@@ -1,0 +1,20 @@
+.DS_Store
+
+.omc
+.omo
+.omx
+.ccmem
+.codegraph
+
+# openwolf
+.wolf/_archive/
+.wolf/buglog.json
+.wolf/hooks/_session.json
+.wolf/memory.md
+.wolf/token-ledger.json
+.wolf/anatomy.md
+.wolf/daemon.log
+.wolf/cerebrum.md
+
+.worktrees/
+.claude/worktrees/
