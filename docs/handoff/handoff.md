@@ -140,7 +140,24 @@ ccloop 实测：那三项抓出过硬错（一处「期望方向写反」、一�
 | **三者** | **Rule 6 写明单位是【上下文窗口占用】**，不是累计消耗；每会话额度**统一为 450,000**（此前 ccloop 400,000 / ccmem 450,000 —— 两文件只差这一个数字，属复制漂移，实测 `diff` 只有一行）。 |
 
 ⚠️ *** **ccloop 与 ccmem 的改动只在本地提交，未 push（控制器不许 push）。** ***
-⚠️ *** **本仓库【已被人自己推过一次】** *** —— reflog 记着 `54ee931 → b6d2253  update by push`，
-推的人是 `biran`，推上去的是 spec 那一笔。**这不是控制器干的。**
+⚠️ *** **本仓库【已被人自己推过一次】** *** —— `.git/logs/refs/remotes/origin/main` 里有一条
+`update by push`，推的人是 `biran`，推上去的是**主题行为 `docs(spec): land the A' decision-ledger design …`**
+的那一笔。**这不是控制器干的，控制器一次都没 push。**
+⚠️ **本文不写死任何 SHA** —— 提交本文这个动作本身就会改 HEAD，而人还会继续自己推。
 ⇒ *** **spec 从那一刻起是【已发布文本】：只能追加具名 ERRATUM，不许就地改。** ***
 ⇒ *** **判断某一笔发没发布，只能现跑 `git ls-remote` ＋ `git merge-base --is-ancestor`，不许查本文。** ***
+
+---
+
+## Suggested skills
+
+| skill | 什么时候用 |
+|---|---|
+| **`superpowers:writing-plans`** | *** **下一件事就是它。** *** ⚠️ 写完**必须跑它自带的自查三项**（spec 覆盖／占位符扫描／类型一致） |
+| `superpowers:brainstorming` | 开 B／C／D／E 任何一个子系统的设计之前。⚠️ architectural 路径的终点只能接 `writing-plans` |
+| `superpowers:verification-before-completion` | *** 每次要说「做完了／通过了／绿了」之前。 *** 本仓库 Rule 12 与它同形 |
+| `superpowers:test-driven-development` | 写校验器（spec §3.8）时。⚠️ 本仓库 Rule 9 要求**每个分支配一条点名删掉它自己的变异** |
+| `superpowers:systematic-debugging` | 出现红／行为不符时**先用它**，别直接改代码 |
+| `superpowers:requesting-code-review` | 派评审时。⚠️ 派之前先报预估：ccloop 实测「派评审→修复→复审」一轮是**几十美元**量级 |
+
+⚠️ **skill 与本仓库 `CLAUDE.md` 冲突时，`CLAUDE.md` 优先**（Rule 11：conformance > taste）。
