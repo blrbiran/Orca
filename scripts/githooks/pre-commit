@@ -1,0 +1,20 @@
+#!/bin/sh
+# spec §3.8 check 6 must run on pre-commit:
+# "any diff to .decisions/** that contains a non-append-only line must be rejected."
+# Consistent with §1's general principle: whatever can be turned into "cannot be
+# done" should not be left as "must be remembered."
+set -e
+
+# CLAUDE.md's line budget (spec §2.1) -- checked on every commit, it's cheap.
+node scripts/check-claude-md-lines.mjs
+
+# The ledger-related checks only run when this commit actually touches .decisions/.
+if git diff --cached --name-only -- .decisions | read -r _; then
+  tmp="$(mktemp)"
+  # Avoid a pipe here: a pipe would swallow git's exit code (CLAUDE.md Rule 14).
+  git diff --cached --unified=0 -- .decisions > "$tmp"
+  npx tsx src/cli.ts check-append-only < "$tmp"
+  rm -f "$tmp"
+
+  npx tsx src/cli.ts validate .decisions
+fi

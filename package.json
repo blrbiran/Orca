@@ -11,7 +11,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "ledger": "tsx src/cli.ts"
+    "ledger": "tsx src/cli.ts",
+    "verify": "npm run typecheck && npm test && npm run ledger -- validate .decisions && node scripts/check-claude-md-lines.mjs",
+    "hooks:install": "git config core.hooksPath scripts/githooks"
   },
   "dependencies": {
     "zod": "^3.23.8"
