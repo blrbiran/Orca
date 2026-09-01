@@ -1,5 +1,6 @@
 import { decisionEventSchema, referenceEventSchema } from "./schema.js";
 import type { ValidationResult } from "./types.js";
+import { undoHowIsExecutable } from "./undoExecutable.js";
 
 function rejected(reasons: string[]): ValidationResult {
   return { verdict: "rejected", reasons };
@@ -28,6 +29,15 @@ export function validateLine(raw: string): ValidationResult {
     const result = decisionEventSchema.safeParse(parsed);
     if (!result.success) {
       return rejected(result.error.issues.map((i) => `${i.path.join(".") || "<root>"}: ${i.message}`));
+    }
+    // Check 3 comes after the schema: rejection-class failures take priority
+    // over downgrades (decision orca-dev-09cc3ea1/3).
+    if (!undoHowIsExecutable(result.data.undo.how)) {
+      return {
+        verdict: "downgraded",
+        tier: 0,
+        reasons: [`undo.how is not executable: ${JSON.stringify(result.data.undo.how)}`],
+      };
     }
     return { verdict: "ok" };
   }

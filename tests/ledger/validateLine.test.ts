@@ -158,3 +158,36 @@ describe("validateLine — regression: every real line in this repo's own ledger
     expect(failures).toEqual([]);
   });
 });
+
+describe("validateLine — check 3: an unexecutable undo.how downgrades to Tier 0, it is not rejected", () => {
+  it("downgrades when undo.how is prose", () => {
+    const result = validateLine(
+      line(validDecision({
+        undo: { how: "回滚一下就好", cost: "小", blast_radius: "小" },
+      })),
+    );
+    expect(result.verdict).toBe("downgraded");
+    if (result.verdict === "downgraded") {
+      expect(result.tier).toBe(0);
+    }
+  });
+
+  it("downgrade does not swallow rejection: when kind is also invalid, the result is rejected, not downgraded", () => {
+    const result = validateLine(
+      line(validDecision({
+        kind: "naming",
+        undo: { how: "回滚一下就好", cost: "小", blast_radius: "小" },
+      })),
+    );
+    expect(result.verdict).toBe("rejected");
+  });
+
+  it("still ok when undo.how is executable", () => {
+    const result = validateLine(
+      line(validDecision({
+        undo: { how: "git branch -f int/a <ref>", cost: "小", blast_radius: "小" },
+      })),
+    );
+    expect(result).toEqual({ verdict: "ok" });
+  });
+});
