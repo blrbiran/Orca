@@ -316,3 +316,120 @@ Task 8 把「校验它全绿」接进 `npm run verify` 与 pre-commit。
 - **ccloop**：下一件事仍是 E1 的 I-2 ＋ 人裁 85，与本轮无关。
 - **ccmem**：下一件事仍是 P0#2 源码核查 → W1 → W2 → W3，与本轮无关。
 - *** **本轮对这两个仓库【一个字节都没写】。** ***
+
+---
+
+# 📌 本轮（2026-09-01／02，会话 `cd28ef61`）—— A′ 的校验器已全部落地，Orca 有产品代码了
+
+**归属**：run `orca-dev-cd28ef61`。本节**只追加**，上面一字未动。
+⚠️ **本节同样不写任何当前哈希** —— 提交本文这个动作本身就会改 HEAD。要指代某一笔就**引提交主题行**。
+
+## 一句话状态
+
+*** **「Orca 至今零产品代码」这句话到本轮为止不再为真。** *** 那份 8 任务的计划
+（`docs/superpowers/plans/2026-08-29-decision-ledger-validator.md`）**已全部执行完毕**，
+外加一轮整支复审的修复。**一次都没有 push、没有建分支、没有合并、没有删任何 worktree。**
+
+## 30 秒核对现状（**以输出为准，别信本文**）
+
+```bash
+cd /Users/biran/code/skills/loop/Orca
+git ls-remote origin refs/heads/main    # ⚠️ 人会自己推，开工核一次收尾再核一次
+git status --short; git log --oneline -14
+npm run verify                          # 期望 exit 0，且最后三行是下面这三条
+```
+
+`npm run verify` 期望输出的末三行（**都是本轮现测**）：
+
+```
+ok: 1 ledger file(s)          ← 会随台账文件数变，本轮结束时是 2
+ok: CLAUDE.md is 135/200 lines
+ok: core.hooksPath is scripts/githooks
+```
+
+⚠️ **验证性 git 命令走裸 `git`，不走 rtk**（rtk 会漏掉 HEAD 那一笔，见上一节第 2 条）。
+
+## 造出来的东西
+
+| 路径 | 是什么 |
+|---|---|
+| `src/ledger/{types,schema,undoExecutable,validateLine,validateFile,appendOnly,writer}.ts` | spec §3.8 六项检查 ＋ fail-closed 写入方 |
+| `src/cli.ts` | `validate` / `check-append-only`，退出码 **0／1／2** |
+| `scripts/githooks/pre-commit`、`scripts/check-claude-md-lines.mjs`、`scripts/check-hooks-path.mjs` | 提交闸门 ＋ `CLAUDE.md ≤ 200 行`预算 ＋ hook 装没装上的断言 |
+| `.decisions/orca-dev-09cc3ea1.jsonl` | 上一轮 7 条决策 ＋ 7 条 `bound`（计划自己做的判断） |
+| `.decisions/orca-dev-cd28ef61.jsonl` | **本轮 13 条裁决**，全部经 `appendEvent` 落盘，无一手写 |
+| `.superpowers/sdd/2026-08-29-decision-ledger-validator/progress.md` ＋ 9 份 `*-report.md` | 16 条裁决全文、每个任务的评审结论、**18＋条点名变异「看见红」的原始输出** |
+
+⚠️ *** **`.superpowers/sdd/` 整个被 gitignore（该目录的 `.gitignore` 内容是 `*`），上面那批是 `git add -f` 进去的。
+在该目录下新增任何要留存的东西，都必须 `-f`。** *** `review-*.diff` 与 `task-*-brief.md` **故意没入库** ——
+前者 `git diff` 可重生成，后者由 `scripts/task-brief` 从计划里机械抽取。
+
+## 🔴 四条「全绿但是坏的」——本轮最贵的知识，**下一轮直接用**
+
+这四条**没有一条**能被单个任务的判据抓到，全都是跨任务或跨层才显形的。
+
+1. *** **schema 的 `.strict()` 拒绝了本仓库自己台账里 7 条真决策中的全部 7 条**（缺 `evidence` 字段），
+   而当时 34 条判据全绿。 *** 根因是**所有判据用的都是手搓 fixture，没有一条拿真数据跑过**。
+   ⇒ 修复里补了一条**直接读仓库自己的 `.decisions/*.jsonl` 断言每行都 ok** 的回归判据。
+   **这条判据是承重的，别删。** 它把 dogfood 闭环从 Task 8 提前到了 Task 2。
+2. *** **写入方从来没跑过检查 5。** *** 写一条引用不存在 id 的 `bound`，写入方照收、`validateFile` 随即判 rejected ——
+   而台账只追加，**唯一的修法是手改文件，也就是这套系统存在的理由所要禁止的动作**。
+3. *** **结尾没有换行的台账有两个独立的坑。** *** ①检查 6 会把纯追加判成非追加，且**每次都会**，文件从此锁死；
+   ②写入方会把新记录**粘在上一条后面**，报成功、落盘、`validateFile` 判 not valid JSON。
+   两条都实测复现过，都已修并配判据。
+4. *** **这道门曾经以未武装状态出厂。** *** `core.hooksPath` 是**本地 git config，不是版本库内容** ——
+   新 clone 根本没有 hook，而没有任何东西会发现。现在由 npm `prepare` 装完即武装，`verify` 再断言一次。
+
+## 🔴 三条工具骗法（**都是本轮实测，此前没记过**）
+
+1. *** **`git checkout -- <本任务刚创建、尚未提交的文件>` 报 `pathspec did not match` 且什么都不还原。** ***
+   计划里每个任务 Step 5 的变异还原命令都是它 ⇒ **5 个任务会失败，Task 3 更糟——它变异的文件是上一个任务提交过的，
+   `checkout` 会成功并静默丢掉本任务自己的实现。** ⇒ 变异一律在 `git clone --local` 副本里做（这本来就是 CLAUDE.md Rule 15）。
+2. *** **`git diff` 对未跟踪文件的内容改动完全看不见。** *** 覆写一个未跟踪文件，前后都是 0 字节，
+   `git status` 打印同一行 `??`。⇒ **「主树零触碰」的证明用 `shasum -a 256` 前后比对，不用 `git diff | wc -c`。**
+3. **`git checkout -- <path>` 是从【索引】恢复，不是从 HEAD。** 文件已暂存时，它会把暂存的（坏的）内容写回工作树。
+   本轮的一个探针就栽在这上面，把「门挡住了」误读成「门不放行合法追加」。
+
+## ⚠️ 发布状态（**只能现跑 `ls-remote` 判，不许查本文**）
+
+本轮**开工时**远端只到上一节那一笔，**中途人自己又推了一次**（推到了 Task 2 那一笔）。
+⇒ **同一会话里远端被推动过两次以上是常态。** 每次要判某笔发没发布，现跑：
+
+```bash
+git ls-remote origin refs/heads/main
+git merge-base --is-ancestor <要查的提交> <上面查到的远端 tip> && echo 已发布 || echo 未发布
+```
+
+## ⛔ 下一件事（**人尚未选定**）
+
+计划里的 A′ 已经做完，**下一步是选 B 还是 C**（顺序 A′ → (B ∥ C) → D → E，人已认可）：
+
+| | 子系统 | 现在的入口条件 |
+|---|---|---|
+| **C（调度层）** | queue over ccloop | 与 A′ 解耦，**可以直接开 brainstorming**。写集判据（`targetPaths` ∪ `allowlistPaths`）与 run-id 分配规则都已在 spec 里登记 |
+| **B（ccmem 倾向 track）** | 吃 `corrections` 里 `kind = not_my_taste` 的对照样本 | ⚠️ **`corrections` 与 `overturned` 的完整字段形状至今没有定**（本轮的决策 `orca-dev-09cc3ea1/5` 只钉了 `ev` ＋ `id`）。B 开工前要先补这个 |
+
+## 已知没做的（**登记，不掩饰**）
+
+计划自己的「已知缺口」7 条**全部仍然成立**（见计划文末，不在此重复）。本轮另加：
+
+- **run-id 分配规则仍属 C** —— 两个 agent 各自挑到同一个 run-id 时，spec §3.1「结构上不可能冲突」的保证失效。
+- **`validateLine.ts` 里有第四份引用事件清单**（一条 OR 链）。它是路由条件不是白名单，当前无行为依赖它同步；**加第五种事件类型时会咬人**。
+- **`appendEvent` 不校验事件的 `run` 字段与文件名是否一致**，也**不拒绝重复的 decision id** —— 两者都超出 spec §3.8 的六项检查，属 spec 问题不是实现 bug，但**面板（E）会需要 id 唯一**，而台账只追加。
+- **退出码 2（降级）目前没有任何消费者**：`set -e` 与 `&&` 都把 1 和 2 一样地当成停。它是为面板准备的，不是死码，**但别把那几条判据读成「已经有人在用它」**。
+- ⚠️ *** **两份台账里 `decision` 的 `at` 都是【批量回填】的同一个时刻** ***（上一轮 7 条同为一个值，本轮 13 条同为另一个值）。
+  **别把 `at` 读成「这条决策是那一刻做出的」。** 本轮的决策 `orca-dev-cd28ef61/13` 记的就是这件事本身。
+
+## Suggested skills
+
+| skill | 什么时候用 |
+|---|---|
+| `superpowers:brainstorming` | *** **开 B 或 C 之前的第一件事。** *** ⚠️ architectural 路径的终点只能接 `writing-plans` |
+| `superpowers:writing-plans` | brainstorming 出 spec 之后。⚠️ 自带的自查三项**本轮又各抓到一处**，别跳过 |
+| `superpowers:subagent-driven-development` | 执行计划时。⚠️ **本轮实测它值这个钱**：18 条变异有独立复核，且整支复审抓到 5 条没有任何单任务评审能看见的 Important |
+| `superpowers:verification-before-completion` | *** 每次要说「做完了／绿了」之前。 *** |
+| `superpowers:test-driven-development` | 补新判据时。⚠️ Rule 9 要求每个分支配一条点名删掉它自己的变异 |
+| `superpowers:systematic-debugging` | 出现红／行为不符时**先用它** |
+
+⚠️ **skill 与 `CLAUDE.md` 冲突时，`CLAUDE.md` 优先**（Rule 11）。
+⚠️ **计划与 spec 冲突时，spec 优先** —— 本轮有 4 次是这么判的，逐条记在本轮台账里。
