@@ -72,6 +72,17 @@ async function runValidate(paths: string[]): Promise<number> {
   if (sawRejected) return 1;
   if (sawDowngraded) return 2;
 
+  // An empty green is the cardinal sin here (CLAUDE.md Rule 9): validating
+  // zero files is not the same claim as validating N files and finding them
+  // all fine. Fail loud rather than print "ok" for a check that checked
+  // nothing — chosen over rewording the line because a non-zero exit is what
+  // CI actually keys off of; a human-only wording fix would still let a
+  // silently-empty scan pass a script that gates on exit code.
+  if (files.length === 0) {
+    process.stderr.write("error: 0 ledger files found — nothing was validated\n");
+    return 1;
+  }
+
   process.stdout.write(`ok: ${files.length} ledger file(s)\n`);
   return 0;
 }

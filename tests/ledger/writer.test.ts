@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { appendEvent } from "../../src/ledger/writer.js";
+import { validateFile } from "../../src/ledger/validateFile.js";
 
 function validDecision(id: string, overrides: Record<string, unknown> = {}) {
   return {
@@ -82,6 +83,44 @@ describe("appendEvent — run-id path safety", () => {
     await appendEvent(dir, "orca-dev-09cc3ea1", validDecision("orca-dev-09cc3ea1/1"));
     const text = await readFile(join(dir, "orca-dev-09cc3ea1.jsonl"), "utf8");
     expect(text).toContain("orca-dev-09cc3ea1/1");
+  });
+});
+
+describe("appendEvent — check 5: a reference event's id must exist as a decision", () => {
+  it("throws when a bound references an id with no matching decision in the file (a typo, not fixable in place)", async () => {
+    const dir = await tempDir();
+    await expect(
+      appendEvent(dir, "probe", { ev: "bound", id: "probe/999", note: "typo" }),
+    ).rejects.toThrow(/rejected/);
+    await expect(readFile(join(dir, "probe.jsonl"), "utf8")).rejects.toThrow();
+  });
+
+  it("passes once the referenced decision has actually been appended first", async () => {
+    const dir = await tempDir();
+    await appendEvent(dir, "probe", validDecision("probe/1"));
+    await appendEvent(dir, "probe", { ev: "bound", id: "probe/1" });
+    const text = await readFile(join(dir, "probe.jsonl"), "utf8");
+    expect(text.split("\n").filter((l) => l.length > 0)).toHaveLength(2);
+  });
+
+  // Pins the documented narrowing: appendEvent cannot see a decision that has
+  // not been written yet, so a bound written before its decision throws here —
+  // while validateFile, reading the same two lines in that same order after
+  // the fact, still returns ok (spec §3.8 check 5 asks for existence, not
+  // order). One test, both halves, so the asymmetry is an assertion, not a
+  // comment.
+  it("writing a bound before its decision throws, even though validateFile accepts that same order", async () => {
+    const dir = await tempDir();
+    await expect(appendEvent(dir, "probe", { ev: "bound", id: "probe/1" })).rejects.toThrow(
+      /rejected/,
+    );
+    await expect(readFile(join(dir, "probe.jsonl"), "utf8")).rejects.toThrow();
+
+    const result = validateFile([
+      JSON.stringify({ ev: "bound", id: "probe/1" }),
+      JSON.stringify(validDecision("probe/1")),
+    ]);
+    expect(result.verdict).toBe("ok");
   });
 });
 

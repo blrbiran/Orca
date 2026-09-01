@@ -1,4 +1,6 @@
 import { execFile } from "node:child_process";
+import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
@@ -42,6 +44,14 @@ describe("main — validate exit codes", () => {
 
   it("returns 1 when no subcommand is given", async () => {
     expect(await main([])).toBe(1);
+  });
+
+  // Fix wave finding 5: an existing-but-empty directory used to print
+  // "ok: 0 ledger file(s)" and exit 0 — indistinguishable in CI output from a
+  // real pass. Validating zero files must not read as ok.
+  it("returns 1 when a directory contains no .jsonl files (an empty check must not read as a pass)", async () => {
+    const emptyDir = await mkdtemp(join(tmpdir(), "orca-cli-empty-"));
+    expect(await main(["validate", emptyDir])).toBe(1);
   });
 });
 

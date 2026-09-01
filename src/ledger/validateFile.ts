@@ -1,3 +1,4 @@
+import { REFERENCE_EVENT_TYPES } from "./schema.js";
 import { validateLine } from "./validateLine.js";
 import type { ValidationResult } from "./types.js";
 
@@ -11,7 +12,7 @@ export interface FileVerdict {
   lines: LineVerdict[];
 }
 
-const REFERENCE_EVENTS = new Set(["bound", "superseded", "overturned"]);
+const REFERENCE_EVENTS = new Set<string>(REFERENCE_EVENT_TYPES);
 
 /**
  * spec §3.8 check 5: the id a bound / superseded / overturned event references

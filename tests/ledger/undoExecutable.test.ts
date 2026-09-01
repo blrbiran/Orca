@@ -45,6 +45,39 @@ describe("undoHowIsExecutable — exclusivity examples for each clause", () => {
   });
 });
 
+describe("undoHowIsExecutable — isArgShaped sub-branches each have a mutation-killing input", () => {
+  // CLAUDE.md Rule 9: a criterion never seen red is not a criterion. Each of
+  // isArgShaped's includes("="), includes("*"), and FILE_NAME.test(token)
+  // clauses can be deleted with the suite staying green unless something
+  // reaches it exclusively. Each input below reaches exactly one of the
+  // three clauses (verified by hand against both isArgShaped and
+  // hasNamedTarget: none of them contains camelCase, snake_case, or a "/",
+  // so hasNamedTarget cannot catch any of them either) — see the mutation
+  // proof in the final fix report for the actual red run of each.
+
+  // Reaches isArgShaped via token.includes("=") only: "target=foo" has no
+  // "-" prefix, no "/", no "*", isn't <...>, and FILE_NAME needs a dot after
+  // the whole token (it has none). Deleting the "=" clause makes this false.
+  it("command-shape via a '=' argument: make target=foo", () => {
+    expect(undoHowIsExecutable("make target=foo")).toBe(true);
+  });
+
+  // Reaches isArgShaped via token.includes("*") only: "*.tmp" starts with
+  // "*" not "-", has no "/", isn't <...>, and FILE_NAME's first character
+  // class excludes "*" so it never matches. Deleting the "*" clause makes
+  // this false.
+  it("command-shape via a '*' argument: rm *.tmp", () => {
+    expect(undoHowIsExecutable("rm *.tmp")).toBe(true);
+  });
+
+  // Reaches isArgShaped via FILE_NAME.test(token) only: "build.mjs" has no
+  // "-" prefix, no "/", no "=", no "*", and isn't <...>. Deleting the
+  // FILE_NAME clause makes this false.
+  it("command-shape via a FILE_NAME argument: node build.mjs", () => {
+    expect(undoHowIsExecutable("node build.mjs")).toBe(true);
+  });
+});
+
 describe("undoHowIsExecutable — English prose should not pass the gate", () => {
   it("just roll it back", () => {
     expect(undoHowIsExecutable("just roll it back")).toBe(false);

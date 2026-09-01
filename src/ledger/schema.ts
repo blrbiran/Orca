@@ -37,18 +37,25 @@ export const decisionEventSchema = z
   .strict();
 
 /**
+ * Single source of truth for the reference event names — fix wave finding 4
+ * (whole-branch review): this list used to exist independently in three
+ * places (here, inlined again in the schema below, and in
+ * validateFile.ts's REFERENCE_EVENTS), which let check 5 silently
+ * desynchronise from check 1 if only one copy was updated.
+ */
+export const REFERENCE_EVENT_TYPES = ["bound", "superseded", "overturned"] as const;
+
+/**
  * Reference events pin only ev and id; everything else passes through —
  * decision orca-dev-09cc3ea1/5.
  * passthrough is required: the spec §3.3 bound example carries a note field.
  */
 export const referenceEventSchema = z
   .object({
-    ev: z.enum(["bound", "superseded", "overturned"]),
+    ev: z.enum(REFERENCE_EVENT_TYPES),
     id: z.string().min(1),
   })
   .passthrough();
-
-export const REFERENCE_EVENT_TYPES = ["bound", "superseded", "overturned"] as const;
 
 export type DecisionEvent = z.infer<typeof decisionEventSchema>;
 export type ReferenceEvent = z.infer<typeof referenceEventSchema>;

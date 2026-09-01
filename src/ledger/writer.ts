@@ -1,5 +1,6 @@
-import { appendFile, mkdir } from "node:fs/promises";
+import { appendFile, mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { validateFile } from "./validateFile.js";
 import { validateLine } from "./validateLine.js";
 
 /**
@@ -31,6 +32,33 @@ export async function appendEvent(
     );
   }
 
+  // Widen the screen to check 5 (a bound/superseded/overturned must reference
+  // an id that exists as a decision) — validateLine alone only covers checks
+  // 1/2/3/4. Check 5 needs the whole prospective file, so read what is
+  // already on disk (a missing file counts as empty) and validate existing
+  // lines plus the new one together, before writing anything.
+  //
+  // This is stricter than validateFile alone for one specific shape: a
+  // reference event that names a decision which has not been written yet.
+  // validateFile only requires the referenced id to exist somewhere in the
+  // file, not before the reference (spec §3.8 check 5 asks for existence,
+  // not order) — but a streaming writer cannot see lines not yet appended,
+  // so writing a bound before its decision throws here even though
+  // validateFile would accept those same two lines in that order.
+  const filePath = join(decisionsDir, `${runId}.jsonl`);
+  const existingText = await readFile(filePath, "utf8").catch((error) => {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return "";
+    throw error;
+  });
+  const existingLines = existingText.length === 0 ? [] : existingText.split("\n");
+  const prospective = validateFile([...existingLines, line]);
+  if (prospective.verdict !== "ok") {
+    const reasons = prospective.lines
+      .filter((l) => l.result.verdict !== "ok")
+      .flatMap((l) => (l.result.verdict === "ok" ? [] : l.result.reasons));
+    throw new Error(`refusing to append: ${prospective.verdict}: ${reasons.join("; ")}`);
+  }
+
   await mkdir(decisionsDir, { recursive: true });
-  await appendFile(join(decisionsDir, `${runId}.jsonl`), `${line}\n`);
+  await appendFile(filePath, `${line}\n`);
 }

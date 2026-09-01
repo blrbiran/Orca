@@ -82,3 +82,51 @@ describe("checkAppendOnly — spec §3.8 check 6", () => {
     expect(result.reasons.join("\n")).toContain("串行");
   });
 });
+
+describe("checkAppendOnly — a ledger with no trailing newline must not be permanently wedged", () => {
+  // Legitimate case: appending to a file whose last byte was not a newline.
+  // Git renders the old last line as removed (with the no-newline marker)
+  // immediately followed by the same content re-added with a newline now
+  // attached, plus the genuinely new line. Byte-identical content either
+  // side of the marker ⇒ this must be treated as an append, not a removal.
+  // Mutation that reddens this: delete the `isNoNewlineAppend` exemption in
+  // src/ledger/appendOnly.ts (or replace it with `false`) — with the
+  // exemption gone, this diff's `-` line is flagged as a removal and this
+  // test fails (expected { ok: true }, got { ok: false, reasons: [...] }).
+  it("byte-identical content across a no-newline marker is an append, not a removal", () => {
+    const diff = [
+      "diff --git a/.decisions/x.jsonl b/.decisions/x.jsonl",
+      "index 1111111..2222222 100644",
+      "--- a/.decisions/x.jsonl",
+      "+++ b/.decisions/x.jsonl",
+      "@@ -1 +1,2 @@",
+      '-{"ev":"decision","id":"fx/1"}',
+      "\\ No newline at end of file",
+      '+{"ev":"decision","id":"fx/1"}',
+      '+{"ev":"bound","id":"fx/1"}',
+    ].join("\n");
+    expect(checkAppendOnly(diff)).toEqual({ ok: true });
+  });
+
+  // Hostile case: same shape (a `-` line, then the no-newline marker, then a
+  // `+` line) but the content actually changed. This must still be rejected —
+  // the exemption is narrow on purpose. Mutation that reddens this: drop the
+  // `nextLine.slice(1) === line.slice(1)` byte-identity requirement (e.g.
+  // always treat a `-` line followed by the marker as an append regardless
+  // of what follows) — with that check gone, this test's tampered line would
+  // be waved through and the assertion `.ok` to be `false` would fail.
+  it("content that differs across a no-newline marker is still a removal and is rejected", () => {
+    const diff = [
+      "diff --git a/.decisions/x.jsonl b/.decisions/x.jsonl",
+      "index 1111111..2222222 100644",
+      "--- a/.decisions/x.jsonl",
+      "+++ b/.decisions/x.jsonl",
+      "@@ -1 +1 @@",
+      '-{"ev":"decision","id":"fx/1"}',
+      "\\ No newline at end of file",
+      '+{"ev":"decision","id":"fx/1","tampered":true}',
+    ].join("\n");
+    const result = checkAppendOnly(diff);
+    expect(result.ok).toBe(false);
+  });
+});
