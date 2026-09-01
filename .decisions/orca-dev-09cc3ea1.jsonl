@@ -10,3 +10,4 @@
 {"ev":"bound","id":"orca-dev-09cc3ea1/5","note":"referenceEventSchema 只钉 ev 与 id，passthrough 放行 note"}
 {"ev":"bound","id":"orca-dev-09cc3ea1/4","note":"谓词落在 src/ledger/undoExecutable.ts；两个子句各配了一条独占判据，M3-a / M3-b 均确认看见红"}
 {"ev":"bound","id":"orca-dev-09cc3ea1/2","note":"三层齐了：validateLine（检查1-4）／validateFile（检查5）／checkAppendOnly（检查6）"}
+{"ev":"bound","id":"orca-dev-09cc3ea1/6","note":"退出码 0/1/2 落在 src/cli.ts；M6-c 证过返回值确实接到了进程退出码"}

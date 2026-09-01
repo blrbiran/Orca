@@ -1,0 +1,1 @@
+{"ev":"decision","id":"fx/2","at":"2026-08-29T00:00:00.000Z","run":"fx","question":"用哪种锁","chose":"文件租约","alternatives":[{"option":"进程内互斥","why_not":"跨进程无效"}],"because":"跨进程","undo":{"how":"回滚一下就好","cost":"一次重跑","blast_radius":"仅本仓库"},"scope":"repo","kind":"interface"}

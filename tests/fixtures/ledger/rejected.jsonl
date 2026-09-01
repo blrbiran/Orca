@@ -1,0 +1,1 @@
+{"ev":"decision","id":"fx/3","at":"2026-08-29T00:00:00.000Z","run":"fx","question":"用哪种锁","chose":"文件租约","alternatives":[],"because":"跨进程","undo":{"how":"git revert <ref>","cost":"一次重跑","blast_radius":"仅本仓库"},"scope":"repo","kind":"interface"}
