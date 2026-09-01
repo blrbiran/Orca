@@ -264,3 +264,55 @@ Task 8 把「校验它全绿」接进 `npm run verify` 与 pre-commit。
 *** **那两份 `CLAUDE.md` 现在也都是已发布文本。** ***
 对那两个仓库**均不产生任务**；ccloop 那节另外点名了一件事 ——
 **契约的 `targetPaths` ／ `allowlistPaths` 两个字段现在多了一个下游消费者（Orca 的并行判据）。**
+
+---
+
+# 📌 本轮（2026-09-01，会话 `cd28ef61`）—— 开工核对 ＋ 三条语言约定
+
+**归属**：run `orca-dev-cd28ef61`。本节**只追加**，上面一字未动。
+本节写下时的仓库位置：**远端与本地 `main` 同点，tip 的主题行是 `update handoff docs`**
+（口径：`git ls-remote origin refs/heads/main` ＋ 裸 `git log --oneline -6`，本会话现测）。
+**本节同样不写任何 SHA。**
+
+## 🔴 三条语言约定（人 2026-09-01 当面交代，**从本轮起对所有后续会话生效**）
+
+| 写什么 | 用哪种语言 |
+|---|---|
+| **与人的对话** | **中文** |
+| **`docs/handoff/handoff.md`** | **中文** |
+| **代码、代码注释、CLI help 文本、README ＋同类产品文档** | *** **英文** *** |
+
+⚠️ **这条会直接改变计划的执行**：
+`docs/superpowers/plans/2026-08-29-decision-ledger-validator.md` 里的代码块**带中文注释**
+（例如 Task 1 冒烟判据里那两行"这条判据存在的唯一理由…"）。
+⇒ *** **照抄代码块时，把其中的注释与字符串改写成英文；逻辑、断言、变异表一字不动。** ***
+计划本身是**已发布文本，不就地改** —— 本节即为该差异的具名登记。
+
+⚠️ **spec 与 plan 保持现有的中文**，理由同上：它们是已发布文本，改动只能追加具名 ERRATUM。
+
+## 开工核对的实测结果（**都带命令，都是本轮现测**）
+
+| 量 | 值 | 测量命令 |
+|---|---|---|
+| 远端 tip 与本地 | **同点** | `git ls-remote origin refs/heads/main` ＋ `git log --oneline -6` |
+| 工作树 | **干净** | `git status --short`（空输出） |
+| worktree | **只有主工作树一个** | `git worktree list` |
+| 被跟踪文件 | **6 个**：`.gitignore` / `CLAUDE.md` / `LICENSE` ＋ handoff ＋ spec ＋ plan | `git ls-files` |
+| node / npm | **v22.13.1** / **10.9.2** | `node -v`；`npm -v` |
+
+⇒ *** **「Orca 至今零产品代码」在本轮开工时仍然为真**，`package.json`、`src/**`、`tests/**`、
+`.decisions/**` 一个都不存在。 ***
+⇒ node 22 满足计划 Tech Stack 要求的 **Node ≥ 20**。
+
+## 一处需要人拍板才动的地方（**已识别，未自作主张**）
+
+计划把台账文件写死成 `.decisions/orca-dev-09cc3ea1.jsonl`（**上一会话的 id**），
+而本轮的 run 是 `orca-dev-cd28ef61`。
+*** **按计划逐字照做是对的** *** —— 那 7 条决策确实是 09cc3ea1 那一轮做的，署它的名才是真的归属。
+**本轮如果自己新做了决策，要另开 `.decisions/orca-dev-cd28ef61.jsonl`，不许混进上一轮的文件。**
+
+## 姊妹仓库本轮状态（**只读，未触碰**）
+
+- **ccloop**：下一件事仍是 E1 的 I-2 ＋ 人裁 85，与本轮无关。
+- **ccmem**：下一件事仍是 P0#2 源码核查 → W1 → W2 → W3，与本轮无关。
+- *** **本轮对这两个仓库【一个字节都没写】。** ***
