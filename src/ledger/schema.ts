@@ -29,6 +29,10 @@ export const decisionEventSchema = z
     undo: undoSchema,
     scope: z.enum(DECISION_SCOPES),
     kind: z.enum(DECISION_KINDS),
+    // Optional per spec §3.4's canonical example and §3.5.1 (evidence is how a
+    // decision's trustworthiness is judged); not one of the 11 required fields
+    // in §3.8 check 1, but legitimate. Fix round 1, finding 1.
+    evidence: z.array(z.string()).optional(),
   })
   .strict();
 

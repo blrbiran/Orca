@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { validateLine } from "../../src/ledger/validateLine.js";
 
@@ -120,5 +122,39 @@ describe("validateLine — decision /5: reference events require only ev and id"
 
   it("rejects a reference event missing id", () => {
     expect(validateLine(line({ ev: "bound" })).verdict).toBe("rejected");
+  });
+});
+
+describe("validateLine — regression: every real line in this repo's own ledger validates", () => {
+  it("has at least one line in the ledger fixture (guards against a wrong/empty path)", () => {
+    const ledgerPath = fileURLToPath(
+      new URL("../../.decisions/orca-dev-09cc3ea1.jsonl", import.meta.url),
+    );
+    const lines = readFileSync(ledgerPath, "utf8").split("\n").filter((l) => l.length > 0);
+    expect(lines.length).toBeGreaterThan(0);
+  });
+
+  it("accepts every non-empty line in .decisions/orca-dev-09cc3ea1.jsonl", () => {
+    const ledgerPath = fileURLToPath(
+      new URL("../../.decisions/orca-dev-09cc3ea1.jsonl", import.meta.url),
+    );
+    const lines = readFileSync(ledgerPath, "utf8").split("\n").filter((l) => l.length > 0);
+
+    const failures = lines
+      .map((raw, index) => ({ index, result: validateLine(raw) }))
+      .filter(({ result }) => result.verdict !== "ok");
+
+    if (failures.length > 0) {
+      const detail = failures
+        .map(({ index, result }) =>
+          `line ${index + 1}: verdict=${result.verdict}, reasons=${JSON.stringify(
+            "reasons" in result ? result.reasons : [],
+          )}`,
+        )
+        .join("\n");
+      throw new Error(`${failures.length} of ${lines.length} ledger lines did not validate:\n${detail}`);
+    }
+
+    expect(failures).toEqual([]);
   });
 });
