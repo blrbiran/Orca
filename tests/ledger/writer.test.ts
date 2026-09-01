@@ -1,4 +1,4 @@
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -121,6 +121,48 @@ describe("appendEvent — check 5: a reference event's id must exist as a decisi
       JSON.stringify(validDecision("probe/1")),
     ]);
     expect(result.verdict).toBe("ok");
+  });
+});
+
+describe("appendEvent — a missing trailing newline must not corrupt the append (scoped re-review finding)", () => {
+  // Seeds the file directly with writeFile, not through appendEvent, so its
+  // last byte is genuinely not "\n" — the shape Fix 2 (appendOnly.ts)
+  // establishes as ordinary for a hand-written or externally-trimmed ledger.
+  // Before this fix, appendFile would glue the new record onto the end of
+  // this line, and the check-5 step would have validated a set of lines
+  // (built from `existingText.split("\n")`) that never actually existed on
+  // disk — reporting success for bytes that were never going to be written.
+  it("inserts a separating newline so the appended record lands on its own line, and what is on disk validates ok", async () => {
+    const dir = await tempDir();
+    const filePath = join(dir, "probe.jsonl");
+    const seed = JSON.stringify(validDecision("probe/1"));
+    await writeFile(filePath, seed); // deliberately no trailing newline
+
+    await appendEvent(dir, "probe", { ev: "bound", id: "probe/1" });
+
+    // Assert on what is actually on disk, not on what was passed in to
+    // appendEvent or to writeFile — that distinction is the whole finding.
+    const onDisk = await readFile(filePath, "utf8");
+    const physicalLines = onDisk.split("\n").filter((l) => l.length > 0);
+    expect(physicalLines).toHaveLength(2);
+    expect(() => JSON.parse(physicalLines[0])).not.toThrow();
+    expect(() => JSON.parse(physicalLines[1])).not.toThrow();
+    expect(JSON.parse(physicalLines[0]).id).toBe("probe/1");
+    expect(JSON.parse(physicalLines[1]).ev).toBe("bound");
+
+    const result = validateFile(onDisk.split("\n"));
+    expect(result.verdict).toBe("ok");
+  });
+
+  it("does not insert a separator when the existing file already ends with a newline (normal, sequential appends are untouched)", async () => {
+    const dir = await tempDir();
+    await appendEvent(dir, "probe", validDecision("probe/1"));
+    await appendEvent(dir, "probe", { ev: "bound", id: "probe/1" });
+
+    const onDisk = await readFile(join(dir, "probe.jsonl"), "utf8");
+    // No blank line was introduced between the two records.
+    expect(onDisk).not.toContain("\n\n");
+    expect(onDisk.split("\n").filter((l) => l.length > 0)).toHaveLength(2);
   });
 });
 
