@@ -1,4 +1,4 @@
-import { decisionEventSchema, referenceEventSchema } from "./schema.js";
+import { decisionEventSchema, isReferenceEventName, referenceEventSchema } from "./schema.js";
 import type { ValidationResult } from "./types.js";
 import { undoHowIsExecutable } from "./undoExecutable.js";
 
@@ -42,7 +42,7 @@ export function validateLine(raw: string): ValidationResult {
     return { verdict: "ok" };
   }
 
-  if (ev === "bound" || ev === "superseded" || ev === "overturned") {
+  if (isReferenceEventName(ev)) {
     const result = referenceEventSchema.safeParse(parsed);
     if (!result.success) {
       return rejected(result.error.issues.map((i) => `${i.path.join(".") || "<root>"}: ${i.message}`));

@@ -57,5 +57,20 @@ export const referenceEventSchema = z
   })
   .passthrough();
 
+export type ReferenceEventName = (typeof REFERENCE_EVENT_TYPES)[number];
+
+const REFERENCE_EVENT_NAMES: ReadonlySet<string> = new Set(REFERENCE_EVENT_TYPES);
+
+/**
+ * The router in validateLine used to spell these three names out again, which
+ * made REFERENCE_EVENT_TYPES a source of truth for the schema but not for the
+ * routing — a fourth name could be added to the constant and still be answered
+ * with "unknown ev". Deriving the predicate here keeps the two in step by
+ * construction rather than by anyone remembering to update both.
+ */
+export function isReferenceEventName(ev: unknown): ev is ReferenceEventName {
+  return typeof ev === "string" && REFERENCE_EVENT_NAMES.has(ev);
+}
+
 export type DecisionEvent = z.infer<typeof decisionEventSchema>;
 export type ReferenceEvent = z.infer<typeof referenceEventSchema>;

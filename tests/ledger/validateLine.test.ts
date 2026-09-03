@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { REFERENCE_EVENT_TYPES } from "../../src/ledger/schema.js";
 import { validateLine } from "../../src/ledger/validateLine.js";
 
 function validDecision(overrides: Record<string, unknown> = {}) {
@@ -189,5 +190,39 @@ describe("validateLine — check 3: an unexecutable undo.how downgrades to Tier 
       })),
     );
     expect(result).toEqual({ verdict: "ok" });
+  });
+});
+
+describe("validateLine routes every reference event name from the single source", () => {
+  // Iterating the constant rather than listing names is the whole point: a
+  // fourth hard-coded copy of this list used to live in validateLine's router,
+  // which meant a name could be in REFERENCE_EVENT_TYPES and still fall
+  // through to "unknown ev". A test that spelled the three names out would
+  // have stayed green through exactly that bug.
+  for (const ev of REFERENCE_EVENT_TYPES) {
+    it(`accepts a minimal ${ev} record`, () => {
+      expect(validateLine(JSON.stringify({ ev, id: "run-7c/3" })).verdict).toBe("ok");
+    });
+  }
+
+  it("an ev outside REFERENCE_EVENT_TYPES is rejected by the router, not by the reference schema", () => {
+    // The pre-existing "rejects unknown ev" criterion asserts only the verdict,
+    // and referenceEventSchema's own z.enum rejects a stray name as well — so a
+    // predicate that answered true for every input left the whole suite green
+    // (measured: 104/104 passed with `return true` in isReferenceEventName).
+    // Pinning the reason is what makes that mutation visible.
+    const result = validateLine(JSON.stringify({ ev: "note", id: "run-7c/3" }));
+    expect(result.verdict).toBe("rejected");
+    expect(result.verdict === "rejected" ? result.reasons.join(" ") : "").toContain("unknown ev");
+  });
+
+  it("every name in REFERENCE_EVENT_TYPES is routed away from the unknown-ev branch", () => {
+    for (const ev of REFERENCE_EVENT_TYPES) {
+      const result = validateLine(JSON.stringify({ ev }));
+      // Missing id, so this must be rejected — but rejected by the reference
+      // schema for the missing field, never by the router for an unknown ev.
+      expect(result.verdict).toBe("rejected");
+      expect(result.verdict === "rejected" ? result.reasons.join(" ") : "").not.toContain("unknown ev");
+    }
   });
 });
