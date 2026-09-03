@@ -23,5 +23,12 @@ if [ "$decisions_changed" -ne 0 ]; then
   npx tsx src/cli.ts check-append-only < "$tmp"
   rm -f "$tmp"
 
-  npx tsx src/cli.ts validate .decisions
+  # Exit code 2 means "downgraded", not "rejected": this repository's first
+  # ledger carries seven bound lines written before bound required taskId and
+  # runId, and being append-only they can never acquire them. Tolerating 2 here
+  # is the same tolerance npm run verify grants, and it is narrowed by the same
+  # criterion -- the one in tests/ledger/validateFile.test.ts that names the
+  # exact set of downgraded lines this repository may contain. Exit code 1
+  # still blocks the commit.
+  npx tsx src/cli.ts validate .decisions || [ $? -eq 2 ]
 fi
