@@ -10,7 +10,12 @@ function validDecision(id: string, overrides: Record<string, unknown> = {}) {
     ev: "decision",
     id,
     at: "2026-08-29T00:00:00.000Z",
-    run: "fx",
+    // A decision id is "<run>/<n>", and since P1 Task 3 the writer refuses a
+    // decision whose run field disagrees with the ledger file it lands in. The
+    // default derives run from the id so the fixture is self-consistent for
+    // whichever run a criterion happens to use; the override still lets a
+    // criterion make them disagree on purpose.
+    run: id.split("/")[0],
     question: "用哪种锁",
     chose: "文件租约",
     alternatives: [{ option: "进程内互斥", why_not: "跨进程无效" }],
@@ -230,5 +235,55 @@ describe("appendEvent refuses a bound that cannot say which task implemented it"
     // Measure the bytes directly rather than trusting the throw: a writer that
     // threw after appending would still satisfy `rejects.toThrow`.
     expect(await readFile(join(dir, "fx.jsonl"), "utf8")).toBe(before);
+  });
+});
+
+describe("appendEvent — the run field must match the file it lands in", () => {
+  it("throws when a decision's run field names a different run than the file", async () => {
+    const dir = await tempDir();
+    await expect(
+      appendEvent(dir, "run-a", validDecision("run-a/1", { run: "run-b" })),
+    ).rejects.toThrow(/run/);
+    // The file must not even have been created.
+    await expect(readFile(join(dir, "run-a.jsonl"), "utf8")).rejects.toThrow();
+  });
+
+  it("accepts a decision whose run field matches", async () => {
+    const dir = await tempDir();
+    await appendEvent(dir, "run-a", validDecision("run-a/1"));
+    expect(await readFile(join(dir, "run-a.jsonl"), "utf8")).toContain("run-a");
+  });
+
+  it("does not apply the check to reference events, which carry no run field", async () => {
+    const dir = await tempDir();
+    await appendEvent(dir, "run-a", validDecision("run-a/1"));
+    await appendEvent(dir, "run-a", {
+      ev: "bound", id: "run-a/1", taskId: "t-1", runId: "run-a",
+    });
+    const text = await readFile(join(dir, "run-a.jsonl"), "utf8");
+    expect(text.split("\n").filter(Boolean).length).toBe(2);
+  });
+});
+
+describe("appendEvent — a decision id must be unique within its file", () => {
+  it("throws on a second decision with an id already in the file, and writes not one byte", async () => {
+    const dir = await tempDir();
+    await appendEvent(dir, "run-a", validDecision("run-a/1"));
+    const before = await readFile(join(dir, "run-a.jsonl"), "utf8");
+
+    await expect(
+      appendEvent(dir, "run-a", validDecision("run-a/1", { question: "a different question" })),
+    ).rejects.toThrow(/duplicate/);
+
+    // Read the disk after the refusal: a writer that threw after appending
+    // would still satisfy rejects.toThrow.
+    expect(await readFile(join(dir, "run-a.jsonl"), "utf8")).toBe(before);
+  });
+
+  it("allows two decisions with different ids", async () => {
+    const dir = await tempDir();
+    await appendEvent(dir, "run-a", validDecision("run-a/1"));
+    await appendEvent(dir, "run-a", validDecision("run-a/2"));
+    expect((await readFile(join(dir, "run-a.jsonl"), "utf8")).split("\n").filter(Boolean).length).toBe(2);
   });
 });

@@ -19,6 +19,17 @@ export async function appendEvent(
     throw new Error(`invalid run id: ${JSON.stringify(runId)}`);
   }
 
+  // Check A: a decision's run field must name the file it lands in.
+  // C writes several ledgers, in several repositories, in the same process;
+  // a run field that disagrees with the filename makes every downstream
+  // attribution wrong while every existing check stays green.
+  const run = (event as { run?: unknown }).run;
+  if ((event as { ev?: unknown }).ev === "decision" && run !== runId) {
+    throw new Error(
+      `refusing to append: run field ${JSON.stringify(run)} does not match the ledger file for run ${JSON.stringify(runId)}`,
+    );
+  }
+
   // Validate before writing. A bad line can't be fixed afterward —
   // spec §3.3 is append-only semantics.
   const line = JSON.stringify(event);
@@ -50,6 +61,30 @@ export async function appendEvent(
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return "";
     throw error;
   });
+
+  // Check B: a decision id must be unique within its file. The ledger is
+  // append-only, so a duplicate can never be removed — and the panel (E)
+  // resolves decisions by id, which a duplicate makes ambiguous forever.
+  //
+  // The throw sits outside the try on purpose: inside it, its own catch would
+  // swallow it and every criterion here could still pass.
+  if ((event as { ev?: unknown }).ev === "decision") {
+    const id = (event as { id?: unknown }).id;
+    for (const existing of existingText.split("\n")) {
+      if (existing.trim().length === 0) continue;
+      let parsedExisting: { ev?: unknown; id?: unknown };
+      try {
+        parsedExisting = JSON.parse(existing) as { ev?: unknown; id?: unknown };
+      } catch {
+        // A line that does not parse is validateFile's problem, not this
+        // check's; the prospective validation below rejects it anyway.
+        continue;
+      }
+      if (parsedExisting.ev === "decision" && parsedExisting.id === id) {
+        throw new Error(`refusing to append: duplicate decision id ${JSON.stringify(id)}`);
+      }
+    }
+  }
 
   // A ledger with no trailing newline is ordinary for a target repo (Fix 2,
   // spec §9.2) — but `appendFile` only concatenates bytes, it does not insert
