@@ -1,10 +1,11 @@
 import { execFile } from "node:child_process";
-import { chmod } from "node:fs/promises";
+import { chmod, readdir, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
-import { captureStreams, makeSandbox, refSha, runCli, seedDisjointPlan, writePlan } from "../sandbox.js";
+import { undoHowIsExecutable } from "../../../src/ledger/undoExecutable.js";
+import { captureStreams, makeSandbox, refSha, runCli, seedDisjointPlan, writeContract, writePlan } from "../sandbox.js";
 
 const execFileAsync = promisify(execFile);
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
@@ -57,10 +58,75 @@ describe("a round that throws (spec §4.2.1 / §6.3)", () => {
       // A defined code from §6.3's scheme, not whatever node would have
       // chosen for an unhandled rejection.
       expect(captured.result).toBe(3);
+
+      // NOT spec §5.4's escalation file: runsDir is unwritable for the whole
+      // of this round (that IS the induced failure), so the catch block's own
+      // attempt to write one under runsDir fails too — caught, logged, and
+      // does not mask the original error or the exit code. See the next test
+      // for the exception path that DOES leave a file behind.
+      expect(captured.stderr).toContain("could not record the escalation file");
+      await expect(readdir(join(s.runsDir, "escalations"))).rejects.toThrow();
     } finally {
       await s.cleanup();
     }
   }, 180_000);
+
+  it("still writes spec §5.4's escalation file when the round dies somewhere runsDir CAN be written to", async () => {
+    // The EACCES test above forces the exception by making runsDir
+    // unwritable, which also makes the escalation file's own write fail —
+    // a real and correctly-handled case, but not one that can prove the
+    // mechanism itself works. This fixture forces the exception a different
+    // way — an unresolvable ccloopBin, which `ccloopEvidence` (called right
+    // after roundId is derived, before any ccloop spawn) throws on — so
+    // runsDir stays writable for the whole round and the escalation file
+    // actually lands.
+    const s = await makeSandbox();
+    try {
+      const contract = await writeContract(s, "T1", {
+        goal: "write a.txt",
+        targetPaths: ["a.txt"],
+        requiredChecks: ["true"],
+      });
+      const planPath = await writePlan(s, {
+        targetRepo: s.targetRepo,
+        ccloopBin: join(s.root, "no-such-ccloop-checkout", "dist", "cli.js"),
+        runsDir: s.runsDir,
+        workBranch: "orca/w/x",
+        policy: "local-merge",
+        ledgerMode: "in-repo",
+        tasks: [{ taskId: "T1", contract, dependsOn: [] }],
+      });
+
+      const captured = await captureStreams(() =>
+        runCli(["run", planPath, "--adapter-config", join(s.root, "unused-adapter-config.json")]).catch(
+          (err: Error) => err.message,
+        ),
+      );
+
+      expect(captured.result).toBe(3);
+      expect(captured.stderr).toContain("the round failed");
+
+      // spec §5.4: the copy, under runsDir, never on W, never inside the
+      // target repository. Mutation: delete the escalation write in the
+      // catch block — this goes red on `readdir` finding zero files.
+      const dir = join(s.runsDir, "escalations");
+      const names = await readdir(dir);
+      expect(names).toHaveLength(1);
+      const escalationPath = join(dir, names[0]);
+      expect(escalationPath.startsWith(s.targetRepo)).toBe(false);
+
+      const text = await readFile(escalationPath, "utf8");
+      expect(text).toMatch(/cannot find ccloop's repository root/);
+      const how = /- how: `([^`]+)`/.exec(text)?.[1];
+      expect(how).not.toBeUndefined();
+      // Mutation: replace the exception path's `rm -rf <escalation file>`
+      // with prose ("clean this up once resolved") — undoHowIsExecutable
+      // rejects it while the file-existence assertions above stay green.
+      expect(undoHowIsExecutable(how!)).toBe(true);
+    } finally {
+      await s.cleanup();
+    }
+  }, 60_000);
 
   // Measured in a real process, not through main()'s return value: the arm
   // under test is the `.then(onFulfilled, onRejected)` in the CLI bootstrap,

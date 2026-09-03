@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { undoHowIsExecutable } from "../../../src/ledger/undoExecutable.js";
 import { validateLine } from "../../../src/ledger/validateLine.js";
 import {
   blameCommitOfLine,
@@ -102,6 +103,33 @@ describe("S3 (spec 3.4 rule 3 / 5.0-5.2 / 8.3)", () => {
     expect(lines.length).toBeGreaterThan(0);
     expect(lines.some((l) => (JSON.parse(l) as { kind?: string }).kind === "reconcile")).toBe(true);
     expect(lines.every((l) => validateLine(l).verdict === "ok")).toBe(true);
+  }, 300_000);
+
+  it("records a boundary decision for T1's second-tier out-of-bounds landing, and its undo.how is executable", async () => {
+    // Task 9 left this decision unwritten: `disposition` (harvest.ts) judges
+    // "out of bounds, no sibling claims it, land anyway" (spec §7.3's SECOND
+    // tier) but never records it. T1 is that shape exactly: it declares
+    // "a.txt" but its required checks also write "shared.txt", which T2's
+    // DECLARED write set ("b.txt") never claims. S7.test.ts is the FIRST
+    // tier's own criterion — there, the out-of-bounds write DOES intersect a
+    // sibling's declared claim, and the verdict is an escalation instead.
+    const lines = await readLedgerOnBranch(s.targetRepo, p.workBranch);
+    const boundary = lines
+      .map((l) => JSON.parse(l) as { kind?: string; scope?: string; question?: string; undo?: { how: string } })
+      .find((d) => d.kind === "boundary");
+
+    expect(boundary).not.toBeUndefined();
+    expect(boundary!.scope).toBe("task");
+    expect(boundary!.question).toContain("shared.txt");
+    // Read back through the REAL validator (not a hand-rolled check), which
+    // is what actually gates every decision this scheduler writes — spec
+    // §3.8 check 3 folded into validateLine's "downgraded to tier 0" branch.
+    expect(validateLine(JSON.stringify(boundary)).verdict).toBe("ok");
+    // And named directly, since a `verdict === "ok"` overall does not by
+    // itself prove THIS decision's undo.how is what passed the check — a
+    // schema failure on a different field would report the same verdict on
+    // a decision whose undo.how happened to be garbage.
+    expect(undoHowIsExecutable(boundary!.undo!.how)).toBe(true);
   }, 300_000);
 
   it("lands a merge commit whose first parent is the W tip and whose tree is the reconciled one", async () => {

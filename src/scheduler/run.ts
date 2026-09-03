@@ -11,9 +11,20 @@ import type { TaskGraph } from "./graph.js";
 import { disposition, harvest, netChangeSet, sameLayerWriteSets } from "./harvest.js";
 import { checkoutWorkBranch, commitLedgerOnW, incomingRefOf, landIntoW, workBranchTip } from "./land.js";
 import type { ConflictState } from "./land.js";
-import { reconcileDecision, writeBoundThenCommit } from "./ledgerWiring.js";
+import {
+  boundaryDecision,
+  ccloopEvidence,
+  escalationFilePath,
+  intentOfContract,
+  reconcileDecision,
+  writeBoundThenCommit,
+  writeEscalationFile,
+} from "./ledgerWiring.js";
+import type { EscalationSide } from "./ledgerWiring.js";
 import { loadPlan } from "./planFile.js";
 import type { PlanFile, PlanRejection, PlanTask } from "./planFile.js";
+import { reduceExitCode } from "./exitCode.js";
+import type { ExitContribution } from "./exitCode.js";
 import { emptyRequiredChecksPairs, renderPlanReport } from "./planReport.js";
 import { preflight } from "./preflight.js";
 import type { PreflightReport } from "./preflight.js";
@@ -141,20 +152,6 @@ export interface RunOptions {
 }
 
 /**
- * spec §6.3's precedence, 3 > 2 > 1 > 0, spelled inline because the codes are
- * ordered integers and the largest contribution wins.
- *
- * ⚠️ Task 13 owns `src/scheduler/exitCode.ts` and the named `M-EXIT` mutation
- * that pins this rule against a criterion. Until then this is the same rule
- * with no module of its own — deliberately NOT a private re-derivation with
- * different semantics, so that Task 13's version replaces it rather than
- * competing with it.
- */
-function roundExitCode(contributions: number[]): number {
-  return contributions.reduce((worst, code) => Math.max(worst, code), 0);
-}
-
-/**
  * spec §4.3: "落地顺序本身是一次 `scheduling` 决策 ⇒ 进台账" — but only when
  * there IS an order to choose. A layer that lands one task made no choice,
  * and A′ §3.5 is explicit that something with no alternatives is not a
@@ -231,6 +228,8 @@ interface ReconcileContext {
   adapterConfig: string;
   keepWorkdirs?: boolean;
   log: (line: string) => void;
+  /** spec §9.1: which ccloop this round ran on, attached to every decision. */
+  evidence: string[];
 }
 
 /**
@@ -306,7 +305,15 @@ async function reconcileAndLand(
   taskId: string,
   run: TaskRun,
   state: ConflictState,
-): Promise<{ landed: true } | { landed: false; why: string }> {
+): Promise<
+  | { landed: true }
+  // otherTaskId and conflictedPaths ride along on every failure so that
+  // run.ts's ONE escalation-writing call site (spec §5.4) can name both
+  // sides and the conflicted paths without reaching back into this
+  // function's internals — otherTaskId is null exactly when otherSideOf
+  // itself could not name a single other side.
+  | { landed: false; why: string; otherTaskId: string | null; conflictBlocks: string[] }
+> {
   const { plan } = ctx;
   const copy = state.copyPath;
 
@@ -316,7 +323,10 @@ async function reconcileAndLand(
     ctx.landed.map(({ taskId: id, run: r }) => ({ taskId: id, runId: r.runId })),
     state.conflictedPaths,
   );
-  if ("escalate" in other) return { landed: false, why: other.escalate };
+  const otherTaskId = "taskId" in other ? other.taskId : null;
+  if ("escalate" in other) {
+    return { landed: false, why: other.escalate, otherTaskId, conflictBlocks: state.conflictedPaths };
+  }
 
   const conflict = await materialiseConflict(copy, state.wTip, state.incomingRef);
   const conflictRef = await pinConflictCommit(copy, run.runId, conflict.conflictCommit);
@@ -328,7 +338,14 @@ async function reconcileAndLand(
   const sideA = plan.tasks.find((t) => t.taskId === taskId)!;
   const sideB = plan.tasks.find((t) => t.taskId === other.taskId)!;
   const synthesized = await synthesizeReconcileContract(sideA, sideB, ctx.contracts, plan.runsDir, conflict);
-  if ("escalate" in synthesized) return { landed: false, why: synthesized.escalate };
+  if ("escalate" in synthesized) {
+    return {
+      landed: false,
+      why: synthesized.escalate,
+      otherTaskId,
+      conflictBlocks: conflict.blocks.map((b) => `${b.path}:${b.startLine}-${b.endLine}`),
+    };
+  }
 
   // The reconciliation is an ordinary ccloop task in an ordinary clone — of
   // the COPY, whose object store is the only one holding the conflict commit,
@@ -371,6 +388,8 @@ async function reconcileAndLand(
         `the reconciliation of ${taskId} x ${other.taskId} ended ${reconcileRun.outcome}` +
         `${reconcileRun.attemptSha === null ? " and published no attempt commit" : ""}; ` +
         `the conflict is at ${conflictRef} in ${copy}`,
+      otherTaskId,
+      conflictBlocks: conflict.blocks.map((b) => `${b.path}:${b.startLine}-${b.endLine}`),
     };
   }
 
@@ -397,6 +416,8 @@ async function reconcileAndLand(
       why:
         `the reconciliation of ${taskId} x ${other.taskId} passed both tasks' required checks but left ` +
         `conflict markers in ${remaining.join(", ")}; the conflict is at ${conflictRef} in ${copy}`,
+      otherTaskId,
+      conflictBlocks: conflict.blocks.map((b) => `${b.path}:${b.startLine}-${b.endLine}`),
     };
   }
 
@@ -416,7 +437,7 @@ async function reconcileAndLand(
     plan.workBranch,
     new Date().toISOString(),
   );
-  await appendEvent(join(copy, ".decisions"), ctx.roundId, decision);
+  await appendEvent(join(copy, ".decisions"), ctx.roundId, { ...decision, evidence: ctx.evidence });
 
   const mergeSha = await writeBoundThenCommit(
     copy,
@@ -529,6 +550,12 @@ export async function runRound(planPath: string, options: RunOptions = {}): Prom
     return 1;
   }
 
+  // Hoisted out of the try block below (rather than `const`) so the
+  // exception handler can name the round its escalation file (spec §5.4) is
+  // about. `undefined` until the round gets far enough to derive one — an
+  // exception before that point (preflight, checkoutWorkBranch) falls back to
+  // a synthesized id in the catch block itself.
+  let roundId: string | undefined;
   try {
     const preflightReport = await preflight(plan, defaultBranch);
 
@@ -554,9 +581,17 @@ export async function runRound(planPath: string, options: RunOptions = {}): Prom
     // writing their own `.decisions/<run-id>.jsonl` at the same time.
     // Derived, not random, and from the plan's bytes plus the base commit, so
     // the same plan against the same base names the same round.
-    const roundId = deriveRunId("round", round.planBytes, base);
+    roundId = deriveRunId("round", round.planBytes, base);
     const decisionsDir = join(plan.targetRepo, ".decisions");
     let decisionSeq = 0;
+
+    // spec §9.1: every decision C generates this round carries which ccloop
+    // it actually ran on — see ccloopEvidence's own comment for why that is
+    // what stands in for a locked npm dependency ccloop cannot offer today.
+    // Read once per round, not once per decision: it is the same ccloop for
+    // every task in a round, and reading it per-decision would just make the
+    // round slower for an answer that cannot change.
+    const evidence = await ccloopEvidence(plan.ccloopBin);
 
     // spec §2.4 / §8.1: every implicit edge's direction is an arbitrary
     // tie-break, so it is a Tier 1 decision. Written and committed BEFORE the
@@ -565,14 +600,14 @@ export async function runRound(planPath: string, options: RunOptions = {}): Prom
     // the reasoning it scheduled on.
     const edgeDecisions = implicitEdgeDecisions(graph, roundId);
     for (const decision of edgeDecisions) {
-      await appendEvent(decisionsDir, roundId, decision);
+      await appendEvent(decisionsDir, roundId, { ...decision, evidence });
       decisionSeq += 1;
     }
     if (edgeDecisions.length > 0) {
       await commitLedgerOnW(plan, `orca: record ${edgeDecisions.length} scheduling decision(s) for ${roundId}`);
     }
 
-    const contributions: number[] = [];
+    const contributions: ExitContribution[] = [];
     const notRun = new Set<string>();
     let stopRound = false;
 
@@ -612,6 +647,16 @@ export async function runRound(planPath: string, options: RunOptions = {}): Prom
       // §5.2's reconciliation needs the run ids to ask which already-landed
       // task actually wrote a conflicted path; `landed` carries only names.
       const landedRuns: Array<{ taskId: string; run: TaskRun }> = [];
+      // spec §7.3 tier 1's boundary decisions, collected rather than committed
+      // immediately: committing one mid-loop would insert an extra commit
+      // between this task's landing and the NEXT same-layer task's own
+      // `landIntoW` call, which captures W's tip at that moment as its merge's
+      // first parent (spec §5.2 step 4 / S3's own criterion for it). Writing
+      // every boundary decision after the whole layer has landed — the same
+      // timing `landingOrderDecision` already uses, for the same reason —
+      // keeps every same-layer merge's first parent exactly the sibling
+      // commit that actually landed before it.
+      const pendingBoundaries: Array<{ taskId: string; outOfBounds: string[]; beforeSha: string }> = [];
       for (const { taskId, run } of runs) {
         log(`orca: ${taskId}: ccloop reported ${run.outcome} (run ${run.runId})`);
 
@@ -643,6 +688,32 @@ export async function runRound(planPath: string, options: RunOptions = {}): Prom
           log(
             `orca: ${taskId}: refusing to land — ${reconciliation.empty ? "the net change set is empty (succeeded_but_empty, spec §6.2)" : `wrote outside its declared write set: ${reconciliation.outOfBounds.join(", ")}`}`,
           );
+
+          // spec §7.3 tier 0 / §5.4: an out-of-bounds write that collides with
+          // a sibling's DECLARED write set is the one disposition verdict that
+          // escalates (exitContribution 3) rather than merely failing (2, the
+          // empty-change-set branch above it) — the layering decision that let
+          // this task and its sibling run in parallel was made from a
+          // declaration this run just proved wrong, so no landing order can be
+          // argued safe. §5.4 requires a copy of the human-facing facts under
+          // runsDir/escalations, never on W.
+          if (verdict.exitContribution === 3) {
+            const escalationPath = await writeEscalationFile(plan.runsDir, {
+              runId: run.runId,
+              reason:
+                `${taskId} wrote outside its declared write set on ${reconciliation.outOfBounds.join(", ")}, ` +
+                `which intersects a sibling task's declared write set in the same layer — the parallelism ` +
+                `verdict for this layer was computed from declarations this run has just proved wrong, so no ` +
+                `landing order can be argued to be safe (spec §7.3)`,
+              sides: [intentOfContract(round.contracts, taskId)],
+              conflictBlocks: reconciliation.outOfBounds,
+              undoHow: `rm -rf ${run.workdir}`,
+              undoCost: `discard the kept copy for ${taskId}; its out-of-bounds write never reached ${plan.workBranch}`,
+              undoBlastRadius: `only the kept copy under ${plan.runsDir}`,
+            });
+            log(`orca: ${taskId}: escalation recorded at ${escalationPath}`);
+          }
+
           // keepWorkdirs is deliberately not passed here: the copy is kept
           // either way, and the printed reason should be the real one rather
           // than a flag that happens to also be set.
@@ -655,6 +726,17 @@ export async function runRound(planPath: string, options: RunOptions = {}): Prom
 
         if (reconciliation.outOfBounds.length > 0) {
           log(`orca: ${taskId}: landed despite writing outside its declared write set (spec §7.3): ${reconciliation.outOfBounds.join(", ")}`);
+
+          // spec §7.3 tier 1's "boundary" decision (debt from Task 9:
+          // harvest.ts's `disposition` judges this case — land:true,
+          // exitContribution:2 — but never wrote it down). The choice being
+          // recorded ("accept this out-of-bounds write, it collides with
+          // nobody") is already made at this point, so `beforeSha` — W's tip
+          // right before this task's OWN landing attempt — is captured now,
+          // while it is still cheap to name; the decision itself is written
+          // after the whole layer lands (see `pendingBoundaries`'s comment).
+          const beforeSha = (await git(plan.targetRepo, ["rev-parse", "HEAD"])).trim();
+          pendingBoundaries.push({ taskId, outOfBounds: reconciliation.outOfBounds, beforeSha });
         }
         if (reconciliation.declaredNotProduced.length > 0) {
           log(`orca: ${taskId}: declared but did not produce: ${reconciliation.declaredNotProduced.join(", ")}`);
@@ -689,6 +771,7 @@ export async function runRound(planPath: string, options: RunOptions = {}): Prom
               adapterConfig: options.adapterConfig!,
               keepWorkdirs: options.keepWorkdirs,
               log,
+              evidence,
             },
             taskId,
             run,
@@ -701,6 +784,33 @@ export async function runRound(planPath: string, options: RunOptions = {}): Prom
             // only place the conflict still exists.
             contributions.push(3);
             log(`orca: ${taskId}: escalating — ${reconciled.why}`);
+
+            // spec §5.4's escalation file — the convergence point for every
+            // way reconcileAndLand can fail to land a conflict (§5.2's
+            // one-sided-contract and empty-required-checks-union refusals,
+            // otherSideOf's inability to name a single other side, the
+            // reconciliation ccloop run itself failing, and markers left
+            // behind): all four return `{ landed: false, why, ... }` from
+            // that one function, and this is the one place every one of them
+            // is handled. `reconciled.otherTaskId` is null exactly when
+            // reconcileAndLand could not name a single other side, so "both
+            // sides' intent" degrades to "the one side known" rather than
+            // guessing.
+            const sides: EscalationSide[] = [intentOfContract(round.contracts, taskId)];
+            if (reconciled.otherTaskId !== null) sides.push(intentOfContract(round.contracts, reconciled.otherTaskId));
+            const escalationPath = await writeEscalationFile(plan.runsDir, {
+              runId: run.runId,
+              reason: reconciled.why,
+              sides,
+              conflictBlocks: reconciled.conflictBlocks,
+              undoHow: `rm -rf ${run.workdir}`,
+              undoCost:
+                `discard the kept copies for this merge point and re-decide the conflict on ` +
+                `${reconciled.conflictBlocks.join(", ") || "the conflicted paths"} by hand`,
+              undoBlastRadius: `the kept copies under ${plan.runsDir}; nothing from this merge point has landed on ${plan.workBranch}`,
+            });
+            log(`orca: ${taskId}: escalation recorded at ${escalationPath}`);
+
             await disposeWorkdir(run, {
               keepBecause: "its merge into the work branch conflicted and a human has to look",
               log,
@@ -719,20 +829,45 @@ export async function runRound(planPath: string, options: RunOptions = {}): Prom
         await disposeWorkdir(run, { keepWorkdirs: options.keepWorkdirs, log });
       }
 
+      // spec §7.3 tier 1: one boundary decision per task that landed an
+      // out-of-bounds write nobody else in the layer claims, written now that
+      // every task in the layer has finished landing — see
+      // `pendingBoundaries`'s own comment for why timing this after the loop,
+      // rather than inline, is load-bearing.
+      for (const pending of pendingBoundaries) {
+        decisionSeq += 1;
+        await appendEvent(decisionsDir, roundId, {
+          ...boundaryDecision(
+            roundId,
+            decisionSeq,
+            pending.taskId,
+            pending.outOfBounds,
+            plan.workBranch,
+            pending.beforeSha,
+            new Date().toISOString(),
+          ),
+          evidence,
+        });
+        await commitLedgerOnW(plan, `orca: record a boundary decision for ${pending.taskId}`);
+      }
+
       if (landed.length >= 2) {
         decisionSeq += 1;
         await appendEvent(
           decisionsDir,
           roundId,
-          landingOrderDecision(
-            roundId,
-            decisionSeq,
-            layerIndex,
-            landed,
-            layerBase,
-            plan.workBranch,
-            new Date().toISOString(),
-          ),
+          {
+            ...landingOrderDecision(
+              roundId,
+              decisionSeq,
+              layerIndex,
+              landed,
+              layerBase,
+              plan.workBranch,
+              new Date().toISOString(),
+            ),
+            evidence,
+          },
         );
         await commitLedgerOnW(plan, `orca: record the landing order for layer ${layerIndex}`);
       }
@@ -741,7 +876,7 @@ export async function runRound(planPath: string, options: RunOptions = {}): Prom
     // spec §4.5: W is never deleted (deleting a branch needs a human, Rule
     // 15), so the round ends by saying where it is.
     log(`orca: work branch ${plan.workBranch} is at ${await workBranchTip(plan)}`);
-    return roundExitCode(contributions);
+    return reduceExitCode(contributions);
   } catch (err) {
     // Fix round 1, finding 2. Without this the exception propagated out of
     // main() as an unhandled rejection: node picked the exit code instead of
@@ -756,6 +891,31 @@ export async function runRound(planPath: string, options: RunOptions = {}): Prom
     // *propagation* is stopped.
     logError(`orca: the round failed: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}`);
     log(await describeRepoState(plan));
+
+    // spec §5.4's escalation file, for the fifth and last place an escalation
+    // arises: an exception nothing anticipated. `roundId` may not have been
+    // assigned yet (an exception in `preflight` or `checkoutWorkBranch` runs
+    // before it is derived) — a synthesized id keeps this from throwing a
+    // SECOND, more confusing error on top of the one already reported.
+    // Wrapped in its own try/catch for the same reason describeRepoState's
+    // reads are individually swallowed: a failure while recording the
+    // escalation (an unwritable runsDir, say) must not mask the original
+    // error or replace §6.3's exit code with node's own.
+    try {
+      const escalationId = roundId ?? `round-exception-${Date.now()}`;
+      const escalationPath = await writeEscalationFile(plan.runsDir, {
+        runId: escalationId,
+        reason: `the round threw before it could finish: ${err instanceof Error ? err.message : String(err)}`,
+        sides: [],
+        conflictBlocks: [],
+        undoHow: `rm -rf ${escalationFilePath(plan.runsDir, escalationId)}`,
+        undoCost: "loses the record that this round needed a human; the exception itself is still in the log above",
+        undoBlastRadius: "only this escalation file",
+      });
+      log(`orca: escalation recorded at ${escalationPath}`);
+    } catch (writeErr) {
+      logError(`orca: could not record the escalation file: ${(writeErr as Error).message}`);
+    }
     return 3;
   } finally {
     await lock.release();
