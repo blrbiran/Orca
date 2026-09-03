@@ -50,11 +50,11 @@ async function worktreeIsDirty(targetRepo: string): Promise<boolean> {
  * they are a separate function rather than folded into loadPlan.
  *
  * All three checks read (git rev-parse, git status --porcelain) and never
- * write — spec §9.1(4) says this explicitly: "读 ref 与 porcelain 不算「碰」"
- * ("reading a ref or porcelain output does not count as touching"). That is
- * what lets `orca plan` (spec §9.2: zero side effects on the target repo)
- * call this function and print real verdicts instead of leaving these three
- * checks perpetually "not evaluated".
+ * write — spec §9.1(4) says explicitly that reading a ref or porcelain
+ * output does not count as touching the repo. That is what lets `orca plan`
+ * (spec §9.2: zero side effects on the target repo) call this function and
+ * print real verdicts instead of leaving these three checks perpetually
+ * "not evaluated".
  */
 export async function preflight(plan: PlanFile, defaultBranch: string): Promise<PreflightReport> {
   const rejections: PlanRejection[] = [];
