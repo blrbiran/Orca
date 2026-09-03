@@ -46,6 +46,14 @@ export interface ContractSpec {
   // the adapter's verify at all, so the pauseSignals/pauseOn route is dead.
   maxAttempts?: number;
   denylistPaths?: string[];
+  // Task 9: the only route to a run that RETRIES. runRequiredChecks hard-codes
+  // `safeToRetry: false` on its own rejection, and under `verifierType:
+  // "command"` runLoop never calls adapter.verify at all, so a command-verified
+  // run can never reach stopController's `retryable` branch and always
+  // publishes exactly one attempt ref. Switching to "agent" makes the scripted
+  // frame's verification block the one stopController reads, which is what lets
+  // a scenario script "reject attempt 1, approve attempt 2" and get two refs.
+  verifierType?: "command" | "agent";
 }
 
 // Identity is passed per-invocation rather than configured, so a machine with
@@ -160,7 +168,7 @@ export async function writeContract(s: Sandbox, taskId: string, spec: ContractSp
       humanGateConditions: [],
     },
     verification: {
-      verifierType: "command",
+      verifierType: spec.verifierType ?? "command",
       requiredChecks: spec.requiredChecks,
       rejectOn: spec.rejectOn ?? ["nonzero exit"],
       evidenceRequired: [],
@@ -316,6 +324,13 @@ export interface ScriptedFrameSpec {
   // `blocked_waiting_human`; it is NOT what the run actually writes, because
   // the scripted adapter touches no files at all.
   changedFiles?: string[];
+  // Task 9: read by ccloop only under `verifierType: "agent"` (see
+  // ContractSpec.verifierType). `approved: false` with `safeToRetry: true` is
+  // the exact pair stopController.evaluateStopDecision turns into `retryable`
+  // -- every other combination is terminal on the first attempt -- so these two
+  // knobs together are what produces a multi-attempt run.
+  approved?: boolean;
+  safeToRetry?: boolean;
 }
 
 /**
@@ -342,11 +357,11 @@ export async function writeScriptedConfig(s: Sandbox, name: string, frames: Scri
         stdoutStderrLog: "",
       },
       verification: {
-        approved: true,
+        approved: frame.approved ?? true,
         rejectCategory: "",
         primaryTargetPaths: [],
         failingCommand: null,
-        safeToRetry: false,
+        safeToRetry: frame.safeToRetry ?? false,
         evidence: [],
         pauseSignals: [],
         stopSignals: [],
@@ -378,6 +393,37 @@ export async function planThatSpawns(s: Sandbox, tasks: PlanFile["tasks"]): Prom
   };
 }
 
+export interface TaskSpec {
+  taskId: string;
+  contract: ContractSpec;
+  dependsOn?: string[];
+}
+
+/**
+ * Task 9: the general form of seedFanOutPlan, extracted rather than copied
+ * because §7's scenarios need a two-task SAME-LAYER shape and Task 8's
+ * fan-out builder hard-codes a T1 -> T2 edge that would put the pair in two
+ * different layers -- the one shape §7.3 says its escalation must NOT be
+ * about.
+ *
+ * Returns the parsed contracts alongside the plan because buildGraph needs
+ * them: re-reading and re-parsing them in each scenario is how the graph a
+ * scenario asserts about drifts away from the contracts it actually ran.
+ */
+export async function seedTasks(
+  s: Sandbox,
+  specs: TaskSpec[],
+): Promise<{ plan: PlanFile; contracts: Map<string, unknown> }> {
+  const tasks: PlanFile["tasks"] = [];
+  const contracts = new Map<string, unknown>();
+  for (const spec of specs) {
+    const contract = await writeContract(s, spec.taskId, spec.contract);
+    tasks.push({ taskId: spec.taskId, contract, dependsOn: spec.dependsOn ?? [] });
+    contracts.set(spec.taskId, JSON.parse(await readFile(contract, "utf8")));
+  }
+  return { plan: await planThatSpawns(s, tasks), contracts };
+}
+
 /**
  * The three-task fan-out S8 and S9 both need: T1 → T2 by explicit dependsOn,
  * with T3 on its own branch claiming a disjoint path so no implicit edge ties
@@ -385,26 +431,14 @@ export async function planThatSpawns(s: Sandbox, tasks: PlanFile["tasks"]): Prom
  * stop, other branches continue" is unmeasurable on a graph with only one
  * branch — and T1's contract is the only parameter because the two scenarios
  * drive that one task to two different terminal statuses.
- *
- * Returns the parsed contracts alongside the plan because buildGraph needs
- * them: re-reading and re-parsing them in each scenario is how the graph a
- * scenario asserts about drifts away from the contracts it actually ran.
  */
 export async function seedFanOutPlan(
   s: Sandbox,
   t1: ContractSpec,
 ): Promise<{ plan: PlanFile; contracts: Map<string, unknown> }> {
-  const specs: Array<[string, ContractSpec, string[]]> = [
-    ["T1", t1, []],
-    ["T2", { goal: "write b.txt", targetPaths: ["b.txt"], requiredChecks: ["true"] }, ["T1"]],
-    ["T3", { goal: "write c.txt", targetPaths: ["c.txt"], requiredChecks: ["true"] }, []],
-  ];
-  const tasks: PlanFile["tasks"] = [];
-  const contracts = new Map<string, unknown>();
-  for (const [taskId, spec, dependsOn] of specs) {
-    const contract = await writeContract(s, taskId, spec);
-    tasks.push({ taskId, contract, dependsOn });
-    contracts.set(taskId, JSON.parse(await readFile(contract, "utf8")));
-  }
-  return { plan: await planThatSpawns(s, tasks), contracts };
+  return seedTasks(s, [
+    { taskId: "T1", contract: t1 },
+    { taskId: "T2", contract: { goal: "write b.txt", targetPaths: ["b.txt"], requiredChecks: ["true"] }, dependsOn: ["T1"] },
+    { taskId: "T3", contract: { goal: "write c.txt", targetPaths: ["c.txt"], requiredChecks: ["true"] } },
+  ]);
 }

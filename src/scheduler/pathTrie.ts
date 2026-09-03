@@ -22,7 +22,17 @@ function segments(normalized: string): string[] {
   return normalized.split("/").filter((s) => s.length > 0);
 }
 
-function contains(outer: string, inner: string): boolean {
+/**
+ * Exported for §7's reconciliation (harvest.ts), which asks a question
+ * classify() cannot answer: classify is symmetric-by-cases and reports a
+ * relation in either direction, while "is this actual path inside something
+ * the task declared" is DIRECTIONAL -- a declared "src/a/b.ts" and an actual
+ * "src/a" are related but not in-bounds. Re-deriving segment containment there
+ * would put two independent readers of spec §3.2's rule in the tree, which is
+ * the drift planFile.ts's detectCycle comment already records this repository
+ * treating as a defect once a shared home exists.
+ */
+export function contains(outer: string, inner: string): boolean {
   const o = segments(outer);
   const i = segments(inner);
   if (o.length > i.length) return false;
