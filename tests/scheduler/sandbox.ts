@@ -40,7 +40,9 @@ export interface ContractSpec {
 // identically to a developer's laptop.
 const ID = ["-c", "user.name=orca-test", "-c", "user.email=orca-test@invalid"];
 
-async function git(repo: string, args: string[]): Promise<string> {
+// Exported per ruling R1: later tasks' scenarios need a raw git escape hatch
+// on the sandbox's repos, and sandbox.ts is the single home for it.
+export async function git(repo: string, args: string[]): Promise<string> {
   const { stdout } = await execFileAsync("git", args, { cwd: repo });
   return stdout;
 }
@@ -61,7 +63,13 @@ function resolveCcloopBin(): string {
   return bin;
 }
 
-export async function makeSandbox(): Promise<Sandbox> {
+export async function makeSandbox(
+  // Test-only seam: the default resolver is the real one, but a scenario that
+  // wants to exercise "resolution fails" without ccloop's build state
+  // actually being absent on this machine can substitute its own. Nothing in
+  // Tasks 2+ is expected to pass this; it exists for sandbox.test.ts itself.
+  options: { resolveCcloopBin?: () => string } = {},
+): Promise<Sandbox> {
   const root = await mkdtemp(join(tmpdir(), "orca-sched-"));
   const targetRepo = join(root, "repo");
   const runsDir = join(root, "runs");
@@ -71,11 +79,22 @@ export async function makeSandbox(): Promise<Sandbox> {
   await writeFile(join(targetRepo, "README.md"), "seed\n");
   await git(targetRepo, [...ID, "add", "-A"]);
   await git(targetRepo, [...ID, "commit", "-m", "init"]);
+  const resolver = options.resolveCcloopBin ?? resolveCcloopBin;
+  // Resolved lazily, on first read, not here. None of this task's three
+  // scenarios ever spawn ccloop, so eagerly resolving at construction would
+  // make every sandbox — on any machine or CI lacking ccloop's gitignored
+  // dist/ build — fail for a reason that has nothing to do with the code
+  // under test. The named error resolveCcloopBin throws now surfaces at the
+  // point of first real use (Task 8's spawn) instead of at every construction.
+  let cached: string | undefined;
   return {
     root,
     targetRepo,
     runsDir,
-    ccloopBin: resolveCcloopBin(),
+    get ccloopBin(): string {
+      if (cached === undefined) cached = resolver();
+      return cached;
+    },
     cleanup: () => rm(root, { recursive: true, force: true }),
   };
 }

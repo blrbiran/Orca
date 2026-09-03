@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
-import { allRefShas, makeSandbox, porcelain, writeContract, writePlan } from "./sandbox.js";
+import { allRefShas, git, makeSandbox, porcelain, writeContract, writePlan } from "./sandbox.js";
 
 describe("the scheduler sandbox", () => {
   it("builds a repository with a real commit, a clean worktree, and no git identity leaking in from the machine", async () => {
@@ -13,6 +13,35 @@ describe("the scheduler sandbox", () => {
       expect(await porcelain(s.targetRepo)).toBe("");
       const refs = await allRefShas(s.targetRepo);
       expect(Object.keys(refs).length).toBeGreaterThan(0);
+      // Load-bearing per fix round 1, finding 1: the two assertions above
+      // pass regardless of whose git identity made the commit — a developer's
+      // real name and email would satisfy them just as well. This is the one
+      // assertion that actually depends on the `-c user.name=` / `-c
+      // user.email=` passed into `commit`, so it is the one that would go red
+      // if that spread were ever dropped (see M-T1-ID in the task report).
+      expect(await git(s.targetRepo, ["log", "-1", "--format=%an <%ae>"])).toBe(
+        "orca-test <orca-test@invalid>\n",
+      );
+    } finally {
+      await s.cleanup();
+    }
+  });
+
+  it("resolves ccloopBin lazily, so construction succeeds even when resolution would fail", async () => {
+    // Load-bearing per fix round 1, finding 2: none of this file's other
+    // scenarios ever read s.ccloopBin, so a resolver that throws must not
+    // stop makeSandbox from returning — otherwise every sandbox on a machine
+    // or CI without ccloop's gitignored dist/ build fails for a reason that
+    // has nothing to do with the code under test. The injected resolver below
+    // always throws, so a pass here means construction genuinely never called
+    // it, and reading the property is what triggers the real error.
+    const s = await makeSandbox({
+      resolveCcloopBin: () => {
+        throw new Error("simulated: ccloop bin not found");
+      },
+    });
+    try {
+      expect(() => s.ccloopBin).toThrow("simulated: ccloop bin not found");
     } finally {
       await s.cleanup();
     }
