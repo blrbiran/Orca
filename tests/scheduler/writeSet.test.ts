@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeClaim, writeSetOf } from "../../src/scheduler/writeSet.js";
+import { normalizeClaim, requiredChecksUnion, writeSetOf } from "../../src/scheduler/writeSet.js";
 
 describe("normalizeClaim (spec 3.3)", () => {
   it("normalizes a prefix glob to its directory prefix", () => {
@@ -53,5 +53,29 @@ describe("writeSetOf (spec 3.1: context.targetPaths ∪ safetyPolicy.allowlistPa
     // exists in this codebase (decision context #4) — a missing field must
     // not throw.
     expect(writeSetOf({})).toEqual([]);
+  });
+});
+
+describe("requiredChecksUnion (spec 5.3 / 9.1(6), fix round 1 finding 2)", () => {
+  function contract(requiredChecks: string[]): unknown {
+    return { verification: { requiredChecks } };
+  }
+
+  it("unions both sides' requiredChecks, deduped", () => {
+    const union = requiredChecksUnion(contract(["a", "b"]), contract(["b", "c"]));
+    expect(union.sort()).toEqual(["a", "b", "c"]);
+  });
+
+  it("is empty when both sides declare no checks", () => {
+    // ccloop's own schema requires requiredChecks.min(1), so a contract
+    // ccloop would accept can never reach this — but subsystem C reads
+    // contract JSON as opaque and unvalidated, so a malformed contract with
+    // requiredChecks: [] does reach here. This is the case orca plan's
+    // escalation warning exists to catch before a spawn would.
+    expect(requiredChecksUnion(contract([]), contract([]))).toEqual([]);
+  });
+
+  it("defaults to no checks when the field is missing, rather than throwing", () => {
+    expect(requiredChecksUnion({}, {})).toEqual([]);
   });
 });

@@ -6,7 +6,7 @@ import { checkAppendOnly } from "./ledger/appendOnly.js";
 import { validateFile } from "./ledger/validateFile.js";
 import { buildGraph } from "./scheduler/graph.js";
 import { loadPlan, type PlanRejection } from "./scheduler/planFile.js";
-import { renderPlanReport } from "./scheduler/planReport.js";
+import { emptyRequiredChecksPairs, renderPlanReport } from "./scheduler/planReport.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -153,6 +153,13 @@ async function runPlan(args: string[]): Promise<number> {
 
   const g = buildGraph(plan, contracts);
 
+  // Fix round 1, finding 2: the requiredChecks-union escalation warning
+  // (spec §5.3 / §9.1(6)) does not need to wait for a later task — the
+  // contracts map above is exactly what it needs, already in hand. Attached
+  // onto `g` rather than threaded as a fifth parameter, since PlanGraphExtras
+  // is already the seam renderPlanReport reads it from.
+  const annotatedGraph = { ...g, emptyRequiredChecksPairs: emptyRequiredChecksPairs(g, contracts) };
+
   // Ruling R3: the real runtime preflight (work branch already exists, base
   // not a real commit, target worktree dirty) is a later task's job, and
   // evaluating any of them would mean spawning git against the target repo —
@@ -161,7 +168,7 @@ async function runPlan(args: string[]): Promise<number> {
   // renderer print those three as "not evaluated".
   const preflight = { rejections: [] as PlanRejection[] };
 
-  process.stdout.write(renderPlanReport(g, plan, preflight, { verbose }));
+  process.stdout.write(renderPlanReport(annotatedGraph, plan, preflight, { verbose }));
   process.stdout.write("\n");
   return 0;
 }

@@ -66,3 +66,35 @@ export function writeSetOf(contract: unknown): ClaimedPath[] {
   const allowlistPaths = asStringArray(c?.safetyPolicy?.allowlistPaths);
   return [...targetPaths, ...allowlistPaths].map(normalizeClaim);
 }
+
+/**
+ * Spec §5.3 / §9.1(6): the set union of two contracts' `verification.
+ * requiredChecks` — an intersecting pair whose union is empty would "pass"
+ * reconciliation by having nothing to check, which is a green that means
+ * nothing. This lives next to writeSetOf because both read the same kind of
+ * opaque, unvalidated contract JSON (no schema for it exists in this
+ * codebase — see writeSetOf's own comment) rather than because it is about
+ * write sets.
+ *
+ * ccloop's own contract schema requires `requiredChecks: z.array(z.string())
+ * .min(1)` (ccloop/src/contract/schema.ts), so a contract ccloop itself would
+ * accept can never contribute an empty array. The empty-union case is still
+ * reachable here: subsystem C reads contract files as opaque JSON and never
+ * validates them against ccloop's schema (fix round 1, finding 2), so a
+ * malformed contract with `requiredChecks: []` reaches the planner fine and
+ * would only be caught later, at spawn — which is exactly why catching it at
+ * plan time (Task 5's `orca plan`) is worth doing.
+ *
+ * Task 11's synthesizeReconcileContract / planReconciliation (spec's own
+ * `requiredChecksUnion(a, b)` interface) must import this function rather
+ * than define a second one — two independent readers of the same contract
+ * field is exactly the drift a later reader should not "helpfully"
+ * reintroduce.
+ */
+export function requiredChecksUnion(a: unknown, b: unknown): string[] {
+  function checksOf(contract: unknown): string[] {
+    const c = contract as { verification?: { requiredChecks?: unknown } } | null | undefined;
+    return asStringArray(c?.verification?.requiredChecks);
+  }
+  return [...new Set([...checksOf(a), ...checksOf(b)])];
+}

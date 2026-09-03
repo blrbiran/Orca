@@ -1,5 +1,6 @@
 import type { TaskGraph } from "./graph.js";
 import type { PlanFile, PlanRejection } from "./planFile.js";
+import { requiredChecksUnion } from "./writeSet.js";
 
 /**
  * Spec §9.1(4) / §4.2's own count: nine up-front checks, not eleven and not
@@ -23,26 +24,51 @@ export const PLAN_LEVEL_CHECKS = [
 // touching the target repo at all — so as of this task they never appear in
 // `preflight.rejections`, and this renderer must print "not evaluated"
 // rather than fake a "pass" it never checked. Task 6's real preflight must
-// use exactly these three code strings for its rejections, or this print
-// will keep calling them "not evaluated" even once they run.
-export const RUNTIME_CHECKS = ["work-branch-already-exists", "base-not-a-commit", "target-worktree-dirty"] as const;
+// import this constant rather than retype the strings — it is the one source
+// of truth for what these three codes are called. `dirty-worktree` matches
+// task-6-brief.md's own S22 criterion verbatim (fix round 1, finding 1); the
+// other two have no prior authority anywhere in the repo and were fixed by
+// controller ruling in the same round.
+export const RUNTIME_CHECKS = ["work-branch-already-exists", "base-not-a-commit", "dirty-worktree"] as const;
 
 /**
  * Spec §5.3 / §9.1(6): a pair whose requiredChecks union is empty escalates
  * on its first conflict instead of being reconciled — worth flagging before
- * a run, not after. Computing the union itself is `requiredChecksUnion`, a
- * later task's function (it needs each task's parsed contract, which
- * TaskGraph does not carry — only the write sets derived from it). Until
- * that task exists, nothing populates this field on a real TaskGraph
- * (buildGraph's return type has no such property), so the warning simply
- * never prints for a real `orca plan` run — honest omission, not a fabricated
- * "no gap found". This type only exists so a future caller has somewhere
- * structurally compatible to attach that data without widening TaskGraph
- * itself; a plain TaskGraph already satisfies it because every field here is
- * optional.
+ * a run, not after. TaskGraph itself does not carry this (it only carries
+ * write sets derived from contracts, not the contracts themselves), so it is
+ * attached as an optional extra rather than by widening TaskGraph's own
+ * exported type — every field here is optional, so a plain TaskGraph is
+ * still assignable to `TaskGraph & PlanGraphExtras` wherever a caller has not
+ * computed this yet.
+ *
+ * Fix round 1, finding 2: this used to be a seam nothing production filled in
+ * — `orca plan` passed a bare TaskGraph and the field was always undefined,
+ * so the warning below could never fire for a real run, indistinguishably
+ * from "checked, found none". `emptyRequiredChecksPairs()` below is what the
+ * CLI now calls to actually fill it in, using the same contracts map
+ * buildGraph already received.
  */
 export interface PlanGraphExtras {
   emptyRequiredChecksPairs?: Array<{ from: string; to: string }>;
+}
+
+/**
+ * Computes, for every intersecting pair the graph found, whether the two
+ * tasks' requiredChecks union is empty (spec §5.3 / §9.1(6)) — the data
+ * `renderPlanReport` needs to print the escalation warning, kept as its own
+ * pure function so the CLI can call it with the contracts map it already
+ * loaded for buildGraph, without renderPlanReport itself doing any I/O.
+ */
+export function emptyRequiredChecksPairs(
+  g: TaskGraph,
+  contracts: Map<string, unknown>,
+): Array<{ from: string; to: string }> {
+  const pairs: Array<{ from: string; to: string }> = [];
+  for (const edge of g.implicit) {
+    const union = requiredChecksUnion(contracts.get(edge.from), contracts.get(edge.to));
+    if (union.length === 0) pairs.push({ from: edge.from, to: edge.to });
+  }
+  return pairs;
 }
 
 function pairMatches(pair: { from: string; to: string }, from: string, to: string): boolean {

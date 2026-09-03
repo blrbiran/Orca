@@ -195,6 +195,28 @@ export async function runCli(argv: string[]): Promise<number> {
   return main(argv);
 }
 
+// Fix round 1, finding 2: the first scenario that needs to assert on what a
+// CLI subcommand actually printed, not just its exit code — `main` writes
+// through `process.stdout.write` directly rather than returning the text, so
+// there is nothing to inspect without capturing it. Restores the real
+// `process.stdout.write` in a `finally` even if `fn` throws, so a failing
+// assertion inside `fn` cannot leave every later test writing into a swallowed
+// buffer.
+export async function captureStdout<T>(fn: () => Promise<T>): Promise<{ result: T; stdout: string }> {
+  const chunks: string[] = [];
+  const original = process.stdout.write.bind(process.stdout);
+  process.stdout.write = ((chunk: string | Uint8Array) => {
+    chunks.push(chunk.toString());
+    return true;
+  }) as typeof process.stdout.write;
+  try {
+    const result = await fn();
+    return { result, stdout: chunks.join("") };
+  } finally {
+    process.stdout.write = original;
+  }
+}
+
 // Ruling R1 (Task 5): the first scenario that needs a full, schedulable,
 // two-task plan file on disk. T1 and T2 claim disjoint paths, so the graph
 // `orca plan` builds has no implicit edge — S17 only cares that `plan` never

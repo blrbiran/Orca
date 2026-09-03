@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   PLAN_LEVEL_CHECKS,
   RUNTIME_CHECKS,
+  emptyRequiredChecksPairs,
   renderPlanReport,
   type PlanGraphExtras,
 } from "../../src/scheduler/planReport.js";
@@ -68,9 +69,12 @@ function gWithStarStar(): TaskGraph & PlanGraphExtras {
   });
 }
 
-// One intersecting pair, flagged as having an empty requiredChecks union —
-// the field a real buildGraph() never sets (see PlanGraphExtras), but exactly
-// what a caller who does have that data (a later task) would attach.
+// One intersecting pair, pre-flagged as having an empty requiredChecks union
+// — this is what `emptyRequiredChecksPairs()` (tested separately below)
+// actually computes and cli.ts actually attaches; used here only to check
+// renderPlanReport's *formatting* of that data in isolation, not whether
+// production computes it (fix round 1 finding 2's production-path proof is
+// tests/scheduler/scenarios/emptyRequiredChecksWarning.test.ts).
 function gEmptyChecks(): TaskGraph & PlanGraphExtras {
   return graph({
     layers: [["T1"], ["T2"]],
@@ -187,10 +191,11 @@ describe("renderPlanReport (spec 9.1, 9.5)", () => {
     expect(out).not.toContain("this plan has no parallelism");
   });
 
-  it("warns about an intersecting pair whose requiredChecks union is empty", () => {
-    // Such a pair escalates on its first conflict instead of being
-    // reconciled, and finding that out after an hour of running is the
-    // expensive way.
+  it("renders the escalation line for a pair emptyRequiredChecksPairs flagged (formatting only)", () => {
+    // This checks the renderer's formatting given already-computed data, not
+    // whether production computes that data — see
+    // scenarios/emptyRequiredChecksWarning.test.ts for the proof that `orca
+    // plan` actually flags a real pair through the real contracts it read.
     expect(renderPlanReport(gEmptyChecks(), p, pf, { verbose: false })).toContain("would escalate");
   });
 
@@ -211,5 +216,39 @@ describe("renderPlanReport (spec 9.1, 9.5)", () => {
     // assertion.
     expect(out).toContain("shared/file0.txt");
     expect(out).toContain("shared/file24.txt");
+  });
+});
+
+describe("emptyRequiredChecksPairs (fix round 1 finding 2 — the real wiring)", () => {
+  it("flags an intersecting pair whose contracts both declare no requiredChecks", () => {
+    const twoTaskGraph = graph({
+      layers: [["T1"], ["T2"]],
+      implicit: [{ from: "T1", to: "T2", conflicts: [{ kind: "equal", a: normalizeClaim("a.txt"), b: normalizeClaim("a.txt") }] }],
+      writeSets: new Map([
+        ["T1", [normalizeClaim("a.txt")]],
+        ["T2", [normalizeClaim("a.txt")]],
+      ]),
+    });
+    const contracts = new Map<string, unknown>([
+      ["T1", { verification: { requiredChecks: [] } }],
+      ["T2", { verification: { requiredChecks: [] } }],
+    ]);
+    expect(emptyRequiredChecksPairs(twoTaskGraph, contracts)).toEqual([{ from: "T1", to: "T2" }]);
+  });
+
+  it("does not flag a pair where at least one side declares a check", () => {
+    const twoTaskGraph = graph({
+      layers: [["T1"], ["T2"]],
+      implicit: [{ from: "T1", to: "T2", conflicts: [{ kind: "equal", a: normalizeClaim("a.txt"), b: normalizeClaim("a.txt") }] }],
+      writeSets: new Map([
+        ["T1", [normalizeClaim("a.txt")]],
+        ["T2", [normalizeClaim("a.txt")]],
+      ]),
+    });
+    const contracts = new Map<string, unknown>([
+      ["T1", { verification: { requiredChecks: ["npm test"] } }],
+      ["T2", { verification: { requiredChecks: [] } }],
+    ]);
+    expect(emptyRequiredChecksPairs(twoTaskGraph, contracts)).toEqual([]);
   });
 });
