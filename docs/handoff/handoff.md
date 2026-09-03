@@ -727,3 +727,152 @@ spec 自查的**范围**一项**没有通过**（如实登记在 spec §10.7）�
 
 ⚠️ **强烈建议开新会话**：本会话上下文里塞满了 ccloop 的源码片段，写计划用不上，
 却要为它们付每一次调用的钱。**本会话钩子最后报出 ~$90.82**（Rule 14：只抄工具报数）。
+
+---
+
+# 📌 本轮（2026-09-03，会话 `10762e47`）—— 三份计划已落地；ccloop 的「下一件事」被人改了
+
+**归属**：run `orca-dev-10762e47`。本节**只追加**，上面一字未动。
+⚠️ **本节不写任何当前哈希** —— 提交本文这个动作本身就会改 HEAD。要指代某一笔就**引提交主题行**。
+
+## 一、开工核对（都带命令，本轮现测）
+
+| 量 | 值 | 命令 |
+|---|---|---|
+| Orca 远端／本地 `main` | **同点**，tip 主题行 `docs(handoff): continue this round's section with the review and the proposal` | `/usr/bin/git ls-remote origin refs/heads/main` ＋ 裸 `git log --oneline -8` |
+| Orca 工作树 ／ worktree | 干净 ／ 只有主工作树 | `git status --short`；`git worktree list` |
+| `npm run verify` | *** **exit 0** ***，`7 files / 100 tests`，末三行 `ok: 3 ledger file(s)` ／ `ok: CLAUDE.md is 135/200 lines` ／ `ok: core.hooksPath is scripts/githooks` | `npm run verify > 文件 2>&1; echo $?` |
+| ccloop 远端／本地 `main` | **同点**，tip `7caa4cb`（主题行 `docs(handoff): stop pinning a hard HEAD in the Orca section`），工作树干净 | `git -C …/ccloop ls-remote` ＋ `log` |
+| ccloop `0f7fc28..7caa4cb` 对 `src`／`scripts`／`tests` 的改动 | *** **空输出 ⇒ 零触碰** *** | `git -C …/ccloop diff --stat 0f7fc28 7caa4cb -- src scripts tests` |
+
+### 🔴 一处具名更正：上一节第十三节的「本地领先远端、两个仓库都没 push」现在为假
+
+上一节（会话 `8d4c6ba3`）第十三节的表写着 **Orca 本地领先若干笔、ccloop 领先三笔、两个仓库都没 push**。
+*** **本轮开工现测：两边都与各自远端同点。推的人是人类，手动推的；控制器仍然一次都没 push。** ***
+⇒ *** **C 的 spec、那 20 条决策台账、P0 提案、ccloop 那三笔文档，现在全是【已发布文本】** ***，
+只能追加具名 ERRATUM。**原文逐字保留，此处即为更正。**
+
+⚠️ **ccloop 侧的推论**：spec 与提案里标注的 ccloop 实测（观测时 commit `0f7fc28…`）**仍然有效** ——
+`0f7fc28..7caa4cb` 之间只有 `docs/handoff/handoff.md` 一个文件被改过。**但行号引用前仍请现测。**
+
+## 二、🔴 人本轮拍了五件事（**逐条援引，不要重开**）
+
+| # | 问的什么 | 裁决 |
+|---|---|---|
+| **1** | P0 把 sha 报进 `attempts/<n>/` 的产物文件，还是让 ref 本身当产物 | **ref 本身当产物**（`fileStore.ts` 零触碰） |
+| **2** | 要不要**现在**动 ccloop | 🔴 *** **现在就动。** *** 原话：「现在就动 ccloop，先做 Orca 这部分工作，**E1 的 I-2 ＋ 人裁 85 顺延**，**人裁 121 仍有效**。」 |
+| **3** | P1 要不要改写两条既有的承重判据 | **改写成新的真事实，不删** |
+| **4** | 历史 `bound` 让 verify 变红怎么收 | **选 (a)**：报 downgraded（退出码 2）；**(b) 移进 `archive/` 已被否** |
+| **5** | 要不要改掉 spec §8.2 建议的任务顺序 | **改序，并追加具名 ERRATUM** |
+
+### 🔴 裁决 2 改变的是 **ccloop 自己的「下一件事」**，读它的三层意思，一层都不要多读
+
+1. **P0 现在排在 E1 的 I-2 ＋ 人裁 85 【前面】** —— 那一轮**顺延，不是取消**。
+2. *** **人裁 121 仍然有效** *** —— 它当初授权的是「开工设计 E1 的 I-2 与人裁 85」，顺延**不撤销它**。
+3. ⚠️ *** **E1 仍在授权面外。** *** ccloop handoff 明写「E1 出完设计、动生产代码之前必须**另拿一次具名授权**」——
+   **本次裁决没有碰这一条。**
+
+⚠️ *** **push 仍需单独授权，裁决 2 不含 push。** ***
+⚠️ **本轮对 ccloop 与 ccmem 仍然【一个字节都没写】** —— 只读了 ccloop 的源码。
+**上面这条裁决要写回 ccloop 的 handoff，那是【下一轮的第一件事之一】，本轮没做。**
+
+## 三、做完了什么
+
+| 产物 | 路径 | 行数 |
+|---|---|---|
+| **P0 计划**（在 ccloop 执行） | `docs/superpowers/plans/2026-09-03-p0-ccloop-publish-attempt-commit.md` | 963 |
+| **P1 计划**（A′ 台账三处扩展） | `docs/superpowers/plans/2026-09-03-p1-ledger-extensions-for-c.md` | 1043 |
+| **P2 计划**（C 本体） | `docs/superpowers/plans/2026-09-03-p2-scheduler-c.md` | 1403 |
+| **本轮 16 条决策** | `.decisions/orca-dev-10762e47.jsonl`，**全部经 `appendEvent` 落盘，无一手写** | 16 |
+
+`npm run verify` **exit 0**，末三行 `ok: 4 ledger file(s)` ／ `ok: CLAUDE.md is 135/200 lines` ／ `ok: core.hooksPath is scripts/githooks`。
+
+## 四、🔴 五条现测，**每一条都改变了计划的形状**（下一轮直接用，别重新发现）
+
+### 1. ccloop 的 cleanup 有 **12 个调用点，但只有 2 个收敛点**
+
+`cleanupAttemptWorkspace` 本体只有一行（`worktreeManager.ts:29`）。**11 个**走
+`cleanupAttemptWorkspaceWithStatus`（`runLoop.ts:331`），*** **第 12 个是 `runLoop.ts:1494` 的裸调用** ***
+（verification rejected 之后的重试路径，且它要求移除失败仍然致命）。
+⇒ 逐点改 ＝ 12 次漏掉一次的机会，而 ccloop 自己的教训是「**半改比不改坏**」。
+**口径**：`/usr/bin/grep -rn cleanupAttemptWorkspace src/`，观测时 ccloop `7caa4cb`。
+
+### 2. 提案原文的第 4 步会把手伸进 `fileStore.ts` 的地盘
+
+`attempts/<n>/` 由 `fileStore.ts:1726` 写，**而红线函数 `tryRecoverStaleOwnerTransferLock` 就在那个文件里**。
+⇒ 改用 **ref 本身当产物**，P0 的改动收敛到 `worktreeManager.ts` ＋ `runLoop.ts` 两个文件。
+
+### 3. 🔴 spec §5.5 把两件事接错了（已立 ERRATUM，写在 P1 计划的 Task 5）
+
+它担心「加 `reconcile` 时第四份清单会咬人」——
+*** **第四份清单是【引用事件】的（`validateLine.ts:45` 的 OR 链），不是【决策 kind】的。** ***
+kind 在 `src/` 里只有一份（`types.ts`），加 `reconcile` 是**一行改动**。
+那条 OR 链**真正咬人的时刻是 `bound` 需要自己的 schema 那一刻**（§8.4②）。
+
+### 4. kind 的**第二份副本在判据里**（`tests/ledger/validateLine.test.ts:84` 硬编码 6 个名字的循环）
+
+加第 7 个 kind **不会红，只会静默不覆盖**。
+⇒ *** **「少跑一条」在 vitest 里是绿的，不是红的。** *** 必须另加一条 `.length` 判据才看得见。
+⚠️ **P1 如实登记了一条【不可观测的变异】**（`M1-12`：把循环改回硬编码）——
+它的防线是代码评审，不是判据。**登记它比假装它红过有用。**
+
+### 5. 🔴🔴 **「schema 可选 ＋ 写入方必需」这个直觉上安全的方案，并不安全**
+
+`tests/ledger/writer.test.ts:173` 那条判据把 `orca-dev-09cc3ea1.jsonl` 的 **14 行逐条喂进 `appendEvent` 重放并比字节**，
+而那 7 条历史 `bound` **7/7 缺 `taskId`/`runId`**（本轮逐行数过）。
+⇒ **无论要求放 schema 还是放写入方，那条既有的承重判据都会红**；且 `verify` 里含 `orca validate .decisions`，
+历史文件会让整支 verify 变 exit 1。**这是裁决 3、4 存在的原因。**
+
+## 五、🔴 本轮闸门自己抓到的一件事（**最好的一次 dogfood**）
+
+写台账时，`appendEvent` **当场拦下第 3 条决策**：
+
+```
+refusing to append: downgraded to tier 0, this decision is not the agent's to make:
+undo.how is not executable: "去掉 --allow-empty 这一个参数"
+```
+
+随后把剩余 14 条一次性喂进谓词审计：*** **10 条不合格。** ***
+⇒ 全部改写成**指名具体文件路径**的形式再落盘。
+
+⚠️ **两条推论**：
+1. *** **散文式的 `undo.how` 是默认产物，不是偶发。** *** 不带闸门写台账，十条里有七条是废的。
+2. **台账只追加 ⇒ 前两条已经落盘，重跑必须从第 3 条续写**，脚本里加了 `START` 而不是重跑全量。
+   （`appendEvent` 目前**不拒绝重复 decision id** —— 那正是 P1 Task 3 要补的检查之一。）
+
+## 六、⛔ 下一件事（**按依赖排，人已授权全部三块**）
+
+| 顺序 | 做什么 | 在哪 |
+|---|---|---|
+| **0** | 🔴 **把裁决 2 写回 ccloop 的 handoff「📌 Orca 那条线」一节**（就地更新，不新增章节）—— 它改了那个仓库自己的「下一件事」，**不写回去等于让下一个 agent 照着旧顺序开工** | ccloop |
+| **1** | 执行 **P0**（`git worktree remove` 之前 commit ＋ 写 ref） | ccloop |
+| **2** | 执行 **P1**（`bound` 字段那条**不能延后**） | Orca |
+| **3** | 执行 **P2**（22 场景 / 14 变异） | Orca |
+
+⚠️ **P0 ∥ P1 之间没有依赖**，依赖只有「两者都在 P2 之前」。
+**执行方式建议 `superpowers:subagent-driven-development`**（handoff 实测「值这个钱」）。
+
+⚠️ **三份计划各自末尾都有一节写「执行前的裁决」与「Self-Review」** —— **开工前逐条读，不要跳。**
+P1 与 P2 各自登记了缺口（P1 三处、P2 三处），**都是有意划界，不是遗漏**。
+
+## 七、本轮**没有**做的（登记，不掩饰）
+
+- *** **一行产品代码都没写**，`src/**`、`tests/**` 一个字节未动。 ***
+- **未 push、未建分支、未合并、未删任何 worktree。**
+- *** **对 ccloop 与 ccmem 一个字节都没写** *** —— 虽然人已授权，且裁决 2 明确要动 ccloop。
+  **那是执行阶段的事，本轮只出计划。**
+- **spec 的 ERRATUM 尚未写进 spec** —— 它是 P1 Task 5 的一个步骤，**随 P1 执行时落地**。
+- **没有派外派评审。** 三份计划都只过了控制器自己的 Self-Review 三项。
+  要不要派，人尚未决定（handoff 实测一轮「派评审→修复→复审」是**几十美元**量级）。
+
+## 八、ccmem 侧（**只读，本轮零触碰**）
+
+最新是 **ⅩⅩⅥ（W2 已合入 `main`）**，下一件事是 **W3**（设计与 11 任务的计划都已落盘），
+**6 条禁令一条都没解**（含不许 push、`config-value-parity` 不合并、7 个死键不删）。
+⚠️ 它的 **§15「Orca 那条线」停在 2026-09-02**，还写着「C 的设计尚未开写」——
+*** **已知陈旧，本轮不改**（人交代 ccmem 是禁区，另一个 agent 在跑 W3）。 ***
+
+## 九、成本
+
+**只抄工具报数**（Rule 14）：本会话钩子报出的总额从 **$8.49 → $44.29** 一路上行。
+**此后的数没有再被工具报出，因此不写 —— 不许自估。**
