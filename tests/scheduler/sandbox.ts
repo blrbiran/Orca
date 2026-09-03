@@ -641,3 +641,74 @@ export async function taskWorkdirs(s: Sandbox): Promise<string[]> {
 export async function defaultBranchOf(repo: string): Promise<string> {
   return (await git(repo, ["symbolic-ref", "--short", "HEAD"])).trim();
 }
+
+/**
+ * Task 11: a contract as `loadRound` holds it — an object, not a path.
+ * `writeContract`'s file read back rather than a second literal, because a
+ * hand-written object here would be free to drift away from the only shape
+ * ccloop's `.strict()` schema accepts, which is the drift F2 was raised about.
+ */
+export async function contractObject(s: Sandbox, taskId: string, spec: ContractSpec): Promise<unknown> {
+  return JSON.parse(await readFile(await writeContract(s, taskId, spec), "utf8"));
+}
+
+/** What seedConflictingCopy leaves behind, in the terms land.ts hands on. */
+export interface ConflictFixture {
+  /** The task's clone (spec §4.3 step 2), which is where §5.2 does its work. */
+  copyPath: string;
+  /** The work branch's tip in the target repo — the merge's first parent. */
+  wTip: string;
+  /** `refs/orca/<run-id>` in the target repo — the merge's second parent. */
+  incomingRef: string;
+  /** The file both sides edited, and therefore the one carrying the markers. */
+  path: string;
+  workBranch: string;
+}
+
+/**
+ * The exact state land.ts's failed `git merge` leaves for spec §5 to pick up:
+ * a target repo sitting on W whose tip edited two regions of a file, a task
+ * clone whose attempt commit edited the same two regions differently, and
+ * `refs/orca/<run-id>` in the target repo pointing at that attempt.
+ *
+ * 🔴 The clone is taken BEFORE the target repo commits its side, and that
+ * ordering is load-bearing rather than incidental: it is what makes W's tip
+ * genuinely absent from the copy's object store, so a materialisation that
+ * skipped fetching it could not check it out. Clone afterwards and the fetch
+ * becomes untestable decoration.
+ *
+ * Two conflicting regions, six unchanged lines apart, because one region
+ * cannot tell "enumerate the blocks" apart from "return the first block".
+ */
+export async function seedConflictingCopy(s: Sandbox, runId = "r1"): Promise<ConflictFixture> {
+  const path = "src/a.ts";
+  const workBranch = "orca/w/x";
+  const lines = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
+  const withEdits = (suffix: string): string =>
+    lines.map((l) => (l === "two" || l === "nine" ? `${l}-${suffix}` : l)).join("\n") + "\n";
+
+  await mkdir(join(s.targetRepo, "src"), { recursive: true });
+  await writeFile(join(s.targetRepo, path), lines.join("\n") + "\n");
+  await git(s.targetRepo, [...ID, "add", "-A"]);
+  await git(s.targetRepo, [...ID, "commit", "-m", "seed the file both sides will edit"]);
+  await git(s.targetRepo, ["checkout", "-b", workBranch]);
+  const base = await headOf(s.targetRepo);
+
+  const copyPath = join(s.runsDir, runId, "repo");
+  await git(s.root, ["clone", "--local", "--no-checkout", s.targetRepo, copyPath]);
+  await git(copyPath, ["checkout", "--detach", base]);
+  await writeFile(join(copyPath, path), withEdits("copy"));
+  await git(copyPath, [...ID, "add", "-A"]);
+  await git(copyPath, [...ID, "commit", "-m", "the task's attempt"]);
+  const attemptSha = await headOf(copyPath);
+
+  await writeFile(join(s.targetRepo, path), withEdits("target"));
+  await git(s.targetRepo, [...ID, "add", "-A"]);
+  await git(s.targetRepo, [...ID, "commit", "-m", "what already landed on W"]);
+  const wTip = await headOf(s.targetRepo);
+
+  const incomingRef = `refs/orca/${runId}`;
+  await git(s.targetRepo, ["fetch", copyPath, `${attemptSha}:${incomingRef}`]);
+
+  return { copyPath, wTip, incomingRef, path, workBranch };
+}
