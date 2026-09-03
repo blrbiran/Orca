@@ -1,4 +1,5 @@
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { allRefShas, git, makeSandbox, porcelain, writeContract, writePlan } from "./sandbox.js";
 
@@ -43,6 +44,44 @@ describe("the scheduler sandbox", () => {
     try {
       expect(() => s.ccloopBin).toThrow("simulated: ccloop bin not found");
     } finally {
+      await s.cleanup();
+    }
+  });
+
+  it("lets ORCA_CCLOOP_BIN override the sibling-directory assumption", async () => {
+    // Deferred minor carried from Task 1 and landed by Task 8, the first task
+    // that actually spawns the binary: until now resolveCcloopBin hard-coded
+    // "ccloop is a sibling of Orca" with no way out, so a checkout that keeps
+    // the two anywhere else could not run a single spawning scenario. The
+    // override is measured against the real resolver, not an injected one —
+    // the injection seam bypasses exactly the code this criterion is about.
+    const s = await makeSandbox();
+    const previous = process.env.ORCA_CCLOOP_BIN;
+    try {
+      const fake = join(s.root, "fake-ccloop.js");
+      await writeFile(fake, "// stands in for ccloop's dist/cli.js\n");
+      process.env.ORCA_CCLOOP_BIN = fake;
+      expect(s.ccloopBin).toBe(fake);
+    } finally {
+      if (previous === undefined) delete process.env.ORCA_CCLOOP_BIN;
+      else process.env.ORCA_CCLOOP_BIN = previous;
+      await s.cleanup();
+    }
+  });
+
+  it("still names the missing binary when ORCA_CCLOOP_BIN points at nothing", async () => {
+    // The override must not become a way to smuggle an opaque ENOENT from
+    // spawn back in: an unset build and a mistyped env var are different
+    // mistakes, and the error has to say which path it tried and where that
+    // path came from.
+    const s = await makeSandbox();
+    const previous = process.env.ORCA_CCLOOP_BIN;
+    try {
+      process.env.ORCA_CCLOOP_BIN = join(s.root, "definitely-not-here.js");
+      expect(() => s.ccloopBin).toThrow(/ORCA_CCLOOP_BIN/);
+    } finally {
+      if (previous === undefined) delete process.env.ORCA_CCLOOP_BIN;
+      else process.env.ORCA_CCLOOP_BIN = previous;
       await s.cleanup();
     }
   });

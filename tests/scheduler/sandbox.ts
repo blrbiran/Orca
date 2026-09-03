@@ -5,7 +5,7 @@
 // that could pick up state left behind by a previous test run.
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
@@ -35,6 +35,17 @@ export interface ContractSpec {
   successCondition?: string;
   buildTestCommands?: string[];
   rejectOn?: string[];
+  // Task 8: the two knobs that steer a real ccloop run to a terminal status
+  // other than `succeeded`. Both are measured routes, not guesses -- see the
+  // task-8 report's terminal-status table. maxAttempts picks which of
+  // `exhausted` and `failed` a rejected verification lands on
+  // (stopController.ts checks `attemptNumber >= maxAttempts` BEFORE it checks
+  // safeToRetry, so maxAttempts 1 yields `exhausted` and 2 yields `failed`),
+  // and denylistPaths is the only route to `blocked_waiting_human` that works
+  // with `verifierType: "command"` -- under that verifier runLoop never calls
+  // the adapter's verify at all, so the pauseSignals/pauseOn route is dead.
+  maxAttempts?: number;
+  denylistPaths?: string[];
 }
 
 // Identity is passed per-invocation rather than configured, so a machine with
@@ -54,12 +65,25 @@ export async function git(repo: string, args: string[]): Promise<string> {
 // sandbox rather than cached, since a rebuild while tests are running should
 // be picked up. Thrown explicitly and by name: a missing dist/cli.js would
 // otherwise surface many stack frames away as an opaque ENOENT from spawn.
+// Task 8 (deferred minor carried from Task 1): the sibling layout used to be
+// hard-coded with no way out, which was harmless while no scenario spawned
+// ccloop and is not harmless now that Task 8's do. A checkout that keeps the
+// two repositories anywhere else — a CI image, a second working copy — could
+// not run a single scheduler scenario. ORCA_CCLOOP_BIN is read on each call
+// rather than captured once, for the same reason the sibling path is resolved
+// fresh: a rebuild or a re-export between two tests should be picked up. The
+// named error survives the override and says which of the two sources the
+// path came from, because "ENOENT spawning /some/path" many frames away is
+// exactly the diagnosis this error exists to replace.
 function resolveCcloopBin(): string {
-  const bin = resolve(dirname(new URL(import.meta.url).pathname), "../../../ccloop/dist/cli.js");
+  const override = process.env.ORCA_CCLOOP_BIN;
+  const bin = override ?? resolve(dirname(new URL(import.meta.url).pathname), "../../../ccloop/dist/cli.js");
   if (!existsSync(bin)) {
+    const source = override === undefined ? "the sibling-directory default" : "ORCA_CCLOOP_BIN";
     throw new Error(
-      `ccloop bin not found at ${bin}. ccloop's package.json is private and its bin ` +
-        `is never an npm dependency — run "npm run build" inside the ccloop repo first.`,
+      `ccloop bin not found at ${bin} (from ${source}). ccloop's package.json is private and its bin ` +
+        `is never an npm dependency — run "npm run build" inside the ccloop repo first, ` +
+        `or point ORCA_CCLOOP_BIN at its dist/cli.js.`,
     );
   }
   return bin;
@@ -122,7 +146,7 @@ export async function writeContract(s: Sandbox, taskId: string, spec: ContractSp
     },
     executionPolicy: {
       autonomyLevel: "L2",
-      maxAttempts: 1,
+      maxAttempts: spec.maxAttempts ?? 1,
       perAttemptTimeoutMs: 60_000,
       totalRuntimeBudgetMs: 60_000,
       tokenBudget: 100_000,
@@ -131,7 +155,7 @@ export async function writeContract(s: Sandbox, taskId: string, spec: ContractSp
     },
     safetyPolicy: {
       allowlistPaths: [],
-      denylistPaths: [],
+      denylistPaths: spec.denylistPaths ?? [],
       maxFilesTouched: spec.targetPaths.length,
       humanGateConditions: [],
     },
@@ -262,4 +286,125 @@ export async function seedTwoTaskPlan(s: Sandbox): Promise<string> {
       { taskId: "T2", contract: c2, dependsOn: [] },
     ],
   });
+}
+
+// Task 8: the first task that spawns ccloop, so the first that needs the
+// target repo's HEAD as a value rather than as a side effect of a git call.
+export async function headOf(repo: string): Promise<string> {
+  return (await git(repo, ["rev-parse", "HEAD"])).trim();
+}
+
+// Task 8: moves the target repo's HEAD past a commit a scenario has already
+// captured as its base. Load-bearing for the repoPath criterion and nothing
+// else: while base === HEAD, a run that ignored the rewrite and worked
+// straight in the target repo would produce a clone whose HEAD is the base
+// anyway, and the criterion could never go red.
+export async function commitOnTop(s: Sandbox, file: string, content: string): Promise<string> {
+  await writeFile(join(s.targetRepo, file), content);
+  await git(s.targetRepo, [...ID, "add", "-A"]);
+  await git(s.targetRepo, [...ID, "commit", "-m", `add ${file}`]);
+  return headOf(s.targetRepo);
+}
+
+// What a scenario actually varies between one scripted ccloop run and the
+// next. Everything else in a frame is fixed boilerplate that ccloop's
+// ScriptedAdapter hands back verbatim, so it is filled in below rather than
+// retyped per scenario.
+export interface ScriptedFrameSpec {
+  // Fed to ccloop's evaluatePathPolicy (policy/pathPolicy.ts). This is the
+  // handle a scenario uses to trip a denylist and reach
+  // `blocked_waiting_human`; it is NOT what the run actually writes, because
+  // the scripted adapter touches no files at all.
+  changedFiles?: string[];
+}
+
+/**
+ * ccloop's `--adapter-config` for the `scripted` adapter: `{ frames: [...] }`,
+ * one frame consumed per attempt (ScriptedAdapter.plan shifts the queue and
+ * throws "no scripted frame remaining" if a run outlives the list). Written
+ * outside the target repo for the same reason contracts are.
+ *
+ * Every frame carries a complete `verification` block even though a contract
+ * with `verifierType: "command"` never reaches adapter.verify — runVerification
+ * returns its own approved/rejected result from the required checks and only
+ * consults the adapter under `verifierType: "agent"`. A half-filled frame
+ * would work today and break silently the first time a scenario flips that
+ * field, so the fixture stays honest instead of minimal.
+ */
+export async function writeScriptedConfig(s: Sandbox, name: string, frames: ScriptedFrameSpec[]): Promise<string> {
+  const config = {
+    frames: frames.map((frame, index) => ({
+      plan: { summary: `scripted frame ${index + 1}`, primaryTargetPaths: [] },
+      execution: {
+        changedFiles: frame.changedFiles ?? [],
+        diffPatch: "",
+        commandOutputs: [],
+        stdoutStderrLog: "",
+      },
+      verification: {
+        approved: true,
+        rejectCategory: "",
+        primaryTargetPaths: [],
+        failingCommand: null,
+        safeToRetry: false,
+        evidence: [],
+        pauseSignals: [],
+        stopSignals: [],
+      },
+    })),
+  };
+  const path = join(s.runsDir, `adapter-${name}.json`);
+  await writeFile(path, JSON.stringify(config, null, 2));
+  return path;
+}
+
+/**
+ * A PlanFile whose ccloopBin is the real binary, unlike seedPlan's and
+ * seedTwoTaskPlan's deliberately fake one. Reading s.ccloopBin resolves the
+ * lazy getter, so this — and only this — is the builder that fails on a
+ * machine where ccloop has not been built. That is correct for Task 8's
+ * scenarios, which cannot mean anything without it, and would have been wrong
+ * for Tasks 2-7's, which never spawn.
+ */
+export async function planThatSpawns(s: Sandbox, tasks: PlanFile["tasks"]): Promise<PlanFile> {
+  return {
+    targetRepo: s.targetRepo,
+    ccloopBin: s.ccloopBin,
+    runsDir: s.runsDir,
+    workBranch: "orca/spawn-scenario-branch",
+    policy: "local-merge",
+    ledgerMode: "in-repo",
+    tasks,
+  };
+}
+
+/**
+ * The three-task fan-out S8 and S9 both need: T1 → T2 by explicit dependsOn,
+ * with T3 on its own branch claiming a disjoint path so no implicit edge ties
+ * it to either. That shape is the whole point of both scenarios — "descendants
+ * stop, other branches continue" is unmeasurable on a graph with only one
+ * branch — and T1's contract is the only parameter because the two scenarios
+ * drive that one task to two different terminal statuses.
+ *
+ * Returns the parsed contracts alongside the plan because buildGraph needs
+ * them: re-reading and re-parsing them in each scenario is how the graph a
+ * scenario asserts about drifts away from the contracts it actually ran.
+ */
+export async function seedFanOutPlan(
+  s: Sandbox,
+  t1: ContractSpec,
+): Promise<{ plan: PlanFile; contracts: Map<string, unknown> }> {
+  const specs: Array<[string, ContractSpec, string[]]> = [
+    ["T1", t1, []],
+    ["T2", { goal: "write b.txt", targetPaths: ["b.txt"], requiredChecks: ["true"] }, ["T1"]],
+    ["T3", { goal: "write c.txt", targetPaths: ["c.txt"], requiredChecks: ["true"] }, []],
+  ];
+  const tasks: PlanFile["tasks"] = [];
+  const contracts = new Map<string, unknown>();
+  for (const [taskId, spec, dependsOn] of specs) {
+    const contract = await writeContract(s, taskId, spec);
+    tasks.push({ taskId, contract, dependsOn });
+    contracts.set(taskId, JSON.parse(await readFile(contract, "utf8")));
+  }
+  return { plan: await planThatSpawns(s, tasks), contracts };
 }
