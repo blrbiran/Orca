@@ -14,7 +14,18 @@ describe("S14 (spec §4.5)", () => {
       const defaultBranch = await defaultBranchOf(s.targetRepo);
       const before = await refSha(s.targetRepo, `refs/heads/${defaultBranch}`);
 
-      const rc = await runCli(["run", p.planPath, "--adapter-config", p.adapterConfig]);
+      // The round's failure is CAPTURED rather than allowed to propagate,
+      // and that is load-bearing rather than defensive: what §4.5 forbids is
+      // the default branch moving, whatever else the round did. A thrown
+      // error would abort this test at this line, and the assertion below —
+      // the one this scenario exists for — would never be evaluated. Measured
+      // while running `M-MAIN`: with the protection deleted the round merges
+      // onto the default branch and then dies looking for a work branch that
+      // was never created, so without this the red would land on the crash
+      // and say nothing about the ref.
+      const outcome = await runCli(["run", p.planPath, "--adapter-config", p.adapterConfig]).catch(
+        (err: Error) => err.message,
+      );
 
       // First, because §10.3's warning is that an earlier assertion going red
       // short-circuits and tells you nothing about this one. This is the
@@ -25,7 +36,7 @@ describe("S14 (spec §4.5)", () => {
       // run that crashed before it did anything: the round really did run,
       // really did land both tasks, and really did move a branch — just not
       // that one.
-      expect(rc).toBe(0);
+      expect(outcome).toBe(0);
       const wTip = await refSha(s.targetRepo, `refs/heads/${p.workBranch}`);
       expect(wTip).not.toBeNull();
       expect(wTip).not.toBe(before);
