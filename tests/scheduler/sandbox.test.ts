@@ -74,11 +74,18 @@ describe("the scheduler sandbox", () => {
     // spawn back in: an unset build and a mistyped env var are different
     // mistakes, and the error has to say which path it tried and where that
     // path came from.
+    //
+    // Matched as the literal "(from ORCA_CCLOOP_BIN)" rather than the bare
+    // name. MEASURED, not reasoned: mutation M-BIN-b pinned the source label
+    // to the sibling default and the bare-name form stayed GREEN, because the
+    // message's closing advice mentions the variable by name whatever the
+    // source was. That is exactly the shape this project calls a criterion
+    // whose assertions do not measure its stated purpose.
     const s = await makeSandbox();
     const previous = process.env.ORCA_CCLOOP_BIN;
     try {
       process.env.ORCA_CCLOOP_BIN = join(s.root, "definitely-not-here.js");
-      expect(() => s.ccloopBin).toThrow(/ORCA_CCLOOP_BIN/);
+      expect(() => s.ccloopBin).toThrow(/\(from ORCA_CCLOOP_BIN\)/);
     } finally {
       if (previous === undefined) delete process.env.ORCA_CCLOOP_BIN;
       else process.env.ORCA_CCLOOP_BIN = previous;
