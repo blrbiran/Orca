@@ -1,3 +1,5 @@
+import { posix } from "node:path";
+
 /**
  * A claimed path as a task declares it (its raw string), plus the same claim
  * normalized to a directory prefix for comparison. Keeping `declared`
@@ -17,12 +19,31 @@ export interface ClaimedPath {
  * it normalizes to "src/". A bare "**" claims the repository root — every
  * path is inside the root — so it normalizes to the empty prefix, which
  * pathTrie's segment comparison already treats as containing everything, for
- * free. Anything else (no glob suffix) is already a prefix in its own right
- * and is kept whole.
+ * free. An empty-string claim is the same repository-root case (a task that
+ * declares no restriction at all), so it also normalizes to the empty
+ * prefix. Anything else (no glob suffix) is already a prefix in its own
+ * right and is kept whole.
+ *
+ * Both root cases are handled before path.posix.normalize runs, not after:
+ * normalize("") returns ".", which would turn "claims the whole repository"
+ * into "claims a directory literally named .". contains() would then answer
+ * false where it used to answer true (the ** claim would stop swallowing
+ * everything) — the unsafe direction spec 3.1 warns against — so the empty
+ * prefix must never reach normalize().
+ *
+ * pathTrie's `contains` compares path segments verbatim; it does not resolve
+ * "." or "..". Without resolving them here, "src/foo/../bar/x.ts" and
+ * "src/bar/x.ts" name the same file but produce different segment lists, so
+ * intersect() would answer "disjoint" for a genuinely overlapping pair —
+ * the unsafe direction. path.posix.normalize also strips a leading "./" for
+ * free, so "./src/**" and "src/**" normalize identically.
  */
 export function normalizeClaim(declared: string): ClaimedPath {
-  const normalized = declared.endsWith("**") ? declared.slice(0, -2) : declared;
-  return { normalized, declared };
+  if (declared === "**" || declared === "") {
+    return { normalized: "", declared };
+  }
+  const prefix = declared.endsWith("**") ? declared.slice(0, -2) : declared;
+  return { normalized: posix.normalize(prefix), declared };
 }
 
 function asStringArray(value: unknown): string[] {

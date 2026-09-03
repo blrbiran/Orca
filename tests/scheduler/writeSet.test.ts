@@ -23,6 +23,15 @@ describe("normalizeClaim (spec 3.3)", () => {
     // directory that does not exist, and the diagnosis reads as a tool bug.
     expect(normalizeClaim("src/**").declared).toBe("src/**");
   });
+
+  it("treats an empty string as the repository root, like a bare **", () => {
+    // A task that declares no restriction at all claims everything, same as
+    // "**". This must be handled as its own case rather than falling through
+    // to path.posix.normalize("") — that returns ".", which would turn
+    // "claims the whole repository" into "claims a directory literally named
+    // .", the unsafe direction (fix round 1, Important finding).
+    expect(normalizeClaim("").normalized).toBe("");
+  });
 });
 
 describe("writeSetOf (spec 3.1: context.targetPaths ∪ safetyPolicy.allowlistPaths)", () => {
