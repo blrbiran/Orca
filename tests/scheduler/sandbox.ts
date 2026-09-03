@@ -5,7 +5,7 @@
 // that could pick up state left behind by a previous test run.
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
@@ -441,4 +441,179 @@ export async function seedFanOutPlan(
     { taskId: "T2", contract: { goal: "write b.txt", targetPaths: ["b.txt"], requiredChecks: ["true"] }, dependsOn: ["T1"] },
     { taskId: "T3", contract: { goal: "write c.txt", targetPaths: ["c.txt"], requiredChecks: ["true"] } },
   ]);
+}
+
+// Task 10: the shell command a task's `requiredChecks` runs to actually
+// produce a file.
+//
+// ⚠️ Non-obvious, and load-bearing for every scenario that has to see real
+// work land on W. ccloop's ScriptedAdapter touches no files at all — its
+// `execution.changedFiles` is a declaration fed to evaluatePathPolicy, not a
+// write. Measured on ccloop 7f2c5f6: runLoop's `runRequiredChecks` executes
+// each check with `sh -lc <command>` and `cwd` set to the attempt worktree
+// (`src/controller/runLoop.ts:175`), and `publishAttemptCommit` then runs
+// `git add -A` in that same worktree before the ref is written. So a required
+// check that writes a file is the one route by which a `scripted` run
+// produces a non-empty attempt commit — which §7's reconciliation, and
+// therefore landing at all, depends on.
+export function writeFileCheck(path: string, content: string): string {
+  const dir = path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "";
+  const mkdirPrefix = dir === "" ? "" : `mkdir -p ${dir} && `;
+  return `${mkdirPrefix}printf '${content}\\n' > ${path}`;
+}
+
+export interface RunnablePlan {
+  planPath: string;
+  adapterConfig: string;
+  workBranch: string;
+}
+
+/**
+ * Task 10: the first builder that produces a plan `orca run` can actually
+ * execute end to end — real ccloopBin, contracts whose required checks write
+ * real files, and one scripted frame.
+ *
+ * One adapter config for the whole round rather than one per task: each
+ * ccloop spawn constructs its own ScriptedAdapter from a fresh read of the
+ * file, so a single one-frame config gives every task exactly one attempt.
+ * The plan file (spec §2.3) has no per-task adapter field to hang anything
+ * else on.
+ */
+export async function seedRunnablePlan(
+  s: Sandbox,
+  specs: TaskSpec[],
+  workBranch = "orca/w/x",
+): Promise<RunnablePlan> {
+  const tasks: PlanFile["tasks"] = [];
+  for (const spec of specs) {
+    const contract = await writeContract(s, spec.taskId, spec.contract);
+    tasks.push({ taskId: spec.taskId, contract, dependsOn: spec.dependsOn ?? [] });
+  }
+  const planPath = await writePlan(s, {
+    targetRepo: s.targetRepo,
+    ccloopBin: s.ccloopBin,
+    runsDir: s.runsDir,
+    workBranch,
+    policy: "local-merge",
+    ledgerMode: "in-repo",
+    tasks,
+  });
+  return { planPath, adapterConfig: await writeScriptedConfig(s, "round", [{}]), workBranch };
+}
+
+/** S1 / S14: two tasks whose write sets do not intersect, so they share a layer. */
+export async function seedDisjointPlan(s: Sandbox): Promise<RunnablePlan> {
+  return seedRunnablePlan(s, [
+    {
+      taskId: "T1",
+      contract: {
+        goal: "write a.txt",
+        targetPaths: ["a.txt"],
+        requiredChecks: [writeFileCheck("a.txt", "a1")],
+        buildTestCommands: ["true"],
+      },
+    },
+    {
+      taskId: "T2",
+      contract: {
+        goal: "write b.txt",
+        targetPaths: ["b.txt"],
+        requiredChecks: [writeFileCheck("b.txt", "b1")],
+        buildTestCommands: ["true"],
+      },
+    },
+  ]);
+}
+
+/**
+ * S2: two tasks whose write sets DO intersect — "src/**" normalizes to the
+ * prefix "src/", which contains "src/a.ts" — so buildGraph puts an implicit
+ * edge between them and they land in two layers, not one. They still write
+ * different files, so the serialisation is the graph's doing and not a merge
+ * conflict's.
+ */
+export async function seedIntersectingPlan(s: Sandbox): Promise<RunnablePlan> {
+  return seedRunnablePlan(s, [
+    {
+      taskId: "T1",
+      contract: {
+        goal: "write src/t1.txt",
+        targetPaths: ["src/**"],
+        requiredChecks: [writeFileCheck("src/t1.txt", "t1")],
+        buildTestCommands: ["true"],
+      },
+    },
+    {
+      taskId: "T2",
+      contract: {
+        goal: "write src/a.ts",
+        targetPaths: ["src/a.ts"],
+        requiredChecks: [writeFileCheck("src/a.ts", "t2")],
+        buildTestCommands: ["true"],
+      },
+    },
+  ]);
+}
+
+/**
+ * Every non-empty line of every ledger file on a branch, read out of the tree
+ * rather than off disk: spec §8.0 says C's decisions are committed onto W, and
+ * a file that is merely sitting in the worktree has not been committed.
+ */
+export async function readLedgerOnBranch(repo: string, branch: string): Promise<string[]> {
+  const names = await git(repo, ["ls-tree", "--name-only", `${branch}:.decisions`]);
+  const lines: string[] = [];
+  for (const name of names.split("\n").filter((n) => n.trim().length > 0)) {
+    const text = await git(repo, ["show", `${branch}:.decisions/${name}`]);
+    for (const line of text.split("\n")) {
+      if (line.trim().length > 0) lines.push(line);
+    }
+  }
+  return lines;
+}
+
+/** A file's content at a commit-ish, or null when it is not in that tree. */
+export async function showFileAt(repo: string, revision: string, path: string): Promise<string | null> {
+  try {
+    return await git(repo, ["show", `${revision}:${path}`]);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The `refs/orca/<run-id>` refs landIntoW fetched into the target repo, keyed
+ * by run id. A scenario uses them to ask what a task's attempt tree actually
+ * contained, which is how "did T2 start from a base that already had T1's
+ * work in it" is measured without reading any scheduler internals.
+ */
+export async function orcaIncomingRefs(repo: string): Promise<Record<string, string>> {
+  const out = await git(repo, ["for-each-ref", "--format=%(refname) %(objectname)", "refs/orca"]);
+  const refs: Record<string, string> = {};
+  for (const line of out.split("\n")) {
+    if (line.trim().length === 0) continue;
+    const [refname, objectname] = line.split(" ");
+    refs[refname.slice("refs/orca/".length)] = objectname;
+  }
+  return refs;
+}
+
+/** The per-task copy directories (spec §4.5) still present under runsDir. */
+export async function taskWorkdirs(s: Sandbox): Promise<string[]> {
+  const entries = await readdir(s.runsDir, { withFileTypes: true });
+  return entries
+    .filter((e) => e.isDirectory() && e.name.startsWith("orca-"))
+    .map((e) => e.name)
+    .sort();
+}
+
+/**
+ * The branch the sandbox repo was initialised on. Read rather than hard-coded
+ * as "main": `git init` picks it from init.defaultBranch, so a machine or CI
+ * image configured for "master" would otherwise fail S14 for a reason that
+ * has nothing to do with the code under test. Must be called BEFORE a run —
+ * afterwards HEAD is on the work branch, and this would answer with W.
+ */
+export async function defaultBranchOf(repo: string): Promise<string> {
+  return (await git(repo, ["symbolic-ref", "--short", "HEAD"])).trim();
 }

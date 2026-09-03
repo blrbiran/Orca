@@ -1,20 +1,16 @@
-import { execFile } from "node:child_process";
 import { readFile, readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { promisify } from "node:util";
 import { checkAppendOnly } from "./ledger/appendOnly.js";
 import { validateFile } from "./ledger/validateFile.js";
-import { buildGraph } from "./scheduler/graph.js";
-import { loadPlan } from "./scheduler/planFile.js";
-import { emptyRequiredChecksPairs, renderPlanReport } from "./scheduler/planReport.js";
 import { preflight } from "./scheduler/preflight.js";
-
-const execFileAsync = promisify(execFile);
+import { loadRound, renderRound, runRound } from "./scheduler/run.js";
 
 const USAGE = `usage:
   orca validate <path...>        validate ledger file(s) or directory (directory scans top-level *.jsonl only)
   orca check-append-only         read a git diff from stdin, reject if it contains any deleted line
   orca plan <path> [--verbose]   print the plan's write sets, conflicts, and layering; execute nothing
+  orca run <path> --adapter-config <path> [--adapter scripted|claude] [--keep-workdirs] [--verbose]
+                                 print the same report, then run every task and land it on the work branch
 `;
 
 async function collectLedgerFiles(paths: string[]): Promise<{ files: string[]; errors: string[] }> {
@@ -96,22 +92,6 @@ async function runValidate(paths: string[]): Promise<number> {
   return 0;
 }
 
-// Spec §9.2: `plan` reads the target repo's currently checked-out branch
-// name to compare against workBranch (loadPlan's work-branch-is-default
-// rejection needs it), but never mutates it — `git symbolic-ref` with no
-// second argument is a read. A repo with nothing checked out (bare, or a
-// fresh --bare clone) has no default to compare against; falling back to ""
-// rather than throwing lets every other check still run and get reported,
-// instead of a caller fixing exceptions one at a time.
-async function resolveDefaultBranch(repoPath: string): Promise<string> {
-  try {
-    const { stdout } = await execFileAsync("git", ["symbolic-ref", "--short", "HEAD"], { cwd: repoPath });
-    return stdout.trim();
-  } catch {
-    return "";
-  }
-}
-
 async function runPlan(args: string[]): Promise<number> {
   const verbose = args.includes("--verbose");
   const planPath = args.find((a) => !a.startsWith("--"));
@@ -120,46 +100,20 @@ async function runPlan(args: string[]): Promise<number> {
     return 1;
   }
 
-  let raw: unknown;
-  try {
-    raw = JSON.parse(await readFile(planPath, "utf8"));
-  } catch (err) {
-    process.stderr.write(`cannot read plan file ${planPath}: ${(err as Error).message}\n`);
-    return 1;
-  }
-
-  const rawTargetRepo = (raw as { targetRepo?: unknown } | null)?.targetRepo;
-  const targetRepo = typeof rawTargetRepo === "string" ? rawTargetRepo : "";
-  const defaultBranch = targetRepo ? await resolveDefaultBranch(targetRepo) : "";
-
-  const result = loadPlan(raw, defaultBranch);
-  if ("rejections" in result) {
-    for (const r of result.rejections) {
+  // spec §9.4: `plan` is not a sibling implementation of `run`'s front half,
+  // it IS that front half — loadRound and renderRound are the same two calls
+  // `orca run` makes before it spawns anything. Two implementations of "read
+  // → validate → compute write sets → build the graph → layer it" would drift,
+  // and the drift's direction is the worst one: the picture a person approved
+  // stops being the graph that runs.
+  const loaded = await loadRound(planPath);
+  if ("rejections" in loaded) {
+    for (const r of loaded.rejections) {
       process.stderr.write(`rejected: ${r.code}: ${r.message}\n`);
     }
     return 1;
   }
-  const { plan } = result;
-
-  // buildGraph's contracts map is the already-loaded contract per task, not
-  // a path to go read one (graph.ts's own doc comment on that parameter) —
-  // reading each task's contract file here, in the CLI, is exactly the seam
-  // that keeps that layer pure. loadPlan's contract-inside-target-repo
-  // rejection guarantees every contract path lives outside targetRepo, so
-  // this is not a read against the repo either.
-  const contracts = new Map<string, unknown>();
-  for (const task of plan.tasks) {
-    contracts.set(task.taskId, JSON.parse(await readFile(task.contract, "utf8")));
-  }
-
-  const g = buildGraph(plan, contracts);
-
-  // Fix round 1, finding 2: the requiredChecks-union escalation warning
-  // (spec §5.3 / §9.1(6)) does not need to wait for a later task — the
-  // contracts map above is exactly what it needs, already in hand. Attached
-  // onto `g` rather than threaded as a fifth parameter, since PlanGraphExtras
-  // is already the seam renderPlanReport reads it from.
-  const annotatedGraph = { ...g, emptyRequiredChecksPairs: emptyRequiredChecksPairs(g, contracts) };
+  const { round } = loaded;
 
   // Ruling 3 (Task 6): the real runtime preflight (work branch already
   // exists, base not a real commit, target worktree dirty) reads a ref and
@@ -167,13 +121,40 @@ async function runPlan(args: string[]): Promise<number> {
   // that reading those does not count as "touching" it, which is what lets
   // `plan` (spec §9.2: zero side effects) call this and print real verdicts
   // instead of a permanent "not evaluated".
-  const preflightReport = await preflight(plan, defaultBranch);
+  const preflightReport = await preflight(round.plan, round.defaultBranch);
 
-  process.stdout.write(
-    renderPlanReport(annotatedGraph, plan, preflightReport, { verbose, runtimeChecksEvaluated: true }),
-  );
-  process.stdout.write("\n");
+  process.stdout.write(`${renderRound(round, preflightReport, verbose)}\n`);
   return 0;
+}
+
+async function runRun(args: string[]): Promise<number> {
+  const positional = args.filter((a) => !a.startsWith("--"));
+  const flagValue = (name: string): string | undefined => {
+    const index = args.indexOf(name);
+    return index === -1 ? undefined : args[index + 1];
+  };
+  // The flag values are positional arguments too, so they have to come off
+  // the positional list before the plan path is picked out of it — otherwise
+  // `orca run --adapter-config cfg.json plan.json` runs cfg.json as the plan.
+  const consumed = new Set([flagValue("--adapter-config"), flagValue("--adapter")]);
+  const planPath = positional.find((a) => !consumed.has(a));
+  if (!planPath) {
+    process.stderr.write(USAGE);
+    return 1;
+  }
+
+  const adapter = flagValue("--adapter");
+  if (adapter !== undefined && adapter !== "scripted" && adapter !== "claude") {
+    process.stderr.write(`orca run: unknown adapter ${JSON.stringify(adapter)}\n`);
+    return 1;
+  }
+
+  return runRound(planPath, {
+    verbose: args.includes("--verbose"),
+    keepWorkdirs: args.includes("--keep-workdirs"),
+    adapter,
+    adapterConfig: flagValue("--adapter-config"),
+  });
 }
 
 async function readStdin(): Promise<string> {
@@ -193,6 +174,10 @@ export async function main(argv: string[], stdinText?: string): Promise<number> 
 
   if (command === "plan") {
     return runPlan(rest);
+  }
+
+  if (command === "run") {
+    return runRun(rest);
   }
 
   if (command === "check-append-only") {

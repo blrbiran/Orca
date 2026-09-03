@@ -346,6 +346,19 @@ export function routeOutcome(graph: TaskGraph, taskId: string, outcome: CcloopOu
 export interface DisposeOptions {
   /** `--keep-workdirs` (spec §4.5): keep every copy, including successful ones. */
   keepWorkdirs?: boolean;
+  /**
+   * Task 10: why this particular copy is being kept even though ccloop
+   * reported `succeeded`. §4.5's rule is stated over ccloop's terminal
+   * status, but a run can succeed in ccloop and still not reach W — §7.3
+   * refuses to land an empty or colliding result, and §5.2's reconciliation
+   * is rebuilt from the copy of a run whose merge conflicted. In every one of
+   * those cases the copy is the only place the result still exists.
+   *
+   * A reason string rather than a second boolean because the keep line is
+   * printed for a human who has to decide whether to go look at the copy, and
+   * "kept (--keep-workdirs)" would be a lie in all three cases.
+   */
+  keepBecause?: string;
   log?: (line: string) => void;
 }
 
@@ -400,10 +413,15 @@ export async function disposeWorkdir(run: TaskRun, options: DisposeOptions = {})
   }
 
   const log = options.log ?? ((line: string) => process.stdout.write(`${line}\n`));
-  const keep = options.keepWorkdirs === true || run.outcome !== "succeeded";
+  const keep = options.keepWorkdirs === true || options.keepBecause !== undefined || run.outcome !== "succeeded";
 
   if (keep) {
-    const why = options.keepWorkdirs === true ? "--keep-workdirs" : `outcome ${run.outcome}`;
+    const why =
+      options.keepWorkdirs === true
+        ? "--keep-workdirs"
+        : run.outcome !== "succeeded"
+          ? `outcome ${run.outcome}`
+          : options.keepBecause!;
     log(`orca: kept the work copy for ${run.runId} (${why}): ${run.workdir}`);
     return { removed: false, workdir: run.workdir };
   }
