@@ -1,11 +1,19 @@
+import { execFile } from "node:child_process";
 import { readFile, readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import { checkAppendOnly } from "./ledger/appendOnly.js";
 import { validateFile } from "./ledger/validateFile.js";
+import { buildGraph } from "./scheduler/graph.js";
+import { loadPlan, type PlanRejection } from "./scheduler/planFile.js";
+import { renderPlanReport } from "./scheduler/planReport.js";
+
+const execFileAsync = promisify(execFile);
 
 const USAGE = `usage:
   orca validate <path...>        validate ledger file(s) or directory (directory scans top-level *.jsonl only)
   orca check-append-only         read a git diff from stdin, reject if it contains any deleted line
+  orca plan <path> [--verbose]   print the plan's write sets, conflicts, and layering; execute nothing
 `;
 
 async function collectLedgerFiles(paths: string[]): Promise<{ files: string[]; errors: string[] }> {
@@ -87,6 +95,77 @@ async function runValidate(paths: string[]): Promise<number> {
   return 0;
 }
 
+// Spec §9.2: `plan` reads the target repo's currently checked-out branch
+// name to compare against workBranch (loadPlan's work-branch-is-default
+// rejection needs it), but never mutates it — `git symbolic-ref` with no
+// second argument is a read. A repo with nothing checked out (bare, or a
+// fresh --bare clone) has no default to compare against; falling back to ""
+// rather than throwing lets every other check still run and get reported,
+// instead of a caller fixing exceptions one at a time.
+async function resolveDefaultBranch(repoPath: string): Promise<string> {
+  try {
+    const { stdout } = await execFileAsync("git", ["symbolic-ref", "--short", "HEAD"], { cwd: repoPath });
+    return stdout.trim();
+  } catch {
+    return "";
+  }
+}
+
+async function runPlan(args: string[]): Promise<number> {
+  const verbose = args.includes("--verbose");
+  const planPath = args.find((a) => !a.startsWith("--"));
+  if (!planPath) {
+    process.stderr.write(USAGE);
+    return 1;
+  }
+
+  let raw: unknown;
+  try {
+    raw = JSON.parse(await readFile(planPath, "utf8"));
+  } catch (err) {
+    process.stderr.write(`cannot read plan file ${planPath}: ${(err as Error).message}\n`);
+    return 1;
+  }
+
+  const rawTargetRepo = (raw as { targetRepo?: unknown } | null)?.targetRepo;
+  const targetRepo = typeof rawTargetRepo === "string" ? rawTargetRepo : "";
+  const defaultBranch = targetRepo ? await resolveDefaultBranch(targetRepo) : "";
+
+  const result = loadPlan(raw, defaultBranch);
+  if ("rejections" in result) {
+    for (const r of result.rejections) {
+      process.stderr.write(`rejected: ${r.code}: ${r.message}\n`);
+    }
+    return 1;
+  }
+  const { plan } = result;
+
+  // buildGraph's contracts map is the already-loaded contract per task, not
+  // a path to go read one (graph.ts's own doc comment on that parameter) —
+  // reading each task's contract file here, in the CLI, is exactly the seam
+  // that keeps that layer pure. loadPlan's contract-inside-target-repo
+  // rejection guarantees every contract path lives outside targetRepo, so
+  // this is not a read against the repo either.
+  const contracts = new Map<string, unknown>();
+  for (const task of plan.tasks) {
+    contracts.set(task.taskId, JSON.parse(await readFile(task.contract, "utf8")));
+  }
+
+  const g = buildGraph(plan, contracts);
+
+  // Ruling R3: the real runtime preflight (work branch already exists, base
+  // not a real commit, target worktree dirty) is a later task's job, and
+  // evaluating any of them would mean spawning git against the target repo —
+  // exactly what spec §9.2 forbids `plan` from doing. Reporting zero
+  // rejections here, rather than fabricating a pass, is what makes the
+  // renderer print those three as "not evaluated".
+  const preflight = { rejections: [] as PlanRejection[] };
+
+  process.stdout.write(renderPlanReport(g, plan, preflight, { verbose }));
+  process.stdout.write("\n");
+  return 0;
+}
+
 async function readStdin(): Promise<string> {
   const chunks: Buffer[] = [];
   for await (const chunk of process.stdin) {
@@ -100,6 +179,10 @@ export async function main(argv: string[], stdinText?: string): Promise<number> 
 
   if (command === "validate") {
     return runValidate(rest);
+  }
+
+  if (command === "plan") {
+    return runPlan(rest);
   }
 
   if (command === "check-append-only") {

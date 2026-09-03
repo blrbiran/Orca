@@ -9,6 +9,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
+import { main } from "../../src/cli.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -181,4 +182,41 @@ export async function allRefShas(repo: string): Promise<Record<string, string>> 
 
 export async function porcelain(repo: string): Promise<string> {
   return git(repo, ["status", "--porcelain"]);
+}
+
+// Ruling R1 (Task 5): the first scenario that needs to invoke the CLI itself
+// rather than the pure functions underneath it. `main` already returns the
+// exit code directly (tests/cli/cli.test.ts's own pattern) — spawning a real
+// `tsx src/cli.ts` subprocess here would work too, but would also make every
+// scheduler scenario pay a process-startup cost for no behavioural gain, since
+// nothing about `plan`'s zero-side-effect claim depends on it being a
+// separate OS process.
+export async function runCli(argv: string[]): Promise<number> {
+  return main(argv);
+}
+
+// Ruling R1 (Task 5): the first scenario that needs a full, schedulable,
+// two-task plan file on disk. T1 and T2 claim disjoint paths, so the graph
+// `orca plan` builds has no implicit edge — S17 only cares that `plan` never
+// mutates the target repo, not about any particular layering.
+export async function seedTwoTaskPlan(s: Sandbox): Promise<string> {
+  const c1 = await writeContract(s, "T1", { goal: "write a.txt", targetPaths: ["a.txt"], requiredChecks: ["true"] });
+  const c2 = await writeContract(s, "T2", { goal: "write b.txt", targetPaths: ["b.txt"], requiredChecks: ["true"] });
+  return writePlan(s, {
+    targetRepo: s.targetRepo,
+    // A syntactically valid absolute path is all loadPlan's schema checks —
+    // `orca plan` never spawns ccloop (spec §9.2), so this deliberately does
+    // not read s.ccloopBin. Reading it would resolve the lazy getter and fail
+    // this scenario on any machine where ccloop has not been built, for a
+    // reason that has nothing to do with the code under test.
+    ccloopBin: join(s.root, "unused-ccloop-cli.js"),
+    runsDir: s.runsDir,
+    workBranch: "orca/plan-scenario-branch",
+    policy: "local-merge",
+    ledgerMode: "in-repo",
+    tasks: [
+      { taskId: "T1", contract: c1, dependsOn: [] },
+      { taskId: "T2", contract: c2, dependsOn: [] },
+    ],
+  });
 }
