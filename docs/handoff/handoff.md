@@ -559,3 +559,101 @@ ccmem 有 **2 节**各自独立的 Orca 章节，每来一次就加一节。
 **顺带给 ccloop 报了两条关于它自己的诊断**（按 Rule 3 只报诊断、不动手）：
 `evaluatePathPolicy` 是纯事后检测器而非闸门；`targetPaths` 根本没被它读。
 **两条都明确写成「不是任务，要不要补由本仓库自己决定」。**
+
+---
+
+# 📌 本轮（2026-09-03，会话 `8d4c6ba3`）—— C 的 spec 已落地；**ccloop 多了一条硬前置**
+
+**归属**：run `orca-dev-8d4c6ba3`。本节**只追加**，上面一字未动。
+⚠️ **本节同样不写任何当前哈希** —— 提交本文这个动作本身就会改 HEAD。要指代某一笔就**引提交主题行**。
+
+## 一、开工核对（都带命令，本轮现测）
+
+| 量 | 值 | 命令 |
+|---|---|---|
+| 远端 `main` tip | 主题行 `docs(handoff): 记下 A′ 校验器已全部落地…` | `git ls-remote origin refs/heads/main` |
+| 本地 `main` | *** **领先远端两笔** *** | 裸 `git log --oneline -5` |
+| 工作树 | 干净（空输出） | `git status --short` |
+| worktree | 只有主工作树一个 | `git worktree list` |
+| `npm run verify` | **exit 0**，`7 files / 100 tests` | `npm run verify > 文件 2>&1; echo $?` |
+
+🔴 *** **一条具名更正**：上一节（2026-09-02，会话 `894ae173`）写着「远端与本地同点」——
+**本轮开工时已经不是了**。领先的两笔是 `docs(research): survey nine schedulers before designing subsystem C`
+与 `docs(handoff): record the sister-repo consolidation`。 ***
+⇒ **那份调研文档和上一节 handoff 本身【尚未发布】**（写下本节的这一刻仍然如此）。
+⇒ 老结论再确认一次：**发布状态只能现跑 `ls-remote` 判，任何文档里写的都只在写下那秒为真。**
+
+## 二、🔴 人本轮扩大了一处授权
+
+> **人 2026-09-03 原话：「如果需要 ccloop 和 ccmem 一起改动的话，允许你改动。」**
+
+本轮据此定的用法（已进台账，`orca-dev-8d4c6ba3/1`）：
+**先报「要改什么、为什么非改不可」再动手；动手时守它们【自己】的规则；push 仍每次单独找人。**
+⚠️ **授权扩大的是「能不能碰」，不是「碰的时候守谁的规矩」**（Rule 16 ／ A′ §7）。
+⚠️ *** **本轮实际上对 ccloop 与 ccmem 一个字节都没写** *** —— 只读了它们的源码。
+
+## 三、做完了什么
+
+| 产物 | 路径 |
+|---|---|
+| **C（调度层）的 spec** | `docs/superpowers/specs/2026-09-03-scheduler-design.md`（十一节） |
+| **本轮 20 条决策** | `.decisions/orca-dev-8d4c6ba3.jsonl`，**全部经 `appendEvent` 落盘，无一手写** |
+
+提交主题行：`docs(spec): design subsystem C, the scheduler over ccloop`。
+
+⚠️ **文件名与上一节的预告不一致**：上一节预告的是 `2026-09-02-scheduler-design.md`，
+实际写于 09-03 ⇒ 按实际日期命名。*** **那个名字下没有文件，不要去找。** ***
+
+## 四、🔴 四条现测，**每一条都改变了设计**（都带命令与观测时的 commit）
+
+**观测时点 2026-09-03，ccloop HEAD `0f7fc28e8bdc573ba22840d3c7e00e25d8927b17`**，
+口径一律 `sed -n` / `/usr/bin/grep -n` 重定向到文件再整份读回。
+
+1. *** **`scripted` adapter 根本不产 `diffPatch`。** *** `diffPatch` 是 adapter 结果的**可选**字段
+   （`src/runtime/types.ts:42`），落盘处有守卫（`fileStore.ts:1738`）；
+   grep `diffPatch|changedFiles|artifacts` 在 `src/runtime/scriptedAdapter.ts` **零命中**。
+   ⇒ **「v1 先用 patch 兜底」这条路没有输入** ⇒ 见第五节。
+2. *** **`run`/`resume` 的退出码是 `status === "succeeded" ? 0 : 2`** ***（`src/cli.ts` 两处一模一样，catch 里 1）。
+   ⇒ **四个非成功终态被压成同一个 2** ⇒ **C 必须读 `loop-state.json` 的 `status`，只看退出码不够。**
+3. *** **`blocked_waiting_human` 是终态（`legalTransitions` 里是 `[]`）且不可 resume** ***
+   （`resumeLoop.ts:98`：`RESUMABLE_STATUSES = ["planning","executing","verifying"]`）。
+   ⇒ 调研文档借鉴 2 写的「等人不是终态」是**从 Airflow 借的应然，不是 ccloop 的实然**。
+4. **`readDiffPatch`（`scripts/claude-phase-runner.mjs:232`）有三条通向静默空补丁的路**：
+   两处 `git diff` **都没有 `--binary`**（二进制 `git apply` 应用不了）；`maxBuffer` 10MB 超了抛错；
+   而 `readGitDiff` 的 catch **只对 `code === 1` 返回 stdout，其余一律返回 `""`**。
+   ⚠️ **未跟踪文件是被收进来的**（逐个合成 `/dev/null` diff）—— 这点 ccloop 做对了，别误报。
+
+## 五、⛔ 下一件事：**接 `writing-plans`，但要出三份计划**
+
+spec 自查的**范围**一项**没有通过**（如实登记在 spec §10.7）。本文要求的东西横跨**两个仓库、三个块**：
+
+| 块 | 内容 | 说明 |
+|---|---|---|
+| **P0** | *** **ccloop 在移除 worktree 前 commit ＋ 写 `refs/ccloop/<run-id>/attempts/<n>` ＋ 报 sha** *** | **C v1 的硬前置**（不是建议）。**在 ccloop 仓库、按它自己的流程做**。纯追加，满足它铁律 2 |
+| **P1** | A′ 台账三处扩展：新 kind `reconcile`、写入方补两条检查、`bound` 加 `taskId`/`runId` | ⚠️ **先做「白名单在代码里有几份副本」的普查**（handoff 已警告 `validateLine.ts` 里有第四份） |
+| **P2** | C 本体：spec §2–§9 ＋ §10.2 的 **19 个场景** ＋ §10.3 的 **12 条点名变异** | 依赖 P0、P1 |
+
+🔴 **P1 里有一条不能延后**：`bound` 加 `taskId`/`runId` 是**写入侧**的 ——
+*** **台账只追加，格式错过就永远补不上。** *** 它必须在 C 写下第一条 `bound` 之前落地。
+
+**执行方式建议 `superpowers:subagent-driven-development`**（handoff 实测「值这个钱」）。
+
+## 六、设计上最值钱的一条（**下一轮直接用**）
+
+> *** **凡是 C 够不着的动作，只能【检测 ＋ 降级】，不能声称禁止。声称禁止就是把一条不成立的前提写进设计。** ***
+
+同一个形状在本轮出现了**三次**：禁不了 agent 改哪些文件 ⇒ 冲突处理是主干；
+禁不了写集判据算错 ⇒ 判据错时系统必须仍正确；**禁不了人在合 PR 时 squash ⇒ 台账必须在归属被销毁后仍可用**。
+第三条是人本轮当面指出来的，spec 已立成 §0.1。
+
+## 七、本轮**没有**做的（登记，不掩饰）
+
+- *** **一行产品代码都没写**，`src/**`、`tests/**` 一个字节未动。 ***
+- **未 push、未建分支、未合并、未删任何 worktree。**
+- **对 ccloop 与 ccmem 一个字节都没写**（虽然人已授权可以改）。
+- **spec 尚未经人审阅** —— 下一步是人审 → 接 `writing-plans`。
+
+## 八、成本
+
+**只抄工具报数**（Rule 14）：本会话钩子最后报出的是 **~$37.45**（在写 spec 之前那一刻）。
+**写 spec 与本节之后的数没有再被工具报出，因此不写** —— 不许自估。
