@@ -5,6 +5,11 @@ export const DECISION_KINDS = [
   "abandon",
   "criteria",
   "boundary",
+  // Reconciling a merge conflict is an agent choosing between two agents'
+  // code, not a scheduling choice. Folding it into "scheduling" would leave
+  // the panel unable to tell an ordering decision from a code-content one,
+  // and the second is an order of magnitude riskier.
+  "reconcile",
 ] as const;
 
 export const DECISION_SCOPES = ["file", "task", "repo", "cross-repo"] as const;

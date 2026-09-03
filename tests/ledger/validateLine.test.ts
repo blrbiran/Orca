@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { REFERENCE_EVENT_TYPES } from "../../src/ledger/schema.js";
+import { DECISION_KINDS } from "../../src/ledger/types.js";
 import { validateLine } from "../../src/ledger/validateLine.js";
 
 function validDecision(overrides: Record<string, unknown> = {}) {
@@ -82,11 +83,24 @@ describe("validateLine — check 2: alternatives is non-empty and each entry has
 });
 
 describe("validateLine — check 4: kind and scope whitelists", () => {
-  for (const kind of ["dependency", "interface", "scheduling", "abandon", "criteria", "boundary"]) {
+  // Derived from DECISION_KINDS, not spelled out: a hard-coded list here would
+  // silently stop covering a newly added kind — green, and empty. That is the
+  // shape this repo has been bitten by before.
+  for (const kind of DECISION_KINDS) {
     it(`accepts whitelisted kind=${kind}`, () => {
       expect(validateLine(line(validDecision({ kind }))).verdict).toBe("ok");
     });
   }
+
+  it("DECISION_KINDS has exactly the seven kinds the ledger recognises", () => {
+    // Counting is the only way this task's mutations are visible: dropping a
+    // kind, or reverting the loop above to a hard-coded list, makes the derived
+    // loop run one fewer case — and a suite that runs one fewer case is green,
+    // not red. vitest has no opinion about a test that stopped existing.
+    expect([...DECISION_KINDS]).toEqual([
+      "dependency", "interface", "scheduling", "abandon", "criteria", "boundary", "reconcile",
+    ]);
+  });
 
   it("rejects kind outside the whitelist", () => {
     expect(validateLine(line(validDecision({ kind: "naming" }))).verdict).toBe("rejected");
