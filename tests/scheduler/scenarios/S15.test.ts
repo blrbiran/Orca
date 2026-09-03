@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { RUN_ID } from "../../../src/ledger/writer.js";
 import { allocateRunId, deriveRunId } from "../../../src/scheduler/runId.js";
 import { makeSandbox } from "../sandbox.js";
 
@@ -17,6 +18,10 @@ describe("S15 (spec §2.1 run-id allocation)", () => {
       const b = await allocateRunId(s.runsDir, "T1", bytes, base);
       expect(b).not.toBe(a);
       expect(b).toMatch(/-2$/);
+      // Fix round 1: the `-2` suffix is a character the id template adds
+      // after deriveRunId has already run its input check — nothing before
+      // this proved the incremented id itself is still legal.
+      expect(b).toMatch(RUN_ID);
     } finally {
       await s.cleanup();
     }

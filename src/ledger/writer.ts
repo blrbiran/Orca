@@ -7,8 +7,13 @@ import { validateLine } from "./validateLine.js";
  * The caller supplies run-id; the writer never invents one — decision
  * orca-dev-09cc3ea1/7. spec §3.0 leaves allocation to subsystem C; here we
  * only block the shapes that would escape .decisions/.
+ *
+ * Exported so subsystem C's allocator (src/scheduler/runId.ts) can check a
+ * taskId against the exact same constraint before it ever reaches this
+ * validator, instead of hand-copying the pattern — a duplicate that could
+ * silently drift out of sync with nothing going red (P2 task 7, fix round 1).
  */
-const RUN_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+export const RUN_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 export async function appendEvent(
   decisionsDir: string,

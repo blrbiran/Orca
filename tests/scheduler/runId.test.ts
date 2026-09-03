@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { RUN_ID } from "../../src/ledger/writer.js";
 import { deriveRunId } from "../../src/scheduler/runId.js";
 
 describe("deriveRunId", () => {
@@ -32,5 +33,17 @@ describe("deriveRunId", () => {
     // ledger, on the first appendEvent call for this run.
     const bytes = Buffer.from("x");
     expect(() => deriveRunId("bad/task id", bytes, "base")).toThrow(/task id/);
+  });
+
+  // Fix round 1: with the character-class duplication gone (deriveRunId now
+  // imports the ledger's own RUN_ID rather than mirroring it), the input
+  // check alone no longer proves anything about the *output* — the suffix
+  // scheme and the hash both contribute characters to the final id, and
+  // nothing before this asserted the result is actually a legal run id. A
+  // taskId containing a dot and a hyphen is legal input but exercises both
+  // separator characters the id template itself introduces.
+  it("produces an id that satisfies the ledger's own RUN_ID validator, even for a taskId with a dot and a hyphen", async () => {
+    const id = deriveRunId("t.1-a", Buffer.from("contract"), "base-commit");
+    expect(id).toMatch(RUN_ID);
   });
 });
