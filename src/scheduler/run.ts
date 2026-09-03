@@ -243,20 +243,33 @@ interface ReconcileContext {
  * identified by what a task actually WROTE rather than by what it declared:
  * this code path only exists because the declarations were wrong.
  *
- * Anything other than exactly one match escalates instead of guessing. Zero
- * means the conflict came from something no task in this layer produced, and
- * more than one means the pair §5.2 reasons about is not a pair; in both cases
- * a synthesized contract would be built from a side chosen by this function
- * rather than by the evidence.
+ * Anything other than exactly one match escalates instead of guessing. Both
+ * ends are reachable, not defensive padding:
+ *  - ZERO, when the conflicting change on W's side came from something other
+ *    than a same-layer task's attempt — C's own ledger commits also touch W —
+ *    or when the task that wrote the path landed a RECONCILED tree that no
+ *    longer contains it, since this measures attempts and not landings;
+ *  - MORE THAN ONE, as soon as three tasks in one layer all lie about the same
+ *    path: the first two land (the second through §5.2), and the third's
+ *    conflict then has two candidate counterparties.
+ * In both cases a synthesized contract would carry a side this function picked
+ * rather than one the evidence names, which is precisely what §5.2's check
+ * exists to prevent.
+ *
+ * Takes the three values it reads rather than the whole ReconcileContext so it
+ * can be exercised directly (fix round 1, finding 2) — a criterion for a
+ * three-task layer would need a third ccloop round to say the same thing.
  */
-async function otherSideOf(
-  ctx: ReconcileContext,
+export async function otherSideOf(
+  targetRepo: string,
+  layerBase: string,
+  landed: Array<{ taskId: string; runId: string }>,
   conflictedPaths: string[],
 ): Promise<{ taskId: string } | { escalate: string }> {
   const conflicted = new Set(conflictedPaths);
   const touched: string[] = [];
-  for (const { taskId, run } of ctx.landed) {
-    const changed = await netChangeSet(ctx.plan.targetRepo, ctx.layerBase, incomingRefOf(run.runId));
+  for (const { taskId, runId } of landed) {
+    const changed = await netChangeSet(targetRepo, layerBase, incomingRefOf(runId));
     if (changed.some((path) => conflicted.has(path))) touched.push(taskId);
   }
   if (touched.length !== 1) {
@@ -297,7 +310,12 @@ async function reconcileAndLand(
   const { plan } = ctx;
   const copy = state.copyPath;
 
-  const other = await otherSideOf(ctx, state.conflictedPaths);
+  const other = await otherSideOf(
+    plan.targetRepo,
+    ctx.layerBase,
+    ctx.landed.map(({ taskId: id, run: r }) => ({ taskId: id, runId: r.runId })),
+    state.conflictedPaths,
+  );
   if ("escalate" in other) return { landed: false, why: other.escalate };
 
   const conflict = await materialiseConflict(copy, state.wTip, state.incomingRef);
@@ -426,10 +444,12 @@ async function reconcileAndLand(
   await git(plan.targetRepo, ["merge", "--ff-only", reconciledRefOf(run.runId)]);
 
   await disposeWorkdir(reconcileRun, { keepWorkdirs: ctx.keepWorkdirs, log: ctx.log });
-  ctx.log(
-    `orca: ${taskId}: reconciled with ${other.taskId} and landed ${mergeSha} on ${plan.workBranch} ` +
-      `(the conflicted commit stays at ${conflictRef} in ${copy})`,
-  );
+  // Fix round 1, finding 3: this line used to say the conflicted commit "stays
+  // at <ref> in <copy>" — seven lines after disposeWorkdir has usually deleted
+  // that copy. It was false on exactly the path where nobody needed it, which
+  // is how a false message survives. Where the conflicted commit was recorded
+  // is already printed above, at the moment it was true.
+  ctx.log(`orca: ${taskId}: reconciled with ${other.taskId} and landed ${mergeSha} on ${plan.workBranch}`);
   return { landed: true };
 }
 

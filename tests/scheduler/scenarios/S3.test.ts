@@ -4,6 +4,7 @@ import {
   blameCommitOfLine,
   commitParents,
   conflictRefShas,
+  firstParentCommits,
   ledgerFilesOnBranch,
   makeSandbox,
   orcaIncomingRefs,
@@ -38,8 +39,16 @@ afterAll(async () => {
   await s?.cleanup();
 });
 
-/** The commit on W whose second parent is `refs/orca/<run-id>` for taskId. */
-async function reconciledMergeCommit(taskId: string): Promise<{ sha: string; parents: string[]; incoming: string }> {
+/**
+ * The commit on W that landed `taskId`: the one two-parent commit whose second
+ * parent is that task's `refs/orca/<run-id>`.
+ *
+ * ⚠️ This is a LOCATOR, not a measurement. "Its second parent is the incoming
+ * ref" is true of whatever it returns by construction, so no criterion below
+ * asserts that. What it does establish -- and this part is real -- is that
+ * exactly one such commit is reachable from W.
+ */
+async function landingCommitOf(taskId: string): Promise<{ sha: string; parents: string[]; incoming: string }> {
   const refs = await orcaIncomingRefs(s.targetRepo);
   const runId = Object.keys(refs).find((id) => id.startsWith(`orca-${taskId}-`));
   expect(runId).not.toBeUndefined();
@@ -95,20 +104,40 @@ describe("S3 (spec 3.4 rule 3 / 5.0-5.2 / 8.3)", () => {
     expect(lines.every((l) => validateLine(l).verdict === "ok")).toBe(true);
   }, 300_000);
 
-  it("lands an ordinary merge commit whose two parents are the W tip and the incoming ref", async () => {
+  it("lands a merge commit whose first parent is the W tip and whose tree is the reconciled one", async () => {
     // spec 5.2 step 4, measured on the object that actually reached W rather
-    // than on rebuildMergeCommit in isolation. M-TREE is fed exactly this:
-    // a merge commit built with the wrong parents still carries the right tree,
-    // so every content assertion above stays green while W's history stops
-    // saying that this task's work was ever a branch of its own.
-    const { sha, parents, incoming } = await reconciledMergeCommit("T2");
-    const grandparents = await commitParents(s.targetRepo, p.workBranch);
-    // Parent 1 is the W tip the landing started from: the only commit on W
-    // that is an ancestor of this merge and not the incoming attempt.
-    expect(parents).toHaveLength(2);
-    expect(parents[1]).toBe(incoming);
-    expect(grandparents.has(parents[0])).toBe(true);
-    expect(parents[0]).not.toBe(incoming);
+    // than on rebuildMergeCommit in isolation.
+    //
+    // 🔴 Fix round 1: the previous version of this criterion selected the
+    // commit by its second parent and then asserted facts that selection had
+    // already guaranteed -- it could not fail. Every assertion here measures
+    // something the locator did not.
+    const t2 = await landingCommitOf("T2");
+
+    // Parent 0 must be the tip W actually had when this landing started, and
+    // that value is derived INDEPENDENTLY of the reconciliation: it is T1's own
+    // landing commit, found from T1's incoming ref. A rebuild that used the
+    // layer base, or the conflicted commit, or the incoming attempt as its
+    // first parent all fail here. Mutation `M-FIRSTPARENT`.
+    const t1 = await landingCommitOf("T1");
+    expect(t2.parents[0]).toBe(t1.sha);
+
+    // The same fact stated the way git states it. `--first-parent` is what
+    // `git log --first-parent` walks and what every later three-way merge
+    // treats as "ours", so swapping the two parents moves the incoming attempt
+    // onto W's mainline and the W tip off it: this pair flips together.
+    const firstParents = await firstParentCommits(s.targetRepo, p.workBranch);
+    expect(firstParents).toContain(t2.parents[0]);
+    expect(firstParents).not.toContain(t2.incoming);
+
+    // The tree, which nothing about the parents constrains: `commit-tree`
+    // takes it as a separate argument, so a merge commit with perfect parents
+    // can just as well carry the conflicted tree (M-REUSE), W's tip's tree, or
+    // the incoming attempt's. Measured at the merge commit itself rather than
+    // at W's tip, because W's tip is the landing-order ledger commit above it.
+    expect(await showFileAt(s.targetRepo, t2.sha, "a.txt")).toBe("a1\n");
+    expect(await showFileAt(s.targetRepo, t2.sha, "b.txt")).toBe("b1\n");
+    expect(await showFileAt(s.targetRepo, t2.sha, "shared.txt")).not.toContain("<<<<<<<");
   }, 300_000);
 
   it("the conflicted commit never reaches W", async () => {
@@ -139,7 +168,7 @@ describe("S3 (spec 3.4 rule 3 / 5.0-5.2 / 8.3)", () => {
     // This round really does put another commit on W after the merge (the
     // landing-order decision, 4.3), so "the commit after it" is a commit that
     // exists and that a wrong implementation would land on.
-    const { sha: merge } = await reconciledMergeCommit("T2");
+    const { sha: merge } = await landingCommitOf("T2");
 
     const files = await ledgerFilesOnBranch(s.targetRepo, p.workBranch);
     const found: Array<{ path: string; line: number }> = [];

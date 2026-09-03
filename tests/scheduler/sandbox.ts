@@ -837,3 +837,105 @@ export async function commitParents(repo: string, revision: string): Promise<Map
   }
   return parents;
 }
+
+/**
+ * `git rev-list --first-parent` from a revision.
+ *
+ * Task 12 fix round 1: the criterion for spec 5.2 step 4 used to select the
+ * merge commit by its second parent and then assert facts about that same
+ * parent, which the selection had already guaranteed. W's first-parent line is
+ * the falsifiable form of the same question -- it is what `git log
+ * --first-parent` walks and what every later three-way merge treats as "ours",
+ * so a merge commit built with its parents the wrong way round moves the
+ * incoming attempt onto it and the W tip off it.
+ */
+export async function firstParentCommits(repo: string, revision: string): Promise<string[]> {
+  const out = await git(repo, ["rev-list", "--first-parent", revision]);
+  return out.split("\n").filter((l) => l.trim().length > 0);
+}
+
+/**
+ * A required check that creates a file only if it is not already there.
+ *
+ * An ordinary shape ("make sure this exists"), and the one that produces a
+ * reconciliation which passes every required check and still leaves the
+ * conflict markers in place: in each task's own attempt worktree the file is
+ * absent and gets written, while in the reconciliation worktree it is present
+ * -- as the conflicted text -- so the check is a no-op and reports success.
+ * That is exactly the hole spec 5.1's third row cannot see and
+ * `markersRemaining` exists to close.
+ */
+export function createFileIfMissingCheck(path: string, content: string): string {
+  return `[ -e ${path} ] || printf '${content}\\n' > ${path}`;
+}
+
+/**
+ * seedLyingPlan's shape, with the two tasks' conflicting writes made
+ * conditional so the synthesized reconciliation cannot clear the markers.
+ * Drives the `markersRemaining` escalation (mutation `M-MARKERS-CALL`).
+ */
+export async function seedUnreconcilableLyingPlan(s: Sandbox): Promise<RunnablePlan> {
+  return seedRunnablePlan(s, [
+    {
+      taskId: "T1",
+      contract: {
+        goal: "write a.txt",
+        targetPaths: ["a.txt"],
+        requiredChecks: [writeFileCheck("a.txt", "a1"), createFileIfMissingCheck("shared.txt", "t1")],
+        buildTestCommands: ["true"],
+      },
+    },
+    {
+      taskId: "T2",
+      contract: {
+        goal: "write b.txt",
+        targetPaths: ["b.txt"],
+        requiredChecks: [writeFileCheck("b.txt", "b1"), createFileIfMissingCheck("shared.txt", "t2")],
+        buildTestCommands: ["true"],
+      },
+    },
+  ]);
+}
+
+/**
+ * seedLyingPlan's shape, with one check that passes in each task's own attempt
+ * worktree and fails in the reconciliation's.
+ *
+ * `test ! -e a.txt` is true for T2, which clones at the layer base before T1
+ * has landed, and false for the reconciliation, whose base is the conflict
+ * commit and therefore already contains T1's file. The synthesized contract
+ * pins maxAttempts to 1 (spec 5.1's last note), so the rejected verification
+ * lands on `exhausted`.
+ *
+ * ⚠️ The failing check is LAST in T2's list, deliberately. requiredChecks run
+ * in order and the union puts the conflicting task's first, so the two writes
+ * above it still run and still clear the conflict markers. Without that, a
+ * reconciliation that ended `exhausted` would also be one that left markers
+ * behind, and the criterion could not tell which of the two guards caught it.
+ */
+export async function seedLyingPlanWhoseReconciliationFails(s: Sandbox): Promise<RunnablePlan> {
+  return seedRunnablePlan(s, [
+    {
+      taskId: "T1",
+      contract: {
+        goal: "write a.txt",
+        targetPaths: ["a.txt"],
+        requiredChecks: [writeFileCheck("a.txt", "a1"), writeFileCheck("shared.txt", "t1")],
+        buildTestCommands: ["true"],
+      },
+    },
+    {
+      taskId: "T2",
+      contract: {
+        goal: "write b.txt",
+        targetPaths: ["b.txt"],
+        requiredChecks: [
+          writeFileCheck("b.txt", "b1"),
+          writeFileCheck("shared.txt", "t2"),
+          "test ! -e a.txt",
+        ],
+        buildTestCommands: ["true"],
+      },
+    },
+  ]);
+}
