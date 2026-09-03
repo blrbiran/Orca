@@ -267,8 +267,12 @@ export interface OutcomeRouting {
   stopRound: boolean;
 }
 
+// Sorted, like descendantsOf below: layers.flat() is layer order, so without
+// this the two branches of routeOutcome would return the same set of task ids
+// in different orders and every caller that compares or prints one would have
+// to know which branch produced it.
 function allTaskIds(graph: TaskGraph): string[] {
-  return graph.layers.flat();
+  return graph.layers.flat().sort();
 }
 
 /**

@@ -3,7 +3,8 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { allocateRunId } from "../../src/scheduler/runId.js";
-import { cloneDirOf, disposeWorkdir, runTask, type TaskRun } from "../../src/scheduler/ccloopRunner.js";
+import { cloneDirOf, disposeWorkdir, routeOutcome, runTask, type TaskRun } from "../../src/scheduler/ccloopRunner.js";
+import { buildGraph, type TaskGraph } from "../../src/scheduler/graph.js";
 import type { PlanFile, PlanTask } from "../../src/scheduler/planFile.js";
 import {
   allRefShas,
@@ -219,5 +220,95 @@ describe("disposeWorkdir (spec §4.5)", () => {
     } finally {
       await s.cleanup();
     }
+  });
+});
+
+describe("routeOutcome (spec §6.1's four-row table)", () => {
+  // Pure: no clone, no spawn. The scenarios above prove the table is wired to
+  // real ccloop outcomes; these prove every row of it exists, including the
+  // two rows no scenario in this task can reach — `cancelled` needs a human
+  // pressing stop, and `exhausted`'s routing is identical to `failed`'s but
+  // must not be assumed to be.
+  function graphOf(tasks: Array<{ taskId: string; dependsOn: string[]; targetPaths: string[] }>): TaskGraph {
+    const plan: PlanFile = {
+      targetRepo: "/target",
+      ccloopBin: "/ccloop/dist/cli.js",
+      runsDir: "/runs",
+      workBranch: "orca/w",
+      policy: "local-merge",
+      ledgerMode: "in-repo",
+      tasks: tasks.map((t) => ({ taskId: t.taskId, contract: `/contracts/${t.taskId}.json`, dependsOn: t.dependsOn })),
+    };
+    const contracts = new Map<string, unknown>(
+      tasks.map((t) => [t.taskId, { context: { targetPaths: t.targetPaths } }]),
+    );
+    return buildGraph(plan, contracts);
+  }
+
+  const chain = () =>
+    graphOf([
+      { taskId: "T1", dependsOn: [], targetPaths: ["a.txt"] },
+      { taskId: "T2", dependsOn: ["T1"], targetPaths: ["b.txt"] },
+      { taskId: "T3", dependsOn: [], targetPaths: ["c.txt"] },
+    ]);
+
+  it("gives each of ccloop's five terminal states its own verdict", () => {
+    // spec §6.1 withdrew "non-succeeded ⇒ descendants all blocked" because the
+    // five states say five different things. The pairs below are the ones a
+    // collapsed rule gets wrong: blocked escalates and is not a failure, while
+    // exhausted and failed are failures that escalate nothing.
+    const g = chain();
+    expect(routeOutcome(g, "T1", "succeeded")).toEqual({
+      countsAsFailure: false,
+      escalates: false,
+      upstreamNotRun: [],
+      stopRound: false,
+    });
+    expect(routeOutcome(g, "T1", "blocked_waiting_human")).toEqual({
+      countsAsFailure: false,
+      escalates: true,
+      upstreamNotRun: ["T2"],
+      stopRound: false,
+    });
+    expect(routeOutcome(g, "T1", "exhausted")).toEqual({
+      countsAsFailure: true,
+      escalates: false,
+      upstreamNotRun: ["T2"],
+      stopRound: false,
+    });
+    expect(routeOutcome(g, "T1", "failed")).toEqual({
+      countsAsFailure: true,
+      escalates: false,
+      upstreamNotRun: ["T2"],
+      stopRound: false,
+    });
+  });
+
+  it("stops the whole round when a task is cancelled", () => {
+    // spec §6.1's cancelled row: a human pressed stop, so starting more tasks
+    // acts against the intent that produced it — unlike every other
+    // non-success state, where the unrelated branches keep going. This is the
+    // only branch of the table S8 and S9 cannot reach, so without this it
+    // would be a branch with no criterion.
+    expect(routeOutcome(chain(), "T1", "cancelled")).toEqual({
+      countsAsFailure: true,
+      escalates: false,
+      upstreamNotRun: ["T2", "T3"],
+      stopRound: true,
+    });
+  });
+
+  it("counts an implicitly-downstream task as a descendant", () => {
+    // The write-set edges buildGraph derives are edges (spec §2.4: edges are
+    // dependsOn ∪ write-set intersection). A task that claims an overlapping
+    // path but declared no dependency is just as unable to start from a base
+    // its upstream never produced, so following only dependsOn here would let
+    // it run against a base that does not exist.
+    const g = graphOf([
+      { taskId: "A", dependsOn: [], targetPaths: ["src/**"] },
+      { taskId: "B", dependsOn: [], targetPaths: ["src/a.ts"] },
+    ]);
+    expect(g.implicit.map((e) => [e.from, e.to])).toEqual([["A", "B"]]);
+    expect(routeOutcome(g, "A", "failed").upstreamNotRun).toEqual(["B"]);
   });
 });
