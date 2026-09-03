@@ -961,3 +961,77 @@ Task 1 的第 2／3／4 条从**内容**这一侧覆盖了同一个关切。**�
 基点是 Orca 主题行 `docs(handoff): continue this round's section with the review and the proposal` 那一笔。
 ccloop 侧的观测时点是它的 `main` tip `7caa4cb`。
 ⚠️ **所有行号引用前必须现测**（开工前 Step B）。
+
+---
+
+## ERRATUM 1（P0 执行时现测，2026-09-03／04，ccloop 基点 `7b44220`）
+
+本节由执行 P0 的那一轮（run `orca-dev-213d1395`）追加。**上文一字未动**，此处为具名更正。
+
+### 1. 🔴 成功事件被撤掉了 —— 只保留 `attempt_commit_publish_failed`
+
+Task 2／Task 3 的实现段都写了「成功记 `attempt_commit_published`，失败记
+`attempt_commit_publish_failed`」。*** **成功那条已按人 2026-09-04 的裁决撤掉。** ***
+
+**为什么**：`events.jsonl` 里多一条事件，**打红了 17 条既有判据** —— 它们用 `toEqual` 钉死了
+完整的事件类型序列（`succeeds when verification approves`、`stops immediately when a stopOn signal matches`、
+`records retained cleanupStatus in execution recovery when cleanup fails` 等，名单在本轮的实测留档里）。
+而 ccloop 铁律 2 明写**不许实施者自改既有判据，改既有判据必须由人指名到具体测试**。
+
+**两条路都实测过，数字如下**：
+
+| 方案 | 实测 |
+|---|---|
+| 保留两个事件 | 整支 **17 条既有判据红** |
+| 只记失败事件 | 整支 **35 files / 623 tests 全绿**（当时 Task 2 收尾，基线 614＋9） |
+
+**人裁（2026-09-04）：只记失败事件。** 依据是本文末尾裁决 1 已经定的「**ref 本身就是产物**」——
+成功事件与 ref 重复（`git for-each-ref refs/ccloop/<run-id>/attempts/` 就能回答），
+而失败时**没有 ref 可看**，那条事件不重复。
+
+⚠️ **提案第 3 节与 README 那一节里「两条新事件」的说法同此更正。**
+
+### 2. 🔴 变异 M0-4 第一次跑是【绿】的 —— 判据是空的
+
+M0-4（把 `ATTEMPT_IDENTITY` 从 commit 参数里删掉）**没有打红任何一条判据**，八条全绿。
+
+根因：**「仓库里没配 git 身份」不足以让 `git commit` 失败** —— git 会从 OS 用户名与主机名
+自己猜一个身份，带警告提交成功。探针实测（四个场景，都在一次性仓库里跑）：
+
+| 场景 | 结果 |
+|---|---|
+| 全局／系统配置清空、仓库无身份、不带 `-c` | **成功**，自动猜出 `<user>@<host>.local` |
+| ＋ `user.useConfigOnly=true` | **失败 exit 128**，`fatal: no email was given and auto-detection is disabled` |
+| 再加 `-c` 显式身份 | **成功** ← 这才是 D4 要守的那条 |
+| `useConfigOnly=true` 但全局配置还在 | 成功（全局兜住了） |
+
+⇒ 判据的 seeding 里补了 `git config user.useConfigOnly true`，**M0-4 才被看见红**。
+⇒ *** **决策 D4 的【措施】仍然正确，但它写的【理由】不准**：真正会失败的不是「没配 user.email」，
+是「猜不出来或禁用了猜」（CI 容器里主机名非 FQDN 就是这种）。 ***
+
+### 3. 一处计数口径差异（**不是漂移**）
+
+「开工前必须先现测的三件事」Step B 那张表写「**12 个调用点，11 个走收敛点**」。
+机械普查（`/usr/bin/grep -rn "cleanupAttemptWorkspace" src/`，观测时 ccloop `7b44220`）是：
+**9 个 `BestEffort` ＋ 1 个直接 `WithStatus` ＋ 1 个裸调（重试路径）= 11 个叶子调用点**，
+差的那一个是把 `cleanupAttemptWorkspaceBestEffort` 内部那一行也算进去了。
+
+⚠️ **这不是源码变了**：`git diff --stat 0f7fc28 7b44220 -- src scripts tests` **空输出**。
+计划真正承重的那条 —— **全仓只有两处裸调 `cleanupAttemptWorkspace(`，一处在收敛点内部、
+一处在重试路径** —— 逐字成立，本轮就是照它做的。
+
+### 4. README 用了中文，不是计划给的英文
+
+计划 Task 4 Step 3 给的 README 段落是英文。ccloop 的 `README.md` **通篇是中文散文**，
+按 Rule 11（conformance > taste inside the codebase）改用中文写，命令与标识符逐字保留。
+计划的 G12 列的是「代码、注释、commit message 一律英文」，**没有列 README**。
+
+### 5. 本轮的实测数（**只抄工具打印出来的数**）
+
+| 量 | 值 |
+|---|---|
+| 开工基线 | `35 files / 614 tests`，零 skipped，TEST/TYPECHECK/BUILD 三个 RC 全 0，17.00s |
+| 收尾 | `35 files / 624 tests`（**基线 +10，与计划预期一致**），零 skipped，三个 RC 全 0，23.92s |
+| 改动范围 | 5 个文件；`git diff --stat 7b44220 HEAD -- scripts/` 与 `-- src/persistence/` **均为空输出** |
+| 变异 | M0-1 ～ M0-7 **七条全部被看见红**（M0-4 是补硬判据之后才红的，见上文第 2 条） |
+| push | **一次都没有** |

@@ -935,3 +935,146 @@ P1 与 P2 各自登记了缺口（P1 三处、P2 三处），**都是有意划�
 | **Orca** | 三份计划 ＋ 16 条决策台账 ＋ 本文 | 本地领先远端，**未 push**；`npm run verify` **exit 0** |
 | **ccloop** | *** **只有 `docs/handoff/handoff.md` 一个文件** *** | 本地领先远端一笔，**未 push**；工作树干净 |
 | **ccmem** | *** **一个字节都没碰** *** | 主工作树在别人的分支上，**禁区** |
+
+---
+
+# 📌 本轮（2026-09-03／04，会话 `213d1395`）—— **P1 与 P0 都已执行完毕**；ccloop 第一次有了本轮线写的产品代码
+
+**归属**：run `orca-dev-213d1395`。本节**只追加**，上面一字未动。
+⚠️ **本节不写任何当前哈希** —— 提交本文这个动作本身就会改 HEAD。要指代某一笔就**引提交主题行**。
+（例外同上一节第十二条：**实测值的观测锚点 commit 必须写**，那是有效期，不是当前状态。）
+
+## 一、开工核对（都带命令，本轮现测）
+
+| 量 | 值 | 命令 |
+|---|---|---|
+| Orca 远端 `main` | tip 主题行 `docs(handoff): continue this round's section with the review and the proposal` | `/usr/bin/git ls-remote origin refs/heads/main` |
+| Orca 本地 `main` | **领先远端三笔**（三份计划 ＋ 两笔 handoff） | 裸 `git log --oneline -6` |
+| Orca `npm run verify` | **exit 0**，`7 files / 100 tests`，末三行 `ok: 4 ledger file(s)` ／ `ok: CLAUDE.md is 135/200 lines` ／ `ok: core.hooksPath is scripts/githooks` | `npm run verify > 文件 2>&1; echo $?` |
+| ccloop 远端／本地 | 远端 `7caa4cb`，本地 `7b44220` **领先一笔**，工作树干净，只有主工作树 | `/usr/bin/git -C …/ccloop ls-remote` ＋ `log` ＋ `status` ＋ `worktree list` |
+| ccloop 基线 | *** **`35 files / 614 tests`，零 skipped，TEST／TYPECHECK／BUILD 三个 RC 全 0，17.00s** *** | `export ECC_GATEGUARD=off DISABLE_OMC=1; npm test -- --run > 文件 2>&1` |
+| ccmem | 主工作树在 `w3-threat-scan-bypass-suite`（别人未合并的分支），W3 未合并、版本号未 bump | **只读，本轮零触碰** |
+
+## 二、🔴 人本轮拍的三件事（**逐条援引，不要重开**）
+
+| # | 问的什么 | 裁决 |
+|---|---|---|
+| **1** | P1 与 P0 谁先做 | *** **P1 先，P0 后。** *** 理由：`bound` 的 `taskId`/`runId` 是写入侧格式、台账只追加，是整个队列里**唯一不可逆**的东西；先落地，P0 的 bound 才能用最终格式写 |
+| **2** | 执行方式 | **本会话内直接执行**，每个 Task 之间设检查点（不派 subagent） |
+| **3** | P0 Task 2 的成功事件打红 17 条既有判据怎么收 | 🔴 *** **撤掉成功事件，只保留 `attempt_commit_publish_failed`。** *** 依据是人裁「ref 本身就是产物」—— 成功事件与 ref 重复，失败事件不重复 |
+
+⚠️ **裁决 3 是 ccloop 铁律 2 强制升人的那个形状**（不许实施者自改既有判据）。**不是我自己判的。**
+
+## 三、做完了什么
+
+### P1（本仓库，5 个任务，5 笔提交）
+
+按提交主题行找：`refactor(ledger): derive the reference-event router from its single source` →
+`feat(ledger): require taskId and runId on bound events` →
+`feat(ledger): reject a mismatched run field and a duplicate decision id at the writer` →
+`feat(ledger): add the reconcile decision kind` →
+`docs(spec): record two errata the P1 execution turned up, and land P1's own decisions`。
+
+**收尾实测**：`npm run verify` **exit 0**，`7 files / 119 tests`（基线 100 → 119）。
+**14 条点名变异，13 条被看见红**；`M1-12` 如实登记为**不可观测**。
+
+### P0（在 ccloop，4 个任务，4 笔提交）
+
+按提交主题行找：`feat(worktree): publish each attempt as a commit reachable through a ref` →
+`feat(runLoop): publish the attempt commit before the worktree is removed` →
+`feat(runLoop): publish on the retry path too, the twelfth cleanup call site` →
+`docs(readme): document the attempt commit refs and what they cost`。
+
+**收尾实测**：*** **`35 files / 624 tests`（基线 614 + 10，与计划预期一致），零 skipped，三个 RC 全 0，23.92s。** ***
+`git diff --stat 7b44220 HEAD -- scripts/` 与 `-- src/persistence/` **均为空输出**
+⇒ *** **`fileStore.ts` 与 `claude-phase-runner.mjs` 零触碰，`diff.patch` 采集路径一个字节没变。** ***
+**M0-1 ～ M0-7 七条变异全部被看见红。**
+
+### 台账与更正
+
+- `.decisions/orca-dev-213d1395.jsonl`：**14 条决策，全部经 `appendEvent` 落盘，无一手写**。
+- C 的 spec 追加了 **ERRATUM 1／ERRATUM 2**（正文一字未动）。
+- P0 计划追加了 **ERRATUM 1**（五节，正文一字未动）。
+
+## 四、🔴 六条现测，**每一条都推翻了计划写的东西**（下一轮直接用，别重新发现）
+
+### 1. P1 打红的既有判据是 **12 条**，不是计划普查结论四说的 2 条
+
+分类：**8 条**是顺带拿 `bound` 当第二个事件的夹具（补两个字段，度量的东西一字未变）；
+**1 条**是 Task 1 自己新加的最小记录判据；**2 条**是人裁 1 授权改写的承重判据；
+*** **第 12 条是 spec §3.3 那个逐字 `bound` 示例 —— 它从本轮起被判 `downgraded`。** ***
+理由与那 7 行历史 `bound` 完全同构：**写在字段存在之前**。已立 ERRATUM 2。
+
+### 2. 🔴 **pre-commit 闸门是退出码 2 的第二个消费者，计划只改了第一个**
+
+计划的 D6 只把 `package.json` 的 verify 串改成容忍 2。`scripts/githooks/pre-commit` 第 6 行是 `set -e`，
+第 26 行是 `validate .decisions` ⇒ *** **每一笔提交都被挡住。** ***
+**这条不是预测出来的，是第一次提交真的返回 `COMMIT_RC=1` 才暴露的。**
+⇒ **教训**：*** **「让一个退出码被接受」这件事要先普查【有几个消费者】，一个一个数出来。** ***
+
+### 3. 🔴 变异 `M1-3` 的失效**整支 104 条判据没有一条能看见**
+
+不是「某条判据没红」，是**整支全绿**。根因：`referenceEventSchema` 自己的 `z.enum` 也会拒掉游离名字，
+而既有那条 `rejects unknown ev` **只断言 verdict、不断言理由**。
+⇒ **只加一条钉住拒绝理由的判据**（不改任何既有判据）之后才看见红。
+
+### 4. 🔴 变异 `M0-4` 第一次跑是**绿的** —— 判据是空的
+
+「仓库里没配 git 身份」**不足以让 `git commit` 失败**：git 会从 OS 用户名与主机名自己猜一个身份，
+带警告提交成功。探针四场景实测在 P0 计划的 ERRATUM 1 第 2 节。
+真正会失败的条件是 **`user.useConfigOnly=true` ＋ 全局／系统配置为空**（CI 容器的形状）。
+⇒ *** **计划决策 D4 的【措施】正确，但它写的【理由】不准。** ***
+
+### 5. **「少跑一条」在 vitest 里是绿的**，而且连计数都要另外配
+
+`M1-12`（把 kind 循环改回硬编码六个名字）实测 **exit 0、全绿，只是该文件从 50 条掉到 49 条**。
+⇒ **少跑的那一条只在计数里露头，不会红。** 登记为不可观测变异，防线是代码评审。
+
+### 6. `undoExecutable` 谓词有**假阴性**（此前只登记过假阳性）
+
+实测：`git checkout <sha> -- README.md` **被判不可执行**。
+命令形子句要求**相邻两 token 的第二个像参数**，而 `git checkout` 的第二个 token 是子命令；
+`README.md` 不含斜杠、不是驼峰，命名目标那一支也接不住。
+⇒ **本轮没有放宽谓词**（决策 `/14`）：闸门本轮已两次拦下真正的散文，放宽换来的是更多散文溜过去；
+假阴性的代价只是多写一个路径。
+
+## 五、闸门本轮又抓到两次（**dogfood 仍然有效**）
+
+1. 写台账时 `appendEvent` **当场拦下第 1 条决策**（`undo.how` 是散文）。
+   ⇒ **这次没有逐条试**，而是**先把全部 8 条 `undo.how` 机械审一遍**再改 —— 只有 1 条不合格，
+   但另有 3 条是靠「散文里恰好含一个路径」过闸的，一并改成真命令。
+2. 写 P0 那批决策时**又拦下一条**（上面第四节第 6 条那个假阴性）。
+
+## 六、三条工具坑（**都是本轮实测，此前没记过**）
+
+1. 🔴 *** **zsh 对无引号变量不做词分割。** *** `FILES="a b c"; for f in $FILES` 会把三个路径当成**一个词**，
+   于是「把工作树文件覆盖进 clone 副本」那一步**静默没执行**，而后续的 `npm run verify` 照样 exit 0 ——
+   **量的是错的树**。⇒ **副本覆盖一律用字面列表，并逐个 `diff` 打印 `IDENTICAL`。**
+2. *** **`throw` 挪进 `try` 会被它自己的 `catch` 吞掉，而判据可能照绿。** *** `M1-10` 实测复现。
+3. `git clone --local` 的副本里**软链主树的 `node_modules` 就够跑测试**，不必 `npm ci`
+   （本轮 Orca 与 ccloop 两边各用了多次）。⚠️ 删副本前先 `/bin/rm -f <副本>/node_modules` 删软链本身。
+
+## 七、本轮**没有**做的（登记，不掩饰）
+
+- *** **P2 一行都没写。** *** 它有 15 个任务 / 22 场景 / 14 变异，硬依赖 P0 ＋ P1，**建议单开会话**。
+- *** **未 push、未建分支、未合并、未删任何分支或 worktree。** *** 两个仓库都有未 push 的提交。
+- **对 ccmem 一个字节都没碰** —— 它的主工作树仍在别人未合并的 W3 分支上。
+  ⚠️ 上一节第十节留下的 §15 替换文本在**上一会话的 scratchpad** 里，**那个目录已经不可用** ——
+  要更新 ccmem 的 §15，按上一节记的三条要点重写即可（C 的三份计划已写完、`bound` 已经加上
+  `taskId`/`runId`【本轮已落地，不再是「即将」】、B 的入口条件仍不满足）。
+- **没有派外派评审。** 九笔实现只过了控制器自己的变异表与整支验证。
+- **ccloop 的 E1 的 I-2 ＋ 人裁 85 一个字节没碰**（人裁 121 仍然有效，那一轮仍在授权面外）。
+
+## 八、⛔ 下一件事
+
+| 顺序 | 做什么 | 在哪 |
+|---|---|---|
+| **1** | 🔴 **执行 P2**（`docs/superpowers/plans/2026-09-03-p2-scheduler-c.md`，15 个任务） | Orca。**开工前先读 P0／P1 两份计划末尾的 ERRATUM** |
+| **2** | ccloop 回到 **E1 的 I-2 ＋ 人裁 85**（人裁 121 仍有效；**E1 动生产代码前仍需另拿一次具名授权**） | ccloop |
+| **3** | ccmem §15 的更新（**等 W3 合进 main 之后**，或由跑 W3 的那条线顺手带上） | ccmem |
+
+⚠️ **两个仓库的未 push 提交都等人单独授权。控制器不许 push。**
+
+## 九、成本
+
+**只抄工具报数**（Rule 14）：**本会话的钩子在写下本节之前没有报出过任何金额，因此不写 —— 不许自估。**
