@@ -64,9 +64,39 @@ describe("buildGraph (spec 2.4)", () => {
     expect(validateLine(JSON.stringify(decisions[0])).verdict).toBe("ok");
   });
 
-  it("a task claiming ** collapses the whole graph to one task per layer", () => {
+  it("a task claiming ** shares a layer with no one, while tasks merely downstream of it may still run together", () => {
+    // Fix round 1, finding 2 (controller ruling): the old version of this
+    // criterion asserted the whole graph collapses to one task per layer,
+    // which is not actually true — it over-read a warning in spec §9.1 as
+    // the layering algorithm itself, when §2.4 (the definitional section)
+    // says layers are parallel. What IS true: T1's write set normalises to
+    // the repository root, so it conflicts with every other task and can
+    // never reach zero in-degree in the same step as any of them — it is
+    // always alone. T2 and T3, though, are each only downstream of T1, not
+    // of each other, and their own write sets are disjoint — so once T1 is
+    // done, they still batch into the same layer. A regression back to
+    // per-component full serialisation would put T2 and T3 in separate
+    // layers too, which the second assertion below catches.
     const g = buildGraph(plan(["T1", "T2", "T3"]), contracts({ T1: ["**"], T2: ["a.txt"], T3: ["b.txt"] }));
-    expect(Math.max(...g.layers.map((l) => l.length))).toBe(1);
+    expect(g.implicit.length).toBe(2);
+    expect(g.layers[0]).toEqual(["T1"]);
+    expect(g.layers[1]).toEqual(["T2", "T3"]);
+  });
+
+  it("batches independent tasks within a connected component (diamond: A→B, A→C, B→D, C→D)", () => {
+    // The shape a per-component "one task per layer" bug gets wrong: B and C
+    // are both only downstream of A, never of each other, and their write
+    // sets are disjoint — so they belong in the same layer, not two.
+    const g = buildGraph(
+      plan([
+        ["A", []],
+        ["B", ["A"]],
+        ["C", ["A"]],
+        ["D", ["B", "C"]],
+      ]),
+      contracts({ A: ["a.txt"], B: ["b.txt"], C: ["c.txt"], D: ["d.txt"] }),
+    );
+    expect(g.layers).toEqual([["A"], ["B", "C"], ["D"]]);
   });
 });
 
