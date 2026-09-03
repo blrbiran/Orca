@@ -1,6 +1,37 @@
-import { decisionEventSchema, isReferenceEventName, referenceEventSchema } from "./schema.js";
+import { z } from "zod";
+import {
+  boundEventSchema,
+  decisionEventSchema,
+  isReferenceEventName,
+  referenceEventSchema,
+} from "./schema.js";
 import type { ValidationResult } from "./types.js";
 import { undoHowIsExecutable } from "./undoExecutable.js";
+
+const ATTRIBUTION_FIELDS = new Set(["taskId", "runId"]);
+
+/**
+ * True only when every issue zod raised is "this attribution field is absent".
+ * A wrong-typed taskId, an empty runId, or any problem on another field all
+ * fall through to a rejection, so the downgrade cannot widen by accident.
+ * The three discriminators were measured against the pinned zod version rather
+ * than assumed: a missing field reports code "invalid_type" with received
+ * "undefined", an empty string reports "too_small", and a wrong type reports
+ * received "number".
+ */
+function issuesAreOnlyMissingAttribution(issues: readonly z.ZodIssue[]): boolean {
+  return (
+    issues.length > 0 &&
+    issues.every(
+      (i) =>
+        i.code === "invalid_type" &&
+        i.received === "undefined" &&
+        i.path.length === 1 &&
+        typeof i.path[0] === "string" &&
+        ATTRIBUTION_FIELDS.has(i.path[0]),
+    )
+  );
+}
 
 function rejected(reasons: string[]): ValidationResult {
   return { verdict: "rejected", reasons };
@@ -43,9 +74,24 @@ export function validateLine(raw: string): ValidationResult {
   }
 
   if (isReferenceEventName(ev)) {
-    const result = referenceEventSchema.safeParse(parsed);
+    // bound carries two extra required fields; the other reference events do
+    // not. Picking the schema by name here is why the router had to stop
+    // spelling the names out — this is the branch that needs to tell them
+    // apart.
+    const schema = ev === "bound" ? boundEventSchema : referenceEventSchema;
+    const result = schema.safeParse(parsed);
     if (!result.success) {
-      return rejected(result.error.issues.map((i) => `${i.path.join(".") || "<root>"}: ${i.message}`));
+      const issues = result.error.issues.map((i) => `${i.path.join(".") || "<root>"}: ${i.message}`);
+      // A bound whose *only* complaints are the two attribution fields is not
+      // malformed — it is a line written before the fields existed, and the
+      // ledger being append-only it can never acquire them. Tier 0 is the
+      // honest verdict: a human, not an agent, has to say which task this
+      // belongs to. Anything else wrong with the record is still a rejection;
+      // widening this would quietly turn hard failures into warnings.
+      if (ev === "bound" && issuesAreOnlyMissingAttribution(result.error.issues)) {
+        return { verdict: "downgraded", tier: 0, reasons: issues };
+      }
+      return rejected(issues);
     }
     return { verdict: "ok" };
   }

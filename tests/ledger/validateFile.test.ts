@@ -1,3 +1,4 @@
+import { readdir, readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import { validateFile } from "../../src/ledger/validateFile.js";
 
@@ -17,11 +18,18 @@ function decisionLine(id: string, undoHow = "git branch -f int/a <ref>"): string
   });
 }
 
+// bound records carry taskId/runId since P1 Task 2; these criteria are about
+// check 5 (does the referenced id exist), so they use an otherwise-valid bound
+// and let the reference itself be the only thing under test.
+function boundLine(id: string): string {
+  return JSON.stringify({ ev: "bound", id, taskId: "t-1", runId: "run-7c" });
+}
+
 describe("validateFile — check 5: referenced ids must exist in the file", () => {
   it("passes when a bound references a decision id that exists in the file", () => {
     const result = validateFile([
       decisionLine("run-7c/1"),
-      JSON.stringify({ ev: "bound", id: "run-7c/1" }),
+      boundLine("run-7c/1"),
     ]);
     expect(result.verdict).toBe("ok");
   });
@@ -29,7 +37,7 @@ describe("validateFile — check 5: referenced ids must exist in the file", () =
   it("rejects when a bound references an id that does not exist", () => {
     const result = validateFile([
       decisionLine("run-7c/1"),
-      JSON.stringify({ ev: "bound", id: "run-7c/9" }),
+      boundLine("run-7c/9"),
     ]);
     expect(result.verdict).toBe("rejected");
     expect(result.lines[1].result.verdict).toBe("rejected");
@@ -47,7 +55,7 @@ describe("validateFile — check 5: referenced ids must exist in the file", () =
 
   it("passes even when the reference appears before the referenced decision — spec only requires existence in the file, not order", () => {
     const result = validateFile([
-      JSON.stringify({ ev: "bound", id: "run-7c/1" }),
+      boundLine("run-7c/1"),
       decisionLine("run-7c/1"),
     ]);
     expect(result.verdict).toBe("ok");
@@ -56,8 +64,8 @@ describe("validateFile — check 5: referenced ids must exist in the file", () =
   it("a bound cannot reference another bound's id — only a decision counts as the referenced object", () => {
     const result = validateFile([
       decisionLine("run-7c/1"),
-      JSON.stringify({ ev: "bound", id: "run-7c/1" }),
-      JSON.stringify({ ev: "bound", id: "run-7c/2" }),
+      boundLine("run-7c/1"),
+      boundLine("run-7c/2"),
     ]);
     expect(result.verdict).toBe("rejected");
   });
@@ -84,5 +92,39 @@ describe("validateFile — aggregation and line numbers", () => {
   it("verdict is rejected when there are both downgrades and rejections", () => {
     const result = validateFile([decisionLine("run-7c/1", "回滚一下就好"), "{坏行"]);
     expect(result.verdict).toBe("rejected");
+  });
+});
+
+describe("the only downgrade this repository's own ledgers may contain", () => {
+  it("is the seven pre-attribution bound lines in orca-dev-09cc3ea1.jsonl, and nothing else", async () => {
+    // verify now tolerates exit code 2 from the ledger step, which on its own
+    // would let any future downgrade through in silence — a decision whose
+    // undo.how is prose, say. This criterion is what keeps that tolerance
+    // narrow: it names the exact set of downgraded lines the repository is
+    // allowed to carry, so an eighth one is a red test rather than a warning
+    // nobody reads.
+    const dir = new URL("../../.decisions/", import.meta.url);
+    const files = (await readdir(dir)).filter((f) => f.endsWith(".jsonl")).sort();
+    expect(files.length).toBeGreaterThan(0);
+
+    const downgraded: string[] = [];
+    for (const file of files) {
+      const text = await readFile(new URL(file, dir), "utf8");
+      const verdict = validateFile(text.split("\n"));
+      for (const line of verdict.lines) {
+        if (line.result.verdict === "downgraded") downgraded.push(`${file}:${line.lineNumber}`);
+      }
+      expect(verdict.lines.filter((l) => l.result.verdict === "rejected")).toEqual([]);
+    }
+
+    expect(downgraded).toEqual([
+      "orca-dev-09cc3ea1.jsonl:8",
+      "orca-dev-09cc3ea1.jsonl:9",
+      "orca-dev-09cc3ea1.jsonl:10",
+      "orca-dev-09cc3ea1.jsonl:11",
+      "orca-dev-09cc3ea1.jsonl:12",
+      "orca-dev-09cc3ea1.jsonl:13",
+      "orca-dev-09cc3ea1.jsonl:14",
+    ]);
   });
 });

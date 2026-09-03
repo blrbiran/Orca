@@ -22,6 +22,13 @@ function validDecision(id: string, overrides: Record<string, unknown> = {}) {
   };
 }
 
+// bound records carry taskId/runId since P1 Task 2. Criteria that only need
+// "a second event after the decision" use this, so the attribution fields stay
+// out of what they are actually measuring.
+function boundFor(id: string, overrides: Record<string, unknown> = {}) {
+  return { ev: "bound", id, taskId: "t-1", runId: "fx", ...overrides };
+}
+
 async function tempDir(): Promise<string> {
   return mkdtemp(join(tmpdir(), "orca-writer-"));
 }
@@ -30,7 +37,7 @@ describe("appendEvent — on-disk shape", () => {
   it("writes to <dir>/<runId>.jsonl, one line per event, trailing newline", async () => {
     const dir = await tempDir();
     await appendEvent(dir, "fx", validDecision("fx/1"));
-    await appendEvent(dir, "fx", { ev: "bound", id: "fx/1" });
+    await appendEvent(dir, "fx", boundFor("fx/1"));
 
     const text = await readFile(join(dir, "fx.jsonl"), "utf8");
     const lines = text.split("\n");
@@ -90,7 +97,7 @@ describe("appendEvent — check 5: a reference event's id must exist as a decisi
   it("throws when a bound references an id with no matching decision in the file (a typo, not fixable in place)", async () => {
     const dir = await tempDir();
     await expect(
-      appendEvent(dir, "probe", { ev: "bound", id: "probe/999", note: "typo" }),
+      appendEvent(dir, "probe", boundFor("probe/999", { note: "typo" })),
     ).rejects.toThrow(/rejected/);
     await expect(readFile(join(dir, "probe.jsonl"), "utf8")).rejects.toThrow();
   });
@@ -98,7 +105,7 @@ describe("appendEvent — check 5: a reference event's id must exist as a decisi
   it("passes once the referenced decision has actually been appended first", async () => {
     const dir = await tempDir();
     await appendEvent(dir, "probe", validDecision("probe/1"));
-    await appendEvent(dir, "probe", { ev: "bound", id: "probe/1" });
+    await appendEvent(dir, "probe", boundFor("probe/1"));
     const text = await readFile(join(dir, "probe.jsonl"), "utf8");
     expect(text.split("\n").filter((l) => l.length > 0)).toHaveLength(2);
   });
@@ -111,13 +118,13 @@ describe("appendEvent — check 5: a reference event's id must exist as a decisi
   // comment.
   it("writing a bound before its decision throws, even though validateFile accepts that same order", async () => {
     const dir = await tempDir();
-    await expect(appendEvent(dir, "probe", { ev: "bound", id: "probe/1" })).rejects.toThrow(
+    await expect(appendEvent(dir, "probe", boundFor("probe/1"))).rejects.toThrow(
       /rejected/,
     );
     await expect(readFile(join(dir, "probe.jsonl"), "utf8")).rejects.toThrow();
 
     const result = validateFile([
-      JSON.stringify({ ev: "bound", id: "probe/1" }),
+      JSON.stringify(boundFor("probe/1")),
       JSON.stringify(validDecision("probe/1")),
     ]);
     expect(result.verdict).toBe("ok");
@@ -138,7 +145,7 @@ describe("appendEvent — a missing trailing newline must not corrupt the append
     const seed = JSON.stringify(validDecision("probe/1"));
     await writeFile(filePath, seed); // deliberately no trailing newline
 
-    await appendEvent(dir, "probe", { ev: "bound", id: "probe/1" });
+    await appendEvent(dir, "probe", boundFor("probe/1"));
 
     // Assert on what is actually on disk, not on what was passed in to
     // appendEvent or to writeFile — that distinction is the whole finding.
@@ -157,7 +164,7 @@ describe("appendEvent — a missing trailing newline must not corrupt the append
   it("does not insert a separator when the existing file already ends with a newline (normal, sequential appends are untouched)", async () => {
     const dir = await tempDir();
     await appendEvent(dir, "probe", validDecision("probe/1"));
-    await appendEvent(dir, "probe", { ev: "bound", id: "probe/1" });
+    await appendEvent(dir, "probe", boundFor("probe/1"));
 
     const onDisk = await readFile(join(dir, "probe.jsonl"), "utf8");
     // No blank line was introduced between the two records.
@@ -170,17 +177,58 @@ describe("appendEvent can reproduce this repo's own hand-written ledger", () => 
   // Task 1's 8 lines were hand-written (the writer did not exist yet). This
   // assertion proves: the same objects fed through the writer produce bytes
   // identical, character for character, to what is on disk in the repo.
-  it("feeding each line through appendEvent reproduces .decisions/orca-dev-09cc3ea1.jsonl byte for byte", async () => {
+  it("feeding each decision line through appendEvent reproduces them byte for byte, and the first bound line is refused", async () => {
+    // Rewritten by P1 Task 2 (human ruling 2026-09-03). The original replayed
+    // all fourteen lines. Seven of them are bound records written before bound
+    // required taskId/runId, and the writer now refuses them — correctly:
+    // today's writer could not have produced them, and the ledger being
+    // append-only they can never be repaired. Narrowing the replay to the
+    // decision lines keeps the original job (real data through the real
+    // writer, compared byte for byte), and the refusal of a real historical
+    // bound is asserted rather than skipped, so the new requirement is pinned
+    // against real history and not only against fixtures.
     const real = await readFile(
       new URL("../../.decisions/orca-dev-09cc3ea1.jsonl", import.meta.url),
       "utf8",
     );
+    const lines = real.split("\n").filter((l) => l.trim().length > 0);
+    const decisions = lines.filter((l) => JSON.parse(l).ev === "decision");
+    const bounds = lines.filter((l) => JSON.parse(l).ev === "bound");
+    expect(decisions).toHaveLength(7);
+    expect(bounds).toHaveLength(7);
+
     const dir = await tempDir();
-    for (const line of real.split("\n")) {
-      if (line.trim().length === 0) continue;
+    for (const line of decisions) {
       await appendEvent(dir, "orca-dev-09cc3ea1", JSON.parse(line));
     }
     const written = await readFile(join(dir, "orca-dev-09cc3ea1.jsonl"), "utf8");
-    expect(written).toBe(real);
+    expect(written).toBe(`${decisions.join("\n")}\n`);
+
+    await expect(
+      appendEvent(dir, "orca-dev-09cc3ea1", JSON.parse(bounds[0])),
+    ).rejects.toThrow(/taskId/);
+    // Read the disk after the refusal rather than trusting the throw.
+    expect(await readFile(join(dir, "orca-dev-09cc3ea1.jsonl"), "utf8")).toBe(written);
+  });
+});
+
+describe("appendEvent refuses a bound that cannot say which task implemented it", () => {
+  it("throws and writes not one byte", async () => {
+    const dir = await tempDir();
+    await appendEvent(dir, "fx", validDecision("fx/1"));
+    const before = await readFile(join(dir, "fx.jsonl"), "utf8");
+
+    // The verdict for this shape is `downgraded`, not `rejected` — and the
+    // writer throws on both. That is the point: reading old history got
+    // gentler, writing new history did not. Matching on the reason text rather
+    // than the verdict word keeps this criterion pinned to the requirement
+    // instead of to which of the two refusal paths carries it.
+    await expect(
+      appendEvent(dir, "fx", { ev: "bound", id: "fx/1" }),
+    ).rejects.toThrow(/taskId/);
+
+    // Measure the bytes directly rather than trusting the throw: a writer that
+    // threw after appending would still satisfy `rejects.toThrow`.
+    expect(await readFile(join(dir, "fx.jsonl"), "utf8")).toBe(before);
   });
 });

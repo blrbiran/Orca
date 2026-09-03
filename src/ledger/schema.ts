@@ -57,6 +57,20 @@ export const referenceEventSchema = z
   })
   .passthrough();
 
+/**
+ * bound is the one reference event that answers "which task implemented this
+ * decision". Its two extra fields are required rather than optional because
+ * the ledger is append-only: an optional field is one an agent will omit, and
+ * the omission can never be repaired on a line already written. superseded and
+ * overturned keep the looser shape — they do not carry that question.
+ */
+export const boundEventSchema = referenceEventSchema.extend({
+  taskId: z.string().min(1),
+  runId: z.string().min(1),
+});
+
+export type BoundEvent = z.infer<typeof boundEventSchema>;
+
 export type ReferenceEventName = (typeof REFERENCE_EVENT_TYPES)[number];
 
 const REFERENCE_EVENT_NAMES: ReadonlySet<string> = new Set(REFERENCE_EVENT_TYPES);
