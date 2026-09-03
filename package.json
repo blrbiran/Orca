@@ -12,7 +12,8 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "ledger": "tsx src/cli.ts",
-    "verify": "npm run typecheck && npm test && (npm run ledger -- validate .decisions || [ $? -eq 2 ]) && node scripts/check-claude-md-lines.mjs && node scripts/check-hooks-path.mjs",
+    "verify": "npm run typecheck && npm test && (npm run ledger -- validate .decisions || [ $? -eq 2 ]) && node scripts/check-claude-md-lines.mjs && node scripts/check-hooks-path.mjs && npm run verify:scheduler",
+    "verify:scheduler": "node scripts/verify-scheduler.mjs",
     "hooks:install": "git config core.hooksPath scripts/githooks",
     "prepare": "git rev-parse --git-dir >/dev/null 2>&1 && git config core.hooksPath scripts/githooks || true"
   },

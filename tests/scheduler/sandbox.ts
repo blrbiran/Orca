@@ -1,0 +1,165 @@
+// The disposable test harness every scheduler scenario in this plan is built
+// on. Each sandbox is a throwaway git repository plus a "runs" directory that
+// sits outside it, so scenarios can assert about refs, porcelain output, and
+// where files land without touching the developer's machine or a shared fixture
+// that could pick up state left behind by a previous test run.
+import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import { promisify } from "node:util";
+
+const execFileAsync = promisify(execFile);
+
+export interface Sandbox {
+  root: string;
+  targetRepo: string;
+  runsDir: string;
+  ccloopBin: string;
+  cleanup(): Promise<void>;
+}
+
+// A contract this harness writes must be accepted by ccloop's own `.strict()`
+// schema (src/contract/schema.ts) or the first real spawn (Task 8) explodes
+// on a shape mismatch neither repo's tests would catch beforehand. This type
+// only surfaces the fields a scenario is likely to want to vary; writeContract
+// fills in every other required field with a fixed, schema-legal default.
+export interface ContractSpec {
+  goal: string;
+  targetPaths: string[];
+  requiredChecks: string[];
+  taskId?: string;
+  successCondition?: string;
+  buildTestCommands?: string[];
+  rejectOn?: string[];
+}
+
+// Identity is passed per-invocation rather than configured, so a machine with
+// no global user.email — a CI container, a fresh checkout — runs these tests
+// identically to a developer's laptop.
+const ID = ["-c", "user.name=orca-test", "-c", "user.email=orca-test@invalid"];
+
+async function git(repo: string, args: string[]): Promise<string> {
+  const { stdout } = await execFileAsync("git", args, { cwd: repo });
+  return stdout;
+}
+
+// ccloop's package.json is `private: true`, so it is never an npm dependency
+// and its bin is only ever this literal path on disk — resolved fresh per
+// sandbox rather than cached, since a rebuild while tests are running should
+// be picked up. Thrown explicitly and by name: a missing dist/cli.js would
+// otherwise surface many stack frames away as an opaque ENOENT from spawn.
+function resolveCcloopBin(): string {
+  const bin = resolve(dirname(new URL(import.meta.url).pathname), "../../../ccloop/dist/cli.js");
+  if (!existsSync(bin)) {
+    throw new Error(
+      `ccloop bin not found at ${bin}. ccloop's package.json is private and its bin ` +
+        `is never an npm dependency — run "npm run build" inside the ccloop repo first.`,
+    );
+  }
+  return bin;
+}
+
+export async function makeSandbox(): Promise<Sandbox> {
+  const root = await mkdtemp(join(tmpdir(), "orca-sched-"));
+  const targetRepo = join(root, "repo");
+  const runsDir = join(root, "runs");
+  await mkdir(targetRepo, { recursive: true });
+  await mkdir(runsDir, { recursive: true });
+  await git(targetRepo, ["init"]);
+  await writeFile(join(targetRepo, "README.md"), "seed\n");
+  await git(targetRepo, [...ID, "add", "-A"]);
+  await git(targetRepo, [...ID, "commit", "-m", "init"]);
+  return {
+    root,
+    targetRepo,
+    runsDir,
+    ccloopBin: resolveCcloopBin(),
+    cleanup: () => rm(root, { recursive: true, force: true }),
+  };
+}
+
+// spec §2.3 rejects a plan whose contract lives inside the target repo — an
+// upstream task could otherwise rewrite the write set the graph was built
+// from. Writing here, under runsDir rather than targetRepo, is what makes
+// that rejection testable at all.
+export async function writeContract(s: Sandbox, taskId: string, spec: ContractSpec): Promise<string> {
+  const contract = {
+    objective: {
+      taskId: spec.taskId ?? taskId,
+      goal: spec.goal,
+      successCondition: spec.successCondition ?? spec.goal,
+      nonGoals: [],
+    },
+    context: {
+      repoPath: s.targetRepo,
+      targetPaths: spec.targetPaths,
+      relevantDocs: [],
+      buildTestCommands: spec.buildTestCommands ?? spec.requiredChecks,
+      constraints: [],
+    },
+    executionPolicy: {
+      autonomyLevel: "L2",
+      maxAttempts: 1,
+      perAttemptTimeoutMs: 60_000,
+      totalRuntimeBudgetMs: 60_000,
+      tokenBudget: 100_000,
+      worktreeRequired: true,
+      partialOutcomeRecoveryWindowMs: 0,
+    },
+    safetyPolicy: {
+      allowlistPaths: [],
+      denylistPaths: [],
+      maxFilesTouched: spec.targetPaths.length,
+      humanGateConditions: [],
+    },
+    verification: {
+      verifierType: "command",
+      requiredChecks: spec.requiredChecks,
+      rejectOn: spec.rejectOn ?? ["nonzero exit"],
+      evidenceRequired: [],
+    },
+    escalationAndExit: {
+      escalationTargets: [],
+      pauseOn: [],
+      stopOn: [],
+      terminalStates: ["succeeded", "blocked_waiting_human", "exhausted", "cancelled", "failed"],
+    },
+  };
+  const path = join(s.runsDir, `contract-${taskId}.json`);
+  await writeFile(path, JSON.stringify(contract, null, 2));
+  return path;
+}
+
+export async function writePlan(s: Sandbox, plan: unknown): Promise<string> {
+  const path = join(s.runsDir, "plan.json");
+  await writeFile(path, JSON.stringify(plan, null, 2));
+  return path;
+}
+
+export async function refSha(repo: string, ref: string): Promise<string | null> {
+  try {
+    return (await git(repo, ["rev-parse", ref])).trim();
+  } catch {
+    // Not a spawn failure worth surfacing: "the ref does not exist yet" is a
+    // question scenarios legitimately ask (e.g. before a task has published
+    // its attempt branch).
+    return null;
+  }
+}
+
+export async function allRefShas(repo: string): Promise<Record<string, string>> {
+  const out = await git(repo, ["for-each-ref", "--format=%(refname) %(objectname)"]);
+  const refs: Record<string, string> = {};
+  for (const line of out.split("\n")) {
+    if (line.trim().length === 0) continue;
+    const [refname, objectname] = line.split(" ");
+    refs[refname] = objectname;
+  }
+  return refs;
+}
+
+export async function porcelain(repo: string): Promise<string> {
+  return git(repo, ["status", "--porcelain"]);
+}
