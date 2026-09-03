@@ -561,7 +561,17 @@ export async function seedIntersectingPlan(s: Sandbox): Promise<RunnablePlan> {
  * a file that is merely sitting in the worktree has not been committed.
  */
 export async function readLedgerOnBranch(repo: string, branch: string): Promise<string[]> {
-  const names = await git(repo, ["ls-tree", "--name-only", `${branch}:.decisions`]);
+  // A branch with no .decisions/ in its tree returns no lines rather than
+  // throwing. Measured while running `M-LEDGER`: git's "Not a valid object
+  // name" propagated out of the helper and killed the scenario before its
+  // own `lines.length` assertion ran, so the red said "the helper crashed"
+  // where the criterion means to say "C wrote no decisions onto W".
+  let names: string;
+  try {
+    names = await git(repo, ["ls-tree", "--name-only", `${branch}:.decisions`]);
+  } catch {
+    return [];
+  }
   const lines: string[] = [];
   for (const name of names.split("\n").filter((n) => n.trim().length > 0)) {
     const text = await git(repo, ["show", `${branch}:.decisions/${name}`]);
