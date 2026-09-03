@@ -1,5 +1,6 @@
 import { isAbsolute, relative } from "node:path";
 import { z } from "zod";
+import { detectCycle } from "./graph.js";
 
 export interface PlanTask {
   taskId: string;
@@ -42,42 +43,6 @@ const planFileSchema = z
     tasks: z.array(planTaskSchema),
   })
   .strict();
-
-/**
- * Standalone DFS, deliberately not shared with anything else yet.
- * Ruling R2 (SDD ledger, Task 2): Task 4 will export detectCycle(tasks) for
- * the graph layer, and this function is expected to converge with it — at
- * that point this body is replaced by a call to the shared one. Written
- * small and self-contained now so that replacement is a one-line change
- * rather than surgery.
- */
-function planHasCycle(tasks: PlanTask[]): boolean {
-  const byId = new Map(tasks.map((task) => [task.taskId, task]));
-  const WHITE = 0;
-  const GRAY = 1;
-  const BLACK = 2;
-  const state = new Map<string, number>();
-
-  function visit(id: string): boolean {
-    const status = state.get(id) ?? WHITE;
-    if (status === GRAY) return true;
-    if (status === BLACK) return false;
-    state.set(id, GRAY);
-    const task = byId.get(id);
-    if (task) {
-      for (const dep of task.dependsOn) {
-        if (visit(dep)) return true;
-      }
-    }
-    state.set(id, BLACK);
-    return false;
-  }
-
-  for (const task of tasks) {
-    if (visit(task.taskId)) return true;
-  }
-  return false;
-}
 
 /**
  * A path counts as "inside" targetRepo only when it does not escape via
@@ -137,7 +102,10 @@ export function loadPlan(raw: unknown, defaultBranch: string): { plan: PlanFile 
   }
 
   // 3. cycle — a task graph with a cycle has no valid execution order.
-  if (planHasCycle(data.tasks)) {
+  // detectCycle is shared with the graph layer (ruling R2, Task 4 SDD
+  // ledger): it used to be a private DFS duplicated here, which this project's
+  // review rubric treats as a defect once a real shared home exists.
+  if (detectCycle(data.tasks)) {
     rejections.push({ code: "cycle", message: "the task graph has a cycle" });
   }
 
