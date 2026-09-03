@@ -1107,3 +1107,31 @@ P1 与 P2 各自登记了缺口（P1 三处、P2 三处），**都是有意划�
 | **Orca** | `src/ledger/**` 五个文件 ／ `tests/ledger/**` 四个文件 ／ `package.json` ／ `scripts/githooks/pre-commit` ／ spec 的两条 ERRATUM ／ P0 计划的一条 ERRATUM ／ 14 条台账 ／ 本文 | 本地领先远端，**未 push**；`npm run verify` **exit 0**，`7 files / 119 tests` |
 | **ccloop** | 四笔实现＋文档 ＋ 一笔 handoff | 本地领先远端**五笔**，**未 push**；`35 files / 624 tests`，三个 RC 全 0 |
 | **ccmem** | *** **一个字节都没碰** *** | 主工作树仍在别人未合并的 `w3-threat-scan-bypass-suite` 上，**禁区** |
+
+### 十一、🔴 对本节自己的一处具名更正：**ccmem 已经不是禁区了**
+
+本节第七节与第十节的表都写着「**ccmem 主工作树仍在别人未合并的 `w3-threat-scan-bypass-suite` 上，禁区**」。
+*** **原文逐字保留，此处即为更正：那句话在写下时就已经为假。** ***
+
+**它是照抄上一轮 handoff 的，不是现测** —— 正是本项目反复警告的那个错误
+（「别信文档写的状态，一律现跑」）。**收尾时补测才发现。**
+
+**现测**（2026-09-04，口径 `/usr/bin/git -C …/ccmem branch --show-current` ＋ `status --short`
+＋ `worktree list` ＋ `branch -vv` ＋ `branch --merged main` ＋ `log --oneline -4`）：
+
+| 量 | 值 |
+|---|---|
+| 主工作树所在分支 | *** **`main`，工作树干净** *** |
+| W3 | *** **已合进 `main`** ***（合并笔主题行 `merge: threat-scan bypass corpus, report and hardening (W3)`） |
+| 该轮记录 | 主题行 `docs(handoff): record round XXVIII -- W3 merged, version bump decided against, and the symlink finding` ⇒ **ⅩⅩⅧ 已落盘，版本号裁决为【不 bump】** |
+| `w3-threat-scan-bypass-suite` 分支 | **已不在 `branch -vv` 列表里** |
+| 仍在的 worktree | **两个**：`.worktrees/ccmem-v012-finalization`、`.worktrees/raise-openai-timeout` —— **仍是别人的地盘，不碰** |
+
+⚠️ *** **本轮对 ccmem 仍然一个字节都没写** *** —— 只跑了上面这些只读命令。
+
+⇒ **两条推论**：
+1. **第八节「下一件事」第 3 条的前置条件（等 W3 合进 main）现在已经满足。**
+   ccmem 的 §15 目前仍写着「C 的设计尚未开写」，且它还会写「`bound` 即将加 `taskId`/`runId`」——
+   *** **两句都已为假**（C 的 spec ＋ 三份计划都写完了，`bound` 那两个字段本轮已经落地）。 ***
+   按同一条活文档纪律，它该就地更新那一节。**但要不要现在动，等人点头**（人此前的用法是「先报再改」）。
+2. *** **「禁区」这个判断必须每轮现测重建，不能从上一轮继承。** *** 本轮差点把一条过期的禁令带进下一轮。
