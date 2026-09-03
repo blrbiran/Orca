@@ -199,7 +199,19 @@ export async function main(argv: string[], stdinText?: string): Promise<number> 
 
 // Only runs when invoked directly as `tsx src/cli.ts`. Not executed on import.
 if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
-  void main(process.argv.slice(2)).then((code) => {
-    process.exitCode = code;
-  });
+  void main(process.argv.slice(2)).then(
+    (code) => {
+      process.exitCode = code;
+    },
+    // Fix round 1, finding 2. Without this arm a rejection out of main() is an
+    // unhandled promise rejection: node decides the exit code, not this
+    // program, and the error text lands in node's own crash format. 3 is spec
+    // §6.3's escalation code and is the honest answer for an exception no
+    // handler anticipated — 1 would claim "the input was rejected", which is a
+    // diagnosis this arm has no way to make.
+    (err: unknown) => {
+      process.stderr.write(`orca: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}\n`);
+      process.exitCode = 3;
+    },
+  );
 }

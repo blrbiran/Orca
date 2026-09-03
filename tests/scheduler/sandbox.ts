@@ -235,19 +235,33 @@ export async function runCli(argv: string[]): Promise<number> {
 // `process.stdout.write` in a `finally` even if `fn` throws, so a failing
 // assertion inside `fn` cannot leave every later test writing into a swallowed
 // buffer.
-export async function captureStdout<T>(fn: () => Promise<T>): Promise<{ result: T; stdout: string }> {
-  const chunks: string[] = [];
-  const original = process.stdout.write.bind(process.stdout);
+export async function captureStreams<T>(
+  fn: () => Promise<T>,
+): Promise<{ result: T; stdout: string; stderr: string }> {
+  const out: string[] = [];
+  const err: string[] = [];
+  const originalOut = process.stdout.write.bind(process.stdout);
+  const originalErr = process.stderr.write.bind(process.stderr);
   process.stdout.write = ((chunk: string | Uint8Array) => {
-    chunks.push(chunk.toString());
+    out.push(chunk.toString());
     return true;
   }) as typeof process.stdout.write;
+  process.stderr.write = ((chunk: string | Uint8Array) => {
+    err.push(chunk.toString());
+    return true;
+  }) as typeof process.stderr.write;
   try {
     const result = await fn();
-    return { result, stdout: chunks.join("") };
+    return { result, stdout: out.join(""), stderr: err.join("") };
   } finally {
-    process.stdout.write = original;
+    process.stdout.write = originalOut;
+    process.stderr.write = originalErr;
   }
+}
+
+export async function captureStdout<T>(fn: () => Promise<T>): Promise<{ result: T; stdout: string }> {
+  const { result, stdout } = await captureStreams(fn);
+  return { result, stdout };
 }
 
 // Ruling R1 (Task 5): the first scenario that needs a full, schedulable,

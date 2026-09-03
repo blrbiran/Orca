@@ -172,27 +172,55 @@ function landingOrderDecision(
     id: `${roundId}/${seq}`,
     at,
     run: roundId,
-    question: `第 ${layerIndex} 层有 ${order.length} 个任务要落地进 ${workBranch}，谁先合谁后合没有天然答案`,
-    chose: `按 taskId 字典序逐个落地：${order.join(" -> ")}`,
+    question: `layer ${layerIndex} has ${order.length} tasks to land on ${workBranch}, and nothing about them says which should be merged first`,
+    chose: `land them one at a time in taskId lexicographic order: ${order.join(" -> ")}`,
     alternatives: [
       {
-        option: `反序落地：${[...order].reverse().join(" -> ")}`,
+        option: `land them in the reverse order: ${[...order].reverse().join(" -> ")}`,
         why_not:
-          "同层任务共用同一个基点、互相看不见，两个顺序都合法；按 taskId 字典序取确定性默认，" +
-          "调度器不允许静默替人挑一个顺序",
+          "same-layer tasks share one base commit and cannot see each other, so both orders are legal; " +
+          "taskId lexicographic order is the deterministic default, and the scheduler is not allowed to " +
+          "pick an order silently on a person's behalf",
       },
     ],
     because:
-      `spec §4.3 逐个落地、不批量：一笔合并对应一个任务，归因不需要二分。` +
-      `顺序影响的是谁先撞上冲突（§5），所以它是一次真的选择，不是执行机制`,
+      "spec §4.3 lands one task at a time rather than in a batch: one merge commit per task, so " +
+      "attribution needs no bisection. The order decides which task hits a conflict first (§5), which " +
+      "makes it a real choice rather than a mechanism",
     undo: {
       how: `git reset --hard ${layerBase}`,
-      cost: `丢掉本层已落地的 ${order.length} 笔合并提交，按另一个顺序重合一次`,
-      blast_radius: `${workBranch} 上第 ${layerIndex} 层的 ${order.length} 笔合并提交`,
+      cost: `discard the ${order.length} merge commits this layer already landed and re-merge them in the other order`,
+      blast_radius: `the ${order.length} merge commits layer ${layerIndex} put on ${workBranch}`,
     },
     scope: "repo",
     kind: "scheduling",
   };
+}
+
+/**
+ * Where the target repository is right now, read best-effort.
+ *
+ * spec §4.2.1 permits C to check out a real person's worktree only because the
+ * design promises to be explicit about having done it. An exception that
+ * escaped mid-round would otherwise leave them on a branch they did not
+ * choose with nothing printed about it — which is the half of §4.2.1's bargain
+ * that would not have been kept.
+ *
+ * Every read is individually swallowed and reported as "<unreadable>": this
+ * runs on an error path, and a second failure here (W never created, the git
+ * directory itself broken) must not mask the error that got us here.
+ */
+async function describeRepoState(plan: PlanFile): Promise<string> {
+  const read = async (args: string[]): Promise<string> => {
+    try {
+      return (await git(plan.targetRepo, args)).trim();
+    } catch {
+      return "<unreadable>";
+    }
+  };
+  const head = await read(["symbolic-ref", "--short", "HEAD"]);
+  const tip = await read(["rev-parse", plan.workBranch]);
+  return `orca: ${plan.targetRepo} is left on branch ${head}; work branch ${plan.workBranch} is at ${tip}`;
 }
 
 /**
@@ -422,6 +450,21 @@ export async function runRound(planPath: string, options: RunOptions = {}): Prom
     // 15), so the round ends by saying where it is.
     log(`orca: work branch ${plan.workBranch} is at ${await workBranchTip(plan)}`);
     return roundExitCode(contributions);
+  } catch (err) {
+    // Fix round 1, finding 2. Without this the exception propagated out of
+    // main() as an unhandled rejection: node picked the exit code instead of
+    // §6.3's 3 > 2 > 1 > 0, and the line that tells the human where their
+    // repository was left never ran at all.
+    //
+    // 3, not 2: §6.3's 2 means "this path is dead, read the log" and its
+    // consumers are meant to read a task's log. An exception nothing
+    // anticipated is by definition the other thing — a person has to come back
+    // and look — and demoting it to 2 is exactly the disappearance §6.3
+    // forbids. The original error is reported, not swallowed; only the
+    // *propagation* is stopped.
+    logError(`orca: the round failed: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}`);
+    log(await describeRepoState(plan));
+    return 3;
   } finally {
     await lock.release();
   }
