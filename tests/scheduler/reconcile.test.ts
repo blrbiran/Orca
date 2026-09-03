@@ -1,6 +1,11 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
-import { materialiseConflict, rebuildMergeCommit, synthesizeReconcileContract } from "../../src/scheduler/reconcile.js";
+import {
+  markersRemaining,
+  materialiseConflict,
+  rebuildMergeCommit,
+  synthesizeReconcileContract,
+} from "../../src/scheduler/reconcile.js";
 import type { PlanTask } from "../../src/scheduler/planFile.js";
 import { contractObject, git, makeSandbox, seedConflictingCopy } from "./sandbox.js";
 
@@ -142,6 +147,32 @@ describe("spec 5.2 step 4: rebuilding the merge commit", () => {
       // incoming task.
       expect(parents).toEqual([f.wTip, (await git(f.copyPath, ["rev-parse", f.incomingRef])).trim()]);
       expect((await git(f.copyPath, ["rev-parse", `${sha}^{tree}`])).trim()).toBe(tree);
+    } finally {
+      await s.cleanup();
+    }
+  });
+});
+
+describe("spec 5.1 third row: the one condition neither side's checks express", () => {
+  it("names the files a reconciled commit still has conflict markers in", async () => {
+    // Verification is code's job, and this is the check ccloop cannot make:
+    // neither task's requiredChecks was written to notice a conflict marker,
+    // so an agent that "resolves" a conflict by committing the markers
+    // verbatim passes all of them. Without this the markers reach W.
+    const s = await makeSandbox();
+    try {
+      const f = await seedConflictingCopy(s);
+      const c = await materialiseConflict(f.copyPath, f.wTip, f.incomingRef);
+
+      expect(await markersRemaining(f.copyPath, c.conflictCommit, c.conflictedPaths)).toEqual([f.path]);
+      // A function that returned its argument would pass the line above and
+      // would also refuse every reconciliation there is, so the clean case is
+      // measured too -- against W's own tip, which by construction has none.
+      expect(await markersRemaining(f.copyPath, f.wTip, c.conflictedPaths)).toEqual([]);
+      // Deleting a conflicted file is a legitimate resolution, and a deleted
+      // file certainly contains no markers. Reported as an error, this branch
+      // would turn a correct reconciliation into an escalation.
+      expect(await markersRemaining(f.copyPath, f.wTip, ["does/not/exist.ts"])).toEqual([]);
     } finally {
       await s.cleanup();
     }
