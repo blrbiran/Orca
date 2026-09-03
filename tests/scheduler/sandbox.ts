@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { main } from "../../src/cli.js";
+import type { PlanFile } from "../../src/scheduler/planFile.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -221,6 +222,26 @@ export async function captureStdout<T>(fn: () => Promise<T>): Promise<{ result: 
 // two-task plan file on disk. T1 and T2 claim disjoint paths, so the graph
 // `orca plan` builds has no implicit edge — S17 only cares that `plan` never
 // mutates the target repo, not about any particular layering.
+// Task 6: the first scenarios (S18/S19/S22) that need an actual PlanFile
+// object in hand, not a path on disk — `preflight()` takes a PlanFile
+// directly, unlike `runCli` which reads plan.json for itself. A single task
+// is deliberate: none of those three scenarios care about the task list's
+// contents, only about plan.targetRepo and plan.workBranch, so there is
+// nothing to gain from a second task here.
+export async function seedPlan(s: Sandbox, overrides: Partial<PlanFile> = {}): Promise<PlanFile> {
+  const contract = await writeContract(s, "T1", { goal: "write a.txt", targetPaths: ["a.txt"], requiredChecks: ["true"] });
+  return {
+    targetRepo: s.targetRepo,
+    ccloopBin: join(s.root, "unused-ccloop-cli.js"),
+    runsDir: s.runsDir,
+    workBranch: "orca/preflight-scenario-branch",
+    policy: "local-merge",
+    ledgerMode: "in-repo",
+    tasks: [{ taskId: "T1", contract, dependsOn: [] }],
+    ...overrides,
+  };
+}
+
 export async function seedTwoTaskPlan(s: Sandbox): Promise<string> {
   const c1 = await writeContract(s, "T1", { goal: "write a.txt", targetPaths: ["a.txt"], requiredChecks: ["true"] });
   const c2 = await writeContract(s, "T2", { goal: "write b.txt", targetPaths: ["b.txt"], requiredChecks: ["true"] });

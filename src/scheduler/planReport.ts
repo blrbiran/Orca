@@ -19,16 +19,22 @@ export const PLAN_LEVEL_CHECKS = [
   "unsupported-policy",
 ] as const;
 
-// Ruling R3: PreflightReport (Task 6) does not exist yet. `orca plan` never
-// spawns anything to evaluate these — §9.2 forbids the plan path from
-// touching the target repo at all — so as of this task they never appear in
-// `preflight.rejections`, and this renderer must print "not evaluated"
-// rather than fake a "pass" it never checked. Task 6's real preflight must
-// import this constant rather than retype the strings — it is the one source
-// of truth for what these three codes are called. `dirty-worktree` matches
-// task-6-brief.md's own S22 criterion verbatim (fix round 1, finding 1); the
-// other two have no prior authority anywhere in the repo and were fixed by
-// controller ruling in the same round.
+// Task 6's real preflight (src/scheduler/preflight.ts) imports this constant
+// rather than retype the strings — it is the one source of truth for what
+// these three codes are called. `dirty-worktree` matches task-6-brief.md's
+// own S22 criterion verbatim (fix round 1, finding 1); the other two have no
+// prior authority anywhere in the repo and were fixed by controller ruling
+// in the same round.
+//
+// Before Task 6, `orca plan` never spawned anything to evaluate these — a
+// bare `git rev-parse`/`git status --porcelain` still does not "touch" the
+// target repo per §9.1(4) — so these three always printed "not evaluated"
+// with nothing that could tell that state apart from "evaluated, and
+// clean". `renderPlanReport`'s `opts.runtimeChecksEvaluated` (below) is the
+// signal a caller sets once it has actually run the checks; omitting it
+// keeps the pre-Task-6 default so a caller who never wires in a real
+// preflight still gets an honest "not evaluated" rather than a fabricated
+// "pass".
 export const RUNTIME_CHECKS = ["work-branch-already-exists", "base-not-a-commit", "dirty-worktree"] as const;
 
 /**
@@ -93,7 +99,13 @@ export function renderPlanReport(
   g: TaskGraph & PlanGraphExtras,
   plan: PlanFile,
   preflight: { rejections: PlanRejection[] },
-  opts: { verbose: boolean },
+  // `runtimeChecksEvaluated` defaults to false (undefined) rather than being
+  // required, so that Task 5's own frozen call sites — which pass a
+  // hand-built `{ rejections }` never routed through the real preflight() —
+  // keep printing exactly the "not evaluated" text they always have,
+  // unmodified. Only Task 6's CLI wiring, which really ran the three checks,
+  // sets it to true.
+  opts: { verbose: boolean; runtimeChecksEvaluated?: boolean },
 ): string {
   const lines: string[] = [];
 
@@ -102,7 +114,9 @@ export function renderPlanReport(
   lines.push("");
   lines.push("Preflight checks:");
   for (const code of PLAN_LEVEL_CHECKS) lines.push(checkLine(code, preflight.rejections, true));
-  for (const code of RUNTIME_CHECKS) lines.push(checkLine(code, preflight.rejections, false));
+  for (const code of RUNTIME_CHECKS) {
+    lines.push(checkLine(code, preflight.rejections, opts.runtimeChecksEvaluated ?? false));
+  }
   lines.push("");
 
   // §9.1(1): each task's write set, normalized alongside the string it

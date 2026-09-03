@@ -5,8 +5,9 @@ import { promisify } from "node:util";
 import { checkAppendOnly } from "./ledger/appendOnly.js";
 import { validateFile } from "./ledger/validateFile.js";
 import { buildGraph } from "./scheduler/graph.js";
-import { loadPlan, type PlanRejection } from "./scheduler/planFile.js";
+import { loadPlan } from "./scheduler/planFile.js";
 import { emptyRequiredChecksPairs, renderPlanReport } from "./scheduler/planReport.js";
+import { preflight } from "./scheduler/preflight.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -160,15 +161,17 @@ async function runPlan(args: string[]): Promise<number> {
   // is already the seam renderPlanReport reads it from.
   const annotatedGraph = { ...g, emptyRequiredChecksPairs: emptyRequiredChecksPairs(g, contracts) };
 
-  // Ruling R3: the real runtime preflight (work branch already exists, base
-  // not a real commit, target worktree dirty) is a later task's job, and
-  // evaluating any of them would mean spawning git against the target repo —
-  // exactly what spec §9.2 forbids `plan` from doing. Reporting zero
-  // rejections here, rather than fabricating a pass, is what makes the
-  // renderer print those three as "not evaluated".
-  const preflight = { rejections: [] as PlanRejection[] };
+  // Ruling 3 (Task 6): the real runtime preflight (work branch already
+  // exists, base not a real commit, target worktree dirty) reads a ref and
+  // porcelain output against the target repo — spec §9.1(4) says explicitly
+  // that reading those does not count as "touching" it, which is what lets
+  // `plan` (spec §9.2: zero side effects) call this and print real verdicts
+  // instead of a permanent "not evaluated".
+  const preflightReport = await preflight(plan, defaultBranch);
 
-  process.stdout.write(renderPlanReport(annotatedGraph, plan, preflight, { verbose }));
+  process.stdout.write(
+    renderPlanReport(annotatedGraph, plan, preflightReport, { verbose, runtimeChecksEvaluated: true }),
+  );
   process.stdout.write("\n");
   return 0;
 }
