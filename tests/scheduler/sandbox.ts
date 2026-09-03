@@ -575,21 +575,13 @@ export async function seedIntersectingPlan(s: Sandbox): Promise<RunnablePlan> {
  * a file that is merely sitting in the worktree has not been committed.
  */
 export async function readLedgerOnBranch(repo: string, branch: string): Promise<string[]> {
-  // A branch with no .decisions/ in its tree returns no lines rather than
-  // throwing. Measured while running `M-LEDGER`: git's "Not a valid object
-  // name" propagated out of the helper and killed the scenario before its
-  // own `lines.length` assertion ran, so the red said "the helper crashed"
-  // where the criterion means to say "C wrote no decisions onto W".
-  let names: string;
-  try {
-    names = await git(repo, ["ls-tree", "--name-only", `${branch}:.decisions`]);
-  } catch {
-    return [];
-  }
+  // Task 12: reads through ledgerFilesOnBranch rather than repeating the
+  // ls-tree/show walk, so the blank-line-dropping this helper does (right for
+  // "validate every record") and the line numbering blameCommitOfLine needs
+  // (right for "which commit wrote line N") cannot drift apart.
   const lines: string[] = [];
-  for (const name of names.split("\n").filter((n) => n.trim().length > 0)) {
-    const text = await git(repo, ["show", `${branch}:.decisions/${name}`]);
-    for (const line of text.split("\n")) {
+  for (const file of await ledgerFilesOnBranch(repo, branch)) {
+    for (const line of file.lines) {
       if (line.trim().length > 0) lines.push(line);
     }
   }
@@ -711,4 +703,137 @@ export async function seedConflictingCopy(s: Sandbox, runId = "r1"): Promise<Con
   await git(s.targetRepo, ["fetch", copyPath, `${attemptSha}:${incomingRef}`]);
 
   return { copyPath, wTip, incomingRef, path, workBranch };
+}
+
+/**
+ * S3: two tasks whose DECLARED write sets do not intersect -- so buildGraph
+ * puts them in one layer and they run in parallel -- and whose required checks
+ * both write `shared.txt` with different content.
+ *
+ * The declaration is the lie spec 3.4 rule 1 is about: the criterion says
+ * "disjoint", the merge says otherwise, and 5.0's trunk has to converge
+ * anyway. Each task also writes a file it did declare, so the round has
+ * something to check landed besides the reconciled file itself.
+ *
+ * ⚠️ Both tasks are therefore OUT OF BOUNDS on `shared.txt`, and that is not
+ * incidental -- it is forced. A path inside BOTH tasks' declared write sets
+ * would make their claims intersect (one prefix contains the other, so
+ * pathTrie.classify returns non-null), buildGraph would put an implicit edge
+ * between them, and they would land in two layers where no merge conflict is
+ * possible at all. So "declared disjoint, actually collided" and "every write
+ * was in bounds" cannot both hold, which is why S3's round exits 2 (7.3's
+ * second tier: out of bounds, no sibling claims it, land anyway) rather than
+ * 0. See the S3 criterion's own comment and the task-12 report.
+ */
+export async function seedLyingPlan(s: Sandbox): Promise<RunnablePlan> {
+  return seedRunnablePlan(s, [
+    {
+      taskId: "T1",
+      contract: {
+        goal: "write a.txt",
+        targetPaths: ["a.txt"],
+        requiredChecks: [writeFileCheck("a.txt", "a1"), writeFileCheck("shared.txt", "t1")],
+        buildTestCommands: ["true"],
+      },
+    },
+    {
+      taskId: "T2",
+      contract: {
+        goal: "write b.txt",
+        targetPaths: ["b.txt"],
+        requiredChecks: [writeFileCheck("b.txt", "b1"), writeFileCheck("shared.txt", "t2")],
+        buildTestCommands: ["true"],
+      },
+    },
+  ]);
+}
+
+/**
+ * Every ledger file on a branch, as (repo-relative path, lines), read out of
+ * the tree. Line numbers are 1-based indices into `lines`, which is what
+ * `git blame -L` counts in -- readLedgerOnBranch drops blank lines and so
+ * cannot be used to find one.
+ */
+export async function ledgerFilesOnBranch(
+  repo: string,
+  branch: string,
+): Promise<Array<{ path: string; lines: string[] }>> {
+  // A branch with no .decisions/ in its tree returns no files rather than
+  // throwing. Measured while running `M-LEDGER` (Task 10): git's "Not a valid
+  // object name" propagated out of the helper and killed the scenario before
+  // its own assertion ran, so the red said "the helper crashed" where the
+  // criterion means to say "C wrote no decisions onto W".
+  let names: string;
+  try {
+    names = await git(repo, ["ls-tree", "--name-only", `${branch}:.decisions`]);
+  } catch {
+    return [];
+  }
+  const files: Array<{ path: string; lines: string[] }> = [];
+  for (const name of names.split("\n").filter((n) => n.trim().length > 0)) {
+    const text = await git(repo, ["show", `${branch}:.decisions/${name}`]);
+    files.push({ path: `.decisions/${name}`, lines: text.split("\n") });
+  }
+  return files;
+}
+
+/**
+ * The commit `git blame` attributes one line of one file to, at a revision.
+ * spec 8.3 / A' 3.3: this is how "which commit implemented this decision" is
+ * answered, so it is also the only honest way to measure that the `bound` line
+ * really is in the merge commit's tree rather than in the commit after it.
+ */
+export async function blameCommitOfLine(
+  repo: string,
+  revision: string,
+  path: string,
+  line: number,
+): Promise<string> {
+  const out = await git(repo, ["blame", "--porcelain", "-L", `${line},${line}`, revision, "--", path]);
+  return out.split("\n")[0].split(" ")[0];
+}
+
+/**
+ * Every `refs/orca/conflict/<run-id>` ref in every task copy still under
+ * runsDir, keyed by the copy directory. spec 5.2 step 5 pins the conflicted
+ * commit on a ref inside the copy precisely so it has a name that is NOT in
+ * the target repository; this reads those names back so a criterion can check
+ * the target repository does not have the commit.
+ */
+export async function conflictRefShas(s: Sandbox): Promise<Record<string, string>> {
+  const out: Record<string, string> = {};
+  for (const name of await taskWorkdirs(s)) {
+    const copy = join(s.runsDir, name, "repo");
+    if (!existsSync(copy)) continue;
+    const refs = await git(copy, ["for-each-ref", "--format=%(refname) %(objectname)", "refs/orca/conflict"]);
+    for (const line of refs.split("\n")) {
+      if (line.trim().length === 0) continue;
+      const [refname, objectname] = line.split(" ");
+      out[`${copy} ${refname}`] = objectname;
+    }
+  }
+  return out;
+}
+
+/** Every commit reachable from a revision, as shas. */
+export async function reachableCommits(repo: string, revision: string): Promise<string[]> {
+  const out = await git(repo, ["rev-list", revision]);
+  return out.split("\n").filter((l) => l.trim().length > 0);
+}
+
+/**
+ * `<commit> <parent...>` for every commit reachable from a revision. The
+ * merge commit spec 5.2 step 4 rebuilds is identified by its parents, not by
+ * its position or its message, because those are exactly what a wrong
+ * implementation would still get right.
+ */
+export async function commitParents(repo: string, revision: string): Promise<Map<string, string[]>> {
+  const out = await git(repo, ["rev-list", "--parents", revision]);
+  const parents = new Map<string, string[]>();
+  for (const line of out.split("\n")) {
+    if (line.trim().length === 0) continue;
+    const [sha, ...rest] = line.trim().split(" ");
+    parents.set(sha, rest);
+  }
+  return parents;
 }

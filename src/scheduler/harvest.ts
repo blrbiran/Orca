@@ -101,8 +101,14 @@ export function sameLayerWriteSets(graph: TaskGraph, taskId: string): Map<string
  *  - `-z` because git otherwise quotes and escapes paths outside ASCII
  *    (core.quotePath), so a perfectly ordinary non-ASCII filename would arrive
  *    as a quoted string that no claim could ever contain.
+ *
+ * Exported by Task 12 for one further caller: §5.2's reconciliation has to
+ * name the OTHER side of a conflict, and it identifies it by asking which
+ * already-landed task in this layer actually touched a conflicted path. That
+ * is the same measurement with the same three flags, so it is the same
+ * function rather than a second, subtly different diff.
  */
-async function netChangeSet(clone: string, base: string, attemptSha: string): Promise<string[]> {
+export async function netChangeSet(clone: string, base: string, attemptSha: string): Promise<string[]> {
   const { stdout } = await execFileAsync(
     "git",
     ["diff", "--no-renames", "--name-only", "-z", base, attemptSha],

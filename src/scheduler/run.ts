@@ -4,17 +4,27 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import type { DecisionEvent } from "../ledger/schema.js";
 import { appendEvent } from "../ledger/writer.js";
-import { disposeWorkdir, routeOutcome, runTask } from "./ccloopRunner.js";
+import { cloneDirOf, disposeWorkdir, routeOutcome, runTask } from "./ccloopRunner.js";
 import type { TaskRun } from "./ccloopRunner.js";
 import { buildGraph, implicitEdgeDecisions } from "./graph.js";
 import type { TaskGraph } from "./graph.js";
-import { disposition, harvest, sameLayerWriteSets } from "./harvest.js";
-import { checkoutWorkBranch, commitLedgerOnW, landIntoW, workBranchTip } from "./land.js";
+import { disposition, harvest, netChangeSet, sameLayerWriteSets } from "./harvest.js";
+import { checkoutWorkBranch, commitLedgerOnW, incomingRefOf, landIntoW, workBranchTip } from "./land.js";
+import type { ConflictState } from "./land.js";
+import { reconcileDecision, writeBoundThenCommit } from "./ledgerWiring.js";
 import { loadPlan } from "./planFile.js";
-import type { PlanFile, PlanRejection } from "./planFile.js";
+import type { PlanFile, PlanRejection, PlanTask } from "./planFile.js";
 import { emptyRequiredChecksPairs, renderPlanReport } from "./planReport.js";
 import { preflight } from "./preflight.js";
 import type { PreflightReport } from "./preflight.js";
+import {
+  markersRemaining,
+  materialiseConflict,
+  pinConflictCommit,
+  rebuildMergeCommit,
+  synthesizeReconcileContract,
+  writeTree,
+} from "./reconcile.js";
 import { acquireRepoLock } from "./repoLock.js";
 import { allocateRunId, deriveRunId } from "./runId.js";
 
@@ -198,6 +208,232 @@ function landingOrderDecision(
 }
 
 /**
+ * The ref the reconciled merge commit is fetched into before W is moved onto
+ * it. Same shape and same reason as `land.ts`'s `refs/orca/<run-id>`: the
+ * commit is built inside the copy, and a fast-forward onto an object reachable
+ * only through a directory §4.5 is about to delete would leave W pointing at
+ * nothing.
+ */
+function reconciledRefOf(runId: string): string {
+  return `refs/orca/reconciled/${runId}`;
+}
+
+/** Everything the conflict main line needs that is not in the ConflictState. */
+interface ReconcileContext {
+  plan: PlanFile;
+  contracts: Map<string, unknown>;
+  roundId: string;
+  layerBase: string;
+  /** The tasks of this layer that already landed, in landing order. */
+  landed: Array<{ taskId: string; run: TaskRun }>;
+  nextDecisionSeq: () => number;
+  adapter: "scripted" | "claude";
+  adapterConfig: string;
+  keepWorkdirs?: boolean;
+  log: (line: string) => void;
+}
+
+/**
+ * Which already-landed task in this layer wrote the paths this merge
+ * conflicted on.
+ *
+ * §5.2's synthesized contract needs BOTH sides' intent — that requirement is
+ * the whole mechanism by which "the reconciler is not the conflicting party"
+ * is enforced — so the other side has to be identified, not assumed. It is
+ * identified by what a task actually WROTE rather than by what it declared:
+ * this code path only exists because the declarations were wrong.
+ *
+ * Anything other than exactly one match escalates instead of guessing. Zero
+ * means the conflict came from something no task in this layer produced, and
+ * more than one means the pair §5.2 reasons about is not a pair; in both cases
+ * a synthesized contract would be built from a side chosen by this function
+ * rather than by the evidence.
+ */
+async function otherSideOf(
+  ctx: ReconcileContext,
+  conflictedPaths: string[],
+): Promise<{ taskId: string } | { escalate: string }> {
+  const conflicted = new Set(conflictedPaths);
+  const touched: string[] = [];
+  for (const { taskId, run } of ctx.landed) {
+    const changed = await netChangeSet(ctx.plan.targetRepo, ctx.layerBase, incomingRefOf(run.runId));
+    if (changed.some((path) => conflicted.has(path))) touched.push(taskId);
+  }
+  if (touched.length !== 1) {
+    return {
+      escalate:
+        `cannot name the other side of the conflict on ${conflictedPaths.join(", ")}: ` +
+        `${touched.length === 0 ? "no task that already landed in this layer" : `${touched.length} tasks (${touched.join(", ")})`} ` +
+        `wrote those paths, so a reconciliation contract would carry a side this scheduler picked rather ` +
+        `than one the evidence names (spec §5.2)`,
+    };
+  }
+  return { taskId: touched[0] };
+}
+
+/**
+ * spec §5's conflict main line, from a failed `git merge` to a correct merge
+ * commit on W. It is the trunk, not an exception path (§5.0): a plan whose
+ * write sets all lie must still converge here, only slower.
+ *
+ * The five steps are §5.2's, in its order:
+ *  1. re-create the conflict inside the copy and commit it, so an agent's
+ *     clean worktree can show the markers as text (materialiseConflict);
+ *  2. synthesize a contract carrying BOTH sides' intent, refusing if either
+ *     side did not contribute one (§5.2) or if their required checks union to
+ *     nothing (§5.3);
+ *  3. spawn ccloop against the conflict commit, reusing the whole pipeline —
+ *     verification, leases, evidence — so C needs no model adapter of its own;
+ *  4. rebuild the merge commit from the reconciled tree, with the ledger line
+ *     already in that tree (§8.3);
+ *  5. leave the conflicted commit behind on a ref in the copy, never on W.
+ */
+async function reconcileAndLand(
+  ctx: ReconcileContext,
+  taskId: string,
+  run: TaskRun,
+  state: ConflictState,
+): Promise<{ landed: true } | { landed: false; why: string }> {
+  const { plan } = ctx;
+  const copy = state.copyPath;
+
+  const other = await otherSideOf(ctx, state.conflictedPaths);
+  if ("escalate" in other) return { landed: false, why: other.escalate };
+
+  const conflict = await materialiseConflict(copy, state.wTip, state.incomingRef);
+  const conflictRef = await pinConflictCommit(copy, run.runId, conflict.conflictCommit);
+  ctx.log(
+    `orca: ${taskId}: recorded the conflict as ${conflict.conflictCommit} on ${conflictRef} in ${copy} ` +
+      `(${conflict.blocks.length} block(s) in ${conflict.conflictedPaths.join(", ")})`,
+  );
+
+  const sideA = plan.tasks.find((t) => t.taskId === taskId)!;
+  const sideB = plan.tasks.find((t) => t.taskId === other.taskId)!;
+  const synthesized = await synthesizeReconcileContract(sideA, sideB, ctx.contracts, plan.runsDir, conflict);
+  if ("escalate" in synthesized) return { landed: false, why: synthesized.escalate };
+
+  // The reconciliation is an ordinary ccloop task in an ordinary clone — of
+  // the COPY, whose object store is the only one holding the conflict commit,
+  // and never of the target repository (§4.2.1 spends its one checkout of a
+  // real person's worktree on W). runTask rewrites `context.repoPath` to that
+  // clone, which is where its attempt ref lands (§4.4).
+  //
+  // Named after the task whose landing conflicted, not after the pair: this id
+  // becomes the run id (and so the copy's directory name and the `taskId` on
+  // the `bound` line), and a taskId is a free string out of a plan file —
+  // splicing a second one in doubles the chance of producing a run id
+  // `allocateRunId` has to refuse. The pair is in the synthesized contract's
+  // own `objective.taskId` and in the decision this run is bound to.
+  const reconcileTask: PlanTask = {
+    taskId: `reconcile-${taskId}`,
+    contract: synthesized.path,
+    dependsOn: [],
+  };
+  const reconcilePlan: PlanFile = { ...plan, targetRepo: copy };
+  const reconcileRunId = await allocateRunId(
+    plan.runsDir,
+    reconcileTask.taskId,
+    await readFile(synthesized.path),
+    conflict.conflictCommit,
+  );
+  const reconcileRun = await runTask(reconcilePlan, reconcileTask, conflict.conflictCommit, reconcileRunId, {
+    adapter: ctx.adapter,
+    adapterConfig: ctx.adapterConfig,
+  });
+  ctx.log(`orca: ${taskId}: reconciliation ${reconcileRunId} reported ${reconcileRun.outcome}`);
+
+  if (reconcileRun.outcome !== "succeeded" || reconcileRun.attemptSha === null) {
+    await disposeWorkdir(reconcileRun, {
+      keepBecause: "the reconciliation did not succeed and its copy is the only place its result exists",
+      log: ctx.log,
+    });
+    return {
+      landed: false,
+      why:
+        `the reconciliation of ${taskId} x ${other.taskId} ended ${reconcileRun.outcome}` +
+        `${reconcileRun.attemptSha === null ? " and published no attempt commit" : ""}; ` +
+        `the conflict is at ${conflictRef} in ${copy}`,
+    };
+  }
+
+  // Move the reconciled attempt into the copy: the merge commit is built
+  // there, next to both of its parents, and the reconciliation clone is a
+  // directory this round is about to delete.
+  await git(copy, [
+    "fetch",
+    cloneDirOf(reconcileRun.workdir),
+    `${reconcileRun.attemptSha}:${reconciledRefOf(reconcileRunId)}`,
+  ]);
+
+  // §5.1's third row gives verification to code. ccloop already ran the union
+  // of both sides' required checks; this is the one condition none of them can
+  // express, because neither task's checks were written to notice a marker.
+  const remaining = await markersRemaining(copy, reconcileRun.attemptSha, conflict.conflictedPaths);
+  if (remaining.length > 0) {
+    await disposeWorkdir(reconcileRun, {
+      keepBecause: "the reconciliation left conflict markers behind and a human has to look",
+      log: ctx.log,
+    });
+    return {
+      landed: false,
+      why:
+        `the reconciliation of ${taskId} x ${other.taskId} passed both tasks' required checks but left ` +
+        `conflict markers in ${remaining.join(", ")}; the conflict is at ${conflictRef} in ${copy}`,
+    };
+  }
+
+  await git(copy, ["checkout", "--detach", reconcileRun.attemptSha]);
+
+  // §8.1's `reconcile` row. Written into the COPY's ledger file — the same
+  // `.decisions/<round-id>.jsonl` W carries, inherited through the merge — so
+  // that it is in the tree the merge commit is built from. See
+  // reconcileDecision's own comment for why a separate commit on W would
+  // delete it again.
+  const decision = reconcileDecision(
+    ctx.roundId,
+    ctx.nextDecisionSeq(),
+    taskId,
+    other.taskId,
+    conflict,
+    plan.workBranch,
+    new Date().toISOString(),
+  );
+  await appendEvent(join(copy, ".decisions"), ctx.roundId, decision);
+
+  const mergeSha = await writeBoundThenCommit(
+    copy,
+    [decision.id],
+    reconcileTask.taskId,
+    ctx.roundId,
+    // §5.2 step 4. The tree is written HERE, inside the callback, because
+    // writeBoundThenCommit has just staged the bound line: a tree computed
+    // before that call would be the reconciled tree without it, and the blame
+    // answer would then name whatever commit recorded it next.
+    async () =>
+      rebuildMergeCommit(
+        copy,
+        state.wTip,
+        state.incomingRef,
+        await writeTree(copy),
+        `orca: land ${run.runId} (reconciled with ${other.taskId})`,
+      ),
+  );
+
+  await git(plan.targetRepo, ["fetch", copy, `${mergeSha}:${reconciledRefOf(run.runId)}`]);
+  // --ff-only, and it genuinely is one: the rebuilt commit's first parent is
+  // W's current tip. If it ever is not, this fails loudly instead of creating
+  // a second merge that would bury the mistake.
+  await git(plan.targetRepo, ["merge", "--ff-only", reconciledRefOf(run.runId)]);
+
+  await disposeWorkdir(reconcileRun, { keepWorkdirs: ctx.keepWorkdirs, log: ctx.log });
+  ctx.log(
+    `orca: ${taskId}: reconciled with ${other.taskId} and landed ${mergeSha} on ${plan.workBranch} ` +
+      `(the conflicted commit stays at ${conflictRef} in ${copy})`,
+  );
+  return { landed: true };
+}
+
+/**
  * Where the target repository is right now, read best-effort.
  *
  * spec §4.2.1 permits C to check out a real person's worktree only because the
@@ -352,6 +588,10 @@ export async function runRound(planPath: string, options: RunOptions = {}): Prom
       );
 
       const landed: string[] = [];
+      // The same tasks as `landed`, with the TaskRun each one landed from.
+      // §5.2's reconciliation needs the run ids to ask which already-landed
+      // task actually wrote a conflicted path; `landed` carries only names.
+      const landedRuns: Array<{ taskId: string; run: TaskRun }> = [];
       for (const { taskId, run } of runs) {
         log(`orca: ${taskId}: ccloop reported ${run.outcome} (run ${run.runId})`);
 
@@ -402,23 +642,55 @@ export async function runRound(planPath: string, options: RunOptions = {}): Prom
 
         const result = await landIntoW(plan, run);
         if (!result.merged) {
-          // spec §5 is the conflict main line and it is Task 11/12's; until
-          // it exists, a conflict escalates (exit 3, §6.3) and the copy is
-          // kept, because §5.2's reconciliation is rebuilt from exactly this
-          // copy and these two parents.
-          contributions.push(3);
           log(
             `orca: ${taskId}: merge into ${plan.workBranch} conflicted on ${result.conflict.conflictedPaths.join(", ")} ` +
               `(W tip ${result.conflict.wTip}, incoming ${result.conflict.incomingRef})`,
           );
-          await disposeWorkdir(run, {
-            keepBecause: "its merge into the work branch conflicted and a human has to look",
-            log,
-          });
-          continue;
+
+          // 🔴 spec §3.4 rule 3: NO code path may take "the write-set
+          // criterion said these two would not collide" as a premise. This
+          // conflict is exactly the case where the criterion was wrong, and
+          // the tempting shortcut — skip the conflict handling when the
+          // declarations did not intersect, because "then it cannot really be
+          // a conflict" — turns a wrong optimisation into a wrong result:
+          // `git merge` has already been aborted, so treating the task as
+          // landed would drop its work from W while reporting success.
+          // §5.0 says the same thing from the other side: a plan whose write
+          // sets ALL lie must still converge, only slower. Mutation `M-OPT`.
+          const reconciled = await reconcileAndLand(
+            {
+              plan,
+              contracts: round.contracts,
+              roundId,
+              layerBase,
+              landed: landedRuns,
+              nextDecisionSeq: () => (decisionSeq += 1),
+              adapter: options.adapter ?? "scripted",
+              adapterConfig: options.adapterConfig!,
+              keepWorkdirs: options.keepWorkdirs,
+              log,
+            },
+            taskId,
+            run,
+            result.conflict,
+          );
+
+          if (!reconciled.landed) {
+            // spec §5.4: the round stops at this merge point, exits 3 (§6.3),
+            // and the copy is kept — the conflicted commit on its ref is the
+            // only place the conflict still exists.
+            contributions.push(3);
+            log(`orca: ${taskId}: escalating — ${reconciled.why}`);
+            await disposeWorkdir(run, {
+              keepBecause: "its merge into the work branch conflicted and a human has to look",
+              log,
+            });
+            continue;
+          }
         }
 
         landed.push(taskId);
+        landedRuns.push({ taskId, run });
 
         // spec §4.5, and the reason Task 8 refused to call this from runTask:
         // the attempt commit is reachable only from inside the copy until the

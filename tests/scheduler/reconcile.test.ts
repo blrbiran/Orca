@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
-import { materialiseConflict, synthesizeReconcileContract } from "../../src/scheduler/reconcile.js";
+import { materialiseConflict, rebuildMergeCommit, synthesizeReconcileContract } from "../../src/scheduler/reconcile.js";
 import type { PlanTask } from "../../src/scheduler/planFile.js";
 import { contractObject, git, makeSandbox, seedConflictingCopy } from "./sandbox.js";
 
@@ -110,6 +110,38 @@ describe("spec 5.2: materialising a conflict and synthesizing its reconciliation
 
       expect("path" in r && r.path.startsWith(s.runsDir)).toBe(true);
       expect((r as { path: string }).path).not.toContain("..");
+    } finally {
+      await s.cleanup();
+    }
+  });
+});
+
+describe("spec 5.2 step 4: rebuilding the merge commit", () => {
+  it("rebuilds a merge commit whose two parents are exactly the W tip and the incoming ref", async () => {
+    // Hand-constructing git history is the most fragile step in this design, so
+    // the criterion measures the object that comes out rather than the sequence
+    // of commands that made it.
+    const s = await makeSandbox();
+    try {
+      const f = await seedConflictingCopy(s);
+      const conflict = await materialiseConflict(f.copyPath, f.wTip, f.incomingRef);
+      // Any tree in the copy would do; the conflict commit's is the one a real
+      // reconciliation starts from, and using a tree that is NOT the tree of
+      // either parent is what makes the third assertion able to fail.
+      const tree = (await git(f.copyPath, ["rev-parse", `${conflict.conflictCommit}^{tree}`])).trim();
+
+      const sha = await rebuildMergeCommit(f.copyPath, f.wTip, f.incomingRef, tree, "merge");
+
+      const parents = (await git(f.copyPath, ["rev-list", "--parents", "-n", "1", sha]))
+        .trim()
+        .split(" ")
+        .slice(1);
+      // Order matters and is asserted as an ordered list: `ours` in every
+      // later three-way merge, and `git log --first-parent` on W, both read
+      // parent 1. Swapping the two would attribute W's own history to the
+      // incoming task.
+      expect(parents).toEqual([f.wTip, (await git(f.copyPath, ["rev-parse", f.incomingRef])).trim()]);
+      expect((await git(f.copyPath, ["rev-parse", `${sha}^{tree}`])).trim()).toBe(tree);
     } finally {
       await s.cleanup();
     }

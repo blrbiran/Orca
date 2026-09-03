@@ -1,12 +1,9 @@
-import { execFile } from "node:child_process";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { promisify } from "node:util";
+import { git } from "./gitExec.js";
 import type { ConflictState } from "./land.js";
 import type { PlanTask } from "./planFile.js";
 import { requiredChecksUnion } from "./writeSet.js";
-
-const execFileAsync = promisify(execFile);
 
 /**
  * Same reason as land.ts's constant of the same name: the copy is a throwaway
@@ -14,15 +11,6 @@ const execFileAsync = promisify(execFile);
  * `git commit` fail outright rather than falling back to something.
  */
 const ORCA_IDENTITY = ["-c", "user.name=orca", "-c", "user.email=orca@invalid"];
-
-// Third copy of this four-line wrapper (land.ts:18, run.ts:23). Kept rather
-// than consolidated on purpose: Task 10's review already recorded the
-// duplication as a deferred minor, and folding three call sites into one
-// module is a change to two files this task has no other reason to touch.
-async function git(repo: string, args: string[]): Promise<string> {
-  const { stdout } = await execFileAsync("git", args, { cwd: repo });
-  return stdout;
-}
 
 /**
  * One `<<<<<<< / ======= / >>>>>>>` region of one file, as spec §5.1 needs it:
@@ -419,4 +407,85 @@ export async function synthesizeReconcileContract(
   const path = join(runsDir, `contract-reconcile-${slug(a.taskId)}-${slug(b.taskId)}.json`);
   await writeFile(path, JSON.stringify(contract, null, 2));
   return { path };
+}
+
+/**
+ * spec §5.2 step 5: the conflicted commit gets a ref of its own inside the
+ * copy, and only inside the copy.
+ *
+ * Two reasons, both load-bearing. It is the temporary ref §5.4 tells the
+ * escalation message to print, so a human sent to the copy has a name to check
+ * out rather than a detached HEAD they must find in the reflog. And the
+ * reconciliation runs in a CLONE of the copy: `git clone --local` copies the
+ * whole object store, so the commit would survive anyway, but an unreferenced
+ * commit is one `git gc` away from not surviving and nothing would say why.
+ */
+export function conflictRefOf(runId: string): string {
+  return `refs/orca/conflict/${runId}`;
+}
+
+export async function pinConflictCommit(copy: string, runId: string, conflictCommit: string): Promise<string> {
+  const ref = conflictRefOf(runId);
+  await git(copy, ["update-ref", ref, conflictCommit]);
+  return ref;
+}
+
+/**
+ * The conflicted commit exists only so an agent can see the markers as text.
+ * What lands on W has to be an ordinary merge commit with correct parents, so
+ * it is rebuilt from the reconciled tree rather than reused. Attribution on W
+ * stays clean, and the conflicted commit stays behind in the copy.
+ */
+export async function rebuildMergeCommit(
+  copy: string, wTip: string, incomingRef: string, reconciledTree: string, message: string,
+): Promise<string> {
+  const incoming = (await git(copy, ["rev-parse", incomingRef])).trim();
+  const sha = await git(copy, [
+    "-c", "user.name=orca", "-c", "user.email=orca@invalid",
+    "commit-tree", reconciledTree, "-p", wTip, "-p", incoming, "-m", message,
+  ]);
+  return sha.trim();
+}
+
+/**
+ * spec §5.1's third row is verification by the union of both sides' required
+ * checks, and ccloop runs those. This is the check ccloop CANNOT run: neither
+ * task's `requiredChecks` was written to notice a conflict marker, so an agent
+ * that "resolved" the conflict by committing the markers verbatim passes every
+ * one of them. The synthesized contract's successCondition says in words that
+ * no marker may remain; Rule 5 says a condition code can decide belongs to
+ * code, not to the model that was asked to satisfy it.
+ *
+ * Read out of the reconciled COMMIT, not off disk: what lands on W is that
+ * commit's tree, and a worktree can differ from it.
+ *
+ * A path missing from the tree is not a failure — deleting a conflicted file
+ * is a legitimate resolution, and it certainly contains no markers.
+ */
+export async function markersRemaining(copy: string, commit: string, paths: string[]): Promise<string[]> {
+  const remaining: string[] = [];
+  for (const path of paths) {
+    let content: string;
+    try {
+      content = await git(copy, ["show", `${commit}:${path}`]);
+    } catch {
+      continue;
+    }
+    if (content.split("\n").some((line) => line.startsWith(OURS_MARKER) || line.startsWith(THEIRS_MARKER))) {
+      remaining.push(path);
+    }
+  }
+  return remaining;
+}
+
+/**
+ * The tree the copy's index currently describes.
+ *
+ * Separate from rebuildMergeCommit on purpose: §8.3's ordering is only
+ * enforceable if the tree is written AFTER the ledger line has been staged,
+ * and a rebuild that computed its own tree internally would have no seam for
+ * `writeBoundThenCommit` to sit in.
+ */
+export async function writeTree(copy: string): Promise<string> {
+  return (await git(copy, ["write-tree"])).trim();
 }
