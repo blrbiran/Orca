@@ -86,14 +86,21 @@ describe("spec 5.2: materialising a conflict and synthesizing its reconciliation
 
   it("keeps the contract inside runsDir even when a taskId is shaped like a path escape", async () => {
     // The placement above is the whole reason 2.3 needs no exception for this
-    // file, and taskId is a free string out of a plan file: "../../x" would
-    // otherwise put a contract wherever the plan's author aimed it, including
-    // back inside targetRepo.
+    // file, and taskId is a free string out of a plan file: a "../.." in it
+    // would otherwise put a contract wherever the plan's author aimed it,
+    // including back inside targetRepo.
+    //
+    // 🔴 Three levels of "..", measured rather than guessed. Two is not enough
+    // and this criterion shipped decorative with it: the filename starts
+    // "contract-reconcile-", so path.join's first ".." only pops that segment
+    // back off and the result lands in runsDir either way. Mutation M-SLUG
+    // (replace the sanitiser with the identity function) passed against the
+    // two-level version and fails against this one.
     const s = await makeSandbox();
     try {
       const f = await seedConflictingCopy(s);
       const conflict = await materialiseConflict(f.copyPath, f.wTip, f.incomingRef);
-      const escape = "../../escape";
+      const escape = "../../../escape";
       const contracts = new Map<string, unknown>([
         [escape, await contractObject(s, "T1", { goal: "one side", targetPaths: [f.path], requiredChecks: ["true"] })],
         ["T2", await contractObject(s, "T2", { goal: "other side", targetPaths: [f.path], requiredChecks: ["true"] })],
