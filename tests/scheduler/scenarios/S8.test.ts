@@ -1,4 +1,4 @@
-import { readFile, readdir } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import { routeOutcome, runTask } from "../../../src/scheduler/ccloopRunner.js";
 import { buildGraph } from "../../../src/scheduler/graph.js";
@@ -60,11 +60,11 @@ describe("S8 (spec §6.1: a failed task)", () => {
       });
       expect(r3.outcome).toBe("succeeded");
 
-      // "upstream_not_run" means never started, not started-and-abandoned
-      // (spec §6.2, borrowed from Airflow's UPSTREAM_FAILED). A run directory
-      // for T2 would mean a run id was claimed and a clone was made.
-      const claimed = await readdir(s.runsDir);
-      expect(claimed.filter((entry) => entry.startsWith("orca-T2-"))).toEqual([]);
+      // Fix round 1, finding 4: an assertion that T2 has no run directory used
+      // to sit here. Nothing in this task decides what to run, so this test
+      // never creates one and no mutation of this module could make it red.
+      // "a task whose upstream failed is never started" becomes measurable
+      // only once an orchestrator exists to decide — deferred to Task 14.
     } finally {
       await s.cleanup();
     }

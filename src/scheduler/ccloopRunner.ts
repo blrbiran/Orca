@@ -1,6 +1,6 @@
 import { execFile, spawn } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { promisify } from "node:util";
 import type { TaskGraph } from "./graph.js";
 import type { PlanFile, PlanTask } from "./planFile.js";
@@ -206,6 +206,16 @@ export async function runTask(
   runId: string,
   options: RunTaskOptions,
 ): Promise<TaskRun> {
+  // Fix round 1, finding 2: an empty run id makes `join(runsDir, "")` collapse
+  // to runsDir itself, and the TaskRun built from it then names the directory
+  // that holds EVERY task's clone. Nothing downstream re-derives that path —
+  // disposeWorkdir takes it from the TaskRun — so the cheapest place to refuse
+  // it is before the directory is ever built. runId.ts's allocateRunId can
+  // never produce one, but runTask does not require its argument to have come
+  // from there.
+  if (runId.length === 0) {
+    throw new Error("orca: runTask needs a non-empty run id; an empty one names the whole runs directory");
+  }
   const workdir = join(plan.runsDir, runId);
   const clone = cloneDirOf(workdir);
   const loopDir = loopDirOf(workdir, runId);
@@ -366,6 +376,29 @@ export interface Disposal {
  * function is ever called.
  */
 export async function disposeWorkdir(run: TaskRun, options: DisposeOptions = {}): Promise<Disposal> {
+  // Fix round 1, finding 2. This is the only recursive delete in the
+  // scheduler, and the path it deletes arrives as a plain field on a value
+  // this function did not build: the orchestrator carries a TaskRun across
+  // spec §4.3's steps 4-6, and this repository's own criteria already hand-
+  // build them. An empty or "."-shaped run id turns `join(runsDir, runId)`
+  // into runsDir itself, and one call would then take out every other task's
+  // clone and every contract copy in the round.
+  //
+  // The check is "the directory is named after the run" rather than a prefix
+  // test on runsDir, because a prefix test says yes to runsDir itself — the
+  // exact value that has to be refused. It also rejects a run id containing a
+  // separator, since basename() of the joined path would not equal it.
+  //
+  // Placed before the keep/remove decision, not just before the rm: a guard
+  // that throws after the deletion has already happened is not a guard, and
+  // the criterion for this asserts the directory is still there afterwards.
+  if (run.runId.length === 0 || basename(run.workdir) !== run.runId) {
+    throw new Error(
+      `orca: refusing to dispose of ${JSON.stringify(run.workdir)} — it is not a directory named ` +
+        `after run id ${JSON.stringify(run.runId)}, so deleting it could take the whole runs directory with it`,
+    );
+  }
+
   const log = options.log ?? ((line: string) => process.stdout.write(`${line}\n`));
   const keep = options.keepWorkdirs === true || run.outcome !== "succeeded";
 

@@ -1,4 +1,4 @@
-import { readFile, readdir } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import { routeOutcome, runTask } from "../../../src/scheduler/ccloopRunner.js";
 import { buildGraph } from "../../../src/scheduler/graph.js";
@@ -61,8 +61,10 @@ describe("S9 (spec §6.1: a blocked task)", () => {
       });
       expect(r3.outcome).toBe("succeeded");
 
-      const claimed = await readdir(s.runsDir);
-      expect(claimed.filter((entry) => entry.startsWith("orca-T2-"))).toEqual([]);
+      // Fix round 1, finding 4: same as S8 — the assertion that T2 has no run
+      // directory could never go red here, because nothing in this task decides
+      // what to run. Deferred to Task 14, where an orchestrator makes it
+      // measurable.
     } finally {
       await s.cleanup();
     }

@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { allocateRunId } from "../../src/scheduler/runId.js";
@@ -164,6 +164,74 @@ describe("ccloopRunner (spec §4.3 steps 2-3, §6.1)", () => {
       await s.cleanup();
     }
   }, 120_000);
+
+  it("fails loud when ccloop leaves a status that is not terminal", async () => {
+    // Fix round 1, finding 1: a status like "executing" means the process was
+    // killed mid-run, which is not an outcome. Without the guard the string
+    // flows straight into routeOutcome, falls through to its default row and
+    // is reported as a failure that counts against the round — spec §0.1's
+    // silent degradation, with nothing anywhere to notice it happened.
+    //
+    // The stub exits 0 on purpose: a runner reading the exit code would call
+    // this a success, and one that trusted whatever string it found would call
+    // it a failure. Both are wrong, and neither is what this asserts.
+    const s = await makeSandbox();
+    try {
+      const base = await headOf(s.targetRepo);
+      const contractPath = await writeContract(s, "T1", {
+        goal: "x",
+        targetPaths: ["a.txt"],
+        requiredChecks: ["true"],
+      });
+      const adapterConfig = await writeScriptedConfig(s, "T1", [{}]);
+      const task: PlanTask = { taskId: "T1", contract: contractPath, dependsOn: [] };
+      const plan = { ...(await planThatSpawns(s, [task])), ccloopBin: join(s.root, "half-finished-ccloop.mjs") };
+      await writeFile(
+        plan.ccloopBin,
+        [
+          'import { writeFileSync } from "node:fs";',
+          'import { join } from "node:path";',
+          'const runDir = process.argv[process.argv.indexOf("--run-dir") + 1];',
+          'writeFileSync(join(runDir, "loop-state.json"), JSON.stringify({ status: "executing" }));',
+          "process.exit(0);",
+          "",
+        ].join("\n"),
+      );
+      const runId = await allocateRunId(s.runsDir, "T1", await readFile(contractPath), base);
+
+      await expect(runTask(plan, task, base, runId, { adapter: "scripted", adapterConfig })).rejects.toThrow(
+        /non-terminal status "executing"/,
+      );
+    } finally {
+      await s.cleanup();
+    }
+  }, 120_000);
+
+  it("refuses an empty run id before it builds anything", async () => {
+    // Fix round 1, finding 2, the runTask half: join(runsDir, "") is runsDir,
+    // so an empty id would make this task's work copy the directory that holds
+    // every other task's, and the TaskRun handed downstream would name it.
+    // Refused before the clone, which is what the second assertion measures.
+    const s = await makeSandbox();
+    try {
+      const base = await headOf(s.targetRepo);
+      const contractPath = await writeContract(s, "T1", {
+        goal: "x",
+        targetPaths: ["a.txt"],
+        requiredChecks: ["true"],
+      });
+      const adapterConfig = await writeScriptedConfig(s, "T1", [{}]);
+      const task: PlanTask = { taskId: "T1", contract: contractPath, dependsOn: [] };
+      const plan = await planThatSpawns(s, [task]);
+
+      await expect(runTask(plan, task, base, "", { adapter: "scripted", adapterConfig })).rejects.toThrow(
+        /non-empty run id/,
+      );
+      expect(existsSync(cloneDirOf(s.runsDir))).toBe(false);
+    } finally {
+      await s.cleanup();
+    }
+  }, 120_000);
 });
 
 describe("disposeWorkdir (spec §4.5)", () => {
@@ -217,6 +285,37 @@ describe("disposeWorkdir (spec §4.5)", () => {
       expect(result.removed).toBe(false);
       expect(existsSync(run.workdir)).toBe(true);
       expect(stdout).toContain(run.workdir);
+    } finally {
+      await s.cleanup();
+    }
+  });
+
+  it("refuses a workdir that is not the run's own directory, and deletes nothing", async () => {
+    // Fix round 1, finding 2. This is the scheduler's only recursive delete,
+    // and the path it takes is a plain field on a value it did not build: the
+    // orchestrator carries a TaskRun across spec §4.3's steps 4-6, and the
+    // criteria above already hand-build them. A TaskRun naming the runs
+    // directory itself — what an empty run id produces — would take out every
+    // other task's clone and every contract copy in the round.
+    //
+    // The second and third assertions are the point of the criterion, not
+    // decoration: a guard that throws AFTER the rm has run would satisfy the
+    // rejects assertion alone while the damage was already done, so the
+    // decoy directory is what proves the refusal happened first.
+    const s = await makeSandbox();
+    try {
+      const decoy = join(s.runsDir, "orca-SOMEONE-ELSE-1");
+      await mkdir(join(decoy, "repo"), { recursive: true });
+      const forged: TaskRun = {
+        runId: "orca-T1-deadbeef",
+        workdir: s.runsDir,
+        outcome: "succeeded",
+        attemptSha: null,
+      };
+
+      await expect(disposeWorkdir(forged)).rejects.toThrow(/refusing to dispose/);
+      expect(existsSync(s.runsDir)).toBe(true);
+      expect(existsSync(join(decoy, "repo"))).toBe(true);
     } finally {
       await s.cleanup();
     }
