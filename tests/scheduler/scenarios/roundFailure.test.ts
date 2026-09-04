@@ -70,8 +70,19 @@ describe("a round that throws (spec §4.2.1 / §6.3)", () => {
       // is on, and where the work branch is. Asserted on the tip's actual sha
       // rather than on wording, so a message that merely mentions the branch
       // name without saying where it is does not pass.
-      expect(captured.stdout).toContain(workBranch);
-      expect(captured.stdout).toContain(tip!);
+      //
+      // ⚠️ Scoped to describeRepoState's OWN line, not to stdout as a whole
+      // (found by the fix wave's self-review, running `M-ROUND-STATE`): the
+      // plan report now prints the base branch's sha too (Important 7), and
+      // in this fixture nothing lands, so W's tip IS the base sha — a
+      // whole-stdout `toContain(tip)` went on passing with
+      // `log(await describeRepoState(plan))` deleted, i.e. it had stopped
+      // being a criterion. The line must carry BOTH facts, which is what
+      // §4.2.1 actually owes.
+      const stateLine = captured.stdout.split("\n").find((l) => l.includes("is left on branch"));
+      expect(stateLine).toBeDefined();
+      expect(stateLine).toContain(workBranch);
+      expect(stateLine).toContain(tip!);
       // Reported, not swallowed.
       expect(captured.stderr).toContain("the round failed");
       expect(captured.stderr).toContain("cannot find ccloop's repository root");
