@@ -9,8 +9,10 @@ const USAGE = `usage:
   orca validate <path...>        validate ledger file(s) or directory (directory scans top-level *.jsonl only)
   orca check-append-only         read a git diff from stdin, reject if it contains any deleted line
   orca plan <path> [--verbose]   print the plan's write sets, conflicts, and layering; execute nothing
-  orca run <path> --adapter-config <path> [--adapter scripted|claude] [--keep-workdirs] [--verbose]
+  orca run <path> --adapter-config <path> [--adapter scripted|claude] [--keep-workdirs] [--serial] [--verbose]
                                  print the same report, then run every task and land it on the work branch
+                                 (--serial: spec §3.5 — turn parallelism off entirely; a v1 criterion, not
+                                 a performance knob)
 `;
 
 async function collectLedgerFiles(paths: string[]): Promise<{ files: string[]; errors: string[] }> {
@@ -154,6 +156,7 @@ async function runRun(args: string[]): Promise<number> {
     keepWorkdirs: args.includes("--keep-workdirs"),
     adapter,
     adapterConfig: flagValue("--adapter-config"),
+    serial: args.includes("--serial"),
   });
 }
 

@@ -217,6 +217,36 @@ export async function porcelain(repo: string): Promise<string> {
   return git(repo, ["status", "--porcelain"]);
 }
 
+/**
+ * Task 14 (S10): runs each of `checks` as a plain shell command against a
+ * branch's tip, in a throwaway worktree rather than the sandbox's own
+ * checked-out one — by the time S10 asks this question the target repo's
+ * worktree is sitting wherever the round left it (usually W already), and
+ * this must not disturb that. Returns 0 only if every check exits 0,
+ * matching the exit-code convention the rest of this file measures with.
+ */
+export async function runChecksOnBranch(repo: string, branch: string, checks: string[]): Promise<number> {
+  const dir = await mkdtemp(join(tmpdir(), "orca-checks-"));
+  try {
+    await git(repo, ["worktree", "add", "--detach", dir, branch]);
+    for (const check of checks) {
+      try {
+        await execFileAsync("sh", ["-lc", check], { cwd: dir });
+      } catch {
+        return 1;
+      }
+    }
+    return 0;
+  } finally {
+    try {
+      await git(repo, ["worktree", "remove", "--force", dir]);
+    } catch {
+      await rm(dir, { recursive: true, force: true });
+      await git(repo, ["worktree", "prune"]).catch(() => {});
+    }
+  }
+}
+
 // Ruling R1 (Task 5): the first scenario that needs to invoke the CLI itself
 // rather than the pure functions underneath it. `main` already returns the
 // exit code directly (tests/cli/cli.test.ts's own pattern) — spawning a real
@@ -286,6 +316,27 @@ export async function seedPlan(s: Sandbox, overrides: Partial<PlanFile> = {}): P
     tasks: [{ taskId: "T1", contract, dependsOn: [] }],
     ...overrides,
   };
+}
+
+/**
+ * Task 14 (S11/S12/S13): a plan object with every field the six up-front
+ * rejections care about defaulted to something valid, so a scenario for one
+ * rejection code only has to override the single field it is about — the
+ * same "vary one field off a known-good default" shape as writeContract's
+ * ContractSpec. Returns the written path, like writePlan.
+ */
+export async function seedRejectablePlan(s: Sandbox, overrides: Record<string, unknown> = {}): Promise<string> {
+  const contract = await writeContract(s, "T1", { goal: "write a.txt", targetPaths: ["a.txt"], requiredChecks: ["true"] });
+  return writePlan(s, {
+    targetRepo: s.targetRepo,
+    ccloopBin: join(s.root, "unused-ccloop-cli.js"),
+    runsDir: s.runsDir,
+    workBranch: "orca/w/x",
+    policy: "local-merge",
+    ledgerMode: "in-repo",
+    tasks: [{ taskId: "T1", contract, dependsOn: [] }],
+    ...overrides,
+  });
 }
 
 export async function seedTwoTaskPlan(s: Sandbox): Promise<string> {

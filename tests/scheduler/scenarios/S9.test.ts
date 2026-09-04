@@ -63,8 +63,10 @@ describe("S9 (spec §6.1: a blocked task)", () => {
 
       // Fix round 1, finding 4: same as S8 — the assertion that T2 has no run
       // directory could never go red here, because nothing in this task decides
-      // what to run. Deferred to Task 14, where an orchestrator makes it
-      // measurable.
+      // what to run. Proved in S8.test.ts (Task 14), against `runRound`'s real
+      // `notRun` set — the same mechanism this scenario's own `route` values
+      // above exercise (`upstreamNotRun`), so that one criterion and its
+      // mutation cover this deferral too.
     } finally {
       await s.cleanup();
     }

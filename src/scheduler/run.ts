@@ -149,6 +149,14 @@ export interface RunOptions {
   adapter?: "scripted" | "claude";
   /** ccloop requires an `--adapter-config` for both adapters; there is no plan-file field for it (§2.3). */
   adapterConfig?: string;
+  /**
+   * spec §3.5: turn parallelism off entirely, and turn back on a correct
+   * result. This is a v1 CRITERION (S10), not a production scheduling
+   * policy — it exists so a serial run's result can be checked against a
+   * parallel one, not to hand an operator a performance knob. See
+   * `executionLayers` below for the whole of the implementation.
+   */
+  serial?: boolean;
   log?: (line: string) => void;
   logError?: (line: string) => void;
 }
@@ -609,11 +617,21 @@ export async function runRound(planPath: string, options: RunOptions = {}): Prom
       await commitLedgerOnW(plan, `orca: record ${edgeDecisions.length} scheduling decision(s) for ${roundId}`);
     }
 
+    // spec §3.5 / S10: --serial flattens every layer to size 1, in the
+    // graph's own already-deterministic (taskId-sorted) topological order.
+    // That is the entire implementation — every line below this point is
+    // unchanged and still runs the same "one base per layer, land one at a
+    // time within it" shape, just with one task per "layer" instead of
+    // layer-many, so each task's own base is W's HEAD after every earlier
+    // task (in this order) has already landed rather than a base shared with
+    // whichever siblings its real layer contained.
+    const executionLayers = options.serial ? graph.layers.flat().map((taskId) => [taskId]) : graph.layers;
+
     const contributions: ExitContribution[] = [];
     const notRun = new Set<string>();
     let stopRound = false;
 
-    for (const [layerIndex, layer] of graph.layers.entries()) {
+    for (const [layerIndex, layer] of executionLayers.entries()) {
       if (stopRound) {
         for (const taskId of layer) notRun.add(taskId);
       }
