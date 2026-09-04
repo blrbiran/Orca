@@ -26,11 +26,18 @@ describe("S16 (spec §4.4: a change larger than ten megabytes is not a silent su
           taskId: "T1",
           contract: {
             goal: "write an eleven-megabyte file",
-            targetPaths: ["big.bin"],
-            // dd, not printf/base64: it writes exactly the requested byte
-            // count regardless of shell quoting limits, and 11 MiB clears
-            // the 10 MB (decimal) line spec §4.4 measured with room to spare.
-            requiredChecks: ["dd if=/dev/zero of=big.bin bs=1048576 count=11 2>/dev/null"],
+            targetPaths: ["big.txt"],
+            // Text, not zero bytes: a run of NUL bytes (e.g. /dev/zero) is
+            // exactly what git's own binary-file heuristic looks for, and a
+            // binary diff's body is a one-line "Binary files ... differ" —
+            // tiny regardless of the file's real size, which would make
+            // M-BIGDIFF's mutation (a full, non-name-only diff with a 10MB
+            // buffer) pass by accident instead of genuinely overflowing.
+            // `yes` repeats a line forever; `head -c` cuts it at the byte
+            // count, clearing the 10MB (decimal) line spec §4.4 measured
+            // with room to spare, as real line-oriented text a full diff
+            // actually has to reproduce byte for byte.
+            requiredChecks: ["yes orca-s16 | head -c 11000000 > big.txt"],
             buildTestCommands: ["true"],
           },
         },
@@ -49,7 +56,7 @@ describe("S16 (spec §4.4: a change larger than ten megabytes is not a silent su
       const d = await harvest(run, base, graph.writeSets.get("T1")!);
       expect(d.empty).toBe(false);
       expect(d.actualPaths.length).toBeGreaterThan(0);
-      expect(d.actualPaths).toContain("big.bin");
+      expect(d.actualPaths).toContain("big.txt");
     } finally {
       await s.cleanup();
     }
