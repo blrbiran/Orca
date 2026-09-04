@@ -25,6 +25,8 @@ import { loadPlan } from "./planFile.js";
 import type { PlanFile, PlanRejection, PlanTask } from "./planFile.js";
 import { reduceExitCode } from "./exitCode.js";
 import type { ExitContribution } from "./exitCode.js";
+import { intersect } from "./pathTrie.js";
+import { normalizeClaim } from "./writeSet.js";
 import { emptyRequiredChecksPairs, renderPlanReport } from "./planReport.js";
 import { preflight } from "./preflight.js";
 import type { PreflightReport } from "./preflight.js";
@@ -681,7 +683,12 @@ export async function runRound(planPath: string, options: RunOptions = {}): Prom
         // spec §7: C measures the net change set itself and reconciles it
         // against the declaration in both directions.
         const reconciliation = await harvest(run, layerBase, graph.writeSets.get(taskId) ?? []);
-        const verdict = disposition(reconciliation, sameLayerWriteSets(graph, taskId));
+        // Bound to a variable (fix round 1, finding 1) rather than passed
+        // inline: the escalation branch below needs to ask WHICH sibling in
+        // this map collided, and an inline call gives it no handle to ask
+        // that question with.
+        const siblingWriteSets = sameLayerWriteSets(graph, taskId);
+        const verdict = disposition(reconciliation, siblingWriteSets);
         contributions.push(verdict.exitContribution);
 
         if (!verdict.land) {
@@ -698,14 +705,39 @@ export async function runRound(planPath: string, options: RunOptions = {}): Prom
           // argued safe. §5.4 requires a copy of the human-facing facts under
           // runsDir/escalations, never on W.
           if (verdict.exitContribution === 3) {
+            // Fix round 1, finding 1: name the OTHER side, not just the
+            // acting task. `disposition` (harvest.ts) already ran exactly
+            // this check to decide `collides` — same `normalizeClaim` +
+            // `intersect`, not a second implementation of the test, so this
+            // can never disagree with the verdict that got us into this
+            // branch in the first place.
+            const oob = reconciliation.outOfBounds.map(normalizeClaim);
+            const collidingSiblings = [...siblingWriteSets.entries()]
+              .filter(([, claims]) => intersect(oob, claims).length > 0)
+              .map(([siblingTaskId]) => siblingTaskId);
+
+            const sides: EscalationSide[] = [intentOfContract(round.contracts, taskId)];
+            for (const siblingTaskId of collidingSiblings) {
+              sides.push(intentOfContract(round.contracts, siblingTaskId));
+            }
+
             const escalationPath = await writeEscalationFile(plan.runsDir, {
               runId: run.runId,
               reason:
                 `${taskId} wrote outside its declared write set on ${reconciliation.outOfBounds.join(", ")}, ` +
-                `which intersects a sibling task's declared write set in the same layer — the parallelism ` +
-                `verdict for this layer was computed from declarations this run has just proved wrong, so no ` +
-                `landing order can be argued to be safe (spec §7.3)`,
-              sides: [intentOfContract(round.contracts, taskId)],
+                `which intersects ${
+                  collidingSiblings.length > 0
+                    ? `${collidingSiblings.join(", ")}'s declared write set in the same layer`
+                    : "a sibling task's declared write set in the same layer, but which sibling could not be " +
+                      "re-identified from its declared claims — verdict.exitContribution === 3 says one exists"
+                } — the parallelism verdict for this layer was computed from declarations this run has just ` +
+                `proved wrong, so no landing order can be argued to be safe (spec §7.3)`,
+              sides,
+              // Raw paths here, not `path:startLine-endLine` block strings
+              // (contrast the reconcileAndLand call site below): there is no
+              // real git merge conflict in this case — `outOfBounds` names
+              // WHOLE FILES a declaration claim collided over, not text
+              // regions inside one, so there is nothing to give a line range.
               conflictBlocks: reconciliation.outOfBounds,
               undoHow: `rm -rf ${run.workdir}`,
               undoCost: `discard the kept copy for ${taskId}; its out-of-bounds write never reached ${plan.workBranch}`,

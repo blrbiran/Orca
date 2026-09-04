@@ -127,6 +127,20 @@ describe("S7 (spec §7.3 direction one, first tier: out of bounds and intersecti
       const text = await readFile(escalationPath, "utf8");
       expect(text).toContain("T1");
       expect(text).toContain("b.txt");
+      // Fix round 1, finding 1: §5.4 asks for BOTH sides' intent, and the
+      // tier-0 collide case is the one where a person most needs to know who
+      // the other party was. Asserted on the bolded `**T2**` form the
+      // "What each side intended" section renders each side as
+      // (`intentOfContract`'s output), not on the bare substring "T2" — "T2"
+      // also appears in the reason text now that it names the colliding
+      // sibling there too, so a bare-substring check would pass even if
+      // `sides` itself never carried T2's intent.
+      // Mutation: revert run.ts's disposition-collide branch to
+      // `sides: [intentOfContract(round.contracts, taskId)]` (T1 only, the
+      // pre-fix shape) — this reddens exactly this assertion, with every
+      // assertion above it (file exists, not on W, "T1"/"b.txt" present)
+      // still green.
+      expect(text).toContain("**T2**");
       const how = /- how: `([^`]+)`/.exec(text)?.[1];
       expect(how).not.toBeUndefined();
       // Mutation: delete the `writeEscalationFile` call in run.ts's
