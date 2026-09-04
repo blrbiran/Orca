@@ -1401,3 +1401,91 @@ spec 的全部引用基于 Orca `43bcb96`；ccloop 侧的实测观测点是它�
 `0f7fc28e8bdc573ba22840d3c7e00e25d8927b17`（spec 与提案里标注的那个），
 已核 `0f7fc28..7caa4cb` 之间 `src/**` 与 `scripts/**` 零改动 ⇒ 那些实测仍然有效。
 ⚠️ **所有行号引用前必须现测。**
+
+---
+
+## ERRATUM 1（P2 子系统 C Task 3 执行时现测，2026-09-04，Orca `c91c603`；
+台账 `.superpowers/sdd/2026-09-03-p2-scheduler-c/progress.md` Task 3 Ruling）
+
+Task 3 Step 5 的点名变异表给 `M-TRIE-c`（只删 `classify` 里 `"new-contains-old"` 这个
+**诊断名**那一支）写的期望是：*** **「只有一条红，另一条照绿」*** ——原文：
+`⚠️ 只有一条红，另一条照绿 —— 这正是 spec §3.2 预告的形状：②③共用一条判定、只是两个名字`。
+
+*** **实测是两条都红。** *** 复审自己的手推证实了实现者的说法：第二条红来自**同一条被删的分支**
+经由**第二份夹具**再次踩中，不是靠案例 ②、③ 被分别判定。计划描述的「②③ 共用一条判定」的模型
+本身没错，**错的只是它预判的波及范围**。
+
+**Step 5 那一行原文逐字保留，此处即为具名更正。**
+
+## ERRATUM 2（P2 子系统 C Task 3 执行时补记，2026-09-04，Orca `c91c603`；
+台账 Task 3 Ruling；`src/scheduler/writeSet.ts` 的 `normalizeClaim`）
+
+Task 3 Step 1 给 `normalizeClaim` 判据的四个用例都不含 `.`／`..` 段。按那份判据能过的实现，
+`./src/**` 与 `src/a.ts`、`src/foo/../bar/x.ts` 与 `src/bar/**` **都被判为不相交** ——
+而 §3.1 明确点名「本该相交却判不相交」是**不安全的方向**。
+
+执行时在 `normalizeClaim` 里加了 `.`／`..` 解析（落在三种既有归一化情形**之前**），
+并且专门加了防护：让裸 `**` 与空字符串两种声明依然归一化到仓库根，
+因为 `path.posix.normalize("")` 返回的是 `"."` —— 如果不挡住，会把
+「认领整个仓库」悄悄挪成「认领一个叫 `.` 的目录」，这本身就是一次不安全方向的变化。
+新增变异 `M-NORM-DOT` 钉住这条。
+
+**Task 3 Step 1 的判据原文逐字保留，此处即为其解析范围补一条具名更正。**
+
+## ERRATUM 3（P2 子系统 C Task 4 执行时裁定，2026-09-04，Orca `c91c603`；
+台账 Task 4 Ruling；对应 spec 侧更正见 spec 文件末尾 ERRATUM 3）
+
+Task 4 Step 1 给的判据原文是：
+
+> `it("a task claiming ** collapses the whole graph to one task per layer", () => { ... expect(Math.max(...g.layers.map((l) => l.length))).toBe(1); });`
+
+即 `T1:**, T2:a.txt, T3:b.txt` 时，**每一层都只有一个任务**。裁定改写了这条判据 ——
+见 spec §2.4 对 §9.1 的更正：真实分层是 `[[T1],[T2,T3]]`，认领仓库根的 T1 独占第一层，
+但 **T2、T3 彼此不相交、共享第二层**，这正是原判据写反的那一半。改写后的判据同时断言
+两条隐式边都存在、T1 独占首层、T2 与 T3 共享一层，并新增一个菱形依赖的判据
+（A→B、A→C、B→D、C→D ⇒ `[[A],[B,C],[D]]`）证明批处理确实发生。`M-IMPL` 仍然要能把它打红。
+
+**Task 4 Step 1 原文逐字保留，此处即为具名更正。**
+
+## ERRATUM 4（P2 子系统 C Task 8 执行时补记，2026-09-04，Orca `c91c603`；
+台账 Task 8 Ruling；`docs/superpowers/plans/2026-09-03-p2-scheduler-c.md:816` 的 Interfaces 块）
+
+Task 8 的 Interfaces 块给的签名是：
+
+> `export async function runTask(plan: PlanFile, task: PlanTask, base: string, runId: string): Promise<TaskRun>`
+
+**这四个参数不够。** ccloop 的 `run` 需要 `--adapter-config`，而计划文件里没有给它留字段，
+所以执行时多出一个**必需的第五个 `options` 参数**来携带适配器配置。**这份更正的签名
+供 Task 13／14 阅读时使用，不是 Task 8 自己那份报告里的版本。**
+
+**Interfaces 块原文逐字保留，此处即为具名更正。**
+
+## ERRATUM 5（P2 子系统 C Task 8 执行时现测，2026-09-04，Orca `c91c603`；
+台账 Task 8 Ruling；`docs/superpowers/plans/2026-09-03-p2-scheduler-c.md:836`）
+
+Task 8 给的 `repoPath` 断言原文是：
+
+> `expect(await headOf(join(r.workdir, "repo"))).toBe(base);`
+
+*** **这条断言在它自己针对的变异（`M-REPOPATH`，即删掉契约里的 `repoPath` 改写）下不可能变红**，***
+因为无论契约有没有改写 `repoPath`，克隆本身都在，`headOf` 读到的都是同一个 `base`。
+真正扛住这份判断力的，是**替换成的三条断言**里带分量的那一条：目标仓库里不出现任何
+`refs/ccloop/**` 引用。原因是 worktree 与它的父仓库共享同一份引用存储——如果不做
+`repoPath` 改写，attempt ref 会落进**这个人自己的仓库**，而不是那份一次性 clone。
+
+**这条断言不得被后续任务照抄。计划原文逐字保留，此处即为具名更正。**
+
+## ERRATUM 6（P2 子系统 C 最终整支复审新增，2026-09-04，Orca `c91c603`；
+台账 Final-review Ruling「Important 6」；spec §1.3）
+
+本计划全程**没有一处提到并发上限**——`grep -F "Promise.all"` 与 `grep -F "concurrency"`
+在计划正文里都是零命中。执行时某一层用了不设上限的 `Promise.all`，且它在任意一个任务抛异常时
+会**整层结果一起丢掉**。
+
+**这不是实现者的疏忽，是一次「spec 到计划」的掉字**：spec §1.3「明确不做」一节写的是
+「自适应并发预算 —— v1 用固定上限」，这个「用固定上限」的决定计划从未落地成任何一个任务的
+Interfaces 或 Step。最终整支复审阶段补上：改成一个小的固定并发池 ＋ 全部结果都收（settled）
+的语义，一个任务失败不再连累同层其它任务的结果被丢弃。
+
+⇒ **登记为该在计划评审阶段就抓住的一类缺口**（spec 写了的约束，计划没有任何任务领走），
+而不是当作某个任务的实现质量问题。**计划正文逐字保留，此处即为具名更正。**
