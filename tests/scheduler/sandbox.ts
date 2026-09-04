@@ -990,3 +990,68 @@ export async function seedLyingPlanWhoseReconciliationFails(s: Sandbox): Promise
     },
   ]);
 }
+
+/**
+ * `seedUnreconcilableLyingPlan`'s shape with a THIRD task downstream of T2.
+ *
+ * Final review, Important 3: T2's merge conflicts, its reconciliation leaves
+ * markers behind, and C therefore refuses to land it (spec §5.4). T3 depends
+ * on T2, so §6.2 says T3 never ran — and before the fix nothing said so, and
+ * T3 went on to clone a W missing T2's work, spawn ccloop against it, and be
+ * reported as its own outcome.
+ *
+ * A separate builder rather than a parameter on the existing one: S3's
+ * escalation criteria assert there is exactly one escalation file and that
+ * b.txt never reached W, and quietly growing the fixture they run on is how
+ * a criterion stops measuring what its comment says it measures.
+ */
+export async function seedUnreconcilableLyingPlanWithDownstream(s: Sandbox): Promise<RunnablePlan> {
+  return seedRunnablePlan(s, [
+    {
+      taskId: "T1",
+      contract: {
+        goal: "write a.txt",
+        targetPaths: ["a.txt"],
+        requiredChecks: [writeFileCheck("a.txt", "a1"), createFileIfMissingCheck("shared.txt", "t1")],
+        buildTestCommands: ["true"],
+      },
+    },
+    {
+      taskId: "T2",
+      contract: {
+        goal: "write b.txt",
+        targetPaths: ["b.txt"],
+        requiredChecks: [writeFileCheck("b.txt", "b1"), createFileIfMissingCheck("shared.txt", "t2")],
+        buildTestCommands: ["true"],
+      },
+    },
+    {
+      taskId: "T3",
+      contract: {
+        goal: "write c.txt",
+        targetPaths: ["c.txt"],
+        requiredChecks: [writeFileCheck("c.txt", "c1")],
+        buildTestCommands: ["true"],
+      },
+      dependsOn: ["T2"],
+    },
+  ]);
+}
+
+/**
+ * A contract file written verbatim, with none of `writeContract`'s
+ * schema-legal scaffolding.
+ *
+ * Two of this fix wave's criteria need a contract that is NOT the well-formed
+ * shape: one that is not JSON at all (`loadRound`'s `unreadable-contract`
+ * rejection), and one that is valid JSON but not a contract ccloop will
+ * accept, which is the only route to "the task itself threw before ccloop
+ * could report a terminal status" that does not stub anything out — ccloop's
+ * own catch exits without writing a `loop-state.json`, and `runTask` refuses
+ * to invent an outcome for a run that left none.
+ */
+export async function writeRawContract(s: Sandbox, name: string, body: string): Promise<string> {
+  const path = join(s.runsDir, `raw-contract-${name}.json`);
+  await writeFile(path, body);
+  return path;
+}

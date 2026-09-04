@@ -48,27 +48,33 @@ landed.
 
 - `targetRepo` — the repository the round lands work into. Orca checks this
   repository's own worktree out onto `workBranch` and merges into it; it
-  never touches the default branch.
+  never touches the base branch it cut `workBranch` from.
 - `ccloopBin` — ccloop's `dist/cli.js`, spawned as a subprocess (ccloop's
   `package.json` is `private: true` and its `bin` is never an npm
   dependency).
 - `runsDir` — outside `targetRepo`, where each task's throwaway clone and any
   escalation files live.
-- `workBranch` — the branch every task's result is merged into (`W`). It must
-  not already exist and must not be the target repository's default branch.
+- `workBranch` — the branch every task's result is merged into (`W`). It is
+  cut from **the branch the target repository currently has checked out** —
+  Orca does not resolve the repository's true default branch, so running it
+  while sitting on `feature/x` cuts `W` from `feature/x`. It must not already
+  exist and must not be that base branch.
 - `ledgerMode` — `"in-repo"` is implemented. `"out-of-repo"` is accepted by
   the schema (spec §8.5) but rejected at run time with exit 1, the same
   treatment an unsupported `policy` value gets: recognised but not yet
   built, refused loudly rather than silently downgraded.
 - `tasks[].contract` — every contract file must live outside `targetRepo`
-  (one of the nine up-front rejections below); Orca reads it as opaque,
+  (one of the up-front rejections below); Orca reads it as opaque,
   unvalidated JSON and derives each task's write set from
   `context.targetPaths ∪ safetyPolicy.allowlistPaths`.
 
-### The nine up-front rejections
+### The up-front rejections
 
-Six are evaluated purely from the plan file's own content, before any git
-call is made against the target repository:
+Seven are evaluated purely from the plan file's own content, before any git
+call is made against the target repository. (Spec §9.1(4) counts nine
+altogether; `unusable-task-id` was added by the final whole-branch review as
+a seventh plan-level check, so the count is now ten — recorded here as an
+erratum against the spec's number rather than left to be discovered.)
 
 | Code | Meaning |
 |---|---|
@@ -76,8 +82,15 @@ call is made against the target repository:
 | `duplicate-task-id` | two tasks in the plan share a `taskId` |
 | `cycle` | the task graph (explicit `dependsOn` plus implicit write-set edges) has a cycle |
 | `contract-inside-target-repo` | a task's contract file lives inside `targetRepo` |
-| `work-branch-is-default` | `workBranch` names the target repository's default branch |
+| `work-branch-is-default` | `workBranch` names the base branch (the one the target repository currently has checked out) |
 | `unsupported-policy` | `policy` is anything other than `"local-merge"` |
+| `unusable-task-id` | a `taskId` cannot become a run id (spec §2.1 derives `orca-<taskId>-<hash8>`, and the ledger requires `/^[A-Za-z0-9][A-Za-z0-9._-]*$/`) |
+
+An eighth plan-level rejection, `unreadable-contract`, is reported the same
+way and at the same point: a task's `contract` path that cannot be read, or
+whose content is not valid JSON. It is not in the table above because it is
+not decidable from the plan file's own bytes — it needs one `readFile` per
+task.
 
 Three more are runtime checks — a read-only `git rev-parse` or `git status
 --porcelain` against the target repository, which does not count as
@@ -87,12 +100,16 @@ Three more are runtime checks — a read-only `git rev-parse` or `git status
 | Code | Meaning |
 |---|---|
 | `work-branch-already-exists` | `workBranch` already exists in the target repository |
-| `base-not-a-commit` | the default branch does not resolve to a real commit yet |
-| `dirty-worktree` | the target repository's worktree has uncommitted changes |
+| `base-not-a-commit` | the base branch does not resolve to a real commit yet |
+| `dirty-worktree` | the target repository's worktree has uncommitted changes, or its cleanliness cannot be read at all (`targetRepo` is not a git repository) |
 
 A plan file that fails to parse at all (malformed JSON, or the wrong shape)
-is reported as `malformed` and is not one of these nine — it means there is
-no plan to evaluate them against yet.
+is reported as `malformed` and is not one of these — it means there is no
+plan to evaluate them against yet.
+
+Any rejection, plan-level or runtime, makes both `orca plan` and `orca run`
+exit 1 (spec §9.3). A *warning* — a plan that is legal but fully serial, say
+— does not affect the exit code.
 
 ### Exit codes
 
@@ -105,7 +122,7 @@ order **3 > 2 > 1 > 0**:
 - **1** — the round was refused before it started: an unreadable or
   malformed plan file, a missing `--adapter-config`, an unimplemented
   `ledgerMode`, a repository lock that could not be acquired (another `orca`
-  process already holds it), or any of the nine up-front rejections above.
+  process already holds it), or any of the up-front rejections above.
 - **2** — an ordinary failure, or a decision that was still safe to make on
   its own: a task's net change set was empty (`succeeded_but_empty`), a task
   failed or exhausted its attempts, or a task landed despite writing outside
@@ -150,9 +167,11 @@ These are registered, not hidden, straight from the design's own accounting:
 2. Layer-by-layer progress means the slowest task in a layer blocks the
    whole layer (dispatching as soon as a task is ready is a pure
    optimisation and does not change criteria semantics).
-3. The work branch's base is read from the default branch's HEAD only once,
-   at round start; a long-running round does not pick up updates to the
-   default branch made while it runs.
+3. The work branch's base is read once, at round start, from the HEAD of
+   whatever branch the target repository has checked out; a long-running
+   round does not pick up updates to that branch made while it runs.
+   Resolving the repository's *true* default branch (rather than using the
+   checked-out one) is registered as post-v1 work.
 4. Escalation is terminal — there is no incremental resume. A human who
    resolves an escalation reruns the whole plan, and every task that already
    finished runs again for nothing. Harmless while v1 spends nothing

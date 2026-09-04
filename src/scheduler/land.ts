@@ -57,24 +57,30 @@ export interface ConflictState {
  *
  * The guard is the whole reason this is a named function rather than two
  * inline git calls: `orca` must never check out, and therefore can never
- * commit onto or merge into, the default branch (spec §4.5 — that is Tier 0,
- * mechanically forbidden). loadPlan already rejects a plan whose workBranch
- * equals the default branch, but that check runs against a name read from a
- * plan file minutes earlier and several layers away. This one runs against
- * the argument the checkout is actually about to use, immediately before it
- * runs, which is the only position from which it can be the last gate. It is
- * mutation `M-MAIN`'s target: delete it, pass the default branch, and S14
- * goes red because the round's merges land on the default branch's ref.
+ * commit onto or merge into, the branch the round is cut from (spec §4.5 —
+ * that is Tier 0, mechanically forbidden). loadPlan already rejects a plan
+ * whose workBranch equals that branch, but that check runs against a name
+ * read from a plan file minutes earlier and several layers away. This one
+ * runs against the argument the checkout is actually about to use,
+ * immediately before it runs, which is the only position from which it can be
+ * the last gate. It is mutation `M-MAIN`'s target: delete it, pass the base
+ * branch, and S14 goes red because the round's merges land on that branch's
+ * ref.
+ *
+ * `baseBranch`, not `defaultBranch` (final review, Important 7): run.ts reads
+ * it from `git symbolic-ref --short HEAD`, so it is whatever the target
+ * repository currently has checked out, which is not necessarily the
+ * repository's default branch.
  *
  * `checkout -b` rather than `branch` + `checkout`: W must not already exist
  * (preflight's `work-branch-already-exists` rejection), and `-b` fails loudly
  * if it does instead of silently reusing someone else's branch.
  */
-export async function checkoutWorkBranch(plan: PlanFile, defaultBranch: string, base: string): Promise<void> {
-  if (plan.workBranch === defaultBranch) {
+export async function checkoutWorkBranch(plan: PlanFile, baseBranch: string, base: string): Promise<void> {
+  if (plan.workBranch === baseBranch) {
     throw new Error(
-      `orca: refusing to check out ${JSON.stringify(plan.workBranch)} — it is the default branch of ` +
-        `${plan.targetRepo}, and landing onto the default branch is Tier 0 (spec §4.5)`,
+      `orca: refusing to check out ${JSON.stringify(plan.workBranch)} — it is the branch ` +
+        `${plan.targetRepo} is currently on and the round's base, and landing onto it is Tier 0 (spec §4.5)`,
     );
   }
   await git(plan.targetRepo, ["checkout", "-b", plan.workBranch, base]);

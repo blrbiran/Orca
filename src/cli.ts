@@ -123,9 +123,21 @@ async function runPlan(args: string[]): Promise<number> {
   // that reading those does not count as "touching" it, which is what lets
   // `plan` (spec §9.2: zero side effects) call this and print real verdicts
   // instead of a permanent "not evaluated".
-  const preflightReport = await preflight(round.plan, round.defaultBranch);
+  const preflightReport = await preflight(round.plan, round.baseBranch);
 
   process.stdout.write(`${renderRound(round, preflightReport, verbose)}\n`);
+
+  // spec §9.3 (final review, Important 2): `plan` answers "is this plan legal
+  // and how would it run". §4.2's three runtime checks are up-front
+  // REJECTIONS, and §9.3 gives a rejected plan exit 1 — so `orca plan` on a
+  // dirty worktree printing `[fail] dirty-worktree: …` and then exiting 0 was
+  // a broken contract, not a warning. §9.3's "warnings do not affect the exit
+  // code" carve-out is about DEGRADATION (a fully serial plan is legal; a
+  // person may want it), not about a check that failed.
+  //
+  // Printed first, then the code: a caller who only reads the exit status
+  // still gets the report on stdout.
+  if (preflightReport.rejections.length > 0) return 1;
   return 0;
 }
 

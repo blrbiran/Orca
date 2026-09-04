@@ -44,6 +44,12 @@ describe("S20 (spec 5.2)", () => {
       // be satisfied by a function that refuses everything -- which the next
       // assertion is here to rule out.
       expect((r as { escalate: string }).escalate).toContain("T2");
+      // Final review, deferred minor 12: and the side it COULD see. 5.2's
+      // whole mechanism is that BOTH sides are named -- a refusal message
+      // that identifies only the missing half tells a reader which contract
+      // is absent but not which conflict it is absent from, and a criterion
+      // checking one of the two is measuring half the rule.
+      expect((r as { escalate: string }).escalate).toContain("T1");
 
       const bothSides = new Map<string, unknown>([["T1", t1], ["T2", t2]]);
       const ok = await synthesizeReconcileContract(side("T1"), side("T2"), bothSides, s.runsDir, conflict);

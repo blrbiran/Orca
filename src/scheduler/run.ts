@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import type { DecisionEvent } from "../ledger/schema.js";
 import { appendEvent } from "../ledger/writer.js";
-import { cloneDirOf, disposeWorkdir, routeOutcome, runTask } from "./ccloopRunner.js";
+import { cloneDirOf, descendantsOf, disposeWorkdir, routeOutcome, runTask } from "./ccloopRunner.js";
 import type { TaskRun } from "./ccloopRunner.js";
 import { buildGraph, implicitEdgeDecisions } from "./graph.js";
 import type { TaskGraph } from "./graph.js";
@@ -38,6 +38,7 @@ import {
   synthesizeReconcileContract,
   writeTree,
 } from "./reconcile.js";
+import { MAX_PARALLEL_TASKS, mapWithPool } from "./pool.js";
 import { acquireRepoLock } from "./repoLock.js";
 import { allocateRunId, deriveRunId } from "./runId.js";
 
@@ -49,25 +50,54 @@ async function git(repo: string, args: string[]): Promise<string> {
 }
 
 /**
- * spec §9.2: `plan` reads the target repo's currently checked-out branch name
- * to compare against workBranch (loadPlan's work-branch-is-default rejection
- * needs it), but never mutates it — `git symbolic-ref` with no second
- * argument is a read. A repo with nothing checked out (bare, or a fresh
- * --bare clone) has no default to compare against; falling back to "" rather
- * than throwing lets every other check still run and get reported, instead of
- * a caller fixing exceptions one at a time.
+ * The branch W is cut from: the target repo's CURRENTLY CHECKED-OUT branch.
+ *
+ * ⚠️ Named `baseBranch`, not `defaultBranch` (final review, Important 7's
+ * second half). It used to be called the default branch everywhere, and that
+ * name was simply false: `git symbolic-ref --short HEAD` answers "what is
+ * checked out", so running orca while sitting on `feature/x` cuts W from
+ * `feature/x` and always did. The BEHAVIOUR is deliberately unchanged in this
+ * fix wave — it is factually the base, and the branch's criteria are built on
+ * it — but a name that says something the code does not do is the kind of
+ * drift this repository pays for later. Resolving the repository's TRUE
+ * default branch (origin/HEAD, say) is registered as a follow-up.
+ *
+ * spec §9.2: `plan` reads this name but never mutates it — `git symbolic-ref`
+ * with no second argument is a read. A repo with nothing checked out (bare, or
+ * a fresh --bare clone) has no branch to compare against; falling back to ""
+ * rather than throwing lets every other check still run and get reported,
+ * instead of a caller fixing exceptions one at a time.
  *
  * ⚠️ It is read ONCE, at the start, and everything downstream uses that value
- * — including land.ts's refusal to check out the default branch. It must not
- * be re-read after `checkoutWorkBranch` has run, because by then HEAD is W
- * and the answer would be "the default branch is W".
+ * — including land.ts's refusal to check out that branch. It must not be
+ * re-read after `checkoutWorkBranch` has run, because by then HEAD is W and
+ * the answer would be "the base branch is W".
  */
-async function resolveDefaultBranch(repoPath: string): Promise<string> {
+async function resolveBaseBranch(repoPath: string): Promise<string> {
   try {
     const { stdout } = await execFileAsync("git", ["symbolic-ref", "--short", "HEAD"], { cwd: repoPath });
     return stdout.trim();
   } catch {
     return "";
+  }
+}
+
+/**
+ * The base branch's tip, read best-effort so the plan report can print it
+ * (final review, Important 7). Null rather than a throw when the branch is
+ * unborn or the path is not a repository at all: preflight's
+ * `base-not-a-commit` is the check that reports that, and this read must not
+ * pre-empt it with an exception.
+ */
+async function resolveBaseSha(repoPath: string, branch: string): Promise<string | null> {
+  if (branch === "") return null;
+  try {
+    const { stdout } = await execFileAsync("git", ["rev-parse", "--verify", "--quiet", `${branch}^{commit}`], {
+      cwd: repoPath,
+    });
+    return stdout.trim() || null;
+  } catch {
+    return null;
   }
 }
 
@@ -85,7 +115,10 @@ export interface Round {
   plan: PlanFile;
   graph: TaskGraph;
   contracts: Map<string, unknown>;
-  defaultBranch: string;
+  /** The branch W is cut from — see `resolveBaseBranch` for why not "default". */
+  baseBranch: string;
+  /** That branch's tip, or null when it is unborn / unreadable. */
+  baseSha: string | null;
   /** The plan file's raw bytes — the round id is derived from them (§2.1). */
   planBytes: Buffer;
 }
@@ -111,9 +144,10 @@ export async function loadRound(planPath: string): Promise<{ round: Round } | { 
 
   const rawTargetRepo = (raw as { targetRepo?: unknown } | null)?.targetRepo;
   const targetRepo = typeof rawTargetRepo === "string" ? rawTargetRepo : "";
-  const defaultBranch = targetRepo ? await resolveDefaultBranch(targetRepo) : "";
+  const baseBranch = targetRepo ? await resolveBaseBranch(targetRepo) : "";
+  const baseSha = targetRepo ? await resolveBaseSha(targetRepo, baseBranch) : null;
 
-  const result = loadPlan(raw, defaultBranch);
+  const result = loadPlan(raw, baseBranch);
   if ("rejections" in result) return result;
   const { plan } = result;
 
@@ -123,12 +157,40 @@ export async function loadRound(planPath: string): Promise<{ round: Round } | { 
   // that layer pure. loadPlan's contract-inside-target-repo rejection
   // guarantees every contract path lives outside targetRepo, so this is not a
   // read against the repo either.
+  //
+  // 🔴 Both the read and the parse are guarded (final review, Important 1).
+  // They used to be neither, and `loadRound` is called OUTSIDE both runRound's
+  // and runPlan's try blocks — so a typo in a contract path, the purest exit-1
+  // input error there is, printed `Error: ENOENT ... at async loadRound` and
+  // exited 3. `rejections` is the shape this function already speaks in, so
+  // there is nothing new for a caller to handle.
   const contracts = new Map<string, unknown>();
+  const contractRejections: PlanRejection[] = [];
   for (const task of plan.tasks) {
-    contracts.set(task.taskId, JSON.parse(await readFile(task.contract, "utf8")));
+    let bytes: string;
+    try {
+      bytes = await readFile(task.contract, "utf8");
+    } catch (err) {
+      contractRejections.push({
+        code: "unreadable-contract",
+        message: `cannot read the contract for ${task.taskId} at ${task.contract}: ${(err as Error).message}`,
+      });
+      continue;
+    }
+    try {
+      contracts.set(task.taskId, JSON.parse(bytes));
+    } catch (err) {
+      contractRejections.push({
+        code: "unreadable-contract",
+        message: `the contract for ${task.taskId} at ${task.contract} is not valid JSON: ${(err as Error).message}`,
+      });
+    }
   }
+  // Reported all at once, like loadPlan's own rejections: a caller who fixes
+  // one contract path and re-runs N times is a caller this is wasting.
+  if (contractRejections.length > 0) return { rejections: contractRejections };
 
-  return { round: { plan, graph: buildGraph(plan, contracts), contracts, defaultBranch, planBytes } };
+  return { round: { plan, graph: buildGraph(plan, contracts), contracts, baseBranch, baseSha, planBytes } };
 }
 
 export function renderRound(round: Round, preflightReport: PreflightReport, verbose: boolean): string {
@@ -138,7 +200,14 @@ export function renderRound(round: Round, preflightReport: PreflightReport, verb
   // parameter, since PlanGraphExtras is already the seam renderPlanReport
   // reads it from.
   const annotated = { ...round.graph, emptyRequiredChecksPairs: emptyRequiredChecksPairs(round.graph, round.contracts) };
-  return renderPlanReport(annotated, round.plan, preflightReport, { verbose, runtimeChecksEvaluated: true });
+  return renderPlanReport(annotated, round.plan, preflightReport, {
+    verbose,
+    runtimeChecksEvaluated: true,
+    // Final review, Important 7: where W starts, printed for the human who
+    // approves the round. Read once, in loadRound, from the same values
+    // `runRound` schedules on — not re-read here, where HEAD may already be W.
+    base: { branch: round.baseBranch, sha: round.baseSha },
+  });
 }
 
 export interface RunOptions {
@@ -511,6 +580,14 @@ async function describeRepoState(plan: PlanFile): Promise<string> {
 }
 
 /**
+ * One task's slot in a layer: either the run ccloop produced, or the exception
+ * that stopped it from producing one. Both are per-task facts, which is the
+ * whole point — see pool.ts for why `Promise.all` could not express the
+ * second one.
+ */
+type LayerResult = { taskId: string; run: TaskRun } | { taskId: string; error: unknown };
+
+/**
  * spec §4.3's six steps for every task in the plan, layer by layer.
  *
  * The shape of the loop is §4.2's: one base per LAYER (W's rolling HEAD when
@@ -529,7 +606,7 @@ export async function runRound(planPath: string, options: RunOptions = {}): Prom
     return 1;
   }
   const { round } = loaded;
-  const { plan, graph, defaultBranch } = round;
+  const { plan, graph, baseBranch } = round;
 
   if (options.adapterConfig === undefined) {
     logError("orca run: --adapter-config <path> is required (ccloop requires one for every adapter)");
@@ -567,7 +644,7 @@ export async function runRound(planPath: string, options: RunOptions = {}): Prom
   // a synthesized id in the catch block itself.
   let roundId: string | undefined;
   try {
-    const preflightReport = await preflight(plan, defaultBranch);
+    const preflightReport = await preflight(plan, baseBranch);
 
     // spec §9.4(2): `run` ALWAYS prints plan's output first. Not a
     // convenience — it is half of what makes the two impossible to drift
@@ -579,11 +656,11 @@ export async function runRound(planPath: string, options: RunOptions = {}): Prom
       return 1;
     }
 
-    // spec §4.2: W is cut from the default branch's HEAD, read ONCE at round
-    // start. §4.2.1's registered v1 limitation: a push to the default branch
-    // during a long round is not picked up.
-    const base = (await git(plan.targetRepo, ["rev-parse", defaultBranch])).trim();
-    await checkoutWorkBranch(plan, defaultBranch, base);
+    // spec §4.2: W is cut from the base branch's HEAD, read ONCE at round
+    // start. §4.2.1's registered v1 limitation: a push to that branch during a
+    // long round is not picked up.
+    const base = (await git(plan.targetRepo, ["rev-parse", baseBranch])).trim();
+    await checkoutWorkBranch(plan, baseBranch, base);
 
     // spec §8.0: C's own decisions go into their own file on W, named after
     // the round rather than after any task — which is what keeps A′ §3.1's
@@ -631,9 +708,29 @@ export async function runRound(planPath: string, options: RunOptions = {}): Prom
     const notRun = new Set<string>();
     let stopRound = false;
 
+    /**
+     * spec §6.2's `upstream_not_run`, applied. 🔴 The ONE place that answers
+     * "who cannot start now" (final review, Important 3).
+     *
+     * Four different things make a task unable to start, and before this fix
+     * only two of them said so: ccloop's own terminal statuses (§6.1's routing
+     * table) and a `cancelled` round. The two branches where C ITSELF refuses
+     * a result — `!verdict.land` (§6.2's succeeded_but_empty, or §7.3's
+     * out-of-bounds-and-colliding) and `!reconciled.landed` (§5.4's
+     * unreconciled conflict) — both just `continue`d, so a downstream task
+     * whose upstream's work had been REFUSED went on to clone a W lacking that
+     * work, spawn ccloop against it, and be reported as its own failure. On a
+     * scripted round that is merely misleading; on a real one it is money
+     * spent on a task whose premise is known-false. §6.2's whole point is that
+     * "it never ran" and "it ran and broke" are different facts.
+     */
+    const cannotStart = (blocked: Iterable<string>): void => {
+      for (const taskId of blocked) notRun.add(taskId);
+    };
+
     for (const [layerIndex, layer] of executionLayers.entries()) {
       if (stopRound) {
-        for (const taskId of layer) notRun.add(taskId);
+        cannotStart(layer);
       }
 
       const runnable = layer.filter((taskId) => !notRun.has(taskId));
@@ -647,10 +744,16 @@ export async function runRound(planPath: string, options: RunOptions = {}): Prom
       // commit and §7's reconciliation compares like with like.
       const layerBase = (await git(plan.targetRepo, ["rev-parse", "HEAD"])).trim();
 
-      // Parallel within the layer (spec §2.4 "层内并行"); the landings below
-      // are strictly serial.
-      const runs = await Promise.all(
-        runnable.map(async (taskId): Promise<{ taskId: string; run: TaskRun }> => {
+      // Parallel within the layer (spec §2.4 "层内并行"), with spec §1.3's
+      // fixed upper bound and settle-everything semantics; the landings below
+      // are strictly serial. See pool.ts for what `Promise.all` got wrong
+      // here: no bound at all, and a first rejection that orphaned every
+      // sibling subprocess while the `finally` below released the repo lock
+      // out from under them.
+      const settled = await mapWithPool(
+        runnable,
+        MAX_PARALLEL_TASKS,
+        async (taskId): Promise<{ taskId: string; run: TaskRun }> => {
           const task = plan.tasks.find((t) => t.taskId === taskId)!;
           const contractBytes = await readFile(task.contract);
           const runId = await allocateRunId(plan.runsDir, taskId, contractBytes, layerBase);
@@ -659,7 +762,13 @@ export async function runRound(planPath: string, options: RunOptions = {}): Prom
             adapterConfig: options.adapterConfig!,
           });
           return { taskId, run };
-        }),
+        },
+      );
+      // Input order, one entry per task, exceptions included — so a task that
+      // threw is handled by the same per-task loop as one ccloop reported
+      // `failed` for, rather than taking the whole round with it.
+      const runs: LayerResult[] = settled.map((result, index) =>
+        result.status === "fulfilled" ? result.value : { taskId: runnable[index], error: result.reason },
       );
 
       const landed: string[] = [];
@@ -677,7 +786,26 @@ export async function runRound(planPath: string, options: RunOptions = {}): Prom
       // keeps every same-layer merge's first parent exactly the sibling
       // commit that actually landed before it.
       const pendingBoundaries: Array<{ taskId: string; outOfBounds: string[]; beforeSha: string }> = [];
-      for (const { taskId, run } of runs) {
+      for (const slot of runs) {
+        // A task whose own spawn threw — a clone that failed, a ccloop that
+        // wrote no loop-state.json, a run id that could not be allocated.
+        // Routed exactly like spec §6.1's `failed` row: it counts as a failure
+        // (exit 2), its descendants cannot start, and every other task in the
+        // layer is still processed below. No `disposeWorkdir` call, because
+        // there is no TaskRun to dispose — whatever the throw left under
+        // runsDir stays there, which is the same "the copy is the only place
+        // the evidence is" rule §4.5 applies to every other failure.
+        if (!("run" in slot)) {
+          const { taskId, error } = slot;
+          logError(
+            `orca: ${taskId}: the task threw before ccloop could report a terminal status: ` +
+              `${error instanceof Error ? (error.stack ?? error.message) : String(error)}`,
+          );
+          contributions.push(2);
+          cannotStart(descendantsOf(graph, taskId));
+          continue;
+        }
+        const { taskId, run } = slot;
         log(`orca: ${taskId}: ccloop reported ${run.outcome} (run ${run.runId})`);
 
         // spec §6.1's routing table, applied before anything is harvested: a
@@ -685,10 +813,45 @@ export async function runRound(planPath: string, options: RunOptions = {}): Prom
         // reconcile, and §7's harvest refuses it on purpose rather than
         // absorbing it into "changed nothing".
         const route = routeOutcome(graph, taskId, run.outcome);
-        for (const descendant of route.upstreamNotRun) notRun.add(descendant);
+        cannotStart(route.upstreamNotRun);
         if (route.stopRound) stopRound = true;
-        if (route.escalates) contributions.push(3);
-        else if (route.countsAsFailure) contributions.push(2);
+        if (route.escalates) {
+          contributions.push(3);
+
+          // spec §5.4's escalation file for `blocked_waiting_human` (final
+          // review, Important 6 — a reversal). An earlier controller ruling
+          // said this case should NOT get a file, because §5.4's mandated
+          // content — both sides' intent and the conflict blocks — does not
+          // exist for a blocked run. That premise is false:
+          // `writeEscalationFile` already renders the degraded shape, and the
+          // round-exception path in the catch block below already uses
+          // exactly that form. Giving one non-conflict escalation a file and
+          // not the other was arbitrary, and it left the ONE terminal status
+          // §6.1 calls "needs a human and is not a failure" with nothing on
+          // disk saying so.
+          //
+          // The copy path is named and is honest: `disposeWorkdir` keeps
+          // every non-succeeded run's copy (its `keep` is true whenever
+          // `run.outcome !== "succeeded"`), and §5.4 step 3 is exactly "print
+          // the copy directory — that is where the person works".
+          const escalationPath = await writeEscalationFile(plan.runsDir, {
+            runId: run.runId,
+            reason:
+              `${taskId} ended blocked_waiting_human: ccloop stopped and is waiting for a person (spec §6.1), ` +
+              `and that status is terminal and unresumable in ccloop, so no \`ccloop resume\` will move it. ` +
+              `Its copy is kept at ${run.workdir} — that is where the run's state and worktree are.`,
+            // One side, not none: unlike the round-exception path this
+            // escalation knows exactly which task it is about, and its
+            // contract is already loaded. `conflictBlocks` stays empty and
+            // renders as "not about a merge conflict", which is true.
+            sides: [intentOfContract(round.contracts, taskId)],
+            conflictBlocks: [],
+            undoHow: `rm -rf ${run.workdir}`,
+            undoCost: `discard the kept copy for ${taskId}, including whatever ccloop was waiting for a person to look at`,
+            undoBlastRadius: `only the kept copy under ${plan.runsDir}; nothing from ${taskId} reached ${plan.workBranch}`,
+          });
+          log(`orca: ${taskId}: escalation recorded at ${escalationPath}`);
+        } else if (route.countsAsFailure) contributions.push(2);
 
         if (run.outcome !== "succeeded") {
           // spec §4.5: a copy that is not deleted has its path printed —
@@ -713,6 +876,12 @@ export async function runRound(planPath: string, options: RunOptions = {}): Prom
           log(
             `orca: ${taskId}: refusing to land — ${reconciliation.empty ? "the net change set is empty (succeeded_but_empty, spec §6.2)" : `wrote outside its declared write set: ${reconciliation.outOfBounds.join(", ")}`}`,
           );
+          // spec §6.2 (final review, Important 3): C refused this result, so
+          // this task's work is not on W and nothing downstream of it can
+          // start from a W that contains it. Before this, a descendant went on
+          // to run against a base missing its upstream's work and was reported
+          // as its own failure.
+          cannotStart(descendantsOf(graph, taskId));
 
           // spec §7.3 tier 0 / §5.4: an out-of-bounds write that collides with
           // a sibling's DECLARED write set is the one disposition verdict that
@@ -834,6 +1003,10 @@ export async function runRound(planPath: string, options: RunOptions = {}): Prom
             // only place the conflict still exists.
             contributions.push(3);
             log(`orca: ${taskId}: escalating — ${reconciled.why}`);
+            // spec §6.2 (final review, Important 3): the same reasoning as the
+            // `!verdict.land` branch above — this task's work never reached W,
+            // so its descendants never ran rather than ran and broke.
+            cannotStart(descendantsOf(graph, taskId));
 
             // spec §5.4's escalation file — the convergence point for every
             // way reconcileAndLand can fail to land a conflict (§5.2's

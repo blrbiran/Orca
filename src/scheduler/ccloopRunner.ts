@@ -290,8 +290,14 @@ function allTaskIds(graph: TaskGraph): string[] {
  * implicit write-set edges buildGraph derived — both, because a downstream
  * task that never declared a dependency but claims an overlapping path is just
  * as unable to start from a base its upstream never produced.
+ *
+ * Exported for run.ts (final review, Important 3): `routeOutcome` is only
+ * about ccloop's own terminal statuses, and the two places where C ITSELF
+ * refuses a result — §7.3's refusal to land, and §5.4's unreconciled conflict
+ * — need the same answer to the same §6.2 question. Sharing this function is
+ * what keeps them from being three different answers.
  */
-function descendantsOf(graph: TaskGraph, taskId: string): string[] {
+export function descendantsOf(graph: TaskGraph, taskId: string): string[] {
   const out = new Map<string, string[]>();
   for (const [from, to] of graph.explicit) out.set(from, [...(out.get(from) ?? []), to]);
   for (const edge of graph.implicit) out.set(edge.from, [...(out.get(edge.from) ?? []), edge.to]);

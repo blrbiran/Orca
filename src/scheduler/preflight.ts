@@ -37,9 +37,32 @@ async function resolvesToACommit(targetRepo: string, ref: string): Promise<boole
   }
 }
 
-async function worktreeIsDirty(targetRepo: string): Promise<boolean> {
-  const { stdout } = await execFileAsync("git", ["status", "--porcelain"], { cwd: targetRepo });
-  return stdout.length > 0;
+/**
+ * Returns the porcelain output, or the reason it could not be read.
+ *
+ * 🔴 Final review, Important 5. This used to let the failure propagate, and
+ * it is the ONE check of the three that can fail rather than answer: the
+ * other two swallow their git error and answer "no". A `targetRepo` that is
+ * not a git repository at all — a typo in the plan file, the purest exit-1
+ * input error there is — therefore threw out of `preflight`, out of `orca
+ * plan`, and reached the user as a raw node stack with node's own exit code
+ * instead of §9.3's 1.
+ *
+ * The failure is reported under `dirty-worktree` rather than a fourth check
+ * name, and that is deliberate: the check's claim is "the worktree is
+ * verifiably clean before C checks a real person's worktree out onto W"
+ * (§4.2.1), and a directory whose cleanliness cannot be read fails that claim
+ * for real. Inventing a fourth spelling of a §4.2 check code is the exact
+ * mistake preflight's own Ruling 1 comment above exists to prevent, and the
+ * message says plainly what happened rather than implying uncommitted work.
+ */
+async function porcelainOf(targetRepo: string): Promise<{ output: string } | { unreadable: string }> {
+  try {
+    const { stdout } = await execFileAsync("git", ["status", "--porcelain"], { cwd: targetRepo });
+    return { output: stdout };
+  } catch (err) {
+    return { unreadable: (err as Error).message.trim() };
+  }
 }
 
 /**
@@ -56,7 +79,7 @@ async function worktreeIsDirty(targetRepo: string): Promise<boolean> {
  * print real verdicts instead of leaving these three checks perpetually
  * "not evaluated".
  */
-export async function preflight(plan: PlanFile, defaultBranch: string): Promise<PreflightReport> {
+export async function preflight(plan: PlanFile, baseBranch: string): Promise<PreflightReport> {
   const rejections: PlanRejection[] = [];
 
   // S18 / §4.2 runtime rejection: an existing workBranch must never be
@@ -70,15 +93,15 @@ export async function preflight(plan: PlanFile, defaultBranch: string): Promise<
     });
   }
 
-  // S19 / §4.2 runtime rejection: the base is the default branch's HEAD at
-  // run start (spec §4.2 — the work branch is cut from it, and each layer's
-  // base is W's rolling HEAD), derived at runtime rather than a plan-file
-  // field. A repository with zero commits at all is the honest fixture: its
-  // default branch is unborn and does not resolve to any commit yet.
-  if (!(await resolvesToACommit(plan.targetRepo, defaultBranch))) {
+  // S19 / §4.2 runtime rejection: the base is the base branch's HEAD at run
+  // start (spec §4.2 — the work branch is cut from it, and each layer's base
+  // is W's rolling HEAD), derived at runtime rather than a plan-file field. A
+  // repository with zero commits at all is the honest fixture: its branch is
+  // unborn and does not resolve to any commit yet.
+  if (!(await resolvesToACommit(plan.targetRepo, baseBranch))) {
     rejections.push({
       code: BASE_NOT_A_COMMIT,
-      message: `default branch ${JSON.stringify(defaultBranch)} does not resolve to a real commit in ${plan.targetRepo}`,
+      message: `base branch ${JSON.stringify(baseBranch)} does not resolve to a real commit in ${plan.targetRepo}`,
     });
   }
 
@@ -87,7 +110,15 @@ export async function preflight(plan: PlanFile, defaultBranch: string): Promise<
   // work a human left uncommitted. Measured with `git status --porcelain`,
   // never `git diff`: diff is blind to an untracked file's content (§9.2's
   // own warning, same reasoning as S17's byte-identical porcelain check).
-  if (await worktreeIsDirty(plan.targetRepo)) {
+  const porcelain = await porcelainOf(plan.targetRepo);
+  if ("unreadable" in porcelain) {
+    rejections.push({
+      code: DIRTY_WORKTREE,
+      message:
+        `cannot determine whether the worktree of ${plan.targetRepo} is clean ` +
+        `(is it a git repository?): ${porcelain.unreadable}`,
+    });
+  } else if (porcelain.output.length > 0) {
     rejections.push({
       code: DIRTY_WORKTREE,
       message: `target repo worktree is not clean: ${plan.targetRepo}`,

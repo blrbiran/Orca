@@ -30,6 +30,11 @@ const p: PlanFile = {
 
 const pf: { rejections: PlanRejection[] } = { rejections: [] };
 
+// Where W would be cut from. Required by renderPlanReport (final review,
+// Important 7) rather than optional, so a caller cannot silently omit it and
+// have "there is no base" print identically to "nobody passed one".
+const BASE = { branch: "main", sha: "9".repeat(40) };
+
 function graph(overrides: Partial<TaskGraph & PlanGraphExtras>): TaskGraph & PlanGraphExtras {
   return {
     layers: [],
@@ -117,7 +122,7 @@ describe("renderPlanReport (spec 9.1, 9.5)", () => {
         ["T2", [normalizeClaim("b.txt")]],
       ]),
     });
-    const out = renderPlanReport(writeSetGraph, p, pf, { verbose: false });
+    const out = renderPlanReport(writeSetGraph, p, pf, { verbose: false, base: BASE });
     expect(out).toContain("src/** -> src/");
     expect(out).toContain("b.txt -> b.txt");
   });
@@ -134,7 +139,7 @@ describe("renderPlanReport (spec 9.1, 9.5)", () => {
         ["T2", [normalizeClaim("a.txt")]],
       ]),
     });
-    const out = renderPlanReport(onePair, p, pf, { verbose: true });
+    const out = renderPlanReport(onePair, p, pf, { verbose: true, base: BASE });
     expect(out).toContain("T1 x T2");
     expect(out).toContain("equal");
   });
@@ -150,14 +155,14 @@ describe("renderPlanReport (spec 9.1, 9.5)", () => {
         ["T3", [normalizeClaim("c.txt")]],
       ]),
     });
-    const out = renderPlanReport(twoLayers, p, pf, { verbose: false });
+    const out = renderPlanReport(twoLayers, p, pf, { verbose: false, base: BASE });
     expect(out).toContain("layer 0: T1 (parallelism: 1)");
     expect(out).toContain("layer 1: T2, T3 (parallelism: 2)");
   });
 
   it("prints the landing policy, the work branch name, and all nine up-front checks", () => {
     const rejections: PlanRejection[] = [{ code: "cycle", message: "the task graph has a cycle" }];
-    const out = renderPlanReport(g, p, { rejections }, { verbose: false });
+    const out = renderPlanReport(g, p, { rejections }, { verbose: false, base: BASE });
     expect(out).toContain("policy=local-merge");
     expect(out).toContain("workBranch=orca/w-fixture");
     // All nine names must appear, whichever of pass/fail/not-evaluated they
@@ -179,7 +184,7 @@ describe("renderPlanReport (spec 9.1, 9.5)", () => {
     // A warning in the wrong place is a warning nobody reads. The place a
     // person decides from is the parallelism line, so the sentence has to be
     // there.
-    const out = renderPlanReport(gWithStarStar(), p, pf, { verbose: false });
+    const out = renderPlanReport(gWithStarStar(), p, pf, { verbose: false, base: BASE });
     const lines = out.split("\n");
     const par = lines.findIndex((l) => l.includes("parallelism"));
     const warn = lines.findIndex((l) => l.includes("no parallelism"));
@@ -196,11 +201,40 @@ describe("renderPlanReport (spec 9.1, 9.5)", () => {
     // whether production computes that data — see
     // scenarios/emptyRequiredChecksWarning.test.ts for the proof that `orca
     // plan` actually flags a real pair through the real contracts it read.
-    expect(renderPlanReport(gEmptyChecks(), p, pf, { verbose: false })).toContain("would escalate");
+    expect(renderPlanReport(gEmptyChecks(), p, pf, { verbose: false, base: BASE })).toContain("would escalate");
+  });
+
+  it("prints the branch W will be cut from and that branch's sha", () => {
+    // Final review, Important 7: where W starts is the single most
+    // consequential fact about a round, and it was the one thing a human
+    // approving the plan could not see — the report named the work branch and
+    // never said what it would be cut from.
+    //
+    // Mutation `M-BASE-LINE`: delete the `lines.push(\`Base: …\`)` call — both
+    // assertions go red. Asserted on the sha's value, not on the word "Base",
+    // so a line that mentions a base without saying which commit does not pass.
+    const out = renderPlanReport(g, p, pf, { verbose: false, base: BASE });
+    expect(out).toContain("main");
+    expect(out).toContain(BASE.sha);
+    // Important 7's second half: it must NOT be called the default branch,
+    // because run.ts reads `git symbolic-ref --short HEAD` — whatever is
+    // checked out — and saying "default" would be a claim the code does not
+    // make good on.
+    expect(out).toContain("currently checked out");
+    expect(out).not.toContain("default branch");
+  });
+
+  it("says so honestly when there is no base branch or no base commit", () => {
+    // A bare repository, or one whose branch is unborn: preflight's
+    // `base-not-a-commit` is what rejects that, and this line must not print
+    // "at null" or an empty string in the meantime.
+    const out = renderPlanReport(g, p, pf, { verbose: false, base: { branch: "", sha: null } });
+    expect(out).toContain("<no branch checked out>");
+    expect(out).toContain("<no commit yet>");
   });
 
   it("states that a disjoint write set does not guarantee no conflict, next to the parallelism", () => {
-    const out = renderPlanReport(g, p, pf, { verbose: false });
+    const out = renderPlanReport(g, p, pf, { verbose: false, base: BASE });
     expect(out).toContain("Disjoint does not guarantee no conflict");
   });
 
@@ -209,7 +243,7 @@ describe("renderPlanReport (spec 9.1, 9.5)", () => {
     // worst of the three options: it looks complete. Summary plus a count is
     // honest; a full list under --verbose is complete; "[+N more]" is
     // neither.
-    const out = renderPlanReport(gManyConflicts(), p, pf, { verbose: true });
+    const out = renderPlanReport(gManyConflicts(), p, pf, { verbose: true, base: BASE });
     expect(out).not.toMatch(/\+\d+ more/);
     // Not just "no marker" — every one of the 25 conflicting paths must
     // actually be present, or a silent cap could hide behind the same

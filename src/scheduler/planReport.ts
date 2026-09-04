@@ -1,23 +1,26 @@
 import type { TaskGraph } from "./graph.js";
+import { PLAN_LEVEL_CHECKS } from "./planFile.js";
 import type { PlanFile, PlanRejection } from "./planFile.js";
 import { requiredChecksUnion } from "./writeSet.js";
 
 /**
- * Spec §9.1(4) / §4.2's own count: nine up-front checks, not eleven and not
- * seven — six are plan-level (spec §2.3, already enforced by loadPlan by the
- * time a caller has a PlanFile at all) and three are runtime (spec §4.2,
- * owned by a later task's real preflight). Kept as two separate lists,
- * exported, so a caller building a preflight report and this renderer never
- * drift on what the nine names actually are.
+ * Spec §9.1(4) / §4.2's own count: the up-front checks come in two kinds —
+ * plan-level (spec §2.3, enforced by loadPlan by the time a caller has a
+ * PlanFile at all) and runtime (spec §4.2, owned by preflight.ts).
+ *
+ * 🔴 The plan-level list is RE-EXPORTED from planFile.ts, never retyped here.
+ * That was the whole defect the final review found: this file used to carry a
+ * second, hand-typed copy that imported nothing from loadPlan, and
+ * `checkLine` below renders a code it cannot find among the rejections as
+ * `[pass] <code>` — so a rename on one side printed a green line for a check
+ * that no longer exists, in the report a human approves a round from.
+ *
+ * (The count is now seven plan-level + three runtime, not spec §9.1(4)'s
+ * "nine": the final review added `unusable-task-id` as a seventh plan-level
+ * rejection because it is mechanically decidable from the plan file alone.
+ * Recorded as an erratum against the spec's count, not a silent drift.)
  */
-export const PLAN_LEVEL_CHECKS = [
-  "relative-path",
-  "duplicate-task-id",
-  "cycle",
-  "contract-inside-target-repo",
-  "work-branch-is-default",
-  "unsupported-policy",
-] as const;
+export { PLAN_LEVEL_CHECKS };
 
 // Task 6's real preflight (src/scheduler/preflight.ts) imports this constant
 // rather than retype the strings — it is the one source of truth for what
@@ -105,12 +108,28 @@ export function renderPlanReport(
   // keep printing exactly the "not evaluated" text they always have,
   // unmodified. Only Task 6's CLI wiring, which really ran the three checks,
   // sets it to true.
-  opts: { verbose: boolean; runtimeChecksEvaluated?: boolean },
+  // `base` is REQUIRED, unlike `runtimeChecksEvaluated` above: an optional
+  // field would make "the caller forgot to pass it" and "there is no base"
+  // print identically, which is the same seam-nothing-fills-in shape
+  // emptyRequiredChecksPairs was burned by in fix round 1.
+  opts: { verbose: boolean; runtimeChecksEvaluated?: boolean; base: { branch: string; sha: string | null } },
 ): string {
   const lines: string[] = [];
 
-  // §9.1(4): landing policy, W's name, and the nine up-front checks.
+  // §9.1(4): landing policy, W's name, and the up-front checks.
   lines.push(`Plan: ${plan.tasks.length} task(s), policy=${plan.policy}, workBranch=${plan.workBranch}`);
+
+  // Final review, Important 7: where W starts is the single most consequential
+  // fact about a round, and it was the one thing a human approving a plan
+  // could not see. Named honestly (Important 7's second half): the base is
+  // whatever branch the target repository currently has checked out — orca
+  // does NOT resolve the repository's true default branch, so running it while
+  // sitting on `feature/x` cuts W from `feature/x`. Saying "default branch"
+  // here would be a claim the code does not make good on.
+  lines.push(
+    `Base: ${plan.workBranch} will be cut from ${opts.base.branch === "" ? "<no branch checked out>" : opts.base.branch}` +
+      ` — the branch currently checked out in ${plan.targetRepo} — at ${opts.base.sha ?? "<no commit yet>"}`,
+  );
   lines.push("");
   lines.push("Preflight checks:");
   for (const code of PLAN_LEVEL_CHECKS) lines.push(checkLine(code, preflight.rejections, true));
