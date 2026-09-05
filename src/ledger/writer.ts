@@ -1,4 +1,4 @@
-import { appendFile, mkdir, readFile } from "node:fs/promises";
+import { appendFile, mkdir, readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { validateFile } from "./validateFile.js";
 import { validateLine } from "./validateLine.js";
@@ -28,8 +28,11 @@ export async function appendEvent(
   // C writes several ledgers, in several repositories, in the same process;
   // a run field that disagrees with the filename makes every downstream
   // attribution wrong while every existing check stays green.
+  // overturned is included because run is half of its attribution (at is the
+  // other half) -- ruling orca-dev-c1c3c2ec/5.
+  const evName = (event as { ev?: unknown }).ev;
   const run = (event as { run?: unknown }).run;
-  if ((event as { ev?: unknown }).ev === "decision" && run !== runId) {
+  if ((evName === "decision" || evName === "overturned") && run !== runId) {
     throw new Error(
       `refusing to append: run field ${JSON.stringify(run)} does not match the ledger file for run ${JSON.stringify(runId)}`,
     );
@@ -73,7 +76,7 @@ export async function appendEvent(
   //
   // The throw sits outside the try on purpose: inside it, its own catch would
   // swallow it and every criterion here could still pass.
-  if ((event as { ev?: unknown }).ev === "decision") {
+  if (evName === "decision") {
     const id = (event as { id?: unknown }).id;
     for (const existing of existingText.split("\n")) {
       if (existing.trim().length === 0) continue;
@@ -107,7 +110,39 @@ export async function appendEvent(
   const separator = existingText.length > 0 && !existingText.endsWith("\n") ? "\n" : "";
   const payload = `${separator}${line}\n`;
 
-  const prospective = validateFile((existingText + payload).split("\n"), { externalDecisionIds: new Set() });
+  // Build the cross-file resolution scope on EVERY append, whatever event this
+  // one happens to be.
+  //
+  // There was going to be an optimisation here that only scanned the directory
+  // when the event being appended was an overturned or a superseded. It is
+  // wrong: the prospective check below revalidates the WHOLE file, so once a
+  // cross-file overturned is on disk, any later append -- an ordinary decision,
+  // say -- would re-judge it as unresolvable and throw. What decides is what
+  // the file contains, not what is being added to it. Ruling
+  // orca-dev-c1c3c2ec/9; pinned by writer.test.ts's "still accepts a later,
+  // unrelated append".
+  const externalDecisionIds = new Set<string>();
+  const siblings = await readdir(decisionsDir).catch((error) => {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [] as string[];
+    throw error;
+  });
+  for (const name of siblings) {
+    if (!name.endsWith(".jsonl") || name === `${runId}.jsonl`) continue;
+    const siblingText = await readFile(join(decisionsDir, name), "utf8");
+    for (const raw of siblingText.split("\n")) {
+      if (raw.trim().length === 0) continue;
+      try {
+        const parsedSibling = JSON.parse(raw) as { ev?: unknown; id?: unknown };
+        if (parsedSibling.ev === "decision" && typeof parsedSibling.id === "string") {
+          externalDecisionIds.add(parsedSibling.id);
+        }
+      } catch {
+        // An unparseable line in someone else's ledger is not this append's problem.
+      }
+    }
+  }
+
+  const prospective = validateFile((existingText + payload).split("\n"), { externalDecisionIds });
   if (prospective.verdict !== "ok") {
     const reasons = prospective.lines
       .filter((l) => l.result.verdict !== "ok")

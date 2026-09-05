@@ -287,3 +287,54 @@ describe("appendEvent — a decision id must be unique within its file", () => {
     expect((await readFile(join(dir, "run-a.jsonl"), "utf8")).split("\n").filter(Boolean).length).toBe(2);
   });
 });
+
+function overturnedFor(id: string, replacedBy: string, run: string, overrides: Record<string, unknown> = {}) {
+  return {
+    ev: "overturned",
+    id,
+    correctionId: "c_1",
+    replacedBy,
+    at: "2026-09-05T18:04:11Z",
+    run,
+    ...overrides,
+  };
+}
+
+describe("appendEvent — cross-file references and the resolution scope (ruling orca-dev-c1c3c2ec/9)", () => {
+  it("accepts an overturned whose id lives in a sibling ledger in the same directory", async () => {
+    const dir = await tempDir();
+    await appendEvent(dir, "run-7c", validDecision("run-7c/1"));
+    await appendEvent(dir, "run-9d", validDecision("run-9d/1"));
+    await expect(
+      appendEvent(dir, "run-9d", overturnedFor("run-7c/1", "run-9d/1", "run-9d")),
+    ).resolves.toBeUndefined();
+  });
+
+  // The scope has to be built on EVERY append, not only when the event being
+  // appended is a reference event. The prospective check revalidates the whole
+  // file, so a scope gated on "what is being appended" would let this
+  // ordinary decision re-judge the overturned already on disk as unresolvable
+  // and throw. What decides is what the file contains.
+  it("still accepts a later, unrelated append to a file that already holds a cross-file overturned", async () => {
+    const dir = await tempDir();
+    await appendEvent(dir, "run-7c", validDecision("run-7c/1"));
+    await appendEvent(dir, "run-9d", validDecision("run-9d/1"));
+    await appendEvent(dir, "run-9d", overturnedFor("run-7c/1", "run-9d/1", "run-9d"));
+    await expect(
+      appendEvent(dir, "run-9d", validDecision("run-9d/2")),
+    ).resolves.toBeUndefined();
+  });
+
+  // Check A covers overturned too: run is half of this event's attribution
+  // (at is the other half), and a run field that disagrees with the file it
+  // lands in makes every downstream attribution wrong while everything stays
+  // green.
+  it("refuses an overturned whose run field does not name the file it lands in", async () => {
+    const dir = await tempDir();
+    await appendEvent(dir, "run-7c", validDecision("run-7c/1"));
+    await appendEvent(dir, "run-9d", validDecision("run-9d/1"));
+    await expect(
+      appendEvent(dir, "run-9d", overturnedFor("run-7c/1", "run-9d/1", "run-7c")),
+    ).rejects.toThrow(/does not match the ledger file/);
+  });
+});
