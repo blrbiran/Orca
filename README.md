@@ -180,8 +180,15 @@ These are registered, not hidden, straight from the design's own accounting:
    has three channels that can silently collapse into an empty patch.
 6. As long as that change has not landed, §7's second direction (declared
    but not produced) degrades to "is the patch empty or not."
-7. There is no "stop just one task" — ccloop's `cancelled` state comes from
-   a stop signal, and that signal is sent to the whole process group.
+7. There is no "stop just one task" — orca has no way to end one task and
+   let the round continue. (The reason given here used to be that
+   `cancelled` only comes from a signal to the whole process group. That is
+   incomplete, measured 2026-09-05: ccloop also returns `cancelled` when the
+   verification's `stopSignals` meet the contract's `escalationAndExit.stopOn`,
+   which is per-contract and is how `cancelledRound.test.ts` produces a real
+   one. It is still not a handle orca holds — the signal comes from the
+   task's own verification — so the limitation stands and its reason does
+   not.)
 8. `ledgerMode: out-of-repo` inherits the weakness A′ §3.7 already
    acknowledges about itself: it has no immutable anchor.
 9. The shell does not distinguish between exit codes 1, 2, and 3 — to a
