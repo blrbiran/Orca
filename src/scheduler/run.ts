@@ -750,6 +750,13 @@ export async function runRound(planPath: string, options: RunOptions = {}): Prom
       // here: no bound at all, and a first rejection that orphaned every
       // sibling subprocess while the `finally` below released the repo lock
       // out from under them.
+      // Set by a task whose own status ends the round (spec §6.1's
+      // `cancelled` row, asked through routeOutcome rather than by naming the
+      // status here, so there is one table). `stopRound` below is the same
+      // fact at layer granularity; this one exists because a layer's queued
+      // tasks are inside the pool, where the layer-boundary check cannot
+      // reach them.
+      let stopLaunching = false;
       const settled = await mapWithPool(
         runnable,
         MAX_PARALLEL_TASKS,
@@ -761,15 +768,29 @@ export async function runRound(planPath: string, options: RunOptions = {}): Prom
             adapter: options.adapter ?? "scripted",
             adapterConfig: options.adapterConfig!,
           });
+          if (routeOutcome(graph, taskId, run.outcome).stopRound) stopLaunching = true;
           return { taskId, run };
         },
+        () => stopLaunching,
       );
       // Input order, one entry per task, exceptions included — so a task that
       // threw is handled by the same per-task loop as one ccloop reported
-      // `failed` for, rather than taking the whole round with it.
-      const runs: LayerResult[] = settled.map((result, index) =>
-        result.status === "fulfilled" ? result.value : { taskId: runnable[index], error: result.reason },
-      );
+      // `failed` for, rather than taking the whole round with it. A task the
+      // pool never launched is not a result at all: it is §6.2's "never ran",
+      // routed through the same `cannotStart` as every other way of not
+      // starting, and it must not reach the per-task loop below or it would
+      // be reported as a failure of its own.
+      const runs: LayerResult[] = [];
+      settled.forEach((result, index) => {
+        const taskId = runnable[index];
+        if (result.status === "not-started") {
+          log(`orca: ${taskId}: upstream_not_run (spec §6.2)`);
+          cannotStart([taskId]);
+          cannotStart(descendantsOf(graph, taskId));
+          return;
+        }
+        runs.push(result.status === "fulfilled" ? result.value : { taskId, error: result.reason });
+      });
 
       const landed: string[] = [];
       // The same tasks as `landed`, with the TaskRun each one landed from.

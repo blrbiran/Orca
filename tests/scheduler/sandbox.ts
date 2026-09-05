@@ -54,6 +54,14 @@ export interface ContractSpec {
   // frame's verification block the one stopController reads, which is what lets
   // a scenario script "reject attempt 1, approve attempt 2" and get two refs.
   verifierType?: "command" | "agent";
+  // The contract half of the only route to `cancelled` that does not require
+  // signalling the process group (which would take orca down with the task).
+  // ccloop's runLoop matches verification.stopSignals against
+  // escalationAndExit.stopOn and returns `cancelled` when one hits -- ahead of
+  // evaluateStopDecision, so it wins even over an approved verification. Both
+  // halves are needed AND `verifierType: "agent"`, because under "command"
+  // runLoop never reads the adapter's verification at all.
+  stopOn?: string[];
 }
 
 // Identity is passed per-invocation rather than configured, so a machine with
@@ -176,7 +184,7 @@ export async function writeContract(s: Sandbox, taskId: string, spec: ContractSp
     escalationAndExit: {
       escalationTargets: [],
       pauseOn: [],
-      stopOn: [],
+      stopOn: spec.stopOn ?? [],
       terminalStates: ["succeeded", "blocked_waiting_human", "exhausted", "cancelled", "failed"],
     },
   };
@@ -396,6 +404,11 @@ export interface ScriptedFrameSpec {
   // knobs together are what produces a multi-attempt run.
   approved?: boolean;
   safeToRetry?: boolean;
+  // The adapter half of the `cancelled` route -- see ContractSpec.stopOn.
+  // Harmless to every other task in the round: one adapter config is shared
+  // by every spawn, but a signal only cancels a task whose own contract lists
+  // it in stopOn.
+  stopSignals?: string[];
 }
 
 /**
@@ -429,7 +442,7 @@ export async function writeScriptedConfig(s: Sandbox, name: string, frames: Scri
         safeToRetry: frame.safeToRetry ?? false,
         evidence: [],
         pauseSignals: [],
-        stopSignals: [],
+        stopSignals: frame.stopSignals ?? [],
       },
     })),
   };

@@ -29,11 +29,33 @@
 export const MAX_PARALLEL_TASKS = 4;
 
 /**
+ * A third outcome the settled array can carry: an item the pool never handed
+ * to `fn` at all.
+ *
+ * 🔴 The pool introduced a state that did not exist before it (final review's
+ * parked finding): tasks QUEUED BUT NOT YET LAUNCHED. `Promise.all` started
+ * every task in the layer at once, so "stop before starting" had nothing to
+ * refer to; with a bound of four, a layer's fifth task sits in a queue while
+ * an earlier one is already reporting a status that ends the round. Round
+ * cancellation was consulted only at layer boundaries, so those queued tasks
+ * launched anyway — an invariant the code could express and did not enforce.
+ */
+export const NOT_STARTED = { status: "not-started" } as const;
+export type PoolResult<R> = PromiseSettledResult<R> | typeof NOT_STARTED;
+
+/**
  * Runs `fn` over `items` with at most `limit` in flight, and settles every
  * one of them: the returned array is in INPUT order, one entry per item, and
  * a rejection from `fn` becomes a `{ status: "rejected" }` entry rather than
  * a rejection of this function. Nothing here is ever discarded, which is the
  * property `Promise.all` does not have.
+ *
+ * `stopLaunching`, when given, is consulted immediately before each item is
+ * handed to `fn` — never in the middle of one, because nothing here can
+ * interrupt work already running. Every item not launched gets a
+ * `not-started` entry, so a caller still receives exactly one result per
+ * item and can tell "never ran" from "ran and failed"; that distinction is
+ * spec §6.2's whole point.
  *
  * This function itself only rejects for a caller error (`limit` below 1),
  * because a limit of 0 would silently do no work at all — the shape Rule 12
@@ -43,12 +65,13 @@ export async function mapWithPool<T, R>(
   items: readonly T[],
   limit: number,
   fn: (item: T) => Promise<R>,
-): Promise<PromiseSettledResult<R>[]> {
+  stopLaunching?: () => boolean,
+): Promise<PoolResult<R>[]> {
   if (!Number.isInteger(limit) || limit < 1) {
     throw new Error(`orca: mapWithPool needs an integer limit of at least 1, got ${String(limit)}`);
   }
 
-  const results = new Array<PromiseSettledResult<R>>(items.length);
+  const results = new Array<PoolResult<R>>(items.length);
   let next = 0;
 
   // Each worker pulls the next index until there are none left. `next++` is
@@ -59,6 +82,13 @@ export async function mapWithPool<T, R>(
     for (;;) {
       const index = next++;
       if (index >= items.length) return;
+      // Marked rather than skipped: the loop keeps going so every remaining
+      // index gets its own entry, which is what keeps the results array one
+      // per item once a stop has begun.
+      if (stopLaunching?.()) {
+        results[index] = NOT_STARTED;
+        continue;
+      }
       try {
         results[index] = { status: "fulfilled", value: await fn(items[index]) };
       } catch (reason) {

@@ -66,6 +66,47 @@ describe("mapWithPool (spec §1.3's fixed upper bound)", () => {
     expect(results[1].status === "rejected" && (results[1].reason as Error).message).toBe("item 1 exploded");
   });
 
+  it("stops handing out work once the caller says to stop, and says which items never ran", async () => {
+    // The parked finding this closes: the pool created a state that did not
+    // exist under `Promise.all` — queued but not yet launched — and round
+    // cancellation was consulted only at layer boundaries, so a layer's fifth
+    // and later tasks launched anyway. The invariant "stop launching new
+    // tasks" was expressible and unenforced.
+    //
+    // Mutation `M-POOL-STOP`: delete the `if (stopLaunching?.())` block from
+    // the worker. `started` becomes all six items and the first assertion
+    // goes red — it measures which items `fn` was actually CALLED with, not
+    // just what the results array says, because a result shape can be
+    // produced without the launch ever being prevented.
+    const started: number[] = [];
+    let stop = false;
+
+    const results = await mapWithPool([0, 1, 2, 3, 4, 5], 2, async (item) => {
+      started.push(item);
+      // Deliberately unequal: with two equal timers this criterion would be
+      // deciding which of two same-delay setTimeout callbacks node runs first,
+      // and a criterion whose colour depends on timer ordering is a flake, not
+      // a measurement. Item 0 finishes first by 40ms.
+      await tick(item === 0 ? 1 : 40);
+      // The first item to finish ends the round, the way a `cancelled` status
+      // does. Its in-flight sibling is NOT interrupted — nothing here can
+      // interrupt work already running, and pretending otherwise is the claim
+      // this project refuses to make.
+      if (item === 0) stop = true;
+      return item;
+    }, () => stop);
+
+    expect(started).toEqual([0, 1]);
+    expect(results.map((r) => r.status)).toEqual([
+      "fulfilled",
+      "fulfilled",
+      "not-started",
+      "not-started",
+      "not-started",
+      "not-started",
+    ]);
+  });
+
   it("refuses a limit below 1 rather than silently doing nothing", async () => {
     // Rule 12: a limit of 0 would make the pool return an array of holes and
     // report success over zero work — the silent-empty shape this repository
