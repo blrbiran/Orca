@@ -15,15 +15,18 @@ const execFileAsync = promisify(execFile);
  * subprocess, never depended on (spec §1.4) — there is nothing to import
  * from.
  */
-export type CcloopOutcome = "succeeded" | "blocked_waiting_human" | "exhausted" | "cancelled" | "failed";
+const OUTCOME_NAMES = ["succeeded", "blocked_waiting_human", "exhausted", "cancelled", "failed"] as const;
 
-const TERMINAL_OUTCOMES: readonly string[] = [
-  "succeeded",
-  "blocked_waiting_human",
-  "exhausted",
-  "cancelled",
-  "failed",
-];
+export type CcloopOutcome = (typeof OUTCOME_NAMES)[number];
+
+/**
+ * The same five names as a plain string list, so `includes` can be asked
+ * about a status read out of loop-state.json — a `string`, which TypeScript
+ * will not let you look up in a tuple of literals. Derived, never retyped:
+ * the type above and this list were two hand-written copies of the same five
+ * names, and reconcile.ts's synthesised contract carried a third.
+ */
+export const TERMINAL_OUTCOMES: readonly string[] = OUTCOME_NAMES;
 
 export interface TaskRun {
   runId: string;

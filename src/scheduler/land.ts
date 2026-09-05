@@ -1,24 +1,7 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { cloneDirOf } from "./ccloopRunner.js";
 import type { TaskRun } from "./ccloopRunner.js";
+import { ORCA_IDENTITY, git } from "./gitExec.js";
 import type { PlanFile } from "./planFile.js";
-
-const execFileAsync = promisify(execFile);
-
-/**
- * Identity is passed per invocation rather than read from the environment,
- * for the same reason ccloop's own worktreeManager does it: the target repo
- * is frequently a throwaway clone or a CI checkout with no user.email set,
- * where `git merge --no-ff` and `git commit` fail outright. Depending on
- * ambient config would break landing in exactly the setups it exists to serve.
- */
-const ORCA_IDENTITY = ["-c", "user.name=orca", "-c", "user.email=orca@invalid"];
-
-async function git(repo: string, args: string[]): Promise<string> {
-  const { stdout } = await execFileAsync("git", args, { cwd: repo });
-  return stdout;
-}
 
 /**
  * The ref that makes a task's attempt commit reachable inside the TARGET

@@ -1,16 +1,10 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { git } from "./gitExec.js";
+import { TERMINAL_OUTCOMES } from "./ccloopRunner.js";
+import { ORCA_IDENTITY, git } from "./gitExec.js";
 import type { ConflictState } from "./land.js";
 import type { PlanTask } from "./planFile.js";
 import { requiredChecksUnion } from "./writeSet.js";
-
-/**
- * Same reason as land.ts's constant of the same name: the copy is a throwaway
- * clone, frequently on a machine with no user.email set, where `git merge` and
- * `git commit` fail outright rather than falling back to something.
- */
-const ORCA_IDENTITY = ["-c", "user.name=orca", "-c", "user.email=orca@invalid"];
 
 /**
  * One `<<<<<<< / ======= / >>>>>>>` region of one file, as spec §5.1 needs it:
@@ -400,7 +394,10 @@ export async function synthesizeReconcileContract(
       escalationTargets: [],
       pauseOn: [],
       stopOn: [],
-      terminalStates: ["succeeded", "blocked_waiting_human", "exhausted", "cancelled", "failed"],
+      // The five names live in ccloopRunner.ts, which is the module that
+      // has to recognise them coming back out of loop-state.json. A second
+      // literal list here would be a copy that nothing keeps in step.
+      terminalStates: [...TERMINAL_OUTCOMES],
     },
   };
 
@@ -441,7 +438,7 @@ export async function rebuildMergeCommit(
 ): Promise<string> {
   const incoming = (await git(copy, ["rev-parse", incomingRef])).trim();
   const sha = await git(copy, [
-    "-c", "user.name=orca", "-c", "user.email=orca@invalid",
+    ...ORCA_IDENTITY,
     "commit-tree", reconciledTree, "-p", wTip, "-p", incoming, "-m", message,
   ]);
   return sha.trim();

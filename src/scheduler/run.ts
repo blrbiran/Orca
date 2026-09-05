@@ -38,16 +38,12 @@ import {
   synthesizeReconcileContract,
   writeTree,
 } from "./reconcile.js";
+import { git } from "./gitExec.js";
 import { MAX_PARALLEL_TASKS, mapWithPool } from "./pool.js";
 import { acquireRepoLock } from "./repoLock.js";
 import { allocateRunId, deriveRunId } from "./runId.js";
 
 const execFileAsync = promisify(execFile);
-
-async function git(repo: string, args: string[]): Promise<string> {
-  const { stdout } = await execFileAsync("git", args, { cwd: repo });
-  return stdout;
-}
 
 /**
  * The branch W is cut from: the target repo's CURRENTLY CHECKED-OUT branch.
