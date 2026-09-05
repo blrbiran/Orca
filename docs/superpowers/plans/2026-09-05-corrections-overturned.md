@@ -49,7 +49,7 @@
 - Produces: `overturnedEventSchema`、`OverturnedEvent`、`REFERENCE_EVENT_SCHEMAS: Record<ReferenceEventName, z.ZodTypeAny>`
 - Consumes: 既有 `referenceEventSchema`、`boundEventSchema`、`isReferenceEventName`
 
-- [ ] **Step 1: 写失败判据**
+- [x] **Step 1: 写失败判据**
 
 新建 `tests/ledger/overturnedEvent.test.ts`：
 
@@ -98,14 +98,14 @@ describe("overturned — spec §3: six required fields, none optional", () => {
 });
 ```
 
-- [ ] **Step 2: 跑它，确认它红**
+- [x] **Step 2: 跑它，确认它红**
 
 ```bash
 npx vitest run tests/ledger/overturnedEvent.test.ts > /tmp/t1.txt 2>&1; echo $?
 ```
 Expected: **FAIL** —— `accepts a complete overturned` 之外的每条 `rejects …` 都失败（今天 `overturned` 只钉 `ev` ＋ `id`，缺字段照样 `ok`）。**整份读回 `/tmp/t1.txt` 确认失败原因是断言，不是导入错误。**
 
-- [ ] **Step 3: 加 schema**
+- [x] **Step 3: 加 schema**
 
 在 `src/ledger/schema.ts` 的 `boundEventSchema` 定义之后追加：
 
@@ -142,7 +142,7 @@ export const REFERENCE_EVENT_SCHEMAS: Record<ReferenceEventName, z.ZodTypeAny> =
 };
 ```
 
-- [ ] **Step 4: 路由改吃映射**
+- [x] **Step 4: 路由改吃映射**
 
 在 `src/ledger/validateLine.ts`：把 import 里的 `boundEventSchema` 换成 `REFERENCE_EVENT_SCHEMAS`（`referenceEventSchema` 若不再被引用则一并移除），并把
 
@@ -166,14 +166,14 @@ export const REFERENCE_EVENT_SCHEMAS: Record<ReferenceEventName, z.ZodTypeAny> =
       // 【不要】为此编一条「能红」的判据：那样的判据什么也证明不了。
 ```
 
-- [ ] **Step 5: 跑判据，确认变绿**
+- [x] **Step 5: 跑判据，确认变绿**
 
 ```bash
 npx vitest run tests/ledger/overturnedEvent.test.ts > /tmp/t1b.txt 2>&1; echo $?
 ```
 Expected: **PASS**，10 条全绿。
 
-- [ ] **Step 6: 改写既有判据 A（人已指名授权）**
+- [x] **Step 6: 改写既有判据 A（人已指名授权）**
 
 `tests/ledger/validateLine.test.ts` —— 把
 
@@ -197,7 +197,7 @@ Expected: **PASS**，10 条全绿。
 
 ⚠️ **`accepts superseded with only ev and id`（紧邻上方那条）一字不动** —— 实测 `superseded` 仍走宽 schema。
 
-- [ ] **Step 7: 改写既有判据 B（人已指名授权）**
+- [x] **Step 7: 改写既有判据 B（人已指名授权）**
 
 同文件，把
 
@@ -223,14 +223,14 @@ Expected: **PASS**，10 条全绿。
   });
 ```
 
-- [ ] **Step 8: 跑整套，确认没有第四条被打红**
+- [x] **Step 8: 跑整套，确认没有第四条被打红**
 
 ```bash
 npm test -- --run > /tmp/t1c.txt 2>&1; echo $?
 ```
 Expected: **exit 0**。⚠️ **若出现本计划没点名的第三条红判据 ⇒ 停下来找人，不许自己改。**
 
-- [ ] **Step 9: 变异 M1（抽样两条）与 M7**
+- [x] **Step 9: 变异 M1（抽样两条）与 M7**
 
 ```bash
 SP=<scratchpad>; /bin/rm -rf $SP/mut && git clone --local . $SP/mut > $SP/clone.txt 2>&1; echo $?
@@ -250,7 +250,7 @@ diff $SP/main-before.txt $SP/main-after.txt; echo "主树零触碰 rc=$?"
 /bin/rm -rf $SP/mut
 ```
 
-- [ ] **Step 10: 提交**
+- [x] **Step 10: 提交**
 
 ```bash
 git add src/ledger/schema.ts src/ledger/validateLine.ts tests/ledger/overturnedEvent.test.ts tests/ledger/validateLine.test.ts
@@ -270,7 +270,7 @@ git commit -m "feat(ledger): pin overturned's six required fields and route refe
 - Produces: `export interface ResolutionScope { externalDecisionIds: ReadonlySet<string> }`；`validateFile(rawLines: string[], scope: ResolutionScope): FileVerdict`
 - Consumes: Task 1 的 `REFERENCE_EVENT_SCHEMAS`（间接，经 `validateLine`）
 
-- [ ] **Step 1: 写失败判据**
+- [x] **Step 1: 写失败判据**
 
 在 `tests/ledger/validateFile.test.ts` 末尾追加（沿用文件顶部既有的 `decisionLine` 辅助）：
 
@@ -332,14 +332,14 @@ describe("check 5 的作用域按事件类型分档（裁决 orca-dev-c1c3c2ec/4
 });
 ```
 
-- [ ] **Step 2: 跑它，确认它红**
+- [x] **Step 2: 跑它，确认它红**
 
 ```bash
 npx vitest run tests/ledger/validateFile.test.ts > /tmp/t2.txt 2>&1; echo $?
 ```
 Expected: **FAIL**（`validateFile` 目前只接一个参数；四条新判据全红）。整份读回确认。
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 `src/ledger/validateFile.ts` 全文改成：
 
@@ -465,12 +465,12 @@ export function validateFile(rawLines: string[], scope: ResolutionScope): FileVe
 }
 ```
 
-- [ ] **Step 4: 给全部既有调用点补参（12 处，度量的东西一字未变）**
+- [x] **Step 4: 给全部既有调用点补参（12 处，度量的东西一字未变）**
 
 在 `tests/ledger/validateFile.test.ts`、`tests/ledger/writer.test.ts`、`src/cli.ts`、`src/ledger/writer.ts` 里，把每个 `validateFile(X)` 改成 `validateFile(X, { externalDecisionIds: new Set() })`。
 ⚠️ `src/cli.ts` 与 `src/ledger/writer.ts` 两处**只是先补空集合让它编译过**，Task 3／Task 4 再把真作用域接上。
 
-- [ ] **Step 5: 改写既有判据 C（人已指名授权，spec §6.2）**
+- [x] **Step 5: 改写既有判据 C（人已指名授权，spec §6.2）**
 
 `tests/ledger/validateFile.test.ts` —— 把
 
@@ -501,14 +501,14 @@ export function validateFile(rawLines: string[], scope: ResolutionScope): FileVe
 
 ⚠️ **紧邻上方的 `superseded` 那条一字不动** —— 实测它不受影响（`superseded` 保持宽 schema，仍是被检查 5 拒的）。
 
-- [ ] **Step 6: 跑整套**
+- [x] **Step 6: 跑整套**
 
 ```bash
 npm test -- --run > /tmp/t2b.txt 2>&1; echo $?
 ```
 Expected: **exit 0**。整份读回。
 
-- [ ] **Step 7: 变异 M3 / M4 / M5**
+- [x] **Step 7: 变异 M3 / M4 / M5**
 
 副本里逐条做，每条之间从 pristine 还原：
 - **M3**：`const pool = fileScoped ? fileDecisionIds : scopedIds;` → `const pool = fileDecisionIds;` ⇒ 期望红在 `resolves an overturned's id against the external scope`。
@@ -517,7 +517,7 @@ Expected: **exit 0**。整份读回。
 
 三条都要**整份读回测试输出，确认红在点名的那条断言上**，不是红在崩溃或别的判据上。
 
-- [ ] **Step 8: 提交**
+- [x] **Step 8: 提交**
 
 ```bash
 git add src/ledger/validateFile.ts src/cli.ts src/ledger/writer.ts tests/ledger/validateFile.test.ts tests/ledger/writer.test.ts
@@ -536,7 +536,7 @@ git commit -m "feat(ledger): scope check 5 by event type and make the resolution
 - Consumes: Task 2 的 `ResolutionScope`
 - Produces: 无新导出
 
-- [ ] **Step 1: 写失败判据**
+- [x] **Step 1: 写失败判据**
 
 在 `tests/cli/cli.test.ts` 末尾追加：
 
@@ -584,14 +584,14 @@ describe("validate — 目录级解析域（裁决 orca-dev-c1c3c2ec/4）", () =
 });
 ```
 
-- [ ] **Step 2: 跑它，确认第一条红**
+- [x] **Step 2: 跑它，确认第一条红**
 
 ```bash
 npx vitest run tests/cli/cli.test.ts > /tmp/t3.txt 2>&1; echo $?
 ```
 Expected: **FAIL**，第一条判据得到 1 而不是 0（`runValidate` 仍逐文件独立验）。
 
-- [ ] **Step 3: 实现两趟**
+- [x] **Step 3: 实现两趟**
 
 `src/cli.ts` 的 `runValidate`：把「读文件 → 立刻 `validateFile`」的单趟循环，换成先收后验：
 
@@ -622,7 +622,7 @@ Expected: **FAIL**，第一条判据得到 1 而不是 0（`runValidate` 仍逐�
   }
 ```
 
-- [ ] **Step 4: 跑判据 ＋ 整套**
+- [x] **Step 4: 跑判据 ＋ 整套**
 
 ```bash
 npx vitest run tests/cli/cli.test.ts > /tmp/t3b.txt 2>&1; echo $?
@@ -630,12 +630,12 @@ npm run verify > /tmp/t3c.txt 2>&1; echo $?
 ```
 Expected: 两者都 **0**。
 
-- [ ] **Step 5: 变异**
+- [x] **Step 5: 变异**
 
 副本里把第二趟的 `{ externalDecisionIds: allDecisionIds }` 改成 `{ externalDecisionIds: new Set() }`
 ⇒ 期望红在 `resolves an overturned against a decision that lives in a sibling ledger file`。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add src/cli.ts tests/cli/cli.test.ts
@@ -654,7 +654,7 @@ git commit -m "feat(cli): resolve reference events against every ledger the vali
 - Consumes: Task 2 的 `ResolutionScope`
 - Produces: 无新导出（`appendEvent` 签名不变）
 
-- [ ] **Step 1: 写失败判据**
+- [x] **Step 1: 写失败判据**
 
 在 `tests/ledger/writer.test.ts` 末尾追加（沿用既有的 `tempDir` / `validDecision` 辅助）：
 
@@ -700,14 +700,14 @@ describe("appendEvent — 跨文件引用与作用域（裁决 orca-dev-c1c3c2ec
 
 ⚠️ `validDecision(id)` 既有辅助产出的 `run` 字段必须与 `appendEvent` 的 runId 一致 —— 若它硬编码了 `probe`，**在本 describe 里改用本地辅助**，不要动既有辅助（那会波及别的判据）。
 
-- [ ] **Step 2: 跑它，确认三条都红**
+- [x] **Step 2: 跑它，确认三条都红**
 
 ```bash
 npx vitest run tests/ledger/writer.test.ts > /tmp/t4.txt 2>&1; echo $?
 ```
 Expected: **FAIL**，三条都红。整份读回，确认红的是断言不是导入。
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 `src/ledger/writer.ts`：
 
@@ -762,7 +762,7 @@ Expected: **FAIL**，三条都红。整份读回，确认红的是断言不是�
 
 (d) 预演调用改成 `validateFile((existingText + payload).split("\n"), { externalDecisionIds })`。
 
-- [ ] **Step 4: 跑判据 ＋ 整套**
+- [x] **Step 4: 跑判据 ＋ 整套**
 
 ```bash
 npx vitest run tests/ledger/writer.test.ts > /tmp/t4b.txt 2>&1; echo $?
@@ -770,7 +770,7 @@ npm run verify > /tmp/t4c.txt 2>&1; echo $?
 ```
 Expected: 两者都 **0**。
 
-- [ ] **Step 5: 变异 M10 / M6**
+- [x] **Step 5: 变异 M10 / M6**
 
 - **M10**：副本里把 `const externalDecisionIds = new Set<string>();` 之后的整段扫目录逻辑，包进
   `if (evName === "overturned" || evName === "superseded") { … }` ⇒
@@ -779,7 +779,7 @@ Expected: 两者都 **0**。
 - **M6**：把 `(evName === "decision" || evName === "overturned")` 改回 `evName === "decision"` ⇒
   期望红在 `refuses an overturned whose run field does not name the file it lands in`。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add src/ledger/writer.ts tests/ledger/writer.test.ts
@@ -798,7 +798,7 @@ git commit -m "fix(ledger): build the cross-file resolution scope on every appen
 - Produces: `CORRECTION_KINDS`、`CorrectionKind`、`correctionSchema`、`Correction`
 - Consumes: 无
 
-- [ ] **Step 1: 写失败判据**
+- [x] **Step 1: 写失败判据**
 
 新建 `tests/ledger/correctionSchema.test.ts`：
 
@@ -855,14 +855,14 @@ describe("correction — spec §4（DB 侧，可迁移）", () => {
 });
 ```
 
-- [ ] **Step 2: 跑它，确认它红**
+- [x] **Step 2: 跑它，确认它红**
 
 ```bash
 npx vitest run tests/ledger/correctionSchema.test.ts > /tmp/t5.txt 2>&1; echo $?
 ```
 Expected: **FAIL**（模块不存在）。
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 新建 `src/corrections/schema.ts`：
 
@@ -917,7 +917,7 @@ export const correctionSchema = correctionShape.superRefine((value, ctx) => {
 export type Correction = z.infer<typeof correctionShape>;
 ```
 
-- [ ] **Step 4: 跑判据 ＋ 整套**
+- [x] **Step 4: 跑判据 ＋ 整套**
 
 ```bash
 npx vitest run tests/ledger/correctionSchema.test.ts > /tmp/t5b.txt 2>&1; echo $?
@@ -925,14 +925,14 @@ npm run verify > /tmp/t5c.txt 2>&1; echo $?
 ```
 Expected: 两者都 **0**。
 
-- [ ] **Step 5: 变异 M8 / M9 抽样**
+- [x] **Step 5: 变异 M8 / M9 抽样**
 
 - **M8**：副本里把整个 `.superRefine(…)` 删掉（`export const correctionSchema = correctionShape;`）
   ⇒ 期望红在 `rejects a not_my_taste correction with no chose_instead`，**且 `wrong` / `stale` 那两条仍绿**
   （若它们也红，说明分档写反了）。
 - **M9-projectKey**：把 `projectKey: z.string().min(1),` 改成 `.optional()` ⇒ 期望红在 `rejects a correction missing projectKey`。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add src/corrections/schema.ts tests/ledger/correctionSchema.test.ts
@@ -945,7 +945,7 @@ git commit -m "feat(corrections): pin the DB-side correction shape, with chose_i
 
 **Files:** 无生产改动（**若这一步需要改生产代码，说明前面某个任务没做完**）
 
-- [ ] **Step 1: 重跑【全部】变异**
+- [x] **Step 1: 重跑【全部】变异**
 
 ⚠️ **代码在后续任务里改过，之前跑过的变异必须重跑** —— 这是 ccloop 用血换来的一条。
 逐条重跑 **M1-correctionId / M1-ev / M3 / M4 / M5 / M6 / M7 / M8 / M9-projectKey / M10**，
@@ -953,14 +953,14 @@ git commit -m "feat(corrections): pin the DB-side correction shape, with chose_i
 
 记一张表：变异名 · 期望红的判据名 · 实际红的判据名 · 是否一致。**不一致就是发现，不是噪音。**
 
-- [ ] **Step 2: 主树零触碰证明**
+- [x] **Step 2: 主树零触碰证明**
 
 ```bash
 git status --porcelain > /tmp/t6a.txt 2>&1; cat /tmp/t6a.txt   # 应为空
 git diff | wc -c; git diff --cached | wc -c                     # 都应为 0
 ```
 
-- [ ] **Step 3: 收尾验证**
+- [x] **Step 3: 收尾验证**
 
 ```bash
 npm run verify > /tmp/t6b.txt 2>&1; echo $?
@@ -969,11 +969,11 @@ npm run ledger -- validate .decisions > /tmp/t6c.txt 2>&1; echo $?
 Expected: `verify` **0**；`validate` **2**，且降级行**仍然只有** `orca-dev-09cc3ea1.jsonl` 的 8–14 行。
 ⚠️ **若冒出第八条降级行 ⇒ 那条「本仓库允许的降级的确切集合」判据会红，停下来查，不许放宽它。**
 
-- [ ] **Step 4: 记台账**
+- [x] **Step 4: 记台账**
 
 把本轮执行期间做的判断（尤其**与计划不符的地方**）经 `appendEvent` 写进 `.decisions/orca-dev-<本会话>.jsonl`。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add -A

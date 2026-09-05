@@ -1573,3 +1573,118 @@ P1 那一轮为 `bound` 付过一次这个代价（12 条既有判据被打红�
   ⇒ *** **在 Orca 落地实现之前，仍有最后一次说话的机会；落地之后台账只追加，就真的改不了了。** ***
 
 ⚠️ **本节不替 ccmem 做这次更新** —— 它的工作树是别人的。**这只是一份现成的补丁文本。**
+
+---
+
+# 📌 本轮续（2026-09-05，会话 `c1c3c2ec`）—— **子系统 B 的实施计划已执行完毕；`overturned` 与 `corrections` 现在是真的**
+
+**归属**：同一 run `orca-dev-c1c3c2ec`。本节**只追加**，上面一字未动。
+⚠️ **本节不写任何 HEAD、不写「领先几笔」** —— 提交本文这个动作本身就会改这两个数，人也会自己推远端。
+**要指代某一笔就引提交主题行；要判发布状态就现跑 `git ls-remote`。**
+
+## 一句话状态
+
+*** **计划的 6 个任务全部执行完毕，8 笔提交，产品代码首次落地。** ***
+`npm run verify` **exit 0**；`orca validate .decisions` **exit 2 且降级行没有新增**。
+**一次都没 push、没建分支、没合并、没删任何分支或 worktree。**
+
+## 一、做完了什么（按提交主题行找）
+
+| 顺序 | 提交主题行 |
+|---|---|
+| 1 | `docs(plan): turn the corrections/overturned spec into six task-by-task steps` |
+| 2 | `feat(ledger): pin overturned's six required fields and route reference events through an exhaustive map` |
+| 3 | `test(ledger): pin the ev literal against the schema directly, where it is observable` |
+| 4 | `feat(ledger): scope check 5 by event type and make the resolution scope a required argument` |
+| 5 | `feat(cli): resolve reference events against every ledger the validate run scanned` |
+| 6 | `fix(ledger): build the cross-file resolution scope on every append, not only for reference events` |
+| 7 | `feat(corrections): pin the DB-side correction shape, with chose_instead required only for not_my_taste` |
+| 8 | `docs(ledger): record the three judgement calls execution forced that the plan did not anticipate` |
+
+**新文件**：`src/corrections/schema.ts`、`tests/ledger/overturnedEvent.test.ts`、`tests/ledger/correctionSchema.test.ts`。
+**台账**：`.decisions/orca-dev-c1c3c2ec.jsonl` 共 **16 条**（设计 13 ＋ 执行 3）。
+
+## 二、实测数（**只抄工具打印的**）
+
+| 量 | 值 |
+|---|---|
+| `npm run verify` | **exit 0** |
+| 判据（**全仓** `npm test` 口径） | `57 files / 284 tests` → *** **`59 / 315`** *** |
+| 判据（**scheduler 档** `verify:scheduler` 口径） | `50 / 165` → **`50 / 165`**（未变，本轮没碰调度层） |
+| `orca validate .decisions` | **exit 2**，降级行仍**只有** `orca-dev-09cc3ea1.jsonl` 的 8–14 行 |
+| 点名变异 | **11 条全部在最终代码上重跑并各自看见红**（M7 是 typecheck exit 2） |
+| 主树污染 | `git status --porcelain` 空、`git diff` 与 `git diff --cached` 各 **0 字节**；副本判据文件 vs 工作树判据文件 **6 个各 0 字节** |
+
+⚠️ *** **`verify` 会打印【两个】判据数** *** —— 全仓一个、scheduler 档一个。历轮文档里的 `50/165` 是**后者**。**别把两个数混着比。**
+
+## 三、🔴 五条会改变下一轮怎么干活的实测（**别重新发现**）
+
+### 1. *** 「变异是绿的」有第三种成因：观测路径选错了 ***
+
+此前只记过两种：**判据是空的**、**守卫是冗余的**（本轮 spec §6.1）。
+本轮出现第三种：点名变异「删掉 `ev: z.literal("overturned")`」**跑绿**，
+因为 `validateLine` **按事件名选 schema**，`overturnedEventSchema` 永远不会被喂到别的 `ev`——
+**从那条路径上看，那个 literal 不可观测。**
+⚠️ 但它**并非不可钉**：直接对 schema 断言就看得见。补了一条之后同一变异立刻红。
+⇒ *** **「绿」先问三句：判据空？守卫冗余？还是我从错的地方看它？** ***
+⇒ **和 §6.1 那处的区别要守住**：那处是**真的**钉不住（两道守卫互为冗余），本处只是**看错了地方**。
+**有办法看见，就不许登记成看不见。**
+
+### 2. *** 字面 grep 的普查有盲区：测试名可以是【算出来的】 ***
+
+开工普查（`grep -rn overturned`）找出 **2 条**会被打红的既有判据，spec 只登记了 **1 条**。
+**实测打红 3 条** —— 第三条是 `accepts a minimal overturned record`，
+它的名字由 `for (const ev of REFERENCE_EVENT_TYPES)` **生成**，字面 grep 永远搜不到「overturned」。
+⇒ **普查要连【被遍历的那个常量】一起搜**，不能只搜字面量。
+⇒ 那一条判定为**夹具更新**（它度量的是路由，路由一字未变），属 P1 那轮「8 条夹具」类别，未另开授权门；**已在提交信息里点名报出**。
+
+### 3. *** 靠崩溃变红，本轮又栽一次 ***
+
+M8 第一版把整段 `superRefine` 删掉 ⇒ vitest 报 **`Tests no tests`**（模块加载失败）。
+**那不是红，是所有判据都没跑** —— 包括那两条 `wrong`/`stale` 的对照断言，而它们正是用来证明分档没写反的。
+改成「让分档条件永不命中」之后，红的是且仅是点名那条，两条对照保持绿。
+
+### 4. *** `cp` 的 `-i` alias 再次静默挂死到超时 *** —— 文档写过，我还是踩了
+
+副本还原用了 `cp`，它弹 `overwrite …? (y/n [n])` 并**挂到 120s 超时**，输出里只看到半截。
+⇒ *** **一律 `cat pristine > target`，`/bin/rm -rf`。这条要当机械习惯，不是「记得」。** ***
+
+### 5. *** 自己写的改码脚本也会被字符串字面量骗 ***
+
+给 15 个 `validateFile(` 调用点补参时，第一版扫描器按 `([{` / `)]}` 数深度，
+**把判据里 `"{坏行"` 这个字符串常量中的 `{` 当成了括号** ⇒ 切错了两处、typecheck 报 8 个语法错。
+⇒ **任何按括号配对改代码的脚本，必须跳过字符串字面量与转义**；改完立刻 `tsc --noEmit` 兜底。
+
+## 四、本轮**没有**做的（登记，不掩饰）
+
+- **未 push、未建分支、未合并、未删任何分支或 worktree。**
+- *** **ccmem 一个字节没写** *** —— 它的工作树在本会话中途变脏（另一会话正在里面干活）。
+  **欠它的那次 §15 更新，补丁原文停在上一节「八.2」。**
+- **spec §7 的六个登记项一个都没做**（`target-not-a-git-repo`、逃生门乙、`orca run` 的取锁顺序、
+  corrections 的 DB/写入方/面板、ccmem 实际写入、跨仓库 `overturned`）。
+- **没有派外派评审**（控制器自审）。
+
+## 五、⛔ 下一件事
+
+| 顺序 | 做什么 | 说明 |
+|---|---|---|
+| **1** | **人审本轮成果** | 8 笔提交、16 条台账、11 条变异证据 |
+| **2** | ccmem 的 §15 更新 | 等它工作树干净；**补丁原文在上一节「八.2」，别重新推导** |
+| **3** | spec §7 的登记项（归 C ／ E） | 尤其 🔴 `orca run` 的取锁顺序缺陷 |
+| **4** | 子系统 **D**，或 B 的后续（真正把对照样本喂进 ccmem） | |
+| **5** | ccloop 的 **E1 的 I-2 ＋ 人裁 85** | 人裁 121 仍有效；**E1 动生产代码前仍需另拿具名授权** |
+| **6** | *** **未 push 的提交等人单独授权。控制器不许 push。** *** | |
+
+### 5.1 下一轮开工必读
+
+1. `docs/superpowers/specs/2026-09-05-corrections-overturned-design.md` —— **§6.1（故意不配判据，别去补）、§6.2、§11**。
+2. `docs/superpowers/plans/2026-09-05-corrections-overturned.md` —— 步骤已全部勾选。
+3. `.decisions/orca-dev-c1c3c2ec.jsonl` **16 条**，各带理由与「判错了要付什么代价」。
+4. A′ spec 末尾**两条 ERRATUM**。
+
+## 六、成本
+
+**只抄工具报数**（Rule 14）：钩子在本轮执行期间最后报出的是 *** **约 $124.34** ***（写计划前后那一刻）。
+**此后没有再报过数，因此不写 —— 不许自估。**
+⚠️ **量级对照（不是估算）**：本会话一口气跑完了**设计 ＋ 对抗性自审 ＋ 计划 ＋ 6 个任务执行 ＋ 11 条变异**，
+**0 个外派评审席位**。上一轮（4 处修复、7 条变异、0 外派）钩子报 ~$98.78。
