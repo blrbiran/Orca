@@ -28,7 +28,7 @@ import type { ExitContribution } from "./exitCode.js";
 import { intersect } from "./pathTrie.js";
 import { normalizeClaim } from "./writeSet.js";
 import { emptyRequiredChecksPairs, renderPlanReport } from "./planReport.js";
-import { preflight } from "./preflight.js";
+import { preflight, unlockableTargetRejection } from "./preflight.js";
 import type { PreflightReport } from "./preflight.js";
 import {
   markersRemaining,
@@ -617,6 +617,25 @@ export async function runRound(planPath: string, options: RunOptions = {}): Prom
   // silent-degradation shape §0.1 forbids.
   if (plan.ledgerMode !== "in-repo") {
     logError(`orca run: ledgerMode ${JSON.stringify(plan.ledgerMode)} is not implemented yet (spec §8.5)`);
+    return 1;
+  }
+
+  // spec §7 item 3: `acquireRepoLock` below is a non-recursive mkdir of
+  // `<targetRepo>/.git/orca-lock`, so a target with no `.git` directory used
+  // to end the round on node's own errno — `ENOENT: no such file or
+  // directory, mkdir '<target>/.git/orca-lock'` — which names an internal
+  // path the user never asked about and never says the one thing that is
+  // wrong. The shape `orca plan` had fixed a round earlier, still standing
+  // here.
+  //
+  // ⚠️ The fix is NOT to move preflight above the lock. The comment below
+  // records why the lock comes first, and that reason is unchanged. What
+  // moves ahead of it is strictly narrower: whether the lock can be placed at
+  // all. A second orca cannot change the answer to that — it is not the
+  // repo's mutable state, it is whether there is a repo to lock.
+  const unlockable = await unlockableTargetRejection(plan.targetRepo);
+  if (unlockable !== undefined) {
+    logError(`rejected: ${unlockable.code}: ${unlockable.message}`);
     return 1;
   }
 

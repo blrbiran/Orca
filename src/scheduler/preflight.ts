@@ -1,4 +1,6 @@
 import { execFile } from "node:child_process";
+import { stat } from "node:fs/promises";
+import { join } from "node:path";
 import { promisify } from "node:util";
 import type { PlanFile, PlanRejection } from "./planFile.js";
 import { RUNTIME_CHECK } from "./planReport.js";
@@ -83,6 +85,55 @@ async function porcelainOf(targetRepo: string): Promise<{ output: string } | { u
   } catch (err) {
     return { unreadable: (err as Error).message.trim() };
   }
+}
+
+/**
+ * Ruling 甲 of the 2026-09-05 corrections/overturned spec §1.2, and §7 item 3
+ * of the same spec: a target that is not a git repository must be refused by
+ * name, as a rejection of its own, rather than as a side effect of checks
+ * that were asking about something else.
+ *
+ * ⚠️ Deliberately NOT a member of RUNTIME_CHECK or PLAN_LEVEL_CHECK. Both of
+ * those are rendered by `renderPlanReport`, which turns "no rejection carries
+ * this code" into `[pass] <code>` — so adding this code there would print a
+ * green line for a check `orca plan` never runs. It is a `run`-side up-front
+ * rejection, in the same position as the guards on `--adapter-config` and
+ * `ledgerMode`, and `orca plan`'s report is left exactly as it was.
+ *
+ * The question asked is narrower than "is this a repository": it is whether
+ * `<targetRepo>/.git` is a directory, which is precisely the condition
+ * `acquireRepoLock`'s non-recursive mkdir needs and could not state for
+ * itself. `git rev-parse` is consulted only to tell the two failures apart in
+ * the message — a path that is no repository at all, versus one that is
+ * inside a repository but is not its root, where git answers happily while
+ * the lock still has nowhere to go.
+ *
+ * ⚠️ The resolved git dir is reported, never compared. Measured 2026-09-06 on
+ * darwin: `git rev-parse --absolute-git-dir` returns the REALPATH, so under a
+ * symlinked temp dir it answers `/private/var/folders/…/.git` for a target
+ * spelled `/var/folders/…`. A string comparison against `join(targetRepo,
+ * ".git")` would therefore have rejected perfectly good repositories — every
+ * scheduler scenario that runs a real round would have gone red for a reason
+ * that has nothing to do with the target being wrong.
+ */
+export const TARGET_NOT_A_GIT_REPO = "target-not-a-git-repo";
+
+export async function unlockableTargetRejection(targetRepo: string): Promise<PlanRejection | undefined> {
+  const lockParent = join(targetRepo, ".git");
+  const found = await stat(lockParent).catch(() => undefined);
+  if (found?.isDirectory() === true) return undefined;
+
+  const gitDir = await execFileAsync("git", ["rev-parse", "--absolute-git-dir"], { cwd: targetRepo })
+    .then(({ stdout }) => stdout.trim())
+    .catch(() => undefined);
+
+  return {
+    code: TARGET_NOT_A_GIT_REPO,
+    message:
+      gitDir === undefined
+        ? `${targetRepo} is not a git repository, so this round has nowhere to put the repo lock it takes before reading anything (${lockParent})`
+        : `${targetRepo} is not the root of a git repository: git resolves it to ${gitDir}, while the repo lock this round takes has to live at ${lockParent}`,
+  };
 }
 
 /**
