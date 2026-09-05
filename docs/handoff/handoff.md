@@ -1528,3 +1528,48 @@ P1 那一轮为 `bound` 付过一次这个代价（12 条既有判据被打红�
 产出是一份 spec ＋ 两条 ERRATUM ＋ 13 条台账。
 上一轮（4 处修复 ＋ 3 条新判据 ＋ 7 条变异）钩子报 ~$98.78；再上一轮（15 任务、约 40 个 subagent 席位）~$138.24。
 ⇒ *** **纯设计轮并不便宜 —— 它的开销在【反复现测】和【对抗性自审】上，而那正是本轮唯一的产出质量来源。** ***
+
+### 八、本节写下之后的两件事（**同会话续写，上面一字未动；本节即为对第五节的具名更正**）
+
+#### 1. 🔴 对第五节的具名更正：**ccmem 的 Orca 章节【没有】更新，ccloop 的更新了**
+
+第五节写着「对 ccloop 与 ccmem 一个跟踪字节都没写（**除本轮收尾更新它们各自的 Orca 章节**）」。
+*** **括号里那半句对 ccmem 为假 —— 它没被更新，而且是故意不更新的。** ***
+
+**现测（2026-09-05 20:52，收尾）**：
+
+| 仓库 | 状态 | 处置 |
+|---|---|---|
+| **ccloop** | 工作树干净、在 `main`、只有主工作树 | ✅ **已更新并提交**，主题行 `docs(handoff): update the Orca section in place -- subsystem B's field shapes are now pinned` |
+| **ccmem** | 🔴 *** **工作树脏（`M docs/handoff/handoff.md`），且该文件 78 秒前刚被改过** *** | ⛔ **没动，一个字节都没写** |
+
+**ccmem 那边正在有另一个 agent 干活**：本会话开工时它在 `0de437e`，20:47 现测干净；
+中途它多了一笔 `docs(handoff): record round XXX -- summarize_pending timeout root-caused, two remedies refuted`
+（作者会话 `session_01XXAJDeB3ZgM6zyLUGJEiNj`，**不是本轮线**），`handoff.md` 从 5054 行涨到 5212 行，
+到 20:52 仍在被写。⇒ **CLAUDE.md Rule 3：别的 agent 的工作树是禁区，只报诊断不动手。**
+
+⚠️ *** **顺带兑现的一条**：同一份文档在四分钟内从「干净」变成「脏」。
+**写之前必须【再核一次】，开工时核过不算。** *** 本轮就是靠收尾前那一次复核才没有和别人抢同一个文件。
+
+#### 2. ⛔ 欠 ccmem 的那次更新 —— **补丁原文留在这里，别重新推导**
+
+**它那一节现在带着一句【已知为假】的话**（§15「对本仓库最要紧的一条」）：
+
+> *** **`corrections` 与 `overturned` 的完整字段形状至今【仍然】没有定。** ***
+
+**该改成什么**（等 ccmem 工作树干净、且人点头之后，由下一轮就地更新它的 §15；**别新增编号章节**，
+那是人 2026-09-02 定的规矩）：
+
+- 形状**已经定了**（2026-09-05，run `orca-dev-c1c3c2ec`），spec 在
+  `…/Orca/docs/superpowers/specs/2026-09-05-corrections-overturned-design.md`。
+- 🔴 **对 ccmem 最要紧的三条**：
+  1. *** **对照样本【不由 `overturned` 承载】。** *** 它是「DB 里的 correction ＋ 台账里的那条 decision」拼出来的：
+     左半边（agent 选了什么、理由、证据）全在 `decision` 的 `chose` / `because` / `evidence` / `alternatives`；
+     右半边（人改成了什么、为什么）在 correction 行。**`overturned` 是瘦事件，只做闭环标记。**
+  2. *** **correction 的 `because` 是全表对记忆层最值钱的字段** *** —— 它带的正是「拒绝它的语境」。
+  3. *** **`projectKey` 取 git remote URL，与 ccmem 的 `project_key` 同口径**，跨项目聚合不需要新键。 ***
+- ⚠️ **时间窗口的准确说法**：那句「要在 Orca 定形状的那一轮之前说」**已经过期一半** ——
+  设计定了，**但产品代码一行没写、那几笔也没 push**。
+  ⇒ *** **在 Orca 落地实现之前，仍有最后一次说话的机会；落地之后台账只追加，就真的改不了了。** ***
+
+⚠️ **本节不替 ccmem 做这次更新** —— 它的工作树是别人的。**这只是一份现成的补丁文本。**
