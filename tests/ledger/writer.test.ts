@@ -131,7 +131,7 @@ describe("appendEvent — check 5: a reference event's id must exist as a decisi
     const result = validateFile([
       JSON.stringify(boundFor("probe/1")),
       JSON.stringify(validDecision("probe/1")),
-    ]);
+    ], { externalDecisionIds: new Set() });
     expect(result.verdict).toBe("ok");
   });
 });
@@ -162,7 +162,7 @@ describe("appendEvent — a missing trailing newline must not corrupt the append
     expect(JSON.parse(physicalLines[0]).id).toBe("probe/1");
     expect(JSON.parse(physicalLines[1]).ev).toBe("bound");
 
-    const result = validateFile(onDisk.split("\n"));
+    const result = validateFile(onDisk.split("\n"), { externalDecisionIds: new Set() });
     expect(result.verdict).toBe("ok");
   });
 

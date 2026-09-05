@@ -107,7 +107,7 @@ export async function appendEvent(
   const separator = existingText.length > 0 && !existingText.endsWith("\n") ? "\n" : "";
   const payload = `${separator}${line}\n`;
 
-  const prospective = validateFile((existingText + payload).split("\n"));
+  const prospective = validateFile((existingText + payload).split("\n"), { externalDecisionIds: new Set() });
   if (prospective.verdict !== "ok") {
     const reasons = prospective.lines
       .filter((l) => l.result.verdict !== "ok")

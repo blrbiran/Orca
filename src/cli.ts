@@ -60,7 +60,7 @@ async function runValidate(paths: string[]): Promise<number> {
 
   for (const file of files) {
     const text = await readFile(file, "utf8");
-    const verdict = validateFile(text.split("\n"));
+    const verdict = validateFile(text.split("\n"), { externalDecisionIds: new Set() });
 
     for (const line of verdict.lines) {
       if (line.result.verdict === "rejected") {
