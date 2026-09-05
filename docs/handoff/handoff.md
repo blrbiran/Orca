@@ -1264,3 +1264,114 @@ P1 与 P2 各自登记了缺口（P1 三处、P2 三处），**都是有意划�
 本轮在 $138.24 那一刻已完成 9 个任务，而全程是 **15 个任务 ＋ 每个任务一次独立评审 ＋ 多数任务一次修复轮
 ＋ 一次整支复审 ＋ 一次修复波复审**，合计约 **40 个 subagent 席位**。
 ⇒ *** **「每任务派评审」确实值钱 —— 它抓到的东西里有多条是单任务视角看不见的 —— 但它是本轮的主要开销。** ***
+
+---
+
+# 📌 本轮（2026-09-05，会话 `99004516`）—— **C 的四条 follow-up 全部收掉**；一条 parked 裁决被实测推翻
+
+**归属**：run `orca-dev-99004516`。本节**只追加**，上面一字未动。
+⚠️ **本节不写任何当前哈希** —— 提交本文这个动作本身就会改 HEAD。要指代某一笔就**引提交主题行**。
+（例外同前：**实测值的观测锚点 commit 必须写** —— 那是有效期，不是当前状态。）
+
+## 一句话状态
+
+上一节「⛔ 下一件事」表里的 **1／2／3／4 四条全部做完**，各一笔提交，外加一笔台账 ＋ README 更正。
+**第 5 条（子系统 B 或 D）没动。一次都没 push、没建分支、没合并、没删任何 worktree。**
+
+## 一、🔴 开工核对推翻了交接给我的两个事实（**都是现测**）
+
+| 交接里怎么说的 | 现测 | 命令 |
+|---|---|---|
+| 「Orca 领先远端 37 笔，**未 push**」 | *** **为假：远端与本地【同点】** *** ⇒ **P2 的全部产品代码、161 条判据、progress.md、两份 ERRATUM 现在都是【已发布文本】** | `/usr/bin/git ls-remote origin refs/heads/main` ＋ 裸 `git log` |
+| 「ccloop **HEAD 恒为 `7f2c5f6`**」 | **为假**：HEAD 是 `2a4381e`（多一笔 `docs(handoff): record that subsystem C now really consumes the attempt refs`），远端同点 | 裸 `git -C …/ccloop log/ls-remote` |
+
+⚠️ 第二条**不影响任何结论** —— `git -C …/ccloop diff --stat 7f2c5f6 2a4381e -- src tests scripts` **空输出**，
+那一笔只动了 handoff。**但引用它当锚点的实测值要按 `2a4381e` 重新写有效期。**
+⇒ 老结论第 N 次兑现：*** **别信任何文档写的发布状态与 HEAD，一律现跑。** ***
+
+开工基线：`npm run verify` **exit 0，47 files / 161 tests**（与上一节记的一致）。
+
+## 二、做完了什么（按提交主题行找，**别数笔数**）
+
+| 顺序 | 提交主题行 | 判据 |
+|---|---|---|
+| 1 | `fix(scheduler): stop preflight fabricating a [pass] for a check it never ran` | 47/161 → 48/162 |
+| 2 | `refactor(scheduler): key the check-code constants instead of positioning them` | 不变 |
+| 3 | `fix(scheduler): stop the pool launching tasks a cancelled round already ended` | 48/162 → **50/165** |
+| 4 | `refactor(scheduler): converge the git wrapper, the commit identity and the five terminal names` | 不变 |
+| 5 | `docs(scheduler): land this round's ledger and correct the README's reason for limitation 7` | 不变 |
+
+**收尾实测**：`npm run verify` **exit 0，50 files / 165 tests**；
+`orca validate .decisions` 仍只报 `orca-dev-09cc3ea1.jsonl` 第 8–14 行那七条历史 `bound` 的 downgraded（人裁 4 之后的既定状态），**没有新的**。
+
+## 三、🔴 四条会改变下一轮怎么干活的实测（**别重新发现**）
+
+### 1. *** parked 裁决「`PLAN_LEVEL_CHECKS` 的置换会【静默】重绑码名」——「静默」这半句为假 ***
+
+**实测**（`git clone --local` 副本，观测时 Orca `7ffa590` 之上、修复之前）：
+对调前两项 ⇒ **打红 4 条既有判据**；对调后两项 ⇒ **同样打红 4 条**。
+根因：`planFile.test.ts` 里**每个码名各有一条断言字面量的单项判据**，它们直接观测绑定。
+*** **看不见置换的只是那一条「防漂移」判据（它比的是排序后的集合），不是整支。** ***
+
+⇒ **两条推论**：
+1. **那条裁决的措施（改键控记录）仍然对，理由不对。** 已按本仓库惯例在提交信息里具名更正，不就地改 progress.md。
+2. *** **我为它写好的那条新判据被撤掉了** *** —— 它度量的东西已经被四条既有判据度量（Rule 2）。
+   **撤掉之前先让它在同一条变异下红过**，所以「它确实承重」与「它冗余」两件事都是量出来的，不是猜的。
+
+### 2. *** 「T1 取消 ＋ T2 依赖 T1」这个判据形状是空的 ***
+
+第一版 `cancelledRound.test.ts` 在 `M-ROUTE-CANCEL`（**整段删掉 `routeOutcome` 里 `cancelled` 那一行**）之下 **是绿的**。
+根因：通用行的 `countsAsFailure`（非 blocked 即 true）与 `descendantsOf(T1) = [T2]` 对两任务链**产生完全相同的输出**。
+⇒ 加了一个**不是 T1 后代**的 T3 ＋ `--serial`（把它排进后面的层）之后才红，且红在 `T3: upstream_not_run` 这条断言上。
+⇒ **形状教训**：**要证明「某一行路由是承重的」，必须有一个只有那一行会挡住的对象。** 链式依赖证明不了它。
+
+### 3. *** `cancelled` 端到端是跑得出来的 —— Task 8 登记的那个缺口可以关了 ***
+
+Task 8 写「`cancelled` 没有实测，要么 `stopOn` ∩ `stopSignals`（需 `verifierType: "agent"`），要么给进程组发信号」。
+**前一条路本轮实测走通了**：`runLoop.ts:1508`（观测时 ccloop `2a4381e`）在 `evaluateStopDecision` **之前**匹配
+`verification.stopSignals` ∩ `contract.escalationAndExit.stopOn`，所以**一个 scripted frame ＋ `verifierType: "agent"` 就能跑出真的 `cancelled`**，
+**一次模型都不用跑，不花钱**。sandbox 因此多了 `ContractSpec.stopOn` 与 `ScriptedFrameSpec.stopSignals` 两个夹具字段。
+⇒ 本仓库现在有**两条**端到端 `cancelled` 判据（`cancelledRound` 与 `poolStopsLaunching`）。
+
+### 4. *** 一层之内的任务是【按 taskId 排序】跑的，不是按计划里的顺序 ***
+
+第一版 `poolStopsLaunching.test.ts` 把取消者命名为 `T1`、排队者命名为 `QUEUED`，结果 **`QUEUED` 先跑**（Q < T），
+取消者自己成了队尾那个 —— 判据当场失去意义。改名 `a1` / `b1..b3` / `z1` 才成立。
+⇒ **任何依赖「谁先跑」的场景，名字是承重的，必须在判据里写明这一点。**
+
+## 四、方法论（本轮兑现的，直接用）
+
+1. *** **靠崩溃变红不是证据 —— 本轮又栽一次。** *** `M-ROUTE-CANCEL` 第一次跑红在
+   「ccloop bin not found」上：`git clone --local` 的副本不在 ccloop 的同级目录，而 `resolveCcloopBin()` 按同级找。
+   ⇒ *** **在副本里跑任何 spawn 场景，必须带 `ORCA_CCLOOP_BIN=/绝对路径/ccloop/dist/cli.js`**，否则你量的是路径解析。 ***
+2. **判据不许把颜色押在两个同长定时器谁先回来上。** `pool.test.ts` 那条最初两个 `tick(5)`，改成 `1ms` vs `40ms`，
+   并在注释里写明为什么。同理 `poolStopsLaunching` 用 `sleep 3` 拉开真子进程的时间差。
+3. **「成功的任务没有 run 目录」不能当控制组** —— §4.5 会 dispose 成功任务的副本。
+   要证明「它跑了」，量它的产物**落没落到 W**。（本轮的控制断言第一版就栽在这。）
+4. **台账闸门本轮一次都没拦下我** —— 七条 `undo.how` 全部一次通过。
+   前两轮各被拦一次，都是散文式 undo。⇒ *** **「写成路径 ＋ 具体改什么」已经变成习惯，这是可复制的。** ***
+
+## 五、本轮**没有**做的（登记，不掩饰）
+
+- **未 push、未建分支、未合并、未删任何分支或 worktree。** 本地领先远端五笔。
+- *** **对 ccloop 与 ccmem 一个跟踪字节都没写。** *** ccloop 只被 spawn（判据跑它的 `dist/cli.js`），
+  收尾现测 `git status --short` 空、HEAD 未变；ccmem 现测在 `main`、工作树干净、只有主工作树，**全程只读**。
+- **没有派外派评审**（人本轮当面裁决：不派，控制器自审）。
+- *** **spec 与 plan 本轮【没有】追加 ERRATUM。** *** 本轮推翻的两条（parked 裁决的「静默」半句、README 限制 7 的理由）
+  分别记在**提交信息**与 **README 那一条本身**里；progress.md 是 `.superpowers/sdd/**`，**一个字没改**。
+- **子系统 B 的入口条件仍不满足** —— `corrections` / `overturned` 字段形状至今未定。
+
+## 六、⛔ 下一件事
+
+| 顺序 | 做什么 | 说明 |
+|---|---|---|
+| **1** | **子系统 B 或 D，人来选** | C 的四条 follow-up 已清空。⚠️ **B 的第一步仍是定 `corrections` / `overturned` 的字段形状**，那是设计工作，先 `superpowers:brainstorming` |
+| **2** | ccloop 回到 **E1 的 I-2 ＋ 人裁 85** | 人裁 121 仍有效；**E1 动生产代码前仍需另拿一次具名授权**。本轮没碰 |
+| **3** | ccmem §15 的更新 | 前置（W3 合进 main）**早已满足**；它那节仍写着「C 的设计尚未开写」等已为假的话。**要不要动等人点头**（人此前的用法是「先报再改」） |
+| **4** | *** **五笔未 push 的提交等人单独授权。控制器不许 push。** *** | |
+
+## 七、成本
+
+**只抄工具报数**（Rule 14）：**本会话的钩子到写下本节为止一次都没有报出过金额，因此不写 —— 不许自估。**
+量级对照（不是估算）：本轮是 **4 处修复 ＋ 3 条新判据 ＋ 7 条点名变异 ＋ 0 个外派评审席位**，
+比上一轮（15 任务、约 40 个 subagent 席位、钩子报 ~$138.24）小一个量级以上。
