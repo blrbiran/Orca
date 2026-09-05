@@ -58,9 +58,32 @@ async function runValidate(paths: string[]): Promise<number> {
   let sawRejected = errors.length > 0;
   let sawDowngraded = false;
 
+  // Two passes, not one. An overturned references the decision it overturns,
+  // and that decision lives in the run that made it -- while the fix agent
+  // overturning it is a later run writing a different file. Validating file by
+  // file can never resolve that. The first pass collects every decision id in
+  // whatever this invocation was pointed at; the second validates against it,
+  // so "could not resolve" means precisely "not in what was scanned", and the
+  // rejection message says so.
+  const texts = new Map<string, string>();
+  const allDecisionIds = new Set<string>();
   for (const file of files) {
     const text = await readFile(file, "utf8");
-    const verdict = validateFile(text.split("\n"), { externalDecisionIds: new Set() });
+    texts.set(file, text);
+    for (const raw of text.split("\n")) {
+      if (raw.trim().length === 0) continue;
+      try {
+        const parsed = JSON.parse(raw) as { ev?: unknown; id?: unknown };
+        if (parsed.ev === "decision" && typeof parsed.id === "string") allDecisionIds.add(parsed.id);
+      } catch {
+        // A line that does not parse is the second pass's problem, not this one's.
+      }
+    }
+  }
+
+  for (const file of files) {
+    const text = texts.get(file) as string;
+    const verdict = validateFile(text.split("\n"), { externalDecisionIds: allDecisionIds });
 
     for (const line of verdict.lines) {
       if (line.result.verdict === "rejected") {

@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -101,4 +101,46 @@ describe("real process exit code", () => {
     );
     expect(stdout).toContain("ok");
   }, 60_000);
+});
+
+describe("validate — the directory is the resolution scope (ruling orca-dev-c1c3c2ec/4)", () => {
+  function decision(id: string, run: string): string {
+    return JSON.stringify({
+      ev: "decision", id, at: "2026-09-05T18:04:11Z", run,
+      question: "q", chose: "c",
+      alternatives: [{ option: "o", why_not: "w" }],
+      because: "b",
+      undo: { how: "git checkout <sha> -- README.md", cost: "x", blast_radius: "y" },
+      scope: "repo", kind: "scheduling",
+    });
+  }
+
+  function overturned(): string {
+    return JSON.stringify({
+      ev: "overturned", id: "run-7c/1", correctionId: "c_1",
+      replacedBy: "run-9d/1", at: "2026-09-05T18:04:11Z", run: "run-9d",
+    });
+  }
+
+  // Single-pass, file-by-file validation cannot see this: the decision being
+  // overturned lives in the run that made it, and the fix agent that overturns
+  // it is a different run writing a different file.
+  it("resolves an overturned against a decision that lives in a sibling ledger file", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "orca-cli-scope-"));
+    await writeFile(join(dir, "run-7c.jsonl"), decision("run-7c/1", "run-7c") + "\n");
+    await writeFile(
+      join(dir, "run-9d.jsonl"),
+      decision("run-9d/1", "run-9d") + "\n" + overturned() + "\n",
+    );
+    expect(await main(["validate", dir])).toBe(0);
+  });
+
+  it("still rejects when that decision exists in no file in the directory", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "orca-cli-scope-"));
+    await writeFile(
+      join(dir, "run-9d.jsonl"),
+      decision("run-9d/1", "run-9d") + "\n" + overturned() + "\n",
+    );
+    expect(await main(["validate", dir])).toBe(1);
+  });
 });
