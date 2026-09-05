@@ -1,16 +1,17 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { PlanFile, PlanRejection } from "./planFile.js";
-import { RUNTIME_CHECKS } from "./planReport.js";
+import { RUNTIME_CHECK } from "./planReport.js";
 
 const execFileAsync = promisify(execFile);
 
-// Ruling 1 (task-6-brief.md): RUNTIME_CHECKS is planReport.ts's single
+// Ruling 1 (task-6-brief.md): RUNTIME_CHECK is planReport.ts's single
 // source of truth for these three code strings — imported, not retyped. A
 // previous task invented a fourth spelling of one of these and it cost a
 // review round; destructuring here rather than writing the literals out a
-// second time is what makes that impossible to repeat.
-const [WORK_BRANCH_ALREADY_EXISTS, BASE_NOT_A_COMMIT, DIRTY_WORKTREE] = RUNTIME_CHECKS;
+// second time is what makes that impossible to repeat. By key, not by
+// position: see RUNTIME_CHECK's own comment.
+const { WORK_BRANCH_ALREADY_EXISTS, BASE_NOT_A_COMMIT, DIRTY_WORKTREE } = RUNTIME_CHECK;
 
 // Ruling R3: exactly this shape, no extra fields — renderPlanReport already
 // takes `{ rejections: PlanRejection[] }` structurally, so this stays

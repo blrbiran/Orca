@@ -1,7 +1,7 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { RUNTIME_CHECKS } from "../../../src/scheduler/planReport.js";
+import { RUNTIME_CHECK, RUNTIME_CHECKS } from "../../../src/scheduler/planReport.js";
 import { captureStdout, makeSandbox, runCli, seedRejectablePlan } from "../sandbox.js";
 
 // The final whole-branch review's parked finding, promoted to the top
@@ -40,7 +40,7 @@ describe("preflight on a target repo git cannot read (final review, promoted fol
 
       // And the check that used to fabricate the pass must say what happened,
       // rather than implying the branch was looked up and found absent.
-      expect(stdout).toContain(`[fail] ${RUNTIME_CHECKS[0]}`);
+      expect(stdout).toContain(`[fail] ${RUNTIME_CHECK.WORK_BRANCH_ALREADY_EXISTS}`);
       expect(stdout).toMatch(/cannot determine whether the branch .* exists/);
     } finally {
       await s.cleanup();

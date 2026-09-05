@@ -38,7 +38,18 @@ export { PLAN_LEVEL_CHECKS };
 // keeps the pre-Task-6 default so a caller who never wires in a real
 // preflight still gets an honest "not evaluated" rather than a fabricated
 // "pass".
-export const RUNTIME_CHECKS = ["work-branch-already-exists", "base-not-a-commit", "dirty-worktree"] as const;
+//
+// ⚠️ Keyed, not positional, for the same reason `PLAN_LEVEL_CHECK` is: the
+// order here is a print order, and a print order must not be able to reach
+// which name means which code (final review's parked finding).
+export const RUNTIME_CHECK = {
+  WORK_BRANCH_ALREADY_EXISTS: "work-branch-already-exists",
+  BASE_NOT_A_COMMIT: "base-not-a-commit",
+  DIRTY_WORKTREE: "dirty-worktree",
+} as const;
+
+/** The same codes as a list, in the order `orca plan` prints them. */
+export const RUNTIME_CHECKS = Object.values(RUNTIME_CHECK);
 
 /**
  * Spec §5.3 / §9.1(6): a pair whose requiredChecks union is empty escalates

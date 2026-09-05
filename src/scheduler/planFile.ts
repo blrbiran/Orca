@@ -33,20 +33,35 @@ export type PlanRejection = { code: string; message: string };
  * code it cannot find in the rejections to `[pass] <code>`, so renaming a
  * code on one side produced a FALSE GREEN line in the report a human approves
  * a round from, and adding one produced a check that ran but was never shown.
- * Same reason `RUNTIME_CHECKS` is destructured by `preflight.ts` instead of
+ * Same reason `RUNTIME_CHECK` is destructured by `preflight.ts` instead of
  * being written out twice there.
+ *
+ * ⚠️ Keyed, not positional. The final review parked a finding that these
+ * codes used to be pulled out of a flat array by POSITION, which made the
+ * array's ORDER load-bearing for something order should have nothing to do
+ * with — reordering it to change the report's print order would have rebound
+ * every name to a different message. Measured afterwards (2026-09-05): four
+ * existing criteria in `planFile.test.ts` do redden on a transposition,
+ * because each asserts a literal code name against a plan violating exactly
+ * that check, so the finding's "silently" was too strong. The order is
+ * decoupled here anyway: a display-order change should not be able to reach
+ * the bindings at all, and a record says which name means which code without
+ * anyone counting entries.
  */
-export const PLAN_LEVEL_CHECKS = [
-  "relative-path",
-  "duplicate-task-id",
-  "cycle",
-  "contract-inside-target-repo",
-  "work-branch-is-default",
-  "unsupported-policy",
-  "unusable-task-id",
-] as const;
+const PLAN_LEVEL_CHECK = {
+  RELATIVE_PATH: "relative-path",
+  DUPLICATE_TASK_ID: "duplicate-task-id",
+  CYCLE: "cycle",
+  CONTRACT_INSIDE_TARGET_REPO: "contract-inside-target-repo",
+  WORK_BRANCH_IS_DEFAULT: "work-branch-is-default",
+  UNSUPPORTED_POLICY: "unsupported-policy",
+  UNUSABLE_TASK_ID: "unusable-task-id",
+} as const;
 
-const [
+/** The same codes as a list, in the order `orca plan` prints them. */
+export const PLAN_LEVEL_CHECKS = Object.values(PLAN_LEVEL_CHECK);
+
+const {
   RELATIVE_PATH,
   DUPLICATE_TASK_ID,
   CYCLE,
@@ -54,7 +69,7 @@ const [
   WORK_BRANCH_IS_DEFAULT,
   UNSUPPORTED_POLICY,
   UNUSABLE_TASK_ID,
-] = PLAN_LEVEL_CHECKS;
+} = PLAN_LEVEL_CHECK;
 
 const planTaskSchema = z
   .object({
