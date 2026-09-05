@@ -19,21 +19,35 @@ export interface PreflightReport {
   rejections: PlanRejection[];
 }
 
-async function refIsKnown(targetRepo: string, ref: string): Promise<boolean> {
-  try {
-    await execFileAsync("git", ["rev-parse", "--verify", "--quiet", ref], { cwd: targetRepo });
-    return true;
-  } catch {
-    return false;
-  }
-}
+/**
+ * Three-way, never two-way: git said yes, git said no, or git could not look.
+ *
+ * 🔴 Final review's promoted follow-up. Both ref reads used to be
+ * `catch { return false }`, which collapses "there is no such ref" into the
+ * same answer as "this is not a repository, I never looked" — and
+ * `renderPlanReport`'s `checkLine` turns "no rejection carries this code"
+ * into `[pass] <code>`. So pointing `targetRepo` at a directory that is not a
+ * git repository printed a green `work-branch-already-exists` line, in the
+ * report a human approves a round from, one line above two failures proving
+ * git could not have answered it. A check that cannot answer must produce a
+ * rejection; silence renders as a pass.
+ *
+ * The split is on git's own exit code, measured rather than assumed
+ * (2026-09-05, git on darwin, `git rev-parse --verify --quiet`):
+ * present ref → 0, absent ref or unborn branch → 1, not a repository or a
+ * missing cwd → 128. `execFile` reports a non-numeric `code` (ENOENT) when
+ * git is not on PATH at all, which is also "could not look" — so only an
+ * exit code of exactly 1 is read as a real "no".
+ */
+type RefProbe = { known: boolean } | { unreadable: string };
 
-async function resolvesToACommit(targetRepo: string, ref: string): Promise<boolean> {
+async function probeRef(targetRepo: string, arg: string): Promise<RefProbe> {
   try {
-    await execFileAsync("git", ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`], { cwd: targetRepo });
-    return true;
-  } catch {
-    return false;
+    await execFileAsync("git", ["rev-parse", "--verify", "--quiet", arg], { cwd: targetRepo });
+    return { known: true };
+  } catch (err) {
+    if ((err as { code?: unknown }).code === 1) return { known: false };
+    return { unreadable: (err as Error).message.trim() };
   }
 }
 
@@ -41,12 +55,17 @@ async function resolvesToACommit(targetRepo: string, ref: string): Promise<boole
  * Returns the porcelain output, or the reason it could not be read.
  *
  * 🔴 Final review, Important 5. This used to let the failure propagate, and
- * it is the ONE check of the three that can fail rather than answer: the
- * other two swallow their git error and answer "no". A `targetRepo` that is
- * not a git repository at all — a typo in the plan file, the purest exit-1
- * input error there is — therefore threw out of `preflight`, out of `orca
- * plan`, and reached the user as a raw node stack with node's own exit code
- * instead of §9.3's 1.
+ * it was the first of the three checks to be able to fail rather than answer.
+ * A `targetRepo` that is not a git repository at all — a typo in the plan
+ * file, the purest exit-1 input error there is — therefore threw out of
+ * `preflight`, out of `orca plan`, and reached the user as a raw node stack
+ * with node's own exit code instead of §9.3's 1.
+ *
+ * ⚠️ The rest of that fix's reasoning said "the other two swallow their git
+ * error and answer no", and treated that as merely a difference. It was the
+ * bug the whole-branch review then found: answering "no" is what renders as
+ * `[pass]`. Both ref reads now go through `probeRef` and report unreadability
+ * the same way this one does — see its comment.
  *
  * The failure is reported under `dirty-worktree` rather than a fourth check
  * name, and that is deliberate: the check's claim is "the worktree is
@@ -86,7 +105,15 @@ export async function preflight(plan: PlanFile, baseBranch: string): Promise<Pre
   // silently reused. Reuse would mean merging onto a branch that may already
   // carry someone else's un-landed work, with no record that anyone chose
   // to build on top of it.
-  if (await refIsKnown(plan.targetRepo, `refs/heads/${plan.workBranch}`)) {
+  const workBranch = await probeRef(plan.targetRepo, `refs/heads/${plan.workBranch}`);
+  if ("unreadable" in workBranch) {
+    rejections.push({
+      code: WORK_BRANCH_ALREADY_EXISTS,
+      message:
+        `cannot determine whether the branch ${JSON.stringify(plan.workBranch)} exists in ` +
+        `${plan.targetRepo} (is it a git repository?): ${workBranch.unreadable}`,
+    });
+  } else if (workBranch.known) {
     rejections.push({
       code: WORK_BRANCH_ALREADY_EXISTS,
       message: `workBranch ${JSON.stringify(plan.workBranch)} already exists in ${plan.targetRepo}`,
@@ -98,7 +125,19 @@ export async function preflight(plan: PlanFile, baseBranch: string): Promise<Pre
   // is W's rolling HEAD), derived at runtime rather than a plan-file field. A
   // repository with zero commits at all is the honest fixture: its branch is
   // unborn and does not resolve to any commit yet.
-  if (!(await resolvesToACommit(plan.targetRepo, baseBranch))) {
+  const base = await probeRef(plan.targetRepo, `${baseBranch}^{commit}`);
+  if ("unreadable" in base) {
+    // Same three-way split as the work branch above. This one already
+    // rejected on an unreadable repo — but it said the branch "does not
+    // resolve to a real commit", which is a claim about the branch, when the
+    // truth is that nothing about the directory could be read at all.
+    rejections.push({
+      code: BASE_NOT_A_COMMIT,
+      message:
+        `cannot determine whether base branch ${JSON.stringify(baseBranch)} resolves to a commit in ` +
+        `${plan.targetRepo} (is it a git repository?): ${base.unreadable}`,
+    });
+  } else if (!base.known) {
     rejections.push({
       code: BASE_NOT_A_COMMIT,
       message: `base branch ${JSON.stringify(baseBranch)} does not resolve to a real commit in ${plan.targetRepo}`,
