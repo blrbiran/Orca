@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { validateLine } from "../../src/ledger/validateLine.js";
+import { overturnedEventSchema } from "../../src/ledger/schema.js";
 
 /** 六字段齐全的 overturned —— spec §3 的字面示例。 */
 function overturned(over: Record<string, unknown> = {}): string {
@@ -39,5 +40,29 @@ describe("overturned — spec §3: six required fields, none optional", () => {
 
   it("keeps passthrough: an extra note field does not make it invalid", () => {
     expect(validateLine(overturned({ note: "落地于本笔提交" })).verdict).toBe("ok");
+  });
+});
+
+describe("overturnedEventSchema pins ev to a literal", () => {
+  // Measured, not assumed: deleting `ev: z.literal("overturned")` from the
+  // schema left every criterion above green. It has to, because validateLine
+  // picks the schema by name, so overturnedEventSchema is never handed a
+  // record whose ev is anything else — the literal is invisible from there.
+  //
+  // It is not invisible here. The schema is exported and is the stated source
+  // of truth for this event's shape (spec §5), so a second consumer that
+  // validates before routing would inherit whatever it actually enforces.
+  // This asserts against the schema directly, which is the only place the
+  // literal can be seen at all.
+  it("rejects a record carrying a different reference-event name", () => {
+    const asBound = {
+      ev: "bound",
+      id: "run-7c/3",
+      correctionId: "c_01J9X",
+      replacedBy: "run-9d/2",
+      at: "2026-09-05T18:04:11Z",
+      run: "run-9d",
+    };
+    expect(overturnedEventSchema.safeParse(asBound).success).toBe(false);
   });
 });
