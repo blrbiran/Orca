@@ -144,8 +144,14 @@ describe("validateLine — decision /5: reference events require only ev and id"
     expect(validateLine(line({ ev: "superseded", id: "run-7c/3" })).verdict).toBe("ok");
   });
 
-  it("accepts overturned with only ev and id", () => {
-    expect(validateLine(line({ ev: "overturned", id: "run-7c/3" })).verdict).toBe("ok");
+  // Encodes ruling orca-dev-c1c3c2ec/5: a panel correction is overturned's
+  // only legal source, so correctionId is required and "only ev and id" is no
+  // longer a legal record. The original criterion encoded this one's
+  // predecessor (decision orca-dev-09cc3ea1/5, reference events pin only ev
+  // and id). This is a tightening, not a loosening. The full six-field
+  // criteria live in tests/ledger/overturnedEvent.test.ts.
+  it("rejects overturned with only ev and id — it now carries four more required fields", () => {
+    expect(validateLine(line({ ev: "overturned", id: "run-7c/3" })).verdict).toBe("rejected");
   });
 
   it("rejects a reference event missing id", () => {
@@ -237,10 +243,23 @@ describe("validateLine routes every reference event name from the single source"
   // The minimal *valid* record differs by name since P1 Task 2 — bound also
   // needs its two attribution fields. What is under test here is the routing,
   // so each name gets the record that is valid for it.
-  const minimalRecord = (ev: string) =>
-    ev === "bound"
-      ? { ev, id: "run-7c/3", taskId: "t-4", runId: "orca-dev-abc123" }
-      : { ev, id: "run-7c/3" };
+  // overturned joined bound in needing more than ev+id (ruling
+  // orca-dev-c1c3c2ec/5). Only the fixture moved — what this criterion
+  // measures is still the routing, not the shapes.
+  const minimalRecord = (ev: string) => {
+    if (ev === "bound") return { ev, id: "run-7c/3", taskId: "t-4", runId: "orca-dev-abc123" };
+    if (ev === "overturned") {
+      return {
+        ev,
+        id: "run-7c/3",
+        correctionId: "c_01J9X",
+        replacedBy: "run-9d/2",
+        at: "2026-09-05T18:04:11Z",
+        run: "run-9d",
+      };
+    }
+    return { ev, id: "run-7c/3" };
+  };
 
   for (const ev of REFERENCE_EVENT_TYPES) {
     it(`accepts a minimal ${ev} record`, () => {
@@ -312,11 +331,12 @@ describe("bound events must name the task and run that implemented them", () => 
     expect(validateLine(JSON.stringify({ ev: "bound", id: "", taskId: "t-4" })).verdict).toBe("rejected");
   });
 
-  it("still accepts superseded and overturned without those fields", () => {
-    // Deliberately not tightened: only bound carries "which task implemented
-    // this". Requiring the fields everywhere would be scope this plan has no
-    // authority to take.
+  it("still accepts superseded without those fields", () => {
+    // superseded still pins only ev and id. The original criterion paired
+    // overturned with it, on the grounds that "requiring the fields everywhere
+    // would be scope this plan has no authority to take" — that boundary was
+    // P1's. Ruling orca-dev-c1c3c2ec/5 crossed it, but for overturned only;
+    // superseded was not touched this round, so this half stands unchanged.
     expect(validateLine(JSON.stringify({ ev: "superseded", id: "run-7c/3" })).verdict).toBe("ok");
-    expect(validateLine(JSON.stringify({ ev: "overturned", id: "run-7c/3" })).verdict).toBe("ok");
   });
 });

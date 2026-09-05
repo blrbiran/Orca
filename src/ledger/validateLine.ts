@@ -1,9 +1,8 @@
 import { z } from "zod";
 import {
-  boundEventSchema,
+  REFERENCE_EVENT_SCHEMAS,
   decisionEventSchema,
   isReferenceEventName,
-  referenceEventSchema,
 } from "./schema.js";
 import type { ValidationResult } from "./types.js";
 import { undoHowIsExecutable } from "./undoExecutable.js";
@@ -74,11 +73,11 @@ export function validateLine(raw: string): ValidationResult {
   }
 
   if (isReferenceEventName(ev)) {
-    // bound carries two extra required fields; the other reference events do
-    // not. Picking the schema by name here is why the router had to stop
-    // spelling the names out — this is the branch that needs to tell them
-    // apart.
-    const schema = ev === "bound" ? boundEventSchema : referenceEventSchema;
+    // Each reference event has its own shape now — bound carries attribution,
+    // overturned is pinned all the way down, superseded is still the loose
+    // one. The lookup is a Record keyed by ReferenceEventName rather than a
+    // ternary chain, so a fourth name cannot be added without a schema.
+    const schema = REFERENCE_EVENT_SCHEMAS[ev];
     const result = schema.safeParse(parsed);
     if (!result.success) {
       const issues = result.error.issues.map((i) => `${i.path.join(".") || "<root>"}: ${i.message}`);
@@ -88,6 +87,16 @@ export function validateLine(raw: string): ValidationResult {
       // honest verdict: a human, not an agent, has to say which task this
       // belongs to. Anything else wrong with the record is still a rejection;
       // widening this would quietly turn hard failures into warnings.
+      //
+      // ⚠️ This downgrade sits behind TWO independent guards: the `ev ===
+      // "bound"` test here, and ATTRIBUTION_FIELDS holding only taskId and
+      // runId. None of overturned's fields are in that set, so loosening
+      // either guard on its own turns no criterion red — a redundant guard
+      // cannot be pinned by a mutation that deletes only itself. This comment
+      // is the only thing guarding it, deliberately: do NOT invent a
+      // criterion that "covers" this, because such a criterion would pass
+      // whether or not the guard exists and would prove nothing. What IS
+      // pinned is the outcome — see tests/ledger/overturnedEvent.test.ts.
       if (ev === "bound" && issuesAreOnlyMissingAttribution(result.error.issues)) {
         return { verdict: "downgraded", tier: 0, reasons: issues };
       }

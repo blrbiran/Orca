@@ -71,7 +71,43 @@ export const boundEventSchema = referenceEventSchema.extend({
 
 export type BoundEvent = z.infer<typeof boundEventSchema>;
 
+/**
+ * overturned is the one reference event pinned all the way down. It can be:
+ * it has no rows yet (measured on this repository's own ledgers: 87 decision,
+ * 7 bound, 0 superseded, 0 overturned), so no historical line needs the loose
+ * shape to keep passing — and once a line is written it can never be repaired.
+ * All six fields are required rather than optional for that reason: in an
+ * append-only file an optional field is one that will simply never arrive.
+ *
+ * ev is overridden to a literal on purpose. referenceEventSchema types it as
+ * the three-name enum, so without this line the schema would happily accept a
+ * bound, and §3's field table would be claiming a check that does not exist.
+ * bound carries the same looseness; that is pre-existing and left alone.
+ */
+export const overturnedEventSchema = referenceEventSchema.extend({
+  ev: z.literal("overturned"),
+  correctionId: z.string().min(1),
+  replacedBy: z.string().min(1),
+  at: z.string().min(1),
+  run: z.string().min(1),
+});
+
+export type OverturnedEvent = z.infer<typeof overturnedEventSchema>;
+
 export type ReferenceEventName = (typeof REFERENCE_EVENT_TYPES)[number];
+
+/**
+ * Event name to schema, exhaustively. A Record keyed by ReferenceEventName
+ * rather than a chain of ternaries, so that adding a fourth reference event
+ * without giving it a schema is a compile error instead of a silent
+ * "unknown ev" at runtime. Same lever as keying the scheduler's check codes
+ * by name instead of destructuring them by position.
+ */
+export const REFERENCE_EVENT_SCHEMAS: Record<ReferenceEventName, z.ZodTypeAny> = {
+  bound: boundEventSchema,
+  superseded: referenceEventSchema,
+  overturned: overturnedEventSchema,
+};
 
 const REFERENCE_EVENT_NAMES: ReadonlySet<string> = new Set(REFERENCE_EVENT_TYPES);
 
