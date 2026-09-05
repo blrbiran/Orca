@@ -576,3 +576,54 @@ Orca 从零开始，**不自动继承任何让 ccloop 可信的纪律** —— �
 >
 > 原文逐字保留（本文在写下本条时已被推到远端，属已发布文本，不许就地改）。
 > 当前状态以 `docs/handoff/handoff.md` 为准。
+
+---
+
+## ERRATUM 1（子系统 B 设计时裁定，2026-09-05，Orca `7fe3ca8`；run `orca-dev-c1c3c2ec`）
+
+**§4.1 那句「fix agent … 在自己的提交里写 `overturned`（引用 correction id）＋ 自己的新 `decision`」
+在字面上为假。**
+
+现测（`cat src/ledger/validateFile.ts`，观测于 `7fe3ca8`）：`validateFile` 的检查 5 只把
+**`ev === "decision"` 的 id** 收进可引用集合（`validateFile.ts:37`），并拿它判所有引用类事件
+（`:57`–`:63`）。⇒ *** **一条 `id` 为 correction id 的 `overturned`，今天会被当场拒绝。** ***
+
+⇒ **正确的形状是两个 id，不是一个**：
+- `overturned.id` ＝ **被推翻的那条 decision 的 id**（受检查 5 管辖）；
+- `overturned.correctionId` ＝ **DB 里那条 correction 的主键**（跨库，只判非空字符串，存在性判不了）。
+
+⇒ §4.1 那张「两份日志各自对自己的作者权威」的表**完全正确，一字不改**；
+错的只是「引用 correction id」这半句**把两个引用挤进了一个字段**。
+
+完整形状与依据见 `docs/superpowers/specs/2026-09-05-corrections-overturned-design.md` §3。
+*** **原文逐字保留，此处即为具名更正。** ***
+
+## ERRATUM 2（子系统 B 设计时裁定，2026-09-05，Orca `7fe3ca8`；run `orca-dev-c1c3c2ec`）
+
+**§3.8 检查 5「`bound` / `superseded` / `overturned` 引用的 `id` 在【本文件】中存在」
+对 `superseded` 与 `overturned` 为假，且它会让 `overturned` 在其唯一的真实用例上写不出来。**
+
+推导（每一步现测于 `7fe3ca8`）：
+
+1. `appendEvent(dir, runId, ev)` 用 `runId` 决定**写进哪个文件**（`src/ledger/writer.ts`），
+   而 §3.7 的无冲突保证正是「**每个 agent 只写自己那个文件**」。
+2. 一条 correction 针对的是**过去某一轮**做的 decision；去修它的 fix agent 是**新的一轮**、写**新文件**。
+3. ⇒ 那条 decision 的 id **不在**新文件里 ⇒ `overturned` 被拒绝，连落盘都到不了。
+
+⇒ **检查 5 按事件类型分档**：
+
+| 引用 | 作用域 | 理由 |
+|---|---|---|
+| `bound.id` | **文件内**（原样不变） | 它天然与自己的 decision 同 run —— 实测本仓库 7 条 `bound` 全部如此 |
+| `overturned.replacedBy` | **文件内** | fix agent 自己新写的 decision，必然同 run |
+| `overturned.id` / `superseded.id` | **目录级** | 跨 run 是它们的常态 |
+
+**依据**：decision id 的实际形状是 `<run-id>/<n>`（实测），**全局唯一且自带出处**。
+*** **「必须在同一文件」从来不是这个 id 的语义要求，只是检查 5 写下时手上只有单文件这一个视角。** ***
+
+⚠️ **已知边界，不预先设计**：目录级解析只在**同一个目标仓库**内成立。
+「推翻另一个仓库台账里的 decision」这个形状今天不存在（§9.2：台账住在被干活的那个仓库，fix agent 也在那里干活）。
+
+⚠️ §3.8 检查 5 的**判罚（拒绝）不变**，改的只是**作用域**。
+落地方式见 `docs/superpowers/specs/2026-09-05-corrections-overturned-design.md` §5。
+*** **原文逐字保留，此处即为具名更正。** ***
