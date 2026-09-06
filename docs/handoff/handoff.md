@@ -1989,3 +1989,21 @@ spec §2.4 写「`decision` 103 ＋ `bound` 7 @ `60d29c8`」，评审现测是 *
 
 ⚠️ 这已经是本会话第二次「开工时的 `ls-remote` 结论在干活途中过期」
 （第一次见本轮前半段那一节的第二条）。*** **同一会话里远端被推动是常态，不是意外。** ***
+
+### 九、姊妹仓库本轮的同批更新（**已完成；知情，不是本仓库的任务**）
+
+两份都是**就地重写各自那一节**（人 2026-09-02 定的规矩：Orca 的章节不能无限增加），
+**不新增编号章节**，且都用「节外内容的 sha256 前后相同」证明没碰到别人的东西。
+
+| 仓库 | 提交主题行 | 关键点 |
+|---|---|---|
+| **ccmem** | `docs(handoff): rewrite the Orca section in place -- subsystem E's first slice, and what it means here` | §15 **从 138 行缩到 111 行**。新增一条对它有用的风险：**Orca 自己抄了一份 `normalizeRemoteUrl`，若 ccmem 改动它，两边的 project key 会静默分叉**（后果是聚合失效，不报错） |
+| **ccloop** | `docs(handoff): rewrite the Orca section in place -- subsystem E's first slice, and one new writer to know about` | 新增登记：**`orca correct` 将是第一个「人手动触发、会改目标工作树并自己提交」的写入方**。今天与它无关（它不是 orca 目标仓库、也没有 `.decisions/`），但形状值得它知道 |
+
+⚠️ **ccmem 在本轮进行中被另一个会话落了 round XXXII** —— 现测确认它**没有碰 §15**，
+本轮也没有碰它任何别的节。*** **动笔前那次复核仍然是必需的。** ***
+
+⚠️ **两份都未 push。** 加上本仓库的，三个仓库都有未 push 的提交，**全部等人单独授权**。
+
+⚠️ **本轮的完整交接另有一份写在系统临时目录**（路径见本轮结束时给人的那条消息），
+**那份是给下一位 agent 的快速入口，不是真相源；真相源是本文件与 spec／报告／台账。**
