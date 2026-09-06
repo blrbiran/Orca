@@ -1,5 +1,23 @@
 # 子系统 E 的第一刀：corrections 的存储与写入方
 
+> # ⛔ 不要照本文实施
+>
+> *** **一席外派评审判定 `Ready to implement? No`，5 Critical ／ 9 Important ／ 6 Minor 尚未修。** ***
+> 报告全文与控制器的逐条复核在
+> **`.superpowers/sdd/2026-09-06-corrections-store-and-writer/external-review.md`**
+> （该目录 `.gitignore` 是 `*`，文件是 `git add -f` 进来的）。
+>
+> **五条 Critical 各自会让【第一次成功运行】就写下永久错误的行**：
+> C1 重复 `--close` 追加第二条 `overturned`；C2 十一个派生字段零判据覆盖（含唯一不可校验的 `correctionId`）；
+> C3 `orca correct` 在目标工作树留未跟踪文件 ⇒ **挡住下一次 `orca run`**；
+> C4 `--close` 拿不到 `chose_instead` ⇒ `wrong`／`stale` 闭环走不完；C5 回填 `at` 与上游 §3 冲突。
+>
+> **人已就 C3 另裁**（2026-09-06）：*** **`orca correct` 自己取 repo 锁并提交它写出的那一个文件。** ***
+> 这条**推翻了本文 §7.1「台账侧不需要锁」与 §6「四步里没有提交」** —— 修订时以人裁为准。
+>
+> ⚠️ **下文除 §2.4 的计数已就地更正外，其余一字未改** —— 它是被评审的那一版。
+> **修订另开会话进行**（人裁 2026-09-06）。
+
 **日期**：2026-09-06　**归属**：run `orca-dev-19c594d2`
 **观测锚点**：Orca `60d29c8`（本文所有实测值都在这一点上取，行号与计数引用前请现测）
 
@@ -79,8 +97,14 @@ git config --get remote.origin.url        // 注意不是 git remote get-url
 
 ### 2.4 `overturned` 与 `superseded` 的存量仍是 0
 
-全部台账逐行 `JSON.parse` 后按 `ev` 计数：**`decision` 103 ＋ `bound` 7**，再无别的事件类型。
+全部台账逐行 `JSON.parse` 后按 `ev` 计数：*** **`decision` 108 ＋ `bound` 7** ***，再无别的事件类型。
+（口径：`git ls-tree -r --name-only 60d29c8 -- .decisions` 得 9 个文件，逐 blob 计数。）
 ⇒ **形状仍可改；写下第一条之后就不可改。** 这是本刀的时间价值所在。
+
+⚠️ *** **本行原文写的是「103 ＋ 7」，就地更正为 108 ＋ 7（评审 M4，控制器现测复核成立）。** ***
+103 是本轮**提交自己那 5 条台账之前**量的，却贴了之后的锚点 `60d29c8` ——
+**一个在它所标注的 commit 上重现不出来的数，就是 Rule 14 说的那种数。**
+承重的那半（`overturned` ＝ 0、`superseded` ＝ 0）在 `60d29c8` 上**重现得出来**，本刀的前提不受影响。
 
 ### 2.5 `appendEvent` 对 downgraded 是**抛错**，不是放行
 
