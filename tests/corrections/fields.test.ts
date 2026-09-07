@@ -7,14 +7,20 @@ import {
 } from "../../src/corrections/fields.js";
 import type { CorrectionRow } from "../../src/corrections/fields.js";
 
+// 🔴 The scramble below is load-bearing: this literal's own key order must
+// differ from CORRECTION_FIELDS, or the "serialises the fields in the
+// declared order" criterion cannot tell canonicalCorrectionJson's declared-
+// order serialisation apart from a mutation that just serialises the
+// object's own key order (fix round 1, plan defect: the two orders used to
+// coincide, so that mutation could not be made to go red).
 const row = (overrides: Partial<CorrectionRow> = {}): CorrectionRow => ({
+  by: "amy",
+  because: "进程内互斥跨进程无效",
+  at: "2026-09-07T00:00:00.000Z",
   projectKey: "github.com/biran/orca",
   decisionId: "orca-dev-1/1",
   kind: "not_my_taste",
   chose_instead: "改用文件租约",
-  because: "进程内互斥跨进程无效",
-  at: "2026-09-07T00:00:00.000Z",
-  by: "amy",
   ...overrides,
 });
 
