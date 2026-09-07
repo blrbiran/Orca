@@ -29,6 +29,17 @@ const TASK_ID_SAFE = RUN_ID;
  * two tasks with the same id at different points in the plan's history (a
  * retried task, a rerun against a new base) must not collide just because
  * they share a name.
+ *
+ * ⚠️ ADDENDUM (2026-09-07, subsystem E): this function has a second caller
+ * that is not a scheduled task — src/corrections/fields.ts derives a fix run
+ * id as deriveRunId("fix", <the correction row's canonical JSON>, <the
+ * correction id>). It passes a correction row where the doc above says
+ * "contract bytes" and a correction id where it says "base commit". Nothing
+ * about the behaviour changes; the shape and the guarantee ("same three
+ * inputs, same output") are exactly what that caller wants. It does NOT go
+ * through allocateRunId, so the EEXIST → -2/-3 escalation does not apply to
+ * it: two colliding corrections would land two `<run>/1` decisions in one
+ * file, which appendEvents' Check B refuses loudly (spec §14.16).
  */
 export function deriveRunId(taskId: string, contractBytes: Buffer, baseCommit: string): string {
   if (!TASK_ID_SAFE.test(taskId)) {
