@@ -40,7 +40,12 @@ export async function acquireStoreLock(
   const deadline = Date.now() + timeoutMs;
   for (;;) {
     try {
-      await mkdir(lockDir);
+      // Explicit mode here too (Rule 17 / spec §14.17 carry no qualifier):
+      // the parent being 0700 only mitigates this by accident, and stops
+      // the moment ORCA_CORRECTIONS_DIR points somewhere looser. This must
+      // stay non-recursive — EEXIST on this exact call is the only signal
+      // that someone else holds the lock.
+      await mkdir(lockDir, { mode: CORRECTIONS_DIR_MODE });
       break;
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
