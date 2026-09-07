@@ -15,40 +15,54 @@ import { validateLine } from "./validateLine.js";
  */
 export const RUN_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
-export async function appendEvent(
+export async function appendEvents(
   decisionsDir: string,
   runId: string,
-  event: unknown,
+  events: unknown[],
 ): Promise<void> {
+  // spec §14.1: an empty batch's payload would be nothing but the separator,
+  // which appends a lone newline to a file that had none. Refusing is not
+  // defensive programming — it is the only shape of this call that can
+  // corrupt a ledger while reporting success.
+  if (events.length === 0) {
+    throw new Error("refusing to append: empty batch");
+  }
+
   if (!RUN_ID.test(runId)) {
     throw new Error(`invalid run id: ${JSON.stringify(runId)}`);
   }
 
-  // Check A: a decision's run field must name the file it lands in.
-  // C writes several ledgers, in several repositories, in the same process;
-  // a run field that disagrees with the filename makes every downstream
-  // attribution wrong while every existing check stays green.
-  // overturned is included because run is half of its attribution (at is the
-  // other half) -- ruling orca-dev-c1c3c2ec/5.
-  const evName = (event as { ev?: unknown }).ev;
-  const run = (event as { run?: unknown }).run;
-  if ((evName === "decision" || evName === "overturned") && run !== runId) {
-    throw new Error(
-      `refusing to append: run field ${JSON.stringify(run)} does not match the ledger file for run ${JSON.stringify(runId)}`,
-    );
-  }
+  const lines: string[] = [];
+  for (const event of events) {
+    // Check A: a decision's run field must name the file it lands in.
+    // C writes several ledgers, in several repositories, in the same process;
+    // a run field that disagrees with the filename makes every downstream
+    // attribution wrong while every existing check stays green.
+    // overturned is included because run is half of its attribution (at is the
+    // other half) -- ruling orca-dev-c1c3c2ec/5.
+    const evName = (event as { ev?: unknown }).ev;
+    const run = (event as { run?: unknown }).run;
+    if ((evName === "decision" || evName === "overturned") && run !== runId) {
+      throw new Error(
+        `refusing to append: run field ${JSON.stringify(run)} does not match the ledger file for run ${JSON.stringify(runId)}`,
+      );
+    }
 
-  // Validate before writing. A bad line can't be fixed afterward —
-  // spec §3.3 is append-only semantics.
-  const line = JSON.stringify(event);
-  const result = validateLine(line);
-  if (result.verdict === "rejected") {
-    throw new Error(`refusing to append: rejected: ${result.reasons.join("; ")}`);
-  }
-  if (result.verdict === "downgraded") {
-    throw new Error(
-      `refusing to append: downgraded to tier 0, this decision is not the agent's to make: ${result.reasons.join("; ")}`,
-    );
+    // Validate before writing. A bad line can't be fixed afterward —
+    // spec §3.3 is append-only semantics. In a batch this runs once per event,
+    // before any of them is written, so a bad line anywhere in the batch still
+    // leaves nothing on disk.
+    const line = JSON.stringify(event);
+    const result = validateLine(line);
+    if (result.verdict === "rejected") {
+      throw new Error(`refusing to append: rejected: ${result.reasons.join("; ")}`);
+    }
+    if (result.verdict === "downgraded") {
+      throw new Error(
+        `refusing to append: downgraded to tier 0, this decision is not the agent's to make: ${result.reasons.join("; ")}`,
+      );
+    }
+    lines.push(line);
   }
 
   // Widen the screen to check 5 (a bound/superseded/overturned must reference
@@ -64,6 +78,9 @@ export async function appendEvent(
   // not order) — but a streaming writer cannot see lines not yet appended,
   // so writing a bound before its decision throws here even though
   // validateFile would accept those same two lines in that order.
+  //
+  // For a batch, "the new record" above means the whole batch: every line in
+  // it is validated together with what is already on disk, in one pass.
   const filePath = join(decisionsDir, `${runId}.jsonl`);
   const existingText = await readFile(filePath, "utf8").catch((error) => {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return "";
@@ -76,22 +93,34 @@ export async function appendEvent(
   //
   // The throw sits outside the try on purpose: inside it, its own catch would
   // swallow it and every criterion here could still pass.
-  if (evName === "decision") {
-    const id = (event as { id?: unknown }).id;
-    for (const existing of existingText.split("\n")) {
-      if (existing.trim().length === 0) continue;
-      let parsedExisting: { ev?: unknown; id?: unknown };
-      try {
-        parsedExisting = JSON.parse(existing) as { ev?: unknown; id?: unknown };
-      } catch {
-        // A line that does not parse is validateFile's problem, not this
-        // check's; the prospective validation below rejects it anyway.
-        continue;
+  //
+  // Now over two scopes rather than one: the batch against the file, AND the
+  // batch against itself. The second scope is new and has no product caller
+  // (registered, spec §14.19 item 18) — it exists because a batch is written
+  // in one appendFile, so a duplicate inside it could never be caught by the
+  // file-scoped pass that runs before the write.
+  const fileDecisionIds = new Set<string>();
+  for (const existing of existingText.split("\n")) {
+    if (existing.trim().length === 0) continue;
+    try {
+      const parsedExisting = JSON.parse(existing) as { ev?: unknown; id?: unknown };
+      if (parsedExisting.ev === "decision" && typeof parsedExisting.id === "string") {
+        fileDecisionIds.add(parsedExisting.id);
       }
-      if (parsedExisting.ev === "decision" && parsedExisting.id === id) {
-        throw new Error(`refusing to append: duplicate decision id ${JSON.stringify(id)}`);
-      }
+    } catch {
+      // A line that does not parse is validateFile's problem, not this
+      // check's; the prospective validation below rejects it anyway.
+      continue;
     }
+  }
+  const batchDecisionIds = new Set<string>();
+  for (const event of events) {
+    if ((event as { ev?: unknown }).ev !== "decision") continue;
+    const id = (event as { id?: unknown }).id;
+    if (fileDecisionIds.has(id as string) || batchDecisionIds.has(id as string)) {
+      throw new Error(`refusing to append: duplicate decision id ${JSON.stringify(id)}`);
+    }
+    batchDecisionIds.add(id as string);
   }
 
   // A ledger with no trailing newline is ordinary for a target repo (Fix 2,
@@ -107,8 +136,12 @@ export async function appendEvent(
   // disk in every case: an empty/absent file (separator ""), a file already
   // ending in a newline (separator ""), and a file that does not
   // (separator is a single newline).
+  //
+  // The separator is added once, in front of the whole batch, not once per
+  // event: inside the batch, `lines` are already joined by a newline below,
+  // so this remains the one place a separator can be missing.
   const separator = existingText.length > 0 && !existingText.endsWith("\n") ? "\n" : "";
-  const payload = `${separator}${line}\n`;
+  const payload = `${separator}${lines.join("\n")}\n`;
 
   // Build the cross-file resolution scope on EVERY append, whatever event this
   // one happens to be.
@@ -152,4 +185,20 @@ export async function appendEvent(
 
   await mkdir(decisionsDir, { recursive: true });
   await appendFile(filePath, payload);
+}
+
+/**
+ * The single-event entry point, kept as a one-line wrapper rather than a
+ * parallel implementation: a hand-copied second copy of the checks above is
+ * exactly the drift this repository has already paid for once (see RUN_ID's
+ * comment). Measured before the refactor and again after: every criterion in
+ * tests/ledger/writer.test.ts observes this path unchanged, and a
+ * single-element batch produces byte-identical payload bytes.
+ */
+export async function appendEvent(
+  decisionsDir: string,
+  runId: string,
+  event: unknown,
+): Promise<void> {
+  await appendEvents(decisionsDir, runId, [event]);
 }
