@@ -25,6 +25,12 @@ export type CorrectionRow = Omit<Correction, "id">;
  * conclusion says the run id is a function of THE WHOLE correction row plus its
  * id. Keeping a pipe-joined five-field subset for the id would have left two
  * definitions standing, which is the defect being fixed.
+ *
+ * The `satisfies readonly (keyof CorrectionRow)[]` constraint buys a compile
+ * error for a typo'd field name here: without it, an entry that doesn't match
+ * a real key would resolve to `undefined` when canonicalCorrectionJson indexes
+ * the row with it, and the "absent optional field" guard would silently drop
+ * it from both derivations instead of failing to compile.
  */
 export const CORRECTION_FIELDS = [
   "projectKey",
@@ -34,7 +40,7 @@ export const CORRECTION_FIELDS = [
   "because",
   "at",
   "by",
-] as const;
+] as const satisfies readonly (keyof CorrectionRow)[];
 
 /**
  * Field order comes from CORRECTION_FIELDS, not from the object's own key
