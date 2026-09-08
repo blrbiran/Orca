@@ -49,6 +49,19 @@ export const ORIGINAL: DecisionEvent = {
   kind: "interface",
 };
 
+/**
+ * Ruling 1 (task 9): the next task's criteria need this too, and cannot
+ * import it from a sibling test file — so it lives here, next to the other
+ * fixture helpers, rather than inside close.test.ts.
+ */
+export const closeArgs = (repo: string, overrides: string[] = []): string[] => [
+  "correct", "--repo", repo, "--by", "amy",
+  "--decision", "orca-dev-1/1", "--kind", "not_my_taste", "--because", "进程内互斥跨进程无效",
+  "--chose-instead", "改用文件租约",
+  "--undo-how", "删掉 src/scheduler/pool.ts 里的那处互斥",
+  ...overrides,
+];
+
 export interface TargetRepo {
   path: string;
   decisionsDir: string;
