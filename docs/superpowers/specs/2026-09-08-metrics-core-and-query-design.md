@@ -299,15 +299,23 @@ corrections 可能写在 A 机、decisions 写在 B 机；年龄 ＝ `本机 now
    本刀直接扫文件，**在今天的数据量下扫描买得到 DB 买得到的一切**，且能当天跑出真数字验收。
 2. **`--root` 之外、且不在注册表里的仓库仍会被漏掉。** 完整性闸门只能发现「有纠正但找不到」的项目，
    *** **发现不了「有决策、零纠正、且不在两条机制覆盖内」的乖仓库。** *** **这是本刀未消除的代价，不掩饰。**
-3. 🔴 **相邻诊断，本刀不动手**：`src/corrections/storeLock.ts` 现测用 `Date.now()` 算锁超时的 deadline
-   （**行号会移动，引用前现测**）—— 那是**用挂钟量时长**，挂钟跳一下（NTP 校时、唤醒后校正）
-   超时就会提前或推迟触发；正确形状是 `performance.now()`。
-   **不在本刀范围内**（Rule 3：只收自己的烂摊子），登记在此。
-4. 🔴 **已发布注释的一处更正**：`src/corrections/schema.ts` 现测写着
-   「there is no database, **no writer and no CLI subcommand** for it yet」——
-   *** **该句现在为假**（writer 是 `store.ts`／`correct.ts`，子命令是 `orca correct`）***，
-   而该注释**已发布**（其最后一笔 `2b34435` 现测是远端 `main` 的祖先）
-   ⇒ **只能在注释块末尾追加具名 ERRATUM，不许就地改。这是本刀实施计划里的一个任务。**
+3. ✅ **已修，不再是登记项**（人 2026-09-08 具名授权「先把两条相邻诊断修了」）：
+   `src/corrections/storeLock.ts` 原本用 `Date.now()` 算锁超时的 deadline —— 那是**用挂钟量时长**。
+   提交主题行 `fix(storeLock): stop measuring an elapsed second with a clock that can be set`。
+   ⚠️ **本文原句写的是「本刀不动手」，那是写下时为真、随后被人的授权推翻的；此处即为就地更正**
+   （本文当时未发布，现测远端不含它 ⇒ 就地改合法）。
+   *** **这条修复顺带产出了本刀 §4.1 那条设计的第一份实证**：在进程内，`Date.now()` 与
+   `performance.now()` 不可区分，除非挂钟真的动 —— 而判据动不了挂钟。
+   ⇒ **「换回挂钟」这个变异唯一可观测的形状，是「注入的时钟不再被问」。** ***
+   实测：变异下**拒绝那条断言照绿**（变异体真的跑满 1000ms 才超时），红的是读数表 `[]`。
+   ⇒ **E2 的 §6 变异表里凡是涉及时钟的，都要照这个形状写，不要只断言「拒绝了」。**
+4. ✅ **已做，不再是实施计划里的任务**（同一次授权）：`src/corrections/schema.ts` 那句
+   「there is no database, **no writer and no CLI subcommand** for it yet」现在为假
+   （writer 是 `store.ts`／`correct.ts`，子命令是 `orca correct`）。
+   该注释**已发布**（其最后一笔 `2b34435` 现测是远端 `main` 的祖先）⇒ 原句逐字保留，
+   **在注释块末尾追加了具名 ERRATUM**。提交主题行
+   `docs(corrections): erratum the comment that says nothing has been built yet`。
+   ⚠️ **erratum 里唯一活下来的那半句「there is no database」指向的就是 E3** —— 本文 §8 已登记。
 5. **审阅记录本刀只定形状与读写函数，自己一条都不产生**（与 §2 的「写」一格一致）—— 产生它的是 E4 的面板。
    ⇒ *** **在 E4 落地之前，审阅覆盖率永远是 0，而 A′ §4.4 要求它与纠正率同读。
    这段时间里纠正率必须带着「覆盖率无数据」的显式标注输出，不许裸给。** ***
