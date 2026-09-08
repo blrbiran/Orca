@@ -10,6 +10,20 @@ import { z } from "zod";
  * can never be repaired. Strictness follows reversibility, not topic. This
  * round does NOT claim this shape is final: there is no database, no writer
  * and no CLI subcommand for it yet (spec §4.2).
+ *
+ * *** ERRATUM (2026-09-08, run orca-dev-ad1e30c6): the sentence above is now
+ * false in two of its three clauses, and the original text is kept verbatim
+ * because it is published. There IS a writer -- store.ts appends rows under
+ * storeLock.ts -- and there IS a CLI subcommand, `orca correct`, with both a
+ * record-only and a loop-closing mode. Only "there is no database" survives,
+ * and that one is scheduled: it is subsystem E's third cut (E3), designed on
+ * top of the metrics core specified in
+ * docs/superpowers/specs/2026-09-08-metrics-core-and-query-design.md.
+ *
+ * What does NOT change is the paragraph's actual claim -- that this shape is
+ * looser than src/ledger/ because a DB row is migratable and a ledger line is
+ * not. That reasoning is untouched by the erratum; what expired is only the
+ * inventory of what had been built when it was written. ***
  */
 export const CORRECTION_KINDS = ["wrong", "not_my_taste", "stale"] as const;
 export type CorrectionKind = (typeof CORRECTION_KINDS)[number];
