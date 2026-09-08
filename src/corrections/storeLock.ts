@@ -1,5 +1,6 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { performance } from "node:perf_hooks";
 import { CORRECTIONS_DIR_MODE, CORRECTIONS_FILE_MODE, storeLockDir } from "./paths.js";
 import { CorrectRejection } from "./rejection.js";
 
@@ -23,9 +24,34 @@ export interface StoreLock {
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
+/**
+ * 🔴 An ELAPSED time, so a monotonic reading -- never Date.now(). The first
+ * version of this function measured the deadline with the wall clock, which is
+ * the textbook mistake: the wall clock is not a stopwatch. It is stepped by NTP
+ * and by a person changing the machine's time, and either direction hurts here.
+ * A forward step turns a 1s retry budget into an immediate `corrections-store-busy`
+ * -- an exit 4 that makes someone re-type a command against a lock that was
+ * about to be released -- and a backward step stretches the budget past what
+ * the docstring above promises.
+ *
+ * Injected rather than called inline for the reason src/scheduler/graph.ts
+ * injects its own `now`: it is the only way a criterion can pin WHICH clock
+ * governs the deadline. In-process, Date.now() and performance.now() are
+ * indistinguishable unless the wall clock actually moves, and a test cannot
+ * move the wall clock -- so the mutation that matters ("go back to Date.now()")
+ * is only observable as "the injected clock stopped being consulted".
+ *
+ * ⚠️ Deliberately NOT used for the `acquired` timestamp in the info file below:
+ * that one is read by a human trying to find the holder, so it must be a wall
+ * clock. Elapsed time and points in time are different measurements and this
+ * module needs both -- which is exactly how the original defect got in.
+ */
+export type MonotonicNow = () => number;
+
 export async function acquireStoreLock(
   dir: string,
   timeoutMs: number = STORE_LOCK_TIMEOUT_MS,
+  now: MonotonicNow = () => performance.now(),
 ): Promise<StoreLock> {
   // §14.8: the PARENT is created recursively (it may not exist at all on a
   // fresh machine); the lock directory itself stays non-recursive, because
@@ -37,7 +63,7 @@ export async function acquireStoreLock(
   await mkdir(dir, { recursive: true, mode: CORRECTIONS_DIR_MODE });
 
   const lockDir = storeLockDir(dir);
-  const deadline = Date.now() + timeoutMs;
+  const deadline = now() + timeoutMs;
   for (;;) {
     try {
       // Explicit mode here too (Rule 17 / spec §14.17 carry no qualifier):
@@ -49,7 +75,7 @@ export async function acquireStoreLock(
       break;
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
-      if (Date.now() >= deadline) {
+      if (now() >= deadline) {
         const info = await readFile(join(lockDir, "info"), "utf8").catch(() => "(no info file)");
         throw new CorrectRejection(
           CORRECTIONS_STORE_BUSY,

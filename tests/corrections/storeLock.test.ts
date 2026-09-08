@@ -80,6 +80,46 @@ describe("corrections store lock (spec §7.2 / §7.3 / §14.8)", () => {
     expect(existsSync(storeLockDir(dir))).toBe(false);
   });
 
+  // 🔴 The deadline is measured with the INJECTED clock, not the wall clock.
+  // This is the only shape that can go red for that: in-process, Date.now()
+  // and performance.now() are indistinguishable unless the wall clock actually
+  // moves, and a test cannot move it. So the criterion observes the one thing
+  // the two differ in -- whether the injected reading is what governs -- by
+  // handing in a clock that jumps 500ms per reading against a 1000ms budget.
+  //
+  // Designed against its own mutation (revert the deadline to Date.now()):
+  // the rejection assertion stays GREEN under that mutation, because after
+  // ~1000ms of real time the loop times out for real. It is the CALL COUNT
+  // that goes red, and it goes red at 0 -- the injected clock never consulted.
+  // The assertions are ordered so the one that survives the mutation runs
+  // first: "red on which assertion" is only usable when the earlier ones
+  // cannot short-circuit the one being measured.
+  it("measures the timeout with the injected clock, not the wall clock", async () => {
+    const dir = await tempDir();
+    const first = await acquireStoreLock(dir);
+    try {
+      const readings: number[] = [];
+      const fakeClock = () => {
+        const reading = readings.length * 500;
+        readings.push(reading);
+        return reading;
+      };
+
+      const error = await acquireStoreLock(dir, 1000, fakeClock).then(
+        () => { throw new Error("acquired a lock someone else already holds"); },
+        (e: unknown) => e,
+      );
+
+      expect((error as CorrectRejection).code).toBe(CORRECTIONS_STORE_BUSY);
+      // 0 = the deadline, then one reading per EEXIST retry: 500 < 1000 keeps
+      // going, 1000 >= 1000 refuses. The literal 3 is the whole point -- a
+      // count of 0 is precisely what reverting to Date.now() produces.
+      expect(readings).toEqual([0, 500, 1000]);
+    } finally {
+      await first.release();
+    }
+  });
+
   // E17 (directory half, store dir AND lock dir). ⚠️ umask is pinned
   // explicitly and RESTORED: without pinning, a machine whose umask is 077
   // gets 0700 for free and the mutation that removes a mode argument stays
