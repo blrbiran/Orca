@@ -16,11 +16,15 @@ import { captureStreams, closeArgs, makeTargetRepo, runCli, withCorrectionsDir }
  * forever, staged and uncommitted, in an append-only file.
  *
  * The fix names the one recovery that does not duplicate rows:
- * `orca correct --repo <repo> --close <correctionId> --undo-how '…'`. This
- * criterion pins BOTH pieces the recovery needs: the flag and the actual id.
- * Reverting to the old wording keeps "--close" in the string (it always did)
- * but never mentions the correction's id — so the id assertion is what goes
- * red under that mutation, not the flag assertion.
+ * `orca correct --repo <repo> --close <correctionId> --undo-how '…'`.
+ *
+ * ⚠️ The assertion checks for the id ADJACENT to `--close` (`--close
+ * <id>`), not merely that both substrings occur somewhere in stderr. Node's
+ * execFile failure message echoes the whole failed command line, which
+ * includes the ledger commit message `… correction <id> --
+ * .decisions/…` — so the bare id is present in stderr even under the OLD
+ * wording, for a reason that has nothing to do with the recovery text.
+ * `--close <id>` adjacent is the substring only the fixed message produces.
  */
 describe("orca correct --close — hook-refused commit names the actual recovery (round-4 review, item 1)", () => {
   it("stderr names --close and the correction id when the original run was a one-shot close", async () => {
@@ -36,6 +40,9 @@ describe("orca correct --close — hook-refused commit names the actual recovery
         const correctionId = (await readCorrections(dir))[0].id;
         expect(first.stderr).toContain("--close");
         expect(first.stderr).toContain(correctionId);
+        // The load-bearing assertion (see the doc comment above): the id
+        // right after --close, which only the fixed recovery text produces.
+        expect(first.stderr).toContain(`--close ${correctionId}`);
       });
     } finally {
       await target.cleanup();
