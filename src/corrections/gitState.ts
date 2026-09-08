@@ -66,19 +66,19 @@ export async function midOperationRejection(
   const present = async (name: string): Promise<boolean> =>
     stat(join(gitDir, name)).then(() => true, () => false);
 
-  const refuse = (what: string, why: string): { code: string; message: string } => ({
+  const refuse = (state: string, why: string): { code: string; message: string } => ({
     code: TARGET_MID_OPERATION,
     message:
-      `${repo} is in the middle of ${what} — orca correct commits the ledger by path, and ${why} ` +
+      `${repo} ${state} — orca correct commits the ledger by path, and ${why} ` +
       `Finish or abort it and re-run the same command; nothing has been written.`,
   });
 
   if (await present("MERGE_HEAD")) {
-    return refuse("a merge", "git refuses a partial commit in this state.");
+    return refuse("is in the middle of a merge", "git refuses a partial commit in this state.");
   }
 
   if (await present("CHERRY_PICK_HEAD")) {
-    return refuse("a cherry-pick", "git refuses a partial commit in this state.");
+    return refuse("is in the middle of a cherry-pick", "git refuses a partial commit in this state.");
   }
 
   const detached = await execFileAsync("git", ["symbolic-ref", "--quiet", "HEAD"], { cwd: repo })
@@ -90,7 +90,7 @@ export async function midOperationRejection(
   // never changes WHETHER we reject — see the doc comment above.
   const rebasing = (await present("rebase-merge")) || (await present("rebase-apply"));
   return refuse(
-    rebasing ? "a rebase" : "a detached HEAD",
+    rebasing ? "is in the middle of a rebase" : "has a detached HEAD",
     "the resulting commit would not be reachable from any branch, and a later --close cannot tell it already ran.",
   );
 }
