@@ -2243,3 +2243,163 @@ ccloop 的 E1 ＋ 人裁 85、未 push 的提交）与第九节第 3 项那张�
 **成本（工具报数，收尾时钩子给的）**：*** **约 $117.89** ***。
 ⚠️ 第八节写的「约 $21.54」是**本轮中段**的数，**没错，但已过期** —— 三席评审是这中间涨上去的大头。
 **只抄工具打印的，不自估。**
+
+---
+
+# 📌 本轮（2026-09-07／08，会话 `0382dc91`）—— **`orca correct` 已经是真的了：第一条 `overturned` 落过盘，`orca validate` 判过 ok**
+
+**归属**：run `orca-dev-0382dc91`。本节**只追加**，上面一字未动。
+⚠️ **本节不写任何 HEAD、不写「领先几笔」** —— 提交本文就会改这两个数，人也会自己推远端。
+**要指代某一笔就引提交主题行；要判发布状态就现跑 `git ls-remote` ＋ `git merge-base --is-ancestor`。**
+
+## 一句话状态
+
+*** **spec 的 §14 定稿之后接了 `writing-plans`，出了 11 个任务的实施计划并【全部执行完毕】。产品代码从零到能跑通一次真闭环。** ***
+**验收（spec §10 那条只在本刀成立的）已通过**：在一次性目标仓库里跑出**本项目第一条真的 `overturned`**，`orca validate` **exit 0**。
+**一次都没 push、没建分支、没合并、没删任何分支或 worktree。**
+
+## 一、开工与收尾的现测（都带命令）
+
+| 项 | 开工（观测锚点：提交主题行 `docs(handoff): close the round -- rule 17 landed…` 那一笔） | 收尾（观测锚点：`fix(correct): stop claiming the file was staged when git add is what refused` 那一笔） |
+|---|---|---|
+| `rtk proxy npm run verify` | **exit 0**，全仓 **60 files / 317 tests**、scheduler 档 **51 / 167** | **exit 0**，全仓 *** **73 files / 397 tests** ***、scheduler 档 **51 / 167** |
+| `git status --porcelain` | 0 字节 | 0 字节 |
+| `ls ~/.orca` | 不存在 | *** **仍然不存在** *** |
+
+⚠️ *** **`verify` 打印两个判据数，别混着比。** *** 全仓档涨了 **+13 文件 / +80 条**；
+**scheduler 档全程未变**，因为本轮没有任何一个任务往 `tests/scheduler/` 加文件 —— 这是开工普查就预测到的，不是漏跑。
+
+⚠️ *** **`ls ~/.orca` 那一格是本轮最该被下一位继承的证据**：`orca correct` 的默认存储就在那里，而
+`CLAUDE.md` Rule 17 要求判据一律走 `ORCA_CORRECTIONS_DIR` 改道。**十一个任务、二十多次判据跑之后它仍然不存在**，
+就是「没有任何一条判据碰过使用者真实用户数据」的证明。**下一位改这一层时，请保持这条能继续成立。**
+
+## 二、做出来的东西（**按提交主题行找，别数笔数**）
+
+计划本身：`docs/superpowers/plans/2026-09-07-corrections-store-and-writer.md`（主题行
+`docs(plan): turn the settled orca correct design into eleven tasks, each with its own mutations`）。
+
+新增 `src/corrections/**` 九个模块 ＋ `src/ledger/writer.ts` 的批量入口 ＋ `src/cli.ts` 的第五个子命令：
+
+| 买到的东西 | 提交主题行 |
+|---|---|
+| **一次落盘**：不存在「decision 写了、overturned 没写」的中间状态 | `feat(ledger): append a batch in one write…` |
+| 与 ccmem 逐字相同的 project key，无 remote 当场拒 | `feat(corrections): derive the same project key ccmem does…` |
+| store 锁：说得出谁持有、超时具名拒绝 | `feat(corrections): put the store behind a lock…` ＋ `fix(corrections): pin the lock directory's mode…` |
+| 🔴 **字段序列的唯一定义**（`by` 只有一处可被删） | `feat(corrections): give the field sequence one definition…` ＋ `fix(corrections): constrain CORRECTION_FIELDS…` |
+| 查重在锁内；`--again` 是显式动作 | `feat(corrections): judge duplicates inside the lock…` |
+| 两行逐字段派生，`at` 是真实落笔时刻 | `feat(corrections): derive both ledger rows…` |
+| 表达了闭环意图就不许半途；畸形参数一律具名拒绝 | `feat(cli): once a closing intent is expressed…` ＋ `fix(cli): refuse a trailing, duplicated, or flag-shaped value…` |
+| 只记模式不取任何锁；两模式共用只读预检 | `feat(correct): record a correction without taking any lock…` |
+| 守卫、锁、次序：任何拒绝都不留下写入 | `feat(correct): guard, lock and order the closing path…` |
+| 只提交它自己写的那一个文件；重跑同一条 `--close` 会补完 | `feat(correct): commit only the ledger file it wrote…` |
+| README ＋ 验收 | `docs(readme): document orca correct after the first real overturned row landed` |
+| 全分支评审的六条修复 | `fix(correct): six whole-branch review fixes…` ＋ 三笔判据修正 |
+
+台账 `.decisions/orca-dev-0382dc91.jsonl` **现测 6 条**，全部经 `appendEvent`。
+
+## 三、🔴 一条**必须带给下一轮**的 spec 更正
+
+*** **spec `2026-09-06-corrections-store-and-writer-design.md` §14.3 的那张「闭-3 状态守卫」名单，已知部分为假。** ***
+
+它要求守卫拦五种状态（merge／rebase／detached ＋ `CHERRY_PICK_HEAD` ＋ `REVERT_HEAD`）。
+**本轮实施者在 git 2.50.1（Apple Git-155）上重测**（完整表在
+`.superpowers/sdd/2026-09-07-corrections-store-and-writer/task-9-report.md`）：
+
+- **只有 `MERGE_HEAD` 与 `CHERRY_PICK_HEAD` 会让 git 拒绝部分提交**（`fatal: cannot do a partial commit during a merge/cherry-pick.`，exit 128）；
+- *** **`REVERT_HEAD`、`rebase-merge`、`rebase-apply` 都不拦** *** —— git 接受部分提交，exit 0，哪怕 HEAD 是 detached。
+
+⇒ 落地的是**三条**：`MERGE_HEAD`、`CHERRY_PICK_HEAD`、**detached HEAD**。
+第三条不是因为 git 拒绝（它不拒），而是因为**那笔提交不在任何分支上**，而幂等检查用的是 `git log --all -S<id>`，
+**看不见没有 ref 指着的提交** ⇒ 下一次 `--close` 会判「还没闭环」，往只追加的台账里**再写一对行**。
+`REVERT_HEAD` 与两个 rebase 标记**只用来改写消息**，不参与判决 —— rebase 必然 detach，
+再给它一条独立判决就造出一条「删掉它自己也不会红」的冗余守卫（`validateLine.ts` 的注释里正记着同一个坑）。
+
+⚠️ **依据是 §14.3 自己那句「守卫只拦真正拦得住的那几种，不做过度拒绝」** —— *** **原则活下来了，那张表没有。** ***
+⚠️ **spec 是已发布文本** ⇒ 要更正只能**追加具名 ERRATUM**，不许就地改。本节即为该更正的记录点。
+⚠️ 同时加了一条**负向对照判据**：`revert -n` 进行中时 `--close` **必须仍然成功** ——
+没有它，将来「把守卫收紧一点」会让其余判据全绿而静默把过度拒绝装回来。
+
+## 四、🔴 六条会改变下一轮怎么干活的实测（**别重新发现**）
+
+### 1. *** 判据的第五种坏法：判据对、变异也对，但两者之间隔着一条永远先炸的断言 ***
+
+本仓库此前收敛过四种（判据空／冗余守卫／观测路径选错／守的门没人走）。本轮又出一种：
+守卫判据同时断言「具名拒绝」和「什么都没写」，而**删掉守卫会让整个调用成功** ⇒ 消息断言先红，
+**「什么都没写」那条从来没被执行过**。
+⇒ *** **打中它的不是删除式变异，是【故障注入】：保住守卫的抛错与消息，只把它挪到写入之后。** ***
+实测：消息断言照常通过，`existsSync` 那条第一次变红。
+
+### 2. *** 「判据在拿代码和自己对比」是一种独立的坏法，而且只有整套一起看才看得见 ***
+
+全分支评审实测出两处，都是**每席任务评审看不见的**（它们各自只看自己那份 brief）：
+- 交换 `CORRECTION_FIELDS` 里两个字段 ⇒ **209/209 全绿**（判据把序列化结果和 `CORRECTION_FIELDS` 自己比）；
+- 把 mode 常量改成 `0o755`／`0o644` ⇒ **209/209 全绿**（判据断言 `mode === 那个常量`，而不是 Rule 17 要求的字面值）。
+⇒ **修法是钉死字面量**：golden id／run id 的字面值、以及 `0o700`／`0o600` 的字面值。
+⇒ 记法：*** **凡是「断言 == 被测代码里的某个常量」的判据，先问一句：这个常量本身是谁钉的？** ***
+
+### 3. *** 十一个任务里有【六个】是实施者自己揭发了计划的测试代码有问题，实现没问题 ***
+
+E18 的变异够不到、release 判据是空壳、夹具键序恰好一致、E12 从没观测到写入、
+第一版恢复消息判据被 git 回显的提交信息喂绿……
+⇒ 这印证了 spec §14.21 那条「同一个上下文的自审抓得到细节、抓不到自己的框架」，
+并给出正向的一半：*** **换一双眼睛【执行】它，框架错误就浮出来了。** ***
+⇒ **下一轮写计划时，把「这条判据的变异真的够得到它吗」当成计划自查的一项，而不是留给实施者去撞。**
+
+### 4. *** 全分支那一席买到的东西，每席任务评审结构上都买不到 ***
+
+它找到的三条 Important **全在任务之间的缝上**：`git add` 的失败归哪个任务、`new URL` 崩在共用预检里、
+以及那句 exit 5 的恢复消息（消息是 Task 8 写的、恢复路径是 Task 10 建的、`close-new` 是 Task 9 建的，
+**没有任何一份 brief 拥有这三者的组合**）。
+⇒ *** **不要因为每席任务都 Approved 就跳过全分支那一席。** ***
+
+### 5. *** 一句写错的错误消息可以三步把人引进不可逆的重复写入 ***
+
+exit 5 原本说「重跑同一条 `--close`」。评审实测：一次性闭环失败后照做 ⇒ exit 1 建议 `--again` ⇒
+`--again` **提交第二对 `decision`＋`overturned`**，第一对孤儿留在盘上。
+台账层拦不住它（writer 只查 decision id 重复，`validateFile` 从不检查「一条 decision 最多被推翻一次」）。
+⇒ *** **在只追加的系统里，错误消息是产品的一部分，和守卫同级。** ***
+
+### 6. **两条与语言无关的机械事实**（下一位直接用）
+
+- *** **在 `git clone --local` 副本里跑判据，副本没有 `node_modules`** *** ⇒ `npx vitest` 会拉一个错版本、
+  死在 config 导入上，给你一个 `RC=1` —— **那不是判据变红**。
+  ⇒ `ln -s <主仓库>/node_modules <副本>/node_modules` 再走 `./node_modules/.bin/vitest`。
+- *** **`git clone --local` 只克隆【已提交】状态。** *** 要变异未提交的改动，必须先 `cat` 进副本并 `diff` 证明逐字节相同；
+  否则你变异的那个副本里**根本没有被测代码**。本轮真的踩到了一次（Task 5 被打断在提交之前）。
+
+## 五、本轮**没有**做的（登记，不掩饰）
+
+- **未 push、未建分支、未合并、未删任何分支或 worktree。**
+- **ccmem 零触碰** —— 人明确说另一个 agent 正在改它。
+- **裁决甲的 `plan` 那一半没做**（仍需人指名授权改 `preflightUnreadableRepo.test.ts`）。
+- **子系统 D 没开**；**B 的后续仍被 E 挡着**。
+- **ccloop 的 E1 的 I-2 ＋ 人裁 85 没动**（人裁 121 仍有效；动生产代码前仍需另拿具名授权）。
+- **spec 没有就地改一个字** —— §14.3 那张表的更正记在本节，不写进 spec。
+
+## 六、⛔ 下一件事
+
+| 顺序 | 做什么 | 说明 |
+|---|---|---|
+| **1** | *** **未 push 的提交等人单独授权** *** | **控制器不许 push。**⚠️ 远端在本轮中途被人推动过一次，**哪些已发布必须现跑 `git ls-remote` ＋ `merge-base --is-ancestor` 自己判** |
+| **2** | 给 spec 追加一条具名 ERRATUM，记 §14.3 守卫表的更正 | 本节第三条给了全部依据；**只能追加，不能就地改** |
+| **3** | 子系统 **E 的后续**（面板／查询／A′ §4.4 修复率的计算与展示） | 第一刀已经把写入方做出来了，形状被第一条真 `overturned` 冻住了 |
+| **4** | 子系统 **D**，或 B 的后续 | B 的后续此前被 E 挡着，**现在不挡了** |
+| **5** | 裁决甲的 `plan` 那一半 | 仍需人**指名授权** |
+| **6** | ccloop 的 **E1 的 I-2 ＋ 人裁 85** | 人裁 121 仍有效 |
+
+### 6.1 下一轮开工必读
+
+1. **本节第三条**（spec §14.3 的守卫表已知部分为假）与**第四条**（六条实测记法）。
+2. `.decisions/orca-dev-0382dc91.jsonl` **6 条**，每条都带被否掉的那条与它的代价。
+3. `.superpowers/sdd/2026-09-07-corrections-store-and-writer/progress.md` —— **本轮全部裁决的流水**，
+   含每条的「如果判错了代价是什么」。⚠️ 该目录 `.gitignore` 是 `*`，**没有进 git**；它随工作区存在，不随仓库。
+4. `README.md` 的 `orca correct` 一节 —— 六个退出码与存储位置都在那里。
+
+## 七、成本
+
+**只抄钩子报出来的数**（Rule 14）：钩子在收尾前最后一次报出的是 *** **约 $277** ***。
+此后又跑了全分支评审、一波六条修复、一次定向复审与一笔消息修复，**钩子没有再报过数，因此不写 —— 不许自估。**
+
+⚠️ **量级对照（不是估算）**：本轮 11 个任务，**每个任务一席实施 ＋ 一席评审**，其中 6 个任务另有修复轮，
+外加**全分支评审一席（用最强模型）＋ 修复波一席 ＋ 定向复审一席**。
+*** **「每任务两席」是这条流水线的稳定形状，也是钱的去处。** ***
