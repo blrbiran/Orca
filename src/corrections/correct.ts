@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { DecisionEvent } from "../ledger/schema.js";
 import { appendEvents } from "../ledger/writer.js";
@@ -6,7 +7,7 @@ import { TARGET_NOT_A_GIT_REPO, unlockableTargetRejection } from "../scheduler/p
 import { CLOSE_ARG_CONFLICT, parseCorrectArgs } from "./args.js";
 import { deriveRows } from "./derive.js";
 import { deriveCorrectionId, deriveFixRunId } from "./fields.js";
-import { midOperationRejection } from "./gitState.js";
+import { alreadyCommitted, commitLedgerFile, midOperationRejection } from "./gitState.js";
 import { readOriginalDecision } from "./originalDecision.js";
 import { correctionsDir } from "./paths.js";
 import { projectKeyOf } from "./projectKey.js";
@@ -144,21 +145,48 @@ export async function correct(argv: string[]): Promise<number> {
 
     const { id: _id, ...rowFields } = row;
     const runId = deriveFixRunId(rowFields, row.id);
+    const relPath = join(".decisions", `${runId}.jsonl`);
 
-    // 闭-7 (Task 10 adds the branch-independent idempotence questions in front
-    // of this): ONE landing, both rows, one appendFile.
-    const at = new Date().toISOString();
-    const { decision, overturned } = deriveRows({
-      correction: row,
-      original: original as DecisionEvent,
-      choseInstead,
-      undo: parsed.undo,
-      at,
-      runId,
-    });
-    await appendEvents(decisionsDir, runId, [decision, overturned]);
+    // Question 2 first: if the rows are already committed somewhere, both
+    // halves are done and there is nothing left to do. §14.1 (second seat,
+    // C-D): exit 0 here must mean landed AND committed — a friendly "already
+    // done" that only checked the file would make a hook-refused commit
+    // permanently unrecoverable, because every re-run would report success.
+    const committed = await alreadyCommitted(parsed.repo, relPath, row.id);
+    if (committed !== undefined) {
+      process.stdout.write(
+        `correction ${row.id} was already closed: ${relPath} at ${committed.commit} (${committed.refs})\n`,
+      );
+      return 0;
+    }
 
-    // 闭-8 lands in Task 10.
+    // Question 1: written in this worktree but not committed — finish the
+    // commit rather than writing the rows a second time.
+    const alreadyWritten = await readFile(join(decisionsDir, `${runId}.jsonl`), "utf8")
+      .then((text) => text.includes(row.id))
+      .catch(() => false);
+
+    // 闭-7: ONE landing, both rows, one appendFile.
+    if (!alreadyWritten) {
+      const at = new Date().toISOString();
+      const { decision, overturned } = deriveRows({
+        correction: row,
+        original: original as DecisionEvent,
+        choseInstead,
+        undo: parsed.undo,
+        at,
+        runId,
+      });
+      await appendEvents(decisionsDir, runId, [decision, overturned]);
+    }
+
+    // 闭-8: commit only the ledger file, leaving the person's own staging intact.
+    await commitLedgerFile(
+      parsed.repo,
+      relPath,
+      `ledger: overturn ${(original as DecisionEvent).id} after ${row.by}'s correction ${row.id}`,
+    );
+    process.stdout.write(`closed correction ${row.id}: ${relPath} committed on the current branch\n`);
     return 0;
   } finally {
     await repoLock.release();

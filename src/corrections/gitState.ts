@@ -2,6 +2,8 @@ import { execFile } from "node:child_process";
 import { stat } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { ORCA_IDENTITY, git } from "../scheduler/gitExec.js";
+import { CorrectRejection } from "./rejection.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -93,4 +95,73 @@ export async function midOperationRejection(
     rebasing ? "is in the middle of a rebase" : "has a detached HEAD",
     "the resulting commit would not be reachable from any branch, and a later --close cannot tell it already ran.",
   );
+}
+
+export const LEDGER_COMMIT_REFUSED = "ledger-commit-refused";
+
+/**
+ * 闭-8. Two halves, both required (measured 2026-09-06 in a throwaway repo,
+ * re-measured at implementation time):
+ *
+ *   git add -- <path> ; git commit -m …            → commits the WHOLE index,
+ *                                                    sweeping in what the
+ *                                                    person had staged
+ *   git commit -m … -- <path>   (alone)            → `error: pathspec … did
+ *                                                    not match any file(s)
+ *                                                    known to git` — the
+ *                                                    ledger file is untracked
+ *   git add -- <path> ; git commit -m … -- <path>  → only the ledger file,
+ *                                                    the person's staging intact
+ *
+ * ORCA_IDENTITY for the same reason land.ts uses it: this is an accounting
+ * commit. WHO made the correction is carried by the row's `by` and by the
+ * message, not by the committer.
+ *
+ * No `--no-verify`: the target repository's hooks are not orca's to bypass
+ * (registered, CLAUDE.md Rule 15 / spec §14.19 item 16). No `git reset` on
+ * failure either — undoing a person's index is not this program's business.
+ */
+export async function commitLedgerFile(repo: string, relPath: string, message: string): Promise<void> {
+  await git(repo, ["add", "--", relPath]);
+  try {
+    await git(repo, [...ORCA_IDENTITY, "commit", "-m", message, "--", relPath]);
+  } catch (err) {
+    throw new CorrectRejection(
+      LEDGER_COMMIT_REFUSED,
+      `the ledger rows are written to ${relPath} and staged, but git refused the commit: ` +
+        `${(err as Error).message.trim()} — fix that and re-run the same --close, which will finish this step`,
+      5,
+    );
+  }
+}
+
+/**
+ * 🔴 The idempotence question, asked of the REPOSITORY rather than of this
+ * worktree (§14.1, third seat). A closing commit lands on whatever branch the
+ * person is standing on — after a round that is usually W — so asking only
+ * "is the row in the file in front of me" answers "no" the moment they switch
+ * back to the main line, and the same correction gets written a second time.
+ * With §14.5's real write moments the two versions differ byte for byte, which
+ * turns an append-only file that was supposed to be structurally
+ * conflict-proof into a content conflict at merge time.
+ *
+ * `-S<correctionId>` is a pickaxe over every ref: it finds the commit that
+ * introduced this correction id into that path, wherever it lives. This is
+ * exactly why midOperationRejection above refuses a detached HEAD: a close
+ * made there would be invisible to `--all`, and this question would wrongly
+ * answer "not yet closed" for a correction that already is.
+ */
+export async function alreadyCommitted(
+  repo: string,
+  relPath: string,
+  correctionId: string,
+): Promise<{ commit: string; refs: string } | undefined> {
+  const log = await git(repo, ["log", "--all", `-S${correctionId}`, "--format=%H", "--", relPath]).catch(
+    () => "",
+  );
+  const commit = log.trim().split("\n")[0];
+  if (commit === undefined || commit.length === 0) return undefined;
+
+  const refs = await git(repo, ["for-each-ref", "--contains", commit, "--format=%(refname)"]).catch(() => "");
+  return { commit, refs: refs.trim().split("\n").filter((r) => r.length > 0).join(", ") || "(no ref)" };
 }
