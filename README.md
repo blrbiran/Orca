@@ -156,6 +156,84 @@ waiting on a person, so there is nothing honest to put in one. The round
 still contributes exit code 3, keeps the task's copy, and prints where it
 is.
 
+## `orca correct`
+
+```
+orca correct --decision <run-id>/<n> --kind wrong|not_my_taste|stale --because <text>
+             [--repo <path>] [--by <who>] [--again] [--record-only]
+             [--chose-instead <text> --undo-how <text> [--undo-cost <text>] [--undo-blast-radius <text>]]
+orca correct --close <correctionId> --undo-how <text> [--repo <path>] [--chose-instead <text>]
+```
+
+A correction records a human overturning a past decision. There are two
+modes:
+
+- **Record-only** — write the correction into the corrections store and stop
+  there. This is what happens when neither `--chose-instead` nor
+  `--undo-how` is given, or when `--record-only` is passed explicitly (which
+  forces record-only even if `--chose-instead` is given alongside it, for
+  the case where the alternative is already known but the undo plan is
+  not). `--decision` names the decision being corrected
+  (`<run-id>/<n>`, the same id a `decision` ledger row carries); `--again`
+  says "yes, record a second correction against the same decision by the
+  same person on purpose" — without it, a repeat is refused rather than
+  silently duplicated. `--by` defaults to `git config user.name`.
+- **Closing the loop** — giving *either* `--chose-instead` or `--undo-how`
+  expresses the intent to close, and then both are required (a typo in one
+  no longer silently falls back to record-only). Closing derives two rows —
+  a new `decision` and an `overturned` referencing the one it replaces —
+  writes them to the target repository's `.decisions/orca-fix-<hash8>.jsonl`
+  in one append, and commits just that one file on the branch the repository
+  currently has checked out, leaving the rest of the person's staging area
+  untouched.
+- **`--close <correctionId>`** re-opens the closing half of a correction that
+  was already recorded (by a prior record-only run, or by a `--close` that
+  landed the ledger rows but failed to commit — see exit 5 below). It cannot
+  be combined with `--decision`, `--kind`, `--because`, or `--again` — those
+  already live on the stored row — and `--chose-instead` may only supply a
+  value the stored row is missing, not override one it already has.
+
+Running the same closing command twice is safe: the second run recognises
+the correction is already recorded (or already committed) and refuses or
+no-ops rather than writing a second `overturned` row into the append-only
+ledger.
+
+### Exit codes
+
+- **0** — the correction was recorded, or the loop was closed and committed
+  (including the no-op case: this exact correction was already closed).
+- **1** — the input was refused: bad or missing arguments, an unknown
+  `--decision`, a correction already recorded (without `--again`), a
+  `--close` argument conflict, the target repository mid-merge/rebase/
+  cherry-pick or on a detached HEAD, or any other named rejection — the
+  message says which.
+- **3** — an exception nobody anticipated (the same top-level handler `orca
+  plan`/`orca run` share).
+- **4** — another `orca` process holds the target repository's lock;
+  transient, retry later.
+- **5** — the ledger rows landed on disk and were staged, but the commit
+  itself was refused (e.g. a hook rejected it); re-run the exact same
+  `--close` command to finish just the commit, without writing the rows a
+  second time.
+
+This scale is `orca correct`'s own — it does not reuse `orca plan`/`orca
+run`'s 0/1/2/3. `orca validate` has a separate scale of its own too: 0 (all
+ledger files ok), 1 (a file was rejected or none were found), and 2 (a
+decision was downgraded to tier 0 — legal, but not an agent's to decide).
+
+### The corrections store
+
+Corrections live outside any git repository, by design — the point of a
+correction is to feed a memory layer that spans repositories, not to be
+another line item in one repository's ledger. By default the store is
+`~/.orca/corrections.jsonl`; set `ORCA_CORRECTIONS_DIR` to redirect it to a
+different directory (its file is always named `corrections.jsonl` inside
+that directory). A directory or file this program creates for the first
+time is created `0700`/`0600` respectively, never inherited from the
+process's umask; a directory or file that already exists keeps whatever
+mode it has — that is a person's data, and this program does not get to
+change it.
+
 ## Known gaps (spec §10.4)
 
 These are registered, not hidden, straight from the design's own accounting:
