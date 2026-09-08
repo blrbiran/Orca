@@ -1,8 +1,9 @@
+import { existsSync } from "node:fs";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { appendEvents } from "../../src/ledger/writer.js";
+import { appendEvent, appendEvents } from "../../src/ledger/writer.js";
 import { deriveRows } from "../../src/corrections/derive.js";
 import type { DecisionEvent } from "../../src/ledger/schema.js";
 import type { Correction } from "../../src/corrections/schema.js";
@@ -112,11 +113,23 @@ describe("derived rows (spec §5 as revised by §14.2 / §14.5 / §14.22)", () =
   // refused by the ledger writer's check 3 instead of landing as a Tier 0
   // downgraded row. This is what makes ruling 4 (undo.how is the human's to
   // fill) a gate rather than a decoration.
+  //
+  // Fix round 1 finding: the original version of this criterion used a bare
+  // mkdtemp directory, so overturned.id ("orca-dev-1/1") resolved to nothing
+  // and check 5 (unknown decision id) rejected the batch regardless of
+  // undo.how — the criterion had never actually observed a write succeed or
+  // fail on the thing it's named for. Seeding `original` on disk in its own
+  // run file first makes the non-executable undo.how the ONLY thing standing
+  // between this batch and success.
   it("fails the append instead of writing a downgraded row when undo.how is prose", async () => {
     const dir = await mkdtemp(join(tmpdir(), "orca-derive-"));
+    await appendEvent(dir, "orca-dev-1", original);
     const { decision, overturned } = deriveRows({ ...input, undo: { how: "改一下" } });
     await expect(appendEvents(dir, "orca-fix-abcd1234", [decision, overturned])).rejects.toThrow(
       /downgraded to tier 0/,
     );
+    // The "rather than writing a downgraded row" half: nothing pinned this
+    // before. A rejected append must leave no ledger file for the run behind.
+    expect(existsSync(join(dir, "orca-fix-abcd1234.jsonl"))).toBe(false);
   });
 });
