@@ -61,9 +61,19 @@ export async function acquireStoreLock(
     }
   }
 
-  await writeFile(join(lockDir, "info"), `pid ${process.pid}\nacquired ${new Date().toISOString()}\n`, {
-    mode: CORRECTIONS_FILE_MODE,
-  });
+  // The lock directory is already ours (mkdir above succeeded) -- if writing
+  // the info file into it fails (ENOSPC, EIO, EPERM, …), the throw must not
+  // escape before the lock directory is removed: nothing else ever removes a
+  // stale lock (stale recovery is deliberately absent, by design, above), so
+  // an escaped throw here would lock that store forever.
+  try {
+    await writeFile(join(lockDir, "info"), `pid ${process.pid}\nacquired ${new Date().toISOString()}\n`, {
+      mode: CORRECTIONS_FILE_MODE,
+    });
+  } catch (err) {
+    await rm(lockDir, { recursive: true, force: true });
+    throw err;
+  }
 
   let released = false;
   return {

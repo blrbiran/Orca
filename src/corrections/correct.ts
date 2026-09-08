@@ -185,6 +185,7 @@ export async function correct(argv: string[]): Promise<number> {
       parsed.repo,
       relPath,
       `ledger: overturn ${(original as DecisionEvent).id} after ${row.by}'s correction ${row.id}`,
+      row.id,
     );
     process.stdout.write(`closed correction ${row.id}: ${relPath} committed on the current branch\n`);
     return 0;

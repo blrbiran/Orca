@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { CorrectRejection } from "../../src/corrections/rejection.js";
-import { CORRECTIONS_DIR_MODE, storeLockDir } from "../../src/corrections/paths.js";
+import { storeLockDir } from "../../src/corrections/paths.js";
 import { CORRECTIONS_STORE_BUSY, acquireStoreLock } from "../../src/corrections/storeLock.js";
 
 const tempDir = () => mkdtemp(join(tmpdir(), "orca-lock-"));
@@ -94,8 +94,14 @@ describe("corrections store lock (spec §7.2 / §7.3 / §14.8)", () => {
     try {
       const lock = await acquireStoreLock(dir);
       try {
-        expect((await stat(dir)).mode & 0o777).toBe(CORRECTIONS_DIR_MODE);
-        expect((await stat(storeLockDir(dir))).mode & 0o777).toBe(CORRECTIONS_DIR_MODE);
+        // 🔴 Round-4 review, item 5: the literal, not CORRECTIONS_DIR_MODE.
+        // Asserting against the constant under test only proves the constant
+        // reached mkdir -- it stays green even if the constant itself is
+        // loosened (measured: setting CORRECTIONS_DIR_MODE = 0o755 left this
+        // criterion green). spec §14.17 requires 0700 on these directories;
+        // that requirement is what must be pinned.
+        expect((await stat(dir)).mode & 0o777).toBe(0o700);
+        expect((await stat(storeLockDir(dir))).mode & 0o777).toBe(0o700);
       } finally {
         await lock.release();
       }

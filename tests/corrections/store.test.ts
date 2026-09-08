@@ -118,7 +118,13 @@ describe("corrections store (spec §4, §4.1, §14.6, §14.7)", () => {
     const previousUmask = process.umask(0o022);
     try {
       await recordCorrection(dir, correction(), { again: false });
-      expect((await stat(correctionsFile(dir))).mode & 0o777).toBe(CORRECTIONS_FILE_MODE);
+      // 🔴 Round-4 review, item 5: the literal, not CORRECTIONS_FILE_MODE.
+      // Comparing against the constant under test only proves the constant
+      // reached appendFile -- it stays green even if the constant itself is
+      // changed to something looser (measured: setting CORRECTIONS_FILE_MODE
+      // = 0o644 left this criterion green). spec §14.17 requires 0600 on this
+      // user-data file; that requirement is what must be pinned.
+      expect((await stat(correctionsFile(dir))).mode & 0o777).toBe(0o600);
     } finally {
       process.umask(previousUmask);
     }

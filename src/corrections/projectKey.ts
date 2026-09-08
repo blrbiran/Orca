@@ -34,14 +34,25 @@ export function normalizeRemoteUrl(remote: string): string {
 export const TARGET_HAS_NO_REMOTE = "target-has-no-remote";
 
 /**
+ * A remote exists but is not a shape `normalizeRemoteUrl` can turn into a
+ * key (round-4 review, item 3). `new URL(remote)` throws for a path-style
+ * remote — `/tmp/some/bare.git`, `../sibling.git`, exactly what
+ * `git clone --local` / `git clone /path` leave behind — and for a
+ * colon-less `git@host` that does not match the scp-style regex either.
+ * ccmem has no normalisation for these shapes either (it throws the same
+ * way), so this is deliberately a refusal, not an invented key: "you have no
+ * remote" (TARGET_HAS_NO_REMOTE) would be a different and misleading
+ * diagnosis for "your remote is not URL-shaped".
+ */
+export const TARGET_REMOTE_NOT_KEYABLE = "target-remote-not-keyable";
+
+/**
  * ⚠️ `git config --get remote.origin.url`, not `git remote get-url origin` —
  * the former is what ccmem runs, and the two disagree on repositories where
  * `insteadOf` rewriting is configured.
  */
 export async function projectKeyOf(repo: string): Promise<string> {
-  const remote = await execFileAsync("git", ["config", "--get", "remote.origin.url"], { cwd: repo })
-    .then(({ stdout }) => stdout.trim())
-    .catch(() => "");
+  const remote = await readOriginRemote(repo);
 
   if (remote.length === 0) {
     throw new CorrectRejection(
@@ -51,5 +62,37 @@ export async function projectKeyOf(repo: string): Promise<string> {
     );
   }
 
-  return normalizeRemoteUrl(remote);
+  try {
+    return normalizeRemoteUrl(remote);
+  } catch (err) {
+    throw new CorrectRejection(
+      TARGET_REMOTE_NOT_KEYABLE,
+      `${repo}'s remote is ${JSON.stringify(remote)}, which is not a URL orca can key a correction by ` +
+        `(a correction is keyed by the repository's remote URL): ${(err as Error).message.trim()}`,
+    );
+  }
+}
+
+/**
+ * `git config --get` exits 1 with empty stdout when the key is simply
+ * unset — that, and only that, is folded into "" (genuinely no remote,
+ * handled by the caller above). Any other failure — git not installed, the
+ * directory unreadable, a corrupt config — is a different problem and must
+ * say so rather than being reported as "has no remote" (round-4 review, item
+ * 3 minor: `.catch(() => "")` used to collapse every one of these).
+ */
+async function readOriginRemote(repo: string): Promise<string> {
+  try {
+    const { stdout } = await execFileAsync("git", ["config", "--get", "remote.origin.url"], { cwd: repo });
+    return stdout.trim();
+  } catch (err) {
+    const execErr = err as { code?: unknown; stdout?: string };
+    if (execErr.code === 1 && (execErr.stdout ?? "").trim().length === 0) {
+      return "";
+    }
+    throw new CorrectRejection(
+      TARGET_HAS_NO_REMOTE,
+      `${repo}: could not read remote.origin.url: ${(err as Error).message.trim()}`,
+    );
+  }
 }

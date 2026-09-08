@@ -120,16 +120,42 @@ export const LEDGER_COMMIT_REFUSED = "ledger-commit-refused";
  * No `--no-verify`: the target repository's hooks are not orca's to bypass
  * (registered, CLAUDE.md Rule 15 / spec §14.19 item 16). No `git reset` on
  * failure either — undoing a person's index is not this program's business.
+ *
+ * ⚠️ `add` sits INSIDE the same try as `commit` (round-4 review, item 2).
+ * Measured: a target repo whose `.gitignore` lists `.decisions/` makes `git
+ * add` itself fail, and `git status --porcelain` then reports nothing (the
+ * file is ignored) — so a caller outside a try/catch let that escape as an
+ * untyped exception (exit 3, a stack trace) even though the honest answer is
+ * the same one a refused commit gives: the rows are written, the commit did
+ * not happen.
+ *
+ * ⚠️ The recovery text names `--close <correctionId>` explicitly (round-4
+ * review, item 1), never "re-run the same command". Measured: for a person
+ * who closed the loop in one shot (`--decision … --chose-instead …
+ * --undo-how …`), re-running THAT same command hits
+ * `correction-already-recorded` on the second try and, followed to
+ * `--again`, commits a SECOND `decision`+`overturned` pair into a new ledger
+ * file while the first pair — from the hook-refused run — stays on disk,
+ * staged and uncommitted forever (append-only: neither pair can be removed
+ * after the fact). `--close <correctionId>` is the one command that reuses
+ * the already-recorded row instead of deriving a new one, so it is the only
+ * recovery that does not duplicate rows.
  */
-export async function commitLedgerFile(repo: string, relPath: string, message: string): Promise<void> {
-  await git(repo, ["add", "--", relPath]);
+export async function commitLedgerFile(
+  repo: string,
+  relPath: string,
+  message: string,
+  correctionId: string,
+): Promise<void> {
   try {
+    await git(repo, ["add", "--", relPath]);
     await git(repo, [...ORCA_IDENTITY, "commit", "-m", message, "--", relPath]);
   } catch (err) {
     throw new CorrectRejection(
       LEDGER_COMMIT_REFUSED,
-      `the ledger rows are written to ${relPath} and staged, but git refused the commit: ` +
-        `${(err as Error).message.trim()} — fix that and re-run the same --close, which will finish this step`,
+      `the ledger rows are written to ${relPath} and staged, but git refused: ` +
+        `${(err as Error).message.trim()} — fix that and run ` +
+        `\`orca correct --repo ${repo} --close ${correctionId} --undo-how '<the same undo>'\`, which will finish this step`,
       5,
     );
   }
