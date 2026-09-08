@@ -63,11 +63,18 @@ describe("correction id and fix run id (spec §14.11)", () => {
   // one would derive a DIFFERENT run id, so the idempotence check would look
   // in a ledger file that does not exist, conclude "not yet closed", and
   // append a second decision+overturned pair.
-  it("pins the correction id and fix run id to fixed literal values (golden, not self-referential)", () => {
+  //
+  // ⚠️ Two separate `it`s, not one `it` with two assertions (Rule 9: "which
+  // assertion goes red" is not reliable, because an earlier assertion in the
+  // same test short-circuits the ones after it -- measure each thing
+  // directly). Each of these two must independently go red under the swap.
+  it("pins the correction id to a fixed literal value (golden, not self-referential)", () => {
+    expect(deriveCorrectionId(row())).toBe("c_2aaacf515c6bf900");
+  });
+
+  it("pins the fix run id to a fixed literal value (golden, not self-referential)", () => {
     const fixture = row();
-    const id = deriveCorrectionId(fixture);
-    expect(id).toBe("c_2aaacf515c6bf900");
-    expect(deriveFixRunId(fixture, id)).toBe("orca-fix-bab81d76");
+    expect(deriveFixRunId(fixture, deriveCorrectionId(fixture))).toBe("orca-fix-bab81d76");
   });
 
   it("serialises the fields in the declared order and omits the absent optional one", () => {
