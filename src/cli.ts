@@ -1,5 +1,7 @@
 import { readFile, readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
+import { correct } from "./corrections/correct.js";
+import { CorrectRejection } from "./corrections/rejection.js";
 import { checkAppendOnly } from "./ledger/appendOnly.js";
 import { validateFile } from "./ledger/validateFile.js";
 import { preflight } from "./scheduler/preflight.js";
@@ -13,6 +15,13 @@ const USAGE = `usage:
                                  print the same report, then run every task and land it on the work branch
                                  (--serial: spec §3.5 — turn parallelism off entirely; a v1 criterion, not
                                  a performance knob)
+  orca correct --decision <run-id>/<n> --kind wrong|not_my_taste|stale --because <text>
+               [--repo <path>] [--by <who>] [--again]
+               [--chose-instead <text> --undo-how <text> [--undo-cost <text>] [--undo-blast-radius <text>]]
+                                 record a human's correction; giving either closing argument means
+                                 closing the loop, which also writes the two ledger rows and commits them
+  orca correct --close <correctionId> --undo-how <text> [--repo <path>] [--chose-instead <text>]
+                                 finish (or re-try) the closing half of a correction already recorded
 `;
 
 async function collectLedgerFiles(paths: string[]): Promise<{ files: string[]; errors: string[] }> {
@@ -195,6 +204,21 @@ async function runRun(args: string[]): Promise<number> {
   });
 }
 
+async function runCorrect(args: string[]): Promise<number> {
+  try {
+    return await correct(args);
+  } catch (err) {
+    // A named refusal answers with its own exit code (spec §14.14). Anything
+    // else is not this handler's to diagnose — it falls through to the
+    // top-level arm, which answers 3.
+    if (err instanceof CorrectRejection) {
+      process.stderr.write(`rejected: ${err.code}: ${err.message}\n`);
+      return err.exitCode;
+    }
+    throw err;
+  }
+}
+
 async function readStdin(): Promise<string> {
   const chunks: Buffer[] = [];
   for await (const chunk of process.stdin) {
@@ -216,6 +240,10 @@ export async function main(argv: string[], stdinText?: string): Promise<number> 
 
   if (command === "run") {
     return runRun(rest);
+  }
+
+  if (command === "correct") {
+    return runCorrect(rest);
   }
 
   if (command === "check-append-only") {
