@@ -1183,3 +1183,81 @@ M-e 提交落在 W 上（登记 15）；M-f 锁跨越钩子（登记 16）。
 **为什么这条值得改**：这条路的产物是**不可逆的台账写入**。
 *** **在一条不可逆的路上，把一次拼写错误变成一次语义降级，代价太高。** ***
 ⇒ 判据 **E3** 钉它，变异是「让缺失回落成只记模式」（**即第二版的行为**）。
+
+---
+
+## 15. ERRATUM —— §14.3 的「闭-3 状态守卫」名单**部分为假**
+
+> **归属**：run `orca-dev-ad1e30c6`，**2026-09-08** 写入，观测锚点 **`1b73923`**
+> （主题行 `docs(sdd): archive the evidence behind the spec correction, and say so in the handoff`）。
+> ⚠️ **本节是【追加】。§0–§14 一个字节都没动** —— 那些是已发布文本
+> （现测：§14 最后一次重写那一笔 `3e71b8c` 是远端 `main` 的祖先）。
+> ⚠️ **也没有往 §14.0 那张推翻对照表里加行** —— 它同样是已发布文本，而本节紧接 §14 之后，
+> 按「§14.0 → §14 全文」的读法会自然读到。**这是一次判断，不是疏漏。**
+
+### 15.1 被推翻的是哪两句（**原文见 §14.3，逐字保留**）
+
+1. **闭-3 那一行**：「**工作树状态守卫**（全部只读，**必须在任何写入之前**）：
+   不在 detached HEAD、**不在 merge／rebase／cherry-pick／revert 进行中**」。
+2. **§14.3「处置两件」的第 1 条**：「**闭-3 的守卫加上 `CHERRY_PICK_HEAD` 与 `REVERT_HEAD`**
+   （连同 merge／rebase／detached，全部只读、全部在任何写入之前）」。
+
+*** **这两句合起来要求守卫拦五种状态。实测：其中三种 git 根本不拦，照原样实施会造成【过度拒绝】。** ***
+
+### 15.2 实测（**第一手材料已归档进本仓库**）
+
+**环境**：`git version 2.50.1 (Apple Git-155)`，**2026-09-08** 测于本机，
+全部在 scratchpad 下的一次性仓库里造，**Orca 工作树零触碰**。
+**完整表（11 种构造状态 × 6 个状态标记 × 部分提交结果）在**
+`.superpowers/sdd/2026-09-07-corrections-store-and-writer/task-9-report.md`
+（`git add -f` 归档，该目录 `.gitignore` 是 `*`）。
+**每一格都是 `git commit -m "partial test" -- README.md` 的字面结果** —— 即 `--close` 真正要做的那种按 pathspec 的部分提交。
+
+| 状态 | 部分提交的结果 |
+|---|---|
+| `MERGE_HEAD` 存在（冲突已解决、未 commit 的 `merge`） | *** **exit 128**，`fatal: cannot do a partial commit during a merge.` *** |
+| `CHERRY_PICK_HEAD` 存在（冲突已解决、未 `--continue` 的 `cherry-pick`） | *** **exit 128**，`fatal: cannot do a partial commit during a cherry-pick.` *** |
+| `REVERT_HEAD` 存在（干净的 `revert -n`） | **exit 0，提交成功** |
+| `REVERT_HEAD` 存在（冲突已解决、未 `--continue` 的 `revert`） | **exit 0，提交成功** |
+| `rebase-merge` 存在（ort/merge 后端，git 当前默认；HEAD 已 detach） | **exit 0，提交成功** |
+| `rebase-apply` 存在（legacy am 后端；HEAD 已 detach） | **exit 0，提交成功** |
+| 单纯 detached HEAD，无任何操作进行中 | **git 不拒** |
+
+*** **整份测量里只观测到那两条 fatal，再没有第三条。** ***
+
+### 15.3 落地的是**三条**，且**三条各有各的理由**
+
+实现在 `src/corrections/gitState.ts` 的 `midOperationRejection`，其 doc comment 是本节的代码侧副本。
+
+| 拒 | 理由 |
+|---|---|
+| `MERGE_HEAD` | **git 自己拒**（上表，exit 128） |
+| `CHERRY_PICK_HEAD` | **git 自己拒**（上表，exit 128）。⚠️ 这正是 §14.3 那条 Critical 的来源：只拦「merge／rebase／detached」会让它整个漏过去 |
+| **detached HEAD** | *** **不是因为 git 拒（它不拒）。** *** 那笔提交**不在任何 ref 上**，而幂等检查是 `git log --all -S<correctionId> -- <path>`，**`--all` 看不见没有 ref 指着的提交** ⇒ 下一次 `--close` 会答「还没闭环」，往**只追加**的台账里**再写一对行** |
+
+**被删掉的三个**：`REVERT_HEAD`、`rebase-merge`、`rebase-apply`。
+它们在实测里**全部允许部分提交**；而 revert 两种情形 **HEAD 仍然是 attached**
+⇒ 拦它们会在「那一次写入本来能干净跑过」的仓库上拒绝闭环。
+
+⚠️ *** **rebase 不需要第四条独立判决** *** —— rebase 必然 detach HEAD，第三条已经覆盖它。
+**多给一条就造出一个「删掉它自己也不会红」的冗余守卫**（同一个坑记在 `src/ledger/validateLine.ts` 的注释里）。
+⇒ `rebase-merge`／`rebase-apply` **只被读来决定消息说什么词**，不参与判决。
+
+### 15.4 为什么这不算推翻 §14.3 的原则
+
+§14.3 自己那句 *** **「守卫只拦真正拦得住的那几种，不做过度拒绝」** *** 是本次更正的**依据**，不是被更正的对象。
+*** **原则活下来了，那张五项名单没有。** ***
+那张名单是**另一天的一次测量**；本次是对**同一个五项列表**的重测，结论与它相反。
+
+⚠️ **配一条负向对照判据**（`tests/corrections/close.test.ts`，
+`negative control: a revert -n in progress does NOT block --close…`）：
+`revert -n` 进行中时 `--close` **必须仍然成功**。
+*** **没有它，将来「把守卫收紧一点」会让其余判据全绿，而静默把过度拒绝装回来。** ***
+
+### 15.5 这条更正本身的记法
+
+*** **一张「哪些状态该拦」的表，是一次【测量】，不是一条【设计】。** ***
+它会随 git 版本、随后端默认值漂移，而 spec 的其余部分是设计。
+⇒ **凡是把测量结果写进 spec 的地方，都要能被一次重测推翻，且重测的第一手材料必须进仓库** ——
+否则下一位拿不到证据，就只能照着一张已知为假的表实施。
+（本轮为此把 `task-9-report.md` 与 `progress.md` 一并 `git add -f` 归档；见 handoff 七.1 节。）
