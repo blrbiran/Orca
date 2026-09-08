@@ -61,6 +61,23 @@ export const UNKNOWN_ARGUMENT = "unknown-argument";
 /** A flag whose value this parser needs but was not given. */
 export const MISSING_REQUIRED_ARGUMENT = "missing-required-argument";
 
+/**
+ * A value-flag whose value slot is malformed: absent (the flag is the last
+ * token), exactly another recognised flag's name (so it was clearly the
+ * NEXT flag, not this one's value), or given more than once. Fix round 1,
+ * finding 1: `argv[index + 1]` reading past the end of the array silently
+ * returns `undefined`, which reads exactly like "flag not given at all" --
+ * the same silent mode-flip this whole task exists to eliminate, arriving
+ * through a different door (`--close` as the trailing token quietly became
+ * a fresh `record` run that exited 0). Finding 3: `indexOf` silently keeps
+ * the first of a repeated flag.
+ *
+ * The membership check against known flags is an EXACT match, deliberately
+ * not "starts with --": a human's `--because` text may legitimately begin
+ * with dashes, and that has to keep working.
+ */
+export const MALFORMED_ARGUMENT = "malformed-argument";
+
 const VALUE_FLAGS = [
   "--repo",
   "--by",
@@ -76,25 +93,53 @@ const VALUE_FLAGS = [
 
 const BOOLEAN_FLAGS = ["--again", "--record-only"] as const;
 
+const ALL_FLAGS = new Set<string>([...VALUE_FLAGS, ...BOOLEAN_FLAGS]);
+
+type Scanned = { values: Map<string, string>; booleans: Set<string> };
+
 /**
- * Every token must be a known boolean flag, or a known value flag followed by
- * its value -- anything else (an unknown flag, or a stray positional) is
- * refused. Walking the array and skipping a value flag's next slot, rather
- * than just checking "does every `--`-prefixed token appear in a known set",
- * is what lets a flag's own value read like a flag name without being
- * misclassified as one.
+ * One pass over argv that is simultaneously the unknown-argument check, the
+ * flag-value lookup, the missing-value check, and the duplicate-value check
+ * -- doing all four as one walk is what lets "is this token a value flag's
+ * value" and "does this value flag already have a value" share the same
+ * index, instead of drifting the way two independent `indexOf`-based
+ * lookups did before this fix.
  */
-function findUnknownToken(argv: string[]): string | undefined {
+function scanArgv(argv: string[]): Scanned {
+  const values = new Map<string, string>();
+  const booleans = new Set<string>();
+
   for (let i = 0; i < argv.length; i++) {
     const token = argv[i];
-    if ((BOOLEAN_FLAGS as readonly string[]).includes(token)) continue;
-    if ((VALUE_FLAGS as readonly string[]).includes(token)) {
-      i++; // its value; not itself an argument to classify
+
+    if ((BOOLEAN_FLAGS as readonly string[]).includes(token)) {
+      booleans.add(token);
       continue;
     }
-    return token;
+
+    if ((VALUE_FLAGS as readonly string[]).includes(token)) {
+      if (i + 1 >= argv.length) {
+        throw new CorrectRejection(MALFORMED_ARGUMENT, `${token} needs a value, but it is the last argument`);
+      }
+      const value = argv[i + 1];
+      if (ALL_FLAGS.has(value)) {
+        throw new CorrectRejection(
+          MALFORMED_ARGUMENT,
+          `${token} needs a value, but got ${value}, which is itself a recognised flag`,
+        );
+      }
+      if (values.has(token)) {
+        throw new CorrectRejection(MALFORMED_ARGUMENT, `${token} was given more than once`);
+      }
+      values.set(token, value);
+      i++; // consume the value slot -- it is not itself a token to classify
+      continue;
+    }
+
+    throw new CorrectRejection(UNKNOWN_ARGUMENT, `unknown argument: ${token}`);
   }
-  return undefined;
+
+  return { values, booleans };
 }
 
 async function defaultGitUserName(): Promise<string | undefined> {
@@ -131,15 +176,8 @@ export async function parseCorrectArgs(
   argv: string[],
   options: ParseCorrectArgsOptions = {},
 ): Promise<ParsedCorrect> {
-  const unknown = findUnknownToken(argv);
-  if (unknown !== undefined) {
-    throw new CorrectRejection(UNKNOWN_ARGUMENT, `unknown argument: ${unknown}`);
-  }
-
-  const flagValue = (name: string): string | undefined => {
-    const index = argv.indexOf(name);
-    return index === -1 ? undefined : argv[index + 1];
-  };
+  const { values, booleans } = scanArgv(argv);
+  const flagValue = (name: string): string | undefined => values.get(name);
 
   const repo = flagValue("--repo") ?? process.cwd();
   const decisionId = flagValue("--decision");
@@ -150,8 +188,8 @@ export async function parseCorrectArgs(
   const undoCost = flagValue("--undo-cost");
   const undoBlastRadius = flagValue("--undo-blast-radius");
   const close = flagValue("--close");
-  const again = argv.includes("--again");
-  const recordOnly = argv.includes("--record-only");
+  const again = booleans.has("--again");
+  const recordOnly = booleans.has("--record-only");
 
   // Ruling 2: --close finishes a loop; --record-only asks not to. Both at
   // once is a contradiction, refused by the same code as the other

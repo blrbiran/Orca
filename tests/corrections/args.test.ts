@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import { CorrectRejection } from "../../src/corrections/rejection.js";
 import {
   CLOSE_ARG_CONFLICT,
+  MALFORMED_ARGUMENT,
   MISSING_CLOSING_HALF,
   MISSING_IDENTITY,
+  MISSING_REQUIRED_ARGUMENT,
   parseCorrectArgs,
   type ParseCorrectArgsOptions,
 } from "../../src/corrections/args.js";
@@ -125,5 +127,78 @@ describe("orca correct argument surface (spec §3 as revised by §14.4 / §14.24
   it("refuses an unknown flag instead of ignoring it", async () => {
     const error = await rejectionOf([...base, "--undo-hwo", "删掉 src/a.ts 那处"]);
     expect(error.message).toContain("--undo-hwo");
+  });
+
+  // Fix round 1, finding 1: `argv[index + 1]` reading past the end of the
+  // array silently returns `undefined`, which used to read exactly like
+  // "flag not given at all" — the same silent mode-flip this whole task
+  // exists to eliminate, arriving through a different door. A shell script
+  // writing `--close $id` with `$id` unset produces exactly this shape.
+  it("refuses --close as the trailing token instead of dropping it and falling back to record", async () => {
+    const error = await rejectionOf([...base, "--close"]);
+    expect(error.message).toContain("--close");
+    expect(error.code).toBe(MALFORMED_ARGUMENT);
+  });
+
+  it("refuses --chose-instead as the trailing token instead of dropping it", async () => {
+    const error = await rejectionOf([...base, "--chose-instead"]);
+    expect(error.message).toContain("--chose-instead");
+    expect(error.code).toBe(MALFORMED_ARGUMENT);
+  });
+
+  // A value slot that is EXACTLY another recognised flag's name means the
+  // flag before it never got a value at all — name the flag that is missing
+  // its value (`--decision` here), not the flag that happened to land in
+  // its slot.
+  it("refuses a value slot that is exactly another known flag, naming the flag left without a value", async () => {
+    const error = await rejectionOf([
+      "--repo", "/tmp/r", "--by", "amy", "--decision", "--kind", "wrong", "--because", "x",
+    ]);
+    expect(error.message).toContain("--decision");
+    expect(error.code).toBe(MALFORMED_ARGUMENT);
+  });
+
+  // 🔴 Negative control: the fix above must be an EXACT match against known
+  // flag names, not "starts with --" — a human's reason may legitimately
+  // begin with dashes, and that has to keep parsing.
+  it("still parses a --because value that itself starts with dashes", async () => {
+    const parsed = await parseCorrectArgs([
+      "--repo", "/tmp/r", "--by", "amy", "--decision", "orca-dev-1/1", "--kind", "wrong",
+      "--because", "--not a flag, a reason",
+    ]);
+    expect(parsed).toMatchObject({ mode: "record", because: "--not a flag, a reason" });
+  });
+
+  // Finding 2: MISSING_REQUIRED_ARGUMENT had zero criteria before this round
+  // — every existing test supplied --decision/--kind/--because via `base`.
+  // A rejection path with no criterion is as good as absent.
+  it("refuses a missing --decision, naming it", async () => {
+    const error = await rejectionOf(["--repo", "/tmp/r", "--by", "amy", "--kind", "wrong", "--because", "错了"]);
+    expect(error.message).toContain("--decision");
+    expect(error.code).toBe(MISSING_REQUIRED_ARGUMENT);
+  });
+
+  it("refuses a missing --because, naming it", async () => {
+    const error = await rejectionOf([
+      "--repo", "/tmp/r", "--by", "amy", "--decision", "orca-dev-1/1", "--kind", "wrong",
+    ]);
+    expect(error.message).toContain("--because");
+    expect(error.code).toBe(MISSING_REQUIRED_ARGUMENT);
+  });
+
+  it("refuses an invalid --kind value, naming --kind", async () => {
+    const error = await rejectionOf([
+      "--repo", "/tmp/r", "--by", "amy", "--decision", "orca-dev-1/1", "--kind", "bogus", "--because", "错了",
+    ]);
+    expect(error.message).toContain("--kind");
+    expect(error.code).toBe(MISSING_REQUIRED_ARGUMENT);
+  });
+
+  // Finding 3: `argv.indexOf` silently kept the first of a repeated flag.
+  // Rule 12 — fail loud rather than silently reinterpret malformed input.
+  it("refuses a repeated --kind instead of silently keeping the first one", async () => {
+    const error = await rejectionOf([...base, "--kind", "stale"]);
+    expect(error.message).toContain("--kind");
+    expect(error.code).toBe(MALFORMED_ARGUMENT);
   });
 });
