@@ -121,13 +121,24 @@ export const LEDGER_COMMIT_REFUSED = "ledger-commit-refused";
  * (registered, CLAUDE.md Rule 15 / spec §14.19 item 16). No `git reset` on
  * failure either — undoing a person's index is not this program's business.
  *
- * ⚠️ `add` sits INSIDE the same try as `commit` (round-4 review, item 2).
- * Measured: a target repo whose `.gitignore` lists `.decisions/` makes `git
- * add` itself fail, and `git status --porcelain` then reports nothing (the
- * file is ignored) — so a caller outside a try/catch let that escape as an
- * untyped exception (exit 3, a stack trace) even though the honest answer is
- * the same one a refused commit gives: the rows are written, the commit did
- * not happen.
+ * ⚠️ `add` and `commit` each get their OWN catch (round-4 review, item 2;
+ * refined after the scoped re-review's minor below). Measured: a target repo
+ * whose `.gitignore` lists `.decisions/` makes `git add` itself fail, and
+ * `git status --porcelain` then reports nothing (the file is ignored) — so a
+ * caller outside a try/catch let that escape as an untyped exception (exit
+ * 3, a stack trace) even though the honest answer is the same CODE a refused
+ * commit gives: the rows are written, the commit did not happen. Both
+ * branches throw the same `LEDGER_COMMIT_REFUSED` at exit 5 — on BOTH, the
+ * rows are written and uncommitted, which is exactly what that code means.
+ *
+ * ⚠️ The two branches do NOT share one message string (re-review minor, the
+ * first version of this fix did): when `add` is what failed, the file was
+ * NEVER staged — that is precisely why `add` refused — so a message that
+ * says "written … and staged" on that branch asserts something false about
+ * what is on disk, the same shape of bug this whole review round exists to
+ * fix. Only the "staged" claim and which command's error text is quoted
+ * differ between the branches; the "written to disk" fact and the recovery
+ * sentence are identical bytes on both.
  *
  * ⚠️ The recovery text names `--close <correctionId>` explicitly (round-4
  * review, item 1), never "re-run the same command". Measured: for a person
@@ -147,15 +158,28 @@ export async function commitLedgerFile(
   message: string,
   correctionId: string,
 ): Promise<void> {
+  const recovery =
+    `fix that and run \`orca correct --repo ${repo} --close ${correctionId} --undo-how '<the same undo>'\`, ` +
+    `which will finish this step`;
+
   try {
     await git(repo, ["add", "--", relPath]);
+  } catch (err) {
+    throw new CorrectRejection(
+      LEDGER_COMMIT_REFUSED,
+      `the ledger rows are written to ${relPath}, but git refused to stage it: ` +
+        `${(err as Error).message.trim()} — ${recovery}`,
+      5,
+    );
+  }
+
+  try {
     await git(repo, [...ORCA_IDENTITY, "commit", "-m", message, "--", relPath]);
   } catch (err) {
     throw new CorrectRejection(
       LEDGER_COMMIT_REFUSED,
-      `the ledger rows are written to ${relPath} and staged, but git refused: ` +
-        `${(err as Error).message.trim()} — fix that and run ` +
-        `\`orca correct --repo ${repo} --close ${correctionId} --undo-how '<the same undo>'\`, which will finish this step`,
+      `the ledger rows are written to ${relPath} and staged, but git refused the commit: ` +
+        `${(err as Error).message.trim()} — ${recovery}`,
       5,
     );
   }
