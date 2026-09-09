@@ -2206,3 +2206,140 @@ for start, body, end in blocks:
 print('BAD_COUNT =', bad)
 SCAN
 ```
+
+---
+
+# 📌 ERRATUM 2 —— **剩下 8 条变异已补跑完；三条「期望红在 X」写得不全**
+
+> **归属**：run `orca-dev-30fa920f`，2026-09-10，在提交 `c75e937`（`docs(handoff): record the round that shipped orca metrics…`）上跑的。
+> ⚠️ *** **本节【只追加】。本文第 1–2208 行一字未动** *** —— 那些行在 `c788ddc` 与 `db715ed` 里已推上远端，
+> 现测 `git ls-remote origin refs/heads/main` ＝ 本地 HEAD ⇒ 已发布文本只能追加更正，不许就地改（CLAUDE.md Rule 13）。
+
+## 一、补跑结果：**8 组 / 11 次单跑，全部见红，无一跑绿**
+
+上一轮登记「没跑的 8 条」现已全部跑完。每条都做了四件事：`shasum` 前后不等（变异真落上去了）、
+判据见红、**读一眼红在不在点名那条上**、副本用 `/bin/rm -rf "${T:?clone root unset}"` 销毁。
+**主工作树全程零触碰** —— 收尾 `git status --porcelain -z` 现测 **0 字节**；`ls ~/.orca` 仍不存在。
+
+| 变异 | 落点 | 实测红在 | 与本文的期望 |
+|---|---|---|---|
+| **15** 第一步（松约束） | `src/metrics/highTier.ts` | `TSC_RC=0` | ✅ 逐字相符（本步的价值就是「松约束自己不红」） |
+| **15** 第二步（加第八个 kind） | `src/ledger/types.ts` | `TS2741: Property 'fabricated' is missing`，位置 `highTier.ts(18,14)` | ✅ 逐字相符 |
+| **7a** | `lenientRead.ts:64` | `names a MIDDLE bad line …`(:30) ＋ **`marks a torn LAST line torn …`(:45)** | ⚠️ **本文只写了前一条** |
+| **7b** | `lenientRead.ts:71` | `a JSON-valid line that is not a correction …`(:57) ＋ **`reports a bare null line as malformed …`(:115)** | ⚠️ **本文只写了前一条** |
+| **11** | `discover.ts:143` | `the integrity gate refuses …`(:101)，**恰好 1 条** | ✅ 逐字相符 |
+| **12** | `discover.ts:80–90`（删 11 行） | `refuses when one projectKey maps to two paths …`(:76)，**恰好 1 条** | ✅ 逐字相符 |
+| **13a** | `discover.ts:68–69` → `throw error` | `skips a repo it cannot key BUT names it …`(:49) ＋ **`a repo with no remote at all …`(:63)** | ⚠️ **本文只写了前一条** |
+| **13b** | 同上 → `continue` | 上述两条 | ✅ 逐字相符（本文写了两条） |
+| **8** | `resolve.ts:78` | `reports a correction whose decision is outside …`(:103)，**恰好 1 条** | ✅ 逐字相符 |
+| **5a** | `collect.ts:184` → 去掉 mode 判 | `filters rows newer than --as-of …`(:48)，**恰好 1 条** | ✅ 逐字相符 |
+| **5b** | 同上 → `if (false)` | `WITHOUT --as-of, a future row is a named refusal …`(:101)，**恰好 1 条** | ✅ 逐字相符 |
+| **18**（三处一起改） | `types.ts` ×2 ＋ `compute.ts` ×1 | `carries no scan-duration field …`(:34) ＋ `matches the golden byte for byte`(:37) | ✅ 点名那条红；golden 是连带，见下 |
+
+## 二、🔴 需要更正的一条：**「期望红在 X」写得【不全】，和写得【假】是同一类危害**
+
+本文末尾那条记法说的是**假**预言（I-2／I-3：点名的断言到不了）。**本轮补跑暴露了同一形状的第二种**：
+*** **预言【真但不全】** —— 点名的那一条确实红了，但同一条变异还打红了本文没提的另一条判据。** ***
+
+三处：**7a、7b、13a**（见上表 ⚠️ 行）。三条的成因是同一个：
+*** **被删掉的那一行是【多条路径共用的收口】** *** ——
+`lenientRead.ts:64` 的 `bad(…)` 同时服务「中间坏行」与「截断末行」两条判据（截断的 JSON 也走 `JSON.parse` 的 catch）；
+`lenientRead.ts:71` 的 `else bad(parsed.reason)` 同时服务「schema 不合法」与「裸 `null` 行」（`null` 是**合法 JSON**，走的是 parse 回调不是 catch）；
+`discover.ts:68` 的 `unkeyable.push` 同时服务 `TARGET_REMOTE_NOT_KEYABLE` 与 `TARGET_HAS_NO_REMOTE` 两种 `CorrectRejection`。
+
+**为什么这仍然危险**：纪律是「**红在别处 ＝ 假红**」。一个照本文执行的人看到「本文说红 1 条、实际红 2 条」，
+**最省事的读法就是判它假红，然后回去改没坏的代码** —— 与 I-2／I-3 引出的是同一个错误动作。
+
+⇒ 🔴 **本文那条记法就此补一维，两条一起用**：
+1. （原有）**每写一条「期望红在 X」，问「在 X 之前有没有别的断言会先炸」** —— 防**假**。
+2. 🆕 *** **每写一条「期望红在 X」，再问「被删掉的那一行，还有【谁】在走它」** *** —— 防**不全**。
+   **写法上把期望写成「红在 X（且仅 X）」或「红在 X 与 Y」，不留「至少」这种读者要自己补的空档。**
+
+⚠️ 这一维与本文第 1942 行那条「**被删掉的那件事，是不是【唯一】在做它的那件事**」是**同一个问句的两个方向**：
+那一条问的是「共用会不会让变异**变绿**」（守卫冗余 ⇒ 静默），**本条问的是「共用会不会让变异红得【比写的多】」**。
+*** **同一个「谁还在走这条路」的普查，一次回答两个问题。** ***
+
+## 三、变异 18 的连带（**不是本文的错，登记以免下一位误判**）
+
+本文只给 18 写了「`carries no scan-duration field …` 红」。补跑时为看清全貌跑了整个 `tests/metrics/`，
+于是 `cli.test.ts` 的 `matches the golden byte for byte` **也红了**（golden 多出 `"scan_ms": 0` 一行）。
+**这是正确的连带**：18 改的是输出形状，byte-exact golden 本来就该跟着红 —— 它正是 golden 存在的理由。
+⚠️ 但同时现测确认了 **C7 白名单的收益**：`serializes top-level keys in METRICS_FIELDS order …` **照绿**
+（`METRICS_FIELDS` 与 `MetricsReport` 同时改 ⇒ key 序仍一致）。
+*** **只改一处到不了输出这件事，本轮现测成立。** ***
+
+## 四、本轮**没有**做的（登记，不掩饰）
+
+- **没有改一行生产代码**，也没有改一行判据。**8 组变异全部见红 ⇒ 没有发现新的真缺陷**（不同于上一轮的 M9）。
+- **没有写台账 decision**：本条是**文档更正**，不是有备选项的设计裁断；按本文与 A′ 的先例，方法论记法的家是
+  ERRATUM ＋ handoff，不是 `.decisions/`。**登记此判断，人可以推翻。**
+- **未 push**（本轮控制器一次都没 push）；未建分支、未合并、未删任何分支或 worktree。
+
+## 五、🔴 本文 Self-Review 第 4 项那个 Q1 扫描器**有假阳性** —— 现测
+
+补跑收尾时把本文第 4 项那段扫描器原样跑了一遍（**dogfood**），它报：
+
+```
+Q1 BAD 2060 /bin/rm -rf "${STORE:?store unset}" "${ROOT:?root unset}"
+BAD_COUNT = 1
+```
+
+**那一行是对的**：用了 `/bin/rm`、两个实参**各自**带 `:?` 护栏、且 `STORE` 与 `ROOT` 都在同块 `mktemp -d` 赋值。
+**错的是扫描器** —— 它把变量名**写死成了 `T`**（`'T=$(mktemp' in txt and '${T:?' in l`），
+于是任何**不叫 `T`** 的正确写法都会被报。
+
+⚠️ *** **这与本文第 2671 行「扫描器不许对自己的警告文字报警」是同一族** *** ——
+那一条防的是「扫描器报自己」，**本条防的是「扫描器报一条合规的行」**。
+*** **两者的后果完全一样：读的人学会忽略它。而一个被忽略的护栏等于没有护栏。** ***
+本文这个 Q1 恰恰是为 C1（四行 `/bin/rm -rf .`）立的最后一道 —— 它带着一条假阳性被交付了。
+
+**修正版（按【护栏本身】判，不认变量名；已现测 `BAD_COUNT = 0`）**：
+
+```bash
+python3 - <<'SCAN'
+import re
+P = 'docs/superpowers/plans/2026-09-09-metrics-core-and-query-v2.md'
+lines = open(P).read().splitlines()
+blocks, cur = [], None
+for i, l in enumerate(lines, 1):
+    if l.strip().startswith('```bash'): cur = [i, []]
+    elif l.strip() == '```' and cur: cur.append(i); blocks.append(cur); cur = None
+    elif cur is not None: cur[1].append((i, l))
+# 赋值可跟在行首、`;`、`&&`、`||` 之后。⚠️ re.M 不能省:少了它 `^` 只匹配整块开头,
+#    于是 `T=$(mktemp -d)` 被判成「没赋值过」—— 本轮实测踩过。
+ASSIGN = re.compile(r'(?:^|[;&|]\s*)\s*([A-Za-z_][A-Za-z0-9_]*)=', re.M)
+bad = 0
+for start, body, end in blocks:
+    code_txt = '\n'.join(l.split('#', 1)[0] for _, l in body)   # 先剥注释再判
+    assigned = set(ASSIGN.findall(code_txt))
+    for n, l in body:
+        code = l.split('#', 1)[0]
+        m = re.search(r'\brm -rf\s+(.*)$', code)
+        if m:
+            argv = re.findall(r'"[^"]*"|\S+', m.group(1))
+            g = [re.fullmatch(r'"\$\{([A-Za-z_][A-Za-z0-9_]*):\?[^}]*\}"', a) for a in argv]
+            ok = ('/bin/rm' in code) and argv and all(g) and all(x.group(1) in assigned for x in g if x)
+            if not ok:
+                print(f'Q1 BAD line {n}: {l.strip()}'); bad += 1
+        if re.search(r'<[^<>|]{1,40}>', code) and '2>&1' not in code:
+            print(f'Q2 BAD line {n}: {l.strip()}'); bad += 1
+print('bash blocks scanned =', len(blocks))
+print('BAD_COUNT =', bad)
+SCAN
+```
+
+⚠️ **写这一版时它自己也错了两次，两次都被【反向对照】抓住，登记下来**：
+1. 第一版仍报 2060 —— `ASSIGN` 只认**行首**赋值，而那一块写的是 `STORE=$(mktemp -d); ROOT=$(mktemp -d)`（**同一行两个**）。
+2. 第二版把**所有** `T` 块都报了 —— 补 `[;&|]` 时**漏了 `re.M`**，`^` 于是只匹配整块开头。
+
+⇒ 🔴 *** **记法（从 ccmem 借的那条，本轮第一次在本仓库兑现）：一个扫描器只在语料上跑是不够的，
+它必须同时有【必抓】和【必不抓】两组样本。** *** 本条修正版跑的四组对照：
+
+| 样本 | 期望 | 现测 |
+|---|---|---|
+| `D=$(mktemp -d)` ＋ `/bin/rm -rf "$(dirname "$D")"`（**C1 的原形**） | FLAGGED | ✅ FLAGGED |
+| `/bin/rm -rf "${T:?…}"` 但 `T` 没在块内赋值 | FLAGGED | ✅ FLAGGED |
+| `rm -rf "${T:?x}"`（不是 `/bin/rm`） | FLAGGED | ✅ FLAGGED |
+| `T=$(mktemp -d)` ＋ `/bin/rm -rf "${T:?x}"` | clean | ✅ clean |
+
+*** **只在本文上跑「BAD_COUNT = 0」什么都不证明** —— 一个恒返回 0 的扫描器也给同样的输出。 ***
