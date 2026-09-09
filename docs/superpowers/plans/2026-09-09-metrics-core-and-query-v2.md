@@ -76,13 +76,13 @@ cat /tmp/verify-taskN.txt
 # 2) Rule 17 活证据
 ls ~/.orca 2>&1 || echo "ORCA_STILL_ABSENT"
 # 3) 工作树(M1:git diff 看不见未跟踪文件,必须用 porcelain -z)
-rtk proxy git status --porcelain -z > /tmp/pN.bin 2>&1
+rtk proxy git status --porcelain -z > /tmp/pN.bin 2>/tmp/pN.err   # ⚠️ 不用 2>&1:stderr 文本会被当成一个「路径」
 python3 -c "import sys;d=open('/tmp/pN.bin','rb').read().split(b'\0');print([x.decode() for x in d if x])"
 # 4) 已发布状态(M2:ls-remote 只给远端 sha;判就地改要 diff)
-git ls-remote origin refs/heads/main | cut -f1
+git ls-remote origin refs/heads/main > /tmp/lsr.txt 2>&1; echo "RC=$?" >> /tmp/lsr.txt; cat /tmp/lsr.txt
 # 5) 提交
-git add <本任务的文件>
-git commit -m "<主题行>"
+git add "${FILES:?task files unset}"                  # ⚠️ 绝不写 <本任务的文件>:bash 把 < 当输入重定向
+git commit -m "${SUBJECT:?commit subject unset}"
 ```
 
 ### 🔴 变异模板（**每个变异一个自包含代码块；C1 就是栽在跨块引用变量上**）
@@ -93,19 +93,27 @@ T=$(mktemp -d)
 git clone --local . "$T/copy" >/dev/null 2>&1
 ln -s "$PWD/node_modules" "$T/copy/node_modules"
 # 副本只有已提交状态 ⇒ 把工作树里未提交的文件逐个 cat 进去并证明逐字节相同
-for f in <本任务改动的文件…>; do
+for f in ${CHANGED:?changed files unset}; do          # ⚠️ 不写 <…>:bash 会把它当重定向
   mkdir -p "$T/copy/$(dirname "$f")"; cat "$f" > "$T/copy/$f"
   diff "$f" "$T/copy/$f" || { echo "COPY_DIFFERS: $f"; exit 1; }
 done
-shasum -a 256 "$T/copy/<被变异的文件>"                    # 变异前
+shasum -a 256 "$T/copy/${TARGET:?mutation target unset}"   # 变异前
 python3 - "$T/copy" <<'PY'
 # …改码脚本:锚点必须整行,且 assert 命中数 == 1
 PY
-shasum -a 256 "$T/copy/<被变异的文件>"                    # 变异后:两个 sha 不等才算落上去
-(cd "$T/copy" && ./node_modules/.bin/vitest run <判据文件> > /tmp/mN.txt 2>&1; echo "RC=$?" >> /tmp/mN.txt)
+shasum -a 256 "$T/copy/${TARGET:?mutation target unset}"   # 变异后:两个 sha 不等才算落上去
+(cd "$T/copy" && ./node_modules/.bin/vitest run "${SPEC:?spec file unset}" > /tmp/mN.txt 2>&1; echo "RC=$?" >> /tmp/mN.txt)
 cat /tmp/mN.txt                                          # ⚠️ 读一眼:红在点名的那一条上吗?
 /bin/rm -rf "${T:?clone root unset}"                     # ⚠️ :? 在变量为空时直接退出 —— 这一格是 C1 的护栏
 ```
+
+⚠️ 🔴 *** **模板里一律用 `"${VAR:?msg}"`，绝不用 `<占位符>`。** *** bash 把 `<x>` 解析成
+「从文件 `x` 输入重定向」＋ 一个输出重定向。**现测**：占位符文件**存在**时，
+`echo … --root <夹具> --as-of X --json > out.json` 会**造出一个名叫 `--as-of` 的文件**
+（`--` 开头的文件名是后续 glob 的参数注入隐患）；**不存在**时 `bash: 夹具: No such file or directory` 直接失败。
+**两种都不是你要的。**（第二席 Minor 2；控制器复核成立，并把触发条件量准了 —— 席位只给了前一半。）
+⚠️ *** **这一类是本文 Self-Review 的「Shell scan」按【变量未赋值】那一维【看不见】的** *** —— 那里根本没有变量。
+⇒ **Shell scan 因此加第二问**：*** **这一段里有没有 `<` 或 `>` 出现在不是重定向的位置。** ***
 
 ⚠️ *** **`/bin/rm` 而不是 `rm`** *** —— 本机 `rm` 与 `cp` 都有 `-i` alias，普通 `rm -rf` 会**静默挂在提示上直到超时**，`cp` 会**静默拒绝覆盖**（用 `cat pristine > target`）。
 
@@ -252,12 +260,18 @@ cat /tmp/m15a.txt
 
 Expected: *** **`TSC_RC=0`** *** —— **松约束【自己】不红。M5 记的就是这个**：这一步的价值是**证明第二步的红确实来自约束**。
 
-**第二步：约束松开后，再加第八个 kind。**（同一段模板，在同一个副本里连着做两处改动）
+**第二步：在【未松约束】的副本上加第八个 kind。**
+⚠️ *** **这是两个【独立副本】，不是同一个副本上的两处改动。** ***
+第一步的价值是证明「松约束**自己**不红」；第二步的价值是证明「**不松**约束时加 kind 会红」。
+**两步合起来才说明那个红来自约束。**
+（第二席 I-4：v2 第一版这句写成「同一个副本里连着做两处改动」，而 `tsconfig.json` 现测无
+`noUncheckedIndexedAccess` ⇒ 真那么做的话 `TSC_RC=0`，下面那条期望就是假的。**代码块本来是对的，错的是这句话。**）
 
 ```bash
 set -u
 T=$(mktemp -d); git clone --local . "$T/copy" >/dev/null 2>&1; ln -s "$PWD/node_modules" "$T/copy/node_modules"
 mkdir -p "$T/copy/src/metrics"; cat src/metrics/highTier.ts > "$T/copy/src/metrics/highTier.ts"
+diff src/metrics/highTier.ts "$T/copy/src/metrics/highTier.ts" || { echo COPY_DIFFERS; exit 1; }   # Global Constraint 10
 shasum -a 256 "$T/copy/src/ledger/types.ts"
 python3 - "$T/copy" <<'PY'
 import sys, pathlib
@@ -300,7 +314,8 @@ Expected: 红在 `sorts reconcile high …` 这一条上。红在别条 ⇒ 假�
   - `MalformedLine { file: string; line: number; bytes: number; reason: string; torn: boolean }` ← 🔴 **`torn` 是 I3 的落点**
   - `LenientRead<T> { rows: T[]; malformed: MalformedLine[] }` ← **不再有全局 `lastLineLooksTorn`**
   - `readCorrectionsLeniently(file): Promise<LenientRead<Correction>>`
-  - `readLedgerLeniently(file): Promise<LenientRead<LedgerRow>>`，`LedgerRow = { kind: "decision"; raw: string; row: DecisionEvent } | { kind: "overturned"; row: OverturnedEvent }`
+  - `readLedgerLeniently(file): Promise<LenientRead<LedgerRow>>`，`LedgerRow = { kind: "decision"; raw: string; value: unknown } | { kind: "overturned"; row: OverturnedEvent }`
+    ⚠️ *** **`value: unknown`，不是 `DecisionEvent`** *** —— 读取器不做 schema 判决，那正是 C2 的全部内容
 
 - [ ] **Step 1: 写会失败的判据** —— `tests/metrics/lenientRead.test.ts`
 
@@ -558,6 +573,11 @@ export type LedgerRow =
 
 export async function readLedgerLeniently(file: string): Promise<LenientRead<LedgerRow>> {
   return readLeniently<LedgerRow>(file, await readLines(file), (value, line) => {
+    // 第二席 Minor 6:一行 `null` 会让 `.ev` 抛 TypeError,整条命令崩 —— 而 §5.2
+    // 要求【任何】坏行都被排除并报告。写法照抄 src/ledger/validateLine.ts 现成的那一道。
+    if (typeof value !== "object" || value === null || Array.isArray(value)) {
+      return { ok: false, reason: "line is not a JSON object" };
+    }
     const ev = (value as { ev?: unknown }).ev;
     if (ev === "decision") return { ok: true, row: { kind: "decision", raw: line, value } };
     if (ev === "overturned") {
@@ -705,7 +725,10 @@ describe("repo discovery (E2 spec §2.1, §2.1.1)", () => {
     expect(found.unkeyable.map((u) => u.path)).toEqual([path]);
   });
 
-  // ⚠️ 夹具让两个路径的 decision 条数【不同】——「任选一个」在两边相同时会照绿(spec §8 第 12 条)。
+  // spec §8 第 12 条点名「任选一个」在两边相同时会照绿。本判据断的是【抛出并列出两个路径】,
+  // 不是条数,所以两边写什么都行 —— 但别把它误读成「条数不同才成立」。
+  // (第二席 Minor 4:v2 第一版这里写着「夹具让两个路径的 decision 条数【不同】」,而 "" 与 "\n\n"
+  //  现测【都是 0 条】—— 那句注释是假的,已删。)
   it("refuses when one projectKey maps to two paths, and lists both", async () => {
     const root = await mkdtemp(join(tmpdir(), "orca-metrics-root-"));
     const one = await repoWithRemote(root, "one", "https://github.com/biran/same.git");
@@ -1137,10 +1160,21 @@ describe("resolveOverturned (E2 spec §3.4.1, §3.4.2; A' §3.7.1 pins archive/<
 | 变异 | 改什么 | 期望红在 |
 |---|---|---|
 | **10** | 归档查找整段跳过（未闭环的直接算未闭环） | `finds an overturned that archiving moved …` |
-| **10-宽** | 把「一层」改成递归走查（模拟 v1 的裁一） | *** **`asks for exactly one path per year dir …` 必须红** *** —— 这条就是为发现「偷偷买回全扫」而写的 |
+| ~~**10-宽**~~ | ⛔ *** **在本任务里写不出来，已挪到 Task 5。** *** `ArchiveIo` 只有 `listYearDirs`／`statFile`／`readFile` 三个原语，**`resolve.ts` 手里没有任何能列出子树的东西** ⇒ 递归走查在纯层根本表达不了 | 见 Task 5 Step 6 |
+
+⚠️ 🔴 *** **v2 第一版把「偷偷买回全扫」的变异记在这一格，而它在这里不可能存在。** ***（第二席 I-1，控制器复核成立。）
+*** **真正能把「一层」变成「全扫」的地方是 Task 5 的 `fsArchiveIo.listYearDirs`** *** —— 一个真 fs 的实现，
+而纯层的假 io **看不见它**。⇒ 判据与变异都挪到 Task 5。
+⇒ **本任务这条判据（`asks for exactly one path per year dir …`）仍然有价值**：它钉的是
+*** **`resolve.ts` 每个年份目录只问一次、且问的是那一个派生出来的文件名** ***，**不是**「fs 侧有没有多走一层」。
+**两件事，两个落点，别再混。**
 | **8** | `unresolvedDecisions.push(...)` 改成 `throw new MetricsRejection(...)` | `reports a correction whose decision is outside …` |
 
-⚠️ **变异 10 跑完确认 `asks for exactly one path …` 那条【仍然绿】** —— 它守的是另一件事，两条不该同时红。
+⚠️ 🔴 *** **变异 10 会让【两条】都红，这是预期的，不是假红。** *** 跳过归档查找同时删掉了「去问」和「问对」两件事
+（`theIo.asked` 变成 `[]`，而那条判据断言 `toHaveLength(3)`）。
+**v2 第一版在这里写着「应仍然绿」—— 那是假的**（第二席 I-2，控制器现测复核成立）。
+⇒ 若要一条只红一条的变异，用 **10-窄**：`statFile` 命中后**不 `readFile`**，此时 `asked` 仍是 3，只有
+`finds an overturned that archiving moved …` 红。
 
 - [ ] **Step 6: 收尾**（照抄）。提交主题行：
 `feat(metrics): resolve archived fix runs by one derived name, as a function with no filesystem in it`
@@ -1165,7 +1199,7 @@ describe("resolveOverturned (E2 spec §3.4.1, §3.4.2; A' §3.7.1 pins archive/<
 | `asOf` | `string` | `--as-of` 或注入的 `now()` |
 | `asOfMode` | `"explicit" \| "wall_clock"` | 有没有给 `--as-of` |
 | `repos` | `DiscoveredRepo[]` | 🔴 **C7**：`discoverRepos` 的结果**必须整份带进来**，否则「有仓库、零决策」的乖仓库会从 `repos` 里消失 |
-| `decisions` | `DecisionObservation[]` | 台账 |
+| `decisions` | `DecisionObservation[]` | 台账（**类型逐字写在本表下方**） |
 | `corrections` | `CorrectionObservation[]` | store（**整行 `Correction`**） |
 | `overturned` | `OverturnedObservation[]` | 台账 ＋ 归档定点查 |
 | `excludedAsFuture` | `number` | `--as-of` 过滤掉的条数 |
@@ -1174,6 +1208,23 @@ describe("resolveOverturned (E2 spec §3.4.1, §3.4.2; A' §3.7.1 pins archive/<
 | `malformed` | `MalformedLine[]` | 两个宽容读取器 |
 
 ⚠️ *** **没有 `lastLineLooksTorn`** *** —— I3 把 torn 记进了 `MalformedLine` 自身。
+
+```typescript
+/** 一条 decision,压平成指标需要的那几格。第二席 I-6:v2 第一版只在上表引用了这个名字,从未定义。 */
+export interface DecisionObservation {
+  projectKey: string;
+  id: string;
+  at: string;
+  kind: DecisionKind;
+  scope: DecisionScope;
+  /**
+   * spec §3.4: validateLine 的判决决定成员资格。`rejected` 的行不进分母(它不是
+   * 合法记录);`downgraded` 的【进】分母(记录合法,只是这条决策不许 agent 拍 ——
+   * A′ §1.1)。两者都【不是】坏行 —— 那是 C2 的整个论点。
+   */
+  verdict: "ok" | "downgraded";
+}
+```
 
 - [ ] **Step 1: 🔴 先做一次机械核对（C5 的落点）**
 
@@ -1312,6 +1363,27 @@ describe("collect + --as-of (E2 spec §4.2, §5.1)", () => {
     });
   }, 5000);
 
+  // 🔴 I-1(第二席):真正能把「一层定点查」偷偷变成「全扫」的地方【在这里】,不在纯层。
+  // resolve.ts 只有三个原语,表达不了递归;而 fsArchiveIo.listYearDirs 是真 fs,
+  // 把它写成递归 walk 就把 spec §3.4.2 的成本承诺换掉了,且纯层的假 io 看不见。
+  // ⇒ 这条判据【正向观测遍历规模】。
+  it("lists only the top level of archive/ — a nested dir must not become a year dir", async () => {
+    await withCorrectionsDir(async () => {
+      const root = await mkdtemp(join(tmpdir(), "orca-metrics-root-"));
+      const repo = await repoWithRemote(root, "a", "https://github.com/biran/a.git");
+      const archive = join(repo, ".decisions", "archive");
+      await mkdir(join(archive, "2026", "nested"), { recursive: true });
+      await mkdir(join(archive, "2025"), { recursive: true });
+      await writeFile(join(archive, "2026", "nested", "orca-fix-deadbeef.jsonl"), "");
+
+      const { fsArchiveIo } = await import("../../src/metrics/collect.js");
+      const years = await fsArchiveIo.listYearDirs(repo);
+
+      expect(years).toEqual(["2025", "2026"]);                 // 恰好顶层两个
+      for (const y of years) expect(y).not.toContain("/");     // 一个带 / 的项就是走深了
+    });
+  });
+
   it("carries every malformed line through, with its file and line", async () => {
     await withCorrectionsDir(async (store) => {
       const root = await mkdtemp(join(tmpdir(), "orca-metrics-root-"));
@@ -1344,7 +1416,8 @@ describe("collect + --as-of (E2 spec §4.2, §5.1)", () => {
    ⚠️ **消息不许说「时钟偏斜」以外的成因** —— spec §4.2 点名了 v0 那条消息说谎的形状。
 7. 🔴 **闸门跑在【未过滤】的 store key 全集上**：一个纠正比 `--as-of` 新的 key 仍然指着一个该进分母的仓库，
    在这里藏起来会让闸门的沉默取决于一个 flag。
-8. 逐仓库调 `resolveOverturned(…, fsArchiveIo)`，其中 `fsArchiveIo` 是本文件里唯一接 fs 的地方：
+8. 逐仓库调 `resolveOverturned(…, fsArchiveIo)`，其中 *** **`fsArchiveIo` 必须 `export`**（判据要直接量它的遍历规模，见 Step 2 最后一条判据）***，
+   它是本文件里唯一接 fs 的地方：
    `listYearDirs` ＝ `readdir(join(repo, ".decisions", "archive"), { withFileTypes: true })` 取目录名并 `.sort()`（ENOENT ⇒ `[]`）；
    `statFile` ＝ `stat(path).then(() => true, () => false)`；`readFile` ＝ `readFile(path, "utf8")`。
 9. 出口前 `malformed.sort((a,b) => a.file !== b.file ? (a.file < b.file ? -1 : 1) : a.line - b.line)`。
@@ -1360,7 +1433,15 @@ describe("collect + --as-of (E2 spec §4.2, §5.1)", () => {
 
 spec §8 第 5 条要求的正是「两条判据必有一条红」。**两次各自看到红。**
 
-- [ ] **Step 6: 🔴 变异 3 —— 让 `rejected` 也进分母**
+- [ ] **Step 6: 🔴 变异 3 与变异 10-宽**
+
+**变异 10-宽（从 Task 4 挪来的，第二席 I-1）**：把 `fsArchiveIo.listYearDirs` 改成递归 walk，
+返回 `["2025","2026","2026/nested"]`。
+Expected: *** **红在 `lists only the top level of archive/ …` 上** ***（`years` 多出一项且含 `/`）。
+⚠️ **这条变异在 Task 4 的纯层里写不出来** —— 那边的 io 是注入的假的。
+*** **风险在真 fs 这一侧，判据也必须在这一侧。** ***
+
+**变异 3 —— 让 `rejected` 也进分母**
 
 把第 3 条里 `rejected ⇒ 跳过` 改成不跳过。
 Expected: 红在 `keeps a downgraded decision, drops a rejected one …`。
@@ -1560,7 +1641,17 @@ function c(decisionId: string, kind: Correction["kind"], at: string): { row: Cor
   return { row: { id: deriveCorrectionId(base), ...base } };
 }
 
-const OBS: Observations = {
+/**
+ * 🔴 GHOST is the correction whose decision was never scanned. It has to exist
+ * as a ROW, not only as an entry in unresolvedDecisions: mutation 9 moves a
+ * correction INTO a kind bucket, and with no such row there is nothing for it
+ * to move — `inBuckets` would be a constant and the criterion could not go red.
+ * (Second review seat, C-1. The first draft of this OBS had the entry and not
+ * the row, which is the "criterion is empty" failure this repo's Rule 9 names.)
+ */
+const GHOST = c("orca-dev-archived/7", "wrong", "2026-04-02T00:00:00.000Z");
+
+export const OBS: Observations = {
   asOf: "2026-09-09T00:00:00.000Z",
   asOfMode: "explicit",
   // I1:乱序给,且含一个零决策的仓库(C7)。
@@ -1577,12 +1668,13 @@ const OBS: Observations = {
     c("orca-dev-1/1", "wrong", "2026-03-01T00:00:00.000Z"),
     c("orca-dev-1/2", "stale", "2026-03-02T00:00:00.000Z"),
     c("orca-dev-1/3", "not_my_taste", "2026-04-01T00:00:00.000Z"),
+    GHOST,                                   // decision 扫不到 —— 变异 9 的那条
   ],
   overturned: [],           // Step 2 收尾时按下面第 2 条判据填一条
   excludedAsFuture: 0,
   // 🔴 C3 / 变异 9 的落点:一条 decision 扫不到的 correction。
   unresolvedDecisions: [
-    { correctionId: "c_ghost", projectKey: "github.com/biran/a", decisionId: "orca-dev-archived/7" },
+    { correctionId: GHOST.row.id, projectKey: "github.com/biran/a", decisionId: "orca-dev-archived/7" },
   ],
   // I1:两条,乱序。
   unkeyableRepos: [
@@ -1599,13 +1691,13 @@ const OBS: Observations = {
 describe("computeMetrics (E2 spec §3, §4.3)", () => {
   it("keeps stale OUT of the correction rate's numerator, and reports the total separately", () => {
     const r = computeMetrics(OBS, { bucket: "month" });
-    expect(r.correction_rate.numerator_corrections_excluding_stale).toBe(2);
-    expect(r.correction_rate.corrections_total_including_stale).toBe(3);
+    expect(r.correction_rate.numerator_corrections_excluding_stale).toBe(3);   // wrong + not_my_taste + GHOST
+    expect(r.correction_rate.corrections_total_including_stale).toBe(4);
   });
 
   it("keeps stale IN the repair rate's denominator — an unrepaired stale is the backlog", () => {
     const r = computeMetrics({ ...OBS, overturned: [{ correctionId: OBS.corrections[0].row.id, at: "2026-05-01T00:00:00.000Z" }] }, { bucket: "month" });
-    expect(r.repair_rate.denominator_corrections_including_stale).toBe(3);
+    expect(r.repair_rate.denominator_corrections_including_stale).toBe(4);
     expect(r.repair_rate.numerator_overturned).toBe(1);
   });
 
@@ -1618,7 +1710,7 @@ describe("computeMetrics (E2 spec §3, §4.3)", () => {
   // 变异 19 的加固形状:钉【年龄的字面毫秒数】,不只钉「跑出来了」。
   it("ages the backlog against as_of, in literal milliseconds", () => {
     const r = computeMetrics(OBS, { bucket: "month" });
-    expect(r.backlog.open_corrections).toBe(3);
+    expect(r.backlog.open_corrections).toBe(4);
     expect(r.backlog.oldest_correction_id).toBe(OBS.corrections[0].row.id);
     expect(r.backlog.oldest_age_ms).toBe(
       Date.parse("2026-09-09T00:00:00.000Z") - Date.parse("2026-03-01T00:00:00.000Z"),
@@ -1637,8 +1729,10 @@ describe("computeMetrics (E2 spec §3, §4.3)", () => {
     const r = computeMetrics(OBS, { bucket: "month" });
     const inBuckets = r.correction_rate.by_decision_kind
       .reduce((n, s) => n + s.numerator_corrections_excluding_stale, 0);
-    expect(inBuckets).toBe(2);                       // c_ghost 不在其中
-    expect(r.unresolved_decisions.map((u) => u.correctionId)).toEqual(["c_ghost"]);
+    // 🔴 分子是 3(含 GHOST),而进桶的只有 2 —— 两个数【分开】才让变异 9 有落点。
+    expect(r.correction_rate.numerator_corrections_excluding_stale).toBe(3);
+    expect(inBuckets).toBe(2);                       // GHOST 不在任何 decision.kind 桶里
+    expect(r.unresolved_decisions.map((u) => u.correctionId)).toEqual([GHOST.row.id]);
   });
 
   it("reports review coverage as unavailable and taints BOTH rates with the caveat", () => {
@@ -1729,7 +1823,8 @@ describe("compute.ts is pure (E2 spec §5, §4.3)", () => {
 
 - [ ] **Step 4: 跑判据，确认 12 ＋ 2 条全绿**
 
-- [ ] **Step 5: 🔴 六条变异（1／2／3′／4／9／16／19），逐条看到红**
+- [ ] **Step 5: 🔴 六条变异（1／2／4／9／16／19），逐条看到红**
+（**变异 3 不在这里** —— C2 之后 `rejected` 的判决点在 `collect` 的 `validateLine`，已挪到 Task 5 Step 6。）
 
 | 变异 | 改什么 | 期望红在 |
 |---|---|---|
@@ -1836,8 +1931,21 @@ describe("report rendering (E2 spec §6)", () => {
 
 | 变异 | 改什么 | 期望 |
 |---|---|---|
-| **17** | 去掉 `METRICS_FIELDS` 排序，直接 `JSON.stringify(report, null, 2)` | `serializes top-level keys …` 红；**并确认「打乱」那条也红**（若只有前者红，说明 I1 的夹具还不够） |
-| **18** | 往报告里加一个 `scan_ms` 字段 | `carries no scan-duration field …` 红 |
+| **17a**（**钉字段序**） | 去掉 `METRICS_FIELDS` 白名单，直接 `JSON.stringify(report, null, 2)`，**并把 `computeMetrics` 的 `return` 字面量按与 `METRICS_FIELDS` 不同的顺序重写** | `serializes top-level keys …` 红 |
+| **17b**（**钉集合序 —— 这才是「打乱」判据的那条**） | 删掉 `compute.ts` 出口的 `repos.sort` / `unkeyable.sort` / `malformed.sort` 三处 | *** **`is order-independent …` 红** *** |
+
+⚠️ 🔴 *** **v2 第一版把这两件事写成一条变异，而那条变异【一条判据都不会红】。** ***（第二席 C-2，控制器复核成立。）
+两个独立的原因：
+1. **集合序由 `compute` 出口的 `sort` 守，不是渲染层** ⇒ 只改渲染层，「打乱」判据照绿 ⇒ **必须有 17b。**
+2. **`MetricsReport` 的字段声明序与 `METRICS_FIELDS` 逐字同序**，而执行者最自然的写法就是按接口顺序写 `return { … }`
+   ⇒ 去掉白名单后 key 序**不变**，字段序判据也照绿 ⇒ **17a 必须【同时】打乱 `return` 字面量的顺序**。
+⇒ **记法**：*** **一条变异要能红，先问「被删掉的那件事，是不是【唯一】在做它的那件事」。** *** 冗余守卫让变异静默。
+| **18** | 🔴 **三处一起改**（`MetricsReport` 加 `scan_ms: number` ＋ `METRICS_FIELDS` 加 `"scan_ms"` ＋ `computeMetrics` 的 `return` 加 `scan_ms: 0`） | `carries no scan-duration field …` 红 |
+
+⚠️ *** **只改一处到不了输出。** *** `renderJson` 按 `METRICS_FIELDS` 白名单逐字段取值 ⇒ 一个不在白名单里的
+`scan_ms` **渲染不出来，判据照绿**；而 `METRICS_FIELDS` 上有 `as const satisfies readonly (keyof MetricsReport)[]`
+⇒ 往里加名字不同时改 `MetricsReport` 就**编译不过**。
+**这是 C7 买来的白名单挡住了变异 18** —— 第二席 Q2 撞出来的第三组（C7 × 变异 18）。
 
 - [ ] **Step 6: 收尾**（照抄）。提交主题行：
 `feat(metrics): pin the field order and keep the person's own words out of the report`
@@ -1936,18 +2044,44 @@ it("reads the corrections store ORCA_CORRECTIONS_DIR points at, not the real ~/.
 - [ ] **Step 5: 生成 golden 并【整份人眼读一遍】再写死**
 
 ```bash
-rtk proxy npx tsx src/cli.ts metrics --root <夹具> --as-of 2026-09-09T00:00:00.000Z --json \
+set -u
+# 1) 夹具必须【确定性】:固定 id、固定 at、固定路径基名。否则 golden 与判据永远差一个路径字符串。
+STORE=$(mktemp -d); ROOT=$(mktemp -d)
+node scripts-scratch/build-metrics-fixture.mjs "${ROOT:?root unset}" "${STORE:?store unset}"   # 见 Step 2
+# 2) 目录先建 —— tests/fixtures/ 现测只有 ledger/,没有 metrics/,`>` 会直接失败
+mkdir -p tests/fixtures/metrics
+# 3) 🔴 必须改道。src/corrections/paths.ts 现测:correctionsDir(env) 在没有
+#    ORCA_CORRECTIONS_DIR 时回落到 join(homedir(), ".orca") —— 那是使用者的真实数据。
+ORCA_CORRECTIONS_DIR="${STORE:?store unset}" rtk proxy npx tsx src/cli.ts metrics \
+  --root "${ROOT:?root unset}" --as-of 2026-09-09T00:00:00.000Z --json \
   > tests/fixtures/metrics/golden.json 2>/tmp/stderr.txt
 cat tests/fixtures/metrics/golden.json     # ⚠️ 整份读,逐个数对着夹具的已知条数核
 cat /tmp/stderr.txt                        # 耗时应当【只】出现在这里
+/bin/rm -rf "${STORE:?store unset}" "${ROOT:?root unset}"
 ```
+
+⚠️ 🔴 *** **v2 第一版这条命令没有 `ORCA_CORRECTIONS_DIR`。** ***（第二席 C-3，控制器复核成立。）
+两个后果：**(a)** 在**任何有 `~/.orca` 的机器上**，它会把使用者真实的 projectKey 与条数读进一个要提交进仓库的 golden，
+或被完整性闸门直接硬拒 —— *** **Rule 17 防的是「判据碰真实用户数据」，读也算** ***；
+**(b)** 判据跑在 `withCorrectionsDir` 给的临时 store 里，与生成 golden 用的 store **不是同一个**
+⇒ **golden 结构上不可能逐字节匹配**，Task 8 的成功判据无法达成。
+⚠️ **`buildFixture` 必须同时被判据与本步调用**（判据里 import 它，本步用一个薄脚本调它），**不许写两份**。
 
 ⚠️ *** **golden 是判据的一半，写死一个错数字等于把 bug 变成规范。** ***
 
 - [ ] **Step 6: 🔴 变异 6 —— §5.2 改回硬拒**
 
-把「先打印报告再返回 6」改成「直接返回 1，不打印」。
-Expected: *** **红在 `stdout.length > 0` 那条断言上** *** —— 只断言退出码的话，这条变异**照绿**。
+🔴 **两条变异，形状不同，各自看到红**（第二席 I-3：v2 第一版只写了第二条，而它的红点**到不了**点名的断言 ——
+`expect(result).toBe(6)` 排在前面会先炸，`stdout.length` 那行永远不执行）。
+
+| 变异 | 改什么 | 期望红在 |
+|---|---|---|
+| **6a**（**spec §8 第 6 条真正要的加固形状**） | *** **仍然返回 6，只把 `process.stdout.write(renderJson(...))` 那一行删掉** *** | *** **`expect(stdout.length).toBeGreaterThan(0)`** *** —— 退出码断言此时是绿的，所以红点必然落在它上面 |
+| **6b** | 改成「直接返回 1，不打印」（§5.2 改回硬拒） | `expect(result).toBe(6)` —— **这条会先炸，是预期的** |
+
+⚠️ *** **「只断言退出码会照绿」这句话对 6b 【不成立】** *** —— 它是从 spec §8 第 6 条原样抄来的，
+而 spec 说的是「把 §5.2 改回硬拒」这一类里**保住退出码**的那一支。**先例不要外推：抄一句话之前，
+把它拿到自己写的那条变异上跑一遍。**
 
 - [ ] **Step 7: 收尾**（照抄）。⚠️ 本任务收尾额外做一件：`git ls-remote` 之后，
 若本轮改过任何**已发布**文件，用 `git diff <远端sha>..HEAD -- <文件>` 自查（M2：`ls-remote` 只给 sha，判就地改要 diff）。
@@ -1972,6 +2106,32 @@ Expected: *** **红在 `stdout.length > 0` 那条断言上** *** —— 只断�
 
 ---
 
+## 第二席外派评审（**2026-09-09，判 `Ready to implement? No`；本文已按它逐条修正**）
+
+**报告原文与控制器复核**：`.superpowers/sdd/2026-09-09-metrics-core-e2/external-review-2.md`
+它审的是**修法本身**：22 条修法逐条判定（**16 条现测修好**），并按要求做了修法之间的两两对撞。
+
+**它抓到的、本文已修的**（每条都经控制器现测复核）：
+
+| | 发现 | 本文的修正 |
+|---|---|---|
+| **C-1** | 变异 9 **结构上不可能红** —— `OBS.unresolvedDecisions` 有条目，`OBS.corrections` 里却没有对应的行 | 新增 `GHOST` 行，并让「分子 3」与「进桶 2」两个数**分开** |
+| **C-2** | 变异 17 是**空操作** —— 集合序由 compute 的 `sort` 守、字段序两处同序 | 拆成 **17a／17b** 两条，各自有落点 |
+| **C-3** | golden 生成命令**读使用者真实的 `~/.orca`**，且与判据不是同一个 store ⇒ golden 结构上对不上 | 改道 ＋ 同一个 `buildFixture` ＋ `mkdir -p` |
+| **I-1** | 变异「10-宽」在纯层**写不出来**；真风险在 Task 5 的 `fsArchiveIo` | 判据与变异一起挪到 Task 5，并 `export fsArchiveIo` |
+| **I-2** | 变异 10 的「另一条应仍绿」**为假**（`asked` 变 `[]` ⇒ 必红） | 改成「两条都红是预期的」，并给出只红一条的 **10-窄** |
+| **I-3** | 变异 6 点名的断言**到不了**（退出码断言先炸） | 拆成 **6a**（保住退出码只删打印）与 **6b** |
+| **I-4** | M5 第二步正文与代码块**互相矛盾** | 改成「两个独立副本」，并补 `diff` 证明 |
+| **I-5** | 变异 18 被 C7 的白名单**挡在输出之外** | 改成 `MetricsReport` ＋ `METRICS_FIELDS` ＋ `return` **三处一起改** |
+| **Minor 1–8** | `OBS` 未 export；`<占位符>` 是重定向；checklist 里的管道；一句假注释；`2>&1` 混进二进制流；`null` 行抛 TypeError；`opts` 必填与「默认」矛盾；两处计数标签 | 全部已改 |
+
+🔴 *** **本轮最该被继承的一条**（I-2 与 I-3 是同一个形状）：
+**在计划里写下「应当红／应当绿」，就是写下一条【预言】。而本文第一版的两条预言现测都是假的，
+且都会【主动把执行者引向错误结论】** —— 按纪律「红在别处＝假红」，执行者会回去改没坏的代码。 ***
+⇒ **记法：每写一条「期望红在 X」，就把那条变异在脑内跑到底，问「在 X 之前有没有别的断言会先炸」。**
+
+---
+
 ## Self-Review
 
 **1. Spec coverage** —— 逐节对照：
@@ -1989,7 +2149,7 @@ Expected: *** **红在 `stdout.length > 0` 那条断言上** *** —— 只断�
 | §5 模块边界 ／ §5.1 不取锁 ／ §5.2 坏行 ／ §5.3 只给读侧 | File Structure ＋ Task 5（§5.1 正向对照）＋ Task 2／8（§5.2）＋ Task 2（§5.3） |
 | §6 输出形状四条 | Task 6（`MetricsReport` ＋ `METRICS_FIELDS`）＋ Task 7（排序、耗时、命名） |
 | §7 成功判据 | Task 8 |
-| §8 二十一条变异 | **1,2,4,9,16,19→T6；3,5,20→T5；6→T8；7(两处),21→T2；8,10→T4；11,12,13→T3；14,15(两步)→T1；17,18→T7** |
+| §8 二十一条变异 | **1,2,4,9,16,19→T6；3,5,10-宽,20→T5；6a/6b→T8；7(两处),21→T2；8,10→T4；11,12,13→T3；14,15(两步)→T1；17a/17b,18(三处一起改)→T7** |
 | §10 登记项 | 「已知边界」节 |
 
 ⚠️ **变异 3 从 T6 挪到了 T5** —— C2 之后 `rejected` 的判决点在 `collect` 里（`validateLine`），不在 compute。
@@ -2007,9 +2167,42 @@ Expected: *** **红在 `stdout.length > 0` 那条断言上** *** —— 只断�
 与实现的 `return` 逐字对照。**`METRICS_FIELDS` 的 `as const satisfies readonly (keyof MetricsReport)[]` 是第二道**：
 字段名打错会编译不过。
 
-**4. 🆕 Shell scan（v1 缺的那一项，C1 就是从这里漏掉的）** —— 本文所有可复制的 shell 逐段过了一遍：
+**4. 🆕 Shell scan（v1 缺的那一项，C1 就是从这里漏掉的）** —— *** **两问，不是一问。** ***
+
+**第一问：变量未赋值时它展开成什么？**（C1 那一类）
 - **每个变异是一个自包含代码块**，`T=$(mktemp -d)` 与用到它的每一行都在同一块内；
 - **每处销毁写作 `/bin/rm -rf "${T:?clone root unset}"`** —— 变量为空时 `:?` 直接退出，不会展开成 `.`；
 - **每段开头 `set -u`**；
 - **没有任何一处用管道过滤 `rtk` 的输出**（I6）；
 - 观测工作树一律 `git status --porcelain -z` ＋ python 按 NUL 切（M1：`git diff` 看不见未跟踪文件）。
+
+**第二问：有没有 `<` 或 `>` 出现在不是重定向的位置？**（第二席 Minor 2 那一类）
+⚠️ *** **第一问结构上看不见第二问** *** —— `<占位符>` 里根本没有变量。
+⇒ 本文所有 `<…>` 形状的 shell 占位符已全部换成 `"${VAR:?msg}"`。
+
+**这两问都写成了可跑的命令，不是一句「扫过了」**（v1 正是自称「核过」而现测为假）：
+
+```bash
+python3 - <<'SCAN'
+import re
+lines = open('docs/superpowers/plans/2026-09-09-metrics-core-and-query-v2.md').read().splitlines()
+blocks, cur = [], None
+for i, l in enumerate(lines, 1):
+    if l.strip().startswith('```bash'): cur = [i, []]
+    elif l.strip() == '```' and cur: cur.append(i); blocks.append(cur); cur = None
+    elif cur is not None: cur[1].append((i, l))
+bad = 0
+for start, body, end in blocks:
+    txt = '\n'.join(l for _, l in body)
+    for n, l in body:
+        if re.search(r'\brm -rf\b', l):
+            ok = ('T=$(mktemp' in txt) and ('${T:?' in l) and ('/bin/rm' in l)
+            if not ok: print('Q1 BAD', n, l.strip()); bad += 1
+        # ⚠️ 先剥掉行内注释再判 —— 否则这一段【自己写的警告文字】就会把扫描器点着,
+        #    而一个对自己的注释报警的扫描器会被读的人忽略掉。
+        code = l.split('#', 1)[0]
+        if re.search(r'<[^<>|]{1,40}>', code) and '2>&1' not in code:
+            print('Q2 BAD', n, l.strip()); bad += 1
+print('BAD_COUNT =', bad)
+SCAN
+```
