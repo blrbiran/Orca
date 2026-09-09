@@ -1,0 +1,171 @@
+{
+  "as_of": "2026-09-09T00:00:00.000Z",
+  "as_of_mode": "explicit",
+  "correction_rate": {
+    "numerator_corrections_excluding_stale": 2,
+    "denominator_decisions": 3,
+    "rate_excluding_stale": 0.6666666666666666,
+    "corrections_total_including_stale": 3,
+    "by_decision_kind": [
+      {
+        "kind": "dependency",
+        "tier": "high",
+        "numerator_corrections_excluding_stale": 0,
+        "denominator_decisions": 1,
+        "rate_excluding_stale": 0
+      },
+      {
+        "kind": "interface",
+        "tier": "high",
+        "numerator_corrections_excluding_stale": 1,
+        "denominator_decisions": 1,
+        "rate_excluding_stale": 1
+      },
+      {
+        "kind": "scheduling",
+        "tier": "high",
+        "numerator_corrections_excluding_stale": 0,
+        "denominator_decisions": 0,
+        "rate_excluding_stale": null
+      },
+      {
+        "kind": "abandon",
+        "tier": "high",
+        "numerator_corrections_excluding_stale": 0,
+        "denominator_decisions": 0,
+        "rate_excluding_stale": null
+      },
+      {
+        "kind": "criteria",
+        "tier": "high",
+        "numerator_corrections_excluding_stale": 0,
+        "denominator_decisions": 0,
+        "rate_excluding_stale": null
+      },
+      {
+        "kind": "boundary",
+        "tier": "high",
+        "numerator_corrections_excluding_stale": 0,
+        "denominator_decisions": 0,
+        "rate_excluding_stale": null
+      },
+      {
+        "kind": "reconcile",
+        "tier": "high",
+        "numerator_corrections_excluding_stale": 0,
+        "denominator_decisions": 1,
+        "rate_excluding_stale": 0
+      }
+    ],
+    "buckets": [
+      {
+        "bucket": "2026-01",
+        "numerator_corrections_excluding_stale": 1,
+        "denominator_decisions": 2,
+        "rate_excluding_stale": 0.5,
+        "counted_through": "2026-09-09T00:00:00.000Z"
+      },
+      {
+        "bucket": "2026-02",
+        "numerator_corrections_excluding_stale": 0,
+        "denominator_decisions": 1,
+        "rate_excluding_stale": 0,
+        "counted_through": "2026-09-09T00:00:00.000Z"
+      }
+    ],
+    "caveats": [
+      "review coverage has no data: its only producer is the panel (E2 spec §3.5), and A' §4.4 says the correction rate must never be read on its own",
+      "some corrections point at decisions outside what was scanned (see unresolved_decisions); they count in the totals but sit in no decision-kind bucket"
+    ]
+  },
+  "repair_rate": {
+    "numerator_overturned": 1,
+    "denominator_corrections_including_stale": 3,
+    "rate": 0.3333333333333333,
+    "stale_only": {
+      "numerator_overturned": 0,
+      "denominator_corrections": 1,
+      "rate": 0,
+      "known_bias": "systematically low: closing a stale correction requires the chose_instead field (CLI flag --chose-instead) that corrections/schema.ts says a stale may not have (E2 spec §3.2.1, A' ERRATUM 3)"
+    },
+    "buckets": [
+      {
+        "bucket": "2026-03",
+        "numerator_overturned": 1,
+        "denominator_corrections_including_stale": 2,
+        "rate": 0.5,
+        "counted_through": "2026-09-09T00:00:00.000Z"
+      },
+      {
+        "bucket": "2026-04",
+        "numerator_overturned": 0,
+        "denominator_corrections_including_stale": 1,
+        "rate": 0,
+        "counted_through": "2026-09-09T00:00:00.000Z"
+      }
+    ],
+    "caveats": [
+      "review coverage has no data: its only producer is the panel (E2 spec §3.5), and A' §4.4 says the correction rate must never be read on its own"
+    ]
+  },
+  "backlog": {
+    "open_corrections": 2,
+    "oldest_age_ms": 16502400000,
+    "oldest_correction_id": "c_0975f73383016b90",
+    "by_correction_kind": [
+      {
+        "kind": "wrong",
+        "open": 0,
+        "oldest_age_ms": null
+      },
+      {
+        "kind": "not_my_taste",
+        "open": 1,
+        "oldest_age_ms": 13910400000
+      },
+      {
+        "kind": "stale",
+        "open": 1,
+        "oldest_age_ms": 16502400000
+      }
+    ]
+  },
+  "repos": [
+    {
+      "projectKey": "github.com/biran/alpha",
+      "decisions": 3
+    },
+    {
+      "projectKey": "github.com/biran/beta",
+      "decisions": 0
+    }
+  ],
+  "breakdown_by_correction_kind_including_stale": [
+    {
+      "kind": "wrong",
+      "corrections": 1
+    },
+    {
+      "kind": "not_my_taste",
+      "corrections": 1
+    },
+    {
+      "kind": "stale",
+      "corrections": 1
+    }
+  ],
+  "review_coverage": {
+    "available": false,
+    "reason": "review coverage has no data: its only producer is the panel (E2 spec §3.5), and A' §4.4 says the correction rate must never be read on its own"
+  },
+  "excluded_as_future": 0,
+  "unresolved_decisions": [
+    {
+      "correctionId": "c_e26ea320c00e0138",
+      "projectKey": "github.com/biran/beta",
+      "decisionId": "orca-dev-b/1"
+    }
+  ],
+  "unkeyable_repos": [],
+  "malformed_lines": []
+}

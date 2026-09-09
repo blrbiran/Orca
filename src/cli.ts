@@ -1,6 +1,11 @@
 import { readFile, readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { correct } from "./corrections/correct.js";
+import { correctionsDir } from "./corrections/paths.js";
+import { collect } from "./metrics/collect.js";
+import { computeMetrics } from "./metrics/compute.js";
+import { renderJson, renderTable, renderTiming } from "./metrics/report.js";
+import { MetricsRejection } from "./metrics/rejection.js";
 import { CorrectRejection } from "./corrections/rejection.js";
 import { checkAppendOnly } from "./ledger/appendOnly.js";
 import { validateFile } from "./ledger/validateFile.js";
@@ -22,6 +27,12 @@ const USAGE = `usage:
                                  closing the loop, which also writes the two ledger rows and commits them
   orca correct --close <correctionId> --undo-how <text> [--repo <path>] [--chose-instead <text>]
                                  finish (or re-try) the closing half of a correction already recorded
+  orca metrics [--root <dir>] [--repo <key>=<path>]... [--as-of <ISO8601>] [--json]
+                                 read-only: the correction rate, the repair rate and the backlog.
+                                 Writes nothing and takes no lock. --as-of filters the input set to
+                                 what existed at that instant; without it, a row dated in the future
+                                 is refused by name. Exit 6 means the report printed in full and some
+                                 lines were malformed.
 `;
 
 async function collectLedgerFiles(paths: string[]): Promise<{ files: string[]; errors: string[] }> {
@@ -219,6 +230,63 @@ async function runCorrect(args: string[]): Promise<number> {
   }
 }
 
+/**
+ * spec §5, §7. Read-only: no file is written, no lock is taken.
+ *
+ * The exit code is NOT simply "were there bad lines". spec §5.2 exempts a torn
+ * LAST line — that is the expected race of reading an append-only file while
+ * someone appends — so 6 fires only when at least one bad line is NOT torn. A
+ * flag per read could not express that; `torn` therefore lives on each line.
+ *
+ * ⚠️ The report is printed BEFORE the code is decided. A read-only reporting
+ * tool that gives a person nothing because one line is bad is out of
+ * proportion, and a criterion that only asserts the exit code would stay green
+ * if this were reordered — so the criterion asserts stdout is non-empty too.
+ */
+async function runMetrics(args: string[]): Promise<number> {
+  const flagValue = (name: string): string | undefined => {
+    const index = args.indexOf(name);
+    return index === -1 ? undefined : args[index + 1];
+  };
+  const repos: Array<{ projectKey: string; path: string }> = [];
+  for (let i = 0; i < args.length; i += 1) {
+    if (args[i] !== "--repo") continue;
+    const pair = args[i + 1] ?? "";
+    const split = pair.indexOf("=");
+    if (split <= 0) {
+      process.stderr.write(`orca metrics: --repo wants <projectKey>=<path>, got ${JSON.stringify(pair)}\n`);
+      return 1;
+    }
+    repos.push({ projectKey: pair.slice(0, split), path: pair.slice(split + 1) });
+  }
+
+  const started = performance.now();
+  try {
+    const observations = await collect({
+      root: flagValue("--root"),
+      repos,
+      // Read-time evaluation, so ORCA_CORRECTIONS_DIR is honoured (Rule 17):
+      // every criterion in this subsystem points it at a throwaway directory,
+      // and a module-level constant would have frozen the real ~/.orca in.
+      correctionsDir: correctionsDir(process.env),
+      asOf: flagValue("--as-of"),
+    });
+    const report = computeMetrics(observations, { bucket: "month" });
+    process.stdout.write(args.includes("--json") ? renderJson(report) : renderTable(report));
+    // spec §4.1 / §6 item 3: the one quantity that varies every run goes to
+    // stderr, never into --json, or no golden could ever be diffed.
+    process.stderr.write(renderTiming(performance.now() - started));
+
+    return report.malformed_lines.some((line) => !line.torn) ? 6 : 0;
+  } catch (err) {
+    if (err instanceof MetricsRejection) {
+      process.stderr.write(`rejected: ${err.code}: ${err.message}\n`);
+      return err.exitCode;
+    }
+    throw err;
+  }
+}
+
 async function readStdin(): Promise<string> {
   const chunks: Buffer[] = [];
   for await (const chunk of process.stdin) {
@@ -244,6 +312,10 @@ export async function main(argv: string[], stdinText?: string): Promise<number> 
 
   if (command === "correct") {
     return runCorrect(rest);
+  }
+
+  if (command === "metrics") {
+    return runMetrics(rest);
   }
 
   if (command === "check-append-only") {
