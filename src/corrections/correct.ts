@@ -5,15 +5,18 @@ import { appendEvents } from "../ledger/writer.js";
 import { acquireRepoLock } from "../scheduler/repoLock.js";
 import { TARGET_NOT_A_GIT_REPO, unlockableTargetRejection } from "../scheduler/preflight.js";
 import { CLOSE_ARG_CONFLICT, parseCorrectArgs } from "./args.js";
+import type { ParsedCorrect } from "./args.js";
 import { deriveRows } from "./derive.js";
-import { deriveCorrectionId, deriveFixRunId } from "./fields.js";
+import { deriveFixRunId } from "./fields.js";
+import type { CorrectionRow } from "./fields.js";
 import { alreadyCommitted, commitLedgerFile, midOperationRejection } from "./gitState.js";
 import { readOriginalDecision } from "./originalDecision.js";
 import { correctionsDir } from "./paths.js";
 import { projectKeyOf } from "./projectKey.js";
 import { CorrectRejection } from "./rejection.js";
 import type { Correction } from "./schema.js";
-import { loadCorrection, recordCorrection } from "./store.js";
+import { recordNewCorrection } from "./record.js";
+import { loadCorrection } from "./store.js";
 
 /**
  * Ruling 2 (task 9): these two are command-level refusals, so they are
@@ -52,24 +55,42 @@ export async function sharedPreflight(repo: string): Promise<string> {
   return projectKeyOf(repo);
 }
 
+/**
+ * 🔴 E3 spec §2.3: ONE literal. Both modes that create a correction build their
+ * row here; before this it was written out twice in the function below, and
+ * fields.ts's comment records what that costs -- a second copy leaves the
+ * criterion that says the two agree with nowhere for a mutation to land.
+ *
+ * `close-existing` is not in the union: it loads a row that already exists
+ * rather than building one.
+ */
+function correctionRowFrom(
+  parsed: Extract<ParsedCorrect, { mode: "record" | "close-new" }>,
+  projectKey: string,
+): CorrectionRow {
+  return {
+    projectKey,
+    decisionId: parsed.decisionId,
+    kind: parsed.kind,
+    chose_instead: parsed.choseInstead,
+    because: parsed.because,
+    at: new Date().toISOString(),
+    by: parsed.by,
+  };
+}
+
 export async function correct(argv: string[]): Promise<number> {
   const parsed = await parseCorrectArgs(argv);
   const dir = correctionsDir();
   const projectKey = await sharedPreflight(parsed.repo);
 
   if (parsed.mode === "record") {
-    const row = {
-      projectKey,
-      decisionId: parsed.decisionId,
-      kind: parsed.kind,
-      chose_instead: parsed.choseInstead,
-      because: parsed.because,
-      at: new Date().toISOString(),
-      by: parsed.by,
-    };
-    const id = deriveCorrectionId(row);
-    await recordCorrection(dir, { id, ...row }, { again: parsed.again });
-    process.stdout.write(`recorded correction ${id} against ${parsed.decisionId} in ${projectKey}\n`);
+    const stored = await recordNewCorrection(dir, correctionRowFrom(parsed, projectKey), {
+      again: parsed.again,
+    });
+    process.stdout.write(
+      `recorded correction ${stored.id} against ${parsed.decisionId} in ${projectKey}\n`,
+    );
     return 0;
   }
 
@@ -119,17 +140,9 @@ export async function correct(argv: string[]): Promise<number> {
       }
       original = await readOriginalDecision(decisionsDir, row.decisionId);
     } else {
-      const base = {
-        projectKey,
-        decisionId: parsed.decisionId,
-        kind: parsed.kind,
-        chose_instead: parsed.choseInstead,
-        because: parsed.because,
-        at: new Date().toISOString(),
-        by: parsed.by,
-      };
-      row = { id: deriveCorrectionId(base), ...base };
-      await recordCorrection(dir, row, { again: parsed.again });
+      row = await recordNewCorrection(dir, correctionRowFrom(parsed, projectKey), {
+        again: parsed.again,
+      });
     }
 
     const choseInstead = row.chose_instead ?? parsed.choseInstead;
