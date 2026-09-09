@@ -1,5 +1,17 @@
 # 指标核心与查询（E2）实施计划
 
+> # ⛔⛔ 停 —— 本文已被一席外派评审判 `Ready to implement? No`（2026-09-09）
+>
+> *** **在读完文末「ERRATUM 1」之前，不要执行本文任何一段 shell。** ***
+>
+> 🔴 **最要紧的一条（C1）**：本文 **235／589／958／1272 四行**都写着
+> `/bin/rm -rf "$(dirname "$D")"`，而 `D=$(mktemp -d)` 只出现在 **192／546／928** 行，
+> **且每一处都在另一个代码块里**。*** **shell 状态不跨 Bash 调用持久** *** ⇒ 四处全部展开成
+> *** **`/bin/rm -rf .`** ***，在仓库根执行即毁掉主工作树。**这是 CLAUDE.md「绝对禁止」清单上的那一条。**
+>
+> ⚠️ **本横幅与文末 ERRATUM 1 都是【纯插入】**：本文原有 1800 行**一个字节未改、未删**
+> （证明：该次提交的 `git diff --numstat` 删除数为 0）。**已发布文本不许就地改** —— 见 ERRATUM 1 §0。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 造出 `orca metrics` —— 一件**纯只读**的事，从各目标仓库的 `.decisions/**` 与全局 corrections store 算出 A′ §4.4 的纠正率、修复率与积压，并交出一个 E3／E4 能直接消费、可逐字节 golden 比对的输出形状。
@@ -1798,3 +1810,111 @@ git commit -m "feat(cli): add orca metrics, the sixth subcommand, reading everyt
 `Observations` 的字段名（`asOf`／`asOfMode`／`decisions`／`corrections`／`overturned`／`excludedAsFuture`／`unresolvedDecisions`／`unkeyableRepos`／`malformed`／`lastLineLooksTorn`）在 Task 4 定义、Task 5／6／7 使用，**拼写一致**；
 输出侧字段（`numerator_corrections_excluding_stale`／`denominator_corrections_including_stale`／`corrections_total_including_stale`／`oldest_age_ms`／`counted_through`）**蛇形命名，与内部驼峰刻意不同** —— 内部是 TS，输出是 E3／E4 的接口。
 ⚠️ **`MetricsReport` 与 `METRICS_FIELDS` 的 `satisfies` 互相约束** ⇒ 字段名打错会编译不过，这是这一处一致性的机械保障。
+
+---
+
+# ERRATUM 1（一席外派评审 ＋ 控制器复核，2026-09-09，Orca `7c4004e`；run `orca-dev-3738db1c`）
+
+## §0 为什么是追加而不是重写
+
+本文在 `7c4004e` 那一刻**已被推到远端**（现测 `git ls-remote` ＝ `7c4004e`，
+`git merge-base --is-ancestor` 判本文那一笔为其祖先，RC=0）⇒ **已发布文本**。
+上一轮的实测教训是**血换来的**：面板 spec 发布后被就地改了两次，两次都断言「本文当时未发布」而都没重新现测，
+构成一次真实的铁律违反（记在 `docs/superpowers/specs/2026-09-09-panel-design.md` §12）。
+⇒ *** **本节只追加；正文 1800 行与文首那道 ⛔ 横幅之外，一个字节未改、未删。** ***
+
+**评审报告原文归档**：`.superpowers/sdd/2026-09-09-metrics-core-e2/external-review.md`
+（⚠️ 该目录 `.gitignore` 内容是 `*`，文件是 `git add -f` 进来的）。
+**控制器对每条承重主张的现测复核结论**记在该文件末尾「控制器复核」一节，**不在此复述**。
+
+**判定**：*** `Ready to implement? No` *** —— 7 Critical ／ 9 Important ／ 6 Minor。
+**控制器复核结果：承重主张逐条现测全部成立，其中两条比评审席自己说的更硬（C1、I2）。**
+
+## §1 被推翻的三处（**正文对应段落逐字保留，此处即为具名更正**）
+
+### 1.1 🔴 裁一（归档递归查）被推翻 —— 改为**一层定点查**
+
+**正文 49 行与 1366 行的裁法作废。** 正文引的依据是 `tests/ledger/appendOnly.test.ts:30` 的归档夹具路径含 `archive/2026/`，
+**而那是 `checkAppendOnly` 的一个手写 diff 字符串常量，不是任何归档器的产物。**
+
+*** **上游 spec 已经把层数钉死了，控制器写正文时没去读它。** ***
+现测 `docs/superpowers/specs/2026-08-29-decision-ledger-design.md` §3.7.1 第 2 条**逐字**写着：
+「超过保留窗口的 run 文件整体 `git mv` 进 `.decisions/archive/<YYYY>/`」⇒ *** **确定的一层。** ***
+
+**佐证（都现测于 `7c4004e`）**：`src/` 里 `archive` **只有 1 次命中，且是 `src/cli.ts:41` 的一句注释**
+⇒ 本仓库**根本还没有归档实现**；`.decisions/` 现测**无任何子目录**。
+
+⇒ **改法**：`readdir(<repo>/.decisions/archive)` 取一层年份目录，对每个年份目录 `stat(join(dir, <basename>))`。
+**「≥2 处命中 ⇒ 具名硬拒」的歧义检测保留不变。**
+⚠️ **为什么这条重要**：递归把 spec §3.4.2 白纸黑字的成本承诺（「不需要全扫归档，代价是每条未闭环 correction 一次 `stat`」）
+换成了每仓库一次整棵归档树遍历，*** **而正文那条「放 200 个无关文件、断言它们没被【读】」的判据结构上发现不了** *** ——
+遍历会 `readdir` 它们但不 `readFile`，判据照绿。**这是「判据对、但它守的门被换掉了」的一个新实例。**
+
+⇒ **台账侧**：决策 `orca-dev-3738db1c/1` 的**依据现测为假、结论过宽**。
+本轮**另起一条决策**记更正（见 §3），*** **不写 `overturned`** *** —— 理由见 §3 末。
+
+### 1.2 裁二（固定月桶）的**理由**被推翻，结论改为纯函数参数
+
+正文 50 行的依据是「粒度可改且不影响接口形状 ⇒ 可逆」。**「不影响接口形状」为假**：
+E2 spec §6 开宗明义说输出「**是 E3／E4 拿走的那个接口**」，§9 又把 E3 **紧接** E2
+⇒ 粒度一旦进了 golden 与面板，改它就是**改一个已被消费的接口**。*** **`bucket` 的取值域本身就是接口的一部分。** ***
+
+⇒ **改法（评审席提的第三选项，两边原来都没看见）**：
+`computeMetrics(obs, { bucket: "month" })` —— **纯函数参数，默认 `"month"`，仍然不加 CLI flag**。
+YAGNI 的代价为零（不新增参数解析、不新增开关文档），而口径持有者不再焊死一个展示选择，E3 可自行重新分桶；
+**附带**：它给变异 16（「换成按事件时间分桶」）多一个落点。
+
+### 1.3 裁三（`counted_through`）**未被推翻**，原样有效
+
+评审席没有攻这一条。**正文 51 行与 1420-1443 行的理由与形状保持不变。**
+
+## §2 实施前必修（**七条 Critical 的处置，逐条给改法**）
+
+| | 必修内容 |
+|---|---|
+| **C1** 🔴 | *** **四处 `/bin/rm -rf "$(dirname "$D")"`（235／589／958／1272 行）全部作废。** *** 改成：变异步骤**自带完整 setup／teardown，不跨 Bash 调用引用变量**，清理写作 `T="${T:?clone root unset}"; /bin/rm -rf "$T"`，且 `T=$(mktemp -d)` 与 `git clone --local . "$T/copy"` 拆成两句。**`${VAR:?msg}` 在变量为空时直接退出，这是这一格唯一可靠的护栏。** |
+| **C2** | `readLedgerLeniently` 对 `ev === "decision"` **只做 `ev` 识别，把 schema 判决整个交给 `validateLine`** —— 否则 `collect` 里 `verdict === "rejected"` 那条分支**永远不成立**，spec §8 第 3 条变异结构上不可能红；且一条真 rejected 的行会先被判 `malformed` ⇒ exit 6，与 §7 夹具自己的 `exit 0` 断言互斥。 |
+| **C3** | Task 5 加一条夹具：**一条 correction 的 `decisionId` 指向不在任何被扫文件里的 id**。对它同时断言 (a) 命令仍出报告且 `unresolved_decisions` 点名它（变异 8 的落点），(b) 它**不出现在任何 `decision.kind` 桶里**（变异 9 的落点，**这条断言必须落在输出层**）。 |
+| **C4** | 变异 21 改成 §5.3 真正禁止的那件事 —— **让 `readCorrections` 直接调 `readCorrectionsLeniently`**；**同时**把判据夹具补一行 **JSON 合法但 schema 不合法**的行。两条都做。 |
+| **C5** | `collect.ts` 加 `export { MetricsRejection } from "./rejection.js";`；`Observations` 补 `lastLineLooksTorn: boolean`（并按 I3 改造）。⚠️ **正文 1798 行 Self-Review 自称这组字段「逐个核过、拼写一致」—— 该结论现测为假。** |
+| **C6** | `CorrectionObservation` **保留整行 `Correction`**（或加 `row: CorrectionRow`）—— 否则 `deriveFixRunId` 算不出 `runId`，裁一的机制根本跑不起来。⚠️ **Rule 17 邻接影响**：`because` 是人的原话 ⇒ **必须同时钉一条「`renderJson` 输出里不含 `because`／`by`」的判据。** |
+| **C7** | **Task 6 Step 1 必须把 `MetricsReport` 全部 12 个字段连同嵌套形状逐字写出来**，并在 `Observations` 里加 `repos: DiscoveredRepo[]`。⚠️ 靠 `decisions` 里的 `projectKey` 反推会让**「有仓库、零决策」的乖仓库从 `repos` 里消失** —— 恰是 §2.1 建立扫描机制要抓的那一类。**在此之前 Task 8 的 golden 无法生成。** |
+
+⚠️ *** **C7 是 spec 外审判 `No` 的那个缺陷降一层重现**：spec 补了「必须有一个字段常量」，计划补了常量的名字，**仍然没有补字段的内容**。 ***
+
+## §3 分解本身要改（评审席 I9，控制器接受）
+
+*** **Task 4／5 的缝切错了。** *** 正文 1251-1253 行让 Task 4 交付一个**明知是错的 stub**
+（`resolvedOverturned` 直接返回 `overturnedRows`），而那正是 spec §3.4.2 判定为「核心交付数字静默劣化」的形状；
+Task 4 的四条判据**结构上看不见它**（没有一条涉及 archive）。
+⇒ 评审员**没法单独否掉 Task 4**（否掉它等于否掉 Task 5 的输入契约），**也没法单独验收 Task 5**（它的变异要到 Task 6／8 才看得见红）。
+**这直接违反本计划自己 Task Right-Sizing 的那句「只在评审员能单独否掉其一时才切」。**
+
+⇒ **改法（采纳评审席倾向的 (b)）**：**倒置** —— 先做「解析」这件**纯**事
+（`resolveAcrossArchive` 接注入的 `listArchive` / `readFile`，**零 fs**），它自带完整判据与变异 8／9／10；
+再做「把 fs 接上去」。**与 spec §5 对 `compute` 的纯度纪律同构。**
+
+## §4 其余 Important／Minor
+
+**不在此复述** —— I1／I3／I4／I5／I6／I7／I8 与 M1–M6 的原文与改法，见
+`.superpowers/sdd/2026-09-09-metrics-core-e2/external-review.md`。
+其中**两条必须点名，因为它们碰 Rule 17 与本仓库既成约定**：
+
+- **I4**：本仓库**已经有** `withCorrectionsDir`（`tests/corrections/harness.ts:25`，注释头一行逐字是
+  「🔴 CLAUDE.md Rule 17。**每一条**触碰 corrections store 的判据都跑在这里面」）与
+  `captureStdout`（`tests/scheduler/sandbox.ts:300`，**是 async，返回 `{ result, stdout }`**，不是正文写的 `{ code, text }`）。
+  *** **正文一次都没提它们。** *** ⇒ Task 8 判据一律包在 `withCorrectionsDir` 里，并加一条判据钉 `ORCA_CORRECTIONS_DIR` 改道生效。
+- **I5**：Task 5／6／7 的收尾**丢掉了本计划自己 Global Constraints 第 9、10、13 条**
+  （现测只有 `git add` ＋ `git commit`），且 Task 5／6／7／8 的变异步骤**全都没有 clone 建立、没有 shasum 前后对比、没有清理**。
+  ⚠️ **第 4 种坏法（变异根本没落上去）正是靠 shasum 挡的。**
+
+## §5 🔴 本轮最该被下一位继承的两条
+
+1. *** **计划的 Self-Review 是会说谎的，而且是【可现测】的谎。** ***
+   正文 1798 行自称字段「逐个核过、拼写一致」，而 C5 现测出两处不一致。
+   ⇒ **自审里凡是写「核过」「照抄」「现测」的句子，都是一条可被外审现测的断言，不是背景说明。**
+   ⚠️ 上一轮已经记过一次同形的（「『照抄 X』是可现测的断言」），**本轮换了个位置又犯了一次** —— 记法有效不等于会用。
+2. *** **本轮最危险的一条（C1）不在设计层，在【计划正文的 shell 片段】里。** ***
+   `writing-plans` 的自查三项（spec 覆盖／占位扫描／类型一致）**结构上都不看 shell**，所以一条都抓不到。
+   ⇒ **新记法：计划里每一段可复制粘贴的 shell，都要按「变量未赋值时它展开成什么」过一遍**，
+   尤其 `rm`／`mv`／`>` 三种会毁数据的动作。*** **shell 状态不跨 Bash 调用持久 —— 跨代码块引用变量等于引用空值。** ***
