@@ -627,3 +627,104 @@ Orca 从零开始，**不自动继承任何让 ccloop 可信的纪律** —— �
 ⚠️ §3.8 检查 5 的**判罚（拒绝）不变**，改的只是**作用域**。
 落地方式见 `docs/superpowers/specs/2026-09-05-corrections-overturned-design.md` §5。
 *** **原文逐字保留，此处即为具名更正。** ***
+
+## ERRATUM 3（E2 指标核心设计时裁定，2026-09-09，Orca `e3d957b`；run `orca-dev-3738db1c`）
+
+**§4.4 那张表把纠正率的分子定成「DB 里的 `corrections` 条数」，在字面上过宽 ——
+它把 `stale` 也算了进去，而 `stale` 按本文自己的 §4.2 恰恰不是 agent 出错。**
+
+推导（每一步的依据都在本文内部，无需外部现测）：
+
+1. §4.2 定义 `stale` ＝「当时对，现在不对」，并在同一行写明它 *** **什么都不训练，重做即可** ***。
+2. §4.4 说纠正率量的是 *** **「agent 的决策质量」** ***，且明写「后者（多少决策是错的）才是要测的东西」。
+3. ⇒ 一条 `stale` 计进分子，等于把 **「世界变了」记成「agent 变差了」**。
+   两句都是本文写的，**冲突在本文内部，不是外部新增的要求**。
+
+⇒ **裁法（E2 §3.2）**：
+
+| | 分子／分母怎么取 | 为什么 |
+|---|---|---|
+| **纠正率** | 分子 *** **排除 `stale`** ***，同时另行输出**含 `stale` 的总数** | 它量「agent 错没错」 |
+| **修复率** | 分母 *** **保留 `stale`** *** | 它量「提了的纠正有没有被执行」；一条提了却没人重做的 `stale` **就是积压本身** |
+
+🔴 *** **两个指标在这一点上故意不对称。** *** ⚠️ 不对称**必须写进字段名** ——
+否则读的人会拿两个分母相减，而它们本来就不是同一个集合。
+
+⚠️ **§4.4 其余部分一字不改**：两个指标都要、不许混成一个、必须与面板的人工审阅覆盖率同读
+（那句话反而因本条更重要 —— 分子变窄之后，单看纠正率更容易自欺）。
+
+**现测锚点**（`grep -n 'CORRECTION_KINDS' src/corrections/schema.ts`，观测于 `e3d957b`）：
+`CORRECTION_KINDS = ["wrong", "not_my_taste", "stale"]` —— 三类与 §4.2 逐字一致，**这一刀确实切下去了**。
+
+⚠️ **一条已登记的偏差，不掩饰**（E2 §3.2.1）：现测 `src/corrections/correct.ts` 的闭环路径
+**无条件要求 `chose_instead`**（缺则 `MISSING_CHOSE_INSTEAD`），而 `src/corrections/schema.ts`
+**只对 `not_my_taste` 强制它**，其注释明说 `wrong` / `stale` "may both have no alternative to point at"。
+⇒ *** **要闭一条 `stale` 的环，人必须编一个 `--chose-instead`** *** ⇒ 它的修复率会**系统性偏低**，
+容易被读成「没人管」。E2 的处置是**把 `stale` 的修复率单独拆出来输出并在字段名上标明这条偏差**，
+*** **不顺手改闭环参数** ***（那是 E1 的生产代码，属另一刀）。
+
+依据与落地形状见 `docs/superpowers/specs/2026-09-08-metrics-core-and-query-design.md` §3.2 与 §3.2.1。
+*** **原文逐字保留，此处即为具名更正。** ***
+
+## ERRATUM 4（E2 指标核心设计时裁定，2026-09-09，Orca `e3d957b`；run `orca-dev-3738db1c`）
+
+**§3.6 那份 `kind` 白名单已经漂了 —— 它列 6 个，代码有 7 个，
+多出来的那个 `reconcile` 按 §3.6 自己的高位判据应当判高位，却因为不在白名单里而沉底。**
+
+**现测**（`DECISION_KINDS`，`src/ledger/types.ts`，观测于 `e3d957b`）：
+`dependency` / `interface` / `scheduling` / `abandon` / `criteria` / `boundary` / *** **`reconcile`** *** —— **7 个**。
+而 §3.6 的表只有前 **6** 个。
+
+⇒ **判它高位。** 依据是 §3.6 自己写的那条高位判据 —— *** **「这条决策有没有砍掉未来的选项」** *** ——
+而 `reconcile` 在代码里的注释逐字写着：合并冲突的调解是「一个 agent 在两个 agent 的代码之间做选择」，
+不是排期选择，且 *** **"the second is an order of magnitude riskier"** ***。
+**一个「量级更危险」的类别沉底，与 §3.6 的判据直接相悖。**
+
+🔴 **但病因是【漂移】，所以要治那一类，不是治这一个实例。**
+*** **补一条 ERRATUM 阻止不了第 8 个 kind 再次沉底。** ***
+
+⇒ **落地方式（E2 §3.6）照抄本仓库既有约定** —— `src/corrections/fields.ts` 的
+`] as const satisfies readonly (keyof CorrectionRow)[]`，其注释说这么写是为了 "buys a compile error"：
+*** **把高位集合定义成对 `DECISION_KINDS` 的【穷尽分类】——每个 kind 显式标 high / low，
+加一个新 kind 就编译不过。** ***
+**不再抄第二份可漂移的白名单。**
+
+⚠️ **§3.6 的两条主张一字不改**：「Tier 1 全部记，分级只管排序不管记不记」与「排序 ＝
+`scope ∈ {cross-repo, repo}` 且 `kind ∈ 高位集合`」。
+本条改的只是 *** **那个集合怎么定义、以及 `reconcile` 落在哪一边** ***。
+
+⚠️ **这条的判据形状已在 E2 §8 点名**（第 14、15 条）：第 15 条的「红」是 `tsc`，不是 vitest ——
+**加一个假 kind 应当【编译不过】**。
+
+依据与落地形状见 `docs/superpowers/specs/2026-09-08-metrics-core-and-query-design.md` §3.6。
+*** **原文逐字保留，此处即为具名更正。** ***
+
+## ERRATUM 5（E3 面板设计时登记、本轮兑现，2026-09-09，Orca `e3d957b`；run `orca-dev-3738db1c`）
+
+**§4.1 那句「fix agent 是唯一的桥」已经为假 —— `orca correct --close` 是第二座桥，且它已经上线跑通。**
+
+**现测**（观测于 `e3d957b`）：
+
+1. `src/cli.ts` 的用法行写着 `orca correct --close <correctionId> --undo-how <text> [--repo <path>] [--chose-instead <text>]`。
+2. `src/corrections/derive.ts` 的 `deriveRows` *** **一次返回两行** *** ——
+   一条新的 `decision`（`chose` ＝ 人给的 `chose_instead`）与一条 `overturned`
+   （`id` ＝ 被推翻那条 decision 的 id，`correctionId` ＝ correction 主键，`replacedBy` ＝ 新 decision）。
+3. `src/corrections/correct.ts` 拿这两行走 `appendEvents`，随后 `commitLedgerFile`
+   *** **只提交它写出的那一个台账文件**（注释 "闭-8: commit only the ledger file, leaving the person's own staging intact"）***。
+
+⇒ *** **人的推翻不再必须等到「fix agent 干完活」才落进 git。** *** 一条 correction 可以由**人手动触发的 CLI**
+当场闭环并提交，中间不经过任何 fix agent。
+
+⚠️ **§4.1 那张表（两份日志各自对自己的作者权威）完全正确，一字不改。**
+**§4.1 结尾那段「真实的不对称」也仍然成立** —— 一条**从未被闭环**的 correction 依旧只活在 DB 里。
+错的只是 *** **「唯一」这两个字** ***：桥现在有两座，`orca correct --close` 是其中一座，
+而 **面板不是** —— A′ §4.1 禁掉面板闭环这一条**未被本条触碰**（E3 §2.1 照此设计：**面板只能记，不能闭环**）。
+
+⚠️ **本条只更正「唯一」这一个断言，不扩大到 §4.1 的安全论证**：
+「Web 应用不该对所有仓库持有提交权」仍然成立，且正是它把面板挡在闭环之外。
+`orca correct --close` 之所以可以提交，是因为它是**人在自己机器上手动触发的 CLI**，不是一个常驻服务。
+
+**登记出处**：本条由 `docs/superpowers/specs/2026-09-09-panel-design.md` §9 第 7 项登记为欠账
+（原文：「A′ §4.1 的『fix agent 是唯一的桥』已被 `orca correct --close` 偏离 ⇒ **欠 A′ 一条具名 ERRATUM**，本刀不代劳，登记」），
+本轮兑现。E1 的形状见 `docs/superpowers/specs/2026-09-06-corrections-store-and-writer-design.md`。
+*** **原文逐字保留，此处即为具名更正。** ***
