@@ -67,6 +67,39 @@ describe("recordNewCorrection — the one construction point (E3 spec §2.3)", (
       expect(error).toBeInstanceOf(CorrectRejection);
       expect((error as CorrectRejection).code).toBe(CORRECTION_ROW_INVALID);
       expect((error as Error).message).toContain("chose_instead");
+      // The advice belongs on THIS path, where a field really did arrive as "".
+      expect((error as Error).message).toContain("must be left out, not sent empty");
+      expect(existsSync(join(dir, "corrections.jsonl"))).toBe(false);
+    });
+  });
+
+  /**
+   * The other way this schema refuses, and it asks for the OPPOSITE thing.
+   * superRefine forces chose_instead for `not_my_taste`, so telling that person
+   * to leave the field out is advice that cannot be followed. Measured on the
+   * real CLI before this criterion existed: both sentences came back in one
+   * refusal, on a path the argument parser does not guard (correct.ts's own
+   * no-chose-instead check sits after the seam call, not before it).
+   *
+   * Giving someone who mistyped one flag something they can act on is the whole
+   * reason this guard exists rather than letting a bare ZodError reach exit 3.
+   */
+  it("does not tell a not_my_taste row to leave chose_instead out", async () => {
+    await withCorrectionsDir(async (dir) => {
+      const error = await recordNewCorrection(
+        dir,
+        { ...ROW, kind: "not_my_taste" },
+        { again: false },
+      ).then(
+        () => {
+          throw new Error("a not_my_taste row with no chose_instead was accepted");
+        },
+        (e: unknown) => e,
+      );
+
+      expect((error as CorrectRejection).code).toBe(CORRECTION_ROW_INVALID);
+      expect((error as Error).message).toContain("required when kind is not_my_taste");
+      expect((error as Error).message).not.toContain("must be left out");
       expect(existsSync(join(dir, "corrections.jsonl"))).toBe(false);
     });
   });

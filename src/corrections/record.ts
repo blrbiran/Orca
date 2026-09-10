@@ -1,4 +1,4 @@
-import { deriveCorrectionId } from "./fields.js";
+import { CORRECTION_FIELDS, deriveCorrectionId } from "./fields.js";
 import type { CorrectionRow } from "./fields.js";
 import { CorrectRejection } from "./rejection.js";
 import { correctionSchema } from "./schema.js";
@@ -35,6 +35,16 @@ export const CORRECTION_ROW_INVALID = "correction-row-invalid";
  * duplicate check therefore misses. An empty box in a web form is the shape
  * that produces it.
  *
+ * *** ERRATUM (2026-09-10, first external review of the seam) ***
+ * Those two ids are not reproducible from anything written down: the row they
+ * were measured on was never recorded, and re-deriving them from this file's
+ * own fixture (tests/corrections/recordSeam.test.ts) yields a different pair.
+ * The MECHANISM above is confirmed -- an empty string and an absent field do
+ * derive different ids -- but treat the two literals as unverifiable. CLAUDE.md
+ * Rule 14 wants the measuring command alongside any recorded measurement, and
+ * this comment was written without one. Recorded here rather than edited above
+ * because the line is published text.
+ *
  * ⚠️ It refuses rather than normalising `""` to absent. Coercing would let
  * someone who left the box empty believe they had said something, and the
  * field it silently drops is the one A' §4.3 calls the most valuable in the
@@ -55,12 +65,31 @@ export async function recordNewCorrection(
     const named = parsed.error.issues
       .map((issue) => `${issue.path.join(".") || "<root>"}: ${issue.message}`)
       .join("; ");
-    throw new CorrectRejection(
-      CORRECTION_ROW_INVALID,
-      `this is not a legal correction row: ${named}. ` +
-        `An optional field must be left out, not sent empty -- an empty string and an absent field ` +
-        `derive different correction ids, so the duplicate check would not see them as the same row.`,
+    // The empty-string advice is conditional, and the condition is measured
+    // rather than assumed: only say "leave it out" when a field really did
+    // arrive as "".
+    //
+    // *** ERRATUM (2026-09-10, first external review of the seam) ***
+    // As first written this sentence was appended to EVERY schema failure.
+    // correctionSchema's superRefine also refuses `not_my_taste` with no
+    // chose_instead (schema.ts), and that issue asks for the OPPOSITE -- the
+    // field must be filled in. Measured on the real CLI: `orca correct --kind
+    // not_my_taste --because ...` with no --chose-instead answered
+    //   "chose_instead: required when kind is not_my_taste. An optional field
+    //    must be left out, not sent empty ..."
+    // -- two contradictory instructions in one refusal, on a path reachable
+    // today, with no criterion covering it. Giving a person who mistyped one
+    // flag something they can act on is this guard's entire reason to exist.
+    const sentEmpty = CORRECTION_FIELDS.filter(
+      (field) => (row as Record<string, unknown>)[field] === "",
     );
+    const advice =
+      sentEmpty.length === 0
+        ? ""
+        : ` An optional field must be left out, not sent empty (${sentEmpty.join(", ")}) -- an empty ` +
+          `string and an absent field derive different correction ids, so the duplicate check would ` +
+          `not see them as the same row.`;
+    throw new CorrectRejection(CORRECTION_ROW_INVALID, `this is not a legal correction row: ${named}.${advice}`);
   }
 
   await recordCorrection(dir, stored, opts);
