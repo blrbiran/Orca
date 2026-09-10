@@ -5,6 +5,34 @@ import { correctionSchema } from "./schema.js";
 import type { Correction } from "./schema.js";
 import { recordCorrection } from "./store.js";
 
+/** A new correction's fields before `at` is stamped — `correctionRowFrom` supplies `at`. */
+export type NewCorrectionInput = Omit<CorrectionRow, "at">;
+
+/**
+ * 🔴 E3 spec §2.3: ONE literal. Both modes that create a correction build their
+ * row here; before this it was written out twice in the function below, and
+ * fields.ts's comment records what that costs -- a second copy leaves the
+ * criterion that says the two agree with nowhere for a mutation to land.
+ *
+ * `close-existing` is not in the union: it loads a row that already exists
+ * rather than building one.
+ *
+ * *** ERRATUM (2026-09-10, human authorisation to inject the correction clock) ***
+ * This function now lives in record.ts, is exported, and takes the clock as a
+ * `now: () => Date` parameter rather than reading `new Date()` itself.
+ */
+export function correctionRowFrom(input: NewCorrectionInput, now: () => Date): CorrectionRow {
+  return {
+    projectKey: input.projectKey,
+    decisionId: input.decisionId,
+    kind: input.kind,
+    chose_instead: input.chose_instead,
+    because: input.because,
+    at: now().toISOString(),
+    by: input.by,
+  };
+}
+
 /**
  * A row reached this far without being a legal correction. Named, because the
  * alternative is what this seam was built to remove: the schema parse inside

@@ -8,14 +8,14 @@ import { CLOSE_ARG_CONFLICT, parseCorrectArgs } from "./args.js";
 import type { ParsedCorrect } from "./args.js";
 import { deriveRows } from "./derive.js";
 import { deriveFixRunId } from "./fields.js";
-import type { CorrectionRow } from "./fields.js";
 import { alreadyCommitted, commitLedgerFile, midOperationRejection } from "./gitState.js";
 import { readOriginalDecision } from "./originalDecision.js";
 import { correctionsDir } from "./paths.js";
 import { projectKeyOf } from "./projectKey.js";
 import { CorrectRejection } from "./rejection.js";
 import type { Correction } from "./schema.js";
-import { recordNewCorrection } from "./record.js";
+import { correctionRowFrom, recordNewCorrection } from "./record.js";
+import type { NewCorrectionInput } from "./record.js";
 import { loadCorrection } from "./store.js";
 
 /**
@@ -56,38 +56,39 @@ export async function sharedPreflight(repo: string): Promise<string> {
 }
 
 /**
- * 🔴 E3 spec §2.3: ONE literal. Both modes that create a correction build their
- * row here; before this it was written out twice in the function below, and
- * fields.ts's comment records what that costs -- a second copy leaves the
- * criterion that says the two agree with nowhere for a mutation to land.
- *
- * `close-existing` is not in the union: it loads a row that already exists
- * rather than building one.
+ * Maps `parsed` (camelCase `choseInstead`) onto `correctionRowFrom`'s input
+ * shape. ONE place, used by both the `record` and `close-new` branches below —
+ * the two branches must build a `NewCorrectionInput` the same way, or the
+ * criterion that says they agree has nowhere for a mutation to land (E3 spec
+ * §2.3, same reasoning fields.ts's comment records for the row constructor
+ * itself).
  */
-function correctionRowFrom(
+function newCorrectionInputFrom(
   parsed: Extract<ParsedCorrect, { mode: "record" | "close-new" }>,
   projectKey: string,
-): CorrectionRow {
+): NewCorrectionInput {
   return {
     projectKey,
     decisionId: parsed.decisionId,
     kind: parsed.kind,
     chose_instead: parsed.choseInstead,
     because: parsed.because,
-    at: new Date().toISOString(),
     by: parsed.by,
   };
 }
 
-export async function correct(argv: string[]): Promise<number> {
+export async function correct(argv: string[], opts: { now?: () => Date } = {}): Promise<number> {
+  const now = opts.now ?? (() => new Date());
   const parsed = await parseCorrectArgs(argv);
   const dir = correctionsDir();
   const projectKey = await sharedPreflight(parsed.repo);
 
   if (parsed.mode === "record") {
-    const stored = await recordNewCorrection(dir, correctionRowFrom(parsed, projectKey), {
-      again: parsed.again,
-    });
+    const stored = await recordNewCorrection(
+      dir,
+      correctionRowFrom(newCorrectionInputFrom(parsed, projectKey), now),
+      { again: parsed.again },
+    );
     process.stdout.write(
       `recorded correction ${stored.id} against ${parsed.decisionId} in ${projectKey}\n`,
     );
@@ -140,9 +141,11 @@ export async function correct(argv: string[]): Promise<number> {
       }
       original = await readOriginalDecision(decisionsDir, row.decisionId);
     } else {
-      row = await recordNewCorrection(dir, correctionRowFrom(parsed, projectKey), {
-        again: parsed.again,
-      });
+      row = await recordNewCorrection(
+        dir,
+        correctionRowFrom(newCorrectionInputFrom(parsed, projectKey), now),
+        { again: parsed.again },
+      );
     }
 
     const choseInstead = row.chose_instead ?? parsed.choseInstead;

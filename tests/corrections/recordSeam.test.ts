@@ -128,6 +128,12 @@ describe("recordNewCorrection — the one construction point (E3 spec §2.3)", (
  * cannot be injected, so the invariant is checked against the row as stored —
  * a mode that built its row from a different field set would store an id that
  * is not the derivation of what sits next to it.
+ *
+ * *** ERRATUM (2026-09-10, human authorisation to inject the correction clock) ***
+ * `at` can now be injected: `correct(argv, { now })` takes the clock as a
+ * parameter (see tests/corrections/injectableClock.test.ts). This file's own
+ * `it`s below still go through `runCli`, which never passes `now`, so every
+ * assertion here is still checked against the wall clock exactly as before.
  */
 describe("both CLI modes construct their correction the same way (E3 spec §2.3)", () => {
   for (const [label, argsOf] of [
