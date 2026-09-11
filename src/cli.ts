@@ -33,6 +33,13 @@ const USAGE = `usage:
                                  what existed at that instant; without it, a row dated in the future
                                  is refused by name. Exit 6 means the report printed in full and some
                                  lines were malformed.
+  orca panel --by <who> [--port <n>] [--bind <addr>] [--root <dir>] [--repo <key>=<path>]...
+                                 serve the read-only panel on the loopback interface with a
+                                 one-time token. --bind opens it to other machines and needs
+                                 --i-know-this-is-exposed as well: there is no TLS, the token
+                                 travels in the HTML, it cannot be revoked, and one process has
+                                 exactly one identity, so external mode suits you across your
+                                 own machines and does not suit a team.
 `;
 
 async function collectLedgerFiles(paths: string[]): Promise<{ files: string[]; errors: string[] }> {
@@ -287,6 +294,32 @@ async function runMetrics(args: string[]): Promise<number> {
   }
 }
 
+async function runPanel(args: string[]): Promise<number> {
+  try {
+    // Argument parsing and the machine-readable line live here; everything the
+    // panel actually DOES lives behind createPanelServer, which touches
+    // neither argv nor stdout. That is the same seam the correction row got in
+    // src/corrections/record.ts, for the same reason: a request handler cannot
+    // call something that writes stdout and returns an exit code.
+    const { startPanelFromArgs } = await import("./panel/server.js");
+    const started = await startPanelFromArgs(args);
+    // 🔴 spec §7: ONE machine-readable line on stdout. Without it the success
+    // criterion cannot read back the port and the token it needs, and a
+    // criterion that cannot read its own subject is exactly the "success
+    // criterion that never exits 0" E2 §7.1 caught.
+    process.stdout.write(`orca-panel ready url=${started.url} token=${started.token}\n`);
+    await started.closed;
+    return 0;
+  } catch (err) {
+    const { PanelRejection } = await import("./panel/rejection.js");
+    if (err instanceof PanelRejection) {
+      process.stderr.write(`rejected: ${err.code}: ${err.message}\n`);
+      return err.exitCode;
+    }
+    throw err;
+  }
+}
+
 async function readStdin(): Promise<string> {
   const chunks: Buffer[] = [];
   for await (const chunk of process.stdin) {
@@ -316,6 +349,10 @@ export async function main(argv: string[], stdinText?: string): Promise<number> 
 
   if (command === "metrics") {
     return runMetrics(rest);
+  }
+
+  if (command === "panel") {
+    return runPanel(rest);
   }
 
   if (command === "check-append-only") {

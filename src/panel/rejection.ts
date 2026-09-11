@@ -1,0 +1,26 @@
+/**
+ * The panel's named refusals. Same shape as CorrectRejection and
+ * MetricsRejection: a `code` the criteria can assert on by name, and an exit
+ * code the CLI answers with, so a mistyped flag never falls through to cli.ts's
+ * exit 3 arm and prints a stack trace at someone.
+ */
+export type PanelExitCode = 1 | 4 | 5;
+
+export class PanelRejection extends Error {
+  constructor(
+    readonly code: string,
+    message: string,
+    readonly exitCode: PanelExitCode = 1,
+  ) {
+    super(message);
+    this.name = "PanelRejection";
+  }
+}
+
+/**
+ * spec §3.1: `--by` is required on the loopback interface too. A default like
+ * "panel" would be a sentence permanently written into an append-only ledger
+ * that nobody ever said -- and `by` reaches BOTH derived ids (§1.3), so it is
+ * not a cosmetic field.
+ */
+export const NO_VIEWER_IDENTITY = "no-viewer-identity";
