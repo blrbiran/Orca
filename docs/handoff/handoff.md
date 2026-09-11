@@ -3156,3 +3156,96 @@ spec 外审 I5 曾把 `0.0.0.0` 从变异列里清掉。本轮计划照做了 �
 
 两边都是**就地滚动更新那一节，没有新增编号章节**（规矩是人 2026-09-02 定的）。**两边都未 push。**
 ⚠️ 两边都要更正同一句**已知为假**的话：「Orca 台账里 `React` 现测仍是零命中」。
+
+---
+
+# 📌 本轮（2026-09-10／11，会话 `6354277a`）—— **E3 开工：前置一刀 ＋ Task 0／1 已实施；Task 2–9 未做**
+
+**归属**：run `orca-dev-6354277a`。本节**只追加**，上面一字未动。
+⚠️ **本节不写任何 HEAD、不写「领先几笔」** —— 提交本文就会改这两个数，人也会自己推远端（本轮中途又推了一次）。
+**要指代某一笔就引提交主题行；要判发布状态就现跑 `git ls-remote` ＋ `git merge-base --is-ancestor`。**
+
+## 一句话状态
+
+*** **E3 本体开工了。** *** 前置一刀（人具名授权改既有生产代码）＋ Task 0（现测复核）＋ Task 1（`web/` workspace ＋ express ＋ `orca panel` 骨架）
+全部实施、过评审、变异由**另一个** subagent 在 clone 里跑过。**Task 2–9 未做。** 未 push、未建分支、未合并、未删任何分支或 worktree。
+
+## 一、人本轮拍的（都进了台账 `.decisions/orca-dev-6354277a.jsonl`）
+
+| | 裁决 | 落在 |
+|---|---|---|
+| **H1** | *** **授权**把 `correctionRowFrom` 提成共享的唯一构造点、`at` 以函数参数可注入；**不加 `--at`** *** | 台账 `/1`；提交 `feat(corrections): make the correction clock injectable and give the panel the one row constructor` |
+| **H2** | *** **spec §3.1 不写 ERRATUM** *** —— 上一轮登记的「spec 有错」是**误读**（spec 说 schema.ts「拒绝为 wrong/stale 强制」＝不强制，与代码一致） | 台账 `/2`；计划末尾「📌 执行轮开工更正」 |
+| — | 2026-09-11：「继续 Task 0/1，途中有问题先按控制器建议执行，最后报审」 | SDD 台账 |
+
+## 二、做出来的东西（**按提交主题行找，别数笔数**）
+
+| 买到的东西 | 提交主题行 |
+|---|---|
+| `correctionRowFrom(input, now)` 从 `correct.ts` 挪进 `record.ts` 并导出；`correct(argv, { now })`；4 条新判据（含一个 golden id，Task 7 要对它断言） | `feat(corrections): make the correction clock injectable…` |
+| 计划追加「📌 执行轮开工更正」一节（H1／H2 ＋ 开工扫描查实的 11 条执行指令） | `docs(plan): withdraw the spec 3.1 erratum and carry the preflight findings into the panel plan` |
+| `web/` workspace（React 19 ＋ Vite）、express、`src/panel/{rejection,server}.ts`（server 是会拒绝的 stub）、`orca panel` 第七个子命令、`verify` 末尾接 `npm run --ws check` | `feat(panel): register the web workspace and reserve the seventh subcommand` |
+
+## 三、实测数（**只抄工具打印的**；观测锚点：上表第三笔提交之上，2026-09-11 10:11）
+
+| 项 | 开工 | 收尾 | 命令 |
+|---|---|---|---|
+| 全仓 | 82 / 467 | *** **85 / 477** *** | `rtk proxy npm run verify > 文件 2>&1` |
+| scheduler 档 | 51 / 167 | **51 / 167** | 同上 |
+| 🆕 web 档（`npm run --ws check`：tsc ＋ vitest） | — | **1 / 1** | 同上 |
+| `VERIFY_RC` | 0 | 0 | 同上 |
+| `git status --porcelain -z` | 0 字节 | 0 字节 | ⚠️ **必须 `/usr/bin/git`**，见第五条第 1 点 |
+| `ls ~/.orca` | 不存在 | *** **仍不存在** *** | |
+
+⚠️ *** **三个判据数别混着比：全仓／scheduler／web 是三档。** ***
+⚠️ 收尾那次 verify 输出 1343 行，**控制器只读了汇总行与失败关键词**（上下文预算）；实施者在同一提交上整份读过一次。**如实登记。**
+
+## 四、变异（**全部由非实施者在 `git clone --local` 里跑，报告在 SDD 工作区**）
+
+- **前置一刀 4 条**：全红在断言上。其中「默认时钟改成 epoch」由**既有**的 `record.test.ts` 与 E21 接住，新判据文件对它照绿 —— 分工如此，不是缺口。
+- **Task 1 8 条**：7 条见红；*** **W-6（删掉 stub 的 `--by` 守卫）全绿 —— 零覆盖** ***。
+  ⇒ 裁决 R18：**挂账带进 Task 3**（Task 3 整份替换 `server.ts` 并拥有 `--by` 判据）。*** **Task 3 的派发必须带一条删掉 `--by` 守卫的点名变异并看见红。** ***
+- **Task 1 计划预言「5 条全红」实测 4 红 1 绿**：「web 没有自己的 lockfile」那条在 Task 1 之前就是绿的；W-2（造一个 `web/package-lock.json`）证明它能红。
+
+## 五、🔴 **必须带给下一轮**的实测
+
+1. *** **rtk 的「空输出打印 `ok`」本轮又栽一次，而且藏在 `| wc -c` 后面**：`git status --porcelain -z | wc -c` 报 **2**（就是 `ok`），`/usr/bin/git` 报 **0**。 ***
+   ⇒ **所有 git 核对一律 `/usr/bin/git`，派给 subagent 的 brief 里也要写明。**
+2. *** **「已就地更正」也是一条预言。** *** 上一轮处置节写着三处「已在上文就地更正」（S-12 的 `subdir/index.js`、`TOKEN_REQUIRED` 两处定义、skip 闸门），
+   **开工扫描现测三处都没落地。** ⇒ **引用「已修」之前去被修的那一行看一眼。**
+3. *** **扫描器也会被字节骗**：一席扫描报「`UNIT_SEPARATOR` 是空串」，`od -c` 现测是 `"\037"`。 *** ⇒ **看起来是空串的字面量，先 `od -c`。**
+4. *** **计划里藏着一个声明了却没实现的端点**：`POST /api/reviews`（spec §4.2 覆盖率分子的两条来源之一）。 *** 两席外审都没抓到，是开工扫描的「接口产出 vs 实现」对表抓到的。
+   ⇒ **开工扫描要逐条比对 Interfaces 的 Produces 与正文实现，不只比对跨 Task 的消费。**
+5. **两份 vite**：根 `node_modules/vite` 5.4.21（vitest 2.0.5 带进来）与 `web/node_modules/vite` 6.4.3 并存 ⇒ `web/vite.config.ts` 只能从 `vitest/config` 取 `defineConfig`。
+   变异副本要**同时** symlink `node_modules` 与 `web/node_modules`。
+6. **React 19 类型没有全局 `JSX`** ⇒ `import type { JSX } from "react"`。
+7. **`npm install` 报 5 个漏洞（3 moderate／1 high／1 critical，实施者转述 npm 的汇总行）**，**未分诊**；是否「先于本轮就有」**未核实**。登记，下一轮或上线前要看。
+
+## 六、本轮**没有**做的（登记，不掩饰）
+
+- *** **Task 2–9 一行未写**（reviews 表、安全边界、静态文件、指标端点、决策列表、记纠正、前端、成功判据）。 ***
+- 计划「本计划自己做的裁断」5 条**尚未落台账** —— 按计划要在各自落地的 Task 用写入方写（裁断 5→Task 2，1→Task 5，4→Task 6，2→Task 8，3→Task 9）。
+- **最终整支评审**（subagent-driven-development 的收尾那一席）未做 —— 等 Task 9 之后。
+- 两条 Minor 挂账（Task P 挪过去的注释里一句悬空的「below」、两套相似的 argv 夹具）、Task 1 两条 Minor（均为计划原文所定）—— 在 SDD 台账里。
+- **未 push**（控制器一次都没 push）。本轮中途人推过一次：远端现含前置一刀与计划更正那两笔；**Task 1 与本文这笔发没发布，现跑判断。**
+
+## 七、⛔ 下一件事
+
+| 顺序 | 做什么 | 说明 |
+|---|---|---|
+| **1** | **Task 2 → Task 9**，接 `superpowers:subagent-driven-development` | *** **先读 SDD 台账 `.superpowers/sdd/2026-09-10-panel-e3/progress.md`**（Task P／0／1 标了 `complete`，从 Task 2 续；**裁决 R1–R18 全在里面**）＋ **计划末尾「📌 执行轮开工更正」** *** |
+| **2** | 每个 Task：`task-brief` 抽 brief ＋ **控制器备注文件**写明适用的裁决 → 实施者 → 评审席 → **另一个** subagent 跑变异 | 模板照抄 `task-1-controller-notes.md` 与 `task-1-mutations-brief.md` |
+| **3** | Task 9 之后：最终整支评审（最强模型）→ 修复一波 → 一次复审 | skill 的收尾流程；**不删 SDD 工作区**（本仓库 `git add -f` 留证） |
+| **4** | 子系统 **D**，或 B 的后续；裁决甲的 `plan` 那一半（需人指名）；ccloop 的 E1 的 I-2 ＋ 人裁 85 | 未变 |
+
+## 八、成本
+
+**只抄钩子报出来的数**（Rule 14）：本会话钩子报过 **约 $63.73 → $73.94 → $98.68 → $110.54**。此后未再报，**不写**。
+派出方工具报的单席用量：开工扫描 192,274；前置一刀实施 175,725、评审 97,347、变异 98,158；Task 0＋1 实施 191,609、评审 104,934、变异 118,529（token）。
+⇒ *** **一个 Task 三席，约 30–40 万 token；控制器上下文在做完 Task 1 时已逼近 Rule 6 的 450k，所以一个会话做 2–3 个 Task 就该交接。** ***
+
+## 九、姊妹仓库本轮的同批动作（**已完成；知情，不是本仓库的任务**）
+
+两边都是**就地滚动更新那一节，没有新增编号项**（规矩是人 2026-09-02 定的）；节外字节 sha256 前后相同；**两边都未 push**。
+- **ccloop**：「📌 Orca 那条线」§五 的 E3 一条改为「已开工」；两条新实测折进第 6、11 条。
+- **ccmem**：§15 的 E3 一条改为「已开工」并补「correction id 取决于注入的时钟」；两条新实测折进第 9、12 条。
