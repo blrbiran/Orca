@@ -113,6 +113,27 @@ async function must<T>(step: number, what: string, expectedDesc: string, promise
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
+ * Ruling R61 (fix round 1): teardown must never hang waiting to confirm a
+ * child is dead. Bounds any such wait so "cannot confirm dead" becomes a
+ * named, timed-out failure instead of a stuck process.
+ */
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      },
+    );
+  });
+}
+
+/**
  * Ruling R59 / L5: an absence check ("still 0", "still only N") must not
  * trust an immediate read -- a fire-and-forget write can land ~500ms after
  * the response that triggered it (measured in task 6). Polls until any check
@@ -177,6 +198,24 @@ async function git(repo: string, args: string[]): Promise<string> {
   return stdout;
 }
 
+/**
+ * Ruling R61 (fix round 1): every destructive removal this script runs is a
+ * `mkdtemp` directory it created itself, never a path taken on faith. Refuses
+ * an empty string outright (an empty `path` to `rm(..., {recursive:true})`
+ * would resolve against the current working directory) and refuses anything
+ * that does not carry the exact `mkdtemp` prefix this script minted it with,
+ * so a future bug that hands this an unexpected value fails loudly instead of
+ * silently deleting the wrong tree.
+ */
+async function guardedRmRecursive(path: string, expectedPrefix: string): Promise<void> {
+  if (path.length === 0 || !path.includes(expectedPrefix)) {
+    throw new Error(
+      `refusing to recursively remove ${JSON.stringify(path)}: expected a path containing ${JSON.stringify(expectedPrefix)}`,
+    );
+  }
+  await rm(path, { recursive: true, force: true });
+}
+
 /** K5's pattern: choose a high-tier (scope, kind) by calling isHighTier, never a hard-coded table. */
 function findHighTierCombo(): { scope: (typeof DECISION_SCOPES)[number]; kind: (typeof DECISION_KINDS)[number] } {
   for (const scope of DECISION_SCOPES) {
@@ -235,7 +274,7 @@ async function makeFixture(): Promise<Fixture> {
     repoKey,
     decisionA: { id: decisionA.id },
     decisionB: { id: decisionB.id },
-    cleanup: () => rm(root, { recursive: true, force: true }),
+    cleanup: () => guardedRmRecursive(root, "orca-panel-verify-target-"),
   };
 }
 
@@ -481,7 +520,7 @@ async function apiPost(baseUrl: string, path: string, body: unknown, token: stri
 
 async function main(): Promise<number> {
   const homeBefore = await snapshotHomeOrca();
-  const cleanups: Array<() => Promise<void> | void> = [];
+  const cleanups: Array<{ what: string; run: () => Promise<void> | void }> = [];
   let exitCode = 0;
 
   try {
@@ -503,10 +542,13 @@ async function main(): Promise<number> {
     pass(0, "web/dist exists, is flat, and carries the token anchor");
 
     const fixture = await makeFixture();
-    cleanups.push(fixture.cleanup);
+    cleanups.push({ what: "remove the throwaway target repo", run: fixture.cleanup });
 
     const storeDir = await mkdtemp(join(tmpdir(), "orca-panel-verify-store-"));
-    cleanups.push(() => rm(storeDir, { recursive: true, force: true }));
+    cleanups.push({
+      what: "remove the throwaway ORCA_CORRECTIONS_DIR",
+      run: () => guardedRmRecursive(storeDir, "orca-panel-verify-store-"),
+    });
 
     const env: NodeJS.ProcessEnv = { ...process.env, ORCA_CORRECTIONS_DIR: storeDir };
 
@@ -523,9 +565,16 @@ async function main(): Promise<number> {
       `${fixture.repoKey}=${fixture.repoPath}`,
     ];
     const { child: panelChild, ready, exited: panelExited } = spawnPanelAndAwaitReady(panelArgs, env, 10_000);
-    cleanups.push(() => {
-      killGroup(panelChild);
-      return panelExited.then(() => undefined);
+    cleanups.push({
+      what: "kill the panel child's process group and confirm it exited",
+      run: () => {
+        killGroup(panelChild);
+        return withTimeout(
+          panelExited,
+          5_000,
+          `panel child (pid ${panelChild.pid}) did not confirm exit within 5000ms after SIGKILL`,
+        ).then(() => undefined);
+      },
     });
 
     const readyLine = await must(1, "orca panel prints its ready line", "orca-panel ready url=... token=...", ready);
@@ -750,13 +799,20 @@ async function main(): Promise<number> {
     }
     exitCode = 1;
   } finally {
+    // Ruling R61 (fix round 1): a teardown failure must be as loud as a step
+    // failure -- it is proof this run may have left something behind (a
+    // process, a directory) for the NEXT run or the person's own machine to
+    // trip over. Every item still runs regardless of an earlier one's
+    // failure (one bad removal must not skip the rest), but ANY failure here
+    // forces a non-zero exit, even on a run where every numbered step passed.
     for (const cleanup of cleanups.reverse()) {
       try {
-        await cleanup();
+        await cleanup.run();
       } catch (cleanupErr) {
         console.error(
-          `verify-panel: teardown warning: ${cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr)}`,
+          `FAIL teardown: ${cleanup.what}: ${cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr)}`,
         );
+        exitCode = 1;
       }
     }
   }

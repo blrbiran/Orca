@@ -26,7 +26,10 @@ describe("parseReadyLine (task 9 ruling L3: this script's own parser)", () => {
 
   it("throws when url= is not http://127.0.0.1:<port>", () => {
     for (const bad of [
-      `orca-panel ready url=http://0.0.0.0:54321 token=${GOOD_TOKEN}`,
+      // RFC 5737 TEST-NET-2 -- non-loopback, and never 0.0.0.0 (ruling R62: that
+      // literal must not appear anywhere in this plan's files, real or as a
+      // test fixture, so it can never be copy-pasted into a real bind).
+      `orca-panel ready url=http://198.51.100.1:54321 token=${GOOD_TOKEN}`,
       `orca-panel ready url=http://192.0.2.1:54321 token=${GOOD_TOKEN}`,
       `orca-panel ready url=https://127.0.0.1:54321 token=${GOOD_TOKEN}`,
     ]) {
