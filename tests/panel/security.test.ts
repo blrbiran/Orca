@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9,7 +9,93 @@ import { mintToken, tokenMatches } from "../../src/panel/token.js";
 import { parsePanelArgs } from "../../src/panel/server.js";
 import { NO_VIEWER_IDENTITY } from "../../src/panel/rejection.js";
 
+// Only for the read-only lsof observation below; the panel child itself is
+// driven through runPanelProcess (F5), never execFileAsync, so it can be
+// killed as a whole process group on its own deadline.
 const execFileAsync = promisify(execFile);
+
+interface PanelProcessResult {
+  code: number | null;
+  stdout: string;
+  stderr: string;
+}
+
+/**
+ * F5 (Task 4, repaying a Task 3 debt): runs `tsx src/cli.ts panel ...` as a
+ * REAL child process, the way a person would from a shell, with a deadline of
+ * its own that is shorter than vitest's per-test timeout.
+ *
+ * Measured: installed tsx is 4.23.13, which re-execs the script in a CHILD
+ * node process -- the one that actually calls listen(). Killing only this
+ * function's own child would leave that grandchild orphaned and listening.
+ * `detached: true` makes this child the leader of a new process GROUP (pgid
+ * == its own pid on POSIX), which the grandchild inherits since it does not
+ * detach itself; signalling the NEGATED pid reaches the whole group.
+ *
+ * If the guard under test is gone and the server actually starts, this
+ * process never exits by itself. On the deadline, the whole group is killed
+ * and the returned promise REJECTS naming the hang -- so a criterion built on
+ * this helper fails loudly instead of either passing vacuously or hanging
+ * vitest itself while the child keeps listening past the test.
+ */
+function runPanelProcess(
+  args: string[],
+  env: NodeJS.ProcessEnv,
+  deadlineMs = 5_000,
+): { result: Promise<PanelProcessResult>; killIfAlive: () => void } {
+  const child = spawn("./node_modules/.bin/tsx", ["src/cli.ts", ...args], {
+    cwd: process.cwd(),
+    env,
+    detached: true,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  let stdout = "";
+  let stderr = "";
+  child.stdout?.on("data", (chunk: Buffer) => (stdout += chunk));
+  child.stderr?.on("data", (chunk: Buffer) => (stderr += chunk));
+
+  let settled = false;
+  const killIfAlive = (): void => {
+    if (settled || child.pid === undefined) return;
+    // Not a "settled" flag flip here: exit/error handlers below own that.
+    // This can be called again after a clean exit (from afterEach, as a
+    // backstop) -- ESRCH from signalling an already-gone group is expected
+    // and swallowed, never thrown at the test.
+    try {
+      process.kill(-child.pid, "SIGKILL");
+    } catch {
+      // Already gone.
+    }
+  };
+
+  const result = new Promise<PanelProcessResult>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      killIfAlive();
+      settled = true;
+      reject(
+        new Error(
+          `orca panel (pid ${child.pid}) did not exit by itself within ${deadlineMs}ms; the whole ` +
+            `process group was killed. This must never read as a pass: a hang means the guard under ` +
+            `test let the server actually start. stderr so far: ${JSON.stringify(stderr)}`,
+        ),
+      );
+    }, deadlineMs);
+
+    child.once("exit", (code) => {
+      clearTimeout(timer);
+      settled = true;
+      resolve({ code, stdout, stderr });
+    });
+    child.once("error", (err) => {
+      clearTimeout(timer);
+      settled = true;
+      reject(err);
+    });
+  });
+
+  return { result, killIfAlive };
+}
 
 // RFC 5737 TEST-NET-1. Measured in spec section 1.7: it is on no interface of
 // this machine, so bind fails with EADDRNOTAVAIL when the guard is gone.
@@ -78,6 +164,11 @@ describe("panel security (spec sections 3.1 and 3.2)", () => {
 
 describe("panel security via the real CLI process (controller ruling E2/E3: not skipped)", () => {
   let throwawayStore: string;
+  // F5: set by each `it` right after spawning, so afterEach can kill
+  // anything still alive from THAT criterion even if an assertion below
+  // throws first. A no-op once the child has already exited or been killed
+  // (see runPanelProcess's `settled` guard).
+  let killCurrent: (() => void) | undefined;
 
   beforeEach(async () => {
     // E4: the brief's real-process criterion references `throwawayStore` but
@@ -87,9 +178,14 @@ describe("panel security via the real CLI process (controller ruling E2/E3: not 
     // testing is not isolated, and this env redirect is not optional even for
     // the --by criterion below, which never reaches correctionsDir() today.
     throwawayStore = await mkdtemp(join(tmpdir(), "orca-panel-"));
+    killCurrent = undefined;
   });
 
   afterEach(async () => {
+    // F5: the backstop. runPanelProcess already kills on its own deadline
+    // before rejecting, so in the common case this is a no-op; it exists so
+    // a thrown assertion between spawn and the deadline cannot skip cleanup.
+    killCurrent?.();
     await rm(throwawayStore, { recursive: true, force: true });
   });
 
@@ -102,14 +198,15 @@ describe("panel security via the real CLI process (controller ruling E2/E3: not 
       // `orca panel` entry point, so it survives the next rewrite of
       // server.ts the way a unit-level criterion on parsePanelArgs alone
       // would not.
-      const run = await execFileAsync(
-        "./node_modules/.bin/tsx",
-        ["src/cli.ts", "panel"],
-        { cwd: process.cwd(), env: { ...process.env, ORCA_CORRECTIONS_DIR: throwawayStore } },
-      ).catch((err: { code: number; stderr: string; stdout: string }) => err);
+      const { result, killIfAlive } = runPanelProcess(["panel"], {
+        ...process.env,
+        ORCA_CORRECTIONS_DIR: throwawayStore,
+      });
+      killCurrent = killIfAlive;
+      const run = await result;
 
       expect(run).toMatchObject({ code: 1 });
-      expect((run as { stderr: string }).stderr).toContain(NO_VIEWER_IDENTITY);
+      expect(run.stderr).toContain(NO_VIEWER_IDENTITY);
     },
     20_000,
   );
@@ -119,14 +216,15 @@ describe("panel security via the real CLI process (controller ruling E2/E3: not 
     async () => {
       // The guard runs before listen(), so what comes back is the named refusal
       // rather than EADDRNOTAVAIL.
-      const run = await execFileAsync(
-        "./node_modules/.bin/tsx",
-        ["src/cli.ts", "panel", "--by", "amy", "--bind", TEST_NET_1],
-        { cwd: process.cwd(), env: { ...process.env, ORCA_CORRECTIONS_DIR: throwawayStore } },
-      ).catch((err: { code: number; stderr: string; stdout: string }) => err);
+      const { result, killIfAlive } = runPanelProcess(["panel", "--by", "amy", "--bind", TEST_NET_1], {
+        ...process.env,
+        ORCA_CORRECTIONS_DIR: throwawayStore,
+      });
+      killCurrent = killIfAlive;
+      const run = await result;
 
       expect(run).toMatchObject({ code: 1 });
-      expect((run as { stderr: string }).stderr).toContain(EXTERNAL_BIND_NOT_CONFIRMED);
+      expect(run.stderr).toContain(EXTERNAL_BIND_NOT_CONFIRMED);
 
       // The process is gone, so nothing it owns can be listening. Observed on
       // the operating system side, never with connect(): section 1.7 measured
@@ -138,9 +236,9 @@ describe("panel security via the real CLI process (controller ruling E2/E3: not 
       // failing lsof into an empty listing, and "does not contain the
       // address" is vacuously true over nothing. Let a failing lsof fail this
       // criterion instead, with a message saying the observation itself could
-      // not be made. A per-pid filter is not the fix either: execFileAsync
-      // has already returned above, so the child is gone and a pid filter
-      // would assert against an empty set by construction.
+      // not be made. A per-pid filter is not the fix either: the child has
+      // already exited above, so the child is gone and a pid filter would
+      // assert against an empty set by construction.
       const listeners = await execFileAsync("lsof", ["-nP", "-iTCP", "-sTCP:LISTEN"]).catch((err: unknown) => {
         throw new Error(
           `could not observe the machine's listening sockets via lsof, so absence of ` +
@@ -154,4 +252,43 @@ describe("panel security via the real CLI process (controller ruling E2/E3: not 
     },
     20_000,
   );
+});
+
+describe("parsePanelArgs argument validation (F6: task 3's deferred malformed-port / malformed-repo-argument)", () => {
+  // Asserted at the parsePanelArgs level, not through the real process:
+  // on the run where the guard under test here is the one deleted, a
+  // real-process criterion would go on to START A SERVER on loopback (port
+  // defaults to 0, an ephemeral port picked by the kernel) and then hang
+  // forever, because nothing in `orca panel` ever exits by itself once it is
+  // listening -- the exact hazard F5 above exists to repair. A parse-level
+  // criterion never spawns anything, so it cannot create that hazard.
+  //
+  // `--by` is supplied in every case: without it, NO_VIEWER_IDENTITY fires
+  // first and the criterion would observe the wrong guard -- the exact shape
+  // external review C2 caught for the bind guard. `{}` as env, never
+  // `process.env`, so none of these can resolve to the real ~/.orca (Rule 17).
+
+  it("rejects --port by name for a non-integer, for -1, and for 65536; accepts 65535", () => {
+    for (const bad of ["abc", "-1", "65536"]) {
+      expect(() => parsePanelArgs(["--by", "amy", "--port", bad], {}), bad).toThrowError(
+        expect.objectContaining({ code: "malformed-port" }),
+      );
+    }
+    // Negative control: without it, a guard that refuses every port passes
+    // the three assertions above vacuously.
+    expect(parsePanelArgs(["--by", "amy", "--port", "65535"], {}).port).toBe(65535);
+  });
+
+  it("rejects --repo by name for a value with no '=' and for one starting with '='; accepts k=path", () => {
+    for (const bad of ["no-equals-here", "=path"]) {
+      expect(() => parsePanelArgs(["--by", "amy", "--repo", bad], {}), bad).toThrowError(
+        expect.objectContaining({ code: "malformed-repo-argument" }),
+      );
+    }
+    // Negative control: without it, a guard that refuses every --repo value
+    // passes the two assertions above vacuously.
+    expect(parsePanelArgs(["--by", "amy", "--repo", "k=/some/path"], {}).repos).toEqual([
+      { projectKey: "k", path: "/some/path" },
+    ]);
+  });
 });
