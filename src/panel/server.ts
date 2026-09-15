@@ -89,10 +89,12 @@ export async function createPanelServer(opts: PanelOptions): Promise<StartedPane
   const app = express();
   app.use(express.json({ limit: "64kb" }));
   // Task 5 wires the read-only + reviews API routes in here (buildApi from
-  // ./api.js), passing { opts, token, reviews }.
-  // Task 4 wires the built web/dist static files in here (loadStaticFiles
-  // from ./staticFiles.js), which also needs `token` to inline it into the
-  // served HTML.
+  // ./api.js), passing { opts, token, reviews }. That module is also the only
+  // consumer of the web/dist static files, so it is what calls
+  // loadStaticFiles (./staticFiles.js, landed in Task 4) and hands the result
+  // to buildApi -- loading it here, with nothing yet reading it, would make
+  // every `orca panel` start fail with panel-dist-missing before web/dist
+  // exists in this repo.
 
   const server: Server = createServer(app);
   const listening = new Promise<void>((resolve, reject) => {
