@@ -80,6 +80,27 @@ describe("the reviews store (spec section 4.3)", () => {
     expect(await readReviews(dir)).toHaveLength(1);
   });
 
+  // Fix round 1 finding (Important, confirmed in scope): `has` then `add` is a
+  // check-then-act pair. The old code only added to `seen` after the write
+  // completed, so two concurrent `append` calls on the SAME instance for the
+  // SAME row could both pass the `has` check before either reached `add`, and
+  // both would write -- the dedupe guarantee does not hold under concurrency.
+  // Reachable in production: Task 5 wires one shared ReviewsWriter into the
+  // HTTP handlers, so two clicks (or one double click) are two concurrent
+  // calls. Mutation R-11 (move `seen.add(key(row))` back to after the write)
+  // reverts the fix and must turn this red.
+  it("resolves exactly one of two concurrent appends for the same row as written, the other as duplicate", async () => {
+    const writer = new ReviewsWriter(dir);
+    await writer.load();
+    const [a, b] = await Promise.all([writer.append(row()), writer.append(row())]);
+    // Order-independent: whichever call wins the race, the OUTCOMES must be
+    // exactly one "written" and one "duplicate" -- not "at least one written"
+    // and not "both written".
+    expect([a, b].sort()).toEqual(["duplicate", "written"]);
+    // The literal count, not an upper bound: the bug this pins made this 2.
+    expect(await readReviews(dir)).toHaveLength(1);
+  });
+
   it("treats a different action on the same decision as a different row", async () => {
     const writer = new ReviewsWriter(dir);
     await writer.load();

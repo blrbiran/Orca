@@ -67,32 +67,48 @@ export class ReviewsWriter {
 
   async append(row: ReviewRow): Promise<"written" | "duplicate"> {
     if (!this.loaded) throw new Error("orca panel: ReviewsWriter.append called before load()");
-    if (this.seen.has(key(row))) return "duplicate";
+    const rowKey = key(row);
+    if (this.seen.has(rowKey)) return "duplicate";
 
-    // `mode` here is masked by the umask, which is why the criterion pins the
-    // umask explicitly rather than trusting the developer's. An
-    // ALREADY-EXISTING directory keeps whatever mode it already has: a
-    // recursive mkdir does not touch a directory that is already there, and
-    // there is no chmod on this path -- it is a person's (or another
-    // program's) directory, and changing its mode is not this program's
-    // decision to make.
-    await mkdir(this.dir, { recursive: true, mode: REVIEWS_DIR_MODE });
-    const lock = await acquireReviewsLock(this.dir);
+    // Claimed HERE, synchronously, before the first `await` -- not after the
+    // write finishes. `has` then `add` is a check-then-act pair, and every
+    // `await` between them opens a window where a second concurrent `append`
+    // call on this SAME instance can also pass the `has` check before either
+    // call reaches `add`: both would then write. Task 5 wires one shared
+    // ReviewsWriter into the HTTP handlers, where two clicks (or one double
+    // click) are exactly two concurrent calls, so this window is reachable in
+    // production, not just in theory. Removed again in the `catch` below if
+    // the write itself fails, so a failed write does not permanently brand a
+    // row as already-written.
+    this.seen.add(rowKey);
     try {
-      const file = reviewsFile(this.dir);
-      let created = false;
+      // `mode` here is masked by the umask, which is why the criterion pins the
+      // umask explicitly rather than trusting the developer's. An
+      // ALREADY-EXISTING directory keeps whatever mode it already has: a
+      // recursive mkdir does not touch a directory that is already there, and
+      // there is no chmod on this path -- it is a person's (or another
+      // program's) directory, and changing its mode is not this program's
+      // decision to make.
+      await mkdir(this.dir, { recursive: true, mode: REVIEWS_DIR_MODE });
+      const lock = await acquireReviewsLock(this.dir);
       try {
-        await writeFile(file, "", { flag: "wx", mode: REVIEWS_FILE_MODE });
-        created = true;
-      } catch (err) {
-        if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
+        const file = reviewsFile(this.dir);
+        let created = false;
+        try {
+          await writeFile(file, "", { flag: "wx", mode: REVIEWS_FILE_MODE });
+          created = true;
+        } catch (err) {
+          if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
+        }
+        if (created) await chmod(file, REVIEWS_FILE_MODE);
+        await appendFile(file, `${JSON.stringify(row)}\n`, "utf8");
+      } finally {
+        await lock.release();
       }
-      if (created) await chmod(file, REVIEWS_FILE_MODE);
-      await appendFile(file, `${JSON.stringify(row)}\n`, "utf8");
-    } finally {
-      await lock.release();
+    } catch (err) {
+      this.seen.delete(rowKey);
+      throw err;
     }
-    this.seen.add(key(row));
     return "written";
   }
 }
