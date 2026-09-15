@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { DecisionList } from "../src/DecisionList.js";
+import { DecisionList, rowKey } from "../src/DecisionList.js";
 import type { DecisionListRow } from "../src/types.js";
 
 /**
@@ -25,5 +25,25 @@ describe("DecisionList (task 8 ruling K6)", () => {
     const html = renderToStaticMarkup(<DecisionList rows={[row]} />);
     expect(html).toContain("run/1");
     expect(html).not.toContain("a reasoning value that must never leak into the list");
+  });
+
+  /**
+   * review finding I-1 / controller ruling R60. A fixed-separator join (the
+   * earlier double-colon join) collides on exactly this pair: {projectKey:
+   * "a::b", id: "c"} and {projectKey: "a", id: "b::c"} would produce the same
+   * string. `rowKey` must tell them apart -- mutation K-8 (restore the
+   * double-colon join) reddens this exact assertion, and only this one: it
+   * is the only place in this file that constructs the colliding pair.
+   *
+   * The second half is a positive observation (task 6/7's own lesson, carried
+   * here): a key generator that always returns something different would
+   * also pass "the two keys differ" trivially, so this also pins that the
+   * SAME row produces the SAME key twice.
+   */
+  it("gives two different keys to a pair that would collide under a fixed separator, and the same key twice to the same row", () => {
+    const rowA: Pick<DecisionListRow, "projectKey" | "id"> = { projectKey: "a::b", id: "c" };
+    const rowB: Pick<DecisionListRow, "projectKey" | "id"> = { projectKey: "a", id: "b::c" };
+    expect(rowKey(rowA)).not.toBe(rowKey(rowB));
+    expect(rowKey(rowA)).toBe(rowKey(rowA));
   });
 });
