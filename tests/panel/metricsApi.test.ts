@@ -184,6 +184,9 @@ describe("the metrics endpoint (spec sections 4.1 and 5)", () => {
           const res = await get(started, "/api/metrics");
           expect(res.status).toBe(409);
           const body = (await res.json()) as Record<string, unknown>;
+          // Named by the imported constant, not a retyped string literal:
+          // review round 1 caught this assertion missing entirely (Rule 12).
+          expect(body.code).toBe(UNRESOLVED_PROJECT_KEYS);
           // Relaxing here voids E2's gate: a silently dropped repository
           // makes the correction rate silently higher and nothing says so.
           // Assert the body has NO `report` key at all, not merely that
