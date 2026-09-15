@@ -29,6 +29,12 @@ export type DecisionScope = "file" | "task" | "repo" | "cross-repo";
 
 export type CorrectionKind = "wrong" | "not_my_taste" | "stale";
 
+/**
+ * Mirrors src/corrections/schema.ts's CORRECTION_KINDS -- same SET, order not
+ * load-bearing here. The correction form's `kind` select offers exactly these.
+ */
+export const WEB_CORRECTION_KINDS = ["wrong", "not_my_taste", "stale"] as const satisfies readonly CorrectionKind[];
+
 export interface MalformedLine {
   file: string;
   line: number;

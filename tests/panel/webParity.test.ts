@@ -4,12 +4,15 @@ import type { DecisionListRow as ServerDecisionListRow } from "../../src/panel/l
 import { LIST_FIELDS } from "../../src/panel/listProjection.js";
 import type { MetricsReport as ServerMetricsReport } from "../../src/metrics/types.js";
 import { METRICS_FIELDS } from "../../src/metrics/types.js";
+import type { CorrectionKind as ServerCorrectionKind } from "../../src/corrections/schema.js";
 import type {
+  CorrectionKind as WebCorrectionKind,
   DecisionListRow as WebDecisionListRow,
   MetricsReport as WebMetricsReport,
   PanelCoverage as WebPanelCoverage,
 } from "../../web/src/types.js";
-import { WEB_LIST_FIELDS, WEB_REPORT_FIELDS } from "../../web/src/types.js";
+import { WEB_CORRECTION_KINDS, WEB_LIST_FIELDS, WEB_REPORT_FIELDS } from "../../web/src/types.js";
+import { CORRECTION_KINDS } from "../../src/corrections/schema.js";
 
 /**
  * task 8 ruling K2. `web/` cannot import `src/` (a browser bundle cannot ship
@@ -33,6 +36,13 @@ describe("web/src/types.ts stays in lockstep with the server shapes (task 8 ruli
   it("WEB_LIST_FIELDS is the same SET as LIST_FIELDS", () => {
     expect([...WEB_LIST_FIELDS].sort()).toEqual([...LIST_FIELDS].sort());
   });
+
+  // Final review I-3 / ruling R66: the correction form's `kind` select offers
+  // exactly the kinds correctionSchema accepts -- a missing one is a kind the
+  // person cannot record, an extra one is a select option the seam refuses.
+  it("WEB_CORRECTION_KINDS is the same SET as CORRECTION_KINDS", () => {
+    expect([...WEB_CORRECTION_KINDS].sort()).toEqual([...CORRECTION_KINDS].sort());
+  });
 });
 
 // --- compile-time mutual-assignability checks (never called at runtime) ---
@@ -55,6 +65,12 @@ function listRowServerToWeb(x: ServerDecisionListRow): WebDecisionListRow {
 function listRowWebToServer(x: WebDecisionListRow): ServerDecisionListRow {
   return x;
 }
+function correctionKindServerToWeb(x: ServerCorrectionKind): WebCorrectionKind {
+  return x;
+}
+function correctionKindWebToServer(x: WebCorrectionKind): ServerCorrectionKind {
+  return x;
+}
 
 // Referenced so nothing above is dead code the compiler is free to ignore;
 // never invoked for its behavior, only so the assignments above are real
@@ -66,4 +82,6 @@ export const __webParityAssignabilityChecks__ = [
   coverageWebToServer,
   listRowServerToWeb,
   listRowWebToServer,
+  correctionKindServerToWeb,
+  correctionKindWebToServer,
 ] as const;
