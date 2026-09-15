@@ -20,6 +20,10 @@ export type NewCorrectionInput = Omit<CorrectionRow, "at">;
  * *** ERRATUM (2026-09-10, human authorisation to inject the correction clock) ***
  * This function now lives in record.ts, is exported, and takes the clock as a
  * `now: () => Date` parameter rather than reading `new Date()` itself.
+ *
+ * *** ERRATUM (2026-09-16, run orca-dev-5d5c8055, final review of E3) ***
+ * "written out twice in the function below" above refers to correct.ts before
+ * this seam existed; the function below this comment no longer contains it.
  */
 export function correctionRowFrom(input: NewCorrectionInput, now: () => Date): CorrectionRow {
   return {
