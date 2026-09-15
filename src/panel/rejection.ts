@@ -32,3 +32,10 @@ export const NO_VIEWER_IDENTITY = "no-viewer-identity";
  * reason to redeclare it.
  */
 export const TOKEN_REQUIRED = "token-required";
+
+/**
+ * Final review I-2 / ruling R65: a request whose body the panel cannot read as
+ * a JSON object -- no JSON content-type, malformed JSON, or JSON that is not an
+ * object. A client mistake, so 400 by this name, never `panel-internal-error`.
+ */
+export const PANEL_BAD_REQUEST = "panel-bad-request";

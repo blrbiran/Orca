@@ -4,6 +4,7 @@ import type { NewCorrectionInput } from "../corrections/record.js";
 import { CorrectRejection } from "../corrections/rejection.js";
 import type { Correction } from "../corrections/schema.js";
 import { CORRECTION_ALREADY_RECORDED } from "../corrections/store.js";
+import { CORRECTIONS_STORE_BUSY } from "../corrections/storeLock.js";
 import { collect } from "../metrics/collect.js";
 import { computeMetrics } from "../metrics/compute.js";
 import { MetricsRejection } from "../metrics/rejection.js";
@@ -11,7 +12,7 @@ import type { DecisionObservation } from "../metrics/types.js";
 import { computePanelCoverage, unreviewedHighTier } from "./coverage.js";
 import { loadDecisionRow } from "./decisionSource.js";
 import { DECISION_NOT_FOUND, projectForList } from "./listProjection.js";
-import { PanelRejection, TOKEN_REQUIRED } from "./rejection.js";
+import { PANEL_BAD_REQUEST, PanelRejection, TOKEN_REQUIRED } from "./rejection.js";
 import { readReviews } from "./reviewsStore.js";
 import type { ReviewsWriter } from "./reviewsStore.js";
 import type { PanelOptions } from "./server.js";
@@ -82,6 +83,39 @@ function isListedDecision(
   decisionId: string,
 ): boolean {
   return observations.decisions.some((d) => d.projectKey === projectKey && d.id === decisionId);
+}
+
+/**
+ * Final review I-2 / ruling R65: the one gate a POST body passes before any
+ * field is read. Express 5 leaves `req.body` undefined when no parser ran (no
+ * JSON content-type), and express.json hands through an array as readily as
+ * an object; either used to surface as `500 panel-internal-error` with a
+ * TypeError in it, or as a misleading 404 for a decision named "". Answers 400
+ * by name and returns undefined when the body is not a plain object.
+ */
+function objectBody(req: Request, res: Response): Record<string, unknown> | undefined {
+  const body: unknown = req.body;
+  if (typeof body === "object" && body !== null && !Array.isArray(body)) {
+    return body as Record<string, unknown>;
+  }
+  const got = body === undefined ? "no JSON body" : Array.isArray(body) ? "an array" : typeof body;
+  res.status(400).json({
+    code: PANEL_BAD_REQUEST,
+    message: `this endpoint wants a JSON object sent with content-type: application/json, and got ${got}`,
+  });
+  return undefined;
+}
+
+/**
+ * express.json's own failures (malformed JSON, too large, bad charset) are
+ * http-errors carrying a string `type` and a 4xx `status`. They are the
+ * client's mistake, so they answer 400 by name rather than falling through to
+ * the 500 arm.
+ */
+function isBodyParserError(err: unknown): err is { message: string; status: number; type: string } {
+  if (typeof err !== "object" || err === null) return false;
+  const e = err as { status?: unknown; type?: unknown };
+  return typeof e.type === "string" && typeof e.status === "number" && e.status >= 400 && e.status < 500;
 }
 
 export function buildApi(app: Express, deps: ApiDeps): void {
@@ -220,7 +254,8 @@ export function buildApi(app: Express, deps: ApiDeps): void {
    */
   app.post("/api/corrections", (req, res, next) => {
     void (async () => {
-      const body = req.body as Record<string, unknown>;
+      const body = objectBody(req, res);
+      if (body === undefined) return;
       const projectKey = String(body.projectKey ?? "");
       const decisionId = String(body.decisionId ?? "");
 
@@ -274,7 +309,11 @@ export function buildApi(app: Express, deps: ApiDeps): void {
           return;
         }
         if (err instanceof CorrectRejection) {
-          res.status(400).json({ code: err.code, message: err.message });
+          // Final review M-8 / ruling R65: a busy store is a transient
+          // conflict with another writer, not something wrong with this
+          // request -- 409, same as the reviews store's own busy refusal.
+          const status = err.code === CORRECTIONS_STORE_BUSY ? 409 : 400;
+          res.status(status).json({ code: err.code, message: err.message });
           return;
         }
         next(err);
@@ -320,7 +359,8 @@ export function buildApi(app: Express, deps: ApiDeps): void {
    */
   app.post("/api/reviews", (req, res, next) => {
     void (async () => {
-      const body = req.body as Record<string, unknown>;
+      const body = objectBody(req, res);
+      if (body === undefined) return;
       const projectKey = String(body.projectKey ?? "");
       const decisionId = String(body.decisionId ?? "");
 
@@ -352,6 +392,10 @@ export function buildApi(app: Express, deps: ApiDeps): void {
       res.status(409).json({ code: err.code, message: err.message });
       return;
     }
-    res.status(500).json({ code: "panel-internal-error", message: String(err) });
+    if (isBodyParserError(err)) {
+      res.status(400).json({ code: PANEL_BAD_REQUEST, message: `the request body could not be read: ${err.message}` });
+      return;
+    }
+    res.status(500).json({ code: "panel-internal-error", message: err instanceof Error ? err.message : String(err) });
   });
 }

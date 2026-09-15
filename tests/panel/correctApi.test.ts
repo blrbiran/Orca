@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { request as httpRequest } from "node:http";
 import { mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -8,7 +9,9 @@ import { CORRECTION_ROW_INVALID } from "../../src/corrections/record.js";
 import { CORRECTION_ALREADY_RECORDED, readCorrections } from "../../src/corrections/store.js";
 import type { DecisionEvent } from "../../src/ledger/schema.js";
 import { appendEvent } from "../../src/ledger/writer.js";
+import { CORRECTIONS_STORE_BUSY, acquireStoreLock } from "../../src/corrections/storeLock.js";
 import { DECISION_NOT_FOUND } from "../../src/panel/listProjection.js";
+import { PANEL_BAD_REQUEST } from "../../src/panel/rejection.js";
 import { REVIEWS_STORE_BUSY, acquireReviewsLock } from "../../src/panel/reviewsLock.js";
 import { readReviews } from "../../src/panel/reviewsStore.js";
 import { createPanelServer, parsePanelArgs } from "../../src/panel/server.js";
@@ -46,6 +49,35 @@ const post = async (started: StartedPanel, path: string, body: unknown, token?: 
     headers: { "x-orca-token": token ?? started.token, "content-type": "application/json" },
     body: JSON.stringify(body),
   });
+
+/**
+ * Final review I-2: raw node:http, never fetch -- fetch would set a
+ * content-type of its own for a string body, and this criterion is about what
+ * happens when a client does NOT send one.
+ */
+function rawPost(
+  started: StartedPanel,
+  path: string,
+  body: string,
+  contentType: string | undefined,
+): Promise<{ status: number; body: string }> {
+  const u = new URL(started.url);
+  const headers: Record<string, string> = {
+    "x-orca-token": started.token,
+    "content-length": String(Buffer.byteLength(body)),
+  };
+  if (contentType !== undefined) headers["content-type"] = contentType;
+  return new Promise((resolve, reject) => {
+    const req = httpRequest({ hostname: u.hostname, port: u.port, path, method: "POST", headers }, (res) => {
+      let text = "";
+      res.setEncoding("utf8");
+      res.on("data", (chunk: string) => (text += chunk));
+      res.on("end", () => resolve({ status: res.statusCode ?? 0, body: text }));
+    });
+    req.on("error", reject);
+    req.end(body);
+  });
+}
 
 async function makeDistFixture(): Promise<{ dir: string; cleanup: () => Promise<void> }> {
   const root = await mkdtemp(join(tmpdir(), "orca-panel-dist-"));
@@ -531,6 +563,92 @@ describe("recording a correction from the panel (spec sections 2.1, 2.3 and 4.4)
         await dist.cleanup();
         await repo.cleanup();
       }
+    });
+  });
+});
+
+/**
+ * Final review I-2 / ruling R65: a client mistake is a 4xx by name, never
+ * `500 panel-internal-error` with a TypeError or SyntaxError in it. Each `it`
+ * owns its store, repo and server (ruling J7).
+ */
+describe("the panel's error mapping for client mistakes (final review I-2)", () => {
+  const withPanel = async (fn: (started: StartedPanel, dir: string) => Promise<void>): Promise<void> => {
+    await withCorrectionsDir(async (dir) => {
+      const repo = await makeTargetRepo();
+      const dist = await makeDistFixture();
+      try {
+        const started = await createPanelServer(
+          parsePanelArgs(["--by", "tester", "--repo", `proj=${repo.path}`, "--dist", dist.dir], {
+            ORCA_CORRECTIONS_DIR: dir,
+          }),
+        );
+        try {
+          await fn(started, dir);
+        } finally {
+          await started.close();
+        }
+      } finally {
+        await dist.cleanup();
+        await repo.cleanup();
+      }
+    });
+  };
+
+  const bothPosts = ["/api/reviews", "/api/corrections"] as const;
+  const wellFormed = JSON.stringify(validBody());
+
+  const expectBadRequest = async (res: { status: number; body: string }): Promise<void> => {
+    expect(res.status).toBe(400);
+    const parsed = JSON.parse(res.body) as { code: string; message: string };
+    expect(parsed.code).toBe(PANEL_BAD_REQUEST);
+    expect(parsed.message.length).toBeGreaterThan(0);
+  };
+
+  it("refuses a POST with no content-type as a bad request (Express leaves the body undefined)", async () => {
+    await withPanel(async (started, dir) => {
+      for (const path of bothPosts) await expectBadRequest(await rawPost(started, path, wellFormed, undefined));
+      expect(await readCorrections(dir)).toHaveLength(0);
+      expect(await readReviews(dir)).toHaveLength(0);
+    });
+  });
+
+  it("refuses a malformed JSON body as a bad request (the body parser's own error)", async () => {
+    await withPanel(async (started, dir) => {
+      for (const path of bothPosts) {
+        await expectBadRequest(await rawPost(started, path, "{not json", "application/json"));
+      }
+      expect(await readCorrections(dir)).toHaveLength(0);
+      expect(await readReviews(dir)).toHaveLength(0);
+    });
+  });
+
+  it("refuses a JSON body that is not an object (an array) as a bad request, before reading any field", async () => {
+    await withPanel(async (started, dir) => {
+      for (const path of bothPosts) {
+        await expectBadRequest(await rawPost(started, path, `[${wellFormed}]`, "application/json"));
+      }
+      expect(await readCorrections(dir)).toHaveLength(0);
+      expect(await readReviews(dir)).toHaveLength(0);
+    });
+  });
+
+  it("answers a busy corrections store with 409 by name, not 400 (a transient conflict, not a client error)", async () => {
+    await withPanel(async (started, dir) => {
+      const held = await acquireStoreLock(dir);
+      try {
+        const res = await post(started, "/api/corrections", validBody());
+        expect(res.status).toBe(409);
+        expect(((await res.json()) as { code: string }).code).toBe(CORRECTIONS_STORE_BUSY);
+        expect(await readCorrections(dir)).toHaveLength(0);
+      } finally {
+        await held.release();
+      }
+      // Positive control: the SAME request with the lock released lands, so
+      // the 409 above was the lock and not something else about the request.
+      const again = await post(started, "/api/corrections", validBody());
+      expect(again.status).toBe(200);
+      expect(await readCorrections(dir)).toHaveLength(1);
     });
   });
 });
