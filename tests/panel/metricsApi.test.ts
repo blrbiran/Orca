@@ -354,9 +354,15 @@ describe("the Host allowlist (final review I-4, DNS rebinding)", () => {
 
   it("refuses a foreign Host on the token-carrying page with 403 by name, and the body carries no token", async () => {
     await withPanel(async (started) => {
-      // `evil.localhost` is in the list on purpose: a suffix match on
-      // "localhost" (mutation HG-2) would let it through.
-      for (const host of ["evil.example", `evil.example:${started.port}`, `evil.localhost:${started.port}`]) {
+      // `evil.localhost` is in the list on purpose, with and without a port: a
+      // suffix match on "localhost" (mutation HG-2) would let it through,
+      // whether the match is on the parsed hostname or on the raw header.
+      for (const host of [
+        "evil.example",
+        `evil.example:${started.port}`,
+        "evil.localhost",
+        `evil.localhost:${started.port}`,
+      ]) {
         const res = await rawGet(started.url, "/", { host });
         expect(res.status, host).toBe(403);
         expect((JSON.parse(res.body) as { code: string }).code, host).toBe(PANEL_HOST_NOT_ALLOWED);
