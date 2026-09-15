@@ -10,7 +10,7 @@ import { appendEvent } from "../../src/ledger/writer.js";
 import { collect } from "../../src/metrics/collect.js";
 import { UNRESOLVED_PROJECT_KEYS } from "../../src/metrics/discover.js";
 import { DECISION_NOT_FOUND, LIST_FIELDS, detailUrl } from "../../src/panel/listProjection.js";
-import { acquireReviewsLock } from "../../src/panel/reviewsLock.js";
+import { REVIEWS_LOCK_TIMEOUT_MS, acquireReviewsLock } from "../../src/panel/reviewsLock.js";
 import { readReviews } from "../../src/panel/reviewsStore.js";
 import type { ReviewRow } from "../../src/panel/reviewsStore.js";
 import { createPanelServer, parsePanelArgs } from "../../src/panel/server.js";
@@ -74,11 +74,25 @@ describe("the decisions endpoints (spec sections 4.2 and 4.3.1)", () => {
           expect(res.status).toBe(200);
           const body = (await res.json()) as { rows: Array<Record<string, unknown>> };
 
-          // 🔴 The expected row is built from LIST_FIELDS, NOT by calling
-          // projectForList. Under mutation L-3b, projectForList grows a
-          // `summary` field; building "expected" by calling it too would grow
-          // both sides of the deep equality together and this criterion would
-          // stay green through the mutation it exists to catch.
+          // 🔴 (fix round 1, review Important I-1 / controller ruling R57)
+          // The expected row is built from LIST_FIELDS, NOT by calling
+          // projectForList: the earlier form -- `observations.decisions.map(
+          // projectForList)` -- was a tautology under mutation L-3b, since the
+          // mutation edits projectForList and both sides of the equality would
+          // grow a `summary` field together and stay green.
+          //
+          // A single `toStrictEqual` is now the whole criterion. The earlier
+          // draft ALSO kept a per-row `Object.keys(...).sort()` loop, labelled
+          // "the load-bearing assertion" on the theory that it alone could
+          // catch an extra field a looser equality might miss. Once the
+          // tautology above was repaired, that reasoning stopped applying:
+          // `expected` no longer moves with the implementation, so ANY extra
+          // or missing key already fails the equality first, and review
+          // measured that the Object.keys loop never reddens on its own --
+          // the criterion always dies at the equality line before reaching
+          // it. `toStrictEqual` (not `toEqual`) closes the one gap a plain
+          // deep-equal has here too: it also rejects an extra key whose value
+          // is `undefined`, which `toEqual` treats as absent.
           const observations = await collect({
             repos: [{ projectKey: "proj", path: repo.path }],
             correctionsDir: dir,
@@ -87,17 +101,8 @@ describe("the decisions endpoints (spec sections 4.2 and 4.3.1)", () => {
           const expected = observations.decisions.map((d) =>
             Object.fromEntries(LIST_FIELDS.map((f) => [f, d[f]])),
           );
-          expect(body.rows).toEqual(expected);
+          expect(body.rows).toStrictEqual(expected);
           expect(body.rows.length).toBeGreaterThan(1);
-
-          // 🔴 THIS is the load-bearing assertion, not a restatement of the
-          // one above: it pins the exact KEY SET of every row, so a mutation
-          // that adds an extra field (and happens to also add it to the
-          // expected side above, hash- and length-preserving) still reddens
-          // here.
-          for (const row of body.rows) {
-            expect(Object.keys(row).sort()).toEqual([...LIST_FIELDS].sort());
-          }
         } finally {
           await started.close();
         }
@@ -126,7 +131,27 @@ describe("the decisions endpoints (spec sections 4.2 and 4.3.1)", () => {
           const body = (await res.json()) as { rows: unknown[] };
           expect(body.rows.length).toBeGreaterThan(0);
 
-          expect(await readReviews(dir)).toHaveLength(0);
+          // 🔴 (fix round 1, mutation verifier finding / controller ruling
+          // R59) Absence cannot be polled TO COMPLETION -- there is no event
+          // that fires when nothing happens -- so this is instead a BOUNDED
+          // OBSERVATION WINDOW: mutation L-3 (the list handler also
+          // fire-and-forget appends an `opened` row per listed decision) was
+          // measured fully green against this criterion's earlier
+          // read-immediately-after-the-response form, because the mutated
+          // write lands roughly 500ms after the response goes out. The window
+          // is sized from the reviews lock's own retry
+          // budget, REVIEWS_LOCK_TIMEOUT_MS (1000ms), plus a further 1000ms of
+          // margin over that measured ~500ms landing time. `eventually`'s
+          // early return only fires when this criterion is ABOUT TO FAIL --
+          // when nothing lands, it waits out the whole window before the
+          // assertion below runs; when mutation L-3's write is present, this
+          // is what gives it time to land before that assertion runs.
+          const rows = await eventually(
+            () => readReviews(dir),
+            (r) => r.length > 0,
+            REVIEWS_LOCK_TIMEOUT_MS + 1_000,
+          );
+          expect(rows).toHaveLength(0);
         } finally {
           await started.close();
         }
