@@ -18,8 +18,16 @@ export interface ReviewRow {
 // decisionId/by/action are otherwise guaranteed free of any particular
 // character.
 const UNIT_SEPARATOR = "\x1f";
+//
+// *** ERRATUM (2026-09-16, run orca-dev-5d5c8055, final review of E3, ruling R64) ***
+// The key now leads with projectKey: (projectKey, decisionId, by, action).
+// Decision ids repeat across clones and forks, and every other join in the
+// panel is on (projectKey, id); without it a second repository's `reviewed`
+// on a same-id decision was answered `duplicate` and never written (measured
+// by the final review's probe). The bound in the class comment below becomes
+// two rows per distinct (projectKey, decisionId).
 const key = (row: ReviewRow): string =>
-  [row.decisionId, row.by, row.action].join(UNIT_SEPARATOR);
+  [row.projectKey, row.decisionId, row.by, row.action].join(UNIT_SEPARATOR);
 
 export async function readReviews(dir: string): Promise<ReviewRow[]> {
   let text: string;

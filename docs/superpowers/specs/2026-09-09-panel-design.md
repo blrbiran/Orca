@@ -238,6 +238,16 @@ token 管**授权**，viewer identity 管**是谁**，**分开实现、分开存
 ⚠️ 多进程下仍会重复写，有意接受。⚠️ **`reviews.jsonl` 没有留存策略**，而 A′ §3.7.1 为 `.decisions/` 强制了归档
 ⇒ **登记在 §9**（外审 M1）。
 
+***ERRATUM (2026-09-16, run orca-dev-5d5c8055, final review of E3)***
+去重键**应为 `(projectKey, decisionId, by, action)`**，不是上文的 `(decisionId, by, action)`。
+**为什么**：§4.2 的覆盖率按 `(projectKey, id)` 联合键计算，`coverage.ts`／详情成员判定／corrections 表自己的键都是联合键；
+而 E2 实测过**决策 id 会在 clone 与 fork 之间重复**。面板的 `by` 每进程恒定，于是按上文的键，
+第二个仓库里同 id 决策的 `reviewed` 会被当成重复**静默丢掉**：请求答 `200 duplicate`、一行不写、该决策永远留在待办上 ——
+正是 §4.3.1 禁止的「人以为审过了，台账没听说」，而且连一个非 2xx 都没有。
+**现测**（final review 的 probe，观测于 `952739d`）：`reviewed proj-a: written | reviewed proj-b (same id): duplicate | rows on disk: 1`。
+本轮在 `git clone --local` 的 BASE 副本上复测：`tests/panel/reviewsStore.test.ts` 的新判据与 `tests/panel/todo.test.ts` 的 (f)
+都红在 `expected 'duplicate' to be 'written'`。上界随之变为 **2 × distinct `(projectKey, decisionId)`**，仍与运行时长无关。
+
 ### 4.4 🔴 同一条决策的第二次纠正：面板必须自己处理，不能转述 CLI 的话（外审 I4）
 
 现测（§1.6）：去重键 `(projectKey, decisionId, by)` **不含 `kind`**，而面板的 `by` 每进程恒定

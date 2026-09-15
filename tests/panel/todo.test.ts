@@ -164,4 +164,47 @@ describe("GET /api/todo (task 8 ruling K5, HTTP)", () => {
       }
     });
   });
+
+  // Final review I-1 / ruling R64, at the HTTP layer: agreeing on repository
+  // B's decision must not be swallowed as a duplicate of repository A's
+  // decision with the same id. Before the fix the second POST answered 200
+  // `duplicate`, wrote nothing, and B's row never left the to-do list.
+  it("(f) agreeing on two repositories' decisions that share an id takes BOTH off the to-do list", async () => {
+    await withCorrectionsDir(async (dir) => {
+      const repoA = await makeTargetRepo();
+      const repoB = await makeTargetRepo({ remote: "https://github.com/biran/orca-b.git" });
+      const dist = await makeDistFixture();
+      try {
+        expect(isHighTier(ORIGINAL.scope, ORIGINAL.kind)).toBe(true);
+        const started = await createPanelServer(
+          parsePanelArgs(
+            ["--by", "tester", "--repo", `proj-a=${repoA.path}`, "--repo", `proj-b=${repoB.path}`, "--dist", dist.dir],
+            { ORCA_CORRECTIONS_DIR: dir },
+          ),
+        );
+        try {
+          // Positive control: both rows really are on the list first, so an
+          // empty list below means "both reviewed", not "never listed".
+          const before = (await (await get(started, "/api/todo")).json()) as { rows: Array<{ projectKey: string }> };
+          expect(before.rows.map((r) => r.projectKey).sort()).toEqual(["proj-a", "proj-b"]);
+
+          for (const projectKey of ["proj-a", "proj-b"]) {
+            const res = await post(started, "/api/reviews", { projectKey, decisionId: ORIGINAL.id });
+            expect(res.status).toBe(200);
+            expect(((await res.json()) as { result: string }).result).toBe("written");
+          }
+
+          const after = (await (await get(started, "/api/todo")).json()) as { rows: unknown[] };
+          expect(after.rows).toEqual([]);
+          expect((await readReviews(dir)).filter((r) => r.action === "reviewed")).toHaveLength(2);
+        } finally {
+          await started.close();
+        }
+      } finally {
+        await dist.cleanup();
+        await repoA.cleanup();
+        await repoB.cleanup();
+      }
+    });
+  });
 });

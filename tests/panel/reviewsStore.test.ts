@@ -101,6 +101,23 @@ describe("the reviews store (spec section 4.3)", () => {
     expect(await readReviews(dir)).toHaveLength(1);
   });
 
+  // Final review I-1 / ruling R64: decision ids repeat across clones and forks
+  // (E2 measured it), so the identity is (projectKey, decisionId) everywhere
+  // else in the panel. A key without projectKey silently dropped the second
+  // repository's row -- the probe measured `proj-b (same id): duplicate`, one
+  // row on disk. The same-projectKey half is the positive control: a key that
+  // stopped deduping altogether would also write two rows above.
+  it("keys dedupe by projectKey too: the same decision id in two repositories writes two rows", async () => {
+    const writer = new ReviewsWriter(dir);
+    await writer.load();
+    expect(await writer.append(row({ projectKey: "proj-a", action: "reviewed" }))).toBe("written");
+    expect(await writer.append(row({ projectKey: "proj-b", action: "reviewed" }))).toBe("written");
+    expect(await readReviews(dir)).toHaveLength(2);
+
+    expect(await writer.append(row({ projectKey: "proj-a", action: "reviewed" }))).toBe("duplicate");
+    expect(await readReviews(dir)).toHaveLength(2);
+  });
+
   it("treats a different action on the same decision as a different row", async () => {
     const writer = new ReviewsWriter(dir);
     await writer.load();
