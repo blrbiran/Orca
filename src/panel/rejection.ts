@@ -24,3 +24,11 @@ export class PanelRejection extends Error {
  * not a cosmetic field.
  */
 export const NO_VIEWER_IDENTITY = "no-viewer-identity";
+
+/**
+ * spec §3.3: the one-time token is the whole of authorisation. Defined here,
+ * beside NO_VIEWER_IDENTITY, so there is exactly one definition — its consumer
+ * is Task 5's `src/panel/api.ts`, which checks it on every request and has no
+ * reason to redeclare it.
+ */
+export const TOKEN_REQUIRED = "token-required";
