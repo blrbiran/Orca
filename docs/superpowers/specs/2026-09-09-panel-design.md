@@ -170,6 +170,18 @@ token 管**授权**，viewer identity 管**是谁**，**分开实现、分开存
 无 TLS ／ token 在 HTML 里 ／ 无吊销无过期 ／ 无多用户（identity 是启动参数，一个进程一个身份）。
 ⇒ *** **外部模式今天只适合「你自己跨机器用」，不适合多人。这一句要出现在 `--bind` 的帮助文本里。** ***
 
+***ERRATUM (2026-09-16, run orca-dev-5d5c8055, final review of E3)***
+上面的登记清单**漏了一条：DNS rebinding**。回环绑定挡得住别的机器，挡不住**同一个人浏览器里的一个网页** ——
+它的域名第二次解析到 `127.0.0.1` 之后，请求是同源的，能读到带 token 的 HTML，进而用整个 API
+（读所有配置仓库的决策理由、以此人的 `--by` 写 `corrections.jsonl`／`reviews.jsonl`）。
+**现测**（final review 的 probe，`scratchpad/probe.mts`，观测于 `952739d`）：`GET /` 带 `Host: evil.example:80` → `200`，body 含 token。
+**本轮修法**：`createPanelServer` 在**一切路由与 body parser 之前**校验 `Host` 头（`src/panel/bindGuard.ts` 的 `isHostAllowed`）——
+只接受 `127.0.0.1`／`localhost`／`::1`，外加绑定地址本身；其余（含缺失的 `Host`、`evil.localhost` 这类后缀形状）一律
+`403 panel-host-not-allowed`，body 不含 token。判据：`tests/panel/metricsApi.test.ts` 的「the Host allowlist」三条
+（`node:http` 原始 `Host` 头，含正向对照），`tests/panel/security.test.ts` 的纯函数一条，`scripts/verify-panel.ts` 第 9 步。
+**仍然没解决的，照登**：一个**被允许的名字**（如 `localhost`）若被本机解析到恶意地址，那不在本守卫的范围内 —— 对回环绑定而言那已是本机被攻陷；
+外部模式下接受的绑定地址若是一个主机名，它本身也可以被 rebind，这属于上面已登记的「外部模式不适合多人」。
+
 ---
 
 ## 4. API 与 reviews 表

@@ -3,7 +3,7 @@ import type { Server } from "node:http";
 import express from "express";
 import { correctionsDir } from "../corrections/paths.js";
 import { buildApi } from "./api.js";
-import { assertBindAllowed } from "./bindGuard.js";
+import { PANEL_HOST_NOT_ALLOWED, assertBindAllowed, isHostAllowed } from "./bindGuard.js";
 import { NO_VIEWER_IDENTITY, PanelRejection } from "./rejection.js";
 import { ReviewsWriter } from "./reviewsStore.js";
 import { loadStaticFiles } from "./staticFiles.js";
@@ -98,6 +98,20 @@ export async function createPanelServer(opts: PanelOptions): Promise<StartedPane
   const statics = await loadStaticFiles(opts.distDir, token);
 
   const app = express();
+  // Final review I-4 / ruling R67: FIRST, before the body parser, the static
+  // route that serves the token, and the /api token check -- a request naming
+  // a foreign Host gets nothing from this process, not even a parse error.
+  // See bindGuard.ts's isHostAllowed for why.
+  app.use((req, res, next) => {
+    if (isHostAllowed(opts.bind, req.headers.host)) {
+      next();
+      return;
+    }
+    res.status(403).json({
+      code: PANEL_HOST_NOT_ALLOWED,
+      message: "this panel answers only to 127.0.0.1, localhost, ::1 or the address it was bound to",
+    });
+  });
   app.use(express.json({ limit: "64kb" }));
   buildApi(app, { opts, token, reviews, statics });
 

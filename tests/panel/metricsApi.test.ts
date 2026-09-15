@@ -12,6 +12,7 @@ import { UNRESOLVED_PROJECT_KEYS } from "../../src/metrics/discover.js";
 import { isHighTier } from "../../src/metrics/highTier.js";
 import type { DecisionObservation } from "../../src/metrics/types.js";
 import { computePanelCoverage } from "../../src/panel/coverage.js";
+import { PANEL_HOST_NOT_ALLOWED } from "../../src/panel/bindGuard.js";
 import { TOKEN_REQUIRED } from "../../src/panel/rejection.js";
 import type { ReviewRow } from "../../src/panel/reviewsStore.js";
 import { createPanelServer, parsePanelArgs } from "../../src/panel/server.js";
@@ -35,10 +36,10 @@ interface RawResponse {
  * URL parser, not the server. This sends whatever string is handed to it,
  * unmodified, as the HTTP request-line path.
  */
-function rawGet(baseUrl: string, rawPath: string): Promise<RawResponse> {
+function rawGet(baseUrl: string, rawPath: string, headers: Record<string, string> = {}): Promise<RawResponse> {
   const u = new URL(baseUrl);
   return new Promise((resolve, reject) => {
-    const req = httpRequest({ hostname: u.hostname, port: u.port, path: rawPath, method: "GET" }, (res) => {
+    const req = httpRequest({ hostname: u.hostname, port: u.port, path: rawPath, method: "GET", headers }, (res) => {
       let body = "";
       res.setEncoding("utf8");
       res.on("data", (chunk: string) => (body += chunk));
@@ -315,6 +316,75 @@ describe("static serving via HTTP (spec section 2.2)", () => {
         }
       } finally {
         await dist.cleanup();
+      }
+    });
+  });
+});
+
+/**
+ * Final review I-4 / ruling R67: DNS rebinding. Loopback binding keeps other
+ * machines out; it does not keep out a page in the person's own browser whose
+ * hostname re-resolves to 127.0.0.1. The probe measured `GET /` with
+ * `Host: evil.example:80` -> 200 with the token in the body. The Host header is
+ * set by hand on a raw node:http request -- the TCP connection still goes to
+ * 127.0.0.1, exactly as a rebound browser's would.
+ */
+describe("the Host allowlist (final review I-4, DNS rebinding)", () => {
+  const withPanel = async (fn: (started: StartedPanel) => Promise<void>): Promise<void> => {
+    await withCorrectionsDir(async (dir) => {
+      const repo = await makeTargetRepo();
+      const dist = await makeDistFixture();
+      try {
+        const started = await createPanelServer(
+          parsePanelArgs(["--by", "tester", "--repo", `proj=${repo.path}`, "--dist", dist.dir], {
+            ORCA_CORRECTIONS_DIR: dir,
+          }),
+        );
+        try {
+          await fn(started);
+        } finally {
+          await started.close();
+        }
+      } finally {
+        await dist.cleanup();
+        await repo.cleanup();
+      }
+    });
+  };
+
+  it("refuses a foreign Host on the token-carrying page with 403 by name, and the body carries no token", async () => {
+    await withPanel(async (started) => {
+      // `evil.localhost` is in the list on purpose: a suffix match on
+      // "localhost" (mutation HG-2) would let it through.
+      for (const host of ["evil.example", `evil.example:${started.port}`, `evil.localhost:${started.port}`]) {
+        const res = await rawGet(started.url, "/", { host });
+        expect(res.status, host).toBe(403);
+        expect((JSON.parse(res.body) as { code: string }).code, host).toBe(PANEL_HOST_NOT_ALLOWED);
+        expect(res.body.includes(started.token), host).toBe(false);
+      }
+    });
+  });
+
+  it("refuses a foreign Host on the API even with a valid token (the guard sits in front of /api too)", async () => {
+    await withPanel(async (started) => {
+      const res = await rawGet(started.url, "/api/metrics", {
+        host: `evil.example:${started.port}`,
+        "x-orca-token": started.token,
+      });
+      expect(res.status).toBe(403);
+      expect((JSON.parse(res.body) as { code: string }).code).toBe(PANEL_HOST_NOT_ALLOWED);
+      expect(res.body.includes(started.token)).toBe(false);
+    });
+  });
+
+  it("answers the loopback names it was reached by: 127.0.0.1, localhost and [::1] (positive controls)", async () => {
+    await withPanel(async (started) => {
+      for (const host of [`127.0.0.1:${started.port}`, `localhost:${started.port}`, `[::1]:${started.port}`]) {
+        const page = await rawGet(started.url, "/", { host });
+        expect(page.status, host).toBe(200);
+        expect(page.body.includes(started.token), host).toBe(true);
+        const api = await rawGet(started.url, "/api/metrics", { host, "x-orca-token": started.token });
+        expect(api.status, host).toBe(200);
       }
     });
   });

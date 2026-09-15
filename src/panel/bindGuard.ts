@@ -36,3 +36,43 @@ export function assertBindAllowed(bind: string, confirmedExternal: boolean): voi
       `machines, and does not suit a team.`,
   );
 }
+
+export const PANEL_HOST_NOT_ALLOWED = "panel-host-not-allowed";
+
+/** The names a panel answers to whatever it is bound to: the browser reached it through loopback. */
+const LOOPBACK_HOSTNAMES = new Set(["127.0.0.1", "localhost", "::1"]);
+
+/**
+ * `Host` header -> hostname, lowercased, port dropped. `[::1]:7777` -> `::1`;
+ * `localhost:7777` -> `localhost`. Anything else that is not one of those two
+ * shapes (an unbracketed IPv6 literal, an empty header) yields undefined and is
+ * refused -- a guard that guesses at a malformed header is not a guard.
+ */
+function hostnameOf(host: string): string | undefined {
+  const bracketed = /^\[([^\]]+)\](?::\d+)?$/.exec(host);
+  if (bracketed) return bracketed[1]!.toLowerCase();
+  const plain = /^([^:[\]]+)(?::\d+)?$/.exec(host);
+  return plain ? plain[1]!.toLowerCase() : undefined;
+}
+
+/**
+ * Final review I-4 / ruling R67: DNS rebinding. Binding to loopback keeps
+ * other machines out; it does not keep out a page in the person's own browser
+ * whose hostname re-resolves to 127.0.0.1 -- that page's requests are
+ * same-origin, so it could read the token-carrying HTML and then use the whole
+ * API. Such a request still names the attacker's hostname in `Host`, and that
+ * is what this refuses.
+ *
+ * Accepted: the loopback names, plus the bind address itself. For a confirmed
+ * external bind that is the address the person chose to expose; for a
+ * loopback bind other than 127.0.0.1 (the guard above allows all of
+ * 127.0.0.0/8) it is the address the panel's own printed URL names, and an IP
+ * literal cannot be rebound. Exact matches only -- never a suffix match, which
+ * would let `evil.localhost` through.
+ */
+export function isHostAllowed(bind: string, host: string | undefined): boolean {
+  if (host === undefined) return false;
+  const hostname = hostnameOf(host);
+  if (hostname === undefined) return false;
+  return LOOPBACK_HOSTNAMES.has(hostname) || hostname === bind.toLowerCase();
+}

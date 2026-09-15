@@ -37,7 +37,7 @@ import type { DecisionEvent } from "../src/ledger/schema.js";
 import { appendEvents } from "../src/ledger/writer.js";
 import { detailUrl } from "../src/panel/listProjection.js";
 import { TOKEN_REQUIRED } from "../src/panel/rejection.js";
-import { EXTERNAL_BIND_NOT_CONFIRMED } from "../src/panel/bindGuard.js";
+import { EXTERNAL_BIND_NOT_CONFIRMED, PANEL_HOST_NOT_ALLOWED } from "../src/panel/bindGuard.js";
 import { REVIEWS_LOCK_TIMEOUT_MS } from "../src/panel/reviewsLock.js";
 import { readReviews } from "../src/panel/reviewsStore.js";
 import { TOKEN_ANCHOR } from "../src/panel/staticFiles.js";
@@ -490,9 +490,14 @@ async function lsofListenForPid(pid: number): Promise<string> {
   }
 }
 
-function rawGet(hostname: string, port: number, path: string): Promise<{ status: number; body: string }> {
+function rawGet(
+  hostname: string,
+  port: number,
+  path: string,
+  headers: Record<string, string> = {},
+): Promise<{ status: number; body: string }> {
   return new Promise((resolve, reject) => {
-    const req = http.request({ hostname, port, path, method: "GET" }, (res) => {
+    const req = http.request({ hostname, port, path, method: "GET", headers }, (res) => {
       let body = "";
       res.on("data", (chunk: Buffer) => (body += chunk.toString("utf8")));
       res.on("end", () => resolve({ status: res.statusCode ?? 0, body }));
@@ -740,7 +745,25 @@ async function main(): Promise<number> {
     if (rootRes.status !== 200) fail(9, "GET / (positive control) answers 200", 200, rootRes.status);
     const rootBody = await rootRes.text();
     if (!rootBody.includes(token)) fail(9, "GET / body carries the injected token", true, false);
-    pass(9, "a raw traversal path 404s, and GET / still serves the token-injected index.html");
+    // Final review I-4 / ruling R67: the same GET / with a foreign Host (a
+    // DNS-rebound page's request, still arriving over loopback) is refused by
+    // name and carries no token; the positive control above is its pair.
+    const rebound = await rawGet(host, port, "/", { host: `evil.example:${port}` });
+    if (rebound.status !== 403) fail(9, "GET / with Host evil.example answers 403", 403, rebound.status);
+    if (rebound.body.includes(token)) fail(9, "the 403 body carries no token", false, true);
+    let reboundCode: unknown;
+    try {
+      reboundCode = (JSON.parse(rebound.body) as { code?: unknown }).code;
+    } catch {
+      reboundCode = rebound.body;
+    }
+    if (reboundCode !== PANEL_HOST_NOT_ALLOWED) {
+      fail(9, "the foreign-Host refusal names PANEL_HOST_NOT_ALLOWED", PANEL_HOST_NOT_ALLOWED, reboundCode);
+    }
+    pass(
+      9,
+      "a raw traversal path 404s, GET / still serves the token-injected index.html, and a foreign Host is refused 403 by name without the token",
+    );
 
     // Step 10: no token -- refused by name, never a stack trace.
     const noTokenRes = await apiGet(baseUrl, "/api/metrics");

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { assertBindAllowed, EXTERNAL_BIND_NOT_CONFIRMED } from "../../src/panel/bindGuard.js";
+import { assertBindAllowed, EXTERNAL_BIND_NOT_CONFIRMED, isHostAllowed } from "../../src/panel/bindGuard.js";
 import { mintToken, tokenMatches } from "../../src/panel/token.js";
 import { parsePanelArgs } from "../../src/panel/server.js";
 import { NO_VIEWER_IDENTITY } from "../../src/panel/rejection.js";
@@ -146,6 +146,21 @@ describe("panel security (spec sections 3.1 and 3.2)", () => {
     // Negative control. Without it, a guard that refuses EVERYTHING passes the
     // criterion above and nobody can ever use --bind.
     expect(() => assertBindAllowed(opts.bind, opts.confirmedExternal)).not.toThrow();
+  });
+
+  // Final review I-4 / ruling R67, the half an in-process server cannot reach:
+  // a confirmed external bind also answers to the address it was bound to
+  // (TEST-NET-1 is on no interface, so this is pinned on the pure predicate).
+  it("accepts the bind address itself as a Host only alongside the loopback names, and refuses a missing Host", () => {
+    expect(isHostAllowed(TEST_NET_1, `${TEST_NET_1}:7777`)).toBe(true);
+    expect(isHostAllowed(TEST_NET_1, "localhost:7777")).toBe(true);
+    expect(isHostAllowed(TEST_NET_1, "evil.example:7777")).toBe(false);
+    // Negative control: a loopback-bound panel does NOT answer to that address.
+    expect(isHostAllowed("127.0.0.1", `${TEST_NET_1}:7777`)).toBe(false);
+    expect(isHostAllowed("::1", "[::1]:7777")).toBe(true);
+    expect(isHostAllowed("127.0.0.1", "LOCALHOST:7777")).toBe(true);
+    expect(isHostAllowed("127.0.0.1", undefined)).toBe(false);
+    expect(isHostAllowed("127.0.0.1", "")).toBe(false);
   });
 
   it("mints a token that is not guessable and compares it in constant time", () => {
