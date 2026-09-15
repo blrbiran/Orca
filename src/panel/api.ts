@@ -1,7 +1,13 @@
 import type { Express, NextFunction, Request, Response } from "express";
+import { correctionRowFrom, recordNewCorrection } from "../corrections/record.js";
+import type { NewCorrectionInput } from "../corrections/record.js";
+import { CorrectRejection } from "../corrections/rejection.js";
+import type { Correction } from "../corrections/schema.js";
+import { CORRECTION_ALREADY_RECORDED } from "../corrections/store.js";
 import { collect } from "../metrics/collect.js";
 import { computeMetrics } from "../metrics/compute.js";
 import { MetricsRejection } from "../metrics/rejection.js";
+import type { DecisionObservation } from "../metrics/types.js";
 import { computePanelCoverage } from "./coverage.js";
 import { loadDecisionRow } from "./decisionSource.js";
 import { DECISION_NOT_FOUND, projectForList } from "./listProjection.js";
@@ -48,12 +54,34 @@ async function currentMetrics(opts: PanelOptions) {
 }
 
 /**
- * task 6 ruling H1: the ONE clock expression, read through `opts.now`, shared
- * by `currentMetrics` above and the detail handler's `opened` timestamp below
- * -- one expression, not two copies that could drift.
+ * task 6 ruling H1, extended by task 7 ruling J2: the ONE clock expression,
+ * read through `opts.now`. `panelClock` is the Date-returning form --
+ * `correctionRowFrom` (task 7's one construction point) takes exactly this
+ * shape -- and `nowIso` below is a thin wrapper over the SAME function, so
+ * `currentMetrics`, the `opened`/`reviewed` timestamps and the correction row
+ * all derive from one expression, never two copies that could drift.
  */
+function panelClock(opts: PanelOptions): () => Date {
+  return opts.now ?? (() => new Date());
+}
+
 function nowIso(opts: PanelOptions): string {
-  return (opts.now ?? (() => new Date()))().toISOString();
+  return panelClock(opts)().toISOString();
+}
+
+/**
+ * task 7 ruling J1: the ONE membership rule -- "does the panel's own
+ * discovery currently list this exact (projectKey, id) pair" -- shared by
+ * `/api/decision` (task 6) and the two POST endpoints below. A correction or
+ * review can therefore never be recorded against a decision, or a
+ * repository, that `currentMetrics` did not itself discover on THIS request.
+ */
+function isListedDecision(
+  observations: { decisions: DecisionObservation[] },
+  projectKey: string,
+  decisionId: string,
+): boolean {
+  return observations.decisions.some((d) => d.projectKey === projectKey && d.id === decisionId);
 }
 
 export function buildApi(app: Express, deps: ApiDeps): void {
@@ -130,9 +158,8 @@ export function buildApi(app: Express, deps: ApiDeps): void {
       // Membership requires BOTH projectKey and id: decision ids repeat across
       // clones and forks (the same lesson computePanelCoverage's join encodes),
       // so id alone would let one repo's request return another repo's row.
-      const known = observations.decisions.some(
-        (d) => d.projectKey === projectKey && d.id === decisionId,
-      );
+      // task 7 ruling J1: the ONE definition, shared with the POST endpoints.
+      const known = isListedDecision(observations, projectKey, decisionId);
       // The repo path a browser-supplied projectKey may select is only ever one
       // `currentMetrics` already discovered -- never a filesystem path built
       // from user input.
@@ -166,6 +193,136 @@ export function buildApi(app: Express, deps: ApiDeps): void {
         .catch((err: unknown) => {
           process.stderr.write(`orca panel: could not record opened for ${decisionId}: ${String(err)}\n`);
         });
+    })().catch(next);
+  });
+
+  /**
+   * task 7: spec §2.1 / §2.3 / §4.4. Records a correction; NEVER closes the
+   * loop -- no repo lock, no write into `.decisions/`, no commit in any
+   * repository. That closing act stays exclusively `orca correct --close`
+   * (A' §4.1: a web application holding commit rights on every repository is
+   * the thing being refused).
+   */
+  app.post("/api/corrections", (req, res, next) => {
+    void (async () => {
+      const body = req.body as Record<string, unknown>;
+      const projectKey = String(body.projectKey ?? "");
+      const decisionId = String(body.decisionId ?? "");
+
+      // ruling J1: the browser never names a filesystem path. It names a
+      // (projectKey, decisionId) pair, checked against THIS request's own
+      // discovery -- same as /api/decision, including a broken gate
+      // answering 409 through currentMetrics's own MetricsRejection.
+      const { observations } = await currentMetrics(deps.opts);
+      if (!isListedDecision(observations, projectKey, decisionId)) {
+        res.status(404).json({ code: DECISION_NOT_FOUND, message: `no decision ${decisionId} in ${projectKey}` });
+        return;
+      }
+
+      // ruling J2: the ONE construction point (spec §2.3) and the ONE clock.
+      // The panel never builds a `CorrectionRow` literal of its own -- that is
+      // exactly the shape fields.ts's comment says makes the "both paths
+      // agree" criterion unmutatable.
+      const input = {
+        projectKey,
+        decisionId,
+        kind: body.kind,
+        // Passed through EXACTLY as sent, empty string included. Coercing ""
+        // to absent here would make the seam's named refusal unreachable from
+        // the panel and silently drop the field A' §4.3 calls the most
+        // valuable in the row -- the precise harm record.ts's comment says it
+        // refuses rather than coerces in order to prevent.
+        ...(body.chose_instead === undefined ? {} : { chose_instead: body.chose_instead }),
+        because: String(body.because ?? ""),
+        by: deps.opts.by,
+      } as NewCorrectionInput;
+      const row = correctionRowFrom(input, panelClock(deps.opts));
+
+      let stored: Correction;
+      try {
+        stored = await recordNewCorrection(deps.opts.correctionsDir, row, {
+          again: body.again === true,
+        });
+      } catch (err) {
+        if (err instanceof CorrectRejection && err.code === CORRECTION_ALREADY_RECORDED) {
+          // ruling J5 / mutation C-14: the panel's OWN sentence. The CLI's
+          // "Pass --again to record another one on purpose" names a flag that
+          // does not exist on a web page.
+          res.status(409).json({
+            code: err.code,
+            message:
+              `You already recorded a correction on this decision. If you mean to record a ` +
+              `second, separate one, choose "record another" and it will be kept alongside the ` +
+              `first rather than replacing it.`,
+            retry_field: "again",
+          });
+          return;
+        }
+        if (err instanceof CorrectRejection) {
+          res.status(400).json({ code: err.code, message: err.message });
+          return;
+        }
+        next(err);
+        return;
+      }
+
+      // ruling J6: `reviewed` is a deliberate act, unlike the detail
+      // endpoint's `opened` -- awaited on purpose, so a failure to record it
+      // reaches the person instead of leaving them believing they reviewed
+      // something the ledger never heard about. A refused correction (above)
+      // never reaches this line, so it never writes `reviewed`.
+      try {
+        await deps.reviews.append({
+          decisionId,
+          projectKey,
+          action: "reviewed",
+          by: deps.opts.by,
+          at: nowIso(deps.opts),
+        });
+      } catch (err) {
+        const code = err instanceof PanelRejection ? err.code : "panel-internal-error";
+        const message = err instanceof Error ? err.message : String(err);
+        res.status(409).json({
+          code,
+          message:
+            `the correction was recorded (id ${stored.id}), but the reviewed mark could not be ` +
+            `written: ${message}`,
+          correction: stored,
+        });
+        return;
+      }
+      res.json({ correction: stored });
+    })().catch(next);
+  });
+
+  /**
+   * task 7 ruling J6: the explicit "I reviewed this" act -- the person clicks
+   * agreed on a decision without correcting it. Same membership rule, same
+   * `reviewed` action; a failed append propagates to the shared error handler
+   * below (a `PanelRejection` becomes 409) rather than being caught here,
+   * unlike the corrections handler above where the correction already landed
+   * and must be reported alongside the failure.
+   */
+  app.post("/api/reviews", (req, res, next) => {
+    void (async () => {
+      const body = req.body as Record<string, unknown>;
+      const projectKey = String(body.projectKey ?? "");
+      const decisionId = String(body.decisionId ?? "");
+
+      const { observations } = await currentMetrics(deps.opts);
+      if (!isListedDecision(observations, projectKey, decisionId)) {
+        res.status(404).json({ code: DECISION_NOT_FOUND, message: `no decision ${decisionId} in ${projectKey}` });
+        return;
+      }
+
+      const result = await deps.reviews.append({
+        decisionId,
+        projectKey,
+        action: "reviewed",
+        by: deps.opts.by,
+        at: nowIso(deps.opts),
+      });
+      res.json({ result });
     })().catch(next);
   });
 
