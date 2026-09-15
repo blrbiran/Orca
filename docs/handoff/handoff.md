@@ -3249,3 +3249,109 @@ spec 外审 I5 曾把 `0.0.0.0` 从变异列里清掉。本轮计划照做了 �
 两边都是**就地滚动更新那一节，没有新增编号项**（规矩是人 2026-09-02 定的）；节外字节 sha256 前后相同；**两边都未 push**。
 - **ccloop**：「📌 Orca 那条线」§五 的 E3 一条改为「已开工」；两条新实测折进第 6、11 条。
 - **ccmem**：§15 的 E3 一条改为「已开工」并补「correction id 取决于注入的时钟」；两条新实测折进第 9、12 条。
+
+---
+
+# 📌 本轮（2026-09-11／15，会话 `5d7759dc`）—— **E3 的 Task 2 与 Task 3 已实施过审；Task 4–9 未做**
+
+**归属**：run `orca-dev-5d7759dc`。本节**只追加**，上面一字未动。
+⚠️ **本节不写任何 HEAD、不写「领先几笔」** —— 提交本文就会改这两个数，人也会自己推远端。
+**要指代某一笔就引提交主题行；要判发布状态就现跑 `git ls-remote` ＋ `git merge-base --is-ancestor`。**
+
+## 一句话状态
+
+*** **Task 2（reviews 表）与 Task 3（安全边界）都已实施、过审、并由【另一个】subagent 在 clone 副本里跑完点名变异。** ***
+两个 Task 合计 **13 条变异，条条落地、条条被看见红、条条与预言一致**。Task 4–9 未做。
+未 push、未建分支、未合并、未删任何分支或 worktree。
+
+## 一、做出来的东西（**按提交主题行找，别数笔数**）
+
+| 买到的东西 | 提交主题行 |
+|---|---|
+| reviews 表：自己一把 `mkdir` 锁、自己的拒绝码 `reviews-store-busy`、目录 0700 文件 0600 显式给、进程内去重可跨重启 | `feat(panel): give reviews their own store, their own lock and their own modes` |
+| 去重的 check-then-act 竞态修复（同步占坑，写失败回滚） | `fix(panel): claim the review dedupe key before the write, not after` |
+| 计划裁断 5 的台账行 ＋ Task 2 的 SDD 证据 | `docs(decisions): record why reviews take a lock of their own, with the mutation that proves it` |
+| 安全边界：`--by` 必填（回环也不例外）、token 常时比较、非回环绑定要第二句确认 | `feat(panel): make identity required, the token unguessable and external bind explicit` |
+| Task 2／3 的台账与全部评审、变异证据 | `docs(sdd): record tasks 2 and 3, and the mutation that closed the unpinned --by guard` |
+
+**材料**：SDD 台账 `.superpowers/sdd/2026-09-10-panel-e3/progress.md`
+（本会话新增「Session 2」一节，裁决 **R19–R29** 全在里面，**末尾 NEXT 一行写着每个 Task 要带哪些裁决**）。
+
+## 二、实测数（**只抄工具打印的**）
+
+| 项 | 开工 | 收尾 | 命令 |
+|---|---|---|---|
+| 全仓 | 85 / 477 | *** **87 / 493** *** | `rtk proxy npm run verify > 文件 2>&1` |
+| scheduler 档 | 51 / 167 | **51 / 167**（未变） | 同上 |
+| web 档 | 1 / 1 | **1 / 1**（未变） | 同上 |
+| `VERIFY_RC` | 0 | 0 | 同上 |
+| `git status --porcelain -z` | 0 字节 | 0 字节（提交后） | **必须 `/usr/bin/git`** |
+| `ls ~/.orca` | 不存在 | *** **仍不存在** ***（变异席在每条变异后各复核一次，六次都不存在） | |
+
+⚠️ **三个判据数别混着比：全仓／scheduler／web 是三档。**
+⚠️ 收尾那次 verify 输出 1344 行，**控制器只读了汇总行与失败关键词**（上下文预算）；实施者在同一提交上整份读过。**如实登记。**
+
+## 三、变异（**全部由非实施者在 `git clone --local` 副本里跑**）
+
+- **Task 2 共 7 条**（R-6／R-7／R-9／R-9b／R-9c／R-10／R-11）：全红、全中。
+  其中 **R-9c 决定了「已存在的目录保持自己 mode」那条判据是不是承重的** —— 它红了，是承重的；
+  **R-11 是并发去重判据【唯一】的红证**（见下面第四条第 3 点）。
+- **Task 3 共 6 条**（P-1／P-10／P-10b／P-11／P-12／P-13）：全红、全中。
+  *** **P-10b 就是挂了一轮的 R18** —— Task 1 那个「删掉照绿、零覆盖」的 `--by` 守卫，
+  这一刀用一条走真 CLI 的判据接住了，删掉整块守卫会红。**洞补上了。** ***
+
+## 四、🔴 **必须带给下一轮**的实测
+
+1. *** **守卫判据要钉在【CLI 层】，不是只钉在函数层。** *** R18 的教训是 Task 1 的守卫住在一个没人调用的 stub 里；
+   Task 3 把它钉在「跑真进程、看退出码与 stderr 上的拒绝码」上 —— **这样的判据活得过 `server.ts` 的下一次整份重写。**
+2. *** **断言【形状】的那一条，在「换成一个形状合法的固定值」的变异下永远绿。** ***
+   实测：token 判据里 `/^[0-9a-f]{64}$/` 在 `mintToken` 改成写死的 64 位十六进制串之后**照绿**，
+   红的是「两次 mint 不相等」那条。⇒ **每条形状断言旁边要有一条【值】的断言。**
+3. *** **实施者没能亲眼看到红时，红证可以整条外包给变异席 —— 前提是它肯说「我没看到」。** ***
+   Task 2 修复轮的实施者试图在修复前的代码上复现红，自己写崩了脚本，
+   *** **它选择如实登记「这条红我没看到」，而不是把推理当成观测** *** ⇒ 控制器据此把 R-11 派给变异席，红证到手。
+   **这是 Rule 12 在一个 subagent 身上兑现的样子，值得照抄进以后的 brief。**
+4. *** **判据红了，不等于它起的东西没了。** *** 两条变异下，走真 CLI 的判据等满 vitest 的 20 秒超时判红，
+   **而那个子进程还活着**（只绑回环）。变异席手工杀掉并上报。⇒ **起真进程的判据要有显式 teardown**（欠 Task 4／5）。
+5. *** **计划里的代码块会 import 【未来】。** *** Task 3 的 `server.ts` 在计划里 import 了 Task 4／5 才存在的两个模块；
+   照抄会让 `tsc` 直接红、整条 verify 停在这一刀（裁决 R26 把它们留成注释）。
+   ⇒ **开工扫描加一条机械检查：本 Task 要写的每个 import，现在存不存在。**
+
+## 五、本轮**没有**做的（登记，不掩饰）
+
+- *** **Task 4–9 一行未写**（静态文件、指标端点、决策列表、记纠正、前端、成功判据）。 ***
+- **最终整支评审**（skill 的收尾那一席）未做 —— 等 Task 9 之后。
+- **Minor 挂账**（都在 SDD 台账里）：`malformed-port`／`malformed-repo-argument` 两条拒绝无人钉住；
+  走真进程的判据欠 teardown；`throwawayStore` 落成了 `describe` 级夹具而非逐条内联；
+  上一轮那两条（注释里悬空的「below」、两套相似 argv 夹具）仍在。
+- **P-2（`server.address().address`）仍未闭合** —— 按计划由 Task 5 补，本轮 R26 之后更是如此（现在还没有任何东西驱动真的 HTTP 面）。
+- **`npm install` 那 5 个漏洞（3 moderate／1 high／1 critical）仍未分诊**（上一轮登记，本轮没碰）。
+- **未 push**（控制器一次都没 push）。本轮开工时远端停在 `docs(plan): withdraw the spec 3.1 erratum…` 那一笔，
+  **此后本地又落了五笔，发没发布现跑判断。**
+- **ccloop 的 E1 的 I-2 ＋ 人裁 85 没动**（人裁 121 仍有效）；裁决甲的 `plan` 那一半仍需人指名。
+
+## 六、⛔ 下一件事
+
+| 顺序 | 做什么 | 说明 |
+|---|---|---|
+| **1** | **Task 4 → Task 9**，接 `superpowers:subagent-driven-development` | *** **先读 SDD 台账的「Session 2」一节（裁决 R19–R29）＋ 末尾 NEXT 那一行** ***，再读计划末尾「📌 执行轮开工更正」 |
+| **2** | 每个 Task 照旧：`task-brief` 抽 brief → **控制器备注**（点名适用裁决 ＋ 现测基线 ＋ 报告契约）→ 实施者 → 评审席 → **另一个** subagent 跑变异 | 模板抄 `task-2-controller-notes.md`／`task-3-controller-notes.md` 与两份 `*-mutations-brief.md`（它们比 Task 1 那两份更新） |
+| **3** | Task 9 之后：最终整支评审（最强模型）→ 一波修复 → 一次复审 | **不删 SDD 工作区**（本仓库 `git add -f` 留证） |
+| **4** | 子系统 **D**，或 B 的后续；裁决甲的 `plan` 那一半（需人指名）；ccloop 的 E1 的 I-2 ＋ 人裁 85 | 未变 |
+
+**开工三条照跑**：`/usr/bin/git ls-remote origin refs/heads/main`；`rtk proxy npm run verify` 重定向读回
+（期望 **87/493、51/167、web 1/1**）；`ls ~/.orca` **必须不存在**。
+
+## 七、成本与用量
+
+**只抄工具报出来的数**（Rule 14）：本会话钩子报过 **约 $15.23 → 约 $56.27 → 约 $91.13**。此后未再报，**不写**。
+派出方工具报的单席用量（token）：Task 2 实施 ＋ 修复 228,901；Task 2 评审 110,309；Task 2 变异 92,269；
+R-11 复验 87,342；修复轮复审 80,776；Task 3 实施 144,029；Task 3 评审 112,342；Task 3 变异 131,246。
+⇒ *** **两个 Task（含一轮修复）约 99 万 token、八席。一个 Task 三到五席、30–45 万 token 的量级，上一轮的估计成立。** ***
+
+## 八、姊妹仓库本轮的同批动作（**已完成；知情，不是本仓库的任务**）
+
+两边都是**就地滚动更新那一节，没有新增编号项**（规矩是人 2026-09-02 定的）；**两边都未 push**。
+- **ccloop**：「📌 Orca 那条线」§五 的 E3 一条改为「Task 0–3 已实施过审」；三条新实测折进第 4、6 条。
+- **ccmem**：§15 的 E3 一条同样改写，并补一条**对它真正有关系的**：reviews 表是 Orca 写到用户全局数据的第二个写入方，
+  去重键是 `(decisionId, by, action)`、跨进程不保证去重。
