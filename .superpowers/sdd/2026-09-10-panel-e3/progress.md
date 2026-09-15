@@ -377,3 +377,8 @@ Everything above this heading is left byte-for-byte alone (CLAUDE.md Rule 13).
 - Registered and not done: `reviews.jsonl` has no retention policy; multi-process duplicate review rows accepted without a criterion; `npm install`'s 5 reported vulnerabilities not triaged (R17); N-3 (413/415 answer 400), N-4 (`[localhost]` Host accepted); the nine fine-to-leave review Minors listed under R68.
 - After that: subsystem D, or B's follow-up; plan ruling 甲's `plan` half (needs the human's naming); ccloop's E1 I-2 + ruling 85.
 - Push/merge remain the human's call; nothing was pushed this session.
+
+### Correction to "End of Session 4 measurements" (not an edit of it)
+
+- That section says "Rule 6 context cap crossed by design (R46)". No tool reported the controller's context size, so "crossed" is unmeasured; R46 only pre-accepted crossing it. The Orca handoff states it that way.
+- Handoffs updated (run `orca-dev-5d5c8055`, 2026-09-16): Orca handoff appended a section for session 5d5c8055; ccloop's "📌 Orca 那条线" and ccmem's §15 updated in place (no new numbered items; each file's bytes before its Orca section sha256-identical before/after, measured). ccmem's reviews dedupe-key sentence corrected to include projectKey. No HEAD written in any of them. Nothing pushed.

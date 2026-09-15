@@ -3463,3 +3463,118 @@ Task 5 实施（含字节修复与修复轮 1，累计）346,715；评审 137,86
 两边都是**就地滚动更新那一节，没有新增编号项**（规矩是人 2026-09-02 定的）；**两边都未 push**。
 - **ccloop**：「📌 Orca 那条线」§五 的 E3 一条改为「Task 0–5 已实施过审」；三条新实测（`fetch` 测不了路径穿越、杀 tsx 不等于杀监听进程、NUL 转义落盘成裸字节）折进第 3、4、11 条。
 - **ccmem**：§15 的 E3 一条同样改写，并写明面板覆盖率与 E2 的 `review_coverage` 并列、E2 一行未改；同三条实测折进第 4、7、12 条；标题与小节日期同步到 2026-09-15。
+
+---
+
+# 📌 本轮（2026-09-15／16，会话 `5d5c8055`）—— **E3 计划全部执行完：Task 6–9 ＋ 整支终审 ＋ 一波修复；面板仍然只记、不闭环**
+
+**归属**：run `orca-dev-5d5c8055`。本节**只追加**，上面一字未动。
+⚠️ **本节不写任何 HEAD、不写「领先几笔」** —— 提交本文就会改这两个数，人也会自己推远端。
+**要指代某一笔就引提交主题行；要判发布状态就现跑 `git ls-remote` ＋ `git merge-base --is-ancestor`。**
+
+## 一句话状态
+
+*** **E3 的计划（Task P、0–9）已全部实施，每个 Task 各自过审、由另一席在 clone 副本里跑完点名变异；随后最强模型做了整支终审，判「ready with fixes」，一波修复已落地并复审、复验。** ***
+面板**仍然只记、不闭环**。*** **留下一条必须先修的 parked：N-1（见「⛔ 下一件事」第 1 条），修之前别拿面板碰真数据。** ***
+未 push、未建分支、未合并、未删任何分支或 worktree。
+
+## 零、开工时的一处现测（**推翻交接给我的一句话**）
+
+交接说「三个仓库现在都有未推的本地提交」。*** **开工现测 `ls-remote`：Orca、ccloop、ccmem 三边都是远端 ＝ 本地** *** —— 人在两轮之间把上一轮全推了。
+⇒ 上一轮写的台账与 handoff **全部是已发布文本**，本轮对它们的任何更正都只能**另起一节追加**（本轮照做）。
+
+## 一、人本轮拍的（记在 SDD 台账 Session 4 的 H5／H6）
+
+- **H5**：批准控制器的开工计划；执行中遇到问题**先按控制器建议办**，最后统一报审。
+- **H6**（执行中途补的一句）：*** **「把剩下的所有 task 跑完再停」** *** —— 覆盖了交接里「一个会话两个 Task 就交接」那条。
+  ⇒ 控制器据此**接受越过 CLAUDE.md Rule 6 的 450k 会话上限**（裁决 R46）；实际占用没有工具报数。
+
+## 二、做出来的东西（**按提交主题行找，别数笔数**）
+
+| 买到的东西 | 提交主题行 |
+|---|---|
+| Task 6：`GET /api/decisions`（冻结投影 LIST_FIELDS）＋ `GET /api/decision`（query string、成员判定走闸门、`opened` 响应之后再写） | `feat(panel): add /api/decisions and /api/decision, opened after the response` |
+| Task 6 修复轮：删掉一条永远红不了的断言；「什么都没记」改成有界观测窗 | `test(panel): repair the list criterion's dead assertion, and poll for absence` |
+| Task 7：`POST /api/corrections`（走 CLI 的 seam、一个时钟、浏览器不指定任何路径）＋ `POST /api/reviews` | `feat(panel): add POST /api/corrections and POST /api/reviews` |
+| Task 8：React 前端（一个指标都不算、E2 每条标注都显示）＋ `GET /api/todo`（未 reviewed 的高位决策，服务端算）＋ web/root 类型对账 | `feat(panel): add the E3 web frontend and GET /api/todo` |
+| Task 8 修复轮：React key 碰撞 | `fix(panel): give DecisionList a collision-free row key` |
+| Task 9：`npm run verify:panel` —— Rule 4 意义上的成功判据，12 步真进程端到端，接进 `npm run verify` | `feat(panel): add verify:panel, the Rule 4 success criterion for E3` |
+| Task 9 修复轮：teardown 失败必须让退出码非 0 | `fix(panel): teardown failures force non-zero exit; drop 0.0.0.0 from the parser fixture` |
+| 终审修复波（六笔） | `fix(panel): key reviews dedupe by projectKey too`／`fix(panel): answer client mistakes 400 by name and a busy store 409`／`feat(web): show the person what happened to Agree and Correct`／`fix(panel): refuse a foreign Host header against DNS rebinding`／`docs(corrections): append an ERRATUM to correctionRowFrom's comment`／`test(panel): refuse the portless evil.localhost Host too` |
+| 本轮 SDD 证据 ＋ 台账三行（计划裁断 4／2／3，经 `appendEvent` 写入 `.decisions/orca-dev-5d5c8055.jsonl`） | `docs(sdd): record tasks 6-9, the final review and its one fix wave, and three ledger rows` |
+
+**材料**：SDD 台账 `.superpowers/sdd/2026-09-10-panel-e3/progress.md` 的「Session 4」一节（裁决 **R41–R71**，末尾有 NEXT）；
+终审报告 `final-review.md`（同目录；31 条挂账逐条判了 fix-before-merge／already-fixed／fine-to-leave）。
+spec `docs/superpowers/specs/2026-09-09-panel-design.md` 的 §3.3 与 §4.3.2 **各追加了一条 ERRATUM**（修复波写的，原文未动）。
+
+## 三、实测数（**只抄工具打印的**）
+
+| 项 | 开工 | 收尾 | 命令 |
+|---|---|---|---|
+| 全仓 npm test | 90 / 519 | *** **95 / 561** *** | `rtk proxy npm run verify > 文件 2>&1` |
+| scheduler 档 | 51 / 167 | **51 / 167**（未变） | 同上 |
+| web build | 无此档 | ok | 同上（Task 9 起 verify 含前端构建） |
+| **verify:panel** | 无此档 | *** **PASS 0–12，RC 0** *** | 同上 |
+| web check 档 | 1 / 1 | **6 / 18** | 同上 |
+| `VERIFY_RC`／整条 verify 耗时 | 0／— | **0／42 s** | 同上，外加 `date +%s` |
+| `git status --porcelain -z` | 0 字节 | 0 字节（证据提交后） | **必须 `/usr/bin/git`** |
+| `ls ~/.orca` | 不存在 | *** **仍不存在** ***（每一席变异前后各复核） | |
+
+⚠️ **登记不掩饰**：开工与收尾两次 verify 的日志（1352／1393 行）控制器都是**用 python 按汇总行／RUN／PASS／FAIL／skipped／todo／Error 索引**的，**没有整份读完**。
+
+## 四、变异（**全部由非实施者在 `git clone --local` 副本里跑**）
+
+- Task 6 **9 条 ＋ 修复轮复跑 2 条**；Task 7 **11 条**；Task 8 **12 条 ＋ K-8**；Task 9 **12 条 ＋ E-10b、TD-1**；终审修复波 **10 条**。
+- *** **跑绿（照绿）的共两条，都当发现处理了**：***
+  - **Task 6 的 L-3**：列表端点「顺手」记 `opened` 的变异照绿 —— 判据在响应回来**立刻**读 store，而那次写是 fire-and-forget、**约 500 ms 后才落盘**（复现 8/8）。⇒ 改成**有界观测窗**（R59），复跑 **3/3 见红**。
+  - **Task 9 的 E-10**：`assetsDir: "assets"` 照绿 —— **今天的前端构建根本没有非入口资源**，那个配置项无物可挪。⇒ 不是缺判据，是**变异对当前产物无作用**（R63）；换成 `entryFileNames: "js/[name].js"`（E-10b）**见红**。
+- **红数与预言不符、按三问查清的**：Task 7 的 C-13（3 非 2）与 K-7（2，且**取决于今天的日期晚于判据的固定时钟**）；Task 8 的 P-8b（又冒出一份没人普查过的夹具）；Task 9 的 E-8（第 8 步留下的坏 projectKey 让闸门先答 409）；修复波的 EB-2（变异体下挂到超时）。
+
+## 五、🔴 **必须带给下一轮**的实测
+
+1. *** **「什么都没发生」没法轮询到完成。** *** 「等它出现」可以轮询到成立就返回；「确认它没出现」只能**观测一个有界窗口**，窗口要从**真实的延迟来源**（这里是锁预算 1000 ms ＋ 实测落盘 500 ms）算出来。
+   *** **立刻读一次「0」的判据，对一个异步写入的变异是瞎的** ***，而且它照绿得非常稳定（8/8）。
+2. *** **一条变异「落上去了」（源码 sha 变了）却可能对【产物】毫无作用。** *** E-10 改了构建配置，构建出来的 `web/dist` 逐字节不变 ⇒ 照绿。
+   ⇒ **改构建配置、改生成器的变异，要量产物，不只量源码 hash。**
+3. *** **裸 NUL 本轮又落盘三次**（累计五次）** *** —— 实施者的 Write 两次、实施者自己的报告里一次；*** **每一次都是【每次编辑后字节扫描】抓住的，「不许写这类转义」的禁令本身一次都没拦住。** ***
+   git 自己的提交信息控制字符守卫也拒过一次草稿。⇒ **扫描是护栏，禁令只是提醒。**
+4. *** **spec 自己写错了去重键。** *** spec §4.3.2 逐字写着 reviews 去重键是 `(decisionId, by, action)`，而同一份 spec 的 §4.2 用 `(projectKey, id)` 联合键 ——
+   终审现测：两个仓库同 id 的决策，第二个的 `reviewed` 被当成 duplicate 吞掉，它**永远不离开待办、永远不进覆盖率**。
+   ⇒ *** **「照 spec 逐字实现」也会把 spec 内部的矛盾原样实现出来；终审要专门找「同一个概念在不同节里是不是同一个键」。** ***
+5. *** **绑回环 ≠ 只有本机能访问。** *** 终审现测 `GET /` 带 `Host: evil.example` 回 200 且带 token ⇒ DNS rebinding 的网页能拿到 token 和整套 API。
+   ⇒ 修复波加了 Host 白名单（第一个中间件），`verify:panel` 第 9 步端到端覆盖；spec §3.3 追加 ERRATUM。
+6. **实施者在主工作树里 `git stash` 过一次**（为了量红）—— 控制器现测台账与 `.decisions` 文件完好、stash 列表为空。
+   ⇒ 此后每个派发都写明「**量红只在 clone 里，主工作树里不许 stash／reset／checkout**」。
+
+## 六、本轮**没有**做的（登记，不掩饰）
+
+- *** **parked N-1（修复波复审发现，R71）没修** *** —— 按 skill「终审只许一波修复」的规矩停在这里。
+- **挂账（都在 SDD 台账与 `final-review.md` 里）**：`reviews.jsonl` 无留存策略；多进程下 reviews 重复行无判据（有意接受）；`npm install` 报的 5 个漏洞未分诊；
+  N-3（body-parser 413／415 答 400）；N-4（`[localhost]` 作 Host 被接受）；终审判 fine-to-leave 的 9 条 Minor（step 11 的 per-pid lsof 是空的且 lsof 成了 verify 的硬依赖、面板无 `--as-of`、`--dist` 未写入帮助、缺 no-store／nosniff 头、`(projectKey, id)` 有三种编码、`close()` 之后在途的 `opened` 写可能留临时目录、测试夹具重复四处、git 夹具继承全局 gpgsign／hooks、`--bind localhost` 打印的 URL 会被 `parseReadyLine` 拒）。
+- **未 push**（控制器一次都没 push）。
+
+## 七、⛔ 下一件事
+
+| 顺序 | 做什么 | 说明 |
+|---|---|---|
+| **1** | *** **修 N-1** *** | `web/src/App.tsx` 切换决策时不清旧详情、`DecisionDetail` 没有 `key` ⇒ 切行之后快速点「Correct」可能把纠正**记到新选中的那条**上，而屏幕上还是旧的（纠正是 append-only 的）。一刀：切换时清 `detail`、用 `rowKey` 给 `DecisionDetail` 上 key、一条 web 判据、一条点名变异。**修之前别拿面板碰真数据。** |
+| **2** | 挂账里挑：`reviews.jsonl` 留存策略、5 个漏洞分诊、N-3／N-4 | 都在 SDD 台账 Session 4 的 NEXT 里 |
+| **3** | 子系统 **D**，或 B 的后续；裁决甲的 `plan` 那一半（需人指名）；ccloop 的 E1 的 I-2 ＋ 人裁 85 | 未变 |
+
+**开工三条照跑**：`/usr/bin/git ls-remote origin refs/heads/main`；`rtk proxy npm run verify` 重定向读回
+（期望 **95/561、51/167、verify:panel PASS 0–12、web 6/18**，整条约 40 多秒）；`ls ~/.orca` **必须不存在**。
+⚠️ `npm run verify` 现在会**起真进程、绑回环端口、写临时目录**（都会自己清掉）—— 看到 `orca panel` 进程一闪而过是正常的。
+
+## 八、成本与用量
+
+**只抄工具报出来的数**（Rule 14）：会话钩子最后一次报数 **约 $165.58**（写本节时，终审修复波与收尾 verify 之后）；这是钩子报的会话累计，不是控制器估算。
+派出方工具报的单席用量（token，22 席，续派的席取最后一次的累计数）：Task 6 实施 259,176／评审 129,249／变异 178,904／复审 76,423／变异复跑 105,560；
+Task 7 实施 202,752／评审 142,170／变异 207,268；Task 8 实施 253,961／评审 138,953／变异 207,771／复审 77,325／K-8 95,475；
+Task 9 实施 374,559／评审 147,983／变异 232,616／复审 96,582／E-10b 114,601；终审 276,996（fable）；修复波 321,052（opus）／复审 133,437（opus）／变异 141,687。
+⇒ 以上 22 个数相加（控制器算术，不是工具报数）约 **391 万 token**。⚠️ **控制器自己的上下文有没有越过 Rule 6 的 450k 会话上限，没有工具报数，不写结论**；R46 按人的 H6 指令预先接受了越过，如实登记。
+
+## 九、姊妹仓库本轮的同批动作（**已完成；知情，不是本仓库的任务**）
+
+两边都是**就地滚动更新那一节，没有新增编号项**（规矩是人 2026-09-02 定的）；**两边都未 push**。
+- **ccloop**：「📌 Orca 那条线」§五 的 E3 一条改为「计划全部执行完、留一条 parked」；两条新实测（「没发生」只能有界观测、变异对产物无作用）折进已有的第 3、7 条，裸 NUL 第三次折进第 11 条。
+- **ccmem**：§15 的 E3 一条同样改写，并**更正 reviews 去重键**（现为 `(projectKey, decisionId, by, action)`）；同样的实测折进已有的第 4、6、12 条。「对本仓库的影响」里过期的「本地领先 3 笔」改成现测的同点。
