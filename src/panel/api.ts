@@ -3,6 +3,8 @@ import { collect } from "../metrics/collect.js";
 import { computeMetrics } from "../metrics/compute.js";
 import { MetricsRejection } from "../metrics/rejection.js";
 import { computePanelCoverage } from "./coverage.js";
+import { loadDecisionRow } from "./decisionSource.js";
+import { DECISION_NOT_FOUND, projectForList } from "./listProjection.js";
 import { PanelRejection, TOKEN_REQUIRED } from "./rejection.js";
 import { readReviews } from "./reviewsStore.js";
 import type { ReviewsWriter } from "./reviewsStore.js";
@@ -40,9 +42,18 @@ async function currentMetrics(opts: PanelOptions) {
     root: opts.root,
     repos: opts.repos,
     correctionsDir: opts.correctionsDir,
-    now: () => (opts.now ?? (() => new Date()))().toISOString(),
+    now: () => nowIso(opts),
   });
   return { observations, report: computeMetrics(observations, { bucket: "month" }) };
+}
+
+/**
+ * task 6 ruling H1: the ONE clock expression, read through `opts.now`, shared
+ * by `currentMetrics` above and the detail handler's `opened` timestamp below
+ * -- one expression, not two copies that could drift.
+ */
+function nowIso(opts: PanelOptions): string {
+  return (opts.now ?? (() => new Date()))().toISOString();
 }
 
 export function buildApi(app: Express, deps: ApiDeps): void {
@@ -87,6 +98,74 @@ export function buildApi(app: Express, deps: ApiDeps): void {
         report,
         panel_review_coverage: computePanelCoverage(observations.decisions, reviews),
       });
+    })().catch(next);
+  });
+
+  app.get("/api/decisions", (_req, res, next) => {
+    void (async () => {
+      const { observations } = await currentMetrics(deps.opts);
+      // Nothing is recorded here. Listing is not looking (spec section 4.2 /
+      // mutation L-3): a browsed list must not itself count as review
+      // coverage, or the coverage number would move just because someone
+      // opened the panel.
+      res.json({ rows: observations.decisions.map(projectForList) });
+    })().catch(next);
+  });
+
+  app.get("/api/decision", (req, res, next) => {
+    void (async () => {
+      // Query string, not path segments: a projectKey is `github.com/biran/orca`
+      // and carries two slashes of its own, so any path-shaped route would need
+      // a wildcard segment and would still be ambiguous about where the key
+      // ends and the decision id begins (task 6 ruling; see listProjection.ts's
+      // detailUrl, the one place this URL is spelled).
+      const projectKey = String(req.query.projectKey ?? "");
+      const decisionId = String(req.query.decisionId ?? "");
+
+      // spec ruling H2: re-runs discovery and E2's gate on every request, same
+      // as /api/metrics -- a broken gate answers 409 here too, through the
+      // shared error handler below, never a stale or partial detail.
+      const { observations } = await currentMetrics(deps.opts);
+
+      // Membership requires BOTH projectKey and id: decision ids repeat across
+      // clones and forks (the same lesson computePanelCoverage's join encodes),
+      // so id alone would let one repo's request return another repo's row.
+      const known = observations.decisions.some(
+        (d) => d.projectKey === projectKey && d.id === decisionId,
+      );
+      // The repo path a browser-supplied projectKey may select is only ever one
+      // `currentMetrics` already discovered -- never a filesystem path built
+      // from user input.
+      const repo = known ? observations.repos.find((r) => r.projectKey === projectKey) : undefined;
+      const decision = repo === undefined ? undefined : await loadDecisionRow(repo.path, decisionId);
+
+      if (decision === undefined) {
+        res.status(404).json({ code: DECISION_NOT_FOUND, message: `no decision ${decisionId}` });
+        return;
+      }
+      res.json({ decision });
+
+      // 🔴 spec section 4.3.1: AFTER the response, never before. `opened` is a
+      // noise signal; letting it sit on the read path means two browser tabs
+      // can make a detail request fail because the system could not record
+      // that someone had glanced at it -- the observation mechanism jamming the
+      // thing it observes. A failure here is a server-side warning and nothing
+      // more.
+      //
+      // `reviewed` is the opposite and is handled in task 7: it is a deliberate
+      // act, so a failure to record it MUST reach the person, or they walk away
+      // believing they reviewed something the ledger never heard about.
+      void deps.reviews
+        .append({
+          decisionId,
+          projectKey,
+          action: "opened",
+          by: deps.opts.by,
+          at: nowIso(deps.opts),
+        })
+        .catch((err: unknown) => {
+          process.stderr.write(`orca panel: could not record opened for ${decisionId}: ${String(err)}\n`);
+        });
     })().catch(next);
   });
 
