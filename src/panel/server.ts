@@ -2,9 +2,11 @@ import { createServer } from "node:http";
 import type { Server } from "node:http";
 import express from "express";
 import { correctionsDir } from "../corrections/paths.js";
+import { buildApi } from "./api.js";
 import { assertBindAllowed } from "./bindGuard.js";
 import { NO_VIEWER_IDENTITY, PanelRejection } from "./rejection.js";
 import { ReviewsWriter } from "./reviewsStore.js";
+import { loadStaticFiles } from "./staticFiles.js";
 import { mintToken } from "./token.js";
 
 export interface PanelOptions {
@@ -17,6 +19,14 @@ export interface PanelOptions {
   repos: Array<{ projectKey: string; path: string }>;
   /** Absolute path to web/dist. Injected so a criterion can point at a fixture. */
   distDir?: string;
+  /**
+   * spec §4.3 / task 5 ruling G3: the ONE clock this subsystem injects.
+   * `parsePanelArgs` never sets it -- `undefined` means the real wall clock,
+   * applied where it is read (`src/panel/api.ts`'s `currentMetrics`). A
+   * criterion sets this directly on the parsed options so it can fix `as_of`
+   * and deep-equal a whole report against one it computed itself.
+   */
+  now?: () => Date;
 }
 
 export interface StartedPanel {
@@ -85,16 +95,11 @@ export async function createPanelServer(opts: PanelOptions): Promise<StartedPane
   const token = mintToken();
   const reviews = new ReviewsWriter(opts.correctionsDir);
   await reviews.load();
+  const statics = await loadStaticFiles(opts.distDir, token);
 
   const app = express();
   app.use(express.json({ limit: "64kb" }));
-  // Task 5 wires the read-only + reviews API routes in here (buildApi from
-  // ./api.js), passing { opts, token, reviews }. That module is also the only
-  // consumer of the web/dist static files, so it is what calls
-  // loadStaticFiles (./staticFiles.js, landed in Task 4) and hands the result
-  // to buildApi -- loading it here, with nothing yet reading it, would make
-  // every `orca panel` start fail with panel-dist-missing before web/dist
-  // exists in this repo.
+  buildApi(app, { opts, token, reviews, statics });
 
   const server: Server = createServer(app);
   const listening = new Promise<void>((resolve, reject) => {
