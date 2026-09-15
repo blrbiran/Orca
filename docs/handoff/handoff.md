@@ -3355,3 +3355,111 @@ R-11 复验 87,342；修复轮复审 80,776；Task 3 实施 144,029；Task 3 评
 - **ccloop**：「📌 Orca 那条线」§五 的 E3 一条改为「Task 0–3 已实施过审」；三条新实测折进第 4、6 条。
 - **ccmem**：§15 的 E3 一条同样改写，并补一条**对它真正有关系的**：reviews 表是 Orca 写到用户全局数据的第二个写入方，
   去重键是 `(decisionId, by, action)`、跨进程不保证去重。
+
+---
+
+# 📌 本轮（2026-09-15，会话 `bad904b1`）—— **E3 的 Task 4 与 Task 5 已实施过审；Task 6–9 未做**
+
+**归属**：run `orca-dev-bad904b1`。本节**只追加**，上面一字未动。
+⚠️ **本节不写任何 HEAD、不写「领先几笔」** —— 提交本文就会改这两个数，人也会自己推远端。
+**要指代某一笔就引提交主题行；要判发布状态就现跑 `git ls-remote` ＋ `git merge-base --is-ancestor`。**
+
+## 一句话状态
+
+*** **Task 4（静态文件）与 Task 5（指标端点）都已实施、过审，并由【另一个】subagent 在 clone 副本里跑完点名变异。** ***
+两个 Task 合计 **25 条变异 ＋ 修复轮 1 条，条条落地、条条见红**；两条的红数与预言不符，都已按「谁还在走被删的那一行」查清。
+Session 2 欠下的三笔债（真进程判据的 teardown、`malformed-*` 两条拒绝无判据、P-2 无落点）**全部还清**。
+Task 6–9 未做。未 push、未建分支、未合并、未删任何分支或 worktree。
+
+## 零、开工时发现的一处不一致（**已在 SDD 台账另起一节记更正，上一节原文未动**）
+
+上一节写着「SDD 台账 Session 2 末尾有 NEXT 一行」。现测 `grep -n NEXT progress.md` **只有第 88 行一处**，属于 Session 1、写于 Task 2 之前。
+*** **Session 2 根本没有 NEXT 行。** *** ⇒ 与「已就地更正」同形：**写了「写了」，没写进去。** 本轮在 Session 3 末尾补了一行真的 NEXT。
+
+## 一、做出来的东西（**按提交主题行找，别数笔数**）
+
+| 买到的东西 | 提交主题行 |
+|---|---|
+| `web/dist` 读进精确文件名 Map；符号链接、未知扩展名、缺 anchor、非 ENOENT 错误各有具名判据 | `feat(panel): serve web/dist out of an exact-filename map, never a joined path` |
+| 真进程判据：detached spawn ＋ 5 秒期限杀整个进程组 ＋ afterEach 兜底；`--port`／`--repo` 两条拒绝在 `parsePanelArgs` 层钉住 | `test(panel): kill the whole process tree on a deadline, and pin malformed --port/--repo` |
+| `GET /api/metrics`（闸门每次请求重算）、面板自己的 review coverage、静态 HTTP 路由、`noSkips` 判据、`createPanelServer` 接线 | `feat(panel): serve /api/metrics with a per-request gate, and give the panel its own review coverage` |
+| 把源码里两个**裸 NUL 字节**换成转义 | `fix(panel): spell the coverage key separator as an escape, not a raw NUL byte` |
+| 评审抓到的漏断言：闸门拒绝的 `code` | `test(panel): pin the gate refusal's code, not only its status` |
+| 本轮 SDD 证据 ＋ 计划裁断 1 的台账行（`.decisions/orca-dev-bad904b1.jsonl`） | `docs(sdd): record tasks 4 and 5, the teardown that was finally witnessed, and the escape that became a byte` |
+
+**材料**：SDD 台账 `.superpowers/sdd/2026-09-10-panel-e3/progress.md` 的「Session 3」一节（裁决 **R30–R40**，**末尾有真的 NEXT**）。
+
+## 二、实测数（**只抄工具打印的**）
+
+| 项 | 开工 | 收尾 | 命令 |
+|---|---|---|---|
+| 全仓 | 87 / 493 | *** **90 / 519** *** | `rtk proxy npm run verify > 文件 2>&1` |
+| scheduler 档 | 51 / 167 | **51 / 167**（未变） | 同上 |
+| web 档 | 1 / 1 | **1 / 1**（未变） | 同上 |
+| `VERIFY_RC` | 0 | 0 | 同上 |
+| `git status --porcelain -z` | 0 字节 | 0 字节（提交后） | **必须 `/usr/bin/git`** |
+| `ls ~/.orca` | 不存在 | *** **仍不存在** ***（两席变异在每条变异前后各复核，全部不存在） | |
+
+✅ *** **收尾那次 verify（1354 行）控制器这次【整份读完】了**，不再是「只读汇总行」。 *** 开工那次仍只索引了汇总行，如实登记。
+
+## 三、变异（**全部由非实施者在 `git clone --local` 副本里跑**）
+
+- **Task 4 共 11 条**（S-12…S-18、M-1、M-2、P-10、P-10b）：全红、全中。
+  *** **P-10／P-10b 这次是为了清点残留进程而重跑的**：判据在自己的 5 秒期限上判红，杀掉整个进程组，**残留 0 个** —— Session 2 那个泄漏修好了，而且是被看见修好的。 ***
+  顺带：计划变异总表说 S-12 下 `index.js/` 会命中 —— **实测不命中**（真正命中的是 `./index.js` 与 `linked.txt`）。又一条假预言。
+- **Task 5 共 14 条 ＋ 修复轮 E-2**：全红。**两条红数与预言不符**，都由「被删的那一行还有谁在走」解释：
+  - **P-2 红 8 条，不是 2 条** —— 默认绑定改成 TEST-NET-1 后，每条经 `parsePanelArgs` 起服务器的判据都在启动时撞上（完好的）绑定守卫。
+  - **N-2 红 3 条，不是 1 条** —— `noSkips.test.ts` 自己的注释里就有字面拼写，只靠「先剥注释」挡着 ⇒ 剥注释这一步**在真实文本上是承重的**（实施者预言「自扫照绿」是假的）。
+- **E-2**（错误处理器改写 `code`）专为修复轮加的那一行断言而跑：它是那条判据**第一处失败**，**这一行是承重的**。
+
+## 四、🔴 **必须带给下一轮**的实测
+
+1. *** **在工具调用里写 NUL 类转义，落到盘上的是【裸字节】。** *** 本会话**实测两次**：
+   ① 实施者的 Write 把源码里本该是转义的分隔符写成了两个裸 0x00 ⇒ **git 把整个 `coverage.ts` 判成二进制**，评审包里只有一行 `Binary files differ` ——
+   *** **评审员根本看不到那个文件，而评审「通过」照样会出来。** *** 是控制器看到 diffstat 里的 `Bin` 才抓到的。
+   ② 控制器自己往台账里记这件事时，heredoc 里原样写了那个转义 ⇒ **Bash 工具以「含隐藏控制字符」拒收**。
+   ⇒ *** **brief、heredoc、Write 里一律不直接写这类转义：用文字描述，或用 `chr()`／`String.fromCharCode` 构造；写完对每个碰过的文件做字节扫描。** ***
+   ⇒ **收到评审包先看 diffstat 有没有 `Bin`。**
+2. *** **`fetch` 测不了路径穿越。** *** WHATWG URL 解析会在【客户端】折叠 `.`、`..` **以及 `%2e%2e`** ⇒ 用 `fetch` 发 `/../../etc/passwd`，服务器收到的是 `/etc/passwd`。
+   Task 5 的 HTTP 级判据改走 `node:http` 发原始 path，并配一条正向对照（`/index.js` 200、`/./index.js` 404）。
+3. *** **「空 env」在本仓库等于「真的 `~/.orca`」。** *** 计划给 P-2 判据写的是 `parsePanelArgs([...], {})`，而 `correctionsDir({})` 解析到使用者真实目录，服务器随即去那里读 reviews。
+   ⇒ **每一个起服务器的判据都显式给改道后的 `ORCA_CORRECTIONS_DIR`**（裁决 R38）。
+4. *** **「杀掉 tsx」不等于「杀掉在监听的那个进程」。** *** tsx 4.23.13 在**子** node 进程里跑脚本 ⇒ 只杀 tsx 的 pid 会留下孤儿。
+   ⇒ **detached spawn ＋ 对负 pid 发信号杀整个进程组**，并由变异席在守卫被删掉的那次跑里**清点进程**来证明。
+5. **计划的「判据要点，执行时写全」写法（Task 5–8）实测会漏东西**：Task 5 的要点里空着 `it` 体、没有 HTTP 级静态判据（计划处置节说「已补」—— 没补）、P-2 的红数写成 1。
+   ⇒ **Task 6–8 开工扫描时，把每个空 `it` 当成一处待裁决，而不是待照抄。**
+
+## 五、本轮**没有**做的（登记，不掩饰）
+
+- *** **Task 6–9 一行未写**（决策列表与详情、记纠正、前端、成功判据）。 ***
+- **最终整支评审**未做 —— 等 Task 9 之后。
+- **Minor 挂账**（都在 SDD 台账里）：F6 那两条按循环断言、首个坏值就短路；`loadStaticFiles` 只读 `web/dist` 顶层（Vite 配置要求扁平输出，**真构建出来是否扁平要到 Task 9 才量得到**）；
+  `api.ts` 里 `now` 的回退表达式难读；500 分支的 `String(err)`；以及更早几轮留下的那几条。
+- **`npm install` 那 5 个漏洞仍未分诊**。
+- **未 push**（控制器一次都没 push）。本轮开工时远端停在 `docs(plan): withdraw the spec 3.1 erratum…` 那一笔，**此后本地又落了多笔，发没发布现跑判断。**
+- ccloop 的 E1 的 I-2 ＋ 人裁 85 没动；裁决甲的 `plan` 那一半仍需人指名。
+
+## 六、⛔ 下一件事
+
+| 顺序 | 做什么 | 说明 |
+|---|---|---|
+| **1** | **Task 6 → Task 9**，接 `superpowers:subagent-driven-development` | *** **先读 SDD 台账「Session 3」一节末尾的 NEXT**（每个 Task 带哪些裁决都写在那里），再读计划末尾「📌 执行轮开工更正」 *** |
+| **2** | 每个 Task 照旧：抽 brief → 控制器备注 → 实施者 → 评审席 ＋ 变异席并行 | 模板抄 `task-4-controller-notes.md`／`task-5-controller-notes.md` 与两份 `*-mutations-brief.md`（它们最新） |
+| **3** | Task 9 之后：最终整支评审（最强模型）→ 一波修复 → 一次复审 | **不删 SDD 工作区** |
+| **4** | 子系统 **D**，或 B 的后续；裁决甲的 `plan` 那一半（需人指名）；ccloop 的 E1 的 I-2 ＋ 人裁 85 | 未变 |
+
+**开工三条照跑**：`/usr/bin/git ls-remote origin refs/heads/main`；`rtk proxy npm run verify` 重定向读回
+（期望 **90/519、51/167、web 1/1**）；`ls ~/.orca` **必须不存在**。
+
+## 七、成本与用量
+
+**只抄工具报出来的数**（Rule 14）：本会话钩子只报过一次 **约 $10.41**（开工核对时），此后未再报，**不写**。
+派出方工具报的单席用量（token）：Task 4 实施 181,790；评审 117,774；变异 164,470。
+Task 5 实施（含字节修复与修复轮 1，累计）346,715；评审 137,869；变异 188,306；复审 76,899；E-2 复验 87,835。
+⇒ 以上八个数相加（控制器算术，不是工具报数）约 **130 万 token**。**两个 Task、八席，与前两轮「一个 Task 30–45 万」的量级一致，Task 5 偏上。**
+
+## 八、姊妹仓库本轮的同批动作（**已完成；知情，不是本仓库的任务**）
+
+两边都是**就地滚动更新那一节，没有新增编号项**（规矩是人 2026-09-02 定的）；**两边都未 push**。
+- **ccloop**：「📌 Orca 那条线」§五 的 E3 一条改为「Task 0–5 已实施过审」；三条新实测（`fetch` 测不了路径穿越、杀 tsx 不等于杀监听进程、NUL 转义落盘成裸字节）折进第 3、4、11 条。
+- **ccmem**：§15 的 E3 一条同样改写，并写明面板覆盖率与 E2 的 `review_coverage` 并列、E2 一行未改；同三条实测折进第 4、7、12 条；标题与小节日期同步到 2026-09-15。
