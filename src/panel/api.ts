@@ -8,7 +8,7 @@ import { collect } from "../metrics/collect.js";
 import { computeMetrics } from "../metrics/compute.js";
 import { MetricsRejection } from "../metrics/rejection.js";
 import type { DecisionObservation } from "../metrics/types.js";
-import { computePanelCoverage } from "./coverage.js";
+import { computePanelCoverage, unreviewedHighTier } from "./coverage.js";
 import { loadDecisionRow } from "./decisionSource.js";
 import { DECISION_NOT_FOUND, projectForList } from "./listProjection.js";
 import { PanelRejection, TOKEN_REQUIRED } from "./rejection.js";
@@ -126,6 +126,21 @@ export function buildApi(app: Express, deps: ApiDeps): void {
         report,
         panel_review_coverage: computePanelCoverage(observations.decisions, reviews),
       });
+    })().catch(next);
+  });
+
+  /**
+   * task 8 ruling K5: spec §4.2's default-view mitigation, served rather than
+   * computed in the browser. Same shape as /api/decisions -- discovery and
+   * the gate re-run on every request, and listing here records nothing
+   * either, for the identical reason (mutation L-3's lesson applies just the
+   * same to a to-do list as it does to the full list).
+   */
+  app.get("/api/todo", (_req, res, next) => {
+    void (async () => {
+      const { observations } = await currentMetrics(deps.opts);
+      const reviews = await readReviews(deps.opts.correctionsDir);
+      res.json({ rows: unreviewedHighTier(observations.decisions, reviews).map(projectForList) });
     })().catch(next);
   });
 

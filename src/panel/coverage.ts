@@ -55,3 +55,27 @@ export function computePanelCoverage(
       "not on its own.",
   };
 }
+
+/**
+ * spec section 4.2's mitigation, task 8 ruling K5: the panel's default view is
+ * a to-do list of unreviewed high-tier decisions, because `reviewed` coverage
+ * can sit near zero for a long time (the caveat above) and a click landing on
+ * the work a person already owes is better than one landing nowhere.
+ *
+ * Reuses `keyOf` -- the SAME (projectKey, id) key `computePanelCoverage` uses
+ * -- so there is one definition of "the same decision", not two that could
+ * drift. `opened` rows are deliberately absent from `reviewed`, for the same
+ * reason `computePanelCoverage` excludes them: an arrow key through a table
+ * cannot produce a deliberate review. Output order is `decisions`' own order.
+ */
+export function unreviewedHighTier(
+  decisions: readonly DecisionObservation[],
+  reviews: readonly ReviewRow[],
+): DecisionObservation[] {
+  const reviewed = new Set<string>();
+  for (const r of reviews) {
+    if (r.action !== "reviewed") continue;
+    reviewed.add(keyOf(r.projectKey, r.decisionId));
+  }
+  return decisions.filter((d) => isHighTier(d.scope, d.kind) && !reviewed.has(keyOf(d.projectKey, d.id)));
+}
