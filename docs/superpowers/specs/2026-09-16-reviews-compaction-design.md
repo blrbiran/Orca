@@ -142,7 +142,7 @@ orca compact-reviews [--apply] [--root <dir>] [--repo <projectKey>=<path>]...
 | 码 | 何时 |
 |---|---|
 | 0 | 试跑完成；或 apply 完成（含「无事可做」） |
-| 1 | 参数错（`--repo` 不是 `key=path`、未知参数）；**或** `collect()` 的拒绝（§1.7 两种）；**或** `reviews.jsonl` 是符号链接（`reviews-store-is-symlink`，§7）—— `MetricsRejection` 与 `PanelRejection` 的退出码都恒为 1，**三者靠 stderr 的 `rejected: <code>: …` 区分**，不靠退出码 |
+| 1 | 参数错（`--repo` 不是 `key=path`、未知参数）；**或** `collect()` 的拒绝（§1.7 两种）；**或** `reviews.jsonl` 是符号链接（`reviews-store-is-symlink`，§7）—— 这三种原因的退出码都是 1（`MetricsRejection` 恒为 1，`src/metrics/rejection.ts`；`reviews-store-is-symlink` 这一个 `PanelRejection` 显式给 1 —— `PanelRejection` 作为类并不恒为 1，下一行的 busy 就是 5），**三者靠 stderr 的 `rejected: <code>: …` 区分**，不靠退出码 |
 | 5 | `reviews-store-busy`（拿不到 reviews 锁），与面板同一个拒绝名 |
 
 ---
