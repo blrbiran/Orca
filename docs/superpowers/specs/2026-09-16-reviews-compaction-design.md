@@ -6,6 +6,7 @@
 > ⚠️ E3 spec 是已发布文本 ⇒ **不就地改它**；实施时在它 §4.3.2 末尾**追加一条具名 ERRATUM 指向本文**（计划里的一步）。
 > ⚠️ 若实施推翻本文前提，**追加具名 ERRATUM，不就地改**。
 > 📝 **同会话评审后就地修订一次**（F1–F9，§2 的 R-E／R-F／R-G）：本文当时未发布（`ls-remote` ＋ `merge-base --is-ancestor` 现测），原稿见 `git log -- <本文>`。
+> 📝 **2026-09-16/17 最终评审后再次就地修订**：本文此时仍未发布（`ls-remote` ＋ `merge-base --is-ancestor` 现测，两次都 RC 1）。改了 §3.2、§3.3、§6.2、§6.3、§7、§8。
 
 ---
 
@@ -130,7 +131,8 @@ orca compact-reviews [--apply] [--root <dir>] [--repo <projectKey>=<path>]...
 ⚠️ **判「去重」时孤儿也参与**：两行同键且都是孤儿 ⇒ 第一行进归档，第二行按重复丢掉。
 
 ### 3.2 报告（stdout，两个模式都打印）
-逐类行数；不判的原因分组（`repo-not-discovered` ／ `ledger-has-malformed-lines` 按 projectKey；`decision-not-found` 按 `(projectKey, decisionId)`）；
+逐类行数；紧接着，**只在孤儿数 > 0 时**，一行 `orphans:` 加每个孤儿一行 `  <projectKey> <decisionId>`（按文件原顺序、去重，取自该行本身解析出的字段——分类器判它是孤儿时已经解析过了）；
+不判的原因分组（`repo-not-discovered` ／ `ledger-has-malformed-lines` 按 projectKey；`decision-not-found` 按 `(projectKey, decisionId)`）；
 `--apply` 写入后末行固定为 `written; a running orca panel picks this up on its next duplicate check, no restart needed`。
 ⚠️ 这句只在 §5 落地后为真 ⇒ **§5 与本命令在同一轮落地**；若计划把 §5 拆出去，这句**必须**改成要求重启。
 （设计讨论第二段曾写「末行提示重启面板」—— 那是 R-D 之前的写法，已被 R-D 取代。）
@@ -140,7 +142,7 @@ orca compact-reviews [--apply] [--root <dir>] [--repo <projectKey>=<path>]...
 | 码 | 何时 |
 |---|---|
 | 0 | 试跑完成；或 apply 完成（含「无事可做」） |
-| 1 | 参数错（`--repo` 不是 `key=path`、未知参数）；**或** `collect()` 的拒绝（§1.7 两种） —— `MetricsRejection` 的退出码恒为 1（`src/metrics/rejection.ts`），**两者靠 stderr 的 `rejected: <code>: …` 区分**，不靠退出码 |
+| 1 | 参数错（`--repo` 不是 `key=path`、未知参数）；**或** `collect()` 的拒绝（§1.7 两种）；**或** `reviews.jsonl` 是符号链接（`reviews-store-is-symlink`，§7）—— `MetricsRejection` 与 `PanelRejection` 的退出码都恒为 1，**三者靠 stderr 的 `rejected: <code>: …` 区分**，不靠退出码 |
 | 5 | `reviews-store-busy`（拿不到 reviews 锁），与面板同一个拒绝名 |
 
 ---
@@ -263,6 +265,7 @@ APFS 的 ino 单调递增，本机复现不了。
 | C9 | `pre-compact` 与原文件逐字节相同 | — |
 | C10 | 归档幂等：预置同一行 ⇒ apply 后仍只一行 | 不预置 ⇒ **必须**追加一行 |
 | C11 | mode：活文件原 `0644` 压完仍 `0644`；新建的归档与备份 `0600`；已存在的 `0640` 备份不改 | — |
+| C11b | `reviews.jsonl` 是符号链接 ⇒ 拒绝 `reviews-store-is-symlink`、退出 1，链接与其目标都不动，不生成备份与归档，锁被释放 | — |
 | C12 | 锁被占 ⇒ `reviews-store-busy`、退出 5、活文件 sha 不变、不生成备份与归档 | — |
 | C13 | seam 让**归档写入**失败 ⇒ 活文件 sha 不变（崩溃语义 §4.2：没进归档的孤儿不许离开活文件） | — |
 | C14 | seam 在「`collect()` 之后、**拿锁之前**」做一次**真的** `ReviewsWriter.append` ⇒ 这一行压实后仍在活文件里（R-G：原稿写「拿锁之后」—— 那里真的追加只会等满 1 s 报 busy，绕锁的追加模拟的是一个不存在的写入方） | — |
@@ -278,12 +281,14 @@ APFS 的 ino 单调递增，本机复现不了。
 | C19b | seam 让身份在第一个 append 写入途中变化 ⇒ 并发的第二个同键 append 仍答 `duplicate`、盘上 1 行（§5.2 的 `inFlight`） |
 | C19 | 身份未变 ⇒ `duplicate`、行数不变，**且 `identityOf` 被调用过**（值观测，防「根本没核对」的空绿） |
 | C20 | 文件被人手动删掉 ⇒ append 答 `written` |
+| C19c | 一次失败的写（锁被压实占着，答 `reviews-store-busy`）不会在之后的重载里回来：另一个键的重复命中强制重建去重集之后，原来那个失败的键仍然能重试写入 —— 钉住 `inFlight` 只在成功时才删这一半（另一半，重建时合并 `inFlight`，已经是 C19b） |
 
 **CLI**
 
 | # | 判据 |
 |---|---|
 | C21 | `main(["compact-reviews", …])`：参数错退出 1；报告含各类行数；`--apply` 末行是 §3.2 那句 |
+| C22 | 一个 `null` 行和一个 `decisionId` 不是字符串的行都按「读不出」处理，不崩：报告的 `unreadable` 计数把两行都算进去 |
 
 **端到端（Rule 4：一条跑出 0／非 0 的命令）**：`scripts/verify-panel.ts` 加**一个新步骤**，总数从 PASS 0–12 变成 **PASS 0–13**。
 **计划阶段定为 PASS 13，排在原 PASS 12 之后**，用**独立的 store 目录 ＋ 独立的面板进程**，并**自己再核一次 `~/.orca` 快照**。
@@ -328,6 +333,10 @@ projectKey 为 `verify-panel-unresolvable-project` 的 correction，并断言**�
 | M21 删掉「补换行」 | C2b |
 | M22 删掉「归档里找得到」条件（回到「顶层找不到即孤儿」） | C4c |
 | M23 `computePanelCoverage` 分子改成按行计数、不装 Set | C16 |
+| M29 `this.inFlight.delete(rowKey)` 挪出 `finally`，只在成功路径（紧接 `return "written"` 之前）删 | C19c |
+| M30 `wantedDecisions`（`src/panel/ledgerViews.ts`）删掉最终评审加的「非空对象、字符串字段」过滤 | C22（CLI 的 null 行 / 非字符串 decisionId 判据） |
+| M31 `applyCompaction` 删掉 `lstat` 符号链接检查 | C11b |
+| M32 `renderCompactionReport` 删掉孤儿清单 | CLI「without --apply prints the report…」 |
 
 ⚠️ **覆盖面**（评审 F5 补齐；C19b／M24 是计划阶段补的）：§6.2 每条判据都至少有一条打向它的变异；C19 由 M11 覆盖（身份核对删掉 ⇒ `identityOf` 不再被调用）。
 ⚠️ *** **每条「红在 X 且仅 X」的精确预言写在计划里、实施之后验收。** *** 本表只定「打向哪条判据」。
@@ -350,7 +359,7 @@ verify:panel **PASS 0–13**；web **8/26** 不变。
 
 | 路径（都在 `correctionsDir(env)` 下） | 写法 | mode | 失败时的残留 |
 |---|---|---|---|
-| `reviews.jsonl` | rename 替换 | **保持原文件权限位** | 无半写：要么旧文件要么新文件 |
+| `reviews.jsonl` | rename 替换；符号链接 ⇒ 拒绝（`reviews-store-is-symlink`），不替人把链接变成普通文件 | **保持原文件权限位** | 无半写：要么旧文件要么新文件 |
 | `reviews.jsonl.pre-compact` | 每次 apply 覆盖 | 新建 `0600`，已存在不改 | 半个备份（此时活文件完好） |
 | `reviews-archive.jsonl` | 只追加、逐行幂等、追加前补换行 | 新建 `0600`，已存在不改 | 多一行完全相同的行，或残一个半行（下次追加前补换行，不吞下一行） |
 | `reviews.jsonl.compact-tmp` | 锁内截断重用 | `0600` 后 chmod 为原文件权限位 | 残留文件，下次锁内重用 |
@@ -374,6 +383,9 @@ verify:panel **PASS 0–13**；web **8/26** 不变。
 7. **两处都找不到的行永远不被清理**（R-E）：违反 A′ 被真删掉的台账文件，它的审阅行会一直留着。有上界、零数字影响，**且每次报告都以 `decision-not-found` 列出** —— 违规应当被看见，不该被静默清走。
 8. **身份核对在锁外**（评审 F9）：理论上 stat 刚答「没变」，压实紧接着 rename ⇒ 对一个刚被移走的键答 `duplicate`。
    R-E 之后够不着：被移走的决策在归档里、不在列表里 ⇒ `/api/reviews` 在追加之前就拒掉它（`isListedDecision`）。登记，不修。
+9. 归档证据只看目标仓库当前签出的工作树：若归档的 `git mv` 只在当前签出、尚未合并的分支上，那些行会被判孤儿，切回别的分支后决策回到待办（审阅行在 `reviews-archive.jsonl` 里，§5 修好后再点一次即可写回）。§3.2 的孤儿清单让试跑能事先看见。
+10. 台账视图在锁外构建：若人在 `buildLedgerViews` 与 rename 之间把归档文件移回顶层，那一刻的行仍按「孤儿」处理（同上可恢复）。
+11. 面板自己的 `ReviewsWriter.load()` 遇到 `null` 行会崩溃 —— 本轮之前就存在，本轮没有修；`orca compact-reviews` 已把它当「读不出」保留（F2）。
 
 ---
 
