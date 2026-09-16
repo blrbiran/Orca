@@ -3809,3 +3809,117 @@ Orca 的远端走到了开工时的本地 HEAD 上，于是本轮只剩**这一�
 上一轮的 ERRATUM 报的是约 $72.87。⇒ **两轮各自「三件小事、零外派 subagent」的量级就是 $60–75，可以拿来估**
 （⚠️ 这句是**由两个工具报数得出的区间**，不是控制器自估的单次成本；要报某一轮的实际花费仍然只能抄它自己的钩子）。
 ⇒ **记法不变**：*** **一句「现测 X 不存在／没发生」写进文档的那一刻就开始过期，而它不会自己更新。引用前去源头现看一眼。** ***
+
+---
+
+# 📌 本轮（2026-09-16／17，会话 `5e5985bc`）—— **`reviews.jsonl` 留存策略落地：`orca compact-reviews`（默认试跑）＋ 面板去重集的文件身份核对**
+
+**归属**：run `orca-dev-5e5985bc`。本节**只追加**，上面一字未动。
+⚠️ **本节不写任何 HEAD，也不把「领先几笔」当当前状态写**。指代某一笔引**提交主题行**；判发布状态**现跑 `git ls-remote` ＋ `merge-base --is-ancestor`**。带观测锚点的实测值照写。
+
+## 一句话状态
+
+*** **`reviews.jsonl` 有留存策略了：人手动 `orca compact-reviews [--apply]` 去重 ＋ 把【已归档】决策的行移进 `reviews-archive.jsonl`；面板在文件被替换后不再从内存答 `duplicate`。** ***
+全程 brainstorming → spec → plan → Subagent-Driven（9 个 Task ＋ 整支终审 ＋ 一波修复），**面板仍然只记、不闭环**。未 push、未建分支、未合并、未删任何分支或 worktree。
+
+## 零、开工核对（本轮现测）
+
+| 项 | 开工 | 收尾 | 命令 |
+|---|---|---|---|
+| npm test | 95 / 566 | *** **100 / 606** *** | `rtk proxy npm run verify > 文件 2>&1` |
+| verify:scheduler | 51 / 167 | 51 / 167 | 同上 |
+| verify:panel | PASS 0–12 | *** **PASS 0–13** *** | 同上 |
+| web check | 8 / 26 | 8 / 26 | 同上 |
+| `VERIFY_RC` | 0 | 0 | 同上 |
+| `ls ~/.orca` | 不存在 | 不存在（每条变异、每次 verify 前后都核） | |
+
+⚠️ **收尾那次全量 verify 是修复波实施者跑的**（主题行 `fix(panel): pin the in-flight cleanup…` 那一笔之上）；其后只有两笔文档提交。
+⚠️ 开工那份 1397 行 verify 日志是**抽汇总行读的，不是逐行读**；Task 8 实施者读 1407 行日志「两次 Read」是否读到末尾**未确证** —— 如实登记。
+开工现测三个仓库**都领先远端、零落后**（Orca 3、ccloop 1、ccmem 1）—— 人上一轮之后没推。**现在的数去现跑。**
+
+## 一、人本轮拍的（AskUserQuestion ＋ 逐段确认，裁决全文在 spec §2）
+
+- **R-A**：留存 ＝ **压实（去重 ＋ 去孤儿）**，否决「写明不做 ＋ 阈值触发」「跟着决策归档走」。
+- **R-B**：孤儿**移走不删**，仓库不在场就不动。**R-C**：默认只试跑 ＋ `--apply` ＋ 一份滚动备份 `reviews.jsonl.pre-compact`。
+- **R-D**：压实引出的面板洞（内存去重集记着被移走的键 ⇒ 人点「同意」答 200 `duplicate` 却一行不写）**同一轮就修**。
+- **R-E**（spec 自审 F1，人：「照建议改」）：*** **孤儿要正向证据 —— 顶层找不到【且】`archive/<YYYY>/<run-id>.jsonl` 里找得到；两处都找不到 ⇒ 不判（`decision-not-found`）。** ***
+  理由：切分支／分支未合并／rebase 都会让 id 暂时不在顶层，而 A′ 只允许「归档」这一种离开方式。
+- **执行方式**：人选 **Subagent-Driven**，并**同意直接在 `main` 上提交到本地**。
+- **本轮中途人给的长期授权**：「执行过程中如果有问题，先按你的建议执行，最后阶段报给我审核」⇒ 控制器 22 条裁决全在台账里，收尾一并报人。
+
+## 二、做出来的东西（**按提交主题行找，别数笔数**）
+
+| 买到的 | 主题行 |
+|---|---|
+| spec（四次同会话未发布修订） | `docs(spec): design reviews.jsonl compaction…` → `…require archive evidence for an orphan…` → `…keep in-flight claims across a reload…` → `…drop the reload single-flight…`；终审后 `…register what the final review…found`、`…scope the exit-code-1 sentence…` |
+| plan | `docs(plan): task-by-task implementation of reviews compaction…` |
+| 纯函数分类器 ＋「重复行不改数字」判据 | `feat(panel): classify reviews.jsonl lines for compaction…` |
+| 读顶层 ＋ 归档的台账视图（run id 含路径分隔符不拼路径） | `feat(panel): read the top-level ledger and the archive…` |
+| 锁内压实（备份 → 归档（幂等、补换行）→ tmp ＋ chmod 原权限位 ＋ rename；永不创建 store 目录） | `feat(panel): compact reviews.jsonl under the reviews lock…` |
+| CLI `orca compact-reviews [--apply] [--root] [--repo]…` | `feat(cli): add orca compact-reviews, a dry run unless --apply` |
+| 面板写入方：只在「内存判重复」时核对文件身份 `dev:ino:birthtimeMs`，变了就从盘上重建（并上尚未写完的 claim）；身份与集合**读成功后一起赋值** | `fix(panel): reload the reviews dedupe set…` ＋ `fix(panel): assign the reviews identity only with the set it describes…` |
+| verify:panel 新 PASS 13（独立 store ＋ 独立面板进程，自带 `~/.orca` 快照） | `test(verify:panel): add step 13…` |
+| E3 spec 追加两条 ERRATUM | `docs(spec): point E3's reviews retention and dedupe notes…` |
+| 终审修复：C19c 钉 `inFlight` 的 finally；奇形行不再让命令崩溃；`reviews.jsonl` 是符号链接 ⇒ 按名拒绝 `reviews-store-is-symlink`；报告按 id 列孤儿 | `fix(panel): pin the in-flight cleanup, keep odd rows from crashing…` |
+
+**材料**：spec `docs/superpowers/specs/2026-09-16-reviews-compaction-design.md`（§8 登记 11 条已知边界）；plan `docs/superpowers/plans/2026-09-16-reviews-compaction.md`；
+**SDD 台账** `.superpowers/sdd/2026-09-16-reviews-compaction/progress.md`（全部 `Ruling:`、预检表、每轮评审结论、收尾实测；主题行 `docs(sdd): record the reviews compaction round…`）。
+⚠️ 该目录下 brief／report／review 包**没入库**（`.gitignore` 是 `*`，只 `add -f` 了 progress.md），工作区留在磁盘上没删。
+
+## 三、🔴 本轮最值钱的几条（**下一轮直接用**）
+
+1. *** **「顶层找不到」不是「已离开」。** *** 一条「按缺席判定」的规则，会被切分支这种日常动作触发。
+   ⇒ **凡是要据此【移走／删除】人的数据，都要一条【正向证据】（这里是归档文件里真有那个 id）；缺席只能判「不判」。**
+2. *** **「身份变了 ⇒ 重建」的两处坑，都是评审量出来的，计划没写出来。** ***
+   ① 先赋身份、再读文件 ⇒ 读失败一次，新身份就挨着旧集合，下一次重复命中直接信了旧集合（评审探针：`second threw EACCES / third duplicate / rows on disk 0`）⇒ **身份与集合读成功后一起赋值**；
+   ② 重建时丢掉「已 claim、未写完」的键 ⇒ 既有并发判据会变成时序 flake ⇒ **重建集 ＝ 盘上 ∪ 赋值时的 inFlight**。
+   ⇒ *** **缓存与它的「版本号」必须原子地一起换，失败路径上两者都不许动。** ***
+3. *** **终审抓到一行新代码【删掉它也红不了】：`finally { inFlight.delete }`。** *** 退化成「只在成功时删」⇒ 全部 132 条面板判据照绿，而 §5.1 的洞原样回来（失败的点击被重建合并回去，重试答 `duplicate`）。
+   ⇒ **「先问删掉它自己的变异能红吗」这次是终审替控制器问的** —— 计划的变异表 29 条、条条见红，仍漏了它。*** **表齐 ≠ 覆盖齐；每个 `finally`／失败路径也要点名。** ***
+4. *** **计划里写的「红在 X 且仅 X」本轮 33 条，31 条精确、2 条不全（M1 另红 C7、M11 另红 C17b），都是真红。** ***
+   漏算的原因各一：C7 的断言按字节比 `liveText`（「字面量从哪来」那一问没问到）；C17b 是写完预言之后才加的判据（**加判据时没回头更新旧预言**）。
+5. **「逐字保留已发布注释」不等于「注释还挂在它描述的东西上」**：计划让三个新导出插在类注释与 `class` 之间 ⇒ JSDoc 把已发布的类注释挂到了 `type IdentityOf` 上，字节一个没变。评审抓的。
+6. **计划自己带了一处「逐字重复一段逻辑」（`runCliToExit` 抄 `runToExit`）**：预检表抓到，改成给原函数加两个默认参数，step 11 的消息字节不变。**预检表是真能抓东西的，别跳。**
+
+## 四、变异（Task 8 ＋ 修复波，都在 `git clone --local` 副本里）
+
+- **Task 8：29 条**（M13 单飞作废），每条 sha 前后不同、变异行读回、条条见红；**27 条预言精确，2 条不全但为真红**（见上第 4 条）。
+  M11（删身份核对）另跑 verify:panel：`PASS 0–12` 后 `FAIL 13 … "written" vs "duplicate"`，残留进程 0。
+  M27 的改法控制器写错了（只删 `finally` 会剩裸 `try`，编译不过），实施者连 `try` 一起删、在两处 return 前释放锁 —— 落地并精确红在 C13。
+- **修复波：4 条（M29–M32），4 条精确。**
+- 证据：台账里的汇总；逐条 sha／红集原件在工作区 `task-8-mutations.md`、`final-fix-report.md`（**未入库**）。
+
+## 五、本轮**没有**做的（登记，不掩饰）
+
+- spec §8 登记的 11 条边界**都没修**，其中值得下一轮知道的：
+  ① **归档证据只看目标仓库当前签出的工作树**（归档的 `git mv` 只在未合并分支上 ⇒ 被判孤儿；试跑的孤儿清单能事先看见；可恢复）；
+  ② 台账视图在锁外构建；③ 百万行量级 apply 持锁 > 1 s；④ birthtime 不被支持的平台（可能是 0 ⇒ 漏检，或 ctime ⇒ 每次重复都整份重读，**本机未核、无 Linux**）；
+  ⑤ *** **面板自己的 `ReviewsWriter.load()` 遇 `null` 行会崩溃 —— 本轮之前就有，没修** ***；⑥ 没有「恢复孤儿」的命令。
+- 终审 Minor #6（`ensureFile` 的显式 chmod 在正常 umask 下删掉也红不了）按裁决**不修**。
+- 多进程重复行**仍会产生**（现在有判据 C16 与清理手段）。
+- 子系统 D、B 的后续、裁决甲的 `plan` 那一半、ccloop 的 E1 I-2 ＋ 人裁 85：**都没动**。
+- **未 push**；工作区 `.superpowers/sdd/2026-09-16-reviews-compaction/` 未删（裁决：守仓库惯例，不 `rm -rf`）。
+
+## 六、⛔ 下一件事
+
+| 顺序 | 做什么 | 说明 |
+|---|---|---|
+| **0** | **人审本轮控制器的裁决** | 台账 `progress.md` 里全部 `Ruling:` 行；收尾对话里已逐条列给人 |
+| **1** | 子系统 **D**，或 B 的后续 | 未变 |
+| **2** | 可选的小挂账 | spec §8 第 11 条（面板 `load()` 遇 `null` 行崩溃）；§8 第 9 条若要收紧，需要一条「跨分支的归档证据」设计 |
+| **3** | 裁决甲的 `plan` 那一半（需人指名）；ccloop 的 E1 I-2 ＋ 人裁 85 | 未变 |
+
+**开工三条照跑**：`/usr/bin/git ls-remote origin refs/heads/main`；`rtk proxy npm run verify` 重定向读回
+（期望 **100/606、51/167、verify:panel PASS 0–13、web 8/26**）；`ls ~/.orca` **必须不存在**。
+⚠️ *** **`95/566` 与 `PASS 0–12` 都已作废。** ***
+
+## 七、成本与用量
+
+**只抄工具报的数**：钩子在控制器派出第一个实施者**之前**报过本会话累计 *** **约 $81.28** ***；此后控制器**没再看到**钩子报数 ⇒ **本轮总花费拿不到，不写**。
+⚠️ 这句同前两轮一样**写下即开始过期** —— 钩子若在本节提交之后又报，以钩子为准。
+**subagent 用量（task-notification 报的 `subagent_tokens`）**：19 次派发，合计 **2,282,003**；最大的是 Task 8 变异席（326,597）与修复波（208,055）。
+（Task 5 实施者被续派过一次，取的是续派后那次通知的 132,106；工具没说它是否含首轮的 103,557。）
+
+## 八、姊妹仓库本轮的同批动作
+
+对 ccloop 与 ccmem 的产品代码、判据、脚本**零触碰**；只就地更新了各自的 Orca 那一节（节外字节 sha256 改前改后逐字相同）。
