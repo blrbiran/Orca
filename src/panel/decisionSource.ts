@@ -8,7 +8,7 @@ import { readLedgerLeniently } from "../metrics/lenientRead.js";
  * copied here rather than editing E2 (task 6 ruling H2): `src/metrics/**` gets
  * zero diff from this task.
  */
-async function ledgerFiles(repo: string): Promise<string[]> {
+export async function ledgerFiles(repo: string): Promise<string[]> {
   const dir = join(repo, ".decisions");
   const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
   return entries
