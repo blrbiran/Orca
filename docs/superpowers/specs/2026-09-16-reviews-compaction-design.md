@@ -411,3 +411,24 @@ for (const n of [1_000, 10_000, 100_000, 1_000_000]) {
 ```
 
 运行：`ORCA_CORRECTIONS_DIR=<tmp> ./node_modules/.bin/tsx <tmp>/p.mts <tmp>`（文件扩展名必须是 `.mts`：`.ts` 在本仓库被按 cjs 转译，顶层 `await` 报错 —— 现测）。
+
+---
+
+## ERRATUM 1（§8 第 11 条已修，2026-09-17；run `orca-dev-18c77f3e`；主题行 `fix(panel): drop a reviews.jsonl line that is not a row instead of crashing on it`）
+
+本文此时**已发布**（开工 `ls-remote` 现测远端与本地同点）⇒ 上文一字不改，更正追加在此。
+
+1. **§8 第 11 条不再成立**：`readReviews` 现在用分类器的 `parseRow`（`compactClassify.ts`，改为导出）判一行是不是「行」，
+   `parseRow` 拒绝的行（`null`、数字、数组、键字段不是字符串、以及读不出的 JSON）一律跳过 ——
+   与 `orca compact-reviews` 的「读不出」**同一个定义**。受益的不只 `load()`：
+   `computePanelCoverage` 与 `unreviewedHighTier` 遇 `null` 元素也抛 TypeError（探针现测），经面板错误处理答 500。
+2. **§6.3 的 M30 失去落点**：`wantedDecisions` 里那道「非空对象、字符串字段」过滤在修后冗余、删掉它也红不了，
+   因此**一并删除**（`ledgerViews.ts` 的已发布注释追加了 ERRATUM）。C22 改由下面的 M33 钉住。
+3. **新判据**（`tests/panel/reviewsStore.test.ts` 末尾新 `describe`）：
+   C23 `readReviews` 丢掉 `null`／数字／数组／非字符串 `decisionId`，保留它们前后的行；
+   C23b 面板写入方在含 `null` 行的文件上启动，且仍对其后那一行答 `duplicate`（正向观测）。
+   先红：C23 红在深比较、C23b 红在 `load()` 的 `key(null)`。
+4. **变异**（`git clone --local` 副本，只跑 `tests/panel`；全量在副本里因按相对路径找 ccloop 而先天红）：
+   M33 删掉 `if (parsed === undefined) continue;` ⇒ 预言「C22、C23、C23b 且仅此三条」，**精确**；
+   M34 把该行的 `continue` 改成 `break` ⇒ 预言「C23、C23b 且仅此两条」，**精确**（C23b 红在 `duplicate` 那条）。
+   本次改动**没有新增 `finally`**；唯一新增的失败路径就是那一行跳过，由 M33 点名。

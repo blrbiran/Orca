@@ -102,21 +102,12 @@ export async function buildLedgerViews(
  * with string `projectKey` and `decisionId` fields are dropped here: they are
  * spec section 3.1's "unreadable" rows, kept verbatim by the classifier, not
  * fed into the archive lookup.
+ *
+ * *** ERRATUM (2026-09-17, reviews compaction spec section 8 item 11) ***
+ * The dropping no longer happens here: readReviews itself now drops every line
+ * the classifier's parseRow rejects, so the filter that stood here could not go
+ * red on its own (mutation M30 would have stayed green) and was removed.
  */
 export async function wantedDecisions(dir: string): Promise<WantedDecision[]> {
-  const wanted: WantedDecision[] = [];
-  for (const row of await readReviews(dir)) {
-    const value = row as unknown;
-    if (
-      typeof value !== "object" ||
-      value === null ||
-      typeof (value as { projectKey?: unknown }).projectKey !== "string" ||
-      typeof (value as { decisionId?: unknown }).decisionId !== "string"
-    ) {
-      continue;
-    }
-    const { projectKey, decisionId } = value as WantedDecision;
-    wanted.push({ projectKey, decisionId });
-  }
-  return wanted;
+  return (await readReviews(dir)).map(({ projectKey, decisionId }) => ({ projectKey, decisionId }));
 }

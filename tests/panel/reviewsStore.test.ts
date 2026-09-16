@@ -303,3 +303,39 @@ describe("the reviews writer after reviews.jsonl is replaced (reviews compaction
     expect((await readReviews(dir)).filter((r) => r.decisionId === "orca-dev-1/1")).toHaveLength(1);
   });
 });
+
+// Appended for reviews compaction spec section 8 item 11. Nothing above this line is edited.
+describe("a reviews.jsonl line that parses but is not a row (reviews compaction spec section 8 item 11)", () => {
+  let dir: string;
+
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), "orca-reviews-odd-"));
+  });
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it("C23 readReviews drops null, a number, an array and a non-string decisionId, and keeps the rows around them", async () => {
+    // One definition of "a row": the same lines `orca compact-reviews` counts as
+    // unreadable (C22). coverage.ts reads r.action off every element (a probe
+    // measured both functions throwing TypeError on a null), which the panel's
+    // error handler answers as 500 on /api/metrics and /api/todo.
+    const before = row({ decisionId: "orca-dev-1/1" });
+    const after = row({ decisionId: "orca-dev-1/3", action: "reviewed" });
+    const odd = JSON.stringify(row({ decisionId: 7 as unknown as string }));
+    const text = ["null", JSON.stringify(before), "42", "[]", odd, JSON.stringify(after)].join("\n") + "\n";
+    await writeFileRaw(reviewsFile(dir), text);
+    expect(await readReviews(dir)).toEqual([before, after]);
+  });
+
+  it("C23b the panel's writer starts on a null line and still dedupes the row after it", async () => {
+    await writeFileRaw(reviewsFile(dir), `null\n${JSON.stringify(row())}\n`);
+    const writer = new ReviewsWriter(dir);
+    await writer.load();
+    // Positive observation that load() read the row after the null line: an
+    // empty set would answer "written" here and append a second copy.
+    expect(await writer.append(row())).toBe("duplicate");
+    expect(await writer.append(row({ action: "reviewed" }))).toBe("written");
+    expect(await readReviews(dir)).toEqual([row(), row({ action: "reviewed" })]);
+  });
+});

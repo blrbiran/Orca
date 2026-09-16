@@ -32,7 +32,7 @@ interface RowKeyFields {
   action: string;
 }
 
-function parseRow(text: string): RowKeyFields | undefined {
+export function parseRow(text: string): RowKeyFields | undefined {
   let value: unknown;
   try {
     value = JSON.parse(text);

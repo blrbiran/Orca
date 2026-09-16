@@ -1,4 +1,5 @@
 import { appendFile, chmod, mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { parseRow } from "./compactClassify.js";
 import { REVIEWS_DIR_MODE, REVIEWS_FILE_MODE, reviewsFile } from "./paths.js";
 import { acquireReviewsLock } from "./reviewsLock.js";
 
@@ -40,14 +41,19 @@ export async function readReviews(dir: string): Promise<ReviewRow[]> {
   const rows: ReviewRow[] = [];
   for (const line of text.split("\n")) {
     if (line.trim().length === 0) continue;
-    try {
-      rows.push(JSON.parse(line) as ReviewRow);
-    } catch {
-      // A torn last line is the expected race of reading an append-only file
-      // while someone appends; E2 section 5.2 makes the same exemption. Here
-      // the file is only ever read to rebuild a dedupe set, so a dropped row
-      // costs one duplicate, never a wrong number.
-    }
+    const parsed = parseRow(line);
+    // A torn last line is the expected race of reading an append-only file
+    // while someone appends; E2 section 5.2 makes the same exemption. Here
+    // the file is only ever read to rebuild a dedupe set, so a dropped row
+    // costs one duplicate, never a wrong number.
+    //
+    // (reviews compaction spec section 8 item 11) A line that parses but is not
+    // a row -- `null`, a number, an array, a non-string key field -- is dropped
+    // the same way: it is exactly what `orca compact-reviews` counts as
+    // unreadable and keeps, and every caller reads fields off each element, so
+    // keeping it made load() and /api/metrics and /api/todo throw.
+    if (parsed === undefined) continue;
+    rows.push(parsed as unknown as ReviewRow);
   }
   return rows;
 }
