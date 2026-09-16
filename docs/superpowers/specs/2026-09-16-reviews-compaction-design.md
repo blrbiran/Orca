@@ -201,7 +201,16 @@ rename 让 `reviews.jsonl` 换一个新 inode ⇒ 若照常新建，就是**替�
 - **非重复路径一字不改**（那段「在第一个 `await` 之前同步 claim」的逻辑原样保留）。
   **读路径上零新增 I/O** ⇒ E3 §4.3.1 仍然成立。
 - 重新 load **单飞**：同一时刻只跑一次，并发的 append 共享同一个 promise。⚠️ 单飞是否承重**实施时先用探针量**（§6.3 M13）。
-- 重新 load 覆盖掉「别的 append 刚 claim、还没写完」的键 ⇒ **最坏多写一行重复**。重复行不改变数字（§1.2，§6 C16 钉住）⇒ **接受，不为它加锁**。
+- 🔴 **已 claim、尚未写完的键在重新 load 时保留**：`ReviewsWriter` 另持一个 `inFlight` 集合（claim 时加、写完或失败时删），重建的去重集 ＝ 盘上的键 ∪ `inFlight`。
+  **计划阶段读代码发现，原稿此处写的是「覆盖掉 ⇒ 最坏多写一行重复 ⇒ 接受」，那是错的**：
+  `tests/panel/reviewsStore.test.ts` 的既有判据「两个并发 append 同一行 ⇒ 恰好一个 written、盘上 1 行」——
+  第二个调用命中内存后 stat，若第一个调用恰好已建出文件 ⇒ 身份变了 ⇒ 重建 ⇒ 盘上还没有那一行 ⇒ **它也写** ⇒ 2 行。
+  ⇒ 不保留 `inFlight` 等于**把一条既有判据变成时序相关的 flake**（改既有判据要人指名，Rule 9；这里是改设计让它继续成立）。
+
+### 5.2.1 身份的纯函数
+`identityFromStats({ dev, ino, birthtimeMs }): string` 单独导出，`statIdentity` 调它。
+**理由**：§5.4 的 `identityOf` seam 能伪造「身份变了」，但**伪造不到 `statIdentity` 的拼法** ——
+「身份只比 `dev:ino`」（M12）改的正是拼法，只有直接喂 `identityFromStats` 两组「ino 同、birthtime 不同」的输入才红得了。
 
 ### 5.3 为什么身份里要有 `birthtimeMs`
 ext4 会**重用 inode**：连压两次，第二次的 `compact-tmp` 可能拿到面板启动时那个文件的 ino ⇒ 只比 ino 会误判「没变」。
@@ -264,7 +273,8 @@ APFS 的 ino 单调递增，本机复现不了。
 | # | 判据 |
 |---|---|
 | C17 | 真文件系统：load 之后文件被 rename 替换成不含该键的版本 ⇒ append 同一个键答 `written`，且盘上真的多了这一行 |
-| C18 | seam：ino 相同、birthtime 不同 ⇒ 也重新 load，答 `written` |
+| C18 | `identityFromStats`：ino 相同、birthtime 不同 ⇒ 两个身份不相等；三项全同 ⇒ 相等（值断言，防恒不等的空绿） |
+| C19b | seam 让身份在第一个 append 写入途中变化 ⇒ 并发的第二个同键 append 仍答 `duplicate`、盘上 1 行（§5.2 的 `inFlight`） |
 | C19 | 身份未变 ⇒ `duplicate`、行数不变，**且 `identityOf` 被调用过**（值观测，防「根本没核对」的空绿） |
 | C20 | 文件被人手动删掉 ⇒ append 答 `written` |
 
@@ -301,6 +311,7 @@ projectKey 为 `verify-panel-unresolvable-project` 的 correction，并断言**�
 | M10 读文件挪到拿锁之前 | C14 |
 | M11 删掉身份核对 | C17 与 verify:panel 的新步骤 |
 | M12 身份只比 `dev:ino` | C18 |
+| M24 重建时不合并 `inFlight` | C19b |
 | M13 删掉单飞 | **先用探针问「能红吗」**；红不了 ⇒ 单飞不落地（同 R74） |
 | M14 去重键去掉 `action` | C15（同一决策的 `opened` 吃掉 `reviewed`） |
 | M15 保留行倒序写出 | C6 |
@@ -313,7 +324,7 @@ projectKey 为 `verify-panel-unresolvable-project` 的 correction，并断言**�
 | M22 删掉「归档里找得到」条件（回到「顶层找不到即孤儿」） | C4c |
 | M23 `computePanelCoverage` 分子改成按行计数、不装 Set | C16 |
 
-⚠️ **覆盖面**（评审 F5 补齐）：§6.2 每条判据都至少有一条打向它的变异；C19 由 M11 覆盖（身份核对删掉 ⇒ `identityOf` 不再被调用）。
+⚠️ **覆盖面**（评审 F5 补齐；C19b／M24 是计划阶段补的）：§6.2 每条判据都至少有一条打向它的变异；C19 由 M11 覆盖（身份核对删掉 ⇒ `identityOf` 不再被调用）。
 ⚠️ *** **每条「红在 X 且仅 X」的精确预言写在计划里、实施之后验收。** *** 本表只定「打向哪条判据」。
 依据：2026-09-10 计划阶段写的红数被两席外审现测错了 31%，而判据层的自审在被测代码还不存在时做不了。
 ⚠️ 写预言时三问：X 之前有没有别的断言先炸（防假）；被删那行还有谁在走（防不全）；点名断言里的字面量从哪个字段来。
