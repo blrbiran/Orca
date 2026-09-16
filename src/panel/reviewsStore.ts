@@ -1,4 +1,4 @@
-import { appendFile, chmod, mkdir, readFile, writeFile } from "node:fs/promises";
+import { appendFile, chmod, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { REVIEWS_DIR_MODE, REVIEWS_FILE_MODE, reviewsFile } from "./paths.js";
 import { acquireReviewsLock } from "./reviewsLock.js";
 
@@ -61,22 +61,73 @@ export async function readReviews(dir: string): Promise<ReviewRow[]> {
  * Two panel processes still write duplicates. Accepted on purpose: the
  * alternative is a cross-process lock on the READ path, and section 4.3.1 is
  * about getting the observation mechanism off that path, not further onto it.
+ *
+ * *** ERRATUM (2026-09-16, run orca-dev-5e5985bc, reviews compaction spec section 5) ***
+ * "seeded once at startup" no longer holds on its own. `orca compact-reviews
+ * --apply` replaces reviews.jsonl by rename, so a key this set remembers may no
+ * longer be on disk, and answering `duplicate` for it would leave a reviewed
+ * decision on the to-do list with a 200. On a duplicate hit the writer now
+ * compares the file's identity (dev:ino:birthtimeMs) with the one it loaded;
+ * if it changed, it rebuilds the set from disk plus the claims still being
+ * written. The non-duplicate path is unchanged.
  */
+export type IdentityOf = (path: string) => Promise<string | undefined>;
+
+/**
+ * reviews compaction spec sections 5.2.1 and 5.3. birthtime is in the identity
+ * because ext4 reuses inode numbers. Where a filesystem has no birthtime, Node
+ * may report ctime or 0 there: 0 degrades this to dev:ino; ctime makes every
+ * duplicate check see a change and re-read the file -- slower, never wrong.
+ */
+export function identityFromStats(stats: { dev: number; ino: number; birthtimeMs: number }): string {
+  return `${stats.dev}:${stats.ino}:${stats.birthtimeMs}`;
+}
+
+export const statIdentity: IdentityOf = async (path) => {
+  try {
+    return identityFromStats(await stat(path));
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    throw err;
+  }
+};
+
 export class ReviewsWriter {
-  private readonly seen = new Set<string>();
+  private seen = new Set<string>();
+  /** Keys claimed and not yet written (or failed). A reload keeps them. */
+  private readonly inFlight = new Set<string>();
+  private identity: string | undefined;
   private loaded = false;
 
-  constructor(private readonly dir: string) {}
+  constructor(
+    private readonly dir: string,
+    private readonly identityOf: IdentityOf = statIdentity,
+  ) {}
 
   async load(): Promise<void> {
-    for (const row of await readReviews(this.dir)) this.seen.add(key(row));
+    // Identity BEFORE the read: a replacement landing between the two is then
+    // seen as a change on the next duplicate check, never missed.
+    this.identity = await this.identityOf(reviewsFile(this.dir));
+    const next = new Set<string>();
+    for (const row of await readReviews(this.dir)) next.add(key(row));
+    // A claim still being written is not on disk yet; dropping it here would
+    // let a concurrent append of the same row write it twice.
+    for (const claimed of this.inFlight) next.add(claimed);
+    this.seen = next;
     this.loaded = true;
   }
 
   async append(row: ReviewRow): Promise<"written" | "duplicate"> {
     if (!this.loaded) throw new Error("orca panel: ReviewsWriter.append called before load()");
     const rowKey = key(row);
-    if (this.seen.has(rowKey)) return "duplicate";
+    if (this.seen.has(rowKey)) {
+      // reviews compaction spec section 5.2: only on this path, so the read
+      // path and the non-duplicate write path gain no I/O.
+      const current = await this.identityOf(reviewsFile(this.dir));
+      if (current === this.identity) return "duplicate";
+      await this.load();
+      if (this.seen.has(rowKey)) return "duplicate";
+    }
 
     // Claimed HERE, synchronously, before the first `await` -- not after the
     // write finishes. `has` then `add` is a check-then-act pair, and every
@@ -89,6 +140,7 @@ export class ReviewsWriter {
     // the write itself fails, so a failed write does not permanently brand a
     // row as already-written.
     this.seen.add(rowKey);
+    this.inFlight.add(rowKey);
     try {
       // `mode` here is masked by the umask, which is why the criterion pins the
       // umask explicitly rather than trusting the developer's. An
@@ -116,6 +168,8 @@ export class ReviewsWriter {
     } catch (err) {
       this.seen.delete(rowKey);
       throw err;
+    } finally {
+      this.inFlight.delete(rowKey);
     }
     return "written";
   }

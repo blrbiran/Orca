@@ -172,3 +172,94 @@ describe("the reviews store (spec section 4.3)", () => {
     expect(text.trimEnd().split("\n")).toHaveLength(2);
   });
 });
+
+// Appended by the reviews compaction round (spec section 5). Nothing above this line is edited.
+import { rename as renameFile, writeFile as writeFileRaw } from "node:fs/promises";
+import { identityFromStats } from "../../src/panel/reviewsStore.js";
+
+describe("the reviews writer after reviews.jsonl is replaced (reviews compaction spec section 5)", () => {
+  let dir: string;
+
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), "orca-reviews-identity-"));
+  });
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  const reviewed = (over: Partial<ReviewRow> = {}): ReviewRow => row({ action: "reviewed", ...over });
+
+  it("C17 writes a key again after reviews.jsonl was replaced by a rename that no longer holds it", async () => {
+    const writer = new ReviewsWriter(dir);
+    await writer.load();
+    expect(await writer.append(reviewed())).toBe("written");
+    // What `orca compact-reviews --apply` does when it moves this row out.
+    const replacement = join(dir, "replacement");
+    await writeFileRaw(replacement, "");
+    await renameFile(replacement, reviewsFile(dir));
+    expect(await writer.append(reviewed())).toBe("written");
+    expect(await readReviews(dir)).toHaveLength(1);
+  });
+
+  it("C18 identityFromStats tells two files apart by birthtime even when dev and ino match", () => {
+    // ext4 reuses inode numbers; two compactions in a row can hand the new
+    // file the old one's ino. This machine (APFS) cannot produce that, which is
+    // why the spelling is pinned here directly.
+    expect(identityFromStats({ dev: 1, ino: 2, birthtimeMs: 3 })).not.toBe(identityFromStats({ dev: 1, ino: 2, birthtimeMs: 4 }));
+    // The equal half, or a function that never answers equal would pass.
+    expect(identityFromStats({ dev: 1, ino: 2, birthtimeMs: 3 })).toBe(identityFromStats({ dev: 1, ino: 2, birthtimeMs: 3 }));
+  });
+
+  it("C19 answers duplicate without reloading when the identity is unchanged, and it did check", async () => {
+    let calls = 0;
+    const writer = new ReviewsWriter(dir, async () => {
+      calls += 1;
+      return "same";
+    });
+    await writer.load();
+    expect(await writer.append(reviewed())).toBe("written");
+    expect(calls).toBe(1); // load only: the non-duplicate path does not look
+    expect(await writer.append(reviewed())).toBe("duplicate");
+    expect(calls).toBe(2); // exactly one check, and no reload (a reload would make it 3)
+    expect(await readReviews(dir)).toHaveLength(1);
+  });
+
+  it("C19b keeps a claim still being written when a changed identity forces a reload", async () => {
+    let calls = 0;
+    const writer = new ReviewsWriter(dir, async () => (calls++ === 0 ? "before" : "after"));
+    await writer.load();
+    // Holding the lock parks the first append after its claim and before its
+    // write, deterministically -- no sleeps.
+    const held = await acquireReviewsLock(dir);
+    const first = writer.append(reviewed());
+    // Under the mutation that drops in-flight claims, `first` can time out on
+    // the lock while `second` is awaited; mark it handled so that shows up as
+    // THIS test's red, not as an unhandled rejection elsewhere in the run.
+    first.catch(() => undefined);
+    try {
+      const second = writer.append(reviewed());
+      // The second call hits memory, sees the identity change, and reloads from
+      // a disk that does not hold the row yet. Only the in-flight claim can
+      // still answer duplicate -- without it, it claims and waits on the lock.
+      expect(await second).toBe("duplicate");
+    } finally {
+      await held.release();
+    }
+    expect(await first).toBe("written");
+    expect(await readReviews(dir)).toHaveLength(1);
+  });
+
+  it("C20 writes a key again after reviews.jsonl was deleted by hand", async () => {
+    // Seeded by ANOTHER writer, so this one loads a file that exists: a writer
+    // that loaded "no file" and then sees "no file" has, correctly, nothing to
+    // reload -- that would not be the case this criterion is about.
+    const seeder = new ReviewsWriter(dir);
+    await seeder.load();
+    expect(await seeder.append(reviewed())).toBe("written");
+    const writer = new ReviewsWriter(dir);
+    await writer.load();
+    await rm(reviewsFile(dir));
+    expect(await writer.append(reviewed())).toBe("written");
+    expect(await readReviews(dir)).toHaveLength(1);
+  });
+});
