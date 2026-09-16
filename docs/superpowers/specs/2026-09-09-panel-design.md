@@ -260,6 +260,10 @@ token 管**授权**，viewer identity 管**是谁**，**分开实现、分开存
 本轮在 `git clone --local` 的 BASE 副本上复测：`tests/panel/reviewsStore.test.ts` 的新判据与 `tests/panel/todo.test.ts` 的 (f)
 都红在 `expected 'duplicate' to be 'written'`。上界随之变为 **2 × distinct `(projectKey, decisionId)`**，仍与运行时长无关。
 
+***ERRATUM (2026-09-16, run orca-dev-5e5985bc, reviews compaction)***
+上文「`reviews.jsonl` 没有留存策略」与「多进程下仍会重复写，有意接受」两句已被 `docs/superpowers/specs/2026-09-16-reviews-compaction-design.md` 接手：留存 ＝ 人手动 `orca compact-reviews --apply`（去重 ＋ 把**已归档**决策的行移进 `reviews-archive.jsonl`）；重复行不改数字这一点现有判据钉住（该文 C16）。
+⚠️ **本节「进程内已写集合（启动时读一次）」不再单独成立**：压实用 rename 替换文件后，面板会在「内存判重复」时核对文件身份并从盘上重建（该文 §5）。
+
 ### 4.4 🔴 同一条决策的第二次纠正：面板必须自己处理，不能转述 CLI 的话（外审 I4）
 
 现测（§1.6）：去重键 `(projectKey, decisionId, by)` **不含 `kind`**，而面板的 `by` 每进程恒定
@@ -374,6 +378,8 @@ ORCA_CORRECTIONS_DIR 改道；造一个带 origin remote 的一次性目标仓�
 6. **提 correction seam（§2.3）是【改既有生产代码】，开工前需人另拿一次具名授权。**
 7. **A′ §4.1 的「fix agent 是唯一的桥」已被 `orca correct --close` 偏离**（§1.4）⇒ **欠 A′ 一条具名 ERRATUM**，本刀不代劳，登记。
 8. **E2 尚未实施** —— 本文建在它的 `compute.ts`、输出形状与闸门上。若实施推翻，**追加具名 ERRATUM，不就地改**。
+
+***ERRATUM (2026-09-16, run orca-dev-5e5985bc)***：第 4 项的「没有留存策略」已由 `docs/superpowers/specs/2026-09-16-reviews-compaction-design.md` 关掉；「多进程下有重复行」仍会发生，但现在有判据与清理手段。原文逐字保留。
 
 ---
 
