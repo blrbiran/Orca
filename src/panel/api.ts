@@ -111,6 +111,14 @@ function objectBody(req: Request, res: Response): Record<string, unknown> | unde
  * http-errors carrying a string `type` and a 4xx `status`. They are the
  * client's mistake, so they answer 400 by name rather than falling through to
  * the 500 arm.
+ *
+ * *** ERRATUM (final review Minor N-3) *** "answer 400" was the whole of it,
+ * and that flattened the parser's own 413 and 415 into 400: a client that sent
+ * 70kb was told its request was malformed, while only the message said
+ * otherwise. The parser has already decided the status -- the arm below now
+ * passes that decision through. The `code` stays `panel-bad-request` for all
+ * of them, because what the client does about it does not differ by status and
+ * nothing reads a code we would have invented.
  */
 function isBodyParserError(err: unknown): err is { message: string; status: number; type: string } {
   if (typeof err !== "object" || err === null) return false;
@@ -393,7 +401,9 @@ export function buildApi(app: Express, deps: ApiDeps): void {
       return;
     }
     if (isBodyParserError(err)) {
-      res.status(400).json({ code: PANEL_BAD_REQUEST, message: `the request body could not be read: ${err.message}` });
+      res
+        .status(err.status)
+        .json({ code: PANEL_BAD_REQUEST, message: `the request body could not be read: ${err.message}` });
       return;
     }
     res.status(500).json({ code: "panel-internal-error", message: err instanceof Error ? err.message : String(err) });

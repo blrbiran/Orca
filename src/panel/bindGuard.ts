@@ -47,10 +47,26 @@ const LOOPBACK_HOSTNAMES = new Set(["127.0.0.1", "localhost", "::1"]);
  * `localhost:7777` -> `localhost`. Anything else that is not one of those two
  * shapes (an unbracketed IPv6 literal, an empty header) yields undefined and is
  * refused -- a guard that guesses at a malformed header is not a guard.
+ *
+ * *** ERRATUM (final review Minor N-4) *** The bracketed branch used to accept
+ * any content between the brackets, which made the sentence above false of its
+ * own code: `[localhost]` parsed to the allowed name `localhost`. Brackets
+ * enclose an IP-literal (RFC 3986 section 3.2.2), and the only IP literals
+ * that need them contain a colon -- so a bracketed host without one is a
+ * malformed header, not another spelling of a name this panel answers to.
+ *
+ * Measured, not argued: a stricter hex-digits-colons-and-dots character class
+ * was written first and then deleted, because a mutation replacing it with
+ * `[^\]]+` reddened nothing. What this function returns is only ever matched
+ * exactly against the loopback names and the bind address, so the colon is the
+ * whole of the fix and the character class was a guard no mutation could pin.
  */
 function hostnameOf(host: string): string | undefined {
   const bracketed = /^\[([^\]]+)\](?::\d+)?$/.exec(host);
-  if (bracketed) return bracketed[1]!.toLowerCase();
+  if (bracketed) {
+    const literal = bracketed[1]!;
+    return literal.includes(":") ? literal.toLowerCase() : undefined;
+  }
   const plain = /^([^:[\]]+)(?::\d+)?$/.exec(host);
   return plain ? plain[1]!.toLowerCase() : undefined;
 }

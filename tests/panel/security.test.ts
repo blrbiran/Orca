@@ -163,6 +163,25 @@ describe("panel security (spec sections 3.1 and 3.2)", () => {
     expect(isHostAllowed("127.0.0.1", "")).toBe(false);
   });
 
+  // Final review Minor N-4. hostnameOf's own comment says a guard that guesses
+  // at a malformed header is not a guard, and then the bracketed branch
+  // accepted ANY content between the brackets: `[localhost]` parsed to the
+  // allowed name `localhost`. Brackets mean an IP-literal (RFC 3986 §3.2.2) and
+  // nothing else, so the content has to look like one or the header is
+  // malformed and refused.
+  it("reads brackets as an IPv6 literal only, so a bracketed name is a malformed Host and not an allowed one", () => {
+    expect(isHostAllowed("127.0.0.1", "[localhost]:1")).toBe(false);
+    expect(isHostAllowed("127.0.0.1", "[localhost]")).toBe(false);
+    // A bracketed IPv4 is the same malformation wearing the other shape: the
+    // name inside is allowed, the spelling is not.
+    expect(isHostAllowed("127.0.0.1", "[127.0.0.1]")).toBe(false);
+    // Positive controls, or a branch that refuses EVERY bracketed host passes
+    // the three above and no browser on IPv6 loopback can reach the panel.
+    expect(isHostAllowed("127.0.0.1", "[::1]")).toBe(true);
+    expect(isHostAllowed("127.0.0.1", "[::1]:7777")).toBe(true);
+    expect(isHostAllowed("::ffff:127.0.0.1", "[::FFFF:127.0.0.1]:7777")).toBe(true);
+  });
+
   it("mints a token that is not guessable and compares it in constant time", () => {
     const a = mintToken();
     const b = mintToken();

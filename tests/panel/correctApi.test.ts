@@ -60,6 +60,7 @@ function rawPost(
   path: string,
   body: string,
   contentType: string | undefined,
+  extraHeaders: Record<string, string> = {},
 ): Promise<{ status: number; body: string }> {
   const u = new URL(started.url);
   const headers: Record<string, string> = {
@@ -67,6 +68,7 @@ function rawPost(
     "content-length": String(Buffer.byteLength(body)),
   };
   if (contentType !== undefined) headers["content-type"] = contentType;
+  Object.assign(headers, extraHeaders);
   return new Promise((resolve, reject) => {
     const req = httpRequest({ hostname: u.hostname, port: u.port, path, method: "POST", headers }, (res) => {
       let text = "";
@@ -627,6 +629,44 @@ describe("the panel's error mapping for client mistakes (final review I-2)", () 
     await withPanel(async (started, dir) => {
       for (const path of bothPosts) {
         await expectBadRequest(await rawPost(started, path, `[${wellFormed}]`, "application/json"));
+      }
+      expect(await readCorrections(dir)).toHaveLength(0);
+      expect(await readReviews(dir)).toHaveLength(0);
+    });
+  });
+
+  // Final review Minor N-3. The body-parser arm named the cause in the message
+  // and then flattened every one of the parser's 4xx statuses to 400, so a
+  // client that sent too much, or an encoding nobody can read, was told it had
+  // sent a malformed request. The parser already determined the status; the
+  // two criteria below pin that it reaches the client.
+  it("answers a body over the parser's 64kb limit with 413, not a flat 400", async () => {
+    await withPanel(async (started, dir) => {
+      // 70,000 bytes inside one JSON string: valid JSON, over the limit, so
+      // the parser refuses on size and not on syntax.
+      const tooLarge = JSON.stringify({ because: "x".repeat(70_000) });
+      for (const path of bothPosts) {
+        const res = await rawPost(started, path, tooLarge, "application/json");
+        expect(res.status).toBe(413);
+        const parsed = JSON.parse(res.body) as { code: string; message: string };
+        expect(parsed.code).toBe(PANEL_BAD_REQUEST);
+        expect(parsed.message.length).toBeGreaterThan(0);
+      }
+      expect(await readCorrections(dir)).toHaveLength(0);
+      expect(await readReviews(dir)).toHaveLength(0);
+    });
+  });
+
+  it("answers a content-encoding nothing can decode with 415, not a flat 400", async () => {
+    await withPanel(async (started, dir) => {
+      for (const path of bothPosts) {
+        const res = await rawPost(started, path, wellFormed, "application/json", {
+          "content-encoding": "x-nonesuch",
+        });
+        expect(res.status).toBe(415);
+        const parsed = JSON.parse(res.body) as { code: string; message: string };
+        expect(parsed.code).toBe(PANEL_BAD_REQUEST);
+        expect(parsed.message.length).toBeGreaterThan(0);
       }
       expect(await readCorrections(dir)).toHaveLength(0);
       expect(await readReviews(dir)).toHaveLength(0);
