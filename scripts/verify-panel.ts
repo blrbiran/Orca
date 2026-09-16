@@ -441,7 +441,14 @@ interface ExitedChild {
 }
 
 /** Step 11's second process: expected to refuse and exit BY ITSELF. A hang means the guard is gone. */
-function runToExit(args: string[], env: NodeJS.ProcessEnv, deadlineMs: number): Promise<ExitedChild> {
+// Step 13 also uses this function, with its own label and hang sentence.
+function runToExit(
+  args: string[],
+  env: NodeJS.ProcessEnv,
+  deadlineMs: number,
+  label = "orca panel",
+  hangMeans = " A hang here means the bind guard let the server actually start.",
+): Promise<ExitedChild> {
   const child = spawnOrcaCli(args, env);
   let stdout = "";
   let stderr = "";
@@ -456,8 +463,8 @@ function runToExit(args: string[], env: NodeJS.ProcessEnv, deadlineMs: number): 
       killGroup(child);
       reject(
         new Error(
-          `orca panel (pid ${child.pid}) did not exit by itself within ${deadlineMs}ms; the whole process ` +
-            `group was killed. A hang here means the bind guard let the server actually start. stderr: ${stderr}`,
+          `${label} (pid ${child.pid}) did not exit by itself within ${deadlineMs}ms; the whole process ` +
+            `group was killed.${hangMeans} stderr: ${stderr}`,
         ),
       );
     }, deadlineMs);
@@ -814,6 +821,87 @@ async function main(): Promise<number> {
       fail(12, "~/.orca is unchanged by the whole run", homeBefore, homeAfter);
     }
     pass(12, `panel closed; ~/.orca is unchanged (${homeBefore.exists ? "present" : "absent"} before and after)`);
+
+    // Step 13 (reviews compaction spec 2026-09-16, section 6.2). Not one of E3
+    // spec section 7's twelve: it runs after them, on its OWN store directory
+    // and its OWN panel process, because step 8 left an unresolvable
+    // correction in the first store that makes every collect() refuse.
+    // A running panel remembers a `reviewed` row; compaction moves it out while
+    // the decision is archived; the decision comes back; agreeing again must
+    // WRITE, not answer `duplicate` from memory.
+    const storeDir13 = await mkdtemp(join(tmpdir(), "orca-panel-verify-store-"));
+    cleanups.push({
+      what: "remove step 13's throwaway ORCA_CORRECTIONS_DIR",
+      run: () => guardedRmRecursive(storeDir13, "orca-panel-verify-store-"),
+    });
+    const env13: NodeJS.ProcessEnv = { ...process.env, ORCA_CORRECTIONS_DIR: storeDir13 };
+    const {
+      child: panel13,
+      ready: ready13,
+      exited: panel13Exited,
+    } = spawnPanelAndAwaitReady(panelArgs, env13, 10_000);
+    cleanups.push({
+      what: "kill step 13's panel child's process group and confirm it exited",
+      run: () => {
+        killGroup(panel13);
+        return withTimeout(
+          panel13Exited,
+          5_000,
+          `step 13 panel child (pid ${panel13.pid}) did not confirm exit within 5000ms after SIGKILL`,
+        ).then(() => undefined);
+      },
+    });
+    const ready13Line = await must(13, "the step 13 panel prints its ready line", "orca-panel ready url=... token=...", ready13);
+    const reviewedRows13 = async (decisionId: string): Promise<number> =>
+      (await readReviews(storeDir13)).filter(
+        (r) => r.projectKey === projectKey && r.decisionId === decisionId && r.action === "reviewed",
+      ).length;
+
+    const agree13 = await apiPost(ready13Line.url, "/api/reviews", { projectKey, decisionId: B }, ready13Line.token);
+    if (agree13.status !== 200) fail(13, "the first agree succeeds", 200, agree13.status);
+    if ((await reviewedRows13(B)) !== 1) fail(13, "the first agree records one 'reviewed' row", 1, await reviewedRows13(B));
+
+    const ledgerName = "verify-panel-1.jsonl";
+    const archivedRel = join(".decisions", "archive", "2020", ledgerName);
+    await mkdir(join(fixture.repoPath, ".decisions", "archive", "2020"), { recursive: true });
+    await git(fixture.repoPath, ["mv", join(".decisions", ledgerName), archivedRel]);
+    const compaction = await must(
+      13,
+      "orca compact-reviews --apply exits by itself",
+      "exit within 20000ms",
+      runToExit(
+        ["compact-reviews", "--apply", "--repo", `${fixture.repoKey}=${fixture.repoPath}`],
+        env13,
+        20_000,
+        "orca compact-reviews",
+        " A hang here means compaction never released the reviews lock or never finished.",
+      ),
+    );
+    if (compaction.code !== 0) fail(13, "orca compact-reviews --apply exits 0", 0, `${compaction.code}: ${compaction.stderr}`);
+    if ((await reviewedRows13(B)) !== 0) {
+      fail(13, "compaction moved the archived decision's 'reviewed' row out of reviews.jsonl", 0, await reviewedRows13(B));
+    }
+    await git(fixture.repoPath, ["mv", archivedRel, join(".decisions", ledgerName)]);
+
+    const againRes = await apiPost(ready13Line.url, "/api/reviews", { projectKey, decisionId: B }, ready13Line.token);
+    if (againRes.status !== 200) fail(13, "agreeing again succeeds", 200, againRes.status);
+    const againBody = (await againRes.json()) as { result?: unknown };
+    if (againBody.result !== "written") {
+      fail(13, "the running panel writes the review again instead of answering duplicate from memory", "written", againBody.result);
+    }
+    if ((await reviewedRows13(B)) !== 1) fail(13, "exactly one 'reviewed' row is back on disk", 1, await reviewedRows13(B));
+    const todo13 = (await (await apiGet(ready13Line.url, "/api/todo", ready13Line.token)).json()) as {
+      rows: Array<{ id: string }>;
+    };
+    if (todo13.rows.some((r) => r.id === B)) fail(13, "the re-reviewed decision is off the to-do list", false, true);
+
+    killGroup(panel13);
+    await panel13Exited;
+    const homeAfter13 = await snapshotHomeOrca();
+    if (JSON.stringify(homeAfter13) !== JSON.stringify(homeBefore)) {
+      fail(13, "~/.orca is unchanged by step 13 as well", homeBefore, homeAfter13);
+    }
+    pass(13, "a running panel writes a review again after compaction moved it out, and ~/.orca is still unchanged");
   } catch (err) {
     if (err instanceof StepFailure) {
       console.error(`FAIL ${err.step} ${err.what}: ${JSON.stringify(err.expected)} vs ${JSON.stringify(err.got)}`);
