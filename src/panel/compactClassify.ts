@@ -1,4 +1,3 @@
-// src/panel/compactClassify.ts -- STUB for the red run; Step 3 replaces the function body.
 export type NotJudgedReason = "repo-not-discovered" | "ledger-has-malformed-lines" | "decision-not-found";
 export type LedgerView =
   | { judged: true; topLevelIds: ReadonlySet<string>; archivedIds: ReadonlySet<string> }
