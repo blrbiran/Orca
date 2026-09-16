@@ -94,9 +94,29 @@ export async function buildLedgerViews(
 
 /**
  * The decisions an unlocked read of reviews.jsonl names. A row appended after
- * this read is not in `wanted`, so its archive file is never read and it can
- * only come out "decision-not-found" or "kept" -- never a false orphan.
+ * this read is not in `wanted`, so its own archive file is never read: it can
+ * come out "decision-not-found", "kept" or "duplicate", and becomes an orphan
+ * only if its run file was already read for another row that names the same
+ * run -- it is never a FALSE orphan, because an orphan still needs its
+ * decision id found in an archive file. Rows that are not a non-null object
+ * with string `projectKey` and `decisionId` fields are dropped here: they are
+ * spec section 3.1's "unreadable" rows, kept verbatim by the classifier, not
+ * fed into the archive lookup.
  */
 export async function wantedDecisions(dir: string): Promise<WantedDecision[]> {
-  return (await readReviews(dir)).map((row) => ({ projectKey: row.projectKey, decisionId: row.decisionId }));
+  const wanted: WantedDecision[] = [];
+  for (const row of await readReviews(dir)) {
+    const value = row as unknown;
+    if (
+      typeof value !== "object" ||
+      value === null ||
+      typeof (value as { projectKey?: unknown }).projectKey !== "string" ||
+      typeof (value as { decisionId?: unknown }).decisionId !== "string"
+    ) {
+      continue;
+    }
+    const { projectKey, decisionId } = value as WantedDecision;
+    wanted.push({ projectKey, decisionId });
+  }
+  return wanted;
 }

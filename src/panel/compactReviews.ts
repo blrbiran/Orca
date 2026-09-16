@@ -1,5 +1,5 @@
 // src/panel/compactReviews.ts
-import { chmod, open, readFile, rename, stat, writeFile } from "node:fs/promises";
+import { chmod, lstat, open, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { classifyReviews } from "./compactClassify.js";
 import type { Classification, LedgerView, LineKind } from "./compactClassify.js";
 import {
@@ -10,6 +10,9 @@ import {
   reviewsFile,
 } from "./paths.js";
 import { acquireReviewsLock } from "./reviewsLock.js";
+import { PanelRejection } from "./rejection.js";
+
+export const REVIEWS_STORE_IS_SYMLINK = "reviews-store-is-symlink";
 
 export interface CompactHooks {
   /** Test seam (spec C14): after the caller's unlocked work, before the lock is taken. */
@@ -95,6 +98,13 @@ export async function applyCompaction(
     if (classification.counts.duplicate === 0 && classification.counts.orphan === 0) {
       return { classification, wrote: false };
     }
+    if ((await lstat(live)).isSymbolicLink()) {
+      throw new PanelRejection(
+        REVIEWS_STORE_IS_SYMLINK,
+        `${live} is a symbolic link. Compaction replaces the file by rename and would turn the link into a regular file; point ORCA_CORRECTIONS_DIR at the real directory instead.`,
+        1,
+      );
+    }
     const liveMode = (await stat(live)).mode & 0o777;
 
     const backup = reviewsBackupFile(dir);
@@ -131,6 +141,18 @@ const KIND_ORDER: readonly LineKind[] = ["kept", "duplicate", "orphan", "unreada
 export function renderCompactionReport(classification: Classification, mode: CompactMode, file: string): string {
   const out = [`orca compact-reviews: ${file}`];
   for (const kind of KIND_ORDER) out.push(`  ${kind.padEnd(11)} ${classification.counts[kind]}`);
+
+  // Derived by parsing the orphan line's own text, not the LineClass type: the
+  // classifier only calls a line an orphan after it parsed with string
+  // projectKey/decisionId fields, so this is always readable.
+  const orphans: string[] = [];
+  for (const { text, cls } of classification.lines) {
+    if (cls.kind !== "orphan") continue;
+    const row = JSON.parse(text) as { projectKey: string; decisionId: string };
+    const label = `  ${row.projectKey} ${row.decisionId}`;
+    if (!orphans.includes(label)) orphans.push(label);
+  }
+  if (orphans.length > 0) out.push("orphans:", ...orphans);
 
   const labels: string[] = [];
   for (const { cls } of classification.lines) {

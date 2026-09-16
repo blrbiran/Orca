@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { chmod, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdtemp, readdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -150,6 +150,17 @@ describe("applying and dry-running compaction (reviews compaction spec section 4
     await chmod(reviewsBackupFile(dir), 0o640);
     await applyCompaction(dir, VIEWS);
     expect((await stat(reviewsBackupFile(dir))).mode & 0o777).toBe(0o640);
+  });
+
+  it("C11b refuses by name to replace a symlinked reviews.jsonl, and leaves the link and its target alone", async () => {
+    const target = join(dir, "real-reviews.jsonl");
+    await writeFile(target, FIXTURE);
+    await symlink(target, reviewsFile(dir));
+    await expect(applyCompaction(dir, VIEWS)).rejects.toMatchObject({ code: "reviews-store-is-symlink", exitCode: 1 });
+    expect((await lstat(reviewsFile(dir))).isSymbolicLink()).toBe(true);
+    expect(await readFile(target, "utf8")).toBe(FIXTURE);
+    await expect(stat(reviewsBackupFile(dir))).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(stat(reviewsLockDir(dir))).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("C12 refuses by name while the lock is held and touches nothing", async () => {

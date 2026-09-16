@@ -73,6 +73,16 @@ describe("orca compact-reviews (reviews compaction spec section 3)", () => {
     });
   });
 
+  it("treats a null line and a row with a non-string decisionId as unreadable instead of crashing", async () => {
+    await inStore(async (store) => {
+      const odd = `null\n${JSON.stringify({ decisionId: 7, projectKey: PK, action: "reviewed", by: "amy", at: "2026-09-10T00:00:00.000Z" })}\n`;
+      await writeFile(reviewsFile(store), odd + STORE);
+      const run = await captureStreams(() => main(["compact-reviews", "--repo", `${PK}=${repoPath}`]));
+      expect(run.result).toBe(0);
+      expect(run.stdout).toContain("  unreadable  2");
+    });
+  });
+
   it("without --apply prints the report and leaves the store byte for byte as it was", async () => {
     await inStore(async (store) => {
       await writeFile(reviewsFile(store), STORE);
@@ -87,6 +97,8 @@ describe("orca compact-reviews (reviews compaction spec section 3)", () => {
           "  orphan      1",
           "  unreadable  0",
           "  not-judged  1",
+          "orphans:",
+          `  ${PK} orca-dev-8/1`,
           "not judged:",
           `  decision-not-found ${PK} orca-dev-7/1`,
           "dry run; nothing was written. Pass --apply to write.",

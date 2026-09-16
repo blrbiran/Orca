@@ -280,4 +280,26 @@ describe("the reviews writer after reviews.jsonl is replaced (reviews compaction
     expect(await writer.append(reviewed())).toBe("written");
     expect(await readReviews(dir)).toHaveLength(1);
   });
+
+  it("C19c a claim whose write failed does not come back on a later reload", async () => {
+    let identity = "before";
+    const writer = new ReviewsWriter(dir, async () => identity);
+    await writer.load();
+    // The write fails: the person sees a 409 while compaction holds the lock.
+    const held = await acquireReviewsLock(dir);
+    try {
+      await expect(writer.append(reviewed())).rejects.toMatchObject({ code: "reviews-store-busy" });
+    } finally {
+      await held.release();
+    }
+    const other = reviewed({ decisionId: "orca-dev-1/2" });
+    expect(await writer.append(other)).toBe("written");
+    // The file is replaced (compaction's rename); a duplicate hit on another
+    // key forces the reload that would merge a leaked claim back in.
+    identity = "after";
+    expect(await writer.append(other)).toBe("duplicate");
+    // The retry of the failed click must write.
+    expect(await writer.append(reviewed())).toBe("written");
+    expect((await readReviews(dir)).filter((r) => r.decisionId === "orca-dev-1/1")).toHaveLength(1);
+  });
 });
