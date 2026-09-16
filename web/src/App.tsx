@@ -17,7 +17,7 @@
  * `ErrorPage` with the server's code and message. `Refusal` and `ErrorPage`
  * are pure and carry the criteria (web/tests/outcome.test.tsx).
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { JSX } from "react";
 import {
   correctionBody,
@@ -34,6 +34,7 @@ import type { Decision } from "./DecisionDetail.js";
 import { ErrorPage } from "./ErrorPage.js";
 import { PanelHome } from "./PanelHome.js";
 import { Refusal } from "./Refusal.js";
+import { acceptArrival } from "./selection.js";
 import type { DecisionListRow, MetricsReport, PanelCoverage } from "./types.js";
 
 interface HomeState {
@@ -51,6 +52,8 @@ export function App(): JSX.Element {
   const [decision, setDecision] = useState<Decision | null>(null);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [lastCorrection, setLastCorrection] = useState<RecordCorrectionInput | null>(null);
+  /** The row whose answer may still be applied; read by `acceptArrival` when one arrives. */
+  const wanted = useRef<DecisionListRow | null>(null);
 
   const loadHome = async (): Promise<void> => {
     try {
@@ -65,18 +68,26 @@ export function App(): JSX.Element {
     void loadHome();
   }, []);
 
+  /**
+   * Parked finding N-1 / ruling R71. Opening another row takes the previous
+   * decision off the screen FIRST, so the buttons and the text under them can
+   * never mean two different decisions; and an answer is only applied when it
+   * is still the one being waited for, so a slow answer that arrives after the
+   * person moved on is dropped instead of repainting the page behind them.
+   */
   useEffect(() => {
     setOutcome(null);
     setLastCorrection(null);
-    if (selected === null) {
-      setDecision(null);
-      return;
-    }
+    setDecision(null);
+    wanted.current = selected;
+    if (selected === null) return;
     void (async () => {
       try {
         const body = await fetchDecision(selected.projectKey, selected.id);
+        if (!acceptArrival(wanted.current, selected)) return;
         setDecision(body.decision as Decision);
       } catch (err) {
+        if (!acceptArrival(wanted.current, selected)) return;
         setError(failureFrom(err));
       }
     })();
