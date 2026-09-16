@@ -5,6 +5,7 @@
 > *** **`reviews.jsonl` 没有留存策略**，以及**多进程重复行没有判据**。 ***
 > ⚠️ E3 spec 是已发布文本 ⇒ **不就地改它**；实施时在它 §4.3.2 末尾**追加一条具名 ERRATUM 指向本文**（计划里的一步）。
 > ⚠️ 若实施推翻本文前提，**追加具名 ERRATUM，不就地改**。
+> 📝 **同会话评审后就地修订一次**（F1–F9，§2 的 R-E／R-F／R-G）：本文当时未发布（`ls-remote` ＋ `merge-base --is-ancestor` 现测），原稿见 `git log -- <本文>`。
 
 ---
 
@@ -64,6 +65,16 @@
 - corrections store 里有 `--root`／`--repo` 解析不到的 projectKey ⇒ `unresolved-project-keys`。
 ⇒ 压实复用 `collect()` 发现仓库，**这两种拒绝原样透传、一个字节不写**。这是保守方向，接受。
 
+### 1.8 「顶层找不到」不等于「已归档」
+A′ §3.7.1 第 1、2 条：台账文件**永不删除**，离开顶层的**唯一合法途径**是整体 `git mv` 进 `.decisions/archive/<YYYY>/`。
+但「顶层找不到某个 id」还有别的成因，而且都是日常动作：目标仓库**切到了别的分支**、那次运行的台账**还在没合并的分支上**、**rebase 进行中**。
+⇒ *** **只有「在归档里找到」才是这条决策离开了的正向证据；「不在顶层」只是没有证据。** ***（§3.1 的孤儿判定据此收紧，R-E。）
+
+归档文件名的现测（观测于 `a0928fe`）：Orca 自己台账里 **156** 条 `ev: "decision"` 行，`id` 按最后一个 `/` 切出的前缀**全部等于**所在文件名（去掉 `.jsonl`），**0 例不等**。
+测量命令：逐行 `json.loads`，取 `ev == "decision"` 的 `id.rsplit('/', 1)[0]` 与文件名比对。
+⇒ 归档查找走 `archive/<YYYY>/<run-id>.jsonl`，与 `src/metrics/resolve.ts` 按文件名 stat 的做法同形（`fsArchiveIo`，只下一层）。
+**不守这个命名的文件**只会让查找落空 ⇒ 判「不判」，**是安全方向**。
+
 ---
 
 ## 2. 人 2026-09-16 拍的（AskUserQuestion ＋ 逐段确认）
@@ -74,7 +85,10 @@
 | **R-B** | 孤儿 ＝ **移走不删**；**仓库不在场就不动** |
 | **R-C** | 安全网 ＝ **默认只试跑 ＋ `--apply` ＋ 一份滚动备份**（每次 apply 覆盖上一份） |
 | **R-D** | §5 那个洞（面板内存去重集记着已被移走的键）**现在修**，不是登记 |
-| — | §3、§4、§6 三段设计逐段确认 |
+| — | 设计讨论四段逐段确认（行分类／写入顺序与 Rule 17 登记／面板修复／判据与变异），分别落在本文 §3、§4 与 §7、§5、§6 |
+| **R-E** | （评审 F1，人：照建议改）孤儿要**正向证据**：顶层找不到**且**归档里找得到；两处都找不到 ⇒ 不判（`decision-not-found`）；**不加放宽参数** |
+| **R-F** | （评审 F4，人：照建议改）birthtime 的平台差异**如实登记，不改设计**（§5.3） |
+| **R-G** | （评审 F2／F3，人：照建议改）C14 的插入点挪到「拿锁之前」；归档追加前补换行（§4.1 第 4 步） |
 
 ---
 
@@ -94,9 +108,9 @@ orca compact-reviews [--apply] [--root <dir>] [--repo <projectKey>=<path>]...
 | 类 | 条件 | 处置 |
 |---|---|---|
 | **读不出** | 这一行 `JSON.parse` 失败，或解析出来不是带四个字符串键字段的对象 | **原样留在原位**（不删、不移、不参与去重） |
-| **不判** | 它的 projectKey 不在 `collect().repos` 里；**或**该仓库顶层台账有任何 `malformed` 行（含 `torn`） | **原样保留，连去重都不做**（R-B「仓库不在就不动」）；报告写明 projectKey 与原因 |
+| **不判** | 它的 projectKey 不在 `collect().repos` 里；**或**该仓库**顶层**台账有任何 `malformed` 行（含 `torn`）；**或**它的 `decisionId` 在顶层与归档里**都找不到**（R-E） | **原样保留，连去重都不做**（R-B「仓库不在就不动」）；报告写明原因 |
 | **重复** | 不属于「不判」，且键 `(projectKey, decisionId, by, action)` 在**前面某个非「不判」行**上已出现过 | 丢掉；**第一次出现的那行照留** ⇒ 最早的 `at` 不丢 |
-| **孤儿** | 仓库在场、台账零坏行，且顶层**任何** `ev: "decision"` 行（**不论校验器判 ok／downgraded／rejected**）的 `id` 都不等于 `decisionId` | 原样追加进 `reviews-archive.jsonl` |
+| **孤儿** | 仓库在场、顶层台账零坏行，顶层**任何** `ev: "decision"` 行（**不论校验器判 ok／downgraded／rejected**）的 `id` 都不等于 `decisionId`，**且** `archive/<YYYY>/<run-id>.jsonl`（任一年份）里有一条 `ev: "decision"` 行的 `id` 等于它（R-E，§1.8） | 原样追加进 `reviews-archive.jsonl` |
 | **保留** | 其余 | 留下，**顺序不变** |
 
 ⚠️ **「读不出」与 `readReviews` 的处理方向相反，有意为之**：`readReviews` 读来只为重建去重集，丢一行代价是一行重复；
@@ -107,10 +121,16 @@ orca compact-reviews [--apply] [--root <dir>] [--repo <projectKey>=<path>]...
 校验器再放宽时，它回来了、审阅记录却不在活文件里。
 ⇒ **孤儿判定按原始 `ev: "decision"` 行的 `id` 判**（`readLedgerLeniently` 的 `kind: "decision"`，与 `decisionSource.ts` 同口径）。
 
+⚠️ **为什么孤儿要归档里的正向证据**（R-E）：见 §1.8。按「顶层找不到」判，人切一次分支再压实，
+那些决策的审阅记录就被移走，切回来后它们**回到待办**。判错的两个方向代价不对称：
+把真孤儿留着 ⇒ 多几个字节、零数字影响（§1.2）；把活记录移走 ⇒ 系统替人撤销了一次审阅。
+⚠️ **坏行规则只看顶层、不看归档**：顶层坏行可能**藏住**一个 id ⇒ 误判孤儿（危险方向）⇒ 整仓不判；
+归档坏行只可能**藏住正向证据** ⇒ 误判「找不到」⇒ 不判（安全方向）⇒ 不需要规则。
+
 ⚠️ **判「去重」时孤儿也参与**：两行同键且都是孤儿 ⇒ 第一行进归档，第二行按重复丢掉。
 
 ### 3.2 报告（stdout，两个模式都打印）
-逐类行数；不判的 projectKey 与原因（`repo-not-discovered` ／ `ledger-has-malformed-lines`）；
+逐类行数；不判的原因分组（`repo-not-discovered` ／ `ledger-has-malformed-lines` 按 projectKey；`decision-not-found` 按 `(projectKey, decisionId)`）；
 `--apply` 写入后末行固定为 `written; a running orca panel picks this up on its next duplicate check, no restart needed`。
 ⚠️ 这句只在 §5 落地后为真 ⇒ **§5 与本命令在同一轮落地**；若计划把 §5 拆出去，这句**必须**改成要求重启。
 （设计讨论第二段曾写「末行提示重启面板」—— 那是 R-D 之前的写法，已被 R-D 取代。）
@@ -120,8 +140,7 @@ orca compact-reviews [--apply] [--root <dir>] [--repo <projectKey>=<path>]...
 | 码 | 何时 |
 |---|---|
 | 0 | 试跑完成；或 apply 完成（含「无事可做」） |
-| 1 | 参数错（`--repo` 不是 `key=path`、未知参数） |
-| `collect()` 的拒绝码 | §1.7 两种，原样透传，`rejected: <code>: <message>` |
+| 1 | 参数错（`--repo` 不是 `key=path`、未知参数）；**或** `collect()` 的拒绝（§1.7 两种） —— `MetricsRejection` 的退出码恒为 1（`src/metrics/rejection.ts`），**两者靠 stderr 的 `rejected: <code>: …` 区分**，不靠退出码 |
 | 5 | `reviews-store-busy`（拿不到 reviews 锁），与面板同一个拒绝名 |
 
 ---
@@ -135,7 +154,8 @@ orca compact-reviews [--apply] [--root <dir>] [--repo <projectKey>=<path>]...
 1. 读 `reviews.jsonl` 并分类。🔴 **必须在锁内读** —— 否则「读完 → 拿锁」之间面板追加的行会被第 5 步的 rename 覆盖掉。
 2. 若「重复」与「孤儿」都是 0 ⇒ **释放锁返回，一个字节不写**（不生成 `pre-compact`）。
 3. 原文件逐字节写进 `reviews.jsonl.pre-compact`（滚动备份）。
-4. 孤儿行追加进 `reviews-archive.jsonl`：**先读归档，已有逐字节相同的行就跳过**（幂等）。
+4. 孤儿行追加进 `reviews-archive.jsonl`：**先读归档，已有逐字节相同的行就跳过**（幂等）；
+   🔴 **归档非空且最后一个字节不是 `\n` ⇒ 先补一个 `\n` 再追加**（R-G）—— 否则上次崩溃留下的半行会把这次第一条孤儿粘成一行解析不了的垃圾，而它在归档外的唯一拷贝 `pre-compact` 下次 apply 就被覆盖。
 5. 保留行写进 `reviews.jsonl.compact-tmp`（锁内打开并截断）→ fsync → **chmod 成原文件 `stat` 出的权限位** → rename 覆盖 `reviews.jsonl`。
 
 ### 4.2 为什么是这个顺序：宁可多一行，不可丢一行
@@ -167,7 +187,7 @@ rename 让 `reviews.jsonl` 换一个新 inode ⇒ 若照常新建，就是**替�
 
 ### 5.1 洞
 `ReviewsWriter` 的去重集**默认启动时读到的那个文件永远是同一个文件**。压实之后不再成立：
-面板启动时读到了 X 的 `reviewed` → 压实把 X 判成孤儿移走（X 的台账文件当时不在顶层）→
+面板启动时读到了 X 的 `reviewed` → X 的台账文件被归档进 `archive/<YYYY>/` → 压实把 X 判成孤儿移走 →
 人用 `undo.how` 把 X `git mv` 回顶层 → **同一个面板进程**里人点「同意」→ 内存命中 ⇒ 答 `duplicate`、**一行不写** →
 活文件里没有 X 的 `reviewed` ⇒ **X 永远留在待办上**，直到面板重启。
 *** **这正是 E3 §4.3.1 禁止的「人以为审过了，台账没听说」，而且连一个非 2xx 都没有。** ***
@@ -185,7 +205,13 @@ rename 让 `reviews.jsonl` 换一个新 inode ⇒ 若照常新建，就是**替�
 
 ### 5.3 为什么身份里要有 `birthtimeMs`
 ext4 会**重用 inode**：连压两次，第二次的 `compact-tmp` 可能拿到面板启动时那个文件的 ino ⇒ 只比 ino 会误判「没变」。
-APFS 的 ino 单调递增，本机复现不了。平台不支持 birthtime 时它是 0 ⇒ 退化成只比 `dev:ino`（§8 登记）。
+APFS 的 ino 单调递增，本机复现不了。
+
+⚠️ **不支持 birthtime 的文件系统上，Node 的 `birthtimeMs` 可能是 ctime，也可能是 0**（出自 Node 文档的说法，**本机未核**：本地 `@types/node` 没写这一句，也没有 Linux 可量）。两种后果不同（R-F：如实登记，不改设计）：
+- **是 0** ⇒ 退化成只比 `dev:ino` ⇒ ext4 上连压两次**可能漏检**（§5.1 的洞在这种平台上仍可能复现）。
+- **是 ctime** ⇒ 每次追加都改 ctime ⇒ 每次「内存判重复」都判「身份变了」 ⇒ **每次都整份重读** —— 算得对，**写路径上变慢**；
+  上界按 §1.3：10 万行一次约 61 ms。`opened` 在响应发出之后才写，**不拖读**；`reviewed` 是人一次点击。
+不改设计的理由：换一种身份（例如压实时写一个代数标记文件）是**又一处仓库外写入**、要再登记一遍 Rule 17；为一个没在 Linux 上量过一次的后果付这个代价不值。
 
 ### 5.4 可注入的 seam
 `ReviewsWriter` 构造参数加一个可选的 `identityOf(path): Promise<string | undefined>`，默认是真 stat。
@@ -215,9 +241,11 @@ APFS 的 ino 单调递增，本机复现不了。平台不支持 birthtime 时�
 |---|---|---|
 | C1 | 重复保留**第一次出现**：断言留下那行的**字节**等于第一行，不只数行数 | — |
 | C2 | 孤儿逐字节进归档，活文件里不再有它 | — |
-| C3 | 仓库不在场 ⇒ 该 projectKey 的行一行不动 | 同一行、仓库在场 ⇒ **必须**判为孤儿 |
-| C4 | 仓库台账有坏行 ⇒ 不判 | 同夹具去掉坏行 ⇒ **必须**判为孤儿 |
-| C4b | 决策行被校验器判 `rejected` ⇒ **不是**孤儿 | 同夹具去掉那行 ⇒ **必须**判为孤儿 |
+| C2b | 归档以半行（无结尾换行）结束 ⇒ apply 后新追加的孤儿**独占一行、逐字节相等、可解析** | 归档以换行结束 ⇒ **不得**多出空行 |
+| C3 | 仓库不在场 ⇒ 该 projectKey 的行一行不动 | 同一行、仓库在场（决策在归档里）⇒ **必须**判为孤儿 |
+| C4 | 仓库**顶层**台账有坏行 ⇒ 不判 | 同夹具去掉坏行（决策在归档里）⇒ **必须**判为孤儿 |
+| C4b | 顶层决策行被校验器判 `rejected` ⇒ 判为**保留**（断言精确类别；只断言「不是孤儿」在 M3b 下照绿 —— 那时它落进 `decision-not-found`，同样不是孤儿） | 同夹具把那个文件移进归档 ⇒ **必须**判为孤儿 |
+| C4c | 决策在顶层与归档里**都找不到** ⇒ 不判（`decision-not-found`），行一字不动 | 同夹具把该 run 文件放进 `archive/<YYYY>/` ⇒ **必须**判为孤儿 |
 | C5 | 读不出的 reviews 行原样留在**原位** | — |
 | C6 | 保留行顺序不变 | — |
 | C7 | 试跑**一个字节不写**：目录清单与每个文件的 sha256 前后相同；且**锁被占时试跑照常退出 0**（它不拿锁） | 同夹具 `--apply` ⇒ 活文件 sha **必须**变 |
@@ -227,7 +255,7 @@ APFS 的 ino 单调递增，本机复现不了。平台不支持 birthtime 时�
 | C11 | mode：活文件原 `0644` 压完仍 `0644`；新建的归档与备份 `0600`；已存在的 `0640` 备份不改 | — |
 | C12 | 锁被占 ⇒ `reviews-store-busy`、退出 5、活文件 sha 不变、不生成备份与归档 | — |
 | C13 | seam 让**归档写入**失败 ⇒ 活文件 sha 不变（崩溃语义 §4.2：没进归档的孤儿不许离开活文件） | — |
-| C14 | seam 在「拿锁之后、读文件之前」插入一次面板追加 ⇒ 这一行压实后仍在活文件里 | — |
+| C14 | seam 在「`collect()` 之后、**拿锁之前**」做一次**真的** `ReviewsWriter.append` ⇒ 这一行压实后仍在活文件里（R-G：原稿写「拿锁之后」—— 那里真的追加只会等满 1 s 报 busy，绕锁的追加模拟的是一个不存在的写入方） | — |
 | C15 | **业务不变量**：夹具仓库全部在场时，压实前后 `computePanelCoverage` 与 `unreviewedHighTier` 逐项深相等 | — |
 | C16 | 重复行不改变覆盖率与待办（关掉 E3 §9 第 4 项的「无判据」） | 换一个 projectKey 的行 ⇒ 结果**必须**变 |
 
@@ -247,9 +275,9 @@ APFS 的 ino 单调递增，本机复现不了。平台不支持 birthtime 时�
 | C21 | `main(["compact-reviews", …])`：参数错退出 1；报告含各类行数；`--apply` 末行是 §3.2 那句 |
 
 **端到端（Rule 4：一条跑出 0／非 0 的命令）**：`scripts/verify-panel.ts` 插入**一个新步骤**，总数从 PASS 0–12 变成 **PASS 0–13**（位置见下方 🔴，关闭面板那一步仍是最后一步）：
-真面板进程在跑 → 对某条决策 X「同意」→ 把 X 所在台账文件移出顶层 → 跑**真的** `orca compact-reviews --apply` 进程 →
-把台账文件移回 → 再「同意」X ⇒ 断言答 `written` 且 X 不在待办上。
-⚠️ 夹具里「移出顶层」会让同一文件里的**其他**决策一起变孤儿；具体选哪条、先后步骤怎么排，由计划按 `verify-panel.ts` 现有的 PASS 5–8 状态现读后定。
+真面板进程在跑 → 对某条决策 X「同意」→ 把 X 所在台账文件 `git mv` 进 `.decisions/archive/<YYYY>/` → 跑**真的** `orca compact-reviews --apply` 进程 →
+`git mv` 移回顶层 → 再「同意」X ⇒ 断言答 `written` 且 X 不在待办上。
+⚠️ 夹具里「移进归档」会让同一文件里的**其他**决策一起变孤儿；具体选哪条、先后步骤怎么排，由计划按 `verify-panel.ts` 现有的 PASS 5–8 状态现读后定。
 🔴 **一个已知的坑（写 spec 时读 `scripts/verify-panel.ts` 第 715–735 行发现，未跑）**：现有 PASS 8 用 `recordCorrection` 往 store 写了一条
 projectKey 为 `verify-panel-unresolvable-project` 的 correction，并断言**下一个请求**答 409 `UNRESOLVED_PROJECT_KEYS`。
 那条行此后一直在 store 里 ⇒ *** **PASS 8 之后，压实进程（`collect()` 整体拒绝，§1.7）和面板自己的 `/api/reviews`（同样经 `collect()`）都会被挡** ***。
@@ -274,7 +302,18 @@ projectKey 为 `verify-panel-unresolvable-project` 的 correction，并断言**�
 | M11 删掉身份核对 | C17 与 verify:panel 的新步骤 |
 | M12 身份只比 `dev:ino` | C18 |
 | M13 删掉单飞 | **先用探针问「能红吗」**；红不了 ⇒ 单飞不落地（同 R74） |
+| M14 去重键去掉 `action` | C15（同一决策的 `opened` 吃掉 `reviewed`） |
+| M15 保留行倒序写出 | C6 |
+| M16 备份写成压实**后**的内容 | C9 |
+| M17 文件不存在时身份记为「与上次一致」 | C20 |
+| M18 孤儿只从活文件删、不写归档 | C2 |
+| M19 忽略 `--apply`（恒试跑） | C21 |
+| M20 拿不到锁时不抛、继续写 | C12 |
+| M21 删掉「补换行」 | C2b |
+| M22 删掉「归档里找得到」条件（回到「顶层找不到即孤儿」） | C4c |
+| M23 `computePanelCoverage` 分子改成按行计数、不装 Set | C16 |
 
+⚠️ **覆盖面**（评审 F5 补齐）：§6.2 每条判据都至少有一条打向它的变异；C19 由 M11 覆盖（身份核对删掉 ⇒ `identityOf` 不再被调用）。
 ⚠️ *** **每条「红在 X 且仅 X」的精确预言写在计划里、实施之后验收。** *** 本表只定「打向哪条判据」。
 依据：2026-09-10 计划阶段写的红数被两席外审现测错了 31%，而判据层的自审在被测代码还不存在时做不了。
 ⚠️ 写预言时三问：X 之前有没有别的断言先炸（防假）；被删那行还有谁在走（防不全）；点名断言里的字面量从哪个字段来。
@@ -297,11 +336,12 @@ verify:panel **PASS 0–13**；web **8/26** 不变。
 |---|---|---|---|
 | `reviews.jsonl` | rename 替换 | **保持原文件权限位** | 无半写：要么旧文件要么新文件 |
 | `reviews.jsonl.pre-compact` | 每次 apply 覆盖 | 新建 `0600`，已存在不改 | 半个备份（此时活文件完好） |
-| `reviews-archive.jsonl` | 只追加、逐行幂等 | 新建 `0600`，已存在不改 | 多一行完全相同的行，或残一个半行 |
+| `reviews-archive.jsonl` | 只追加、逐行幂等、追加前补换行 | 新建 `0600`，已存在不改 | 多一行完全相同的行，或残一个半行（下次追加前补换行，不吞下一行） |
 | `reviews.jsonl.compact-tmp` | 锁内截断重用 | `0600` 后 chmod 为原文件权限位 | 残留文件，下次锁内重用 |
 | `.reviews-lock/` | mkdir／rmdir（finally 释放） | `0700` | 被 kill 后残留；拒绝消息已写「手动删除」 |
 
-⚠️ **归档里的半行**：`reviews-archive.jsonl` 不被任何代码读回做数字，只被第 4 步读来做幂等比对 ⇒ 半行只会让一次比对不命中、多追加一行。
+⚠️ **归档里的半行**：`reviews-archive.jsonl` 不被任何代码读回做数字，只被第 4 步读来做幂等比对。
+原稿此处写「半行只会让一次比对不命中、多追加一行」—— **不全**：不补换行时它会吞掉下一条孤儿（评审 F3）。§4.1 第 4 步的补换行就是为此。
 
 ---
 
@@ -310,7 +350,35 @@ verify:panel **PASS 0–13**；web **8/26** 不变。
 1. **没有「恢复孤儿」的命令**：决策被移回顶层后，它的审阅记录在 `reviews-archive.jsonl` 里，要人手动挪回。
    §5 修好之后，面板不会因此卡住 —— 最坏是这条决策**重新出现在待办上**，人再点一次。
 2. **百万行量级时 apply 持锁可能超过 1 s**，期间面板的 `reviewed` 写答 409（§4.4）。
-3. **birthtime 不被支持的平台上**，身份核对退化为 `dev:ino`，ext4 上连续压实可能漏检（§5.3）。
+3. **birthtime 不被支持的平台上**：它是 0 ⇒ ext4 上连续压实可能漏检；它是 ctime ⇒ 每次重复命中都整份重读（§5.3，R-F，本机未核）。
 4. **压实继承 `collect()` 的两种整体拒绝**（§1.7）：corrections store 里有一个解析不到的 projectKey，压实就一行不动。
 5. **多进程重复行仍会产生**：本文让它有了判据（C16）与清理手段，没有让它停止发生。
 6. **本文改 E3 已发布的生产代码** `src/panel/reviewsStore.ts` 与已发布的 `scripts/verify-panel.ts`（PASS 编号顺延）。
+7. **两处都找不到的行永远不被清理**（R-E）：违反 A′ 被真删掉的台账文件，它的审阅行会一直留着。有上界、零数字影响，**且每次报告都以 `decision-not-found` 列出** —— 违规应当被看见，不该被静默清走。
+8. **身份核对在锁外**（评审 F9）：理论上 stat 刚答「没变」，压实紧接着 rename ⇒ 对一个刚被移走的键答 `duplicate`。
+   R-E 之后够不着：被移走的决策在归档里、不在列表里 ⇒ `/api/reviews` 在追加之前就拒掉它（`isListedDecision`）。登记，不修。
+
+---
+
+## 附录 A：§1.3 的探针（原样，未入库；在临时目录里跑，`ORCA_CORRECTIONS_DIR` 同时改道）
+
+```ts
+import { readReviews } from "/Users/biran/code/skills/loop/Orca/src/panel/reviewsStore.ts";
+import { writeFile, mkdtemp, stat } from "node:fs/promises";
+import { join } from "node:path";
+const base = process.argv[2];
+const row = { decisionId: "orca-dev-4ccc0a0b/12", projectKey: "github.com/example-owner/example-repository", action: "reviewed", by: "person@example", at: new Date(0).toISOString() };
+const one = JSON.stringify(row) + "\n";
+console.log("bytes/row", Buffer.byteLength(one));
+for (const n of [1_000, 10_000, 100_000, 1_000_000]) {
+  const dir = await mkdtemp(join(base, "r-"));
+  await writeFile(join(dir, "reviews.jsonl"), one.repeat(n));
+  const sz = (await stat(join(dir, "reviews.jsonl"))).size;
+  const t: number[] = [];
+  for (let i = 0; i < 5; i++) { const s = performance.now(); await readReviews(dir); t.push(performance.now() - s); }
+  t.sort((a, b) => a - b);
+  console.log(`rows=${n} bytes=${sz} readReviews median_ms=${t[2].toFixed(1)} min=${t[0].toFixed(1)} max=${t[4].toFixed(1)}`);
+}
+```
+
+运行：`ORCA_CORRECTIONS_DIR=<tmp> ./node_modules/.bin/tsx <tmp>/p.mts <tmp>`（文件扩展名必须是 `.mts`：`.ts` 在本仓库被按 cjs 转译，顶层 `await` 报错 —— 现测）。
