@@ -11,6 +11,10 @@ import { checkAppendOnly } from "./ledger/appendOnly.js";
 import { validateFile } from "./ledger/validateFile.js";
 import { preflight } from "./scheduler/preflight.js";
 import { loadRound, renderRound, runRound } from "./scheduler/run.js";
+import { applyCompaction, dryRunCompaction, renderCompactionReport } from "./panel/compactReviews.js";
+import { buildLedgerViews, wantedDecisions } from "./panel/ledgerViews.js";
+import { reviewsFile } from "./panel/paths.js";
+import { PanelRejection } from "./panel/rejection.js";
 
 const USAGE = `usage:
   orca validate <path...>        validate ledger file(s) or directory (directory scans top-level *.jsonl only)
@@ -40,6 +44,12 @@ const USAGE = `usage:
                                  travels in the HTML, it cannot be revoked, and one process has
                                  exactly one identity, so external mode suits you across your
                                  own machines and does not suit a team.
+  orca compact-reviews [--apply] [--root <dir>] [--repo <key>=<path>]...
+                                 dedupe reviews.jsonl and move rows whose decision was archived into
+                                 reviews-archive.jsonl. Without --apply it prints the report and writes
+                                 nothing. A row is left untouched when its repository is not found, its
+                                 ledger has a bad line, or its decision is in neither the ledger nor
+                                 .decisions/archive/. It never creates the store directory.
 `;
 
 async function collectLedgerFiles(paths: string[]): Promise<{ files: string[]; errors: string[] }> {
@@ -320,6 +330,64 @@ async function runPanel(args: string[]): Promise<number> {
   }
 }
 
+/**
+ * reviews compaction spec section 3. Repositories come from collect() -- the
+ * same --root/--repo flags as `metrics` and `panel`, so "which repositories
+ * are here" has one definition -- and collect()'s refusals pass through by
+ * name (section 1.7): a store key nothing resolves means nothing is touched.
+ */
+async function runCompactReviews(args: string[]): Promise<number> {
+  let apply = false;
+  let root: string | undefined;
+  const repos: Array<{ projectKey: string; path: string }> = [];
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    if (arg === "--apply") {
+      apply = true;
+      continue;
+    }
+    if (arg === "--root" && args[i + 1] !== undefined) {
+      root = args[i + 1];
+      i += 1;
+      continue;
+    }
+    if (arg === "--repo") {
+      const pair = args[i + 1] ?? "";
+      const split = pair.indexOf("=");
+      if (split <= 0) {
+        process.stderr.write(`orca compact-reviews: --repo wants <projectKey>=<path>, got ${JSON.stringify(pair)}\n`);
+        return 1;
+      }
+      repos.push({ projectKey: pair.slice(0, split), path: pair.slice(split + 1) });
+      i += 1;
+      continue;
+    }
+    process.stderr.write(`orca compact-reviews: unknown argument ${JSON.stringify(arg)}\n${USAGE}`);
+    return 1;
+  }
+
+  const dir = correctionsDir(process.env);
+  try {
+    const observations = await collect({ root, repos, correctionsDir: dir });
+    const views = await buildLedgerViews(observations.repos, await wantedDecisions(dir));
+    if (!apply) {
+      process.stdout.write(renderCompactionReport(await dryRunCompaction(dir, views), "dry-run", reviewsFile(dir)));
+      return 0;
+    }
+    const outcome = await applyCompaction(dir, views);
+    process.stdout.write(
+      renderCompactionReport(outcome.classification, outcome.wrote ? "applied" : "nothing-to-do", reviewsFile(dir)),
+    );
+    return 0;
+  } catch (err) {
+    if (err instanceof MetricsRejection || err instanceof PanelRejection) {
+      process.stderr.write(`rejected: ${err.code}: ${err.message}\n`);
+      return err.exitCode;
+    }
+    throw err;
+  }
+}
+
 async function readStdin(): Promise<string> {
   const chunks: Buffer[] = [];
   for await (const chunk of process.stdin) {
@@ -353,6 +421,10 @@ export async function main(argv: string[], stdinText?: string): Promise<number> 
 
   if (command === "panel") {
     return runPanel(rest);
+  }
+
+  if (command === "compact-reviews") {
+    return runCompactReviews(rest);
   }
 
   if (command === "check-append-only") {
