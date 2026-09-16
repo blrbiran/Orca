@@ -52,25 +52,6 @@ export async function readReviews(dir: string): Promise<ReviewRow[]> {
   return rows;
 }
 
-/**
- * spec section 4.3.2: the dedupe set is in-process, seeded once at startup.
- * Its upper bound is two rows per distinct decisionId -- one `opened`, one
- * `reviewed` -- and is therefore independent of how long the process runs. The
- * spec's first draft called it unbounded; it corrects itself there.
- *
- * Two panel processes still write duplicates. Accepted on purpose: the
- * alternative is a cross-process lock on the READ path, and section 4.3.1 is
- * about getting the observation mechanism off that path, not further onto it.
- *
- * *** ERRATUM (2026-09-16, run orca-dev-5e5985bc, reviews compaction spec section 5) ***
- * "seeded once at startup" no longer holds on its own. `orca compact-reviews
- * --apply` replaces reviews.jsonl by rename, so a key this set remembers may no
- * longer be on disk, and answering `duplicate` for it would leave a reviewed
- * decision on the to-do list with a 200. On a duplicate hit the writer now
- * compares the file's identity (dev:ino:birthtimeMs) with the one it loaded;
- * if it changed, it rebuilds the set from disk plus the claims still being
- * written. The non-duplicate path is unchanged.
- */
 export type IdentityOf = (path: string) => Promise<string | undefined>;
 
 /**
@@ -92,6 +73,25 @@ export const statIdentity: IdentityOf = async (path) => {
   }
 };
 
+/**
+ * spec section 4.3.2: the dedupe set is in-process, seeded once at startup.
+ * Its upper bound is two rows per distinct decisionId -- one `opened`, one
+ * `reviewed` -- and is therefore independent of how long the process runs. The
+ * spec's first draft called it unbounded; it corrects itself there.
+ *
+ * Two panel processes still write duplicates. Accepted on purpose: the
+ * alternative is a cross-process lock on the READ path, and section 4.3.1 is
+ * about getting the observation mechanism off that path, not further onto it.
+ *
+ * *** ERRATUM (2026-09-16, run orca-dev-5e5985bc, reviews compaction spec section 5) ***
+ * "seeded once at startup" no longer holds on its own. `orca compact-reviews
+ * --apply` replaces reviews.jsonl by rename, so a key this set remembers may no
+ * longer be on disk, and answering `duplicate` for it would leave a reviewed
+ * decision on the to-do list with a 200. On a duplicate hit the writer now
+ * compares the file's identity (dev:ino:birthtimeMs) with the one it loaded;
+ * if it changed, it rebuilds the set from disk plus the claims still being
+ * written. The non-duplicate path is unchanged.
+ */
 export class ReviewsWriter {
   private seen = new Set<string>();
   /** Keys claimed and not yet written (or failed). A reload keeps them. */
@@ -107,12 +107,16 @@ export class ReviewsWriter {
   async load(): Promise<void> {
     // Identity BEFORE the read: a replacement landing between the two is then
     // seen as a change on the next duplicate check, never missed.
-    this.identity = await this.identityOf(reviewsFile(this.dir));
+    const identity = await this.identityOf(reviewsFile(this.dir));
     const next = new Set<string>();
     for (const row of await readReviews(this.dir)) next.add(key(row));
     // A claim still being written is not on disk yet; dropping it here would
     // let a concurrent append of the same row write it twice.
     for (const claimed of this.inFlight) next.add(claimed);
+    // Assigned together, after the read succeeded: a read that throws must not
+    // leave the new identity beside the old set, or the next duplicate hit would
+    // trust a set it never rebuilt.
+    this.identity = identity;
     this.seen = next;
     this.loaded = true;
   }

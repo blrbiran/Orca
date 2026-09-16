@@ -174,7 +174,7 @@ describe("the reviews store (spec section 4.3)", () => {
 });
 
 // Appended by the reviews compaction round (spec section 5). Nothing above this line is edited.
-import { rename as renameFile, writeFile as writeFileRaw } from "node:fs/promises";
+import { mkdir as mkdirRaw, rename as renameFile, writeFile as writeFileRaw } from "node:fs/promises";
 import { identityFromStats } from "../../src/panel/reviewsStore.js";
 
 describe("the reviews writer after reviews.jsonl is replaced (reviews compaction spec section 5)", () => {
@@ -197,6 +197,24 @@ describe("the reviews writer after reviews.jsonl is replaced (reviews compaction
     const replacement = join(dir, "replacement");
     await writeFileRaw(replacement, "");
     await renameFile(replacement, reviewsFile(dir));
+    expect(await writer.append(reviewed())).toBe("written");
+    expect(await readReviews(dir)).toHaveLength(1);
+  });
+
+  it("C17b a reload that fails does not leave the new identity beside the old set", async () => {
+    let identity = "before";
+    const writer = new ReviewsWriter(dir, async () => identity);
+    await writer.load();
+    expect(await writer.append(reviewed())).toBe("written");
+    // The file is replaced by something that cannot be read as a file: the
+    // reload the changed identity triggers must fail loudly.
+    identity = "after";
+    await rm(reviewsFile(dir));
+    await mkdirRaw(reviewsFile(dir));
+    await expect(writer.append(reviewed())).rejects.toMatchObject({ code: "EISDIR" });
+    // Readable again, identity still "after" and still not what was loaded.
+    await rm(reviewsFile(dir), { recursive: true });
+    await writeFileRaw(reviewsFile(dir), "");
     expect(await writer.append(reviewed())).toBe("written");
     expect(await readReviews(dir)).toHaveLength(1);
   });
