@@ -4581,3 +4581,85 @@ ccloop、ccmem：只就地更新各自 Orca 一节里 D 那一条（I3 已修、
 - **① Rule 15 补一句** ⇒ 已落：`CLAUDE.md` Rule 15 追加「Tier 0 闸门落地后：人点头了 agent 也做不成，由人在自己的终端里做」（主题行 `docs(claude-md): say in Rule 15 …`）。措辞限定为「落地后」—— 闸门未实现前写「已由闸门执行」是假话。
 - **② 具名授权改 `src/checkpoint/measure.ts`** ⇒ 纳入本刀：`runMeasurement` 在 spawn 前过 `classify`，被拦以 `measurement-gated` 具名拒绝（spec §4 表末行、§6.4；主题行 `docs(spec): record the person's two rulings …`）。**授权只覆盖这一个文件的这一处改动**，其余既有 `src/**` 不动。
 - 上文第九节「⛔ 待人」的②③**已过期**（被本段取代）；①「人审 spec」仍待人。审过 ⇒ `superpowers:writing-plans`（建议新会话：本会话水位已近 T1）。
+
+# 📌 本轮（2026-09-18，会话 `c30670af`）—— **I3 已修并经判别性活体验收；Tier 0 闸门的 spec、计划、实施、活体验收全部完成，闸门现已在本仓库生效**
+
+**归属**：run `orca-dev-c30670af`（控制器 Claude Code 会话 `c30670af-876f-4e5e-bbb2-9e7c2f23b679`，`claude-opus-5[1m]`）。本节只追加，上文一字未动（追加前 382852 字节 sha256 `e10471ad…`）。
+⚠️ 不写 HEAD、不写领先笔数；指代某一笔引主题行；判发布状态现跑 `/usr/bin/git ls-remote origin refs/heads/main`。
+⚠️ 上文第九、十节里 Tier 0 spec 的「待人」两项**已过期**：人已裁决（见三），且计划已执行完毕。
+
+## 一句话状态
+
+*** **Tier 0 机械闸门已落地并生效**：`.claude/settings.json` 的 PreToolUse 钩子 `orca gate --hook claude-code` ＋ 24 条 `permissions.deny`，拦本仓库所有 agent 会话（交互、无头、子代理）的 push／合并进 main／删分支／删 worktree／`gh` 对外写；`orca resume`／`checkpoint write` 执行记录的实测前也过同一套判定。 ***
+**真相源**：spec `docs/superpowers/specs/2026-09-18-tier0-gate-design.md`、计划 `docs/superpowers/plans/2026-09-18-tier0-gate.md`、SDD 台账 `.superpowers/sdd/2026-09-18-tier0-gate/progress.md`（**被 git 忽略、本轮保留未删**，含 6 份任务报告、5 份审查、5 份变异表、活体验收报告、终审与复审）。本节不复述它们。
+
+## 零、开工核对（本轮现测，观测锚点：`docs(handoff): close the D1+D2 round …` 那笔）
+
+| 项 | 值 |
+|---|---|
+| 发布状态 | 开工时远端 main ＝ `chore(checkpoint): orca-dev-d5688105, level 388468 …` 那笔，本地多一笔收尾 handoff |
+| `orca resume` | RC 0；三条实测退出码均未变；标 stale |
+| verify（resume 重跑） | 107/663、51/167、PASS 0–13、8/26 |
+| `ls ~/.orca` | 不存在 |
+
+## 一、做出来的东西（按主题行）
+
+| 阶段 | 主题行 |
+|---|---|
+| I3 修复 | `fix(level): stay silent on a subagent's tool call, whose hook input names the parent's session` |
+| I3 活体 | `docs(handoff): record the discriminating live check …` |
+| Tier 0 spec | `docs(spec): design the Tier 0 gate …` → `docs(spec): revise the Tier 0 gate after an adversarial review …` → `docs(spec): record the person's two rulings …` |
+| Rule 15 | `docs(claude-md): say in Rule 15 that once the Tier 0 gate lands, the person makes these four moves` |
+| 计划 | `docs(plan): turn the Tier 0 gate spec into six tasks …` |
+| 实施（六刀） | `feat(gate): tokenize a Bash tool command …` → `feat(gate): classify a Bash tool command …` → `feat(gate): deliver the Tier 0 verdict to Claude Code as exit 2 …` → `feat(checkpoint): run a recorded measurement only if the Tier 0 gate lets it through` → `feat(gate): run the Tier 0 gate before every Bash call in this repository …` |
+| 修复波 | `fix(gate): skip gh's --repo value …`、`test(gate): cover the two-word --git-dir …`、`test(gate): see a parenthesised command …`、`docs(readme): say which forms the deny layer actually backs`、`fix(gate): allow git's info flags and stop exempting dynamic git words`、`docs(readme): attribute literal matching to deny and name the merge-into-main forms` |
+
+*** **新基线（下一轮开工核对照这个比）**：末笔上 `rtk proxy npm run verify` 整份读回 —— npm test **111 files / 810 tests**、verify:scheduler **51/167**、verify:panel **14/14（PASS 0–13）**、web **8/26**、`VERIFY_RC=0`；`ls ~/.orca` 不存在。 ***
+（D1＋D2 轮的 107/663 已作废：本轮新增 4 个测试文件。）
+
+## 二、🔴 本轮值得带走的
+
+1. *** **I3 的判别性活体验收**：同一份真实子代理 stdin，修复后的钩子输出 0 字节、修复前输出 1220 字节的父会话指令；父会话 transcript 收到 2 条注入、子代理 transcript 0 条。**真实 stdin 里 `agent_id`／`agent_type` 确是 JSON 字符串。** ***
+2. *** **闸门实测三条（spec §2.1）**：PreToolUse `exit 2` 在默认／auto／bypassPermissions 下对父会话与子代理都拦；**钩子自身出错（exit 1）与超时被杀都放行**；deny 规则在 bypassPermissions 下仍生效、看得穿 `&&`、看不穿 `sh -c`。⇒ 三层缺一不可。 ***
+3. *** **「一条永远不会红的判据」又出现两次**：活体验收原设计里 bare 仓库与副本同点、`tmp` 不领先 main，命令即便没被拦也看不出差别；对抗审查席抓到，改成由脚本先断言前置条件、缺 `tool_use` 即判红。 ***
+4. **作者自审仍然抓不全**：spec 初稿经一席对抗审查判 `No`（3 Critical／14 Important）；终审（最强模型）又在已过五席审查的代码上找出 6 条 Important，其中 `git --version` 被拦是**活的误拦** —— 而 Rule 14 恰恰要求引用环境事实前现测。
+5. **变异是唯一能证明判据承重的手段**：本轮四个任务共跑 86 条点名变异，第一遍有 5 条没红（M1-7、M2-7j、M2-7l、M2-11c、M2-11d），补夹具后复跑全部见红。
+6. 🆕 **别人的 shell alias 会毁掉实验的前置条件**：活体验收 B 第一次跑时 `rm` 被 alias 成 `rm -i`，符号链接没删掉，测成了普通拦截路径；比对脚本如实报红，改用 `/bin/rm -f` 重跑才得到 `exit 127` 那条路径。
+
+## 三、人本轮拍的
+
+- I3：先给计划，人「同意，继续」；判别性活体验收「做」。
+- Tier 0：威胁模型＝**合作型 agent 的失手**；生效范围＝**Orca 仓库所有 agent 会话**；对抗审查后控制器提议改 git `reference-transaction` 为主，人答「**维持bash钩子，我们允许适当的放宽**」；**不管 git alias**。
+- spec §8 两项：「**1 补一句 2 授权改**」⇒ `CLAUDE.md` Rule 15 补了一句（闸门落地后这四件事由人自己敲）；**具名授权改 `src/checkpoint/measure.ts`**（只此一处）。
+- 本轮执行方式：写计划 → subagent 执行 → 有问题先按控制器建议执行 → 最后统一报人审；**临时忽略上下文大小**。
+
+## 四、没做／挂账（spec §7 与 SDD 台账为准，此处不复述全部）
+
+- **未 push**（人的事，每次单独点头）；未建分支、未合并、未删任何分支或 worktree。
+- **已知放行、登记在 spec §7**：写成脚本再执行、内联解释器（`python3 -c`）、git alias、`-c core.hooksPath=`、`--no-verify`、嵌套 `claude --safe-mode`、`ExitWorktree` 工具、`rm -rf` 掉 worktree 目录、`gh repo delete`／`gh release`、deny 层不含 `git -C <path> push` 这类中段形式。
+- **终审判为可延后的 minor**：算术展开被当命令替换收集（保守）；main 上 `git reset <treeish> -- <path>`、`git branch -f <其它> main` 被过度拦（后者在 ccloop 工作流里可能撞到，绕法是改用 sha）；main 上 `git merge --abort`／`rebase --continue` 也被拦（spec 写明不设例外）；整词是变量的 `$GIT push` 仍放行。
+- **终审「无法验证」的**：PreToolUse 的 `cwd` 是否跟随 Bash 工具持久化的工作目录（**建议人亲自跑一次**：一次调用里 `cd <临时仓库>`，下一次调用 `git merge nosuchbranch`，看拒绝文本报的是哪个目录）；`--safe-mode`、`!` 前缀、与全局 `rtk hook claude` 的先后（rtk 改写已被现场观测到是活的）。
+
+## 五、⛔ 下一件事
+
+| 顺序 | 做什么 |
+|---|---|
+| **0** | 人审本轮（本地提交 ＋ 本节 ＋ SDD 台账目录）；决定是否删 `.superpowers/sdd/2026-09-18-tier0-gate/` |
+| **1** | push（三个仓库，每次单独点头） |
+| **2** | *** **D-launch**（spec §6：拉起下一个会话；Tier 0 闸门这个前置已解除） *** —— 先 `superpowers:brainstorming` |
+| **3** | D3（交接职责迁移到检查点） |
+
+**下一会话开工**（输出一律重定向到文件、整份读回）：
+1. `/usr/bin/git ls-remote origin refs/heads/main` 与本地 `rev-parse HEAD` 比。
+2. `node_modules/.bin/tsx src/cli.ts resume` —— 现行检查点 `.orca/checkpoints/orca-dev-c30670af.json`（band 2，记了本轮越过 T2 的事实）；它记的实测是 `npx vitest run tests/gate tests/level tests/checkpoint`、`ls ~/.orca`、`git ls-remote`。
+3. 全量 verify 期望 **111/810、51/167、PASS 0–13、8/26**。
+4. ⚠️ **闸门现在是活的**：push／删分支／删 worktree／在 main 上 merge 会被拦，退出码 2、stderr 一行 `orca gate: …`。**这是设计如此** —— 列进检查点的 `awaitingHuman`，请人自己敲。
+
+## 六、成本与水位
+
+**成本**（只抄工具报的数）：钩子最后一次报本会话累计 **约 99.33 美元**（之后未再报，**收尾总额拿不到**）。另计：闸门可行性探针 5 次 `claude -p` 合计 **1.3347215**；活体验收 4 次合计 **2.4721274999999996**（含一次作废重跑 0.4110615）。
+**水位**：越过 T1 时写了第一份检查点；**越过 T2（450,000）时如实上报并写了 band 2 检查点**（主题行 `chore(checkpoint): orca-dev-c30670af, level 454259 …`），随后按人的明确指令「临时忽略上下文大小」继续执行，收尾时钩子报约 **529,960**。
+
+## 七、姊妹仓库
+
+ccloop、ccmem：只就地更新各自 Orca 一节（D 那一条压到要点 ＋ Tier 0 闸门一句），**不新增章节、不新增编号项**；节外字节 sha256 前后相同；产品代码零触碰。
