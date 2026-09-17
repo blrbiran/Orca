@@ -212,3 +212,28 @@ NoReading = { runtime, sessionRef, reason }  // 绝不以 0 代替
 | verify:scheduler／verify:panel／web | 51 / 167、PASS 0–13、8 / 26 | 同上 |
 | `ls ~/.orca` | 不存在（verify 前后） | |
 | 本会话写本文前的水位（只算 prompt，见 §3.1 口径注意） | 279,813 | `probe_transcript.py`（§2.1） |
+
+---
+
+## 9. 对齐结果（run `orca-dev-8df1943a`，2026-09-17，观测锚点 Orca `a332e17`）
+
+**人本会话确认**（一次 AskUserQuestion，四问均选推荐项）：§4、§5 **按草稿确认**；§7 第 1、3、9、10 项按下述定。
+本节**只追加**；上文「状态」行与 §7 的「未决」字样**以本节为准**，原文保留。
+
+| §7 项 | 裁定 |
+|---|---|
+| **1 检查点格式与住处** | 仓库内、被 git 跟踪的 `.orca/checkpoints/<run-id>.json`。**只由 `orca checkpoint write` 写**：判断部分（下一件事、未决、待人）由 agent 以草稿文件给出；水位、会话标识、HEAD、每条实测的退出码**由代码跑出来填**。不进 `.decisions/`（提交钩子要求只追加），不进 `.superpowers/`（被 git 忽略）。无仓库外写入 ⇒ 不触发 Rule 17 登记。 |
+| **3 开工命令** | `orca resume`：打印判断部分 → 列检查点实测 commit 之后的提交 → **自动重跑**每条实测（过期标记、退出码变化点名）→ 现跑 `ls-remote` 报领先／落后 → 列待人事项；有实测退出码变化 ⇒ 非 0 退出。 |
+| **9 Claude Code 的 `windowTokens`** | 取 transcript 中最后一条 `type=attachment` 且 `attachment.type=model` 的 `identity.modelId`：带 `[1m]` 后缀 ⇒ 1,000,000；否则查仓库配置表；查不到 ⇒ `NoReading`。 |
+| **10 「覆盖当前水位」** | **按档**：检查点记下写入时的 `sessionRef` 与水位档（T1／T2）；同一会话、同档或更高档已有检查点 ⇒ 覆盖。写完之后又做的工作由 `resume` 列出的提交补上。 |
+
+**本节的现测**（命令均为 scratchpad 下一次性 python 探针，按行 `json.loads`，只打印计数与键名）：
+- 本会话 transcript 的 `message.model` **只记 `claude-opus-5`**，分不出 1M ⇒ 早先「按模型标识解析」的候选不成立，改取 `attachment.identity.modelId`（本会话第 16 行 = `claude-opus-5[1m]`，Claude Code 2.1.274）。
+- 最近 400 份 transcript 中 399 份含该 attachment；缺的 1 份由 2.1.252 写出。**会话中途 `/model` 切换是否追加新行：未测**，归计划判据。
+- 同 msg id 多行共 2435 次重复，usage 四项**全部一致**（0 处不同）；`model=<synthetic>` 的 assistant 行 105 条，usage 全 0 ⇒ 属「不是读数」。
+- 全部本机 transcript 中 `compact_boundary` **零命中** ⇒ 压缩后的读数形状**无样本**；读数滞后只会偏高（提醒早到，方向安全），v1 不为它单设分支，登记待样本出现。
+
+**其余 §7 项在 D1／D2 计划里的处置**（可逆，按 Rule 1 第 2 档自定，理由写在计划里）：
+第 2 项 v1 的待人队列就是检查点的 `awaitingHuman` 字段，由 `resume` 列出，不接面板；第 4 项由计划的活体验收直接现测；
+第 5 项与 v1 无关（v1 只做 Claude Code）；第 6 项 v1 只实现 Claude Code；第 7 项清单见计划；
+第 8 项对 1M 窗口不发生，`usable` 压低时按 §4 已写的「T1 与 T2 重合按 T2 处理」，间距规则待第二个运行时。
