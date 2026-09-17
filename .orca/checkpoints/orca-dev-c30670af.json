@@ -1,0 +1,57 @@
+{
+  "v": 1,
+  "runId": "orca-dev-c30670af",
+  "runtime": "claude-code",
+  "sessionRef": "c30670af-876f-4e5e-bbb2-9e7c2f23b679",
+  "writtenAt": "2026-09-17T16:52:13.227Z",
+  "head": "ded87047df052358846c920b87dcc052c22a9989",
+  "level": {
+    "kind": "reading",
+    "level": 336286,
+    "windowTokens": 1000000,
+    "t1": 330000,
+    "t2": 450000,
+    "band": 1
+  },
+  "next": [
+    "Write the implementation plan for docs/superpowers/specs/2026-09-18-tier0-gate-design.md with superpowers:writing-plans (the person asked for it and to ignore context size for this round)",
+    "Execute that plan subagent-driven; report to the person at the end; then update the Orca handoff and the Orca sections of the ccloop and ccmem handoffs in place"
+  ],
+  "open": [
+    "Tier 0 gate spec: the person has not explicitly reviewed the controller-added details listed in its header and section 10; asking for the plan was taken as approval to proceed",
+    "Rule 6: this session is past T1 by the person's explicit instruction for this round"
+  ],
+  "awaitingHuman": [
+    {
+      "kind": "irreversible",
+      "what": "push Orca main (I3 fix, live check, Tier 0 spec, CLAUDE.md Rule 15 sentence, handoffs) and the ccloop and ccmem handoff commits"
+    },
+    {
+      "kind": "named-authorization",
+      "what": "the gate plan's live acceptance (spec 6.3, runs A/B/C with claude -p) costs money and leaves transcripts; the person authorized executing the round and said to proceed on the controller's recommendation"
+    }
+  ],
+  "measurements": [
+    {
+      "command": "npm run verify",
+      "exitCode": 0,
+      "commit": "ded87047df052358846c920b87dcc052c22a9989",
+      "observedAt": "2026-09-17T16:52:08.118Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-c30670af-O4jRH7/1.txt"
+    },
+    {
+      "command": "ls ~/.orca",
+      "exitCode": 1,
+      "commit": "ded87047df052358846c920b87dcc052c22a9989",
+      "observedAt": "2026-09-17T16:52:08.130Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-c30670af-O4jRH7/2.txt"
+    },
+    {
+      "command": "git ls-remote origin refs/heads/main",
+      "exitCode": 0,
+      "commit": "ded87047df052358846c920b87dcc052c22a9989",
+      "observedAt": "2026-09-17T16:52:13.166Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-c30670af-O4jRH7/3.txt"
+    }
+  ]
+}
