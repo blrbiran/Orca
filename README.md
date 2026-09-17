@@ -311,8 +311,12 @@ command in this repository's Claude Code sessions through
 --hook claude-code`. It blocks four irreversible git/gh moves — `git push`,
 `git branch -d`/`-D`/`--delete`, `git worktree remove`/`prune`, and `gh pr
 merge`/`gh repo sync` — plus any non-`GET` `gh api` call, whether typed
-directly or through `rtk`/`rtk proxy`. `permissions.deny` backs the same list
-at the literal-string layer, ahead of the hook.
+directly or through `rtk`/`rtk proxy`. `permissions.deny` backs only the
+eight literal move patterns above (each also in `rtk `/`rtk proxy ` form) at
+the literal-string layer, ahead of the hook — it has no entry for `gh api`
+(its arbitrary flags can't be enumerated as literal prefixes) and none for a
+merge into main, so those, and any non-literal form of the moves above, rest
+on the hook alone.
 
 A blocked move is not lost: do it in your own terminal, outside the agent
 session. `orca resume` and `orca checkpoint write` refuse to record a
