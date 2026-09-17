@@ -4457,3 +4457,83 @@ handoff 席工作期间钩子一直报 359,412（见三第 7 条，推断为父�
 | `superpowers:subagent-driven-development` | 只在派发词里写明「忽略 `orca level:` 注入」时用，直到 I3 落地 |
 | `superpowers:verification-before-completion` | 报任何「完成／测试过」之前 |
 | `superpowers:brainstorming` | 设计 Tier 0 机械闸门之前 |
+
+# 📌 本轮（2026-09-17，会话 `c30670af`）—— **I3 已修：子代理的工具调用不再收到父会话的水位与写检查点指令**
+
+**归属**：run `orca-dev-c30670af`（控制器 Claude Code 会话 `c30670af-876f-4e5e-bbb2-9e7c2f23b679`，`claude-opus-5[1m]`）。本节只追加，上文一字未动（追加前 367422 字节的 sha256 `3708dce9…` 与追加后前缀逐字相同）。
+⚠️ 不写 HEAD、不写领先笔数；指代某一笔引主题行；判发布状态现跑 `/usr/bin/git ls-remote origin refs/heads/main`。
+
+## 一句话状态
+
+*** **I3 修复提交：`fix(level): stay silent on a subagent's tool call, whose hook input names the parent's session`。** ***
+钩子 stdin 带字符串型 `agent_id` ⇒ `hookBody` 在解析成功后、读水位之前直接返回 `""`（不注入任何东西）。主会话调用（含每一次 NoReading 报告、stdin 解析失败的报告）行为不变。
+**子代理自己的水位仍然不测**（挂账，见四）。
+
+## 零、开工核对（本轮现测，观测锚点：`docs(handoff): close the D1+D2 round…` 那笔，本轮第一笔之前）
+
+| 项 | 值 | 命令 |
+|---|---|---|
+| 发布状态 | 远端 main ＝ `chore(checkpoint): orca-dev-d5688105, level 388468 …` 那笔；本地多一笔收尾 handoff；porcelain 0 字节 | `/usr/bin/git ls-remote origin refs/heads/main`；`git rev-parse HEAD`；`git status --porcelain \| wc -c`，重定向到文件读回 |
+| `orca resume` | RC 0；三条实测退出码均未变（verify 0→0、`ls ~/.orca` 1→1、ls-remote 0→0）；标 stale（检查点之后 1 个文件变了） | `node_modules/.bin/tsx src/cli.ts resume > 文件 2>&1` 整份读回 |
+| verify（resume 重跑的那次） | 107/663、51/167、PASS 0–13、8/26 | resume 输出里的 `…/1.txt`（1444 行） |
+| `ls ~/.orca` | `LS_RC=1` | |
+
+⚠️ *** **Rule 14 如实登记**：两次全量 verify 的输出（1444 行／1449 行）本轮**没有整份读回**，读的是汇总行＋失败标记扫描（`grep -nE 'Test Files\|Tests  \|^PASS\|FAIL\|×\|VERIFY_RC\|LS_RC'`，走 `rtk proxy`）＋末尾 20 行；退出码取自 resume／`VERIFY_RC`。 *** 理由是上下文预算；判据形状比整份读回弱。
+
+## 一、做出来的东西
+
+| 提交主题行 | 内容 |
+|---|---|
+| `fix(level): stay silent on a subagent's tool call, whose hook input names the parent's session` | `src/level/hook.ts`：`parseHookInput` 多返回 `subagent: typeof fields.agent_id === "string"`；`hookBody` 加 `if (input.subagent) return "";`。`tests/level/hook.test.ts` 加一条 `it`（先断言主会话 stdin 在 450,000 收到 `Write a checkpoint and hand off now;`，再断言同一 stdin 加 `agent_id`／`agent_type` 返回字面量 `""`） |
+
+**先红**：修复前跑 `npx vitest run tests/level/hook.test.ts`，新 `it` 红在 `toBe("")`（第二条断言），收到的正是父会话的越 T2 注入全文（含 `--session`／`--transcript` 写检查点命令）；第一条对照断言通过。
+**后绿**：`npx tsc --noEmit -p tsconfig.json` RC 0；`npx vitest run tests/level tests/checkpoint` 56/56。
+*** **新基线**（修复提交上，`rtk proxy npm run verify > 文件 2>&1`）：npm test **107/664**、verify:scheduler **51/167**、verify:panel **PASS 0–13**、web **8/26**、`VERIFY_RC=0`；`ls ~/.orca` `LS_RC=1`；porcelain 0 字节。 *** 664 ＝ 663 ＋ 本轮 1 条 `it`。
+
+**设计裁定（可逆，Rule 1 第 2 档，人已同意计划）**：子代理调用**完全静默**，不选「只告知、不带命令」。
+- 反方：spec §4「NoReading 每次都报、不静默」—— 子代理从此拿不到任何水位信息。
+- 采纳静默的理由：§4 管的是**会话自己的**水位，子代理拿到的读数是父会话的，对它无意义；越 T2 的告知文本本身含「hand off now」，只告知仍会带偏子代理；父会话在 Agent 工具返回后的下一次调用自己会收到提醒，不漏报。
+- 连带后果：子代理调用里 `unreadable checkpoint` 的报告也一并静默（那些同样是父会话仓库的事，主会话调用照报）。
+
+## 二、变异（`git clone --local` 副本，sonnet 席执行；主工作树 `git diff`／`git diff --cached` 字节数前后 0／0，porcelain 0；副本 `/bin/rm -rf` RC 0）
+
+| 变异 | 要求 | 观测 |
+|---|---|---|
+| M-I3-1 删去 `if (input.subagent) return "";` | 新 `it` 红在 `toBe("")` | RED，1 failed／10 passed，`hook.test.ts:67`，收到完整注入 JSON；对照断言仍过 |
+| M-I3-2 条件改恒真 | 主会话对照与其它主会话用例红 | RED，9 failed／2 passed；红法是 `context()` 里 `JSON.parse("")` 抛 `SyntaxError`（不是值不匹配）—— 与 D1＋D2 轮 M2-11 同形，**裁定接受** |
+| M-I3-3 检测键改成 `agent_name` | 新 `it` 红在 `toBe("")` | RED，1 failed／10 passed，同 M-I3-1 |
+
+## 三、活体观察（**非判别性，如实登记**）
+
+派一个 haiku 子代理跑两次 `echo`，报告收到的钩子注入：两次都**没有** `orca level:` 注入（第 2 次只有 harness 自己的 MCP 状态提示）。
+*** **这不能证明修复在真环境生效**：本会话（父）全程水位低于 T1（钩子对控制器从未注入），修复前子代理在这个水位下同样收不到任何东西。 ***
+能判别的活体验收要父会话越过 T1：照十第 1 条的做法在 clone 里把 `.orca/level.json` 阈值压低、无头 `claude -p` 起一个带子代理的会话 —— **花钱、在 `~/.claude/projects` 下留 transcript ⇒ 待人单独点头**，本轮未跑。
+
+## 四、没做／挂账
+
+- **待人**：上面那次判别性活体验收（`claude -p`）。
+- 🆕 **子代理自己的水位不测**：若要测，需拼 `<transcript 目录>/<session_id>/subagents/agent-<agent_id>.jsonl`（十第 1 条 Q2），且子代理的窗口大小来源未定。重开条件：实测到某个子代理的单次上下文接近 T1。
+- 🆕 真环境 stdin 里 `agent_id` 是 JSON 字符串这一点，依据是十第 1 条 Q2 的活体 dump（该 dump 已随 clone 删除）与 transcript 文件名 `agent-a0fdd46fd31394cf6.jsonl`；**本轮没有重新打印真 stdin**。若它是别的类型，修复会静默失效 —— 判别性活体验收会同时回答这一条。
+- 十第 3 条挂账与十一第 1 条的「10 s 超时静默」、M3 无判据：**不变**。
+- 未 push、未建分支、未合并、未删任何分支或 worktree。检查点本轮未写（水位未到 T1）。
+
+## 五、⛔ 下一件事
+
+| 顺序 | 做什么 |
+|---|---|
+| **0** | 人审本轮（修复一笔 ＋ 本节 ＋ 姊妹仓库 Orca 一节的就地更新）；判别性活体验收做不做 |
+| **1** | *** **Tier 0 机械闸门** —— 先 `superpowers:brainstorming`（spec §6；bd5f202b 轮现测：全局 `permissions.deny` 无 push 规则、auto mode 下闸门今天不存在） *** |
+| **2** | D-launch → D3（spec §6） |
+
+*** **I3 已落地：从修复提交起，SDD 派发不再需要「忽略 `orca level:` 注入」那句叮嘱**（十一第 2 条末那条临时要求就此过期）；但判别性活体验收未跑之前，保留这句叮嘱**无害**，建议继续写。 ***
+
+**下一会话开工**：同十一第 3 条，基线改为 **107/664**、51/167、PASS 0–13、8/26；`resume` 读的检查点仍是 `orca-dev-d5688105.json`（它的 `next` 第 1 条「修 I3」已由本轮完成）。
+
+## 六、成本与水位
+
+**成本**（只抄钩子报的数）：本会话中途一次 `COST NOTICE: session total ~$8.43`；*** **收尾累计拿不到。** *** 子代理通知报的 token：变异席 71,089、活体观察席 36,116。
+**水位**：钩子对控制器全程未注入 ⇒ 低于 T1 330,000；*** **具体读数本轮没量**（不自估）。 ***
+
+## 七、姊妹仓库
+
+ccloop、ccmem：只就地更新各自 Orca 一节里 D 那一条（I3 已修、下一件事 Tier 0）；节外字节 sha256 前后相同；产品代码零触碰。
