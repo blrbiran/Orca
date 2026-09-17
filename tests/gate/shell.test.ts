@@ -51,6 +51,7 @@ describe("parseShell (Tier 0 gate spec 3.1)", () => {
     expect(p.grouping).toBe(true);
     expect(p.commands.map((c) => c.words.map((w) => w.text))).toEqual([["cd", "../x"], ["git", "merge", "y"], ["git", "push"]]);
     expect(parseShell("git rev-parse @{u}").grouping).toBe(false);
+    expect(parseShell("(git push)").grouping).toBe(true);
   });
 
   it("names the first problem", () => {
