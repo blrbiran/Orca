@@ -2262,3 +2262,53 @@ git commit -m "feat(level): run the context-window hook in this repository's Cla
 
 **3. 类型一致**：`Covering`（Task 1）＝ `findCovering` 返回（Task 3）＝ `decide` 入参（Task 4）；`LevelRecord`（Task 3）＝ `levelRecord` 返回（Task 5）；
 `readLevel` 返回 `{ input, thresholds }`（Task 4）被 Task 5 同名解构；`flagValues`（Task 5）被 Task 6 复用；`checkpointSession`／`NOW`／`writeTranscript`（Task 5 helper）被 Task 6 引用的只有前两者；`runMeasurement` 签名 Task 5 定、Task 6 同用。
+
+---
+
+## 更正 1（执行前预检，run `orca-dev-d5688105`，2026-09-17）
+
+**归属**：执行轮控制器（Claude Code 会话 `d5688105`）。上文**一字未动**，本节只追加；上文与本节冲突时**以本节为准**。
+**来源**：执行前另一席的预检扫描（把全部代码按计划拼进 clone 副本实测：tsc RC=0，7 个新文件 53 条全绿；逐条推演／实测变异）。完整表在被 git 忽略的 SDD 工作区 `preflight-scan.md`，**本节是它的具名裁定，不依赖那份文件**。
+**不改的**：`it` 条数（所有补断言都加在**既有** `it` 里）、预言 107/661、任何生产行为。
+
+### 全局
+
+- **E-G1（改 GC1 的落实）**：代码块里的中文「放置说明」注释（Task 1 L267／L275、Task 3 L1028、Task 4 L1216／L1219、Task 5 L1557、Task 6 L1892；以及 Task 3 L846 会留进最终 `schema.ts` 的那一行）**不抄进代码**；需要时改成英文或删掉。
+- **E-G2（GC3 措辞）**：GC3 写「追加三个 `run*` 函数」，实际还追加 import、`flagValues` 与内联的 `level` 分派。**内容不变**（`src/cli.ts` 只追加、不改既有行），只是措辞不全。
+- **E-G3（GC4 例外名单）**：Task 7 Step 2（量钩子延迟）也只读取样真实 transcript，补进 GC4 的例外名单。
+- **E-G4（取 transcript 的方式）**：Task 2 Step 2 与 Task 7 Step 2 的 `ls -t … | head -1` 现测选中的是**别的会话**（一个 haiku sdk-cli 会话）。一律改为**按会话 id 精确取文件**：`~/.claude/projects/-Users-biran-code-skills-loop-Orca/<session-id>.jsonl`，会话 id 由控制器在派发时给出；探针同时打印最后一条 `attachment.type=model` 的 `identity.modelId`，**不以 `[1m]` 结尾就停下报控制器**（夹具判据写死了 1M）。
+- **E-G5（重复逻辑，minor）**：zod issue 格式化在 Task 2 L785、Task 3 L1076、Task 5 L1793、Task 6 L2088 有两种变体（带／不带 `|| "(root)"`）⇒ **统一为带 `(root)` 的那种**；是否抽出共用函数由执行者按 Rule 2 定，审查登记。
+
+### Task 1
+
+- **E1-1**：「stays silent one token below T1」没有任何变异能打红（L262 说靠 M1-2，实测不成立）。**补 M1-8**：`bandOf` 里 `level >= effective.t1` 改 `level >= effective.t1 - 1` ⇒ 必须红在「stays silent one token below T1」。L331 那句「它的牙齿来自变异 M1-2」以 M1-8 为准。
+
+### Task 2
+
+- **E2-1**：脱敏脚本（L459）删掉 `id: row.message.id` —— 适配器不读它，spec §7 第 7 项要求夹具只留 usage 数字与结构键。
+- **E2-2**：四个「读不到」分支（L697、L703、L716、L775）没有判据也没有变异，违反 spec §7 第 7 项。**在既有 `it` 里追加断言**，分别覆盖：一行 JSON `null`、一条没有 `modelId` 的 model attachment、一条没有 `timestamp` 的读数行、`level.json` 是目录（EISDIR）——每条断言 `NoReading`（或具名拒绝）且 reason 点名原因；**补 M2-11…M2-14**，各删掉对应分支、必须红在追加了断言的那条 `it`。执行者若发现某个分支的实际形状与此描述不符，以代码为准、在报告里写明。
+- **E2-3**：见 E-G4。会话 id 由控制器给出。
+
+### Task 3
+
+- **E3-1**：M3-3（L1104）实测红不了（文件名排序恰好让变异前后同结果）⇒ 调换 L984–985 的档位：**band 2 写进 `a.json`，band 1 写进 `b.json`**。
+- **E3-2**：M3-6（L1107）实测红不了（`"session-x"` 本来就没有 8 位十六进制前缀）⇒ 被拒样本改为一个**前缀不是 8 位十六进制、但含 8 位十六进制子串**的值，例如 `"session-0a1b2c3d"`。
+
+### Task 5
+
+- **E5-1**：M5-3（L1831）实测红不了 —— `refuseDirty` 过滤里 `CHECKPOINT_DIR` 那半条从未被走到。**不删过滤**（它服务的正是「提交被钩子拒（exit 5）之后重试」这条路），改为在「a later write in the same session replaces the file…」那条 `it` 里：第二次写之前，先在检查点目录下留一份**未提交**的检查点文件（模拟 exit 5 之后的残留），断言第二次写成功。
+- **E5-2**：变异表缺 M5-7、M5-8 的改法不可执行 ⇒ **M5-7**：`measurements.push` 里的 `commit: head` 改 `commit: "0".repeat(40)`，必须红在「writes what the code measured…」；原 M5-8 作废。
+- **E5-3**：具名拒绝 `session-ref-unusable`、`head-moved`、`checkpoint-commit-refused`（exit 5）没有判据。**在既有 `it` 里追加断言**：`session-ref-unusable` 用 `"session-x"`；`head-moved` 用一条会提交的实测命令（`git -c user.name=x -c user.email=y commit -q --allow-empty -m x`）；exit 5 用临时仓库自己的 `.git/hooks/pre-commit`（`exit 1`，若该临时仓库的 `core.hooksPath` 不指向 `.git/hooks` 则按实际设置）；**各补一条变异**（`M5-8`…，删掉对应的 `throw`／分支）。某条做不到 ⇒ 在报告里显式登记「未覆盖」及原因（Rule 12）。
+- **E5-4**：L1673 所说的「先红」里有 4 条 `it` 红在桩抛出的 `Error("stub")` 上，**判为可接受**（不是模块加载错误，与 Task 4 L1323 同形）。
+
+### Task 6
+
+- **E6-1**：`describeLevel` 在全计划里没有断言（返回 `""` 仍全绿）⇒ 在「through the real process…」那条 `it` 里追加 `toContain` 断言检查点的水位描述全文（形如 `level <n> of 1000000 (T1 330000, T2 450000, band 1)`，`<n>` 以夹具实际值为准），**补一条变异**（`describeLevel` 返回 `""`）。
+- **E6-2**：`checkpoint-invalid`（`--checkpoint` 指向坏文件）与发布状态的两句（ls-remote 成功／失败）没有断言 ⇒ 在既有 `it` 里追加，各补一条变异；做不到则显式登记。
+- **E6-3**：L1852 引文「有回归 ⇒ 非 0」不是 spec §9 第 3 项原文，原文是「**有实测退出码变化 ⇒ 非 0 退出**」；变量名 `regressed` 改为 `exitCodeChanged`。行为不变。
+
+### Task 7
+
+- **E7-1**：见 E-G3、E-G4。
+- **E7-2**：Step 3 本轮**跳过**（人未单独点头）。补跑前：L2187 的 `cp … 2>/dev/null || { … }` 必然走 `||`（`.claude` 目录尚不存在）且吞掉错误 ⇒ **只保留 `mkdir -p "$CLONE/.claude"` ＋ `cat … >`**。
+- **E7-3（待人，不改行为）**：仓库级钩子作用于**本仓库的所有 Claude Code 会话**：① 不带 `[1m]` 且配置表里没有窗口的模型（现测本仓库最近 40 份 transcript 里 12 份是 haiku sdk-cli 会话）每次工具调用都会被注入 `no reading`（spec §4 要求每次都报，行为正确）；② 没有 `node_modules` 的 checkout 每次都报钩子错误。**是否在 `.orca/level.json` 登记其它模型的窗口，由人定**；收尾报告列入待人事项。
