@@ -4563,3 +4563,14 @@ ccloop、ccmem：只就地更新各自 Orca 一节里 D 那一条（I3 已修、
 
 ⇒ *** **I3 在真 hook runner（无头 `-p`）上闭合：父会话越过 T2 时主会话照常收到注入，子代理收不到。** *** 交互会话里的子代理没有单独现测（同一钩子、同一 stdin 形状，十第 1 条与本轮都是 `-p`）。
 **⛔ 下一件事**（取代上一节五）：**1** 人审（修复一笔＋两节 handoff＋姊妹仓库）与 push；**2** Tier 0 机械闸门（先 brainstorming）；**3** D-launch → D3。「派发词里叮嘱忽略 `orca level:`」从此可以不写。
+
+## 九、同会话补遗：Tier 0 闸门的 spec 已落盘并过一席对抗审查；**待人审，未写计划**（run `orca-dev-c30670af`，2026-09-18）
+
+**归属**：同上（控制器会话 `c30670af-876f-4e5e-bbb2-9e7c2f23b679`）。本段只追加（追加前 379752 字节 sha256 `f4ddb3e3…`）。
+
+*** **spec：`docs/superpowers/specs/2026-09-18-tier0-gate-design.md`**（主题行 `docs(spec): design the Tier 0 gate …` 初稿 → `docs(spec): revise the Tier 0 gate after an adversarial review …` 修订）。**真相源是那份 spec，本节不复述。** ***
+- 人本轮拍的：威胁模型＝合作型 agent 的失手；范围＝Orca 仓库所有 agent 会话；方案＝Orca 的 PreToolUse Bash 钩子为主、仓库级 deny 兜底；**不展开 git alias**；审查后控制器提议改 git `reference-transaction` 为主，人答「**维持bash钩子，我们允许适当的放宽**」。
+- 实测（spec §2）：钩子 `exit 2`／deny 在默认、auto、bypassPermissions 下对父会话与子代理都拦；**钩子出错（exit 1）与超时都放行**；deny 看不穿 `sh -c`。5 次探针会话工具报的成本合计 **1.3347215**。另有一席 opus 对抗审查（子代理通知报 138,036 tokens），判 No；处置表在 spec §10。
+- ⛔ **待人**（spec §8）：① 审 spec，重点是头部列的「控制器补的细节」与 §10；② `CLAUDE.md` Rule 15 是否补一句「由闸门机械执行、人在自己的终端做」；③ 是否**具名授权**改 `src/checkpoint/measure.ts`，让 `orca resume`／`checkpoint write` 执行记录的实测前先过 `classify`（否则留作 D-launch 的前置）。
+- **下一件事**：人审过 ⇒ `superpowers:writing-plans`（spec §6 的变异清单与活体验收 A／B／C 进计划）。活体验收花钱，实施轮执行前须人点头。
+- 本会话 scratchpad 里的 git 层探针（spec §2.3）是一次性的；ccloop、ccmem 的 Orca 一节本段**未更新**（「下一件事是 Tier 0 闸门」仍然成立）。
