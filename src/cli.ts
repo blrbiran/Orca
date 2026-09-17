@@ -16,6 +16,8 @@ import { applyCompaction, dryRunCompaction, renderCompactionReport } from "./pan
 import { buildLedgerViews, wantedDecisions } from "./panel/ledgerViews.js";
 import { reviewsFile } from "./panel/paths.js";
 import { PanelRejection } from "./panel/rejection.js";
+import { CheckpointRejection, describeLevel } from "./checkpoint/schema.js";
+import { writeCheckpoint } from "./checkpoint/write.js";
 
 const USAGE = `usage:
   orca validate <path...>        validate ledger file(s) or directory (directory scans top-level *.jsonl only)
@@ -54,6 +56,11 @@ const USAGE = `usage:
   orca level --hook claude-code  read a Claude Code hook's JSON on stdin and print what the session should be
                                  told about its context window: nothing below T1, a request to write a
                                  checkpoint at T1, a breach past T2, and "no reading" whenever it cannot read
+  orca checkpoint write --session <id> --transcript <path> --draft <path> [--repo <path>]
+                                 write .orca/checkpoints/<run-id>.json from the agent's draft (next, open,
+                                 awaitingHuman, measure) plus what this command measures itself: the
+                                 context-window level, HEAD, and the exit code of every measure command.
+                                 Refuses a dirty worktree. Commits exactly that one file.
 `;
 
 async function collectLedgerFiles(paths: string[]): Promise<{ files: string[]; errors: string[] }> {
@@ -392,6 +399,49 @@ async function runCompactReviews(args: string[]): Promise<number> {
   }
 }
 
+/** `--flag value` pairs, each allowed flag at most once. Returns an error text instead of throwing. */
+function flagValues(command: string, args: string[], allowed: string[]): Map<string, string> | string {
+  const values = new Map<string, string>();
+  for (let i = 0; i < args.length; i += 2) {
+    const flag = args[i];
+    const value = args[i + 1];
+    if (!allowed.includes(flag) || value === undefined || values.has(flag)) {
+      return `orca ${command}: unexpected argument ${JSON.stringify(flag)}`;
+    }
+    values.set(flag, value);
+  }
+  return values;
+}
+
+async function runCheckpoint(args: string[]): Promise<number> {
+  const [sub, ...flags] = args;
+  const values = sub === "write" ? flagValues("checkpoint write", flags, ["--repo", "--session", "--transcript", "--draft"]) : "orca checkpoint: only write is supported";
+  if (typeof values === "string") {
+    process.stderr.write(`${values}\n${USAGE}`);
+    return 1;
+  }
+  const sessionRef = values.get("--session");
+  const transcriptPath = values.get("--transcript");
+  const draftPath = values.get("--draft");
+  if (sessionRef === undefined || transcriptPath === undefined || draftPath === undefined) {
+    process.stderr.write(`orca checkpoint write: --session, --transcript and --draft are required\n${USAGE}`);
+    return 1;
+  }
+  try {
+    const result = await writeCheckpoint({ repo: values.get("--repo") ?? process.cwd(), sessionRef, transcriptPath, draftPath });
+    const lines = [`wrote ${result.path}`, `committed ${result.commit}`, describeLevel(result.checkpoint.level)];
+    for (const m of result.checkpoint.measurements) lines.push(`exit ${m.exitCode}: ${m.command} (output ${m.outputPath})`);
+    process.stdout.write(`${lines.join("\n")}\n`);
+    return 0;
+  } catch (err) {
+    if (err instanceof CheckpointRejection) {
+      process.stderr.write(`rejected: ${err.code}: ${err.message}\n`);
+      return err.exitCode;
+    }
+    throw err;
+  }
+}
+
 async function readStdin(): Promise<string> {
   const chunks: Buffer[] = [];
   for await (const chunk of process.stdin) {
@@ -438,6 +488,10 @@ export async function main(argv: string[], stdinText?: string): Promise<number> 
     }
     process.stdout.write(await levelHookClaudeCode(stdinText ?? (await readStdin())));
     return 0;
+  }
+
+  if (command === "checkpoint") {
+    return runCheckpoint(rest);
   }
 
   if (command === "check-append-only") {
