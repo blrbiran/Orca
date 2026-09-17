@@ -24,6 +24,9 @@ export async function levelHookClaudeCode(stdinText: string): Promise<string> {
 async function hookBody(stdinText: string): Promise<string> {
   const input = parseHookInput(stdinText);
   if (typeof input === "string") return inject([`orca level: no reading — ${input}`]);
+  // Final review I3: a subagent's tool call carries the parent's session_id and transcript_path, and only
+  // agent_id tells it apart. Any reading or command built from them is the parent's, not the subagent's.
+  if (input.subagent) return "";
 
   // Claude Code sets CLAUDE_PROJECT_DIR for hook commands. The stdin cwd follows the session's `cd`,
   // so a session that moved into another repository would otherwise be handed that repository's
@@ -45,7 +48,9 @@ async function hookBody(stdinText: string): Promise<string> {
   return lines.length === 0 ? "" : inject(lines);
 }
 
-function parseHookInput(text: string): { sessionRef: string; transcriptPath: string; cwd: string } | string {
+function parseHookInput(
+  text: string,
+): { sessionRef: string; transcriptPath: string; cwd: string; subagent: boolean } | string {
   let raw: unknown;
   try {
     raw = JSON.parse(text);
@@ -57,7 +62,7 @@ function parseHookInput(text: string): { sessionRef: string; transcriptPath: str
   if (typeof sessionRef !== "string" || typeof transcriptPath !== "string" || typeof cwd !== "string") {
     return "hook input lacks session_id, transcript_path or cwd";
   }
-  return { sessionRef, transcriptPath, cwd };
+  return { sessionRef, transcriptPath, cwd, subagent: typeof fields.agent_id === "string" };
 }
 
 const inject = (lines: string[]): string =>
