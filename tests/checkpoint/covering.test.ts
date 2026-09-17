@@ -16,6 +16,12 @@ describe("findCovering (D spec 9, item 10: covered by band)", () => {
     const p2 = await putCheckpoint(repo, "a.json", checkpointFixture({ level: BAND2 }));
     await putCheckpoint(repo, "b.json", checkpointFixture());
     expect(await findCovering(repo, SESSION)).toEqual({ covering: { path: p2, band: 2 }, problems: [] });
+
+    // Order independence: the band-2 checkpoint can also be the one that sorts last.
+    const repo2 = await tempDir();
+    await putCheckpoint(repo2, "a.json", checkpointFixture());
+    const q2 = await putCheckpoint(repo2, "b.json", checkpointFixture({ level: BAND2 }));
+    expect(await findCovering(repo2, SESSION)).toEqual({ covering: { path: q2, band: 2 }, problems: [] });
   });
 
   it("does not let another session's checkpoint cover this one", async () => {
