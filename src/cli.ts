@@ -9,6 +9,7 @@ import { MetricsRejection } from "./metrics/rejection.js";
 import { CorrectRejection } from "./corrections/rejection.js";
 import { checkAppendOnly } from "./ledger/appendOnly.js";
 import { levelHookClaudeCode } from "./level/hook.js";
+import { gateHookClaudeCode } from "./gate/hook.js";
 import { validateFile } from "./ledger/validateFile.js";
 import { preflight } from "./scheduler/preflight.js";
 import { loadRound, renderRound, runRound } from "./scheduler/run.js";
@@ -67,6 +68,9 @@ const USAGE = `usage:
                                  next steps and open items, the commits since, whether its measurements are
                                  stale, re-run every one of them, report publish state from ls-remote now, and
                                  list what waits for a human. Exit 2 when a measurement's exit code changed.
+  orca gate --hook claude-code   read a Claude Code PreToolUse hook's JSON on stdin; exit 2 with one line on stderr
+                                 when the Bash command would push, merge into main, delete a branch or remove a
+                                 worktree (Tier 0), or when it cannot decide; exit 0 otherwise
 `;
 
 async function collectLedgerFiles(paths: string[]): Promise<{ files: string[]; errors: string[] }> {
@@ -513,6 +517,16 @@ export async function main(argv: string[], stdinText?: string): Promise<number> 
     }
     process.stdout.write(await levelHookClaudeCode(stdinText ?? (await readStdin())));
     return 0;
+  }
+
+  if (command === "gate") {
+    if (rest.length !== 2 || rest[0] !== "--hook" || rest[1] !== "claude-code") {
+      process.stderr.write(`orca gate: only --hook claude-code is supported\n${USAGE}`);
+      return 1;
+    }
+    const result = await gateHookClaudeCode(stdinText ?? (await readStdin()));
+    process.stderr.write(result.stderr);
+    return result.exitCode;
   }
 
   if (command === "checkpoint") {
