@@ -83,7 +83,6 @@ async function classifyCommand(cmd: SimpleCommand, ctx: Context, depth: number):
   }
   for (let k = 0; k < words.length; k++) {
     const name = basename(words[k].text);
-    if (words[k].dynamic) continue;
     if (SHELLS.has(name)) {
       const option = words.findIndex((w, j) => j > k && /^-[A-Za-z]*c[A-Za-z]*$/.test(w.text));
       if (option >= 0 && words[option + 1] !== undefined) {
@@ -124,6 +123,7 @@ async function classifyGit(args: Word[], assignments: Set<string>, ctx: Context)
       otherRepository = true;
       i++;
     } else if (t.startsWith("--namespace=") || GIT_FLAGS.has(t)) i++;
+    else if (["-v", "--version", "-h", "--help", "--exec-path", "--html-path", "--man-path", "--info-path"].includes(t)) return ALLOW;
     else return unclear(`unknown git option ${t} before the subcommand`);
   }
   if (i >= args.length) return ALLOW;

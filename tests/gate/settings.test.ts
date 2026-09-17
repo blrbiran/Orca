@@ -40,6 +40,12 @@ describe(".claude/settings.json wires the Tier 0 gate (spec 5, 6.2)", () => {
     const settings = JSON.parse(await readFile(join(repoRoot, ".claude", "settings.json"), "utf8"));
     expect(settings.hooks.PreToolUse).toContainEqual({ matcher: "Bash", hooks: [{ type: "command", command: COMMAND, timeout: 10 }] });
     expect([...settings.permissions.deny].sort()).toEqual([...DENY].sort());
+    // Spec §2.1: Claude Code silently ignores a settings file that fails validation, taking
+    // hooks and deny down together with no red anywhere else. This catches an added or
+    // misspelled top-level key (e.g. a stray "denny") — it does NOT catch an invalid value
+    // nested inside a key that is itself spelled correctly.
+    expect(Object.keys(settings).sort()).toEqual(["hooks", "permissions"]);
+    expect(Object.keys(settings.hooks).sort()).toEqual(["PostToolUse", "PreToolUse"]);
   });
 
   it("command line layer: without node_modules a push is blocked naming exit 127, and a command without git or gh still runs", async () => {

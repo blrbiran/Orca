@@ -44,6 +44,7 @@ describe("parseShell (Tier 0 gate spec 3.1)", () => {
   it("drops redirection targets and fd numbers from words", () => {
     expect(texts("git merge x > out.txt 2>&1")).toEqual([["git", "merge", "x"]]);
     expect(texts("a &> log; b >> f")).toEqual([["a"], ["b"]]);
+    expect(texts("git merge y <<< x")).toEqual([["git", "merge", "y"]]);
   });
 
   it("treats parentheses and whole-word braces as grouping separators", () => {
