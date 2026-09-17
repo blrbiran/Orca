@@ -12,8 +12,13 @@ import { CHECKPOINT_DIR, type Checkpoint, CheckpointRejection, CheckpointSchema,
  */
 export async function resume(opts: { repo: string; checkpointPath?: string }): Promise<{ text: string; exitCode: 0 | 2 }> {
   const repo = (await git(opts.repo, ["rev-parse", "--show-toplevel"])).trim();
-  const path = opts.checkpointPath ?? (await latestCheckpoint(repo));
-  const cp = await readCheckpoint(path);
+  // An explicit --checkpoint is read as the file it names. A located checkpoint is read from its commit,
+  // so uncommitted edits or residue in the worktree are never presented as the committed checkpoint.
+  const located = opts.checkpointPath === undefined ? await latestCheckpoint(repo) : undefined;
+  const path = located === undefined ? (opts.checkpointPath as string) : join(repo, located.file);
+  const cp = await readCheckpoint(path, () =>
+    located === undefined ? readFile(path, "utf8") : git(repo, ["show", `${located.sha}:${located.file}`]),
+  );
   const out: string[] = [
     `checkpoint: ${path}`,
     `run ${cp.runId}, session ${cp.sessionRef}, written ${cp.writtenAt}, ${describeLevel(cp.level)}`,
@@ -50,7 +55,7 @@ export async function resume(opts: { repo: string; checkpointPath?: string }): P
   return { text: `${out.join("\n")}\n`, exitCode: exitCodeChanged ? 2 : 0 };
 }
 
-async function latestCheckpoint(repo: string): Promise<string> {
+async function latestCheckpoint(repo: string): Promise<{ sha: string; file: string }> {
   const sha = (await git(repo, ["log", "-1", "--format=%H", "--", CHECKPOINT_DIR])).trim();
   if (sha === "") throw new CheckpointRejection("no-checkpoint", `no commit reachable from HEAD touches ${CHECKPOINT_DIR}`);
   const files = (await git(repo, ["diff-tree", "--root", "--no-commit-id", "--name-only", "-r", sha, "--", CHECKPOINT_DIR]))
@@ -62,13 +67,13 @@ async function latestCheckpoint(repo: string): Promise<string> {
       `commit ${sha.slice(0, 7)} touches ${files.length} checkpoint files (${files.join(", ")}); name one with --checkpoint`,
     );
   }
-  return join(repo, files[0]);
+  return { sha, file: files[0] };
 }
 
-async function readCheckpoint(path: string): Promise<Checkpoint> {
+async function readCheckpoint(path: string, load: () => Promise<string>): Promise<Checkpoint> {
   let raw: unknown;
   try {
-    raw = JSON.parse(await readFile(path, "utf8"));
+    raw = JSON.parse(await load());
   } catch (err) {
     throw new CheckpointRejection("checkpoint-invalid", `${path} cannot be read as JSON: ${(err as Error).message}`);
   }
@@ -86,7 +91,8 @@ async function publishStatus(repo: string): Promise<string> {
   const branch = (await git(repo, ["rev-parse", "--abbrev-ref", "HEAD"])).trim();
   let line: string;
   try {
-    line = (await git(repo, ["ls-remote", "origin", `refs/heads/${branch}`])).trim();
+    // GIT_TERMINAL_PROMPT=0: a remote that wants credentials fails here instead of waiting on a prompt.
+    line = (await git(repo, ["ls-remote", "origin", `refs/heads/${branch}`], { env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } })).trim();
   } catch (err) {
     return `publish: ls-remote origin failed: ${(err as Error).message.trim()}`;
   }

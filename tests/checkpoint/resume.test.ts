@@ -49,6 +49,13 @@ describe("resume (D spec 5 step 4, 9 item 3)", () => {
   it("the checkpoint's own commit does not make its measurements stale", async () => {
     const s = await written({ next: ["n"], measure: ["true"] });
     expect((await resume({ repo: s.repo })).text).toContain("measurements (fresh):\n");
+
+    // Final review M1: a located checkpoint is read from its commit. An uncommitted edit to the file in the
+    // worktree must not be presented as the committed checkpoint.
+    await writeFile(s.path, JSON.stringify({ ...s.checkpoint, next: ["uncommitted edit"] }));
+    const text = (await resume({ repo: s.repo })).text;
+    expect(text).toContain("\nnext:\n  1. n\nopen:\n");
+    expect(text).not.toContain("uncommitted edit");
   });
 
   it("exits 2 naming the measurement whose exit code changed", async () => {
