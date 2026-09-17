@@ -4319,3 +4319,94 @@ handoff 席工作期间钩子一直报 359,412（见三第 7 条，推断为父�
 
 - **ccloop**、**ccmem**：只就地更新各自的 Orca 一节（ccloop「§五」D 那一条＋「§七」归属；ccmem「Orca 那边到哪了」D 那一条＋「归属」），**不新增章节、不新增编号项**；节外字节的 sha256 前后相同；各自单独一笔 `docs(handoff): update the Orca section in place -- D1 and D2 executed, live check awaits the person`。
 - 本计划**一个字节没碰** ccloop、ccmem 的代码；D 对 ccloop 阶段 agent 的那条诊断不变（暂不纳入）。
+
+## 十、同会话补遗（run `orca-dev-d5688105`，人审阅后说「按你的建议继续」）
+
+**归属**：run `orca-dev-d5688105`（控制器 Claude Code 会话 `d5688105-065f-41d6-aa5e-a4818e5d78c3`）；本节由控制器派出的 handoff 补遗席于 2026-09-17 按 SDD 台账 `progress.md` 末尾几行、`live-check-report.md`、`final-review-triage.md` 写成。
+*** **本节只追加；上文（含本轮一至九）一字未动。上文里已过期的句子在这里更正，不就地改（Rule 13）。** ***
+⚠️ 不写 HEAD、不写领先笔数；指代某一笔一律引主题行；判发布状态现跑 `/usr/bin/git ls-remote origin refs/heads/main`。
+
+### 1. 🔴 更正：「活体验收（Task 7 Step 3）待人点头」「I3 未知」—— **现已实测**
+
+**过期的是这些句子**：本轮标题里的「活体验收（Task 7 Step 3）待人点头」；一句话状态里的「Step 3 按人的指令跳过」；三第 4 条末「无头 `-p` 与 subagent 仍无直接证据」；六「待人」第一条（Step 3 未跑）；六「终审之后仍开着的」里的 I3 未现测、以及「无头 `-p`、subagent 输入形状都没亲眼见过」；七第 1 行。
+**让它们过期的是**：人审阅后说「按你的建议继续」⇒ 控制器派一个 sonnet 专席跑了活体验收（台账 `LIVE CHECK (Task 7 Step 3, …)` 一行；详细报告 `.superpowers/sdd/2026-09-17-checkpoint-handoff-d1-d2/live-check-report.md`）。三第 7 条那条「推断、未直接证实」**被实测证实**。
+
+**做法**（全部在 `git clone --local` 副本里，主工作树零触碰）：副本去掉 `origin`，`node_modules` 符号链接到主仓库；
+副本的 `.orca/level.json` 写成 `{"t1":1000,"t2":2000,"windows":{"claude-haiku-4-5-20251001":200000}}`（故意压低阈值）；
+副本的 `.claude/settings.json` 保留 orca 钩子原样，另加第二个 PostToolUse 钩子把 stdin `cat` 进 `.hook-stdin-*.json`；
+然后 `claude -p "First run the shell command: echo live-check. Then use the Agent tool to launch one subagent whose only job is to run the shell command: echo sub-check. Report both outputs." --allowedTools "Bash(echo:*)" "Agent" "Task" --output-format json > "$S/live.json" 2>&1`，RC=0（`subtype: "success"`）。
+*** **更正 E7-2 已照做：没有用 `cp … ||`**，只用 `mkdir -p` ＋ `cat > 文件`。 *** 结束后副本 `/bin/rm -rf "${S:?}"`（`RM_RC=0`），主仓库 `git status --porcelain` 0 字节。
+`checkpoint` 不在 `--allowedTools` 里 ⇒ 注入的写检查点命令在结构上跑不了，模型也明说没跑。
+
+| 问题 | 实测结论 |
+|---|---|
+| **Q1**：spec §7 第 4 项，无头 `claude -p` | *** **PASS** *** —— 三份钩子 stdin 都带 `session_id` 与 `transcript_path`（指向真实存在的主 transcript）；注入文本以 `orca level: ` 开头、含 `is past T2`、带真实的 `--session`／`--transcript`；它作为 attachment 进了 transcript，模型随后的消息逐字引用 ⇒ **送达了模型，不只是被记下** |
+| **Q2**：终审 I3，subagent 的工具调用 | stdin 的 `session_id` ＝ **父会话的**（没有独立的 subagent 会话 id）；`transcript_path` ＝ **父会话的主 `.jsonl`**，不是磁盘上确实存在的 `<session>/subagents/agent-*.jsonl`；`cwd` 同父。*** **唯一能区分的键是 `agent_id`、`agent_type`**（主会话调用里没有这两个键）。 *** 注入给 subagent 的文本 ＝ **父会话的读数 ＋ 一条替父会话写检查点的命令**（`--session`／`--transcript` 都是父的）；subagent 的模型也收到了并在报告里逐字引用 |
+
+⇒ *** **钩子无法用 `session_id`／`transcript_path` 判断「这次调用发生在 subagent 里」；只有 `agent_id`／`agent_type` 能。** ***
+修好之前：SDD 下父会话越过 T1、且这一档还没有检查点时，**subagent 席会被要求替父会话写检查点**。
+若将来要读 subagent 自己的 transcript，得自己拼 `<transcript 目录>/<session_id>/subagents/agent-<agent_id>.jsonl`，不能信钩子给的 `transcript_path`。
+（本补遗席自己也是 subagent：它每次工具调用收到的都是 `orca level: 386080 of 1000000 tokens (T1 330000, T2 450000). A checkpoint for this band is at …/orca-dev-d5688105.json.`，读数恒定、不随本席上下文增长 —— 与 Q2 一致；本席没有照注入跑任何命令。）
+
+**成本**：`total_cost_usd` *** **0.73438725** ***（`live.json` 里工具报的数，不是估的）。活体会话 id `d372c7fd-82a4-4d5e-b67e-6950f0a86066`。
+**保留下来的 transcript**（人的数据，没删）：
+- `/Users/biran/.claude/projects/-private-var-folders-nb-068k-scs4gzgclcp66f9hys40000gn-T-tmp-XjhmsfotJ4-orca/d372c7fd-82a4-4d5e-b67e-6950f0a86066.jsonl`
+- `/Users/biran/.claude/projects/-private-var-folders-nb-068k-scs4gzgclcp66f9hys40000gn-T-tmp-XjhmsfotJ4-orca/d372c7fd-82a4-4d5e-b67e-6950f0a86066/subagents/agent-a0fdd46fd31394cf6.jsonl`（同目录还有一份 `agent-a0fdd46fd31394cf6.meta.json`）
+
+**仍然没测的**（本次活体验收也没覆盖）：`/model` 中途换模型时 attachment 的行为；失败路径经真 hook runner；钩子被 10 s 超时杀掉时对 agent 静默（六那条不变）；M3 `GIT_TERMINAL_PROMPT=0` 无判据（不变）。
+
+### 2. `.orca/level.json` 登记了 Haiku 4.5 的窗口（回答六的 E7-3 ①）
+
+提交 `chore(level): register the Haiku 4.5 window so its sessions here get a reading, not "no reading"`：新文件 `.orca/level.json` ＝ `{"windows": {"claude-haiku-4-5-20251001": 200000}}`。
+- **为什么是它**：本仓库 transcript 里**唯一的非 1M 模型**，59 份里 12 份；另有 33 份根本没有 model attachment。
+  ⚠️ 来源是台账 `Post-review (person: '按你的建议继续')` 一行与该提交正文；*** **台账没有记这次计数的测量命令** ***，观测时点在上文 handoff 那笔（`docs(handoff): record the D1+D2 execution round…`）之后、该提交之前。
+  它与六 E7-3 里预检的「最近 40 份里 12 份 haiku、14 份无 attachment」是**两次不同口径的测量**（40 份 vs 59 份），两个都原样保留，互不替代。
+- **怎么算**：200,000 的窗口下 T1 与 T2 重合在 200,000 ⇒ 按 spec §4 当 T2 处理。
+- **前后实测**（同一份 haiku transcript 喂给钩子）：登记前注入 `no reading — no window size known`；登记后静默；两次 RC 0。（命令同样未记入台账。）
+- ⚠️ 上文二的新基线（107/663 …）测于 `fix(checkpoint): keep the credential-prompt guard inside resume…`；*** **其后的 handoff 那笔与这笔 `.orca/level.json`，台账里没有再跑全量 verify** ***，下一会话开工核对时现测为准。
+
+### 3. 终审挂账的逐行分诊（**补上文六「逐行分诊 SDD 工作区里没有」那个缺口**）
+
+**更正**：上文六说终审只给了「M2、M4、M5 与审查席判留着的行继续挂账」一句分诊、逐行分诊找不到。控制器之后从终审报告逐行抄录成 `.superpowers/sdd/2026-09-17-checkpoint-handoff-d1-d2/final-review-triage.md`，下面**原样照抄**（其中 E7-3 ① 一行已由上面第 2 条落地）：
+
+| 挂账项 | 终审判定 | 理由 |
+|---|---|---|
+| T2 `let row: any` | 留挂账 | 外观问题；每个字段使用前都校验过 |
+| T2 出现外来会话的行即整份放弃读取 | 留挂账 | 失败是出声的；59 份 transcript 中 0 份含多个 sessionId |
+| T3 `let parsed;` 无类型 | 留挂账 | 外观问题 |
+| T4 越过 T2 的文字未在钩子层测 | 留挂账 | `decide` 已测该文字；垫片原样转发 |
+| T4 rev-parse → cwd 回落未测 | 当场修（并入 I2） | 该段代码反正要改；已在终审修复里测了 env 与回落两路 |
+| T4 静默时也拼 `orcaCommand` | 留挂账 | 微秒级；钩子总耗时实测 0.24–0.43 s |
+| T5 脏树过滤：改名出检查点目录、目录下非 JSON 文件被豁免 | 留挂账 | 按路径提交保证「只提交一个文件」仍成立；属罕见情形；日后改 `--porcelain -z` |
+| T5 `measure.ts` 无超时、输出全缓冲在内存 | 留挂账 | 失败出声（agent 的工具超时）；日后把输出文件 fd 直接给子进程的 stdout/stderr，同时消掉下面的顺序问题 |
+| T5 mkdtemp 输出目录从不删除 | 留挂账 | 输出是有意保留的；无实测时的空目录只是杂物 |
+| T5 exit 5 判据依赖全局无 `core.hooksPath`；注释里的实测没带命令 | 留挂账 | 全局值现测未设（`git config --global --get core.hooksPath` RC=1）；若被设上，判据会红而不是假绿 |
+| T5 stdout/stderr 顺序断言 | 留挂账 | 预检 200 次 0 次乱序；上面的 fd 改法可消除竞态 |
+| T5 zod issue 格式化重复 | 留挂账 | Rule 2 交给执行者判（E-G5）；实际是 **4 份**（config、covering、write、resume），不是 3 份 |
+| T5 `--repo` 不是仓库时抛原始 git 错误 | 留挂账 | 出声：exit 3 并带错误文字 |
+| T6 `written()` 返回的 checkpoint 字段已无人用 | 留挂账 | 测试外观 |
+| T6 「origin 有本地未取回的提交」那一支未测 | 留挂账 | 只影响输出文字、不影响退出码；在 handoff 里登记为未覆盖（Rule 9） |
+| E7-3 ① 其它模型的窗口 | 待人 | 人已按建议处理：登记 `claude-haiku-4-5-20251001: 200000`（提交 `chore(level): register the Haiku 4.5 window…`） |
+| E7-3 ② 没有 `node_modules` 的 checkout | 当场修（I1） | 属 spec §4 符合性，不是人的决定 |
+
+终审另列的 Minor（未修，留挂账）：M2 `resume` 会执行检查点里记录的 shell 命令，USAGE／README 应写明；M4 提交的检查点带本机绝对 tmp 路径（含用户名）。
+
+### 4. ⛔ 下一件事（*** **取代上文七的表** ***；七的开工核对照下面这份）
+
+| 顺序 | 做什么 |
+|---|---|
+| **0** | 人审本轮（上文一至九 ＋ 本节；全部提交在本地 main，未推） |
+| **1** | *** **下一会话：在代码里修 I3。** *** `src/level/hook.ts`：stdin 带 `agent_id`（即 subagent 的调用）时，**不得**收到父会话的写检查点请求。提议：静默，或只告知、不带命令 —— **用测试定**，并点名一条变异（去掉这条 `agent_id` 分支 ⇒ 必须见红）；主会话调用的 NoReading 报告**保持不变**（spec §4 不许静默） |
+| **2** | 然后：Tier 0 机械闸门 → D-launch → D3（spec §6） |
+| **3** | push 是人的事（每次单独点头） |
+
+**下一会话开工核对**（输出一律重定向到文件、整份读回，不过滤）：
+1. `/usr/bin/git ls-remote origin refs/heads/main`，与本地 `rev-parse HEAD` 比 —— 人可能已经推过。
+2. `rtk proxy npm run verify > 文件 2>&1; echo VERIFY_RC=$? >> 文件`，期望 **107/663、51/167、PASS 0–13、8/26、`VERIFY_RC=0`**（基线测点见本节第 2 条末的 ⚠️）。
+3. `ls ~/.orca` 必须不存在（`LS_RC=1`）。
+4. `node_modules/.bin/tsx src/cli.ts resume` —— 从 HEAD 可达的**最新**检查点起步（见第 5 条），重跑其中记录的实测、列出其后的提交、现跑 `ls-remote`。
+
+### 5. 检查点会被换掉
+
+紧接本补遗那笔提交之后，控制器用**同一个 run id 文件** `.orca/checkpoints/orca-dev-d5688105.json` 写一份新检查点，**以一笔新提交替换**上文七第 4 条说的那份（写于终审修复之前的旧检查点）。
+写本节时那笔还不存在 ⇒ 用 `/usr/bin/git log --format='%s' -- .orca/checkpoints/orca-dev-d5688105.json` 现查；`resume` 读的是最新那份。
