@@ -1,0 +1,50 @@
+import { findCovering } from "../checkpoint/covering.js";
+import { git } from "../scheduler/gitExec.js";
+import { orcaCommand } from "./invocation.js";
+import { readLevel } from "./readLevel.js";
+import { decide } from "./trigger.js";
+
+export const DRAFT_SHAPE =
+  '{"next":["..."],"open":["..."],"awaitingHuman":[{"kind":"irreversible|tied-evidence|named-authorization|ccloop-change","what":"..."}],"measure":["<command>"]}';
+
+/**
+ * D spec 3: the delivery shim. It carries no judgment of its own (Rule 5) — it reads the hook input,
+ * asks the core, and hands the core's text to Claude Code verbatim as additional context.
+ */
+export async function levelHookClaudeCode(stdinText: string): Promise<string> {
+  const input = parseHookInput(stdinText);
+  if (typeof input === "string") return inject([`orca level: no reading — ${input}`]);
+
+  const repo = await git(input.cwd, ["rev-parse", "--show-toplevel"]).then(
+    (out) => out.trim(),
+    () => input.cwd,
+  );
+  const { input: reading, thresholds } = await readLevel(repo, input.sessionRef, input.transcriptPath);
+  const { covering, problems } = await findCovering(repo, input.sessionRef);
+  const command =
+    `Run: ${orcaCommand(["checkpoint", "write", "--repo", repo, "--session", input.sessionRef, "--transcript", input.transcriptPath, "--draft"])} <draft.json>` +
+    ` where the draft is a file outside the repository shaped like ${DRAFT_SHAPE}`;
+  const decision = decide(reading, thresholds, covering, command);
+
+  const lines = decision.kind === "silent" ? [] : [decision.text];
+  for (const problem of problems) lines.push(`orca level: unreadable checkpoint ${problem}`);
+  return lines.length === 0 ? "" : inject(lines);
+}
+
+function parseHookInput(text: string): { sessionRef: string; transcriptPath: string; cwd: string } | string {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(text);
+  } catch {
+    return "hook input is not JSON";
+  }
+  const fields = (typeof raw === "object" && raw !== null ? raw : {}) as Record<string, unknown>;
+  const { session_id: sessionRef, transcript_path: transcriptPath, cwd } = fields;
+  if (typeof sessionRef !== "string" || typeof transcriptPath !== "string" || typeof cwd !== "string") {
+    return "hook input lacks session_id, transcript_path or cwd";
+  }
+  return { sessionRef, transcriptPath, cwd };
+}
+
+const inject = (lines: string[]): string =>
+  `${JSON.stringify({ hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: lines.join("\n") } })}\n`;

@@ -8,6 +8,7 @@ import { renderJson, renderTable, renderTiming } from "./metrics/report.js";
 import { MetricsRejection } from "./metrics/rejection.js";
 import { CorrectRejection } from "./corrections/rejection.js";
 import { checkAppendOnly } from "./ledger/appendOnly.js";
+import { levelHookClaudeCode } from "./level/hook.js";
 import { validateFile } from "./ledger/validateFile.js";
 import { preflight } from "./scheduler/preflight.js";
 import { loadRound, renderRound, runRound } from "./scheduler/run.js";
@@ -50,6 +51,9 @@ const USAGE = `usage:
                                  nothing. A row is left untouched when its repository is not found, its
                                  ledger has a bad line, or its decision is in neither the ledger nor
                                  .decisions/archive/. It never creates the store directory.
+  orca level --hook claude-code  read a Claude Code hook's JSON on stdin and print what the session should be
+                                 told about its context window: nothing below T1, a request to write a
+                                 checkpoint at T1, a breach past T2, and "no reading" whenever it cannot read
 `;
 
 async function collectLedgerFiles(paths: string[]): Promise<{ files: string[]; errors: string[] }> {
@@ -425,6 +429,15 @@ export async function main(argv: string[], stdinText?: string): Promise<number> 
 
   if (command === "compact-reviews") {
     return runCompactReviews(rest);
+  }
+
+  if (command === "level") {
+    if (rest.length !== 2 || rest[0] !== "--hook" || rest[1] !== "claude-code") {
+      process.stderr.write(`orca level: only --hook claude-code is supported\n${USAGE}`);
+      return 1;
+    }
+    process.stdout.write(await levelHookClaudeCode(stdinText ?? (await readStdin())));
+    return 0;
   }
 
   if (command === "check-append-only") {
