@@ -18,6 +18,7 @@ import { reviewsFile } from "./panel/paths.js";
 import { PanelRejection } from "./panel/rejection.js";
 import { CheckpointRejection, describeLevel } from "./checkpoint/schema.js";
 import { writeCheckpoint } from "./checkpoint/write.js";
+import { resume } from "./checkpoint/resume.js";
 
 const USAGE = `usage:
   orca validate <path...>        validate ledger file(s) or directory (directory scans top-level *.jsonl only)
@@ -61,6 +62,11 @@ const USAGE = `usage:
                                  awaitingHuman, measure) plus what this command measures itself: the
                                  context-window level, HEAD, and the exit code of every measure command.
                                  Refuses a dirty worktree. Commits exactly that one file.
+  orca resume [--repo <path>] [--checkpoint <path>]
+                                 start a session from the latest checkpoint reachable from HEAD: print its
+                                 next steps and open items, the commits since, whether its measurements are
+                                 stale, re-run every one of them, report publish state from ls-remote now, and
+                                 list what waits for a human. Exit 2 when a measurement's exit code changed.
 `;
 
 async function collectLedgerFiles(paths: string[]): Promise<{ files: string[]; errors: string[] }> {
@@ -442,6 +448,25 @@ async function runCheckpoint(args: string[]): Promise<number> {
   }
 }
 
+async function runResume(args: string[]): Promise<number> {
+  const values = flagValues("resume", args, ["--repo", "--checkpoint"]);
+  if (typeof values === "string") {
+    process.stderr.write(`${values}\n${USAGE}`);
+    return 1;
+  }
+  try {
+    const result = await resume({ repo: values.get("--repo") ?? process.cwd(), checkpointPath: values.get("--checkpoint") });
+    process.stdout.write(result.text);
+    return result.exitCode;
+  } catch (err) {
+    if (err instanceof CheckpointRejection) {
+      process.stderr.write(`rejected: ${err.code}: ${err.message}\n`);
+      return err.exitCode;
+    }
+    throw err;
+  }
+}
+
 async function readStdin(): Promise<string> {
   const chunks: Buffer[] = [];
   for await (const chunk of process.stdin) {
@@ -492,6 +517,10 @@ export async function main(argv: string[], stdinText?: string): Promise<number> 
 
   if (command === "checkpoint") {
     return runCheckpoint(rest);
+  }
+
+  if (command === "resume") {
+    return runResume(rest);
   }
 
   if (command === "check-append-only") {
