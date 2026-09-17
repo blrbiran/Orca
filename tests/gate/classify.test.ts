@@ -72,6 +72,10 @@ const rows: Row[] = [
   ["gh api --method PATCH a", {}, gh],
   ["gh api repos/o/r/issues -f title=x", {}, gh],
   ["gh api a --input body.json", {}, gh],
+  ["gh -R o/r pr merge 1", {}, gh],
+  ["gh --repo o/r pr merge 1", {}, gh],
+  ["gh --repo=o/r pr merge 1", {}, gh],
+  ["gh pr merge 1 -R o/r", {}, gh],
   // merge into main whatever the branch
   ["git branch -f main x", {}, merge],
   ["git branch --force main x", {}, merge],
@@ -129,6 +133,7 @@ const rows: Row[] = [
   ['echo "git push"', {}, allow],
   ['grep -n "git push" f', {}, allow],
   ["gh pr view 1", {}, allow],
+  ["gh -R o/r pr view 1", {}, allow],
   ["gh api repos/o/r", {}, allow],
   ["gh api -X GET repos/o/r", {}, allow],
   ["ls -la", {}, allow],

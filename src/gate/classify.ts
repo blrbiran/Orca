@@ -200,7 +200,13 @@ async function classifyGit(args: Word[], assignments: Set<string>, ctx: Context)
 
 function classifyGh(args: Word[]): Verdict {
   const texts = args.map((w) => w.text);
-  const positionals = texts.filter((t) => !t.startsWith("-"));
+  const positionals: string[] = [];
+  for (let j = 0; j < texts.length; j++) {
+    const t = texts[j];
+    if (t === "-R" || t === "--repo") j++;
+    else if (t.startsWith("--repo=")) continue;
+    else if (!t.startsWith("-")) positionals.push(t);
+  }
   if (positionals[0] === "pr" && positionals[1] === "merge") return block("outward gh write");
   if (positionals[0] === "repo" && positionals[1] === "sync") return block("outward gh write");
   if (positionals[0] !== "api") return ALLOW;
