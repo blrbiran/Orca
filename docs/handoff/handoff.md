@@ -4537,3 +4537,29 @@ handoff 席工作期间钩子一直报 359,412（见三第 7 条，推断为父�
 ## 七、姊妹仓库
 
 ccloop、ccmem：只就地更新各自 Orca 一节里 D 那一条（I3 已修、下一件事 Tier 0）；节外字节 sha256 前后相同；产品代码零触碰。
+
+## 八、同会话补遗：判别性活体验收已做（run `orca-dev-c30670af`，人答「做」）
+
+**归属**：同上一节（控制器会话 `c30670af-876f-4e5e-bbb2-9e7c2f23b679`），控制器亲自执行，2026-09-17。本段只追加，上一节一至七一字未动（追加前 375403 字节 sha256 `dd522ac2…` 与追加后前缀逐字相同）。
+*** **更正（Rule 13，不就地改）**：上一节标题「判别性活体验收待人」、三末句「待人单独点头，本轮未跑」、四「待人」第一条、四第三条（`agent_id` 类型未重测）、五第 0 行「判别性活体验收做不做」—— **均已过期**，让它们过期的是下面这次实测。 ***
+
+**做法**（观测锚点：`docs(handoff): record the I3 fix …` 那笔，含修复）：scratchpad 下 `git clone --local` → 去 `origin` → `node_modules` 符号链接主仓库；
+副本 `.orca/level.json` ＝ `{"t1":1000,"t2":2000,"windows":{"claude-haiku-4-5-20251001":200000}}`；副本 `.claude/settings.json` 的 orca 钩子命令行与主仓库**逐字相同**（`diff` 第 8 行无差异），同组另加 `cat > "$(mktemp "$CLAUDE_PROJECT_DIR"/.hook-stdin-XXXXXX)"` 转储 stdin；
+`cd 副本 && claude -p "<先 echo live-check，再用 Agent 派一个只跑 echo sub-check 的子代理，逐字引用收到的钩子上下文>" --allowedTools "Bash(echo:*)" "Agent" "Task" --output-format json > live.json 2>&1`，`CLAUDE_RC=0`，`subtype: "success"`，`subagent_stats.spawned=1`。
+结束后副本 `/bin/rm -rf "${S:?}"` RC 0；主仓库 porcelain 0 字节。`checkpoint` 不在 `--allowedTools` 里，模型也没跑。
+
+| 证据 | 结果 |
+|---|---|
+| stdin 转储 3 份 | 主会话 2 份（`Bash`、`Agent`）**无** `agent_id`；子代理 1 份（`Bash`）带 `agent_id`＝`"a8292c6dfd47d9d50"`、`agent_type`＝`"general-purpose"`，*** **两者都是 JSON 字符串** ***；三份 `session_id`／`transcript_path` 都是父会话的（与十第 1 条 Q2 一致） |
+| 父 transcript（python 按行 `json.loads`，数 `type=attachment`） | `hook_additional_context` **3** 条，其中 PostToolUse 的 2 条是 `orca level: 41734 …`（Bash 后）与 `orca level: 45519 …`（Agent 后），都含 `is past T2 … Write a checkpoint and hand off now` |
+| 子代理 transcript `subagents/agent-a8292c6dfd47d9d50.jsonl` | *** **`hook_additional_context` 0 条**；含 `orca level:` 的 2 行是派发提示词（user）与子代理的回答（assistant），不是注入 *** |
+| 离线重放（用上面转储的真 stdin，`CLAUDE_PROJECT_DIR=副本`，跑与钩子同一命令） | 修复代码：主会话 stdin → RC 0、1220 字节注入；**子代理 stdin → RC 0、0 字节**。把副本的 `src/level/hook.ts` 换成 `aa19d27`（修复前）：**子代理 stdin → RC 0、1220 字节注入**（即修复前会发给子代理）；还原后 `git diff` 0 字节 |
+
+⚠️ 子代理 transcript 里**没有 orca 钩子的 `hook_success` 行**（主会话那边有，因为有 stdout）—— 推断 Claude Code 只记有输出的钩子；「它在子代理调用里跑了且输出为空」靠的是**同组转储钩子确实跑了** ＋ 离线重放 0 字节，不是 transcript 直接记录。
+**重放记录**留在控制器 scratchpad `replay-kept.txt`（会话结束即不保证存在，要点已抄在上表）。
+
+**成本**：`live.json` 的 `total_cost_usd` *** **0.70485275** ***（工具报的数）。活体会话 id `66fbca0b-6cd8-4f4e-b95c-8bd1a1f41a29`。
+**保留的 transcript**（人的数据，没删）：`~/.claude/projects/-private-tmp-claude-501--Users-biran-code-skills-loop-Orca-c30670af-876f-4e5e-bbb2-9e7c2f23b679-scratchpad-live-Ucuuih-orca/66fbca0b-6cd8-4f4e-b95c-8bd1a1f41a29.jsonl` 及同名目录下 `subagents/agent-a8292c6dfd47d9d50.{jsonl,meta.json}`。
+
+⇒ *** **I3 在真 hook runner（无头 `-p`）上闭合：父会话越过 T2 时主会话照常收到注入，子代理收不到。** *** 交互会话里的子代理没有单独现测（同一钩子、同一 stdin 形状，十第 1 条与本轮都是 `-p`）。
+**⛔ 下一件事**（取代上一节五）：**1** 人审（修复一笔＋两节 handoff＋姊妹仓库）与 push；**2** Tier 0 机械闸门（先 brainstorming）；**3** D-launch → D3。「派发词里叮嘱忽略 `orca level:`」从此可以不写。
