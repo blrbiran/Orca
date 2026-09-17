@@ -4150,3 +4150,16 @@ Orca 的远端走到了开工时的本地 HEAD 上，于是本轮只剩**这一�
 
 钩子报本会话累计：本轮中途一次 `COST WARNING: session total ~$10.13`，之后未再报 ⇒ **收尾时的累计值拿不到**。
 水位（只算 prompt）：开工 99,070 → 写计划前 188,608 → Task 5／6 写完 260,336。
+
+## 六、同会话补遗（run `orca-dev-8df1943a`，本节上文一字未动）
+
+**更正「四、本轮没做的」第一条**：ccloop、ccmem 的 Orca 一节**已在同会话稍后就地更新**（D 那一条补「计划已落盘、未执行」，发布状态句按现测改写；节外 sha256 前后相同；主题行 `docs(handoff): update the Orca section in place -- D now has a plan, not yet executed`）。
+
+**人给下一轮的指令（原话要点，只管执行计划的那一轮，不延续到更后面）**：
+- 「用 subagent 的方式执行」计划 ⇒ `superpowers:subagent-driven-development`。
+- 「这一轮执行过程中如果有问题，先按你的建议执行。执行完在最后阶段报给我审核。」
+- 全部完成后：把当前状态与必要信息分别更新进 Orca／ccloop／ccmem 三份 `docs/handoff/handoff.md`；**ccloop、ccmem 只就地更新各自的 Orca 一节，不新增章节**；不写死 HEAD。
+- 另在对话里给人一份 ≤10 行的 handoff executive summary，**不写进文件**。
+
+**Task 7 Step 3（无头 `claude -p` 活体验收）的处置**：控制器请求过人单独点头，人**没有单独答复这一项** ⇒ 控制器建议：
+执行轮**跳过 Step 3**，把它列入收尾审核的待人事项（spec §5：进队列、不阻塞链条），其余 Task 照做。人点头后再补跑。
