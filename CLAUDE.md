@@ -125,6 +125,8 @@ Default to surfacing uncertainty, not hiding it.
 ## Rule 15 — 不可逆动作需人单独授权
 **push**、**合并进 `main`**、**删分支或 worktree** —— 这四件**每一次都要人单独点头**，
 不因为上一次批准过就自动延续。**非门合并一律 `--ff-only`。**
+⚠️ **Tier 0 闸门（`docs/superpowers/specs/2026-09-18-tier0-gate-design.md`）落地后**：这四件事在本仓库的 agent 会话里被机械拦下，
+**人点头了 agent 也做不成** —— 由人在自己的终端里做，agent 只把它列进检查点的 `awaitingHuman`。
 
 变异 / 故障注入**只在 `git clone --local` 副本里做**，主工作树全程零触碰；
 还原证明看 `git diff` 与 `git diff --cached` 的**字节数**，不看肉眼。
