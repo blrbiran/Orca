@@ -1,6 +1,8 @@
+import { execFile } from "node:child_process";
 import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import { git } from "../scheduler/gitExec.js";
 import { runMeasurement } from "./measure.js";
 import { CHECKPOINT_DIR, type Checkpoint, CheckpointRejection, CheckpointSchema, describeLevel } from "./schema.js";
@@ -92,7 +94,11 @@ async function publishStatus(repo: string): Promise<string> {
   let line: string;
   try {
     // GIT_TERMINAL_PROMPT=0: a remote that wants credentials fails here instead of waiting on a prompt.
-    line = (await git(repo, ["ls-remote", "origin", `refs/heads/${branch}`], { env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } })).trim();
+    const { stdout } = await promisify(execFile)("git", ["ls-remote", "origin", `refs/heads/${branch}`], {
+      cwd: repo,
+      env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
+    });
+    line = stdout.trim();
   } catch (err) {
     return `publish: ls-remote origin failed: ${(err as Error).message.trim()}`;
   }

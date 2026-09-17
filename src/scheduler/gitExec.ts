@@ -23,8 +23,8 @@ const execFileAsync = promisify(execFile);
  * a commit message) and several of them come out of a plan file, so a shell
  * would make a task id with a `;` in it a command.
  */
-export async function git(repo: string, args: string[], opts: { env?: NodeJS.ProcessEnv } = {}): Promise<string> {
-  const { stdout } = await execFileAsync("git", args, opts.env === undefined ? { cwd: repo } : { cwd: repo, env: opts.env });
+export async function git(repo: string, args: string[]): Promise<string> {
+  const { stdout } = await execFileAsync("git", args, { cwd: repo });
   return stdout;
 }
 
