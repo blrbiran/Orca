@@ -3,7 +3,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { resume } from "../../src/checkpoint/resume.js";
-import { describeLevel } from "../../src/checkpoint/schema.js";
 import { writeCheckpoint } from "../../src/checkpoint/write.js";
 import { ORCA_IDENTITY, git } from "../../src/scheduler/gitExec.js";
 import { checkpointFixture, putCheckpoint } from "../helpers/checkpoint.js";
@@ -30,9 +29,13 @@ describe("resume (D spec 5 step 4, 9 item 3)", () => {
     const out = await runCli(["resume", "--repo", s.repo]);
     expect(out.code).toBe(0);
     expect(out.stdout).toContain(`checkpoint: ${s.path}\n`);
-    // E6-1: describeLevel has no assertion anywhere else in this plan — assert its full render here,
-    // computed from what writeCheckpoint actually measured, not a guessed literal.
-    expect(out.stdout).toContain(describeLevel(s.checkpoint.level));
+    // E6-1: describeLevel has no assertion anywhere else in this plan. Asserted as a literal, not via
+    // describeLevel itself (fix round 1: computing the expectation with the function under test means a
+    // mutant that makes describeLevel return "" makes the expectation "" too, and toContain("") always
+    // passes). checkpointSession(400_000, draft) yields promptTokens=400_000, outputTokens=1 (the
+    // transcript helper's fixed output), so level=400_001 against the "[1m]" model's 1,000,000-token
+    // window and the default 330,000/450,000 thresholds — band 1.
+    expect(out.stdout).toContain("level 400001 of 1000000 (T1 330000, T2 450000, band 1)");
     expect(out.stdout).toContain("\n  1. finish task 6\n");
     expect(out.stdout).toContain("\n  - which window for claude-opus-5\n");
     expect(out.stdout).toContain(" later work\n");
@@ -96,6 +99,11 @@ describe("resume (D spec 5 step 4, 9 item 3)", () => {
     const badCheckpoint = join(repo, "not-a-checkpoint.txt");
     await writeFile(badCheckpoint, "not json");
     await expect(resume({ repo, checkpointPath: badCheckpoint })).rejects.toMatchObject({ code: "checkpoint-invalid" });
+
+    // Fix round 1 (minor): checkpoint-invalid also fires for valid JSON of the wrong shape.
+    const wrongShape = join(repo, "wrong-shape.json");
+    await writeFile(wrongShape, JSON.stringify({}));
+    await expect(resume({ repo, checkpointPath: wrongShape })).rejects.toMatchObject({ code: "checkpoint-invalid" });
   });
 
   it("refuses by name when no checkpoint is reachable from HEAD", async () => {
