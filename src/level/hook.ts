@@ -12,12 +12,26 @@ export const DRAFT_SHAPE =
  * asks the core, and hands the core's text to Claude Code verbatim as additional context.
  */
 export async function levelHookClaudeCode(stdinText: string): Promise<string> {
+  // D spec 4: a missing reading is reported every time, never silently. A throw escaping here would
+  // leave the agent with nothing, so it becomes the same injection as every other missing reading.
+  try {
+    return await hookBody(stdinText);
+  } catch (err) {
+    return inject([`orca level: no reading — ${(err as Error).message}`]);
+  }
+}
+
+async function hookBody(stdinText: string): Promise<string> {
   const input = parseHookInput(stdinText);
   if (typeof input === "string") return inject([`orca level: no reading — ${input}`]);
 
-  const repo = await git(input.cwd, ["rev-parse", "--show-toplevel"]).then(
+  // Claude Code sets CLAUDE_PROJECT_DIR for hook commands. The stdin cwd follows the session's `cd`,
+  // so a session that moved into another repository would otherwise be handed that repository's
+  // checkpoint commands (Rule 16). The stdin cwd is only the fallback when the variable is absent.
+  const start = process.env.CLAUDE_PROJECT_DIR || input.cwd;
+  const repo = await git(start, ["rev-parse", "--show-toplevel"]).then(
     (out) => out.trim(),
-    () => input.cwd,
+    () => start,
   );
   const { input: reading, thresholds } = await readLevel(repo, input.sessionRef, input.transcriptPath);
   const { covering, problems } = await findCovering(repo, input.sessionRef);

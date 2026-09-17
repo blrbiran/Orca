@@ -1,7 +1,7 @@
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { levelHookClaudeCode } from "../../src/level/hook.js";
 import { checkpointFixture, putCheckpoint } from "../helpers/checkpoint.js";
 import { runCli } from "../helpers/runCli.js";
@@ -27,6 +27,18 @@ function context(stdout: string): string {
 }
 
 describe("orca level --hook claude-code (D spec 3 delivery shim, 4)", () => {
+  // Final review I2: the hook reads CLAUDE_PROJECT_DIR. A session running these tests may have it set
+  // (Claude Code exports it to hook commands), so every test starts without it and restores it after.
+  let previousProjectDir: string | undefined;
+  beforeEach(() => {
+    previousProjectDir = process.env.CLAUDE_PROJECT_DIR;
+    delete process.env.CLAUDE_PROJECT_DIR;
+  });
+  afterEach(() => {
+    if (previousProjectDir === undefined) delete process.env.CLAUDE_PROJECT_DIR;
+    else process.env.CLAUDE_PROJECT_DIR = previousProjectDir;
+  });
+
   it("prints nothing below T1", async () => {
     const s = await setup(329_999);
     expect(await levelHookClaudeCode(s.stdin)).toBe("");
@@ -59,12 +71,43 @@ describe("orca level --hook claude-code (D spec 3 delivery shim, 4)", () => {
     const s = await setup(1);
     const bad = await putCheckpoint(s.repo, "bad.json", "{");
     expect(context(await levelHookClaudeCode(s.stdin)).startsWith(`orca level: unreadable checkpoint ${bad}: `)).toBe(true);
+
+    // Final review I1: a throw inside the hook (readdir on a checkpoints path that is a file: ENOTDIR) is
+    // injected as a missing reading, never propagated to leave the agent with nothing (D spec 4).
+    const t = await setup(1);
+    await mkdir(join(t.repo, ".orca"));
+    await writeFile(join(t.repo, ".orca", "checkpoints"), "");
+    expect(context(await levelHookClaudeCode(t.stdin))).toBe(
+      `orca level: no reading — ENOTDIR: not a directory, scandir '${join(t.repo, ".orca", "checkpoints")}'`,
+    );
   });
 
   it("says there is no reading, naming the path, when the transcript cannot be read", async () => {
     const s = await setup(1);
     const stdin = JSON.stringify({ session_id: SESSION, transcript_path: "/nonexistent/t.jsonl", cwd: s.repo });
     expect(context(await levelHookClaudeCode(stdin))).toContain("no reading — transcript /nonexistent/t.jsonl cannot be read");
+  });
+
+  it("resolves the repository from CLAUDE_PROJECT_DIR, not from a stdin cwd the session moved into (final review I2)", async () => {
+    const project = await setup(330_000);
+    // The other repository's config is invalid: reading it instead of the project's would be a missing reading.
+    const elsewhere = await setup(330_000, { t1: "x" });
+    process.env.CLAUDE_PROJECT_DIR = project.repo;
+    const stdin = JSON.stringify({ session_id: SESSION, transcript_path: project.transcriptPath, cwd: elsewhere.repo });
+    expect(context(await levelHookClaudeCode(stdin))).toContain(`'--repo' '${project.repo}' '--session'`);
+    const path = await putCheckpoint(project.repo, "orca-dev-0a1b2c3d.json", checkpointFixture());
+    expect(context(await levelHookClaudeCode(stdin))).toContain(`A checkpoint for this band is at ${path}.`);
+  });
+
+  it("without CLAUDE_PROJECT_DIR resolves the repository from the stdin cwd: its top level, or the cwd itself outside git", async () => {
+    const s = await setup(330_000);
+    const sub = join(s.repo, "sub");
+    await mkdir(sub);
+    const fromSub = JSON.stringify({ session_id: SESSION, transcript_path: s.transcriptPath, cwd: sub });
+    expect(context(await levelHookClaudeCode(fromSub))).toContain(`'--repo' '${s.repo}' '--session'`);
+    const outside = await realpath(await mkdtemp(join(tmpdir(), "orca-not-a-repo-")));
+    const fromOutside = JSON.stringify({ session_id: SESSION, transcript_path: s.transcriptPath, cwd: outside });
+    expect(context(await levelHookClaudeCode(fromOutside))).toContain(`'--repo' '${outside}' '--session'`);
   });
 
   it("through the real process: exits 0 with the injection on stdout, and refuses another runtime with 1", async () => {

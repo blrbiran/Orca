@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/node_modules/.bin/tsx \"$CLAUDE_PROJECT_DIR\"/src/cli.ts level --hook claude-code",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/node_modules/.bin/tsx \"$CLAUDE_PROJECT_DIR\"/src/cli.ts level --hook claude-code || { rc=$?; echo \"orca level: no reading — hook command failed (exit $rc)\" >&2; exit 2; }",
             "timeout": 10
           }
         ]
