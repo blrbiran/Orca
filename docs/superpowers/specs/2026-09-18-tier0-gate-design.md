@@ -3,6 +3,7 @@
 **状态**：**设计草稿，已过一席对抗审查并按 §10 修订；尚无实现计划**。
 - **人在会话里确认过的**：§1 威胁模型（合作型 agent 的失手）与生效范围（Orca 仓库里的所有 agent 会话）；方案（Orca 代码写的 PreToolUse 钩子为主、仓库级 deny 规则兜底）；判定的大框架 —— 无条件拦四件事的直接形式、「合并进 main」按目标仓库当前分支判、判不清就拦、**不展开 git alias**（人原话「暂时不要管 git alias。一般情况下 agent 不会直接用 git alias」）；三层宁拦不放；判据与活体验收的框架。
 - **审查后人裁**：审查席判 No、控制器提议改成 git `reference-transaction` 钩子为主，人答「**维持bash钩子，我们允许适当的放宽**」⇒ 本文仍以 Bash 钩子为主；审查意见按 §10 逐条处置，放宽的进 §7。
+- **§8 两项人裁**（人原话「1 补一句 2 授权改」）：`CLAUDE.md` Rule 15 补一句（已落，见 §8 第 1 项）；**具名授权改 `src/checkpoint/measure.ts`**，让 Orca 执行记录的实测前先过闸门（纳入本刀，§4、§6.4）。
 - ⚠️ **人未逐条确认、由控制器在确认之后补进的细节**：§3.1 的「任意位置的 git／gh 词」找法、heredoc 与命令替换的处理、`gh api` 默认 POST、`git reset` 的不移动 HEAD 例外，以及 §10 的全部处置。**人审本文时以这些为重点。**
 
 **归属**：run `orca-dev-c30670af`（控制器会话 `c30670af-876f-4e5e-bbb2-9e7c2f23b679`，2026-09-17／18）。上游：D spec `2026-09-17-checkpoint-handoff-design.md` §6（「前置：Tier 0 闸门」）；主 spec `2026-08-29-decision-ledger-design.md` §1 的三档；`CLAUDE.md` Rule 15。
@@ -12,7 +13,7 @@
 - 不改全局 `~/.claude/settings.json`、不动人的 git 凭据、不改 ccloop／ccmem（Rule 16）。
 - 不接 Claude Code 以外的运行时。
 - 不做 git 层（`reference-transaction`／`pre-push`）闸门 —— 人裁维持 Bash 钩子（实测见 §2.3，留作将来加固的候选）。
-- 不写实现计划、不动 `src/**`。
+- 本文不写实现计划、不动 `src/**`（实施轮按 §4 新建 `src/gate/**`，并按人的具名授权改 `src/checkpoint/measure.ts`；其余既有 `src/**` 不动）。
 
 ---
 
@@ -134,6 +135,7 @@ Bash 工具进程里 `CLAUDECODE=1`。临时仓库的 `reference-transaction` �
 | `src/gate/classify.ts` | `(命令串, cwd, branchOf) → allow ｜ block{action, reason}`。纯逻辑，`branchOf` 注入（签名：绝对路径 → 分支名，可抛错） | shell.ts |
 | `src/gate/hook.ts` | 送达垫片：解析 stdin；`tool_name !== "Bash"` ⇒ 放行（含子代理调用，一视同仁，**不照抄水位钩子对 `agent_id` 的静默**）；调 classify；转成退出码与 stderr | classify.ts |
 | `src/cli.ts` | 新子命令 `orca gate --hook claude-code` | hook.ts |
+| `src/checkpoint/measure.ts`（**既有，人具名授权改**） | `runMeasurement` 在 spawn 之前用同一个 `classify(command, repo, branchOf)` 判一次；被拦 ⇒ 抛 `CheckpointRejection("measurement-gated", …)`，**不 spawn**，沿用既有拒绝路径的退出码。它是 `write.ts` 与 `resume.ts` 执行实测的唯一入口 ⇒ 一处检查覆盖两个调用方；同一检查点里排在前面、已放行的实测照常先跑完 | classify.ts |
 
 **时限**：从钩子进程启动起算**总期限 5 s**，覆盖全部 `branchOf` 调用（同一路径缓存一次）；每次 `git rev-parse` 用剩余期限作超时；耗尽 ⇒ 判不清拦。外部钩子超时 10 s；总期限**严格小于**外部。`src/scheduler/gitExec.ts` 的 `git()` 没有超时参数 ⇒ gate 自带带超时的 `execFile` 调用（不改既有 `src/scheduler/**`）。
 
@@ -185,6 +187,13 @@ Bash 工具进程里 `CLAUDECODE=1`。临时仓库的 `reference-transaction` �
 - **真 git**：临时仓库在 `main` 上，stdin 为 `git merge x` ⇒ `exit 2`；切到 `feat` ⇒ `exit 0`（`branchOf` 不打桩）。
 - **配置判据**：§5。
 
+### 6.4 Orca 执行记录的实测（`tests/checkpoint/*.test.ts`，人具名授权的那一处）
+
+- `orca checkpoint write`：草稿 `measure` 含 `git push origin main; touch <临时目录>/ran` ⇒ 以 `measurement-gated` 具名拒绝、未写检查点、`ran` 文件**不存在**；同一草稿里排在前面的 `true` 照常执行（其输出文件存在）。
+- `orca resume`：一份已提交的检查点，`measurements` 含同形的命令 ⇒ 以 `measurement-gated` 具名拒绝、`ran` 不存在。
+- 既有判据（`npx vitest run tests/level tests/checkpoint` 现 56 条）全部保持绿。
+- **变异**：删掉 `runMeasurement` 里的 classify 检查 ⇒ 两条都必须红（`ran` 被创建：push 到不存在的远端失败后 `touch` 照跑）。由另一席在 clone 副本里跑。
+
 ### 6.3 活体验收（花钱、在 `~/.claude/projects` 下留 transcript ⇒ 实施轮执行前须人点头）
 
 **准备**（全部在 scratchpad）：`git clone --local` Orca 得副本；`node_modules` 符号链接主仓库；`git init --bare` 一个 bare 仓库，副本 `origin` 改指它并先推一次 main（控制器在无闸门的副本配置下推）；然后在副本 main 上**再提交一笔**（副本 main 领先 bare 1 笔）；建分支 `tmp` 并在其上**提交一笔**（`tmp` 领先 main 1 笔）；建分支 `keep`；`git worktree add ../w -b wt`。
@@ -203,7 +212,7 @@ Bash 工具进程里 `CLAUDECODE=1`。临时仓库的 `reference-transaction` �
 2. **transcript**：每条期望命令都有对应的 `tool_use`（**缺失即红** —— 模型拒绝执行时本次运行不作数）；其 `tool_result` 为 `is_error: true` 且文本匹配上表的层；
 3. **状态**：bare 的 `refs/heads/main` 前后相同；副本 main 前后相同；`git merge-base --is-ancestor tmp main` 仍为假；`keep` 分支与 `../w` 仍在。
 
-**Rule 4 成功判据**：`npm run verify` 退出码 0；且比对脚本对 A、B、C 退出码 0。
+**Rule 4 成功判据**：`npm run verify` 退出码 0（含 §6.1、§6.2、§6.4 的判据）；且比对脚本对 A、B、C 退出码 0。
 
 ## 7. 残余风险（人裁「允许适当放宽」；登记，不在本文保证内）
 
@@ -218,12 +227,12 @@ Bash 工具进程里 `CLAUDECODE=1`。临时仓库的 `reference-transaction` �
 9. 删 worktree 的其它形态：`rm -rf <worktree 目录>`；内置工具 `ExitWorktree` 的 `action: "remove"`（其工具说明为「delete the worktree directory and its branch」，只作用于本会话 `EnterWorktree` 建的 worktree）—— 钩子 matcher 只有 `Bash`，不拦。
 10. deny 层不含 `git -C <path> push` 等中段形式（中段通配未测）。
 11. `gh` 只拦 §3.2 三类；`gh repo delete`、`gh release …` 等对外写不拦。
-12. 🔴 **Orca 自己执行记录下来的 shell**：`src/checkpoint/measure.ts:12` 以 `spawn("/bin/sh", ["-c", command])` 执行；`write.ts:47–49` 跑草稿的 `measure`、`resume.ts:47–49` 重跑检查点里的每条实测。钩子只看到 `tsx … resume`（不含 git／gh ⇒ 快速放行）。D-launch 会无头跑 `resume`。**处置见 §8 第 2 项。**
+12. ~~Orca 自己执行记录下来的 shell~~ ⇒ **人已具名授权、纳入本刀**（§4 表末行、§6.4）。原登记：`src/checkpoint/measure.ts:12` 以 `spawn("/bin/sh", ["-c", command])` 执行；`write.ts` 跑草稿的 `measure`、`resume.ts` 重跑检查点里的每条实测；钩子只看到 `tsx … resume`。纳入后仍挡不住的：实测命令本身是 `sh script.sh` 之类（同第 1 项）。
 
 ## 8. 未决（待人）
 
-1. **Rule 15 的写法**（§0）：闸门生效后 agent 点头了也做不成。建议实施时把 `CLAUDE.md` Rule 15 补一句「本仓库由 Tier 0 闸门机械执行：这四件事由人在自己的终端里做，agent 只列进 `awaitingHuman`」—— 改 `CLAUDE.md` 按 Rule 11 须人同意。
-2. **§7 第 12 项要不要纳入本刀**：建议纳入 —— `runMeasurement` 在 spawn 前用同一个 `classify`（真 `branchOf`，cwd 为 `--repo`）判一次，被拦的实测不执行、以具名拒绝退出。成本小，且正堵在 D-launch 的无人值守链上。⚠️ 这是**改既有生产代码**（`src/checkpoint/measure.ts`），按历来做法须人**具名授权**；不授权则留在 §7，并在 D-launch 的 spec 里作为其前置。
+1. ~~Rule 15 的写法~~ ⇒ **人裁「补一句」，已落**：`CLAUDE.md` Rule 15 追加「Tier 0 闸门落地后 …」一句（主题行 `docs(claude-md): …`）。措辞写成**闸门落地后**才生效：闸门未实现前写「由闸门机械执行」是假话（Rule 12）。
+2. ~~§7 第 12 项要不要纳入本刀~~ ⇒ **人裁「授权改」**：纳入（§4、§6.4）。
 3. `!` 前缀实测（§7 第 6 项）：只影响 README 写法；建议实施轮让人敲一次 `! git push --dry-run`。
 4. 闸门生效后，本仓库现行工作流里是否有 agent 合法执行过上述命令（如清理自己建的 worktree）—— 计划阶段按 `git log`／handoff 核一遍；若有，改为进 `awaitingHuman`，**不在闸门里开例外**。
 
@@ -243,7 +252,7 @@ Bash 工具进程里 `CLAUDECODE=1`。临时仓库的 `reference-transaction` �
 | I3 | 未知 git 全局选项使子命令放行 | 改：补 `-P`、`--no-optional-locks`、`--literal-pathspecs`；其余未知 ⇒ 判不清；每个选项一行夹具 | §3.1、§6.1 |
 | I4 | `--git-dir`／`--work-tree`／`GIT_DIR`／`GIT_WORK_TREE` 查错仓库 | 改：按分支判时出现 ⇒ 判不清 | §3.3 |
 | I5 | 子 shell 括号破坏 `cd` 叠加 | 改（放宽）：括号当分隔符；按分支判时出现括号 ⇒ 判不清，不模拟作用域 | §3.1、§3.3 |
-| I6 | `orca resume`／`checkpoint write` 执行记录的 shell，不经闸门 | 登记 ＋ 待人：建议纳入，须具名授权改 `measure.ts` | §7-12、§8-2 |
+| I6 | `orca resume`／`checkpoint write` 执行记录的 shell，不经闸门 | 人具名授权 ⇒ 纳入：`runMeasurement` 先过 classify | §4、§6.4 |
 | I7 | `ExitWorktree` 删 worktree 与分支，钩子看不到 | 放宽：登记 | §7-9 |
 | I8 | 无 `node_modules` 时所有 Bash 被拦 | 改：快速放行前移到 shell 命令行；写明恢复 | §3.1、§4 |
 | I9 | `branchOf` 无总上限、时限无判据 | 改：总期限 5 s；假 `git` sleep 的判据 | §4、§6.2 |
@@ -261,4 +270,4 @@ Bash 工具进程里 `CLAUDECODE=1`。临时仓库的 `reference-transaction` �
 | M7 | 缺子代理夹具，照抄水位钩子的静默会漏 | 改：`hook.ts` 明写子代理一视同仁 ＋ 判据 | §4、§6.2 |
 | M8 | 命令行层 `rc==2` 分支无判据 | 改：加一条只有一行 stderr 的判据 | §6.2 |
 | 控制器 | 头部「§3 经人确认」过度声称 | 改：头部分列「人确认的」与「控制器补的」 | 头部 |
-| 控制器 | 与 Rule 15 字面冲突 | 登记 ＋ 待人 | §0、§8-1 |
+| 控制器 | 与 Rule 15 字面冲突 | 人裁补一句，已落 | §0、§8-1 |
