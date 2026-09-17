@@ -4008,3 +4008,94 @@ Orca 的远端走到了开工时的本地 HEAD 上，于是本轮只剩**这一�
 
 对 ccloop 与 ccmem 的产品代码、判据、脚本**零触碰**；只就地更新了各自的 Orca 那一节（节外字节 sha256 改前改后逐字相同，**一个编号项都没新增**），
 并把两处已过期的「本地领先远端 1 笔」改成本轮现测的「同点」。
+
+---
+
+# 📌 本轮（2026-09-17，会话 `bd5f202b`）—— **子系统 D（检查点交接）设计草稿已落盘；计划没写 —— 本会话自己的水位过了 spec 定的 T1，按方案 A 交接**
+
+**归属**：run `orca-dev-bd5f202b`。本节**只追加**，上面一字未动（追加前后原 315421 字节的 sha256 逐字相同）。
+⚠️ **本节不写任何 HEAD，也不写「领先几笔」**。指代某一笔引**提交主题行**；判发布状态**现跑 `git ls-remote`**。带观测锚点的实测值照写。
+
+## 一句话状态
+
+*** **D 的设计草稿：`docs/superpowers/specs/2026-09-17-checkpoint-handoff-design.md`（主题行 `docs(spec): draft subsystem D checkpoint handoff -- a water level any runtime can report, …`），同一笔给主 spec 追加了 ERRATUM 6。** ***
+**没有计划、没有生产代码、没有台账行。** spec 的 §4、§5 已提出但人未单独确认；§7 有 10 个未决项。**真相源是那份 spec，本节不复述它。**
+
+## 零、开工核对（本轮现测）
+
+| 项 | 值 | 命令 |
+|---|---|---|
+| npm test | 100 / 608 | `rtk proxy npm run verify > 文件 2>&1`，整份读回（1410 行），`VERIFY_RC=0` |
+| verify:scheduler／verify:panel／web | 51 / 167、PASS 0–13、8 / 26 | 同上 |
+| `ls ~/.orca` | 不存在（verify 前后） | |
+| 开工 `ls-remote` | Orca 本地领先 2（上一轮的 fix 与 handoff 两笔）；ccloop、ccmem 各领先 1 | `/usr/bin/git ls-remote` ＋ `rev-list --left-right --count` |
+| 写 spec 前再测 | **Orca 远端已走到上一轮 handoff 那笔** ⇒ 人在本会话期间推了 Orca 那两笔；ccloop、ccmem 那两笔**本轮没有重测** | 同上 |
+
+## 一、人本轮拍的
+
+- 审上一轮 4 笔（Orca fix ＋ 三份 handoff）：控制器逐笔摆 diff、现测节外 sha256 与读取方；**人未提修改，随即让开始 D 的 brainstorm**。
+- **Orca 的主要目的**（人原话）：「尽量减少每次对人的打扰（将人从任务工作／循环的当下现场摘出来）」—— D 的目标据此从「让 agent 察觉水位」改为「交接链本身不需要人」（spec §0）。
+- **handoff 不是给人读的**（人原话）⇒ 主 spec ERRATUM 6；已写入用户记忆（见「二」）。
+- D 先服务**开发会话**，ccloop 阶段 agent 暂不做；三种痛都要消；**一份 spec 覆盖三刀，本轮只计划 D1 ＋ D2**。
+- **后续不止 Claude Code**：Codex、opencode、pi、oh-my-pi 都可能 ⇒ 分层（spec §3）。源码在 `/Users/biran/code/skills/agent/{codex,pi,oh-my-pi,opencode}`（人给的 `sourceget find …`）。
+- 「拉起下一个会话」**进 spec、不进本轮实施**；**Tier 0 机械闸门是它的前置**（spec §6）。
+- 控制器自审出 11 条问题（其中 3 条改变设计），人：「同意，修改」。
+- 写计划前控制器现测水位 333,515（≥ spec 的 T1）⇒ 人选**方案 A**：提交 spec ＋ 交接，计划留新会话。
+- **长期授权（本轮）**：「执行过程中如果有问题，先按你的建议执行。执行完在最后阶段报给我审核」。
+
+## 二、做出来的东西
+
+- 上述 spec 一笔（+232 行：新 spec 214 行 ＋ ERRATUM 6 共 18 行；主 spec 原 45015 字节 sha256 前后逐字相同；两文件控制字符扫描 0，扫描器有必抓／必不抓对照）。
+- ⚠️ **一处仓库外写入（Rule 13 要求登记）**：用户记忆 `~/.claude/projects/-Users-biran-code-skills-loop-Orca/memory/handoff-reader-is-next-agent.md` 新建，`MEMORY.md` 追加一行索引。
+- scratchpad 下的探针（`probe_transcript.py` 等）是**一次性的**，不进仓库；公式在 spec §2.1。
+
+## 三、🔴 本轮值得带走的
+
+1. *** **水位现在能被代码读出，而且被对照过**：Claude Code transcript 最近一条主链消息 input＋cache_read＋cache_creation ＝ 201,451，人跑 `/context` 报 201.5k。** *** 此前 handoff:3574 写着「没有工具报数」。
+2. *** **自己写的 spec 与自己的数据表矛盾，作者自审没看出来**：正文说「不需要窗口大小」，§2.2 表里 Codex 的窗口是 258,400（小于 330K 阈值）。** *** 是人要求 review 后换「挑错席」重读才抓到。⇒ **写完 spec，拿每条论断去对 spec 自己的实测表。**
+3. *** **一句「今天守得住靠权限弹窗」从来没量过** *** —— 现测全局 `permissions.deny` 无任何 push 规则、配置了 `autoMode`、本会话就在 auto mode 下 ⇒ **Tier 0 机械闸门今天就不存在**，不只是「无头时才缺」。
+4. *** **只读打开 SQLite 不等于零触碰**：opencode spike 席以 `mode=ro` 打开时改动了人的 `~/.config/opencode/opencode.db-shm` 的 mtime（内容未写）。** *** 已在 spec §2.2 登记，**待人知悉**。
+5. **本机已有同类实现**：ecc 插件 `suggest-compact.js` 读钩子 stdin 的 `transcript_path` 算上下文 —— 也是反例：失败时**静默失效**。
+6. **撤回一个说法要全文 grep**：修 11 条后按 ccmem 记法扫了 7 个早稿措辞，残留只剩有意保留的引文与「已删」注记。
+7. **工具骗法**：zsh 不对未加引号的变量分词，一个 `set -- $spec` 的 sha 脚本整段跑错（输出作废、重跑）⇒ 本机 shell 脚本里别靠隐式分词。
+8. **5 个只读 subagent 的报告逐份抽查了关键引用（file:line 现读原文），全部属实**；但其中两处行号是按报告引用、本轮才补读核对的（opencode `session.ts:371`、`overflow.ts:10-33`）。
+
+## 四、本轮**没有**做的
+
+- **计划**（`writing-plans`）、`src/**`、`tests/**`：零触碰。
+- **台账**：本轮一条 `.decisions/` 行都没写 —— 本轮的决定全是人当面拍的；**要不要补，待人定**。
+- spec §4、§5 **未经人单独确认**；§7 的 10 项**未决**。
+- ccloop、ccmem：只就地更新各自的 Orca 一节（见「七」）。
+- **未 push、未建分支、未合并、未删任何分支或 worktree。**
+
+## 五、⛔ 下一件事
+
+| 顺序 | 做什么 | 说明 |
+|---|---|---|
+| **0** | **人审本轮**：spec 那一笔 ＋ 三份 handoff 的更新；台账补不补；opencode `-shm` mtime 副作用 | 收尾对话里已列 |
+| **1** | *** **新会话：先对齐，再写计划** *** | 先请人确认 spec §4、§5；再对齐 §7 的第 1（检查点格式与住处）、3（开工命令）、9（Claude Code 的窗口大小从哪来）、10（「覆盖当前水位的检查点」怎么判）项 —— **这四项不定，D2 计划写不出来**；然后 `superpowers:writing-plans`，D1 ＋ D2 一份计划 |
+| **2** | 之后 | Tier 0 机械闸门 → D-launch → D3（spec §6） |
+| **3** | 仍暂缓 | B 的后续（`~/.orca` 仍不存在）；spec §8 第 9 条、裁决甲 `plan` 那一半 |
+
+**开工三条照跑**：`/usr/bin/git ls-remote origin refs/heads/main`；`rtk proxy npm run verify` 重定向读回（期望 *** **100/608**、51/167、PASS 0–13、web 8/26 ***）；`ls ~/.orca` 必须不存在。
+⚠️ **写计划前先量自己的水位**（spec §2.1 的公式）；本轮就是在 333,515 停下的。
+
+## Suggested skills
+
+| skill | 什么时候用 |
+|---|---|
+| `superpowers:brainstorming` | 继续对齐 §4、§5、§7（**不是从头 brainstorm**，spec 已有） |
+| `superpowers:writing-plans` | 上面四项定了之后；每个 `finally`／失败路径点名变异，读数「读不到」路径必点名 |
+| `superpowers:test-driven-development` | 实施时 |
+| `superpowers:verification-before-completion` | 说「绿了／做完了」之前 |
+| `superpowers:dispatching-parallel-agents` | 若要再对多个运行时做只读 spike（本轮三席并行的做法见 spec §2.2 的锚点） |
+
+## 六、成本与水位
+
+**只抄工具报的数**：钩子在本节写作前最后一次报本会话累计 *** **约 $126.89** ***。
+本轮 5 个只读 subagent，通知里报的 token：86,555／96,772／103,788／120,804／93,695。
+本会话水位（只算 prompt，spec §2.1 公式）：决定交接时 **333,515**。
+
+## 七、姊妹仓库本轮的同批动作
+
+对 ccloop 与 ccmem 的产品代码、判据、脚本**零触碰**；只就地更新各自的 Orca 那一节（节外字节 sha256 改前改后逐字相同，**一个编号项都没新增**）。
