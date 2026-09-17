@@ -4574,3 +4574,10 @@ ccloop、ccmem：只就地更新各自 Orca 一节里 D 那一条（I3 已修、
 - ⛔ **待人**（spec §8）：① 审 spec，重点是头部列的「控制器补的细节」与 §10；② `CLAUDE.md` Rule 15 是否补一句「由闸门机械执行、人在自己的终端做」；③ 是否**具名授权**改 `src/checkpoint/measure.ts`，让 `orca resume`／`checkpoint write` 执行记录的实测前先过 `classify`（否则留作 D-launch 的前置）。
 - **下一件事**：人审过 ⇒ `superpowers:writing-plans`（spec §6 的变异清单与活体验收 A／B／C 进计划）。活体验收花钱，实施轮执行前须人点头。
 - 本会话 scratchpad 里的 git 层探针（spec §2.3）是一次性的；ccloop、ccmem 的 Orca 一节本段**未更新**（「下一件事是 Tier 0 闸门」仍然成立）。
+
+## 十、同会话补遗：人对 spec §8 的两项裁决（run `orca-dev-c30670af`，2026-09-18）
+
+本段只追加（追加前 381779 字节 sha256 `234afb4e…`）。人原话「1 补一句 2 授权改」：
+- **① Rule 15 补一句** ⇒ 已落：`CLAUDE.md` Rule 15 追加「Tier 0 闸门落地后：人点头了 agent 也做不成，由人在自己的终端里做」（主题行 `docs(claude-md): say in Rule 15 …`）。措辞限定为「落地后」—— 闸门未实现前写「已由闸门执行」是假话。
+- **② 具名授权改 `src/checkpoint/measure.ts`** ⇒ 纳入本刀：`runMeasurement` 在 spawn 前过 `classify`，被拦以 `measurement-gated` 具名拒绝（spec §4 表末行、§6.4；主题行 `docs(spec): record the person's two rulings …`）。**授权只覆盖这一个文件的这一处改动**，其余既有 `src/**` 不动。
+- 上文第九节「⛔ 待人」的②③**已过期**（被本段取代）；①「人审 spec」仍待人。审过 ⇒ `superpowers:writing-plans`（建议新会话：本会话水位已近 T1）。
