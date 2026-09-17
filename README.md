@@ -311,7 +311,12 @@ command in this repository's Claude Code sessions through
 --hook claude-code`. It blocks four irreversible git/gh moves — `git push`,
 `git branch -d`/`-D`/`--delete`, `git worktree remove`/`prune`, and `gh pr
 merge`/`gh repo sync` — plus any non-`GET` `gh api` call, whether typed
-directly or through `rtk`/`rtk proxy`. `permissions.deny` backs only the
+directly or through `rtk`/`rtk proxy`. It also blocks a merge into `main`:
+on `main` this means `git merge`, `git pull`, `git rebase` and any `git
+reset` that moves HEAD; whatever the current branch, it also means `git
+branch -f`/`-M`/`-m`/`-C`/`-c … main`, `git checkout -B main`, `git switch
+-C main`, a `git fetch` refspec ending in `:main`, and `git update-ref
+refs/heads/main`. `permissions.deny` backs only the
 eight literal move patterns above (each also in `rtk `/`rtk proxy ` form) at
 the literal-string layer, ahead of the hook — it has no entry for `gh api`
 (its arbitrary flags can't be enumerated as literal prefixes) and none for a
@@ -323,7 +328,10 @@ session. `orca resume` and `orca checkpoint write` refuse to record a
 measurement the gate blocked, exiting with `measurement-gated` rather than
 recording a false pass.
 
-This is a literal-prefix gate, not a semantic one — it does not parse shell,
-so it can both over- and under-match unusual quoting or command
-substitution. See residual risks in
+`permissions.deny` matches literal prefixes only. The hook is different: it
+parses the command — quoting, command substitution, heredocs, `sh -c` and
+the like — and errs toward blocking when it cannot decide. What still gets
+through is narrower and more deliberate: a command written into a script
+file, an inline interpreter invocation such as `python3 -c "…"`, or `rm -rf`
+of a worktree directory. See residual risks in
 `docs/superpowers/specs/2026-09-18-tier0-gate-design.md` §7.
