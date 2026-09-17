@@ -302,3 +302,24 @@ write a checkpoint; past T2 (450,000) it is told to hand off; when the level can
   unrelated to the per-user `~/.orca` store.
 
 Design: `docs/superpowers/specs/2026-09-17-checkpoint-handoff-design.md`.
+
+## Tier 0 gate
+
+A `PreToolUse` hook (`.claude/settings.json`, `Bash` matcher) runs every Bash
+command in this repository's Claude Code sessions through
+`scripts/gate-prefilter.mjs` and, when that does not resolve it, `orca gate
+--hook claude-code`. It blocks four irreversible git/gh moves — `git push`,
+`git branch -d`/`-D`/`--delete`, `git worktree remove`/`prune`, and `gh pr
+merge`/`gh repo sync` — plus any non-`GET` `gh api` call, whether typed
+directly or through `rtk`/`rtk proxy`. `permissions.deny` backs the same list
+at the literal-string layer, ahead of the hook.
+
+A blocked move is not lost: do it in your own terminal, outside the agent
+session. `orca resume` and `orca checkpoint write` refuse to record a
+measurement the gate blocked, exiting with `measurement-gated` rather than
+recording a false pass.
+
+This is a literal-prefix gate, not a semantic one — it does not parse shell,
+so it can both over- and under-match unusual quoting or command
+substitution. See residual risks in
+`docs/superpowers/specs/2026-09-18-tier0-gate-design.md` §7.

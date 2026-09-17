@@ -1,5 +1,29 @@
 {
+  "permissions": {
+    "deny": [
+      "Bash(git push*)", "Bash(rtk git push*)", "Bash(rtk proxy git push*)",
+      "Bash(git branch -d*)", "Bash(rtk git branch -d*)", "Bash(rtk proxy git branch -d*)",
+      "Bash(git branch -D*)", "Bash(rtk git branch -D*)", "Bash(rtk proxy git branch -D*)",
+      "Bash(git branch --delete*)", "Bash(rtk git branch --delete*)", "Bash(rtk proxy git branch --delete*)",
+      "Bash(git worktree remove*)", "Bash(rtk git worktree remove*)", "Bash(rtk proxy git worktree remove*)",
+      "Bash(git worktree prune*)", "Bash(rtk git worktree prune*)", "Bash(rtk proxy git worktree prune*)",
+      "Bash(gh pr merge*)", "Bash(rtk gh pr merge*)", "Bash(rtk proxy gh pr merge*)",
+      "Bash(gh repo sync*)", "Bash(rtk gh repo sync*)", "Bash(rtk proxy gh repo sync*)"
+    ]
+  },
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "in=$(cat); printf '%s' \"$in\" | node \"$CLAUDE_PROJECT_DIR\"/scripts/gate-prefilter.mjs && exit 0; printf '%s' \"$in\" | \"$CLAUDE_PROJECT_DIR\"/node_modules/.bin/tsx \"$CLAUDE_PROJECT_DIR\"/src/cli.ts gate --hook claude-code || { rc=$?; [ \"$rc\" -eq 2 ] && exit 2; echo \"orca gate: hook failed (exit $rc) — blocked\" >&2; exit 2; }",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "*",
