@@ -1,0 +1,54 @@
+{
+  "v": 1,
+  "runId": "orca-dev-d5688105",
+  "runtime": "claude-code",
+  "sessionRef": "d5688105-065f-41d6-aa5e-a4818e5d78c3",
+  "writtenAt": "2026-09-17T13:36:43.003Z",
+  "head": "6c17a7294ac3fa8dd8acc3db41b54eccb2d33556",
+  "level": {
+    "kind": "reading",
+    "level": 336193,
+    "windowTokens": 1000000,
+    "t1": 330000,
+    "t2": 450000,
+    "band": 1
+  },
+  "next": [
+    "Final fix wave for subsystem D per the SDD ledger rulings: I1 hook failures must reach the agent (settings.json command fallback with exit 2 + try/catch in levelHookClaudeCode + test), I2 resolve the repo from CLAUDE_PROJECT_DIR before stdin cwd (+ test), M1 resume reads the checkpoint from the commit (git show), M3 ls-remote with GIT_TERMINAL_PROMPT=0; then one scoped re-review and a full npm run verify read back in full",
+    "Append a section to docs/handoff/handoff.md and update the Orca sections in ccloop and ccmem handoffs in place; give the person the executive summary in the conversation"
+  ],
+  "open": [
+    "Subagent hook input shape is unknown: under SDD a subagent tool call may get no-reading or a parent-session write request (final review I3)",
+    "Deferred minors listed in .superpowers/sdd/2026-09-17-checkpoint-handoff-d1-d2/progress.md (dirty filter renames, measure timeout, zod formatter x4, resume runs recorded shell commands wording, absolute tmp outputPath)"
+  ],
+  "awaitingHuman": [
+    {
+      "kind": "named-authorization",
+      "what": "Task 7 Step 3 headless claude -p live check (also answers the subagent hook input shape)"
+    },
+    {
+      "kind": "named-authorization",
+      "what": "Whether to register windows for non-1M models in .orca/level.json (E7-3)"
+    },
+    {
+      "kind": "irreversible",
+      "what": "push main (local commits from this round are unpushed)"
+    }
+  ],
+  "measurements": [
+    {
+      "command": "npx vitest run tests/level tests/checkpoint",
+      "exitCode": 0,
+      "commit": "6c17a7294ac3fa8dd8acc3db41b54eccb2d33556",
+      "observedAt": "2026-09-17T13:36:37.655Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-d5688105-gY4W29/1.txt"
+    },
+    {
+      "command": "git ls-remote origin refs/heads/main",
+      "exitCode": 0,
+      "commit": "6c17a7294ac3fa8dd8acc3db41b54eccb2d33556",
+      "observedAt": "2026-09-17T13:36:42.959Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-d5688105-gY4W29/2.txt"
+    }
+  ]
+}
