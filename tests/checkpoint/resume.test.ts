@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -115,5 +116,23 @@ describe("resume (D spec 5 step 4, 9 item 3)", () => {
 
   it("refuses by name when no checkpoint is reachable from HEAD", async () => {
     await expect(resume({ repo: await tempRepo() })).rejects.toMatchObject({ code: "no-checkpoint" });
+  });
+
+  it("refuses a recorded measurement the Tier 0 gate blocks, without running it (Tier 0 gate spec 6.4)", async () => {
+    const repo = await tempRepo();
+    const outside = await mkdtemp(join(tmpdir(), "orca-gated-"));
+    const sha = (await git(repo, ["rev-parse", "HEAD"])).trim();
+    await putCheckpoint(
+      repo,
+      "orca-dev-0a1b2c3d.json",
+      checkpointFixture({
+        head: sha,
+        measurements: [{ command: `git push origin main; touch ${outside}/ran`, exitCode: 0, commit: sha, observedAt: "2026-09-17T00:00:00.000Z", outputPath: "/nonexistent/1.txt" }],
+      }),
+    );
+    await git(repo, ["add", "--", ".orca"]);
+    await git(repo, [...ORCA_IDENTITY, "commit", "-q", "-m", "checkpoint"]);
+    await expect(resume({ repo })).rejects.toMatchObject({ code: "measurement-gated" });
+    expect(existsSync(join(outside, "ran"))).toBe(false);
   });
 });

@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { writeCheckpoint } from "../../src/checkpoint/write.js";
@@ -122,5 +123,16 @@ describe("writeCheckpoint (D spec 5 step 2, 9 item 1)", () => {
     const refused = await runCli(args);
     expect(refused.code).toBe(1);
     expect(refused.stderr.startsWith("rejected: dirty-worktree: ")).toBe(true);
+  });
+
+  it("refuses a measurement the Tier 0 gate blocks without running it, after running the ones before it (Tier 0 gate spec 6.4)", async () => {
+    const outside = await mkdtemp(join(tmpdir(), "orca-gated-"));
+    const s = await checkpointSession(400_000, { next: ["n"], measure: [`touch ${outside}/first`, `git push origin main; touch ${outside}/ran`] });
+    const before = await head(s.repo);
+    await expect(write(s)).rejects.toMatchObject({ code: "measurement-gated" });
+    expect(existsSync(join(outside, "first"))).toBe(true);
+    expect(existsSync(join(outside, "ran"))).toBe(false);
+    expect(existsSync(join(s.repo, FILE))).toBe(false);
+    expect(await head(s.repo)).toBe(before);
   });
 });
