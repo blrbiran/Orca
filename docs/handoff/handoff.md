@@ -4099,3 +4099,54 @@ Orca 的远端走到了开工时的本地 HEAD 上，于是本轮只剩**这一�
 ## 七、姊妹仓库本轮的同批动作
 
 对 ccloop 与 ccmem 的产品代码、判据、脚本**零触碰**；只就地更新各自的 Orca 那一节（节外字节 sha256 改前改后逐字相同，**一个编号项都没新增**）。
+
+# 📌 本轮（2026-09-17，会话 `8df1943a`）—— **D 的四项已对齐、D1＋D2 计划已落盘；未执行**
+
+**归属**：run `orca-dev-8df1943a`。本节只追加。⚠️ 不写 HEAD、不写领先笔数；判发布状态现跑 `/usr/bin/git ls-remote origin refs/heads/main`。
+
+## 一句话状态
+
+*** **计划：`docs/superpowers/plans/2026-09-17-checkpoint-handoff-d1-d2.md`（主题行 `docs(plan): turn D1 and D2 into seven tasks…`）。spec 追加了 §9「对齐结果」（主题行 `docs(spec): record the D alignment…`）。** ***
+没有生产代码、没有台账行。**真相源是 spec §9 与计划，本节不复述。**
+
+## 零、开工核对（本轮现测，Orca `a332e17`）
+
+| 项 | 值 | 命令 |
+|---|---|---|
+| verify | `VERIFY_RC=0`；100/608、51/167、PASS 0–13、web 8/26 | `rtk proxy npm run verify > 文件 2>&1`，整份读回（1408 行） |
+| `ls ~/.orca` | 不存在（前后各一次） | |
+| 开工 ls-remote | Orca 本地领先 2、ccloop 1、ccmem 1（＝上一轮待审 4 笔） | `/usr/bin/git ls-remote` ＋ `rev-list --left-right --count` |
+
+## 一、人本轮拍的
+
+- 上一轮 4 笔：人「同意，继续」；**台账不补**（控制器建议，人同意）；opencode `-shm` mtime 副作用：知悉，无需补救。
+- spec §4、§5 **确认**；§7 第 1、3、9、10 项**均选推荐项**（内容见 spec §9）。
+- 「同意，继续」⇒ 写计划。
+
+## 二、🔴 本轮值得带走的
+
+1. *** **transcript 的 `message.model` 分不出 1M**（只记 `claude-opus-5`）；`type=attachment, attachment.type=model` 的 `identity.modelId` 才带 `[1m]`。** *** 早先「按模型标识解析窗口」若照做，会把 1M 会话当成未知或 200K。
+2. *** **本机全部 transcript 里 `compact_boundary` 零命中** *** ⇒ 压缩后的读数形状无样本，计划不为它设分支（滞后只偏高）。
+3. **控制器失误（如实登记）**：为查模型设置打印了 `~/.claude/settings.json` 的若干键，其中 `env` 含一把 API key 明文，进了本会话 transcript。已告知人，建议轮换。⇒ *** **读人的配置文件只打印明确需要的键，不打印 `env`。** ***
+4. 自查时 `grep -c 'it("'` 报 61、行首计数 53 —— 子串计数会把非 `it` 行算进去。⇒ 数判据条数按行首匹配。
+
+## 三、⛔ 下一件事
+
+| 顺序 | 做什么 |
+|---|---|
+| **0** | 人审本轮 2 笔（spec §9 ＋ 计划）与本节 |
+| **1** | 人选执行方式（subagent-driven 推荐）；**Task 7 Step 3 活体验收会无头起一次 `claude -p`，须人单独点头** |
+| **2** | 执行计划 Task 1–7；每个 Task 的变异表由另一席在 clone 副本里执行 |
+| **3** | 之后：Tier 0 机械闸门 → D-launch → D3（spec §6） |
+
+⚠️ 写代码前先量水位（spec §2.1 公式）。本会话写完计划时 prompt 读数约 290K，**已接近 T1，故不在本会话执行**。
+
+## 四、本轮没做的
+
+- 计划未执行；`src/**`、`tests/**` 零触碰；台账零行；ccloop、ccmem **本轮未更新各自的 Orca 一节**（D 从「无计划」变「有计划」，未触及它们的任何事实；下一轮执行完再一并更新）。
+- 未 push、未建分支、未合并、未删任何分支或 worktree。
+
+## 五、成本与水位
+
+钩子报本会话累计：本轮中途一次 `COST WARNING: session total ~$10.13`，之后未再报 ⇒ **收尾时的累计值拿不到**。
+水位（只算 prompt）：开工 99,070 → 写计划前 188,608 → Task 5／6 写完 260,336。
