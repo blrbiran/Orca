@@ -286,3 +286,19 @@ pre-commit hook (`scripts/githooks/pre-commit`) is deliberately narrower: it
 only re-checks `.decisions/**` for append-only violations when a commit
 actually touches that directory, which is why it stays fast regardless of
 how large `npm run verify` grows.
+
+## Checkpoint handoff (subsystem D, v1: Claude Code)
+
+A development session in this repository learns its own context-window level from a `PostToolUse` hook
+(`.claude/settings.json` runs `orca level --hook claude-code`). At T1 (330,000 tokens by default) it is told to
+write a checkpoint; past T2 (450,000) it is told to hand off; when the level cannot be read it is told so on every call.
+
+- `orca checkpoint write --session <id> --transcript <path> --draft <file>` writes and commits
+  `.orca/checkpoints/<run-id>.json`. The agent's draft carries judgment only (next steps, open items, what waits
+  for a human, which commands to measure); the level, HEAD and every measurement's exit code are measured by the command.
+- `orca resume` starts the next session from the latest checkpoint reachable from HEAD and re-measures everything
+  that may have changed, including publish state from `git ls-remote`.
+- Thresholds and model window sizes can be set in `.orca/level.json`; that file lives in the repository and is
+  unrelated to the per-user `~/.orca` store.
+
+Design: `docs/superpowers/specs/2026-09-17-checkpoint-handoff-design.md`.
