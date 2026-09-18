@@ -1,6 +1,8 @@
 import { z } from "zod";
 
 export const CHECKPOINT_DIR = ".orca/checkpoints";
+/** D-launch spec §6.1: chain records, committed by `orca chain` only. Here so resume can exclude them (review M4). */
+export const CHAIN_RECORDS_DIR = ".orca/chains";
 export const AWAITING_KINDS = ["irreversible", "tied-evidence", "named-authorization", "ccloop-change"] as const;
 
 const Sha = z.string().regex(/^[0-9a-f]{40}$/);

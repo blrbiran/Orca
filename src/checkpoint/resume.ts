@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { git } from "../scheduler/gitExec.js";
 import { runMeasurement } from "./measure.js";
-import { CHECKPOINT_DIR, type Checkpoint, CheckpointRejection, CheckpointSchema, describeLevel } from "./schema.js";
+import { CHAIN_RECORDS_DIR, CHECKPOINT_DIR, type Checkpoint, CheckpointRejection, CheckpointSchema, describeLevel } from "./schema.js";
 
 /**
  * D spec 5 step 4 and 9 item 3: the start-of-session check a person used to paste as a brief.
@@ -33,7 +33,7 @@ export async function resume(opts: { repo: string; checkpointPath?: string }): P
   const since = await git(repo, ["log", "--oneline", `${cp.head}..HEAD`]).catch((err: Error) => `(cannot list: ${err.message.trim()})\n`);
   out.push(`commits since ${cp.head.slice(0, 7)}:`, ...(since.trim() === "" ? ["  (none)"] : since.trimEnd().split("\n").map((l) => `  ${l}`)));
 
-  const changed = await git(repo, ["diff", "--name-only", cp.head, "HEAD", "--", ".", `:(exclude)${CHECKPOINT_DIR}`]).then(
+  const changed = await git(repo, ["diff", "--name-only", cp.head, "HEAD", "--", ".", `:(exclude)${CHECKPOINT_DIR}`, `:(exclude)${CHAIN_RECORDS_DIR}`]).then(
     (text) => text.split("\n").filter((l) => l !== ""),
     (err: Error) => err,
   );
@@ -111,4 +111,23 @@ async function publishStatus(repo: string): Promise<string> {
   }
   const [ahead, behind] = (await git(repo, ["rev-list", "--left-right", "--count", `HEAD...${remote}`])).trim().split(/\s+/);
   return `publish: origin/${branch} at ${remote.slice(0, 7)}; local ahead ${ahead}, behind ${behind} (measured now by ls-remote)`;
+}
+
+export type ResumeOutcome =
+  | { exitCode: 0 | 2; text: string; rejection: null }
+  | { exitCode: number; text: ""; rejection: { code: string; message: string } };
+
+/**
+ * D-launch spec §2 (review 1): the chain supervisor runs resume inside its own process — never as an `orca` child,
+ * which would load code a session may have changed. A named refusal becomes a value the supervisor routes (§4.4);
+ * anything else still throws, so the CLI keeps answering it with main()'s exit 3 exactly as before.
+ */
+export async function resumeOutcome(opts: { repo: string; checkpointPath?: string }): Promise<ResumeOutcome> {
+  try {
+    const result = await resume(opts);
+    return { ...result, rejection: null };
+  } catch (err) {
+    if (err instanceof CheckpointRejection) return { exitCode: err.exitCode, text: "", rejection: { code: err.code, message: err.message } };
+    throw err;
+  }
 }

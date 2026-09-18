@@ -19,7 +19,7 @@ import { reviewsFile } from "./panel/paths.js";
 import { PanelRejection } from "./panel/rejection.js";
 import { CheckpointRejection, describeLevel } from "./checkpoint/schema.js";
 import { writeCheckpoint } from "./checkpoint/write.js";
-import { resume } from "./checkpoint/resume.js";
+import { resumeOutcome } from "./checkpoint/resume.js";
 
 const USAGE = `usage:
   orca validate <path...>        validate ledger file(s) or directory (directory scans top-level *.jsonl only)
@@ -461,17 +461,13 @@ async function runResume(args: string[]): Promise<number> {
     process.stderr.write(`${values}\n${USAGE}`);
     return 1;
   }
-  try {
-    const result = await resume({ repo: values.get("--repo") ?? process.cwd(), checkpointPath: values.get("--checkpoint") });
-    process.stdout.write(result.text);
-    return result.exitCode;
-  } catch (err) {
-    if (err instanceof CheckpointRejection) {
-      process.stderr.write(`rejected: ${err.code}: ${err.message}\n`);
-      return err.exitCode;
-    }
-    throw err;
+  const outcome = await resumeOutcome({ repo: values.get("--repo") ?? process.cwd(), checkpointPath: values.get("--checkpoint") });
+  if (outcome.rejection !== null) {
+    process.stderr.write(`rejected: ${outcome.rejection.code}: ${outcome.rejection.message}\n`);
+    return outcome.exitCode;
   }
+  process.stdout.write(outcome.text);
+  return outcome.exitCode;
 }
 
 async function readStdin(): Promise<string> {

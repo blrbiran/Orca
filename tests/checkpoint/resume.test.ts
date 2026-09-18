@@ -1,9 +1,9 @@
 import { existsSync } from "node:fs";
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { resume } from "../../src/checkpoint/resume.js";
+import { resume, resumeOutcome } from "../../src/checkpoint/resume.js";
 import { writeCheckpoint } from "../../src/checkpoint/write.js";
 import { ORCA_IDENTITY, git } from "../../src/scheduler/gitExec.js";
 import { isolateChainEnv } from "../helpers/chainEnv.js";
@@ -137,5 +137,31 @@ describe("resume (D spec 5 step 4, 9 item 3)", () => {
     await git(repo, [...ORCA_IDENTITY, "commit", "-q", "-m", "checkpoint"]);
     await expect(resume({ repo })).rejects.toMatchObject({ code: "measurement-gated" });
     expect(existsSync(join(outside, "ran"))).toBe(false);
+  });
+
+  it("through the real process a refusal is one stderr line and exit 1 (unchanged by D-launch)", async () => {
+    const repo = await tempRepo();
+    const out = await runCli(["resume", "--repo", repo]);
+    expect([out.code, out.stdout, out.stderr]).toEqual([1, "", "rejected: no-checkpoint: no commit reachable from HEAD touches .orca/checkpoints\n"]);
+  });
+
+  it("a chain record commit does not make the measurements stale (D-launch spec §4.4, review M4)", async () => {
+    const s = await written({ next: ["n"], measure: ["true"] });
+    await mkdir(join(s.repo, ".orca", "chains"), { recursive: true });
+    await commitFile(s.repo, ".orca/chains/chain-0000000a.json", "{}\n", "chore(chain): chain-0000000a, started");
+    expect((await resume({ repo: s.repo })).text).toContain("measurements (fresh):\n");
+  });
+
+  it("resumeOutcome turns a named refusal into a value and passes success through (D-launch spec §2, review 1)", async () => {
+    const repo = await tempRepo();
+    expect(await resumeOutcome({ repo })).toEqual({
+      exitCode: 1,
+      text: "",
+      rejection: { code: "no-checkpoint", message: "no commit reachable from HEAD touches .orca/checkpoints" },
+    });
+    const s = await written({ next: ["n"] });
+    const ok = await resumeOutcome({ repo: s.repo });
+    expect([ok.exitCode, ok.rejection]).toEqual([0, null]);
+    expect(ok.text).toContain("\nnext:\n  1. n\n");
   });
 });
