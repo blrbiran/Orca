@@ -4663,3 +4663,91 @@ ccloop、ccmem：只就地更新各自 Orca 一节里 D 那一条（I3 已修、
 ## 七、姊妹仓库
 
 ccloop、ccmem：只就地更新各自 Orca 一节（D 那一条压到要点 ＋ Tier 0 闸门一句），**不新增章节、不新增编号项**；节外字节 sha256 前后相同；产品代码零触碰。
+
+---
+
+# 📌 本轮（2026-09-18，会话 `6662000e`）—— **D-launch 的 spec、计划、实施、整支终审与一波修复全部完成：`orca chain` 已落地；真钱活体验收未跑（待人点头）**
+
+**归属**：run `orca-dev-6662000e`（控制器 Claude Code 会话 `6662000e-644c-44b3-b38f-58cda6412bf0`，`claude-opus-5[1m]`）。本节只追加，上文一字未动（追加前 392351 字节，sha256 `9d848e0e…`）。
+⚠️ 不写 HEAD、不写领先笔数；指代某一笔引主题行；判发布状态现跑 `/usr/bin/git ls-remote origin refs/heads/main`。
+⚠️ 上一节「⛔ 下一件事」里的第 0、1、2 项**已过期**：人已审并删了 Tier 0 的 SDD 台账目录、已 push、D-launch 已做完（本节）。
+
+## 一句话状态
+
+*** **`orca chain start|stop|unlock` 已落地**：外部监督进程串行以 `claude -p --permission-mode auto` 拉起会话，退出检查点带 `chain: continue|done|blocked`，由纯函数 `decideNext` 判续停，链记录提交在 `.orca/chains/<id>.json`；面板可开链／停链／看状态／出横幅。 ***
+**真相源**：spec `docs/superpowers/specs/2026-09-18-d-launch-design.md`（§1 人裁、§10–§13 各轮处置与残余）、计划 `docs/superpowers/plans/2026-09-18-d-launch.md`（PC 节＝计划对 spec 的更正；附录 A＝活体验收）、SDD 台账 `.superpowers/sdd/2026-09-18-d-launch/progress.md`（被 git 忽略、**本轮保留未删**，含每个 Task 的 brief／报告／变异表／审查、终审与修复波报告）。本节不复述它们。
+
+## 零、开工核对（本轮现测，观测锚点：`docs(handoff): record the I3 live check …` 那笔）
+
+三仓库本地＝远端、工作树 0 字节；`orca resume` RC 0；verify 111/810、51/167、PASS 0–13、8/26；`ls ~/.orca` 不存在。
+
+## 一、做出来的东西（按主题行，顺序即提交顺序）
+
+| 阶段 | 主题行 |
+|---|---|
+| spec | `docs(spec): design D-launch …` → `docs(spec): revise D-launch after the person's review request` |
+| 计划 | `docs(plan): turn the D-launch spec into nine tasks, revised after an adversarial review`（同笔追加 spec §12） |
+| 实施 | `refactor(gate): move the expected gate wiring into src/gate/settings.ts` → `feat(checkpoint): carry a chain mark …` → `feat(level): in a chain session, T1 is the handoff …` → `feat(checkpoint): resume as an in-process outcome …` → `feat(chain): the pure routing table …` → `feat(chain): launch one headless Claude Code session …` → `feat(chain): check everything before a chain starts …` → `feat(chain): orca chain start|stop|unlock …` → `feat(panel): start, stop and follow chains …` |
+| 任务内修复 | `fix(chain): resume's own git calls go through chainGit …`、`test(chain): a criterion for defaultChainDeps' own resume wiring …`、`fix(panel): attach the spawned CLI's exit/error listeners before any await`、`fix(chain): E10 can no longer reach a real claude …` |
+| 终审修复波 | `fix(chain): the gate check settles on the hook's exit …`、`fix(chain): a chain session cannot start a chain (nested-chain)`、`test(checkpoint): a criterion for findTranscript's session-ref-unusable guard`、`fix(chain): a remainder that --max-budget-usd would carry as 0 is no budget`、`fix(chain): read process start times in UTC`、`fix(chain): unlock validates the chain record before it removes the lock`、`test(chain): a criterion for the gate check's must-pass sample timing out`、`test(chain): the unlock-record criterion is E12 …` |
+| 收尾 | 本节所在的 handoff 提交；spec §13；检查点 `chore(checkpoint): orca-dev-6662000e, …` |
+
+*** **新基线（下一轮开工核对照这个比）**：修复波末笔上 `rtk proxy npm run verify` 整份读回（2742 行）—— npm test **129 files / 1074 tests**、verify:scheduler **51/167**、verify:chain **13/212 ＋ 带 `ORCA_CHAIN_*` 重跑全套 129/1074**、verify:panel **PASS 0–14**、web **9/34**、`VERIFY_RC=0`；`ls ~/.orca` 前后不存在。 ***
+⚠️ `npm run verify` 现在约 4 分钟（整套跑两遍），Bash 要给 600000 ms 或放后台。
+⚠️ 台账校验那 7 行 `.decisions/orca-dev-09cc3ea1.jsonl:8-14: downgraded to tier 0` 是**既有状态**（开工基线里就有），不是本轮引入。
+
+## 二、🔴 本轮值得带走的
+
+1. *** **「永远不会红的判据」本轮又出现四次，全部是被别的席位抓到的，没有一次是作者自查抓到的**：E10 的环境取自 vitest 自身 `process.env`（退化时会拉起真 claude）；W30 只钉住了测试替身的接线、没钉生产接线（实施者自己发现后补 E11，初稿仍是空的——单会话走不到触发 fsmonitor 的那次 git 调用）；E7 在断言锁已删之前先释放锁（复审现测：删掉 unlock 的删锁行，判据照绿，**未修，见五**）。 ***
+2. *** **计划评审在副本里把代码块原样落盘跑一遍，比读更值钱**：抓到两条计划自己代码下就红的判据（坏 shebang 的假 claude 走 PATH 查找时 execvp 会继续往后找，落到本机 cmux shim＝真 claude 包装器）。 ***
+3. **`git commit` 带路径时 `--only` 本来就是默认** ⇒ 删 `--only` 的变异永远绿（计划评审现测）。
+4. **进程内 resume 的 git 调用会触发会话可改的 `.git/config` 里的 `core.fsmonitor`** ⇒ 监督进程的所有 git 调用一律带 `-c core.hooksPath=/dev/null -c core.fsmonitor=false`（`chainGit`），resume 也接受注入的 git 执行器。
+5. **预算耗尽现测（claude 2.1.275）**：`--max-budget-usd 0.0001` ⇒ 退出 1、`subtype: "error_max_budget_usd"`、`total_cost_usd` 0.000944（超预算，证实软上限）。
+6. **Bash 持久化 cwd 离不开项目目录；闸门判分支用的是持久化的 cwd**（嵌套仓库正反两次实测，spec §9）。
+7. **子代理用脚本筛 verify 输出**（修复波实施者）——违反 Rule 14；控制器另派一席逐行整份读回才算数。**brief 里写了「整份读回」也会被绕开，要在收货时查它是怎么读的。**
+8. **变异记录会被照着预言抄**：Task 5 有一行「观测」格与预言相同而实际多红一条，是审查者复跑才发现的。
+
+## 三、人本轮拍的
+
+- 开工：已 push；删 Tier 0 的 SDD 台账目录（已移入废纸篓）；同意按计划推进。
+- D-launch 设计逐问裁决 R1–R14（spec §1）：外部监督进程；退出检查点带 `chain` 字段；`auto` 权限；四条硬上限；超时「只是保底」默认 360 分钟；终端＋macOS＋web 通知；链记录仓库内提交；`--goal` 必填；方案 A；**web UI 也要开链入口、两种绑定模式都开放（重问后维持，明文推翻 A′ §4.1 对开链这一种写入的禁令）**；停链＝当前会话跑完再停；闸门被链内 agent 改动 ⇒ 检测即停。
+- 人要求 review spec 后控制器又改 8 处（spec §11），人「同意，继续」。
+- 本轮执行方式：写计划 → subagent 执行 → 有问题先按控制器建议执行 → 最后统一报人审；**临时忽略上下文大小**。
+
+## 四、控制器代人做的裁决（台账 `Ruling:` 行为准，要点）
+
+在 main 上执行不开分支；活体验收不跑（要钱、spec 要求单独点头）；闸门守护集不扩到 `src/cli.ts` 导入闭包；监督进程 git 调用关钩子与 fsmonitor；剔除名单扩到 `CLAUDECODE`／`CLAUDE_CODE_SESSION_*`／`CLAUDE_CODE_MESSAGING_*`／`CMUX_*`；实施者自跑本 Task 变异（不另设变异席）；无文件交集时下一个实施与上一个审查并行；W30 以「resume 接受 git 执行器」修；面板 spawn 监听器顺序违背计划原文而按 spec 修；拒绝嵌套链。
+
+## 五、没做／挂账
+
+- **未 push**（人的事）；未建分支、未合并、未删分支或 worktree。
+- *** **活体验收（计划附录 A）未跑**：会起真 claude、花钱；且 `.orca/chain.json`（选哪个 model）是人的决定，Orca 里尚不存在 ⇒ 在 Orca 本身开链会被 `chain-config-missing` 拒绝。 ***
+- **真 claude 是否被拉起过一次（如实）**：Task 8 修复前的一次手工检查里，E10 的环境带着真实 PATH；`~/.claude/projects` 下**没有**任何对应 transcript（只看文件名与 mtime），但**不能完全排除**真 claude 可执行文件被拉起后在假模型名上失败、未写 transcript。
+- **spec §13 登记的五条残余**（嵌套链守卫可被 `env -u` 绕过；E7 空断言；闸门核对不杀同组残留；旧时区锁；迟到 stderr 丢弃）＋台账里 `minor (deferred)` 各条。
+- 提交 `feat(panel): start, stop and follow chains …` 的 Co-Authored-By 写成了 Sonnet 5（与约定不符），**未 amend**。
+- 修复波实施者有两次 amend 自己未推、无依赖的提交（与「优先新提交」不符），如实记录。
+
+## 六、⛔ 下一件事
+
+| 顺序 | 做什么 |
+|---|---|
+| **0** | 人审本轮（本地提交 ＋ spec §10–§13 ＋ SDD 台账目录）；决定是否删 `.superpowers/sdd/2026-09-18-d-launch/` |
+| **1** | push（三个仓库，每次单独点头，人自己敲） |
+| **2** | 人选 `.orca/chain.json` 的 model，并点头活体验收（计划附录 A；先现测首调读数 F，副本 T1 设在 F 之上） |
+| **3** | 修 spec §13 第 2、3 条（E7 一行；闸门核对 settle 时 `kill(-pid)`），各配变异 |
+| **4** | D3（交接职责迁移到检查点） |
+
+**下一会话开工**（输出一律重定向到文件、整份读回）：
+1. `/usr/bin/git ls-remote origin refs/heads/main` 与本地 `rev-parse HEAD` 比（三个仓库）。
+2. `node_modules/.bin/tsx src/cli.ts resume` —— 现行检查点 `.orca/checkpoints/orca-dev-6662000e.json`。
+3. 全量 verify 期望 **129/1074、51/167、13/212＋129/1074、PASS 0–14、9/34**（后台或 600000 ms）。
+4. ⚠️ 闸门是活的：push／删分支／删 worktree／在 main 上 merge 会被拦（退出 2、stderr `orca gate: …`），列进检查点 `awaitingHuman`。
+
+## 七、成本与水位
+
+**成本**（只抄工具报的数）：钩子最后一次报本会话累计约 **277.84 美元**（之后未再报，**收尾总额拿不到**）；预算探针 0.000944。
+**水位**：越过 T1 写检查点；越过 T2（450,000）后按人的明确指令「这次先临时忽略上下文大小」继续，写了 band 2 检查点（主题行 `chore(checkpoint): orca-dev-6662000e, level 463701 …`）；收尾时钩子报约 **568,000**。
+
+## 八、姊妹仓库
+
+ccloop、ccmem：只就地更新各自 Orca 一节里 D 那一条（D-launch 已实施、对它们零任务），**不新增章节、不新增编号项**；节外字节 sha256 前后相同；产品代码零触碰。
