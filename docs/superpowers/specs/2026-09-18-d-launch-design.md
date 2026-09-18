@@ -1,6 +1,7 @@
 # D-launch 拉起下一个会话 —— 设计
 
-**状态**：设计已逐节经人确认（本会话 ①–⑥ 六节）；经一席对抗审查（判 `No`：2 Critical／12 Important／13 Minor），处置见 §10，两处需人裁的已由人裁（§1 R13、R14）；**尚无实现计划**。
+**状态**：设计已逐节经人确认（本会话 ①–⑥ 六节）；经一席对抗审查（判 `No`：2 Critical／12 Important／13 Minor），处置见 §10，两处需人裁的已由人裁（§1 R13、R14）；
+人要求复审后控制器又找出 8 处，处置见 §11（人「同意，继续」）；**尚无实现计划**。
 **归属**：run `orca-dev-6662000e`（控制器 Claude Code 会话 `6662000e-644c-44b3-b38f-58cda6412bf0`，`claude-opus-5[1m]`），2026-09-18。
 **上游**：D spec `2026-09-17-checkpoint-handoff-design.md` §3（启动适配器）、§5（交接链与人的边界）、§6（分刀：D-launch 在 Tier 0 闸门之后）；
 Tier 0 spec `2026-09-18-tier0-gate-design.md`（前置，已落地）。
@@ -8,6 +9,10 @@ Tier 0 spec `2026-09-18-tier0-gate-design.md`（前置，已落地）。
 
 **明确不做（v1）**：第二个运行时（Codex 等）；会话失败自动重试；立即杀掉当前会话的「硬停」；D3（交接职责迁移）；改 ccloop；
 把闸门钉在工作树外（§1 R14 否决，残余风险见 §7）。
+
+**v1 的适用范围**：只在**装有 Tier 0 闸门的仓库**里开链（§5.2 要求配置与 `src/gate/settings.ts` 深相等）⇒ 今天即 **Orca 本身或它的 clone／worktree**。
+面板 `--repo` 列表里的其他仓库，开链会被 §5.1 按名拒绝。
+**凡要改被守护路径（§4.1）的工作 —— 例如开发闸门本身 —— 不能交给链做**：会话一改即被判 `gate-modified` 停链。
 
 ---
 
@@ -38,33 +43,42 @@ D-launch 的交付：一个**外部监督进程** `orca chain`，由人授权一
 | R11 | 外部绑定模式下的开链入口 | **两种模式都开放** |
 | R12 | 停链按钮 | **要：当前会话跑完再停**；终端对应 `orca chain stop` |
 | R13 | （对抗审查 I6 后重问）R11 与 A′ §4.1「面板若直接写进仓库……安全上不给」冲突 | **维持 R11**。⇒ 本文**推翻** A′ §4.1 对「开链」这一种写入的禁令，见 §6.3 |
-| R14 | （对抗审查 C1 后）链里的 agent 能改掉／关掉自己的闸门，防到什么程度 | **检测即停**（§5.1 每会话前功能性核对 ＋ §4.2 会话后比对被守护路径）。否决：把闸门钉在工作树外。人上一轮对 Tier 0 的原话「维持bash钩子，我们允许适当的放宽」同向 |
+| R14 | （对抗审查 C1 后）链里的 agent 能改掉／关掉自己的闸门，防到什么程度 | **检测即停**（§5.2 每会话前功能性核对 ＋ §4.2 会话后比对被守护路径）。否决：把闸门钉在工作树外。人上一轮对 Tier 0 的原话「维持bash钩子，我们允许适当的放宽」同向 |
 
 **具名授权**：
 - R6、R10、R11、R13 ⇒ 改**面板**（E3 生产代码：`src/panel/**`、`web/src/**`），范围限于「链的状态、开链、停链、停链横幅」。
 - R2 ⇒ 改 `src/checkpoint/{schema,write,covering,resume}.ts`、`src/level/{hook,trigger}.ts`、`src/cli.ts`（`checkpoint write` 与新增 `chain` 子命令两处），范围限于 §3 与 §4 所列改动。
   ⚠️ 其中 `covering.ts`、`resume.ts`、`trigger.ts`、`cli.ts` 是对抗审查（I9、M4）之后补进清单的，**交人审 spec 时一并点名**。
+- 复审 2 ⇒ 新建 `src/gate/settings.ts`，并改写**承重判据** `tests/gate/settings.test.ts` 让它从该文件取期望值（期望值本身逐字节不变）。
+  ⚠️ 这是人审复审时（2026-09-18「同意，继续」）一并认可的；计划须为「期望值逐字节不变」点名一条核对。
 
 ---
 
 ## 2. 组件与数据流
 
 ```
-终端：orca chain start --repo <path> --by <who> --goal <text> --max-sessions N --max-cost-usd X [--session-timeout-min M]
+终端：orca chain start --repo <path> --by <who> --goal <text> --max-sessions N --max-cost-usd X [--session-timeout-min M] [--chain-id <id>]
 面板：POST /api/chains {repoKey, goal, maxSessions, maxCostUsd, sessionTimeoutMin?}   （by 取面板进程的 --by）
         → 与 CLI 同一个 zod schema 校验
-        → detached spawn 上面那条 CLI，stdio 全部指向 .orca/chain-logs/<pending-id>/supervisor.log（不接面板的管道，审查 I3）
-        → 轮询该文件等 `orca chain: started <chain-id>` 一行（10 s 期限）；起不来 ⇒ 把文件里 CLI 的按名拒绝原样返回
+        → 面板先生成 chain-id（^chain-[0-9a-f]{8}$），以 --chain-id 传给 CLI；CLI 校验格式并拒绝已存在的 id
+        → detached spawn 上面那条 CLI，stdio 全部指向 .orca/chain-logs/<chain-id>/supervisor.log（不接面板的管道，审查 I3）
+        → 轮询该文件等 `orca chain: started <chain-id>` 一行（10 s 期限），同时看子进程是否已退出：
+          已退出 ⇒ 立即把文件里 CLI 的按名拒绝原样返回，不等满 10 s
 停链：orca chain stop --repo <path>  ／  POST /api/chains/<chain-id>/stop
         → chain-id 须匹配 ^chain-[0-9a-f]{8}$ 且链记录存在（审查 I10）
         → 写停止请求 .git/orca-chain/<chain-id>/stop（.git 之内：会话里的 agent 清理工作树时碰不到）
 看状态：面板读各仓库的 .orca/chains/*.json（只读）
 
-监督进程（用它自己所在 checkout 的 Orca 代码，不用目标仓库工作树里可能被 agent 改动的 src/cli.ts，审查 I12）：
+监督进程（审查 I12；复审 1）：
+  - **所有 chain 用到的模块在启动时静态加载**，`resume` 以**进程内函数调用**执行，不 spawn `orca` 子进程
+    （`cli.ts` 对部分子命令用动态 `import()`（:335、:345），启动后才加载的模块会读到工作树里被改过的代码）；
+  - 唯一例外是 §5.2 的闸门功能性核对 —— 它**有意**执行工作树里的钩子命令，因为要验的正是那一份；
+  - 在目标仓库**就是**监督进程所在 checkout（即在 Orca 主工作树里开链）时，启动后工作树里的改动不影响已加载的监督代码，
+    但下一次开链会用上被改过的代码 ⇒ **默认在专用 clone／worktree 里开链**，在主工作树开链时打一行警告（§7-6）。
   开链前核对（§5.1）→ 写链记录并提交
   循环：
     1. 每会话前核对（§5.2）：停止请求、剩余预算、闸门功能性核对、工作树干净、分支
-    2. 跑 `orca resume --repo <repo>`，取其输出（§4.4 的退出码处理）
+    2. 进程内调 resume（`--repo <repo>` 等价），取其输出（§4.4 的退出码处理）
     3. 拼提示词 = goal 原文 ＋ resume 输出 ＋ 链的规矩（§3.3）
     4. 启动适配器.launch({prompt, sessionId: 新 uuid, budgetUsd: 剩余预算, timeoutMs, env})     （§2.2 argv 模板）
          stdin: ignore；cwd: 仓库顶层；stdout → .orca/chain-logs/<chain-id>/<n>.stdout.json；stderr → <n>.stderr.txt
@@ -84,7 +98,8 @@ D-launch 的交付：一个**外部监督进程** `orca chain`，由人授权一
 | `src/chain/decide.ts` | `decideNext`：纯函数，§4.2 全部路由 | 无 I/O |
 | `src/chain/record.ts` | 链记录 zod schema；读、写、提交 | git |
 | `src/chain/lock.ts` | 仓库级链锁 `.git/orca-chain/lock` | 文件系统 |
-| `src/chain/gateCheck.ts` | §5.2 闸门功能性核对与配置深相等核对 | `.claude/settings.json` |
+| `src/gate/settings.ts` | **期望的闸门配置对象（钩子对象 ＋ deny 列表）的唯一来源**，从 `tests/gate/settings.test.ts:10-22` 的常量挪出；该测试与 `gateCheck` 都从这里取（复审 2） | 无 |
+| `src/chain/gateCheck.ts` | §5.2 闸门功能性核对与配置深相等核对 | `.claude/settings.json`、`src/gate/settings.ts` |
 | `src/chain/launch/claudeCode.ts` | 启动适配器：按固定 argv 模板 spawn（独立进程组）、超时杀组、会话后清点残留、解析 result JSON；**不含判断** | `claude` 可执行文件 |
 | `src/chain/prompt.ts` | 拼提示词（确定性模板） | 无 |
 | `src/chain/run.ts` | 监督循环 | 以上全部、`orca resume` |
@@ -111,7 +126,7 @@ D-launch 的交付：一个**外部监督进程** `orca chain`，由人授权一
    该变量存在时 wrapper 会注入 `--settings`），并显式设 `ORCA_CHAIN_ID`、`ORCA_CHAIN_SESSION`。
 6. **不自动重试**、**不替会话收拾工作树**（不提交、不 stash、不 reset）。
 7. **链须独占工作树**（审查 I11）：本仓库多 agent 共享（Rule 13），人的交互会话若同时在同一工作树里写，其提交会被算成会话的进展、其未提交改动会让链停在 `dirty-after-session`。
-   ⇒ 开链前核对拒绝 `.git/orca-lock`（调度器的 repo 锁）被持有的仓库；**建议在专用 worktree 或 clone 里跑链**（§7）。
+   ⇒ 开链前核对拒绝 `.git/orca-lock`（调度器的 repo 锁）被持有的仓库；**默认在专用 worktree 或 clone 里跑链**，在监督进程自身所在的工作树里开链时打一行警告（§7）。
 
 ---
 
@@ -154,7 +169,7 @@ D-launch 的交付：一个**外部监督进程** `orca chain`，由人授权一
 2. **你的会话 id 是 `<uuid>`**（注意 resume 输出里打印的是**上一个**会话的 id，别用错）；写退出检查点的**完整命令**与草稿形状（含 `chain`）。
 3. 何时写退出检查点：水位提醒到了 ⇒ `continue`；goal 完成 ⇒ `done`；只剩卡人的事 ⇒ `blocked`；**因任何其他原因结束之前**都先写一份。
 4. 结束前工作树必须干净（全部提交），留在开始时的分支上，不改写已有历史；写完退出检查点就结束会话。
-5. 不改 `src/gate/**`、`.claude/**`、`scripts/gate-prefilter.mjs`，不建 `.claude/settings.local.json`（改了会被检测并停链，§4.2 规则 3c）。
+5. 不改被守护路径（§4.1 列全），不建 `.claude/settings.local.json`（改了会被检测并停链，§4.2 规则 3）。
 6. Rule 15 的四件事列进 `awaitingHuman`，不要尝试（闸门会拦）。
 
 ### 3.4 写检查点不再需要 `--transcript`；会话 id 被钉住
@@ -183,7 +198,11 @@ D-launch 的交付：一个**外部监督进程** `orca chain`，由人授权一
 **「本会话新提交数」**：`git rev-list <会话开始 HEAD>..<会话结束 HEAD>` 中，改动路径**不全在** `.orca/checkpoints/` 之下的提交个数
 （`git diff-tree --no-commit-id --name-only -r <sha>` 逐个判）。链记录提交发生在会话之外，本就不在区间里。
 
-**「被守护路径」**：`src/gate/**`、`.claude/**`（含是否出现 `.claude/settings.local.json`）、`scripts/gate-prefilter.mjs`。
+**「被守护路径」**：
+- 闸门：`src/gate/**`（含 `src/gate/settings.ts`）、`.claude/**`（含是否出现 `.claude/settings.local.json`）、`scripts/gate-prefilter.mjs`；
+- 链自己的配置与记录（复审 3）：`.orca/level.json`（调高 T1 即可让会话永不交接）、`.orca/chain.json`（换模型）、`.orca/chains/**`（链记录）；
+- 别的会话的检查点：`.orca/checkpoints/` 下除 `orca-dev-<本会话 uuid 前 8 位>.json` 以外的任何文件（M3 只钉住了 `--session` 参数，没钉住直接改文件）。
+
 比对 `git diff --name-only <会话开始 HEAD> -- <路径>`（含未提交）与 `settings.local.json` 的存在性。
 
 ### 4.2 规则（按序判，命中即返回；**任何异常都停，停是安全的方向**）
@@ -246,7 +265,9 @@ D-launch 的交付：一个**外部监督进程** `orca chain`，由人授权一
 ### 5.1 开链前核对（任一不过 ⇒ 按名拒绝、退出 1、什么都不写）
 
 1. 目标是 git 仓库的顶层，工作树干净，HEAD 在某个分支上（非 detached）。
-2. 链锁可取。锁存在而持有者 pid 已不在 ⇒ **按名拒绝** `chain-lock-stale`，提示人确认后 `orca chain unlock`；**不自动清理**。
+2. 链锁可取。锁里记 **pid ＋ 该进程的启动时间**（复审 8：只记 pid，pid 被复用后死链会被误判为在跑）；
+   判「持有者还在」要两者同时对上。锁存在而持有者不在 ⇒ **按名拒绝** `chain-lock-stale`，提示人确认后 `orca chain unlock`；**不自动清理**。
+   持有者还在 ⇒ 按名拒绝 `chain-running`。
 3. `.git/orca-lock`（调度器的 repo 锁）未被持有。
 4. 参数：`--goal`、`--by` 非空；`--max-sessions`、`--max-cost-usd` 必给、为正、**无默认值**。
 5. `claude` 在 PATH 上；`.orca/chain.json` 的 `model` 能被 `orca level` 解析出窗口（`[1m]` 后缀或 `.orca/level.json` 的 `windows` 表）。
@@ -254,12 +275,18 @@ D-launch 的交付：一个**外部监督进程** `orca chain`，由人授权一
 
 ### 5.2 每会话前核对（审查 C1；R14「检测即停」的前一半）
 
-任一不过 ⇒ 停链 `gate-check-failed`（anomaly），不起会话：
-1. **配置深相等**：`.claude/settings.json` 的 PreToolUse 钩子对象与 `permissions.deny` 集合，与 Tier 0 spec §5 的判据**深相等**（复用其实现），不是「命令串里含 `gate`」。
+第 1–3 项任一不过 ⇒ 停链 `gate-check-failed`（anomaly），不起会话；第 4 项各按自己的原因停（复审 4）：
+1. **配置深相等**：`.claude/settings.json` 的 PreToolUse 钩子对象与 `permissions.deny` 集合，与 `src/gate/settings.ts` 的期望对象**深相等**（Tier 0 spec §5 的判据，复审 2 挪进 `src/` 作唯一来源），不是「命令串里含 `gate`」。
 2. **`.claude/settings.local.json` 不存在**（它被全局 gitignore 忽略，工作树「干净」看不见它；其中的 `disableAllHooks` 能关掉闸门）。
 3. **功能性核对**：用一条必拦样本（`git push` 的 PreToolUse stdin）真跑一次 settings 里的钩子命令（`CLAUDE_PROJECT_DIR` 指向仓库），要求退出 2 且 stderr 以 `orca gate:` 开头；
    再用一条必放样本（`git status`）要求退出 0。
-4. 停止请求、剩余预算、工作树干净、HEAD 仍在开链时的分支上。
+4. 其余前置，**不归入 `gate-check-failed`**：
+   - 有停止请求 ⇒ `stop-requested`（limit）
+   - 剩余预算 ≤ 0 ⇒ `max-cost`（limit）
+   - 工作树不干净 ⇒ `dirty-before-session`（anomaly；新增，通常意味着有人在同一工作树里写，§2.2-7）
+   - HEAD 不在开链时的分支上 ⇒ `branch-changed`（anomaly）
+
+   判序：先第 4 项的停止请求与预算（limit 优先于核对），再第 1–3 项，再工作树与分支。
 
 ⚠️ `-p` 模式下 settings 文件校验失败会被**静默忽略**（`claude --help` 原文），第 1、3 项的功能性核对正是为此。
 
@@ -312,7 +339,7 @@ D-launch 的交付：一个**外部监督进程** `orca chain`，由人授权一
 
 - 读不到或不存在的字段为 `null`；`stop` 在运行中为 `null`。`by` 是归属（Rule 13），与面板 spec §1.3 同义。
 - 写入时机：开链、每个会话后、停链（及 `unlock`）；提交信息 `chore(chain): <chain-id>, session <n>, <reason>`（开链为 `started`）。
-- **提交方式**：`git commit --only -- .orca/chains/<chain-id>.json`（审查 I2）—— 只提交这一个路径，**不要求**其余工作树干净、也不带上任何别的改动；
+- **提交方式**：`git add -- .orca/chains/<chain-id>.json` 后 `git commit --only -- .orca/chains/<chain-id>.json`（审查 I2；复审 7：首次写时文件尚未被跟踪，单用 `--only` 会失败）—— 只提交这一个路径，**不要求**其余工作树干净、也不带上任何别的改动；
   这样 `dirty-after-session` 停链时终态照样能提交，而会话留下的改动原样留在工作树里给人看。
 - 不进 `.decisions/`（提交钩子要求只追加），不进 `.superpowers/sdd/`（其 `.gitignore` 为 `*`）。**无仓库外写入** ⇒ 不触发 Rule 17 登记。
 - `.gitignore` 加 `.orca/chain-logs/`。停止请求与链锁在 `.git/orca-chain/` 下。
@@ -320,7 +347,7 @@ D-launch 的交付：一个**外部监督进程** `orca chain`，由人授权一
 ### 6.2 面板
 
 - **状态**：每个仓库最近一条链：goal、by、第几个会话、累计成本（或「读不到」）、状态；停了则原因、类别、`awaitingHuman`。
-  `state: running` 但链锁不在或持有者 pid 不在 ⇒ 显示「**运行中（持有者已不存在）**」，不冒充在跑。
+  `state: running` 但链锁不在、或锁里的 pid ＋ 启动时间对不上活进程 ⇒ 显示「**运行中（持有者已不存在）**」，不冒充在跑。
 - **开链表单**：仓库（面板 `--repo` 列表中选）、goal、三个上限（超时预填配置值）。成功显示 chain-id；被拒原样显示拒绝。
 - **停链按钮**：仅 `running` 时出现；只写停止请求，页面标「将在当前会话结束后停止」。
 - **横幅**：链停下后按类别（完成／等人／上限／异常）显示一条，「知道了」即收起；收起状态**只存浏览器**（`localStorage`），不写 `~/.orca`。
@@ -346,11 +373,12 @@ D-launch 的交付：一个**外部监督进程** `orca chain`，由人授权一
 2. **R14：闸门与被它守护的代码在同一个工作树。** 闸门钩子执行的是工作树里的 `src/cli.ts gate`；agent 改 `src/gate/**` 当场生效、无需提交；
    `.claude/settings.local.json`（全局 gitignore）里的 `disableAllHooks` 可关掉钩子。
    「检测即停」只能在**会话前**确认闸门完好、在**会话后**发现改动；*** **同一会话里先改闸门、再做 Tier 0 动作，拦不住，只能事后发现。** ***
-3. **resume 执行 agent 写的命令**（审查 I12）：监督进程的 `orca resume` 会重跑检查点 `measure` 里的任意命令（`/bin/sh -c`），只过 Tier 0 classify、不过 auto 分类器。
+3. **resume 执行 agent 写的命令**（审查 I12）：监督进程（进程内）的 resume 会重跑检查点 `measure` 里的任意命令（`/bin/sh -c`），只过 Tier 0 classify、不过 auto 分类器。
    被 auto 分类器拦下的命令可以写进 `measure`，由监督进程无人值守地执行。v1 不收紧，登记。
 4. **R3：auto 分类器可能误拒**。无头会话里被拒即拒；agent 须绕开或列进 `awaitingHuman`。
 5. **闸门已知放行清单**（Tier 0 spec §7）在无人值守时敞开。v1 不收紧；闸门之外的两层是 **deny 规则**与 **auto 分类器**。
-6. **链须独占工作树**：人的交互会话同时在同一工作树里写会被误算为进展或让链停在 `dirty-after-session`。建议专用 worktree／clone。
+6. **链须独占工作树**：人的交互会话同时在同一工作树里写会被误算为进展或让链停在 `dirty-after-session`／`dirty-before-session`。
+   **默认专用 worktree／clone**；在监督进程自身所在的工作树里开链时打警告 —— 此时 agent 对 `src/chain/**` 的改动会被**下一次**开链用上（复审 1）。
 7. **监督进程被硬杀后**链记录停在 `running`、链锁残留；靠人 `orca chain unlock`。
 8. **`ORCA_CHAIN_*` 是否传到钩子**、**Bash 工具后台进程是否在会话进程组内**：未现测，由活体验收定。
 9. **本机 `claude` 是 cmux shim**：已靠剔除 `CMUX_SURFACE_ID` 规避 `--settings` 注入；wrapper 的其他行为未审，活体验收用 `ps` 核对真实子进程 argv。
@@ -385,6 +413,10 @@ D-launch 的交付：一个**外部监督进程** `orca chain`，由人授权一
 9. 机械扫描：`src/chain/**` 不含 push／merge／删分支／删 worktree 调用；*** **扫描器自带「必抓」与「必不抓」两组样本** ***。
 10. verify 前后 `~/.orca` 不存在；transcript 查找判据全部经 `ORCA_CLAUDE_PROJECTS_DIR` 改道（以「改道到空目录时查找失败」证明改道生效）。
     （审查 M11：「`~/.claude` 零写入」不可测 —— 并行的交互会话在持续写它 —— 已删。）
+11. （复审）被守护路径的新增三类（`.orca/level.json`、`.orca/chain.json`、`.orca/chains/**`、他会话检查点）各一条 `gate-modified` 判据；
+    本会话自己的检查点被改**不**触发（必不抓样本）；`dirty-before-session`；`--chain-id` 格式与重复各一条拒绝；
+    链锁 pid 对上但启动时间对不上 ⇒ 判为持有者不在；监督进程在循环中**不 spawn `orca` 子进程**（假 PATH 里放一个会记录调用的 `orca`／`tsx` 桩，断言零调用；闸门功能性核对除外）；
+    `tests/gate/settings.test.ts` 改为引用 `src/gate/settings.ts` 后，期望值与改前逐字节相同（对改前常量取 sha256 比对）。
 
 ### 8.3 活体验收（花钱；**跑之前单独找人点头**）
 
@@ -449,3 +481,20 @@ D-launch 的交付：一个**外部监督进程** `orca chain`，由人授权一
 | M11 | 删去不可测的「`~/.claude` 零写入」，换成改道生效的判据 | §8.2-10 |
 | M12 | SIGINT 照常跑规则 1–3c | §5.3 |
 | M13 | `unlock` 收尾链记录；分支变化停链；`by` 进记录；§7 补 deny 层 | §5.3、§4.2 规则 3c、§6.1、§7-5 |
+
+---
+
+## 11. 复审的处置（人要求 review 后，控制器自己通读并对照代码；人「同意，继续」）
+
+| 条 | 问题 | 处置 | 落在 |
+|---|---|---|---|
+| 1 | 「监督进程用自己 checkout 的代码」在 v1 不成立：v1 只能在装闸门的 Orca 仓库开链，监督进程所在 checkout 可能就是 agent 改的工作树；每轮 spawn 的 `orca resume` 与 `cli.ts` 的动态 `import()` 会读到被改的代码 | resume 改进程内调用、chain 模块启动时静态加载、循环中不 spawn `orca`（闸门功能性核对除外）；适用范围明写；默认专用 clone／worktree，主工作树开链打警告 | 抬头「适用范围」、§2、§2.2-7、§7-6、§8.2-11 |
+| 2 | 「复用 Tier 0 §5 判据的实现」无法照做：期望配置只在 `tests/gate/settings.test.ts:10-22` | 挪进 `src/gate/settings.ts` 作唯一来源；测试改为引用；期望值逐字节不变并点名核对；授权清单补上 | §2.1、§5.2-1、§1、§8.2-11 |
+| 3 | 被守护路径漏了链自己的配置与记录、他会话检查点 | 补进 §4.1；登记「改被守护路径的工作不能交给链」 | §4.1、抬头、§3.3-5、§8.2-11 |
+| 4 | 会话前核对把停止请求／预算／脏工作树／分支都归为 `gate-check-failed` | 各按自己的原因与类别停；新增 `dirty-before-session`；定判序 | §5.2 |
+| 5 | 两处节号引用错 | R14 改指 §5.2；§3.3-5 改指规则 3 | §1、§3.3 |
+| 6 | 面板 `<pending-id>` 未定义；等 `started` 时不看子进程是否已退出 | 面板生成 chain-id 以 `--chain-id` 传入；子进程已退出即返回拒绝 | §2 |
+| 7 | 首次写链记录时单用 `commit --only` 会失败 | 先 `git add` 该路径 | §6.1 |
+| 8 | 链锁只记 pid，pid 复用会误判 | 锁记 pid ＋ 启动时间；新增 `chain-running` 拒绝 | §5.1-2、§6.2、§8.2-11 |
+
+本节只追加；§10 的处置表原样保留。
