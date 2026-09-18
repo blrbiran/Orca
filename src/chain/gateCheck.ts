@@ -9,6 +9,12 @@ import { SETTINGS_LOCAL } from "./facts.js";
 
 export type GateCheck = { ok: true } | { ok: false; reason: string };
 const SAMPLE_TIMEOUT_MS = 10_000;
+/**
+ * Final review Important-1: how long trailing stderr may take after the hook's shell has exited. Not waiting for the
+ * stream to close: a process the worktree's code moved into another session keeps the pipe open for as long as it
+ * lives, and the check would then never return while the chain holds its lock.
+ */
+const DRAIN_MS = 1_000;
 /** Data written to the hook's stdin, never executed. The one literal the Tier 0 scan (Task 8) is expected to report. */
 const MUST_BLOCK_SAMPLE = "git push";
 const MUST_PASS_SAMPLE = "git status";
@@ -59,10 +65,12 @@ export async function checkGate(repo: string, env: NodeJS.ProcessEnv = process.e
   const probeDir = await mkdtemp(join(tmpdir(), "orca-gate-probe-"));
   try {
     const push = await runHook(repo, command, MUST_BLOCK_SAMPLE, probeDir);
+    if (push.timedOut) return { ok: false, reason: timedOutReason(MUST_BLOCK_SAMPLE, push.stderr) };
     if (push.code !== 2 || !push.stderr.startsWith("orca gate:")) {
       return { ok: false, reason: `the gate hook let the must-block sample through: ${MUST_BLOCK_SAMPLE} exited ${push.code}, stderr ${JSON.stringify(push.stderr.slice(0, 200))}` };
     }
     const status = await runHook(repo, command, MUST_PASS_SAMPLE, probeDir);
+    if (status.timedOut) return { ok: false, reason: timedOutReason(MUST_PASS_SAMPLE, status.stderr) };
     if (status.code !== 0) {
       return { ok: false, reason: `the gate hook blocked the must-pass sample: ${MUST_PASS_SAMPLE} exited ${status.code}, stderr ${JSON.stringify(status.stderr.slice(0, 200))}` };
     }
@@ -72,7 +80,16 @@ export async function checkGate(repo: string, env: NodeJS.ProcessEnv = process.e
   }
 }
 
-async function runHook(repo: string, command: string, sample: string, probeDir: string): Promise<{ code: number | null; stderr: string }> {
+const timedOutReason = (sample: string, stderr: string): string =>
+  `the gate hook did not finish the ${sample} sample within ${SAMPLE_TIMEOUT_MS} ms; its process group was killed, stderr ${JSON.stringify(stderr.slice(0, 200))}`;
+
+type HookRun = { code: number | null; stderr: string; timedOut: boolean };
+
+/**
+ * Settles on the shell's `exit`, then gives trailing stderr at most DRAIN_MS to arrive (final review Important-1). On
+ * the sample timeout the whole group is killed; its shell then exits, and the run is reported as timed out.
+ */
+async function runHook(repo: string, command: string, sample: string, probeDir: string): Promise<HookRun> {
   const sessionId = randomUUID();
   const transcriptPath = join(probeDir, `${sessionId}.jsonl`);
   await writeFile(transcriptPath, "");
@@ -80,7 +97,18 @@ async function runHook(repo: string, command: string, sample: string, probeDir: 
   return new Promise((resolve) => {
     const child = spawn("/bin/sh", ["-c", command], { cwd: repo, env: { ...process.env, CLAUDE_PROJECT_DIR: repo }, stdio: ["pipe", "ignore", "pipe"], detached: true });
     let stderr = "";
+    let timedOut = false;
+    let settled = false;
+    const settle = (code: number | null): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      // An escaped process may still hold the write end; stop reading so it cannot keep this process busy.
+      child.stderr.destroy();
+      resolve({ code, stderr, timedOut });
+    };
     const timer = setTimeout(() => {
+      timedOut = true;
       try {
         process.kill(-(child.pid as number), "SIGKILL");
       } catch {
@@ -89,12 +117,17 @@ async function runHook(repo: string, command: string, sample: string, probeDir: 
     }, SAMPLE_TIMEOUT_MS);
     child.stderr.on("data", (c: Buffer) => (stderr += c.toString("utf8")));
     child.once("error", (e) => {
-      clearTimeout(timer);
-      resolve({ code: null, stderr: e.message });
+      stderr = e.message;
+      settle(null);
     });
-    child.once("close", (code) => {
+    child.once("exit", (code) => {
       clearTimeout(timer);
-      resolve({ code, stderr });
+      if (child.stderr.readableEnded || child.stderr.destroyed) return settle(code);
+      const drain = setTimeout(() => settle(code), DRAIN_MS);
+      child.stderr.once("close", () => {
+        clearTimeout(drain);
+        settle(code);
+      });
     });
     child.stdin.end(input);
   });

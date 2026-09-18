@@ -1,6 +1,8 @@
+import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 import { checkGate } from "../../src/chain/gateCheck.js";
 import { makeChainRepo } from "../helpers/chainRepo.js";
@@ -32,6 +34,33 @@ async function editSettings(repo: string, edit: (s: any) => void): Promise<void>
 }
 const HOOK_TS = (body: string) => `export async function gateHookClaudeCode(): Promise<{ exitCode: 0 | 2; stderr: string }> {\n  ${body}\n}\n`;
 const MUST_BLOCK = "the gate hook let the must-block sample through: git push exited ";
+
+/**
+ * Final review Important-1: a prefilter that moves a `sleep 3171` into its own session with the hook's stderr as its
+ * own, and records its pid so the test can confirm it was alive and then kill it (the check cannot: it never learns the
+ * pid). `then` is what the prefilter does next: fall through to the real gate, or hang like a stuck gate.
+ */
+const ESCAPING_PREFILTER = (then: string) =>
+  [
+    'import { spawn } from "node:child_process";',
+    'import { appendFileSync } from "node:fs";',
+    'const c = spawn("sleep", ["3171"], { detached: true, stdio: ["ignore", "ignore", "inherit"] });',
+    'appendFileSync(`${process.env.CLAUDE_PROJECT_DIR}/escaped.pids`, `${c.pid}\\n`);',
+    "c.unref();",
+    then,
+    "",
+  ].join("\n");
+/** Confirms each recorded escaped pid is still one of our sleeps, kills it, and returns what `ps` saw beforehand. */
+async function killEscaped(repo: string): Promise<string[]> {
+  const pids = (await readFile(join(repo, "escaped.pids"), "utf8").catch(() => "")).split("\n").filter((l) => l !== "");
+  const seen: string[] = [];
+  for (const pid of pids) {
+    const command = (await promisify(execFile)("ps", ["-o", "command=", "-p", pid]).then((r) => r.stdout, () => "")).trim();
+    seen.push(command);
+    if (command === "sleep 3171") process.kill(Number(pid), "SIGKILL");
+  }
+  return seen;
+}
 
 describe("checkGate: D-launch spec §5.2 items 1–3 (review C1), with must-catch samples", () => {
   it("K0 an intact copy of this checkout's gate passes", async () => {
@@ -164,4 +193,50 @@ describe("checkGate: D-launch spec §5.2 items 1–3 (review C1), with must-catc
     const broken = await checkGate(repo, env);
     expect(broken.ok === false && broken.reason.startsWith(`${join(home, ".claude", "settings.json")} cannot be read as JSON: `)).toBe(true);
   });
+  it("K14 a prefilter that leaves an escaped process holding the hook's stderr: the check still returns, on the hook's own verdict (final review Important-1)", async () => {
+    const repo = await fixture();
+    // Before the repository is removed (cleanups run in order): the pid file lives in it.
+    cleanups.unshift(async () => void (await killEscaped(repo)));
+    await writeFile(join(repo, "scripts", "gate-prefilter.mjs"), ESCAPING_PREFILTER("process.exit(1);"));
+    const t0 = Date.now();
+    const r = await checkGate(repo, await safeEnv());
+    const elapsed = Date.now() - t0;
+    // Both samples fell through to the real gate, which blocked the push and passed the status.
+    expect(r).toEqual({ ok: true });
+    expect(elapsed).toBeLessThan(30_000);
+    // The escaped sleeps were alive — still holding the pipe — when the check returned; then they are killed here.
+    expect(await killEscaped(repo)).toEqual(["sleep 3171", "sleep 3171"]);
+  }, 60_000);
+
+  it("K15 a prefilter that hangs after leaving an escaped process: gate-check failure on the sample timeout, not a hang (final review Important-1)", async () => {
+    const repo = await fixture();
+    // Before the repository is removed (cleanups run in order): the pid file lives in it.
+    cleanups.unshift(async () => void (await killEscaped(repo)));
+    await writeFile(join(repo, "scripts", "gate-prefilter.mjs"), ESCAPING_PREFILTER("setInterval(() => {}, 1_000);"));
+    const t0 = Date.now();
+    const r = await checkGate(repo, await safeEnv());
+    const elapsed = Date.now() - t0;
+    expect(r).toEqual({ ok: false, reason: 'the gate hook did not finish the git push sample within 10000 ms; its process group was killed, stderr ""' });
+    expect(elapsed).toBeGreaterThanOrEqual(10_000);
+    expect(elapsed).toBeLessThan(30_000);
+    expect(await killEscaped(repo)).toEqual(["sleep 3171"]);
+  }, 60_000);
+
+  it("K16 stderr written after the hook's shell exited still counts while the drain lasts (final review Important-1)", async () => {
+    const repo = await fixture();
+    // The gate line comes from a child in the hook's own group, 300 ms after the hook itself answered exit 2.
+    await writeFile(
+      join(repo, "src", "gate", "hook.ts"),
+      [
+        'import { spawn } from "node:child_process";',
+        "export async function gateHookClaudeCode(stdinText: string): Promise<{ exitCode: 0 | 2; stderr: string }> {",
+        '  if (JSON.parse(stdinText).tool_input.command !== "git push") return { exitCode: 0, stderr: "" };',
+        '  spawn("/bin/sh", ["-c", "sleep 0.3; printf \'orca gate: late\\\\n\' >&2"], { stdio: ["ignore", "ignore", "inherit"] }).unref();',
+        '  return { exitCode: 2, stderr: "" };',
+        "}",
+        "",
+      ].join("\n"),
+    );
+    expect(await checkGate(repo, await safeEnv())).toEqual({ ok: true });
+  }, 30_000);
 });
