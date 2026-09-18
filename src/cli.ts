@@ -20,6 +20,7 @@ import { PanelRejection } from "./panel/rejection.js";
 import { CheckpointRejection, describeLevel } from "./checkpoint/schema.js";
 import { writeCheckpoint } from "./checkpoint/write.js";
 import { resumeOutcome } from "./checkpoint/resume.js";
+import { runChainCommand } from "./chain/command.js";
 
 const USAGE = `usage:
   orca validate <path...>        validate ledger file(s) or directory (directory scans top-level *.jsonl only)
@@ -74,6 +75,21 @@ const USAGE = `usage:
   orca gate --hook claude-code   read a Claude Code PreToolUse hook's JSON on stdin; exit 2 with one line on stderr
                                  when the Bash command would push, merge into main, delete a branch or remove a
                                  worktree (Tier 0), or when it cannot decide; exit 0 otherwise
+  orca chain start --repo <path> --by <who> --goal <text> --max-sessions <n> --max-cost-usd <x>
+                   [--session-timeout-min <m>] [--chain-id <chain-xxxxxxxx>] [--via cli|panel]
+                                 run unattended Claude Code sessions one after another in <path> — a dedicated
+                                 clone or worktree of an Orca checkout with the Tier 0 gate — each starting from
+                                 \`orca resume\`, until one writes an exit checkpoint saying done or blocked, or a
+                                 limit or an anomaly stops the chain. The cost limit is soft: it is checked after
+                                 each session, and a session may overrun its --max-budget-usd. The model and the
+                                 default timeout (360 min, a backstop) come from .orca/chain.json. Exit 0 done,
+                                 1 refused before anything was written, 2 anomaly, 3 blocked on a person,
+                                 4 limit or stop request
+  orca chain stop --repo <path> [--chain-id <id>]
+                                 ask the running chain to stop after its current session ends
+  orca chain unlock --repo <path>
+                                 after checking its supervisor is gone: remove a chain's lock and record the
+                                 chain as stopped (unlocked-by-human)
 `;
 
 async function collectLedgerFiles(paths: string[]): Promise<{ files: string[]; errors: string[] }> {
@@ -526,6 +542,10 @@ export async function main(argv: string[], stdinText?: string): Promise<number> 
     const result = await gateHookClaudeCode(stdinText ?? (await readStdin()));
     process.stderr.write(result.stderr);
     return result.exitCode;
+  }
+
+  if (command === "chain") {
+    return runChainCommand(rest);
   }
 
   if (command === "checkpoint") {
