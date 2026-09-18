@@ -64,6 +64,21 @@ export function defaultChainDeps(): ChainDeps {
   return deps;
 }
 
+/**
+ * Review m1: the launch adapter (Task 6) awaits `onPoll` as `void req.onPoll?.()` — a rejection there would be an
+ * unhandled rejection that could kill the supervisor mid-session (Task 6 review; also the note this round follows
+ * up on). `check` throwing must never propagate, and must never itself count as a stop request: the next poll or
+ * the post-session `stopRequested` check tries again. Exported (not left as an inline closure) so it has its own
+ * criterion, not just incidental coverage from the sessions that happen to reach a poll tick.
+ */
+export async function pollForStop(check: () => Promise<boolean>, latched: { value: boolean }): Promise<void> {
+  try {
+    if (!latched.value && (await check())) latched.value = true;
+  } catch {
+    // A poll failure is not a stop request; the next poll or the post-session check tries again.
+  }
+}
+
 function stopFromError(err: unknown): Stop {
   const detail = err instanceof Error ? err.message : String(err);
   return { kind: "stop", reason: err instanceof ChainRejection ? err.code : "supervisor-error", category: "anomaly", detail, awaitingHuman: [] };
@@ -153,12 +168,12 @@ async function runSessions(
 ): Promise<{ stop: Stop; label: string }> {
   const { repo, chainId } = pre;
   let spent = 0;
-  let latched = false;
+  const latched = { value: false };
   for (let n = 1; ; n += 1) {
     // Spec §5.2, judged in decideBeforeSession's order.
-    latched = latched || flags.signalled || (await stopRequested(repo, chainId));
+    latched.value = latched.value || flags.signalled || (await stopRequested(repo, chainId));
     const before = decideBeforeSession({
-      stopRequested: latched,
+      stopRequested: latched.value,
       remainingUsd: record.limits.maxCostUsd - spent,
       gate: await deps.gateCheck(repo),
       worktreeClean: await worktreeClean(repo),
@@ -194,18 +209,11 @@ async function runSessions(
       graceMs: deps.graceMs,
       signal,
       pollMs: deps.pollMs,
-      // Spec §2 step 4: latched in memory, so a request deleted later still counts (review I10). The launch adapter
-      // awaits this with `void req.onPoll?.()` (Task 6), so a rejection here would be an unhandled rejection that
-      // could kill the supervisor mid-session — the try/catch keeps this promise from ever rejecting.
-      onPoll: async () => {
-        try {
-          if (!latched && (await stopRequested(repo, chainId))) latched = true;
-        } catch {
-          // A poll failure is not a stop request; the next poll or the post-session check tries again.
-        }
-      },
+      // Spec §2 step 4: latched in memory, so a request deleted later still counts (review I10). pollForStop is
+      // what keeps this from ever rejecting (review m1).
+      onPoll: () => pollForStop(() => stopRequested(repo, chainId), latched),
     });
-    latched = latched || (await stopRequested(repo, chainId));
+    latched.value = latched.value || (await stopRequested(repo, chainId));
 
     const exit = await exitCheckpointAtHead(repo, sessionId);
     const facts: SessionFacts = {
@@ -221,7 +229,7 @@ async function runSessions(
       descendsFromStart: await isAncestor(repo, startHead),
       onStartBranch: (await currentBranch(repo)) === pre.branch,
       interrupted: flags.signalled,
-      stopRequested: latched,
+      stopRequested: latched.value,
       newCommits: await progressCommits(repo, startHead),
       sessionsRun: n,
       priorCostUsd: spent,

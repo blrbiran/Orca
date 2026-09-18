@@ -195,7 +195,7 @@ describe("orca chain through the real CLI (D-launch spec §4.3, §5.3, §8.2-3/1
   }, 60_000);
 
   it("E10 the default gate check reads deps.env, not the ambient process.env (controller note on Task 7 review)", async () => {
-    const { repo } = await target(true);
+    const { repo, fake } = await target(true);
     // A harmless stand-in for the ambient environment: no settings.json inside it, so a checkGate that (wrongly) fell
     // back to process.env would read this and pass — proving the failure below can only come from deps.env.
     const harmless = await mkdtemp(join(tmpdir(), "orca-gate-harmless-"));
@@ -212,9 +212,13 @@ describe("orca chain through the real CLI (D-launch spec §4.3, §5.3, §8.2-3/1
       await rm(poisoned, { recursive: true, force: true });
     });
     const c = capture();
-    // Direct mutation after construction (same pattern as W16's `s.deps.claudeBin = …`), which defaultChainDeps's
-    // lazy `deps.env` read must honour.
-    c.deps.env = { ...process.env, CLAUDE_CONFIG_DIR: poisoned };
+    // Fix round 3 (review I1): fake.env(), never a spread of the real ambient process.env — this machine has a
+    // real `claude` on PATH (a cmux shim that execs a real wrapper), and a spread would have kept it reachable.
+    // fake.env's own PATH filtering (plan PC-24) excludes every directory holding one, and claudeBin is set to the
+    // fake's absolute path on top of that (same as W16), so findExecutable never walks PATH at all here — this
+    // criterion cannot reach the real claude whether or not the code it guards regresses.
+    c.deps.env = fake.env({ CLAUDE_CONFIG_DIR: poisoned });
+    c.deps.claudeBin = fake.claude;
     // A preflight-time refusal (D-launch spec §4.3): exit 1, nothing written — not the in-loop gate-check-failed's 2.
     expect(await runChainCommand(START(repo, "chain-0000000c").slice(1), c.deps)).toBe(1);
     expect(c.err.join("")).toContain("rejected: gate-check-failed");

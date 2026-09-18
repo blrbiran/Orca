@@ -10,7 +10,7 @@ import { launchClaudeCode } from "../../src/chain/launch/claudeCode.js";
 import { lockState } from "../../src/chain/lock.js";
 import { stopRequestPath } from "../../src/chain/paths.js";
 import { readChainRecord } from "../../src/chain/recordSchema.js";
-import { type ChainDeps, startChain } from "../../src/chain/run.js";
+import { type ChainDeps, pollForStop, startChain } from "../../src/chain/run.js";
 import { git } from "../../src/scheduler/gitExec.js";
 import { isolateChainEnv } from "../helpers/chainEnv.js";
 import { ORCA_ROOT, makeChainRepo } from "../helpers/chainRepo.js";
@@ -416,4 +416,28 @@ describe("startChain: the supervisor loop (D-launch spec §2, §4, §8.2-3)", ()
     const r = await record(s.repo);
     expect([r.stop?.reason, r.stop?.detail, r.sessions.length, await s.fake.call(1)]).toEqual(["resume-failed", "resume threw: resume exploded", 0, null]);
   }, 30_000);
+});
+
+describe("pollForStop: onPoll's own logic, direct (review m1 — Task 6's launch adapter awaits it as `void req.onPoll?.()`)", () => {
+  it("a throwing check resolves without rejecting, and does not latch", async () => {
+    const latched = { value: false };
+    await expect(pollForStop(() => Promise.reject(new Error("boom")), latched)).resolves.toBeUndefined();
+    expect(latched.value).toBe(false);
+  });
+
+  it("a check that finds a stop request latches", async () => {
+    const latched = { value: false };
+    await pollForStop(() => Promise.resolve(true), latched);
+    expect(latched.value).toBe(true);
+  });
+
+  it("once latched, the check is not called again", async () => {
+    let calls = 0;
+    const latched = { value: true };
+    await pollForStop(async () => {
+      calls += 1;
+      return true;
+    }, latched);
+    expect(calls).toBe(0);
+  });
 });
