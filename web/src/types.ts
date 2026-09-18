@@ -186,3 +186,34 @@ export const WEB_LIST_FIELDS = [
   "scope",
   "verdict",
 ] as const satisfies readonly (keyof DecisionListRow)[];
+
+/** D-launch spec §6.2. Mirrors src/panel/chains.ts's ChainView; parity: tests/panel/chainsApi.test.ts C10. */
+export type ChainStopCategory = "done" | "blocked" | "limit" | "anomaly";
+export interface ChainStopView {
+  reason: string;
+  category: ChainStopCategory;
+  at: string;
+  awaitingHuman: string[];
+  detail: string | null;
+}
+export interface ChainView {
+  chainId: string;
+  goal: string;
+  by: string;
+  via: "cli" | "panel";
+  startedAt: string;
+  state: "running" | "stopped";
+  holderGone: boolean;
+  sessionsDone: number;
+  costUsd: number | null;
+  stop: ChainStopView | null;
+}
+export interface ChainRepoView {
+  repoKey: string;
+  defaultSessionTimeoutMin: number | null;
+  chain: ChainView | null;
+  problem: string | null;
+}
+export const WEB_CHAIN_VIEW_FIELDS = [
+  "chainId", "goal", "by", "via", "startedAt", "state", "holderGone", "sessionsDone", "costUsd", "stop",
+] as const satisfies readonly (keyof ChainView)[];

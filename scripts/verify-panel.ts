@@ -27,6 +27,8 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
+import { makeChainRepo } from "../tests/helpers/chainRepo.js";
+import { fakeClaude } from "../tests/helpers/fakeClaude.js";
 import { CORRECTION_ALREADY_RECORDED, readCorrections, recordCorrection } from "../src/corrections/store.js";
 import type { Correction } from "../src/corrections/schema.js";
 import { projectKeyOf } from "../src/corrections/projectKey.js";
@@ -484,6 +486,20 @@ function runToExit(
   });
 }
 
+/** Resolves once `pid` no longer exists; rejects naming it after `ms`. */
+async function waitForPidGone(pid: number, ms: number): Promise<void> {
+  const deadline = Date.now() + ms;
+  for (;;) {
+    try {
+      process.kill(pid, 0);
+    } catch {
+      return;
+    }
+    if (Date.now() > deadline) throw new Error(`pid ${pid} is still alive after ${ms}ms`);
+    await sleep(100);
+  }
+}
+
 async function lsofListenForPid(pid: number): Promise<string> {
   try {
     const { stdout } = await execFileAsync("lsof", ["-nP", "-a", "-p", String(pid), "-iTCP", "-sTCP:LISTEN"]);
@@ -902,6 +918,58 @@ async function main(): Promise<number> {
       fail(13, "~/.orca is unchanged by step 13 as well", homeBefore, homeAfter13);
     }
     pass(13, "a running panel writes a review again after compaction moved it out, and ~/.orca is still unchanged");
+
+    // Step 14 (D-launch spec §8.2-8): the real panel opens a chain by spawning `orca chain start`; a fake claude's one
+    // session ends it with done; the status view says so; malformed and unknown stops are refused; ~/.orca untouched.
+    const chainTarget = await makeChainRepo({ gate: true });
+    cleanups.push({ what: "remove step 14's chain target repository", run: chainTarget.cleanup });
+    const fake14 = await fakeClaude();
+    cleanups.push({ what: "kill step 14's fake claude processes and remove its directory", run: fake14.teardown });
+    await fake14.scenario(1, { steps: [{ do: "commit", file: "step14.txt" }, { do: "exitCheckpoint", status: "done", next: [] }], result: { subtype: "success", cost: 0.25 } });
+    const storeDir14 = await mkdtemp(join(tmpdir(), "orca-panel-verify-store-"));
+    cleanups.push({ what: "remove step 14's throwaway ORCA_CORRECTIONS_DIR", run: () => guardedRmRecursive(storeDir14, "orca-panel-verify-store-") });
+    const { child: panel14, ready: ready14, exited: panel14Exited } = spawnPanelAndAwaitReady(
+      ["panel", "--by", "tester", "--port", "0", "--bind", "127.0.0.1", "--repo", `chains=${chainTarget.path}`],
+      fake14.env({ ORCA_CORRECTIONS_DIR: storeDir14 }),
+      10_000,
+    );
+    cleanups.push({
+      what: "kill step 14's panel child's process group and confirm it exited",
+      run: () => {
+        killGroup(panel14);
+        return withTimeout(panel14Exited, 5_000, `step 14 panel child (pid ${panel14.pid}) did not confirm exit within 5000ms after SIGKILL`).then(() => undefined);
+      },
+    });
+    const r14 = await must(14, "the step 14 panel prints its ready line", "orca-panel ready url=... token=...", ready14);
+    const startRes = await apiPost(r14.url, "/api/chains", { repoKey: "chains", goal: "verify-panel step 14", maxSessions: 2, maxCostUsd: 1 }, r14.token);
+    if (startRes.status !== 200) fail(14, "POST /api/chains starts a chain", 200, `${startRes.status} ${await startRes.text()}`);
+    const { chainId } = (await startRes.json()) as { chainId: string };
+    if (!/^chain-[0-9a-f]{8}$/.test(chainId)) fail(14, "the answer names the chain", "chain-<8 hex>", chainId);
+    // Named rather than `typeof view` (review, TS2339): a `typeof` query on a `let` reassigned inside the same
+    // loop it is read in is self-referential and TS collapses it to `never`. A named type sidesteps that.
+    type Step14ChainView = { chainId?: string; state?: string; via?: string; by?: string; stop?: { reason?: string } | null };
+    let view: Step14ChainView | null = null;
+    const until14 = Date.now() + 60_000;
+    while (Date.now() < until14) {
+      const body = (await (await apiGet(r14.url, "/api/chains", r14.token)).json()) as { repos: Array<{ chain: Step14ChainView | null }> };
+      view = body.repos[0]?.chain ?? null;
+      if (view?.state === "stopped") break;
+      await sleep(250);
+    }
+    const seen = { chainId: view?.chainId, state: view?.state, reason: view?.stop?.reason, via: view?.via, by: view?.by };
+    const wanted = { chainId, state: "stopped", reason: "done", via: "panel", by: "tester" };
+    if (JSON.stringify(seen) !== JSON.stringify(wanted)) fail(14, "the status view shows the chain stopped with done", wanted, seen);
+    const badId = await apiPost(r14.url, "/api/chains/chain-XYZ/stop", { repoKey: "chains" }, r14.token);
+    if (badId.status !== 400) fail(14, "a malformed chain id is refused with 400", 400, badId.status);
+    const unknown = await apiPost(r14.url, "/api/chains/chain-00000000/stop", { repoKey: "chains" }, r14.token);
+    if (unknown.status !== 404) fail(14, "an unknown chain id is refused with 404", 404, unknown.status);
+    const record14 = JSON.parse(await readFile(join(chainTarget.path, ".orca", "chains", `${chainId}.json`), "utf8")) as { supervisorPid: number };
+    await must(14, "the chain's supervisor exits by itself", "gone within 10000ms", waitForPidGone(record14.supervisorPid, 10_000));
+    killGroup(panel14);
+    await panel14Exited;
+    const homeAfter14 = await snapshotHomeOrca();
+    if (JSON.stringify(homeAfter14) !== JSON.stringify(homeBefore)) fail(14, "~/.orca is unchanged by step 14", homeBefore, homeAfter14);
+    pass(14, "the panel opened a chain by spawning orca chain start, it ran to done and the status view says so, bad stops are refused, ~/.orca is unchanged");
   } catch (err) {
     if (err instanceof StepFailure) {
       console.error(`FAIL ${err.step} ${err.what}: ${JSON.stringify(err.expected)} vs ${JSON.stringify(err.got)}`);

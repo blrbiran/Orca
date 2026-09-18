@@ -335,3 +335,27 @@ through is narrower and more deliberate: a command written into a script
 file, an inline interpreter invocation such as `python3 -c "…"`, or `rm -rf`
 of a worktree directory. See residual risks in
 `docs/superpowers/specs/2026-09-18-tier0-gate-design.md` §7.
+
+## Unattended chains (`orca chain`)
+
+`orca chain start --repo <path> --by <you> --goal <text> --max-sessions <n> --max-cost-usd <x>` runs headless Claude
+Code sessions one after another in `<path>` — a dedicated clone or worktree of an Orca checkout, whose Tier 0 gate
+wiring must equal `src/gate/settings.ts`. Each session starts from `orca resume` and ends by writing an exit checkpoint
+(`"chain": {"status": "continue" | "done" | "blocked", "why": "..."}`); code, not the model, decides whether the next
+session starts. Exit codes: 0 done, 1 refused before anything was written, 2 an anomaly (a changed gate or guarded
+path, a dirty worktree, rewritten history, a timeout, no exit checkpoint, an unreadable cost, ...), 3 everything left
+waits for a person, 4 a limit or a stop request.
+
+- The target needs `node_modules/.bin/tsx` (a fresh worktree often has no `node_modules`: link or install it first);
+  otherwise the start is refused with `tsx-missing`.
+- The model and the default session timeout (360 minutes, a backstop) come from `.orca/chain.json`, e.g.
+  `{"model": "claude-opus-5[1m]"}`; `orca level` must know that model's window. The cost limit is soft.
+- The record `.orca/chains/<chain-id>.json` is committed on its own after every session; raw session output is in the
+  ignored `.orca/chain-logs/`. The chain lock and stop requests live in the git dir.
+- `orca chain stop --repo <path>` stops the chain after its current session; `orca chain unlock --repo <path>` clears
+  the lock of a supervisor that is gone and records the chain as stopped.
+- The panel shows each repository's latest chain, starts and stops chains, and shows a banner when one stops
+  (dismissing it is remembered in the browser only). Anyone holding the panel token can start a paid, unattended agent
+  that commits: see the D-launch spec §7.
+
+Design: `docs/superpowers/specs/2026-09-18-d-launch-design.md`.

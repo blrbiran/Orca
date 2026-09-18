@@ -500,3 +500,10 @@ ORCA_CORRECTIONS_DIR 改道；造一个带 origin remote 的一次性目标仓�
    没有 sha 的「未发布」是不可复核的断言。
 3. ⚠️ **收尾的 `ls-remote` 不只是为了报「还剩几笔没推」** ——
    *** **它同时是「我这一轮有没有改过已发布文本」的唯一检测手段。本轮就是靠它才发现的。** ***
+
+***ERRATUM (2026-09-18, run `orca-dev-6662000e`, Orca `6717fbd`, D-launch)***
+§2.1「面板**不可以**：取任何目标仓库的 repo 锁、往 `.decisions/` 写、在任何仓库里 `git commit`」对**面板进程自身**仍然成立，§6 变异 5 仍承重。
+但人已在 D-launch spec 的裁决 R13 中准许面板**经 detached spawn 的 `orca chain start`** 开链 —— 那个子进程会取链锁、提交链记录、起能提交的 agent；
+外部绑定模式同样开放（R11），token 泄漏的后果登记在 D-launch spec §7-1。
+判据：`tests/panel/chainsApi.test.ts` C1（链记录的 `supervisorPid` 不是面板进程）与 C9（`src/panel/**` 无 `"commit"` 字面量、不 import 链的提交模块）。
+详见 `docs/superpowers/specs/2026-09-18-d-launch-design.md` §6.3。原文逐字保留。

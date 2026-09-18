@@ -27,6 +27,10 @@ export interface PanelOptions {
    * and deep-equal a whole report against one it computed itself.
    */
   now?: () => Date;
+  /** D-launch: the environment `orca chain start` is spawned with. Criteria put a fake claude first on its PATH. */
+  chainEnv?: NodeJS.ProcessEnv;
+  /** D-launch spec §2: how long POST /api/chains waits for the `started` line (default 10 s). Criteria shorten it. */
+  chainStartWaitMs?: number;
 }
 
 export interface StartedPanel {

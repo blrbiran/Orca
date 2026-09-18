@@ -9,6 +9,7 @@ import { collect } from "../metrics/collect.js";
 import { computeMetrics } from "../metrics/compute.js";
 import { MetricsRejection } from "../metrics/rejection.js";
 import type { DecisionObservation } from "../metrics/types.js";
+import { registerChainRoutes } from "./chains.js";
 import { computePanelCoverage, unreviewedHighTier } from "./coverage.js";
 import { loadDecisionRow } from "./decisionSource.js";
 import { DECISION_NOT_FOUND, projectForList } from "./listProjection.js";
@@ -93,7 +94,7 @@ function isListedDecision(
  * TypeError in it, or as a misleading 404 for a decision named "". Answers 400
  * by name and returns undefined when the body is not a plain object.
  */
-function objectBody(req: Request, res: Response): Record<string, unknown> | undefined {
+export function objectBody(req: Request, res: Response): Record<string, unknown> | undefined {
   const body: unknown = req.body;
   if (typeof body === "object" && body !== null && !Array.isArray(body)) {
     return body as Record<string, unknown>;
@@ -388,6 +389,8 @@ export function buildApi(app: Express, deps: ApiDeps): void {
       res.json({ result });
     })().catch(next);
   });
+
+  registerChainRoutes(app, deps.opts, objectBody);
 
   // Errors last. A gate refusal is a first-class error page, never partial
   // data: relaxing here would void E2's gate entirely.

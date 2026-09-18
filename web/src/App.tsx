@@ -22,20 +22,36 @@ import type { JSX } from "react";
 import {
   correctionBody,
   failureFrom,
+  fetchChains,
   fetchDecision,
   fetchMetrics,
   fetchTodo,
   recordCorrection,
   recordReview,
+  requestChainStart,
+  requestChainStop,
+  startChainBody,
 } from "./api.js";
 import type { PanelRefusal, PostResult, RecordCorrectionInput } from "./api.js";
+import { bannersFor, readDismissed, writeDismissed } from "./chainBanner.js";
+import { ChainPanel } from "./ChainPanel.js";
+import type { ChainOutcome } from "./ChainPanel.js";
 import { DecisionDetail } from "./DecisionDetail.js";
 import type { Decision } from "./DecisionDetail.js";
 import { ErrorPage } from "./ErrorPage.js";
 import { PanelHome } from "./PanelHome.js";
 import { Refusal } from "./Refusal.js";
 import { acceptArrival } from "./selection.js";
-import type { DecisionListRow, MetricsReport, PanelCoverage } from "./types.js";
+import type { ChainRepoView, DecisionListRow, MetricsReport, PanelCoverage } from "./types.js";
+
+/** localStorage, or undefined where touching it throws. */
+function browserStorage(): Storage | undefined {
+  try {
+    return window.localStorage;
+  } catch {
+    return undefined;
+  }
+}
 
 interface HomeState {
   todo: DecisionListRow[];
@@ -54,6 +70,33 @@ export function App(): JSX.Element {
   const [lastCorrection, setLastCorrection] = useState<RecordCorrectionInput | null>(null);
   /** The row whose answer may still be applied; read by `acceptArrival` when one arrives. */
   const wanted = useRef<DecisionListRow | null>(null);
+
+  const [chains, setChains] = useState<ChainRepoView[] | null>(null);
+  const [chainOutcome, setChainOutcome] = useState<ChainOutcome | null>(null);
+  const [dismissed, setDismissed] = useState<Set<string>>(() => readDismissed(browserStorage()));
+
+  const loadChains = async (): Promise<void> => {
+    try {
+      setChains((await fetchChains()).repos);
+    } catch (err) {
+      setChainOutcome({ kind: "refused", refusal: failureFrom(err) });
+    }
+  };
+  // Spec §6.2: the banner appears when a chain stops, so the status is re-read while the page is open.
+  useEffect(() => {
+    void loadChains();
+    const timer = setInterval(() => void loadChains(), 5_000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const chainAction = async (act: () => Promise<ChainOutcome>): Promise<void> => {
+    try {
+      setChainOutcome(await act());
+    } catch (err) {
+      setChainOutcome({ kind: "refused", refusal: failureFrom(err) });
+    }
+    await loadChains();
+  };
 
   const loadHome = async (): Promise<void> => {
     try {
@@ -113,6 +156,31 @@ export function App(): JSX.Element {
 
   return (
     <main>
+      {chains !== null && (
+        <ChainPanel
+          repos={chains}
+          banners={bannersFor(chains, dismissed)}
+          outcome={chainOutcome}
+          onDismiss={(chainId) => {
+            const next = new Set(dismissed);
+            next.add(chainId);
+            setDismissed(next);
+            writeDismissed(browserStorage(), next);
+          }}
+          onStart={(form) => {
+            void chainAction(async () => {
+              const r = await requestChainStart(startChainBody(form));
+              return r.ok ? { kind: "started", chainId: r.body.chainId } : { kind: "refused", refusal: r };
+            });
+          }}
+          onStop={(repoKey, chainId) => {
+            void chainAction(async () => {
+              const r = await requestChainStop(repoKey, chainId);
+              return r.ok ? { kind: "stop-requested", chainId } : { kind: "refused", refusal: r };
+            });
+          }}
+        />
+      )}
       <PanelHome todo={home.todo} report={home.report} coverage={home.coverage} onOpen={setSelected} />
       {selected !== null && decision !== null && (
         <>

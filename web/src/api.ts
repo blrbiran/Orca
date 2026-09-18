@@ -13,7 +13,7 @@
  * person, not just "answered 409"); a POST resolves to a typed `PostResult`
  * the page must look at, instead of a promise it could `void`.
  */
-import type { CorrectionKind, DecisionListRow, MetricsReport, PanelCoverage } from "./types.js";
+import type { ChainRepoView, CorrectionKind, DecisionListRow, MetricsReport, PanelCoverage } from "./types.js";
 
 declare global {
   interface Window {
@@ -148,3 +148,29 @@ export const recordCorrection = (input: RecordCorrectionInput): Promise<PostResu
 /** POST /api/reviews -- src/panel/api.ts. The explicit "I reviewed this" act. */
 export const recordReview = (projectKey: string, decisionId: string): Promise<PostResult<unknown>> =>
   postJson("/api/reviews", { projectKey, decisionId });
+
+/** GET /api/chains -- src/panel/chains.ts. */
+export const fetchChains = (): Promise<{ repos: ChainRepoView[] }> => getJson<{ repos: ChainRepoView[] }>("/api/chains");
+
+export interface StartChainInput {
+  repoKey: string;
+  goal: string;
+  maxSessions: number;
+  maxCostUsd: number;
+  sessionTimeoutMin?: number;
+}
+/** The form's boxes as the POST body: numbers as numbers; a blank timeout is left out so .orca/chain.json decides. The server validates. */
+export function startChainBody(form: { repoKey: string; goal: string; maxSessions: string; maxCostUsd: string; sessionTimeoutMin: string }): StartChainInput {
+  return {
+    repoKey: form.repoKey,
+    goal: form.goal,
+    maxSessions: Number(form.maxSessions),
+    maxCostUsd: Number(form.maxCostUsd),
+    ...(form.sessionTimeoutMin.trim() === "" ? {} : { sessionTimeoutMin: Number(form.sessionTimeoutMin) }),
+  };
+}
+/** POST /api/chains -- the panel spawns `orca chain start`; it never runs a chain itself. */
+export const requestChainStart = (input: StartChainInput): Promise<PostResult<{ chainId: string }>> => postJson("/api/chains", input);
+/** POST /api/chains/:id/stop -- writes the stop request; the chain stops after its current session. */
+export const requestChainStop = (repoKey: string, chainId: string): Promise<PostResult<{ chainId: string }>> =>
+  postJson(`/api/chains/${encodeURIComponent(chainId)}/stop`, { repoKey });
