@@ -3,57 +3,56 @@
   "runId": "orca-dev-6662000e",
   "runtime": "claude-code",
   "sessionRef": "6662000e-644c-44b3-b38f-58cda6412bf0",
-  "writtenAt": "2026-09-18T01:38:19.100Z",
-  "head": "8ec825d425ed2346a2715e79ba0a698258abe732",
+  "writtenAt": "2026-09-18T04:26:01.102Z",
+  "head": "4fad967de92fa07f0af46b3a5f608d40758fe6ac",
   "level": {
     "kind": "reading",
-    "level": 344175,
+    "level": 463701,
     "windowTokens": 1000000,
     "t1": 330000,
     "t2": 450000,
-    "band": 1
+    "band": 2
   },
   "next": [
-    "Person reviews the revised D-launch spec docs/superpowers/specs/2026-09-18-d-launch-design.md (commits af70325, 8ec825d; sections 10 and 11 are the review dispositions). On approval, invoke superpowers:writing-plans for it; no code before the plan is approved.",
-    "When executing: append ERRATUM entries to the A' spec (2026-08-29-decision-ledger-design.md section 4.1) and the panel spec (2026-09-09-panel-design.md section 2.1) pointing to D-launch spec section 6.3, per Rule 13",
-    "Before the plan fixes rule 5's subtype, measure the real budget-exhausted subtype of claude -p on this machine's claude version (side evidence: error_max_budget_usd)"
+    "Continue executing docs/superpowers/plans/2026-09-18-d-launch.md subagent-driven; ledger .superpowers/sdd/2026-09-18-d-launch/progress.md (git-ignored) is the progress map: Tasks 1-5 complete, Task 6 committed (4fad967) awaiting its task review, Tasks 7-9 not started",
+    "Then a final whole-branch review (most capable model), one fix wave, full npm run verify, the three handoff updates (Orca handoff appended; ccloop and ccmem Orca sections rewritten in place), and a report to the person"
   ],
   "open": [
-    "Adversarial review of the spec judged No (2 Critical/12 Important/13 Minor); all disposed in spec section 10; a controller re-read found 8 more, disposed in section 11 with the person's approval. No second external review has been run on the revised spec.",
-    "The authorization list in spec section 1 grew beyond the three files first agreed (covering, resume, trigger, cli, src/gate/settings.ts, tests/gate/settings.test.ts); the person approved the revision but the plan should name them again",
-    "Handoff docs (Orca docs/handoff/handoff.md, ccloop and ccmem Orca sections) not yet updated for this round"
+    "Past T2 by the person's explicit instruction for this round (这次先临时忽略上下文大小); recorded here per Rule 6",
+    "Deferred minors for the final review are listed in the ledger (Task 1, 2, 5 entries)",
+    "Live acceptance (plan Appendix A) not run: needs the person's separate nod; .orca/chain.json (model) is the person's decision and does not exist yet"
   ],
   "awaitingHuman": [
     {
       "kind": "irreversible",
-      "what": "push Orca main (af70325, 8ec825d and this checkpoint commit)"
+      "what": "push Orca main (spec, plan, Task 1-6 commits, checkpoints)"
     },
     {
       "kind": "named-authorization",
-      "what": "approve the revised D-launch spec before writing the plan"
+      "what": "nod for the paid live acceptance of orca chain (plan Appendix A) and choose the model for .orca/chain.json"
     }
   ],
   "measurements": [
     {
-      "command": "npx vitest run tests/gate tests/level tests/checkpoint",
+      "command": "npx vitest run tests/chain tests/checkpoint tests/level tests/gate",
       "exitCode": 0,
-      "commit": "8ec825d425ed2346a2715e79ba0a698258abe732",
-      "observedAt": "2026-09-18T01:38:14.438Z",
-      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-6662000e-45lyyx/1.txt"
+      "commit": "4fad967de92fa07f0af46b3a5f608d40758fe6ac",
+      "observedAt": "2026-09-18T04:25:49.997Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-6662000e-mJmpou/1.txt"
     },
     {
       "command": "ls ~/.orca",
       "exitCode": 1,
-      "commit": "8ec825d425ed2346a2715e79ba0a698258abe732",
-      "observedAt": "2026-09-18T01:38:14.448Z",
-      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-6662000e-45lyyx/2.txt"
+      "commit": "4fad967de92fa07f0af46b3a5f608d40758fe6ac",
+      "observedAt": "2026-09-18T04:25:50.006Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-6662000e-mJmpou/2.txt"
     },
     {
       "command": "git ls-remote origin refs/heads/main",
       "exitCode": 0,
-      "commit": "8ec825d425ed2346a2715e79ba0a698258abe732",
-      "observedAt": "2026-09-18T01:38:19.045Z",
-      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-6662000e-45lyyx/3.txt"
+      "commit": "4fad967de92fa07f0af46b3a5f608d40758fe6ac",
+      "observedAt": "2026-09-18T04:26:01.053Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-6662000e-mJmpou/3.txt"
     }
   ]
 }
