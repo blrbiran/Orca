@@ -1,10 +1,10 @@
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { CheckpointSchema } from "../../src/checkpoint/schema.js";
-import { claudeProjectsRoot } from "../../src/checkpoint/transcript.js";
+import { claudeProjectsRoot, findTranscript } from "../../src/checkpoint/transcript.js";
 import { writeCheckpoint } from "../../src/checkpoint/write.js";
 import { git } from "../../src/scheduler/gitExec.js";
 import { isolateChainEnv } from "../helpers/chainEnv.js";
@@ -131,6 +131,21 @@ describe("checkpoint write in a chain (D-launch spec §3.1, §3.4)", () => {
     await expect(
       writeCheckpoint({ repo: s.repo, sessionRef: SESSION, draftPath: s.draftPath, now: NOW, env: { ORCA_CLAUDE_PROJECTS_DIR: empty, CLAUDE_CONFIG_DIR: config, HOME: d } }),
     ).rejects.toMatchObject({ code: "transcript-not-found" });
+  });
+
+  it("T6 a session ref that would climb out of the projects root is session-ref-unusable, though a file waits there (final review, T2)", async () => {
+    // runIdFor accepts anything that starts with 8 hex digits (schema.ts), so this ref reaches findTranscript.
+    const parent = await mkdtemp(join(tmpdir(), "orca-escape-"));
+    const root = join(parent, "projects");
+    await mkdir(join(root, "-p"), { recursive: true });
+    // Where the ref would land from <root>/-p/: <parent>/outside.jsonl. It exists, so only the guard stands between.
+    await writeFile(join(parent, "outside.jsonl"), "");
+    const d = await decoy();
+    const ref = "abcdef12/../../../outside";
+    await expect(findTranscript(ref, { ORCA_CLAUDE_PROJECTS_DIR: root, CLAUDE_CONFIG_DIR: d, HOME: d })).rejects.toMatchObject({
+      code: "session-ref-unusable",
+      message: `session ${JSON.stringify(ref)} cannot name a transcript file`,
+    });
   });
 
   it("T5 projects root precedence: ORCA_CLAUDE_PROJECTS_DIR, then $CLAUDE_CONFIG_DIR/projects, then $HOME/.claude/projects", () => {
