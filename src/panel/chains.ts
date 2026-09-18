@@ -1,4 +1,4 @@
-import { type ChildProcess, spawn } from "node:child_process";
+import { spawn } from "node:child_process";
 import { mkdir, open, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -76,16 +76,22 @@ export async function chainRepoView(repoKey: string, path: string): Promise<Chai
 
 type StartOutcome = { kind: "started" } | { kind: "exited"; code: number | null } | { kind: "timeout" };
 
-/** Spec §2 (review 6): wait for the `started` line, but answer as soon as the child exits instead of waiting it out. */
-async function waitForStart(child: ChildProcess, logPath: string, chainId: string, waitMs: number): Promise<StartOutcome> {
-  let exited: { code: number | null } | undefined;
-  child.once("exit", (code) => (exited = { code }));
-  child.once("error", () => (exited = { code: null }));
+/**
+ * Spec §2 (review 6): wait for the `started` line, but answer as soon as the child exits instead of waiting it out.
+ *
+ * Review fix round 1: takes the exit/error state as a GETTER rather than the child itself. The listeners that
+ * populate it must be attached synchronously, right after `spawn()`, before any `await` -- Node can emit a spawn
+ * failure's `error` event (ENOENT: tsx missing or the path is wrong; EACCES; EAGAIN) before this function ever
+ * runs, and a `ChildProcess` with no `error` listener at all turns that into an uncaught exception that takes the
+ * whole panel process down instead of a named `500 chain-start-failed`. Criterion: C11.
+ */
+async function waitForStart(logPath: string, chainId: string, waitMs: number, getExited: () => { code: number | null } | undefined): Promise<StartOutcome> {
   const line = `orca chain: started ${chainId}`;
   const deadline = Date.now() + waitMs;
   for (;;) {
     const text = await readFile(logPath, "utf8").catch(() => "");
     if (text.includes(line)) return { kind: "started" };
+    const exited = getExited();
     if (exited !== undefined) return { kind: "exited", code: exited.code };
     if (Date.now() >= deadline) return { kind: "timeout" };
     await new Promise((r) => setTimeout(r, 100));
@@ -139,15 +145,19 @@ export function registerChainRoutes(
         ...(a.sessionTimeoutMin === undefined ? [] : ["--session-timeout-min", String(a.sessionTimeoutMin)]),
         "--chain-id", chainId, "--via", "panel",
       ];
-      const child = spawn(join(ORCA_ROOT, "node_modules", ".bin", "tsx"), argv, {
+      const child = spawn(opts.chainTsxBin ?? join(ORCA_ROOT, "node_modules", ".bin", "tsx"), argv, {
         cwd: ORCA_ROOT,
         env: opts.chainEnv ?? process.env,
         detached: true,
         stdio: ["ignore", log.fd, log.fd],
       });
+      // Review fix round 1: the VERY NEXT statement after spawn(), before any await -- see waitForStart's comment.
+      let exited: { code: number | null } | undefined;
+      child.once("exit", (code) => (exited = { code }));
+      child.once("error", () => (exited = { code: null }));
       await log.close();
       child.unref();
-      const outcome = await waitForStart(child, logPath, chainId, opts.chainStartWaitMs ?? CHAIN_START_WAIT_MS);
+      const outcome = await waitForStart(logPath, chainId, opts.chainStartWaitMs ?? CHAIN_START_WAIT_MS, () => exited);
       if (outcome.kind === "started") {
         res.json({ chainId });
         return;

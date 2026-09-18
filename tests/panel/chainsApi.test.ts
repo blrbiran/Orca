@@ -229,6 +229,17 @@ describe("chains in the panel (D-launch spec §6.2, §6.3, §8.2-8)", () => {
   it("C10 web/src/types.ts keeps the chain view's field set (task 8 ruling K2)", () => {
     expect([...WEB_CHAIN_VIEW_FIELDS].sort()).toEqual([...CHAIN_VIEW_FIELDS].sort());
   });
+
+  it("C11 a spawn failure (bad executable path) answers 500 chain-start-failed instead of crashing the panel (review fix round 1)", async () => {
+    const noTsxDir = await mkdtemp(join(tmpdir(), "orca-panel-no-tsx-"));
+    cleanups.push(() => rm(noTsxDir, { recursive: true, force: true }));
+    const s = await setup({ gate: false, over: { chainTsxBin: join(noTsxDir, "does-not-exist") } });
+    const res = await post(s.panel, "/api/chains", { repoKey: "chains", goal: "g", maxSessions: 1, maxCostUsd: 1 });
+    expect([res.status, ((await res.json()) as { code: string }).code]).toEqual([500, "chain-start-failed"]);
+    // The bug this guards against was an unhandled 'error' event that crashed the WHOLE panel process on a spawn
+    // failure -- so the real assertion is that the process is still alive and serving ordinary requests afterwards.
+    expect((await get(s.panel, "/api/chains")).status).toBe(200);
+  });
 });
 
 // The compile-time half, the same depth as tests/panel/webParity.test.ts (review M8): `npm run typecheck` checks that

@@ -31,6 +31,13 @@ export interface PanelOptions {
   chainEnv?: NodeJS.ProcessEnv;
   /** D-launch spec §2: how long POST /api/chains waits for the `started` line (default 10 s). Criteria shorten it. */
   chainStartWaitMs?: number;
+  /**
+   * D-launch, review fix round 1: the executable `orca chain start` is spawned through (default:
+   * `node_modules/.bin/tsx` under the Orca checkout). `parsePanelArgs` never sets it -- a criterion points this at
+   * a path that does not exist to make the spawn itself fail (ENOENT), without relying on the real filesystem
+   * being in a particular broken state.
+   */
+  chainTsxBin?: string;
 }
 
 export interface StartedPanel {
