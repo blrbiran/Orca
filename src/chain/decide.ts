@@ -1,5 +1,6 @@
 import type { ResumeOutcome } from "../checkpoint/resume.js";
 import type { ChainStatus } from "../checkpoint/schema.js";
+import { formatBudget } from "./launch/claudeCode.js";
 
 export const STOP_CATEGORIES = ["done", "blocked", "limit", "anomaly"] as const;
 export type StopCategory = (typeof STOP_CATEGORIES)[number];
@@ -84,7 +85,8 @@ export interface BeforeSession {
 /** Spec §5.2 (review 4) and its judging order: limits before the gate check, then worktree and branch. Null = start. */
 export function decideBeforeSession(b: BeforeSession): Stop | null {
   if (b.stopRequested) return stop("stop-requested", "limit");
-  if (b.remainingUsd <= 0) return stop("max-cost", "limit", "no budget left for another session");
+  // Final review Minor-1: a remainder that --max-budget-usd would carry as 0 (below 1/10000 USD) is no budget either.
+  if (b.remainingUsd <= 0 || formatBudget(b.remainingUsd) === "0") return stop("max-cost", "limit", "no budget left for another session");
   if (!b.gate.ok) return stop("gate-check-failed", "anomaly", b.gate.reason);
   if (!b.worktreeClean) return stop("dirty-before-session", "anomaly");
   if (!b.onStartBranch) return stop("branch-changed", "anomaly");

@@ -165,6 +165,12 @@ describe("decideBeforeSession: spec §5.2 and its judging order", () => {
   it("B1 a stop request ⇒ stop-requested", () => expect(decideBeforeSession(ready({ stopRequested: true }))).toEqual(stop("stop-requested", "limit")));
   it("B2 no budget left (exactly zero) ⇒ max-cost", () =>
     expect(decideBeforeSession(ready({ remainingUsd: 0 }))).toEqual(stop("max-cost", "limit", "no budget left for another session")));
+  it("B6 a remainder --max-budget-usd would carry as 0 ⇒ max-cost, not a session launched with 0 (final review Minor-1)", () => {
+    expect(decideBeforeSession(ready({ remainingUsd: 0.00005 }))).toEqual(stop("max-cost", "limit", "no budget left for another session"));
+    expect(decideBeforeSession(ready({ remainingUsd: 1 - 0.99995 }))).toEqual(stop("max-cost", "limit", "no budget left for another session"));
+    // The smallest amount the flag can carry still starts a session.
+    expect(decideBeforeSession(ready({ remainingUsd: 0.0001 }))).toBeNull();
+  });
   it("B3 the gate check failed ⇒ gate-check-failed with its reason", () =>
     expect(decideBeforeSession(ready({ gate: { ok: false, reason: "r" } }))).toEqual(stop("gate-check-failed", "anomaly", "r")));
   it("B4 a dirty worktree ⇒ dirty-before-session", () =>
