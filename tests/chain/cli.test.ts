@@ -285,7 +285,7 @@ describe("orca chain through the real CLI (D-launch spec §4.3, §5.3, §8.2-3/1
     expect((await git(repo, ["log", "-1", "--format=%s"])).trim()).toBe("chore(chain): chain-0000000f, stopped, unlocked-by-human");
     expect((await git(repo, ["show", "--name-only", "--format=", "HEAD"])).trim()).toBe(".orca/chains/chain-0000000f.json");
   }, 60_000);
-  it("E11 orca chain unlock with a stale lock whose record is missing or invalid: refused, and the lock is still there (final review Minor-4)", async () => {
+  it("E12 orca chain unlock with a stale lock whose record is missing or invalid: refused, and the lock is still there (final review Minor-4)", async () => {
     const { repo } = await target(false);
     const lock = await acquireChainLock(repo, "chain-0000000f");
     cleanups.push(() => lock.release());
