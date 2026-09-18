@@ -222,6 +222,23 @@ describe("checkGate: D-launch spec §5.2 items 1–3 (review C1), with must-catc
     expect(await killEscaped(repo)).toEqual(["sleep 3171"]);
   }, 60_000);
 
+  it("K17 a prefilter that hangs on the must-pass sample only: gate-check failure naming that sample (final review Important-1)", async () => {
+    const repo = await fixture();
+    await writeFile(
+      join(repo, "scripts", "gate-prefilter.mjs"),
+      [
+        'let input = "";',
+        'process.stdin.on("data", (c) => (input += c));',
+        'process.stdin.on("end", () => (JSON.parse(input).tool_input.command === "git status" ? setInterval(() => {}, 1_000) : process.exit(1)));',
+        "",
+      ].join("\n"),
+    );
+    const t0 = Date.now();
+    const r = await checkGate(repo, await safeEnv());
+    expect(r).toEqual({ ok: false, reason: 'the gate hook did not finish the git status sample within 10000 ms; its process group was killed, stderr ""' });
+    expect(Date.now() - t0).toBeLessThan(30_000);
+  }, 60_000);
+
   it("K16 stderr written after the hook's shell exited still counts while the drain lasts (final review Important-1)", async () => {
     const repo = await fixture();
     // The gate line comes from a child in the hook's own group, 300 ms after the hook itself answered exit 2.
