@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { writeCheckpoint } from "../../src/checkpoint/write.js";
 import { git } from "../../src/scheduler/gitExec.js";
+import { isolateChainEnv } from "../helpers/chainEnv.js";
 import { runCli } from "../helpers/runCli.js";
 import { NOW, checkpointSession, writeTranscript } from "../helpers/session.js";
 import { SESSION } from "../helpers/transcript.js";
@@ -15,6 +16,8 @@ const write = (s: { repo: string; transcriptPath: string; draftPath: string }) =
   writeCheckpoint({ repo: s.repo, sessionRef: SESSION, transcriptPath: s.transcriptPath, draftPath: s.draftPath, now: NOW });
 
 describe("writeCheckpoint (D spec 5 step 2, 9 item 1)", () => {
+  isolateChainEnv();
+
   it("writes what the code measured and commits exactly that one file", async () => {
     const s = await checkpointSession(400_000, { next: ["finish task 6"], measure: ["true", "exit 3"] });
     const before = await head(s.repo);

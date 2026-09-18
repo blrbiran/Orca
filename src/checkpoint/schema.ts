@@ -7,15 +7,35 @@ const Sha = z.string().regex(/^[0-9a-f]{40}$/);
 const Text = z.string().min(1);
 const Awaiting = z.object({ kind: z.enum(AWAITING_KINDS), what: Text }).strict();
 
+export const CHAIN_STATUSES = ["continue", "done", "blocked"] as const;
+export type ChainStatus = (typeof CHAIN_STATUSES)[number];
+const ChainMarkSchema = z.object({ status: z.enum(CHAIN_STATUSES), why: Text }).strict();
+export type ChainMark = z.infer<typeof ChainMarkSchema>;
+
+/**
+ * D-launch spec §3.1 (review M6): `next` may be empty only when the chain is done, and a blocked chain must name what
+ * waits for a human. One function for the draft and the checkpoint, so the two cannot drift.
+ */
+function chainRules(value: { next: string[]; awaitingHuman: unknown[]; chain?: ChainMark }, ctx: z.RefinementCtx): void {
+  if (value.next.length === 0 && value.chain?.status !== "done") {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["next"], message: "must name at least one next step unless chain.status is done" });
+  }
+  if (value.chain?.status === "blocked" && value.awaitingHuman.length === 0) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["awaitingHuman"], message: "must not be empty when chain.status is blocked" });
+  }
+}
+
 /** What the agent writes: only the judgment (D spec 5 step 2). Everything measurable is filled in by code. */
 export const DraftSchema = z
   .object({
-    next: z.array(Text).min(1),
+    next: z.array(Text),
     open: z.array(Text).default([]),
     awaitingHuman: z.array(Awaiting).default([]),
     measure: z.array(Text).default([]),
+    chain: ChainMarkSchema.optional(),
   })
-  .strict();
+  .strict()
+  .superRefine(chainRules);
 export type Draft = z.infer<typeof DraftSchema>;
 
 const LevelRecordSchema = z.discriminatedUnion("kind", [
@@ -46,12 +66,14 @@ export const CheckpointSchema = z
     writtenAt: z.string().datetime(),
     head: Sha,
     level: LevelRecordSchema,
-    next: z.array(Text).min(1),
+    next: z.array(Text),
     open: z.array(Text),
     awaitingHuman: z.array(Awaiting),
     measurements: z.array(MeasurementSchema),
+    chain: ChainMarkSchema.optional(),
   })
-  .strict();
+  .strict()
+  .superRefine(chainRules);
 export type Checkpoint = z.infer<typeof CheckpointSchema>;
 export type LevelRecord = Checkpoint["level"];
 

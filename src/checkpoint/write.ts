@@ -17,13 +17,15 @@ import {
   describeLevel,
   runIdFor,
 } from "./schema.js";
+import { findTranscript } from "./transcript.js";
 
 export interface WriteOptions {
   repo: string;
   sessionRef: string;
-  transcriptPath: string;
+  transcriptPath?: string;
   draftPath: string;
   now?: () => Date;
+  env?: NodeJS.ProcessEnv;
 }
 
 /**
@@ -32,6 +34,16 @@ export interface WriteOptions {
  */
 export async function writeCheckpoint(opts: WriteOptions): Promise<{ path: string; commit: string; checkpoint: Checkpoint }> {
   const now = opts.now ?? (() => new Date());
+  const env = opts.env ?? process.env;
+  // D-launch spec §3.4 (review M3): in a chain session the supervisor fixed this session's id. Writing under another
+  // id — say the previous session's, which resume prints — would overwrite that session's exit checkpoint.
+  const pinned = env.ORCA_CHAIN_SESSION;
+  if (pinned !== undefined && pinned !== "" && pinned !== opts.sessionRef) {
+    throw new CheckpointRejection(
+      "session-mismatch",
+      `this is chain session ${pinned}; --session ${opts.sessionRef} names another session, and writing it would overwrite that session's checkpoint`,
+    );
+  }
   const repo = (await git(opts.repo, ["rev-parse", "--show-toplevel"])).trim();
   const runId = runIdFor(opts.sessionRef);
   if (runId === null) {
@@ -41,7 +53,8 @@ export async function writeCheckpoint(opts: WriteOptions): Promise<{ path: strin
   await refuseDirty(repo, "dirty-worktree", "commit or stash first, and keep the draft outside the repository");
 
   const head = (await git(repo, ["rev-parse", "HEAD"])).trim();
-  const level = await levelRecord(repo, opts.sessionRef, opts.transcriptPath);
+  const transcriptPath = opts.transcriptPath ?? (await findTranscript(opts.sessionRef, env));
+  const level = await levelRecord(repo, opts.sessionRef, transcriptPath);
   const outputDir = await mkdtemp(join(tmpdir(), `orca-checkpoint-${runId}-`));
   const measurements: Checkpoint["measurements"] = [];
   for (const [index, command] of draft.measure.entries()) {
@@ -66,6 +79,7 @@ export async function writeCheckpoint(opts: WriteOptions): Promise<{ path: strin
     open: draft.open,
     awaitingHuman: draft.awaitingHuman,
     measurements,
+    ...(draft.chain === undefined ? {} : { chain: draft.chain }),
   });
   const relPath = join(CHECKPOINT_DIR, `${runId}.json`);
   await mkdir(join(repo, CHECKPOINT_DIR), { recursive: true });

@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import { resume } from "../../src/checkpoint/resume.js";
 import { writeCheckpoint } from "../../src/checkpoint/write.js";
 import { ORCA_IDENTITY, git } from "../../src/scheduler/gitExec.js";
+import { isolateChainEnv } from "../helpers/chainEnv.js";
 import { checkpointFixture, putCheckpoint } from "../helpers/checkpoint.js";
 import { runCli } from "../helpers/runCli.js";
 import { NOW, checkpointSession } from "../helpers/session.js";
@@ -19,6 +20,8 @@ async function written(draft: unknown) {
 }
 
 describe("resume (D spec 5 step 4, 9 item 3)", () => {
+  isolateChainEnv();
+
   it("through the real process: judgment, later commits, stale re-run, failed publish check and the human queue", async () => {
     const s = await written({
       next: ["finish task 6"],

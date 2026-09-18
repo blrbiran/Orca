@@ -4,9 +4,14 @@ import { fileURLToPath } from "node:url";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
-export function runCli(args: string[], stdin = "", cwd = repoRoot): Promise<{ code: number | null; stdout: string; stderr: string }> {
+export function runCli(
+  args: string[],
+  stdin = "",
+  cwd = repoRoot,
+  env?: NodeJS.ProcessEnv,
+): Promise<{ code: number | null; stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
-    const child = spawn(join(repoRoot, "node_modules", ".bin", "tsx"), [join(repoRoot, "src", "cli.ts"), ...args], { cwd });
+    const child = spawn(join(repoRoot, "node_modules", ".bin", "tsx"), [join(repoRoot, "src", "cli.ts"), ...args], { cwd, env: env ?? process.env });
     let stdout = "";
     let stderr = "";
     child.stdout.on("data", (chunk: Buffer) => (stdout += chunk.toString("utf8")));

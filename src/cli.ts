@@ -58,10 +58,13 @@ const USAGE = `usage:
   orca level --hook claude-code  read a Claude Code hook's JSON on stdin and print what the session should be
                                  told about its context window: nothing below T1, a request to write a
                                  checkpoint at T1, a breach past T2, and "no reading" whenever it cannot read
-  orca checkpoint write --session <id> --transcript <path> --draft <path> [--repo <path>]
+  orca checkpoint write --session <id> --draft <path> [--transcript <path>] [--repo <path>]
                                  write .orca/checkpoints/<run-id>.json from the agent's draft (next, open,
-                                 awaitingHuman, measure) plus what this command measures itself: the
-                                 context-window level, HEAD, and the exit code of every measure command.
+                                 awaitingHuman, measure, and in a chain session chain) plus what this command
+                                 measures itself: the context-window level, HEAD, and the exit code of every
+                                 measure command. Without --transcript the transcript is found by session id under
+                                 ORCA_CLAUDE_PROJECTS_DIR, $CLAUDE_CONFIG_DIR/projects or ~/.claude/projects.
+                                 In a chain session (ORCA_CHAIN_SESSION set) --session must equal it.
                                  Refuses a dirty worktree. Commits exactly that one file.
   orca resume [--repo <path>] [--checkpoint <path>]
                                  start a session from the latest checkpoint reachable from HEAD: print its
@@ -433,8 +436,8 @@ async function runCheckpoint(args: string[]): Promise<number> {
   const sessionRef = values.get("--session");
   const transcriptPath = values.get("--transcript");
   const draftPath = values.get("--draft");
-  if (sessionRef === undefined || transcriptPath === undefined || draftPath === undefined) {
-    process.stderr.write(`orca checkpoint write: --session, --transcript and --draft are required\n${USAGE}`);
+  if (sessionRef === undefined || draftPath === undefined) {
+    process.stderr.write(`orca checkpoint write: --session and --draft are required\n${USAGE}`);
     return 1;
   }
   try {
