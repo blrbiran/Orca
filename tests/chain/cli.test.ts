@@ -222,6 +222,28 @@ describe("orca chain through the real CLI (D-launch spec §4.3, §5.3, §8.2-3/1
     expect(existsSync(join(repo, ".orca", "chains"))).toBe(false);
   }, 60_000);
 
+  it("E11 defaultChainDeps' own resume wiring routes through chainGit too, not just the test double's (fix round 1 follow-up)", async () => {
+    // W30 (tests/chain/run.test.ts) only proves that test file's own handcrafted ChainDeps mirrors production
+    // wiring — it never calls defaultChainDeps() at all. This exercises the shipped wiring itself, in-process
+    // (capture() calls defaultChainDeps() directly), against the same trace mechanism W30 uses.
+    // Two sessions, not one (measured, fix round 2): resume()'s first call (session 1, no checkpoint yet) only
+    // runs `rev-parse --show-toplevel` and a `git log` that comes up empty before throwing "no-checkpoint" —
+    // neither trips fsmonitor. It is latestCheckpoint's `diff-tree` call, reached only once a prior session's
+    // checkpoint exists (i.e. session 2's resume()), that does.
+    const { repo, fake } = await target();
+    const trace = join(fake.dir, "hook-trace.txt");
+    await writeFile(join(repo, ".git", "hooks", "pre-commit"), `#!/bin/sh\necho pre-commit >> '${trace}'\nexit 0\n`, { mode: 0o755 });
+    const monitor = join(repo, ".git", "fsmonitor.sh");
+    await writeFile(monitor, `#!/bin/sh\necho fsmonitor >> '${trace}'\nexit 1\n`, { mode: 0o755 });
+    await git(repo, ["config", "core.fsmonitor", monitor]);
+    await fake.scenario(1, { steps: [{ do: "commit", file: "one.txt" }, { do: "exitCheckpoint", status: "continue" }], result: { subtype: "success", cost: 0.1 } });
+    await fake.scenario(2, { steps: [{ do: "commit", file: "two.txt" }, { do: "exitCheckpoint", status: "done", next: [] }], result: { subtype: "success", cost: 0.1 } });
+    const c = capture();
+    c.deps.env = fake.env();
+    expect(await runChainCommand(START(repo, "chain-0000000b").slice(1), c.deps)).toBe(0);
+    expect(existsSync(trace)).toBe(false);
+  }, 60_000);
+
   it("E6 orca chain stop: refused without a running chain; with one, it writes the request the supervisor latches", async () => {
     const { repo } = await target(false);
     const none = capture();
