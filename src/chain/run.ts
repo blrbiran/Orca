@@ -6,6 +6,7 @@ import { exitCheckpointAtHead } from "../checkpoint/covering.js";
 import { type ResumeOutcome, resumeOutcome } from "../checkpoint/resume.js";
 import { EXIT_CODES, type ResumeResult, type SessionFacts, type Stop, decideBeforeSession, decideNext, decideResume } from "./decide.js";
 import { currentBranch, guardedChanges, headOf, isAncestor, progressCommits, worktreeClean } from "./facts.js";
+import { chainGit } from "./git.js";
 import { checkGate } from "./gateCheck.js";
 import { KILL_GRACE_MS, type LaunchRequest, type SessionResult, launchClaudeCode } from "./launch/claudeCode.js";
 import { acquireChainLock } from "./lock.js";
@@ -45,7 +46,9 @@ export function defaultChainDeps(): ChainDeps {
   // way tests here already mutate `deps.claudeBin` after construction.
   const deps: ChainDeps = {
     launch: launchClaudeCode,
-    resume: resumeOutcome,
+    // Controller ruling on W30 (plan PC-20): resume's own read-only git calls carry the same
+    // -c core.hooksPath=/dev/null -c core.fsmonitor=false as every other supervisor git call.
+    resume: (opts) => resumeOutcome({ ...opts, git: chainGit }),
     gateCheck: (repo) => checkGate(repo, deps.env),
     notify: (title, body) => macNotify(title, body, process.env),
     out: (text) => void process.stdout.write(text),

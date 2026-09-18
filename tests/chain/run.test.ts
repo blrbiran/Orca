@@ -3,6 +3,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { NO_CHECKPOINT_TEXT } from "../../src/chain/decide.js";
+import { chainGit } from "../../src/chain/git.js";
 import { resumeOutcome } from "../../src/checkpoint/resume.js";
 import type { GateCheck } from "../../src/chain/gateCheck.js";
 import { launchClaudeCode } from "../../src/chain/launch/claudeCode.js";
@@ -46,7 +47,10 @@ async function setup(opts: { brokenShebang?: boolean } = {}) {
   let next = 0;
   const deps: ChainDeps = {
     launch: launchClaudeCode,
-    resume: resumeOutcome,
+    // Controller ruling on W30: production wiring routes resume's own git calls through chainGit too (plan
+    // PC-20) — mirrored here, not through defaultChainDeps() which this handcrafted ChainDeps bypasses
+    // entirely, so W30's assertion actually exercises the fix instead of silently missing it.
+    resume: (opts) => resumeOutcome({ ...opts, git: chainGit }),
     gateCheck: (repo) => gateHook(++calls, repo),
     notify: async (title, body) => {
       notes.push([title, body]);
