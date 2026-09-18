@@ -73,6 +73,14 @@ function pathWithoutRealClaude(path: string): string {
     .join(":");
 }
 
+/** The names of tests/helpers/chainEnv.ts's CHAIN_ENV, not imported: that module imports vitest, and scripts/verify-panel.ts imports this one outside vitest. */
+const CHAIN_ENV_KEYS = ["ORCA_CHAIN_ID", "ORCA_CHAIN_SESSION"];
+function withoutChainEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const copy = { ...env };
+  for (const key of CHAIN_ENV_KEYS) delete copy[key];
+  return copy;
+}
+
 const wrapper = (target: string, ...pre: string[]): string => `#!/bin/sh\nexec node '${target}' ${pre.map((p) => `'${p}'`).join(" ")} "$@"\n`;
 
 /** A PATH directory with a fake `claude`, an `osascript` recorder and failing `orca`/`tsx`/`npx` stubs (D-launch spec §8.1). */
@@ -96,8 +104,10 @@ export async function fakeClaude(opts: { brokenShebang?: boolean } = {}): Promis
     bin,
     claude: join(bin, "claude"),
     dir,
+    // Final review Important-2: a chain session's own ORCA_CHAIN_* never reaches a supervisor a criterion starts (the
+    // preflight refuses nested-chain); a criterion that wants one passes it in `extra`.
     env: (extra = {}) => ({
-      ...process.env,
+      ...withoutChainEnv(process.env),
       PATH: `${bin}:${pathWithoutRealClaude(process.env.PATH ?? "")}`,
       FAKE_CLAUDE_DIR: dir,
       CLAUDE_CONFIG_DIR: claudeConfig,

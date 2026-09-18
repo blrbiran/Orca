@@ -167,4 +167,15 @@ describe("preflight: D-launch spec §5.1 — refused by name, exit 1, nothing wr
     await commitAll(s.repo, "timeout 90");
     expect((await preflight(s.args(), s.deps)).timeoutMin).toBe(90);
   });
+  it("PF18 ORCA_CHAIN_ID in the supervisor's environment is nested-chain, before anything else is looked at (final review Important-2)", async () => {
+    const s = await setup();
+    const before = await s.snapshot();
+    let gateChecked = false;
+    const deps = { ...s.deps, env: { ...s.deps.env, ORCA_CHAIN_ID: "chain-0000000a" }, gateCheck: async () => ((gateChecked = true), { ok: true as const }) };
+    const refusal = preflight(s.args(), deps);
+    await expect(refusal).rejects.toMatchObject({ code: "nested-chain", exitCode: 1 });
+    await expect(refusal).rejects.toThrow("ORCA_CHAIN_ID is set (chain-0000000a): this is a chain session, and a chain session cannot start a chain");
+    expect(gateChecked).toBe(false);
+    expect(await s.snapshot()).toEqual(before);
+  });
 });

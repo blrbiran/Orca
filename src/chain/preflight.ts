@@ -36,11 +36,16 @@ export async function findExecutable(name: string, env: NodeJS.ProcessEnv): Prom
 }
 
 /**
- * D-launch spec §5.1: everything checked before anything is written. Arguments first (they cost nothing), then the
- * repository (item 1, with plan PC-2's log ignore before the clean check), the locks (2, 3), the runtime and model
- * (5), the gate (6). Every failure is a named ChainRejection with exit 1.
+ * D-launch spec §5.1: everything checked before anything is written. Never from inside a chain session; then arguments
+ * (they cost nothing), then the repository (item 1, with plan PC-2's log ignore before the clean check), the locks
+ * (2, 3), the runtime and model (5), the gate (6). Every failure is a named ChainRejection with exit 1.
  */
 export async function preflight(raw: unknown, deps: PreflightDeps): Promise<Preflighted> {
+  // Final review Important-2 (controller ruling): a chain session may not start a chain. Its limits would be set by the
+  // agent, not by the person (ruling R4); a detached nested supervisor also outlives the session's group sweep.
+  if (deps.env.ORCA_CHAIN_ID) {
+    throw new ChainRejection("nested-chain", `ORCA_CHAIN_ID is set (${deps.env.ORCA_CHAIN_ID}): this is a chain session, and a chain session cannot start a chain`);
+  }
   const parsed = ChainStartSchema.safeParse(raw);
   if (!parsed.success) {
     throw new ChainRejection("chain-args-invalid", parsed.error.issues.map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`).join("; "));
