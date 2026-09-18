@@ -498,3 +498,24 @@ D-launch 的交付：一个**外部监督进程** `orca chain`，由人授权一
 | 8 | 链锁只记 pid，pid 复用会误判 | 锁记 pid ＋ 启动时间；新增 `chain-running` 拒绝 | §5.1-2、§6.2、§8.2-11 |
 
 本节只追加；§10 的处置表原样保留。
+
+---
+
+## 12. 计划阶段的更正与控制器裁决（run `orca-dev-6662000e`，2026-09-18；人授权「有问题先按你的建议执行」）
+
+**本节只追加；上文不改。** 计划 `docs/superpowers/plans/2026-09-18-d-launch.md` 的「PC」节逐条写了 spec 没写或照做不了的实施细节（PC-1 起），以该节为准，此处不复述。要点：
+链锁与停止请求放在 `$(git rev-parse --absolute-git-dir)/orca-chain/`（worktree 里 `.git` 是文件，PC-1）；开链前核对另拒 `chain-logs-not-ignored`（PC-2）；`--via`（PC-3）；`stop.detail`（PC-4）；
+`settings.json` 顶层 `disableAllHooks` 也核对（PC-5）；面板停链请求体带 `repoKey`（PC-12）。
+
+计划经一席对抗审查（判 `No`）后，控制器裁决如下（对应计划 PC-17 起）：
+
+| 审查条 | 裁决 | 若错的代价 |
+|---|---|---|
+| I3(a) 闸门钩子执行 `src/cli.ts` 及其导入闭包，均不在被守护路径里 | **不扩**守护集（扩了链几乎改不了 Orca 任何源码）；由每会话前的功能性核对兜底 | 会话经非闸门模块削弱闸门，只有下一次会话前核对能发现 |
+| I3(b) 功能性核对的样本 stdin 固定，改过的代码可识别它 | 样本字段每次随机（uuid、真实 cwd、存在的 transcript 路径） | —— |
+| I3(c) 用户级 settings 的 `disableAllHooks` 未查 | `gateCheck` 只读检查 `$CLAUDE_CONFIG_DIR/settings.json` ‖ `~/.claude/settings.json`；判据改道 | 开链时只读一次人的全局 settings |
+| I4 监督进程的 git 调用会执行工作树里的钩子与 `.git/config` 的 fsmonitor | 监督进程的**所有** git 调用带 `-c core.hooksPath=/dev/null -c core.fsmonitor=false`；§5.3 的 `record-commit-refused` 保留给其余 git 失败 | 仓库里想审每笔提交的钩子审不到链记录提交 |
+| I5 嵌套会话环境变量会传给无头 claude | §2.2-5 的剔除名单扩为：`CLAUDE_CODE_SIMPLE`、`CLAUDE_CODE_SAFE_MODE`、`CLAUDECODE`、`CLAUDE_CODE_SESSION_*`、`CLAUDE_CODE_MESSAGING_*`、`CMUX_*` | 某个正当的 cmux／claude 设置到不了无头会话 |
+
+**规则 5 已现测**（本节写作时，claude 2.1.275）：`claude -p … --output-format json --max-budget-usd 0.0001` ⇒ 进程退出 1，`subtype: "error_max_budget_usd"`、`is_error: true`、`total_cost_usd: 0.000944`（超出预算，证实软上限）。探针成本 0.000944 美元（工具报数）。
+**授权补点名**：新文件 `src/checkpoint/transcript.ts`（§3.4 的查找）与 `src/chain/**`、`src/panel/chains.ts`、`web/src/ChainPanel.tsx` 等新文件同属本 spec 范围；既有文件的改动仍以 §1 清单为界。
