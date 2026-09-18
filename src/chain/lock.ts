@@ -12,10 +12,13 @@ export interface LockHolder {
 }
 export type LockState = { kind: "free" } | { kind: "held"; holder: LockHolder } | { kind: "stale"; holder: LockHolder | null; why: string };
 
-/** `ps -o lstart=` in the C locale; null when there is no such process. The pid alone can be reused (review 8). */
+/**
+ * `ps -o lstart=` in the C locale and in UTC; null when there is no such process. The pid alone can be reused (review 8).
+ * UTC (final review Minor-3): lstart is local time, so a reader under another TZ would see a live holder as a reused pid.
+ */
 export async function processStartTime(pid: number): Promise<string | null> {
   try {
-    const { stdout } = await promisify(execFile)("ps", ["-o", "lstart=", "-p", String(pid)], { env: { ...process.env, LC_ALL: "C" } });
+    const { stdout } = await promisify(execFile)("ps", ["-o", "lstart=", "-p", String(pid)], { env: { ...process.env, LC_ALL: "C", TZ: "UTC" } });
     const text = stdout.trim();
     return text === "" ? null : text;
   } catch {

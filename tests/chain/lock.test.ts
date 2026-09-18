@@ -65,4 +65,20 @@ describe("chain lock (D-launch spec §5.1-2, review 8)", () => {
     expect(await git(wt, ["status", "--porcelain"])).toBe("");
     await lock.release();
   });
+  it("L6 a reader under another TZ still sees a live holder as held, not as a reused pid (final review Minor-3)", async () => {
+    const repo = await tempRepo();
+    const saved = process.env.TZ;
+    let lock: { release(): Promise<void> } | null = null;
+    try {
+      process.env.TZ = "America/Los_Angeles";
+      lock = await acquireChainLock(repo, "chain-0000000a");
+      process.env.TZ = "Asia/Tokyo";
+      const state = await lockState(repo);
+      expect(state.kind === "held" && [state.holder.chainId, state.holder.pid]).toEqual(["chain-0000000a", process.pid]);
+    } finally {
+      if (saved === undefined) delete process.env.TZ;
+      else process.env.TZ = saved;
+      await lock?.release();
+    }
+  });
 });
