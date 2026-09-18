@@ -1,0 +1,59 @@
+{
+  "v": 1,
+  "runId": "orca-dev-6662000e",
+  "runtime": "claude-code",
+  "sessionRef": "6662000e-644c-44b3-b38f-58cda6412bf0",
+  "writtenAt": "2026-09-18T01:38:19.100Z",
+  "head": "8ec825d425ed2346a2715e79ba0a698258abe732",
+  "level": {
+    "kind": "reading",
+    "level": 344175,
+    "windowTokens": 1000000,
+    "t1": 330000,
+    "t2": 450000,
+    "band": 1
+  },
+  "next": [
+    "Person reviews the revised D-launch spec docs/superpowers/specs/2026-09-18-d-launch-design.md (commits af70325, 8ec825d; sections 10 and 11 are the review dispositions). On approval, invoke superpowers:writing-plans for it; no code before the plan is approved.",
+    "When executing: append ERRATUM entries to the A' spec (2026-08-29-decision-ledger-design.md section 4.1) and the panel spec (2026-09-09-panel-design.md section 2.1) pointing to D-launch spec section 6.3, per Rule 13",
+    "Before the plan fixes rule 5's subtype, measure the real budget-exhausted subtype of claude -p on this machine's claude version (side evidence: error_max_budget_usd)"
+  ],
+  "open": [
+    "Adversarial review of the spec judged No (2 Critical/12 Important/13 Minor); all disposed in spec section 10; a controller re-read found 8 more, disposed in section 11 with the person's approval. No second external review has been run on the revised spec.",
+    "The authorization list in spec section 1 grew beyond the three files first agreed (covering, resume, trigger, cli, src/gate/settings.ts, tests/gate/settings.test.ts); the person approved the revision but the plan should name them again",
+    "Handoff docs (Orca docs/handoff/handoff.md, ccloop and ccmem Orca sections) not yet updated for this round"
+  ],
+  "awaitingHuman": [
+    {
+      "kind": "irreversible",
+      "what": "push Orca main (af70325, 8ec825d and this checkpoint commit)"
+    },
+    {
+      "kind": "named-authorization",
+      "what": "approve the revised D-launch spec before writing the plan"
+    }
+  ],
+  "measurements": [
+    {
+      "command": "npx vitest run tests/gate tests/level tests/checkpoint",
+      "exitCode": 0,
+      "commit": "8ec825d425ed2346a2715e79ba0a698258abe732",
+      "observedAt": "2026-09-18T01:38:14.438Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-6662000e-45lyyx/1.txt"
+    },
+    {
+      "command": "ls ~/.orca",
+      "exitCode": 1,
+      "commit": "8ec825d425ed2346a2715e79ba0a698258abe732",
+      "observedAt": "2026-09-18T01:38:14.448Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-6662000e-45lyyx/2.txt"
+    },
+    {
+      "command": "git ls-remote origin refs/heads/main",
+      "exitCode": 0,
+      "commit": "8ec825d425ed2346a2715e79ba0a698258abe732",
+      "observedAt": "2026-09-18T01:38:19.045Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-6662000e-45lyyx/3.txt"
+    }
+  ]
+}
