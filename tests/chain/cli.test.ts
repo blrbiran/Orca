@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -284,5 +284,21 @@ describe("orca chain through the real CLI (D-launch spec §4.3, §5.3, §8.2-3/1
     expect([r.state, r.stop?.reason, r.stop?.category]).toEqual(["stopped", "unlocked-by-human", "anomaly"]);
     expect((await git(repo, ["log", "-1", "--format=%s"])).trim()).toBe("chore(chain): chain-0000000f, stopped, unlocked-by-human");
     expect((await git(repo, ["show", "--name-only", "--format=", "HEAD"])).trim()).toBe(".orca/chains/chain-0000000f.json");
+  }, 60_000);
+  it("E11 orca chain unlock with a stale lock whose record is missing or invalid: refused, and the lock is still there (final review Minor-4)", async () => {
+    const { repo } = await target(false);
+    const lock = await acquireChainLock(repo, "chain-0000000f");
+    cleanups.push(() => lock.release());
+    await writeFile(join(await chainLockDir(repo), "holder.json"), JSON.stringify({ chainId: "chain-0000000f", pid: process.pid, startedAt: "never" }));
+    const missing = capture();
+    expect(await runChainCommand(["unlock", "--repo", repo], missing.deps)).toBe(1);
+    expect(missing.err.join("")).toContain("rejected: chain-not-found: ");
+    expect(existsSync(join(await chainLockDir(repo), "holder.json"))).toBe(true);
+    await mkdir(join(repo, ".orca", "chains"), { recursive: true });
+    await writeFile(join(repo, ".orca", "chains", "chain-0000000f.json"), "{");
+    const invalid = capture();
+    expect(await runChainCommand(["unlock", "--repo", repo], invalid.deps)).toBe(1);
+    expect(invalid.err.join("")).toContain("rejected: chain-record-invalid: ");
+    expect(existsSync(join(await chainLockDir(repo), "holder.json"))).toBe(true);
   }, 60_000);
 });
