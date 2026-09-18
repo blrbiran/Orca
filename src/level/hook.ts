@@ -1,11 +1,14 @@
-import { findCovering } from "../checkpoint/covering.js";
+import { join } from "node:path";
+import { exitCheckpointAtHead, findCovering } from "../checkpoint/covering.js";
 import { git } from "../scheduler/gitExec.js";
 import { orcaCommand } from "./invocation.js";
 import { readLevel } from "./readLevel.js";
-import { decide } from "./trigger.js";
+import { type ChainMode, decide } from "./trigger.js";
 
 export const DRAFT_SHAPE =
   '{"next":["..."],"open":["..."],"awaitingHuman":[{"kind":"irreversible|tied-evidence|named-authorization|ccloop-change","what":"..."}],"measure":["<command>"]}';
+export const CHAIN_DRAFT_SHAPE =
+  '{"next":["..."],"open":["..."],"awaitingHuman":[{"kind":"irreversible|tied-evidence|named-authorization|ccloop-change","what":"..."}],"measure":["<command>"],"chain":{"status":"continue|done|blocked","why":"..."}}';
 
 /**
  * D spec 3: the delivery shim. It carries no judgment of its own (Rule 5) — it reads the hook input,
@@ -38,10 +41,18 @@ async function hookBody(stdinText: string): Promise<string> {
   );
   const { input: reading, thresholds } = await readLevel(repo, input.sessionRef, input.transcriptPath);
   const { covering, problems } = await findCovering(repo, input.sessionRef);
+  // D-launch spec §3.2: the supervisor sets ORCA_CHAIN_ID on `claude`; hooks inherit it (verified live, spec §8.3).
+  const chainId = process.env.ORCA_CHAIN_ID;
+  const inChain = chainId !== undefined && chainId !== "";
   const command =
     `Run: ${orcaCommand(["checkpoint", "write", "--repo", repo, "--session", input.sessionRef, "--transcript", input.transcriptPath, "--draft"])} <draft.json>` +
-    ` where the draft is a file outside the repository shaped like ${DRAFT_SHAPE}`;
-  const decision = decide(reading, thresholds, covering, command);
+    ` where the draft is a file outside the repository shaped like ${inChain ? CHAIN_DRAFT_SHAPE : DRAFT_SHAPE}`;
+  let chain: ChainMode | undefined;
+  if (inChain) {
+    const exit = await exitCheckpointAtHead(repo, input.sessionRef);
+    chain = { exitCheckpointPath: exit.kind === "found" ? join(repo, exit.relPath) : null };
+  }
+  const decision = decide(reading, thresholds, covering, command, chain);
 
   const lines = decision.kind === "silent" ? [] : [decision.text];
   for (const problem of problems) lines.push(`orca level: unreadable checkpoint ${problem}`);

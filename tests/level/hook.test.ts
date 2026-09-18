@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { levelHookClaudeCode } from "../../src/level/hook.js";
 import { checkpointFixture, putCheckpoint } from "../helpers/checkpoint.js";
+import { isolateChainEnv } from "../helpers/chainEnv.js";
 import { runCli } from "../helpers/runCli.js";
 import { tempRepo } from "../helpers/tempRepo.js";
 import { SESSION, jsonl, modelRow, usageRow } from "../helpers/transcript.js";
@@ -27,6 +28,7 @@ function context(stdout: string): string {
 }
 
 describe("orca level --hook claude-code (D spec 3 delivery shim, 4)", () => {
+  isolateChainEnv();
   // Final review I2: the hook reads CLAUDE_PROJECT_DIR. A session running these tests may have it set
   // (Claude Code exports it to hook commands), so every test starts without it and restores it after.
   let previousProjectDir: string | undefined;

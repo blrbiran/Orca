@@ -12,6 +12,12 @@ export interface Covering {
 }
 export type Decision = { kind: "silent" } | { kind: "write" | "inform" | "breach" | "no-reading"; text: string };
 
+export interface ChainMode {
+  exitCheckpointPath: string | null;
+}
+export const CHAIN_ASK =
+  'This session runs in an unattended chain: write an exit checkpoint with "chain": {"status": "continue", "why": "<one sentence>"} now, then end this session.';
+
 export function effectiveThresholds(reading: Reading, configured: Thresholds): Thresholds {
   const usable = reading.windowTokens - (reading.compactionReserveTokens ?? 0);
   return { t1: Math.min(configured.t1, usable), t2: Math.min(configured.t2, usable) };
@@ -29,6 +35,7 @@ export function decide(
   configured: Thresholds,
   covering: Covering | null,
   writeCommand: string,
+  chain?: ChainMode,
 ): Decision {
   if (input.kind === "no-reading") {
     return { kind: "no-reading", text: `orca level: no reading — ${input.reason}` };
@@ -36,6 +43,19 @@ export function decide(
   const effective = effectiveThresholds(input, configured);
   const level = levelOf(input);
   const band = bandOf(level, effective);
+
+  // D-launch spec §3.2 (plan PC-10): in a chain nobody decides when to switch, so T1 is the handoff. An exit
+  // checkpoint already at HEAD is announced at any band; a mid-session checkpoint covers nothing here (review I9).
+  if (chain !== undefined) {
+    const chainHead = `orca level: ${level} of ${input.windowTokens} tokens (T1 ${effective.t1}, T2 ${effective.t2})`;
+    if (chain.exitCheckpointPath !== null) {
+      return { kind: "inform", text: `${chainHead}. The exit checkpoint for this session is at ${chain.exitCheckpointPath}: end this session now.` };
+    }
+    if (band === 0) return { kind: "silent" };
+    if (band === 2) return { kind: "breach", text: `${chainHead} is past T2, the session limit. ${CHAIN_ASK} ${writeCommand}` };
+    return { kind: "write", text: `${chainHead}. ${CHAIN_ASK} ${writeCommand}` };
+  }
+
   if (band === 0) return { kind: "silent" };
 
   const head = `orca level: ${level} of ${input.windowTokens} tokens (T1 ${effective.t1}, T2 ${effective.t2})`;
