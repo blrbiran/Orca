@@ -1,25 +1,16 @@
 // tests/gate/settings.test.ts
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { copyFile, mkdir, mkdtemp, readFile, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { GATE_DENY, GATE_HOOK_COMMAND } from "../../src/gate/settings.js";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const COMMAND =
-  'in=$(cat); printf \'%s\' "$in" | node "$CLAUDE_PROJECT_DIR"/scripts/gate-prefilter.mjs && exit 0; printf \'%s\' "$in" | "$CLAUDE_PROJECT_DIR"/node_modules/.bin/tsx "$CLAUDE_PROJECT_DIR"/src/cli.ts gate --hook claude-code || { rc=$?; [ "$rc" -eq 2 ] && exit 2; echo "orca gate: hook failed (exit $rc) — blocked" >&2; exit 2; }';
-const DENY_BASE = [
-  "git push*",
-  "git branch -d*",
-  "git branch -D*",
-  "git branch --delete*",
-  "git worktree remove*",
-  "git worktree prune*",
-  "gh pr merge*",
-  "gh repo sync*",
-];
-const DENY = DENY_BASE.flatMap((p) => [`Bash(${p})`, `Bash(rtk ${p})`, `Bash(rtk proxy ${p})`]);
+const COMMAND = GATE_HOOK_COMMAND;
+const DENY = GATE_DENY;
 const PUSH_LINE =
   "orca gate: push is Tier 0 (CLAUDE.md Rule 15) — do not retry or rephrase it; list it under awaitingHuman in the checkpoint and continue with reversible work.\n";
 const stdin = (command: string) => JSON.stringify({ tool_name: "Bash", tool_input: { command }, cwd: "/" });
@@ -60,5 +51,13 @@ describe(".claude/settings.json wires the Tier 0 gate (spec 5, 6.2)", () => {
 
   it("command line layer: the hook's own exit 2 passes through with its one line and nothing added", async () => {
     expect(await sh(repoRoot, stdin("git push"))).toEqual({ code: 2, stderr: PUSH_LINE });
+  });
+
+  it("the expected wiring left this file byte for byte (D-launch spec §1, review 2)", () => {
+    // sha256 of JSON.stringify({ COMMAND, DENY }) computed from this file's own constants at 96cae2b, before the move
+    // (plan Task 1 Step 1). A changed hook command or deny list must change this literal on purpose, in review.
+    expect(createHash("sha256").update(JSON.stringify({ COMMAND, DENY })).digest("hex")).toBe(
+      "eb0dfc953e904ac96ad090e2470a43cf1630765b532ec165c1dfd1cefffba87b",
+    );
   });
 });
