@@ -235,6 +235,127 @@ describe("web command ledger", () => {
     }
   });
 
+  it.each([
+    ["control-invalid-stop", 400],
+    ["group-not-found", 404],
+    ["graph-version-conflict", 409],
+    ["duplicate-task-id", 422],
+    ["graph-dangling-dependency", 422],
+    ["graph-cycle", 422],
+    ["control-capability-unsupported", 422],
+    ["control-recovery-required", 423],
+  ] as const)("durably classifies the %s command error family", async (code, status) => {
+    const h = await openTestStore();
+    try {
+      createGroup(h.store, group, { commandId: "create", expectedRevision: 0, by: "human" });
+      let calls = 0;
+      const rejected = input<CommandBody>(raw(`error-${code}`), () => deadlineA, () => {
+        calls += 1;
+        throw new ControlError(code);
+      });
+      const first = applyWebCommand(h.store, rejected);
+      expect(first).toEqual({
+        status,
+        body: { error: { code, message: code, commandRevision: 1, evidenceIds: [], retryable: false } },
+      });
+      expect(applyWebCommand(h.store, rejected)).toEqual(first);
+      expect(calls).toBe(1);
+    } finally {
+      await h.dispose();
+    }
+  });
+
+  it("persists and replays expected expansion failures without inventing an effective command", async () => {
+    const h = await openTestStore();
+    try {
+      createGroup(h.store, group, { commandId: "create", expectedRevision: 0, by: "human" });
+      let expansions = 0;
+      const rejected: WebCommandInput<CommandBody> = {
+        rawCommand: raw("expand-profile-changed"),
+        expand: () => {
+          expansions += 1;
+          h.store.db.prepare("INSERT INTO meta VALUES ('partial-expansion-write','bad')").run();
+          throw new ControlError("profile-changed");
+        },
+        apply: () => { throw new Error("failed expansion must not apply"); },
+      };
+      const first = applyWebCommand(h.store, rejected);
+      expect(first).toEqual({
+        status: 409,
+        body: { error: { code: "profile-changed", message: "profile-changed", commandRevision: 1, evidenceIds: [], retryable: false } },
+      });
+      expect(h.store.db.prepare("SELECT value FROM meta WHERE key='partial-expansion-write'").get()).toBeUndefined();
+      expect(applyWebCommand(h.store, rejected)).toEqual(first);
+      expect(expansions).toBe(1);
+      expect(h.store.db.prepare(`SELECT effective_payload_json,effective_payload_hash,authority_command_json,authority_command_hash
+        FROM commands WHERE group_id='g1' AND id='expand-profile-changed'`).get()).toEqual({
+        effective_payload_json: null,
+        effective_payload_hash: null,
+        authority_command_json: null,
+        authority_command_hash: null,
+      });
+    } finally {
+      await h.dispose();
+    }
+  });
+
+  it("persists global expansion failures with a null command revision", async () => {
+    const h = await openTestStore();
+    try {
+      let expansions = 0;
+      const rawCommand: RawAuthorityCommandV1 = {
+        schema: "orca-raw-command-v1",
+        commandId: "shutdown-expansion-error",
+        expectedRevision: 0,
+        actorId: "system:shutdown",
+        verb: "shutdown",
+        target: { kind: "global", epoch: "epoch-a" },
+        payload: { shutdownAcceptedAt: deadlineA, shutdownDeadlineAt: deadlineB },
+      };
+      const rejected: WebCommandInput<CommandBody> = {
+        rawCommand,
+        expand: () => {
+          expansions += 1;
+          throw new ControlError("control-capability-unsupported");
+        },
+        apply: () => { throw new Error("failed expansion must not apply"); },
+      };
+      const first = applyWebCommand(h.store, rejected);
+      expect(first).toEqual({
+        status: 422,
+        body: { error: { code: "control-capability-unsupported", message: "control-capability-unsupported", commandRevision: null, evidenceIds: [], retryable: false } },
+      });
+      expect(applyWebCommand(h.store, rejected)).toEqual(first);
+      expect(expansions).toBe(1);
+    } finally {
+      await h.dispose();
+    }
+  });
+
+  it("rolls unexpected expansion failures back without recording a command result", async () => {
+    const h = await openTestStore();
+    try {
+      createGroup(h.store, group, { commandId: "create", expectedRevision: 0, by: "human" });
+      let expansions = 0;
+      const broken: WebCommandInput<CommandBody> = {
+        rawCommand: raw("broken-expansion"),
+        expand: () => {
+          expansions += 1;
+          h.store.db.prepare("INSERT INTO meta VALUES ('partial-broken-expansion','bad')").run();
+          throw new ControlError("control-sequence-overflow");
+        },
+        apply: () => { throw new Error("broken expansion must not apply"); },
+      };
+      expect(() => applyWebCommand(h.store, broken)).toThrow("control-sequence-overflow");
+      expect(h.store.db.prepare("SELECT value FROM meta WHERE key='partial-broken-expansion'").get()).toBeUndefined();
+      expect(lookupCommandResult(h.store, "g1", "broken-expansion")).toBeNull();
+      expect(() => applyWebCommand(h.store, broken)).toThrow("control-sequence-overflow");
+      expect(expansions).toBe(2);
+    } finally {
+      await h.dispose();
+    }
+  });
+
   it("rolls unexpected failures back without recording a command result", async () => {
     const h = await openTestStore();
     try {

@@ -1,5 +1,5 @@
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
-import { ControlError } from "./errors.js";
+import { ControlError, durableCommandErrorStatus } from "./errors.js";
 import { recordProjectionChange } from "./projectionJournal.js";
 import type { ControlStore } from "./store.js";
 import {
@@ -36,45 +36,6 @@ export interface WebCommandInput<T> {
 
 type CommandRow = { raw_request_hash: unknown; original_status: unknown; body_json: unknown };
 type CommandBody = CommandLookupV1["body"];
-
-const unprocessableCodes = new Set([
-  "continuation-budget-unavailable",
-  "continuation-predecessor-unrecoverable",
-  "dependency-not-done",
-  "duplicate-proposal-target",
-  "estimate-input-too-large",
-  "execution-policy-unrepresentable",
-  "grant-amendment-unsupported",
-  "graph-change-needs-handoff",
-  "group-budget-unavailable",
-  "group-deadline-expired",
-  "group-review-budget-unavailable",
-  "group-state-invalid",
-  "group-stopped",
-  "handoff-budget-unavailable",
-  "handoff-grant-insufficient",
-  "handoff-parent-invalid",
-  "no-op-command",
-  "reconcile-budget-unapproved",
-  "recovery-blocked",
-  "recovery-validation-failed",
-  "control-capability-unsupported",
-]);
-
-function durableStatusFor(error: ControlError): number | null {
-  if (error.code === "control-recovery-required") return 423;
-  if (error.code.endsWith("-not-found")) return 404;
-  if (
-    error.code.endsWith("-conflict")
-    || error.code.endsWith("-already-exists")
-    || error.code === "profile-changed"
-    || error.code === "stop-mode-conflict"
-    || error.code === "work-already-active"
-    || error.code === "work-already-done"
-  ) return 409;
-  if (unprocessableCodes.has(error.code)) return 422;
-  return null;
-}
 
 function scope(command: RawAuthorityCommandV1): { key: string; kind: "group" | "global"; id: string; groupId: string | null } {
   if (command.target.kind === "global") return { key: "@global", kind: "global", id: "global", groupId: null };
@@ -115,23 +76,37 @@ function revisionConflict(commandRevision: number): StoredCommandOutcome<Command
   };
 }
 
-function applyWithSavepoint<T>(store: ControlStore, apply: () => StoredCommandOutcome<T>, commandRevision: number): StoredCommandOutcome<T | CommandBody> {
-  store.db.exec("SAVEPOINT web_command_apply");
+function domainErrorOutcome(error: ControlError, commandRevision: number | null): StoredCommandOutcome<CommandBody> | null {
+  const status = durableCommandErrorStatus(error.code);
+  if (status === null) return null;
+  return {
+    status,
+    body: { error: { code: error.code, message: error.message, commandRevision, evidenceIds: [], retryable: false } },
+  };
+}
+
+type SavepointResult<T> = { value: T } | { outcome: StoredCommandOutcome<CommandBody> };
+
+function invokeWithSavepoint<T>(
+  store: ControlStore,
+  name: "web_command_expand" | "web_command_apply",
+  invoke: () => T,
+  commandRevision: number | null,
+  rollbackResult: (value: T) => boolean = () => false,
+): SavepointResult<T> {
+  store.db.exec(`SAVEPOINT ${name}`);
   try {
-    const outcome = apply();
-    if (Number(outcome.status) >= 400 && Number(outcome.status) < 500) store.db.exec("ROLLBACK TO web_command_apply");
-    store.db.exec("RELEASE web_command_apply");
-    return outcome;
+    const value = invoke();
+    if (rollbackResult(value)) store.db.exec(`ROLLBACK TO ${name}`);
+    store.db.exec(`RELEASE ${name}`);
+    return { value };
   } catch (error) {
-    store.db.exec("ROLLBACK TO web_command_apply");
-    store.db.exec("RELEASE web_command_apply");
+    store.db.exec(`ROLLBACK TO ${name}`);
+    store.db.exec(`RELEASE ${name}`);
     if (!(error instanceof ControlError)) throw error;
-    const status = durableStatusFor(error);
-    if (status === null) throw error;
-    return {
-      status,
-      body: { error: { code: error.code, message: error.message, commandRevision, evidenceIds: [], retryable: false } },
-    };
+    const outcome = domainErrorOutcome(error, commandRevision);
+    if (outcome === null) throw error;
+    return { outcome };
   }
 }
 
@@ -187,32 +162,58 @@ export function applyWebCommand<T>(store: ControlStore, input: WebCommandInput<T
       return replay(prior) as StoredCommandOutcome<T>;
     }
 
-    const effectiveCommand = effectiveAuthorityCommandSchema.parse(input.expand()) as EffectiveAuthorityCommandV1;
-    if (canonicalBytes(identityWithoutPayload(rawCommand)).compare(canonicalBytes(identityWithoutPayload(effectiveCommand))) !== 0) {
-      throw new ControlError("control-effective-command-identity-mismatch");
-    }
-    const effectivePayloadJson = canonicalBytes(effectiveCommand.payload).toString("utf8");
-    const effectivePayloadHash = sha256Canonical(effectiveCommand.payload);
-    const authorityCommandJson = canonicalBytes(effectiveCommand).toString("utf8");
-    const authorityCommandHash = sha256Canonical(effectiveCommand);
-
     const groupRow = commandScope.groupId === null ? undefined : store.db.prepare("SELECT revision,projection_seq FROM groups WHERE id=?").get(commandScope.groupId);
     const currentCommandRevision = commandScope.groupId === null ? 0 : Number(groupRow?.revision ?? 0);
+    const resultCommandRevision = commandScope.groupId === null ? null : currentCommandRevision;
     const currentProjectionSeq = commandScope.groupId === null || !groupRow ? null : Number(groupRow.projection_seq);
     const nextCommandRevision = currentCommandRevision === Number.MAX_SAFE_INTEGER ? Number.MAX_SAFE_INTEGER : currentCommandRevision + 1;
     const nextProjectionSeq = currentProjectionSeq === null
       ? commandScope.groupId === null ? null : 1
       : currentProjectionSeq === Number.MAX_SAFE_INTEGER ? Number.MAX_SAFE_INTEGER : currentProjectionSeq + 1;
 
-    const context: WebCommandContext = {
-      rawCommand, effectiveCommand, rawRequestHash, effectivePayloadHash, authorityCommandHash,
-      currentCommandRevision, nextCommandRevision, currentProjectionSeq, nextProjectionSeq,
-    };
+    let effectivePayloadJson: string | null = null;
+    let effectivePayloadHash: string | null = null;
+    let authorityCommandJson: string | null = null;
+    let authorityCommandHash: string | null = null;
+    let context: WebCommandContext | null = null;
     let unvalidated: StoredCommandOutcome<T | CommandBody>;
-    if (rawCommand.expectedRevision !== currentCommandRevision) unvalidated = revisionConflict(currentCommandRevision);
-    else unvalidated = applyWithSavepoint(store, () => input.apply(context), currentCommandRevision);
+    const expansion = invokeWithSavepoint(store, "web_command_expand", () => {
+      const effectiveCommand = effectiveAuthorityCommandSchema.parse(input.expand()) as EffectiveAuthorityCommandV1;
+      if (canonicalBytes(identityWithoutPayload(rawCommand)).compare(canonicalBytes(identityWithoutPayload(effectiveCommand))) !== 0) {
+        throw new ControlError("control-effective-command-identity-mismatch");
+      }
+      return effectiveCommand;
+    }, resultCommandRevision);
+    if ("outcome" in expansion) {
+      unvalidated = expansion.outcome;
+    } else {
+      const effectiveCommand = expansion.value;
+      effectivePayloadJson = canonicalBytes(effectiveCommand.payload).toString("utf8");
+      effectivePayloadHash = sha256Canonical(effectiveCommand.payload);
+      authorityCommandJson = canonicalBytes(effectiveCommand).toString("utf8");
+      authorityCommandHash = sha256Canonical(effectiveCommand);
+      context = {
+        rawCommand, effectiveCommand, rawRequestHash, effectivePayloadHash, authorityCommandHash,
+        currentCommandRevision, nextCommandRevision, currentProjectionSeq, nextProjectionSeq,
+      };
+      if (rawCommand.expectedRevision !== currentCommandRevision) {
+        unvalidated = revisionConflict(currentCommandRevision);
+      } else {
+        const application = invokeWithSavepoint(
+          store,
+          "web_command_apply",
+          () => input.apply(context!),
+          resultCommandRevision,
+          (value) => Number(value.status) >= 400 && Number(value.status) < 500,
+        );
+        unvalidated = "outcome" in application ? application.outcome : application.value;
+      }
+    }
     const outcome = validatedOutcome(unvalidated.status, unvalidated.body);
-    assertSuccessIdentity(outcome.body, context);
+    if ("schema" in outcome.body) {
+      if (context === null) invalidResult();
+      assertSuccessIdentity(outcome.body, context);
+    }
     const typedOutcome = outcome as unknown as StoredCommandOutcome<T>;
 
     const succeeded = outcome.status >= 200 && outcome.status < 300;
