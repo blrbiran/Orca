@@ -4891,3 +4891,21 @@ SDD新增review-fix-evidence目录，保留全部旧台账与证据。产品已�
 **awaitingHuman**：分支整合、push、删分支／worktree由人在终端操作，不绕活闸门；Claude额度按用户通知2026-09-22 09:00 Asia/Shanghai后恢复，仍需核实。原 Orca chain 真钱验收须人提交 `.orca/chain.json` 选 model 并点头，先测该配置首调 F，副本 T1>F；不复用 Codex 切片 F。D-launch 其余残余仍看原 spec，不因本次适配完成而关闭。
 
 **姊妹仓库**：本次按用户要求在 ccloop 主目录与 Codex 开发树同步同一 Orca 滚动节，在 ccmem 更新原 §15；各自非 Orca 前缀保持字节不变，不再追加跨仓会话日志。ccmem 原生任务仍看它自己的入口及ⅩⅬⅡ，未改代码、daemon或用户数据。
+
+## 2026-09-19 控制底座计划与完整 verify（task 01a0b836）
+
+归属：Codex task `01a0b836-21b3-7d93-89c4-4a9b86293eb0`；观测源码基点 Orca `75d65eca0f4bcf047d62854c5af191815a00d485`。用户同意先核对／验证，再写 §13.6 控制底座计划。本节只追加，不修改历史记录；本轮产品代码零改动，ccloop／ccmem 零写入，未调用真实模型。
+
+新计划：`docs/superpowers/plans/2026-09-19-task-control-foundation.md`，八项：私有 SQLite 存储、组／命令版本、统一预算领取与结算、持久启动及所有权、证据与脏快照归档、一致提交与清理、scheduler 受控接线、崩溃恢复验收。含 R1–R5 责任映射、M01–M40 最小变异、自查。建议 Native；计划本身尚待审阅，未开始实施，也未把上一 Codex 切片的 Native 选择扩大为新切片执行方式批准。
+
+计划边界：真实 ccloop 新控制协议／handoff／静止证明／新 run 快照物化留下一切片；底座先验真实 DB/文件和离线协议对端，未支持新协议的生产 adapter 按名拒绝受控组派发，不回退旧 runner。旧单轮 CLI 保留原契约，不宣称组级恢复。Web 与 ccmem 后续依赖顺序不变，Codex 五任务不重做，具体 agent 逻辑不移到 Orca。
+
+**开工实测**：三主仓 status 干净；Codex 开发树 `/tmp/ccloop-codex-0919`、`codex/codex-adapter-0919`，HEAD `532f3e1`，只有未跟踪 node_modules。`rtk proxy /usr/bin/git ls-remote origin refs/heads/main` 在沙箱 DNS 失败后，经授权网络重跑成功：Orca 远端 `ce85baa`、ccloop `4bd59a7`、ccmem `cb5683f`；与当时各自主树 HEAD 比较领先/落后为 1/0、2/0、2/0。仅为开工快照，不当作后续发布状态。
+
+**resume**：首次 tsx 在沙箱内因 IPC listen EPERM 未执行成功；授权同命令重跑 `rtk proxy node_modules/.bin/tsx src/cli.ts resume` RC0。沿用 `.orca/checkpoints/orca-dev-6662000e.json`，明确 stale（7 个文件变化）；其测量重跑 28文件/456测试 RC0，真实 `~/.orca` 不存在的检查仍退出1，远端测量退出0。三个 measurement 输出和 resume 完整输出已读回；未改旧 checkpoint 或伪造 Codex 水位。
+
+**完整 verify 挂账已关闭**：在上述 Orca 源码基点运行 `rtk proxy npm run verify`，RC0：主套129/1075；scheduler51/167；chain13/213；链环境主套129/1075；Web build通过；panel PASS0–14；Web check9/34。没有跳过。旧 ledger 七条降级消息是现有 verify 接受的退出2路径，日志保留，没有隐藏或改判据。日志2783行、219270字节，连续分块整份读回，拼接与原文件逐字节相等，SHA256 `8c21ea3c5797f18065babbe71d89c8c64bab2ace8299248caa9f77e4e9054e5f`。
+
+**证据**：原始 `/tmp/orca-control-start-20260919/` 保留；另复制到 `.superpowers/sdd/2026-09-19-task-control-foundation/planning-evidence/`，含 verify.log/rc、resume、三仓核对和 manifest。此为开发证据保存，不是新产品归档功能已实现。文档结构／占位符／代码围栏／M01–M40 完整性检查通过；计划中的新测试尚未实现或执行。真实 `~/.orca` 在验证后仍不存在。成本与上下文读数工具未提供，不自估。
+
+**接下来**：审阅控制底座计划并确认执行方式，再按计划实施；规格已批准，不重开架构。开发树、原 live 与审查证据全部保留；整合、push、删分支/worktree仍由人操作。Claude 额度 2026-09-22 09:00 Asia/Shanghai 后核实；chain 活验仍需人选 model 并点头。
