@@ -103,6 +103,10 @@ async function runHook(repo: string, command: string, sample: string, probeDir: 
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      // D-launch spec §13 item 3: an exited shell can leave live children in its group.
+      if (child.pid !== undefined) {
+        try { process.kill(-child.pid, "SIGKILL"); } catch { /* Already gone. */ }
+      }
       // An escaped process may still hold the write end; stop reading so it cannot keep this process busy.
       child.stderr.destroy();
       resolve({ code, stderr, timedOut });

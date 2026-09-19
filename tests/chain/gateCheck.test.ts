@@ -256,4 +256,38 @@ describe("checkGate: D-launch spec §5.2 items 1–3 (review C1), with must-catc
     );
     expect(await checkGate(repo, await safeEnv())).toEqual({ ok: true });
   }, 30_000);
+
+  it("K18 settling a successful check kills the hook's same-group children before test cleanup (spec §13 item 3)", async () => {
+    const repo = await fixture();
+    const children = async (): Promise<Array<{ pid: number; command: string }>> => {
+      const pids = (await readFile(join(repo, "same-group.pids"), "utf8").catch(() => "")).trim().split("\n").filter(Boolean);
+      return Promise.all(pids.map(async (pid) => ({
+        pid: Number(pid),
+        command: (await promisify(execFile)("ps", ["-o", "command=", "-p", pid]).then((r) => r.stdout, () => "")).trim(),
+      })));
+    };
+    // Cleanup runs even when the deletion mutation leaves both children alive.
+    cleanups.unshift(async () => {
+      for (const child of await children()) {
+        if (child.command === "sleep 3172") {
+          try { process.kill(child.pid, "SIGKILL"); } catch { /* Already exited. */ }
+        }
+      }
+    });
+    await writeFile(join(repo, "scripts", "gate-prefilter.mjs"), [
+      'import { spawn } from "node:child_process";',
+      'import { appendFileSync } from "node:fs";',
+      'const c = spawn("sleep", ["3172"], { stdio: ["ignore", "ignore", "inherit"] });',
+      'c.once("spawn", () => {',
+      '  process.kill(c.pid, 0);',
+      '  appendFileSync(`${process.env.CLAUDE_PROJECT_DIR}/same-group.pids`, `${c.pid}\\n`);',
+      '  process.exit(1);',
+      '});',
+      '',
+    ].join("\n"));
+    expect(await checkGate(repo, await safeEnv())).toEqual({ ok: true });
+    // Positive control: both samples really launched a live child.
+    expect((await children()).length).toBe(2);
+    await expect.poll(async () => (await children()).filter((c) => c.command === "sleep 3172"), { timeout: 2_000 }).toEqual([]);
+  }, 30_000);
 });

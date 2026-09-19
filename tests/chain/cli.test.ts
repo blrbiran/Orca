@@ -278,8 +278,8 @@ describe("orca chain through the real CLI (D-launch spec §4.3, §5.3, §8.2-3/1
     await writeFile(join(await chainLockDir(repo), "holder.json"), JSON.stringify({ chainId: "chain-0000000f", pid: process.pid, startedAt: "never" }));
     const stale = capture();
     expect(await runChainCommand(["unlock", "--repo", repo], stale.deps)).toBe(0);
-    await lock.release();
     expect(existsSync(await chainLockDir(repo))).toBe(false);
+    await lock.release();
     const r = await readChainRecord(repo, "chain-0000000f");
     expect([r.state, r.stop?.reason, r.stop?.category]).toEqual(["stopped", "unlocked-by-human", "anomaly"]);
     expect((await git(repo, ["log", "-1", "--format=%s"])).trim()).toBe("chore(chain): chain-0000000f, stopped, unlocked-by-human");
