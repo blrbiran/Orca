@@ -4818,3 +4818,20 @@ SQLite 单写、stateDir、attempts 轮数语义等是待审建议，不能冒�
 原 spec 17648 字节保持一致，SHA256 `e1e4120816af2fc644882a215591696388a27f5c29188af65e25c16070633146`。
 没有为文档改动重跑产品测试，也没有调用真实 agent。书面 spec 尚待人审阅，随后进入实施计划。
 Claude 额度与活体验收 awaitingHuman 条件不变；未 push、merge main、删除分支或 worktree。
+
+
+## 2026-09-19 追加：书面规格获批，Codex 切片计划已写
+
+归属：Codex task `01a0b792-9ebb-79d0-ba91-604825a9f974`，基于 Orca `9b92218`。
+用户在 spec 五项修订后“同意，继续”，视为批准书面 spec（含 §13）；现在进入实施计划阶段。
+新计划：`docs/superpowers/plans/2026-09-19-ccloop-codex-adapter.md`，五个任务：协议、进程、adapter、CLI、隔离验收。
+计划源码修改仅限 ccloop，现有判据不改，先 offline fake，后一次显式 soft 的三阶段 Codex 真机验收。
+本次只写计划，未修改 ccloop，未调用模型，未运行新计划中的测试。
+本地 Codex 源码快照 `6478a751fde8884b2fdc76486fe23175a8e795d4` 的 JSONL 输出使用 thread total，
+未观测时可能合成零；因此计划禁止累计重复 completed、拒绝含混零用量，不宣称硬限额。
+自审修正：ccloop command verifier 跳过 adapter.verify，三阶段验收须用 agent verifier 加独立 requiredChecks。
+
+计划已自审，`rtk proxy git diff --check` RC0，文档结构/控制字节检查通过；不是运行实现的通过。
+下一步 awaitingHuman：审阅计划并选择 Native 或 subagent-driven；建议 Native，末尾独立整支审查。
+用户尚未在本任务明确选择执行方式；不沿用历史 Claude 会话的 SDD 决定。
+Claude 的额度时间和原活体验收条件不变；未 push、merge、删分支/worktree。
