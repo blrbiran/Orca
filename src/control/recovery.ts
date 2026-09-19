@@ -2,7 +2,7 @@ import type { ControlStore } from "./store.js";
 import type { ExecutionPort } from "./executionPort.js";
 import { reconcileStart } from "./dispatch.js";
 import { readRun } from "./budget.js";
-import { readCommittedCheckpoint,verifyCandidateArtifacts } from "./checkpoints.js";
+import { readCommittedCheckpoint,verifyCandidateArtifacts,repairAcceptedWork } from "./checkpoints.js";
 import { publishPending } from "./projection.js";
 import { cleanupCommittedRun } from "./cleanup.js";
 import { ControlService } from "./service.js";
@@ -11,6 +11,8 @@ import { acquireRepoLock } from "../scheduler/repoLock.js";
 
 /** Recovery never creates a replacement run or executes a Git merge. */
 export async function recoverControl(store:ControlStore,port:ExecutionPort):Promise<{blockedRunIds:string[];replayedProjectionIds:string[]}> {
+ const release=store.beginOperation();
+ try {
  store.assertOwner();store.dispatchBlocked=true;
  const service=new ControlService(store,port),blocked=new Set<string>();
  for(const row of store.db.prepare("SELECT id,body FROM outbox WHERE kind='landing' AND delivered=0").all()) {
@@ -22,7 +24,7 @@ export async function recoverControl(store:ControlStore,port:ExecutionPort):Prom
   const runId=String(row.id);let run=readRun(store,runId);
   try {
    if(run.checkpointId) await verifyCandidateArtifacts(store,await readCommittedCheckpoint(store,runId));
-   if(run.state==="settled") continue;
+   if(run.state==="settled") {await repairAcceptedWork(store,runId);continue;}
    if(!store.db.prepare("SELECT id FROM outbox WHERE id=? AND kind='start'").get("start:"+runId)) {blocked.add(runId);continue;}
    await reconcileStart(store,port,runId);run=readRun(store,runId);
    if(run.state==="unknown") {blocked.add(runId);continue;}
@@ -46,4 +48,5 @@ export async function recoverControl(store:ControlStore,port:ExecutionPort):Prom
  }
  store.dispatchBlocked=blocked.size>0;
  return {blockedRunIds:[...blocked].sort(),replayedProjectionIds};
+ } finally {release();}
 }

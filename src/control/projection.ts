@@ -10,11 +10,19 @@ async function writeProjection(path:string,bytes:Buffer):Promise<void> {
  try{await file.writeFile(bytes);await file.sync();}finally{await file.close();}
  await rename(temp,path);syncDirectory(dir);
 }
-export async function publishPending(store:ControlStore,deps:{writeProjection?:(path:string,bytes:Buffer)=>Promise<void>}={}):Promise<void> {
+type ProjectionDependencies={writeProjection?:(path:string,bytes:Buffer)=>Promise<void>};
+const publications=new WeakMap<ControlStore,Promise<void>>();
+export function publishPending(store:ControlStore,deps:ProjectionDependencies={}):Promise<void> {
+ const previous=publications.get(store)??Promise.resolve();
+ const result=previous.catch(()=>{}).then(()=>drainPending(store,deps));
+ publications.set(store,result);return result;
+}
+async function drainPending(store:ControlStore,deps:ProjectionDependencies):Promise<void> {
  for(const row of store.db.prepare("SELECT id,body FROM outbox WHERE kind='projection' AND delivered=0 ORDER BY rowid").all()) {
   const reference=JSON.parse(String(row.body));const run=readRun(store,reference.runId);
   if(run.checkpointId===reference.checkpointId) {
    const c=await readCommittedCheckpoint(store,run.runId);
+   if(c.checkpointId!==reference.checkpointId) continue;
    await (deps.writeProjection??writeProjection)(join(store.stateDir,"projections",run.runId,"latest.json"),Buffer.from(JSON.stringify({...c,hash:reference.hash})));
   }
   store.transaction(()=>store.db.prepare("UPDATE outbox SET delivered=1 WHERE id=?").run(String(row.id)));

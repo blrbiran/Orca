@@ -1,12 +1,13 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { open, readFile } from "node:fs/promises";
+import { existsSync, readFileSync, renameSync } from "node:fs";
 import { join } from "node:path";
 import type { ControlStore } from "./store.js";
 import type { Candidate, ArtifactRef } from "./types.js";
 import { ControlError } from "./errors.js";
 import { readArtifact } from "./archive.js";
 import { verifySnapshot } from "./snapshot.js";
-import { readRun, releaseRunReserve, saveRun } from "./budget.js";
+import { readRun, releaseRunReserve, saveRun, hasObservedUsage } from "./budget.js";
 import { readGroup, readWork, saveGroup } from "./queries.js";
 import { privateDirectory, syncDirectory, assertRegular } from "./paths.js";
 import { candidateSchema } from "./schema.js";
@@ -36,9 +37,23 @@ export async function acceptanceEvidence(store:ControlStore,runId:string):Promis
  return record.runId===runId && record.accepted===true && proof.runId===runId && proof.checksPassed===true && proof.landing==="landed";
 }
 async function persistImmutableCheckpoint(store:ControlStore,c:Candidate):Promise<{checkpointId:string;hash:string}> {
- const dir=privateDirectory(join(store.stateDir,"checkpoints",c.runId));const path=join(dir,c.checkpointId+".json");const bytes=Buffer.from(JSON.stringify(c));
- try {const file=await open(path,"wx",0o600);try{await file.writeFile(bytes);await file.sync();}finally{await file.close();}syncDirectory(dir);}
- catch(error){if((error as NodeJS.ErrnoException).code!=="EEXIST") throw error;assertRegular(path);if(!(await readFile(path)).equals(bytes)) throw new ControlError("checkpoint-id-conflict");}
+ const dir=privateDirectory(join(store.stateDir,"checkpoints",c.runId)),path=join(dir,c.checkpointId+".json");
+ const bytes=Buffer.from(JSON.stringify(c)),temp=join(dir,".staging-"+randomUUID());
+ const file=await open(temp,"wx",0o600);try{await file.writeFile(bytes);await file.sync();}finally{await file.close();}
+ // The service owns this directory. Keep the final existence check and rename in
+ // one synchronous section so concurrent commits cannot replace immutable IDs.
+ store.assertOwner();
+ if(existsSync(path)) {
+  assertRegular(path);const previous=readFileSync(path);
+  if(previous.equals(bytes)) return {checkpointId:c.checkpointId,hash:createHash("sha256").update(bytes).digest("hex")};
+  if(store.db.prepare("SELECT id FROM checkpoints WHERE id=?").get(c.checkpointId)) throw new ControlError("checkpoint-id-conflict");
+  let valid=false;try{JSON.parse(previous.toString());valid=true;}catch{}
+  if(valid) throw new ControlError("checkpoint-id-conflict");
+  // Retain evidence from pre-atomic writers without treating a torn file as a
+  // committed checkpoint or allowing replacement of a different valid object.
+  renameSync(path,join(dir,".interrupted-"+randomUUID()));
+ }
+ renameSync(temp,path);syncDirectory(dir);
  return {checkpointId:c.checkpointId,hash:createHash("sha256").update(bytes).digest("hex")};
 }
 export async function commitCandidate(store:ControlStore,c:Candidate,deps:CommitDependencies={}):Promise<{checkpointId:string;hash:string}> {
@@ -52,7 +67,7 @@ export async function commitCandidate(store:ControlStore,c:Candidate,deps:Commit
   assertIdentity(store,c);let run=readRun(store,c.runId);
   if(run.state==="settled") throw new ControlError("checkpoint-run-settled");
   const pending=store.db.prepare("SELECT seq FROM usage_events WHERE run_id=? AND seq>?").get(c.runId,run.highWater);
-  const settled=!!c.stopProof && c.unresolvedRequestIds.length===0 && !pending && !run.unknown.work && !run.unknown.handoff;
+  const settled=!!c.stopProof && c.unresolvedRequestIds.length===0 && !pending && !run.unknown.work && !run.unknown.handoff && hasObservedUsage(store,run);
   store.db.prepare("INSERT INTO checkpoints VALUES (?,?,?,?)").run(c.checkpointId,c.runId,reference.hash,JSON.stringify(c));
   if(settled) releaseRunReserve(store,c.runId,c.stopProof!);
   run=readRun(store,c.runId);run.checkpointId=c.checkpointId;
@@ -73,4 +88,17 @@ export async function readCommittedCheckpoint(store:ControlStore,runId:string):P
  const path=join(store.stateDir,"checkpoints",runId,run.checkpointId+".json");assertRegular(path);const bytes=await readFile(path);
  if(createHash("sha256").update(bytes).digest("hex")!==row.hash || !bytes.equals(Buffer.from(String(row.body)))) throw new ControlError("checkpoint-hash-mismatch");
  return JSON.parse(bytes.toString());
+}
+
+/** Business acceptance can arrive after final accounting; never settle twice. */
+export async function repairAcceptedWork(store:ControlStore,runId:string):Promise<void> {
+ const run=readRun(store,runId);
+ if(run.state!=="settled" || !run.recoverable) return;
+ const c=await readCommittedCheckpoint(store,runId);await verifyCandidateArtifacts(store,c);
+ if(!await acceptanceEvidence(store,runId)) return;
+ store.transaction(()=>{
+  const current=readRun(store,runId),work=readWork(store,run.groupId,run.workItemId),group=readGroup(store,run.groupId);
+  if(current.checkpointId!==c.checkpointId || work.targetVersion!==run.targetVersion || group.graphVersion!==run.graphVersion || current.state!=="settled" || !current.recoverable) return;
+  work.status="done";store.db.prepare("UPDATE work_items SET body=? WHERE group_id=? AND id=?").run(JSON.stringify(work),run.groupId,run.workItemId);
+ });
 }

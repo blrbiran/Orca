@@ -14,7 +14,7 @@ import { hashPayload } from "./commands.js";
 import { startClaim, readEnvelope } from "./dispatch.js";
 import { recordUsage } from "./usage.js";
 import { archiveRun, writeArtifact, readArtifact } from "./archive.js";
-import { commitCandidate } from "./checkpoints.js";
+import { commitCandidate, repairAcceptedWork } from "./checkpoints.js";
 import { cleanupCommittedRun } from "./cleanup.js";
 import { publishPending } from "./projection.js";
 import { privateDirectory } from "./paths.js";
@@ -72,13 +72,14 @@ export async function disposeControlled(service:ControlService,run:TaskRun,optio
  if(record.state!=="settled") {
   const archive=await archiveReport(service,run.runId,report),raw=report.candidate;
   const missing=[...archive.missing,...(raw?.missing??[]),...(!raw?["candidate-missing"]:[])];
-  const candidate:Candidate={...identity(record),checkpointId:"settle-"+run.runId,usageHighWater:record.highWater,
+  const candidate:Candidate={...identity(record),checkpointId:"settle-"+run.runId,usageHighWater:raw?.usageHighWater??record.highWater,
    result:missing.length===0 && raw?.result==="complete"?"complete":"partial",
    artifacts:[...archive.artifacts,...(raw?.artifacts??[])],snapshot:archive.snapshot,missing,
    unresolvedRequestIds:raw?.unresolvedRequestIds??["terminal-evidence"],stopProof:raw?.stopProof??null,terminalOutcome:report.terminal.outcome};
   candidate.checkpointId="settle-"+run.runId+"-"+hashPayload(candidate).slice(0,16);
   await commitCandidate(store,candidate);
  }
+ await repairAcceptedWork(store,run.runId);
  await publishPending(store);
  if(options.keepWorkdirs || options.keepBecause || run.outcome!=="succeeded") {
   options.log?.(`orca: kept controlled run ${run.runId}: ${run.workdir}`);return {removed:false,workdir:run.workdir};
@@ -117,7 +118,8 @@ export function makeControlledExecution(service:ControlService,groupId:string):R
    if(registered.length!==round.plan.tasks.length) throw new ControlError("group-graph-conflict");
    for(const task of round.plan.tasks) {
     const w=registered.find(w=>w.taskId===task.taskId);
-    if(!w || hashPayload(w.contract)!==hashPayload(round.contracts.get(task.taskId)) || hashPayload([...w.dependsOn].sort())!==hashPayload([...task.dependsOn].sort())) throw new ControlError("group-graph-conflict");
+    const dependencies=w?.dependsOn.map(id=>registered.find(parent=>parent.workItemId===id)?.taskId);
+    if(!w || !dependencies || dependencies.some(id=>!id) || hashPayload(w.contract)!==hashPayload(round.contracts.get(task.taskId)) || hashPayload([...dependencies].sort())!==hashPayload([...task.dependsOn].sort())) throw new ControlError("group-graph-conflict");
    }
   },
   reconcileBudget:taskId=>service.reconcileBudget(groupId,taskId),

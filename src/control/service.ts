@@ -12,12 +12,15 @@ export interface ServiceOptions {targetRepo?:string;reconcileGrant?: Grant}
 export class ControlService {
   constructor(readonly store: ControlStore, readonly port?: ExecutionPort, readonly options: ServiceOptions = {}) {}
   async run(groupId:string, planPath:string, options: Omit<import("../scheduler/run.js").RunOptions,"adapter"|"adapterConfig"> = {}):Promise<number> {
+    const release=this.store.beginOperation();
+    try {
     await this.capabilities(groupId);
     const {loadRound,runPreparedRound}=await import("../scheduler/run.js");
     const {makeControlledExecution}=await import("./schedulerBridge.js");
     const loaded=await loadRound(planPath);
     if("rejections" in loaded) throw new ControlError("control-plan-rejected");
-    return runPreparedRound(loaded.round,options,makeControlledExecution(this,groupId));
+    return await runPreparedRound(loaded.round,options,makeControlledExecution(this,groupId));
+    } finally {release();}
   }
   executionPort(): ExecutionPort { return this.port ?? productionExecutionPort(); }
   async capabilities(groupId: string) {
@@ -30,9 +33,13 @@ export class ControlService {
     const group = readGroup(this.store,groupId), work = readWork(this.store,groupId,workItemId);
     if(group.stopped) throw new ControlError("group-stopped");
     const previous=this.store.db.prepare("SELECT id FROM runs WHERE group_id=? AND work_item_id=? ORDER BY rowid DESC LIMIT 1").get(groupId,workItemId);
-    if(previous) return readRun(this.store,String(previous.id));
+    if(this.store.dispatchBlocked) throw new ControlError("control-recovery-required");
+    if(previous) {
+      const run=readRun(this.store,String(previous.id));
+      if(run.targetVersion===work.targetVersion && run.graphVersion===group.graphVersion && run.configHash===work.configHash) return run;
+    }
     return claimWork(this.store,{groupId,workItemId,capabilities,graphVersion:group.graphVersion,targetVersion:work.targetVersion,
-      commandId:`execute-${workItemId}-${work.targetVersion}`,expectedRevision:group.revision,by:"control-service"});
+      commandId:`execute-${workItemId}-${work.targetVersion}-${group.graphVersion}`,expectedRevision:group.revision,by:"control-service"});
   }
   async reconcileBudget(groupId: string, taskId: string): Promise<ApprovedReconcileBudget> {
     const capabilities=await this.capabilities(groupId), group=readGroup(this.store,groupId);
@@ -40,7 +47,10 @@ export class ControlService {
     const workItemId=`reconcile-${taskId}`;
     const existing=this.store.db.prepare("SELECT id FROM runs WHERE group_id=? AND work_item_id=? ORDER BY rowid DESC LIMIT 1").get(groupId,workItemId);
     let claim:Claim;
-    if(existing) claim=readRun(this.store,String(existing.id));
+    if(existing) {
+      claim=readRun(this.store,String(existing.id));
+      if(claim.graphVersion!==group.graphVersion) throw new ControlError("reconcile-version-conflict");
+    }
     else {
       const cap=this.options.reconcileGrant;
       if(!cap) throw new ControlError("reconcile-budget-unapproved");

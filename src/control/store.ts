@@ -38,6 +38,7 @@ export interface ControlStore {
   dispatchBlocked:boolean;
   transaction<T>(fn:()=>T):T;
   assertOwner():void;
+  beginOperation():()=>void;
   close():void;
 }
 export async function openControlStore(options:{stateDir:string;recovery?:boolean}):Promise<ControlStore> {
@@ -104,9 +105,16 @@ export async function openControlStore(options:{stateDir:string;recovery?:boolea
     });
     let closed = false;
     let inTransaction = false;
+    let operationActive = false;
+    const assertOwner=()=>{if(closed || readOwner(ownerFile).nonce!==owner.nonce) throw new ControlError("control-owner-changed");};
     return {
       stateDir, db:connection, dispatchBlocked:recovered || !!connection.prepare("SELECT id FROM runs WHERE active=1 LIMIT 1").get(),
-      assertOwner() {if(closed || readOwner(ownerFile).nonce!==owner.nonce) throw new ControlError("control-owner-changed");},
+      assertOwner,
+      beginOperation() {
+        assertOwner();if(operationActive) throw new ControlError("control-operation-in-progress");
+        operationActive=true;let released=false;
+        return ()=>{if(!released){released=true;operationActive=false;}};
+      },
       transaction<T>(fn:()=>T):T {
         if (closed) throw new ControlError("control-store-closed");
         if (inTransaction) throw new ControlError("control-nested-transaction");

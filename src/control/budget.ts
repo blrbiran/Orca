@@ -64,6 +64,7 @@ export function claimWork(store:ControlStore,input:ClaimInput, preparedWork?:Wor
     if(store.db.prepare("SELECT id FROM runs WHERE group_id=? AND work_item_id=? AND active=1").get(groupId,workItemId)) throw new ControlError("work-already-active");
     const total=add(work.grant.work,work.grant.handoff);
     if(work.kind==="goal-review") {
+      if(!fits(group.used,group.reserved,group.limit)) throw new ControlError("group-budget-unavailable");
       if(!fits(total,zero(),group.reviewRemaining)) throw new ControlError("group-review-budget-unavailable");
       group.reviewRemaining=subtract(group.reviewRemaining,total);
     } else {
@@ -72,17 +73,25 @@ export function claimWork(store:ControlStore,input:ClaimInput, preparedWork?:Wor
       group.reserved=reserved;
     }
     const claim:Claim={groupId,workItemId,taskId:work.taskId,runId:"run-"+randomUUID(),generation:1,graphVersion,targetVersion,commandId:meta.commandId,configHash:work.configHash,grant:work.grant,ownerToken:randomUUID()};
-    const run:RunRecord={...claim,executionId:null,state:"claimed",checkpointId:null,recoverable:false,remaining:structuredClone(work.grant),cumulative:{work:zero(),handoff:zero()},unknown:{work:false,handoff:false},highWater:0,breaches:[],handoffWorkItemId:null};
+    const run:RunRecord={...claim,executionId:null,state:"claimed",checkpointId:null,recoverable:false,remaining:structuredClone(work.grant),cumulative:{work:zero(),handoff:zero()},unknown:{work:true,handoff:true},highWater:0,breaches:[],handoffWorkItemId:null};
     store.db.prepare("INSERT INTO runs VALUES (?,?,?,?,1,?)").run(claim.runId,groupId,workItemId,1,JSON.stringify(run));
     work.status="running";store.db.prepare("UPDATE work_items SET body=? WHERE group_id=? AND id=?").run(JSON.stringify(work),groupId,workItemId);
     group.status="running";group.budgetVersion++;saveGroup(store,group);return claim;
   });
 }
+/** Numeric counters begin at zero, but zero consumption must be observed. */
+export function hasObservedUsage(store:ControlStore,run:RunRecord):boolean {
+ const observed=new Set<string>();
+ for(const row of store.db.prepare("SELECT body FROM usage_events WHERE run_id=? AND seq<=?").all(run.runId,run.highWater)) {
+  const event=JSON.parse(String(row.body));if(event.cumulative!==null)observed.add(event.bucket);
+ }
+ return observed.has("work") && observed.has("handoff");
+}
 /** Only call inside the candidate commit transaction, after artifact validation. */
 export function releaseRunReserve(store:ControlStore,id:string,proof:StopProof):void {
   const run=readRun(store,id);
   if(run.state==="settled") return;
-  if(!proof || proof.isolated!==true || proof.executionId!==run.executionId || proof.generation!==run.generation || run.unknown.work || run.unknown.handoff) throw new ControlError("run-stop-unconfirmed");
+  if(!proof || proof.isolated!==true || proof.executionId!==run.executionId || proof.generation!==run.generation || run.unknown.work || run.unknown.handoff || !hasObservedUsage(store,run)) throw new ControlError("run-stop-unconfirmed");
   if(store.db.prepare("SELECT seq FROM usage_events WHERE run_id=? AND seq>?").get(id,run.highWater)) throw new ControlError("usage-gap");
   const group=readGroup(store,run.groupId);
   group.reserved=subtract(group.reserved,add(run.remaining.work,run.remaining.handoff));
