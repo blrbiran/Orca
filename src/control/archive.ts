@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { constants, createReadStream, createWriteStream } from "node:fs";
-import { link, lstat, open, readFile, readdir, readlink, realpath, unlink } from "node:fs/promises";
+import { rename, lstat, open, readFile, readdir, readlink, realpath, unlink } from "node:fs/promises";
 import type { FileHandle } from "node:fs/promises";
 import { join, relative, isAbsolute, dirname, basename } from "node:path";
 import { pipeline } from "node:stream/promises";
@@ -20,14 +20,15 @@ async function digestFile(path:string):Promise<string> {
  try {for await(const bytes of handle.createReadStream({autoClose:false})) hash.update(bytes);return hash.digest("hex");} finally {await handle.close();}
 }
 async function publish(store:ControlStore,id:string,temp:string,hash:string,deps:ArchiveDependencies):Promise<ArtifactRef> {
- idSchema.parse(id);const dir=privateDirectory(join(store.stateDir,"artifacts",id));const destination=join(dir,"data");
+ idSchema.parse(id);const dir=join(privateDirectory(join(store.stateDir,"artifacts")),id);const destination=join(dir,"data");
  const handle=await open(temp,"r");try {await (deps.syncFile??(file=>file.sync()))(handle);}finally{await handle.close();}
- syncDirectory(dirname(temp));deps.beforePublish?.();
- try {await link(temp,destination);}catch(error){
-  if((error as NodeJS.ErrnoException).code!=="EEXIST") throw error;
-  assertRegular(destination);if(await digestFile(destination)!==hash) throw new ControlError("artifact-id-conflict");
+ const stagedDir=privateDirectory(join(store.stateDir,"staging",randomUUID()));
+ await rename(temp,join(stagedDir,"data"));syncDirectory(stagedDir);syncDirectory(dirname(temp));deps.beforePublish?.();
+ try {await rename(stagedDir,dir);}catch(error){
+  if(!["EEXIST","ENOTEMPTY"].includes((error as NodeJS.ErrnoException).code??"")) throw error;
+  privateDirectory(dir);assertRegular(destination);if(await digestFile(destination)!==hash) throw new ControlError("artifact-id-conflict");
  }
- await unlink(temp);syncDirectory(dir);syncDirectory(dirname(temp));
+ syncDirectory(dir);syncDirectory(dirname(dir));syncDirectory(dirname(temp));
  const ref={artifactId:id,hash};
  store.transaction(()=>{
   const old=store.db.prepare("SELECT hash FROM artifacts WHERE id=?").get(id);

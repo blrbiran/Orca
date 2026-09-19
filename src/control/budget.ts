@@ -1,10 +1,11 @@
+import { controlGraph } from "./graph.js";
 import { randomUUID } from "node:crypto";
 import type { ControlStore } from "./store.js";
-import type { Amount, BudgetMode, Capabilities, Claim, ClaimInput, Grant, RunView, StopProof } from "./types.js";
+import type { Amount, BudgetMode, Capabilities, Claim, ClaimInput, Grant, RunView, StopProof, WorkInput } from "./types.js";
 import { ControlError } from "./errors.js";
-import { amountSchema, safeInteger } from "./schema.js";
+import { amountSchema, safeInteger, workSchema } from "./schema.js";
 import { applyCommand, dimensions, fits, zero } from "./commands.js";
-import { readGroup, readWork, saveGroup } from "./queries.js";
+import { readGroup, readWork, saveGroup, allWork } from "./queries.js";
 export interface RunRecord extends Claim, RunView {
   remaining:Grant; cumulative:Grant; highWater:number;
   unknown:{work:boolean;handoff:boolean};breaches:number[];
@@ -32,12 +33,19 @@ export function assertCapabilities(mode:BudgetMode,c:Capabilities):void {
   if(c.protocol!==1 || !c.durableAccept || !c.ownershipIsolation || !c.evidenceRetention || c.usageObservation==="unavailable" || c.budgetEnforcement==="unsupported") throw new ControlError("control-capability-unsupported");
   if(mode==="strict" && (c.budgetEnforcement!=="bounded" || !c.requestBoundEvidence)) throw new ControlError("control-capability-unsupported");
 }
-export function claimWork(store:ControlStore,input:ClaimInput):Claim {
+export function claimWork(store:ControlStore,input:ClaimInput, preparedWork?:WorkInput):Claim {
   const {groupId,workItemId,graphVersion,targetVersion,capabilities,...meta}=input;
   safeInteger.parse(graphVersion);safeInteger.parse(targetVersion);
-  return applyCommand(store,groupId,meta,{verb:"claim",workItemId,graphVersion,targetVersion,capabilities},()=>{
+  return applyCommand(store,groupId,meta,{verb:"claim",workItemId,graphVersion,targetVersion,capabilities,...(preparedWork?{preparedWork}: {})},()=>{
     if(store.dispatchBlocked) throw new ControlError("control-recovery-required");
-    const group=readGroup(store,groupId),work=readWork(store,groupId,workItemId);
+    const group=readGroup(store,groupId);
+    if(preparedWork) {
+      workSchema.parse(preparedWork);
+      if(preparedWork.kind!=="reconcile" || preparedWork.workItemId!==workItemId || targetVersion!==1) throw new ControlError("reconcile-registration-invalid");
+      controlGraph([...allWork(store,groupId),preparedWork]);
+      store.db.prepare("INSERT INTO work_items VALUES (?,?,?,?)").run(groupId,workItemId,1,JSON.stringify({...preparedWork,targetVersion:1,status:"ready"}));
+    }
+    const work=readWork(store,groupId,workItemId);
     if(group.graphVersion!==graphVersion) throw new ControlError("graph-version-conflict");
     if(work.targetVersion!==targetVersion) throw new ControlError("target-version-conflict");
     assertCapabilities(group.budgetMode??"strict",capabilities);
