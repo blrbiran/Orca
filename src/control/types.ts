@@ -1,4 +1,5 @@
 export type WorkKind = "task" | "decompose" | "reconcile" | "handoff" | "goal-review" | "memory";
+export type WebWorkKind = "budget-estimate" | "task" | "handoff" | "goal-review";
 export type BudgetMode = "strict" | "soft";
 export interface Amount { tokens: number; activeMs: number; attempts: number; sessions: number }
 export interface Grant { work: Amount; handoff: Amount }
