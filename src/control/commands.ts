@@ -68,7 +68,7 @@ export function setGroupStopped(store:ControlStore,groupId:string,stopped:boolea
   return applyCommand(store,groupId,meta,{verb:"stop",body:stopped},()=>{
     const group=readGroup(store,groupId);
     if(!stopped && group.proposal) throw new ControlError("graph-change-needs-handoff");
-    group.stopped=stopped;group.revision++;saveGroup(store,group);return getGroup(store,groupId);
+    group.stopped=stopped;group.revision++;saveGroup(store,group);store.db.prepare("INSERT INTO outbox VALUES (?, 'group-handoff', ?, 0) ON CONFLICT(id) DO NOTHING").run(`group-handoff:${groupId}:state:${group.revision}:${group.budgetVersion}`,JSON.stringify({groupId,revision:group.revision,budgetVersion:group.budgetVersion}));return getGroup(store,groupId);
   });
 }
 export function setGroupLimit(store:ControlStore,groupId:string,limit:Amount,meta:CommandMeta):GroupView {
@@ -76,6 +76,6 @@ export function setGroupLimit(store:ControlStore,groupId:string,limit:Amount,met
   return applyCommand(store,groupId,meta,{verb:"limit",body:limit},()=>{
     const group=readGroup(store,groupId);
     if(!fits(group.used,group.reserved,limit)) throw new ControlError("group-budget-unavailable");
-    group.limit=limit;group.revision++;saveGroup(store,group);return getGroup(store,groupId);
+    group.limit=limit;group.revision++;saveGroup(store,group);store.db.prepare("INSERT INTO outbox VALUES (?, 'group-handoff', ?, 0) ON CONFLICT(id) DO NOTHING").run(`group-handoff:${groupId}:state:${group.revision}:${group.budgetVersion}`,JSON.stringify({groupId,revision:group.revision,budgetVersion:group.budgetVersion}));return getGroup(store,groupId);
   });
 }

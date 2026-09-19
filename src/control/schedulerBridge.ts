@@ -73,7 +73,7 @@ export async function disposeControlled(service:ControlService,run:TaskRun,optio
  if(record.state!=="settled") {
   const archive=await archiveReport(service,run.runId,report),raw=report.candidate;
   const missing=[...archive.missing,...(raw?.missing??[]),...(!raw?["candidate-missing"]:[])];
-  const handoff=raw?.handoff??await writeArtifact(store,"handoff-"+run.runId,Buffer.from(JSON.stringify({unfinished:[],pendingDecisions:[],awaitingHuman:[]})));
+  const handoff=raw?.handoff??await writeArtifact(store,"handoff-"+run.runId,Buffer.from(JSON.stringify({protocol:1,identity:identity(record),request:null,runState:{status:report.terminal.outcome},completed:[],unfinished:[],pendingDecisions:[],awaitingHuman:[],validationCommands:[],rawLogs:[],usageHighWater:record.highWater,unresolvedRequestIds:["terminal-evidence"],artifacts:[]})));
   const candidate:Candidate={...identity(record),checkpointId:"settle-"+run.runId,usageHighWater:raw?.usageHighWater??record.highWater,
    result:missing.length===0 && raw?.result==="complete"?"complete":"partial",
    artifacts:[...archive.artifacts,...(raw?.artifacts??[]),handoff],snapshot:archive.snapshot,missing,

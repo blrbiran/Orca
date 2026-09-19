@@ -35,7 +35,7 @@ export function recordUsage(store:ControlStore,event:UsageEvent):{applied:boolea
       }
       run.highWater=next.eventSeq;
     }
-    group.budgetVersion++;saveGroup(store,group);saveRun(store,run);
+    group.budgetVersion++;saveGroup(store,group);saveRun(store,run);store.db.prepare("INSERT INTO outbox VALUES (?, 'group-handoff', ?, 0) ON CONFLICT(id) DO NOTHING").run(`group-handoff:${group.groupId}:budget:${group.revision}:${group.budgetVersion}`,JSON.stringify({groupId:group.groupId,revision:group.revision,budgetVersion:group.budgetVersion}));
     return {applied:true,highWater:run.highWater};
   });
 }

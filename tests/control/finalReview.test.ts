@@ -19,12 +19,13 @@ import { collectControlled,makeControlledExecution,disposeControlled } from "../
 import { landIntoW } from "../../src/scheduler/land.js";
 import { acquireRepoLock } from "../../src/scheduler/repoLock.js";
 import type { ExecutionPort } from "../../src/control/executionPort.js";
+import { createHash } from "node:crypto";
 function latch(){let release!:()=>void;const promise=new Promise<void>(r=>{release=r;});return {promise,release};}
 describe("final review regressions",{timeout:30000},()=>{
  it("retains reserve until the producer final usage watermark arrives",async()=>{
   const h=await crashCase("after-accept");try{
    const peer=roundPeer(join(h.root,"peer"));let tail=false;
-   const port:ExecutionPort={...peer,collect:async(...args)=>{const r=await peer.collect(...args);return {...r,events:tail?[...r.events,{...r.events[0],eventSeq:3,cumulative:amount(2,2,1,1)}]:r.events,candidate:{...r.candidate!,usageHighWater:3}};}};
+   const port:ExecutionPort={...peer,collect:async(...args)=>{const r=await peer.collect(...args);let handoff=r.candidate!.handoff;if(tail){const packet=JSON.parse((await peer.readEvidence(handoff)).toString());packet.usageHighWater=3;const bytes=Buffer.from(JSON.stringify(packet)),artifactId=r.candidate!.runId+"-handoff-tail";await writeFile(join(h.root,"peer",artifactId),bytes);handoff={artifactId,hash:createHash("sha256").update(bytes).digest("hex")};}return {...r,events:tail?[...r.events,{...r.events[0],eventSeq:3,cumulative:amount(2,2,1,1)}]:r.events,candidate:{...r.candidate!,usageHighWater:3,handoff}};}};
    for(let i=0;i<2;i++){expect((await recoverControl(h.store,port)).blockedRunIds).toContain(h.info.runId);expect(readRun(h.store,h.info.runId).state).not.toBe("settled");expect(readRun(h.store,h.info.runId).remaining.work.tokens).toBeGreaterThan(0);}
    tail=true;expect((await recoverControl(h.store,port)).blockedRunIds).toEqual([]);expect(readRun(h.store,h.info.runId).highWater).toBe(3);expect(getGroup(h.store,"g1").used.tokens).toBe(2);
    await recoverControl(h.store,port);expect(getGroup(h.store,"g1").used.tokens).toBe(2);
@@ -35,7 +36,7 @@ describe("final review regressions",{timeout:30000},()=>{
    const source=await writeArtifact(h.store,"explicit-zero",Buffer.from(JSON.stringify(amount(0,0,0,0))));let seq=0;
    for(const bucket of ["work","handoff"] as const)if(observed==="both"||observed===bucket)recordUsage(h.store,{runId:h.claim.runId,generation:1,eventSeq:++seq,bucket,cumulative:amount(0,0,0,0),source});
    const proofSource=await writeArtifact(h.store,"stop-proof",Buffer.from(JSON.stringify({executionId:"execution-1",generation:1,isolated:true})));const stopProof={...h.stopProof,source:proofSource};
-   const handoff=await writeArtifact(h.store,"handoff-observations",Buffer.from(JSON.stringify({unfinished:[],pendingDecisions:[],awaitingHuman:[]})));
+   const handoff=await writeArtifact(h.store,"handoff-observations",Buffer.from(JSON.stringify({protocol:1,identity:{groupId:h.claim.groupId,workItemId:h.claim.workItemId,taskId:h.claim.taskId,runId:h.claim.runId,generation:h.claim.generation,graphVersion:h.claim.graphVersion,targetVersion:h.claim.targetVersion},request:null,runState:{status:"succeeded"},completed:[],unfinished:[],pendingDecisions:[],awaitingHuman:[],validationCommands:[],rawLogs:[],usageHighWater:seq,unresolvedRequestIds:[],artifacts:[]})));
    const a=await archiveRun(h.store,{runId:h.claim.runId,sourceDir:h.sourceDir,repoDir:h.repoDir,stopProof});
    const reserved=getGroup(h.store,"g1").reserved;
    const {commandId:_commandId,configHash:_configHash,grant:_grant,ownerToken:_ownerToken,...candidateIdentity}=h.claim;

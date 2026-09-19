@@ -26,9 +26,9 @@ describe("immutable continuation bundle", { timeout: 30_000 }, () => {
         checkpointId: committed.checkpointId,
         checkpointHash: committed.hash,
         snapshot: h.candidate.snapshot,
-        unfinished: [],
-        pendingDecisions: [],
-        awaitingHuman: [],
+        unfinished: ["follow-up"],
+        pendingDecisions: ["choose"],
+        awaitingHuman: ["approve"],
       });
       expect(manifest.artifacts.length).toBeGreaterThan(h.candidate.artifacts.length);
       for (const relative of ["resume-bundle.json", ...manifest.artifacts.map((entry: { file: string }) => entry.file)]) {

@@ -77,6 +77,12 @@ export async function commitCandidate(store:ControlStore,c:Candidate,deps:Commit
   store.db.prepare("UPDATE work_items SET body=? WHERE group_id=? AND id=?").run(JSON.stringify(work),c.groupId,c.workItemId);
   const group=readGroup(store,c.groupId);group.status="review";saveGroup(store,group);
   store.db.prepare("INSERT INTO outbox VALUES (?, 'projection', ?, 0)").run("projection:"+c.checkpointId,JSON.stringify({runId:c.runId,...reference}));
+  const taskCheckpointRefs=[] as Array<{taskId:string;checkpointId:string;checkpointHash:string}>;const seen=new Set<string>();
+  for(const row of store.db.prepare("SELECT body FROM runs WHERE group_id=? ORDER BY rowid DESC").all(c.groupId)){const value=JSON.parse(String(row.body));if(!value.taskId||!value.checkpointId||seen.has(value.taskId))continue;seen.add(value.taskId);const checkpoint=store.db.prepare("SELECT hash FROM checkpoints WHERE id=? AND run_id=?").get(value.checkpointId,value.runId);if(checkpoint)taskCheckpointRefs.push({taskId:value.taskId,checkpointId:value.checkpointId,checkpointHash:String(checkpoint.hash)});}
+  taskCheckpointRefs.sort((a,b)=>a.taskId.localeCompare(b.taskId));
+  if(c.taskId)store.db.prepare("INSERT INTO outbox VALUES (?, 'task-handoff', ?, 0)").run(`task-handoff:${c.groupId}:${c.taskId}:${c.checkpointId}`,JSON.stringify({groupId:c.groupId,taskId:c.taskId,runId:c.runId,checkpointId:c.checkpointId,checkpointHash:reference.hash}));
+  const groupCheckpointId=hashPayload({groupId:c.groupId,revision:group.revision,budgetVersion:group.budgetVersion,taskCheckpointRefs});
+  store.db.prepare("INSERT INTO outbox VALUES (?, 'group-handoff', ?, 0) ON CONFLICT(id) DO NOTHING").run(`group-handoff:${c.groupId}:${groupCheckpointId}`,JSON.stringify({groupId:c.groupId,groupCheckpointId,revision:group.revision,budgetVersion:group.budgetVersion,taskCheckpointRefs}));
   return reference;
  });
  await deps.afterTransaction?.();return result;
