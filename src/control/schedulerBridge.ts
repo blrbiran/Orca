@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readFile, realpath } from "node:fs/promises";
+import { lstat, readFile, realpath } from "node:fs/promises";
 import { join } from "node:path";
 import type { Round, RoundExecution } from "../scheduler/run.js";
 import type { TaskRun, DisposeOptions } from "../scheduler/ccloopRunner.js";
@@ -50,8 +50,10 @@ export async function collectControlled(service:ControlService,runId:string):Pro
  if(report.terminal) {
   const t=report.terminal,work=envelope.work;
   if(!work || !TERMINAL_OUTCOMES.includes(t.outcome) || t.sourceDir!==work.sourceDir || t.repoDir!==join(work.sourceDir,"repo")) throw new ControlError("report-path-conflict");
-  privateDirectory(t.sourceDir);privateDirectory(t.repoDir);
-  if(await realpath(t.sourceDir)!==t.sourceDir || await realpath(t.repoDir)!==t.repoDir) throw new ControlError("report-path-conflict");
+  for(const path of [t.sourceDir,t.repoDir]) {
+   const stat=await lstat(path);
+   if(stat.isSymbolicLink()||!stat.isDirectory()||await realpath(path)!==path) throw new ControlError("report-path-conflict");
+  }
   if(t.attemptSha!==null && !/^[0-9a-f]{40,64}$/.test(t.attemptSha)) throw new ControlError("report-commit-invalid");
   const bytes=Buffer.from(JSON.stringify(report)),source=await writeArtifact(store,"report-"+runId+"-"+hashPayload(report),bytes);
   store.transaction(()=>store.db.prepare("INSERT INTO outbox VALUES (?, 'report', ?, 0) ON CONFLICT(id) DO UPDATE SET body=excluded.body").run("report:"+runId,JSON.stringify({source})));

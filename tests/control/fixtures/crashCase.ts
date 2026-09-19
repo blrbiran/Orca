@@ -6,10 +6,10 @@ import { openControlStore } from "../../../src/control/store.js";
 import { roundPeer } from "./roundPeer.js";
 import { getGroup } from "../../../src/control/queries.js";
 import { git } from "./archive.js";
-export async function crashCase(point:string) {
+export async function crashCase(point:string,worker="crash-worker.mjs") {
  const root=await mkdtemp(join(tmpdir(),"orca-crash-matrix-"));
  const canonical=await (await import("node:fs/promises")).realpath(root);
- const child=spawn(process.execPath,["--import","tsx",resolve("tests/control/fixtures/crash-worker.mjs"),canonical,point],{stdio:["ignore","pipe","pipe"]});
+ const child=spawn(process.execPath,["--import","tsx",resolve("tests/control/fixtures",worker),canonical,point],{stdio:["ignore","pipe","pipe"]});
  let output="",resolveMarker:()=>void=()=>{},rejectMarker:(error:Error)=>void=()=>{};
  const marker=new Promise<void>((resolve,reject)=>{resolveMarker=resolve;rejectMarker=reject;});
  const done=new Promise<{code:number|null;signal:NodeJS.Signals|null}>(resolve=>child.once("exit",(code,signal)=>{resolve({code,signal});rejectMarker(new Error(`worker exited before marker: ${code}/${signal}\n${output}`));}));

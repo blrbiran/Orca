@@ -2,7 +2,7 @@
 import { createHash } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 
-const [method, adapterFlag, adapter, configFlag, configPath] = process.argv.slice(2);
+const [control, method, adapterFlag, adapter, configFlag, configPath] = process.argv.slice(2);
 const config = JSON.parse(await readFile(configPath, "utf8"));
 let stdin = "";
 for await (const chunk of process.stdin) stdin += chunk;
@@ -21,5 +21,5 @@ else if (method === "read-evidence") {
   const bytes = Buffer.from(config.evidence ?? "evidence");
   value = { artifactId:payload.ref.artifactId,hash:config.badHash ? "0".repeat(64) : createHash("sha256").update(bytes).digest("hex"),base64:bytes.toString("base64") };
 }
-else throw new Error(`unexpected method ${method} ${adapterFlag} ${adapter} ${configFlag}`);
+else throw new Error(`unexpected method ${control} ${method} ${adapterFlag} ${adapter} ${configFlag}`);
 process.stdout.write(`${JSON.stringify(value)}\n`);
