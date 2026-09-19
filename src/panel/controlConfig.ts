@@ -1,4 +1,4 @@
-import { lstatSync, realpathSync } from "node:fs";
+import { fstatSync, lstatSync, realpathSync } from "node:fs";
 import { isAbsolute, parse, relative, resolve, sep } from "node:path";
 import { z } from "zod";
 import { durableCommandErrorStatuses } from "../control/errors.js";
@@ -6,6 +6,7 @@ import { ControlError } from "../control/errors.js";
 import type { ExecutionProfileRouter } from "../control/profiles.js";
 import { controlConfigSchema, type ControlConfigV1 } from "../control/webProtocol.js";
 import { idSchema, safeInteger } from "../control/schema.js";
+import type { TrustedSchedulerPlanTarget } from "../scheduler/planFile.js";
 
 export interface TrustedRepositoryConfig {
   repoId: string;
@@ -36,7 +37,7 @@ export interface TrustedControlConfigInput {
 }
 
 export interface TrustedControlConfig {
-  resolveTarget(input: unknown): { repositoryPath: string; planPath: string };
+  resolveTarget(input: unknown): TrustedSchedulerPlanTarget;
   readView(): Promise<ControlConfigV1>;
   readonly shutdownGraceMs: number;
 }
@@ -98,6 +99,14 @@ function revalidatePath(witness: PathWitness): string {
   return current.canonicalPath;
 }
 
+function validateOpenFile(witness: PathWitness, fd: number): void {
+  const expected = witness.components.at(-1);
+  const opened = fstatSync(fd, { bigint: true });
+  if (!expected || !opened.isFile() || String(opened.dev) !== expected.dev || String(opened.ino) !== expected.ino) {
+    throw new ControlError("control-path-changed");
+  }
+}
+
 function unique<T>(values: readonly T[], key: (value: T) => string): boolean {
   return new Set(values.map(key)).size === values.length;
 }
@@ -144,15 +153,25 @@ export function createTrustedControlConfig(
   return Object.freeze({
     shutdownGraceMs: input.shutdownGraceMs,
     resolveTarget(raw: unknown) {
-      const target = targetSchema.safeParse(raw);
-      if (!target.success) throw new ControlError("control-target-not-allowed");
-      const repository = repositories.get(target.data.repoId);
-      const plan = plans.get(target.data.planId);
+      const parsedTarget = targetSchema.safeParse(raw);
+      if (!parsedTarget.success) throw new ControlError("control-target-not-allowed");
+      const repository = repositories.get(parsedTarget.data.repoId);
+      const plan = plans.get(parsedTarget.data.planId);
       if (!repository || !plan || plan.repoId !== repository.repoId) throw new ControlError("control-target-not-allowed");
       const repositoryPath = revalidatePath(repository.witness);
       const planPath = revalidatePath(plan.witness);
       if (!isDescendant(repositoryPath, planPath)) throw new ControlError("control-path-escape");
-      return { repositoryPath, planPath };
+      const resolvedTarget = { repositoryPath, planPath } as TrustedSchedulerPlanTarget;
+      Object.defineProperty(resolvedTarget, "validatePlanDescriptor", {
+        enumerable: false,
+        value(fd: number) {
+          const currentRepositoryPath = revalidatePath(repository.witness);
+          const currentPlanPath = revalidatePath(plan.witness);
+          if (!isDescendant(currentRepositoryPath, currentPlanPath)) throw new ControlError("control-path-escape");
+          validateOpenFile(plan.witness, fd);
+        },
+      });
+      return Object.freeze(resolvedTarget);
     },
     async readView(): Promise<ControlConfigV1> {
       const observations = await Promise.all(profiles.map((profile) => router.probe(profile)));

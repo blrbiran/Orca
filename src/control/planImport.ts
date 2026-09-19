@@ -1,5 +1,5 @@
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
-import { applyWebCommand, type WebCommandContext } from "./commandLedger.js";
+import { applyWebCommand, lookupWebCommandReplay, type WebCommandContext } from "./commandLedger.js";
 import { dimensions, zero } from "./commands.js";
 import { ControlError } from "./errors.js";
 import type { ExecutionProfileRouter, FrozenProfile, ObservedProfile } from "./profiles.js";
@@ -37,6 +37,8 @@ export interface ImportDeps {
   exactTokenCount?: (profile: FrozenProfile, canonicalRequestBytes: Buffer) => number;
   beforeCommit?: () => void;
 }
+
+export type AsyncImportDeps = Omit<ImportDeps, "estimatorObservation">;
 
 const TASK_WORK: Amount = Object.freeze({ tokens: 3_000_000, activeMs: 14_400_000, attempts: 3, sessions: 3 });
 const TASK_HANDOFF: Amount = Object.freeze({ tokens: 300_000, activeMs: 1_800_000, attempts: 0, sessions: 0 });
@@ -214,7 +216,7 @@ export function importControlPlan(deps: ImportDeps, command: ImportCommand): Imp
     apply: context => {
       const payload = context.effectiveCommand.payload as ImportDefaults & { groupId: string; repoId: string; planId: string };
       const target = deps.trustedConfig.resolveTarget({ repoId: payload.repoId, planId: payload.planId });
-      const source = readSchedulerControlPlanSource(target.planPath, target.repositoryPath);
+      const source = readSchedulerControlPlanSource(target);
       const plan = normalizeControlPlan({ ...source, repoId: payload.repoId, planId: payload.planId });
       const planCanonicalJson = canonicalBytes(plan).toString("utf8");
       const planHash = sha256Canonical(plan);
@@ -267,7 +269,7 @@ export function importControlPlan(deps: ImportDeps, command: ImportCommand): Imp
         allocations, budgetMode: null, contextPolicy: { handoffAtContextTokens: null }, profiles: null, executionSnapshotHash: null,
       };
       deps.store.db.prepare("INSERT INTO budget_proposals(group_id,proposal_version,body) VALUES (?,?,?)")
-        .run(payload.groupId, 1, JSON.stringify(proposal));
+        .run(payload.groupId, 1, canonicalBytes(proposal).toString("utf8"));
       const estimate = {
         estimateId, estimateVersion: 1, state: preflight.state,
         profile: { profileId: payload.estimatorProfileId, profileHash: payload.estimatorProfileHash }, mode: payload.estimateMode,
@@ -275,7 +277,7 @@ export function importControlPlan(deps: ImportDeps, command: ImportCommand): Imp
         grant: cloneAmount(ESTIMATE_GRANT),
       };
       deps.store.db.prepare("INSERT INTO estimates(group_id,id,estimate_version,state,body) VALUES (?,?,?,?,?)")
-        .run(payload.groupId, estimateId, 1, preflight.state, JSON.stringify(estimate));
+        .run(payload.groupId, estimateId, 1, preflight.state, canonicalBytes(estimate).toString("utf8"));
       if (preflight.state === "queued") {
         const wakeId = `scheduler-wake:${payload.groupId}:estimate:${estimateId}`;
         deps.store.db.prepare("INSERT INTO scheduler_wakes(id,group_id,kind,body,delivered) VALUES (?,?, 'budget-estimate', ?, 0)")
@@ -286,4 +288,32 @@ export function importControlPlan(deps: ImportDeps, command: ImportCommand): Imp
     },
   });
   return outcome.body;
+}
+
+/**
+ * Production orchestration for import's asynchronous capability probe. Durable
+ * identity replay happens first; applyWebCommand rechecks after the await so a
+ * concurrent same-ID commit wins without duplicate effects.
+ */
+export async function importControlPlanAsync(deps: AsyncImportDeps, command: ImportCommand): Promise<ImportResult> {
+  const replay = lookupWebCommandReplay<CommandSuccessV1>(deps.store, command);
+  if (replay) return replay.body;
+
+  const raw = command.payload;
+  const currentDefaults = deps.defaults();
+  const frozenDefaults: ImportDefaults = {
+    estimatorProfileId: raw.estimatorProfileId ?? currentDefaults.estimatorProfileId,
+    estimatorProfileHash: raw.estimatorProfileHash ?? currentDefaults.estimatorProfileHash,
+    estimateMode: raw.estimateMode ?? currentDefaults.estimateMode,
+  };
+  const profile = deps.profileRouter.resolve("budget-estimate", frozenDefaults.estimatorProfileId, frozenDefaults.estimatorProfileHash);
+  const observation = await deps.profileRouter.probe(profile);
+  return importControlPlan({
+    ...deps,
+    defaults: () => frozenDefaults,
+    estimatorObservation: selected => {
+      if (selected !== profile) throw new ControlError("profile-changed");
+      return observation;
+    },
+  }, command);
 }

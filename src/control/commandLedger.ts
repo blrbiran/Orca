@@ -65,6 +65,23 @@ function replay(row: CommandRow): StoredCommandOutcome<CommandBody> {
   return validatedOutcome(row.original_status, parsedBody(row.body_json));
 }
 
+/**
+ * Read-only first step for commands that must perform asynchronous preparation.
+ * A matching durable result is returned before callers touch dynamic defaults or
+ * external capability I/O. A miss is only advisory: applyWebCommand must still
+ * perform its transactional identity/CAS check after preparation.
+ */
+export function lookupWebCommandReplay<T>(store: ControlStore, input: RawAuthorityCommandV1): StoredCommandOutcome<T> | null {
+  const rawCommand = rawAuthorityCommandSchema.parse(input) as RawAuthorityCommandV1;
+  const commandScope = scope(rawCommand);
+  const rawRequestHash = sha256Canonical(rawCommand);
+  const prior = store.db.prepare("SELECT raw_request_hash,original_status,body_json FROM commands WHERE group_id=? AND id=?")
+    .get(commandScope.key, rawCommand.commandId) as CommandRow | undefined;
+  if (!prior) return null;
+  if (prior.raw_request_hash !== rawRequestHash) throw new ControlError("command-id-conflict");
+  return replay(prior) as StoredCommandOutcome<T>;
+}
+
 function identityWithoutPayload(command: RawAuthorityCommandV1 | EffectiveAuthorityCommandV1): unknown {
   return { commandId: command.commandId, expectedRevision: command.expectedRevision, actorId: command.actorId, verb: command.verb, target: command.target };
 }

@@ -1,16 +1,17 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createExecutionProfileRouter, resolveProfile } from "../../src/control/profiles.js";
-import { importControlPlan, type ImportCommand } from "../../src/control/planImport.js";
+import { importControlPlan, importControlPlanAsync, type ImportCommand } from "../../src/control/planImport.js";
 import { readArchivedContract, readArchivedPlan, readBudgetProposal, readEstimateRecord } from "../../src/control/queries.js";
 import { createTrustedControlConfig } from "../../src/panel/controlConfig.js";
 import type { ExecutionPort } from "../../src/control/executionPort.js";
 import type { ExecutionProfileSnapshotV1 } from "../../src/control/webProtocol.js";
 import { openTestStore } from "./fixtures/store.js";
 import { openControlStore } from "../../src/control/store.js";
+import { canonicalBytes } from "../../src/control/canonicalJson.js";
 
 const hash = (letter: string) => letter.repeat(64);
 const contract = (taskId: string, tokenBudget = 100) => ({
@@ -98,7 +99,7 @@ describe("immutable plan import", () => {
       expect(archived.plan.tasks.map(task => task.taskId)).toEqual(["a", "b"]);
       expect(archived.plan.tasks[1].dependencyTaskIds).toEqual(["a"]);
       for (const task of archived.plan.tasks) {
-        const retained = readArchivedContract(h.store, task.originalContractHash);
+        const retained = readArchivedContract(h.store, "g", task.taskId);
         expect(retained.contractHash).toBe(task.originalContractHash);
         expect(retained.canonicalJson).toBe(task.originalContractCanonicalJson);
       }
@@ -120,6 +121,54 @@ describe("immutable plan import", () => {
       h.setDefaults({ estimatorProfileId: "removed", estimatorProfileHash: hash("9"), estimateMode: "strict" });
       expect(importControlPlan(h.deps, command())).toEqual(first);
       expect(h.store.db.prepare("SELECT count(*) AS n FROM estimates WHERE group_id='g'").get()?.n).toBe(1);
+    } finally { await h.dispose(); }
+  });
+
+  it("replays asynchronously before capability I/O and cannot hang on a lost-response retry", async () => {
+    const h = await setup();
+    try {
+      const first = importControlPlan(h.deps, command());
+      const probe = vi.fn(() => new Promise<never>(() => {}));
+      const result = await importControlPlanAsync({ ...h.deps, profileRouter: { ...h.router, probe } }, command());
+      expect(result).toEqual(first);
+      expect(probe).not.toHaveBeenCalled();
+    } finally { await h.dispose(); }
+  });
+
+  it("returns a same-id raw conflict before capability I/O", async () => {
+    const h = await setup();
+    try {
+      importControlPlan(h.deps, command());
+      const probe = vi.fn(() => new Promise<never>(() => {}));
+      await expect(importControlPlanAsync(
+        { ...h.deps, profileRouter: { ...h.router, probe } },
+        { ...command(), actorId: "different" },
+      )).rejects.toThrow("command-id-conflict");
+      expect(probe).not.toHaveBeenCalled();
+    } finally { await h.dispose(); }
+  });
+
+  it("rechecks command identity after an in-flight probe and creates no duplicate effects", async () => {
+    const h = await setup();
+    try {
+      let release!: (value: ReturnType<typeof h.deps.estimatorObservation> & { observedAt: string }) => void;
+      const probe = vi.fn(() => new Promise<ReturnType<typeof h.deps.estimatorObservation> & { observedAt: string }>(resolve => { release = resolve; }));
+      const pending = importControlPlanAsync({ ...h.deps, profileRouter: { ...h.router, probe } }, command());
+      expect(probe).toHaveBeenCalledTimes(1);
+      const committed = importControlPlan(h.deps, command());
+      release({ ...h.deps.estimatorObservation(h.frozen), observedAt: new Date(0).toISOString() });
+      await expect(pending).resolves.toEqual(committed);
+      expect(h.store.db.prepare("SELECT count(*) AS n FROM estimates WHERE group_id='g'").get()?.n).toBe(1);
+      expect(h.store.db.prepare("SELECT count(*) AS n FROM commands WHERE group_id='g'").get()?.n).toBe(1);
+    } finally { await h.dispose(); }
+  });
+
+  it("turns a real probe failure into a terminal import without optimistic capability", async () => {
+    const h = await setup();
+    try {
+      const result = await importControlPlanAsync(h.deps, command());
+      expect(result).toMatchObject({ result: { kind: "imported", estimateState: "blocked-capability" } });
+      expect(h.store.db.prepare("SELECT id FROM scheduler_wakes WHERE group_id='g'").get()).toBeUndefined();
     } finally { await h.dispose(); }
   });
 
@@ -178,6 +227,20 @@ describe("immutable plan import", () => {
     } finally { await h.dispose(); }
   });
 
+  it("rejects a plan inode swap between trusted resolution and descriptor validation", async () => {
+    const h = await setup();
+    try {
+      const resolved = h.trustedConfig.resolveTarget({ repoId: "repo", planId: "plan" });
+      await rename(h.planPath, `${h.planPath}.old`);
+      await writeFile(h.planPath, JSON.stringify(h.plan));
+      const deps = { ...h.deps, trustedConfig: { resolveTarget: () => resolved } };
+      expect(() => importControlPlan(deps, command())).toThrow("control-path-changed");
+      for (const table of ["groups", "work_items", "budget_proposals", "estimates", "execution_snapshots", "scheduler_wakes", "commands"]) {
+        expect(h.store.db.prepare(`SELECT count(*) AS n FROM ${table}`).get()?.n).toBe(0);
+      }
+    } finally { await h.dispose(); }
+  });
+
   it.each(["before-commit", "after-commit"] as const)("is absent or fully replayable after real SIGKILL %s", async point => {
     const h = await setup();
     const config = {
@@ -198,7 +261,7 @@ describe("immutable plan import", () => {
       const frozen = { snapshot: c.profile, profileHash: c.profileHash, port: {} };
       const router = { resolve(kind,id,hash) { if (kind !== "budget-estimate" || id !== "estimator" || hash !== c.profileHash) throw new Error("profile"); return frozen; }, list() { return [frozen]; }, async probe() { throw new Error("unused"); } };
       const stop = label => { writeSync(1, label + "\\n"); Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0); };
-      const deps = { store, profileRouter: router, trustedConfig: { resolveTarget() { return { repositoryPath: c.repositoryPath, planPath: c.planPath }; } }, defaults: () => ({ estimatorProfileId: "estimator", estimatorProfileHash: c.profileHash, estimateMode: "strict" }), estimatorObservation: selected => ({ profile: selected, observed: selected.snapshot.profile.capabilities, probeFailureCode: null }), ...(c.point === "before-commit" ? { beforeCommit: () => stop("BEFORE_COMMIT") } : {}) };
+      const deps = { store, profileRouter: router, trustedConfig: { resolveTarget() { return { repositoryPath: c.repositoryPath, planPath: c.planPath, validatePlanDescriptor() {} }; } }, defaults: () => ({ estimatorProfileId: "estimator", estimatorProfileHash: c.profileHash, estimateMode: "strict" }), estimatorObservation: selected => ({ profile: selected, observed: selected.snapshot.profile.capabilities, probeFailureCode: null }), ...(c.point === "before-commit" ? { beforeCommit: () => stop("BEFORE_COMMIT") } : {}) };
       importControlPlan(deps, c.command);
       stop("AFTER_COMMIT");
     `;
@@ -242,13 +305,56 @@ describe("immutable plan import", () => {
       const archived = readArchivedPlan(h.store, "g");
       const contractHash = archived.plan.tasks[0].originalContractHash;
       h.store.db.prepare("UPDATE execution_snapshots SET body='{}' WHERE hash=?").run(contractHash);
-      expect(() => readArchivedContract(h.store, contractHash)).toThrow("recovery-blocked");
+      expect(() => readArchivedContract(h.store, "g", archived.plan.tasks[0].taskId)).toThrow("recovery-blocked");
       h.store.db.prepare("DELETE FROM execution_snapshots WHERE hash=?").run(contractHash);
-      expect(() => readArchivedContract(h.store, contractHash)).toThrow("recovery-blocked");
+      expect(() => readArchivedContract(h.store, "g", archived.plan.tasks[0].taskId)).toThrow("recovery-blocked");
       h.store.db.prepare("UPDATE execution_snapshots SET body='{}' WHERE hash=?").run(archived.planHash);
       expect(() => readArchivedPlan(h.store, "g")).toThrow("recovery-blocked");
       h.store.db.prepare("DELETE FROM execution_snapshots WHERE hash=?").run(archived.planHash);
       expect(() => readArchivedPlan(h.store, "g")).toThrow("recovery-blocked");
+    } finally { await h.dispose(); }
+  });
+
+  it("fails closed on structurally valid but malformed proposal and estimate authority", async () => {
+    const h = await setup();
+    try {
+      const result = importControlPlan(h.deps, command());
+      if ("error" in result || result.result.kind !== "imported") throw new Error("expected import");
+      const estimateId = result.result.estimateId;
+      const proposalRow = h.store.db.prepare("SELECT body FROM budget_proposals WHERE group_id='g'").get()!;
+      const proposal = JSON.parse(String(proposalRow.body));
+      h.store.db.prepare("UPDATE budget_proposals SET body=? WHERE group_id='g'")
+        .run(canonicalBytes({ ...proposal, unexpected: true }).toString("utf8"));
+      expect(() => readBudgetProposal(h.store, "g")).toThrow("recovery-blocked");
+      h.store.db.prepare("UPDATE budget_proposals SET body=? WHERE group_id='g'")
+        .run(canonicalBytes({ ...proposal, planHash: hash("8") }).toString("utf8"));
+      expect(() => readBudgetProposal(h.store, "g")).toThrow("recovery-blocked");
+
+      const estimateRow = h.store.db.prepare("SELECT body FROM estimates WHERE group_id='g' AND id=?").get(estimateId)!;
+      const estimate = JSON.parse(String(estimateRow.body));
+      h.store.db.prepare("UPDATE estimates SET body=? WHERE group_id='g' AND id=?")
+        .run(canonicalBytes({ ...estimate, estimateId: "wrong" }).toString("utf8"), estimateId);
+      expect(() => readEstimateRecord(h.store, "g", estimateId)).toThrow("recovery-blocked");
+    } finally { await h.dispose(); }
+  });
+
+  it("fails closed on noncanonical proposal bytes and an estimate request hash mismatch", async () => {
+    const h = await setup();
+    try {
+      const result = importControlPlan(h.deps, command());
+      if ("error" in result || result.result.kind !== "imported") throw new Error("expected import");
+      const estimateId = result.result.estimateId;
+      const proposal = readBudgetProposal(h.store, "g");
+      const reversed = Object.fromEntries(Object.entries(proposal).reverse());
+      h.store.db.prepare("UPDATE budget_proposals SET body=? WHERE group_id='g'").run(JSON.stringify(reversed));
+      expect(() => readBudgetProposal(h.store, "g")).toThrow("recovery-blocked");
+
+      const estimateRow = h.store.db.prepare("SELECT body FROM estimates WHERE group_id='g' AND id=?").get(estimateId)!;
+      const estimate = JSON.parse(String(estimateRow.body));
+      estimate.requestHash = hash("9");
+      h.store.db.prepare("UPDATE estimates SET body=? WHERE group_id='g' AND id=?")
+        .run(JSON.stringify(estimate), estimateId);
+      expect(() => readEstimateRecord(h.store, "g", estimateId)).toThrow("recovery-blocked");
     } finally { await h.dispose(); }
   });
 

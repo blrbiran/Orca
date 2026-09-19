@@ -1,20 +1,41 @@
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { ControlError } from "./errors.js";
-import { amountSchema } from "./schema.js";
-import { executionSnapshotSchema, type ExecutionSnapshotV1, type ProfileBindingV1 } from "./webProtocol.js";
+import { amountSchema, idSchema } from "./schema.js";
+import {
+  controlPlanSchema,
+  executionSnapshotSchema,
+  amountProvenanceSchema,
+  type AmountProvenanceV1,
+  type ControlPlanV1,
+  type ExecutionSnapshotV1,
+  type ProfileBindingV1,
+} from "./webProtocol.js";
 import type { Amount } from "./types.js";
 import { taskContractSchema } from "../scheduler/planFile.js";
+import { readArchivedPlan, readBudgetProposal } from "./queries.js";
+import type { ControlStore } from "./store.js";
+
+type ExecutionAllocation = ExecutionSnapshotV1["allocations"][number];
+export interface EstimateAllocation {
+  ownerKind: "estimate";
+  ownerId: string;
+  bucket: "work";
+  amount: Amount;
+  fieldProvenance: AmountProvenanceV1;
+}
 
 export interface ConfirmedProposal {
+  store: ControlStore;
   groupId: string;
   planHash: string;
   graphVersion: number;
   proposalVersion: number;
+  proposalIdentity: { groupId: string; planHash: string; proposalVersion: number };
   groupLimit: Amount;
   budgetMode: "strict" | "soft";
   contextPolicy: { handoffAtContextTokens: number | null };
   profiles: { estimator: ProfileBindingV1; worker: ProfileBindingV1; handoff: ProfileBindingV1; goalReview: ProfileBindingV1 };
-  allocations: ExecutionSnapshotV1["allocations"];
+  allocations: Array<ExecutionAllocation | EstimateAllocation>;
   tasks: Array<{
     taskId: string;
     originalContractHash: string;
@@ -37,6 +58,85 @@ function compare(left: string, right: string): number {
 
 function positiveInteger(value: unknown): value is number {
   return Number.isSafeInteger(value) && Number(value) > 0;
+}
+
+function verifyPlanAuthority(input: ConfirmedProposal): ControlPlanV1 {
+  if (input.proposalIdentity.groupId !== input.groupId) throw new ControlError("execution-identity-conflict");
+  const archivedPlan = readArchivedPlan(input.store, input.groupId);
+  const proposal = readBudgetProposal(input.store, input.groupId);
+  if (archivedPlan.graphVersion !== input.graphVersion) throw new ControlError("graph-version-conflict");
+  if (archivedPlan.planHash !== input.planHash || input.proposalIdentity.planHash !== input.planHash || proposal.planHash !== input.planHash) {
+    throw new ControlError("plan-version-conflict");
+  }
+  if (input.proposalIdentity.proposalVersion !== input.proposalVersion || proposal.proposalVersion !== input.proposalVersion
+    || canonicalBytes(proposal.groupLimit).compare(canonicalBytes(input.groupLimit)) !== 0) {
+    throw new ControlError("proposal-version-conflict");
+  }
+  const suppliedProposalAllocations = input.allocations.filter(allocation => allocation.ownerKind !== "estimate")
+    .map(allocation => ({ ownerKind: allocation.ownerKind, ownerId: allocation.ownerId, bucket: allocation.bucket,
+      amount: allocation.amount, fieldProvenance: allocation.fieldProvenance }))
+    .sort((left, right) => compare(`${left.ownerKind}\0${left.ownerId}\0${left.bucket}`, `${right.ownerKind}\0${right.ownerId}\0${right.bucket}`));
+  const archivedProposalAllocations = proposal.allocations.map(({ state: _state, ...allocation }) => allocation);
+  if (canonicalBytes(suppliedProposalAllocations).compare(canonicalBytes(archivedProposalAllocations)) !== 0) {
+    throw new ControlError("proposal-version-conflict");
+  }
+  try {
+    const plan = controlPlanSchema.parse(JSON.parse(archivedPlan.canonicalJson));
+    if (canonicalBytes(plan).toString("utf8") !== archivedPlan.canonicalJson
+      || sha256Canonical(plan) !== archivedPlan.planHash
+      || canonicalBytes(plan).compare(canonicalBytes(archivedPlan.plan)) !== 0) {
+      throw new ControlError("recovery-blocked");
+    }
+    return plan;
+  } catch (error) {
+    if (error instanceof ControlError) throw error;
+    throw new ControlError("recovery-blocked");
+  }
+}
+
+function verifyTaskSet(input: ConfirmedProposal, plan: ControlPlanV1): void {
+  const supplied = new Map<string, ConfirmedProposal["tasks"][number]>();
+  for (const task of input.tasks) {
+    if (supplied.has(task.taskId)) throw new ControlError("plan-version-conflict");
+    supplied.set(task.taskId, task);
+  }
+  if (supplied.size !== plan.tasks.length) throw new ControlError("plan-version-conflict");
+  for (const authority of plan.tasks) {
+    const task = supplied.get(authority.taskId);
+    if (!task || task.originalContractHash !== authority.originalContractHash
+      || task.originalContractCanonicalJson !== authority.originalContractCanonicalJson) {
+      throw new ControlError("plan-version-conflict");
+    }
+  }
+}
+
+function verifyConservation(input: ConfirmedProposal): ExecutionAllocation[] {
+  amountSchema.parse(input.groupLimit);
+  const total = { tokens: 0n, activeMs: 0n, attempts: 0n, sessions: 0n };
+  const seen = new Set<string>();
+  for (const allocation of input.allocations) {
+    amountSchema.parse(allocation.amount);
+    const key = `${allocation.ownerKind}\0${allocation.ownerId}\0${allocation.bucket}`;
+    if (seen.has(key)) throw new ControlError("execution-policy-unrepresentable");
+    seen.add(key);
+    if (allocation.ownerKind === "estimate") {
+      const provenance = amountProvenanceSchema.safeParse(allocation.fieldProvenance);
+      if (!idSchema.safeParse(allocation.ownerId).success || allocation.bucket !== "work" || !provenance.success
+        || Object.values(allocation.fieldProvenance).some(field => field.provenance !== "system" || field.estimateId !== null)) {
+        throw new ControlError("execution-policy-unrepresentable");
+      }
+    }
+    for (const dimension of ["tokens", "activeMs", "attempts", "sessions"] as const) {
+      total[dimension] += BigInt(allocation.amount[dimension]);
+      if (total[dimension] > BigInt(Number.MAX_SAFE_INTEGER)) throw new ControlError("numeric-overflow");
+    }
+  }
+  for (const dimension of ["tokens", "activeMs", "attempts", "sessions"] as const) {
+    if (total[dimension] > BigInt(input.groupLimit[dimension])) throw new ControlError("group-budget-unavailable");
+  }
+  return input.allocations
+    .filter((allocation): allocation is ExecutionAllocation => allocation.ownerKind !== "estimate")
+    .map(allocation => structuredClone(allocation));
 }
 
 function deriveContract(task: ConfirmedProposal["tasks"][number], proposalVersion: number): {
@@ -89,6 +189,8 @@ function deriveContract(task: ConfirmedProposal["tasks"][number], proposalVersio
 }
 
 export function prepareExecutionSnapshot(input: ConfirmedProposal): PreparedExecutionSnapshot {
+  const plan = verifyPlanAuthority(input);
+  verifyTaskSet(input, plan);
   const taskIds = new Set<string>();
   const derivedContracts = input.tasks.map(task => {
     if (taskIds.has(task.taskId)) throw new ControlError("duplicate-task-id");
@@ -97,7 +199,7 @@ export function prepareExecutionSnapshot(input: ConfirmedProposal): PreparedExec
     return { taskId: task.taskId, ...derived };
   }).sort((left, right) => compare(left.taskId, right.taskId));
 
-  const allocations = structuredClone(input.allocations).sort((left, right) => compare(
+  const allocations = verifyConservation(input).sort((left, right) => compare(
     `${left.ownerKind}\0${left.ownerId}\0${left.bucket}`,
     `${right.ownerKind}\0${right.ownerId}\0${right.bucket}`,
   ));

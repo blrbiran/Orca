@@ -40,6 +40,12 @@ export interface SchedulerControlPlanSource {
   }>;
 }
 
+export interface TrustedSchedulerPlanTarget {
+  repositoryPath: string;
+  planPath: string;
+  validatePlanDescriptor(fd: number): void;
+}
+
 export type PlanRejection = { code: string; message: string };
 
 /**
@@ -158,7 +164,7 @@ export const taskContractSchema = z.object({
   }).strict(),
 }).strict();
 
-function readRegularUtf8(path: string): string {
+function readRegularUtf8(path: string, validateDescriptor?: (fd: number) => void): string {
   let fd: number | undefined;
   try {
     const before = lstatSync(path, { bigint: true });
@@ -168,11 +174,13 @@ function readRegularUtf8(path: string): string {
     fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
     const opened = fstatSync(fd, { bigint: true });
     if (opened.dev !== before.dev || opened.ino !== before.ino) throw new ControlError("control-plan-rejected", "source-file-changed");
+    validateDescriptor?.(fd);
     const bytes = readFileSync(fd);
     const after = fstatSync(fd, { bigint: true });
     if (after.dev !== opened.dev || after.ino !== opened.ino || after.size !== opened.size || after.mtimeNs !== opened.mtimeNs) {
       throw new ControlError("control-plan-rejected", "source-file-changed");
     }
+    validateDescriptor?.(fd);
     try { return new TextDecoder("utf-8", { fatal: true }).decode(bytes); }
     catch { throw new ControlError("control-plan-rejected", "invalid-utf8"); }
   } catch (error) {
@@ -209,9 +217,10 @@ function parseContract(path: string, taskId: string): { value: unknown; canonica
  * The paths are consumed only here; callers archive the returned bytes and do
  * not retain a path as execution authority.
  */
-export function readSchedulerControlPlanSource(planPath: string, repositoryPath: string): SchedulerControlPlanSource {
+export function readSchedulerControlPlanSource(target: TrustedSchedulerPlanTarget): SchedulerControlPlanSource {
+  const { planPath, repositoryPath } = target;
   let raw: unknown;
-  try { raw = JSON.parse(readRegularUtf8(planPath)); }
+  try { raw = JSON.parse(readRegularUtf8(planPath, fd => target.validatePlanDescriptor(fd))); }
   catch (error) {
     if (error instanceof ControlError) throw error;
     return sourceRejected("plan-json");
