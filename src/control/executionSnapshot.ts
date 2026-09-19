@@ -12,7 +12,7 @@ import {
 } from "./webProtocol.js";
 import type { Amount } from "./types.js";
 import { taskContractSchema } from "../scheduler/planFile.js";
-import { readArchivedPlan, readBudgetProposal } from "./queries.js";
+import { readArchivedPlan, readBudgetProposal, readEstimateRecord } from "./queries.js";
 import type { ControlStore } from "./store.js";
 
 type ExecutionAllocation = ExecutionSnapshotV1["allocations"][number];
@@ -114,6 +114,7 @@ function verifyConservation(input: ConfirmedProposal): ExecutionAllocation[] {
   amountSchema.parse(input.groupLimit);
   const total = { tokens: 0n, activeMs: 0n, attempts: 0n, sessions: 0n };
   const seen = new Set<string>();
+  const suppliedEstimates = new Map<string, EstimateAllocation>();
   for (const allocation of input.allocations) {
     amountSchema.parse(allocation.amount);
     const key = `${allocation.ownerKind}\0${allocation.ownerId}\0${allocation.bucket}`;
@@ -125,10 +126,25 @@ function verifyConservation(input: ConfirmedProposal): ExecutionAllocation[] {
         || Object.values(allocation.fieldProvenance).some(field => field.provenance !== "system" || field.estimateId !== null)) {
         throw new ControlError("execution-policy-unrepresentable");
       }
+      suppliedEstimates.set(allocation.ownerId, allocation);
     }
     for (const dimension of ["tokens", "activeMs", "attempts", "sessions"] as const) {
       total[dimension] += BigInt(allocation.amount[dimension]);
       if (total[dimension] > BigInt(Number.MAX_SAFE_INTEGER)) throw new ControlError("numeric-overflow");
+    }
+  }
+  const estimateRows = input.store.db.prepare("SELECT id FROM estimates WHERE group_id=? ORDER BY id").all(input.groupId);
+  const committedEstimates = new Map<string, ReturnType<typeof readEstimateRecord>>();
+  for (const row of estimateRows) {
+    const estimateId = String(row.id);
+    const persisted = readEstimateRecord(input.store, input.groupId, estimateId);
+    if (["queued", "running", "start-unknown"].includes(persisted.state)) committedEstimates.set(estimateId, persisted);
+  }
+  if (committedEstimates.size !== suppliedEstimates.size) throw new ControlError("execution-policy-unrepresentable");
+  for (const [estimateId, persisted] of committedEstimates) {
+    const supplied = suppliedEstimates.get(estimateId);
+    if (!supplied || canonicalBytes(supplied.amount).compare(canonicalBytes(persisted.grant)) !== 0) {
+      throw new ControlError("execution-policy-unrepresentable");
     }
   }
   for (const dimension of ["tokens", "activeMs", "attempts", "sessions"] as const) {

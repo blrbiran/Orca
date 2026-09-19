@@ -290,6 +290,15 @@ export function importControlPlan(deps: ImportDeps, command: ImportCommand): Imp
   return outcome.body;
 }
 
+function persistAsyncPreparationFailure(store: ControlStore, command: ImportCommand, failure: unknown): ImportResult {
+  const outcome = applyWebCommand<CommandSuccessV1>(store, {
+    rawCommand: command,
+    expand: () => { throw failure; },
+    apply: () => { throw failure; },
+  });
+  return outcome.body;
+}
+
 /**
  * Production orchestration for import's asynchronous capability probe. Durable
  * identity replay happens first; applyWebCommand rechecks after the await so a
@@ -299,15 +308,22 @@ export async function importControlPlanAsync(deps: AsyncImportDeps, command: Imp
   const replay = lookupWebCommandReplay<CommandSuccessV1>(deps.store, command);
   if (replay) return replay.body;
 
-  const raw = command.payload;
-  const currentDefaults = deps.defaults();
-  const frozenDefaults: ImportDefaults = {
-    estimatorProfileId: raw.estimatorProfileId ?? currentDefaults.estimatorProfileId,
-    estimatorProfileHash: raw.estimatorProfileHash ?? currentDefaults.estimatorProfileHash,
-    estimateMode: raw.estimateMode ?? currentDefaults.estimateMode,
-  };
-  const profile = deps.profileRouter.resolve("budget-estimate", frozenDefaults.estimatorProfileId, frozenDefaults.estimatorProfileHash);
-  const observation = await deps.profileRouter.probe(profile);
+  let frozenDefaults: ImportDefaults;
+  let profile: FrozenProfile;
+  let observation: ObservedProfile;
+  try {
+    const raw = command.payload;
+    const currentDefaults = deps.defaults();
+    frozenDefaults = {
+      estimatorProfileId: raw.estimatorProfileId ?? currentDefaults.estimatorProfileId,
+      estimatorProfileHash: raw.estimatorProfileHash ?? currentDefaults.estimatorProfileHash,
+      estimateMode: raw.estimateMode ?? currentDefaults.estimateMode,
+    };
+    profile = deps.profileRouter.resolve("budget-estimate", frozenDefaults.estimatorProfileId, frozenDefaults.estimatorProfileHash);
+    observation = await deps.profileRouter.probe(profile);
+  } catch (error) {
+    return persistAsyncPreparationFailure(deps.store, command, error);
+  }
   return importControlPlan({
     ...deps,
     defaults: () => frozenDefaults,

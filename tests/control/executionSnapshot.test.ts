@@ -60,6 +60,20 @@ beforeEach(async () => {
   };
   harness.store.db.prepare("INSERT INTO budget_proposals(group_id,proposal_version,body) VALUES ('g',2,?)")
     .run(canonicalBytes(proposal).toString("utf8"));
+  const request = {
+    schema: "budget-estimate-request-v1", planHash: a.planHash, planSnapshotCanonicalJson: a.planCanonicalJson,
+    estimatorProfile: { profileId: "e", profileHash: hash("b") },
+    estimatorCapabilities: { contextWindowTokens: 1_000_000, usageObservation: "realtime", budgetEnforcement: "bounded", contextObservation: "unavailable" },
+    responseSchemaVersion: "budget-estimate-v1", instructionVersion: "1",
+  };
+  const estimate = {
+    estimateId: "estimate-1", estimateVersion: 1, state: "queued",
+    profile: { profileId: "e", profileHash: hash("b") }, mode: "strict",
+    requestHash: sha256Canonical(request), request, outputHash: null, output: null,
+    reasonCode: null, grant: amount(10, 10, 1, 1),
+  };
+  harness.store.db.prepare("INSERT INTO estimates(group_id,id,estimate_version,state,body) VALUES ('g','estimate-1',1,'queued',?)")
+    .run(canonicalBytes(estimate).toString("utf8"));
 });
 afterEach(async () => { await harness.dispose(); });
 
@@ -81,6 +95,13 @@ function input(): ConfirmedProposal {
     ],
     tasks: [{ taskId: "a", originalContractHash: sha256Canonical(a.contract), originalContractCanonicalJson: a.originalContractCanonicalJson, work, handoff }],
   };
+}
+
+function rewriteEstimateGrant(grant: ReturnType<typeof amount>): void {
+  const row = harness.store.db.prepare("SELECT body FROM estimates WHERE group_id='g' AND id='estimate-1'").get()!;
+  const estimate = { ...JSON.parse(String(row.body)), grant };
+  harness.store.db.prepare("UPDATE estimates SET body=? WHERE group_id='g' AND id='estimate-1'")
+    .run(canonicalBytes(estimate).toString("utf8"));
 }
 
 describe("execution snapshot preparation", () => {
@@ -124,14 +145,40 @@ describe("execution snapshot preparation", () => {
     const over = input();
     const overEstimate = over.allocations.find(allocation => allocation.ownerKind === "estimate")!;
     overEstimate.amount.tokens = 2_000;
+    rewriteEstimateGrant(overEstimate.amount);
     expect(() => buildExecutionSnapshot(over)).toThrow("group-budget-unavailable");
 
     const overflow = input();
-    overflow.allocations.push({
-      ownerKind: "estimate", ownerId: "estimate-max", bucket: "work",
-      amount: amount(Number.MAX_SAFE_INTEGER, 0, 0, 0), fieldProvenance: provenance("system"),
-    });
+    const overflowEstimate = overflow.allocations.find(allocation => allocation.ownerKind === "estimate")!;
+    overflowEstimate.amount = amount(Number.MAX_SAFE_INTEGER, 0, 0, 0);
+    rewriteEstimateGrant(overflowEstimate.amount);
     expect(() => buildExecutionSnapshot(overflow)).toThrow("numeric-overflow");
+  });
+
+  it.each([
+    ["omitted", (candidate: ConfirmedProposal) => {
+      candidate.allocations = candidate.allocations.filter(allocation => allocation.ownerKind !== "estimate");
+    }],
+    ["substituted", (candidate: ConfirmedProposal) => {
+      const estimate = candidate.allocations.find(allocation => allocation.ownerKind === "estimate")!;
+      estimate.amount = amount(10, 11, 1, 1);
+    }],
+    ["understated", (candidate: ConfirmedProposal) => {
+      const estimate = candidate.allocations.find(allocation => allocation.ownerKind === "estimate")!;
+      estimate.amount = amount(9, 10, 1, 1);
+    }],
+    ["duplicate", (candidate: ConfirmedProposal) => {
+      const estimate = candidate.allocations.find(allocation => allocation.ownerKind === "estimate")!;
+      candidate.allocations.push(structuredClone(estimate));
+    }],
+    ["wrong-ID", (candidate: ConfirmedProposal) => {
+      const estimate = candidate.allocations.find(allocation => allocation.ownerKind === "estimate")!;
+      estimate.ownerId = "estimate-other";
+    }],
+  ] as const)("rejects an %s estimate allocation relative to persisted authority", (_label, mutate) => {
+    const candidate = input();
+    mutate(candidate);
+    expect(() => buildExecutionSnapshot(candidate)).toThrow("execution-policy-unrepresentable");
   });
 
   it.each([

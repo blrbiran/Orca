@@ -12,6 +12,8 @@ import type { ExecutionProfileSnapshotV1 } from "../../src/control/webProtocol.j
 import { openTestStore } from "./fixtures/store.js";
 import { openControlStore } from "../../src/control/store.js";
 import { canonicalBytes } from "../../src/control/canonicalJson.js";
+import { lookupCommandResult } from "../../src/control/commandLedger.js";
+import { ControlError } from "../../src/control/errors.js";
 
 const hash = (letter: string) => letter.repeat(64);
 const contract = (taskId: string, tokenBudget = 100) => ({
@@ -160,6 +162,62 @@ describe("immutable plan import", () => {
       await expect(pending).resolves.toEqual(committed);
       expect(h.store.db.prepare("SELECT count(*) AS n FROM estimates WHERE group_id='g'").get()?.n).toBe(1);
       expect(h.store.db.prepare("SELECT count(*) AS n FROM commands WHERE group_id='g'").get()?.n).toBe(1);
+    } finally { await h.dispose(); }
+  });
+
+  it.each([
+    ["missing", { estimatorProfileId: "missing" }],
+    ["changed", { estimatorProfileHash: hash("9") }],
+  ] as const)("persists and replays a durable %s profile rejection across a later config change", async (_label, patch) => {
+    const h = await setup();
+    try {
+      h.setDefaults({
+        estimatorProfileId: "estimatorProfileId" in patch ? patch.estimatorProfileId : "estimator",
+        estimatorProfileHash: "estimatorProfileHash" in patch ? patch.estimatorProfileHash : h.frozen.profileHash,
+        estimateMode: "strict",
+      });
+      const first = await importControlPlanAsync(h.deps, command());
+      expect(first).toMatchObject({ error: { code: "profile-changed", commandRevision: 0, retryable: false } });
+      expect(lookupCommandResult(h.store, "g", "import-1")).toMatchObject({
+        originalStatus: 409,
+        body: { error: { code: "profile-changed" } },
+      });
+
+      h.setDefaults({ estimatorProfileId: "estimator", estimatorProfileHash: h.frozen.profileHash, estimateMode: "strict" });
+      const resolve = vi.fn(h.router.resolve);
+      const probe = vi.fn(h.router.probe);
+      await expect(importControlPlanAsync({ ...h.deps, profileRouter: { ...h.router, resolve, probe } }, command())).resolves.toEqual(first);
+      expect(resolve).not.toHaveBeenCalled();
+      expect(probe).not.toHaveBeenCalled();
+      expect(h.store.db.prepare("SELECT id FROM groups WHERE id='g'").get()).toBeUndefined();
+    } finally { await h.dispose(); }
+  });
+
+  it("lets a concurrent same-id commit win when an in-flight probe rejects durably", async () => {
+    const h = await setup();
+    try {
+      let reject!: (error: Error) => void;
+      const probe = vi.fn(() => new Promise<never>((_resolve, rejectPromise) => { reject = rejectPromise; }));
+      const pending = importControlPlanAsync({ ...h.deps, profileRouter: { ...h.router, probe } }, command());
+      expect(probe).toHaveBeenCalledTimes(1);
+      const committed = importControlPlan(h.deps, command());
+      reject(new ControlError("profile-changed"));
+      await expect(pending).resolves.toEqual(committed);
+      expect(h.store.db.prepare("SELECT count(*) AS n FROM commands WHERE group_id='g'").get()?.n).toBe(1);
+      expect(h.store.db.prepare("SELECT count(*) AS n FROM estimates WHERE group_id='g'").get()?.n).toBe(1);
+    } finally { await h.dispose(); }
+  });
+
+  it.each([
+    ["unexpected", () => new Error("probe-crash")],
+    ["transient", () => new ControlError("control-capability-probe-failed")],
+  ] as const)("does not persist an %s asynchronous preparation failure", async (_label, failure) => {
+    const h = await setup();
+    try {
+      const probe = vi.fn(async () => { throw failure(); });
+      await expect(importControlPlanAsync({ ...h.deps, profileRouter: { ...h.router, probe } }, command())).rejects.toThrow();
+      expect(h.store.db.prepare("SELECT count(*) AS n FROM commands").get()?.n).toBe(0);
+      expect(h.store.db.prepare("SELECT count(*) AS n FROM groups").get()?.n).toBe(0);
     } finally { await h.dispose(); }
   });
 
