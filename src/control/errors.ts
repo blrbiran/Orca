@@ -2,8 +2,8 @@ export type DurableCommandErrorStatus = 400 | 404 | 409 | 422 | 423;
 
 /**
  * Stable V1 classification for errors that are safe to persist as immutable
- * command outcomes. Codes absent from this catalog are internal/unexpected and
- * must escape so the surrounding transaction rolls back.
+ * command outcomes. Every other ControlError code must be explicitly classified
+ * in the disjoint non-durable catalog below and escape for transaction rollback.
  */
 export const durableCommandErrorStatuses = {
   // The raw envelope is already valid when command processing starts. These
@@ -116,7 +116,7 @@ export const durableCommandErrorStatuses = {
 export type NonDurableControlErrorClassification = "internal" | "transient";
 
 /**
- * Literal ControlError codes that must never become immutable command
+ * ControlError codes that must never become immutable command
  * outcomes. Internal/background failures roll back; transient failures are
  * retried under a new attempt rather than frozen under the command ID.
  */
@@ -128,7 +128,9 @@ export const nonDurableControlErrorClassifications = {
   "cleanup-path-invalid": "internal",
   "cleanup-source-reused": "internal",
   "command-id-conflict": "internal",
+  "control-adapter-config-invalid": "internal",
   "control-async-transaction": "internal",
+  "control-binary-invalid": "internal",
   "control-command-result-invalid": "internal",
   "control-effective-command-identity-mismatch": "internal",
   "control-evidence-context-missing": "internal",
@@ -143,6 +145,7 @@ export const nonDurableControlErrorClassifications = {
   "control-path-not-directory": "internal",
   "control-path-symlink": "internal",
   "control-path-unsafe-file": "internal",
+  "control-peer-exit": "transient",
   "control-peer-timeout": "transient",
   "control-port-options-invalid": "internal",
   "control-projection-state-missing": "internal",
@@ -178,11 +181,19 @@ export const nonDurableControlErrorClassifications = {
   "request-bound-proof-invalid": "internal",
   "shutdown-frozen-set-inconsistent": "internal",
   "start-proof-outcome-unknown": "internal",
-} as const satisfies Record<string, NonDurableControlErrorClassification>;
+} as const satisfies Record<string, NonDurableControlErrorClassification> &
+  Partial<Record<keyof typeof durableCommandErrorStatuses, never>>;
 
+/**
+ * The closed construction contract: adding a code requires one classification.
+ * The non-durable catalog's `never` constraint rejects overlap at compile time.
+ * Helpers must accept this union (or a classified subset), never raw strings.
+ */
 export type KnownControlErrorCode =
   | keyof typeof durableCommandErrorStatuses
   | keyof typeof nonDurableControlErrorClassifications;
+
+export type NonDurableControlErrorCode = keyof typeof nonDurableControlErrorClassifications;
 
 /** Audited V1 error and typed failure codes named by the Web control spec. */
 export const v1WebErrorCodes = [
@@ -227,5 +238,8 @@ export function durableCommandErrorStatus(code: string): DurableCommandErrorStat
 }
 
 export class ControlError extends Error {
-  constructor(public readonly code: string) { super(code); this.name = "ControlError"; }
+  constructor(public readonly code: KnownControlErrorCode, public readonly detail?: string) {
+    super(detail === undefined ? code : `${code}:${detail}`);
+    this.name = "ControlError";
+  }
 }

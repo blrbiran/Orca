@@ -5,7 +5,7 @@ import { isAbsolute, join } from "node:path";
 import { z } from "zod";
 import type { ExecutionPort, ExecutionReport, ExecutionStatus, StartEnvelope } from "./executionPort.js";
 import type { ArtifactRef, Capabilities, HandoffAck, HandoffRequest } from "./types.js";
-import { ControlError } from "./errors.js";
+import { ControlError, type NonDurableControlErrorCode } from "./errors.js";
 import { artifactSchema, candidateSchema, capabilitiesSchema, safeInteger } from "./schema.js";
 
 const MAX_OUTPUT=24*1024*1024;
@@ -25,7 +25,7 @@ const terminalSchema=z.object({status:z.enum(["succeeded","blocked_waiting_human
 const collectionSchema=z.object({events:z.array(eventSchema),candidate:candidateSchema.nullable(),terminal:terminalSchema.nullable()}).strict();
 const evidenceSchema=z.object({artifactId:z.string().min(1),hash:z.string().regex(/^[a-f0-9]{64}$/),base64:z.string()}).strict();
 
-function regularAbsolute(path:string,code:string,executable=false):string {
+function regularAbsolute(path:string,code:NonDurableControlErrorCode,executable=false):string {
  try {const stat=lstatSync(path);if(!isAbsolute(path)||realpathSync(path)!==path||!stat.isFile()||stat.isSymbolicLink()||(executable&&(stat.mode&0o111)===0))throw new Error();return path;}
  catch{throw new ControlError(code);}
 }
@@ -35,7 +35,7 @@ export function createCcloopExecutionPort(options:{binary:string;adapter:"codex"
  const evidenceContext=new Map<string,StartEnvelope>(),key=(ref:ArtifactRef)=>`${ref.artifactId}:${ref.hash}`;
  const raw=(method:string,payload:unknown)=>new Promise<unknown>((resolve,reject)=>{
    const child=execFile(binary,["control",method,"--adapter",options.adapter,"--adapter-config",config],{encoding:"utf8",maxBuffer:MAX_OUTPUT,timeout:options.timeoutMs},(error,stdout,stderr)=>{
-    if(error){const e=error as Error&{code?:number|string;killed?:boolean};if(e.code==="ERR_CHILD_PROCESS_STDIO_MAXBUFFER"||/maxBuffer/i.test(e.message))return reject(new ControlError("control-response-too-large"));if(e.killed)return reject(new ControlError("control-peer-timeout"));const suffix=String(stderr).trim();return reject(new ControlError(`control-peer-exit-${String(e.code)}${suffix?":"+suffix:""}`));}
+    if(error){const e=error as Error&{code?:number|string;killed?:boolean};if(e.code==="ERR_CHILD_PROCESS_STDIO_MAXBUFFER"||/maxBuffer/i.test(e.message))return reject(new ControlError("control-response-too-large"));if(e.killed)return reject(new ControlError("control-peer-timeout"));const suffix=String(stderr).trim();return reject(new ControlError("control-peer-exit",`${String(e.code)}${suffix?":"+suffix:""}`));}
     if(Buffer.byteLength(stdout)>MAX_OUTPUT||Buffer.byteLength(stderr)>MAX_OUTPUT)return reject(new ControlError("control-response-too-large"));
     try{resolve(JSON.parse(stdout));}catch{reject(new ControlError("control-response-invalid"));}
    });

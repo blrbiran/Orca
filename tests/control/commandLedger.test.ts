@@ -374,16 +374,19 @@ describe("web command ledger", () => {
     }
   });
 
-  it.each(["control-sequence-overflow", "control-peer-timeout"] as const)("rolls explicitly non-durable %s failures back", async (code) => {
+  it.each((["control-sequence-overflow", "control-peer-timeout", "control-binary-invalid", "control-adapter-config-invalid", "control-peer-exit"] as const)
+    .flatMap((code) => (["expand", "apply"] as const).map((phase) => [code, phase] as const)))("rolls explicitly non-durable %s failures back during %s", async (code, phase) => {
     const h = await openTestStore();
     try {
       createGroup(h.store, group, { commandId: "create", expectedRevision: 0, by: "human" });
       let calls = 0;
-      const broken = input<CommandBody>(raw(`non-durable-${code}`), () => deadlineA, () => {
+      const fail = () => {
         calls += 1;
         h.store.db.prepare("INSERT INTO meta VALUES (?, 'bad')").run(`partial-${code}`);
         throw new ControlError(code);
-      });
+      };
+      const command = input<CommandBody>(raw(`non-durable-${code}`), () => deadlineA, fail);
+      const broken = phase === "expand" ? { ...command, expand: fail } : command;
       expect(() => applyWebCommand(h.store, broken)).toThrow(code);
       expect(h.store.db.prepare("SELECT value FROM meta WHERE key=?").get(`partial-${code}`)).toBeUndefined();
       expect(lookupCommandResult(h.store, "g1", `non-durable-${code}`)).toBeNull();

@@ -24,7 +24,9 @@ describe("production ccloop execution port",()=>{
     const recorded=JSON.parse(await readFile(h.record,"utf8"));expect(recorded.argv).toEqual(["control","accept","--adapter","codex","--adapter-config",h.config]);expect(JSON.parse(recorded.stdin)).toEqual(h.envelope);
   });
   it("propagates exit 2 stably and refuses malformed or oversized stdout",async()=>{
-    await expect((await fixture("exit2")).port.capabilities()).rejects.toThrow("control-peer-exit-2:remote-refusal");
+    await expect((await fixture("exit2")).port.capabilities()).rejects.toMatchObject({
+      name: "ControlError", code: "control-peer-exit", detail: "2:remote-refusal", message: "control-peer-exit:2:remote-refusal",
+    });
     await expect((await fixture("bad-json")).port.capabilities()).rejects.toThrow("control-response-invalid");
     await expect((await fixture("oversized")).port.capabilities()).rejects.toThrow("control-response-too-large");
   });
