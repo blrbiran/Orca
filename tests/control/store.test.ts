@@ -4,7 +4,9 @@ import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
+import { createRequire } from "node:module";
 import { openControlStore } from "../../src/control/store.js";
+import { legacySchema, schemaVersion } from "../../src/control/migrations.js";
 import { openTestStore } from "./fixtures/store.js";
 
 describe("control storage", () => {
@@ -68,6 +70,40 @@ describe("control storage", () => {
       await expect(openControlStore({stateDir:h.store.stateDir})).rejects.toThrow("control-schema-unsupported");
       expect(await readFile(join(h.store.stateDir,"control.sqlite"))).toEqual(before);
     } finally { await h.dispose(); }
+  });
+  it("migrates schema 1 atomically and creates the durable Web control tables", async () => {
+    const h = await openTestStore();
+    const dbPath = join(h.store.stateDir,"control.sqlite");
+    try {
+      const identity = String(h.store.db.prepare("SELECT value FROM meta WHERE key='identity'").get()?.value);
+      h.store.close();
+      const { DatabaseSync } = createRequire(import.meta.url)("node:sqlite") as typeof import("node:sqlite");
+      const legacy = new DatabaseSync(dbPath);
+      try {
+        legacy.exec("PRAGMA foreign_keys=OFF");
+        for (const row of legacy.prepare("SELECT name,type FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'").all() as Array<{name:string;type:string}>) {
+          if (row.type === "table") legacy.exec(`DROP TABLE ${row.name}`);
+        }
+        legacy.exec(legacySchema);
+        legacy.prepare("INSERT INTO meta VALUES ('schemaVersion','1')").run();
+        legacy.prepare("INSERT INTO meta VALUES ('identity',?)").run(identity);
+        legacy.prepare("INSERT INTO groups VALUES ('legacy',4,1,'{}')").run();
+      } finally {
+        legacy.close();
+      }
+
+      const migrated = await openControlStore({stateDir:h.store.stateDir});
+      try {
+        expect(migrated.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()?.value).toBe(schemaVersion);
+        expect(migrated.db.prepare("SELECT revision,projection_seq FROM groups WHERE id='legacy'").get()).toEqual({revision:4,projection_seq:1});
+        const tables = new Set(migrated.db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(row=>String(row.name)));
+        for (const table of ["projection_state","projection_journal","budget_proposals","estimates","execution_snapshots","stop_intents","recovery_blockers","scheduler_wakes","handoff_requests","handoff_request_joins"]) expect(tables).toContain(table);
+      } finally {
+        migrated.close();
+      }
+    } finally {
+      await h.dispose();
+    }
   });
   it("rejects a copied database at another canonical path", async () => {
     const h = await openTestStore();

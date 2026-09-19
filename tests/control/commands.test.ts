@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { createGroup, putWork, setGroupStopped, setGroupLimit } from "../../src/control/commands.js";
-import { getGroup } from "../../src/control/queries.js";
+import { getGroup, readVersions } from "../../src/control/queries.js";
 import { openTestStore } from "./fixtures/store.js";
 import type { GroupInput, WorkInput } from "../../src/control/types.js";
 export const group:GroupInput = {groupId:"g1",projectKey:"example/repo",goal:"Ship checked change",successConditions:["checks pass"],limit:{tokens:100,activeMs:10000,attempts:10,sessions:10},reviewReserve:{tokens:10,activeMs:1000,attempts:1,sessions:1},deadlineAt:null};
@@ -11,12 +11,14 @@ describe("control commands", () => {
     const h = await openTestStore(); try {
       const first = createGroup(h.store,group,meta);
       expect(first.revision).toBe(1); expect(first.reserved.tokens).toBe(10);
+      expect(readVersions(h.store,"g1")).toEqual({commandRevision:1,projectionSeq:1});
       setGroupStopped(h.store,"g1",true,{...meta,commandId:"stop",expectedRevision:1});
       expect(createGroup(h.store,{...group,limit:{sessions:10,attempts:10,activeMs:10000,tokens:100}},meta)).toEqual(first);
       expect(() => createGroup(h.store,{...group,goal:"Different"},meta)).toThrow("command-id-conflict");
       expect(() => createGroup(h.store,group,{...meta,by:"other"})).toThrow("command-id-conflict");
       expect(() => setGroupStopped(h.store,"g1",false,{...meta,commandId:"stale"})).toThrow("revision-conflict");
       expect(getGroup(h.store,"g1").stopped).toBe(true);
+      expect(readVersions(h.store,"g1")).toEqual({commandRevision:2,projectionSeq:2});
     } finally { await h.dispose(); }
   });
   it("does not borrow another project's reserve or alter used amounts when limits increase", async () => {

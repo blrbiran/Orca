@@ -1,6 +1,7 @@
 import type { ControlStore } from "./store.js";
 import type { ArtifactRef, Amount, GroupInput, GroupView, RunView, WorkInput } from "./types.js";
 import { ControlError } from "./errors.js";
+import { recordProjectionChange } from "./projectionJournal.js";
 export type GroupRecord = GroupView & GroupInput & {budgetVersion:number;reviewRemaining:Amount;proposal?:{work:WorkInput;commandId:string}};
 export type WorkRecord = WorkInput & {targetVersion:number;status:"ready"|"running"|"done"|"blocked"};
 export function readGroup(store:ControlStore,id:string):GroupRecord {
@@ -10,6 +11,12 @@ export function readGroup(store:ControlStore,id:string):GroupRecord {
 }
 export function saveGroup(store:ControlStore,group:GroupRecord):void {
   store.db.prepare("UPDATE groups SET revision=?,graph_version=?,body=? WHERE id=?").run(group.revision,group.graphVersion,JSON.stringify(group),group.groupId);
+  recordProjectionChange(store,[group.groupId]);
+}
+export function readVersions(store:ControlStore,id:string):{commandRevision:number;projectionSeq:number} {
+  const row=store.db.prepare("SELECT revision,projection_seq FROM groups WHERE id=?").get(id);
+  if(!row)throw new ControlError("group-not-found");
+  return {commandRevision:Number(row.revision),projectionSeq:Number(row.projection_seq)};
 }
 export function getGroup(store:ControlStore,id:string):GroupView {
   const g=readGroup(store,id);

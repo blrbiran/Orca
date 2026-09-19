@@ -6,7 +6,8 @@ import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, re
 import { join } from "node:path";
 import { ControlError } from "./errors.js";
 import { assertRegular, privateDirectory, syncDirectory } from "./paths.js";
-import { initialSchema, schemaVersion } from "./migrations.js";
+import { initialSchema, migrateSchema, schemaVersion } from "./migrations.js";
+import { beginProjectionTransaction, finishProjectionTransaction } from "./projectionJournal.js";
 
 interface Owner { nonce:string; pid:number; started:string; host:string; path:string }
 function machineIdentity(): string {
@@ -82,7 +83,7 @@ export async function openControlStore(options:{stateDir:string;recovery?:boolea
       const probe = new DatabaseSync(dbPath,{readOnly:true});
       try {
         const version = probe.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()?.value;
-        if (version !== schemaVersion) throw new ControlError("control-schema-unsupported");
+        if (version !== schemaVersion && version !== "1") throw new ControlError("control-schema-unsupported");
         const identity = probe.prepare("SELECT value FROM meta WHERE key='identity'").get()?.value;
         if (identity !== JSON.stringify({host,path:stateDir})) throw new ControlError("control-host-mismatch");
       } finally { probe.close(); }
@@ -101,13 +102,20 @@ export async function openControlStore(options:{stateDir:string;recovery?:boolea
           connection.prepare("INSERT INTO meta VALUES ('identity',?)").run(JSON.stringify({host,path:stateDir}));
           connection.exec("COMMIT");
         } catch(error) { connection.exec("ROLLBACK"); throw error; }
+      } else {
+        const version = String(connection.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()?.value ?? "");
+        if (version !== schemaVersion) {
+          connection.exec("BEGIN IMMEDIATE");
+          try { migrateSchema(connection,version); connection.exec("COMMIT"); }
+          catch(error) { connection.exec("ROLLBACK"); throw error; }
+        }
       }
     });
     let closed = false;
     let inTransaction = false;
     let operationActive = false;
     const assertOwner=()=>{if(closed || readOwner(ownerFile).nonce!==owner.nonce) throw new ControlError("control-owner-changed");};
-    return {
+    const store:ControlStore = {
       stateDir, db:connection, dispatchBlocked:recovered || !!connection.prepare("SELECT id FROM runs WHERE active=1 LIMIT 1").get(),
       assertOwner,
       beginOperation() {
@@ -119,16 +127,17 @@ export async function openControlStore(options:{stateDir:string;recovery?:boolea
         if (closed) throw new ControlError("control-store-closed");
         if (inTransaction) throw new ControlError("control-nested-transaction");
         return privateIO(() => {
-          connection.exec("BEGIN IMMEDIATE"); inTransaction = true;
+          connection.exec("BEGIN IMMEDIATE"); inTransaction = true; beginProjectionTransaction(store);
           try {
             const result = fn();
             if (result && typeof (result as {then?:unknown}).then === "function") throw new ControlError("control-async-transaction");
             connection.exec("COMMIT"); return result;
           } catch (error) { connection.exec("ROLLBACK"); throw error; }
-          finally { inTransaction = false; }
+          finally { finishProjectionTransaction(store); inTransaction = false; }
         });
       },
       close() { if (closed) return; connection.close(); closed = true; release(); },
     };
+    return store;
   } catch(error) { db?.close(); release(); throw error; }
 }

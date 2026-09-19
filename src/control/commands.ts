@@ -5,6 +5,7 @@ import { ControlError } from "./errors.js";
 import { amountSchema, commandSchema, groupSchema, idSchema, workSchema } from "./schema.js";
 import { allWork, getGroup, readGroup, saveGroup, type GroupRecord } from "./queries.js";
 import { controlGraph } from "./graph.js";
+import { recordProjectionChange } from "./projectionJournal.js";
 export const dimensions = ["tokens","activeMs","attempts","sessions"] as const;
 export function zero():Amount {return {tokens:0,activeMs:0,attempts:0,sessions:0};}
 export function canonical(value:unknown):string {
@@ -30,7 +31,8 @@ export function applyCommand<T>(store:ControlStore,groupId:string,meta:CommandMe
     const revision=store.db.prepare("SELECT revision FROM groups WHERE id=?").get(groupId)?.revision ?? 0;
     if(revision!==meta.expectedRevision) throw new ControlError("revision-conflict");
     const result=mutate();
-    store.db.prepare("INSERT INTO commands VALUES (?,?,?,?)").run(groupId,meta.commandId,hash,JSON.stringify(result));
+    store.db.prepare("INSERT INTO commands(group_id,id,payload_hash,result) VALUES (?,?,?,?)").run(groupId,meta.commandId,hash,JSON.stringify(result));
+    recordProjectionChange(store,[groupId]);
     return result;
   });
 }
@@ -40,7 +42,7 @@ export function createGroup(store:ControlStore,input:GroupInput,meta:CommandMeta
     if(store.db.prepare("SELECT id FROM groups WHERE id=?").get(data.groupId)) throw new ControlError("group-already-exists");
     if(!fits(zero(),data.reviewReserve,data.limit)) throw new ControlError("group-budget-unavailable");
     const group:GroupRecord={...data,revision:1,graphVersion:1,stopped:false,status:"draft",used:zero(),reserved:{...data.reviewReserve},reviewRemaining:{...data.reviewReserve},budgetVersion:1};
-    store.db.prepare("INSERT INTO groups VALUES (?,?,?,?)").run(group.groupId,group.revision,group.graphVersion,JSON.stringify(group));
+    store.db.prepare("INSERT INTO groups(id,revision,graph_version,body) VALUES (?,?,?,?)").run(group.groupId,group.revision,group.graphVersion,JSON.stringify(group));
     return getGroup(store,group.groupId);
   });
 }
