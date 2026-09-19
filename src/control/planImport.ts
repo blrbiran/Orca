@@ -1,5 +1,5 @@
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
-import { applyWebCommand, lookupWebCommandReplay, type WebCommandContext } from "./commandLedger.js";
+import { applyWebCommand, preflightWebCommand, type WebCommandContext } from "./commandLedger.js";
 import { dimensions, zero } from "./commands.js";
 import { ControlError } from "./errors.js";
 import type { ExecutionProfileRouter, FrozenProfile, ObservedProfile } from "./profiles.js";
@@ -301,12 +301,12 @@ function persistAsyncPreparationFailure(store: ControlStore, command: ImportComm
 
 /**
  * Production orchestration for import's asynchronous capability probe. Durable
- * identity replay happens first; applyWebCommand rechecks after the await so a
- * concurrent same-ID commit wins without duplicate effects.
+ * identity/CAS preflight happens before dynamic defaults or I/O; applyWebCommand
+ * repeats both checks after the await to close concurrent commit races.
  */
 export async function importControlPlanAsync(deps: AsyncImportDeps, command: ImportCommand): Promise<ImportResult> {
-  const replay = lookupWebCommandReplay<CommandSuccessV1>(deps.store, command);
-  if (replay) return replay.body;
+  const preflight = preflightWebCommand(deps.store, command);
+  if (preflight) return preflight.body;
 
   let frozenDefaults: ImportDefaults;
   let profile: FrozenProfile;

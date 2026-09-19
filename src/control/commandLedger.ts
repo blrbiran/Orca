@@ -66,10 +66,8 @@ function replay(row: CommandRow): StoredCommandOutcome<CommandBody> {
 }
 
 /**
- * Read-only first step for commands that must perform asynchronous preparation.
- * A matching durable result is returned before callers touch dynamic defaults or
- * external capability I/O. A miss is only advisory: applyWebCommand must still
- * perform its transactional identity/CAS check after preparation.
+ * Read-only raw identity lookup. A miss does not check the current revision;
+ * asynchronous orchestration must use preflightWebCommand before preparation.
  */
 export function lookupWebCommandReplay<T>(store: ControlStore, input: RawAuthorityCommandV1): StoredCommandOutcome<T> | null {
   const rawCommand = rawAuthorityCommandSchema.parse(input) as RawAuthorityCommandV1;
@@ -80,6 +78,32 @@ export function lookupWebCommandReplay<T>(store: ControlStore, input: RawAuthori
   if (!prior) return null;
   if (prior.raw_request_hash !== rawRequestHash) throw new ControlError("command-id-conflict");
   return replay(prior) as StoredCommandOutcome<T>;
+}
+
+/**
+ * Atomic identity/CAS gate before asynchronous preparation. A stale new command
+ * commits its durable conflict; null means current with no writes or reservation.
+ * Callers must still use applyWebCommand after preparation to close races.
+ */
+export function preflightWebCommand<T = CommandBody>(store: ControlStore, input: RawAuthorityCommandV1): StoredCommandOutcome<T> | null {
+  const rawCommand = rawAuthorityCommandSchema.parse(input) as RawAuthorityCommandV1;
+  return store.transaction(() => {
+    const prior = lookupWebCommandReplay<T>(store, rawCommand);
+    if (prior) return prior;
+
+    const commandScope = scope(rawCommand);
+    const groupRow = commandScope.groupId === null ? undefined : store.db.prepare("SELECT revision,projection_seq FROM groups WHERE id=?").get(commandScope.groupId);
+    const currentCommandRevision = commandScope.groupId === null ? 0 : Number(groupRow?.revision ?? 0);
+    if (rawCommand.expectedRevision === currentCommandRevision) return null;
+
+    const commandRevision = commandScope.groupId === null ? null : currentCommandRevision;
+    const projectionSeq = commandScope.groupId === null || !groupRow ? null : Number(groupRow.projection_seq);
+    const conflict = revisionConflict(currentCommandRevision);
+    const outcome = validatedOutcome(conflict.status, conflict.body);
+    assertFinalVersions(outcome.body, commandRevision, projectionSeq);
+    persistCommandOutcome(store, rawCommand, outcome, commandRevision, projectionSeq);
+    return outcome as StoredCommandOutcome<T>;
+  });
 }
 
 function identityWithoutPayload(command: RawAuthorityCommandV1 | EffectiveAuthorityCommandV1): unknown {
@@ -148,6 +172,37 @@ function assertFinalVersions(body: CommandBody, commandRevision: number | null, 
   } else if (body.error.commandRevision !== commandRevision) invalidResult();
 }
 
+function persistCommandOutcome(
+  store: ControlStore,
+  rawCommand: RawAuthorityCommandV1,
+  outcome: StoredCommandOutcome<CommandBody>,
+  commandRevision: number | null,
+  projectionSeq: number | null,
+  effectiveIdentity?: {
+    effectivePayloadJson: string | null;
+    effectivePayloadHash: string | null;
+    authorityCommandJson: string | null;
+    authorityCommandHash: string | null;
+  },
+): void {
+  const commandScope = scope(rawCommand);
+  const rawRequestJson = canonicalBytes(rawCommand).toString("utf8");
+  const rawRequestHash = sha256Canonical(rawCommand);
+  const bodyJson = canonicalBytes(outcome.body).toString("utf8");
+  const responseBytes = Buffer.from(bodyJson, "utf8");
+  store.db.prepare(`INSERT INTO commands(
+    group_id,id,payload_hash,result,ledger_version,scope_kind,scope_id,actor_id,verb,target_json,expected_revision,
+    raw_request_json,raw_request_hash,effective_payload_json,effective_payload_hash,authority_command_json,authority_command_hash,
+    original_status,body_json,response_bytes,command_revision,projection_seq
+  ) VALUES (?,?,?,?,1,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+    commandScope.key, rawCommand.commandId, rawRequestHash, bodyJson, commandScope.kind, commandScope.id, rawCommand.actorId,
+    rawCommand.verb, canonicalBytes(rawCommand.target).toString("utf8"), rawCommand.expectedRevision, rawRequestJson, rawRequestHash,
+    effectiveIdentity?.effectivePayloadJson ?? null, effectiveIdentity?.effectivePayloadHash ?? null,
+    effectiveIdentity?.authorityCommandJson ?? null, effectiveIdentity?.authorityCommandHash ?? null,
+    outcome.status, bodyJson, responseBytes, commandRevision, projectionSeq,
+  );
+}
+
 function updateRevision(store: ControlStore, groupId: string, nextRevision: number): void {
   const row = store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId);
   if (!row) throw new ControlError("group-not-found");
@@ -168,7 +223,6 @@ function updateRevision(store: ControlStore, groupId: string, nextRevision: numb
 export function applyWebCommand<T>(store: ControlStore, input: WebCommandInput<T>): StoredCommandOutcome<T> {
   const rawCommand = rawAuthorityCommandSchema.parse(input.rawCommand) as RawAuthorityCommandV1;
   const commandScope = scope(rawCommand);
-  const rawRequestJson = canonicalBytes(rawCommand).toString("utf8");
   const rawRequestHash = sha256Canonical(rawCommand);
 
   return store.transaction(() => {
@@ -251,18 +305,9 @@ export function applyWebCommand<T>(store: ControlStore, input: WebCommandInput<T
     const commandRevision = commandScope.groupId === null ? null : Number(finalGroup?.revision ?? currentCommandRevision);
     const projectionSeq = commandScope.groupId === null || !finalGroup ? null : Number(finalGroup.projection_seq);
     assertFinalVersions(outcome.body, commandRevision, projectionSeq);
-    const bodyJson = canonicalBytes(outcome.body).toString("utf8");
-    const responseBytes = Buffer.from(bodyJson, "utf8");
-    store.db.prepare(`INSERT INTO commands(
-      group_id,id,payload_hash,result,ledger_version,scope_kind,scope_id,actor_id,verb,target_json,expected_revision,
-      raw_request_json,raw_request_hash,effective_payload_json,effective_payload_hash,authority_command_json,authority_command_hash,
-      original_status,body_json,response_bytes,command_revision,projection_seq
-    ) VALUES (?,?,?,?,1,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
-      commandScope.key, rawCommand.commandId, rawRequestHash, bodyJson, commandScope.kind, commandScope.id, rawCommand.actorId,
-      rawCommand.verb, canonicalBytes(rawCommand.target).toString("utf8"), rawCommand.expectedRevision, rawRequestJson, rawRequestHash,
-      effectivePayloadJson, effectivePayloadHash, authorityCommandJson, authorityCommandHash, outcome.status, bodyJson, responseBytes,
-      commandRevision, projectionSeq,
-    );
+    persistCommandOutcome(store, rawCommand, outcome, commandRevision, projectionSeq, {
+      effectivePayloadJson, effectivePayloadHash, authorityCommandJson, authorityCommandHash,
+    });
     return typedOutcome;
   });
 }

@@ -150,6 +150,52 @@ describe("immutable plan import", () => {
     } finally { await h.dispose(); }
   });
 
+  it("durably rejects an initially stale import before any defaults, profile, probe, or source callbacks", async () => {
+    const h = await setup();
+    try {
+      importControlPlan(h.deps, command("g", "import-winner"));
+      const defaults = vi.fn(h.deps.defaults);
+      const resolve = vi.fn(h.router.resolve);
+      const probe = vi.fn(async () => ({ ...h.deps.estimatorObservation(h.frozen), observedAt: new Date(0).toISOString() }));
+      const resolveTarget = vi.fn(h.trustedConfig.resolveTarget);
+      const deps = { ...h.deps, defaults, profileRouter: { ...h.router, resolve, probe }, trustedConfig: { resolveTarget } };
+
+      const first = await importControlPlanAsync(deps, command());
+      expect(first).toMatchObject({ error: { code: "revision-conflict", commandRevision: 1, retryable: false } });
+      for (const callback of [defaults, resolve, probe, resolveTarget]) expect(callback).not.toHaveBeenCalled();
+      expect(lookupCommandResult(h.store, "g", "import-1")).toEqual({ schema: "orca-command-lookup-v1", originalStatus: 409, body: first });
+      expect(h.store.db.prepare(`SELECT effective_payload_json,effective_payload_hash,authority_command_json,authority_command_hash
+        FROM commands WHERE group_id='g' AND id='import-1'`).get()).toEqual({
+        effective_payload_json: null, effective_payload_hash: null, authority_command_json: null, authority_command_hash: null,
+      });
+
+      h.store.transaction(() => h.store.db.prepare("UPDATE groups SET revision=2 WHERE id='g'").run());
+      defaults.mockImplementation(() => { throw new Error("replay read defaults"); });
+      await expect(importControlPlanAsync(deps, command())).resolves.toEqual(first);
+      await expect(importControlPlanAsync(deps, { ...command(), actorId: "different" })).rejects.toThrow("command-id-conflict");
+      for (const callback of [defaults, resolve, probe, resolveTarget]) expect(callback).not.toHaveBeenCalled();
+      expect(h.store.db.prepare("SELECT count(*) AS n FROM commands WHERE group_id='g'").get()?.n).toBe(2);
+    } finally { await h.dispose(); }
+  });
+
+  it("rechecks revision after a successful in-flight probe before source I/O", async () => {
+    const h = await setup();
+    try {
+      let release!: (value: ReturnType<typeof h.deps.estimatorObservation> & { observedAt: string }) => void;
+      const probe = vi.fn(() => new Promise<ReturnType<typeof h.deps.estimatorObservation> & { observedAt: string }>(resolve => { release = resolve; }));
+      const resolveTarget = vi.fn(h.trustedConfig.resolveTarget);
+      const pending = importControlPlanAsync({ ...h.deps, profileRouter: { ...h.router, probe }, trustedConfig: { resolveTarget } }, command());
+      expect(probe).toHaveBeenCalledTimes(1);
+      expect(lookupCommandResult(h.store, "g", "import-1")).toBeNull();
+      importControlPlan(h.deps, command("g", "import-winner"));
+      release({ ...h.deps.estimatorObservation(h.frozen), observedAt: new Date(0).toISOString() });
+      const result = await pending;
+      expect(result).toMatchObject({ error: { code: "revision-conflict", commandRevision: 1 } });
+      expect(resolveTarget).not.toHaveBeenCalled();
+      expect(lookupCommandResult(h.store, "g", "import-1")).toMatchObject({ originalStatus: 409, body: result });
+    } finally { await h.dispose(); }
+  });
+
   it("rechecks command identity after an in-flight probe and creates no duplicate effects", async () => {
     const h = await setup();
     try {

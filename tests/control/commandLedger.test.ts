@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyWebCommand, lookupCommandResult, type StoredCommandOutcome, type WebCommandContext, type WebCommandInput } from "../../src/control/commandLedger.js";
+import { applyWebCommand, lookupCommandResult, preflightWebCommand, type StoredCommandOutcome, type WebCommandContext, type WebCommandInput } from "../../src/control/commandLedger.js";
 import { createGroup, setGroupStopped } from "../../src/control/commands.js";
 import { ControlError } from "../../src/control/errors.js";
 import { readVersions } from "../../src/control/queries.js";
@@ -124,6 +124,7 @@ describe("web command ledger", () => {
     try {
       createGroup(h.store, group, { commandId: "create", expectedRevision: 0, by: "human" });
       applyWebCommand(h.store, input(raw(), () => deadlineA, accepted));
+      expect(() => preflightWebCommand(h.store, change(raw()) as RawAuthorityCommandV1)).toThrow("command-id-conflict");
       expect(() => applyWebCommand(h.store, {
         rawCommand: change(raw()) as RawAuthorityCommandV1,
         expand: () => { throw new Error("must not expand a conflicting replay"); },
@@ -208,6 +209,43 @@ describe("web command ledger", () => {
     }
   });
 
+  it("preflights current commands without writes and durably stores stale conflicts for final apply replay", async () => {
+    const h = await openTestStore();
+    try {
+      const before = h.store.db.prepare("SELECT total_changes() AS n").get();
+      expect(preflightWebCommand(h.store, raw("preflight", 0))).toBeNull();
+      expect(h.store.db.prepare("SELECT total_changes() AS n").get()).toEqual(before);
+      createGroup(h.store, group, { commandId: "create", expectedRevision: 0, by: "human" });
+      const afterCreate = h.store.db.prepare("SELECT total_changes() AS n").get();
+      expect(preflightWebCommand(h.store, raw("current", 1))).toBeNull();
+      expect(h.store.db.prepare("SELECT total_changes() AS n").get()).toEqual(afterCreate);
+      const stale = preflightWebCommand<CommandBody>(h.store, raw("preflight", 0));
+      expect(stale).toMatchObject({ status: 409, body: { error: { code: "revision-conflict", commandRevision: 1 } } });
+      expect(readVersions(h.store, "g1")).toEqual({ commandRevision: 1, projectionSeq: 1 });
+      setGroupStopped(h.store, "g1", true, { commandId: "advance", expectedRevision: 1, by: "human" });
+      expect(preflightWebCommand(h.store, raw("preflight", 0))).toEqual(stale);
+      expect(applyWebCommand(h.store, input(raw("preflight", 0), () => { throw new Error("replay expanded"); }, accepted))).toEqual(stale);
+    } finally { await h.dispose(); }
+  });
+
+  it("rolls back a preflight conflict if its transaction cannot commit", async () => {
+    const h = await openTestStore();
+    try {
+      createGroup(h.store, group, { commandId: "create", expectedRevision: 0, by: "human" });
+      const interruptedStore = {
+        ...h.store,
+        transaction: <T>(fn: () => T): T => h.store.transaction(() => {
+          fn();
+          expect(lookupCommandResult(h.store, "g1", "preflight-interrupted")).toMatchObject({ originalStatus: 409 });
+          throw new Error("preflight-before-commit");
+        }),
+      };
+      expect(() => preflightWebCommand(interruptedStore, raw("preflight-interrupted", 0))).toThrow("preflight-before-commit");
+      expect(lookupCommandResult(h.store, "g1", "preflight-interrupted")).toBeNull();
+      expect(preflightWebCommand(h.store, raw("preflight-interrupted", 0))).toMatchObject({ status: 409 });
+    } finally { await h.dispose(); }
+  });
+
   it("keeps one global command namespace across process epochs", async () => {
     const h = await openTestStore();
     try {
@@ -239,7 +277,13 @@ describe("web command ledger", () => {
           authorityChanged: false,
         };
       };
-      applyWebCommand(h.store, make("epoch-a"));
+      const before = h.store.db.prepare("SELECT total_changes() AS n").get();
+      expect(preflightWebCommand(h.store, make("epoch-a").rawCommand)).toBeNull();
+      expect(h.store.db.prepare("SELECT total_changes() AS n").get()).toEqual(before);
+      const first = applyWebCommand(h.store, make("epoch-a"));
+      expect(first.body).toMatchObject({ commandRevision: null, projectionSeq: null });
+      expect(preflightWebCommand(h.store, make("epoch-a").rawCommand)).toEqual(first);
+      expect(() => preflightWebCommand(h.store, make("epoch-b").rawCommand)).toThrow("command-id-conflict");
       expect(() => applyWebCommand(h.store, { ...make("epoch-b"), expand: () => { throw new Error("conflict expanded"); } }))
         .toThrow("command-id-conflict");
     } finally {
