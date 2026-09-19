@@ -24,6 +24,7 @@ describe("durable starts",()=>{
  it("writes the full immutable intent before handing off to the peer and rejects altered identity",async()=>{
   const h=await setup();try{
    const root=join(h.root,"peer");const real=fakePeer(root);
+   await expect(startClaim(h.store,real,{...h.envelope,claim:{...h.envelope.claim,generation:2}})).rejects.toThrow("run-generation-conflict");
    await startClaim(h.store,{...real,accept:async input=>{
     const row=h.store.db.prepare("SELECT body FROM outbox WHERE id=?").get("start:"+input.claim.runId);
     expect(JSON.parse(String(row?.body))).toEqual(input);
@@ -65,4 +66,15 @@ describe("durable starts",()=>{
   }finally{await h.dispose();}
  });
  it("refuses production adapters until ccloop implements the public control protocol",()=>{expect(()=>productionExecutionPort()).toThrow("control-protocol-unavailable");});
+ it("rechecks stop after asynchronous capability discovery before creating a start intent",async()=>{
+  const h=await setup();try{
+   const root=join(h.root,"peer");const peer=fakePeer(root);
+   await expect(startClaim(h.store,{...peer,capabilities:async()=>{
+    setGroupStopped(h.store,"g1",true,{commandId:"stop-during-discovery",expectedRevision:3,by:"human"});
+    return peer.capabilities();
+   }},h.envelope)).rejects.toThrow("group-stopped");
+   await expect(readFile(join(root,"launches"))).rejects.toThrow();
+  }finally{await h.dispose();}
+ });
+
 });

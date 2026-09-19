@@ -26,6 +26,10 @@ function persistStatus(store:ControlStore,input:StartEnvelope,status:ExecutionSt
  });
 }
 async function send(store:ControlStore,port:ExecutionPort,input:StartEnvelope):Promise<RunView> {
+ const current=readGroup(store,input.claim.groupId);
+ if(current.stopped) throw new ControlError("group-stopped");
+ if(store.dispatchBlocked) throw new ControlError("control-recovery-required");
+ if(current.deadlineAt && Date.now()>=Date.parse(current.deadlineAt)) throw new ControlError("group-deadline-expired");
  let status:ExecutionStatus;
  try { status=await port.accept(input); }
  catch { persistStatus(store,input,{kind:"unknown"});throw new ControlError("start-outcome-unknown"); }
@@ -42,7 +46,7 @@ export async function startClaim(store:ControlStore,port:ExecutionPort,input:Sta
   return reconcileStart(store,port,input.claim.runId);
  }
  if(store.dispatchBlocked) throw new ControlError("control-recovery-required");
- if(group.stopped) throw new ControlError("group-stopped");
+ if(readGroup(store,input.claim.groupId).stopped) throw new ControlError("group-stopped");
  if(input.contractHash!==hashPayload(readWork(store,input.claim.groupId,input.claim.workItemId).contract)) throw new ControlError("start-contract-conflict");
  store.transaction(()=>{
   assertClaimIdentity(store,input.claim);const run=readRun(store,input.claim.runId);
