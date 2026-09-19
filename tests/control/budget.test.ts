@@ -1,3 +1,7 @@
+import { spawn, execFileSync } from "node:child_process";
+import { once } from "node:events";
+import { resolve } from "node:path";
+import { openControlStore } from "../../src/control/store.js";
 import { describe,it,expect } from "vitest";
 import { claimWork } from "../../src/control/budget.js";
 import { recordUsage } from "../../src/control/usage.js";
@@ -67,4 +71,19 @@ describe("unified work claims",()=>{
    expect(h.store.db.prepare("SELECT id FROM runs").all()).toHaveLength(1);
   }finally{await h.dispose();}
  });
+ it("lets only one process claim while a service owner is alive and keeps that claim after close",async()=>{
+  const h=await openTestStore();const s=seedBudgetCase(h.store);h.store.close();
+  const args=["--import","tsx",resolve("tests/control/fixtures/claim-worker.ts"),h.store.stateDir,JSON.stringify(s.t1Claim)];
+  const child=spawn(process.execPath,args,{stdio:["pipe","pipe","pipe"]});let stderr="";child.stderr.on("data",b=>stderr+=b);
+  try {
+   await new Promise<void>((ok,fail)=>{const timer=setTimeout(()=>fail(new Error(stderr)),10000);child.stdout.once("data",()=>{clearTimeout(timer);ok();});child.once("exit",code=>{clearTimeout(timer);fail(new Error(String(code)+stderr));});});
+   expect(()=>execFileSync(process.execPath,args,{stdio:"pipe"})).toThrow();
+   const done=once(child,"exit");child.stdin.end();await done;
+   const store=await openControlStore({stateDir:h.store.stateDir});try{
+    expect(()=>claimWork(store,{...s.t1Claim,commandId:"other-process"})).toThrow("work-already-active");
+    expect(store.db.prepare("SELECT id FROM runs").all()).toHaveLength(1);
+   }finally{store.close();}
+  }finally{if(child.exitCode===null && child.signalCode===null) child.kill("SIGKILL");await h.dispose();}
+ });
+
 });
