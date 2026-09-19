@@ -243,6 +243,8 @@ describe("web command ledger", () => {
     ["graph-dangling-dependency", 422],
     ["graph-cycle", 422],
     ["control-capability-unsupported", 422],
+    ["budget-overflow", 422],
+    ["numeric-overflow", 422],
     ["control-recovery-required", 423],
   ] as const)("durably classifies the %s command error family", async (code, status) => {
     const h = await openTestStore();
@@ -367,6 +369,26 @@ describe("web command ledger", () => {
       expect(() => applyWebCommand(h.store, broken)).toThrow("unexpected-internal");
       expect(h.store.db.prepare("SELECT value FROM meta WHERE key='partial-internal-write'").get()).toBeUndefined();
       expect(lookupCommandResult(h.store, "g1", "broken")).toBeNull();
+    } finally {
+      await h.dispose();
+    }
+  });
+
+  it.each(["control-sequence-overflow", "control-peer-timeout"] as const)("rolls explicitly non-durable %s failures back", async (code) => {
+    const h = await openTestStore();
+    try {
+      createGroup(h.store, group, { commandId: "create", expectedRevision: 0, by: "human" });
+      let calls = 0;
+      const broken = input<CommandBody>(raw(`non-durable-${code}`), () => deadlineA, () => {
+        calls += 1;
+        h.store.db.prepare("INSERT INTO meta VALUES (?, 'bad')").run(`partial-${code}`);
+        throw new ControlError(code);
+      });
+      expect(() => applyWebCommand(h.store, broken)).toThrow(code);
+      expect(h.store.db.prepare("SELECT value FROM meta WHERE key=?").get(`partial-${code}`)).toBeUndefined();
+      expect(lookupCommandResult(h.store, "g1", `non-durable-${code}`)).toBeNull();
+      expect(() => applyWebCommand(h.store, broken)).toThrow(code);
+      expect(calls).toBe(2);
     } finally {
       await h.dispose();
     }
