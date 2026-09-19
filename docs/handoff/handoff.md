@@ -4802,3 +4802,19 @@ SQLite 单写、stateDir、attempts 轮数语义等是待审建议，不能冒�
 - 修复后预期全套计数为主套 129/1075、chain 13/213，其余不变；后者是新增一条推导，尚待完整 verify 实测，不可当已验证基线。
 
 成本/上下文水位：本轮工具未提供，拿不到，不自估。
+
+
+## 2026-09-19 追加：任务控制 spec 五项复审修订
+
+归属：Codex task `01a0b792-9ebb-79d0-ba91-604825a9f974`，基于 Orca `46cd717`。
+人要求 review spec 后明确“修复问题”；本次仅修改文档，产品代码和姊妹仓库未改。
+`docs/superpowers/specs/2026-09-19-task-control-design.md` 新 §13 优先于它点名的旧表述：
+严格预算区分观测与封顶；拆分/冲突修复/组验收等全部归组计费；定义 ccloop 交接与新 run 协议；
+明确 SQLite 和不可变检查点的权威、提交及恢复顺序；证据独立归档读回后才允许清理工作目录。
+交付依赖改为控制底座 → ccloop 交接/D3 → Web 可恢复流程；Codex 窄适配仍先做。
+
+独立 reviewer 只读复审认为五项在架构层闭合；不是运行实现的验证。
+文档检查命令：`rtk proxy git diff --check` RC 0；Python 比较修改前副本前缀，
+原 spec 17648 字节保持一致，SHA256 `e1e4120816af2fc644882a215591696388a27f5c29188af65e25c16070633146`。
+没有为文档改动重跑产品测试，也没有调用真实 agent。书面 spec 尚待人审阅，随后进入实施计划。
+Claude 额度与活体验收 awaitingHuman 条件不变；未 push、merge main、删除分支或 worktree。
