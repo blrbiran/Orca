@@ -1,12 +1,19 @@
 import { describe, expect, it } from "vitest";
 import { canonicalTimestampSchema, commandEnvelopeSchema } from "../../src/control/schema.js";
 import {
+  authorityCommandSchema,
   budgetEstimateSchema,
+  commandSuccessSchema,
   controlPlanSchema,
   controlSummarySchema,
+  dispatchEnvelopeSchema,
+  effectiveAuthorityCommandSchema,
   executionProfileSnapshotSchema,
   executionSnapshotSchema,
+  groupViewSchema,
   importPlanPayloadSchema,
+  rawAuthorityCommandSchema,
+  requestBoundProofArtifactSchema,
   resumeFromHandoffPayloadSchema,
 } from "../../src/control/webProtocol.js";
 
@@ -49,6 +56,48 @@ describe("Web control protocol", () => {
       commandEnvelopeSchema.safeParse({ commandId: "cmd-1", expectedRevision: 0, payload: {}, by: "browser" }).success,
     ).toBe(false);
     expect(commandEnvelopeSchema.safeParse({ commandId: "cmd-1", expectedRevision: 0 }).success).toBe(false);
+  });
+
+  it("couples command verbs to closed raw payloads and explicit effective defaults", () => {
+    const operation = {
+      target: { scope: "task", taskId: "a", allocation: "work", dimension: "tokens" },
+      value: 10,
+      provenance: "human",
+    } as const;
+    const common = {
+      commandId: "cmd-1",
+      expectedRevision: 1,
+      actorId: "operator",
+      verb: "proposal-edit",
+      target: { kind: "group", groupId: "g" },
+    } as const;
+    const raw = {
+      ...common,
+      schema: "orca-raw-command-v1",
+      payload: { baseProposalVersion: 1, operations: [operation] },
+    } as const;
+    const effective = {
+      ...common,
+      schema: "orca-authority-command-v1",
+      payload: { baseProposalVersion: 1, operations: [{ ...operation, estimateId: null }], proposedGroupLimit: null },
+    } as const;
+
+    expect(rawAuthorityCommandSchema.parse(raw)).toEqual(raw);
+    expect(effectiveAuthorityCommandSchema.parse(effective)).toEqual(effective);
+    expect(authorityCommandSchema.parse(raw)).toEqual(raw);
+    expect(authorityCommandSchema.parse(effective)).toEqual(effective);
+    expect(
+      rawAuthorityCommandSchema.safeParse({ ...raw, payload: { ...raw.payload, executablePath: "/tmp/agent" } }).success,
+    ).toBe(false);
+    expect(
+      effectiveAuthorityCommandSchema.safeParse({
+        ...effective,
+        payload: { baseProposalVersion: 1, operations: [operation] },
+      }).success,
+    ).toBe(false);
+    expect(
+      rawAuthorityCommandSchema.safeParse({ ...raw, verb: "start", payload: { command: "rm -rf" } }).success,
+    ).toBe(false);
   });
 
   it("validates normalized plans and rejects unsorted or duplicate sets", () => {
@@ -131,6 +180,97 @@ describe("Web control protocol", () => {
         profile: { ...snapshot.profile, allowedWorkKinds: ["task", "task"] },
       }).success,
     ).toBe(false);
+    expect(
+      executionProfileSnapshotSchema.safeParse({
+        ...snapshot,
+        profile: {
+          ...snapshot.profile,
+          capabilities: { ...snapshot.profile.capabilities, usageObservation: "realtime" },
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      executionProfileSnapshotSchema.safeParse({
+        ...snapshot,
+        profile: {
+          ...snapshot.profile,
+          capabilities: { ...snapshot.profile.capabilities, budgetEnforcement: "bounded" },
+        },
+      }).success,
+    ).toBe(false);
+  });
+
+  it("enforces dispatch phase grants and proof attempt/session maxima", () => {
+    const zero = { tokens: 0, activeMs: 0, attempts: 0, sessions: 0 };
+    const binding = { profileId: "p", profileHash: hash };
+    const estimateEnvelope = {
+      schema: "orca-dispatch-envelope-v1",
+      phase: "estimate",
+      groupId: "g",
+      workItemId: "estimate",
+      runId: "r",
+      generation: 1,
+      claimIdentity: "estimate:g:e",
+      ownerTokenHash: hash,
+      continuationIntentId: null,
+      claimOrdinal: null,
+      derivedContractHash: hash,
+      grants: { work: amount, handoff: zero },
+      profiles: { estimator: binding, worker: null, handoff: null },
+    } as const;
+    expect(dispatchEnvelopeSchema.parse(estimateEnvelope)).toEqual(estimateEnvelope);
+    expect(
+      dispatchEnvelopeSchema.safeParse({ ...estimateEnvelope, grants: { ...estimateEnvelope.grants, handoff: amount } }).success,
+    ).toBe(false);
+
+    const workEnvelope = {
+      ...estimateEnvelope,
+      phase: "work",
+      claimOrdinal: 1,
+      profiles: { estimator: null, worker: binding, handoff: binding },
+    } as const;
+    expect(dispatchEnvelopeSchema.parse(workEnvelope)).toEqual(workEnvelope);
+    expect(dispatchEnvelopeSchema.safeParse({ ...workEnvelope, claimOrdinal: null }).success).toBe(false);
+    expect(
+      dispatchEnvelopeSchema.safeParse({
+        ...workEnvelope,
+        phase: "handoff",
+        continuationIntentId: null,
+        profiles: { estimator: null, worker: null, handoff: binding },
+        claimOrdinal: null,
+      }).success,
+    ).toBe(false);
+
+    const proof = {
+      schema: "orca-request-bound-proof-v1",
+      phase: "work",
+      runId: "r",
+      generation: 1,
+      providerAttemptOrdinal: 1,
+      startEnvelopeHash: hash,
+      derivedContractHash: hash,
+      profileId: "p",
+      profileHash: hash,
+      proofScheme: "adapter-request-bound-v1",
+      proofVersion: "1",
+      requestLimits: { tokens: null, activeMs: null, attempts: 1, sessions: 0 },
+      boundedDimensions: ["attempts", "sessions"],
+      evidenceKind: "proof",
+      providerStartForbiddenUntilVerified: true,
+    } as const;
+    expect(requestBoundProofArtifactSchema.parse(proof)).toEqual(proof);
+    expect(
+      requestBoundProofArtifactSchema.safeParse({
+        ...proof,
+        requestLimits: { ...proof.requestLimits, attempts: 2 },
+      }).success,
+    ).toBe(false);
+    expect(
+      requestBoundProofArtifactSchema.safeParse({
+        ...proof,
+        requestLimits: { ...proof.requestLimits, sessions: 2 },
+      }).success,
+    ).toBe(false);
   });
 
   it("validates a complete, canonically ordered execution snapshot", () => {
@@ -196,6 +336,112 @@ describe("Web control protocol", () => {
     };
     expect(controlSummarySchema.parse(summary)).toEqual(summary);
     expect(controlSummarySchema.safeParse({ ...summary, groups: [{ ...group, groupId: "b" }, group] }).success).toBe(false);
+  });
+
+  it("enforces canonical group allocation ownership and command revision nullability", () => {
+    const allocation = (ownerKind: "goal-review" | "reserve" | "task", ownerId: string, bucket: "review" | "reserve" | "handoff" | "work") => ({
+      ownerKind,
+      ownerId,
+      bucket,
+      state: "draft-encumbered" as const,
+      amount,
+      fieldProvenance: ownerKind === "reserve" ? systemProvenance : provenance,
+    });
+    const group = {
+      schema: "orca-control-group-v1",
+      epoch: "epoch",
+      changeSeq: 1,
+      summary: {
+        groupId: "g",
+        state: "draft",
+        commandRevision: 1,
+        projectionSeq: 1,
+        stopMode: null,
+        stopState: null,
+        claimBlocked: false,
+        recoveryBlockerCount: 0,
+      },
+      graphVersion: 1,
+      plan: { repoId: "repo", planId: "plan", planHash: hash, goal: "ship", successConditions: ["pass"] },
+      proposal: {
+        state: "editable",
+        proposalVersion: 1,
+        planHash: hash,
+        budgetMode: null,
+        contextPolicy: { handoffAtContextTokens: null },
+        profiles: null,
+        executionSnapshotHash: null,
+      },
+      ledger: {
+        groupLimit: amount,
+        used: amount,
+        committedRemaining: amount,
+        explicitUnallocatedReserve: amount,
+        budgetDeficit: amount,
+        usageUnknown: false,
+      },
+      allocations: [
+        allocation("goal-review", "g:goal-review", "review"),
+        allocation("reserve", "g:reserve", "reserve"),
+        allocation("task", "a", "handoff"),
+        allocation("task", "a", "work"),
+      ],
+      workItems: [
+        {
+          taskId: "a",
+          status: "draft",
+          dependencyTaskIds: [],
+          targetVersion: "v1",
+          configHash: hash,
+          originalContractHash: hash,
+          derivedContractHash: null,
+          currentRunId: null,
+          pendingRunId: null,
+          lineageRunIds: [],
+        },
+      ],
+      estimates: [],
+      runs: [],
+      checkpoints: [],
+      handoffRequests: [],
+      stop: null,
+      recoveryBlockers: [],
+      recentCommandIds: [],
+    } as const;
+    expect(groupViewSchema.parse(group)).toEqual(group);
+    for (const badAllocation of [
+      allocation("task", "missing", "work"),
+      allocation("goal-review", "wrong:goal-review", "review"),
+      allocation("reserve", "g:reserve", "work"),
+    ]) {
+      expect(groupViewSchema.safeParse({ ...group, allocations: [badAllocation] }).success).toBe(false);
+    }
+
+    const browserSuccess = {
+      schema: "orca-command-success-v1",
+      commandId: "cmd",
+      actorId: "operator",
+      verb: "start",
+      target: { kind: "group", groupId: "g" },
+      commandRevision: 2,
+      projectionSeq: 2,
+      effectivePayloadHash: hash,
+      authorityCommandHash: hash,
+      result: { kind: "scheduled", operation: "start", wakeId: "wake:g" },
+    } as const;
+    expect(commandSuccessSchema.parse(browserSuccess)).toEqual(browserSuccess);
+    expect(commandSuccessSchema.safeParse({ ...browserSuccess, commandRevision: null, projectionSeq: null }).success).toBe(false);
+
+    const shutdownSuccess = {
+      ...browserSuccess,
+      verb: "shutdown",
+      target: { kind: "global", epoch: "epoch" },
+      commandRevision: null,
+      projectionSeq: null,
+      result: { kind: "shutdown", groups: [] },
+    } as const;
+    expect(commandSuccessSchema.parse(shutdownSuccess)).toEqual(shutdownSuccess);
+    expect(commandSuccessSchema.safeParse({ ...shutdownSuccess, commandRevision: 1, projectionSeq: 1 }).success).toBe(false);
   });
 
   it("requires sorted estimate tasks and duplicate-free assumptions", () => {

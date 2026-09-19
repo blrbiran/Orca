@@ -134,6 +134,14 @@ export const executionProfileSnapshotSchema = z
   .strict()
   .superRefine((value, ctx) => {
     const { profile, resolved } = value;
+    if (profile.adapter === "codex") {
+      if (profile.capabilities.usageObservation !== "phase-end") {
+        issue(ctx, ["profile", "capabilities", "usageObservation"], "codex-usage-observation-must-be-phase-end");
+      }
+      if (profile.capabilities.budgetEnforcement !== "soft") {
+        issue(ctx, ["profile", "capabilities", "budgetEnforcement"], "codex-budget-enforcement-must-be-soft");
+      }
+    }
     const observesContext = profile.capabilities.contextObservation !== "unavailable";
     if (observesContext !== (profile.contextTokenizer !== null)) {
       issue(ctx, ["profile", "contextTokenizer"], "context-tokenizer-capability-mismatch");
@@ -186,6 +194,12 @@ export const requestBoundProofArtifactSchema = z
         issue(ctx, ["requestLimits", dimension], "request-limit-dimension-mismatch");
       }
     });
+    if (value.requestLimits.attempts !== null && value.requestLimits.attempts !== 1) {
+      issue(ctx, ["requestLimits", "attempts"], "request-attempt-limit-must-be-one");
+    }
+    if (value.requestLimits.sessions !== null && ![0, 1].includes(value.requestLimits.sessions)) {
+      issue(ctx, ["requestLimits", "sessions"], "request-session-limit-must-be-zero-or-one");
+    }
   });
 
 export const dispatchEnvelopeSchema = z
@@ -214,6 +228,12 @@ export const dispatchEnvelopeSchema = z
     const expected = value.phase === "estimate" ? ["estimator"] : value.phase === "handoff" ? ["handoff"] : ["worker", "handoff"];
     if (populated.join("\0") !== expected.join("\0")) issue(ctx, ["profiles"], "dispatch-profile-slot-mismatch");
     if (value.phase === "estimate" && value.claimOrdinal !== null) issue(ctx, ["claimOrdinal"], "estimate-claim-ordinal-must-be-null");
+    if (value.phase === "estimate" && Object.values(value.grants.handoff).some((amount) => amount !== 0)) {
+      issue(ctx, ["grants", "handoff"], "estimate-handoff-grant-must-be-zero");
+    }
+    if (value.phase !== "estimate" && value.claimOrdinal === null) {
+      issue(ctx, ["claimOrdinal"], "phase-claim-ordinal-required");
+    }
     if (value.phase !== "work" && value.continuationIntentId !== null) {
       issue(ctx, ["continuationIntentId"], "continuation-only-valid-for-work");
     }
@@ -412,18 +432,6 @@ export const commandTargetSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("global"), epoch: nonemptyString }).strict(),
 ]);
 
-export const authorityCommandSchema = z
-  .object({
-    schema: z.enum(["orca-authority-command-v1", "orca-raw-command-v1"]),
-    commandId: idSchema,
-    expectedRevision: safeInteger,
-    actorId: nonemptyString,
-    verb: commandVerbSchema,
-    target: commandTargetSchema,
-    payload: z.record(z.unknown()),
-  })
-  .strict();
-
 export const emptyPayloadSchema = z.object({}).strict();
 export const importPlanPayloadSchema = z
   .object({
@@ -453,14 +461,16 @@ export const recoveryRetryPayloadSchema = z.discriminatedUnion("scope", [
   z.object({ scope: z.literal("group"), groupId: idSchema }).strict(),
 ]);
 
+const proposalTargetSchema = z.discriminatedUnion("scope", [
+  z
+    .object({ scope: z.literal("task"), taskId: idSchema, allocation: z.enum(["work", "handoff"]), dimension: amountDimensionSchema })
+    .strict(),
+  z.object({ scope: z.literal("goal-review"), dimension: amountDimensionSchema }).strict(),
+]);
+
 const proposalOperationSchema = z
   .object({
-    target: z.discriminatedUnion("scope", [
-      z
-        .object({ scope: z.literal("task"), taskId: idSchema, allocation: z.enum(["work", "handoff"]), dimension: amountDimensionSchema })
-        .strict(),
-      z.object({ scope: z.literal("goal-review"), dimension: amountDimensionSchema }).strict(),
-    ]),
+    target: proposalTargetSchema,
     value: safeInteger,
     provenance: z.enum(["complex-1m-default", "model", "human"]),
     estimateId: idSchema.optional(),
@@ -499,6 +509,139 @@ export const confirmPayloadSchema = z
   })
   .strict();
 export const setLimitPayloadSchema = z.object({ limit: amountSchema }).strict();
+
+const effectiveImportPlanPayloadSchema = z
+  .object({
+    groupId: idSchema,
+    repoId: idSchema,
+    planId: idSchema,
+    estimatorProfileId: idSchema,
+    estimatorProfileHash: hashSchema,
+    estimateMode: z.enum(["strict", "soft"]),
+  })
+  .strict();
+const effectiveProposalOperationSchema = z
+  .object({
+    target: proposalTargetSchema,
+    value: safeInteger,
+    provenance: z.enum(["complex-1m-default", "model", "human"]),
+    estimateId: idSchema.nullable(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if ((value.provenance === "model") !== (value.estimateId !== null)) issue(ctx, ["estimateId"], "estimate-provenance-mismatch");
+  });
+export const effectiveProposalEditPayloadSchema = z
+  .object({
+    baseProposalVersion: positiveSafeInteger,
+    operations: z.array(effectiveProposalOperationSchema),
+    proposedGroupLimit: amountSchema.nullable(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    requireUnique(
+      value.operations,
+      (operation) =>
+        operation.target.scope === "task"
+          ? `task\0${operation.target.taskId}\0${operation.target.allocation}\0${operation.target.dimension}`
+          : `goal-review\0${operation.target.dimension}`,
+      ctx,
+      ["operations"],
+    );
+  });
+export const effectiveHandoffStopPayloadSchema = z.object({ handoffDeadlineAt: canonicalTimestampSchema }).strict();
+const shutdownPayloadSchema = z
+  .object({ shutdownAcceptedAt: canonicalTimestampSchema, shutdownDeadlineAt: canonicalTimestampSchema })
+  .strict();
+
+const groupCommandTargetSchema = z.object({ kind: z.literal("group"), groupId: idSchema }).strict();
+const taskCommandTargetSchema = z.object({ kind: z.literal("task"), groupId: idSchema, taskId: idSchema }).strict();
+const globalCommandTargetSchema = z.object({ kind: z.literal("global"), epoch: nonemptyString }).strict();
+const rawCommandFields = {
+  schema: z.literal("orca-raw-command-v1"),
+  commandId: idSchema,
+  expectedRevision: safeInteger,
+  actorId: nonemptyString,
+} as const;
+const effectiveCommandFields = {
+  schema: z.literal("orca-authority-command-v1"),
+  commandId: idSchema,
+  expectedRevision: safeInteger,
+  actorId: nonemptyString,
+} as const;
+
+const rawAuthorityCommandVariants = z.discriminatedUnion("verb", [
+  z.object({ ...rawCommandFields, verb: z.literal("import-plan"), target: groupCommandTargetSchema, payload: importPlanPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("proposal-edit"), target: groupCommandTargetSchema, payload: proposalEditPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("estimate"), target: groupCommandTargetSchema, payload: reestimatePayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("confirm"), target: groupCommandTargetSchema, payload: confirmPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("start"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("pause-dispatch"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("handoff-stop"), target: groupCommandTargetSchema, payload: handoffStopPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("resume-dispatch"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
+  z
+    .object({ ...rawCommandFields, verb: z.literal("resume-from-handoff"), target: groupCommandTargetSchema, payload: resumeFromHandoffPayloadSchema })
+    .strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("set-limit"), target: groupCommandTargetSchema, payload: setLimitPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("continue-task"), target: taskCommandTargetSchema, payload: continueTaskPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("recovery-retry"), target: commandTargetSchema, payload: recoveryRetryPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("shutdown"), target: globalCommandTargetSchema, payload: shutdownPayloadSchema }).strict(),
+]);
+
+const effectiveAuthorityCommandVariants = z.discriminatedUnion("verb", [
+  z
+    .object({ ...effectiveCommandFields, verb: z.literal("import-plan"), target: groupCommandTargetSchema, payload: effectiveImportPlanPayloadSchema })
+    .strict(),
+  z
+    .object({ ...effectiveCommandFields, verb: z.literal("proposal-edit"), target: groupCommandTargetSchema, payload: effectiveProposalEditPayloadSchema })
+    .strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("estimate"), target: groupCommandTargetSchema, payload: reestimatePayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("confirm"), target: groupCommandTargetSchema, payload: confirmPayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("start"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("pause-dispatch"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
+  z
+    .object({ ...effectiveCommandFields, verb: z.literal("handoff-stop"), target: groupCommandTargetSchema, payload: effectiveHandoffStopPayloadSchema })
+    .strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("resume-dispatch"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
+  z
+    .object({
+      ...effectiveCommandFields,
+      verb: z.literal("resume-from-handoff"),
+      target: groupCommandTargetSchema,
+      payload: resumeFromHandoffPayloadSchema,
+    })
+    .strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("set-limit"), target: groupCommandTargetSchema, payload: setLimitPayloadSchema }).strict(),
+  z
+    .object({ ...effectiveCommandFields, verb: z.literal("continue-task"), target: taskCommandTargetSchema, payload: continueTaskPayloadSchema })
+    .strict(),
+  z
+    .object({ ...effectiveCommandFields, verb: z.literal("recovery-retry"), target: commandTargetSchema, payload: recoveryRetryPayloadSchema })
+    .strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("shutdown"), target: globalCommandTargetSchema, payload: shutdownPayloadSchema }).strict(),
+]);
+
+function refineCommandIdentity(
+  value: z.infer<typeof rawAuthorityCommandVariants> | z.infer<typeof effectiveAuthorityCommandVariants>,
+  ctx: z.RefinementCtx,
+): void {
+  if (value.verb === "import-plan" && value.target.groupId !== value.payload.groupId) {
+    issue(ctx, ["target", "groupId"], "command-target-payload-mismatch");
+  }
+  if (value.verb === "recovery-retry") {
+    if (value.payload.scope === "run") {
+      if (value.target.kind !== "run" || value.target.runId !== value.payload.runId) {
+        issue(ctx, ["target"], "command-target-payload-mismatch");
+      }
+    } else if (value.target.kind !== "group" || value.target.groupId !== value.payload.groupId) {
+      issue(ctx, ["target"], "command-target-payload-mismatch");
+    }
+  }
+}
+
+export const rawAuthorityCommandSchema = rawAuthorityCommandVariants.superRefine(refineCommandIdentity);
+export const effectiveAuthorityCommandSchema = effectiveAuthorityCommandVariants.superRefine(refineCommandIdentity);
+export const authorityCommandSchema = z.union([rawAuthorityCommandSchema, effectiveAuthorityCommandSchema]);
 
 export const controlConfigSchema = z
   .object({
@@ -738,6 +881,25 @@ export const groupViewSchema = z
     requireSortedUnique(value.checkpoints, (entry) => entry.checkpointId, ctx, ["checkpoints"]);
     requireSortedUnique(value.handoffRequests, (entry) => entry.requestId, ctx, ["handoffRequests"]);
     requireSortedUnique(value.recoveryBlockers, (entry) => `${entry.scope}\0${entry.runId ?? ""}\0${entry.code}`, ctx, ["recoveryBlockers"]);
+    const taskIds = new Set(value.workItems.map((entry) => entry.taskId));
+    const estimateIds = new Set(value.estimates.map((entry) => entry.estimateId));
+    value.allocations.forEach((allocation, index) => {
+      if (allocation.ownerKind === "task") {
+        if (!taskIds.has(allocation.ownerId) || !["work", "handoff"].includes(allocation.bucket)) {
+          issue(ctx, ["allocations", index], "invalid-task-allocation");
+        }
+      } else if (allocation.ownerKind === "estimate") {
+        if (!estimateIds.has(allocation.ownerId) || allocation.bucket !== "work") {
+          issue(ctx, ["allocations", index], "invalid-estimate-allocation");
+        }
+      } else if (allocation.ownerKind === "goal-review") {
+        if (allocation.ownerId !== `${value.summary.groupId}:goal-review` || allocation.bucket !== "review") {
+          issue(ctx, ["allocations", index], "invalid-goal-review-allocation");
+        }
+      } else if (allocation.ownerId !== `${value.summary.groupId}:reserve` || allocation.bucket !== "reserve") {
+        issue(ctx, ["allocations", index], "invalid-reserve-allocation");
+      }
+    });
     const confirmed = value.proposal.state === "confirmed";
     if (confirmed !== (value.proposal.profiles !== null && value.proposal.executionSnapshotHash !== null)) {
       issue(ctx, ["proposal"], "proposal-snapshot-state-mismatch");
@@ -881,7 +1043,15 @@ export const commandSuccessSchema = z
     authorityCommandHash: hashSchema,
     result: commandResultSchema,
   })
-  .strict();
+  .strict()
+  .superRefine((value, ctx) => {
+    const isShutdown = value.verb === "shutdown";
+    const revisionsAreNull = value.commandRevision === null && value.projectionSeq === null;
+    if (isShutdown !== revisionsAreNull) {
+      issue(ctx, ["commandRevision"], "command-revision-nullability-mismatch");
+      issue(ctx, ["projectionSeq"], "command-revision-nullability-mismatch");
+    }
+  });
 
 export const commandLookupSchema = z
   .object({ schema: z.literal("orca-command-lookup-v1"), originalStatus: safeInteger, body: z.union([commandSuccessSchema, commandErrorBodySchema]) })
@@ -902,6 +1072,8 @@ export type BudgetEstimateV1 = z.infer<typeof budgetEstimateSchema>;
 export type CommandVerbV1 = z.infer<typeof commandVerbSchema>;
 export type CommandTargetV1 = z.infer<typeof commandTargetSchema>;
 export type AuthorityCommandV1 = z.infer<typeof authorityCommandSchema>;
+export type RawAuthorityCommandV1 = z.infer<typeof rawAuthorityCommandSchema>;
+export type EffectiveAuthorityCommandV1 = z.infer<typeof effectiveAuthorityCommandSchema>;
 export type CommandEnvelopeV1 = z.infer<typeof commandEnvelopeSchema>;
 export type EmptyPayload = z.infer<typeof emptyPayloadSchema>;
 export type ImportPlanPayload = z.infer<typeof importPlanPayloadSchema>;
@@ -910,6 +1082,7 @@ export type ResumeFromHandoffPayload = z.infer<typeof resumeFromHandoffPayloadSc
 export type ContinueTaskPayload = z.infer<typeof continueTaskPayloadSchema>;
 export type RecoveryRetryPayload = z.infer<typeof recoveryRetryPayloadSchema>;
 export type ProposalEditPayload = z.infer<typeof proposalEditPayloadSchema>;
+export type EffectiveProposalEditPayload = z.infer<typeof effectiveProposalEditPayloadSchema>;
 export type ReestimatePayload = z.infer<typeof reestimatePayloadSchema>;
 export type ConfirmPayload = z.infer<typeof confirmPayloadSchema>;
 export type SetLimitPayload = z.infer<typeof setLimitPayloadSchema>;
