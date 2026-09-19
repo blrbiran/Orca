@@ -1,9 +1,12 @@
-import { lstat, mkdir, readFile, realpath, symlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, readdir, realpath, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { commitCandidate } from "../../src/control/checkpoints.js";
 import { exportResumeBundle } from "../../src/control/resumeBundle.js";
 import { candidateCase } from "./fixtures/candidate.js";
+import { createAdmissionGate } from "../../src/control/admissionGate.js";
+
+const latch = () => { let release!: () => void; const promise = new Promise<void>((resolve) => { release = resolve; }); return { promise, release }; };
 
 describe("immutable continuation bundle", { timeout: 30_000 }, () => {
   it("exports a committed recoverable checkpoint and every nested artifact as private regular files", async () => {
@@ -90,6 +93,28 @@ describe("immutable continuation bundle", { timeout: 30_000 }, () => {
       await expect(exportResumeBundle(h.store, { predecessorRunId: h.claim.runId, newSourceDir: sourceDir }))
         .rejects.toThrow("control-path-symlink");
     } finally {
+      await h.dispose();
+    }
+  });
+
+  it("stages outside admission and publishes nothing when drain wins", async () => {
+    const h = await candidateCase();
+    const staged = latch(), resume = latch();
+    try {
+      await commitCandidate(h.store, h.candidate);
+      const gate = createAdmissionGate(), sourceDir = join(h.root, "next");
+      const exporting = exportResumeBundle(h.store, { predecessorRunId: h.claim.runId, newSourceDir: sourceDir }, {
+        admit: async operation => { const release = gate.enter(); try { return await operation(); } finally { release(); } },
+        afterStage: async () => { staged.release(); await resume.promise; },
+      });
+      expect(await Promise.race([staged.promise.then(() => "staged"), exporting.then(() => "published")])).toBe("staged");
+      await gate.beginDrain().beforeWriterTransaction;
+      resume.release();
+      await expect(exporting).rejects.toThrow("panel-draining");
+      await expect(lstat(sourceDir)).rejects.toMatchObject({ code: "ENOENT" });
+      expect((await readdir(h.root)).filter(name => name.startsWith(".resume-staging-"))).toEqual([]);
+    } finally {
+      resume.release();
       await h.dispose();
     }
   });

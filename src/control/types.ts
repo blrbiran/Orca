@@ -33,6 +33,7 @@ export interface ClaimInput extends CommandMeta {
   groupId: string; workItemId: string; graphVersion: number; targetVersion: number;
   capabilities: Capabilities;
   executionProfile?: ExecutionProfileBinding;
+  handoffProfile?: ExecutionProfileBinding;
 }
 export interface Claim extends Identity {
   commandId: string; configHash: string; grant: Grant; ownerToken: string;

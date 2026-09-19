@@ -37,6 +37,15 @@ function profileSnapshot(): ExecutionProfileSnapshotV1 {
   };
 }
 
+function handoffSnapshot(): ExecutionProfileSnapshotV1 {
+  const value = profileSnapshot();
+  value.profile.profileId = "handoff";
+  value.profile.allowedWorkKinds = ["handoff"];
+  value.profile.workMaxOutputTokens = null;
+  value.resolved.adapterImplementationHash = digest("d");
+  return value;
+}
+
 function capableProbe() {
   return structuredClone(profileSnapshot().profile.capabilities);
 }
@@ -54,11 +63,13 @@ function port(overrides: Partial<ExecutionPort> = {}): ExecutionPort {
   };
 }
 
-function serviceWith(store: Awaited<ReturnType<typeof openTestStore>>["store"], selected: ExecutionPort, fallback = port()) {
+function serviceWith(store: Awaited<ReturnType<typeof openTestStore>>["store"], selected: ExecutionPort, fallback = port(), handoffPort = port()) {
   const frozen = resolveProfile(profileSnapshot(), selected);
-  const router = createExecutionProfileRouter([frozen]);
+  const handoff = resolveProfile(handoffSnapshot(), handoffPort);
+  const router = createExecutionProfileRouter([frozen, handoff]);
   const selection: ExecutionProfileSelection = { workKind: "task", profileId: "worker", profileHash: frozen.profileHash };
-  return { service: new ControlService(store, fallback, { profileRouter: router, reconcileGrant: { work: amount(7, 500, 1, 1), handoff: amount(2, 50, 0, 0) } }), selection, frozen };
+  const handoffSelection: ExecutionProfileSelection = { workKind: "handoff", profileId: "handoff", profileHash: handoff.profileHash };
+  return { service: new ControlService(store, fallback, { profileRouter: router, reconcileGrant: { work: amount(7, 500, 1, 1), handoff: amount(2, 50, 0, 0) } }), selection, handoffSelection, frozen };
 }
 
 function envelope(claim: Awaited<ReturnType<ControlService["claimProfiled"]>>, contract: unknown, root: string): StartEnvelope {
@@ -76,11 +87,11 @@ describe("profiled service execution", () => {
           probeProfileCapabilities: async () => mode === "unavailable" ? { ...capableProbe(), handoffControl: "unavailable" } : capableProbe(),
           accept: async () => { accepts += 1; return { kind: "unknown" }; },
         });
-        const { service, selection } = serviceWith(h.store, selected);
+        const { service, selection, handoffSelection } = serviceWith(h.store, selected);
         const attempted = mode === "stale" ? { ...selection, profileHash: digest("0") }
           : mode === "missing" ? { ...selection, profileId: "gone" }
           : selection;
-        await expect(service.claimProfiled("g1", "T1", attempted)).rejects.toThrow(mode === "unavailable" ? "control-capability-unsupported" : "profile-changed");
+        await expect(service.claimProfiled("g1", "T1", attempted, handoffSelection)).rejects.toThrow(mode === "unavailable" ? "control-capability-unsupported" : "profile-changed");
         expect(h.store.db.prepare("SELECT count(*) AS n FROM runs").get()?.n).toBe(0);
         expect(accepts).toBe(0);
       } finally { await h.dispose(); }
@@ -94,9 +105,10 @@ describe("profiled service execution", () => {
       let selectedAccepts = 0;
       const selected = port({ accept: async (input) => { selectedAccepts += 1; return { kind: "accepted", executionId: "selected", configHash: input.claim.configHash }; } });
       const fallback = port({ accept: async () => { throw new Error("fallback-provider-called"); } });
-      const { service, selection } = serviceWith(h.store, selected, fallback);
-      const claim = await service.claimProfiled("g1", "T1", selection);
+      const { service, selection, handoffSelection } = serviceWith(h.store, selected, fallback);
+      const claim = await service.claimProfiled("g1", "T1", selection, handoffSelection);
       expect(readRun(h.store, claim.runId).executionProfile).toEqual(selection);
+      expect(readRun(h.store, claim.runId).handoffProfile).toEqual(handoffSelection);
       await expect(service.startProfiled(selection, envelope(claim, seeded.w1.contract, h.root))).resolves.toMatchObject({ executionId: "selected" });
       expect(selectedAccepts).toBe(1);
     } finally { await h.dispose(); }
@@ -112,8 +124,8 @@ describe("profiled service execution", () => {
           probeProfileCapabilities: async () => available ? capableProbe() : { ...capableProbe(), handoffControl: "unavailable" },
           accept: async () => { accepts += 1; return { kind: "unknown" }; },
         });
-        const { service, selection } = serviceWith(h.store, selected);
-        const claim = await service.claimProfiled("g1", "T1", selection);
+        const { service, selection, handoffSelection } = serviceWith(h.store, selected);
+        const claim = await service.claimProfiled("g1", "T1", selection, handoffSelection);
         available = false;
         const attempted = mode === "stale" ? { ...selection, profileHash: digest("0") }
           : mode === "missing" ? { ...selection, profileId: "gone" }
@@ -127,13 +139,72 @@ describe("profiled service execution", () => {
     }
   });
 
+  it("freshly validates the persisted profile before reconciling an unknown start", async () => {
+    for (const mode of ["stale", "missing", "unavailable"] as const) {
+      const h = await openTestStore();
+      try {
+        const seeded = seedBudgetCase(h.store);
+        let available = true, accepts = 0;
+        const selected = port({
+          probeProfileCapabilities: async () => available ? capableProbe() : { ...capableProbe(), handoffControl: "unavailable" },
+          accept: async () => { accepts += 1; throw new Error("lost-start-response"); },
+          inspect: async () => ({ kind: "absent" }),
+        });
+        const { service, selection, handoffSelection } = serviceWith(h.store, selected);
+        const claim = await service.claimProfiled("g1", "T1", selection, handoffSelection);
+        await expect(service.startProfiled(selection, envelope(claim, seeded.w1.contract, h.root))).rejects.toThrow("start-outcome-unknown");
+        available = false;
+        if (mode !== "unavailable") {
+          const run = readRun(h.store, claim.runId);
+          run.executionProfile = { ...selection, ...(mode === "stale" ? { profileHash: digest("0") } : { profileId: "gone" }) };
+          h.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify(run), claim.runId);
+        }
+        await expect(Promise.resolve().then(() => service.reconcileStartForRun(claim.runId))).rejects.toThrow(mode === "unavailable" ? "control-capability-unsupported" : "profile-changed");
+        expect(accepts).toBe(1);
+        expect(readRun(h.store, claim.runId).state).toBe("unknown");
+        expect(h.store.db.prepare("SELECT count(*) AS n FROM outbox WHERE kind='start'").get()?.n).toBe(1);
+      } finally { await h.dispose(); }
+    }
+  });
+
+  it("rejects strict profiles whose matching proof omits the tokens work dimension", async () => {
+    for (const workDimensions of [[], ["activeMs"]] as Array<Array<"tokens" | "activeMs">>) {
+      const h = await openTestStore();
+      try {
+        seedBudgetCase(h.store);
+        const workerSnapshot = profileSnapshot();
+        workerSnapshot.profile.capabilities.requestBoundProof!.workDimensions = workDimensions;
+        const selected = port({ probeProfileCapabilities: async () => structuredClone(workerSnapshot.profile.capabilities) });
+        const worker = resolveProfile(workerSnapshot, selected), handoff = resolveProfile(handoffSnapshot(), port());
+        const router = createExecutionProfileRouter([worker, handoff]);
+        const service = new ControlService(h.store, port(), { profileRouter: router });
+        const workerSelection = { workKind: "task" as const, profileId: "worker", profileHash: worker.profileHash };
+        const handoffSelection = { workKind: "handoff" as const, profileId: "handoff", profileHash: handoff.profileHash };
+        await expect(service.claimProfiled("g1", "T1", workerSelection, handoffSelection)).rejects.toThrow("control-capability-unsupported");
+        expect(h.store.db.prepare("SELECT count(*) AS n FROM runs").get()?.n).toBe(0);
+      } finally { await h.dispose(); }
+    }
+  });
+
+  it("rejects a task-only profile where a separate handoff profile is required", async () => {
+    const h = await openTestStore();
+    try {
+      seedBudgetCase(h.store);
+      const worker = resolveProfile(profileSnapshot(), port()), router = createExecutionProfileRouter([worker]);
+      const service = new ControlService(h.store, port(), { profileRouter: router });
+      const selection = { workKind: "task" as const, profileId: "worker", profileHash: worker.profileHash };
+      await expect(service.claimProfiled("g1", "T1", selection, selection)).rejects.toThrow("profile-changed");
+      expect(h.store.db.prepare("SELECT count(*) AS n FROM runs").get()?.n).toBe(0);
+    } finally { await h.dispose(); }
+  });
+
   it("lets drain pass a hanging claim probe, then rejects its writer", async () => {
     const h = await openTestStore();
     const entered = latch(), resume = latch();
     try {
       seedBudgetCase(h.store);
-      const { service, selection } = serviceWith(h.store, port({ probeProfileCapabilities: async () => { entered.release(); await resume.promise; return capableProbe(); } }));
-      const claim = service.claimProfiled("g1", "T1", selection);
+      const { service, selection, handoffSelection } = serviceWith(h.store, port({ probeProfileCapabilities: async () => { entered.release(); await resume.promise; return capableProbe(); } }));
+      const claim = service.claimProfiled("g1", "T1", selection, handoffSelection);
       await entered.promise;
       await service.admissionGate.beginDrain().beforeWriterTransaction;
       resume.release();
@@ -147,8 +218,8 @@ describe("profiled service execution", () => {
     const entered = latch(), resume = latch();
     try {
       seedBudgetCase(h.store);
-      const { service, selection } = serviceWith(h.store, port({ probeProfileCapabilities: async () => { entered.release(); await resume.promise; return capableProbe(); } }));
-      const reconcile = service.reconcileBudgetProfiled("g1", "T1", selection);
+      const { service, selection, handoffSelection } = serviceWith(h.store, port({ probeProfileCapabilities: async () => { entered.release(); await resume.promise; return capableProbe(); } }));
+      const reconcile = service.reconcileBudgetProfiled("g1", "T1", selection, handoffSelection);
       await entered.promise;
       await service.admissionGate.beginDrain().beforeWriterTransaction;
       resume.release();
@@ -163,8 +234,8 @@ describe("profiled service execution", () => {
     try {
       const seeded = seedBudgetCase(h.store);
       const selected = port({ accept: async (input) => { entered.release(); await resume.promise; return { kind: "accepted", executionId: "late", configHash: input.claim.configHash }; } });
-      const { service, selection } = serviceWith(h.store, selected);
-      const claim = await service.claimProfiled("g1", "T1", selection);
+      const { service, selection, handoffSelection } = serviceWith(h.store, selected);
+      const claim = await service.claimProfiled("g1", "T1", selection, handoffSelection);
       const start = service.startProfiled(selection, envelope(claim, seeded.w1.contract, h.root));
       await entered.promise;
       await service.admissionGate.beginDrain().beforeWriterTransaction;
@@ -185,8 +256,8 @@ describe("profiled service execution", () => {
         collect: async (input) => ({ events: [{ runId: input.claim.runId, generation: 1, eventSeq: 1, bucket: "work", cumulative: amount(1, 1, 1, 1), source }], candidate: null, terminal: null }),
         readEvidence: async () => { entered.release(); await resume.promise; return bytes; },
       });
-      const { service, selection } = serviceWith(h.store, selected);
-      const claim = await service.claimProfiled("g1", "T1", selection);
+      const { service, selection, handoffSelection } = serviceWith(h.store, selected);
+      const claim = await service.claimProfiled("g1", "T1", selection, handoffSelection);
       await service.startProfiled(selection, envelope(claim, seeded.w1.contract, h.root));
       const collect = collectControlled(service, claim.runId);
       await entered.promise;
@@ -204,13 +275,15 @@ describe("profiled service execution", () => {
     try {
       const seeded = seedBudgetCase(h.store), bytes = Buffer.from("handoff-usage");
       const source = { artifactId: "late-handoff-usage", hash: createHash("sha256").update(bytes).digest("hex") };
-      const selected = port({
-        requestHandoff: async (_input, request) => { entered.release(); await resume.promise; return { kind: "latched", requestId: request.requestId }; },
+      let workerHandoffs = 0, selectedHandoffs = 0;
+      const selected = port({ requestHandoff: async (_input, request) => { workerHandoffs += 1; entered.release(); await resume.promise; return { kind: "latched", requestId: request.requestId }; } });
+      const handoffPort = port({
+        requestHandoff: async (_input, request) => { selectedHandoffs += 1; entered.release(); await resume.promise; return { kind: "latched", requestId: request.requestId }; },
         collect: async (input) => ({ events: [{ runId: input.claim.runId, generation: 1, eventSeq: 1, bucket: "handoff", cumulative: amount(1, 1, 0, 0), source }], candidate: null, terminal: null }),
         readEvidence: async () => bytes,
       });
-      const { service, selection } = serviceWith(h.store, selected);
-      const claim = await service.claimProfiled("g1", "T1", selection);
+      const { service, selection, handoffSelection } = serviceWith(h.store, selected, port(), handoffPort);
+      const claim = await service.claimProfiled("g1", "T1", selection, handoffSelection);
       await service.startProfiled(selection, envelope(claim, seeded.w1.contract, h.root));
       const group = getGroup(h.store, "g1");
       putWork(h.store, "g1", { ...seeded.w1, workItemId: "handoff-T1", kind: "handoff", parentRunId: claim.runId, grant: { work: amount(0, 0, 0, 0), handoff: seeded.w1.grant.handoff } }, { commandId: "register-profiled-handoff", expectedRevision: group.revision, by: "test" });
@@ -222,6 +295,8 @@ describe("profiled service execution", () => {
       expect(h.store.db.prepare("SELECT count(*) AS n FROM artifacts").get()?.n).toBe(0);
       expect(readRun(h.store, claim.runId).highWater).toBe(0);
       expect(h.store.db.prepare("SELECT delivered FROM outbox WHERE id=?").get(`handoff-request:${claim.runId}`)?.delivered).toBe(0);
+      expect(workerHandoffs).toBe(0);
+      expect(selectedHandoffs).toBe(1);
     } finally { resume.release(); await h.dispose(); }
   });
 
@@ -229,11 +304,11 @@ describe("profiled service execution", () => {
     const h = await openTestStore();
     try {
       seedBudgetCase(h.store);
-      const { service, selection } = serviceWith(h.store, port());
+      const { service, selection, handoffSelection } = serviceWith(h.store, port());
       const group = getGroup(h.store, "g1");
       setGroupStopped(h.store, "g1", true, { commandId: "stop-profiled", expectedRevision: group.revision, by: "test" });
-      await expect(service.claimProfiled("g1", "T1", selection)).rejects.toThrow("group-stopped");
-      await expect(service.reconcileBudgetProfiled("g1", "T1", selection)).rejects.toThrow("group-stopped");
+      await expect(service.claimProfiled("g1", "T1", selection, handoffSelection)).rejects.toThrow("group-stopped");
+      await expect(service.reconcileBudgetProfiled("g1", "T1", selection, handoffSelection)).rejects.toThrow("group-stopped");
       await service.admissionGate.beginDrain().beforeWriterTransaction;
     } finally { await h.dispose(); }
   });

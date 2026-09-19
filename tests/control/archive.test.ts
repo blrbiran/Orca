@@ -1,11 +1,13 @@
 import { describe,it,expect } from "vitest";
-import { rename, readFile, writeFile, stat, symlink } from "node:fs/promises";
+import { rename, readFile, readdir, writeFile, stat, symlink } from "node:fs/promises";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { archiveRun,readArtifact,writeArtifact } from "../../src/control/archive.js";
 import { verifySnapshot } from "../../src/control/snapshot.js";
 import { archiveCase } from "./fixtures/archive.js";
 import { openTestStore } from "./fixtures/store.js";
+import { createAdmissionGate } from "../../src/control/admissionGate.js";
+const latch=()=>{let release!:()=>void;const promise=new Promise<void>(resolve=>{release=resolve;});return {promise,release};};
 describe("independent evidence archive",{timeout:30000},()=>{
  it("reads every original log after the complete source directory has moved",async()=>{
   const h=await archiveCase();try{
@@ -50,6 +52,22 @@ describe("independent evidence archive",{timeout:30000},()=>{
    const ref=await writeArtifact(h.store,"ordered",Buffer.from("durable"),{syncFile:async file=>{await file.sync();steps.push("synced");},beforePublish:()=>{expect(steps).toEqual(["synced"]);steps.push("published");}});
    expect((await readArtifact(h.store,ref)).toString()).toBe("durable");expect(steps).toEqual(["synced","published"]);
   }finally{await h.dispose();}
+ });
+ it("hashes a duplicate outside admission and publishes nothing after drain",async()=>{
+  const h=await openTestStore(),reading=latch(),resume=latch();try{
+   await writeArtifact(h.store,"duplicate",Buffer.from("same"));
+   h.store.db.prepare("DELETE FROM artifacts WHERE id=?").run("duplicate");
+   const gate=createAdmissionGate();
+   const writing=writeArtifact(h.store,"duplicate",Buffer.from("same"),{
+    admit:async operation=>{const release=gate.enter();try{return await operation();}finally{release();}},
+    beforeDuplicateRead:async()=>{reading.release();await resume.promise;},
+   });
+   expect(await Promise.race([reading.promise.then(()=>"reading"),writing.then(()=>"published")])).toBe("reading");
+   await gate.beginDrain().beforeWriterTransaction;resume.release();
+   await expect(writing).rejects.toThrow("panel-draining");
+   expect(h.store.db.prepare("SELECT id FROM artifacts WHERE id=?").get("duplicate")).toBeUndefined();
+   expect(await readdir(join(h.store.stateDir,"staging"))).toEqual([]);
+  }finally{resume.release();await h.dispose();}
  });
 
 });

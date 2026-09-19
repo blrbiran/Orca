@@ -7,7 +7,7 @@ import { TERMINAL_OUTCOMES } from "../scheduler/ccloopRunner.js";
 import { git } from "../scheduler/gitExec.js";
 import type { ControlService, ExecutionProfileSelection } from "./service.js";
 import type { Candidate, Claim, ArtifactRef, Identity } from "./types.js";
-import type { ExecutionReport, StartEnvelope } from "./executionPort.js";
+import type { ExecutionPort, ExecutionReport, StartEnvelope } from "./executionPort.js";
 import { allWork, readGroup, readWork, saveWork } from "./queries.js";
 import { hasObservedUsage, readRun } from "./budget.js";
 import { hashPayload } from "./commands.js";
@@ -28,8 +28,8 @@ function identity(c:Identity) {
  const {groupId,workItemId,taskId,runId,generation,graphVersion,targetVersion}=c;
  return {groupId,workItemId,taskId,runId,generation,graphVersion,targetVersion};
 }
-export async function collectControlled(service:ControlService,runId:string):Promise<ExecutionReport> {
- const {store}=service,port=service.executionPortForRun(runId),envelope=readEnvelope(store,runId);
+export async function collectControlled(service:ControlService,runId:string,selectedPort?:ExecutionPort):Promise<ExecutionReport> {
+ const {store}=service,port=selectedPort??service.executionPortForRun(runId),envelope=readEnvelope(store,runId);
  if(!port.readEvidence) throw new ControlError("control-evidence-unavailable");
  const report=await port.collect(envelope,readRun(store,runId).highWater);
  const refs=[...report.events.map(e=>e.source),...(report.candidate?.artifacts??[])];
@@ -116,11 +116,13 @@ export async function confirmLanding(service:ControlService,id:string,intent:Lan
  }
  intent.landed=landed[0];service.write(()=>service.store.transaction(()=>service.store.db.prepare("UPDATE outbox SET body=?,delivered=1 WHERE id=?").run(JSON.stringify(intent),id)));return true;
 }
-export function makeControlledExecution(service:ControlService,groupId:string,selection?:ExecutionProfileSelection):RoundExecution {
+export function makeControlledExecution(service:ControlService,groupId:string,selection?:ExecutionProfileSelection,handoffSelection?:ExecutionProfileSelection):RoundExecution {
  return {
   mode:"controlled",
   preflight:async(round:Round)=>{
+   if(selection&&!handoffSelection)throw new ControlError("profile-changed");
    const port=selection?(await service.profiledCapabilities(groupId,selection)).profile.port:service.legacyExecutionPort();
+   if(handoffSelection)await service.profiledCapabilities(groupId,handoffSelection);
    if(!selection)await service.legacyCapabilities(groupId);
    if(!port.readEvidence) throw new ControlError("control-evidence-unavailable");
    const group=readGroup(service.store,groupId);
@@ -136,12 +138,12 @@ export function makeControlledExecution(service:ControlService,groupId:string,se
     if(!w || !dependencies || dependencies.some(id=>!id) || hashPayload(w.contract)!==hashPayload(round.contracts.get(task.taskId)) || hashPayload([...dependencies].sort())!==hashPayload([...task.dependsOn].sort())) throw new ControlError("group-graph-conflict");
    }
   },
-  reconcileBudget:taskId=>selection?service.reconcileBudgetProfiled(groupId,taskId,selection):service.reconcileBudgetLegacy(groupId,taskId),
+  reconcileBudget:taskId=>selection?service.reconcileBudgetProfiled(groupId,taskId,selection,handoffSelection!):service.reconcileBudgetLegacy(groupId,taskId),
   execute:async({plan,task,base,kind})=>{
    const work=allWork(service.store,groupId).find(w=>w.taskId===task.taskId && w.kind===kind);
    if(!work) throw new ControlError("work-not-found");
    const contract=JSON.parse(await readFile(task.contract,"utf8"));
-   const claim=claimOnly(await (selection?service.claimProfiled(groupId,work.workItemId,selection):service.claimLegacy(groupId,work.workItemId)));
+   const claim=claimOnly(await (selection?service.claimProfiled(groupId,work.workItemId,selection,handoffSelection!):service.claimLegacy(groupId,work.workItemId)));
    if(kind==="reconcile" && !service.store.db.prepare("SELECT id FROM outbox WHERE id=?").get("start:"+claim.runId)) {
     service.write(()=>service.store.transaction(()=>{
      const current=readWork(service.store,groupId,work.workItemId);

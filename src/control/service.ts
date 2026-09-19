@@ -49,14 +49,14 @@ export class ControlService {
     return await runPreparedRound(loaded.round,options,makeControlledExecution(this,groupId));
     } finally {release();}
   }
-  async runProfiled(groupId:string,planPath:string,selection:ExecutionProfileSelection,options:Omit<import("../scheduler/run.js").RunOptions,"adapter"|"adapterConfig">={}):Promise<number> {
+  async runProfiled(groupId:string,planPath:string,selection:ExecutionProfileSelection,handoffSelection:ExecutionProfileSelection,options:Omit<import("../scheduler/run.js").RunOptions,"adapter"|"adapterConfig">={}):Promise<number> {
     const release=this.store.beginOperation();
     try {
       const {loadRound,runPreparedRound}=await import("../scheduler/run.js");
       const {makeControlledExecution}=await import("./schedulerBridge.js");
       const loaded=await loadRound(planPath);
       if("rejections" in loaded) throw new ControlError("control-plan-rejected");
-      return await runPreparedRound(loaded.round,options,makeControlledExecution(this,groupId,selection));
+      return await runPreparedRound(loaded.round,options,makeControlledExecution(this,groupId,selection,handoffSelection));
     } finally {release();}
   }
   executionProfile(selection: ExecutionProfileSelection): FrozenProfile {
@@ -82,62 +82,76 @@ export class ControlService {
   async profiledCapabilities(groupId:string,selection:ExecutionProfileSelection):Promise<{profile:FrozenProfile;capabilities:Capabilities}> {
     const profile=this.executionProfile(selection),observation=await this.options.profileRouter!.probe(profile);
     const observed=observation.observed,mode=readGroup(this.store,groupId).budgetMode??"strict";
-    if(observation.probeFailureCode!==null||observed.usageObservation==="unavailable"||observed.budgetEnforcement==="unavailable"||observed.handoffControl!=="durable"||observed.handoffExecution===null||(mode==="strict"&&(observed.budgetEnforcement!=="bounded"||observed.requestBoundProof===null)))throw new ControlError("control-capability-unsupported");
+    if(observation.probeFailureCode!==null||observed.usageObservation==="unavailable"||observed.budgetEnforcement==="unavailable"||observed.handoffControl!=="durable"||observed.handoffExecution===null||(mode==="strict"&&(observed.budgetEnforcement!=="bounded"||observed.requestBoundProof===null||!observed.requestBoundProof.workDimensions.includes("tokens"))))throw new ControlError("control-capability-unsupported");
     const capabilities=await profile.port.capabilities();assertCapabilities(mode,capabilities);return {profile,capabilities};
   }
-  private claimWithCapabilities(groupId:string,workItemId:string,capabilities:Capabilities,executionProfile?:ExecutionProfileSelection):Claim {
+  private claimWithCapabilities(groupId:string,workItemId:string,capabilities:Capabilities,executionProfile?:ExecutionProfileSelection,handoffProfile?:ExecutionProfileSelection):Claim {
     return this.write(()=>{
       const group=readGroup(this.store,groupId),work=readWork(this.store,groupId,workItemId);
       if(group.stopped)throw new ControlError("group-stopped");
       const previous=this.store.db.prepare("SELECT id FROM runs WHERE group_id=? AND work_item_id=? ORDER BY rowid DESC LIMIT 1").get(groupId,workItemId);
       if(this.store.dispatchBlocked)throw new ControlError("control-recovery-required");
-      if(previous){const run=readRun(this.store,String(previous.id));if(run.targetVersion===work.targetVersion&&run.graphVersion===group.graphVersion&&run.configHash===work.configHash){if(!sameProfile(run.executionProfile,executionProfile))throw new ControlError("profile-changed");return run;}}
-      return claimWork(this.store,{groupId,workItemId,capabilities,executionProfile,graphVersion:group.graphVersion,targetVersion:work.targetVersion,commandId:`execute-${workItemId}-${work.targetVersion}-${group.graphVersion}`,expectedRevision:group.revision,by:"control-service"});
+      if(previous){const run=readRun(this.store,String(previous.id));if(run.targetVersion===work.targetVersion&&run.graphVersion===group.graphVersion&&run.configHash===work.configHash){if(!sameProfile(run.executionProfile,executionProfile)||!sameProfile(run.handoffProfile,handoffProfile))throw new ControlError("profile-changed");return run;}}
+      return claimWork(this.store,{groupId,workItemId,capabilities,executionProfile,handoffProfile,graphVersion:group.graphVersion,targetVersion:work.targetVersion,commandId:`execute-${workItemId}-${work.targetVersion}-${group.graphVersion}`,expectedRevision:group.revision,by:"control-service"});
     });
   }
   async claimLegacy(groupId:string,workItemId:string):Promise<Claim>{return this.claimWithCapabilities(groupId,workItemId,await this.legacyCapabilities(groupId));}
   claim(groupId:string,workItemId:string):Promise<Claim>{return this.claimLegacy(groupId,workItemId);}
-  async claimProfiled(groupId:string,workItemId:string,selection:ExecutionProfileSelection):Promise<Claim>{const {capabilities}=await this.profiledCapabilities(groupId,selection);return this.claimWithCapabilities(groupId,workItemId,capabilities,selection);}
-  private reconcileWithCapabilities(groupId:string,taskId:string,capabilities:Capabilities,executionProfile?:ExecutionProfileSelection):ApprovedReconcileBudget {
+  async claimProfiled(groupId:string,workItemId:string,selection:ExecutionProfileSelection,handoffSelection:ExecutionProfileSelection):Promise<Claim>{
+    if(selection.workKind!=="task"||handoffSelection.workKind!=="handoff")throw new ControlError("profile-changed");
+    const [{capabilities}]=await Promise.all([this.profiledCapabilities(groupId,selection),this.profiledCapabilities(groupId,handoffSelection)]);
+    return this.claimWithCapabilities(groupId,workItemId,capabilities,selection,handoffSelection);
+  }
+  private reconcileWithCapabilities(groupId:string,taskId:string,capabilities:Capabilities,executionProfile?:ExecutionProfileSelection,handoffProfile?:ExecutionProfileSelection):ApprovedReconcileBudget {
     return this.write(()=>{
       const group=readGroup(this.store,groupId);if(group.stopped)throw new ControlError("group-stopped");
       const workItemId=`reconcile-${taskId}`,existing=this.store.db.prepare("SELECT id FROM runs WHERE group_id=? AND work_item_id=? ORDER BY rowid DESC LIMIT 1").get(groupId,workItemId);let claim:Claim;
-      if(existing){const run=readRun(this.store,String(existing.id));claim=run;if(run.graphVersion!==group.graphVersion)throw new ControlError("reconcile-version-conflict");if(!sameProfile(run.executionProfile,executionProfile))throw new ControlError("profile-changed");}
+      if(existing){const run=readRun(this.store,String(existing.id));claim=run;if(run.graphVersion!==group.graphVersion)throw new ControlError("reconcile-version-conflict");if(!sameProfile(run.executionProfile,executionProfile)||!sameProfile(run.handoffProfile,handoffProfile))throw new ControlError("profile-changed");}
       else {
         const cap=this.options.reconcileGrant;if(!cap)throw new ControlError("reconcile-budget-unapproved");grantSchema.parse(cap);
         const free=subtract(group.limit,add(group.used,group.reserved)),handoff=componentMin(cap.handoff,free),work=componentMin(cap.work,subtract(free,handoff));
         if(work.tokens===0||work.activeMs===0||work.attempts===0||work.sessions===0)throw new ControlError("group-budget-unavailable");
         const parent=allWork(this.store,groupId).find(item=>item.taskId===taskId&&item.kind==="task");if(!parent)throw new ControlError("work-not-found");
         const prepared:WorkInput={workItemId,taskId:workItemId,kind:"reconcile",dependsOn:[],contract:{pendingReconciliation:taskId},configHash:parent.configHash,grant:{work,handoff}};
-        claim=claimWork(this.store,{groupId,workItemId,capabilities,executionProfile,graphVersion:group.graphVersion,targetVersion:1,commandId:`reconcile-${taskId}`,expectedRevision:group.revision,by:"control-service"},prepared);
+        claim=claimWork(this.store,{groupId,workItemId,capabilities,executionProfile,handoffProfile,graphVersion:group.graphVersion,targetVersion:1,commandId:`reconcile-${taskId}`,expectedRevision:group.revision,by:"control-service"},prepared);
       }
       return {maxAttempts:claim.grant.work.attempts,perAttemptTimeoutMs:claim.grant.work.activeMs,totalRuntimeBudgetMs:claim.grant.work.activeMs,tokenBudget:claim.grant.work.tokens};
     });
   }
   async reconcileBudgetLegacy(groupId:string,taskId:string):Promise<ApprovedReconcileBudget>{return this.reconcileWithCapabilities(groupId,taskId,await this.legacyCapabilities(groupId));}
   reconcileBudget(groupId:string,taskId:string):Promise<ApprovedReconcileBudget>{return this.reconcileBudgetLegacy(groupId,taskId);}
-  async reconcileBudgetProfiled(groupId:string,taskId:string,selection:ExecutionProfileSelection):Promise<ApprovedReconcileBudget>{const {capabilities}=await this.profiledCapabilities(groupId,selection);return this.reconcileWithCapabilities(groupId,taskId,capabilities,selection);}
-  async startProfiled(selection:ExecutionProfileSelection,input:import("./executionPort.js").StartEnvelope){const {profile}=await this.profiledCapabilities(input.claim.groupId,selection);if(!sameProfile(readRun(this.store,input.claim.runId).executionProfile,selection))throw new ControlError("profile-changed");return startClaim(this.store,profile.port,input,this.admissionGate);}
+  async reconcileBudgetProfiled(groupId:string,taskId:string,selection:ExecutionProfileSelection,handoffSelection:ExecutionProfileSelection):Promise<ApprovedReconcileBudget>{
+    if(selection.workKind!=="task"||handoffSelection.workKind!=="handoff")throw new ControlError("profile-changed");
+    const [{capabilities}]=await Promise.all([this.profiledCapabilities(groupId,selection),this.profiledCapabilities(groupId,handoffSelection)]);
+    return this.reconcileWithCapabilities(groupId,taskId,capabilities,selection,handoffSelection);
+  }
+  async startProfiled(selection:ExecutionProfileSelection,input:import("./executionPort.js").StartEnvelope){if(selection.workKind!=="task")throw new ControlError("profile-changed");const {profile}=await this.profiledCapabilities(input.claim.groupId,selection);if(!sameProfile(readRun(this.store,input.claim.runId).executionProfile,selection))throw new ControlError("profile-changed");return startClaim(this.store,profile.port,input,this.admissionGate);}
   startLegacy(input:import("./executionPort.js").StartEnvelope){return startClaim(this.store,this.legacyExecutionPort(),input,this.admissionGate);}
-  reconcileStartForRun(runId:string){return reconcileStart(this.store,this.executionPortForRun(runId),runId,this.admissionGate);}
+  async reconcileStartForRun(runId:string){
+    const run=readRun(this.store,runId);
+    if(run.executionProfile&&run.executionProfile.workKind!=="task")throw new ControlError("profile-changed");
+    const selected=run.executionProfile ? await this.profiledCapabilities(run.groupId,run.executionProfile) : undefined;
+    return reconcileStart(this.store,selected?.profile.port??this.legacyExecutionPort(),runId,this.admissionGate);
+  }
   async requestHandoff(groupId:string,runId:string,input:{requestId:string;reason:HandoffReason;deadlineAt:string}) {
     const run=readRun(this.store,runId),group=readGroup(this.store,groupId);
     if(run.groupId!==groupId||run.state==="settled")throw new ControlError("handoff-parent-invalid");
     const work=allWork(this.store,groupId).find(item=>item.kind==="handoff"&&item.parentRunId===runId);
     if(!work)throw new ControlError("handoff-work-not-found");
-    const binding=run.executionProfile;
+    const binding=run.handoffProfile;
+    if(run.executionProfile&&(!binding||binding.workKind!=="handoff"))throw new ControlError("profile-changed");
     const selected=binding ? await this.profiledCapabilities(groupId,binding) : {profile:undefined,capabilities:await this.legacyCapabilities(groupId)};
     const envelope=readEnvelope(this.store,runId),request=handoffRequestSchema.parse({protocol:1 as const,...input,runId,generation:run.generation});
     const id="handoff-request:"+runId,body={workItemId:work.workItemId,request};const old=this.store.db.prepare("SELECT body FROM outbox WHERE id=?").get(id);
     this.write(()=>{
-      claimWork(this.store,{groupId,workItemId:work.workItemId,capabilities:selected.capabilities,executionProfile:binding,graphVersion:group.graphVersion,targetVersion:work.targetVersion,commandId:`claim-${input.requestId}`,expectedRevision:group.revision,by:"control-service"});
+      claimWork(this.store,{groupId,workItemId:work.workItemId,capabilities:selected.capabilities,executionProfile:binding,handoffProfile:binding,graphVersion:group.graphVersion,targetVersion:work.targetVersion,commandId:`claim-${input.requestId}`,expectedRevision:group.revision,by:"control-service"});
       if(old){if(hashPayload(JSON.parse(String(old.body)))!==hashPayload(body))throw new ControlError("handoff-request-conflict");}
       else this.store.transaction(()=>this.store.db.prepare("INSERT INTO outbox VALUES (?, 'handoff-request', ?, 0)").run(id,JSON.stringify(body)));
     });
     const port=selected.profile?.port??this.legacyExecutionPort();
     try{const ack=await port.requestHandoff(envelope,request);if(ack.requestId!==input.requestId)throw new Error("identity");}
     catch{throw new ControlError("handoff-outcome-unknown");}
-    const {collectControlled,settleControlledHandoff}=await import("./schedulerBridge.js");const report=await collectControlled(this,runId);await settleControlledHandoff(this,runId,report);
+    const {collectControlled,settleControlledHandoff}=await import("./schedulerBridge.js");const report=await collectControlled(this,runId,port);await settleControlledHandoff(this,runId,report);
     if(readRun(this.store,runId).state==="settled")this.write(()=>this.store.transaction(()=>this.store.db.prepare("UPDATE outbox SET delivered=1 WHERE id=?").run(id)));
     return getRun(this.store,runId);
   }
@@ -145,13 +159,17 @@ export class ControlService {
     const group=readGroup(this.store,groupId);if(group.revision!==input.expectedRevision)throw new ControlError("revision-conflict");
     const rows=this.store.db.prepare("SELECT body FROM runs WHERE group_id=? ORDER BY rowid DESC").all(groupId).map(row=>JSON.parse(String(row.body)) as ReturnType<typeof readRun>);
     const predecessor=rows.find(run=>run.taskId===taskId&&run.state==="settled"&&run.recoverable);if(!predecessor)throw new ControlError("continuation-predecessor-unrecoverable");
-    const work=readWork(this.store,groupId,predecessor.workItemId),binding=predecessor.executionProfile;
+    const work=readWork(this.store,groupId,predecessor.workItemId),binding=predecessor.executionProfile,handoffBinding=predecessor.handoffProfile;
     const selected=binding ? await this.profiledCapabilities(groupId,binding) : {profile:undefined,capabilities:await this.legacyCapabilities(groupId)};
-    const claim=this.write(()=>claimContinuation(this.store,{groupId,predecessorRunId:predecessor.runId,workItemId:work.workItemId,taskId,graphVersion:group.graphVersion,targetVersion:work.targetVersion,commandId:input.commandId,expectedRevision:input.expectedRevision,by:"human",executionProfile:binding}));
+    if(binding) {
+      if(binding.workKind!=="task"||!handoffBinding||handoffBinding.workKind!=="handoff")throw new ControlError("profile-changed");
+      await this.profiledCapabilities(groupId,handoffBinding);
+    }
+    const claim=this.write(()=>claimContinuation(this.store,{groupId,predecessorRunId:predecessor.runId,workItemId:work.workItemId,taskId,graphVersion:group.graphVersion,targetVersion:work.targetVersion,commandId:input.commandId,expectedRevision:input.expectedRevision,by:"human",executionProfile:binding,handoffProfile:handoffBinding}));
     const port=selected.profile?.port??this.legacyExecutionPort();
     if(this.store.db.prepare("SELECT id FROM outbox WHERE id=?").get("start:"+claim.runId))return reconcileStart(this.store,port,claim.runId,this.admissionGate);
     const previous=readEnvelope(this.store,predecessor.runId),sourceDir=join(dirname(previous.work.sourceDir),claim.runId);
-    const checkpoint=await exportResumeBundle(this.store,{predecessorRunId:predecessor.runId,newSourceDir:sourceDir});
+    const checkpoint=await exportResumeBundle(this.store,{predecessorRunId:predecessor.runId,newSourceDir:sourceDir},{admit:operation=>this.writeAsync(operation)});
     return startClaim(this.store,port,{protocol:1,claim,contractHash:hashPayload(work.contract),inputCheckpoint:checkpoint,work:{contract:work.contract,targetRepo:previous.work.targetRepo,base:previous.work.base,sourceDir}},this.admissionGate);
   }
 }

@@ -1,7 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
-import { constants, createReadStream, createWriteStream } from "node:fs";
-import { rename, lstat, open, readFile, readdir, readlink, realpath, unlink } from "node:fs/promises";
+import { constants, createReadStream, createWriteStream, lstatSync } from "node:fs";
+import { rename, lstat, open, readFile, readdir, readlink, realpath, rm } from "node:fs/promises";
 import type { FileHandle } from "node:fs/promises";
+import type { BigIntStats } from "node:fs";
 import { join, relative, isAbsolute, dirname, basename } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { Transform } from "node:stream";
@@ -17,6 +18,7 @@ export interface ArchiveDependencies {
  afterCopy?:(path:string)=>Promise<void>;
  syncFile?:(file:FileHandle)=>Promise<void>;
  admit?<T>(operation:()=>Promise<T>):Promise<T>;
+ beforeDuplicateRead?:()=>Promise<void>;
 }
 export interface TreeEntry {path:string;kind:"file"|"directory"|"symlink";mode:number;ref?:ArtifactRef;target?:string}
 export function within(root:string,path:string):boolean {const rel=relative(root,path);return rel===""||(!rel.startsWith("..")&&!isAbsolute(rel));}
@@ -24,26 +26,67 @@ async function digestFile(path:string):Promise<string> {
  const hash=createHash("sha256");const handle=await open(path,constants.O_RDONLY|constants.O_NOFOLLOW);
  try {for await(const bytes of handle.createReadStream({autoClose:false})) hash.update(bytes);return hash.digest("hex");} finally {await handle.close();}
 }
+interface FileIdentity {dev:string;ino:string;size:string;mtimeNs:string;ctimeNs:string}
+function fileIdentity(stat:BigIntStats):FileIdentity {
+ return {dev:String(stat.dev),ino:String(stat.ino),size:String(stat.size),mtimeNs:String(stat.mtimeNs),ctimeNs:String(stat.ctimeNs)};
+}
+function sameFileIdentity(left:FileIdentity,right:FileIdentity):boolean {
+ return left.dev===right.dev&&left.ino===right.ino&&left.size===right.size&&left.mtimeNs===right.mtimeNs&&left.ctimeNs===right.ctimeNs;
+}
+async function observeDuplicate(path:string,deps:ArchiveDependencies):Promise<{identity:FileIdentity;hash:string}|null> {
+ let handle:FileHandle;
+ try {handle=await open(path,constants.O_RDONLY|constants.O_NOFOLLOW);}
+ catch(error) {if((error as NodeJS.ErrnoException).code==="ENOENT")return null;throw error;}
+ try {
+  const before=fileIdentity(await handle.stat({bigint:true}));
+  await deps.beforeDuplicateRead?.();
+  const hash=createHash("sha256");
+  for await(const bytes of handle.createReadStream({autoClose:false}))hash.update(bytes);
+  const after=fileIdentity(await handle.stat({bigint:true}));
+  if(!sameFileIdentity(before,after))throw new ControlError("artifact-id-conflict");
+  return {identity:after,hash:hash.digest("hex")};
+ } finally {await handle.close();}
+}
+function currentIdentity(path:string):FileIdentity {
+ const stat=lstatSync(path,{bigint:true});
+ if(!stat.isFile()||stat.isSymbolicLink()||stat.nlink!==1n)throw new ControlError("artifact-id-conflict");
+ return fileIdentity(stat);
+}
 async function publish(store:ControlStore,id:string,temp:string,hash:string,deps:ArchiveDependencies):Promise<ArtifactRef> {
  idSchema.parse(id);const dir=join(privateDirectory(join(store.stateDir,"artifacts")),id);const destination=join(dir,"data");
  const handle=await open(temp,"r");try {await (deps.syncFile??(file=>file.sync()))(handle);}finally{await handle.close();}
  const stagedDir=privateDirectory(join(store.stateDir,"staging",randomUUID()));
- await rename(temp,join(stagedDir,"data"));syncDirectory(stagedDir);syncDirectory(dirname(temp));deps.beforePublish?.();
- const commit=async()=>{
-  try {await rename(stagedDir,dir);}catch(error){
-   if(!["EEXIST","ENOTEMPTY"].includes((error as NodeJS.ErrnoException).code??"")) throw error;
-   privateDirectory(dir);assertRegular(destination);if(await digestFile(destination)!==hash) throw new ControlError("artifact-id-conflict");
+ const admit=<T>(operation:()=>Promise<T>)=>deps.admit?deps.admit(operation):operation();
+ const register=()=>store.transaction(()=>{
+  const old=store.db.prepare("SELECT hash FROM artifacts WHERE id=?").get(id);
+  if(old && old.hash!==hash) throw new ControlError("artifact-id-conflict");
+  store.db.prepare("INSERT INTO artifacts VALUES (?,?,?) ON CONFLICT(id) DO NOTHING").run(id,hash,JSON.stringify({path:relative(store.stateDir,destination)}));
+ });
+ try {
+  await rename(temp,join(stagedDir,"data"));syncDirectory(stagedDir);syncDirectory(dirname(temp));deps.beforePublish?.();
+  for(;;) {
+   const duplicate=await observeDuplicate(destination,deps);
+   if(duplicate) {
+    if(duplicate.hash!==hash)throw new ControlError("artifact-id-conflict");
+    await admit(async()=>{
+     if(!sameFileIdentity(duplicate.identity,currentIdentity(destination)))throw new ControlError("artifact-id-conflict");
+     register();
+    });
+    break;
+   }
+   const published=await admit(async()=>{
+    try {await rename(stagedDir,dir);}
+    catch(error) {
+     if(["EEXIST","ENOTEMPTY"].includes((error as NodeJS.ErrnoException).code??""))return false;
+     throw error;
+    }
+    syncDirectory(dir);syncDirectory(dirname(dir));syncDirectory(dirname(temp));register();return true;
+   });
+   if(published)break;
   }
-  syncDirectory(dir);syncDirectory(dirname(dir));syncDirectory(dirname(temp));
-  store.transaction(()=>{
-   const old=store.db.prepare("SELECT hash FROM artifacts WHERE id=?").get(id);
-   if(old && old.hash!==hash) throw new ControlError("artifact-id-conflict");
-   store.db.prepare("INSERT INTO artifacts VALUES (?,?,?) ON CONFLICT(id) DO NOTHING").run(id,hash,JSON.stringify({path:relative(store.stateDir,destination)}));
-  });
- };
- await (deps.admit?deps.admit(commit):commit());
- const ref={artifactId:id,hash};
- await readArtifact(store,ref);return ref;
+  const ref={artifactId:id,hash};
+  await readArtifact(store,ref);return ref;
+ } finally {await rm(stagedDir,{recursive:true,force:true});}
 }
 export async function writeArtifact(store:ControlStore,id:string,bytes:Buffer,deps:ArchiveDependencies={}):Promise<ArtifactRef> {
  idSchema.parse(id);const temp=join(privateDirectory(join(store.stateDir,"staging")),randomUUID());

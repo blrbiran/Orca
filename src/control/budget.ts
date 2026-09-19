@@ -13,6 +13,7 @@ export interface RunRecord extends Claim, RunView {
   handoffWorkItemId:string|null;
   predecessorRunId?:string;
   executionProfile?:ExecutionProfileBinding;
+  handoffProfile?:ExecutionProfileBinding;
 }
 export function readRun(store:ControlStore,id:string):RunRecord {
   const row=store.db.prepare("SELECT body FROM runs WHERE id=?").get(id);
@@ -44,9 +45,9 @@ export function assertCapabilities(mode:BudgetMode,c:Capabilities):void {
   if(mode==="strict" && (c.budgetEnforcement!=="bounded" || !c.requestBoundEvidence)) throw new ControlError("control-capability-unsupported");
 }
 export function claimWork(store:ControlStore,input:ClaimInput, preparedWork?:WorkInput):Claim {
-  const {groupId,workItemId,graphVersion,targetVersion,capabilities,executionProfile,...meta}=input;
+  const {groupId,workItemId,graphVersion,targetVersion,capabilities,executionProfile,handoffProfile,...meta}=input;
   safeInteger.parse(graphVersion);safeInteger.parse(targetVersion);
-  return applyCommand(store,groupId,meta,{verb:"claim",workItemId,graphVersion,targetVersion,capabilities,executionProfile:executionProfile??null,...(preparedWork?{preparedWork}: {})},()=>{
+  return applyCommand(store,groupId,meta,{verb:"claim",workItemId,graphVersion,targetVersion,capabilities,executionProfile:executionProfile??null,handoffProfile:handoffProfile??null,...(preparedWork?{preparedWork}: {})},()=>{
     if(store.dispatchBlocked) throw new ControlError("control-recovery-required");
     const group=readGroup(store,groupId);
     if(preparedWork) {
@@ -82,7 +83,7 @@ export function claimWork(store:ControlStore,input:ClaimInput, preparedWork?:Wor
       group.reserved=reserved;
     }
     const claim:Claim={groupId,workItemId,taskId:work.taskId,runId:"run-"+randomUUID(),generation:1,graphVersion,targetVersion,commandId:meta.commandId,configHash:work.configHash,grant:work.grant,ownerToken:randomUUID()};
-    const run:RunRecord={...claim,...(executionProfile?{executionProfile}:{}),executionId:null,state:"claimed",checkpointId:null,recoverable:false,remaining:structuredClone(work.grant),cumulative:{work:zero(),handoff:zero()},unknown:{work:true,handoff:true},highWater:0,breaches:[],handoffWorkItemId:null};
+    const run:RunRecord={...claim,...(executionProfile?{executionProfile}:{}),...(handoffProfile?{handoffProfile}:{}),executionId:null,state:"claimed",checkpointId:null,recoverable:false,remaining:structuredClone(work.grant),cumulative:{work:zero(),handoff:zero()},unknown:{work:true,handoff:true},highWater:0,breaches:[],handoffWorkItemId:null};
     store.db.prepare("INSERT INTO runs VALUES (?,?,?,?,1,?)").run(claim.runId,groupId,workItemId,1,JSON.stringify(run));
     work.status="running";saveWork(store,groupId,work);
     group.status="running";group.budgetVersion++;saveGroup(store,group);return claim;

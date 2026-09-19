@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { constants } from "node:fs";
-import { lstat, open, readFile, rename } from "node:fs/promises";
-import { isAbsolute, join } from "node:path";
+import { lstat, open, readFile, rename, rm } from "node:fs/promises";
+import { dirname, isAbsolute, join } from "node:path";
 import type { ControlStore } from "./store.js";
 import type { ArtifactRef } from "./types.js";
 import { readRun } from "./budget.js";
@@ -29,6 +29,11 @@ export interface ResumeBundleV1 {
   unfinished: string[];
   pendingDecisions: string[];
   awaitingHuman: string[];
+}
+
+export interface ResumeBundleDependencies {
+  admit?<T>(operation: () => Promise<T>): Promise<T>;
+  afterStage?: () => Promise<void>;
 }
 
 function sha256(bytes: Buffer): string {
@@ -67,7 +72,7 @@ async function rereadRegular(path: string, expectedHash?: string): Promise<Buffe
   return bytes;
 }
 
-export async function exportResumeBundle(store: ControlStore, input: { predecessorRunId: string; newSourceDir: string }): Promise<InputCheckpointV1> {
+export async function exportResumeBundle(store: ControlStore, input: { predecessorRunId: string; newSourceDir: string }, deps: ResumeBundleDependencies = {}): Promise<InputCheckpointV1> {
   if (!isAbsolute(input.newSourceDir)) throw new ControlError("resume-source-dir-not-absolute");
   const run = readRun(store, input.predecessorRunId);
   if (run.state !== "settled" || !run.recoverable || !run.checkpointId) throw new ControlError("resume-predecessor-unrecoverable");
@@ -92,47 +97,55 @@ export async function exportResumeBundle(store: ControlStore, input: { predecess
 
   const checkpointRef = { artifactId: `checkpoint-${checkpointHash}`, hash: checkpointHash };
   if (refs.has(checkpointRef.artifactId)) throw new ControlError("resume-artifact-conflict");
-  const sourceDir = privateDirectory(input.newSourceDir);
-  const inputDir = privateDirectory(join(sourceDir, "input"));
-  const finalDir = join(inputDir, checkpoint.checkpointId);
-  try { await lstat(finalDir); throw new ControlError("resume-bundle-exists"); }
-  catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
-  const staging = privateDirectory(join(inputDir, `.staging-${randomUUID()}`));
+  const staging = privateDirectory(join(privateDirectory(dirname(input.newSourceDir)), `.resume-staging-${randomUUID()}`));
   const artifactsDir = privateDirectory(join(staging, "artifacts"));
+  try {
+    const artifacts: ResumeBundleV1["artifacts"] = [{ ref: checkpointRef, file: "checkpoint.json" }];
+    await writePrivate(join(staging, "checkpoint.json"), checkpointBytes);
+    for (const ref of [...refs.values()].sort((a, b) => a.artifactId.localeCompare(b.artifactId))) {
+      const file = `artifacts/${ref.artifactId}.bin`;
+      await writePrivate(join(staging, file), artifactBytes.get(ref.artifactId)!);
+      artifacts.push({ ref, file });
+    }
+    let handoff: { unfinished: string[]; pendingDecisions: string[]; awaitingHuman: string[] } | undefined;
+    const handoffRef = (checkpoint as unknown as { handoff?: ArtifactRef }).handoff;
+    if (handoffRef) {
+      try {
+        const raw = JSON.parse(artifactBytes.get(handoffRef.artifactId)!.toString()) as Record<string, unknown>;
+        if (![raw.unfinished, raw.pendingDecisions, raw.awaitingHuman].every(value => Array.isArray(value) && value.every(item => typeof item === "string"))) throw new Error();
+        handoff = { unfinished: raw.unfinished as string[], pendingDecisions: raw.pendingDecisions as string[], awaitingHuman: raw.awaitingHuman as string[] };
+      } catch { throw new ControlError("resume-handoff-invalid"); }
+    }
+    const manifest: ResumeBundleV1 = {
+      protocol: 1,
+      predecessorRunId: input.predecessorRunId,
+      checkpointId: checkpoint.checkpointId,
+      checkpointHash,
+      checkpoint: checkpointRef,
+      snapshot: checkpoint.snapshot,
+      artifacts,
+      unfinished: handoff?.unfinished ?? [],
+      pendingDecisions: handoff?.pendingDecisions ?? [],
+      awaitingHuman: handoff?.awaitingHuman ?? [],
+    };
+    await writePrivate(join(staging, "resume-bundle.json"), Buffer.from(JSON.stringify(manifest)));
+    syncDirectory(artifactsDir); syncDirectory(staging);
+    await rereadRegular(join(staging, "resume-bundle.json"));
+    for (const entry of artifacts) await rereadRegular(join(staging, entry.file), entry.ref.hash);
+    await deps.afterStage?.();
 
-  const artifacts: ResumeBundleV1["artifacts"] = [{ ref: checkpointRef, file: "checkpoint.json" }];
-  await writePrivate(join(staging, "checkpoint.json"), checkpointBytes);
-  for (const ref of [...refs.values()].sort((a, b) => a.artifactId.localeCompare(b.artifactId))) {
-    const file = `artifacts/${ref.artifactId}.bin`;
-    await writePrivate(join(staging, file), artifactBytes.get(ref.artifactId)!);
-    artifacts.push({ ref, file });
+    const publish = async (): Promise<string> => {
+      const sourceDir = privateDirectory(input.newSourceDir);
+      const inputDir = privateDirectory(join(sourceDir, "input"));
+      const finalDir = join(inputDir, checkpoint.checkpointId);
+      try { await lstat(finalDir); throw new ControlError("resume-bundle-exists"); }
+      catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+      await rename(staging, finalDir); syncDirectory(inputDir);
+      return finalDir;
+    };
+    const finalDir = await (deps.admit ? deps.admit(publish) : publish());
+    return { predecessorRunId: input.predecessorRunId, checkpointId: checkpoint.checkpointId, checkpointHash, bundlePath: finalDir };
+  } finally {
+    await rm(staging, { recursive: true, force: true });
   }
-  let handoff: { unfinished: string[]; pendingDecisions: string[]; awaitingHuman: string[] } | undefined;
-  const handoffRef = (checkpoint as unknown as { handoff?: ArtifactRef }).handoff;
-  if (handoffRef) {
-    try {
-      const raw = JSON.parse(artifactBytes.get(handoffRef.artifactId)!.toString()) as Record<string, unknown>;
-      if (![raw.unfinished, raw.pendingDecisions, raw.awaitingHuman].every(value => Array.isArray(value) && value.every(item => typeof item === "string"))) throw new Error();
-      handoff = { unfinished: raw.unfinished as string[], pendingDecisions: raw.pendingDecisions as string[], awaitingHuman: raw.awaitingHuman as string[] };
-    } catch { throw new ControlError("resume-handoff-invalid"); }
-  }
-  const manifest: ResumeBundleV1 = {
-    protocol: 1,
-    predecessorRunId: input.predecessorRunId,
-    checkpointId: checkpoint.checkpointId,
-    checkpointHash,
-    checkpoint: checkpointRef,
-    snapshot: checkpoint.snapshot,
-    artifacts,
-    unfinished: handoff?.unfinished ?? [],
-    pendingDecisions: handoff?.pendingDecisions ?? [],
-    awaitingHuman: handoff?.awaitingHuman ?? [],
-  };
-  await writePrivate(join(staging, "resume-bundle.json"), Buffer.from(JSON.stringify(manifest)));
-  syncDirectory(artifactsDir); syncDirectory(staging);
-
-  await rereadRegular(join(staging, "resume-bundle.json"));
-  for (const entry of artifacts) await rereadRegular(join(staging, entry.file), entry.ref.hash);
-  await rename(staging, finalDir); syncDirectory(inputDir);
-  return { predecessorRunId: input.predecessorRunId, checkpointId: checkpoint.checkpointId, checkpointHash, bundlePath: finalDir };
 }

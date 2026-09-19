@@ -58,13 +58,13 @@ function deepFreeze<T>(value: T): T {
 }
 
 function ownPort(port: ExecutionPort): ExecutionPort {
-  const capabilities = port.capabilities;
-  const readEvidence = port.readEvidence;
-  const accept = port.accept;
-  const inspect = port.inspect;
-  const requestHandoff = port.requestHandoff;
-  const collect = port.collect;
-  const probeProfileCapabilities = port.probeProfileCapabilities;
+  const capabilities = port.capabilities.bind(port);
+  const readEvidence = port.readEvidence.bind(port);
+  const accept = port.accept.bind(port);
+  const inspect = port.inspect.bind(port);
+  const requestHandoff = port.requestHandoff.bind(port);
+  const collect = port.collect.bind(port);
+  const probeProfileCapabilities = port.probeProfileCapabilities?.bind(port);
   const owned: ExecutionPort = {
     ...(probeProfileCapabilities ? { probeProfileCapabilities: () => probeProfileCapabilities() } : {}),
     capabilities: () => capabilities(),

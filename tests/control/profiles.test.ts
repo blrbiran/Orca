@@ -118,6 +118,27 @@ describe("trusted execution profiles", () => {
     expect(owned).not.toBe(frozen);
   });
 
+  it("preserves the original receiver for captured port methods", async () => {
+    class ReceiverPort implements ExecutionPort {
+      #accepts = 0;
+      probeProfileCapabilities = async () => snapshot().profile.capabilities;
+      capabilities = async () => ({ protocol: 1 as const, durableAccept: true, ownershipIsolation: true, evidenceRetention: true, usageObservation: "realtime" as const, budgetEnforcement: "bounded" as const, requestBoundEvidence: "request-bound-v1" });
+      readEvidence = async () => Buffer.alloc(0);
+      async accept() { this.#accepts += 1; return { kind: "accepted" as const, executionId: `receiver-${this.#accepts}`, configHash: hash("a") }; }
+      inspect = async () => ({ kind: "unknown" as const });
+      requestHandoff = async (_input: never, request: { requestId: string }) => ({ kind: "unknown" as const, requestId: request.requestId });
+      collect = async () => ({ events: [], candidate: null, terminal: null });
+    }
+    const supplied = new ReceiverPort();
+    const frozen = resolveProfile(snapshot(), supplied);
+    const router = createExecutionProfileRouter([frozen]);
+    const owned = router.resolve("task", "worker", frozen.profileHash);
+    const mutable: ExecutionPort = supplied;
+    mutable.accept = async () => ({ kind: "unknown" });
+
+    await expect(owned.port.accept({} as never)).resolves.toMatchObject({ kind: "accepted", executionId: "receiver-1" });
+  });
+
   it("intersects every ordered capability and keeps proof only on exact descriptor equality", () => {
     const declared = snapshot().profile.capabilities;
     const observed: ProfileCapabilityProbe = {
