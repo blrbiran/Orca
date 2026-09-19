@@ -4891,3 +4891,54 @@ SDD新增review-fix-evidence目录，保留全部旧台账与证据。产品已�
 **awaitingHuman**：分支整合、push、删分支／worktree由人在终端操作，不绕活闸门；Claude额度按用户通知2026-09-22 09:00 Asia/Shanghai后恢复，仍需核实。原 Orca chain 真钱验收须人提交 `.orca/chain.json` 选 model 并点头，先测该配置首调 F，副本 T1>F；不复用 Codex 切片 F。D-launch 其余残余仍看原 spec，不因本次适配完成而关闭。
 
 **姊妹仓库**：本次按用户要求在 ccloop 主目录与 Codex 开发树同步同一 Orca 滚动节，在 ccmem 更新原 §15；各自非 Orca 前缀保持字节不变，不再追加跨仓会话日志。ccmem 原生任务仍看它自己的入口及ⅩⅬⅡ，未改代码、daemon或用户数据。
+
+## 2026-09-19 控制底座计划与完整 verify（task 01a0b836）
+
+归属：Codex task `01a0b836-21b3-7d93-89c4-4a9b86293eb0`；观测源码基点 Orca `75d65eca0f4bcf047d62854c5af191815a00d485`。用户同意先核对／验证，再写 §13.6 控制底座计划。本节只追加，不修改历史记录；本轮产品代码零改动，ccloop／ccmem 零写入，未调用真实模型。
+
+新计划：`docs/superpowers/plans/2026-09-19-task-control-foundation.md`，八项：私有 SQLite 存储、组／命令版本、统一预算领取与结算、持久启动及所有权、证据与脏快照归档、一致提交与清理、scheduler 受控接线、崩溃恢复验收。含 R1–R5 责任映射、M01–M40 最小变异、自查。建议 Native；计划本身尚待审阅，未开始实施，也未把上一 Codex 切片的 Native 选择扩大为新切片执行方式批准。
+
+计划边界：真实 ccloop 新控制协议／handoff／静止证明／新 run 快照物化留下一切片；底座先验真实 DB/文件和离线协议对端，未支持新协议的生产 adapter 按名拒绝受控组派发，不回退旧 runner。旧单轮 CLI 保留原契约，不宣称组级恢复。Web 与 ccmem 后续依赖顺序不变，Codex 五任务不重做，具体 agent 逻辑不移到 Orca。
+
+**开工实测**：三主仓 status 干净；Codex 开发树 `/tmp/ccloop-codex-0919`、`codex/codex-adapter-0919`，HEAD `532f3e1`，只有未跟踪 node_modules。`rtk proxy /usr/bin/git ls-remote origin refs/heads/main` 在沙箱 DNS 失败后，经授权网络重跑成功：Orca 远端 `ce85baa`、ccloop `4bd59a7`、ccmem `cb5683f`；与当时各自主树 HEAD 比较领先/落后为 1/0、2/0、2/0。仅为开工快照，不当作后续发布状态。
+
+**resume**：首次 tsx 在沙箱内因 IPC listen EPERM 未执行成功；授权同命令重跑 `rtk proxy node_modules/.bin/tsx src/cli.ts resume` RC0。沿用 `.orca/checkpoints/orca-dev-6662000e.json`，明确 stale（7 个文件变化）；其测量重跑 28文件/456测试 RC0，真实 `~/.orca` 不存在的检查仍退出1，远端测量退出0。三个 measurement 输出和 resume 完整输出已读回；未改旧 checkpoint 或伪造 Codex 水位。
+
+**完整 verify 挂账已关闭**：在上述 Orca 源码基点运行 `rtk proxy npm run verify`，RC0：主套129/1075；scheduler51/167；chain13/213；链环境主套129/1075；Web build通过；panel PASS0–14；Web check9/34。没有跳过。旧 ledger 七条降级消息是现有 verify 接受的退出2路径，日志保留，没有隐藏或改判据。日志2783行、219270字节，连续分块整份读回，拼接与原文件逐字节相等，SHA256 `8c21ea3c5797f18065babbe71d89c8c64bab2ace8299248caa9f77e4e9054e5f`。
+
+**证据**：原始 `/tmp/orca-control-start-20260919/` 保留；另复制到 `.superpowers/sdd/2026-09-19-task-control-foundation/planning-evidence/`，含 verify.log/rc、resume、三仓核对和 manifest。此为开发证据保存，不是新产品归档功能已实现。文档结构／占位符／代码围栏／M01–M40 完整性检查通过；计划中的新测试尚未实现或执行。真实 `~/.orca` 在验证后仍不存在。成本与上下文读数工具未提供，不自估。
+
+**接下来**：审阅控制底座计划并确认执行方式，再按计划实施；规格已批准，不重开架构。开发树、原 live 与审查证据全部保留；整合、push、删分支/worktree仍由人操作。Claude 额度 2026-09-22 09:00 Asia/Shanghai 后核实；chain 活验仍需人选 model 并点头。
+
+
+## 2026-09-19 控制底座八任务完成与最终交接（task 01a0b836）
+
+本节为接手优先入口。用户已批准控制底座计划并选择 Native 连续实施，取代前节“计划待审／未实施”。独立开发树 `/Users/biran/.codex/worktrees/control-foundation-0919/Orca`，分支 `codex/control-foundation-0919`，按提交主题 `fix(control): preserve accounting and checkpoint recovery invariants` 和 `docs: hand off verified task control foundation` 定位实现与交接；文档提交会改变 HEAD，不要求它等于验收源码提交。尚未整合 main，以实际 worktree、status、log 为准。
+
+八项已完成：私有 SQLite 单写与本机路径身份；命令幂等和版本；所有 work kind 的统一预算领取与累计 usage；持久启动 intent 和 accepted 核对；独立原始证据与脏 Git 快照；checkpoint 事务、投影 outbox 和安全清理；共享 scheduler 的受控执行；崩溃恢复与 task/group artifact 读模型。所有子任务完成仍进入 review，不能推断 goal done。实施计划 `docs/superpowers/plans/2026-09-19-task-control-foundation.md`，批准规格 `docs/superpowers/specs/2026-09-19-task-control-design.md` §13；均已在此开发分支保存。
+
+最终独立整支审查针对 `75d65ec..9f6e3cc`，发现 8 项 Important、0 Critical/Minor；全部在一次修复轮完成：保留生产方最终 usage 水位；两个预算桶均须明确观测（包括零）；checkpoint 先 fsync 暂存再原子发布；投影串行防旧覆盖；新 target/graph/config 领取新 run；已结算后迟到的落地证明可修复业务状态且 run/recovery 互斥；goal-review 不绕过总预算；work-item/task 依赖 ID 正确映射。新增回归先 12 负例失败、1 正例通过，再 13/13 通过；M45–M53 各自行为断言失败并还原。未进行第二次审查，不把测试通过表述为复审通过。
+
+完整 `ORCA_CCLOOP_BIN=/Users/biran/code/skills/loop/ccloop/dist/cli.js npm run verify`（Node v24.13.0）最终 RC0：主套 142文件/1173测试，control 13/98，scheduler 51/167，chain 13/213，chain 环境主套 142/1173，Web build，panel PASS0–14，Web check 9/34。正式套件没有 skipped/todo。旧 ledger 七条降级仍走现有验收接受的退出2路径。修复过程中的类型声明失败日志亦保留；只有 `final-full-verify-2.log` 是最终验收。整份日志 284702 字节、279923 字符已连续分块读回，SHA256 `4d3d9cd16f544447b29774818c865d941c645c50e60d7fa3d4838f6b7ccef359`。
+
+证据在本开发树 `.superpowers/sdd/2026-09-19-task-control-foundation/`（本地保留、不入产品提交）：`progress.md` 全量 Ruling 与成本、`final-review-resolution.md`、`final-review-reproductions/`、`final-full-verify-2.log/rc`、`final-verification-metadata.json`、`evidence-manifest.json`、所有任务红绿/变异日志。M01–M53 及加强版和复跑按台账解释；变异的定向选择 skips 不属于正式验收跳过。所有原始实验副本保留。六个 SIGKILL 边界均先确认同步 marker，重复恢复不重复计费、启动或 merge。验收后真实 `/Users/biran/.orca` 仍不存在，登记的控制测试 worker 已退出。
+
+边界与保留裁定：生产 ccloop 新控制协议／请求封顶／静止证明／handoff／D3 仍留下一切片；不支持协议明确拒绝，禁止退回旧执行器冒充可恢复控制。Codex 仍仅 soft。未加 Web 可恢复操作或自动拆分/ccmem。尚无启动 intent 的 claim 保留身份和预算并 blocked；未知执行不释放所有权；恢复只重试已有 durable cleanup outbox；备份副本不自动获得执行权。旧 repo lock 不凭猜测接管，仍须人工解除；解除后迟到 acceptance 的业务状态已修复。私有目录祖先被外部重定向及其他未注入的启动/断电窗口未获普遍安全证明，保留为验证边界。Deferred Minor 为零。
+
+原 Codex 切片 `/tmp/ccloop-codex-0919`、`codex/codex-adapter-0919` 产品源码未动、勿重复实施，按主题 `fix(codex): harden output reads and watchdog cleanup` 定位；仍未整合 ccloop main。其离线45/706、一次真钱三阶段功能成功及原 wrapper 误判离线修复而未重跑的事实不变。本次按用户要求将 handoff 同步至 Orca 主目录与控制底座开发树、ccloop 主目录与 Codex 开发树、ccmem 主目录；姊妹仓库各只更新既有 Orca 滚动节，非 Orca 正文逐字保留。源码、daemon、用户数据均未改；不从本文推断文档是否已提交或发布。
+
+下一切片：先按公共 ExecutionPort/StartEnvelope 对齐 ccloop 交接与 D3，再 Web 可恢复操作，再自动拆分和 ccmem。Orca 控制 ccloop；具体 agent 适配留在 ccloop；Web 优先。整合、push、删分支/worktree仍由人在终端操作，所有开发树与证据保留。Claude 额度在 2026-09-22 09:00 Asia/Shanghai 后核实，chain 活验仍须人选 model 并点头，先测对应配置 F，副本 T1>F；本次没有真实模型调用。
+
+开工顺序：先读本节、三仓 handoff 和批准规格 §13，再检查各仓 `rtk proxy git status --short --branch`、`rtk proxy git worktree list`、按主题查 `rtk proxy /usr/bin/git log --all --format='%h %s'`。远端状态分别用 `rtk proxy /usr/bin/git ls-remote origin refs/heads/main` 现查，不以缓存 ahead 数代替。Orca 跑 `rtk proxy node_modules/.bin/tsx src/cli.ts resume`；旧 Claude checkpoint 的 stale 结果结合本节解读，不伪造 Codex 水位。验证改道临时数据，检查真实 `~/.orca` 仍不存在；完整 verify 保存退出码和原始日志并整份读回。下一位应先写 ccloop 公共控制协议／handoff 与 D3 切片计划，对齐底座 `src/control/executionPort.ts`、`types.ts`、`dispatch.ts`、`schedulerBridge.ts` 的现有契约；不得重新执行已完成的两个计划。本次 handoff 同步仅做文档一致性检查，没有重新运行产品测试或模型。
+
+## 2026-09-19 公共控制协议、handoff 与 D3 完成（快速接手入口）
+
+本节取代上节“下一位先写 ccloop 协议／D3 计划”的状态。已批准计划 `docs/superpowers/plans/2026-09-19-ccloop-control-handoff-d3.md` 八任务已完成，勿重做控制底座、Codex 五任务或本计划。Orca 开发树仍为 `/Users/biran/.codex/worktrees/control-foundation-0919/Orca`、分支 `codex/control-foundation-0919`；ccloop 开发树仍为 `/tmp/ccloop-codex-0919`、分支 `codex/codex-adapter-0919`。两者尚未整合各自主线。用实际 status/worktree/log 和提交主题 `test(control): verify real ccloop recovery protocol`、`feat(control): verify cross-repo recovery protocol` 定位；handoff 文档提交会移动 HEAD，因此不把任何 SHA、ahead 数或本文 HEAD 当作接手条件。
+
+已交付：ccloop `control` v1 的 capabilities/accept/inspect/handoff/collect/read-evidence，持久 accepted、严格幂等身份、阶段末累计 usage、work/handoff 两桶明确收口、机械交接包、两次进程组静止证明、原始证据、完整脏 Git 快照恢复和结果仓库；Orca 使用显式生产 port，独立归档并重读证据、提交 checkpoint、以 predecessor grant 减累计用量领取新 continuation run，并从已提交 JSON 生成 task/group D3。受控路径禁止回退旧 runner。Codex 仍只支持 `phase-end + soft`，不是 strict token 封顶。
+
+实际二进制离线验收贯通 accept/replay → 三阶段 usage → handoff/proof → archive/commit → dirty bundle → 新 run materialization → collect。六个同步 SIGKILL 边界恢复不重复 agent、usage、checkpoint、continuation 或 Markdown。最终历史验收：ccloop control 24/306、全套 56/771、typecheck/build RC0；Orca cross-repo 1/3、control 19/120、完整 verify 主套 148/1195 两次、scheduler 51/167、chain 13/213、Web build、panel PASS0–14、Web 9/34，正式日志无 skipped/todo。精确命令、日志 SHA、run/execution/checkpoint/group ID、配置哈希与临时根见开发树 `.superpowers/sdd/2026-09-19-ccloop-control-handoff-d3/task-8-final-metadata.md`；完整台账见同目录 `progress.md`。
+
+关键竞态已修：Orca polling 不再用会创建目录的 helper 触碰 terminal source；ccloop 在 candidate durable 后才暴露 terminal，并负责精确物化 `sourceDir/repo`；Orca 只读校验，预先存在的非 Git 目录失败关闭。保留诊断根 `.../orca-real-ccloop-MyDo5O`、fixture `/private/tmp/orca-ccloop-d3-task8`、两开发树、node_modules 和全部 SDD 证据。最终真实 `/Users/biran/.orca` 仍不存在；本切片没有真实模型调用。
+
+下一步依次是 Web 可恢复任务控制 → 自动拆分 → ccmem 纠正闭环／组 goal 验收；agent 适配继续留在 ccloop。一次 Codex 真钱三阶段功能成功，但 wrapper 修正版只做了离线修复、未真钱重跑，不能升级表述。整合、push、删分支/worktree与证据清理由人操作。Claude 额度在 2026-09-22 09:00 Asia/Shanghai 后再核实；Orca chain 活验仍须人选择 model 并明确点头。
