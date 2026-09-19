@@ -2,6 +2,8 @@ import type { Candidate, Capabilities, Claim, StopProof, UsageEvent, ArtifactRef
 import type { InputCheckpointV1 } from "./resumeBundle.js";
 import { ControlError } from "./errors.js";
 import { createCcloopExecutionPort } from "./ccloopPort.js";
+import type { CapabilityViewV1 } from "./webProtocol.js";
+export type ProfileCapabilityProbe = CapabilityViewV1;
 export interface StartEnvelope { protocol:1;claim:Claim;contractHash:string;inputCheckpoint:InputCheckpointV1|null; work:{contract:unknown;targetRepo:string;base:string;sourceDir:string} }
 export type ExecutionStatus={kind:"absent"}|{kind:"accepted";executionId:string;configHash:string}|{kind:"unknown"}|{kind:"stopped";proof:StopProof};
 export interface ExecutionReport {
@@ -9,7 +11,9 @@ export interface ExecutionReport {
  terminal:{outcome:"succeeded"|"blocked_waiting_human"|"exhausted"|"cancelled"|"failed";attemptSha:string|null;sourceDir:string;repoDir:string}|null;
 }
 export interface ExecutionPort {
- capabilities():Promise<Capabilities>;
+  /** A full V1 probe. Absence is capability-unavailable, never inferred. */
+  probeProfileCapabilities?():Promise<ProfileCapabilityProbe>;
+  capabilities():Promise<Capabilities>;
   readEvidence(ref:ArtifactRef):Promise<Buffer>;
   accept(input:StartEnvelope):Promise<ExecutionStatus>;
   inspect(input:StartEnvelope):Promise<ExecutionStatus>;

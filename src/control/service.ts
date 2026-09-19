@@ -13,10 +13,22 @@ import { exportResumeBundle } from "./resumeBundle.js";
 import { readEnvelope, reconcileStart, startClaim } from "./dispatch.js";
 import { getRun } from "./queries.js";
 import { dirname, join } from "node:path";
+import { createAdmissionGate, type AdmissionGate } from "./admissionGate.js";
+import type { ExecutionProfileRouter, FrozenProfile, ObservedProfile } from "./profiles.js";
+import type { WebWorkKindV1 } from "./webProtocol.js";
 
-export interface ServiceOptions {targetRepo?:string;reconcileGrant?: Grant}
+export interface ExecutionProfileSelection { workKind: WebWorkKindV1; profileId: string; profileHash: string }
+export interface ServiceOptions {
+  targetRepo?:string;
+  reconcileGrant?: Grant;
+  profileRouter?: ExecutionProfileRouter;
+  admissionGate?: AdmissionGate;
+}
 export class ControlService {
-  constructor(readonly store: ControlStore, readonly port?: ExecutionPort, readonly options: ServiceOptions = {}) {}
+  readonly admissionGate: AdmissionGate;
+  constructor(readonly store: ControlStore, readonly port?: ExecutionPort, readonly options: ServiceOptions = {}) {
+    this.admissionGate = options.admissionGate ?? createAdmissionGate();
+  }
   async run(groupId:string, planPath:string, options: Omit<import("../scheduler/run.js").RunOptions,"adapter"|"adapterConfig"> = {}):Promise<number> {
     const release=this.store.beginOperation();
     try {
@@ -28,13 +40,25 @@ export class ControlService {
     return await runPreparedRound(loaded.round,options,makeControlledExecution(this,groupId));
     } finally {release();}
   }
-  executionPort(): ExecutionPort { return this.port ?? productionExecutionPort(); }
+  executionProfile(selection: ExecutionProfileSelection): FrozenProfile {
+    if (!this.options.profileRouter) throw new ControlError("control-protocol-unavailable");
+    return this.options.profileRouter.resolve(selection.workKind, selection.profileId, selection.profileHash);
+  }
+  async probeExecutionProfile(selection: ExecutionProfileSelection): Promise<ObservedProfile> {
+    const profile = this.executionProfile(selection);
+    return this.options.profileRouter!.probe(profile);
+  }
+  executionPort(selection?: ExecutionProfileSelection): ExecutionPort {
+    return selection ? this.executionProfile(selection).port : this.port ?? productionExecutionPort();
+  }
   async capabilities(groupId: string) {
     const caps = await this.executionPort().capabilities();
     assertCapabilities(readGroup(this.store,groupId).budgetMode ?? "strict",caps);
     return caps;
   }
   async claim(groupId: string, workItemId: string): Promise<Claim> {
+    const releaseAdmission = this.admissionGate.enter();
+    try {
     const capabilities = await this.capabilities(groupId);
     const group = readGroup(this.store,groupId), work = readWork(this.store,groupId,workItemId);
     if(group.stopped) throw new ControlError("group-stopped");
@@ -46,8 +70,11 @@ export class ControlService {
     }
     return claimWork(this.store,{groupId,workItemId,capabilities,graphVersion:group.graphVersion,targetVersion:work.targetVersion,
       commandId:`execute-${workItemId}-${work.targetVersion}-${group.graphVersion}`,expectedRevision:group.revision,by:"control-service"});
+    } finally { releaseAdmission(); }
   }
   async reconcileBudget(groupId: string, taskId: string): Promise<ApprovedReconcileBudget> {
+    const releaseAdmission = this.admissionGate.enter();
+    try {
     const capabilities=await this.capabilities(groupId), group=readGroup(this.store,groupId);
     if(group.stopped) throw new ControlError("group-stopped");
     const workItemId=`reconcile-${taskId}`;
@@ -72,8 +99,11 @@ export class ControlService {
     }
     return {maxAttempts:claim.grant.work.attempts,perAttemptTimeoutMs:claim.grant.work.activeMs,
       totalRuntimeBudgetMs:claim.grant.work.activeMs,tokenBudget:claim.grant.work.tokens};
+    } finally { releaseAdmission(); }
   }
   async requestHandoff(groupId:string,runId:string,input:{requestId:string;reason:HandoffReason;deadlineAt:string}) {
+    const releaseAdmission = this.admissionGate.enter();
+    try {
     const run=readRun(this.store,runId),group=readGroup(this.store,groupId);
     if(run.groupId!==groupId||run.state==="settled")throw new ControlError("handoff-parent-invalid");
     const work=allWork(this.store,groupId).find(item=>item.kind==="handoff"&&item.parentRunId===runId);
@@ -89,8 +119,11 @@ export class ControlService {
     const {collectControlled,settleControlledHandoff}=await import("./schedulerBridge.js");const report=await collectControlled(this,runId);await settleControlledHandoff(this,runId,report);
     if(readRun(this.store,runId).state==="settled")this.store.transaction(()=>this.store.db.prepare("UPDATE outbox SET delivered=1 WHERE id=?").run(id));
     return getRun(this.store,runId);
+    } finally { releaseAdmission(); }
   }
   async continueTask(groupId:string,taskId:string,input:{commandId:string;expectedRevision:number}) {
+    const releaseAdmission = this.admissionGate.enter();
+    try {
     const group=readGroup(this.store,groupId);if(group.revision!==input.expectedRevision)throw new ControlError("revision-conflict");
     const rows=this.store.db.prepare("SELECT body FROM runs WHERE group_id=? ORDER BY rowid DESC").all(groupId).map(row=>JSON.parse(String(row.body)) as ReturnType<typeof readRun>);
     const predecessor=rows.find(run=>run.taskId===taskId&&run.state==="settled"&&run.recoverable);if(!predecessor)throw new ControlError("continuation-predecessor-unrecoverable");
@@ -100,5 +133,6 @@ export class ControlService {
     const previous=readEnvelope(this.store,predecessor.runId),sourceDir=join(dirname(previous.work.sourceDir),claim.runId);
     const checkpoint=await exportResumeBundle(this.store,{predecessorRunId:predecessor.runId,newSourceDir:sourceDir});
     return startClaim(this.store,this.executionPort(),{protocol:1,claim,contractHash:hashPayload(work.contract),inputCheckpoint:checkpoint,work:{contract:work.contract,targetRepo:previous.work.targetRepo,base:previous.work.base,sourceDir}});
+    } finally { releaseAdmission(); }
   }
 }
