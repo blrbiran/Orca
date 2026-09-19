@@ -4909,3 +4909,22 @@ SDD新增review-fix-evidence目录，保留全部旧台账与证据。产品已�
 **证据**：原始 `/tmp/orca-control-start-20260919/` 保留；另复制到 `.superpowers/sdd/2026-09-19-task-control-foundation/planning-evidence/`，含 verify.log/rc、resume、三仓核对和 manifest。此为开发证据保存，不是新产品归档功能已实现。文档结构／占位符／代码围栏／M01–M40 完整性检查通过；计划中的新测试尚未实现或执行。真实 `~/.orca` 在验证后仍不存在。成本与上下文读数工具未提供，不自估。
 
 **接下来**：审阅控制底座计划并确认执行方式，再按计划实施；规格已批准，不重开架构。开发树、原 live 与审查证据全部保留；整合、push、删分支/worktree仍由人操作。Claude 额度 2026-09-22 09:00 Asia/Shanghai 后核实；chain 活验仍需人选 model 并点头。
+
+
+## 2026-09-19 控制底座八任务完成与最终交接（task 01a0b836）
+
+本节为接手优先入口。用户已批准控制底座计划并选择 Native 连续实施，取代前节“计划待审／未实施”。独立开发树 `/Users/biran/.codex/worktrees/control-foundation-0919/Orca`，分支 `codex/control-foundation-0919`，源码提交至 `09e990f56a2784bc8814999d5a495ccbccc1b8b4`；后续文档提交不改变验收源码。尚未整合 main。
+
+八项已完成：私有 SQLite 单写与本机路径身份；命令幂等和版本；所有 work kind 的统一预算领取与累计 usage；持久启动 intent 和 accepted 核对；独立原始证据与脏 Git 快照；checkpoint 事务、投影 outbox 和安全清理；共享 scheduler 的受控执行；崩溃恢复与 task/group artifact 读模型。所有子任务完成仍进入 review，不能推断 goal done。实施计划 `docs/superpowers/plans/2026-09-19-task-control-foundation.md`，批准规格 `docs/superpowers/specs/2026-09-19-task-control-design.md` §13；均已在此开发分支保存。
+
+最终独立整支审查针对 `75d65ec..9f6e3cc`，发现 8 项 Important、0 Critical/Minor；全部在一次修复轮完成：保留生产方最终 usage 水位；两个预算桶均须明确观测（包括零）；checkpoint 先 fsync 暂存再原子发布；投影串行防旧覆盖；新 target/graph/config 领取新 run；已结算后迟到的落地证明可修复业务状态且 run/recovery 互斥；goal-review 不绕过总预算；work-item/task 依赖 ID 正确映射。新增回归先 12 负例失败、1 正例通过，再 13/13 通过；M45–M53 各自行为断言失败并还原。未进行第二次审查，不把测试通过表述为复审通过。
+
+完整 `ORCA_CCLOOP_BIN=/Users/biran/code/skills/loop/ccloop/dist/cli.js npm run verify`（Node v24.13.0）最终 RC0：主套 142文件/1173测试，control 13/98，scheduler 51/167，chain 13/213，chain 环境主套 142/1173，Web build，panel PASS0–14，Web check 9/34。正式套件没有 skipped/todo。旧 ledger 七条降级仍走现有验收接受的退出2路径。修复过程中的类型声明失败日志亦保留；只有 `final-full-verify-2.log` 是最终验收。整份日志 284702 字节、279923 字符已连续分块读回，SHA256 `4d3d9cd16f544447b29774818c865d941c645c50e60d7fa3d4838f6b7ccef359`。
+
+证据在本开发树 `.superpowers/sdd/2026-09-19-task-control-foundation/`（本地保留、不入产品提交）：`progress.md` 全量 Ruling 与成本、`final-review-resolution.md`、`final-review-reproductions/`、`final-full-verify-2.log/rc`、`final-verification-metadata.json`、`evidence-manifest.json`、所有任务红绿/变异日志。M01–M53 及加强版和复跑按台账解释；变异的定向选择 skips 不属于正式验收跳过。所有原始实验副本保留。六个 SIGKILL 边界均先确认同步 marker，重复恢复不重复计费、启动或 merge。验收后真实 `/Users/biran/.orca` 仍不存在，登记的控制测试 worker 已退出。
+
+边界与保留裁定：生产 ccloop 新控制协议／请求封顶／静止证明／handoff／D3 仍留下一切片；不支持协议明确拒绝，禁止退回旧执行器冒充可恢复控制。Codex 仍仅 soft。未加 Web 可恢复操作或自动拆分/ccmem。尚无启动 intent 的 claim 保留身份和预算并 blocked；未知执行不释放所有权；恢复只重试已有 durable cleanup outbox；备份副本不自动获得执行权。旧 repo lock 不凭猜测接管，仍须人工解除；解除后迟到 acceptance 的业务状态已修复。私有目录祖先被外部重定向及其他未注入的启动/断电窗口未获普遍安全证明，保留为验证边界。Deferred Minor 为零。
+
+原 Codex 切片 `/tmp/ccloop-codex-0919`、`codex/codex-adapter-0919` 未动、勿重复实施，HEAD 观测 `532f3e1`；仍未整合 ccloop main。其离线45/706、一次真钱三阶段功能成功及原 wrapper 误判离线修复而未重跑的事实不变。ccloop/ccmem 产品与交接本轮实施未写入；Orca 原主树保留先前计划及 handoff 未提交状态。本节只写在控制底座开发分支，接手不要只读原主树的旧末节。
+
+下一切片：先按公共 ExecutionPort/StartEnvelope 对齐 ccloop 交接与 D3，再 Web 可恢复操作，再自动拆分和 ccmem。Orca 控制 ccloop；具体 agent 适配留在 ccloop；Web 优先。整合、push、删分支/worktree仍由人在终端操作，所有开发树与证据保留。Claude 额度在 2026-09-22 09:00 Asia/Shanghai 后核实，chain 活验仍须人选 model 并点头，先测对应配置 F，副本 T1>F；本次没有真实模型调用。
