@@ -1046,9 +1046,10 @@ export const commandSuccessSchema = z
   .strict()
   .superRefine((value, ctx) => {
     const isShutdown = value.verb === "shutdown";
-    const revisionsAreNull = value.commandRevision === null && value.projectionSeq === null;
-    if (isShutdown !== revisionsAreNull) {
+    if (isShutdown ? value.commandRevision !== null : value.commandRevision === null) {
       issue(ctx, ["commandRevision"], "command-revision-nullability-mismatch");
+    }
+    if (isShutdown ? value.projectionSeq !== null : value.projectionSeq === null) {
       issue(ctx, ["projectionSeq"], "command-revision-nullability-mismatch");
     }
   });

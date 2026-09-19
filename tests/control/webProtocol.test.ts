@@ -431,6 +431,8 @@ describe("Web control protocol", () => {
     } as const;
     expect(commandSuccessSchema.parse(browserSuccess)).toEqual(browserSuccess);
     expect(commandSuccessSchema.safeParse({ ...browserSuccess, commandRevision: null, projectionSeq: null }).success).toBe(false);
+    expect(commandSuccessSchema.safeParse({ ...browserSuccess, commandRevision: null }).success).toBe(false);
+    expect(commandSuccessSchema.safeParse({ ...browserSuccess, projectionSeq: null }).success).toBe(false);
 
     const shutdownSuccess = {
       ...browserSuccess,
@@ -442,6 +444,8 @@ describe("Web control protocol", () => {
     } as const;
     expect(commandSuccessSchema.parse(shutdownSuccess)).toEqual(shutdownSuccess);
     expect(commandSuccessSchema.safeParse({ ...shutdownSuccess, commandRevision: 1, projectionSeq: 1 }).success).toBe(false);
+    expect(commandSuccessSchema.safeParse({ ...shutdownSuccess, commandRevision: 1 }).success).toBe(false);
+    expect(commandSuccessSchema.safeParse({ ...shutdownSuccess, projectionSeq: 1 }).success).toBe(false);
   });
 
   it("requires sorted estimate tasks and duplicate-free assumptions", () => {
