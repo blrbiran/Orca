@@ -5,12 +5,31 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { pipeline } from "node:stream/promises";
+import { z } from "zod";
 import type { ControlStore } from "./store.js";
 import type { ArtifactRef } from "./types.js";
 import { archiveFile, captureTree, readArtifact, writeArtifact, type ArchiveDependencies, type TreeEntry } from "./archive.js";
 import { privateDirectory } from "./paths.js";
 import { ControlError } from "./errors.js";
-interface Snapshot {version:1;head:string;bundle:ArtifactRef;index:{path:string;mode:string;oid:string;stage:number;ref:ArtifactRef|null}[];tree:TreeEntry[];deleted:string[];missing:string[]}
+import { artifactSchema, safeInteger } from "./schema.js";
+
+const relativeSnapshotPath = z.string().min(1).refine(path =>
+ !path.startsWith("/") && !path.split("/").some(part => part === "" || part === "." || part === ".."),
+ "snapshot-path-invalid",
+);
+const fileTreeEntrySchema = z.object({path:relativeSnapshotPath,kind:z.literal("file"),mode:safeInteger.max(0o777),ref:artifactSchema,target:z.never().optional()}).strict();
+const directoryTreeEntrySchema = z.object({path:relativeSnapshotPath,kind:z.literal("directory"),mode:safeInteger.max(0o777),ref:z.never().optional(),target:z.never().optional()}).strict();
+const symlinkTreeEntrySchema = z.object({path:relativeSnapshotPath,kind:z.literal("symlink"),mode:safeInteger.max(0o777),ref:z.never().optional(),target:z.string()}).strict();
+export const snapshotSchema = z.object({
+ version:z.literal(1),
+ head:z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/),
+ bundle:artifactSchema,
+ index:z.array(z.object({path:relativeSnapshotPath,mode:z.string().regex(/^[0-7]{6}$/),oid:z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/),stage:safeInteger.max(3),ref:artifactSchema.nullable()}).strict()),
+ tree:z.array(z.union([fileTreeEntrySchema,directoryTreeEntrySchema,symlinkTreeEntrySchema])),
+ deleted:z.array(relativeSnapshotPath),
+ missing:z.array(z.string()),
+}).strict();
+export type SnapshotV1 = z.infer<typeof snapshotSchema>;
 function git(repo:string,...args:string[]):Buffer {return execFileSync("git",["-C",repo,...args],{maxBuffer:64*1024*1024});}
 async function blobFile(repo:string,oid:string,destination:string):Promise<void> {
  const child=spawn("git",["-C",repo,"cat-file","blob",oid],{stdio:["ignore","pipe","pipe"]});let stderr="";child.stderr.on("data",b=>stderr+=b);
@@ -24,7 +43,7 @@ export async function captureSnapshot(store:ControlStore,repo:string,missing:str
  const oldMask=process.umask(0o077);
  try {git(repo,"bundle","create",bundlePath,"--all","HEAD");}finally{process.umask(oldMask);}
  // Git output is staging evidence, never an executable hook/config archive.
- const bundle=await archiveFile(store,bundlePath,deps);const index:Snapshot["index"]=[];
+ const bundle=await archiveFile(store,bundlePath,deps);const index:SnapshotV1["index"]=[];
  for(const raw of initialIndex.toString().split("\0").filter(Boolean)) {
   const tab=raw.indexOf("\t"),path=raw.slice(tab+1);const [mode,oid,stage]=raw.slice(0,tab).split(" ");
   if(mode==="160000") {missing.push("submodule:"+path);index.push({path,mode,oid,stage:Number(stage),ref:null});continue;}
@@ -34,12 +53,14 @@ export async function captureSnapshot(store:ControlStore,repo:string,missing:str
  const tree=await captureTree(store,repo,"repo/",missing,deps,[".git"]);
  const paths=new Set(tree.map(e=>e.path));const deleted=index.filter(e=>!paths.has(e.path)).map(e=>e.path);
  if(!initialIndex.equals(git(repo,"ls-files","--stage","-z")) || refs!==git(repo,"show-ref","--head").toString() || head!==git(repo,"rev-parse","HEAD").toString().trim()) missing.push("changed:git-state");
- const snapshot:Snapshot={version:1,head,bundle,index,tree,deleted,missing:[...missing]};
+ const snapshot=snapshotSchema.parse({version:1,head,bundle,index,tree,deleted,missing:[...missing]});
  const bytes=Buffer.from(JSON.stringify(snapshot));return writeArtifact(store,"snapshot-"+createHash("sha256").update(bytes).digest("hex"),bytes,deps);
 }
 export async function verifySnapshot(store:ControlStore,ref:ArtifactRef):Promise<void> {
- const snapshot=JSON.parse((await readArtifact(store,ref)).toString()) as Snapshot;
- if(snapshot.version!==1 || snapshot.missing.length) throw new ControlError("snapshot-partial");
+ const parsed=snapshotSchema.safeParse(JSON.parse((await readArtifact(store,ref)).toString()));
+ if(!parsed.success) throw new ControlError("snapshot-invalid");
+ const snapshot=parsed.data;
+ if(snapshot.missing.length) throw new ControlError("snapshot-partial");
  const bundleBytes=await readArtifact(store,snapshot.bundle);
  for(const entry of snapshot.tree) if(entry.ref) await readArtifact(store,entry.ref);
  for(const entry of snapshot.index) {
