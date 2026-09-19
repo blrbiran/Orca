@@ -1,0 +1,12 @@
+export const schemaVersion = "1";
+export const initialSchema = `CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;
+CREATE TABLE groups(id TEXT PRIMARY KEY, revision INTEGER NOT NULL, graph_version INTEGER NOT NULL, body TEXT NOT NULL) STRICT;
+CREATE TABLE work_items(group_id TEXT NOT NULL REFERENCES groups(id), id TEXT NOT NULL, target_version INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY(group_id,id)) STRICT;
+CREATE TABLE commands(group_id TEXT NOT NULL, id TEXT NOT NULL, payload_hash TEXT NOT NULL, result TEXT NOT NULL, PRIMARY KEY(group_id,id)) STRICT;
+CREATE TABLE runs(id TEXT PRIMARY KEY, group_id TEXT NOT NULL REFERENCES groups(id), work_item_id TEXT NOT NULL, generation INTEGER NOT NULL, active INTEGER NOT NULL CHECK(active IN (0,1)), body TEXT NOT NULL) STRICT;
+CREATE UNIQUE INDEX one_active_work ON runs(group_id,work_item_id) WHERE active=1;
+CREATE TABLE usage_events(run_id TEXT NOT NULL REFERENCES runs(id), seq INTEGER NOT NULL, payload_hash TEXT NOT NULL, body TEXT NOT NULL, PRIMARY KEY(run_id,seq)) STRICT;
+CREATE TABLE artifacts(id TEXT PRIMARY KEY, hash TEXT NOT NULL, body TEXT NOT NULL) STRICT;
+CREATE TABLE checkpoints(id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES runs(id), hash TEXT NOT NULL, body TEXT NOT NULL) STRICT;
+CREATE TABLE outbox(id TEXT PRIMARY KEY, kind TEXT NOT NULL, body TEXT NOT NULL, delivered INTEGER NOT NULL DEFAULT 0) STRICT;
+`;
