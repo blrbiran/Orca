@@ -6,7 +6,7 @@ import { readRun } from "./budget.js";
 import { acceptanceEvidence, readCommittedCheckpoint, verifyCandidateArtifacts } from "./checkpoints.js";
 import { within } from "./archive.js";
 import { privateDirectory } from "./paths.js";
-export async function cleanupCommittedRun(store:ControlStore,runId:string,sourceDir:string,deps:{beforeCleanup?:()=>Promise<void>}={}):Promise<{removed:boolean}> {
+export async function cleanupCommittedRun(store:ControlStore,runId:string,sourceDir:string,deps:{beforeCleanup?:()=>Promise<void>;admit?<T>(operation:()=>Promise<T>):Promise<T>}={}):Promise<{removed:boolean}> {
  const c=await readCommittedCheckpoint(store,runId),run=readRun(store,runId);
  if(!run.recoverable || run.state!=="settled" || !c.stopProof || c.unresolvedRequestIds.length || c.result!=="complete") throw new ControlError("cleanup-not-recoverable");
  if(c.terminalOutcome==="succeeded" && !await acceptanceEvidence(store,runId)) throw new ControlError("landing-not-confirmed");
@@ -25,9 +25,11 @@ export async function cleanupCommittedRun(store:ControlStore,runId:string,source
  };
  try {await assertSource();}
  catch(error){if((error as NodeJS.ErrnoException).code==="ENOENT") {
-  store.transaction(()=>store.db.prepare("UPDATE outbox SET delivered=1 WHERE id=? AND kind='cleanup'").run("cleanup:"+runId));return {removed:false};
+  const finish=async()=>store.transaction(()=>store.db.prepare("UPDATE outbox SET delivered=1 WHERE id=? AND kind='cleanup'").run("cleanup:"+runId));await (deps.admit?deps.admit(finish):finish());return {removed:false};
  }throw error;}
- store.transaction(()=>store.db.prepare("INSERT INTO outbox VALUES (?, 'cleanup', ?, 0) ON CONFLICT(id) DO NOTHING").run("cleanup:"+runId,JSON.stringify({runId,sourceDir})));
- await deps.beforeCleanup?.();await assertSource();await rm(sourceDir,{recursive:true});
- store.transaction(()=>store.db.prepare("UPDATE outbox SET delivered=1 WHERE id=?").run("cleanup:"+runId));return {removed:true};
+ const intent=async()=>store.transaction(()=>store.db.prepare("INSERT INTO outbox VALUES (?, 'cleanup', ?, 0) ON CONFLICT(id) DO NOTHING").run("cleanup:"+runId,JSON.stringify({runId,sourceDir})));
+ await (deps.admit?deps.admit(intent):intent());
+ await deps.beforeCleanup?.();
+ const finish=async()=>{await assertSource();await rm(sourceDir,{recursive:true});return store.transaction(()=>store.db.prepare("UPDATE outbox SET delivered=1 WHERE id=?").run("cleanup:"+runId));};
+ await (deps.admit?deps.admit(finish):finish());return {removed:true};
 }

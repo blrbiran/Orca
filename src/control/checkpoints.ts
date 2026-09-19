@@ -12,7 +12,11 @@ import { readGroup, readWork, saveGroup, saveWork } from "./queries.js";
 import { privateDirectory, syncDirectory, assertRegular } from "./paths.js";
 import { candidateSchema } from "./schema.js";
 import { hashPayload } from "./commands.js";
-export interface CommitDependencies {afterArchive?:()=>Promise<void>;afterTransaction?:()=>Promise<void>}
+export interface CommitDependencies {
+ afterArchive?:()=>Promise<void>;
+ afterTransaction?:()=>Promise<void>;
+ admit?<T>(operation:()=>Promise<T>):Promise<T>;
+}
 function assertIdentity(store:ControlStore,c:Candidate):void {
  const r=readRun(store,c.runId),g=readGroup(store,c.groupId),w=readWork(store,c.groupId,c.workItemId);
  if(r.groupId!==c.groupId || r.workItemId!==c.workItemId || r.taskId!==c.taskId || r.generation!==c.generation || r.graphVersion!==c.graphVersion || g.graphVersion!==c.graphVersion || r.targetVersion!==c.targetVersion || w.targetVersion!==c.targetVersion) throw new ControlError("checkpoint-identity-conflict");
@@ -61,8 +65,9 @@ export async function commitCandidate(store:ControlStore,c:Candidate,deps:Commit
  c=candidateSchema.parse(c);
  await verifyCandidateArtifacts(store,c);
  const accepted=await acceptanceEvidence(store,c.runId);
+ const commit=async()=>{
  const reference=await persistImmutableCheckpoint(store,c);await deps.afterArchive?.();
- const result=store.transaction(()=>{
+ return store.transaction(()=>{
   const previous=store.db.prepare("SELECT hash,body FROM checkpoints WHERE id=?").get(c.checkpointId);
   if(previous){if(previous.hash!==reference.hash || hashPayload(JSON.parse(String(previous.body)))!==hashPayload(c)) throw new ControlError("checkpoint-id-conflict");return reference;}
   assertIdentity(store,c);let run=readRun(store,c.runId);
@@ -84,7 +89,8 @@ export async function commitCandidate(store:ControlStore,c:Candidate,deps:Commit
   const groupCheckpointId=hashPayload({groupId:c.groupId,revision:group.revision,budgetVersion:group.budgetVersion,taskCheckpointRefs});
   store.db.prepare("INSERT INTO outbox VALUES (?, 'group-handoff', ?, 0) ON CONFLICT(id) DO NOTHING").run(`group-handoff:${c.groupId}:${groupCheckpointId}`,JSON.stringify({groupId:c.groupId,groupCheckpointId,revision:group.revision,budgetVersion:group.budgetVersion,taskCheckpointRefs}));
   return reference;
- });
+ });};
+ const result=await (deps.admit?deps.admit(commit):commit());
  await deps.afterTransaction?.();return result;
 }
 export async function readCommittedCheckpoint(store:ControlStore,runId:string):Promise<Candidate> {
@@ -98,14 +104,15 @@ export async function readCommittedCheckpoint(store:ControlStore,runId:string):P
 }
 
 /** Business acceptance can arrive after final accounting; never settle twice. */
-export async function repairAcceptedWork(store:ControlStore,runId:string):Promise<void> {
+export async function repairAcceptedWork(store:ControlStore,runId:string,deps:{admit?<T>(operation:()=>T):T}={}):Promise<void> {
  const run=readRun(store,runId);
  if(run.state!=="settled" || !run.recoverable) return;
  const c=await readCommittedCheckpoint(store,runId);await verifyCandidateArtifacts(store,c);
  if(!await acceptanceEvidence(store,runId)) return;
- store.transaction(()=>{
+ const repair=()=>store.transaction(()=>{
   const current=readRun(store,runId),work=readWork(store,run.groupId,run.workItemId),group=readGroup(store,run.groupId);
   if(current.checkpointId!==c.checkpointId || work.targetVersion!==run.targetVersion || group.graphVersion!==run.graphVersion || current.state!=="settled" || !current.recoverable) return;
   work.status="done";saveWork(store,run.groupId,work);
  });
+ deps.admit?deps.admit(repair):repair();
 }

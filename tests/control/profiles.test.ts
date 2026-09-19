@@ -86,7 +86,9 @@ describe("trusted execution profiles", () => {
   it("routes only an allowlisted work kind with the exact frozen hash", () => {
     const frozen = resolveProfile(snapshot(), port(unavailableCapabilities));
     const router = createExecutionProfileRouter([frozen]);
-    expect(router.resolve("task", "worker", frozen.profileHash)).toBe(frozen);
+    const owned = router.resolve("task", "worker", frozen.profileHash);
+    expect(owned.profileHash).toBe(frozen.profileHash);
+    expect(owned).not.toBe(frozen);
     expect(() => router.resolve("handoff", "worker", frozen.profileHash)).toThrow("profile-changed");
     expect(() => router.resolve("task", "worker", hash("0"))).toThrow("profile-changed");
     expect(() => router.resolve("task", "missing", hash("0"))).toThrow("profile-changed");
@@ -99,6 +101,21 @@ describe("trusted execution profiles", () => {
     const other = resolveProfile(snapshot({ adapterImplementationHash: hash("9") }, { profileId: "other" }), port(unavailableCapabilities));
     const router = createExecutionProfileRouter([frozen]);
     await expect(router.probe(other)).rejects.toThrow("profile-changed");
+  });
+
+  it("owns immutable snapshot and port method bindings after construction", async () => {
+    let first = 0;
+    const mutablePort = port(async () => { first += 1; return unavailableCapabilities; });
+    const frozen = resolveProfile(snapshot(), mutablePort);
+    const router = createExecutionProfileRouter([frozen]);
+    const owned = router.resolve("task", "worker", frozen.profileHash);
+    mutablePort.probeProfileCapabilities = async () => ({ ...unavailableCapabilities, usageObservation: "realtime" });
+    mutablePort.accept = async () => ({ kind: "accepted", executionId: "mutated", configHash: hash("0") });
+
+    await router.probe(owned);
+    expect(first).toBe(1);
+    await expect(owned.port.accept({} as never)).resolves.toEqual({ kind: "unknown" });
+    expect(owned).not.toBe(frozen);
   });
 
   it("intersects every ordered capability and keeps proof only on exact descriptor equality", () => {
@@ -132,11 +149,11 @@ describe("trusted execution profiles", () => {
     }));
     const router = createExecutionProfileRouter([failed, malformed]);
 
-    await expect(router.probe(failed)).resolves.toMatchObject({
+    await expect(router.probe(router.resolve("task", "worker", failed.profileHash))).resolves.toMatchObject({
       observed: unavailableCapabilities,
       probeFailureCode: "control-capability-probe-failed",
     });
-    await expect(router.probe(malformed)).resolves.toMatchObject({
+    await expect(router.probe(router.resolve("task", "malformed", malformed.profileHash))).resolves.toMatchObject({
       observed: unavailableCapabilities,
       probeFailureCode: "control-capability-probe-failed",
     });

@@ -146,6 +146,7 @@ export const nonDurableControlErrorClassifications = {
   "control-owner-invalid": "internal",
   "control-path-not-directory": "internal",
   "control-path-escape": "internal",
+  "control-path-changed": "internal",
   "control-path-symlink": "internal",
   "control-path-unsafe-file": "internal",
   "control-peer-exit": "transient",

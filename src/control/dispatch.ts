@@ -7,12 +7,17 @@ import { hashPayload } from "./commands.js";
 import { assertClaimIdentity } from "./ownership.js";
 import { ControlError } from "./errors.js";
 import { startEnvelopeSchema } from "./schema.js";
+import type { AdmissionGate } from "./admissionGate.js";
+
+function admitted<T>(gate:AdmissionGate|undefined,write:()=>T):T {
+ const release=gate?.enter();try{return write();}finally{release?.();}
+}
 export function readEnvelope(store:ControlStore,runId:string):StartEnvelope {
  const row=store.db.prepare("SELECT body FROM outbox WHERE id=? AND kind='start'").get("start:"+runId);
  if(!row) throw new ControlError("start-intent-missing");return JSON.parse(String(row.body));
 }
-function persistStatus(store:ControlStore,input:StartEnvelope,status:ExecutionStatus):RunView {
- return store.transaction(()=>{
+function persistStatus(store:ControlStore,input:StartEnvelope,status:ExecutionStatus,gate?:AdmissionGate):RunView {
+ return admitted(gate,()=>store.transaction(()=>{
   assertClaimIdentity(store,input.claim);const run=readRun(store,input.claim.runId);
   if(run.state==="settled") return getRun(store,run.runId);
   if(status.kind==="accepted") {
@@ -24,19 +29,22 @@ function persistStatus(store:ControlStore,input:StartEnvelope,status:ExecutionSt
    store.db.prepare("INSERT INTO outbox VALUES (?, 'stop', ?, 0) ON CONFLICT(id) DO NOTHING").run("stop:"+run.runId,JSON.stringify(status.proof));
   } else run.state="unknown";
   saveRun(store,run);return getRun(store,run.runId);
- });
+ }));
 }
-async function send(store:ControlStore,port:ExecutionPort,input:StartEnvelope):Promise<RunView> {
+async function send(store:ControlStore,port:ExecutionPort,input:StartEnvelope,gate?:AdmissionGate):Promise<RunView> {
  const current=readGroup(store,input.claim.groupId);
  if(current.stopped) throw new ControlError("group-stopped");
  if(store.dispatchBlocked) throw new ControlError("control-recovery-required");
  if(current.deadlineAt && Date.now()>=Date.parse(current.deadlineAt)) throw new ControlError("group-deadline-expired");
  let status:ExecutionStatus;
  try { status=await port.accept(input); }
- catch { persistStatus(store,input,{kind:"unknown"});throw new ControlError("start-outcome-unknown"); }
- return persistStatus(store,input,status);
+ catch {
+  try {persistStatus(store,input,{kind:"unknown"},gate);} catch(error) {if(error instanceof ControlError&&error.code==="panel-draining")throw error;throw error;}
+  throw new ControlError("start-outcome-unknown");
+ }
+ return persistStatus(store,input,status,gate);
 }
-export async function startClaim(store:ControlStore,port:ExecutionPort,input:StartEnvelope):Promise<RunView> {
+export async function startClaim(store:ControlStore,port:ExecutionPort,input:StartEnvelope,gate?:AdmissionGate):Promise<RunView> {
  input=startEnvelopeSchema.parse(input) as StartEnvelope;
  assertClaimIdentity(store,input.claim);
  if(input.protocol!==1) throw new ControlError("control-protocol-unavailable");
@@ -45,20 +53,20 @@ export async function startClaim(store:ControlStore,port:ExecutionPort,input:Sta
  const existing=store.db.prepare("SELECT body FROM outbox WHERE id=?").get("start:"+input.claim.runId);
  if(existing) {
   if(hashPayload(JSON.parse(String(existing.body)))!==hashPayload(input)) throw new ControlError("start-envelope-conflict");
-  return reconcileStart(store,port,input.claim.runId);
+  return reconcileStart(store,port,input.claim.runId,gate);
  }
  if(store.dispatchBlocked) throw new ControlError("control-recovery-required");
  if(readGroup(store,input.claim.groupId).stopped) throw new ControlError("group-stopped");
  if(input.contractHash!==hashPayload(readWork(store,input.claim.groupId,input.claim.workItemId).contract)) throw new ControlError("start-contract-conflict");
- store.transaction(()=>{
+ admitted(gate,()=>store.transaction(()=>{
   assertClaimIdentity(store,input.claim);const run=readRun(store,input.claim.runId);
   if(run.state!=="claimed") throw new ControlError("start-state-conflict");
   store.db.prepare("INSERT INTO outbox VALUES (?, 'start', ?, 0)").run("start:"+run.runId,JSON.stringify(input));
   run.state="starting";saveRun(store,run);
- });
- return send(store,port,input);
+ }));
+ return send(store,port,input,gate);
 }
-export async function reconcileStart(store:ControlStore,port:ExecutionPort,runId:string):Promise<RunView> {
+export async function reconcileStart(store:ControlStore,port:ExecutionPort,runId:string,gate?:AdmissionGate):Promise<RunView> {
  const input=readEnvelope(store,runId);assertClaimIdentity(store,input.claim);
  if(getRun(store,runId).state==="settled") return getRun(store,runId);
  let status:ExecutionStatus;
@@ -67,8 +75,8 @@ export async function reconcileStart(store:ControlStore,port:ExecutionPort,runId
   const group=readGroup(store,input.claim.groupId);
   if(!group.stopped && !store.dispatchBlocked) {
    assertCapabilities(group.budgetMode??"strict",await port.capabilities());
-   return send(store,port,input);
+   return send(store,port,input,gate);
   }
  }
- return persistStatus(store,input,status);
+ return persistStatus(store,input,status,gate);
 }

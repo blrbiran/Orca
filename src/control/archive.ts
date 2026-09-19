@@ -12,7 +12,12 @@ import { privateDirectory, assertRegular, syncDirectory } from "./paths.js";
 import { idSchema } from "./schema.js";
 import { readRun } from "./budget.js";
 import { captureSnapshot } from "./snapshot.js";
-export interface ArchiveDependencies { beforePublish?:()=>void; afterCopy?:(path:string)=>Promise<void>;syncFile?:(file:FileHandle)=>Promise<void> }
+export interface ArchiveDependencies {
+ beforePublish?:()=>void;
+ afterCopy?:(path:string)=>Promise<void>;
+ syncFile?:(file:FileHandle)=>Promise<void>;
+ admit?<T>(operation:()=>Promise<T>):Promise<T>;
+}
 export interface TreeEntry {path:string;kind:"file"|"directory"|"symlink";mode:number;ref?:ArtifactRef;target?:string}
 export function within(root:string,path:string):boolean {const rel=relative(root,path);return rel===""||(!rel.startsWith("..")&&!isAbsolute(rel));}
 async function digestFile(path:string):Promise<string> {
@@ -24,17 +29,20 @@ async function publish(store:ControlStore,id:string,temp:string,hash:string,deps
  const handle=await open(temp,"r");try {await (deps.syncFile??(file=>file.sync()))(handle);}finally{await handle.close();}
  const stagedDir=privateDirectory(join(store.stateDir,"staging",randomUUID()));
  await rename(temp,join(stagedDir,"data"));syncDirectory(stagedDir);syncDirectory(dirname(temp));deps.beforePublish?.();
- try {await rename(stagedDir,dir);}catch(error){
-  if(!["EEXIST","ENOTEMPTY"].includes((error as NodeJS.ErrnoException).code??"")) throw error;
-  privateDirectory(dir);assertRegular(destination);if(await digestFile(destination)!==hash) throw new ControlError("artifact-id-conflict");
- }
- syncDirectory(dir);syncDirectory(dirname(dir));syncDirectory(dirname(temp));
+ const commit=async()=>{
+  try {await rename(stagedDir,dir);}catch(error){
+   if(!["EEXIST","ENOTEMPTY"].includes((error as NodeJS.ErrnoException).code??"")) throw error;
+   privateDirectory(dir);assertRegular(destination);if(await digestFile(destination)!==hash) throw new ControlError("artifact-id-conflict");
+  }
+  syncDirectory(dir);syncDirectory(dirname(dir));syncDirectory(dirname(temp));
+  store.transaction(()=>{
+   const old=store.db.prepare("SELECT hash FROM artifacts WHERE id=?").get(id);
+   if(old && old.hash!==hash) throw new ControlError("artifact-id-conflict");
+   store.db.prepare("INSERT INTO artifacts VALUES (?,?,?) ON CONFLICT(id) DO NOTHING").run(id,hash,JSON.stringify({path:relative(store.stateDir,destination)}));
+  });
+ };
+ await (deps.admit?deps.admit(commit):commit());
  const ref={artifactId:id,hash};
- store.transaction(()=>{
-  const old=store.db.prepare("SELECT hash FROM artifacts WHERE id=?").get(id);
-  if(old && old.hash!==hash) throw new ControlError("artifact-id-conflict");
-  store.db.prepare("INSERT INTO artifacts VALUES (?,?,?) ON CONFLICT(id) DO NOTHING").run(id,hash,JSON.stringify({path:relative(store.stateDir,destination)}));
- });
  await readArtifact(store,ref);return ref;
 }
 export async function writeArtifact(store:ControlStore,id:string,bytes:Buffer,deps:ArchiveDependencies={}):Promise<ArtifactRef> {
@@ -107,8 +115,9 @@ export async function archiveRun(store:ControlStore,input:{runId:string;sourceDi
  const manifest={version:1,runId:run.runId,sourceIdentity,logs,snapshot,missing};
  const bytes=Buffer.from(JSON.stringify(manifest));const archive=await writeArtifact(store,"archive-"+createHash("sha256").update(bytes).digest("hex"),bytes,deps);
  const artifacts=[...logs.flatMap(e=>e.ref?[e.ref]:[]),archive,snapshot];
- store.transaction(()=>{
+ const persist=async()=>store.transaction(()=>{
   store.db.prepare("INSERT INTO outbox VALUES (?, 'archive', ?, 0) ON CONFLICT(id) DO NOTHING").run("archive:"+archive.artifactId,JSON.stringify({runId:run.runId,sourceDir:source,sourceIdentity,repoDir:repo,runsRoot:dirname(source),artifacts,snapshot,missing}));
  });
+ await (deps.admit?deps.admit(persist):persist());
  return {artifacts,snapshot,missing};
 }

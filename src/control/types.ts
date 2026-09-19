@@ -1,5 +1,6 @@
 export type WorkKind = "task" | "decompose" | "reconcile" | "handoff" | "goal-review" | "memory";
 export type WebWorkKind = "budget-estimate" | "task" | "handoff" | "goal-review";
+export interface ExecutionProfileBinding { workKind: WebWorkKind; profileId: string; profileHash: string }
 export type BudgetMode = "strict" | "soft";
 export interface Amount { tokens: number; activeMs: number; attempts: number; sessions: number }
 export interface Grant { work: Amount; handoff: Amount }
@@ -31,6 +32,7 @@ export type WorkInput = WorkBase & (
 export interface ClaimInput extends CommandMeta {
   groupId: string; workItemId: string; graphVersion: number; targetVersion: number;
   capabilities: Capabilities;
+  executionProfile?: ExecutionProfileBinding;
 }
 export interface Claim extends Identity {
   commandId: string; configHash: string; grant: Grant; ownerToken: string;

@@ -57,6 +57,26 @@ function deepFreeze<T>(value: T): T {
   return value;
 }
 
+function ownPort(port: ExecutionPort): ExecutionPort {
+  const capabilities = port.capabilities;
+  const readEvidence = port.readEvidence;
+  const accept = port.accept;
+  const inspect = port.inspect;
+  const requestHandoff = port.requestHandoff;
+  const collect = port.collect;
+  const probeProfileCapabilities = port.probeProfileCapabilities;
+  const owned: ExecutionPort = {
+    ...(probeProfileCapabilities ? { probeProfileCapabilities: () => probeProfileCapabilities() } : {}),
+    capabilities: () => capabilities(),
+    readEvidence: (ref) => readEvidence(ref),
+    accept: (input) => accept(input),
+    inspect: (input) => inspect(input),
+    requestHandoff: (input, request) => requestHandoff(input, request),
+    collect: (input, afterSeq) => collect(input, afterSeq),
+  };
+  return Object.freeze(owned);
+}
+
 function minimum<T extends string>(left: T, right: T, order: readonly T[]): T {
   return order[Math.min(order.indexOf(left), order.indexOf(right))];
 }
@@ -101,14 +121,15 @@ export function createExecutionProfileRouter(
   options: { now?: () => Date } = {},
 ): ExecutionProfileRouter {
   const byId = new Map<string, FrozenProfile>();
-  for (const profile of profiles) {
-    const id = profile.snapshot.profile.profileId;
+  for (const supplied of profiles) {
+    const id = supplied.snapshot.profile.profileId;
     if (
-      !executionProfileSnapshotSchema.safeParse(profile.snapshot).success
-      || sha256Canonical(profile.snapshot) !== profile.profileHash
+      !executionProfileSnapshotSchema.safeParse(supplied.snapshot).success
+      || sha256Canonical(supplied.snapshot) !== supplied.profileHash
     ) throw new ControlError("control-profile-invalid", `identity:${id}`);
     if (byId.has(id)) throw new ControlError("control-profile-invalid", `duplicate:${id}`);
-    byId.set(id, profile);
+    const snapshot = deepFreeze(structuredClone(supplied.snapshot));
+    byId.set(id, Object.freeze({ snapshot, profileHash: supplied.profileHash, port: ownPort(supplied.port) }));
   }
   const ordered = Object.freeze([...byId.values()].sort((left, right) =>
     left.snapshot.profile.profileId.localeCompare(right.snapshot.profile.profileId)));

@@ -61,19 +61,41 @@ function invalid(detail?: string): never {
   throw new ControlError("control-trusted-config-invalid", detail);
 }
 
-function checkedPath(input: string, kind: "directory" | "file"): string {
+interface PathWitness {
+  input: string;
+  kind: "directory" | "file";
+  canonicalPath: string;
+  components: Array<{ path: string; dev: string; ino: string }>;
+}
+
+function checkedPath(input: string, kind: "directory" | "file"): PathWitness {
   if (!isAbsolute(input) || resolve(input) !== input) invalid("path-not-absolute-canonical");
   let cursor = parse(input).root;
+  const components: PathWitness["components"] = [];
   for (const part of input.slice(cursor.length).split(sep).filter(Boolean)) {
     cursor = resolve(cursor, part);
     let stat;
-    try { stat = lstatSync(cursor); }
+    try { stat = lstatSync(cursor, { bigint: true }); }
     catch { invalid("path-missing"); }
     if (stat.isSymbolicLink()) throw new ControlError("control-path-symlink");
+    components.push({ path: cursor, dev: String(stat.dev), ino: String(stat.ino) });
   }
   const stat = lstatSync(input);
   if ((kind === "directory" && !stat.isDirectory()) || (kind === "file" && !stat.isFile())) invalid(`path-not-${kind}`);
-  return realpathSync(input);
+  return { input, kind, canonicalPath: realpathSync(input), components };
+}
+
+function revalidatePath(witness: PathWitness): string {
+  const current = checkedPath(witness.input, witness.kind);
+  if (
+    current.canonicalPath !== witness.canonicalPath
+    || current.components.length !== witness.components.length
+    || current.components.some((component, index) =>
+      component.path !== witness.components[index].path
+      || component.dev !== witness.components[index].dev
+      || component.ino !== witness.components[index].ino)
+  ) throw new ControlError("control-path-changed");
+  return current.canonicalPath;
 }
 
 function unique<T>(values: readonly T[], key: (value: T) => string): boolean {
@@ -101,19 +123,19 @@ export function createTrustedControlConfig(
   checkedPath(input.exportRoot, "directory");
   checkedPath(input.evidenceRoot, "directory");
 
-  const repositories = new Map<string, TrustedRepositoryConfig & { canonicalPath: string }>();
+  const repositories = new Map<string, TrustedRepositoryConfig & { witness: PathWitness }>();
   for (const entry of input.repositories) {
     if (!idSchema.safeParse(entry.repoId).success || !entry.displayName) invalid("repository");
-    repositories.set(entry.repoId, { ...entry, canonicalPath: checkedPath(entry.path, "directory") });
+    repositories.set(entry.repoId, { ...entry, witness: checkedPath(entry.path, "directory") });
   }
-  const plans = new Map<string, TrustedPlanConfig & { canonicalPath: string }>();
+  const plans = new Map<string, TrustedPlanConfig & { witness: PathWitness }>();
   for (const entry of input.plans) {
     if (!idSchema.safeParse(entry.planId).success || !idSchema.safeParse(entry.repoId).success || !entry.displayName) invalid("plan");
     const repository = repositories.get(entry.repoId);
     if (!repository) invalid("plan-repository");
-    const canonicalPath = checkedPath(entry.path, "file");
-    if (!isDescendant(repository.canonicalPath, canonicalPath)) throw new ControlError("control-path-escape");
-    plans.set(entry.planId, { ...entry, canonicalPath });
+    const witness = checkedPath(entry.path, "file");
+    if (!isDescendant(repository.witness.canonicalPath, witness.canonicalPath)) throw new ControlError("control-path-escape");
+    plans.set(entry.planId, { ...entry, witness });
   }
 
   const profiles = router.list();
@@ -127,7 +149,10 @@ export function createTrustedControlConfig(
       const repository = repositories.get(target.data.repoId);
       const plan = plans.get(target.data.planId);
       if (!repository || !plan || plan.repoId !== repository.repoId) throw new ControlError("control-target-not-allowed");
-      return { repositoryPath: repository.canonicalPath, planPath: plan.canonicalPath };
+      const repositoryPath = revalidatePath(repository.witness);
+      const planPath = revalidatePath(plan.witness);
+      if (!isDescendant(repositoryPath, planPath)) throw new ControlError("control-path-escape");
+      return { repositoryPath, planPath };
     },
     async readView(): Promise<ControlConfigV1> {
       const observations = await Promise.all(profiles.map((profile) => router.probe(profile)));

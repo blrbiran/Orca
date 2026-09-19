@@ -96,6 +96,21 @@ describe("trusted panel control config", () => {
     expect(() => createTrustedControlConfig({ ...base, plans: [{ planId: "link", repoId: "repo", displayName: "Link", path: link }] }, h.router)).toThrow("control-path-symlink");
   });
 
+  it("rejects a plan or ancestor swapped to a symlink after startup", async () => {
+    const h = await setup();
+    const config = createTrustedControlConfig({
+      epoch: "epoch-1", stateDir: h.root, executablePath: h.binary, adapterConfigPath: h.adapterConfig,
+      archiveRoot: h.root, exportRoot: h.root, evidenceRoot: h.root, shutdownGraceMs: 30_000,
+      repositories: [{ repoId: "repo", displayName: "Repo", path: h.repo }],
+      plans: [{ planId: "ship", repoId: "repo", displayName: "Ship", path: h.plan }],
+      defaultEstimatorProfileId: "estimator", defaultEstimateMode: "soft",
+    }, h.router);
+    const originalPlans = join(h.repo, "plans-original");
+    await (await import("node:fs/promises")).rename(join(h.repo, "plans"), originalPlans);
+    await symlink(originalPlans, join(h.repo, "plans"));
+    expect(() => config.resolveTarget({ repoId: "repo", planId: "ship" })).toThrow("control-path-symlink");
+  });
+
   it("rejects duplicate IDs and invalid trusted executable paths before serving config", async () => {
     const h = await setup();
     const input = {
