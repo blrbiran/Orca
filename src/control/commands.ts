@@ -51,13 +51,14 @@ export function putWork(store:ControlStore,groupId:string,input:WorkInput,meta:C
     const existing=allWork(store,groupId);const old=existing.find(w=>w.workItemId===work.workItemId);
     controlGraph([...existing.filter(w=>w.workItemId!==work.workItemId),work]);
     const active=store.db.prepare("SELECT id FROM runs WHERE group_id=? AND active=1").get(groupId);
-    if(active || group.proposal){
+    const auxiliaryAppend = !old && work.kind !== "task";
+    if((active && !auxiliaryAppend) || group.proposal){
       group.proposal={work,commandId:meta.commandId};group.stopped=true;group.revision++;saveGroup(store,group);
       return {view:getGroup(store,groupId),rejected:true};
     }
     const record={...work,targetVersion:(old?.targetVersion??0)+1,status:"ready"};
     store.db.prepare("INSERT INTO work_items VALUES (?,?,?,?) ON CONFLICT(group_id,id) DO UPDATE SET target_version=excluded.target_version,body=excluded.body").run(groupId,work.workItemId,record.targetVersion,JSON.stringify(record));
-    group.revision++;group.graphVersion++;group.status="ready";saveGroup(store,group);
+    group.revision++;if(!active || !auxiliaryAppend) group.graphVersion++;group.status="ready";saveGroup(store,group);
     return {view:getGroup(store,groupId),rejected:false};
   });
   if(result.rejected) throw new ControlError("graph-change-needs-handoff");return result.view;
