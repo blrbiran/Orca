@@ -6,6 +6,7 @@ import { getRun, readGroup, readWork } from "./queries.js";
 import { hashPayload } from "./commands.js";
 import { assertClaimIdentity } from "./ownership.js";
 import { ControlError } from "./errors.js";
+import { startEnvelopeSchema } from "./schema.js";
 export function readEnvelope(store:ControlStore,runId:string):StartEnvelope {
  const row=store.db.prepare("SELECT body FROM outbox WHERE id=? AND kind='start'").get("start:"+runId);
  if(!row) throw new ControlError("start-intent-missing");return JSON.parse(String(row.body));
@@ -36,6 +37,7 @@ async function send(store:ControlStore,port:ExecutionPort,input:StartEnvelope):P
  return persistStatus(store,input,status);
 }
 export async function startClaim(store:ControlStore,port:ExecutionPort,input:StartEnvelope):Promise<RunView> {
+ input=startEnvelopeSchema.parse(input) as StartEnvelope;
  assertClaimIdentity(store,input.claim);
  if(input.protocol!==1) throw new ControlError("control-protocol-unavailable");
  const group=readGroup(store,input.claim.groupId);

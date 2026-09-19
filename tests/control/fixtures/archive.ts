@@ -9,8 +9,8 @@ import { fakePeer } from "./peer.js";
 export function git(repo:string,...args:string[]):Buffer {return execFileSync("git",["-C",repo,...args],{env:{...process.env,GIT_AUTHOR_NAME:"Control Test",GIT_AUTHOR_EMAIL:"test@example.invalid",GIT_COMMITTER_NAME:"Control Test",GIT_COMMITTER_EMAIL:"test@example.invalid"}});}
 export async function archiveCase() {
  const h=await openTestStore();const seed=seedBudgetCase(h.store);const claim=claimWork(h.store,seed.t1Claim);
- await startClaim(h.store,fakePeer(join(h.root,"peer")),{protocol:1,claim,contractHash:hashPayload(seed.w1.contract),inputCheckpoint:null});
  const sourceDir=join(h.root,"runs",claim.runId),repoDir=join(sourceDir,"repo");await mkdir(repoDir,{recursive:true});
+ await startClaim(h.store,fakePeer(join(h.root,"peer")),{protocol:1,claim,contractHash:hashPayload(seed.w1.contract),inputCheckpoint:null,work:{contract:seed.w1.contract,targetRepo:h.root,base:"HEAD",sourceDir}});
  git(repoDir,"init","-q");
  await writeFile(join(repoDir,"tracked"),"HEAD\n");await writeFile(join(repoDir,"deleted"),"delete me\n");
  git(repoDir,"add",".");git(repoDir,"commit","-qm","base");git(repoDir,"checkout","--detach","-q");

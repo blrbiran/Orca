@@ -35,9 +35,11 @@ describe("final review regressions",{timeout:30000},()=>{
    const source=await writeArtifact(h.store,"explicit-zero",Buffer.from(JSON.stringify(amount(0,0,0,0))));let seq=0;
    for(const bucket of ["work","handoff"] as const)if(observed==="both"||observed===bucket)recordUsage(h.store,{runId:h.claim.runId,generation:1,eventSeq:++seq,bucket,cumulative:amount(0,0,0,0),source});
    const proofSource=await writeArtifact(h.store,"stop-proof",Buffer.from(JSON.stringify({executionId:"execution-1",generation:1,isolated:true})));const stopProof={...h.stopProof,source:proofSource};
+   const handoff=await writeArtifact(h.store,"handoff-observations",Buffer.from(JSON.stringify({unfinished:[],pendingDecisions:[],awaitingHuman:[]})));
    const a=await archiveRun(h.store,{runId:h.claim.runId,sourceDir:h.sourceDir,repoDir:h.repoDir,stopProof});
    const reserved=getGroup(h.store,"g1").reserved;
-   await commitCandidate(h.store,{...h.claim,checkpointId:"observations",usageHighWater:seq,result:"complete",artifacts:[...a.artifacts,source,proofSource],snapshot:a.snapshot,missing:[],unresolvedRequestIds:[],stopProof,terminalOutcome:"succeeded"});
+   const {commandId:_commandId,configHash:_configHash,grant:_grant,ownerToken:_ownerToken,...candidateIdentity}=h.claim;
+   await commitCandidate(h.store,{...candidateIdentity,checkpointId:"observations",usageHighWater:seq,result:"complete",artifacts:[...a.artifacts,source,proofSource,handoff],snapshot:a.snapshot,missing:[],unresolvedRequestIds:[],stopProof,terminalOutcome:"succeeded",handoff});
    expect(getGroup(h.store,"g1").used.tokens).toBe(0);
    if(observed==="both")expect(readRun(h.store,h.claim.runId).state).toBe("settled");
    else {expect(readRun(h.store,h.claim.runId).state).not.toBe("settled");expect(getGroup(h.store,"g1").reserved).toEqual(reserved);}

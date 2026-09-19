@@ -7,6 +7,7 @@ const persist=(path,bytes)=>{const fd=openSync(path,"w",0o600);try{writeFileSync
 let accepted=existsSync(file)?JSON.parse(readFileSync(file,"utf8")):null;
 if(method==="capabilities") console.log(JSON.stringify({protocol:1,durableAccept:true,ownershipIsolation:true,evidenceRetention:true,usageObservation:"realtime",budgetEnforcement:"bounded",requestBoundEvidence:"offline-peer-v1"}));
 else if(method==="collect") console.log(existsSync(join(root,"report.json"))?readFileSync(join(root,"report.json"),"utf8"):JSON.stringify({events:[],candidate:null,terminal:null}));
+else if(method==="handoff") console.log(JSON.stringify({kind:"latched",requestId:input.request.requestId}));
 else if(method==="inspect") console.log(JSON.stringify(mode==="unknown"?{kind:"unknown"}:accepted?accepted.status:{kind:"absent"}));
 else if(method==="accept") {
  if(accepted && JSON.stringify(accepted.input)!==JSON.stringify(input)) throw new Error("peer-envelope-conflict");

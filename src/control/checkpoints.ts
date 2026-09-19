@@ -20,6 +20,7 @@ function assertIdentity(store:ControlStore,c:Candidate):void {
 }
 export async function verifyCandidateArtifacts(store:ControlStore,c:Candidate):Promise<void> {
  for(const ref of c.artifacts) await readArtifact(store,ref);
+ await readArtifact(store,c.handoff);
  if(c.snapshot){await readArtifact(store,c.snapshot);if(c.result==="complete") await verifySnapshot(store,c.snapshot);}
  else if(c.result==="complete") throw new ControlError("snapshot-required");
  for(const row of store.db.prepare("SELECT body FROM usage_events WHERE run_id=? AND seq<=?").all(c.runId,c.usageHighWater)) {

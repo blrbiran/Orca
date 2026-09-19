@@ -35,6 +35,15 @@ export interface Claim extends Identity {
   commandId: string; configHash: string; grant: Grant; ownerToken: string;
 }
 export interface ArtifactRef { artifactId: string; hash: string }
+export type HandoffReason = "budget" | "context" | "human" | "graph-change" | "shutdown";
+export interface HandoffRequest {
+  protocol: 1; requestId: string; runId: string; generation: number;
+  reason: HandoffReason; deadlineAt: string;
+}
+export type HandoffAck =
+  | {kind:"latched";requestId:string}
+  | {kind:"complete";requestId:string;checkpointId:string}
+  | {kind:"unknown";requestId:string};
 export interface UsageEvent {
   runId: string; generation: number; eventSeq: number;
   bucket: "work" | "handoff";
@@ -48,7 +57,7 @@ export interface Candidate extends Identity {
   result: "complete" | "partial" | "failed";
   artifacts: ArtifactRef[]; snapshot: ArtifactRef | null;
   missing: string[]; unresolvedRequestIds: string[];
-  stopProof: StopProof | null; terminalOutcome: string;
+  stopProof: StopProof | null; terminalOutcome: string; handoff: ArtifactRef;
 }
 export interface GroupView {
   groupId: string; revision: number; graphVersion: number; stopped: boolean;

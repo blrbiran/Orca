@@ -31,7 +31,7 @@ await makeControlledExecution(service,"g1").land(plan,[run],run.attemptSha,()=>l
 const archive=await archiveRun(store,{runId:claim.runId,sourceDir,repoDir:join(sourceDir,"repo"),stopProof:report.candidate.stopProof});
 await mark("after-archive");
 const {groupId,workItemId,taskId,runId,generation,graphVersion,targetVersion}=claim;
-const candidate={groupId,workItemId,taskId,runId,generation,graphVersion,targetVersion,checkpointId:"settle-"+runId,usageHighWater:2,result:"complete",artifacts:[...archive.artifacts,...report.candidate.artifacts],snapshot:archive.snapshot,missing:[],unresolvedRequestIds:[],stopProof:report.candidate.stopProof,terminalOutcome:"succeeded"};
+const candidate={groupId,workItemId,taskId,runId,generation,graphVersion,targetVersion,checkpointId:"settle-"+runId,usageHighWater:2,result:"complete",artifacts:[...archive.artifacts,...report.candidate.artifacts,report.candidate.handoff],snapshot:archive.snapshot,missing:[],unresolvedRequestIds:[],stopProof:report.candidate.stopProof,terminalOutcome:"succeeded",handoff:report.candidate.handoff};
 await commitCandidate(store,candidate,{afterTransaction:()=>mark("after-transaction")});
 await mark("before-projection");await publishPending(store);
 await cleanupCommittedRun(store,runId,sourceDir,{beforeCleanup:()=>mark("before-cleanup")});

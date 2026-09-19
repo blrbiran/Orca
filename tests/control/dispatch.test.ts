@@ -8,7 +8,7 @@ import { getGroup,getRun } from "../../src/control/queries.js";
 import { hashPayload,setGroupStopped } from "../../src/control/commands.js";
 import { openTestStore,seedBudgetCase } from "./fixtures/store.js";
 import { fakePeer } from "./fixtures/peer.js";
-const setup=async()=>{const h=await openTestStore();const s=seedBudgetCase(h.store);const claim=claimWork(h.store,s.t1Claim);return {...h,envelope:{protocol:1 as const,claim,contractHash:hashPayload(s.w1.contract),inputCheckpoint:null}};};
+const setup=async()=>{const h=await openTestStore();const s=seedBudgetCase(h.store);const claim=claimWork(h.store,s.t1Claim);return {...h,envelope:{protocol:1 as const,claim,contractHash:hashPayload(s.w1.contract),inputCheckpoint:null,work:{contract:s.w1.contract,targetRepo:h.root,base:"HEAD",sourceDir:h.root}}};};
 describe("durable starts",()=>{
  it("recovers the accepted identity after the peer drops its response, without another launch",async()=>{
   const h=await setup();try{
@@ -33,7 +33,7 @@ describe("durable starts",()=>{
    }},h.envelope);
    await expect(startClaim(h.store,real,{...h.envelope,claim:{...h.envelope.claim,generation:2}})).rejects.toThrow("run-generation-conflict");
    for(const patch of [{configHash:"changed"},{ownerToken:"other"}]) await expect(startClaim(h.store,real,{...h.envelope,claim:{...h.envelope.claim,...patch}})).rejects.toThrow();
-   await expect(startClaim(h.store,real,{...h.envelope,contractHash:"different"})).rejects.toThrow("start-envelope-conflict");
+   await expect(startClaim(h.store,real,{...h.envelope,contractHash:"0".repeat(64)})).rejects.toThrow("start-envelope-conflict");
    expect(await readFile(join(root,"launches"),"utf8")).toBe("1\n");
   }finally{await h.dispose();}
  });

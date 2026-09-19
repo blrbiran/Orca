@@ -9,7 +9,7 @@ import type { ControlService } from "./service.js";
 import type { Candidate, Claim, ArtifactRef, Identity } from "./types.js";
 import type { ExecutionReport, StartEnvelope } from "./executionPort.js";
 import { allWork, readGroup, readWork } from "./queries.js";
-import { readRun } from "./budget.js";
+import { hasObservedUsage, readRun } from "./budget.js";
 import { hashPayload } from "./commands.js";
 import { startClaim, readEnvelope } from "./dispatch.js";
 import { recordUsage } from "./usage.js";
@@ -33,6 +33,7 @@ export async function collectControlled(service:ControlService,runId:string):Pro
  if(!port.readEvidence) throw new ControlError("control-evidence-unavailable");
  const report=await port.collect(envelope,readRun(store,runId).highWater);
  const refs=[...report.events.map(e=>e.source),...(report.candidate?.artifacts??[])];
+ if(report.candidate) refs.push(report.candidate.handoff);
  if(report.candidate?.stopProof) refs.push(report.candidate.stopProof.source);
  for(const ref of refs) {
    const bytes=await port.readEvidence(ref);
@@ -62,7 +63,7 @@ async function savedReport(service:ControlService,runId:string):Promise<Executio
  if(!row) throw new ControlError("control-terminal-pending");
  return JSON.parse((await readArtifact(service.store,JSON.parse(String(row.body)).source)).toString());
 }
-async function archiveReport(service:ControlService,runId:string,report:ExecutionReport) {
+export async function archiveReport(service:ControlService,runId:string,report:ExecutionReport) {
  if(!report.terminal) throw new ControlError("control-terminal-pending");
  return archiveRun(service.store,{runId,sourceDir:report.terminal.sourceDir,repoDir:report.terminal.repoDir,stopProof:report.candidate?.stopProof??null});
 }
@@ -72,10 +73,11 @@ export async function disposeControlled(service:ControlService,run:TaskRun,optio
  if(record.state!=="settled") {
   const archive=await archiveReport(service,run.runId,report),raw=report.candidate;
   const missing=[...archive.missing,...(raw?.missing??[]),...(!raw?["candidate-missing"]:[])];
+  const handoff=raw?.handoff??await writeArtifact(store,"handoff-"+run.runId,Buffer.from(JSON.stringify({unfinished:[],pendingDecisions:[],awaitingHuman:[]})));
   const candidate:Candidate={...identity(record),checkpointId:"settle-"+run.runId,usageHighWater:raw?.usageHighWater??record.highWater,
    result:missing.length===0 && raw?.result==="complete"?"complete":"partial",
-   artifacts:[...archive.artifacts,...(raw?.artifacts??[])],snapshot:archive.snapshot,missing,
-   unresolvedRequestIds:raw?.unresolvedRequestIds??["terminal-evidence"],stopProof:raw?.stopProof??null,terminalOutcome:report.terminal.outcome};
+   artifacts:[...archive.artifacts,...(raw?.artifacts??[]),handoff],snapshot:archive.snapshot,missing,
+   unresolvedRequestIds:raw?.unresolvedRequestIds??["terminal-evidence"],stopProof:raw?.stopProof??null,terminalOutcome:report.terminal.outcome,handoff};
   candidate.checkpointId="settle-"+run.runId+"-"+hashPayload(candidate).slice(0,16);
   await commitCandidate(store,candidate);
  }
@@ -85,6 +87,15 @@ export async function disposeControlled(service:ControlService,run:TaskRun,optio
   options.log?.(`orca: kept controlled run ${run.runId}: ${run.workdir}`);return {removed:false,workdir:run.workdir};
  }
  const result=await cleanupCommittedRun(store,run.runId,run.workdir);return {...result,workdir:run.workdir};
+}
+export async function settleControlledHandoff(service:ControlService,runId:string,report:ExecutionReport):Promise<void> {
+ const raw=report.candidate;if(!raw?.stopProof||!report.terminal)return;
+ const {store}=service,record=readRun(store,runId);
+ if(raw.unresolvedRequestIds.length||record.unknown.work||record.unknown.handoff||!hasObservedUsage(store,record)||store.db.prepare("SELECT seq FROM usage_events WHERE run_id=? AND seq>?").get(runId,record.highWater))return;
+ const archive=await archiveReport(service,runId,report);
+ const missing=[...archive.missing,...raw.missing];
+ const candidate:Candidate={...identity(record),checkpointId:raw.checkpointId,usageHighWater:raw.usageHighWater,result:missing.length===0&&raw.result==="complete"?"complete":"partial",artifacts:[...archive.artifacts,...raw.artifacts,raw.handoff],snapshot:archive.snapshot,missing,unresolvedRequestIds:raw.unresolvedRequestIds,stopProof:raw.stopProof,terminalOutcome:raw.terminalOutcome,handoff:raw.handoff};
+ await commitCandidate(store,candidate);await publishPending(store);
 }
 interface LandingIntent {repo:string;branch:string;base:string;incoming:string;runIds:string[];artifacts:ArtifactRef[];landed?:string;conflicted?:boolean}
 export async function confirmLanding(service:ControlService,id:string,intent:LandingIntent):Promise<boolean> {

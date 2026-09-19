@@ -10,6 +10,7 @@ export interface RunRecord extends Claim, RunView {
   remaining:Grant; cumulative:Grant; highWater:number;
   unknown:{work:boolean;handoff:boolean};breaches:number[];
   handoffWorkItemId:string|null;
+  predecessorRunId?:string;
 }
 export function readRun(store:ControlStore,id:string):RunRecord {
   const row=store.db.prepare("SELECT body FROM runs WHERE id=?").get(id);
