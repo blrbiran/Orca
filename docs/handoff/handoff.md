@@ -4872,3 +4872,22 @@ Claude额度需等2026-09-22 09:00 Asia/Shanghai之后，仍不自动调用；Or
 
 最终独立审查：3项Important、无Critical/Minor，均修复于ff7d97a：FIFO输出非阻塞拒绝、历史ps日期空白规范化、观测文件写失败仍回收已登记进程并保留错误。每项新增回归均亲自读完整RED/GREEN日志；没有第二轮审查或真钱重跑。最终45文件/706测试全部通过，typecheck/build通过；相关6个变异复跑行为断言失败，clone两种diff为0字节。最终登记组和fake进程核对为空，~/.orca仍不存在。
 SDD新增review-fix-evidence目录，保留全部旧台账与证据。产品已提交，工作树只保留不入库的node_modules软链。
+
+
+## 2026-09-19 接手状态收敛（三仓交接同步，task 01a0b792）
+
+归属：Codex task `01a0b792-9ebb-79d0-ba91-604825a9f974`。本节是接手优先入口，旧会话逐字保留；历史“待审规格／待选执行方式／下一步修 E7”已被下述完成事实取代。提交本文会改变 HEAD，因此不规定当前哈希、领先笔数或发布状态。
+
+**已完成**：D-launch §13 的 E7 空断言与 settle 进程组回收已修（定位主题与证据见其 spec §14）；task-control 规格含 §13 已获用户批准；Codex 五任务计划以 Native 完成，含独立审查三项修复。Orca 控制 ccloop、agent 适配留在 ccloop；Web 是人的主要操作入口，ccmem 是决策记忆系统，这些方向不重开。
+
+**代码在哪里**：ccloop 产品分支 `codex/codex-adapter-0919`，工作树 `/tmp/ccloop-codex-0919`；ccloop 主目录尚未包含该实现。用 `git worktree list`、实际 status 与 `git log --all --format='%h %s'` 查找 `fix(codex): harden output reads and watchdog cleanup`，不要要求 HEAD 等于某个实现提交。既有 resume 不是新交接／跨 run 恢复；Codex 只支持 soft，严格预算、统一组账本、任务独立 handoff、D3 与新 Web 控制流程仍未实施。
+
+**下一件事**：读取 `docs/superpowers/specs/2026-09-19-task-control-design.md` §13（优先于旧段落），为 §13.6 第一项控制底座写实施计划：统一 work item/预算账本、启动幂等与所有权、证据归档和一致提交。之后依次 ccloop 交接/D3、Web 可恢复操作、自动拆分与 ccmem 决策闭环。已完成的 `docs/superpowers/plans/2026-09-19-ccloop-codex-adapter.md` 用于追溯，不再从 Task1 重做。
+
+**证据与局限**：Codex 修复源码对应 `ff7d97a`（历史观测锚点，不是当前 HEAD），`npm test` 45/706、typecheck/build RC0，完整日志与红绿/变异在开发树 `.superpowers/sdd/2026-09-19-ccloop-codex-adapter/`。一次 live 证据 `/tmp/ccloop-codex-live-20260919-01`：三阶段功能成功，128226 tokens、soft 超额28226；原 wrapper RC1 的余额误判已离线修复，修正版未重跑真钱。原 summary 与 offline-audit 分开保留。临时路径里的证据尚非产品永久归档，勿清理工作树或台账。
+
+**开工核对**：三个主仓各跑 `rtk proxy /usr/bin/git ls-remote origin refs/heads/main` 并与本地比较；Orca 跑 `rtk proxy node_modules/.bin/tsx src/cli.ts resume`。旧 checkpoint `.orca/checkpoints/orca-dev-6662000e.json` 仍基于 Claude transcript，本轮未伪造 Codex 水位；恢复结果须结合本节。检查真实 `~/.orca` 不存在；测试一律改道临时数据。verify 用后台保存退出码与完整日志、整份读回（约四分钟，给足超时）。旧全套基线129/1074、51/167、13/212＋129/1074、PASS0–14、9/34是修复前观测；E7/settle 修复后只实测 npm test129/1075及typecheck，尚未重跑完整 verify，chain13/213只是预期，不要写成已通过。本次交接更新没有重跑产品测试或模型。
+
+**awaitingHuman**：分支整合、push、删分支／worktree由人在终端操作，不绕活闸门；Claude额度按用户通知2026-09-22 09:00 Asia/Shanghai后恢复，仍需核实。原 Orca chain 真钱验收须人提交 `.orca/chain.json` 选 model 并点头，先测该配置首调 F，副本 T1>F；不复用 Codex 切片 F。D-launch 其余残余仍看原 spec，不因本次适配完成而关闭。
+
+**姊妹仓库**：本次按用户要求在 ccloop 主目录与 Codex 开发树同步同一 Orca 滚动节，在 ccmem 更新原 §15；各自非 Orca 前缀保持字节不变，不再追加跨仓会话日志。ccmem 原生任务仍看它自己的入口及ⅩⅬⅡ，未改代码、daemon或用户数据。
