@@ -159,6 +159,41 @@ describe("web command ledger", () => {
     }
   });
 
+  it("persists a stale revision before expansion with null effective identity fields", async () => {
+    const h = await openTestStore();
+    try {
+      createGroup(h.store, group, { commandId: "create", expectedRevision: 0, by: "human" });
+      let expansions = 0;
+      const stale: WebCommandInput<CommandBody> = {
+        rawCommand: raw("stale-before-expansion", 0),
+        expand: () => {
+          expansions += 1;
+          throw new ControlError("profile-changed");
+        },
+        apply: () => { throw new Error("stale command must not apply"); },
+      };
+      const first = applyWebCommand(h.store, stale);
+      expect(first).toEqual({
+        status: 409,
+        body: { error: { code: "revision-conflict", message: "The command revision is stale.", commandRevision: 1, evidenceIds: [], retryable: false } },
+      });
+      expect(expansions).toBe(0);
+      expect(h.store.db.prepare(`SELECT effective_payload_json,effective_payload_hash,authority_command_json,authority_command_hash
+        FROM commands WHERE group_id='g1' AND id='stale-before-expansion'`).get()).toEqual({
+        effective_payload_json: null,
+        effective_payload_hash: null,
+        authority_command_json: null,
+        authority_command_hash: null,
+      });
+
+      setGroupStopped(h.store, "g1", true, { commandId: "legacy-stop-after-stale", expectedRevision: 1, by: "human" });
+      expect(applyWebCommand(h.store, stale)).toEqual(first);
+      expect(expansions).toBe(0);
+    } finally {
+      await h.dispose();
+    }
+  });
+
   it("fails authority sequence overflow atomically", async () => {
     const h = await openTestStore();
     try {

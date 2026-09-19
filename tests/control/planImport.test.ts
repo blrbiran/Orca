@@ -208,6 +208,35 @@ describe("immutable plan import", () => {
     } finally { await h.dispose(); }
   });
 
+  it("persists revision conflict before a failing in-flight probe and replays it before changed defaults", async () => {
+    const h = await setup();
+    try {
+      let reject!: (error: Error) => void;
+      const probe = vi.fn(() => new Promise<never>((_resolve, rejectPromise) => { reject = rejectPromise; }));
+      const pending = importControlPlanAsync({ ...h.deps, profileRouter: { ...h.router, probe } }, command());
+      expect(probe).toHaveBeenCalledTimes(1);
+
+      const committed = importControlPlan(h.deps, command("g", "import-other"));
+      expect(committed).toMatchObject({ result: { kind: "imported", groupId: "g" } });
+      reject(new ControlError("profile-changed"));
+      const stale = await pending;
+      expect(stale).toMatchObject({ error: { code: "revision-conflict", commandRevision: 1, retryable: false } });
+      expect(lookupCommandResult(h.store, "g", "import-1")).toMatchObject({ originalStatus: 409, body: stale });
+
+      h.setDefaults({ estimatorProfileId: "missing", estimatorProfileHash: hash("9"), estimateMode: "strict" });
+      const replayProbe = vi.fn(() => new Promise<never>(() => {}));
+      await expect(importControlPlanAsync({ ...h.deps, profileRouter: { ...h.router, probe: replayProbe } }, command())).resolves.toEqual(stale);
+      expect(replayProbe).not.toHaveBeenCalled();
+      expect(h.store.db.prepare(`SELECT effective_payload_json,effective_payload_hash,authority_command_json,authority_command_hash
+        FROM commands WHERE group_id='g' AND id='import-1'`).get()).toEqual({
+        effective_payload_json: null,
+        effective_payload_hash: null,
+        authority_command_json: null,
+        authority_command_hash: null,
+      });
+    } finally { await h.dispose(); }
+  });
+
   it.each([
     ["unexpected", () => new Error("probe-crash")],
     ["transient", () => new ControlError("control-capability-probe-failed")],

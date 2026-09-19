@@ -194,28 +194,28 @@ export function applyWebCommand<T>(store: ControlStore, input: WebCommandInput<T
     let authorityCommandHash: string | null = null;
     let context: WebCommandContext | null = null;
     let unvalidated: StoredCommandOutcome<T | CommandBody>;
-    const expansion = invokeWithSavepoint(store, "web_command_expand", () => {
-      const effectiveCommand = effectiveAuthorityCommandSchema.parse(input.expand()) as EffectiveAuthorityCommandV1;
-      if (canonicalBytes(identityWithoutPayload(rawCommand)).compare(canonicalBytes(identityWithoutPayload(effectiveCommand))) !== 0) {
-        throw new ControlError("control-effective-command-identity-mismatch");
-      }
-      return effectiveCommand;
-    }, resultCommandRevision);
-    if ("outcome" in expansion) {
-      unvalidated = expansion.outcome;
+    if (rawCommand.expectedRevision !== currentCommandRevision) {
+      unvalidated = revisionConflict(currentCommandRevision);
     } else {
-      const effectiveCommand = expansion.value;
-      effectivePayloadJson = canonicalBytes(effectiveCommand.payload).toString("utf8");
-      effectivePayloadHash = sha256Canonical(effectiveCommand.payload);
-      authorityCommandJson = canonicalBytes(effectiveCommand).toString("utf8");
-      authorityCommandHash = sha256Canonical(effectiveCommand);
-      context = {
-        rawCommand, effectiveCommand, rawRequestHash, effectivePayloadHash, authorityCommandHash,
-        currentCommandRevision, nextCommandRevision, currentProjectionSeq, nextProjectionSeq,
-      };
-      if (rawCommand.expectedRevision !== currentCommandRevision) {
-        unvalidated = revisionConflict(currentCommandRevision);
+      const expansion = invokeWithSavepoint(store, "web_command_expand", () => {
+        const effectiveCommand = effectiveAuthorityCommandSchema.parse(input.expand()) as EffectiveAuthorityCommandV1;
+        if (canonicalBytes(identityWithoutPayload(rawCommand)).compare(canonicalBytes(identityWithoutPayload(effectiveCommand))) !== 0) {
+          throw new ControlError("control-effective-command-identity-mismatch");
+        }
+        return effectiveCommand;
+      }, resultCommandRevision);
+      if ("outcome" in expansion) {
+        unvalidated = expansion.outcome;
       } else {
+        const effectiveCommand = expansion.value;
+        effectivePayloadJson = canonicalBytes(effectiveCommand.payload).toString("utf8");
+        effectivePayloadHash = sha256Canonical(effectiveCommand.payload);
+        authorityCommandJson = canonicalBytes(effectiveCommand).toString("utf8");
+        authorityCommandHash = sha256Canonical(effectiveCommand);
+        context = {
+          rawCommand, effectiveCommand, rawRequestHash, effectivePayloadHash, authorityCommandHash,
+          currentCommandRevision, nextCommandRevision, currentProjectionSeq, nextProjectionSeq,
+        };
         const application = invokeWithSavepoint(
           store,
           "web_command_apply",
