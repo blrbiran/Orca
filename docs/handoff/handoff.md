@@ -4751,3 +4751,54 @@ ccloop、ccmem：只就地更新各自 Orca 一节（D 那一条压到要点 ＋
 ## 八、姊妹仓库
 
 ccloop、ccmem：只就地更新各自 Orca 一节里 D 那一条（D-launch 已实施、对它们零任务），**不新增章节、不新增编号项**；节外字节 sha256 前后相同；产品代码零触碰。
+
+
+---
+
+# 本轮（2026-09-19，Codex task `01a0b792`）：E7 / settle 已修；任务控制架构待书面审阅
+
+归属：Codex task `01a0b792-9ebb-79d0-ba91-604825a9f974`；开工 Orca `fd4d82c`、
+ccloop `befb91f`、ccmem `d3978b1`。修复提交 `4707eda92ad51f77dd3807ea57cc9a2585f054db`。
+本节只追加，上文会话 `6662000e` 原样保留。
+
+## 已完成与证据
+
+1. 三份 handoff、D-launch spec/计划已读。开工各仓 `/usr/bin/git ls-remote origin refs/heads/main`
+   与 `git rev-parse HEAD` 比对：Orca fd4d82c / d321b5e，ccloop befb91f / 4bd59a7，
+   ccmem d3978b1 / cb5683f；`git rev-list --left-right --count HEAD...<remote-sha>` 分别 28/0、1/0、1/0。
+   这是开工观测，不是后续实时发布状态。`node_modules/.bin/tsx src/cli.ts resume` RC 0。
+2. 开工 `rtk proxy npm run verify` RC 0，129/1074、51/167、13/212 + 129/1074、PASS 0–14、9/34。
+   日志 `/tmp/orca-start-20260919/verify.log` 已连续整份读回。真实 `~/.orca` 前后不存在。
+3. 修复 spec §13 第 2、3 条并各做删除变异：E7 不再由测试清理制造成功；settle 杀钩子进程组；
+   K18 在清理前检查同组残留。变异的具体命令、红绿结果、还原字节数见 D-launch spec 新 §14。
+   修复后 `npm run typecheck` RC 0，`npm test` RC 0：129/1075，全量无跳过。
+   修复后没有重跑完整 verify，不能把开工那次冒充修复后结果。
+4. 通读本地 Hermes Kanban 拆分、依赖、任务操作与交接路径，核对 OpenClaw 控制台文档。
+   写出 `docs/superpowers/specs/2026-09-19-task-control-design.md` 并自审；这是待书面审阅设计，未实施新架构。
+5. 本地 `codex --version` 为 0.155.1，`codex exec --help` 可用；未真实调用模型，未验证其额度和 usage 语义。
+   ccloop / ccmem 本轮仅阅读，产品和 handoff 均未修改。
+
+## 本轮人的新要求与设计建议
+
+人的要求：Orca 控制 ccloop，agent 适配在 ccloop；ccmem 参与决策记忆；Web > CLI；
+任务/组/goal/依赖/拆分/启动/停止/token/时间/轮数；每任务 handoff 再汇总到组。
+长期 agent 优先级 Claude Code > Codex CLI > OpenCode > oh-my-pi > pi。
+Claude 额度耗尽，2026-09-22 09:00 Asia/Shanghai 后恢复；允许考虑紧急 Codex 测试路径。
+
+建议采用已有 scheduler + 持久任务控制服务，Codex 窄适配先落 ccloop，不扩 chain 为第二个执行器。
+设计明确 token 累计消耗与上下文分开，预算预留交接份额；JSON 检查点为真相源，按 task 生成文档，
+组暂停也汇总部分成果；人工纠正先制止旧决策派发，再同步 ccmem 并记录后续引用。
+SQLite 单写、stateDir、attempts 轮数语义等是待审建议，不能冒充逐项人裁。
+
+## 下一步与 awaitingHuman
+
+- 下一步：审阅新架构 spec 后写 ccloop Codex 切片计划，随后实现与隔离验收；Web 任务控制、D3、记忆闭环按设计分片。
+- awaitingHuman：新书面架构审阅；Superpowers brainstorming 明确要求 written spec approval 后才写实施计划。
+- awaitingHuman：Claude 活体验收；9 月 22 日 09:00 后仍需人提交 `.orca/chain.json` 选 model 并点头；先测 F，副本 T1 > F。
+- awaitingHuman：如需发布，由人在自己终端操作三仓 push。未执行 push、main merge、删分支、删 worktree；未尝试绕闸门。
+- 原 D-launch §13 第 1、4、5 条继续保留。SDD 台账目录仍未删除。
+- 检查点 `.orca/checkpoints/orca-dev-6662000e.json` 未替换：它基于 Claude transcript；本 Codex 会话没有伪造水位读数。
+  下一轮读本节及新 spec，再执行 resume；旧 checkpoint 显示测量陈旧时应核对本轮新增提交。
+- 修复后预期全套计数为主套 129/1075、chain 13/213，其余不变；后者是新增一条推导，尚待完整 verify 实测，不可当已验证基线。
+
+成本/上下文水位：本轮工具未提供，拿不到，不自估。

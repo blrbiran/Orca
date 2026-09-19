@@ -533,3 +533,38 @@ D-launch 的交付：一个**外部监督进程** `orca chain`，由人授权一
 | 3 | 闸门核对在子进程退出即定论后，不再杀钩子自己的进程组 ⇒ 同组残留进程活过核对（复审现测 `sleep 3172` 存活） | 判定仍正确，链不再挂住；下一轮在 settle 里补 `kill(-pid)` |
 | 4 | 11abdbe 之前写下的链锁记的是本地时区起始时间，新代码按 UTC 读会判为「持有者不在」 | 至今没有任何真链跑过（活体验收待人点头）；误判只能经人手 `unlock` 生效 |
 | 5 | 钩子退出 1 s 之后才到的 stderr 被丢弃 | 安全方向：只会误停，不会误放 |
+
+
+---
+
+## 14. E7 与闸门同组残留已修（2026-09-19）
+
+归属：Codex task `01a0b792-9ebb-79d0-ba91-604825a9f974`；观测基点 `fd4d82c`，
+修复提交 `4707eda92ad51f77dd3807ea57cc9a2585f054db`。人明确要求修 §13 第 2、3 条并同意继续。
+本节追加，§13 原文保留；其中第 2、3 条的“下一轮修”由本次代码与变异证据取代。
+
+- E7：锁不存在的断言移到测试自己的 `lock.release()` 之前。
+  在本地 clone 删除 `src/chain/command.ts` 的 `await removeChainLock(repo)`：
+  旧 E7 仍为 RC 0；新 E7 为 RC 1，实测锁仍存在（true），预期 false。
+- settle：对钩子进程组调用 `process.kill(-child.pid, "SIGKILL")`，保留现有 stderr drain。
+  新 K18 确认两个核对样本都启动了同组 `sleep 3172`，在测试清理之前检查它们已退出。
+  旧生产代码下 RC 1；修复后 E7/K18 聚焦跑 RC 0；只删除新增 kill 一行后 K18 再次 RC 1。
+  K18 teardown 清理变异遗留；K16 迟到 stderr 既有判据在全量跑中通过。
+
+变异仅在 `git clone --local` 副本 `/tmp/orca-0919-fix-vfp4q8y7/repo`：
+命令为 `node_modules/.bin/vitest run tests/chain/cli.test.ts -t E7`、
+`node_modules/.bin/vitest run tests/chain/gateCheck.test.ts -t K18`；修复聚焦跑两文件 `-t 'E7|K18'`。
+聚焦跑未匹配项有意不执行，不能代替全量通过。
+settle 源文件 SHA256：修复版 `c12e3df69ed9ed711827f6f9f4756b9f85f2bebc29d5a0f116f922d37a2627cd`，
+删 kill 版 `8e80ca2344fd3e6d32a7e913ce913e6851dca075df7912599ef5c3dac16d8aa8`。
+副本以 `git show HEAD:<path>` 还原四个测试/生产文件后，`git diff` 与 `git diff --cached` 输出均 0 字节。
+原始日志在上述临时目录的 e7-before/e7-after/k18-before/fixed/k18-mutation.log；已整份读回，临时目录不保证永久保留。
+
+修复工作树（随后提交为 `4707eda`）现测 `rtk proxy npm run typecheck` RC 0；
+`rtk proxy npm test` RC 0，129 files / 1075 tests 全部通过，无跳过；
+完整日志 `/tmp/orca-tests-0919.log` 已按连续范围整份读回（初次工具总输出截断的段已重读）。
+此次未重复全套 `npm run verify`；开工在 `fd4d82c` 跑的完整 verify 基线通过，见新 handoff。
+真实 `~/.orca` 仍不存在。§13 第 1、4、5 条不因这次修复被宣布解决。
+
+Claude Code 额度恢复时间由人告知为 2026-09-22 09:00 Asia/Shanghai；活体验收仍待人选 model 并点头。
+Codex 替代测试路径的架构建议在 `2026-09-19-task-control-design.md`，不等于当前 chain 已支持 Codex。
