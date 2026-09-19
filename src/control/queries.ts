@@ -2,6 +2,9 @@ import type { ControlStore } from "./store.js";
 import type { ArtifactRef, Amount, GroupInput, GroupView, RunView, WorkInput } from "./types.js";
 import { ControlError } from "./errors.js";
 import { recordProjectionChange } from "./projectionJournal.js";
+import { readCanonicalRecord } from "./snapshot.js";
+import { controlPlanSchema, type ControlPlanV1 } from "./webProtocol.js";
+import { sha256Canonical } from "./canonicalJson.js";
 export type GroupRecord = GroupView & GroupInput & {budgetVersion:number;reviewRemaining:Amount;proposal?:{work:WorkInput;commandId:string}};
 export type WorkRecord = WorkInput & {targetVersion:number;status:"ready"|"running"|"done"|"blocked"};
 export function readGroup(store:ControlStore,id:string):GroupRecord {
@@ -43,6 +46,60 @@ export function getRun(store:ControlStore,id:string):RunView {
   if(!row) throw new ControlError("run-not-found");
   const r=JSON.parse(String(row.body));
   return {runId:r.runId,generation:r.generation,executionId:r.executionId,state:r.state,checkpointId:r.checkpointId,recoverable:r.recoverable};
+}
+
+export function readArchivedPlan(store: ControlStore, groupId: string): { planHash: string; canonicalJson: string; plan: ControlPlanV1 } {
+  const row = store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId);
+  if (!row) throw new ControlError("group-not-found");
+  let planHash: unknown;
+  try { planHash = (JSON.parse(String(row.body)) as { planHash?: unknown }).planHash; }
+  catch { throw new ControlError("recovery-blocked"); }
+  if (typeof planHash !== "string") throw new ControlError("recovery-blocked");
+  const canonicalJson = readCanonicalRecord(store, planHash);
+  try {
+    const plan = controlPlanSchema.parse(JSON.parse(canonicalJson));
+    if (sha256Canonical(plan) !== planHash) throw new ControlError("recovery-blocked");
+    return { planHash, canonicalJson, plan };
+  } catch (error) {
+    if (error instanceof ControlError && error.code === "recovery-blocked") throw error;
+    throw new ControlError("recovery-blocked");
+  }
+}
+
+export function readArchivedContract(store: ControlStore, contractHash: string): { contractHash: string; canonicalJson: string; contract: unknown } {
+  const canonicalJson = readCanonicalRecord(store, contractHash);
+  try { return { contractHash, canonicalJson, contract: JSON.parse(canonicalJson) }; }
+  catch { throw new ControlError("recovery-blocked"); }
+}
+
+export interface BudgetProposalRecord {
+  proposalVersion: number;
+  state: "editable" | "confirmed";
+  planHash: string;
+  groupLimit: Amount;
+  explicitUnallocatedReserve: Amount;
+  allocations: unknown[];
+}
+
+export function readBudgetProposal(store: ControlStore, groupId: string): BudgetProposalRecord {
+  const row = store.db.prepare("SELECT body FROM budget_proposals WHERE group_id=?").get(groupId);
+  if (!row) throw new ControlError("recovery-blocked");
+  try { return JSON.parse(String(row.body)) as BudgetProposalRecord; }
+  catch { throw new ControlError("recovery-blocked"); }
+}
+
+export interface EstimateRecord {
+  estimateId: string;
+  estimateVersion: number;
+  state: "queued" | "blocked-capability" | "input-too-large";
+  reasonCode: string | null;
+}
+
+export function readEstimateRecord(store: ControlStore, groupId: string, estimateId: string): EstimateRecord {
+  const row = store.db.prepare("SELECT body FROM estimates WHERE group_id=? AND id=?").get(groupId, estimateId);
+  if (!row) throw new ControlError("recovery-blocked");
+  try { return JSON.parse(String(row.body)) as EstimateRecord; }
+  catch { throw new ControlError("recovery-blocked"); }
 }
 
 function artifactsForRuns(store:ControlStore,runIds:Set<string>):ArtifactRef[] {

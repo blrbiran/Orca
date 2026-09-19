@@ -1,12 +1,17 @@
+import { constants, closeSync, fstatSync, lstatSync, openSync, readFileSync, realpathSync } from "node:fs";
 import { isAbsolute, relative } from "node:path";
 import { z } from "zod";
 import { RUN_ID } from "../ledger/writer.js";
+import { canonicalBytes, sha256Canonical } from "../control/canonicalJson.js";
+import { ControlError } from "../control/errors.js";
 import { detectCycle } from "./graph.js";
 
 export interface PlanTask {
   taskId: string;
   contract: string;
   dependsOn: string[];
+  targetVersion?: string;
+  configHash?: string;
 }
 
 export interface PlanFile {
@@ -16,7 +21,23 @@ export interface PlanFile {
   workBranch: string;
   policy: "local-merge";
   ledgerMode: "in-repo" | "out-of-repo";
+  goal?: string;
+  successConditions?: string[];
   tasks: PlanTask[];
+}
+
+export interface SchedulerControlPlanSource {
+  goal: string;
+  successConditions: string[];
+  tasks: Array<{
+    taskId: string;
+    dependencyTaskIds: string[];
+    targetVersion: string;
+    configHash: string;
+    originalContract: unknown;
+    originalContractCanonicalJson: string;
+    originalContractHash: string;
+  }>;
 }
 
 export type PlanRejection = { code: string; message: string };
@@ -76,6 +97,8 @@ const planTaskSchema = z
     taskId: z.string().min(1),
     contract: z.string().min(1),
     dependsOn: z.array(z.string()),
+    targetVersion: z.string().min(1).optional(),
+    configHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   })
   .strict();
 
@@ -91,9 +114,138 @@ const planFileSchema = z
     workBranch: z.string().min(1),
     policy: z.string().min(1),
     ledgerMode: z.enum(["in-repo", "out-of-repo"]),
+    goal: z.string().min(1).optional(),
+    successConditions: z.array(z.string().min(1)).optional(),
     tasks: z.array(planTaskSchema),
   })
   .strict();
+
+const terminalStates = ["succeeded", "blocked_waiting_human", "exhausted", "cancelled", "failed"] as const;
+const terminalStatesSchema = z.array(z.enum(terminalStates)).refine(states =>
+  states.length === terminalStates.length
+  && new Set(states).size === terminalStates.length
+  && terminalStates.every(state => states.includes(state)),
+);
+
+/** Closed ccloop V1 contract shape, mirrored from the foundation validator. */
+export const taskContractSchema = z.object({
+  objective: z.object({
+    taskId: z.string().min(1), goal: z.string().min(1), successCondition: z.string().min(1),
+    nonGoals: z.array(z.string()).default([]),
+  }).strict(),
+  context: z.object({
+    repoPath: z.string().min(1), targetPaths: z.array(z.string()).min(1),
+    relevantDocs: z.array(z.string()).default([]), buildTestCommands: z.array(z.string()).min(1),
+    constraints: z.array(z.string()).default([]),
+  }).strict(),
+  executionPolicy: z.object({
+    autonomyLevel: z.literal("L2"), maxAttempts: z.number().int().positive(),
+    perAttemptTimeoutMs: z.number().int().positive(), totalRuntimeBudgetMs: z.number().int().positive(),
+    tokenBudget: z.number().int().positive(), worktreeRequired: z.literal(true),
+    partialOutcomeRecoveryWindowMs: z.number().int().nonnegative(),
+  }).strict(),
+  safetyPolicy: z.object({
+    allowlistPaths: z.array(z.string()).default([]), denylistPaths: z.array(z.string()).default([]),
+    maxFilesTouched: z.number().int().positive(), humanGateConditions: z.array(z.string()).default([]),
+  }).strict(),
+  verification: z.object({
+    verifierType: z.enum(["command", "agent"]), requiredChecks: z.array(z.string()).min(1),
+    rejectOn: z.array(z.string()).min(1), evidenceRequired: z.array(z.string()).default([]),
+  }).strict(),
+  escalationAndExit: z.object({
+    escalationTargets: z.array(z.string()).default([]), pauseOn: z.array(z.string()).default([]),
+    stopOn: z.array(z.string()).default([]), terminalStates: terminalStatesSchema.default(() => [...terminalStates]),
+  }).strict(),
+}).strict();
+
+function readRegularUtf8(path: string): string {
+  let fd: number | undefined;
+  try {
+    const before = lstatSync(path, { bigint: true });
+    if (!before.isFile() || before.isSymbolicLink() || before.nlink !== 1n || realpathSync(path) !== path) {
+      throw new ControlError("control-plan-rejected", "unsafe-source-file");
+    }
+    fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+    const opened = fstatSync(fd, { bigint: true });
+    if (opened.dev !== before.dev || opened.ino !== before.ino) throw new ControlError("control-plan-rejected", "source-file-changed");
+    const bytes = readFileSync(fd);
+    const after = fstatSync(fd, { bigint: true });
+    if (after.dev !== opened.dev || after.ino !== opened.ino || after.size !== opened.size || after.mtimeNs !== opened.mtimeNs) {
+      throw new ControlError("control-plan-rejected", "source-file-changed");
+    }
+    try { return new TextDecoder("utf-8", { fatal: true }).decode(bytes); }
+    catch { throw new ControlError("control-plan-rejected", "invalid-utf8"); }
+  } catch (error) {
+    if (error instanceof ControlError) throw error;
+    throw new ControlError("control-plan-rejected", `unreadable-source:${path}`);
+  } finally {
+    if (fd !== undefined) closeSync(fd);
+  }
+}
+
+function sourceRejected(detail: string): never {
+  throw new ControlError("control-plan-rejected", detail);
+}
+
+function parseContract(path: string, taskId: string): { value: unknown; canonicalJson: string; hash: string } {
+  let raw: unknown;
+  try { raw = JSON.parse(readRegularUtf8(path)); }
+  catch (error) {
+    if (error instanceof ControlError) throw error;
+    return sourceRejected(`contract-json:${taskId}`);
+  }
+  const parsed = taskContractSchema.safeParse(raw);
+  if (!parsed.success || parsed.data.objective.taskId !== taskId) {
+    return sourceRejected(`contract-shape:${taskId}`);
+  }
+  let bytes: Buffer;
+  try { bytes = canonicalBytes(parsed.data); }
+  catch { return sourceRejected(`contract-canonical:${taskId}`); }
+  return { value: parsed.data, canonicalJson: bytes.toString("utf8"), hash: sha256Canonical(parsed.data) };
+}
+
+/**
+ * Adapts the allowlisted scheduler format into the data needed by Web import.
+ * The paths are consumed only here; callers archive the returned bytes and do
+ * not retain a path as execution authority.
+ */
+export function readSchedulerControlPlanSource(planPath: string, repositoryPath: string): SchedulerControlPlanSource {
+  let raw: unknown;
+  try { raw = JSON.parse(readRegularUtf8(planPath)); }
+  catch (error) {
+    if (error instanceof ControlError) throw error;
+    return sourceRejected("plan-json");
+  }
+  const loaded = loadPlan(raw, "");
+  if ("rejections" in loaded) return sourceRejected(loaded.rejections.map(item => item.code).join(","));
+  const plan = loaded.plan;
+  if (plan.targetRepo !== repositoryPath || plan.goal === undefined || plan.successConditions === undefined || plan.successConditions.length === 0) {
+    return sourceRejected("control-metadata");
+  }
+  if (new Set(plan.successConditions).size !== plan.successConditions.length) return sourceRejected("duplicate-success-condition");
+  const taskIds = new Set(plan.tasks.map(task => task.taskId));
+  for (const task of plan.tasks) {
+    if (new Set(task.dependsOn).size !== task.dependsOn.length) return sourceRejected(`duplicate-dependency:${task.taskId}`);
+    if (task.dependsOn.some(dependency => !taskIds.has(dependency))) return sourceRejected(`dangling-dependency:${task.taskId}`);
+    if (task.targetVersion === undefined || task.configHash === undefined) return sourceRejected(`task-control-metadata:${task.taskId}`);
+  }
+  return {
+    goal: plan.goal,
+    successConditions: [...plan.successConditions],
+    tasks: plan.tasks.map(task => {
+      const original = parseContract(task.contract, task.taskId);
+      return {
+        taskId: task.taskId,
+        dependencyTaskIds: [...task.dependsOn],
+        targetVersion: task.targetVersion!,
+        configHash: task.configHash!,
+        originalContract: original.value,
+        originalContractCanonicalJson: original.canonicalJson,
+        originalContractHash: original.hash,
+      };
+    }),
+  };
+}
 
 /**
  * A path counts as "inside" targetRepo only when it does not escape via

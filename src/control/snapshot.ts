@@ -12,6 +12,7 @@ import { archiveFile, captureTree, readArtifact, writeArtifact, type ArchiveDepe
 import { privateDirectory } from "./paths.js";
 import { ControlError } from "./errors.js";
 import { artifactSchema, safeInteger } from "./schema.js";
+import { canonicalBytes } from "./canonicalJson.js";
 
 const relativeSnapshotPath = z.string().min(1).refine(path =>
  !path.startsWith("/") && !path.split("/").some(part => part === "" || part === "." || part === ".."),
@@ -76,4 +77,37 @@ export async function verifySnapshot(store:ControlStore,ref:ArtifactRef):Promise
   git(root,"fetch","-q",join(root,"input.bundle"),"HEAD");
   if(git(root,"rev-parse","FETCH_HEAD").toString().trim()!==snapshot.head) throw new ControlError("snapshot-head-mismatch");
  }finally{await rm(root,{recursive:true,force:true});}
+}
+
+/** Store canonical JSON bytes in the database transaction that publishes authority. */
+export function writeCanonicalRecord(store: ControlStore, groupId: string, hash: string, canonicalJson: string): void {
+  let parsed: unknown;
+  try { parsed = JSON.parse(canonicalJson); }
+  catch { throw new ControlError("control-non-canonical-json"); }
+  const bytes = canonicalBytes(parsed);
+  if (bytes.toString("utf8") !== canonicalJson || createHash("sha256").update(bytes).digest("hex") !== hash) {
+    throw new ControlError("control-non-canonical-json");
+  }
+  store.db.prepare("INSERT INTO execution_snapshots(hash,group_id,body) VALUES (?,?,?) ON CONFLICT(hash) DO NOTHING")
+    .run(hash, groupId, canonicalJson);
+  const row = store.db.prepare("SELECT body FROM execution_snapshots WHERE hash=?").get(hash);
+  if (!row || String(row.body) !== canonicalJson) throw new ControlError("recovery-blocked");
+}
+
+/** Read and re-hash a canonical authority record. Missing or damaged authority fails closed. */
+export function readCanonicalRecord(store: ControlStore, hash: string): string {
+  const row = store.db.prepare("SELECT body FROM execution_snapshots WHERE hash=?").get(hash);
+  if (!row) throw new ControlError("recovery-blocked");
+  const body = String(row.body);
+  try {
+    const parsed = JSON.parse(body);
+    const bytes = canonicalBytes(parsed);
+    if (bytes.toString("utf8") !== body || createHash("sha256").update(bytes).digest("hex") !== hash) {
+      throw new ControlError("recovery-blocked");
+    }
+  } catch (error) {
+    if (error instanceof ControlError && error.code === "recovery-blocked") throw error;
+    throw new ControlError("recovery-blocked");
+  }
+  return body;
 }
