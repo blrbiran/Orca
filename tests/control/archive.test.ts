@@ -1,5 +1,5 @@
 import { describe,it,expect } from "vitest";
-import { rename, readFile, readdir, writeFile, stat, symlink } from "node:fs/promises";
+import { mkdir, rename, readFile, readdir, writeFile, stat, symlink } from "node:fs/promises";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { archiveRun,readArtifact,writeArtifact } from "../../src/control/archive.js";
@@ -68,6 +68,27 @@ describe("independent evidence archive",{timeout:30000},()=>{
    expect(h.store.db.prepare("SELECT id FROM artifacts WHERE id=?").get("duplicate")).toBeUndefined();
    expect(await readdir(join(h.store.stateDir,"staging"))).toEqual([]);
   }finally{resume.release();await h.dispose();}
+ });
+
+ it("rejects a duplicate through a symlinked artifact id directory without registering it",async()=>{
+  const h=await openTestStore();try{
+   const bytes=Buffer.from("same"),outside=join(h.root,"outside-artifact"),artifacts=join(h.store.stateDir,"artifacts");
+   await mkdir(outside,{mode:0o700});await writeFile(join(outside,"data"),bytes,{mode:0o600});await mkdir(artifacts,{mode:0o700});
+   await symlink(outside,join(artifacts,"linked"));
+   await expect(writeArtifact(h.store,"linked",bytes)).rejects.toThrow("control-path-symlink");
+   expect(h.store.db.prepare("SELECT id FROM artifacts WHERE id=?").get("linked")).toBeUndefined();
+  }finally{await h.dispose();}
+ });
+
+ it("rejects an artifact id directory swapped to a symlink after hashing without registering it",async()=>{
+  const h=await openTestStore();try{
+   const bytes=Buffer.from("same"),artifacts=join(h.store.stateDir,"artifacts"),idDir=join(artifacts,"swapped"),relocated=join(h.root,"relocated-artifact");
+   await mkdir(idDir,{recursive:true,mode:0o700});await writeFile(join(idDir,"data"),bytes,{mode:0o600});
+   await expect(writeArtifact(h.store,"swapped",bytes,{admit:async operation=>{
+    await rename(idDir,relocated);await symlink(relocated,idDir);return operation();
+   }})).rejects.toThrow("control-path-symlink");
+   expect(h.store.db.prepare("SELECT id FROM artifacts WHERE id=?").get("swapped")).toBeUndefined();
+  }finally{await h.dispose();}
  });
 
 });

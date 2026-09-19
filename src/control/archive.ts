@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { constants, createReadStream, createWriteStream, lstatSync } from "node:fs";
+import { constants, createReadStream, createWriteStream, lstatSync, realpathSync } from "node:fs";
 import { rename, lstat, open, readFile, readdir, readlink, realpath, rm } from "node:fs/promises";
 import type { FileHandle } from "node:fs/promises";
 import type { BigIntStats } from "node:fs";
@@ -33,10 +33,21 @@ function fileIdentity(stat:BigIntStats):FileIdentity {
 function sameFileIdentity(left:FileIdentity,right:FileIdentity):boolean {
  return left.dev===right.dev&&left.ino===right.ino&&left.size===right.size&&left.mtimeNs===right.mtimeNs&&left.ctimeNs===right.ctimeNs;
 }
-async function observeDuplicate(path:string,deps:ArchiveDependencies):Promise<{identity:FileIdentity;hash:string}|null> {
+function checkedDirectoryIdentity(root:string,dir:string):FileIdentity {
+ const stat=lstatSync(dir,{bigint:true});
+ if(stat.isSymbolicLink())throw new ControlError("control-path-symlink");
+ if(!stat.isDirectory())throw new ControlError("control-path-not-directory");
+ const canonical=realpathSync(dir);
+ if(canonical!==dir||dirname(canonical)!==root||!within(root,canonical))throw new ControlError("control-path-symlink");
+ return fileIdentity(stat);
+}
+async function observeDuplicate(root:string,dir:string,path:string,deps:ArchiveDependencies):Promise<{parentIdentity:FileIdentity;identity:FileIdentity;hash:string}|null> {
+ let parentIdentity:FileIdentity;
+ try {parentIdentity=checkedDirectoryIdentity(root,dir);}
+ catch(error) {if((error as NodeJS.ErrnoException).code==="ENOENT")return null;throw error;}
  let handle:FileHandle;
  try {handle=await open(path,constants.O_RDONLY|constants.O_NOFOLLOW);}
- catch(error) {if((error as NodeJS.ErrnoException).code==="ENOENT")return null;throw error;}
+ catch(error) {if((error as NodeJS.ErrnoException).code==="ENOENT")throw new ControlError("artifact-id-conflict");throw error;}
  try {
   const before=fileIdentity(await handle.stat({bigint:true}));
   await deps.beforeDuplicateRead?.();
@@ -44,7 +55,7 @@ async function observeDuplicate(path:string,deps:ArchiveDependencies):Promise<{i
   for await(const bytes of handle.createReadStream({autoClose:false}))hash.update(bytes);
   const after=fileIdentity(await handle.stat({bigint:true}));
   if(!sameFileIdentity(before,after))throw new ControlError("artifact-id-conflict");
-  return {identity:after,hash:hash.digest("hex")};
+  return {parentIdentity,identity:after,hash:hash.digest("hex")};
  } finally {await handle.close();}
 }
 function currentIdentity(path:string):FileIdentity {
@@ -53,7 +64,7 @@ function currentIdentity(path:string):FileIdentity {
  return fileIdentity(stat);
 }
 async function publish(store:ControlStore,id:string,temp:string,hash:string,deps:ArchiveDependencies):Promise<ArtifactRef> {
- idSchema.parse(id);const dir=join(privateDirectory(join(store.stateDir,"artifacts")),id);const destination=join(dir,"data");
+ idSchema.parse(id);const artifactsRoot=privateDirectory(join(store.stateDir,"artifacts")),dir=join(artifactsRoot,id),destination=join(dir,"data");
  const handle=await open(temp,"r");try {await (deps.syncFile??(file=>file.sync()))(handle);}finally{await handle.close();}
  const stagedDir=privateDirectory(join(store.stateDir,"staging",randomUUID()));
  const admit=<T>(operation:()=>Promise<T>)=>deps.admit?deps.admit(operation):operation();
@@ -65,10 +76,11 @@ async function publish(store:ControlStore,id:string,temp:string,hash:string,deps
  try {
   await rename(temp,join(stagedDir,"data"));syncDirectory(stagedDir);syncDirectory(dirname(temp));deps.beforePublish?.();
   for(;;) {
-   const duplicate=await observeDuplicate(destination,deps);
+   const duplicate=await observeDuplicate(artifactsRoot,dir,destination,deps);
    if(duplicate) {
     if(duplicate.hash!==hash)throw new ControlError("artifact-id-conflict");
     await admit(async()=>{
+     if(!sameFileIdentity(duplicate.parentIdentity,checkedDirectoryIdentity(artifactsRoot,dir)))throw new ControlError("artifact-id-conflict");
      if(!sameFileIdentity(duplicate.identity,currentIdentity(destination)))throw new ControlError("artifact-id-conflict");
      register();
     });
