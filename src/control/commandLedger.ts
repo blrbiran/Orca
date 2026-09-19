@@ -3,6 +3,8 @@ import { ControlError } from "./errors.js";
 import { recordProjectionChange } from "./projectionJournal.js";
 import type { ControlStore } from "./store.js";
 import {
+  commandErrorBodySchema,
+  commandSuccessSchema,
   effectiveAuthorityCommandSchema,
   rawAuthorityCommandSchema,
   type CommandLookupV1,
@@ -33,31 +35,125 @@ export interface WebCommandInput<T> {
 }
 
 type CommandRow = { raw_request_hash: unknown; original_status: unknown; body_json: unknown };
+type CommandBody = CommandLookupV1["body"];
+
+const unprocessableCodes = new Set([
+  "continuation-budget-unavailable",
+  "continuation-predecessor-unrecoverable",
+  "dependency-not-done",
+  "duplicate-proposal-target",
+  "estimate-input-too-large",
+  "execution-policy-unrepresentable",
+  "grant-amendment-unsupported",
+  "graph-change-needs-handoff",
+  "group-budget-unavailable",
+  "group-deadline-expired",
+  "group-review-budget-unavailable",
+  "group-state-invalid",
+  "group-stopped",
+  "handoff-budget-unavailable",
+  "handoff-grant-insufficient",
+  "handoff-parent-invalid",
+  "no-op-command",
+  "reconcile-budget-unapproved",
+  "recovery-blocked",
+  "recovery-validation-failed",
+  "control-capability-unsupported",
+]);
+
+function durableStatusFor(error: ControlError): number | null {
+  if (error.code === "control-recovery-required") return 423;
+  if (error.code.endsWith("-not-found")) return 404;
+  if (
+    error.code.endsWith("-conflict")
+    || error.code.endsWith("-already-exists")
+    || error.code === "profile-changed"
+    || error.code === "stop-mode-conflict"
+    || error.code === "work-already-active"
+    || error.code === "work-already-done"
+  ) return 409;
+  if (unprocessableCodes.has(error.code)) return 422;
+  return null;
+}
 
 function scope(command: RawAuthorityCommandV1): { key: string; kind: "group" | "global"; id: string; groupId: string | null } {
   if (command.target.kind === "global") return { key: "@global", kind: "global", id: "global", groupId: null };
   return { key: command.target.groupId, kind: "group", id: command.target.groupId, groupId: command.target.groupId };
 }
 
-function replay(row: CommandRow): StoredCommandOutcome<unknown> {
+function invalidResult(): never {
+  throw new ControlError("control-command-result-invalid");
+}
+
+function validatedOutcome(statusValue: unknown, body: unknown): StoredCommandOutcome<CommandBody> {
+  const status = Number(statusValue);
+  if (!Number.isSafeInteger(status) || !((status >= 200 && status < 300) || (status >= 400 && status < 500))) invalidResult();
+  const parsed = (status >= 200 && status < 300 ? commandSuccessSchema : commandErrorBodySchema).safeParse(body);
+  if (!parsed.success) invalidResult();
+  if ("error" in parsed.data && parsed.data.error.retryable) invalidResult();
+  return { status, body: parsed.data } as StoredCommandOutcome<CommandBody>;
+}
+
+function parsedBody(bodyJson: unknown): unknown {
+  try { return JSON.parse(String(bodyJson)); }
+  catch { return invalidResult(); }
+}
+
+function replay(row: CommandRow): StoredCommandOutcome<CommandBody> {
   if (row.original_status === null || row.body_json === null) throw new ControlError("command-id-conflict");
-  return { status: Number(row.original_status), body: JSON.parse(String(row.body_json)) };
+  return validatedOutcome(row.original_status, parsedBody(row.body_json));
 }
 
 function identityWithoutPayload(command: RawAuthorityCommandV1 | EffectiveAuthorityCommandV1): unknown {
   return { commandId: command.commandId, expectedRevision: command.expectedRevision, actorId: command.actorId, verb: command.verb, target: command.target };
 }
 
-function checkedStatus(status: number): number {
-  if (!Number.isSafeInteger(status) || status < 100 || status > 599) throw new ControlError("control-command-status-invalid");
-  return status;
-}
-
-function revisionConflict(commandRevision: number): StoredCommandOutcome<unknown> {
+function revisionConflict(commandRevision: number): StoredCommandOutcome<CommandBody> {
   return {
     status: 409,
     body: { error: { code: "revision-conflict", message: "The command revision is stale.", commandRevision, evidenceIds: [], retryable: false } },
   };
+}
+
+function applyWithSavepoint<T>(store: ControlStore, apply: () => StoredCommandOutcome<T>, commandRevision: number): StoredCommandOutcome<T | CommandBody> {
+  store.db.exec("SAVEPOINT web_command_apply");
+  try {
+    const outcome = apply();
+    if (Number(outcome.status) >= 400 && Number(outcome.status) < 500) store.db.exec("ROLLBACK TO web_command_apply");
+    store.db.exec("RELEASE web_command_apply");
+    return outcome;
+  } catch (error) {
+    store.db.exec("ROLLBACK TO web_command_apply");
+    store.db.exec("RELEASE web_command_apply");
+    if (!(error instanceof ControlError)) throw error;
+    const status = durableStatusFor(error);
+    if (status === null) throw error;
+    return {
+      status,
+      body: { error: { code: error.code, message: error.message, commandRevision, evidenceIds: [], retryable: false } },
+    };
+  }
+}
+
+function assertSuccessIdentity(
+  body: CommandBody,
+  context: Pick<WebCommandContext, "rawCommand" | "effectivePayloadHash" | "authorityCommandHash">,
+): void {
+  if (!("schema" in body)) return;
+  if (
+    body.commandId !== context.rawCommand.commandId
+    || body.actorId !== context.rawCommand.actorId
+    || body.verb !== context.rawCommand.verb
+    || canonicalBytes(body.target).compare(canonicalBytes(context.rawCommand.target)) !== 0
+    || body.effectivePayloadHash !== context.effectivePayloadHash
+    || body.authorityCommandHash !== context.authorityCommandHash
+  ) invalidResult();
+}
+
+function assertFinalVersions(body: CommandBody, commandRevision: number | null, projectionSeq: number | null): void {
+  if ("schema" in body) {
+    if (body.commandRevision !== commandRevision || body.projectionSeq !== projectionSeq) invalidResult();
+  } else if (body.error.commandRevision !== commandRevision) invalidResult();
 }
 
 function updateRevision(store: ControlStore, groupId: string, nextRevision: number): void {
@@ -108,27 +204,35 @@ export function applyWebCommand<T>(store: ControlStore, input: WebCommandInput<T
       ? commandScope.groupId === null ? null : 1
       : currentProjectionSeq === Number.MAX_SAFE_INTEGER ? Number.MAX_SAFE_INTEGER : currentProjectionSeq + 1;
 
-    let outcome: StoredCommandOutcome<T>;
-    if (rawCommand.expectedRevision !== currentCommandRevision) outcome = revisionConflict(currentCommandRevision) as StoredCommandOutcome<T>;
-    else outcome = input.apply({ rawCommand, effectiveCommand, rawRequestHash, effectivePayloadHash, authorityCommandHash, currentCommandRevision, nextCommandRevision, currentProjectionSeq, nextProjectionSeq });
-    checkedStatus(outcome.status);
+    const context: WebCommandContext = {
+      rawCommand, effectiveCommand, rawRequestHash, effectivePayloadHash, authorityCommandHash,
+      currentCommandRevision, nextCommandRevision, currentProjectionSeq, nextProjectionSeq,
+    };
+    let unvalidated: StoredCommandOutcome<T | CommandBody>;
+    if (rawCommand.expectedRevision !== currentCommandRevision) unvalidated = revisionConflict(currentCommandRevision);
+    else unvalidated = applyWithSavepoint(store, () => input.apply(context), currentCommandRevision);
+    const outcome = validatedOutcome(unvalidated.status, unvalidated.body);
+    assertSuccessIdentity(outcome.body, context);
+    const typedOutcome = outcome as unknown as StoredCommandOutcome<T>;
 
-    const authorityChanged = rawCommand.expectedRevision === currentCommandRevision && (typeof input.authorityChanged === "function"
-      ? input.authorityChanged(outcome)
+    const succeeded = outcome.status >= 200 && outcome.status < 300;
+    const authorityChanged = succeeded && rawCommand.expectedRevision === currentCommandRevision && (typeof input.authorityChanged === "function"
+      ? input.authorityChanged(typedOutcome)
       : input.authorityChanged ?? (outcome.status >= 200 && outcome.status < 300));
     if (authorityChanged && commandScope.groupId === null) throw new ControlError("control-global-authority-requires-explicit-groups");
     if (authorityChanged) {
       if (currentCommandRevision === Number.MAX_SAFE_INTEGER) throw new ControlError("control-sequence-overflow");
       updateRevision(store, commandScope.groupId!, currentCommandRevision + 1);
     }
-    const projectionGroups = typeof input.projectionGroupIds === "function"
-      ? input.projectionGroupIds(outcome)
+    const projectionGroups = !succeeded ? [] : typeof input.projectionGroupIds === "function"
+      ? input.projectionGroupIds(typedOutcome)
       : input.projectionGroupIds ?? (authorityChanged && commandScope.groupId !== null ? [commandScope.groupId] : []);
     if (projectionGroups.length > 0) recordProjectionChange(store, projectionGroups);
 
     const finalGroup = commandScope.groupId === null ? undefined : store.db.prepare("SELECT revision,projection_seq FROM groups WHERE id=?").get(commandScope.groupId);
     const commandRevision = commandScope.groupId === null ? null : Number(finalGroup?.revision ?? currentCommandRevision);
     const projectionSeq = commandScope.groupId === null || !finalGroup ? null : Number(finalGroup.projection_seq);
+    assertFinalVersions(outcome.body, commandRevision, projectionSeq);
     const bodyJson = canonicalBytes(outcome.body).toString("utf8");
     const responseBytes = Buffer.from(bodyJson, "utf8");
     store.db.prepare(`INSERT INTO commands(
@@ -141,7 +245,7 @@ export function applyWebCommand<T>(store: ControlStore, input: WebCommandInput<T
       effectivePayloadJson, effectivePayloadHash, authorityCommandJson, authorityCommandHash, outcome.status, bodyJson, responseBytes,
       commandRevision, projectionSeq,
     );
-    return outcome;
+    return typedOutcome;
   });
 }
 
@@ -149,5 +253,6 @@ export function lookupCommandResult(store: ControlStore, groupId: string, comman
   const row = store.db.prepare("SELECT original_status,body_json FROM commands WHERE group_id=? AND id=?")
     .get(groupId, commandId) as Pick<CommandRow, "original_status" | "body_json"> | undefined;
   if (!row || row.original_status === null || row.body_json === null) return null;
-  return { schema: "orca-command-lookup-v1", originalStatus: Number(row.original_status), body: JSON.parse(String(row.body_json)) } as CommandLookupV1;
+  const outcome = validatedOutcome(row.original_status, parsedBody(row.body_json));
+  return { schema: "orca-command-lookup-v1", originalStatus: outcome.status, body: outcome.body };
 }

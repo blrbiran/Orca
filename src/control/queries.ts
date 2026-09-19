@@ -26,6 +26,15 @@ export function readWork(store:ControlStore,groupId:string,id:string):WorkRecord
   const row=store.db.prepare("SELECT body FROM work_items WHERE group_id=? AND id=?").get(groupId,id);
   if(!row) throw new ControlError("work-not-found");return JSON.parse(String(row.body));
 }
+export function saveWork(store:ControlStore,groupId:string,work:WorkRecord):void {
+  const body=JSON.stringify(work);
+  const changed=store.db.prepare("UPDATE work_items SET body=? WHERE group_id=? AND id=? AND body<>?").run(body,groupId,work.workItemId,body).changes;
+  if(changed===0) {
+    if(!store.db.prepare("SELECT id FROM work_items WHERE group_id=? AND id=?").get(groupId,work.workItemId))throw new ControlError("work-not-found");
+    return;
+  }
+  recordProjectionChange(store,[groupId]);
+}
 export function allWork(store:ControlStore,groupId:string):WorkRecord[] {
   return store.db.prepare("SELECT body FROM work_items WHERE group_id=? ORDER BY id").all(groupId).map(r=>JSON.parse(String(r.body)));
 }

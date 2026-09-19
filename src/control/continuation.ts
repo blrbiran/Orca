@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { ControlStore } from "./store.js";
 import type { Claim, CommandMeta } from "./types.js";
 import { applyCommand, dimensions, fits, zero } from "./commands.js";
-import { readGroup, readWork, saveGroup } from "./queries.js";
+import { readGroup, readWork, saveGroup, saveWork } from "./queries.js";
 import { add, readRun, subtract, type RunRecord } from "./budget.js";
 import { ControlError } from "./errors.js";
 
@@ -22,6 +22,6 @@ export function claimContinuation(store:ControlStore,input:ContinuationClaimInpu
   group.reserved=reserved;group.budgetVersion++;group.status="running";saveGroup(store,group);
   const claim:Claim={groupId,workItemId,taskId,runId:"run-"+randomUUID(),generation:1,graphVersion,targetVersion,commandId:meta.commandId,configHash:work.configHash,grant,ownerToken:randomUUID()};
   const run:RunRecord={...claim,executionId:null,state:"claimed",checkpointId:null,recoverable:false,remaining:structuredClone(grant),cumulative:{work:zero(),handoff:zero()},unknown:{work:true,handoff:true},highWater:0,breaches:[],handoffWorkItemId:null,predecessorRunId};
-  store.db.prepare("INSERT INTO runs VALUES (?,?,?,?,1,?)").run(claim.runId,groupId,workItemId,1,JSON.stringify(run));work.status="running";store.db.prepare("UPDATE work_items SET body=? WHERE group_id=? AND id=?").run(JSON.stringify(work),groupId,workItemId);return claim;
+  store.db.prepare("INSERT INTO runs VALUES (?,?,?,?,1,?)").run(claim.runId,groupId,workItemId,1,JSON.stringify(run));work.status="running";saveWork(store,groupId,work);return claim;
  });
 }

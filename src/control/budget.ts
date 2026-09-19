@@ -5,7 +5,8 @@ import type { Amount, BudgetMode, Capabilities, Claim, ClaimInput, Grant, RunVie
 import { ControlError } from "./errors.js";
 import { amountSchema, safeInteger, workSchema, capabilitiesSchema } from "./schema.js";
 import { applyCommand, dimensions, fits, zero } from "./commands.js";
-import { readGroup, readWork, saveGroup, allWork } from "./queries.js";
+import { readGroup, readWork, saveGroup, saveWork, allWork } from "./queries.js";
+import { recordProjectionChange } from "./projectionJournal.js";
 export interface RunRecord extends Claim, RunView {
   remaining:Grant; cumulative:Grant; highWater:number;
   unknown:{work:boolean;handoff:boolean};breaches:number[];
@@ -17,7 +18,13 @@ export function readRun(store:ControlStore,id:string):RunRecord {
   if(!row) throw new ControlError("run-not-found");return JSON.parse(String(row.body));
 }
 export function saveRun(store:ControlStore,run:RunRecord):void {
-  store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify(run),run.runId);
+  const body=JSON.stringify(run);
+  const changed=store.db.prepare("UPDATE runs SET body=? WHERE id=? AND body<>?").run(body,run.runId,body).changes;
+  if(changed===0) {
+    if(!store.db.prepare("SELECT id FROM runs WHERE id=?").get(run.runId))throw new ControlError("run-not-found");
+    return;
+  }
+  recordProjectionChange(store,[run.groupId]);
 }
 export function add(a:Amount,b:Amount):Amount {
   const result={...a};for(const k of dimensions) result[k]=a[k]+b[k];
@@ -76,7 +83,7 @@ export function claimWork(store:ControlStore,input:ClaimInput, preparedWork?:Wor
     const claim:Claim={groupId,workItemId,taskId:work.taskId,runId:"run-"+randomUUID(),generation:1,graphVersion,targetVersion,commandId:meta.commandId,configHash:work.configHash,grant:work.grant,ownerToken:randomUUID()};
     const run:RunRecord={...claim,executionId:null,state:"claimed",checkpointId:null,recoverable:false,remaining:structuredClone(work.grant),cumulative:{work:zero(),handoff:zero()},unknown:{work:true,handoff:true},highWater:0,breaches:[],handoffWorkItemId:null};
     store.db.prepare("INSERT INTO runs VALUES (?,?,?,?,1,?)").run(claim.runId,groupId,workItemId,1,JSON.stringify(run));
-    work.status="running";store.db.prepare("UPDATE work_items SET body=? WHERE group_id=? AND id=?").run(JSON.stringify(work),groupId,workItemId);
+    work.status="running";saveWork(store,groupId,work);
     group.status="running";group.budgetVersion++;saveGroup(store,group);return claim;
   });
 }

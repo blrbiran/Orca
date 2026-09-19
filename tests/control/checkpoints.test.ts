@@ -1,9 +1,10 @@
 import { describe,it,expect } from "vitest";
 import { join } from "node:path";
 import { readFile, writeFile } from "node:fs/promises";
-import { commitCandidate,readCommittedCheckpoint } from "../../src/control/checkpoints.js";
+import { commitCandidate,readCommittedCheckpoint,repairAcceptedWork } from "../../src/control/checkpoints.js";
+import { writeArtifact } from "../../src/control/archive.js";
 import { publishPending } from "../../src/control/projection.js";
-import { getGroup,getRun } from "../../src/control/queries.js";
+import { getGroup,getRun,readVersions,readWork } from "../../src/control/queries.js";
 import { recordUsage } from "../../src/control/usage.js";
 import { candidateCase } from "./fixtures/candidate.js";
 describe("checkpoint authority",{timeout:30000},()=>{
@@ -59,6 +60,20 @@ describe("checkpoint authority",{timeout:30000},()=>{
    await expect(readFile(join(h.store.stateDir,"projections",h.claim.runId,"latest.json"))).rejects.toThrow();
    expect(getGroup(h.store,"g1").reserved.tokens).toBe(40);
    await commitCandidate(h.store,h.candidate);expect(getRun(h.store,h.claim.runId).recoverable).toBe(true);
+  }finally{await h.dispose();}
+ });
+ it("projects post-acceptance work repair exactly once",async()=>{
+  const h=await candidateCase();try{
+   await commitCandidate(h.store,h.candidate);
+   expect(readWork(h.store,"g1","T1").status).toBe("blocked");
+   const acceptance=await writeArtifact(h.store,"late-acceptance",Buffer.from(JSON.stringify({runId:h.claim.runId,checksPassed:true,landing:"landed"})));
+   h.store.db.prepare("INSERT INTO outbox VALUES (?, 'acceptance', ?, 1)").run("acceptance:"+h.claim.runId,JSON.stringify({runId:h.claim.runId,accepted:true,source:acceptance}));
+   const before=readVersions(h.store,"g1");
+   await repairAcceptedWork(h.store,h.claim.runId);
+   expect(readWork(h.store,"g1","T1").status).toBe("done");
+   expect(readVersions(h.store,"g1")).toEqual({commandRevision:before.commandRevision,projectionSeq:before.projectionSeq+1});
+   await repairAcceptedWork(h.store,h.claim.runId);
+   expect(readVersions(h.store,"g1")).toEqual({commandRevision:before.commandRevision,projectionSeq:before.projectionSeq+1});
   }finally{await h.dispose();}
  });
 

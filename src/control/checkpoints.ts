@@ -8,7 +8,7 @@ import { ControlError } from "./errors.js";
 import { readArtifact } from "./archive.js";
 import { verifySnapshot } from "./snapshot.js";
 import { readRun, releaseRunReserve, saveRun, hasObservedUsage } from "./budget.js";
-import { readGroup, readWork, saveGroup } from "./queries.js";
+import { readGroup, readWork, saveGroup, saveWork } from "./queries.js";
 import { privateDirectory, syncDirectory, assertRegular } from "./paths.js";
 import { candidateSchema } from "./schema.js";
 import { hashPayload } from "./commands.js";
@@ -74,7 +74,7 @@ export async function commitCandidate(store:ControlStore,c:Candidate,deps:Commit
   run=readRun(store,c.runId);run.checkpointId=c.checkpointId;
   run.recoverable=settled && c.result==="complete" && c.missing.length===0 && !!c.snapshot;saveRun(store,run);
   const work=readWork(store,c.groupId,c.workItemId);work.status=run.recoverable && accepted ? "done":"blocked";
-  store.db.prepare("UPDATE work_items SET body=? WHERE group_id=? AND id=?").run(JSON.stringify(work),c.groupId,c.workItemId);
+  saveWork(store,c.groupId,work);
   const group=readGroup(store,c.groupId);group.status="review";saveGroup(store,group);
   store.db.prepare("INSERT INTO outbox VALUES (?, 'projection', ?, 0)").run("projection:"+c.checkpointId,JSON.stringify({runId:c.runId,...reference}));
   const taskCheckpointRefs=[] as Array<{taskId:string;checkpointId:string;checkpointHash:string}>;const seen=new Set<string>();
@@ -106,6 +106,6 @@ export async function repairAcceptedWork(store:ControlStore,runId:string):Promis
  store.transaction(()=>{
   const current=readRun(store,runId),work=readWork(store,run.groupId,run.workItemId),group=readGroup(store,run.groupId);
   if(current.checkpointId!==c.checkpointId || work.targetVersion!==run.targetVersion || group.graphVersion!==run.graphVersion || current.state!=="settled" || !current.recoverable) return;
-  work.status="done";store.db.prepare("UPDATE work_items SET body=? WHERE group_id=? AND id=?").run(JSON.stringify(work),run.groupId,run.workItemId);
+  work.status="done";saveWork(store,run.groupId,work);
  });
 }

@@ -1,14 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { applyWebCommand, lookupCommandResult, type WebCommandInput } from "../../src/control/commandLedger.js";
+import { applyWebCommand, lookupCommandResult, type StoredCommandOutcome, type WebCommandContext, type WebCommandInput } from "../../src/control/commandLedger.js";
 import { createGroup, setGroupStopped } from "../../src/control/commands.js";
+import { ControlError } from "../../src/control/errors.js";
 import { readVersions } from "../../src/control/queries.js";
-import type { EffectiveAuthorityCommandV1, RawAuthorityCommandV1 } from "../../src/control/webProtocol.js";
+import type { CommandLookupV1, CommandSuccessV1, EffectiveAuthorityCommandV1, RawAuthorityCommandV1 } from "../../src/control/webProtocol.js";
 import type { GroupInput } from "../../src/control/types.js";
 import { openTestStore } from "./fixtures/store.js";
 
 const deadlineA = "2026-09-20T10:00:00.000Z";
 const deadlineB = "2026-09-20T11:00:00.000Z";
 const group: GroupInput = {groupId:"g1",projectKey:"example/repo",goal:"Ship",successConditions:["checks pass"],limit:{tokens:100,activeMs:10000,attempts:10,sessions:10},reviewReserve:{tokens:10,activeMs:1000,attempts:1,sessions:1},deadlineAt:null};
+type CommandBody = CommandLookupV1["body"];
 
 function raw(commandId = "web-stop", expectedRevision = 1): RawAuthorityCommandV1 {
   return {
@@ -34,6 +36,32 @@ function input<T>(
   };
 }
 
+function accepted(context: WebCommandContext): StoredCommandOutcome<CommandSuccessV1> {
+  const handoffDeadlineAt = (context.effectiveCommand.payload as { handoffDeadlineAt: string }).handoffDeadlineAt;
+  return {
+    status: 202,
+    body: {
+      schema: "orca-command-success-v1",
+      commandId: context.rawCommand.commandId,
+      actorId: context.rawCommand.actorId,
+      verb: context.rawCommand.verb,
+      target: context.rawCommand.target,
+      commandRevision: context.nextCommandRevision,
+      projectionSeq: context.nextProjectionSeq,
+      effectivePayloadHash: context.effectivePayloadHash,
+      authorityCommandHash: context.authorityCommandHash,
+      result: {
+        kind: "handoff-stopped",
+        stopRevision: context.nextCommandRevision,
+        acceptedAt: deadlineA,
+        handoffDeadlineAt,
+        frozenRunIds: [],
+        requestIds: [],
+      },
+    },
+  };
+}
+
 describe("web command ledger", () => {
   it("replays the persisted effective default before reading changed defaults", async () => {
     const h = await openTestStore();
@@ -41,9 +69,9 @@ describe("web command ledger", () => {
       createGroup(h.store, group, { commandId: "create", expectedRevision: 0, by: "human" });
       const defaults = { deadline: deadlineA };
       let calls = 0;
-      const first = applyWebCommand(h.store, input(raw(), () => defaults.deadline, ({ effectiveCommand }) => {
+      const first = applyWebCommand(h.store, input(raw(), () => defaults.deadline, (context) => {
         calls += 1;
-        return { status: 202, body: { selected: (effectiveCommand.payload as { handoffDeadlineAt: string }).handoffDeadlineAt } };
+        return accepted(context);
       }));
       defaults.deadline = deadlineB;
       const replay = applyWebCommand(h.store, input(raw(), () => {
@@ -53,13 +81,13 @@ describe("web command ledger", () => {
       }));
 
       expect(replay).toEqual(first);
-      expect(first.body).toEqual({ selected: deadlineA });
+      expect(first.body).toMatchObject({ result: { kind: "handoff-stopped", handoffDeadlineAt: deadlineA } });
       expect(calls).toBe(1);
       expect(readVersions(h.store, "g1")).toEqual({ commandRevision: 2, projectionSeq: 2 });
       expect(lookupCommandResult(h.store, "g1", "web-stop")).toEqual({
         schema: "orca-command-lookup-v1",
         originalStatus: 202,
-        body: { selected: deadlineA },
+        body: first.body,
       });
       const row = h.store.db.prepare(`SELECT actor_id,verb,target_json,expected_revision,raw_request_json,raw_request_hash,
         effective_payload_json,effective_payload_hash,authority_command_json,authority_command_hash,original_status,
@@ -71,10 +99,10 @@ describe("web command ledger", () => {
         expected_revision: 1,
         effective_payload_json: `{"handoffDeadlineAt":"${deadlineA}"}`,
         original_status: 202,
-        body_json: `{"selected":"${deadlineA}"}`,
         command_revision: 2,
         projection_seq: 2,
       });
+      expect(JSON.parse(String(row?.body_json))).toEqual(first.body);
       expect(String(row?.raw_request_json)).toContain('"payload":{}');
       for (const hash of [row?.raw_request_hash,row?.effective_payload_hash,row?.authority_command_hash]) expect(hash).toMatch(/^[a-f0-9]{64}$/);
       expect(new Set([row?.raw_request_hash,row?.effective_payload_hash,row?.authority_command_hash]).size).toBe(3);
@@ -95,7 +123,7 @@ describe("web command ledger", () => {
     const h = await openTestStore();
     try {
       createGroup(h.store, group, { commandId: "create", expectedRevision: 0, by: "human" });
-      applyWebCommand(h.store, input(raw(), () => deadlineA, () => ({ status: 202, body: { selected: deadlineA } })));
+      applyWebCommand(h.store, input(raw(), () => deadlineA, accepted));
       expect(() => applyWebCommand(h.store, {
         rawCommand: change(raw()) as RawAuthorityCommandV1,
         expand: () => { throw new Error("must not expand a conflicting replay"); },
@@ -136,7 +164,7 @@ describe("web command ledger", () => {
     try {
       createGroup(h.store, group, { commandId: "create", expectedRevision: 0, by: "human" });
       h.store.db.prepare("UPDATE groups SET revision=? WHERE id='g1'").run(Number.MAX_SAFE_INTEGER);
-      const overflow = input(raw("overflow", Number.MAX_SAFE_INTEGER), () => deadlineA, () => ({ status: 202, body: { selected: deadlineA } }));
+      const overflow = input(raw("overflow", Number.MAX_SAFE_INTEGER), () => deadlineA, accepted);
       expect(() => applyWebCommand(h.store, overflow)).toThrow("control-sequence-overflow");
       expect(lookupCommandResult(h.store, "g1", "overflow")).toBeNull();
       expect(readVersions(h.store, "g1").commandRevision).toBe(Number.MAX_SAFE_INTEGER);
@@ -148,7 +176,7 @@ describe("web command ledger", () => {
   it("keeps one global command namespace across process epochs", async () => {
     const h = await openTestStore();
     try {
-      const make = (epoch: string): WebCommandInput<{ stopped: true }> => {
+      const make = (epoch: string): WebCommandInput<CommandSuccessV1> => {
         const rawCommand: RawAuthorityCommandV1 = {
           schema: "orca-raw-command-v1",
           commandId: "shutdown-1",
@@ -161,13 +189,91 @@ describe("web command ledger", () => {
         return {
           rawCommand,
           expand: () => ({ ...rawCommand, schema: "orca-authority-command-v1" }),
-          apply: () => ({ status: 200, body: { stopped: true } }),
+          apply: (context) => ({ status: 200, body: {
+            schema: "orca-command-success-v1",
+            commandId: context.rawCommand.commandId,
+            actorId: context.rawCommand.actorId,
+            verb: "shutdown",
+            target: context.rawCommand.target,
+            commandRevision: null,
+            projectionSeq: null,
+            effectivePayloadHash: context.effectivePayloadHash,
+            authorityCommandHash: context.authorityCommandHash,
+            result: { kind: "shutdown", groups: [] },
+          } }),
           authorityChanged: false,
         };
       };
       applyWebCommand(h.store, make("epoch-a"));
       expect(() => applyWebCommand(h.store, { ...make("epoch-b"), expand: () => { throw new Error("conflict expanded"); } }))
         .toThrow("command-id-conflict");
+    } finally {
+      await h.dispose();
+    }
+  });
+
+  it("durably converts expected domain errors and rolls back their partial writes before replay", async () => {
+    const h = await openTestStore();
+    try {
+      createGroup(h.store, group, { commandId: "create", expectedRevision: 0, by: "human" });
+      let calls = 0;
+      const rejected = input<CommandBody>(raw("thrown"), () => deadlineA, () => {
+        calls += 1;
+        h.store.db.prepare("INSERT INTO meta VALUES ('partial-domain-write','bad')").run();
+        throw new ControlError("group-budget-unavailable");
+      });
+      const first = applyWebCommand(h.store, rejected);
+      expect(first).toEqual({
+        status: 422,
+        body: { error: { code: "group-budget-unavailable", message: "group-budget-unavailable", commandRevision: 1, evidenceIds: [], retryable: false } },
+      });
+      expect(h.store.db.prepare("SELECT value FROM meta WHERE key='partial-domain-write'").get()).toBeUndefined();
+      expect(applyWebCommand(h.store, { ...rejected, apply: () => { throw new Error("durable error repeated"); } })).toEqual(first);
+      expect(calls).toBe(1);
+    } finally {
+      await h.dispose();
+    }
+  });
+
+  it("rolls unexpected failures back without recording a command result", async () => {
+    const h = await openTestStore();
+    try {
+      createGroup(h.store, group, { commandId: "create", expectedRevision: 0, by: "human" });
+      const broken = input<CommandBody>(raw("broken"), () => deadlineA, () => {
+        h.store.db.prepare("INSERT INTO meta VALUES ('partial-internal-write','bad')").run();
+        throw new Error("unexpected-internal");
+      });
+      expect(() => applyWebCommand(h.store, broken)).toThrow("unexpected-internal");
+      expect(h.store.db.prepare("SELECT value FROM meta WHERE key='partial-internal-write'").get()).toBeUndefined();
+      expect(lookupCommandResult(h.store, "g1", "broken")).toBeNull();
+    } finally {
+      await h.dispose();
+    }
+  });
+
+  it("rejects invalid success and error bodies without committing, and validates lookup rows", async () => {
+    const h = await openTestStore();
+    try {
+      createGroup(h.store, group, { commandId: "create", expectedRevision: 0, by: "human" });
+      const invalidSuccess = input<CommandBody>(raw("invalid-success"), () => deadlineA, (context) => {
+        const outcome = accepted(context);
+        return { ...outcome, body: { ...outcome.body, commandRevision: -1 } as CommandSuccessV1 };
+      });
+      expect(() => applyWebCommand(h.store, invalidSuccess)).toThrow("control-command-result-invalid");
+      expect(lookupCommandResult(h.store, "g1", "invalid-success")).toBeNull();
+      expect(readVersions(h.store, "g1")).toEqual({ commandRevision: 1, projectionSeq: 1 });
+
+      const invalidError = input<CommandBody>(raw("invalid-error"), () => deadlineA, () => ({
+        status: 422,
+        body: { error: { code: "group-budget-unavailable", message: "bad", commandRevision: -1, evidenceIds: [], retryable: false } },
+      } as StoredCommandOutcome<CommandBody>));
+      expect(() => applyWebCommand(h.store, invalidError)).toThrow("control-command-result-invalid");
+      expect(lookupCommandResult(h.store, "g1", "invalid-error")).toBeNull();
+
+      const valid = applyWebCommand(h.store, input(raw("corrupt-lookup"), () => deadlineA, accepted));
+      expect(valid.status).toBe(202);
+      h.store.db.prepare("UPDATE commands SET body_json='{}' WHERE group_id='g1' AND id='corrupt-lookup'").run();
+      expect(() => lookupCommandResult(h.store, "g1", "corrupt-lookup")).toThrow("control-command-result-invalid");
     } finally {
       await h.dispose();
     }

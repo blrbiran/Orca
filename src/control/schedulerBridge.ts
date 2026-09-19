@@ -8,7 +8,7 @@ import { git } from "../scheduler/gitExec.js";
 import type { ControlService } from "./service.js";
 import type { Candidate, Claim, ArtifactRef, Identity } from "./types.js";
 import type { ExecutionReport, StartEnvelope } from "./executionPort.js";
-import { allWork, readGroup, readWork } from "./queries.js";
+import { allWork, readGroup, readWork, saveWork } from "./queries.js";
 import { hasObservedUsage, readRun } from "./budget.js";
 import { hashPayload } from "./commands.js";
 import { startClaim, readEnvelope } from "./dispatch.js";
@@ -146,7 +146,7 @@ export function makeControlledExecution(service:ControlService,groupId:string):R
      const current=readWork(service.store,groupId,work.workItemId);
      if(readRun(service.store,claim.runId).state!=="claimed") throw new ControlError("start-state-conflict");
      if(!(current.contract as {pendingReconciliation?:string}).pendingReconciliation && hashPayload(current.contract)!==hashPayload(contract)) throw new ControlError("start-contract-conflict");
-     current.contract=contract;service.store.db.prepare("UPDATE work_items SET body=? WHERE group_id=? AND id=?").run(JSON.stringify(current),groupId,work.workItemId);
+     current.contract=contract;saveWork(service.store,groupId,current);
     });
    } else if(hashPayload(contract)!==hashPayload(work.contract)) throw new ControlError("start-contract-conflict");
    const root=privateDirectory(plan.runsDir),input:StartEnvelope={protocol:1,claim,contractHash:hashPayload(contract),inputCheckpoint:null,

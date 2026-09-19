@@ -1,14 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { createGroup } from "../../src/control/commands.js";
+import { createGroup, hashPayload } from "../../src/control/commands.js";
+import { claimWork } from "../../src/control/budget.js";
+import { startClaim } from "../../src/control/dispatch.js";
 import {
   projectionJournalRetention,
   readProjectionChanges,
   readProjectionState,
   recordProjectionChange,
 } from "../../src/control/projectionJournal.js";
-import { readGroup, readVersions, saveGroup } from "../../src/control/queries.js";
+import { getRun, readGroup, readVersions, saveGroup } from "../../src/control/queries.js";
 import type { GroupInput } from "../../src/control/types.js";
-import { openTestStore } from "./fixtures/store.js";
+import { openTestStore, seedBudgetCase } from "./fixtures/store.js";
+import { fakePeer } from "./fixtures/peer.js";
 
 const group: GroupInput = {groupId:"g1",projectKey:"example/repo",goal:"Ship",successConditions:["checks pass"],limit:{tokens:100,activeMs:10000,attempts:10,sessions:10},reviewReserve:{tokens:10,activeMs:1000,attempts:1,sessions:1},deadlineAt:null};
 
@@ -85,6 +88,49 @@ describe("projection journal", () => {
       h.store.db.prepare("UPDATE groups SET projection_seq=? WHERE id='g1'").run(Number.MAX_SAFE_INTEGER);
       expect(() => recordProjectionChange(h.store, ["g1"])).toThrow("control-sequence-overflow");
       expect(readProjectionState(h.store).changeSeq).toBe(1);
+    } finally {
+      await h.dispose();
+    }
+  });
+
+  it("projects claim, starting, and accepted run/work transitions once per transaction", async () => {
+    const h = await openTestStore();
+    try {
+      const seeded = seedBudgetCase(h.store);
+      const beforeClaim = readVersions(h.store, "g1");
+      const claim = claimWork(h.store, seeded.t1Claim);
+      expect(readVersions(h.store, "g1")).toEqual({ commandRevision: beforeClaim.commandRevision, projectionSeq: beforeClaim.projectionSeq + 1 });
+
+      const beforeStart = readVersions(h.store, "g1");
+      await startClaim(h.store, fakePeer(`${h.root}/accepted-peer`), {
+        protocol: 1,
+        claim,
+        contractHash: hashPayload(seeded.w1.contract),
+        inputCheckpoint: null,
+        work: { contract: seeded.w1.contract, targetRepo: h.root, base: "HEAD", sourceDir: h.root },
+      });
+      expect(getRun(h.store, claim.runId).state).toBe("accepted");
+      expect(readVersions(h.store, "g1")).toEqual({ commandRevision: beforeStart.commandRevision, projectionSeq: beforeStart.projectionSeq + 2 });
+    } finally {
+      await h.dispose();
+    }
+  });
+
+  it("projects starting and unknown run transitions without changing authority", async () => {
+    const h = await openTestStore();
+    try {
+      const seeded = seedBudgetCase(h.store);
+      const claim = claimWork(h.store, seeded.t1Claim);
+      const before = readVersions(h.store, "g1");
+      await expect(startClaim(h.store, fakePeer(`${h.root}/unknown-peer`, "drop"), {
+        protocol: 1,
+        claim,
+        contractHash: hashPayload(seeded.w1.contract),
+        inputCheckpoint: null,
+        work: { contract: seeded.w1.contract, targetRepo: h.root, base: "HEAD", sourceDir: h.root },
+      })).rejects.toThrow("start-outcome-unknown");
+      expect(getRun(h.store, claim.runId).state).toBe("unknown");
+      expect(readVersions(h.store, "g1")).toEqual({ commandRevision: before.commandRevision, projectionSeq: before.projectionSeq + 2 });
     } finally {
       await h.dispose();
     }
