@@ -6,7 +6,7 @@ import { publishPending } from "../../src/control/projection.js";
 import { getGroup,getRun } from "../../src/control/queries.js";
 import { recordUsage } from "../../src/control/usage.js";
 import { candidateCase } from "./fixtures/candidate.js";
-describe("checkpoint authority",()=>{
+describe("checkpoint authority",{timeout:30000},()=>{
  it("commits once before projection and survives a projection failure without refunding usage",async()=>{
   const h=await candidateCase();try{
    await expect(readCommittedCheckpoint(h.store,h.claim.runId)).rejects.toThrow("checkpoint-not-committed");

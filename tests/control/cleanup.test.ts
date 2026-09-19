@@ -6,7 +6,7 @@ import { cleanupCommittedRun } from "../../src/control/cleanup.js";
 import { readArtifact,writeArtifact } from "../../src/control/archive.js";
 import { getRun } from "../../src/control/queries.js";
 import { candidateCase } from "./fixtures/candidate.js";
-describe("cleanup authorization",()=>{
+describe("cleanup authorization",{timeout:30000},()=>{
  it("requires committed recoverable evidence and durable acceptance before removing only the registered run",async()=>{
   const h=await candidateCase();try{
    await expect(cleanupCommittedRun(h.store,h.claim.runId,h.sourceDir)).rejects.toThrow("checkpoint-not-committed");

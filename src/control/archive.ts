@@ -98,15 +98,17 @@ export async function archiveRun(store:ControlStore,input:{runId:string;sourceDi
  privateDirectory(input.sourceDir);privateDirectory(input.repoDir);
  if((await lstat(input.sourceDir)).isSymbolicLink() || (await lstat(input.repoDir)).isSymbolicLink()) throw new ControlError("control-path-symlink");
  if(within(source,store.stateDir) || !within(source,repo) || basename(source)!==run.runId || source===repo) throw new ControlError("archive-source-invalid");
+ const sourceStat=await lstat(source,{bigint:true});
+ const sourceIdentity={dev:String(sourceStat.dev),ino:String(sourceStat.ino),birthtimeNs:String(sourceStat.birthtimeNs)};
  const missing:string[]=[];
  if(!input.stopProof || !input.stopProof.isolated || input.stopProof.executionId!==run.executionId || input.stopProof.generation!==run.generation) missing.push("stop-unconfirmed");
  const logs=await captureTree(store,source,"",missing,deps,[relative(source,repo)]);
  const snapshot=await captureSnapshot(store,repo,missing,deps);
- const manifest={version:1,runId:run.runId,logs,snapshot,missing};
+ const manifest={version:1,runId:run.runId,sourceIdentity,logs,snapshot,missing};
  const bytes=Buffer.from(JSON.stringify(manifest));const archive=await writeArtifact(store,"archive-"+createHash("sha256").update(bytes).digest("hex"),bytes,deps);
  const artifacts=[...logs.flatMap(e=>e.ref?[e.ref]:[]),archive,snapshot];
  store.transaction(()=>{
-  store.db.prepare("INSERT INTO outbox VALUES (?, 'archive', ?, 0) ON CONFLICT(id) DO NOTHING").run("archive:"+archive.artifactId,JSON.stringify({runId:run.runId,sourceDir:source,repoDir:repo,runsRoot:dirname(source),artifacts,snapshot,missing}));
+  store.db.prepare("INSERT INTO outbox VALUES (?, 'archive', ?, 0) ON CONFLICT(id) DO NOTHING").run("archive:"+archive.artifactId,JSON.stringify({runId:run.runId,sourceDir:source,sourceIdentity,repoDir:repo,runsRoot:dirname(source),artifacts,snapshot,missing}));
  });
  return {artifacts,snapshot,missing};
 }

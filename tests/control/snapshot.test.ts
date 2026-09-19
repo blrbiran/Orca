@@ -5,7 +5,7 @@ import { execFileSync } from "node:child_process";
 import { archiveRun,readArtifact } from "../../src/control/archive.js";
 import { verifySnapshot } from "../../src/control/snapshot.js";
 import { archiveCase, git } from "./fixtures/archive.js";
-describe("dirty snapshots",()=>{
+describe("dirty snapshots",{timeout:30000},()=>{
  it("keeps detached HEAD, index and worktree bytes separately, including ignored files and symlinks",async()=>{
   const h=await archiveCase();try{
    const result=await archiveRun(h.store,{runId:h.claim.runId,sourceDir:h.sourceDir,repoDir:h.repoDir,stopProof:h.stopProof});

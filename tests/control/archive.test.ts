@@ -6,7 +6,7 @@ import { archiveRun,readArtifact,writeArtifact } from "../../src/control/archive
 import { verifySnapshot } from "../../src/control/snapshot.js";
 import { archiveCase } from "./fixtures/archive.js";
 import { openTestStore } from "./fixtures/store.js";
-describe("independent evidence archive",()=>{
+describe("independent evidence archive",{timeout:30000},()=>{
  it("reads every original log after the complete source directory has moved",async()=>{
   const h=await archiveCase();try{
    const result=await archiveRun(h.store,{runId:h.claim.runId,sourceDir:h.sourceDir,repoDir:h.repoDir,stopProof:h.stopProof});

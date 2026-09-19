@@ -359,3 +359,40 @@ waits for a person, 4 a limit or a stop request.
   that commits: see the D-launch spec §7.
 
 Design: `docs/superpowers/specs/2026-09-18-d-launch-design.md`.
+
+
+## Durable task control foundation
+
+`src/control` provides an opt-in, single-host SQLite control service (Node.js
+22.13.1 or newer). It persists group/work identities, idempotent claims,
+work/handoff budget reservations, cumulative usage, dispatch intents, independent
+archives and committed checkpoints. A recovered writer reconciles existing run
+identities before dispatch can resume. Unknown execution or missing evidence keeps
+the run blocked and its remaining budget reserved. Copying a state directory does
+not transfer execution ownership; host and canonical-path checks reject copies.
+
+This slice is a foundation. The production ccloop control protocol is not yet
+implemented: the production factory refuses execution and has no legacy adapter
+fallback. Offline protocol peers exist only under tests. There is no new Web stop
+or resume promise, and this does not upgrade Codex soft budgets to hard limits.
+The existing CLI retains its legacy execution path.
+
+`ControlService.run(groupId, planPath, options)` verifies the approved graph and
+uses the shared scheduler. A service is bound to an explicit `targetRepo`; the
+logical `projectKey` is not a filesystem path. Reconciliation requires an explicit
+`reconcileGrant` and uses only the group's remaining approved budget. Agent-specific
+adaptation belongs in ccloop. The prepared start envelope and raw evidence reader
+are the protocol seam for that follow-up.
+
+Evidence consumers use `listGroupArtifacts(store, groupId)` or
+`listTaskArtifacts(store, groupId, taskId)`, then `readArtifact(store, ref)` to read
+and independently verify the archived bytes. Checkpoint authority comes from
+`readCommittedCheckpoint`, never a scanned `latest.json` file. Cleanup requires a
+committed recoverable checkpoint, retained raw evidence, an unchanged source
+directory identity, and confirmed landing for successful work. Recovery retries
+only cleanup that was already durably authorized and never re-executes a merge.
+A claim without a prepared dispatch intent remains blocked for explicit recovery.
+
+Run the offline control gate with `npm run verify:control`; it is included in
+`npm run verify`. Scheduler integration tests require the existing ccloop build
+through `ORCA_CCLOOP_BIN` when the checkout has no sibling ccloop repository.

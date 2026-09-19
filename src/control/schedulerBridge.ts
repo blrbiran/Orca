@@ -69,13 +69,14 @@ async function archiveReport(service:ControlService,runId:string,report:Executio
 export async function disposeControlled(service:ControlService,run:TaskRun,options:DisposeOptions) {
  const {store}=service,record=readRun(store,run.runId),report=await savedReport(service,run.runId);
  if(!report.terminal || report.terminal.sourceDir!==run.workdir) throw new ControlError("report-path-conflict");
- if(!record.checkpointId) {
+ if(record.state!=="settled") {
   const archive=await archiveReport(service,run.runId,report),raw=report.candidate;
   const missing=[...archive.missing,...(raw?.missing??[]),...(!raw?["candidate-missing"]:[])];
   const candidate:Candidate={...identity(record),checkpointId:"settle-"+run.runId,usageHighWater:record.highWater,
    result:missing.length===0 && raw?.result==="complete"?"complete":"partial",
    artifacts:[...archive.artifacts,...(raw?.artifacts??[])],snapshot:archive.snapshot,missing,
    unresolvedRequestIds:raw?.unresolvedRequestIds??["terminal-evidence"],stopProof:raw?.stopProof??null,terminalOutcome:report.terminal.outcome};
+  candidate.checkpointId="settle-"+run.runId+"-"+hashPayload(candidate).slice(0,16);
   await commitCandidate(store,candidate);
  }
  await publishPending(store);

@@ -17,9 +17,17 @@ export async function cleanupCommittedRun(store:ControlStore,runId:string,source
  if(!archive || basename(sourceDir)!==runId || canonicalSource!==archive.sourceDir || dirname(archive.sourceDir)!==archive.runsRoot || !within(archive.runsRoot,archive.sourceDir)) throw new ControlError("cleanup-path-invalid");
  await verifyCandidateArtifacts(store,c);
  privateDirectory(archive.runsRoot);
- try {const stat=await lstat(sourceDir);if(stat.isSymbolicLink() || !stat.isDirectory() || await realpath(sourceDir)!==archive.sourceDir) throw new ControlError("cleanup-path-invalid");}
- catch(error){if((error as NodeJS.ErrnoException).code==="ENOENT") return {removed:false};throw error;}
+ const assertSource=async()=>{
+  const stat=await lstat(sourceDir,{bigint:true});
+  if(stat.isSymbolicLink() || !stat.isDirectory() || await realpath(sourceDir)!==archive.sourceDir) throw new ControlError("cleanup-path-invalid");
+  const actual={dev:String(stat.dev),ino:String(stat.ino),birthtimeNs:String(stat.birthtimeNs)};
+  if(JSON.stringify(actual)!==JSON.stringify(archive.sourceIdentity)) throw new ControlError("cleanup-source-reused");
+ };
+ try {await assertSource();}
+ catch(error){if((error as NodeJS.ErrnoException).code==="ENOENT") {
+  store.transaction(()=>store.db.prepare("UPDATE outbox SET delivered=1 WHERE id=? AND kind='cleanup'").run("cleanup:"+runId));return {removed:false};
+ }throw error;}
  store.transaction(()=>store.db.prepare("INSERT INTO outbox VALUES (?, 'cleanup', ?, 0) ON CONFLICT(id) DO NOTHING").run("cleanup:"+runId,JSON.stringify({runId,sourceDir})));
- await deps.beforeCleanup?.();await rm(sourceDir,{recursive:true});
+ await deps.beforeCleanup?.();await assertSource();await rm(sourceDir,{recursive:true});
  store.transaction(()=>store.db.prepare("UPDATE outbox SET delivered=1 WHERE id=?").run("cleanup:"+runId));return {removed:true};
 }

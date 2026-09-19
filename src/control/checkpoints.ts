@@ -9,7 +9,7 @@ import { verifySnapshot } from "./snapshot.js";
 import { readRun, releaseRunReserve, saveRun } from "./budget.js";
 import { readGroup, readWork, saveGroup } from "./queries.js";
 import { privateDirectory, syncDirectory, assertRegular } from "./paths.js";
-import { idSchema,safeInteger } from "./schema.js";
+import { candidateSchema } from "./schema.js";
 import { hashPayload } from "./commands.js";
 export interface CommitDependencies {afterArchive?:()=>Promise<void>;afterTransaction?:()=>Promise<void>}
 function assertIdentity(store:ControlStore,c:Candidate):void {
@@ -26,7 +26,7 @@ export async function verifyCandidateArtifacts(store:ControlStore,c:Candidate):P
  }
  if(c.stopProof){
   const raw=JSON.parse((await readArtifact(store,c.stopProof.source)).toString());const r=readRun(store,c.runId);
-  if(!raw.isolated || raw.executionId!==c.stopProof.executionId || raw.generation!==c.stopProof.generation || r.executionId!==raw.executionId || r.generation!==raw.generation) throw new ControlError("run-stop-unconfirmed");
+  if(raw.isolated!==true || raw.executionId!==c.stopProof.executionId || raw.generation!==c.stopProof.generation || r.executionId!==raw.executionId || r.generation!==raw.generation) throw new ControlError("run-stop-unconfirmed");
  }
 }
 export async function acceptanceEvidence(store:ControlStore,runId:string):Promise<boolean> {
@@ -42,8 +42,7 @@ async function persistImmutableCheckpoint(store:ControlStore,c:Candidate):Promis
  return {checkpointId:c.checkpointId,hash:createHash("sha256").update(bytes).digest("hex")};
 }
 export async function commitCandidate(store:ControlStore,c:Candidate,deps:CommitDependencies={}):Promise<{checkpointId:string;hash:string}> {
- idSchema.parse(c.runId);idSchema.parse(c.checkpointId);safeInteger.parse(c.usageHighWater);
- if(!["complete","partial","failed"].includes(c.result)) throw new ControlError("checkpoint-result-invalid");
+ c=candidateSchema.parse(c);
  await verifyCandidateArtifacts(store,c);
  const accepted=await acceptanceEvidence(store,c.runId);
  const reference=await persistImmutableCheckpoint(store,c);await deps.afterArchive?.();

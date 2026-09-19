@@ -80,6 +80,9 @@ describe("unified work claims",()=>{
    expect(()=>execFileSync(process.execPath,args,{stdio:"pipe"})).toThrow();
    const done=once(child,"exit");child.stdin.end();await done;
    const store=await openControlStore({stateDir:h.store.stateDir});try{
+    expect(store.dispatchBlocked).toBe(true);
+    expect(()=>claimWork(store,{...s.t1Claim,commandId:"other-process"})).toThrow("control-recovery-required");
+    store.dispatchBlocked=false; // Independently exercise the persisted unique active-run guard.
     expect(()=>claimWork(store,{...s.t1Claim,commandId:"other-process"})).toThrow("work-already-active");
     expect(store.db.prepare("SELECT id FROM runs").all()).toHaveLength(1);
    }finally{store.close();}

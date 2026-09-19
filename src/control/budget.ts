@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { ControlStore } from "./store.js";
 import type { Amount, BudgetMode, Capabilities, Claim, ClaimInput, Grant, RunView, StopProof, WorkInput } from "./types.js";
 import { ControlError } from "./errors.js";
-import { amountSchema, safeInteger, workSchema } from "./schema.js";
+import { amountSchema, safeInteger, workSchema, capabilitiesSchema } from "./schema.js";
 import { applyCommand, dimensions, fits, zero } from "./commands.js";
 import { readGroup, readWork, saveGroup, allWork } from "./queries.js";
 export interface RunRecord extends Claim, RunView {
@@ -30,6 +30,7 @@ export function componentMin(a:Amount,b:Amount):Amount {
   return {tokens:Math.min(a.tokens,b.tokens),activeMs:Math.min(a.activeMs,b.activeMs),attempts:Math.min(a.attempts,b.attempts),sessions:Math.min(a.sessions,b.sessions)};
 }
 export function assertCapabilities(mode:BudgetMode,c:Capabilities):void {
+  if(!capabilitiesSchema.safeParse(c).success) throw new ControlError("control-capability-unsupported");
   if(c.protocol!==1 || !c.durableAccept || !c.ownershipIsolation || !c.evidenceRetention || c.usageObservation==="unavailable" || c.budgetEnforcement==="unsupported") throw new ControlError("control-capability-unsupported");
   if(mode==="strict" && (c.budgetEnforcement!=="bounded" || !c.requestBoundEvidence)) throw new ControlError("control-capability-unsupported");
 }
