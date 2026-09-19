@@ -8,6 +8,7 @@ import { assertBindAllowed, EXTERNAL_BIND_NOT_CONFIRMED, isHostAllowed } from ".
 import { mintToken, tokenMatches } from "../../src/panel/token.js";
 import { parsePanelArgs } from "../../src/panel/server.js";
 import { NO_VIEWER_IDENTITY } from "../../src/panel/rejection.js";
+import { controlErrorBody } from "../../src/panel/controlErrors.js";
 
 // Only for the read-only lsof observation below; the panel child itself is
 // driven through runPanelProcess (F5), never execFileAsync, so it can be
@@ -193,6 +194,9 @@ describe("panel security (spec sections 3.1 and 3.2)", () => {
     expect(tokenMatches(a, "")).toBe(false);
     // A length-mismatched candidate must not throw out of timingSafeEqual.
     expect(tokenMatches(a, "deadbeef")).toBe(false);
+    expect(controlErrorBody("token-required", "this panel needs its one-time token")).toEqual({
+      error: { code: "token-required", message: "this panel needs its one-time token", commandRevision: null, evidenceIds: [], retryable: false },
+    });
   });
 });
 

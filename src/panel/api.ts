@@ -19,12 +19,15 @@ import type { ReviewsWriter } from "./reviewsStore.js";
 import type { PanelOptions } from "./server.js";
 import type { StaticFiles } from "./staticFiles.js";
 import { tokenMatches } from "./token.js";
+import { registerControlReadRoutes, type ControlReadApiDeps } from "./controlApi.js";
+import { controlErrorBody } from "./controlErrors.js";
 
 export interface ApiDeps {
   opts: PanelOptions;
   token: string;
   reviews: ReviewsWriter;
   statics: StaticFiles;
+  control?: ControlReadApiDeps;
 }
 
 /**
@@ -155,11 +158,16 @@ export function buildApi(app: Express, deps: ApiDeps): void {
   app.use("/api", (req: Request, res: Response, next: NextFunction) => {
     const given = req.header("x-orca-token") ?? undefined;
     if (!tokenMatches(deps.token, given)) {
-      res.status(401).json({ code: TOKEN_REQUIRED, message: "this panel needs its one-time token" });
+      const message = "this panel needs its one-time token";
+      res.status(401).json(req.path === "/control" || req.path.startsWith("/control/")
+        ? controlErrorBody(TOKEN_REQUIRED, message)
+        : { code: TOKEN_REQUIRED, message });
       return;
     }
     next();
   });
+
+  if (deps.control) registerControlReadRoutes(app, deps.control);
 
   app.get("/api/metrics", (_req, res, next) => {
     void (async () => {
