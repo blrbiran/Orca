@@ -4942,3 +4942,11 @@ SDD新增review-fix-evidence目录，保留全部旧台账与证据。产品已�
 关键竞态已修：Orca polling 不再用会创建目录的 helper 触碰 terminal source；ccloop 在 candidate durable 后才暴露 terminal，并负责精确物化 `sourceDir/repo`；Orca 只读校验，预先存在的非 Git 目录失败关闭。保留诊断根 `.../orca-real-ccloop-MyDo5O`、fixture `/private/tmp/orca-ccloop-d3-task8`、两开发树、node_modules 和全部 SDD 证据。最终真实 `/Users/biran/.orca` 仍不存在；本切片没有真实模型调用。
 
 下一步依次是 Web 可恢复任务控制 → 自动拆分 → ccmem 纠正闭环／组 goal 验收；agent 适配继续留在 ccloop。一次 Codex 真钱三阶段功能成功，但 wrapper 修正版只做了离线修复、未真钱重跑，不能升级表述。整合、push、删分支/worktree与证据清理由人操作。Claude 额度在 2026-09-22 09:00 Asia/Shanghai 后再核实；Orca chain 活验仍须人选择 model 并明确点头。
+
+## 2026-09-20 Web 可恢复控制临时交接（Task 6 已合入，先修审查阻塞）
+
+Task 1–6 已实现：协议、命令账本、profile/admission、plan import、canonical reads、模型自动估算／proposal／confirmation／live set-limit／accounted settlement；Task 7–10 尚未开始，当前 durable hooks 不等于 provider delivery/proof/start/session admission 或 Web lifecycle。
+
+实现自验为聚焦 61、全套 1372 passed/3 skipped、typecheck、Web 34；独立审查复现 4 个未修复 Important：非规范输出会使 estimate 卡在 running；已知 soft 超额不能终态结算并保留 deficit；终态后的未见 usage 可侵蚀其他 commitments；handoffExecution 缺失/不匹配仍可 claim。另有 Minor：应返回 `handoff-grant-insufficient`。
+
+下一位 agent 的第一项工作必须修复上述 Task 6 findings，补 RED→GREEN 与独立复审；修复完成前不要开始 Task 7。复现报告见控制开发树 `.superpowers/sdd/2026-09-20-web-recoverable-control/task-6-review-report.md`，实现报告见同目录 `task-6-implementer-report.md`。不固定当前 HEAD；保留开发树、node_modules 与全部 SDD 证据。
