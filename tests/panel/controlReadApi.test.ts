@@ -6,10 +6,12 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { writeArtifact } from "../../src/control/archive.js";
 import { canonicalBytes, sha256Canonical } from "../../src/control/canonicalJson.js";
 import { lookupCommandResult } from "../../src/control/commandLedger.js";
+import { prepareExecutionSnapshot, type PreparedExecutionSnapshot } from "../../src/control/executionSnapshot.js";
 import { importControlPlan, type ImportCommand } from "../../src/control/planImport.js";
 import { createExecutionProfileRouter, resolveProfile } from "../../src/control/profiles.js";
 import { readArchivedPlan, readBudgetProposal, readEstimateRecord } from "../../src/control/queries.js";
 import { recordProjectionChange, readProjectionState } from "../../src/control/projectionJournal.js";
+import { writeCanonicalRecord } from "../../src/control/snapshot.js";
 import type { ExecutionPort } from "../../src/control/executionPort.js";
 import type {
   BudgetEstimateV1,
@@ -130,6 +132,119 @@ async function request(h: Harness, path: string, authenticated = true, init: Req
   return fetch(`${h.url}${path}`, { ...init, headers: { ...(authenticated ? { "x-orca-token": token } : {}), ...init.headers } });
 }
 
+async function confirmGroup(h: Harness, groupId: string, stopped = false): Promise<{
+  estimateId: string;
+  output: BudgetEstimateV1;
+  outputHash: string;
+  prepared: PreparedExecutionSnapshot;
+}> {
+  const plan = readArchivedPlan(h.store, groupId);
+  const proposal = readBudgetProposal(h.store, groupId);
+  const estimateId = String(h.store.db.prepare("SELECT id FROM estimates WHERE group_id=?").get(groupId)?.id);
+  const estimate = readEstimateRecord(h.store, groupId, estimateId);
+  const output: BudgetEstimateV1 = {
+    schema: "budget-estimate-v1", planHash: plan.planHash,
+    tasks: plan.plan.tasks.map(task => ({ taskId: task.taskId, complexity: "M", confidence: "high", work: amount(10), handoff: amount(2), rationale: `budget ${task.taskId}`, assumptions: ["clean tree"] })),
+    goalReviewReserve: amount(3), groupRationale: "bounded fixture",
+  };
+  const outputHash = sha256Canonical(output);
+  const readyEstimate = { ...estimate, state: "ready" as const, output, outputHash, reasonCode: null };
+  h.store.db.prepare("UPDATE estimates SET state=?,body=? WHERE group_id=? AND id=?")
+    .run("ready", canonicalBytes(readyEstimate).toString("utf8"), groupId, estimateId);
+
+  const binding = { profileId: "estimator", profileHash: h.profileHash };
+  const profiles = { estimator: binding, worker: binding, handoff: binding, goalReview: binding };
+  const allocations = proposal.allocations.map(({ state: _state, ...allocation }) => allocation);
+  const prepared = prepareExecutionSnapshot({
+    store: h.store,
+    groupId,
+    planHash: plan.planHash,
+    graphVersion: plan.graphVersion,
+    proposalVersion: proposal.proposalVersion,
+    proposalIdentity: { groupId, planHash: plan.planHash, proposalVersion: proposal.proposalVersion },
+    groupLimit: proposal.groupLimit,
+    budgetMode: "strict",
+    contextPolicy: { handoffAtContextTokens: 80_000 },
+    profiles,
+    allocations,
+    tasks: plan.plan.tasks.map(task => ({
+      taskId: task.taskId,
+      originalContractHash: task.originalContractHash,
+      originalContractCanonicalJson: task.originalContractCanonicalJson,
+      work: allocations.find(row => row.ownerKind === "task" && row.ownerId === task.taskId && row.bucket === "work")!.amount,
+      handoff: allocations.find(row => row.ownerKind === "task" && row.ownerId === task.taskId && row.bucket === "handoff")!.amount,
+    })),
+  });
+  const confirmedProposal = {
+    ...proposal,
+    state: "confirmed" as const,
+    budgetMode: "strict" as const,
+    contextPolicy: prepared.snapshot.contextPolicy,
+    profiles,
+    executionSnapshotHash: prepared.snapshotHash,
+  };
+  h.store.transaction(() => {
+    for (const derived of prepared.derivedContracts) writeCanonicalRecord(h.store, groupId, derived.derivedContractHash, derived.canonicalJson);
+    writeCanonicalRecord(h.store, groupId, prepared.snapshotHash, prepared.canonicalJson);
+    h.store.db.prepare("UPDATE budget_proposals SET body=? WHERE group_id=?")
+      .run(canonicalBytes(confirmedProposal).toString("utf8"), groupId);
+    const row = h.store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId)!;
+    const body = JSON.parse(String(row.body));
+    body.status = "ready";
+    body.stopped = stopped;
+    body.proposal = {
+      state: "confirmed", proposalVersion: proposal.proposalVersion, planHash: plan.planHash,
+      budgetMode: "strict", contextPolicy: prepared.snapshot.contextPolicy, profiles,
+      executionSnapshotHash: prepared.snapshotHash,
+    };
+    h.store.db.prepare("UPDATE groups SET body=? WHERE id=?").run(JSON.stringify(body), groupId);
+    for (const derived of prepared.derivedContracts) {
+      const workRow = h.store.db.prepare("SELECT body FROM work_items WHERE group_id=? AND id=?").get(groupId, derived.taskId)!;
+      const work = JSON.parse(String(workRow.body));
+      work.status = "ready";
+      work.derivedContractHash = derived.derivedContractHash;
+      h.store.db.prepare("UPDATE work_items SET body=? WHERE group_id=? AND id=?")
+        .run(JSON.stringify(work), groupId, derived.taskId);
+    }
+    if (stopped) {
+      const stop = { mode: "pause", state: "paused", frozenRunIds: [], acceptedAt: null, deadlineAt: null };
+      h.store.db.prepare("INSERT INTO stop_intents(group_id,mode,revision,body) VALUES (?,?,?,?)")
+        .run(groupId, "pause", 1, canonicalBytes(stop).toString("utf8"));
+    }
+    recordProjectionChange(h.store, [groupId]);
+  });
+  return { estimateId, output, outputHash, prepared };
+}
+
+function insertValidTaskRun(h: Harness, groupId: string, runId = "run-one"): Record<string, unknown> {
+  const proposal = readBudgetProposal(h.store, groupId);
+  const workRow = h.store.db.prepare("SELECT body FROM work_items WHERE group_id=? AND id='a'").get(groupId)!;
+  const work = JSON.parse(String(workRow.body));
+  const zero = amount(0, 0, 0, 0);
+  const binding = proposal.profiles!.worker;
+  const run = {
+    groupId, workItemId: "a", taskId: "a", estimateId: null, runId, generation: 1,
+    graphVersion: 1, targetVersion: work.targetVersion, commandId: `start-${runId}`,
+    configHash: work.configHash, grant: work.grant, ownerToken: `owner-${runId}`,
+    executionProfile: { workKind: "task", ...binding },
+    handoffProfile: { workKind: "handoff", ...proposal.profiles!.handoff },
+    executionId: `execution-${runId}`, state: "accepted", checkpointId: null, recoverable: false,
+    remaining: work.grant, cumulative: { work: zero, handoff: zero }, unknown: { work: false, handoff: false },
+    highWater: 0, breaches: [], handoffWorkItemId: null,
+    phase: "work", claimOrdinal: 1, providerAttemptOrdinal: 1, failureCode: null,
+  };
+  work.status = "running";
+  work.currentRunId = runId;
+  work.pendingRunId = null;
+  work.lineageRunIds = [runId];
+  h.store.transaction(() => {
+    h.store.db.prepare("UPDATE work_items SET body=? WHERE group_id=? AND id='a'").run(JSON.stringify(work), groupId);
+    h.store.db.prepare("INSERT INTO runs(id,group_id,work_item_id,generation,active,body) VALUES (?,?,?,?,?,?)")
+      .run(runId, groupId, "a", 1, 1, canonicalBytes(run).toString("utf8"));
+  });
+  return run;
+}
+
 describe("canonical control read API", () => {
   let h: Harness;
   beforeEach(async () => { h = await setup(); });
@@ -180,64 +295,199 @@ describe("canonical control read API", () => {
 
   it("reloads confirmed profiles, snapshot hashes, estimate output, and paused state without exposing trusted paths", async () => {
     const groupId = "group-a";
-    const plan = readArchivedPlan(h.store, groupId);
-    const proposal = readBudgetProposal(h.store, groupId);
-    const estimateRow = h.store.db.prepare("SELECT id FROM estimates WHERE group_id=?").get(groupId);
-    const estimateId = String(estimateRow?.id);
-    const estimate = readEstimateRecord(h.store, groupId, estimateId);
-    const output: BudgetEstimateV1 = {
-      schema: "budget-estimate-v1", planHash: plan.planHash,
-      tasks: plan.plan.tasks.map(task => ({ taskId: task.taskId, complexity: "M", confidence: "high", work: amount(10), handoff: amount(2), rationale: `budget ${task.taskId}`, assumptions: ["clean tree"] })),
-      goalReviewReserve: amount(3), groupRationale: "bounded fixture",
-    };
-    const outputHash = sha256Canonical(output);
-    const readyEstimate = { ...estimate, state: "ready" as const, output, outputHash, reasonCode: null };
-    const binding = { profileId: "estimator", profileHash: h.profileHash };
-    const profiles = { estimator: binding, worker: binding, handoff: binding, goalReview: binding };
-    const derivedContracts = plan.plan.tasks.map((task, index) => ({ taskId: task.taskId, derivedContractHash: hash(index === 0 ? "7" : "8") }));
-    const snapshot = {
-      schema: "orca-execution-snapshot-v1" as const, groupId, planHash: plan.planHash, graphVersion: 1, proposalVersion: 1,
-      groupLimit: proposal.groupLimit, budgetMode: "strict" as const, contextPolicy: { handoffAtContextTokens: 80_000 }, profiles,
-      allocations: proposal.allocations.map(({ state: _state, ...allocation }) => allocation), derivedContracts,
-    };
-    const snapshotHash = sha256Canonical(snapshot);
-    const confirmedProposal = { ...proposal, state: "confirmed" as const, budgetMode: "strict" as const, contextPolicy: snapshot.contextPolicy, profiles, executionSnapshotHash: snapshotHash };
-    h.store.transaction(() => {
-      h.store.db.prepare("UPDATE estimates SET state=?,body=? WHERE group_id=? AND id=?").run("ready", canonicalBytes(readyEstimate).toString("utf8"), groupId, estimateId);
-      h.store.db.prepare("INSERT INTO execution_snapshots(hash,group_id,body) VALUES (?,?,?)").run(snapshotHash, groupId, canonicalBytes(snapshot).toString("utf8"));
-      h.store.db.prepare("UPDATE budget_proposals SET body=? WHERE group_id=?").run(canonicalBytes(confirmedProposal).toString("utf8"), groupId);
-      const row = h.store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId)!;
-      const body = JSON.parse(String(row.body));
-      body.status = "ready"; body.stopped = true; body.proposal = { state: "confirmed", proposalVersion: 1, planHash: plan.planHash, budgetMode: "strict", contextPolicy: snapshot.contextPolicy, profiles, executionSnapshotHash: snapshotHash };
-      h.store.db.prepare("UPDATE groups SET body=? WHERE id=?").run(JSON.stringify(body), groupId);
-      for (const derived of derivedContracts) {
-        const workRow = h.store.db.prepare("SELECT body FROM work_items WHERE group_id=? AND id=?").get(groupId, derived.taskId)!;
-        const work = JSON.parse(String(workRow.body)); work.status = "ready"; work.derivedContractHash = derived.derivedContractHash;
-        h.store.db.prepare("UPDATE work_items SET body=? WHERE group_id=? AND id=?").run(JSON.stringify(work), groupId, derived.taskId);
-      }
-      recordProjectionChange(h.store, [groupId]);
-    });
+    const { estimateId, output, outputHash, prepared } = await confirmGroup(h, groupId, true);
 
     const response = await request(h, `/api/control/groups/${groupId}`);
     expect(response.status).toBe(200);
     const view = await response.json() as GroupViewV1;
-    expect(view.proposal).toEqual({ state: "confirmed", proposalVersion: 1, planHash: plan.planHash, budgetMode: "strict", contextPolicy: snapshot.contextPolicy, profiles, executionSnapshotHash: snapshotHash });
+    expect(view.proposal).toMatchObject({ state: "confirmed", executionSnapshotHash: prepared.snapshotHash });
     expect(view.estimates[0]).toMatchObject({ estimateId, state: "ready", outputHash, output });
     expect(view.summary).toMatchObject({ state: "ready", stopMode: "pause", stopState: "paused" });
     expect(view.stop).toEqual({ mode: "pause", state: "paused", frozenRunIds: [], acceptedAt: null, deadlineAt: null });
     expect(view.workItems.map(item => item.taskId)).toEqual(["a", "b"]);
     expect(JSON.stringify(view)).not.toContain(h.root);
     expect(JSON.stringify(view)).not.toContain("repoPath");
+  });
 
+  it("fails closed when confirmed allocation or derived-contract authority is missing, forged, or belongs to another task", async () => {
+    const groupId = "group-a";
+    const { prepared } = await confirmGroup(h, groupId);
+    const [taskA, taskB] = prepared.derivedContracts;
+
+    h.store.db.prepare("DELETE FROM execution_snapshots WHERE hash=?").run(taskA.derivedContractHash);
+    let response = await request(h, `/api/control/groups/${groupId}`);
+    expect(response.status).toBe(423);
+    writeCanonicalRecord(h.store, groupId, taskA.derivedContractHash, taskA.canonicalJson);
+
+    h.store.db.prepare("UPDATE execution_snapshots SET body='{}' WHERE hash=?").run(taskA.derivedContractHash);
+    response = await request(h, `/api/control/groups/${groupId}`);
+    expect(response.status).toBe(423);
+    h.store.db.prepare("DELETE FROM execution_snapshots WHERE hash=?").run(taskA.derivedContractHash);
+    writeCanonicalRecord(h.store, groupId, taskA.derivedContractHash, taskA.canonicalJson);
+
+    const forgedRecord = JSON.parse(taskA.canonicalJson);
+    const forgedContract = JSON.parse(String(forgedRecord.contractCanonicalJson));
+    forgedContract.objective.goal = "forged but canonical";
+    forgedRecord.contractCanonicalJson = canonicalBytes(forgedContract).toString("utf8");
+    const forgedHash = sha256Canonical(forgedRecord);
+    const forgedSnapshot = {
+      ...prepared.snapshot,
+      derivedContracts: prepared.snapshot.derivedContracts.map(row => row.taskId === "a"
+        ? { taskId: "a", derivedContractHash: forgedHash }
+        : row),
+    };
+    const forgedSnapshotHash = sha256Canonical(forgedSnapshot);
     h.store.transaction(() => {
-      const row = h.store.db.prepare("SELECT body FROM work_items WHERE group_id=? AND id='a'").get(groupId)!;
-      const work = JSON.parse(String(row.body)); work.derivedContractHash = hash("9");
+      writeCanonicalRecord(h.store, groupId, forgedHash, canonicalBytes(forgedRecord).toString("utf8"));
+      writeCanonicalRecord(h.store, groupId, forgedSnapshotHash, canonicalBytes(forgedSnapshot).toString("utf8"));
+      const proposal = readBudgetProposal(h.store, groupId);
+      h.store.db.prepare("UPDATE budget_proposals SET body=? WHERE group_id=?")
+        .run(canonicalBytes({ ...proposal, executionSnapshotHash: forgedSnapshotHash }).toString("utf8"), groupId);
+      const groupRow = h.store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId)!;
+      const group = JSON.parse(String(groupRow.body));
+      group.proposal.executionSnapshotHash = forgedSnapshotHash;
+      h.store.db.prepare("UPDATE groups SET body=? WHERE id=?").run(JSON.stringify(group), groupId);
+      const workRow = h.store.db.prepare("SELECT body FROM work_items WHERE group_id=? AND id='a'").get(groupId)!;
+      const work = JSON.parse(String(workRow.body));
+      work.derivedContractHash = forgedHash;
       h.store.db.prepare("UPDATE work_items SET body=? WHERE group_id=? AND id='a'").run(JSON.stringify(work), groupId);
-      recordProjectionChange(h.store, [groupId]);
     });
-    const inconsistent = await request(h, `/api/control/groups/${groupId}`);
-    expect(inconsistent.status).toBe(423);
-    expect(await inconsistent.json()).toMatchObject({ error: { code: "recovery-blocked", retryable: false } });
+    response = await request(h, `/api/control/groups/${groupId}`);
+    expect(response.status).toBe(423);
+
+    const wrongTaskSnapshot = {
+      ...prepared.snapshot,
+      derivedContracts: prepared.snapshot.derivedContracts.map(row => row.taskId === "a"
+        ? { taskId: "a", derivedContractHash: taskB.derivedContractHash }
+        : row),
+    };
+    const wrongTaskHash = sha256Canonical(wrongTaskSnapshot);
+    h.store.transaction(() => {
+      writeCanonicalRecord(h.store, groupId, wrongTaskHash, canonicalBytes(wrongTaskSnapshot).toString("utf8"));
+      const proposal = readBudgetProposal(h.store, groupId);
+      const changedProposal = { ...proposal, executionSnapshotHash: wrongTaskHash };
+      h.store.db.prepare("UPDATE budget_proposals SET body=? WHERE group_id=?")
+        .run(canonicalBytes(changedProposal).toString("utf8"), groupId);
+      const groupRow = h.store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId)!;
+      const group = JSON.parse(String(groupRow.body));
+      group.proposal.executionSnapshotHash = wrongTaskHash;
+      h.store.db.prepare("UPDATE groups SET body=? WHERE id=?").run(JSON.stringify(group), groupId);
+      const workRow = h.store.db.prepare("SELECT body FROM work_items WHERE group_id=? AND id='a'").get(groupId)!;
+      const work = JSON.parse(String(workRow.body));
+      work.derivedContractHash = taskB.derivedContractHash;
+      h.store.db.prepare("UPDATE work_items SET body=? WHERE group_id=? AND id='a'").run(JSON.stringify(work), groupId);
+    });
+    response = await request(h, `/api/control/groups/${groupId}`);
+    expect(response.status).toBe(423);
+
+    const allocationMismatch = {
+      ...prepared.snapshot,
+      allocations: prepared.snapshot.allocations.map((row, index) => index === 0
+        ? { ...row, amount: { ...row.amount, tokens: row.amount.tokens + 1 } }
+        : row),
+    };
+    const mismatchHash = sha256Canonical(allocationMismatch);
+    h.store.transaction(() => {
+      writeCanonicalRecord(h.store, groupId, mismatchHash, canonicalBytes(allocationMismatch).toString("utf8"));
+      const proposal = readBudgetProposal(h.store, groupId);
+      h.store.db.prepare("UPDATE budget_proposals SET body=? WHERE group_id=?")
+        .run(canonicalBytes({ ...proposal, executionSnapshotHash: mismatchHash }).toString("utf8"), groupId);
+      const groupRow = h.store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId)!;
+      const group = JSON.parse(String(groupRow.body));
+      group.proposal.executionSnapshotHash = mismatchHash;
+      h.store.db.prepare("UPDATE groups SET body=? WHERE id=?").run(JSON.stringify(group), groupId);
+      const workRow = h.store.db.prepare("SELECT body FROM work_items WHERE group_id=? AND id='a'").get(groupId)!;
+      const work = JSON.parse(String(workRow.body));
+      work.derivedContractHash = taskA.derivedContractHash;
+      h.store.db.prepare("UPDATE work_items SET body=? WHERE group_id=? AND id='a'").run(JSON.stringify(work), groupId);
+    });
+    response = await request(h, `/api/control/groups/${groupId}`);
+    expect(response.status).toBe(423);
+  });
+
+  it("rejects malformed or cross-record-inconsistent persisted run authority instead of synthesizing display values", async () => {
+    const groupId = "group-a";
+    await confirmGroup(h, groupId);
+    const valid = insertValidTaskRun(h, groupId);
+    const baseline = await request(h, `/api/control/groups/${groupId}`);
+    expect(baseline.status).toBe(200);
+    expect((await baseline.json() as GroupViewV1).runs).toMatchObject([{
+      runId: "run-one", taskId: "a", estimateId: null, phase: "work", state: "running",
+      claimOrdinal: 1, providerAttemptOrdinal: 1, used: amount(0, 0, 0, 0),
+    }]);
+
+    const invalidBodies = [
+      (({ executionProfile: _removed, ...body }) => body)(valid),
+      { ...valid, phase: "invented" },
+      (({ providerAttemptOrdinal: _removed, ...body }) => body)(valid),
+      { ...valid, cumulative: { work: { tokens: -1, activeMs: 0, attempts: 0, sessions: 0 }, handoff: amount(0, 0, 0, 0) } },
+      { ...valid, executionProfile: { workKind: "task", profileId: "other", profileHash: hash("9") } },
+      { ...valid, taskId: "b" },
+      { ...valid, graphVersion: 2 },
+    ];
+    for (const body of invalidBodies) {
+      h.store.db.prepare("UPDATE runs SET body=? WHERE id='run-one'").run(JSON.stringify(body));
+      const response = await request(h, `/api/control/groups/${groupId}`);
+      expect(response.status).toBe(423);
+    }
+
+    h.store.db.prepare("UPDATE runs SET body=?,work_item_id='b' WHERE id='run-one'")
+      .run(canonicalBytes(valid).toString("utf8"));
+    const wrongRowIdentity = await request(h, `/api/control/groups/${groupId}`);
+    expect(wrongRowIdentity.status).toBe(423);
+
+    h.store.db.prepare("UPDATE runs SET body=?,work_item_id='a' WHERE id='run-one'")
+      .run(canonicalBytes(valid).toString("utf8"));
+    const workRow = h.store.db.prepare("SELECT body FROM work_items WHERE group_id=? AND id='a'").get(groupId)!;
+    const work = JSON.parse(String(workRow.body));
+    delete work.currentRunId;
+    h.store.db.prepare("UPDATE work_items SET body=? WHERE group_id=? AND id='a'").run(JSON.stringify(work), groupId);
+    const missingCurrentRun = await request(h, `/api/control/groups/${groupId}`);
+    expect(missingCurrentRun.status).toBe(423);
+  });
+
+  it("requires canonical stop authority and preserves revision and blocker evidence on group read failures", async () => {
+    const groupId = "group-a";
+    const row = h.store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId)!;
+    const group = JSON.parse(String(row.body));
+    group.stopped = true;
+    h.store.db.prepare("UPDATE groups SET body=? WHERE id=?").run(JSON.stringify(group), groupId);
+    h.store.db.prepare("INSERT INTO recovery_blockers(id,group_id,run_id,scope,code,body) VALUES (?,?,?,?,?,?)")
+      .run("stop-authority", groupId, null, "group", "shutdown-frozen-set-inconsistent", canonicalBytes({ evidenceIds: ["stop-evidence"] }).toString("utf8"));
+
+    let response = await request(h, `/api/control/groups/${groupId}`);
+    expect(response.status).toBe(423);
+    expect(await response.json()).toEqual({
+      error: { code: "recovery-blocked", message: "recovery-blocked:stop-intent-missing", commandRevision: 1, evidenceIds: ["stop-evidence"], retryable: false },
+    });
+
+    const stop = { mode: "pause", state: "paused", frozenRunIds: [], acceptedAt: null, deadlineAt: null };
+    h.store.db.prepare("INSERT INTO stop_intents(group_id,mode,revision,body) VALUES (?,?,?,?)")
+      .run(groupId, "pause", 1, JSON.stringify(stop));
+    response = await request(h, `/api/control/groups/${groupId}`);
+    expect(response.status).toBe(423);
+
+    h.store.db.prepare("UPDATE stop_intents SET body=? WHERE group_id=?")
+      .run(canonicalBytes(stop).toString("utf8"), groupId);
+    response = await request(h, `/api/control/groups/${groupId}`);
+    expect(response.status).toBe(200);
+
+    group.stopped = false;
+    h.store.db.prepare("UPDATE groups SET body=? WHERE id=?").run(JSON.stringify(group), groupId);
+    response = await request(h, `/api/control/groups/${groupId}`);
+    expect(response.status).toBe(423);
+  });
+
+  it("rejects budget and graph legacy stopped flags without canonical stop intents", async () => {
+    for (const [groupId, status] of [["group-a", "running"], ["group-b", "blocked"]] as const) {
+      const row = h.store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId)!;
+      const group = JSON.parse(String(row.body));
+      group.stopped = true;
+      group.status = status;
+      h.store.db.prepare("UPDATE groups SET body=? WHERE id=?").run(JSON.stringify(group), groupId);
+      const response = await request(h, `/api/control/groups/${groupId}`);
+      expect(response.status).toBe(423);
+    }
   });
 
   it("returns persisted command results, sorted recovery, verified evidence manifests, and exact typed misses", async () => {
@@ -265,23 +515,64 @@ describe("canonical control read API", () => {
       { scope: "group", groupId: "group-b", runId: null, code: "claim-capability-unavailable", evidenceIds: ["evidence-z"] },
     ] });
 
+    await confirmGroup(h, "group-a");
+    const evidenceRun = insertValidTaskRun(h, "group-a");
+    evidenceRun.phase = "handoff";
+    h.store.db.prepare("UPDATE runs SET body=? WHERE id='run-one'").run(canonicalBytes(evidenceRun).toString("utf8"));
     const first = await writeArtifact(h.store, "evidence-z", Buffer.from("longer evidence"));
     const second = await writeArtifact(h.store, "evidence-a", Buffer.from("a"));
+    const handoffEvidence = await writeArtifact(h.store, "evidence-handoff", Buffer.from("handoff"));
+    const blockerEvidence = await writeArtifact(h.store, "evidence-blocker", Buffer.from("blocker"));
     h.store.transaction(() => {
-      h.store.db.prepare("INSERT INTO runs(id,group_id,work_item_id,generation,active,body) VALUES (?,?,?,?,?,?)")
-        .run("run-one", "group-a", "a", 1, 0, JSON.stringify({ runId: "run-one", groupId: "group-a", taskId: "a" }));
       h.store.db.prepare("INSERT INTO usage_events(run_id,seq,payload_hash,body) VALUES (?,?,?,?)")
-        .run("run-one", 1, hash("1"), JSON.stringify({ source: first }));
+        .run("run-one", 1, hash("1"), canonicalBytes({ runId: "run-one", generation: 1, eventSeq: 1, bucket: "work", cumulative: amount(0, 0, 0, 0), source: first }).toString("utf8"));
       h.store.db.prepare("INSERT INTO usage_events(run_id,seq,payload_hash,body) VALUES (?,?,?,?)")
-        .run("run-one", 2, hash("2"), JSON.stringify({ source: second }));
+        .run("run-one", 2, hash("2"), canonicalBytes({ runId: "run-one", generation: 1, eventSeq: 2, bucket: "handoff", cumulative: amount(0, 0, 0, 0), source: second }).toString("utf8"));
+      const handoff = {
+        requestId: "request-one", runId: "run-one", state: "latched", deadlineAt: "2030-01-01T00:00:00.000Z",
+        phaseAttemptOrdinal: 1, failureCode: null, evidenceIds: [handoffEvidence.artifactId],
+      };
+      h.store.db.prepare("INSERT INTO handoff_requests(id,group_id,run_id,state,body) VALUES (?,?,?,?,?)")
+        .run("request-one", "group-a", "run-one", "latched", canonicalBytes(handoff).toString("utf8"));
+      h.store.db.prepare("INSERT INTO recovery_blockers(id,group_id,run_id,scope,code,body) VALUES (?,?,?,?,?,?)")
+        .run("run-blocker", "group-a", "run-one", "run", "start-proof-outcome-unknown", canonicalBytes({ evidenceIds: [blockerEvidence.artifactId] }).toString("utf8"));
     });
     const evidenceResponse = await request(h, "/api/control/runs/run-one/evidence");
     expect(evidenceResponse.status).toBe(200);
     const manifest = await evidenceResponse.json() as EvidenceManifestV1;
-    expect(manifest.entries.map(entry => entry.evidenceId)).toEqual(["evidence-a", "evidence-z"]);
-    expect(manifest.entries.map(entry => entry.byteLength)).toEqual([1, 15]);
+    expect(manifest.entries.map(entry => entry.evidenceId)).toEqual(["evidence-a", "evidence-blocker", "evidence-handoff", "evidence-z"]);
+    expect(manifest.entries.map(entry => entry.byteLength)).toEqual([1, 7, 7, 15]);
     expect(manifest.entries.every(entry => entry.downloadUrl.startsWith("/api/control/runs/run-one/evidence/"))).toBe(true);
     expect(JSON.stringify(manifest)).not.toContain(h.root);
+
+    h.store.db.prepare("INSERT INTO outbox(id,kind,body,delivered) VALUES (?,?,?,0)")
+      .run("malformed-evidence-outbox", "archive", canonicalBytes({ runId: "run-one", artifacts: {} }).toString("utf8"));
+    let corrupted = await request(h, "/api/control/runs/run-one/evidence");
+    expect(corrupted.status).toBe(423);
+    h.store.db.prepare("DELETE FROM outbox WHERE id='malformed-evidence-outbox'").run();
+
+    h.store.db.prepare("UPDATE usage_events SET body=? WHERE run_id='run-one' AND seq=1")
+      .run(canonicalBytes({ source: { artifactId: "malformed" } }).toString("utf8"));
+    corrupted = await request(h, "/api/control/runs/run-one/evidence");
+    expect(corrupted.status).toBe(423);
+    const fullGroup = await request(h, "/api/control/groups/group-a");
+    expect(fullGroup.status).toBe(423);
+
+    h.store.db.prepare("UPDATE usage_events SET body=? WHERE run_id='run-one' AND seq=1")
+      .run(canonicalBytes({ runId: "run-one", generation: 1, eventSeq: 1, bucket: "work", cumulative: amount(0, 0, 0, 0), source: first }).toString("utf8"));
+    const handoffRow = h.store.db.prepare("SELECT body FROM handoff_requests WHERE id='request-one'").get()!;
+    const handoff = JSON.parse(String(handoffRow.body));
+    handoff.evidenceIds = ["missing-evidence"];
+    h.store.db.prepare("UPDATE handoff_requests SET body=? WHERE id='request-one'")
+      .run(canonicalBytes(handoff).toString("utf8"));
+    corrupted = await request(h, "/api/control/runs/run-one/evidence");
+    expect(corrupted.status).toBe(423);
+
+    handoff.evidenceIds = [handoffEvidence.artifactId];
+    h.store.db.prepare("UPDATE handoff_requests SET group_id='group-b',body=? WHERE id='request-one'")
+      .run(canonicalBytes(handoff).toString("utf8"));
+    corrupted = await request(h, "/api/control/runs/run-one/evidence");
+    expect(corrupted.status).toBe(423);
 
     const config = await request(h, "/api/control/config");
     const configBody = await config.json() as { errorCatalog: Array<{ code: string; status: number }> };

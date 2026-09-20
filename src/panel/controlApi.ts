@@ -2,6 +2,7 @@ import type { Express, NextFunction, Request, Response } from "express";
 import { lookupCommandResult } from "../control/commandLedger.js";
 import { ControlError } from "../control/errors.js";
 import { readVersions } from "../control/queries.js";
+import { idSchema } from "../control/schema.js";
 import { controlConfigSchema } from "../control/webProtocol.js";
 import type { ControlStore } from "../control/store.js";
 import type { TrustedControlConfig } from "./controlConfig.js";
@@ -29,6 +30,19 @@ function sinceChangeSeq(req: Request): number | null {
   return value;
 }
 
+function readErrorContext(store: ControlStore, groupId: string): { commandRevision: number | null; evidenceIds: string[] } {
+  const group = store.db.prepare("SELECT revision FROM groups WHERE id=?").get(groupId);
+  if (!group) return { commandRevision: null, evidenceIds: [] };
+  const evidenceIds = new Set<string>();
+  for (const row of store.db.prepare("SELECT body FROM recovery_blockers WHERE group_id=?").all(groupId)) {
+    try {
+      const parsed = JSON.parse(String(row.body)) as { evidenceIds?: unknown };
+      if (Array.isArray(parsed.evidenceIds)) for (const value of parsed.evidenceIds) if (idSchema.safeParse(value).success) evidenceIds.add(String(value));
+    } catch { /* best-effort context must not mask the primary read failure */ }
+  }
+  return { commandRevision: Number(group.revision), evidenceIds: [...evidenceIds].sort() };
+}
+
 export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps): void {
   app.get("/api/control/config", asyncRoute(async (_req, res) => {
     const base = await deps.config.readView();
@@ -49,14 +63,15 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
     res.json(readControlSummary(deps.store, deps.epoch, null, true));
   });
 
-  app.get("/api/control/groups/:groupId", (req, res, next) => {
-    try { res.json(readControlGroup(deps.store, deps.epoch, String(req.params.groupId))); }
+  app.get("/api/control/groups/:groupId", (req, res) => {
+    const groupId = String(req.params.groupId);
+    try { res.json(readControlGroup(deps.store, deps.epoch, groupId)); }
     catch (error) {
       if (error instanceof ControlError && error.code === "group-not-found") {
         sendControlError(res, 404, error.code, "No control group was found.");
         return;
       }
-      next(error);
+      sendMappedControlError(res, error, readErrorContext(deps.store, groupId));
     }
   });
 
@@ -78,7 +93,12 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
   });
 
   app.get("/api/control/runs/:runId/evidence", asyncRoute(async (req, res) => {
-    res.json(await readRunEvidence(deps.store, String(req.params.runId)));
+    const runId = String(req.params.runId);
+    try { res.json(await readRunEvidence(deps.store, runId)); }
+    catch (error) {
+      const run = deps.store.db.prepare("SELECT group_id FROM runs WHERE id=?").get(runId);
+      sendMappedControlError(res, error, run ? readErrorContext(deps.store, String(run.group_id)) : undefined);
+    }
   }));
 
   app.use("/api/control", (_req, res) => {

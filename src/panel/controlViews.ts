@@ -6,7 +6,8 @@ import { readProjectionChanges, readProjectionState } from "../control/projectio
 import { readArchivedPlan, readBudgetProposal, readEstimateRecord } from "../control/queries.js";
 import { readCanonicalRecord } from "../control/snapshot.js";
 import type { ControlStore } from "../control/store.js";
-import { amountSchema, artifactSchema, canonicalTimestampSchema, idSchema, safeInteger } from "../control/schema.js";
+import { amountSchema, artifactSchema, canonicalTimestampSchema, grantSchema, idSchema, safeInteger } from "../control/schema.js";
+import { taskContractSchema } from "../scheduler/planFile.js";
 import {
   allocationViewSchema,
   controlSummarySchema,
@@ -56,10 +57,11 @@ const workBodySchema = z.object({
   dependsOn: z.array(idSchema),
   contract: z.unknown(),
   configHash: hashSchema,
+  grant: grantSchema,
   targetVersion: z.union([z.string().min(1), safeInteger]),
   status: workStatusSchema,
-  originalContractHash: hashSchema.optional(),
-  derivedContractHash: hashSchema.nullable().optional(),
+  originalContractHash: hashSchema,
+  derivedContractHash: hashSchema.nullable(),
   currentRunId: idSchema.nullable().optional(),
   pendingRunId: idSchema.nullable().optional(),
   lineageRunIds: z.array(idSchema).optional(),
@@ -71,9 +73,9 @@ const stopBodySchema = z.object({
   frozenRunIds: z.array(idSchema),
   acceptedAt: canonicalTimestampSchema.nullable(),
   deadlineAt: canonicalTimestampSchema.nullable(),
-}).passthrough();
+}).strict();
 
-const blockerBodySchema = z.object({ evidenceIds: z.array(idSchema) }).passthrough();
+const blockerBodySchema = z.object({ evidenceIds: z.array(idSchema) }).strict();
 const handoffBodySchema = z.object({
   requestId: idSchema,
   runId: idSchema,
@@ -82,7 +84,58 @@ const handoffBodySchema = z.object({
   phaseAttemptOrdinal: safeInteger.positive(),
   failureCode: z.string().min(1).nullable(),
   evidenceIds: z.array(idSchema),
-}).passthrough();
+}).strict();
+
+const derivedContractRecordSchema = z.object({
+  schema: z.literal("orca-derived-contract-record-v1"),
+  originalContractHash: hashSchema,
+  proposalVersion: safeInteger.positive(),
+  confirmedGrant: grantSchema,
+  derivationVersion: z.literal("orca-derived-contract-v1"),
+  contractCanonicalJson: z.string().min(1),
+}).strict();
+
+const executionProfileAuthoritySchema = z.object({
+  workKind: z.enum(["budget-estimate", "task", "handoff", "goal-review"]),
+  profileId: idSchema,
+  profileHash: hashSchema,
+}).strict();
+
+const persistedRunSchema = z.object({
+  groupId: idSchema,
+  workItemId: idSchema,
+  taskId: idSchema.nullable(),
+  estimateId: idSchema.nullable(),
+  runId: idSchema,
+  generation: safeInteger.positive(),
+  graphVersion: safeInteger.positive(),
+  targetVersion: z.union([z.string().min(1), safeInteger]),
+  commandId: idSchema,
+  configHash: hashSchema,
+  grant: grantSchema,
+  ownerToken: idSchema,
+  executionProfile: executionProfileAuthoritySchema,
+  handoffProfile: executionProfileAuthoritySchema.nullable(),
+  executionId: z.string().min(1).nullable(),
+  state: z.enum([
+    "claimed", "starting", "accepted", "unknown", "settled",
+    "attempt-unknown", "attempt-proof-invalid", "failed-before-provider",
+    "settled-recoverable", "settled-restartable", "settled-unrecoverable",
+  ]),
+  checkpointId: idSchema.nullable(),
+  recoverable: z.boolean(),
+  remaining: grantSchema,
+  cumulative: grantSchema,
+  unknown: z.object({ work: z.boolean(), handoff: z.boolean() }).strict(),
+  highWater: safeInteger,
+  breaches: z.array(safeInteger.positive()),
+  handoffWorkItemId: idSchema.nullable(),
+  predecessorRunId: idSchema.optional(),
+  phase: z.enum(["estimate", "work", "handoff"]),
+  claimOrdinal: safeInteger.positive().nullable(),
+  providerAttemptOrdinal: safeInteger,
+  failureCode: z.string().min(1).nullable(),
+}).strict();
 
 function blocked(detail: string): never {
   throw new ControlError("recovery-blocked", detail);
@@ -126,19 +179,47 @@ function blockerRows(store: ControlStore, groupId?: string): Array<{
     const owner = row.group_id === null ? "" : String(row.group_id);
     const runId = row.run_id === null ? null : String(row.run_id);
     const code = String(row.code);
-    const body = parseStored(blockerBodySchema, row.body, "recovery-blocker-invalid");
+    const bodyJson = String(row.body);
+    const body = parseStored(blockerBodySchema, bodyJson, "recovery-blocker-invalid");
     if (!["global", "group", "run"].includes(scope) || !idSchema.safeParse(owner).success
-      || (runId !== null && !idSchema.safeParse(runId).success) || code.length === 0) return blocked("recovery-blocker-identity");
+      || (runId !== null && !idSchema.safeParse(runId).success) || code.length === 0
+      || canonicalBytes(body).toString("utf8") !== bodyJson
+      || sortedUnique(body.evidenceIds).join("\0") !== body.evidenceIds.join("\0")
+      || (scope === "run" && runId === null) || (scope === "group" && runId !== null)) return blocked("recovery-blocker-identity");
+    if (runId !== null) {
+      const run = store.db.prepare("SELECT group_id FROM runs WHERE id=?").get(runId);
+      if (!run || String(run.group_id) !== owner) return blocked("recovery-blocker-run-owner");
+    }
     return { scope: scope as "global" | "group" | "run", groupId: owner, runId, code, evidenceIds: sortedUnique(body.evidenceIds) };
   }).sort((left, right) => `${left.scope}\0${left.groupId}\0${left.runId ?? ""}\0${left.code}`.localeCompare(`${right.scope}\0${right.groupId}\0${right.runId ?? ""}\0${right.code}`));
 }
 
 function stopView(store: ControlStore, groupId: string, legacyStopped: boolean): GroupViewV1["stop"] {
-  const row = store.db.prepare("SELECT mode,body FROM stop_intents WHERE group_id=?").get(groupId);
-  if (!row) return legacyStopped ? { mode: "pause", state: "paused", frozenRunIds: [], acceptedAt: null, deadlineAt: null } : null;
-  const stop = parseStored(stopBodySchema, row.body, "stop-intent-invalid");
-  if (String(row.mode) !== stop.mode) return blocked("stop-intent-identity");
-  return { ...stop, frozenRunIds: sortedUnique(stop.frozenRunIds) };
+  const row = store.db.prepare("SELECT mode,revision,body FROM stop_intents WHERE group_id=?").get(groupId);
+  if (!row) {
+    if (legacyStopped) return blocked("stop-intent-missing");
+    return null;
+  }
+  if (!legacyStopped) return blocked("stop-intent-without-stop");
+  const body = String(row.body);
+  const stop = parseStored(stopBodySchema, body, "stop-intent-invalid");
+  const groupRevision = Number(store.db.prepare("SELECT revision FROM groups WHERE id=?").get(groupId)?.revision);
+  if (canonicalBytes(stop).toString("utf8") !== body
+    || String(row.mode) !== stop.mode
+    || !Number.isSafeInteger(Number(row.revision)) || Number(row.revision) <= 0 || Number(row.revision) > groupRevision
+    || sortedUnique(stop.frozenRunIds).join("\0") !== stop.frozenRunIds.join("\0")) {
+    return blocked("stop-intent-identity");
+  }
+  if (stop.mode === "pause") {
+    if (stop.state !== "paused" || stop.acceptedAt !== null || stop.deadlineAt !== null) return blocked("stop-intent-pause");
+  } else if (stop.state === "paused" || stop.acceptedAt === null || stop.deadlineAt === null) {
+    return blocked("stop-intent-deadline");
+  }
+  for (const runId of stop.frozenRunIds) {
+    const run = store.db.prepare("SELECT group_id FROM runs WHERE id=?").get(runId);
+    if (!run || String(run.group_id) !== groupId) return blocked("stop-intent-frozen-run");
+  }
+  return stop;
 }
 
 export function readGroupSummary(store: ControlStore, groupId: string): GroupSummaryV1 {
@@ -166,6 +247,12 @@ export function readGroupSummary(store: ControlStore, groupId: string): GroupSum
 
 function allGroupIds(store: ControlStore): string[] {
   return store.db.prepare("SELECT id FROM groups ORDER BY id").all().map(row => String(row.id));
+}
+
+function readOwnedCanonicalRecord(store: ControlStore, groupId: string, hash: string): string {
+  const row = store.db.prepare("SELECT group_id FROM execution_snapshots WHERE hash=?").get(hash);
+  if (!row || String(row.group_id) !== groupId) return blocked("canonical-record-owner");
+  return readCanonicalRecord(store, hash);
 }
 
 export function readControlSummary(
@@ -197,11 +284,13 @@ function validateExecutionSnapshot(
   groupId: string,
   graphVersion: number,
   proposal: ReturnType<typeof readBudgetProposal>,
+  plan: ReturnType<typeof readArchivedPlan>["plan"],
 ): ExecutionSnapshotV1 | null {
   if (proposal.state !== "confirmed") return null;
   if (!proposal.executionSnapshotHash || !proposal.profiles || !proposal.budgetMode) return blocked("confirmed-proposal-incomplete");
-  const canonicalJson = readCanonicalRecord(store, proposal.executionSnapshotHash);
+  const canonicalJson = readOwnedCanonicalRecord(store, groupId, proposal.executionSnapshotHash);
   const parsed = executionSnapshotSchema.safeParse(parseJson(canonicalJson, "execution-snapshot-invalid"));
+  const proposalAllocations = proposal.allocations.map(({ state: _state, ...allocation }) => allocation);
   if (!parsed.success || canonicalBytes(parsed.data).toString("utf8") !== canonicalJson
     || sha256Canonical(parsed.data) !== proposal.executionSnapshotHash
     || parsed.data.groupId !== groupId || parsed.data.planHash !== proposal.planHash
@@ -209,8 +298,39 @@ function validateExecutionSnapshot(
     || parsed.data.budgetMode !== proposal.budgetMode
     || canonicalBytes(parsed.data.groupLimit).compare(canonicalBytes(proposal.groupLimit)) !== 0
     || canonicalBytes(parsed.data.contextPolicy).compare(canonicalBytes(proposal.contextPolicy)) !== 0
-    || canonicalBytes(parsed.data.profiles).compare(canonicalBytes(proposal.profiles)) !== 0) {
+    || canonicalBytes(parsed.data.profiles).compare(canonicalBytes(proposal.profiles)) !== 0
+    || canonicalBytes(parsed.data.allocations).compare(canonicalBytes(proposalAllocations)) !== 0) {
     return blocked("execution-snapshot-identity");
+  }
+  const tasks = new Map(plan.tasks.map(task => [task.taskId, task]));
+  for (const ref of parsed.data.derivedContracts) {
+    const task = tasks.get(ref.taskId);
+    if (!task) return blocked("derived-contract-task");
+    const recordJson = readOwnedCanonicalRecord(store, groupId, ref.derivedContractHash);
+    const record = derivedContractRecordSchema.safeParse(parseJson(recordJson, "derived-contract-invalid"));
+    if (!record.success || canonicalBytes(record.data).toString("utf8") !== recordJson
+      || record.data.originalContractHash !== task.originalContractHash
+      || record.data.proposalVersion !== proposal.proposalVersion) return blocked("derived-contract-identity");
+    const contract = taskContractSchema.safeParse(parseJson(record.data.contractCanonicalJson, "derived-contract-payload-invalid"));
+    const original = taskContractSchema.safeParse(parseJson(task.originalContractCanonicalJson, "original-contract-invalid"));
+    const work = parsed.data.allocations.find(row => row.ownerKind === "task" && row.ownerId === ref.taskId && row.bucket === "work");
+    const handoff = parsed.data.allocations.find(row => row.ownerKind === "task" && row.ownerId === ref.taskId && row.bucket === "handoff");
+    if (!contract.success || !original.success || canonicalBytes(contract.data).toString("utf8") !== record.data.contractCanonicalJson
+      || contract.data.objective.taskId !== ref.taskId || !work || !handoff
+      || canonicalBytes(record.data.confirmedGrant.work).compare(canonicalBytes(work.amount)) !== 0
+      || canonicalBytes(record.data.confirmedGrant.handoff).compare(canonicalBytes(handoff.amount)) !== 0) {
+      return blocked("derived-contract-cross-record");
+    }
+    const expectedContract = structuredClone(original.data);
+    expectedContract.executionPolicy = {
+      ...expectedContract.executionPolicy,
+      tokenBudget: work.amount.tokens,
+      totalRuntimeBudgetMs: work.amount.activeMs,
+      maxAttempts: work.amount.attempts,
+      perAttemptTimeoutMs: Math.min(expectedContract.executionPolicy.perAttemptTimeoutMs, work.amount.activeMs),
+      partialOutcomeRecoveryWindowMs: Math.min(expectedContract.executionPolicy.partialOutcomeRecoveryWindowMs, handoff.amount.activeMs),
+    };
+    if (canonicalBytes(contract.data).compare(canonicalBytes(expectedContract)) !== 0) return blocked("derived-contract-forged");
   }
   return parsed.data;
 }
@@ -243,7 +363,7 @@ function workViews(
   plan: ReturnType<typeof readArchivedPlan>["plan"],
   snapshot: ExecutionSnapshotV1 | null,
 ): WorkItemViewV1[] {
-  const runs = store.db.prepare("SELECT id,work_item_id,body FROM runs WHERE group_id=? ORDER BY rowid").all(groupId);
+  const runs = store.db.prepare("SELECT id,work_item_id,active,body FROM runs WHERE group_id=? ORDER BY rowid").all(groupId);
   const derivedByTask = new Map(snapshot?.derivedContracts.map(contract => [contract.taskId, contract.derivedContractHash]) ?? []);
   if (snapshot && (derivedByTask.size !== plan.tasks.length || plan.tasks.some(task => !derivedByTask.has(task.taskId)))) {
     return blocked("execution-snapshot-task-set");
@@ -259,64 +379,120 @@ function workViews(
       || contract?.contentAddressedHash !== task.originalContractHash
       || (snapshot !== null && body.derivedContractHash !== derivedByTask.get(task.taskId))
       || sortedUnique(body.dependsOn).join("\0") !== task.dependencyTaskIds.join("\0")) return blocked(`work-item-authority:${task.taskId}`);
-    const lineage = body.lineageRunIds ?? runs.filter(run => String(run.work_item_id) === task.taskId).map(run => String(run.id));
-    const latest = lineage.at(-1) ?? null;
+    const taskRuns = runs.filter(run => String(run.work_item_id) === task.taskId);
+    const persistedRunIds = taskRuns.map(run => String(run.id));
+    if (taskRuns.length > 0) {
+      if (!body.lineageRunIds || body.currentRunId === undefined || body.currentRunId === null
+        || new Set(body.lineageRunIds).size !== body.lineageRunIds.length
+        || sortedUnique(body.lineageRunIds).join("\0") !== sortedUnique(persistedRunIds).join("\0")
+        || body.currentRunId !== persistedRunIds.at(-1)) return blocked(`work-item-run-lineage:${task.taskId}`);
+      const activeRunIds = taskRuns.filter(run => Number(run.active) === 1).map(run => String(run.id));
+      if (activeRunIds.length > 1 || (activeRunIds.length === 1 && body.currentRunId !== activeRunIds[0])) {
+        return blocked(`work-item-active-run:${task.taskId}`);
+      }
+    } else if (body.currentRunId !== undefined && body.currentRunId !== null || (body.lineageRunIds?.length ?? 0) > 0) {
+      return blocked(`work-item-run-without-row:${task.taskId}`);
+    }
+    if (body.pendingRunId && persistedRunIds.includes(body.pendingRunId)) return blocked(`work-item-pending-run:${task.taskId}`);
+    const lineage = body.lineageRunIds ?? [];
     const status: WorkItemViewV1["status"] = body.status === "running" ? "active" : body.status === "done" ? "completed" : body.status;
     return {
       taskId: task.taskId, status, dependencyTaskIds: [...task.dependencyTaskIds], targetVersion: task.targetVersion,
       configHash: task.configHash, originalContractHash: task.originalContractHash,
-      derivedContractHash: body.derivedContractHash ?? null,
-      currentRunId: body.currentRunId ?? latest, pendingRunId: body.pendingRunId ?? null,
+      derivedContractHash: body.derivedContractHash,
+      currentRunId: body.currentRunId ?? null, pendingRunId: body.pendingRunId ?? null,
       lineageRunIds: sortedUnique(lineage),
     };
   });
 }
 
 function artifactIdsForRun(store: ControlStore, runId: string): string[] {
-  const ids: string[] = [];
-  const add = (value: unknown): void => {
-    const parsed = artifactSchema.safeParse(value);
-    if (parsed.success) ids.push(parsed.data.artifactId);
-  };
-  for (const row of store.db.prepare("SELECT body FROM usage_events WHERE run_id=? ORDER BY seq").all(runId)) add((parseJson(row.body, "usage-event-invalid") as { source?: unknown }).source);
-  for (const row of store.db.prepare("SELECT body FROM checkpoints WHERE run_id=? ORDER BY id").all(runId)) {
-    const body = parseJson(row.body, "checkpoint-invalid") as { artifacts?: unknown[]; snapshot?: unknown; handoff?: unknown; stopProof?: { source?: unknown } };
-    for (const ref of body.artifacts ?? []) add(ref);
-    add(body.snapshot); add(body.handoff); add(body.stopProof?.source);
-  }
-  return sortedUnique(ids);
+  const row = store.db.prepare("SELECT group_id FROM runs WHERE id=?").get(runId);
+  if (!row) return blocked("run-row-missing");
+  return evidenceRefs(store, runId, String(row.group_id)).map(ref => ref.evidenceId);
 }
 
-function runViews(store: ControlStore, groupId: string, proposal: ReturnType<typeof readBudgetProposal>, estimates: EstimateViewV1[]): RunViewV1[] {
-  return store.db.prepare("SELECT id,work_item_id,generation,active,body FROM runs WHERE group_id=? ORDER BY id").all(groupId).map(row => {
-    const raw = parseJson(row.body, `run-invalid:${String(row.id)}`) as Record<string, unknown>;
+function profileView(binding: z.infer<typeof executionProfileAuthoritySchema>): RunViewV1["profile"] {
+  return { profileId: binding.profileId, profileHash: binding.profileHash };
+}
+
+function sameBinding(binding: z.infer<typeof executionProfileAuthoritySchema>, expected: RunViewV1["profile"], workKind: z.infer<typeof executionProfileAuthoritySchema>["workKind"]): boolean {
+  return binding.workKind === workKind && binding.profileId === expected.profileId && binding.profileHash === expected.profileHash;
+}
+
+function validAccounting(run: z.infer<typeof persistedRunSchema>): boolean {
+  for (const bucket of ["work", "handoff"] as const) {
+    for (const dimension of ["tokens", "activeMs", "attempts", "sessions"] as const) {
+      if (run.remaining[bucket][dimension] !== Math.max(run.grant[bucket][dimension] - run.cumulative[bucket][dimension], 0)) return false;
+    }
+  }
+  return true;
+}
+
+function displayRunState(run: z.infer<typeof persistedRunSchema>): RunViewV1["state"] {
+  switch (run.state) {
+    case "claimed": case "starting": return "starting";
+    case "accepted": return "running";
+    case "unknown": case "attempt-unknown": case "attempt-proof-invalid": case "failed-before-provider":
+    case "settled-recoverable": case "settled-restartable": case "settled-unrecoverable": return run.state;
+    case "settled": return run.recoverable ? "settled-recoverable" : "settled-unrecoverable";
+  }
+}
+
+function runViews(store: ControlStore, groupId: string, graphVersion: number, proposal: ReturnType<typeof readBudgetProposal>): RunViewV1[] {
+  return store.db.prepare("SELECT id,group_id,work_item_id,generation,active,body FROM runs WHERE group_id=? ORDER BY id").all(groupId).map(row => {
     const runId = String(row.id);
-    if (raw.runId !== runId || !idSchema.safeParse(runId).success) return blocked(`run-identity:${runId}`);
-    const taskId = typeof raw.taskId === "string" ? raw.taskId : null;
-    const estimateId = typeof raw.estimateId === "string" ? raw.estimateId : null;
-    const phase = raw.phase === "estimate" || raw.phase === "handoff" ? raw.phase : "work";
-    const profileCandidate = raw.profile ?? raw.executionProfile;
-    let profile = profileBindingSchema.safeParse(profileCandidate).success ? profileBindingSchema.parse(profileCandidate) : null;
-    if (!profile && estimateId) profile = estimates.find(estimate => estimate.estimateId === estimateId)?.profile ?? null;
-    if (!profile && proposal.profiles) profile = phase === "handoff" ? proposal.profiles.handoff : phase === "estimate" ? proposal.profiles.estimator : proposal.profiles.worker;
-    if (!profile) return blocked(`run-profile:${runId}`);
-    const cumulative = raw.cumulative as { work?: unknown; handoff?: unknown } | undefined;
-    const remainingGrant = raw.remaining as { work?: unknown; handoff?: unknown } | undefined;
-    const usedValue = raw.used ?? (phase === "handoff" ? cumulative?.handoff : cumulative?.work);
-    const remainingValue = phase === "handoff" ? remainingGrant?.handoff : remainingGrant?.work;
-    const used = amountSchema.safeParse(usedValue).success ? amountSchema.parse(usedValue) : { tokens: 0, activeMs: 0, attempts: 0, sessions: 0 };
-    const remaining = amountSchema.safeParse(remainingValue).success ? amountSchema.parse(remainingValue) : { tokens: 0, activeMs: 0, attempts: 0, sessions: 0 };
-    const rawState = String(raw.state ?? "unknown");
-    const state: RunViewV1["state"] = rawState === "accepted" || rawState === "running" ? "running"
-      : rawState === "claimed" || rawState === "starting" ? "starting"
-      : rawState === "settled" ? (raw.recoverable === true ? "settled-recoverable" : "settled-unrecoverable")
-      : (["unknown", "attempt-unknown", "attempt-proof-invalid", "failed-before-provider", "settled-recoverable", "settled-restartable", "settled-unrecoverable"].includes(rawState)
-        ? rawState as RunViewV1["state"] : "unknown");
+    const parsed = persistedRunSchema.safeParse(parseJson(row.body, `run-invalid:${runId}`));
+    if (!parsed.success) return blocked(`run-invalid:${runId}:${parsed.error.issues[0]?.message ?? "invalid"}`);
+    const run = parsed.data;
+    if (run.runId !== runId || run.groupId !== groupId || String(row.group_id) !== groupId
+      || run.workItemId !== String(row.work_item_id) || run.generation !== Number(row.generation)
+      || !validAccounting(run) || !proposal.profiles) return blocked(`run-identity:${runId}`);
+
+    const state = displayRunState(run);
+    const terminal = ["failed-before-provider", "settled-recoverable", "settled-restartable", "settled-unrecoverable"].includes(state);
+    if ((Number(row.active) === 1) === terminal
+      || (Number(row.active) === 1 && run.graphVersion !== graphVersion)
+      || ((run.state === "accepted" || run.state === "settled") && run.providerAttemptOrdinal === 0)) {
+      return blocked(`run-state:${runId}`);
+    }
+
+    let profile: RunViewV1["profile"];
+    if (run.phase === "estimate") {
+      if (run.taskId !== null || run.estimateId === null || run.claimOrdinal !== null || run.handoffProfile !== null
+        || run.workItemId !== run.estimateId || run.executionProfile.workKind !== "budget-estimate") return blocked(`run-estimate-identity:${runId}`);
+      const estimate = readEstimateRecord(store, groupId, run.estimateId);
+      const zero = { tokens: 0, activeMs: 0, attempts: 0, sessions: 0 };
+      if (!sameBinding(run.executionProfile, estimate.profile, "budget-estimate")
+        || canonicalBytes(run.grant.work).compare(canonicalBytes(estimate.grant)) !== 0
+        || canonicalBytes(run.grant.handoff).compare(canonicalBytes(zero)) !== 0) return blocked(`run-estimate-profile:${runId}`);
+      profile = profileView(run.executionProfile);
+    } else {
+      if (run.taskId === null || run.estimateId !== null || run.claimOrdinal === null || run.handoffProfile === null) return blocked(`run-task-identity:${runId}`);
+      const workRow = store.db.prepare("SELECT body FROM work_items WHERE group_id=? AND id=?").get(groupId, run.workItemId);
+      if (!workRow) return blocked(`run-work-missing:${runId}`);
+      const work = parseStored(workBodySchema, workRow.body, `run-work-invalid:${runId}`);
+      if (work.workItemId !== run.workItemId || work.taskId !== run.taskId || work.configHash !== run.configHash
+        || String(work.targetVersion) !== String(run.targetVersion)
+        || canonicalBytes(work.grant).compare(canonicalBytes(run.grant)) !== 0
+        || !sameBinding(run.executionProfile, proposal.profiles.worker, "task")
+        || !sameBinding(run.handoffProfile, proposal.profiles.handoff, "handoff")) return blocked(`run-work-identity:${runId}`);
+      if (run.phase === "handoff") {
+        const requests = store.db.prepare("SELECT body FROM handoff_requests WHERE group_id=? AND run_id=?").all(groupId, runId);
+        if (!requests.some(request => {
+          const body = handoffBodySchema.safeParse(parseJson(request.body, `run-handoff-invalid:${runId}`));
+          return body.success && body.data.phaseAttemptOrdinal === run.providerAttemptOrdinal;
+        })) return blocked(`run-handoff-request:${runId}`);
+        profile = profileView(run.handoffProfile);
+      } else {
+        profile = profileView(run.executionProfile);
+      }
+    }
+    const bucket = run.phase === "handoff" ? "handoff" : "work";
     return {
-      runId, taskId, estimateId, generation: Number(row.generation), state, phase,
-      claimOrdinal: Number.isSafeInteger(raw.claimOrdinal) && Number(raw.claimOrdinal) > 0 ? Number(raw.claimOrdinal) : null,
-      providerAttemptOrdinal: Number.isSafeInteger(raw.providerAttemptOrdinal) ? Number(raw.providerAttemptOrdinal) : 0,
-      profile, used, remaining, failureCode: typeof raw.failureCode === "string" ? raw.failureCode : null,
+      runId, taskId: run.taskId, estimateId: run.estimateId, generation: run.generation, state, phase: run.phase,
+      claimOrdinal: run.claimOrdinal, providerAttemptOrdinal: run.providerAttemptOrdinal, profile,
+      used: run.cumulative[bucket], remaining: run.remaining[bucket], failureCode: run.failureCode,
       evidenceIds: artifactIdsForRun(store, runId),
     };
   });
@@ -335,9 +511,13 @@ function checkpointViews(store: ControlStore, groupId: string): CheckpointViewV1
 
 function handoffViews(store: ControlStore, groupId: string): HandoffRequestViewV1[] {
   return store.db.prepare("SELECT id,run_id,state,body FROM handoff_requests WHERE group_id=? ORDER BY id").all(groupId).map(row => {
-    const body = parseStored(handoffBodySchema, row.body, `handoff-request-invalid:${String(row.id)}`);
-    if (body.requestId !== String(row.id) || body.runId !== String(row.run_id) || body.state !== String(row.state)) return blocked("handoff-request-identity");
-    return { ...body, evidenceIds: sortedUnique(body.evidenceIds) };
+    const bodyJson = String(row.body);
+    const body = parseStored(handoffBodySchema, bodyJson, `handoff-request-invalid:${String(row.id)}`);
+    const run = store.db.prepare("SELECT group_id FROM runs WHERE id=?").get(String(row.run_id));
+    if (body.requestId !== String(row.id) || body.runId !== String(row.run_id) || body.state !== String(row.state)
+      || canonicalBytes(body).toString("utf8") !== bodyJson || !run || String(run.group_id) !== groupId
+      || sortedUnique(body.evidenceIds).join("\0") !== body.evidenceIds.join("\0")) return blocked("handoff-request-identity");
+    return body;
   });
 }
 
@@ -345,7 +525,7 @@ export function readControlGroup(store: ControlStore, epoch: string, groupId: st
   const body = groupBody(store, groupId);
   const archived = readArchivedPlan(store, groupId);
   const proposal = readBudgetProposal(store, groupId);
-  const snapshot = validateExecutionSnapshot(store, groupId, archived.graphVersion, proposal);
+  const snapshot = validateExecutionSnapshot(store, groupId, archived.graphVersion, proposal, archived.plan);
   const estimates = estimateViews(store, groupId);
   const summary = readGroupSummary(store, groupId);
   const blockers = blockerRows(store, groupId).map(({ groupId: _groupId, ...blocker }) => blocker);
@@ -368,7 +548,7 @@ export function readControlGroup(store: ControlStore, epoch: string, groupId: st
     allocations,
     workItems: workViews(store, groupId, archived.plan, snapshot),
     estimates: estimates.views,
-    runs: runViews(store, groupId, proposal, estimates.views),
+    runs: runViews(store, groupId, archived.graphVersion, proposal),
     checkpoints: checkpointViews(store, groupId),
     handoffRequests: handoffViews(store, groupId),
     stop: stopView(store, groupId, body.stopped),
@@ -389,35 +569,85 @@ export function readControlRecovery(store: ControlStore, epoch: string): Recover
 
 type EvidenceRef = { evidenceId: string; kind: string; sha256: string };
 
-function evidenceRefs(store: ControlStore, runId: string): EvidenceRef[] {
+function artifactById(store: ControlStore, evidenceId: string, kind: string): EvidenceRef {
+  if (!idSchema.safeParse(evidenceId).success) return blocked("evidence-id-invalid");
+  const row = store.db.prepare("SELECT hash FROM artifacts WHERE id=?").get(evidenceId);
+  if (!row || !hashSchema.safeParse(row.hash).success) return blocked("evidence-reference-dangling");
+  return { evidenceId, kind, sha256: String(row.hash) };
+}
+
+function evidenceRefs(store: ControlStore, runId: string, groupId: string): EvidenceRef[] {
   const refs = new Map<string, EvidenceRef>();
-  const add = (value: unknown, kind: string): void => {
-    if (value === null || value === undefined) return;
+  const remember = (ref: EvidenceRef): void => {
+    const prior = refs.get(ref.evidenceId);
+    if (prior && prior.sha256 !== ref.sha256) return blocked("evidence-reference-conflict");
+    if (!prior) refs.set(ref.evidenceId, ref);
+  };
+  const add = (value: unknown, kind: string, required = false): void => {
+    if (value === null || value === undefined) {
+      if (required) return blocked("evidence-reference-missing");
+      return;
+    }
     const parsed = artifactSchema.safeParse(value);
     if (!parsed.success) return blocked("evidence-reference-invalid");
-    const prior = refs.get(parsed.data.artifactId);
-    if (prior && prior.sha256 !== parsed.data.hash) return blocked("evidence-reference-conflict");
-    if (!prior) refs.set(parsed.data.artifactId, { evidenceId: parsed.data.artifactId, kind, sha256: parsed.data.hash });
+    remember({ evidenceId: parsed.data.artifactId, kind, sha256: parsed.data.hash });
   };
-  for (const row of store.db.prepare("SELECT body FROM usage_events WHERE run_id=? ORDER BY seq").all(runId)) add((parseJson(row.body, "usage-event-invalid") as { source?: unknown }).source, "usage");
+  for (const row of store.db.prepare("SELECT body FROM usage_events WHERE run_id=? ORDER BY seq").all(runId)) {
+    add((parseJson(row.body, "usage-event-invalid") as { source?: unknown }).source, "usage", true);
+  }
   for (const row of store.db.prepare("SELECT body FROM checkpoints WHERE run_id=? ORDER BY id").all(runId)) {
-    const body = parseJson(row.body, "checkpoint-invalid") as { artifacts?: unknown[]; snapshot?: unknown; handoff?: unknown; stopProof?: { source?: unknown } };
+    const body = parseJson(row.body, "checkpoint-invalid") as { artifacts?: unknown[]; snapshot?: unknown; handoff?: unknown; stopProof?: unknown };
+    if (!Array.isArray(body.artifacts)) return blocked("checkpoint-artifacts-invalid");
     for (const ref of body.artifacts ?? []) add(ref, "artifact");
-    add(body.snapshot, "snapshot"); add(body.handoff, "handoff"); add(body.stopProof?.source, "stop-proof");
+    add(body.snapshot, "snapshot"); add(body.handoff, "handoff", true);
+    if (body.stopProof !== null && body.stopProof !== undefined) {
+      if (typeof body.stopProof !== "object" || !("source" in body.stopProof)) return blocked("checkpoint-stop-proof-invalid");
+      add((body.stopProof as { source: unknown }).source, "stop-proof", true);
+    }
   }
   for (const row of store.db.prepare("SELECT kind,body FROM outbox ORDER BY id").all()) {
     const body = parseJson(row.body, "outbox-evidence-invalid") as Record<string, unknown>;
     if (body.runId !== runId) continue;
-    for (const ref of Array.isArray(body.artifacts) ? body.artifacts : []) add(ref, String(row.kind));
+    if (body.artifacts !== undefined && !Array.isArray(body.artifacts)) return blocked("outbox-artifacts-invalid");
+    for (const ref of body.artifacts ?? [] as unknown[]) add(ref, String(row.kind));
     add(body.snapshot, String(row.kind)); add(body.source, String(row.kind));
+  }
+  for (const row of store.db.prepare("SELECT id,group_id,state,body FROM handoff_requests WHERE run_id=? ORDER BY id").all(runId)) {
+    if (String(row.group_id) !== groupId) return blocked("handoff-evidence-owner");
+    const bodyJson = String(row.body);
+    const body = parseStored(handoffBodySchema, bodyJson, "handoff-evidence-invalid");
+    if (body.requestId !== String(row.id) || body.runId !== runId || body.state !== String(row.state)
+      || canonicalBytes(body).toString("utf8") !== bodyJson
+      || sortedUnique(body.evidenceIds).join("\0") !== body.evidenceIds.join("\0")) return blocked("handoff-evidence-identity");
+    for (const evidenceId of body.evidenceIds) remember(artifactById(store, evidenceId, "handoff-request"));
+  }
+  for (const row of store.db.prepare("SELECT group_id,scope,body FROM recovery_blockers WHERE run_id=? ORDER BY id").all(runId)) {
+    if (String(row.group_id) !== groupId || !["run", "global"].includes(String(row.scope))) return blocked("recovery-evidence-owner");
+    const bodyJson = String(row.body);
+    const body = parseStored(blockerBodySchema, bodyJson, "recovery-evidence-invalid");
+    if (canonicalBytes(body).toString("utf8") !== bodyJson
+      || sortedUnique(body.evidenceIds).join("\0") !== body.evidenceIds.join("\0")) return blocked("recovery-evidence-identity");
+    for (const evidenceId of body.evidenceIds) remember(artifactById(store, evidenceId, "recovery-blocker"));
   }
   return [...refs.values()].sort((left, right) => left.evidenceId.localeCompare(right.evidenceId));
 }
 
 export async function readRunEvidence(store: ControlStore, runId: string): Promise<EvidenceManifestV1> {
-  if (!idSchema.safeParse(runId).success || !store.db.prepare("SELECT id FROM runs WHERE id=?").get(runId)) throw new ControlError("run-not-found");
-  const entries = await Promise.all(evidenceRefs(store, runId).map(async ref => {
-    const bytes = await readArtifact(store, { artifactId: ref.evidenceId, hash: ref.sha256 });
+  const row = idSchema.safeParse(runId).success
+    ? store.db.prepare("SELECT group_id FROM runs WHERE id=?").get(runId)
+    : undefined;
+  if (!row) throw new ControlError("run-not-found");
+  const groupId = String(row.group_id);
+  const proposal = readBudgetProposal(store, groupId);
+  const archived = readArchivedPlan(store, groupId);
+  runViews(store, groupId, archived.graphVersion, proposal);
+  const entries = await Promise.all(evidenceRefs(store, runId, groupId).map(async ref => {
+    let bytes: Buffer;
+    try { bytes = await readArtifact(store, { artifactId: ref.evidenceId, hash: ref.sha256 }); }
+    catch (error) {
+      if (error instanceof ControlError && ["artifact-not-found", "artifact-hash-mismatch"].includes(error.code)) return blocked("evidence-artifact-invalid");
+      throw error;
+    }
     return { ...ref, byteLength: bytes.byteLength, downloadUrl: `/api/control/runs/${encodeURIComponent(runId)}/evidence/${encodeURIComponent(ref.evidenceId)}` };
   }));
   const parsed = evidenceManifestSchema.safeParse({ schema: "orca-run-evidence-v1", runId, entries });

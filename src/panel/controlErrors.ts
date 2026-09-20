@@ -60,13 +60,17 @@ export function sendControlError(
   res.status(status).json(controlErrorBody(code, message, options));
 }
 
-export function sendMappedControlError(res: Response, error: unknown): void {
+export function sendMappedControlError(
+  res: Response,
+  error: unknown,
+  context: { commandRevision?: number | null; evidenceIds?: readonly string[] } = {},
+): void {
   if (error instanceof ControlError) {
     const durableStatus = durableCommandErrorStatus(error.code);
     const directStatus = readErrorStatuses[error.code as keyof typeof readErrorStatuses];
     if (durableStatus !== null || directStatus !== undefined) {
       const status = (durableStatus ?? directStatus) as ControlHttpStatus;
-      sendControlError(res, status, error.code, error.message, { retryable: status === 503 });
+      sendControlError(res, status, error.code, error.message, { ...context, retryable: status === 503 });
       return;
     }
   }
@@ -75,6 +79,6 @@ export function sendMappedControlError(res: Response, error: unknown): void {
     500,
     "control-internal-error",
     "The control read could not be completed.",
-    { retryable: true },
+    { ...context, retryable: true },
   );
 }
