@@ -249,7 +249,7 @@ function allGroupIds(store: ControlStore): string[] {
   return store.db.prepare("SELECT id FROM groups ORDER BY id").all().map(row => String(row.id));
 }
 
-function readOwnedCanonicalRecord(store: ControlStore, groupId: string, hash: string): string {
+function readGroupOwnedCanonicalRecord(store: ControlStore, groupId: string, hash: string): string {
   const row = store.db.prepare("SELECT group_id FROM execution_snapshots WHERE hash=?").get(hash);
   if (!row || String(row.group_id) !== groupId) return blocked("canonical-record-owner");
   return readCanonicalRecord(store, hash);
@@ -288,7 +288,7 @@ function validateExecutionSnapshot(
 ): ExecutionSnapshotV1 | null {
   if (proposal.state !== "confirmed") return null;
   if (!proposal.executionSnapshotHash || !proposal.profiles || !proposal.budgetMode) return blocked("confirmed-proposal-incomplete");
-  const canonicalJson = readOwnedCanonicalRecord(store, groupId, proposal.executionSnapshotHash);
+  const canonicalJson = readGroupOwnedCanonicalRecord(store, groupId, proposal.executionSnapshotHash);
   const parsed = executionSnapshotSchema.safeParse(parseJson(canonicalJson, "execution-snapshot-invalid"));
   const proposalAllocations = proposal.allocations.map(({ state: _state, ...allocation }) => allocation);
   if (!parsed.success || canonicalBytes(parsed.data).toString("utf8") !== canonicalJson
@@ -306,7 +306,7 @@ function validateExecutionSnapshot(
   for (const ref of parsed.data.derivedContracts) {
     const task = tasks.get(ref.taskId);
     if (!task) return blocked("derived-contract-task");
-    const recordJson = readOwnedCanonicalRecord(store, groupId, ref.derivedContractHash);
+    const recordJson = readCanonicalRecord(store, ref.derivedContractHash);
     const record = derivedContractRecordSchema.safeParse(parseJson(recordJson, "derived-contract-invalid"));
     if (!record.success || canonicalBytes(record.data).toString("utf8") !== recordJson
       || record.data.originalContractHash !== task.originalContractHash
@@ -598,7 +598,7 @@ function evidenceRefs(store: ControlStore, runId: string, groupId: string): Evid
   for (const row of store.db.prepare("SELECT body FROM checkpoints WHERE run_id=? ORDER BY id").all(runId)) {
     const body = parseJson(row.body, "checkpoint-invalid") as { artifacts?: unknown[]; snapshot?: unknown; handoff?: unknown; stopProof?: unknown };
     if (!Array.isArray(body.artifacts)) return blocked("checkpoint-artifacts-invalid");
-    for (const ref of body.artifacts ?? []) add(ref, "artifact");
+    for (const ref of body.artifacts ?? []) add(ref, "artifact", true);
     add(body.snapshot, "snapshot"); add(body.handoff, "handoff", true);
     if (body.stopProof !== null && body.stopProof !== undefined) {
       if (typeof body.stopProof !== "object" || !("source" in body.stopProof)) return blocked("checkpoint-stop-proof-invalid");
@@ -609,7 +609,7 @@ function evidenceRefs(store: ControlStore, runId: string, groupId: string): Evid
     const body = parseJson(row.body, "outbox-evidence-invalid") as Record<string, unknown>;
     if (body.runId !== runId) continue;
     if (body.artifacts !== undefined && !Array.isArray(body.artifacts)) return blocked("outbox-artifacts-invalid");
-    for (const ref of body.artifacts ?? [] as unknown[]) add(ref, String(row.kind));
+    for (const ref of body.artifacts ?? [] as unknown[]) add(ref, String(row.kind), true);
     add(body.snapshot, String(row.kind)); add(body.source, String(row.kind));
   }
   for (const row of store.db.prepare("SELECT id,group_id,state,body FROM handoff_requests WHERE run_id=? ORDER BY id").all(runId)) {

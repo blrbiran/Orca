@@ -405,6 +405,25 @@ describe("canonical control read API", () => {
     expect(response.status).toBe(423);
   });
 
+  it("accepts a globally deduplicated derived contract when each group snapshot independently proves its authority", async () => {
+    const first = await confirmGroup(h, "group-a");
+    const second = await confirmGroup(h, "group-b");
+    expect(second.prepared.derivedContracts.map(record => record.derivedContractHash))
+      .toEqual(first.prepared.derivedContracts.map(record => record.derivedContractHash));
+
+    const sharedHash = first.prepared.derivedContracts[0].derivedContractHash;
+    expect(h.store.db.prepare("SELECT group_id FROM execution_snapshots WHERE hash=?").get(sharedHash))
+      .toEqual({ group_id: "group-a" });
+    expect((await request(h, "/api/control/groups/group-a")).status).toBe(200);
+    expect((await request(h, "/api/control/groups/group-b")).status).toBe(200);
+
+    const workRow = h.store.db.prepare("SELECT body FROM work_items WHERE group_id='group-b' AND id='a'").get()!;
+    const work = JSON.parse(String(workRow.body));
+    work.derivedContractHash = second.prepared.derivedContracts.find(record => record.taskId === "b")!.derivedContractHash;
+    h.store.db.prepare("UPDATE work_items SET body=? WHERE group_id='group-b' AND id='a'").run(JSON.stringify(work));
+    expect((await request(h, "/api/control/groups/group-b")).status).toBe(423);
+  });
+
   it("rejects malformed or cross-record-inconsistent persisted run authority instead of synthesizing display values", async () => {
     const groupId = "group-a";
     await confirmGroup(h, groupId);
@@ -490,6 +509,52 @@ describe("canonical control read API", () => {
     }
   });
 
+  it.each([
+    { source: "checkpoint", kind: "null", element: null },
+    { source: "checkpoint", kind: "invalid", element: { artifactId: "malformed" } },
+    { source: "outbox", kind: "null", element: null },
+    { source: "outbox", kind: "invalid", element: { artifactId: "malformed" } },
+    { source: "handoff", kind: "null", element: null },
+    { source: "handoff", kind: "invalid", element: { artifactId: "malformed" } },
+    { source: "recovery", kind: "null", element: null },
+    { source: "recovery", kind: "invalid", element: { artifactId: "malformed" } },
+  ])("blocks a $source evidence collection containing a $kind element", async ({ source, element }) => {
+    await confirmGroup(h, "group-a");
+    const run = insertValidTaskRun(h, "group-a");
+    run.phase = "handoff";
+    h.store.db.prepare("UPDATE runs SET body=? WHERE id='run-one'").run(canonicalBytes(run).toString("utf8"));
+    const checkpointHandoff = await writeArtifact(h.store, "checkpoint-handoff", Buffer.from("handoff"));
+    const handoff: Record<string, unknown> & { evidenceIds: unknown[] } = {
+      requestId: "request-one", runId: "run-one", state: "latched", deadlineAt: "2030-01-01T00:00:00.000Z",
+      phaseAttemptOrdinal: 1, failureCode: null, evidenceIds: [],
+    };
+    h.store.db.prepare("INSERT INTO handoff_requests(id,group_id,run_id,state,body) VALUES (?,?,?,?,?)")
+      .run("request-one", "group-a", "run-one", "latched", canonicalBytes(handoff).toString("utf8"));
+
+    if (source === "checkpoint") {
+      const checkpoint = {
+        checkpointId: "checkpoint-one", runId: "run-one", taskId: "a", result: "partial",
+        artifacts: [element], snapshot: null, missing: [], handoff: checkpointHandoff, stopProof: null,
+      };
+      h.store.db.prepare("INSERT INTO checkpoints(id,run_id,hash,body) VALUES (?,?,?,?)")
+        .run("checkpoint-one", "run-one", hash("7"), canonicalBytes(checkpoint).toString("utf8"));
+    } else if (source === "outbox") {
+      h.store.db.prepare("INSERT INTO outbox(id,kind,body,delivered) VALUES (?,?,?,0)")
+        .run("evidence-outbox", "archive", canonicalBytes({ runId: "run-one", artifacts: [element] }).toString("utf8"));
+    } else if (source === "handoff") {
+      handoff.evidenceIds = [element];
+      h.store.db.prepare("UPDATE handoff_requests SET body=? WHERE id='request-one'")
+        .run(canonicalBytes(handoff).toString("utf8"));
+    } else {
+      h.store.db.prepare("INSERT INTO recovery_blockers(id,group_id,run_id,scope,code,body) VALUES (?,?,?,?,?,?)")
+        .run("run-blocker", "group-a", "run-one", "run", "start-proof-outcome-unknown", canonicalBytes({ evidenceIds: [element] }).toString("utf8"));
+    }
+
+    const response = await request(h, "/api/control/runs/run-one/evidence");
+    expect(response.status).toBe(423);
+    expect(await response.json()).toMatchObject({ error: { code: "recovery-blocked" } });
+  });
+
   it("returns persisted command results, sorted recovery, verified evidence manifests, and exact typed misses", async () => {
     const persisted = lookupCommandResult(h.store, "group-a", "import-group-a");
     const lookup = await request(h, "/api/control/groups/group-a/commands/import-group-a");
@@ -530,12 +595,20 @@ describe("canonical control read API", () => {
         .run("run-one", 2, hash("2"), canonicalBytes({ runId: "run-one", generation: 1, eventSeq: 2, bucket: "handoff", cumulative: amount(0, 0, 0, 0), source: second }).toString("utf8"));
       const handoff = {
         requestId: "request-one", runId: "run-one", state: "latched", deadlineAt: "2030-01-01T00:00:00.000Z",
-        phaseAttemptOrdinal: 1, failureCode: null, evidenceIds: [handoffEvidence.artifactId],
+        phaseAttemptOrdinal: 1, failureCode: null, evidenceIds: [second.artifactId, handoffEvidence.artifactId],
       };
       h.store.db.prepare("INSERT INTO handoff_requests(id,group_id,run_id,state,body) VALUES (?,?,?,?,?)")
         .run("request-one", "group-a", "run-one", "latched", canonicalBytes(handoff).toString("utf8"));
       h.store.db.prepare("INSERT INTO recovery_blockers(id,group_id,run_id,scope,code,body) VALUES (?,?,?,?,?,?)")
-        .run("run-blocker", "group-a", "run-one", "run", "start-proof-outcome-unknown", canonicalBytes({ evidenceIds: [blockerEvidence.artifactId] }).toString("utf8"));
+        .run("run-blocker", "group-a", "run-one", "run", "start-proof-outcome-unknown", canonicalBytes({ evidenceIds: [blockerEvidence.artifactId, first.artifactId] }).toString("utf8"));
+      const checkpoint = {
+        checkpointId: "checkpoint-one", runId: "run-one", taskId: "a", result: "partial",
+        artifacts: [first], snapshot: null, missing: [], handoff: handoffEvidence, stopProof: null,
+      };
+      h.store.db.prepare("INSERT INTO checkpoints(id,run_id,hash,body) VALUES (?,?,?,?)")
+        .run("checkpoint-one", "run-one", hash("7"), canonicalBytes(checkpoint).toString("utf8"));
+      h.store.db.prepare("INSERT INTO outbox(id,kind,body,delivered) VALUES (?,?,?,0)")
+        .run("valid-evidence-outbox", "archive", canonicalBytes({ runId: "run-one", artifacts: [second, first] }).toString("utf8"));
     });
     const evidenceResponse = await request(h, "/api/control/runs/run-one/evidence");
     expect(evidenceResponse.status).toBe(200);
