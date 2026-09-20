@@ -4943,10 +4943,12 @@ SDD新增review-fix-evidence目录，保留全部旧台账与证据。产品已�
 
 下一步依次是 Web 可恢复任务控制 → 自动拆分 → ccmem 纠正闭环／组 goal 验收；agent 适配继续留在 ccloop。一次 Codex 真钱三阶段功能成功，但 wrapper 修正版只做了离线修复、未真钱重跑，不能升级表述。Orca 与 ccloop 相关分支已按用户授权在本地合入各自 `main`，未 push、未删除分支/worktree 或证据。Claude 额度在 2026-09-22 09:00 Asia/Shanghai 后再核实；Orca chain 活验仍须人选择 model 并明确点头。
 
-## 2026-09-20 Web 可恢复控制临时交接（Task 6 已合入，先修审查阻塞）
+## 2026-09-20 Web 可恢复控制交接（Task 6 审查问题已闭环）
 
-Task 1–6 已实现：协议、命令账本、profile/admission、plan import、canonical reads、模型自动估算／proposal／confirmation／live set-limit／accounted settlement；Task 7–10 尚未开始，当前 durable hooks 不等于 provider delivery/proof/start/session admission 或 Web lifecycle。
+Task 1–6 已实现并提交在本地 `main`：协议、命令账本、profile/admission、plan import、canonical reads、模型自动估算／proposal／confirmation／live set-limit／accounted settlement。Task 7–10 尚未开始；当前 durable hooks 不等于 provider delivery/proof/start/session admission 或 Web lifecycle，不要重做 Task 1–6。
 
-实现自验为聚焦 61、全套 1372 passed/3 skipped、typecheck、Web 34；独立审查复现 4 个未修复 Important：非规范输出会使 estimate 卡在 running；已知 soft 超额不能终态结算并保留 deficit；终态后的未见 usage 可侵蚀其他 commitments；handoffExecution 缺失/不匹配仍可 claim。另有 Minor：应返回 `handoff-grant-insufficient`。
+Task 6 原独立审查的 4 个 Important 与 1 个 Minor 均已修复：非规范 estimator 输出稳定失败并终态落账；已知 soft 超额可结算且保留 deficit；任一终态拒绝未见 usage、精确重放仍幂等；缺失或不匹配 `handoffExecution` 禁止 create/claim；确认阶段返回正确的 `handoff-grant-insufficient`。复审又发现 schema-valid 但 canonical JSON 不可表示的 lone surrogate／`-0` 输出仍可能抛错，已补 RED→GREEN 并保证回滚清空 output/hash、run 进入稳定失败态。最终独立复审结论为 Approved，无 Critical/Important/Minor 遗留。
 
-下一位 agent 的第一项工作必须修复上述 Task 6 findings，补 RED→GREEN 与独立复审；修复完成前不要开始 Task 7。复现报告见控制开发树 `.superpowers/sdd/2026-09-20-web-recoverable-control/task-6-review-report.md`，实现报告见同目录 `task-6-implementer-report.md`。不固定当前 HEAD；保留开发树、node_modules 与全部 SDD 证据。
+最终全套 `ORCA_CCLOOP_BIN=/tmp/ccloop-codex-0919/dist/cli.js ORCA_CCLOOP_ADAPTER_CONFIG=/tmp/orca-ccloop-d3-task8/fake-codex-config.json npm run verify` RC0：主套 163 文件／1384 测试，control 32／287（含真实 ccloop 3／3），scheduler 51／167，chain 13／213，chain 环境主套 163／1384，Web build、panel PASS0–14、Web 9／34；typecheck 和 `git diff --check` 通过。聚焦最终回归为 estimator 18／18、confirmation 8／8。提交按主题 `fix(control): close Task 6 settlement review gaps` 与 `fix(control): reject noncanonical validated estimates` 定位；本文提交会继续移动 HEAD，不固定哈希、ahead 数或发布状态。
+
+下一项是计划 `docs/superpowers/plans/2026-09-20-web-recoverable-control.md` 的 Task 7：durable start、proof recovery 与 context-watermark control；先写 start/proof 真值表 RED，再实现 wake/delivery/claim/proof/session admission 与恢复，不能把 Codex `phase-end + soft` 宣称为 strict。复现与实现报告保留在控制开发树 `.superpowers/sdd/2026-09-20-web-recoverable-control/task-6-review-report.md`、同目录 `task-6-implementer-report.md`；开发树、node_modules、全部 SDD 证据、ccloop fixture 均保留。三仓仅本地提交，未 push、未清理分支/worktree；chain 活验仍须人选 model 并明确点头。
