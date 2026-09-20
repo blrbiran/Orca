@@ -1,9 +1,13 @@
 import type { Express, NextFunction, Request, Response } from "express";
+import { randomUUID } from "node:crypto";
+import { canonicalBytes } from "../control/canonicalJson.js";
+import { ZodError } from "zod";
 import { lookupCommandResult } from "../control/commandLedger.js";
 import { ControlError } from "../control/errors.js";
 import { readVersions } from "../control/queries.js";
 import { idSchema } from "../control/schema.js";
-import { controlConfigSchema } from "../control/webProtocol.js";
+import { commandEnvelopeSchema, controlConfigSchema, rawAuthorityCommandSchema, type RawAuthorityCommandV1 } from "../control/webProtocol.js";
+import type { WebControlService } from "../control/webService.js";
 import type { ControlStore } from "../control/store.js";
 import type { TrustedControlConfig } from "./controlConfig.js";
 import { controlErrorCatalog, sendControlError, sendMappedControlError } from "./controlErrors.js";
@@ -13,11 +17,33 @@ export interface ControlReadApiDeps {
   store: ControlStore;
   epoch: string;
   config: Pick<TrustedControlConfig, "readView">;
+  service?: WebControlService;
 }
 
 function asyncRoute(handler: (req: Request, res: Response) => Promise<void> | void) {
   return (req: Request, res: Response, next: NextFunction): void => { void Promise.resolve(handler(req, res)).catch(next); };
 }
+
+/** Validate control JSON before the parser discards duplicate object keys. */
+export function verifyControlJsonBody(req: { url?: string; method?: string }, _res: unknown, bytes: Buffer): void {
+  if (req.method !== "POST" || !req.url?.startsWith("/api/control/")) return;
+  const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  const parsed: unknown = JSON.parse(text);
+  const stack: Array<Set<string> | null> = [];
+  for (const match of text.matchAll(/"(?:\\.|[^"\\])*"|[{}\[\]:,]/g)) {
+    const token = match[0];
+    if (token === "{") stack.push(new Set());
+    else if (token === "[") stack.push(null);
+    else if (token === "}" || token === "]") stack.pop();
+    else if (token.startsWith('"') && /^\s*:/.test(text.slice(match.index! + token.length))) {
+      const keys = stack[stack.length - 1], key = JSON.parse(token) as string;
+      if (!keys || keys.has(key)) throw new ControlError("control-non-canonical-json");
+      keys.add(key);
+    }
+  }
+  canonicalBytes(parsed);
+}
+
 
 function sinceChangeSeq(req: Request): number | null {
   const keys = Object.keys(req.query);
@@ -44,6 +70,7 @@ function readErrorContext(store: ControlStore, groupId: string): { commandRevisi
 }
 
 export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps): void {
+  if (deps.service) registerControlMutationRoutes(app, deps.store, deps.service);
   app.get("/api/control/config", asyncRoute(async (_req, res) => {
     const base = await deps.config.readView();
     res.json(controlConfigSchema.parse({ ...base, epoch: deps.epoch, errorCatalog: controlErrorCatalog() }));
@@ -106,6 +133,52 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
   });
 
   app.use("/api/control", (error: unknown, _req: Request, res: Response, _next: NextFunction) => {
-    sendMappedControlError(res, error);
+    if (error instanceof SyntaxError || (typeof error === "object" && error !== null && "type" in error && ["entity.parse.failed", "entity.verify.failed"].includes(String(error.type)))) {
+      sendControlError(res, 400, "control-non-json-payload", "The command body is not valid V1 JSON.");
+    } else sendMappedControlError(res, error);
   });
+}
+
+export function registerControlMutationRoutes(app: Express, store: ControlStore, service: WebControlService): void {
+  const actorId = store.transaction(() => {
+    const prior = store.db.prepare("SELECT value FROM meta WHERE key='panelOperatorId'").get();
+    if (prior) {
+      if (!/^operator-[0-9a-f-]{36}$/.test(String(prior.value))) throw new ControlError("recovery-blocked");
+      return String(prior.value);
+    }
+    const value = `operator-${randomUUID()}`;
+    store.db.prepare("INSERT INTO meta(key,value) VALUES ('panelOperatorId',?)").run(value);
+    return value;
+  });
+  const routes = [
+    ["/api/control/groups/import-plan", "import-plan"],
+    ["/api/control/groups/:groupId/proposal/edit", "proposal-edit"],
+    ["/api/control/groups/:groupId/estimates", "estimate"],
+    ["/api/control/groups/:groupId/confirm", "confirm"],
+    ["/api/control/groups/:groupId/set-limit", "set-limit"],
+  ] as const;
+  for (const [path, verb] of routes) app.post(path, asyncRoute(async (req, res) => {
+    let id: string | null = null;
+    try {
+      const envelope = commandEnvelopeSchema.parse(req.body);
+      const importId = typeof envelope.payload === "object" && envelope.payload !== null && "groupId" in envelope.payload ? envelope.payload.groupId : undefined;
+      id = idSchema.parse(verb === "import-plan" ? importId : req.params.groupId);
+      const command = rawAuthorityCommandSchema.parse({ schema: "orca-raw-command-v1", ...envelope, actorId, verb, target: { kind: "group", groupId: id } }) as RawAuthorityCommandV1;
+      switch (command.verb) {
+        case "import-plan": await service.importPlan(command); break;
+        case "proposal-edit": service.editProposal(command); break;
+        case "estimate": await service.createEstimate(command); break;
+        case "confirm": service.confirm(command); break;
+        case "set-limit": service.setLimit(command); break;
+        default: throw new ControlError("route-not-found");
+      }
+      const result = lookupCommandResult(store, id, command.commandId);
+      if (!result) throw new ControlError("control-command-result-invalid");
+      res.status(result.originalStatus).json(result.body);
+    } catch (error) {
+      const context = id === null ? undefined : readErrorContext(store, id);
+      if (error instanceof ZodError) sendControlError(res, 400, "control-non-json-payload", "The command body does not match the closed V1 schema.", context);
+      else sendMappedControlError(res, error, context);
+    }
+  }));
 }

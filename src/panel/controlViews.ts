@@ -296,11 +296,21 @@ function validateExecutionSnapshot(
     || parsed.data.groupId !== groupId || parsed.data.planHash !== proposal.planHash
     || parsed.data.graphVersion !== graphVersion || parsed.data.proposalVersion !== proposal.proposalVersion
     || parsed.data.budgetMode !== proposal.budgetMode
-    || canonicalBytes(parsed.data.groupLimit).compare(canonicalBytes(proposal.groupLimit)) !== 0
     || canonicalBytes(parsed.data.contextPolicy).compare(canonicalBytes(proposal.contextPolicy)) !== 0
     || canonicalBytes(parsed.data.profiles).compare(canonicalBytes(proposal.profiles)) !== 0
-    || canonicalBytes(parsed.data.allocations).compare(canonicalBytes(proposalAllocations)) !== 0) {
+    || canonicalBytes(parsed.data.allocations.filter(a => a.ownerKind !== "reserve")).compare(canonicalBytes(proposalAllocations.filter(a => a.ownerKind !== "reserve"))) !== 0) {
     return blocked("execution-snapshot-identity");
+  }
+  // Limits and residual reserve may change after confirmation. Frozen grants
+  // remain exact above; mutable accounting must independently conserve capacity.
+  const live = groupBody(store, groupId).ledger;
+  if (canonicalBytes(live.explicitUnallocatedReserve).compare(canonicalBytes(proposal.explicitUnallocatedReserve)) !== 0) return blocked("live-reserve-identity");
+  if (!live.usageUnknown) for (const dimension of ["tokens", "activeMs", "attempts", "sessions"] as const) {
+    const occupied = BigInt(live.used[dimension]) + BigInt(live.committedRemaining[dimension]);
+    const ceiling = BigInt(live.groupLimit[dimension]);
+    const reserve = occupied < ceiling ? ceiling - occupied : 0n;
+    const deficit = occupied > ceiling ? occupied - ceiling : 0n;
+    if (BigInt(live.explicitUnallocatedReserve[dimension]) !== reserve || BigInt(live.budgetDeficit[dimension]) !== deficit) return blocked("live-ledger-conservation");
   }
   const tasks = new Map(plan.tasks.map(task => [task.taskId, task]));
   for (const ref of parsed.data.derivedContracts) {
@@ -447,7 +457,7 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
     const run = parsed.data;
     if (run.runId !== runId || run.groupId !== groupId || String(row.group_id) !== groupId
       || run.workItemId !== String(row.work_item_id) || run.generation !== Number(row.generation)
-      || !validAccounting(run) || !proposal.profiles) return blocked(`run-identity:${runId}`);
+      || !validAccounting(run)) return blocked(`run-identity:${runId}`);
 
     const state = displayRunState(run);
     const terminal = ["failed-before-provider", "settled-recoverable", "settled-restartable", "settled-unrecoverable"].includes(state);
@@ -468,6 +478,7 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
         || canonicalBytes(run.grant.handoff).compare(canonicalBytes(zero)) !== 0) return blocked(`run-estimate-profile:${runId}`);
       profile = profileView(run.executionProfile);
     } else {
+      if (!proposal.profiles) return blocked(`run-profile-missing:${runId}`);
       if (run.taskId === null || run.estimateId !== null || run.claimOrdinal === null || run.handoffProfile === null) return blocked(`run-task-identity:${runId}`);
       const workRow = store.db.prepare("SELECT body FROM work_items WHERE group_id=? AND id=?").get(groupId, run.workItemId);
       if (!workRow) return blocked(`run-work-missing:${runId}`);

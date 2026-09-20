@@ -83,6 +83,8 @@ describe("Web control protocol", () => {
     } as const;
 
     expect(rawAuthorityCommandSchema.parse(raw)).toEqual(raw);
+    // Duplicate targets are shape-valid; the command ledger owns durable 422 rejection.
+    expect(rawAuthorityCommandSchema.safeParse({ ...raw, payload: { ...raw.payload, operations: [operation, operation] } }).success).toBe(true);
     expect(effectiveAuthorityCommandSchema.parse(effective)).toEqual(effective);
     expect(authorityCommandSchema.parse(raw)).toEqual(raw);
     expect(authorityCommandSchema.parse(effective)).toEqual(effective);

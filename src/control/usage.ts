@@ -4,7 +4,7 @@ import type { UsageEvent } from "./types.js";
 import { ControlError } from "./errors.js";
 import { amountSchema, idSchema, safeInteger } from "./schema.js";
 import { dimensions, hashPayload } from "./commands.js";
-import { add, componentMin, readRun, saveRun, subtract } from "./budget.js";
+import { add, componentMin, readRun, saveRun, subtract, syncWebBudget } from "./budget.js";
 import { readGroup, saveGroup } from "./queries.js";
 const eventSchema=z.object({runId:idSchema,generation:safeInteger.positive(),eventSeq:safeInteger.positive(),bucket:z.enum(["work","handoff"]),cumulative:amountSchema.nullable(),source:z.object({artifactId:idSchema,hash:z.string().regex(/^[a-f0-9]{64}$/)}).strict()}).strict();
 export function recordUsage(store:ControlStore,event:UsageEvent):{applied:boolean;highWater:number} {
@@ -31,11 +31,16 @@ export function recordUsage(store:ControlStore,event:UsageEvent):{applied:boolea
         group.used=add(group.used,delta);group.reserved=subtract(group.reserved,released);
         run.remaining[next.bucket]=subtract(run.remaining[next.bucket],released);
         run.cumulative[next.bucket]=next.cumulative;run.unknown[next.bucket]=false;
-        if(dimensions.some(k=>next.cumulative![k]>run.grant[next.bucket][k])) {run.breaches.push(next.eventSeq);group.stopped=true;}
+        if(dimensions.some(k=>next.cumulative![k]>run.grant[next.bucket][k])) {
+          run.breaches.push(next.eventSeq);
+          if("planHash" in group)group.status="blocked";else group.stopped=true;
+        }
       }
       run.highWater=next.eventSeq;
     }
-    group.budgetVersion++;saveGroup(store,group);saveRun(store,run);store.db.prepare("INSERT INTO outbox VALUES (?, 'group-handoff', ?, 0) ON CONFLICT(id) DO NOTHING").run(`group-handoff:${group.groupId}:budget:${group.revision}:${group.budgetVersion}`,JSON.stringify({groupId:group.groupId,revision:group.revision,budgetVersion:group.budgetVersion}));
+    syncWebBudget(store,group,run);
+    if(group.budgetVersion===Number.MAX_SAFE_INTEGER)throw new ControlError("numeric-overflow");
+    group.budgetVersion=Number(BigInt(group.budgetVersion)+1n);saveGroup(store,group);saveRun(store,run);store.db.prepare("INSERT INTO outbox VALUES (?, 'group-handoff', ?, 0) ON CONFLICT(id) DO NOTHING").run(`group-handoff:${group.groupId}:budget:${group.revision}:${group.budgetVersion}`,JSON.stringify({groupId:group.groupId,revision:group.revision,budgetVersion:group.budgetVersion}));
     return {applied:true,highWater:run.highWater};
   });
 }

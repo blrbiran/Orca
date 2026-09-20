@@ -5,7 +5,8 @@ import type { Amount, BudgetMode, Capabilities, Claim, ClaimInput, ExecutionProf
 import { ControlError } from "./errors.js";
 import { amountSchema, safeInteger, workSchema, capabilitiesSchema } from "./schema.js";
 import { applyCommand, dimensions, fits, zero } from "./commands.js";
-import { readGroup, readWork, saveGroup, saveWork, allWork } from "./queries.js";
+import { readGroup, readWork, saveGroup, saveWork, allWork, readBudgetProposal, type GroupRecord } from "./queries.js";
+import { canonicalBytes } from "./canonicalJson.js";
 import { recordProjectionChange } from "./projectionJournal.js";
 export interface RunRecord extends Claim, RunView {
   remaining:Grant; cumulative:Grant; highWater:number;
@@ -29,12 +30,43 @@ export function saveRun(store:ControlStore,run:RunRecord):void {
   recordProjectionChange(store,[run.groupId]);
 }
 export function add(a:Amount,b:Amount):Amount {
-  const result={...a};for(const k of dimensions) result[k]=a[k]+b[k];
-  if(!amountSchema.safeParse(result).success) throw new ControlError("budget-overflow");return result;
+  amountSchema.parse(a);amountSchema.parse(b);
+  const result={...a};for(const k of dimensions) {
+    const value=BigInt(a[k])+BigInt(b[k]);
+    if(value>BigInt(Number.MAX_SAFE_INTEGER))throw new ControlError("budget-overflow");
+    result[k]=Number(value);
+  }
+  return result;
 }
 export function subtract(a:Amount,b:Amount):Amount {
-  const result={...a};for(const k of dimensions) result[k]=a[k]-b[k];
-  if(!amountSchema.safeParse(result).success) throw new ControlError("usage-regression");return result;
+  amountSchema.parse(a);amountSchema.parse(b);
+  const result={...a};for(const k of dimensions) {
+    const value=BigInt(a[k])-BigInt(b[k]);
+    if(value<0n)throw new ControlError("usage-regression");
+    result[k]=Number(value);
+  }
+  return result;
+}
+/** Synchronize Web projections inside the existing usage transaction. */
+export function syncWebBudget(store:ControlStore,group:GroupRecord,currentRun:RunRecord):void {
+  if(!("planHash" in group))return;
+  const proposal=readBudgetProposal(store,group.groupId),reserve=zero(),deficit=zero();
+  for(const d of dimensions){
+    const occupied=BigInt(group.used[d])+BigInt(group.reserved[d]),ceiling=BigInt(group.limit[d]);
+    const residual=ceiling>occupied?ceiling-occupied:0n,breach=occupied>ceiling?occupied-ceiling:0n;
+    if(residual>BigInt(Number.MAX_SAFE_INTEGER)||breach>BigInt(Number.MAX_SAFE_INTEGER))throw new ControlError("numeric-overflow");
+    reserve[d]=Number(residual);deficit[d]=Number(breach);
+  }
+  let usageUnknown=false;
+  for(const row of store.db.prepare("SELECT id,body FROM runs WHERE group_id=?").all(group.groupId)){
+    const run=String(row.id)===currentRun.runId?currentRun:JSON.parse(String(row.body)) as RunRecord;
+    if(!run.unknown||run.unknown.work||run.unknown.handoff||store.db.prepare("SELECT seq FROM usage_events WHERE run_id=? AND seq>?").get(run.runId,run.highWater))usageUnknown=true;
+  }
+  Object.assign(group,{ledger:{groupLimit:group.limit,used:group.used,committedRemaining:group.reserved,explicitUnallocatedReserve:reserve,budgetDeficit:deficit,usageUnknown}});
+  proposal.explicitUnallocatedReserve=reserve;
+  const allocation=proposal.allocations.find(a=>a.ownerKind==="reserve");
+  if(!allocation)throw new ControlError("recovery-blocked");allocation.amount=reserve;
+  store.db.prepare("UPDATE budget_proposals SET body=? WHERE group_id=?").run(canonicalBytes(proposal).toString("utf8"),group.groupId);
 }
 export function componentMin(a:Amount,b:Amount):Amount {
   return {tokens:Math.min(a.tokens,b.tokens),activeMs:Math.min(a.activeMs,b.activeMs),attempts:Math.min(a.attempts,b.attempts),sessions:Math.min(a.sessions,b.sessions)};
@@ -50,6 +82,7 @@ export function claimWork(store:ControlStore,input:ClaimInput, preparedWork?:Wor
   return applyCommand(store,groupId,meta,{verb:"claim",workItemId,graphVersion,targetVersion,capabilities,executionProfile:executionProfile??null,handoffProfile:handoffProfile??null,...(preparedWork?{preparedWork}: {})},()=>{
     if(store.dispatchBlocked) throw new ControlError("control-recovery-required");
     const group=readGroup(store,groupId);
+    if("planHash" in group && group.status!=="running")throw new ControlError("group-state-invalid");
     if(preparedWork) {
       workSchema.parse(preparedWork);
       if(preparedWork.kind!=="reconcile" || preparedWork.workItemId!==workItemId || targetVersion!==1) throw new ControlError("reconcile-registration-invalid");

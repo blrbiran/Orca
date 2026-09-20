@@ -482,18 +482,7 @@ const proposalOperationSchema = z
 
 export const proposalEditPayloadSchema = z
   .object({ baseProposalVersion: positiveSafeInteger, operations: z.array(proposalOperationSchema), proposedGroupLimit: amountSchema.optional() })
-  .strict()
-  .superRefine((value, ctx) => {
-    requireUnique(
-      value.operations,
-      (operation) =>
-        operation.target.scope === "task"
-          ? `task\0${operation.target.taskId}\0${operation.target.allocation}\0${operation.target.dimension}`
-          : `goal-review\0${operation.target.dimension}`,
-      ctx,
-      ["operations"],
-    );
-  });
+  .strict();
 
 export const reestimatePayloadSchema = z
   .object({ proposalVersion: positiveSafeInteger, estimatorProfileId: idSchema, estimatorProfileHash: hashSchema, estimateMode: z.enum(["strict", "soft"]) })
@@ -537,18 +526,7 @@ export const effectiveProposalEditPayloadSchema = z
     operations: z.array(effectiveProposalOperationSchema),
     proposedGroupLimit: amountSchema.nullable(),
   })
-  .strict()
-  .superRefine((value, ctx) => {
-    requireUnique(
-      value.operations,
-      (operation) =>
-        operation.target.scope === "task"
-          ? `task\0${operation.target.taskId}\0${operation.target.allocation}\0${operation.target.dimension}`
-          : `goal-review\0${operation.target.dimension}`,
-      ctx,
-      ["operations"],
-    );
-  });
+  .strict();
 export const effectiveHandoffStopPayloadSchema = z.object({ handoffDeadlineAt: canonicalTimestampSchema }).strict();
 const shutdownPayloadSchema = z
   .object({ shutdownAcceptedAt: canonicalTimestampSchema, shutdownDeadlineAt: canonicalTimestampSchema })

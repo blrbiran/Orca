@@ -248,7 +248,7 @@ export function readEstimateRecord(store: ControlStore, groupId: string, estimat
   }
   if ((estimate.state === "queued" && (estimate.request === null || estimate.reasonCode !== null))
     || (estimate.state === "input-too-large" && (estimate.request === null || estimate.reasonCode !== "estimate-input-too-large"))
-    || (estimate.state === "blocked-capability" && estimate.reasonCode !== "estimate-blocked-capability")) return recoveryBlocked();
+    || (estimate.state === "blocked-capability" && !["estimate-blocked-capability", "estimate-capability-degraded"].includes(estimate.reasonCode ?? ""))) return recoveryBlocked();
   if (estimate.output) {
     const expectedTaskIds = archivedPlan.plan.tasks.map(task => task.taskId);
     if (estimate.output.tasks.map(task => task.taskId).join("\0") !== expectedTaskIds.join("\0")) return recoveryBlocked();

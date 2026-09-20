@@ -14,6 +14,7 @@ import type { Amount } from "./types.js";
 import { taskContractSchema } from "../scheduler/planFile.js";
 import { readArchivedPlan, readBudgetProposal, readEstimateRecord } from "./queries.js";
 import type { ControlStore } from "./store.js";
+import { readCanonicalRecord } from "./snapshot.js";
 
 type ExecutionAllocation = ExecutionSnapshotV1["allocations"][number];
 export interface EstimateAllocation {
@@ -143,7 +144,13 @@ function verifyConservation(input: ConfirmedProposal): ExecutionAllocation[] {
   if (committedEstimates.size !== suppliedEstimates.size) throw new ControlError("execution-policy-unrepresentable");
   for (const [estimateId, persisted] of committedEstimates) {
     const supplied = suppliedEstimates.get(estimateId);
-    if (!supplied || canonicalBytes(supplied.amount).compare(canonicalBytes(persisted.grant)) !== 0) {
+    let remaining = persisted.grant;
+    if (persisted.state !== "queued") {
+      const runs = input.store.db.prepare("SELECT body FROM runs WHERE group_id=? AND work_item_id=? AND active=1").all(input.groupId, estimateId);
+      if (runs.length !== 1) throw new ControlError("recovery-blocked");
+      remaining = amountSchema.parse(JSON.parse(String(runs[0].body)).remaining.work);
+    }
+    if (!supplied || canonicalBytes(supplied.amount).compare(canonicalBytes(remaining)) !== 0) {
       throw new ControlError("execution-policy-unrepresentable");
     }
   }
@@ -191,6 +198,7 @@ function deriveContract(task: ConfirmedProposal["tasks"][number], proposalVersio
     perAttemptTimeoutMs: Math.min(existing.perAttemptTimeoutMs, task.work.activeMs),
     partialOutcomeRecoveryWindowMs: Math.min(Number(existing.partialOutcomeRecoveryWindowMs), task.handoff.activeMs),
   };
+  if (!taskContractSchema.safeParse(original).success) throw new ControlError("execution-policy-unrepresentable");
   const contractCanonicalJson = canonicalBytes(original).toString("utf8");
   const record = {
     schema: "orca-derived-contract-record-v1",
@@ -245,4 +253,30 @@ export function prepareExecutionSnapshot(input: ConfirmedProposal): PreparedExec
 
 export function buildExecutionSnapshot(input: ConfirmedProposal): ExecutionSnapshotV1 {
   return prepareExecutionSnapshot(input).snapshot;
+}
+
+/** Scheduler consumption verifies the archived wrapper, then returns its exact contract bytes. */
+export function readConfirmedTaskExecution(store: ControlStore, groupId: string, taskId: string) {
+  const proposal = readBudgetProposal(store, groupId), plan = readArchivedPlan(store, groupId);
+  if (proposal.state !== "confirmed" || !proposal.executionSnapshotHash) throw new ControlError("group-state-invalid");
+  try {
+    const snapshot = executionSnapshotSchema.parse(JSON.parse(readCanonicalRecord(store, proposal.executionSnapshotHash)));
+    if (snapshot.groupId !== groupId || snapshot.planHash !== plan.planHash || snapshot.graphVersion !== plan.graphVersion
+      || snapshot.proposalVersion !== proposal.proposalVersion || snapshot.budgetMode !== proposal.budgetMode
+      || sha256Canonical(snapshot.profiles) !== sha256Canonical(proposal.profiles)
+      || sha256Canonical(snapshot.contextPolicy) !== sha256Canonical(proposal.contextPolicy)
+      || sha256Canonical(snapshot.allocations.filter(a => a.ownerKind !== "reserve")) !== sha256Canonical(proposal.allocations.filter(a => a.ownerKind !== "reserve").map(({ state: _state, ...a }) => a))) throw new ControlError("recovery-blocked");
+    const task = plan.plan.tasks.find(t => t.taskId === taskId), ref = snapshot.derivedContracts.find(t => t.taskId === taskId);
+    const work = snapshot.allocations.find(a => a.ownerKind === "task" && a.ownerId === taskId && a.bucket === "work");
+    const handoff = snapshot.allocations.find(a => a.ownerKind === "task" && a.ownerId === taskId && a.bucket === "handoff");
+    if (!task || !ref || !work || !handoff) throw new ControlError("recovery-blocked");
+    const expected = deriveContract({ ...task, work: work.amount, handoff: handoff.amount }, proposal.proposalVersion);
+    const canonicalJson = readCanonicalRecord(store, ref.derivedContractHash);
+    if (canonicalJson !== expected.canonicalJson || ref.derivedContractHash !== expected.derivedContractHash) throw new ControlError("recovery-blocked");
+    return { derivedContractHash: ref.derivedContractHash, contractCanonicalJson: expected.contractCanonicalJson,
+      contract: taskContractSchema.parse(JSON.parse(expected.contractCanonicalJson)), grant: { work: work.amount, handoff: handoff.amount } };
+  } catch (error) {
+    if (error instanceof ControlError) throw error;
+    throw new ControlError("recovery-blocked");
+  }
 }

@@ -6,9 +6,7 @@ import type { ExecutionProfileRouter, FrozenProfile, ObservedProfile } from "./p
 import type { ControlStore } from "./store.js";
 import type { Amount } from "./types.js";
 import {
-  budgetEstimateRequestSchema,
   controlPlanSchema,
-  type BudgetEstimateRequestV1,
   type CommandLookupV1,
   type CommandSuccessV1,
   type ControlPlanV1,
@@ -17,6 +15,7 @@ import {
 import { writeCanonicalRecord } from "./snapshot.js";
 import { readSchedulerControlPlanSource, type SchedulerControlPlanSource } from "../scheduler/planFile.js";
 import type { TrustedControlConfig } from "../panel/controlConfig.js";
+import { buildBudgetEstimateRequest, persistEstimateArtifacts, TASK_WORK, TASK_HANDOFF, GOAL_REVIEW, ESTIMATE_GRANT, type FrozenEstimateRequest } from "./estimator.js";
 
 export type AllowlistedPlanSource = SchedulerControlPlanSource & { repoId: string; planId: string };
 export type ImportCommand = Extract<RawAuthorityCommandV1, { verb: "import-plan" }>;
@@ -39,11 +38,6 @@ export interface ImportDeps {
 }
 
 export type AsyncImportDeps = Omit<ImportDeps, "estimatorObservation">;
-
-const TASK_WORK: Amount = Object.freeze({ tokens: 3_000_000, activeMs: 14_400_000, attempts: 3, sessions: 3 });
-const TASK_HANDOFF: Amount = Object.freeze({ tokens: 300_000, activeMs: 1_800_000, attempts: 0, sessions: 0 });
-const GOAL_REVIEW: Amount = Object.freeze({ tokens: 1_000_000, activeMs: 3_600_000, attempts: 1, sessions: 1 });
-const ESTIMATE_GRANT: Amount = Object.freeze({ tokens: 250_000, activeMs: 900_000, attempts: 1, sessions: 1 });
 
 function compare(left: string, right: string): number { return left < right ? -1 : left > right ? 1 : 0; }
 function cloneAmount(value: Amount): Amount { return { ...value }; }
@@ -127,7 +121,6 @@ export function normalizeControlPlan(source: AllowlistedPlanSource): ControlPlan
 }
 
 type EstimateState = "queued" | "blocked-capability" | "input-too-large";
-interface EstimatePreflight { state: EstimateState; reasonCode: string | null; requestHash: string | null; request: BudgetEstimateRequestV1 | null }
 
 function preflightEstimate(
   deps: ImportDeps,
@@ -135,52 +128,9 @@ function preflightEstimate(
   planCanonicalJson: string,
   profile: FrozenProfile,
   mode: "strict" | "soft",
-): EstimatePreflight {
-  const observation = deps.estimatorObservation(profile);
-  if (observation.profile !== profile || observation.profile.profileHash !== profile.profileHash) throw new ControlError("profile-changed");
-  const observed = observation.observed;
-  const preflight = profile.snapshot.profile.estimatorPreflight;
-  if (observation.probeFailureCode !== null || !preflight || observed.contextWindowTokens === null || observed.handoffControl !== "durable"
-    || observed.usageObservation === "unavailable" || observed.budgetEnforcement === "unavailable"
-    || observed.handoffExecution === null
-    || (mode === "strict" && (observed.budgetEnforcement !== "bounded"
-      || !observed.requestBoundProof || !dimensions.every(dimension => observed.requestBoundProof!.workDimensions.includes(dimension))))) {
-    return { state: "blocked-capability", reasonCode: "estimate-blocked-capability", requestHash: null, request: null };
-  }
-  const request = budgetEstimateRequestSchema.parse({
-    schema: "budget-estimate-request-v1",
-    planHash,
-    planSnapshotCanonicalJson: planCanonicalJson,
-    estimatorProfile: { profileId: profile.snapshot.profile.profileId, profileHash: profile.profileHash },
-    estimatorCapabilities: {
-      contextWindowTokens: observed.contextWindowTokens,
-      usageObservation: observed.usageObservation,
-      budgetEnforcement: observed.budgetEnforcement,
-      contextObservation: observed.contextObservation,
-    },
-    responseSchemaVersion: "budget-estimate-v1",
-    instructionVersion: preflight.instructionVersion,
-  });
-  const bytes = canonicalBytes(request);
-  let serializedInputTokens: number;
-  if (preflight.tokenizer.kind === "exact") {
-    if (!deps.exactTokenCount) return { state: "blocked-capability", reasonCode: "estimate-blocked-capability", requestHash: sha256Canonical(request), request };
-    serializedInputTokens = deps.exactTokenCount(profile, bytes);
-  } else {
-    const numerator = BigInt(preflight.tokenizer.numerator);
-    const denominator = BigInt(preflight.tokenizer.denominator);
-    const count = (BigInt(bytes.length) * numerator + denominator - 1n) / denominator;
-    if (count > BigInt(Number.MAX_SAFE_INTEGER)) throw new ControlError("numeric-overflow");
-    serializedInputTokens = Number(count);
-  }
-  if (!Number.isSafeInteger(serializedInputTokens) || serializedInputTokens < 0) throw new ControlError("numeric-overflow");
-  const requiredBig = BigInt(serializedInputTokens) + BigInt(preflight.framingTokenOverhead) + BigInt(preflight.maxOutputTokens);
-  if (requiredBig > BigInt(Number.MAX_SAFE_INTEGER)) throw new ControlError("numeric-overflow");
-  const required = Number(requiredBig);
-  if (required > observed.contextWindowTokens || required > ESTIMATE_GRANT.tokens) {
-    return { state: "input-too-large", reasonCode: "estimate-input-too-large", requestHash: sha256Canonical(request), request };
-  }
-  return { state: "queued", reasonCode: null, requestHash: sha256Canonical(request), request };
+): FrozenEstimateRequest {
+  return buildBudgetEstimateRequest({ planHash, planCanonicalJson, profile, mode,
+    observation: deps.estimatorObservation(profile), exactTokenCount: deps.exactTokenCount });
 }
 
 function success(context: WebCommandContext, groupId: string, estimateId: string, state: EstimateState, reasonCode: string | null): { status: number; body: CommandSuccessV1 } {
@@ -278,6 +228,7 @@ export function importControlPlan(deps: ImportDeps, command: ImportCommand): Imp
       };
       deps.store.db.prepare("INSERT INTO estimates(group_id,id,estimate_version,state,body) VALUES (?,?,?,?,?)")
         .run(payload.groupId, estimateId, 1, preflight.state, canonicalBytes(estimate).toString("utf8"));
+      persistEstimateArtifacts(deps.store, payload.groupId, estimateId, preflight);
       if (preflight.state === "queued") {
         const wakeId = `scheduler-wake:${payload.groupId}:estimate:${estimateId}`;
         deps.store.db.prepare("INSERT INTO scheduler_wakes(id,group_id,kind,body,delivered) VALUES (?,?, 'budget-estimate', ?, 0)")

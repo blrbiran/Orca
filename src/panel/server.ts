@@ -5,6 +5,7 @@ import { correctionsDir } from "../corrections/paths.js";
 import { buildApi } from "./api.js";
 import { PANEL_HOST_NOT_ALLOWED, assertBindAllowed, isHostAllowed } from "./bindGuard.js";
 import { controlErrorBody } from "./controlErrors.js";
+import { verifyControlJsonBody } from "./controlApi.js";
 import { NO_VIEWER_IDENTITY, PanelRejection } from "./rejection.js";
 import { ReviewsWriter } from "./reviewsStore.js";
 import { loadStaticFiles } from "./staticFiles.js";
@@ -124,7 +125,7 @@ export async function createPanelServer(opts: PanelOptions): Promise<StartedPane
       ? controlErrorBody(PANEL_HOST_NOT_ALLOWED, message)
       : { code: PANEL_HOST_NOT_ALLOWED, message });
   });
-  app.use(express.json({ limit: "64kb" }));
+  app.use(express.json({ limit: "64kb", verify: verifyControlJsonBody }));
   buildApi(app, { opts, token, reviews, statics });
 
   const server: Server = createServer(app);

@@ -19,6 +19,7 @@ import { cleanupCommittedRun } from "./cleanup.js";
 import { publishPending } from "./projection.js";
 import { privateDirectory } from "./paths.js";
 import { ControlError } from "./errors.js";
+import { readConfirmedTaskExecution } from "./executionSnapshot.js";
 
 function claimOnly(c:Claim):Claim {
  const {groupId,workItemId,taskId,runId,generation,graphVersion,targetVersion,commandId,configHash,grant,ownerToken}=c;
@@ -142,7 +143,8 @@ export function makeControlledExecution(service:ControlService,groupId:string,se
   execute:async({plan,task,base,kind})=>{
    const work=allWork(service.store,groupId).find(w=>w.taskId===task.taskId && w.kind===kind);
    if(!work) throw new ControlError("work-not-found");
-   const contract=JSON.parse(await readFile(task.contract,"utf8"));
+   const confirmed="planHash" in readGroup(service.store,groupId)?readConfirmedTaskExecution(service.store,groupId,task.taskId):null;
+   const contract=confirmed?.contract??JSON.parse(await readFile(task.contract,"utf8"));
    const claim=claimOnly(await (selection?service.claimProfiled(groupId,work.workItemId,selection,handoffSelection!):service.claimLegacy(groupId,work.workItemId)));
    if(kind==="reconcile" && !service.store.db.prepare("SELECT id FROM outbox WHERE id=?").get("start:"+claim.runId)) {
     service.write(()=>service.store.transaction(()=>{
@@ -151,7 +153,7 @@ export function makeControlledExecution(service:ControlService,groupId:string,se
      if(!(current.contract as {pendingReconciliation?:string}).pendingReconciliation && hashPayload(current.contract)!==hashPayload(contract)) throw new ControlError("start-contract-conflict");
      current.contract=contract;saveWork(service.store,groupId,current);
     }));
-   } else if(hashPayload(contract)!==hashPayload(work.contract)) throw new ControlError("start-contract-conflict");
+   } else if(!confirmed && hashPayload(contract)!==hashPayload(work.contract)) throw new ControlError("start-contract-conflict");
    const root=service.write(()=>privateDirectory(plan.runsDir)),input:StartEnvelope={protocol:1,claim,contractHash:hashPayload(contract),inputCheckpoint:null,
     work:{contract,targetRepo:await realpath(plan.targetRepo),base,sourceDir:join(root,claim.runId)}};
    if(selection)await service.startProfiled(selection,input);else await service.startLegacy(input);
