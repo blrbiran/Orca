@@ -47,16 +47,24 @@ export function subtract(a:Amount,b:Amount):Amount {
   }
   return result;
 }
+export function budgetBalance(limit:Amount,used:Amount,committed:Amount):{reserve:Amount;deficit:Amount} {
+  [limit,used,committed].forEach(value=>amountSchema.parse(value));
+  const reserve=zero(),deficit=zero();
+  for(const d of dimensions){
+    const occupied=BigInt(used[d])+BigInt(committed[d]),ceiling=BigInt(limit[d]);
+    const available=ceiling>occupied?ceiling-occupied:0n,breach=occupied>ceiling?occupied-ceiling:0n;
+    if(available>BigInt(Number.MAX_SAFE_INTEGER)||breach>BigInt(Number.MAX_SAFE_INTEGER))throw new ControlError("numeric-overflow");
+    reserve[d]=Number(available);deficit[d]=Number(breach);
+  }
+  return {reserve,deficit};
+}
+export function isTerminalRunState(state:string):boolean {
+  return state==="settled" || ["failed-before-provider","settled-recoverable","settled-restartable","settled-unrecoverable"].includes(state);
+}
 /** Synchronize Web projections inside the existing usage transaction. */
 export function syncWebBudget(store:ControlStore,group:GroupRecord,currentRun:RunRecord):void {
   if(!("planHash" in group))return;
-  const proposal=readBudgetProposal(store,group.groupId),reserve=zero(),deficit=zero();
-  for(const d of dimensions){
-    const occupied=BigInt(group.used[d])+BigInt(group.reserved[d]),ceiling=BigInt(group.limit[d]);
-    const residual=ceiling>occupied?ceiling-occupied:0n,breach=occupied>ceiling?occupied-ceiling:0n;
-    if(residual>BigInt(Number.MAX_SAFE_INTEGER)||breach>BigInt(Number.MAX_SAFE_INTEGER))throw new ControlError("numeric-overflow");
-    reserve[d]=Number(residual);deficit[d]=Number(breach);
-  }
+  const proposal=readBudgetProposal(store,group.groupId),{reserve,deficit}=budgetBalance(group.limit,group.used,group.reserved);
   let usageUnknown=false;
   for(const row of store.db.prepare("SELECT id,body FROM runs WHERE group_id=?").all(group.groupId)){
     const run=String(row.id)===currentRun.runId?currentRun:JSON.parse(String(row.body)) as RunRecord;

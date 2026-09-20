@@ -4,7 +4,7 @@ import type { UsageEvent } from "./types.js";
 import { ControlError } from "./errors.js";
 import { amountSchema, idSchema, safeInteger } from "./schema.js";
 import { dimensions, hashPayload } from "./commands.js";
-import { add, componentMin, readRun, saveRun, subtract, syncWebBudget } from "./budget.js";
+import { add, componentMin, isTerminalRunState, readRun, saveRun, subtract, syncWebBudget } from "./budget.js";
 import { readGroup, saveGroup } from "./queries.js";
 const eventSchema=z.object({runId:idSchema,generation:safeInteger.positive(),eventSeq:safeInteger.positive(),bucket:z.enum(["work","handoff"]),cumulative:amountSchema.nullable(),source:z.object({artifactId:idSchema,hash:z.string().regex(/^[a-f0-9]{64}$/)}).strict()}).strict();
 export function recordUsage(store:ControlStore,event:UsageEvent):{applied:boolean;highWater:number} {
@@ -17,7 +17,7 @@ export function recordUsage(store:ControlStore,event:UsageEvent):{applied:boolea
       if(prior.payload_hash!==hash) throw new ControlError("usage-event-conflict");
       return {applied:false,highWater:run.highWater};
     }
-    if(run.state==="settled") throw new ControlError("run-already-settled");
+    if(isTerminalRunState(run.state)) throw new ControlError("run-already-settled");
     store.db.prepare("INSERT INTO usage_events VALUES (?,?,?,?)").run(event.runId,event.eventSeq,hash,JSON.stringify(event));
     const group=readGroup(store,run.groupId);
     for(;;){

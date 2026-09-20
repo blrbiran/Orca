@@ -16,6 +16,7 @@ import type { Amount } from "./types.js";
 import type { ControlStore } from "./store.js";
 import type { CommandLookupV1, CommandSuccessV1, EffectiveProposalEditPayload, RawAuthorityCommandV1, ProfileBindingV1 } from "./webProtocol.js";
 import type { AdmissionGate } from "./admissionGate.js";
+import { budgetBalance } from "./budget.js";
 
 export type ProposalEditCommand = Extract<RawAuthorityCommandV1, { verb: "proposal-edit" }>;
 export type ReestimateCommand = Extract<RawAuthorityCommandV1, { verb: "estimate" }>;
@@ -29,6 +30,37 @@ const ledgerSchema = z.object({ groupLimit: amountSchema, used: amountSchema, co
 const groupSchema = z.object({ groupId: z.string(), status: z.enum(["draft", "ready", "running", "review", "done", "blocked"]), stopped: z.boolean(), used: amountSchema, reserved: amountSchema, limit: amountSchema, ledger: ledgerSchema }).passthrough();
 type Group = z.infer<typeof groupSchema>;
 const same = (a: unknown, b: unknown) => canonicalBytes(a).equals(canonicalBytes(b));
+function identifyRawEstimateOutput(value: unknown): { rawHash: string; rawIdentity: string; canonicalJson: string | null } {
+  try {
+    const bytes = canonicalBytes(value), canonicalJson = bytes.toString("utf8");
+    return { rawHash: createHash("sha256").update(bytes).digest("hex"), rawIdentity: `canonical-json:${canonicalJson}`, canonicalJson };
+  } catch (error) {
+    if (!(error instanceof ControlError) || error.code !== "control-non-canonical-json") throw error;
+  }
+  const seen = new Map<object, number>();
+  const encode = (item: unknown): unknown => {
+    if (item === null) return ["null"];
+    if (typeof item === "boolean" || typeof item === "string") return [typeof item, item];
+    if (typeof item === "number") return ["number", Object.is(item, -0) ? "-0" : String(item)];
+    if (typeof item === "bigint") return ["bigint", item.toString()];
+    if (typeof item === "undefined") return ["undefined"];
+    if (typeof item === "symbol") return ["symbol", item.description ?? ""];
+    if (typeof item === "function") return ["function", item.name];
+    const prior = seen.get(item);
+    if (prior !== undefined) return ["reference", prior];
+    const identity = seen.size; seen.set(item, identity);
+    if (Array.isArray(item)) return ["array", identity, item.map(encode)];
+    const entries = Reflect.ownKeys(item).map((key, ordinal) => {
+      const descriptor = Object.getOwnPropertyDescriptor(item, key)!;
+      const encodedKey = typeof key === "string" ? ["string", key] : ["symbol", key.description ?? "", ordinal];
+      return [encodedKey, "value" in descriptor ? ["value", encode(descriptor.value)] : ["accessor", Boolean(descriptor.get), Boolean(descriptor.set)]];
+    });
+    entries.sort((left, right) => JSON.stringify(left[0]).localeCompare(JSON.stringify(right[0])));
+    return ["object", identity, entries];
+  };
+  const rawIdentity = `noncanonical-v1:${JSON.stringify(encode(value))}`;
+  return { rawHash: createHash("sha256").update(rawIdentity).digest("hex"), rawIdentity, canonicalJson: null };
+}
 export function readWebGroup(store: ControlStore, groupId: string): Group {
   const row = store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId);
   if (!row) throw new ControlError("group-not-found");
@@ -271,10 +303,12 @@ export class WebControlService {
   /** The scheduler verifies evidence first, then commits terminal state in this same transaction. */
   completeEstimate(id: string, estimateId: string, rawOutput: unknown, commitTerminal?: () => void): void {
     this.mutate(() => this.store.transaction(() => {
-      const estimate = readEstimateRecord(this.store, id, estimateId), receiptId = `estimate-result:${id}:${estimateId}`, rawHash = sha256Canonical(rawOutput);
+      const estimate = readEstimateRecord(this.store, id, estimateId), receiptId = `estimate-result:${id}:${estimateId}`;
+      const { rawHash, rawIdentity, canonicalJson: rawCanonicalJson } = identifyRawEstimateOutput(rawOutput);
       const receipt = this.store.db.prepare("SELECT body FROM outbox WHERE id=? AND kind='estimate-result'").get(receiptId);
       if (receipt) {
-        if (JSON.parse(String(receipt.body)).rawHash !== rawHash) throw new ControlError("report-identity-conflict");
+        const retained = JSON.parse(String(receipt.body));
+        if (retained.rawHash !== rawHash || retained.rawIdentity !== rawIdentity) throw new ControlError("report-identity-conflict");
         return;
       }
       commitTerminal?.();
@@ -293,18 +327,21 @@ export class WebControlService {
       const group = readWebGroup(this.store, id), proposal = readBudgetProposal(this.store, id), plan = readArchivedPlan(this.store, id);
       if (group.ledger.usageUnknown) throw new ControlError("recovery-blocked");
       if (dimensions.some(d => group.used[d] < run.cumulative.work[d])) throw new ControlError("recovery-blocked");
-      if (!same(residual(group.limit, group.used, group.reserved), proposal.explicitUnallocatedReserve)) throw new ControlError("recovery-blocked");
+      const currentBalance = budgetBalance(group.limit, group.used, group.reserved);
+      if (!same(currentBalance.reserve, proposal.explicitUnallocatedReserve) || !same(currentBalance.deficit, group.ledger.budgetDeficit)) throw new ControlError("recovery-blocked");
       let output;
       try { output = validateEstimateOutput(rawOutput, plan.planHash, plan.plan.tasks.map(t => t.taskId)); }
       catch (error) { if (!(error instanceof ControlError)) throw error; }
       estimate.state = output ? "ready" : "failed"; estimate.output = output ?? null; estimate.outputHash = output ? sha256Canonical(output) : null; estimate.reasonCode = output ? null : "plan-version-conflict";
-      writeCanonicalRecord(this.store, id, rawHash, canonicalBytes(rawOutput).toString("utf8"));
+      if (rawCanonicalJson !== null) writeCanonicalRecord(this.store, id, rawHash, rawCanonicalJson);
       if (output) writeCanonicalRecord(this.store, id, estimate.outputHash!, canonicalBytes(output).toString("utf8"));
       group.ledger.committedRemaining = residual(group.reserved, zero(), run.remaining.work);
-      setReserve(proposal, residual(group.limit, group.used, group.ledger.committedRemaining));
+      const settledBalance = budgetBalance(group.limit, group.used, group.ledger.committedRemaining);
+      group.ledger.budgetDeficit = settledBalance.deficit;
+      setReserve(proposal, settledBalance.reserve);
       this.store.db.prepare("UPDATE estimates SET state=?,body=? WHERE group_id=? AND id=?").run(estimate.state, canonicalBytes(estimate).toString("utf8"), id, estimateId);
       this.store.db.prepare("UPDATE runs SET active=0 WHERE id=?").run(run.runId);
-      this.store.db.prepare("INSERT INTO outbox(id,kind,body,delivered) VALUES (?,'estimate-result',?,1)").run(receiptId, canonicalBytes({ groupId: id, estimateId, runId: run.runId, rawHash }).toString("utf8"));
+      this.store.db.prepare("INSERT INTO outbox(id,kind,body,delivered) VALUES (?,'estimate-result',?,1)").run(receiptId, canonicalBytes({ groupId: id, estimateId, runId: run.runId, rawHash, rawIdentity }).toString("utf8"));
       saveWebAuthority(this.store, group, proposal); recordProjectionChange(this.store, [id]);
     }));
   }
@@ -332,7 +369,7 @@ export class WebControlService {
         const tasks = plan.plan.tasks.map(task => {
           const work = proposal.allocations.find(a => a.ownerId === task.taskId && a.bucket === "work")!.amount;
           const handoff = proposal.allocations.find(a => a.ownerId === task.taskId && a.bucket === "handoff")!.amount;
-          if (selected.handoff.snapshot.profile.capabilities.handoffExecution === "model-assisted-v1" && dimensions.some(d => handoff[d] < 1)) throw new ControlError("execution-policy-unrepresentable");
+          if (selected.handoff.snapshot.profile.capabilities.handoffExecution === "model-assisted-v1" && dimensions.some(d => handoff[d] < 1)) throw new ControlError("handoff-grant-insufficient");
           return { ...task, work, handoff };
         });
         const prepared = prepareExecutionSnapshot({ store: this.store, groupId: id, planHash: plan.planHash, graphVersion: plan.graphVersion, proposalVersion: proposal.proposalVersion,

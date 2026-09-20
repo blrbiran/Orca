@@ -78,7 +78,7 @@ describe("atomic confirmation", () => {
     const profile = profileSnapshot(); profile.profile.capabilities.handoffExecution = "model-assisted-v1";
     const h = await webFixture(profile); try {
       const service = new WebControlService(h.deps);
-      expect(service.confirm(h.command("confirm", h.confirmPayload()))).toMatchObject({ error: { code: "execution-policy-unrepresentable" } });
+      expect(service.confirm(h.command("confirm", h.confirmPayload()))).toMatchObject({ error: { code: "handoff-grant-insufficient" } });
       expect(readBudgetProposal(h.store, "g").state).toBe("editable");
     } finally { await h.dispose(); }
   });

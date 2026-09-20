@@ -32,9 +32,14 @@ describe("frozen estimator", () => {
       expect(result.requiredRequestTokens).toBe(serialized + 17 + 64000);
       expect(result.contract).toMatchObject({ requestHash: result.requestHash, framingTokenOverhead: 17, maxOutputTokens: 64000 });
       expect(estimateCapabilityDegraded(result.request!, { ...observation, observed: { ...observation.observed, contextWindowTokens: 999999 } })).toBe(true);
+      expect(estimateCapabilityDegraded(result.request!, { ...observation, observed: { ...observation.observed, handoffExecution: null } })).toBe(true);
       expect(estimateCapabilityDegraded(result.request!, observation)).toBe(false);
       const tooLarge = buildBudgetEstimateRequest({ planHash: plan.planHash, planCanonicalJson: plan.canonicalJson, profile: h.frozen, observation: { ...observation, observed: { ...observation.observed, contextWindowTokens: 1 } }, mode: "soft" });
       expect(tooLarge.state).toBe("input-too-large"); expect(h.accept).not.toHaveBeenCalled();
+      for (const handoffExecution of [null, "model-assisted-v1" as const]) {
+        expect(buildBudgetEstimateRequest({ planHash: plan.planHash, planCanonicalJson: plan.canonicalJson, profile: h.frozen,
+          observation: { ...observation, observed: { ...observation.observed, handoffExecution } }, mode: "soft" })).toMatchObject({ state: "blocked-capability" });
+      }
     } finally { await h.dispose(); }
   });
   it("accounts durable estimate creation/replay, terminal preflight, and claim degradation without a run", async () => {
@@ -56,6 +61,17 @@ describe("frozen estimator", () => {
       expect(await service.createEstimate(terminal)).toMatchObject({ result: { estimateState: "input-too-large", wakeId: null } });
       expect(lookupCommandResult(h.store, "g", terminal.commandId)?.originalStatus).toBe(200);
       expect(h.accept).not.toHaveBeenCalled();
+    } finally { await h.dispose(); }
+  });
+  it.each([null, "model-assisted-v1" as const])("blocks estimate claim when observed handoff execution is missing or mismatched (%s)", async handoffExecution => {
+    const h = await webFixture(); try {
+      const service = new WebControlService(h.deps), before = readBudgetProposal(h.store, "g");
+      h.setObserved({ ...h.frozen.snapshot.profile.capabilities, handoffExecution });
+      expect(await service.claimEstimate("g", h.estimateId)).toBeNull();
+      expect(readEstimateRecord(h.store, "g", h.estimateId)).toMatchObject({ state: "blocked-capability", reasonCode: "estimate-capability-degraded" });
+      expect(readBudgetProposal(h.store, "g").explicitUnallocatedReserve.tokens).toBe(before.explicitUnallocatedReserve.tokens + 250000);
+      expect(h.store.db.prepare("SELECT count(*) AS n FROM runs").get()!.n).toBe(0);
+      expect(h.store.db.prepare("SELECT count(*) AS n FROM outbox WHERE kind='estimate-claim'").get()!.n).toBe(0);
     } finally { await h.dispose(); }
   });
   it.each([false, true])("settles accounted estimate atomically and never overwrites dirty fields (invalid=%s)", async invalid => {
@@ -111,6 +127,57 @@ describe("frozen estimator", () => {
       expect(readEstimateRecord(h.store, "g", h.estimateId).state).toBe("failed");
       expect(h.store.db.prepare("SELECT active FROM runs WHERE id=?").get(run!.runId)!.active).toBe(0);
     } finally { await h.dispose(); }
+  });
+  it.each([
+    ["fractional number", { work: { tokens: 0.5 } }],
+    ["unsafe number", { work: { tokens: Number.MAX_SAFE_INTEGER + 1 } }],
+    ["lone surrogate", { rationale: "\ud800" }],
+  ])("terminally fails and retains invalid raw output identity: %s", async (_label, output) => {
+    const h = await webFixture(); try {
+      const service = new WebControlService(h.deps), run = await service.claimEstimate("g", h.estimateId);
+      const row = JSON.parse(String(h.store.db.prepare("SELECT body FROM runs WHERE id=?").get(run!.runId)!.body));
+      row.state = "settled-restartable";
+      h.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify(row), run!.runId);
+      service.completeEstimate("g", h.estimateId, output);
+      expect(readEstimateRecord(h.store, "g", h.estimateId)).toMatchObject({ state: "failed", output: null, outputHash: null });
+      expect(h.store.db.prepare("SELECT active FROM runs WHERE id=?").get(run!.runId)!.active).toBe(0);
+      const receipt = JSON.parse(String(h.store.db.prepare("SELECT body FROM outbox WHERE id=?").get(`estimate-result:g:${h.estimateId}`)!.body));
+      expect(receipt).toMatchObject({ groupId: "g", estimateId: h.estimateId, runId: run!.runId });
+      expect(receipt.rawHash).toMatch(/^[a-f0-9]{64}$/);
+      expect(receipt.rawIdentity).toEqual(expect.any(String));
+      service.completeEstimate("g", h.estimateId, output);
+      expect(() => service.completeEstimate("g", h.estimateId, { different: output })).toThrow("report-identity-conflict");
+    } finally { await h.dispose(); }
+  });
+  it("settles a known soft-budget deficit instead of stranding the estimate", async () => {
+    const h = await webFixture(); try {
+      const service = new WebControlService(h.deps), run = await service.claimEstimate("g", h.estimateId);
+      recordUsage(h.store, { runId: run!.runId, generation: 1, eventSeq: 1, bucket: "work", cumulative: { tokens: 6_000_000, activeMs: 0, attempts: 0, sessions: 0 }, source: { artifactId: "overrun", hash: "b".repeat(64) } });
+      const row = JSON.parse(String(h.store.db.prepare("SELECT body FROM runs WHERE id=?").get(run!.runId)!.body));
+      row.state = "settled-restartable";
+      h.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify(row), run!.runId);
+      service.completeEstimate("g", h.estimateId, {});
+      const group = readControlGroup(h.store, "epoch", "g");
+      expect(readEstimateRecord(h.store, "g", h.estimateId).state).toBe("failed");
+      expect(group.summary.state).toBe("blocked");
+      expect(group.ledger.explicitUnallocatedReserve.tokens).toBe(0);
+      expect(group.ledger.budgetDeficit.tokens).toBe(group.ledger.used.tokens + group.ledger.committedRemaining.tokens - group.ledger.groupLimit.tokens);
+      expect(group.ledger.budgetDeficit.tokens).toBeGreaterThan(0);
+    } finally { await h.dispose(); }
+  });
+  it("allows an exact retained usage replay but rejects unseen usage after every Task 6 terminal state", async () => {
+    for (const state of ["failed-before-provider", "settled-recoverable", "settled-restartable", "settled-unrecoverable"]) {
+      const h = await webFixture(); try {
+        const service = new WebControlService(h.deps), run = await service.claimEstimate("g", h.estimateId);
+        const event = { runId: run!.runId, generation: 1, eventSeq: 1, bucket: "work" as const, cumulative: { tokens: 1, activeMs: 0, attempts: 0, sessions: 0 }, source: { artifactId: "terminal", hash: "c".repeat(64) } };
+        expect(recordUsage(h.store, event)).toMatchObject({ applied: true });
+        const row = JSON.parse(String(h.store.db.prepare("SELECT body FROM runs WHERE id=?").get(run!.runId)!.body));
+        row.state = state;
+        h.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify(row), run!.runId);
+        expect(recordUsage(h.store, event)).toMatchObject({ applied: false });
+        expect(() => recordUsage(h.store, { ...event, eventSeq: 2, cumulative: { ...event.cumulative, tokens: 2 } })).toThrow("run-already-settled");
+      } finally { await h.dispose(); }
+    }
   });
   it("holds gaps/unknown usage and refunds only settled remainder after confirmed usage", async () => {
     const h = await webFixture(); try {

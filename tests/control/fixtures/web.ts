@@ -7,7 +7,7 @@ import { importControlPlan } from "../../../src/control/planImport.js";
 import { canonicalBytes, sha256Canonical } from "../../../src/control/canonicalJson.js";
 import { readArchivedPlan, readBudgetProposal } from "../../../src/control/queries.js";
 import type { ExecutionPort } from "../../../src/control/executionPort.js";
-import type { ExecutionProfileSnapshotV1, RawAuthorityCommandV1, ConfirmPayload } from "../../../src/control/webProtocol.js";
+import type { CapabilityViewV1, ExecutionProfileSnapshotV1, RawAuthorityCommandV1, ConfirmPayload } from "../../../src/control/webProtocol.js";
 
 export const profileSnapshot = (): ExecutionProfileSnapshotV1 => ({
   schema: "orca-execution-profile-snapshot-v1",
@@ -20,7 +20,7 @@ export const profileSnapshot = (): ExecutionProfileSnapshotV1 => ({
 
 export async function webFixture(snapshot = profileSnapshot()) {
   const h = await openTestStore();
-  let observed = structuredClone(snapshot.profile.capabilities);
+  let observed: CapabilityViewV1 = structuredClone(snapshot.profile.capabilities);
   const accept = vi.fn(async () => ({ kind: "unknown" as const }));
   const port = { accept, probeProfileCapabilities: async () => observed,
     capabilities: async () => ({ protocol: 1, durableAccept: true, ownershipIsolation: true, evidenceRetention: true, usageObservation: "realtime", budgetEnforcement: "bounded", requestBoundEvidence: "proof" }),

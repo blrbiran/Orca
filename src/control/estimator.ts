@@ -68,7 +68,7 @@ export function buildBudgetEstimateRequest(input: EstimateInput): FrozenEstimate
   const preflight = profile.snapshot.profile.estimatorPreflight;
   const blocked: FrozenEstimateRequest = { state: "blocked-capability", reasonCode: "estimate-blocked-capability", requestHash: null, request: null, contract: null, contractHash: null, inputTokens: null, requiredRequestTokens: null };
   // Active time, attempts and sessions are bounded by the accounted claim path.
-  if (observation.probeFailureCode !== null || !preflight || observed.contextWindowTokens === null || observed.handoffControl !== "durable"
+  if (observation.probeFailureCode !== null || !preflight || observed.contextWindowTokens === null || observed.handoffControl !== "durable" || observed.handoffExecution === null
     || observed.usageObservation === "unavailable" || observed.budgetEnforcement === "unavailable"
     || (input.mode === "strict" && (observed.budgetEnforcement !== "bounded" || !observed.requestBoundProof?.workDimensions.includes("tokens")))) return blocked;
   const request = budgetEstimateRequestSchema.parse({ schema: "budget-estimate-request-v1", planHash: input.planHash,
@@ -103,7 +103,7 @@ export function estimateCapabilityDegraded(request: BudgetEstimateRequestV1, obs
     || order.indexOf(current.usageObservation) < order.indexOf(frozen.usageObservation)
     || order.indexOf(current.contextObservation) < order.indexOf(frozen.contextObservation)
     || budgetOrder.indexOf(current.budgetEnforcement) < budgetOrder.indexOf(frozen.budgetEnforcement)
-    || current.handoffControl !== "durable"
+    || current.handoffControl !== "durable" || current.handoffExecution === null
     || (mode === "strict" && !current.requestBoundProof?.workDimensions.includes("tokens"));
 }
 export function validateEstimateOutput(value: unknown, planHash: string, taskIds: string[]): BudgetEstimateV1 {
