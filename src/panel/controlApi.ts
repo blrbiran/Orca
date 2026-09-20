@@ -6,7 +6,7 @@ import { lookupCommandResult } from "../control/commandLedger.js";
 import { ControlError } from "../control/errors.js";
 import { readVersions } from "../control/queries.js";
 import { idSchema } from "../control/schema.js";
-import { commandEnvelopeSchema, controlConfigSchema, rawAuthorityCommandSchema, type RawAuthorityCommandV1 } from "../control/webProtocol.js";
+import { recoveryRetryPayloadSchema, commandEnvelopeSchema, controlConfigSchema, rawAuthorityCommandSchema, type CommandTargetV1, type CommandVerbV1, type RawAuthorityCommandV1 } from "../control/webProtocol.js";
 import type { WebControlService } from "../control/webService.js";
 import type { ControlStore } from "../control/store.js";
 import type { TrustedControlConfig } from "./controlConfig.js";
@@ -150,21 +150,51 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
     store.db.prepare("INSERT INTO meta(key,value) VALUES ('panelOperatorId',?)").run(value);
     return value;
   });
-  const routes = [
-    ["/api/control/groups/import-plan", "import-plan"],
-    ["/api/control/groups/:groupId/proposal/edit", "proposal-edit"],
-    ["/api/control/groups/:groupId/estimates", "estimate"],
-    ["/api/control/groups/:groupId/confirm", "confirm"],
-    ["/api/control/groups/:groupId/set-limit", "set-limit"],
-    ["/api/control/groups/:groupId/start", "start"],
-  ] as const;
-  for (const [path, verb] of routes) app.post(path, asyncRoute(async (req, res) => {
+  /** Resolve the command target and the ledger scope a route names; `recovery-retry` carries no group in its path. */
+  type RouteTarget = (params: Request["params"], payload: unknown, store: ControlStore) => { groupId: string; target: CommandTargetV1 };
+  const payloadFields = (payload: unknown): Record<string, unknown> =>
+    typeof payload === "object" && payload !== null && !Array.isArray(payload) ? payload as Record<string, unknown> : {};
+  const scoped = (groupId: string) => ({ groupId, target: { kind: "group" as const, groupId } });
+  const fromParams: RouteTarget = (params) => scoped(idSchema.parse(params.groupId));
+  const routes: Array<{ path: string; verb: CommandVerbV1; target: RouteTarget }> = [
+    { path: "/api/control/groups/import-plan", verb: "import-plan", target: (_params, payload) => scoped(idSchema.parse(payloadFields(payload).groupId)) },
+    { path: "/api/control/groups/:groupId/proposal/edit", verb: "proposal-edit", target: fromParams },
+    { path: "/api/control/groups/:groupId/estimates", verb: "estimate", target: fromParams },
+    { path: "/api/control/groups/:groupId/confirm", verb: "confirm", target: fromParams },
+    { path: "/api/control/groups/:groupId/set-limit", verb: "set-limit", target: fromParams },
+    { path: "/api/control/groups/:groupId/start", verb: "start", target: fromParams },
+    { path: "/api/control/groups/:groupId/pause-dispatch", verb: "pause-dispatch", target: fromParams },
+    { path: "/api/control/groups/:groupId/handoff-stop", verb: "handoff-stop", target: fromParams },
+    { path: "/api/control/groups/:groupId/resume-dispatch", verb: "resume-dispatch", target: fromParams },
+    { path: "/api/control/groups/:groupId/resume-from-handoff", verb: "resume-from-handoff", target: fromParams },
+    {
+      path: "/api/control/groups/:groupId/tasks/:taskId/continue",
+      verb: "continue-task",
+      target: (params) => {
+        const groupId = idSchema.parse(params.groupId);
+        return { groupId, target: { kind: "task", groupId, taskId: idSchema.parse(params.taskId) } };
+      },
+    },
+    {
+      path: "/api/control/recovery/retry",
+      verb: "recovery-retry",
+      target: (_params, payload, store) => {
+        const retry = recoveryRetryPayloadSchema.parse(payload);
+        if (retry.scope === "group") return scoped(retry.groupId);
+        const row = store.db.prepare("SELECT group_id FROM runs WHERE id=?").get(retry.runId);
+        if (!row) throw new ControlError("run-not-found");
+        const groupId = idSchema.parse(String(row.group_id));
+        return { groupId, target: { kind: "run", groupId, runId: retry.runId } };
+      },
+    },
+  ];
+  for (const route of routes) app.post(route.path, asyncRoute(async (req, res) => {
     let id: string | null = null;
     try {
       const envelope = commandEnvelopeSchema.parse(req.body);
-      const importId = typeof envelope.payload === "object" && envelope.payload !== null && "groupId" in envelope.payload ? envelope.payload.groupId : undefined;
-      id = idSchema.parse(verb === "import-plan" ? importId : req.params.groupId);
-      const command = rawAuthorityCommandSchema.parse({ schema: "orca-raw-command-v1", ...envelope, actorId, verb, target: { kind: "group", groupId: id } }) as RawAuthorityCommandV1;
+      const resolved = route.target(req.params, envelope.payload, store);
+      id = resolved.groupId;
+      const command = rawAuthorityCommandSchema.parse({ schema: "orca-raw-command-v1", ...envelope, actorId, verb: route.verb, target: resolved.target }) as RawAuthorityCommandV1;
       switch (command.verb) {
         case "import-plan": await service.importPlan(command); break;
         case "proposal-edit": service.editProposal(command); break;
@@ -172,6 +202,12 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
         case "confirm": service.confirm(command); break;
         case "set-limit": service.setLimit(command); break;
         case "start": await service.start(command); break;
+        case "pause-dispatch": await service.pauseDispatch(command); break;
+        case "handoff-stop": await service.handoffStop(command); break;
+        case "resume-dispatch": await service.resumeDispatch(command); break;
+        case "resume-from-handoff": await service.resumeFromHandoff(command); break;
+        case "continue-task": await service.continueTask(command); break;
+        case "recovery-retry": await service.recoveryRetry(command); break;
         default: throw new ControlError("route-not-found");
       }
       const result = lookupCommandResult(store, id, command.commandId);

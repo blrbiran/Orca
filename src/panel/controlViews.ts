@@ -133,6 +133,7 @@ const persistedRunSchema = z.object({
   predecessorRunId: idSchema.optional(),
   phase: z.enum(["estimate", "work", "handoff"]),
   claimOrdinal: safeInteger.positive().nullable(),
+  continuationIntentId: idSchema.nullable().optional(),
   providerAttemptOrdinal: safeInteger,
   failureCode: z.string().min(1).nullable(),
 }).strict();

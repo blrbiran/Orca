@@ -203,7 +203,7 @@ function persistCommandOutcome(
   );
 }
 
-function updateRevision(store: ControlStore, groupId: string, nextRevision: number): void {
+export function updateRevision(store: ControlStore, groupId: string, nextRevision: number): void {
   const row = store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId);
   if (!row) throw new ControlError("group-not-found");
   let body = String(row.body);

@@ -627,7 +627,7 @@ export const effectiveProposalEditPayloadSchema = z
   })
   .strict();
 export const effectiveHandoffStopPayloadSchema = z.object({ handoffDeadlineAt: canonicalTimestampSchema }).strict();
-const shutdownPayloadSchema = z
+export const shutdownPayloadSchema = z
   .object({ shutdownAcceptedAt: canonicalTimestampSchema, shutdownDeadlineAt: canonicalTimestampSchema })
   .strict();
 

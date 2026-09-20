@@ -10,6 +10,7 @@ import type { ExecutionProfileRouter, FrozenProfile, ObservedProfile } from "./p
 import type { AdmissionGate } from "./admissionGate.js";
 import type { WakeHandler, WakeHandlers } from "./dispatch.js";
 import type { ControlStore } from "./store.js";
+import { claimableContinuations, continuationAlreadyClaimed, continuationWakeBody, type RegisteredContinuation } from "./continuation.js";
 
 export type Phase = "estimate" | "work" | "handoff";
 export type StartCommand = Extract<RawAuthorityCommandV1, { verb: "start" }>;
@@ -123,6 +124,22 @@ function pendingStartWake(store: ControlStore, groupId: string): ClaimedWake | n
   return { id: String(row.id), body };
 }
 
+/**
+ * A registered continuation batch outranks ordinary dispatch: it must be retried on the
+ * same claim identity it was registered under, not replaced by a fresh ready-work claim.
+ */
+function pendingResumeWake(store: ControlStore, groupId: string): { id: string; resumeRevision: number; continuations: RegisteredContinuation[] } | null {
+  const body = continuationWakeBody(store, groupId);
+  if (!body) return null;
+  const row = store.db.prepare("SELECT id FROM scheduler_wakes WHERE group_id=? AND kind='resume' AND delivered=0 ORDER BY rowid").get(groupId);
+  if (!row) return null;
+  return { id: String(row.id), resumeRevision: body.resumeRevision, continuations: body.continuations };
+}
+
+function stopIsPending(store: ControlStore, groupId: string): boolean {
+  return store.db.prepare("SELECT group_id FROM stop_intents WHERE group_id=?").get(groupId) !== undefined;
+}
+
 function activeWorkRun(store: ControlStore, groupId: string): { kind: "claimed"; runId: string } | null {
   for (const row of store.db.prepare("SELECT id,body FROM runs WHERE group_id=? AND active=1").all(groupId)) {
     if (JSON.parse(String(row.body)).phase === "work") return { kind: "claimed", runId: String(row.id) };
@@ -138,8 +155,9 @@ export async function deliverScheduledStart(deps: WebDispatchDeps, groupId: stri
   const { store, profileRouter, admissionGate } = deps;
   const release = admissionGate?.enter();
   try {
-    const wake = pendingStartWake(store, groupId);
+    const wake = pendingResumeWake(store, groupId) ?? pendingStartWake(store, groupId);
     if (!wake) return activeWorkRun(store, groupId) ?? { kind: "idle" };
+    if (stopIsPending(store, groupId)) return { kind: "blocked", reason: "group-stopped" };
     const snapshot = readFrozenSnapshot(store, groupId);
     let blocked = false;
     try {
@@ -151,23 +169,57 @@ export async function deliverScheduledStart(deps: WebDispatchDeps, groupId: stri
       blocked = true;
     }
     return store.transaction(() => {
-      const still = pendingStartWake(store, groupId);
+      const still = pendingResumeWake(store, groupId) ?? pendingStartWake(store, groupId);
       if (!still) return activeWorkRun(store, groupId) ?? { kind: "idle" as const };
       if (blocked) {
         store.db.prepare("INSERT INTO recovery_blockers(id,group_id,run_id,scope,code,body) VALUES (?,?,NULL,'group','claim-capability-unavailable',?) ON CONFLICT(id) DO NOTHING")
           .run(`claim-blocked:${groupId}:${still.id}`, groupId, canonicalBytes({ evidenceIds: [] }).toString("utf8"));
         return { kind: "blocked" as const, reason: "claim-capability-unavailable" };
       }
+      const startRevision = "resumeRevision" in still ? still.resumeRevision : still.body.startRevision;
+      if ("resumeRevision" in still) {
+        const continuation = deliverContinuationWake(store, groupId, still, snapshot);
+        if (continuation !== null) return continuation;
+      }
       const work = nextClaimableTask(store, groupId);
       if (!work) {
         store.db.prepare("UPDATE scheduler_wakes SET delivered=1 WHERE id=?").run(still.id);
         return { kind: "idle" as const };
       }
-      const run = createStartingRun(store, groupId, work, snapshot, still.body.startRevision);
+      const run = createStartingRun(store, groupId, work, snapshot, startRevision);
       store.db.prepare("UPDATE scheduler_wakes SET delivered=1 WHERE id=?").run(still.id);
       return { kind: "claimed" as const, runId: run.runId };
     });
   } finally { release?.(); }
+}
+
+type WakeOutcome = { kind: "claimed"; runId: string } | { kind: "idle" };
+
+/**
+ * Claim the next registered continuation of a resume wake. Returns null once the batch is
+ * exhausted so the same delivery can fall through to ordinary ready work.
+ */
+function deliverContinuationWake(
+  store: ControlStore,
+  groupId: string,
+  wake: { id: string; resumeRevision: number; continuations: RegisteredContinuation[] },
+  snapshot: ExecutionSnapshotV1,
+): WakeOutcome | null {
+  if (wake.continuations.length === 0) {
+    store.db.prepare("UPDATE scheduler_wakes SET delivered=1 WHERE id=?").run(wake.id);
+    return null;
+  }
+  const actionable = claimableContinuations(store, groupId, wake.continuations);
+  const consumed = wake.continuations.filter(registered => continuationAlreadyClaimed(store, registered));
+  if (actionable.length === 0) {
+    store.db.prepare("UPDATE scheduler_wakes SET delivered=1 WHERE id=?").run(wake.id);
+    const last = consumed.at(-1);
+    return last ? { kind: "claimed", runId: last.pendingRunId } : null;
+  }
+  const registered = actionable[0];
+  const run = createStartingRun(store, groupId, { workItemId: registered.taskId }, snapshot, wake.resumeRevision, registered);
+  if (actionable.length === 1) store.db.prepare("UPDATE scheduler_wakes SET delivered=1 WHERE id=?").run(wake.id);
+  return { kind: "claimed", runId: run.runId };
 }
 
 interface ClaimableTask { workItemId: string }
@@ -188,17 +240,28 @@ function nextClaimableTask(store: ControlStore, groupId: string): ClaimableTask 
   return null;
 }
 
-function createStartingRun(store: ControlStore, groupId: string, target: { workItemId: string }, snapshot: ExecutionSnapshotV1, startRevision: number): DispatchRun {
+function createStartingRun(
+  store: ControlStore,
+  groupId: string,
+  target: { workItemId: string },
+  snapshot: ExecutionSnapshotV1,
+  startRevision: number,
+  continuation?: RegisteredContinuation,
+): DispatchRun {
   const work = readWork(store, groupId, target.workItemId);
-  const claimOrdinal = ((work as unknown as { claimOrdinal?: number }).claimOrdinal ?? 0) + 1;
+  const claimOrdinal = continuation ? continuation.claimOrdinal : ((work as unknown as { claimOrdinal?: number }).claimOrdinal ?? 0) + 1;
+  const claimIdentity = continuation
+    ? `${continuation.desiredIntentId}:attempt:${claimOrdinal}`
+    : `task:${groupId}:${startRevision}:${work.taskId}:attempt:${claimOrdinal}`;
   const grant = structuredClone((work as unknown as { grant: { work: unknown; handoff: unknown } }).grant);
-  const runId = `run-${randomUUID()}`;
+  const runId = continuation ? continuation.pendingRunId : `run-${randomUUID()}`;
   const ownerToken = randomUUID();
   const binding = (slot: ProfileBindingV1): { profileId: string; profileHash: string } => ({ profileId: slot.profileId, profileHash: slot.profileHash });
   const envelope = dispatchEnvelopeSchema.parse({
     schema: "orca-dispatch-envelope-v1", phase: "work", groupId, workItemId: work.workItemId, runId, generation: 1,
-    claimIdentity: `task:${groupId}:${startRevision}:${work.taskId}:attempt:${claimOrdinal}`,
-    ownerTokenHash: createHash("sha256").update(ownerToken).digest("hex"), continuationIntentId: null, claimOrdinal,
+    claimIdentity,
+    ownerTokenHash: createHash("sha256").update(ownerToken).digest("hex"),
+    continuationIntentId: continuation?.continuationIntentId ?? null, claimOrdinal,
     derivedContractHash: (work as unknown as { derivedContractHash: string }).derivedContractHash, grants: grant,
     profiles: { estimator: null, worker: binding(snapshot.profiles.worker), handoff: binding(snapshot.profiles.handoff) },
   });
@@ -206,17 +269,19 @@ function createStartingRun(store: ControlStore, groupId: string, target: { workI
   writeCanonicalRecord(store, groupId, envelopeHash, canonicalBytes(envelope).toString("utf8"));
   const run: DispatchRun = {
     runId, groupId, workItemId: work.workItemId, taskId: work.taskId, estimateId: null, generation: 1,
-    graphVersion: snapshot.graphVersion, targetVersion: work.targetVersion, commandId: `start-${groupId}-${startRevision}-${work.workItemId}`,
+    graphVersion: snapshot.graphVersion, targetVersion: work.targetVersion,
+    commandId: continuation ? `continue-${groupId}-${continuation.resumeRevision}-${work.workItemId}` : `start-${groupId}-${startRevision}-${work.workItemId}`,
     configHash: work.configHash, grant, ownerToken, executionId: null, state: "starting", checkpointId: null, recoverable: false,
     remaining: structuredClone(grant), cumulative: { work: zero(), handoff: zero() }, unknown: { work: false, handoff: false },
     highWater: 0, breaches: [], handoffWorkItemId: null, phase: "work", claimOrdinal, providerAttemptOrdinal: 0, failureCode: null,
+    continuationIntentId: continuation?.continuationIntentId ?? null,
     executionProfile: { workKind: "task", ...binding(snapshot.profiles.worker) }, handoffProfile: { workKind: "handoff", ...binding(snapshot.profiles.handoff) },
   };
   store.db.prepare("INSERT INTO runs(id,group_id,work_item_id,generation,active,body) VALUES (?,?,?,1,1,?)").run(runId, groupId, work.workItemId, JSON.stringify(run));
   store.db.prepare("INSERT INTO outbox(id,kind,body,delivered) VALUES (?,'work-claim',?,0)")
     .run(`work:${groupId}:${runId}`, canonicalBytes({ groupId, workItemId: work.workItemId, runId, envelopeHash, sessionReservation: 1, attemptReservation: 0 }).toString("utf8"));
-  const record = readWork(store, groupId, target.workItemId) as unknown as { status: string; currentRunId: string | null; claimOrdinal: number; lineageRunIds?: string[] };
-  record.status = "running"; record.currentRunId = runId; record.claimOrdinal = claimOrdinal;
+  const record = readWork(store, groupId, target.workItemId) as unknown as { status: string; currentRunId: string | null; pendingRunId: string | null; claimOrdinal: number; lineageRunIds?: string[] };
+  record.status = "running"; record.currentRunId = runId; record.pendingRunId = null; record.claimOrdinal = claimOrdinal;
   record.lineageRunIds = [...new Set([...(record.lineageRunIds ?? []), runId])].sort();
   saveWork(store, groupId, record as never);
   return run;
@@ -226,7 +291,7 @@ function createStartingRun(store: ControlStore, groupId: string, target: { workI
  * A synchronously invalid first-attempt proof is proved not to have started: the run
  * settles `failed-before-provider` with zero provider calls and re-arms the task.
  */
-export function settleProviderAttempt(deps: WebDispatchDeps, input: { runId: string; phase: Phase; firstAttemptProof: "invalid" }): { run: DispatchRun; providerCalls: number; wakeId: string } {
+export function settleProviderAttempt(deps: WebDispatchDeps, input: { runId: string; phase: Phase; firstAttemptProof: "invalid" }): { run: DispatchRun; providerCalls: number; wakeId: string | null } {
   const { store } = deps;
   return store.transaction(() => {
     const run = readDispatchRun(store, input.runId);
@@ -241,8 +306,13 @@ export function settleProviderAttempt(deps: WebDispatchDeps, input: { runId: str
     const work = readWork(store, run.groupId, run.workItemId) as unknown as { status: string };
     // `currentRunId` names the most recent run for the work item, not an active one,
     // so the failed run keeps it until a re-armed claim replaces it.
-    work.status = "ready";
+    work.status = run.continuationIntentId ? "continuing" : "ready";
     saveWork(store, run.groupId, work as never);
+    if (run.continuationIntentId) {
+      // A registered continuation is retried only through `recovery-retry`, which re-arms
+      // the same intent with a fresh claim ordinal.
+      return { run, providerCalls: 0, wakeId: null };
+    }
     const wakeId = `scheduler-wake:${run.groupId}:no-start:${run.runId}:${ordinal}`;
     const startRevision = claimStartRevision(readWorkClaimEnvelope(store, run.groupId, run.runId).claimIdentity, run.groupId);
     store.db.prepare("INSERT INTO scheduler_wakes(id,group_id,kind,body,delivered) VALUES (?,?,'no-start',?,0) ON CONFLICT(id) DO NOTHING")
@@ -272,7 +342,8 @@ export type AttemptReservation =
 
 /**
  * Reserve exactly one provider attempt for one invocation. A run whose context
- * watermark is latched can no longer reserve a work-phase attempt at all.
+ * watermark is latched, or whose handoff stop is being collected, can no longer
+ * reserve a work-phase attempt at all.
  */
 export function beginProviderAttempt(deps: WebDispatchDeps, runId: string, phase: Phase): AttemptReservation {
   const { store, admissionGate } = deps;
@@ -283,6 +354,9 @@ export function beginProviderAttempt(deps: WebDispatchDeps, runId: string, phase
       if (phase === "work") {
         const latch = store.db.prepare("SELECT request_id FROM context_latches WHERE run_id=? AND generation=?").get(runId, run.generation);
         if (latch) return { kind: "suppressed" as const, requestId: latch.request_id == null ? null : String(latch.request_id) };
+        const held = store.db.prepare("SELECT id FROM handoff_requests WHERE run_id=? AND state IN ('latched','collecting') ORDER BY rowid")
+          .get(runId);
+        if (held) return { kind: "suppressed" as const, requestId: String(held.id) };
       }
       run.providerAttemptOrdinal += 1;
       saveDispatchRun(store, run);
@@ -347,6 +421,7 @@ export function createWebWakeHandlers(deps: WebWakeDeps): WakeHandlers {
   return {
     start,
     "no-start": start,
+    resume: start,
     "budget-estimate": async (wake) => {
       const estimateId = wake.body.estimateId;
       if (typeof estimateId !== "string") throw new ControlError("recovery-blocked");

@@ -12,6 +12,8 @@ import { amountSchema } from "./schema.js";
 import { writeCanonicalRecord, readCanonicalRecord } from "./snapshot.js";
 import { dispatchEnvelopeSchema, estimateExecutionContractSchema } from "./webProtocol.js";
 import { scheduleStart, type StartCommand } from "./webDispatch.js";
+import { applyHandoffStop, applyPauseDispatch, applyRecoveryRetry, applyResumeDispatch, type HandoffStopCommand, type PauseCommand, type RecoveryRetryCommand, type ResumeDispatchCommand, type StopDeps } from "./stopIntent.js";
+import { applyContinueTask, applyResumeFromHandoff, type ContinueTaskCommand, type ResumeFromHandoffCommand } from "./continuation.js";
 import { recordProjectionChange } from "./projectionJournal.js";
 import type { Amount } from "./types.js";
 import type { ControlStore } from "./store.js";
@@ -24,7 +26,7 @@ export type ReestimateCommand = Extract<RawAuthorityCommandV1, { verb: "estimate
 export type ConfirmCommand = Extract<RawAuthorityCommandV1, { verb: "confirm" }>;
 export type SetLimitCommand = Extract<RawAuthorityCommandV1, { verb: "set-limit" }>;
 export type WebCommandResult = CommandLookupV1["body"];
-export interface WebServiceDeps extends AsyncImportDeps { admissionGate?: AdmissionGate }
+export interface WebServiceDeps extends AsyncImportDeps { admissionGate?: AdmissionGate; now?: () => Date }
 interface EstimateRun { runId: string; groupId: string; workItemId: string; phase: string; state: string; claimOrdinal: null; providerAttemptOrdinal: number; remaining: { work: Amount; handoff: Amount }; cumulative: { work: Amount; handoff: Amount }; unknown: { work: boolean; handoff: boolean }; [key: string]: unknown }
 
 const ledgerSchema = z.object({ groupLimit: amountSchema, used: amountSchema, committedRemaining: amountSchema, explicitUnallocatedReserve: amountSchema, budgetDeficit: amountSchema, usageUnknown: z.boolean() }).strict();
@@ -354,6 +356,27 @@ export class WebControlService {
   }
   async start(command: StartCommand): Promise<WebCommandResult> {
     return scheduleStart({ store: this.store, profileRouter: this.deps.profileRouter, admissionGate: this.deps.admissionGate }, command);
+  }
+  private stopDeps(): StopDeps {
+    return { store: this.store, profileRouter: this.deps.profileRouter, admissionGate: this.deps.admissionGate, now: this.deps.now, beforeCommit: this.deps.beforeCommit };
+  }
+  async pauseDispatch(command: PauseCommand): Promise<WebCommandResult> {
+    return applyPauseDispatch(this.stopDeps(), command) as WebCommandResult;
+  }
+  async handoffStop(command: HandoffStopCommand): Promise<WebCommandResult> {
+    return applyHandoffStop(this.stopDeps(), command) as WebCommandResult;
+  }
+  async resumeDispatch(command: ResumeDispatchCommand): Promise<WebCommandResult> {
+    return applyResumeDispatch(this.stopDeps(), command) as WebCommandResult;
+  }
+  async recoveryRetry(command: RecoveryRetryCommand): Promise<WebCommandResult> {
+    return applyRecoveryRetry(this.stopDeps(), command) as WebCommandResult;
+  }
+  async resumeFromHandoff(command: ResumeFromHandoffCommand): Promise<WebCommandResult> {
+    return applyResumeFromHandoff(this.stopDeps(), command) as WebCommandResult;
+  }
+  async continueTask(command: ContinueTaskCommand): Promise<WebCommandResult> {
+    return applyContinueTask(this.stopDeps(), command) as WebCommandResult;
   }
   confirm(command: ConfirmCommand): WebCommandResult {
     return this.mutate(() => applyWebCommand(this.store, {

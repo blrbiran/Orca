@@ -58,6 +58,7 @@ export const durableCommandErrorStatuses = {
   "start-contract-conflict": 409,
   "start-envelope-conflict": 409,
   "start-state-conflict": 409,
+  "stop-already-active": 409,
   "stop-mode-conflict": 409,
   "target-version-conflict": 409,
   "usage-event-conflict": 409,
@@ -235,6 +236,7 @@ export const v1WebErrorCodes = [
   "route-not-found",
   "shutdown-frozen-set-inconsistent",
   "start-proof-outcome-unknown",
+  "stop-already-active",
   "stop-mode-conflict",
 ] as const satisfies readonly KnownControlErrorCode[];
 
