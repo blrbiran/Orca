@@ -11,6 +11,7 @@ import { readArchivedPlan, readBudgetProposal, readEstimateRecord, type BudgetPr
 import { amountSchema } from "./schema.js";
 import { writeCanonicalRecord, readCanonicalRecord } from "./snapshot.js";
 import { dispatchEnvelopeSchema, estimateExecutionContractSchema } from "./webProtocol.js";
+import { scheduleStart, type StartCommand } from "./webDispatch.js";
 import { recordProjectionChange } from "./projectionJournal.js";
 import type { Amount } from "./types.js";
 import type { ControlStore } from "./store.js";
@@ -350,6 +351,9 @@ export class WebControlService {
       this.store.db.prepare("INSERT INTO outbox(id,kind,body,delivered) VALUES (?,'estimate-result',?,1)").run(receiptId, canonicalBytes({ groupId: id, estimateId, runId: run.runId, rawHash, rawIdentity }).toString("utf8"));
       saveWebAuthority(this.store, group, proposal); recordProjectionChange(this.store, [id]);
     }));
+  }
+  async start(command: StartCommand): Promise<WebCommandResult> {
+    return scheduleStart({ store: this.store, profileRouter: this.deps.profileRouter, admissionGate: this.deps.admissionGate }, command);
   }
   confirm(command: ConfirmCommand): WebCommandResult {
     return this.mutate(() => applyWebCommand(this.store, {

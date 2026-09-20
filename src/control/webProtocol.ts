@@ -202,6 +202,105 @@ export const requestBoundProofArtifactSchema = z
     }
   });
 
+const proofPhaseSchema = z.enum(["estimate", "work", "handoff"]);
+
+export const proofAcceptedRecordSchema = z
+  .object({
+    schema: z.literal("orca-proof-accepted-v1"),
+    runId: idSchema,
+    generation: positiveSafeInteger,
+    phase: proofPhaseSchema,
+    providerAttemptOrdinal: positiveSafeInteger,
+    artifactHash: hashSchema,
+    dispatchEnvelopeHash: hashSchema,
+    acceptedAt: canonicalTimestampSchema,
+  })
+  .strict();
+export type ProofAcceptedRecordV1 = z.infer<typeof proofAcceptedRecordSchema>;
+
+export const providerStartMarkerSchema = z
+  .object({
+    schema: z.literal("orca-provider-start-v1"),
+    runId: idSchema,
+    generation: positiveSafeInteger,
+    phase: proofPhaseSchema,
+    artifactHash: hashSchema.nullable(),
+    dispatchEnvelopeHash: hashSchema,
+    providerAttemptOrdinal: positiveSafeInteger,
+    startedAt: canonicalTimestampSchema,
+  })
+  .strict();
+export type ProviderStartMarkerV1 = z.infer<typeof providerStartMarkerSchema>;
+
+export const noProviderStartProofSchema = z
+  .object({
+    schema: z.literal("orca-no-provider-start-v1"),
+    runId: idSchema,
+    generation: positiveSafeInteger,
+    phase: proofPhaseSchema,
+    providerAttemptOrdinal: positiveSafeInteger,
+    artifactHash: hashSchema.nullable(),
+    dispatchEnvelopeHash: hashSchema,
+    adapterExecutionId: nonemptyString,
+    providerInvoked: z.literal(false),
+    terminalObservationHash: hashSchema,
+    stopProofHash: hashSchema,
+    observedAt: canonicalTimestampSchema,
+  })
+  .strict();
+export type NoProviderStartProofV1 = z.infer<typeof noProviderStartProofSchema>;
+
+export const adapterTerminalObservationSchema = z
+  .object({
+    schema: z.literal("orca-adapter-terminal-observation-v1"),
+    adapterExecutionId: nonemptyString,
+    runId: idSchema,
+    generation: positiveSafeInteger,
+    phase: proofPhaseSchema,
+    providerAttemptOrdinal: positiveSafeInteger,
+    state: z.literal("exited-before-provider"),
+    exitCode: z.number().int().nullable(),
+    signal: z.string().nullable(),
+    finalJournalHash: hashSchema,
+    observedAt: canonicalTimestampSchema,
+  })
+  .strict();
+export type AdapterTerminalObservationV1 = z.infer<typeof adapterTerminalObservationSchema>;
+
+export const adapterStopProofSchema = z
+  .object({
+    schema: z.literal("orca-adapter-stop-proof-v1"),
+    adapterExecutionId: nonemptyString,
+    runId: idSchema,
+    generation: positiveSafeInteger,
+    phase: proofPhaseSchema,
+    providerAttemptOrdinal: positiveSafeInteger,
+    providerStartMarkerPresent: z.literal(false),
+    processGroupStopped: z.literal(true),
+    finalJournalHash: hashSchema,
+    stoppedAt: canonicalTimestampSchema,
+  })
+  .strict();
+export type AdapterStopProofV1 = z.infer<typeof adapterStopProofSchema>;
+
+// workerSessionOrdinal must equal 1 and sequence must be the next accepted value; those
+// cross-record checks live in the observation handler so they surface as `context-observation-invalid`.
+export const contextObservationSchema = z
+  .object({
+    schema: z.literal("orca-context-observation-v1"),
+    runId: idSchema,
+    generation: positiveSafeInteger,
+    workerSessionOrdinal: safeInteger,
+    sequence: positiveSafeInteger,
+    occupiedInputTokens: safeInteger,
+    requestMaxOutputTokens: positiveSafeInteger,
+    tokenizerId: nonemptyString,
+    tokenizerVersion: nonemptyString,
+    observedAt: canonicalTimestampSchema,
+  })
+  .strict();
+export type ContextObservationV1 = z.infer<typeof contextObservationSchema>;
+
 export const dispatchEnvelopeSchema = z
   .object({
     schema: z.literal("orca-dispatch-envelope-v1"),
@@ -1081,5 +1180,6 @@ export type GroupViewV1 = z.infer<typeof groupViewSchema>;
 export type RecoveryViewV1 = z.infer<typeof recoveryViewSchema>;
 export type EvidenceManifestV1 = z.infer<typeof evidenceManifestSchema>;
 export type CommandErrorV1 = z.infer<typeof commandErrorSchema>;
+export type CommandErrorBodyV1 = z.infer<typeof commandErrorBodySchema>;
 export type CommandSuccessV1 = z.infer<typeof commandSuccessSchema>;
 export type CommandLookupV1 = z.infer<typeof commandLookupSchema>;

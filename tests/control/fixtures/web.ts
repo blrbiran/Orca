@@ -2,6 +2,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { vi } from "vitest";
 import { openTestStore } from "./store.js";
+import { createAdmissionGate } from "../../../src/control/admissionGate.js";
 import { resolveProfile, createExecutionProfileRouter } from "../../../src/control/profiles.js";
 import { importControlPlan } from "../../../src/control/planImport.js";
 import { canonicalBytes, sha256Canonical } from "../../../src/control/canonicalJson.js";
@@ -37,7 +38,7 @@ export async function webFixture(snapshot = profileSnapshot()) {
   const contractPath = join(h.root, "contract.json"), planPath = join(repo, "plan.json");
   await writeFile(contractPath, canonicalBytes(contract));
   await writeFile(planPath, JSON.stringify({ targetRepo: repo, ccloopBin: "/bin/true", runsDir: h.root, workBranch: "orca/work", policy: "local-merge", ledgerMode: "out-of-repo", goal: "ship", successConditions: ["passes"], tasks: [{ taskId: "a", contract: contractPath, dependsOn: [], targetVersion: "v1", configHash: sha256Canonical({}) }] }));
-  const deps = { store: h.store, profileRouter: router, trustedConfig: { resolveTarget: () => ({ repositoryPath: repo, planPath, validatePlanDescriptor() {} }) },
+  const deps = { store: h.store, admissionGate: createAdmissionGate(), profileRouter: router, trustedConfig: { resolveTarget: () => ({ repositoryPath: repo, planPath, validatePlanDescriptor() {} }) },
     defaults: () => ({ estimatorProfileId: "all", estimatorProfileHash: frozen.profileHash, estimateMode: "soft" as const }) };
   const imported = importControlPlan({ ...deps, estimatorObservation: () => ({ profile: frozen, observed, probeFailureCode: null }) }, {
     schema: "orca-raw-command-v1", commandId: "import", expectedRevision: 0, actorId: "human", verb: "import-plan", target: { kind: "group", groupId: "g" }, payload: { groupId: "g", repoId: "repo", planId: "plan" } });

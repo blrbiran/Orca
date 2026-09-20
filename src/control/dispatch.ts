@@ -80,3 +80,34 @@ export async function reconcileStart(store:ControlStore,port:ExecutionPort,runId
  }
  return persistStatus(store,input,status,gate);
 }
+
+export type SchedulerWakeKind = "start" | "no-start" | "budget-estimate";
+export interface SchedulerWake { id: string; groupId: string; kind: SchedulerWakeKind; body: Record<string, unknown> }
+/** A handler returns true only when the wake's effect is durably in place; false or a throw keeps it pending. */
+export type WakeHandler = (wake: SchedulerWake) => Promise<boolean>;
+export type WakeHandlers = Partial<Record<SchedulerWakeKind, WakeHandler>>;
+
+function groupClaimBlocked(store:ControlStore,groupId:string):boolean {
+ return store.db.prepare("SELECT id FROM recovery_blockers WHERE group_id=? AND scope='group'").get(groupId)!==undefined;
+}
+
+/**
+ * Drain `scheduler_wakes` oldest-first through kind handlers. A wake is acknowledged
+ * exactly once and only by a delivery that succeeded: a global blocker, a group
+ * blocker or a missing handler all leave it durably pending for the next round.
+ */
+export async function deliverSchedulerWakes(store:ControlStore,handlers:WakeHandlers):Promise<{delivered:string[];deferred:string[]}> {
+ const pending=store.db.prepare("SELECT id,group_id,kind,body FROM scheduler_wakes WHERE delivered=0 ORDER BY rowid").all();
+ const delivered:string[]=[],deferred:string[]=[];
+ for (const row of pending) {
+  const id=String(row.id),groupId=String(row.group_id),kind=String(row.kind) as SchedulerWakeKind;
+  const handler=handlers[kind];
+  if(store.dispatchBlocked||handler===undefined||groupClaimBlocked(store,groupId)){deferred.push(id);continue;}
+  let done=false;
+  try{done=await handler({id,groupId,kind,body:JSON.parse(String(row.body))});}catch{done=false;}
+  if(!done){deferred.push(id);continue;}
+  store.db.prepare("UPDATE scheduler_wakes SET delivered=1 WHERE id=? AND delivered=0").run(id);
+  delivered.push(id);
+ }
+ return {delivered,deferred};
+}

@@ -156,6 +156,7 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
     ["/api/control/groups/:groupId/estimates", "estimate"],
     ["/api/control/groups/:groupId/confirm", "confirm"],
     ["/api/control/groups/:groupId/set-limit", "set-limit"],
+    ["/api/control/groups/:groupId/start", "start"],
   ] as const;
   for (const [path, verb] of routes) app.post(path, asyncRoute(async (req, res) => {
     let id: string | null = null;
@@ -170,6 +171,7 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
         case "estimate": await service.createEstimate(command); break;
         case "confirm": service.confirm(command); break;
         case "set-limit": service.setLimit(command); break;
+        case "start": await service.start(command); break;
         default: throw new ControlError("route-not-found");
       }
       const result = lookupCommandResult(store, id, command.commandId);

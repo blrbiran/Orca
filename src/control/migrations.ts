@@ -1,6 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
 
-export const schemaVersion = "2";
+export const schemaVersion = "3";
 export const legacySchema = `CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;
 CREATE TABLE groups(id TEXT PRIMARY KEY, revision INTEGER NOT NULL, graph_version INTEGER NOT NULL, body TEXT NOT NULL) STRICT;
 CREATE TABLE work_items(group_id TEXT NOT NULL REFERENCES groups(id), id TEXT NOT NULL, target_version INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY(group_id,id)) STRICT;
@@ -50,10 +50,18 @@ INSERT INTO projection_state(singleton,change_seq,oldest_retained_seq)
 INSERT INTO projection_journal(change_seq,group_id,projection_seq) SELECT 1,id,1 FROM groups;
 `;
 
-export const initialSchema = legacySchema + schema1To2;
+// One canonical record per evidence kind per (runId,generation,phase,providerAttemptOrdinal):
+// a byte-identical repeat is idempotent, a divergent second record is contradictory evidence.
+export const schema2To3 = `CREATE TABLE attempt_evidence(run_id TEXT NOT NULL REFERENCES runs(id), generation INTEGER NOT NULL, phase TEXT NOT NULL CHECK(phase IN ('estimate','work','handoff')), provider_attempt_ordinal INTEGER NOT NULL, kind TEXT NOT NULL CHECK(kind IN ('proof-accepted','provider-start','no-start','adapter-terminal-observation','adapter-stop-proof')), body TEXT NOT NULL, PRIMARY KEY(run_id,generation,phase,provider_attempt_ordinal,kind)) STRICT;
+CREATE TABLE context_observations(run_id TEXT NOT NULL REFERENCES runs(id), generation INTEGER NOT NULL, sequence INTEGER NOT NULL CHECK(sequence > 0), body TEXT NOT NULL, PRIMARY KEY(run_id,generation,sequence)) STRICT;
+CREATE TABLE context_latches(run_id TEXT NOT NULL REFERENCES runs(id), generation INTEGER NOT NULL, reason TEXT NOT NULL CHECK(reason IN ('context-threshold-crossed','context-observation-gap')), request_id TEXT, PRIMARY KEY(run_id,generation)) STRICT;
+`;
+
+export const initialSchema = legacySchema + schema1To2 + schema2To3;
 
 export function migrateSchema(store: DatabaseSync, fromVersion: string): void {
-  if (fromVersion !== "1") throw new Error("control-schema-unsupported");
-  store.exec(schema1To2);
+  if (fromVersion === "1") store.exec(schema1To2 + schema2To3);
+  else if (fromVersion === "2") store.exec(schema2To3);
+  else throw new Error("control-schema-unsupported");
   store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
 }

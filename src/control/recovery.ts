@@ -1,6 +1,6 @@
 import type { ControlStore } from "./store.js";
 import type { ExecutionPort } from "./executionPort.js";
-import { reconcileStart } from "./dispatch.js";
+import { reconcileStart, deliverSchedulerWakes, type WakeHandlers } from "./dispatch.js";
 import { readRun } from "./budget.js";
 import { readCommittedCheckpoint,verifyCandidateArtifacts,repairAcceptedWork } from "./checkpoints.js";
 import { publishPending } from "./projection.js";
@@ -10,7 +10,7 @@ import { collectControlled,disposeControlled,confirmLanding } from "./schedulerB
 import { acquireRepoLock } from "../scheduler/repoLock.js";
 
 /** Recovery never creates a replacement run or executes a Git merge. */
-export async function recoverControl(store:ControlStore,port:ExecutionPort):Promise<{blockedRunIds:string[];replayedProjectionIds:string[]}> {
+export async function recoverControl(store:ControlStore,port:ExecutionPort,wakes?:{handlers:WakeHandlers}):Promise<{blockedRunIds:string[];replayedProjectionIds:string[];pendingWakeIds:string[]}> {
  const release=store.beginOperation();
  try {
  store.assertOwner();store.dispatchBlocked=true;
@@ -47,6 +47,10 @@ export async function recoverControl(store:ControlStore,port:ExecutionPort):Prom
   try{await cleanupCommittedRun(store,input.runId,input.sourceDir);}catch{blocked.add(input.runId);}
  }
  store.dispatchBlocked=blocked.size>0;
- return {blockedRunIds:[...blocked].sort(),replayedProjectionIds};
+ // Pending wakes are the durable record of an intent the crashed scheduler never
+ // carried out; they are drained only after this process owns the store and the
+ // run walk has decided whether dispatch is safe.
+ const delivery=wakes?await deliverSchedulerWakes(store,wakes.handlers):{deferred:[] as string[]};
+ return {blockedRunIds:[...blocked].sort(),replayedProjectionIds,pendingWakeIds:delivery.deferred};
  } finally {release();}
 }
