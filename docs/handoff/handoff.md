@@ -4952,3 +4952,28 @@ Task 6 原独立审查的 4 个 Important 与 1 个 Minor 均已修复：非规�
 最终全套 `ORCA_CCLOOP_BIN=/tmp/ccloop-codex-0919/dist/cli.js ORCA_CCLOOP_ADAPTER_CONFIG=/tmp/orca-ccloop-d3-task8/fake-codex-config.json npm run verify` RC0：主套 163 文件／1384 测试，control 32／287（含真实 ccloop 3／3），scheduler 51／167，chain 13／213，chain 环境主套 163／1384，Web build、panel PASS0–14、Web 9／34；typecheck 和 `git diff --check` 通过。聚焦最终回归为 estimator 18／18、confirmation 8／8。提交按主题 `fix(control): close Task 6 settlement review gaps` 与 `fix(control): reject noncanonical validated estimates` 定位；本文提交会继续移动 HEAD，不固定哈希、ahead 数或发布状态。
 
 下一项是计划 `docs/superpowers/plans/2026-09-20-web-recoverable-control.md` 的 Task 7：durable start、proof recovery 与 context-watermark control；先写 start/proof 真值表 RED，再实现 wake/delivery/claim/proof/session admission 与恢复，不能把 Codex `phase-end + soft` 宣称为 strict。复现与实现报告保留在控制开发树 `.superpowers/sdd/2026-09-20-web-recoverable-control/task-6-review-report.md`、同目录 `task-6-implementer-report.md`；开发树、node_modules、全部 SDD 证据、ccloop fixture 均保留。三仓仅本地提交，未 push、未清理分支/worktree；chain 活验仍须人选 model 并明确点头。
+
+## 2026-09-21 Web 可恢复控制交接（Task 7–8 已完成，下一位从 Task 9 接手）
+
+本节取代上节「下一项是 Task 7」的状态，是当前接手入口。计划 `docs/superpowers/plans/2026-09-20-web-recoverable-control.md` 的 **Task 1–8 已全部提交在本地 `main`，勿重做**。定位用提交主题：Task 7 是 `feat(control): dispatch recoverable web runs`，Task 8 是 `feat(control): orchestrate recoverable web stops`。本文提交会继续移动 HEAD，因此不固定任何哈希、ahead 数或发布状态；三仓仍全部只有本地提交，未 push、未清理分支／worktree／证据。
+
+**Task 7 交付**：durable start（wake→claim→proof→session admission 的真值表全实现）、start proof recovery、context-watermark control（阈值穿越与 observation gap 的 latch／抑制）。Codex 仍是 `phase-end + soft`，任何地方都不得宣称 strict。
+
+**Task 8 交付**（四个模块，判据来自 spec §6 与三件新测试文件）：
+- `src/control/stopIntent.ts`：pause／handoff-stop／resume-dispatch／recovery-retry。stop 强度按 `pause < shutdown < human handoff-stop` 合成；一个 run 只有一个开放 request，后来者 join 且 adopt 只缩短 deadline；frozen set 与其 request／join 身份在同一事务落账；model-assisted 每次 attempt 现探测、proof 与 ordinal 失败关闭；`outcome-unknown` 由 run-scoped recovery 用 `handoff-recovery:<requestId>:<commandId>` 重新排队并把 request 复位为 `request-pending`。
+- `src/control/continuation.ts` ＋ `src/control/webDispatch.ts`：`resume-from-handoff` 批量注册全有或全无，`continue-task` 单任务注册，`pendingRunId`／`claimOrdinal`／lineage 记账，`failed-before-provider` 的 re-arm 保留同一 intent 身份只推进 ordinal。
+- `src/panel/controlLifecycle.ts`：冻结 shutdown 窗口（默认 grace 120000ms，饱和于最大协议时刻），先关 admission 再等已准入写者（`beginDrain()`＋await，shutdown 自己不 `enter()`），一笔 global command 跨组单事务提交，disposition 为 `created | strengthened-pause | preserved-pause | preserved-handoff | preserved-shutdown | blocked-inconsistent`，不一致 frozen set 落 `shutdown-frozen-set-inconsistent` blocker；`runControlPanelStartup` 保持 recovery 在 listen 之前。
+- `src/panel/controlApi.ts`：新增六个动词路由，含无 group 前缀的 `POST /api/control/recovery/retry`（run 作用域由 `runs.group_id` 反查台账 scope）与 task 目标的 `POST /api/control/groups/:groupId/tasks/:taskId/continue`；drain 期间的写请求返回 503 `panel-draining` 且不留 ledger 行。
+
+**本轮验证**：`tsc --noEmit` 干净；全套 167 文件通过／1 跳过、**1484 passed／3 skipped**；聚焦 `tests/control tests/panel` 为 56 文件／557 passed／3 skipped（其中新增 3 个真 HTTP 路由判据）。⚠️ **环境偏差必须带走**：验证命令没有走 `rtk proxy`，而是 `PATH="/usr/local/bin:$PATH" /usr/local/bin/node node_modules/.bin/{tsc,vitest}`，因为全局 `/opt/homebrew` 那颗 node 缺 `libsimdjson.26.dylib`；`scripts/githooks/pre-commit` 调裸 `node`，所以 **`git commit` 也要带同一 PATH 前缀**（本轮第一次未带，hook 崩掉、提交未发生）。人已裁定「不修全局，用 PATH 前缀提交」。
+
+**本轮披露的测试更正**（判据文本一个字未改，改的都是判据之外的观察形状；实施者无权自改判据）：`tests/control/stopIntent.test.ts` 补 `await`、补 node:sqlite 的 `.run()`（`prepare()` 不执行）、读 `remaining.work.activeMs`、`requests()` 投影补 `failureCode`、frozen-set 断言按 phase 过滤（fixture 的 estimate wake 会留下一个合法被冻结的 run）；`tests/control/webContinuation.test.ts` 排序两侧一致、**durable 4xx 也计 ledger 行**（`commands + 1`，先核 `errors.ts` 再改）、依赖判据取 `ready`；`tests/panel/controlLifecycle.test.ts` 的 outbox 唯一身份改用 `kind='handoff-request' AND json_extract(body,'$.runId')=?`（run id 也出现在 claim 行里）、lost-commit 用例的 revision 改相对值。**若下一位认为某条更正改错了判据，按原判据重新立 RED，不要沿用本文。**
+
+**与 spec 的两处冲突**（已落地，待人确认）：§6.4 的 shutdown 命令 ID `shutdown:<epoch>` 与 `idSchema`（不允许冒号）冲突 ⇒ 实现为 hash 形态 `shutdown-<sha256(epoch)>`；§6.2 join 的 `origin` 联合写了 `human`，而 `tests/control/stopIntent.test.ts` 断言 `"handoff"` ⇒ 按测试取 `handoff`／`shutdown`。
+
+**挂账（下一步要先知道的）**：
+1. `src/panel/server.ts`／`api.ts` **至今不构造 control runtime**（没有 stateDir、trusted config、profile、scheduler 的生产装配），所以 `orca panel` 实际一格 `/api/control` 都没挂载；唯一挂载点是 `buildApi` 的 `deps.control`。Task 8 Step 6 因此只交付了路由层，**把生产挂载留给 Task 10 Step 1**（那里才要求「临时 stateDir ＋ 确定性 profile／ExecutionPort ＋ 真 token 的真 Panel」）。计划文件列表点名 `server.ts`，本轮有意未改，理由记在此处。
+2. 一个 `failed-before-provider` 的 run 会留着 `remaining = zero()` 而非零 grant，违反 `validAccounting`，使该组在 panel 读路径被 block。Task 9 前要么修账，要么明确接受这个表现。
+3. RED／GREEN 与台账仍在开发树 `/Users/biran/.codex/worktrees/control-foundation-0919/Orca/.superpowers/sdd/2026-09-20-web-recoverable-control/`（gitignored，main 树无此目录）。历史台账一个字不改。
+
+**下一件事**：Task 9（薄 Web 控制客户端与可恢复浏览器状态，计划 Step 1–7：先状态机 RED、再组件 RED、然后 wrapper／canonical state／薄 UI、Web GREEN ＋ root parity），随后 Task 10 验收与证据图；再往后是自动拆分、ccmem 纠正闭环／组 goal 验收。约束不变：开门／合并／删分支或 worktree／push 四件需人单独授权，控制器不许 push，非门合并一律 `--ff-only`，成本只报工具给出的数，chain 活验须人选 model 并点头；Claude 额度 2026-09-22 09:00 Asia/Shanghai 后再核实。本切片没有任何真实模型调用。
