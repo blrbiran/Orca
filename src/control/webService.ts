@@ -329,10 +329,16 @@ export class WebControlService {
       if (dimensions.some(d => group.used[d] < run.cumulative.work[d])) throw new ControlError("recovery-blocked");
       const currentBalance = budgetBalance(group.limit, group.used, group.reserved);
       if (!same(currentBalance.reserve, proposal.explicitUnallocatedReserve) || !same(currentBalance.deficit, group.ledger.budgetDeficit)) throw new ControlError("recovery-blocked");
-      let output;
-      try { output = validateEstimateOutput(rawOutput, plan.planHash, plan.plan.tasks.map(t => t.taskId)); }
-      catch (error) { if (!(error instanceof ControlError)) throw error; }
-      estimate.state = output ? "ready" : "failed"; estimate.output = output ?? null; estimate.outputHash = output ? sha256Canonical(output) : null; estimate.reasonCode = output ? null : "plan-version-conflict";
+      let output, outputHash: string | null = null;
+      try {
+        output = validateEstimateOutput(rawOutput, plan.planHash, plan.plan.tasks.map(t => t.taskId));
+        outputHash = sha256Canonical(output);
+      }
+      catch (error) {
+        if (!(error instanceof ControlError)) throw error;
+        output = undefined; outputHash = null;
+      }
+      estimate.state = output ? "ready" : "failed"; estimate.output = output ?? null; estimate.outputHash = outputHash; estimate.reasonCode = output ? null : "plan-version-conflict";
       if (rawCanonicalJson !== null) writeCanonicalRecord(this.store, id, rawHash, rawCanonicalJson);
       if (output) writeCanonicalRecord(this.store, id, estimate.outputHash!, canonicalBytes(output).toString("utf8"));
       group.ledger.committedRemaining = residual(group.reserved, zero(), run.remaining.work);

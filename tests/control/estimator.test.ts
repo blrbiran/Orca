@@ -149,6 +149,21 @@ describe("frozen estimator", () => {
       expect(() => service.completeEstimate("g", h.estimateId, { different: output })).toThrow("report-identity-conflict");
     } finally { await h.dispose(); }
   });
+  it.each(["lone surrogate", "negative zero"])("terminally fails a schema-valid but noncanonical estimate: %s", async invalid => {
+    const h = await webFixture(); try {
+      const service = new WebControlService(h.deps), run = await service.claimEstimate("g", h.estimateId), plan = readArchivedPlan(h.store, "g");
+      const output = { schema: "budget-estimate-v1", planHash: plan.planHash,
+        tasks: [{ taskId: "a", complexity: "M", confidence: "high", work: { tokens: invalid === "negative zero" ? -0 : 100, activeMs: 100, attempts: 1, sessions: 1 }, handoff: { tokens: 1, activeMs: 100, attempts: 1, sessions: 1 }, rationale: "small", assumptions: ["clean tree"] }],
+        goalReviewReserve: { tokens: 100, activeMs: 100, attempts: 1, sessions: 1 }, groupRationale: invalid === "lone surrogate" ? "\ud800" : "small" };
+      const row = JSON.parse(String(h.store.db.prepare("SELECT body FROM runs WHERE id=?").get(run!.runId)!.body));
+      row.state = "settled-restartable";
+      h.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify(row), run!.runId);
+      service.completeEstimate("g", h.estimateId, output);
+      expect(readEstimateRecord(h.store, "g", h.estimateId)).toMatchObject({ state: "failed", output: null, outputHash: null });
+      expect(h.store.db.prepare("SELECT active FROM runs WHERE id=?").get(run!.runId)!.active).toBe(0);
+      service.completeEstimate("g", h.estimateId, output);
+    } finally { await h.dispose(); }
+  });
   it("settles a known soft-budget deficit instead of stranding the estimate", async () => {
     const h = await webFixture(); try {
       const service = new WebControlService(h.deps), run = await service.claimEstimate("g", h.estimateId);
