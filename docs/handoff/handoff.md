@@ -4941,7 +4941,7 @@ SDD新增review-fix-evidence目录，保留全部旧台账与证据。产品已�
 
 关键竞态已修：Orca polling 不再用会创建目录的 helper 触碰 terminal source；ccloop 在 candidate durable 后才暴露 terminal，并负责精确物化 `sourceDir/repo`；Orca 只读校验，预先存在的非 Git 目录失败关闭。保留诊断根 `.../orca-real-ccloop-MyDo5O`、fixture `/private/tmp/orca-ccloop-d3-task8`、两开发树、node_modules 和全部 SDD 证据。最终真实 `/Users/biran/.orca` 仍不存在；本切片没有真实模型调用。
 
-下一步依次是 Web 可恢复任务控制 → 自动拆分 → ccmem 纠正闭环／组 goal 验收；agent 适配继续留在 ccloop。一次 Codex 真钱三阶段功能成功，但 wrapper 修正版只做了离线修复、未真钱重跑，不能升级表述。整合、push、删分支/worktree与证据清理由人操作。Claude 额度在 2026-09-22 09:00 Asia/Shanghai 后再核实；Orca chain 活验仍须人选择 model 并明确点头。
+下一步依次是 Web 可恢复任务控制 → 自动拆分 → ccmem 纠正闭环／组 goal 验收；agent 适配继续留在 ccloop。一次 Codex 真钱三阶段功能成功，但 wrapper 修正版只做了离线修复、未真钱重跑，不能升级表述。Orca 与 ccloop 相关分支已按用户授权在本地合入各自 `main`，未 push、未删除分支/worktree 或证据。Claude 额度在 2026-09-22 09:00 Asia/Shanghai 后再核实；Orca chain 活验仍须人选择 model 并明确点头。
 
 ## 2026-09-20 Web 可恢复控制临时交接（Task 6 已合入，先修审查阻塞）
 
