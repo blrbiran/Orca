@@ -13,6 +13,24 @@ import type {
 } from "../../web/src/types.js";
 import { WEB_CORRECTION_KINDS, WEB_LIST_FIELDS, WEB_REPORT_FIELDS } from "../../web/src/types.js";
 import { CORRECTION_KINDS } from "../../src/corrections/schema.js";
+import type {
+  CommandErrorV1 as ServerCommandErrorV1,
+  CommandLookupV1 as ServerCommandLookupV1,
+  ControlConfigV1 as ServerControlConfigV1,
+  ControlSummaryV1 as ServerControlSummaryV1,
+  EvidenceManifestV1 as ServerEvidenceManifestV1,
+  GroupViewV1 as ServerGroupViewV1,
+  RecoveryViewV1 as ServerRecoveryViewV1,
+} from "../../src/control/webProtocol.js";
+import type {
+  CommandErrorV1 as WebCommandErrorV1,
+  CommandLookupV1 as WebCommandLookupV1,
+  ControlConfigV1 as WebControlConfigV1,
+  ControlSummaryV1 as WebControlSummaryV1,
+  EvidenceManifestV1 as WebEvidenceManifestV1,
+  GroupViewV1 as WebGroupViewV1,
+  RecoveryViewV1 as WebRecoveryViewV1,
+} from "../../web/src/controlTypes.js";
 
 /**
  * task 8 ruling K2. `web/` cannot import `src/` (a browser bundle cannot ship
@@ -71,6 +89,20 @@ function correctionKindServerToWeb(x: ServerCorrectionKind): WebCorrectionKind {
 function correctionKindWebToServer(x: WebCorrectionKind): ServerCorrectionKind {
   return x;
 }
+function controlConfigServerToWeb(x: ServerControlConfigV1): WebControlConfigV1 { return x; }
+function controlConfigWebToServer(x: WebControlConfigV1): ServerControlConfigV1 { return x; }
+function controlSummaryServerToWeb(x: ServerControlSummaryV1): WebControlSummaryV1 { return x; }
+function controlSummaryWebToServer(x: WebControlSummaryV1): ServerControlSummaryV1 { return x; }
+function controlGroupServerToWeb(x: ServerGroupViewV1): WebGroupViewV1 { return x; }
+function controlGroupWebToServer(x: WebGroupViewV1): ServerGroupViewV1 { return x; }
+function recoveryServerToWeb(x: ServerRecoveryViewV1): WebRecoveryViewV1 { return x; }
+function recoveryWebToServer(x: WebRecoveryViewV1): ServerRecoveryViewV1 { return x; }
+function evidenceServerToWeb(x: ServerEvidenceManifestV1): WebEvidenceManifestV1 { return x; }
+function evidenceWebToServer(x: WebEvidenceManifestV1): ServerEvidenceManifestV1 { return x; }
+function commandLookupServerToWeb(x: ServerCommandLookupV1): WebCommandLookupV1 { return x; }
+function commandLookupWebToServer(x: WebCommandLookupV1): ServerCommandLookupV1 { return x; }
+function commandErrorServerToWeb(x: ServerCommandErrorV1): WebCommandErrorV1 { return x; }
+function commandErrorWebToServer(x: WebCommandErrorV1): ServerCommandErrorV1 { return x; }
 
 // Referenced so nothing above is dead code the compiler is free to ignore;
 // never invoked for its behavior, only so the assignments above are real
@@ -84,4 +116,18 @@ export const __webParityAssignabilityChecks__ = [
   listRowWebToServer,
   correctionKindServerToWeb,
   correctionKindWebToServer,
+  controlConfigServerToWeb,
+  controlConfigWebToServer,
+  controlSummaryServerToWeb,
+  controlSummaryWebToServer,
+  controlGroupServerToWeb,
+  controlGroupWebToServer,
+  recoveryServerToWeb,
+  recoveryWebToServer,
+  evidenceServerToWeb,
+  evidenceWebToServer,
+  commandLookupServerToWeb,
+  commandLookupWebToServer,
+  commandErrorServerToWeb,
+  commandErrorWebToServer,
 ] as const;

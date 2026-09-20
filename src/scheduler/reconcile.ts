@@ -308,13 +308,27 @@ function slug(taskId: string): string {
  * not verify would spend a second attempt on a decision already owed to
  * someone else.
  */
+export interface ApprovedReconcileBudget {
+  maxAttempts: number;
+  perAttemptTimeoutMs: number;
+  totalRuntimeBudgetMs: number;
+  tokenBudget: number;
+}
+
 export async function synthesizeReconcileContract(
   a: PlanTask,
   b: PlanTask,
   contracts: Map<string, unknown>,
   runsDir: string,
   conflict: MaterialisedConflict,
+  approvedBudget?: ApprovedReconcileBudget,
 ): Promise<{ path: string } | { escalate: string }> {
+  if (approvedBudget !== undefined && (
+    ![approvedBudget.maxAttempts, approvedBudget.perAttemptTimeoutMs,
+      approvedBudget.totalRuntimeBudgetMs, approvedBudget.tokenBudget]
+      .every(value => Number.isSafeInteger(value) && value > 0) ||
+    approvedBudget.perAttemptTimeoutMs > approvedBudget.totalRuntimeBudgetMs
+  )) return { escalate: "approved reconciliation budget must contain positive safe integers and a bounded timeout" };
   const intents = [a, b].map((task) => ({ task, intent: intentOf(contracts.get(task.taskId)) }));
   const oneSided = intents.filter((s) => s.intent === null).map((s) => s.task.taskId);
   if (oneSided.length > 0) {
@@ -369,10 +383,10 @@ export async function synthesizeReconcileContract(
     },
     executionPolicy: {
       autonomyLevel: "L2",
-      maxAttempts: 1,
-      perAttemptTimeoutMs: Math.max(sideA.perAttemptTimeoutMs, sideB.perAttemptTimeoutMs),
-      totalRuntimeBudgetMs: Math.max(sideA.totalRuntimeBudgetMs, sideB.totalRuntimeBudgetMs),
-      tokenBudget: Math.max(sideA.tokenBudget, sideB.tokenBudget),
+      maxAttempts: approvedBudget?.maxAttempts ?? 1,
+      perAttemptTimeoutMs: approvedBudget?.perAttemptTimeoutMs ?? Math.max(sideA.perAttemptTimeoutMs, sideB.perAttemptTimeoutMs),
+      totalRuntimeBudgetMs: approvedBudget?.totalRuntimeBudgetMs ?? Math.max(sideA.totalRuntimeBudgetMs, sideB.totalRuntimeBudgetMs),
+      tokenBudget: approvedBudget?.tokenBudget ?? Math.max(sideA.tokenBudget, sideB.tokenBudget),
       worktreeRequired: true,
       partialOutcomeRecoveryWindowMs: 0,
     },

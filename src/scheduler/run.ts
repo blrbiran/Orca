@@ -5,7 +5,7 @@ import { promisify } from "node:util";
 import type { DecisionEvent } from "../ledger/schema.js";
 import { appendEvent } from "../ledger/writer.js";
 import { cloneDirOf, descendantsOf, disposeWorkdir, routeOutcome, runTask } from "./ccloopRunner.js";
-import type { TaskRun } from "./ccloopRunner.js";
+import type { TaskRun, DisposeOptions, Disposal } from "./ccloopRunner.js";
 import { buildGraph, implicitEdgeDecisions } from "./graph.js";
 import type { TaskGraph } from "./graph.js";
 import { disposition, harvest, netChangeSet, sameLayerWriteSets } from "./harvest.js";
@@ -42,6 +42,18 @@ import { git } from "./gitExec.js";
 import { MAX_PARALLEL_TASKS, mapWithPool } from "./pool.js";
 import { acquireRepoLock } from "./repoLock.js";
 import { allocateRunId, deriveRunId } from "./runId.js";
+
+import type { ApprovedReconcileBudget } from "./reconcile.js";
+
+export interface RoundExecution {
+  mode: "legacy" | "controlled";
+  preflight(round: Round): Promise<void>;
+  execute(input: {plan: PlanFile; task: PlanTask; base: string; kind: "task" | "reconcile"}): Promise<TaskRun>;
+  dispose(run: TaskRun, options: DisposeOptions): Promise<Disposal>;
+  reconcileBudget(taskId: string): Promise<ApprovedReconcileBudget | undefined>;
+  land(plan: PlanFile, runs: TaskRun[], incomingSha: string,
+    perform: () => Promise<Awaited<ReturnType<typeof landIntoW>>>): Promise<Awaited<ReturnType<typeof landIntoW>>>;
+}
 
 const execFileAsync = promisify(execFile);
 
@@ -299,8 +311,7 @@ interface ReconcileContext {
   /** The tasks of this layer that already landed, in landing order. */
   landed: Array<{ taskId: string; run: TaskRun }>;
   nextDecisionSeq: () => number;
-  adapter: "scripted" | "claude";
-  adapterConfig: string;
+  execution: RoundExecution;
   keepWorkdirs?: boolean;
   log: (line: string) => void;
   /** spec §9.1: which ccloop this round ran on, attached to every decision. */
@@ -412,7 +423,15 @@ async function reconcileAndLand(
 
   const sideA = plan.tasks.find((t) => t.taskId === taskId)!;
   const sideB = plan.tasks.find((t) => t.taskId === other.taskId)!;
-  const synthesized = await synthesizeReconcileContract(sideA, sideB, ctx.contracts, plan.runsDir, conflict);
+  let approvedBudget: ApprovedReconcileBudget | undefined;
+  try { approvedBudget = await ctx.execution.reconcileBudget(taskId); }
+  catch (error) {
+    return {landed:false,why:`reconciliation refused: ${error instanceof Error ? error.message : String(error)}; conflict retained at ${conflictRef} in ${copy}`,
+      otherTaskId,conflictBlocks:conflict.blocks.map(b=>`${b.path}:${b.startLine}-${b.endLine}`)};
+  }
+  if (ctx.execution.mode === "controlled" && approvedBudget === undefined)
+    throw new Error("controlled reconciliation requires an approved grant");
+  const synthesized = await synthesizeReconcileContract(sideA, sideB, ctx.contracts, plan.runsDir, conflict, approvedBudget);
   if ("escalate" in synthesized) {
     return {
       landed: false,
@@ -440,20 +459,13 @@ async function reconcileAndLand(
     dependsOn: [],
   };
   const reconcilePlan: PlanFile = { ...plan, targetRepo: copy };
-  const reconcileRunId = await allocateRunId(
-    plan.runsDir,
-    reconcileTask.taskId,
-    await readFile(synthesized.path),
-    conflict.conflictCommit,
-  );
-  const reconcileRun = await runTask(reconcilePlan, reconcileTask, conflict.conflictCommit, reconcileRunId, {
-    adapter: ctx.adapter,
-    adapterConfig: ctx.adapterConfig,
-  });
+  const reconcileRun = await ctx.execution.execute({plan: reconcilePlan, task: reconcileTask,
+    base: conflict.conflictCommit, kind: "reconcile"});
+  const reconcileRunId = reconcileRun.runId;
   ctx.log(`orca: ${taskId}: reconciliation ${reconcileRunId} reported ${reconcileRun.outcome}`);
 
   if (reconcileRun.outcome !== "succeeded" || reconcileRun.attemptSha === null) {
-    await disposeWorkdir(reconcileRun, {
+    await ctx.execution.dispose(reconcileRun, {
       keepBecause: "the reconciliation did not succeed and its copy is the only place its result exists",
       log: ctx.log,
     });
@@ -482,7 +494,7 @@ async function reconcileAndLand(
   // express, because neither task's checks were written to notice a marker.
   const remaining = await markersRemaining(copy, reconcileRun.attemptSha, conflict.conflictedPaths);
   if (remaining.length > 0) {
-    await disposeWorkdir(reconcileRun, {
+    await ctx.execution.dispose(reconcileRun, {
       keepBecause: "the reconciliation left conflict markers behind and a human has to look",
       log: ctx.log,
     });
@@ -537,9 +549,13 @@ async function reconcileAndLand(
   // --ff-only, and it genuinely is one: the rebuilt commit's first parent is
   // W's current tip. If it ever is not, this fails loudly instead of creating
   // a second merge that would bury the mistake.
-  await git(plan.targetRepo, ["merge", "--ff-only", reconciledRefOf(run.runId)]);
+  const landing = await ctx.execution.land(plan, [run, reconcileRun], mergeSha, async () => {
+    await git(plan.targetRepo, ["merge", "--ff-only", reconciledRefOf(run.runId)]);
+    return {merged: true};
+  });
+  if (!landing.merged) throw new Error("reconciled fast-forward unexpectedly conflicted");
 
-  await disposeWorkdir(reconcileRun, { keepWorkdirs: ctx.keepWorkdirs, log: ctx.log });
+  await ctx.execution.dispose(reconcileRun, { keepWorkdirs: ctx.keepWorkdirs, log: ctx.log });
   // Fix round 1, finding 3: this line used to say the conflicted commit "stays
   // at <ref> in <copy>" — seven lines after disposeWorkdir has usually deleted
   // that copy. It was false on exactly the path where nobody needed it, which
@@ -602,12 +618,30 @@ export async function runRound(planPath: string, options: RunOptions = {}): Prom
     return 1;
   }
   const { round } = loaded;
-  const { plan, graph, baseBranch } = round;
-
   if (options.adapterConfig === undefined) {
     logError("orca run: --adapter-config <path> is required (ccloop requires one for every adapter)");
     return 1;
   }
+
+  const execution: RoundExecution = {
+    mode: "legacy",
+    preflight: async () => {},
+    execute: async ({plan, task, base}) => {
+      const runId = await allocateRunId(plan.runsDir, task.taskId, await readFile(task.contract), base);
+      return runTask(plan, task, base, runId, {adapter: options.adapter ?? "scripted", adapterConfig: options.adapterConfig!});
+    },
+    dispose: disposeWorkdir,
+    reconcileBudget: async () => undefined,
+    land: async (_plan, _runs, _incoming, perform) => perform(),
+  };
+  return runPreparedRound(round, options, execution);
+}
+
+export async function runPreparedRound(round: Round, options: RunOptions, execution: RoundExecution): Promise<number> {
+  await execution.preflight(round);
+  const log = options.log ?? ((line: string) => process.stdout.write(`${line}\n`));
+  const logError = options.logError ?? ((line: string) => process.stderr.write(`${line}\n`));
+  const {plan, graph, baseBranch} = round;
 
   // spec §8.5: `out-of-repo` writes the ledger into runsDir with a content
   // hash instead of a commit anchor. Task 2 deliberately accepts the value in
@@ -777,12 +811,7 @@ export async function runRound(planPath: string, options: RunOptions = {}): Prom
         MAX_PARALLEL_TASKS,
         async (taskId): Promise<{ taskId: string; run: TaskRun }> => {
           const task = plan.tasks.find((t) => t.taskId === taskId)!;
-          const contractBytes = await readFile(task.contract);
-          const runId = await allocateRunId(plan.runsDir, taskId, contractBytes, layerBase);
-          const run = await runTask(plan, task, layerBase, runId, {
-            adapter: options.adapter ?? "scripted",
-            adapterConfig: options.adapterConfig!,
-          });
+          const run = await execution.execute({plan, task, base: layerBase, kind: "task"});
           if (routeOutcome(graph, taskId, run.outcome).stopRound) stopLaunching = true;
           return { taskId, run };
         },
@@ -893,7 +922,7 @@ export async function runRound(planPath: string, options: RunOptions = {}): Prom
           // spec §4.5: a copy that is not deleted has its path printed —
           // disposeWorkdir's own keep branch does that, and this is the
           // branch it exists for.
-          await disposeWorkdir(run, { keepWorkdirs: options.keepWorkdirs, log });
+          await execution.dispose(run, { keepWorkdirs: options.keepWorkdirs, log });
           continue;
         }
 
@@ -972,7 +1001,7 @@ export async function runRound(planPath: string, options: RunOptions = {}): Prom
           // keepWorkdirs is deliberately not passed here: the copy is kept
           // either way, and the printed reason should be the real one rather
           // than a flag that happens to also be set.
-          await disposeWorkdir(run, {
+          await execution.dispose(run, {
             keepBecause: "it did not land, and its copy is the only place its result still exists",
             log,
           });
@@ -997,7 +1026,7 @@ export async function runRound(planPath: string, options: RunOptions = {}): Prom
           log(`orca: ${taskId}: declared but did not produce: ${reconciliation.declaredNotProduced.join(", ")}`);
         }
 
-        const result = await landIntoW(plan, run);
+        const result = await execution.land(plan, [run], run.attemptSha!, () => landIntoW(plan, run));
         if (!result.merged) {
           log(
             `orca: ${taskId}: merge into ${plan.workBranch} conflicted on ${result.conflict.conflictedPaths.join(", ")} ` +
@@ -1022,8 +1051,7 @@ export async function runRound(planPath: string, options: RunOptions = {}): Prom
               layerBase,
               landed: landedRuns,
               nextDecisionSeq: () => (decisionSeq += 1),
-              adapter: options.adapter ?? "scripted",
-              adapterConfig: options.adapterConfig!,
+              execution,
               keepWorkdirs: options.keepWorkdirs,
               log,
               evidence,
@@ -1070,7 +1098,7 @@ export async function runRound(planPath: string, options: RunOptions = {}): Prom
             });
             log(`orca: ${taskId}: escalation recorded at ${escalationPath}`);
 
-            await disposeWorkdir(run, {
+            await execution.dispose(run, {
               keepBecause: "its merge into the work branch conflicted and a human has to look",
               log,
             });
@@ -1085,7 +1113,7 @@ export async function runRound(planPath: string, options: RunOptions = {}): Prom
         // the attempt commit is reachable only from inside the copy until the
         // fetch above puts it in the target repo's object store. This line is
         // the first moment the copy is genuinely finished with.
-        await disposeWorkdir(run, { keepWorkdirs: options.keepWorkdirs, log });
+        await execution.dispose(run, { keepWorkdirs: options.keepWorkdirs, log });
       }
 
       // spec §7.3 tier 1: one boundary decision per task that landed an

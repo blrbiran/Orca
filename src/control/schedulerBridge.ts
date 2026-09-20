@@ -1,0 +1,186 @@
+import { createHash } from "node:crypto";
+import { lstat, readFile, realpath } from "node:fs/promises";
+import { join } from "node:path";
+import type { Round, RoundExecution } from "../scheduler/run.js";
+import type { TaskRun, DisposeOptions } from "../scheduler/ccloopRunner.js";
+import { TERMINAL_OUTCOMES } from "../scheduler/ccloopRunner.js";
+import { git } from "../scheduler/gitExec.js";
+import type { ControlService, ExecutionProfileSelection } from "./service.js";
+import type { Candidate, Claim, ArtifactRef, Identity } from "./types.js";
+import type { ExecutionPort, ExecutionReport, StartEnvelope } from "./executionPort.js";
+import { allWork, readGroup, readWork, saveWork } from "./queries.js";
+import { hasObservedUsage, readRun } from "./budget.js";
+import { hashPayload } from "./commands.js";
+import { readEnvelope } from "./dispatch.js";
+import { recordUsage } from "./usage.js";
+import { archiveRun, writeArtifact, readArtifact } from "./archive.js";
+import { commitCandidate, repairAcceptedWork } from "./checkpoints.js";
+import { cleanupCommittedRun } from "./cleanup.js";
+import { publishPending } from "./projection.js";
+import { privateDirectory } from "./paths.js";
+import { ControlError } from "./errors.js";
+import { readConfirmedTaskExecution } from "./executionSnapshot.js";
+
+function claimOnly(c:Claim):Claim {
+ const {groupId,workItemId,taskId,runId,generation,graphVersion,targetVersion,commandId,configHash,grant,ownerToken}=c;
+ return {groupId,workItemId,taskId,runId,generation,graphVersion,targetVersion,commandId,configHash,grant,ownerToken};
+}
+function identity(c:Identity) {
+ const {groupId,workItemId,taskId,runId,generation,graphVersion,targetVersion}=c;
+ return {groupId,workItemId,taskId,runId,generation,graphVersion,targetVersion};
+}
+export async function collectControlled(service:ControlService,runId:string,selectedPort?:ExecutionPort):Promise<ExecutionReport> {
+ const {store}=service,port=selectedPort??service.executionPortForRun(runId),envelope=readEnvelope(store,runId);
+ if(!port.readEvidence) throw new ControlError("control-evidence-unavailable");
+ const report=await port.collect(envelope,readRun(store,runId).highWater);
+ const refs=[...report.events.map(e=>e.source),...(report.candidate?.artifacts??[])];
+ if(report.candidate) refs.push(report.candidate.handoff);
+ if(report.candidate?.stopProof) refs.push(report.candidate.stopProof.source);
+ for(const ref of refs) {
+   const bytes=await port.readEvidence(ref);
+   if(createHash("sha256").update(bytes).digest("hex")!==ref.hash) throw new ControlError("artifact-hash-mismatch");
+   await writeArtifact(store,ref.artifactId,bytes,{admit:operation=>service.writeAsync(operation)});
+ }
+ for(const event of report.events) {
+  if(event.runId!==runId || event.generation!==envelope.claim.generation) throw new ControlError("report-identity-conflict");
+  service.write(()=>recordUsage(store,event));
+ }
+ if(report.candidate) {
+  if(hashPayload(identity(report.candidate))!==hashPayload(identity(envelope.claim))) throw new ControlError("report-identity-conflict");
+ }
+ if(report.terminal) {
+  const t=report.terminal,work=envelope.work;
+  if(!work || !TERMINAL_OUTCOMES.includes(t.outcome) || t.sourceDir!==work.sourceDir || t.repoDir!==join(work.sourceDir,"repo")) throw new ControlError("report-path-conflict");
+  for(const path of [t.sourceDir,t.repoDir]) {
+   const stat=await lstat(path);
+   if(stat.isSymbolicLink()||!stat.isDirectory()||await realpath(path)!==path) throw new ControlError("report-path-conflict");
+  }
+  if(t.attemptSha!==null && !/^[0-9a-f]{40,64}$/.test(t.attemptSha)) throw new ControlError("report-commit-invalid");
+  const bytes=Buffer.from(JSON.stringify(report)),source=await writeArtifact(store,"report-"+runId+"-"+hashPayload(report),bytes,{admit:operation=>service.writeAsync(operation)});
+  service.write(()=>store.transaction(()=>store.db.prepare("INSERT INTO outbox VALUES (?, 'report', ?, 0) ON CONFLICT(id) DO UPDATE SET body=excluded.body").run("report:"+runId,JSON.stringify({source}))));
+ }
+ return report;
+}
+async function savedReport(service:ControlService,runId:string):Promise<ExecutionReport> {
+ const row=service.store.db.prepare("SELECT body FROM outbox WHERE id=? AND kind='report'").get("report:"+runId);
+ if(!row) throw new ControlError("control-terminal-pending");
+ return JSON.parse((await readArtifact(service.store,JSON.parse(String(row.body)).source)).toString());
+}
+export async function archiveReport(service:ControlService,runId:string,report:ExecutionReport) {
+ if(!report.terminal) throw new ControlError("control-terminal-pending");
+ return archiveRun(service.store,{runId,sourceDir:report.terminal.sourceDir,repoDir:report.terminal.repoDir,stopProof:report.candidate?.stopProof??null},{admit:operation=>service.writeAsync(operation)});
+}
+export async function disposeControlled(service:ControlService,run:TaskRun,options:DisposeOptions) {
+ const {store}=service,record=readRun(store,run.runId),report=await savedReport(service,run.runId);
+ if(!report.terminal || report.terminal.sourceDir!==run.workdir) throw new ControlError("report-path-conflict");
+ if(record.state!=="settled") {
+  const archive=await archiveReport(service,run.runId,report),raw=report.candidate;
+  const missing=[...archive.missing,...(raw?.missing??[]),...(!raw?["candidate-missing"]:[])];
+  const handoff=raw?.handoff??await writeArtifact(store,"handoff-"+run.runId,Buffer.from(JSON.stringify({protocol:1,identity:identity(record),request:null,runState:{status:report.terminal.outcome},completed:[],unfinished:[],pendingDecisions:[],awaitingHuman:[],validationCommands:[],rawLogs:[],usageHighWater:record.highWater,unresolvedRequestIds:["terminal-evidence"],artifacts:[]})),{admit:operation=>service.writeAsync(operation)});
+  const candidate:Candidate={...identity(record),checkpointId:"settle-"+run.runId,usageHighWater:raw?.usageHighWater??record.highWater,
+   result:missing.length===0 && raw?.result==="complete"?"complete":"partial",
+   artifacts:[...archive.artifacts,...(raw?.artifacts??[]),handoff],snapshot:archive.snapshot,missing,
+   unresolvedRequestIds:raw?.unresolvedRequestIds??["terminal-evidence"],stopProof:raw?.stopProof??null,terminalOutcome:report.terminal.outcome,handoff};
+  candidate.checkpointId="settle-"+run.runId+"-"+hashPayload(candidate).slice(0,16);
+  await commitCandidate(store,candidate,{admit:operation=>service.writeAsync(operation)});
+ }
+ await repairAcceptedWork(store,run.runId,{admit:operation=>service.write(operation)});
+ await publishPending(store,{admit:operation=>service.writeAsync(operation)});
+ if(options.keepWorkdirs || options.keepBecause || run.outcome!=="succeeded") {
+  options.log?.(`orca: kept controlled run ${run.runId}: ${run.workdir}`);return {removed:false,workdir:run.workdir};
+ }
+ const result=await cleanupCommittedRun(store,run.runId,run.workdir,{admit:operation=>service.writeAsync(operation)});return {...result,workdir:run.workdir};
+}
+export async function settleControlledHandoff(service:ControlService,runId:string,report:ExecutionReport):Promise<void> {
+ const raw=report.candidate;if(!raw?.stopProof||!report.terminal)return;
+ const {store}=service,record=readRun(store,runId);
+ if(raw.unresolvedRequestIds.length||record.unknown.work||record.unknown.handoff||!hasObservedUsage(store,record)||store.db.prepare("SELECT seq FROM usage_events WHERE run_id=? AND seq>?").get(runId,record.highWater))return;
+ const archive=await archiveReport(service,runId,report);
+ const missing=[...archive.missing,...raw.missing];
+ const candidate:Candidate={...identity(record),checkpointId:raw.checkpointId,usageHighWater:raw.usageHighWater,result:missing.length===0&&raw.result==="complete"?"complete":"partial",artifacts:[...archive.artifacts,...raw.artifacts,raw.handoff],snapshot:archive.snapshot,missing,unresolvedRequestIds:raw.unresolvedRequestIds,stopProof:raw.stopProof,terminalOutcome:raw.terminalOutcome,handoff:raw.handoff};
+ await commitCandidate(store,candidate,{admit:operation=>service.writeAsync(operation)});await publishPending(store,{admit:operation=>service.writeAsync(operation)});
+}
+interface LandingIntent {repo:string;branch:string;base:string;incoming:string;runIds:string[];artifacts:ArtifactRef[];landed?:string;conflicted?:boolean}
+export async function confirmLanding(service:ControlService,id:string,intent:LandingIntent):Promise<boolean> {
+ const branch=(await git(intent.repo,["symbolic-ref","--short","HEAD"])).trim();
+ if(branch!==intent.branch) throw new ControlError("landing-branch-conflict");
+ const tip=(await git(intent.repo,["rev-parse","refs/heads/"+intent.branch])).trim();
+ if(tip===intent.base) return false;
+ const lines=(await git(intent.repo,["rev-list","--first-parent","--parents",`${intent.base}..${tip}`])).trim().split("\n");
+ const landed=lines.map(l=>l.split(" ")).find(([sha,...parents])=>
+  (sha===intent.incoming && parents[0]===intent.base) || (parents.length===2 && parents[0]===intent.base && parents[1]===intent.incoming));
+ if(!landed) throw new ControlError("landing-outcome-unknown");
+ for(const ref of intent.artifacts) await readArtifact(service.store,ref);
+ for(const runId of intent.runIds) {
+  const source=await writeArtifact(service.store,"acceptance-"+runId,Buffer.from(JSON.stringify({runId,checksPassed:true,landing:"landed",commit:landed[0],intent:id})),{admit:operation=>service.writeAsync(operation)});
+  service.write(()=>service.store.transaction(()=>service.store.db.prepare("INSERT INTO outbox VALUES (?, 'acceptance', ?, 1) ON CONFLICT(id) DO NOTHING").run("acceptance:"+runId,JSON.stringify({runId,accepted:true,source}))));
+ }
+ intent.landed=landed[0];service.write(()=>service.store.transaction(()=>service.store.db.prepare("UPDATE outbox SET body=?,delivered=1 WHERE id=?").run(JSON.stringify(intent),id)));return true;
+}
+export function makeControlledExecution(service:ControlService,groupId:string,selection?:ExecutionProfileSelection,handoffSelection?:ExecutionProfileSelection):RoundExecution {
+ return {
+  mode:"controlled",
+  preflight:async(round:Round)=>{
+   if(selection&&!handoffSelection)throw new ControlError("profile-changed");
+   const port=selection?(await service.profiledCapabilities(groupId,selection)).profile.port:service.legacyExecutionPort();
+   if(handoffSelection)await service.profiledCapabilities(groupId,handoffSelection);
+   if(!selection)await service.legacyCapabilities(groupId);
+   if(!port.readEvidence) throw new ControlError("control-evidence-unavailable");
+   const group=readGroup(service.store,groupId);
+   if(group.stopped) throw new ControlError("group-stopped");
+   if(service.store.dispatchBlocked) throw new ControlError("control-recovery-required");
+   if(!service.options.targetRepo) throw new ControlError("group-project-binding-required");
+   if(await realpath(round.plan.targetRepo)!==await realpath(service.options.targetRepo)) throw new ControlError("group-project-conflict");
+   const registered=allWork(service.store,groupId).filter(w=>w.kind==="task");
+   if(registered.length!==round.plan.tasks.length) throw new ControlError("group-graph-conflict");
+   for(const task of round.plan.tasks) {
+    const w=registered.find(w=>w.taskId===task.taskId);
+    const dependencies=w?.dependsOn.map(id=>registered.find(parent=>parent.workItemId===id)?.taskId);
+    if(!w || !dependencies || dependencies.some(id=>!id) || hashPayload(w.contract)!==hashPayload(round.contracts.get(task.taskId)) || hashPayload([...dependencies].sort())!==hashPayload([...task.dependsOn].sort())) throw new ControlError("group-graph-conflict");
+   }
+  },
+  reconcileBudget:taskId=>selection?service.reconcileBudgetProfiled(groupId,taskId,selection,handoffSelection!):service.reconcileBudgetLegacy(groupId,taskId),
+  execute:async({plan,task,base,kind})=>{
+   const work=allWork(service.store,groupId).find(w=>w.taskId===task.taskId && w.kind===kind);
+   if(!work) throw new ControlError("work-not-found");
+   const confirmed="planHash" in readGroup(service.store,groupId)?readConfirmedTaskExecution(service.store,groupId,task.taskId):null;
+   const contract=confirmed?.contract??JSON.parse(await readFile(task.contract,"utf8"));
+   const claim=claimOnly(await (selection?service.claimProfiled(groupId,work.workItemId,selection,handoffSelection!):service.claimLegacy(groupId,work.workItemId)));
+   if(kind==="reconcile" && !service.store.db.prepare("SELECT id FROM outbox WHERE id=?").get("start:"+claim.runId)) {
+    service.write(()=>service.store.transaction(()=>{
+     const current=readWork(service.store,groupId,work.workItemId);
+     if(readRun(service.store,claim.runId).state!=="claimed") throw new ControlError("start-state-conflict");
+     if(!(current.contract as {pendingReconciliation?:string}).pendingReconciliation && hashPayload(current.contract)!==hashPayload(contract)) throw new ControlError("start-contract-conflict");
+     current.contract=contract;saveWork(service.store,groupId,current);
+    }));
+   } else if(!confirmed && hashPayload(contract)!==hashPayload(work.contract)) throw new ControlError("start-contract-conflict");
+   const root=service.write(()=>privateDirectory(plan.runsDir)),input:StartEnvelope={protocol:1,claim,contractHash:hashPayload(contract),inputCheckpoint:null,
+    work:{contract,targetRepo:await realpath(plan.targetRepo),base,sourceDir:join(root,claim.runId)}};
+   if(selection)await service.startProfiled(selection,input);else await service.startLegacy(input);
+   const report=await collectControlled(service,claim.runId);
+   if(!report.terminal) throw new ControlError("control-terminal-pending");
+   await archiveReport(service,claim.runId,report);
+   return {runId:claim.runId,workdir:report.terminal.sourceDir,outcome:report.terminal.outcome,attemptSha:report.terminal.attemptSha};
+  },
+  dispose:(run,options)=>disposeControlled(service,run,options),
+  land:async(plan,runs,incoming,perform)=>{
+   const store=service.store,id="landing-"+hashPayload({repo:plan.targetRepo,branch:plan.workBranch,incoming,runIds:runs.map(r=>r.runId)});
+   const old=store.db.prepare("SELECT body FROM outbox WHERE id=? AND kind='landing'").get(id);
+   let intent:LandingIntent;
+   if(old) {
+    intent=JSON.parse(String(old.body));
+    if(await confirmLanding(service,id,intent)) return {merged:true};
+    throw new ControlError("landing-needs-review");
+   }
+   const artifacts:ArtifactRef[]=[];
+   for(const run of runs){const report=await savedReport(service,run.runId);const archive=await archiveReport(service,run.runId,report);artifacts.push(...archive.artifacts);}
+   intent={repo:plan.targetRepo,branch:plan.workBranch,base:(await git(plan.targetRepo,["rev-parse","HEAD"])).trim(),incoming,runIds:runs.map(r=>r.runId),artifacts};
+   if((await git(plan.targetRepo,["symbolic-ref","--short","HEAD"])).trim()!==plan.workBranch) throw new ControlError("landing-branch-conflict");
+   service.write(()=>store.transaction(()=>store.db.prepare("INSERT INTO outbox VALUES (?, 'landing', ?, 0)").run(id,JSON.stringify(intent))));
+   const result=await perform();
+   if(result.merged) {if(!await confirmLanding(service,id,intent)) throw new ControlError("landing-outcome-unknown");}
+   else {intent.conflicted=true;service.write(()=>store.transaction(()=>store.db.prepare("UPDATE outbox SET body=?,delivered=1 WHERE id=?").run(JSON.stringify(intent),id)));}
+   return result;
+  },
+ };
+}

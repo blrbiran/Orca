@@ -383,6 +383,30 @@ describe("the Host allowlist (final review I-4, DNS rebinding)", () => {
     });
   });
 
+  it("uses the exact V1 envelope for a foreign Host on control routes while preserving legacy API errors", async () => {
+    await withPanel(async (started) => {
+      const headers = { host: `evil.example:${started.port}`, "x-orca-token": started.token };
+      const control = await rawGet(started.url, "/api/control/config", headers);
+      expect(control.status).toBe(403);
+      expect(JSON.parse(control.body)).toEqual({
+        error: {
+          code: PANEL_HOST_NOT_ALLOWED,
+          message: "this panel answers only to 127.0.0.1, localhost, ::1 or the address it was bound to",
+          commandRevision: null,
+          evidenceIds: [],
+          retryable: false,
+        },
+      });
+
+      const legacy = await rawGet(started.url, "/api/metrics", headers);
+      expect(legacy.status).toBe(403);
+      expect(JSON.parse(legacy.body)).toEqual({
+        code: PANEL_HOST_NOT_ALLOWED,
+        message: "this panel answers only to 127.0.0.1, localhost, ::1 or the address it was bound to",
+      });
+    });
+  });
+
   it("answers the loopback names it was reached by: 127.0.0.1, localhost and [::1] (positive controls)", async () => {
     await withPanel(async (started) => {
       for (const host of [`127.0.0.1:${started.port}`, `localhost:${started.port}`, `[::1]:${started.port}`]) {
