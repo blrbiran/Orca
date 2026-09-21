@@ -77,8 +77,15 @@ export async function commitCandidate(store:ControlStore,c:Candidate,deps:Commit
   store.db.prepare("INSERT INTO checkpoints VALUES (?,?,?,?)").run(c.checkpointId,c.runId,reference.hash,JSON.stringify(c));
   if(settled) releaseRunReserve(store,c.runId,c.stopProof!);
   run=readRun(store,c.runId);run.checkpointId=c.checkpointId;
-  run.recoverable=settled && c.result==="complete" && c.missing.length===0 && !!c.snapshot;saveRun(store,run);
-  const work=readWork(store,c.groupId,c.workItemId);work.status=run.recoverable && accepted ? "done":"blocked";
+  // Ruling (2026-09-22, §6.3 correction): `recoverable` answers one question -- can this
+  // checkpoint be continued from -- and a settled run whose dirty snapshot arrived complete can,
+  // even when the task stopped before finishing. Whether the task *finished* is `completed`.
+  // The two were one boolean, which made §6.3's continuation unreachable by construction: only a
+  // finished task could be `recoverable`, and a finished task is never the predecessor to continue.
+  const continuable=settled && c.missing.length===0 && !!c.snapshot;
+  const completed=continuable && c.result==="complete";
+  run.recoverable=continuable;saveRun(store,run);
+  const work=readWork(store,c.groupId,c.workItemId);work.status=completed && accepted ? "done":"blocked";
   saveWork(store,c.groupId,work);
   const group=readGroup(store,c.groupId);group.status="review";saveGroup(store,group);
   store.db.prepare("INSERT INTO outbox VALUES (?, 'projection', ?, 0)").run("projection:"+c.checkpointId,JSON.stringify({runId:c.runId,...reference}));
@@ -108,6 +115,9 @@ export async function repairAcceptedWork(store:ControlStore,runId:string,deps:{a
  const run=readRun(store,runId);
  if(run.state!=="settled" || !run.recoverable) return;
  const c=await readCommittedCheckpoint(store,runId);await verifyCandidateArtifacts(store,c);
+ // Acceptance completes a task; it does not finish an interrupted one. `recoverable` says the
+ // checkpoint is continuable, which an unfinished task's checkpoint also is.
+ if(c.result!=="complete") return;
  if(!await acceptanceEvidence(store,runId)) return;
  const repair=()=>store.transaction(()=>{
   const current=readRun(store,runId),work=readWork(store,run.groupId,run.workItemId),group=readGroup(store,run.groupId);

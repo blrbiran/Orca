@@ -77,7 +77,9 @@ export async function exportResumeBundle(store: ControlStore, input: { predecess
   const run = readRun(store, input.predecessorRunId);
   if (run.state !== "settled" || !run.recoverable || !run.checkpointId) throw new ControlError("resume-predecessor-unrecoverable");
   const checkpoint = await readCommittedCheckpoint(store, input.predecessorRunId);
-  if (checkpoint.result !== "complete" || checkpoint.missing.length || !checkpoint.snapshot) throw new ControlError("resume-predecessor-unrecoverable");
+  // Ruling (2026-09-22, §6.3 correction): a bundle exists to continue from a checkpoint, so what
+  // has to be whole here is the snapshot and the evidence, not the predecessor's terminal outcome.
+  if (checkpoint.missing.length || !checkpoint.snapshot) throw new ControlError("resume-predecessor-unrecoverable");
 
   const checkpointBytes = Buffer.from(JSON.stringify(checkpoint));
   const checkpointHash = sha256(checkpointBytes);
