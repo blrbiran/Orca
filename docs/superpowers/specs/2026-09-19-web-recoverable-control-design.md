@@ -1524,3 +1524,123 @@ After this design is approved, implementation planning should preserve the follo
 9. acceptance, fault injection, mutation, evidence, and non-live ccloop smoke.
 
 Automatic decomposition and ccmem correction begin only after this Web slice passes its acceptance boundary.
+
+## 11. Corrections and amendments (appended 2026-09-22)
+
+Sections 1–10 are the approved text as published and are not edited in place. This section records
+what the acceptance and whole-branch review waves found to be wrong or under-specified in that text,
+together with the human ruling that settles each. File and line references are as measured on the
+tree on 2026-09-22; re-measure before acting on them.
+
+### 11.1 Ruling — §6.3: `recoverable` means *continuable*, not *finished*
+
+§6.3's canonical predecessor (`src/control/continuation.ts:140,145`) requires a run that is
+`state === "settled-recoverable"`, `recoverable === true`, holding a checkpoint whose
+`result === "partial"`. Sections 4/6 as published also let the commit path set `recoverable` **only
+when `result === "complete"`**. The two halves contradict, so no production commit could ever
+satisfy §6.3: web batch continuation was unreachable by construction, not merely unwired, and the
+criteria that appeared to cover it passed because fixtures wrote the flag by hand
+(`tests/control/webContinuation.test.ts`, `webContinuationAccounting.test.ts`,
+`tests/panel/fixtures/controlPanel.ts`).
+
+Ruling (human, 2026-09-22): the continuation side is right and `recoverable` was the wrong
+encoding. It answers one question — *can this checkpoint be continued from* — which depends on the
+snapshot and evidence being whole, not on whether the task reached its outcome. Whether the task
+*finished* is a separate judgement:
+
+- `src/control/checkpoints.ts:85-88` derives `continuable = settled && missing.length === 0 && !!snapshot`
+  and `completed = continuable && result === "complete"`, and writes `work.status = "done"` only on
+  `completed && accepted`. Completion therefore means exactly what it meant before: the two
+  expressions conjunct back to `settled && complete && whole snapshot && accepted`.
+- `repairAcceptedWork` (`src/control/checkpoints.ts:116-120`) returns unless the committed
+  checkpoint's `result === "complete"` — acceptance completes a task, it does not finish an
+  interrupted one.
+- `exportResumeBundle` (`src/control/resumeBundle.ts:78-82`) requires a whole snapshot and no
+  missing evidence, and no longer demands the predecessor's terminal outcome: a bundle exists to
+  continue *from* a checkpoint.
+- Cleanup (`src/control/cleanup.ts:11`) keeps its explicit `result === "complete"` guard, so
+  widening `recoverable` did not widen what may be deleted.
+
+What widened is one thing only: a settled run whose dirty snapshot arrived whole is now admissible
+as a continuation source, which is what §6.3 asks for. Criteria:
+`tests/control/checkpointRecoverability.test.ts` (6 tests, added — no existing criterion relaxed).
+
+**Consequence for §9.4.** That list names a mutation "marks a partial checkpoint recoverable"
+(line 1467). Under this ruling a `result: "partial"` checkpoint *is* recoverable, so the line is read
+in its new vocabulary: the fault is calling a checkpoint continuable when it is not whole — not
+settled, no snapshot, missing captured evidence, or an unresolved request. The mutation
+`continuable = settled && c.missing.length === 0 && !!c.snapshot` → `continuable = settled` was run on
+2026-09-22 and went red (`rc=1`) on
+`refuses the bundle when the snapshot is gone, even though the run settled`, which asserts
+`recoverable === false` before it asserts the refusal. The `missing` conjunct is asserted by
+`does not call a checkpoint with missing evidence continuable`; that one has **not** been seen red
+(the mutation run was not permitted on 2026-09-22), so it is an open verification item, not a
+delivered gate.
+
+
+
+**Residual, and it is a wiring gap rather than a predicate gap**: the chain
+`commitCandidate → settleHandoffRequest → assertPredecessor` is now satisfiable by production code,
+but `settleHandoffRequest` has no production caller (§11.5), so the shipped Panel still cannot
+produce a §6.3 predecessor.
+
+### 11.2 ERRATUM — the global shutdown command identity is hash-shaped
+
+§6.4 says "The global ledger key and command ID are both `shutdown:<epoch>`" and the per-run request
+identity is `shutdown:<groupId>:<shutdownRevision>:<runId>`. The second is an outbox key and is
+implemented literally. The first cannot be: `idSchema` (`src/control/schema.ts:3`) is
+`^[a-zA-Z0-9][a-zA-Z0-9_.-]*$` and rejects colons, so a spec-shaped command id would fail the
+protocol's own parse. Implemented as
+`shutdown-<sha256(epoch hex)>` (`src/panel/controlLifecycle.ts:76-78`).
+
+Correction: read `shutdown:<epoch>` in that sentence as "the identity derived from the epoch", and
+the implemented shape as authoritative. The properties the rule cares about — deterministic,
+crash-replayable, one per epoch — hold under the hash.
+
+### 11.3 ERRATUM — §6.2 `HandoffJoinV1.origin` literals
+
+§6.2's record (`docs/.../2026-09-19-web-recoverable-control-design.md:1178`) types origin as
+`"context" | "human" | "shutdown"`. Implemented, the stop path uses `"handoff" | "shutdown"`
+(`src/control/stopIntent.ts:268,284`) and the context path writes `"context"`
+(`src/control/contextControl.ts:108,123`). So `"human"` never appears on the wire; a human
+`handoff-stop` is recorded as `origin: "handoff"`.
+
+Second, sharper divergence: origin exists only on the join record and the outbox body. The canonical
+request body (`src/control/stopIntent.ts:291-296`) carries none, so §6.2's claim that one open
+request spans "context, human, and shutdown origins" is only reconstructible from the outbox row
+plus the run's latch reason (`context-threshold-crossed`), not from the request the join points at.
+
+Correction: the enum reads `"context" | "handoff" | "shutdown"`, and origin is a property of the
+*desire* (outbox/join), not of the adopted request. No behavioural consequence was found; the label
+and the record placement are the whole of it. Fixing either would move a wire value, so it is a
+human call, not a cleanup.
+
+### 11.4 Amendment — the evidence-bytes route was unspecified; it is now pinned
+
+§4 defines `EvidenceManifestV1.entries[].downloadUrl` (line 515) and never specifies the route that
+serves it, so as shipped the field 404ed. The route added under Task 10
+(`src/panel/controlApi.ts:134-150`) resolves only hashes the store's own reference table accepts, and
+answers with `content-type: application/octet-stream`, `x-content-type-options: nosniff`
+(`:143`, added 2026-09-22 so a stored artifact cannot be reinterpreted by the browser),
+`content-security-policy: default-src 'none'`, and
+`content-disposition: attachment; filename="<sha256>"`.
+
+Not closed, and it is a product decision: the route authenticates by the `x-orca-token` header only,
+so following `downloadUrl` from a browser without the header is a 401. A short-lived capability or an
+in-app viewer are both bigger changes than a header.
+
+### 11.5 Status of the seams this slice shipped but did not wire
+
+Measured 2026-09-22 by cross-file reference count under `src/` (0 = defined, never called outside its
+own file): `beginHandoffAttempt`, `settleHandoffRequest`, `deliverHandoffStop`,
+`createWebWakeHandlers`, `runControlPanelStartup`, `createTrustedControlConfig`, `applyPanelShutdown`,
+`acceptContextObservation`. Wired: `applyHandoffStop`, `deliverSchedulerWakes`, `scheduleStart`,
+`startClaim`, `openControlStore`. `createCcloopExecutionPort` does not expose
+`probeProfileCapabilities` (the method is optional on `ExecutionPort`, and `profiles.ts:150` answers
+`control-capability-probe-failed` when it is absent), and no production consumer translates the
+ledger's `DispatchEnvelopeV1` (`schema: "orca-dispatch-envelope-v1"`, `src/control/webProtocol.ts:304`)
+into the port's `StartEnvelope` (`src/control/executionPort.ts:7`) — ccloop calls its wire twin
+`StartEnvelopeV1`. `webCcloopSmoke.test.ts:88-101` holds the only translator in the repository and
+says so. The production mount policy for these seams is ruled in
+`docs/superpowers/specs/2026-09-22-panel-control-assembly-design.md`.
+
