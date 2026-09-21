@@ -177,6 +177,44 @@ export type CommandTargetV1 =
   | { kind: "task"; groupId: string; taskId: string }
   | { kind: "run"; groupId: string; runId: string }
   | { kind: "global"; epoch: string };
+
+/** What a mutation POST carries: an id the ledger dedupes on, the revision it expects, and the verb's payload. */
+export type CommandEnvelopeV1 = { commandId: string; expectedRevision: number; payload?: unknown };
+export type AmountDimensionV1 = "tokens" | "activeMs" | "attempts" | "sessions";
+export type ProposalTargetV1 =
+  | { scope: "task"; taskId: string; allocation: "work" | "handoff"; dimension: AmountDimensionV1 }
+  | { scope: "goal-review"; dimension: AmountDimensionV1 };
+export type ProposalOperationV1 = {
+  target: ProposalTargetV1;
+  value: number;
+  provenance: "complex-1m-default" | "model" | "human";
+  estimateId?: string;
+};
+export type ProposalEditPayloadV1 = { baseProposalVersion: number; operations: ProposalOperationV1[]; proposedGroupLimit?: Amount };
+export type EstimatePayloadV1 = { proposalVersion: number; estimatorProfileId: string; estimatorProfileHash: string; estimateMode: "strict" | "soft" };
+export type ConfirmPayloadV1 = {
+  planHash: string;
+  proposalVersion: number;
+  budgetMode: "strict" | "soft";
+  profileIds: { estimator: string; worker: string; handoff: string; goalReview: string };
+  profileHashes: { estimator: string; worker: string; handoff: string; goalReview: string };
+  contextPolicy: { handoffAtContextTokens: number | null };
+};
+export type SetLimitPayloadV1 = { limit: Amount };
+export type ImportPlanPayloadV1 = {
+  groupId: string;
+  repoId: string;
+  planId: string;
+  estimatorProfileId?: string;
+  estimatorProfileHash?: string;
+  estimateMode?: "strict" | "soft";
+};
+export type HandoffStopPayloadV1 = { handoffDeadlineAt?: string };
+export type ContinuationSelectionV1 = { taskId: string; predecessorRunId: string; checkpointId: string };
+export type ResumeFromHandoffPayloadV1 = { selections: ContinuationSelectionV1[] };
+export type ContinueTaskPayloadV1 = { predecessorRunId: string; checkpointId: string };
+export type RecoveryRetryPayloadV1 = { scope: "run"; runId: string } | { scope: "group"; groupId: string };
+
 export type CommandSuccessV1 = {
   schema: "orca-command-success-v1";
   commandId: string;

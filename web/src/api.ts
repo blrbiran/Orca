@@ -25,6 +25,9 @@ function token(): string {
   return window.__ORCA_TOKEN__ ?? "";
 }
 
+/** The injected panel token, for any module that carries it as `x-orca-token` (web/src/controlApi.ts). */
+export const panelToken = token;
+
 /** A named refusal as the page shows it. `status` is null when no HTTP answer arrived at all. */
 export interface PanelRefusal {
   status: number | null;

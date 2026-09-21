@@ -17,7 +17,7 @@
  * `ErrorPage` with the server's code and message. `Refusal` and `ErrorPage`
  * are pure and carry the criteria (web/tests/outcome.test.tsx).
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useReducer, useRef, useState } from "react";
 import type { JSX } from "react";
 import {
   correctionBody,
@@ -36,6 +36,26 @@ import type { PanelRefusal, PostResult, RecordCorrectionInput } from "./api.js";
 import { bannersFor, readDismissed, writeDismissed } from "./chainBanner.js";
 import { ChainPanel } from "./ChainPanel.js";
 import type { ChainOutcome } from "./ChainPanel.js";
+import {
+  commandEnvelope,
+  controlCommandPath,
+  controlFailureFrom,
+  fetchControlConfig,
+  fetchControlGroup,
+  fetchControlRecovery,
+  fetchControlSummary,
+  nextCommandId,
+  readUncertainCommands,
+  recoverUncertainCommand,
+  refusalFromAnswer,
+  sendControlCommand,
+  writeUncertainCommands,
+} from "./controlApi.js";
+import type { ControlAction } from "./controlApi.js";
+import { ControlPanel } from "./ControlPanel.js";
+import { initialControlState, reduceControlState, summaryView } from "./controlState.js";
+import type { UncertainCommand } from "./controlState.js";
+import type { ControlConfigV1 } from "./controlTypes.js";
 import { DecisionDetail } from "./DecisionDetail.js";
 import type { Decision } from "./DecisionDetail.js";
 import { ErrorPage } from "./ErrorPage.js";
@@ -52,6 +72,18 @@ function browserStorage(): Storage | undefined {
     return undefined;
   }
 }
+
+/** sessionStorage: an unresolved command id survives a reload, a page refresh does not outlive the tab. */
+function browserSession(): Storage | undefined {
+  try {
+    return window.sessionStorage;
+  } catch {
+    return undefined;
+  }
+}
+
+/** The control summary is polled this fast (spec §9.2); the panel itself never pushes. */
+const CONTROL_POLL_MS = 2_000;
 
 interface HomeState {
   todo: DecisionListRow[];
@@ -75,6 +107,16 @@ export function App(): JSX.Element {
   const [chainOutcome, setChainOutcome] = useState<ChainOutcome | null>(null);
   const [dismissed, setDismissed] = useState<Set<string>>(() => readDismissed(browserStorage()));
 
+  /** Null while the control plane is not mounted on this panel; then the page shows no control section at all. */
+  const [controlConfig, setControlConfig] = useState<ControlConfigV1 | null>(null);
+  const [control, dispatchControl] = useReducer(reduceControlState, undefined, initialControlState);
+  const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
+  /** The reducer's latest value, for callbacks that outlive the render they were built in. */
+  const controlNow = useRef(control);
+  controlNow.current = control;
+  /** Command ids whose lookup is already in flight, so one tick does not ask twice. */
+  const resolving = useRef<Set<string>>(new Set());
+
   const loadChains = async (): Promise<void> => {
     try {
       setChains((await fetchChains()).repos);
@@ -97,6 +139,97 @@ export function App(): JSX.Element {
     }
     await loadChains();
   };
+
+  /**
+   * Spec §9.2: the summary is polled, never pushed. Once the client has an epoch,
+   * a tick asks only for what moved (`sinceChangeSeq`) -- a partial answer that
+   * must not evict the groups it does not mention. A voided cache asks for
+   * everything instead.
+   */
+  const readControlTick = async (): Promise<void> => {
+    const state = controlNow.current;
+    const since = state.epoch !== null && !state.refetchRequired ? state.changeSeq : undefined;
+    try {
+      const summary = await fetchControlSummary(since);
+      dispatchControl({ type: "summary", value: summary, partial: since !== undefined });
+      dispatchControl({ type: "recovery", value: await fetchControlRecovery() });
+    } catch (err) {
+      dispatchControl({ type: "refusal", groupId: null, value: controlFailureFrom(err) });
+    }
+    for (const command of controlNow.current.uncertainCommandIds) void resolveUncertain(command);
+  };
+
+  const readControlGroup = async (groupId: string): Promise<void> => {
+    try {
+      dispatchControl({ type: "group", value: await fetchControlGroup(groupId) });
+    } catch (err) {
+      dispatchControl({ type: "refusal", groupId, value: controlFailureFrom(err) });
+    }
+  };
+
+  /**
+   * A command the browser lost the answer to is looked up, never re-issued: the
+   * ledger dedupes on the whole raw envelope, so a fresh id would be a second
+   * intent -- possibly a second execution -- rather than a retry of this one.
+   */
+  const resolveUncertain = async (command: UncertainCommand): Promise<void> => {
+    const id = `${command.groupId}\0${command.commandId}`;
+    if (resolving.current.has(id)) return;
+    resolving.current.add(id);
+    const result = await recoverUncertainCommand(command.groupId, command.commandId);
+    resolving.current.delete(id);
+    dispatchControl({ type: "command-resolved", value: command });
+    if (result.kind === "absent") dispatchControl({ type: "refusal", groupId: command.groupId, value: result.refusal });
+    await readControlGroup(command.groupId);
+  };
+
+  /** Send one intent. Whatever the ledger says afterwards is read, not inferred here. */
+  const sendControl = async (action: ControlAction): Promise<void> => {
+    const commandId = nextCommandId();
+    const command = { groupId: action.groupId, commandId };
+    dispatchControl({ type: "command-uncertain", value: command });
+    const answer = await sendControlCommand(controlCommandPath(action), commandEnvelope(commandId, action));
+    if (answer.kind === "uncertain") {
+      // The id stays where it is: sessionStorage keeps it across a reload, and the
+      // next tick looks it up. The page shows that the outcome is unknown.
+      dispatchControl({ type: "refusal", groupId: action.groupId, value: answer.refusal });
+      return;
+    }
+    dispatchControl({ type: "command-resolved", value: command });
+    if (answer.status >= 400) dispatchControl({ type: "refusal", groupId: action.groupId, value: refusalFromAnswer(answer) });
+    await readControlGroup(action.groupId);
+  };
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        setControlConfig(await fetchControlConfig());
+      } catch {
+        setControlConfig(null);
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (controlConfig === null) return;
+    // A command id that survived the reload is resolved before anything else reads.
+    for (const command of readUncertainCommands(browserSession())) void resolveUncertain(command);
+    void readControlTick();
+    const timer = setInterval(() => void readControlTick(), CONTROL_POLL_MS);
+    return () => clearInterval(timer);
+  }, [controlConfig]);
+
+  useEffect(() => {
+    writeUncertainCommands(browserSession(), control.uncertainCommandIds);
+  }, [control.uncertainCommandIds]);
+
+  // Opening a group, a voided cache and a projection gap all mean: re-read it canonically.
+  useEffect(() => {
+    if (controlConfig === null || selectedGroup === null) return;
+    const cached = control.canonical[selectedGroup] !== undefined;
+    if (cached && !control.refetchRequired) return;
+    void readControlGroup(selectedGroup);
+  }, [controlConfig, selectedGroup, control.canonical, control.refetchRequired]);
 
   const loadHome = async (): Promise<void> => {
     try {
@@ -178,6 +311,24 @@ export function App(): JSX.Element {
               const r = await requestChainStop(repoKey, chainId);
               return r.ok ? { kind: "stop-requested", chainId } : { kind: "refused", refusal: r };
             });
+          }}
+        />
+      )}
+      {controlConfig !== null && control.recovery !== null && (
+        <ControlPanel
+          config={controlConfig}
+          summary={summaryView(control)}
+          recovery={control.recovery}
+          groups={control.canonical}
+          selected={selectedGroup}
+          drafts={control.drafts}
+          uncertain={control.uncertainCommandIds}
+          refusal={control.refusal}
+          refetchRequired={control.refetchRequired}
+          onSelect={setSelectedGroup}
+          onDraft={(key, text) => dispatchControl({ type: "draft", key, text })}
+          onCommand={(action) => {
+            void sendControl(action);
           }}
         />
       )}

@@ -11,5 +11,5 @@ export default defineConfig({
     rollupOptions: { output: { entryFileNames: "[name].js", assetFileNames: "[name].[ext]" } },
   },
   server: { proxy: { "/api": "http://127.0.0.1:7777" } },
-  test: { environment: "node", include: ["tests/**/*.test.tsx"] },
+  test: { environment: "node", include: ["tests/**/*.test.ts", "tests/**/*.test.tsx"] },
 });

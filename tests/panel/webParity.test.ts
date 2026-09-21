@@ -14,22 +14,44 @@ import type {
 import { WEB_CORRECTION_KINDS, WEB_LIST_FIELDS, WEB_REPORT_FIELDS } from "../../web/src/types.js";
 import { CORRECTION_KINDS } from "../../src/corrections/schema.js";
 import type {
+  CommandEnvelopeV1 as ServerCommandEnvelopeV1,
   CommandErrorV1 as ServerCommandErrorV1,
   CommandLookupV1 as ServerCommandLookupV1,
+  CommandSuccessV1 as ServerCommandSuccessV1,
+  ConfirmPayload as ServerConfirmPayload,
+  ContinueTaskPayload as ServerContinueTaskPayload,
   ControlConfigV1 as ServerControlConfigV1,
   ControlSummaryV1 as ServerControlSummaryV1,
   EvidenceManifestV1 as ServerEvidenceManifestV1,
   GroupViewV1 as ServerGroupViewV1,
+  HandoffStopPayload as ServerHandoffStopPayload,
+  ImportPlanPayload as ServerImportPlanPayload,
+  ProposalEditPayload as ServerProposalEditPayload,
+  RecoveryRetryPayload as ServerRecoveryRetryPayload,
   RecoveryViewV1 as ServerRecoveryViewV1,
+  ReestimatePayload as ServerReestimatePayload,
+  ResumeFromHandoffPayload as ServerResumeFromHandoffPayload,
+  SetLimitPayload as ServerSetLimitPayload,
 } from "../../src/control/webProtocol.js";
 import type {
+  CommandEnvelopeV1 as WebCommandEnvelopeV1,
   CommandErrorV1 as WebCommandErrorV1,
   CommandLookupV1 as WebCommandLookupV1,
+  CommandSuccessV1 as WebCommandSuccessV1,
+  ConfirmPayloadV1 as WebConfirmPayloadV1,
+  ContinueTaskPayloadV1 as WebContinueTaskPayloadV1,
   ControlConfigV1 as WebControlConfigV1,
   ControlSummaryV1 as WebControlSummaryV1,
+  EstimatePayloadV1 as WebEstimatePayloadV1,
   EvidenceManifestV1 as WebEvidenceManifestV1,
   GroupViewV1 as WebGroupViewV1,
+  HandoffStopPayloadV1 as WebHandoffStopPayloadV1,
+  ImportPlanPayloadV1 as WebImportPlanPayloadV1,
+  ProposalEditPayloadV1 as WebProposalEditPayloadV1,
+  RecoveryRetryPayloadV1 as WebRecoveryRetryPayloadV1,
   RecoveryViewV1 as WebRecoveryViewV1,
+  ResumeFromHandoffPayloadV1 as WebResumeFromHandoffPayloadV1,
+  SetLimitPayloadV1 as WebSetLimitPayloadV1,
 } from "../../web/src/controlTypes.js";
 
 /**
@@ -104,6 +126,32 @@ function commandLookupWebToServer(x: WebCommandLookupV1): ServerCommandLookupV1 
 function commandErrorServerToWeb(x: ServerCommandErrorV1): WebCommandErrorV1 { return x; }
 function commandErrorWebToServer(x: WebCommandErrorV1): ServerCommandErrorV1 { return x; }
 
+// Task 9: the commands the browser may send. A payload mirror that drifts from the
+// server's schema is a command the ledger will refuse (or, worse, one it will
+// accept with a different meaning), so both directions are checked at compile time.
+function envelopeServerToWeb(x: ServerCommandEnvelopeV1): WebCommandEnvelopeV1 { return x; }
+function envelopeWebToServer(x: WebCommandEnvelopeV1): ServerCommandEnvelopeV1 { return x; }
+function successServerToWeb(x: ServerCommandSuccessV1): WebCommandSuccessV1 { return x; }
+function successWebToServer(x: WebCommandSuccessV1): ServerCommandSuccessV1 { return x; }
+function importPlanServerToWeb(x: ServerImportPlanPayload): WebImportPlanPayloadV1 { return x; }
+function importPlanWebToServer(x: WebImportPlanPayloadV1): ServerImportPlanPayload { return x; }
+function proposalEditServerToWeb(x: ServerProposalEditPayload): WebProposalEditPayloadV1 { return x; }
+function proposalEditWebToServer(x: WebProposalEditPayloadV1): ServerProposalEditPayload { return x; }
+function estimateServerToWeb(x: ServerReestimatePayload): WebEstimatePayloadV1 { return x; }
+function estimateWebToServer(x: WebEstimatePayloadV1): ServerReestimatePayload { return x; }
+function confirmServerToWeb(x: ServerConfirmPayload): WebConfirmPayloadV1 { return x; }
+function confirmWebToServer(x: WebConfirmPayloadV1): ServerConfirmPayload { return x; }
+function setLimitServerToWeb(x: ServerSetLimitPayload): WebSetLimitPayloadV1 { return x; }
+function setLimitWebToServer(x: WebSetLimitPayloadV1): ServerSetLimitPayload { return x; }
+function handoffStopServerToWeb(x: ServerHandoffStopPayload): WebHandoffStopPayloadV1 { return x; }
+function handoffStopWebToServer(x: WebHandoffStopPayloadV1): ServerHandoffStopPayload { return x; }
+function resumeFromHandoffServerToWeb(x: ServerResumeFromHandoffPayload): WebResumeFromHandoffPayloadV1 { return x; }
+function resumeFromHandoffWebToServer(x: WebResumeFromHandoffPayloadV1): ServerResumeFromHandoffPayload { return x; }
+function continueTaskServerToWeb(x: ServerContinueTaskPayload): WebContinueTaskPayloadV1 { return x; }
+function continueTaskWebToServer(x: WebContinueTaskPayloadV1): ServerContinueTaskPayload { return x; }
+function recoveryRetryServerToWeb(x: ServerRecoveryRetryPayload): WebRecoveryRetryPayloadV1 { return x; }
+function recoveryRetryWebToServer(x: WebRecoveryRetryPayloadV1): ServerRecoveryRetryPayload { return x; }
+
 // Referenced so nothing above is dead code the compiler is free to ignore;
 // never invoked for its behavior, only so the assignments above are real
 // return statements the type checker has to verify.
@@ -130,4 +178,26 @@ export const __webParityAssignabilityChecks__ = [
   commandLookupWebToServer,
   commandErrorServerToWeb,
   commandErrorWebToServer,
+  envelopeServerToWeb,
+  envelopeWebToServer,
+  successServerToWeb,
+  successWebToServer,
+  importPlanServerToWeb,
+  importPlanWebToServer,
+  proposalEditServerToWeb,
+  proposalEditWebToServer,
+  estimateServerToWeb,
+  estimateWebToServer,
+  confirmServerToWeb,
+  confirmWebToServer,
+  setLimitServerToWeb,
+  setLimitWebToServer,
+  handoffStopServerToWeb,
+  handoffStopWebToServer,
+  resumeFromHandoffServerToWeb,
+  resumeFromHandoffWebToServer,
+  continueTaskServerToWeb,
+  continueTaskWebToServer,
+  recoveryRetryServerToWeb,
+  recoveryRetryWebToServer,
 ] as const;
