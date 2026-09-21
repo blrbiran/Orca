@@ -1,6 +1,7 @@
 import type { Express, NextFunction, Request, Response } from "express";
 import { randomUUID } from "node:crypto";
 import { canonicalBytes } from "../control/canonicalJson.js";
+import { readArtifact } from "../control/archive.js";
 import { ZodError } from "zod";
 import { lookupCommandResult } from "../control/commandLedger.js";
 import { ControlError } from "../control/errors.js";
@@ -123,6 +124,26 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
     const runId = String(req.params.runId);
     try { res.json(await readRunEvidence(deps.store, runId)); }
     catch (error) {
+      const run = deps.store.db.prepare("SELECT group_id FROM runs WHERE id=?").get(runId);
+      sendMappedControlError(res, error, run ? readErrorContext(deps.store, String(run.group_id)) : undefined);
+    }
+  }));
+
+  // The manifest hands the browser these URLs, so the bytes behind one have to be served by the
+  // same store-verified path: the reference list is re-walked, and only a listed hash is read.
+  app.get("/api/control/runs/:runId/evidence/:artifactId", asyncRoute(async (req, res) => {
+    const runId = String(req.params.runId);
+    const artifactId = String(req.params.artifactId);
+    try {
+      const manifest = await readRunEvidence(deps.store, runId);
+      const entry = manifest.entries.find((row) => row.evidenceId === artifactId);
+      if (!entry) throw new ControlError("recovery-blocked", "evidence-reference-unknown");
+      const bytes = await readArtifact(deps.store, { artifactId: entry.evidenceId, hash: entry.sha256 });
+      res.setHeader("content-type", "application/octet-stream");
+      res.setHeader("content-security-policy", "default-src 'none'");
+      res.setHeader("content-disposition", `attachment; filename="${entry.sha256}"`);
+      res.send(bytes);
+    } catch (error) {
       const run = deps.store.db.prepare("SELECT group_id FROM runs WHERE id=?").get(runId);
       sendMappedControlError(res, error, run ? readErrorContext(deps.store, String(run.group_id)) : undefined);
     }
