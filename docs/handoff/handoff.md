@@ -4977,3 +4977,25 @@ Task 6 原独立审查的 4 个 Important 与 1 个 Minor 均已修复：非规�
 3. RED／GREEN 与台账仍在开发树 `/Users/biran/.codex/worktrees/control-foundation-0919/Orca/.superpowers/sdd/2026-09-20-web-recoverable-control/`（gitignored，main 树无此目录）。历史台账一个字不改。
 
 **下一件事**：Task 9（薄 Web 控制客户端与可恢复浏览器状态，计划 Step 1–7：先状态机 RED、再组件 RED、然后 wrapper／canonical state／薄 UI、Web GREEN ＋ root parity），随后 Task 10 验收与证据图；再往后是自动拆分、ccmem 纠正闭环／组 goal 验收。约束不变：开门／合并／删分支或 worktree／push 四件需人单独授权，控制器不许 push，非门合并一律 `--ff-only`，成本只报工具给出的数，chain 活验须人选 model 并点头；Claude 额度 2026-09-22 09:00 Asia/Shanghai 后再核实。本切片没有任何真实模型调用。
+
+## 2026-09-21 Web 可恢复控制交接（Task 9–10 已完成，计划十项全部落地；下一件事是整支终审）
+
+本节取代上节的状态与「下一件事」，是当前接手入口。`docs/superpowers/plans/2026-09-20-web-recoverable-control.md` 的 **Task 1–10 已全部提交在本地 `main`，一项都不要重做**。定位只用提交主题：Task 9 是 `feat(web): add recoverable task control`，Task 10 是 `test(control): verify web recoverable control`（它的生产改动另起一提交 `fix(panel): serve the evidence bytes the manifest hands to the browser`）。本文提交会继续移动 HEAD，因此不固定哈希、ahead 数或发布状态；三仓仍全部只有本地提交，未 push、未清理分支／worktree／证据。
+
+**Task 9 交付**（14 文件／1602 行）：`web/src/controlApi.ts`、`controlState.ts`、`controlTypes.ts` ＋ `ControlPanel.tsx`／`ControlGroupView.tsx`／`BudgetEditor.tsx`／`RecoveryView.tsx`／`App.tsx`，配 `web/tests/controlState.test.ts`（166 行）、`web/tests/controlPanel.test.tsx`（194 行）与 root parity 判据 `tests/panel/webParity.test.ts`（把 server 侧 DTO 与 browser 侧类型双向钉住）。浏览器只携带呈现状态、未保存草稿与「结果不确定」的 command id，权威一律在 SQLite。
+
+**Task 10 交付**：五个测试文件（`tests/panel/controlApi.test.ts`、`tests/panel/controlRecoveryApi.test.ts`、`tests/control/webFaults.test.ts`、`webMutations.test.ts`、`webCcloopSmoke.test.ts`）＋ 共享真 Panel fixture `tests/panel/fixtures/controlPanel.ts` ＋ 两个命名脚本 `verify:web-control`、`verify:web-control:consumer` ＋ 证据树 `.superpowers/sdd/2026-09-19-web-recoverable-control/`（`progress.md` 台账、`acceptance-map.md`、`commands/`、`test-logs/`、`artifacts/`、`final-report.md`）。spec §9.1 的 43 个场景、§9.3 的 11 个故障缝、§9.4 的 10 个变异闸门全部映射到 `file:line` ＋ 原文 `it()` 标题，逐行回查过。
+
+**本轮实测数字**（命令、RC、红→绿全表在 `commands/2026-09-21-task-10.md`）：`verify:web-control` 11 文件／112 passed／2 skipped；`:consumer` 4 passed（`ORCA_CCLOOP_BIN=/tmp/ccloop-codex-0919/dist/cli.js`）；`npm --workspace web run check` 11 文件／58 passed；root 全套 172 文件通过／1 跳过、1516 passed／3 skipped；`typecheck` 干净；`build --workspace web` `✓ built in 531ms`；`verify:control` 39 文件／403 tests；`verify:panel` `PASS 0`–`PASS 14`。三条判据更正都写进代码注释并归到生产事实上（`commands/` 的 RED 表），**判据文本一个字未自改**。
+
+**⚠️ 需人签核的一处生产改动**：Task 10 名义上只加测试，但 `GET /api/control/runs/:runId/evidence` 交出的 `downloadUrl` 当时**没有任何路由服务**——manifest 自己的字段是 404。已另起提交 `fix(panel): serve the evidence bytes the manifest hands to the browser`（21 行）：重走同一份 store 校验过的引用表，只读列出的 hash，`content-security-policy: default-src 'none'`，文件名取 sha256。它单独成提交就是为了让你能只 revert 它。
+
+**环境偏差（必须带走）**：所有验证与提交命令都带 `PATH="/usr/local/bin:$PATH"` 前缀，pre-commit hook 真跑、未用 `--no-verify`；原因是全局 homebrew node 缺 `libsimdjson.26.dylib`，人已裁定「不修全局，用 PATH 前缀提交」。
+
+**挂账（下一步要先知道的，都是本轮现测）**：
+1. 上节挂账 1 **未关闭**：`src/panel/` 里仍没有任何地方构造 `deps.control`，所以生产 `orca panel` 依旧一格 `/api/control` 都不挂载；本轮证明的是「测试装配的真 Panel 上整平面绿」。下一位先决定生产装配落在哪、允许默认什么，这比再加测试值钱。
+2. 上节挂账 2 **已关闭**：`fix(control): keep an unspent grant booked on a pre-provider failure`。
+3. 证据链两处表现要人判：(a) `web/src/ControlGroupView.tsx:99`、`web/src/RecoveryView.tsx:49` 把 evidence 链接渲染成裸 `<a href>`，而 `/api/control` 一律要 `x-orca-token`，所以浏览器点进去是 401（Task 9 的 UI 面，修法要么是带 token 的查看器、要么是限时凭据，属产品决定）；(b) 没有任何生产 consumer 把台账的 `orca-dispatch-envelope-v1` 翻成 ccloop 的 `StartEnvelopeV1`，且 `createCcloopExecutionPort` 不暴露 `probeProfileCapabilities`，因此裸 ccloop port 驱动不了 Web dispatch——`webCcloopSmoke.test.ts` 在自己的文件里做了这层翻译并写明「生产里没有」。
+4. 台账分两处：Task 1–6 的 dispatch／审查／修复轮记录在开发树 `.../control-foundation-0919/Orca/.superpowers/sdd/2026-09-20-web-recoverable-control/progress.md`（一个字不改），Task 7–10 在 main 树 `.superpowers/sdd/2026-09-19-web-recoverable-control/progress.md`。**Task 7／8／9／10 没有独立审查席**——代码与判据都出自控制器，Task 10 是它们的验收证据。
+
+**下一件事**：计划 Final checklist 剩下的三项——整支终审（对着 spec、计划、parked/minor 与全量 diff 一遍，重点判 Task 7 的通用 wake engine 与 Task 10 的这处生产路由是否该那么做）、必要时一波修复＋定点复审、以及人在看完本报告后对上面 1／3 两条挂账给方向。再往后才是自动拆分、ccmem 纠正闭环／组 goal 验收。约束不变：开门／合并／删分支或 worktree／push 四件需人单独授权，控制器不许 push，非门合并一律 `--ff-only`，验证走 `rtk proxy`、远端只以 `git ls-remote` 为准，成本只报工具给出的数，不许替人宣布；chain 活验仍须人选 model 并明确点头，Claude 额度 2026-09-22 09:00 Asia/Shanghai 后再核实。Codex 依旧是 `phase-end + soft`，任何地方都不许宣称 strict；本切片没有任何真实模型调用。
