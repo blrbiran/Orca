@@ -4941,7 +4941,7 @@ SDD新增review-fix-evidence目录，保留全部旧台账与证据。产品已�
 
 关键竞态已修：Orca polling 不再用会创建目录的 helper 触碰 terminal source；ccloop 在 candidate durable 后才暴露 terminal，并负责精确物化 `sourceDir/repo`；Orca 只读校验，预先存在的非 Git 目录失败关闭。保留诊断根 `.../orca-real-ccloop-MyDo5O`、fixture `/private/tmp/orca-ccloop-d3-task8`、两开发树、node_modules 和全部 SDD 证据。最终真实 `/Users/biran/.orca` 仍不存在；本切片没有真实模型调用。
 
-下一步依次是 Web 可恢复任务控制 → 自动拆分 → ccmem 纠正闭环／组 goal 验收；agent 适配继续留在 ccloop。一次 Codex 真钱三阶段功能成功，但 wrapper 修正版只做了离线修复、未真钱重跑，不能升级表述。Orca 与 ccloop 相关分支已按用户授权在本地合入各自 `main`，未 push、未删除分支/worktree 或证据。Claude 额度在 2026-09-22 09:00 Asia/Shanghai 后再核实；Orca chain 活验仍须人选择 model 并明确点头。
+下一步依次是 Web 可恢复任务控制 → 自动拆分 → ccmem 纠正闭环／组 goal 验收；agent 适配继续留在 ccloop。一次 Codex 真钱三阶段功能成功，但 wrapper 修正版只做了离线修复、未真钱重跑，不能升级表述。Orca 与 ccloop 相关分支已在本地合入各自 `main`；是否已推送现测（`git status -sb` ＋ `git ls-remote`），分支/worktree/证据未删除。Claude 额度在 2026-09-22 09:00 Asia/Shanghai 后再核实；Orca chain 活验仍须人选择 model 并明确点头。
 
 ## 2026-09-20 Web 可恢复控制交接（Task 6 审查问题已闭环）
 
@@ -4951,11 +4951,11 @@ Task 6 原独立审查的 4 个 Important 与 1 个 Minor 均已修复：非规�
 
 最终全套 `ORCA_CCLOOP_BIN=/tmp/ccloop-codex-0919/dist/cli.js ORCA_CCLOOP_ADAPTER_CONFIG=/tmp/orca-ccloop-d3-task8/fake-codex-config.json npm run verify` RC0：主套 163 文件／1384 测试，control 32／287（含真实 ccloop 3／3），scheduler 51／167，chain 13／213，chain 环境主套 163／1384，Web build、panel PASS0–14、Web 9／34；typecheck 和 `git diff --check` 通过。聚焦最终回归为 estimator 18／18、confirmation 8／8。提交按主题 `fix(control): close Task 6 settlement review gaps` 与 `fix(control): reject noncanonical validated estimates` 定位；本文提交会继续移动 HEAD，不固定哈希、ahead 数或发布状态。
 
-下一项是计划 `docs/superpowers/plans/2026-09-20-web-recoverable-control.md` 的 Task 7：durable start、proof recovery 与 context-watermark control；先写 start/proof 真值表 RED，再实现 wake/delivery/claim/proof/session admission 与恢复，不能把 Codex `phase-end + soft` 宣称为 strict。复现与实现报告保留在控制开发树 `.superpowers/sdd/2026-09-20-web-recoverable-control/task-6-review-report.md`、同目录 `task-6-implementer-report.md`；开发树、node_modules、全部 SDD 证据、ccloop fixture 均保留。三仓仅本地提交，未 push、未清理分支/worktree；chain 活验仍须人选 model 并明确点头。
+下一项是计划 `docs/superpowers/plans/2026-09-20-web-recoverable-control.md` 的 Task 7：durable start、proof recovery 与 context-watermark control；先写 start/proof 真值表 RED，再实现 wake/delivery/claim/proof/session admission 与恢复，不能把 Codex `phase-end + soft` 宣称为 strict。复现与实现报告保留在控制开发树 `.superpowers/sdd/2026-09-20-web-recoverable-control/task-6-review-report.md`、同目录 `task-6-implementer-report.md`；开发树、node_modules、全部 SDD 证据、ccloop fixture 均保留。发布状态现测（`git status -sb` ＋ `git log --oneline @{u}..HEAD` ＋ `git ls-remote`），分支/worktree 未清理；chain 活验仍须人选 model 并明确点头。
 
 ## 2026-09-21 Web 可恢复控制交接（Task 7–8 已完成，下一位从 Task 9 接手）
 
-本节取代上节「下一项是 Task 7」的状态，是当前接手入口。计划 `docs/superpowers/plans/2026-09-20-web-recoverable-control.md` 的 **Task 1–8 已全部提交在本地 `main`，勿重做**。定位用提交主题：Task 7 是 `feat(control): dispatch recoverable web runs`，Task 8 是 `feat(control): orchestrate recoverable web stops`。本文提交会继续移动 HEAD，因此不固定任何哈希、ahead 数或发布状态；三仓仍全部只有本地提交，未 push、未清理分支／worktree／证据。
+本节取代上节「下一项是 Task 7」的状态，是当前接手入口。计划 `docs/superpowers/plans/2026-09-20-web-recoverable-control.md` 的 **Task 1–8 已全部提交在本地 `main`，勿重做**。定位用提交主题：Task 7 是 `feat(control): dispatch recoverable web runs`，Task 8 是 `feat(control): orchestrate recoverable web stops`。本文提交会继续移动 HEAD，因此不固定任何哈希、ahead 数或发布状态；发布状态不在本文判定（用户曾自行推送；现测 `git status -sb` ＋ `git log --oneline @{u}..HEAD` ＋ `git ls-remote`）；分支／worktree／证据未清理。
 
 **Task 7 交付**：durable start（wake→claim→proof→session admission 的真值表全实现）、start proof recovery、context-watermark control（阈值穿越与 observation gap 的 latch／抑制）。Codex 仍是 `phase-end + soft`，任何地方都不得宣称 strict。
 
@@ -4980,7 +4980,7 @@ Task 6 原独立审查的 4 个 Important 与 1 个 Minor 均已修复：非规�
 
 ## 2026-09-21 Web 可恢复控制交接（Task 9–10 已完成，计划十项全部落地；下一件事是整支终审）
 
-本节取代上节的状态与「下一件事」，是当前接手入口。`docs/superpowers/plans/2026-09-20-web-recoverable-control.md` 的 **Task 1–10 已全部提交在本地 `main`，一项都不要重做**。定位只用提交主题：Task 9 是 `feat(web): add recoverable task control`，Task 10 是 `test(control): verify web recoverable control`（它的生产改动另起一提交 `fix(panel): serve the evidence bytes the manifest hands to the browser`）。本文提交会继续移动 HEAD，因此不固定哈希、ahead 数或发布状态；三仓仍全部只有本地提交，未 push、未清理分支／worktree／证据。
+本节取代上节的状态与「下一件事」，是当前接手入口。`docs/superpowers/plans/2026-09-20-web-recoverable-control.md` 的 **Task 1–10 已全部提交在本地 `main`，一项都不要重做**。定位只用提交主题：Task 9 是 `feat(web): add recoverable task control`，Task 10 是 `test(control): verify web recoverable control`（它的生产改动另起一提交 `fix(panel): serve the evidence bytes the manifest hands to the browser`）。本文提交会继续移动 HEAD，因此不固定哈希、ahead 数或发布状态；发布状态不在本文判定（用户曾自行推送；现测 `git status -sb` ＋ `git log --oneline @{u}..HEAD` ＋ `git ls-remote`）；分支／worktree／证据未清理。
 
 **Task 9 交付**（14 文件／1602 行）：`web/src/controlApi.ts`、`controlState.ts`、`controlTypes.ts` ＋ `ControlPanel.tsx`／`ControlGroupView.tsx`／`BudgetEditor.tsx`／`RecoveryView.tsx`／`App.tsx`，配 `web/tests/controlState.test.ts`（166 行）、`web/tests/controlPanel.test.tsx`（194 行）与 root parity 判据 `tests/panel/webParity.test.ts`（把 server 侧 DTO 与 browser 侧类型双向钉住）。浏览器只携带呈现状态、未保存草稿与「结果不确定」的 command id，权威一律在 SQLite。
 
@@ -4999,3 +4999,28 @@ Task 6 原独立审查的 4 个 Important 与 1 个 Minor 均已修复：非规�
 4. 台账分两处：Task 1–6 的 dispatch／审查／修复轮记录在开发树 `.../control-foundation-0919/Orca/.superpowers/sdd/2026-09-20-web-recoverable-control/progress.md`（一个字不改），Task 7–10 在 main 树 `.superpowers/sdd/2026-09-19-web-recoverable-control/progress.md`。**Task 7／8／9／10 没有独立审查席**——代码与判据都出自控制器，Task 10 是它们的验收证据。
 
 **下一件事**：计划 Final checklist 剩下的三项——整支终审（对着 spec、计划、parked/minor 与全量 diff 一遍，重点判 Task 7 的通用 wake engine 与 Task 10 的这处生产路由是否该那么做）、必要时一波修复＋定点复审、以及人在看完本报告后对上面 1／3 两条挂账给方向。再往后才是自动拆分、ccmem 纠正闭环／组 goal 验收。约束不变：开门／合并／删分支或 worktree／push 四件需人单独授权，控制器不许 push，非门合并一律 `--ff-only`，验证走 `rtk proxy`、远端只以 `git ls-remote` 为准，成本只报工具给出的数，不许替人宣布；chain 活验仍须人选 model 并明确点头，Claude 额度 2026-09-22 09:00 Asia/Shanghai 后再核实。Codex 依旧是 `phase-end + soft`，任何地方都不许宣称 strict；本切片没有任何真实模型调用。
+
+## 2026-09-21 Web 可恢复控制交接（整支终审已跑完，修复三笔落地；下一件事是人签核 §0 与两处生产装配）
+
+本节取代上节的状态与「下一件事」，是当前接手入口。**上节的「173 文件全通过、1519 测试全通过、零 skip」不再成立**——那需要 `/tmp` 里的 ccloop artifact 才测得到，本轮拿不到，见下面「本轮实测」。
+
+**整支终审做完了**：三个审查席把 `final-report.md` 的每个数字和每段引文回查了一遍，九处说法读不回证据，已按「历史记录一个字不改」的规矩**只追加** `## 0. Corrections` 一节（§1–§10 原文照旧），`acceptance-map.md` 只加了一句指向 §0 的按语。改到的都是报告，不是判据、也不是测试。
+
+**三笔本地提交**（定位只用主题；本文提交会移动 HEAD，别把哈希当条件）：
+1. `fix(control): book a continuation against what its predecessor did not spend` — §5.1.1 让可恢复前驱把承诺停在「grant 减已结算累计用量」，§6.3 的续跑因此继承余量而不是原始 grant；重投的 settle 不再二次归还组预留；一次 resume wake 收口整批续跑；usage 未知时 start wake 交付不开 run。判据 `tests/control/webContinuationAccounting.test.ts`（6 个测试）。
+2. `fix(web): keep an unresolved command id and open run evidence with the token` — 只有 spec §4.1 的 `command-result-not-found` 才算 `absent`，其余（连不上、5xx、token 被拒）一律 `unresolved`、留住 id；重载后存活的 id 之前在镜像 effect 清 key 之前从没被读回来，现在在 reducer 初值里恢复。证据链接不再是打不开裸 `<a href>`：`web/src/EvidenceLink.tsx` 带 `x-orca-token` 取 manifest、以对象 URL 交下载、失败报具名拒绝。判据 `web/tests/controlCommandRecovery.test.tsx`、`web/tests/evidenceLink.test.tsx`（各 3 个）。
+3. `docs(sdd): append the whole-branch corrections to the web control report` — §0 ＋ 按语 ＋ 五份 `*-post-review.log`。
+
+**本轮实测**（不带 `/tmp` artifact）：`npm test` RC0＝173 文件通过／1 skip、1520 通过／5 skip（1525），那 5 个 skip 全是需要 `ORCA_CCLOOP_BIN`＋`ORCA_CCLOOP_ADAPTER_CONFIG` 的 `ccloopProtocol.integration`（3）与 `webCcloopSmoke`（2）；`typecheck` RC0；`npm --prefix web run check` RC0＝13 文件／64 测试；`verify:panel` RC0＝15 行 `PASS`。`verify:control` 与正式集成门**本轮未重跑**，别再引用它们的旧数。都带 `PATH="/usr/local/bin:$PATH"`，未用 `--no-verify`。
+
+**⚠️ 本轮动过一处既有判据，交人判**：`web/tests/controlPanel.test.tsx:147` 原来断言那个死的 evidence `href`，现改为断言渲染出的 evidence 控件本身，行为判据搬到 `evidenceLink.test.tsx`。这是「不许实施者自改判据」的例外，控制器没有自裁，写在这里等人点头或改回。
+
+**挂账（下一件件事，都是现测过的）**：
+1. 生产装配仍无人拍：`src/panel/server.ts:129` 依旧不构造 `deps.control`，生产 `orca panel` 一格 `/api/control` 都不挂；`acceptContextObservation`（`src/control/contextControl.ts:86`）没有生产调用方，且水位取调用方传入的 `input.policy`，自动上下文交接在出厂 Panel 里根本开不起来。这两个比再加测试值钱。
+2. 证据字节路由（`src/panel/controlApi.ts:134-150`）设了 CSP、disposition、content-type，**没设 `x-content-type-options: nosniff`**。
+3. §6.3 的前驱谓词在**生产里凑不齐**：`src/control/continuation.ts:140` 要 `state==="settled-recoverable" && recoverable===true`，`:145` 又要求那条 checkpoint 的 `result === "partial"`；而 `src/control/checkpoints.ts:80` 只在 `result === "complete"` 时才把 `recoverable` 置真，全仓没有任何生产路径写出 `recoverable: true` 的 Web run（只有 `tests/control/webContinuation.test.ts:156`、`webContinuationAccounting.test.ts:89`、`tests/panel/fixtures/controlPanel.ts:229` 三处 fixture 手工写）。需要人裁哪一侧的口径是对的，判据才算真覆盖。
+4. spec §9.1 有 4 行没有任何判据：*Model-assisted handoff*、*Handoff time limits*、*Estimator interrupted by stop*、*Strict estimator proof acknowledgement is lost*。§9.1 表 51 行、`acceptance-map.md` 70 行，别再说成「43 个场景」。
+5. artifact 字节路由仍只认 header，浏览器点开是 401——本轮只收口了 manifest，扩大范围属产品决定。
+6. 两处控制器自裁的 spec 冲突、六条 MINOR、proof 路径自测（§776）与 `attempt-proof-invalid`（§784）仍等人过一遍；Task 7–10 始终没有独立审查席。
+
+**约束不变**：开门／合并／删分支或 worktree／push 四件需人单独授权，控制器不许 push，非门合并一律 `--ff-only`；验证走 `rtk proxy`、远端只以 `git ls-remote` 为准；成本只报工具给出的数，拿不到就说拿不到；不许替人宣布；`.superpowers/sdd/**` 的历史记录一个字不改。本切片没有任何真实模型调用；Codex 仍是 `phase-end + soft`，任何地方不许宣称 strict。

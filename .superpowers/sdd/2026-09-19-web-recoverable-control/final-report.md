@@ -10,9 +10,10 @@ index.
 ## 0. Corrections (2026-09-21, whole-branch review)
 
 The three review seats re-checked every number and quotation in this report against the artifacts it
-cites. Nine statements below were wrong or could not be read off the evidence as written. Nothing in
-§1-§10 is edited here -- the original text stays as it was filed, and this section is the correction.
-Read §0 before repeating anything from the body.
+cited. Items 1-9 are the corrections -- nine statements that were wrong or could not be read off the
+evidence as written. Item 10 is this round's re-measurement and item 11 a gap the review found that
+§9 did not list. Nothing in §1-§10 is edited here -- the original text stays as it was filed, and
+this section is the correction. Read §0 before repeating anything from the body.
 
 1. **Push state (lines 6-7, "nothing pushed").** A report cannot describe a remote. Measure it:
    `git status -sb` and `git log --oneline @{u}..HEAD`.
@@ -92,13 +93,26 @@ Read §0 before repeating anything from the body.
     `ORCA_CCLOOP_ADAPTER_CONFIG`. **The formal gates were therefore not re-run this round**: with
     `ORCA_CONTROL_VERIFY=1` and no ccloop artifacts, `npm run verify:control` refuses
     (`RC=1`, recorded at `test-logs/verify-control-post-review.log`), and the same variable without
-    those artifacts makes the integration file throw at collection (`test-logs/root-suite-post-review
-    .log` was replaced by the clean run). §2's row 10 numbers stand only as the 2026-09-21 measurement
-    taken while those `/tmp` artifacts existed. `sha256` of the four logs, in table order:
+    those artifacts makes the integration file throw at collection
+    (`test-logs/root-suite-post-review.log` was replaced by the clean run). §2's row 10 numbers stand
+    only as the 2026-09-21 measurement taken while those `/tmp` artifacts existed. `sha256` of the
+    five logs, table order first four then the refusal:
     `95d84a2ca7e73990c2392c3e93ddf16ea07321c87cad25b91019a572fce393d7`,
     `8e2aaab2dbe975bac7e86488699019132f722a3160d59893f217bb41415d1c31`,
     `2f7e9880396dbbf7340e81947bef58acef9a07a6415cb40dbeeb02727c95d502`,
-    `120a31c58abb0e8b3f277b0118f60e3702575c47fb53bbc760c9327242afea6f`.
+    `120a31c58abb0e8b3f277b0118f60e3702575c47fb53bbc760c9327242afea6f`,
+    `6d6ada19f7aa7bc9bda7be4a59dac6f9a0e792855cb67b33161ce3069d94e434` (the refusal).
+11. **A gap this review found while writing item 10, not listed in §9.** §6.3's predecessor
+   predicate cannot be satisfied by any production path: `src/control/continuation.ts:140` requires
+   `state === "settled-recoverable"` and `recoverable === true`, and `:145` then requires that
+   checkpoint's `result === "partial"`, while `src/control/checkpoints.ts:80` sets `recoverable` true
+   only for `result === "complete"`. Nothing in `src/` ever writes `recoverable: true` for a Web run;
+   the three places that do are test fixtures
+   (`tests/control/webContinuation.test.ts:156`,
+   `tests/control/webContinuationAccounting.test.ts:89`,
+   `tests/panel/fixtures/controlPanel.ts:229`). So the continuation tests prove the accounting rule
+   given a forged recoverable predecessor, and do not prove that such a predecessor is reachable.
+   Adjudicating which side is correct needs the human; this report does not close it.
 
 ## 1. What was verified, and how far that reaches
 
