@@ -1,5 +1,13 @@
 # Acceptance map -- web recoverable control (spec 2026-09-19 section 9)
 
+> **Read `final-report.md` §0 first (2026-09-21 whole-branch review).** It corrects what this file
+> states too eagerly: the `webFaults:243`/`:266` rows describe a re-boot and an HTTP observation,
+> which the tests are not (`:243` is also cited at line 60 below for a pause-strengthening scenario it
+> does not exercise), and `final-report.md` quoted "43 §9.1 scenarios" where the spec's §9.1 table has
+> 51 rows and this file's has 70. Every
+> `file:line` citation in this file was re-checked on 2026-09-21: the 45 that quote a test title match
+> within six lines of the cited line.
+
 Scope of this file: which automated test proves which acceptance row of
 `docs/superpowers/specs/2026-09-19-web-recoverable-control-design.md` section 9.1, plus the fault
 injection (9.3) and mutation (9.4) criteria. Task 10 is the verification task; most rows were

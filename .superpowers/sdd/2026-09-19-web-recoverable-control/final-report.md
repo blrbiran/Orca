@@ -7,6 +7,99 @@ review or revert it on its own. Working tree `main`, nothing pushed. Every numbe
 from a tool result; the unfiltered logs in `test-logs/` are the authority, and this file is the
 index.
 
+## 0. Corrections (2026-09-21, whole-branch review)
+
+The three review seats re-checked every number and quotation in this report against the artifacts it
+cites. Nine statements below were wrong or could not be read off the evidence as written. Nothing in
+§1-§10 is edited here -- the original text stays as it was filed, and this section is the correction.
+Read §0 before repeating anything from the body.
+
+1. **Push state (lines 6-7, "nothing pushed").** A report cannot describe a remote. Measure it:
+   `git status -sb` and `git log --oneline @{u}..HEAD`.
+2. **"the eleven fault seams" (§1 line 20, §5 line 185).** `tests/control/webFaults.test.ts` has
+   **ten** `it()` blocks (`:75, :97, :113, :137, :157, :173, :198, :221, :243, :266`); §2's own row 1
+   counted 10. The "ten mutation guards" claim is right (10 `it(` in `webMutations.test.ts`).
+3. **"all 43 §9.1 scenarios" (§3 line 112).** spec §9.1's table has **51** rows; `acceptance-map.md`
+   §9.1 has **70** rows (it splits some scenarios and adds pre-existing-task rows), and 45 of its
+   citations quote a test title -- all 45 were re-checked and each title sits within six lines of its
+   cited line. Four §9.1 rows are not carried by any map row and are not proven here:
+   *Model-assisted handoff*, *Handoff time limits*, *Estimator interrupted by stop*,
+   *Strict estimator proof acknowledgement is lost*.
+4. **Three "verbatim" values in §4 do not exist in `artifacts/api-fixtures.json`** (lines 156, 160,
+   163, 180-181): `run-5a096e24-…` (twice), `handoff-0e3ee8e6…`, and the start
+   `authorityCommandHash "c8db9fca…"`. The fixture's real values are the work run
+   `run-89ca6cd9-7ccf-4ef4-8492-a48cb2d9b109`, `requestIds:
+   ["handoff-540c22832b0a46218fb79b76aeeaf01bbd53712dd08257d0639c156f2e98bc6d"]`, and
+   `authorityCommandHash: "7c710354e145ea6861015cef6134ef1cc4e8d6f22c49a022aa9d68de67f031af"`;
+   the estimate run is `run-f1bc2df5-226e-491e-99d7-e88a7706f950`, so §4's closing note about "the two
+   `<run>` ids" describes a difference that was not the one on the page. `effectivePayloadHash
+   "44136fa3…"`, `wakeId "scheduler-wake:grp-1:4"`, revision/projection numbers, the evidence entry
+   (`aa6483b2…`, 151 bytes, its `downloadUrl`) and the two header sets were re-checked and are correct.
+   Two renderings also differ in shape: the 401 body and the unlisted-artifact body are stored as JSON
+   *strings* in the fixture and printed as objects above.
+5. **§5's two "not simulated" bullets (lines 192-197) describe tests that do not exist.**
+   `webFaults:266` calls the production `runControlPanelStartup` (`src/panel/controlLifecycle.ts:181`)
+   with **injected** `recover`/`listen` callbacks that only record their order; no store is reopened,
+   no server is created, and no HTTP request is made -- what it proves is the order and that dispatch
+   was already blocked when the run's start wake was redelivered. `webFaults:243` never re-boots
+   either: it imports a second group in the same harness and calls `applyPanelShutdown` three times
+   under the **same** epoch (once with a before-commit fault, once clean, once as the replay),
+   asserting `stop_intents` rows. "a second `boot()` over the same `stateDir` (a new epoch, i.e. a
+   process restart)" contradicts the test and this report's own §5 wording. `acceptance-map.md:59`,
+   `:84` and `:85` repeat the overstated phrasing, and `acceptance-map.md:60` cites `webFaults:243`
+   for a *pause-strengthening* scenario that test does not exercise.
+6. **Exit codes (§2 line 32, lines 62-67, line 110).** No file in `test-logs/` contains an exit code
+   (`grep -c "RC=" test-logs/*` → 0 everywhere); they hold captured command output only. The `RC`
+   column lives in `commands/2026-09-21-task-10.md`'s tables. Where a log is the only artifact, its
+   proof is the summary line it carries, not a quoted `RC=0`.
+7. **§10's `/tmp` hashes (lines 297-303) are stale and the last sentence is self-contradictory.**
+   Re-measured 2026-09-21: `fake-codex-config.json` is still
+   `f6c14da856424b105356a5697fbd0be376257e1000910407b88c4a0f7ef856e8`; `fake-codex-marker.json` is
+   now `8d5534bd028eb6dd4c26476a630133ef6f573fb02fb55e1080ba5cf5702fe150` (not `0cfac1b9…`) and
+   `.calls` is 165 lines (not 159). The adapter writes both during a run, so "Nothing in this task
+   wrote to `/tmp/orca-ccloop-d3-task8/`" is false as written; the honest claim is that no task
+   authored or edited the fixture *inputs* there.
+8. **§9's "Panel evidence links cannot be opened by a browser" is closed** by
+   `web/src/EvidenceLink.tsx` and `saveEvidenceManifest` in `web/src/controlApi.ts`: the manifest is
+   fetched with the `x-orca-token` header and handed to the browser as an object-URL download, and a
+   refusal is named instead of swallowed. Criteria: `web/tests/evidenceLink.test.tsx` (3 tests). One
+   existing assertion moved with it -- `web/tests/controlPanel.test.tsx:147` used to assert the dead
+   `href`; it now asserts the evidence control is rendered. That is the only place in this round where
+   a pre-existing assertion was changed, and it is called out for the human rather than settled here.
+   §9's "Production `orca panel` still mounts no `/api/control`" item is **not** closed: the test
+   harness still assembles the runtime, not `src/panel/server.ts`.
+9. **Two gaps §9 did not list**, both from this review: `acceptContextObservation`
+   (`src/control/contextControl.ts:86`) has **no production caller**, and its watermark comes from a
+   caller-supplied `input.policy`, so the automatic context handoff cannot fire in a shipped Panel;
+   and the evidence-bytes route (`src/panel/controlApi.ts:134-150`) sets CSP, disposition and
+   content-type but **no `x-content-type-options: nosniff`**.
+10. **Re-measured 2026-09-21 after the fix wave above**, in this tree, with the type-only
+    `unknown[]` → `SQLInputValue[]` correction in `tests/control/webContinuationAccounting.test.ts:30`
+    (the earlier `typecheck-post-review.log` reported `RC=2` on that line; it was a real regression
+    from this round, not a harness artifact). Each log below is the unfiltered output and its own
+    `RC=` line, so item 6's "no file in `test-logs/` contains an exit code" applies to the older
+    captures only:
+
+    | Log | Command | Result |
+    |---|---|---|
+    | `test-logs/typecheck-post-review.log` | `npm run typecheck` | `RC=0`, no diagnostics |
+    | `test-logs/web-check-post-review.log` | `npm --prefix web run check` | `RC=0`; 13 files / 64 tests |
+    | `test-logs/root-suite-post-review.log` | `npm test` | `RC=0`; 173 files passed / 1 skipped; 1520 passed / 5 skipped (1525) |
+    | `test-logs/verify-panel-post-review.log` | `npm run verify:panel` | `RC=0`; 15 `PASS` lines |
+
+    The one skipped file is `tests/control/ccloopProtocol.integration.test.ts` (3 tests), and 2 more
+    tests skip inside `tests/control/webCcloopSmoke.test.ts`; all five need `ORCA_CCLOOP_BIN` and
+    `ORCA_CCLOOP_ADAPTER_CONFIG`. **The formal gates were therefore not re-run this round**: with
+    `ORCA_CONTROL_VERIFY=1` and no ccloop artifacts, `npm run verify:control` refuses
+    (`RC=1`, recorded at `test-logs/verify-control-post-review.log`), and the same variable without
+    those artifacts makes the integration file throw at collection (`test-logs/root-suite-post-review
+    .log` was replaced by the clean run). §2's row 10 numbers stand only as the 2026-09-21 measurement
+    taken while those `/tmp` artifacts existed. `sha256` of the four logs, in table order:
+    `95d84a2ca7e73990c2392c3e93ddf16ea07321c87cad25b91019a572fce393d7`,
+    `8e2aaab2dbe975bac7e86488699019132f722a3160d59893f217bb41415d1c31`,
+    `2f7e9880396dbbf7340e81947bef58acef9a07a6415cb40dbeeb02727c95d502`,
+    `120a31c58abb0e8b3f277b0118f60e3702575c47fb53bbc760c9327242afea6f`.
+
 ## 1. What was verified, and how far that reaches
 
 Task 10 is the verification task: it adds tests and evidence, and (see §8) one production route.

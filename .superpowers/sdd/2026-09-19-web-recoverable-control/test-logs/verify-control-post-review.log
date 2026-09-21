@@ -1,0 +1,3 @@
+> node scripts/verify-control.mjs
+verify:control requires ORCA_CCLOOP_BIN and ORCA_CCLOOP_ADAPTER_CONFIG
+RC=1
