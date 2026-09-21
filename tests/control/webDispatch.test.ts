@@ -269,6 +269,24 @@ describe("scheduler wake delivery", () => {
     } finally { await h.dispose(); }
   });
 
+  it("keeps a failed-before-provider run booked at its unspent grant so the panel read path stays open", async () => {
+    const { h, service } = await startedFixture(); try {
+      const scheduled = await service.start(h.command("start", {}));
+      if ("error" in scheduled || scheduled.result.kind !== "scheduled") throw new Error("start rejected");
+      await deliverSchedulerWakes(h.store, createWebWakeHandlers({ ...h.deps, service }));
+      const failed = workRuns(h.store)[0];
+      await settleProviderAttempt({ store: h.store, profileRouter: h.deps.profileRouter }, { runId: failed.runId, phase: "work", firstAttemptProof: "invalid" });
+      const view = readControlGroup(h.store, "epoch-test", "g");
+      expect(view.summary.state).not.toBe("blocked");
+      expect(view.recoveryBlockers).toEqual([]);
+      const run = JSON.parse(String(h.store.db.prepare("SELECT body FROM runs WHERE id=?").get(failed.runId)!.body));
+      // No provider call means no consumption: the whole grant stays booked to the work item.
+      expect(run.remaining).toEqual(run.grant);
+      expect(run.cumulative).toEqual({ work: { tokens: 0, activeMs: 0, attempts: 0, sessions: 0 }, handoff: { tokens: 0, activeMs: 0, attempts: 0, sessions: 0 } });
+      expect(view.runs).toContainEqual(expect.objectContaining({ runId: failed.runId, state: "failed-before-provider", used: run.cumulative.work, remaining: run.grant.work }));
+    } finally { await h.dispose(); }
+  });
+
   it("re-arms the claim from a no-start wake under the original start revision", async () => {
     const { h, service } = await startedFixture(); try {
       const scheduled = await service.start(h.command("start", {}));

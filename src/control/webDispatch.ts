@@ -300,7 +300,8 @@ export function settleProviderAttempt(deps: WebDispatchDeps, input: { runId: str
     run.state = "failed-before-provider";
     run.failureCode = "request-bound-proof-invalid";
     run.unknown = { work: false, handoff: false };
-    run.remaining = { work: zero(), handoff: zero() };
+    // `remaining` stays at the unspent grant: with no provider call the ledger invariant
+    // `remaining == max(grant - cumulative, 0)` keeps the whole grant booked to the work item.
     saveDispatchRun(store, run);
     store.db.prepare("UPDATE runs SET active=0 WHERE id=?").run(run.runId);
     const work = readWork(store, run.groupId, run.workItemId) as unknown as { status: string };
