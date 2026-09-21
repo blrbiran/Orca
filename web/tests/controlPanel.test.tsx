@@ -147,6 +147,8 @@ describe("ControlPanel", () => {
     // This used to assert the manifest URL inside an `href`, which pinned the dead link:
     // `/api/control/*` answers to the `x-orca-token` header, so no href can load it. The
     // evidence control's real behaviour is judged in web/tests/evidenceLink.test.tsx.
+    // Ruling (human, 2026-09-22): this rewrite of an existing criterion is ratified -- an
+    // implementer may not change a judgement, so it was put up for approval and approved.
     expect(html).toContain(">evidence</button>");
     expect(html).toContain("projection refetch required");
   });

@@ -64,6 +64,20 @@ describe("checkpoint recoverability is not task completion", { timeout: 30_000 }
     }
   });
 
+  // spec §9.4 names this fault ("marks a partial checkpoint recoverable"): a checkpoint that
+  // reports evidence it could not capture is not continuable, whole snapshot or not.
+  it("does not call a checkpoint with missing evidence continuable", async () => {
+    const h = await candidateCase();
+    try {
+      await commitCandidate(h.store, { ...h.candidate, result: "partial", missing: ["submodule:vendor"] });
+      expect(getRun(h.store, h.claim.runId).recoverable).toBe(false);
+      await expect(exportResumeBundle(h.store, { predecessorRunId: h.claim.runId, newSourceDir: join(h.root, "next") }))
+        .rejects.toThrow("resume-predecessor-unrecoverable");
+    } finally {
+      await h.dispose();
+    }
+  });
+
   it("does not let late acceptance finish a task that stopped short of its outcome", async () => {
     const h = await candidateCase();
     try {
