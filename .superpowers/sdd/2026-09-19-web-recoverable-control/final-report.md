@@ -245,6 +245,15 @@ Each of these is a deliberate choice made during execution, not an oversight. Li
 
 ## 9. Findings left for a human decision
 
+* **Production `orca panel` still mounts no `/api/control` surface at all.** `src/panel/server.ts`
+  imports only the host check and the canonical-JSON body gate from the control layer, and nothing in
+  `src/panel/` constructs the `deps.control` runtime (stateDir, trusted config, profile router,
+  scheduler, `ExecutionPort`) that `buildApi` requires. The whole plane is therefore proven green
+  over a Panel that the *test harness* assembles (`tests/panel/fixtures/controlPanel.ts`). This is
+  the carried-forward item 1 of the 2026-09-21 handoff section, and Task 10 did not close it: the
+  plan's Task 10 Step 1 asked for "a real Panel with a temporary stateDir and deterministic profiles",
+  which is what the harness is, not for production wiring. **The next decision is where that
+  assembly lives and what it is allowed to default to.**
 * **Panel evidence links cannot be opened by a browser.** `web/src/ControlGroupView.tsx:99` and
   `web/src/RecoveryView.tsx:49` render plain `<a href={evidenceManifestUrl(runId)}>`; every
   `/api/control` read requires the `x-orca-token` header, so following one of those anchors answers
