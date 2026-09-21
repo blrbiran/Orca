@@ -136,6 +136,29 @@ describe("evidence and restart (task 10 step 2)", () => {
     await panel.close();
   });
 
+  it("refuses a browser any content sniffing of the evidence bytes it serves", async () => {
+    const paths = await h.workspace();
+    const panel = await h.boot("epoch-nosniff", paths);
+    await confirmSoft(panel);
+    await command(panel, `/api/control/groups/${GROUP}/start`, { commandId: "nosniff-start", expectedRevision: await revision(panel), payload: {} });
+    await panel.drainWakes();
+    const runId = (await view(panel)).runs.find((run) => run.phase === "work")!.runId;
+    await command(panel, `/api/control/groups/${GROUP}/handoff-stop`, { commandId: "nosniff-stop", expectedRevision: await revision(panel), payload: {} });
+    await settleRecoverableWork(panel, runId, "cp-nosniff-1");
+
+    const manifest = await json(await get(panel, `/api/control/runs/${runId}/evidence`));
+    const entry = (manifest.entries as Array<Record<string, unknown>>)[0];
+    const download = await get(panel, String(entry.downloadUrl));
+    expect(download.status).toBe(200);
+    // These bytes are arbitrary archived content, named by a hash the store verified. The
+    // attachment and CSP only pay off if no reader is left guessing what the body is.
+    expect(download.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(download.headers.get("content-type")).toBe("application/octet-stream");
+    expect(download.headers.get("content-security-policy")).toBe("default-src 'none'");
+    expect(download.headers.get("content-disposition")).toContain(`filename="${entry.sha256}"`);
+    await panel.close();
+  });
+
   it("reopens onto a run still marked active and stops dispatching until a person recovers it", async () => {
     const paths = await h.workspace();
     const first = await h.boot("epoch-crash", paths);

@@ -140,6 +140,7 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
       if (!entry) throw new ControlError("recovery-blocked", "evidence-reference-unknown");
       const bytes = await readArtifact(deps.store, { artifactId: entry.evidenceId, hash: entry.sha256 });
       res.setHeader("content-type", "application/octet-stream");
+      res.setHeader("x-content-type-options", "nosniff");
       res.setHeader("content-security-policy", "default-src 'none'");
       res.setHeader("content-disposition", `attachment; filename="${entry.sha256}"`);
       res.send(bytes);
