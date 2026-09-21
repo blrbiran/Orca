@@ -43,7 +43,7 @@ describe("checkpoint recoverability is not task completion", { timeout: 30_000 }
       const acceptance = await writeArtifact(h.store, "acceptance-before-commit",
         Buffer.from(JSON.stringify({ runId: h.claim.runId, checksPassed: true, landing: "landed" })));
       h.store.db.prepare("INSERT INTO outbox VALUES (?, 'acceptance', ?, 1)")
-        .run(`acceptance-before-commit:${h.claim.runId}`, JSON.stringify({ runId: h.claim.runId, accepted: true, source: acceptance }));
+        .run(`acceptance:${h.claim.runId}`, JSON.stringify({ runId: h.claim.runId, accepted: true, source: acceptance }));
       await commitCandidate(h.store, { ...h.candidate, result: "partial" });
       expect(getRun(h.store, h.claim.runId).recoverable).toBe(true);
       expect(readWork(h.store, "g1", "T1").status).not.toBe("done");
@@ -71,7 +71,7 @@ describe("checkpoint recoverability is not task completion", { timeout: 30_000 }
       const acceptance = await writeArtifact(h.store, "late-acceptance-interrupted",
         Buffer.from(JSON.stringify({ runId: h.claim.runId, checksPassed: true, landing: "landed" })));
       h.store.db.prepare("INSERT INTO outbox VALUES (?, 'acceptance', ?, 1)")
-        .run(`acceptance-interrupted:${h.claim.runId}`, JSON.stringify({ runId: h.claim.runId, accepted: true, source: acceptance }));
+        .run(`acceptance:${h.claim.runId}`, JSON.stringify({ runId: h.claim.runId, accepted: true, source: acceptance }));
       await repairAcceptedWork(h.store, h.claim.runId);
       expect(readWork(h.store, "g1", "T1").status).not.toBe("done");
     } finally {
