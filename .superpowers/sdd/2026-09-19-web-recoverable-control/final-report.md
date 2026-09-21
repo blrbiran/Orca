@@ -56,6 +56,21 @@ skip spelling and passes, so nothing Task 10 added there hides a case behind a s
 `tests/` tree the only skip spellings are the three lines above -- an `it.skipIf` pair in
 `webCcloopSmoke.test.ts` (146, 176) and the integration file's `describe.skipIf` (29).
 
+**Fresh full verification after the final reviewed code** (the plan's own checklist requirement, run
+against the committed tree, so it includes `92e7df2`'s route and every test in this commit):
+
+```text
+PATH="/usr/local/bin:$PATH" rtk env ORCA_CCLOOP_BIN=/tmp/ccloop-codex-0919/dist/cli.js \
+  ORCA_CCLOOP_ADAPTER_CONFIG=/tmp/orca-ccloop-d3-task8/fake-codex-config.json npm test
+RC=0   Test Files  173 passed (173)   Tests  1519 passed (1519)   Duration  100.31s
+log: test-logs/root-suite-final.log
+```
+
+With both environment variables exported the two `it.skipIf` cases and the three live-protocol cases
+run, so this is the zero-skip count: 173 files and 1519 tests. It supersedes row 7's
+172/1516+3-skipped as the post-code measurement; row 7 is kept because it is the configuration
+`verify:web-control` uses.
+
 ## 3. Artifact inventory
 
 Test/source bytes (sha256, from `shasum -a 256` in the working tree at evidence time):
@@ -77,6 +92,7 @@ Evidence files (this directory):
 d7bbbd05e67b1e1bab5b503a343c3e0a0873c8b8903e104dcb915f0c218593e2  artifacts/api-fixtures.json
 -                                                        artifacts/api-fixtures-dump.test.ts.txt  (collector, kept out of the suite)
 e0196bfd01ca61f328bb76fbc6889ba202256972f576d499e254f95d580c10ef  test-logs/root-suite.log
+f50017b0afc35572ac3aafc5227705d9c8cd5808f4d906a94eb881763586eba7  test-logs/root-suite-final.log
 8284e4cf41b6ce8d4ef26a3c688eb3ea4294a67839788ca6a4b65f0fdf52894f  test-logs/typecheck.log
 babb2c1346628bf027e78455698511edc007c39f2bcabf9ae5658009cd867609  test-logs/verify-control.log
 7799ce6d8dee456507ccffa3403db80e9c940f890a2293bae331d70014b2c821  test-logs/verify-panel.log

@@ -102,6 +102,10 @@ what each revealed), `acceptance-map.md` (spec §9.1/§9.3/§9.4 to `file:line`)
 `artifacts/api-fixtures.json` the verbatim Panel answers, regenerable by
 `artifacts/api-fixtures-dump.test.ts.txt`.
 
+Fresh full verification after the final reviewed code, on the committed tree:
+`rtk env ORCA_CCLOOP_BIN=/tmp/ccloop-codex-0919/dist/cli.js ORCA_CCLOOP_ADAPTER_CONFIG=/tmp/orca-ccloop-d3-task8/fake-codex-config.json npm test`
+-- `RC=0`, 173 files passed, 1519 tests passed, **zero skips** (`test-logs/root-suite-final.log`).
+
 No live model call occurred in any of it; Codex remained `usageObservation: phase-end` plus
 `budgetEnforcement: soft` everywhere, and the strict-mode rows prove only that strict is
 unreachable on it.
