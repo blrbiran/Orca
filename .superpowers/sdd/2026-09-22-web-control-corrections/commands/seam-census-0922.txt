@@ -1,0 +1,26 @@
+== beginHandoffAttempt
+== settleHandoffRequest
+src/control/stopIntent.ts:515:    settleHandoffRequestInTransaction(deps, groupId, requestId, "settled-unrecoverable", reasonCode);
+src/control/stopIntent.ts:610:    return store.transaction(() => settleHandoffRequestInTransaction(deps, requestedGroup(store, input.requestId), input.requestId, input.outcome, input.reasonCode ?? null));
+== deliverHandoffStop
+== createWebWakeHandlers
+== runControlPanelStartup
+== createTrustedControlConfig
+== applyPanelShutdown
+== acceptContextObservation
+== applyHandoffStop
+src/control/webService.ts:15:import { applyHandoffStop, applyPauseDispatch, applyRecoveryRetry, applyResumeDispatch, type HandoffStopCommand, type PauseCommand, type RecoveryRetryCommand, type ResumeDispatchCommand, type StopDeps } from "./stopIntent.js";
+src/control/webService.ts:367:    return applyHandoffStop(this.stopDeps(), command) as WebCommandResult;
+== deliverSchedulerWakes
+src/control/recovery.ts:3:import { reconcileStart, deliverSchedulerWakes, type WakeHandlers } from "./dispatch.js";
+src/control/recovery.ts:53: const delivery=wakes?await deliverSchedulerWakes(store,wakes.handlers):{deferred:[] as string[]};
+== scheduleStart
+src/control/webService.ts:14:import { scheduleStart, type StartCommand } from "./webDispatch.js";
+src/control/webService.ts:358:    return scheduleStart({ store: this.store, profileRouter: this.deps.profileRouter, admissionGate: this.deps.admissionGate }, command);
+src/control/webDispatch.ts:174:      // `scheduleStart` refuses to arm a wake while usage is unknown; the wake outlives that
+== startClaim
+src/control/service.ts:13:import { readEnvelope, reconcileStart, startClaim } from "./dispatch.js";
+src/control/service.ts:128:  async startProfiled(selection:ExecutionProfileSelection,input:import("./executionPort.js").StartEnvelope){if(selection.workKind!=="task")throw new ControlError("profile-changed");const {profile}=await this.profiledCapabilities(input.claim.groupId,selection);if(!sameProfile(readRun(this.store,input.claim.runId).executionProfile,selection))throw new ControlError("profile-changed");return startClaim(this.store,profile.port,input,this.admissionGate);}
+src/control/service.ts:129:  startLegacy(input:import("./executionPort.js").StartEnvelope){return startClaim(this.store,this.legacyExecutionPort(),input,this.admissionGate);}
+src/control/service.ts:173:    return startClaim(this.store,port,{protocol:1,claim,contractHash:hashPayload(work.contract),inputCheckpoint:checkpoint,work:{contract:work.contract,targetRepo:previous.work.targetRepo,base:previous.work.base,sourceDir}},this.admissionGate);
+== openControlStore

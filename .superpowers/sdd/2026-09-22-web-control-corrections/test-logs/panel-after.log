@@ -1,0 +1,20 @@
+
+> orca@0.1.0 verify:panel
+> tsx scripts/verify-panel.ts
+
+PASS 0 web/dist exists, is flat, and carries the token anchor
+PASS 1 orca panel is up at http://127.0.0.1:62200, ready line parsed
+PASS 2 listing records nothing (opened/reviewed stay 0 for both decisions)
+PASS 3 opening a decision's detail records exactly one 'opened' row and no 'reviewed' row
+PASS 4 re-opening the same decision's detail does not duplicate the 'opened' row
+PASS 5 agreeing records 'reviewed', moves the coverage numerator to 1, and updates the to-do list
+PASS 6 recording a correction records it and 'reviewed', and never closes the loop
+PASS 7 a second correction on the same decision is refused by name, with the panel's own message
+PASS 8 a correction with an unresolvable projectKey makes the next request answer 409 by name
+PASS 9 a raw traversal path 404s, GET / still serves the token-injected index.html, and a foreign Host is refused 403 by name without the token
+PASS 10 a request with no token is refused by name (401 TOKEN_REQUIRED)
+PASS 11 an unconfirmed external bind is refused by name, and the process never listens
+PASS 12 panel closed; ~/.orca is unchanged (absent before and after)
+PASS 13 a running panel writes a review again after compaction moved it out, and ~/.orca is still unchanged
+PASS 14 the panel opened a chain by spawning orca chain start, it ran to done and the status view says so, bad stops are refused, ~/.orca is unchanged
+PANEL_RC=0

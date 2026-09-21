@@ -1,0 +1,18 @@
+
+ RUN  v2.1.9 /Users/biran/code/skills/loop/Orca
+
+(node:24670) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/control/checkpointRecoverability.test.ts (6 tests) 6922ms
+   ✓ checkpoint recoverability is not task completion > keeps an interrupted run with a whole snapshot continuable, and its work unfinished 1136ms
+   ✓ checkpoint recoverability is not task completion > hands that predecessor's own dirty snapshot to the continuation bundle 1251ms
+   ✓ checkpoint recoverability is not task completion > does not complete an interrupted task's work at commit time, acceptance or not 1148ms
+   ✓ checkpoint recoverability is not task completion > refuses the bundle when the snapshot is gone, even though the run settled 1116ms
+   ✓ checkpoint recoverability is not task completion > does not call a checkpoint with missing evidence continuable 1114ms
+   ✓ checkpoint recoverability is not task completion > does not let late acceptance finish a task that stopped short of its outcome 1157ms
+
+ Test Files  1 passed (1)
+      Tests  6 passed (6)
+   Start at  01:58:01
+   Duration  7.42s (transform 157ms, setup 0ms, collect 224ms, tests 6.92s, environment 0ms, prepare 71ms)
+

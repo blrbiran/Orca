@@ -1,0 +1,102 @@
+[
+ {
+  "id": "M1 conflate continuable with finished",
+  "mutated_differs_from_worktree": true,
+  "rc": 1,
+  "lines": [
+   "   × checkpoint recoverability is not task completion > keeps an interrupted run with a whole snapshot continuable, and its work unfinished 1175ms",
+   "   × checkpoint recoverability is not task completion > hands that predecessor's own dirty snapshot to the continuation bundle 1119ms",
+   "   × checkpoint recoverability is not task completion > does not complete an interrupted task's work at commit time, acceptance or not 1159ms",
+   "   ✓ checkpoint recoverability is not task completion > refuses the bundle when the snapshot is gone, even though the run settled 1125ms",
+   "   ✓ checkpoint recoverability is not task completion > does not let late acceptance finish a task that stopped short of its outcome 1158ms",
+   " Test Files  1 failed (1)",
+   "      Tests  3 failed | 2 passed (5)"
+  ]
+ },
+ {
+  "restored_clean": true
+ },
+ {
+  "id": "M2 drop the whole-snapshot requirement",
+  "mutated_differs_from_worktree": true,
+  "rc": 1,
+  "lines": [
+   "   ✓ checkpoint recoverability is not task completion > keeps an interrupted run with a whole snapshot continuable, and its work unfinished 1285ms",
+   "   ✓ checkpoint recoverability is not task completion > hands that predecessor's own dirty snapshot to the continuation bundle 1868ms",
+   "   ✓ checkpoint recoverability is not task completion > does not complete an interrupted task's work at commit time, acceptance or not 1152ms",
+   "   × checkpoint recoverability is not task completion > refuses the bundle when the snapshot is gone, even though the run settled 1453ms",
+   "   ✓ checkpoint recoverability is not task completion > does not let late acceptance finish a task that stopped short of its outcome 1203ms",
+   " Test Files  1 failed (1)",
+   "      Tests  1 failed | 4 passed (5)"
+  ]
+ },
+ {
+  "restored_clean": true
+ },
+ {
+  "id": "M3 let acceptance finish an interrupted task",
+  "mutated_differs_from_worktree": true,
+  "rc": 0,
+  "lines": [
+   " ✓ tests/control/checkpointRecoverability.test.ts (5 tests) 5932ms",
+   "   ✓ checkpoint recoverability is not task completion > keeps an interrupted run with a whole snapshot continuable, and its work unfinished 1175ms",
+   "   ✓ checkpoint recoverability is not task completion > hands that predecessor's own dirty snapshot to the continuation bundle 1298ms",
+   "   ✓ checkpoint recoverability is not task completion > does not complete an interrupted task's work at commit time, acceptance or not 1156ms",
+   "   ✓ checkpoint recoverability is not task completion > refuses the bundle when the snapshot is gone, even though the run settled 1131ms",
+   "   ✓ checkpoint recoverability is not task completion > does not let late acceptance finish a task that stopped short of its outcome 1172ms",
+   " Test Files  1 passed (1)",
+   "      Tests  5 passed (5)"
+  ]
+ },
+ {
+  "restored_clean": true
+ },
+ {
+  "id": "M4 make the completion judgement the status driver again",
+  "mutated_differs_from_worktree": true,
+  "rc": 0,
+  "lines": [
+   " ✓ tests/control/checkpointRecoverability.test.ts (5 tests) 5907ms",
+   "   ✓ checkpoint recoverability is not task completion > keeps an interrupted run with a whole snapshot continuable, and its work unfinished 1163ms",
+   "   ✓ checkpoint recoverability is not task completion > hands that predecessor's own dirty snapshot to the continuation bundle 1261ms",
+   "   ✓ checkpoint recoverability is not task completion > does not complete an interrupted task's work at commit time, acceptance or not 1161ms",
+   "   ✓ checkpoint recoverability is not task completion > refuses the bundle when the snapshot is gone, even though the run settled 1134ms",
+   "   ✓ checkpoint recoverability is not task completion > does not let late acceptance finish a task that stopped short of its outcome 1186ms",
+   " Test Files  1 passed (1)",
+   "      Tests  5 passed (5)"
+  ]
+ },
+ {
+  "restored_clean": true
+ },
+ {
+  "id": "M5 refuse a bundle for an interrupted predecessor",
+  "mutated_differs_from_worktree": true,
+  "rc": 1,
+  "lines": [
+   "   ✓ checkpoint recoverability is not task completion > keeps an interrupted run with a whole snapshot continuable, and its work unfinished 1165ms",
+   "   × checkpoint recoverability is not task completion > hands that predecessor's own dirty snapshot to the continuation bundle 1137ms",
+   "   ✓ checkpoint recoverability is not task completion > does not complete an interrupted task's work at commit time, acceptance or not 1201ms",
+   "   ✓ checkpoint recoverability is not task completion > refuses the bundle when the snapshot is gone, even though the run settled 1102ms",
+   "   ✓ checkpoint recoverability is not task completion > does not let late acceptance finish a task that stopped short of its outcome 1165ms",
+   " Test Files  1 failed (1)",
+   "      Tests  1 failed | 4 passed (5)"
+  ]
+ },
+ {
+  "restored_clean": true
+ },
+ {
+  "id": "M6 serve evidence bytes without nosniff",
+  "mutated_differs_from_worktree": true,
+  "rc": 1,
+  "lines": [
+   "   × evidence and restart (task 10 step 2) > refuses a browser any content sniffing of the evidence bytes it serves 132ms",
+   " Test Files  1 failed (1)",
+   "      Tests  1 failed | 3 passed (4)"
+  ]
+ },
+ {
+  "restored_clean": true
+ }
+]

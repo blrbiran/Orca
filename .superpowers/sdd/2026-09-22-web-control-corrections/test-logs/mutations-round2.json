@@ -1,0 +1,40 @@
+[
+ {
+  "id": "M3 let acceptance finish an interrupted task",
+  "src_mutated": true,
+  "test_matches_worktree": true,
+  "rc": 1,
+  "failures": [
+   "   × checkpoint recoverability is not task completion > does not let late acceptance finish a task that stopped short of its outcome 1171ms"
+  ],
+  "summary": [
+   " Test Files  1 failed (1)",
+   "      Tests  1 failed | 4 passed (5)"
+  ]
+ },
+ {
+  "id": "M3 let acceptance finish an interrupted task",
+  "restored_clean": true
+ },
+ {
+  "id": "M4 make the continuable flag drive work status",
+  "src_mutated": true,
+  "test_matches_worktree": true,
+  "rc": 1,
+  "failures": [
+   "   × checkpoint recoverability is not task completion > does not complete an interrupted task's work at commit time, acceptance or not 1165ms"
+  ],
+  "summary": [
+   " Test Files  1 failed (1)",
+   "      Tests  1 failed | 4 passed (5)"
+  ]
+ },
+ {
+  "id": "M4 make the continuable flag drive work status",
+  "restored_clean": true
+ },
+ {
+  "id": "M7 remove the split's completion expression",
+  "error": "anchor hits 0"
+ }
+]
