@@ -1,0 +1,931 @@
+{
+  "GET /api/control/config": {
+    "schema": "orca-control-config-v1",
+    "epoch": "epoch-evidence",
+    "repositories": [
+      {
+        "repoId": "repo",
+        "displayName": "Repo"
+      }
+    ],
+    "plans": [
+      {
+        "planId": "plan",
+        "repoId": "repo",
+        "displayName": "Plan"
+      }
+    ],
+    "profiles": [
+      {
+        "profileId": "all",
+        "profileHash": "9b3414cdd92478de43de470a481705a07f736cbebd40ff0dc8cb8b3753c41612",
+        "allowedWorkKinds": [
+          "budget-estimate",
+          "goal-review",
+          "handoff",
+          "task"
+        ],
+        "contextTokenizer": null,
+        "workMaxOutputTokens": 1000,
+        "declared": {
+          "usageObservation": "realtime",
+          "budgetEnforcement": "bounded",
+          "contextObservation": "unavailable",
+          "handoffControl": "durable",
+          "handoffExecution": "mechanical-in-run-v1",
+          "contextWindowTokens": 1000000,
+          "requestBoundProof": {
+            "scheme": "adapter-request-bound-v1",
+            "version": "1",
+            "workDimensions": [
+              "tokens"
+            ],
+            "handoffDimensions": [],
+            "evidenceKind": "proof"
+          }
+        },
+        "observed": {
+          "usageObservation": "realtime",
+          "budgetEnforcement": "bounded",
+          "contextObservation": "unavailable",
+          "handoffControl": "durable",
+          "handoffExecution": "mechanical-in-run-v1",
+          "contextWindowTokens": 1000000,
+          "requestBoundProof": {
+            "scheme": "adapter-request-bound-v1",
+            "version": "1",
+            "workDimensions": [
+              "tokens"
+            ],
+            "handoffDimensions": [],
+            "evidenceKind": "proof"
+          }
+        },
+        "observedAt": "2030-01-01T00:00:00.000Z",
+        "probeFailureCode": null
+      }
+    ],
+    "defaults": {
+      "estimatorProfileId": "all",
+      "estimatorProfileHash": "9b3414cdd92478de43de470a481705a07f736cbebd40ff0dc8cb8b3753c41612",
+      "estimateMode": "soft"
+    },
+    "errorCatalog": [
+      {
+        "code": "artifact-id-conflict",
+        "status": 409
+      },
+      {
+        "code": "artifact-not-found",
+        "status": 404
+      },
+      {
+        "code": "budget-overflow",
+        "status": 422
+      },
+      {
+        "code": "checkpoint-id-conflict",
+        "status": 409
+      },
+      {
+        "code": "checkpoint-identity-conflict",
+        "status": 409
+      },
+      {
+        "code": "checkpoint-not-committed",
+        "status": 404
+      },
+      {
+        "code": "checkpoint-run-settled",
+        "status": 409
+      },
+      {
+        "code": "checkpoint-usage-high-water",
+        "status": 409
+      },
+      {
+        "code": "cleanup-not-recoverable",
+        "status": 422
+      },
+      {
+        "code": "command-result-not-found",
+        "status": 404
+      },
+      {
+        "code": "continuation-budget-unavailable",
+        "status": 422
+      },
+      {
+        "code": "continuation-identity-conflict",
+        "status": 409
+      },
+      {
+        "code": "continuation-predecessor-unrecoverable",
+        "status": 422
+      },
+      {
+        "code": "control-capability-unsupported",
+        "status": 422
+      },
+      {
+        "code": "control-evidence-unavailable",
+        "status": 422
+      },
+      {
+        "code": "control-internal-error",
+        "status": 500
+      },
+      {
+        "code": "control-invalid-stop",
+        "status": 400
+      },
+      {
+        "code": "control-non-canonical-json",
+        "status": 400
+      },
+      {
+        "code": "control-non-json-payload",
+        "status": 400
+      },
+      {
+        "code": "control-operation-in-progress",
+        "status": 503
+      },
+      {
+        "code": "control-owner-changed",
+        "status": 503
+      },
+      {
+        "code": "control-plan-rejected",
+        "status": 422
+      },
+      {
+        "code": "control-protocol-unavailable",
+        "status": 422
+      },
+      {
+        "code": "control-recovery-busy",
+        "status": 503
+      },
+      {
+        "code": "control-recovery-required",
+        "status": 423
+      },
+      {
+        "code": "control-target-not-allowed",
+        "status": 404
+      },
+      {
+        "code": "control-terminal-pending",
+        "status": 422
+      },
+      {
+        "code": "control-writer-active",
+        "status": 503
+      },
+      {
+        "code": "dependency-not-done",
+        "status": 422
+      },
+      {
+        "code": "duplicate-proposal-target",
+        "status": 422
+      },
+      {
+        "code": "duplicate-task-id",
+        "status": 422
+      },
+      {
+        "code": "estimate-in-flight",
+        "status": 422
+      },
+      {
+        "code": "execution-identity-conflict",
+        "status": 409
+      },
+      {
+        "code": "execution-policy-unrepresentable",
+        "status": 422
+      },
+      {
+        "code": "grant-amendment-unsupported",
+        "status": 422
+      },
+      {
+        "code": "graph-change-needs-handoff",
+        "status": 422
+      },
+      {
+        "code": "graph-cycle",
+        "status": 422
+      },
+      {
+        "code": "graph-dangling-dependency",
+        "status": 422
+      },
+      {
+        "code": "graph-version-conflict",
+        "status": 409
+      },
+      {
+        "code": "group-already-exists",
+        "status": 409
+      },
+      {
+        "code": "group-budget-unavailable",
+        "status": 422
+      },
+      {
+        "code": "group-deadline-expired",
+        "status": 422
+      },
+      {
+        "code": "group-graph-conflict",
+        "status": 409
+      },
+      {
+        "code": "group-not-found",
+        "status": 404
+      },
+      {
+        "code": "group-project-binding-required",
+        "status": 422
+      },
+      {
+        "code": "group-project-conflict",
+        "status": 409
+      },
+      {
+        "code": "group-review-budget-unavailable",
+        "status": 422
+      },
+      {
+        "code": "group-state-invalid",
+        "status": 422
+      },
+      {
+        "code": "group-stopped",
+        "status": 422
+      },
+      {
+        "code": "handoff-budget-unavailable",
+        "status": 422
+      },
+      {
+        "code": "handoff-grant-insufficient",
+        "status": 422
+      },
+      {
+        "code": "handoff-identity-conflict",
+        "status": 409
+      },
+      {
+        "code": "handoff-parent-invalid",
+        "status": 422
+      },
+      {
+        "code": "handoff-request-conflict",
+        "status": 409
+      },
+      {
+        "code": "handoff-work-not-found",
+        "status": 404
+      },
+      {
+        "code": "identity-space-exhausted",
+        "status": 422
+      },
+      {
+        "code": "landing-branch-conflict",
+        "status": 409
+      },
+      {
+        "code": "landing-needs-review",
+        "status": 422
+      },
+      {
+        "code": "landing-not-confirmed",
+        "status": 422
+      },
+      {
+        "code": "no-op-command",
+        "status": 422
+      },
+      {
+        "code": "numeric-overflow",
+        "status": 422
+      },
+      {
+        "code": "panel-draining",
+        "status": 503
+      },
+      {
+        "code": "panel-host-not-allowed",
+        "status": 403
+      },
+      {
+        "code": "plan-version-conflict",
+        "status": 409
+      },
+      {
+        "code": "profile-changed",
+        "status": 409
+      },
+      {
+        "code": "proposal-version-conflict",
+        "status": 409
+      },
+      {
+        "code": "query-invalid",
+        "status": 400
+      },
+      {
+        "code": "reconcile-budget-unapproved",
+        "status": 422
+      },
+      {
+        "code": "reconcile-registration-invalid",
+        "status": 422
+      },
+      {
+        "code": "reconcile-version-conflict",
+        "status": 409
+      },
+      {
+        "code": "recovery-blocked",
+        "status": 423
+      },
+      {
+        "code": "recovery-validation-failed",
+        "status": 422
+      },
+      {
+        "code": "report-commit-invalid",
+        "status": 409
+      },
+      {
+        "code": "report-identity-conflict",
+        "status": 409
+      },
+      {
+        "code": "report-path-conflict",
+        "status": 409
+      },
+      {
+        "code": "resume-artifact-conflict",
+        "status": 409
+      },
+      {
+        "code": "resume-bundle-exists",
+        "status": 409
+      },
+      {
+        "code": "resume-handoff-invalid",
+        "status": 422
+      },
+      {
+        "code": "resume-predecessor-unrecoverable",
+        "status": 422
+      },
+      {
+        "code": "resume-source-dir-not-absolute",
+        "status": 422
+      },
+      {
+        "code": "revision-conflict",
+        "status": 409
+      },
+      {
+        "code": "route-not-found",
+        "status": 404
+      },
+      {
+        "code": "run-already-settled",
+        "status": 409
+      },
+      {
+        "code": "run-generation-conflict",
+        "status": 409
+      },
+      {
+        "code": "run-grant-conflict",
+        "status": 409
+      },
+      {
+        "code": "run-not-found",
+        "status": 404
+      },
+      {
+        "code": "run-owner-conflict",
+        "status": 409
+      },
+      {
+        "code": "run-stop-unconfirmed",
+        "status": 422
+      },
+      {
+        "code": "snapshot-invalid",
+        "status": 422
+      },
+      {
+        "code": "snapshot-partial",
+        "status": 422
+      },
+      {
+        "code": "snapshot-required",
+        "status": 422
+      },
+      {
+        "code": "start-contract-conflict",
+        "status": 409
+      },
+      {
+        "code": "start-envelope-conflict",
+        "status": 409
+      },
+      {
+        "code": "start-intent-missing",
+        "status": 404
+      },
+      {
+        "code": "start-state-conflict",
+        "status": 409
+      },
+      {
+        "code": "stop-already-active",
+        "status": 409
+      },
+      {
+        "code": "stop-mode-conflict",
+        "status": 409
+      },
+      {
+        "code": "target-version-conflict",
+        "status": 409
+      },
+      {
+        "code": "task-checkpoint-not-committed",
+        "status": 404
+      },
+      {
+        "code": "token-required",
+        "status": 401
+      },
+      {
+        "code": "usage-event-conflict",
+        "status": 409
+      },
+      {
+        "code": "usage-gap",
+        "status": 422
+      },
+      {
+        "code": "work-already-active",
+        "status": 409
+      },
+      {
+        "code": "work-already-done",
+        "status": 409
+      },
+      {
+        "code": "work-not-found",
+        "status": 404
+      }
+    ]
+  },
+  "POST /api/control/groups/import-plan -> 201": {
+    "status": 201,
+    "body": {
+      "schema": "orca-command-success-v1",
+      "commandId": "evidence-import",
+      "actorId": "operator-7451324d-94ad-436a-b7d4-331807988095",
+      "verb": "import-plan",
+      "target": {
+        "kind": "group",
+        "groupId": "grp-1"
+      },
+      "commandRevision": 1,
+      "projectionSeq": 1,
+      "effectivePayloadHash": "171e3996e51246395d81b1b3d53b07681a6904b2e09907f0ed42b7be392d6b8b",
+      "authorityCommandHash": "56884cee1376fc50409d24cdb939e86ef0f039d0b9c0c21aa026f1eb0937ee9a",
+      "result": {
+        "kind": "imported",
+        "groupId": "grp-1",
+        "estimateId": "estimate-ec0e083a181306fea89a9b1e",
+        "estimateState": "queued",
+        "estimateReasonCode": null
+      }
+    }
+  },
+  "POST import-plan replay (same commandId)": {
+    "status": 201,
+    "byteForByteIdentical": true
+  },
+  "GET /api/control/groups/:id -- top-level keys": [
+    "schema",
+    "epoch",
+    "changeSeq",
+    "summary",
+    "graphVersion",
+    "plan",
+    "proposal",
+    "ledger",
+    "allocations",
+    "workItems",
+    "estimates",
+    "runs",
+    "checkpoints",
+    "handoffRequests",
+    "stop",
+    "recoveryBlockers",
+    "recentCommandIds"
+  ],
+  "GET /api/control/groups/:id -- summary": {
+    "groupId": "grp-1",
+    "state": "draft",
+    "commandRevision": 1,
+    "projectionSeq": 1,
+    "stopMode": null,
+    "stopState": null,
+    "claimBlocked": false,
+    "recoveryBlockerCount": 0
+  },
+  "GET /api/control/groups/:id -- proposal": {
+    "state": "editable",
+    "proposalVersion": 1,
+    "planHash": "e68257fcf60e65fa085e1cebe3ba011f2a87b00d1b15726576186fe40f577435",
+    "budgetMode": null,
+    "contextPolicy": {
+      "handoffAtContextTokens": null
+    },
+    "profiles": null,
+    "executionSnapshotHash": null
+  },
+  "GET /api/control/groups/:id -- workItems[0]": {
+    "taskId": "a",
+    "status": "draft",
+    "dependencyTaskIds": [],
+    "targetVersion": "v1",
+    "configHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "originalContractHash": "1b14fd0bc59fc4eb3447768a50553e4d122dcdadf96a2736147b6ba1fa2ca44a",
+    "derivedContractHash": null,
+    "currentRunId": null,
+    "pendingRunId": null,
+    "lineageRunIds": []
+  },
+  "GET /api/control/groups/:id -- estimates[0]": {
+    "estimateId": "estimate-ec0e083a181306fea89a9b1e",
+    "estimateVersion": 1,
+    "state": "queued",
+    "profile": {
+      "profileId": "all",
+      "profileHash": "9b3414cdd92478de43de470a481705a07f736cbebd40ff0dc8cb8b3753c41612"
+    },
+    "mode": "soft",
+    "requestHash": "42ebe4a34733dbfe818bcec1df4c1e8487676c9fd15a23273719462c3e33258a",
+    "outputHash": null,
+    "output": null,
+    "reasonCode": null
+  },
+  "GET /api/control/groups/:id -- allocations[0]": {
+    "ownerKind": "estimate",
+    "ownerId": "estimate-ec0e083a181306fea89a9b1e",
+    "bucket": "work",
+    "state": "draft-encumbered",
+    "amount": {
+      "tokens": 250000,
+      "activeMs": 900000,
+      "attempts": 1,
+      "sessions": 1
+    },
+    "fieldProvenance": {
+      "tokens": {
+        "provenance": "system",
+        "estimateId": null
+      },
+      "activeMs": {
+        "provenance": "system",
+        "estimateId": null
+      },
+      "attempts": {
+        "provenance": "system",
+        "estimateId": null
+      },
+      "sessions": {
+        "provenance": "system",
+        "estimateId": null
+      }
+    }
+  },
+  "GET /api/control/groups/:id -- runs": [],
+  "GET /api/control/groups/:id -- ledger": {
+    "groupLimit": {
+      "tokens": 5460000,
+      "activeMs": 24840000,
+      "attempts": 6,
+      "sessions": 6
+    },
+    "used": {
+      "tokens": 0,
+      "activeMs": 0,
+      "attempts": 0,
+      "sessions": 0
+    },
+    "committedRemaining": {
+      "tokens": 4550000,
+      "activeMs": 20700000,
+      "attempts": 5,
+      "sessions": 5
+    },
+    "explicitUnallocatedReserve": {
+      "tokens": 910000,
+      "activeMs": 4140000,
+      "attempts": 1,
+      "sessions": 1
+    },
+    "budgetDeficit": {
+      "tokens": 0,
+      "activeMs": 0,
+      "attempts": 0,
+      "sessions": 0
+    },
+    "usageUnknown": false
+  },
+  "leak check: group view contains no trusted path": {
+    "containsRoot": false,
+    "containsRepoPath": false
+  },
+  "POST proposal/edit with a stale expectedRevision": {
+    "status": 409,
+    "body": {
+      "error": {
+        "code": "revision-conflict",
+        "message": "The command revision is stale.",
+        "commandRevision": 1,
+        "evidenceIds": [],
+        "retryable": false
+      }
+    }
+  },
+  "POST proposal/edit with an out-of-range value": {
+    "status": 400,
+    "body": {
+      "error": {
+        "code": "control-non-json-payload",
+        "message": "The command body is not valid V1 JSON.",
+        "commandRevision": null,
+        "evidenceIds": [],
+        "retryable": false
+      }
+    }
+  },
+  "POST unknown control verb": {
+    "status": 404,
+    "body": "{\"error\":{\"code\":\"route-not-found\",\"message\":\"No control route matches this request.\",\"commandRevision\":null,\"evidenceIds\":[],\"retryable\":false}}"
+  },
+  "commands ledger rows after the two refused edits": {
+    "total": 2,
+    "staleRow": {
+      "1": 1
+    },
+    "outOfRangeRow": null,
+    "groupRevision": 1
+  },
+  "GET /api/control/summary without a token": {
+    "status": 401,
+    "body": "{\"error\":{\"code\":\"token-required\",\"message\":\"this panel needs its one-time token\",\"commandRevision\":null,\"evidenceIds\":[],\"retryable\":false}}"
+  },
+  "GET /api/control/runs/:runId/evidence -- estimate run the worker never reported": {
+    "status": 200,
+    "body": {
+      "schema": "orca-run-evidence-v1",
+      "runId": "run-f1bc2df5-226e-491e-99d7-e88a7706f950",
+      "entries": []
+    }
+  },
+  "GET /api/control/runs/:runId/evidence -- the same run after the fixture marked it settled-restartable": {
+    "status": 423,
+    "body": {
+      "error": {
+        "code": "recovery-blocked",
+        "message": "recovery-blocked:run-state:run-f1bc2df5-226e-491e-99d7-e88a7706f950",
+        "commandRevision": 1,
+        "evidenceIds": [],
+        "retryable": false
+      }
+    }
+  },
+  "GET /api/control/runs/:runId/evidence -- once the estimate answer is published": {
+    "status": 200,
+    "body": {
+      "schema": "orca-run-evidence-v1",
+      "runId": "run-f1bc2df5-226e-491e-99d7-e88a7706f950",
+      "entries": []
+    }
+  },
+  "estimate outputHash (server-side canonical sha256)": "327e001ffecbe80ebbb4aec3ce7dfc6d877164bfb25787e69aeea7f8efea1dfa",
+  "POST proposal/edit applying model advice": {
+    "status": 200,
+    "body": {
+      "schema": "orca-command-success-v1",
+      "commandId": "evidence-edit",
+      "actorId": "operator-7451324d-94ad-436a-b7d4-331807988095",
+      "verb": "proposal-edit",
+      "target": {
+        "kind": "group",
+        "groupId": "grp-1"
+      },
+      "commandRevision": 2,
+      "projectionSeq": 4,
+      "effectivePayloadHash": "31eff9637a0d0129578daa7b1d3b82f7176496476ad9ed26d5ad85caef3e996b",
+      "authorityCommandHash": "243b185bef62f1828ca92802e9e63c1a12a5f78d76f85c254210e7ac21aa7e93",
+      "result": {
+        "kind": "proposal-edited",
+        "proposalVersion": 2
+      }
+    }
+  },
+  "POST confirm": {
+    "status": 200,
+    "body": {
+      "schema": "orca-command-success-v1",
+      "commandId": "evidence-confirm",
+      "actorId": "operator-7451324d-94ad-436a-b7d4-331807988095",
+      "verb": "confirm",
+      "target": {
+        "kind": "group",
+        "groupId": "grp-1"
+      },
+      "commandRevision": 3,
+      "projectionSeq": 5,
+      "effectivePayloadHash": "d63191deccc6aec7d7706203b05f8644dc6e02f100a4a4ce0f21ae78769d0ebc",
+      "authorityCommandHash": "d9044407558e89f7787286bb663bc2fb088c382579f763ea9c702c8202b610dd",
+      "result": {
+        "kind": "confirmed",
+        "executionSnapshotHash": "997137a5795d8b012f8c6647311b93ec60b542eb67662c2696a1ae64f05886f2"
+      }
+    }
+  },
+  "POST start": {
+    "status": 202,
+    "body": {
+      "schema": "orca-command-success-v1",
+      "commandId": "evidence-start",
+      "actorId": "operator-7451324d-94ad-436a-b7d4-331807988095",
+      "verb": "start",
+      "target": {
+        "kind": "group",
+        "groupId": "grp-1"
+      },
+      "commandRevision": 4,
+      "projectionSeq": 6,
+      "effectivePayloadHash": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "authorityCommandHash": "7c710354e145ea6861015cef6134ef1cc4e8d6f22c49a022aa9d68de67f031af",
+      "result": {
+        "kind": "scheduled",
+        "operation": "start",
+        "wakeId": "scheduler-wake:grp-1:4"
+      }
+    }
+  },
+  "GET /api/control/groups/:id -- the claimed run": {
+    "runId": "run-89ca6cd9-7ccf-4ef4-8492-a48cb2d9b109",
+    "taskId": "a",
+    "estimateId": null,
+    "generation": 1,
+    "state": "starting",
+    "phase": "work",
+    "claimOrdinal": 1,
+    "providerAttemptOrdinal": 0,
+    "profile": {
+      "profileId": "all",
+      "profileHash": "9b3414cdd92478de43de470a481705a07f736cbebd40ff0dc8cb8b3753c41612"
+    },
+    "used": {
+      "tokens": 0,
+      "activeMs": 0,
+      "attempts": 0,
+      "sessions": 0
+    },
+    "remaining": {
+      "tokens": 2000000,
+      "activeMs": 14400000,
+      "attempts": 3,
+      "sessions": 3
+    },
+    "failureCode": null,
+    "evidenceIds": []
+  },
+  "POST handoff-stop": {
+    "status": 200,
+    "body": {
+      "schema": "orca-command-success-v1",
+      "commandId": "evidence-handoff",
+      "actorId": "operator-7451324d-94ad-436a-b7d4-331807988095",
+      "verb": "handoff-stop",
+      "target": {
+        "kind": "group",
+        "groupId": "grp-1"
+      },
+      "commandRevision": 5,
+      "projectionSeq": 8,
+      "effectivePayloadHash": "0749db29f1932abb539d37c15b79d93758507f018291f06980d8eb679d588f0a",
+      "authorityCommandHash": "8e770432c3a6a1b0565dd1a6bb345b712026ccf7a0ec8526a2b6b4d93c985352",
+      "result": {
+        "kind": "handoff-stopped",
+        "stopRevision": 5,
+        "acceptedAt": "2026-09-21T13:03:15.525Z",
+        "handoffDeadlineAt": "2026-09-21T13:33:15.525Z",
+        "frozenRunIds": [
+          "run-89ca6cd9-7ccf-4ef4-8492-a48cb2d9b109"
+        ],
+        "requestIds": [
+          "handoff-540c22832b0a46218fb79b76aeeaf01bbd53712dd08257d0639c156f2e98bc6d"
+        ]
+      }
+    }
+  },
+  "GET /api/control/groups/:id -- stop state after the worker's settlement": {
+    "summary": {
+      "groupId": "grp-1",
+      "state": "ready",
+      "commandRevision": 5,
+      "projectionSeq": 9,
+      "stopMode": "handoff",
+      "stopState": "handoff-complete",
+      "claimBlocked": false,
+      "recoveryBlockerCount": 0
+    },
+    "checkpoints": [
+      {
+        "checkpointId": "cp-a-1",
+        "taskId": "a",
+        "runId": "run-89ca6cd9-7ccf-4ef4-8492-a48cb2d9b109",
+        "state": "partial",
+        "snapshotHash": null,
+        "evidenceIds": [
+          "handoff-run-89ca6cd9-7ccf-4ef4-8492-a48cb2d9b109"
+        ]
+      }
+    ]
+  },
+  "GET /api/control/runs/:runId/evidence -- the recoverable work run": {
+    "status": 200,
+    "body": {
+      "schema": "orca-run-evidence-v1",
+      "runId": "run-89ca6cd9-7ccf-4ef4-8492-a48cb2d9b109",
+      "entries": [
+        {
+          "evidenceId": "handoff-run-89ca6cd9-7ccf-4ef4-8492-a48cb2d9b109",
+          "kind": "handoff",
+          "sha256": "aa6483b2401ce253f2bcd8165b88dbb94d9ef99076e12f7e2d3c23303355a224",
+          "byteLength": 151,
+          "downloadUrl": "/api/control/runs/run-89ca6cd9-7ccf-4ef4-8492-a48cb2d9b109/evidence/handoff-run-89ca6cd9-7ccf-4ef4-8492-a48cb2d9b109"
+        }
+      ]
+    }
+  },
+  "GET /api/control/runs/run-89ca6cd9-7ccf-4ef4-8492-a48cb2d9b109/evidence/handoff-run-89ca6cd9-7ccf-4ef4-8492-a48cb2d9b109": {
+    "entry": {
+      "evidenceId": "handoff-run-89ca6cd9-7ccf-4ef4-8492-a48cb2d9b109",
+      "kind": "handoff",
+      "sha256": "aa6483b2401ce253f2bcd8165b88dbb94d9ef99076e12f7e2d3c23303355a224",
+      "byteLength": 151,
+      "downloadUrl": "/api/control/runs/run-89ca6cd9-7ccf-4ef4-8492-a48cb2d9b109/evidence/handoff-run-89ca6cd9-7ccf-4ef4-8492-a48cb2d9b109"
+    },
+    "downloadStatus": 200,
+    "bytes": 151,
+    "contentType": "application/octet-stream",
+    "contentDisposition": "attachment; filename=\"aa6483b2401ce253f2bcd8165b88dbb94d9ef99076e12f7e2d3c23303355a224\"",
+    "contentSecurityPolicy": "default-src 'none'",
+    "unlistedArtifactId": {
+      "status": 423,
+      "body": "{\"error\":{\"code\":\"recovery-blocked\",\"message\":\"recovery-blocked:evidence-reference-unknown\",\"commandRevision\":5,\"evidenceIds\":[],\"retryable\":false}}"
+    }
+  },
+  "GET /api/control/recovery": {
+    "schema": "orca-control-recovery-v1",
+    "epoch": "epoch-evidence",
+    "dispatchBlocked": false,
+    "blockers": []
+  },
+  "GET /api/control/summary": {
+    "schema": "orca-control-summary-v1",
+    "epoch": "epoch-evidence",
+    "changeSeq": 9,
+    "resetRequired": true,
+    "dispatchBlocked": false,
+    "groups": [
+      {
+        "groupId": "grp-1",
+        "state": "ready",
+        "commandRevision": 5,
+        "projectionSeq": 9,
+        "stopMode": "handoff",
+        "stopState": "handoff-complete",
+        "claimBlocked": false,
+        "recoveryBlockerCount": 0
+      }
+    ]
+  }
+}

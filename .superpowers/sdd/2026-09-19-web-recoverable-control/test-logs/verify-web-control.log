@@ -1,0 +1,44 @@
+> vitest run tests/control/web*.test.ts tests/panel/control*.test.ts
+ RUN  v2.1.9 /Users/biran/code/skills/loop/Orca
+ ✓ tests/control/webProtocol.test.ts (11 tests) 15ms
+ ✓ tests/control/webCcloopSmoke.test.ts (4 tests | 2 skipped) 1254ms
+   ✓ the frozen dispatch envelope reaches a real process (task 10 step 4) > carries the ledger's claim identity byte-for-byte and is durably accepted once 500ms
+   ✓ the frozen dispatch envelope reaches a real process (task 10 step 4) > latches the stop under the ledger's request identity and returns evidence the store re-hashes 743ms
+ ✓ tests/panel/controlConfig.test.ts (4 tests) 182ms
+ ✓ tests/panel/controlRecoveryApi.test.ts (3 tests) 1350ms
+   ✓ recovery blockers over the panel (task 10 step 2) > keeps a refused claim durable and group-local, and one retry re-arms it into a real run 477ms
+   ✓ evidence and restart (task 10 step 2) > serves a recoverable run's evidence manifest as bytes the store holds, and refuses a dangling reference 469ms
+   ✓ evidence and restart (task 10 step 2) > reopens onto a run still marked active and stops dispatching until a person recovers it 373ms
+ ✓ tests/panel/controlApi.test.ts (4 tests) 1514ms
+   ✓ web control acceptance over a real panel (task 10 step 1) > takes a plan from import to a continued task, and the ledger's own state is durable at every boundary 748ms
+ ✓ tests/panel/controlLifecycle.test.ts (12 tests) 1898ms
+ ✓ tests/control/webFaults.test.ts (10 tests) 1913ms
+ ✓ tests/control/webMutations.test.ts (10 tests) 2011ms
+   ✓ inverted invariants (task 10 step 3) > gates a strict claim on proof the profile cannot produce, while soft mode keeps claiming 420ms
+ ✓ tests/control/webDispatch.test.ts (20 tests) 2828ms
+ ✓ tests/control/webContinuation.test.ts (19 tests) 3238ms
+ ✓ tests/panel/controlReadApi.test.ts (17 tests) 3419ms
+   ✓ canonical control read API > returns sorted complete, incremental, ahead, and retained-gap summaries 677ms
+   ✓ canonical control read API > fails closed when confirmed allocation or derived-contract authority is missing, forged, or belongs to another task 300ms
+ Test Files  11 passed (11)
+      Tests  112 passed | 2 skipped (114)
+   Start at  20:09:33
+   Duration  4.32s (transform 1.08s, setup 0ms, collect 4.28s, tests 19.62s, environment 1ms, prepare 785ms)
+(node:33091) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:33089) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:33084) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:33085) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:33086) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:33083) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:33090) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:33088) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:33107) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)

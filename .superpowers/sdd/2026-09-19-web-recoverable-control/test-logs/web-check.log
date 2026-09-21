@@ -1,0 +1,17 @@
+> tsc --noEmit -p tsconfig.json && vitest run
+ RUN  v2.1.9 /Users/biran/code/skills/loop/Orca/web
+ ✓ tests/controlState.test.ts (11 tests) 3ms
+ ✓ tests/selection.test.tsx (4 tests) 2ms
+ ✓ tests/decisionList.test.tsx (2 tests) 6ms
+ ✓ tests/decisionDetail.test.tsx (2 tests) 8ms
+ ✓ tests/metricsView.test.tsx (5 tests) 10ms
+ ✓ tests/panelHome.test.tsx (1 test) 7ms
+ ✓ tests/outcome.test.tsx (7 tests) 11ms
+ ✓ tests/chainPanel.test.tsx (8 tests) 11ms
+ ✓ tests/controlPanel.test.tsx (13 tests) 92ms
+ ✓ tests/App.test.tsx (1 test) 6ms
+ ✓ tests/appSelection.test.tsx (4 tests) 164ms
+ Test Files  11 passed (11)
+      Tests  58 passed (58)
+   Start at  20:09:53
+   Duration  1.53s (transform 458ms, setup 0ms, collect 1.16s, tests 318ms, environment 600ms, prepare 950ms)

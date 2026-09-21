@@ -1,0 +1,1407 @@
+
+> orca@0.1.0 test
+> vitest run
+
+
+ RUN  v2.1.9 /Users/biran/code/skills/loop/Orca
+
+(node:36800) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:36802) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:36797) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:36799) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:36798) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/control/webContinuation.test.ts (19 tests) 4241ms
+ ✓ tests/control/commandLedger.test.ts (38 tests) 4437ms
+ ✓ tests/control/planImport.test.ts (28 tests) 4621ms
+   ✓ immutable plan import > is absent or fully replayable after real SIGKILL before-commit 625ms
+   ✓ immutable plan import > is absent or fully replayable after real SIGKILL after-commit 484ms
+ ✓ tests/panel/metricsApi.test.ts (16 tests) 4364ms
+   ✓ the metrics endpoint (spec sections 4.1 and 5) > passes E2's report through field for field, adding nothing and dropping nothing 541ms
+   ✓ the metrics endpoint (spec sections 4.1 and 5) > re-runs repository discovery and E2's gate on EVERY request 582ms
+   ✓ the metrics endpoint (spec sections 4.1 and 5) > answers a broken gate with a first-class error, never with partial data 446ms
+   ✓ the metrics endpoint (spec sections 4.1 and 5) > answers 401 without a token, and 401 with a wrong one 552ms
+   ✓ the Host allowlist (final review I-4, DNS rebinding) > refuses a foreign Host on the token-carrying page with 403 by name, and the body carries no token 527ms
+   ✓ the Host allowlist (final review I-4, DNS rebinding) > refuses a foreign Host on the API even with a valid token (the guard sits in front of /api too) 409ms
+   ✓ the Host allowlist (final review I-4, DNS rebinding) > uses the exact V1 envelope for a foreign Host on control routes while preserving legacy API errors 570ms
+   ✓ the Host allowlist (final review I-4, DNS rebinding) > answers the loopback names it was reached by: 127.0.0.1, localhost and [::1] (positive controls) 608ms
+ ✓ tests/panel/controlReadApi.test.ts (17 tests) 4656ms
+   ✓ canonical control read API > returns sorted complete, incremental, ahead, and retained-gap summaries 488ms
+   ✓ canonical control read API > fails closed when confirmed allocation or derived-contract authority is missing, forged, or belongs to another task 312ms
+   ✓ canonical control read API > rejects malformed or cross-record-inconsistent persisted run authority instead of synthesizing display values 318ms
+   ✓ canonical control read API > blocks a 'checkpoint' evidence collection containing a 'null' element 301ms
+   ✓ canonical control read API > returns persisted command results, sorted recovery, verified evidence manifests, and exact typed misses 450ms
+(node:45849) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:46064) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:46384) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:46648) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/control/webFaults.test.ts (10 tests) 1677ms
+ ✓ tests/control/stopIntent.test.ts (39 tests) 6803ms
+   ✓ stop and continuation mutation routes > serves every stop, continuation, and recovery verb with its durable replay identity 310ms
+ ✓ tests/control/webProtocol.test.ts (11 tests) 13ms
+ ✓ tests/control/profiledService.test.ts (12 tests) 2472ms
+   ✓ profiled service execution > rejects stale, missing, and unavailable profiles before claim state or provider invocation 382ms
+   ✓ profiled service execution > freshly rejects stale, missing, and unavailable profiles at start without invoking a provider 422ms
+   ✓ profiled service execution > freshly validates the persisted profile before reconciling an unknown start 470ms
+ ✓ tests/control/webDispatch.test.ts (20 tests) 2820ms
+ ✓ tests/control/estimator.test.ts (18 tests) 2637ms
+   ✓ frozen estimator > allows an exact retained usage replay but rejects unseen usage after every Task 6 terminal state 450ms
+(node:51324) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:51743) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:52001) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/panel/controlApi.test.ts (4 tests) 942ms
+   ✓ web control acceptance over a real panel (task 10 step 1) > takes a plan from import to a continued task, and the ledger's own state is durable at every boundary 506ms
+(node:54394) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/control/webMutations.test.ts (10 tests) 1281ms
+ ✓ tests/control/webCcloopSmoke.test.ts (4 tests) 1919ms
+   ✓ the shipped consumer answers for its own capabilities (task 10 step 4) > claims phase-end usage and soft enforcement, and the ledger opens no strict run on it 452ms
+   ✓ the shipped consumer answers for its own capabilities (task 10 step 4) > refuses an envelope that is not V1 and reads a well-formed one as no execution yet 392ms
+   ✓ the frozen dispatch envelope reaches a real process (task 10 step 4) > carries the ledger's claim identity byte-for-byte and is durably accepted once 445ms
+   ✓ the frozen dispatch envelope reaches a real process (task 10 step 4) > latches the stop under the ledger's request identity and returns evidence the store re-hashes 614ms
+ ✓ tests/panel/controlLifecycle.test.ts (12 tests) 1007ms
+ ✓ tests/corrections/close.test.ts (15 tests) 9833ms
+   ✓ orca correct --close / closing new — guards, lock, order, single write (§14.3 闭-1…闭-8) > closes the loop end to end: one new orca-fix-*.jsonl, a decision then an overturned row 720ms
+   ✓ orca correct --close / closing new — guards, lock, order, single write (§14.3 闭-1…闭-8) > E16: both ledger rows carry a fresh `at`, bracketed by the call, distinct from the correction's own `at` 698ms
+   ✓ orca correct --close / closing new — guards, lock, order, single write (§14.3 闭-1…闭-8) > E21: --undo-cost overrides the inherited cost; without it, the cost names what it inherited from 976ms
+   ✓ orca correct --close / closing new — guards, lock, order, single write (§14.3 闭-1…闭-8) > E11(a): a mistyped --decision is refused by name, not by the ledger's own unknown-reference wording 495ms
+   ✓ orca correct --close / closing new — guards, lock, order, single write (§14.3 闭-1…闭-8) > E11(b) (the ordering pin): a mistyped --decision leaves nothing written anywhere 528ms
+   ✓ orca correct --close / closing new — guards, lock, order, single write (§14.3 闭-1…闭-8) > E8b: refuses while another process holds the repo lock, before the store is ever read 576ms
+   ✓ orca correct --close / closing new — guards, lock, order, single write (§14.3 闭-1…闭-8) > E19: an expected rejection AFTER the lock is taken still releases it 616ms
+   ✓ orca correct --close / closing new — guards, lock, order, single write (§14.3 闭-1…闭-8) > guard: refuses while a merge is unresolved, naming it, before reading or writing anything 1030ms
+   ✓ orca correct --close / closing new — guards, lock, order, single write (§14.3 闭-1…闭-8) > E15: refuses a cherry-pick whose conflict is resolved but not --continue'd, naming it 935ms
+   ✓ orca correct --close / closing new — guards, lock, order, single write (§14.3 闭-1…闭-8) > guard: refuses a detached HEAD — not because git refuses the commit, but because it would be unreachable 544ms
+   ✓ orca correct --close / closing new — guards, lock, order, single write (§14.3 闭-1…闭-8) > negative control: a revert -n in progress does NOT block --close (over-rejection would silently regress here) 830ms
+   ✓ orca correct --close / closing new — guards, lock, order, single write (§14.3 闭-1…闭-8) > E4′ (fault injection): a non-executable --undo-how leaves the correction on disk but writes no ledger file 377ms
+   ✓ orca correct --close / closing new — guards, lock, order, single write (§14.3 闭-1…闭-8) > E3b: --close without --chose-instead refuses by name when the stored row has none either 360ms
+   ✓ orca correct --close / closing new — guards, lock, order, single write (§14.3 闭-1…闭-8) > --close conflicts when the stored row already has chose_instead and --close supplies another one 476ms
+   ✓ orca correct --close / closing new — guards, lock, order, single write (§14.3 闭-1…闭-8) > E6: two people's byte-identical-but-for-`by` corrections close into two different files 672ms
+ ✓ tests/ledger/validateLine.test.ts (50 tests) 12ms
+ ✓ tests/ledger/writer.test.ts (25 tests) 92ms
+ ✓ tests/scheduler/ccloopRunner.test.ts (12 tests) 4171ms
+   ✓ ccloopRunner (spec §4.3 steps 2-3, §6.1) > reads the terminal status from loop-state.json, not from the exit code 1441ms
+   ✓ ccloopRunner (spec §4.3 steps 2-3, §6.1) > rewrites the contract's repoPath to the per-task clone 1106ms
+   ✓ ccloopRunner (spec §4.3 steps 2-3, §6.1) > fails loud when ccloop leaves no terminal status behind 334ms
+   ✓ ccloopRunner (spec §4.3 steps 2-3, §6.1) > fails loud when ccloop leaves a status that is not terminal 399ms
+ ✓ tests/panel/correctApi.test.ts (17 tests) 10721ms
+   ✓ recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > answers a row the seam would refuse with the seam's OWN named refusal (an unknown kind) 554ms
+   ✓ recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > refuses an empty optional field by name instead of dumping Zod at the person 528ms
+   ✓ recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > records and does NOT close the loop 617ms
+   ✓ recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > writes its OWN message for a second correction, with no `--again` in it 657ms
+   ✓ recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > records another one when the page asks for it on purpose 556ms
+   ✓ recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > does NOT write `reviewed` when the correction was refused 492ms
+   ✓ recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > writes `reviewed` when the correction lands, and when the person clicks agreed 594ms
+   ✓ recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > lets a failed `reviewed` write reach the person on POST /api/reviews, unlike `opened` 1520ms
+   ✓ recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > tells the person the correction landed even when the reviewed mark could not be written 1534ms
+   ✓ recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > answers 404 for a decision the panel does not list, and records nothing (both endpoints) 371ms
+   ✓ recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > derives the same correction id the CLI derives for the same input and clock (E3 spec §2.3) 376ms
+   ✓ the panel's error mapping for client mistakes (final review I-2) > refuses a POST with no content-type as a bad request (Express leaves the body undefined) 334ms
+   ✓ the panel's error mapping for client mistakes (final review I-2) > refuses a JSON body that is not an object (an array) as a bad request, before reading any field 302ms
+   ✓ the panel's error mapping for client mistakes (final review I-2) > answers a body over the parser's 64kb limit with 413, not a flat 400 318ms
+   ✓ the panel's error mapping for client mistakes (final review I-2) > answers a content-encoding nothing can decode with 415, not a flat 400 306ms
+   ✓ the panel's error mapping for client mistakes (final review I-2) > answers a busy corrections store with 409 by name, not 400 (a transient conflict, not a client error) 1361ms
+ ✓ tests/scheduler/planReport.test.ts (12 tests) 4ms
+ ✓ tests/chain/decide.test.ts (48 tests) 8ms
+ ✓ tests/panel/security.test.ts (11 tests) 1396ms
+   ✓ panel security via the real CLI process (controller ruling E2/E3: not skipped) > refuses a missing --by through the REAL process (ruling E3: the hole Task 1's stub left open) 898ms
+   ✓ panel security via the real CLI process (controller ruling E2/E3: not skipped) > refuses an unconfirmed external bind through the REAL process, leaving no listener 492ms
+(node:59013) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/panel/reviewsStore.test.ts (19 tests) 2215ms
+   ✓ the reviews store (spec section 4.3) > refuses by its OWN name when its OWN lock is held 1013ms
+   ✓ the reviews writer after reviews.jsonl is replaced (reviews compaction spec section 5) > C19c a claim whose write failed does not come back on a later reload 1018ms
+Plan: 2 task(s), policy=local-merge, workBranch=orca/w/x
+Base: orca/w/x will be cut from main — the branch currently checked out in /var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-sched-9Mz8mI/repo — at 8b22328affb2a65ba061074df05eefbf9c7101b1
+
+Preflight checks:
+  [pass] relative-path
+  [pass] duplicate-task-id
+  [pass] cycle
+  [pass] contract-inside-target-repo
+  [pass] work-branch-is-default
+  [pass] unsupported-policy
+  [pass] unusable-task-id
+  [pass] work-branch-already-exists
+  [pass] base-not-a-commit
+  [pass] dirty-worktree
+
+Write sets:
+  T1:
+    a.txt -> a.txt
+  T2:
+    b.txt -> b.txt
+
+Intersecting pairs: 0
+
+Layers (parallelism):
+  layer 0: T1, T2 (parallelism: 2)
+
+These are declared write sets. The actual write set is only known once a task finishes. Disjoint does not guarantee no conflict.
+crash after-accept: marker observed, SIGKILL
+(node:59066) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+Cloning into '/private/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-crash-matrix-WC7d65/runs/run-030481d0-703e-45ad-9915-18fc67fdc09c/repo'...
+done.
+HEAD is now at 7da4b73 base
+ ✓ tests/control/executionSnapshot.test.ts (13 tests) 1211ms
+orca: T1: ccloop reported succeeded (run orca-T1-37d24b9b)
+orca: T1: landed despite writing outside its declared write set (spec §7.3): shared.txt
+orca: kept the work copy for orca-T1-37d24b9b (--keep-workdirs): /var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-sched-9Mz8mI/runs/orca-T1-37d24b9b
+orca: T2: ccloop reported succeeded (run orca-T2-305ec5ad)
+orca: T2: landed despite writing outside its declared write set (spec §7.3): shared.txt
+ ✓ tests/panel/decisionsApi.test.ts (8 tests) 6119ms
+   ✓ the decisions endpoints (spec sections 4.2 and 4.3.1) > returns list rows DEEP-EQUAL to the frozen projection, not merely lacking a summary 369ms
+   ✓ the decisions endpoints (spec sections 4.2 and 4.3.1) > records NOTHING when the list is served 2459ms
+   ✓ the decisions endpoints (spec sections 4.2 and 4.3.1) > serves the detail while the reviews lock is held, and the failed opened write is only a server-side warning 1261ms
+   ✓ the decisions endpoints (spec sections 4.2 and 4.3.1) > serves the detail even when the CORRECTIONS lock is held 342ms
+   ✓ the decisions endpoints (spec sections 4.2 and 4.3.1) > answers 404 for a decision it has never seen, and for a known id under an unconfigured projectKey 383ms
+   ✓ the decisions endpoints (spec sections 4.2 and 4.3.1) > returns each repository's own row when two repositories share a decision id 700ms
+   ✓ the decisions endpoints (spec sections 4.2 and 4.3.1) > answers the detail with the gate's refusal when the gate is broken 318ms
+orca: T2: merge into orca/w/x conflicted on shared.txt (W tip bfdc2bab441b9f372ba2836f54eb5b2e586a77ba, incoming refs/orca/orca-T2-305ec5ad)
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-ZVG8kn/input.bundle is okay
+(node:64523) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+orca: T2: recorded the conflict as cf03b7bb0f2484032dadcd1049eb87251a101536 on refs/orca/conflict/orca-T2-305ec5ad in /var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-sched-9Mz8mI/runs/orca-T2-305ec5ad/repo (1 block(s) in shared.txt)
+orca: T2: reconciliation orca-reconcile-T2-41a01560 reported succeeded
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-bGDtPu/input.bundle is okay
+orca: kept the work copy for orca-reconcile-T2-41a01560 (--keep-workdirs): /var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-sched-9Mz8mI/runs/orca-reconcile-T2-41a01560
+orca: T2: reconciled with T1 and landed c68f0c97eeecd446a866e3d4afe65603949c35db on orca/w/x
+orca: kept the work copy for orca-T2-305ec5ad (--keep-workdirs): /var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-sched-9Mz8mI/runs/orca-T2-305ec5ad
+ ✓ tests/control/contextControl.test.ts (14 tests) 1901ms
+ ✓ tests/panel/webParity.test.ts (3 tests) 2ms
+orca: work branch orca/w/x is at cf4cbc4e51baf96d3ad8ea19360e88bde2267cce
+ ✓ tests/corrections/args.test.ts (19 tests) 4ms
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-PB5L9M/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-H4R692/input.bundle is okay
+ ✓ tests/scheduler/scenarios/S3.test.ts (5 tests) 5380ms
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-kXYaUv/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-rBIrwb/input.bundle is okay
+ ✓ tests/checkpoint/chainField.test.ts (17 tests) 5115ms
+   ✓ checkpoint write in a chain (D-launch spec §3.1, §3.4) > C1 a done exit checkpoint keeps its chain mark and may have no next step 554ms
+   ✓ checkpoint write in a chain (D-launch spec §3.1, §3.4) > C2 refuses an empty next unless the chain is done, and writes nothing 314ms
+   ✓ checkpoint write in a chain (D-launch spec §3.1, §3.4) > C4 accepts a blocked mark that names what waits 552ms
+   ✓ checkpoint write in a chain (D-launch spec §3.1, §3.4) > T1 finds the transcript by session id under ORCA_CLAUDE_PROJECTS_DIR when --transcript is not given 501ms
+   ✓ checkpoint write in a chain (D-launch spec §3.1, §3.4) > T2 refuses by name when no directory, or more than one, has the transcript; writes nothing 443ms
+   ✓ checkpoint write in a chain (D-launch spec §3.1, §3.4) > T3 falls back to $CLAUDE_CONFIG_DIR/projects (review M2: the cmux wrapper moves it) 489ms
+   ✓ checkpoint write in a chain (D-launch spec §3.1, §3.4) > T4 an empty ORCA_CLAUDE_PROJECTS_DIR wins over a CLAUDE_CONFIG_DIR that has the transcript (spec §8.2-10: the redirection takes effect) 321ms
+   ✓ checkpoint write in a chain (D-launch spec §3.1, §3.4) > P1 in a chain session, refuses a --session other than ORCA_CHAIN_SESSION and writes nothing; the same id passes 526ms
+   ✓ checkpoint write in a chain (D-launch spec §3.1, §3.4) > CLI1 through the real process: --transcript may be left out 1183ms
+ ✓ tests/scheduler/scenarios/roundFailure.test.ts (3 tests) 2027ms
+   ✓ a round that throws (spec §4.2.1 / §6.3) > exits 3, reports the original error, and still says where the repository was left 602ms
+   ✓ a round that throws (spec §4.2.1 / §6.3) > still writes spec §5.4's escalation file when the round dies somewhere runsDir CAN be written to 561ms
+   ✓ a round that throws (spec §4.2.1 / §6.3) > a rejection out of main() becomes a defined exit code in a real process 863ms
+(node:78231) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/control/proposal.test.ts (4 tests) 649ms
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-hU4iX2/input.bundle is okay
+Plan: 5 task(s), policy=local-merge, workBranch=orca/w/x
+Base: orca/w/x will be cut from main — the branch currently checked out in /var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-sched-Cn9ZLP/repo — at 4718f2d3c4de1f3713c8d5c9570350d3972dcc36
+
+Preflight checks:
+  [pass] relative-path
+  [pass] duplicate-task-id
+  [pass] cycle
+  [pass] contract-inside-target-repo
+  [pass] work-branch-is-default
+  [pass] unsupported-policy
+  [pass] unusable-task-id
+  [pass] work-branch-already-exists
+  [pass] base-not-a-commit
+  [pass] dirty-worktree
+
+Write sets:
+  T1:
+    f1.txt -> f1.txt
+  T2:
+    f2.txt -> f2.txt
+  T3:
+    f3.txt -> f3.txt
+  T4:
+    f4.txt -> f4.txt
+  T5:
+    f5.txt -> f5.txt
+
+Intersecting pairs: 0
+
+Layers (parallelism):
+  layer 0: T1, T2, T3, T4, T5 (parallelism: 5)
+
+These are declared write sets. The actual write set is only known once a task finishes. Disjoint does not guarantee no conflict.
+ ✓ tests/scheduler/scenarios/inputRejections.test.ts (5 tests) 2251ms
+   ✓ input rejections that used to be exit 3 (spec §9.3 / §6.3) > a contract path that does not exist is rejected as unreadable-contract at exit 1, target repo untouched 458ms
+   ✓ input rejections that used to be exit 3 (spec §9.3 / §6.3) > a contract that is not valid JSON is rejected as unreadable-contract at exit 1, target repo untouched 400ms
+   ✓ input rejections that used to be exit 3 (spec §9.3 / §6.3) > a taskId that cannot become a run id is rejected as unusable-task-id at exit 1, before the worktree is touched 466ms
+   ✓ input rejections that used to be exit 3 (spec §9.3 / §6.3) > orca plan exits 1 when a runtime check fails, and 0 when none does 596ms
+   ✓ input rejections that used to be exit 3 (spec §9.3 / §6.3) > a targetRepo that is not a git repository is rejected, not thrown 331ms
+(node:83298) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+orca: T1: ccloop reported succeeded (run orca-T1-2feca303)
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-VLnxbt/input.bundle is okay
+ ✓ tests/panel/controlRecoveryApi.test.ts (3 tests) 822ms
+   ✓ evidence and restart (task 10 step 2) > serves a recoverable run's evidence manifest as bytes the store holds, and refuses a dangling reference 347ms
+orca: T2: ccloop reported succeeded (run orca-T2-2d1eb875)
+ ✓ tests/scheduler/harvest.test.ts (4 tests) 4427ms
+   ✓ harvest (spec §7.2: C measures the change set itself) > measures the actual change set itself instead of consuming ccloop's changedFiles 1175ms
+   ✓ harvest (spec §7.2: C measures the change set itself) > harvests the highest-numbered attempt ref, not the first one it finds 1472ms
+   ✓ harvest (spec §7.2: C measures the change set itself) > refuses a run that published no attempt ref instead of reporting an empty change set 798ms
+   ✓ harvest (spec §7.2: C measures the change set itself) > declared-but-not-produced is a warning and a ledger entry, never a failure 980ms
+ ✓ tests/control/profiles.test.ts (9 tests) 23ms
+orca: T3: ccloop reported succeeded (run orca-T3-e77ccadd)
+ ↓ tests/control/ccloopProtocol.integration.test.ts (3 tests | 3 skipped)
+orca: T4: ccloop reported succeeded (run orca-T4-47780217)
+orca: T5: ccloop reported succeeded (run orca-T5-67ae7413)
+orca: work branch orca/w/x is at d3cf145e48b4cac9e218940e955a796f3fc5a9a4
+ ✓ tests/scheduler/scenarios/upstreamNotRun.test.ts (4 tests) 11438ms
+   ✓ a result C refuses blocks its descendants (spec §6.2) > a task that succeeded_but_empty stops its downstream from starting 1345ms
+   ✓ a result C refuses blocks its descendants (spec §6.2) > a conflict C could not reconcile stops its downstream from starting 4052ms
+   ✓ one task's exception is that task's failure (spec §6.1 / §1.3) > a task that throws before ccloop reports anything does not discard its layer 1941ms
+   ✓ one task's exception is that task's failure (spec §6.1 / §1.3) > a layer larger than the concurrency bound still lands every one of its tasks 4099ms
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-iCIuJh/input.bundle is okay
+ ✓ tests/panel/compactReviews.test.ts (12 tests) 1581ms
+   ✓ applying and dry-running compaction (reviews compaction spec section 4) > C12 refuses by name while the lock is held and touches nothing 1022ms
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-sLhKUm/input.bundle is okay
+ ✓ tests/panel/todo.test.ts (6 tests) 1336ms
+   ✓ GET /api/todo (task 8 ruling K5, HTTP) > (e) answers with exactly the unreviewed high-tier decision, deep-equal to its LIST_FIELDS projection, and records nothing 544ms
+   ✓ GET /api/todo (task 8 ruling K5, HTTP) > (f) agreeing on two repositories' decisions that share an id takes BOTH off the to-do list 789ms
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-f6nKqb/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-TDztZB/input.bundle is okay
+ ✓ tests/corrections/recordSeam.test.ts (8 tests) 1993ms
+   ✓ both CLI modes construct their correction the same way (E3 spec §2.3) > record mode: the stored id is the derivation of the stored row 405ms
+   ✓ both CLI modes construct their correction the same way (E3 spec §2.3) > close mode: the stored id is the derivation of the stored row 605ms
+   ✓ both CLI modes construct their correction the same way (E3 spec §2.3) > close mode stores the row the person described, not just a self-consistent one 566ms
+   ✓ both CLI modes construct their correction the same way (E3 spec §2.3) > gives a named rejection for --chose-instead '', not a Zod dump 359ms
+(node:3576) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/checkpoint/resume.test.ts (11 tests) 9253ms
+   ✓ resume (D spec 5 step 4, 9 item 3) > through the real process: judgment, later commits, stale re-run, failed publish check and the human queue 1298ms
+   ✓ resume (D spec 5 step 4, 9 item 3) > the checkpoint's own commit does not make its measurements stale 1072ms
+   ✓ resume (D spec 5 step 4, 9 item 3) > exits 2 naming the measurement whose exit code changed 943ms
+   ✓ resume (D spec 5 step 4, 9 item 3) > reports ahead and behind against origin, measured now 1525ms
+   ✓ resume (D spec 5 step 4, 9 item 3) > refuses two checkpoint files in the latest checkpoint commit, naming --checkpoint 540ms
+   ✓ resume (D spec 5 step 4, 9 item 3) > with --checkpoint reads the named file even when the latest commit is ambiguous 655ms
+   ✓ resume (D spec 5 step 4, 9 item 3) > refuses a recorded measurement the Tier 0 gate blocks, without running it (Tier 0 gate spec 6.4) 550ms
+   ✓ resume (D spec 5 step 4, 9 item 3) > through the real process a refusal is one stderr line and exit 1 (unchanged by D-launch) 610ms
+   ✓ resume (D spec 5 step 4, 9 item 3) > a chain record commit does not make the measurements stale (D-launch spec §4.4, review M4) 832ms
+   ✓ resume (D spec 5 step 4, 9 item 3) > resumeOutcome turns a named refusal into a value and passes success through (D-launch spec §2, review 1) 988ms
+ ✓ tests/control/confirmation.test.ts (8 tests) 1040ms
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-aX1lzT/input.bundle is okay
+ ✓ tests/scheduler/reconcile.test.ts (6 tests) 8926ms
+   ✓ spec 5.2: materialising a conflict and synthesizing its reconciliation contract > materialises the conflict as a commit, because a fresh worktree cannot show it 1429ms
+   ✓ spec 5.2: materialising a conflict and synthesizing its reconciliation contract > enumerates one block per conflicting region, with each side's lines kept apart 1455ms
+   ✓ spec 5.2: materialising a conflict and synthesizing its reconciliation contract > writes the synthesized contract into runsDir, outside the target repo 1561ms
+   ✓ spec 5.2: materialising a conflict and synthesizing its reconciliation contract > keeps the contract inside runsDir even when a taskId is shaped like a path escape 1394ms
+   ✓ spec 5.2 step 4: rebuilding the merge commit > rebuilds a merge commit whose two parents are exactly the W tip and the incoming ref 1615ms
+   ✓ spec 5.1 third row: the one condition neither side's checks express > names the files a reconciled commit still has conflict markers in 1471ms
+ ✓ tests/gate/classify.test.ts (125 tests) 15ms
+ ✓ tests/ledger/validateFile.test.ts (15 tests) 38ms
+ ✓ tests/panel/chainsApi.test.ts (11 tests) 20931ms
+   ✓ chains in the panel (D-launch spec §6.2, §6.3, §8.2-8) > C1 POST /api/chains starts a chain ONLY by spawning `orca chain start`: the supervisor is another process; the status view follows it to done 5780ms
+   ✓ chains in the panel (D-launch spec §6.2, §6.3, §8.2-8) > C3 a refusal by the CLI comes back as soon as the CLI exits, with its code (spec §2) 1689ms
+   ✓ chains in the panel (D-launch spec §6.2, §6.3, §8.2-8) > C4 no `started` line within the wait is 500 by name, naming the log and the pid 4931ms
+   ✓ chains in the panel (D-launch spec §6.2, §6.3, §8.2-8) > C5 stop: shape, repository, existence and state are each refused by name; a running chain gets the request 628ms
+   ✓ chains in the panel (D-launch spec §6.2, §6.3, §8.2-8) > C6 status: a running record without a live holder is shown as holder gone; with one, not; a missing cost is null 656ms
+   ✓ chains in the panel (D-launch spec §6.2, §6.3, §8.2-8) > C7 every chain route needs the token 330ms
+   ✓ chains in the panel (D-launch spec §6.2, §6.3, §8.2-8) > C8 external mode opens the same routes (rulings R11, R13): an app built for a confirmed external bind starts a chain 6304ms
+   ✓ chains in the panel (D-launch spec §6.2, §6.3, §8.2-8) > C11 a spawn failure (bad executable path) answers 500 chain-start-failed instead of crashing the panel (review fix round 1) 306ms
+(node:12356) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:5460) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-eXtzQI/input.bundle is okay
+Cloning into '/private/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-sched-VNOKAv/runs/run-ca9600e1-9f6b-4cf0-929d-9cd7237f8fc5/repo'...
+done.
+HEAD is now at 33ada95 init
+crash after-accept: marker observed, SIGKILL
+Cloning into '/private/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-sched-VNOKAv/runs/run-affd3bc0-5caa-4adc-99c5-10f5e9972372/repo'...
+done.
+HEAD is now at 33ada95 init
+Cloning into '/private/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-crash-matrix-Ru6RTt/runs/run-9d07376f-2d10-4ed4-bc1f-1c4f76d59e59/repo'...
+done.
+HEAD is now at 9a7df0d base
+ ✓ tests/control/store.test.ts (9 tests) 1757ms
+   ✓ control storage > does not migrate or rewrite an unknown schema version 473ms
+ ✓ tests/panel/controlConfig.test.ts (4 tests) 186ms
+ ✓ tests/corrections/store.test.ts (8 tests) 465ms
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-6HR9o2/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-3S8NZx/input.bundle is okay
+ ✓ tests/metrics/collect.test.ts (7 tests) 1132ms
+ ✓ tests/chain/launch.test.ts (13 tests) 6539ms
+   ✓ launchClaudeCode (D-launch spec §2.2-4/5, §4.2, §8.2-2) > A1 the argv is the template, item for item 633ms
+   ✓ launchClaudeCode (D-launch spec §2.2-4/5, §4.2, §8.2-2) > A2 the child env drops every class of variable that can switch hooks off or steer the wrapper, keeps the rest, and sets the two chain variables (plan PC-21) 497ms
+   ✓ launchClaudeCode (D-launch spec §2.2-4/5, §4.2, §8.2-2) > A3 stdin is /dev/null, cwd is the repository, stdout and stderr land in two files 702ms
+   ✓ launchClaudeCode (D-launch spec §2.2-4/5, §4.2, §8.2-2) > A4 reports the exit code, the cost and the subtype from the result JSON; nulls when there is none 625ms
+   ✓ launchClaudeCode (D-launch spec §2.2-4/5, §4.2, §8.2-2) > A5 at the timeout the whole group gets SIGTERM, then SIGKILL after the grace; nothing is left 748ms
+   ✓ launchClaudeCode (D-launch spec §2.2-4/5, §4.2, §8.2-2) > A6 after a normal exit, a process the session left in its group is counted and killed 573ms
+   ✓ launchClaudeCode (D-launch spec §2.2-4/5, §4.2, §8.2-2) > A8 an abort (the supervisor was signalled) ends the session through its group 532ms
+   ✓ launchClaudeCode (D-launch spec §2.2-4/5, §4.2, §8.2-2) > A10 a stdout log the session deleted reads as no result JSON, not as a crash (plan PC-22) 698ms
+   ✓ launchClaudeCode (D-launch spec §2.2-4/5, §4.2, §8.2-2) > A9 onPoll runs while the session is alive (the supervisor latches stop requests there) 1364ms
+(node:23759) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-es5JTC/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-yw2zjh/input.bundle is okay
+ ✓ tests/chain/preflight.test.ts (26 tests) 14013ms
+   ✓ preflight: D-launch spec §5.1 — refused by name, exit 1, nothing written > PF0 all clear: the resolved repo, branch, head, id, config and timeout 821ms
+   ✓ preflight: D-launch spec §5.1 — refused by name, exit 1, nothing written > PF1 a blank goal is chain-args-invalid 503ms
+   ✓ preflight: D-launch spec §5.1 — refused by name, exit 1, nothing written > PF1 no --by is chain-args-invalid 534ms
+   ✓ preflight: D-launch spec §5.1 — refused by name, exit 1, nothing written > PF1 zero sessions is chain-args-invalid 472ms
+   ✓ preflight: D-launch spec §5.1 — refused by name, exit 1, nothing written > PF1 a cost that is not a number is chain-args-invalid 462ms
+   ✓ preflight: D-launch spec §5.1 — refused by name, exit 1, nothing written > PF1 an infinite cost is chain-args-invalid 555ms
+   ✓ preflight: D-launch spec §5.1 — refused by name, exit 1, nothing written > PF1 a missing cost (no default) is chain-args-invalid 457ms
+   ✓ preflight: D-launch spec §5.1 — refused by name, exit 1, nothing written > PF1 a malformed chain id is chain-args-invalid 420ms
+   ✓ preflight: D-launch spec §5.1 — refused by name, exit 1, nothing written > PF1 an unknown via is chain-args-invalid 450ms
+   ✓ preflight: D-launch spec §5.1 — refused by name, exit 1, nothing written > PF2 a path that does not exist is repo-not-found 448ms
+   ✓ preflight: D-launch spec §5.1 — refused by name, exit 1, nothing written > PF3 a directory outside git is not-a-repository 383ms
+   ✓ preflight: D-launch spec §5.1 — refused by name, exit 1, nothing written > PF4 a subdirectory is not-repository-top-level 401ms
+   ✓ preflight: D-launch spec §5.1 — refused by name, exit 1, nothing written > PF5 a chain id that already has a record is chain-id-exists 489ms
+   ✓ preflight: D-launch spec §5.1 — refused by name, exit 1, nothing written > PF6 a dirty worktree is worktree-dirty 406ms
+   ✓ preflight: D-launch spec §5.1 — refused by name, exit 1, nothing written > PF7 a detached HEAD is detached-head 439ms
+   ✓ preflight: D-launch spec §5.1 — refused by name, exit 1, nothing written > PF8 a live chain lock is chain-running 696ms
+   ✓ preflight: D-launch spec §5.1 — refused by name, exit 1, nothing written > PF9 a lock whose holder is gone is chain-lock-stale, and is left in place 766ms
+   ✓ preflight: D-launch spec §5.1 — refused by name, exit 1, nothing written > PF10 the scheduler's repo lock held is repo-lock-held (review I11) 552ms
+   ✓ preflight: D-launch spec §5.1 — refused by name, exit 1, nothing written > PF11 no claude on PATH is claude-not-found 453ms
+   ✓ preflight: D-launch spec §5.1 — refused by name, exit 1, nothing written > PF12 chain logs that git does not ignore are chain-logs-not-ignored (plan PC-2) 466ms
+   ✓ preflight: D-launch spec §5.1 — refused by name, exit 1, nothing written > PF13 no .orca/chain.json is chain-config-missing 846ms
+   ✓ preflight: D-launch spec §5.1 — refused by name, exit 1, nothing written > PF14 a model orca level cannot find a window for is model-window-unknown (review M9) 601ms
+   ✓ preflight: D-launch spec §5.1 — refused by name, exit 1, nothing written > PF15 a failed gate check is gate-check-failed with its reason 464ms
+   ✓ preflight: D-launch spec §5.1 — refused by name, exit 1, nothing written > PF17 no node_modules/.bin/tsx in the target is tsx-missing (plan PC-23, review M5) 586ms
+   ✓ preflight: D-launch spec §5.1 — refused by name, exit 1, nothing written > PF16 --session-timeout-min wins over .orca/chain.json, which wins over 360 (plan PC-13) 898ms
+   ✓ preflight: D-launch spec §5.1 — refused by name, exit 1, nothing written > PF18 ORCA_CHAIN_ID in the supervisor's environment is nested-chain, before anything else is looked at (final review Important-2) 443ms
+ ✓ tests/scheduler/planFile.test.ts (11 tests) 5ms
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-x9Iq30/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-2RssAW/input.bundle is okay
+ ✓ tests/control/budget.test.ts (14 tests) 1876ms
+   ✓ unified work claims > lets only one process claim while a service owner is alive and keeps that claim after close 526ms
+crash after-accept: marker observed, SIGKILL
+ ✓ tests/corrections/storeLock.test.ts (6 tests) 288ms
+Cloning into '/private/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-crash-matrix-DKU9fl/runs/run-edfefa5f-51bd-4bbd-b1c9-63b4d52c3831/repo'...
+done.
+HEAD is now at 5a95fc3 base
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-7mumfK/input.bundle is okay
+ ✓ tests/checkpoint/write.test.ts (9 tests) 6828ms
+   ✓ writeCheckpoint (D spec 5 step 2, 9 item 1) > writes what the code measured and commits exactly that one file 1673ms
+   ✓ writeCheckpoint (D spec 5 step 2, 9 item 1) > keeps each measurement's whole output where the checkpoint says 568ms
+   ✓ writeCheckpoint (D spec 5 step 2, 9 item 1) > refuses a dirty worktree and writes nothing 441ms
+   ✓ writeCheckpoint (D spec 5 step 2, 9 item 1) > refuses a measurement that dirties the worktree and writes nothing 945ms
+   ✓ writeCheckpoint (D spec 5 step 2, 9 item 1) > still writes when there is no reading, and says why 503ms
+   ✓ writeCheckpoint (D spec 5 step 2, 9 item 1) > a later write in the same session replaces the file in a new commit, at the new band 983ms
+   ✓ writeCheckpoint (D spec 5 step 2, 9 item 1) > through the real process: prints where it wrote and exits 0; a rejection exits 1 by name 1110ms
+   ✓ writeCheckpoint (D spec 5 step 2, 9 item 1) > refuses a measurement the Tier 0 gate blocks without running it, after running the ones before it (Tier 0 gate spec 6.4) 366ms
+ ✓ tests/level/hook.test.ts (11 tests) 3272ms
+   ✓ orca level --hook claude-code (D spec 3 delivery shim, 4) > reports an unreadable checkpoint even below T1 462ms
+   ✓ orca level --hook claude-code (D spec 3 delivery shim, 4) > resolves the repository from CLAUDE_PROJECT_DIR, not from a stdin cwd the session moved into (final review I2) 436ms
+   ✓ orca level --hook claude-code (D spec 3 delivery shim, 4) > through the real process: exits 0 with the injection on stdout, and refuses another runtime with 1 685ms
+Plan: 2 task(s), policy=local-merge, workBranch=orca/w/x
+Base: orca/w/x will be cut from main — the branch currently checked out in /var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-sched-1gCnHA/repo — at 959f9ab52305d979127b616f44fb12d9630a6952
+
+Preflight checks:
+  [pass] relative-path
+  [pass] duplicate-task-id
+  [pass] cycle
+  [pass] contract-inside-target-repo
+  [pass] work-branch-is-default
+  [pass] unsupported-policy
+  [pass] unusable-task-id
+  [pass] work-branch-already-exists
+  [pass] base-not-a-commit
+  [pass] dirty-worktree
+
+Write sets:
+  T1:
+    a.txt -> a.txt
+  T2:
+    b.txt -> b.txt
+
+Intersecting pairs: 0
+
+Layers (parallelism):
+  layer 0: T1, T2 (parallelism: 2)
+
+These are declared write sets. The actual write set is only known once a task finishes. Disjoint does not guarantee no conflict.
+(node:31936) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+Plan: 2 task(s), policy=local-merge, workBranch=orca/w/x
+Base: orca/w/x will be cut from main — the branch currently checked out in /var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-sched-KNOQhz/repo — at 959f9ab52305d979127b616f44fb12d9630a6952
+
+Preflight checks:
+  [pass] relative-path
+  [pass] duplicate-task-id
+  [pass] cycle
+  [pass] contract-inside-target-repo
+  [pass] work-branch-is-default
+  [pass] unsupported-policy
+  [pass] unusable-task-id
+  [pass] work-branch-already-exists
+  [pass] base-not-a-commit
+  [pass] dirty-worktree
+
+Write sets:
+  T1:
+    a.txt -> a.txt
+  T2:
+    b.txt -> b.txt
+
+Intersecting pairs: 0
+
+Layers (parallelism):
+  layer 0: T1, T2 (parallelism: 2)
+
+These are declared write sets. The actual write set is only known once a task finishes. Disjoint does not guarantee no conflict.
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-HAxHp0/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-Msh4lv/input.bundle is okay
+orca: T1: ccloop reported succeeded (run orca-T1-46343a59)
+Cloning into '/private/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-sched-VNOKAv/runs/run-4f717b36-7568-4449-b710-3a2ef1f78583/repo'...
+done.
+Note: switching to 'ddcffc8c5b470f45a75ce109cf69d1519566385d'.
+
+You are in 'detached HEAD' state. You can look around, make experimental
+changes and commit them, and you can discard any commits you make in this
+state without impacting any branches by switching back to a branch.
+
+If you want to create a new branch to retain commits you create, you may
+do so (now or later) by using -c with the switch command. Example:
+
+  git switch -c <new-branch-name>
+
+Or undo this operation with:
+
+  git switch -
+
+Turn off this advice by setting config variable advice.detachedHead to false
+
+HEAD is now at ddcffc8 orca: the conflict itself, recorded so it can be read (spec §5.2 step 2) — never lands on the work branch
+orca: T1: ccloop reported succeeded (run orca-T1-e28ba45d)
+orca: T2: ccloop reported succeeded (run orca-T2-beb3d280)
+orca: T1: refusing to land — wrote outside its declared write set: b.txt
+orca: T1: escalation recorded at /var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-sched-KNOQhz/runs/escalations/orca-T1-e28ba45d.md
+orca: kept the work copy for orca-T1-e28ba45d (it did not land, and its copy is the only place its result still exists): /var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-sched-KNOQhz/runs/orca-T1-e28ba45d
+orca: T2: ccloop reported succeeded (run orca-T2-9e37be12)
+orca: work branch orca/w/x is at 452bd6a97e1dcbc9f1b204f27af2dad3d51a4a0a
+ ✓ tests/scheduler/scenarios/S7.test.ts (2 tests) 2977ms
+   ✓ S7 (spec §7.3 direction one, first tier: out of bounds and intersecting) > S7: out-of-bounds writes that intersect a sibling in the same layer refuse to land and escalate 1120ms
+   ✓ S7 (spec §7.3 direction one, first tier: out of bounds and intersecting) > S7 end to end: the escalation is recorded under runsDir, never on W, with an executable undo.how 1856ms
+orca: work branch orca/w/x is at 2c2c00b06cf529a93905b6ab4aac31e1a3ce6974
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-KrFO1U/input.bundle is okay
+(node:38473) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/scheduler/ledgerWiring.test.ts (4 tests) 3384ms
+   ✓ ledger wiring (spec 8.0) > writes into the task's own copy, never into the target repository directly 570ms
+   ✓ ledger wiring (spec 8.0) > records ccloop's HEAD and version in each decision's evidence 2434ms
+   ✓ ledger wiring (spec 8.0) > ccloopEvidence resolves the same HEAD sha git itself reports for ccloop's repository 379ms
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-HZzymU/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-x7ENJR/input.bundle is okay
+ ✓ tests/panel/compactReviewsCli.test.ts (6 tests) 137ms
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-Ct9T0r/input.bundle is okay
+ ✓ tests/control/projectionJournal.test.ts (6 tests) 1087ms
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-HdQaAS/input.bundle is okay
+ ✓ tests/panel/noSkips.test.ts (4 tests) 23ms
+ ✓ tests/corrections/commit.test.ts (5 tests) 4744ms
+   ✓ orca correct --close — commit and branch-independent idempotence (闭-8, §14.1) > E14: commits exactly the one ledger file it wrote, leaving the worktree clean 719ms
+   ✓ orca correct --close — commit and branch-independent idempotence (闭-8, §14.1) > E14b: commits only the ledger file, and leaves what the person had staged staged 743ms
+   ✓ orca correct --close — commit and branch-independent idempotence (闭-8, §14.1) > E5a: re-running the same --close a second time reports success without duplicating the rows 817ms
+   ✓ orca correct --close — commit and branch-independent idempotence (闭-8, §14.1) > E5c (branch-independent): closing on branch W, then re-running the same close from the main line, is a no-op there too 1216ms
+   ✓ orca correct --close — commit and branch-independent idempotence (闭-8, §14.1) > E5b (recovery path): re-running the same close after a hook refused the commit finishes it 1248ms
+ ✓ tests/level/claudeCode.test.ts (10 tests) 7ms
+ ✓ tests/control/finalReview.test.ts (13 tests) 32093ms
+   ✓ final review regressions > retains reserve until the producer final usage watermark arrives 6076ms
+   ✓ final review regressions > requires explicit observations of both budget buckets: none 2166ms
+   ✓ final review regressions > requires explicit observations of both budget buckets: work 2025ms
+   ✓ final review regressions > requires explicit observations of both budget buckets: handoff 2100ms
+   ✓ final review regressions > requires explicit observations of both budget buckets: both 2084ms
+   ✓ final review regressions > retries a torn uncommitted checkpoint without rewriting a committed checkpoint 2277ms
+   ✓ final review regressions > serializes projection publication so a delayed old write cannot become latest 2397ms
+   ✓ final review regressions > claims the newly approved target version while preserving same-version idempotence 2176ms
+   ✓ final review regressions > repairs late acceptance without charging or merging twice: dispose 4952ms
+   ✓ final review regressions > repairs late acceptance without charging or merging twice: recovery 5512ms
+ ✓ tests/panel/compactClassify.test.ts (8 tests) 3ms
+(node:42708) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/panel/ledgerViews.test.ts (5 tests) 138ms
+ ✓ tests/control/archive.test.ts (8 tests) 4964ms
+   ✓ independent evidence archive > reads every original log after the complete source directory has moved 2200ms
+   ✓ independent evidence archive > retains source on a publication failure and never calls a missing stop proof complete 1738ms
+Plan: 3 task(s), policy=local-merge, workBranch=orca/w/x
+Base: orca/w/x will be cut from main — the branch currently checked out in /var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-sched-MfHKSt/repo — at 196c17dccd1dfc8697dbea3a0ae267cbc222b545
+
+Preflight checks:
+  [pass] relative-path
+  [pass] duplicate-task-id
+  [pass] cycle
+  [pass] contract-inside-target-repo
+  [pass] work-branch-is-default
+  [pass] unsupported-policy
+  [pass] unusable-task-id
+  [pass] work-branch-already-exists
+  [pass] base-not-a-commit
+  [pass] dirty-worktree
+
+Write sets:
+  T1:
+    a.txt -> a.txt
+  T2:
+    b.txt -> b.txt
+  T3:
+    c.txt -> c.txt
+
+Intersecting pairs: 0
+
+Layers (parallelism):
+  layer 0: T1, T3 (parallelism: 2)
+  layer 1: T2 (parallelism: 1)
+
+These are declared write sets. The actual write set is only known once a task finishes. Disjoint does not guarantee no conflict.
+ ✓ tests/corrections/injectableClock.test.ts (4 tests) 2107ms
+   ✓ the correction clock is injectable (Task P, E3 spec §2.3) > record mode through correct(argv, { now }) stores at === INSTANT 520ms
+   ✓ the correction clock is injectable (Task P, E3 spec §2.3) > close mode through correct(argv, { now }) stores at === INSTANT 728ms
+   ✓ the correction clock is injectable (Task P, E3 spec §2.3) > the same input with the same injected clock yields the same stored id, matching the golden Task 7 will assert against 858ms
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-0epHvY/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-BLDY73/input.bundle is okay
+(node:48183) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-V36Ezv/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-KzKwXH/input.bundle is okay
+ ✓ tests/chain/cli.test.ts (12 tests) 41454ms
+   ✓ orca chain through the real CLI (D-launch spec §4.3, §5.3, §8.2-3/11) > E1 two sessions with the real gate check: exit 0, one notification, no orca child process, no forbidden stub called 10227ms
+   ✓ orca chain through the real CLI (D-launch spec §4.3, §5.3, §8.2-3/11) > E8 must-catch for E1: an orca child started by absolute path is seen by the recorder 615ms
+   ✓ orca chain through the real CLI (D-launch spec §4.3, §5.3, §8.2-3/11) > E2 a refused start exits 1 and writes nothing 672ms
+   ✓ orca chain through the real CLI (D-launch spec §4.3, §5.3, §8.2-3/11) > E3 blocked through the CLI exits 3 5740ms
+   ✓ orca chain through the real CLI (D-launch spec §4.3, §5.3, §8.2-3/11) > E4 SIGINT to the supervisor ends the running session through its group, records stop-requested and frees the lock (spec §5.3) 6047ms
+   ✓ orca chain through the real CLI (D-launch spec §4.3, §5.3, §8.2-3/11) > E9 SIGHUP (the terminal went away) is handled like SIGINT (plan PC-23, review M4) 6559ms
+   ✓ orca chain through the real CLI (D-launch spec §4.3, §5.3, §8.2-3/11) > E5 an unforeseen error in a chain subcommand is exit 2, never main()'s 3 (review I8); an unknown subcommand is 1 640ms
+   ✓ orca chain through the real CLI (D-launch spec §4.3, §5.3, §8.2-3/11) > E10 the default gate check reads deps.env, not the ambient process.env (controller note on Task 7 review) 1386ms
+   ✓ orca chain through the real CLI (D-launch spec §4.3, §5.3, §8.2-3/11) > E11 defaultChainDeps' own resume wiring routes through chainGit too, not just the test double's (fix round 1 follow-up) 7213ms
+   ✓ orca chain through the real CLI (D-launch spec §4.3, §5.3, §8.2-3/11) > E6 orca chain stop: refused without a running chain; with one, it writes the request the supervisor latches 827ms
+   ✓ orca chain through the real CLI (D-launch spec §4.3, §5.3, §8.2-3/11) > E7 orca chain unlock: refuses when nothing is locked or the holder is alive; otherwise removes the lock and ends the record (review M13, plan PC-6) 949ms
+   ✓ orca chain through the real CLI (D-launch spec §4.3, §5.3, §8.2-3/11) > E12 orca chain unlock with a stale lock whose record is missing or invalid: refused, and the lock is still there (final review Minor-4) 577ms
+orca: T1: ccloop reported failed (run orca-T1-463eefc4)
+orca: kept the work copy for orca-T1-463eefc4 (outcome failed): /var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-sched-MfHKSt/runs/orca-T1-463eefc4
+orca: T3: ccloop reported succeeded (run orca-T3-f4e71943)
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-DbcDnN/input.bundle is okay
+orca: T2: upstream_not_run (spec §6.2)
+orca: work branch orca/w/x is at a9113b4f29070ab484232a199fee815c10a0a7da
+ ✓ tests/scheduler/scenarios/S8.test.ts (2 tests) 3709ms
+   ✓ S8 (spec §6.1: a failed task) > S8: a failed task marks its descendants upstream_not_run and lets other branches continue 2180ms
+   ✓ S8 (spec §6.1: a failed task) > S8 (deferred property, Task 14): a task whose upstream failed gets no run directory at all 1529ms
+Plan: 2 task(s), policy=local-merge, workBranch=orca/w/x
+Base: orca/w/x will be cut from main — the branch currently checked out in /var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-sched-1LHQ6p/repo — at c50fe28f7c4f7ac97cec5576c6fb5c8cd4d73807
+
+Preflight checks:
+  [pass] relative-path
+  [pass] duplicate-task-id
+  [pass] cycle
+  [pass] contract-inside-target-repo
+  [pass] work-branch-is-default
+  [pass] unsupported-policy
+  [pass] unusable-task-id
+  [pass] work-branch-already-exists
+  [pass] base-not-a-commit
+  [pass] dirty-worktree
+
+Write sets:
+  T1:
+    a.txt -> a.txt
+  T2:
+    b.txt -> b.txt
+
+Intersecting pairs: 0
+
+Layers (parallelism):
+  layer 0: T1, T2 (parallelism: 2)
+
+These are declared write sets. The actual write set is only known once a task finishes. Disjoint does not guarantee no conflict.
+ ✓ tests/corrections/derive.test.ts (4 tests) 9ms
+ ✓ tests/metrics/cli.test.ts (8 tests) 2711ms
+   ✓ orca metrics (E2 spec §7) > matches the golden byte for byte 343ms
+   ✓ orca metrics (E2 spec §7) > ② one projectKey on two paths ⇒ exit 1 449ms
+   ✓ orca metrics (E2 spec §7) > a torn LAST line in the store is exit 0 and says a write may be in flight 314ms
+   ✓ orca metrics (E2 spec §7) > a torn store tail AND a corrupt ledger middle line together are still exit 6 372ms
+   ✓ orca metrics (E2 spec §7) > reads the corrections store ORCA_CORRECTIONS_DIR points at, not the real ~/.orca 493ms
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-i2jVHh/input.bundle is okay
+orca: T1: ccloop reported succeeded (run orca-T1-77fd5db9)
+orca: T1: landed despite writing outside its declared write set (spec §7.3): shared.txt
+(node:53389) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-z0fSZM/input.bundle is okay
+orca: T2: ccloop reported succeeded (run orca-T2-97cad937)
+orca: T2: landed despite writing outside its declared write set (spec §7.3): shared.txt
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-Wvis3Y/input.bundle is okay
+orca: T2: merge into orca/w/x conflicted on shared.txt (W tip ed23cf70d3472f311f8b85a6589d2f2ca4a46036, incoming refs/orca/orca-T2-97cad937)
+ ✓ tests/control/commands.test.ts (10 tests) 1007ms
+ ✓ tests/panel/staticFiles.test.ts (8 tests) 264ms
+orca: T2: recorded the conflict as ac17501d9dd6e3b648e220809f9eab9aa3028824 on refs/orca/conflict/orca-T2-97cad937 in /var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-sched-1LHQ6p/runs/orca-T2-97cad937/repo (1 block(s) in shared.txt)
+ ✓ tests/scheduler/pool.test.ts (5 tests) 82ms
+(node:57193) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/level/hookChain.test.ts (8 tests) 3096ms
+   ✓ orca level in a chain session (D-launch spec §3.2) > H2 band 2 without an exit checkpoint: past T2, the same request 380ms
+   ✓ orca level in a chain session (D-launch spec §3.2) > H3 below T1 with no exit checkpoint says nothing 309ms
+   ✓ orca level in a chain session (D-launch spec §3.2) > H4 a mid-session checkpoint (no chain) does not count as covering in a chain (review I9) 455ms
+   ✓ orca level in a chain session (D-launch spec §3.2) > H5 an exit checkpoint at HEAD is announced at any band, T1 or not 909ms
+   ✓ orca level in a chain session (D-launch spec §3.2) > H8 no reading is still reported every time in a chain 308ms
+Cloning into '/private/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-sched-Zc80xq/runs/run-1bcb5878-0773-432d-911b-83c3bb747f51/repo'...
+done.
+HEAD is now at b6f3564 init
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-frZk6y/input.bundle is okay
+orca: T2: reconciliation orca-reconcile-T2-8620bc43 reported succeeded
+Cloning into '/private/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-sched-Zc80xq/runs/run-6d1073db-71a9-436c-a8d9-179e85ee91ec/repo'...
+done.
+HEAD is now at b6f3564 init
+orca: kept the work copy for orca-reconcile-T2-8620bc43 (the reconciliation left conflict markers behind and a human has to look): /var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-sched-1LHQ6p/runs/orca-reconcile-T2-8620bc43
+orca: T2: escalating — the reconciliation of T2 x T1 passed both tasks' required checks but left conflict markers in shared.txt; the conflict is at refs/orca/conflict/orca-T2-97cad937 in /var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-sched-1LHQ6p/runs/orca-T2-97cad937/repo
+orca: T2: escalation recorded at /var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-sched-1LHQ6p/runs/escalations/orca-T2-97cad937.md
+orca: kept the work copy for orca-T2-97cad937 (its merge into the work branch conflicted and a human has to look): /var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-sched-1LHQ6p/runs/orca-T2-97cad937
+ ✓ tests/control/handoffTransaction.test.ts (3 tests) 4590ms
+   ✓ handoff transaction > persists one immutable request intent before RPC and retries the same request 366ms
+   ✓ handoff transaction > keeps both reservations and ownership when no quiet proof is available 355ms
+   ✓ handoff transaction > archives and commits a proven candidate before releasing the parent reserve 3869ms
+orca: work branch orca/w/x is at ba41059fe868f41652205dd2d6ebae4d5fe01dff
+ ✓ tests/panel/workspace.test.ts (7 tests) 8ms
+ ✓ tests/scheduler/graph.test.ts (8 tests) 5ms
+ ✓ tests/gate/hook.test.ts (6 tests) 6814ms
+   ✓ orca gate --hook claude-code (Tier 0 gate spec 4, 6.2) > through the real process: a push exits 2 with the one literal line; a status exits 0 silently; another runtime is refused with 1 634ms
+   ✓ orca gate --hook claude-code (Tier 0 gate spec 4, 6.2) > reads the real current branch: a merge on main exits 2, on another branch 0 729ms
+   ✓ orca gate --hook claude-code (Tier 0 gate spec 4, 6.2) > blocks within the hook's 10 s when git hangs, naming the 5 s deadline (spec 4) 5273ms
+ok: 1 ledger file(s)
+/Users/biran/code/skills/loop/Orca/tests/fixtures/ledger/rejected.jsonl:1: rejected: alternatives: Array must contain at least 1 element(s)
+/Users/biran/code/skills/loop/Orca/tests/fixtures/ledger/downgraded.jsonl:1: downgraded to tier 0: undo.how is not executable: "回滚一下就好"
+/Users/biran/code/skills/loop/Orca/tests/fixtures/ledger/downgraded.jsonl:1: downgraded to tier 0: undo.how is not executable: "回滚一下就好"
+/Users/biran/code/skills/loop/Orca/tests/fixtures/ledger/rejected.jsonl:1: rejected: alternatives: Array must contain at least 1 element(s)
+/Users/biran/code/skills/loop/Orca/tests/fixtures/ledger/downgraded.jsonl:1: downgraded to tier 0: undo.how is not executable: "回滚一下就好"
+/Users/biran/code/skills/loop/Orca/tests/fixtures/ledger/rejected.jsonl:1: rejected: alternatives: Array must contain at least 1 element(s)
+cannot stat: /Users/biran/code/skills/loop/Orca/tests/fixtures/ledger/nope.jsonl
+usage:
+  orca validate <path...>        validate ledger file(s) or directory (directory scans top-level *.jsonl only)
+  orca check-append-only         read a git diff from stdin, reject if it contains any deleted line
+  orca plan <path> [--verbose]   print the plan's write sets, conflicts, and layering; execute nothing
+  orca run <path> --adapter-config <path> [--adapter scripted|claude] [--keep-workdirs] [--serial] [--verbose]
+                                 print the same report, then run every task and land it on the work branch
+                                 (--serial: spec §3.5 — turn parallelism off entirely; a v1 criterion, not
+                                 a performance knob)
+  orca correct --decision <run-id>/<n> --kind wrong|not_my_taste|stale --because <text>
+               [--repo <path>] [--by <who>] [--again]
+               [--chose-instead <text> --undo-how <text> [--undo-cost <text>] [--undo-blast-radius <text>]]
+                                 record a human's correction; giving either closing argument means
+                                 closing the loop, which also writes the two ledger rows and commits them
+  orca correct --close <correctionId> --undo-how <text> [--repo <path>] [--chose-instead <text>]
+                                 finish (or re-try) the closing half of a correction already recorded
+  orca metrics [--root <dir>] [--repo <key>=<path>]... [--as-of <ISO8601>] [--json]
+                                 read-only: the correction rate, the repair rate and the backlog.
+                                 Writes nothing and takes no lock. --as-of filters the input set to
+                                 what existed at that instant; without it, a row dated in the future
+                                 is refused by name. Exit 6 means the report printed in full and some
+                                 lines were malformed.
+  orca panel --by <who> [--port <n>] [--bind <addr>] [--root <dir>] [--repo <key>=<path>]...
+                                 serve the read-only panel on the loopback interface with a
+                                 one-time token. --bind opens it to other machines and needs
+                                 --i-know-this-is-exposed as well: there is no TLS, the token
+                                 travels in the HTML, it cannot be revoked, and one process has
+                                 exactly one identity, so external mode suits you across your
+                                 own machines and does not suit a team.
+  orca compact-reviews [--apply] [--root <dir>] [--repo <key>=<path>]...
+                                 dedupe reviews.jsonl and move rows whose decision was archived into
+                                 reviews-archive.jsonl. Without --apply it prints the report and writes
+                                 nothing. A row is left untouched when its repository is not found, its
+                                 ledger has a bad line, or its decision is in neither the ledger nor
+                                 .decisions/archive/. It never creates the store directory.
+  orca level --hook claude-code  read a Claude Code hook's JSON on stdin and print what the session should be
+                                 told about its context window: nothing below T1, a request to write a
+                                 checkpoint at T1, a breach past T2, and "no reading" whenever it cannot read
+  orca checkpoint write --session <id> --draft <path> [--transcript <path>] [--repo <path>]
+                                 write .orca/checkpoints/<run-id>.json from the agent's draft (next, open,
+                                 awaitingHuman, measure, and in a chain session chain) plus what this command
+                                 measures itself: the context-window level, HEAD, and the exit code of every
+                                 measure command. Without --transcript the transcript is found by session id under
+                                 ORCA_CLAUDE_PROJECTS_DIR, $CLAUDE_CONFIG_DIR/projects or ~/.claude/projects.
+                                 In a chain session (ORCA_CHAIN_SESSION set) --session must equal it.
+                                 Refuses a dirty worktree. Commits exactly that one file.
+  orca resume [--repo <path>] [--checkpoint <path>]
+                                 start a session from the latest checkpoint reachable from HEAD: print its
+                                 next steps and open items, the commits since, whether its measurements are
+                                 stale, re-run every one of them, report publish state from ls-remote now, and
+                                 list what waits for a human. Exit 2 when a measurement's exit code changed.
+  orca gate --hook claude-code   read a Claude Code PreToolUse hook's JSON on stdin; exit 2 with one line on stderr
+                                 when the Bash command would push, merge into main, delete a branch or remove a
+                                 worktree (Tier 0), or when it cannot decide; exit 0 otherwise
+  orca chain start --repo <path> --by <who> --goal <text> --max-sessions <n> --max-cost-usd <x>
+                   [--session-timeout-min <m>] [--chain-id <chain-xxxxxxxx>] [--via cli|panel]
+                                 run unattended Claude Code sessions one after another in <path> — a dedicated
+                                 clone or worktree of an Orca checkout with the Tier 0 gate — each starting from
+                                 `orca resume`, until one writes an exit checkpoint saying done or blocked, or a
+                                 limit or an anomaly stops the chain. The cost limit is soft: it is checked after
+                                 each session, and a session may overrun its --max-budget-usd. The model and the
+                                 default timeout (360 min, a backstop) come from .orca/chain.json. Exit 0 done,
+                                 1 refused before anything was written, 2 anomaly, 3 blocked on a person,
+                                 4 limit or stop request
+  orca chain stop --repo <path> [--chain-id <id>]
+                                 ask the running chain to stop after its current session ends
+  orca chain unlock --repo <path>
+                                 after checking its supervisor is gone: remove a chain's lock and record the
+                                 chain as stopped (unlocked-by-human)
+error: 0 ledger files found — nothing was validated
+non-append change to .decisions/**: -{"ev":"decision","id":"x/1"}
+ok: append-only
+Plan: 2 task(s), policy=local-merge, workBranch=orca/w/x
+Base: orca/w/x will be cut from main — the branch currently checked out in /var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-sched-onisOz/repo — at 1b30414a7165c9d5aa3b6b941ff371986f52642c
+
+Preflight checks:
+  [pass] relative-path
+  [pass] duplicate-task-id
+  [pass] cycle
+  [pass] contract-inside-target-repo
+  [pass] work-branch-is-default
+  [pass] unsupported-policy
+  [pass] unusable-task-id
+  [pass] work-branch-already-exists
+  [pass] base-not-a-commit
+  [pass] dirty-worktree
+
+Write sets:
+  T1:
+    a.txt -> a.txt
+  T2:
+    b.txt -> b.txt
+
+Intersecting pairs: 0
+
+Layers (parallelism):
+  layer 0: T1, T2 (parallelism: 2)
+
+These are declared write sets. The actual write set is only known once a task finishes. Disjoint does not guarantee no conflict.
+ok: 2 ledger file(s)
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-cli-scope-pcePg1/run-9d.jsonl:2: rejected: overturned references unknown decision id in id: "run-7c/1" (searched this file plus 1 external id(s); validate the whole .decisions/ directory to widen the scope)
+ ✓ tests/cli/cli.test.ts (14 tests) 1044ms
+   ✓ real process exit code > rejected.jsonl makes the process exit with 1 486ms
+   ✓ real process exit code > ok.jsonl makes the process exit with 0 489ms
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-HZ7bbf/input.bundle is okay
+(node:61892) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/scheduler/sandbox.test.ts (6 tests) 2500ms
+   ✓ the scheduler sandbox > builds a repository with a real commit, a clean worktree, and no git identity leaking in from the machine 402ms
+   ✓ the scheduler sandbox > resolves ccloopBin lazily, so construction succeeds even when resolution would fail 528ms
+   ✓ the scheduler sandbox > lets ORCA_CCLOOP_BIN override the sibling-directory assumption 437ms
+   ✓ the scheduler sandbox > still names the missing binary when ORCA_CCLOOP_BIN points at nothing 341ms
+   ✓ the scheduler sandbox > puts contracts outside the target repository 305ms
+   ✓ the scheduler sandbox > writes a plan file that round-trips as JSON 487ms
+orca: T1: ccloop reported succeeded (run orca-T1-14ad6f6d)
+orca: T1: landed despite writing outside its declared write set (spec §7.3): shared.txt
+orca: T2: ccloop reported succeeded (run orca-T2-10dc3173)
+orca: T2: landed despite writing outside its declared write set (spec §7.3): shared.txt
+orca: T2: merge into orca/w/x conflicted on shared.txt (W tip 45480366873225939abb91a72c6dc52ec66b9d1f, incoming refs/orca/orca-T2-10dc3173)
+orca: T2: recorded the conflict as 616b8033d1e00c7486d695d035028a6268da6dab on refs/orca/conflict/orca-T2-10dc3173 in /var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-sched-onisOz/runs/orca-T2-10dc3173/repo (1 block(s) in shared.txt)
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-XwOvae/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-w8syVe/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-U1ajUz/input.bundle is okay
+ ✓ tests/scheduler/scenarios/S13.test.ts (4 tests) 2538ms
+   ✓ S13 (spec §2.3: the remaining four up-front rejections) > S13: a relative path is rejected as relative-path at exit 1, target repo untouched 461ms
+   ✓ S13 (spec §2.3: the remaining four up-front rejections) > S13: a duplicate taskId is rejected as duplicate-task-id at exit 1, target repo untouched 827ms
+   ✓ S13 (spec §2.3: the remaining four up-front rejections) > S13: a cycle in dependsOn is rejected as cycle at exit 1, target repo untouched 764ms
+   ✓ S13 (spec §2.3: the remaining four up-front rejections) > S13: a contract file living inside the target repo is rejected as contract-inside-target-repo at exit 1, target repo untouched 486ms
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-0Xj02h/input.bundle is okay
+ ✓ tests/metrics/resolve.test.ts (6 tests) 10ms
+ ✓ tests/metrics/compute.test.ts (14 tests) 5ms
+orca: T2: reconciliation orca-reconcile-T2-f0ac87fd reported exhausted
+orca: kept the work copy for orca-reconcile-T2-f0ac87fd (outcome exhausted): /var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-sched-onisOz/runs/orca-reconcile-T2-f0ac87fd
+orca: T2: escalating — the reconciliation of T2 x T1 ended exhausted; the conflict is at refs/orca/conflict/orca-T2-10dc3173 in /var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-sched-onisOz/runs/orca-T2-10dc3173/repo
+orca: T2: escalation recorded at /var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-sched-onisOz/runs/escalations/orca-T2-10dc3173.md
+orca: kept the work copy for orca-T2-10dc3173 (its merge into the work branch conflicted and a human has to look): /var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-sched-onisOz/runs/orca-T2-10dc3173
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-kb8Q9O/input.bundle is okay
+(node:70053) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+orca: work branch orca/w/x is at 289c22254c2299c4685f2bea17f620c938a5b7fb
+ ✓ tests/scheduler/scenarios/S3escalations.test.ts (2 tests) 10288ms
+   ✓ S3's escalations (spec 5.1 third row / 5.4) > refuses to land a reconciliation that still has conflict markers in it 4593ms
+   ✓ S3's escalations (spec 5.1 third row / 5.4) > refuses to land when the reconciliation run itself did not succeed 5694ms
+ ✓ tests/ledger/appendOnly.test.ts (10 tests) 3ms
+ ✓ tests/metrics/lenientRead.test.ts (8 tests) 200ms
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-7g93oN/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-EgF3ZY/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-UHLWZq/input.bundle is okay
+ ✓ tests/control/dispatch.test.ts (7 tests) 2239ms
+   ✓ durable starts > recovers the accepted identity after the peer drops its response, without another launch 571ms
+   ✓ durable starts > writes the full immutable intent before handing off to the peer and rejects altered identity 541ms
+   ✓ durable starts > keeps unknown ownership despite a dead service PID, expired clock or unavailable inspect 409ms
+   ✓ durable starts > does not send an absent start after stop is latched 323ms
+ ✓ tests/scheduler/scenarios/cancelledRound.test.ts (1 test) 1693ms
+   ✓ a cancelled task stops the whole round (spec §6.1) > reports cancelled, blocks every other task by name including one it is not upstream of, and lands nothing 1692ms
+ ✓ tests/scheduler/scenarios/runOnNonGitTarget.test.ts (2 tests) 669ms
+   ✓ run on a target that cannot hold the repo lock (spec §7 item 3) > names the target as not a git repository instead of node's mkdir errno 327ms
+   ✓ run on a target that cannot hold the repo lock (spec §7 item 3) > rejects a directory inside a repository but not at its root, for the same reason 341ms
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-FBqqqB/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-DOwwSB/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-soyn41/input.bundle is okay
+ ✓ tests/metrics/discover.test.ts (7 tests) 1687ms
+   ✓ repo discovery (E2 spec §2.1, §2.1.1) > scans --root for repos with .decisions/ and keys them by remote, in projectKey order 721ms
+   ✓ repo discovery (E2 spec §2.1, §2.1.1) > skips a repo it cannot key BUT names it — a --local clone must not kill the command 329ms
+   ✓ repo discovery (E2 spec §2.1, §2.1.1) > a repo with no remote at all is also named, not silently dropped 311ms
+   ✓ repo discovery (E2 spec §2.1, §2.1.1) > refuses when one projectKey maps to two paths, and lists both 324ms
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-dG9Yj8/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-etAFwG/input.bundle is okay
+ ✓ tests/scheduler/scenarios/blockedEscalation.test.ts (1 test) 1770ms
+   ✓ a blocked_waiting_human run writes spec §5.4's escalation file > records the escalation under runsDir, naming the task and the copy the person has to look at 1769ms
+(node:79364) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-lzf1SO/input.bundle is okay
+(node:80113) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+Cloning into '/private/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-sched-lsKaGW/runs/run-55ce8d3d-25f7-4368-bb6b-5644fb487788/repo'...
+done.
+HEAD is now at 56946de init
+Cloning into '/private/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-sched-lsKaGW/runs/run-8bba81df-a0ff-412a-959e-9cca04201810/repo'...
+done.
+HEAD is now at 56946de init
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-QJQn1A/input.bundle is okay
+ ✓ tests/chain/facts.test.ts (17 tests) 12541ms
+   ✓ guardedChanges (D-launch spec §4.1, §8.2-11) > G1 src/gate committed 976ms
+   ✓ guardedChanges (D-launch spec §4.1, §8.2-11) > G2 .claude/settings.json edited, not committed 650ms
+   ✓ guardedChanges (D-launch spec §4.1, §8.2-11) > G3 scripts/gate-prefilter.mjs committed 532ms
+   ✓ guardedChanges (D-launch spec §4.1, §8.2-11) > G4 .orca/level.json created, untracked 900ms
+   ✓ guardedChanges (D-launch spec §4.1, §8.2-11) > G5 .orca/chain.json edited and committed 917ms
+   ✓ guardedChanges (D-launch spec §4.1, §8.2-11) > G6 another chain's record created, untracked 528ms
+   ✓ guardedChanges (D-launch spec §4.1, §8.2-11) > G7 another session's checkpoint committed 617ms
+   ✓ guardedChanges (D-launch spec §4.1, §8.2-11) > G8 .claude/settings.local.json exists (ignored, so git status never shows it) 797ms
+   ✓ guardedChanges (D-launch spec §4.1, §8.2-11) > G9 this session's own checkpoint committed twice (must not catch) 1167ms
+   ✓ guardedChanges (D-launch spec §4.1, §8.2-11) > G10 an unrelated file committed (must not catch) 624ms
+   ✓ progressCommits (spec §4.1: commits touching something outside .orca/checkpoints/) > N1 a commit touching only .orca/checkpoints is not progress 692ms
+   ✓ progressCommits (spec §4.1: commits touching something outside .orca/checkpoints/) > N2 an empty commit is not progress 742ms
+   ✓ progressCommits (spec §4.1: commits touching something outside .orca/checkpoints/) > N3 a commit outside .orca/checkpoints is progress 762ms
+   ✓ progressCommits (spec §4.1: commits touching something outside .orca/checkpoints/) > N4 a commit touching both is progress 640ms
+   ✓ worktree, branch and ancestry > F1 worktreeClean sees an untracked file 373ms
+   ✓ worktree, branch and ancestry > F2 currentBranch is null when detached 458ms
+   ✓ worktree, branch and ancestry > F3 isAncestor turns false after the start commit is amended 1166ms
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-Jro8zl/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-1ydwZd/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-TUrH6H/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-JLo7Dg/input.bundle is okay
+ ✓ tests/scheduler/scenarios/S20.test.ts (2 tests) 998ms
+   ✓ S20 (spec 5.2) > S20: a reconciliation contract that names only one side's taskId is refused, and the run escalates 707ms
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-6nhOfz/input.bundle is okay
+ ✓ tests/control/endToEnd.test.ts (7 tests) 14471ms
+   ✓ retains stable task/group evidence and cumulative usage after source cleanup and limit increase 3370ms
+   ✓ does not publish private claim fields inside a checkpoint 2919ms
+   ✓ refuses cleanup when a different directory reuses the registered run path 3188ms
+   ✓ refuses a copied backup without transferring execution ownership 524ms
+   ✓ blocks recovery of a missing current checkpoint instead of selecting an older one 4011ms
+ ✓ tests/corrections/fields.test.ts (6 tests) 4ms
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-5BBu7U/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-rSq4oU/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-M6Bbi0/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-SIJoG4/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-wr2Mpy/input.bundle is okay
+ ✓ tests/control/checkpoints.test.ts (9 tests) 26105ms
+   ✓ checkpoint authority > commits once before projection and survives a projection failure without refunding usage 2564ms
+   ✓ checkpoint authority > retains active ownership and reserves for partial stop evidence 1857ms
+   ✓ checkpoint authority > retains active ownership and reserves for partial requests evidence 2074ms
+   ✓ checkpoint authority > retains active ownership and reserves for partial gap evidence 2582ms
+   ✓ checkpoint authority > retains active ownership and reserves for partial unknown evidence 2660ms
+   ✓ checkpoint authority > keeps immutable older checkpoints and ignores late projection replay 3304ms
+   ✓ checkpoint authority > does not recover from a checkpoint file whose committed hash no longer matches 2921ms
+   ✓ checkpoint authority > does not grant recovery or publish latest when interrupted between file fsync and database commit 3642ms
+   ✓ checkpoint authority > projects post-acceptance work repair exactly once 4500ms
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-qWGZXw/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-CdYn12/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-Sl9AIt/input.bundle is okay
+ ✓ tests/scheduler/otherSide.test.ts (3 tests) 3702ms
+   ✓ spec 5.2: naming the other side of a conflict > names the one already-landed task in this layer that wrote a conflicted path 1389ms
+   ✓ spec 5.2: naming the other side of a conflict > refuses to pick a side when two already-landed tasks both wrote a conflicted path 1280ms
+   ✓ spec 5.2: naming the other side of a conflict > refuses when no already-landed task in this layer wrote the conflicted path 1032ms
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-QELaNj/input.bundle is okay
+ ✓ tests/control/resumeBundle.test.ts (5 tests) 21931ms
+   ✓ immutable continuation bundle > exports a committed recoverable checkpoint and every nested artifact as private regular files 3085ms
+   ✓ immutable continuation bundle > refuses an unsettled predecessor and a committed partial checkpoint 5225ms
+   ✓ immutable continuation bundle > refuses a damaged or missing nested artifact instead of exporting a partial bundle 5823ms
+   ✓ immutable continuation bundle > refuses a symlinked destination component 4487ms
+   ✓ immutable continuation bundle > stages outside admission and publishes nothing when drain wins 3310ms
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-IfjQgE/input.bundle is okay
+ ✓ tests/ledger/undoExecutable.test.ts (13 tests) 3ms
+ ✓ tests/corrections/record.test.ts (4 tests) 2670ms
+   ✓ orca correct — record only (spec §14.3 记-1…记-3) > writes one row keyed by the repository's remote, stamped now 806ms
+   ✓ orca correct — record only (spec §14.3 记-1…记-3) > records while another process holds the repo lock 644ms
+   ✓ orca correct — record only (spec §14.3 记-1…记-3) > refuses a linked worktree in record mode too, by the same code 722ms
+   ✓ orca correct — record only (spec §14.3 记-1…记-3) > refuses a second correction on the same decision by the same person, and takes --again 498ms
+ ✓ tests/scheduler/scenarios/poolStopsLaunching.test.ts (1 test) 7493ms
+   ✓ a cancelled task stops the pool from launching a queued sibling > never starts the task that was still queued when the round was cancelled 7492ms
+ ✓ tests/ledger/appendEvents.test.ts (5 tests) 72ms
+(node:97976) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-GyZ378/input.bundle is okay
+ ✓ tests/control/usage.test.ts (4 tests) 905ms
+   ✓ ordered cumulative usage > deduplicates events, rejects conflicting replay, and drains gaps in sequence 328ms
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-U8mjb5/input.bundle is okay
+ ✓ tests/chain/record.test.ts (6 tests) 2754ms
+   ✓ chain record (D-launch spec §6.1) > RC1 the first write adds the untracked file and commits only it, leaving staged and untracked work alone (review I2, review 7) 665ms
+   ✓ chain record (D-launch spec §6.1) > RC2 a later write replaces the file in a new commit and reads back equal 506ms
+   ✓ chain record (D-launch spec §6.1) > RC6 the repository's pre-commit hook and fsmonitor never run for the supervisor's commit (plan PC-20, review I4) 641ms
+   ✓ chain record (D-launch spec §6.1) > RC4 a record the schema refuses is never written 335ms
+   ✓ chain record (D-launch spec §6.1) > RC5 reading a missing or broken record is refused by name 422ms
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-YljIPb/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-l5CeZy/input.bundle is okay
+ ✓ tests/gate/settings.test.ts (4 tests) 405ms
+ ✓ tests/chain/lock.test.ts (6 tests) 2417ms
+   ✓ chain lock (D-launch spec §5.1-2, review 8) > L1 acquire, then held by this process; a second acquire is chain-running; release frees it 521ms
+   ✓ chain lock (D-launch spec §5.1-2, review 8) > L2 the right pid with the wrong start time is a reused pid: stale, refused by name, never cleaned up 519ms
+   ✓ chain lock (D-launch spec §5.1-2, review 8) > L3 a dead pid is stale 416ms
+   ✓ chain lock (D-launch spec §5.1-2, review 8) > L5 in a linked worktree the lock lives in that worktree's own git dir (plan PC-1) 642ms
+   ✓ chain lock (D-launch spec §5.1-2, review 8) > L6 a reader under another TZ still sees a live holder as held, not as a reused pid (final review Minor-3) 305ms
+ ✓ tests/scheduler/writeSet.test.ts (10 tests) 3ms
+ ✓ tests/gate/shell.test.ts (10 tests) 3ms
+(node:2456) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/scheduler/scenarios/S9.test.ts (1 test) 1917ms
+   ✓ S9 (spec §6.1: a blocked task) > S9: a blocked task escalates without counting as a failure, and siblings keep running 1916ms
+ ✓ tests/level/trigger.test.ts (9 tests) 3ms
+Plan: 2 task(s), policy=local-merge, workBranch=orca/w/x
+Base: orca/w/x will be cut from main — the branch currently checked out in /var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-sched-DTkLV2/repo — at dfb2661967ac715618dcf4d0bb4229f2aa498917
+
+Preflight checks:
+  [pass] relative-path
+  [pass] duplicate-task-id
+  [pass] cycle
+  [pass] contract-inside-target-repo
+  [pass] work-branch-is-default
+  [pass] unsupported-policy
+  [pass] unusable-task-id
+  [pass] work-branch-already-exists
+  [pass] base-not-a-commit
+  [pass] dirty-worktree
+
+Write sets:
+  T1:
+    a.txt -> a.txt
+  T2:
+    b.txt -> b.txt
+
+Intersecting pairs: 0
+
+Layers (parallelism):
+  layer 0: T1, T2 (parallelism: 2)
+
+These are declared write sets. The actual write set is only known once a task finishes. Disjoint does not guarantee no conflict.
+ ✓ tests/corrections/projectKeyNotKeyable.test.ts (2 tests) 556ms
+   ✓ projectKey — a remote that is not URL-shaped is a named refusal, not a crash (round-4 review, item 3) > refuses a path-style remote (the git clone --local shape) by name 327ms
+Cloning into '/private/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-sched-3teaRq/runs/run-5799739f-ad41-4aee-a909-1c0657990269/repo'...
+done.
+HEAD is now at dfb2661 init
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-m0r3X5/input.bundle is okay
+Cloning into '/private/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-sched-3teaRq/runs/run-2c6295ac-1054-4034-a4f7-3afe809d1104/repo'...
+done.
+ ✓ tests/control/ccloopPort.test.ts (4 tests) 2389ms
+   ✓ production ccloop execution port > uses direct argv plus stdin JSON and validates successful responses 376ms
+   ✓ production ccloop execution port > propagates exit 2 stably and refuses malformed or oversized stdout 1042ms
+   ✓ production ccloop execution port > validates evidence identity, base64 and hash 910ms
+HEAD is now at dfb2661 init
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-g4NJrs/input.bundle is okay
+ ✓ tests/control/continuation.test.ts (3 tests) 15467ms
+   ✓ continuation claims > creates a fresh run and reserves predecessor grant minus cumulative without resetting used 3451ms
+   ✓ continuation claims > refuses active, stale, mismatched, unrecoverable, and zero-work predecessors 9054ms
+   ✓ continuation claims > exports and binds the verified resume bundle before starting and replays one new run 2962ms
+orca: T1: ccloop reported succeeded (run orca-T1-05962454)
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-7y1jIN/input.bundle is okay
+ ✓ tests/control/handoff.test.ts (5 tests) 15573ms
+   ✓ D3 handoff projections > builds task JSON from the committed packet and renders markdown without private claim fields 3418ms
+   ✓ D3 handoff projections > lists incomplete tasks with dependency impact and exact task checkpoint refs 3642ms
+   ✓ D3 handoff projections > rebuilds committed projections and prevents an older replay from overwriting current handoffs 3379ms
+   ✓ D3 handoff projections > does not hide a corrupt current checkpoint or roll back a committed run after projection failure 2420ms
+   ✓ D3 handoff projections > publishes an immediate group handoff when the group is paused 2712ms
+orca: T2: ccloop reported succeeded (run orca-T2-e838ca22)
+crash after-claim: marker observed, SIGKILL
+(node:6553) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+orca: work branch orca/w/x is at a6dcfa290ee5de2a0764ae30366c4569de5ab71a
+Plan: 2 task(s), policy=local-merge, workBranch=orca/w/x
+Base: orca/w/x will be cut from main — the branch currently checked out in /var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-sched-IxerNs/repo — at 4df51f54da6e96b70c386710e41b222734c6fb89
+
+Preflight checks:
+  [pass] relative-path
+  [pass] duplicate-task-id
+  [pass] cycle
+  [pass] contract-inside-target-repo
+  [pass] work-branch-is-default
+  [pass] unsupported-policy
+  [pass] unusable-task-id
+  [pass] work-branch-already-exists
+  [pass] base-not-a-commit
+  [pass] dirty-worktree
+
+Write sets:
+  T1:
+    a.txt -> a.txt
+  T2:
+    b.txt -> b.txt
+
+Intersecting pairs: 0
+
+Layers (parallelism):
+  layer 0: T1, T2 (parallelism: 2)
+
+These are declared write sets. The actual write set is only known once a task finishes. Disjoint does not guarantee no conflict.
+ ✓ tests/scheduler/scenarios/S16.test.ts (1 test) 1789ms
+   ✓ S16 (spec §4.4: a change larger than ten megabytes is not a silent success) > S16: harvest sees the real net change set of an eleven-megabyte write, not an empty one 1788ms
+ ✓ tests/scheduler/scenarios/S6.test.ts (1 test) 1299ms
+   ✓ S6 (spec §7.3 direction one, second tier: out of bounds but disjoint) > S6: out-of-bounds writes that touch nobody else land anyway, with a boundary decision 1299ms
+ ✓ tests/checkpoint/covering.test.ts (6 tests) 185ms
+ ✓ tests/chain/gateCheck.test.ts (19 tests) 68318ms
+   ✓ checkGate: D-launch spec §5.2 items 1–3 (review C1), with must-catch samples > K0 an intact copy of this checkout's gate passes 2818ms
+   ✓ checkGate: D-launch spec §5.2 items 1–3 (review C1), with must-catch samples > K1 PreToolUse removed 882ms
+   ✓ checkGate: D-launch spec §5.2 items 1–3 (review C1), with must-catch samples > K2 the hook command changed by one character 1171ms
+   ✓ checkGate: D-launch spec §5.2 items 1–3 (review C1), with must-catch samples > K3 one deny entry missing 1046ms
+   ✓ checkGate: D-launch spec §5.2 items 1–3 (review C1), with must-catch samples > K4 disableAllHooks in settings.json (plan PC-5) 877ms
+   ✓ checkGate: D-launch spec §5.2 items 1–3 (review C1), with must-catch samples > K5 settings.local.json exists 858ms
+   ✓ checkGate: D-launch spec §5.2 items 1–3 (review C1), with must-catch samples > K6 settings.json is not JSON 1410ms
+   ✓ checkGate: D-launch spec §5.2 items 1–3 (review C1), with must-catch samples > K7 a prefilter that lets everything through: the push sample exits 0 901ms
+   ✓ checkGate: D-launch spec §5.2 items 1–3 (review C1), with must-catch samples > K8 the gate code in the worktree changed to allow everything while the settings stay equal (spec §7-2) 2551ms
+   ✓ checkGate: D-launch spec §5.2 items 1–3 (review C1), with must-catch samples > K9 an exit 2 that is not the gate's own line 2653ms
+   ✓ checkGate: D-launch spec §5.2 items 1–3 (review C1), with must-catch samples > K10 a gate that blocks everything fails the must-pass sample 3166ms
+   ✓ checkGate: D-launch spec §5.2 items 1–3 (review C1), with must-catch samples > K11 every sample is new: a random uuid session_id, the real cwd, a transcript_path that exists (plan PC-18, review I3(b)) 4127ms
+   ✓ checkGate: D-launch spec §5.2 items 1–3 (review C1), with must-catch samples > K12 disableAllHooks in the user-level settings under $CLAUDE_CONFIG_DIR fails the check (plan PC-19, review I3(c)) 860ms
+   ✓ checkGate: D-launch spec §5.2 items 1–3 (review C1), with must-catch samples > K13 without CLAUDE_CONFIG_DIR the user-level settings are $HOME/.claude/settings.json; an unreadable one fails too 1912ms
+   ✓ checkGate: D-launch spec §5.2 items 1–3 (review C1), with must-catch samples > K14 a prefilter that leaves an escaped process holding the hook's stderr: the check still returns, on the hook's own verdict (final review Important-1) 5918ms
+   ✓ checkGate: D-launch spec §5.2 items 1–3 (review C1), with must-catch samples > K15 a prefilter that hangs after leaving an escaped process: gate-check failure on the sample timeout, not a hang (final review Important-1) 12812ms
+   ✓ checkGate: D-launch spec §5.2 items 1–3 (review C1), with must-catch samples > K17 a prefilter that hangs on the must-pass sample only: gate-check failure naming that sample (final review Important-1) 13955ms
+   ✓ checkGate: D-launch spec §5.2 items 1–3 (review C1), with must-catch samples > K16 stderr written after the hook's shell exited still counts while the drain lasts (final review Important-1) 4958ms
+   ✓ checkGate: D-launch spec §5.2 items 1–3 (review C1), with must-catch samples > K18 settling a successful check kills the hook's same-group children before test cleanup (spec §13 item 3) 5443ms
+Plan: 2 task(s), policy=local-merge, workBranch=orca/w/x
+Base: orca/w/x will be cut from main — the branch currently checked out in /var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-sched-tGjmPM/repo — at 59aafb5e814af96a1284eda2b12e8fbab4f2b06d
+
+Preflight checks:
+  [pass] relative-path
+  [pass] duplicate-task-id
+  [pass] cycle
+  [pass] contract-inside-target-repo
+  [pass] work-branch-is-default
+  [pass] unsupported-policy
+  [pass] unusable-task-id
+  [pass] work-branch-already-exists
+  [pass] base-not-a-commit
+  [pass] dirty-worktree
+
+Write sets:
+  T1:
+    a.txt -> a.txt
+  T2:
+    b.txt -> b.txt
+
+Intersecting pairs: 0
+
+Layers (parallelism):
+  layer 0: T1, T2 (parallelism: 2)
+
+These are declared write sets. The actual write set is only known once a task finishes. Disjoint does not guarantee no conflict.
+ ✓ tests/chain/run.test.ts (35 tests) 78581ms
+   ✓ startChain: the supervisor loop (D-launch spec §2, §4, §8.2-3) > W1 continue → continue → done: exit 0, one record commit per step, each touching only the record 4935ms
+   ✓ startChain: the supervisor loop (D-launch spec §2, §4, §8.2-3) > W2 blocked: exit 3, awaitingHuman carried into the record and the summary 2063ms
+   ✓ startChain: the supervisor loop (D-launch spec §2, §4, §8.2-3) > W3 a session with no commit outside .orca/checkpoints: no-progress, exit 4 1902ms
+   ✓ startChain: the supervisor loop (D-launch spec §2, §4, §8.2-3) > W4 a stop request before the first session: no session starts 907ms
+   ✓ startChain: the supervisor loop (D-launch spec §2, §4, §8.2-3) > W5 a stop request written during a session and deleted before it ends is latched (review I10) 2490ms
+   ✓ startChain: the supervisor loop (D-launch spec §2, §4, §8.2-3) > W6 the budget ran out inside the session (error_max_budget_usd): max-cost, exit 4 1785ms
+   ✓ startChain: the supervisor loop (D-launch spec §2, §4, §8.2-3) > W7 the cumulative cost reaches the limit; each session gets only what is left 3533ms
+   ✓ startChain: the supervisor loop (D-launch spec §2, §4, §8.2-3) > W8 the session limit: max-sessions, exit 4 3534ms
+   ✓ startChain: the supervisor loop (D-launch spec §2, §4, §8.2-3) > W9 a dirty worktree after the session: the final record is still committed, alone, and the dirt stays 2161ms
+   ✓ startChain: the supervisor loop (D-launch spec §2, §4, §8.2-3) > W10 a guarded path committed in the session: gate-modified, naming it 2071ms
+   ✓ startChain: the supervisor loop (D-launch spec §2, §4, §8.2-3) > W11 settings.local.json created (ignored, so the worktree looks clean): gate-modified 2040ms
+   ✓ startChain: the supervisor loop (D-launch spec §2, §4, §8.2-3) > W12 the session switched branches: branch-changed; the final record lands where HEAD is 2203ms
+   ✓ startChain: the supervisor loop (D-launch spec §2, §4, §8.2-3) > W13 the session rewrote the commit it started from: history-rewritten 2493ms
+   ✓ startChain: the supervisor loop (D-launch spec §2, §4, §8.2-3) > W14 no exit checkpoint: no-exit-checkpoint 2328ms
+   ✓ startChain: the supervisor loop (D-launch spec §2, §4, §8.2-3) > W15 the timeout: session-timeout, the cost is unreadable and says so 1822ms
+   ✓ startChain: the supervisor loop (D-launch spec §2, §4, §8.2-3) > W16 a claude that cannot start: launch-failed 1497ms
+   ✓ startChain: the supervisor loop (D-launch spec §2, §4, §8.2-3) > W17 no result JSON: cost-unreadable 2099ms
+   ✓ startChain: the supervisor loop (D-launch spec §2, §4, §8.2-3) > W18 a failed session: session-failed with the exit code and subtype 2339ms
+   ✓ startChain: the supervisor loop (D-launch spec §2, §4, §8.2-3) > W19 resume exit 2 (a measurement changed) does not stop the chain; the next session sees it (spec §4.4) 3422ms
+   ✓ startChain: the supervisor loop (D-launch spec §2, §4, §8.2-3) > W20 resume refused (a gated measurement): resume-failed before session 2 2308ms
+   ✓ startChain: the supervisor loop (D-launch spec §2, §4, §8.2-3) > W21 the gate check fails before session 2: gate-check-failed with the reason 2293ms
+   ✓ startChain: the supervisor loop (D-launch spec §2, §4, §8.2-3) > W22 someone else dirtied the worktree between sessions: dirty-before-session 2660ms
+   ✓ startChain: the supervisor loop (D-launch spec §2, §4, §8.2-3) > W23 the branch changed between sessions: branch-changed before session 2 2722ms
+   ✓ startChain: the supervisor loop (D-launch spec §2, §4, §8.2-3) > W24 a process the session left behind is counted in the record and ended 2568ms
+   ✓ startChain: the supervisor loop (D-launch spec §2, §4, §8.2-3) > W25 a refused record commit: record-commit-refused, exit 2, the file on disk says so, HEAD keeps the last committed record 2359ms
+   ✓ startChain: the supervisor loop (D-launch spec §2, §4, §8.2-3) > W26 a failed notification is one warning line and changes nothing else (spec §5.3) 2860ms
+   ✓ startChain: the supervisor loop (D-launch spec §2, §4, §8.2-3) > W27 a chain in the supervisor's own checkout gets a warning (spec §7-6) 3393ms
+   ✓ startChain: the supervisor loop (D-launch spec §2, §4, §8.2-3) > W28 an unforeseen error inside the loop still ends the record, releases the lock and exits 2 1896ms
+   ✓ startChain: the supervisor loop (D-launch spec §2, §4, §8.2-3) > W29 a stop request left at the end of a session is seen right after it (no polling needed) 2554ms
+   ✓ startChain: the supervisor loop (D-launch spec §2, §4, §8.2-3) > W30 the target's pre-commit hook and fsmonitor never run for the supervisor (plan PC-20, review I4) 3593ms
+   ✓ startChain: the supervisor loop (D-launch spec §2, §4, §8.2-3) > W31 a session that deleted its own stdout log: cost-unreadable, not a supervisor error (plan PC-22, review M1) 2416ms
+   ✓ startChain: the supervisor loop (D-launch spec §2, §4, §8.2-3) > W32 resume that throws (the CLI's exit 3) stops the chain as resume-failed before any session (spec §4.4, review M2) 1334ms
+crash after-accept: marker observed, SIGKILL
+orca: T1: ccloop reported succeeded (run orca-T1-ab7ba5b3)
+Cloning into '/private/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-crash-matrix-3jDjLt/runs/run-ec88e4c5-11ab-4351-88d6-aba4086ff4e1/repo'...
+done.
+ ✓ tests/corrections/projectKey.test.ts (5 tests) 433ms
+HEAD is now at 85ab576 base
+orca: T2: ccloop reported succeeded (run orca-T2-efddd6a4)
+(node:11601) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/corrections/gitignoredLedger.test.ts (1 test) 719ms
+   ✓ orca correct --close — a gitignored ledger path is a named refusal, not a crash (round-4 review, item 2) > refuses with ledger-commit-refused and exit 5, naming --close and never claiming the file was staged 718ms
+orca: T1: ccloop reported succeeded (run orca-T1-5f61af8a)
+ ✓ tests/scheduler/scenarios/S5.test.ts (1 test) 1381ms
+   ✓ S5 (spec §6.2 / §7.3: succeeded_but_empty) > S5: a task ccloop calls succeeded but whose tree equals the base does not land 1381ms
+ ✓ tests/scheduler/pathTrie.test.ts (10 tests) 2ms
+orca: work branch orca/w/x is at 7b292faa7926ee7d266856ee8bb87366045acf70
+ ✓ tests/ledger/overturnedEvent.test.ts (10 tests) 3ms
+ ✓ tests/control/errorClassification.test.ts (3 tests) 7ms
+ ✓ tests/control/schedulerBridge.test.ts (9 tests) 51845ms
+   ✓ controlled reconciliation budget > uses the approved grant or refuses zero (7) 1459ms
+   ✓ controlled reconciliation budget > uses the approved grant or refuses zero (0) 1457ms
+   ✓ runs a real conflicting graph through durable control: success 16926ms
+   ✓ runs a real conflicting graph through durable control: budget 12056ms
+   ✓ runs a real conflicting graph through durable control: stopped 13701ms
+   ✓ runs a real conflicting graph through durable control: crash 5920ms
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-nuIxXf/input.bundle is okay
+ ✓ tests/checkpoint/exitCheckpoint.test.ts (6 tests) 2127ms
+   ✓ exitCheckpointAtHead (D-launch spec §3.2, §3.5) > X1 finds this session's checkpoint with a chain mark at HEAD 449ms
+   ✓ exitCheckpointAtHead (D-launch spec §3.2, §3.5) > X3 a mid-session checkpoint (no chain) is not an exit checkpoint (review I9) 467ms
+   ✓ exitCheckpointAtHead (D-launch spec §3.2, §3.5) > X4 a file under this run id that names another session is not this session's 518ms
+   ✓ exitCheckpointAtHead (D-launch spec §3.2, §3.5) > X5 a file that is not JSON is absent with the reason 412ms
+ ✓ tests/metrics/report.test.ts (7 tests) 4ms
+orca: T2: ccloop reported succeeded (run orca-T2-a6456bca)
+orca: another orca process already holds the repo lock on /var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-sched-0arrKl/repo (/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-sched-0arrKl/repo/.git/orca-lock)
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-sAy4nb/input.bundle is okay
+Plan: 2 task(s), policy=local-merge, workBranch=orca/w/x
+Base: orca/w/x will be cut from main — the branch currently checked out in /var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-sched-0arrKl/repo — at 3015d5d9bfd01765695be6501b97b81c37029a29
+
+Preflight checks:
+  [pass] relative-path
+  [pass] duplicate-task-id
+  [pass] cycle
+  [pass] contract-inside-target-repo
+  [pass] work-branch-is-default
+  [pass] unsupported-policy
+  [pass] unusable-task-id
+  [pass] work-branch-already-exists
+  [pass] base-not-a-commit
+  [pass] dirty-worktree
+
+Write sets:
+  T1:
+    a.txt -> a.txt
+  T2:
+    b.txt -> b.txt
+
+Intersecting pairs: 0
+
+Layers (parallelism):
+  layer 0: T1, T2 (parallelism: 2)
+
+These are declared write sets. The actual write set is only known once a task finishes. Disjoint does not guarantee no conflict.
+orca: work branch orca/w/x is at 40baa197aa37299b35e09a155311f9ff8bf35422
+ ✓ tests/level/hookGolden.test.ts (6 tests) 1815ms
+   ✓ orca level without ORCA_CHAIN_ID is byte for byte what it was at 96cae2b (D-launch spec §3.2, §8.2-4) > band1 334ms
+   ✓ orca level without ORCA_CHAIN_ID is byte for byte what it was at 96cae2b (D-launch spec §3.2, §8.2-4) > band1-covered 324ms
+   ✓ orca level without ORCA_CHAIN_ID is byte for byte what it was at 96cae2b (D-launch spec §3.2, §8.2-4) > band2-covered 336ms
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-LGxWKq/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-brgUwZ/input.bundle is okay
+ ✓ tests/scheduler/scenarios/S10.test.ts (2 tests) 6728ms
+   ✓ S10 (spec §3.5: --serial turns parallelism off; results must still be correct) > parallel: T1 and T2 both land, passing the union of both requiredChecks, and T2's clone did not see T1's work 3104ms
+   ✓ S10 (spec §3.5: --serial turns parallelism off; results must still be correct) > S10: --serial also lands both, passing the same union of requiredChecks — not byte-identical to the parallel run, but equally correct 3623ms
+Plan: 2 task(s), policy=local-merge, workBranch=orca/w/x
+Base: orca/w/x will be cut from main — the branch currently checked out in /var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-sched-77wU9u/repo — at 0213fba9ea66f38a83a09985aa56a32924d4c9ac
+
+Preflight checks:
+  [pass] relative-path
+  [pass] duplicate-task-id
+  [pass] cycle
+  [pass] contract-inside-target-repo
+  [pass] work-branch-is-default
+  [pass] unsupported-policy
+  [pass] unusable-task-id
+  [pass] work-branch-already-exists
+  [pass] base-not-a-commit
+  [pass] dirty-worktree
+
+Write sets:
+  T1:
+    a.txt -> a.txt
+  T2:
+    b.txt -> b.txt
+
+Intersecting pairs: 0
+
+Layers (parallelism):
+  layer 0: T1, T2 (parallelism: 2)
+
+These are declared write sets. The actual write set is only known once a task finishes. Disjoint does not guarantee no conflict.
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-sSy0ar/input.bundle is okay
+ ✓ tests/panel/endToEnd.test.ts (5 tests) 2ms
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-Og1ZcF/input.bundle is okay
+ ✓ tests/corrections/ledgerCommitRefusalMessage.test.ts (1 test) 942ms
+   ✓ orca correct --close — hook-refused commit names the actual recovery (round-4 review, item 1) > stderr names --close and the correction id when the original run was a one-shot close 941ms
+ ✓ tests/scheduler/scenarios/preflightUnreadableRepo.test.ts (1 test) 403ms
+   ✓ preflight on a target repo git cannot read (final review, promoted follow-up) > prints no [pass] for any runtime check when the target repo is not a git repository 398ms
+Plan: 2 task(s), policy=local-merge, workBranch=orca/w/x
+Base: orca/w/x will be cut from main — the branch currently checked out in /var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-sched-dvLqxN/repo — at 0213fba9ea66f38a83a09985aa56a32924d4c9ac
+
+Preflight checks:
+  [pass] relative-path
+  [pass] duplicate-task-id
+  [pass] cycle
+  [pass] contract-inside-target-repo
+  [pass] work-branch-is-default
+  [pass] unsupported-policy
+  [pass] unusable-task-id
+  [pass] work-branch-already-exists
+  [pass] base-not-a-commit
+  [pass] dirty-worktree
+
+Write sets:
+  T1:
+    a.txt -> a.txt
+  T2:
+    b.txt -> b.txt
+
+Intersecting pairs: 0
+
+Layers (parallelism):
+  layer 0: T1, T2 (parallelism: 2)
+
+These are declared write sets. The actual write set is only known once a task finishes. Disjoint does not guarantee no conflict.
+ ✓ tests/chain/scan.test.ts (20 tests) 161ms
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-NUXfY1/input.bundle is okay
+ ✓ tests/scheduler/runId.test.ts (5 tests) 3ms
+orca: T1: ccloop reported succeeded (run orca-T1-f75a3e7c)
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-Us5DAe/input.bundle is okay
+ ✓ tests/level/config.test.ts (5 tests) 24ms
+ ✓ tests/control/snapshot.test.ts (3 tests) 7951ms
+   ✓ dirty snapshots > keeps detached HEAD, index and worktree bytes separately, including ignored files and symlinks 2502ms
+   ✓ dirty snapshots > reports special files without opening a FIFO and treats source mutation as partial 2962ms
+   ✓ dirty snapshots > preserves all three unmerged index stages independently of the working file 2486ms
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-mFbAzt/input.bundle is okay
+ ✓ tests/chain/config.test.ts (4 tests) 54ms
+orca: T2: ccloop reported succeeded (run orca-T2-3ec72306)
+ ✓ tests/panel/coverageDuplicates.test.ts (2 tests) 2ms
+orca: T1: ccloop reported succeeded (run orca-T1-d3f7bc18)
+ ✓ tests/scheduler/scenarios/S15.test.ts (2 tests) 460ms
+orca: T2: ccloop reported succeeded (run orca-T2-e7d76bb9)
+orca: T1: ccloop reported succeeded (run orca-T1-788afe8e)
+orca: work branch orca/w/x is at a7603eab2d2b029fcf9ca23b1b6e3f5829684447
+ ✓ tests/scheduler/scenarios/S21.test.ts (2 tests) 2823ms
+   ✓ S21 (spec §1.2 rule 3 / §10.2) > S21: with the lock held, a second orca run never enters W 2592ms
+ ✓ tests/scheduler/scenarios/emptyRequiredChecksWarning.test.ts (1 test) 393ms
+   ✓ orca plan warns about an empty requiredChecks union (spec 5.3 / 9.1(6), fix round 1 finding 2) > prints the escalation warning through the real plan path, not a hand-built fixture 392ms
+ ✓ tests/scheduler/exitCode.test.ts (5 tests) 2ms
+orca: kept the work copy for orca-T1-788afe8e (--keep-workdirs): /var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-sched-dvLqxN/runs/orca-T1-788afe8e
+orca: T2: ccloop reported succeeded (run orca-T2-c606224b)
+ ✓ tests/ledger/correctionSchema.test.ts (12 tests) 4ms
+ ✓ tests/scheduler/scenarios/S4.test.ts (1 test) 339ms
+   ✓ S4 (spec 5.3) > S4: an empty requiredChecks union refuses automatic reconciliation and escalates 339ms
+orca: kept the work copy for orca-T2-c606224b (--keep-workdirs): /var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-sched-dvLqxN/runs/orca-T2-c606224b
+orca: work branch orca/w/x is at a0a909bdfb3160735eb2bd16ac5c5b4e85908fca
+orca: work branch orca/w/x is at 426f69bbe8158f0611918c792d8dfb456d08c19b
+ ✓ tests/scheduler/scenarios/S14.test.ts (1 test) 2888ms
+   ✓ S14 (spec §4.5) > S14: a whole run leaves the default branch's ref byte-identical 2888ms
+ ✓ tests/scheduler/scenarios/workdirDisposal.test.ts (3 tests) 6818ms
+   ✓ task copy retention (spec §4.5) > deletes a successful task's copy once its result has landed on W 2626ms
+   ✓ task copy retention (spec §4.5) > keeps a non-successful task's copy and prints where it is 1720ms
+   ✓ task copy retention (spec §4.5) > --keep-workdirs keeps even the copies of tasks that landed 2472ms
+ ✓ tests/chain/prompt.test.ts (3 tests) 2ms
+ ✓ tests/chain/stopRequest.test.ts (4 tests) 1365ms
+   ✓ stop requests (D-launch spec §2, review I10) > Q3 a stopped chain is chain-not-running 389ms
+   ✓ stop requests (D-launch spec §2, review I10) > Q4 a running chain gets the request inside the git dir, where a session's cleanup cannot reach it 489ms
+ ✓ tests/scheduler/scenarios/planPrintsBase.test.ts (1 test) 521ms
+   ✓ orca plan prints where the work branch starts (spec §9.1) > names the target repository's checked-out branch and its actual tip sha 521ms
+ ✓ tests/control/admissionGate.test.ts (3 tests) 4ms
+ ✓ tests/scheduler/scenarios/S11.test.ts (1 test) 516ms
+   ✓ S11 (spec §2.3 / §4.2: workBranch == default branch) > S11: rejected as work-branch-is-default at exit 1, before anything touches the target repo 515ms
+ ✓ tests/control/canonicalJson.test.ts (8 tests) 44ms
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-hzBXiF/input.bundle is okay
+ ✓ tests/scheduler/scenarios/S12.test.ts (1 test) 543ms
+   ✓ S12 (spec §2.3 / §4.2: policy other than local-merge) > S12: rejected as unsupported-policy at exit 1 rather than silently downgraded, before anything touches the target repo 542ms
+ ✓ tests/metrics/highTier.test.ts (4 tests) 2ms
+ ✓ tests/control/cleanup.test.ts (2 tests) 5923ms
+   ✓ cleanup authorization > requires committed recoverable evidence and durable acceptance before removing only the registered run 3530ms
+   ✓ cleanup authorization > refuses deletion when archived content was corrupted after commit 2393ms
+ ✓ tests/scheduler/scenarios/S19.test.ts (1 test) 436ms
+   ✓ S19 (spec §4.2 runtime preflight) > S19: a base that is not a real commit is rejected 434ms
+ ✓ tests/scheduler/repoLock.test.ts (3 tests) 729ms
+ ✓ tests/scheduler/scenarios/planWiresPreflight.test.ts (1 test) 468ms
+   ✓ orca plan wires the real preflight in (spec §9.1(4) / ruling 3) > prints [pass], not [not evaluated], for the three runtime checks on a plan where they can be evaluated 467ms
+ ✓ tests/panel/usage.test.ts (1 test) 2ms
+ ✓ tests/smoke.test.ts (1 test) 3ms
+ ✓ tests/scheduler/scenarios/S22.test.ts (2 tests) 327ms
+   ✓ S22 (spec §4.2.1) > S22: a dirty target worktree is rejected up front 326ms
+ ✓ tests/scheduler/scenarios/S18.test.ts (1 test) 410ms
+   ✓ S18 (spec §4.2 runtime preflight) > S18: an existing workBranch is rejected rather than reused 409ms
+crash after-archive: marker observed, SIGKILL
+Plan: 2 task(s), policy=local-merge, workBranch=orca/plan-scenario-branch
+Base: orca/plan-scenario-branch will be cut from main — the branch currently checked out in /var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-sched-31aK7M/repo — at e35301299d7f5557e883f6ac9930fb8c6bc62af8
+
+Preflight checks:
+  [pass] relative-path
+  [pass] duplicate-task-id
+  [pass] cycle
+  [pass] contract-inside-target-repo
+  [pass] work-branch-is-default
+  [pass] unsupported-policy
+  [pass] unusable-task-id
+  [pass] work-branch-already-exists
+  [pass] base-not-a-commit
+  [pass] dirty-worktree
+
+Write sets:
+  T1:
+    a.txt -> a.txt
+  T2:
+    b.txt -> b.txt
+
+Intersecting pairs: 0
+
+Layers (parallelism):
+  layer 0: T1, T2 (parallelism: 2)
+
+These are declared write sets. The actual write set is only known once a task finishes. Disjoint does not guarantee no conflict.
+ ✓ tests/scheduler/preflight.test.ts (1 test) 262ms
+ ✓ tests/scheduler/scenarios/S17.test.ts (1 test) 496ms
+   ✓ S17 (spec 9.2) > S17: orca plan touches not one byte of the target repository 496ms
+ ✓ tests/scheduler/scenarios/S1.test.ts (1 test) 2380ms
+   ✓ S1 (spec §10.2: the basic path) > S1: two tasks with disjoint write sets share a layer, both land, and the round exits 0 2379ms
+ ✓ tests/scheduler/scenarios/S2.test.ts (1 test) 3495ms
+   ✓ S2 (spec §2.4 / §8.1) > S2: two tasks with intersecting write sets run serially and the ordering lands in the ledger 3494ms
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-a0ElCr/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-PArQVL/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-VsB1KX/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-jcJacD/input.bundle is okay
+crash after-transaction: marker observed, SIGKILL
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-YiKcCB/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-vluj5u/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-DgQBbb/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-A2EXSq/input.bundle is okay
+crash before-projection: marker observed, SIGKILL
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-TxBgcc/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-TkB50O/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-bR485R/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-68DOJr/input.bundle is okay
+crash before-cleanup: marker observed, SIGKILL
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-cbIqjE/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-H4Att4/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-q82uFr/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-EXAERN/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-E08JLo/input.bundle is okay
+crash after-accept: marker observed, SIGKILL
+Cloning into '/private/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-crash-matrix-bCI2Gq/runs/run-ba7acc3b-3f4c-4125-bd84-7ad156b95a03/repo'...
+done.
+HEAD is now at f04340d base
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-al4lyr/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-BVxXiM/input.bundle is okay
+crash after-accept: marker observed, SIGKILL
+ ✓ tests/control/recovery.test.ts (8 tests) 21830ms
+   ✓ crash recovery with real SIGKILL > after-claim 811ms
+   ✓ crash recovery with real SIGKILL > after-accept 4317ms
+   ✓ crash recovery with real SIGKILL > after-archive 5125ms
+   ✓ crash recovery with real SIGKILL > after-transaction 2851ms
+   ✓ crash recovery with real SIGKILL > before-projection 2843ms
+   ✓ crash recovery with real SIGKILL > before-cleanup 3058ms
+   ✓ advances a partial checkpoint when later isolation evidence arrives 2428ms
+   ✓ keeps an unknown accepted run active with its reserved budget 396ms
+
+ Test Files  172 passed | 1 skipped (173)
+      Tests  1516 passed | 3 skipped (1519)
+   Start at  20:10:13
+   Duration  99.66s (transform 2.61s, setup 0ms, collect 17.34s, tests 745.88s, environment 26ms, prepare 8.05s)
+

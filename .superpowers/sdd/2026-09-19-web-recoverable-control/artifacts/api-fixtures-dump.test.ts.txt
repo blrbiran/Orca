@@ -1,0 +1,174 @@
+/**
+ * Task 10 step 7 evidence collector -- NOT part of the acceptance suite; deleted after the dump.
+ *
+ * Boots the same real Panel the acceptance tests use, drives the documented flow over HTTP, and
+ * prints the response bodies verbatim so `final-report.md` can quote them. Nothing is hand-written
+ * here: every value is what the Panel answered. The only non-HTTP steps are the two the browser
+ * cannot perform -- the estimate answer and the worker's settlement -- and those go through the
+ * production seams the fixture documents.
+ *
+ * Rerun with:
+ *   PATH="/usr/local/bin:$PATH" ORCA_EVIDENCE_OUT=<dir> npx vitest run tests/panel/__api-fixtures-dump.test.ts
+ */
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { afterAll, describe, expect, it } from "vitest";
+import { sha256Canonical } from "../../src/control/canonicalJson.js";
+import type { BudgetEstimateV1 } from "../../src/control/webProtocol.js";
+import type { Amount } from "../../src/control/types.js";
+import {
+  GROUP, PANEL_TOKEN, command, createHarness, get, json, settleRecoverableWork, settleRun, view,
+  type Panel,
+} from "./fixtures/controlPanel.js";
+
+const ESTIMATE_WORK: Amount = { tokens: 2_000_000, activeMs: 9_000_000, attempts: 2, sessions: 2 };
+const ESTIMATE_HANDOFF: Amount = { tokens: 100_000, activeMs: 600_000, attempts: 0, sessions: 0 };
+const amount = (tokens: number, activeMs: number, attempts: number, sessions: number): Amount => ({ tokens, activeMs, attempts, sessions });
+
+const h = createHarness();
+afterAll(async () => { await h.dispose(); });
+
+const out: Record<string, unknown> = {};
+const record = (key: string, value: unknown): void => { out[key] = value; };
+
+describe("api fixture dump", () => {
+  it("captures redacted responses for the documented flow", async () => {
+    const paths = await h.workspace();
+    const panel = await h.boot("epoch-evidence", paths);
+
+    const config = await json(await get(panel, "/api/control/config"));
+    record("GET /api/control/config", config);
+
+    const imported = await command(panel, "/api/control/groups/import-plan", {
+      commandId: "evidence-import", expectedRevision: 0, payload: { groupId: GROUP, repoId: "repo", planId: "plan" },
+    });
+    record("POST /api/control/groups/import-plan -> 201", imported);
+
+    const replay = await command(panel, "/api/control/groups/import-plan", {
+      commandId: "evidence-import", expectedRevision: 0, payload: { groupId: GROUP, repoId: "repo", planId: "plan" },
+    });
+    record("POST import-plan replay (same commandId)", { status: replay.status, byteForByteIdentical: JSON.stringify(replay.body) === JSON.stringify(imported.body) });
+
+    const draft = await view(panel);
+    record("GET /api/control/groups/:id -- top-level keys", Object.keys(draft));
+    record("GET /api/control/groups/:id -- summary", draft.summary);
+    record("GET /api/control/groups/:id -- proposal", draft.proposal);
+    record("GET /api/control/groups/:id -- workItems[0]", draft.workItems[0]);
+    record("GET /api/control/groups/:id -- estimates[0]", draft.estimates[0]);
+    record("GET /api/control/groups/:id -- allocations[0]", draft.allocations[0]);
+    record("GET /api/control/groups/:id -- runs", draft.runs);
+    record("GET /api/control/groups/:id -- ledger", draft.ledger);
+    record("leak check: group view contains no trusted path", {
+      containsRoot: JSON.stringify(draft).includes(panel.root), containsRepoPath: JSON.stringify(draft).includes("repoPath"),
+    });
+
+    const stale = await command(panel, `/api/control/groups/${GROUP}/proposal/edit`, {
+      commandId: "evidence-stale", expectedRevision: 99,
+      payload: { baseProposalVersion: 1, operations: [{ target: { scope: "goal-review", dimension: "tokens" }, value: 1_500_000, provenance: "human" }] },
+    });
+    record("POST proposal/edit with a stale expectedRevision", stale);
+
+    const outOfRange = await command(panel, `/api/control/groups/${GROUP}/proposal/edit`, {
+      commandId: "evidence-out-of-range", expectedRevision: await revisionOf(panel),
+      payload: { baseProposalVersion: 1, operations: [{ target: { scope: "goal-review", dimension: "tokens" }, value: Number.MAX_SAFE_INTEGER + 1, provenance: "human" }] },
+    });
+    record("POST proposal/edit with an out-of-range value", outOfRange);
+
+    const unknownVerb = await fetch(`${panel.url}/api/control/not-a-route`, {
+      method: "POST", headers: { "x-orca-token": PANEL_TOKEN, "content-type": "application/json" },
+      body: JSON.stringify({ commandId: "evidence-bad", expectedRevision: 1, payload: {} }),
+    });
+    record("POST unknown control verb", { status: unknownVerb.status, body: await unknownVerb.text() });
+
+    // A refused payload must not become a second write: the ledger row count is the only
+    // bookkeeping a browser cannot forge, so it is what the dump records.
+    record("commands ledger rows after the two refused edits", {
+      total: Number(panel.store.db.prepare("SELECT COUNT(*) AS n FROM commands").get()!.n),
+      staleRow: panel.store.db.prepare("SELECT 1 FROM commands WHERE id=?").get("evidence-stale") ?? null,
+      outOfRangeRow: panel.store.db.prepare("SELECT 1 FROM commands WHERE id=?").get("evidence-out-of-range") ?? null,
+      groupRevision: await revisionOf(panel),
+    });
+
+    const anonymous = await fetch(`${panel.url}/api/control/summary`);
+    record("GET /api/control/summary without a token", { status: anonymous.status, body: await anonymous.text() });
+
+    await panel.drainWakes();
+    const estimateRun = String(panel.store.db.prepare("SELECT id FROM runs WHERE group_id=?").get(GROUP)!.id);
+    record("GET /api/control/runs/:runId/evidence -- estimate run the worker never reported", await recordEvidence(panel, estimateRun));
+    settleRun(panel.store, estimateRun, "settled-restartable");
+    record("GET /api/control/runs/:runId/evidence -- the same run after the fixture marked it settled-restartable", await recordEvidence(panel, estimateRun));
+    const output: BudgetEstimateV1 = {
+      schema: "budget-estimate-v1", planHash: draft.plan.planHash,
+      tasks: [{ taskId: "a", complexity: "M", confidence: "high", work: ESTIMATE_WORK, handoff: ESTIMATE_HANDOFF, rationale: "one module", assumptions: ["clean tree"] }],
+      goalReviewReserve: amount(200_000, 900_000, 1, 1), groupRationale: "single task",
+    };
+    panel.service.completeEstimate(GROUP, draft.estimates[0].estimateId, output);
+    record("GET /api/control/runs/:runId/evidence -- once the estimate answer is published", await recordEvidence(panel, estimateRun));
+    record("estimate outputHash (server-side canonical sha256)", sha256Canonical(output));
+
+    const edited = await command(panel, `/api/control/groups/${GROUP}/proposal/edit`, {
+      commandId: "evidence-edit", expectedRevision: await revisionOf(panel),
+      payload: { baseProposalVersion: (await view(panel)).proposal.proposalVersion, operations: [{ target: { scope: "task", taskId: "a", allocation: "work", dimension: "tokens" }, value: ESTIMATE_WORK.tokens, provenance: "model", estimateId: draft.estimates[0].estimateId }] },
+    });
+    record("POST proposal/edit applying model advice", edited);
+
+    const binding = { profileId: "all", profileHash: String((config.profiles as Array<Record<string, unknown>>)[0].profileHash) };
+    const confirmed = await command(panel, `/api/control/groups/${GROUP}/confirm`, {
+      commandId: "evidence-confirm", expectedRevision: await revisionOf(panel),
+      payload: {
+        planHash: draft.plan.planHash, proposalVersion: (await view(panel)).proposal.proposalVersion, budgetMode: "soft",
+        profileIds: { estimator: "all", worker: "all", handoff: "all", goalReview: "all" },
+        profileHashes: { estimator: binding.profileHash, worker: binding.profileHash, handoff: binding.profileHash, goalReview: binding.profileHash },
+        contextPolicy: { handoffAtContextTokens: 800_000 },
+      },
+    });
+    record("POST confirm", confirmed);
+
+    const started = await command(panel, `/api/control/groups/${GROUP}/start`, { commandId: "evidence-start", expectedRevision: await revisionOf(panel), payload: {} });
+    record("POST start", started);
+    await panel.drainWakes();
+    const running = await view(panel);
+    const workRun = running.runs.find((run) => run.phase === "work")!;
+    record("GET /api/control/groups/:id -- the claimed run", workRun);
+
+    const stopped = await command(panel, `/api/control/groups/${GROUP}/handoff-stop`, { commandId: "evidence-handoff", expectedRevision: await revisionOf(panel), payload: {} });
+    record("POST handoff-stop", stopped);
+
+    await settleRecoverableWork(panel, workRun.runId, "cp-a-1");
+    record("GET /api/control/groups/:id -- stop state after the worker's settlement", {
+      summary: (await view(panel)).summary, checkpoints: (await view(panel)).checkpoints,
+    });
+    record("GET /api/control/runs/:runId/evidence -- the recoverable work run", await recordEvidence(panel, workRun.runId));
+    const manifest = await json(await get(panel, `/api/control/runs/${workRun.runId}/evidence`));
+    const entries = (manifest as { entries: Array<{ evidenceId: string; sha256: string; downloadUrl: string; byteLength: number }> }).entries;
+    for (const entry of entries) {
+      const download = await fetch(`${panel.url}${entry.downloadUrl}`, { headers: { "x-orca-token": PANEL_TOKEN } });
+      const unlisted = await fetch(`${panel.url}/api/control/runs/${workRun.runId}/evidence/not-an-artifact`, { headers: { "x-orca-token": PANEL_TOKEN } });
+      record(`GET ${entry.downloadUrl}`, {
+        entry, downloadStatus: download.status, bytes: (await download.arrayBuffer()).byteLength,
+        contentType: download.headers.get("content-type"), contentDisposition: download.headers.get("content-disposition"),
+        contentSecurityPolicy: download.headers.get("content-security-policy"),
+        unlistedArtifactId: { status: unlisted.status, body: await unlisted.text() },
+      });
+    }
+    record("GET /api/control/recovery", await json(await get(panel, "/api/control/recovery")));
+    record("GET /api/control/summary", await json(await get(panel, "/api/control/summary")));
+
+    if (process.env.ORCA_EVIDENCE_OUT) {
+      await mkdir(process.env.ORCA_EVIDENCE_OUT, { recursive: true });
+      await writeFile(join(process.env.ORCA_EVIDENCE_OUT, "api-fixtures.json"), JSON.stringify(out, null, 2));
+    }
+    console.log(JSON.stringify(out, null, 2));
+    expect(Object.keys(out).length).toBeGreaterThan(20);
+    await panel.close();
+  });
+});
+
+async function revisionOf(panel: Panel): Promise<number> {
+  return (await view(panel)).summary.commandRevision;
+}
+
+async function recordEvidence(panel: Panel, runId: string): Promise<unknown> {
+  const response = await get(panel, `/api/control/runs/${runId}/evidence`);
+  return { status: response.status, body: await json(response) };
+}

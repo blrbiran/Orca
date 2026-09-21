@@ -1,0 +1,15 @@
+
+ RUN  v2.1.9 /Users/biran/code/skills/loop/Orca
+
+(node:32230) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/control/webCcloopSmoke.test.ts (4 tests) 1671ms
+   ✓ the shipped consumer answers for its own capabilities (task 10 step 4) > refuses an envelope that is not V1 and reads a well-formed one as no execution yet 348ms
+   ✓ the frozen dispatch envelope reaches a real process (task 10 step 4) > carries the ledger's claim identity byte-for-byte and is durably accepted once 633ms
+   ✓ the frozen dispatch envelope reaches a real process (task 10 step 4) > latches the stop under the ledger's request identity and returns evidence the store re-hashes 470ms
+
+ Test Files  1 passed (1)
+      Tests  4 passed (4)
+   Start at  20:09:08
+   Duration  2.18s (transform 200ms, setup 0ms, collect 278ms, tests 1.67s, environment 0ms, prepare 49ms)
+
