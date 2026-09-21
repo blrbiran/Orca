@@ -144,7 +144,10 @@ describe("ControlPanel", () => {
 
   it("links run evidence and reports a projection refetch is needed", () => {
     const html = renderToStaticMarkup(<ControlPanel {...panelProps({ refetchRequired: true })} />);
-    expect(html).toContain("/api/control/runs/run-a/evidence");
+    // This used to assert the manifest URL inside an `href`, which pinned the dead link:
+    // `/api/control/*` answers to the `x-orca-token` header, so no href can load it. The
+    // evidence control's real behaviour is judged in web/tests/evidenceLink.test.tsx.
+    expect(html).toContain(">evidence</button>");
     expect(html).toContain("projection refetch required");
   });
 });

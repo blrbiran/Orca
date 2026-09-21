@@ -109,7 +109,12 @@ export function App(): JSX.Element {
 
   /** Null while the control plane is not mounted on this panel; then the page shows no control section at all. */
   const [controlConfig, setControlConfig] = useState<ControlConfigV1 | null>(null);
-  const [control, dispatchControl] = useReducer(reduceControlState, undefined, initialControlState);
+  // The ids still waiting on a lookup are restored in the initializer, not in an
+  // effect: the effect that mirrors the reducer's list back into sessionStorage runs
+  // on the very same mount commit, and would clear the key before anything read it.
+  const [control, dispatchControl] = useReducer(reduceControlState, undefined, () => ({
+    ...initialControlState(), uncertainCommandIds: readUncertainCommands(browserSession()),
+  }));
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
   /** The reducer's latest value, for callbacks that outlive the render they were built in. */
   const controlNow = useRef(control);
@@ -178,6 +183,12 @@ export function App(): JSX.Element {
     resolving.current.add(id);
     const result = await recoverUncertainCommand(command.groupId, command.commandId);
     resolving.current.delete(id);
+    if (result.kind === "unresolved") {
+      // The lookup told us nothing, so the command is still unresolved: keep the id
+      // for the next tick and show why this round could not conclude.
+      dispatchControl({ type: "refusal", groupId: command.groupId, value: result.refusal });
+      return;
+    }
     dispatchControl({ type: "command-resolved", value: command });
     if (result.kind === "absent") dispatchControl({ type: "refusal", groupId: command.groupId, value: result.refusal });
     await readControlGroup(command.groupId);
@@ -213,7 +224,7 @@ export function App(): JSX.Element {
   useEffect(() => {
     if (controlConfig === null) return;
     // A command id that survived the reload is resolved before anything else reads.
-    for (const command of readUncertainCommands(browserSession())) void resolveUncertain(command);
+    for (const command of controlNow.current.uncertainCommandIds) void resolveUncertain(command);
     void readControlTick();
     const timer = setInterval(() => void readControlTick(), CONTROL_POLL_MS);
     return () => clearInterval(timer);

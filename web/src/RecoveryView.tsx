@@ -5,7 +5,8 @@
  * locally, and an unknown outcome stays unknown until the server says otherwise.
  */
 import type { JSX } from "react";
-import { evidenceManifestUrl, type ControlAction } from "./controlApi.js";
+import type { ControlAction } from "./controlApi.js";
+import { EvidenceLink } from "./EvidenceLink.js";
 import type { GroupViewV1, RecoveryViewV1 } from "./controlTypes.js";
 
 export interface RecoveryViewProps {
@@ -46,7 +47,7 @@ export function RecoveryView(props: RecoveryViewProps): JSX.Element {
             {blocker.evidenceIds.length > 0 ? ` · evidence ${blocker.evidenceIds.join(", ")}` : ""}
             {blocker.runId !== null && (
               <>
-                <a href={evidenceManifestUrl(String(blocker.runId))}>run evidence</a>
+                <EvidenceLink runId={String(blocker.runId)} label="run evidence" />
                 {retry({ scope: "run", runId: blocker.runId }, String(group?.summary.groupId ?? ""))}
               </>
             )}

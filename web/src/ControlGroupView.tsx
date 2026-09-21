@@ -8,8 +8,9 @@
  * execution is still alive.
  */
 import type { JSX } from "react";
-import { evidenceManifestUrl, type ControlAction } from "./controlApi.js";
+import type { ControlAction } from "./controlApi.js";
 import { BudgetEditor } from "./BudgetEditor.js";
+import { EvidenceLink } from "./EvidenceLink.js";
 import type { ControlConfigV1, ContinuationSelectionV1, GroupViewV1, RunViewV1 } from "./controlTypes.js";
 import type { UncertainCommand } from "./controlState.js";
 
@@ -96,7 +97,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
               <td>{run.used.tokens}</td>
               <td>{run.remaining.tokens}</td>
               <td>
-                <a href={evidenceManifestUrl(run.runId)}>evidence</a>
+                <EvidenceLink runId={run.runId} />
                 {run.evidenceIds.length > 0 ? ` ${run.evidenceIds.join(", ")}` : ""}
               </td>
             </tr>

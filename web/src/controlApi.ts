@@ -88,7 +88,21 @@ export const fetchControlRecovery = (): Promise<RecoveryViewV1> => controlGet<Re
 /** GET /api/control/runs/:runId/evidence -- the manifest of raw evidence retained for one run. */
 export const fetchRunEvidence = (runId: string): Promise<EvidenceManifestV1> =>
   controlGet<EvidenceManifestV1>(`/api/control/runs/${segment(runId)}/evidence`);
-export const evidenceManifestUrl = (runId: string): string => `/api/control/runs/${segment(runId)}/evidence`;
+
+/**
+ * Offer a manifest the caller already read as a download. The read has to come
+ * first: the route answers to the `x-orca-token` header only, so no URL behind
+ * it is savable straight from the address bar.
+ */
+export function saveEvidenceManifest(manifest: EvidenceManifestV1): void {
+  const url = URL.createObjectURL(new Blob([`${JSON.stringify(manifest, null, 2)}\n`], { type: "application/json" }));
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `evidence-${manifest.runId}.json`;
+  anchor.click();
+  // Revoked on the next tick, once the browser has taken the URL.
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
 
 export type ControlAnswer = { kind: "answered"; status: number; body: CommandSuccessV1 | { error: CommandErrorV1 } } | { kind: "uncertain"; refusal: ControlRefusal };
 
@@ -113,8 +127,6 @@ export async function sendControlCommand(path: string, envelope: CommandEnvelope
   return { kind: "answered", status: res.status, body: body as CommandSuccessV1 | { error: CommandErrorV1 } };
 }
 
-export type CommandRecovery = { kind: "found"; lookup: CommandLookupV1 } | { kind: "absent"; refusal: ControlRefusal };
-
 /** The refusal a durable 4xx answer carries, in the shape the page shows. */
 export function refusalFromAnswer(answer: Extract<ControlAnswer, { kind: "answered" }>): ControlRefusal {
   const error = (answer.body as { error?: CommandErrorV1 }).error;
@@ -126,18 +138,26 @@ export function refusalFromAnswer(answer: Extract<ControlAnswer, { kind: "answer
   };
 }
 
+export type CommandRecovery =
+  | { kind: "found"; lookup: CommandLookupV1 }
+  | { kind: "absent"; refusal: ControlRefusal }
+  | { kind: "unresolved"; refusal: ControlRefusal };
+
 /**
  * GET the retained result of a command the browser lost the answer to. `absent`
- * is the server's `command-result-not-found`: nothing durable happened, so the
- * person can issue the command again under a new id. Any other refusal is
- * surfaced with its own code rather than swallowed.
+ * is spec §4.1's `404 command-result-not-found` and nothing else: the ledger
+ * holds no such command, so the person may issue the intent again under a new
+ * id. Every other refusal -- an unreachable panel, a 5xx, a rejected token -- is
+ * `unresolved`, because dropping the id there would turn a re-issue into a
+ * second execution rather than a retry of this one.
  */
 export async function recoverUncertainCommand(groupId: string, commandId: string): Promise<CommandRecovery> {
   const path = `/api/control/groups/${segment(groupId)}/commands/${segment(commandId)}`;
   try {
     return { kind: "found", lookup: await controlGet<CommandLookupV1>(path) };
   } catch (err) {
-    return { kind: "absent", refusal: controlFailureFrom(err) };
+    const refusal = controlFailureFrom(err);
+    return refusal.code === "command-result-not-found" ? { kind: "absent", refusal } : { kind: "unresolved", refusal };
   }
 }
 
