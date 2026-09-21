@@ -171,6 +171,10 @@ export async function deliverScheduledStart(deps: WebDispatchDeps, groupId: stri
     return store.transaction(() => {
       const still = pendingResumeWake(store, groupId) ?? pendingStartWake(store, groupId);
       if (!still) return activeWorkRun(store, groupId) ?? { kind: "idle" as const };
+      // `scheduleStart` refuses to arm a wake while usage is unknown; the wake outlives that
+      // check, so delivery re-reads the ledger rather than claiming on an unknowable budget.
+      const ledgerGroup = readGroup(store, groupId) as unknown as { ledger?: { usageUnknown?: boolean } };
+      if (ledgerGroup.ledger?.usageUnknown) return { kind: "blocked" as const, reason: "usage-unknown" };
       if (blocked) {
         store.db.prepare("INSERT INTO recovery_blockers(id,group_id,run_id,scope,code,body) VALUES (?,?,NULL,'group','claim-capability-unavailable',?) ON CONFLICT(id) DO NOTHING")
           .run(`claim-blocked:${groupId}:${still.id}`, groupId, canonicalBytes({ evidenceIds: [] }).toString("utf8"));
@@ -196,8 +200,8 @@ export async function deliverScheduledStart(deps: WebDispatchDeps, groupId: stri
 type WakeOutcome = { kind: "claimed"; runId: string } | { kind: "idle" };
 
 /**
- * Claim the next registered continuation of a resume wake. Returns null once the batch is
- * exhausted so the same delivery can fall through to ordinary ready work.
+ * Claim the registered continuations of a resume wake in request order. Returns null once the
+ * batch is exhausted so the same delivery can fall through to ordinary ready work.
  */
 function deliverContinuationWake(
   store: ControlStore,
@@ -216,10 +220,15 @@ function deliverContinuationWake(
     const last = consumed.at(-1);
     return last ? { kind: "claimed", runId: last.pendingRunId } : null;
   }
-  const registered = actionable[0];
-  const run = createStartingRun(store, groupId, { workItemId: registered.taskId }, snapshot, wake.resumeRevision, registered);
-  if (actionable.length === 1) store.db.prepare("UPDATE scheduler_wakes SET delivered=1 WHERE id=?").run(wake.id);
-  return { kind: "claimed", runId: run.runId };
+  // One delivery finishes the batch: the scheduler acks any wake whose handler reported a
+  // claim, so claiming only the first would leave the rest `continuing` with no wake to run them.
+  let first: DispatchRun | null = null;
+  for (const registered of actionable) {
+    const run = createStartingRun(store, groupId, { workItemId: registered.taskId }, snapshot, wake.resumeRevision, registered);
+    first ??= run;
+  }
+  store.db.prepare("UPDATE scheduler_wakes SET delivered=1 WHERE id=?").run(wake.id);
+  return { kind: "claimed", runId: first!.runId };
 }
 
 interface ClaimableTask { workItemId: string }

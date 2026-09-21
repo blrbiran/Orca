@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import { applyWebCommand, type WebCommandContext } from "./commandLedger.js";
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
+import { dimensions } from "./commands.js";
 import { add, budgetBalance, subtract } from "./budget.js";
 import { ControlError } from "./errors.js";
 import { recordProjectionChange } from "./projectionJournal.js";
@@ -625,6 +626,11 @@ function settleHandoffRequestInTransaction(
 ): { state: string; groupStopState: GroupStopState } {
   const { store } = deps;
   const request = readHandoffRequest(store, groupId, requestId).request;
+  // A settle the adapter re-delivers after losing its answer is the same settlement, not a
+  // second one: re-running it would give the group reserve back twice and under-book live runs.
+  if (!ADOPTABLE_STATES.includes(request.state)) {
+    return { state: request.state, groupStopState: groupStopState(store, groupId) };
+  }
   const run = readRunBody(store, request.runId);
   if (outcome !== "outcome-unknown") {
     saveHandoffRequest(store, groupId, { ...request, state: outcome, failureCode: reasonCode });
@@ -648,7 +654,7 @@ function terminaliseRun(store: ControlStore, groupId: string, run: RunBody, outc
     releaseCommitment(store, groupId, settled.remaining.work);
     return;
   }
-  const work = readWork(store, groupId, run.workItemId) as unknown as { status: string };
+  const work = readWork(store, groupId, run.workItemId) as unknown as { status: string; grant: { work: Amount; handoff: Amount } };
   if (outcome === "settled-unrecoverable") {
     setAllocationStates(store, groupId, run.workItemId, "terminal");
     work.status = "blocked";
@@ -656,8 +662,12 @@ function terminaliseRun(store: ControlStore, groupId: string, run: RunBody, outc
     releaseCommitment(store, groupId, released);
     return;
   }
-  setAllocationStates(store, groupId, run.workItemId, "held");
+  // §5.1.1: a recoverable predecessor parks its commitment at `each predecessor bucket's grant
+  // minus settled cumulative usage`, so §6.3's continuation inherits that remainder rather than
+  // the original plan grant. `remaining` already holds it, clamped at zero by usage settlement.
+  setAllocationStates(store, groupId, run.workItemId, "held", settled.remaining);
   work.status = "held";
+  work.grant = settled.remaining;
   saveWork(store, groupId, work as never);
 }
 
@@ -673,11 +683,19 @@ function interruptEstimate(store: ControlStore, groupId: string, estimateId: str
   recordProjectionChange(store, [groupId]);
 }
 
-export function setAllocationStates(store: ControlStore, groupId: string, ownerId: string, state: BudgetProposalRecord["allocations"][number]["state"]): void {
+export function setAllocationStates(
+  store: ControlStore,
+  groupId: string,
+  ownerId: string,
+  state: BudgetProposalRecord["allocations"][number]["state"],
+  amounts?: { work: Amount; handoff: Amount },
+): void {
   const proposal = readBudgetProposal(store, groupId);
   let changed = false;
   for (const allocation of proposal.allocations) {
     if (allocation.ownerKind !== "task" || allocation.ownerId !== ownerId) continue;
+    const amount = amounts?.[allocation.bucket as "work" | "handoff"];
+    if (amount && dimensions.some(d => allocation.amount[d] !== amount[d])) { allocation.amount = { ...amount }; changed = true; }
     if (allocation.state !== state) { allocation.state = state; changed = true; }
   }
   if (!changed) return;
