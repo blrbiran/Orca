@@ -5024,3 +5024,19 @@ Task 6 原独立审查的 4 个 Important 与 1 个 Minor 均已修复：非规�
 6. 两处控制器自裁的 spec 冲突、六条 MINOR、proof 路径自测（§776）与 `attempt-proof-invalid`（§784）仍等人过一遍；Task 7–10 始终没有独立审查席。
 
 **约束不变**：开门／合并／删分支或 worktree／push 四件需人单独授权，控制器不许 push，非门合并一律 `--ff-only`；验证走 `rtk proxy`、远端只以 `git ls-remote` 为准；成本只报工具给出的数，拿不到就说拿不到；不许替人宣布；`.superpowers/sdd/**` 的历史记录一个字不改。本切片没有任何真实模型调用；Codex 仍是 `phase-end + soft`，任何地方不许宣称 strict。
+
+## 2026-09-22 Web 可恢复控制交接（§6.3 语义已按人裁落地、spec §11 追加完毕、生产装配已成文；下一件事是装配计划的实施与人过一遍 §3）
+
+本节取代上节的状态与「下一件事」，是当前接手入口。上节的挂账 1／2／3 本轮都动了：装配从「无人拍」变成**已成文的设计与计划**，nosniff 与 §6.3 谓词从「要人判」变成**已落地的语义**，两处自裁 spec 冲突变成 **§11 具名 ERRATUM**。定位一律用提交主题，本文提交会移动 HEAD；发布状态不在本文判定（现测 `git status -sb` ＋ `git log --oneline @{u}..HEAD` ＋ `git ls-remote`）。
+
+**本轮六笔本地提交**（前三笔是 §6.3 与人裁小项，后三笔是本轮收尾）：`fix(control): read a settled checkpoint as continuable rather than finished`、`fix(panel): refuse content sniffing on the evidence bytes route`、`test(control): put the acceptance rows where the store actually looks`、`test(control): judge a missing-evidence checkpoint on its own conjunct`，加 `docs(spec): append the web control corrections and design the Panel control assembly`、`docs(sdd): record the correction round's rulings, mutation battery, and open items`。
+
+**§6.3 的口径（人已裁，见 spec §11.1）**：`recoverable` 只回答「这个检查点能不能续」，任务完没完成是另一个判断。改前三处口径互相矛盾，**web 续跑是按构造不可达，不是「没接线」**——只有手写 fixture 满足得过。`checkpoints.ts:85-88` 拆成 `continuable`／`completed`，`repairAcceptedWork` 要求 `result === "complete"`，`exportResumeBundle` 只要求快照完整，`cleanup.ts:11` 保留自己的 `complete` 判断。完成口径逐字等价于改前（`settled && complete && whole && accepted`），放宽的只有「脏但完整的快照可以作为续跑前驱」。**注意 §9.4 那行「marks a partial checkpoint recoverable」必须按新词汇读**（＝把不完整的检查点当可续），映射到变异 M2，已实测打红。
+
+**本轮实测**（台账 `.superpowers/sdd/2026-09-22-web-control-corrections/progress.md`，未过滤日志在同目录 `test-logs/`）：`npm test` RC0＝**174 文件通过／1 skip、1526 通过／5 skip（1531）**；`typecheck` RC0；`npm --prefix web run check` RC0＝13 文件／64 测试；`verify:panel` RC0＝`PASS 0`–`PASS 14`，并报 `~/.orca is unchanged (absent before and after)`。变异电池 M1–M6＋第二轮 M3/M4/M7 全在克隆树跑，主工作树零污染。**⚠️ 更正**：本轮聊天里说过「零 skip」，那是错的——5 个 skip 真实存在（`ccloopProtocol.integration` 3、`webCcloopSmoke` 2），需要 `/tmp` ccloop artifact 才会跑。`verify:control` 与两枚正式集成门**本轮未重跑**，旧数不得当现状。
+
+**⚠️ 要人过一遍的三件**：(1) 装配设计里 R1×R3 相撞的解法是我提的、不是人拍的——`docs/superpowers/specs/2026-09-22-panel-control-assembly-design.md` §3 取「routes 挂上、读接口照常、缺 port 的命令具名拒绝 `control-port-unconfigured`」，并写明了被否掉的「boot 直接失败」和否它的理由；(2) 新增判据 `does not call a checkpoint with missing evidence continuable` **没有被亲眼打红过**——打红它的变异本轮被权限模式拦下，我没有重试，日志留白；(3) §9.1 两行（*Estimator interrupted by stop* 第三句、*Handoff time limits* 的 `activeMs` 独立执法那一半）本轮**没有补判据**，理由是排在装配设计之前不值，这个取舍归人判。
+
+**挂账（下一件件事）**：装配计划 `docs/superpowers/plans/2026-09-22-panel-control-assembly.md` Task 1–8 **一项都没实施**；八个 seam 在 `src/` 里仍 0 生产调用方（现测 `test-logs` 同级 `commands/seam-census-0922.txt`）。两处硬前提不是「接线」而是「没造」：ccloop port 不暴露 `probeProfileCapabilities`（缺了它每次 Web claim 必得 `control-capability-probe-failed`），台账 `DispatchEnvelopeV1 → StartEnvelope` 的翻译器在 `src/` 里不存在、只有 `tests/control/webCcloopSmoke.test.ts:88-101` 一份。`acceptContextObservation` 仍接不起来：`ContextObservationV1` 在 `src/` 里**没有任何生产者**，缺的是 ccloop 侧的 emit，不许自造替代源（装配 spec §8）。另：`tests/panel/fixtures/controlPanel.ts:229` 仍手写 `recoverable: true` 配 `snapshot: null`，与新的推导矛盾——写 §11 时发现的，本轮没动。
+
+**约束不变**：开门／合并／删分支或 worktree／push 四件需人单独授权，控制器不许 push，非门合并一律 `--ff-only`；验证一律带 `PATH="/usr/local/bin:$PATH"` 前缀（全局 homebrew node 缺 `libsimdjson.26.dylib`），未用 `--no-verify`；远端只以 `git ls-remote` 为准；成本只报工具给出的数，拿不到就说拿不到；不许替人宣布；`.superpowers/sdd/**` 与 spec §1–§10 的历史一个字不改，写错了就另起具名更正。判据不许实施者自改——要改就点名哪条、为什么，等人裁（本轮 `web/tests/controlPanel.test.tsx:147` 就是这么走的，注释已归属）。本切片没有任何真实模型调用；Codex 仍是 `phase-end + soft`，任何地方不许宣称 strict。
