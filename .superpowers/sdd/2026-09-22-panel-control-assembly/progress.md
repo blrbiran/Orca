@@ -264,3 +264,53 @@ platform and `checkedPath` refuses a path that traverses one.
 RC0, `PASS 0`–`PASS 14` (`test-logs/t5-verify-panel.log`), whose step 12 now reads
 "~/.orca is unchanged (present before and after)" — present, because of the artifact above;
 `typecheck` RC0.
+
+## Task 6 — recovery before listen, and a wake pump the process owns
+
+`src/panel/server.ts` now goes through `runControlPanelStartup({ recover, listen })`, and `listen`
+is the call that opens the socket rather than a promise created earlier — the ordering is real, not
+described. `ControlRuntime` gained `recover()`, `pump()`, `startPump()` and a `close()` that stops the
+timer. Criteria: `tests/panel/controlStartup.test.ts` (7 tests).
+
+The pump: one pass in flight, a re-entrant call returns **the same promise** rather than starting a
+second (asserted by identity, because "both resolved" would pass either way); every pass goes through
+`withAdmission`, so it cannot slip a write past a draining shutdown; the timer is `unref`'d, because
+the pump is something the process does while alive, never a reason to stay alive. `startPump` answers
+whether it armed — idempotence that cannot be observed cannot be judged, and a second timer would
+double every delivery for the life of the process.
+
+**Mutation battery, 5, all red** (`commands/t6-mutation-battery.json`): listen no longer waits for
+recovery (RC1, 2 failed); a re-entrant pump starts a second pass (1); the in-flight handle never
+cleared (1); a second timer can be armed (1); `close` no longer stops the timer (1).
+
+### A pre-existing store race, handled here and reported rather than fixed
+
+`src/control/store.ts` creates `service-lock/owner.json` with `openSync(..., "wx")` and writes it
+immediately afterwards. A second process reading it in between sees zero bytes and `JSON.parse`
+throws a plain `SyntaxError`. Nothing used to contend for a control store, so nothing hit it.
+Handled in `controlAssembly.ts` (the panel boots without the plane and names the file it could not
+read) rather than fixed in `store.ts`, per CLAUDE.md Rule 3. **It is a real defect in the store's
+locking and it is still there.**
+
+### 🔴 Two criteria are RED at the end of this task, for a real reason
+
+`tests/control/webCcloopSmoke.test.ts` — "carries the ledger's claim identity byte-for-byte and is
+durably accepted once" and "latches the stop under the ledger's identity" — fail with
+`start-envelope-conflict:run:targetVersion`. Measured, three files:
+
+| Where | Type of `targetVersion` |
+|---|---|
+| `src/control/webProtocol.ts` (the ledger / Web protocol) | `nonemptyString` — real rows hold `"v1"` |
+| `src/control/schema.ts` (`startEnvelopeSchema`) | `safeInteger` |
+| `src/control/types.ts` (`Identity`) | `number` |
+
+`toStartEnvelope` sits exactly on that seam. The copy that used to live in the test did
+`Number(run.targetVersion)`, which is `NaN` for `"v1"`, and `JSON.stringify` writes `NaN` as `null` —
+so **the criterion that says it carries the ledger's identity byte-for-byte has been shipping `null`
+in this field**, and its `expect(wire.stdin).toBe(JSON.stringify(start))` passed because both sides
+were `null`. Task 4's parsing turned that into a refusal.
+
+There is no meaning-preserving translation between a string and a safe integer, so refusing is the
+correct behaviour and the criteria cannot pass until the disagreement is resolved. **Resolving it
+means changing one of two closed schemas and the change reaches ccloop, so it is not this slice's to
+take.** Left red and named here rather than skipped, coerced, or hidden.

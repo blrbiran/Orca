@@ -8,6 +8,7 @@ import { controlErrorBody } from "./controlErrors.js";
 import { verifyControlJsonBody } from "./controlApi.js";
 import { randomUUID } from "node:crypto";
 import { assembleControlRuntime, type ControlRuntime } from "./controlAssembly.js";
+import { runControlPanelStartup } from "./controlLifecycle.js";
 import { resolveControlOptions, type ControlOptionsResolution } from "./controlOptions.js";
 import { NO_VIEWER_IDENTITY, PanelRejection } from "./rejection.js";
 import { ReviewsWriter } from "./reviewsStore.js";
@@ -190,11 +191,20 @@ export async function createPanelServer(opts: PanelOptions, env: NodeJS.ProcessE
   }
 
   const server: Server = createServer(app);
-  const listening = new Promise<void>((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(opts.port, opts.bind, () => resolve());
+  // spec §6, ruling R4: recovery runs to completion before the socket is opened. Not "recovery is
+  // started first" -- a connection accepted while reconciliation is still in flight can dispatch
+  // against run state this process has not yet reconciled, which is the crash it exists to prevent.
+  // With no control plane both arms are the no-op they were before this existed.
+  await runControlPanelStartup({
+    recover: async () => { await control?.recover(); },
+    listen: () => new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(opts.port, opts.bind, () => resolve());
+    }),
   });
-  await listening;
+  // Armed only after recovery and after listen, and fired once immediately: a wake that was armed
+  // before the crash is delivered without waiting a whole interval for it.
+  if (control !== null) { control.startPump(opts.control.wakeIntervalMs); void control.pump(); }
 
   const address = server.address();
   if (address === null || typeof address === "string") {

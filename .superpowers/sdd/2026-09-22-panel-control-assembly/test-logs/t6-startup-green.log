@@ -1,0 +1,12 @@
+
+ RUN  v2.1.9 /Users/biran/code/skills/loop/Orca
+
+(node:63645) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/panel/controlStartup.test.ts (7 tests) 263ms
+
+ Test Files  1 passed (1)
+      Tests  7 passed (7)
+   Start at  20:01:01
+   Duration  789ms (transform 237ms, setup 14ms, collect 312ms, tests 263ms, environment 0ms, prepare 54ms)
+

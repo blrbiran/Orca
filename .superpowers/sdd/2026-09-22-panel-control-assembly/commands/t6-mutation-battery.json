@@ -1,0 +1,48 @@
+[
+ {
+  "mutation": "M1 listen no longer waits for recovery",
+  "file": "src/panel/controlLifecycle.ts",
+  "rc": 1,
+  "failedCount": 2,
+  "failed": [
+   "a panel recovers before it listens resolves recovery strictly before the listen callback runs, not merely first",
+   "a panel recovers before it listens never opens the socket at all when recovery throws"
+  ]
+ },
+ {
+  "mutation": "M2 a re-entrant pump starts a second pass",
+  "file": "src/panel/controlAssembly.ts",
+  "rc": 1,
+  "failedCount": 1,
+  "failed": [
+   "the wake pump belongs to the process, not to a request runs one pass at a time: a re-entrant call joins the pass in flight instead of starting a second"
+  ]
+ },
+ {
+  "mutation": "M3 the in-flight handle is never cleared",
+  "file": "src/panel/controlAssembly.ts",
+  "rc": 1,
+  "failedCount": 1,
+  "failed": [
+   "the wake pump belongs to the process, not to a request is available again once the pass in flight has finished"
+  ]
+ },
+ {
+  "mutation": "M4 a second timer can be armed",
+  "file": "src/panel/controlAssembly.ts",
+  "rc": 1,
+  "failedCount": 1,
+  "failed": [
+   "the wake pump belongs to the process, not to a request arms the timer only once, however many times it is asked"
+  ]
+ },
+ {
+  "mutation": "M5 close no longer stops the timer",
+  "file": "src/panel/controlAssembly.ts",
+  "rc": 1,
+  "failedCount": 1,
+  "failed": [
+   "the wake pump belongs to the process, not to a request can be armed again after a close, because a restart is a new process's business"
+  ]
+ }
+]

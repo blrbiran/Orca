@@ -5,11 +5,15 @@ import { ControlError } from "../control/errors.js";
 import { createCcloopExecutionPort } from "../control/ccloopPort.js";
 import { createUnconfiguredControlPort } from "../control/unconfiguredPort.js";
 import type { ExecutionPort } from "../control/executionPort.js";
+import { deliverSchedulerWakes } from "../control/dispatch.js";
+import { recoverControl } from "../control/recovery.js";
+import { createWebWakeHandlers } from "../control/webDispatch.js";
 import { createExecutionProfileRouter, resolveProfile, type ExecutionProfileRouter, type FrozenProfile } from "../control/profiles.js";
 import { openControlStore, type ControlStore } from "../control/store.js";
 import { WebControlService } from "../control/webService.js";
 import { executionProfileSnapshotSchema } from "../control/webProtocol.js";
 import { createTrustedControlConfig, type TrustedControlConfig } from "./controlConfig.js";
+import { withAdmission } from "./controlLifecycle.js";
 import { controlRepoKey } from "./controlOptions.js";
 import type { ControlOptions } from "./server.js";
 
@@ -46,7 +50,22 @@ const PORT_TIMEOUT_MS = 60_000;
  * `orca panel` does when run twice. Before this slice a second panel simply worked, because there
  * was no store to contend for.
  */
-const CONTENDED = new Set(["control-writer-active", "control-recovery-busy"]);
+const CONTENDED = new Set(["control-writer-active", "control-recovery-busy", "control-owner-changed"]);
+
+/**
+ * ⚠️ A pre-existing race in `src/control/store.ts`, reachable only now that panels contend for a
+ * store. The owner file is created with `openSync(..., "wx")` and written immediately afterwards, so
+ * a second process that reads it in between sees zero bytes and `JSON.parse` throws a plain
+ * `SyntaxError`, not a `ControlError`.
+ *
+ * It is handled here rather than fixed there (CLAUDE.md Rule 3: this slice does not rewrite the
+ * store's locking), and it is reported rather than swallowed, because the same symptom after a crash
+ * means a genuinely unreadable lock and not a busy one. Either way this panel must not take the
+ * store, so it boots without the plane and says which file it could not read.
+ */
+function unreadableOwner(error: unknown): boolean {
+  return error instanceof SyntaxError && /JSON/i.test(error.message);
+}
 
 export interface ControlRuntime {
   store: ControlStore;
@@ -56,6 +75,16 @@ export interface ControlRuntime {
   admissionGate: AdmissionGate;
   port: ExecutionPort;
   epoch: string;
+  /** spec §6: runs to completion before the server accepts anything. */
+  recover(): Promise<void>;
+  /** One delivery pass. Re-entrant calls while one is in flight are no-ops, not queued. */
+  pump(): Promise<void>;
+  /**
+   * Owned by the process, not by a request. Answers whether it armed the timer: idempotence that
+   * cannot be observed is idempotence that cannot be judged, and a second timer would double every
+   * delivery pass for the life of the process.
+   */
+  startPump(intervalMs: number): boolean;
   close(): void;
 }
 
@@ -116,6 +145,10 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
   try { store = await openControlStore({ stateDir, recovery: true }); }
   catch (error) {
     if (error instanceof ControlError && CONTENDED.has(error.code)) return null;
+    if (unreadableOwner(error)) {
+      process.stderr.write(`orca-panel: ${join(stateDir, "service-lock", "owner.json")} could not be read; this panel serves reviews and decisions only\n`);
+      return null;
+    }
     throw error;
   }
   // The store canonicalises its own directory; its siblings are built from that rather than from
@@ -161,5 +194,36 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
     },
   });
 
-  return Object.freeze({ store, config, service, router, admissionGate, port, epoch, close: () => store.close() });
+  const wakeHandlers = createWebWakeHandlers({ store, profileRouter: router, admissionGate, service });
+
+  // spec §6. One pass at a time, and a re-entrant call is dropped rather than queued: the delivery
+  // already drains the whole table, so a second concurrent pass would only race the single-writer
+  // gate for rows the first one is about to take. Dropping is the correct answer, not a shortcut.
+  let inFlight: Promise<void> | null = null;
+  const pump = (): Promise<void> => {
+    if (inFlight !== null) return inFlight;
+    // Through the admission gate like every other write, so a pass cannot slip a claim past a
+    // shutdown that has already begun draining.
+    const pass = withAdmission({ admissionGate }, () => deliverSchedulerWakes(store, wakeHandlers))
+      .then(() => undefined, () => undefined)
+      .finally(() => { inFlight = null; });
+    inFlight = pass;
+    return pass;
+  };
+
+  let timer: NodeJS.Timeout | null = null;
+  return Object.freeze({
+    store, config, service, router, admissionGate, port, epoch,
+    recover: async () => { await recoverControl(store, port, { handlers: wakeHandlers }); },
+    pump,
+    startPump(intervalMs: number): boolean {
+      if (timer !== null) return false;
+      // unref'd: the pump is a thing the process does while it is alive, never a reason for it to
+      // stay alive. A panel that has closed its server should exit.
+      timer = setInterval(() => { void pump(); }, intervalMs);
+      timer.unref();
+      return true;
+    },
+    close: () => { if (timer !== null) { clearInterval(timer); timer = null; } store.close(); },
+  });
 }
