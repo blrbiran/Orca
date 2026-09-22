@@ -1,0 +1,15 @@
+
+ RUN  v2.1.9 /Users/biran/code/skills/loop/Orca
+
+ ✓ tests/control/profiles.test.ts (9 tests) 18ms
+ ✓ tests/control/ccloopPort.test.ts (7 tests) 2814ms
+   ✓ production ccloop execution port > answers a profile probe through the router instead of being reported as a failed probe 485ms
+   ✓ production ccloop execution port > uses direct argv plus stdin JSON and validates successful responses 315ms
+   ✓ production ccloop execution port > propagates exit 2 stably and refuses malformed or oversized stdout 850ms
+   ✓ production ccloop execution port > validates evidence identity, base64 and hash 630ms
+
+ Test Files  2 passed (2)
+      Tests  16 passed (16)
+   Start at  09:48:39
+   Duration  3.11s (transform 100ms, setup 0ms, collect 143ms, tests 2.83s, environment 0ms, prepare 98ms)
+

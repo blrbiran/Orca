@@ -1,0 +1,32 @@
+[
+ {
+  "mutation": "M1 the probe method is removed from the ccloop port",
+  "file": "src/control/ccloopPort.ts",
+  "rc": 1,
+  "failedCount": 3,
+  "failed": [
+   "production ccloop execution port answers a profile probe through the router instead of being reported as a failed probe",
+   "production ccloop execution port states only what ccloop states, and says unavailable for the rest rather than inventing it",
+   "production ccloop execution port therefore fails a claim closed on capabilities, which is the accurate answer until ccloop grows the probe"
+  ]
+ },
+ {
+  "mutation": "M2 handoff control is asserted rather than reported absent",
+  "file": "src/control/ccloopPort.ts",
+  "rc": 1,
+  "failedCount": 2,
+  "failed": [
+   "production ccloop execution port states only what ccloop states, and says unavailable for the rest rather than inventing it",
+   "production ccloop execution port therefore fails a claim closed on capabilities, which is the accurate answer until ccloop grows the probe"
+  ]
+ },
+ {
+  "mutation": "M3 an unsupported budget enforcement is passed through unmapped",
+  "file": "src/control/ccloopPort.ts",
+  "rc": 1,
+  "failedCount": 1,
+  "failed": [
+   "production ccloop execution port states only what ccloop states, and says unavailable for the rest rather than inventing it"
+  ]
+ }
+]

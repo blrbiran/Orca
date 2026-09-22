@@ -104,3 +104,41 @@ each run):
 **Green.** `tests/control` 41 files passed / 1 skipped, 415 passed / 5 skipped, RC0
 (`test-logs/t2-control-green.log`); `typecheck` RC0. The 5 skips are the `/tmp`-artifact integration
 files, unchanged from the pre-plan baseline.
+
+## Task 3 — the profile probe on the ccloop port
+
+`createCcloopExecutionPort` now returns `probeProfileCapabilities`. Criteria added (only added) to
+`tests/control/ccloopPort.test.ts`: the probe answer arrives through a real
+`createExecutionProfileRouter(...).probe()` with `probeFailureCode` null; the translated view is
+asserted field by field; and the resulting intersection is asserted to be capability-refused.
+
+### 🔴 A finding that changes what this task buys, measured not assumed
+
+The plan's premise was that exposing the probe unblocks Web dispatch ("without it every Web dispatch
+is `control-capability-probe-failed`"). It does not, and the reason is on ccloop's side:
+
+> ccloop's `control capabilities` returns exactly seven fields (`ccloop src/control/command.ts`, the
+> `method === "capabilities"` arm, read this session): `protocol`, `durableAccept`,
+> `ownershipIsolation`, `evidenceRetention`, `usageObservation: "phase-end"`,
+> `budgetEnforcement: "soft"`, `requestBoundEvidence: null`. **None of them covers
+> `contextObservation`, `handoffControl`, `handoffExecution`, `contextWindowTokens` or a
+> `requestBoundProof` descriptor**, which is five of the seven fields a `CapabilityViewV1` needs.
+
+`ExecutionPort`'s own contract says absence is capability-unavailable and is "never inferred", and
+Orca is not allowed to invent a substitute for a peer's observation. So the probe reports what ccloop
+states and `unavailable`/`null` for the rest. The effect is that a Web claim through the real ccloop
+port now fails with **`control-capability-unsupported`** (`profiledCapabilities` requires
+`handoffControl === "durable"`) instead of `control-capability-probe-failed`.
+
+That is a better answer — it names the peer's limitation instead of blaming a probe that never
+ran — but it is **not** a working dispatch path. **Web dispatch to real ccloop stays blocked until
+ccloop's `control capabilities` grows the V1 profile-probe fields.** This is a second ccloop-side gap
+alongside `ContextObservationV1`, and it is recorded in both handoffs. Nothing on the Orca side may
+paper over it; the criterion named "therefore fails a claim closed on capabilities" exists so that a
+later reader cannot mistake the closed failure for a regression.
+
+**Mutation battery, 3 mutations, all red** (`commands/t3-mutation-battery.json`): the probe method
+removed (RC1, 3 failed); `handoffControl` asserted as `durable` rather than reported absent (RC1, 2
+failed); the `unsupported → unavailable` mapping replaced by a constant (RC1, 1 failed).
+
+**Green.** `ccloopPort` + `profiles` 2 files / 16 tests RC0 (`test-logs/t3-green.log`); `typecheck` RC0.

@@ -43,6 +43,36 @@ export function createCcloopExecutionPort(options:{binary:string;adapter:"codex"
  });
  const parse=<T>(schema:z.ZodType<T>,value:unknown):T=>{const parsed=schema.safeParse(value);if(!parsed.success)throw new ControlError("control-response-invalid");return parsed.data;};
  const port:ExecutionPort={
+  /**
+   * Assembly plan Task 3. The router needs this method to exist (`profiles.ts:67-69,150`), and
+   * without it every Web claim is reported as `control-capability-probe-failed` -- a probe that was
+   * never attempted, blamed on the adapter.
+   *
+   * ⚠️ *** ccloop's control protocol has no V1 profile probe. *** `control capabilities` answers
+   * seven fields (ccloop `src/control/command.ts`, the `method === "capabilities"` arm) and none of
+   * them covers `contextObservation`, `handoffControl`, `handoffExecution`, `contextWindowTokens` or
+   * a `requestBoundProof` descriptor. So this translates what ccloop states and says `unavailable` /
+   * `null` for what it does not -- it does NOT infer them, per `ExecutionPort`'s own contract and the
+   * standing rule that Orca may not invent a substitute source for a peer's observation.
+   *
+   * The consequence is deliberate and fail-closed: a claim through this port reaches
+   * `control-capability-unsupported` (`service.ts`'s `profiledCapabilities` requires
+   * `handoffControl === "durable"`), which is accurate. Dispatching Web work to real ccloop needs
+   * ccloop's `capabilities` to grow these fields first; that is a ccloop-side change, recorded in
+   * both handoffs, and nothing on this side may paper over it.
+   */
+  async probeProfileCapabilities(){
+   const stated=parse(capabilitiesSchema,await raw("capabilities",{})) as Capabilities;
+   return {
+    usageObservation:stated.usageObservation,
+    budgetEnforcement:stated.budgetEnforcement==="unsupported"?"unavailable":stated.budgetEnforcement,
+    contextObservation:"unavailable",
+    handoffControl:"unavailable",
+    handoffExecution:null,
+    contextWindowTokens:null,
+    requestBoundProof:null,
+   };
+  },
   async capabilities(){return parse(capabilitiesSchema,await raw("capabilities",{})) as Capabilities;},
   async accept(input){return parse(executionStatusSchema,await raw("accept",input)) as ExecutionStatus;},
   async inspect(input){return parse(executionStatusSchema,await raw("inspect",input)) as ExecutionStatus;},
