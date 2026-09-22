@@ -3,74 +3,79 @@
   "runId": "orca-dev-2adcc8bb",
   "runtime": "claude-code",
   "sessionRef": "2adcc8bb-ee5e-43c5-b078-2e2bc60655e6",
-  "writtenAt": "2026-09-22T11:57:31.493Z",
-  "head": "70e7b18977102d30883362728ddf875358649323",
+  "writtenAt": "2026-09-22T12:25:28.951Z",
+  "head": "a205ce76c235d951c1f419623cb07ba014510aaf",
   "level": {
     "kind": "reading",
-    "level": 380936,
+    "level": 459890,
     "windowTokens": 1000000,
     "t1": 330000,
     "t2": 450000,
-    "band": 1
+    "band": 2
   },
   "next": [
-    "Task 6: recovery strictly before listen via runControlPanelStartup, plus a process-owned wake pump with one pass in flight",
-    "Task 7: SIGINT/SIGTERM close the admission gate, write exactly one shutdown identity per epoch, stop the timer, close the server",
-    "Task 8: whole-slice verification, real-binary boot smoke, ledger, then update the Orca/ccloop/ccmem handoffs"
+    "Resolve the targetVersion type disagreement: webProtocol.ts says nonemptyString, schema.ts and types.ts say safe integer, and toStartEnvelope sits on the seam. Two criteria in tests/control/webCcloopSmoke.test.ts are red because of it. Changing either side is a closed-schema change that reaches ccloop, so it needs a human ruling first.",
+    "ccloop side: extend control capabilities with the V1 profile probe fields, otherwise every Web claim against real ccloop fails control-capability-unsupported.",
+    "Then: automatic task decomposition, the ccmem correction loop and group-goal acceptance."
   ],
   "open": [
-    "Web dispatch to real ccloop stays blocked: ccloop control capabilities answers 7 fields and covers none of contextObservation/handoffControl/handoffExecution/contextWindowTokens/requestBoundProof, so a claim now fails control-capability-unsupported. ccloop-side change.",
-    "Production had no source of execution profile snapshots; this session added --profile <path> and made zero profiles a served state.",
-    "A second orca panel on the same repository now boots without the control plane (single-writer store). Decision, not a ruling; reversible.",
+    "Web dispatch to real ccloop is blocked on the ccloop capabilities gap (Task 3 finding).",
+    "Production still has no execution profile snapshot unless an operator passes --profile <path>; zero profiles is a served state.",
+    "A second orca panel on the same repository boots without the control plane, because a control store has one writer. Decision, not a ruling; reversible.",
+    "Pre-existing race in src/control/store.ts: owner.json is created with openSync wx and written afterwards, so a concurrent reader sees zero bytes. Handled in controlAssembly.ts, not fixed in the store.",
     "acceptContextObservation still has no producer for ContextObservationV1 in src/.",
-    "verify:control and verify:web-control:consumer not run this session for want of a /tmp ccloop artifact."
+    "verify:control and verify:web-control:consumer were not run this session: no /tmp ccloop artifact."
   ],
   "awaitingHuman": [
     {
       "kind": "irreversible",
-      "what": "~/.orca/control now holds stores this session created (proj, known, github.com/biran/orca, plus the post-fix -<digest> variants). The handoff recorded ~/.orca as not existing before. Removing anything under a home directory needs the operator's word; an attempt to move it aside was refused by the harness guard."
+      "what": "~/.orca/control holds stores this session created before the Rule 17 hole was closed: proj, known, github.com/biran/orca, proj-e73c023a, known-7117fff2, github.com-biran-orca-26b561d6. The handoff recorded ~/.orca as not existing before. An attempt to move it aside was refused by the harness guard, so it needs the operator's word."
+    },
+    {
+      "kind": "tied-evidence",
+      "what": "targetVersion: webProtocol.ts nonemptyString vs schema.ts/types.ts safe integer. Both are in use; one must change and the change reaches ccloop."
     },
     {
       "kind": "irreversible",
-      "what": "push: local commits on main are unpushed as of this checkpoint"
+      "what": "push: this session's commits on main are unpushed"
     },
     {
       "kind": "named-authorization",
-      "what": "merge, branch or worktree deletion, and opening the gate remain unauthorized this session"
+      "what": "merge, branch or worktree deletion, and opening the gate remain unauthorized"
     },
     {
       "kind": "ccloop-change",
-      "what": "ccloop must extend control capabilities with the V1 profile probe fields before any Web claim can reach a real ccloop run"
+      "what": "ccloop control capabilities must gain contextObservation, handoffControl, handoffExecution, contextWindowTokens and a requestBoundProof descriptor"
     }
   ],
   "measurements": [
     {
-      "command": "PATH=\"/usr/local/bin:$PATH\" npm run typecheck",
-      "exitCode": 0,
-      "commit": "70e7b18977102d30883362728ddf875358649323",
-      "observedAt": "2026-09-22T11:55:32.768Z",
-      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-2adcc8bb-bTXWi3/1.txt"
-    },
-    {
       "command": "PATH=\"/usr/local/bin:$PATH\" npm test",
       "exitCode": 1,
-      "commit": "70e7b18977102d30883362728ddf875358649323",
-      "observedAt": "2026-09-22T11:57:15.369Z",
-      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-2adcc8bb-bTXWi3/2.txt"
+      "commit": "a205ce76c235d951c1f419623cb07ba014510aaf",
+      "observedAt": "2026-09-22T12:25:09.072Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-2adcc8bb-P9q7l8/1.txt"
+    },
+    {
+      "command": "PATH=\"/usr/local/bin:$PATH\" npm run typecheck",
+      "exitCode": 0,
+      "commit": "a205ce76c235d951c1f419623cb07ba014510aaf",
+      "observedAt": "2026-09-22T12:25:13.158Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-2adcc8bb-P9q7l8/2.txt"
     },
     {
       "command": "PATH=\"/usr/local/bin:$PATH\" npm --prefix web run check",
       "exitCode": 0,
-      "commit": "70e7b18977102d30883362728ddf875358649323",
-      "observedAt": "2026-09-22T11:57:18.562Z",
-      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-2adcc8bb-bTXWi3/3.txt"
+      "commit": "a205ce76c235d951c1f419623cb07ba014510aaf",
+      "observedAt": "2026-09-22T12:25:16.238Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-2adcc8bb-P9q7l8/3.txt"
     },
     {
       "command": "PATH=\"/usr/local/bin:$PATH\" npm run verify:panel",
       "exitCode": 0,
-      "commit": "70e7b18977102d30883362728ddf875358649323",
-      "observedAt": "2026-09-22T11:57:31.450Z",
-      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-2adcc8bb-bTXWi3/4.txt"
+      "commit": "a205ce76c235d951c1f419623cb07ba014510aaf",
+      "observedAt": "2026-09-22T12:25:28.900Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-2adcc8bb-P9q7l8/4.txt"
     }
   ]
 }
