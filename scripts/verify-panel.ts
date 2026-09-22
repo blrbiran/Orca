@@ -21,6 +21,7 @@
 import { execFile, spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
 import { createHash } from "node:crypto";
+import { mkdtempSync } from "node:fs";
 import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import http from "node:http";
 import { homedir, tmpdir } from "node:os";
@@ -336,7 +337,17 @@ async function snapshotHomeOrca(): Promise<HomeOrcaSnapshot> {
 // calls listen() -- measured there.
 // ---------------------------------------------------------------------------
 
+/**
+ * 🔴 CLAUDE.md Rule 17. `orca panel` mounts the control plane by default and its state lives under
+ * ~/.orca/control/<key> unless ORCA_CONTROL_DIR says otherwise. Step 14 asserts ~/.orca is unchanged
+ * by the whole run, and it caught this: without relocation, every panel this script spawns writes a
+ * control store into a real home directory. Set here rather than at each call site so that a new
+ * step cannot forget it -- an explicit value in `env` still wins.
+ */
+const VERIFY_CONTROL_ROOT = mkdtempSync(join(tmpdir(), "orca-panel-verify-control-"));
+
 function spawnOrcaCli(args: string[], env: NodeJS.ProcessEnv): ChildProcess {
+  env = { ORCA_CONTROL_DIR: VERIFY_CONTROL_ROOT, ...env };
   return spawn("./node_modules/.bin/tsx", ["src/cli.ts", ...args], {
     cwd: process.cwd(),
     env,

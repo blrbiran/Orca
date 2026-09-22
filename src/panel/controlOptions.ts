@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -33,6 +34,14 @@ export interface ControlOptionsResolution {
    * answer this one (spec §9.3).
    */
   executionPort: "configured" | "unconfigured";
+  /**
+   * The plan allow-list, from `--plan <planId>=<repoId>=<path>`. It comes from the command line and
+   * never from a browser request: `resolveTarget` is the only thing standing between a posted
+   * `{repoId, planId}` and a file read.
+   */
+  plans: Array<{ planId: string; repoId: string; path: string }>;
+  /** `--profile <path>`, each a frozen `ExecutionProfileSnapshotV1` on disk. Empty is a state. */
+  profilePaths: string[];
   /** At most one, in the fixed order below. Null means the plane may be built. */
   rejection: string | null;
 }
@@ -53,6 +62,22 @@ export function controlRoot(env: NodeJS.ProcessEnv): string {
 const nonEmpty = (value: string | undefined): value is string => value !== undefined && value.length > 0;
 
 /**
+ * A `--repo` project key is whatever the operator typed, and in this repository the convention is a
+ * normalised remote URL: `github.com/biran/orca`. That is neither a path component nor an id --
+ * joining it onto a root makes nested directories (and, for a key containing `..`, makes them
+ * somewhere else entirely), and `repoId` is an `idSchema`.
+ *
+ * So the key is encoded once, here, for both uses. The readable part is for a person looking at a
+ * directory listing; the hash is what keeps two different keys from landing in one store, which
+ * sanitising alone would not: `a/b` and `a-b` sanitise to the same thing.
+ */
+export function controlRepoKey(projectKey: string): string {
+  const readable = projectKey.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^[^a-zA-Z0-9]+/, "").slice(0, 60);
+  const digest = createHash("sha256").update(projectKey).digest("hex").slice(0, 8);
+  return readable.length > 0 ? `${readable}-${digest}` : `repo-${digest}`;
+}
+
+/**
  * The off shape, in one place. A hand-built `PanelOptions` in a criterion uses this rather than
  * spelling six fields out, so a fixture cannot quietly disagree with what parsing produces.
  */
@@ -63,6 +88,8 @@ export const controlDisabled = (): Omit<ControlOptionsResolution, "rejection"> =
   estimatorProfileId: null,
   estimateMode: null,
   executionPort: "unconfigured",
+  plans: [],
+  profilePaths: [],
 });
 
 export function resolveControlOptions(
@@ -81,6 +108,17 @@ export function resolveControlOptions(
 
   const off = (): ControlOptionsResolution => ({ ...controlDisabled(), executionPort, rejection: null });
 
+  const profilePaths: string[] = [];
+  for (let i = 0; i < args.length; i += 1) if (args[i] === "--profile" && (args[i + 1] ?? "").length > 0) profilePaths.push(args[i + 1]!);
+
+  const plans: Array<{ planId: string; repoId: string; path: string }> = [];
+  for (let i = 0; i < args.length; i += 1) {
+    if (args[i] !== "--plan") continue;
+    const parts = (args[i + 1] ?? "").split("=");
+    if (parts.length !== 3 || parts.some((part) => part.length === 0)) return { ...controlDisabled(), executionPort, enabled: true, rejection: "control-plan-argument-invalid" };
+    plans.push({ planId: parts[0]!, repoId: parts[1]!, path: parts[2]! });
+  }
+
   // Ruling R1 mounts by default, but a plane over no repository can dispatch nothing, and 11 of the
   // 40 existing `parsePanelArgs` call sites name no --repo (measured 2026-09-22). Rejecting those
   // would turn boots that are green today red, so the answer for them is "off", not "rejected".
@@ -91,11 +129,11 @@ export function resolveControlOptions(
   if (nonEmpty(explicitStateDir)) {
     stateDir = explicitStateDir;
   } else if (repos.length === 1) {
-    stateDir = join(controlRoot(env), repos[0]!.projectKey);
+    stateDir = join(controlRoot(env), controlRepoKey(repos[0]!.projectKey));
   } else {
     // spec §4: more than one --repo leaves no <repoKey> to name, so there is no default to fall
     // back on. Naming one anyway (a hash, the first key) would put a store somewhere nobody asked for.
-    return { ...off(), enabled: true, rejection: "control-state-dir-required" };
+    return { ...off(), plans, profilePaths, enabled: true, rejection: "control-state-dir-required" };
   }
 
   const wakeText = flag("--control-wake-ms");
@@ -103,7 +141,7 @@ export function resolveControlOptions(
   if (wakeText !== undefined) {
     const parsed = Number(wakeText);
     if (!Number.isSafeInteger(parsed) || parsed <= 0) {
-      return { ...off(), enabled: true, stateDir, rejection: "control-wake-ms-invalid" };
+      return { ...off(), plans, profilePaths, enabled: true, stateDir, rejection: "control-wake-ms-invalid" };
     }
     wakeIntervalMs = parsed;
   }
@@ -119,15 +157,17 @@ export function resolveControlOptions(
   // Half a configuration is different from none: an operator who typed one of the two flags meant
   // to configure an estimator, and silently ignoring the half they did type would be the guess.
   if (hasProfile !== hasMode) {
-    return { ...off(), enabled: true, stateDir, wakeIntervalMs, rejection: "control-estimator-incomplete" };
+    return { ...off(), plans, profilePaths, enabled: true, stateDir, wakeIntervalMs, rejection: "control-estimator-incomplete" };
   }
   if (hasMode && estimateModeText !== "strict" && estimateModeText !== "soft") {
-    return { ...off(), enabled: true, stateDir, wakeIntervalMs, rejection: "control-estimate-mode-invalid" };
+    return { ...off(), plans, profilePaths, enabled: true, stateDir, wakeIntervalMs, rejection: "control-estimate-mode-invalid" };
   }
 
   return {
     enabled: true,
     stateDir,
+    plans,
+    profilePaths,
     wakeIntervalMs,
     estimatorProfileId: hasProfile ? estimatorProfileId : null,
     estimateMode: hasMode ? (estimateModeText as EstimateMode) : null,

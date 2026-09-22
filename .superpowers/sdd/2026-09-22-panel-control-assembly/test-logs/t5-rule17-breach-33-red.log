@@ -1,0 +1,722 @@
+
+ RUN  v2.1.9 /Users/biran/code/skills/loop/Orca
+
+(node:77828) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:77823) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:77827) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:77824) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:77825) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:77826) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/panel/controlApi.test.ts (4 tests) 923ms
+   ✓ web control acceptance over a real panel (task 10 step 1) > takes a plan from import to a continued task, and the ledger's own state is durable at every boundary 389ms
+ ✓ tests/panel/controlLifecycle.test.ts (12 tests) 1134ms
+ ✓ tests/panel/security.test.ts (11 tests) 1251ms
+   ✓ panel security via the real CLI process (controller ruling E2/E3: not skipped) > refuses a missing --by through the REAL process (ruling E3: the hole Task 1's stub left open) 848ms
+   ✓ panel security via the real CLI process (controller ruling E2/E3: not skipped) > refuses an unconfirmed external bind through the REAL process, leaving no listener 397ms
+ ✓ tests/panel/webParity.test.ts (3 tests) 2ms
+(node:78876) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/panel/controlOptions.test.ts (31 tests) 5ms
+ ✓ tests/panel/reviewsStore.test.ts (19 tests) 2206ms
+   ✓ the reviews store (spec section 4.3) > refuses by its OWN name when its OWN lock is held 1008ms
+   ✓ the reviews writer after reviews.jsonl is replaced (reviews compaction spec section 5) > C19c a claim whose write failed does not come back on a later reload 1027ms
+(node:79308) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/panel/controlConfig.test.ts (4 tests) 119ms
+ ✓ tests/panel/controlRecoveryApi.test.ts (4 tests) 1087ms
+ ✓ tests/panel/controlConfigPort.test.ts (8 tests) 125ms
+orca-panel: control plane mounted with no execution port; it will serve reads and refuse to start work
+(node:80639) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+orca-panel: control plane mounted with no execution port; it will serve reads and refuse to start work
+orca-panel: control plane mounted with no execution port; it will serve reads and refuse to start work
+ ❯ tests/panel/todo.test.ts (6 tests | 1 failed) 1406ms
+   × GET /api/todo (task 8 ruling K5, HTTP) > (e) answers with exactly the unreviewed high-tier decision, deep-equal to its LIST_FIELDS projection, and records nothing 631ms
+     → control-writer-active
+   ✓ GET /api/todo (task 8 ruling K5, HTTP) > (f) agreeing on two repositories' decisions that share an id takes BOTH off the to-do list 773ms
+ ✓ tests/panel/compactReviewsCli.test.ts (6 tests) 260ms
+ ✓ tests/panel/compactReviews.test.ts (12 tests) 1453ms
+   ✓ applying and dry-running compaction (reviews compaction spec section 4) > C12 refuses by name while the lock is held and touches nothing 1027ms
+orca-panel: control plane mounted with no execution port; it will serve reads and refuse to start work
+ ✓ tests/panel/controlReadApi.test.ts (17 tests) 3136ms
+   ✓ canonical control read API > returns persisted command results, sorted recovery, verified evidence manifests, and exact typed misses 366ms
+orca-panel: control plane mounted with no execution port; it will serve reads and refuse to start work
+ ✓ tests/panel/compactClassify.test.ts (8 tests) 3ms
+ ✓ tests/panel/noSkips.test.ts (4 tests) 57ms
+orca-panel: control plane mounted with no execution port; it will serve reads and refuse to start work
+orca-panel: control plane mounted with no execution port; it will serve reads and refuse to start work
+ ✓ tests/panel/ledgerViews.test.ts (5 tests) 85ms
+ ✓ tests/panel/staticFiles.test.ts (8 tests) 99ms
+ ✓ tests/panel/workspace.test.ts (7 tests) 11ms
+orca-panel: control plane mounted with no execution port; it will serve reads and refuse to start work
+ ✓ tests/panel/endToEnd.test.ts (5 tests) 2ms
+orca-panel: control plane mounted with no execution port; it will serve reads and refuse to start work
+ ✓ tests/panel/coverageDuplicates.test.ts (2 tests) 2ms
+ ✓ tests/panel/controlMount.test.ts (12 tests) 955ms
+ ✓ tests/panel/usage.test.ts (1 test) 2ms
+ ❯ tests/panel/metricsApi.test.ts (16 tests | 8 failed) 3412ms
+   × the metrics endpoint (spec sections 4.1 and 5) > passes E2's report through field for field, adding nothing and dropping nothing 458ms
+     → ENOENT: no such file or directory, lstat '/Users/biran/.orca/control/proj/service-lock/owner.json'
+   × the metrics endpoint (spec sections 4.1 and 5) > re-runs repository discovery and E2's gate on EVERY request 411ms
+     → control-path-symlink
+   × the metrics endpoint (spec sections 4.1 and 5) > answers a broken gate with a first-class error, never with partial data 383ms
+     → control-writer-active
+   × the metrics endpoint (spec sections 4.1 and 5) > answers 401 without a token, and 401 with a wrong one 496ms
+     → control-writer-active
+   × the Host allowlist (final review I-4, DNS rebinding) > refuses a foreign Host on the token-carrying page with 403 by name, and the body carries no token 399ms
+     → control-writer-active
+   × the Host allowlist (final review I-4, DNS rebinding) > refuses a foreign Host on the API even with a valid token (the guard sits in front of /api too) 409ms
+     → control-writer-active
+   × the Host allowlist (final review I-4, DNS rebinding) > uses the exact V1 envelope for a foreign Host on control routes while preserving legacy API errors 395ms
+     → control-writer-active
+   × the Host allowlist (final review I-4, DNS rebinding) > answers the loopback names it was reached by: 127.0.0.1, localhost and [::1] (positive controls) 359ms
+     → control-writer-active
+ ❯ tests/panel/decisionsApi.test.ts (8 tests | 7 failed) 3553ms
+   × the decisions endpoints (spec sections 4.2 and 4.3.1) > returns list rows DEEP-EQUAL to the frozen projection, not merely lacking a summary 481ms
+     → control-path-symlink
+   × the decisions endpoints (spec sections 4.2 and 4.3.1) > records NOTHING when the list is served 381ms
+     → control-recovery-busy
+   × the decisions endpoints (spec sections 4.2 and 4.3.1) > records exactly one `opened` when a detail is served, and no `reviewed` 391ms
+     → control-writer-active
+   × the decisions endpoints (spec sections 4.2 and 4.3.1) > serves the detail while the reviews lock is held, and the failed opened write is only a server-side warning 506ms
+     → control-writer-active
+   × the decisions endpoints (spec sections 4.2 and 4.3.1) > serves the detail even when the CORRECTIONS lock is held 413ms
+     → control-writer-active
+   × the decisions endpoints (spec sections 4.2 and 4.3.1) > answers 404 for a decision it has never seen, and for a known id under an unconfigured projectKey 379ms
+     → control-writer-active
+   ✓ the decisions endpoints (spec sections 4.2 and 4.3.1) > returns each repository's own row when two repositories share a decision id 762ms
+   × the decisions endpoints (spec sections 4.2 and 4.3.1) > answers the detail with the gate's refusal when the gate is broken 239ms
+     → control-writer-active
+ ❯ tests/panel/correctApi.test.ts (17 tests | 17 failed) 5057ms
+   × recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > answers a row the seam would refuse with the seam's OWN named refusal (an unknown kind) 458ms
+     → control-recovery-busy
+   × recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > refuses an empty optional field by name instead of dumping Zod at the person 403ms
+     → control-writer-active
+   × recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > records and does NOT close the loop 391ms
+     → control-writer-active
+   × recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > writes its OWN message for a second correction, with no `--again` in it 506ms
+     → control-writer-active
+   × recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > records another one when the page asks for it on purpose 413ms
+     → control-recovery-busy
+   × recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > does NOT write `reviewed` when the correction was refused 379ms
+     → control-recovery-busy
+   × recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > writes `reviewed` when the correction lands, and when the person clicks agreed 429ms
+     → control-writer-active
+   × recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > lets a failed `reviewed` write reach the person on POST /api/reviews, unlike `opened` 369ms
+     → control-writer-active
+   × recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > tells the person the correction landed even when the reviewed mark could not be written 246ms
+     → control-path-symlink
+   × recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > answers 404 for a decision the panel does not list, and records nothing (both endpoints) 181ms
+     → control-writer-active
+   × recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > derives the same correction id the CLI derives for the same input and clock (E3 spec §2.3) 200ms
+     → control-trusted-config-invalid:Invalid
+   × the panel's error mapping for client mistakes (final review I-2) > refuses a POST with no content-type as a bad request (Express leaves the body undefined) 181ms
+     → control-writer-active
+   × the panel's error mapping for client mistakes (final review I-2) > refuses a malformed JSON body as a bad request (the body parser's own error) 179ms
+     → control-writer-active
+   × the panel's error mapping for client mistakes (final review I-2) > refuses a JSON body that is not an object (an array) as a bad request, before reading any field 179ms
+     → control-writer-active
+   × the panel's error mapping for client mistakes (final review I-2) > answers a body over the parser's 64kb limit with 413, not a flat 400 187ms
+     → control-writer-active
+   × the panel's error mapping for client mistakes (final review I-2) > answers a content-encoding nothing can decode with 415, not a flat 400 177ms
+     → control-writer-active
+   × the panel's error mapping for client mistakes (final review I-2) > answers a busy corrections store with 409 by name, not 400 (a transient conflict, not a client error) 180ms
+     → control-writer-active
+ ✓ tests/panel/chainsApi.test.ts (11 tests) 14521ms
+   ✓ chains in the panel (D-launch spec §6.2, §6.3, §8.2-8) > C1 POST /api/chains starts a chain ONLY by spawning `orca chain start`: the supervisor is another process; the status view follows it to done 5535ms
+   ✓ chains in the panel (D-launch spec §6.2, §6.3, §8.2-8) > C3 a refusal by the CLI comes back as soon as the CLI exits, with its code (spec §2) 637ms
+   ✓ chains in the panel (D-launch spec §6.2, §6.3, §8.2-8) > C4 no `started` line within the wait is 500 by name, naming the log and the pid 3832ms
+   ✓ chains in the panel (D-launch spec §6.2, §6.3, §8.2-8) > C5 stop: shape, repository, existence and state are each refused by name; a running chain gets the request 318ms
+   ✓ chains in the panel (D-launch spec §6.2, §6.3, §8.2-8) > C6 status: a running record without a live holder is shown as holder gone; with one, not; a missing cost is null 343ms
+   ✓ chains in the panel (D-launch spec §6.2, §6.3, §8.2-8) > C8 external mode opens the same routes (rulings R11, R13): an app built for a confirmed external bind starts a chain 3393ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 33 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/panel/correctApi.test.ts > recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > answers a row the seam would refuse with the seam's OWN named refusal (an unknown kind)
+ControlError: control-recovery-busy
+ ❯ Module.openControlStore src/control/store.ts:60:65
+     58|     if (!options.recovery) throw new ControlError("control-writer-acti…
+     59|     const recoveryLock = join(stateDir,"recovery-lock");
+     60|     try { mkdirSync(recoveryLock,{mode:0o700}); } catch { throw new Co…
+       |                                                                 ^
+     61|     try {
+     62|       const old = readOwner(ownerFile);
+ ❯ Module.assembleControlRuntime src/panel/controlAssembly.ts:98:23
+ ❯ Module.createPanelServer src/panel/server.ts:179:45
+ ❯ tests/panel/correctApi.test.ts:128:25
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ tests/panel/correctApi.test.ts:124:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/33]⎯
+
+ FAIL  tests/panel/correctApi.test.ts > recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > refuses an empty optional field by name instead of dumping Zod at the person
+ControlError: control-writer-active
+ ❯ Module.openControlStore src/control/store.ts:64:43
+     62|       const old = readOwner(ownerFile);
+     63|       if (old.host !== host || old.path !== stateDir) throw new Contro…
+     64|       if (!definitelyDead(old.pid)) throw new ControlError("control-wr…
+       |                                           ^
+     65|       if (readOwner(ownerFile).nonce !== old.nonce) throw new ControlE…
+     66|       renameSync(lock,join(stateDir,"retired-lock-"+randomUUID()));
+ ❯ Module.assembleControlRuntime src/panel/controlAssembly.ts:98:23
+ ❯ Module.createPanelServer src/panel/server.ts:179:45
+ ❯ tests/panel/correctApi.test.ts:164:25
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ tests/panel/correctApi.test.ts:160:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/33]⎯
+
+ FAIL  tests/panel/correctApi.test.ts > recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > records and does NOT close the loop
+ControlError: control-writer-active
+ ❯ Module.openControlStore src/control/store.ts:64:43
+     62|       const old = readOwner(ownerFile);
+     63|       if (old.host !== host || old.path !== stateDir) throw new Contro…
+     64|       if (!definitelyDead(old.pid)) throw new ControlError("control-wr…
+       |                                           ^
+     65|       if (readOwner(ownerFile).nonce !== old.nonce) throw new ControlE…
+     66|       renameSync(lock,join(stateDir,"retired-lock-"+randomUUID()));
+ ❯ Module.assembleControlRuntime src/panel/controlAssembly.ts:98:23
+ ❯ Module.createPanelServer src/panel/server.ts:179:45
+ ❯ tests/panel/correctApi.test.ts:198:25
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ tests/panel/correctApi.test.ts:194:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/33]⎯
+
+ FAIL  tests/panel/correctApi.test.ts > recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > writes its OWN message for a second correction, with no `--again` in it
+ControlError: control-writer-active
+ ❯ Module.openControlStore src/control/store.ts:64:43
+     62|       const old = readOwner(ownerFile);
+     63|       if (old.host !== host || old.path !== stateDir) throw new Contro…
+     64|       if (!definitelyDead(old.pid)) throw new ControlError("control-wr…
+       |                                           ^
+     65|       if (readOwner(ownerFile).nonce !== old.nonce) throw new ControlE…
+     66|       renameSync(lock,join(stateDir,"retired-lock-"+randomUUID()));
+ ❯ Module.assembleControlRuntime src/panel/controlAssembly.ts:98:23
+ ❯ Module.createPanelServer src/panel/server.ts:179:45
+ ❯ tests/panel/correctApi.test.ts:242:25
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ tests/panel/correctApi.test.ts:238:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/33]⎯
+
+ FAIL  tests/panel/correctApi.test.ts > recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > records another one when the page asks for it on purpose
+ControlError: control-recovery-busy
+ ❯ Module.openControlStore src/control/store.ts:60:65
+     58|     if (!options.recovery) throw new ControlError("control-writer-acti…
+     59|     const recoveryLock = join(stateDir,"recovery-lock");
+     60|     try { mkdirSync(recoveryLock,{mode:0o700}); } catch { throw new Co…
+       |                                                                 ^
+     61|     try {
+     62|       const old = readOwner(ownerFile);
+ ❯ Module.assembleControlRuntime src/panel/controlAssembly.ts:98:23
+ ❯ Module.createPanelServer src/panel/server.ts:179:45
+ ❯ tests/panel/correctApi.test.ts:284:25
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ tests/panel/correctApi.test.ts:280:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/33]⎯
+
+ FAIL  tests/panel/correctApi.test.ts > recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > does NOT write `reviewed` when the correction was refused
+ControlError: control-recovery-busy
+ ❯ Module.openControlStore src/control/store.ts:60:65
+     58|     if (!options.recovery) throw new ControlError("control-writer-acti…
+     59|     const recoveryLock = join(stateDir,"recovery-lock");
+     60|     try { mkdirSync(recoveryLock,{mode:0o700}); } catch { throw new Co…
+       |                                                                 ^
+     61|     try {
+     62|       const old = readOwner(ownerFile);
+ ❯ Module.assembleControlRuntime src/panel/controlAssembly.ts:98:23
+ ❯ Module.createPanelServer src/panel/server.ts:179:45
+ ❯ tests/panel/correctApi.test.ts:311:25
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ tests/panel/correctApi.test.ts:307:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/33]⎯
+
+ FAIL  tests/panel/correctApi.test.ts > recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > writes `reviewed` when the correction lands, and when the person clicks agreed
+ControlError: control-writer-active
+ ❯ Module.openControlStore src/control/store.ts:64:43
+     62|       const old = readOwner(ownerFile);
+     63|       if (old.host !== host || old.path !== stateDir) throw new Contro…
+     64|       if (!definitelyDead(old.pid)) throw new ControlError("control-wr…
+       |                                           ^
+     65|       if (readOwner(ownerFile).nonce !== old.nonce) throw new ControlE…
+     66|       renameSync(lock,join(stateDir,"retired-lock-"+randomUUID()));
+ ❯ Module.assembleControlRuntime src/panel/controlAssembly.ts:98:23
+ ❯ Module.createPanelServer src/panel/server.ts:179:45
+ ❯ tests/panel/correctApi.test.ts:358:25
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ tests/panel/correctApi.test.ts:341:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/33]⎯
+
+ FAIL  tests/panel/correctApi.test.ts > recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > lets a failed `reviewed` write reach the person on POST /api/reviews, unlike `opened`
+ControlError: control-writer-active
+ ❯ Module.openControlStore src/control/store.ts:64:43
+     62|       const old = readOwner(ownerFile);
+     63|       if (old.host !== host || old.path !== stateDir) throw new Contro…
+     64|       if (!definitelyDead(old.pid)) throw new ControlError("control-wr…
+       |                                           ^
+     65|       if (readOwner(ownerFile).nonce !== old.nonce) throw new ControlE…
+     66|       renameSync(lock,join(stateDir,"retired-lock-"+randomUUID()));
+ ❯ Module.assembleControlRuntime src/panel/controlAssembly.ts:98:23
+ ❯ Module.createPanelServer src/panel/server.ts:179:45
+ ❯ tests/panel/correctApi.test.ts:398:25
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ tests/panel/correctApi.test.ts:393:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/33]⎯
+
+ FAIL  tests/panel/correctApi.test.ts > recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > tells the person the correction landed even when the reviewed mark could not be written
+ControlError: control-path-symlink
+ ❯ checkedPath src/panel/controlConfig.ts:98:38
+     96|     try { stat = lstatSync(cursor, { bigint: true }); }
+     97|     catch { invalid("path-missing"); }
+     98|     if (stat.isSymbolicLink()) throw new ControlError("control-path-sy…
+       |                                      ^
+     99|     components.push({ path: cursor, dev: String(stat.dev), ino: String…
+    100|   }
+ ❯ Module.createTrustedControlConfig src/panel/controlConfig.ts:155:57
+ ❯ Module.assembleControlRuntime src/panel/controlAssembly.ts:101:18
+ ❯ Module.createPanelServer src/panel/server.ts:179:39
+ ❯ tests/panel/correctApi.test.ts:435:25
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ tests/panel/correctApi.test.ts:430:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/33]⎯
+
+ FAIL  tests/panel/correctApi.test.ts > recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > answers 404 for a decision the panel does not list, and records nothing (both endpoints)
+ControlError: control-writer-active
+ ❯ Module.openControlStore src/control/store.ts:64:43
+     62|       const old = readOwner(ownerFile);
+     63|       if (old.host !== host || old.path !== stateDir) throw new Contro…
+     64|       if (!definitelyDead(old.pid)) throw new ControlError("control-wr…
+       |                                           ^
+     65|       if (readOwner(ownerFile).nonce !== old.nonce) throw new ControlE…
+     66|       renameSync(lock,join(stateDir,"retired-lock-"+randomUUID()));
+ ❯ Module.assembleControlRuntime src/panel/controlAssembly.ts:98:23
+ ❯ Module.createPanelServer src/panel/server.ts:179:45
+ ❯ tests/panel/correctApi.test.ts:471:25
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ tests/panel/correctApi.test.ts:467:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/33]⎯
+
+ FAIL  tests/panel/correctApi.test.ts > recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > derives the same correction id the CLI derives for the same input and clock (E3 spec §2.3)
+ControlError: control-trusted-config-invalid:Invalid
+ ❯ invalid src/panel/controlConfig.ts:79:9
+     77| 
+     78| function invalid(detail?: string): never {
+     79|   throw new ControlError("control-trusted-config-invalid", detail);
+       |         ^
+     80| }
+     81| 
+ ❯ Module.createTrustedControlConfig src/panel/controlConfig.ts:141:29
+ ❯ Module.assembleControlRuntime src/panel/controlAssembly.ts:101:18
+ ❯ Module.createPanelServer src/panel/server.ts:179:39
+ ❯ tests/panel/correctApi.test.ts:550:25
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ tests/panel/correctApi.test.ts:532:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/33]⎯
+
+ FAIL  tests/panel/correctApi.test.ts > the panel's error mapping for client mistakes (final review I-2) > refuses a POST with no content-type as a bad request (Express leaves the body undefined)
+ControlError: control-writer-active
+ ❯ Module.openControlStore src/control/store.ts:64:43
+     62|       const old = readOwner(ownerFile);
+     63|       if (old.host !== host || old.path !== stateDir) throw new Contro…
+     64|       if (!definitelyDead(old.pid)) throw new ControlError("control-wr…
+       |                                           ^
+     65|       if (readOwner(ownerFile).nonce !== old.nonce) throw new ControlE…
+     66|       renameSync(lock,join(stateDir,"retired-lock-"+randomUUID()));
+ ❯ Module.assembleControlRuntime src/panel/controlAssembly.ts:98:23
+ ❯ Module.createPanelServer src/panel/server.ts:179:45
+ ❯ tests/panel/correctApi.test.ts:583:25
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ withPanel tests/panel/correctApi.test.ts:579:5
+ ❯ tests/panel/correctApi.test.ts:611:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/33]⎯
+
+ FAIL  tests/panel/correctApi.test.ts > the panel's error mapping for client mistakes (final review I-2) > refuses a malformed JSON body as a bad request (the body parser's own error)
+ControlError: control-writer-active
+ ❯ Module.openControlStore src/control/store.ts:64:43
+     62|       const old = readOwner(ownerFile);
+     63|       if (old.host !== host || old.path !== stateDir) throw new Contro…
+     64|       if (!definitelyDead(old.pid)) throw new ControlError("control-wr…
+       |                                           ^
+     65|       if (readOwner(ownerFile).nonce !== old.nonce) throw new ControlE…
+     66|       renameSync(lock,join(stateDir,"retired-lock-"+randomUUID()));
+ ❯ Module.assembleControlRuntime src/panel/controlAssembly.ts:98:23
+ ❯ Module.createPanelServer src/panel/server.ts:179:45
+ ❯ tests/panel/correctApi.test.ts:583:25
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ withPanel tests/panel/correctApi.test.ts:579:5
+ ❯ tests/panel/correctApi.test.ts:619:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/33]⎯
+
+ FAIL  tests/panel/correctApi.test.ts > the panel's error mapping for client mistakes (final review I-2) > refuses a JSON body that is not an object (an array) as a bad request, before reading any field
+ControlError: control-writer-active
+ ❯ Module.openControlStore src/control/store.ts:64:43
+     62|       const old = readOwner(ownerFile);
+     63|       if (old.host !== host || old.path !== stateDir) throw new Contro…
+     64|       if (!definitelyDead(old.pid)) throw new ControlError("control-wr…
+       |                                           ^
+     65|       if (readOwner(ownerFile).nonce !== old.nonce) throw new ControlE…
+     66|       renameSync(lock,join(stateDir,"retired-lock-"+randomUUID()));
+ ❯ Module.assembleControlRuntime src/panel/controlAssembly.ts:98:23
+ ❯ Module.createPanelServer src/panel/server.ts:179:45
+ ❯ tests/panel/correctApi.test.ts:583:25
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ withPanel tests/panel/correctApi.test.ts:579:5
+ ❯ tests/panel/correctApi.test.ts:629:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/33]⎯
+
+ FAIL  tests/panel/correctApi.test.ts > the panel's error mapping for client mistakes (final review I-2) > answers a body over the parser's 64kb limit with 413, not a flat 400
+ControlError: control-writer-active
+ ❯ Module.openControlStore src/control/store.ts:64:43
+     62|       const old = readOwner(ownerFile);
+     63|       if (old.host !== host || old.path !== stateDir) throw new Contro…
+     64|       if (!definitelyDead(old.pid)) throw new ControlError("control-wr…
+       |                                           ^
+     65|       if (readOwner(ownerFile).nonce !== old.nonce) throw new ControlE…
+     66|       renameSync(lock,join(stateDir,"retired-lock-"+randomUUID()));
+ ❯ Module.assembleControlRuntime src/panel/controlAssembly.ts:98:23
+ ❯ Module.createPanelServer src/panel/server.ts:179:45
+ ❯ tests/panel/correctApi.test.ts:583:25
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ withPanel tests/panel/correctApi.test.ts:579:5
+ ❯ tests/panel/correctApi.test.ts:644:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/33]⎯
+
+ FAIL  tests/panel/correctApi.test.ts > the panel's error mapping for client mistakes (final review I-2) > answers a content-encoding nothing can decode with 415, not a flat 400
+ControlError: control-writer-active
+ ❯ Module.openControlStore src/control/store.ts:64:43
+     62|       const old = readOwner(ownerFile);
+     63|       if (old.host !== host || old.path !== stateDir) throw new Contro…
+     64|       if (!definitelyDead(old.pid)) throw new ControlError("control-wr…
+       |                                           ^
+     65|       if (readOwner(ownerFile).nonce !== old.nonce) throw new ControlE…
+     66|       renameSync(lock,join(stateDir,"retired-lock-"+randomUUID()));
+ ❯ Module.assembleControlRuntime src/panel/controlAssembly.ts:98:23
+ ❯ Module.createPanelServer src/panel/server.ts:179:45
+ ❯ tests/panel/correctApi.test.ts:583:25
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ withPanel tests/panel/correctApi.test.ts:579:5
+ ❯ tests/panel/correctApi.test.ts:661:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/33]⎯
+
+ FAIL  tests/panel/correctApi.test.ts > the panel's error mapping for client mistakes (final review I-2) > answers a busy corrections store with 409 by name, not 400 (a transient conflict, not a client error)
+ControlError: control-writer-active
+ ❯ Module.openControlStore src/control/store.ts:64:43
+     62|       const old = readOwner(ownerFile);
+     63|       if (old.host !== host || old.path !== stateDir) throw new Contro…
+     64|       if (!definitelyDead(old.pid)) throw new ControlError("control-wr…
+       |                                           ^
+     65|       if (readOwner(ownerFile).nonce !== old.nonce) throw new ControlE…
+     66|       renameSync(lock,join(stateDir,"retired-lock-"+randomUUID()));
+ ❯ Module.assembleControlRuntime src/panel/controlAssembly.ts:98:23
+ ❯ Module.createPanelServer src/panel/server.ts:179:45
+ ❯ tests/panel/correctApi.test.ts:583:25
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ withPanel tests/panel/correctApi.test.ts:579:5
+ ❯ tests/panel/correctApi.test.ts:677:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/33]⎯
+
+ FAIL  tests/panel/decisionsApi.test.ts > the decisions endpoints (spec sections 4.2 and 4.3.1) > returns list rows DEEP-EQUAL to the frozen projection, not merely lacking a summary
+ControlError: control-path-symlink
+ ❯ checkedPath src/panel/controlConfig.ts:98:38
+     96|     try { stat = lstatSync(cursor, { bigint: true }); }
+     97|     catch { invalid("path-missing"); }
+     98|     if (stat.isSymbolicLink()) throw new ControlError("control-path-sy…
+       |                                      ^
+     99|     components.push({ path: cursor, dev: String(stat.dev), ino: String…
+    100|   }
+ ❯ Module.createTrustedControlConfig src/panel/controlConfig.ts:155:57
+ ❯ Module.assembleControlRuntime src/panel/controlAssembly.ts:101:18
+ ❯ Module.createPanelServer src/panel/server.ts:179:39
+ ❯ tests/panel/decisionsApi.test.ts:67:25
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ tests/panel/decisionsApi.test.ts:58:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/33]⎯
+
+ FAIL  tests/panel/decisionsApi.test.ts > the decisions endpoints (spec sections 4.2 and 4.3.1) > records NOTHING when the list is served
+ControlError: control-recovery-busy
+ ❯ Module.openControlStore src/control/store.ts:60:65
+     58|     if (!options.recovery) throw new ControlError("control-writer-acti…
+     59|     const recoveryLock = join(stateDir,"recovery-lock");
+     60|     try { mkdirSync(recoveryLock,{mode:0o700}); } catch { throw new Co…
+       |                                                                 ^
+     61|     try {
+     62|       const old = readOwner(ownerFile);
+ ❯ Module.assembleControlRuntime src/panel/controlAssembly.ts:98:23
+ ❯ Module.createPanelServer src/panel/server.ts:179:45
+ ❯ tests/panel/decisionsApi.test.ts:121:25
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ tests/panel/decisionsApi.test.ts:117:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/33]⎯
+
+ FAIL  tests/panel/decisionsApi.test.ts > the decisions endpoints (spec sections 4.2 and 4.3.1) > records exactly one `opened` when a detail is served, and no `reviewed`
+ControlError: control-writer-active
+ ❯ Module.openControlStore src/control/store.ts:64:43
+     62|       const old = readOwner(ownerFile);
+     63|       if (old.host !== host || old.path !== stateDir) throw new Contro…
+     64|       if (!definitelyDead(old.pid)) throw new ControlError("control-wr…
+       |                                           ^
+     65|       if (readOwner(ownerFile).nonce !== old.nonce) throw new ControlE…
+     66|       renameSync(lock,join(stateDir,"retired-lock-"+randomUUID()));
+ ❯ Module.assembleControlRuntime src/panel/controlAssembly.ts:98:23
+ ❯ Module.createPanelServer src/panel/server.ts:179:45
+ ❯ tests/panel/decisionsApi.test.ts:177:25
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ tests/panel/decisionsApi.test.ts:166:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/33]⎯
+
+ FAIL  tests/panel/decisionsApi.test.ts > the decisions endpoints (spec sections 4.2 and 4.3.1) > serves the detail while the reviews lock is held, and the failed opened write is only a server-side warning
+ControlError: control-writer-active
+ ❯ Module.openControlStore src/control/store.ts:64:43
+     62|       const old = readOwner(ownerFile);
+     63|       if (old.host !== host || old.path !== stateDir) throw new Contro…
+     64|       if (!definitelyDead(old.pid)) throw new ControlError("control-wr…
+       |                                           ^
+     65|       if (readOwner(ownerFile).nonce !== old.nonce) throw new ControlE…
+     66|       renameSync(lock,join(stateDir,"retired-lock-"+randomUUID()));
+ ❯ Module.assembleControlRuntime src/panel/controlAssembly.ts:98:23
+ ❯ Module.createPanelServer src/panel/server.ts:179:45
+ ❯ tests/panel/decisionsApi.test.ts:212:25
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ tests/panel/decisionsApi.test.ts:206:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/33]⎯
+
+ FAIL  tests/panel/decisionsApi.test.ts > the decisions endpoints (spec sections 4.2 and 4.3.1) > serves the detail even when the CORRECTIONS lock is held
+ControlError: control-writer-active
+ ❯ Module.openControlStore src/control/store.ts:64:43
+     62|       const old = readOwner(ownerFile);
+     63|       if (old.host !== host || old.path !== stateDir) throw new Contro…
+     64|       if (!definitelyDead(old.pid)) throw new ControlError("control-wr…
+       |                                           ^
+     65|       if (readOwner(ownerFile).nonce !== old.nonce) throw new ControlE…
+     66|       renameSync(lock,join(stateDir,"retired-lock-"+randomUUID()));
+ ❯ Module.assembleControlRuntime src/panel/controlAssembly.ts:98:23
+ ❯ Module.createPanelServer src/panel/server.ts:179:45
+ ❯ tests/panel/decisionsApi.test.ts:258:25
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ tests/panel/decisionsApi.test.ts:253:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/33]⎯
+
+ FAIL  tests/panel/decisionsApi.test.ts > the decisions endpoints (spec sections 4.2 and 4.3.1) > answers 404 for a decision it has never seen, and for a known id under an unconfigured projectKey
+ControlError: control-writer-active
+ ❯ Module.openControlStore src/control/store.ts:64:43
+     62|       const old = readOwner(ownerFile);
+     63|       if (old.host !== host || old.path !== stateDir) throw new Contro…
+     64|       if (!definitelyDead(old.pid)) throw new ControlError("control-wr…
+       |                                           ^
+     65|       if (readOwner(ownerFile).nonce !== old.nonce) throw new ControlE…
+     66|       renameSync(lock,join(stateDir,"retired-lock-"+randomUUID()));
+ ❯ Module.assembleControlRuntime src/panel/controlAssembly.ts:98:23
+ ❯ Module.createPanelServer src/panel/server.ts:179:45
+ ❯ tests/panel/decisionsApi.test.ts:283:25
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ tests/panel/decisionsApi.test.ts:279:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/33]⎯
+
+ FAIL  tests/panel/decisionsApi.test.ts > the decisions endpoints (spec sections 4.2 and 4.3.1) > answers the detail with the gate's refusal when the gate is broken
+ControlError: control-writer-active
+ ❯ Module.openControlStore src/control/store.ts:64:43
+     62|       const old = readOwner(ownerFile);
+     63|       if (old.host !== host || old.path !== stateDir) throw new Contro…
+     64|       if (!definitelyDead(old.pid)) throw new ControlError("control-wr…
+       |                                           ^
+     65|       if (readOwner(ownerFile).nonce !== old.nonce) throw new ControlE…
+     66|       renameSync(lock,join(stateDir,"retired-lock-"+randomUUID()));
+ ❯ Module.assembleControlRuntime src/panel/controlAssembly.ts:98:23
+ ❯ Module.createPanelServer src/panel/server.ts:179:45
+ ❯ tests/panel/decisionsApi.test.ts:358:25
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ tests/panel/decisionsApi.test.ts:354:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[24/33]⎯
+
+ FAIL  tests/panel/metricsApi.test.ts > the metrics endpoint (spec sections 4.1 and 5) > passes E2's report through field for field, adding nothing and dropping nothing
+Error: ENOENT: no such file or directory, lstat '/Users/biran/.orca/control/proj/service-lock/owner.json'
+ ❯ Module.assertRegular src/control/paths.ts:27:16
+     25| }
+     26| export function assertRegular(path: string): void {
+     27|   const stat = lstatSync(path);
+       |                ^
+     28|   if (stat.isSymbolicLink() || !stat.isFile() || stat.nlink !== 1) thr…
+     29| }
+ ❯ readOwner src/control/store.ts:23:3
+ ❯ Module.openControlStore src/control/store.ts:62:19
+ ❯ Module.assembleControlRuntime src/panel/controlAssembly.ts:98:23
+ ❯ Module.createPanelServer src/panel/server.ts:179:45
+ ❯ tests/panel/metricsApi.test.ts:92:25
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ tests/panel/metricsApi.test.ts:77:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[25/33]⎯
+
+ FAIL  tests/panel/metricsApi.test.ts > the metrics endpoint (spec sections 4.1 and 5) > re-runs repository discovery and E2's gate on EVERY request
+ControlError: control-path-symlink
+ ❯ checkedPath src/panel/controlConfig.ts:98:38
+     96|     try { stat = lstatSync(cursor, { bigint: true }); }
+     97|     catch { invalid("path-missing"); }
+     98|     if (stat.isSymbolicLink()) throw new ControlError("control-path-sy…
+       |                                      ^
+     99|     components.push({ path: cursor, dev: String(stat.dev), ino: String…
+    100|   }
+ ❯ Module.createTrustedControlConfig src/panel/controlConfig.ts:155:57
+ ❯ Module.assembleControlRuntime src/panel/controlAssembly.ts:101:18
+ ❯ Module.createPanelServer src/panel/server.ts:179:39
+ ❯ tests/panel/metricsApi.test.ts:130:25
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ tests/panel/metricsApi.test.ts:122:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[26/33]⎯
+
+ FAIL  tests/panel/metricsApi.test.ts > the metrics endpoint (spec sections 4.1 and 5) > answers a broken gate with a first-class error, never with partial data
+ControlError: control-writer-active
+ ❯ Module.openControlStore src/control/store.ts:64:43
+     62|       const old = readOwner(ownerFile);
+     63|       if (old.host !== host || old.path !== stateDir) throw new Contro…
+     64|       if (!definitelyDead(old.pid)) throw new ControlError("control-wr…
+       |                                           ^
+     65|       if (readOwner(ownerFile).nonce !== old.nonce) throw new ControlE…
+     66|       renameSync(lock,join(stateDir,"retired-lock-"+randomUUID()));
+ ❯ Module.assembleControlRuntime src/panel/controlAssembly.ts:98:23
+ ❯ Module.createPanelServer src/panel/server.ts:179:45
+ ❯ tests/panel/metricsApi.test.ts:172:25
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ tests/panel/metricsApi.test.ts:164:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[27/33]⎯
+
+ FAIL  tests/panel/metricsApi.test.ts > the metrics endpoint (spec sections 4.1 and 5) > answers 401 without a token, and 401 with a wrong one
+ControlError: control-writer-active
+ ❯ Module.openControlStore src/control/store.ts:64:43
+     62|       const old = readOwner(ownerFile);
+     63|       if (old.host !== host || old.path !== stateDir) throw new Contro…
+     64|       if (!definitelyDead(old.pid)) throw new ControlError("control-wr…
+       |                                           ^
+     65|       if (readOwner(ownerFile).nonce !== old.nonce) throw new ControlE…
+     66|       renameSync(lock,join(stateDir,"retired-lock-"+randomUUID()));
+ ❯ Module.assembleControlRuntime src/panel/controlAssembly.ts:98:23
+ ❯ Module.createPanelServer src/panel/server.ts:179:45
+ ❯ tests/panel/metricsApi.test.ts:211:25
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ tests/panel/metricsApi.test.ts:207:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[28/33]⎯
+
+ FAIL  tests/panel/metricsApi.test.ts > the Host allowlist (final review I-4, DNS rebinding) > refuses a foreign Host on the token-carrying page with 403 by name, and the body carries no token
+ControlError: control-writer-active
+ ❯ Module.openControlStore src/control/store.ts:64:43
+     62|       const old = readOwner(ownerFile);
+     63|       if (old.host !== host || old.path !== stateDir) throw new Contro…
+     64|       if (!definitelyDead(old.pid)) throw new ControlError("control-wr…
+       |                                           ^
+     65|       if (readOwner(ownerFile).nonce !== old.nonce) throw new ControlE…
+     66|       renameSync(lock,join(stateDir,"retired-lock-"+randomUUID()));
+ ❯ Module.assembleControlRuntime src/panel/controlAssembly.ts:98:23
+ ❯ Module.createPanelServer src/panel/server.ts:179:45
+ ❯ tests/panel/metricsApi.test.ts:338:25
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ withPanel tests/panel/metricsApi.test.ts:334:5
+ ❯ tests/panel/metricsApi.test.ts:356:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[29/33]⎯
+
+ FAIL  tests/panel/metricsApi.test.ts > the Host allowlist (final review I-4, DNS rebinding) > refuses a foreign Host on the API even with a valid token (the guard sits in front of /api too)
+ControlError: control-writer-active
+ ❯ Module.openControlStore src/control/store.ts:64:43
+     62|       const old = readOwner(ownerFile);
+     63|       if (old.host !== host || old.path !== stateDir) throw new Contro…
+     64|       if (!definitelyDead(old.pid)) throw new ControlError("control-wr…
+       |                                           ^
+     65|       if (readOwner(ownerFile).nonce !== old.nonce) throw new ControlE…
+     66|       renameSync(lock,join(stateDir,"retired-lock-"+randomUUID()));
+ ❯ Module.assembleControlRuntime src/panel/controlAssembly.ts:98:23
+ ❯ Module.createPanelServer src/panel/server.ts:179:45
+ ❯ tests/panel/metricsApi.test.ts:338:25
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ withPanel tests/panel/metricsApi.test.ts:334:5
+ ❯ tests/panel/metricsApi.test.ts:375:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[30/33]⎯
+
+ FAIL  tests/panel/metricsApi.test.ts > the Host allowlist (final review I-4, DNS rebinding) > uses the exact V1 envelope for a foreign Host on control routes while preserving legacy API errors
+ControlError: control-writer-active
+ ❯ Module.openControlStore src/control/store.ts:64:43
+     62|       const old = readOwner(ownerFile);
+     63|       if (old.host !== host || old.path !== stateDir) throw new Contro…
+     64|       if (!definitelyDead(old.pid)) throw new ControlError("control-wr…
+       |                                           ^
+     65|       if (readOwner(ownerFile).nonce !== old.nonce) throw new ControlE…
+     66|       renameSync(lock,join(stateDir,"retired-lock-"+randomUUID()));
+ ❯ Module.assembleControlRuntime src/panel/controlAssembly.ts:98:23
+ ❯ Module.createPanelServer src/panel/server.ts:179:45
+ ❯ tests/panel/metricsApi.test.ts:338:25
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ withPanel tests/panel/metricsApi.test.ts:334:5
+ ❯ tests/panel/metricsApi.test.ts:387:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[31/33]⎯
+
+ FAIL  tests/panel/metricsApi.test.ts > the Host allowlist (final review I-4, DNS rebinding) > answers the loopback names it was reached by: 127.0.0.1, localhost and [::1] (positive controls)
+ControlError: control-writer-active
+ ❯ Module.openControlStore src/control/store.ts:64:43
+     62|       const old = readOwner(ownerFile);
+     63|       if (old.host !== host || old.path !== stateDir) throw new Contro…
+     64|       if (!definitelyDead(old.pid)) throw new ControlError("control-wr…
+       |                                           ^
+     65|       if (readOwner(ownerFile).nonce !== old.nonce) throw new ControlE…
+     66|       renameSync(lock,join(stateDir,"retired-lock-"+randomUUID()));
+ ❯ Module.assembleControlRuntime src/panel/controlAssembly.ts:98:23
+ ❯ Module.createPanelServer src/panel/server.ts:179:45
+ ❯ tests/panel/metricsApi.test.ts:338:25
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ withPanel tests/panel/metricsApi.test.ts:334:5
+ ❯ tests/panel/metricsApi.test.ts:411:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[32/33]⎯
+
+ FAIL  tests/panel/todo.test.ts > GET /api/todo (task 8 ruling K5, HTTP) > (e) answers with exactly the unreviewed high-tier decision, deep-equal to its LIST_FIELDS projection, and records nothing
+ControlError: control-writer-active
+ ❯ Module.openControlStore src/control/store.ts:64:43
+     62|       const old = readOwner(ownerFile);
+     63|       if (old.host !== host || old.path !== stateDir) throw new Contro…
+     64|       if (!definitelyDead(old.pid)) throw new ControlError("control-wr…
+       |                                           ^
+     65|       if (readOwner(ownerFile).nonce !== old.nonce) throw new ControlE…
+     66|       renameSync(lock,join(stateDir,"retired-lock-"+randomUUID()));
+ ❯ Module.assembleControlRuntime src/panel/controlAssembly.ts:98:23
+ ❯ Module.createPanelServer src/panel/server.ts:179:45
+ ❯ tests/panel/todo.test.ts:125:25
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ tests/panel/todo.test.ts:112:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[33/33]⎯
+
+ Test Files  4 failed | 22 passed (26)
+      Tests  33 failed | 208 passed (241)
+   Start at  10:01:48
+   Duration  15.23s (transform 1.29s, setup 0ms, collect 5.33s, tests 40.87s, environment 3ms, prepare 1.32s)
+

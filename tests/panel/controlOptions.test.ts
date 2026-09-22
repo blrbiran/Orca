@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { resolveControlOptions, controlRoot, DEFAULT_CONTROL_WAKE_MS } from "../../src/panel/controlOptions.js";
+import { resolveControlOptions, controlRoot, controlRepoKey, DEFAULT_CONTROL_WAKE_MS } from "../../src/panel/controlOptions.js";
 
 /**
  * Assembly plan Task 1. This module is the single place that decides whether the control plane
@@ -19,7 +19,7 @@ describe("resolveControlOptions decides the control mount", () => {
     const resolved = resolveControlOptions([...base, "--repo", "proj=/x", "--estimator-profile", "p1", "--estimate-mode", "soft"], env(), [repo("proj")]);
     expect(resolved.enabled).toBe(true);
     expect(resolved.rejection).toBe(null);
-    expect(resolved.stateDir).toBe(join("/relocated", "proj"));
+    expect(resolved.stateDir).toBe(join("/relocated", controlRepoKey("proj")));
   });
 
   it("turns off with --no-control, and then names no state directory at all", () => {
@@ -32,8 +32,8 @@ describe("resolveControlOptions decides the control mount", () => {
   it("reads the relocation variable rather than a constant frozen at import", () => {
     const first = resolveControlOptions([...base, "--estimator-profile", "p", "--estimate-mode", "soft"], env({ ORCA_CONTROL_DIR: "/one" }), [repo("k")]);
     const second = resolveControlOptions([...base, "--estimator-profile", "p", "--estimate-mode", "soft"], env({ ORCA_CONTROL_DIR: "/two" }), [repo("k")]);
-    expect(first.stateDir).toBe(join("/one", "k"));
-    expect(second.stateDir).toBe(join("/two", "k"));
+    expect(first.stateDir).toBe(join("/one", controlRepoKey("k")));
+    expect(second.stateDir).toBe(join("/two", controlRepoKey("k")));
   });
 
   it("falls back to the home directory when the variable is unset or empty, without touching it", () => {
@@ -192,5 +192,30 @@ describe("resolveControlOptions answers with one rejection in a fixed order", ()
   it("reports the wake interval before the estimator", () => {
     const resolved = resolveControlOptions([...base, "--control-wake-ms", "0", "--estimate-mode", "soft"], env(), [repo("k")]);
     expect(resolved.rejection).toBe("control-wake-ms-invalid");
+  });
+});
+
+describe("the project key is encoded before it becomes a directory or an id", () => {
+  it("never produces a nested path, however the key was spelled", () => {
+    for (const key of ["github.com/biran/orca", "a/b/c", "../escape", "/absolute"]) {
+      expect(controlRepoKey(key)).not.toContain("/");
+      expect(controlRepoKey(key)).not.toContain("..");
+    }
+  });
+
+  it("produces something the control id schema accepts", () => {
+    for (const key of ["github.com/biran/orca", "proj", "...", "\u4e2d\u6587"]) {
+      expect(controlRepoKey(key)).toMatch(/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/);
+    }
+  });
+
+  it("keeps two keys that sanitise alike in separate stores", () => {
+    // Sanitising alone would map both to the same directory, and two repositories would then share
+    // one ledger. The digest is what makes that impossible, so it is judged directly.
+    expect(controlRepoKey("a/b")).not.toBe(controlRepoKey("a-b"));
+  });
+
+  it("answers the same thing every time, because the store has to be found again after a restart", () => {
+    expect(controlRepoKey("github.com/biran/orca")).toBe(controlRepoKey("github.com/biran/orca"));
   });
 });

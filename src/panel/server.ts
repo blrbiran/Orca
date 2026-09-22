@@ -6,6 +6,8 @@ import { buildApi } from "./api.js";
 import { PANEL_HOST_NOT_ALLOWED, assertBindAllowed, isHostAllowed } from "./bindGuard.js";
 import { controlErrorBody } from "./controlErrors.js";
 import { verifyControlJsonBody } from "./controlApi.js";
+import { randomUUID } from "node:crypto";
+import { assembleControlRuntime, type ControlRuntime } from "./controlAssembly.js";
 import { resolveControlOptions, type ControlOptionsResolution } from "./controlOptions.js";
 import { NO_VIEWER_IDENTITY, PanelRejection } from "./rejection.js";
 import { ReviewsWriter } from "./reviewsStore.js";
@@ -143,7 +145,7 @@ function controlRejectionMessage(code: string): string {
   }
 }
 
-export async function createPanelServer(opts: PanelOptions): Promise<StartedPanel> {
+export async function createPanelServer(opts: PanelOptions, env: NodeJS.ProcessEnv = process.env): Promise<StartedPanel> {
   // Before listen(), never after -- see bindGuard.ts.
   assertBindAllowed(opts.bind, opts.confirmedExternal);
 
@@ -168,7 +170,24 @@ export async function createPanelServer(opts: PanelOptions): Promise<StartedPane
       : { code: PANEL_HOST_NOT_ALLOWED, message });
   });
   app.use(express.json({ limit: "64kb", verify: verifyControlJsonBody }));
-  buildApi(app, { opts, token, reviews, statics });
+
+  // Assembly plan Task 5. Built before listen so that a process which cannot build its control
+  // plane never accepts a connection that would then meet a half-built one. The epoch is its own
+  // per-process value and not the token: it is served in every view, and the token is a credential.
+  const epoch = randomUUID();
+  let control: ControlRuntime | null = null;
+  if (opts.control.enabled) control = await assembleControlRuntime({ control: opts.control, repos: opts.repos, epoch, env });
+  buildApi(app, {
+    opts, token, reviews, statics,
+    // Disabled means no `control` key at all -- byte-for-byte the shape that shipped before this
+    // existed, so `controlApi.ts` registers nothing and every /api/control path is a 404.
+    ...(control === null ? {} : { control: { store: control.store, epoch, config: control.config, service: control.service } }),
+  });
+  if (control === null && opts.control.enabled) {
+    process.stderr.write("orca-panel: another process holds this repository's control store; this panel serves reviews and decisions only\n");
+  } else if (control !== null && opts.control.executionPort === "unconfigured") {
+    process.stderr.write("orca-panel: control plane mounted with no execution port; it will serve reads and refuse to start work\n");
+  }
 
   const server: Server = createServer(app);
   const listening = new Promise<void>((resolve, reject) => {
@@ -181,7 +200,7 @@ export async function createPanelServer(opts: PanelOptions): Promise<StartedPane
   if (address === null || typeof address === "string") {
     throw new PanelRejection("panel-no-address", "the panel started but has no numeric address");
   }
-  const closed = new Promise<void>((resolve) => server.once("close", () => resolve()));
+  const closed = new Promise<void>((resolve) => server.once("close", () => { control?.close(); resolve(); }));
 
   return {
     url: `http://${opts.bind}:${address.port}`,
@@ -196,5 +215,5 @@ export async function createPanelServer(opts: PanelOptions): Promise<StartedPane
 }
 
 export async function startPanelFromArgs(args: string[]): Promise<StartedPanel> {
-  return createPanelServer(parsePanelArgs(args, process.env));
+  return createPanelServer(parsePanelArgs(args, process.env), process.env);
 }

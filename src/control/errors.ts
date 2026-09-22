@@ -77,6 +77,9 @@ export const durableCommandErrorStatuses = {
   // person sees a named outcome rather than a rolled-back command, and 422 rather than 5xx because
   // the request was understood perfectly -- the environment simply cannot carry it out.
   "control-port-unconfigured": 422,
+  // Assembly spec §10 / ruling R7: this process was started without an estimator profile and mode.
+  // Same shape and same reason as the line above: a state a person is told about, not a crash.
+  "control-estimator-unconfigured": 422,
   "control-protocol-unavailable": 422,
   "control-terminal-pending": 422,
   "dependency-not-done": 422,

@@ -207,3 +207,60 @@ the parity test, so the guard against a half-added protocol field is a guard rat
 
 **Green.** `tests/panel/controlConfigPort.test.ts` 8 tests RC0 (`test-logs/t4b-panel-green.log`);
 `npm --prefix web run check` RC0 = 14 files / 70 tests (`test-logs/t4b-web-green.log`); root `typecheck` RC0.
+
+## Task 5 — the shipped panel builds and mounts the plane
+
+Created `src/panel/controlAssembly.ts` (`assembleControlRuntime`) and mounted it from
+`src/panel/server.ts`; `tests/panel/controlMount.test.ts` (12 tests) is the first set of criteria in
+this repository about the **shipped process** serving `/api/control`, rather than a fixture.
+
+### 🔴 A Rule 17 breach this task caused, and how it was closed
+
+Mounting by default made `createPanelServer` open a control store, and the default root is a real
+home directory. The existing `tests/panel` criteria do not relocate `ORCA_CONTROL_DIR`, because
+nothing used to need it. Running the suite therefore **created `~/.orca/control/{proj, known,
+github.com/biran/orca}` in the operator's real home** — the exact outcome Rule 17 names as
+unacceptable. Measured, not inferred: `test-logs/t5-rule17-breach-33-red.log`, and the directory was
+listed afterwards.
+
+This is recorded rather than quietly fixed because the fix has two halves and only one of them is code:
+
+1. **Mechanical guard, added:** `tests/setup/relocateUserData.ts`, wired as vitest `setupFiles`, gives
+   every test file its own temp `ORCA_CONTROL_DIR`. Remembering the variable in each criterion is not
+   a guard — it was measured failing — so forgetting it now lands in a temp directory instead.
+2. **`scripts/verify-panel.ts` relocates too**, in `spawnOrcaCli`, so a new step cannot forget.
+   **Its own step 12–14 guard caught this**: "~/.orca is unchanged by the whole run" failed with a
+   byte-level diff of what had appeared. That guard had never fired before; it has now, and it works.
+
+⚠️ **The artifact this created in the real home has NOT been removed.** Deleting under a home
+directory needs the operator's word, and the attempt to move it aside was refused by the harness's
+own destructive-action guard. `~/.orca/control/` currently holds the stores this session created:
+`proj/`, `known/`, `github.com/biran/orca/`, plus the post-fix `proj-e73c023a/`, `known-7117fff2/`,
+`github.com-biran-orca-26b561d6/`. Before this session, the Orca handoff recorded `~/.orca` as not
+existing. It is the operator's call.
+
+### Three things that had to be built, not wired
+
+- **No production source of execution profile snapshots existed at all.** The fixture used a
+  constant, and a snapshot pins content hashes of an adapter config, a model policy and proof
+  documents; deriving those here would freeze an identity nothing was frozen against. Added
+  `--profile <path>`, which loads and parses a snapshot the operator names. **Zero profiles is a
+  served state**, consistent with R5 and R7: the panel serves every read and can start nothing.
+- **A project key is neither a path component nor an id.** This repository's keys are normalised
+  remote URLs (`github.com/biran/orca`), and joining one onto a root makes nested directories — that
+  is why `~/.orca/control/github.com/biran/orca` appeared above — while `repoId` is an `idSchema`.
+  `controlRepoKey()` encodes it once for both uses: a readable slug plus eight hex of a sha256 of
+  the original, because sanitising alone maps `a/b` and `a-b` to one store.
+- **A control store is a single writer.** A second `orca panel` on the same repository cannot have
+  it, and must not. But refusing to boot the second panel would take the read-only decision viewer
+  away for no gain, so a contended store means the panel boots without the plane and says so on
+  stderr. **This is a decision, not a ruling** — reversible, and it changes what running `orca panel`
+  twice does, which before this slice simply worked because there was no store to contend for.
+
+Paths are `realpathSync`'d before they reach the trusted config, because `/tmp` is a symlink on this
+platform and `checkedPath` refuses a path that traverses one.
+
+**Green.** `tests/panel` 26 files / 245 tests RC0 (`test-logs/t5-panel-green.log`); `verify:panel`
+RC0, `PASS 0`–`PASS 14` (`test-logs/t5-verify-panel.log`), whose step 12 now reads
+"~/.orca is unchanged (present before and after)" — present, because of the artifact above;
+`typecheck` RC0.
