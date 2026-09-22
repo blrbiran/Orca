@@ -171,3 +171,39 @@ row coerced instead of parsed (RC1, 1).
 
 **Green.** `startEnvelope` 9 tests RC0 (`test-logs/t4-green.log`); `typecheck` RC0. The smoke test
 itself is one of the 5 environment-gated skips and was not executed this session.
+
+## Task 4b — the two fields R6 and R7 ask for, end to end
+
+`ControlConfigV1` gains `executionPort: "configured" | "unconfigured"` (required) and its `defaults`
+becomes nullable, on both sides of the parity boundary. `TrustedControlConfigInput` gains
+`executionPort` and makes `adapterConfigPath` and the estimator pair nullable, with two cross-field
+refinements so neither pair can disagree. The Web renders both states. New criteria:
+`tests/panel/controlConfigPort.test.ts` (8) and `web/tests/controlPortBanner.test.tsx` (6).
+
+**Fixtures touched, assertions not.** The typechecker named every construction site, and each gained
+`executionPort: "configured" as const` with an attributed comment: `tests/panel/controlConfig.test.ts`
+(4), `tests/panel/controlReadApi.test.ts`, `tests/panel/fixtures/controlPanel.ts`,
+`tests/control/planImport.test.ts`, and the three `web/tests/*` config fixtures. No assertion moved.
+
+**The Web could no longer form two commands, which is the point.** With `defaults: null` there is no
+estimator profile to name in an import and no mode to fall back on in a confirm. Rather than sending
+an empty id or a guessed mode, `ControlPanel`'s import form and `BudgetEditor`'s confirm button are
+refused with a note naming the missing flags. Guessing the mode is exactly the fault spec §6 named.
+
+**Mutation battery, 6, all red** (`commands/t4b-mutation-battery.json`):
+
+| Mutation | Result |
+|---|---|
+| M1 the field is not copied into the served view (served as a constant) | RC1, 1 failed |
+| M2 the port answer derived from `probeFailureCode` instead | RC1, 1 failed |
+| M3 the port/adapter-config refinement dropped | RC1, 2 failed |
+| M4 the estimator pair refinement dropped | RC1, 1 failed |
+| M5 an estimator named but absent silently accepted | RC1, 1 failed |
+| M6 the field added to the server schema only | `typecheck` RC2, and the output names `webParity` |
+
+M6 is the plan's Step 3 and is judged by `typecheck`, not by vitest, because `tests/panel/webParity.test.ts`
+is a type-level criterion. **It had never been seen to fail before**; it has now, and the failure names
+the parity test, so the guard against a half-added protocol field is a guard rather than a claim.
+
+**Green.** `tests/panel/controlConfigPort.test.ts` 8 tests RC0 (`test-logs/t4b-panel-green.log`);
+`npm --prefix web run check` RC0 = 14 files / 70 tests (`test-logs/t4b-web-green.log`); root `typecheck` RC0.

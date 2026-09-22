@@ -741,9 +741,16 @@ export const controlConfigSchema = z
         })
         .strict(),
     ),
+    // Assembly spec §10 (ruling R7): null is "no estimator was configured on this process", which
+    // is a state the panel serves rather than a state it refuses to boot in.
     defaults: z
       .object({ estimatorProfileId: idSchema, estimatorProfileHash: hashSchema, estimateMode: z.enum(["strict", "soft"]) })
-      .strict(),
+      .strict()
+      .nullable(),
+    // Assembly spec §9.2 (ruling R6). Per process, for the life of the epoch. Deliberately NOT
+    // inferable from `profiles[].probeFailureCode`, which answers a per-profile, per-probe question
+    // -- see §9.3: letting one stand in for the other blends two facts of different sizes.
+    executionPort: z.enum(["configured", "unconfigured"]),
     errorCatalog: z.array(z.object({ code: nonemptyString, status: safeInteger }).strict()),
   })
   .strict()

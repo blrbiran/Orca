@@ -1,0 +1,55 @@
+[
+ {
+  "mutation": "M1 the field is not copied into the served view",
+  "file": "src/panel/controlConfig.ts",
+  "rc": 1,
+  "failedCount": 1,
+  "failed": [
+   "the served config states whether an execution port is configured serves \"unconfigured\" when the panel was started without one"
+  ]
+ },
+ {
+  "mutation": "M2 the port answer is derived from a probe failure instead",
+  "file": "src/panel/controlConfig.ts",
+  "rc": 1,
+  "failedCount": 1,
+  "failed": [
+   "the served config states whether an execution port is configured does not answer the port question from a profile's probe failure"
+  ]
+ },
+ {
+  "mutation": "M3 the port/adapter-config refinement is dropped",
+  "file": "src/panel/controlConfig.ts",
+  "rc": 1,
+  "failedCount": 2,
+  "failed": [
+   "the two pairs cannot disagree refuses a configured port with no adapter config",
+   "the two pairs cannot disagree refuses an unconfigured port that still carries one, which is the other direction"
+  ]
+ },
+ {
+  "mutation": "M4 the estimator pair refinement is dropped",
+  "file": "src/panel/controlConfig.ts",
+  "rc": 1,
+  "failedCount": 1,
+  "failed": [
+   "the two pairs cannot disagree refuses half an estimator in both directions"
+  ]
+ },
+ {
+  "mutation": "M5 a named-but-absent estimator is silently accepted",
+  "file": "src/panel/controlConfig.ts",
+  "rc": 1,
+  "failedCount": 1,
+  "failed": [
+   "the served config states whether an estimator was chosen still refuses an estimator that was named and does not resolve"
+  ]
+ },
+ {
+  "mutation": "M6 parity guard: field on the server side only",
+  "file": "web/src/controlTypes.ts",
+  "rc": 2,
+  "namesWebParity": true,
+  "stdoutTail": "\n> orca@0.1.0 typecheck\n> tsc --noEmit -p tsconfig.json\n\ntests/panel/webParity.test.ts(115,83): error TS2741: Property 'executionPort' is missing in type 'ControlConfigV1' but required in type '{ schema: \"orca-control-config-v1\"; profiles: { observedAt: string; profileId: string; profileHash: string; allowedWorkKinds: (\"task\" | \"handoff\" | \"goal-review\" | \"budget-estimate\")[]; ... 4 more ...; probeFailureCode: string | null; }[]; ... 5 more ...; errorCatalog: { ...; }[]; }'.\n"
+ }
+]

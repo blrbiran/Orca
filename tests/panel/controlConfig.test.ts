@@ -61,6 +61,7 @@ describe("trusted panel control config", () => {
     const h = await setup();
     const config = createTrustedControlConfig({
       epoch: "epoch-1", stateDir: h.root, executablePath: h.binary, adapterConfigPath: h.adapterConfig,
+      executionPort: "configured" as const,  // Task 4b: these fixtures configure a real adapter config, so the pair says "configured".
       archiveRoot: h.root, exportRoot: h.root, evidenceRoot: h.root, shutdownGraceMs: 30_000,
       repositories: [{ repoId: "repo", displayName: "Repo", path: h.repo }],
       plans: [{ planId: "ship", repoId: "repo", displayName: "Ship", path: h.plan }],
@@ -87,6 +88,7 @@ describe("trusted panel control config", () => {
     await symlink(outside, link);
     const base = {
       epoch: "epoch-1", stateDir: h.root, executablePath: h.binary, adapterConfigPath: h.adapterConfig,
+      executionPort: "configured" as const,  // Task 4b: these fixtures configure a real adapter config, so the pair says "configured".
       archiveRoot: h.root, exportRoot: h.root, evidenceRoot: h.root, shutdownGraceMs: 30_000,
       repositories: [{ repoId: "repo", displayName: "Repo", path: h.repo }],
       defaultEstimatorProfileId: "estimator", defaultEstimateMode: "soft" as const,
@@ -100,6 +102,7 @@ describe("trusted panel control config", () => {
     const h = await setup();
     const config = createTrustedControlConfig({
       epoch: "epoch-1", stateDir: h.root, executablePath: h.binary, adapterConfigPath: h.adapterConfig,
+      executionPort: "configured" as const,  // Task 4b: these fixtures configure a real adapter config, so the pair says "configured".
       archiveRoot: h.root, exportRoot: h.root, evidenceRoot: h.root, shutdownGraceMs: 30_000,
       repositories: [{ repoId: "repo", displayName: "Repo", path: h.repo }],
       plans: [{ planId: "ship", repoId: "repo", displayName: "Ship", path: h.plan }],
@@ -115,6 +118,7 @@ describe("trusted panel control config", () => {
     const h = await setup();
     const input = {
       epoch: "epoch-1", stateDir: h.root, executablePath: h.binary, adapterConfigPath: h.adapterConfig,
+      executionPort: "configured" as const,  // Task 4b: these fixtures configure a real adapter config, so the pair says "configured".
       archiveRoot: h.root, exportRoot: h.root, evidenceRoot: h.root, shutdownGraceMs: 30_000,
       repositories: [{ repoId: "repo", displayName: "Repo", path: h.repo }, { repoId: "repo", displayName: "Again", path: h.repo }],
       plans: [{ planId: "ship", repoId: "repo", displayName: "Ship", path: h.plan }],

@@ -25,15 +25,21 @@ export interface TrustedControlConfigInput {
   epoch: string;
   stateDir: string;
   executablePath: string;
-  adapterConfigPath: string;
+  /**
+   * Null when no execution port is configured (ruling R5). Paired with `executionPort` by a
+   * refinement below: the two can no longer disagree, which a free-standing string allowed.
+   */
+  adapterConfigPath: string | null;
+  executionPort: "configured" | "unconfigured";
   archiveRoot: string;
   exportRoot: string;
   evidenceRoot: string;
   shutdownGraceMs: number;
   repositories: TrustedRepositoryConfig[];
   plans: TrustedPlanConfig[];
-  defaultEstimatorProfileId: string;
-  defaultEstimateMode: "strict" | "soft";
+  /** Both null or both set (ruling R7). Null is a served state, not a boot failure. */
+  defaultEstimatorProfileId: string | null;
+  defaultEstimateMode: "strict" | "soft" | null;
 }
 
 export interface TrustedControlConfig {
@@ -47,16 +53,27 @@ const trustedControlConfigInputSchema = z.object({
   epoch: z.string().min(1),
   stateDir: z.string().min(1),
   executablePath: z.string().min(1),
-  adapterConfigPath: z.string().min(1),
+  adapterConfigPath: z.string().min(1).nullable(),
+  executionPort: z.enum(["configured", "unconfigured"]),
   archiveRoot: z.string().min(1),
   exportRoot: z.string().min(1),
   evidenceRoot: z.string().min(1),
   shutdownGraceMs: safeInteger.positive(),
   repositories: z.array(z.object({ repoId: idSchema, displayName: z.string().min(1), path: z.string().min(1) }).strict()),
   plans: z.array(z.object({ planId: idSchema, repoId: idSchema, displayName: z.string().min(1), path: z.string().min(1) }).strict()),
-  defaultEstimatorProfileId: idSchema,
-  defaultEstimateMode: z.enum(["strict", "soft"]),
-}).strict();
+  defaultEstimatorProfileId: idSchema.nullable(),
+  defaultEstimateMode: z.enum(["strict", "soft"]).nullable(),
+}).strict().superRefine((value, ctx) => {
+  // The invariant is the pair, not either field: a configured port with no adapter config, and a
+  // profile with no mode, were both representable before and are the shapes that let a soft
+  // adapter be driven as a strict one.
+  if ((value.executionPort === "configured") !== (value.adapterConfigPath !== null)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["adapterConfigPath"], message: "execution-port-adapter-config-mismatch" });
+  }
+  if ((value.defaultEstimatorProfileId === null) !== (value.defaultEstimateMode === null)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["defaultEstimateMode"], message: "estimator-defaults-incomplete" });
+  }
+});
 
 function invalid(detail?: string): never {
   throw new ControlError("control-trusted-config-invalid", detail);
@@ -127,7 +144,7 @@ export function createTrustedControlConfig(
 
   checkedPath(input.stateDir, "directory");
   checkedPath(input.executablePath, "file");
-  checkedPath(input.adapterConfigPath, "file");
+  if (input.adapterConfigPath !== null) checkedPath(input.adapterConfigPath, "file");
   checkedPath(input.archiveRoot, "directory");
   checkedPath(input.exportRoot, "directory");
   checkedPath(input.evidenceRoot, "directory");
@@ -148,8 +165,13 @@ export function createTrustedControlConfig(
   }
 
   const profiles = router.list();
-  const defaultProfile = profiles.find((profile) => profile.snapshot.profile.profileId === input.defaultEstimatorProfileId);
-  if (!defaultProfile || !defaultProfile.snapshot.profile.allowedWorkKinds.includes("budget-estimate")) invalid("default-estimator");
+  // Ruling R7: no estimator named is a state, not an error. A name that does not resolve, or
+  // resolves to a profile that cannot estimate, is still an error -- the operator asked for
+  // something specific and did not get it.
+  const defaultProfile = input.defaultEstimatorProfileId === null
+    ? null
+    : profiles.find((profile) => profile.snapshot.profile.profileId === input.defaultEstimatorProfileId) ?? invalid("default-estimator");
+  if (defaultProfile !== null && !defaultProfile.snapshot.profile.allowedWorkKinds.includes("budget-estimate")) invalid("default-estimator");
   return Object.freeze({
     shutdownGraceMs: input.shutdownGraceMs,
     resolveTarget(raw: unknown) {
@@ -195,11 +217,12 @@ export function createTrustedControlConfig(
           observedAt,
           probeFailureCode,
         })).sort((left, right) => left.profileId.localeCompare(right.profileId)),
-        defaults: {
+        defaults: defaultProfile === null || input.defaultEstimateMode === null ? null : {
           estimatorProfileId: defaultProfile.snapshot.profile.profileId,
           estimatorProfileHash: defaultProfile.profileHash,
           estimateMode: input.defaultEstimateMode,
         },
+        executionPort: input.executionPort,
         errorCatalog: Object.entries(durableCommandErrorStatuses)
           .map(([code, status]) => ({ code, status }))
           .sort((left, right) => left.code.localeCompare(right.code)),

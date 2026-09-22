@@ -38,6 +38,7 @@ const config: ControlConfigV1 = {
     observedAt: "2026-09-21T00:00:00.000Z", probeFailureCode: null,
   }],
   defaults: { estimatorProfileId: "all", estimatorProfileHash: "b".repeat(64), estimateMode: "soft" },
+  executionPort: "configured",  // Task 4b fixture: these criteria are not about the port.
   errorCatalog: [{ code: "unauthorized", status: 401 }],
 };
 

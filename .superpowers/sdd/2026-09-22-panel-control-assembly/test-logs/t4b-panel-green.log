@@ -1,0 +1,10 @@
+
+ RUN  v2.1.9 /Users/biran/code/skills/loop/Orca
+
+ ✓ tests/panel/controlConfigPort.test.ts (8 tests) 37ms
+
+ Test Files  1 passed (1)
+      Tests  8 passed (8)
+   Start at  09:56:15
+   Duration  342ms (transform 71ms, setup 0ms, collect 90ms, tests 37ms, environment 0ms, prepare 60ms)
+

@@ -100,6 +100,7 @@ async function setup(): Promise<Harness> {
   const router = createExecutionProfileRouter([frozen], { now: () => new Date("2030-01-01T00:00:00.000Z") });
   const trustedConfig = createTrustedControlConfig({
     epoch: "epoch-test", stateDir: h.store.stateDir, executablePath: binary, adapterConfigPath: adapter,
+      executionPort: "configured" as const,  // Task 4b: these fixtures configure a real adapter config, so the pair says "configured".
     archiveRoot: h.root, exportRoot: h.root, evidenceRoot: h.root, shutdownGraceMs: 1_000,
     repositories: [{ repoId: "repo", displayName: "Repo", path: repo }],
     plans: [{ planId: "plan", repoId: "repo", displayName: "Plan", path: planPath }],

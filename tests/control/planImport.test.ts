@@ -81,6 +81,7 @@ async function setup() {
   const router = createExecutionProfileRouter([frozen]);
   const trustedConfig = createTrustedControlConfig({
     epoch: "epoch", stateDir: h.store.stateDir, executablePath: binary, adapterConfigPath: adapter,
+    executionPort: "configured" as const,  // Task 4b: a real adapter config is configured here.
     archiveRoot: h.root, exportRoot: h.root, evidenceRoot: h.root, shutdownGraceMs: 1_000,
     repositories: [{ repoId: "repo", displayName: "Repo", path: repo }],
     plans: [{ planId: "plan", repoId: "repo", displayName: "Plan", path: planPath }],

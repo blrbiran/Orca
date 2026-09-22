@@ -120,6 +120,7 @@ export function createHarness(): Harness {
       const router = createExecutionProfileRouter([frozen], { now: () => new Date("2030-01-01T00:00:00.000Z") });
       const trustedConfig = createTrustedControlConfig({
         epoch, stateDir: store.stateDir, executablePath: paths.binary, adapterConfigPath: paths.adapter,
+      executionPort: "configured" as const,  // Task 4b: these fixtures configure a real adapter config, so the pair says "configured".
         archiveRoot: root, exportRoot: root, evidenceRoot: root, shutdownGraceMs: 1_000,
         repositories: [{ repoId: "repo", displayName: "Repo", path: paths.repo }],
         plans: [{ planId: "plan", repoId: "repo", displayName: "Plan", path: paths.planPath }],

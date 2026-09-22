@@ -36,12 +36,17 @@ function ImportForm(props: { config: ControlConfigV1; onCommand: (action: Contro
   return (
     <section aria-label="Import plan">
       <h3>Import a plan</h3>
-      {repository === undefined || plan === undefined ? (
+      {props.config.defaults === null ? (
+        <p role="note">
+          No estimator profile is configured for this panel, so a plan cannot be imported. Restart it
+          with --estimator-profile and --estimate-mode.
+        </p>
+      ) : repository === undefined || plan === undefined ? (
         <p role="note">No trusted repository and plan are configured for this panel.</p>
       ) : (
         <>
           <p>
-            {repository.displayName} · {plan.displayName} · estimate mode {props.config.defaults.estimateMode}
+            {repository.displayName} · {plan.displayName} · estimate mode {props.config.defaults?.estimateMode ?? "not configured"}
           </p>
           <button
             type="button"
@@ -55,9 +60,9 @@ function ImportForm(props: { config: ControlConfigV1; onCommand: (action: Contro
                   groupId,
                   repoId: repository.repoId,
                   planId: plan.planId,
-                  estimatorProfileId: props.config.defaults.estimatorProfileId,
-                  estimatorProfileHash: props.config.defaults.estimatorProfileHash,
-                  estimateMode: props.config.defaults.estimateMode,
+                  estimatorProfileId: props.config.defaults!.estimatorProfileId,
+                  estimatorProfileHash: props.config.defaults!.estimatorProfileHash,
+                  estimateMode: props.config.defaults!.estimateMode,
                 },
               });
             }}
@@ -81,6 +86,18 @@ export function ControlPanel(props: ControlPanelProps): JSX.Element {
         epoch {summary.epoch} · projection {summary.changeSeq} ·{" "}
         {summary.dispatchBlocked ? "dispatch blocked" : "dispatch live"}
       </p>
+      {/*
+        * Ruling R6. Read from the config's own field, never inferred from profiles[].probeFailureCode:
+        * that answers a per-profile, per-probe question, and this one is per process for the life of
+        * the epoch. A panel with no port still serves every read -- which is the point, because the
+        * reads are what a person needs after a crash -- so this says why the commands will refuse.
+        */}
+      {config.executionPort === "unconfigured" && (
+        <p role="alert">
+          no execution port configured · this panel serves recovery and evidence, and refuses to start
+          work · set ORCA_CCLOOP_BIN and ORCA_CCLOOP_ADAPTER_CONFIG and restart it
+        </p>
+      )}
       {summary.resetRequired && <p role="alert">server reset required · this page must re-read before it trusts any cached view</p>}
       {refetchRequired && <p role="alert">projection refetch required · re-reading the open groups</p>}
       {recovery.dispatchBlocked && <p role="alert">dispatch blocked · recovery must be observed</p>}

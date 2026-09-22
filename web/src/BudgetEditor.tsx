@@ -99,8 +99,13 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
     ? config.profiles[0]?.observed.budgetEnforcement ?? "unknown"
     : "frozen at confirmation";
   const contextUnavailable = config.profiles.some((profile) => profile.observed.contextObservation === "unavailable");
+  // Ruling R7: a panel started without --estimator-profile/--estimate-mode serves `defaults: null`.
+  // There is then nothing to fall back to, so confirming is refused here rather than sent with a
+  // guessed profile or a guessed mode -- guessing the mode is the strict-versus-soft fault itself.
+  const defaults = config.defaults;
+  const confirmBlocked = defaults === null && (view.proposal.profiles === null || view.proposal.budgetMode === null);
   const confirmProfile = (kind: "estimator" | "worker" | "handoff" | "goalReview") =>
-    view.proposal.profiles?.[kind] ?? { profileId: config.defaults.estimatorProfileId, profileHash: config.defaults.estimatorProfileHash };
+    view.proposal.profiles?.[kind] ?? { profileId: defaults?.estimatorProfileId ?? "", profileHash: defaults?.estimatorProfileHash ?? "" };
 
   const submitEdit = (): void => {
     const operations = editedOperations(view, drafts);
@@ -116,6 +121,7 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
     onCommand({ verb: "set-limit", groupId, expectedRevision: view.summary.commandRevision, payload: { limit: limitAmount(view, drafts) } });
   };
   const submitConfirm = (): void => {
+    if (confirmBlocked) return;
     const contextDraft = drafts[CONTEXT_POLICY_KEY(groupId)];
     const tokens = contextDraft === undefined || contextDraft.trim() === "" ? null : Number(contextDraft);
     onCommand({
@@ -125,7 +131,7 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
       payload: {
         planHash: view.plan.planHash,
         proposalVersion: view.proposal.proposalVersion,
-        budgetMode: view.proposal.budgetMode ?? config.defaults.estimateMode,
+        budgetMode: view.proposal.budgetMode ?? defaults!.estimateMode,
         profileIds: {
           estimator: confirmProfile("estimator").profileId, worker: confirmProfile("worker").profileId,
           handoff: confirmProfile("handoff").profileId, goalReview: confirmProfile("goalReview").profileId,

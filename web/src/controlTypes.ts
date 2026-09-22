@@ -34,7 +34,10 @@ export type ControlConfigV1 = {
     observedAt: string;
     probeFailureCode: string | null;
   }>;
-  defaults: { estimatorProfileId: string; estimatorProfileHash: string; estimateMode: "strict" | "soft" };
+  /** null when this panel was started without --estimator-profile/--estimate-mode (ruling R7). */
+  defaults: null | { estimatorProfileId: string; estimatorProfileHash: string; estimateMode: "strict" | "soft" };
+  /** Ruling R6. The only authority on whether a port is configured; not probeFailureCode. */
+  executionPort: "configured" | "unconfigured";
   errorCatalog: Array<{ code: string; status: number }>;
 };
 
