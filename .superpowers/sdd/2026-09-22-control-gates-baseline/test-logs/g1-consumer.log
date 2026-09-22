@@ -1,0 +1,51 @@
+
+> orca@0.1.0 verify:web-control:consumer
+> vitest run tests/control/webCcloopSmoke.test.ts
+
+
+ RUN  v2.1.9 /Users/biran/code/skills/loop/Orca
+
+(node:84462) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ❯ tests/control/webCcloopSmoke.test.ts (4 tests | 2 failed) 684ms
+   ✓ the shipped consumer answers for its own capabilities (task 10 step 4) > refuses an envelope that is not V1 and reads a well-formed one as no execution yet 315ms
+   × the frozen dispatch envelope reaches a real process (task 10 step 4) > carries the ledger's claim identity byte-for-byte and is durably accepted once 62ms
+     → start-envelope-conflict:run:targetVersion
+   × the frozen dispatch envelope reaches a real process (task 10 step 4) > latches the stop under the ledger's request identity and returns evidence the store re-hashes 57ms
+     → start-envelope-conflict:run:targetVersion
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/control/webCcloopSmoke.test.ts > the frozen dispatch envelope reaches a real process (task 10 step 4) > carries the ledger's claim identity byte-for-byte and is durably accepted once
+ControlError: start-envelope-conflict:run:targetVersion
+ ❯ Module.toStartEnvelope src/control/startEnvelope.ts:65:11
+     63|   const parsedRun = startEnvelopeSourceSchema.safeParse(run);
+     64|   if (!parsedRun.success) {
+     65|     throw new ControlError("start-envelope-conflict", `run:${parsedRun…
+       |           ^
+     66|   }
+     67|   const claim = parsedRun.data;
+ ❯ startEnvelope tests/control/webCcloopSmoke.test.ts:95:10
+ ❯ tests/control/webCcloopSmoke.test.ts:217:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/control/webCcloopSmoke.test.ts > the frozen dispatch envelope reaches a real process (task 10 step 4) > latches the stop under the ledger's request identity and returns evidence the store re-hashes
+ControlError: start-envelope-conflict:run:targetVersion
+ ❯ Module.toStartEnvelope src/control/startEnvelope.ts:65:11
+     63|   const parsedRun = startEnvelopeSourceSchema.safeParse(run);
+     64|   if (!parsedRun.success) {
+     65|     throw new ControlError("start-envelope-conflict", `run:${parsedRun…
+       |           ^
+     66|   }
+     67|   const claim = parsedRun.data;
+ ❯ startEnvelope tests/control/webCcloopSmoke.test.ts:95:10
+ ❯ tests/control/webCcloopSmoke.test.ts:246:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 2 passed (4)
+   Start at  23:13:34
+   Duration  1.18s (transform 205ms, setup 16ms, collect 261ms, tests 684ms, environment 0ms, prepare 63ms)
+

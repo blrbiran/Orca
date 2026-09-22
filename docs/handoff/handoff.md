@@ -5218,6 +5218,8 @@ harness 已修，且**从此每组都记基线返回码 —— 不报绿基线�
 ccloop 栽过一模一样的一次（变异电池跑在红基线上，整组作废）。
 **这一步不需要任何裁决，也不动一行生产代码。**
 
+✅ *** **第 1 步已于同一会话做完 —— 见本节末尾「同会话补遗：第 1 步已完成」，那里有基线数、判别式与一处更正。** ***
+
 **第 2 步 —— 三仓 handoff 更正**（人已授权）。
 ccloop 与 ccmem 的 handoff 里都还写着「`targetVersion` 等人裁」「ccloop 要不要补 `capabilities` 五个字段」——
 **G1 把这两句的前提换掉了**（不再是 Orca 提需求、ccloop 追平）。**各追加一节更正，原文一个字不删。**
@@ -5246,3 +5248,58 @@ ccloop 侧定契约（capability 词汇表 ＋ `targetVersion` 定型，走 brai
 
 **截至写下本节时**，本会话工具报数 **约 $39.93**（harness 报的，不是自估；**会话仍在继续，最终数只会更高，别把这个数当会话总账**）；其中三个 fable subagent 合计
 **约 352k token／62 次工具调用**（工具报数）。**本轮无任何真实模型执行、无 run、无生产代码改动。**
+
+
+### ✅ 同会话补遗：第 1 步已完成（会话 `da2f5e9a`，2026-09-22）
+
+台账与**未过滤日志**：`.superpowers/sdd/2026-09-22-control-gates-baseline/`
+（`progress.md` ＋ `test-logs/g1-consumer.log`、`g2-control.log` 及两个 `.rc`）。
+两道门都带 `PATH="/usr/local/bin:$PATH"` ＋ 下面那对环境变量，走 `rtk proxy`，重定向到文件再整份读回。
+
+```
+ORCA_CCLOOP_BIN=/tmp/ccloop-codex-0919/dist/cli.js
+ORCA_CCLOOP_ADAPTER_CONFIG=/tmp/orca-ccloop-d3-task8/fake-codex-config.json
+```
+
+| 门 | RC | 结果（只抄工具报数） |
+|---|---|---|
+| `verify:web-control:consumer` | **1** | **2 失败 / 2 通过（4）**，0 skipped，1.18s |
+| `verify:control` | **1** | **42 文件通过 / 1 失败（43）**；**430 通过 / 2 失败（432）**，0 skipped，78.55s |
+
+*** **两道门的全部失败就是同一对判据**：`tests/control/webCcloopSmoke.test.ts` 那两条，
+报 `start-envelope-conflict:run:targetVersion`，抛点 `src/control/startEnvelope.ts:65`。**不是回归。** ***
+
+#### 🔴 更正：上面第 1 步写的「缺 `/tmp` 的 ccloop artifact」为假
+
+**两个 artifact 都在**（现测 `rtk proxy ls -la /tmp/ccloop-codex-0919/ /tmp/ccloop-codex-0919/dist/`，未过滤整份读回）：
+`dist/cli.js` 存在、`-rwxr-xr-x`、166 B、**build 时间 Sep 19 21:48**；
+`fake-codex-config.json` 存在、`-rw-------`、273 B。**开发树活着，上一轮只是没去用它。**
+⚠️ **但 `dist` 是 9/19 的构建** ⇒ 这条基线反映的是**那一刻的 ccloop**，不是它的当前 `src/`。
+*** **第 4 步在 ccloop 侧动完契约后，必须先重建 `dist` 再重跑这两道门。** ***
+（第 1 步的原文按 Rule 13 逐字保留，本条即为具名更正。）
+
+#### 🔴 rtk 的第六种骗法：**目录列表也会骗**
+
+`ls /tmp/ccloop-codex-0919` 的**过滤输出里没有 `dist/`**，而 `rtk proxy ls -la` 的整份读回里它在。
+差一点据此判定「artifact 真的没了」。
+⇒ *** **目录列表也算验证性读，一律 `rtk proxy` ＋ 重定向 ＋ 整份读回。** ***
+
+#### 🔴 判别式：**别只看 RC**
+
+这两道门在 `targetVersion` 修好之前**必然 RC1**，**RC1 本身不携带信息**。
+下一轮的判别式是「**除这两条之外有没有新的红**」。回绿的定义：
+消费者门 ＝ **RC0 / 4 通过 / 0 失败**；控制门 ＝ **RC0 / 43 文件通过 / 432 通过 / 0 失败 / 0 skipped**。
+
+#### Rule 17 核验
+
+跑前跑后各测一次 `rtk proxy ls -la ~/.orca ~/.orca/control`：两级目录都是 `drwx------`（0700），
+`control/` **始终为空**，其 mtime **跑前跑后都是 `Sep 22 23:02`**，而两道门跑在 **23:13–23:15**。
+⇒ *** **两道门没有写进真实用户数据。** ***
+
+#### 本步没做
+
+**没有重建 ccloop 的 `dist`**（重建会把「现状基线」换成另一个东西）；
+**没有跑** `npm test` 全量／`typecheck`／Web 门／`verify:panel` ——
+本步的观测范围只有这两道门，**不许拿本步的结论去覆盖上一节里那些门的实测数**。
+
+⇒ **下一件事变成第 2 步：去 ccloop 与 ccmem 各追加一节更正。**

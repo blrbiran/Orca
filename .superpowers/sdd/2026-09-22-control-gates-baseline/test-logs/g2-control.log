@@ -1,0 +1,433 @@
+
+> orca@0.1.0 verify:control
+> node scripts/verify-control.mjs
+
+
+ RUN  v2.1.9 /Users/biran/code/skills/loop/Orca
+
+(node:86233) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:86234) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:86235) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:86231) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/control/webContinuation.test.ts (19 tests) 2997ms
+ ✓ tests/control/planImport.test.ts (28 tests) 3182ms
+   ✓ immutable plan import > is absent or fully replayable after real SIGKILL before-commit 382ms
+   ✓ immutable plan import > is absent or fully replayable after real SIGKILL after-commit 377ms
+ ✓ tests/control/commandLedger.test.ts (38 tests) 3237ms
+(node:89301) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:89383) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:89436) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/control/webFaults.test.ts (10 tests) 1155ms
+(node:90603) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/control/stopIntent.test.ts (39 tests) 4990ms
+ ✓ tests/control/webProtocol.test.ts (11 tests) 13ms
+ ✓ tests/control/profiledService.test.ts (12 tests) 1893ms
+   ✓ profiled service execution > rejects stale, missing, and unavailable profiles before claim state or provider invocation 301ms
+   ✓ profiled service execution > freshly validates the persisted profile before reconciling an unknown start 319ms
+ ✓ tests/control/webDispatch.test.ts (20 tests) 2173ms
+(node:91138) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:91376) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:91217) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ❯ tests/control/webCcloopSmoke.test.ts (4 tests | 2 failed) 791ms
+   ✓ the shipped consumer answers for its own capabilities (task 10 step 4) > refuses an envelope that is not V1 and reads a well-formed one as no execution yet 333ms
+   × the frozen dispatch envelope reaches a real process (task 10 step 4) > carries the ledger's claim identity byte-for-byte and is durably accepted once 105ms
+     → start-envelope-conflict:run:targetVersion
+   × the frozen dispatch envelope reaches a real process (task 10 step 4) > latches the stop under the ledger's request identity and returns evidence the store re-hashes 99ms
+     → start-envelope-conflict:run:targetVersion
+(node:91975) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/control/webContinuationAccounting.test.ts (6 tests) 834ms
+ ✓ tests/control/estimator.test.ts (18 tests) 1832ms
+   ✓ frozen estimator > allows an exact retained usage replay but rejects unseen usage after every Task 6 terminal state 339ms
+(node:92274) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/control/webMutations.test.ts (10 tests) 1156ms
+(node:92490) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+crash after-accept: marker observed, SIGKILL
+(node:92213) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/control/executionSnapshot.test.ts (13 tests) 1033ms
+Cloning into '/private/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-crash-matrix-roFz0D/runs/run-f1b7b763-3b35-464d-b5dc-bef88b477882/repo'...
+done.
+HEAD is now at dc52efd base
+ ✓ tests/control/profiles.test.ts (9 tests) 18ms
+ ✓ tests/control/proposal.test.ts (4 tests) 548ms
+(node:93299) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:93269) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/control/contextControl.test.ts (14 tests) 1422ms
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-5EnVvj/input.bundle is okay
+ ✓ tests/control/confirmation.test.ts (8 tests) 846ms
+(node:94315) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-MzxEXg/input.bundle is okay
+ ✓ tests/control/store.test.ts (9 tests) 1329ms
+   ✓ control storage > does not migrate or rewrite an unknown schema version 387ms
+(node:96234) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-YWPLwK/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-bQrBrL/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-IdWQ74/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-rT7qAT/input.bundle is okay
+(node:93790) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/control/budget.test.ts (14 tests) 1503ms
+   ✓ unified work claims > lets only one process claim while a service owner is alive and keeps that claim after close 419ms
+Cloning into '/private/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-sched-MCAgJv/runs/run-02e1f921-97a9-478b-8b52-84ba691b6f0b/repo'...
+done.
+HEAD is now at 03818cc init
+Cloning into '/private/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-sched-MCAgJv/runs/run-8a8085cc-2663-44ac-9fdf-f7a8fce5b74b/repo'...
+done.
+HEAD is now at 03818cc init
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-0XTgQ8/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-KcfXvN/input.bundle is okay
+ ✓ tests/control/ccloopPort.test.ts (7 tests) 3077ms
+   ✓ production ccloop execution port > answers a profile probe through the router instead of being reported as a failed probe 702ms
+   ✓ production ccloop execution port > propagates exit 2 stably and refuses malformed or oversized stdout 917ms
+   ✓ production ccloop execution port > validates evidence identity, base64 and hash 643ms
+(node:627) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/control/unconfiguredPort.test.ts (5 tests) 155ms
+(node:1254) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-oK4FIU/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-vAvu2S/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-H3C3U8/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-KGjxlh/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-PmhZsf/input.bundle is okay
+Cloning into '/private/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-sched-MCAgJv/runs/run-93e34d16-962b-466d-9768-3a4e407d9831/repo'...
+done.
+Note: switching to 'b8fd8dcd316aa4fcc57395e1dcce43dba000e339'.
+
+You are in 'detached HEAD' state. You can look around, make experimental
+changes and commit them, and you can discard any commits you make in this
+state without impacting any branches by switching back to a branch.
+
+If you want to create a new branch to retain commits you create, you may
+do so (now or later) by using -c with the switch command. Example:
+
+  git switch -c <new-branch-name>
+
+Or undo this operation with:
+
+  git switch -
+
+Turn off this advice by setting config variable advice.detachedHead to false
+
+HEAD is now at b8fd8dc orca: the conflict itself, recorded so it can be read (spec §5.2 step 2) — never lands on the work branch
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-V4tas7/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-QzWeFn/input.bundle is okay
+ ✓ tests/control/archive.test.ts (8 tests) 5307ms
+   ✓ independent evidence archive > reads every original log after the complete source directory has moved 2211ms
+   ✓ independent evidence archive > rejects immutable ID conflict, forged hashes and traversal, with private archive files 322ms
+   ✓ independent evidence archive > retains source on a publication failure and never calls a missing stop proof complete 1966ms
+(node:5391) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-bzyEKB/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-uhycex/input.bundle is okay
+ ✓ tests/control/projectionJournal.test.ts (6 tests) 1257ms
+   ✓ projection journal > retains a bounded invalidation window and reports old sequence gaps 429ms
+ ✓ tests/control/startEnvelope.test.ts (9 tests) 6ms
+(node:6959) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-linj5a/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-ycDfwO/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-8rWxea/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-TQx5mT/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-kr5FJm/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-ZI3vqq/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-kpB2JG/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-di17If/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-mjK8B0/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-4Q4htn/input.bundle is okay
+crash after-accept: marker observed, SIGKILL
+Cloning into '/private/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-crash-matrix-p7QVlT/runs/run-ae8c8eec-28cc-435f-a9bc-2a718ece36cc/repo'...
+done.
+HEAD is now at 38611f4 base
+CONTROL_PROTOCOL_EVIDENCE={"root":"/private/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-real-ccloop-AmL5Lk","binary":"/tmp/ccloop-codex-0919/dist/cli.js","adapterConfigPath":"/tmp/orca-ccloop-d3-task8/fake-codex-config.json","configHash":"6d172246c4c67d0629787e87b125b3f8cd6072a4e18991b5fcad4c8f3ae33a47","first":{"runId":"run-1275c038-998a-4afd-893d-5333ff8214a6","executionId":"execution-300c2c19-0089-43f5-a083-f177dc545ebe","checkpoint":{"id":"checkpoint-2bed97fdbfccf049fdce1a5a5dffffdb9963b8aa45399663","hash":"3c59cf93c52811018cf6d7e69db830094828ea3154015efc116ae4689fd7a5f0"}},"continuation":{"runId":"run-da5b26ac-f181-45fc-acb2-8346906343b3","executionId":"execution-44c521cf-df08-47ab-b892-55bd9159699e","candidateCheckpointId":"checkpoint-964c7a2c763157c19bf349fda055f8f5b30a4d899de5fb39"},"groupCheckpointId":"ff461eaf044056ef20b2ed055cfee751e665d17373dcd3129c3a115ae421cc73","processes":{"first":[{"pgid":93996,"phase":"plan","pid":93996,"registeredAt":"2026-09-22T15:13:57.812Z","startedAt":"Tue Sep 22 15:13:57 2026"},{"pgid":94111,"phase":"execute","pid":94111,"registeredAt":"2026-09-22T15:13:57.894Z","startedAt":"Tue Sep 22 15:13:57 2026"},{"pgid":94340,"phase":"verify","pid":94340,"registeredAt":"2026-09-22T15:13:58.027Z","startedAt":"Tue Sep 22 15:13:58 2026"}],"continuation":[{"pgid":6979,"phase":"plan","pid":6979,"registeredAt":"2026-09-22T15:14:11.863Z","startedAt":"Tue Sep 22 15:14:11 2026"},{"pgid":7088,"phase":"execute","pid":7088,"registeredAt":"2026-09-22T15:14:11.963Z","startedAt":"Tue Sep 22 15:14:11 2026"},{"pgid":7250,"phase":"verify","pid":7250,"registeredAt":"2026-09-22T15:14:12.149Z","startedAt":"Tue Sep 22 15:14:12 2026"}]}}
+Cloning into '/private/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-sched-5cTL5P/runs/run-98b8c8d9-ead1-454b-b8fb-cbb08bfd8c21/repo'...
+done.
+HEAD is now at 6ca86be init
+Cloning into '/private/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-sched-5cTL5P/runs/run-214b8889-ac67-4103-a87f-ad2a16c6a522/repo'...
+done.
+HEAD is now at 6ca86be init
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-wcuQVk/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-io8MsE/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-HM1KEO/input.bundle is okay
+crash after-archive: marker observed, SIGKILL
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-jtFhLd/input.bundle is okay
+crash after-accept: marker observed, SIGKILL
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-tycWTE/input.bundle is okay
+Cloning into '/private/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-crash-matrix-IqDEgb/runs/run-062c09de-4a09-4fa9-aeae-6c7a25ce2af9/repo'...
+done.
+HEAD is now at d4fced5 base
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-n1pAdx/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-NFNqF1/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-HyMtqe/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-EeVk4D/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-fXflNU/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-2Z43jm/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-3u727l/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-MLBrYr/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-66nS4T/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-ToyyuR/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-QtqdpA/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-RVEkNB/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-XOwGH9/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-3oLool/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-yoPD1g/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-kDVPcR/input.bundle is okay
+crash before-projection: marker observed, SIGKILL
+ ✓ tests/control/finalReview.test.ts (13 tests) 30052ms
+   ✓ final review regressions > retains reserve until the producer final usage watermark arrives 4625ms
+   ✓ final review regressions > requires explicit observations of both budget buckets: none 1864ms
+   ✓ final review regressions > requires explicit observations of both budget buckets: work 1711ms
+   ✓ final review regressions > requires explicit observations of both budget buckets: handoff 1926ms
+   ✓ final review regressions > requires explicit observations of both budget buckets: both 2746ms
+   ✓ final review regressions > retries a torn uncommitted checkpoint without rewriting a committed checkpoint 2678ms
+   ✓ final review regressions > serializes projection publication so a delayed old write cannot become latest 2540ms
+   ✓ final review regressions > claims the newly approved target version while preserving same-version idempotence 2088ms
+   ✓ final review regressions > repairs late acceptance without charging or merging twice: dispose 4787ms
+   ✓ final review regressions > repairs late acceptance without charging or merging twice: recovery 4838ms
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-PvaqAp/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-nn7q5x/input.bundle is okay
+(node:22839) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+Cloning into '/private/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-sched-mZ5iEL/runs/run-505c2c67-6347-461d-ac08-44f82308b86e/repo'...
+done.
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-xZi8Lm/input.bundle is okay
+HEAD is now at 6f0429a init
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-qf5EQI/input.bundle is okay
+Cloning into '/private/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-sched-mZ5iEL/runs/run-45aea187-493f-4e0e-95db-0bb111020ecd/repo'...
+done.
+HEAD is now at 6f0429a init
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-T8Rw3q/input.bundle is okay
+ ✓ tests/control/ccloopProtocol.integration.test.ts (3 tests) 30178ms
+   ✓ real ccloop protocol > accepts, accounts, commits a handoff, resumes a dirty snapshot, and collects a fresh execution 19672ms
+   ✓ real ccloop protocol > recovers the Orca SIGKILL boundary without duplicating checkpoint or D3 Markdown: after-archive 5842ms
+   ✓ real ccloop protocol > recovers the Orca SIGKILL boundary without duplicating checkpoint or D3 Markdown: before-projection 4098ms
+(node:24180) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/control/commands.test.ts (10 tests) 1281ms
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-nsgqpy/input.bundle is okay
+(node:25432) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-6oCoob/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-7Z34pN/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-Rzvwow/input.bundle is okay
+ ✓ tests/control/handoffTransaction.test.ts (3 tests) 4713ms
+   ✓ handoff transaction > persists one immutable request intent before RPC and retries the same request 333ms
+   ✓ handoff transaction > keeps both reservations and ownership when no quiet proof is available 321ms
+   ✓ handoff transaction > archives and commits a proven candidate before releasing the parent reserve 4055ms
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-PppiUa/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-svRs0D/input.bundle is okay
+(node:27667) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-xVPxEZ/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-Ton2SY/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-aqDHQl/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-mMbJg6/input.bundle is okay
+ ✓ tests/control/checkpoints.test.ts (9 tests) 19919ms
+   ✓ checkpoint authority > commits once before projection and survives a projection failure without refunding usage 2728ms
+   ✓ checkpoint authority > retains active ownership and reserves for partial stop evidence 1935ms
+   ✓ checkpoint authority > retains active ownership and reserves for partial requests evidence 2039ms
+   ✓ checkpoint authority > retains active ownership and reserves for partial gap evidence 2177ms
+   ✓ checkpoint authority > retains active ownership and reserves for partial unknown evidence 1807ms
+   ✓ checkpoint authority > keeps immutable older checkpoints and ignores late projection replay 2355ms
+   ✓ checkpoint authority > does not recover from a checkpoint file whose committed hash no longer matches 1606ms
+   ✓ checkpoint authority > does not grant recovery or publish latest when interrupted between file fsync and database commit 2502ms
+   ✓ checkpoint authority > projects post-acceptance work repair exactly once 2765ms
+(node:28866) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-dJPGZq/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-qO6DSk/input.bundle is okay
+ ✓ tests/control/dispatch.test.ts (7 tests) 1520ms
+   ✓ durable starts > recovers the accepted identity after the peer drops its response, without another launch 473ms
+   ✓ durable starts > writes the full immutable intent before handing off to the peer and rejects altered identity 323ms
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-AFiFyJ/input.bundle is okay
+(node:30712) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-8MsRjY/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-KNElzN/input.bundle is okay
+Cloning into '/private/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-sched-NjLEyc/runs/run-1c217a93-513a-49ef-b386-13fba9dbd7c9/repo'...
+done.
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-wM2Fe4/input.bundle is okay
+HEAD is now at 00309b5 init
+Cloning into '/private/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-sched-NjLEyc/runs/run-dbc74a6b-49bd-40fd-bc0a-72520882288d/repo'...
+done.
+HEAD is now at 00309b5 init
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-C3Ckxl/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-a7TKdK/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-i6KK2b/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-vmAmXN/input.bundle is okay
+ ✓ tests/control/schedulerBridge.test.ts (9 tests) 42541ms
+   ✓ controlled reconciliation budget > uses the approved grant or refuses zero (7) 1264ms
+   ✓ controlled reconciliation budget > uses the approved grant or refuses zero (0) 1275ms
+   ✓ runs a real conflicting graph through durable control: success 15958ms
+   ✓ runs a real conflicting graph through durable control: budget 9220ms
+   ✓ runs a real conflicting graph through durable control: stopped 9319ms
+   ✓ runs a real conflicting graph through durable control: crash 5281ms
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-HGAOyn/input.bundle is okay
+(node:36908) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-4CeJta/input.bundle is okay
+ ✓ tests/control/endToEnd.test.ts (7 tests) 10009ms
+   ✓ retains stable task/group evidence and cumulative usage after source cleanup and limit increase 2182ms
+   ✓ does not publish private claim fields inside a checkpoint 2084ms
+   ✓ refuses cleanup when a different directory reuses the registered run path 2626ms
+   ✓ refuses a copied backup without transferring execution ownership 556ms
+   ✓ blocks recovery of a missing current checkpoint instead of selecting an older one 2328ms
+(node:37615) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-jsEha3/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-0ftjn5/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-Q8ng9E/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-64Hm1o/input.bundle is okay
+ ✓ tests/control/resumeBundle.test.ts (5 tests) 16863ms
+   ✓ immutable continuation bundle > exports a committed recoverable checkpoint and every nested artifact as private regular files 2468ms
+   ✓ immutable continuation bundle > refuses an unsettled predecessor and a committed partial checkpoint 3735ms
+   ✓ immutable continuation bundle > refuses a damaged or missing nested artifact instead of exporting a partial bundle 4834ms
+   ✓ immutable continuation bundle > refuses a symlinked destination component 2954ms
+   ✓ immutable continuation bundle > stages outside admission and publishes nothing when drain wins 2871ms
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-kbS1Ly/input.bundle is okay
+(node:40604) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/control/continuation.test.ts (3 tests) 12630ms
+   ✓ continuation claims > creates a fresh run and reserves predecessor grant minus cumulative without resetting used 2518ms
+   ✓ continuation claims > refuses active, stale, mismatched, unrecoverable, and zero-work predecessors 7151ms
+   ✓ continuation claims > exports and binds the verified resume bundle before starting and replays one new run 2957ms
+ ✓ tests/control/usage.test.ts (4 tests) 708ms
+(node:41025) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+crash after-claim: marker observed, SIGKILL
+(node:41127) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+crash after-accept: marker observed, SIGKILL
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-E3e3kq/input.bundle is okay
+Cloning into '/private/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-crash-matrix-uxVzCS/runs/run-794dd85a-b90e-4c0d-a4a2-b7a161e9f7ca/repo'...
+done.
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-cguOXE/input.bundle is okay
+HEAD is now at 71903d8 base
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-WKumfw/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-idETO6/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-qCiMix/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-ZJ4dph/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-thRCfv/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-FrTmPh/input.bundle is okay
+ ✓ tests/control/handoff.test.ts (5 tests) 12454ms
+   ✓ D3 handoff projections > builds task JSON from the committed packet and renders markdown without private claim fields 2674ms
+   ✓ D3 handoff projections > lists incomplete tasks with dependency impact and exact task checkpoint refs 2306ms
+   ✓ D3 handoff projections > rebuilds committed projections and prevents an older replay from overwriting current handoffs 2395ms
+   ✓ D3 handoff projections > does not hide a corrupt current checkpoint or roll back a committed run after projection failure 2402ms
+   ✓ D3 handoff projections > publishes an immediate group handoff when the group is paused 2670ms
+ ✓ tests/control/checkpointRecoverability.test.ts (6 tests) 13375ms
+   ✓ checkpoint recoverability is not task completion > keeps an interrupted run with a whole snapshot continuable, and its work unfinished 2199ms
+   ✓ checkpoint recoverability is not task completion > hands that predecessor's own dirty snapshot to the continuation bundle 2518ms
+   ✓ checkpoint recoverability is not task completion > does not complete an interrupted task's work at commit time, acceptance or not 2212ms
+   ✓ checkpoint recoverability is not task completion > refuses the bundle when the snapshot is gone, even though the run settled 2091ms
+   ✓ checkpoint recoverability is not task completion > does not call a checkpoint with missing evidence continuable 2164ms
+   ✓ checkpoint recoverability is not task completion > does not let late acceptance finish a task that stopped short of its outcome 2190ms
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-yTWInT/input.bundle is okay
+(node:47211) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/control/snapshot.test.ts (3 tests) 7473ms
+   ✓ dirty snapshots > keeps detached HEAD, index and worktree bytes separately, including ignored files and symlinks 2239ms
+   ✓ dirty snapshots > reports special files without opening a FIFO and treats source mutation as partial 2958ms
+   ✓ dirty snapshots > preserves all three unmerged index stages independently of the working file 2275ms
+ ✓ tests/control/errorClassification.test.ts (3 tests) 7ms
+crash after-archive: marker observed, SIGKILL
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-xW3mMm/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-kvtVQ1/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-VLYqF1/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-va7Mzc/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-cjD7NT/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-PVDHsQ/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-cQrMZT/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-8lwsdb/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-lrp3QO/input.bundle is okay
+ ✓ tests/control/cleanup.test.ts (2 tests) 3394ms
+   ✓ cleanup authorization > requires committed recoverable evidence and durable acceptance before removing only the registered run 1926ms
+   ✓ cleanup authorization > refuses deletion when archived content was corrupted after commit 1467ms
+ ✓ tests/control/admissionGate.test.ts (3 tests) 5ms
+crash after-transaction: marker observed, SIGKILL
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-Ov4lS7/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-0JosZc/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-j0wXZU/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-4mNld5/input.bundle is okay
+crash before-projection: marker observed, SIGKILL
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-d0ztCs/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-ago6ua/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-fjdO4Y/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-J41qEw/input.bundle is okay
+crash before-cleanup: marker observed, SIGKILL
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-HqCmz9/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-Eb3fAF/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-qSitTn/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-EYUmFW/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-SSvnJc/input.bundle is okay
+crash after-accept: marker observed, SIGKILL
+Cloning into '/private/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-crash-matrix-0YDtPD/runs/run-73684bf8-6da8-415a-a9cc-61d4057fdb07/repo'...
+done.
+HEAD is now at f50a68c base
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-4s5Lrq/input.bundle is okay
+/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-snapshot-verify-BjJgKp/input.bundle is okay
+crash after-accept: marker observed, SIGKILL
+ ✓ tests/control/recovery.test.ts (8 tests) 20492ms
+   ✓ crash recovery with real SIGKILL > after-claim 931ms
+   ✓ crash recovery with real SIGKILL > after-accept 3902ms
+   ✓ crash recovery with real SIGKILL > after-archive 4571ms
+   ✓ crash recovery with real SIGKILL > after-transaction 2915ms
+   ✓ crash recovery with real SIGKILL > before-projection 2589ms
+   ✓ crash recovery with real SIGKILL > before-cleanup 2863ms
+   ✓ advances a partial checkpoint when later isolation evidence arrives 2333ms
+   ✓ keeps an unknown accepted run active with its reserved budget 387ms
+ ✓ tests/control/canonicalJson.test.ts (8 tests) 3ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/control/webCcloopSmoke.test.ts > the frozen dispatch envelope reaches a real process (task 10 step 4) > carries the ledger's claim identity byte-for-byte and is durably accepted once
+ControlError: start-envelope-conflict:run:targetVersion
+ ❯ Module.toStartEnvelope src/control/startEnvelope.ts:65:11
+     63|   const parsedRun = startEnvelopeSourceSchema.safeParse(run);
+     64|   if (!parsedRun.success) {
+     65|     throw new ControlError("start-envelope-conflict", `run:${parsedRun…
+       |           ^
+     66|   }
+     67|   const claim = parsedRun.data;
+ ❯ startEnvelope tests/control/webCcloopSmoke.test.ts:95:10
+ ❯ tests/control/webCcloopSmoke.test.ts:217:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/control/webCcloopSmoke.test.ts > the frozen dispatch envelope reaches a real process (task 10 step 4) > latches the stop under the ledger's request identity and returns evidence the store re-hashes
+ControlError: start-envelope-conflict:run:targetVersion
+ ❯ Module.toStartEnvelope src/control/startEnvelope.ts:65:11
+     63|   const parsedRun = startEnvelopeSourceSchema.safeParse(run);
+     64|   if (!parsedRun.success) {
+     65|     throw new ControlError("start-envelope-conflict", `run:${parsedRun…
+       |           ^
+     66|   }
+     67|   const claim = parsedRun.data;
+ ❯ startEnvelope tests/control/webCcloopSmoke.test.ts:95:10
+ ❯ tests/control/webCcloopSmoke.test.ts:246:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+ Test Files  1 failed | 42 passed (43)
+      Tests  2 failed | 430 passed (432)
+   Start at  23:13:48
+   Duration  78.55s (transform 860ms, setup 289ms, collect 3.40s, tests 268.37s, environment 4ms, prepare 1.42s)
+
