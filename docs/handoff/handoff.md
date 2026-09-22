@@ -5040,3 +5040,126 @@ Task 6 原独立审查的 4 个 Important 与 1 个 Minor 均已修复：非规�
 **挂账（下一件件事）**：装配计划 `docs/superpowers/plans/2026-09-22-panel-control-assembly.md` Task 1–8 **一项都没实施**；八个 seam 在 `src/` 里仍 0 生产调用方（现测 `test-logs` 同级 `commands/seam-census-0922.txt`）。两处硬前提不是「接线」而是「没造」：ccloop port 不暴露 `probeProfileCapabilities`（缺了它每次 Web claim 必得 `control-capability-probe-failed`），台账 `DispatchEnvelopeV1 → StartEnvelope` 的翻译器在 `src/` 里不存在、只有 `tests/control/webCcloopSmoke.test.ts:88-101` 一份。`acceptContextObservation` 仍接不起来：`ContextObservationV1` 在 `src/` 里**没有任何生产者**，缺的是 ccloop 侧的 emit，不许自造替代源（装配 spec §8）。另：`tests/panel/fixtures/controlPanel.ts:229` 仍手写 `recoverable: true` 配 `snapshot: null`，与新的推导矛盾——写 §11 时发现的，本轮没动。
 
 **约束不变**：开门／合并／删分支或 worktree／push 四件需人单独授权，控制器不许 push，非门合并一律 `--ff-only`；验证一律带 `PATH="/usr/local/bin:$PATH"` 前缀（全局 homebrew node 缺 `libsimdjson.26.dylib`），未用 `--no-verify`；远端只以 `git ls-remote` 为准；成本只报工具给出的数，拿不到就说拿不到；不许替人宣布；`.superpowers/sdd/**` 与 spec §1–§10 的历史一个字不改，写错了就另起具名更正。判据不许实施者自改——要改就点名哪条、为什么，等人裁（本轮 `web/tests/controlPanel.test.tsx:147` 就是这么走的，注释已归属）。本切片没有任何真实模型调用；Codex 仍是 `phase-end + soft`，任何地方不许宣称 strict。
+
+## 2026-09-22 Panel 控制装配（计划 Task 1–8 ＋ 新增 4b 全部实施完毕；出厂 `orca panel` 现在真的挂控制面）
+
+本节取代上节的状态与「下一件事」，是当前接手入口。上节那句「装配计划 Task 1–8 一项都没实施」已经过期 ——
+让它过期的是本轮按主题行可查的八笔提交（`feat(panel): decide the control mount …`、
+`feat(control): refuse by name when no execution port is configured`、
+`feat(control): let the ccloop port answer a profile probe, and say what it cannot`、
+`feat(control): move the ledger's dispatch translation out of a test fixture`、
+`feat(control): let a panel say it has no port and no estimator`、
+`feat(panel): make the shipped panel build and mount the control plane`、
+`feat(panel): recover before listening, and give the process its own wake pump`、
+`feat(panel): shut the control plane down once, on a real signal`、
+`test(panel): close the Rule 17 hole with a criterion instead of a hope`）。
+**定位一律用主题行；本文这一笔提交本身就会移动 HEAD，别把任何哈希、ahead 数或发布状态当成接手条件**
+（现测 `git status -sb` ＋ `git log --oneline @{u}..HEAD` ＋ `git ls-remote`）。
+
+### 人本轮拍的三条（写在装配 spec 里，引用引 spec）
+
+| # | 裁决 | 落在哪 |
+|---|---|---|
+| R5 | 没配 port ⇒ **照常 boot、照常挂载、读接口照常**，只有依赖 port 的命令具名拒绝 `control-port-unconfigured`。spec §3 现稿获批 | spec §9.1 |
+| R6 | 显示问题**本轮一并做**：`ControlConfigV1` 加 `executionPort` | spec §9.2，计划 Task 4b |
+| R7 | estimator 同形：没给也照常 boot，需要它的命令具名拒绝；`ControlConfigV1.defaults` 变可空 | spec §10 |
+
+⚠️ **R6 的爆炸半径当初被我估大了**：`ControlConfigV1` 是 Orca Panel ↔ Orca Web 的内部契约，
+**ccloop 全仓零消费者**（现测，排除 node_modules/.git），不需要跨仓核对。更正记在 spec §9.2。
+
+### 做出来的东西
+
+出厂 `orca panel` 现在开控制 store、造 trusted config 与 service、挂 `/api/control`；`--no-control` 把整面关掉，
+关掉时的行为与本切片之前逐字节相同。新增 `--control-state-dir`、`--control-wake-ms`、`--estimator-profile`、
+`--estimate-mode`、`--plan`、`--profile`。listen 之前先跑完 recovery；进程自己拥有 wake pump（同一时刻一趟在飞）；
+SIGINT/SIGTERM 关闸、每 epoch 恰好写一条 shutdown 身份、停表、再停止接受连接。
+
+**真二进制 boot smoke（第一次不是 fixture 在服务这个面）**，日志
+`.superpowers/sdd/2026-09-22-panel-control-assembly/test-logs/t8-boot-smoke2.log`：
+config 200 且 `executionPort=unconfigured`／`defaults=null`／0 profiles、recovery 200、
+`POST /api/control/groups/import-plan` 422 `control-estimator-unconfigured`、SIGTERM exit 0 且台账恰好一行 shutdown。
+
+### 🔴 三件「不是没接线，是压根没造」（计划只点了两件）
+
+1. **生产里没有任何 execution profile 快照的来源**。fixture 用的是常量，而快照要钉 adapter config／model policy／
+   proof 文档的内容哈希 —— 在这里推导等于冻结一个没人冻结过的身份。新增 `--profile <path>` 由操作者指名；
+   **零 profile 是一个被服务的状态**，与 R5／R7 同形。
+2. **project key 既不是路径段也不是 id**。本仓库的 key 是规范化 remote URL（`github.com/biran/orca`），
+   直接 join 会造出嵌套目录（`~/.orca/control/github.com/biran/orca` 就是这么来的），而 `repoId` 是 `idSchema`。
+   `controlRepoKey()` 一次编码供两处用：可读片段 ＋ 原 key 的 sha256 前八位 —— 只做净化会把 `a/b` 和 `a-b` 并到同一个 store。
+3. **control store 是单写者**。同一仓库的第二个 `orca panel` 拿不到它，也不该拿到；但因此拒绝启动会白白拿走只读看板，
+   所以**第二个面板不挂控制面照常启动并在 stderr 说明**。⚠️ **这是我做的决定，不是人裁**，可逆；
+   本切片之前跑两个 panel 是能跑的，因为根本没有 store 可争。
+
+### 🔴 Task 3 的发现改变了结论：Web 派活到真 ccloop 仍然打不通
+
+`createCcloopExecutionPort` 现在暴露 `probeProfileCapabilities`，但**这不解锁派活**。现测 ccloop
+`src/control/command.ts` 的 `method === "capabilities"` 分支只答七个字段，
+**`contextObservation`／`handoffControl`／`handoffExecution`／`contextWindowTokens`／`requestBoundProof` 一个都没有** ——
+正是 `CapabilityViewV1` 七个字段里的五个。port 契约写明缺席是 unavailable、**不许推断**，Orca 也不许自造对端观测，
+所以探针如实转译、其余报 `unavailable`／`null`。结果是一次 Web claim 从
+`control-capability-probe-failed`（一次根本没发生的探测）变成 `control-capability-unsupported`（对端确实没有）——
+**更准确，但依然打不通**。⇒ **这是 ccloop 侧要改的第二个缺口**（第一个是 `ContextObservationV1` 没有生产者）。
+
+### 🔴 两条判据现在是红的，原因是真的，不许当回归
+
+`tests/control/webCcloopSmoke.test.ts` 的两条报 `start-envelope-conflict:run:targetVersion`。现测三份文件：
+
+| 出处 | `targetVersion` 的类型 |
+|---|---|
+| `src/control/webProtocol.ts`（台账／Web 协议） | `nonemptyString`，真实行里是 `"v1"` |
+| `src/control/schema.ts`（`startEnvelopeSchema`） | `safeInteger` |
+| `src/control/types.ts`（`Identity`） | `number` |
+
+`toStartEnvelope` 正好坐在这条缝上。**旧的 test 本地副本用 `Number(run.targetVersion)`，`"v1"` 得 `NaN`，
+`JSON.stringify` 写成 `null`** —— 所以那条自称「byte-for-byte 带上台账身份」的判据**从来没有观测过这个字段**，
+它的 `expect(wire.stdin).toBe(JSON.stringify(start))` 之所以绿，是因为两边都是 `null`。
+字符串与安全整数之间没有保义的翻译，所以翻译器拒绝是对的；**改哪一侧是封闭 schema 决定且跨仓，不是本切片能拍的。**
+
+### 🔴 本轮自己造成的 Rule 17 事故，以及「第一次修没修好」
+
+默认挂载让 `createPanelServer` 开 store，而默认根是真实家目录；现有 panel 判据不改道 `ORCA_CONTROL_DIR`，
+于是跑套件**在真实 `~/.orca` 下造出了 control store**。第一次的「机械改道」只动 `process.env`，
+而那些判据给 `parsePanelArgs` 传的是自己的 env 对象、根本不读 `process.env` —— **所以第一次没修好，整套又写了一次**。
+最终两件：40 个 `parsePanelArgs` 调用点把 `process.env` 展开进 env 参数；
+`tests/setup/relocateUserData.ts` **每个测试文件跑完比对真实 `~/.orca` 快照**，变了就红。
+`scripts/verify-panel.ts` 也在 `spawnOrcaCli` 里统一改道 —— **它自己的第 12–14 步就是抓住这件事的那道闸门，第一次真的红了。**
+
+⚠️ *** **残留没有清理：`~/.orca/control/` 现在有本轮造出来的 `proj`、`known`、`github.com/biran/orca`，
+以及修好之后的 `proj-e73c023a`、`known-7117fff2`、`github.com-biran-orca-26b561d6`。** ***
+本文档此前记录 `~/.orca` 是不存在的。**家目录下的删除要人点头**，移走的尝试被 harness 的破坏性动作守卫拦下了。
+
+### 🔴 本切片自己有一条判据是空的（已改）
+
+`tests/panel/controlMount.test.ts` 那条「以 port 自己的名字拒绝 start」原本 POST 到 `/api/control/commands` ——
+**那不是一条路由**，回 404，而它的断言是「status ≥ 400 且不是 panel-internal-error」，**于是照绿**。
+是 boot smoke 抓到的，不是套件。已改成点名 `controlApi.ts` 路由表里真实存在的路由并断言错误码本身。
+
+### 变异总账
+
+七组电池，全部在 `git clone --local` 副本里跑，主工作树 `git diff`／`git diff --cached` 全程 0 字节：
+Task 1 十一条、Task 2 四条、Task 3 三条、Task 4 五条、Task 4b 六条（含一条由 `typecheck` 判的 parity 变异 ——
+`tests/panel/webParity.test.ts` **此前从未被看见红过**，这次见了）、Task 6 五条、Task 7 五条，**全部看见红**。
+⚠️ Task 7 的**第一组作废**：克隆基线本身是红的（副本没有 gitignore 掉的 `web/dist`），红基线上谁都红。
+harness 已修，且**从此每组都记基线返回码 —— 不报绿基线的电池不算证据**。逐条与失败判据名见
+`.superpowers/sdd/2026-09-22-panel-control-assembly/commands/t*-mutation-battery.json`。
+
+### 本轮实测（只抄工具报数）
+
+`npm test` **RC1 ＝ 180 文件通过／1 skip（182），1611 通过／2 失败／5 skip（1618）**，两条失败就是上面那对 `targetVersion`；
+`typecheck` RC0；`npm --prefix web run check` RC0 ＝ 14 文件／70 测试；`verify:panel` RC0 ＝ `PASS 0`–`PASS 14`；
+`tests/panel` 单跑 RC0 ＝ 26 文件／259 测试。
+*** **`verify:control` 与 `verify:web-control:consumer` 本轮未跑**（缺 `/tmp` 的 ccloop artifact），**不许引用旧数。** ***
+未过滤日志全部在 `.superpowers/sdd/2026-09-22-panel-control-assembly/test-logs/`，台账在同目录 `progress.md`。
+
+### ⛔ 下一件事
+
+1. **人裁 `targetVersion` 那条缝**（上面的表），两条红判据卡在这里，改动跨仓。
+2. **ccloop 侧补 `control capabilities` 的 V1 探针字段**，否则 Web 派活到真 ccloop 一直打不通。
+3. 上面两件之后才是自动拆分、ccmem 纠正闭环／组 goal 验收。**Web > CLI。**
+4. 人另外要处置的：`~/.orca` 残留、push、以及那条「第二个 panel 不挂控制面」的决定要不要维持。
+
+**约束不变**：开门／合并／删分支或 worktree／push 四件需人单独授权，控制器不许 push，非门合并一律 `--ff-only`；
+验证一律带 `PATH="/usr/local/bin:$PATH"`，未用 `--no-verify`；远端只以 `git ls-remote` 为准；
+成本只报工具给出的数；不许替人宣布；`.superpowers/sdd/**` 与 spec §1–§8 的历史一个字不改，写错了另起具名更正。
+本切片没有任何真实模型调用；Codex 仍是 `phase-end + soft`，任何地方不许宣称 strict。
