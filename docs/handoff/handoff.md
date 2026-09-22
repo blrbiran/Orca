@@ -113,9 +113,11 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
    提交主题行 `docs(handoff): roll the Orca section onto ruling G1, and say what it does not settle`
    与 `docs(handoff): roll the Orca section, and drop two claims that outlived their facts`。
 3. ✅ **压缩本文档** —— 本次即是。
-4. ⛔ *** **ccloop 先把自己挂着的「E1 的 I-2 ＋ 人裁 85」做完** ***（人裁 121 已开口、人裁 126 推到新会话）。
+4. ✅ *** **ccloop 的「E1 的 I-2」已做完** ***（2026-09-23，人裁 127／128，**全程在 ccloop 仓库里**）。
+   缺陷：非字符串 holder 被 `parsePid` 强转成 pid ⇒ 无法归属的锁被 `ccloop unlock` **无凭证删除**。
+   细节在 ccloop 台账 §46 与 `docs/superpowers/specs/2026-09-23-i2-array-holder-coercion-design.md`。
+   ⛔ *** **ccloop 那边的下一件事是【人裁 85】（`ls` 也报锁），仍未开工。** ***
    *** **人明确要求不插队 —— G1 不是插队的理由。** ***
-   ⚠️ **E1 仍在授权面外**：出完设计、动生产代码之前必须另拿一次具名授权。
 5. **然后才是 G1 那条线**：
    ccloop 侧定契约（capability 词汇表 ＋ `targetVersion` 定型，走 brainstorming → writing-plans）
    → Orca 跟随改 `src/control/webProtocol.ts`／`schema.ts`／`types.ts` 三处
@@ -226,6 +228,12 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
   （锁预算 1000ms ＋ 落盘 500ms）。立刻读一次「0」的判据对异步写入**8/8 稳定假绿**。
 - *** **只断言 verdict、不断言理由的判据看不见整支变异**（104 条全绿）⇒ 加一条钉住拒绝理由的。 ***
 
+⚠️ *** **第八种（2026-09-23 实测，最贵的一次）：一个变量同时承担「被判断」和「被展示」时，
+任何一端的规范化都会【静默解除】另一端的守卫。** ***
+ccloop 的 I-2 里，spec 第一版把「渲染成 `JSON.stringify`」贴在那个既喂分类、又喂显示的变量上 ——
+于是数组先变成字符串，类型守卫在那条路径上**完全不承重**：**删掉它，行为一格不变、全套零红。**
+⇒ **修法是把两件事拆成两个变量**；⇒ **判别办法是：删掉你新加的那个守卫，看行为变不变。**
+
 ⚠️ *** **「红在哪条断言」不是可靠的判别方式** *** —— 前面的断言会先短路。**要量什么就直接量什么。**
 ⚠️ *** **排在被测调用【之前】、读回测试自己刚写进去的值的断言，永远不可能红。** *** 验收改写时先扫这个形状。
 
@@ -301,6 +309,17 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 - **一份 spec 里「今天不需要 X」和「X 会拿走什么」不能同时存在。**
 - *** **写完 spec，拿每条论断去对 spec 自己的实测表** *** —— 作者自审看不出自相矛盾，要换「挑错席」重读。
   **撤回一个说法要全文 grep。**
+
+### 6.4b 扫描器族的两条新坑（**2026-09-23 实测，都属「扫描器没在做它声称的事」**）
+
+- *** **`grep` 配 `$'\x00\|\x01…'` 在 bash 里会在 NUL 处【截断参数】** *** ⇒ 模式变成空串、
+  **命中每一行**。实测报出的数**正好等于文件总行数**，看起来像扫到了一大堆，其实什么都没扫。
+  ⇒ **扫控制字节一律用 python 直接读字节。**
+  ⚠️ 这条与 §六.4 那条「一个扫描器只在语料上跑不够，必须同时有【必抓】和【必不抓】两组样本」同族 ——
+  *** **恒命中全部行的扫描器，和恒返回 0 的扫描器一样没用。** ***
+- *** **扫描词从【英文源码注释】机械导出，对【中文活文档】恒零命中。** ***
+  实测：全树扫描的**范围覆盖到了**中文 handoff，却一条都没捞到，于是一份活文档带着已知为假的说法过了一整轮。
+  ⇒ *** **「扫描器跑了」「范围对了」都不等于「它在做它声称的事」。导出扫描词时要覆盖语料的语言。** ***
 
 ### 6.5 文档、发布状态与「写下即过期」
 
@@ -520,7 +539,10 @@ ccloop `control` v1 的方法集：`capabilities`／`accept`／`inspect`／`hand
   ⚠️ `~/.orca` 现在**存在了**（空的 `control/`，0700），但**没有 `not_my_taste` 行** ⇒ 条件仍不满足。
 - **Co-Authored-By 写错模型的四笔** —— 未 amend（**不许 amend，由人决定**）。
 - **一把 API key 曾明文进入 transcript**（2026-09-17 那一轮）⇒ **建议轮换，只有人能确认做没做。**
-- ccloop 自己的：**E1 的 I-2 ＋ 人裁 85**（人裁 121 有效），**动生产代码前需另拿具名授权**。
+- ccloop 自己的：**人裁 85（`ls` 也报锁）** 仍挂着未开工；**E1 的 I-2 已于 2026-09-23 完成**（人裁 127／128）。
+- ccloop 主线有**一条稳定红**（非 flake）：`tests/control/stopProof.test.ts > quiet execution proof >
+  does not treat leader exit as group quiet and proves only after the full tree is gone`。
+  **根因未查，无人授权动它。** 判别过程：副本单跑 3/3 红、主树也红、单跑 5.37s（远低于 flake 画像 25–29s）。
 
 ---
 
