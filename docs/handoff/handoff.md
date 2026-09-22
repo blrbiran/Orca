@@ -508,7 +508,9 @@ ccloop `control` v1 的方法集：`capabilities`／`accept`／`inspect`／`hand
 
 ## 九、归人的（**agent 做不成，或必须人单独点头**）
 
-- **push** —— 三个仓库都有未推的提交。**现跑 `ls-remote` 自己数，别信本文。**
+- **push 永远归人，控制器不许 push。** *** **本文不记发布状态。** *** 「有没有未推的笔」是一条
+  **一秒后就可能变**的现测（人会自己推，历轮实测同一会话内被推动 3–4 次是常态）⇒ 要知道就跑
+  `/usr/bin/git ls-remote origin refs/heads/main` 与本地比，**三个仓各跑一次**。
 - **`orca chain` 的真钱活体验收** —— 要人提交 `.orca/chain.json` 选 model 并点头
   （Orca 内尚不存在该文件 ⇒ 开链被 `chain-config-missing` 拒绝）。**先测 F，副本 T1 > F。**
 - **「第二个 panel 不挂控制面」** —— 是**控制器自己做的决定，不是人裁**，可逆，要不要维持仍未决。
