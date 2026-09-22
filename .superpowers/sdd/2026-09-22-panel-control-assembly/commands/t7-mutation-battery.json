@@ -1,0 +1,49 @@
+[
+ {
+  "mutation": "M1 the shutdown latch is removed",
+  "file": "src/panel/controlAssembly.ts",
+  "rc": 1,
+  "failedCount": 2,
+  "failed": [
+   "a panel shuts its control plane down once per epoch does not write a second identity when a second signal arrives",
+   "a panel shuts its control plane down once per epoch does not write a second identity for a signal that arrives after the first finished"
+  ]
+ },
+ {
+  "mutation": "M2 the latch only guards concurrent calls",
+  "file": "src/panel/controlAssembly.ts",
+  "rc": 1,
+  "failedCount": 1,
+  "failed": [
+   "a panel shuts its control plane down once per epoch does not write a second identity for a signal that arrives after the first finished"
+  ]
+ },
+ {
+  "mutation": "M3 shutdown no longer stops the pump timer",
+  "file": "src/panel/controlAssembly.ts",
+  "rc": 1,
+  "failedCount": 2,
+  "failed": [
+   "a panel shuts its control plane down once per epoch stops the wake pump, so nothing keeps writing after the gate has closed",
+   "a real SIGTERM to a real panel makes it exit cleanly, having written one shutdown row for its epoch"
+  ]
+ },
+ {
+  "mutation": "M4 the SIGTERM handler is never registered",
+  "file": "src/panel/server.ts",
+  "rc": 1,
+  "failedCount": 1,
+  "failed": [
+   "a real SIGTERM to a real panel makes it exit cleanly, having written one shutdown row for its epoch"
+  ]
+ },
+ {
+  "mutation": "M5 the signal does not shut the control plane down",
+  "file": "src/panel/server.ts",
+  "rc": 1,
+  "failedCount": 1,
+  "failed": [
+   "a real SIGTERM to a real panel makes it exit cleanly, having written one shutdown row for its epoch"
+  ]
+ }
+]

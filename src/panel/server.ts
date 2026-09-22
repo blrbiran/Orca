@@ -212,6 +212,29 @@ export async function createPanelServer(opts: PanelOptions, env: NodeJS.ProcessE
   }
   const closed = new Promise<void>((resolve) => server.once("close", () => { control?.close(); resolve(); }));
 
+  // spec §6, and the convention src/chain/run.ts:106-107 already uses. On a signal: the control
+  // plane closes its gate and writes its one shutdown identity, then the server stops accepting.
+  // A second signal does not wait -- it exits -- and says that the next start may be recovery
+  // blocked, which is exactly what spec §6.4 requires a shutdown to leave behind when it is cut short.
+  let signalled = false;
+  const onSignal = (): void => {
+    if (signalled) {
+      process.stderr.write("orca-panel: second signal; exiting without draining. The next start may be recovery blocked.\n");
+      process.exit(1);
+    }
+    signalled = true;
+    void (async () => {
+      try { await control?.shutdown(); }
+      finally { server.close(); }
+    })();
+  };
+  process.on("SIGINT", onSignal);
+  process.on("SIGTERM", onSignal);
+  void closed.then(() => {
+    process.off("SIGINT", onSignal);
+    process.off("SIGTERM", onSignal);
+  });
+
   return {
     url: `http://${opts.bind}:${address.port}`,
     token,

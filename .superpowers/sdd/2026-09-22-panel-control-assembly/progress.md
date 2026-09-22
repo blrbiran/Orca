@@ -314,3 +314,35 @@ There is no meaning-preserving translation between a string and a safe integer, 
 correct behaviour and the criteria cannot pass until the disagreement is resolved. **Resolving it
 means changing one of two closed schemas and the change reaches ccloop, so it is not this slice's to
 take.** Left red and named here rather than skipped, coerced, or hidden.
+
+## Task 7 — signals, and one shutdown identity per epoch
+
+`ControlRuntime.shutdown()` closes the gate through `applyPanelShutdown`, stops the pump timer first,
+and latches so a second call is observably a no-op rather than a second ledger identity discovered as
+a conflict. `src/panel/server.ts` registers `SIGINT`/`SIGTERM` on the convention `src/chain/run.ts`
+already uses, and a second signal exits without draining after saying the next start may be recovery
+blocked. Criteria: `tests/panel/controlShutdown.test.ts` (6 tests), including a **real signal to a
+real child process**, which is the only thing that judges the handler itself.
+
+"Exactly one" is judged by counting rows in `commands` for `shutdownCommandId(epoch)`, not by the
+return value and not by the log: an implementation that only reordered its logging would pass those
+and fail this. The racing case and the sequential case are separate judgements, because a latch that
+guards only concurrent calls passes one and fails the other.
+
+**Mutation battery, 5, all red** (`commands/t7-mutation-battery.json`): the latch removed (RC1, 2
+failed); the latch reduced to concurrency-only (1); shutdown no longer stopping the timer (2); the
+`SIGTERM` handler never registered (1); the signal not shutting the plane down (1).
+
+### ⚠️ The first run of this battery was worthless, and is recorded as such
+
+Its clone baseline was **red** (`rc=1`), so every "mutation failed" line in it proved nothing — a red
+baseline fails under every mutation. The cause: `web/dist` is gitignored, a clone therefore has none,
+and the child-process criterion spawns the real CLI, which refuses by name without it. Two fixes, both
+kept:
+
+1. `commands/mutation-harness.py` now links `web/dist` and `web/node_modules` into every clone, and
+   **every battery from here on records its baseline return code** — a battery that does not state a
+   green baseline is not evidence.
+2. The criterion now carries the child's stderr into its failure message. It previously said
+   "exited 1 before ready", which names nothing; the diagnosis above took a round trip that a one-line
+   message would have saved.

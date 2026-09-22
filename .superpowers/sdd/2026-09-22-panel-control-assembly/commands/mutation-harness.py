@@ -7,6 +7,15 @@ def clone(copy):
     if os.path.exists(copy): shutil.rmtree(copy)
     subprocess.run(["git","clone","--local",SRC,copy],check=True,capture_output=True)
     os.symlink(os.path.join(SRC,"node_modules"),os.path.join(copy,"node_modules"))
+    # web/dist is gitignored, so a clone has none, and a criterion that spawns the real CLI is
+    # refused by name before it can be judged. Linked rather than rebuilt: the bytes are identical
+    # and a rebuild per battery costs minutes for no extra evidence.
+    for extra in ("web/dist","web/node_modules"):
+        src=os.path.join(SRC,extra)
+        if os.path.exists(src):
+            dst=os.path.join(copy,extra)
+            os.makedirs(os.path.dirname(dst),exist_ok=True)
+            if not os.path.exists(dst): os.symlink(src,dst)
     dirty=subprocess.run(["git","status","--porcelain"],cwd=SRC,capture_output=True,text=True).stdout.split("\n")
     carried=[]
     for line in dirty:

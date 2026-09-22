@@ -13,7 +13,7 @@ import { openControlStore, type ControlStore } from "../control/store.js";
 import { WebControlService } from "../control/webService.js";
 import { executionProfileSnapshotSchema } from "../control/webProtocol.js";
 import { createTrustedControlConfig, type TrustedControlConfig } from "./controlConfig.js";
-import { withAdmission } from "./controlLifecycle.js";
+import { applyPanelShutdown, withAdmission } from "./controlLifecycle.js";
 import { controlRepoKey } from "./controlOptions.js";
 import type { ControlOptions } from "./server.js";
 
@@ -79,6 +79,12 @@ export interface ControlRuntime {
   recover(): Promise<void>;
   /** One delivery pass. Re-entrant calls while one is in flight are no-ops, not queued. */
   pump(): Promise<void>;
+  /**
+   * spec §6: close the gate, write exactly one shutdown identity for this epoch, stop the timer.
+   * Answers whether this call was the one that ran it, so a second signal is observably a no-op
+   * rather than a second ledger identity discovered as a conflict.
+   */
+  shutdown(): Promise<boolean>;
   /**
    * Owned by the process, not by a request. Answers whether it armed the timer: idempotence that
    * cannot be observed is idempotence that cannot be judged, and a second timer would double every
@@ -212,9 +218,25 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
   };
 
   let timer: NodeJS.Timeout | null = null;
+  const stopTimer = () => { if (timer !== null) { clearInterval(timer); timer = null; } };
+
+  // One shutdown per runtime, by a latch rather than by hoping the signal arrives once. A second
+  // SIGTERM while the first is still draining must not write a second ledger identity for the same
+  // epoch, and `applyPanelShutdown` is not the place to discover that -- it would be a conflict.
+  let shutdownRun: Promise<boolean> | null = null;
+
   return Object.freeze({
     store, config, service, router, admissionGate, port, epoch,
     recover: async () => { await recoverControl(store, port, { handlers: wakeHandlers }); },
+    shutdown() {
+      if (shutdownRun !== null) return shutdownRun.then(() => false);
+      // The timer stops first: a pass that starts after the gate begins draining would be refused
+      // anyway, and one that is already in flight is what the drain exists to wait for.
+      stopTimer();
+      shutdownRun = applyPanelShutdown({ store, profileRouter: router, admissionGate, epoch, shutdownGraceMs: config.shutdownGraceMs })
+        .then(() => true);
+      return shutdownRun;
+    },
     pump,
     startPump(intervalMs: number): boolean {
       if (timer !== null) return false;
@@ -224,6 +246,6 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
       timer.unref();
       return true;
     },
-    close: () => { if (timer !== null) { clearInterval(timer); timer = null; } store.close(); },
+    close: () => { stopTimer(); store.close(); },
   });
 }
