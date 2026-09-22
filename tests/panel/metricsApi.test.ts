@@ -84,7 +84,7 @@ describe("the metrics endpoint (spec sections 4.1 and 5)", () => {
       const fixedNow = (): Date => new Date("2026-09-10T00:00:00.000Z");
       try {
         const opts: PanelOptions = {
-          ...parsePanelArgs(["--by", "tester", "--repo", `proj=${repo.path}`, "--dist", dist.dir], {
+          ...parsePanelArgs(["--by", "tester", "--repo", `proj=${repo.path}`, "--dist", dist.dir], { ...process.env,
             ORCA_CORRECTIONS_DIR: dir,
           }),
           now: fixedNow,
@@ -125,7 +125,7 @@ describe("the metrics endpoint (spec sections 4.1 and 5)", () => {
       try {
         const opts = parsePanelArgs(
           ["--by", "tester", "--repo", `known=${repo.path}`, "--dist", dist.dir],
-          { ORCA_CORRECTIONS_DIR: dir },
+          { ...process.env, ORCA_CORRECTIONS_DIR: dir },
         );
         const started = await createPanelServer(opts);
         try {
@@ -167,7 +167,7 @@ describe("the metrics endpoint (spec sections 4.1 and 5)", () => {
       try {
         const opts = parsePanelArgs(
           ["--by", "tester", "--repo", `known=${repo.path}`, "--dist", dist.dir],
-          { ORCA_CORRECTIONS_DIR: dir },
+          { ...process.env, ORCA_CORRECTIONS_DIR: dir },
         );
         const started = await createPanelServer(opts);
         try {
@@ -209,7 +209,7 @@ describe("the metrics endpoint (spec sections 4.1 and 5)", () => {
       const dist = await makeDistFixture();
       try {
         const started = await createPanelServer(
-          parsePanelArgs(["--by", "tester", "--repo", `known=${repo.path}`, "--dist", dist.dir], {
+          parsePanelArgs(["--by", "tester", "--repo", `known=${repo.path}`, "--dist", dist.dir], { ...process.env,
             ORCA_CORRECTIONS_DIR: dir,
           }),
         );
@@ -245,7 +245,7 @@ describe("the metrics endpoint (spec sections 4.1 and 5)", () => {
         // `?? "127.0.0.1"` INSIDE parsePanelArgs; calling createPanelServer
         // with a hand-built options object never executes that line.
         const started = await createPanelServer(
-          parsePanelArgs(["--by", "amy", "--dist", dist.dir], { ORCA_CORRECTIONS_DIR: dir }),
+          parsePanelArgs(["--by", "amy", "--dist", dist.dir], { ...process.env, ORCA_CORRECTIONS_DIR: dir }),
         );
         try {
           expect(started.url.startsWith("http://127.0.0.1:")).toBe(true);
@@ -265,7 +265,7 @@ describe("static serving via HTTP (spec section 2.2)", () => {
       const dist = await makeDistFixture();
       try {
         const started = await createPanelServer(
-          parsePanelArgs(["--by", "tester", "--dist", dist.dir], { ORCA_CORRECTIONS_DIR: dir }),
+          parsePanelArgs(["--by", "tester", "--dist", dist.dir], { ...process.env, ORCA_CORRECTIONS_DIR: dir }),
         );
         try {
           const res = await rawGet(started.url, "/");
@@ -289,7 +289,7 @@ describe("static serving via HTTP (spec section 2.2)", () => {
       const dist = await makeDistFixture();
       try {
         const started = await createPanelServer(
-          parsePanelArgs(["--by", "tester", "--dist", dist.dir], { ORCA_CORRECTIONS_DIR: dir }),
+          parsePanelArgs(["--by", "tester", "--dist", dist.dir], { ...process.env, ORCA_CORRECTIONS_DIR: dir }),
         );
         try {
           for (const spelling of [
@@ -336,7 +336,7 @@ describe("the Host allowlist (final review I-4, DNS rebinding)", () => {
       const dist = await makeDistFixture();
       try {
         const started = await createPanelServer(
-          parsePanelArgs(["--by", "tester", "--repo", `proj=${repo.path}`, "--dist", dist.dir], {
+          parsePanelArgs(["--by", "tester", "--repo", `proj=${repo.path}`, "--dist", dist.dir], { ...process.env,
             ORCA_CORRECTIONS_DIR: dir,
           }),
         );

@@ -123,7 +123,7 @@ describe("GET /api/todo (task 8 ruling K5, HTTP)", () => {
         await git(repo.path, ["commit", "-m", "seed a second high-tier decision"]);
 
         const started = await createPanelServer(
-          parsePanelArgs(["--by", "tester", "--repo", `proj=${repo.path}`, "--dist", dist.dir], {
+          parsePanelArgs(["--by", "tester", "--repo", `proj=${repo.path}`, "--dist", dist.dir], { ...process.env,
             ORCA_CORRECTIONS_DIR: dir,
           }),
         );
@@ -185,7 +185,7 @@ describe("GET /api/todo (task 8 ruling K5, HTTP)", () => {
       "--no-control",
       "--by", "tester", "--repo", `proj-a=${repoA.path}`, "--repo", `proj-b=${repoB.path}`, "--dist", dist.dir,
     ],
-            { ORCA_CORRECTIONS_DIR: dir },
+            { ...process.env, ORCA_CORRECTIONS_DIR: dir },
           ),
         );
         try {

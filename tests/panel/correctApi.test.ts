@@ -126,7 +126,7 @@ describe("recording a correction from the panel (spec sections 2.1, 2.3 and 4.4)
       const dist = await makeDistFixture();
       try {
         const started = await createPanelServer(
-          parsePanelArgs(["--by", "tester", "--repo", `proj=${repo.path}`, "--dist", dist.dir], {
+          parsePanelArgs(["--by", "tester", "--repo", `proj=${repo.path}`, "--dist", dist.dir], { ...process.env,
             ORCA_CORRECTIONS_DIR: dir,
           }),
         );
@@ -162,7 +162,7 @@ describe("recording a correction from the panel (spec sections 2.1, 2.3 and 4.4)
       const dist = await makeDistFixture();
       try {
         const started = await createPanelServer(
-          parsePanelArgs(["--by", "tester", "--repo", `proj=${repo.path}`, "--dist", dist.dir], {
+          parsePanelArgs(["--by", "tester", "--repo", `proj=${repo.path}`, "--dist", dist.dir], { ...process.env,
             ORCA_CORRECTIONS_DIR: dir,
           }),
         );
@@ -196,7 +196,7 @@ describe("recording a correction from the panel (spec sections 2.1, 2.3 and 4.4)
       const dist = await makeDistFixture();
       try {
         const started = await createPanelServer(
-          parsePanelArgs(["--by", "tester", "--repo", `proj=${repo.path}`, "--dist", dist.dir], {
+          parsePanelArgs(["--by", "tester", "--repo", `proj=${repo.path}`, "--dist", dist.dir], { ...process.env,
             ORCA_CORRECTIONS_DIR: dir,
           }),
         );
@@ -240,7 +240,7 @@ describe("recording a correction from the panel (spec sections 2.1, 2.3 and 4.4)
       const dist = await makeDistFixture();
       try {
         const started = await createPanelServer(
-          parsePanelArgs(["--by", "tester", "--repo", `proj=${repo.path}`, "--dist", dist.dir], {
+          parsePanelArgs(["--by", "tester", "--repo", `proj=${repo.path}`, "--dist", dist.dir], { ...process.env,
             ORCA_CORRECTIONS_DIR: dir,
           }),
         );
@@ -282,7 +282,7 @@ describe("recording a correction from the panel (spec sections 2.1, 2.3 and 4.4)
       const dist = await makeDistFixture();
       try {
         const started = await createPanelServer(
-          parsePanelArgs(["--by", "tester", "--repo", `proj=${repo.path}`, "--dist", dist.dir], {
+          parsePanelArgs(["--by", "tester", "--repo", `proj=${repo.path}`, "--dist", dist.dir], { ...process.env,
             ORCA_CORRECTIONS_DIR: dir,
           }),
         );
@@ -309,7 +309,7 @@ describe("recording a correction from the panel (spec sections 2.1, 2.3 and 4.4)
       const dist = await makeDistFixture();
       try {
         const started = await createPanelServer(
-          parsePanelArgs(["--by", "tester", "--repo", `proj=${repo.path}`, "--dist", dist.dir], {
+          parsePanelArgs(["--by", "tester", "--repo", `proj=${repo.path}`, "--dist", dist.dir], { ...process.env,
             ORCA_CORRECTIONS_DIR: dir,
           }),
         );
@@ -350,7 +350,7 @@ describe("recording a correction from the panel (spec sections 2.1, 2.3 and 4.4)
         await appendEvent(repo.decisionsDir, "orca-dev-1", second);
 
         const opts: PanelOptions = {
-          ...parsePanelArgs(["--by", "amy", "--repo", `proj=${repo.path}`, "--dist", dist.dir], {
+          ...parsePanelArgs(["--by", "amy", "--repo", `proj=${repo.path}`, "--dist", dist.dir], { ...process.env,
             ORCA_CORRECTIONS_DIR: dir,
           }),
           now: fixedNow,
@@ -396,7 +396,7 @@ describe("recording a correction from the panel (spec sections 2.1, 2.3 and 4.4)
       const held = await acquireReviewsLock(dir);
       try {
         const started = await createPanelServer(
-          parsePanelArgs(["--by", "tester", "--repo", `proj=${repo.path}`, "--dist", dist.dir], {
+          parsePanelArgs(["--by", "tester", "--repo", `proj=${repo.path}`, "--dist", dist.dir], { ...process.env,
             ORCA_CORRECTIONS_DIR: dir,
           }),
         );
@@ -433,7 +433,7 @@ describe("recording a correction from the panel (spec sections 2.1, 2.3 and 4.4)
       const held = await acquireReviewsLock(dir);
       try {
         const started = await createPanelServer(
-          parsePanelArgs(["--by", "tester", "--repo", `proj=${repo.path}`, "--dist", dist.dir], {
+          parsePanelArgs(["--by", "tester", "--repo", `proj=${repo.path}`, "--dist", dist.dir], { ...process.env,
             ORCA_CORRECTIONS_DIR: dir,
           }),
         );
@@ -469,7 +469,7 @@ describe("recording a correction from the panel (spec sections 2.1, 2.3 and 4.4)
       const dist = await makeDistFixture();
       try {
         const started = await createPanelServer(
-          parsePanelArgs(["--by", "tester", "--repo", `proj=${repo.path}`, "--dist", dist.dir], {
+          parsePanelArgs(["--by", "tester", "--repo", `proj=${repo.path}`, "--dist", dist.dir], { ...process.env,
             ORCA_CORRECTIONS_DIR: dir,
           }),
         );
@@ -543,7 +543,7 @@ describe("recording a correction from the panel (spec sections 2.1, 2.3 and 4.4)
         const opts: PanelOptions = {
           ...parsePanelArgs(
             ["--by", "amy", "--repo", `github.com/biran/orca=${repo.path}`, "--dist", dist.dir],
-            { ORCA_CORRECTIONS_DIR: dir },
+            { ...process.env, ORCA_CORRECTIONS_DIR: dir },
           ),
           now: () => new Date(GOLDEN_INSTANT),
         };
@@ -581,7 +581,7 @@ describe("the panel's error mapping for client mistakes (final review I-2)", () 
       const dist = await makeDistFixture();
       try {
         const started = await createPanelServer(
-          parsePanelArgs(["--by", "tester", "--repo", `proj=${repo.path}`, "--dist", dist.dir], {
+          parsePanelArgs(["--by", "tester", "--repo", `proj=${repo.path}`, "--dist", dist.dir], { ...process.env,
             ORCA_CORRECTIONS_DIR: dir,
           }),
         );

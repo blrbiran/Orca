@@ -113,19 +113,39 @@ describe("the store's own modes", () => {
 });
 
 describe("what a panel with no port refuses", () => {
-  it("refuses a start command by the port's own name rather than by a capability complaint", async () => {
+  it("refuses a plan import by the estimator's own name, on the route that actually exists", async () => {
+    // ⚠️ The first version of this judgement posted to /api/control/commands, which is not a route.
+    // It answered 404 and the assertion -- "status >= 400 and not panel-internal-error" -- passed.
+    // A criterion that cannot tell a missing route from a named refusal is not judging anything, so
+    // it now names the route from the table in controlApi.ts and asserts the code itself.
     const h = await workspace();
     const panel = await boot(h);
-    const response = await fetch(`${panel.url}/api/control/commands`, {
+    const response = await fetch(`${panel.url}/api/control/groups/import-plan`, {
       method: "POST",
       headers: { "x-orca-token": panel.token, "content-type": "application/json" },
-      body: JSON.stringify({ schema: "orca-raw-command-v1", commandId: "start-1", actorId: "human", expectedRevision: 0, verb: "start", target: { kind: "group", groupId: "g" }, payload: { groupId: "g", taskId: "t" } }),
+      // The envelope the route parses is strict and carries only these three: the verb, the actor
+      // and the target come from the route and the store, never from the browser.
+      body: JSON.stringify({ commandId: "import-1", expectedRevision: 0, payload: { groupId: "g", repoId: "proj", planId: "plan" } }),
     });
-    const body = await response.json() as Record<string, unknown>;
-    // The status and code both matter: a 5xx here would mean the command rolled back with nothing
-    // to show, which is the opposite of what a named refusal is for.
-    expect(response.status).toBeGreaterThanOrEqual(400);
-    expect(JSON.stringify(body)).not.toContain("panel-internal-error");
+    const body = await response.json() as { error?: { code?: string } };
+    expect(response.status).not.toBe(404);
+    expect(body.error?.code).toBe("control-estimator-unconfigured");
+  });
+
+  it("does not answer a real mutation route with route-not-found, which is how the above went vacuous", async () => {
+    const h = await workspace();
+    const panel = await boot(h);
+    const response = await fetch(`${panel.url}/api/control/groups/g/start`, {
+      method: "POST",
+      headers: { "x-orca-token": panel.token, "content-type": "application/json" },
+      body: JSON.stringify({ commandId: "start-1", expectedRevision: 0, payload: { groupId: "g" } }),
+    });
+    const body = await response.json() as { error?: { code?: string } };
+    // What this is for: the route is registered and validates. Which named refusal it reaches
+    // depends on the payload, and pinning that would make this a criterion about the start payload
+    // schema instead of about the mount -- which is what the vacuous version got wrong.
+    expect(body.error?.code).not.toBe("route-not-found");
+    expect(body.error?.code).toBeTypeOf("string");
   });
 
   it("publishes the port refusal in the error catalogue the browser reads", async () => {

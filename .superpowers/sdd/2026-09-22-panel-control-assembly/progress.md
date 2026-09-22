@@ -346,3 +346,61 @@ kept:
 2. The criterion now carries the child's stderr into its failure message. It previously said
    "exited 1 before ready", which names nothing; the diagnosis above took a round trip that a one-line
    message would have saved.
+
+## Task 8 — whole-slice verification
+
+**Measured this session, on the tree these commits leave behind.** Every command carried
+`PATH="/usr/local/bin:$PATH"`; none used `--no-verify`; every log is unfiltered and redirected to a
+file, read back whole.
+
+| Gate | Result | Log |
+|---|---|---|
+| `npm test` | **RC1** — 180 files passed / 1 skipped (182), **1611 passed / 2 failed / 5 skipped** (1618) | `test-logs/t8-full3.log` |
+| `typecheck` | RC0 | `test-logs/t8-typecheck.log` |
+| `npm --prefix web run check` | RC0 — 14 files / 70 tests | `test-logs/t8-web.log` |
+| `verify:panel` | RC0 — `PASS 0`–`PASS 14` | `test-logs/t8-verify-panel.log` |
+| `tests/panel` alone | RC0 — 26 files / 259 tests | `test-logs/t8-panel-final.log` |
+| `verify:control`, `verify:web-control:consumer` | **NOT RUN** — both need a `/tmp` ccloop artifact that is not present. No old number is quoted for them. | — |
+
+**The 2 failures are the `targetVersion` pair named in Task 6**, and nothing else.
+**The 5 skips** are the environment-gated integration files, unchanged from the pre-plan baseline.
+
+### Real-binary boot smoke (`test-logs/t8-boot-smoke2.log`)
+
+The first time the shipped `orca panel` — not a fixture — serves this plane:
+
+```
+stderr : control plane mounted with no execution port; it will serve reads and refuse to start work
+GET  /api/control/config            -> 200  executionPort=unconfigured  defaults=null  profiles=0
+                                            catalogue carries control-port-unconfigured and
+                                            control-estimator-unconfigured
+GET  /api/control/recovery          -> 200
+POST /api/control/groups/import-plan -> 422  control-estimator-unconfigured
+SIGTERM                             -> exit 0, exactly 1 shutdown row in the ledger
+state                               -> only under $ORCA_CONTROL_DIR; ~/.orca untouched by the smoke
+```
+
+### 🔴 The Rule 17 breach was NOT fixed by the first attempt, and the claim that it was is corrected here
+
+Task 5's section says relocation was made mechanical. **It was not.** `tests/setup/relocateUserData.ts`
+sets `process.env`, and the panel criteria hand `parsePanelArgs` an env object of their own, which
+never reads `process.env`. So the whole-suite run **wrote into `~/.orca` again**
+(`test-logs/t8-rule17-second-breach.log`: `ENOENT ... /Users/biran/.orca/control/proj-e73c023a/service-lock/owner.json`).
+
+Two things closed it, and only the second is a guard:
+
+1. All **40** `parsePanelArgs` call sites in `tests/panel/{correctApi, decisionsApi, metricsApi, todo,
+   security}.test.ts` now spread `process.env` into their env argument, so the relocation reaches them.
+2. `tests/setup/relocateUserData.ts` now **snapshots the real `~/.orca` before each test file and
+   asserts it is unchanged afterwards**, naming Rule 17. That is a criterion that goes red; the
+   relocation alone was a hope. The file says so in its own comment, because "we relocated it" was
+   the thing that turned out not to be true.
+
+### 🔴 A criterion of this slice's own was vacuous, and is corrected here
+
+`tests/panel/controlMount.test.ts`'s "refuses a start command by the port's own name" posted to
+`/api/control/commands` — **not a route**. It answered `route-not-found` 404 and the assertion
+(`status >= 400` and not `panel-internal-error`) passed. It was caught by the boot smoke, not by the
+suite. Replaced by two judgements that name a route from `controlApi.ts`'s table: a plan import
+answers `control-estimator-unconfigured`, and a real mutation route is asserted **not** to answer
+`route-not-found`. This is the "a green criterion may be empty" shape, found in this session's own work.

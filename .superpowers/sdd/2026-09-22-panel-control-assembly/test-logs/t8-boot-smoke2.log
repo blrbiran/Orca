@@ -1,0 +1,21 @@
+=== real orca panel boot smoke (correct routes), 2026-09-22T12:22:30Z
+orca-panel ready url=http://127.0.0.1:55020 token=d29528641782f7ccabf2f3d69a13c669a3b566e835bca8cd23bb653ec244d10b
+--- stderr:
+orca-panel: control plane mounted with no execution port; it will serve reads and refuse to start work
+(node:39903) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+--- GET /api/control/config:
+http 200
+  executionPort = unconfigured
+  defaults      = None
+  profiles      = 0
+  catalog has control-port-unconfigured      = True
+  catalog has control-estimator-unconfigured = True
+--- POST /api/control/groups/import-plan (the route that exists):
+{"error":{"code":"control-estimator-unconfigured","message":"control-estimator-unconfigured","commandRevision":0,"evidenceIds":[],"retryable":false}} <- http 422
+--- SIGTERM:
+exit=0
+--- one shutdown row:
+  shutdown rows = 1
+(node:39971) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)

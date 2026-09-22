@@ -1,0 +1,142 @@
+
+ RUN  v2.1.9 /Users/biran/code/skills/loop/Orca
+
+(node:9233) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:9228) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:9232) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+orca-panel: control plane mounted with no execution port; it will serve reads and refuse to start work
+(node:9231) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+orca-panel: control plane mounted with no execution port; it will serve reads and refuse to start work
+(node:9230) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+orca-panel: control plane mounted with no execution port; it will serve reads and refuse to start work
+(node:9229) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/panel/controlApi.test.ts (4 tests) 879ms
+   ✓ web control acceptance over a real panel (task 10 step 1) > takes a plan from import to a continued task, and the ledger's own state is durable at every boundary 387ms
+ ✓ tests/panel/security.test.ts (11 tests) 823ms
+   ✓ panel security via the real CLI process (controller ruling E2/E3: not skipped) > refuses a missing --by through the REAL process (ruling E3: the hole Task 1's stub left open) 418ms
+   ✓ panel security via the real CLI process (controller ruling E2/E3: not skipped) > refuses an unconfirmed external bind through the REAL process, leaving no listener 394ms
+ ✓ tests/panel/controlLifecycle.test.ts (12 tests) 1098ms
+ ✓ tests/panel/controlOptions.test.ts (35 tests) 8ms
+ ✓ tests/panel/webParity.test.ts (3 tests) 4ms
+orca-panel: control plane mounted with no execution port; it will serve reads and refuse to start work
+orca-panel: control plane mounted with no execution port; it will serve reads and refuse to start work
+(node:10169) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+orca-panel: control plane mounted with no execution port; it will serve reads and refuse to start work
+orca-panel: control plane mounted with no execution port; it will serve reads and refuse to start work
+(node:10584) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+orca-panel: control plane mounted with no execution port; it will serve reads and refuse to start work
+orca-panel: control plane mounted with no execution port; it will serve reads and refuse to start work
+orca-panel: control plane mounted with no execution port; it will serve reads and refuse to start work
+orca-panel: control plane mounted with no execution port; it will serve reads and refuse to start work
+orca-panel: control plane mounted with no execution port; it will serve reads and refuse to start work
+ ✓ tests/panel/reviewsStore.test.ts (19 tests) 2252ms
+   ✓ the reviews store (spec section 4.3) > refuses by its OWN name when its OWN lock is held 1007ms
+   ✓ the reviews writer after reviews.jsonl is replaced (reviews compaction spec section 5) > C19c a claim whose write failed does not come back on a later reload 1049ms
+orca-panel: control plane mounted with no execution port; it will serve reads and refuse to start work
+orca-panel: control plane mounted with no execution port; it will serve reads and refuse to start work
+(node:10425) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+orca-panel: control plane mounted with no execution port; it will serve reads and refuse to start work
+orca-panel: control plane mounted with no execution port; it will serve reads and refuse to start work
+orca-panel: control plane mounted with no execution port; it will serve reads and refuse to start work
+orca-panel: control plane mounted with no execution port; it will serve reads and refuse to start work
+ ✓ tests/panel/controlRecoveryApi.test.ts (4 tests) 1207ms
+   ✓ evidence and restart (task 10 step 2) > refuses a browser any content sniffing of the evidence bytes it serves 323ms
+   ✓ evidence and restart (task 10 step 2) > reopens onto a run still marked active and stops dispatching until a person recovers it 317ms
+orca-panel: control plane mounted with no execution port; it will serve reads and refuse to start work
+orca-panel: control plane mounted with no execution port; it will serve reads and refuse to start work
+ ✓ tests/panel/controlConfig.test.ts (4 tests) 75ms
+orca-panel: control plane mounted with no execution port; it will serve reads and refuse to start work
+ ✓ tests/panel/controlMount.test.ts (13 tests) 1162ms
+orca-panel: control plane mounted with no execution port; it will serve reads and refuse to start work
+orca-panel: control plane mounted with no execution port; it will serve reads and refuse to start work
+ ✓ tests/panel/controlConfigPort.test.ts (8 tests) 90ms
+(node:12106) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/panel/todo.test.ts (6 tests) 1549ms
+   ✓ GET /api/todo (task 8 ruling K5, HTTP) > (e) answers with exactly the unreviewed high-tier decision, deep-equal to its LIST_FIELDS projection, and records nothing 733ms
+   ✓ GET /api/todo (task 8 ruling K5, HTTP) > (f) agreeing on two repositories' decisions that share an id takes BOTH off the to-do list 811ms
+ ✓ tests/panel/controlReadApi.test.ts (17 tests) 3167ms
+   ✓ canonical control read API > returns persisted command results, sorted recovery, verified evidence manifests, and exact typed misses 322ms
+orca-panel: control plane mounted with no execution port; it will serve reads and refuse to start work
+ ✓ tests/panel/noSkips.test.ts (4 tests) 39ms
+orca-panel: control plane mounted with no execution port; it will serve reads and refuse to start work
+ ✓ tests/panel/compactClassify.test.ts (8 tests) 9ms
+ ✓ tests/panel/compactReviewsCli.test.ts (6 tests) 153ms
+ ✓ tests/panel/ledgerViews.test.ts (5 tests) 57ms
+ ✓ tests/panel/workspace.test.ts (7 tests) 12ms
+orca-panel: control plane mounted with no execution port; it will serve reads and refuse to start work
+ ✓ tests/panel/staticFiles.test.ts (8 tests) 79ms
+orca-panel: control plane mounted with no execution port; it will serve reads and refuse to start work
+orca-panel: control plane mounted with no execution port; it will serve reads and refuse to start work
+ ✓ tests/panel/compactReviews.test.ts (12 tests) 1496ms
+   ✓ applying and dry-running compaction (reviews compaction spec section 4) > C12 refuses by name while the lock is held and touches nothing 1025ms
+ ✓ tests/panel/endToEnd.test.ts (5 tests) 5ms
+ ✓ tests/panel/coverageDuplicates.test.ts (2 tests) 4ms
+(node:12970) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+orca-panel: control plane mounted with no execution port; it will serve reads and refuse to start work
+ ✓ tests/panel/usage.test.ts (1 test) 7ms
+ ✓ tests/panel/controlShutdown.test.ts (6 tests) 1049ms
+   ✓ a real SIGTERM to a real panel > makes it exit cleanly, having written one shutdown row for its epoch 559ms
+ ✓ tests/panel/metricsApi.test.ts (16 tests) 3605ms
+   ✓ the metrics endpoint (spec sections 4.1 and 5) > passes E2's report through field for field, adding nothing and dropping nothing 532ms
+   ✓ the metrics endpoint (spec sections 4.1 and 5) > re-runs repository discovery and E2's gate on EVERY request 427ms
+   ✓ the metrics endpoint (spec sections 4.1 and 5) > answers a broken gate with a first-class error, never with partial data 467ms
+   ✓ the metrics endpoint (spec sections 4.1 and 5) > answers 401 without a token, and 401 with a wrong one 464ms
+   ✓ the Host allowlist (final review I-4, DNS rebinding) > refuses a foreign Host on the token-carrying page with 403 by name, and the body carries no token 469ms
+   ✓ the Host allowlist (final review I-4, DNS rebinding) > refuses a foreign Host on the API even with a valid token (the guard sits in front of /api too) 360ms
+   ✓ the Host allowlist (final review I-4, DNS rebinding) > uses the exact V1 envelope for a foreign Host on control routes while preserving legacy API errors 397ms
+   ✓ the Host allowlist (final review I-4, DNS rebinding) > answers the loopback names it was reached by: 127.0.0.1, localhost and [::1] (positive controls) 384ms
+orca-panel: control plane mounted with no execution port; it will serve reads and refuse to start work
+ ✓ tests/panel/controlStartup.test.ts (7 tests) 357ms
+orca-panel: control plane mounted with no execution port; it will serve reads and refuse to start work
+orca-panel: control plane mounted with no execution port; it will serve reads and refuse to start work
+orca-panel: control plane mounted with no execution port; it will serve reads and refuse to start work
+orca-panel: control plane mounted with no execution port; it will serve reads and refuse to start work
+ ✓ tests/panel/decisionsApi.test.ts (8 tests) 5676ms
+   ✓ the decisions endpoints (spec sections 4.2 and 4.3.1) > returns list rows DEEP-EQUAL to the frozen projection, not merely lacking a summary 534ms
+   ✓ the decisions endpoints (spec sections 4.2 and 4.3.1) > records NOTHING when the list is served 2390ms
+   ✓ the decisions endpoints (spec sections 4.2 and 4.3.1) > records exactly one `opened` when a detail is served, and no `reviewed` 387ms
+   ✓ the decisions endpoints (spec sections 4.2 and 4.3.1) > serves the detail while the reviews lock is held, and the failed opened write is only a server-side warning 1388ms
+   ✓ the decisions endpoints (spec sections 4.2 and 4.3.1) > returns each repository's own row when two repositories share a decision id 331ms
+orca-panel: control plane mounted with no execution port; it will serve reads and refuse to start work
+orca-panel: control plane mounted with no execution port; it will serve reads and refuse to start work
+orca-panel: control plane mounted with no execution port; it will serve reads and refuse to start work
+orca-panel: control plane mounted with no execution port; it will serve reads and refuse to start work
+orca-panel: control plane mounted with no execution port; it will serve reads and refuse to start work
+orca-panel: control plane mounted with no execution port; it will serve reads and refuse to start work
+orca-panel: control plane mounted with no execution port; it will serve reads and refuse to start work
+orca-panel: control plane mounted with no execution port; it will serve reads and refuse to start work
+ ✓ tests/panel/correctApi.test.ts (17 tests) 8745ms
+   ✓ recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > answers a row the seam would refuse with the seam's OWN named refusal (an unknown kind) 548ms
+   ✓ recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > refuses an empty optional field by name instead of dumping Zod at the person 406ms
+   ✓ recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > records and does NOT close the loop 569ms
+   ✓ recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > writes its OWN message for a second correction, with no `--again` in it 516ms
+   ✓ recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > records another one when the page asks for it on purpose 458ms
+   ✓ recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > does NOT write `reviewed` when the correction was refused 420ms
+   ✓ recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > writes `reviewed` when the correction lands, and when the person clicks agreed 397ms
+   ✓ recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > lets a failed `reviewed` write reach the person on POST /api/reviews, unlike `opened` 1380ms
+   ✓ recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > tells the person the correction landed even when the reviewed mark could not be written 1248ms
+   ✓ the panel's error mapping for client mistakes (final review I-2) > answers a busy corrections store with 409 by name, not 400 (a transient conflict, not a client error) 1224ms
+ ✓ tests/panel/chainsApi.test.ts (11 tests) 15387ms
+   ✓ chains in the panel (D-launch spec §6.2, §6.3, §8.2-8) > C1 POST /api/chains starts a chain ONLY by spawning `orca chain start`: the supervisor is another process; the status view follows it to done 6212ms
+   ✓ chains in the panel (D-launch spec §6.2, §6.3, §8.2-8) > C3 a refusal by the CLI comes back as soon as the CLI exits, with its code (spec §2) 713ms
+   ✓ chains in the panel (D-launch spec §6.2, §6.3, §8.2-8) > C4 no `started` line within the wait is 500 by name, naming the log and the pid 3933ms
+   ✓ chains in the panel (D-launch spec §6.2, §6.3, §8.2-8) > C5 stop: shape, repository, existence and state are each refused by name; a running chain gets the request 331ms
+   ✓ chains in the panel (D-launch spec §6.2, §6.3, §8.2-8) > C6 status: a running record without a live holder is shown as holder gone; with one, not; a missing cost is null 341ms
+   ✓ chains in the panel (D-launch spec §6.2, §6.3, §8.2-8) > C8 external mode opens the same routes (rulings R11, R13): an app built for a confirmed external bind starts a chain 3364ms
+
+ Test Files  28 passed (28)
+      Tests  259 passed (259)
+   Start at  20:20:06
+   Duration  16.22s (transform 1.35s, setup 359ms, collect 5.75s, tests 48.99s, environment 3ms, prepare 1.35s)
+

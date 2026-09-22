@@ -65,7 +65,7 @@ describe("the decisions endpoints (spec sections 4.2 and 4.3.1)", () => {
         await appendEvent(repo.decisionsDir, "orca-dev-1", second);
 
         const started = await createPanelServer(
-          parsePanelArgs(["--by", "tester", "--repo", `proj=${repo.path}`, "--dist", dist.dir], {
+          parsePanelArgs(["--by", "tester", "--repo", `proj=${repo.path}`, "--dist", dist.dir], { ...process.env,
             ORCA_CORRECTIONS_DIR: dir,
           }),
         );
@@ -119,7 +119,7 @@ describe("the decisions endpoints (spec sections 4.2 and 4.3.1)", () => {
       const dist = await makeDistFixture();
       try {
         const started = await createPanelServer(
-          parsePanelArgs(["--by", "tester", "--repo", `proj=${repo.path}`, "--dist", dist.dir], {
+          parsePanelArgs(["--by", "tester", "--repo", `proj=${repo.path}`, "--dist", dist.dir], { ...process.env,
             ORCA_CORRECTIONS_DIR: dir,
           }),
         );
@@ -169,7 +169,7 @@ describe("the decisions endpoints (spec sections 4.2 and 4.3.1)", () => {
       const fixedNow = (): Date => new Date("2026-09-10T00:00:00.000Z");
       try {
         const opts: PanelOptions = {
-          ...parsePanelArgs(["--by", "amy", "--repo", `proj=${repo.path}`, "--dist", dist.dir], {
+          ...parsePanelArgs(["--by", "amy", "--repo", `proj=${repo.path}`, "--dist", dist.dir], { ...process.env,
             ORCA_CORRECTIONS_DIR: dir,
           }),
           now: fixedNow,
@@ -210,7 +210,7 @@ describe("the decisions endpoints (spec sections 4.2 and 4.3.1)", () => {
       const held = await acquireReviewsLock(dir);
       try {
         const started = await createPanelServer(
-          parsePanelArgs(["--by", "tester", "--repo", `proj=${repo.path}`, "--dist", dist.dir], {
+          parsePanelArgs(["--by", "tester", "--repo", `proj=${repo.path}`, "--dist", dist.dir], { ...process.env,
             ORCA_CORRECTIONS_DIR: dir,
           }),
         );
@@ -256,7 +256,7 @@ describe("the decisions endpoints (spec sections 4.2 and 4.3.1)", () => {
       const held = await acquireStoreLock(dir);
       try {
         const started = await createPanelServer(
-          parsePanelArgs(["--by", "tester", "--repo", `proj=${repo.path}`, "--dist", dist.dir], {
+          parsePanelArgs(["--by", "tester", "--repo", `proj=${repo.path}`, "--dist", dist.dir], { ...process.env,
             ORCA_CORRECTIONS_DIR: dir,
           }),
         );
@@ -281,7 +281,7 @@ describe("the decisions endpoints (spec sections 4.2 and 4.3.1)", () => {
       const dist = await makeDistFixture();
       try {
         const started = await createPanelServer(
-          parsePanelArgs(["--by", "tester", "--repo", `proj=${repo.path}`, "--dist", dist.dir], {
+          parsePanelArgs(["--by", "tester", "--repo", `proj=${repo.path}`, "--dist", dist.dir], { ...process.env,
             ORCA_CORRECTIONS_DIR: dir,
           }),
         );
@@ -326,7 +326,7 @@ describe("the decisions endpoints (spec sections 4.2 and 4.3.1)", () => {
       "--no-control",
       "--by", "tester", "--repo", `proj-a=${repoA.path}`, "--repo", `proj-b=${repoB.path}`, "--dist", dist.dir,
     ],
-            { ORCA_CORRECTIONS_DIR: dir },
+            { ...process.env, ORCA_CORRECTIONS_DIR: dir },
           ),
         );
         try {
@@ -356,7 +356,7 @@ describe("the decisions endpoints (spec sections 4.2 and 4.3.1)", () => {
       const dist = await makeDistFixture();
       try {
         const started = await createPanelServer(
-          parsePanelArgs(["--by", "tester", "--repo", `proj=${repo.path}`, "--dist", dist.dir], {
+          parsePanelArgs(["--by", "tester", "--repo", `proj=${repo.path}`, "--dist", dist.dir], { ...process.env,
             ORCA_CORRECTIONS_DIR: dir,
           }),
         );
