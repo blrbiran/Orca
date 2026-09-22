@@ -82,6 +82,10 @@ export class ControlService {
   async profiledCapabilities(groupId:string,selection:ExecutionProfileSelection):Promise<{profile:FrozenProfile;capabilities:Capabilities}> {
     const profile=this.executionProfile(selection),observation=await this.options.profileRouter!.probe(profile);
     const observed=observation.observed,mode=readGroup(this.store,groupId).budgetMode??"strict";
+    // Ruling R5: the router turns every probe throw into a failure code, which is right for a
+    // genuine probe failure and wrong for "there is no port at all" -- those need different fixes,
+    // so the named one is re-raised rather than folded into the capability answer.
+    if(observation.probeFailureCode==="control-port-unconfigured")throw new ControlError("control-port-unconfigured");
     if(observation.probeFailureCode!==null||observed.usageObservation==="unavailable"||observed.budgetEnforcement==="unavailable"||observed.handoffControl!=="durable"||observed.handoffExecution===null||(mode==="strict"&&(observed.budgetEnforcement!=="bounded"||observed.requestBoundProof===null||!observed.requestBoundProof.workDimensions.includes("tokens"))))throw new ControlError("control-capability-unsupported");
     const capabilities=await profile.port.capabilities();assertCapabilities(mode,capabilities);return {profile,capabilities};
   }

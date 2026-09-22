@@ -73,6 +73,10 @@ export const durableCommandErrorStatuses = {
   "control-capability-unsupported": 422,
   "control-evidence-unavailable": 422,
   "control-plan-rejected": 422,
+  // Assembly spec §3 / ruling R5: no execution port is configured on this process. Durable, so a
+  // person sees a named outcome rather than a rolled-back command, and 422 rather than 5xx because
+  // the request was understood perfectly -- the environment simply cannot carry it out.
+  "control-port-unconfigured": 422,
   "control-protocol-unavailable": 422,
   "control-terminal-pending": 422,
   "dependency-not-done": 422,

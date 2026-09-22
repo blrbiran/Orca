@@ -66,3 +66,41 @@ battery, where the served value is observable.
    site that passes a variable. The number to trust is the 36 in the log.
 
 **Green.** `tests/panel` 24 files / 221 tests, RC0 (`test-logs/t1-panel-green.log`); `typecheck` RC0.
+
+## Task 2 — the named refusal port
+
+Created `src/control/unconfiguredPort.ts` (`createUnconfiguredControlPort`), registered
+`control-port-unconfigured` in `src/control/errors.ts`, and carried the name through
+`src/control/service.ts`'s `profiledCapabilities`. Criteria: `tests/control/unconfiguredPort.test.ts`
+(5 tests).
+
+**Two deviations from the plan's Task 2 text, both deliberate.**
+
+1. The plan expected the code to be classified `internal` in the non-durable catalog. It is registered
+   **durable, 422** instead. An internal classification rolls the command back and leaves the panel
+   with no named outcome to show, which defeats R5: the point of a closed name is that the operator
+   is told which environment variable is missing. 422 is the same status its nearest sibling
+   `control-capability-unsupported` carries, and durable registration is what puts it in the catalog
+   `controlConfig.ts` serves to the browser.
+2. The plan assumed the name would reach `startClaim` by itself. It does not, and that was measured:
+   `profiles.ts`'s `probe()` catches every throw into `probeFailureCode`, and
+   `service.ts`'s `profiledCapabilities` turns any non-null failure code into
+   `control-capability-unsupported`. So a missing environment variable would have been reported as an
+   inadequate adapter. One conditional in `profiledCapabilities` re-raises the named code before the
+   generic one; `probeFailureCode` keeps its meaning and its population, and no existing assertion moved.
+
+**Mutation battery, 4 mutations, all seen red** (`commands/t2-mutation-battery.json`; harness
+`commands/mutation-harness.py`, which clones, copies the dirty working-tree files in, proves them
+identical with `filecmp`, mutates one exact full line at a time and restores the pristine text after
+each run):
+
+| Mutation | Result |
+|---|---|
+| M1 the re-raise in `profiledCapabilities` deleted | RC1, 1 failed |
+| M2 the optional `probeProfileCapabilities` dropped from the port | RC1, 3 failed |
+| M3 the durable status changed from 422 | RC1, 1 failed |
+| M4 `accept()` answers `{kind:"unknown"}` instead of refusing | RC1, 1 failed |
+
+**Green.** `tests/control` 41 files passed / 1 skipped, 415 passed / 5 skipped, RC0
+(`test-logs/t2-control-green.log`); `typecheck` RC0. The 5 skips are the `/tmp`-artifact integration
+files, unchanged from the pre-plan baseline.

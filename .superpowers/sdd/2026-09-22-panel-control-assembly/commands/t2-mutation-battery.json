@@ -1,0 +1,40 @@
+[
+ {
+  "mutation": "M1 the named code is folded back into the capability answer",
+  "file": "src/control/service.ts",
+  "rc": 1,
+  "failedCount": 1,
+  "failed": [
+   "a claim against an unconfigured port refuses by the port's own name and writes no run, rather than blaming the adapter's capabilities"
+  ]
+ },
+ {
+  "mutation": "M2 the optional probe is dropped from the port",
+  "file": "src/control/unconfiguredPort.ts",
+  "rc": 1,
+  "failedCount": 3,
+  "failed": [
+   "the unconfigured execution port refuses every method it has, not merely the obvious ones",
+   "the unconfigured execution port exposes the optional probe, so a missing port is never reported as a missing capability",
+   "a claim against an unconfigured port refuses by the port's own name and writes no run, rather than blaming the adapter's capabilities"
+  ]
+ },
+ {
+  "mutation": "M3 the code is not a durable outcome (status changed)",
+  "file": "src/control/errors.ts",
+  "rc": 1,
+  "failedCount": 1,
+  "failed": [
+   "the unconfigured execution port is registered as a durable outcome, so the refusal reaches a person instead of rolling back"
+  ]
+ },
+ {
+  "mutation": "M4 accept() answers plausibly instead of refusing",
+  "file": "src/control/unconfiguredPort.ts",
+  "rc": 1,
+  "failedCount": 1,
+  "failed": [
+   "the unconfigured execution port refuses every method it has, not merely the obvious ones"
+  ]
+ }
+]
