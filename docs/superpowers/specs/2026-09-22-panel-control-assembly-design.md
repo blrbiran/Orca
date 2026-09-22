@@ -188,3 +188,95 @@ observation itself: `ContextObservationV1` (`src/control/webProtocol.ts:302`) ha
 anywhere in `src/` — nothing in the port's `collect` events yields one. So automatic context handoff
 needs a ccloop-side emit first, and this slice must not invent a substitute source. It is recorded
 here and in the ccloop handoff, and remains unbuilt.
+
+---
+
+## 9. Second round of rulings (human, 2026-09-22, session `2adcc8bb`)
+
+**§0–§8 above are unchanged.** This section records two rulings taken after that text was published,
+and one design consequence discovered while sizing them. Where §3 and this section disagree about
+scope, this section is later and wins; where they agree, §3's text stands.
+
+### 9.1 R5 — §3's resolution is approved as written
+
+The R1×R3 collision is resolved the way §3 proposed: **a Panel with no configured execution port
+boots, mounts the plane, serves reads, and refuses port-dependent commands by the closed name
+`control-port-unconfigured`.** The rejected alternative (hard-fail at boot) stays rejected, and §3's
+reasons stand as the reasons. Nothing in §3 changes; this is the approval it was waiting for.
+
+### 9.2 R6 — the display question is closed, in this slice, by a protocol field
+
+§3 left open that a Panel "cannot currently *display* 'no port configured'" and parked it for a human.
+The ruling is to **add the field now**, in this slice:
+
+```
+ControlConfigV1 += executionPort: "configured" | "unconfigured"     // required, closed enum
+```
+
+This overrides the plan's global constraint "No closed protocol schema changes" for this one field.
+The plan's correction section records that; it is not a licence for any other schema change.
+
+**Blast radius, measured 2026-09-22 (not estimated).** A cross-file scan of `src/`, `tests/`,
+`web/src/` and `web/tests/` for `ControlConfigV1|controlConfigSchema` gives exactly four kinds of site:
+
+- `src/control/webProtocol.ts:723` — the zod schema, and `:1168` its inferred type;
+- `web/src/controlTypes.ts:21` — the hand-written mirror. `tests/panel/webParity.test.ts:114-115`
+  asserts both directions of assignability, so omitting either side fails typecheck rather than
+  drifting silently. That parity test is the reason this field cannot be half-added;
+- `src/panel/controlConfig.ts:178` — the single production construction of the view;
+- four web fixtures (`web/tests/controlPanel.test.tsx:14`, `controlCommandRecovery.test.tsx:31`,
+  `evidenceLink.test.tsx:29`, and `tests/panel/` parse sites). Adding a required field makes these
+  fixtures fail to typecheck until the field is supplied. **Supplying a field to a fixture object is
+  not editing an assertion**, and the "do not edit existing test assertions" constraint is untouched.
+
+**This is not a cross-repo change.** A scan of the whole ccloop repository (excluding `node_modules`
+and `.git`) for `ControlConfig` returns one file, `reference/oh-my-openagent/.../command-config-handler.test.ts`,
+which is vendored third-party material unrelated to this protocol. `ControlConfigV1` is the Orca
+Panel ↔ Orca Web contract; the Orca ↔ ccloop contract is the execution port
+(`capabilities/accept/inspect/handoff/collect/read-evidence`), and **no ccloop consumer needs
+checking for this field**. An earlier sizing of R6 said the opposite; that was wrong, and the measured
+answer is this paragraph.
+
+### 9.3 Why a top-level field and not `profiles[].probeFailureCode`
+
+`controlConfigSchema` already carries `profiles[].probeFailureCode: string | null`, and
+`ExecutionProfileRouter.probe` (`src/control/profiles.ts:147-165`) catches any throw and records a
+code there. So once §3's unconfigured port is mounted, every profile would carry a probe failure code
+and a reader could infer "no port" from it. **That inference is refused**, because the two facts are
+different sizes: `probeFailureCode` is *per profile, this probe, this moment*; "no execution port is
+configured" is *per process, for the life of the epoch*. Letting one stand in for the other is exactly
+the blended-pattern failure CLAUDE.md Rule 7 forbids.
+
+Therefore: the new field is the **only** authority on whether a port is configured, and
+`probeFailureCode` keeps its present meaning **unchanged** — no code reads it to answer the port
+question, and this slice alters neither its type nor its population.
+
+### 9.4 Consequence found while sizing: `adapterConfigPath` cannot stay unconditionally required
+
+`TrustedControlConfigInput.adapterConfigPath` is `z.string().min(1)` (`src/panel/controlConfig.ts:48`),
+and §4 sources it from `ORCA_CCLOOP_ADAPTER_CONFIG`. Under R5 that variable may legitimately be
+absent, so a Panel that is *allowed* to boot could not build its trusted config. This is an
+implementation decision, reversible, and taken here rather than silently in code (CLAUDE.md Rule 1,
+rung 2):
+
+> `adapterConfigPath` becomes `string | null`, and the input schema gains a cross-field refinement:
+> `executionPort === "configured"` **requires** a non-null `adapterConfigPath`, and
+> `executionPort === "unconfigured"` **requires** it to be null.
+
+This is strictly tighter than today's shape, not looser: the two fields can no longer disagree, and a
+configured port with no adapter config — representable today — becomes unrepresentable. The field pair
+is the invariant, not either field alone.
+
+### 9.5 What §7's acceptance gains
+
+§7's list is unchanged and still binding. Three lines are added to it:
+
+9. `GET /api/control/config` answers `executionPort: "unconfigured"` when neither
+   `ORCA_CCLOOP_BIN` nor `ORCA_CCLOOP_ADAPTER_CONFIG` is set, and `"configured"` when both are; the
+   criterion asserts the served JSON, not the input object it was built from.
+10. A `TrustedControlConfigInput` with `executionPort: "configured"` and a null `adapterConfigPath`
+    is refused by the schema, and so is the converse — asserted as two separate refusals, because one
+    refusal passing does not show the other exists.
+11. The Web panel renders the unconfigured state visibly, and a criterion that reads
+    `probeFailureCode` instead of the new field must be red, so the §9.3 separation is observed rather
+    than merely written down.

@@ -235,3 +235,83 @@ parsed options into the four objects the control plane needs (`ControlStore`,
   §11 only as an appended correction, never by editing §1–§10.
 - [ ] Update spec §11.5's seam list with what this plan wired and what still has 0 callers
   (`acceptContextObservation` stays 0, with spec §8's reason).
+
+---
+
+## Correction, 2026-09-22 (session `2adcc8bb`) — everything above is unchanged
+
+Two rulings landed after this plan was written (assembly design spec §9). One of them contradicts a
+constraint stated above, so it is corrected here rather than left to be read literally.
+
+### C1. The global constraint "No closed protocol schema changes" no longer holds as written
+
+Original text, kept verbatim above:
+
+> No closed protocol schema changes. `control-port-unconfigured` is a new **error code**, registered in
+> `src/control/errors.ts` the way existing codes are; adding a field to `ControlConfigV1` is out of
+> scope (spec §3 leaves the display question to a human).
+
+**The human has since ruled the opposite for exactly one field** (spec §9.2): `ControlConfigV1` gains
+a required `executionPort: "configured" | "unconfigured"`. Read the constraint as:
+
+> No closed protocol schema changes **other than** `ControlConfigV1.executionPort` and the
+> `TrustedControlConfigInput` refinement spec §9.4 requires. Every other schema stays closed and
+> untouched; in particular nothing in the Orca ↔ ccloop execution-port contract may change, and this
+> field reaches no ccloop consumer (measured, spec §9.2).
+
+The rest of the Global Constraints section is unaffected — Rule 17 relocation, no live model call,
+Codex stays `phase-end + soft`, no editing existing assertions, RED before GREEN, `PATH` prefix, no
+`--no-verify`, and the four human-authorized actions this plan still authorizes none of.
+
+### C2. Task ordering, and why the new task is 4b rather than a renumber
+
+Task numbers above are published and referenced from the handoff and from ccmem's §15, so they are not
+renumbered. The new work slots between Task 4 and Task 5 and is called **Task 4b**: it must land
+before Task 5, because Task 5's mount acceptance asserts the served value of the new field, and it
+must land after Task 1, because the value it serves comes from Task 1's resolution.
+
+### Task 4b: The port-configuration field, end to end
+
+**Files:**
+- Modify: `src/control/webProtocol.ts` (`controlConfigSchema`, `:723`)
+- Modify: `web/src/controlTypes.ts` (`ControlConfigV1`, `:21`)
+- Modify: `src/panel/controlConfig.ts` (input interface `:24-36`, input schema `:45-58`, view `:178`)
+- Modify: `web/src/ControlPanel.tsx` (render the unconfigured state)
+- Modify (fixtures only, no assertion touched): `web/tests/controlPanel.test.tsx:14`,
+  `web/tests/controlCommandRecovery.test.tsx:31`, `web/tests/evidenceLink.test.tsx:29`, and any
+  `tests/panel/` construction the typechecker names
+- Create: `tests/panel/controlConfigPort.test.ts`, `web/tests/controlPortBanner.test.tsx`
+
+**Interfaces:**
+- Consumes: Task 1's `resolveControlOptions` result (whether both ccloop variables were present).
+- Produces: `executionPort` on the served `ControlConfigV1`, and a `TrustedControlConfigInput` whose
+  `executionPort`/`adapterConfigPath` pair cannot disagree (spec §9.4).
+
+- [ ] Step 1: RED — the served `GET /api/control/config` body carries `executionPort: "unconfigured"`
+  with neither ccloop variable set and `"configured"` with both. Assert the **served JSON**, parsed by
+  `controlConfigSchema`, not the input object — an assertion against the input would pass even if the
+  view never copied the field through.
+- [ ] Step 2: RED — two separate refusals, asserted separately: `executionPort: "configured"` with
+  `adapterConfigPath: null` is rejected by `trustedControlConfigInputSchema`, and
+  `executionPort: "unconfigured"` with a non-null `adapterConfigPath` is rejected. One test asserting
+  one direction does not show the other refinement exists.
+- [ ] Step 3: RED — `tests/panel/webParity.test.ts` must fail to typecheck if the field is added to
+  only one of the two declarations. Prove it by adding the field to the server schema alone and
+  running `typecheck` (expect non-zero), before adding the web mirror. Record that non-zero run; a
+  parity guard nobody has seen fail is not a guard.
+- [ ] Step 4: RED — the Web panel shows the unconfigured state. The criterion asserts the rendered
+  output reacts to `config.executionPort`, and a sibling criterion that drives the same render from
+  `profiles[].probeFailureCode` with `executionPort: "configured"` must **not** show it — this is how
+  spec §9.3's separation gets observed rather than asserted.
+- [ ] Step 5: GREEN focused, then `PATH="/usr/local/bin:$PATH" npm --prefix web run check` and
+  `node node_modules/.bin/vitest run tests/panel` unfiltered to files, read back whole.
+- [ ] Step 6: Mutation — delete the field's copy-through in `src/panel/controlConfig.ts:178` in a
+  `git clone --local` copy and confirm Step 1's criterion goes red; a field that serves a constant
+  would pass Step 1 without it. Log to the round's ledger.
+
+### C3. Task 5 and Task 8 gain one line each
+
+- Task 5 Step 1 additionally asserts `executionPort: "unconfigured"` on the same 200 response it
+  already reads, so the mount criterion and the field criterion cannot drift apart.
+- Task 8's whole-slice record must state the served field's value in the real-binary boot smoke —
+  the shipped `orca panel`, not a fixture, is where this field first becomes visible to a person.
