@@ -1,0 +1,45 @@
+
+ RUN  v2.1.9 /private/tmp/claude-501/-Users-biran-code-skills-loop-Orca/2adcc8bb-ee5e-43c5-b078-2e2bc60655e6/scratchpad/orca-mut-missing
+
+(node:72403) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ❯ tests/control/checkpointRecoverability.test.ts (6 tests | 1 failed) 6878ms
+   ✓ checkpoint recoverability is not task completion > keeps an interrupted run with a whole snapshot continuable, and its work unfinished 1125ms
+   ✓ checkpoint recoverability is not task completion > hands that predecessor's own dirty snapshot to the continuation bundle 1220ms
+   ✓ checkpoint recoverability is not task completion > does not complete an interrupted task's work at commit time, acceptance or not 1088ms
+   ✓ checkpoint recoverability is not task completion > refuses the bundle when the snapshot is gone, even though the run settled 1080ms
+   × checkpoint recoverability is not task completion > does not call a checkpoint with missing evidence continuable 1220ms
+     → promise resolved "{ …(4) }" instead of rejecting
+   ✓ checkpoint recoverability is not task completion > does not let late acceptance finish a task that stopped short of its outcome 1145ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/control/checkpointRecoverability.test.ts > checkpoint recoverability is not task completion > does not call a checkpoint with missing evidence continuable
+AssertionError: promise resolved "{ …(4) }" instead of rejecting
+
+- Expected
++ Received
+
+- [Error: rejected promise]
++ Object {
++   "bundlePath": "/private/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-control-hOKG4E/next/input/cp1",
++   "checkpointHash": "7a6c1901cc48caa5423eca45e2f9924602af25226ace4512d1df3f32fbe353e2",
++   "checkpointId": "cp1",
++   "predecessorRunId": "run-3c1ec2d1-2697-4a97-a9c8-19440d4ce5df",
++ }
+
+ ❯ tests/control/checkpointRecoverability.test.ts:74:120
+     72|       await commitCandidate(h.store, { ...h.candidate, result: "partia…
+     73|       // PROBE ONLY (clone copy): first assertion elided to unshadow t…
+     74|       await expect(exportResumeBundle(h.store, { predecessorRunId: h.c…
+       |                                                                                                                        ^
+     75|         .rejects.toThrow("resume-predecessor-unrecoverable");
+     76|     } finally {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 5 passed (6)
+   Start at  09:25:10
+   Duration  7.29s (transform 137ms, setup 0ms, collect 190ms, tests 6.88s, environment 0ms, prepare 45ms)
+

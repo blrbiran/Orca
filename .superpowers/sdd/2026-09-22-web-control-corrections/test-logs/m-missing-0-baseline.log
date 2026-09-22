@@ -1,0 +1,18 @@
+
+ RUN  v2.1.9 /private/tmp/claude-501/-Users-biran-code-skills-loop-Orca/2adcc8bb-ee5e-43c5-b078-2e2bc60655e6/scratchpad/orca-mut-missing
+
+(node:61250) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/control/checkpointRecoverability.test.ts (6 tests) 6823ms
+   ✓ checkpoint recoverability is not task completion > keeps an interrupted run with a whole snapshot continuable, and its work unfinished 1118ms
+   ✓ checkpoint recoverability is not task completion > hands that predecessor's own dirty snapshot to the continuation bundle 1216ms
+   ✓ checkpoint recoverability is not task completion > does not complete an interrupted task's work at commit time, acceptance or not 1099ms
+   ✓ checkpoint recoverability is not task completion > refuses the bundle when the snapshot is gone, even though the run settled 1089ms
+   ✓ checkpoint recoverability is not task completion > does not call a checkpoint with missing evidence continuable 1140ms
+   ✓ checkpoint recoverability is not task completion > does not let late acceptance finish a task that stopped short of its outcome 1160ms
+
+ Test Files  1 passed (1)
+      Tests  6 passed (6)
+   Start at  09:23:37
+   Duration  7.24s (transform 139ms, setup 0ms, collect 189ms, tests 6.82s, environment 0ms, prepare 52ms)
+

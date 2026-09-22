@@ -127,3 +127,44 @@ criterion whose setup writes to a key no reader uses is empty, and no amount of 
    `commands/seam-census-0922.txt`); `acceptContextObservation` additionally has no producer for
    `ContextObservationV1` anywhere in `src/` -- that is a ccloop-side emit, recorded in the assembly
    spec §8.
+
+---
+
+## 5. Backfill (2026-09-22, session `2adcc8bb`, on commit `1f1bb0b` — §1–§4 above unchanged)
+
+§4.1 is now closed. The mutation that §4.1 said had never been run was run, and both assertions of
+`does not call a checkpoint with missing evidence continuable` were seen red — each against its own
+guard, which is not what §4.1 assumed.
+
+**Method.** `git clone --local` copy at `…/scratchpad/orca-mut-missing`, `node_modules` symlinked from
+the main tree. The copy's `src/control/checkpoints.ts` and
+`tests/control/checkpointRecoverability.test.ts` were proved byte-identical to the main worktree with
+`cmp` before any edit (the worktree was clean at `1f1bb0b`, so the clone of committed state equals it).
+Every mutation used an exact-full-line anchor with an asserted hit count of 1. Runs are unfiltered,
+redirected to a file, read back whole; each log's first `RUN` line points at the copy, not the main tree.
+
+| # | Mutation | Log | Result |
+|---|---|---|---|
+| 0 | none (baseline in the copy) | `test-logs/m-missing-0-baseline.log` | RC0, 6 passed |
+| 1 | `checkpoints.ts:85` `continuable = settled && c.missing.length===0 && !!c.snapshot` → `settled && !!c.snapshot` | `test-logs/m-missing-1-checkpoints85.log` | **RC1, exactly 1 failed** — `:73` `expected true to be false` |
+| 2 | M1 still applied, plus the criterion's **first** assertion elided in the copy (probe only) | `test-logs/m-missing-2-probe-unshadowed.log` | RC0, 6 passed |
+| 3 | M1 + probe still applied, plus `resumeBundle.ts:82` `if (checkpoint.missing.length \|\| !checkpoint.snapshot)` → `if (!checkpoint.snapshot)` | `test-logs/m-missing-3-resumebundle82.log` | **RC1, exactly 1 failed** — `:74` `promise resolved … instead of rejecting` |
+
+**What run 2 found, and why it matters.** With `checkpoints.ts:85`'s `missing` conjunct deleted and the
+first assertion out of the way, the criterion's **second** assertion still passed. So the second
+assertion is not shadowed duplication of the first, and it is not carried by `checkpoints.ts` at all:
+`src/control/resumeBundle.ts:82` independently refuses a checkpoint with `missing.length`. The two
+assertions pin two different guards — defence in depth that nobody had written down. Run 3 names and
+kills the second guard on its own and observes it red, so neither assertion is now resting on the other.
+
+⚠️ This corrects an assumption implicit in §4.1, which spoke of "the mutation" (singular) that would
+kill this criterion. One mutation kills half of it. §4.1's text is left verbatim; this is the correction.
+
+**Restore proof (main worktree, run after the battery).** `git diff` **0 bytes**, `git diff --cached`
+**0 bytes**, `git status --porcelain` **0 bytes**, `HEAD` still `1f1bb0b`. Byte counts are from
+`wc -c` on redirected files, not from eyeballing: `commands/m-missing-restore-diff.txt` and
+`commands/m-missing-restore-diff-cached.txt` are both 0 bytes and are the artifacts themselves.
+The copy was deleted with `/bin/rm -rf` (the local `rm -i` alias makes a bare `rm -rf` hang).
+
+**Not measured here.** Nothing else was re-run; the round's counts in §1–§3 stand as they were, and
+`verify:control` / `:consumer` remain not-run this session for want of a `/tmp` ccloop artifact.
