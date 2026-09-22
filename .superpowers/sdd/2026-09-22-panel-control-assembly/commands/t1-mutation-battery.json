@@ -1,0 +1,101 @@
+[
+ {
+  "mutation": "M1 --no-control ignored",
+  "rc": 1,
+  "failedCount": 2,
+  "failed": [
+   "resolveControlOptions decides the control mount turns off with --no-control, and then names no state directory at all",
+   "resolveControlOptions refuses what it cannot name asks for nothing once control is off, however malformed the rest is"
+  ]
+ },
+ {
+  "mutation": "M2 zero-repo no longer turns control off",
+  "rc": 1,
+  "failedCount": 1,
+  "failed": [
+   "resolveControlOptions refuses what it cannot name does not mount at all when no repository was named, so today's zero-repo boots are untouched"
+  ]
+ },
+ {
+  "mutation": "M3 explicit --control-state-dir ignored",
+  "rc": 1,
+  "failedCount": 2,
+  "failed": [
+   "resolveControlOptions refuses what it cannot name takes an explicit state directory verbatim, and that settles the two-repo case",
+   "resolveControlOptions refuses what it cannot name lets an explicit state directory beat the derived one for a single repo"
+  ]
+ },
+ {
+  "mutation": "M4 multi-repo rejection replaced by a guessed key",
+  "rc": 1,
+  "failedCount": 2,
+  "failed": [
+   "resolveControlOptions refuses what it cannot name refuses two repos with no explicit state directory, because there is no key to use",
+   "resolveControlOptions answers with one rejection in a fixed order reports the state directory before the wake interval"
+  ]
+ },
+ {
+  "mutation": "M5 wake interval accepted unvalidated",
+  "rc": 1,
+  "failedCount": 8,
+  "failed": [
+   "resolveControlOptions validates the wake interval refuses \"0\" as an interval",
+   "resolveControlOptions validates the wake interval refuses \"-1\" as an interval",
+   "resolveControlOptions validates the wake interval refuses \"1.5\" as an interval",
+   "resolveControlOptions validates the wake interval refuses \"abc\" as an interval",
+   "resolveControlOptions validates the wake interval refuses \"\" as an interval",
+   "resolveControlOptions validates the wake interval refuses \"9007199254740993\" as an interval",
+   "resolveControlOptions validates the wake interval refuses \"Infinity\" as an interval",
+   "resolveControlOptions answers with one rejection in a fixed order reports the wake interval before the estimator"
+  ]
+ },
+ {
+  "mutation": "M6 estimator profile no longer required",
+  "rc": 1,
+  "failedCount": 1,
+  "failed": [
+   "resolveControlOptions makes the estimator an operator choice refuses to guess the estimator profile"
+  ]
+ },
+ {
+  "mutation": "M7 estimate mode no longer required",
+  "rc": 1,
+  "failedCount": 1,
+  "failed": [
+   "resolveControlOptions makes the estimator an operator choice refuses to guess the estimate mode, because guessing it is the strict-versus-soft fault"
+  ]
+ },
+ {
+  "mutation": "M8 unrecognised estimate mode accepted",
+  "rc": 1,
+  "failedCount": 1,
+  "failed": [
+   "resolveControlOptions makes the estimator an operator choice refuses a mode it does not recognise by a different name than a missing one"
+  ]
+ },
+ {
+  "mutation": "M9 either ccloop variable counts as configured",
+  "rc": 1,
+  "failedCount": 2,
+  "failed": [
+   "resolveControlOptions reports whether an execution port is configured needs both variables, not either one",
+   "resolveControlOptions reports whether an execution port is configured calls the port configured only when both are set and non-empty"
+  ]
+ },
+ {
+  "mutation": "M10 empty ORCA_CONTROL_DIR treated as set",
+  "rc": 1,
+  "failedCount": 1,
+  "failed": [
+   "resolveControlOptions decides the control mount falls back to the home directory when the variable is unset or empty, without touching it"
+  ]
+ },
+ {
+  "mutation": "M11 home fallback drops the control segment",
+  "rc": 1,
+  "failedCount": 1,
+  "failed": [
+   "resolveControlOptions decides the control mount falls back to the home directory when the variable is unset or empty, without touching it"
+  ]
+ }
+]

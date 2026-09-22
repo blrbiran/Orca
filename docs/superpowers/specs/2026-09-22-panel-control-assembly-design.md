@@ -280,3 +280,40 @@ is the invariant, not either field alone.
 11. The Web panel renders the unconfigured state visibly, and a criterion that reads
     `probeFailureCode` instead of the new field must be red, so the §9.3 separation is observed rather
     than merely written down.
+
+---
+
+## 10. R7 — the estimator refuses like the port does (human, 2026-09-22, session `2adcc8bb`)
+
+**§0–§9 above are unchanged.** §6 says of the estimator defaults: "both required when control is
+mounted, because a guessed estimate mode is exactly the 'treats a soft adapter as strict' failure."
+Implementing that against R1 was measured before it was argued about:
+
+> `tests/panel`: **36 of 220 criteria red**, every one `control-estimator-profile-required`, spread
+> over `correctApi`, `metricsApi`, `decisionsApi`, `todo` and `security` — five files with no
+> relationship to the control plane. Unfiltered log:
+> `.superpowers/sdd/2026-09-22-panel-control-assembly/test-logs/t1-collision-36-red.log`.
+
+Two approved statements collided, each with real backing, so it went to a human (CLAUDE.md Rule 7).
+
+**The ruling: the estimator behaves exactly like the execution port under R5.** A panel with no
+`--estimator-profile`/`--estimate-mode` boots, mounts the plane and serves the reads; the commands
+that need an estimate refuse by a closed name. §6's reason survives intact — nothing is guessed,
+because refusing is not guessing. §6's *mechanism* ("both required when control is mounted") is what
+this supersedes, and only that clause.
+
+Consequences, all of them inside this slice:
+
+- `ControlConfigV1.defaults` becomes nullable, the same way §9.4 made `adapterConfigPath` nullable,
+  and for the same reason: a served view must be able to say "not configured" rather than be
+  impossible to build. This is the second and last field this slice changes; §9.2's sentence that the
+  override "is not a licence for any other schema change" now names two fields, not one.
+- `TrustedControlConfigInput.defaultEstimatorProfileId` / `defaultEstimateMode` become nullable as a
+  pair, with the same cross-field refinement shape as §9.4: both null or both set, never one.
+- `resolveControlOptions` therefore does not refuse an absent estimator. It does refuse **half** of
+  one (`control-estimator-incomplete`), in both directions, because an operator who typed one of the
+  two flags meant to configure an estimator and dropping the half they typed would be the guess §6
+  was protecting against. It also still refuses a mode it does not recognise
+  (`control-estimate-mode-invalid`), separately.
+- §7's acceptance gains: a panel booted with neither estimator flag serves `defaults: null` and
+  refuses an estimate command by name; a panel given exactly one of the two flags does not boot.

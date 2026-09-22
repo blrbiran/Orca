@@ -15,6 +15,7 @@ import type { ChainRepoView as WebChainRepoView, ChainView as WebChainView } fro
 import { ReviewsWriter } from "../../src/panel/reviewsStore.js";
 import { git } from "../../src/scheduler/gitExec.js";
 import { type PanelOptions, createPanelServer } from "../../src/panel/server.js";
+import { controlDisabled } from "../../src/panel/controlOptions.js";
 import { TOKEN_ANCHOR, loadStaticFiles } from "../../src/panel/staticFiles.js";
 import { WEB_CHAIN_VIEW_FIELDS } from "../../web/src/types.js";
 import { PANEL_COMMIT_RULE, offending, scanTree } from "../../scripts/forbidden-literals.js";
@@ -47,6 +48,9 @@ async function setup(opts: { gate?: boolean; over?: Partial<PanelOptions> } = {}
     confirmedExternal: false,
     correctionsDir: store,
     repos: [{ projectKey: "chains", path: target.path }],
+    // Assembly plan Task 1: this criterion is about chains, not about the control plane, so it
+    // builds the same options a `--no-control` boot produces. Fixture shape only; no assertion moved.
+    control: controlDisabled(),
     distDir: await distFixture(),
     chainEnv: fake.env(),
     ...opts.over,

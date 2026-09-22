@@ -1,0 +1,676 @@
+
+ RUN  v2.1.9 /Users/biran/code/skills/loop/Orca
+
+(node:15566) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:15560) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:15564) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ❯ tests/panel/security.test.ts (11 tests | 1 failed) 938ms
+   ✓ panel security via the real CLI process (controller ruling E2/E3: not skipped) > refuses a missing --by through the REAL process (ruling E3: the hole Task 1's stub left open) 572ms
+   ✓ panel security via the real CLI process (controller ruling E2/E3: not skipped) > refuses an unconfirmed external bind through the REAL process, leaving no listener 358ms
+   × parsePanelArgs argument validation (F6: task 3's deferred malformed-port / malformed-repo-argument) > rejects --repo by name for a value with no '=' and for one starting with '='; accepts k=path 3ms
+     → --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+ ✓ tests/panel/controlApi.test.ts (4 tests) 927ms
+   ✓ web control acceptance over a real panel (task 10 step 1) > takes a plan from import to a continued task, and the ledger's own state is durable at every boundary 442ms
+ ✓ tests/panel/controlLifecycle.test.ts (12 tests) 1086ms
+ ✓ tests/panel/webParity.test.ts (3 tests) 2ms
+(node:16659) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/panel/reviewsStore.test.ts (19 tests) 2201ms
+   ✓ the reviews store (spec section 4.3) > refuses by its OWN name when its OWN lock is held 1006ms
+   ✓ the reviews writer after reviews.jsonl is replaced (reviews compaction spec section 5) > C19c a claim whose write failed does not come back on a later reload 1026ms
+ ✓ tests/panel/controlOptions.test.ts (30 tests) 4ms
+ ✓ tests/panel/controlRecoveryApi.test.ts (4 tests) 1062ms
+   ✓ recovery blockers over the panel (task 10 step 2) > keeps a refused claim durable and group-local, and one retry re-arms it into a real run 320ms
+ ✓ tests/panel/controlConfig.test.ts (4 tests) 52ms
+ ❯ tests/panel/todo.test.ts (6 tests | 2 failed) 1138ms
+   × GET /api/todo (task 8 ruling K5, HTTP) > (e) answers with exactly the unreviewed high-tier decision, deep-equal to its LIST_FIELDS projection, and records nothing 438ms
+     → --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+   × GET /api/todo (task 8 ruling K5, HTTP) > (f) agreeing on two repositories' decisions that share an id takes BOTH off the to-do list 699ms
+     → more than one --repo leaves no project key to name the control state directory after; pass --control-state-dir <path>, or --no-control if this panel is not running work.
+ ✓ tests/panel/noSkips.test.ts (4 tests) 34ms
+ ✓ tests/panel/compactReviews.test.ts (12 tests) 1427ms
+   ✓ applying and dry-running compaction (reviews compaction spec section 4) > C12 refuses by name while the lock is held and touches nothing 1015ms
+ ✓ tests/panel/compactClassify.test.ts (8 tests) 3ms
+ ✓ tests/panel/controlReadApi.test.ts (17 tests) 2851ms
+   ✓ canonical control read API > returns persisted command results, sorted recovery, verified evidence manifests, and exact typed misses 334ms
+ ✓ tests/panel/compactReviewsCli.test.ts (6 tests) 245ms
+ ✓ tests/panel/ledgerViews.test.ts (5 tests) 87ms
+ ✓ tests/panel/staticFiles.test.ts (8 tests) 73ms
+ ✓ tests/panel/workspace.test.ts (7 tests) 14ms
+ ✓ tests/panel/coverageDuplicates.test.ts (2 tests) 2ms
+ ✓ tests/panel/endToEnd.test.ts (5 tests) 2ms
+ ✓ tests/panel/usage.test.ts (1 test) 2ms
+ ❯ tests/panel/metricsApi.test.ts (16 tests | 8 failed) 2983ms
+   × the metrics endpoint (spec sections 4.1 and 5) > passes E2's report through field for field, adding nothing and dropping nothing 403ms
+     → --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+   × the metrics endpoint (spec sections 4.1 and 5) > re-runs repository discovery and E2's gate on EVERY request 364ms
+     → --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+   × the metrics endpoint (spec sections 4.1 and 5) > answers a broken gate with a first-class error, never with partial data 407ms
+     → --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+   × the metrics endpoint (spec sections 4.1 and 5) > answers 401 without a token, and 401 with a wrong one 366ms
+     → --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+   × the Host allowlist (final review I-4, DNS rebinding) > refuses a foreign Host on the token-carrying page with 403 by name, and the body carries no token 355ms
+     → --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+   × the Host allowlist (final review I-4, DNS rebinding) > refuses a foreign Host on the API even with a valid token (the guard sits in front of /api too) 370ms
+     → --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+   × the Host allowlist (final review I-4, DNS rebinding) > uses the exact V1 envelope for a foreign Host on control routes while preserving legacy API errors 389ms
+     → --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+   × the Host allowlist (final review I-4, DNS rebinding) > answers the loopback names it was reached by: 127.0.0.1, localhost and [::1] (positive controls) 262ms
+     → --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+ ❯ tests/panel/decisionsApi.test.ts (8 tests | 8 failed) 3137ms
+   × the decisions endpoints (spec sections 4.2 and 4.3.1) > returns list rows DEEP-EQUAL to the frozen projection, not merely lacking a summary 405ms
+     → --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+   × the decisions endpoints (spec sections 4.2 and 4.3.1) > records NOTHING when the list is served 362ms
+     → --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+   × the decisions endpoints (spec sections 4.2 and 4.3.1) > records exactly one `opened` when a detail is served, and no `reviewed` 401ms
+     → --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+   × the decisions endpoints (spec sections 4.2 and 4.3.1) > serves the detail while the reviews lock is held, and the failed opened write is only a server-side warning 374ms
+     → --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+   × the decisions endpoints (spec sections 4.2 and 4.3.1) > serves the detail even when the CORRECTIONS lock is held 420ms
+     → --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+   × the decisions endpoints (spec sections 4.2 and 4.3.1) > answers 404 for a decision it has never seen, and for a known id under an unconfigured projectKey 364ms
+     → --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+   × the decisions endpoints (spec sections 4.2 and 4.3.1) > returns each repository's own row when two repositories share a decision id 595ms
+     → more than one --repo leaves no project key to name the control state directory after; pass --control-state-dir <path>, or --no-control if this panel is not running work.
+   × the decisions endpoints (spec sections 4.2 and 4.3.1) > answers the detail with the gate's refusal when the gate is broken 217ms
+     → --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+ ❯ tests/panel/correctApi.test.ts (17 tests | 17 failed) 4343ms
+   × recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > answers a row the seam would refuse with the seam's OWN named refusal (an unknown kind) 400ms
+     → --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+   × recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > refuses an empty optional field by name instead of dumping Zod at the person 366ms
+     → --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+   × recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > records and does NOT close the loop 409ms
+     → --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+   × recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > writes its OWN message for a second correction, with no `--again` in it 365ms
+     → --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+   × recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > records another one when the page asks for it on purpose 325ms
+     → --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+   × recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > does NOT write `reviewed` when the correction was refused 340ms
+     → --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+   × recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > writes `reviewed` when the correction lands, and when the person clicks agreed 344ms
+     → --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+   × recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > lets a failed `reviewed` write reach the person on POST /api/reviews, unlike `opened` 290ms
+     → --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+   × recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > tells the person the correction landed even when the reviewed mark could not be written 233ms
+     → --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+   × recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > answers 404 for a decision the panel does not list, and records nothing (both endpoints) 164ms
+     → --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+   × recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > derives the same correction id the CLI derives for the same input and clock (E3 spec §2.3) 176ms
+     → --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+   × the panel's error mapping for client mistakes (final review I-2) > refuses a POST with no content-type as a bad request (Express leaves the body undefined) 153ms
+     → --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+   × the panel's error mapping for client mistakes (final review I-2) > refuses a malformed JSON body as a bad request (the body parser's own error) 157ms
+     → --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+   × the panel's error mapping for client mistakes (final review I-2) > refuses a JSON body that is not an object (an array) as a bad request, before reading any field 157ms
+     → --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+   × the panel's error mapping for client mistakes (final review I-2) > answers a body over the parser's 64kb limit with 413, not a flat 400 149ms
+     → --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+   × the panel's error mapping for client mistakes (final review I-2) > answers a content-encoding nothing can decode with 415, not a flat 400 154ms
+     → --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+   × the panel's error mapping for client mistakes (final review I-2) > answers a busy corrections store with 409 by name, not 400 (a transient conflict, not a client error) 159ms
+     → --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+ ✓ tests/panel/chainsApi.test.ts (11 tests) 13849ms
+   ✓ chains in the panel (D-launch spec §6.2, §6.3, §8.2-8) > C1 POST /api/chains starts a chain ONLY by spawning `orca chain start`: the supervisor is another process; the status view follows it to done 4868ms
+   ✓ chains in the panel (D-launch spec §6.2, §6.3, §8.2-8) > C3 a refusal by the CLI comes back as soon as the CLI exits, with its code (spec §2) 633ms
+   ✓ chains in the panel (D-launch spec §6.2, §6.3, §8.2-8) > C4 no `started` line within the wait is 500 by name, naming the log and the pid 3832ms
+   ✓ chains in the panel (D-launch spec §6.2, §6.3, §8.2-8) > C6 status: a running record without a live holder is shown as holder gone; with one, not; a missing cost is null 308ms
+   ✓ chains in the panel (D-launch spec §6.2, §6.3, §8.2-8) > C8 external mode opens the same routes (rulings R11, R13): an app built for a confirmed external bind starts a chain 3451ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 36 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/panel/correctApi.test.ts > recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > answers a row the seam would refuse with the seam's OWN named refusal (an unknown kind)
+PanelRejection: --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+ ❯ Module.parsePanelArgs src/panel/server.ts:104:33
+    102|   // A rejection is raised here rather than carried, so no caller can …
+    103|   const { rejection, ...control } = resolveControlOptions(args, env, r…
+    104|   if (rejection !== null) throw new PanelRejection(rejection, controlR…
+       |                                 ^
+    105| 
+    106|   return {
+ ❯ tests/panel/correctApi.test.ts:129:11
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ tests/panel/correctApi.test.ts:124:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/36]⎯
+
+ FAIL  tests/panel/correctApi.test.ts > recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > refuses an empty optional field by name instead of dumping Zod at the person
+PanelRejection: --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+ ❯ Module.parsePanelArgs src/panel/server.ts:104:33
+    102|   // A rejection is raised here rather than carried, so no caller can …
+    103|   const { rejection, ...control } = resolveControlOptions(args, env, r…
+    104|   if (rejection !== null) throw new PanelRejection(rejection, controlR…
+       |                                 ^
+    105| 
+    106|   return {
+ ❯ tests/panel/correctApi.test.ts:165:11
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ tests/panel/correctApi.test.ts:160:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/36]⎯
+
+ FAIL  tests/panel/correctApi.test.ts > recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > records and does NOT close the loop
+PanelRejection: --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+ ❯ Module.parsePanelArgs src/panel/server.ts:104:33
+    102|   // A rejection is raised here rather than carried, so no caller can …
+    103|   const { rejection, ...control } = resolveControlOptions(args, env, r…
+    104|   if (rejection !== null) throw new PanelRejection(rejection, controlR…
+       |                                 ^
+    105| 
+    106|   return {
+ ❯ tests/panel/correctApi.test.ts:199:11
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ tests/panel/correctApi.test.ts:194:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/36]⎯
+
+ FAIL  tests/panel/correctApi.test.ts > recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > writes its OWN message for a second correction, with no `--again` in it
+PanelRejection: --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+ ❯ Module.parsePanelArgs src/panel/server.ts:104:33
+    102|   // A rejection is raised here rather than carried, so no caller can …
+    103|   const { rejection, ...control } = resolveControlOptions(args, env, r…
+    104|   if (rejection !== null) throw new PanelRejection(rejection, controlR…
+       |                                 ^
+    105| 
+    106|   return {
+ ❯ tests/panel/correctApi.test.ts:243:11
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ tests/panel/correctApi.test.ts:238:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/36]⎯
+
+ FAIL  tests/panel/correctApi.test.ts > recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > records another one when the page asks for it on purpose
+PanelRejection: --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+ ❯ Module.parsePanelArgs src/panel/server.ts:104:33
+    102|   // A rejection is raised here rather than carried, so no caller can …
+    103|   const { rejection, ...control } = resolveControlOptions(args, env, r…
+    104|   if (rejection !== null) throw new PanelRejection(rejection, controlR…
+       |                                 ^
+    105| 
+    106|   return {
+ ❯ tests/panel/correctApi.test.ts:285:11
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ tests/panel/correctApi.test.ts:280:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/36]⎯
+
+ FAIL  tests/panel/correctApi.test.ts > recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > does NOT write `reviewed` when the correction was refused
+PanelRejection: --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+ ❯ Module.parsePanelArgs src/panel/server.ts:104:33
+    102|   // A rejection is raised here rather than carried, so no caller can …
+    103|   const { rejection, ...control } = resolveControlOptions(args, env, r…
+    104|   if (rejection !== null) throw new PanelRejection(rejection, controlR…
+       |                                 ^
+    105| 
+    106|   return {
+ ❯ tests/panel/correctApi.test.ts:312:11
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ tests/panel/correctApi.test.ts:307:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/36]⎯
+
+ FAIL  tests/panel/correctApi.test.ts > recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > writes `reviewed` when the correction lands, and when the person clicks agreed
+PanelRejection: --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+ ❯ Module.parsePanelArgs src/panel/server.ts:104:33
+    102|   // A rejection is raised here rather than carried, so no caller can …
+    103|   const { rejection, ...control } = resolveControlOptions(args, env, r…
+    104|   if (rejection !== null) throw new PanelRejection(rejection, controlR…
+       |                                 ^
+    105| 
+    106|   return {
+ ❯ tests/panel/correctApi.test.ts:353:14
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ tests/panel/correctApi.test.ts:341:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/36]⎯
+
+ FAIL  tests/panel/correctApi.test.ts > recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > lets a failed `reviewed` write reach the person on POST /api/reviews, unlike `opened`
+PanelRejection: --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+ ❯ Module.parsePanelArgs src/panel/server.ts:104:33
+    102|   // A rejection is raised here rather than carried, so no caller can …
+    103|   const { rejection, ...control } = resolveControlOptions(args, env, r…
+    104|   if (rejection !== null) throw new PanelRejection(rejection, controlR…
+       |                                 ^
+    105| 
+    106|   return {
+ ❯ tests/panel/correctApi.test.ts:399:11
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ tests/panel/correctApi.test.ts:393:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/36]⎯
+
+ FAIL  tests/panel/correctApi.test.ts > recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > tells the person the correction landed even when the reviewed mark could not be written
+PanelRejection: --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+ ❯ Module.parsePanelArgs src/panel/server.ts:104:33
+    102|   // A rejection is raised here rather than carried, so no caller can …
+    103|   const { rejection, ...control } = resolveControlOptions(args, env, r…
+    104|   if (rejection !== null) throw new PanelRejection(rejection, controlR…
+       |                                 ^
+    105| 
+    106|   return {
+ ❯ tests/panel/correctApi.test.ts:436:11
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ tests/panel/correctApi.test.ts:430:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/36]⎯
+
+ FAIL  tests/panel/correctApi.test.ts > recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > answers 404 for a decision the panel does not list, and records nothing (both endpoints)
+PanelRejection: --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+ ❯ Module.parsePanelArgs src/panel/server.ts:104:33
+    102|   // A rejection is raised here rather than carried, so no caller can …
+    103|   const { rejection, ...control } = resolveControlOptions(args, env, r…
+    104|   if (rejection !== null) throw new PanelRejection(rejection, controlR…
+       |                                 ^
+    105| 
+    106|   return {
+ ❯ tests/panel/correctApi.test.ts:472:11
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ tests/panel/correctApi.test.ts:467:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/36]⎯
+
+ FAIL  tests/panel/correctApi.test.ts > recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > derives the same correction id the CLI derives for the same input and clock (E3 spec §2.3)
+PanelRejection: --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+ ❯ Module.parsePanelArgs src/panel/server.ts:104:33
+    102|   // A rejection is raised here rather than carried, so no caller can …
+    103|   const { rejection, ...control } = resolveControlOptions(args, env, r…
+    104|   if (rejection !== null) throw new PanelRejection(rejection, controlR…
+       |                                 ^
+    105| 
+    106|   return {
+ ❯ tests/panel/correctApi.test.ts:544:14
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ tests/panel/correctApi.test.ts:532:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/36]⎯
+
+ FAIL  tests/panel/correctApi.test.ts > the panel's error mapping for client mistakes (final review I-2) > refuses a POST with no content-type as a bad request (Express leaves the body undefined)
+PanelRejection: --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+ ❯ Module.parsePanelArgs src/panel/server.ts:104:33
+    102|   // A rejection is raised here rather than carried, so no caller can …
+    103|   const { rejection, ...control } = resolveControlOptions(args, env, r…
+    104|   if (rejection !== null) throw new PanelRejection(rejection, controlR…
+       |                                 ^
+    105| 
+    106|   return {
+ ❯ tests/panel/correctApi.test.ts:584:11
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ withPanel tests/panel/correctApi.test.ts:579:5
+ ❯ tests/panel/correctApi.test.ts:611:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/36]⎯
+
+ FAIL  tests/panel/correctApi.test.ts > the panel's error mapping for client mistakes (final review I-2) > refuses a malformed JSON body as a bad request (the body parser's own error)
+PanelRejection: --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+ ❯ Module.parsePanelArgs src/panel/server.ts:104:33
+    102|   // A rejection is raised here rather than carried, so no caller can …
+    103|   const { rejection, ...control } = resolveControlOptions(args, env, r…
+    104|   if (rejection !== null) throw new PanelRejection(rejection, controlR…
+       |                                 ^
+    105| 
+    106|   return {
+ ❯ tests/panel/correctApi.test.ts:584:11
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ withPanel tests/panel/correctApi.test.ts:579:5
+ ❯ tests/panel/correctApi.test.ts:619:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/36]⎯
+
+ FAIL  tests/panel/correctApi.test.ts > the panel's error mapping for client mistakes (final review I-2) > refuses a JSON body that is not an object (an array) as a bad request, before reading any field
+PanelRejection: --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+ ❯ Module.parsePanelArgs src/panel/server.ts:104:33
+    102|   // A rejection is raised here rather than carried, so no caller can …
+    103|   const { rejection, ...control } = resolveControlOptions(args, env, r…
+    104|   if (rejection !== null) throw new PanelRejection(rejection, controlR…
+       |                                 ^
+    105| 
+    106|   return {
+ ❯ tests/panel/correctApi.test.ts:584:11
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ withPanel tests/panel/correctApi.test.ts:579:5
+ ❯ tests/panel/correctApi.test.ts:629:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/36]⎯
+
+ FAIL  tests/panel/correctApi.test.ts > the panel's error mapping for client mistakes (final review I-2) > answers a body over the parser's 64kb limit with 413, not a flat 400
+PanelRejection: --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+ ❯ Module.parsePanelArgs src/panel/server.ts:104:33
+    102|   // A rejection is raised here rather than carried, so no caller can …
+    103|   const { rejection, ...control } = resolveControlOptions(args, env, r…
+    104|   if (rejection !== null) throw new PanelRejection(rejection, controlR…
+       |                                 ^
+    105| 
+    106|   return {
+ ❯ tests/panel/correctApi.test.ts:584:11
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ withPanel tests/panel/correctApi.test.ts:579:5
+ ❯ tests/panel/correctApi.test.ts:644:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/36]⎯
+
+ FAIL  tests/panel/correctApi.test.ts > the panel's error mapping for client mistakes (final review I-2) > answers a content-encoding nothing can decode with 415, not a flat 400
+PanelRejection: --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+ ❯ Module.parsePanelArgs src/panel/server.ts:104:33
+    102|   // A rejection is raised here rather than carried, so no caller can …
+    103|   const { rejection, ...control } = resolveControlOptions(args, env, r…
+    104|   if (rejection !== null) throw new PanelRejection(rejection, controlR…
+       |                                 ^
+    105| 
+    106|   return {
+ ❯ tests/panel/correctApi.test.ts:584:11
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ withPanel tests/panel/correctApi.test.ts:579:5
+ ❯ tests/panel/correctApi.test.ts:661:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/36]⎯
+
+ FAIL  tests/panel/correctApi.test.ts > the panel's error mapping for client mistakes (final review I-2) > answers a busy corrections store with 409 by name, not 400 (a transient conflict, not a client error)
+PanelRejection: --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+ ❯ Module.parsePanelArgs src/panel/server.ts:104:33
+    102|   // A rejection is raised here rather than carried, so no caller can …
+    103|   const { rejection, ...control } = resolveControlOptions(args, env, r…
+    104|   if (rejection !== null) throw new PanelRejection(rejection, controlR…
+       |                                 ^
+    105| 
+    106|   return {
+ ❯ tests/panel/correctApi.test.ts:584:11
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ withPanel tests/panel/correctApi.test.ts:579:5
+ ❯ tests/panel/correctApi.test.ts:677:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/36]⎯
+
+ FAIL  tests/panel/decisionsApi.test.ts > the decisions endpoints (spec sections 4.2 and 4.3.1) > returns list rows DEEP-EQUAL to the frozen projection, not merely lacking a summary
+PanelRejection: --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+ ❯ Module.parsePanelArgs src/panel/server.ts:104:33
+    102|   // A rejection is raised here rather than carried, so no caller can …
+    103|   const { rejection, ...control } = resolveControlOptions(args, env, r…
+    104|   if (rejection !== null) throw new PanelRejection(rejection, controlR…
+       |                                 ^
+    105| 
+    106|   return {
+ ❯ tests/panel/decisionsApi.test.ts:68:11
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ tests/panel/decisionsApi.test.ts:58:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/36]⎯
+
+ FAIL  tests/panel/decisionsApi.test.ts > the decisions endpoints (spec sections 4.2 and 4.3.1) > records NOTHING when the list is served
+PanelRejection: --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+ ❯ Module.parsePanelArgs src/panel/server.ts:104:33
+    102|   // A rejection is raised here rather than carried, so no caller can …
+    103|   const { rejection, ...control } = resolveControlOptions(args, env, r…
+    104|   if (rejection !== null) throw new PanelRejection(rejection, controlR…
+       |                                 ^
+    105| 
+    106|   return {
+ ❯ tests/panel/decisionsApi.test.ts:122:11
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ tests/panel/decisionsApi.test.ts:117:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/36]⎯
+
+ FAIL  tests/panel/decisionsApi.test.ts > the decisions endpoints (spec sections 4.2 and 4.3.1) > records exactly one `opened` when a detail is served, and no `reviewed`
+PanelRejection: --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+ ❯ Module.parsePanelArgs src/panel/server.ts:104:33
+    102|   // A rejection is raised here rather than carried, so no caller can …
+    103|   const { rejection, ...control } = resolveControlOptions(args, env, r…
+    104|   if (rejection !== null) throw new PanelRejection(rejection, controlR…
+       |                                 ^
+    105| 
+    106|   return {
+ ❯ tests/panel/decisionsApi.test.ts:172:14
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ tests/panel/decisionsApi.test.ts:166:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/36]⎯
+
+ FAIL  tests/panel/decisionsApi.test.ts > the decisions endpoints (spec sections 4.2 and 4.3.1) > serves the detail while the reviews lock is held, and the failed opened write is only a server-side warning
+PanelRejection: --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+ ❯ Module.parsePanelArgs src/panel/server.ts:104:33
+    102|   // A rejection is raised here rather than carried, so no caller can …
+    103|   const { rejection, ...control } = resolveControlOptions(args, env, r…
+    104|   if (rejection !== null) throw new PanelRejection(rejection, controlR…
+       |                                 ^
+    105| 
+    106|   return {
+ ❯ tests/panel/decisionsApi.test.ts:213:11
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ tests/panel/decisionsApi.test.ts:206:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/36]⎯
+
+ FAIL  tests/panel/decisionsApi.test.ts > the decisions endpoints (spec sections 4.2 and 4.3.1) > serves the detail even when the CORRECTIONS lock is held
+PanelRejection: --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+ ❯ Module.parsePanelArgs src/panel/server.ts:104:33
+    102|   // A rejection is raised here rather than carried, so no caller can …
+    103|   const { rejection, ...control } = resolveControlOptions(args, env, r…
+    104|   if (rejection !== null) throw new PanelRejection(rejection, controlR…
+       |                                 ^
+    105| 
+    106|   return {
+ ❯ tests/panel/decisionsApi.test.ts:259:11
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ tests/panel/decisionsApi.test.ts:253:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/36]⎯
+
+ FAIL  tests/panel/decisionsApi.test.ts > the decisions endpoints (spec sections 4.2 and 4.3.1) > answers 404 for a decision it has never seen, and for a known id under an unconfigured projectKey
+PanelRejection: --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+ ❯ Module.parsePanelArgs src/panel/server.ts:104:33
+    102|   // A rejection is raised here rather than carried, so no caller can …
+    103|   const { rejection, ...control } = resolveControlOptions(args, env, r…
+    104|   if (rejection !== null) throw new PanelRejection(rejection, controlR…
+       |                                 ^
+    105| 
+    106|   return {
+ ❯ tests/panel/decisionsApi.test.ts:284:11
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ tests/panel/decisionsApi.test.ts:279:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/36]⎯
+
+ FAIL  tests/panel/decisionsApi.test.ts > the decisions endpoints (spec sections 4.2 and 4.3.1) > returns each repository's own row when two repositories share a decision id
+PanelRejection: more than one --repo leaves no project key to name the control state directory after; pass --control-state-dir <path>, or --no-control if this panel is not running work.
+ ❯ Module.parsePanelArgs src/panel/server.ts:104:33
+    102|   // A rejection is raised here rather than carried, so no caller can …
+    103|   const { rejection, ...control } = resolveControlOptions(args, env, r…
+    104|   if (rejection !== null) throw new PanelRejection(rejection, controlR…
+       |                                 ^
+    105| 
+    106|   return {
+ ❯ tests/panel/decisionsApi.test.ts:321:11
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ tests/panel/decisionsApi.test.ts:310:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[24/36]⎯
+
+ FAIL  tests/panel/decisionsApi.test.ts > the decisions endpoints (spec sections 4.2 and 4.3.1) > answers the detail with the gate's refusal when the gate is broken
+PanelRejection: --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+ ❯ Module.parsePanelArgs src/panel/server.ts:104:33
+    102|   // A rejection is raised here rather than carried, so no caller can …
+    103|   const { rejection, ...control } = resolveControlOptions(args, env, r…
+    104|   if (rejection !== null) throw new PanelRejection(rejection, controlR…
+       |                                 ^
+    105| 
+    106|   return {
+ ❯ tests/panel/decisionsApi.test.ts:353:11
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ tests/panel/decisionsApi.test.ts:348:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[25/36]⎯
+
+ FAIL  tests/panel/metricsApi.test.ts > the metrics endpoint (spec sections 4.1 and 5) > passes E2's report through field for field, adding nothing and dropping nothing
+PanelRejection: --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+ ❯ Module.parsePanelArgs src/panel/server.ts:104:33
+    102|   // A rejection is raised here rather than carried, so no caller can …
+    103|   const { rejection, ...control } = resolveControlOptions(args, env, r…
+    104|   if (rejection !== null) throw new PanelRejection(rejection, controlR…
+       |                                 ^
+    105| 
+    106|   return {
+ ❯ tests/panel/metricsApi.test.ts:87:14
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ tests/panel/metricsApi.test.ts:77:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[26/36]⎯
+
+ FAIL  tests/panel/metricsApi.test.ts > the metrics endpoint (spec sections 4.1 and 5) > re-runs repository discovery and E2's gate on EVERY request
+PanelRejection: --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+ ❯ Module.parsePanelArgs src/panel/server.ts:104:33
+    102|   // A rejection is raised here rather than carried, so no caller can …
+    103|   const { rejection, ...control } = resolveControlOptions(args, env, r…
+    104|   if (rejection !== null) throw new PanelRejection(rejection, controlR…
+       |                                 ^
+    105| 
+    106|   return {
+ ❯ tests/panel/metricsApi.test.ts:126:22
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ tests/panel/metricsApi.test.ts:122:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[27/36]⎯
+
+ FAIL  tests/panel/metricsApi.test.ts > the metrics endpoint (spec sections 4.1 and 5) > answers a broken gate with a first-class error, never with partial data
+PanelRejection: --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+ ❯ Module.parsePanelArgs src/panel/server.ts:104:33
+    102|   // A rejection is raised here rather than carried, so no caller can …
+    103|   const { rejection, ...control } = resolveControlOptions(args, env, r…
+    104|   if (rejection !== null) throw new PanelRejection(rejection, controlR…
+       |                                 ^
+    105| 
+    106|   return {
+ ❯ tests/panel/metricsApi.test.ts:168:22
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ tests/panel/metricsApi.test.ts:164:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[28/36]⎯
+
+ FAIL  tests/panel/metricsApi.test.ts > the metrics endpoint (spec sections 4.1 and 5) > answers 401 without a token, and 401 with a wrong one
+PanelRejection: --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+ ❯ Module.parsePanelArgs src/panel/server.ts:104:33
+    102|   // A rejection is raised here rather than carried, so no caller can …
+    103|   const { rejection, ...control } = resolveControlOptions(args, env, r…
+    104|   if (rejection !== null) throw new PanelRejection(rejection, controlR…
+       |                                 ^
+    105| 
+    106|   return {
+ ❯ tests/panel/metricsApi.test.ts:212:11
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ tests/panel/metricsApi.test.ts:207:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[29/36]⎯
+
+ FAIL  tests/panel/metricsApi.test.ts > the Host allowlist (final review I-4, DNS rebinding) > refuses a foreign Host on the token-carrying page with 403 by name, and the body carries no token
+PanelRejection: --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+ ❯ Module.parsePanelArgs src/panel/server.ts:104:33
+    102|   // A rejection is raised here rather than carried, so no caller can …
+    103|   const { rejection, ...control } = resolveControlOptions(args, env, r…
+    104|   if (rejection !== null) throw new PanelRejection(rejection, controlR…
+       |                                 ^
+    105| 
+    106|   return {
+ ❯ tests/panel/metricsApi.test.ts:339:11
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ withPanel tests/panel/metricsApi.test.ts:334:5
+ ❯ tests/panel/metricsApi.test.ts:356:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[30/36]⎯
+
+ FAIL  tests/panel/metricsApi.test.ts > the Host allowlist (final review I-4, DNS rebinding) > refuses a foreign Host on the API even with a valid token (the guard sits in front of /api too)
+PanelRejection: --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+ ❯ Module.parsePanelArgs src/panel/server.ts:104:33
+    102|   // A rejection is raised here rather than carried, so no caller can …
+    103|   const { rejection, ...control } = resolveControlOptions(args, env, r…
+    104|   if (rejection !== null) throw new PanelRejection(rejection, controlR…
+       |                                 ^
+    105| 
+    106|   return {
+ ❯ tests/panel/metricsApi.test.ts:339:11
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ withPanel tests/panel/metricsApi.test.ts:334:5
+ ❯ tests/panel/metricsApi.test.ts:375:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[31/36]⎯
+
+ FAIL  tests/panel/metricsApi.test.ts > the Host allowlist (final review I-4, DNS rebinding) > uses the exact V1 envelope for a foreign Host on control routes while preserving legacy API errors
+PanelRejection: --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+ ❯ Module.parsePanelArgs src/panel/server.ts:104:33
+    102|   // A rejection is raised here rather than carried, so no caller can …
+    103|   const { rejection, ...control } = resolveControlOptions(args, env, r…
+    104|   if (rejection !== null) throw new PanelRejection(rejection, controlR…
+       |                                 ^
+    105| 
+    106|   return {
+ ❯ tests/panel/metricsApi.test.ts:339:11
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ withPanel tests/panel/metricsApi.test.ts:334:5
+ ❯ tests/panel/metricsApi.test.ts:387:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[32/36]⎯
+
+ FAIL  tests/panel/metricsApi.test.ts > the Host allowlist (final review I-4, DNS rebinding) > answers the loopback names it was reached by: 127.0.0.1, localhost and [::1] (positive controls)
+PanelRejection: --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+ ❯ Module.parsePanelArgs src/panel/server.ts:104:33
+    102|   // A rejection is raised here rather than carried, so no caller can …
+    103|   const { rejection, ...control } = resolveControlOptions(args, env, r…
+    104|   if (rejection !== null) throw new PanelRejection(rejection, controlR…
+       |                                 ^
+    105| 
+    106|   return {
+ ❯ tests/panel/metricsApi.test.ts:339:11
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ withPanel tests/panel/metricsApi.test.ts:334:5
+ ❯ tests/panel/metricsApi.test.ts:411:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[33/36]⎯
+
+ FAIL  tests/panel/security.test.ts > parsePanelArgs argument validation (F6: task 3's deferred malformed-port / malformed-repo-argument) > rejects --repo by name for a value with no '=' and for one starting with '='; accepts k=path
+PanelRejection: --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+ ❯ Module.parsePanelArgs src/panel/server.ts:104:33
+    102|   // A rejection is raised here rather than carried, so no caller can …
+    103|   const { rejection, ...control } = resolveControlOptions(args, env, r…
+    104|   if (rejection !== null) throw new PanelRejection(rejection, controlR…
+       |                                 ^
+    105| 
+    106|   return {
+ ❯ tests/panel/security.test.ts:328:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[34/36]⎯
+
+ FAIL  tests/panel/todo.test.ts > GET /api/todo (task 8 ruling K5, HTTP) > (e) answers with exactly the unreviewed high-tier decision, deep-equal to its LIST_FIELDS projection, and records nothing
+PanelRejection: --estimator-profile <id> is required while the control plane is mounted; there is no default estimator, because an estimate charged to the wrong profile is not a rounding error.
+ ❯ Module.parsePanelArgs src/panel/server.ts:104:33
+    102|   // A rejection is raised here rather than carried, so no caller can …
+    103|   const { rejection, ...control } = resolveControlOptions(args, env, r…
+    104|   if (rejection !== null) throw new PanelRejection(rejection, controlR…
+       |                                 ^
+    105| 
+    106|   return {
+ ❯ tests/panel/todo.test.ts:126:11
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ tests/panel/todo.test.ts:112:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[35/36]⎯
+
+ FAIL  tests/panel/todo.test.ts > GET /api/todo (task 8 ruling K5, HTTP) > (f) agreeing on two repositories' decisions that share an id takes BOTH off the to-do list
+PanelRejection: more than one --repo leaves no project key to name the control state directory after; pass --control-state-dir <path>, or --no-control if this panel is not running work.
+ ❯ Module.parsePanelArgs src/panel/server.ts:104:33
+    102|   // A rejection is raised here rather than carried, so no caller can …
+    103|   const { rejection, ...control } = resolveControlOptions(args, env, r…
+    104|   if (rejection !== null) throw new PanelRejection(rejection, controlR…
+       |                                 ^
+    105| 
+    106|   return {
+ ❯ tests/panel/todo.test.ts:180:11
+ ❯ Module.withCorrectionsDir tests/corrections/harness.ts:30:12
+ ❯ tests/panel/todo.test.ts:173:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[36/36]⎯
+
+ Test Files  5 failed | 19 passed (24)
+      Tests  36 failed | 184 passed (220)
+   Start at  09:35:16
+   Duration  14.52s (transform 1.30s, setup 0ms, collect 4.87s, tests 36.46s, environment 3ms, prepare 1.29s)
+

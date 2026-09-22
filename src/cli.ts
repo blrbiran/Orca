@@ -44,12 +44,21 @@ const USAGE = `usage:
                                  is refused by name. Exit 6 means the report printed in full and some
                                  lines were malformed.
   orca panel --by <who> [--port <n>] [--bind <addr>] [--root <dir>] [--repo <key>=<path>]...
+             [--no-control] [--control-state-dir <path>] [--control-wake-ms <n>]
+             [--estimator-profile <id> --estimate-mode strict|soft]
                                  serve the read-only panel on the loopback interface with a
                                  one-time token. --bind opens it to other machines and needs
                                  --i-know-this-is-exposed as well: there is no TLS, the token
                                  travels in the HTML, it cannot be revoked, and one process has
                                  exactly one identity, so external mode suits you across your
                                  own machines and does not suit a team.
+                                 The task control plane mounts with the panel; --no-control leaves
+                                 it off. Its state lives under $ORCA_CONTROL_DIR (default
+                                 ~/.orca/control/<repo key>); more than one --repo has no key to
+                                 name it after, so it needs --control-state-dir. Running work also
+                                 needs ORCA_CCLOOP_BIN + ORCA_CCLOOP_ADAPTER_CONFIG and the two
+                                 estimator flags -- without them the panel still starts and still
+                                 shows recovery, and refuses those commands by name.
   orca compact-reviews [--apply] [--root <dir>] [--repo <key>=<path>]...
                                  dedupe reviews.jsonl and move rows whose decision was archived into
                                  reviews-archive.jsonl. Without --apply it prints the report and writes

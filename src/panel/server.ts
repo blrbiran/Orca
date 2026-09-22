@@ -6,6 +6,7 @@ import { buildApi } from "./api.js";
 import { PANEL_HOST_NOT_ALLOWED, assertBindAllowed, isHostAllowed } from "./bindGuard.js";
 import { controlErrorBody } from "./controlErrors.js";
 import { verifyControlJsonBody } from "./controlApi.js";
+import { resolveControlOptions, type ControlOptionsResolution } from "./controlOptions.js";
 import { NO_VIEWER_IDENTITY, PanelRejection } from "./rejection.js";
 import { ReviewsWriter } from "./reviewsStore.js";
 import { loadStaticFiles } from "./staticFiles.js";
@@ -40,7 +41,17 @@ export interface PanelOptions {
    * being in a particular broken state.
    */
   chainTsxBin?: string;
+  /**
+   * Assembly plan Task 1. Decided at parse time for the same reason `correctionsDir` is: the
+   * answer depends on the environment, and a criterion must be able to relocate it. `enabled:
+   * false` means `createPanelServer` passes no `control` dep, which is byte-for-byte the behaviour
+   * that shipped before this existed.
+   */
+  control: ControlOptions;
 }
+
+/** What survives parsing: a rejection never reaches here, it is thrown. */
+export type ControlOptions = Omit<ControlOptionsResolution, "rejection">;
 
 export interface StartedPanel {
   url: string;
@@ -87,6 +98,11 @@ export function parsePanelArgs(args: string[], env: NodeJS.ProcessEnv): PanelOpt
     throw new PanelRejection("malformed-port", `--port wants an integer 0-65535, got ${JSON.stringify(portText)}`);
   }
 
+  // Resolved after --repo and before the return, because it is a function of the repo list.
+  // A rejection is raised here rather than carried, so no caller can hold a half-resolved plane.
+  const { rejection, ...control } = resolveControlOptions(args, env, repos);
+  if (rejection !== null) throw new PanelRejection(rejection, controlRejectionMessage(rejection));
+
   return {
     by,
     bind: flag("--bind") ?? "127.0.0.1",
@@ -98,7 +114,33 @@ export function parsePanelArgs(args: string[], env: NodeJS.ProcessEnv): PanelOpt
     root: flag("--root"),
     repos,
     distDir: flag("--dist"),
+    control,
   };
+}
+
+/**
+ * One sentence per refusal, saying what the operator must decide. These are not defaults waiting to
+ * be filled in: spec §6 makes the estimator an operator choice precisely because guessing the
+ * estimate mode is how a soft adapter comes to be treated as a strict one.
+ */
+function controlRejectionMessage(code: string): string {
+  switch (code) {
+    case "control-state-dir-required":
+      return "more than one --repo leaves no project key to name the control state directory after; " +
+        "pass --control-state-dir <path>, or --no-control if this panel is not running work.";
+    case "control-wake-ms-invalid":
+      return "--control-wake-ms wants a positive integer number of milliseconds.";
+    case "control-estimator-profile-required":
+      return "--estimator-profile <id> is required while the control plane is mounted; there is no " +
+        "default estimator, because an estimate charged to the wrong profile is not a rounding error.";
+    case "control-estimate-mode-required":
+      return "--estimate-mode strict|soft is required while the control plane is mounted; guessing it " +
+        "is how a soft adapter comes to be presented as a strict one.";
+    case "control-estimate-mode-invalid":
+      return "--estimate-mode wants exactly strict or soft.";
+    default:
+      return code;
+  }
 }
 
 export async function createPanelServer(opts: PanelOptions): Promise<StartedPanel> {

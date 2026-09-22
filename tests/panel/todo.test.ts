@@ -178,7 +178,13 @@ describe("GET /api/todo (task 8 ruling K5, HTTP)", () => {
         expect(isHighTier(ORIGINAL.scope, ORIGINAL.kind)).toBe(true);
         const started = await createPanelServer(
           parsePanelArgs(
-            ["--by", "tester", "--repo", `proj-a=${repoA.path}`, "--repo", `proj-b=${repoB.path}`, "--dist", dist.dir],
+            [
+      // Assembly plan Task 1 / design spec section 4: two --repo flags leave no project key to name a
+      // control state directory after, so this multi-repository panel says it is not running work.
+      // Argument list only; no assertion in this file moved.
+      "--no-control",
+      "--by", "tester", "--repo", `proj-a=${repoA.path}`, "--repo", `proj-b=${repoB.path}`, "--dist", dist.dir,
+    ],
             { ORCA_CORRECTIONS_DIR: dir },
           ),
         );

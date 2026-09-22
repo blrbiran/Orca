@@ -1,0 +1,18 @@
+
+ RUN  v2.1.9 /Users/biran/code/skills/loop/Orca
+
+ ❯ tests/panel/controlOptions.test.ts (0 test)
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/panel/controlOptions.test.ts [ tests/panel/controlOptions.test.ts ]
+Error: Failed to load url ../../src/panel/controlOptions.js (resolved id: ../../src/panel/controlOptions.js) in /Users/biran/code/skills/loop/Orca/tests/panel/controlOptions.test.ts. Does the file exist?
+ ❯ loadAndTransform node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:51969:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  no tests
+   Start at  09:31:13
+   Duration  225ms (transform 32ms, setup 0ms, collect 0ms, tests 0ms, environment 0ms, prepare 64ms)
+

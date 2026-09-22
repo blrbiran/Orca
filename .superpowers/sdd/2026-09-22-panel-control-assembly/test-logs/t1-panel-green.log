@@ -1,0 +1,71 @@
+
+ RUN  v2.1.9 /Users/biran/code/skills/loop/Orca
+
+(node:46906) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:46901) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:46905) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/panel/security.test.ts (11 tests) 647ms
+   ✓ panel security via the real CLI process (controller ruling E2/E3: not skipped) > refuses an unconfirmed external bind through the REAL process, leaving no listener 358ms
+ ✓ tests/panel/controlApi.test.ts (4 tests) 908ms
+   ✓ web control acceptance over a real panel (task 10 step 1) > takes a plan from import to a continued task, and the ledger's own state is durable at every boundary 428ms
+(node:47595) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/panel/controlLifecycle.test.ts (12 tests) 1090ms
+ ✓ tests/panel/webParity.test.ts (3 tests) 2ms
+ ✓ tests/panel/controlOptions.test.ts (31 tests) 4ms
+ ✓ tests/panel/controlRecoveryApi.test.ts (4 tests) 994ms
+ ✓ tests/panel/reviewsStore.test.ts (19 tests) 2172ms
+   ✓ the reviews store (spec section 4.3) > refuses by its OWN name when its OWN lock is held 1016ms
+   ✓ the reviews writer after reviews.jsonl is replaced (reviews compaction spec section 5) > C19c a claim whose write failed does not come back on a later reload 1012ms
+ ✓ tests/panel/controlConfig.test.ts (4 tests) 70ms
+ ✓ tests/panel/compactReviewsCli.test.ts (6 tests) 133ms
+ ✓ tests/panel/noSkips.test.ts (4 tests) 26ms
+ ✓ tests/panel/compactClassify.test.ts (8 tests) 3ms
+ ✓ tests/panel/ledgerViews.test.ts (5 tests) 65ms
+ ✓ tests/panel/todo.test.ts (6 tests) 1193ms
+   ✓ GET /api/todo (task 8 ruling K5, HTTP) > (e) answers with exactly the unreviewed high-tier decision, deep-equal to its LIST_FIELDS projection, and records nothing 568ms
+   ✓ GET /api/todo (task 8 ruling K5, HTTP) > (f) agreeing on two repositories' decisions that share an id takes BOTH off the to-do list 623ms
+ ✓ tests/panel/workspace.test.ts (7 tests) 7ms
+ ✓ tests/panel/endToEnd.test.ts (5 tests) 2ms
+ ✓ tests/panel/compactReviews.test.ts (12 tests) 1416ms
+   ✓ applying and dry-running compaction (reviews compaction spec section 4) > C12 refuses by name while the lock is held and touches nothing 1017ms
+ ✓ tests/panel/staticFiles.test.ts (8 tests) 179ms
+ ✓ tests/panel/controlReadApi.test.ts (17 tests) 2895ms
+ ✓ tests/panel/coverageDuplicates.test.ts (2 tests) 2ms
+ ✓ tests/panel/usage.test.ts (1 test) 1ms
+ ✓ tests/panel/metricsApi.test.ts (16 tests) 2772ms
+   ✓ the metrics endpoint (spec sections 4.1 and 5) > passes E2's report through field for field, adding nothing and dropping nothing 469ms
+   ✓ the metrics endpoint (spec sections 4.1 and 5) > re-runs repository discovery and E2's gate on EVERY request 325ms
+   ✓ the metrics endpoint (spec sections 4.1 and 5) > answers 401 without a token, and 401 with a wrong one 414ms
+   ✓ the Host allowlist (final review I-4, DNS rebinding) > refuses a foreign Host on the token-carrying page with 403 by name, and the body carries no token 324ms
+   ✓ the Host allowlist (final review I-4, DNS rebinding) > refuses a foreign Host on the API even with a valid token (the guard sits in front of /api too) 352ms
+   ✓ the Host allowlist (final review I-4, DNS rebinding) > uses the exact V1 envelope for a foreign Host on control routes while preserving legacy API errors 321ms
+ ✓ tests/panel/decisionsApi.test.ts (8 tests) 4956ms
+   ✓ the decisions endpoints (spec sections 4.2 and 4.3.1) > returns list rows DEEP-EQUAL to the frozen projection, not merely lacking a summary 470ms
+   ✓ the decisions endpoints (spec sections 4.2 and 4.3.1) > records NOTHING when the list is served 2304ms
+   ✓ the decisions endpoints (spec sections 4.2 and 4.3.1) > serves the detail while the reviews lock is held, and the failed opened write is only a server-side warning 1187ms
+   ✓ the decisions endpoints (spec sections 4.2 and 4.3.1) > returns each repository's own row when two repositories share a decision id 313ms
+ ✓ tests/panel/correctApi.test.ts (17 tests) 7223ms
+   ✓ recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > answers a row the seam would refuse with the seam's OWN named refusal (an unknown kind) 433ms
+   ✓ recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > refuses an empty optional field by name instead of dumping Zod at the person 322ms
+   ✓ recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > records and does NOT close the loop 419ms
+   ✓ recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > writes its OWN message for a second correction, with no `--again` in it 329ms
+   ✓ recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > records another one when the page asks for it on purpose 380ms
+   ✓ recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > writes `reviewed` when the correction lands, and when the person clicks agreed 358ms
+   ✓ recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > lets a failed `reviewed` write reach the person on POST /api/reviews, unlike `opened` 1254ms
+   ✓ recording a correction from the panel (spec sections 2.1, 2.3 and 4.4) > tells the person the correction landed even when the reviewed mark could not be written 1159ms
+   ✓ the panel's error mapping for client mistakes (final review I-2) > answers a busy corrections store with 409 by name, not 400 (a transient conflict, not a client error) 1176ms
+ ✓ tests/panel/chainsApi.test.ts (11 tests) 13339ms
+   ✓ chains in the panel (D-launch spec §6.2, §6.3, §8.2-8) > C1 POST /api/chains starts a chain ONLY by spawning `orca chain start`: the supervisor is another process; the status view follows it to done 4778ms
+   ✓ chains in the panel (D-launch spec §6.2, §6.3, §8.2-8) > C3 a refusal by the CLI comes back as soon as the CLI exits, with its code (spec §2) 637ms
+   ✓ chains in the panel (D-launch spec §6.2, §6.3, §8.2-8) > C4 no `started` line within the wait is 500 by name, naming the log and the pid 3817ms
+   ✓ chains in the panel (D-launch spec §6.2, §6.3, §8.2-8) > C8 external mode opens the same routes (rulings R11, R13): an app built for a confirmed external bind starts a chain 3130ms
+
+ Test Files  24 passed (24)
+      Tests  221 passed (221)
+   Start at  09:39:43
+   Duration  13.95s (transform 1.28s, setup 0ms, collect 4.59s, tests 40.10s, environment 3ms, prepare 1.16s)
+

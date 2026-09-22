@@ -319,7 +319,13 @@ describe("the decisions endpoints (spec sections 4.2 and 4.3.1)", () => {
 
         const started = await createPanelServer(
           parsePanelArgs(
-            ["--by", "tester", "--repo", `proj-a=${repoA.path}`, "--repo", `proj-b=${repoB.path}`, "--dist", dist.dir],
+            [
+      // Assembly plan Task 1 / design spec section 4: two --repo flags leave no project key to name a
+      // control state directory after, so this multi-repository panel says it is not running work.
+      // Argument list only; no assertion in this file moved.
+      "--no-control",
+      "--by", "tester", "--repo", `proj-a=${repoA.path}`, "--repo", `proj-b=${repoB.path}`, "--dist", dist.dir,
+    ],
             { ORCA_CORRECTIONS_DIR: dir },
           ),
         );
