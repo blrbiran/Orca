@@ -1,0 +1,82 @@
+{
+  "v": 1,
+  "runId": "orca-dev-da2f5e9a",
+  "runtime": "claude-code",
+  "sessionRef": "da2f5e9a-e49f-48bd-a84f-f3320dea729b",
+  "writtenAt": "2026-09-22T16:00:34.044Z",
+  "head": "4f25a52b5081392e80397bbf1be28951a43381fb",
+  "level": {
+    "kind": "reading",
+    "level": 365395,
+    "windowTokens": 1000000,
+    "t1": 330000,
+    "t2": 450000,
+    "band": 1
+  },
+  "next": [
+    "ccloop 先做完它自己挂着的 E1 的 I-2 ＋ 人裁 85（人裁 121 已开口）。人 2026-09-22 明确要求不插队 —— G1 不是插队的理由。E1 动生产代码前必须另拿具名授权。",
+    "然后才是 G1 那条线：ccloop 侧定 control v1 契约（capability 词汇表 ＋ targetVersion 定型，走 brainstorming → writing-plans）→ Orca 跟随改 src/control/webProtocol.ts、schema.ts、types.ts 三处 → tests/control/webCcloopSmoke.test.ts 两条红判据回绿 → 终点判据：Web 派活到真 ccloop 能开出一个 run。",
+    "动契约后必须先重建 /tmp/ccloop-codex-0919/dist 再重跑 verify:control 与 verify:web-control:consumer —— 现有基线量的是 Sep 19 21:48 的构建。",
+    "暂时不碰 goal.md 的 G5（syncskill 补三件）、loop 方案层、Web UI 扩展 —— 都依赖上面这条先通。"
+  ],
+  "open": [
+    "三道门现为 RC1，失败全部是同一对 targetVersion 判据，不是回归。判别式是「除这两条之外有没有新的红」，回绿定义写在 docs/handoff/handoff.md §三。",
+    "ccloop control capabilities 缺五个 V1 探针字段（contextObservation/handoffControl/handoffExecution/contextWindowTokens/requestBoundProof），Web 派活必得 control-capability-unsupported。",
+    "ContextObservationV1 在 Orca src/ 无生产者，缺 ccloop 侧 emit，Orca 不许自造。",
+    "ccloop 走 npm 依赖锁版本（spec §9.1）至今未落地，现实是 ORCA_CCLOOP_BIN 指本机二进制。",
+    "本轮压缩 handoff 时，182–4766 行由四个 subagent 分段读、控制器逐条筛，控制器未逐字通读。缺条目可按 §十一 的命令从 git 历史取回，补回不需授权。"
+  ],
+  "awaitingHuman": [
+    {
+      "kind": "irreversible",
+      "what": "push —— Orca 本地积了多笔未推；ccloop 与 ccmem 各领先远端一笔。现跑 git ls-remote 自己数。"
+    },
+    {
+      "kind": "tied-evidence",
+      "what": "targetVersion 定成非空字符串还是安全整数 —— G1 已裁由 ccloop 拍，拍成什么仍未裁。"
+    },
+    {
+      "kind": "tied-evidence",
+      "what": "「第二个 panel 不挂控制面」是控制器自决、不是人裁，可逆，要不要维持仍未决。"
+    },
+    {
+      "kind": "named-authorization",
+      "what": "裁决甲的 plan 那一半：改 preflightUnreadableRepo 的判据需人指名到具体测试，至今未授权。"
+    },
+    {
+      "kind": "named-authorization",
+      "what": "orca chain 真钱活体验收：要人提交 .orca/chain.json 选 model 并点头，先测 F，副本 T1 > F。"
+    },
+    {
+      "kind": "irreversible",
+      "what": "2026-09-17 那一轮有一把 API key 明文进入 transcript，建议轮换 —— 只有人能确认做没做。"
+    },
+    {
+      "kind": "ccloop-change",
+      "what": "ccloop 的 E1 I-2 ＋ 人裁 85：动生产代码前需另拿一次具名授权。"
+    }
+  ],
+  "measurements": [
+    {
+      "command": "/usr/bin/git status --porcelain",
+      "exitCode": 0,
+      "commit": "4f25a52b5081392e80397bbf1be28951a43381fb",
+      "observedAt": "2026-09-22T16:00:33.957Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-da2f5e9a-Als0dc/1.txt"
+    },
+    {
+      "command": "wc -l docs/handoff/handoff.md",
+      "exitCode": 0,
+      "commit": "4f25a52b5081392e80397bbf1be28951a43381fb",
+      "observedAt": "2026-09-22T16:00:33.966Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-da2f5e9a-Als0dc/2.txt"
+    },
+    {
+      "command": "node scripts/check-claude-md-lines.mjs",
+      "exitCode": 0,
+      "commit": "4f25a52b5081392e80397bbf1be28951a43381fb",
+      "observedAt": "2026-09-22T16:00:34.003Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-da2f5e9a-Als0dc/3.txt"
+    }
+  ]
+}
