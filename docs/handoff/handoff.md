@@ -5168,3 +5168,81 @@ harness 已修，且**从此每组都记基线返回码 —— 不报绿基线�
 验证一律带 `PATH="/usr/local/bin:$PATH"`，未用 `--no-verify`；远端只以 `git ls-remote` 为准；
 成本只报工具给出的数；不许替人宣布；`.superpowers/sdd/**` 与 spec §1–§8 的历史一个字不改，写错了另起具名更正。
 本切片没有任何真实模型调用；Codex 仍是 `phase-end + soft`，任何地方不许宣称 strict。
+
+---
+
+## 2026-09-22 目标对齐（`goal.md` 已落地；人拍了 G1–G6 ＋ 执行顺序；**本节取代上节的 ⛔ 下一件事**）
+
+**归属**：会话 `da2f5e9a`（Claude Code 交互会话，不是 orca run），2026-09-22，
+在主题行 `docs(goal): record the six rulings, and say which sentence each one falsifies` 那一笔之上。
+**本轮没有碰任何 `src/`、`tests/` 或 `scripts/` 下的文件，只写文档。** 定位一律用提交主题行。
+
+### 做出来的东西（两笔，按主题行找）
+
+1. `docs(goal): write down what we are building, and point the handoff at it`
+2. `docs(goal): record the six rulings, and say which sentence each one falsifies`
+
+⇒ 新增 `docs/handoff/goal.md`（方向性文件，**每轮交接不需要读**），本文档头部加了一行指针。
+
+### 🔴 人本轮拍的六条（G1–G6，**全文在 `docs/handoff/goal.md` §8，引用引那里的编号**）
+
+| # | 裁决 | 对本仓库最实际的后果 |
+|---|---|---|
+| **G1** | **control v1 的线上契约归 ccloop（生产方）**，Orca 作为消费方跟随 | *** **近期那条线的顺序反了** *** —— 不是「ccloop 追平 Orca 的五字段清单」，而是 **ccloop 先在自己的契约里定 capability 词汇表与 `targetVersion`，Orca 再改三处**。反过来做会白改一次。⚠️ **边界**：只搬 ccloop↔Orca 的线上契约；`work item`／`group`／`orca-raw-command-v1`／`expectedRevision` **一律不搬** |
+| **G2** | `level`／`checkpoint`／`gate` **留在 Orca** | 职责归属不再未决 |
+| **G3** | `orca chain` 是 **Orca 自用的开发循环，不是产品能力** | 不进 loop 方案层；「跑成循环」完整留给 ccloop |
+| **G4** | 完成度 ＝ **已完成 task 数／总 task 数**，在跑任务另显示 `attempt n/maxAttempts` | UI 必须明写「不反映难度差异」；**代码算，不许模型估** |
+| **G5** | **syncskill 补三件**（profile／清单、按 run 注入、版本记录） | **本轮唯一新增的跨仓工作量**，落在中期，**现在不要开** |
+| **G6** | A2A **只做只读状态外壳**，控制仍走 control v1 | 远期方向已定 |
+
+⚠️ *** **G1 只定了「谁有权拍」，没定 `targetVersion` 拍成什么。** *** 非空字符串还是安全整数，
+**仍要在 ccloop 侧单独拍一次**。**不许把 G1 读成这条缝已经解决了。**
+
+### 🔴 一处具名更正：`~/.orca` 的残留已由人清理
+
+上节写的是「⚠️ 残留没有清理：`~/.orca/control/` 现在有本轮造出来的 `proj`、`known`、`github.com/biran/orca`，
+以及修好之后的 `proj-e73c023a`、`known-7117fff2`、`github.com-biran-orca-26b561d6`」。
+**那句现在为假** —— 让它为假的是**人自己在 2026-09-22 删掉了那六个目录**（不是 agent 干的）。
+
+**本会话现测**（命令 `rtk proxy ls -la ~/.orca ~/.orca/control`，未过滤整份读回）：
+`~/.orca/` 与 `~/.orca/control/` **都还在、都是 `drwx------`（0700，符合 Rule 17）**，
+**`control/` 下为空**（`total 0`，只有 `.` 与 `..`）。
+⚠️ **上节原文按 Rule 13 逐字保留，本条即为具名更正。**
+
+### ⛔ 下一件事（**人本轮亲自定的顺序，逐条照做，不要重排**）
+
+**第 1 步 —— 先拿基线，再改协议。**
+`verify:control` 与 `verify:web-control:consumer` 上一轮**未跑**（缺 `/tmp` 的 ccloop artifact），
+**这两道门现在的状态是未知的**。先把 artifact 恢复出来、两道门各跑一遍、**记下返回码与未过滤日志**。
+⚠️ 理由是实测教训：**在状态未知的门上改协议，改完分不清红的是新回归还是本来就红** ——
+ccloop 栽过一模一样的一次（变异电池跑在红基线上，整组作废）。
+**这一步不需要任何裁决，也不动一行生产代码。**
+
+**第 2 步 —— 三仓 handoff 更正**（人已授权）。
+ccloop 与 ccmem 的 handoff 里都还写着「`targetVersion` 等人裁」「ccloop 要不要补 `capabilities` 五个字段」——
+**G1 把这两句的前提换掉了**（不再是 Orca 提需求、ccloop 追平）。**各追加一节更正，原文一个字不删。**
+细节引 Orca `docs/handoff/goal.md` §8。
+
+**第 3 步 —— 把被插队的事做完。**
+*** **ccloop 自己挂着的「E1 的 I-2 ＋ 人裁 85」先做完**（人裁 121 已开口、人裁 126 推到新会话）。 ***
+**人明确要求不插队。** ⚠️ **E1 仍在授权面外：出完设计、动生产代码之前必须另拿一次具名授权。**
+
+**第 4 步 —— 才是 G1 那条线。**
+ccloop 侧定契约（capability 词汇表 ＋ `targetVersion` 定型，走 brainstorming → spec → plan）
+→ Orca 跟随改 `src/control/webProtocol.ts`／`schema.ts`／`types.ts` 三处
+→ `tests/control/webCcloopSmoke.test.ts` 那两条红判据回绿
+→ **终点判据：Web 派活到真 ccloop 能开出一个 run**（现在必得 `control-capability-unsupported`）。
+
+**明确暂时不碰**：G5 的 syncskill 三件、`goal.md` §3.3 的 loop 方案层、§3.4 的 Web UI 扩展 ——
+**都依赖第 4 步先通**，现在开等于在打不通的系统上加工作量。
+
+### 还归人的（agent 做不成）
+
+- **push**：本仓库现在有**未 push 的提交**（现跑 `git ls-remote` ＋ `git log --oneline @{u}..HEAD` 自己数，别信本文）。
+- 「**第二个 panel 不挂控制面**」那条 —— 是上一轮**控制器自己做的决定，不是人裁**，可逆，要不要维持仍未决。
+- `~/.orca` 的残留**已处理**（见上面的具名更正）。
+
+### 成本
+
+**截至写下本节时**，本会话工具报数 **约 $39.93**（harness 报的，不是自估；**会话仍在继续，最终数只会更高，别把这个数当会话总账**）；其中三个 fable subagent 合计
+**约 352k token／62 次工具调用**（工具报数）。**本轮无任何真实模型执行、无 run、无生产代码改动。**
