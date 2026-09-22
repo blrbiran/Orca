@@ -142,3 +142,32 @@ removed (RC1, 3 failed); `handoffControl` asserted as `durable` rather than repo
 failed); the `unsupported → unavailable` mapping replaced by a constant (RC1, 1 failed).
 
 **Green.** `ccloopPort` + `profiles` 2 files / 16 tests RC0 (`test-logs/t3-green.log`); `typecheck` RC0.
+
+## Task 4 — the envelope translator moved into `src/`
+
+Created `src/control/startEnvelope.ts` (`toStartEnvelope`) and `tests/control/startEnvelope.test.ts`
+(9 tests). `tests/control/webCcloopSmoke.test.ts`'s local copy is deleted; what remains there is a
+four-line adapter to the production function's signature, so the fixture cannot drift from what a
+real dispatch sends.
+
+**Three checks the moved function gained, each because the test copy silently lacked them.** They
+are not gold-plating; each is a way a dispatch could be charged to the wrong claim:
+`String(run.groupId)` turned a missing run field into the four characters `"undefined"` and sent it,
+nothing re-parsed the stored envelope, and nothing checked that the envelope and the run named the
+same run and generation. All three refuse with `start-envelope-conflict` and a detail naming which
+(`schema:` / `run:` / `identity:`), and the assembled result is parsed against the repository's own
+`startEnvelopeSchema` before it is returned.
+
+**Deviation from the plan's Task 4 Step 3.** The plan asked that `StartEnvelope` appear in the smoke
+test only as an import and call sites. One hand-built literal remains (the `inspect`-absent case for
+`run-web-smoke`), and it stays: there is no ledger row for that run, so there is no
+`DispatchEnvelopeV1` to translate and the literal is the subject of the criterion rather than a
+second translator. The ledger path goes through `toStartEnvelope`.
+
+**Mutation battery, 5 mutations, all red** (`commands/t4-mutation-battery.json`): contract hash
+recomputed instead of taken from the ledger (RC1, 3 failed); the identity check deleted (RC1, 2);
+generation dropped from it (RC1, 1); the stored envelope trusted without re-parsing (RC1, 1); the run
+row coerced instead of parsed (RC1, 1).
+
+**Green.** `startEnvelope` 9 tests RC0 (`test-logs/t4-green.log`); `typecheck` RC0. The smoke test
+itself is one of the 5 environment-gated skips and was not executed this session.

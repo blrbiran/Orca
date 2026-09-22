@@ -1,0 +1,10 @@
+
+ RUN  v2.1.9 /Users/biran/code/skills/loop/Orca
+
+ ✓ tests/control/startEnvelope.test.ts (9 tests) 5ms
+
+ Test Files  1 passed (1)
+      Tests  9 passed (9)
+   Start at  09:52:09
+   Duration  262ms (transform 59ms, setup 0ms, collect 69ms, tests 5ms, environment 0ms, prepare 60ms)
+

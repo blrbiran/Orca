@@ -1,0 +1,50 @@
+[
+ {
+  "mutation": "M1 contract hash recomputed instead of taken from the ledger",
+  "file": "src/control/startEnvelope.ts",
+  "rc": 1,
+  "failedCount": 3,
+  "failed": [
+   "translating a frozen dispatch envelope into a start envelope copies the claim from the run row and the contract hash from the ledger, field by field",
+   "translating a frozen dispatch envelope into a start envelope translates a handoff-phase envelope with the same claim and the same ledger hash",
+   "translating a frozen dispatch envelope into a start envelope carries a continuation's ledger hash rather than the predecessor's"
+  ]
+ },
+ {
+  "mutation": "M2 identity agreement no longer checked",
+  "file": "src/control/startEnvelope.ts",
+  "rc": 1,
+  "failedCount": 2,
+  "failed": [
+   "the translation refuses before anything is dispatched refuses when the envelope and the run name different runs",
+   "the translation refuses before anything is dispatched refuses when they disagree about the generation, not only the run id"
+  ]
+ },
+ {
+  "mutation": "M3 generation dropped from the identity check",
+  "file": "src/control/startEnvelope.ts",
+  "rc": 1,
+  "failedCount": 1,
+  "failed": [
+   "the translation refuses before anything is dispatched refuses when they disagree about the generation, not only the run id"
+  ]
+ },
+ {
+  "mutation": "M4 the stored envelope is trusted without re-parsing",
+  "file": "src/control/startEnvelope.ts",
+  "rc": 1,
+  "failedCount": 1,
+  "failed": [
+   "the translation refuses before anything is dispatched refuses a stored envelope whose phase and profile slots disagree, naming the schema"
+  ]
+ },
+ {
+  "mutation": "M5 run row coerced instead of parsed",
+  "file": "src/control/startEnvelope.ts",
+  "rc": 1,
+  "failedCount": 1,
+  "failed": [
+   "the translation refuses before anything is dispatched refuses a run row missing a claim field, rather than dispatching the string \"undefined\""
+  ]
+ }
+]

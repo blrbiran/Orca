@@ -25,6 +25,7 @@ import { deliverScheduledStart } from "../../src/control/webDispatch.js";
 import { readCanonicalRecord } from "../../src/control/snapshot.js";
 import { WebControlService } from "../../src/control/webService.js";
 import { dispatchEnvelopeSchema, type CapabilityViewV1, type DispatchEnvelopeV1 } from "../../src/control/webProtocol.js";
+import { toStartEnvelope } from "../../src/control/startEnvelope.js";
 import type { StartEnvelope } from "../../src/control/executionPort.js";
 import type { ControlStore } from "../../src/control/store.js";
 import { profileSnapshot, webFixture } from "./fixtures/web.js";
@@ -84,20 +85,14 @@ function runBody(store: ControlStore, runId: string): Record<string, unknown> {
   return JSON.parse(String(store.db.prepare("SELECT body FROM runs WHERE id=?").get(runId)!.body)) as Record<string, unknown>;
 }
 
-/** What the ledger's frozen identity becomes on the wire: a ccloop start envelope. */
+/**
+ * What the ledger's frozen identity becomes on the wire. The translation used to live here, which
+ * made a test fixture the production consumer of the ledger; it now lives in
+ * `src/control/startEnvelope.ts` and this is a thin adapter to that function's signature, so the
+ * two cannot drift.
+ */
 function startEnvelope(envelope: DispatchEnvelopeV1, run: Record<string, unknown>, sourceDir: string, contract: unknown): StartEnvelope {
-  return {
-    protocol: 1,
-    claim: {
-      groupId: String(run.groupId), workItemId: String(run.workItemId), taskId: (run.taskId as string | null) ?? null,
-      runId: String(run.runId), generation: Number(run.generation), graphVersion: Number(run.graphVersion),
-      targetVersion: Number(run.targetVersion), commandId: String(run.commandId), configHash: String(run.configHash),
-      grant: run.grant as StartEnvelope["claim"]["grant"], ownerToken: String(run.ownerToken),
-    },
-    contractHash: envelope.derivedContractHash,
-    inputCheckpoint: null,
-    work: { contract, targetRepo: sourceDir, base: "v1", sourceDir },
-  };
+  return toStartEnvelope(envelope, run, { sourceDir, targetRepo: sourceDir, base: "v1" }, contract);
 }
 
 /** The contract a plan import accepts, so the consumer's own schema has something real to parse. */
