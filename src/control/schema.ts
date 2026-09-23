@@ -37,6 +37,3 @@ export const candidateSchema=z.object({
  missing:z.array(z.string()),unresolvedRequestIds:z.array(z.string()),terminalOutcome:z.string().min(1),
  stopProof:z.object({executionId:z.string().min(1),generation:safeInteger.positive(),isolated:z.literal(true),source:artifactSchema}).strict().nullable(),handoff:artifactSchema,
 }).strict();
-
-export const capabilitiesSchema=z.object({protocol:z.literal(1),durableAccept:z.boolean(),ownershipIsolation:z.boolean(),evidenceRetention:z.boolean(),
- usageObservation:z.enum(["realtime","phase-end","unavailable"]),budgetEnforcement:z.enum(["bounded","soft","unsupported"]),requestBoundEvidence:z.string().trim().min(1).nullable()}).strict();

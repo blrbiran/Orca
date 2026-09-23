@@ -6,7 +6,8 @@ import { z } from "zod";
 import type { ExecutionPort, ExecutionReport, ExecutionStatus, StartEnvelope } from "./executionPort.js";
 import type { ArtifactRef, Capabilities, HandoffAck, HandoffRequest } from "./types.js";
 import { ControlError, type NonDurableControlErrorCode } from "./errors.js";
-import { artifactSchema, candidateSchema, capabilitiesSchema, safeInteger } from "./schema.js";
+import { artifactSchema, candidateSchema, safeInteger } from "./schema.js";
+import { capabilitiesSchema } from "./webProtocol.js";
 
 const MAX_OUTPUT=24*1024*1024;
 const executionStatusSchema=z.discriminatedUnion("kind",[

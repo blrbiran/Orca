@@ -89,6 +89,12 @@ const declaredCapabilitiesSchema = capabilityViewSchema.extend({
   handoffExecution: z.enum(["mechanical-in-run-v1", "model-assisted-v1"]),
 }).strict();
 
+// The v2 wire vocabulary: the view schema plus the protocol tag. No independent field list --
+// this is the single source of truth for what a v2 capabilities payload looks like. Defined here
+// rather than in schema.ts to avoid a runtime ESM import cycle (schema.ts is imported by
+// webProtocol.ts for primitives like safeInteger/idSchema).
+export const capabilitiesSchema = capabilityViewSchema.extend({ protocol: z.literal(2) }).strict();
+
 export const executionProfileSnapshotSchema = z
   .object({
     schema: z.literal("orca-execution-profile-snapshot-v1"),

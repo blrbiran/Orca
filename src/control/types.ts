@@ -1,3 +1,5 @@
+import type { CapabilityViewV1 } from "./webProtocol.js";
+
 export type WorkKind = "task" | "decompose" | "reconcile" | "handoff" | "goal-review" | "memory";
 export type WebWorkKind = "budget-estimate" | "task" | "handoff" | "goal-review";
 export interface ExecutionProfileBinding { workKind: WebWorkKind; profileId: string; profileHash: string }
@@ -9,13 +11,7 @@ export interface Identity {
   groupId: string; workItemId: string; taskId: string | null; runId: string;
   generation: number; graphVersion: number; targetVersion: number;
 }
-export interface Capabilities {
-  protocol: 1; durableAccept: boolean; ownershipIsolation: boolean;
-  evidenceRetention: boolean;
-  usageObservation: "realtime" | "phase-end" | "unavailable";
-  budgetEnforcement: "bounded" | "soft" | "unsupported";
-  requestBoundEvidence: string | null;
-}
+export type Capabilities = CapabilityViewV1 & { protocol: 2 };
 export interface GroupInput {
   groupId: string; projectKey: string; goal: string; successConditions: string[];
   budgetMode?: BudgetMode; limit: Amount; reviewReserve: Amount;
