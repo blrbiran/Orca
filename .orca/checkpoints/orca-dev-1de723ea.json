@@ -3,68 +3,69 @@
   "runId": "orca-dev-1de723ea",
   "runtime": "claude-code",
   "sessionRef": "1de723ea-71e0-4d2e-99b6-7d1116658c4f",
-  "writtenAt": "2026-09-23T02:45:12.635Z",
-  "head": "a2a44ef511f43287709a100b378617d75afa2907",
+  "writtenAt": "2026-09-23T15:56:09.507Z",
+  "head": "0c1ef158508f170cced209d769937c4fa9fde5b5",
   "level": {
     "kind": "reading",
-    "level": 452781,
+    "level": 696219,
     "windowTokens": 1000000,
     "t1": 330000,
     "t2": 450000,
     "band": 2
   },
   "next": [
-    "Task 1（三态下沉）已到 fix round 3/5，正在跑 round 3 的定域复审。复审绿即 Task 1 complete。",
-    "然后依次 Task 2..12，每个 Task 一席实施 + 一席评审 + 若干修复轮。计划在 docs/superpowers/plans/2026-09-23-ls-lock-visibility.md，SDD ledger 在 .superpowers/sdd/2026-09-23-ls-lock-visibility/sdd-ledger.md。",
-    "全部做完后：pkg2 台账新开 §47，再更新三份 handoff（Orca / ccloop / ccmem），ccloop 与 ccmem 的 Orca 节整节替换不新增。",
-    "最后给人一个 10 行以内的 handoff executive summary，只在对话里给，不写文件。"
+    "本轮（ccloop 人裁 85 + I-3）已完整收口：12 Task、18 席、最终全分支评审 + 一轮修复 + 一次复审 + 一次事后更正，全部关闭。",
+    "下一件事是 G1：control v1 线上契约归 ccloop。要定 capability 词汇表 + targetVersion 定型，先 brainstorming 再 writing-plans。",
+    "动契约后 Orca 侧必须先重建 /tmp/ccloop-codex-0919/dist 再重跑那两道门 —— 现基线量的是 Sep 19 21:48 的构建。",
+    "三份 handoff 已更新（Orca / ccloop / ccmem），ccloop 与 ccmem 的 Orca 节都整节替换且比上一版更短。"
   ],
   "open": [
-    "本会话越过 T2（450,000）由人裁 134 单次指令授权：「尽量将这个完整task做完，暂时不要考虑context大小」。这是具名超支，不是常态。",
-    "ccloop 现测 58 files / 787 tests，1 red = stopProof（允许 7 条里的第 1 条）。typecheck 0 / build 0。",
-    "Task 1 至今 6 席：实施 + 评审 + 3 个修复轮 + 3 次复审。超支的根因是【计划】给的结构判据有缺陷（单行解析 → 注释分号截断 → 空判据），不是实施席。",
-    "已记的控制器裁决 A..K 全在 sdd-ledger.md，最终报告要逐条列给人。",
-    "spec 第一版被独立评审判 4 Critical / 11 Important / 9 Minor，控制器复核全部成立，13 条被推翻的结论留档在 spec §10。"
+    "ccloop 现测 818 tests / 817 passed / 1 failed（stopProof 稳定红）。判别改用 node scripts/check-known-reds.mjs，两个方向都验过。",
+    "已知红名单从 7 条补到 13 条 —— 多出的 6 条一直在 flake 只是没人记名字。名单本身是会过期的现测。",
+    "既有判据改动全轮只有 1 条，是人按人裁 135 指名授权的，改写后更强不放宽。",
+    "本轮 4 条红预言被实测推翻；2 次控制器压缩活文档时丢结论，都靠逐条读 git diff 的 - 行捞回。",
+    "M3/M4 在 ccloop 登记未修（都要改既有判据，需人按人裁 88 指名）。",
+    "本会话越过 T2 由人裁 134 单次指令授权，是具名超支不是常态。"
   ],
   "awaitingHuman": [
     {
       "kind": "irreversible",
-      "what": "push / 合并 main / 删分支或 worktree —— 四件归人。ccloop 本轮已有多笔本地提交未推。"
-    },
-    {
-      "kind": "named-authorization",
-      "what": "人裁 88：改既有判据仍需人指名。本轮至今【零既有判据改动】，设计上应保持为零。"
+      "what": "push / 合并 main / 删分支或 worktree —— 四件归人。⚠️ 本轮发现：有东西在把提交推到真实 GitHub 远端而控制器从未 push；三仓都装着同一个混淆的 post-commit 钩子。时间线不支持每笔自动推。要人自己查并决定。"
     },
     {
       "kind": "tied-evidence",
-      "what": "targetVersion 定成非空字符串还是安全整数 —— G1 已裁由 ccloop 拍，拍成什么仍未裁。本轮不碰。"
+      "what": "targetVersion 定成非空字符串还是安全整数 —— G1 给了权没给答案。"
+    },
+    {
+      "kind": "named-authorization",
+      "what": "ccloop 的 M3（双记 owner_transfer_contended）与 M4（snapshotTree 不记扫描根 mtime）要改既有判据，需人按人裁 88 指名。"
     },
     {
       "kind": "ccloop-change",
-      "what": "stopProof 那条稳定红根因未查；Linux 覆盖仍挂着，要人自己起 OrbStack daemon。"
+      "what": "stopProof 那条稳定红根因未查，要人先开口；Linux 覆盖仍挂着，要人自己起 OrbStack daemon。"
     }
   ],
   "measurements": [
     {
-      "command": "/usr/bin/git -C /Users/biran/code/skills/loop/ccloop log --oneline -12",
+      "command": "/usr/bin/git -C /Users/biran/code/skills/loop/ccloop log --oneline -8",
       "exitCode": 0,
-      "commit": "a2a44ef511f43287709a100b378617d75afa2907",
-      "observedAt": "2026-09-23T02:45:11.084Z",
-      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-1de723ea-I1j0f5/1.txt"
+      "commit": "0c1ef158508f170cced209d769937c4fa9fde5b5",
+      "observedAt": "2026-09-23T15:56:07.078Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-1de723ea-N2AmiB/1.txt"
     },
     {
       "command": "/usr/bin/git -C /Users/biran/code/skills/loop/ccloop status --short",
       "exitCode": 0,
-      "commit": "a2a44ef511f43287709a100b378617d75afa2907",
-      "observedAt": "2026-09-23T02:45:11.114Z",
-      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-1de723ea-I1j0f5/2.txt"
+      "commit": "0c1ef158508f170cced209d769937c4fa9fde5b5",
+      "observedAt": "2026-09-23T15:56:07.110Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-1de723ea-N2AmiB/2.txt"
     },
     {
       "command": "/usr/bin/git -C /Users/biran/code/skills/loop/ccloop ls-remote origin refs/heads/main",
       "exitCode": 0,
-      "commit": "a2a44ef511f43287709a100b378617d75afa2907",
-      "observedAt": "2026-09-23T02:45:12.586Z",
-      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-1de723ea-I1j0f5/3.txt"
+      "commit": "0c1ef158508f170cced209d769937c4fa9fde5b5",
+      "observedAt": "2026-09-23T15:56:09.460Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-1de723ea-N2AmiB/3.txt"
     }
   ]
 }
