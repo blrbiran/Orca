@@ -1,0 +1,70 @@
+{
+  "v": 1,
+  "runId": "orca-dev-1de723ea",
+  "runtime": "claude-code",
+  "sessionRef": "1de723ea-71e0-4d2e-99b6-7d1116658c4f",
+  "writtenAt": "2026-09-23T01:59:01.733Z",
+  "head": "d52914a8def5e8a85a62b76da00bee0ab60dd9a7",
+  "level": {
+    "kind": "reading",
+    "level": 341154,
+    "windowTokens": 1000000,
+    "t1": 330000,
+    "t2": 450000,
+    "band": 1
+  },
+  "next": [
+    "计划已落盘 docs/superpowers/plans/2026-09-23-ls-lock-visibility.md（12 个 Task）。下一步：计划自审三项（spec 覆盖 / 占位符 / 类型一致），把占位夹具名换成现测真名。",
+    "然后 superpowers:subagent-driven-development 逐 Task 执行，每 Task 一席实施 + 一席复核。",
+    "全部做完后更新三份 handoff（Orca / ccloop / ccmem），ccloop 与 ccmem 的 Orca 节整节替换不新增。",
+    "最后给人一个 10 行以内的 handoff executive summary，只在对话里给，不写文件。"
+  ],
+  "open": [
+    "人裁 129-134 已记入 .superpowers/sdd/2026-09-23-ls-lock-visibility/progress.md；pkg2 台账 §47 尚未写。",
+    "独立评审判第一版 spec 4 Critical / 11 Important / 9 Minor，控制器逐条复核全部成立，13 条被推翻的结论留档在 spec §10。",
+    "最贵的一条教训：控制器把台账 §46 的「控制器裁决 6」写成了「人裁 6」——把自己的裁决冒充成人裁。机械做法：凡写「人裁 N」落笔前先 grep 全部台账核它是什么，还要核是哪一本。",
+    "ccloop 开工基线现测 56 files / 779 tests，1 red（stopProof 稳定红）。台账 §46 与上一个检查点都记 777，现测 779。",
+    "人裁 88 未被人裁 134 覆盖：改既有判据仍需人指名。本轮设计目标是把既有判据改动面压到零（schemaVersion 保持 1、三态下沉保名字、isProcessActive 不动）。"
+  ],
+  "awaitingHuman": [
+    {
+      "kind": "irreversible",
+      "what": "push / 合并 main / 删分支或 worktree —— 四件归人，Tier 0 闸门会拦。本轮 ccloop 已有本地提交未推。"
+    },
+    {
+      "kind": "named-authorization",
+      "what": "若实施中出现非改不可的既有判据，需人按人裁 88 指名到具体测试。目前设计上应为零。"
+    },
+    {
+      "kind": "tied-evidence",
+      "what": "targetVersion 定成非空字符串还是安全整数 —— G1 已裁由 ccloop 拍，拍成什么仍未裁。本轮不碰。"
+    },
+    {
+      "kind": "ccloop-change",
+      "what": "stopProof 那条稳定红根因未查；Linux 覆盖仍挂着，要人自己起 OrbStack daemon。"
+    }
+  ],
+  "measurements": [
+    {
+      "command": "/usr/bin/git -C /Users/biran/code/skills/loop/ccloop log --oneline -5",
+      "exitCode": 0,
+      "commit": "d52914a8def5e8a85a62b76da00bee0ab60dd9a7",
+      "observedAt": "2026-09-23T01:58:59.877Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-1de723ea-zSdOtQ/1.txt"
+    },
+    {
+      "command": "/usr/bin/git -C /Users/biran/code/skills/loop/ccloop status --short",
+      "exitCode": 0,
+      "commit": "d52914a8def5e8a85a62b76da00bee0ab60dd9a7",
+      "observedAt": "2026-09-23T01:58:59.906Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-1de723ea-zSdOtQ/2.txt"
+    },
+    {
+      "command": "/usr/bin/git -C /Users/biran/code/skills/loop/ccloop ls-remote origin refs/heads/main",
+      "exitCode": 0,
+      "commit": "d52914a8def5e8a85a62b76da00bee0ab60dd9a7",
+      "observedAt": "2026-09-23T01:59:01.678Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-1de723ea-zSdOtQ/3.txt"
+    }
+  ]
+}
