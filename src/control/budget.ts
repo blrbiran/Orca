@@ -82,8 +82,8 @@ export function componentMin(a:Amount,b:Amount):Amount {
 }
 export function assertCapabilities(mode:BudgetMode,c:Capabilities):void {
   if(!capabilitiesSchema.safeParse(c).success) throw new ControlError("control-capability-unsupported");
-  if(c.protocol!==1 || !c.durableAccept || !c.ownershipIsolation || !c.evidenceRetention || c.usageObservation==="unavailable" || c.budgetEnforcement==="unsupported") throw new ControlError("control-capability-unsupported");
-  if(mode==="strict" && (c.budgetEnforcement!=="bounded" || !c.requestBoundEvidence)) throw new ControlError("control-capability-unsupported");
+  if(c.usageObservation==="unavailable" || c.budgetEnforcement==="unavailable" || c.handoffControl!=="durable" || c.handoffExecution===null) throw new ControlError("control-capability-unsupported");
+  if(mode==="strict" && (c.budgetEnforcement!=="bounded" || c.requestBoundProof===null)) throw new ControlError("control-capability-unsupported");
 }
 export function claimWork(store:ControlStore,input:ClaimInput, preparedWork?:WorkInput):Claim {
   const {groupId,workItemId,graphVersion,targetVersion,capabilities,executionProfile,handoffProfile,...meta}=input;

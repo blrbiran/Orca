@@ -53,12 +53,16 @@ it("reserves reconciliation once from remaining group budget and refuses stopped
   await expect(service.reconcileBudget("g1","T2")).rejects.toThrow("group-stopped");
  }finally{await h.dispose();}
 });
+// Human authorization (2026-09-24, ruling-88): rewritten for the v2 wire vocabulary (G1 seam A
+// Task 3) -- `durableAccept` is a retired field that no longer exists on `Capabilities`; the
+// rewrite is a whole swap, not a weakening, and keeps the same "peer answers with a hard miss"
+// shape this test pinned before.
 it("gets capabilities from the peer before a service claim",async()=>{
  const {ControlService}=await import("../../src/control/service.js");
  const {openTestStore,seedBudgetCase,caps}=await import("./fixtures/store.js");
  const h=await openTestStore();try{
   seedBudgetCase(h.store);
-  const service=new ControlService(h.store,{capabilities:async()=>({...caps,durableAccept:false})} as never);
+  const service=new ControlService(h.store,{capabilities:async()=>({...caps,handoffExecution:null})} as never);
   await expect(service.claim("g1","T1")).rejects.toThrow("control-capability-unsupported");
   expect(h.store.db.prepare("SELECT count(*) AS n FROM runs").get()?.n).toBe(0);
  }finally{await h.dispose();}

@@ -13,7 +13,10 @@ import { writeFileSync } from "node:fs";
 import { createGroup, putWork } from "../../../src/control/commands.js";
 import type { ControlStore } from "../../../src/control/store.js";
 import type { Capabilities, ClaimInput, WorkInput } from "../../../src/control/types.js";
-export const caps:Capabilities={protocol:1,durableAccept:true,ownershipIsolation:true,evidenceRetention:true,usageObservation:"realtime",budgetEnforcement:"bounded",requestBoundEvidence:"offline-peer-v1"};
+// Human authorization (2026-09-24, ruling-88): upgraded to the v2 wire vocabulary (G1 seam A
+// Task 3) so callers exercise a strict-capable answer under `capabilitiesSchema` rather than the
+// retired v1 shape.
+export const caps:Capabilities={protocol:2,usageObservation:"realtime",budgetEnforcement:"bounded",contextObservation:"realtime",handoffControl:"durable",handoffExecution:"mechanical-in-run-v1",contextWindowTokens:200000,requestBoundProof:{scheme:"adapter-request-bound-v1",version:"1",workDimensions:["activeMs","tokens"],handoffDimensions:["activeMs","tokens"],evidenceKind:"offline-peer-v1"}};
 export const amount=(tokens:number,activeMs=10000,attempts=10,sessions=10)=>({tokens,activeMs,attempts,sessions});
 export function seedBudgetCase(store:ControlStore,mode:"strict"|"soft"="strict") {
   createGroup(store,{groupId:"g1",projectKey:"example/repo",goal:"Ship",successConditions:["checks pass"],budgetMode:mode,limit:amount(100,1000000,100,100),reviewReserve:amount(10,100,1,1),deadlineAt:null},{commandId:"create",expectedRevision:0,by:"human"});

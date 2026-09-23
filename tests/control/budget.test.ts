@@ -8,7 +8,7 @@ import { recordUsage } from "../../src/control/usage.js";
 import { createGroup,putWork,setGroupLimit,setGroupStopped } from "../../src/control/commands.js";
 import { getGroup } from "../../src/control/queries.js";
 import { openTestStore,seedBudgetCase,amount,caps } from "./fixtures/store.js";
-import type { WorkKind } from "../../src/control/types.js";
+import type { WorkKind, Capabilities } from "../../src/control/types.js";
 describe("unified work claims",()=>{
  it("reserves both buckets atomically and replays one immutable run",async()=>{
   const h=await openTestStore();try{
@@ -30,8 +30,25 @@ describe("unified work claims",()=>{
    expect(h.store.db.prepare("SELECT id FROM runs").all()).toHaveLength(0);
   }finally{await h.dispose();}
  });
- it.each([{...caps,budgetEnforcement:"soft" as const},{...caps,requestBoundEvidence:null},{...caps,durableAccept:false}])("refuses unproven strict capabilities before reserving",async capabilities=>{
+ // Human authorization (2026-09-24, ruling-88): the second and third cells were rewritten for the
+ // v2 wire vocabulary (G1 seam A Task 3) -- `requestBoundEvidence`/`durableAccept` are retired
+ // fields that no longer exist on `Capabilities`; the rewrite is a whole swap, not a weakening, and
+ // keeps the same negative-capability shape (a strict-mode-only miss, then a hard miss) each cell
+ // pinned before.
+ it.each([{...caps,budgetEnforcement:"soft" as const},{...caps,requestBoundProof:null},{...caps,handoffControl:"phase-end" as const}])("refuses unproven strict capabilities before reserving",async capabilities=>{
   const h=await openTestStore();try{const s=seedBudgetCase(h.store);expect(()=>claimWork(h.store,{...s.t1Claim,capabilities})).toThrow("control-capability-unsupported");expect(getGroup(h.store,"g1").reserved.tokens).toBe(10);}finally{await h.dispose();}
+ });
+ it("refuses a peer answering the retired v1 vocabulary",async()=>{
+  const h=await openTestStore();
+  try {
+   const s=seedBudgetCase(h.store);
+   const legacy = { protocol: 1, durableAccept: true, ownershipIsolation: true,
+     evidenceRetention: true, usageObservation: "phase-end",
+     budgetEnforcement: "soft", requestBoundEvidence: null } as unknown as Capabilities;
+   expect(() => claimWork(h.store, { ...s.t1Claim, capabilities: legacy }))
+     .toThrow("control-capability-unsupported");
+   expect(getGroup(h.store, "g1").reserved.tokens).toBe(10);
+  } finally { await h.dispose(); }
  });
  it("transfers goal review reserve without charging it twice",async()=>{
   const h=await openTestStore();try{
