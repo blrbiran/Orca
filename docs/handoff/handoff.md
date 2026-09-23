@@ -106,30 +106,30 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 
 ## 四、⛔ 下一件事
 
-**人 2026-09-22 亲自定的顺序，逐条照做，不要重排。**
+1.–4. ✅ **两道门基线／三仓 handoff 更正／压缩本文档／ccloop 的 E1 I-2** —— 都已完成。
+   （I-2 的缺陷：非字符串 holder 被 `parsePid` 强转成 pid ⇒ 无法归属的锁被 `ccloop unlock`
+   **无凭证删除**。材料在 ccloop 台账 §46 与
+   `docs/superpowers/specs/2026-09-23-i2-array-holder-coercion-design.md`。）
+5. ✅ *** **ccloop 的【人裁 85（`ls` 也报锁）＋ I-3】也做完了**（2026-09-23，人裁 129–138，
+   全程在 ccloop 仓库里）。 *** Orca 本轮只是调度方，**生产改动一行都不在 Orca**。
+   做出来的：`ccloop ls` 报锁的全部七态；红线函数把「活性判不了」和「持有者活着」分开报，
+   并给前者一个自己的错误类；三处重试闸门各加一支**以保住**那三格今天的重试行为。
+   细节在 ccloop 的 `docs/superpowers/specs/2026-09-23-ls-lock-visibility-design.md`（§10／§11
+   记着 **18 条被实测推翻的初版结论**）与 `.superpowers/sdd/2026-09-23-ls-lock-visibility/progress.md`。
+   ⚠️ **ccloop 的挂账队列到此清空** —— 「不要插队」这条约束**不再适用**。
 
-1. ✅ **两道门拿基线** —— 已完成（§三那张表）。
-2. ✅ **三仓 handoff 更正** —— 已完成。ccloop 与 ccmem 各自**整节替换**了它们的「Orca 那条线」，
-   提交主题行 `docs(handoff): roll the Orca section onto ruling G1, and say what it does not settle`
-   与 `docs(handoff): roll the Orca section, and drop two claims that outlived their facts`。
-3. ✅ **压缩本文档** —— 本次即是。
-4. ✅ *** **ccloop 的「E1 的 I-2」已做完** ***（2026-09-23，人裁 127／128，**全程在 ccloop 仓库里**）。
-   缺陷：非字符串 holder 被 `parsePid` 强转成 pid ⇒ 无法归属的锁被 `ccloop unlock` **无凭证删除**。
-   细节在 ccloop 台账 §46 与 `docs/superpowers/specs/2026-09-23-i2-array-holder-coercion-design.md`。
-   ⛔ *** **ccloop 那边的下一件事是【人裁 85】（`ls` 也报锁），仍未开工。** ***
-   *** **人明确要求不插队 —— G1 不是插队的理由。** ***
-5. **然后才是 G1 那条线**：
+6. ⛔ *** **下一件事就是 G1 那条线。** ***
    ccloop 侧定契约（capability 词汇表 ＋ `targetVersion` 定型，走 brainstorming → writing-plans）
    → Orca 跟随改 `src/control/webProtocol.ts`／`schema.ts`／`types.ts` 三处
    → 两条红判据回绿
    → **终点判据：Web 派活到真 ccloop 能开出一个 run**。
    ⚠️ *** **动契约后要先重建 `/tmp/ccloop-codex-0919/dist` 再重跑那两道门** *** —— 现在的基线量的是
    Sep 19 21:48 的构建，不重建就是拿旧二进制当证据。
+   ⚠️ *** **G1 只定了「由 ccloop 拍」，没定 `targetVersion` 拍成什么。** ***
 
 **明确暂时不碰**：`goal.md` 的 G5（syncskill 补三件）、§3.3 loop 方案层、§3.4 Web UI 扩展 ——
-**都依赖第 5 步先通**，现在开等于在打不通的系统上加工作量。
+**都依赖第 6 步先通**，现在开等于在打不通的系统上加工作量。
 
----
 
 ## 五、已经拍板过的事（**不要重开**）
 
@@ -355,6 +355,31 @@ ccloop 的 I-2 里，spec 第一版把「渲染成 `JSON.stringify`」贴在那�
 
 ---
 
+### 6.7 本轮（2026-09-23，调度 ccloop 那一轮）新栽的
+
+- *** **「别人会接住」本身就是一条预言，而预言会错。** *** 本轮**四条**红预言被实测推翻。
+  最贵的一条是计划里写的「这两处闸门的变异由另外两个 Task 的判据接住」—— **实测零红**。
+  ⇒ *** **跨 Task 的红证必须在两个 Task 都落地之后【真的重跑一次】，不许只在纸上推。** ***
+- *** **护栏自己也有盲区，而盲区看起来和「通过」一模一样。** *** ccloop 的零写证明用的快照 helper
+  **从来没记录过目录的 mtime**，于是「探测时 touch 了 run 目录」这条变异**跑出全绿**。
+  ⇒ **补护栏时先写一条打它盲区的变异。** 同族：只记 mtime 不记 size、不记根目录自身。
+- *** **「已知红名单」本身是一条会过期的现测。** *** 判别式（红 ⊆ 名单，按名字核）是对的，
+  但名单从 7 条补到了 13 条 —— 多出来的 6 条**一直在 flake，只是没人记名字**，
+  于是判别式会把它们**误报成回归**。⇒ **名单要机械判**（ccloop 现在有 `scripts/check-known-reds.mjs`），
+  **且引用名单前先确认它是哪一轮测的。**
+- *** **erratum 里不许写计数。** *** 本轮实施席写了一条 erratum 说「不再适用于三格中的两格」，
+  实测是**三格全部**，而**同一段的下一句自己就说了三格**。**点名，不要计数。**
+- ⚠️ *** **在「关闭某类缺陷」的那一波里顺手多修一处，正是新引入该类缺陷的地方。** ***
+  上一条就是这么来的：那处修改不在命名的发现清单里，是实施席自作主张多修的。
+  ⇒ **收货时要问「你有没有修清单之外的东西」；派发时要写明「看见了就报，不要顺手修」。**
+- 🔴 *** **压缩活文档时丢结论 —— 控制器本轮自己犯了两次。** *** Rule 13(b) 写着「删的是过程，不是结论」，
+  而两次整节重写都把仍然活着的结论一并删掉了（一次在 ccmem，一次在 ccloop，后者丢了七条，
+  其中包括上一轮「最值钱的一条教训」）。**两次都是靠【把 `git diff` 的 `-` 行单独抽出来逐条读】捞回来的。**
+  ⇒ *** **这条机械检查不是可选项。写完整节替换，必须逐条过一遍被删的行。** ***
+- **一席外派的用量区间本轮实测**：评审席 60k–190k token，实施席 140k–450k token。
+  **一个 12 Task 的轮次用掉 18 席。**（只抄工具报数。）
+
+
 ## 七、工具骗法（**每一条都真栽过**）
 
 ### 7.1 rtk（**六种**）
@@ -528,23 +553,32 @@ ccloop `control` v1 的方法集：`capabilities`／`accept`／`inspect`／`hand
 ## 九、归人的（**agent 做不成，或必须人单独点头**）
 
 - **push 永远归人，控制器不许 push。** *** **本文不记发布状态。** *** 「有没有未推的笔」是一条
-  **一秒后就可能变**的现测（人会自己推，历轮实测同一会话内被推动 3–4 次是常态）⇒ 要知道就跑
-  `/usr/bin/git ls-remote origin refs/heads/main` 与本地比，**三个仓各跑一次**。
+  **一秒后就可能变**的现测 —— *** **历轮实测：同一会话内远端被人推动 3–4 次是常态。** ***
+  要知道就跑 `/usr/bin/git ls-remote origin refs/heads/main` 与本地比，**三个仓各跑一次**。
+- 🔴 *** **本轮发现（2026-09-23）：这台机器上有东西在把提交推到真实的 GitHub 远端，
+  而控制器一次 `push` 都没跑过。** *** 三个仓都装着同一个 `.git/hooks/post-commit`
+  （`Qoder CN` 的 AI tracker，调一个**混淆过的** Electron 二进制，看不进去）。
+  ⚠️ **但时间线不支持「每笔自动推」** —— 一度 ccloop 的 23 笔全在本地，
+  远端从早上直接跳到深夜的某一笔，且**停在中间**而不是最新一笔。更像某一刻的**批量推送**。
+  ⇒ **控制器没有动任何钩子**（那是人的配置）。**要人自己查 `post-commit`／`post-checkout` 并决定。**
+  ⇒ ⚠️ **不论是谁推的：那些提交现在是【已发布文本】，后续更正只能追加具名 ERRATUM。**
 - **`orca chain` 的真钱活体验收** —— 要人提交 `.orca/chain.json` 选 model 并点头
   （Orca 内尚不存在该文件 ⇒ 开链被 `chain-config-missing` 拒绝）。**先测 F，副本 T1 > F。**
 - **「第二个 panel 不挂控制面」** —— 是**控制器自己做的决定，不是人裁**，可逆，要不要维持仍未决。
 - **`targetVersion` 定成非空字符串还是安全整数** —— G1 已裁「由 ccloop 拍」，**拍成什么仍未裁**。
 - **裁决甲的 `plan` 那一半** —— 改 `preflightUnreadableRepo` 的判据需人**指名到具体测试**，至今未授权。
 - **子系统 B 的后续** —— 人裁「暂缓到 `~/.orca` 存在且有 `not_my_taste` 行」。
-  ⚠️ `~/.orca` 现在**存在了**（空的 `control/`，0700），但**没有 `not_my_taste` 行** ⇒ 条件仍不满足。
+  ⚠️ `~/.orca` **存在**（空的 `control/`，0700）但**没有 `not_my_taste` 行** ⇒ 条件仍不满足。
 - **Co-Authored-By 写错模型的四笔** —— 未 amend（**不许 amend，由人决定**）。
+  ⚠️ **本轮的新情况**：各实施席用了**自己模型**的归属行（多为 Sonnet），这是控制器裁定的 ——
+  那些提交的作者确实是它们，写成 Opus 才是假话。**归属行因此不统一，人若不接受要自己决定怎么办。**
 - **一把 API key 曾明文进入 transcript**（2026-09-17 那一轮）⇒ **建议轮换，只有人能确认做没做。**
-- ccloop 自己的：**人裁 85（`ls` 也报锁）** 仍挂着未开工；**E1 的 I-2 已于 2026-09-23 完成**（人裁 127／128）。
-- ccloop 主线有**一条稳定红**（非 flake）：`tests/control/stopProof.test.ts > quiet execution proof >
-  does not treat leader exit as group quiet and proves only after the full tree is gone`。
-  **根因未查，无人授权动它。** 判别过程：副本单跑 3/3 红、主树也红、单跑 5.37s（远低于 flake 画像 25–29s）。
+- ccloop 自己的：**人裁 85 与 I-3 已于 2026-09-23 完成**（人裁 129–138）。
+  仍挂着的是 **G1**、**`stopProof` 那条稳定红**（根因未查，要人先开口；
+  **判别过程**：`git clone --local` 副本单跑 **3/3 红**、主树单跑也红、单跑耗时 **5.37s** ——
+  远低于 flake 画像的 25–29s ⇒ **与负载无关**）、**Linux 覆盖**
+  （要人自己起 OrbStack daemon），以及本轮登记未修的 **M3／M4**（都要改既有判据，需人按人裁 88 指名）。
 
----
 
 ## 十、Suggested skills
 
