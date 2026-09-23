@@ -1,0 +1,54 @@
+{
+  "v": 1,
+  "runId": "orca-dev-a4f77b1f",
+  "runtime": "claude-code",
+  "sessionRef": "a4f77b1f-c842-41ee-8e25-70d1dcdfaa75",
+  "writtenAt": "2026-09-23T18:08:31.922Z",
+  "head": "eb0c954d57a80f20f768afcaa7b8dd0debe0d747",
+  "level": {
+    "kind": "reading",
+    "level": 365752,
+    "windowTokens": 1000000,
+    "t1": 330000,
+    "t2": 450000,
+    "band": 1
+  },
+  "next": [
+    "Execute the G1 seam-A plan: ccloop docs/superpowers/plans/2026-09-24-g1-capability-vocabulary.md (6 tasks, 42 steps) via superpowers:subagent-driven-development. Roughly 18-30 subagents by past measurement, so it does not fit one session.",
+    "Task 1 lands in ccloop main (NOT codex/codex-adapter-0919, which is 10142 lines behind main).",
+    "Before Task 3 and Task 5, get the human to name each existing test to be rewritten (ruling 88). The plan names them.",
+    "Rebuild the ccloop binary first: git clone --local to the session scratchpad, symlink node_modules, npm run build. /tmp cleaning destroys these trees."
+  ],
+  "open": [
+    "G1 seam B (targetVersion type split) is deliberately NOT in scope; the two webCcloopSmoke targetVersion criteria stay red and that is expected.",
+    "Production deployment has no execution profile snapshot anywhere in the repo; does not block G1's test-level endpoint.",
+    "capabilities is still a static literal on the ccloop side; making it computed is the ruled second step."
+  ],
+  "awaitingHuman": [
+    {
+      "kind": "named-authorization",
+      "what": "Ruling 88: name each existing test the plan's Task 3 and Task 5 rewrite, including webCcloopSmoke's codexProbe which is the round's real acceptance point"
+    },
+    {
+      "kind": "irreversible",
+      "what": "push in all three repositories; something on this machine pushes commits while the controller never has"
+    },
+    {
+      "kind": "irreversible",
+      "what": "the prunable worktree registration at /private/tmp/ccloop-codex-0919 (pruning a worktree is Tier 0; untouched)"
+    },
+    {
+      "kind": "ccloop-change",
+      "what": "G1's production change in ccloop is one file, src/control/command.ts"
+    }
+  ],
+  "measurements": [
+    {
+      "command": "node -e \"process.exit(0)\"",
+      "exitCode": 0,
+      "commit": "eb0c954d57a80f20f768afcaa7b8dd0debe0d747",
+      "observedAt": "2026-09-23T18:08:31.872Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-a4f77b1f-QxU47Q/1.txt"
+    }
+  ]
+}
