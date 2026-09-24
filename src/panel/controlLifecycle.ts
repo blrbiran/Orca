@@ -13,6 +13,7 @@ import {
   saveStopIntent,
   type StopIntentV1,
 } from "../control/stopIntent.js";
+import { isWebWorkRun } from "../control/webDispatch.js";
 import type { ExecutionProfileRouter } from "../control/profiles.js";
 import type { AdmissionGate } from "../control/admissionGate.js";
 import type { ControlStore } from "../control/store.js";
@@ -36,6 +37,11 @@ export interface PanelShutdownDeps {
   shutdownGraceMs?: number;
   now?: () => Date;
   beforeCommit?: () => void;
+  /**
+   * Execution driver spec §4: a run the driver owns keeps running in ccloop across an Orca restart and is
+   * collected afterwards, so no stop is frozen for it. Off unless a driver exists.
+   */
+  exemptDriverRuns?: boolean;
 }
 
 export interface PanelStartupOrder {
@@ -117,9 +123,9 @@ function recordInconsistency(store: ControlStore, groupId: string, shutdownId: s
  * strengthened only when it must actually stop a run, and a human handoff-stop or
  * an earlier epoch's deadline is never rewritten.
  */
-export function shutdownGroup(store: ControlStore, groupId: string, window: ShutdownWindow, shutdownId: string): ShutdownGroupEntry {
+export function shutdownGroup(store: ControlStore, groupId: string, window: ShutdownWindow, shutdownId: string, exemptDriverRuns = false): ShutdownGroupEntry {
   const intent = readStopIntent(store, groupId);
-  const active = frozenRunIds(store, groupId);
+  const active = frozenRunIds(store, groupId).filter((runId) => !(exemptDriverRuns && isWebWorkRun(store, runId)));
   if (intent !== null && frozenSetIsInconsistent(store, groupId, intent, active)) {
     recordInconsistency(store, groupId, shutdownId);
     return { groupId, disposition: "blocked-inconsistent", changed: false, ...versions(store, groupId),
@@ -164,7 +170,7 @@ export async function applyPanelShutdown(deps: PanelShutdownDeps): Promise<Comma
     apply: context => {
       if (context.rawCommand.target.kind !== "global") throw new ControlError("control-target-not-allowed");
       const groupIds = store.db.prepare("SELECT id FROM groups ORDER BY id").all().map((row) => String(row.id));
-      const groups = groupIds.map(groupId => shutdownGroup(store, groupId, window, command.commandId));
+      const groups = groupIds.map(groupId => shutdownGroup(store, groupId, window, command.commandId, deps.exemptDriverRuns === true));
       deps.beforeCommit?.();
       return { status: 200, body: {
         schema: "orca-command-success-v1", commandId: context.rawCommand.commandId, actorId: context.rawCommand.actorId,

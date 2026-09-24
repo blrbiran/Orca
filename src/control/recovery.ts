@@ -1,6 +1,7 @@
 import type { ControlStore } from "./store.js";
 import type { ExecutionPort } from "./executionPort.js";
 import { reconcileStart, deliverSchedulerWakes, type WakeHandlers } from "./dispatch.js";
+import { isWebWorkRun } from "./webDispatch.js";
 import { readRun } from "./budget.js";
 import { readCommittedCheckpoint,verifyCandidateArtifacts,repairAcceptedWork } from "./checkpoints.js";
 import { publishPending } from "./projection.js";
@@ -10,7 +11,7 @@ import { collectControlled,disposeControlled,confirmLanding } from "./schedulerB
 import { acquireRepoLock } from "../scheduler/repoLock.js";
 
 /** Recovery never creates a replacement run or executes a Git merge. */
-export async function recoverControl(store:ControlStore,port:ExecutionPort,wakes?:{handlers:WakeHandlers}):Promise<{blockedRunIds:string[];replayedProjectionIds:string[];pendingWakeIds:string[]}> {
+export async function recoverControl(store:ControlStore,port:ExecutionPort,wakes?:{handlers:WakeHandlers},options:{driverOwnsWebRuns?:boolean}={}):Promise<{blockedRunIds:string[];replayedProjectionIds:string[];pendingWakeIds:string[]}> {
  const release=store.beginOperation();
  try {
  store.assertOwner();store.dispatchBlocked=true;
@@ -21,7 +22,10 @@ export async function recoverControl(store:ControlStore,port:ExecutionPort,wakes
   catch{for(const id of intent.runIds)blocked.add(id);}finally{await lock?.release();}
  }
  for(const row of store.db.prepare("SELECT id FROM runs ORDER BY rowid").all()) {
-  const runId=String(row.id);let run=readRun(store,runId);
+  const runId=String(row.id);
+  // Execution driver spec §4: with a driver present, a Web work run is the driver's to reconcile, run by run.
+  if(options.driverOwnsWebRuns && isWebWorkRun(store,runId)) continue;
+  let run=readRun(store,runId);
   try {
    if(run.checkpointId) await verifyCandidateArtifacts(store,await readCommittedCheckpoint(store,runId));
    if(run.state==="settled") {await repairAcceptedWork(store,runId);continue;}

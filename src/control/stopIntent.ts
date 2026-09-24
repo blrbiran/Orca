@@ -9,6 +9,7 @@ import { recordProjectionChange } from "./projectionJournal.js";
 import { readBudgetProposal, readWork, saveWork, type BudgetProposalRecord } from "./queries.js";
 import { writeCanonicalRecord } from "./snapshot.js";
 import { rearmFailedContinuation } from "./continuation.js";
+import { resumeBlockedDriverRun } from "./driveRecord.js";
 import { dispatchEnvelopeSchema, type CapabilityViewV1, type CommandErrorBodyV1, type CommandSuccessV1, type RawAuthorityCommandV1 } from "./webProtocol.js";
 import { idSchema, safeInteger, canonicalTimestampSchema } from "./schema.js";
 import type { Amount } from "./types.js";
@@ -441,7 +442,8 @@ function retryRun(store: ControlStore, groupId: string, runId: string, context: 
   if (run.groupId !== groupId) return blocked("recovery-run-owner");
   const rearm = rearmFailedContinuation(store, groupId, run);
   if (rearm !== null) wakeIds.push(rearm);
-  const resolved = blockers.resolved || rearm !== null;
+  const resumedDriverRun = resumeBlockedDriverRun(store, runId);
+  const resolved = blockers.resolved || rearm !== null || resumedDriverRun;
   const requestId = store.db.prepare("SELECT id FROM handoff_requests WHERE group_id=? AND run_id=? ORDER BY rowid DESC LIMIT 1").get(groupId, runId);
   if (!requestId) return { resolved, blockerCodes: blockers.codes, evidenceIds: blockers.evidenceIds, wakeIds };
   const { request } = readHandoffRequest(store, groupId, String(requestId.id));
