@@ -70,7 +70,7 @@ it("blocks recovery of a missing current checkpoint instead of selecting an olde
 // Human authorization (2026-09-24, ruling-88): rewritten for the v2 wire vocabulary (G1 seam A
 // Task 6) -- `durableAccept` is a retired field that no longer exists on `Capabilities`. Correction
 // (final fix dispatch, 2026-09-24, I2/I3): the guarantee `durableAccept` carried did NOT move to
-// `handoffControl` -- G1 deleted the three v1 strict-mode gates (`durableAccept`/`ownershipIsolation`/
+// `handoffControl` -- G1 deleted the three v1 gates (checked in every budget mode, not only strict: `durableAccept`/`ownershipIsolation`/
 // `evidenceRetention`) outright, because ccloop always answered them as an unconditional `true`, so
 // they never gated anything. Nothing in v2 replaces them; `handoffControl` is a different guarantee
 // (handoff latching) that assertCapabilities also happens to check, not a successor to the deleted

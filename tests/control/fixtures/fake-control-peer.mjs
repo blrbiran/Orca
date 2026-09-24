@@ -13,7 +13,7 @@ let accepted=existsSync(file)?JSON.parse(readFileSync(file,"utf8")):null;
 // those three gates outright, because ccloop always answered them as an unconditional `true`, so
 // they never gated anything. Nothing in v2 replaces them; `handoffControl` and `requestBoundProof`
 // are separate guarantees (handoff latching and per-request bound evidence, respectively) that
-// happen to also gate strict mode, not successors to the deleted booleans.
+// are also gated on (handoffControl in every budget mode, requestBoundProof in strict mode), not successors to the deleted booleans.
 if(method==="capabilities") console.log(JSON.stringify({protocol:2,usageObservation:"realtime",budgetEnforcement:"bounded",contextObservation:"unavailable",handoffControl:"durable",handoffExecution:"mechanical-in-run-v1",contextWindowTokens:null,requestBoundProof:{scheme:"adapter-request-bound-v1",version:"1",workDimensions:["activeMs","tokens"],handoffDimensions:["activeMs","tokens"],evidenceKind:"offline-peer-v1"}}));
 else if(method==="collect") console.log(existsSync(join(root,"report.json"))?readFileSync(join(root,"report.json"),"utf8"):JSON.stringify({events:[],candidate:null,terminal:null}));
 else if(method==="handoff") console.log(JSON.stringify({kind:"latched",requestId:input.request.requestId}));
