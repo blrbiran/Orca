@@ -106,8 +106,17 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 `the frozen dispatch envelope reaches a real process (task 10 step 4)` 下的两条，报
 `start-envelope-conflict:run:targetVersion`。**它们属于缝 B，在 G1 缝 A 内红着是预期的，改绿即越界。**
 
+⚠️ *** **已知 flake（2026-09-24 会话 `ae4061a5` 现测登记，根因未查）**：
+`tests/panel/controlShutdown.test.ts` > `a real SIGTERM to a real panel` > `makes it exit cleanly, having written one shutdown row for its epoch`。 ***
+在同一棵树（观测锚点＝主题行 `docs(handoff): G1 seam A is done; the next steps are the human's, ccloop pushed before Orca`）上：
+`npm test` 里绿、`verify:chain` 第二段全量重跑里**红一次**（`expected 143 to be +0`，`controlShutdown.test.ts:126`）；
+单文件 `./node_modules/.bin/vitest run tests/panel/controlShutdown.test.ts` 连跑 **5/5 绿**（6/6）。
+⇒ 看到它红：**先单文件重跑**，绿了就不是回归。未验证的推测：判据连发两次 SIGTERM，第二次若经 tsx 转发时晚于
+`src/panel/server.ts` 在 `closed` 之后摘掉处理器，内层 node 按默认处置死，tsx 转成 143。
+（已排除「信号先于处理器安装」：处理器在 `src/cli.ts` 打印 ready 之前同步装好。）
+
 ⚠️ *** **别只看 RC。** *** 这几道门在缝 B 定型之前**必然 RC1**，RC1 本身不携带信息。
-**判别式是「除这两条之外有没有新的红」。** 缝 B 做完后的回绿定义：`verify:control` ＝ RC0 / 44 文件 / 436 通过 / 0 skipped。
+**判别式是「除这两条（以及上面那条已知 flake）之外有没有新的红」。** 缝 B 做完后的回绿定义：`verify:control` ＝ RC0 / 44 文件 / 436 通过 / 0 skipped。
 本轮全部门日志与裁定：台账 `.superpowers/sdd/2026-09-24-g1-capability-vocabulary/progress.md`；
 上一版（G1 之前）基线台账：`.superpowers/sdd/2026-09-22-control-gates-baseline/`。
 
@@ -115,12 +124,14 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 
 *** **G1 缝 A 已做完。下一件事【全部归人】**，按顺序： ***
 
-1. 🔴 *** **先推 ccloop，再推 Orca。** *** （下面是一条**会过期的现测**，本文照例不记发布状态 —— 接手先跑 §二 的 `ls-remote`，三个仓各一次。）2026-09-24 现测：Orca 远端已在会话中途被推到 Task 5 那一笔
+1. ✅ **已由人推送（2026-09-24 会话 `ae4061a5` 用 `ls-remote` 现测：三个仓远端 main 都等于当时本地 main，含 ccloop 的 v2 那一笔）。** 下面是推送前的记录，留作经过：
+   🔴 *** **先推 ccloop，再推 Orca。** *** （下面是一条**会过期的现测**，本文照例不记发布状态 —— 接手先跑 §二 的 `ls-remote`，三个仓各一次。）2026-09-24 现测：Orca 远端已在会话中途被推到 Task 5 那一笔
    （主题行 `fix(control): correct false human-authorization attribution on Task 5 criterion`），
    那一笔**要求 `protocol: 2`**，而 ccloop 远端仍停在答 `protocol: 1` 的那一笔 ⇒ **已发布的两个 main 此刻对不上线**，
    且已发布的 Orca main 在 typecheck 与 `verify:control` 上都是红的（中间态）。
    **本会话没有任何一席执行过 `git push`**（逐个子代理 transcript 扫过）⇒ 推送来自会话外（人，或 §九 那个 `post-commit` 钩子）。
 2. **缝 B 要不要开、`targetVersion` 拍成什么** —— 下游是 `src/scheduler/planFile.ts`（人写的 plan 文件格式），人裁排除过。
+   ⇒ 🟢 **人 2026-09-24 原话「开缝 B」（会话 `ae4061a5`）。`targetVersion` 拍成什么仍未定，设计在进行中。**
 3. 缝 B 之后才轮到：生产 execution profile 快照（§9）、`capabilities` 计算化（人裁「分两步」的第二步）。
 
 ### 4.1 G1 缝 A 做了什么（**不要重做**）
@@ -704,7 +715,7 @@ Orca 要求排序去重的四值枚举 ⇒ 将来非 null 且写错时 Orca 整�
 
 ### 9.1 G1 缝 A 之后归人的（**2026-09-24 替换上一版「执行前必须由人给的」——那些授权都已给出并用完**）
 
-- 🔴 **推送顺序：先 ccloop、后 Orca**（§四.1）。
+- ✅ ~~推送顺序：先 ccloop、后 Orca~~ —— **人已推送**（2026-09-24，会话 `ae4061a5` `ls-remote` 现测，见 §四 第 1 条）。
 - **一笔缺归属行的提交**：主题行 `fix(control): give the schema-line criterion in endToEnd a real red, correct false capability-migration comments`
   没有 `Co-Authored-By`／`Claude-Session`（实施席违令试 amend 被拦）。**不许 amend，由人决定。**
 - **本轮的人裁**（便于以后引用）：人 2026-09-24「task 1 3 5 6 都同意授权。按顺序做」＋ 对 Task 4 三处判据的「授权改写三处」。
