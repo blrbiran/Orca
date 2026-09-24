@@ -93,6 +93,16 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
                 {run.blockedReason ? ` — ${run.blockedReason}` : ""}
                 {run.failureCode !== null ? ` (${run.failureCode})` : ""}
                 {` · attempt ${run.providerAttemptOrdinal} of claim ${run.claimOrdinal ?? "n/a"}`}
+                {/* Execution driver final review I5: a run the driver blocked carries its reason on the run, not as a
+                    recovery blocker, so its one remedy (spec §2.3, the run-scope recovery-retry) is offered here. */}
+                {run.state === "blocked" && run.blockedReason ? (
+                  <button
+                    type="button"
+                    onClick={() => onCommand({ verb: "recovery-retry", groupId, expectedRevision: revision, payload: { scope: "run", runId: run.runId } })}
+                  >
+                    Retry run {run.taskId ?? run.runId}
+                  </button>
+                ) : null}
               </td>
               <td>{run.profile.profileId} {short(run.profile.profileHash)}</td>
               <td>{run.used.tokens}</td>
