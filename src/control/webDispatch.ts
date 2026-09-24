@@ -233,7 +233,7 @@ function deliverContinuationWake(
 
 interface ClaimableTask { workItemId: string }
 
-function nextClaimableTask(store: ControlStore, groupId: string): ClaimableTask | null {
+export function nextClaimableTask(store: ControlStore, groupId: string): ClaimableTask | null {
   const rows = store.db.prepare("SELECT id,body FROM work_items WHERE group_id=? ORDER BY id").all(groupId);
   for (const row of rows) {
     const work = JSON.parse(String(row.body)) as { workItemId: string; kind: string; status: string; dependsOn?: string[] };
@@ -339,7 +339,7 @@ function claimStartRevision(claimIdentity: string, groupId: string): number {
   return revision;
 }
 
-function readWorkClaimEnvelope(store: ControlStore, groupId: string, runId: string): DispatchEnvelopeV1 {
+export function readWorkClaimEnvelope(store: ControlStore, groupId: string, runId: string): DispatchEnvelopeV1 {
   const row = store.db.prepare("SELECT body FROM outbox WHERE id=? AND kind='work-claim'").get(`work:${groupId}:${runId}`);
   if (!row) throw new ControlError("start-intent-missing");
   const { envelopeHash } = JSON.parse(String(row.body)) as { envelopeHash: string };
@@ -351,6 +351,25 @@ export type AttemptReservation =
   | { kind: "suppressed"; requestId: string | null };
 
 /**
+ * The transaction body of `beginProviderAttempt`, for a caller that must reserve the attempt in the
+ * same transaction as its own writes (execution driver step A1). It moves no amount: the read model
+ * requires `remaining == max(grant - cumulative, 0)` on every run.
+ */
+export function reserveProviderAttemptInTransaction(store: ControlStore, runId: string, phase: Phase): AttemptReservation {
+  const run = readDispatchRun(store, runId);
+  if (phase === "work") {
+    const latch = store.db.prepare("SELECT request_id FROM context_latches WHERE run_id=? AND generation=?").get(runId, run.generation);
+    if (latch) return { kind: "suppressed", requestId: latch.request_id == null ? null : String(latch.request_id) };
+    const held = store.db.prepare("SELECT id FROM handoff_requests WHERE run_id=? AND state IN ('latched','collecting') ORDER BY rowid")
+      .get(runId);
+    if (held) return { kind: "suppressed", requestId: String(held.id) };
+  }
+  run.providerAttemptOrdinal += 1;
+  saveDispatchRun(store, run);
+  return { kind: "reserved", providerAttemptOrdinal: run.providerAttemptOrdinal, envelope: readWorkClaimEnvelope(store, run.groupId, runId) };
+}
+
+/**
  * Reserve exactly one provider attempt for one invocation. A run whose context
  * watermark is latched, or whose handoff stop is being collected, can no longer
  * reserve a work-phase attempt at all.
@@ -359,19 +378,7 @@ export function beginProviderAttempt(deps: WebDispatchDeps, runId: string, phase
   const { store, admissionGate } = deps;
   const release = admissionGate?.enter();
   try {
-    return store.transaction(() => {
-      const run = readDispatchRun(store, runId);
-      if (phase === "work") {
-        const latch = store.db.prepare("SELECT request_id FROM context_latches WHERE run_id=? AND generation=?").get(runId, run.generation);
-        if (latch) return { kind: "suppressed" as const, requestId: latch.request_id == null ? null : String(latch.request_id) };
-        const held = store.db.prepare("SELECT id FROM handoff_requests WHERE run_id=? AND state IN ('latched','collecting') ORDER BY rowid")
-          .get(runId);
-        if (held) return { kind: "suppressed" as const, requestId: String(held.id) };
-      }
-      run.providerAttemptOrdinal += 1;
-      saveDispatchRun(store, run);
-      return { kind: "reserved" as const, providerAttemptOrdinal: run.providerAttemptOrdinal, envelope: readWorkClaimEnvelope(store, run.groupId, runId) };
-    });
+    return store.transaction(() => reserveProviderAttemptInTransaction(store, runId, phase));
   } finally { release?.(); }
 }
 
@@ -439,4 +446,14 @@ export function createWebWakeHandlers(deps: WebWakeDeps): WakeHandlers {
       return store.db.prepare("SELECT state FROM estimates WHERE group_id=? AND id=?").get(wake.groupId, estimateId)?.state !== "queued";
     },
   };
+}
+
+/**
+ * Execution driver spec §4: a run the Web ledger claimed for work carries the `work:<group>:<run>`
+ * claim row. Legacy runs carry a `start:<run>` row instead and are never this.
+ */
+export function isWebWorkRun(store: ControlStore, runId: string): boolean {
+  const row = store.db.prepare("SELECT group_id FROM runs WHERE id=?").get(runId);
+  if (!row) return false;
+  return store.db.prepare("SELECT id FROM outbox WHERE id=? AND kind='work-claim'").get(`work:${String(row.group_id)}:${runId}`) !== undefined;
 }

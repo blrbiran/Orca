@@ -20,7 +20,7 @@ export const profileSnapshot = (): ExecutionProfileSnapshotV1 => ({
 });
 
 // Seam B (human ruling 2026-09-24, named under ruling 88): targetVersion is one positive safe integer from plan to wire.
-export interface WebFixtureTask { taskId: string; dependsOn?: string[]; targetVersion?: number; configHash?: string }
+export interface WebFixtureTask { taskId: string; dependsOn?: string[]; targetVersion?: number; configHash?: string; targetPaths?: string[] }
 
 export async function webFixture(snapshot = profileSnapshot(), tasks: readonly WebFixtureTask[] = [{ taskId: "a" }]) {
   const h = await openTestStore();
@@ -39,7 +39,7 @@ export async function webFixture(snapshot = profileSnapshot(), tasks: readonly W
   const planTasks = [];
   for (const task of tasks) {
     const contract = { objective: { taskId: task.taskId, goal: "ship", successCondition: "passes", nonGoals: [] },
-      context: { repoPath: repo, targetPaths: [task.taskId], relevantDocs: [], buildTestCommands: ["true"], constraints: [] },
+      context: { repoPath: repo, targetPaths: task.targetPaths ?? [task.taskId], relevantDocs: [], buildTestCommands: ["true"], constraints: [] },
       executionPolicy: { autonomyLevel: "L2", maxAttempts: 9, perAttemptTimeoutMs: 60_000, totalRuntimeBudgetMs: 90_000, tokenBudget: 99_000, worktreeRequired: true, partialOutcomeRecoveryWindowMs: 30_000 },
       safetyPolicy: { allowlistPaths: [], denylistPaths: [], maxFilesTouched: 1, humanGateConditions: [] },
       verification: { verifierType: "command", requiredChecks: ["true"], rejectOn: ["failure"], evidenceRequired: [] },
