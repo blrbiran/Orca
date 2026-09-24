@@ -36,7 +36,7 @@ describe("E: settle a landed run (spec §2.2, deviation D2)", () => {
       expect(t.h.store.db.prepare("SELECT delivered FROM outbox WHERE id=?").get(`task-handoff:g:a:${run.checkpointId}`)).toEqual({ delivered: 1 });
       expect(t.h.store.db.prepare("SELECT COUNT(*) AS n FROM outbox WHERE kind='group-handoff' AND delivered=0").get()).toEqual({ n: 0 });
     } finally { await t.h.dispose(); }
-  });
+  }, 30000);
 
   it("cleans only the run's own workspace and incoming ref, keeps its source directory, and never touches orca/<group>", async () => {
     const t = await driverHarness([{ taskId: "a" }]); try {
@@ -49,7 +49,7 @@ describe("E: settle a landed run (spec §2.2, deviation D2)", () => {
       expect(git(t.repo, "rev-parse", "refs/heads/orca/g")).toBe(drive.landedCommit);
       expect(existsSync(drive.sourceDir)).toBe(true);
     } finally { await t.h.dispose(); }
-  });
+  }, 30000);
 
   it("settles an empty result without acceptance, so its work is blocked (deviation D14)", async () => {
     const t = await driverHarness([{ taskId: "a" }], { files: () => ({}) }); try {
@@ -59,7 +59,7 @@ describe("E: settle a landed run (spec §2.2, deviation D2)", () => {
       expect(t.h.store.db.prepare("SELECT COUNT(*) AS n FROM outbox WHERE kind='acceptance'").get()!.n).toBe(0);
       expect(JSON.parse(String(t.h.store.db.prepare("SELECT body FROM work_items WHERE group_id='g' AND id='a'").get()!.body)).status).toBe("blocked");
     } finally { await t.h.dispose(); }
-  });
+  }, 30000);
 
   it("commits the checkpoint exactly once across a death after the acceptance", async () => {
     const t = await driverHarness([{ taskId: "a" }]); try {
@@ -71,7 +71,7 @@ describe("E: settle a landed run (spec §2.2, deviation D2)", () => {
       expect(t.h.store.db.prepare("SELECT COUNT(*) AS n FROM checkpoints WHERE run_id=?").get(runId)).toEqual({ n: 1 });
       expect(t.h.store.db.prepare("SELECT COUNT(*) AS n FROM outbox WHERE kind='acceptance'").get()).toEqual({ n: 1 });
     } finally { await t.h.dispose(); }
-  });
+  }, 30000);
 
   it("R2b: an independent run settles while its sibling is blocked at B'", async () => {
     const t = await driverHarness([{ taskId: "a" }, { taskId: "b" }], { behaviour: (id) => (id === "a" ? "unknown" : "succeed") }); try {
@@ -82,7 +82,7 @@ describe("E: settle a landed run (spec §2.2, deviation D2)", () => {
       expect(t.body(b).state).toBe("settled");
       expect(t.fake.calls.inspect).toBe(10);
     } finally { await t.h.dispose(); }
-  });
+  }, 30000);
 });
 
 describe("P7 (controller ruling 2026-09-25): a cleanup failure never blocks a settled run", () => {
@@ -117,7 +117,7 @@ describe("P7 (controller ruling 2026-09-25): a cleanup failure never blocks a se
       expect(recovered.state).toBe("settled");
       expect(recovered.drive.cleanupError).toBe(null);
     } finally { await t.h.dispose(); }
-  });
+  }, 30000);
 });
 
 describe("fix round 1 (review Important 1/2): a publish failure after settle is its own field", () => {
@@ -151,7 +151,7 @@ describe("fix round 1 (review Important 1/2): a publish failure after settle is 
       expect(t.h.store.db.prepare("SELECT delivered FROM outbox WHERE id=?").get(`projection:${recovered.checkpointId}`)).toEqual({ delivered: 1 });
       expect(t.h.store.db.prepare("SELECT delivered FROM outbox WHERE id=?").get(`task-handoff:g:a:${recovered.checkpointId}`)).toEqual({ delivered: 1 });
     } finally { await t.h.dispose(); }
-  });
+  }, 30000);
 });
 
 describe("CR1: the group keeps going after one start command (spec §2.1)", () => {
@@ -186,7 +186,7 @@ describe("CR1: the group keeps going after one start command (spec §2.1)", () =
       await t.driver().round();
       expect(t.h.store.db.prepare("SELECT COUNT(*) AS n FROM scheduler_wakes WHERE kind='start'").get()).toEqual({ n: 0 });
     } finally { await t.h.dispose(); }
-  });
+  }, 30000);
 });
 
 // Final review I1 (controller ruling, 2026-09-25): usage over a run's grant blocks a Web group (usage.ts),
@@ -214,7 +214,7 @@ describe("a group blocked by a budget breach (final review I1)", () => {
       expect(t.h.store.db.prepare("SELECT COUNT(*) AS n FROM scheduler_wakes WHERE group_id='g' AND id LIKE 'drive:%'").get()).toEqual({ n: 0 });
       expect(t.h.store.db.prepare("SELECT COUNT(*) AS n FROM runs WHERE group_id='g'").get()).toEqual({ n: 1 });
     } finally { await t.h.dispose(); }
-  });
+  }, 30000);
 
   it("A1 reserves no provider attempt for a claimed run of a blocked group", async () => {
     const t = await driverHarness([{ taskId: "a" }]); try {
@@ -225,7 +225,7 @@ describe("a group blocked by a budget breach (final review I1)", () => {
       expect(t.body(runId)).toMatchObject({ state: "starting", providerAttemptOrdinal: 0 });
       expect(t.fake.calls.accept).toHaveLength(0);
     } finally { await t.h.dispose(); }
-  });
+  }, 30000);
 
   it("B sends no accept for a prepared run once its group is blocked", async () => {
     const t = await driverHarness([{ taskId: "a" }]); try {
@@ -237,5 +237,5 @@ describe("a group blocked by a budget breach (final review I1)", () => {
       expect(t.body(runId).state).toBe("start-pending");
       expect(t.fake.calls.accept).toHaveLength(0);
     } finally { await t.h.dispose(); }
-  });
+  }, 30000);
 });
