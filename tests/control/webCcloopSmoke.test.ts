@@ -156,7 +156,7 @@ describe("the shipped consumer answers for its own capabilities (task 10 step 4)
     } finally { await soft.f.dispose(); }
   });
 
-  // Human authorization 2026-09-24, G1 seam A Task 5 fix round 1 (only-add, no existing criterion
+  // Controller ruling (G1 seam A Task 5 fix round 1, 2026-09-24; only-add, no existing criterion
   // in this file changed): `probeBlocksDispatch` (src/control/webDispatch.ts) is called twice on
   // the same observation -- once in `scheduleStart` (via `WebControlService.start()`, the
   // "expect(... start...).toBe(false)" line above) and again in `deliverScheduledStart`. A real
