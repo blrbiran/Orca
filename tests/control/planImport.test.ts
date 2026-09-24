@@ -65,8 +65,9 @@ async function setup() {
     targetRepo: repo, ccloopBin: binary, runsDir: h.root, workBranch: "orca/work", policy: "local-merge", ledgerMode: "out-of-repo",
     goal: "Ship", successConditions: ["tests pass"],
     tasks: [
-      { taskId: "b", contract: b, dependsOn: ["a"], targetVersion: "v2", configHash: hash("e") },
-      { taskId: "a", contract: a, dependsOn: [], targetVersion: "v1", configHash: hash("f") },
+      // Seam B (human ruling 2026-09-24, named under ruling 88): targetVersion is one positive safe integer from plan to wire.
+      { taskId: "b", contract: b, dependsOn: ["a"], targetVersion: 2, configHash: hash("e") },
+      { taskId: "a", contract: a, dependsOn: [], targetVersion: 1, configHash: hash("f") },
     ],
   };
   await writeFile(planPath, JSON.stringify(plan));

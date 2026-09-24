@@ -19,7 +19,8 @@ export const profileSnapshot = (): ExecutionProfileSnapshotV1 => ({
   resolved: { adapterConfigContentHash: "a".repeat(64), modelPolicyContentHash: "b".repeat(64), proofDocumentContentHashes: ["c".repeat(64)], adapterImplementationHash: "d".repeat(64), adapterProtocolVersion: "1", tokenizerArtifactHashes: [], secretValueHashes: [] },
 });
 
-export interface WebFixtureTask { taskId: string; dependsOn?: string[]; targetVersion?: string; configHash?: string }
+// Seam B (human ruling 2026-09-24, named under ruling 88): targetVersion is one positive safe integer from plan to wire.
+export interface WebFixtureTask { taskId: string; dependsOn?: string[]; targetVersion?: number; configHash?: string }
 
 export async function webFixture(snapshot = profileSnapshot(), tasks: readonly WebFixtureTask[] = [{ taskId: "a" }]) {
   const h = await openTestStore();
@@ -45,7 +46,8 @@ export async function webFixture(snapshot = profileSnapshot(), tasks: readonly W
       escalationAndExit: { escalationTargets: [], pauseOn: [], stopOn: [], terminalStates: ["succeeded", "blocked_waiting_human", "exhausted", "cancelled", "failed"] } };
     const contractPath = join(h.root, `contract-${task.taskId}.json`);
     await writeFile(contractPath, canonicalBytes(contract));
-    planTasks.push({ taskId: task.taskId, contract: contractPath, dependsOn: task.dependsOn ?? [], targetVersion: task.targetVersion ?? "v1", configHash: task.configHash ?? sha256Canonical({}) });
+    // Seam B (human ruling 2026-09-24, named under ruling 88): targetVersion is one positive safe integer from plan to wire.
+    planTasks.push({ taskId: task.taskId, contract: contractPath, dependsOn: task.dependsOn ?? [], targetVersion: task.targetVersion ?? 1, configHash: task.configHash ?? sha256Canonical({}) });
   }
   await writeFile(planPath, JSON.stringify({ targetRepo: repo, ccloopBin: "/bin/true", runsDir: h.root, workBranch: "orca/work", policy: "local-merge", ledgerMode: "out-of-repo", goal: "ship", successConditions: ["passes"], tasks: planTasks }));
   const deps = { store: h.store, admissionGate: createAdmissionGate(), profileRouter: router, trustedConfig: { resolveTarget: () => ({ repositoryPath: repo, planPath, validatePlanDescriptor() {} }) },

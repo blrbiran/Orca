@@ -45,8 +45,9 @@ function groupView(over: Partial<GroupViewV1> = {}): GroupViewV1 {
       { ownerKind: "reserve", ownerId: "reserve", bucket: "reserve", state: "confirmed", amount: amount(5_000_000), fieldProvenance: provenance("system") },
     ],
     workItems: [
-      { taskId: "a", status: "active", dependencyTaskIds: [], targetVersion: "1", configHash: "d".repeat(64), originalContractHash: "e".repeat(64), derivedContractHash: "f".repeat(64), currentRunId: "run-a", pendingRunId: null, lineageRunIds: ["run-a"] },
-      { taskId: "b", status: "ready", dependencyTaskIds: ["a"], targetVersion: "1", configHash: "d".repeat(64), originalContractHash: "e".repeat(64), derivedContractHash: "f".repeat(64), currentRunId: null, pendingRunId: null, lineageRunIds: [] },
+      // Seam B (human ruling 2026-09-24, named under ruling 88): targetVersion is one positive safe integer from plan to wire.
+      { taskId: "a", status: "active", dependencyTaskIds: [], targetVersion: 1, configHash: "d".repeat(64), originalContractHash: "e".repeat(64), derivedContractHash: "f".repeat(64), currentRunId: "run-a", pendingRunId: null, lineageRunIds: ["run-a"] },
+      { taskId: "b", status: "ready", dependencyTaskIds: ["a"], targetVersion: 1, configHash: "d".repeat(64), originalContractHash: "e".repeat(64), derivedContractHash: "f".repeat(64), currentRunId: null, pendingRunId: null, lineageRunIds: [] },
     ],
     estimates: [{ estimateId: "est-1", estimateVersion: 1, state: "ready", profile: { profileId: "all", profileHash: "b".repeat(64) }, mode: "soft", requestHash: "1".repeat(64), outputHash: "2".repeat(64), output: null, reasonCode: null }],
     runs: [{ runId: "run-a", taskId: "a", estimateId: null, generation: 1, state: "running", phase: "work", claimOrdinal: 1, providerAttemptOrdinal: 1, profile: { profileId: "all", profileHash: "b".repeat(64) }, used: amount(1_000_000), remaining: amount(2_000_000), failureCode: null, evidenceIds: ["ev-1"] }],

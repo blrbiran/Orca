@@ -380,7 +380,7 @@ export const controlPlanSchema = z
         .object({
           taskId: idSchema,
           dependencyTaskIds: sortedIdArraySchema,
-          targetVersion: nonemptyString,
+          targetVersion: positiveSafeInteger,
           configHash: hashSchema,
           originalContractHash: hashSchema,
           originalContractCanonicalJson: nonemptyString,
@@ -818,7 +818,7 @@ export const workItemViewSchema = z
     taskId: idSchema,
     status: z.enum(["draft", "ready", "starting", "start-unknown", "active", "held", "continuing", "completed", "blocked"]),
     dependencyTaskIds: sortedIdArraySchema,
-    targetVersion: nonemptyString,
+    targetVersion: positiveSafeInteger,
     configHash: hashSchema,
     originalContractHash: hashSchema,
     derivedContractHash: hashSchema.nullable(),

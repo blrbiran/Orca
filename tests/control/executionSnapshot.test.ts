@@ -24,7 +24,8 @@ function authority() {
   const originalContractCanonicalJson = canonicalBytes(contract).toString("utf8");
   const plan = controlPlanSchema.parse({
     schema: "orca-control-plan-v1", repoId: "repo", planId: "plan", goal: "ship", successConditions: ["passes"],
-    tasks: [{ taskId: "a", dependencyTaskIds: [], targetVersion: "v1", configHash: hash("f"),
+    // Seam B (human ruling 2026-09-24, named under ruling 88): targetVersion is one positive safe integer from plan to wire.
+    tasks: [{ taskId: "a", dependencyTaskIds: [], targetVersion: 1, configHash: hash("f"),
       originalContractHash: sha256Canonical(contract), originalContractCanonicalJson }],
   });
   const planCanonicalJson = canonicalBytes(plan).toString("utf8");

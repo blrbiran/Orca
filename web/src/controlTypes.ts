@@ -75,7 +75,7 @@ export type WorkItemViewV1 = {
   taskId: string;
   status: "draft" | "ready" | "starting" | "start-unknown" | "active" | "held" | "continuing" | "completed" | "blocked";
   dependencyTaskIds: string[];
-  targetVersion: string;
+  targetVersion: number;
   configHash: string;
   originalContractHash: string;
   derivedContractHash: string | null;

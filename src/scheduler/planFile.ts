@@ -4,13 +4,14 @@ import { z } from "zod";
 import { RUN_ID } from "../ledger/writer.js";
 import { canonicalBytes, sha256Canonical } from "../control/canonicalJson.js";
 import { ControlError } from "../control/errors.js";
+import { safeInteger } from "../control/schema.js";
 import { detectCycle } from "./graph.js";
 
 export interface PlanTask {
   taskId: string;
   contract: string;
   dependsOn: string[];
-  targetVersion?: string;
+  targetVersion?: number;
   configHash?: string;
 }
 
@@ -32,7 +33,7 @@ export interface SchedulerControlPlanSource {
   tasks: Array<{
     taskId: string;
     dependencyTaskIds: string[];
-    targetVersion: string;
+    targetVersion: number;
     configHash: string;
     originalContract: unknown;
     originalContractCanonicalJson: string;
@@ -103,7 +104,7 @@ const planTaskSchema = z
     taskId: z.string().min(1),
     contract: z.string().min(1),
     dependsOn: z.array(z.string()),
-    targetVersion: z.string().min(1).optional(),
+    targetVersion: safeInteger.positive().optional(),
     configHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   })
   .strict();

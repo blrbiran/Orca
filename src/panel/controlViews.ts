@@ -58,7 +58,7 @@ const workBodySchema = z.object({
   contract: z.unknown(),
   configHash: hashSchema,
   grant: grantSchema,
-  targetVersion: z.union([z.string().min(1), safeInteger]),
+  targetVersion: safeInteger.positive(),
   status: workStatusSchema,
   originalContractHash: hashSchema,
   derivedContractHash: hashSchema.nullable(),
@@ -109,7 +109,7 @@ const persistedRunSchema = z.object({
   runId: idSchema,
   generation: safeInteger.positive(),
   graphVersion: safeInteger.positive(),
-  targetVersion: z.union([z.string().min(1), safeInteger]),
+  targetVersion: safeInteger.positive(),
   commandId: idSchema,
   configHash: hashSchema,
   grant: grantSchema,
@@ -385,7 +385,7 @@ function workViews(
     const body = parseStored(workBodySchema, row.body, `work-item-invalid:${task.taskId}`);
     const contract = body.contract as { contentAddressedHash?: unknown };
     if (body.workItemId !== task.taskId || body.taskId !== task.taskId
-      || body.configHash !== task.configHash || String(body.targetVersion) !== task.targetVersion
+      || body.configHash !== task.configHash || body.targetVersion !== task.targetVersion
       || body.originalContractHash !== task.originalContractHash
       || contract?.contentAddressedHash !== task.originalContractHash
       || (snapshot !== null && body.derivedContractHash !== derivedByTask.get(task.taskId))
@@ -485,7 +485,7 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
       if (!workRow) return blocked(`run-work-missing:${runId}`);
       const work = parseStored(workBodySchema, workRow.body, `run-work-invalid:${runId}`);
       if (work.workItemId !== run.workItemId || work.taskId !== run.taskId || work.configHash !== run.configHash
-        || String(work.targetVersion) !== String(run.targetVersion)
+        || work.targetVersion !== run.targetVersion
         || canonicalBytes(work.grant).compare(canonicalBytes(run.grant)) !== 0
         || !sameBinding(run.executionProfile, proposal.profiles.worker, "task")
         || !sameBinding(run.handoffProfile, proposal.profiles.handoff, "handoff")) return blocked(`run-work-identity:${runId}`);

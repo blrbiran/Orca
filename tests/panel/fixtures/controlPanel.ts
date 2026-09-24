@@ -94,7 +94,8 @@ export function createHarness(): Harness {
     await writeFile(planPath, JSON.stringify({
       targetRepo: repo, ccloopBin: binary, runsDir: root, workBranch: "orca/work", policy: "local-merge", ledgerMode: "out-of-repo",
       goal: "Ship a", successConditions: ["a passes"],
-      tasks: [{ taskId: "a", contract: contractPath, dependsOn: [], targetVersion: "v1", configHash: "c".repeat(64) }],
+      // Seam B (human ruling 2026-09-24, named under ruling 88): targetVersion is one positive safe integer from plan to wire.
+      tasks: [{ taskId: "a", contract: contractPath, dependsOn: [], targetVersion: 1, configHash: "c".repeat(64) }],
     }));
     return { planPath, binary, adapter, repo };
   }

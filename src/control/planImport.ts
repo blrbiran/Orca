@@ -211,8 +211,8 @@ export function importControlPlan(deps: ImportDeps, command: ImportCommand): Imp
           grant: { work: cloneAmount(TASK_WORK), handoff: cloneAmount(TASK_HANDOFF) }, targetVersion: task.targetVersion,
           status: "draft", originalContractHash: task.originalContractHash, derivedContractHash: null,
         };
-        deps.store.db.prepare("INSERT INTO work_items(group_id,id,target_version,body) VALUES (?,?,1,?)")
-          .run(payload.groupId, task.taskId, JSON.stringify(work));
+        deps.store.db.prepare("INSERT INTO work_items(group_id,id,target_version,body) VALUES (?,?,?,?)")
+          .run(payload.groupId, task.taskId, task.targetVersion, JSON.stringify(work));
       }
       const proposal = {
         proposalVersion: 1, state: "editable", planHash, groupLimit, explicitUnallocatedReserve,

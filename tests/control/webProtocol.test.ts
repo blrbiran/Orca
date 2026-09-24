@@ -113,7 +113,8 @@ describe("Web control protocol", () => {
         {
           taskId: "a",
           dependencyTaskIds: [],
-          targetVersion: "v1",
+          // Seam B (human ruling 2026-09-24, named under ruling 88): targetVersion is one positive safe integer from plan to wire.
+          targetVersion: 1,
           configHash: hash,
           originalContractHash: hash,
           originalContractCanonicalJson: '{"schema":"orca-task-contract-v1"}',
@@ -121,7 +122,8 @@ describe("Web control protocol", () => {
         {
           taskId: "b",
           dependencyTaskIds: ["a"],
-          targetVersion: "v1",
+          // Seam B (human ruling 2026-09-24, named under ruling 88): targetVersion is one positive safe integer from plan to wire.
+          targetVersion: 1,
           configHash: hash,
           originalContractHash: hash,
           originalContractCanonicalJson: '{"schema":"orca-task-contract-v1"}',
@@ -393,7 +395,8 @@ describe("Web control protocol", () => {
           taskId: "a",
           status: "draft",
           dependencyTaskIds: [],
-          targetVersion: "v1",
+          // Seam B (human ruling 2026-09-24, named under ruling 88): targetVersion is one positive safe integer from plan to wire.
+          targetVersion: 1,
           configHash: hash,
           originalContractHash: hash,
           derivedContractHash: null,
