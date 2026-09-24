@@ -239,3 +239,41 @@ describe("P7 (controller ruling 2026-09-25): a settled run stays settled", () =>
     } finally { await t.h.dispose(); }
   });
 });
+
+describe("Fix round 1 (task-4-review.md, 2026-09-25): refusals the first round left uncovered", () => {
+  it("D20: never calls accept while the admission gate drains a prepared, not-yet-accepted run", async () => {
+    const t = await driverHarness([{ taskId: "a" }]); try {
+      const runId = await t.claim();
+      const driver = t.driver();
+      // `until` stops the instant `prepared` flips true, before B has had a chance to run — the run
+      // is still `start-pending`, not yet `accepted`, so B's before-accept draining guard is the only
+      // thing standing between this round and a real `accept` call.
+      await t.until(driver, () => t.body(runId).drive?.prepared === true);
+      t.h.deps.admissionGate.beginDrain();
+      expect(await driver.round()).toBe(false);
+      expect(t.body(runId)).toMatchObject({ state: "start-pending", drive: { prepared: true } });
+      expect(t.fake.calls.accept).toHaveLength(0);
+    } finally { await t.h.dispose(); }
+  });
+
+  it("D21: blocks a continuation run before any provider attempt, by name", async () => {
+    const t = await driverHarness([{ taskId: "a" }]); try {
+      const runId = await t.claim();
+      const body = t.body(runId);
+      body.continuationIntentId = "continuation-1";
+      t.h.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify(body), runId);
+      expect(stepA1(t.deps, runId)).toBe(true);
+      expect(t.body(runId)).toMatchObject({ state: "blocked", providerAttemptOrdinal: 0, drive: { blockedAt: "A1", blockedReason: "continuation-unsupported" } });
+    } finally { await t.h.dispose(); }
+  });
+
+  it("blocks A1 as attempt-suppressed when the run's context watermark is already latched", async () => {
+    const t = await driverHarness([{ taskId: "a" }]); try {
+      const runId = await t.claim();
+      const generation = t.body(runId).generation;
+      t.h.store.db.prepare("INSERT INTO context_latches(run_id,generation,reason,request_id) VALUES (?,?,?,?)").run(runId, generation, "context-threshold-crossed", "request-1");
+      expect(stepA1(t.deps, runId)).toBe(true);
+      expect(t.body(runId)).toMatchObject({ state: "blocked", providerAttemptOrdinal: 0, drive: { blockedAt: "A1", blockedReason: "attempt-suppressed:request-1" } });
+    } finally { await t.h.dispose(); }
+  });
+});
