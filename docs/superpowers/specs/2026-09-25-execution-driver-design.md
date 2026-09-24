@@ -231,5 +231,8 @@ Minor 全部就地修进对应段落（M1 行 id、M4 残留清单、M5 `stopped
 - **I1**：一次 settle 不再把因超额（breach）而 `blocked` 的 Web 组改回 `review`；驱动环不为 `blocked` 的组补 wake，A1／B 也不在这样的组里开始 provider 调用。
 - **I2**：落地的比较后更新失败后再读一次分支：只有尖端确实移到别处才算「被人动过」、下一轮重来；其余失败（例如残留的 `orca/<g>.lock`）一律把 run 阻断在 D／R，原因为 `cas-failed:<ref>: <git 的 stderr>`。
 - **I3**：解冲突的 `ccloop run` 以 detached（自成进程组）方式起、stdout／stderr 写进它 runs 目录里的文件、`unref`，面板关闭不连带杀死它；重启后的驱动环按记下的 pid 等它，它活着时不删它的 loop state。`orca run` 的起法不变。
-- **I4**：解冲突记录里持久化 `spawnSeq`（每次起之前 +1），花费按 `spawn-<seq>` 记账，不再按 pid；人对阻断在 R 的 run 发 `recovery-retry` 时保留已收的 outcome，于是一个已经收过、被拒的终态 loop state 会被丢弃并重新起（先做可负担性检查），同一次 spawn 永不记两次、每次新 spawn 都记一次。
+- **I4**：解冲突记录里持久化 `spawnSeq`（每次起之前 +1），花费按 `spawn-<seq>` 记账，不再按 pid；人对阻断在 R 的 run 发 `recovery-retry` 时保留已收的 outcome，于是一个已经收过、被拒的终态 loop state 会被丢弃并重新起（先做可负担性检查），同一次 spawn 永不记两次；**跑到终态的** spawn 各记一次。⚠️ **一个死掉、没写出终态 loop state 的 spawn 不记账**：重新起之前它的 runs 目录会被删掉，花费丢失（控制器会话 `905e41ce` 修复波复审发现，登记，未修）。
 - **I5**：面板对带 `blockedReason` 的 `blocked` run 显示「Retry run」按钮，发 run 级 `recovery-retry`（target 为该 run，payload 指名同一个 run）。
+
+**(d) 本片收口时仍登记（不修）**：因超额 breach 而 `blocked` 的组在产品内只能 stop／recover 脱困（`setLimit` 拒收 blocked 组），组内停在 A1 的 run 在面板上只显示 `starting`、不显示原因；
+`reconcile-orphan-unknown` 后人发 retry，会在孤儿进程可能仍活着时重起一次解冲突（两次解冲突、删掉活的 loop state）；`spawnSeq` 记账键没有判据钉住（假 ccloop 总会发布 attempt）。
