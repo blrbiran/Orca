@@ -44,18 +44,20 @@ import {
   fetchControlGroup,
   fetchControlRecovery,
   fetchControlSummary,
+  fetchRepositoryWorkspace,
   nextCommandId,
   readUncertainCommands,
   recoverUncertainCommand,
   refusalFromAnswer,
   sendControlCommand,
+  workspaceModePath,
   writeUncertainCommands,
 } from "./controlApi.js";
 import type { ControlAction } from "./controlApi.js";
 import { ControlPanel } from "./ControlPanel.js";
 import { initialControlState, reduceControlState, summaryView } from "./controlState.js";
 import type { UncertainCommand } from "./controlState.js";
-import type { ControlConfigV1 } from "./controlTypes.js";
+import type { ControlConfigV1, RepositoryWorkspaceV1 } from "./controlTypes.js";
 import { DecisionDetail } from "./DecisionDetail.js";
 import type { Decision } from "./DecisionDetail.js";
 import { ErrorPage } from "./ErrorPage.js";
@@ -109,6 +111,8 @@ export function App(): JSX.Element {
 
   /** Null while the control plane is not mounted on this panel; then the page shows no control section at all. */
   const [controlConfig, setControlConfig] = useState<ControlConfigV1 | null>(null);
+  /** Execution driver spec §3.2: the first trusted repository's workspace mode, null until read. */
+  const [workspace, setWorkspace] = useState<RepositoryWorkspaceV1 | null>(null);
   // The ids still waiting on a lookup are restored in the initializer, not in an
   // effect: the effect that mirrors the reducer's list back into sessionStorage runs
   // on the very same mount commit, and would clear the key before anything read it.
@@ -211,6 +215,16 @@ export function App(): JSX.Element {
     await readControlGroup(action.groupId);
   };
 
+  /** Name the choice under the revision it was read at; whatever the server says is read back, not assumed. */
+  const sendWorkspaceMode = async (mode: "worktree" | "clone", expectedRevision: number): Promise<void> => {
+    if (workspace === null) return;
+    const scope = `@repository:${workspace.repoId}`;
+    const answer = await sendControlCommand(workspaceModePath(workspace.repoId), { commandId: nextCommandId(), expectedRevision, payload: { workspaceMode: mode } });
+    if (answer.kind === "uncertain") dispatchControl({ type: "refusal", groupId: scope, value: answer.refusal });
+    else if (answer.status >= 400) dispatchControl({ type: "refusal", groupId: scope, value: refusalFromAnswer(answer) });
+    try { setWorkspace(await fetchRepositoryWorkspace(workspace.repoId)); } catch { /* the refusal above already says why */ }
+  };
+
   useEffect(() => {
     void (async () => {
       try {
@@ -225,6 +239,8 @@ export function App(): JSX.Element {
     if (controlConfig === null) return;
     // A command id that survived the reload is resolved before anything else reads.
     for (const command of controlNow.current.uncertainCommandIds) void resolveUncertain(command);
+    const repoId = controlConfig.repositories[0]?.repoId;
+    if (repoId !== undefined) void fetchRepositoryWorkspace(repoId).then(setWorkspace, () => setWorkspace(null));
     void readControlTick();
     const timer = setInterval(() => void readControlTick(), CONTROL_POLL_MS);
     return () => clearInterval(timer);
@@ -341,6 +357,8 @@ export function App(): JSX.Element {
           onCommand={(action) => {
             void sendControl(action);
           }}
+          workspace={workspace}
+          onWorkspaceMode={(mode, revision) => { void sendWorkspaceMode(mode, revision); }}
         />
       )}
       <PanelHome todo={home.todo} report={home.report} coverage={home.coverage} onOpen={setSelected} />

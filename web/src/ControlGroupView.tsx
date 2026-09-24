@@ -90,6 +90,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
               <td>{run.phase}</td>
               <td>
                 {run.state}
+                {run.blockedReason ? ` — ${run.blockedReason}` : ""}
                 {run.failureCode !== null ? ` (${run.failureCode})` : ""}
                 {` · attempt ${run.providerAttemptOrdinal} of claim ${run.claimOrdinal ?? "n/a"}`}
               </td>

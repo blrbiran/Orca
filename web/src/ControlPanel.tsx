@@ -12,7 +12,8 @@ import type { JSX } from "react";
 import { nextCommandId, type ControlAction } from "./controlApi.js";
 import { ControlGroupView } from "./ControlGroupView.js";
 import { RecoveryView } from "./RecoveryView.js";
-import type { ControlConfigV1, ControlSummaryV1, GroupViewV1, RecoveryViewV1 } from "./controlTypes.js";
+import { WorkspaceModeSelector } from "./WorkspaceModeSelector.js";
+import type { ControlConfigV1, ControlSummaryV1, GroupViewV1, RecoveryViewV1, RepositoryWorkspaceV1 } from "./controlTypes.js";
 import type { ControlRefusal, UncertainCommand } from "./controlState.js";
 
 export interface ControlPanelProps {
@@ -28,6 +29,9 @@ export interface ControlPanelProps {
   onSelect: (groupId: string) => void;
   onDraft: (key: string, text: string) => void;
   onCommand: (action: ControlAction) => void;
+  /** Execution driver spec §3.2: the first trusted repository's workspace mode, once read. */
+  workspace?: RepositoryWorkspaceV1 | null;
+  onWorkspaceMode?: (mode: "worktree" | "clone", expectedRevision: number) => void;
 }
 
 function ImportForm(props: { config: ControlConfigV1; onCommand: (action: ControlAction) => void }): JSX.Element {
@@ -102,6 +106,7 @@ export function ControlPanel(props: ControlPanelProps): JSX.Element {
       {refetchRequired && <p role="alert">projection refetch required · re-reading the open groups</p>}
       {recovery.dispatchBlocked && <p role="alert">dispatch blocked · recovery must be observed</p>}
       <ImportForm config={config} onCommand={props.onCommand} />
+      {props.workspace && props.onWorkspaceMode && <WorkspaceModeSelector workspace={props.workspace} onChange={props.onWorkspaceMode} />}
       <nav aria-label="Control groups">
         {summary.groups.length === 0 && <p>No control groups yet.</p>}
         {summary.groups.map((group) => (

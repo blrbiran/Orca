@@ -27,6 +27,7 @@ import type {
   ProposalEditPayloadV1,
   RecoveryRetryPayloadV1,
   RecoveryViewV1,
+  RepositoryWorkspaceV1,
   ResumeFromHandoffPayloadV1,
   SetLimitPayloadV1,
 } from "./controlTypes.js";
@@ -88,6 +89,12 @@ export const fetchControlRecovery = (): Promise<RecoveryViewV1> => controlGet<Re
 /** GET /api/control/runs/:runId/evidence -- the manifest of raw evidence retained for one run. */
 export const fetchRunEvidence = (runId: string): Promise<EvidenceManifestV1> =>
   controlGet<EvidenceManifestV1>(`/api/control/runs/${segment(runId)}/evidence`);
+
+/** Execution driver spec §3.2: a trusted repository's workspace mode and the revision it is at. */
+export const fetchRepositoryWorkspace = (repoId: string): Promise<RepositoryWorkspaceV1> =>
+  controlGet<RepositoryWorkspaceV1>(`/api/control/repositories/${segment(repoId)}/workspace`);
+
+export const workspaceModePath = (repoId: string): string => `/api/control/repositories/${segment(repoId)}/workspace-mode`;
 
 /**
  * Offer a manifest the caller already read as a download. The read has to come
