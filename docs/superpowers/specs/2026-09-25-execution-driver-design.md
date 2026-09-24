@@ -215,3 +215,21 @@ Minor 全部就地修进对应段落（M1 行 id、M4 残留清单、M5 `stopped
 - **D10**：C2 **只加不改**：共享 ref 照写（ccloop `tests/control/endToEnd.test.ts:36` 钉着它），另写按 `claim.runId` 命名的 ref，`materializeResultRepository` 读按 run 的那个。
 - **D12**：默认 20% 预留付不起一次解冲突（约 2.48M vs 3M）⇒ E1 先 `set-limit` 抬高上限。
 - 其余（D5 exit 2 ⇒ `accept-refused`；D6 A1 不动预算数额；D11 对方＝`base..landedCommit^2`；D13 用 `ORCA_IDENTITY`；D14 空结果 ⇒ work `blocked`；D15 `cleanedUp`；D16 仓库级命令作用域＋GET 路由；D17 `onSpawn`；D18 usage 取 `tokenBudgetRemaining`；D19 冲突 ref 在副本里；D20 每次 provider 调用前查 draining；D21 continuation run ⇒ `blocked`）见计划 §0.1 原表。
+
+## 12. 终审后的更正（2026-09-25，控制器裁定）
+
+> **归属**：控制器会话 `905e41ce` 的终审修复席（Claude Opus 5.5），依据终审报告 `.superpowers/sdd/2026-09-25-execution-driver/final-review.md` 的 I1–I6 与控制器对它们的裁定。上文逐字保留（Rule 13），**本节优先于上文对应段落**。
+
+**(a) §3.5 残留清单补登（Rule 17）**：写到仓库外的还有 `<workspacesRoot>/conflict-<runId>`（冲突副本，§5.3(1) 建）与 `<workspacesRoot>/reconcile-<runId>`（解冲突 run 的 runs 目录：`runTask` 的 clone、ccloop 的 run 目录、以及 I3 之后的 `ccloop.stdout.log`／`ccloop.stderr.log`，0600）；都由驱动环在 D／R 步触发。
+**这两者在 run settle 之后也保留**：每个解冲突过的 run 留一对，**无上限**；清理推后（登记，不在本片做）。
+
+**(b) 诚实的验收表述还要加两条限定**：
+① 可能冲突的 group，要先把 token 上限抬到够付一次解冲突（D12：默认预留付不起，第一次冲突会被 `reconcile-budget` 阻断）；
+② 带 command verifier 的 task，需要 ccloop 在主题行为「fix(control): report zero usage for a verify phase that calls no provider」那一笔或之后（C4），否则 settle 会以 `settle-incomplete` 阻断。
+
+**(c) 终审 I1–I5 各改了什么**：
+- **I1**：一次 settle 不再把因超额（breach）而 `blocked` 的 Web 组改回 `review`；驱动环不为 `blocked` 的组补 wake，A1／B 也不在这样的组里开始 provider 调用。
+- **I2**：落地的比较后更新失败后再读一次分支：只有尖端确实移到别处才算「被人动过」、下一轮重来；其余失败（例如残留的 `orca/<g>.lock`）一律把 run 阻断在 D／R，原因为 `cas-failed:<ref>: <git 的 stderr>`。
+- **I3**：解冲突的 `ccloop run` 以 detached（自成进程组）方式起、stdout／stderr 写进它 runs 目录里的文件、`unref`，面板关闭不连带杀死它；重启后的驱动环按记下的 pid 等它，它活着时不删它的 loop state。`orca run` 的起法不变。
+- **I4**：解冲突记录里持久化 `spawnSeq`（每次起之前 +1），花费按 `spawn-<seq>` 记账，不再按 pid；人对阻断在 R 的 run 发 `recovery-retry` 时保留已收的 outcome，于是一个已经收过、被拒的终态 loop state 会被丢弃并重新起（先做可负担性检查），同一次 spawn 永不记两次、每次新 spawn 都记一次。
+- **I5**：面板对带 `blockedReason` 的 `blocked` run 显示「Retry run」按钮，发 run 级 `recovery-retry`（target 为该 run，payload 指名同一个 run）。
