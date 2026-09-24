@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { WebControlService } from "../../src/control/webService.js";
-import { applyPanelShutdown, freezeShutdownWindow, runControlPanelStartup, shutdownCommandId, withAdmission } from "../../src/panel/controlLifecycle.js";
+import { applyPanelShutdown, freezeShutdownWindow, runControlPanelStartup, shutdownCommandId, shutdownGroup, withAdmission } from "../../src/panel/controlLifecycle.js";
 import { groupStopState, readStopIntent } from "../../src/control/stopIntent.js";
 import { deliverScheduledStart } from "../../src/control/webDispatch.js";
 import { importControlPlan } from "../../src/control/planImport.js";
@@ -228,6 +228,28 @@ describe("panel shutdown transaction", () => {
       expect(commandRows(h.store, "@global")).toEqual([shutdownCommandId(EPOCH)]);
       expect(revisionOf(h.store, "g")).toBe(before.g + 1);
       expect(revisionOf(h.store, "h")).toBe(before.h + 1);
+    } finally { await h.dispose(); }
+  });
+});
+
+describe("shutdown exemption and a persisted frozen set (review round 1, Important 2)", () => {
+  it("does not flag shutdown-frozen-set-inconsistent for a Web work run frozen before a driver existed, once a later shutdown exempts it", async () => {
+    const ctx = await shutdownHarness(["g"]); const { h } = ctx; try {
+      const window = freezeShutdownWindow({ now: () => ctx.clock.value, shutdownGraceMs: GRACE_MS });
+      // First shutdown: no driver yet (exemptDriverRuns=false, the default), so the Web work run is frozen
+      // and durably gets a handoff request the ordinary way.
+      const first = shutdownGroup(h.store, "g", window, "shutdown-1");
+      expect(first).toMatchObject({ disposition: "created", changed: true });
+      expect(first.frozenRunIds.length).toBe(1);
+      const runId = first.frozenRunIds[0];
+      expect(h.store.db.prepare("SELECT id FROM handoff_requests WHERE group_id='g' AND run_id=?").get(runId)).toBeDefined();
+      // Second shutdown: a driver now exists, so `active` excludes this run -- but the stop intent from
+      // the first call already froze it. The frozen-set-consistency check must not be tripped by that:
+      // the already-persisted handoff request is what keeps it consistent, and the earlier intent is
+      // preserved untouched (the exemption does not retroactively unfreeze an already-frozen run).
+      const second = shutdownGroup(h.store, "g", window, "shutdown-2", true);
+      expect(second).toMatchObject({ disposition: "preserved-shutdown", changed: false, blockerCode: null, frozenRunIds: [runId] });
+      expect(h.store.db.prepare("SELECT COUNT(*) AS n FROM recovery_blockers WHERE group_id='g'").get()!.n).toBe(0);
     } finally { await h.dispose(); }
   });
 });

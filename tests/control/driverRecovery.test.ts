@@ -80,6 +80,26 @@ describe("a person's recovery-retry on a blocked driver run (spec §2.3)", () =>
     } finally { await h.dispose(); }
   });
 
+  it("resumes a driver run to its blocked step even when a run-level blocker was already resolved (evaluation order, ruling P1)", async () => {
+    // Review round 1, Important 1: a short-circuited `blockers.resolved || rearm !== null || resumeBlockedDriverRun(...)`
+    // never calls `resumeBlockedDriverRun` once `blockers.resolved` is already true -- so a run that has BOTH a
+    // resolved run-level blocker AND a driver `blockedAt` must still get its driver state resumed.
+    const { h, service, runId } = await claimedSoft(); try {
+      const row = h.store.db.prepare("SELECT body FROM runs WHERE id=?").get(runId)!;
+      const body = JSON.parse(String(row.body));
+      h.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify({ ...body, state: "blocked", providerAttemptOrdinal: 1, drive: {
+        workspaceMode: "worktree", sourceDir: "/x/s", workspacePath: "/x/w", targetRepo: null, prepared: true, base: null, envelopeHash: null, inspectUnknown: 10,
+        outcome: null, attemptSha: null, landedCommit: null, reconcile: null, blockedAt: "B'", blockedReason: "inspect-unknown", cleanedUp: false,
+      } }), runId);
+      h.store.db.prepare("INSERT INTO recovery_blockers(id,group_id,run_id,scope,code,body) VALUES (?,?,?,?,?,?)")
+        .run(`test-run-blocker:${runId}`, "g", runId, "run", "test-run-blocker", JSON.stringify({ evidenceIds: [] }));
+      const retried = await service.recoveryRetry(h.runCommand("recovery-retry", runId, { scope: "run", runId }));
+      // `blockers.resolved` alone already makes this true; the load-bearing assertion is the drive state below.
+      expect(retried).toMatchObject({ result: { kind: "recovery-observed", resolved: true } });
+      expect(JSON.parse(String(h.store.db.prepare("SELECT body FROM runs WHERE id=?").get(runId)!.body))).toMatchObject({ state: "unknown", drive: { blockedAt: null, blockedReason: null, inspectUnknown: 0 } });
+    } finally { await h.dispose(); }
+  });
+
   it("reports nothing resolved, and changes nothing, for a run that is not blocked", async () => {
     const { h, service, runId } = await claimedSoft(); try {
       const before = String(h.store.db.prepare("SELECT body FROM runs WHERE id=?").get(runId)!.body);
