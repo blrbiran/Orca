@@ -50,7 +50,7 @@ export interface RunTaskOptions {
    * money. Passed rather than defaulted so the choice is visible at each call
    * site instead of being a constant buried here.
    */
-  adapter: "scripted" | "claude";
+  adapter: "scripted" | "claude" | "codex";
   /**
    * ccloop's `--adapter-config`, which it requires for both adapters. The plan
    * file's shape (spec §2.3) has no field for it and this task does not invent
@@ -58,6 +58,11 @@ export interface RunTaskOptions {
    * is a decision that belongs to the orchestration task, not to this module.
    */
   adapterConfig: string;
+  /**
+   * Execution driver spec §5.3(6): called with the ccloop process id as soon as it is spawned, so a
+   * caller can record it durably and, after its own restart, tell a live reconciliation from a dead one.
+   */
+  onSpawn?: (pid: number) => void;
 }
 
 /**
@@ -105,9 +110,10 @@ interface SpawnResult {
  * on PATH — the criterion for "which ccloop ran" should be the path in the
  * plan file and nothing else.
  */
-function spawnCcloop(bin: string, args: string[]): Promise<SpawnResult> {
+function spawnCcloop(bin: string, args: string[], onSpawn?: (pid: number) => void): Promise<SpawnResult> {
   return new Promise<SpawnResult>((resolve, reject) => {
     const child = spawn(process.execPath, [bin, ...args], { stdio: ["ignore", "pipe", "pipe"] });
+    if (child.pid !== undefined) onSpawn?.(child.pid);
     let stdout = "";
     let stderr = "";
     child.stdout.on("data", (chunk: Buffer) => {
@@ -162,7 +168,7 @@ async function readTerminalStatus(loopDir: string, spawned: SpawnResult): Promis
  * iteration order: a run that retried publishes one ref per attempt, and only
  * the final attempt's tree is the one the terminal status is about.
  */
-async function latestAttemptSha(clone: string, runId: string): Promise<string | null> {
+export async function latestAttemptSha(clone: string, runId: string): Promise<string | null> {
   const { stdout } = await execFileAsync(
     "git",
     ["for-each-ref", "--format=%(refname) %(objectname)", `refs/ccloop/${runId}/attempts`],
@@ -250,7 +256,7 @@ export async function runTask(
     options.adapter,
     "--adapter-config",
     options.adapterConfig,
-  ]);
+  ], options.onSpawn);
 
   const outcome = await readTerminalStatus(loopDir, spawned);
   const attemptSha = await latestAttemptSha(clone, runId);

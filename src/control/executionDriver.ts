@@ -14,7 +14,7 @@ import { recordUsage } from "./usage.js";
 import { isWebWorkRun, readWorkClaimEnvelope, reserveProviderAttemptInTransaction } from "./webDispatch.js";
 import { readWorkspaceSetting, type WorkspaceMode } from "./workspaceSettings.js";
 import { commitAttempt, ensureWorkBranch, ensureWorkspace, sourceDirOf, workspacePathOf, type WorkspaceRoots } from "./workspace.js";
-import { stepD } from "./driverLanding.js";
+import { stepD, stepR } from "./driverLanding.js";
 import { harvest } from "../scheduler/harvest.js";
 import { writeSetOf } from "../scheduler/writeSet.js";
 import type { AdmissionGate } from "./admissionGate.js";
@@ -378,7 +378,6 @@ export function stepOf(run: DriverRun): DriveStep {
 
 /** One step for one run (spec §2.2 table). Later tasks add D, R and E here. */
 export async function advance(deps: ExecutionDriverDeps, runId: string, context: DriverContext): Promise<boolean> {
-  void context;
   const run = readDriverRun(deps.store, runId);
   switch (run.state) {
     case "starting": return stepA1(deps, runId);
@@ -386,6 +385,7 @@ export async function advance(deps: ExecutionDriverDeps, runId: string, context:
     case "unknown": return stepBPrime(deps, runId);
     case "accepted": return stepC(deps, runId);
     case "collected": return stepD(deps, runId);
+    case "reconciling": return stepR(deps, runId, context);
     default: return false;
   }
 }
