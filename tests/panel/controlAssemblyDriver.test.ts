@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { assembleControlRuntime } from "../../src/panel/controlAssembly.js";
-import { resolveControlOptions } from "../../src/panel/controlOptions.js";
+import { controlRepoKey, resolveControlOptions } from "../../src/panel/controlOptions.js";
 
 // Execution driver spec §2.1: the driver exists only with a configured port; without one the panel is
 // byte-for-byte what it was, which includes creating no run or workspace directories.
@@ -39,6 +39,22 @@ describe("the execution driver in the panel's assembly (spec §2.1)", () => {
       expect(runtime.driver).toBe(null);
       expect(existsSync(`${runtime.store.stateDir}.runs`)).toBe(false);
       expect(existsSync(`${runtime.store.stateDir}.workspaces`)).toBe(false);
+    } finally { runtime.close(); }
+  });
+
+  // Fix round 1 (controller ruling, spec §2.1): the repository a workspace mode is set on is known only
+  // to a panel with a configured port. Unconfigured, set-workspace-mode refuses every repository, as
+  // before this slice.
+  it.each([false, true])("knows its own repository for set-workspace-mode only with a configured port (configured=%s)", async (configured) => {
+    const runtime = await assembled(configured); try {
+      const repoId = controlRepoKey("proj");
+      expect(runtime.service.repositoryKnown(repoId)).toBe(configured);
+      const set = await runtime.service.setWorkspaceMode({
+        schema: "orca-raw-command-v1", commandId: "mode", actorId: "human", verb: "set-workspace-mode",
+        target: { kind: "repository", repoId }, expectedRevision: 0, payload: { workspaceMode: "clone" },
+      } as never);
+      if (configured) expect(set).toMatchObject({ result: { kind: "workspace-mode-set", repoId, workspaceMode: "clone" } });
+      else expect(set).toMatchObject({ error: { code: "control-target-not-allowed" } });
     } finally { runtime.close(); }
   });
 
