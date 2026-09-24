@@ -149,7 +149,7 @@ function newDrive(roots: WorkspaceRoots, runId: string, workspaceMode: Workspace
   return {
     workspaceMode, sourceDir: sourceDirOf(roots, runId), workspacePath: workspacePathOf(roots, runId), targetRepo: null,
     prepared: false, base: null, envelopeHash: null, inspectUnknown: 0, outcome: null, attemptSha: null, landedCommit: null,
-    reconcile: null, blockedAt: null, blockedReason: null, cleanedUp: false, cleanupError: null,
+    reconcile: null, blockedAt: null, blockedReason: null, cleanedUp: false, cleanupError: null, publishError: null,
   };
 }
 
@@ -361,14 +361,20 @@ async function savedReport(store: ControlStore, runId: string): Promise<Executio
 
 /**
  * E (spec §2.2): acceptance first -- `commitCandidate` marks the work done only when acceptance already
- * exists (checkpoints.ts) -- then the checkpoint, the projection, and only then the cleanup. A run that
- * settled before it was cleaned (a death in between) is visited again for the cleanup alone (D15).
+ * exists (checkpoints.ts) -- then the checkpoint, then publication, then cleanup. A run that settled
+ * before it was cleaned (a death in between) is visited again for whatever is left (D15).
+ *
+ * Fix round 1 (2026-09-25, review Important 1/2): publication and cleanup are retried independently of
+ * each other, every round, for as long as either is outstanding. A publish failure is recorded in its
+ * own `publishError` (never `cleanupError`, and never cleared by a successful cleanup); cleanup still
+ * runs regardless of whether publication succeeded, and is not gated on it.
  */
 export async function stepE(deps: ExecutionDriverDeps, runId: string): Promise<boolean> {
   const { store } = deps;
   const run = readDriverRun(store, runId);
   if (run.drive === undefined) return false;
   const drive = run.drive;
+  let settledJustNow = false;
   if (run.state === "landed") {
     const report = await savedReport(store, runId);
     const raw = report.candidate;
@@ -393,11 +399,36 @@ export async function stepE(deps: ExecutionDriverDeps, runId: string): Promise<b
     candidate.checkpointId = `settle-${runId}-${hashPayload(candidate).slice(0, 16)}`;
     await commitCandidate(store, candidate, archiveAdmission(deps));
     if (readDriverRun(store, runId).state !== "settled") { blockRun(deps, runId, "E", "settle-incomplete"); return true; }
-    await publishPending(store, archiveAdmission(deps));
+    settledJustNow = true;
   }
   const settled = readDriverRun(store, runId);
-  if (settled.state !== "settled" || settled.drive === undefined || settled.drive.cleanedUp) return run.state === "landed";
-  await cleanupRunWorkspace(deps.resolveRepository(groupRepoId(store, settled.groupId)), deps.roots, runId, settled.drive.workspacePath);
+  if (settled.state !== "settled" || settled.drive === undefined) return settledJustNow;
+  if (!deps.admissionGate?.draining) {
+    try {
+      await publishPending(store, archiveAdmission(deps));
+      write(deps, () => {
+        const current = readDriverRun(store, runId);
+        if (current.state === "settled" && current.drive !== undefined && current.drive.publishError !== null) {
+          current.drive = { ...current.drive, publishError: null };
+          saveDriverRun(store, current);
+        }
+      });
+    } catch (error) {
+      // A draining panel ends the round the same way every other step does; only a real publish
+      // fault (IO, a schema drift in the candidate's handoff, ...) is recorded here.
+      if (error instanceof ControlError && error.code === "panel-draining") throw error;
+      write(deps, () => {
+        const current = readDriverRun(store, runId);
+        if (current.state === "settled" && current.drive !== undefined) {
+          current.drive = { ...current.drive, publishError: describeError(error) };
+          saveDriverRun(store, current);
+        }
+      });
+    }
+  }
+  const afterPublish = readDriverRun(store, runId);
+  if (afterPublish.state !== "settled" || afterPublish.drive === undefined || afterPublish.drive.cleanedUp) return settledJustNow;
+  await cleanupRunWorkspace(deps.resolveRepository(groupRepoId(store, afterPublish.groupId)), deps.roots, runId, afterPublish.drive.workspacePath);
   write(deps, () => {
     const current = readDriverRun(store, runId);
     current.drive = { ...current.drive!, cleanedUp: true, cleanupError: null };
@@ -443,14 +474,18 @@ export function replenishStartWakes(deps: Pick<ExecutionDriverDeps, "store" | "a
 
 const DRIVEN = new Set(["starting", "start-pending", "accepted", "unknown", "collected", "landed", "reconciling"]);
 
-/** spec §2.1: every Web work run the driver can still move, by runId; plus settled runs not yet cleaned (deviation D15). */
+/**
+ * spec §2.1: every Web work run the driver can still move, by runId; plus a settled run that is not
+ * yet cleaned or not yet published (deviation D15, extended by fix round 1's independent publish
+ * retry -- a settled, cleaned run whose last publish attempt failed stays in scope until one succeeds).
+ */
 export function driverRunIds(store: ControlStore): string[] {
   const ids: string[] = [];
   for (const row of store.db.prepare("SELECT id,body FROM runs ORDER BY id").all()) {
     const runId = String(row.id);
     const run = JSON.parse(String(row.body)) as DriverRun;
     if (run.phase !== "work" || !isWebWorkRun(store, runId)) continue;
-    if (DRIVEN.has(run.state) || (run.state === "settled" && run.drive !== undefined && !run.drive.cleanedUp)) ids.push(runId);
+    if (DRIVEN.has(run.state) || (run.state === "settled" && run.drive !== undefined && (!run.drive.cleanedUp || run.drive.publishError !== null))) ids.push(runId);
   }
   return ids;
 }

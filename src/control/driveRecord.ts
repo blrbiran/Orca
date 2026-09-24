@@ -55,6 +55,10 @@ export const driveRecordSchema = z.object({
   // never as a block -- the run stays `settled`, `cleanedUp:false`, and is retried next round.
   // Defaulted so a drive record from before this field existed (fixtures included) still parses.
   cleanupError: z.string().min(1).nullable().default(null),
+  // Fix round 1 (2026-09-25, review Important 1/2): a projection-publish failure after settle is its
+  // own field, never conflated with `cleanupError` -- a successful cleanup never clears it, and it is
+  // cleared only once publishing itself succeeds. Defaulted for the same reason as `cleanupError`.
+  publishError: z.string().min(1).nullable().default(null),
 }).strict();
 export type DriveRecord = z.infer<typeof driveRecordSchema>;
 

@@ -30,6 +30,11 @@ describe("E: settle a landed run (spec §2.2, deviation D2)", () => {
       expect(readWebGroup(t.h.store, "g").ledger.committedRemaining.tokens).toBe(before - remaining.work.tokens - remaining.handoff.tokens);
       const acceptance = JSON.parse(String(t.h.store.db.prepare("SELECT body FROM outbox WHERE id=? AND kind='acceptance'").get(`acceptance:${runId}`)!.body));
       expect(JSON.parse((await readArtifact(t.h.store, acceptance.source)).toString())).toMatchObject({ runId, checksPassed: true, landing: "landed", commit: run.drive.landedCommit });
+      // Fix round 1 (review Important 2): "then the projection" is only true if publication actually
+      // ran -- these are the exact rows `commitCandidate` (checkpoints.ts) queues for this settle.
+      expect(t.h.store.db.prepare("SELECT delivered FROM outbox WHERE id=?").get(`projection:${run.checkpointId}`)).toEqual({ delivered: 1 });
+      expect(t.h.store.db.prepare("SELECT delivered FROM outbox WHERE id=?").get(`task-handoff:g:a:${run.checkpointId}`)).toEqual({ delivered: 1 });
+      expect(t.h.store.db.prepare("SELECT COUNT(*) AS n FROM outbox WHERE kind='group-handoff' AND delivered=0").get()).toEqual({ n: 0 });
     } finally { await t.h.dispose(); }
   });
 
@@ -96,9 +101,9 @@ describe("P7 (controller ruling 2026-09-25): a cleanup failure never blocks a se
         },
       };
       const driver = createExecutionDriver(faultyDeps);
-      // Waits for the fault's own error to land on the run, not just for `settled` -- settling and
-      // cleaning up are two different rounds once the run is already `settled` (D15), and this round's
-      // per-run error handler overwrites `cleanupError` with whatever the most recent attempt hit.
+      // Waits for the fault's own error to land on the run, not just for `settled` -- the per-run
+      // error handler overwrites `cleanupError` with whatever the most recent attempt hit, and settle
+      // and cleanup can both land within the same round once publication succeeds on its own first try.
       await t.until(driver, () => {
         const drive = t.body(runId).drive;
         return t.body(runId).state === "settled" && typeof drive?.cleanupError === "string" && drive.cleanupError.includes("workspace-unreachable");
@@ -111,6 +116,40 @@ describe("P7 (controller ruling 2026-09-25): a cleanup failure never blocks a se
       const recovered = t.body(runId);
       expect(recovered.state).toBe("settled");
       expect(recovered.drive.cleanupError).toBe(null);
+    } finally { await t.h.dispose(); }
+  });
+});
+
+describe("fix round 1 (review Important 1/2): a publish failure after settle is its own field", () => {
+  it("records publishError separately from cleanupError, survives a successful cleanup, and clears only once publishing succeeds", async () => {
+    const t = await driverHarness([{ taskId: "a" }]); try {
+      const runId = await t.claim();
+      // A poison outbox row inserted before this run's own: `publishPending`'s drain (projection.ts)
+      // processes every undelivered `projection`/`task-handoff`/`group-handoff` row in one pass, in
+      // rowid order, and a throw on one row aborts the whole pass -- exactly what a broken handoff
+      // packet or an IO fault would do, exercised here without touching the (now-fixed) fake port.
+      t.h.store.db.prepare("INSERT INTO outbox(id,kind,body,delivered) VALUES ('task-handoff:poison','task-handoff',?,0)")
+        .run(JSON.stringify({ groupId: "g", taskId: "does-not-exist" }));
+      const driver = t.driver();
+      await t.until(driver, () => {
+        const drive = t.body(runId).drive;
+        return t.body(runId).state === "settled" && typeof drive?.publishError === "string";
+      });
+      const failed = t.body(runId);
+      expect(failed.state).toBe("settled");
+      expect(failed.drive.publishError).toContain("task-checkpoint-not-committed");
+      // Cleanup does not wait on publication, and a successful cleanup must not erase publishError.
+      await t.until(driver, () => t.body(runId).drive?.cleanedUp === true);
+      expect(t.body(runId).state).toBe("settled");
+      expect(t.body(runId).drive.publishError).not.toBe(null);
+      expect(t.body(runId).drive.cleanupError).toBe(null);
+      t.h.store.db.prepare("DELETE FROM outbox WHERE id='task-handoff:poison'").run();
+      await t.until(driver, () => t.body(runId).drive?.publishError === null);
+      const recovered = t.body(runId);
+      expect(recovered.state).toBe("settled");
+      expect(recovered.drive.cleanedUp).toBe(true);
+      expect(t.h.store.db.prepare("SELECT delivered FROM outbox WHERE id=?").get(`projection:${recovered.checkpointId}`)).toEqual({ delivered: 1 });
+      expect(t.h.store.db.prepare("SELECT delivered FROM outbox WHERE id=?").get(`task-handoff:g:a:${recovered.checkpointId}`)).toEqual({ delivered: 1 });
     } finally { await t.h.dispose(); }
   });
 });

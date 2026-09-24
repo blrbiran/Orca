@@ -58,12 +58,27 @@ export function fakeCcloopPort(input: {
       { runId: claim.runId, generation: claim.generation, eventSeq: 2, bucket: "handoff", cumulative: { tokens: 0, activeMs: 0, attempts: 0, sessions: 0 }, source: put(`usage-${claim.runId}-2`, Buffer.from(`handoff usage ${claim.runId}`)) },
     ];
     const outcome = input.behaviour(claim.workItemId) === "exhausted" ? "exhausted" : "succeeded";
+    // Fix round 1 (review Important 1): a `protocol:1` packet handoff.ts's `packetSchema` (and its
+    // identity/usageHighWater check against the committed candidate) actually accepts -- the driver's
+    // `stepE` carries this bytes-for-bytes into the committed candidate's own `handoff` field.
+    const usageHighWater = 2;
+    const handoffPacket = {
+      protocol: 1 as const,
+      identity: {
+        groupId: claim.groupId, workItemId: claim.workItemId, taskId: claim.taskId, runId: claim.runId,
+        generation: claim.generation, graphVersion: claim.graphVersion, targetVersion: claim.targetVersion,
+      },
+      request: null, runState: { status: outcome },
+      completed: [] as string[], unfinished: [] as string[], pendingDecisions: [] as string[],
+      awaitingHuman: [] as string[], validationCommands: [] as string[], rawLogs: [] as unknown[],
+      usageHighWater, unresolvedRequestIds: [] as string[], artifacts: [] as unknown[],
+    };
     const candidate: Candidate = {
       groupId: claim.groupId, workItemId: claim.workItemId, taskId: claim.taskId, runId: claim.runId, generation: claim.generation,
-      graphVersion: claim.graphVersion, targetVersion: claim.targetVersion, checkpointId: `candidate-${claim.runId}`, usageHighWater: 2,
+      graphVersion: claim.graphVersion, targetVersion: claim.targetVersion, checkpointId: `candidate-${claim.runId}`, usageHighWater,
       result: outcome === "succeeded" ? "complete" : "partial", artifacts: [], snapshot: null, missing: [], unresolvedRequestIds: [],
       stopProof: { executionId, generation: claim.generation, isolated: true, source: stopSource(claim.runId, executionId, claim.generation) },
-      terminalOutcome: outcome, handoff: put(`handoff-${claim.runId}`, Buffer.from(JSON.stringify({ runId: claim.runId }))),
+      terminalOutcome: outcome, handoff: put(`handoff-${claim.runId}`, Buffer.from(JSON.stringify(handoffPacket))),
     };
     return { events, candidate, terminal: { outcome, attemptSha: null, sourceDir: work.sourceDir, repoDir: repo } };
   };
