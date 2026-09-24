@@ -11,7 +11,8 @@ if (config.mode === "exit2") { process.stderr.write("remote-refusal\n"); process
 if (config.mode === "bad-json") { process.stdout.write("not-json\n"); process.exit(0); }
 if (config.mode === "oversized") { await new Promise(resolve=>process.stdout.write(JSON.stringify({blob:"x".repeat(25 * 1024 * 1024)})+"\n",resolve)); process.exit(0); }
 const payload = JSON.parse(stdin || "{}");
-const caps = { protocol:1,durableAccept:true,ownershipIsolation:true,evidenceRetention:true,usageObservation:"phase-end",budgetEnforcement:"soft",requestBoundEvidence:null };
+const v2default = { protocol:2,usageObservation:"phase-end",budgetEnforcement:"soft",contextObservation:"unavailable",handoffControl:"durable",handoffExecution:"mechanical-in-run-v1",contextWindowTokens:null,requestBoundProof:null };
+const caps = config.capabilities ?? v2default;
 let value;
 if (method === "capabilities") value = caps;
 else if (method === "accept" || method === "inspect") value = { kind:"accepted",executionId:"execution-1",configHash:payload.claim.configHash };

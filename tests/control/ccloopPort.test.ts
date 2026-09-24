@@ -43,33 +43,55 @@ describe("production ccloop execution port",()=>{
     expect(observation.probeFailureCode).toBe(null);
     expect(observation.probeFailureCode).not.toBe("control-capability-probe-failed");
   });
-  it("states only what ccloop states, and says unavailable for the rest rather than inventing it",async()=>{
-    // ccloop's `control capabilities` answers seven fields and none of them describes context
-    // observation, handoff control or execution, a context window, or a request-bound proof
-    // descriptor. Each `unavailable`/`null` below is the absence of a ccloop answer, not a guess.
+  // Human authorization 2026-09-24, G1 seam A Task 4: ccloop's `control capabilities` now answers
+  // the eight-field v2 shape (protocol tag plus the seven capability fields), so the port no
+  // longer has anything left to translate or invent -- it passes the peer's own answer through
+  // verbatim, stripped only of the `protocol` tag. This test is rewritten, not weakened: it pins
+  // both that the pass-through is faithful (Step 1's original assertion, still exercised against
+  // the v2 default) AND that it is a genuine pass-through rather than a hardcode that happens to
+  // match the default -- the second `fixture` call overrides one field and asserts the override
+  // survives, which a hardcoded `"durable"` could never do.
+  it("passes the peer's own v2 answer through, substituting nothing",async()=>{
     const h=await fixture();
     expect(await h.port.probeProfileCapabilities!()).toEqual({
       usageObservation:"phase-end",
       budgetEnforcement:"soft",
       contextObservation:"unavailable",
-      handoffControl:"unavailable",
-      handoffExecution:null,
+      handoffControl:"durable",
+      handoffExecution:"mechanical-in-run-v1",
       contextWindowTokens:null,
       requestBoundProof:null,
     });
   });
-  it("therefore fails a claim closed on capabilities, which is the accurate answer until ccloop grows the probe",async()=>{
-    // Named here so the gap cannot be mistaken for a regression: exposing the probe changes the
-    // refusal from "the probe failed" to "the peer does not offer this", and does not make Web
-    // dispatch to real ccloop work. That needs a ccloop-side change.
+  it("does not invent a substitute source for a peer's observation -- an overridden field passes through unchanged",async()=>{
+    // Human authorization 2026-09-24, G1 seam A Task 4. If this method still hardcoded a field
+    // instead of reading the peer's answer, a peer that states something other than the default
+    // would be silently overridden. Answering "phase-end" here and asserting "phase-end" back --
+    // not "durable" -- is what tells a pass-through apart from a hardcode that merely matches the
+    // default by coincidence.
+    const h=await fixture("ok",{capabilities:{
+      protocol:2,usageObservation:"phase-end",budgetEnforcement:"soft",contextObservation:"unavailable",
+      handoffControl:"phase-end",handoffExecution:"mechanical-in-run-v1",contextWindowTokens:null,requestBoundProof:null,
+    }});
+    expect(await h.port.probeProfileCapabilities!()).toMatchObject({handoffControl:"phase-end"});
+  });
+  it("therefore, with a peer answering the v2 default, keeps handoffControl durable and handoffExecution non-null through intersectCapabilities",async()=>{
+    // Human authorization 2026-09-24, G1 seam A Task 4. Renamed from its pre-G1 form, which
+    // recorded that a claim closed on capabilities failed because the port could not observe
+    // `handoffControl`/`handoffExecution` at all. That gap is closed now that ccloop's `capabilities`
+    // states both fields: this test is now an observation of the real port, through the fake
+    // binary, producing an intersection that keeps what the declared profile and the peer agree on
+    // -- it is not a claim that Web dispatch to real ccloop is fully wired (that is Tasks 5/6).
     const h=await fixture();
     const declared=probeSnapshot().profile.capabilities;
     const observed=intersectCapabilities(declared,await h.port.probeProfileCapabilities!());
-    expect(observed.handoffControl).toBe("unavailable");
-    expect(observed.handoffExecution).toBe(null);
+    expect(observed.handoffControl).toBe("durable");
+    expect(observed.handoffExecution).not.toBe(null);
   });
   it("uses direct argv plus stdin JSON and validates successful responses",async()=>{
-    const h=await fixture();expect(await h.port.capabilities()).toMatchObject({protocol:1,budgetEnforcement:"soft"});
+    // Human authorization 2026-09-24, G1 seam A Task 4: only the `protocol` expectation changes,
+    // from v1 to the v2 wire vocabulary the fake binary now answers with.
+    const h=await fixture();expect(await h.port.capabilities()).toMatchObject({protocol:2,budgetEnforcement:"soft"});
     expect(await h.port.accept(h.envelope)).toEqual({kind:"accepted",executionId:"execution-1",configHash:"a".repeat(64)});
     const recorded=JSON.parse(await readFile(h.record,"utf8"));expect(recorded.argv).toEqual(["control","accept","--adapter","codex","--adapter-config",h.config]);expect(JSON.parse(recorded.stdin)).toEqual(h.envelope);
   });

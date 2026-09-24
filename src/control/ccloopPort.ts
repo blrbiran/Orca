@@ -61,18 +61,18 @@ export function createCcloopExecutionPort(options:{binary:string;adapter:"codex"
    * `handoffControl === "durable"`), which is accurate. Dispatching Web work to real ccloop needs
    * ccloop's `capabilities` to grow these fields first; that is a ccloop-side change, recorded in
    * both handoffs, and nothing on this side may paper over it.
+   *
+   * *** ERRATUM (2026-09-24, G1 seam A) *** The paragraph above describes the state before the
+   * capability vocabulary was settled: ccloop's `capabilities` now answers the eight-field v2
+   * shape, so this method passes the peer's answer through and substitutes nothing. The rule it
+   * cites -- that Orca may not invent a substitute source for a peer's observation -- is
+   * unchanged and is now enforced by a criterion in `tests/control/profiles.test.ts` rather than
+   * by hardcoded `unavailable`s. See docs/superpowers/specs/2026-09-24-g1-control-wire-contract-design.md
+   * in the ccloop repository.
    */
   async probeProfileCapabilities(){
-   const stated=parse(capabilitiesSchema,await raw("capabilities",{})) as Capabilities;
-   return {
-    usageObservation:stated.usageObservation,
-    budgetEnforcement:stated.budgetEnforcement==="unsupported"?"unavailable":stated.budgetEnforcement,
-    contextObservation:"unavailable",
-    handoffControl:"unavailable",
-    handoffExecution:null,
-    contextWindowTokens:null,
-    requestBoundProof:null,
-   };
+   const {protocol:_protocol,...view}=parse(capabilitiesSchema,await raw("capabilities",{})) as Capabilities;
+   return view;
   },
   async capabilities(){return parse(capabilitiesSchema,await raw("capabilities",{})) as Capabilities;},
   async accept(input){return parse(executionStatusSchema,await raw("accept",input)) as ExecutionStatus;},
