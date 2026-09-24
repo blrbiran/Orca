@@ -1644,3 +1644,13 @@ into the port's `StartEnvelope` (`src/control/executionPort.ts:7`) — ccloop ca
 says so. The production mount policy for these seams is ruled in
 `docs/superpowers/specs/2026-09-22-panel-control-assembly-design.md`.
 
+## ERRATUM (G1 seam B, 2026-09-24)
+
+Three statements above are superseded by `docs/superpowers/specs/2026-09-24-g1-seam-b-target-version-design.md`
+(human ruling 2026-09-24: one targetVersion, a positive safe integer, from plan file to wire). The original text is kept verbatim.
+
+- `WorkItemViewV1.targetVersion: string` (the `WorkItemViewV1` type in the read-model section) is now a positive safe integer.
+- `ControlPlanV1.tasks[].targetVersion: string` (section 4.2) is now a positive safe integer.
+- "`targetVersion` is the source plan's nonempty opaque version string and is not numerically coerced" (section 4.2) no longer holds:
+  the source plan writes a positive safe integer, the import stores it unchanged in both the work-item column and body, and a
+  string is refused as `malformed`.
