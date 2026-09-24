@@ -1,0 +1,50 @@
+{
+  "v": 1,
+  "runId": "orca-dev-ae4061a5",
+  "runtime": "claude-code",
+  "sessionRef": "ae4061a5-b38b-4523-8114-c987a0174285",
+  "writtenAt": "2026-09-24T15:38:36.473Z",
+  "head": "48362c7e4edc515f243841e9e7c3f40fbba5eec3",
+  "level": {
+    "kind": "reading",
+    "level": 332884,
+    "windowTokens": 1000000,
+    "t1": 330000,
+    "t2": 450000,
+    "band": 1
+  },
+  "next": [
+    "Put plan section A (docs/superpowers/plans/2026-09-24-g1-seam-b-target-version.md) before the human and wait for per-file ruling-88 names",
+    "Then execute seam B Tasks 1-4 in a fresh session"
+  ],
+  "open": [
+    "Execution-driver gap: beginProviderAttempt and toStartEnvelope have no caller in src (spec section 1.0)",
+    "controlShutdown SIGTERM flake root cause not investigated"
+  ],
+  "awaitingHuman": [
+    {
+      "kind": "named-authorization",
+      "what": "Ruling-88 names for the nine files in plan section A before seam B Task 2"
+    },
+    {
+      "kind": "irreversible",
+      "what": "Push the local Orca commits (handoff, spec x3, plan, handoff) when the human chooses"
+    }
+  ],
+  "measurements": [
+    {
+      "command": "/usr/bin/git -C /Users/biran/code/skills/loop/Orca ls-remote origin refs/heads/main",
+      "exitCode": 128,
+      "commit": "48362c7e4edc515f243841e9e7c3f40fbba5eec3",
+      "observedAt": "2026-09-24T15:38:36.398Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-ae4061a5-u4wy5D/1.txt"
+    },
+    {
+      "command": "/usr/bin/git -C /Users/biran/code/skills/loop/Orca log --oneline -8",
+      "exitCode": 0,
+      "commit": "48362c7e4edc515f243841e9e7c3f40fbba5eec3",
+      "observedAt": "2026-09-24T15:38:36.429Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-ae4061a5-u4wy5D/2.txt"
+    }
+  ]
+}
