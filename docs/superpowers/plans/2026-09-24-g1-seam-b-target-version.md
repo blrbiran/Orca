@@ -32,9 +32,6 @@ panel 视图撤掉 `union`／`String()` 胶布。ccloop 零改动、protocol 不
 
 ## §A 需要人逐条授权改写的既有判据（人裁 88：指名、整条改写不许放宽、改后写明编码哪条人裁）
 
-✅ *** **已授权**：人 2026-09-24 原话「§A 九个文件都授权改写」（会话 `ae4061a5`，在本表摆出之后）。 ***
-授权范围＝本表九个文件的所列改写点，**仅限把字符串 `targetVersion` 整条改写成整数**；表外任何判据仍需另行指名。
-
 扫描方法：TypeScript AST（`typescript` 包），找含 `targetVersion: <字符串字面量>` 的顶层 helper，求传递闭包，
 再列回调引用闭包内 helper 的 `it`／`test`。脚本 `its-consuming.mjs` 在会话 scratchpad（不入库）。
 ⚠️ **盲区**：经 `beforeEach` 等间接调用的 helper 数不出 `it`（下表标「按 helper 授权」的两处）。
@@ -470,3 +467,10 @@ Three statements above are superseded by `docs/superpowers/specs/2026-09-24-g1-s
 改完把 `git diff` 的 `-` 行单独抽出来逐条读（handoff §6.7）。
 
 - [ ] **Step 5：提交**（两笔：Web spec 更正一笔、handoff 一笔），收尾再跑一次三仓 `ls-remote`。
+
+---
+
+## §A 授权记录（追加于发布之后，2026-09-24，会话 `ae4061a5`）
+
+✅ *** **§A 已授权**：人 2026-09-24 原话「§A 九个文件都授权改写」（在 §A 表摆出之后）。 ***
+授权范围＝§A 表九个文件的所列改写点，**仅限把字符串 `targetVersion` 整条改写成整数**；表外任何判据仍需另行指名。
