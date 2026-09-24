@@ -84,8 +84,11 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 `control-capability-unsupported` 那道缺口关了。 *** 细节与诚实的验收表述见 §四。
 
 **还不能跑的**：*** **Web 派活到真 ccloop 仍然开不出一次 ccloop 执行。** *** soft 组现在能在 **Orca 台账里记下一条
-`starting` run**，但 ccloop 那一侧的 `accept` 还没发生过 —— 下一步卡在**缝 B**（`targetVersion` 类型分叉，
-`src/control/startEnvelope.ts:65` 抛 `start-envelope-conflict:run:targetVersion`），**人裁排除，没做**。
+`starting` run**，但 ccloop 那一侧的 `accept` 还没发生过。**卡点有两个，不是一个**（2026-09-24 会话 `ae4061a5` 现测）：
+① **缝 B**（`targetVersion` 类型分叉，`src/control/startEnvelope.ts` 抛 `start-envelope-conflict:run:targetVersion`）—— 已开、设计与计划已写，见 §四；
+② 🔴 **执行驱动缺口**：`beginProviderAttempt` 与 `toStartEnvelope` 在 `src/`＋`scripts/` 里**零调用方**（只有测试调），
+生产里 run 停在 `starting` 之后**没有东西驱动 `accept`**。⇒ *** **缝 B 做完 `webCcloopSmoke` 会绿（测试手调 `toStartEnvelope`），但生产仍到不了 ccloop。** ***
+（上一版写「下一步卡在缝 B」—— 只说对了一半，由本次现测更正。）
 
 **现行基线**（只抄工具报数，env ＝ `ORCA_CCLOOP_BIN`＋`ORCA_CCLOOP_ADAPTER_CONFIG`，见 §8.2；
 **观测锚点** ＝ 主题行 `fix(control): give the schema-line criterion in endToEnd a real red, correct false capability-migration comments`
@@ -122,7 +125,17 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 
 ## 四、⛔ 下一件事
 
-*** **G1 缝 A 已做完。下一件事【全部归人】**，按顺序： ***
+### 4.0 ⛔ 现在的下一件事（2026-09-24 会话 `ae4061a5`，**本节优先于下面的 1–3**）
+
+*** **缝 B 已开（人原话「开缝 B」），方向已定：`targetVersion` 全链路统一为正安全整数，plan 为权威、store 与之恒等。** ***
+- spec：`docs/superpowers/specs/2026-09-24-g1-seam-b-target-version-design.md`（经一席独立评审，1C／6I／7M 由控制器逐条现测后并入）
+- 计划：`docs/superpowers/plans/2026-09-24-g1-seam-b-target-version.md`（4 个 Task）
+- 🔴 *** **Task 2 开工前必须先拿到人对计划 §A 的逐条授权（人裁 88）** —— 9 个文件的既有判据要改写，§A 按 `it` 列好了。 ***
+  **本会话没拿到这份授权**（人只说了「同意，继续」写计划）。**下一会话第一件事：把 §A 摆给人，等点名。**
+- 本会话收尾时上下文约 315k（逼近 Rule 6 的 330k/任务）⇒ **实施在新会话做**。
+- 缝 B 之后的下一件：**执行驱动缺口**（spec §1.0）—— 人已同意「缝 B 先做，驱动缺口之后单开」。
+
+*** **G1 缝 A 已做完。下面 1–3 是缝 A 收尾时写的「下一件事」**，按顺序： ***
 
 1. ✅ **已由人推送（2026-09-24 会话 `ae4061a5` 用 `ls-remote` 现测：三个仓远端 main 都等于当时本地 main，含 ccloop 的 v2 那一笔）。** 下面是推送前的记录，留作经过：
    🔴 *** **先推 ccloop，再推 Orca。** *** （下面是一条**会过期的现测**，本文照例不记发布状态 —— 接手先跑 §二 的 `ls-remote`，三个仓各一次。）2026-09-24 现测：Orca 远端已在会话中途被推到 Task 5 那一笔
