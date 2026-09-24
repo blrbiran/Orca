@@ -28,6 +28,8 @@ export function fakeCcloopPort(input: {
   behaviour(workItemId: string): FakeBehaviour;
   files(workItemId: string): Record<string, string>;
   delayAccept?: () => Promise<void>;
+  /** Final review I1: the work tokens the run reports (10 unless said otherwise), so a criterion can overspend a grant. */
+  workTokens?: (workItemId: string) => number;
 }): FakeCcloop {
   const calls = { accept: [] as StartEnvelope[], inspect: 0, collect: 0 };
   const executions = new Map<string, string>();
@@ -54,7 +56,7 @@ export function fakeCcloopPort(input: {
       writeFileSync(join(repo, path), content);
     }
     const events: UsageEvent[] = [
-      { runId: claim.runId, generation: claim.generation, eventSeq: 1, bucket: "work", cumulative: { tokens: 10, activeMs: 5, attempts: 1, sessions: 1 }, source: put(`usage-${claim.runId}-1`, Buffer.from(`work usage ${claim.runId}`)) },
+      { runId: claim.runId, generation: claim.generation, eventSeq: 1, bucket: "work", cumulative: { tokens: input.workTokens?.(claim.workItemId) ?? 10, activeMs: 5, attempts: 1, sessions: 1 }, source: put(`usage-${claim.runId}-1`, Buffer.from(`work usage ${claim.runId}`)) },
       { runId: claim.runId, generation: claim.generation, eventSeq: 2, bucket: "handoff", cumulative: { tokens: 0, activeMs: 0, attempts: 0, sessions: 0 }, source: put(`usage-${claim.runId}-2`, Buffer.from(`handoff usage ${claim.runId}`)) },
     ];
     const outcome = input.behaviour(claim.workItemId) === "exhausted" ? "exhausted" : "succeeded";

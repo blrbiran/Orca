@@ -135,6 +135,14 @@ export function groupStopped(store: ControlStore, groupId: string): boolean {
   return readGroup(store, groupId).stopped || store.db.prepare("SELECT group_id FROM stop_intents WHERE group_id=?").get(groupId) !== undefined;
 }
 
+/**
+ * Final review I1 (controller ruling, 2026-09-25): no provider attempt starts in a group that is stopped or
+ * that a budget breach blocked (usage.ts); the run waits where it is.
+ */
+export function groupHeld(store: ControlStore, groupId: string): boolean {
+  return groupStopped(store, groupId) || readGroup(store, groupId).status === "blocked";
+}
+
 /** The frozen worker profile's port: the one the run was claimed against. */
 export function portFor(deps: Pick<ExecutionDriverDeps, "router">, run: DriverRun): ExecutionPort {
   return deps.router.resolve("task", run.executionProfile.profileId, run.executionProfile.profileHash).port;
@@ -173,7 +181,7 @@ export function stepA1(deps: ExecutionDriverDeps, runId: string): boolean {
     };
     if (readBudgetProposal(store, run.groupId).budgetMode === "strict") return refuse("strict-proof-unimplemented");
     if (run.continuationIntentId) return refuse("continuation-unsupported");
-    if (store.dispatchBlocked || groupStopped(store, run.groupId)) return false;
+    if (store.dispatchBlocked || groupHeld(store, run.groupId)) return false;
     const reservation = reserveProviderAttemptInTransaction(store, runId, "work");
     if (reservation.kind === "suppressed") return refuse(`attempt-suppressed:${reservation.requestId ?? "unknown"}`);
     const reserved = readDriverRun(store, runId);
@@ -271,7 +279,7 @@ export async function stepB(deps: ExecutionDriverDeps, runId: string): Promise<b
   if (run.executionId !== null) {
     return write(deps, () => { const current = readDriverRun(store, runId); current.state = "accepted"; saveDriverRun(store, current); return true; });
   }
-  if (store.dispatchBlocked || groupStopped(store, run.groupId) || deps.admissionGate?.draining) return false;
+  if (store.dispatchBlocked || groupHeld(store, run.groupId) || deps.admissionGate?.draining) return false;
   let status: ExecutionStatus;
   try {
     status = await portFor(deps, run).accept(readStartEnvelope(store, run));

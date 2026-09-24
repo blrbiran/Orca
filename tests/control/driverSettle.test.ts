@@ -188,3 +188,54 @@ describe("CR1: the group keeps going after one start command (spec §2.1)", () =
     } finally { await t.h.dispose(); }
   });
 });
+
+// Final review I1 (controller ruling, 2026-09-25): usage over a run's grant blocks a Web group (usage.ts),
+// and that block is the group's only brake in soft mode. A settle must not lift it (checkpoints.ts), and the
+// driver must neither re-arm dispatch for a blocked group nor start a provider attempt in one.
+function setGroupStatus(store: { db: { prepare(sql: string): { get(...args: unknown[]): unknown; run(...args: unknown[]): unknown } } }, status: string): void {
+  const row = store.db.prepare("SELECT body FROM groups WHERE id='g'").get() as { body: string };
+  store.db.prepare("UPDATE groups SET body=? WHERE id='g'").run(JSON.stringify({ ...JSON.parse(row.body), status }));
+}
+
+describe("a group blocked by a budget breach (final review I1)", () => {
+  it("a run that overspends its grant settles, and its group stays blocked with no new start wake", async () => {
+    let tokens = 10;
+    const t = await driverHarness([{ taskId: "a" }, { taskId: "b", dependsOn: ["a"] }], { workTokens: () => tokens }); try {
+      const runId = await t.claim();
+      tokens = t.body(runId).grant.work.tokens + 1;
+      const driver = t.driver();
+      await t.until(driver, () => t.body(runId).drive?.cleanedUp === true);
+      expect(t.body(runId).state).toBe("settled");
+      expect(t.body(runId).breaches.length).toBeGreaterThan(0);
+      // b depends only on a, which is done: without the brake, b is claimable and a start wake is armed.
+      expect(JSON.parse(String(t.h.store.db.prepare("SELECT body FROM work_items WHERE group_id='g' AND id='a'").get()!.body)).status).toBe("done");
+      await driver.round(); await driver.round();
+      expect(readWebGroup(t.h.store, "g").status).toBe("blocked");
+      expect(t.h.store.db.prepare("SELECT COUNT(*) AS n FROM scheduler_wakes WHERE group_id='g' AND id LIKE 'drive:%'").get()).toEqual({ n: 0 });
+      expect(t.h.store.db.prepare("SELECT COUNT(*) AS n FROM runs WHERE group_id='g'").get()).toEqual({ n: 1 });
+    } finally { await t.h.dispose(); }
+  });
+
+  it("A1 reserves no provider attempt for a claimed run of a blocked group", async () => {
+    const t = await driverHarness([{ taskId: "a" }]); try {
+      const runId = await t.claim();
+      setGroupStatus(t.h.store, "blocked");
+      const driver = t.driver();
+      for (let i = 0; i < 5; i += 1) await driver.round();
+      expect(t.body(runId)).toMatchObject({ state: "starting", providerAttemptOrdinal: 0 });
+      expect(t.fake.calls.accept).toHaveLength(0);
+    } finally { await t.h.dispose(); }
+  });
+
+  it("B sends no accept for a prepared run once its group is blocked", async () => {
+    const t = await driverHarness([{ taskId: "a" }]); try {
+      const runId = await t.claim();
+      const driver = t.driver();
+      await t.until(driver, () => t.body(runId).drive?.prepared === true);
+      setGroupStatus(t.h.store, "blocked");
+      for (let i = 0; i < 5; i += 1) await driver.round();
+      expect(t.body(runId).state).toBe("start-pending");
+      expect(t.fake.calls.accept).toHaveLength(0);
+    } finally { await t.h.dispose(); }
+  });
+});
