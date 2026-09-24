@@ -1,4 +1,6 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { writeFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import { createExecutionDriver, stepE, type ExecutionDriver } from "../../src/control/executionDriver.js";
@@ -176,6 +178,28 @@ describe("reconciling a conflict (spec §5.3)", { timeout: 30_000 }, () => {
         await restarted.round();
       }
       expect(t.ids.every((id) => LANDED.includes(t.body(id).state))).toBe(true);
+      expect(t.spawns()).toHaveLength(1);
+    } finally { await t.h.dispose(); }
+  });
+
+  // Final review I3 (controller ruling, 2026-09-25): spec §4's premise -- a driver run's work is a process of
+  // its own that outlives the panel -- holds for the reconciliation too. It is spawned detached (its own process
+  // group, so a terminal's Ctrl-C to the panel's group does not reach it) with its output in files, not pipes
+  // that close with the panel; a stopped driver's successor waits on it and never spawns a second one.
+  it("spawns the reconciliation as its own process group with its output in files, and a new driver after stop() finishes it with one spawn", async () => {
+    const t = await twoConflicting({ files: { "shared.txt": "A\nB\n" }, holdMs: 1500 }); try {
+      const first = t.driver();
+      await untilDeadline(first, () => t.ids.some((id) => t.body(id).drive?.reconcile?.pid != null));
+      const runId = t.ids.find((id) => t.body(id).drive?.reconcile?.pid != null)!;
+      const { pid, runsDir, reconcileRunId } = t.body(runId).drive.reconcile;
+      expect(Number(execFileSync("ps", ["-o", "pgid=", "-p", String(pid)], { encoding: "utf8" }).trim())).toBe(pid);
+      for (const name of ["ccloop.stdout.log", "ccloop.stderr.log"]) {
+        expect(statSync(join(runsDir, reconcileRunId, name)).mode & 0o777).toBe(0o600);
+      }
+      await first.stop();
+      const second = createExecutionDriver(t.deps);
+      await untilDeadline(second, () => t.ids.every((id) => LANDED.includes(t.body(id).state)));
+      expect(t.body(runId).drive.reconcile).toMatchObject({ pid, outcome: "succeeded" });
       expect(t.spawns()).toHaveLength(1);
     } finally { await t.h.dispose(); }
   });

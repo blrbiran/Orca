@@ -1,4 +1,5 @@
-import { execFile, spawn } from "node:child_process";
+import { execFile, spawn, type ChildProcess } from "node:child_process";
+import { closeSync, openSync, readFileSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { promisify } from "node:util";
@@ -63,6 +64,13 @@ export interface RunTaskOptions {
    * caller can record it durably and, after its own restart, tell a live reconciliation from a dead one.
    */
   onSpawn?: (pid: number) => void;
+  /**
+   * Execution driver final review I3: when set, ccloop is spawned detached (its own process group leader),
+   * with stdout and stderr written to `ccloop.stdout.log` / `ccloop.stderr.log` (created 0600) in this
+   * directory instead of pipes, and unref'd -- so it outlives the process that spawned it, which a restarted
+   * caller then waits on by pid. Unset (`orca run`): attached and piped, exactly as before.
+   */
+  detachedLogDir?: string;
 }
 
 /**
@@ -110,7 +118,8 @@ interface SpawnResult {
  * on PATH — the criterion for "which ccloop ran" should be the path in the
  * plan file and nothing else.
  */
-function spawnCcloop(bin: string, args: string[], onSpawn?: (pid: number) => void): Promise<SpawnResult> {
+function spawnCcloop(bin: string, args: string[], onSpawn?: (pid: number) => void, detachedLogDir?: string): Promise<SpawnResult> {
+  if (detachedLogDir !== undefined) return spawnDetached(bin, args, detachedLogDir, onSpawn);
   return new Promise<SpawnResult>((resolve, reject) => {
     const child = spawn(process.execPath, [bin, ...args], { stdio: ["ignore", "pipe", "pipe"] });
     if (child.pid !== undefined) onSpawn?.(child.pid);
@@ -124,6 +133,26 @@ function spawnCcloop(bin: string, args: string[], onSpawn?: (pid: number) => voi
     });
     child.on("error", reject);
     child.on("close", (code, signal) => resolve({ code, signal, stdout, stderr }));
+  });
+}
+
+/** RunTaskOptions.detachedLogDir: the same result, with the output read back from its files once the child ends. */
+function spawnDetached(bin: string, args: string[], logDir: string, onSpawn?: (pid: number) => void): Promise<SpawnResult> {
+  const outPath = join(logDir, "ccloop.stdout.log");
+  const errPath = join(logDir, "ccloop.stderr.log");
+  const read = (path: string): string => { try { return readFileSync(path, "utf8"); } catch { return ""; } };
+  return new Promise<SpawnResult>((resolve, reject) => {
+    const out = openSync(outPath, "w", 0o600);
+    let child: ChildProcess;
+    try {
+      const err = openSync(errPath, "w", 0o600);
+      try { child = spawn(process.execPath, [bin, ...args], { detached: true, stdio: ["ignore", out, err] }); }
+      finally { closeSync(err); }
+    } finally { closeSync(out); }
+    if (child.pid !== undefined) onSpawn?.(child.pid);
+    child.unref();
+    child.on("error", reject);
+    child.on("close", (code, signal) => resolve({ code, signal, stdout: read(outPath), stderr: read(errPath) }));
   });
 }
 
@@ -256,7 +285,7 @@ export async function runTask(
     options.adapter,
     "--adapter-config",
     options.adapterConfig,
-  ], options.onSpawn);
+  ], options.onSpawn, options.detachedLogDir);
 
   const outcome = await readTerminalStatus(loopDir, spawned);
   const attemptSha = await latestAttemptSha(clone, runId);
