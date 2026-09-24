@@ -68,15 +68,22 @@ it("blocks recovery of a missing current checkpoint instead of selecting an olde
  }finally{await h.dispose();}
 },30000);
 // Human authorization (2026-09-24, ruling-88): rewritten for the v2 wire vocabulary (G1 seam A
-// Task 6) -- `durableAccept` is a retired field that no longer exists on `Capabilities`. The
-// guarantee it carried (a strict-typed field being malformed rather than merely absent) now lives
-// on `handoffControl`, so the mutation moves there: a boolean where the schema requires an enum
-// string is still a malformed peer capability, caught the same way by `capabilitiesSchema.safeParse`.
-it("rejects malformed peer capability booleans",async()=>{
+// Task 6) -- `durableAccept` is a retired field that no longer exists on `Capabilities`. Correction
+// (final fix dispatch, 2026-09-24, I2/I3): the guarantee `durableAccept` carried did NOT move to
+// `handoffControl` -- G1 deleted the three v1 strict-mode gates (`durableAccept`/`ownershipIsolation`/
+// `evidenceRetention`) outright, because ccloop always answered them as an unconditional `true`, so
+// they never gated anything. Nothing in v2 replaces them; `handoffControl` is a different guarantee
+// (handoff latching) that assertCapabilities also happens to check, not a successor to the deleted
+// booleans. The earlier version of this test mutated `handoffControl`, which the
+// `handoffControl!=="durable"` guard clause (budget.ts) also rejects -- so deleting the schema check
+// (`capabilitiesSchema.safeParse`, budget.ts) produced no red here. This version mutates
+// `contextObservation`, a field no guard clause after the schema check reads, so it pins the schema
+// check itself: only `capabilitiesSchema.safeParse` catches a boolean where an enum string is required.
+it("rejects a malformed peer capability answer the guard clauses never read",async()=>{
  const {ControlService}=await import("../../src/control/service.js");const {openTestStore,seedBudgetCase,caps}=await import("./fixtures/store.js");
  const h=await openTestStore();try{seedBudgetCase(h.store);
-  const service=new ControlService(h.store,{capabilities:async()=>({...caps,handoffControl:false})} as never);
-  await expect(service.claim("g1","T1")).rejects.toThrow();
+  const service=new ControlService(h.store,{capabilities:async()=>({...caps,contextObservation:false})} as never);
+  await expect(service.claim("g1","T1")).rejects.toThrow("control-capability-unsupported");
   expect(h.store.db.prepare("SELECT count(*) AS n FROM runs").get()?.n).toBe(0);
  }finally{await h.dispose();}
 },30000);

@@ -86,7 +86,7 @@ describe("production ccloop execution port",()=>{
     const declared=probeSnapshot().profile.capabilities;
     const observed=intersectCapabilities(declared,await h.port.probeProfileCapabilities!());
     expect(observed.handoffControl).toBe("durable");
-    expect(observed.handoffExecution).not.toBe(null);
+    expect(observed.handoffExecution).toBe("mechanical-in-run-v1");
   });
   it("uses direct argv plus stdin JSON and validates successful responses",async()=>{
     // Human authorization 2026-09-24, G1 seam A Task 4: only the `protocol` expectation changes,
