@@ -99,6 +99,7 @@ export async function stepD(deps: ExecutionDriverDeps, runId: string): Promise<b
     return revParse(landing, "HEAD");
   });
   if (landed.kind === "not-produced") return beginReconcile(deps, runId, targetRepo, old);
+  // A moved tip only (final review I2): any other failed swap threw from compareAndSwap and blocks the run.
   if (landed.kind === "moved") return false;
   deps.crash?.("D-after-cas");
   markLanded(deps, runId, landed.commit);
@@ -305,7 +306,8 @@ async function finishReconcile(
     const current = readDriverRun(store, runId);
     if (current.state !== "reconciling") return false;
     if (!swapped) {
-      // The tip moved while the reconciliation ran, so its merge has a stale first parent: land again.
+      // The tip moved while the reconciliation ran, so its merge has a stale first parent: land again. Only a
+      // moved tip gets here; a swap that failed otherwise threw and blocks the run at R (final review I2).
       current.state = "collected";
       current.drive = { ...current.drive!, reconcile: null };
     } else {

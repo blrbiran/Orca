@@ -105,12 +105,23 @@ export async function commitAttempt(resultRepo: string): Promise<string> {
   return revParse(resultRepo, "HEAD");
 }
 
-/** spec §5.1: move `ref` to `next` only if it is still at `old`. False means someone moved it. */
+/**
+ * spec §5.1: move `ref` to `next` only if it is still at `old`. False means someone moved it.
+ * Final review I2 (controller ruling, 2026-09-25): false is answered only when the tip really is somewhere
+ * else now. Any other refusal (a leftover `<ref>.lock`, a broken repository) throws with git's own words, so
+ * the run is blocked by name instead of being retried every round with nothing recorded.
+ */
 export async function compareAndSwap(repo: string, ref: string, next: string, old: string): Promise<boolean> {
   try {
     await git(repo, [...QUIET_GIT, "update-ref", ref, next, old]);
     return true;
-  } catch { return false; }
+  } catch (error) {
+    const current = await revParse(repo, ref).catch(() => null);
+    if (current !== null && current !== old) return false;
+    const stderr = (error as { stderr?: unknown }).stderr;
+    const detail = (typeof stderr === "string" && stderr.trim().length > 0 ? stderr : (error as Error).message).replace(/\s+/g, " ").trim();
+    throw new Error(`cas-failed:${ref}: ${detail}`);
+  }
 }
 
 /** spec §3.5: a settled run's own workspace and its incoming ref. `orca/<groupId>` is never touched. */

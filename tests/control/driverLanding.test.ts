@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { createExecutionDriver } from "../../src/control/executionDriver.js";
@@ -69,6 +69,25 @@ describe("D: landing on orca/<group> (spec §5.1-§5.2)", () => {
       expect(t.body(runId).drive.landedCommit).toBe(landed);
       expect(git(t.repo, "rev-parse", "refs/heads/orca/g")).toBe(landed);
       expect(git(t.repo, "rev-list", "--count", "refs/heads/orca/g")).toBe(commits);
+    } finally { await t.h.dispose(); }
+  });
+
+  // Final review I2 (controller ruling, 2026-09-25): only a tip that really moved is retried next round. Any
+  // other failure of the swap -- here a leftover ref lock, as a death inside update-ref leaves -- blocks the run
+  // with git's own words, instead of re-merging silently every round with nothing recorded.
+  it("blocks the run, naming git's error, when the swap fails on a leftover ref lock with the tip unmoved", async () => {
+    const t = await driverHarness([{ taskId: "a" }]); try {
+      const runId = await t.claim();
+      const driver = t.driver();
+      await t.until(driver, () => t.body(runId).state === "collected");
+      const old = git(t.repo, "rev-parse", "refs/heads/orca/g");
+      writeFileSync(join(t.repo, ".git", "refs", "heads", "orca", "g.lock"), `${old}\n`);
+      await t.until(driver, () => t.body(runId).state === "blocked", 5);
+      const drive = t.body(runId).drive;
+      expect(drive.blockedAt).toBe("D");
+      expect(drive.blockedReason).toMatch(/^cas-failed:refs\/heads\/orca\/g: .*g\.lock/);
+      expect(git(t.repo, "rev-parse", "refs/heads/orca/g")).toBe(old);
+      expect(existsSync(landingPathOf(t.deps.roots, runId))).toBe(false);
     } finally { await t.h.dispose(); }
   });
 

@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import { createExecutionDriver, stepE, type ExecutionDriver } from "../../src/control/executionDriver.js";
@@ -189,6 +189,25 @@ describe("reconciling a conflict (spec §5.3)", { timeout: 30_000 }, () => {
       await createExecutionDriver(t.deps).round();
       expect(t.body(runId).drive).toMatchObject({ blockedAt: "R", blockedReason: "reconcile-orphan-unknown" });
       expect(t.spawns()).toHaveLength(0);
+    } finally { await t.h.dispose(); }
+  });
+});
+
+// Final review I2 (controller ruling, 2026-09-25): a reconciled merge whose swap fails with the tip unmoved is
+// blocked at R with git's error; only a moved tip goes back to D, where it would conflict and pay again.
+describe("a reconciliation whose landing swap fails without the tip moving (final review I2)", { timeout: 30_000 }, () => {
+  it("blocks at R naming the leftover lock, and spawns no second reconciliation", async () => {
+    const t = await twoConflicting({ files: { "shared.txt": "A\nB\n" }, holdMs: 800 }); try {
+      const driver = t.driver();
+      await untilDeadline(driver, () => t.ids.some((id) => t.body(id).state === "reconciling"));
+      const runId = t.ids.find((id) => t.body(id).state === "reconciling")!;
+      const tip = git(t.repo, "rev-parse", "refs/heads/orca/g");
+      writeFileSync(`${t.repo}/.git/refs/heads/orca/g.lock`, `${tip}\n`);
+      await untilDeadline(driver, () => t.body(runId).state === "blocked");
+      expect(t.body(runId).drive.blockedAt).toBe("R");
+      expect(t.body(runId).drive.blockedReason).toMatch(/^cas-failed:refs\/heads\/orca\/g: .*g\.lock/);
+      expect(git(t.repo, "rev-parse", "refs/heads/orca/g")).toBe(tip);
+      expect(t.spawns()).toHaveLength(1);
     } finally { await t.h.dispose(); }
   });
 });
