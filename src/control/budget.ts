@@ -9,6 +9,7 @@ import { applyCommand, dimensions, fits, zero } from "./commands.js";
 import { readGroup, readWork, saveGroup, saveWork, allWork, readBudgetProposal, type GroupRecord } from "./queries.js";
 import { canonicalBytes } from "./canonicalJson.js";
 import { recordProjectionChange } from "./projectionJournal.js";
+import { releaseCommitment, setAllocationStates } from "./stopIntent.js";
 export interface RunRecord extends Claim, RunView {
   remaining:Grant; cumulative:Grant; highWater:number;
   unknown:{work:boolean;handoff:boolean};breaches:number[];
@@ -146,6 +147,16 @@ export function releaseRunReserve(store:ControlStore,id:string,proof:StopProof):
   if(!proof || proof.isolated!==true || proof.executionId!==run.executionId || proof.generation!==run.generation || run.unknown.work || run.unknown.handoff || !hasObservedUsage(store,run)) throw new ControlError("run-stop-unconfirmed");
   if(store.db.prepare("SELECT seq FROM usage_events WHERE run_id=? AND seq>?").get(id,run.highWater)) throw new ControlError("usage-gap");
   const group=readGroup(store,run.groupId);
+  if("planHash" in group){
+    // Execution driver deviation D2 (measured): a Web run keeps `remaining == max(grant-cumulative,0)`,
+    // which the read model checks on every run, so its unspent grant is released through the Web
+    // ledger's own path -- allocation terminal, reserve given back with every mirror in step -- the
+    // same one `terminaliseRun` (stopIntent.ts) uses.
+    run.state="settled";saveRun(store,run);store.db.prepare("UPDATE runs SET active=0 WHERE id=?").run(id);
+    setAllocationStates(store,run.groupId,run.workItemId,"terminal");
+    releaseCommitment(store,run.groupId,add(run.remaining.work,run.remaining.handoff));
+    return;
+  }
   group.reserved=subtract(group.reserved,add(run.remaining.work,run.remaining.handoff));
   group.budgetVersion++;run.remaining={work:zero(),handoff:zero()};run.state="settled";
   saveGroup(store,group);saveRun(store,run);store.db.prepare("UPDATE runs SET active=0 WHERE id=?").run(id);

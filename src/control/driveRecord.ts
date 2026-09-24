@@ -51,6 +51,10 @@ export const driveRecordSchema = z.object({
   blockedAt: driveStepSchema.nullable(),
   blockedReason: z.string().min(1).nullable(),
   cleanedUp: z.boolean(),
+  // Controller ruling P7 (2026-09-25): a cleanup failure on an already-settled run is recorded here,
+  // never as a block -- the run stays `settled`, `cleanedUp:false`, and is retried next round.
+  // Defaulted so a drive record from before this field existed (fixtures included) still parses.
+  cleanupError: z.string().min(1).nullable().default(null),
 }).strict();
 export type DriveRecord = z.infer<typeof driveRecordSchema>;
 

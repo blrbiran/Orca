@@ -1,27 +1,31 @@
 import { createHash } from "node:crypto";
 import { join } from "node:path";
-import { writeArtifact } from "./archive.js";
-import { saveRun } from "./budget.js";
+import { archiveRun, readArtifact, writeArtifact } from "./archive.js";
+import { readRun, saveRun } from "./budget.js";
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
+import { commitCandidate } from "./checkpoints.js";
 import { hashPayload } from "./commands.js";
 import { ControlError } from "./errors.js";
 import { readConfirmedTaskExecution } from "./executionSnapshot.js";
 import { privateDirectory } from "./paths.js";
+import { publishPending } from "./projection.js";
 import { readBudgetProposal, readGroup } from "./queries.js";
 import { readCanonicalRecord, writeCanonicalRecord } from "./snapshot.js";
 import { toStartEnvelope } from "./startEnvelope.js";
 import { recordUsage } from "./usage.js";
-import { isWebWorkRun, readWorkClaimEnvelope, reserveProviderAttemptInTransaction } from "./webDispatch.js";
+import { isWebWorkRun, nextClaimableTask, readWorkClaimEnvelope, reserveProviderAttemptInTransaction } from "./webDispatch.js";
 import { readWorkspaceSetting, type WorkspaceMode } from "./workspaceSettings.js";
-import { commitAttempt, ensureWorkBranch, ensureWorkspace, sourceDirOf, workspacePathOf, type WorkspaceRoots } from "./workspace.js";
+import { cleanupRunWorkspace, commitAttempt, ensureWorkBranch, ensureWorkspace, sourceDirOf, workspacePathOf, type WorkspaceRoots } from "./workspace.js";
 import { stepD, stepR } from "./driverLanding.js";
 import { harvest } from "../scheduler/harvest.js";
 import { writeSetOf } from "../scheduler/writeSet.js";
 import type { AdmissionGate } from "./admissionGate.js";
 import type { DriveRecord, DriveStep } from "./driveRecord.js";
 import type { ExecutionPort, ExecutionStatus, StartEnvelope } from "./executionPort.js";
+import type { ExecutionReport } from "./executionPort.js";
 import type { ExecutionProfileRouter } from "./profiles.js";
 import type { ControlStore } from "./store.js";
+import type { Candidate } from "./types.js";
 
 /**
  * Execution driver spec §2. Owned by the panel's control assembly next to the wake pump, and only
@@ -145,7 +149,7 @@ function newDrive(roots: WorkspaceRoots, runId: string, workspaceMode: Workspace
   return {
     workspaceMode, sourceDir: sourceDirOf(roots, runId), workspacePath: workspacePathOf(roots, runId), targetRepo: null,
     prepared: false, base: null, envelopeHash: null, inspectUnknown: 0, outcome: null, attemptSha: null, landedCommit: null,
-    reconcile: null, blockedAt: null, blockedReason: null, cleanedUp: false,
+    reconcile: null, blockedAt: null, blockedReason: null, cleanedUp: false, cleanupError: null,
   };
 }
 
@@ -349,6 +353,94 @@ export async function stepC(deps: ExecutionDriverDeps, runId: string): Promise<b
   });
 }
 
+async function savedReport(store: ControlStore, runId: string): Promise<ExecutionReport> {
+  const row = store.db.prepare("SELECT body FROM outbox WHERE id=? AND kind='report'").get(`report:${runId}`);
+  if (!row) throw new ControlError("control-terminal-pending");
+  return JSON.parse((await readArtifact(store, JSON.parse(String(row.body)).source)).toString()) as ExecutionReport;
+}
+
+/**
+ * E (spec §2.2): acceptance first -- `commitCandidate` marks the work done only when acceptance already
+ * exists (checkpoints.ts) -- then the checkpoint, the projection, and only then the cleanup. A run that
+ * settled before it was cleaned (a death in between) is visited again for the cleanup alone (D15).
+ */
+export async function stepE(deps: ExecutionDriverDeps, runId: string): Promise<boolean> {
+  const { store } = deps;
+  const run = readDriverRun(store, runId);
+  if (run.drive === undefined) return false;
+  const drive = run.drive;
+  if (run.state === "landed") {
+    const report = await savedReport(store, runId);
+    const raw = report.candidate;
+    if (raw === null || report.terminal === null) throw new ControlError("control-terminal-pending");
+    const archive = await archiveRun(store, { runId, sourceDir: drive.sourceDir, repoDir: join(drive.sourceDir, "repo"), stopProof: raw.stopProof }, archiveAdmission(deps));
+    if (drive.landedCommit !== null) {
+      // Same evidence shape `confirmLanding` writes (schedulerBridge.ts). checksPassed: ccloop's verifier
+      // ran the contract's requiredChecks in this run and it ended `succeeded`.
+      const source = await writeArtifact(store, `acceptance-${runId}`, Buffer.from(JSON.stringify({ runId, checksPassed: true, landing: "landed", commit: drive.landedCommit, intent: `drive:${runId}` })), archiveAdmission(deps));
+      write(deps, () => store.db.prepare("INSERT INTO outbox VALUES (?, 'acceptance', ?, 1) ON CONFLICT(id) DO NOTHING").run(`acceptance:${runId}`, JSON.stringify({ runId, accepted: true, source })));
+    }
+    deps.crash?.("E-after-acceptance");
+    const record = readRun(store, runId);
+    const missing = [...archive.missing, ...raw.missing];
+    const candidate: Candidate = {
+      groupId: record.groupId, workItemId: record.workItemId, taskId: record.taskId, runId, generation: record.generation,
+      graphVersion: record.graphVersion, targetVersion: record.targetVersion, checkpointId: `settle-${runId}`, usageHighWater: raw.usageHighWater,
+      result: missing.length === 0 && raw.result === "complete" ? "complete" : "partial",
+      artifacts: [...archive.artifacts, ...raw.artifacts, raw.handoff], snapshot: archive.snapshot, missing,
+      unresolvedRequestIds: raw.unresolvedRequestIds, stopProof: raw.stopProof, terminalOutcome: report.terminal.outcome, handoff: raw.handoff,
+    };
+    candidate.checkpointId = `settle-${runId}-${hashPayload(candidate).slice(0, 16)}`;
+    await commitCandidate(store, candidate, archiveAdmission(deps));
+    if (readDriverRun(store, runId).state !== "settled") { blockRun(deps, runId, "E", "settle-incomplete"); return true; }
+    await publishPending(store, archiveAdmission(deps));
+  }
+  const settled = readDriverRun(store, runId);
+  if (settled.state !== "settled" || settled.drive === undefined || settled.drive.cleanedUp) return run.state === "landed";
+  await cleanupRunWorkspace(deps.resolveRepository(groupRepoId(store, settled.groupId)), deps.roots, runId, settled.drive.workspacePath);
+  write(deps, () => {
+    const current = readDriverRun(store, runId);
+    current.drive = { ...current.drive!, cleanedUp: true, cleanupError: null };
+    saveDriverRun(store, current);
+  });
+  return true;
+}
+
+/** Group states the driver re-arms dispatch for; `commitCandidate` moves a group to `review` (checkpoints.ts). */
+export const DISPATCHABLE_GROUP_STATES = new Set(["ready", "running", "review"]);
+
+/**
+ * CR1 (spec §2.1): a start wake claims one task, and nothing else ever arms another. For each started,
+ * dispatchable group with ready work and no wake pending, arm one `start` wake under the group's last
+ * start revision; the pump claims one task per wake, so parallelism grows by one per round. A group
+ * nobody started has no start wake to copy and gets nothing.
+ */
+export function replenishStartWakes(deps: Pick<ExecutionDriverDeps, "store" | "admissionGate">): string[] {
+  const { store } = deps;
+  if (store.dispatchBlocked) return [];
+  return write(deps, () => {
+    const armed: string[] = [];
+    for (const row of store.db.prepare("SELECT id,body FROM groups ORDER BY id").all()) {
+      const groupId = String(row.id);
+      const group = JSON.parse(String(row.body)) as { planHash?: string; status: string; stopped: boolean };
+      if (group.planHash === undefined || group.stopped || !DISPATCHABLE_GROUP_STATES.has(group.status)) continue;
+      if (store.db.prepare("SELECT group_id FROM stop_intents WHERE group_id=?").get(groupId)) continue;
+      if (store.db.prepare("SELECT id FROM recovery_blockers WHERE group_id=? AND scope='group'").get(groupId)) continue;
+      if (store.db.prepare("SELECT id FROM scheduler_wakes WHERE group_id=? AND kind IN ('start','no-start','resume') AND delivered=0").get(groupId)) continue;
+      const last = store.db.prepare("SELECT body FROM scheduler_wakes WHERE group_id=? AND kind='start' ORDER BY rowid DESC LIMIT 1").get(groupId);
+      if (!last || nextClaimableTask(store, groupId) === null) continue;
+      const body = JSON.parse(String(last.body)) as { startRevision: number; executionSnapshotHash?: string };
+      const ordinal = Number(store.db.prepare("SELECT COUNT(*) AS n FROM scheduler_wakes WHERE group_id=? AND id LIKE ?").get(groupId, `drive:${groupId}:%`)!.n) + 1;
+      const wakeId = `drive:${groupId}:${ordinal}`;
+      store.db.prepare("INSERT INTO scheduler_wakes(id,group_id,kind,body,delivered) VALUES (?,?,'start',?,0)").run(wakeId, groupId, canonicalBytes({
+        groupId, startRevision: body.startRevision, ...(body.executionSnapshotHash === undefined ? {} : { executionSnapshotHash: body.executionSnapshotHash }),
+      }).toString("utf8"));
+      armed.push(wakeId);
+    }
+    return armed;
+  });
+}
+
 const DRIVEN = new Set(["starting", "start-pending", "accepted", "unknown", "collected", "landed", "reconciling"]);
 
 /** spec §2.1: every Web work run the driver can still move, by runId; plus settled runs not yet cleaned (deviation D15). */
@@ -386,6 +478,7 @@ export async function advance(deps: ExecutionDriverDeps, runId: string, context:
     case "accepted": return stepC(deps, runId);
     case "collected": return stepD(deps, runId);
     case "reconciling": return stepR(deps, runId, context);
+    case "landed": case "settled": return stepE(deps, runId);
     default: return false;
   }
 }
@@ -399,6 +492,12 @@ export function createExecutionDriver(deps: ExecutionDriverDeps): ExecutionDrive
 
   const pass = async (): Promise<boolean> => {
     let progressed = false;
+    try {
+      if (replenishStartWakes(deps).length > 0) { progressed = true; deps.kickPump?.(); }
+    } catch (error) {
+      if (error instanceof ControlError && error.code === "panel-draining") return false;
+      throw error;
+    }
     for (const runId of driverRunIds(deps.store)) {
       if (context.stopped) break;
       try {
@@ -408,10 +507,23 @@ export function createExecutionDriver(deps: ExecutionDriverDeps): ExecutionDrive
         // A draining panel refuses every write; the round ends and no run is blamed for it.
         if (error instanceof ControlError && error.code === "panel-draining") return progressed;
         const run = readDriverRun(deps.store, runId);
-        // A settled run stays settled: whatever failed here is the settle step's own cleanup work
-        // (Task 7 records cleanupError on the run and retries it), never a reason to reopen it as
-        // blocked at an earlier step (controller ruling P7, 2026-09-25).
-        if (run.state === "settled") { process.stderr.write(`orca-driver: ${runId}: ${describeError(error)}\n`); continue; }
+        // A settled run stays settled: whatever failed here is the settle step's own cleanup work,
+        // never a reason to reopen it as blocked at an earlier step (controller ruling P7,
+        // 2026-09-25). Record the failure on the run and leave it for the next round to retry --
+        // re-checked inside the write since another write may have landed while this step was
+        // in flight (the deferred note from Task 4's review: never write after an await without
+        // re-reading state first).
+        if (run.state === "settled") {
+          write(deps, () => {
+            const current = readDriverRun(deps.store, runId);
+            if (current.state === "settled" && current.drive !== undefined && !current.drive.cleanedUp) {
+              current.drive = { ...current.drive, cleanupError: describeError(error) };
+              saveDriverRun(deps.store, current);
+            }
+          });
+          process.stderr.write(`orca-driver: ${runId}: ${describeError(error)}\n`);
+          continue;
+        }
         if (run.drive === undefined) { process.stderr.write(`orca-driver: ${runId}: ${describeError(error)}\n`); continue; }
         blockRun(deps, runId, stepOf(run), describeError(error));
         progressed = true;
