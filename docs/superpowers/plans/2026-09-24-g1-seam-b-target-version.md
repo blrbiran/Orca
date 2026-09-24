@@ -65,7 +65,7 @@ panel 视图撤掉 `union`／`String()` 胶布。ccloop 零改动、protocol 不
   `readCanonicalRecord`（`src/control/snapshot.js`）、`ControlError`（`.code`／`.detail`）、`webFixture`／`profileSnapshot`（`tests/control/fixtures/web.ts`）。
 - Produces: 判据 N0–N9（spec §4.2 的 N1–N9，加一条正向对照 N0）。
 
-- [ ] **Step 1：写判据文件**
+- [x] **Step 1：写判据文件**
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -234,7 +234,7 @@ describe("wire schemas refuse a string targetVersion (seam B)", () => {
 });
 ```
 
-- [ ] **Step 2：跑它，看见红（改动前）**
+- [x] **Step 2：跑它，看见红（改动前）**
 
 ```bash
 cd /Users/biran/code/skills/loop/Orca
@@ -247,7 +247,7 @@ OUT="${SCRATCH:?set SCRATCH to the session scratchpad}/task1-red.log"
 N3、N4、N5、N6、N8、N9、N0b、N7b 红（`webFixture` 写出整数 plan，导入被拒，夹具抛错）；
 N7 红（`"3"` 被接受、`3` 被拒）。**把实际红集合与此表逐条比，不一致就停下报告，不要改判据迁就。**
 
-- [ ] **Step 3：不提交。** 进入 Task 2（本文件随 Task 2 一起提交）。
+- [x] **Step 3：不提交。** 进入 Task 2（本文件随 Task 2 一起提交）。
 
 ---
 
@@ -263,7 +263,7 @@ N7 红（`"3"` 被接受、`3` 被拒）。**把实际红集合与此表逐条�
 - Produces: `PlanTask.targetVersion?: number`；`SchedulerControlPlanSource.tasks[].targetVersion: number`；
   `ControlPlanV1.tasks[].targetVersion: number`；`WorkItemViewV1.targetVersion: number`（server 与 `web/src`）。
 
-- [ ] **Step 1：`src/scheduler/planFile.ts`**
+- [x] **Step 1：`src/scheduler/planFile.ts`**
 
 在 import 区加一行（`schema.ts` 只 import `zod`，无环 —— spec §3）：
 
@@ -286,7 +286,7 @@ import { safeInteger } from "../control/schema.js";
     targetVersion: safeInteger.positive().optional(),
 ```
 
-- [ ] **Step 2：`src/control/webProtocol.ts`** —— `:383` 与 `:821` 都改成：
+- [x] **Step 2：`src/control/webProtocol.ts`** —— `:383` 与 `:821` 都改成：
 
 ```ts
           targetVersion: positiveSafeInteger,
@@ -294,7 +294,7 @@ import { safeInteger } from "../control/schema.js";
 
 （`:821` 缩进是四格：`    targetVersion: positiveSafeInteger,`）
 
-- [ ] **Step 3：`src/control/planImport.ts:214-215`** —— 列写 plan 的值：
+- [x] **Step 3：`src/control/planImport.ts:214-215`** —— 列写 plan 的值：
 
 ```ts
         deps.store.db.prepare("INSERT INTO work_items(group_id,id,target_version,body) VALUES (?,?,?,?)")
@@ -303,7 +303,7 @@ import { safeInteger } from "../control/schema.js";
 
 （先现读 `:214-215` 原文，确认第二行是 `.run(payload.groupId, task.taskId, JSON.stringify(work));` 再改；不是就停下报告。）
 
-- [ ] **Step 4：`src/panel/controlViews.ts`**
+- [x] **Step 4：`src/panel/controlViews.ts`**
 
 `:61` 与 `:112`：
 
@@ -315,13 +315,13 @@ import { safeInteger } from "../control/schema.js";
 `:488` 那一行 `|| String(work.targetVersion) !== String(run.targetVersion)` → `|| work.targetVersion !== run.targetVersion`。
 **按整行锚点改、断言命中数 == 1**（handoff 教训：子串替换会在句子中间切开）。
 
-- [ ] **Step 5：`web/src/controlTypes.ts:78`**
+- [x] **Step 5：`web/src/controlTypes.ts:78`**
 
 ```ts
   targetVersion: number;
 ```
 
-- [ ] **Step 6：§A 九个文件逐处改写**（每处加 §A 那行英文注释）。改完用 python 全仓复扫，**期望零命中**：
+- [x] **Step 6：§A 九个文件逐处改写**（每处加 §A 那行英文注释）。改完用 python 全仓复扫，**期望零命中**：
 
 ```bash
 cd /Users/biran/code/skills/loop/Orca
@@ -341,7 +341,7 @@ EOF
 cat "${SCRATCH:?}/task2-rescan.txt"
 ```
 
-- [ ] **Step 7：跑 typecheck 与 Task 1 判据，看见绿**
+- [x] **Step 7：跑 typecheck 与 Task 1 判据，看见绿**
 
 ```bash
 cd /Users/biran/code/skills/loop/Orca
@@ -351,11 +351,11 @@ npm run typecheck > "${SCRATCH:?}/task2-tsc.log" 2>&1; echo "RC=$?" >> "${SCRATC
 
 Expected：两个 RC 都是 0，Task 1 全部判据通过。
 
-- [ ] **Step 8：`planImport.test.ts` 的 330／347 不是空绿** —— 在它们的回调里临时打印 `JSON.stringify(result)`，
+- [x] **Step 8：`planImport.test.ts` 的 330／347 不是空绿** —— 在它们的回调里临时打印 `JSON.stringify(result)`，
 确认拒收理由分别是 `duplicate-task-id`／`duplicate-dependency`／`dangling-dependency`（或其对应的控制面码）与 contract schema，
 **而不是** `malformed`。量完删掉打印，`git diff` 确认该文件只剩 §A 的改写。
 
-- [ ] **Step 9：提交**
+- [x] **Step 9：提交**
 
 ```bash
 cd /Users/biran/code/skills/loop/Orca
@@ -381,7 +381,7 @@ Existing criteria rewritten under ruling 88 as named by the human on 2026-09-24.
 
 **Files:** 无（只在副本里改；主工作树零触碰）
 
-- [ ] **Step 1：建副本并跑出绿基线**
+- [x] **Step 1：建副本并跑出绿基线**
 
 ```bash
 C="${SCRATCH:?}/orca-mut"
@@ -393,7 +393,7 @@ cd "$C" && ./node_modules/.bin/vitest run tests/control/targetVersion.test.ts > 
 
 绿基线 RC 0 才往下走。
 
-- [ ] **Step 2：逐条变异**。每条：`shasum -a 256` 记前值 → python 整行锚点替换、断言命中 == 1 → 记后值（**相等当场停**）→
+- [x] **Step 2：逐条变异**。每条：`shasum -a 256` 记前值 → python 整行锚点替换、断言命中 == 1 → 记后值（**相等当场停**）→
 跑「期望红」列的文件 → 记红在哪几条 → `cat` 原文件还原 → 再 `shasum` 等于前值。
 
 | V | 文件 | 旧 → 新 | 跑 | 期望红（**且仅**） |
@@ -413,17 +413,17 @@ cd "$C" && ./node_modules/.bin/vitest run tests/control/targetVersion.test.ts > 
 ⚠️ V5 与 V8 的旧串相同（`:61` 与 `:112` 同形）⇒ **锚点必须带行号**：先按行号取那一行、断言它等于旧串、只改那一行。
 ⚠️ **表里的「期望红」是预言。** 实测与预言不一致 ⇒ 记实测，**不改判据迁就**；若某条变异零红，登记为「该分支无独占判据」并报告。
 
-- [ ] **Step 3：还原证明** —— 副本里 `/usr/bin/git diff | wc -c` 与 `/usr/bin/git diff --cached | wc -c` 都是 0；
+- [x] **Step 3：还原证明** —— 副本里 `/usr/bin/git diff | wc -c` 与 `/usr/bin/git diff --cached | wc -c` 都是 0；
 副本 `tests/control/targetVersion.test.ts` 与主树同名文件 `cmp` 相同。删副本前 `/bin/rm -f` 两个软链，再 `/bin/rm -rf "$C"`。
 
-- [ ] **Step 4：把变异表（前后 sha256 全 64 位、红集合、RC）写进台账** `.superpowers/sdd/2026-09-24-g1-seam-b/progress.md`，
+- [x] **Step 4：把变异表（前后 sha256 全 64 位、红集合、RC）写进台账** `.superpowers/sdd/2026-09-24-g1-seam-b/progress.md`，
 `/usr/bin/git add -f` **单独**加，单独提交（主题行 `docs(sdd): record the seam B mutation battery`）。
 
 ---
 
 ## Task 4：收口 —— 成功判据、Web spec 更正、handoff
 
-- [ ] **Step 1：写机械判定器**（放 scratchpad，**不入库**），先在**改动前**的树上看它红：
+- [x] **Step 1：写机械判定器**（放 scratchpad，**不入库**），先在**改动前**的树上看它红：
 
 ```python
 # check-seamb.py <vitest-json>
@@ -441,13 +441,13 @@ print("OK" if not problems else "\n".join(problems)); sys.exit(1 if problems els
 
 红证：拿本会话开头那份改动前的 `test.json`（`scratchpad/gates/test.json`）喂它，**必须退 1**（smoke 有 2 条红）。
 
-- [ ] **Step 2：跑成功判据**（spec §4.1，逐段单跑，每段各取 RC，全部重定向到文件再整份读回）：
+- [x] **Step 2：跑成功判据**（spec §4.1，逐段单跑，每段各取 RC，全部重定向到文件再整份读回）：
 `npm run typecheck`；`vitest run --reporter=json --outputFile=…` ＋ `python3 check-seamb.py …`；`npm run verify:control`；
 `verify:web-control`；`verify:web-control:consumer`；`verify:scheduler`；`verify:chain`；`npm run build --workspace web`；
 `verify:panel`；`npm run --ws check`；`check-claude-md-lines`；`check-hooks-path`；ledger validate（RC ∈ {0,2}）。
 可直接复用本会话 scratchpad 里的 `gates.sh` 形状。
 
-- [ ] **Step 3：Web spec 更正** —— `docs/superpowers/specs/2026-09-19-web-recoverable-control-design.md` **文末追加**：
+- [x] **Step 3：Web spec 更正** —— `docs/superpowers/specs/2026-09-19-web-recoverable-control-design.md` **文末追加**：
 
 ```markdown
 ## ERRATUM (G1 seam B, 2026-09-24)
@@ -462,11 +462,11 @@ Three statements above are superseded by `docs/superpowers/specs/2026-09-24-g1-s
   string is refused as `malformed`.
 ```
 
-- [ ] **Step 4：handoff 滚动** —— Orca `docs/handoff/handoff.md` §三（基线按实测重写、回绿定义兑现）、§四（缝 B 做完；
+- [x] **Step 4：handoff 滚动** —— Orca `docs/handoff/handoff.md` §三（基线按实测重写、回绿定义兑现）、§四（缝 B 做完；
 **下一件是 spec §1.0 的执行驱动缺口**，并改掉「accept 卡在缝 B」这句）、§4.2 表的缝 B 列；ccloop／ccmem 的「Orca 那条线」各一句。
 改完把 `git diff` 的 `-` 行单独抽出来逐条读（handoff §6.7）。
 
-- [ ] **Step 5：提交**（两笔：Web spec 更正一笔、handoff 一笔），收尾再跑一次三仓 `ls-remote`。
+- [x] **Step 5：提交**（两笔：Web spec 更正一笔、handoff 一笔），收尾再跑一次三仓 `ls-remote`。
 
 ---
 
