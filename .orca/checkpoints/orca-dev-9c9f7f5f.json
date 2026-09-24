@@ -1,0 +1,49 @@
+{
+  "v": 1,
+  "runId": "orca-dev-9c9f7f5f",
+  "runtime": "claude-code",
+  "sessionRef": "9c9f7f5f-625c-4222-8a9e-75ba7479f148",
+  "writtenAt": "2026-09-24T01:39:44.969Z",
+  "head": "2e6f47af90ed1798ba365495a954038e78aaba2c",
+  "level": {
+    "kind": "reading",
+    "level": 346732,
+    "windowTokens": 1000000,
+    "t1": 330000,
+    "t2": 450000,
+    "band": 1
+  },
+  "next": [
+    "Wait for Task 6 implementer report (consumer sync + per-segment gates), review it, then final whole-branch review, then update three handoffs"
+  ],
+  "open": [
+    "Task 6 in flight; Tasks 1-5 complete per ledger .superpowers/sdd/2026-09-24-g1-capability-vocabulary/progress.md",
+    "Task 6 implementer killed processes (traced to its own npm test; circumstantial)"
+  ],
+  "awaitingHuman": [
+    {
+      "kind": "irreversible",
+      "what": "push Orca main (local ahead of origin) and ccloop main (f9727a1 feat(control): answer the v2 eight-field capability vocabulary)"
+    },
+    {
+      "kind": "named-authorization",
+      "what": "seam B (targetVersion / planFile.ts) remains excluded; two webCcloopSmoke reds stay red"
+    }
+  ],
+  "measurements": [
+    {
+      "command": "/usr/bin/git -C /Users/biran/code/skills/loop/Orca log --oneline -12",
+      "exitCode": 0,
+      "commit": "2e6f47af90ed1798ba365495a954038e78aaba2c",
+      "observedAt": "2026-09-24T01:39:44.883Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-9c9f7f5f-A3Qht4/1.txt"
+    },
+    {
+      "command": "/usr/bin/git -C /Users/biran/code/skills/loop/ccloop log --oneline -3",
+      "exitCode": 0,
+      "commit": "2e6f47af90ed1798ba365495a954038e78aaba2c",
+      "observedAt": "2026-09-24T01:39:44.917Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-9c9f7f5f-A3Qht4/2.txt"
+    }
+  ]
+}
