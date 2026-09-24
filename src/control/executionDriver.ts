@@ -14,6 +14,7 @@ import { recordUsage } from "./usage.js";
 import { isWebWorkRun, readWorkClaimEnvelope, reserveProviderAttemptInTransaction } from "./webDispatch.js";
 import { readWorkspaceSetting, type WorkspaceMode } from "./workspaceSettings.js";
 import { commitAttempt, ensureWorkBranch, ensureWorkspace, sourceDirOf, workspacePathOf, type WorkspaceRoots } from "./workspace.js";
+import { stepD } from "./driverLanding.js";
 import { harvest } from "../scheduler/harvest.js";
 import { writeSetOf } from "../scheduler/writeSet.js";
 import type { AdmissionGate } from "./admissionGate.js";
@@ -384,6 +385,7 @@ export async function advance(deps: ExecutionDriverDeps, runId: string, context:
     case "start-pending": return run.drive?.prepared ? stepB(deps, runId) : stepA2(deps, runId);
     case "unknown": return stepBPrime(deps, runId);
     case "accepted": return stepC(deps, runId);
+    case "collected": return stepD(deps, runId);
     default: return false;
   }
 }
