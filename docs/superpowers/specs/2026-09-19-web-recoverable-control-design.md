@@ -1654,3 +1654,11 @@ Three statements above are superseded by `docs/superpowers/specs/2026-09-24-g1-s
 - "`targetVersion` is the source plan's nonempty opaque version string and is not numerically coerced" (section 4.2) no longer holds:
   the source plan writes a positive safe integer, the import stores it unchanged in both the work-item column and body, and a
   string is refused as `malformed`.
+
+## ERRATUM (execution driver, 2026-09-25)
+
+The statements below are superseded by `docs/superpowers/specs/2026-09-25-execution-driver-design.md` for the runs the execution driver owns: Web runs claimed for work (they carry a `work:<groupId>:<runId>` claim row) on a panel whose execution port is configured. The original text above is kept verbatim.
+
+- The background scheduler named at line 772 is the execution driver loop (`src/control/executionDriver.ts`). After a start wake is delivered it reserves the provider attempt, sends the frozen start envelope, collects, lands the result on `orca/<groupId>`, settles the run, and arms another start wake while ready work remains.
+- The request-bound proof line 778 requires before a strict provider call is honoured in this slice only by refusal: a strict group's run is blocked with `strict-proof-unimplemented` before any provider attempt; soft groups are driven without a proof.
+- Line 788 (a lost proof acknowledgement sets a global recovery blocker) is unchanged for the proof path (`recoverAttempt`). What no longer applies to driver-owned runs is startup recovery's rule that a run without a `start:<runId>` row blocks dispatch for every group: recovery leaves those runs to the driver, and a run the driver cannot advance is blocked on its own, with a named `blockedReason`, without setting `dispatchBlocked`.
