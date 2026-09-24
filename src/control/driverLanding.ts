@@ -166,6 +166,7 @@ async function beginReconcile(deps: ExecutionDriverDeps, runId: string, targetRe
   const record: ReconcileRecord = {
     copyPath: copy, old, conflictCommit: conflict.conflictCommit, conflictedPaths: conflict.conflictedPaths, otherTaskId: other.taskId,
     reconcileRunId: `reconcile-${runId}`, runsDir, contractPath: synthesized.path, tokenBudget, spawning: false, pid: null, outcome: null, attemptSha: null,
+    spawnSeq: 0,
   };
   return write(deps, () => {
     const current = readDriverRun(store, runId);
@@ -183,9 +184,15 @@ export type ReconcileAction = "collect" | "wait" | "orphan" | "spawn";
  * spec §5.3(6), deviation D17. A terminal loop state is collected; a recorded live process is waited
  * on; a spawn that was begun but whose process id never got recorded may still be running somewhere,
  * so it is blocked rather than run twice; anything else is (re)spawned.
+ *
+ * Final review I4: `collected` says the terminal loop state on disk was already collected and refused
+ * (its outcome is recorded) -- a person's retry then means run it again, so it is discarded and respawned.
  */
-export function reconcileNextAction(input: { loopStatus: string | null; spawning: boolean; pid: number | null; alive: boolean }): ReconcileAction {
-  if (input.loopStatus !== null && TERMINAL_OUTCOMES.includes(input.loopStatus)) return "collect";
+export function reconcileNextAction(input: { loopStatus: string | null; spawning: boolean; pid: number | null; alive: boolean; collected?: boolean }): ReconcileAction {
+  if (input.loopStatus !== null && TERMINAL_OUTCOMES.includes(input.loopStatus)) {
+    if (input.collected !== true) return "collect";
+    return input.pid !== null && input.alive ? "wait" : "spawn";
+  }
   if (input.pid !== null && input.alive) return "wait";
   if (input.spawning && input.pid === null) return "orphan";
   return "spawn";
@@ -210,7 +217,8 @@ function readLoopState(loopDir: string): { status: string | null; tokenBudgetRem
  * spec §5.3(5), deviation D18: `ccloop run` reports no usage events, so the reconciliation's token
  * spend is read off its loop state and booked on the group once per spawn, whatever the spawn ended
  * as (spec §5.3(5); fix round 1, I1), keeping the Web ledger mirror in step. `spawnKey` names the
- * spawn: its published attempt, or its process id when it published none.
+ * spawn by its persisted sequence number (final review I4), so a retry never books one twice and a new
+ * spawn is always booked.
  */
 export function recordReconcileUsage(deps: ExecutionDriverDeps, groupId: string, runId: string, spawnKey: string, tokens: number): void {
   write(deps, () => {
@@ -239,7 +247,9 @@ export async function stepR(deps: ExecutionDriverDeps, runId: string, context: D
   if (run.state !== "reconciling" || record == null) return false;
   const workdir = join(record.runsDir, record.reconcileRunId);
   const loop = readLoopState(loopDirOf(workdir, record.reconcileRunId));
-  const action = reconcileNextAction({ loopStatus: loop.status, spawning: record.spawning, pid: record.pid, alive: record.pid !== null && processAlive(record.pid) });
+  const action = reconcileNextAction({
+    loopStatus: loop.status, spawning: record.spawning, pid: record.pid, alive: record.pid !== null && processAlive(record.pid), collected: record.outcome !== null,
+  });
   if (action === "wait") return false;
   if (action === "orphan") { blockRun(deps, runId, "R", "reconcile-orphan-unknown"); return true; }
   if (action === "collect") return finishReconcile(deps, runId, record, loop, await latestAttemptSha(cloneDirOf(workdir), record.reconcileRunId));
@@ -251,7 +261,7 @@ export async function stepR(deps: ExecutionDriverDeps, runId: string, context: D
     current.drive = { ...current.drive!, reconcile: { ...current.drive!.reconcile!, ...patch } };
     saveDriverRun(store, current);
   });
-  setRecord({ spawning: true, pid: null });
+  setRecord({ spawning: true, pid: null, outcome: null, attemptSha: null, spawnSeq: (record.spawnSeq ?? 0) + 1 });
   const plan: PlanFile = { targetRepo: record.copyPath, ccloopBin: deps.ccloopBin, runsDir: record.runsDir, workBranch: `orca/${run.groupId}`, policy: "local-merge", ledgerMode: "out-of-repo", tasks: [] };
   const task: PlanTask = { taskId: record.reconcileRunId, contract: record.contractPath, dependsOn: [] };
   const running = runTask(plan, task, record.conflictCommit, record.reconcileRunId, {
@@ -287,7 +297,7 @@ async function finishReconcile(
   // Booked before any refusal: a failed or marker-leaving reconciliation spent its tokens too (fix
   // round 1, I1). No `tokenBudgetRemaining` means the spend is unknown, so the whole budget is booked (m4).
   const spent = loop.tokenBudgetRemaining === null ? record.tokenBudget : Math.max(0, record.tokenBudget - loop.tokenBudgetRemaining);
-  recordReconcileUsage(deps, run.groupId, runId, attemptSha ?? `pid-${record.pid ?? "unrecorded"}`, spent);
+  recordReconcileUsage(deps, run.groupId, runId, `spawn-${record.spawnSeq ?? 0}`, spent);
   if (loop.status !== "succeeded" || attemptSha === null) { blockRun(deps, runId, "R", `reconcile-terminal:${loop.status}`, outcomePatch); return true; }
   const workdir = join(record.runsDir, record.reconcileRunId);
   await git(record.copyPath, [...QUIET_GIT, "fetch", "--no-tags", cloneDirOf(workdir), `+${attemptSha}:refs/orca/reconciled/${runId}`]);

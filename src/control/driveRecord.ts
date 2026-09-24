@@ -31,6 +31,10 @@ export const reconcileRecordSchema = z.object({
   pid: safeInteger.positive().nullable(),
   outcome: z.string().min(1).nullable(),
   attemptSha: commitSchema.nullable(),
+  // Final review I4 (controller ruling, 2026-09-25): which spawn this is, 1 for the first, persisted before
+  // each spawn. The spend is booked under it (never under a pid, which a retry clears). Defaulted so a
+  // record from before this field existed still parses.
+  spawnSeq: safeInteger.default(0),
 }).strict();
 export type ReconcileRecord = z.infer<typeof reconcileRecordSchema>;
 
@@ -72,6 +76,10 @@ export const RESUME_STATE: Record<DriveStep, string> = {
  * Blocked at A2 means the workspace was never recorded as prepared, so A2 runs again; blocked at R
  * forgets the dead reconciliation process so the next round decides afresh. Answers whether it
  * changed anything, which is what `recovery-observed.resolved` reports.
+ *
+ * Final review I4: at R the collected `outcome` and the `spawnSeq` are kept. A reconciliation already
+ * collected and refused (an outcome is recorded) is then spawned again rather than collected again,
+ * and its earlier spawn is never booked a second time.
  */
 export function resumeBlockedDriverRun(store: ControlStore, runId: string): boolean {
   const row = store.db.prepare("SELECT body FROM runs WHERE id=?").get(runId);
@@ -83,7 +91,7 @@ export function resumeBlockedDriverRun(store: ControlStore, runId: string): bool
   run.drive = {
     ...run.drive, blockedAt: null, blockedReason: null, inspectUnknown: 0,
     prepared: step === "A2" ? false : run.drive.prepared,
-    reconcile: step === "R" && run.drive.reconcile !== null ? { ...run.drive.reconcile, spawning: false, pid: null, outcome: null, attemptSha: null } : run.drive.reconcile,
+    reconcile: step === "R" && run.drive.reconcile !== null ? { ...run.drive.reconcile, spawning: false, pid: null, attemptSha: null } : run.drive.reconcile,
   };
   store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify(run), runId);
   recordProjectionChange(store, [run.groupId]);

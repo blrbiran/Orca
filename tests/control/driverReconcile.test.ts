@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { writeFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
@@ -236,6 +236,58 @@ describe("a reconciliation whose landing swap fails without the tip moving (fina
   });
 });
 
+// Final review I4 (controller ruling, 2026-09-25): spec §2.3's only manual remedy, a run-scope recovery-retry, has
+// to act on a run blocked at R. When the reconciliation it holds was already collected and refused (failed, or
+// markers left), the retry discards that terminal state and runs it again. Each spawn is booked under its own
+// persisted sequence number, so a retry never books a spawn twice and a new spawn is always booked.
+describe("a person's retry of a run blocked at R (final review I4)", { timeout: 30_000 }, () => {
+  const bookings = (t: { h: { store: { db: { prepare(sql: string): { all(): unknown[] } } } } }) =>
+    (t.h.store.db.prepare("SELECT body FROM outbox WHERE kind='reconcile-usage' ORDER BY id").all() as Array<{ body: string }>).map((row) => JSON.parse(row.body).spawnKey);
+
+  it("re-runs a failed reconciliation: two spawns, two distinct bookings, never three", async () => {
+    const t = await twoConflicting({ files: { "shared.txt": "A\nB\n" }, status: "failed", spent: 7 }); try {
+      const driver = t.driver();
+      await untilDeadline(driver, () => t.ids.some((id) => t.body(id).state === "blocked"));
+      const runId = t.ids.find((id) => t.body(id).state === "blocked")!;
+      expect(t.body(runId).drive.blockedReason).toBe("reconcile-terminal:failed");
+      expect(bookings(t)).toHaveLength(1);
+      await writeFile(t.deps.adapterConfigPath, JSON.stringify({ status: "succeeded", spent: 7, holdMs: 0, files: { "shared.txt": "A\nB\n" } }));
+      const retried = await t.service.recoveryRetry(t.h.runCommand("recovery-retry", runId, { scope: "run", runId }));
+      expect(retried).toMatchObject({ result: { kind: "recovery-observed", resolved: true } });
+      await untilDeadline(driver, () => t.ids.every((id) => LANDED.includes(t.body(id).state)));
+      await driver.round(); await driver.round();
+      expect(t.spawns()).toHaveLength(2);
+      expect(t.body(runId).drive.reconcile).toMatchObject({ outcome: "succeeded" });
+      expect(git(t.repo, "show", "refs/heads/orca/g:shared.txt")).toBe("A\nB");
+      const keys = bookings(t);
+      expect(keys).toHaveLength(2);
+      expect(new Set(keys).size).toBe(2);
+      // 10 + 10 for the two tasks, 7 for each of the two reconciliations.
+      expect(readWebGroup(t.h.store, "g").used.tokens).toBe(34);
+    } finally { await t.h.dispose(); }
+  });
+
+  it("retries a collected reconciliation whose landing failed without running it again or booking it twice", async () => {
+    const t = await twoConflicting({ files: { "shared.txt": "A\nB\n" }, holdMs: 800 }); try {
+      const driver = t.driver();
+      await untilDeadline(driver, () => t.ids.some((id) => t.body(id).state === "reconciling"));
+      const runId = t.ids.find((id) => t.body(id).state === "reconciling")!;
+      const lock = `${t.repo}/.git/refs/heads/orca/g.lock`;
+      writeFileSync(lock, `${git(t.repo, "rev-parse", "refs/heads/orca/g")}\n`);
+      await untilDeadline(driver, () => t.body(runId).state === "blocked");
+      expect(t.body(runId).drive.blockedAt).toBe("R");
+      rmSync(lock);
+      const retried = await t.service.recoveryRetry(t.h.runCommand("recovery-retry", runId, { scope: "run", runId }));
+      expect(retried).toMatchObject({ result: { kind: "recovery-observed", resolved: true } });
+      await untilDeadline(driver, () => LANDED.includes(t.body(runId).state));
+      await driver.round(); await driver.round();
+      expect(t.spawns()).toHaveLength(1);
+      expect(bookings(t)).toHaveLength(1);
+      expect(readWebGroup(t.h.store, "g").used.tokens).toBe(27);
+    } finally { await t.h.dispose(); }
+  });
+});
+
 describe("what a restarted driver does with a reconciliation it finds (spec §5.3(6), deviation D17)", () => {
   it.each([
     [{ loopStatus: "succeeded", spawning: true, pid: 5, alive: true }, "collect"],
@@ -244,6 +296,18 @@ describe("what a restarted driver does with a reconciliation it finds (spec §5.
     [{ loopStatus: null, spawning: true, pid: null, alive: false }, "orphan"],
     [{ loopStatus: null, spawning: true, pid: 5, alive: false }, "spawn"],
     [{ loopStatus: "planning", spawning: false, pid: null, alive: false }, "spawn"],
+  ] as const)("%o ⇒ %s", (input, action) => {
+    expect(reconcileNextAction(input)).toBe(action);
+  });
+});
+
+// Final review I4: a terminal loop state already collected and refused is run again once the process is gone.
+describe("what the driver does with a reconciliation already collected and refused (final review I4)", () => {
+  it.each([
+    [{ loopStatus: "failed", spawning: false, pid: null, alive: false, collected: true }, "spawn"],
+    [{ loopStatus: "succeeded", spawning: false, pid: 5, alive: false, collected: true }, "spawn"],
+    [{ loopStatus: "failed", spawning: true, pid: 5, alive: true, collected: true }, "wait"],
+    [{ loopStatus: "failed", spawning: false, pid: null, alive: false, collected: false }, "collect"],
   ] as const)("%o ⇒ %s", (input, action) => {
     expect(reconcileNextAction(input)).toBe(action);
   });
