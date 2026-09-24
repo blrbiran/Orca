@@ -57,9 +57,12 @@ async function setup() {
     defaultEstimatorProfileId: "estimator", defaultEstimateMode: "soft",
     ...over,
   });
+  // Human authorization 2026-09-24, G1 seam A Task 6 (capability vocabulary sync): the mock now
+  // answers the v2 vocabulary, spread from the same declared capabilities the profile snapshot
+  // carries, so the peer's raw answer stays schema-valid.
   const capablePort = {
     probeProfileCapabilities: async () => ({ ...snapshot().profile.capabilities }),
-    capabilities: async () => ({ protocol: 1, durableAccept: true, ownershipIsolation: true, evidenceRetention: true, usageObservation: "phase-end", budgetEnforcement: "soft", requestBoundEvidence: null }),
+    capabilities: async () => ({ protocol: 2 as const, ...snapshot().profile.capabilities }),
     readEvidence: async () => Buffer.alloc(0), accept: async () => ({ kind: "unknown" }), inspect: async () => ({ kind: "unknown" }),
     requestHandoff: async () => ({ kind: "unknown" }), collect: async () => ({ events: [], candidate: null, terminal: null }),
   } as unknown as ExecutionPort;

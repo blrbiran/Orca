@@ -59,14 +59,19 @@ function port(probe: ProfileCapabilityProbe | (() => Promise<ProfileCapabilityPr
   const result = typeof probe === "function" ? probe : async () => probe;
   return {
     probeProfileCapabilities: result,
+    // Human authorization 2026-09-24, G1 seam A Task 6 (capability vocabulary sync): `durableAccept`/
+    // `ownershipIsolation`/`evidenceRetention`/`requestBoundEvidence` are retired v1 fields; this
+    // mock's `capabilities()` is unused by this suite's assertions (only `probeProfileCapabilities`
+    // is exercised), so it is rewritten as a plain valid v2 answer, whole swap not a weakening.
     capabilities: async () => ({
-      protocol: 1,
-      durableAccept: true,
-      ownershipIsolation: true,
-      evidenceRetention: true,
+      protocol: 2,
       usageObservation: "realtime",
       budgetEnforcement: "bounded",
-      requestBoundEvidence: "request-bound-v1",
+      contextObservation: "unavailable",
+      handoffControl: "durable",
+      handoffExecution: "mechanical-in-run-v1",
+      contextWindowTokens: null,
+      requestBoundProof: null,
     }),
     readEvidence: async () => Buffer.alloc(0),
     accept: async () => ({ kind: "unknown" }),
@@ -122,7 +127,9 @@ describe("trusted execution profiles", () => {
     class ReceiverPort implements ExecutionPort {
       #accepts = 0;
       probeProfileCapabilities = async () => snapshot().profile.capabilities;
-      capabilities = async () => ({ protocol: 1 as const, durableAccept: true, ownershipIsolation: true, evidenceRetention: true, usageObservation: "realtime" as const, budgetEnforcement: "bounded" as const, requestBoundEvidence: "request-bound-v1" });
+      // Human authorization 2026-09-24, G1 seam A Task 6 (capability vocabulary sync): rewritten to
+      // the v2 vocabulary; unused by this suite's assertions, same treatment as `port()` above.
+      capabilities = async () => ({ protocol: 2 as const, ...snapshot().profile.capabilities });
       readEvidence = async () => Buffer.alloc(0);
       async accept() { this.#accepts += 1; return { kind: "accepted" as const, executionId: `receiver-${this.#accepts}`, configHash: hash("a") }; }
       inspect = async () => ({ kind: "unknown" as const });

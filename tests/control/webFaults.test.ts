@@ -268,7 +268,10 @@ describe("commit boundaries (task 10 step 3)", () => {
     try {
       expect(count(h.store, "runs", "active=1")).toBe(1);
       const order: string[] = [];
-      const port = { capabilities: async () => ({ protocol: 1, durableAccept: true, ownershipIsolation: true, evidenceRetention: true, usageObservation: "realtime", budgetEnforcement: "bounded", requestBoundEvidence: "proof" }), inspect: async () => ({ kind: "unknown" as const }), collect: async () => ({ events: [], candidate: null, terminal: null }) } as never;
+      // Human authorization 2026-09-24, G1 seam A Task 6 (capability vocabulary sync): the mock now
+      // answers the v2 vocabulary, spread from the same declared capabilities `claimed()`'s default
+      // snapshot carries (the group here was confirmed strict), so it stays strict-mode-safe.
+      const port = { capabilities: async () => ({ protocol: 2 as const, ...profileSnapshot().profile.capabilities }), inspect: async () => ({ kind: "unknown" as const }), collect: async () => ({ events: [], candidate: null, terminal: null }) } as never;
       await runControlPanelStartup({
         recover: async () => { order.push("recover"); await recoverControl(h.store, port); },
         listen: async () => { order.push("listen"); },

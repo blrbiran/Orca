@@ -90,9 +90,12 @@ async function setup(): Promise<Harness> {
     ],
   }));
   const snapshot = profile();
+  // Human authorization 2026-09-24, G1 seam A Task 6 (capability vocabulary sync): the mock now
+  // answers the v2 vocabulary, spread from the same declared capabilities the profile snapshot
+  // carries, so the peer's raw answer stays schema-valid and strict-mode-safe.
   const port: ExecutionPort = {
     probeProfileCapabilities: async () => snapshot.profile.capabilities,
-    capabilities: async () => ({ protocol: 1, durableAccept: true, ownershipIsolation: true, evidenceRetention: true, usageObservation: "realtime", budgetEnforcement: "bounded", requestBoundEvidence: "proof" }),
+    capabilities: async () => ({ protocol: 2 as const, ...snapshot.profile.capabilities }),
     readEvidence: async () => Buffer.alloc(0), accept: async () => ({ kind: "unknown" }), inspect: async () => ({ kind: "unknown" }),
     requestHandoff: async (_input, request) => ({ kind: "unknown", requestId: request.requestId }), collect: async () => ({ events: [], candidate: null, terminal: null }),
   };

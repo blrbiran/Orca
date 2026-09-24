@@ -44,9 +44,12 @@ async function setup() {
       adapterImplementationHash: hash("c"), adapterProtocolVersion: "1", tokenizerArtifactHashes: [], secretValueHashes: [],
     },
   };
+  // Human authorization 2026-09-24, G1 seam A Task 6 (capability vocabulary sync): the mock now
+  // answers the v2 vocabulary, spread from the same declared capabilities the profile snapshot
+  // carries, so the peer's raw answer stays schema-valid.
   const port = {
     probeProfileCapabilities: async () => ({ ...snapshot.profile.capabilities }),
-    capabilities: async () => ({ protocol: 1 as const, durableAccept: true, ownershipIsolation: true, evidenceRetention: true, usageObservation: "phase-end" as const, budgetEnforcement: "soft" as const, requestBoundEvidence: null }),
+    capabilities: async () => ({ protocol: 2 as const, ...snapshot.profile.capabilities }),
     readEvidence: async () => Buffer.alloc(0), accept: async () => ({ kind: "unknown" as const }), inspect: async () => ({ kind: "unknown" as const }),
     requestHandoff: async (_input: never, request: {requestId:string}) => ({ kind: "unknown" as const, requestId: request.requestId }),
     collect: async () => ({ events: [], candidate: null, terminal: null }),

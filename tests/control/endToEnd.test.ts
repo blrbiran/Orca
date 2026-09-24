@@ -67,10 +67,15 @@ it("blocks recovery of a missing current checkpoint instead of selecting an olde
   expect(result.blockedRunIds).toContain(h.claim.runId);expect(getRun(h.store,h.claim.runId).checkpointId).toBe("cp2");expect(getGroup(h.store,"g1").used).toEqual(before);
  }finally{await h.dispose();}
 },30000);
+// Human authorization (2026-09-24, ruling-88): rewritten for the v2 wire vocabulary (G1 seam A
+// Task 6) -- `durableAccept` is a retired field that no longer exists on `Capabilities`. The
+// guarantee it carried (a strict-typed field being malformed rather than merely absent) now lives
+// on `handoffControl`, so the mutation moves there: a boolean where the schema requires an enum
+// string is still a malformed peer capability, caught the same way by `capabilitiesSchema.safeParse`.
 it("rejects malformed peer capability booleans",async()=>{
  const {ControlService}=await import("../../src/control/service.js");const {openTestStore,seedBudgetCase,caps}=await import("./fixtures/store.js");
  const h=await openTestStore();try{seedBudgetCase(h.store);
-  const service=new ControlService(h.store,{capabilities:async()=>({...caps,durableAccept:"false"})} as never);
+  const service=new ControlService(h.store,{capabilities:async()=>({...caps,handoffControl:false})} as never);
   await expect(service.claim("g1","T1")).rejects.toThrow();
   expect(h.store.db.prepare("SELECT count(*) AS n FROM runs").get()?.n).toBe(0);
  }finally{await h.dispose();}
