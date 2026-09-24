@@ -120,7 +120,11 @@ export async function otherSideOfWeb(store: ControlStore, targetRepo: string, ru
     try {
       await git(targetRepo, [...QUIET_GIT, "merge-base", "--is-ancestor", landed, run.drive!.base!]);
       continue;
-    } catch { /* landed after this run's base: a candidate */ }
+    } catch (error) {
+      // Exit 1 is git's "not an ancestor": landed after this run's base, a candidate. Anything else
+      // (128: a missing object, a broken repository) is an error, not an answer (fix round 1, m7).
+      if ((error as { code?: unknown }).code !== 1) throw error;
+    }
     const changed = await netChangeSet(targetRepo, other.drive.base, `${landed}^2`);
     if (changed.some((path) => conflicted.has(path))) touched.add(other.taskId);
   }
@@ -203,12 +207,13 @@ function readLoopState(loopDir: string): { status: string | null; tokenBudgetRem
 
 /**
  * spec §5.3(5), deviation D18: `ccloop run` reports no usage events, so the reconciliation's token
- * spend is read off its loop state and booked on the group once per reconciled attempt, keeping the
- * Web ledger mirror in step.
+ * spend is read off its loop state and booked on the group once per spawn, whatever the spawn ended
+ * as (spec §5.3(5); fix round 1, I1), keeping the Web ledger mirror in step. `spawnKey` names the
+ * spawn: its published attempt, or its process id when it published none.
  */
-export function recordReconcileUsage(deps: ExecutionDriverDeps, groupId: string, runId: string, attemptSha: string, tokens: number): void {
+export function recordReconcileUsage(deps: ExecutionDriverDeps, groupId: string, runId: string, spawnKey: string, tokens: number): void {
   write(deps, () => {
-    const id = `reconcile-usage:${runId}:${attemptSha}`;
+    const id = `reconcile-usage:${runId}:${spawnKey}`;
     if (deps.store.db.prepare("SELECT id FROM outbox WHERE id=?").get(id)) return;
     const group = readGroup(deps.store, groupId);
     group.used = add(group.used, { tokens, activeMs: 0, attempts: 1, sessions: 1 });
@@ -216,7 +221,7 @@ export function recordReconcileUsage(deps: ExecutionDriverDeps, groupId: string,
     group.budgetVersion += 1;
     saveGroup(deps.store, group);
     deps.store.db.prepare("INSERT INTO outbox(id,kind,body,delivered) VALUES (?,'reconcile-usage',?,1)")
-      .run(id, canonicalBytes({ groupId, runId, attemptSha, tokens }).toString("utf8"));
+      .run(id, canonicalBytes({ groupId, runId, spawnKey, tokens }).toString("utf8"));
   });
 }
 
@@ -250,7 +255,12 @@ export async function stepR(deps: ExecutionDriverDeps, runId: string, context: D
   const task: PlanTask = { taskId: record.reconcileRunId, contract: record.contractPath, dependsOn: [] };
   const running = runTask(plan, task, record.conflictCommit, record.reconcileRunId, {
     adapter: "codex", adapterConfig: deps.adapterConfigPath,
-    onSpawn: (pid) => { if (!context.stopped) setRecord({ pid }); },
+    // Recorded even after stop(): the child is ours, and a restart can only wait on a pid it can read
+    // (fix round 1, m2). A refused write (a draining panel) is logged; the restart then sees an orphan.
+    onSpawn: (pid) => {
+      try { setRecord({ pid }); }
+      catch (error) { process.stderr.write(`orca-driver: ${runId}: reconciliation pid ${pid} not recorded: ${describeError(error)}\n`); }
+    },
   }).then(
     () => undefined,
     (error: unknown) => {
@@ -270,12 +280,15 @@ async function finishReconcile(
   const { store } = deps;
   const run = readDriverRun(store, runId);
   const outcomePatch = { reconcile: { ...record, outcome: loop.status } };
+  // Booked before any refusal: a failed or marker-leaving reconciliation spent its tokens too (fix
+  // round 1, I1). No `tokenBudgetRemaining` means the spend is unknown, so the whole budget is booked (m4).
+  const spent = loop.tokenBudgetRemaining === null ? record.tokenBudget : Math.max(0, record.tokenBudget - loop.tokenBudgetRemaining);
+  recordReconcileUsage(deps, run.groupId, runId, attemptSha ?? `pid-${record.pid ?? "unrecorded"}`, spent);
   if (loop.status !== "succeeded" || attemptSha === null) { blockRun(deps, runId, "R", `reconcile-terminal:${loop.status}`, outcomePatch); return true; }
   const workdir = join(record.runsDir, record.reconcileRunId);
   await git(record.copyPath, [...QUIET_GIT, "fetch", "--no-tags", cloneDirOf(workdir), `+${attemptSha}:refs/orca/reconciled/${runId}`]);
   const remaining = await markersRemaining(record.copyPath, attemptSha, record.conflictedPaths);
   if (remaining.length > 0) { blockRun(deps, runId, "R", `markers-remaining:${remaining.join(",")}`, outcomePatch); return true; }
-  recordReconcileUsage(deps, run.groupId, runId, attemptSha, Math.max(0, record.tokenBudget - (loop.tokenBudgetRemaining ?? record.tokenBudget)));
   let targetRepo: string;
   try { targetRepo = deps.resolveRepository(groupRepoId(store, run.groupId)); }
   catch { blockRun(deps, runId, "R", "repository-path"); return true; }
