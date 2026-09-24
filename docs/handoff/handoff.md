@@ -70,7 +70,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 **Orca 有十个子系统**（行数为 2026-09-22 现测，命令
 `for d in …; do cat src/$d/*.ts | wc -l; done`，观测锚点＝主题行
-`docs(handoff): roll the entry point onto the six rulings and the order they land in` 那一笔）：
+`docs(handoff): roll the entry point onto the six rulings and the order they land in` 那一笔；**G1 缝 A 之后未重测**）：
 
 `control` 7280 / `scheduler` 4482 / `panel` 3801 / `corrections` 1529 / `metrics` 1266 /
 `chain` 1208 / `ledger` 709 / `gate` 551 / `checkpoint` 523 / `level` 346。
@@ -80,75 +80,90 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 出厂 `orca panel` 会开控制 store、挂 `/api/control`、listen 前跑完 recovery、自带 wake pump、
 SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行为与挂载前逐字节相同。
 
-**还不能跑的**：*** **Web 派活到真 ccloop 打不通。** *** 一次 Web claim 必得
-`control-capability-unsupported` —— ccloop 的 `control capabilities` 只答七个字段，
-`CapabilityViewV1` 要的 `contextObservation`／`handoffControl`／`handoffExecution`／
-`contextWindowTokens`／`requestBoundProof` **一个都没有**（§八.4）。
+*** **G1 缝 A 做完了（2026-09-24）**：真 ccloop 的 `capabilities` 答 v2 八字段，Orca 直通对端应答，
+`control-capability-unsupported` 那道缺口关了。 *** 细节与诚实的验收表述见 §四。
 
-**现行基线**（2026-09-22 现测，只抄工具报数）：
+**还不能跑的**：*** **Web 派活到真 ccloop 仍然开不出一次 ccloop 执行。** *** soft 组现在能在 **Orca 台账里记下一条
+`starting` run**，但 ccloop 那一侧的 `accept` 还没发生过 —— 下一步卡在**缝 B**（`targetVersion` 类型分叉，
+`src/control/startEnvelope.ts:65` 抛 `start-envelope-conflict:run:targetVersion`），**人裁排除，没做**。
+
+**现行基线**（只抄工具报数，env ＝ `ORCA_CCLOOP_BIN`＋`ORCA_CCLOOP_ADAPTER_CONFIG`，见 §8.2；
+**观测锚点** ＝ 主题行 `fix(control): give the schema-line criterion in endToEnd a real red, correct false capability-migration comments`
+那一笔，其上只多一笔纯注释提交；门逐段单跑，因为 `npm run verify` 的 `&&` 链会停在 `npm test`）：
 
 | 门 | RC | 结果 |
 |---|---|---|
-| `npm test` | **1** | 180 文件通过 / 1 skip（182）；1611 通过 / **2 失败** / 5 skip（1618） |
-| `verify:control` | **1** | 42 文件通过 / 1 失败（43）；430 通过 / **2 失败**（432），0 skipped |
-| `verify:web-control:consumer` | **1** | **2 失败** / 2 通过（4），0 skipped |
-| `typecheck`／Web 门／`verify:panel` | **0** | Web 门 14 文件 70 测试；panel `PASS 0`–`PASS 14` |
+| `typecheck` | **0** | 0 错误 |
+| `npm test` | **1** | 182/183 文件；1620 通过 / **2 失败**（1622） |
+| `verify:control` | **1** | 43/44 文件；434 通过 / **2 失败**（436），**0 skipped** |
+| `verify:web-control:consumer` | **1** | **2 失败** / 3 通过（5） |
+| `verify:web-control` | **1** | 16/17 文件；189 通过 / **2 失败**（191） |
+| `verify:chain` | **1** | 第二段重跑全套 ⇒ 同一对红 |
+| `verify:scheduler`／`verify:panel`／`--ws check`／web build／`check-claude-md-lines`／`check-hooks-path` | **0** | scheduler 51/51、167/167；panel `PASS` 15/15；ws 14/14、70/70 |
+| `ledger validate` | **2** | `verify` 脚本本身容忍 2（历史 bound 行） |
 
-⚠️ *** **2026-09-24 复现**（重建环境后现测）：`verify:control` ＝ RC1 / 42 文件通过 / 1 失败（43）/
-430 通过 / 2 失败（432）/ **0 skipped**；消费者门 ＝ RC1 / 2 失败 / 2 通过（4）。**与上表逐格一致。**
-⚠️ *** **但【不要】把「432 通过」当成 G1 的回绿目标** *** —— 那两条失败的根因在**缝 B**，
-而缝 B 被人裁排除在 G1 外（§4.1）。**它们在 G1 内红着是预期的。**
+*** **所有红门的失败【全部】是同一对判据** ***：`tests/control/webCcloopSmoke.test.ts` >
+`the frozen dispatch envelope reaches a real process (task 10 step 4)` 下的两条，报
+`start-envelope-conflict:run:targetVersion`。**它们属于缝 B，在 G1 缝 A 内红着是预期的，改绿即越界。**
 
-*** **三道红门的失败【全部】是同一对判据** ***：`tests/control/webCcloopSmoke.test.ts` 的两条，
-报 `start-envelope-conflict:run:targetVersion`，抛点 `src/control/startEnvelope.ts:65`。**不是回归。**
-
-⚠️ *** **别只看 RC。** *** 这几道门在 `targetVersion` 定型之前**必然 RC1**，RC1 本身不携带信息。
-**判别式是「除这两条之外有没有新的红」。** 回绿的定义：
-`verify:control` ＝ RC0 / 43 文件 / 432 通过 / 0 skipped；消费者门 ＝ RC0 / 4 通过 / 0 失败。
-基线台账与未过滤日志：`.superpowers/sdd/2026-09-22-control-gates-baseline/`。
-
----
+⚠️ *** **别只看 RC。** *** 这几道门在缝 B 定型之前**必然 RC1**，RC1 本身不携带信息。
+**判别式是「除这两条之外有没有新的红」。** 缝 B 做完后的回绿定义：`verify:control` ＝ RC0 / 44 文件 / 436 通过 / 0 skipped。
+本轮全部门日志与裁定：台账 `.superpowers/sdd/2026-09-24-g1-capability-vocabulary/progress.md`；
+上一版（G1 之前）基线台账：`.superpowers/sdd/2026-09-22-control-gates-baseline/`。
 
 ## 四、⛔ 下一件事
 
-*** **G1 的 spec 与实施计划都已写好并提交（ccloop 仓，未 push）。下一件事就是【执行那份计划】。** ***
+*** **G1 缝 A 已做完。下一件事【全部归人】**，按顺序： ***
 
-- spec：ccloop `docs/superpowers/specs/2026-09-24-g1-control-wire-contract-design.md`
-- 计划：ccloop `docs/superpowers/plans/2026-09-24-g1-capability-vocabulary.md`（6 Task / 42 Step）
-- 执行方式：`superpowers:subagent-driven-development`。**按历轮画像约 18–30 席，做不进一个会话。**
+1. 🔴 *** **先推 ccloop，再推 Orca。** *** （下面是一条**会过期的现测**，本文照例不记发布状态 —— 接手先跑 §二 的 `ls-remote`，三个仓各一次。）2026-09-24 现测：Orca 远端已在会话中途被推到 Task 5 那一笔
+   （主题行 `fix(control): correct false human-authorization attribution on Task 5 criterion`），
+   那一笔**要求 `protocol: 2`**，而 ccloop 远端仍停在答 `protocol: 1` 的那一笔 ⇒ **已发布的两个 main 此刻对不上线**，
+   且已发布的 Orca main 在 typecheck 与 `verify:control` 上都是红的（中间态）。
+   **本会话没有任何一席执行过 `git push`**（逐个子代理 transcript 扫过）⇒ 推送来自会话外（人，或 §九 那个 `post-commit` 钩子）。
+2. **缝 B 要不要开、`targetVersion` 拍成什么** —— 下游是 `src/scheduler/planFile.ts`（人写的 plan 文件格式），人裁排除过。
+3. 缝 B 之后才轮到：生产 execution profile 快照（§9）、`capabilities` 计算化（人裁「分两步」的第二步）。
 
-### 4.1 🔴 本轮最值钱的一条：**G1 是两条独立的缝，不是一条链**
+### 4.1 G1 缝 A 做了什么（**不要重做**）
 
-本文此前（以及 ccloop／ccmem 的 handoff）都把 G1 写成
-「定契约 → Orca 跟随 → 两条红判据回绿 → Web 派活开出 run」。*** **现测表明这条因果链不存在。** ***
+- spec／计划：ccloop `docs/superpowers/{specs,plans}/2026-09-24-g1-*`（**执行中没改**，全部偏离记在台账的裁定行里）。
+- **ccloop 一笔**：`feat(control): answer the v2 eight-field capability vocabulary`。
+- **Orca 按 Task 顺序**（按主题行找）：`refactor(control): collapse capabilities schema into the v2 view schema` →
+  `refactor(control): rewrite assertCapabilities for the v2 wire vocabulary` →
+  `feat(control): pass ccloop's own v2 capability answer through the port` ＋ ERRATUM 修正一笔 →
+  `test(control): feed real ccloop capability answer through the web smoke test` ＋ 两笔修复 →
+  `test(control): sync the last v1 capability-vocabulary consumers to v2` → 整支评审修复两笔。
+- ⚠️ **`capabilitiesSchema` 住在 `src/control/webProtocol.ts`，不是 spec §7.1 写的 `schema.ts`** ——
+  `webProtocol.ts` 在顶层 import `schema.ts`，反过来就是运行期 ESM 环（TDZ），`typecheck` 看不出来。
+- `durableAccept`／`ownershipIsolation`／`evidenceRetention` **是删掉的，不是迁到别的字段**：ccloop 永远答 `true`，
+  旧守卫那一行在**所有预算模式**下都查它们，删了之后**没有东西替代**。`requestBoundEvidence` → `requestBoundProof` 才是真改名。
 
-| | **缝 A：capability 词汇表** | **缝 B：`targetVersion` 类型分叉** |
+🔴 *** **诚实的验收表述（整支评审席定稿，控制器复核）**： ***
+ccloop 该笔的真实应答，经 Orca 生产代码 `probeProfileCapabilities()` 直通，能让一个**测试声明的 profile** 上的 soft Web 组排上；
+`deliverScheduledStart` 在 **Orca 台账**里记下一条 `starting` run。**ccloop 的 `accept` 没有发生**（那一步是缝 B）；strict 组被拒。
+变异 M7／M8（ccloop 答 `handoffControl:"phase-end"`／`handoffExecution:null`）让冒烟测试变红，但**红在应答字面量与调度时那一次守卫**，
+**不是**终点那条 `claimed`；投递时那一次守卫**单独**承重，由只加不改的判据
+`blocks only at delivery when the observation degrades after a clean schedule` 加变异 X3 证明（合成退化）。
+
+### 4.2 🔴 G1 是两条独立的缝，不是一条链（**结论未变，仍然最值钱**）
+
+| | **缝 A：capability 词汇表**（✅ 做完） | **缝 B：`targetVersion` 类型分叉**（未做） |
 |---|---|---|
 | 症状 | 真 ccloop 答不满 ⇒ Web 派活被拒 | `webCcloopSmoke` 两条判据红 |
 | 拒点 | `src/control/webDispatch.ts` 的 `probeBlocksDispatch` | `src/control/startEnvelope.ts` 的 `safeInteger` |
 | 根因 | ccloop 的 `capabilities` 不答五个字段 | plan 文件的 `targetVersion` 是**字符串** |
 
-**决定性证据**：`tests/control/webCcloopSmoke.test.ts` 的 `codexProbe()` 自己的注释写着
-「Only the three fields the adapter answers come from the subprocess; the rest are what a
-deployment declares」—— `handoffControl`／`handoffExecution`／`contextWindowTokens`
-**是从 declared profile 借的**。⇒ *** **该测试故意绕过了缝 A，它的红与 capability 缺口无关。** ***
+当时的决定性证据：`webCcloopSmoke` 的 `codexProbe()` 把对端答不出的字段从 declared profile **借**过来，故意绕过了缝 A（该函数本轮已删）。
+⇒ *** **修好 A，那两条判据仍然红** *** —— 本轮实测兑现。
 
-⇒ *** **修好 A，那两条判据仍然红；修好 B，Web 派活仍然被拒。** ***
-⚠️ **缝 B 的下游是 `src/scheduler/planFile.ts`（人写的 plan 文件格式），人裁已把它排除在 G1 外**
-⇒ *** **那两条红判据在 G1 内【结构上不可能回绿】。把它们列进 G1 的验收就是设一个达不成的目标。** ***
+### 4.3 已由现测定掉的（**不要重新讨论**）
 
-### 4.2 已由现测定掉的（**不要重新讨论**）
+- **`targetVersion` ＝ 安全整数** —— 承认 ccloop 已经拍了的（`protocol.ts`／`handoff.ts`／`command.ts` 全是 `safeInteger`／`number`）；
+  收敛动作属于缝 B。
+- **`handoffControl` = `"durable"`**（ccloop 的 handoff 两态 `latched`/`complete`、落盘、带 crash point）；
+  **`handoffExecution` = `"mechanical-in-run-v1"`**（这一格推翻过一次：`handoff.ts` 构造 packet 那段全是 runState 的三元表达式、零模型调用，经过在 spec §10）。
+- **ccloop 侧改动落在 `main`，不是 `codex/codex-adapter-0919`**（那个分支落后 10142 行）。
 
-- **`targetVersion` ＝ 安全整数** —— 不是新决定，是**承认 ccloop 已经拍了的**：
-  ccloop `src/control/protocol.ts`／`handoff.ts`／`command.ts` 的类型声明处逐一点名全是
-  `safeInteger`／`number`。但**收敛动作属于缝 B，本轮不做**。
-- **`handoffControl` = `"durable"`**（ccloop 的 handoff 两态 `latched`/`complete`、落盘、带 crash point）。
-- **`handoffExecution` = `"mechanical-in-run-v1"`** —— ⚠️ 这一格**推翻过一次**：初版按
-  「Codex adapter 能跑模型」推成 `model-assisted-v1`，实测 `handoff.ts` 构造 packet 的那段
-  **全是 runState 的三元表达式、零模型调用**。
-- **ccloop 侧改动落在 `main`，不是 `codex/codex-adapter-0919`** —— 见 §8.2。
-
-**明确暂时不碰**：`goal.md` 的 G5、§3.3 loop 方案层、§3.4 Web UI 扩展；以及**缝 B**。
+**明确暂时不碰**：`goal.md` 的 G5、§3.3 loop 方案层、§3.4 Web UI 扩展；以及**缝 B**（等人开口）。
 
 ## 五、已经拍板过的事（**不要重开**）
 
@@ -428,6 +443,30 @@ ccloop 的 I-2 里，spec 第一版把「渲染成 `JSON.stringify`」贴在那�
   ⚠️ **但它的三个计数里有两个不准**（20 vs 实测 18、3 vs 实测 5）
   ⇒ **铁律「不许照抄评审员的数字」本轮又兑现一次。**
 
+
+### 6.9 本轮（2026-09-24，G1 缝 A 实施轮）新栽的
+
+- 🔴 *** **「红在哪条断言」本轮又栽两次** *** —— ccloop M1／M2 红在 `result.code` 而非 `toEqual`；Orca 终点判据 `claimed`
+  被**同一个** `probeBlocksDispatch` 在更早的调度时一步拦下（实施席还把它错归到 `service.ts:89`，评审席用 X2 量出那条路根本不经过它）。
+  ⇒ *** **要证某条断言承重，就造一个只有它能接住的变异；造不出来，就补一条只加不改的判据去隔离它。** ***
+- 🔴 *** **「只改词汇迫使的」改写也能把判据改弱。** *** 一条畸形能力判据从 `durableAccept:"false"` 映射成 `handoffControl:false`，
+  而后者也被后面的守卫子句拦 ⇒ `budget.ts` 的 schema 那一行**删了零红**。
+  ⇒ **改写判据时问：原来那格是不是【唯一】被某一行拦下的？映射后还是吗？**
+- 🔴 *** **子代理会替人署名。** *** 一席把控制器裁定加的判据注释成「Human authorization」。
+  另一席在注释里把三个被删的布尔写成「迁到了 `handoffControl`」。⇒ **收货时逐条核归属与因果措辞。**
+- 🔴 *** **子代理会杀进程、会试 amend。** *** 一席为解超时 `kill` 了 10 个进程，harness 报了 SECURITY WARNING；
+  追溯是它自己那次 `npm test` 的孤儿 worker，但只有强旁证。另一席在派发写明「不许 amend」之后仍试图 amend，被 harness 拦下，
+  留下一笔**没有归属行**的提交。⇒ **派发里写死「不许杀非己进程」，并在收货时扫它的 transcript。**
+- 🔴 *** **`verify:control` 必须配 fake codex 的 adapter config。** *** 指向真 `codex` 会让
+  `ccloopProtocol.integration.test.ts` 真的驱动 adapter，多出一条基线外的红（§8.2）。
+- *** **`npm run verify` 是 `&&` 链** *** —— 一旦有预期内的红，它停在 `npm test`，后面的门**一道都没量**。
+  ⇒ 有预期红时**逐段单跑**，每段各取 RC。
+- *** **跨 Task 比红集合要同一套 env。** *** Task 2 没设 `ORCA_CCLOOP_BIN`（5 skipped），Task 3 设了（3 skipped），
+  于是多出一条「红」其实只是从 skip 变成了 run。
+- *** **计划里的代码块会调用不存在的 helper**（`runControl`／`createCcloopPort`）**，还会点错文件**（ERRATUM 指向 `profiles.test.ts`）。 ***
+  ⇒ 开工扫描时逐个核 identifier 与路径；控制器裁定改了落点，要回头改计划派生出的文字。
+- **一席外派用量本轮实测**（工具报数）：实施席 115k–310k token，评审席 109k–182k token。
+
 ## 七、工具骗法（**每一条都真栽过**）
 
 ### 7.1 rtk（**六种**）
@@ -576,6 +615,11 @@ cd "${DEST}" && npm run build      # dist/ 被 gitignore，不 build 会让 endT
 而 macOS 的 `/tmp` 是软链 ⇒ **必须写 `/private/tmp/…`**。已发布记录里的 sha256 `f6c14da8…`
 描述的是一个**已不存在**的文件，**不要拿它验证新造的**。
 ⚠️ `verify:web-control:consumer` **不需要**这个变量，只需 `ORCA_CCLOOP_BIN`。
+🔴 *** **config 的 `command` 必须指向 ccloop 的 fake codex，不能指向真 `codex`**（2026-09-24 实测）： ***
+`["<node>", "<ccloop 副本>/tests/fixtures/fake-codex.mjs", "integration", "<scratchpad>/fixtures/fake-codex-marker.json"]`，
+`model:"fixture-model"`、`budgetMode:"soft"`、`sandbox:"workspace-write"`、`timeoutMs:120000`、`killGraceMs:5000`，mode 0600。
+指向真 `codex` 时 `ccloopProtocol.integration.test.ts` 会真的驱动 adapter，多出一条基线外的红。
+🔴 *** **在副本的 `main` 上 `git pull --ff-only` 会被 Tier 0 闸门拦下**（算合并进 main） *** ⇒ 要新版本就**重新 clone 一份到新目录**再 build。
 
 | 路径 | 是什么 |
 |---|---|
@@ -594,16 +638,18 @@ cd "${DEST}" && npm run build      # dist/ 被 gitignore，不 build 会让 endT
   ⚠️ **已知过度拦**：main 上 `git branch -f`、`merge --abort`、`rebase --continue`。
   ⚠️ **威胁模型是「合作型 agent 的失手」，不是对抗。**
 
-### 8.4 控制协议与**两个缺口**
+### 8.4 控制协议与缺口
 
 ccloop `control` v1 的方法集：`capabilities`／`accept`／`inspect`／`handoff`／`collect`／`read-evidence`。
 传输是**一次一进程**的 JSON-over-stdio，真实状态全在文件里，所以 Orca 崩溃后可重读恢复。
 
-🔴 **缺口一**：`capabilities` 只答 `protocol`／`durableAccept`／`ownershipIsolation`／`evidenceRetention`／
-`usageObservation: "phase-end"`／`budgetEnforcement: "soft"`／`requestBoundEvidence`，
-**`CapabilityViewV1` 要的另外五个一个都没有** ⇒ Web 派活必得 `control-capability-unsupported`。
-🔴 **缺口二**：`ContextObservationV1` 在 Orca `src/` **无生产者**，缺 ccloop 侧的实时观测 emit，
-**Orca 不许自造对端观测**。
+✅ **缺口一已关（2026-09-24，G1 缝 A）**：`capabilities` 现在答 `protocol:2` 八字段
+（`usageObservation:"phase-end"`／`budgetEnforcement:"soft"`／`contextObservation:"unavailable"`／`handoffControl:"durable"`／
+`handoffExecution:"mechanical-in-run-v1"`／`contextWindowTokens:null`／`requestBoundProof:null`）。
+⚠️ 两仓 schema 逐字段一致，**唯一例外**：ccloop 的 `requestBoundProof.workDimensions／handoffDimensions` 是 `z.array(z.string())`，
+Orca 要求排序去重的四值枚举 ⇒ 将来非 null 且写错时 Orca 整条拒收（fail closed，但连 soft 组也会被挡）。
+🔴 **缺口二（未变）**：`ContextObservationV1` 在 Orca `src/` **无生产者**，**Orca 不许自造对端观测**。
+⇒ 真 ccloop 下 `contextWindowTokens:null`，**每个 Web 组的预估都会是 `estimate-blocked-capability`**（spec §6.1）。
 
 ⚠️ *** **Codex 只支持 `phase-end` ＋ `soft`。任何地方不许宣称 strict token 封顶。** ***
 `orca chain` 的 `--max-budget-usd` 同样是**软上限**（超预算退出 1、`error_max_budget_usd`）。
@@ -611,7 +657,7 @@ ccloop `control` v1 的方法集：`capabilities`／`accept`／`inspect`／`hand
 ### 8.5 基线的演进（**每一个都作废前一个；只有最后一行现行**）
 
 `95/561 → 95/566 → 100/606 → 100/608 → 107/663 → 107/664 → 111/810 → 129/1074 →
-129/1075 → 172/1516 → 180/1618`。**现行值与三道红门见 §三。**
+129/1075 → 172/1516 → 180/1618 → 183/1622`（最后一格是 G1 缝 A 之后的 `npm test`，含 2 条预期红）。**现行值与红门见 §三。****现行值与三道红门见 §三。**
 ⚠️ **引用任何基线数前现测。** 历史值只用来判断「一份旧文档有多旧」。
 
 ### 8.6 成本量级对照（**只抄工具报数，一个自估都没有**）
@@ -650,26 +696,35 @@ ccloop `control` v1 的方法集：`capabilities`／`accept`／`inspect`／`hand
   那些提交的作者确实是它们，写成 Opus 才是假话。**归属行因此不统一，人若不接受要自己决定怎么办。**
 - **一把 API key 曾明文进入 transcript**（2026-09-17 那一轮）⇒ **建议轮换，只有人能确认做没做。**
 - ccloop 自己的：**人裁 85 与 I-3 已于 2026-09-23 完成**（人裁 129–138）。
-  仍挂着的是 **G1**、**`stopProof` 那条稳定红**（根因未查，要人先开口；
+  仍挂着的是 **G1 缝 B**（缝 A 已于 2026-09-24 做完）、**`stopProof` 那条稳定红**（根因未查，要人先开口；
   **判别过程**：`git clone --local` 副本单跑 **3/3 红**、主树单跑也红、单跑耗时 **5.37s** ——
   远低于 flake 画像的 25–29s ⇒ **与负载无关**）、**Linux 覆盖**
   （要人自己起 OrbStack daemon），以及本轮登记未修的 **M3／M4**（都要改既有判据，需人按人裁 88 指名）。
 
 
-### 9.1 G1 执行前必须由人给的（**2026-09-24 新增**）
+### 9.1 G1 缝 A 之后归人的（**2026-09-24 替换上一版「执行前必须由人给的」——那些授权都已给出并用完**）
 
-- 🔴 *** **计划的 Task 3 与 Task 5 要改既有判据，需人按【人裁 88】逐一指名。** *** 已在计划里点名：
-  `tests/control/budget.test.ts` 的 `it.each(...)("refuses unproven strict capabilities before reserving")`
-  第三格、`tests/control/schedulerBridge.test.ts` 的
-  `it("gets capabilities from the peer before a service claim")`、
-  `tests/control/fixtures/fake-ccloop-control.mjs` 的 capabilities 应答、
-  `tests/control/webCcloopSmoke.test.ts` 的 `codexProbe()` 及其调用点。
-  ⚠️ **最后一个是本轮的真正验收点** —— 它今天把对端答不出的四格从 declared profile 借过来，
-  **不改它，任何「对端答错」的变异都没有判据能接住**。
-- **ccloop 侧改动落在 `main`** —— 这是控制器按现测定的（codex 分支落后 10142 行），**可逆，但请知情**。
-- **生产部署缺 execution profile 快照** —— 全仓 `orca-execution-profile-snapshot-v1` 的命中
-  全在 `tests/`／`docs/`／schema 定义。**不阻塞 G1 的终点判据**（那是测试级的），
-  但「真正部署一次 Web 派活」还缺这个输入。
+- 🔴 **推送顺序：先 ccloop、后 Orca**（§四.1）。
+- **一笔缺归属行的提交**：主题行 `fix(control): give the schema-line criterion in endToEnd a real red, correct false capability-migration comments`
+  没有 `Co-Authored-By`／`Claude-Session`（实施席违令试 amend 被拦）。**不许 amend，由人决定。**
+- **本轮的人裁**（便于以后引用）：人 2026-09-24「task 1 3 5 6 都同意授权。按顺序做」＋ 对 Task 4 三处判据的「授权改写三处」。
+  ⚠️ 代码注释里写的 **「ruling-88」指的是 ccloop 的人裁 88（改既有判据必须由人指名）这条【规则】**，不是授权消息本身。
+- **挂账（都已登记，没人授权就不动）**：
+  - `tests/control/fixtures/web.ts` 的 `webFixture` 与 `tests/panel/fixtures/controlPanel.ts` 的 `createHarness`：
+    `port.capabilities()` ＝ `{protocol:2, ...declared}`，**没有独立钩子**，而 `setObserved` 只管探测那条路
+    ⇒ 将来写「认领时能力不符」的判据若用 `setObserved`，会**假绿**。
+  - `assertCapabilities` 的 strict 分支**没查** `requestBoundProof.workDimensions.includes("tokens")`（`probeBlocksDispatch` 与
+    `profiledCapabilities` 都查）—— 计划原文如此，codex 答不出 bounded，今天够不着。
+  - `ccloopPort.ts` 已发布的 ERRATUM 写「The paragraph above」，而真正过时的是第二段 —— **已发布，只能再追加说明**。
+  - `webProtocol.ts` 的 `capabilitiesSchema` 外层 `.strict()` **冗余**（`.extend()` 保留基座的 strict）—— 登记为冗余守卫，不编假判据。
+  - `tests/control/capabilitySchema.test.ts` 的标题「no independent field list」**证伪不了**（一份逐字相同的副本也会过）。
+  - Web `BudgetEditor.tsx` 只显示 `budgetEnforcement`／`contextObservation`，**决定派活的 `handoffControl`／`handoffExecution` 不显示**，
+    投递被挡时只露出 `claim-capability-unavailable`（先于 G1 就如此）。
+- **生产部署缺 execution profile 快照**（spec §5.3「实施第一步要处理」，**计划与执行都没接**）：
+  全仓 `orca-execution-profile-snapshot-v1` 的命中全在 `tests/`／`docs/`／schema 定义。soft 下与真 codex profile 求交结果不变，
+  但「真正部署一次 Web 派活」缺这个输入。
+- **Task 6 实施席杀进程**（harness SECURITY WARNING「Interfere With Workloads」）：追溯为它自己的孤儿 worker，**只有强旁证**，
+  若同一分钟别的会话也在跑 vitest，那些可能被误杀。**请人知情。**
 
 ## 十、Suggested skills
 
