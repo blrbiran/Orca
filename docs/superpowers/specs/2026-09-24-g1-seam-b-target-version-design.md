@@ -25,7 +25,7 @@ Orca 里有**两个同名的 `targetVersion`**，被 `planImport` 接成了一�
 
 | | plan 里的 | 控制面里的 |
 |---|---|---|
-| 定义 | Web spec `2026-09-19-web-recoverable-control-design.md` §ControlPlanV1：「source plan 的**不透明**非空版本字符串，**不做数值转换**」，进 `planHash` | work item 的修订号：`src/control/commands.ts:61` 的 `(old?.targetVersion ?? 0) + 1`；`claimWork`／continuation／checkpoint 用它判 `target-version-conflict` |
+| 定义 | Web spec `2026-09-19-web-recoverable-control-design.md` §4.2 Atomic plan import 的 `ControlPlanV1` 定义：「source plan 的**不透明**非空版本字符串，**不做数值转换**」，进 `planHash` | work item 的修订号：`src/control/commands.ts:61` 的 `(old?.targetVersion ?? 0) + 1`；`claimWork`（`budget.ts:103`）与 continuation（`continuation.ts:35`）用它判 `target-version-conflict`；checkpoint 用它做身份比对（`checkpoints.ts:22,124`） |
 | 类型 | `string`（夹具里是 `"v1"`／`"v2"`） | 整数（`work_items.target_version INTEGER NOT NULL`） |
 
 `src/control/planImport.ts:214` 写 work item 时，**列**写死 `1`，**body** 的 `targetVersion` 写 plan 的字符串。
@@ -64,7 +64,7 @@ plan 文件 → `ControlPlanV1` → work item（列与 body）→ `WorkItemViewV
 - 前提（现测）：**Web 路径不 re-put。** `src/` 里写 `work_items` 的只有
   `planImport.ts:214`（INSERT）、`budget.ts:99`（reconcile 登记，写 `1`）、`commands.ts:62`（`putWork`）、
   `queries.ts:47`（`saveWork`，只改 body）、`webService.ts:209,417`（只改 `status`／`grant`／`derivedContractHash` 等，**不碰 `targetVersion`**）；
-  **`putWork` 在 `src/` 里零调用方**（只在 `tests/` 与 foundation 旧路径上）。
+  **`putWork` 在 `src/` 里零调用方**（只有 `tests/` 调它）。
 - `putWork` 的 `+1` **不动、不接进 Web 路径**。
 
 ⚠️ 下界取 1 而线上 `safeInteger` 允许 0：plan 侧**更严**是有意的（store 计数从 1 起），线上不收紧。
@@ -88,9 +88,13 @@ plan 文件 → `ControlPlanV1` → work item（列与 body）→ `WorkItemViewV
 **不改**：ccloop 任何文件；`commands.ts` 的 `putWork`；`budget.ts:99`；`startEnvelope.ts`（它已是 `safeInteger`，本来就对）；
 `web/src/**/*.tsx`（现测不展示 `targetVersion`）。
 
-⚠️ 正安全整数的 schema **优先复用** `src/control/schema.ts` 的 `safeInteger` 加 `.positive()`；
-`planFile.ts` 在 `src/scheduler/` —— 它能不能 import `src/control/schema.ts` 而不造成运行期 ESM 环，**计划阶段现测**
-（G1 缝 A 在 `webProtocol.ts`↔`schema.ts` 上栽过 TDZ，`typecheck` 看不出）。
+⚠️ 正安全整数的 schema **复用** `src/control/schema.ts` 的 `safeInteger` 加 `.positive()`。
+**不会造成 ESM 环（现测）**：`schema.ts` 的 import 只有 `zod`；`planFile.ts` 本来就 import `../control/canonicalJson.js` 与 `../control/errors.js`。
+（G1 缝 A 栽过的 TDZ 是 `webProtocol.ts`↔`schema.ts` 互引，此处没有反向边。）
+
+**读同一个 body 字段、本来就按整数写的消费者 —— 不改，统一后自动一致**：
+`budget.ts:90`（`safeInteger.parse(targetVersion)`）与 `:103`、`continuation.ts:35`、`checkpoints.ts:22,124`、
+`service.ts:98,151`（旧 `ControlService`；`:151` 在 `requestHandoff` 里）、`schedulerBridge.ts:25,29`、`ownership.ts:9`。
 
 ### 3.1 副作用
 
@@ -122,11 +126,11 @@ env ＝ Orca handoff §8.2（`ORCA_CCLOOP_BIN` ＝ ccloop main 的 `clone --loca
 | # | 判据 | 喂它的场景 | 点名的变异（必须**看见红**） |
 |---|---|---|---|
 | N1 | plan 里 `targetVersion: "v1"` ⇒ `loadPlan` 拒，`malformed`，message 以 `tasks.0.targetVersion:` 开头 | 单任务 plan | V1：`planTaskSchema.targetVersion` 改回 `z.string().min(1)` |
-| N2 | plan 里 `targetVersion: 0` ⇒ 拒；`1.5` ⇒ 拒 | 同上 | V2：去掉 `.positive()`（只剩 nonnegative）；V2b：去掉 `.int()` |
+| N2 | plan 里 `targetVersion: 0` ⇒ 拒；`1.5` ⇒ 拒 | 同上 | V2：去掉 `.positive()`（只剩 nonnegative）；V2b：plan 侧 schema 就地换成 `z.number().positive()`（丢 `.int()`）—— ⚠️ **不许去改共享的 `schema.ts` 的 `safeInteger`**，那会同时打到全仓消费者，红了也不是 N2 的独占证据 |
 | N3 | plan 写 `targetVersion: 3` 导入后，`work_items.target_version` 列 **与** body 都等于 `3` | 用 **3**（≠1），专打「列写死 1」 | V3：`planImport.ts:214` 列改回字面量 `1` |
 | N4 | N3 的导入物走到 Web 派活，start envelope 的 `claim.targetVersion === 3` | 同 N3，经 `webDispatch` | V4：`webDispatch.ts:281` 的 `work.targetVersion` 换成字面量 `1` |
-| N5 | work body 里 `targetVersion` 为字符串 ⇒ panel 视图 `blocked("work-item-invalid:…")` | 直接改库里的 body | V5：`controlViews.ts:61` 恢复 union |
-| N6 | work body 的 `targetVersion` 与 plan 不等（整数 2 vs 3）⇒ `blocked("work-item-authority:…")` | 直接改库里的 body | V6：删掉 `:388` 的 `targetVersion` 子句 |
+| N5 | work body 里 `targetVersion` 为字符串 ⇒ panel 视图抛 `ControlError("recovery-blocked")`，detail 以 `work-item-invalid:<taskId>:` 开头（`controlViews.ts` 的 `parseStored`→`blocked`） | 直接改库里的 body | V5：`controlViews.ts:61` 恢复 union |
+| N6 | work body 的 `targetVersion` 与 plan 不等（整数 2 vs 3）⇒ 抛 `ControlError("recovery-blocked")`，detail ＝ `work-item-authority:<taskId>` | 直接改库里的 body | V6：删掉 `:388` 的 `targetVersion` 子句 |
 | N7 | `ControlPlanV1` 与 `WorkItemViewV1` 对字符串 `targetVersion` 拒收 | 直接对 schema 断言 | V7／V7b：两处 schema 各改回 `nonemptyString` |
 
 ⚠️ **每一条「红在 N_k」都是预言，不是证据**（handoff §六.3）。实施后逐条在 `git clone --local` 副本里打，
@@ -148,6 +152,7 @@ env ＝ Orca handoff §8.2（`ORCA_CCLOOP_BIN` ＝ ccloop main 的 `clone --loca
 | `tests/panel/controlReadApi.test.ts` | 88、89 | helper 内 `"v2"`／`"v1"` |
 
 ⚠️ 本表由 python 逐行扫得；helper 被哪些 `it` 消费，**计划阶段给出逐条 `it` 清单**供人逐条指名（本轮用正则定位 helper 不准，未采信）。
+⚠️ 反向扫过（行里有 `"v<数字>"` 但没有 `targetVersion` 一词）：`tests/**` 与 `web/src/**` 只命中 4 处 `base: "v1"`（`startEnvelope.test.ts:44,60`、`webCcloopSmoke.test.ts:79,205`），那是 git base ref，**与本设计无关，不改**。
 ⚠️ 两个夹具是共享的：改它们会改变**所有**消费者喂进去的值（`"v1"` → `1`）。计划阶段列出消费者文件清单。
 
 ---
