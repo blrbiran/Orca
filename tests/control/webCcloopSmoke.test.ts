@@ -156,6 +156,33 @@ describe("the shipped consumer answers for its own capabilities (task 10 step 4)
     } finally { await soft.f.dispose(); }
   });
 
+  // Human authorization 2026-09-24, G1 seam A Task 5 fix round 1 (only-add, no existing criterion
+  // in this file changed): `probeBlocksDispatch` (src/control/webDispatch.ts) is called twice on
+  // the same observation -- once in `scheduleStart` (via `WebControlService.start()`, the
+  // "expect(... start...).toBe(false)" line above) and again in `deliverScheduledStart`. A real
+  // ccloop answer that degrades between those two calls is the only way to exercise the second
+  // call without the first one catching it first, so this isolates the delivery-time guard.
+  it.skipIf(!realBinary)("blocks only at delivery when the observation degrades after a clean schedule", async () => {
+    const root = await tempRoot("orca-web-real-delivery-guard-");
+    const config = join(root, "adapter.json");
+    await writeFile(config, "{}");
+    const port = createCcloopExecutionPort({ binary: await realpath(realBinary!), adapter: "codex", adapterConfigPath: config, timeoutMs: 15_000 });
+    const realProbe = await port.probeProfileCapabilities!();
+
+    const soft = await confirmedByAdapter("soft", realProbe);
+    try {
+      // Schedule cleanly with the real, undegraded answer -- same gate, same observation, passes.
+      expect("error" in await soft.service.start(soft.f.command("start", {}))).toBe(false);
+      // Degrade what the fixture's port answers on its NEXT probe, after scheduling already
+      // succeeded. `deliverScheduledStart` re-probes rather than reusing the schedule-time
+      // observation, so only the delivery-time call sees this.
+      soft.f.setObserved({ ...realProbe, handoffControl: "phase-end" });
+      const delivered = await deliverScheduledStart(soft.deps, "g");
+      expect(delivered).toEqual({ kind: "blocked", reason: "claim-capability-unavailable" });
+      expect(soft.f.store.db.prepare("SELECT COUNT(*) AS n FROM runs WHERE group_id='g'").get()!.n).toBe(0);
+    } finally { await soft.f.dispose(); }
+  });
+
   it.skipIf(!realBinary)("refuses an envelope that is not V1 and reads a well-formed one as no execution yet", async () => {
     const root = await tempRoot("orca-web-real-env-");
     const config = join(root, "adapter.json");
