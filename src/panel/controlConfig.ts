@@ -44,6 +44,7 @@ export interface TrustedControlConfigInput {
 
 export interface TrustedControlConfig {
   resolveTarget(input: unknown): TrustedSchedulerPlanTarget;
+  resolveRepository(repoId: string): string;
   readView(): Promise<ControlConfigV1>;
   readonly shutdownGraceMs: number;
 }
@@ -194,6 +195,12 @@ export function createTrustedControlConfig(
         },
       });
       return Object.freeze(resolvedTarget);
+    },
+    /** Execution driver spec §3.1: the trusted path by repoId, its witness re-validated on every use. */
+    resolveRepository(repoId: string): string {
+      const repository = repositories.get(repoId);
+      if (!repository) throw new ControlError("control-target-not-allowed");
+      return revalidatePath(repository.witness);
     },
     async readView(): Promise<ControlConfigV1> {
       const observations = await Promise.all(profiles.map((profile) => router.probe(profile)));

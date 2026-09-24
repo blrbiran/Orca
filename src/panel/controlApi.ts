@@ -7,7 +7,8 @@ import { lookupCommandResult } from "../control/commandLedger.js";
 import { ControlError } from "../control/errors.js";
 import { readVersions } from "../control/queries.js";
 import { idSchema } from "../control/schema.js";
-import { recoveryRetryPayloadSchema, commandEnvelopeSchema, controlConfigSchema, rawAuthorityCommandSchema, type CommandTargetV1, type CommandVerbV1, type RawAuthorityCommandV1 } from "../control/webProtocol.js";
+import { recoveryRetryPayloadSchema, commandEnvelopeSchema, controlConfigSchema, rawAuthorityCommandSchema, repositoryWorkspaceSchema, type CommandTargetV1, type CommandVerbV1, type RawAuthorityCommandV1 } from "../control/webProtocol.js";
+import { readWorkspaceSetting } from "../control/workspaceSettings.js";
 import type { WebControlService } from "../control/webService.js";
 import type { ControlStore } from "../control/store.js";
 import type { TrustedControlConfig } from "./controlConfig.js";
@@ -120,6 +121,15 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
     res.json(readControlRecovery(deps.store, deps.epoch));
   });
 
+  app.get("/api/control/repositories/:repoId/workspace", (req, res) => {
+    const repoId = String(req.params.repoId);
+    if (!idSchema.safeParse(repoId).success || !deps.service?.repositoryKnown(repoId)) {
+      sendControlError(res, 404, "control-target-not-allowed", "No trusted repository has this id.");
+      return;
+    }
+    res.json(repositoryWorkspaceSchema.parse({ schema: "orca-repository-workspace-v1", repoId, ...readWorkspaceSetting(deps.store, repoId) }));
+  });
+
   app.get("/api/control/runs/:runId/evidence", asyncRoute(async (req, res) => {
     const runId = String(req.params.runId);
     try { res.json(await readRunEvidence(deps.store, runId)); }
@@ -209,6 +219,15 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
         return { groupId, target: { kind: "run", groupId, runId: retry.runId } };
       },
     },
+    {
+      path: "/api/control/repositories/:repoId/workspace-mode",
+      verb: "set-workspace-mode",
+      // The ledger key is the repository scope's, so the retained result is looked up under it.
+      target: (params) => {
+        const repoId = idSchema.parse(params.repoId);
+        return { groupId: `@repository:${repoId}`, target: { kind: "repository", repoId } };
+      },
+    },
   ];
   for (const route of routes) app.post(route.path, asyncRoute(async (req, res) => {
     let id: string | null = null;
@@ -230,6 +249,7 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
         case "resume-from-handoff": await service.resumeFromHandoff(command); break;
         case "continue-task": await service.continueTask(command); break;
         case "recovery-retry": await service.recoveryRetry(command); break;
+        case "set-workspace-mode": await service.setWorkspaceMode(command); break;
         default: throw new ControlError("route-not-found");
       }
       const result = lookupCommandResult(store, id, command.commandId);

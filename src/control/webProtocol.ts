@@ -528,13 +528,17 @@ export const commandVerbSchema = z.enum([
   "continue-task",
   "recovery-retry",
   "shutdown",
+  "set-workspace-mode",
 ]);
+
+const repositoryCommandTargetSchema = z.object({ kind: z.literal("repository"), repoId: idSchema }).strict();
 
 export const commandTargetSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("group"), groupId: idSchema }).strict(),
   z.object({ kind: z.literal("task"), groupId: idSchema, taskId: idSchema }).strict(),
   z.object({ kind: z.literal("run"), groupId: idSchema, runId: idSchema }).strict(),
   z.object({ kind: z.literal("global"), epoch: nonemptyString }).strict(),
+  repositoryCommandTargetSchema,
 ]);
 
 export const emptyPayloadSchema = z.object({}).strict();
@@ -636,6 +640,8 @@ export const effectiveHandoffStopPayloadSchema = z.object({ handoffDeadlineAt: c
 export const shutdownPayloadSchema = z
   .object({ shutdownAcceptedAt: canonicalTimestampSchema, shutdownDeadlineAt: canonicalTimestampSchema })
   .strict();
+export const workspaceModeSchema = z.enum(["worktree", "clone"]);
+export const setWorkspaceModePayloadSchema = z.object({ workspaceMode: workspaceModeSchema }).strict();
 
 const groupCommandTargetSchema = z.object({ kind: z.literal("group"), groupId: idSchema }).strict();
 const taskCommandTargetSchema = z.object({ kind: z.literal("task"), groupId: idSchema, taskId: idSchema }).strict();
@@ -669,6 +675,7 @@ const rawAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...rawCommandFields, verb: z.literal("continue-task"), target: taskCommandTargetSchema, payload: continueTaskPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("recovery-retry"), target: commandTargetSchema, payload: recoveryRetryPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("shutdown"), target: globalCommandTargetSchema, payload: shutdownPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("set-workspace-mode"), target: repositoryCommandTargetSchema, payload: setWorkspaceModePayloadSchema }).strict(),
 ]);
 
 const effectiveAuthorityCommandVariants = z.discriminatedUnion("verb", [
@@ -702,6 +709,7 @@ const effectiveAuthorityCommandVariants = z.discriminatedUnion("verb", [
     .object({ ...effectiveCommandFields, verb: z.literal("recovery-retry"), target: commandTargetSchema, payload: recoveryRetryPayloadSchema })
     .strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("shutdown"), target: globalCommandTargetSchema, payload: shutdownPayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("set-workspace-mode"), target: repositoryCommandTargetSchema, payload: setWorkspaceModePayloadSchema }).strict(),
 ]);
 
 function refineCommandIdentity(
@@ -844,6 +852,10 @@ export const runViewSchema = z
       "settled-recoverable",
       "settled-restartable",
       "settled-unrecoverable",
+      "collected",
+      "landed",
+      "reconciling",
+      "blocked",
     ]),
     phase: z.enum(["estimate", "work", "handoff"]),
     claimOrdinal: positiveSafeInteger.nullable(),
@@ -852,6 +864,7 @@ export const runViewSchema = z
     used: amountSchema,
     remaining: amountSchema,
     failureCode: nonemptyString.nullable(),
+    blockedReason: nonemptyString.nullable(),
     evidenceIds: sortedIdArraySchema,
   })
   .strict();
@@ -1074,6 +1087,7 @@ const commandResultSchema = z.discriminatedUnion("kind", [
     })
     .strict(),
   z.object({ kind: z.literal("limit-set"), limit: amountSchema }).strict(),
+  z.object({ kind: z.literal("workspace-mode-set"), repoId: idSchema, workspaceMode: workspaceModeSchema }).strict(),
   z
     .object({
       kind: z.literal("task-continuing"),
@@ -1136,10 +1150,13 @@ export const commandSuccessSchema = z
   .strict()
   .superRefine((value, ctx) => {
     const isShutdown = value.verb === "shutdown";
+    // Execution driver spec §3.2: a repository-scoped command has its setting's revision and no group
+    // projection.
+    const projectionless = isShutdown || value.verb === "set-workspace-mode";
     if (isShutdown ? value.commandRevision !== null : value.commandRevision === null) {
       issue(ctx, ["commandRevision"], "command-revision-nullability-mismatch");
     }
-    if (isShutdown ? value.projectionSeq !== null : value.projectionSeq === null) {
+    if (projectionless ? value.projectionSeq !== null : value.projectionSeq === null) {
       issue(ctx, ["projectionSeq"], "command-revision-nullability-mismatch");
     }
   });
@@ -1196,3 +1213,9 @@ export type CommandErrorV1 = z.infer<typeof commandErrorSchema>;
 export type CommandErrorBodyV1 = z.infer<typeof commandErrorBodySchema>;
 export type CommandSuccessV1 = z.infer<typeof commandSuccessSchema>;
 export type CommandLookupV1 = z.infer<typeof commandLookupSchema>;
+
+export const repositoryWorkspaceSchema = z
+  .object({ schema: z.literal("orca-repository-workspace-v1"), repoId: idSchema, workspaceMode: workspaceModeSchema, revision: safeInteger })
+  .strict();
+export type RepositoryWorkspaceV1 = z.infer<typeof repositoryWorkspaceSchema>;
+export type SetWorkspaceModePayload = z.infer<typeof setWorkspaceModePayloadSchema>;

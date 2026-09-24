@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { readArtifact } from "../control/archive.js";
 import { canonicalBytes, sha256Canonical } from "../control/canonicalJson.js";
+import { driveRecordSchema } from "../control/driveRecord.js";
 import { ControlError } from "../control/errors.js";
 import { readProjectionChanges, readProjectionState } from "../control/projectionJournal.js";
 import { readArchivedPlan, readBudgetProposal, readEstimateRecord } from "../control/queries.js";
@@ -121,6 +122,7 @@ const persistedRunSchema = z.object({
     "claimed", "starting", "accepted", "unknown", "settled",
     "attempt-unknown", "attempt-proof-invalid", "failed-before-provider",
     "settled-recoverable", "settled-restartable", "settled-unrecoverable",
+    "start-pending", "collected", "landed", "reconciling", "blocked",
   ]),
   checkpointId: idSchema.nullable(),
   recoverable: z.boolean(),
@@ -136,6 +138,7 @@ const persistedRunSchema = z.object({
   continuationIntentId: idSchema.nullable().optional(),
   providerAttemptOrdinal: safeInteger,
   failureCode: z.string().min(1).nullable(),
+  drive: driveRecordSchema.optional(),
 }).strict();
 
 function blocked(detail: string): never {
@@ -447,6 +450,8 @@ function displayRunState(run: z.infer<typeof persistedRunSchema>): RunViewV1["st
     case "unknown": case "attempt-unknown": case "attempt-proof-invalid": case "failed-before-provider":
     case "settled-recoverable": case "settled-restartable": case "settled-unrecoverable": return run.state;
     case "settled": return run.recoverable ? "settled-recoverable" : "settled-unrecoverable";
+    case "start-pending": return "starting";
+    case "collected": case "landed": case "reconciling": case "blocked": return run.state;
   }
 }
 
@@ -505,6 +510,7 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
       runId, taskId: run.taskId, estimateId: run.estimateId, generation: run.generation, state, phase: run.phase,
       claimOrdinal: run.claimOrdinal, providerAttemptOrdinal: run.providerAttemptOrdinal, profile,
       used: run.cumulative[bucket], remaining: run.remaining[bucket], failureCode: run.failureCode,
+      blockedReason: run.drive?.blockedReason ?? null,
       evidenceIds: artifactIdsForRun(store, runId),
     };
   });

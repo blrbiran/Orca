@@ -129,7 +129,7 @@ function parseStored<T>(schema: z.ZodType<T>, value: string, detail: string): T 
 }
 
 export function groupCommandTarget(command: RawAuthorityCommandV1): string {
-  if (command.target.kind === "global") throw new ControlError("control-target-not-allowed");
+  if (command.target.kind === "global" || command.target.kind === "repository") throw new ControlError("control-target-not-allowed");
   return command.target.groupId;
 }
 
@@ -401,7 +401,7 @@ export function applyRecoveryRetry(deps: StopDeps, command: RecoveryRetryCommand
       expand: () => ({ ...command, schema: "orca-authority-command-v1" }),
       apply: context => {
         const target = command.target;
-        if (target.kind === "global") throw new ControlError("control-target-not-allowed");
+        if (target.kind === "global" || target.kind === "repository") throw new ControlError("control-target-not-allowed");
         const groupId = target.groupId;
         const observed = target.kind === "run"
           ? retryRun(store, groupId, target.runId, context)

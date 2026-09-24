@@ -134,6 +134,7 @@ export function createHarness(): Harness {
         store, admissionGate: createAdmissionGate(), profileRouter: router, trustedConfig,
         defaults: () => ({ estimatorProfileId: "all", estimatorProfileHash: frozen.profileHash, estimateMode: "soft" as const }),
         estimatorObservation: (selected: typeof frozen) => ({ profile: selected, observed: selected.snapshot.profile.capabilities, probeFailureCode: null }),
+        knownRepository: (repoId: string) => repoId === "repo",
       };
       const service = new WebControlService(deps);
 

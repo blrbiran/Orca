@@ -88,7 +88,7 @@ export type RunViewV1 = {
   taskId: string | null;
   estimateId: string | null;
   generation: number;
-  state: "starting" | "unknown" | "attempt-unknown" | "attempt-proof-invalid" | "running" | "failed-before-provider" | "settled-recoverable" | "settled-restartable" | "settled-unrecoverable";
+  state: "starting" | "unknown" | "attempt-unknown" | "attempt-proof-invalid" | "running" | "failed-before-provider" | "settled-recoverable" | "settled-restartable" | "settled-unrecoverable" | "collected" | "landed" | "reconciling" | "blocked";
   phase: "estimate" | "work" | "handoff";
   claimOrdinal: number | null;
   providerAttemptOrdinal: number;
@@ -96,6 +96,7 @@ export type RunViewV1 = {
   used: Amount;
   remaining: Amount;
   failureCode: string | null;
+  blockedReason?: string | null;
   evidenceIds: string[];
 };
 export type BudgetEstimateV1 = {
@@ -179,7 +180,8 @@ export type CommandTargetV1 =
   | { kind: "group"; groupId: string }
   | { kind: "task"; groupId: string; taskId: string }
   | { kind: "run"; groupId: string; runId: string }
-  | { kind: "global"; epoch: string };
+  | { kind: "global"; epoch: string }
+  | { kind: "repository"; repoId: string };
 
 /** What a mutation POST carries: an id the ledger dedupes on, the revision it expects, and the verb's payload. */
 export type CommandEnvelopeV1 = { commandId: string; expectedRevision: number; payload?: unknown };
@@ -222,7 +224,7 @@ export type CommandSuccessV1 = {
   schema: "orca-command-success-v1";
   commandId: string;
   actorId: string;
-  verb: "import-plan" | "proposal-edit" | "estimate" | "confirm" | "start" | "pause-dispatch" | "handoff-stop" | "resume-dispatch" | "resume-from-handoff" | "set-limit" | "continue-task" | "recovery-retry" | "shutdown";
+  verb: "import-plan" | "proposal-edit" | "estimate" | "confirm" | "start" | "pause-dispatch" | "handoff-stop" | "resume-dispatch" | "resume-from-handoff" | "set-limit" | "continue-task" | "recovery-retry" | "shutdown" | "set-workspace-mode";
   target: CommandTargetV1;
   commandRevision: number | null;
   projectionSeq: number | null;
@@ -238,8 +240,10 @@ export type CommandSuccessV1 = {
     | { kind: "handoff-stopped"; stopRevision: number; acceptedAt: string; handoffDeadlineAt: string; frozenRunIds: string[]; requestIds: string[] }
     | { kind: "resumed-from-handoff"; wakeId: string; pendingRuns: Array<{ taskId: string; continuationIntentId: string; pendingRunId: string; claimOrdinal: number }> }
     | { kind: "limit-set"; limit: Amount }
+    | { kind: "workspace-mode-set"; repoId: string; workspaceMode: "worktree" | "clone" }
     | { kind: "task-continuing"; continuationIntentId: string; pendingRunId: string; claimOrdinal: number; wakeId: string }
     | { kind: "recovery-observed"; resolved: boolean; blockerCodes: string[]; evidenceIds: string[]; wakeIds: string[] }
     | { kind: "shutdown"; groups: Array<{ groupId: string; disposition: "created" | "strengthened-pause" | "preserved-pause" | "preserved-handoff" | "preserved-shutdown" | "blocked-inconsistent"; changed: boolean; commandRevision: number; projectionSeq: number; frozenRunIds: string[]; requestIds: string[]; blockerCode: string | null }> };
 };
 export type CommandLookupV1 = { schema: "orca-command-lookup-v1"; originalStatus: number; body: CommandSuccessV1 | { error: CommandErrorV1 } };
+export type RepositoryWorkspaceV1 = { schema: "orca-repository-workspace-v1"; repoId: string; workspaceMode: "worktree" | "clone"; revision: number };

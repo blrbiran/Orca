@@ -37,9 +37,26 @@ export interface WebCommandInput<T> {
 type CommandRow = { raw_request_hash: unknown; original_status: unknown; body_json: unknown };
 type CommandBody = CommandLookupV1["body"];
 
-function scope(command: RawAuthorityCommandV1): { key: string; kind: "group" | "global"; id: string; groupId: string | null } {
-  if (command.target.kind === "global") return { key: "@global", kind: "global", id: "global", groupId: null };
-  return { key: command.target.groupId, kind: "group", id: command.target.groupId, groupId: command.target.groupId };
+type CommandScope = { key: string; kind: "group" | "global" | "repository"; id: string; groupId: string | null; repoId: string | null };
+
+function scope(command: RawAuthorityCommandV1): CommandScope {
+  if (command.target.kind === "global") return { key: "@global", kind: "global", id: "global", groupId: null, repoId: null };
+  if (command.target.kind === "repository") {
+    return { key: `@repository:${command.target.repoId}`, kind: "repository", id: command.target.repoId, groupId: null, repoId: command.target.repoId };
+  }
+  return { key: command.target.groupId, kind: "group", id: command.target.groupId, groupId: command.target.groupId, repoId: null };
+}
+
+/**
+ * Execution driver spec §3.2: a repository-scoped command is checked against its setting's own
+ * revision (0 while no row exists), not against any group's.
+ */
+function repositoryRevision(store: ControlStore, repoId: string): number {
+  const row = store.db.prepare("SELECT body FROM repository_settings WHERE repo_id=?").get(repoId);
+  if (!row) return 0;
+  const revision = (JSON.parse(String(row.body)) as { revision?: unknown }).revision;
+  if (typeof revision !== "number" || !Number.isSafeInteger(revision) || revision <= 0) throw new ControlError("recovery-blocked", "repository-settings-invalid");
+  return revision;
 }
 
 function invalidResult(): never {
@@ -93,10 +110,11 @@ export function preflightWebCommand<T = CommandBody>(store: ControlStore, input:
 
     const commandScope = scope(rawCommand);
     const groupRow = commandScope.groupId === null ? undefined : store.db.prepare("SELECT revision,projection_seq FROM groups WHERE id=?").get(commandScope.groupId);
-    const currentCommandRevision = commandScope.groupId === null ? 0 : Number(groupRow?.revision ?? 0);
+    const currentCommandRevision = commandScope.repoId !== null ? repositoryRevision(store, commandScope.repoId)
+      : commandScope.groupId === null ? 0 : Number(groupRow?.revision ?? 0);
     if (rawCommand.expectedRevision === currentCommandRevision) return null;
 
-    const commandRevision = commandScope.groupId === null ? null : currentCommandRevision;
+    const commandRevision = commandScope.repoId !== null ? currentCommandRevision : commandScope.groupId === null ? null : currentCommandRevision;
     const projectionSeq = commandScope.groupId === null || !groupRow ? null : Number(groupRow.projection_seq);
     const conflict = revisionConflict(currentCommandRevision);
     const outcome = validatedOutcome(conflict.status, conflict.body);
@@ -234,8 +252,9 @@ export function applyWebCommand<T>(store: ControlStore, input: WebCommandInput<T
     }
 
     const groupRow = commandScope.groupId === null ? undefined : store.db.prepare("SELECT revision,projection_seq FROM groups WHERE id=?").get(commandScope.groupId);
-    const currentCommandRevision = commandScope.groupId === null ? 0 : Number(groupRow?.revision ?? 0);
-    const resultCommandRevision = commandScope.groupId === null ? null : currentCommandRevision;
+    const currentCommandRevision = commandScope.repoId !== null ? repositoryRevision(store, commandScope.repoId)
+      : commandScope.groupId === null ? 0 : Number(groupRow?.revision ?? 0);
+    const resultCommandRevision = commandScope.repoId !== null ? currentCommandRevision : commandScope.groupId === null ? null : currentCommandRevision;
     const currentProjectionSeq = commandScope.groupId === null || !groupRow ? null : Number(groupRow.projection_seq);
     const nextCommandRevision = currentCommandRevision === Number.MAX_SAFE_INTEGER ? Number.MAX_SAFE_INTEGER : currentCommandRevision + 1;
     const nextProjectionSeq = currentProjectionSeq === null
@@ -302,7 +321,8 @@ export function applyWebCommand<T>(store: ControlStore, input: WebCommandInput<T
     if (projectionGroups.length > 0) recordProjectionChange(store, projectionGroups);
 
     const finalGroup = commandScope.groupId === null ? undefined : store.db.prepare("SELECT revision,projection_seq FROM groups WHERE id=?").get(commandScope.groupId);
-    const commandRevision = commandScope.groupId === null ? null : Number(finalGroup?.revision ?? currentCommandRevision);
+    const commandRevision = commandScope.repoId !== null ? repositoryRevision(store, commandScope.repoId)
+      : commandScope.groupId === null ? null : Number(finalGroup?.revision ?? currentCommandRevision);
     const projectionSeq = commandScope.groupId === null || !finalGroup ? null : Number(finalGroup.projection_seq);
     assertFinalVersions(outcome.body, commandRevision, projectionSeq);
     persistCommandOutcome(store, rawCommand, outcome, commandRevision, projectionSeq, {

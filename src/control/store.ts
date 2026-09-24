@@ -83,7 +83,7 @@ export async function openControlStore(options:{stateDir:string;recovery?:boolea
       const probe = new DatabaseSync(dbPath,{readOnly:true});
       try {
         const version = probe.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()?.value;
-        if (version !== schemaVersion && version !== "1" && version !== "2") throw new ControlError("control-schema-unsupported");
+        if (version !== schemaVersion && version !== "1" && version !== "2" && version !== "3") throw new ControlError("control-schema-unsupported");
         const identity = probe.prepare("SELECT value FROM meta WHERE key='identity'").get()?.value;
         if (identity !== JSON.stringify({host,path:stateDir})) throw new ControlError("control-host-mismatch");
       } finally { probe.close(); }

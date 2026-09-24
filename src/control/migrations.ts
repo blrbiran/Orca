@@ -1,6 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
 
-export const schemaVersion = "3";
+export const schemaVersion = "4";
 export const legacySchema = `CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;
 CREATE TABLE groups(id TEXT PRIMARY KEY, revision INTEGER NOT NULL, graph_version INTEGER NOT NULL, body TEXT NOT NULL) STRICT;
 CREATE TABLE work_items(group_id TEXT NOT NULL REFERENCES groups(id), id TEXT NOT NULL, target_version INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY(group_id,id)) STRICT;
@@ -57,11 +57,16 @@ CREATE TABLE context_observations(run_id TEXT NOT NULL REFERENCES runs(id), gene
 CREATE TABLE context_latches(run_id TEXT NOT NULL REFERENCES runs(id), generation INTEGER NOT NULL, reason TEXT NOT NULL CHECK(reason IN ('context-threshold-crossed','context-observation-gap')), request_id TEXT, PRIMARY KEY(run_id,generation)) STRICT;
 `;
 
-export const initialSchema = legacySchema + schema1To2 + schema2To3;
+// Execution driver spec §3.2: the per-repository workspace mode. No row means "worktree".
+export const schema3To4 = `CREATE TABLE repository_settings(repo_id TEXT PRIMARY KEY, body TEXT NOT NULL) STRICT;
+`;
+
+export const initialSchema = legacySchema + schema1To2 + schema2To3 + schema3To4;
 
 export function migrateSchema(store: DatabaseSync, fromVersion: string): void {
-  if (fromVersion === "1") store.exec(schema1To2 + schema2To3);
-  else if (fromVersion === "2") store.exec(schema2To3);
+  if (fromVersion === "1") store.exec(schema1To2 + schema2To3 + schema3To4);
+  else if (fromVersion === "2") store.exec(schema2To3 + schema3To4);
+  else if (fromVersion === "3") store.exec(schema3To4);
   else throw new Error("control-schema-unsupported");
   store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
 }

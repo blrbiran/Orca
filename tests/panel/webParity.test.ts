@@ -116,7 +116,12 @@ function controlConfigWebToServer(x: WebControlConfigV1): ServerControlConfigV1 
 function controlSummaryServerToWeb(x: ServerControlSummaryV1): WebControlSummaryV1 { return x; }
 function controlSummaryWebToServer(x: WebControlSummaryV1): ServerControlSummaryV1 { return x; }
 function controlGroupServerToWeb(x: ServerGroupViewV1): WebGroupViewV1 { return x; }
-function controlGroupWebToServer(x: WebGroupViewV1): ServerGroupViewV1 { return x; }
+// Execution driver spec §7.4: `blockedReason` is optional on the Web side only so the existing
+// literal run fixtures in evidenceLink/controlPanel/controlCommandRecovery need no edit (D7's
+// zero-rewrite principle); normalize it here so the rest of the shape still gets checked both ways.
+function controlGroupWebToServer(x: WebGroupViewV1): ServerGroupViewV1 {
+  return { ...x, runs: x.runs.map((run) => ({ ...run, blockedReason: run.blockedReason ?? null })) };
+}
 function recoveryServerToWeb(x: ServerRecoveryViewV1): WebRecoveryViewV1 { return x; }
 function recoveryWebToServer(x: WebRecoveryViewV1): ServerRecoveryViewV1 { return x; }
 function evidenceServerToWeb(x: ServerEvidenceManifestV1): WebEvidenceManifestV1 { return x; }

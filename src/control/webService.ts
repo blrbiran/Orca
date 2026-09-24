@@ -14,6 +14,7 @@ import { dispatchEnvelopeSchema, estimateExecutionContractSchema } from "./webPr
 import { scheduleStart, type StartCommand } from "./webDispatch.js";
 import { applyHandoffStop, applyPauseDispatch, applyRecoveryRetry, applyResumeDispatch, type HandoffStopCommand, type PauseCommand, type RecoveryRetryCommand, type ResumeDispatchCommand, type StopDeps } from "./stopIntent.js";
 import { applyContinueTask, applyResumeFromHandoff, type ContinueTaskCommand, type ResumeFromHandoffCommand } from "./continuation.js";
+import { applySetWorkspaceMode, type SetWorkspaceModeCommand } from "./workspaceSettings.js";
 import { recordProjectionChange } from "./projectionJournal.js";
 import type { Amount } from "./types.js";
 import type { ControlStore } from "./store.js";
@@ -26,7 +27,7 @@ export type ReestimateCommand = Extract<RawAuthorityCommandV1, { verb: "estimate
 export type ConfirmCommand = Extract<RawAuthorityCommandV1, { verb: "confirm" }>;
 export type SetLimitCommand = Extract<RawAuthorityCommandV1, { verb: "set-limit" }>;
 export type WebCommandResult = CommandLookupV1["body"];
-export interface WebServiceDeps extends AsyncImportDeps { admissionGate?: AdmissionGate; now?: () => Date }
+export interface WebServiceDeps extends AsyncImportDeps { admissionGate?: AdmissionGate; now?: () => Date; knownRepository?: (repoId: string) => boolean }
 interface EstimateRun { runId: string; groupId: string; workItemId: string; phase: string; state: string; claimOrdinal: null; providerAttemptOrdinal: number; remaining: { work: Amount; handoff: Amount }; cumulative: { work: Amount; handoff: Amount }; unknown: { work: boolean; handoff: boolean }; [key: string]: unknown }
 
 const ledgerSchema = z.object({ groupLimit: amountSchema, used: amountSchema, committedRemaining: amountSchema, explicitUnallocatedReserve: amountSchema, budgetDeficit: amountSchema, usageUnknown: z.boolean() }).strict();
@@ -144,7 +145,7 @@ function success(context: WebCommandContext, result: CommandSuccessV1["result"],
     effectivePayloadHash: context.effectivePayloadHash, authorityCommandHash: context.authorityCommandHash, result } };
 }
 function groupId(command: RawAuthorityCommandV1): string {
-  if (command.target.kind === "global") throw new ControlError("group-not-found");
+  if (command.target.kind === "global" || command.target.kind === "repository") throw new ControlError("group-not-found");
   return command.target.groupId;
 }
 function allocationFor(proposal: BudgetProposalRecord, target: EffectiveProposalEditPayload["operations"][number]["target"]) {
@@ -372,6 +373,11 @@ export class WebControlService {
   async recoveryRetry(command: RecoveryRetryCommand): Promise<WebCommandResult> {
     return applyRecoveryRetry(this.stopDeps(), command) as WebCommandResult;
   }
+  /** Execution driver spec §3.2. A panel started without the repository refuses it by name. */
+  async setWorkspaceMode(command: SetWorkspaceModeCommand): Promise<WebCommandResult> {
+    return applySetWorkspaceMode({ store: this.store, admissionGate: this.deps.admissionGate, knownRepository: this.deps.knownRepository ?? (() => false) }, command) as WebCommandResult;
+  }
+  repositoryKnown(repoId: string): boolean { return this.deps.knownRepository?.(repoId) ?? false; }
   async resumeFromHandoff(command: ResumeFromHandoffCommand): Promise<WebCommandResult> {
     return applyResumeFromHandoff(this.stopDeps(), command) as WebCommandResult;
   }
