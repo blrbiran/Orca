@@ -7,6 +7,8 @@ import { createUnconfiguredControlPort } from "../control/unconfiguredPort.js";
 import type { ExecutionPort } from "../control/executionPort.js";
 import { deliverSchedulerWakes } from "../control/dispatch.js";
 import { recoverControl } from "../control/recovery.js";
+import { createExecutionDriver, type CrashPoint, type ExecutionDriver } from "../control/executionDriver.js";
+import { controlWorkspaceRoots } from "../control/workspace.js";
 import { createWebWakeHandlers } from "../control/webDispatch.js";
 import { createExecutionProfileRouter, resolveProfile, type ExecutionProfileRouter, type FrozenProfile } from "../control/profiles.js";
 import { openControlStore, type ControlStore } from "../control/store.js";
@@ -75,6 +77,8 @@ export interface ControlRuntime {
   admissionGate: AdmissionGate;
   port: ExecutionPort;
   epoch: string;
+  /** Execution driver spec §2.1: present only when an execution port is configured. */
+  driver: ExecutionDriver | null;
   /** spec §6: runs to completion before the server accepts anything. */
   recover(): Promise<void>;
   /** One delivery pass. Re-entrant calls while one is in flight are no-ops, not queued. */
@@ -99,6 +103,8 @@ export interface ControlAssemblyInput {
   repos: ReadonlyArray<{ projectKey: string; path: string }>;
   epoch: string;
   env: NodeJS.ProcessEnv;
+  /** Test-only fault injection for the execution driver (spec §7.2 R1). Never set by the CLI. */
+  driverCrash?: (point: CrashPoint) => void;
 }
 
 /**
@@ -191,6 +197,7 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
     admissionGate,
     profileRouter: router,
     trustedConfig: config,
+    knownRepository: (repoId: string) => repos.some((repo) => controlRepoKey(repo.projectKey) === repoId),
     // Ruling R7: the commands that need an estimate refuse by name. Nothing is substituted, and in
     // particular no mode is guessed -- a guessed mode is how a soft adapter comes to be driven as
     // a strict one, which is the whole reason these are operator arguments.
@@ -205,17 +212,30 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
   // spec §6. One pass at a time, and a re-entrant call is dropped rather than queued: the delivery
   // already drains the whole table, so a second concurrent pass would only race the single-writer
   // gate for rows the first one is about to take. Dropping is the correct answer, not a shortcut.
+  let driver: ExecutionDriver | null = null;
   let inFlight: Promise<void> | null = null;
   const pump = (): Promise<void> => {
     if (inFlight !== null) return inFlight;
     // Through the admission gate like every other write, so a pass cannot slip a claim past a
     // shutdown that has already begun draining.
     const pass = withAdmission({ admissionGate }, () => deliverSchedulerWakes(store, wakeHandlers))
-      .then(() => undefined, () => undefined)
+      // A delivered wake is a claimed run the driver can now start (spec §2.1).
+      .then((delivery) => { if (delivery.delivered.length > 0) driver?.kick(); }, () => undefined)
       .finally(() => { inFlight = null; });
     inFlight = pass;
     return pass;
   };
+
+  // Execution driver spec §2.1: only with a configured port. Unconfigured, nothing here runs and no
+  // directory is created, so the panel is what it was before this slice.
+  if (control.executionPort === "configured") {
+    driver = createExecutionDriver({
+      store, router, admissionGate, roots: controlWorkspaceRoots(store.stateDir),
+      resolveRepository: (repoId) => config.resolveRepository(repoId),
+      ccloopBin: env.ORCA_CCLOOP_BIN!, adapterConfigPath: env.ORCA_CCLOOP_ADAPTER_CONFIG!,
+      kickPump: () => { void pump(); }, crash: input.driverCrash,
+    });
+  }
 
   let timer: NodeJS.Timeout | null = null;
   const stopTimer = () => { if (timer !== null) { clearInterval(timer); timer = null; } };
@@ -226,15 +246,24 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
   let shutdownRun: Promise<boolean> | null = null;
 
   return Object.freeze({
-    store, config, service, router, admissionGate, port, epoch,
-    recover: async () => { await recoverControl(store, port, { handlers: wakeHandlers }); },
+    store, config, service, router, admissionGate, port, epoch, driver,
+    recover: async () => {
+      await recoverControl(store, port, { handlers: wakeHandlers }, { driverOwnsWebRuns: driver !== null });
+      driver?.kick();
+    },
     shutdown() {
       if (shutdownRun !== null) return shutdownRun.then(() => false);
       // The timer stops first: a pass that starts after the gate begins draining would be refused
       // anyway, and one that is already in flight is what the drain exists to wait for.
       stopTimer();
-      shutdownRun = applyPanelShutdown({ store, profileRouter: router, admissionGate, epoch, shutdownGraceMs: config.shutdownGraceMs })
-        .then(() => true);
+      // Execution driver spec §2.1: the driver's timer stops and its step in flight finishes first, then
+      // the pump's pass, then the shutdown is written -- freezing no run the driver owns (spec §4).
+      shutdownRun = (async () => {
+        await driver?.stop();
+        await inFlight;
+        await applyPanelShutdown({ store, profileRouter: router, admissionGate, epoch, shutdownGraceMs: config.shutdownGraceMs, exemptDriverRuns: driver !== null });
+        return true;
+      })();
       return shutdownRun;
     },
     pump,
@@ -244,8 +273,11 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
       // stay alive. A panel that has closed its server should exit.
       timer = setInterval(() => { void pump(); }, intervalMs);
       timer.unref();
+      driver?.start(intervalMs);
       return true;
     },
-    close: () => { stopTimer(); store.close(); },
+    // Controller ruling P10: a shutdown already stopped the driver and awaited it; close does not
+    // start a second, un-awaited stop behind it.
+    close: () => { stopTimer(); if (shutdownRun === null) void driver?.stop(); store.close(); },
   });
 }
