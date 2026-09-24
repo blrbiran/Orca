@@ -198,3 +198,20 @@ env：`ORCA_CCLOOP_BIN` ＝ 改过 C1–C3 的 ccloop 的 `clone --local`＋buil
 并入方式：CR1→§2.1 补 wake；CR2→B 抛错改 `unknown`；CR3→C 只对 `succeeded` 落地；CR4→冲突副本用 clone；CR5→目录布局；CR6→不复用 legacy 三函数。
 I1→§5.1；I2→§2.1 关闭顺序＋§4 不写 stop intent；I3→§1 限定无 estimator；I4→§2.2 E；I5→§5.3(5)；I6→§5.3(2)(4)(6)；I7→§5.3(6)；I8→§2.3＋B' 阈值；I9→A1／A2 拆分与完整 envelope；I10→§7.4；I11→§1 strict＋§8；I12→C1；I13→§7.2 各「防空绿」列。
 Minor 全部就地修进对应段落（M1 行 id、M4 残留清单、M5 `stopped`／`configHash`、M6 跳过点、M7 越界检查先于合并、M8 §1 措辞、M9 由 C3「既有模式一字不改」＋计划点名其判据）。M2（重放证据来自夹具）→ §4 标 Task 0 现量；M3 → §3.3。
+
+## 11. 计划阶段的偏离裁定（2026-09-25，控制器）
+
+计划席在写计划前现量了 §2–§6 标「Task 0 现量」的全部项（结果在计划 `docs/superpowers/plans/2026-09-25-execution-driver.md` §0，带 file:line 与探针），
+并列出 21 处本文与代码不符之处（计划 §0.1 的 D1–D21）。**控制器裁定：D1–D21 全部按计划席的建议执行，计划正文即按建议写成；本节优先于上文对应段落。**
+理由：每一条都有现量或代码行作证，且都比上文更贴近代码；人的规矩是「执行中遇到问题先按控制器的建议做，最后一次报人」。承重的几条：
+
+- **D1**：未配置 estimator 时 `import-plan` 就被拒（`control-estimator-unconfigured`）⇒ §1 的限定改为「配置一个 `contextWindowTokens:null`、预估得 `blocked-capability` 的 estimator」；诚实的验收表述随之改。
+- **D2**：`commitCandidate` 的 `releaseRunReserve` 不同步 Web 台账 ⇒ 每次 settle 后整个 group 视图被判 `run-identity` 阻塞 ⇒ 必须加 Web 分支（本片新增的生产改动）。
+- **D3**：`running` 落盘为既有的 `accepted`（视图照旧显示为 running）；新增五态都是非终态。
+- **D4**：`stopped` 是 ccloop 对正常结束的 run 的答复 ⇒ B／B' 见 `stopped` 进 collect，不进 `blocked`（推翻 §2.2 那一格）。
+- **D7**：recovery 跳过与 shutdown 豁免**只在驱动环存在时**生效 ⇒ **零条既有判据需要改写**（§7.3 的候选全部不改）。
+- **D8**：Web spec :788 是 proof-ack 规则，本片不改它 ⇒ §8 的 ERRATUM 改写为只点名 :772／:778 与「全局 blocker」的实际出处。
+- **D9**：store 没有 `state/` 子目录 ⇒ `runsRoot`／`workspacesRoot` ＝ `<stateDir>.runs`／`<stateDir>.workspaces`（与 store 目录并列）。
+- **D10**：C2 **只加不改**：共享 ref 照写（ccloop `tests/control/endToEnd.test.ts:36` 钉着它），另写按 `claim.runId` 命名的 ref，`materializeResultRepository` 读按 run 的那个。
+- **D12**：默认 20% 预留付不起一次解冲突（约 2.48M vs 3M）⇒ E1 先 `set-limit` 抬高上限。
+- 其余（D5 exit 2 ⇒ `accept-refused`；D6 A1 不动预算数额；D11 对方＝`base..landedCommit^2`；D13 用 `ORCA_IDENTITY`；D14 空结果 ⇒ work `blocked`；D15 `cleanedUp`；D16 仓库级命令作用域＋GET 路由；D17 `onSpawn`；D18 usage 取 `tokenBudgetRemaining`；D19 冲突 ref 在副本里；D20 每次 provider 调用前查 draining；D21 continuation run ⇒ `blocked`）见计划 §0.1 原表。
