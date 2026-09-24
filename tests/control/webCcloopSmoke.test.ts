@@ -46,22 +46,6 @@ async function tempRoot(prefix: string): Promise<string> {
 
 const sha256 = (bytes: Buffer | string) => createHash("sha256").update(bytes).digest("hex");
 
-/** The adapter's own capability answer, projected into the view the profile router intersects. */
-function codexProbe(capabilities: { usageObservation: string; budgetEnforcement: string; requestBoundEvidence: string | null }): CapabilityViewV1 {
-  const declared = profileSnapshot().profile.capabilities;
-  return {
-    // Only the three fields the adapter answers come from the subprocess; the rest are what a
-    // deployment declares, and `intersectCapabilities` still takes the minimum of the two.
-    usageObservation: capabilities.usageObservation as CapabilityViewV1["usageObservation"],
-    budgetEnforcement: capabilities.budgetEnforcement as CapabilityViewV1["budgetEnforcement"],
-    contextObservation: "unavailable",
-    handoffControl: declared.handoffControl,
-    handoffExecution: declared.handoffExecution,
-    contextWindowTokens: declared.contextWindowTokens,
-    requestBoundProof: capabilities.requestBoundEvidence === null ? null : declared.requestBoundProof,
-  };
-}
-
 /** A confirmed group whose profiles probe exactly as the shipped adapter does. */
 async function confirmedByAdapter(budgetMode: "strict" | "soft", probe: CapabilityViewV1) {
   const f = await webFixture(profileSnapshot(), [{ taskId: "a" }]);
@@ -145,14 +129,18 @@ describe("the shipped consumer answers for its own capabilities (task 10 step 4)
     const port = createCcloopExecutionPort({ binary: await realpath(realBinary!), adapter: "codex", adapterConfigPath: config, timeoutMs: 15_000 });
     const capabilities = await port.capabilities();
 
-    // Codex's own words, taken from the binary that would run the work: it claims no realtime
-    // usage, no bounded enforcement, and no request-bound evidence of any kind.
+    // Codex's own words, taken from the binary that would run the work: v2, eight fields, no
+    // realtime usage, no bounded enforcement, no context observation, and no request-bound proof.
+    // Human authorization 2026-09-24, G1 seam A Task 5: this literal moved from the v1 seven-field
+    // shape to the v2 eight-field shape ccloop main now answers.
     expect(capabilities).toEqual({
-      protocol: 1, durableAccept: true, ownershipIsolation: true, evidenceRetention: true,
-      usageObservation: "phase-end", budgetEnforcement: "soft", requestBoundEvidence: null,
+      protocol: 2, usageObservation: "phase-end", budgetEnforcement: "soft", contextObservation: "unavailable",
+      handoffControl: "durable", handoffExecution: "mechanical-in-run-v1", contextWindowTokens: null, requestBoundProof: null,
     });
 
-    const strict = await confirmedByAdapter("strict", codexProbe(capabilities));
+    // Human authorization 2026-09-24, G1 seam A Task 5: the adapter's own probe answer feeds the
+    // router as-is -- nothing here borrows from the declared profile.
+    const strict = await confirmedByAdapter("strict", await port.probeProfileCapabilities!());
     try {
       const refused = await strict.service.start(strict.f.command("start", {}));
       expect("error" in refused ? refused.error.code : "applied").toBe("control-capability-unsupported");
@@ -160,7 +148,7 @@ describe("the shipped consumer answers for its own capabilities (task 10 step 4)
       expect(strict.f.store.db.prepare("SELECT COUNT(*) AS n FROM runs WHERE group_id='g'").get()!.n).toBe(0);
     } finally { await strict.f.dispose(); }
 
-    const soft = await confirmedByAdapter("soft", codexProbe(capabilities));
+    const soft = await confirmedByAdapter("soft", await port.probeProfileCapabilities!());
     try {
       expect("error" in await soft.service.start(soft.f.command("start", {}))).toBe(false);
       expect((await deliverScheduledStart(soft.deps, "g")).kind).toBe("claimed");
