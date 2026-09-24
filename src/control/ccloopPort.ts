@@ -66,9 +66,10 @@ export function createCcloopExecutionPort(options:{binary:string;adapter:"codex"
    * capability vocabulary was settled: ccloop's `capabilities` now answers the eight-field v2
    * shape, so this method passes the peer's answer through and substitutes nothing. The rule it
    * cites -- that Orca may not invent a substitute source for a peer's observation -- is
-   * unchanged and is now enforced by a criterion in `tests/control/profiles.test.ts` rather than
-   * by hardcoded `unavailable`s. See docs/superpowers/specs/2026-09-24-g1-control-wire-contract-design.md
-   * in the ccloop repository.
+   * unchanged and is now enforced by a criterion in `tests/control/ccloopPort.test.ts`
+   * ("does not invent a substitute source for a peer's observation -- an overridden field passes
+   * through unchanged") rather than by hardcoded `unavailable`s. See
+   * docs/superpowers/specs/2026-09-24-g1-control-wire-contract-design.md in the ccloop repository.
    */
   async probeProfileCapabilities(){
    const {protocol:_protocol,...view}=parse(capabilitiesSchema,await raw("capabilities",{})) as Capabilities;
