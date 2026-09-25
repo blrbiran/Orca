@@ -97,6 +97,20 @@ describe("reconciling a conflict (spec §5.3)", { timeout: 30_000 }, () => {
     } finally { await t.h.dispose(); }
   });
 
+  // Fix round 1 (T7 review, minor): an exit 1 whose stderr names no code (a crash inside the run, say) is not a named
+  // refusal; it stays a spawn failure, as before T7, and keeps the head of what ccloop printed.
+  it("blocks an exit 1 whose stderr names no code as a spawn failure carrying the stderr head, not as a refusal", async () => {
+    const t = await twoConflicting({ files: { "shared.txt": "A\nB\n" }, refuse: "TypeError: something broke inside the run\n    at somewhere" }); try {
+      const driver = t.driver();
+      await untilDeadline(driver, () => t.ids.some((id) => t.body(id).state === "blocked"));
+      const blocked = t.ids.find((id) => t.body(id).state === "blocked")!;
+      const reason: string = t.body(blocked).drive.blockedReason;
+      expect(reason.startsWith("reconcile-spawn:")).toBe(true);
+      expect(reason).toContain("TypeError: something broke inside the run");
+      expect(reason).not.toContain("at somewhere");
+    } finally { await t.h.dispose(); }
+  });
+
   it("books the reconciliation's spend on the group once, and the ledger still conserves", async () => {
     const t = await twoConflicting({ files: { "shared.txt": "A\nB\n" }, spent: 7 }); try {
       const driver = t.driver();

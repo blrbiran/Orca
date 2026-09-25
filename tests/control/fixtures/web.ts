@@ -35,7 +35,9 @@ export async function webFixture(snapshot = profileSnapshot(), tasks: readonly W
   // carries, so the peer's raw answer stays schema-valid and strict-mode-safe.
   // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): the probe is now a resolution of
   // the selection being asked about (capabilities protocol 3); its capability view is still the mutable `observed`.
-  const port = { accept, resolveAgent: async (partial: PartialSelection) => ({ selection: { ...FIXTURE_AGENT, ...partial }, configHash: sha256Canonical({}), timeoutMs: 120_000, killGraceMs: 5_000, capabilities: observed }),
+  // T7 fix round 1: every selection the port is asked about, in order, so a criterion can pin which one a gate asked.
+  const asked: PartialSelection[] = [];
+  const port = { accept, resolveAgent: async (partial: PartialSelection) => (asked.push(structuredClone(partial)), { selection: { ...FIXTURE_AGENT, ...partial }, configHash: sha256Canonical({}), timeoutMs: 120_000, killGraceMs: 5_000, capabilities: observed }),
     listAgents: async () => ({ installations: [{ id: "codex", kind: "codex", defaults: { model: "fixture-model", contextWindow: "agent-default" as const }, contextOptions: ["agent-default" as const], version: "0.0.0-fixture" }] }),
     readEvidence: async () => Buffer.alloc(0), inspect: async () => ({ kind: "unknown" }), requestHandoff: async () => ({ kind: "unknown" }), collect: async () => ({ events: [], candidate: null, terminal: null }) } as unknown as ExecutionPort;
   const supplied = resolveProfile(snapshot, port), router = createExecutionProfileRouter([supplied]);
@@ -82,5 +84,5 @@ export async function webFixture(snapshot = profileSnapshot(), tasks: readonly W
     raw(`command-${++sequence}`, currentRevision(), verb, { kind: "run", groupId: "g", runId }, payload) as Extract<RawAuthorityCommandV1, { verb: V }>;
   const confirmPayload = (): ConfirmPayload => ({ planHash: readArchivedPlan(h.store, "g").planHash, proposalVersion: readBudgetProposal(h.store, "g").proposalVersion, budgetMode: "strict",
     profileIds: { estimator: "all", worker: "all", handoff: "all", goalReview: "all" }, profileHashes: { estimator: frozen.profileHash, worker: frozen.profileHash, handoff: frozen.profileHash, goalReview: frozen.profileHash }, contextPolicy: { handoffAtContextTokens: 800_000 } });
-  return { ...h, deps, frozen, accept, command, taskCommand, runCommand, rawCommand: raw, confirmPayload, estimateId: imported.result.estimateId, setObserved: (value: typeof observed) => { observed = value; } };
+  return { ...h, deps, frozen, accept, command, taskCommand, runCommand, rawCommand: raw, confirmPayload, estimateId: imported.result.estimateId, setObserved: (value: typeof observed) => { observed = value; }, asked };
 }

@@ -570,6 +570,20 @@ describe("model-assisted handoff attempts", () => {
     } finally { await h.dispose(); }
   });
 
+  // T7 fix round 1 (agent selection spec §6.4): handoff has no slot of its own, so the model-assisted attempt probes
+  // the handed-off run's own frozen selection -- the complete one on its run row, not a default and not a partial.
+  it("probes the handed-off run's own frozen selection before a model-assisted attempt", async () => {
+    const { h } = await modelAssistedFixture(); try {
+      const run = workRuns(h.store).find((candidate) => candidate.phase === "work")!;
+      const requestId = requests(h.store)[0].requestId;
+      h.asked.length = 0;
+      expect(await beginHandoffAttempt({ store: h.store, profileRouter: h.deps.profileRouter }, requestId)).toMatchObject({ kind: "reserved" });
+      const frozen = JSON.parse(String(h.store.db.prepare("SELECT body FROM runs WHERE id=?").get(run.runId)!.body)).agent;
+      expect(frozen).toEqual({ agent: expect.any(String), model: expect.any(String), contextWindow: expect.anything() });
+      expect(h.asked).toEqual([frozen]);
+    } finally { await h.dispose(); }
+  });
+
   it("makes a pre-attempt capability failure retryable with no attempt, session, or ordinal change", async () => {
     const { h, service } = await modelAssistedFixture(); try {
       const runId = workRuns(h.store).find((run) => run.phase === "work")!.runId;

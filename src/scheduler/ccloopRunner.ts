@@ -101,7 +101,8 @@ export const AGENT_SELECTION_FILE = "agent-selection.json";
  */
 export class AgentsRunRefused extends Error {
   constructor(readonly refusal: string | null, readonly stderr: string) {
-    super(`ccloop run --agents refused${refusal === null ? "" : `: ${refusal}`}`);
+    // With no code, the first stderr line is kept: it is all anyone will have to go on (T7 fix round 1).
+    super(refusal === null ? `ccloop run --agents exited 1: ${stderr.trim().split("\n")[0] || "<empty stderr>"}` : `ccloop run --agents refused: ${refusal}`);
     this.name = "AgentsRunRefused";
   }
 }

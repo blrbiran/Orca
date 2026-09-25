@@ -9,7 +9,7 @@ import type { ExecutionProfileSnapshotV1 } from "../../src/control/webProtocol.j
 import { collectControlled } from "../../src/control/schedulerBridge.js";
 import { getGroup } from "../../src/control/queries.js";
 // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
-import { amount, openTestStore, resolvedAs, seedBudgetCase } from "./fixtures/store.js";
+import { amount, caps, openTestStore, resolvedAs, seedBudgetCase } from "./fixtures/store.js";
 
 const digest = (byte: string) => byte.repeat(64);
 const latch = () => { let release!: () => void; const promise = new Promise<void>((resolve) => { release = resolve; }); return { promise, release }; };
@@ -51,11 +51,15 @@ function capableProbe() {
   return structuredClone(profileSnapshot().profile.capabilities);
 }
 
-// Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): the port's one capability
-// question is resolveAgent (capabilities protocol 3, spec §4.6), which both the router's probe and the service's own
-// check ask; `probing(view)` answers it with `view` for whatever selection is asked.
+// Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"; fix round 1): the port's one
+// capability question is resolveAgent (capabilities protocol 3, spec §4.6), asked both by the router's probe and by the
+// service's own check (and the dispatch gate). Before, those were two methods -- probeProfileCapabilities answered
+// `view` and capabilities() answered the capable `caps` -- so a degraded `view` could only be refused by the router's
+// observed-profile branch. To keep that, `probing(view)` answers `view` only while the router is probing (serviceWith
+// wraps the router and raises `routerProbing`), and the capable `caps` to every direct call.
+let routerProbing = 0;
 const probing = (view: () => ReturnType<typeof capableProbe> | Promise<ReturnType<typeof capableProbe>>): Pick<ExecutionPort, "resolveAgent"> => ({
-  resolveAgent: async (partial) => resolvedAs(await view(), partial),
+  resolveAgent: async (partial) => resolvedAs(routerProbing > 0 ? await view() : caps, partial),
 });
 
 function port(overrides: Partial<ExecutionPort> = {}): ExecutionPort {
@@ -75,7 +79,9 @@ function port(overrides: Partial<ExecutionPort> = {}): ExecutionPort {
 function serviceWith(store: Awaited<ReturnType<typeof openTestStore>>["store"], selected: ExecutionPort, fallback = port(), handoffPort = port()) {
   const frozen = resolveProfile(profileSnapshot(), selected);
   const handoff = resolveProfile(handoffSnapshot(), handoffPort);
-  const router = createExecutionProfileRouter([frozen, handoff]);
+  const real = createExecutionProfileRouter([frozen, handoff]);
+  // Marks the port calls made from inside the router's probe (see `probing`); every other method is the router's own.
+  const router: typeof real = Object.freeze({ ...real, probe: async (profile: Parameters<typeof real.probe>[0], agent?: Parameters<typeof real.probe>[1]) => { routerProbing += 1; try { return await real.probe(profile, agent); } finally { routerProbing -= 1; } } });
   const selection: ExecutionProfileSelection = { workKind: "task", profileId: "worker", profileHash: frozen.profileHash };
   const handoffSelection: ExecutionProfileSelection = { workKind: "handoff", profileId: "handoff", profileHash: handoff.profileHash };
   return { service: new ControlService(store, fallback, { profileRouter: router, reconcileGrant: { work: amount(7, 500, 1, 1), handoff: amount(2, 50, 0, 0) } }), selection, handoffSelection, frozen };
@@ -94,7 +100,7 @@ describe("profiled service execution", () => {
         seedBudgetCase(h.store);
         let accepts = 0;
         const selected = port({
-          // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
+          // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"; fix round 1): the degraded view is what the router's probe observes, while the service's direct check still answers capable -- so only the observed-profile branch of profiledCapabilities can refuse, as before.
           ...probing(() => mode === "unavailable" ? { ...capableProbe(), handoffControl: "unavailable" } : capableProbe()),
           accept: async () => { accepts += 1; return { kind: "unknown" }; },
         });
@@ -132,7 +138,7 @@ describe("profiled service execution", () => {
         const seeded = seedBudgetCase(h.store);
         let available = true, accepts = 0;
         const selected = port({
-          // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
+          // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"; fix round 1): the degraded view is what the router's probe observes, while the service's direct check still answers capable -- so only the observed-profile branch of profiledCapabilities can refuse, as before.
           ...probing(() => available ? capableProbe() : { ...capableProbe(), handoffControl: "unavailable" }),
           accept: async () => { accepts += 1; return { kind: "unknown" }; },
         });
@@ -151,6 +157,30 @@ describe("profiled service execution", () => {
     }
   });
 
+  // T7 fix round 1 (agent selection spec §6.4): reconciling an unknown start re-probes the run's own frozen selection
+  // (run.agent), through the router and the service's direct check alike -- never a default or a partial.
+  it("re-probes the run's own frozen selection before reconciling an unknown start", async () => {
+    const h = await openTestStore();
+    try {
+      const seeded = seedBudgetCase(h.store);
+      const asked: unknown[] = [];
+      const selected = port({
+        resolveAgent: async (partial) => { asked.push(structuredClone(partial)); return resolvedAs(capableProbe(), partial); },
+        accept: async () => { throw new Error("lost-start-response"); },
+        inspect: async () => ({ kind: "absent" }),
+      });
+      const { service, selection, handoffSelection } = serviceWith(h.store, selected);
+      const claim = await service.claimProfiled("g1", "T1", selection, handoffSelection);
+      await expect(service.startProfiled(selection, envelope(claim, seeded.w1.contract, h.root))).rejects.toThrow("start-outcome-unknown");
+      asked.length = 0;
+      await Promise.resolve().then(() => service.reconcileStartForRun(claim.runId)).catch(() => undefined);
+      const frozen = readRun(h.store, claim.runId).agent;
+      expect(frozen).toEqual({ agent: "codex", model: "fixture-model", contextWindow: "agent-default" });
+      expect(asked.length).toBeGreaterThanOrEqual(2);
+      expect(asked.every((partial) => JSON.stringify(partial) === JSON.stringify(frozen))).toBe(true);
+    } finally { await h.dispose(); }
+  });
+
   it("freshly validates the persisted profile before reconciling an unknown start", async () => {
     for (const mode of ["stale", "missing", "unavailable"] as const) {
       const h = await openTestStore();
@@ -158,7 +188,7 @@ describe("profiled service execution", () => {
         const seeded = seedBudgetCase(h.store);
         let available = true, accepts = 0;
         const selected = port({
-          // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
+          // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"; fix round 1): the degraded view is what the router's probe observes, while the service's direct check still answers capable -- so only the observed-profile branch of profiledCapabilities can refuse, as before.
           ...probing(() => available ? capableProbe() : { ...capableProbe(), handoffControl: "unavailable" }),
           accept: async () => { accepts += 1; throw new Error("lost-start-response"); },
           inspect: async () => ({ kind: "absent" }),

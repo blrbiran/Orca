@@ -299,8 +299,9 @@ export async function stepR(deps: ExecutionDriverDeps, runId: string, context: D
     () => undefined,
     (error: unknown) => {
       // Controller ruling P7: only a run still reconciling is blocked from here, never one moved on since.
-      // Plan T6 ruling: a refusal (`ccloop run --agents` exit 1) is blocked under ccloop's own code, not as a spawn failure.
-      const reason = error instanceof AgentsRunRefused ? `reconcile-refused${error.refusal === null ? "" : `:${error.refusal}`}` : `reconcile-spawn:${describeError(error)}`;
+      // Plan T6 ruling: a refusal (`ccloop run --agents` exit 1 naming a code) is blocked under ccloop's own code. An
+      // exit 1 that names none is not known to be a refusal and stays a spawn failure with the stderr head (fix round 1).
+      const reason = error instanceof AgentsRunRefused && error.refusal !== null ? `reconcile-refused:${error.refusal}` : `reconcile-spawn:${describeError(error)}`;
       if (!context.stopped && readDriverRun(store, runId).state === "reconciling") blockRun(deps, runId, "R", reason);
     },
   ).catch(() => undefined).finally(() => { context.reconciling.delete(runId); });
