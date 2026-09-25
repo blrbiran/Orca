@@ -59,7 +59,7 @@ export interface AgentResolutionV1 {                                // what capa
   configHash: string;                                               // canonicalHash(MaterializedAgentConfigV1)
   timeoutMs: number;
   killGraceMs: number;
-  capabilities: CapabilityViewV1;                                   // the eight fields, no `protocol`
+  capabilities: CapabilityViewV1;                                   // the seven capability fields, no `protocol`
 }
 export class AgentError extends Error { constructor(readonly code: string, detail?: string) }
 ```
@@ -136,7 +136,7 @@ listAgents(): Promise<AgentsView>;                                          // c
 - work item／run 行新增：`agent: AgentSelection`、`agentProvenance`、`configHash`（确认前 `null`）、`timeoutMs`、`killGraceMs`、`agentCapabilities: CapabilityViewV1`。
 - 组记录新增：`agentOverrides: GroupAgentOverrides`（面板与 plan 顶层合并后的组层）、`reconcileSlot: FrozenSlot | null`、`estimatorSlot: FrozenSlot | null`。
 - 表 `agent_preferences(operator_id TEXT PRIMARY KEY, revision INTEGER NOT NULL, doc_json TEXT NOT NULL)`。
-- 命令动词 `set-agent-preferences`（target `{kind:"operator", operatorId}`，payload `{expectedRevision, preferences: OperatorPreferences}`）、`proposal-set-agent`（target group，payload `{baseProposalVersion, scope: {kind:"group", slot: Slot} | {kind:"task", taskId}, partial: PartialSelection | null}`，`null` ＝ 清除该层）。
+- 命令动词 `set-agent-preferences`（target `{kind:"operator", operatorId}`，payload `{preferences: OperatorPreferences}`，revision 只在命令信封的 `expectedRevision`，§0.2 P5）、`proposal-set-agent`（target group，payload `{baseProposalVersion, scope: {kind:"group", slot: Slot} | {kind:"task", taskId}, partial: PartialSelection | null}`，`null` ＝ 清除该层）。
 - confirm payload 新增 `selectionsHash: string`。
 - 环境变量 `ORCA_AGENTS_TABLE` 取代 `ORCA_CCLOOP_ADAPTER_CONFIG`。
 
@@ -163,6 +163,36 @@ listAgents(): Promise<AgentsView>;                                          // c
 各分节自带的「现量」表是写作席在副本里量的，**实施席开工前按内容锚点重核**（行号会移动；前面的 Task 会改同一文件）。
 
 ---
+
+## §0.2 计划复审更正（2026-09-26，复审报告 `.superpowers/sdd/2026-09-26-agent-selection/plan-review.md`；**优先于 §0 以下所有分节正文**）
+
+**总原则**：各分节是并行写的，后面 Task 的 before 锚点可能写的是前面 Task 落地**之前**的代码。**实施席以真实的树为准**：前面 Task 已产出的符号、文件、判据**只增量修改，不重新创建、不整份覆盖、不重复声明**；分节正文与已落地代码冲突时，保留已落地的名字与形状，按本节与 §0 做。
+
+| # | Task | 必须这样做 |
+|---|---|---|
+| P1（C1） | T13 | `agentsTablePath(env)` 缺省分支用 `env.HOME`（缺或非绝对 ⇒ 拒），**不许调 `os.homedir()`**；补判据「不给 `ORCA_AGENTS_TABLE`、`HOME` 指向临时目录 ⇒ 表落 `<tmpHOME>/.orca/agents.json`、0700／0600」；判据文件 `beforeAll` 把进程级 `HOME` 与 `ORCA_AGENTS_TABLE` 改道到临时目录；变异 M13-10 在这三条落地前**禁止跑**，跑时只在副本且 HOME 改道。 |
+| P2（C2） | T3 | 3.5.6 之后加一步：`src/agents/claude.ts` 的 `createAdapter` 改 `return new ClaudeAgentAdapter(config)`；`AGENT_ERROR_CODES` 删 `agent-adapter-unavailable`；T1 的 registry 判据「does not yet build a claude adapter」整条改写为 `toBeInstanceOf(ClaudeAgentAdapter)`（带改写注释）；变异「改回抛错」须红；核 `grep -rn "agent-adapter-unavailable" src tests` rc=1。 |
+| P3（C3） | T3 | **跳过 §3.4**（`extraEnv` 已由 T1 产出）及 Files 里对应四项；变异 E1–E3 改跑 T1 的 `tests/runtime/codex/extraEnv.test.ts`。 |
+| P4（C4／R7） | T10 | 按 R7 实现：导入时 `prepareEstimatorSlot` **不读 plan 源**，只解析操作者两层（`estimatorSlotFor(deps, actorId, {}, profile)`），在调用 probe 前不得插入任何 `await`；plan 文件与 `ControlPlanV1` **没有** `estimatorAgent`（带它的 plan 被拒为 malformed，补判据）；**跳过**把受保护判据 `planImport.test.ts > immutable plan import > rechecks revision after a successful in-flight probe before source I/O` 改写的那一段（判据本体一字不改，只允许改 `setup()` 让 `estimatorObservation` 带 `resolution`）；变异 T10-M3 换成「`prepareEstimatorSlot` 经 `resolveTarget` 读源 ⇒ 受保护判据红」；补判据：面板组级 estimator 在 reestimate 生效（R7 正向面）＋变异。 |
+| P5（C5／R5） | T14、T15、T16、骨架 | `set-agent-preferences` 的 payload 一律 `{ preferences }`；revision 只在命令信封的 `expectedRevision`。T14 判据、`web/src/controlTypes.ts` 的 `SetAgentPreferencesPayloadV1`、T15 `sendAgentPreferences`、T16 `setPreferences` 都按此写（不许 `as never` 掩盖）。 |
+| P6（C6） | T10 | `tests/control/fixtures/web.ts` 只对 T7 版本**增量**改，保留 T7 的 `FIXTURE_AGENT` 与桥（桥到 T11 才删）；不重新加回 `probeProfileCapabilities`／`capabilities`；T10 新文件 `agents.ts` 里的 id 常量叫 `FIXTURE_AGENT_ID`，不与 `web.ts` 的 `FIXTURE_AGENT` 同名；port 字面量不得出现重复键。 |
+| P7（C7） | T9 | `src/control/webService.ts`、`src/control/stopIntent.ts` 里排除 `global`／`repository` 后直接读 `target.groupId` 的三处，改为正向判断 `target.kind === "group"`（或加上 `operator`），列入 T9 Files，T9 提交前 tsc rc=0。 |
+| P8（C8） | T14 | 面板夹具：`BootOptions` 加 `agents?`、`resolveAgent?`、`seedPreferences?: false`；未给时回落 T10 的版本；T14 自己的替身改名 `claudeCodexResolveAgent`，由 T14 判据显式传入；T14 判据里「初始 `revision:0`」「`agent-unselected`」两条用 `seedPreferences:false` 启动。 |
+| P9（I1） | T11、T12 | 「T7 bridge」共 **6 处**：T11 删 `web.ts`、`live-driver-acceptance.ts`、`ccloopWorld.ts` 两处（连同无用的 `const resolution`）四处，核「剩下的只在 `driverReconcile.test.ts` 与 `src/control/driverLanding.ts`」；T12 删这两处，之后 `/usr/bin/grep -rn "T7 bridge" src tests scripts > $S/bridge.txt; echo rc=$?` 期望 rc=1。R8 的「三处」以本条为准。 |
+| P10（I2） | T10、T11 | 以 T7 终态为 before：`handoffGraceMsOf` 已由 T7 放进 `driverHandoff.ts`（async、带 `graceByRun`），T11 只换函数体为读冻结 `killGraceMs`、删 WeakMap、调用点改读冻结值，**不新增同名导出**；T11 显式删 T7 的 `temporaryProbeSelection` 与判据「`ccloopPort.test.ts` > … > TEMPORARY (plan T11 deletes it): …」（登记为按计划删除的临时判据），核 `grep -rn "temporaryProbeSelection\|TEMPORARY (plan T11" src tests` 零命中；legacy 路径沿用 T7 的 `workAgents`／`parentAgent`，**不新造** `groupAgents`／`workAgent`／`taskAgent`；T10 Step 10.6 只把 T7 的 `selection?: AgentSelection` 放宽为 `PartialSelection`；`persistedRunSchema.agent`、`errors.ts` 的 agent 码若已存在则跳过（不重复键）。T10／T11 的既有判据红表以**实跑**为准（W5 的 251 条是静态预测）。 |
+| P11（I3） | T11、T15 | T11 补 web 判据「无 `selectionsHash` 时点确认不调用 `onCommand`」＋删条件的变异；T15 Step 7 **替换** T11 那一行（升级为 `disabled`），不重复加 prop／键；核 `selectionsHash:` 在 `BudgetEditor.tsx` 恰 1 次、`W5-M9` 临时注释已消失。 |
+| P12（I4） | T14 | 只加 T14 自己的新类型；跳过已由 T9／T10／T11 完成的镜像与 `controlGroupWebToServer` 改写（L16036–16053 与重复的 `REWRITTEN` 行）；期望 web tsc rc=0。 |
+| P13（I5） | T7、T16、T11 | T7 把表对象抽成导出的 `const agentsTable`（写文件前）；T16 跳过重复的 `versionOf` 声明、往 `agentsTable.installations.claude` 加条目后重写文件；T11 用字面量 `"codex"`（不引用不存在的 `WORLD_AGENT`），`raw(...)` 按实际签名调用。 |
+| P14（I6） | T12 | 断言从冻结的 `reconcileSlot.selection` 读值比对（不写死 `fixture-model`），并断言与 worker 冻结值不同；读组的 reconcile 槽用 T11 的 `readConfirmedReconcileSlot`。 |
+| P15（I7） | T7 | `fake-ccloop-control.mjs` 的退出码与码名对齐真 T5：具名拒绝退 2、stderr `<code>[: <detail>]`；坏 argv 退 1；`capabilities {}` 拒 `control-request-invalid`；判据字面量改 `"2:agent-version-drift: …"`。 |
+| P16（I8） | 全部 | 台账 `progress.md` 的改写记录格式统一为一行 `- REWRITTEN: <文件> > <describe> > <it> — <为什么>`（从 T1 起）；新判据文件记 `- NEW-CRITERIA: <文件> <条数>`；T17 的判定器从台账读这两类行生成 `EXPECTED`。 |
+| P17（I9） | T5、T17、W5 各变异 | ccloop **主树不跑 `npm run build`／`verify:control`**（会换掉主树 `dist/` 的线上协议）；这类步骤在 `git clone --local` 副本里做。变异复原一律写字面路径 `/usr/bin/git -C "$S/mut-…" checkout -- src`，**不许**依赖跨调用的 `$C`。T17 门先断言 E2E 用的 ccloop build 的 HEAD 等于 ccloop `main` HEAD，不等就重新 clone＋build。 |
+| P18（I10） | T5、T6、T9 | 选择／上下文 schema 只有一个来源：ccloop 用 `protocol.ts` 的（R4），T6 用 `agentSelectionSchema`；Orca 用 T7 在 `schema.ts` 定义的，`webProtocol.ts` 以 `export { … } from "./schema.js"` 再导出（T14 Step 0 的检查接受再导出）。 |
+| P19（I11） | T3 | `ClaudeAgentAdapter` 调 T1 的 `claudeModelArgument(config.selection)` 拼 1M，不自己拼 `[1m]`、不再定义第二份 `ONE_MILLION`；变异 M1m 改针对 `claude.ts`。 |
+| P20（I12） | T17 | 加一步：给本 spec 末尾追加「§13 实施期更正」（只追加、原文不动，判据核 append-only），登记 R7、R6 M4、R8 M-8、W5-M12、W5-M15 等偏离；报人清单另列 C1 残留文件与改写过的既有判据。 |
+| P21（I13） | 全部 | 每一波末个 Task 之后派一席复审（波 1：T1–T4；波 2：T6、T5、T7；波 3：T8–T13；波 4：T14、T15；波 5：T16），T17 之后派一席终审。 |
+| P22（I14） | T11 | `profiles.test.ts > trusted execution profiles > keeps Codex phase-end and soft` 整条改写为「v2 快照带 `adapter:"codex"` 被拒」（编码 profile v2 删 adapter 身份字段），不删除。 |
+| P23（m1–m12） | 各 Task | m1 `CapabilityViewV1` 是 7 键；m2 删 T7 startEnvelope 判据里读回自己写入值的那一行、T15 判据 7 限定 `section[aria-label="Agent selection"]`、driverHarness 冻结 `killGraceMs` 用非 5000 的值；m3 T5 `claudeEndToEnd` 不过滤 `--version`、断言恰 3 行；m5 T6 用 `AgentError` 抛这两个码；m6 为列出的分支各补判据或登记；m7 T2 detect／validate 与 T13 加「HOME＋四个 XDG 根改道、零写入」断言；m8 D12／D13 注入 probe、PATH 指向空目录；m9 逐文件 `git add`；m10 不用管道取字节数；m11 变异电池等门的 `summary.txt` 出 DONE 后才开始；m12 各条照做。 |
 
 ## 任务总表（波次见 spec §10；各 Task 正文在下文各节）
 
@@ -16822,7 +16852,7 @@ export const fetchAgentPreview = (groupId: string): Promise<AgentSelectionPrevie
   const sendAgentPreferences = async (preferences: OperatorPreferencesV1, expectedRevision: number): Promise<void> => {
     if (agentPreferences === null) return;
     const scope = `@operator:${agentPreferences.operatorId}`;
-    const answer = await sendControlCommand(AGENT_PREFERENCES_PATH, { commandId: nextCommandId(), expectedRevision, payload: { expectedRevision, preferences } });
+    const answer = await sendControlCommand(AGENT_PREFERENCES_PATH, { commandId: nextCommandId(), expectedRevision, payload: { preferences } }); // §0.2 P5: revision lives only in the envelope
     if (answer.kind === "uncertain") dispatchControl({ type: "refusal", groupId: scope, value: answer.refusal });
     else if (answer.status >= 400) dispatchControl({ type: "refusal", groupId: scope, value: refusalFromAnswer(answer) });
     try { setAgentPreferences(await fetchAgentPreferences()); } catch { /* the refusal above already says why */ }
