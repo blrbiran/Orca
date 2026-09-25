@@ -3,11 +3,11 @@
   "runId": "orca-dev-af3dc0d3",
   "runtime": "claude-code",
   "sessionRef": "af3dc0d3-b6e4-4b97-b41a-7f75552cf74c",
-  "writtenAt": "2026-09-25T01:55:24.672Z",
-  "head": "b16af65632c4abfdfa4b9c72e03087dafcc3f2b7",
+  "writtenAt": "2026-09-25T01:55:41.853Z",
+  "head": "b6c1a93718677acbf04c530783765ff87ba83fb2",
   "level": {
     "kind": "reading",
-    "level": 128699,
+    "level": 130118,
     "windowTokens": 1000000,
     "t1": 330000,
     "t2": 450000,
@@ -15,7 +15,7 @@
   },
   "next": [
     "Execution driver first slice (①②③) is done under fake codex; see docs/handoff/handoff.md §4.0 and .superpowers/sdd/2026-09-25-execution-driver/. Do not resume its plan.",
-    "Human opened B on 2026-09-25 (session af3dc0d3): ④ handoff delivery for the execution driver. Start with superpowers:brainstorming -> spec -> plan; do not implement before the human approves the spec.",
+    "Human opened A then B on 2026-09-25 (session af3dc0d3). A first: real-codex live acceptance of the execution driver (real money) - write an acceptance procedure with a spend ceiling and get the human's go before any paid run. Then B: ④ handoff delivery via superpowers:brainstorming -> spec -> plan; no implementation before the human approves the spec.",
     "Driver-loop E2E needs a ccloop main build containing C1-C4: fresh git clone --local into the session scratchpad, symlink node_modules, npm run build; adapter config under /private/tmp, mode 0600, pointing at ccloop's fake codex."
   ],
   "open": [
@@ -25,7 +25,7 @@
   "awaitingHuman": [
     {
       "kind": "named-authorization",
-      "what": "Real-codex live acceptance of the execution driver (costs real money); until then do not claim Web dispatch works"
+      "what": "Go-ahead and spend ceiling for the first paid real-codex run (A is opened, but the paid run itself waits for the human); until it passes do not claim Web dispatch works"
     },
     {
       "kind": "named-authorization",
@@ -40,9 +40,9 @@
     {
       "command": "npm run typecheck",
       "exitCode": 0,
-      "commit": "b16af65632c4abfdfa4b9c72e03087dafcc3f2b7",
-      "observedAt": "2026-09-25T01:55:24.623Z",
-      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-af3dc0d3-BDShKu/1.txt"
+      "commit": "b6c1a93718677acbf04c530783765ff87ba83fb2",
+      "observedAt": "2026-09-25T01:55:41.807Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-af3dc0d3-fw6fn4/1.txt"
     }
   ]
 }
