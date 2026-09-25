@@ -242,3 +242,56 @@ Orca 若把它读成「已解决」，就是改写对端观测，违反执行驱
 **线上契约变更（人已同意）**：shutdown 条目的 `disposition` 枚举（`webProtocol.ts:1116-1123`）加值 `skipped-driver-owned`，`web/src/controlTypes.ts` 同步；§6 的「`skipped: "driver-owned"` 字段」作废，以本条为准。
 
 **判据增补**（在 §9.2 与 §11 各条之上）：H8（§11 I1）；C6 的 ccloop 判据（deadline 中止的 candidate `unresolvedRequestIds` 为空、`result` 仍为 `partial`，并配一条删掉修复就红的变异）；E2E 一例「deadline 中止 ⇒ 可恢复 ⇒ 续跑落地」（C5 `delayMs` 大于请求的 deadline）；重复解冲突的 token 全部记到 group 上（§11 I7）。
+
+## 13. 复审后的更正与人裁（2026-09-25，控制器会话 `e5f56bfe`）—— **本节优先于上文全部（含 §11、§12）**
+
+> **归属**：控制器会话 `e5f56bfe`（Claude Opus 5.5）。依据：一席只读独立复审（6C／10I／8M；报告在会话 scratchpad `handoff-spec-rereview.md`，不入库；工具报数 353,115 token、66 次工具调用，美元未知），观测于 Orca `264f967`、ccloop `a5dc529`。
+> 控制器用 python 逐行现测复核了全部 Critical 的承重行（Orca `checkpoints.ts:46,62,77,85`、`continuation.ts:140,145-147`、`canonicalJson.ts:65`、`resumeBundle.ts:78,82,84-87`、`executionDriver.ts:399,483,496`、`usage.ts:27`、`budget.ts:71-74`、`controlViews.ts:452`、`web/src/ControlGroupView.tsx:22`、`stopIntent.ts:289`、`store.ts:128,133`、`webDispatch.ts:293`、`continuation.ts:176-177`；ccloop `handoff.ts:196-198,261-270,288,310`、`runLoop.ts:1228`、`tests/control/handoff.test.ts:222-224,242,262,264`），**全部成立**。
+> 上文逐字保留。
+
+### 13.1 人裁（2026-09-25，逐项点选）
+
+- **C-2「ccloop 把没跑到的阶段文件记进 `missing`，Orca 见 `missing` 非空即判不可续」⇒ 修在 ccloop（C7）。**
+  有请求且 `runState` 非终态时，当前 attempt 里**没进入过**的阶段文件不列 `missing`；进入过而文件不在的仍列。`result` 语义不变。「进入过」的判据（loop-state／事件里哪一个字段）由计划 Task 0 现量。H1 加断言：H-settle 之后 `checkpoint.missing` 为空、`run.recoverable===true`。
+- **C-3「deadline 中止的阶段 usage 为 null ⇒ C6 之后仍不可续，且把组的 `usageUnknown` 置真」⇒ 人裁「本片就让它可续」。**
+  §12 判据增补里「deadline 中止 ⇒ 可恢复 ⇒ 续跑落地」一例**保留**。机制未定：由计划 Task 0 现量（真 codex 与 fake codex 在阶段被中止时，已写出的日志里有没有可用的 usage 观测；ccloop `onPhaseSettled` 在 `result` 为空时手里还有什么），计划席给出方案、控制器裁定后报人。候选：(i) ccloop 从被中止阶段已写出的 codex 日志取最后一次 usage 观测（修在产生观测的一端，优先）；(ii) 取不到时由某一端以一个**可证明的上界**结算，并登记「可能低估／高估」。**不许**让 Orca 把 `null` 静默当 0。
+- **C-5「stop 后冲突且不可负担 ⇒ run 保持 blocked、请求已 settle」⇒ 人裁「收口成 held，续跑重跑」。**
+  §12(2) 第二句作废。该 run 走 H-settle 记账（承诺挂 `held`、work `held`、run `settled-recoverable`、`active=0`），检查点取该 run 已收集到的完整结果，Orca 检查点 `result:"partial"`（任务未落地）；续跑从该检查点再跑一次 ccloop（**会再花一次钱**，已登记）。请求 `settled-recoverable`。
+  另：`freezeRun` 遇到「active 且请求已 settle」按 Web §6.2 记 recovery blocker，**不抛整条命令**；配一条判据。
+- **C-4 ＋ I-4「面板把正常完成的任务选进续跑；全部 restartable 时面板无出口」⇒ 人裁「同意，本片一起改」（线上契约变更）。**
+  `RunViewV1` 加只读字段 `continuable`（＝持久 state 为 `settled-recoverable` 且检查点 `result==="partial"`），`web/src/controlTypes.ts` 同步；`continuableRuns` 改看它。组 `handoff-complete` 且无可续项时，面板显示发空 selections 的「Resume (no continuation)」。H5 加面板层断言（`continuableRuns(view)` 不含该 run），另加一例「组内一个已完成、一个被 handoff ⇒ 面板一键续跑成功」。
+
+- **ccloop 既有判据（ccloop 人裁 88）⇒ 人 2026-09-25「允许修改」**，覆盖且只覆盖控制器当面点名的两条：
+  `tests/control/handoff.test.ts` > "mechanical handoff packet" > "allows request:null only for natural terminal runs and retains handoff refs for every result"（C6）；
+  同文件 > "mechanical handoff packet" > "derives blocked facts and explicit logs without an LLM call"（C7，若现跑确实红）。
+  守 (b) 整条改写不许放宽、(c) 改后注释写明编码的是本条人裁。**计划 Task 0 现跑若另有 ccloop 判据红，仍须人逐条指名。**
+
+### 13.2 控制器决定（证据分得出胜负，Rule 7；人未逐条点）
+
+- **C-1 检查点字节形态**：H-settle 写检查点一律 `canonicalBytes(candidate)` —— 盘上文件与 `checkpoints` 行 body 是同一份规范字节，行 hash ＝ `sha256Canonical(candidate)`；**不复用** `persistImmutableCheckpoint` 的 `JSON.stringify(c)`。判据：H-settle 之后 `exportResumeBundle` 与 `registerContinuation` 都通过；变异「换回 `JSON.stringify`」须见红。
+- **C-6 续跑 run 被 stop 在 A1／A2**：restartable 支对 `continuationIntentId` 非空的 run 另行处理 —— work 回 `held`、`currentRunId` 指回前任、清 `pendingRunId`／`continuation`，allocation 回 `held`（数额不变），run 记 `settled-restartable`。判据：再次 resume 选同一前任成功，新续跑 envelope 带 `inputCheckpoint`。
+- **I-1 事务边界**：H-settle ＝ 外部段（`archiveRun`、写规范字节检查点文件，二者幂等）＋ 一个 DB 事务（插检查点行、置 `checkpointId`／`recoverable`、recoverable 记账、请求 settle、重算 stop 状态），导出或新增事务内函数。C1 是两个事务（`commitCandidate` 一次、请求 settle 一次），由 §11 I5 的兜底行收口；§11 I5「窗口不存在」对 C1 作废。
+- **I-2 遍历范围**：H 的遍历 ＝ `driverRunIds` ∪ {Web work run 且最新请求 ∈ `ADOPTABLE_STATES`}，不看 run 状态；无请求时逐字节同前。
+- **I-3 blocked run 的分支轴**：按「ccloop 执行是否可能仍在跑」分 —— `drive.outcome!==null` 或 `blockedAt ∈ {D,R,E}` ⇒ 不投递，按 13.1 C-5 收口；`blockedAt==="B'"`，或 `blockedAt==="C"` 且无 outcome ⇒ 投递／inspect，拿不到结果进 `outcome-unknown`；`blockedAt ∈ {A1,A2}` 或 B 上的 `accept-refused` ⇒ restartable。
+- **I-5 续跑预算**：A2 对续跑把 contract 的 `maxAttempts`／`tokenBudget`／`totalRuntimeBudgetMs` 截到剩余 grant（取 min，contract 哈希按上游规则重算）；某一维剩余为 0 ⇒ 该续跑在注册时被拒，由面板剔除后再发（`registerContinuation` 的全有或全无不改）。
+- **I-6**：§11 I7 删掉「或 `reconcileRunsDirOf` 下的 spawn 目录数」（每次 spawn 前同一目录被删，恒为 1）；只用 fake codex `.calls` 中解冲突脚本的条目数。单调 spawn 键：`beginReconcile` 取已记账的 `reconcile-usage:<runId>:%` 行数为初值。
+- **I-7 C5 加续跑区分键**：脚本条目可按 `<task>#continuation` 取，命中条件由 Task 0 现量（prompt 里能否看到 ccloop 的 continuation 约束文本）；未命中退回 `<task>`，旧行为一字不改。
+- **I-8 关闭**：§12(3) 的「跳过」只在 (i) 无既有 stop intent 且 (ii) 组内无非驱动环活动 run 时成立；既有 `blocked-inconsistent`／`preserved-*` 先判；H7 保留。ERRATUM 另点名 Web §6.4「重启后空 `resume-from-handoff` 再显式 `start`」对驱动环组作废。
+- **I-9**：C6 改 ccloop `handoff.ts` 的 packet 与 candidate **两处**。
+- **I-10**：投递请求体由该请求**原始 outbox 行**确定性重建（`reason` 按 origin 映射），不加字段、不改 schema；驱动环**不调** `deliverHandoffStop`。§11 I4「持久化实际发出的字节」作废。
+- **Minor a–h 全部接受**：allocation 无 `ready` 态（非续跑保持 `confirmed`、续跑回 `held`）；§7 补登 `.resume-staging-<uuid>` 残留；N 元解冲突 id 超 200 字符时改用哈希后缀；N2 的「人工重试可能多一次解冲突」登记；H-settle candidate 的 `terminalOutcome` 取 ccloop candidate 的；R-H 的 `H-after-deliver` 接受 `latched`／`complete` 两种答复；§11 M6 对 `driverRecovery.test.ts` 的判断放宽为「多半不红」；B 上的 `accept-refused` 判 restartable。
+
+### 13.3 会红的既有判据（静态阅读；计划 Task 0 现跑为准）
+
+- Orca 必红：`tests/control/executionDriver.test.ts` "D21: blocks a continuation run before any provider attempt, by name"。条件性：`tests/panel/controlLifecycle.test.ts:236` 那条（按 13.2 I-8 的次序应不红）、`web/tests/controlPanel.test.tsx:117-120`（随 13.1 C-4）。本片授权改写（§12），守人裁 88 (b)(c)。
+- ccloop 必红：`tests/control/handoff.test.ts` "mechanical handoff packet > allows request:null only for natural terminal runs and retains handoff refs for every result"（C6）。可能红：同文件 "derives blocked facts and explicit logs without an LLM call"（C7）。**要人按 ccloop 人裁 88 指名后才能改。**
+
+### 13.4 计划期的人裁与控制器裁定（2026-09-25，控制器会话 `e5f56bfe`）—— 优先于 13.1–13.3
+
+依据：计划 `docs/superpowers/plans/2026-09-25-handoff-delivery.md` 的 §0（Task 0 现量）与 §0.1（D 表）；控制器现测复核了 D-C3（ccloop `runCodexPhase.ts:11-14` 的 `PhaseOutcome` 无 usage 字段、`command.ts:146` `usageObservation:"phase-end"`）、D-C7′（ccloop `runLoop.ts:1421-1425`：execute 被中止时 `execution` 为 null）、D-STALE（Orca `driverLanding.ts:249-258`：先读旧 loop-state 决定 collect，后删目录）。
+
+- **D-C3 ⇒ 人裁「接受 (i)，如实登记」**：ccloop 在中止时从该阶段已写出的 `events.jsonl` 取最后一条合法的 `turn.completed` usage，取不到仍为 `null`（不当 0、不估）；fake codex 脚本加 `usageBeforeDelay`。
+  🔴 **13.1 C-3「本片就让它可续」只在 fake codex 下成立。** 真 codex 的 usage 是阶段末才有 ⇒ 真 codex 下 deadline 中止的 run 多半仍 `settled-unrecoverable`，且把组的 `usageUnknown` 置真、挡住该组此后的领取 —— 登记为已知缺口。
+- **D-C7′ ⇒ 人裁 (α)**：C7 再加一条 —— 被 handoff deadline 中止的那个阶段（`events.jsonl` 有 `type:"handoff_interrupted"` 且 `detail` 点名该阶段与 attempt）不列 `missing`；工作树快照就是它留下的全部证据。13.1 C-2「进入过而文件不在的仍列」对这一种情形作废。
+- **执行方式 ⇒ 人裁「子代理逐 Task」**（`superpowers:subagent-driven-development`）。
+- **控制器裁定（按计划席建议，证据分得出胜负）**：D-SNAP、D-VIEW、D-LANDED、D-HASH（照上游规则不重算 contract 哈希；13.2 I-5 那句「重算」作废）、D-STOPINSPECT、D-TASKS、D-STALE（上游既有 bug，本片修）、D-SPAWNKEY（取已记账键号的 MAX，13.2 I-6「行数」作废）、D-SKIP、D-RESUME-SHUTDOWN —— 全部采纳，内容见计划 §0.1。
