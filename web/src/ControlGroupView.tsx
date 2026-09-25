@@ -16,10 +16,13 @@ import type { UncertainCommand } from "./controlState.js";
 
 const short = (hash: string): string => hash.slice(0, 12);
 
-/** A held run the person may continue: settled with a checkpoint to continue from. */
+/**
+ * A held run the person may continue: the server marks it `continuable` (handoff delivery spec §13.1 C-4),
+ * because a normally completed run also displays as `settled-recoverable` and must never be continued.
+ */
 export function continuableRuns(view: GroupViewV1): Array<{ run: RunViewV1; checkpointId: string }> {
   return view.runs.flatMap((run) => {
-    if (run.taskId === null || run.state !== "settled-recoverable") return [];
+    if (run.taskId === null || run.continuable !== true) return [];
     const checkpoint = view.checkpoints.find((candidate) => candidate.runId === run.runId && candidate.state !== "unknown");
     return checkpoint ? [{ run, checkpointId: checkpoint.checkpointId }] : [];
   });
@@ -186,6 +189,16 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
             </button>
           ))}
         </>
+      )}
+      {/* Handoff delivery spec §13.1 I-4: when every frozen run finished or restarted, nothing is continuable,
+          and the group's only way out of handoff-complete is a resume with no selections. */}
+      {handoffActive && view.summary.stopState === "handoff-complete" && continuable.length === 0 && (
+        <button
+          type="button"
+          onClick={() => onCommand({ verb: "resume-from-handoff", groupId, expectedRevision: revision, payload: { selections: [] } })}
+        >
+          Resume (no continuation)
+        </button>
       )}
       {view.recoveryBlockers.length > 0 && (
         <button

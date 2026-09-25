@@ -98,6 +98,7 @@ describe("ControlPanel", () => {
     expect(html).toContain("Resume dispatch");
   });
 
+  // Handoff delivery (human ruling 2026-09-25, spec §12: this slice may rewrite criteria; ruling 88 (b)(c)): the batch continuation is offered only for a run the server marks continuable (a handoff left a partial checkpoint), never for a normally completed run that also displays settled-recoverable.
   it("shows handoff progress as pending/partial/unresolved and offers the batch continuation once requests settle", () => {
     const view = groupView({
       summary: { ...summary.groups[0], stopMode: "handoff", stopState: "handoff-unresolved" },
@@ -113,11 +114,19 @@ describe("ControlPanel", () => {
     const settled = groupView({ ...view, stop: { ...view.stop!, state: "handoff-complete" },
       summary: { ...view.summary, stopState: "handoff-complete" },
       workItems: [{ ...view.workItems[0], status: "held", currentRunId: null }],
-      checkpoints: [{ checkpointId: "cp-1", taskId: "a", runId: "run-a", state: "complete", snapshotHash: "9".repeat(64), evidenceIds: ["ev-1"] }],
-      runs: [{ ...view.runs[0], state: "settled-recoverable" }], handoffRequests: [], recoveryBlockers: [] });
+      checkpoints: [{ checkpointId: "cp-1", taskId: "a", runId: "run-a", state: "partial", snapshotHash: "9".repeat(64), evidenceIds: ["ev-1"] }],
+      runs: [{ ...view.runs[0], state: "settled-recoverable", continuable: true }], handoffRequests: [], recoveryBlockers: [] });
     const settledHtml = renderToStaticMarkup(<ControlPanel {...panelProps({ groups: { g: settled }, summary: { ...summary, groups: [settled.summary] } })} />);
-    expect(settledHtml).toContain("Continue selected tasks");
+    expect(settledHtml).toContain("Continue selected tasks (1)");
+    expect(settledHtml).toContain("Continue task a");
     expect(settledHtml).toContain("settled-recoverable");
+    // The same settled run finished normally: it still displays settled-recoverable, but it is not continuable.
+    const completed = groupView({ ...settled, workItems: [{ ...view.workItems[0], status: "completed", currentRunId: "run-a" }],
+      checkpoints: [{ ...settled.checkpoints[0], state: "complete" }], runs: [{ ...settled.runs[0], continuable: false }] });
+    const completedHtml = renderToStaticMarkup(<ControlPanel {...panelProps({ groups: { g: completed }, summary: { ...summary, groups: [completed.summary] } })} />);
+    expect(completedHtml).toContain("settled-recoverable");
+    expect(completedHtml).not.toContain("Continue selected tasks");
+    expect(completedHtml).not.toContain("Continue task a");
   });
 
   it("names an uncertain command and a dispatch block instead of guessing an outcome", () => {

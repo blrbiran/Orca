@@ -119,8 +119,10 @@ function controlGroupServerToWeb(x: ServerGroupViewV1): WebGroupViewV1 { return 
 // Execution driver spec §7.4: `blockedReason` is optional on the Web side only so the existing
 // literal run fixtures in evidenceLink/controlPanel/controlCommandRecovery need no edit (D7's
 // zero-rewrite principle); normalize it here so the rest of the shape still gets checked both ways.
+// Handoff delivery (human ruling 2026-09-25, spec §12: this slice may rewrite criteria; ruling 88 (b)(c)): `continuable` is
+// optional on the Web side for the same reason as `blockedReason`, and an absent flag reads as "not continuable".
 function controlGroupWebToServer(x: WebGroupViewV1): ServerGroupViewV1 {
-  return { ...x, runs: x.runs.map((run) => ({ ...run, blockedReason: run.blockedReason ?? null })) };
+  return { ...x, runs: x.runs.map((run) => ({ ...run, blockedReason: run.blockedReason ?? null, continuable: run.continuable ?? false })) };
 }
 function recoveryServerToWeb(x: ServerRecoveryViewV1): WebRecoveryViewV1 { return x; }
 function recoveryWebToServer(x: WebRecoveryViewV1): ServerRecoveryViewV1 { return x; }

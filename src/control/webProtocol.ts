@@ -865,6 +865,7 @@ export const runViewSchema = z
     remaining: amountSchema,
     failureCode: nonemptyString.nullable(),
     blockedReason: nonemptyString.nullable(),
+    continuable: z.boolean(),
     evidenceIds: sortedIdArraySchema,
   })
   .strict();

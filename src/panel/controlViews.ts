@@ -2,6 +2,7 @@ import { frozenAllocationShape } from "../control/executionSnapshot.js";
 import { z } from "zod";
 import { readArtifact } from "../control/archive.js";
 import { canonicalBytes, sha256Canonical } from "../control/canonicalJson.js";
+import { dimensions } from "../control/commands.js";
 import { driveRecordSchema } from "../control/driveRecord.js";
 import { ControlError } from "../control/errors.js";
 import { readProjectionChanges, readProjectionState } from "../control/projectionJournal.js";
@@ -458,6 +459,23 @@ function displayRunState(run: z.infer<typeof persistedRunSchema>): RunViewV1["st
   }
 }
 
+/**
+ * Handoff delivery spec §13.1 C-4, §13.2 I-5 (controller ruling 2026-09-25): a run the person may
+ * continue from is one a handoff stopped -- persisted `settled-recoverable` with a committed
+ * checkpoint whose result is `partial` -- and whose remaining work grant still has something left
+ * in every dimension. `registerContinuation` (continuation.ts:169) refuses the whole batch with
+ * `budget-overrun` the moment one selected predecessor has an exhausted dimension, so offering it
+ * here would be a dead end. A run the driver settled normally (persisted `settled`, recoverable,
+ * checkpoint `complete`) displays as `settled-recoverable` too, but its task is done and must
+ * never be offered for continuation.
+ */
+function continuableRun(store: ControlStore, run: z.infer<typeof persistedRunSchema>): boolean {
+  if (run.state !== "settled-recoverable") return false;
+  if (dimensions.some((dimension) => run.remaining.work[dimension] <= 0)) return false;
+  const row = store.db.prepare("SELECT body FROM checkpoints WHERE id=? AND run_id=?").get(run.checkpointId, run.runId);
+  return row !== undefined && (parseJson(row.body, `checkpoint-invalid:${run.checkpointId}`) as { result?: unknown }).result === "partial";
+}
+
 function runViews(store: ControlStore, groupId: string, graphVersion: number, proposal: ReturnType<typeof readBudgetProposal>): RunViewV1[] {
   return store.db.prepare("SELECT id,group_id,work_item_id,generation,active,body FROM runs WHERE group_id=? ORDER BY id").all(groupId).map(row => {
     const runId = String(row.id);
@@ -520,6 +538,7 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
       claimOrdinal: run.claimOrdinal, providerAttemptOrdinal: run.providerAttemptOrdinal, profile,
       used: run.cumulative[bucket], remaining: run.remaining[bucket], failureCode: run.failureCode,
       blockedReason: run.drive?.blockedReason ?? null,
+      continuable: continuableRun(store, run),
       evidenceIds: artifactIdsForRun(store, runId),
     };
   });

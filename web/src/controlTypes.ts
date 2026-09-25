@@ -97,6 +97,7 @@ export type RunViewV1 = {
   remaining: Amount;
   failureCode: string | null;
   blockedReason?: string | null;
+  continuable?: boolean;
   evidenceIds: string[];
 };
 export type BudgetEstimateV1 = {
