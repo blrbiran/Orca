@@ -3,41 +3,45 @@
   "runId": "orca-dev-75ec878e",
   "runtime": "claude-code",
   "sessionRef": "75ec878e-a6d3-4299-9a4b-b76dd574b77a",
-  "writtenAt": "2026-09-25T17:41:33.817Z",
-  "head": "1f9045e1892c46112c3f0c76456496c4883af726",
+  "writtenAt": "2026-09-25T19:17:10.599Z",
+  "head": "94a442295e6c57f0db8cf6b51ba13060478fe362",
   "level": {
     "kind": "reading",
-    "level": 335434,
+    "level": 454095,
     "windowTokens": 1000000,
     "t1": 330000,
     "t2": 450000,
-    "band": 1
+    "band": 2
   },
   "next": [
-    "dispatch five plan writers per plan-skeleton.md (T1-T17) and assemble docs/superpowers/plans/2026-09-26-agent-selection.md",
-    "plan self-review, then one plan review seat",
-    "subagent-driven execution T1..T17"
+    "subagent-driven execution T1..T17 per .superpowers/sdd/2026-09-26-agent-selection/progress.md §5 (T1 dispatched on ccloop BASE f4e49a2)",
+    "per-wave reviews and a final review (plan §0.2 P21)",
+    "then update three handoffs and give the human the exec summary"
   ],
   "open": [
-    "session continues past T1 by human instruction: 'this session do not consider context size'"
+    "session past T2 by explicit human instruction: 'this session do not consider context size'"
   ],
   "awaitingHuman": [
     {
       "kind": "irreversible",
-      "what": "push Orca and ccloop (ccloop first) — human-timed"
+      "what": "push ccloop then Orca — human-timed"
+    },
+    {
+      "kind": "irreversible",
+      "what": "delete stray ~/.orca/agents.json and ~/.orca/agents.json.draft.json written by a plan-writer mutation (Rule 17 breach, ledger §4)"
     },
     {
       "kind": "named-authorization",
-      "what": "review every Ruling: line in .superpowers/sdd/2026-09-26-agent-selection/progress.md and the rewritten existing tests listed there"
+      "what": "review Ruling: lines and REWRITTEN existing criteria in the ledger, incl. W5-M16 spec deviation"
     }
   ],
   "measurements": [
     {
-      "command": "/usr/bin/git -C /Users/biran/code/skills/loop/Orca log --oneline -3",
+      "command": "/usr/bin/git -C /Users/biran/code/skills/loop/ccloop log --oneline -3",
       "exitCode": 0,
-      "commit": "1f9045e1892c46112c3f0c76456496c4883af726",
-      "observedAt": "2026-09-25T17:41:33.770Z",
-      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-75ec878e-3PRgnb/1.txt"
+      "commit": "94a442295e6c57f0db8cf6b51ba13060478fe362",
+      "observedAt": "2026-09-25T19:17:10.549Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-75ec878e-5Opxdb/1.txt"
     }
   ]
 }
