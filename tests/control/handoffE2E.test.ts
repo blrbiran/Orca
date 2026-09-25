@@ -358,15 +358,28 @@ describe.skipIf(!realBinary)("handoff delivery against real ccloop (spec §9.2)"
       runtime.startPump(50);
       await inExecute(w, runtime, ["a"]);
       const [a] = runsOf(runtime, "a");
-      const [requestId] = await handoffStop(runtime, { handoffDeadlineAt: new Date(Date.now() + 3_000).toISOString() });
+      const stoppedAt = Date.now();
+      const [requestId] = await handoffStop(runtime, { handoffDeadlineAt: new Date(stoppedAt + 3_000).toISOString() });
       await until(() => ["settled-recoverable", "settled-unrecoverable", "outcome-unknown"].includes(requestState(runtime, requestId!)), 120_000, "the request to settle");
+      // The execute phase was cut at the deadline, not waited out: the request settled long before the phase's
+      // own 120 s sleep would have ended, and ccloop recorded the interruption of that phase (D-C7').
+      expect(Date.now() - stoppedAt).toBeLessThan(60_000);
+      const ccloopEvents = readFileSync(join(a!.body.drive.sourceDir, "run", "events.jsonl"), "utf8").trim().split("\n").map((line) => JSON.parse(line) as { type: string; detail: unknown });
+      expect(ccloopEvents).toContainEqual(expect.objectContaining({ type: "handoff_interrupted", detail: "handoff deadline interrupted execute in attempt 1" }));
       const parked = readDriverRun(runtime.store, a!.runId) as unknown as Record<string, any>;
       const checkpoint = checkpointOf(runtime, parked.checkpointId);
       // ccloop C6: its own request is answered even though the phase was cut; C-3: the cut phase's usage was observed.
       expect(checkpoint).toMatchObject({ result: "partial", unresolvedRequestIds: [], missing: [] });
-      const usage = runtime.store.db.prepare("SELECT body FROM usage_events WHERE run_id=? ORDER BY seq").all(a!.runId).map((row) => JSON.parse(String(row.body)));
-      expect(usage.length).toBeGreaterThan(0);
-      expect(usage.every((event) => event.cumulative !== null)).toBe(true);
+      // C-3, scoped to the cut phase: the plan phase's work event alone would satisfy "every event is known", so
+      // the run's work usage must be known and a later work event must have grown past the plan phase's -- the
+      // execute phase's own observation, reported although the phase was aborted.
+      expect(parked.unknown.work).toBe(false);
+      const workUsage = runtime.store.db.prepare("SELECT body FROM usage_events WHERE run_id=? ORDER BY seq").all(a!.runId)
+        .map((row) => JSON.parse(String(row.body)) as { bucket: string; cumulative: { tokens: number } | null })
+        .filter((event) => event.bucket === "work");
+      expect(workUsage.length).toBeGreaterThanOrEqual(2);
+      expect(workUsage.every((event) => event.cumulative !== null)).toBe(true);
+      expect(workUsage.at(-1)!.cumulative!.tokens).toBeGreaterThan(workUsage[0]!.cumulative!.tokens);
       expect(requestState(runtime, requestId!)).toBe("settled-recoverable");
       await resumeAsThePanelWould(runtime);
       await until(() => { noBlocked(runtime); return work(runtime, "a").status === "done" && runsOf(runtime, "a").every((run) => run.body.drive?.cleanedUp === true); }, 240_000, "the continuation to land");
