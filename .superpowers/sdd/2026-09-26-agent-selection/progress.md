@@ -55,3 +55,22 @@
 - 派发材料：`impl-common.md`（通用禁令与约定）、`plan-rulings.md`（计划头部＋§0＋§0.2）、`measure-W<n>.md`、`task-<N>-brief.md`；报告 `task-<N>-report.md`。
 - 模型：实施席 sonnet（计划含完整代码，转写＋测试；跨文件整合的 T5／T7／T10／T11 用 opus）；任务复审 sonnet；终审 opus。
 - 预检（pre-flight）：计划复审（§4）已按接缝逐对查过共享文件／接口 —— 共享文件对：T1/T3（`src/agents/claude.ts`、codex `extraEnv`：P2／P3）、T1/T5（`protocol.ts` schema：R4）、T2/T6（`cli.ts`：内容锚点）、T4/T5（`worker.ts`、`phasesCompleted.test.ts`：R4）、T7/T10（`fixtures/web.ts`：P6）、T7/T11（`driverHandoff.ts`、`temporaryProbeSelection`、legacy 名：P10）、T7/T16（`ccloopWorld.ts`：P13）、T7/T11/T12（桥：P9）、T9/T14/T15/T16（payload：P5）、T10/T14（面板夹具：P8）、T11/T15（`BudgetEditor`：P11）、T9–T11/T14（web 镜像：P12）。自洽问题见 §0.2 各条。Ruling: 以 §0.2 为执行依据，不重出计划 —— 若错，代价是实施席多一轮适配。
+- Task 1: complete (ccloop commits f4e49a2..8bfedf3, review clean). 实施席报数 173,762 token／52 次工具调用；复审席 sonnet（报数见通知）。
+- Task 1: minor (deferred): `src/agents/table.ts` 的 1 MiB 上限分支无判据、无变异。
+- Task 1: minor (deferred): `parseInstallation` 无 kind／`getDescriptor` 包装、`tableShape` 顶层、`resolveAgent` 的 `installation === undefined` 分支没有具名变异（有间接覆盖）。
+- Task 2: complete (ccloop commits 8bfedf3..60d06e0, review clean). 实施席 143,547 token／49 次。实施席按派发补了 P23 m7 零写入判据（brief 原文没有），已在报告中说明。
+- Task 2: minor (deferred): `detect.ts` 的 `isFile()`／`isDirectory()` 两个守卫无具名变异、无专门场景。
+- Task 4: complete (ccloop commits 60d06e0..927e768, review clean). 实施席 143,248 token／55 次。
+- Task 3: review → Needs fixes（2 Important，均为证据纪律）。循环 import `claude.ts`⇄`claudeAgentAdapter.ts` 复审判安全（跨模块引用都在函数体内）。
+- Task 3: Ruling: 复审 I-2「brief Step 3.6.1 要求写 `mutations.md` 未做」—— 本轮变异台账以各报告的 `MUTATION:` 行为准（`impl-common.md` 已这样规定，与计划 brief 冲突，以控制器的执行文件为准），T17 由控制器汇总成 `mutations.md` —— 错了的代价：T17 多一次汇总。
+- Task 3: minor (deferred): 把 `claudeModelArgument`／`ONE_MILLION`／`CONTEXT_OPTIONS` 挪进 `src/agents/types.ts` 以结构性消除循环 import；dist 检查只走了 adapter 先加载的方向。
+- Task 3: fix round 1/5 (1 addressed, 0 open — P2 restore-the-throw mutation evidence run in clone; no commits; re-review haiku ADDRESSED)
+- Task 3: complete (ccloop commits 927e768..6439eb2, review clean after round 1). 实施席 292,245＋305,166（续用同一席，累计口径以工具为准）token。
+- 波 1（T1–T4）完成：ccloop f4e49a2..6439eb2；派波次复审（P21），与 T6 并行（复审只读固定 diff 文件）。
+- 波 1 复审（opus）：`wave1-review.md`，0 Critical／2 Important／9 Minor。
+- Ruling: 波 1 的 I-1（runner 把 `CCLOOP_CLAUDE_*` 泄漏给 claude 及其子进程 ⇒ 将来 claude agent 在 ccloop 里跑测试会让旧适配器判据调真 claude）与 I-2（handoff 证据包只收 `run/codex/`，漏 `run/claude/`）并入 T5 一起做（T5 本来就碰 handoff 与 worker；runner 的剥离是 T3 代码的小改）—— 错的代价：T5 范围略大。I-1 必须在付费 claude 那一轮之前落地。Minor 记为 deferred，见 wave1-review.md。
+- Task 6: review → Approved with 2 Important (plan-inherited).
+- Task 6: Ruling: I-1 退出码语义冲突 —— `ccloop run --agents` 的拒绝全部退 1（2 ＝ run 跑完未成功），与 `ccloop control` 的具名拒绝退 2 相反；T7／T12 的解冲突路径**必须自己解释 `run --agents` 的退出码**（1 ⇒ 读 stderr 首段的码并按具名拒绝 block；2 ⇒ run 完成未成功），不许复用 `ccloopPort` 的 `"2:"` 前缀判定 —— 写进 T7／T12 派发，并登记 spec §13（P20）。错的代价：真的哈希不符会被当 unknown 反复重试。
+- Task 6: fix round 1 → 补 `src/cli.ts` 选择文件 `JSON.parse` 的 try/catch 判据＋变异（I-2）。
+- Task 6: fix round 1/5 (1 addressed, 0 open — malformed-JSON criterion + T6M8; commits 5955e27..988f82b)
+- Task 6: complete (ccloop commits 6439eb2..988f82b, review clean after round 1). 实施席 212,318＋229,914 token。
