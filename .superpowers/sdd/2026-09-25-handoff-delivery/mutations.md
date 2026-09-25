@@ -235,3 +235,28 @@ Task 9 Fix round 1（commit 3351438，只改 handoffE2E.test.ts 判据本身）�
 - T4-M22：不红于 Task 4 范围，**顺延到 Task 5**，T5 报告确认红（见上）。
 - T3-M3、T3-M10、T3-M11：不红于 Task 3 范围，均已在 Task 4／Task 5 报告里用同一变异复测并见红（见上标注「顺延」的行）。
 - T5-M11、T4-M22b、T6-M15、T7-M2、T7-M7a：登记为等价变异（理由见对应行），非缺口。
+
+---
+
+## T10b — the six open gaps closed（判据 commit 3cfbb4d，变异副本 clone 自 dfdc676）
+
+归属：Task 10b 实施席（Claude Opus 5.5，会话 session_018mArcQDZBWMymL3MHT6WzR），2026-09-25。上方「open gaps」表原文不动，本节只追加。
+
+新判据全部在 `tests/control/handoffGuards.test.ts`（6 条，只新增；夹具与既有判据零改动）。跑法：`git clone --local` 到 `scratchpad/t10b/orca`（HEAD dfdc676），把新判据文件 `cat >` 进副本，软链 `node_modules`；基线 6/6 绿（`scratchpad/t10b/baseline.json`）；随后用 **T10 `mutate.py` 的同一组锚点与替换串**（`scratchpad/t10b/mutate.py`，只把测试集改成 `tests/control/handoffGuards.test.ts`、根改成新副本），逐条 apply → 跑 → 还原，每条锚点命中数 1、`shasum -a 256` 还原后与变异前相同（`scratchpad/t10b/results.json`）。六条跑完后副本 `git diff` 与 `git diff --cached` 均 **0 字节**（`scratchpad/t10b/final-diff.txt`、`final-diff-cached.txt`）。
+
+| ID | 新判据（handoffGuards.test.ts） | 怎么够到守卫 | 变异下实测红（每条红集恰为该判据本身，1 条；行号取自失败栈） |
+|---|---|---|---|
+| T3-DEFER-1 | "refuses to restart a continuation the task does not register as its own…" | 续跑 run 的 `continuationIntentId` 改成 `continuation-other`（同 driverContinuation A2 判据的做法：没有公开路径写出这种不一致，这是 A2 与 `terminaliseRun` 都按名拒绝的存储态）→ A2 按 `continuation-registration` 挡下 → handoff-stop → 一轮驱动：H 的 `closeBlocked` 把 A2 当「确证未开始」→ `restartRun` → `terminaliseRun` | `expected 'settled-restartable' to be 'request-pending'`（:161） |
+| T3-DEFER-2 | "leaves a request another settle already closed as it was…" | 公开 `settleHandoffRequest` 先把请求关成 `settled-restartable`，再调导出的 `settleCompletedRunRequestInTransaction` | `expected { …(7) } to match object { state: 'settled-restartable', …(1) }`（:130；变异把已关的请求改写成 recoverable） |
+| T4-DEFER-1 | "refuses a checkpoint row already stored under the same id with a different hash…" | 在 H-after-candidate 死一次后，直接调导出的 `settleHandoffCheckpoint`；包一层 admission gate，其 `enter`（`write` 开事务前的最后一步）在规范文件已写出后往 `checkpoints` 表插一行同 id、hash 为 `0`×64 的行 | `expected true to match object { code: 'checkpoint-id-conflict' }`（:60） |
+| T4-DEFER-2 | "refuses a candidate whose usage high-water is not the run's booked high-water…" | 同上前置；报告里 candidate 的 `usageHighWater` 比 run 已记的 2 少 1 | `expected true to match object { code: 'checkpoint-usage-high-water' }`（:75） |
+| T4-DEFER-3 | "does not send ccloop the request once draining has begun…" | stop 后 `admissionGate.beginDrain()`，直接调导出的 `stepH`。一轮 `round()` 的第一笔写（`replenishStartWakes`）在 draining 时即被拒，round 到不了 H；只有「轮中途开始 drain」会带着 draining 进 H，直接调 `stepH` 就是这一形状 | `expected [ { protocol: 1, …(5) } ] to deeply equal []`（:95；变异下请求被投递给 ccloop） |
+| T4-DEFER-4 | "still settles restartable, and records why the removal failed…" | A1、A2 后 stop；用 `resolveRepository` 抛错的驱动跑到 `settled-restartable`（inspect 答 absent → `restartRun`，`cleanupRunWorkspace` 拿不到仓库） | `expected { workspaceMode: 'worktree', …(16) } to match object { cleanedUp: false, …(1) }`（:114；变异下记成 cleanedUp:true、cleanupError:null） |
+
+判定：六条全部**见红**，均非等价／不可达变异；「open gaps」表六行由本节关闭。
+
+测量命令（观测于 3cfbb4d 的工作树，判据文件字节与副本一致）：
+- 基线／变异：`python3 scratchpad/t10b/mutate.py`（每条 `vitest run tests/control/handoffGuards.test.ts --reporter=json`），红集由 python 读 `mut-<ID>.json` 的 `assertionResults[].status=="failed"` 得出。
+- 主树：`vitest run` 四文件（handoffGuards、driverHandoff、handoffStop、driverContinuation）51/51 绿；全量 `vitest run --reporter=json` 1844/1845，唯一红为已知负载抖动 `controlShutdown` SIGTERM（`expected 143 to be +0`），单文件重跑 6/6 绿；`npm run typecheck` RC 0；web build RC 0。
+
+附带观察（只报不修）：T3-DEFER-1 的守卫在未变异时正确拒绝，但被拒的 run 随后由驱动环 `pass()` 的通用 catch 按 `stepOf` 重新标成 `blockedAt: "E"`（blocked 态的 `stepOf` 落到 default）；下一轮 `closeBlocked` 把 E 当「执行已结束」去 `savedReport`，抛 `control-terminal-pending` 并覆写 `blockedReason`。结果仍是 fail-closed（请求不结、任务不移交），但名字不再说真实原因。判据因此只跑一轮就量。
