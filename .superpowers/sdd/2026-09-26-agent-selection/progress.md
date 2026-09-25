@@ -74,3 +74,10 @@
 - Task 6: fix round 1 → 补 `src/cli.ts` 选择文件 `JSON.parse` 的 try/catch 判据＋变异（I-2）。
 - Task 6: fix round 1/5 (1 addressed, 0 open — malformed-JSON criterion + T6M8; commits 5955e27..988f82b)
 - Task 6: complete (ccloop commits 6439eb2..988f82b, review clean after round 1). 实施席 212,318＋229,914 token。
+- Task 5: complete-pending — review (opus): spec ✅, 0 Critical, 1 Important (表被删 ⇒ 挡住 inspect/collect/handoff/read-evidence，违背 spec §4.2／I4 的本意)。抽查 20 条改写全部不放宽。实施席 331,553 token／86 次。
+- Task 5: fix round 1 → I-1（`assertAgentsTablePath` 对 ENOENT 放行、悬空软链仍拒）＋ M-a（`config.json` 非 JSON ⇒ `agent-config-invalid`）＋ M-c（verify 脚本 fixture 守卫收紧为 `command[0]===process.execPath` 且 `command[1]` 为 fixture，防误调真 claude）。
+- Task 5: minor (deferred): codex 的 capabilities 应答在 control 层无断言（T1 已覆盖）；`runCodexPhase > kills a TERM-ignoring process before returning abort` 在一次 verify:control 中红一次（疑似新 flake，T17 判定）。
+- Task 5: fix round 1/5 (3 addressed, 0 open — table-deletion ENOENT pass, non-JSON config ⇒ agent-config-invalid, verify guard tightened; commits 8937454..a8037ad)
+- Task 5: complete (ccloop commits 988f82b..a8037ad, review clean after round 1). 实施席 331,553＋355,578 token。
+- Task 5: minor (deferred): 缺失文件经软链目录到达时路径检查放行（复审实验确认；对不读表的方法无后果）。
+- ccloop 侧 T1–T6 全部完成：ccloop f4e49a2..a8037ad。
