@@ -83,10 +83,11 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 *** **G1 缝 A 做完了（2026-09-24）**：真 ccloop 的 `capabilities` 答 v2 八字段，Orca 直通对端应答，
 `control-capability-unsupported` 那道缺口关了。 *** 细节与诚实的验收表述见 §四。
 
-*** **G1 缝 B（2026-09-25）与执行驱动第一片（2026-09-25，会话 `905e41ce`）都做完了。** *** 细节见 §四 4.0。
+*** **G1 缝 B（2026-09-25）与执行驱动第一片（2026-09-25，会话 `905e41ce`）都做完了。** *** 细节见 §四 4.0.1；现在的下一件事见 §四 4.0。
 
-**还不能说的**：*** **「Web 派活可用」仍然不是事实** *** —— 执行驱动只在 **fake codex** 下验过（soft 组、配置一个预估得 `blocked-capability` 的 estimator）。
-真 codex 从没跑过；handoff 投递（④）、预算预估链（⑤）、strict 组都在范围外。**驱动环只在 port `configured` 时挂；未配置时行为逐字节同前。**
+**还不能说的**：*** **「Web 派活可用」仍然不是事实。** *** 能说的只有：**真 codex 下单任务主链跑通过一次**（2026-09-25，会话 `af3dc0d3`，
+请求模型 gpt-6-luna，服务层不含 HTTP，n＝1；台账 `.superpowers/sdd/2026-09-25-live-acceptance/progress.md` §5 是唯一可引的表述）。
+冲突／解冲突、依赖、崩溃恢复、面板 HTTP、strict 组、④ handoff、⑤ 预估链都没在真 codex 下验过。**驱动环只在 port `configured` 时挂；未配置时行为逐字节同前。**
 
 **现行基线**（只抄工具报数；env ＝ `ORCA_CCLOOP_BIN` 指 **含 C1–C4 的 ccloop main build** ＋ fake-codex adapter config，见 §8.2；
 **观测锚点** ＝ 主题行 `test(control): give the real-git settle criteria an explicit timeout` 那一笔；门逐段单跑，门清单见本轮计划 Task 11）：
@@ -121,7 +122,22 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 
 ## 四、⛔ 下一件事
 
-### 4.0 ⛔ 现在的下一件事（2026-09-25 会话 `905e41ce`，**本节优先于下面的 1–3**）
+### 4.0 ⛔ 现在的下一件事（2026-09-25 会话 `af3dc0d3` 改写，**本节优先于下面的 1–3 与 4.0.1**）
+
+人 2026-09-25：「第二件先开A再开B」；「claude 单独开一片」。
+
+- ✅ **A（真 codex 活体验收）做完了，不要重跑**：一次付费跑 RC 0、16 项检查全过；ccloop 报 125,664 token、Orca 台账记同数；美元未知。
+  脚本 `scripts/live-driver-acceptance.ts`（`--fake` 零成本空跑；五条变异都看见过红）；台账 `.superpowers/sdd/2026-09-25-live-acceptance/progress.md`（含证据副本）。
+- 🟡 **B（④ handoff 投递＋续跑＋N 路并行落地＋m5）：spec 已写、已评审、已追加更正，还没有计划。**
+  spec `docs/superpowers/specs/2026-09-25-handoff-delivery-design.md` —— *** **§12（人裁）＞ §11（评审更正）＞ 正文** ***；正文已发布，只能再追加更正节。
+  评审报告只在旧会话 scratchpad（不入库）；它的结论已全部写进 §11。
+- ⛔ **下一步**（按顺序）：
+  1. 人审 §11／§12（人可能已审过 —— 先看对话或问人）；
+  2. 要不要对 §11／§12 复审：改动不小（新增单事务 H-settle、ccloop C6、N 元解冲突、关闭枚举），**控制器倾向复审一次**，但评审席约 26 万 token（工具报数），**先问人**；
+  3. `superpowers:writing-plans`。计划的 **Task 0** 必须先量 spec 里所有「Task 0 现量」项，并**现跑**列出会红的既有判据：Orca 侧本片已授权改写（守人裁 88 的 (b)(c)）；**ccloop 侧（C6 钉旧行为的判据）要人按 ccloop 人裁 88 指名到具体测试**。
+- 之后：**claude 走 control 模式单独一片**（ccloop control 今天只接 codex：`src/control/accept.ts:91`、`worker.ts:107,153`；需要 ccloop 一笔改动＋fake claude 的驱动环 E2E；真 claude 付费跑另问人）。
+
+### 4.0.1 执行驱动第一片（2026-09-25 会话 `905e41ce`，**已做完，不要重做**）
 
 *** **执行驱动缺口（第一片 ①启动腿＋②恢复＋③收尾腿）做完了。** *** 人 2026-09-25「执行驱动缺口什么时候开 => 现在开」。
 - **材料**：spec `docs/superpowers/specs/2026-09-25-execution-driver-design.md`（**§11 计划期偏离裁定 D1–D21、§12 终审更正都优先于上文**）；
@@ -133,8 +149,7 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 - 🔴 *** **诚实的验收表述（只能这么说）**：在 **fake codex**、**soft 组**、**配置了一个预估得 `blocked-capability` 的 estimator** 下，
   Web 派活能从 confirm 跑到 settle、落到目标仓库的 `orca/<groupId>`，冲突由单独的解冲突 run 解；**可能冲突的组要先抬 token 上限（D12）**；
   **command verifier 需要 ccloop 含 C4**。**真 codex 从没跑过 ⇒ 不许说「Web 派活可用」**；真钱活体验收归人。 ***
-- ⛔ **下一件事（都归人开口）**：① 真 codex 的活体验收（花真钱）；② ④ handoff 投递、⑤ 预算预估链（配置了会预估的 estimator 时导入后卡 `estimate-in-flight`）、strict 组 —— 都在本片范围外；
-  ③ §9.0 本轮登记的挂账。
+- 当时列的下一件事：真 codex 活体验收 ✅ 已做（见 4.0）；④ handoff 投递 🟡 已开（见 4.0）；⑤ 预算预估链（配置了会预估的 estimator 时导入后卡 `estimate-in-flight`）、strict 组 —— 仍未开，归人；§9.0 的挂账仍在。
 - 本轮的执行规矩（人原话）：问题先按控制器建议做、最后一次报人；**上下文大小本会话不考虑**（控制器越过 T2 继续，检查点记了越线）。
 
 *** **G1 缝 A 已做完。下面 1–3 是缝 A 收尾时写的「下一件事」**，按顺序： ***
@@ -532,6 +547,16 @@ ccloop 的 I-2 里，spec 第一版把「渲染成 `JSON.stringify`」贴在那�
 - *** **负载会造出计时红**：`driverSettle` 单跑每条约 2 s，全量＋并发时撞 5 s 默认超时；E2E 在两份 clone 并跑时 5/9。**有并发负载时的红先单跑再判。**
 - **成本形状**（只抄工具报数）：本轮约 50 席；单席 60k–850k token（计划席 850,065 最大，变异席 511,452，终审 270,143）。控制器上下文越过 T2 后按人的明示继续。
 
+### 6.13 本轮（2026-09-25，活体验收＋④ 设计，会话 `af3dc0d3`）新栽的
+
+- 🔴 *** **Web 派活的默认预算会覆盖 contract**：estimate 为 `blocked-capability` 时每个任务拿 `complex-1m-default`（work 3M token、3 attempts、4 h），confirm 用它改写 contract 的 `tokenBudget`／`maxAttempts`（`executionSnapshot.ts` 的 `deriveContract`）。** ***
+  ⇒ 真钱跑之前必须 confirm 前 `proposal-edit` 封顶，并在 ccloop 实际收到的 `loop-contract.json` 里核（活体验收脚本就是这么做的，M2 变异证明承重）。
+- 🔴 *** **跨仓词表不一致是反复出现的根因**（继第一片 C4 之后又一次）：ccloop 的 handoff `result:"complete"` 说的是「handoff 做得干净」，Orca 的检查点 `partial` 说的是「任务没做完」；ccloop 的 `unresolvedRequestIds` 把刚回答过的请求也列为未解决。 ***
+  ⇒ 接两仓的字段前，**逐个字段问「对端这个词的意思是什么」**；修法优先在产生观测的那一端（Orca 不许改写对端观测）。
+- *** **spec 在会话中途被人推上远端** *** ⇒ 评审后的改动只能追加更正节。**改任何文档前先 `ls-remote` ＋ `merge-base --is-ancestor` 判发布。**
+- *** **子代理报的行号会错**（一席报 `applyResumeFromHandoff` 在 `:259`，实测 `:202`）⇒ 写进 spec 的行号一律自己现测。
+- *** **独立评审是值的**：自查没抓到的 4 条 Critical 全在「现有零件互相拼不上」（两个函数对前任状态要求不同、两种调用顺序都双计预算）。** 一席评审约 26 万 token（工具报数）。
+
 ## 七、工具骗法（**每一条都真栽过**）
 
 ### 7.1 rtk（**六种**）
@@ -769,7 +794,10 @@ Orca 要求排序去重的四值枚举 ⇒ 将来非 null 且写错时 Orca 整�
 
 ### 9.0 执行驱动轮登记、归人的（2026-09-25）
 
-- **真 codex 活体验收**（花真钱）—— 从没跑过；在此之前不许说「Web 派活可用」。
+- ~~真 codex 活体验收~~ —— ✅ 会话 `af3dc0d3` 跑过一次单任务（见 §4.0）；更多形状（冲突、依赖、崩溃、HTTP）的真钱跑仍归人。
+- 🆕 **Web 派活默认给每个任务 3M token／3 attempts 并覆盖 contract**（§6.13）—— 改默认值还是在面板上提示，归人。
+- 🆕 **④ 的人裁已给**（spec §12）：关闭结果加 `skipped-driver-owned` 枚举（线上契约变更，人同意）；Orca 侧既有判据本片可改写；**ccloop 侧 C6 钉旧行为的判据要人指名**。
+- 🆕 **既有 bug（上游代码，④ 里修）**：同一个 run 第二次解冲突的 token 不记到 group（`recordReconcileUsage` 的键在 reconcile 重置后撞键）。
 - **控制器替人做的全部决定**：SDD 台账 `.superpowers/sdd/2026-09-25-execution-driver/progress.md` 的 `Ruling:` 行（含 spec §11 D1–D21、终审 I1–I6、C4「修在 ccloop」）。
 - **缝 B 变异台账那一笔**（主题行 `docs(sdd): record the seam B mutation battery`）的 `Co-Authored-By` 与 `Claude-Session` 之间多一个空行，`%(trailers)` 只认后者 —— 人 2026-09-25 问过，控制器建议不修；**不 amend**。
 - **一个遗留的 `git stash`**（`stash@{0}`，内容是控制器当时未提交的本文编辑，已按原文重写回本文）—— 删不删归人。
@@ -780,7 +808,7 @@ Orca 要求排序去重的四值枚举 ⇒ 将来非 null 且写错时 Orca 整�
   - 解冲突：死掉没写终态的 spawn 不记账；`reconcile-orphan-unknown` 后 retry 可能与活着的孤儿并跑；`conflict-<runId>`／`reconcile-<runId>` 每个解冲突过的 run 留一对、无上限（spec §12）。
   - 变异台账里「无独占判据」的行（C2-M2/M3、C4-M1、T4-D20、T5-M2 等，见 `mutations.md`）—— 登记为冗余守卫，没编假判据。
   - `replenishStartWakes` 或 `blockRun` 抛错会中止整轮（所有组）。
-- ccloop 本轮四笔在本地 main，人自己决定何时推。
+- ccloop 那四笔（C1–C4）的发布状态本文不记 —— 跑 `/usr/bin/git ls-remote` 自查（2026-09-25 会话 `af3dc0d3` 开工时已在远端）。
 
 ### 9.1 G1 缝 A 之后归人的（**2026-09-24 替换上一版「执行前必须由人给的」——那些授权都已给出并用完**）
 
