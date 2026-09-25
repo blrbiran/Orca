@@ -66,6 +66,9 @@ export const durableCommandErrorStatuses = {
   "work-already-done": 409,
 
   // Valid commands that cannot be represented or performed in current state.
+  // Agent selection spec §6.3 (e) and §4.6 (M5): no layer chose an agent; an answer did not echo a requested field.
+  "agent-unselected": 422,
+  "agent-selection-invalid": 422,
   "cleanup-not-recoverable": 422,
   "budget-overflow": 422,
   "continuation-budget-unavailable": 422,
