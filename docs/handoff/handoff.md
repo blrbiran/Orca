@@ -83,31 +83,28 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 *** **G1 缝 A 做完了（2026-09-24）**：真 ccloop 的 `capabilities` 答 v2 八字段，Orca 直通对端应答，
 `control-capability-unsupported` 那道缺口关了。 *** 细节与诚实的验收表述见 §四。
 
-*** **G1 缝 B 也做完了（2026-09-25，会话 `905e41ce`）**：`targetVersion` 从 plan 文件到 start envelope 是同一个正安全整数，
-`start-envelope-conflict:run:targetVersion` 关了，`webCcloopSmoke` 那两条回绿。 *** 细节见 §四。
+*** **G1 缝 B（2026-09-25）与执行驱动第一片（2026-09-25，会话 `905e41ce`）都做完了。** *** 细节见 §四 4.0。
 
-**还不能跑的**：*** **Web 派活到真 ccloop 仍然开不出一次 ccloop 执行 —— 缝 B 做完也一样，不许说成「Web 派活可用」。** ***
-soft 组能在 **Orca 台账里记下一条 `starting` run**，但 ccloop 那一侧的 `accept` 在生产里从没发生过。
-🔴 **剩下的卡点是执行驱动缺口**（spec `2026-09-24-g1-seam-b-target-version-design.md` §1.0）：`beginProviderAttempt` 与 `toStartEnvelope`
-在 `src/`＋`scripts/` 里**零调用方**（只有测试调），生产里 run 停在 `starting` 之后**没有东西驱动 `accept`**。
-`webCcloopSmoke` 能绿，是因为测试自己手调 `toStartEnvelope`。
+**还不能说的**：*** **「Web 派活可用」仍然不是事实** *** —— 执行驱动只在 **fake codex** 下验过（soft 组、配置一个预估得 `blocked-capability` 的 estimator）。
+真 codex 从没跑过；handoff 投递（④）、预算预估链（⑤）、strict 组都在范围外。**驱动环只在 port `configured` 时挂；未配置时行为逐字节同前。**
 
-**现行基线**（只抄工具报数，env ＝ `ORCA_CCLOOP_BIN`＋`ORCA_CCLOOP_ADAPTER_CONFIG`，见 §8.2；
-**观测锚点** ＝ 主题行 `docs(sdd): record the seam B mutation battery` 那一笔；门逐段单跑，门清单见计划 `docs/superpowers/plans/2026-09-24-g1-seam-b-target-version.md` Task 4 Step 2）：
+**现行基线**（只抄工具报数；env ＝ `ORCA_CCLOOP_BIN` 指 **含 C1–C4 的 ccloop main build** ＋ fake-codex adapter config，见 §8.2；
+**观测锚点** ＝ 主题行 `test(control): give the real-git settle criteria an explicit timeout` 那一笔；门逐段单跑，门清单见本轮计划 Task 11）：
 
 | 门 | RC | 结果 |
 |---|---|---|
 | `typecheck` | **0** | 0 错误 |
-| `npm test`（json reporter） | **0** | 184 文件；**1636/1636 通过**，0 pending／0 todo |
-| `verify:control` | **0** | 45/45 文件；450/450，**0 skipped** |
-| `verify:web-control` | **0** | 17/17 文件；191/191 |
-| `verify:web-control:consumer` | **0** | 5/5 |
-| `verify:chain` | **0** | 第二段全套 184 文件、1636/1636 |
-| `verify:scheduler`／`verify:panel`／`--ws check`／web build／`check-claude-md-lines`／`check-hooks-path` | **0** | scheduler 51/51、167/167；panel `PASS` 15/15；ws 14/14、70/70 |
+| 全量 vitest（json） | **0** | 195 文件；**1756/1756**，0 pending／todo；判定器（本轮 12 个新／改判据文件全过）RC 0 |
+| `executionDriverE2E` 单跑 | **0** | 无并发负载下连跑 3 次，每次 9/9 |
+| `verify:control` | **0** | 54/54 文件；562/562，**0 skipped**（前一笔之上测） |
+| `verify:web-control`／`:consumer` | **0** | 18 文件 197/197；5/5 |
+| `verify:chain` | **0** | 第二段全套 195 文件、1756/1756 |
+| `verify:scheduler`／`verify:panel`／`--ws check`／web build／`check-claude-md-lines`／`check-hooks-path` | **0** | scheduler 51/51、167/167；panel `PASS` 15/15；ws 16/16、75/75 |
 | `ledger validate` | **2** | `verify` 脚本本身容忍 2（历史 bound 行） |
 
-⇒ *** **缝 B 的回绿定义已兑现**：`verify:control` RC 0、0 skipped（条数从 436 变成 450，是本轮新增的 14 条判据）。 ***
-`npm run verify` 现在应能整条跑通（本轮没有整条跑过，只逐段跑）。
+⚠️ *** **新登记的负载型 flake**：`tests/control/executionDriverE2E.test.ts` 在重负载（两份 clone 并跑变异）下出现过 5/9（R1 子场景）；无负载单跑 3/3 全绿。
+`tests/control/driverSettle.test.ts` 的真 git 场景曾在全量＋并发负载下撞默认 5 s 超时，已给 30 s（主题行见上）。 ***
+⇒ **看到这两个文件红：先单文件重跑，绿了就不是回归。**
 
 ⚠️ *** **已知 flake（2026-09-24 会话 `ae4061a5` 现测登记，根因未查；2026-09-25 那一轮全套里没出现）**：
 `tests/panel/controlShutdown.test.ts` > `a real SIGTERM to a real panel` > `makes it exit cleanly, having written one shutdown row for its epoch`。 ***
@@ -126,22 +123,19 @@ soft 组能在 **Orca 台账里记下一条 `starting` run**，但 ccloop 那一
 
 ### 4.0 ⛔ 现在的下一件事（2026-09-25 会话 `905e41ce`，**本节优先于下面的 1–3**）
 
-*** **G1 缝 B 做完了**（spec `docs/superpowers/specs/2026-09-24-g1-seam-b-target-version-design.md`，计划同名 plans 文件，Task 1–4 全勾）。 ***
-- **做了什么**（按主题行找）：`fix(control): make targetVersion one positive safe integer from plan file to start envelope`
-  （生产五个文件 ＋ §A 九个文件的人裁 88 改写 ＋ 新判据 `tests/control/targetVersion.test.ts` 14 条）→
-  `docs(spec): append the seam B erratum to the Web control spec` → `docs(sdd): record the seam B mutation battery`（台账
-  `.superpowers/sdd/2026-09-24-g1-seam-b/progress.md`，十一条变异全 64 位 sha256）→ 本 handoff 一笔。
-- plan 文件的 `targetVersion` 现在是 `safeInteger.positive().optional()`；**写字符串的 plan 会被 `loadPlan` 以 `malformed` 拒 ——
-  `orca run` 也一样**（它也走 `loadPlan`，spec §3.1），**不做静默转换**。同一份 plan 的 `planHash` 会变。
-- 变异十一条**全部看见红**，十条与预言一致。**V7b（`workItemViewSchema` 改回字符串）只红 N7b 与 N0b**：N5／N6／N8／N9 各自的守卫先拦，
-  走不到出口的 `groupViewSchema` —— 计划写的是「若…也会红」，实测没有。**V5 的实测**：schema 放宽后字符串被 `:388` 的
-  authority 子句以 `work-item-authority:a` 拦下，N5 靠断言 `work-item-invalid:` 前缀才红 —— spec §4.2 那条「只断言 code 会空绿」的预言兑现。
-- 🔴 *** **诚实的验收表述**：`webCcloopSmoke` 两条回绿，是因为测试手调 `toStartEnvelope`；**生产里仍没有东西驱动 ccloop `accept`**。
-  *** **不许说成「Web 派活可用」。** *** ***
-- *** **下一件事归人：执行驱动缺口（spec §1.0）何时开。** *** 人 2026-09-24 已同意「缝 B 先做，驱动缺口之后单开」——**开不开、何时开仍要人开口**。
-  之后才是：生产 execution profile 快照（§9.1）、`ContextObservationV1` 生产者、`capabilities` 计算化。
-- 本轮的执行裁定（人的规矩是「攒到最后报人审核」）已在会话里报人；要点：§A 复扫的 5 处命中全在新判据文件里（故意喂的字符串输入）；
-  变异台账那一笔的 `Co-Authored-By` 与 `Claude-Session` 之间多了一个空行，`%(trailers)` 只认出后者 —— **不 amend，归人**。
+*** **执行驱动缺口（第一片 ①启动腿＋②恢复＋③收尾腿）做完了。** *** 人 2026-09-25「执行驱动缺口什么时候开 => 现在开」。
+- **材料**：spec `docs/superpowers/specs/2026-09-25-execution-driver-design.md`（**§11 计划期偏离裁定 D1–D21、§12 终审更正都优先于上文**）；
+  计划 `docs/superpowers/plans/2026-09-25-execution-driver.md`（§0 是现量结果）；SDD 台账 `.superpowers/sdd/2026-09-25-execution-driver/progress.md`
+  （**全部 `Ruling:` 行＝控制器替人做的决定**）＋ 变异台账 `mutations.md`、终审 `final-review.md`、终审修复 `final-fix-report.md`，同目录。
+- **做出来的**：`src/control/executionDriver.ts`（状态机 A1/A2/B/B'/C/D/R/E、补 wake）、`driverLanding.ts`（落地＋解冲突）、`workspace.ts`（worktree／clone 工作区、CAS）、
+  `driveRecord.ts`／`workspaceSettings.ts`（封闭 schema、`set-workspace-mode`）、recovery／shutdown 对驱动环 run 的豁免、面板的工作区方式选择与 blocked 重试按钮；
+  装配只在 port `configured` 时挂驱动环（**未配置 ⇒ 逐字节同前**）。ccloop 四笔：C1 结果目录硬链接 clone、C2 按 run 的 attempt ref（只加不改）、C3 脚本化 fake codex、C4 无 provider 的 verify 报 0 用量。
+- 🔴 *** **诚实的验收表述（只能这么说）**：在 **fake codex**、**soft 组**、**配置了一个预估得 `blocked-capability` 的 estimator** 下，
+  Web 派活能从 confirm 跑到 settle、落到目标仓库的 `orca/<groupId>`，冲突由单独的解冲突 run 解；**可能冲突的组要先抬 token 上限（D12）**；
+  **command verifier 需要 ccloop 含 C4**。**真 codex 从没跑过 ⇒ 不许说「Web 派活可用」**；真钱活体验收归人。 ***
+- ⛔ **下一件事（都归人开口）**：① 真 codex 的活体验收（花真钱）；② ④ handoff 投递、⑤ 预算预估链（配置了会预估的 estimator 时导入后卡 `estimate-in-flight`）、strict 组 —— 都在本片范围外；
+  ③ §9.0 本轮登记的挂账。
+- 本轮的执行规矩（人原话）：问题先按控制器建议做、最后一次报人；**上下文大小本会话不考虑**（控制器越过 T2 继续，检查点记了越线）。
 
 *** **G1 缝 A 已做完。下面 1–3 是缝 A 收尾时写的「下一件事」**，按顺序： ***
 
@@ -171,7 +165,7 @@ soft 组能在 **Orca 台账里记下一条 `starting` run**，但 ccloop 那一
 
 🔴 *** **诚实的验收表述（整支评审席定稿，控制器复核）**： ***
 ccloop 该笔的真实应答，经 Orca 生产代码 `probeProfileCapabilities()` 直通，能让一个**测试声明的 profile** 上的 soft Web 组排上；
-`deliverScheduledStart` 在 **Orca 台账**里记下一条 `starting` run。**ccloop 的 `accept` 没有发生**（当时写「那一步是缝 B」；缝 B 做完后现在卡在执行驱动缺口，见 §4.0）；strict 组被拒。
+`deliverScheduledStart` 在 **Orca 台账**里记下一条 `starting` run。**ccloop 的 `accept` 没有发生**（当时写「那一步是缝 B」；缝 B 与执行驱动都已做完，见 §4.0）；strict 组被拒。
 变异 M7／M8（ccloop 答 `handoffControl:"phase-end"`／`handoffExecution:null`）让冒烟测试变红，但**红在应答字面量与调度时那一次守卫**，
 **不是**终点那条 `claimed`；投递时那一次守卫**单独**承重，由只加不改的判据
 `blocks only at delivery when the observation degrades after a clean schedule` 加变异 X3 证明（合成退化）。
@@ -189,13 +183,14 @@ ccloop 该笔的真实应答，经 Orca 生产代码 `probeProfileCapabilities()
 
 ### 4.3 已由现测定掉的（**不要重新讨论**）
 
+- ✅ **缝 B 已落地（2026-09-25）**：plan 文件的 `targetVersion` 是 `safeInteger.positive().optional()`，**写字符串的 plan 会被 `loadPlan` 以 `malformed` 拒 —— `orca run` 也一样**，不做静默转换；同一份 plan 的 `planHash` 会变。细节：spec `2026-09-24-g1-seam-b-target-version-design.md`、台账 `.superpowers/sdd/2026-09-24-g1-seam-b/`。
 - **`targetVersion` ＝ 安全整数** —— 承认 ccloop 已经拍了的（`protocol.ts`／`handoff.ts`／`command.ts` 全是 `safeInteger`／`number`）；
   收敛动作属于缝 B。
 - **`handoffControl` = `"durable"`**（ccloop 的 handoff 两态 `latched`/`complete`、落盘、带 crash point）；
   **`handoffExecution` = `"mechanical-in-run-v1"`**（这一格推翻过一次：`handoff.ts` 构造 packet 那段全是 runState 的三元表达式、零模型调用，经过在 spec §10）。
 - **ccloop 侧改动落在 `main`，不是 `codex/codex-adapter-0919`**（那个分支落后 10142 行）。
 
-**明确暂时不碰**：`goal.md` 的 G5、§3.3 loop 方案层、§3.4 Web UI 扩展；以及**执行驱动缺口**（等人开口；缝 B 已做完）。
+**明确暂时不碰**：`goal.md` 的 G5、§3.3 loop 方案层、§3.4 Web UI 扩展；以及④ handoff 投递、⑤ 预算预估链、strict 组（执行驱动第一片已做完，见 §4.0）。
 
 ## 五、已经拍板过的事（**不要重开**）
 
@@ -522,6 +517,21 @@ ccloop 的 I-2 里，spec 第一版把「渲染成 `JSON.stringify`」贴在那�
 - **一席变异外派本轮实测**（工具报数）：86,308 token／16 次工具调用／约 198 秒，十一条变异 —— **远低于**历轮评审／实施席画像。
   单文件判据、`clone --local` 副本、一席跑完，这个形状便宜。
 
+### 6.12 本轮（2026-09-25，执行驱动轮，会话 `905e41ce`）新栽的
+
+- 🔴 *** **子代理会动主树**：三席在主树里做变异（Task 2 整张表、Task 4／Task 7 各一条）；**一席为了让 `git diff --stat` 只剩自己的文件，执行了 `git stash`，把控制器未提交的 handoff 编辑收走、没还** ——
+  控制器事后从 `git stash list` 找回（那个 stash 仍留着，删不删归人）。 ***
+  ⇒ **派发里写死「不许 stash／checkout／reset 主树」；控制器自己的未提交改动在派任何会碰主树的席之前先提交。**
+- 🔴 *** **「测试绿」掩盖过一个会卡死全 store 的故障**：假 port 的 handoff 产物不合 `packetSchema`，settle 后 `publishPending` 每次抛错、被兜底 catch 吞掉，
+  而 `drainPending` 遇第一行失败即停 ⇒ 所有组的发布卡住、重启后 `dispatchBlocked`。 ***
+  ⇒ **任何 catch 兜底都要问「它吞的是不是一个会连锁的失败」；判据要正向观测副作用（outbox `delivered=1`），不能只看状态机终态。**
+- 🔴 *** **跨仓的空值语义是一类根因**：ccloop 对「没调 provider 的 verify 阶段」报 `null` 用量，Orca 把 `null` 当「未知」⇒ command verifier 的任务永远 settle 不了。
+  实施席为了绿把判据改成 agent verifier —— **绿是换出来的**。修法在对端（C4：报测得的 0），因为 Orca 不许自造对端观测（§8.4）。 ***
+- *** **「冗余守卫」的预言两个方向都会错**：T6-M10 预言冗余、实测删了它会双重 spawn 解冲突；T4-D20 预言有判据、实测被更早一步的 gate 遮蔽；控制器自己预言 I4 的记账键删了照绿，实测红。**都要量。**
+- *** **终审抓到的全在缝上**：settle 抹掉超额阻塞（I1）、CAS 的一切失败都被当「尖端被移动」（I2）、解冲突子进程随面板一起死（I3）—— 每个单 Task 评审都没看到。**别跳过全分支终审。**
+- *** **负载会造出计时红**：`driverSettle` 单跑每条约 2 s，全量＋并发时撞 5 s 默认超时；E2E 在两份 clone 并跑时 5/9。**有并发负载时的红先单跑再判。**
+- **成本形状**（只抄工具报数）：本轮约 50 席；单席 60k–850k token（计划席 850,065 最大，变异席 511,452，终审 270,143）。控制器上下文越过 T2 后按人的明示继续。
+
 ## 七、工具骗法（**每一条都真栽过**）
 
 ### 7.1 rtk（**六种**）
@@ -653,7 +663,7 @@ exit 5（提交被钩子拒）、exit 6（metrics 有坏行）。
 10142 deletions** —— 它停在 09-19，而 main 此后做完了 I-2、人裁 85、I-3。
 **main 自带 `src/runtime/codex/`，其 build 答的 capabilities 与该分支逐字相同。**
 
-⇒ *** **以后一律用 ccloop `main` 的 build 作 `ORCA_CCLOOP_BIN`。** *** 好处：
+⇒ *** **以后一律用 ccloop `main` 的 build 作 `ORCA_CCLOOP_BIN`，且必须含 C1–C4（主题行 `fix(control): report zero usage for a verify phase that calls no provider` 或之后）—— 否则执行驱动的端到端判据会以 `settle-incomplete` 红。** *** 好处：
 `scripts/check-known-reds.mjs` 只在 main 上存在（分支侧该文件 90 行全无）。
 
 **重建方法**（不要建 worktree —— 建得出来但删不掉，删 worktree 是 Tier 0）：
@@ -712,7 +722,7 @@ Orca 要求排序去重的四值枚举 ⇒ 将来非 null 且写错时 Orca 整�
 ### 8.5 基线的演进（**每一个都作废前一个；只有最后一行现行**）
 
 `95/561 → 95/566 → 100/606 → 100/608 → 107/663 → 107/664 → 111/810 → 129/1074 →
-129/1075 → 172/1516 → 180/1618 → 183/1622 → 184/1636`（最后一格是 G1 缝 B 之后的 `npm test`，全绿；183/1622 是缝 A 之后、含 2 条预期红）。**现行值见 §三。**
+129/1075 → 172/1516 → 180/1618 → 183/1622 → 184/1636 → 195/1756`（最后一格是执行驱动轮之后的全量 vitest，全绿；184/1636 是缝 B 之后）。**现行值见 §三。**
 ⚠️ **引用任何基线数前现测。** 历史值只用来判断「一份旧文档有多旧」。
 
 ### 8.6 成本量级对照（**只抄工具报数，一个自估都没有**）
@@ -742,7 +752,7 @@ Orca 要求排序去重的四值枚举 ⇒ 将来非 null 且写错时 Orca 整�
 - **`orca chain` 的真钱活体验收** —— 要人提交 `.orca/chain.json` 选 model 并点头
   （Orca 内尚不存在该文件 ⇒ 开链被 `chain-config-missing` 拒绝）。**先测 F，副本 T1 > F。**
 - **「第二个 panel 不挂控制面」** —— 是**控制器自己做的决定，不是人裁**，可逆，要不要维持仍未决。
-- **执行驱动缺口何时开**（spec `2026-09-24-g1-seam-b-target-version-design.md` §1.0）—— 缝 B 已做完，Web 派活到 ccloop `accept` 在生产里卡在这一步；真部署还缺 §9.1 的 profile 快照。
+- ~~执行驱动缺口何时开~~ —— 已开并做完第一片（§4.0、§9.0）；真部署还缺 §9.1 的 profile 快照。
 - **裁决甲的 `plan` 那一半** —— 改 `preflightUnreadableRepo` 的判据需人**指名到具体测试**，至今未授权。
 - **子系统 B 的后续** —— 人裁「暂缓到 `~/.orca` 存在且有 `not_my_taste` 行」。
   ⚠️ `~/.orca` **存在**（空的 `control/`，0700）但**没有 `not_my_taste` 行** ⇒ 条件仍不满足。
@@ -756,6 +766,21 @@ Orca 要求排序去重的四值枚举 ⇒ 将来非 null 且写错时 Orca 整�
   远低于 flake 画像的 25–29s ⇒ **与负载无关**）、**Linux 覆盖**
   （要人自己起 OrbStack daemon），以及本轮登记未修的 **M3／M4**（都要改既有判据，需人按人裁 88 指名）。
 
+
+### 9.0 执行驱动轮登记、归人的（2026-09-25）
+
+- **真 codex 活体验收**（花真钱）—— 从没跑过；在此之前不许说「Web 派活可用」。
+- **控制器替人做的全部决定**：SDD 台账 `.superpowers/sdd/2026-09-25-execution-driver/progress.md` 的 `Ruling:` 行（含 spec §11 D1–D21、终审 I1–I6、C4「修在 ccloop」）。
+- **缝 B 变异台账那一笔**（主题行 `docs(sdd): record the seam B mutation battery`）的 `Co-Authored-By` 与 `Claude-Session` 之间多一个空行，`%(trailers)` 只认后者 —— 人 2026-09-25 问过，控制器建议不修；**不 amend**。
+- **一个遗留的 `git stash`**（`stash@{0}`，内容是控制器当时未提交的本文编辑，已按原文重写回本文）—— 删不删归人。
+- 挂账（都登记、本轮未修）：
+  - 优雅关闭仍为**每个组**写 shutdown stop intent ⇒ 重启后新派活要人发 `resume-from-handoff`（终审 m5）；驱动环启用前被冻结的 run，启用后不会自动解冻。
+  - 一个发布一直失败的 Web run，下次重启会让 recovery 置全 store 的 `dispatchBlocked`（m6）。
+  - 因超额 breach 而 `blocked` 的组只能 stop／recover 脱困（`setLimit` 拒收 blocked 组）；组内停在 A1 的 run 面板只显示 `starting`。
+  - 解冲突：死掉没写终态的 spawn 不记账；`reconcile-orphan-unknown` 后 retry 可能与活着的孤儿并跑；`conflict-<runId>`／`reconcile-<runId>` 每个解冲突过的 run 留一对、无上限（spec §12）。
+  - 变异台账里「无独占判据」的行（C2-M2/M3、C4-M1、T4-D20、T5-M2 等，见 `mutations.md`）—— 登记为冗余守卫，没编假判据。
+  - `replenishStartWakes` 或 `blockRun` 抛错会中止整轮（所有组）。
+- ccloop 本轮四笔在本地 main，人自己决定何时推。
 
 ### 9.1 G1 缝 A 之后归人的（**2026-09-24 替换上一版「执行前必须由人给的」——那些授权都已给出并用完**）
 
