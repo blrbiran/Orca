@@ -468,9 +468,19 @@ function displayRunState(run: z.infer<typeof persistedRunSchema>): RunViewV1["st
  * here would be a dead end. A run the driver settled normally (persisted `settled`, recoverable,
  * checkpoint `complete`) displays as `settled-recoverable` too, but its task is done and must
  * never be offered for continuation.
+ *
+ * Final fix wave (FR-C1, controller ruling 2026-09-25): and it must still be the task's parked run -- the
+ * work item's `currentRunId` and `status: "held"`, the two conditions `assertPredecessor`
+ * (continuation.ts) requires. A predecessor that was already continued keeps its persisted
+ * `settled-recoverable` and `partial` checkpoint forever, so without these it would be offered again
+ * after any later handoff-stop, and the panel's batch would be refused whole.
  */
 function continuableRun(store: ControlStore, run: z.infer<typeof persistedRunSchema>): boolean {
   if (run.state !== "settled-recoverable") return false;
+  const workRow = store.db.prepare("SELECT body FROM work_items WHERE group_id=? AND id=?").get(run.groupId, run.workItemId);
+  if (workRow === undefined) return false;
+  const work = parseStored(workBodySchema, workRow.body, `run-work-invalid:${run.runId}`);
+  if (work.currentRunId !== run.runId || work.status !== "held") return false;
   if (dimensions.some((dimension) => run.remaining.work[dimension] <= 0)) return false;
   const row = store.db.prepare("SELECT body FROM checkpoints WHERE id=? AND run_id=?").get(run.checkpointId, run.runId);
   return row !== undefined && (parseJson(row.body, `checkpoint-invalid:${run.checkpointId}`) as { result?: unknown }).result === "partial";

@@ -8,6 +8,8 @@ import { readControlGroup } from "../../src/panel/controlViews.js";
 import { driverHarness } from "../control/fixtures/driverHarness.js";
 import { webFixture } from "../control/fixtures/web.js";
 import type { ControlStore } from "../../src/control/store.js";
+import type { FakeBehaviour } from "../control/fixtures/driverPort.js";
+import { requestState, stop, work, type Harness } from "../control/fixtures/handoffHarness.js";
 
 // Handoff delivery spec §13.1 C-4 (human ruling 2026-09-25, an online contract change): `RunViewV1.continuable`
 // is true only for a run a handoff stopped -- persisted `settled-recoverable` holding a checkpoint whose
@@ -63,21 +65,19 @@ describe("RunViewV1.continuable (handoff delivery C-4)", () => {
 
   it("is true for a run a handoff settled recoverably with a partial checkpoint", async () => {
     const { h, runId } = await handedOff("partial"); try {
-      expect(persisted(h.store, runId)).toMatchObject({ state: "settled-recoverable", recoverable: true });
+      // Final fix wave: every assertion reads the read model's own output, after the call (no read-back of the fixture's writes).
       expect(viewOf(h.store, runId)).toMatchObject({ state: "settled-recoverable", continuable: true });
     } finally { await h.dispose(); }
   });
 
   it("is false for a handoff-settled run whose checkpoint says the task completed", async () => {
     const { h, runId } = await handedOff("complete"); try {
-      expect(persisted(h.store, runId)).toMatchObject({ state: "settled-recoverable", recoverable: true });
       expect(viewOf(h.store, runId)).toMatchObject({ state: "settled-recoverable", continuable: false });
     } finally { await h.dispose(); }
   });
 
   it("is false for a handoff-settled run that is not recoverable, although its checkpoint is partial", async () => {
     const { h, runId } = await handedOff("partial", "settled-unrecoverable"); try {
-      expect(persisted(h.store, runId)).toMatchObject({ state: "settled-unrecoverable", recoverable: false, checkpointId: `cp-${runId}` });
       expect(viewOf(h.store, runId)).toMatchObject({ state: "settled-unrecoverable", continuable: false });
     } finally { await h.dispose(); }
   });
@@ -100,8 +100,86 @@ describe("RunViewV1.continuable (handoff delivery C-4)", () => {
       const work = JSON.parse(String(workRow.body)) as { grant: { work: Record<string, number> } };
       h.store.db.prepare("UPDATE work_items SET body=? WHERE group_id=? AND id=?")
         .run(JSON.stringify({ ...work, grant: { ...work.grant, work: { ...work.grant.work, tokens: 0 } } }), "g", run.workItemId);
-      expect(persisted(h.store, runId)).toMatchObject({ state: "settled-recoverable", recoverable: true });
-      expect(viewOf(h.store, runId)).toMatchObject({ state: "settled-recoverable", continuable: false });
+      expect(viewOf(h.store, runId)).toMatchObject({ state: "settled-recoverable", continuable: false, remaining: { tokens: 0 } });
     } finally { await h.dispose(); }
+  });
+});
+
+// Final fix wave FR-C1 (final review C1, controller ruling 2026-09-25): a predecessor that was already continued
+// keeps its persisted `settled-recoverable` and `partial` checkpoint for good, so `continuable` must also require
+// what `assertPredecessor` requires -- the task's `currentRunId` is this run and its status is `held`. Otherwise,
+// after any later handoff-stop of the group, the panel's one batch is refused whole and its no-continuation
+// resume is hidden: no exit.
+
+/**
+ * The panel's rule (web/src/ControlGroupView.tsx `continuableRuns`), applied to the server's read model, as
+ * handoffE2E.test.ts applies it: every run the server marks continuable, with its non-unknown checkpoint.
+ */
+function panelSelections(t: Harness): Array<{ taskId: string; predecessorRunId: string; checkpointId: string }> {
+  const view = readControlGroup(t.h.store, "epoch-test", "g");
+  return view.runs.flatMap((run) => {
+    if (run.taskId === null || run.continuable !== true) return [];
+    const checkpoint = view.checkpoints.find((candidate) => candidate.runId === run.runId && candidate.state !== "unknown");
+    return checkpoint ? [{ taskId: run.taskId, predecessorRunId: run.runId, checkpointId: checkpoint.checkpointId }] : [];
+  });
+}
+
+/** Task a stopped mid-run, parked held, then continued: answers the predecessor and the claimed continuation. */
+async function continued(behaviour: { value: FakeBehaviour }, after: FakeBehaviour) {
+  const t = await driverHarness([{ taskId: "a" }], { behaviour: () => behaviour.value });
+  const predecessor = await t.claim();
+  const driver = t.driver();
+  await t.until(driver, () => t.body(predecessor).state === "accepted");
+  const [first] = await stop(t);
+  await t.until(driver, () => requestState(t, first!) === "settled-recoverable");
+  const checkpointId = t.body(predecessor).checkpointId as string;
+  const resumed = await t.service.resumeFromHandoff(t.h.command("resume-from-handoff", { selections: [{ taskId: "a", predecessorRunId: predecessor, checkpointId }] } as never));
+  if ("error" in resumed) throw new Error(`resume-from-handoff refused: ${JSON.stringify(resumed.error)}`);
+  behaviour.value = after;
+  const claimed = await deliverScheduledStart(t.dispatch, "g");
+  if (claimed.kind !== "claimed") throw new Error(`resume claim refused: ${JSON.stringify(claimed)}`);
+  return { t, driver, predecessor, continuation: claimed.runId };
+}
+
+describe("RunViewV1.continuable after a continuation (final fix wave FR-C1)", { timeout: 60_000 }, () => {
+  it("offers only the newest link of a continuation chain after a second handoff, and the panel's batch is accepted", async () => {
+    const behaviour = { value: "stoppable" as FakeBehaviour };
+    const { t, driver, predecessor, continuation } = await continued(behaviour, "stoppable"); try {
+      await t.until(driver, () => t.body(continuation).state === "accepted");
+      const [second] = await stop(t);
+      await t.until(driver, () => requestState(t, second!) === "settled-recoverable");
+      const view = readControlGroup(t.h.store, "epoch-test", "g");
+      expect(view.summary.stopState).toBe("handoff-complete");
+      const flags = Object.fromEntries(view.runs.map((run) => [run.runId, { state: run.state, continuable: run.continuable }]));
+      // Both display settled-recoverable with a partial checkpoint; only the one the task is parked on is continuable.
+      expect(flags).toEqual({
+        [predecessor]: { state: "settled-recoverable", continuable: false },
+        [continuation]: { state: "settled-recoverable", continuable: true },
+      });
+      const selections = panelSelections(t);
+      expect(selections).toEqual([{ taskId: "a", predecessorRunId: continuation, checkpointId: t.body(continuation).checkpointId }]);
+      const resumed = await t.service.resumeFromHandoff(t.h.command("resume-from-handoff", { selections } as never));
+      expect("error" in resumed ? resumed.error : resumed.result.kind).toBe("resumed-from-handoff");
+      // Registered, not yet claimed: the task still names this run but is no longer held, so it is not offered twice.
+      expect(work(t, "a")).toMatchObject({ status: "continuing", currentRunId: continuation });
+      expect(readControlGroup(t.h.store, "epoch-test", "g").runs.find((run) => run.runId === continuation)).toMatchObject({ continuable: false });
+    } finally { await t.h.dispose(); }
+  });
+
+  it("offers nothing once the continuation landed and the group is stopped again, so the no-continuation resume is the way out", async () => {
+    const behaviour = { value: "stoppable" as FakeBehaviour };
+    const { t, driver, predecessor, continuation } = await continued(behaviour, "succeed"); try {
+      await t.until(driver, () => t.body(continuation).state === "settled" && t.body(continuation).drive.cleanedUp === true);
+      expect(work(t, "a").status).toBe("done");
+      await stop(t);
+      const view = readControlGroup(t.h.store, "epoch-test", "g");
+      expect(view.summary.stopState).toBe("handoff-complete");
+      expect(view.runs.find((run) => run.runId === predecessor)).toMatchObject({ state: "settled-recoverable", continuable: false });
+      expect(view.runs.find((run) => run.runId === continuation)).toMatchObject({ state: "settled-recoverable", continuable: false });
+      // The panel renders "Resume (no continuation)" exactly when this is empty at handoff-complete; that command is accepted.
+      expect(panelSelections(t)).toEqual([]);
+      const resumed = await t.service.resumeFromHandoff(t.h.command("resume-from-handoff", { selections: [] } as never));
+      expect("error" in resumed ? resumed.error : resumed.result.kind).toBe("resumed-from-handoff");
+    } finally { await t.h.dispose(); }
   });
 });
