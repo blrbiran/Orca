@@ -1,0 +1,43 @@
+{
+  "v": 1,
+  "runId": "orca-dev-75ec878e",
+  "runtime": "claude-code",
+  "sessionRef": "75ec878e-a6d3-4299-9a4b-b76dd574b77a",
+  "writtenAt": "2026-09-25T17:41:33.817Z",
+  "head": "1f9045e1892c46112c3f0c76456496c4883af726",
+  "level": {
+    "kind": "reading",
+    "level": 335434,
+    "windowTokens": 1000000,
+    "t1": 330000,
+    "t2": 450000,
+    "band": 1
+  },
+  "next": [
+    "dispatch five plan writers per plan-skeleton.md (T1-T17) and assemble docs/superpowers/plans/2026-09-26-agent-selection.md",
+    "plan self-review, then one plan review seat",
+    "subagent-driven execution T1..T17"
+  ],
+  "open": [
+    "session continues past T1 by human instruction: 'this session do not consider context size'"
+  ],
+  "awaitingHuman": [
+    {
+      "kind": "irreversible",
+      "what": "push Orca and ccloop (ccloop first) — human-timed"
+    },
+    {
+      "kind": "named-authorization",
+      "what": "review every Ruling: line in .superpowers/sdd/2026-09-26-agent-selection/progress.md and the rewritten existing tests listed there"
+    }
+  ],
+  "measurements": [
+    {
+      "command": "/usr/bin/git -C /Users/biran/code/skills/loop/Orca log --oneline -3",
+      "exitCode": 0,
+      "commit": "1f9045e1892c46112c3f0c76456496c4883af726",
+      "observedAt": "2026-09-25T17:41:33.770Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-75ec878e-3PRgnb/1.txt"
+    }
+  ]
+}
