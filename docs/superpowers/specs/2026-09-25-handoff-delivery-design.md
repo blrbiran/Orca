@@ -157,3 +157,88 @@ env：`ORCA_CCLOOP_BIN` ＝ 含 C1–C5 的 ccloop `clone --local` ＋ build（�
 
 上下文阈值 handoff（ccloop `unavailable`）；strict 组；解冲突 run 不可被 handoff 打断；续跑不 rebase（方案 Y，人裁不选）；N 路续跑的解冲突无预留、上限不够时第 k 次被 `reconcile-budget` 阻断；
 落地按组串行降低同组吞吐；`outcome-unknown` 的宽限期（`killGraceMs` ＋ 60 s）是控制器拍的；真 codex 下的 handoff 未验（deadline 默认 30 min，单 attempt 的 run 实际多半在 deadline 被中止、结果 `partial`）。
+
+---
+
+## 11. 评审后的更正（2026-09-25，控制器会话 `af3dc0d3`）—— **本节与 §12 优先于上文对应段落**
+
+> **归属**：控制器会话 `af3dc0d3`（Claude Opus 5.5）。依据：一席只读独立评审（4C／9I／6M；报告在会话 scratchpad `handoff-spec-review.md`，不入库），观测于 Orca `64a05e1`、ccloop `f9267cb`。
+> 控制器逐条复核了承重主张（C1 `stopIntent.ts:651-673`；C2 `resumeBundle.ts:78` 对 `continuation.ts:140`；C3 ccloop `handoff.ts:288` 与 `continuation.ts:145`；C4 `executionDriver.ts:282-294`；I4 ccloop `handoff.ts:151-152`；I6 ccloop `resultRepository.ts:69-77`；I7 `driverLanding.ts:169,225,325`；I8 `webProtocol.ts:1116-1123`；I9 `stopIntent.ts:660-673`），**全部成立，全部接受**。
+> 上文逐字保留（本 spec 已发布，Rule 13）。
+
+**(C1) 已完成的 run 的请求不走 `terminaliseRun`。** §3 表「已 `collected`／`landed`／`reconciling`」一行更正为：run 照常 settle（run `settled`、work `done`、承诺按 D2 释放），其请求以**新的一支** settle 为 `settled-recoverable` —— 只改请求行与 stop 状态，**不调 `terminaliseRun`**，不动 run、work、分配。H5 改为断言 `work.status==="done"`、`run.state==="settled"`、`drive.cleanedUp===true`，且之后依赖它的任务被领走。
+
+**(C2) handoff 的收口是一个单事务步骤 H-settle。** §3「`settleHandoffRequest`；run 转 `held`」更正为：驱动环新增 H-settle，**一个事务内**：按 stepE 的方式归档快照（`archiveRun`）→ 提交 `result:"partial"` 的检查点（见 C3）→ 置 `recoverable`／`checkpointId` → 以 **Web 感知的预留规则把剩余承诺挂为 `held`（不释放）** → 请求 `settled-recoverable` → run `settled-recoverable`、work `held`。
+不经 `commitCandidate`→`releaseRunReserve` 这条会释放承诺的路（两种顺序都会双计或破坏 `assertPredecessor`，评审 C2 已逐一证明）。
+`exportResumeBundle`（`resumeBundle.ts:78`）对 Web 前任接受 `settled-recoverable`（今天只收 `settled`）。
+⇒ 给 `2026-09-19-web-recoverable-control-design.md` 追加 `ERRATUM (handoff delivery, 2026-09-25)`，点名其 §11.1「`commitCandidate → settleHandoffRequest → assertPredecessor` 可满足」在第一片 D2 之后不再成立。
+H1 加台账守恒断言：resume 前后 group `reserved` 与各分配的数额。
+
+**(C3) ccloop 的 handoff 结果与 Orca 的检查点结果是两个词表。** 映射写死：**有请求、无终态的 candidate ⇒ Orca 检查点 `result:"partial"`**，不论 ccloop 的 `result` 是 `complete`（边界停）还是 `partial`（deadline 中止）；ccloop 的 `result` 只表示「handoff 这个动作干不干净」，照原样存进证据。
+deadline 路径的「自己的请求 id 被列为未解决」**修在 ccloop（C6，见 §12(1)）**，Orca 不改写对端观测（执行驱动 spec §8.4 的规矩）。
+§10 那句「单 attempt 的 run 多半在 deadline 被中止、结果 `partial`」按 C6 之后的语义读：它是**可恢复**的，不是死路。
+
+**(C4) 「无 `executionId`」不等于「未 accept」。** §3「未 accept」一行拆为两行：
+- `starting`，或 `start-pending` 且 `prepared:false` ⇒ 直接 restartable（见 I9）。
+- `start-pending` 且 `prepared:true` ⇒ 先 `port.inspect`（同 B′）：`absent` ⇒ restartable；`accepted`／`stopped` ⇒ 按「已 accept」一行；`unknown` ⇒ 等，计数同 B′。
+R-H 增加崩溃点：stop 之下的 `B-after-accept`。
+
+**(I1) 补 `blocked` 一行。** 被冻结的 `blocked` run：有 `executionId` ⇒ `requestHandoff` 后按「已 accept」一行收口；无 ⇒ restartable（若从未 prepared）或 unrecoverable。无论哪条，请求**必须**到达已 settle 态或 `outcome-unknown`（后者可由 `recovery-retry` 接手）。新判据 H8：组内一个 blocked run ＋ 一个在跑的 run，stop 后到达终态 stop 状态。
+
+**(I2) stop 之后的冲突落地**：见 §12(2)。
+
+**(I3) 「有未完成请求」的判定用 `ADOPTABLE_STATES`（`stopIntent.ts:54`），含 `outcome-unknown`。** `outcome-unknown` 的 run 继续 collect，迟到的 candidate 照样 H-settle；**`outcome-unknown` 不杀 ccloop 进程**。
+
+**(I4) 投递的请求体要原样重放。** `reason` 不在 `handoff_requests` 行里，取自 outbox 的 origin，映射 `handoff→human`、`shutdown→shutdown`。
+投递时与 `collecting` 意图**同一次写入**持久化「实际发出的请求字节（或其哈希与所带 deadline）」，崩溃后一律重放这份字节 —— ccloop 按整个请求的规范哈希判重放（`handoff.ts:151-152`），重建出不同字节会得 `control-handoff-conflict`。
+登记：投递之后再被缩短的 deadline（`adoptRequest`、`deliverHandoffStop` 会缩）**到不了 ccloop**。
+
+**(I5) 崩溃窗口补齐。** C1、C2 都是单事务，故「检查点已提交、请求未 settle」的窗口不存在；另加一行兜底：**run `settled` 且请求仍开着 ⇒ 按 C1 那一支 settle 请求**。
+`exportResumeBundle` 不幂等（第二次得 `resume-bundle-exists`，`resumeBundle.ts:143`）⇒ A2 遇已存在的 bundle **复用**：对检查点哈希重新核验后据以重建 `InputCheckpointV1`。
+R-H 增加：`H-between-commit-and-settle`（防回归）、stop 下的 `B-after-accept`。
+
+**(I6) 方案 X 保证的是「祖先」，不是「相等」。** §4 🔴 那句更正为：`drive.base` 是 `snapshot.head` 的**祖先**（快照 HEAD 可能是前任某次失败 attempt 的提交，ccloop `resultRepository.ts:75-77`）。
+H1 改为断言 `merge-base --is-ancestor <前任 drive.base> <snapshot.head>`，且续跑第一个尝试工作区的 HEAD ＝ `snapshot.head`；另加一例「stop 落在一次失败 attempt 之后」。
+续跑因此会在失败 attempt 的改动上继续（ccloop 的设计）；越界检查按 `drive.base` 算，会把失败 attempt 的改动一并算进去 —— **控制器决定接受**，登记。
+
+**(I7) H2 的 N2 断言换成不会被重置的计数。** 解冲突 spawn 数取 fake codex `.calls` 里解冲突脚本的条目数、或 `reconcileRunsDirOf` 下的 spawn 目录数 —— 不用 `spawnSeq`（尖端移动那支会清零，`driverLanding.ts:325`）。
+**既有 bug（上游代码）登记并在本片修**（控制器决定，因为 N3 的可负担性检查读的就是这个数）：`recordReconcileUsage` 的键 `reconcile-usage:<runId>:spawn-<spawnSeq>` 在重置后撞键，第二次解冲突的 token **不记到 group 上**。改为单调、不随重置清零的 spawn 键。
+
+**(I8) 关闭**：见 §12(3)。
+
+**(I9) restartable 是新代码。** `terminaliseRun` 今天把 restartable 也挂成 `held`（`stopIntent.ts:660-673`），任务会滞留、无出路。新增一支：restartable ⇒ 承诺留给该任务、work 回 `ready`、分配回 ready 态（A1 的「预留」只是 `providerAttemptOrdinal`，没有数额可「释放」—— 上文「释放本 run 预留」作废）。
+估算器的 restartable（`tests/control/stopIntent.test.ts` 钉 `active:0` 的那几条）行为不变。
+H4 改为断言 `work.status==="ready"`、分配状态，以及之后 resume＋start 为该任务领出一个新 run（不是只断言 `.calls` 不增 —— 那在 held group 里恒成立）。
+
+**Minor**：
+- M1：ccloop 不只在 attempt 之间停，每个阶段边界（plan／execute／verify 之后）都会停（`runLoop.ts` 的 `persistHandoffBoundary`）。
+- M2：`settled-recoverable` 是 **run** 的 state，`held` 是 **work** 的状态；续跑匹配的是 Orca 自己的 `settle-…` 检查点 id，不是 ccloop ack 里的 `checkpointId`。
+- M3：`otherSideOfWeb` 是 `driverLanding.ts:114-133`。
+- M4：`toStartEnvelope` 写死 `inputCheckpoint: null`（`startEnvelope.ts:91`）⇒ 要加参数。
+- M5：解冲突 contract 的 `objective.taskId` 是 `reconcile-${a}-${b}`（`reconcile.ts:361`）；N 元命名规则：`reconcile-<本任务>-<对方按 id 排序以 - 连接>`，N＝1 时与今天逐字相同（N-parity 依赖它）。
+- M6：会红的既有判据以计划阶段现跑为准；评审读出的候选：`tests/control/executionDriver.test.ts:266`（D21，必红）、`tests/control/driverRecovery.test.ts:45-53`（条目形状随 §12(3) 变）；`tests/panel/controlLifecycle.test.ts:150-168` 多半不受影响。
+
+## 12. 本会话的人裁（2026-09-25，逐条原话）—— 优先于上文与 §11
+
+- m5「同意」；C5「同意」；既有判据「同意修改」⇒ **本片授权改写既有判据**，守人裁 88 的 (b)(c)：整条改写不许放宽、改后注释写明编码哪条人裁，逐条记台账；**ccloop 侧的既有判据按 ccloop 人裁 88 由人指名到具体测试**，计划阶段列出清单。§9 末段「本片不授权改写」作废。
+- 「在 fake codex 之后再加 fake claude（如果必要可以一起将 claude 作为 agent 也调通）」＋「claude 单独开一片」⇒ **不在本片**。ccloop control 模式今天只接 codex（`accept.ts:91`、`worker.ts:107,153`），claude 走 control 需要 ccloop 另一笔改动，另立 spec。
+
+**(1) deadline 路径（人：「ccloop 和 Orca 目前都未发布，你看怎么做是正确的」）⇒ 控制器决定：修在 ccloop，C6。**
+理由：ccloop 的 `unresolvedRequestIds`（`handoff.ts:288,310`）在两个分支里恒等于「`result` 不是 `complete` 就列自己」，与 `result` 冗余，且与事实不符 —— candidate 已写出，**这个请求已被回答**。「被中途打断」由 `result:"partial"` 表达。
+Orca 若把它读成「已解决」，就是改写对端观测，违反执行驱动 spec §8.4。
+
+| # | 改什么 | 为什么 |
+|---|---|---|
+| C6 | ccloop `src/control/handoff.ts`：candidate 所回答的那个请求**不列入** `unresolvedRequestIds`；`result` 语义不变 | deadline 中止的 run 今天永远不可恢复，group 停死在 `handoff-partial` |
+
+钉旧行为的 ccloop 判据按 ccloop 人裁 88 列出、由人指名后整条改写。
+
+**(2) stop 之后的冲突（人：「倾向于起。如果花费未超就起，花费超了上限就不起」）。**
+开着请求的 run 在 D 冲突时：可负担性检查（执行驱动 spec §5.3(5)）通过 ⇒ 照起解冲突；不通过 ⇒ `blocked`＝`reconcile-budget`，其请求按 §11(I1) 的 `blocked` 一行收口（有完整成果，按 C1 那一支 settle 为 `settled-recoverable`，run 保持 `blocked` 供人 `recovery-retry`）。
+登记：stop 之后最多再起「stop 时 `collected` 的 run 数」次解冲突。
+
+**(3) 关闭（人：「同意，空闲的也跳过」）。**
+「驱动环的 group」＝ 有 `planHash`、已 `start` 过（存在 start wake）、且驱动环存在。这样的 group **不论有无活动 run** 都跳过，不写 stop intent、不置 `stopped`；其他 group 照旧（Web spec §6.4 逐字节同前）。
+**线上契约变更（人已同意）**：shutdown 条目的 `disposition` 枚举（`webProtocol.ts:1116-1123`）加值 `skipped-driver-owned`，`web/src/controlTypes.ts` 同步；§6 的「`skipped: "driver-owned"` 字段」作废，以本条为准。
+
+**判据增补**（在 §9.2 与 §11 各条之上）：H8（§11 I1）；C6 的 ccloop 判据（deadline 中止的 candidate `unresolvedRequestIds` 为空、`result` 仍为 `partial`，并配一条删掉修复就红的变异）；E2E 一例「deadline 中止 ⇒ 可恢复 ⇒ 续跑落地」（C5 `delayMs` 大于请求的 deadline）；重复解冲突的 token 全部记到 group 上（§11 I7）。
