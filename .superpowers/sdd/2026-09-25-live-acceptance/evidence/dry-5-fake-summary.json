@@ -1,0 +1,345 @@
+{
+  "mode": "fake",
+  "model": "fixture-model",
+  "groupTokens": 300000,
+  "taskTokens": 150000,
+  "deadlineMs": 300000,
+  "startedAt": "2026-09-25T02:18:28.701Z",
+  "root": "/private/tmp/claude-501/-Users-biran-code-skills-loop-Orca/af3dc0d3-b6e4-4b97-b41a-7f75552cf74c/scratchpad/dry-5",
+  "imported": {
+    "schema": "orca-command-success-v1",
+    "commandId": "import",
+    "actorId": "human",
+    "verb": "import-plan",
+    "target": {
+      "kind": "group",
+      "groupId": "g"
+    },
+    "commandRevision": 1,
+    "projectionSeq": 1,
+    "effectivePayloadHash": "e3d6ac39b03ae0fa792306d8f21db1456c28c7b5befed936ca45a35b155f5b02",
+    "authorityCommandHash": "18e6af765508a30ce056b767073ce71eb863a0e59fc2b9f69e15735e33901533",
+    "result": {
+      "kind": "imported",
+      "groupId": "g",
+      "estimateId": "estimate-d881cf4e52a154ab59b37d52",
+      "estimateState": "blocked-capability",
+      "estimateReasonCode": "estimate-blocked-capability"
+    }
+  },
+  "confirmedLedger": {
+    "groupLimit": {
+      "tokens": 300000,
+      "activeMs": 24840000,
+      "attempts": 6,
+      "sessions": 6
+    },
+    "used": {
+      "tokens": 0,
+      "activeMs": 0,
+      "attempts": 0,
+      "sessions": 0
+    },
+    "committedRemaining": {
+      "tokens": 150001,
+      "activeMs": 6000000,
+      "attempts": 2,
+      "sessions": 2
+    },
+    "explicitUnallocatedReserve": {
+      "tokens": 149999,
+      "activeMs": 18840000,
+      "attempts": 4,
+      "sessions": 4
+    },
+    "budgetDeficit": {
+      "tokens": 0,
+      "activeMs": 0,
+      "attempts": 0,
+      "sessions": 0
+    },
+    "usageUnknown": false
+  },
+  "proposal": {
+    "proposalVersion": 2,
+    "state": "confirmed",
+    "planHash": "7b7abbc9d488fa3badb562fef009f44ef7eb24283d185e076362f37e480efc94",
+    "groupLimit": {
+      "tokens": 300000,
+      "activeMs": 24840000,
+      "attempts": 6,
+      "sessions": 6
+    },
+    "explicitUnallocatedReserve": {
+      "tokens": 149999,
+      "activeMs": 18840000,
+      "attempts": 4,
+      "sessions": 4
+    },
+    "allocations": [
+      {
+        "ownerKind": "goal-review",
+        "ownerId": "g:goal-review",
+        "bucket": "review",
+        "state": "confirmed",
+        "amount": {
+          "tokens": 1,
+          "activeMs": 3600000,
+          "attempts": 1,
+          "sessions": 1
+        },
+        "fieldProvenance": {
+          "tokens": {
+            "provenance": "human",
+            "estimateId": null
+          },
+          "activeMs": {
+            "provenance": "complex-1m-default",
+            "estimateId": null
+          },
+          "attempts": {
+            "provenance": "complex-1m-default",
+            "estimateId": null
+          },
+          "sessions": {
+            "provenance": "complex-1m-default",
+            "estimateId": null
+          }
+        }
+      },
+      {
+        "ownerKind": "reserve",
+        "ownerId": "g:reserve",
+        "bucket": "reserve",
+        "state": "confirmed",
+        "amount": {
+          "tokens": 149999,
+          "activeMs": 18840000,
+          "attempts": 4,
+          "sessions": 4
+        },
+        "fieldProvenance": {
+          "tokens": {
+            "provenance": "system",
+            "estimateId": null
+          },
+          "activeMs": {
+            "provenance": "system",
+            "estimateId": null
+          },
+          "attempts": {
+            "provenance": "system",
+            "estimateId": null
+          },
+          "sessions": {
+            "provenance": "system",
+            "estimateId": null
+          }
+        }
+      },
+      {
+        "ownerKind": "task",
+        "ownerId": "a",
+        "bucket": "handoff",
+        "state": "confirmed",
+        "amount": {
+          "tokens": 0,
+          "activeMs": 1800000,
+          "attempts": 0,
+          "sessions": 0
+        },
+        "fieldProvenance": {
+          "tokens": {
+            "provenance": "human",
+            "estimateId": null
+          },
+          "activeMs": {
+            "provenance": "complex-1m-default",
+            "estimateId": null
+          },
+          "attempts": {
+            "provenance": "complex-1m-default",
+            "estimateId": null
+          },
+          "sessions": {
+            "provenance": "complex-1m-default",
+            "estimateId": null
+          }
+        }
+      },
+      {
+        "ownerKind": "task",
+        "ownerId": "a",
+        "bucket": "work",
+        "state": "confirmed",
+        "amount": {
+          "tokens": 150000,
+          "activeMs": 600000,
+          "attempts": 1,
+          "sessions": 1
+        },
+        "fieldProvenance": {
+          "tokens": {
+            "provenance": "human",
+            "estimateId": null
+          },
+          "activeMs": {
+            "provenance": "human",
+            "estimateId": null
+          },
+          "attempts": {
+            "provenance": "human",
+            "estimateId": null
+          },
+          "sessions": {
+            "provenance": "human",
+            "estimateId": null
+          }
+        }
+      }
+    ],
+    "budgetMode": "soft",
+    "contextPolicy": {
+      "handoffAtContextTokens": null
+    },
+    "profiles": {
+      "estimator": {
+        "profileId": "all",
+        "profileHash": "1c302e441b80fd4122da7f5a5b66168e786ea5b859b53ce81f17a5257b96a5fe"
+      },
+      "worker": {
+        "profileId": "all",
+        "profileHash": "1c302e441b80fd4122da7f5a5b66168e786ea5b859b53ce81f17a5257b96a5fe"
+      },
+      "handoff": {
+        "profileId": "all",
+        "profileHash": "1c302e441b80fd4122da7f5a5b66168e786ea5b859b53ce81f17a5257b96a5fe"
+      },
+      "goalReview": {
+        "profileId": "all",
+        "profileHash": "1c302e441b80fd4122da7f5a5b66168e786ea5b859b53ce81f17a5257b96a5fe"
+      }
+    },
+    "executionSnapshotHash": "c1ecc63c55d5ccf711ee965139823179bd570a6afe5e3eb8d471dfed9dacd436"
+  },
+  "shutdown": true,
+  "killedProcessGroups": [],
+  "run": {
+    "runId": "run-9c5977b1-4d18-426f-9861-4246a54dcba3",
+    "state": "settled",
+    "drive": {
+      "workspaceMode": "worktree",
+      "sourceDir": "/private/tmp/claude-501/-Users-biran-code-skills-loop-Orca/af3dc0d3-b6e4-4b97-b41a-7f75552cf74c/scratchpad/dry-5/control/live-247610f4.runs/run-9c5977b1-4d18-426f-9861-4246a54dcba3",
+      "workspacePath": "/private/tmp/claude-501/-Users-biran-code-skills-loop-Orca/af3dc0d3-b6e4-4b97-b41a-7f75552cf74c/scratchpad/dry-5/control/live-247610f4.workspaces/run-9c5977b1-4d18-426f-9861-4246a54dcba3",
+      "targetRepo": "/private/tmp/claude-501/-Users-biran-code-skills-loop-Orca/af3dc0d3-b6e4-4b97-b41a-7f75552cf74c/scratchpad/dry-5/target",
+      "prepared": true,
+      "base": "7b2cc75a4fb8fef80d43e50651c8d8fc52196584",
+      "envelopeHash": "bd7642fcf4690492de44d13d6c2dd6ace64c48a40277cf9b90fa332bdb2db5d5",
+      "inspectUnknown": 0,
+      "outcome": "succeeded",
+      "attemptSha": "9b92e06ce8b366ad4d78627219d5236983f6d917",
+      "landedCommit": "b79780e86d70f39e81362ad6dc3e08a38ec4171e",
+      "reconcile": null,
+      "blockedAt": null,
+      "blockedReason": null,
+      "cleanedUp": true,
+      "cleanupError": null,
+      "publishError": null
+    }
+  },
+  "ledger": {
+    "groupLimit": {
+      "tokens": 300000,
+      "activeMs": 24840000,
+      "attempts": 6,
+      "sessions": 6
+    },
+    "used": {
+      "tokens": 45,
+      "activeMs": 200,
+      "attempts": 1,
+      "sessions": 1
+    },
+    "committedRemaining": {
+      "tokens": 1,
+      "activeMs": 3600000,
+      "attempts": 1,
+      "sessions": 1
+    },
+    "explicitUnallocatedReserve": {
+      "tokens": 299954,
+      "activeMs": 21239800,
+      "attempts": 4,
+      "sessions": 4
+    },
+    "budgetDeficit": {
+      "tokens": 0,
+      "activeMs": 0,
+      "attempts": 0,
+      "sessions": 0
+    },
+    "usageUnknown": false
+  },
+  "providerCalls": [
+    {
+      "phase": "execute",
+      "file": "/private/tmp/claude-501/-Users-biran-code-skills-loop-Orca/af3dc0d3-b6e4-4b97-b41a-7f75552cf74c/scratchpad/dry-5/control/live-247610f4.runs/run-9c5977b1-4d18-426f-9861-4246a54dcba3/run/codex/1/execute/call-VU61iX/events.jsonl",
+      "usage": {
+        "input_tokens": 12,
+        "output_tokens": 3
+      },
+      "total": 15
+    },
+    {
+      "phase": "plan",
+      "file": "/private/tmp/claude-501/-Users-biran-code-skills-loop-Orca/af3dc0d3-b6e4-4b97-b41a-7f75552cf74c/scratchpad/dry-5/control/live-247610f4.runs/run-9c5977b1-4d18-426f-9861-4246a54dcba3/run/codex/1/plan/call-d9ScBx/events.jsonl",
+      "usage": {
+        "input_tokens": 12,
+        "output_tokens": 3
+      },
+      "total": 15
+    },
+    {
+      "phase": "verify",
+      "file": "/private/tmp/claude-501/-Users-biran-code-skills-loop-Orca/af3dc0d3-b6e4-4b97-b41a-7f75552cf74c/scratchpad/dry-5/control/live-247610f4.runs/run-9c5977b1-4d18-426f-9861-4246a54dcba3/run/codex/1/verify/call-ldhhXL/events.jsonl",
+      "usage": {
+        "input_tokens": 12,
+        "output_tokens": 3
+      },
+      "total": 15
+    }
+  ],
+  "ccloopReportedTokens": 45,
+  "ccloopExecutionPolicies": [
+    {
+      "autonomyLevel": "L2",
+      "maxAttempts": 1,
+      "perAttemptTimeoutMs": 420000,
+      "totalRuntimeBudgetMs": 600000,
+      "tokenBudget": 150000,
+      "worktreeRequired": true,
+      "partialOutcomeRecoveryWindowMs": 1000
+    }
+  ],
+  "landedAnswer": "42\n",
+  "checks": {
+    "ccloopPolicyCapped": true,
+    "notTimedOut": true,
+    "runSettled": true,
+    "workDone": true,
+    "cleanedUp": true,
+    "landedBytes": true,
+    "onlyAnswerChanged": true,
+    "humanUntouched": true,
+    "dispatchNotBlocked": true,
+    "published": true,
+    "threeProviderCalls": true,
+    "everyCallHasUsage": true,
+    "ledgerKnown": true,
+    "ledgerMatchesCcloop": true,
+    "orcaHomeUntouched": true,
+    "fakeCallsExact": true,
+    "shutdownClean": true
+  },
+  "finishedAt": "2026-09-25T02:18:38.087Z"
+}
