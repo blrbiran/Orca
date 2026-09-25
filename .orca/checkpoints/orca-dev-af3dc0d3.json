@@ -3,34 +3,34 @@
   "runId": "orca-dev-af3dc0d3",
   "runtime": "claude-code",
   "sessionRef": "af3dc0d3-b6e4-4b97-b41a-7f75552cf74c",
-  "writtenAt": "2026-09-25T03:55:12.374Z",
-  "head": "64a05e13dd1dac53c678abc35bf7b92371353ab0",
+  "writtenAt": "2026-09-25T04:56:00.126Z",
+  "head": "dac8dd2869ee81c7635807c0fbed15a8c2c2b166",
   "level": {
     "kind": "reading",
-    "level": 334374,
+    "level": 390658,
     "windowTokens": 1000000,
     "t1": 330000,
     "t2": 450000,
     "band": 1
   },
   "next": [
-    "A done: one paid real-codex run passed (ledger .superpowers/sdd/2026-09-25-live-acceptance/progress.md). Do not rerun.",
-    "B (④ handoff delivery + continuation + N-way parallel landing + m5): spec docs/superpowers/specs/2026-09-25-handoff-delivery-design.md is committed; an independent read-only spec review is in flight (report: session scratchpad handoff-spec-review.md). Verify each load-bearing reviewer claim, fix the spec, then add the human's 2026-09-25 rulings below, re-review, and only then writing-plans.",
-    "Human rulings 2026-09-25 to fold into the spec: m5 agreed; C5 agreed; add fake claude after fake codex (and wire real claude as an agent if needed) - ccloop control mode is codex-only today (accept.ts:91, worker.ts:107/153), so this needs a ccloop change C6; existing criteria may be rewritten this round under ruling 88 (b)(c)."
+    "Read docs/handoff/handoff.md §4.0 first. A (real-codex live acceptance) is done; do not rerun.",
+    "B (④ handoff delivery): spec docs/superpowers/specs/2026-09-25-handoff-delivery-design.md is reviewed and corrected (§12 > §11 > body; body is published, append only). Next: confirm the human reviewed §11/§12, ask whether to re-review them (one reviewer seat ~260k tokens), then superpowers:writing-plans with a Task 0 that measures every 'Task 0 现量' item and lists the existing criteria that go red.",
+    "After B: the claude-through-ccloop-control slice (human ruling: separate slice)."
   ],
   "open": [
     "executionDriverE2E and driverSettle show timing reds under load: rerun the file alone before judging; controlShutdown's SIGTERM case is a known flake.",
     "Subagent briefs must forbid touching the main worktree (no stash/checkout/reset, no mutation in the main tree); commit own changes before dispatching one that may touch it.",
-    "Controller context crossed T1 (330395) in session af3dc0d3."
+    "ccmem docs/handoff/handoff.md §15 was edited but left uncommitted in session af3dc0d3 (ccmem needs a per-write go-ahead)."
   ],
   "awaitingHuman": [
     {
       "kind": "named-authorization",
-      "what": "Whether wiring real claude as an agent through Orca's driver belongs in this slice, and any paid claude live run"
+      "what": "ccloop C6 rewrites existing ccloop criteria: the human names each test under ccloop ruling 88"
     },
     {
       "kind": "named-authorization",
-      "what": "Web dispatch default of complex-1m-default (3M tokens, 3 attempts per task) overriding contract caps: change the default or surface it in the panel?"
+      "what": "Web dispatch default complex-1m-default (3M tokens, 3 attempts per task) overrides contract caps: change the default or surface it in the panel?"
     },
     {
       "kind": "irreversible",
@@ -41,9 +41,9 @@
     {
       "command": "npm run typecheck",
       "exitCode": 0,
-      "commit": "64a05e13dd1dac53c678abc35bf7b92371353ab0",
-      "observedAt": "2026-09-25T03:55:12.327Z",
-      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-af3dc0d3-n7qPyU/1.txt"
+      "commit": "dac8dd2869ee81c7635807c0fbed15a8c2c2b166",
+      "observedAt": "2026-09-25T04:56:00.076Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-af3dc0d3-bMDHnx/1.txt"
     }
   ]
 }
