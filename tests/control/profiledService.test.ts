@@ -10,6 +10,8 @@ import { collectControlled } from "../../src/control/schedulerBridge.js";
 import { getGroup } from "../../src/control/queries.js";
 // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
 import { amount, caps, openTestStore, resolvedAs, seedBudgetCase } from "./fixtures/store.js";
+import { candidateCase } from "./fixtures/candidate.js";
+import { commitCandidate } from "../../src/control/checkpoints.js";
 
 const digest = (byte: string) => byte.repeat(64);
 const latch = () => { let release!: () => void; const promise = new Promise<void>((resolve) => { release = resolve; }); return { promise, release }; };
@@ -155,6 +157,50 @@ describe("profiled service execution", () => {
         expect(h.store.db.prepare("SELECT id FROM outbox WHERE id=?").get(`start:${claim.runId}`)).toBeUndefined();
       } finally { await h.dispose(); }
     }
+  });
+
+  // T7 fix round 2 (agent selection spec §6.4): on the PROFILED path (the run holds execution and handoff bindings),
+  // a handoff request probes the handoff profile with the handed-off run's own frozen selection -- not a default.
+  it("probes the handoff profile with the handed-off run's frozen selection on the profiled handoff path", async () => {
+    const h = await openTestStore();
+    try {
+      const seeded = seedBudgetCase(h.store);
+      const askedWork: unknown[] = [], askedHandoff: unknown[] = [];
+      const record = (into: unknown[]) => async (partial: Parameters<ExecutionPort["resolveAgent"]>[0]) => { into.push(structuredClone(partial)); return resolvedAs(capableProbe(), partial); };
+      const selected = port({ resolveAgent: record(askedWork), accept: async (input) => ({ kind: "accepted", executionId: "e1", configHash: input.claim.configHash }) });
+      const handoffPort = port({ resolveAgent: record(askedHandoff), requestHandoff: async () => { throw new Error("lost-response"); } });
+      const { service, selection, handoffSelection } = serviceWith(h.store, selected, port(), handoffPort);
+      const claim = await service.claimProfiled("g1", "T1", selection, handoffSelection);
+      await service.startProfiled(selection, envelope(claim, seeded.w1.contract, h.root));
+      putWork(h.store, "g1", { ...seeded.w1, workItemId: "handoff-T1", kind: "handoff", parentRunId: claim.runId, grant: { work: amount(0, 0, 0, 0), handoff: seeded.w1.grant.handoff } }, { commandId: "register-handoff", expectedRevision: Number(h.store.db.prepare("SELECT revision FROM groups WHERE id='g1'").get()!.revision), by: "service" });
+      askedHandoff.length = 0;
+      await expect(service.requestHandoff("g1", claim.runId, { requestId: "r1", reason: "context", deadlineAt: "2030-01-01T00:00:00Z" })).rejects.toThrow("handoff-outcome-unknown");
+      const frozen = readRun(h.store, claim.runId).agent;
+      expect(readRun(h.store, claim.runId).handoffProfile).toEqual(handoffSelection);
+      expect(askedHandoff.length).toBeGreaterThanOrEqual(2);
+      expect(askedHandoff.every((partial) => JSON.stringify(partial) === JSON.stringify(frozen))).toBe(true);
+    } finally { await h.dispose(); }
+  });
+
+  // T7 fix round 2: on the PROFILED path a continuation probes both its predecessor's execution and handoff profiles
+  // with the predecessor's own frozen selection (two separate call sites, each pinned).
+  it("probes both profiles with the predecessor's frozen selection on the profiled continuation path", async () => {
+    const h = await candidateCase();
+    try {
+      await commitCandidate(h.store, h.candidate);
+      const askedWork: unknown[] = [], askedHandoff: unknown[] = [];
+      const record = (into: unknown[]) => async (partial: Parameters<ExecutionPort["resolveAgent"]>[0]) => { into.push(structuredClone(partial)); return resolvedAs(capableProbe(), partial); };
+      const { service, selection, handoffSelection } = serviceWith(h.store, port({ resolveAgent: record(askedWork) }), port(), port({ resolveAgent: record(askedHandoff) }));
+      const predecessor = readRun(h.store, h.claim.runId);
+      predecessor.executionProfile = selection; predecessor.handoffProfile = handoffSelection;
+      h.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify(predecessor), h.claim.runId);
+      await service.continueTask("g1", "T1", { commandId: "continue", expectedRevision: 3 }).catch(() => undefined);
+      const frozen = readRun(h.store, h.claim.runId).agent;
+      expect(frozen).toEqual({ agent: "codex", model: "fixture-model", contextWindow: "agent-default" });
+      expect(askedWork.length).toBeGreaterThanOrEqual(1);
+      expect(askedHandoff.length).toBeGreaterThanOrEqual(1);
+      for (const partial of [...askedWork, ...askedHandoff]) expect(partial).toEqual(frozen);
+    } finally { await h.dispose(); }
   });
 
   // T7 fix round 1 (agent selection spec §6.4): reconciling an unknown start re-probes the run's own frozen selection
