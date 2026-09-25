@@ -1,0 +1,48 @@
+{
+  "v": 1,
+  "runId": "orca-dev-af3dc0d3",
+  "runtime": "claude-code",
+  "sessionRef": "af3dc0d3-b6e4-4b97-b41a-7f75552cf74c",
+  "writtenAt": "2026-09-25T01:55:24.672Z",
+  "head": "b16af65632c4abfdfa4b9c72e03087dafcc3f2b7",
+  "level": {
+    "kind": "reading",
+    "level": 128699,
+    "windowTokens": 1000000,
+    "t1": 330000,
+    "t2": 450000,
+    "band": 0
+  },
+  "next": [
+    "Execution driver first slice (①②③) is done under fake codex; see docs/handoff/handoff.md §4.0 and .superpowers/sdd/2026-09-25-execution-driver/. Do not resume its plan.",
+    "Human opened B on 2026-09-25 (session af3dc0d3): ④ handoff delivery for the execution driver. Start with superpowers:brainstorming -> spec -> plan; do not implement before the human approves the spec.",
+    "Driver-loop E2E needs a ccloop main build containing C1-C4: fresh git clone --local into the session scratchpad, symlink node_modules, npm run build; adapter config under /private/tmp, mode 0600, pointing at ccloop's fake codex."
+  ],
+  "open": [
+    "executionDriverE2E and driverSettle show timing reds under load: rerun the file alone before judging; controlShutdown's SIGTERM case is a known flake.",
+    "Subagent briefs must forbid touching the main worktree (no stash/checkout/reset, no mutation in the main tree); commit own changes before dispatching one that may touch it."
+  ],
+  "awaitingHuman": [
+    {
+      "kind": "named-authorization",
+      "what": "Real-codex live acceptance of the execution driver (costs real money); until then do not claim Web dispatch works"
+    },
+    {
+      "kind": "named-authorization",
+      "what": "⑤ budget estimate chain, strict groups, and the §9.0 registered residuals: each needs the human to open it"
+    },
+    {
+      "kind": "irreversible",
+      "what": "Leftover stash@{0} from the execution driver round: keep or drop is the human's call"
+    }
+  ],
+  "measurements": [
+    {
+      "command": "npm run typecheck",
+      "exitCode": 0,
+      "commit": "b16af65632c4abfdfa4b9c72e03087dafcc3f2b7",
+      "observedAt": "2026-09-25T01:55:24.623Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-af3dc0d3-BDShKu/1.txt"
+    }
+  ]
+}
