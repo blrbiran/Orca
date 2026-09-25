@@ -1120,6 +1120,7 @@ const commandResultSchema = z.discriminatedUnion("kind", [
               "preserved-handoff",
               "preserved-shutdown",
               "blocked-inconsistent",
+              "skipped-driver-owned",
             ]),
             changed: z.boolean(),
             commandRevision: positiveSafeInteger,

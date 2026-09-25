@@ -49,7 +49,7 @@ export interface PanelStartupOrder {
   listen: () => Promise<void>;
 }
 
-type Disposition = "created" | "strengthened-pause" | "preserved-pause" | "preserved-handoff" | "preserved-shutdown" | "blocked-inconsistent";
+type Disposition = "created" | "strengthened-pause" | "preserved-pause" | "preserved-handoff" | "preserved-shutdown" | "blocked-inconsistent" | "skipped-driver-owned";
 
 interface ShutdownGroupEntry {
   groupId: string;
@@ -119,6 +119,17 @@ function recordInconsistency(store: ControlStore, groupId: string, shutdownId: s
 }
 
 /**
+ * Handoff delivery spec §12(3): a group the execution driver owns is a Web plan group (it has a
+ * `planHash`) that a person has started at least once (a `start` wake exists, delivered or not).
+ * Whether a driver exists at all is the caller's `exemptDriverRuns`.
+ */
+function driverOwnedGroup(store: ControlStore, groupId: string): boolean {
+  const group = JSON.parse(String(store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId)!.body)) as { planHash?: string };
+  return group.planHash !== undefined
+    && store.db.prepare("SELECT 1 FROM scheduler_wakes WHERE group_id=? AND kind='start'").get(groupId) !== undefined;
+}
+
+/**
  * Compose one shutdown intent per group under a single global command: a pause is
  * strengthened only when it must actually stop a run, and a human handoff-stop or
  * an earlier epoch's deadline is never rewritten.
@@ -137,6 +148,12 @@ export function shutdownGroup(store: ControlStore, groupId: string, window: Shut
   }
   if (intent?.mode === "pause" && active.length === 0) {
     return { groupId, disposition: "preserved-pause", changed: false, ...versions(store, groupId), frozenRunIds: [], requestIds: [], blockerCode: null };
+  }
+  // Handoff delivery spec §12(3) and §13.2 I-8 (m5): a driver-owned group keeps dispatching across a
+  // restart, so it gets no stop intent and is not stopped -- but only when no earlier intent exists
+  // (the branches above answer those first) and every active run is one the driver collects.
+  if (exemptDriverRuns && intent === null && active.length === 0 && driverOwnedGroup(store, groupId)) {
+    return { groupId, disposition: "skipped-driver-owned", changed: false, ...versions(store, groupId), frozenRunIds: [], requestIds: [], blockerCode: null };
   }
   const stopRevision = revisionOf(store, groupId) + 1;
   updateRevision(store, groupId, stopRevision);

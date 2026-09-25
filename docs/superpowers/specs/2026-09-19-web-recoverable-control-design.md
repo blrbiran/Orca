@@ -1662,3 +1662,31 @@ The statements below are superseded by `docs/superpowers/specs/2026-09-25-execut
 - The background scheduler named at line 772 is the execution driver loop (`src/control/executionDriver.ts`). After a start wake is delivered it reserves the provider attempt, sends the frozen start envelope, collects, lands the result on `orca/<groupId>`, settles the run, and arms another start wake while ready work remains.
 - The request-bound proof line 778 requires before a strict provider call is honoured in this slice only by refusal: a strict group's run is blocked with `strict-proof-unimplemented` before any provider attempt; soft groups are driven without a proof.
 - Line 788 (a lost proof acknowledgement sets a global recovery blocker) is unchanged for the proof path (`recoverAttempt`). What no longer applies to driver-owned runs is startup recovery's rule that a run without a `start:<runId>` row blocks dispatch for every group: recovery leaves those runs to the driver, and a run the driver cannot advance is blocked on its own, with a named `blockedReason`, without setting `dispatchBlocked`.
+
+## ERRATUM (handoff delivery, 2026-09-25)
+
+Appended 2026-09-25 by the implementer of Task 7 of the handoff delivery plan, under controller session `e5f56bfe`
+(Claude Opus 5.5), in the commit whose subject is `feat(panel): skip graceful shutdown for driver-owned groups`. The statements below are superseded by
+`docs/superpowers/specs/2026-09-25-handoff-delivery-design.md` (§6, §11 C2, §12(3), §13.2 C-1, I-1 and I-8). The original text above is kept verbatim.
+
+1. **§6.4 no longer freezes a driver-owned group.** A group is driver-owned when its body carries a `planHash`, a `start`
+   scheduler wake exists for it (delivered or not), and the panel runs with an execution driver (`exemptDriverRuns`).
+   For such a group, and only when it has **no existing stop intent** and **no active run other than the driver's own Web
+   work runs**, shutdown writes no stop intent, does not set `stopped`, freezes no run, and lists the group with the new
+   disposition `skipped-driver-owned` (`changed: false`). Step 3 (line 1274, "for every group with active runs—including a
+   paused group—persists or strengthens its stop intent … for a dispatch-enabled group with no active run, persists a
+   shutdown stop intent") therefore does not apply to it, and neither does the sentence at line 1282: "A ready group with
+   no active run receives a shutdown intent with an empty frozen set, reaches `handoff-complete`, and after restart uses an
+   empty `resume-from-handoff` followed by an explicit `start`." After a restart the driver collects the runs it left in
+   ccloop and arms the next start wake with no human command. Every other group — never started, no `planHash`, no driver,
+   an existing pause/handoff/shutdown intent, or any active non-driver run such as a budget estimate — is handled exactly
+   as §6.4 says. Implemented in `src/panel/controlLifecycle.ts` (`driverOwnedGroup` and the branch after the preserved
+   dispositions); pinned by `tests/panel/shutdownDriverGroup.test.ts`.
+2. **§11.1 "the chain `commitCandidate → settleHandoffRequest → assertPredecessor` is now satisfiable by production code"
+   (lines 1582-1583) no longer holds** after the execution driver's deviation D2 (`releaseRunReserve` got a Web branch that
+   releases the run's commitment when a candidate is committed): committing first and settling the request second either
+   double-counts or breaks `assertPredecessor`. A Web run stopped by a handoff is closed by one step, H-settle: archive the
+   snapshot and write the checkpoint file as canonical bytes (`canonicalBytes(candidate)`, row hash
+   `sha256Canonical(candidate)`), then one transaction inserts the checkpoint row with `result: "partial"`, sets
+   `checkpointId`/`recoverable`, parks the remaining commitment as `held`, settles the request `settled-recoverable`, and
+   leaves the run `settled-recoverable` with its work `held`. `commitCandidate` is not on that path.
