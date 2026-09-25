@@ -81,3 +81,12 @@
 - Task 5: complete (ccloop commits 988f82b..a8037ad, review clean after round 1). 实施席 331,553＋355,578 token。
 - Task 5: minor (deferred): 缺失文件经软链目录到达时路径检查放行（复审实验确认；对不读表的方法无后果）。
 - ccloop 侧 T1–T6 全部完成：ccloop f4e49a2..a8037ad。
+- Task 8: complete (Orca commits 37cebf0..c23f262, review clean). 实施席 125,954 token。
+- Task 7: review (opus) → Needs fixes: I1 `profiledService.test.ts` 三条「unavailable」判据被改写放宽（复审在副本实测：删 `service.ts:92` 的 `||observed.handoffControl!=="durable"`，BASE 3 红、HEAD 全绿）；I2 REWRITTEN 清单漏项且改名的只列旧名；I3 legacy 路径选择路由（workAgents／claimLegacy／parentAgent／requestHandoff／continueTask／reconcileStartForRun／stopIntent probe）无变异、夹具不断言所问选择。实施席 264,518 token／104 次。
+- Task 7: fix round 1 → I1＋I2＋I3＋Minor「exit 1 无可解析码时丢了 stderr、退化自 `reconcile-spawn:`」。
+- Task 7: minor (deferred): `graceByRun` 把失败的 resolveAgent 缓存成 60 s、`deps.handoffGraceMs` 无人设置（T11 换冻结值时一并处理）；「eight-field」字样（应为 7 键）；`dispatch.test.ts:2923` 近读回形状；`unconfiguredPort` 的 `typeof resolveAgent` 恒真；套话注释未说明各判据编码什么；SQLite ExperimentalWarning 等噪声早于 T7。
+- Task 7: Ruling: 新阻塞码 `reconcile-refused:<code>` 接受（`drive.blockedReason` 自由串、`reconcile-*` 家族内、不撞名），T17 登记进 spec §13 —— 错的代价：面板显示一个未入 spec 的码。
+- Task 7: fix round 1/5 (4 addressed, 1 open — profiled-branch run.agent/predecessor.agent in requestHandoff/continueTask unpinned (reviewer mutation: all green); commits 8de4d6f..111d06f)
+- Task 7: fix round 2/5 (1 addressed, 0 open — profiled-branch criteria + F2-1..F2-3; commits 111d06f..b549a58)
+- Task 7: complete (Orca commits c23f262..b549a58, review clean after round 2). 实施席续用同一席，工具报数累计见各通知（264,518／341,602／350,256）。复审席自报曾误写 `.claude_scratch_report.txt` 到 Orca 根目录并随即删除（控制器 `git status --untracked-files=all` 现核：只剩本台账）。
+- 波 2（T6、T5、T7）完成：ccloop 988f82b..a8037ad、Orca c23f262..b549a58；派波次复审（P21），与 T9 并行。
