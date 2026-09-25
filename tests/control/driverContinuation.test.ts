@@ -159,6 +159,25 @@ describe("a continuation whose registration is not its own (spec §4)", { timeou
   });
 });
 
+// Task 5 review fix round 1 (controller ruling 2026-09-25): spec §7 -- a failed removal of the predecessor's workspace
+// is residue recorded on the predecessor, not a reason to block the continuation whose bundle already verified.
+describe("a predecessor whose workspace cannot be removed (spec §4, §7)", { timeout: 60_000 }, () => {
+  it("does not block the continuation: it still reaches accept, and the predecessor's run body carries the cleanupError", async () => {
+    const behaviour = { value: "stoppable" as FakeBehaviour };
+    const { t, predecessor, driver, checkpointId } = await parked(behaviour); try {
+      // A workspace path not named after the run: cleanupRunWorkspace refuses to remove it.
+      const old = t.body(predecessor);
+      old.drive.workspacePath = `${old.drive.workspacePath}-renamed`;
+      t.h.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify(old), predecessor);
+      behaviour.value = "succeed";
+      const continuation = await resume(t, predecessor, checkpointId);
+      await t.until(driver, () => t.fake.calls.accept.some((sent) => sent.claim.runId === continuation));
+      expect(t.body(continuation).drive).toMatchObject({ blockedAt: null, blockedReason: null });
+      expect(t.body(predecessor).drive).toMatchObject({ cleanedUp: false, cleanupError: expect.stringContaining("refusing to clean") });
+    } finally { await t.h.dispose(); }
+  });
+});
+
 describe("withinGrant (spec §13.2 I-5)", () => {
   // Each dimension on its own: the end-to-end criterion compares against withinGrant itself, so only this one sees a
   // dimension the cut forgets.

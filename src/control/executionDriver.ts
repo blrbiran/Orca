@@ -265,14 +265,20 @@ async function continuationBundle(deps: ExecutionDriverDeps, predecessorRunId: s
   }
 }
 
-/** spec §4, §7: the predecessor's own workspace; its source directory and archived snapshot stay. */
+/**
+ * spec §4, §7: the predecessor's own workspace; its source directory and archived snapshot stay. The predecessor
+ * is out of the driver's scope, so a failed removal is recorded on it (the residue, visible on the panel) and never
+ * blocks the continuation, whose bundle already exists -- the convention of driverHandoff.restartRun.
+ */
 async function cleanupPredecessor(deps: ExecutionDriverDeps, targetRepo: string, predecessorRunId: string): Promise<void> {
   const predecessor = readDriverRun(deps.store, predecessorRunId);
   if (predecessor.drive === undefined || predecessor.drive.cleanedUp) return;
-  await cleanupRunWorkspace(targetRepo, deps.roots, predecessorRunId, predecessor.drive.workspacePath);
+  let cleanupError: string | null = null;
+  try { await cleanupRunWorkspace(targetRepo, deps.roots, predecessorRunId, predecessor.drive.workspacePath); }
+  catch (error) { cleanupError = describeError(error); }
   write(deps, () => {
     const current = readDriverRun(deps.store, predecessorRunId);
-    current.drive = { ...current.drive!, cleanedUp: true, cleanupError: null };
+    current.drive = { ...current.drive!, cleanedUp: cleanupError === null, cleanupError };
     saveDriverRun(deps.store, current);
   });
 }
