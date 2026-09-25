@@ -236,6 +236,9 @@ export function deriveStopState(store: ControlStore, groupId: string, frozenRunI
     const state = latestRequestForRun(store, groupId, runId)?.state ?? null;
     if (state === null || state === "outcome-unknown") unresolved = true;
     else if (OPEN_STATES.includes(state)) pending = true;
+    // Handoff delivery (controller ruling 2026-09-25 on Task 3's open question; Web spec §6.2): a run still active
+    // under a settled request is a contradiction and a recovery blocker, never a finished stop.
+    else if (Number(store.db.prepare("SELECT active FROM runs WHERE id=?").get(runId)?.active ?? 0) === 1) unresolved = true;
     else if (state === "settled-unrecoverable") partial = true;
   }
   return unresolved ? "handoff-unresolved" : pending ? "handoff-pending" : partial ? "handoff-partial" : "handoff-complete";

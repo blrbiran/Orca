@@ -255,17 +255,34 @@ export function buildExecutionSnapshot(input: ConfirmedProposal): ExecutionSnaps
   return prepareExecutionSnapshot(input).snapshot;
 }
 
+/**
+ * Handoff delivery plan deviation D-SNAP (2026-09-25): the shape a live allocation is compared to its frozen
+ * counterpart in. Web spec §5.1.1 re-amounts a parked task allocation (held, then continuing) to its remaining
+ * grant, and it keeps that amount once terminal; those amounts are the ledger's settlement, not a drift from the
+ * confirmation, so only their `amount` is left out. Every other field of theirs, and every field of every other
+ * allocation, is still compared. Shared by the driver's contract read and the panel's read model.
+ */
+export function frozenAllocationShape(allocations: ReadonlyArray<{ ownerKind: string; ownerId: string; bucket: string; state: string }>) {
+  const settled = new Set(allocations.filter(a => a.ownerKind === "task" && ["held", "continuing", "terminal"].includes(a.state)).map(a => `${a.ownerId}\0${a.bucket}`));
+  return <A extends { ownerKind: string; ownerId: string; bucket: string }>(allocation: A): A | Omit<A, "amount"> => {
+    if (allocation.ownerKind !== "task" || !settled.has(`${allocation.ownerId}\0${allocation.bucket}`)) return allocation;
+    const { amount: _amount, ...rest } = allocation as A & { amount: unknown };
+    return rest;
+  };
+}
+
 /** Scheduler consumption verifies the archived wrapper, then returns its exact contract bytes. */
 export function readConfirmedTaskExecution(store: ControlStore, groupId: string, taskId: string) {
   const proposal = readBudgetProposal(store, groupId), plan = readArchivedPlan(store, groupId);
   if (proposal.state !== "confirmed" || !proposal.executionSnapshotHash) throw new ControlError("group-state-invalid");
+  const settledShape = frozenAllocationShape(proposal.allocations);
   try {
     const snapshot = executionSnapshotSchema.parse(JSON.parse(readCanonicalRecord(store, proposal.executionSnapshotHash)));
     if (snapshot.groupId !== groupId || snapshot.planHash !== plan.planHash || snapshot.graphVersion !== plan.graphVersion
       || snapshot.proposalVersion !== proposal.proposalVersion || snapshot.budgetMode !== proposal.budgetMode
       || sha256Canonical(snapshot.profiles) !== sha256Canonical(proposal.profiles)
       || sha256Canonical(snapshot.contextPolicy) !== sha256Canonical(proposal.contextPolicy)
-      || sha256Canonical(snapshot.allocations.filter(a => a.ownerKind !== "reserve")) !== sha256Canonical(proposal.allocations.filter(a => a.ownerKind !== "reserve").map(({ state: _state, ...a }) => a))) throw new ControlError("recovery-blocked");
+      || sha256Canonical(snapshot.allocations.filter(a => a.ownerKind !== "reserve").map(settledShape)) !== sha256Canonical(proposal.allocations.filter(a => a.ownerKind !== "reserve").map(({ state: _state, ...a }) => settledShape(a)))) throw new ControlError("recovery-blocked");
     const task = plan.plan.tasks.find(t => t.taskId === taskId), ref = snapshot.derivedContracts.find(t => t.taskId === taskId);
     const work = snapshot.allocations.find(a => a.ownerKind === "task" && a.ownerId === taskId && a.bucket === "work");
     const handoff = snapshot.allocations.find(a => a.ownerKind === "task" && a.ownerId === taskId && a.bucket === "handoff");

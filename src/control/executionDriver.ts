@@ -17,6 +17,7 @@ import { isWebWorkRun, nextClaimableTask, readWorkClaimEnvelope, reserveProvider
 import { readWorkspaceSetting, type WorkspaceMode } from "./workspaceSettings.js";
 import { cleanupRunWorkspace, commitAttempt, ensureWorkBranch, ensureWorkspace, sourceDirOf, workspacePathOf, type WorkspaceRoots } from "./workspace.js";
 import { stepD, stepR } from "./driverLanding.js";
+import { openRequestOf, stepH, visitOrder } from "./driverHandoff.js";
 import { harvest } from "../scheduler/harvest.js";
 import { writeSetOf } from "../scheduler/writeSet.js";
 import type { AdmissionGate } from "./admissionGate.js";
@@ -33,7 +34,9 @@ import type { Candidate } from "./types.js";
  * recovery and the pump never do (spec §2.1).
  */
 
-export type CrashPoint = "A2-after-workspace" | "B-after-accept" | "C-after-terminal" | "D-after-cas" | "E-after-acceptance";
+export type CrashPoint = "A2-after-workspace" | "B-after-accept" | "C-after-terminal" | "D-after-cas" | "E-after-acceptance"
+  // Handoff delivery spec §9.2 R-H, §11 I5, §13.2 I-1.
+  | "H-after-deliver" | "H-after-candidate" | "H-between-commit-and-settle" | "A2-after-bundle";
 
 /** Test-only fault injection (spec §7.2 R1): thrown from `crash`, it ends the driver as a process death would. */
 export class DriverCrash extends Error {
@@ -57,6 +60,10 @@ export interface ExecutionDriverDeps {
   crash?: (point: CrashPoint) => void;
   /** Test seam (spec §5.1): runs between a landing's merge and its compare-and-swap. */
   beforeCas?: () => Promise<void>;
+  /** Handoff delivery spec §3: the clock a request's grace is judged by (tests move it). */
+  now?: () => Date;
+  /** Handoff delivery spec §3 (controller decision): adapter killGraceMs + 60 s; HANDOFF_EXTRA_GRACE_MS when absent. */
+  handoffGraceMs?: number;
 }
 
 export interface DriverRun {
@@ -309,11 +316,13 @@ export async function stepBPrime(deps: ExecutionDriverDeps, runId: string): Prom
  * terminal: succeeded becomes an attempt commit (§3.3) checked against the task's paths (§5.2);
  * anything else is blocked where it stands and nothing is landed.
  */
-export async function stepC(deps: ExecutionDriverDeps, runId: string): Promise<boolean> {
+/**
+ * C's collection half (spec §2.2), shared with the handoff step H (handoff delivery spec §3): collect, check
+ * every piece of evidence against its hash and archive it, book usage, and check the report is this run's.
+ */
+export async function collectInto(deps: ExecutionDriverDeps, run: DriverRun): Promise<ExecutionReport> {
   const { store } = deps;
-  const run = readDriverRun(store, runId);
-  if (run.state !== "accepted" || run.drive === undefined || run.taskId === null) return false;
-  const drive = run.drive;
+  const runId = run.runId;
   const port = portFor(deps, run);
   const report = await port.collect(readStartEnvelope(store, run), run.highWater);
   const refs = [...report.events.map((event) => event.source), ...(report.candidate?.artifacts ?? [])];
@@ -331,6 +340,22 @@ export async function stepC(deps: ExecutionDriverDeps, runId: string): Promise<b
   const candidate = report.candidate;
   if (candidate && (candidate.runId !== runId || candidate.generation !== run.generation || candidate.workItemId !== run.workItemId)) {
     throw new ControlError("report-identity-conflict");
+  }
+  return report;
+}
+
+export async function stepC(deps: ExecutionDriverDeps, runId: string): Promise<boolean> {
+  const { store } = deps;
+  const run = readDriverRun(store, runId);
+  if (run.state !== "accepted" || run.drive === undefined || run.taskId === null) return false;
+  const drive = run.drive;
+  const report = await collectInto(deps, run);
+  const candidate = report.candidate;
+  // Handoff delivery spec §3 (X1): a proved stop with no terminal and no request of this run's is not
+  // something to wait for forever; it is blocked by name. With a request, step H owns the run.
+  if (!report.terminal && candidate?.stopProof && openRequestOf(store, run) === null) {
+    blockRun(deps, runId, "C", "candidate-without-terminal");
+    return true;
   }
   if (!report.terminal || !candidate?.stopProof) return report.events.length > 0;
   if (report.terminal.sourceDir !== drive.sourceDir) throw new ControlError("report-path-conflict");
@@ -361,7 +386,7 @@ export async function stepC(deps: ExecutionDriverDeps, runId: string): Promise<b
   });
 }
 
-async function savedReport(store: ControlStore, runId: string): Promise<ExecutionReport> {
+export async function savedReport(store: ControlStore, runId: string): Promise<ExecutionReport> {
   const row = store.db.prepare("SELECT body FROM outbox WHERE id=? AND kind='report'").get(`report:${runId}`);
   if (!row) throw new ControlError("control-terminal-pending");
   return JSON.parse((await readArtifact(store, JSON.parse(String(row.body)).source)).toString()) as ExecutionReport;
@@ -541,10 +566,12 @@ export function createExecutionDriver(deps: ExecutionDriverDeps): ExecutionDrive
       if (error instanceof ControlError && error.code === "panel-draining") return false;
       throw error;
     }
-    for (const runId of driverRunIds(deps.store)) {
+    for (const runId of visitOrder(deps.store)) {
       if (context.stopped) break;
       try {
-        if (await advance(deps, runId, context)) progressed = true;
+        // Handoff delivery spec §3: a run with an open request goes to H; every other run is advanced as before.
+        const moved = openRequestOf(deps.store, readDriverRun(deps.store, runId)) !== null ? await stepH(deps, runId, context) : await advance(deps, runId, context);
+        if (moved) progressed = true;
       } catch (error) {
         if (error instanceof DriverCrash) throw error;
         // A draining panel refuses every write; the round ends and no run is blamed for it.

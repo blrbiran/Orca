@@ -21,6 +21,7 @@ export interface HarnessOptions {
   files?: (workItemId: string) => Record<string, string>;
   delayAccept?: () => Promise<void>;
   workTokens?: (workItemId: string) => number;
+  duringCollect?: () => Promise<void>;
 }
 
 /**
@@ -41,7 +42,7 @@ export async function driverHarness(tasks: readonly WebFixtureTask[], options: H
   const fake = fakeCcloopPort({
     capabilities: snapshot.profile.capabilities, behaviour: options.behaviour ?? (() => "succeed"),
     files: options.files ?? ((id) => ({ [id]: `${id}\n` })), delayAccept: options.delayAccept,
-    workTokens: options.workTokens,
+    workTokens: options.workTokens, duringCollect: options.duringCollect,
   });
   const deps: ExecutionDriverDeps = {
     store: h.store, router: createExecutionProfileRouter([resolveProfile(snapshot, fake.port)]), admissionGate: h.deps.admissionGate,

@@ -50,9 +50,15 @@ describe("a restartable run gives its task back (spec §11 I9, Minor a)", () => 
 });
 
 describe("a run that finished settles its request on its own (spec §11 C1)", () => {
+  // Handoff delivery (human ruling 2026-09-25, spec §12: this slice may rewrite criteria; ruling 88 (b)(c)): this criterion
+  // was added in this slice (Task 3) and its setup is corrected to the function's precondition (a run already settled
+  // through E) under the controller ruling on the C-5 stop state (deriveStopState counts an active run with a settled
+  // request as unresolved), 2026-09-25.
   it("marks only the request settled-recoverable: the run, its work item and the allocations are not touched", async () => {
     const { t, runIds: [runId] } = await stopped(); try {
       const [requestId] = await handoffStop(t);
+      // E's releaseRunReserve leaves a settled run inactive; that is the only run this function is called for.
+      t.h.store.db.prepare("UPDATE runs SET active=0 WHERE id=?").run(runId!);
       const before = { run: row(t, "runs", runId!), work: row(t, "work_items", "a"), proposal: JSON.stringify(readBudgetProposal(t.h.store, "g")) };
       t.h.store.transaction(() => settleCompletedRunRequestInTransaction(t.h.store, "g", requestId!));
       expect(readHandoffRequest(t.h.store, "g", requestId!).request.state).toBe("settled-recoverable");

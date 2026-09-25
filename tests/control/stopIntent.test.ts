@@ -345,6 +345,20 @@ describe("one open handoff request per run and generation", () => {
       expect(readStopIntent(h.store, "g")).toMatchObject({ mode: "handoff", frozenRunIds: [runId] });
     } finally { await h.dispose(); }
   });
+
+  // Handoff delivery Task 4 (controller ruling on Task 3's open question, 2026-09-25; Web spec §6.2): an active run
+  // whose latest request already settled is a contradiction, so the group is not handoff-complete while it lasts.
+  it("keeps the group handoff-unresolved while an active run's only request is already settled", async () => {
+    const { h, service } = await startedFixture(); try {
+      const runId = workRuns(h.store).find((run) => run.phase === "work")!.runId;
+      seedRequest(h.store, "g", runId, "settled-recoverable", "2026-09-20T11:00:00.000Z");
+      const result = await service.handoffStop(h.command("handoff-stop", {}));
+      if ("error" in result || result.result.kind !== "handoff-stopped") throw new Error(`handoff-stop refused: ${JSON.stringify(result)}`);
+      expect(Number(h.store.db.prepare("SELECT active FROM runs WHERE id=?").get(runId)!.active)).toBe(1);
+      expect(readStopIntent(h.store, "g")!.state).toBe("handoff-unresolved");
+      expect(groupStopState(h.store, "g")).toBe("handoff-unresolved");
+    } finally { await h.dispose(); }
+  });
 });
 
 describe("handoff deadline clocks", () => {

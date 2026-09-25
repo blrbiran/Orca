@@ -1,3 +1,4 @@
+import { frozenAllocationShape } from "../control/executionSnapshot.js";
 import { z } from "zod";
 import { readArtifact } from "../control/archive.js";
 import { canonicalBytes, sha256Canonical } from "../control/canonicalJson.js";
@@ -294,7 +295,9 @@ function validateExecutionSnapshot(
   if (!proposal.executionSnapshotHash || !proposal.profiles || !proposal.budgetMode) return blocked("confirmed-proposal-incomplete");
   const canonicalJson = readGroupOwnedCanonicalRecord(store, groupId, proposal.executionSnapshotHash);
   const parsed = executionSnapshotSchema.safeParse(parseJson(canonicalJson, "execution-snapshot-invalid"));
-  const proposalAllocations = proposal.allocations.map(({ state: _state, ...allocation }) => allocation);
+  // Handoff delivery plan deviation D-SNAP: a settled task allocation's amount is the ledger's, not a drift.
+  const settledShape = frozenAllocationShape(proposal.allocations);
+  const proposalAllocations = proposal.allocations.map(({ state: _state, ...allocation }) => settledShape(allocation));
   if (!parsed.success || canonicalBytes(parsed.data).toString("utf8") !== canonicalJson
     || sha256Canonical(parsed.data) !== proposal.executionSnapshotHash
     || parsed.data.groupId !== groupId || parsed.data.planHash !== proposal.planHash
@@ -302,7 +305,7 @@ function validateExecutionSnapshot(
     || parsed.data.budgetMode !== proposal.budgetMode
     || canonicalBytes(parsed.data.contextPolicy).compare(canonicalBytes(proposal.contextPolicy)) !== 0
     || canonicalBytes(parsed.data.profiles).compare(canonicalBytes(proposal.profiles)) !== 0
-    || canonicalBytes(parsed.data.allocations.filter(a => a.ownerKind !== "reserve")).compare(canonicalBytes(proposalAllocations.filter(a => a.ownerKind !== "reserve"))) !== 0) {
+    || canonicalBytes(parsed.data.allocations.filter(a => a.ownerKind !== "reserve").map(settledShape)).compare(canonicalBytes(proposalAllocations.filter(a => a.ownerKind !== "reserve"))) !== 0) {
     return blocked("execution-snapshot-identity");
   }
   // Limits and residual reserve may change after confirmation. Frozen grants
@@ -489,9 +492,15 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
       const workRow = store.db.prepare("SELECT body FROM work_items WHERE group_id=? AND id=?").get(groupId, run.workItemId);
       if (!workRow) return blocked(`run-work-missing:${runId}`);
       const work = parseStored(workBodySchema, workRow.body, `run-work-invalid:${runId}`);
+      // Handoff delivery plan deviation D-VIEW (2026-09-25): Web spec §5.1.1 parks a recoverable predecessor's
+      // remainder as the task's grant, the grant its continuation is claimed with. So the task's grant is its
+      // current run's claim grant -- or, while that run is the parked predecessor, its remaining -- and an older
+      // run of the task's lineage keeps the grant it was claimed with.
+      const current = work.currentRunId === runId;
+      const claimed = current && run.state === "settled-recoverable" ? run.remaining : run.grant;
       if (work.workItemId !== run.workItemId || work.taskId !== run.taskId || work.configHash !== run.configHash
         || work.targetVersion !== run.targetVersion
-        || canonicalBytes(work.grant).compare(canonicalBytes(run.grant)) !== 0
+        || (current && canonicalBytes(work.grant).compare(canonicalBytes(claimed)) !== 0)
         || !sameBinding(run.executionProfile, proposal.profiles.worker, "task")
         || !sameBinding(run.handoffProfile, proposal.profiles.handoff, "handoff")) return blocked(`run-work-identity:${runId}`);
       if (run.phase === "handoff") {
