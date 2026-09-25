@@ -9,7 +9,8 @@ import {
   settleCompletedRunRequestInTransaction, settleHandoffRequestInTransaction, type HandoffRequestBody,
 } from "./stopIntent.js";
 import { isWebWorkRun } from "./webDispatch.js";
-import { cleanupRunWorkspace } from "./workspace.js";
+import { cleanupRunWorkspace, revParse, workBranchRef } from "./workspace.js";
+import { findLanding } from "./driverLanding.js";
 import {
   INSPECT_UNKNOWN_LIMIT, advance, archiveAdmission, collectInto, describeError, driverRunIds, groupRepoId, portFor, readDriverRun,
   readStartEnvelope, saveDriverRun, savedReport, stepC, write, type DriverContext, type DriverRun, type ExecutionDriverDeps,
@@ -197,12 +198,30 @@ async function closeBlocked(deps: ExecutionDriverDeps, run: DriverRun, request: 
   const drive = run.drive!;
   const at = drive.blockedAt;
   if (drive.landedCommit !== null) return false;
+  // Controller ruling T4-I1, 2026-09-25: D and R land through `landOnTip`, whose worktree removal runs after the
+  // swap; if it throws, the change is on orca/<g> but the run is blocked with no `landedCommit`. Ask the branch.
+  if ((at === "D" || at === "R") && await landedUnrecorded(deps, run)) return false;
   if (drive.outcome !== null || at === "D" || at === "R" || at === "E") {
     return settleHandoffCheckpoint(deps, run.runId, request.requestId, await savedReport(deps.store, run.runId));
   }
   if (at === "A1" || at === "A2" || (at === "B" && (drive.blockedReason ?? "").startsWith("accept-refused"))) return restartRun(deps, run.runId, request.requestId);
   if (run.executionId === null) return inspectUnderStop(deps, run, request);
   return deliverAndCollect(deps, run, request);
+}
+
+/**
+ * Controller ruling T4-I1, 2026-09-25: D-LANDED for a landing the run never recorded -- the same probe stepD
+ * makes (`findLanding` from the run's base to the current tip). A probe that cannot answer (no repository, a
+ * landing git cannot name) cannot prove the change is absent, so the run is left to a person as landed.
+ */
+async function landedUnrecorded(deps: ExecutionDriverDeps, run: DriverRun): Promise<boolean> {
+  const drive = run.drive!;
+  if (drive.attemptSha === null || drive.base === null) return false;
+  try {
+    const targetRepo = deps.resolveRepository(groupRepoId(deps.store, run.groupId));
+    const tip = await revParse(targetRepo, workBranchRef(run.groupId));
+    return await findLanding(targetRepo, drive.base, tip, drive.attemptSha) !== null;
+  } catch { return true; }
 }
 
 /**

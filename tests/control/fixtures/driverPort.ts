@@ -19,7 +19,14 @@ export type FakeBehaviour = "succeed" | "unknown" | "forget-first-accept" | "los
   // no terminal; `-silent` latches the request but never produces anything; `orphan-candidate` reports a proved
   // stop with no terminal and no request at all (criterion X1); `stoppable-usage-unknown` stops like `stoppable`
   // but its work phase was aborted before any usage was observed (cumulative null, handoff spec §13.1 C-3).
-  | "stoppable" | "stoppable-silent" | "orphan-candidate" | "stoppable-usage-unknown";
+  | "stoppable" | "stoppable-silent" | "orphan-candidate" | "stoppable-usage-unknown"
+  // Task 4 fix round 1: stoppable runs whose candidate fails exactly one of Web spec §6.2's hard conditions --
+  // an open request id, a missing piece of evidence, a usage event past a gap (seq 3 never arrives), a handoff
+  // usage that turned unknown after it was observed -- and one whose ccloop acknowledges some other request id.
+  | "stoppable-unresolved" | "stoppable-missing" | "stoppable-usage-gap" | "stoppable-handoff-usage-unknown" | "stoppable-wrong-ack";
+
+/** Task 4 fix round 1: the behaviours above that stop like `stoppable` once a request arrives. */
+const STOPPABLE_VARIANTS: ReadonlySet<FakeBehaviour> = new Set<FakeBehaviour>(["stoppable-unresolved", "stoppable-missing", "stoppable-usage-gap", "stoppable-handoff-usage-unknown", "stoppable-wrong-ack"]);
 
 export interface FakeCcloop {
   port: ExecutionPort;
@@ -67,11 +74,15 @@ export function fakeCcloopPort(input: {
       { runId: claim.runId, generation: claim.generation, eventSeq: 1, bucket: "work", cumulative: input.behaviour(claim.workItemId) === "stoppable-usage-unknown" ? null : { tokens: input.workTokens?.(claim.workItemId) ?? 10, activeMs: 5, attempts: 1, sessions: 1 }, source: put(`usage-${claim.runId}-1`, Buffer.from(`work usage ${claim.runId}`)) },
       { runId: claim.runId, generation: claim.generation, eventSeq: 2, bucket: "handoff", cumulative: { tokens: 0, activeMs: 0, attempts: 0, sessions: 0 }, source: put(`usage-${claim.runId}-2`, Buffer.from(`handoff usage ${claim.runId}`)) },
     ];
+    const variant = input.behaviour(claim.workItemId);
+    if (variant === "stoppable-usage-gap") events.push({ runId: claim.runId, generation: claim.generation, eventSeq: 4, bucket: "handoff", cumulative: { tokens: 0, activeMs: 0, attempts: 0, sessions: 0 }, source: put(`usage-${claim.runId}-4`, Buffer.from(`handoff usage ${claim.runId} 4`)) });
+    if (variant === "stoppable-handoff-usage-unknown") events.push({ runId: claim.runId, generation: claim.generation, eventSeq: 3, bucket: "handoff", cumulative: null, source: put(`usage-${claim.runId}-3`, Buffer.from(`handoff usage ${claim.runId} 3`)) });
+    const unresolvedRequestIds = variant === "stoppable-unresolved" ? ["open-question-1"] : [];
     const outcome = input.behaviour(claim.workItemId) === "exhausted" ? "exhausted" : "succeeded";
     // Fix round 1 (review Important 1): a `protocol:1` packet handoff.ts's `packetSchema` (and its
     // identity/usageHighWater check against the committed candidate) actually accepts -- the driver's
     // `stepE` carries this bytes-for-bytes into the committed candidate's own `handoff` field.
-    const usageHighWater = 2;
+    const usageHighWater = variant === "stoppable-handoff-usage-unknown" ? 3 : 2;
     const handoffPacket = {
       protocol: 1 as const,
       identity: {
@@ -81,12 +92,12 @@ export function fakeCcloopPort(input: {
       request: stop.request, runState: { status: stop.terminal ? outcome : "executing" },
       completed: [] as string[], unfinished: [] as string[], pendingDecisions: [] as string[],
       awaitingHuman: [] as string[], validationCommands: [] as string[], rawLogs: [] as unknown[],
-      usageHighWater, unresolvedRequestIds: [] as string[], artifacts: [] as unknown[],
+      usageHighWater, unresolvedRequestIds, artifacts: [] as unknown[],
     };
     const candidate: Candidate = {
       groupId: claim.groupId, workItemId: claim.workItemId, taskId: claim.taskId, runId: claim.runId, generation: claim.generation,
       graphVersion: claim.graphVersion, targetVersion: claim.targetVersion, checkpointId: `candidate-${claim.runId}`, usageHighWater,
-      result: outcome === "succeeded" ? "complete" : "partial", artifacts: [], snapshot: null, missing: [], unresolvedRequestIds: [],
+      result: outcome === "succeeded" ? "complete" : "partial", artifacts: [], snapshot: null, missing: variant === "stoppable-missing" ? ["evidence-lost"] : [], unresolvedRequestIds,
       stopProof: { executionId, generation: claim.generation, isolated: true, source: stopSource(claim.runId, executionId, claim.generation) },
       terminalOutcome: stop.terminal ? outcome : "executing", handoff: put(`handoff-${claim.runId}`, Buffer.from(JSON.stringify(handoffPacket))),
     };
@@ -125,7 +136,7 @@ export function fakeCcloopPort(input: {
       if (executionId === undefined) return { events: [], candidate: null, terminal: null };
       let report = reports.get(envelope.claim.runId);
       const behaviour = input.behaviour(envelope.claim.workItemId);
-      if (report === undefined && (behaviour === "stoppable" || behaviour === "stoppable-silent" || behaviour === "stoppable-usage-unknown")) {
+      if (report === undefined && (behaviour === "stoppable" || behaviour === "stoppable-silent" || behaviour === "stoppable-usage-unknown" || STOPPABLE_VARIANTS.has(behaviour))) {
         const request = handoffs.get(envelope.claim.runId);
         if (request === undefined || behaviour === "stoppable-silent") return { events: [], candidate: null, terminal: null };
         report = execute(envelope, executionId, { request, terminal: false });
@@ -150,6 +161,7 @@ export function fakeCcloopPort(input: {
       const existing = handoffs.get(runId);
       if (existing !== undefined && JSON.stringify(existing) !== JSON.stringify(request)) throw new ControlError("control-peer-exit", "2:control-handoff-conflict");
       handoffs.set(runId, request);
+      if (input.behaviour(envelope.claim.workItemId) === "stoppable-wrong-ack") return { kind: "latched", requestId: `not-${request.requestId}` };
       return reports.has(runId) ? { kind: "complete", requestId: request.requestId, checkpointId: `candidate-${runId}` } : { kind: "latched", requestId: request.requestId };
     },
   };

@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { sha256Canonical } from "../../src/control/canonicalJson.js";
@@ -8,6 +9,7 @@ import { readControlGroup } from "../../src/panel/controlViews.js";
 import { exportResumeBundle } from "../../src/control/resumeBundle.js";
 import { handoffRequestFromOutbox, readHandoffRequest, readStopIntent } from "../../src/control/stopIntent.js";
 import { deliverScheduledStart } from "../../src/control/webDispatch.js";
+import { landingPathOf } from "../../src/control/workspace.js";
 import type { FakeBehaviour } from "./fixtures/driverPort.js";
 import { driverHarness, git } from "./fixtures/driverHarness.js";
 import { active, allocation, committedAndUsed, crashingAt, requestBody, requestOf, requestState, stop, work } from "./fixtures/handoffHarness.js";
@@ -345,6 +347,141 @@ describe("deaths inside H (spec §9.2 R-H)", { timeout: 60_000 }, () => {
       expect(requestState(t, requestId!)).toBe("collecting");
       await t.until(t.driver(), () => requestState(t, requestId!) === "settled-recoverable");
       expect(Number(t.h.store.db.prepare("SELECT COUNT(*) AS n FROM checkpoints WHERE run_id=?").get(runId)!.n)).toBe(1);
+    } finally { await t.h.dispose(); }
+  });
+});
+
+// Task 4 fix round 1 (controller ruling T4-I1, 2026-09-25): D and R land through `landOnTip`, whose own worktree removal
+// runs in a `finally` after the swap. When it throws, the change is on orca/g but the run is blocked with no
+// `landedCommit`. Parking that run held would have a continuation land the same change a second time (spec §3).
+const checkpointsOf = (t: Awaited<ReturnType<typeof driverHarness>>, runId: string): number =>
+  Number(t.h.store.db.prepare("SELECT COUNT(*) AS n FROM checkpoints WHERE run_id=?").get(runId)!.n);
+
+describe("a landing whose worktree removal failed after the swap (controller ruling T4-I1)", { timeout: 60_000 }, () => {
+  it("leaves a run blocked at D whose change is already on orca/g to a person, as D-LANDED does: its request stays open", async () => {
+    const t = await driverHarness([{ taskId: "a" }]); try {
+      const runId = await t.claim();
+      await t.until(t.driver(), () => t.body(runId).state === "collected");
+      const tip = git(t.repo, "rev-parse", "refs/heads/orca/g");
+      // A locked worktree refuses `worktree remove --force`, so landOnTip's `finally` throws after the swap.
+      const locking = createExecutionDriver({ ...t.deps, beforeCas: async () => { git(t.repo, "worktree", "lock", landingPathOf(t.deps.roots, runId)); } });
+      await t.until(locking, () => t.body(runId).state === "blocked");
+      const landed = git(t.repo, "rev-parse", "refs/heads/orca/g");
+      expect(landed).not.toBe(tip);
+      expect(git(t.repo, "rev-parse", `${landed}^2`)).toBe(t.body(runId).drive.attemptSha);
+      expect(t.body(runId).drive).toMatchObject({ blockedAt: "D", landedCommit: null });
+      const [requestId] = await stop(t);
+      const driver = t.driver();
+      for (let i = 0; i < 5; i += 1) await driver.round();
+      expect(requestState(t, requestId!)).toBe("request-pending");
+      expect(t.body(runId)).toMatchObject({ state: "blocked", drive: { blockedAt: "D", landedCommit: null } });
+      expect(checkpointsOf(t, runId)).toBe(0);
+      expect(work(t, "a").status).not.toBe("held");
+      expect(git(t.repo, "rev-parse", "refs/heads/orca/g")).toBe(landed);
+      expect(readStopIntent(t.h.store, "g")!.state).toBe("handoff-pending");
+    } finally { await t.h.dispose(); }
+  });
+
+  it("leaves a run blocked at R whose reconciled merge is already on orca/g to a person: its request stays open", async () => {
+    const t = await driverHarness([{ taskId: "a", targetPaths: ["shared.txt"] }, { taskId: "b", targetPaths: ["shared.txt"] }],
+      { files: (id) => ({ "shared.txt": id === "a" ? "A\n" : "B\n" }) }); try {
+      // As tests/control/driverReconcile.test.ts's `twoConflicting`: a reconciliation that succeeds, and a group that can afford it.
+      await writeFile(t.deps.adapterConfigPath, JSON.stringify({ status: "succeeded", spent: 7, holdMs: 0, files: { "shared.txt": "A\nB\n" } }));
+      const limit = readControlGroup(t.h.store, "epoch-test", "g").ledger.groupLimit;
+      const raised = t.service.setLimit(t.h.command("set-limit", { limit: { ...limit, tokens: limit.tokens + 10_000_000 } }));
+      if ("error" in raised) throw new Error(`set-limit refused: ${JSON.stringify(raised.error)}`);
+      const ids = [await t.claim(), await t.claim()];
+      const reconciling = () => ids.filter((id) => t.body(id).state === "reconciling");
+      const locking = createExecutionDriver({ ...t.deps, beforeCas: async () => {
+        for (const id of reconciling()) git(t.repo, "worktree", "lock", landingPathOf(t.deps.roots, id));
+      } });
+      const deadline = Date.now() + 30_000;
+      const blockedAtR = () => ids.find((id) => t.body(id).state === "blocked" && t.body(id).drive.blockedAt === "R");
+      while (Date.now() < deadline && !(blockedAtR() !== undefined && ids.some((id) => t.body(id).state === "settled"))) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        await locking.round();
+      }
+      const runId = blockedAtR()!;
+      expect(runId).toBeDefined();
+      const landed = git(t.repo, "rev-parse", "refs/heads/orca/g");
+      expect(git(t.repo, "rev-parse", `${landed}^2`)).toBe(t.body(runId).drive.attemptSha);
+      expect(t.body(runId).drive.landedCommit).toBeNull();
+      const [requestId] = await stop(t);
+      const driver = t.driver();
+      for (let i = 0; i < 5; i += 1) await driver.round();
+      expect(requestState(t, requestId!)).toBe("request-pending");
+      expect(t.body(runId)).toMatchObject({ state: "blocked", drive: { blockedAt: "R", landedCommit: null } });
+      expect(checkpointsOf(t, runId)).toBe(0);
+      expect(git(t.repo, "rev-parse", "refs/heads/orca/g")).toBe(landed);
+      expect(readStopIntent(t.h.store, "g")!.state).toBe("handoff-pending");
+    } finally { await t.h.dispose(); }
+  });
+
+  it("does not park a run blocked at D when the branch cannot be read to prove its change absent", async () => {
+    const t = await driverHarness([{ taskId: "a" }]); try {
+      const runId = await t.claim();
+      await t.until(t.driver(), () => t.body(runId).state === "collected");
+      const blind = createExecutionDriver({ ...t.deps, resolveRepository: () => { throw new Error("repository gone"); } });
+      await t.until(blind, () => t.body(runId).state === "blocked");
+      expect(t.body(runId).drive).toMatchObject({ blockedAt: "D", blockedReason: "repository-path", landedCommit: null });
+      const [requestId] = await stop(t);
+      for (let i = 0; i < 5; i += 1) await blind.round();
+      expect(requestState(t, requestId!)).toBe("request-pending");
+      expect(checkpointsOf(t, runId)).toBe(0);
+      expect(readStopIntent(t.h.store, "g")!.state).toBe("handoff-pending");
+    } finally { await t.h.dispose(); }
+  });
+});
+
+// Task 4 fix round 1 (review finding 2): each of Web spec §6.2's hard conditions, alone, makes the H-settled
+// checkpoint one a continuation may not start from, and names itself -- a condition that stopped being checked
+// would hand a continuation a checkpoint with an open question, a hole in its evidence or unbooked usage.
+describe("a stop whose checkpoint fails one hard condition is settled unrecoverable by name (Web spec §6.2)", { timeout: 60_000 }, () => {
+  const settlesUnrecoverable = async (behaviour: FakeBehaviour, failureCode: string): Promise<void> => {
+    const t = await driverHarness([{ taskId: "a" }], { behaviour: () => behaviour }); try {
+      const runId = await t.claim();
+      const driver = t.driver();
+      await t.until(driver, () => t.body(runId).state === "accepted");
+      const [requestId] = await stop(t);
+      await t.until(driver, () => requestState(t, requestId!) !== "request-pending" && requestState(t, requestId!) !== "collecting");
+      expect(requestBody(t, requestId!)).toMatchObject({ state: "settled-unrecoverable", failureCode });
+      expect(t.body(runId)).toMatchObject({ state: "settled-unrecoverable", recoverable: false, failureCode });
+      expect(checkpointsOf(t, runId)).toBe(1);
+      expect(readStopIntent(t.h.store, "g")!.state).toBe("handoff-partial");
+    } finally { await t.h.dispose(); }
+  };
+
+  it("an open request id in the candidate: unresolved-requests", () => settlesUnrecoverable("stoppable-unresolved", "unresolved-requests"));
+  it("evidence the candidate names as missing: missing:<what>", () => settlesUnrecoverable("stoppable-missing", "missing:evidence-lost"));
+  it("a usage event past a gap that was never booked: usage-unsettled", () => settlesUnrecoverable("stoppable-usage-gap", "usage-unsettled"));
+  it("a handoff usage that turned unknown after it was observed: usage-unsettled", () => settlesUnrecoverable("stoppable-handoff-usage-unknown", "usage-unsettled"));
+});
+
+describe("delivery and inspection under a stop (Task 4 fix round 1, review finding 2)", { timeout: 60_000 }, () => {
+  it("does not take an acknowledgement of some other request as delivery of this one: the request stays request-pending", async () => {
+    const t = await driverHarness([{ taskId: "a" }], { behaviour: () => "stoppable-wrong-ack" }); try {
+      const runId = await t.claim();
+      const driver = t.driver();
+      await t.until(driver, () => t.body(runId).state === "accepted");
+      const [requestId] = await stop(t);
+      for (let i = 0; i < 5; i += 1) await driver.round();
+      expect(t.fake.calls.handoff.length).toBeGreaterThan(1);
+      expect(requestState(t, requestId!)).toBe("request-pending");
+      expect(t.body(runId).state).toBe("accepted");
+      expect(checkpointsOf(t, runId)).toBe(0);
+    } finally { await t.h.dispose(); }
+  });
+
+  it("takes an inspection that proves the execution stopped as its identity, and settles the request from there", async () => {
+    const t = await driverHarness([{ taskId: "a" }], { behaviour: () => "lost-accept" }); try {
+      const runId = await t.claim();
+      const driver = t.driver();
+      await t.until(driver, () => t.body(runId).state === "unknown");
+      const [requestId] = await stop(t);
+      await t.until(driver, () => !["request-pending", "collecting"].includes(requestState(t, requestId!)));
+      expect(t.fake.calls.inspect).toBe(1);
+      expect(requestState(t, requestId!)).toBe("settled-recoverable");
+      expect(t.body(runId)).toMatchObject({ executionId: `execution-${runId}` });
     } finally { await t.h.dispose(); }
   });
 });
