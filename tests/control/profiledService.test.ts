@@ -8,7 +8,7 @@ import { ControlService, type ExecutionProfileSelection } from "../../src/contro
 import type { ExecutionProfileSnapshotV1 } from "../../src/control/webProtocol.js";
 import { collectControlled } from "../../src/control/schedulerBridge.js";
 import { getGroup } from "../../src/control/queries.js";
-import { caps, amount, openTestStore, seedBudgetCase } from "./fixtures/store.js";
+import { amount, openTestStore, resolvedAs, seedBudgetCase } from "./fixtures/store.js";
 
 const digest = (byte: string) => byte.repeat(64);
 const latch = () => { let release!: () => void; const promise = new Promise<void>((resolve) => { release = resolve; }); return { promise, release }; };
@@ -50,10 +50,17 @@ function capableProbe() {
   return structuredClone(profileSnapshot().profile.capabilities);
 }
 
+// Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): the port's one capability
+// question is resolveAgent (capabilities protocol 3, spec §4.6), which both the router's probe and the service's own
+// check ask; `probing(view)` answers it with `view` for whatever selection is asked.
+const probing = (view: () => ReturnType<typeof capableProbe> | Promise<ReturnType<typeof capableProbe>>): Pick<ExecutionPort, "resolveAgent"> => ({
+  resolveAgent: async (partial) => resolvedAs(await view(), partial),
+});
+
 function port(overrides: Partial<ExecutionPort> = {}): ExecutionPort {
   return {
-    probeProfileCapabilities: async () => capableProbe(),
-    capabilities: async () => caps,
+    ...probing(() => capableProbe()),
+    listAgents: async () => ({ installations: [] }),
     readEvidence: async () => Buffer.alloc(0),
     accept: async (input) => ({ kind: "accepted", executionId: `execution-${input.claim.runId}`, configHash: input.claim.configHash }),
     inspect: async () => ({ kind: "unknown" }),
@@ -73,7 +80,7 @@ function serviceWith(store: Awaited<ReturnType<typeof openTestStore>>["store"], 
 }
 
 function envelope(claim: Awaited<ReturnType<ControlService["claimProfiled"]>>, contract: unknown, root: string): StartEnvelope {
-  return { protocol: 1, claim, contractHash: hashPayload(contract), inputCheckpoint: null, work: { contract, targetRepo: root, base: "HEAD", sourceDir: `${root}/${claim.runId}` } };
+  return { protocol: 2, claim, contractHash: hashPayload(contract), inputCheckpoint: null, work: { contract, targetRepo: root, base: "HEAD", sourceDir: `${root}/${claim.runId}` } };
 }
 
 describe("profiled service execution", () => {
@@ -84,7 +91,7 @@ describe("profiled service execution", () => {
         seedBudgetCase(h.store);
         let accepts = 0;
         const selected = port({
-          probeProfileCapabilities: async () => mode === "unavailable" ? { ...capableProbe(), handoffControl: "unavailable" } : capableProbe(),
+          ...probing(() => mode === "unavailable" ? { ...capableProbe(), handoffControl: "unavailable" } : capableProbe()),
           accept: async () => { accepts += 1; return { kind: "unknown" }; },
         });
         const { service, selection, handoffSelection } = serviceWith(h.store, selected);
@@ -121,7 +128,7 @@ describe("profiled service execution", () => {
         const seeded = seedBudgetCase(h.store);
         let available = true, accepts = 0;
         const selected = port({
-          probeProfileCapabilities: async () => available ? capableProbe() : { ...capableProbe(), handoffControl: "unavailable" },
+          ...probing(() => available ? capableProbe() : { ...capableProbe(), handoffControl: "unavailable" }),
           accept: async () => { accepts += 1; return { kind: "unknown" }; },
         });
         const { service, selection, handoffSelection } = serviceWith(h.store, selected);
@@ -146,7 +153,7 @@ describe("profiled service execution", () => {
         const seeded = seedBudgetCase(h.store);
         let available = true, accepts = 0;
         const selected = port({
-          probeProfileCapabilities: async () => available ? capableProbe() : { ...capableProbe(), handoffControl: "unavailable" },
+          ...probing(() => available ? capableProbe() : { ...capableProbe(), handoffControl: "unavailable" }),
           accept: async () => { accepts += 1; throw new Error("lost-start-response"); },
           inspect: async () => ({ kind: "absent" }),
         });
@@ -174,7 +181,7 @@ describe("profiled service execution", () => {
         seedBudgetCase(h.store);
         const workerSnapshot = profileSnapshot();
         workerSnapshot.profile.capabilities.requestBoundProof!.workDimensions = workDimensions;
-        const selected = port({ probeProfileCapabilities: async () => structuredClone(workerSnapshot.profile.capabilities) });
+        const selected = port({ ...probing(() => structuredClone(workerSnapshot.profile.capabilities)) });
         const worker = resolveProfile(workerSnapshot, selected), handoff = resolveProfile(handoffSnapshot(), port());
         const router = createExecutionProfileRouter([worker, handoff]);
         const service = new ControlService(h.store, port(), { profileRouter: router });
@@ -203,7 +210,7 @@ describe("profiled service execution", () => {
     const entered = latch(), resume = latch();
     try {
       seedBudgetCase(h.store);
-      const { service, selection, handoffSelection } = serviceWith(h.store, port({ probeProfileCapabilities: async () => { entered.release(); await resume.promise; return capableProbe(); } }));
+      const { service, selection, handoffSelection } = serviceWith(h.store, port({ ...probing(async () => { entered.release(); await resume.promise; return capableProbe(); }) }));
       const claim = service.claimProfiled("g1", "T1", selection, handoffSelection);
       await entered.promise;
       await service.admissionGate.beginDrain().beforeWriterTransaction;
@@ -218,7 +225,7 @@ describe("profiled service execution", () => {
     const entered = latch(), resume = latch();
     try {
       seedBudgetCase(h.store);
-      const { service, selection, handoffSelection } = serviceWith(h.store, port({ probeProfileCapabilities: async () => { entered.release(); await resume.promise; return capableProbe(); } }));
+      const { service, selection, handoffSelection } = serviceWith(h.store, port({ ...probing(async () => { entered.release(); await resume.promise; return capableProbe(); }) }));
       const reconcile = service.reconcileBudgetProfiled("g1", "T1", selection, handoffSelection);
       await entered.promise;
       await service.admissionGate.beginDrain().beforeWriterTransaction;

@@ -1,10 +1,10 @@
 import { controlGraph } from "./graph.js";
 import { randomUUID } from "node:crypto";
 import type { ControlStore } from "./store.js";
-import type { Amount, BudgetMode, Capabilities, Claim, ClaimInput, ExecutionProfileBinding, Grant, RunView, StopProof, WorkInput } from "./types.js";
+import type { Amount, BudgetMode, Claim, ClaimInput, ExecutionProfileBinding, Grant, RunView, StopProof, WorkInput } from "./types.js";
 import { ControlError } from "./errors.js";
 import { amountSchema, safeInteger, workSchema } from "./schema.js";
-import { capabilitiesSchema } from "./webProtocol.js";
+import { capabilityViewSchema, type CapabilityViewV1 } from "./webProtocol.js";
 import { applyCommand, dimensions, fits, zero } from "./commands.js";
 import { readGroup, readWork, saveGroup, saveWork, allWork, readBudgetProposal, type GroupRecord } from "./queries.js";
 import { canonicalBytes } from "./canonicalJson.js";
@@ -81,8 +81,8 @@ export function syncWebBudget(store:ControlStore,group:GroupRecord,currentRun:Ru
 export function componentMin(a:Amount,b:Amount):Amount {
   return {tokens:Math.min(a.tokens,b.tokens),activeMs:Math.min(a.activeMs,b.activeMs),attempts:Math.min(a.attempts,b.attempts),sessions:Math.min(a.sessions,b.sessions)};
 }
-export function assertCapabilities(mode:BudgetMode,c:Capabilities):void {
-  if(!capabilitiesSchema.safeParse(c).success) throw new ControlError("control-capability-unsupported");
+export function assertCapabilities(mode:BudgetMode,c:CapabilityViewV1):void {
+  if(!capabilityViewSchema.safeParse(c).success) throw new ControlError("control-capability-unsupported");
   if(c.usageObservation==="unavailable" || c.budgetEnforcement==="unavailable" || c.handoffControl!=="durable" || c.handoffExecution===null) throw new ControlError("control-capability-unsupported");
   if(mode==="strict" && (c.budgetEnforcement!=="bounded" || c.requestBoundProof===null)) throw new ControlError("control-capability-unsupported");
 }
@@ -108,7 +108,7 @@ export function claimWork(store:ControlStore,input:ClaimInput, preparedWork?:Wor
       if(parent.groupId!==groupId || parent.taskId!==work.taskId || parent.state==="settled" || parent.configHash!==work.configHash || parent.handoffWorkItemId) throw new ControlError("handoff-parent-invalid");
       if(!fits(work.grant.handoff,zero(),parent.remaining.handoff) || dimensions.some(k=>work.grant.work[k]!==0)) throw new ControlError("handoff-budget-unavailable");
       parent.handoffWorkItemId=workItemId;saveRun(store,parent);
-      return {groupId:parent.groupId,workItemId:parent.workItemId,taskId:parent.taskId,runId:parent.runId,generation:parent.generation,graphVersion:parent.graphVersion,targetVersion:parent.targetVersion,commandId:parent.commandId,configHash:parent.configHash,grant:parent.grant,ownerToken:parent.ownerToken};
+      return {groupId:parent.groupId,workItemId:parent.workItemId,taskId:parent.taskId,runId:parent.runId,generation:parent.generation,graphVersion:parent.graphVersion,targetVersion:parent.targetVersion,commandId:parent.commandId,configHash:parent.configHash,agent:parent.agent,grant:parent.grant,ownerToken:parent.ownerToken};
     }
     if(group.stopped) throw new ControlError("group-stopped");
     if(group.deadlineAt && Date.now()>=Date.parse(group.deadlineAt)) throw new ControlError("group-deadline-expired");
@@ -125,7 +125,7 @@ export function claimWork(store:ControlStore,input:ClaimInput, preparedWork?:Wor
       if(!fits(group.used,reserved,group.limit)) throw new ControlError("group-budget-unavailable");
       group.reserved=reserved;
     }
-    const claim:Claim={groupId,workItemId,taskId:work.taskId,runId:"run-"+randomUUID(),generation:1,graphVersion,targetVersion,commandId:meta.commandId,configHash:work.configHash,grant:work.grant,ownerToken:randomUUID()};
+    const claim:Claim={groupId,workItemId,taskId:work.taskId,runId:"run-"+randomUUID(),generation:1,graphVersion,targetVersion,commandId:meta.commandId,configHash:work.configHash,agent:work.agent,grant:work.grant,ownerToken:randomUUID()};
     const run:RunRecord={...claim,...(executionProfile?{executionProfile}:{}),...(handoffProfile?{handoffProfile}:{}),executionId:null,state:"claimed",checkpointId:null,recoverable:false,remaining:structuredClone(work.grant),cumulative:{work:zero(),handoff:zero()},unknown:{work:true,handoff:true},highWater:0,breaches:[],handoffWorkItemId:null};
     store.db.prepare("INSERT INTO runs VALUES (?,?,?,?,1,?)").run(claim.runId,groupId,workItemId,1,JSON.stringify(run));
     work.status="running";saveWork(store,groupId,work);

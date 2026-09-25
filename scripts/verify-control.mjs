@@ -4,14 +4,14 @@ import { realpathSync } from "node:fs";
 const root = fileURLToPath(new URL("../", import.meta.url));
 const vitest = fileURLToPath(new URL("../node_modules/vitest/vitest.mjs", import.meta.url));
 const binary = process.env.ORCA_CCLOOP_BIN;
-const config = process.env.ORCA_CCLOOP_ADAPTER_CONFIG;
-if (!binary || !config) {
-  console.error("verify:control requires ORCA_CCLOOP_BIN and ORCA_CCLOOP_ADAPTER_CONFIG");
+const table = process.env.ORCA_AGENTS_TABLE;
+if (!binary || !table) {
+  console.error("verify:control requires ORCA_CCLOOP_BIN and ORCA_AGENTS_TABLE");
   process.exit(1);
 }
 try {
   realpathSync(binary);
-  realpathSync(config);
+  realpathSync(table);
 } catch (error) {
   console.error(error);
   process.exit(1);

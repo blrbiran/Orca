@@ -99,7 +99,7 @@ export function ControlPanel(props: ControlPanelProps): JSX.Element {
       {config.executionPort === "unconfigured" && (
         <p role="alert">
           no execution port configured · this panel serves recovery and evidence, and refuses to start
-          work · set ORCA_CCLOOP_BIN and ORCA_CCLOOP_ADAPTER_CONFIG and restart it
+          work · set ORCA_CCLOOP_BIN and ORCA_AGENTS_TABLE and restart it
         </p>
       )}
       {summary.resetRequired && <p role="alert">server reset required · this page must re-read before it trusts any cached view</p>}

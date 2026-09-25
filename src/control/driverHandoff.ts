@@ -15,7 +15,8 @@ import {
   INSPECT_UNKNOWN_LIMIT, advance, archiveAdmission, collectInto, describeError, driverRunIds, groupRepoId, portFor, readDriverRun,
   readStartEnvelope, saveDriverRun, savedReport, stepC, write, type DriverContext, type DriverRun, type ExecutionDriverDeps,
 } from "./executionDriver.js";
-import type { ExecutionReport, ExecutionStatus } from "./executionPort.js";
+import type { ExecutionPort, ExecutionReport, ExecutionStatus } from "./executionPort.js";
+import type { PartialSelection } from "./agentSelection.js";
 import type { ControlStore } from "./store.js";
 import type { Candidate } from "./types.js";
 
@@ -159,7 +160,7 @@ async function deliverAndCollect(deps: ExecutionDriverDeps, run: DriverRun, requ
       delivered = ack.requestId === request.requestId && (ack.kind === "latched" || ack.kind === "complete");
     } catch { delivered = false; }
     deps.crash?.("H-after-deliver");
-    if (!delivered) return settleIfPastGrace(deps, run, request);
+    if (!delivered) return await settleIfPastGrace(deps, run, request);
     return write(deps, () => {
       const current = readHandoffRequest(store, run.groupId, request.requestId).request;
       if (current.state !== "request-pending") return false;
@@ -173,13 +174,46 @@ async function deliverAndCollect(deps: ExecutionDriverDeps, run: DriverRun, requ
     deps.crash?.("H-after-candidate");
     return settleHandoffCheckpoint(deps, run.runId, request.requestId, report);
   }
-  return settleIfPastGrace(deps, run, request) || report.events.length > 0;
+  return (await settleIfPastGrace(deps, run, request)) || report.events.length > 0;
+}
+
+/**
+ * spec §3 (controller decision): a delivered request that yields nothing turns outcome-unknown only past its deadline
+ * plus the agent's own killGraceMs plus HANDOFF_EXTRA_GRACE_MS. ccloop waits killGraceMs before it kills a phase, so
+ * a shorter grace would call a stop unknown while ccloop is still finishing it. The killGraceMs is the one ccloop
+ * answers for the run's frozen selection (agent selection spec §6.6: Orca never parses the agents table); an answer
+ * that cannot be had, or is not a non-negative safe integer, counts 0 -- never shorter than the fixed part.
+ *
+ * Agent selection plan T7 hook: T11 freezes killGraceMs on the work item at confirm and this reads it from there.
+ */
+export async function handoffGraceMsOf(port: Pick<ExecutionPort, "resolveAgent">, agent: PartialSelection): Promise<number> {
+  let killGraceMs = 0;
+  try {
+    const value = (await port.resolveAgent(agent)).killGraceMs;
+    if (Number.isSafeInteger(value) && value >= 0) killGraceMs = value;
+  } catch { killGraceMs = 0; }
+  return killGraceMs + HANDOFF_EXTRA_GRACE_MS;
+}
+
+/** One answer per run for the driver's life: the grace is asked for on every round past the fixed part. */
+const graceByRun = new WeakMap<ExecutionDriverDeps, Map<string, number>>();
+async function graceMsFor(deps: ExecutionDriverDeps, run: DriverRun): Promise<number> {
+  if (deps.handoffGraceMs !== undefined) return deps.handoffGraceMs;
+  const known = graceByRun.get(deps) ?? new Map<string, number>();
+  graceByRun.set(deps, known);
+  const cached = known.get(run.runId);
+  if (cached !== undefined) return cached;
+  const grace = await handoffGraceMsOf(portFor(deps, run), run.agent);
+  known.set(run.runId, grace);
+  return grace;
 }
 
 /** spec §3 grace (controller decision): past deadline + killGraceMs + 60 s with nothing collected. */
-function settleIfPastGrace(deps: ExecutionDriverDeps, run: DriverRun, request: HandoffRequestBody): boolean {
+async function settleIfPastGrace(deps: ExecutionDriverDeps, run: DriverRun, request: HandoffRequestBody): Promise<boolean> {
   if (request.state === "outcome-unknown") return false;
-  if (nowMs(deps) <= Date.parse(request.deadlineAt) + (deps.handoffGraceMs ?? HANDOFF_EXTRA_GRACE_MS)) return false;
+  // The fixed part first: no port call while the grace cannot possibly have elapsed.
+  if (nowMs(deps) <= Date.parse(request.deadlineAt) + HANDOFF_EXTRA_GRACE_MS) return false;
+  if (nowMs(deps) <= Date.parse(request.deadlineAt) + await graceMsFor(deps, run)) return false;
   return write(deps, () => {
     const current = readHandoffRequest(deps.store, run.groupId, request.requestId).request;
     if (current.state === "outcome-unknown" || !ADOPTABLE_STATES.includes(current.state)) return false;

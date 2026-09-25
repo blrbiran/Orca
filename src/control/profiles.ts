@@ -1,5 +1,6 @@
 import { ControlError, type KnownControlErrorCode } from "./errors.js";
-import type { ExecutionPort, ProfileCapabilityProbe } from "./executionPort.js";
+import type { ExecutionPort } from "./executionPort.js";
+import type { AgentSelection, PartialSelection } from "./agentSelection.js";
 import { sha256Canonical } from "./canonicalJson.js";
 import {
   capabilityViewSchema,
@@ -26,7 +27,12 @@ export interface ObservedProfile {
 
 export interface ExecutionProfileRouter {
   resolve(workKind: WebWorkKindV1, profileId: string, expectedHash: string): FrozenProfile;
-  probe(profile: FrozenProfile): Promise<ObservedProfile>;
+  /**
+   * Agent selection spec §6.4 (C3): a probe is of one selection -- the one the caller is about to dispatch, freeze
+   * or show. `selection` is optional only until agent selection plan T11, which makes it required and passes the
+   * frozen one at every gate; until then a call without it takes the TEMPORARY path of `temporaryProbeSelection`.
+   */
+  probe(profile: FrozenProfile, selection?: AgentSelection): Promise<ObservedProfile>;
   list(): readonly FrozenProfile[];
 }
 
@@ -41,7 +47,8 @@ export const unavailableCapabilities: CapabilityViewV1 = Object.freeze({
 });
 
 const unboundPort: ExecutionPort = {
-  capabilities: async () => { throw new ControlError("control-protocol-unavailable"); },
+  resolveAgent: async () => { throw new ControlError("control-protocol-unavailable"); },
+  listAgents: async () => { throw new ControlError("control-protocol-unavailable"); },
   readEvidence: async () => { throw new ControlError("control-protocol-unavailable"); },
   accept: async () => { throw new ControlError("control-protocol-unavailable"); },
   inspect: async () => { throw new ControlError("control-protocol-unavailable"); },
@@ -58,16 +65,16 @@ function deepFreeze<T>(value: T): T {
 }
 
 function ownPort(port: ExecutionPort): ExecutionPort {
-  const capabilities = port.capabilities.bind(port);
+  const resolveAgent = port.resolveAgent.bind(port);
+  const listAgents = port.listAgents.bind(port);
   const readEvidence = port.readEvidence.bind(port);
   const accept = port.accept.bind(port);
   const inspect = port.inspect.bind(port);
   const requestHandoff = port.requestHandoff.bind(port);
   const collect = port.collect.bind(port);
-  const probeProfileCapabilities = port.probeProfileCapabilities?.bind(port);
   const owned: ExecutionPort = {
-    ...(probeProfileCapabilities ? { probeProfileCapabilities: () => probeProfileCapabilities() } : {}),
-    capabilities: () => capabilities(),
+    resolveAgent: (partial) => resolveAgent(partial),
+    listAgents: () => listAgents(),
     readEvidence: (ref) => readEvidence(ref),
     accept: (input) => accept(input),
     inspect: (input) => inspect(input),
@@ -85,7 +92,7 @@ function proofMatches(left: CapabilityViewV1["requestBoundProof"], right: Capabi
   return left !== null && right !== null && sha256Canonical(left) === sha256Canonical(right);
 }
 
-export function intersectCapabilities(declared: DeclaredCapabilities, observed: ProfileCapabilityProbe): CapabilityViewV1 {
+export function intersectCapabilities(declared: DeclaredCapabilities, observed: CapabilityViewV1): CapabilityViewV1 {
   const usageOrder = ["unavailable", "phase-end", "realtime"] as const;
   const enforcementOrder = ["unavailable", "soft", "bounded"] as const;
   const handoffOrder = ["unavailable", "phase-end", "durable"] as const;
@@ -103,6 +110,18 @@ export function intersectCapabilities(declared: DeclaredCapabilities, observed: 
       ? declared.requestBoundProof
       : null,
   };
+}
+
+/**
+ * TEMPORARY (agent selection plan T7; plan T11 deletes it with the optional parameter above). What a probe with no
+ * selection asks about: the installation with the lexically first id in the port's own table, with no field
+ * overridden, so the capabilities still come from ccloop for an installation that exists (nothing is taken from the
+ * profile's declaration). With several installations this is arbitrary; that is why it may not outlive T11.
+ */
+async function temporaryProbeSelection(port: ExecutionPort): Promise<PartialSelection> {
+  const ids = (await port.listAgents()).installations.map((installation) => installation.id).sort();
+  if (ids.length === 0) throw new ControlError("control-capability-probe-failed", "agents-table-empty");
+  return { agent: ids[0] };
 }
 
 export function resolveProfile(snapshot: ExecutionProfileSnapshotV1, port: ExecutionPort = unboundPort): FrozenProfile {
@@ -144,11 +163,11 @@ export function createExecutionProfileRouter(
       }
       return profile;
     },
-    async probe(profile: FrozenProfile): Promise<ObservedProfile> {
+    async probe(profile: FrozenProfile, selection?: AgentSelection): Promise<ObservedProfile> {
       if (byId.get(profile.snapshot.profile.profileId) !== profile) throw new ControlError("profile-changed");
       try {
-        if (!profile.port.probeProfileCapabilities) throw new ControlError("control-capability-probe-failed");
-        const result = capabilityViewSchema.safeParse(await profile.port.probeProfileCapabilities());
+        const agent: PartialSelection = selection ?? await temporaryProbeSelection(profile.port);
+        const result = capabilityViewSchema.safeParse((await profile.port.resolveAgent(agent)).capabilities);
         if (!result.success) throw new ControlError("control-capability-probe-failed");
         return Object.freeze({
           profile,

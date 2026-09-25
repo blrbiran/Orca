@@ -28,6 +28,7 @@ import type { ExecutionReport } from "./executionPort.js";
 import type { ExecutionProfileRouter } from "./profiles.js";
 import type { ControlStore } from "./store.js";
 import type { Candidate } from "./types.js";
+import type { AgentSelection } from "./agentSelection.js";
 
 /**
  * Execution driver spec §2. Owned by the panel's control assembly next to the wake pump, and only
@@ -54,23 +55,23 @@ export interface ExecutionDriverDeps {
   roots: WorkspaceRoots;
   /** spec §3.1: the trusted path for a repoId, its witness re-validated on every call. */
   resolveRepository(repoId: string): string;
-  /** spec §5.3(6): the binary and codex adapter config a reconciliation `ccloop run` is spawned with. */
+  /** spec §5.3(6): the binary and agents table a reconciliation `ccloop run` is spawned with (agent selection spec §4.9). */
   ccloopBin: string;
-  adapterConfigPath: string;
+  agentsTablePath: string;
   kickPump?: () => void;
   crash?: (point: CrashPoint) => void;
   /** Test seam (spec §5.1): runs between a landing's merge and its compare-and-swap. */
   beforeCas?: () => Promise<void>;
   /** Handoff delivery spec §3: the clock a request's grace is judged by (tests move it). */
   now?: () => Date;
-  /** Handoff delivery spec §3 (controller decision): adapter killGraceMs + 60 s; HANDOFF_EXTRA_GRACE_MS when absent. */
+  /** Test override of the handoff grace; absent, it is the run's agent killGraceMs + 60 s (driverHandoff.handoffGraceMsOf). */
   handoffGraceMs?: number;
 }
 
 export interface DriverRun {
   runId: string; groupId: string; workItemId: string; taskId: string | null;
   generation: number; graphVersion: number; targetVersion: number;
-  state: string; phase: string; configHash: string; executionId: string | null;
+  state: string; phase: string; configHash: string; agent: AgentSelection; executionId: string | null;
   highWater: number; providerAttemptOrdinal: number; continuationIntentId?: string | null;
   executionProfile: { profileId: string; profileHash: string };
   drive?: DriveRecord;

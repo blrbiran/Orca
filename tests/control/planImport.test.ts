@@ -75,7 +75,11 @@ async function setup() {
   // answers the v2 vocabulary, spread from the same declared capabilities the profile snapshot
   // carries, so the peer's raw answer stays schema-valid and strict-mode-safe.
   const port: ExecutionPort = {
-    capabilities: async () => ({ protocol: 2 as const, ...profile().profile.capabilities }),
+    // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): this port never had a
+    // profile probe (only the retired `capabilities()`), so every router probe of it failed; the probe now asks
+    // listAgents and resolveAgent, and both refuse, which keeps "a real probe failure" what the import is judged against.
+    resolveAgent: async () => { throw new ControlError("control-capability-probe-failed"); },
+    listAgents: async () => { throw new ControlError("control-capability-probe-failed"); },
     readEvidence: async () => Buffer.alloc(0),
     accept: async () => ({ kind: "unknown" }), inspect: async () => ({ kind: "unknown" }),
     requestHandoff: async (_input, request) => ({ kind: "unknown", requestId: request.requestId }),
@@ -84,8 +88,8 @@ async function setup() {
   const frozen = resolveProfile(profile(), port);
   const router = createExecutionProfileRouter([frozen]);
   const trustedConfig = createTrustedControlConfig({
-    epoch: "epoch", stateDir: h.store.stateDir, executablePath: binary, adapterConfigPath: adapter,
-    executionPort: "configured" as const,  // Task 4b: a real adapter config is configured here.
+    epoch: "epoch", stateDir: h.store.stateDir, executablePath: binary, agentsTablePath: adapter,
+    executionPort: "configured" as const,  // Task 4b: a real agents table (agent selection spec §6.6) is configured here.
     archiveRoot: h.root, exportRoot: h.root, evidenceRoot: h.root, shutdownGraceMs: 1_000,
     repositories: [{ repoId: "repo", displayName: "Repo", path: repo }],
     plans: [{ planId: "plan", repoId: "repo", displayName: "Plan", path: planPath }],

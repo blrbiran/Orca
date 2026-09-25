@@ -44,6 +44,8 @@ export function fakeCcloopPort(input: {
   workTokens?: (workItemId: string) => number;
   /** Handoff delivery (Task 4): runs inside every `collect` that found an execution, before it answers. */
   duringCollect?: () => Promise<void>;
+  /** Agent selection: the killGraceMs every resolution answers (0 unless said otherwise). */
+  killGraceMs?: number;
 }): FakeCcloop {
   const calls = { accept: [] as StartEnvelope[], inspect: 0, collect: 0, handoff: [] as HandoffRequest[] };
   const handoffs = new Map<string, HandoffRequest>();
@@ -105,8 +107,9 @@ export function fakeCcloopPort(input: {
   };
 
   const port: ExecutionPort = {
-    probeProfileCapabilities: async () => input.capabilities,
-    capabilities: async () => ({ protocol: 2 as const, ...input.capabilities }),
+    // Agent selection spec §4.6: capabilities protocol 3 -- the selection asked about, echoed and filled.
+    resolveAgent: async (partial) => ({ selection: { agent: "codex", model: "fixture-model", contextWindow: "agent-default", ...partial }, configHash: "c".repeat(64), timeoutMs: 120_000, killGraceMs: input.killGraceMs ?? 0, capabilities: input.capabilities }),
+    listAgents: async () => ({ installations: [] }),
     async accept(envelope) {
       calls.accept.push(structuredClone(envelope));
       await input.delayAccept?.();

@@ -103,7 +103,7 @@ describe("projection journal", () => {
 
       const beforeStart = readVersions(h.store, "g1");
       await startClaim(h.store, fakePeer(`${h.root}/accepted-peer`), {
-        protocol: 1,
+        protocol: 2,
         claim,
         contractHash: hashPayload(seeded.w1.contract),
         inputCheckpoint: null,
@@ -123,7 +123,7 @@ describe("projection journal", () => {
       const claim = claimWork(h.store, seeded.t1Claim);
       const before = readVersions(h.store, "g1");
       await expect(startClaim(h.store, fakePeer(`${h.root}/unknown-peer`, "drop"), {
-        protocol: 1,
+        protocol: 2,
         claim,
         contractHash: hashPayload(seeded.w1.contract),
         inputCheckpoint: null,

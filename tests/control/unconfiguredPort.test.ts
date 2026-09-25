@@ -39,12 +39,14 @@ function controlProfileSnapshot(profileId: string, workKinds: ExecutionProfileSn
 
 describe("the unconfigured execution port", () => {
   const port = createUnconfiguredControlPort();
-  const envelope = { protocol: 1, claim: {}, contractHash: "x", inputCheckpoint: null, work: {} } as never;
+  const envelope = { protocol: 2, claim: {}, contractHash: "x", inputCheckpoint: null, work: {} } as never;
 
+  // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): the port's two capability
+  // methods are resolveAgent and listAgents now (spec §4.6); every method is still named and still refuses.
   it("refuses every method it has, not merely the obvious ones", async () => {
     const calls: Array<[string, Promise<unknown>]> = [
-      ["probeProfileCapabilities", port.probeProfileCapabilities!()],
-      ["capabilities", port.capabilities()],
+      ["resolveAgent", port.resolveAgent({ agent: "codex" })],
+      ["listAgents", port.listAgents()],
       ["readEvidence", port.readEvidence({ artifactId: "a", hash: "h" } as never)],
       ["accept", port.accept(envelope)],
       ["inspect", port.inspect(envelope)],
@@ -54,7 +56,7 @@ describe("the unconfigured execution port", () => {
     // Every method of ExecutionPort is named here on purpose: a port that refuses six of seven is
     // a port with one silent hole, and the hole is the method nobody thought to list.
     expect(calls.map(([name]) => name).sort()).toEqual(
-      ["accept", "capabilities", "collect", "inspect", "probeProfileCapabilities", "readEvidence", "requestHandoff"],
+      ["accept", "collect", "inspect", "listAgents", "readEvidence", "requestHandoff", "resolveAgent"],
     );
     for (const [name, call] of calls) {
       await call.then(
@@ -67,10 +69,12 @@ describe("the unconfigured execution port", () => {
     }
   });
 
-  it("exposes the optional probe, so a missing port is never reported as a missing capability", async () => {
-    // Without this method the router answers control-capability-probe-failed (profiles.ts:150) and
-    // an operator who forgot an environment variable is told their adapter is inadequate.
-    expect(typeof port.probeProfileCapabilities).toBe("function");
+  // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): the probe is resolveAgent,
+  // which every port must have; what this pins is unchanged -- the router reports the port's own name.
+  it("exposes the probe, so a missing port is never reported as a missing capability", async () => {
+    // Without the port's own refusal the router answers control-capability-probe-failed and an
+    // operator who forgot an environment variable is told their adapter is inadequate.
+    expect(typeof port.resolveAgent).toBe("function");
     const router = createExecutionProfileRouter([resolveProfile(controlProfileSnapshot("worker", ["task"]), port)]);
     const observed = await router.probe(router.list()[0]!);
     expect(observed.probeFailureCode).toBe("control-port-unconfigured");
@@ -84,8 +88,9 @@ describe("the unconfigured execution port", () => {
   });
 
   it("refuses a second time exactly as it refused the first, holding no state", async () => {
-    const first = await port.capabilities().catch((error: ControlError) => error.code);
-    const second = await port.capabilities().catch((error: ControlError) => error.code);
+    // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): asked through resolveAgent.
+    const first = await port.resolveAgent({ agent: "codex" }).catch((error: ControlError) => error.code);
+    const second = await port.resolveAgent({ agent: "codex" }).catch((error: ControlError) => error.code);
     expect([first, second]).toEqual(["control-port-unconfigured", "control-port-unconfigured"]);
   });
 });

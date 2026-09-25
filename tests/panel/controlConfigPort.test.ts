@@ -44,13 +44,13 @@ async function setup() {
   const plan = join(repo, "ship.json");
   await writeFile(plan, "{}", { mode: 0o600 });
   const binary = join(root, "ccloop");
-  const adapterConfig = join(root, "adapter.json");
+  const agentsTable = join(root, "agents.json");
   await writeFile(binary, "#!/bin/sh\n", { mode: 0o700 });
   await chmod(binary, 0o700);
-  await writeFile(adapterConfig, "{}", { mode: 0o600 });
+  await writeFile(agentsTable, "{}", { mode: 0o600 });
   const router = (port: ExecutionPort) => createExecutionProfileRouter([resolveProfile(snapshot(), port)]);
   const base = (over: Partial<TrustedControlConfigInput> = {}): TrustedControlConfigInput => ({
-    epoch: "epoch-1", stateDir: root, executablePath: binary, adapterConfigPath: adapterConfig,
+    epoch: "epoch-1", stateDir: root, executablePath: binary, agentsTablePath: agentsTable,
     executionPort: "configured", archiveRoot: root, exportRoot: root, evidenceRoot: root, shutdownGraceMs: 30_000,
     repositories: [{ repoId: "repo", displayName: "Repo", path: repo }],
     plans: [{ planId: "ship", repoId: "repo", displayName: "Ship", path: plan }],
@@ -61,18 +61,19 @@ async function setup() {
   // answers the v2 vocabulary, spread from the same declared capabilities the profile snapshot
   // carries, so the peer's raw answer stays schema-valid.
   const capablePort = {
-    probeProfileCapabilities: async () => ({ ...snapshot().profile.capabilities }),
-    capabilities: async () => ({ protocol: 2 as const, ...snapshot().profile.capabilities }),
+    // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): capabilities protocol 3.
+    resolveAgent: async () => ({ selection: { agent: "codex", model: "fixture-model", contextWindow: "agent-default" }, configHash: "d".repeat(64), timeoutMs: 1, killGraceMs: 0, capabilities: { ...snapshot().profile.capabilities } }),
+    listAgents: async () => ({ installations: [{ id: "codex", kind: "codex", defaults: { model: "fixture-model", contextWindow: "agent-default" as const }, contextOptions: ["agent-default" as const], version: "0.0.0-fixture" }] }),
     readEvidence: async () => Buffer.alloc(0), accept: async () => ({ kind: "unknown" }), inspect: async () => ({ kind: "unknown" }),
     requestHandoff: async () => ({ kind: "unknown" }), collect: async () => ({ events: [], candidate: null, terminal: null }),
   } as unknown as ExecutionPort;
-  return { root, repo, plan, binary, adapterConfig, router, base, capablePort };
+  return { root, repo, plan, binary, agentsTable, router, base, capablePort };
 }
 
 describe("the served config states whether an execution port is configured", () => {
   it("serves \"unconfigured\" when the panel was started without one", async () => {
     const h = await setup();
-    const config = createTrustedControlConfig(h.base({ executionPort: "unconfigured", adapterConfigPath: null }), h.router(createUnconfiguredControlPort()));
+    const config = createTrustedControlConfig(h.base({ executionPort: "unconfigured", agentsTablePath: null }), h.router(createUnconfiguredControlPort()));
     // Parsed by the protocol schema rather than read off the input object: an input that is never
     // copied into the view would pass an assertion made against the input.
     const view = controlConfigSchema.parse(await config.readView());
@@ -90,7 +91,8 @@ describe("the served config states whether an execution port is configured", () 
     // have a port configured -- an implementation that derived the field from probeFailureCode would
     // answer "unconfigured" and this criterion would catch it.
     const h = await setup();
-    const failing = { ...h.capablePort, probeProfileCapabilities: async () => { throw new ControlError("control-capability-probe-failed"); } } as ExecutionPort;
+    // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): the failing probe is resolveAgent.
+    const failing = { ...h.capablePort, resolveAgent: async () => { throw new ControlError("control-capability-probe-failed"); } } as ExecutionPort;
     const view = controlConfigSchema.parse(await createTrustedControlConfig(h.base(), h.router(failing)).readView());
     expect(view.profiles[0]!.probeFailureCode).toBe("control-capability-probe-failed");
     expect(view.executionPort).toBe("configured");
@@ -118,17 +120,20 @@ describe("the two pairs cannot disagree", () => {
     try { fn(); return "<built>"; } catch (error) { return error instanceof ControlError ? String(error.detail) : String(error); }
   };
 
-  it("refuses a configured port with no adapter config", async () => {
+  // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): the pair is port + agents
+  // table now (spec §6.6), and the refinement is named for it.
+  it("refuses a configured port with no agents table", async () => {
     const h = await setup();
-    expect(detail(() => createTrustedControlConfig(h.base({ executionPort: "configured", adapterConfigPath: null }), h.router(h.capablePort))))
-      .toBe("execution-port-adapter-config-mismatch");
+    expect(detail(() => createTrustedControlConfig(h.base({ executionPort: "configured", agentsTablePath: null }), h.router(h.capablePort))))
+      .toBe("execution-port-agents-table-mismatch");
   });
 
   it("refuses an unconfigured port that still carries one, which is the other direction", async () => {
     // Asserted separately from the case above: one refinement passing says nothing about the other.
+    // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): same pair, renamed refinement.
     const h = await setup();
     expect(detail(() => createTrustedControlConfig(h.base({ executionPort: "unconfigured" }), h.router(createUnconfiguredControlPort()))))
-      .toBe("execution-port-adapter-config-mismatch");
+      .toBe("execution-port-agents-table-mismatch");
   });
 
   it("refuses half an estimator in both directions", async () => {

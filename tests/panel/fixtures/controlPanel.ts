@@ -27,7 +27,8 @@ import { buildApi } from "../../../src/panel/api.js";
 import { verifyControlJsonBody } from "../../../src/panel/controlApi.js";
 import { createTrustedControlConfig } from "../../../src/panel/controlConfig.js";
 import { ReviewsWriter } from "../../../src/panel/reviewsStore.js";
-import { profileSnapshot } from "../../control/fixtures/web.js";
+import { FIXTURE_AGENT, profileSnapshot } from "../../control/fixtures/web.js";
+import type { PartialSelection } from "../../../src/control/agentSelection.js";
 
 export const PANEL_TOKEN = "b".repeat(64);
 export const GROUP = "grp-1";
@@ -35,7 +36,7 @@ export const GROUP = "grp-1";
 export interface Paths {
   planPath: string;
   binary: string;
-  adapter: string;
+  agentsTable: string;
   repo: string;
 }
 
@@ -87,9 +88,9 @@ export function createHarness(): Harness {
     const contractPath = join(contracts, "a.json");
     await writeFile(contractPath, canonicalBytes(contract));
     const binary = join(root, "ccloop");
-    const adapter = join(root, "adapter.json");
+    const agentsTable = join(root, "agents.json");
     await writeFile(binary, "#!/bin/sh\n", { mode: 0o700 });
-    await writeFile(adapter, "{}");
+    await writeFile(agentsTable, "{}");
     const planPath = join(repo, "plans", "plan.json");
     await writeFile(planPath, JSON.stringify({
       targetRepo: repo, ccloopBin: binary, runsDir: root, workBranch: "orca/work", policy: "local-merge", ledgerMode: "out-of-repo",
@@ -97,7 +98,7 @@ export function createHarness(): Harness {
       // Seam B (human ruling 2026-09-24, named under ruling 88): targetVersion is one positive safe integer from plan to wire.
       tasks: [{ taskId: "a", contract: contractPath, dependsOn: [], targetVersion: 1, configHash: "c".repeat(64) }],
     }));
-    return { planPath, binary, adapter, repo };
+    return { planPath, binary, agentsTable, repo };
   }
 
   return {
@@ -114,8 +115,8 @@ export function createHarness(): Harness {
       // answers the v2 vocabulary, spread from the same declared capabilities the profile snapshot
       // carries, so the peer's raw answer stays schema-valid and strict-mode-safe.
       const port = {
-        probeProfileCapabilities: async () => capabilities() as never,
-        capabilities: async () => ({ protocol: 2 as const, ...snapshot.profile.capabilities }),
+        resolveAgent: async (partial: PartialSelection) => ({ selection: { ...FIXTURE_AGENT, ...partial }, configHash: "c".repeat(64), timeoutMs: 120_000, killGraceMs: 5_000, capabilities: capabilities() }) as never,
+        listAgents: async () => ({ installations: [{ id: "codex", kind: "codex", defaults: { model: "fixture-model", contextWindow: "agent-default" as const }, contextOptions: ["agent-default" as const], version: "0.0.0-fixture" }] }),
         readEvidence: async () => Buffer.alloc(0), accept: async () => ({ kind: "unknown" }), inspect: async () => ({ kind: "unknown" }),
         requestHandoff: async (_input: unknown, request: { requestId: string }) => ({ kind: "unknown", requestId: request.requestId }),
         collect: async () => ({ events: [], candidate: null, terminal: null }),
@@ -123,8 +124,8 @@ export function createHarness(): Harness {
       const frozen = resolveProfile(snapshot, port);
       const router = createExecutionProfileRouter([frozen], { now: () => new Date("2030-01-01T00:00:00.000Z") });
       const trustedConfig = createTrustedControlConfig({
-        epoch, stateDir: store.stateDir, executablePath: paths.binary, adapterConfigPath: paths.adapter,
-      executionPort: "configured" as const,  // Task 4b: these fixtures configure a real adapter config, so the pair says "configured".
+        epoch, stateDir: store.stateDir, executablePath: paths.binary, agentsTablePath: paths.agentsTable,
+      executionPort: "configured" as const,  // Task 4b: these fixtures configure a real agents table, so the pair says "configured".
         archiveRoot: root, exportRoot: root, evidenceRoot: root, shutdownGraceMs: 1_000,
         repositories: [{ repoId: "repo", displayName: "Repo", path: paths.repo }],
         plans: [{ planId: "plan", repoId: "repo", displayName: "Plan", path: paths.planPath }],

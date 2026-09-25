@@ -1,11 +1,11 @@
 import { describe, it, expect } from "vitest";
 import { createGroup, putWork, setGroupStopped, setGroupLimit } from "../../src/control/commands.js";
 import { getGroup, readVersions } from "../../src/control/queries.js";
-import { openTestStore } from "./fixtures/store.js";
+import { fixtureAgent, openTestStore } from "./fixtures/store.js";
 import type { GroupInput, WorkInput } from "../../src/control/types.js";
 export const group:GroupInput = {groupId:"g1",projectKey:"example/repo",goal:"Ship checked change",successConditions:["checks pass"],limit:{tokens:100,activeMs:10000,attempts:10,sessions:10},reviewReserve:{tokens:10,activeMs:1000,attempts:1,sessions:1},deadlineAt:null};
 const meta = {commandId:"create",expectedRevision:0,by:"human"};
-const work:WorkInput = {workItemId:"T1",taskId:"T1",kind:"task",dependsOn:[],contract:{scope:{allowedPaths:["a"]}},configHash:"config1",grant:{work:{tokens:60,activeMs:100,attempts:1,sessions:1},handoff:{tokens:10,activeMs:10,attempts:0,sessions:0}}};
+const work:WorkInput = {workItemId:"T1",taskId:"T1",kind:"task",dependsOn:[],contract:{scope:{allowedPaths:["a"]}},configHash:"config1",agent:fixtureAgent,grant:{work:{tokens:60,activeMs:100,attempts:1,sessions:1},handoff:{tokens:10,activeMs:10,attempts:0,sessions:0}}};
 describe("control commands", () => {
   it("replays the original result before checking stale revisions, but rejects changed payload and author", async () => {
     const h = await openTestStore(); try {

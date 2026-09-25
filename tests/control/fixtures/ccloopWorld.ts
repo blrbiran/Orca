@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { afterAll, afterEach, beforeAll, expect } from "vitest";
 import { canonicalBytes } from "../../../src/control/canonicalJson.js";
+import { createCcloopExecutionPort } from "../../../src/control/ccloopPort.js";
 import type { CrashPoint } from "../../../src/control/executionDriver.js";
 import { readArchivedPlan, readBudgetProposal } from "../../../src/control/queries.js";
 import { assembleControlRuntime, type ControlRuntime } from "../../../src/panel/controlAssembly.js";
@@ -19,6 +20,11 @@ import { profileSnapshot } from "./web.js";
  * rather than copying it (handoff delivery preflight I11). A target repository, a scripted fake codex
  * from the ccloop build ORCA_CCLOOP_BIN points at, a plan, a profile and control options, all under a
  * temporary root; `boot` assembles a control runtime over them.
+ *
+ * Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): the fake codex is an
+ * installation in an agents table (`<root>/agents.json`, spec §4.2) handed over as ORCA_AGENTS_TABLE, and every
+ * configHash comes from ccloop's own resolution of a selection against that table (spec I3) -- the local copy of
+ * ccloop's canonical hash this file used to carry is gone.
  */
 export const realBinary = process.env.ORCA_CCLOOP_BIN;
 
@@ -26,13 +32,16 @@ export const g = (cwd: string, ...args: string[]): string =>
   execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "core.hooksPath=/dev/null", ...args], { cwd, encoding: "utf8" }).trim();
 const sha256 = (path: string): string => createHash("sha256").update(readFileSync(path)).digest("hex");
 
-/** ccloop's canonicalHash (ccloop src/control/protocol.ts:172-192): keys sorted by localeCompare, JSON, sha256. */
-function ccloopHash(value: unknown): string {
-  const canonical = (item: unknown): unknown => Array.isArray(item) ? item.map(canonical)
-    : item !== null && typeof item === "object"
-      ? Object.fromEntries(Object.entries(item as Record<string, unknown>).sort(([left], [right]) => left.localeCompare(right)).map(([key, nested]) => [key, canonical(nested)]))
-      : item;
-  return createHash("sha256").update(JSON.stringify(canonical(value))).digest("hex");
+/**
+ * What `ccloop agents detect` would record as an installation's version: the first `\d+.\d+.\d+(-…)?` in the stdout
+ * of `[...command, "--version"]` (agent selection plan T1's probeVersion rule). The fakes answer `--version` without
+ * logging a call.
+ */
+export function versionOf(command: string[]): string {
+  const printed = execFileSync(command[0]!, [...command.slice(1), "--version"], { encoding: "utf8", input: "" });
+  const match = /\d+\.\d+\.\d+(-[\w.]+)?/.exec(printed);
+  if (!match) throw new Error(`no version in ${JSON.stringify(printed)}`);
+  return match[0];
 }
 
 /** What the shipped ccloop answers (pinned in webCcloopSmoke.test.ts); a null window blocks the estimate (D1). */
@@ -48,7 +57,7 @@ export interface Task { taskId: string; dependsOn?: string[]; targetPaths: strin
  */
 export interface ScriptEntry { files: Record<string, string>; delayMs?: { plan?: number; execute?: number; verify?: number }; usageBeforeDelay?: boolean }
 
-/** The adapter's killGraceMs in every world; handoffE2E's G scenario tells it apart from HANDOFF_EXTRA_GRACE_MS alone. */
+/** The codex installation's killGraceMs in every world; handoffE2E's G scenario tells it apart from HANDOFF_EXTRA_GRACE_MS alone. */
 export const KILL_GRACE_MS = 5_000;
 
 export type World = Awaited<ReturnType<ReturnType<typeof ccloopWorlds>["world"]>>;
@@ -73,9 +82,17 @@ export function ccloopWorlds(options: { rootPrefix: string; epochPrefix: string 
     const scriptPath = join(root, "codex-script.json");
     await writeFile(scriptPath, JSON.stringify(script));
     const fakeCodex = resolve(dirname(realBinary!), "..", "tests", "fixtures", "fake-codex.mjs");
-    const adapter = { command: [process.execPath, fakeCodex, "script", marker, scriptPath], model: "fixture-model", budgetMode: "soft", sandbox: "workspace-write", timeoutMs: 120_000, killGraceMs: KILL_GRACE_MS };
-    const adapterPath = join(root, "adapter.json");
-    await writeFile(adapterPath, JSON.stringify(adapter), { mode: 0o600 });
+    const codexCommand = [process.execPath, fakeCodex, "script", marker, scriptPath];
+    const table = join(root, "agents.json");
+    // Plan P13: the table object is a value of its own (returned with the world), so a later scenario can add an
+    // installation to `agentsTable.installations` and rewrite `table` from it.
+    const agentsTable = { schema: "ccloop-agents-table-v1", installations: {
+      codex: { kind: "codex", command: codexCommand, version: versionOf(codexCommand), configDir: null, timeoutMs: 120_000, killGraceMs: KILL_GRACE_MS, sandbox: "workspace-write", budgetMode: "soft" },
+    } as Record<string, Record<string, unknown>> };
+    await writeFile(table, JSON.stringify(agentsTable), { mode: 0o600 });
+    // Agent selection plan T7 bridge -- plan T10 drops configHash from the plan and plan T11 deletes this (with this
+    // `resolution`): the plan still carries a configHash, and it is ccloop's, for the selection every task runs with.
+    const resolution = await createCcloopExecutionPort({ binary: realBinary!, agentsTablePath: table, timeoutMs: 60_000 }).resolveAgent({ agent: "codex" });
     const contracts = join(root, "contracts");
     await mkdir(contracts);
     const planTasks = [];
@@ -95,7 +112,7 @@ export function ccloopWorlds(options: { rootPrefix: string; epochPrefix: string 
       };
       const path = join(contracts, `${task.taskId}.json`);
       await writeFile(path, canonicalBytes(contract));
-      planTasks.push({ taskId: task.taskId, contract: path, dependsOn: task.dependsOn ?? [], targetVersion: 1, configHash: ccloopHash(adapter) });
+      planTasks.push({ taskId: task.taskId, contract: path, dependsOn: task.dependsOn ?? [], targetVersion: 1, configHash: resolution.configHash });
     }
     const planPath = join(repo, "plan.json");
     await writeFile(planPath, JSON.stringify({ targetRepo: repo, ccloopBin: realBinary, runsDir: join(root, "unused-runs"), workBranch: "orca/unused", policy: "local-merge", ledgerMode: "out-of-repo", goal: "ship", successConditions: ["the files hold the scripted text"], tasks: planTasks }));
@@ -105,7 +122,7 @@ export function ccloopWorlds(options: { rootPrefix: string; epochPrefix: string 
     await writeFile(profilePath, JSON.stringify(snapshot));
     const repoId = controlRepoKey("e2e");
     const repos = [{ projectKey: "e2e", path: repo }];
-    const env: NodeJS.ProcessEnv = { ORCA_CONTROL_DIR: join(root, "control"), ORCA_CCLOOP_BIN: realBinary!, ORCA_CCLOOP_ADAPTER_CONFIG: adapterPath };
+    const env: NodeJS.ProcessEnv = { ORCA_CONTROL_DIR: join(root, "control"), ORCA_CCLOOP_BIN: realBinary!, ORCA_AGENTS_TABLE: table };
     const { rejection, ...control } = resolveControlOptions(["--plan", `plan=${repoId}=${planPath}`, "--profile", profilePath, "--estimator-profile", "all", "--estimate-mode", "soft", "--control-wake-ms", "50"], env, repos);
     if (rejection !== null) throw new Error(rejection);
     let epoch = 0;
@@ -138,7 +155,7 @@ export function ccloopWorlds(options: { rootPrefix: string; epochPrefix: string 
     const landings = (): number => Number(g(repo, "rev-list", "--first-parent", "--count", "main..refs/heads/orca/g"));
     const show = (path: string): string => g(repo, "show", `refs/heads/orca/g:${path}`);
     const tip = (): string => g(repo, "rev-parse", "refs/heads/orca/g");
-    return { root, repo, repoId, boot, die, teardown, calls, scripted, human, worktrees, landings, show, tip };
+    return { root, repo, repoId, table, agentsTable, boot, die, teardown, calls, scripted, human, worktrees, landings, show, tip };
   }
 
   const removeRoots = async (): Promise<void> => {
@@ -179,6 +196,13 @@ export const raw = (runtime: ControlRuntime, commandId: string, verb: string, pa
 export async function startGroup(runtime: ControlRuntime, repoId: string, raiseTokens = 0): Promise<void> {
   const imported = await runtime.service.importPlan(raw(runtime, "import", "import-plan", { groupId: "g", repoId, planId: "plan" }));
   expect(imported).toMatchObject({ result: { kind: "imported", estimateState: "blocked-capability" } });
+  // Agent selection plan T7 bridge -- plan T11 freezes each task's selection at confirm and deletes this. Until then
+  // nothing in the product writes one; the selection is the one the plan's configHash was resolved from, asked of
+  // the assembled port again.
+  const { selection } = await runtime.port.resolveAgent({ agent: "codex" });
+  for (const row of runtime.store.db.prepare("SELECT id,body FROM work_items WHERE group_id='g'").all()) {
+    runtime.store.db.prepare("UPDATE work_items SET body=? WHERE group_id='g' AND id=?").run(JSON.stringify({ ...JSON.parse(String(row.body)), agent: selection }), String(row.id));
+  }
   const hash = runtime.router.list()[0]!.profileHash;
   const confirmed = runtime.service.confirm(raw(runtime, "confirm", "confirm", {
     planHash: readArchivedPlan(runtime.store, "g").planHash, proposalVersion: readBudgetProposal(runtime.store, "g").proposalVersion, budgetMode: "soft",

@@ -12,6 +12,11 @@
  * What is NOT here, and cannot be: a production process that turns the ledger's
  * `orca-dispatch-envelope-v1` into a ccloop `StartEnvelopeV1` and runs the worker. That translation
  * is performed in this file, so what it proves is the envelope, not a deployed executor.
+ *
+ * Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): the wire is envelope
+ * protocol 2 (the claim carries the frozen selection), capabilities protocol 3 asked about one selection, and
+ * `control <method> --agents <table>`. The shipped CLI is given a real agents table whose one installation is the
+ * build's fake codex; its capabilities are still asked, never borrowed from the declared profile.
  */
 import { createHash } from "node:crypto";
 import { chmod, copyFile, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
@@ -29,6 +34,8 @@ import { toStartEnvelope } from "../../src/control/startEnvelope.js";
 import type { StartEnvelope } from "../../src/control/executionPort.js";
 import type { ControlStore } from "../../src/control/store.js";
 import { profileSnapshot, webFixture } from "./fixtures/web.js";
+import { versionOf } from "./fixtures/ccloopWorld.js";
+import { dirname } from "node:path";
 
 const realBinary = process.env.ORCA_CCLOOP_BIN;
 const fixtureCli = resolve("tests/control/fixtures/fake-ccloop-control.mjs");
@@ -45,6 +52,16 @@ async function tempRoot(prefix: string): Promise<string> {
 }
 
 const sha256 = (bytes: Buffer | string) => createHash("sha256").update(bytes).digest("hex");
+
+/** Agent selection spec §4.2: a real agents table whose one installation, `codex`, is the ccloop build's fake codex. */
+async function realTable(root: string): Promise<string> {
+  const command = [process.execPath, resolve(dirname(realBinary!), "..", "tests", "fixtures", "fake-codex.mjs"), "integration", join(root, "codex-marker.json")];
+  const table = join(root, "agents.json");
+  await writeFile(table, JSON.stringify({ schema: "ccloop-agents-table-v1", installations: {
+    codex: { kind: "codex", command, version: versionOf(command), configDir: null, timeoutMs: 120_000, killGraceMs: 5_000, sandbox: "workspace-write", budgetMode: "soft" },
+  } }), { mode: 0o600 });
+  return table;
+}
 
 /** A confirmed group whose profiles probe exactly as the shipped adapter does. */
 async function confirmedByAdapter(budgetMode: "strict" | "soft", probe: CapabilityViewV1) {
@@ -91,20 +108,21 @@ function loopContract(taskId: string): Record<string, unknown> {
   };
 }
 
-/** A deterministic consumer: the production port speaking V1 to a real child process. */
-async function consumer(adapterConfig: Record<string, unknown> = {}) {
+/** A deterministic consumer: the production port speaking the control protocol to a real child process. */
+async function consumer(knobs: Record<string, unknown> = {}) {
   const root = await tempRoot("orca-web-consumer-");
   const binary = join(root, "ccloop");
   await copyFile(fixtureCli, binary);
   await chmod(binary, 0o700);
   const record = join(root, "record.json");
-  const config = join(root, "adapter.json");
+  // The stand-in reads its knobs from the file passed as the agents table; it is not a real table.
+  const table = join(root, "agents.json");
   const sourceDir = join(root, "run");
   await mkdir(sourceDir, { mode: 0o700 });
-  await writeFile(config, JSON.stringify({ record, ...adapterConfig }), { mode: 0o600 });
-  const port = createCcloopExecutionPort({ binary, adapter: "codex", adapterConfigPath: config, timeoutMs: 10_000 });
+  await writeFile(table, JSON.stringify({ record, ...knobs }), { mode: 0o600 });
+  const port = createCcloopExecutionPort({ binary, agentsTablePath: table, timeoutMs: 10_000 });
   const started = async () => JSON.parse(await readFile(record, "utf8")) as { argv: string[]; stdin: string };
-  return { root, config, record, sourceDir, port, started, contract: loopContract("a") };
+  return { root, table, record, sourceDir, port, started, contract: loopContract("a") };
 }
 
 /** Import, confirm and claim one task, and hand back what the ledger froze for it. */
@@ -124,23 +142,23 @@ async function claimedWith(mode: "strict" | "soft") {
 describe("the shipped consumer answers for its own capabilities (task 10 step 4)", () => {
   it.skipIf(!realBinary)("claims phase-end usage and soft enforcement, and the ledger opens no strict run on it", async () => {
     const root = await tempRoot("orca-web-real-cap-");
-    const config = join(root, "adapter.json");
-    await writeFile(config, "{}");
-    const port = createCcloopExecutionPort({ binary: await realpath(realBinary!), adapter: "codex", adapterConfigPath: config, timeoutMs: 15_000 });
-    const capabilities = await port.capabilities();
+    const port = createCcloopExecutionPort({ binary: await realpath(realBinary!), agentsTablePath: await realTable(root), timeoutMs: 15_000 });
+    const { capabilities } = await port.resolveAgent({ agent: "codex" });
 
-    // Codex's own words, taken from the binary that would run the work: v2, eight fields, no
+    // Codex's own words, taken from the binary that would run the work: eight fields, no
     // realtime usage, no bounded enforcement, no context observation, and no request-bound proof.
     // Human authorization 2026-09-24, G1 seam A Task 5: this literal moved from the v1 seven-field
     // shape to the v2 eight-field shape ccloop main now answers.
+    // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): capabilities protocol 3
+    // answers the same view inside the codex selection's resolution, untagged.
     expect(capabilities).toEqual({
-      protocol: 2, usageObservation: "phase-end", budgetEnforcement: "soft", contextObservation: "unavailable",
+      usageObservation: "phase-end", budgetEnforcement: "soft", contextObservation: "unavailable",
       handoffControl: "durable", handoffExecution: "mechanical-in-run-v1", contextWindowTokens: null, requestBoundProof: null,
     });
 
     // Human authorization 2026-09-24, G1 seam A Task 5: the adapter's own probe answer feeds the
     // router as-is -- nothing here borrows from the declared profile.
-    const strict = await confirmedByAdapter("strict", await port.probeProfileCapabilities!());
+    const strict = await confirmedByAdapter("strict", capabilities);
     try {
       const refused = await strict.service.start(strict.f.command("start", {}));
       expect("error" in refused ? refused.error.code : "applied").toBe("control-capability-unsupported");
@@ -148,7 +166,7 @@ describe("the shipped consumer answers for its own capabilities (task 10 step 4)
       expect(strict.f.store.db.prepare("SELECT COUNT(*) AS n FROM runs WHERE group_id='g'").get()!.n).toBe(0);
     } finally { await strict.f.dispose(); }
 
-    const soft = await confirmedByAdapter("soft", await port.probeProfileCapabilities!());
+    const soft = await confirmedByAdapter("soft", capabilities);
     try {
       expect("error" in await soft.service.start(soft.f.command("start", {}))).toBe(false);
       expect((await deliverScheduledStart(soft.deps, "g")).kind).toBe("claimed");
@@ -163,11 +181,11 @@ describe("the shipped consumer answers for its own capabilities (task 10 step 4)
   // ccloop answer that degrades between those two calls is the only way to exercise the second
   // call without the first one catching it first, so this isolates the delivery-time guard.
   it.skipIf(!realBinary)("blocks only at delivery when the observation degrades after a clean schedule", async () => {
+    // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): the real answer is the
+    // codex selection's resolution against a real agents table; the guard it isolates is unchanged.
     const root = await tempRoot("orca-web-real-delivery-guard-");
-    const config = join(root, "adapter.json");
-    await writeFile(config, "{}");
-    const port = createCcloopExecutionPort({ binary: await realpath(realBinary!), adapter: "codex", adapterConfigPath: config, timeoutMs: 15_000 });
-    const realProbe = await port.probeProfileCapabilities!();
+    const port = createCcloopExecutionPort({ binary: await realpath(realBinary!), agentsTablePath: await realTable(root), timeoutMs: 15_000 });
+    const realProbe = (await port.resolveAgent({ agent: "codex" })).capabilities;
 
     const soft = await confirmedByAdapter("soft", realProbe);
     try {
@@ -183,20 +201,20 @@ describe("the shipped consumer answers for its own capabilities (task 10 step 4)
     } finally { await soft.f.dispose(); }
   });
 
-  it.skipIf(!realBinary)("refuses an envelope that is not V1 and reads a well-formed one as no execution yet", async () => {
+  // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): the frozen shape is envelope
+  // protocol 2 now (the claim carries the selection), so protocol 1 is the foreign version that must be refused.
+  it.skipIf(!realBinary)("refuses an envelope that is not V2 and reads a well-formed one as no execution yet", async () => {
     const root = await tempRoot("orca-web-real-env-");
-    const config = join(root, "adapter.json");
-    await writeFile(config, "{}");
     const sourceDir = join(root, "run");
     await mkdir(sourceDir, { mode: 0o700 });
     const bundlePath = join(sourceDir, "input", "bundle");
     await mkdir(bundlePath, { recursive: true, mode: 0o700 });
-    const port = createCcloopExecutionPort({ binary: await realpath(realBinary!), adapter: "codex", adapterConfigPath: config, timeoutMs: 15_000 });
+    const port = createCcloopExecutionPort({ binary: await realpath(realBinary!), agentsTablePath: await realTable(root), timeoutMs: 15_000 });
     const envelope: StartEnvelope = {
-      protocol: 1,
+      protocol: 2,
       claim: {
         groupId: "g", workItemId: "a", taskId: "a", runId: "run-web-smoke", generation: 1, graphVersion: 1, targetVersion: 1,
-        commandId: "start-g-2-a", configHash: sha256("config"),
+        commandId: "start-g-2-a", configHash: sha256("config"), agent: { agent: "codex", model: "gpt-6-sol", contextWindow: "agent-default" },
         grant: { work: { tokens: 1, activeMs: 1, attempts: 1, sessions: 1 }, handoff: { tokens: 0, activeMs: 0, attempts: 0, sessions: 0 } },
         ownerToken: "token",
       },
@@ -206,7 +224,7 @@ describe("the shipped consumer answers for its own capabilities (task 10 step 4)
     };
 
     // Nothing has been accepted for this run, so the shipped consumer parses the envelope and
-    // reports the absence -- parsing it at all is the point: the shape the ledger freezes is V1.
+    // reports the absence -- parsing it at all is the point: the shape the ledger freezes is V2.
     expect(await port.inspect(envelope)).toEqual({ kind: "absent" });
     // A continuation envelope has to be legal too, because that is the one a recovery hands over.
     expect(await port.inspect({
@@ -215,7 +233,7 @@ describe("the shipped consumer answers for its own capabilities (task 10 step 4)
     })).toEqual({ kind: "absent" });
     // A foreign protocol version, an unsafe claim integer, and a bundle that escapes the run
     // directory are each refused before a worker could exist.
-    await expect(port.inspect({ ...envelope, protocol: 2 as 1 })).rejects.toThrow("control-peer-exit:2:control-protocol-unsupported");
+    await expect(port.inspect({ ...envelope, protocol: 1 as 2 })).rejects.toThrow("control-peer-exit:2:control-protocol-unsupported");
     await expect(port.inspect({ ...envelope, claim: { ...envelope.claim, generation: 0 } })).rejects.toThrow("control-peer-exit:2:control-request-invalid");
     await expect(port.inspect({
       ...envelope,
@@ -242,7 +260,8 @@ describe("the frozen dispatch envelope reaches a real process (task 10 step 4)",
       const accepted = await c.port.accept(start);
       expect(accepted).toEqual({ kind: "accepted", executionId: "execution-1", configHash: start.claim.configHash });
       const wire = await c.started();
-      expect(wire.argv).toEqual(["control", "accept", "--adapter", "codex", "--adapter-config", c.config]);
+      // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): `--agents <table>` (spec §4.5).
+      expect(wire.argv).toEqual(["control", "accept", "--agents", c.table]);
       // Byte-for-byte: nothing between the ledger and the pipe re-serialises the claim.
       expect(wire.stdin).toBe(JSON.stringify(start));
 

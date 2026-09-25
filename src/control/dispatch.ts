@@ -47,9 +47,10 @@ async function send(store:ControlStore,port:ExecutionPort,input:StartEnvelope,ga
 export async function startClaim(store:ControlStore,port:ExecutionPort,input:StartEnvelope,gate?:AdmissionGate):Promise<RunView> {
  input=startEnvelopeSchema.parse(input) as StartEnvelope;
  assertClaimIdentity(store,input.claim);
- if(input.protocol!==1) throw new ControlError("control-protocol-unavailable");
+ if(input.protocol!==2) throw new ControlError("control-protocol-unavailable");
  const group=readGroup(store,input.claim.groupId);
- assertCapabilities(group.budgetMode??"strict",await port.capabilities());
+ // Agent selection spec §6.4 (C3): the gate asks about the claim's own frozen selection, the one ccloop will run.
+ assertCapabilities(group.budgetMode??"strict",(await port.resolveAgent(input.claim.agent)).capabilities);
  const existing=store.db.prepare("SELECT body FROM outbox WHERE id=?").get("start:"+input.claim.runId);
  if(existing) {
   if(hashPayload(JSON.parse(String(existing.body)))!==hashPayload(input)) throw new ControlError("start-envelope-conflict");
@@ -74,7 +75,7 @@ export async function reconcileStart(store:ControlStore,port:ExecutionPort,runId
  if(status.kind==="absent") {
   const group=readGroup(store,input.claim.groupId);
   if(!group.stopped && !store.dispatchBlocked) {
-   assertCapabilities(group.budgetMode??"strict",await port.capabilities());
+   assertCapabilities(group.budgetMode??"strict",(await port.resolveAgent(input.claim.agent)).capabilities);
    return send(store,port,input,gate);
   }
  }

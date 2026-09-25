@@ -22,6 +22,8 @@ export interface HarnessOptions {
   delayAccept?: () => Promise<void>;
   workTokens?: (workItemId: string) => number;
   duringCollect?: () => Promise<void>;
+  /** Agent selection: the killGraceMs the synthetic ccloop answers for every selection. */
+  killGraceMs?: number;
 }
 
 /**
@@ -42,12 +44,12 @@ export async function driverHarness(tasks: readonly WebFixtureTask[], options: H
   const fake = fakeCcloopPort({
     capabilities: snapshot.profile.capabilities, behaviour: options.behaviour ?? (() => "succeed"),
     files: options.files ?? ((id) => ({ [id]: `${id}\n` })), delayAccept: options.delayAccept,
-    workTokens: options.workTokens, duringCollect: options.duringCollect,
+    workTokens: options.workTokens, duringCollect: options.duringCollect, killGraceMs: options.killGraceMs,
   });
   const deps: ExecutionDriverDeps = {
     store: h.store, router: createExecutionProfileRouter([resolveProfile(snapshot, fake.port)]), admissionGate: h.deps.admissionGate,
     roots: controlWorkspaceRoots(h.store.stateDir), resolveRepository: () => repo,
-    ccloopBin: FAKE_CCLOOP_RUN, adapterConfigPath: join(h.root, "reconcile-adapter.json"),
+    ccloopBin: FAKE_CCLOOP_RUN, agentsTablePath: join(h.root, "reconcile-agents.json"),
   };
   const dispatch = { store: h.store, profileRouter: h.deps.profileRouter, admissionGate: h.deps.admissionGate };
   /** A fresh start command and its delivery: one more claimed run. */

@@ -2,7 +2,7 @@ import { z } from "zod";
 import { ControlError } from "./errors.js";
 import type { StartEnvelope } from "./executionPort.js";
 import { dispatchEnvelopeSchema, type DispatchEnvelopeV1 } from "./webProtocol.js";
-import { grantSchema, idSchema, safeInteger, startEnvelopeSchema } from "./schema.js";
+import { agentSelectionSchema, grantSchema, idSchema, safeInteger, startEnvelopeSchema } from "./schema.js";
 import type { InputCheckpointV1 } from "./resumeBundle.js";
 
 /**
@@ -25,6 +25,8 @@ const startEnvelopeSourceSchema = z
     targetVersion: safeInteger,
     commandId: idSchema,
     configHash: z.string().min(1),
+    // Agent selection spec §4.6: the run's frozen, complete selection travels in the claim (StartEnvelopeV2).
+    agent: agentSelectionSchema,
     grant: grantSchema,
     ownerToken: idSchema,
   })
@@ -74,7 +76,7 @@ export function toStartEnvelope(
     throw new ControlError("start-envelope-conflict", `identity:${frozen.runId}`);
   }
   const built = {
-    protocol: 1 as const,
+    protocol: 2 as const,
     claim: {
       groupId: claim.groupId,
       workItemId: claim.workItemId,
@@ -85,6 +87,7 @@ export function toStartEnvelope(
       targetVersion: claim.targetVersion,
       commandId: claim.commandId,
       configHash: claim.configHash,
+      agent: claim.agent,
       grant: claim.grant,
       ownerToken: claim.ownerToken,
     },

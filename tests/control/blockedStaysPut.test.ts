@@ -103,7 +103,7 @@ describe("a blocked run keeps the step it was blocked at through a later error (
       expect(t.body(parked)).toMatchObject({ state: "collected", drive: { landedCommit: null } });
       // From D the run tries its landing again; the conflict's reconciliation (scripted to fail, so nothing lands)
       // runs in its own process, so rounds are paced by the clock until the request closes.
-      await writeFile(t.deps.adapterConfigPath, JSON.stringify({ status: "failed", spent: 1, holdMs: 0, files: {} }));
+      await writeFile(t.deps.agentsTablePath, JSON.stringify({ status: "failed", spent: 1, holdMs: 0, files: {} }));
       const after: Array<[string, string | null]> = [];
       const deadline = Date.now() + 30_000;
       while (Date.now() < deadline && requestState(t, requestOf(t, parked)) === "request-pending") {

@@ -56,7 +56,7 @@ const USAGE = `usage:
                                  it off. Its state lives under $ORCA_CONTROL_DIR (default
                                  ~/.orca/control/<repo key>); more than one --repo has no key to
                                  name it after, so it needs --control-state-dir. Running work also
-                                 needs ORCA_CCLOOP_BIN + ORCA_CCLOOP_ADAPTER_CONFIG and the two
+                                 needs ORCA_CCLOOP_BIN + ORCA_AGENTS_TABLE and the two
                                  estimator flags -- without them the panel still starts and still
                                  shows recovery, and refuses those commands by name.
   orca compact-reviews [--apply] [--root <dir>] [--repo <key>=<path>]...

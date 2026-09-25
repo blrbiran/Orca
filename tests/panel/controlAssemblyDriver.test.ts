@@ -22,9 +22,11 @@ async function assembled(configured: boolean) {
     const binary = join(root, "ccloop");
     await copyFile(resolve("tests/control/fixtures/fake-ccloop-control.mjs"), binary);
     await chmod(binary, 0o700);
-    const config = join(root, "adapter.json");
-    await writeFile(config, "{}", { mode: 0o600 });
-    Object.assign(env, { ORCA_CCLOOP_BIN: binary, ORCA_CCLOOP_ADAPTER_CONFIG: config });
+    // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): the port's second half is
+    // the agents table (ORCA_AGENTS_TABLE, spec §6.6); any regular file still satisfies construction.
+    const table = join(root, "agents.json");
+    await writeFile(table, "{}", { mode: 0o600 });
+    Object.assign(env, { ORCA_CCLOOP_BIN: binary, ORCA_AGENTS_TABLE: table });
   }
   const { rejection, ...control } = resolveControlOptions([], env, [{ projectKey: "proj", path: repo }]);
   expect(rejection).toBe(null);

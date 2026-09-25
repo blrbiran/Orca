@@ -3,12 +3,12 @@ import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { fakePeer } from "./peer.js";
 import { git } from "./archive.js";
-import { caps } from "./store.js";
+import { agentsView, caps, resolvedAs } from "./store.js";
 import type { ExecutionPort,StartEnvelope,ExecutionReport } from "../../../src/control/executionPort.js";
 export function roundPeer(root:string):ExecutionPort {
  const peer=(input:StartEnvelope)=>fakePeer(join(root,input.claim.runId));
  return {
-  capabilities:async()=>caps,
+  resolveAgent:async partial=>resolvedAs(caps,partial),listAgents:async()=>agentsView,
   accept:input=>peer(input).accept(input),inspect:input=>peer(input).inspect(input),
   requestHandoff:(input,request)=>peer(input).requestHandoff(input,request),
   readEvidence:async ref=>readFile(join(root,ref.artifactId)),

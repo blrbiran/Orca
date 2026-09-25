@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
-import type { ExecutionPort, ProfileCapabilityProbe } from "../../src/control/executionPort.js";
+import type { ExecutionPort } from "../../src/control/executionPort.js";
+import type { PartialSelection } from "../../src/control/agentSelection.js";
 import {
   createExecutionProfileRouter,
   intersectCapabilities,
   resolveProfile,
   unavailableCapabilities,
 } from "../../src/control/profiles.js";
-import type { ExecutionProfileSnapshotV1 } from "../../src/control/webProtocol.js";
+import type { CapabilityViewV1, ExecutionProfileSnapshotV1 } from "../../src/control/webProtocol.js";
 
 const hash = (value: string) => value.repeat(64);
 
@@ -55,24 +56,17 @@ function snapshot(
   };
 }
 
-function port(probe: ProfileCapabilityProbe | (() => Promise<ProfileCapabilityProbe>)): ExecutionPort {
+// Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): the probe is a
+// resolution of the selection asked about (capabilities protocol 3); `asked` records every selection it was given.
+const asked: PartialSelection[] = [];
+function port(probe: CapabilityViewV1 | (() => Promise<CapabilityViewV1>)): ExecutionPort {
   const result = typeof probe === "function" ? probe : async () => probe;
   return {
-    probeProfileCapabilities: result,
-    // Human authorization 2026-09-24, G1 seam A Task 6 (capability vocabulary sync): `durableAccept`/
-    // `ownershipIsolation`/`evidenceRetention`/`requestBoundEvidence` are retired v1 fields; this
-    // mock's `capabilities()` is unused by this suite's assertions (only `probeProfileCapabilities`
-    // is exercised), so it is rewritten as a plain valid v2 answer, whole swap not a weakening.
-    capabilities: async () => ({
-      protocol: 2,
-      usageObservation: "realtime",
-      budgetEnforcement: "bounded",
-      contextObservation: "unavailable",
-      handoffControl: "durable",
-      handoffExecution: "mechanical-in-run-v1",
-      contextWindowTokens: null,
-      requestBoundProof: null,
-    }),
+    resolveAgent: async (partial) => {
+      asked.push(partial);
+      return { selection: { agent: "codex", model: "fixture-model", contextWindow: "agent-default", ...partial }, configHash: hash("c"), timeoutMs: 1, killGraceMs: 0, capabilities: await result() };
+    },
+    listAgents: async () => ({ installations: [{ id: "codex", kind: "codex", defaults: { model: "fixture-model", contextWindow: "agent-default" as const }, contextOptions: ["agent-default" as const], version: "0.0.0-fixture" }] }),
     readEvidence: async () => Buffer.alloc(0),
     accept: async () => ({ kind: "unknown" }),
     inspect: async () => ({ kind: "unknown" }),
@@ -114,7 +108,7 @@ describe("trusted execution profiles", () => {
     const frozen = resolveProfile(snapshot(), mutablePort);
     const router = createExecutionProfileRouter([frozen]);
     const owned = router.resolve("task", "worker", frozen.profileHash);
-    mutablePort.probeProfileCapabilities = async () => ({ ...unavailableCapabilities, usageObservation: "realtime" });
+    mutablePort.resolveAgent = async () => { throw new Error("the replaced method was called"); };
     mutablePort.accept = async () => ({ kind: "accepted", executionId: "mutated", configHash: hash("0") });
 
     await router.probe(owned);
@@ -126,10 +120,10 @@ describe("trusted execution profiles", () => {
   it("preserves the original receiver for captured port methods", async () => {
     class ReceiverPort implements ExecutionPort {
       #accepts = 0;
-      probeProfileCapabilities = async () => snapshot().profile.capabilities;
-      // Human authorization 2026-09-24, G1 seam A Task 6 (capability vocabulary sync): rewritten to
-      // the v2 vocabulary; unused by this suite's assertions, same treatment as `port()` above.
-      capabilities = async () => ({ protocol: 2 as const, ...snapshot().profile.capabilities });
+      // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): the two capability
+      // methods are the resolution and the table view now; unused by this criterion's assertions.
+      resolveAgent = async () => ({ selection: { agent: "codex", model: "m", contextWindow: "agent-default" as const }, configHash: hash("c"), timeoutMs: 1, killGraceMs: 0, capabilities: snapshot().profile.capabilities });
+      listAgents = async () => ({ installations: [] });
       readEvidence = async () => Buffer.alloc(0);
       async accept() { this.#accepts += 1; return { kind: "accepted" as const, executionId: `receiver-${this.#accepts}`, configHash: hash("a") }; }
       inspect = async () => ({ kind: "unknown" as const });
@@ -148,7 +142,7 @@ describe("trusted execution profiles", () => {
 
   it("intersects every ordered capability and keeps proof only on exact descriptor equality", () => {
     const declared = snapshot().profile.capabilities;
-    const observed: ProfileCapabilityProbe = {
+    const observed: CapabilityViewV1 = {
       usageObservation: "phase-end",
       budgetEnforcement: "soft",
       contextObservation: "phase-end",
@@ -185,6 +179,15 @@ describe("trusted execution profiles", () => {
       observed: unavailableCapabilities,
       probeFailureCode: "control-capability-probe-failed",
     });
+  });
+
+  it("probes exactly the selection it is asked about (agent selection spec §6.4)", async () => {
+    const frozen = resolveProfile(snapshot(), port(snapshot().profile.capabilities));
+    const router = createExecutionProfileRouter([frozen]);
+    asked.length = 0;
+    const observed = await router.probe(router.resolve("task", "worker", frozen.profileHash), { agent: "claude", model: "claude-opus-5-5", contextWindow: 1_000_000 });
+    expect(asked).toEqual([{ agent: "claude", model: "claude-opus-5-5", contextWindow: 1_000_000 }]);
+    expect(observed.probeFailureCode).toBeNull();
   });
 
   it("rejects profiles whose context tokenizer or task output limit does not match the declaration", () => {

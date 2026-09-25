@@ -36,6 +36,7 @@ function ledgerEnvelope(over: Partial<DispatchEnvelopeV1> = {}): DispatchEnvelop
 const runRow = (over: Record<string, unknown> = {}) => ({
   groupId: "g1", workItemId: "w1", taskId: "t1", runId: "run-1", generation: 2,
   graphVersion: 4, targetVersion: 7, commandId: "start-g1-w1", configHash: hx("c"),
+  agent: { agent: "claude", model: "claude-opus-5-5", contextWindow: 1_000_000 },
   grant: { work: amount(5), handoff: amount(3) }, ownerToken: "owner-token-1",
   state: "running", recoverable: false, highWater: 0,
   ...over,
@@ -45,12 +46,15 @@ const work = { sourceDir: "/tmp/src", targetRepo: "/tmp/repo", base: "v1" };
 const contract = { objective: "ship" };
 
 describe("translating a frozen dispatch envelope into a start envelope", () => {
+  // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): StartEnvelopeV2 -- protocol 2,
+  // and the run's frozen selection travels in the claim (spec §4.6).
   it("copies the claim from the run row and the contract hash from the ledger, field by field", () => {
     const built = toStartEnvelope(ledgerEnvelope(), runRow(), work, contract);
-    expect(built.protocol).toBe(1);
+    expect(built.protocol).toBe(2);
     expect(built.claim).toEqual({
       groupId: "g1", workItemId: "w1", taskId: "t1", runId: "run-1", generation: 2,
       graphVersion: 4, targetVersion: 7, commandId: "start-g1-w1", configHash: hx("c"),
+      agent: { agent: "claude", model: "claude-opus-5-5", contextWindow: 1_000_000 },
       grant: { work: amount(5), handoff: amount(3) }, ownerToken: "owner-token-1",
     });
     // Named separately from the deep-equal above: this is the one field that comes from the ledger
@@ -60,10 +64,11 @@ describe("translating a frozen dispatch envelope into a start envelope", () => {
     expect(built.work).toEqual({ contract, targetRepo: "/tmp/repo", base: "v1", sourceDir: "/tmp/src" });
   });
 
+  // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): `agent` is a claim field now.
   it("drops the run row's own extra columns instead of smuggling them onto the wire", () => {
     const built = toStartEnvelope(ledgerEnvelope(), runRow(), work, contract);
     expect(Object.keys(built.claim).sort()).toEqual(
-      ["commandId", "configHash", "generation", "grant", "graphVersion", "groupId", "ownerToken", "runId", "targetVersion", "taskId", "workItemId"],
+      ["agent", "commandId", "configHash", "generation", "grant", "graphVersion", "groupId", "ownerToken", "runId", "targetVersion", "taskId", "workItemId"],
     );
   });
 
@@ -96,6 +101,14 @@ describe("the translation refuses before anything is dispatched", () => {
     const { ownerToken, ...without } = runRow();
     expect(ownerToken).toBe("owner-token-1");
     expect(codeOf(() => toStartEnvelope(ledgerEnvelope(), without, work, contract))).toBe("start-envelope-conflict|run:ownerToken");
+  });
+
+  it("refuses a run row with no frozen selection, naming the field, rather than dispatching a claim without one", () => {
+    // Plan P23 m2: no assertion reads back the agent this test itself wrote into runRow().
+    const { agent: _agent, ...without } = runRow();
+    expect(codeOf(() => toStartEnvelope(ledgerEnvelope(), without, work, contract))).toBe("start-envelope-conflict|run:agent");
+    // A partial selection is not a frozen one: ccloop would fill the rest, and the claim would no longer say what ran.
+    expect(codeOf(() => toStartEnvelope(ledgerEnvelope(), runRow({ agent: { agent: "claude" } }), work, contract))).toMatch(/^start-envelope-conflict\|run:agent/);
   });
 
   it("refuses when the envelope and the run name different runs", () => {

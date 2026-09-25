@@ -8,6 +8,7 @@ import { importControlPlan } from "../../../src/control/planImport.js";
 import { canonicalBytes, sha256Canonical } from "../../../src/control/canonicalJson.js";
 import { readArchivedPlan, readBudgetProposal } from "../../../src/control/queries.js";
 import type { ExecutionPort } from "../../../src/control/executionPort.js";
+import type { AgentSelection, PartialSelection } from "../../../src/control/agentSelection.js";
 import type { CapabilityViewV1, ExecutionProfileSnapshotV1, RawAuthorityCommandV1, ConfirmPayload } from "../../../src/control/webProtocol.js";
 
 export const profileSnapshot = (): ExecutionProfileSnapshotV1 => ({
@@ -22,6 +23,9 @@ export const profileSnapshot = (): ExecutionProfileSnapshotV1 => ({
 // Seam B (human ruling 2026-09-24, named under ruling 88): targetVersion is one positive safe integer from plan to wire.
 export interface WebFixtureTask { taskId: string; dependsOn?: string[]; targetVersion?: number; configHash?: string; targetPaths?: string[] }
 
+/** Agent selection spec §3: the complete selection this fixture's task work items are frozen with. */
+export const FIXTURE_AGENT: AgentSelection = { agent: "codex", model: "fixture-model", contextWindow: "agent-default" };
+
 export async function webFixture(snapshot = profileSnapshot(), tasks: readonly WebFixtureTask[] = [{ taskId: "a" }]) {
   const h = await openTestStore();
   let observed: CapabilityViewV1 = structuredClone(snapshot.profile.capabilities);
@@ -29,8 +33,10 @@ export async function webFixture(snapshot = profileSnapshot(), tasks: readonly W
   // Human authorization 2026-09-24, G1 seam A Task 6 (capability vocabulary sync): the mock now
   // answers the v2 vocabulary, spread from the same declared capabilities the profile snapshot
   // carries, so the peer's raw answer stays schema-valid and strict-mode-safe.
-  const port = { accept, probeProfileCapabilities: async () => observed,
-    capabilities: async () => ({ protocol: 2 as const, ...snapshot.profile.capabilities }),
+  // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): the probe is now a resolution of
+  // the selection being asked about (capabilities protocol 3); its capability view is still the mutable `observed`.
+  const port = { accept, resolveAgent: async (partial: PartialSelection) => ({ selection: { ...FIXTURE_AGENT, ...partial }, configHash: sha256Canonical({}), timeoutMs: 120_000, killGraceMs: 5_000, capabilities: observed }),
+    listAgents: async () => ({ installations: [{ id: "codex", kind: "codex", defaults: { model: "fixture-model", contextWindow: "agent-default" as const }, contextOptions: ["agent-default" as const], version: "0.0.0-fixture" }] }),
     readEvidence: async () => Buffer.alloc(0), inspect: async () => ({ kind: "unknown" }), requestHandoff: async () => ({ kind: "unknown" }), collect: async () => ({ events: [], candidate: null, terminal: null }) } as unknown as ExecutionPort;
   const supplied = resolveProfile(snapshot, port), router = createExecutionProfileRouter([supplied]);
   const frozen = router.resolve("budget-estimate", "all", supplied.profileHash);
@@ -55,6 +61,12 @@ export async function webFixture(snapshot = profileSnapshot(), tasks: readonly W
   const imported = importControlPlan({ ...deps, estimatorObservation: () => ({ profile: frozen, observed, probeFailureCode: null }) }, {
     schema: "orca-raw-command-v1", commandId: "import", expectedRevision: 0, actorId: "human", verb: "import-plan", target: { kind: "group", groupId: "g" }, payload: { groupId: "g", repoId: "repo", planId: "plan" } });
   if ("error" in imported || imported.result.kind !== "imported") throw new Error(JSON.stringify(imported));
+  // Agent selection plan T7 bridge -- plan T11 freezes a selection into every task work item at confirm and deletes
+  // this. Until then nothing in the product writes one, so the fixture does, or no claim could carry `claim.agent`.
+  for (const task of tasks) {
+    const row = h.store.db.prepare("SELECT body FROM work_items WHERE group_id='g' AND id=?").get(task.taskId)!;
+    h.store.db.prepare("UPDATE work_items SET body=? WHERE group_id='g' AND id=?").run(JSON.stringify({ ...JSON.parse(String(row.body)), agent: FIXTURE_AGENT }), task.taskId);
+  }
   let sequence = 0;
   const raw = (commandId: string, expectedRevision: number, verb: RawAuthorityCommandV1["verb"], target: RawAuthorityCommandV1["target"], payload: unknown) => ({
     schema: "orca-raw-command-v1", commandId, actorId: "human", expectedRevision, verb, target, payload,

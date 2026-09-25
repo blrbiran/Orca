@@ -21,10 +21,10 @@ async function setup() {
   const plan = join(plans, "ship.json");
   await writeFile(plan, "{}", { mode: 0o600 });
   const binary = join(root, "ccloop");
-  const adapterConfig = join(root, "adapter.json");
+  const agentsTable = join(root, "agents.json");
   await writeFile(binary, "#!/bin/sh\n", { mode: 0o700 });
   await chmod(binary, 0o700);
-  await writeFile(adapterConfig, "{}", { mode: 0o600 });
+  await writeFile(agentsTable, "{}", { mode: 0o600 });
 
   const snapshot: ExecutionProfileSnapshotV1 = {
     schema: "orca-execution-profile-snapshot-v1",
@@ -48,23 +48,24 @@ async function setup() {
   // answers the v2 vocabulary, spread from the same declared capabilities the profile snapshot
   // carries, so the peer's raw answer stays schema-valid.
   const port = {
-    probeProfileCapabilities: async () => ({ ...snapshot.profile.capabilities }),
-    capabilities: async () => ({ protocol: 2 as const, ...snapshot.profile.capabilities }),
+    // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): capabilities protocol 3.
+    resolveAgent: async () => ({ selection: { agent: "codex", model: "fixture-model", contextWindow: "agent-default" }, configHash: hash("d"), timeoutMs: 1, killGraceMs: 0, capabilities: { ...snapshot.profile.capabilities } }),
+    listAgents: async () => ({ installations: [{ id: "codex", kind: "codex", defaults: { model: "fixture-model", contextWindow: "agent-default" as const }, contextOptions: ["agent-default" as const], version: "0.0.0-fixture" }] }),
     readEvidence: async () => Buffer.alloc(0), accept: async () => ({ kind: "unknown" as const }), inspect: async () => ({ kind: "unknown" as const }),
     requestHandoff: async (_input: never, request: {requestId:string}) => ({ kind: "unknown" as const, requestId: request.requestId }),
     collect: async () => ({ events: [], candidate: null, terminal: null }),
   } as unknown as ExecutionPort;
   const frozen = resolveProfile(snapshot, port);
   const router = createExecutionProfileRouter([frozen]);
-  return { root, repo, plan, binary, adapterConfig, frozen, router };
+  return { root, repo, plan, binary, agentsTable, frozen, router };
 }
 
 describe("trusted panel control config", () => {
   it("resolves only stable repository and plan IDs and never exposes trusted paths", async () => {
     const h = await setup();
     const config = createTrustedControlConfig({
-      epoch: "epoch-1", stateDir: h.root, executablePath: h.binary, adapterConfigPath: h.adapterConfig,
-      executionPort: "configured" as const,  // Task 4b: these fixtures configure a real adapter config, so the pair says "configured".
+      epoch: "epoch-1", stateDir: h.root, executablePath: h.binary, agentsTablePath: h.agentsTable,
+      executionPort: "configured" as const,  // Task 4b: these fixtures configure a real agents table, so the pair says "configured".
       archiveRoot: h.root, exportRoot: h.root, evidenceRoot: h.root, shutdownGraceMs: 30_000,
       repositories: [{ repoId: "repo", displayName: "Repo", path: h.repo }],
       plans: [{ planId: "ship", repoId: "repo", displayName: "Ship", path: h.plan }],
@@ -80,7 +81,9 @@ describe("trusted panel control config", () => {
     expect(view.defaults).toEqual({ estimatorProfileId: "estimator", estimatorProfileHash: h.frozen.profileHash, estimateMode: "soft" });
     expect(serialized).not.toContain(h.root);
     expect(serialized).not.toContain("executablePath");
-    expect(serialized).not.toContain("adapterConfigPath");
+    // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): the trusted path is the
+    // agents table now (spec §6.6); neither its value nor its field name reaches the view.
+    expect(serialized).not.toContain("agentsTablePath");
   });
 
   it("rejects allowlisted plan escapes and symlinked path components at startup", async () => {
@@ -90,8 +93,8 @@ describe("trusted panel control config", () => {
     const link = join(h.repo, "linked-plan.json");
     await symlink(outside, link);
     const base = {
-      epoch: "epoch-1", stateDir: h.root, executablePath: h.binary, adapterConfigPath: h.adapterConfig,
-      executionPort: "configured" as const,  // Task 4b: these fixtures configure a real adapter config, so the pair says "configured".
+      epoch: "epoch-1", stateDir: h.root, executablePath: h.binary, agentsTablePath: h.agentsTable,
+      executionPort: "configured" as const,  // Task 4b: these fixtures configure a real agents table, so the pair says "configured".
       archiveRoot: h.root, exportRoot: h.root, evidenceRoot: h.root, shutdownGraceMs: 30_000,
       repositories: [{ repoId: "repo", displayName: "Repo", path: h.repo }],
       defaultEstimatorProfileId: "estimator", defaultEstimateMode: "soft" as const,
@@ -104,8 +107,8 @@ describe("trusted panel control config", () => {
   it("rejects a plan or ancestor swapped to a symlink after startup", async () => {
     const h = await setup();
     const config = createTrustedControlConfig({
-      epoch: "epoch-1", stateDir: h.root, executablePath: h.binary, adapterConfigPath: h.adapterConfig,
-      executionPort: "configured" as const,  // Task 4b: these fixtures configure a real adapter config, so the pair says "configured".
+      epoch: "epoch-1", stateDir: h.root, executablePath: h.binary, agentsTablePath: h.agentsTable,
+      executionPort: "configured" as const,  // Task 4b: these fixtures configure a real agents table, so the pair says "configured".
       archiveRoot: h.root, exportRoot: h.root, evidenceRoot: h.root, shutdownGraceMs: 30_000,
       repositories: [{ repoId: "repo", displayName: "Repo", path: h.repo }],
       plans: [{ planId: "ship", repoId: "repo", displayName: "Ship", path: h.plan }],
@@ -120,8 +123,8 @@ describe("trusted panel control config", () => {
   it("rejects duplicate IDs and invalid trusted executable paths before serving config", async () => {
     const h = await setup();
     const input = {
-      epoch: "epoch-1", stateDir: h.root, executablePath: h.binary, adapterConfigPath: h.adapterConfig,
-      executionPort: "configured" as const,  // Task 4b: these fixtures configure a real adapter config, so the pair says "configured".
+      epoch: "epoch-1", stateDir: h.root, executablePath: h.binary, agentsTablePath: h.agentsTable,
+      executionPort: "configured" as const,  // Task 4b: these fixtures configure a real agents table, so the pair says "configured".
       archiveRoot: h.root, exportRoot: h.root, evidenceRoot: h.root, shutdownGraceMs: 30_000,
       repositories: [{ repoId: "repo", displayName: "Repo", path: h.repo }, { repoId: "repo", displayName: "Again", path: h.repo }],
       plans: [{ planId: "ship", repoId: "repo", displayName: "Ship", path: h.plan }],

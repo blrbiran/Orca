@@ -89,11 +89,9 @@ const declaredCapabilitiesSchema = capabilityViewSchema.extend({
   handoffExecution: z.enum(["mechanical-in-run-v1", "model-assisted-v1"]),
 }).strict();
 
-// The v2 wire vocabulary: the view schema plus the protocol tag. No independent field list --
-// this is the single source of truth for what a v2 capabilities payload looks like. Defined here
-// rather than in schema.ts to avoid a runtime ESM import cycle (schema.ts is imported by
-// webProtocol.ts for primitives like safeInteger/idSchema).
-export const capabilitiesSchema = capabilityViewSchema.extend({ protocol: z.literal(2) }).strict();
+// Agent selection spec §4.6 / §5: the protocol-2 capabilities payload is gone. `control capabilities`
+// answers protocol 3 (a table view, or one selection's resolution whose `capabilities` is this view with
+// no protocol tag); those response schemas live with the port that parses them (ccloopPort.ts).
 
 export const executionProfileSnapshotSchema = z
   .object({

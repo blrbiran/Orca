@@ -163,14 +163,17 @@ describe("resolveControlOptions reports whether an execution port is configured"
     expect(withEnv({}).executionPort).toBe("unconfigured");
   });
 
+  // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): the second variable is
+  // ORCA_AGENTS_TABLE (spec §6.6), and the retired ORCA_CCLOOP_ADAPTER_CONFIG configures nothing any more.
   it("needs both variables, not either one", () => {
     expect(withEnv({ ORCA_CCLOOP_BIN: "/bin/ccloop" }).executionPort).toBe("unconfigured");
-    expect(withEnv({ ORCA_CCLOOP_ADAPTER_CONFIG: "/etc/adapter.json" }).executionPort).toBe("unconfigured");
+    expect(withEnv({ ORCA_AGENTS_TABLE: "/etc/agents.json" }).executionPort).toBe("unconfigured");
+    expect(withEnv({ ORCA_CCLOOP_BIN: "/bin/ccloop", ORCA_CCLOOP_ADAPTER_CONFIG: "/etc/adapter.json" }).executionPort).toBe("unconfigured");
   });
 
   it("calls the port configured only when both are set and non-empty", () => {
-    expect(withEnv({ ORCA_CCLOOP_BIN: "/bin/ccloop", ORCA_CCLOOP_ADAPTER_CONFIG: "/etc/adapter.json" }).executionPort).toBe("configured");
-    expect(withEnv({ ORCA_CCLOOP_BIN: "", ORCA_CCLOOP_ADAPTER_CONFIG: "/etc/adapter.json" }).executionPort).toBe("unconfigured");
+    expect(withEnv({ ORCA_CCLOOP_BIN: "/bin/ccloop", ORCA_AGENTS_TABLE: "/etc/agents.json" }).executionPort).toBe("configured");
+    expect(withEnv({ ORCA_CCLOOP_BIN: "", ORCA_AGENTS_TABLE: "/etc/agents.json" }).executionPort).toBe("unconfigured");
   });
 
   it("does not let a missing port become a boot rejection, which is the whole of ruling R5", () => {

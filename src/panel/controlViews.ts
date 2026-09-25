@@ -9,7 +9,7 @@ import { readProjectionChanges, readProjectionState } from "../control/projectio
 import { readArchivedPlan, readBudgetProposal, readEstimateRecord } from "../control/queries.js";
 import { readCanonicalRecord } from "../control/snapshot.js";
 import type { ControlStore } from "../control/store.js";
-import { amountSchema, artifactSchema, canonicalTimestampSchema, grantSchema, idSchema, safeInteger } from "../control/schema.js";
+import { agentSelectionSchema, amountSchema, artifactSchema, canonicalTimestampSchema, grantSchema, idSchema, safeInteger } from "../control/schema.js";
 import { taskContractSchema } from "../scheduler/planFile.js";
 import {
   allocationViewSchema,
@@ -115,6 +115,8 @@ const persistedRunSchema = z.object({
   targetVersion: safeInteger.positive(),
   commandId: idSchema,
   configHash: hashSchema,
+  // Agent selection spec I1: a work run carries its frozen selection; an estimate run has none (plan T10 gives it one).
+  agent: agentSelectionSchema.optional(),
   grant: grantSchema,
   ownerToken: idSchema,
   executionProfile: executionProfileAuthoritySchema,

@@ -50,7 +50,10 @@ describe("the panel says when it has no execution port", () => {
     const html = render({ executionPort: "unconfigured" });
     expect(html).toContain("no execution port configured");
     expect(html).toContain("ORCA_CCLOOP_BIN");
-    expect(html).toContain("ORCA_CCLOOP_ADAPTER_CONFIG");
+    // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): the second variable is the
+    // agents table now (spec §6.6), and the retired name must not be offered as a fix.
+    expect(html).toContain("ORCA_AGENTS_TABLE");
+    expect(html).not.toContain("ORCA_CCLOOP_ADAPTER_CONFIG");
   });
 
   it("stays quiet when a port is configured, so the notice means something when it appears", () => {

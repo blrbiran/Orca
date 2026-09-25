@@ -1,5 +1,6 @@
 import type { ControlStore } from "./store.js";
 import type { ArtifactRef, Amount, GroupInput, GroupView, RunView, WorkInput } from "./types.js";
+import type { AgentSelection } from "./agentSelection.js";
 import { ControlError } from "./errors.js";
 import { recordProjectionChange } from "./projectionJournal.js";
 import { readCanonicalRecord } from "./snapshot.js";
@@ -53,6 +54,15 @@ export function saveWork(store:ControlStore,groupId:string,work:WorkRecord):void
 }
 export function allWork(store:ControlStore,groupId:string):WorkRecord[] {
   return store.db.prepare("SELECT body FROM work_items WHERE group_id=? ORDER BY id").all(groupId).map(r=>JSON.parse(String(r.body)));
+}
+/**
+ * Agent selection (plan T7): the distinct frozen selections of a legacy group's task work items, in canonical order.
+ * The legacy scheduler's group-level gates run before any claim exists, so they probe each of them.
+ */
+export function workAgents(store:ControlStore,groupId:string):AgentSelection[] {
+ const byBytes=new Map<string,AgentSelection>();
+ for(const work of allWork(store,groupId))if(work.kind==="task")byBytes.set(canonicalBytes(work.agent).toString("utf8"),work.agent);
+ return [...byBytes.keys()].sort().map(key=>byBytes.get(key)!);
 }
 export function getRun(store:ControlStore,id:string):RunView {
   const row=store.db.prepare("SELECT body FROM runs WHERE id=?").get(id);

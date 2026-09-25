@@ -453,7 +453,9 @@ describe("web command ledger", () => {
     }
   });
 
-  it.each((["control-sequence-overflow", "control-peer-timeout", "control-binary-invalid", "control-adapter-config-invalid", "control-peer-exit"] as const)
+  // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): the port's path refusal is
+  // control-agents-table-invalid now (agent selection spec §6.6); the five codes still each roll back in both phases.
+  it.each((["control-sequence-overflow", "control-peer-timeout", "control-binary-invalid", "control-agents-table-invalid", "control-peer-exit"] as const)
     .flatMap((code) => (["expand", "apply"] as const).map((phase) => [code, phase] as const)))("rolls explicitly non-durable %s failures back during %s", async (code, phase) => {
     const h = await openTestStore();
     try {

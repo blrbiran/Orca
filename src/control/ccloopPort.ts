@@ -3,11 +3,12 @@ import { createHash } from "node:crypto";
 import { lstatSync, realpathSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import { z } from "zod";
-import type { ExecutionPort, ExecutionReport, ExecutionStatus, StartEnvelope } from "./executionPort.js";
-import type { ArtifactRef, Capabilities, HandoffAck, HandoffRequest } from "./types.js";
+import type { AgentsView, ExecutionPort, ExecutionReport, ExecutionStatus, StartEnvelope } from "./executionPort.js";
+import type { ArtifactRef, HandoffAck, HandoffRequest } from "./types.js";
+import type { AgentResolution, PartialSelection } from "./agentSelection.js";
 import { ControlError, type NonDurableControlErrorCode } from "./errors.js";
-import { artifactSchema, candidateSchema, safeInteger } from "./schema.js";
-import { capabilitiesSchema } from "./webProtocol.js";
+import { agentSelectionSchema, artifactSchema, candidateSchema, contextWindowSchema, idSchema, safeInteger } from "./schema.js";
+import { capabilityViewSchema } from "./webProtocol.js";
 
 const MAX_OUTPUT=24*1024*1024;
 const executionStatusSchema=z.discriminatedUnion("kind",[
@@ -25,17 +26,39 @@ const eventSchema=z.object({runId:z.string().min(1),generation:safeInteger.posit
 const terminalSchema=z.object({status:z.enum(["succeeded","blocked_waiting_human","exhausted","cancelled","failed"]),currentAttempt:safeInteger,attemptsUsed:safeInteger,lastTransitionAt:z.string(),waitingOnHuman:z.boolean(),stopReason:z.string().nullable(),budgetSnapshot:z.object({attemptsRemaining:safeInteger,timeRemainingMs:safeInteger,tokenBudgetRemaining:safeInteger}).strict(),recentFailures:z.array(z.object({rejectCategory:z.string(),primaryTargetPaths:z.array(z.string()),failingCommand:z.string().nullable()}).strict())}).strict();
 const collectionSchema=z.object({events:z.array(eventSchema),candidate:candidateSchema.nullable(),terminal:terminalSchema.nullable()}).strict();
 const evidenceSchema=z.object({artifactId:z.string().min(1),hash:z.string().regex(/^[a-f0-9]{64}$/),base64:z.string()}).strict();
+// Agent selection spec §4.6: capabilities protocol 3. Two shapes, chosen by the request: `agent: null` answers the
+// table view, a partial selection answers that selection's resolution (its seven-key capability view carries no protocol tag).
+const agentsViewSchema=z.object({protocol:z.literal(3),installations:z.array(z.object({id:idSchema,kind:z.string().min(1),defaults:z.object({model:z.string().min(1),contextWindow:contextWindowSchema}).strict(),contextOptions:z.array(contextWindowSchema).min(1),version:z.string().min(1)}).strict())}).strict();
+const agentResolutionSchema=z.object({protocol:z.literal(3),selection:agentSelectionSchema,configHash:z.string().regex(/^[a-f0-9]{64}$/),timeoutMs:safeInteger.positive().max(2_147_483_647),killGraceMs:safeInteger.max(60_000),capabilities:capabilityViewSchema}).strict();
+
+/**
+ * The ccloop error code inside a `control-peer-exit` (ccloop prints `<code>[:detail]` on stderr and exits non-zero),
+ * or null for any other failure. Agent selection spec §7: `agent-selection-rejected:<taskId|slot>:<ccloop code>`
+ * names the code, so it is read here, where the peer's output is parsed, and nowhere else.
+ */
+export function peerErrorCode(error:unknown):string|null {
+ if(!(error instanceof ControlError)||error.code!=="control-peer-exit"||error.detail===undefined)return null;
+ const match=/^[^:]*:([a-z][a-z0-9-]*)/.exec(error.detail);return match?match[1]!:null;
+}
+/** Agent selection spec §7: ccloop's refusals of a selection or table, which a caller must be able to tell apart. */
+const NAMED_REFUSALS=new Set(["agent-installation-missing","agent-context-unsupported","agent-selection-invalid","agent-version-drift","agents-table-invalid"] as const);
+type NamedRefusal=typeof NAMED_REFUSALS extends Set<infer T>?T:never;
+/** A capabilities call's failure: one of ccloop's named refusals is rethrown under its own name, anything else as it was. */
+function named(error:unknown):unknown {
+ const code=peerErrorCode(error);
+ return code!==null&&NAMED_REFUSALS.has(code as NamedRefusal)?new ControlError(code as NamedRefusal,(error as ControlError).detail):error;
+}
 
 function regularAbsolute(path:string,code:NonDurableControlErrorCode,executable=false):string {
  try {const stat=lstatSync(path);if(!isAbsolute(path)||realpathSync(path)!==path||!stat.isFile()||stat.isSymbolicLink()||(executable&&(stat.mode&0o111)===0))throw new Error();return path;}
  catch{throw new ControlError(code);}
 }
-export function createCcloopExecutionPort(options:{binary:string;adapter:"codex";adapterConfigPath:string;timeoutMs:number}):ExecutionPort {
- const binary=regularAbsolute(options.binary,"control-binary-invalid",true),config=regularAbsolute(options.adapterConfigPath,"control-adapter-config-invalid");
- if(options.adapter!=="codex"||!Number.isSafeInteger(options.timeoutMs)||options.timeoutMs<=0)throw new ControlError("control-port-options-invalid");
+export function createCcloopExecutionPort(options:{binary:string;agentsTablePath:string;timeoutMs:number}):ExecutionPort {
+ const binary=regularAbsolute(options.binary,"control-binary-invalid",true),table=regularAbsolute(options.agentsTablePath,"control-agents-table-invalid");
+ if(!Number.isSafeInteger(options.timeoutMs)||options.timeoutMs<=0)throw new ControlError("control-port-options-invalid");
  const evidenceContext=new Map<string,StartEnvelope>(),key=(ref:ArtifactRef)=>`${ref.artifactId}:${ref.hash}`;
  const raw=(method:string,payload:unknown)=>new Promise<unknown>((resolve,reject)=>{
-   const child=execFile(binary,["control",method,"--adapter",options.adapter,"--adapter-config",config],{encoding:"utf8",maxBuffer:MAX_OUTPUT,timeout:options.timeoutMs},(error,stdout,stderr)=>{
+   const child=execFile(binary,["control",method,"--agents",table],{encoding:"utf8",maxBuffer:MAX_OUTPUT,timeout:options.timeoutMs},(error,stdout,stderr)=>{
     if(error){const e=error as Error&{code?:number|string;killed?:boolean};if(e.code==="ERR_CHILD_PROCESS_STDIO_MAXBUFFER"||/maxBuffer/i.test(e.message))return reject(new ControlError("control-response-too-large"));if(e.killed)return reject(new ControlError("control-peer-timeout"));const suffix=String(stderr).trim();return reject(new ControlError("control-peer-exit",`${String(e.code)}${suffix?":"+suffix:""}`));}
     if(Buffer.byteLength(stdout)>MAX_OUTPUT||Buffer.byteLength(stderr)>MAX_OUTPUT)return reject(new ControlError("control-response-too-large"));
     try{resolve(JSON.parse(stdout));}catch{reject(new ControlError("control-response-invalid"));}
@@ -45,37 +68,27 @@ export function createCcloopExecutionPort(options:{binary:string;adapter:"codex"
  const parse=<T>(schema:z.ZodType<T>,value:unknown):T=>{const parsed=schema.safeParse(value);if(!parsed.success)throw new ControlError("control-response-invalid");return parsed.data;};
  const port:ExecutionPort={
   /**
-   * Assembly plan Task 3. The router needs this method to exist (`profiles.ts:67-69,150`), and
-   * without it every Web claim is reported as `control-capability-probe-failed` -- a probe that was
-   * never attempted, blamed on the adapter.
+   * Agent selection spec §4.6. The request's own fields come back verbatim (spec M5: an alias is not
+   * normalised), which is what lets a caller tell a layer's value from a descriptor default; an answer that
+   * changed one is not this selection's answer, so it is refused rather than passed on.
    *
-   * ⚠️ *** ccloop's control protocol has no V1 profile probe. *** `control capabilities` answers
-   * seven fields (ccloop `src/control/command.ts`, the `method === "capabilities"` arm) and none of
-   * them covers `contextObservation`, `handoffControl`, `handoffExecution`, `contextWindowTokens` or
-   * a `requestBoundProof` descriptor. So this translates what ccloop states and says `unavailable` /
-   * `null` for what it does not -- it does NOT infer them, per `ExecutionPort`'s own contract and the
-   * standing rule that Orca may not invent a substitute source for a peer's observation.
-   *
-   * The consequence is deliberate and fail-closed: a claim through this port reaches
-   * `control-capability-unsupported` (`service.ts`'s `profiledCapabilities` requires
-   * `handoffControl === "durable"`), which is accurate. Dispatching Web work to real ccloop needs
-   * ccloop's `capabilities` to grow these fields first; that is a ccloop-side change, recorded in
-   * both handoffs, and nothing on this side may paper over it.
-   *
-   * *** ERRATUM (2026-09-24, G1 seam A) *** The paragraph above describes the state before the
-   * capability vocabulary was settled: ccloop's `capabilities` now answers the eight-field v2
-   * shape, so this method passes the peer's answer through and substitutes nothing. The rule it
-   * cites -- that Orca may not invent a substitute source for a peer's observation -- is
-   * unchanged and is now enforced by a criterion in `tests/control/ccloopPort.test.ts`
-   * ("does not invent a substitute source for a peer's observation -- an overridden field passes
-   * through unchanged") rather than by hardcoded `unavailable`s. See
-   * docs/superpowers/specs/2026-09-24-g1-control-wire-contract-design.md in the ccloop repository.
+   * The standing rule of the retired `probeProfileCapabilities` still holds: Orca does not invent a substitute
+   * for a field ccloop did not state -- the view is the peer's, unaltered (criterion in ccloopPort.test.ts).
    */
-  async probeProfileCapabilities(){
-   const {protocol:_protocol,...view}=parse(capabilitiesSchema,await raw("capabilities",{})) as Capabilities;
-   return view;
+  async resolveAgent(partial:PartialSelection):Promise<AgentResolution>{
+   let answer:unknown;
+   try{answer=await raw("capabilities",{agent:partial});}catch(error){throw named(error);}
+   const {protocol:_protocol,...resolution}=parse(agentResolutionSchema,answer);
+   for(const key of ["agent","model","contextWindow"] as const){
+    if(partial[key]!==undefined&&resolution.selection[key]!==partial[key])throw new ControlError("control-response-invalid",`selection-not-echoed:${key}`);
+   }
+   return resolution;
   },
-  async capabilities(){return parse(capabilitiesSchema,await raw("capabilities",{})) as Capabilities;},
+  async listAgents():Promise<AgentsView>{
+   let answer:unknown;
+   try{answer=await raw("capabilities",{agent:null});}catch(error){throw named(error);}
+   const {protocol:_protocol,...view}=parse(agentsViewSchema,answer);return view;
+  },
   async accept(input){return parse(executionStatusSchema,await raw("accept",input)) as ExecutionStatus;},
   async inspect(input){return parse(executionStatusSchema,await raw("inspect",input)) as ExecutionStatus;},
   async requestHandoff(input,request){return parse(handoffAckSchema,await raw("handoff",{input,request})) as HandoffAck;},

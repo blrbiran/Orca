@@ -8,7 +8,8 @@ import { recordUsage } from "../../src/control/usage.js";
 import { createGroup,putWork,setGroupLimit,setGroupStopped } from "../../src/control/commands.js";
 import { getGroup } from "../../src/control/queries.js";
 import { openTestStore,seedBudgetCase,amount,caps } from "./fixtures/store.js";
-import type { WorkKind, Capabilities } from "../../src/control/types.js";
+import type { WorkKind } from "../../src/control/types.js";
+import type { CapabilityViewV1 } from "../../src/control/webProtocol.js";
 describe("unified work claims",()=>{
  it("reserves both buckets atomically and replays one immutable run",async()=>{
   const h=await openTestStore();try{
@@ -44,7 +45,7 @@ describe("unified work claims",()=>{
    const s=seedBudgetCase(h.store);
    const legacy = { protocol: 1, durableAccept: true, ownershipIsolation: true,
      evidenceRetention: true, usageObservation: "phase-end",
-     budgetEnforcement: "soft", requestBoundEvidence: null } as unknown as Capabilities;
+     budgetEnforcement: "soft", requestBoundEvidence: null } as unknown as CapabilityViewV1;
    expect(() => claimWork(h.store, { ...s.t1Claim, capabilities: legacy }))
      .toThrow("control-capability-unsupported");
    expect(getGroup(h.store, "g1").reserved.tokens).toBe(10);

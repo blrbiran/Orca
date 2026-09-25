@@ -10,7 +10,7 @@ export function git(repo:string,...args:string[]):Buffer {return execFileSync("g
 export async function archiveCase() {
  const h=await openTestStore();const seed=seedBudgetCase(h.store);const claim=claimWork(h.store,seed.t1Claim);
  const sourceDir=join(h.root,"runs",claim.runId),repoDir=join(sourceDir,"repo");await mkdir(repoDir,{recursive:true});
- await startClaim(h.store,fakePeer(join(h.root,"peer")),{protocol:1,claim,contractHash:hashPayload(seed.w1.contract),inputCheckpoint:null,work:{contract:seed.w1.contract,targetRepo:h.root,base:"HEAD",sourceDir}});
+ await startClaim(h.store,fakePeer(join(h.root,"peer")),{protocol:2,claim,contractHash:hashPayload(seed.w1.contract),inputCheckpoint:null,work:{contract:seed.w1.contract,targetRepo:h.root,base:"HEAD",sourceDir}});
  git(repoDir,"init","-q");
  await writeFile(join(repoDir,"tracked"),"HEAD\n");await writeFile(join(repoDir,"deleted"),"delete me\n");
  git(repoDir,"add",".");git(repoDir,"commit","-qm","base");git(repoDir,"checkout","--detach","-q");

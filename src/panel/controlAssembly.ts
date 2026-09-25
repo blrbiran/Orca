@@ -8,7 +8,6 @@ import type { ExecutionPort } from "../control/executionPort.js";
 import { deliverSchedulerWakes } from "../control/dispatch.js";
 import { recoverControl } from "../control/recovery.js";
 import { createExecutionDriver, type CrashPoint, type ExecutionDriver } from "../control/executionDriver.js";
-import { HANDOFF_EXTRA_GRACE_MS } from "../control/driverHandoff.js";
 import { controlWorkspaceRoots } from "../control/workspace.js";
 import { createWebWakeHandlers } from "../control/webDispatch.js";
 import { createExecutionProfileRouter, resolveProfile, type ExecutionProfileRouter, type FrozenProfile } from "../control/profiles.js";
@@ -109,21 +108,6 @@ export interface ControlAssemblyInput {
 }
 
 /**
- * Handoff delivery spec §3 (controller decision): a delivered request that yields nothing is judged
- * outcome-unknown only past its deadline plus the adapter's own killGraceMs plus HANDOFF_EXTRA_GRACE_MS.
- * Read once, here. A config that cannot be read, or whose killGraceMs is not a non-negative safe integer,
- * counts 0: the grace is never shorter than the fixed part, and an unusable config is the port's to refuse.
- */
-export function handoffGraceMsOf(adapterConfigPath: string): number {
-  let killGraceMs = 0;
-  try {
-    const value = (JSON.parse(readFileSync(adapterConfigPath, "utf8")) as { killGraceMs?: unknown } | null)?.killGraceMs;
-    if (typeof value === "number" && Number.isSafeInteger(value) && value >= 0) killGraceMs = value;
-  } catch { killGraceMs = 0; }
-  return killGraceMs + HANDOFF_EXTRA_GRACE_MS;
-}
-
-/**
  * The execution port, chosen once. There is deliberately no third branch: a missing binary selects
  * the refusing port, never `legacyExecutionPort`, which has no ledger authority and no handoff
  * protocol. "Quietly ran the work somewhere else" is worse than "refused by name".
@@ -132,8 +116,7 @@ function choosePort(control: ControlOptions, env: NodeJS.ProcessEnv): ExecutionP
   if (control.executionPort === "unconfigured") return createUnconfiguredControlPort();
   return createCcloopExecutionPort({
     binary: env.ORCA_CCLOOP_BIN!,
-    adapter: "codex",
-    adapterConfigPath: env.ORCA_CCLOOP_ADAPTER_CONFIG!,
+    agentsTablePath: env.ORCA_AGENTS_TABLE!,
     timeoutMs: PORT_TIMEOUT_MS,
   });
 }
@@ -189,7 +172,7 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
     epoch,
     stateDir: store.stateDir,
     executablePath: process.execPath,
-    adapterConfigPath: control.executionPort === "configured" ? env.ORCA_CCLOOP_ADAPTER_CONFIG! : null,
+    agentsTablePath: control.executionPort === "configured" ? env.ORCA_AGENTS_TABLE! : null,
     executionPort: control.executionPort,
     archiveRoot: join(root, ARCHIVE),
     exportRoot: join(root, EXPORT),
@@ -252,9 +235,9 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
     driver = createExecutionDriver({
       store, router, admissionGate, roots: controlWorkspaceRoots(store.stateDir),
       resolveRepository: (repoId) => config.resolveRepository(repoId),
-      ccloopBin: env.ORCA_CCLOOP_BIN!, adapterConfigPath: env.ORCA_CCLOOP_ADAPTER_CONFIG!,
+      ccloopBin: env.ORCA_CCLOOP_BIN!, agentsTablePath: env.ORCA_AGENTS_TABLE!,
+      // Handoff grace: the run's agent killGraceMs + 60 s, asked of the port per run (driverHandoff.handoffGraceMsOf).
       kickPump: () => { void pump(); }, crash: input.driverCrash,
-      handoffGraceMs: handoffGraceMsOf(env.ORCA_CCLOOP_ADAPTER_CONFIG!),
     });
   }
 

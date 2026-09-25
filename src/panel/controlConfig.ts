@@ -28,8 +28,9 @@ export interface TrustedControlConfigInput {
   /**
    * Null when no execution port is configured (ruling R5). Paired with `executionPort` by a
    * refinement below: the two can no longer disagree, which a free-standing string allowed.
+   * Agent selection spec §6.6: the agents table replaces the single adapter config.
    */
-  adapterConfigPath: string | null;
+  agentsTablePath: string | null;
   executionPort: "configured" | "unconfigured";
   archiveRoot: string;
   exportRoot: string;
@@ -54,7 +55,7 @@ const trustedControlConfigInputSchema = z.object({
   epoch: z.string().min(1),
   stateDir: z.string().min(1),
   executablePath: z.string().min(1),
-  adapterConfigPath: z.string().min(1).nullable(),
+  agentsTablePath: z.string().min(1).nullable(),
   executionPort: z.enum(["configured", "unconfigured"]),
   archiveRoot: z.string().min(1),
   exportRoot: z.string().min(1),
@@ -65,11 +66,11 @@ const trustedControlConfigInputSchema = z.object({
   defaultEstimatorProfileId: idSchema.nullable(),
   defaultEstimateMode: z.enum(["strict", "soft"]).nullable(),
 }).strict().superRefine((value, ctx) => {
-  // The invariant is the pair, not either field: a configured port with no adapter config, and a
+  // The invariant is the pair, not either field: a configured port with no agents table, and a
   // profile with no mode, were both representable before and are the shapes that let a soft
   // adapter be driven as a strict one.
-  if ((value.executionPort === "configured") !== (value.adapterConfigPath !== null)) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["adapterConfigPath"], message: "execution-port-adapter-config-mismatch" });
+  if ((value.executionPort === "configured") !== (value.agentsTablePath !== null)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["agentsTablePath"], message: "execution-port-agents-table-mismatch" });
   }
   if ((value.defaultEstimatorProfileId === null) !== (value.defaultEstimateMode === null)) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["defaultEstimateMode"], message: "estimator-defaults-incomplete" });
@@ -145,7 +146,7 @@ export function createTrustedControlConfig(
 
   checkedPath(input.stateDir, "directory");
   checkedPath(input.executablePath, "file");
-  if (input.adapterConfigPath !== null) checkedPath(input.adapterConfigPath, "file");
+  if (input.agentsTablePath !== null) checkedPath(input.agentsTablePath, "file");
   checkedPath(input.archiveRoot, "directory");
   checkedPath(input.exportRoot, "directory");
   checkedPath(input.evidenceRoot, "directory");

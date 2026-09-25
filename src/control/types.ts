@@ -1,4 +1,5 @@
 import type { CapabilityViewV1 } from "./webProtocol.js";
+import type { AgentSelection } from "./agentSelection.js";
 
 export type WorkKind = "task" | "decompose" | "reconcile" | "handoff" | "goal-review" | "memory";
 export type WebWorkKind = "budget-estimate" | "task" | "handoff" | "goal-review";
@@ -11,7 +12,6 @@ export interface Identity {
   groupId: string; workItemId: string; taskId: string | null; runId: string;
   generation: number; graphVersion: number; targetVersion: number;
 }
-export type Capabilities = CapabilityViewV1 & { protocol: 2 };
 export interface GroupInput {
   groupId: string; projectKey: string; goal: string; successConditions: string[];
   budgetMode?: BudgetMode; limit: Amount; reviewReserve: Amount;
@@ -19,7 +19,7 @@ export interface GroupInput {
 }
 export interface WorkBase {
   workItemId: string; taskId: string | null;
-  dependsOn: string[]; contract: unknown; configHash: string; grant: Grant;
+  dependsOn: string[]; contract: unknown; configHash: string; agent: AgentSelection; grant: Grant;
 }
 export type WorkInput = WorkBase & (
   | {kind:"handoff";parentRunId:string}
@@ -27,12 +27,12 @@ export type WorkInput = WorkBase & (
 );
 export interface ClaimInput extends CommandMeta {
   groupId: string; workItemId: string; graphVersion: number; targetVersion: number;
-  capabilities: Capabilities;
+  capabilities: CapabilityViewV1;
   executionProfile?: ExecutionProfileBinding;
   handoffProfile?: ExecutionProfileBinding;
 }
 export interface Claim extends Identity {
-  commandId: string; configHash: string; grant: Grant; ownerToken: string;
+  commandId: string; configHash: string; agent: AgentSelection; grant: Grant; ownerToken: string;
 }
 export interface ArtifactRef { artifactId: string; hash: string }
 export type HandoffReason = "budget" | "context" | "human" | "graph-change" | "shutdown";

@@ -28,9 +28,9 @@ async function untilDeadline(driver: ExecutionDriver, predicate: () => boolean, 
   if (!predicate()) throw new Error("the driver did not reach the expected state before the deadline");
 }
 
-async function twoConflicting(reconcile: { files: Record<string, string>; status?: string; spent?: number; holdMs?: number }, affordable = true) {
+async function twoConflicting(reconcile: { files: Record<string, string>; status?: string; spent?: number; holdMs?: number; refuse?: string }, affordable = true) {
   const t = await driverHarness(conflicting, { files });
-  await writeFile(t.deps.adapterConfigPath, JSON.stringify({ status: "succeeded", spent: 7, holdMs: 0, ...reconcile }));
+  await writeFile(t.deps.agentsTablePath, JSON.stringify({ status: "succeeded", spent: 7, holdMs: 0, ...reconcile }));
   if (affordable) {
     // Deviation D12: by default the group's reserve (20% of base) is smaller than one task's token
     // budget, so a reconciliation is refused until another run settles. Raise the ceiling explicitly.
@@ -39,7 +39,7 @@ async function twoConflicting(reconcile: { files: Record<string, string>; status
     if ("error" in raised) throw new Error(`set-limit refused: ${JSON.stringify(raised.error)}`);
   }
   const ids = [await t.claim(), await t.claim()];
-  const spawns = () => existsSync(`${t.deps.adapterConfigPath}.runs`) ? readFileSync(`${t.deps.adapterConfigPath}.runs`, "utf8").trim().split("\n") : [];
+  const spawns = () => existsSync(`${t.deps.agentsTablePath}.runs`) ? readFileSync(`${t.deps.agentsTablePath}.runs`, "utf8").trim().split("\n") : [];
   return { ...t, ids, spawns };
 }
 
@@ -61,6 +61,36 @@ describe("reconciling a conflict (spec §5.3)", { timeout: 30_000 }, () => {
       expect(t.spawns()).toHaveLength(1);
       expect(git(reconciled.reconcile.copyPath, "rev-parse", `refs/orca/conflict/${second}`)).toBe(reconciled.reconcile.conflictCommit);
       expect(git(t.repo, "for-each-ref", "--format=%(refname)", "refs/orca/conflict/")).toBe("");
+    } finally { await t.h.dispose(); }
+  });
+
+  it("spawns the reconciliation as ccloop run --agents <table> --agent-selection <file>, the file 0600 and holding a frozen selection with its configHash (agent selection spec §4.9)", async () => {
+    const t = await twoConflicting({ files: { "shared.txt": "A\nB\n" } }); try {
+      const driver = t.driver();
+      await untilDeadline(driver, () => t.ids.every((id) => [...LANDED, "blocked"].includes(t.body(id).state)));
+      expect(t.ids.every((id) => LANDED.includes(t.body(id).state))).toBe(true);
+      const reconciled = t.ids.find((id) => t.body(id).drive.reconcile !== null)!;
+      const selections = readFileSync(`${t.deps.agentsTablePath}.selections`, "utf8").trim().split("\n").map((line) => JSON.parse(line));
+      // Agent selection plan T7 bridge -- T11 leaves it, plan T12 deletes this (plan P9) and asserts the group's frozen
+      // reconcile slot instead: until then the reconciliation runs with the conflicted run's own selection and configHash.
+      expect(selections).toEqual([{ selection: { selection: t.body(reconciled).agent, configHash: t.body(reconciled).configHash }, mode: 0o600 }]);
+      expect(t.body(reconciled).agent).toEqual({ agent: "codex", model: "fixture-model", contextWindow: "agent-default" });
+    } finally { await t.h.dispose(); }
+  });
+
+  // Plan T6 ruling (agent selection): `ccloop run --agents` exits 1 on any refusal -- a stale configHash, a drifted
+  // version -- with the refusal's code first on stderr, and 2 only for a run that completed without succeeding. The
+  // reconciliation reads its own exit codes (never the control wire's "2:" rule): a refusal blocks the run under
+  // ccloop's code, with no terminal outcome, and is not spawned again.
+  it("blocks a reconciliation ccloop run --agents refuses (exit 1) under the code its stderr starts with, and does not spawn it again", async () => {
+    const t = await twoConflicting({ files: { "shared.txt": "A\nB\n" }, refuse: "control-config-hash-mismatch: the selection file names another configHash" }); try {
+      const driver = t.driver();
+      await untilDeadline(driver, () => t.ids.some((id) => t.body(id).state === "blocked"));
+      const blocked = t.ids.find((id) => t.body(id).state === "blocked")!;
+      expect(t.body(blocked).drive).toMatchObject({ blockedAt: "R", blockedReason: "reconcile-refused:control-config-hash-mismatch", reconcile: { outcome: null } });
+      for (let round = 0; round < 5; round += 1) await driver.round();
+      expect(t.spawns()).toHaveLength(1);
+      expect(t.body(blocked).state).toBe("blocked");
     } finally { await t.h.dispose(); }
   });
 
@@ -251,7 +281,7 @@ describe("a person's retry of a run blocked at R (final review I4)", { timeout: 
       const runId = t.ids.find((id) => t.body(id).state === "blocked")!;
       expect(t.body(runId).drive.blockedReason).toBe("reconcile-terminal:failed");
       expect(bookings(t)).toHaveLength(1);
-      await writeFile(t.deps.adapterConfigPath, JSON.stringify({ status: "succeeded", spent: 7, holdMs: 0, files: { "shared.txt": "A\nB\n" } }));
+      await writeFile(t.deps.agentsTablePath, JSON.stringify({ status: "succeeded", spent: 7, holdMs: 0, files: { "shared.txt": "A\nB\n" } }));
       const retried = await t.service.recoveryRetry(t.h.runCommand("recovery-retry", runId, { scope: "run", runId }));
       expect(retried).toMatchObject({ result: { kind: "recovery-observed", resolved: true } });
       await untilDeadline(driver, () => t.ids.every((id) => LANDED.includes(t.body(id).state)));

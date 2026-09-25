@@ -84,6 +84,13 @@ export const durableCommandErrorStatuses = {
   // Same shape and same reason as the line above: a state a person is told about, not a crash.
   "control-estimator-unconfigured": 422,
   "control-protocol-unavailable": 422,
+  // Agent selection spec §7 (W6-11/W6-12): ccloop's named refusals of a selection or table, which the port rethrows
+  // under their own names. Durable and 422 like the port codes above: understood, and not performable as asked.
+  // (agent-unselected and agent-selection-invalid are registered above, by plan T8.)
+  "agent-context-unsupported": 422,
+  "agent-installation-missing": 422,
+  "agent-version-drift": 422,
+  "agents-table-invalid": 422,
   "control-terminal-pending": 422,
   "dependency-not-done": 422,
   "duplicate-proposal-target": 422,
@@ -140,7 +147,7 @@ export const nonDurableControlErrorClassifications = {
   "cleanup-path-invalid": "internal",
   "cleanup-source-reused": "internal",
   "command-id-conflict": "internal",
-  "control-adapter-config-invalid": "internal",
+  "control-agents-table-invalid": "internal",
   "control-async-transaction": "internal",
   "control-binary-invalid": "internal",
   "control-capability-probe-failed": "transient",

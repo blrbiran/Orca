@@ -1,9 +1,11 @@
 import type { ControlStore } from "./store.js";
 import type { ExecutionPort } from "./executionPort.js";
 import { productionExecutionPort } from "./executionPort.js";
-import type { Capabilities, Claim, ExecutionProfileBinding, Grant, WorkInput, HandoffReason } from "./types.js";
+import type { Claim, ExecutionProfileBinding, Grant, WorkInput, HandoffReason } from "./types.js";
+import type { AgentSelection, PartialSelection } from "./agentSelection.js";
+import type { CapabilityViewV1 } from "./webProtocol.js";
 import { assertCapabilities, claimWork, readRun, componentMin, subtract, add } from "./budget.js";
-import { allWork, readGroup, readWork } from "./queries.js";
+import { allWork, readGroup, readWork, workAgents } from "./queries.js";
 import { ControlError } from "./errors.js";
 import type { ApprovedReconcileBudget } from "../scheduler/reconcile.js";
 import { grantSchema, handoffRequestSchema } from "./schema.js";
@@ -41,7 +43,7 @@ export class ControlService {
   async run(groupId:string, planPath:string, options: Omit<import("../scheduler/run.js").RunOptions,"adapter"|"adapterConfig"> = {}):Promise<number> {
     const release=this.store.beginOperation();
     try {
-    await this.legacyCapabilities(groupId);
+    for(const agent of workAgents(this.store,groupId))await this.legacyCapabilities(groupId,agent);
     const {loadRound,runPreparedRound}=await import("../scheduler/run.js");
     const {makeControlledExecution}=await import("./schedulerBridge.js");
     const loaded=await loadRound(planPath);
@@ -63,9 +65,9 @@ export class ControlService {
     if (!this.options.profileRouter) throw new ControlError("control-protocol-unavailable");
     return this.options.profileRouter.resolve(selection.workKind, selection.profileId, selection.profileHash);
   }
-  async probeExecutionProfile(selection: ExecutionProfileSelection): Promise<ObservedProfile> {
+  async probeExecutionProfile(selection: ExecutionProfileSelection, agent: AgentSelection): Promise<ObservedProfile> {
     const profile = this.executionProfile(selection);
-    return this.options.profileRouter!.probe(profile);
+    return this.options.profileRouter!.probe(profile, agent);
   }
   legacyExecutionPort():ExecutionPort { return this.port ?? productionExecutionPort(); }
   executionPort(selection?: ExecutionProfileSelection): ExecutionPort { return selection ? this.executionProfile(selection).port : this.legacyExecutionPort(); }
@@ -73,23 +75,24 @@ export class ControlService {
     const binding=readRun(this.store,runId).executionProfile;
     return binding ? this.executionProfile(binding).port : this.legacyExecutionPort();
   }
-  async legacyCapabilities(groupId: string):Promise<Capabilities> {
-    const caps = await this.legacyExecutionPort().capabilities();
+  /** Agent selection spec §6.4 (C3): every gate asks about the selection it is about to dispatch. */
+  async legacyCapabilities(groupId: string,agent:PartialSelection):Promise<CapabilityViewV1> {
+    const caps = (await this.legacyExecutionPort().resolveAgent(agent)).capabilities;
     assertCapabilities(readGroup(this.store,groupId).budgetMode ?? "strict",caps);
     return caps;
   }
-  capabilities(groupId:string):Promise<Capabilities> { return this.legacyCapabilities(groupId); }
-  async profiledCapabilities(groupId:string,selection:ExecutionProfileSelection):Promise<{profile:FrozenProfile;capabilities:Capabilities}> {
-    const profile=this.executionProfile(selection),observation=await this.options.profileRouter!.probe(profile);
+  capabilities(groupId:string,agent:PartialSelection):Promise<CapabilityViewV1> { return this.legacyCapabilities(groupId,agent); }
+  async profiledCapabilities(groupId:string,selection:ExecutionProfileSelection,agent:AgentSelection):Promise<{profile:FrozenProfile;capabilities:CapabilityViewV1}> {
+    const profile=this.executionProfile(selection),observation=await this.options.profileRouter!.probe(profile,agent);
     const observed=observation.observed,mode=readGroup(this.store,groupId).budgetMode??"strict";
     // Ruling R5: the router turns every probe throw into a failure code, which is right for a
     // genuine probe failure and wrong for "there is no port at all" -- those need different fixes,
     // so the named one is re-raised rather than folded into the capability answer.
     if(observation.probeFailureCode==="control-port-unconfigured")throw new ControlError("control-port-unconfigured");
     if(observation.probeFailureCode!==null||observed.usageObservation==="unavailable"||observed.budgetEnforcement==="unavailable"||observed.handoffControl!=="durable"||observed.handoffExecution===null||(mode==="strict"&&(observed.budgetEnforcement!=="bounded"||observed.requestBoundProof===null||!observed.requestBoundProof.workDimensions.includes("tokens"))))throw new ControlError("control-capability-unsupported");
-    const capabilities=await profile.port.capabilities();assertCapabilities(mode,capabilities);return {profile,capabilities};
+    const capabilities=(await profile.port.resolveAgent(agent)).capabilities;assertCapabilities(mode,capabilities);return {profile,capabilities};
   }
-  private claimWithCapabilities(groupId:string,workItemId:string,capabilities:Capabilities,executionProfile?:ExecutionProfileSelection,handoffProfile?:ExecutionProfileSelection):Claim {
+  private claimWithCapabilities(groupId:string,workItemId:string,capabilities:CapabilityViewV1,executionProfile?:ExecutionProfileSelection,handoffProfile?:ExecutionProfileSelection):Claim {
     return this.write(()=>{
       const group=readGroup(this.store,groupId),work=readWork(this.store,groupId,workItemId);
       if(group.stopped)throw new ControlError("group-stopped");
@@ -99,14 +102,15 @@ export class ControlService {
       return claimWork(this.store,{groupId,workItemId,capabilities,executionProfile,handoffProfile,graphVersion:group.graphVersion,targetVersion:work.targetVersion,commandId:`execute-${workItemId}-${work.targetVersion}-${group.graphVersion}`,expectedRevision:group.revision,by:"control-service"});
     });
   }
-  async claimLegacy(groupId:string,workItemId:string):Promise<Claim>{return this.claimWithCapabilities(groupId,workItemId,await this.legacyCapabilities(groupId));}
+  async claimLegacy(groupId:string,workItemId:string):Promise<Claim>{return this.claimWithCapabilities(groupId,workItemId,await this.legacyCapabilities(groupId,readWork(this.store,groupId,workItemId).agent));}
   claim(groupId:string,workItemId:string):Promise<Claim>{return this.claimLegacy(groupId,workItemId);}
   async claimProfiled(groupId:string,workItemId:string,selection:ExecutionProfileSelection,handoffSelection:ExecutionProfileSelection):Promise<Claim>{
     if(selection.workKind!=="task"||handoffSelection.workKind!=="handoff")throw new ControlError("profile-changed");
-    const [{capabilities}]=await Promise.all([this.profiledCapabilities(groupId,selection),this.profiledCapabilities(groupId,handoffSelection)]);
+    const agent=readWork(this.store,groupId,workItemId).agent;
+    const [{capabilities}]=await Promise.all([this.profiledCapabilities(groupId,selection,agent),this.profiledCapabilities(groupId,handoffSelection,agent)]);
     return this.claimWithCapabilities(groupId,workItemId,capabilities,selection,handoffSelection);
   }
-  private reconcileWithCapabilities(groupId:string,taskId:string,capabilities:Capabilities,executionProfile?:ExecutionProfileSelection,handoffProfile?:ExecutionProfileSelection):ApprovedReconcileBudget {
+  private reconcileWithCapabilities(groupId:string,taskId:string,capabilities:CapabilityViewV1,executionProfile?:ExecutionProfileSelection,handoffProfile?:ExecutionProfileSelection):ApprovedReconcileBudget {
     return this.write(()=>{
       const group=readGroup(this.store,groupId);if(group.stopped)throw new ControlError("group-stopped");
       const workItemId=`reconcile-${taskId}`,existing=this.store.db.prepare("SELECT id FROM runs WHERE group_id=? AND work_item_id=? ORDER BY rowid DESC LIMIT 1").get(groupId,workItemId);let claim:Claim;
@@ -116,25 +120,31 @@ export class ControlService {
         const free=subtract(group.limit,add(group.used,group.reserved)),handoff=componentMin(cap.handoff,free),work=componentMin(cap.work,subtract(free,handoff));
         if(work.tokens===0||work.activeMs===0||work.attempts===0||work.sessions===0)throw new ControlError("group-budget-unavailable");
         const parent=allWork(this.store,groupId).find(item=>item.taskId===taskId&&item.kind==="task");if(!parent)throw new ControlError("work-not-found");
-        const prepared:WorkInput={workItemId,taskId:workItemId,kind:"reconcile",dependsOn:[],contract:{pendingReconciliation:taskId},configHash:parent.configHash,grant:{work,handoff}};
+        const prepared:WorkInput={workItemId,taskId:workItemId,kind:"reconcile",dependsOn:[],contract:{pendingReconciliation:taskId},configHash:parent.configHash,agent:parent.agent,grant:{work,handoff}};
         claim=claimWork(this.store,{groupId,workItemId,capabilities,executionProfile,handoffProfile,graphVersion:group.graphVersion,targetVersion:1,commandId:`reconcile-${taskId}`,expectedRevision:group.revision,by:"control-service"},prepared);
       }
       return {maxAttempts:claim.grant.work.attempts,perAttemptTimeoutMs:claim.grant.work.activeMs,totalRuntimeBudgetMs:claim.grant.work.activeMs,tokenBudget:claim.grant.work.tokens};
     });
   }
-  async reconcileBudgetLegacy(groupId:string,taskId:string):Promise<ApprovedReconcileBudget>{return this.reconcileWithCapabilities(groupId,taskId,await this.legacyCapabilities(groupId));}
+  async reconcileBudgetLegacy(groupId:string,taskId:string):Promise<ApprovedReconcileBudget>{return this.reconcileWithCapabilities(groupId,taskId,await this.legacyCapabilities(groupId,this.parentAgent(groupId,taskId)));}
   reconcileBudget(groupId:string,taskId:string):Promise<ApprovedReconcileBudget>{return this.reconcileBudgetLegacy(groupId,taskId);}
   async reconcileBudgetProfiled(groupId:string,taskId:string,selection:ExecutionProfileSelection,handoffSelection:ExecutionProfileSelection):Promise<ApprovedReconcileBudget>{
     if(selection.workKind!=="task"||handoffSelection.workKind!=="handoff")throw new ControlError("profile-changed");
-    const [{capabilities}]=await Promise.all([this.profiledCapabilities(groupId,selection),this.profiledCapabilities(groupId,handoffSelection)]);
+    const agent=this.parentAgent(groupId,taskId);
+    const [{capabilities}]=await Promise.all([this.profiledCapabilities(groupId,selection,agent),this.profiledCapabilities(groupId,handoffSelection,agent)]);
     return this.reconcileWithCapabilities(groupId,taskId,capabilities,selection,handoffSelection);
   }
-  async startProfiled(selection:ExecutionProfileSelection,input:import("./executionPort.js").StartEnvelope){if(selection.workKind!=="task")throw new ControlError("profile-changed");const {profile}=await this.profiledCapabilities(input.claim.groupId,selection);if(!sameProfile(readRun(this.store,input.claim.runId).executionProfile,selection))throw new ControlError("profile-changed");return startClaim(this.store,profile.port,input,this.admissionGate);}
+  /** A legacy (non-Web) reconciliation runs with its conflicted task's selection, as it ran with its configHash. */
+  private parentAgent(groupId:string,taskId:string):AgentSelection {
+    const parent=allWork(this.store,groupId).find(item=>item.taskId===taskId&&item.kind==="task");if(!parent)throw new ControlError("work-not-found");
+    return parent.agent;
+  }
+  async startProfiled(selection:ExecutionProfileSelection,input:import("./executionPort.js").StartEnvelope){if(selection.workKind!=="task")throw new ControlError("profile-changed");const {profile}=await this.profiledCapabilities(input.claim.groupId,selection,input.claim.agent);if(!sameProfile(readRun(this.store,input.claim.runId).executionProfile,selection))throw new ControlError("profile-changed");return startClaim(this.store,profile.port,input,this.admissionGate);}
   startLegacy(input:import("./executionPort.js").StartEnvelope){return startClaim(this.store,this.legacyExecutionPort(),input,this.admissionGate);}
   async reconcileStartForRun(runId:string){
     const run=readRun(this.store,runId);
     if(run.executionProfile&&run.executionProfile.workKind!=="task")throw new ControlError("profile-changed");
-    const selected=run.executionProfile ? await this.profiledCapabilities(run.groupId,run.executionProfile) : undefined;
+    const selected=run.executionProfile ? await this.profiledCapabilities(run.groupId,run.executionProfile,run.agent) : undefined;
     return reconcileStart(this.store,selected?.profile.port??this.legacyExecutionPort(),runId,this.admissionGate);
   }
   async requestHandoff(groupId:string,runId:string,input:{requestId:string;reason:HandoffReason;deadlineAt:string}) {
@@ -144,7 +154,8 @@ export class ControlService {
     if(!work)throw new ControlError("handoff-work-not-found");
     const binding=run.handoffProfile;
     if(run.executionProfile&&(!binding||binding.workKind!=="handoff"))throw new ControlError("profile-changed");
-    const selected=binding ? await this.profiledCapabilities(groupId,binding) : {profile:undefined,capabilities:await this.legacyCapabilities(groupId)};
+    // Agent selection spec §6.4: handoff has no slot of its own; it is probed with the handed-off run's selection.
+    const selected=binding ? await this.profiledCapabilities(groupId,binding,run.agent) : {profile:undefined,capabilities:await this.legacyCapabilities(groupId,run.agent)};
     const envelope=readEnvelope(this.store,runId),request=handoffRequestSchema.parse({protocol:1 as const,...input,runId,generation:run.generation});
     const id="handoff-request:"+runId,body={workItemId:work.workItemId,request};const old=this.store.db.prepare("SELECT body FROM outbox WHERE id=?").get(id);
     this.write(()=>{
@@ -164,16 +175,16 @@ export class ControlService {
     const rows=this.store.db.prepare("SELECT body FROM runs WHERE group_id=? ORDER BY rowid DESC").all(groupId).map(row=>JSON.parse(String(row.body)) as ReturnType<typeof readRun>);
     const predecessor=rows.find(run=>run.taskId===taskId&&run.state==="settled"&&run.recoverable);if(!predecessor)throw new ControlError("continuation-predecessor-unrecoverable");
     const work=readWork(this.store,groupId,predecessor.workItemId),binding=predecessor.executionProfile,handoffBinding=predecessor.handoffProfile;
-    const selected=binding ? await this.profiledCapabilities(groupId,binding) : {profile:undefined,capabilities:await this.legacyCapabilities(groupId)};
+    const selected=binding ? await this.profiledCapabilities(groupId,binding,predecessor.agent) : {profile:undefined,capabilities:await this.legacyCapabilities(groupId,predecessor.agent)};
     if(binding) {
       if(binding.workKind!=="task"||!handoffBinding||handoffBinding.workKind!=="handoff")throw new ControlError("profile-changed");
-      await this.profiledCapabilities(groupId,handoffBinding);
+      await this.profiledCapabilities(groupId,handoffBinding,predecessor.agent);
     }
     const claim=this.write(()=>claimContinuation(this.store,{groupId,predecessorRunId:predecessor.runId,workItemId:work.workItemId,taskId,graphVersion:group.graphVersion,targetVersion:work.targetVersion,commandId:input.commandId,expectedRevision:input.expectedRevision,by:"human",executionProfile:binding,handoffProfile:handoffBinding}));
     const port=selected.profile?.port??this.legacyExecutionPort();
     if(this.store.db.prepare("SELECT id FROM outbox WHERE id=?").get("start:"+claim.runId))return reconcileStart(this.store,port,claim.runId,this.admissionGate);
     const previous=readEnvelope(this.store,predecessor.runId),sourceDir=join(dirname(previous.work.sourceDir),claim.runId);
     const checkpoint=await exportResumeBundle(this.store,{predecessorRunId:predecessor.runId,newSourceDir:sourceDir},{admit:operation=>this.writeAsync(operation)});
-    return startClaim(this.store,port,{protocol:1,claim,contractHash:hashPayload(work.contract),inputCheckpoint:checkpoint,work:{contract:work.contract,targetRepo:previous.work.targetRepo,base:previous.work.base,sourceDir}},this.admissionGate);
+    return startClaim(this.store,port,{protocol:2,claim,contractHash:hashPayload(work.contract),inputCheckpoint:checkpoint,work:{contract:work.contract,targetRepo:previous.work.targetRepo,base:previous.work.base,sourceDir}},this.admissionGate);
   }
 }

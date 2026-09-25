@@ -22,7 +22,7 @@ writeFileSync(join(root,"run.json"),JSON.stringify({runId:claim.runId,target,bas
 await mark("after-claim");
 const peer=roundPeer(join(root,"peer")),service=new ControlService(store,peer);
 const sourceDir=join(root,"runs",claim.runId);mkdirSync(join(root,"runs"),{recursive:true});
-await startClaim(store,peer,{protocol:1,claim,contractHash:hashPayload(seed.w1.contract),inputCheckpoint:null,work:{contract:seed.w1.contract,targetRepo:target,base,sourceDir}});
+await startClaim(store,peer,{protocol:2,claim,contractHash:hashPayload(seed.w1.contract),inputCheckpoint:null,work:{contract:seed.w1.contract,targetRepo:target,base,sourceDir}});
 await mark("after-accept");
 const report=await collectControlled(service,claim.runId),terminal=report.terminal;
 const run={runId:claim.runId,workdir:sourceDir,outcome:terminal.outcome,attemptSha:terminal.attemptSha};

@@ -10,6 +10,7 @@ import type { ExecutionProfileRouter, FrozenProfile, ObservedProfile } from "./p
 import type { AdmissionGate } from "./admissionGate.js";
 import type { WakeHandler, WakeHandlers } from "./dispatch.js";
 import type { ControlStore } from "./store.js";
+import type { AgentSelection } from "./agentSelection.js";
 import { claimableContinuations, continuationAlreadyClaimed, continuationWakeBody, type RegisteredContinuation } from "./continuation.js";
 
 export type Phase = "estimate" | "work" | "handoff";
@@ -18,7 +19,7 @@ export interface WebDispatchDeps { store: ControlStore; profileRouter: Execution
 export interface AttemptTuple { runId: string; generation: number; phase: Phase; providerAttemptOrdinal: number }
 export interface DispatchRun {
   runId: string; groupId: string; workItemId: string; taskId: string | null; generation: number;
-  graphVersion: number; targetVersion: number; commandId: string; configHash: string;
+  graphVersion: number; targetVersion: number; commandId: string; configHash: string; agent: AgentSelection;
   grant: { work: unknown; handoff: unknown }; ownerToken: string; state: string; phase: Phase;
   claimOrdinal: number | null; providerAttemptOrdinal: number; remaining: { work: unknown; handoff: unknown };
   cumulative: unknown; unknown: { work: boolean; handoff: boolean }; highWater: number; breaches: unknown[];
@@ -280,7 +281,7 @@ function createStartingRun(
     runId, groupId, workItemId: work.workItemId, taskId: work.taskId, estimateId: null, generation: 1,
     graphVersion: snapshot.graphVersion, targetVersion: work.targetVersion,
     commandId: continuation ? `continue-${groupId}-${continuation.resumeRevision}-${work.workItemId}` : `start-${groupId}-${startRevision}-${work.workItemId}`,
-    configHash: work.configHash, grant, ownerToken, executionId: null, state: "starting", checkpointId: null, recoverable: false,
+    configHash: work.configHash, agent: work.agent, grant, ownerToken, executionId: null, state: "starting", checkpointId: null, recoverable: false,
     remaining: structuredClone(grant), cumulative: { work: zero(), handoff: zero() }, unknown: { work: false, handoff: false },
     highWater: 0, breaches: [], handoffWorkItemId: null, phase: "work", claimOrdinal, providerAttemptOrdinal: 0, failureCode: null,
     continuationIntentId: continuation?.continuationIntentId ?? null,

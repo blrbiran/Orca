@@ -14,7 +14,11 @@ let accepted=existsSync(file)?JSON.parse(readFileSync(file,"utf8")):null;
 // they never gated anything. Nothing in v2 replaces them; `handoffControl` and `requestBoundProof`
 // are separate guarantees (handoff latching and per-request bound evidence, respectively) that
 // are also gated on (handoffControl in every budget mode, requestBoundProof in strict mode), not successors to the deleted booleans.
-if(method==="capabilities") console.log(JSON.stringify({protocol:2,usageObservation:"realtime",budgetEnforcement:"bounded",contextObservation:"unavailable",handoffControl:"durable",handoffExecution:"mechanical-in-run-v1",contextWindowTokens:null,requestBoundProof:{scheme:"adapter-request-bound-v1",version:"1",workDimensions:["activeMs","tokens"],handoffDimensions:["activeMs","tokens"],evidenceKind:"offline-peer-v1"}}));
+// Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): `capabilities` is asked
+// about one selection (`{agent: partial}`) and answers its resolution -- the given fields echoed, fixture defaults
+// for the rest -- carrying the same strict-capable view as before; `{agent: null}` answers an empty table view.
+const view={usageObservation:"realtime",budgetEnforcement:"bounded",contextObservation:"unavailable",handoffControl:"durable",handoffExecution:"mechanical-in-run-v1",contextWindowTokens:null,requestBoundProof:{scheme:"adapter-request-bound-v1",version:"1",workDimensions:["activeMs","tokens"],handoffDimensions:["activeMs","tokens"],evidenceKind:"offline-peer-v1"}};
+if(method==="capabilities") console.log(JSON.stringify(input.agent===null?{installations:[]}:{selection:{agent:"codex",model:"fixture-model",contextWindow:"agent-default",...input.agent},configHash:"c".repeat(64),timeoutMs:120000,killGraceMs:5000,capabilities:view}));
 else if(method==="collect") console.log(existsSync(join(root,"report.json"))?readFileSync(join(root,"report.json"),"utf8"):JSON.stringify({events:[],candidate:null,terminal:null}));
 else if(method==="handoff") console.log(JSON.stringify({kind:"latched",requestId:input.request.requestId}));
 else if(method==="inspect") console.log(JSON.stringify(mode==="unknown"?{kind:"unknown"}:accepted?accepted.status:{kind:"absent"}));

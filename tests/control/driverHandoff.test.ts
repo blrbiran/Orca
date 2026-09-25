@@ -270,6 +270,28 @@ describe("nothing arrives (spec §3 grace, §11 I3)", { timeout: 60_000 }, () =>
   });
 });
 
+describe("the grace is the run's own agent killGraceMs plus the fixed minute (spec §3; agent selection spec §6.6)", { timeout: 60_000 }, () => {
+  it("does not call a request outcome-unknown before the killGraceMs ccloop answers for the run's selection has passed", async () => {
+    const t = await driverHarness([{ taskId: "a" }], { behaviour: () => "stoppable-silent", killGraceMs: 5_000 }); try {
+      const runId = await t.claim();
+      let now = Date.now();
+      const driver = createExecutionDriver({ ...t.deps, now: () => new Date(now) });
+      await t.until(driver, () => t.body(runId).state === "accepted");
+      const [requestId] = await stop(t);
+      await t.until(driver, () => requestState(t, requestId!) === "collecting");
+      const deadline = Date.parse(readHandoffRequest(t.h.store, "g", requestId!).request.deadlineAt);
+      now = deadline + HANDOFF_EXTRA_GRACE_MS + 1;
+      await driver.round();
+      expect(requestState(t, requestId!)).toBe("collecting");
+      now = deadline + HANDOFF_EXTRA_GRACE_MS + 5_000;
+      await driver.round();
+      expect(requestState(t, requestId!)).toBe("collecting");
+      now = deadline + HANDOFF_EXTRA_GRACE_MS + 5_001;
+      await t.until(driver, () => requestState(t, requestId!) === "outcome-unknown");
+    } finally { await t.h.dispose(); }
+  });
+});
+
 describe("blocked runs under a stop (spec §11 I1, §13.1 C-5, §13.2 I-3; H8)", { timeout: 60_000 }, () => {
   it("closes a run blocked after its execution ended from its collected result, beside a running run", async () => {
     const t = await driverHarness([{ taskId: "a" }, { taskId: "b" }], { behaviour: (id) => id === "a" ? "exhausted" : "stoppable" }); try {
@@ -386,7 +408,7 @@ describe("a landing whose worktree removal failed after the swap (controller rul
     const t = await driverHarness([{ taskId: "a", targetPaths: ["shared.txt"] }, { taskId: "b", targetPaths: ["shared.txt"] }],
       { files: (id) => ({ "shared.txt": id === "a" ? "A\n" : "B\n" }) }); try {
       // As tests/control/driverReconcile.test.ts's `twoConflicting`: a reconciliation that succeeds, and a group that can afford it.
-      await writeFile(t.deps.adapterConfigPath, JSON.stringify({ status: "succeeded", spent: 7, holdMs: 0, files: { "shared.txt": "A\nB\n" } }));
+      await writeFile(t.deps.agentsTablePath, JSON.stringify({ status: "succeeded", spent: 7, holdMs: 0, files: { "shared.txt": "A\nB\n" } }));
       const limit = readControlGroup(t.h.store, "epoch-test", "g").ledger.groupLimit;
       const raised = t.service.setLimit(t.h.command("set-limit", { limit: { ...limit, tokens: limit.tokens + 10_000_000 } }));
       if ("error" in raised) throw new Error(`set-limit refused: ${JSON.stringify(raised.error)}`);

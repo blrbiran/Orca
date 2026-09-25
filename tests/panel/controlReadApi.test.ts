@@ -95,16 +95,17 @@ async function setup(): Promise<Harness> {
   // answers the v2 vocabulary, spread from the same declared capabilities the profile snapshot
   // carries, so the peer's raw answer stays schema-valid and strict-mode-safe.
   const port: ExecutionPort = {
-    probeProfileCapabilities: async () => snapshot.profile.capabilities,
-    capabilities: async () => ({ protocol: 2 as const, ...snapshot.profile.capabilities }),
+    // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): capabilities protocol 3.
+    resolveAgent: async (partial) => ({ selection: { agent: "codex", model: "fixture-model", contextWindow: "agent-default", ...partial }, configHash: hash("d"), timeoutMs: 1, killGraceMs: 0, capabilities: snapshot.profile.capabilities }),
+    listAgents: async () => ({ installations: [{ id: "codex", kind: "codex", defaults: { model: "fixture-model", contextWindow: "agent-default" as const }, contextOptions: ["agent-default" as const], version: "0.0.0-fixture" }] }),
     readEvidence: async () => Buffer.alloc(0), accept: async () => ({ kind: "unknown" }), inspect: async () => ({ kind: "unknown" }),
     requestHandoff: async (_input, request) => ({ kind: "unknown", requestId: request.requestId }), collect: async () => ({ events: [], candidate: null, terminal: null }),
   };
   const frozen = resolveProfile(snapshot, port);
   const router = createExecutionProfileRouter([frozen], { now: () => new Date("2030-01-01T00:00:00.000Z") });
   const trustedConfig = createTrustedControlConfig({
-    epoch: "epoch-test", stateDir: h.store.stateDir, executablePath: binary, adapterConfigPath: adapter,
-      executionPort: "configured" as const,  // Task 4b: these fixtures configure a real adapter config, so the pair says "configured".
+    epoch: "epoch-test", stateDir: h.store.stateDir, executablePath: binary, agentsTablePath: adapter,
+      executionPort: "configured" as const,  // Task 4b: these fixtures configure a real agents table, so the pair says "configured".
     archiveRoot: h.root, exportRoot: h.root, evidenceRoot: h.root, shutdownGraceMs: 1_000,
     repositories: [{ repoId: "repo", displayName: "Repo", path: repo }],
     plans: [{ planId: "plan", repoId: "repo", displayName: "Plan", path: planPath }],

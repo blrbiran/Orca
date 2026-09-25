@@ -44,8 +44,19 @@ describe("control error classification", () => {
     expect([...v1WebErrorCodes].sort()).toEqual(v1WebErrorCodes);
   });
 
-  it.each(["control-binary-invalid", "control-adapter-config-invalid"])("classifies helper-mediated %s as internal", (code) => {
+  // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): the agents table replaced the
+  // adapter config (spec §6.6), so its path refusal is the helper-mediated internal code now.
+  it.each(["control-binary-invalid", "control-agents-table-invalid"])("classifies helper-mediated %s as internal", (code) => {
     expect(Reflect.get(nonDurableControlErrorClassifications, code)).toBe("internal");
     expect(durableCommandErrorStatus(code)).toBeNull();
   });
+
+  // Agent selection spec §7 (W6-11/W6-12): the port rethrows ccloop's named refusals of a selection or table under
+  // their own names, and Orca's own agent-unselected joins them. Each is a state a person is told about -- a command
+  // that is understood and cannot be performed as asked -- so it is durable at 422, never an internal failure.
+  it.each(["agent-installation-missing", "agent-context-unsupported", "agent-selection-invalid", "agent-version-drift", "agents-table-invalid", "agent-unselected"])(
+    "records the agent selection refusal %s durably at 422", (code) => {
+      expect(durableCommandErrorStatus(code)).toBe(422);
+      expect(Object.hasOwn(nonDurableControlErrorClassifications, code)).toBe(false);
+    });
 });

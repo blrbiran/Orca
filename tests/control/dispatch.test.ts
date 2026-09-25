@@ -8,7 +8,7 @@ import { getGroup,getRun } from "../../src/control/queries.js";
 import { hashPayload,setGroupStopped } from "../../src/control/commands.js";
 import { openTestStore,seedBudgetCase } from "./fixtures/store.js";
 import { fakePeer } from "./fixtures/peer.js";
-const setup=async()=>{const h=await openTestStore();const s=seedBudgetCase(h.store);const claim=claimWork(h.store,s.t1Claim);return {...h,envelope:{protocol:1 as const,claim,contractHash:hashPayload(s.w1.contract),inputCheckpoint:null,work:{contract:s.w1.contract,targetRepo:h.root,base:"HEAD",sourceDir:h.root}}};};
+const setup=async()=>{const h=await openTestStore();const s=seedBudgetCase(h.store);const claim=claimWork(h.store,s.t1Claim);return {...h,envelope:{protocol:2 as const,claim,contractHash:hashPayload(s.w1.contract),inputCheckpoint:null,work:{contract:s.w1.contract,targetRepo:h.root,base:"HEAD",sourceDir:h.root}}};};
 describe("durable starts",()=>{
  it("recovers the accepted identity after the peer drops its response, without another launch",async()=>{
   const h=await setup();try{
@@ -69,11 +69,32 @@ describe("durable starts",()=>{
  it("rechecks stop after asynchronous capability discovery before creating a start intent",async()=>{
   const h=await setup();try{
    const root=join(h.root,"peer");const peer=fakePeer(root);
-   await expect(startClaim(h.store,{...peer,capabilities:async()=>{
+   // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): capability discovery is
+   // `resolveAgent` of the claim's selection now (spec §6.4); stop still lands during it and is still re-checked.
+   await expect(startClaim(h.store,{...peer,resolveAgent:async partial=>{
     setGroupStopped(h.store,"g1",true,{commandId:"stop-during-discovery",expectedRevision:3,by:"human"});
-    return peer.capabilities();
+    return peer.resolveAgent(partial);
    }},h.envelope)).rejects.toThrow("group-stopped");
    await expect(readFile(join(root,"launches"))).rejects.toThrow();
+  }finally{await h.dispose();}
+ });
+
+ it("asks the capability gate about the claim's own frozen selection, at start and at a re-send (agent selection spec §6.4)",async()=>{
+  const h=await setup();try{
+   const root=join(h.root,"peer");const peer=fakePeer(root);const asked:unknown[]=[];
+   const recording={...peer,resolveAgent:async(partial:Parameters<typeof peer.resolveAgent>[0])=>{asked.push(partial);return peer.resolveAgent(partial);},accept:async()=>{throw new Error("connection-before-send");}};
+   await expect(startClaim(h.store,recording,h.envelope)).rejects.toThrow("start-outcome-unknown");
+   await reconcileStart(h.store,{...recording,accept:peer.accept,inspect:async()=>({kind:"absent" as const})},h.envelope.claim.runId);
+   expect(asked).toEqual([h.envelope.claim.agent,h.envelope.claim.agent]);
+   expect(h.envelope.claim.agent).toEqual({agent:"codex",model:"fixture-model",contextWindow:"agent-default"});
+  }finally{await h.dispose();}
+ });
+ it("refuses an envelope whose claim names a selection other than the run's frozen one, before anything is sent",async()=>{
+  const h=await setup();try{
+   const root=join(h.root,"peer");
+   await expect(startClaim(h.store,fakePeer(root),{...h.envelope,claim:{...h.envelope.claim,agent:{...h.envelope.claim.agent,model:"another-model"}}})).rejects.toThrow("run-owner-conflict");
+   await expect(readFile(join(root,"launches"))).rejects.toThrow();
+   expect(h.store.db.prepare("SELECT id FROM outbox WHERE kind='start'").get()).toBeUndefined();
   }finally{await h.dispose();}
  });
 

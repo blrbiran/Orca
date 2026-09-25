@@ -102,9 +102,10 @@ export function resolveControlOptions(
     return index === -1 ? undefined : args[index + 1];
   };
 
-  // Both variables or neither: a binary with no adapter config cannot be driven, and half a
+  // Both variables or neither: a binary with no agents table cannot be driven, and half a
   // configuration presented as a whole one is how a soft adapter gets treated as strict.
-  const executionPort = nonEmpty(env.ORCA_CCLOOP_BIN) && nonEmpty(env.ORCA_CCLOOP_ADAPTER_CONFIG) ? "configured" : "unconfigured";
+  // Agent selection spec §6.6: ORCA_AGENTS_TABLE replaces ORCA_CCLOOP_ADAPTER_CONFIG.
+  const executionPort = nonEmpty(env.ORCA_CCLOOP_BIN) && nonEmpty(env.ORCA_AGENTS_TABLE) ? "configured" : "unconfigured";
 
   const off = (): ControlOptionsResolution => ({ ...controlDisabled(), executionPort, rejection: null });
 

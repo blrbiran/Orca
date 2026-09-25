@@ -76,13 +76,13 @@ it("blocks recovery of a missing current checkpoint instead of selecting an olde
 // (handoff latching) that assertCapabilities also happens to check, not a successor to the deleted
 // booleans. The earlier version of this test mutated `handoffControl`, which the
 // `handoffControl!=="durable"` guard clause (budget.ts) also rejects -- so deleting the schema check
-// (`capabilitiesSchema.safeParse`, budget.ts) produced no red here. This version mutates
+// (`capabilitiesSchema.safeParse`, budget.ts; `capabilityViewSchema.safeParse` since agent selection) produced no red here. This version mutates
 // `contextObservation`, a field no guard clause after the schema check reads, so it pins the schema
 // check itself: only `capabilitiesSchema.safeParse` catches a boolean where an enum string is required.
 it("rejects a malformed peer capability answer the guard clauses never read",async()=>{
- const {ControlService}=await import("../../src/control/service.js");const {openTestStore,seedBudgetCase,caps}=await import("./fixtures/store.js");
+ const {ControlService}=await import("../../src/control/service.js");const {openTestStore,seedBudgetCase,caps,resolvedAs}=await import("./fixtures/store.js");
  const h=await openTestStore();try{seedBudgetCase(h.store);
-  const service=new ControlService(h.store,{capabilities:async()=>({...caps,contextObservation:false})} as never);
+  const service=new ControlService(h.store,{resolveAgent:async()=>resolvedAs({...caps,contextObservation:false} as never)} as never);
   await expect(service.claim("g1","T1")).rejects.toThrow("control-capability-unsupported");
   expect(h.store.db.prepare("SELECT count(*) AS n FROM runs").get()?.n).toBe(0);
  }finally{await h.dispose();}

@@ -8,7 +8,7 @@ import { git } from "../scheduler/gitExec.js";
 import type { ControlService, ExecutionProfileSelection } from "./service.js";
 import type { Candidate, Claim, ArtifactRef, Identity } from "./types.js";
 import type { ExecutionPort, ExecutionReport, StartEnvelope } from "./executionPort.js";
-import { allWork, readGroup, readWork, saveWork } from "./queries.js";
+import { allWork, readGroup, readWork, saveWork, workAgents } from "./queries.js";
 import { hasObservedUsage, readRun } from "./budget.js";
 import { hashPayload } from "./commands.js";
 import { readEnvelope } from "./dispatch.js";
@@ -22,8 +22,8 @@ import { ControlError } from "./errors.js";
 import { readConfirmedTaskExecution } from "./executionSnapshot.js";
 
 function claimOnly(c:Claim):Claim {
- const {groupId,workItemId,taskId,runId,generation,graphVersion,targetVersion,commandId,configHash,grant,ownerToken}=c;
- return {groupId,workItemId,taskId,runId,generation,graphVersion,targetVersion,commandId,configHash,grant,ownerToken};
+ const {groupId,workItemId,taskId,runId,generation,graphVersion,targetVersion,commandId,configHash,agent,grant,ownerToken}=c;
+ return {groupId,workItemId,taskId,runId,generation,graphVersion,targetVersion,commandId,configHash,agent,grant,ownerToken};
 }
 function identity(c:Identity) {
  const {groupId,workItemId,taskId,runId,generation,graphVersion,targetVersion}=c;
@@ -122,9 +122,13 @@ export function makeControlledExecution(service:ControlService,groupId:string,se
   mode:"controlled",
   preflight:async(round:Round)=>{
    if(selection&&!handoffSelection)throw new ControlError("profile-changed");
-   const port=selection?(await service.profiledCapabilities(groupId,selection)).profile.port:service.legacyExecutionPort();
-   if(handoffSelection)await service.profiledCapabilities(groupId,handoffSelection);
-   if(!selection)await service.legacyCapabilities(groupId);
+   // Agent selection (plan T7): before any claim exists, every frozen selection the round will dispatch is probed.
+   const port=selection?service.executionProfile(selection).port:service.legacyExecutionPort();
+   for(const agent of workAgents(service.store,groupId)){
+    if(selection)await service.profiledCapabilities(groupId,selection,agent);
+    if(handoffSelection)await service.profiledCapabilities(groupId,handoffSelection,agent);
+    if(!selection)await service.legacyCapabilities(groupId,agent);
+   }
    if(!port.readEvidence) throw new ControlError("control-evidence-unavailable");
    const group=readGroup(service.store,groupId);
    if(group.stopped) throw new ControlError("group-stopped");
@@ -154,7 +158,7 @@ export function makeControlledExecution(service:ControlService,groupId:string,se
      current.contract=contract;saveWork(service.store,groupId,current);
     }));
    } else if(!confirmed && hashPayload(contract)!==hashPayload(work.contract)) throw new ControlError("start-contract-conflict");
-   const root=service.write(()=>privateDirectory(plan.runsDir)),input:StartEnvelope={protocol:1,claim,contractHash:hashPayload(contract),inputCheckpoint:null,
+   const root=service.write(()=>privateDirectory(plan.runsDir)),input:StartEnvelope={protocol:2,claim,contractHash:hashPayload(contract),inputCheckpoint:null,
     work:{contract,targetRepo:await realpath(plan.targetRepo),base,sourceDir:join(root,claim.runId)}};
    if(selection)await service.startProfiled(selection,input);else await service.startLegacy(input);
    const report=await collectControlled(service,claim.runId);

@@ -8,7 +8,7 @@ import { readConfirmedTaskExecution } from "./executionSnapshot.js";
 import { privateDirectory } from "./paths.js";
 import { readGroup, saveGroup } from "./queries.js";
 import { ORCA_IDENTITY, git } from "../scheduler/gitExec.js";
-import { TERMINAL_OUTCOMES, cloneDirOf, latestAttemptSha, loopDirOf, runTask } from "../scheduler/ccloopRunner.js";
+import { AgentsRunRefused, TERMINAL_OUTCOMES, cloneDirOf, latestAttemptSha, loopDirOf, runTask } from "../scheduler/ccloopRunner.js";
 import { netChangeSet } from "../scheduler/harvest.js";
 import { markersRemaining, materialiseConflict, pinConflictCommit, rebuildMergeCommit, synthesizeReconcileContractOf } from "../scheduler/reconcile.js";
 import { blockRun, describeError, groupRepoId, readDriverRun, saveDriverRun, write, type DriverContext, type DriverRun, type ExecutionDriverDeps } from "./executionDriver.js";
@@ -282,7 +282,10 @@ export async function stepR(deps: ExecutionDriverDeps, runId: string, context: D
   const plan: PlanFile = { targetRepo: record.copyPath, ccloopBin: deps.ccloopBin, runsDir: record.runsDir, workBranch: `orca/${run.groupId}`, policy: "local-merge", ledgerMode: "out-of-repo", tasks: [] };
   const task: PlanTask = { taskId: record.reconcileRunId, contract: record.contractPath, dependsOn: [] };
   const running = runTask(plan, task, record.conflictCommit, record.reconcileRunId, {
-    adapter: "codex", adapterConfig: deps.adapterConfigPath,
+    // Agent selection spec §4.9. Agent selection plan T7 bridge -- T11 leaves it, plan T12 deletes this (plan P9) for
+    // the group's frozen reconcile slot (§6.1): until then, the conflicted run's own frozen selection and configHash,
+    // exactly what the reconciliation ran with before.
+    agentsTable: deps.agentsTablePath, agentSelection: { selection: run.agent, configHash: run.configHash },
     // Final review I3: its own process group, output in files inside its runs dir, unref'd -- the panel
     // closing (or a Ctrl-C to its process group) does not end it, and a restarted driver waits on its pid.
     detachedLogDir: workdir,
@@ -296,7 +299,9 @@ export async function stepR(deps: ExecutionDriverDeps, runId: string, context: D
     () => undefined,
     (error: unknown) => {
       // Controller ruling P7: only a run still reconciling is blocked from here, never one moved on since.
-      if (!context.stopped && readDriverRun(store, runId).state === "reconciling") blockRun(deps, runId, "R", `reconcile-spawn:${describeError(error)}`);
+      // Plan T6 ruling: a refusal (`ccloop run --agents` exit 1) is blocked under ccloop's own code, not as a spawn failure.
+      const reason = error instanceof AgentsRunRefused ? `reconcile-refused${error.refusal === null ? "" : `:${error.refusal}`}` : `reconcile-spawn:${describeError(error)}`;
+      if (!context.stopped && readDriverRun(store, runId).state === "reconciling") blockRun(deps, runId, "R", reason);
     },
   ).catch(() => undefined).finally(() => { context.reconciling.delete(runId); });
   context.reconciling.set(runId, running);

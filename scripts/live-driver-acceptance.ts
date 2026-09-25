@@ -24,6 +24,7 @@ import { mkdir, realpath, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { canonicalBytes } from "../src/control/canonicalJson.js";
+import { createCcloopExecutionPort } from "../src/control/ccloopPort.js";
 import { readArchivedPlan, readBudgetProposal } from "../src/control/queries.js";
 import { assembleControlRuntime, type ControlRuntime } from "../src/panel/controlAssembly.js";
 import { controlRepoKey, resolveControlOptions } from "../src/panel/controlOptions.js";
@@ -58,13 +59,15 @@ const g = (cwd: string, ...rest: string[]): string =>
   execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "core.hooksPath=/dev/null", ...rest], { cwd, encoding: "utf8" }).trim();
 const sha256 = (path: string): string => createHash("sha256").update(readFileSync(path)).digest("hex");
 
-/** ccloop's canonicalHash (ccloop src/control/protocol.ts): keys sorted by localeCompare, JSON, sha256. */
-function ccloopHash(value: unknown): string {
-  const canonical = (item: unknown): unknown => Array.isArray(item) ? item.map(canonical)
-    : item !== null && typeof item === "object"
-      ? Object.fromEntries(Object.entries(item as Record<string, unknown>).sort(([l], [r]) => l.localeCompare(r)).map(([k, v]) => [k, canonical(v)]))
-      : item;
-  return createHash("sha256").update(JSON.stringify(canonical(value))).digest("hex");
+/**
+ * Agent selection spec §4.2: the version `ccloop agents detect` would record -- the first `\d+.\d+.\d+(-…)?` in the
+ * stdout of `[...command, "--version"]`. The configHash is never computed here: ccloop answers it (spec I3).
+ */
+function versionOf(command: string[]): string {
+  const printed = execFileSync(command[0]!, [...command.slice(1), "--version"], { encoding: "utf8", input: "" });
+  const match = /\d+\.\d+\.\d+(-[\w.]+)?/.exec(printed);
+  if (!match) throw new Error(`no version in ${JSON.stringify(printed)}`);
+  return match[0];
 }
 
 /** Every path under `dir` with its size and mtime, so a touch shows up, not only a new file. */
@@ -96,11 +99,15 @@ const marker = join(root, "codex-marker.json");
 const scriptPath = join(root, "codex-script.json");
 await writeFile(scriptPath, JSON.stringify({ a: { files: { "answer.txt": "42\n" } } }));
 const fakeCodex = resolve(dirname(ccloopBin), "..", "tests", "fixtures", "fake-codex.mjs");
-const adapter = fake
-  ? { command: [process.execPath, fakeCodex, "script", marker, scriptPath], model: "fixture-model", budgetMode: "soft", sandbox: "workspace-write", timeoutMs: 120_000, killGraceMs: 5_000 }
-  : { command: [args.codex!], model: args.model!, budgetMode: "soft", sandbox: "workspace-write", timeoutMs: 120_000, killGraceMs: 5_000 };
-const adapterPath = join(root, "adapter.json");
-await writeFile(adapterPath, JSON.stringify(adapter), { mode: 0o600 });
+// Agent selection spec §4.2, §6.6: one codex installation in an agents table handed over as ORCA_AGENTS_TABLE; the
+// model is a selection field, and the plan's configHash is ccloop's answer for that selection.
+const codexCommand = fake ? [process.execPath, fakeCodex, "script", marker, scriptPath] : [args.codex!];
+const tablePath = join(root, "agents.json");
+await writeFile(tablePath, JSON.stringify({ schema: "ccloop-agents-table-v1", installations: {
+  codex: { kind: "codex", command: codexCommand, version: versionOf(codexCommand), configDir: null, timeoutMs: 120_000, killGraceMs: 5_000, sandbox: "workspace-write", budgetMode: "soft" },
+} }), { mode: 0o600 });
+const resolution = await createCcloopExecutionPort({ binary: ccloopBin, agentsTablePath: tablePath, timeoutMs: 60_000 })
+  .resolveAgent(fake ? { agent: "codex" } : { agent: "codex", model: args.model! });
 
 const check = 'test "$(cat answer.txt)" = 42';
 const contract = {
@@ -115,7 +122,7 @@ const contractPath = join(root, "contract-a.json");
 await writeFile(contractPath, canonicalBytes(contract));
 // The trusted control config requires the plan file inside its repository (controlConfig.ts, control-path-escape).
 const planPath = join(repo, "plan.json");
-await writeFile(planPath, JSON.stringify({ targetRepo: repo, ccloopBin, runsDir: join(root, "unused-runs"), workBranch: "orca/unused", policy: "local-merge", ledgerMode: "out-of-repo", goal: "live acceptance", successConditions: ["answer.txt holds 42"], tasks: [{ taskId: "a", contract: contractPath, dependsOn: [], targetVersion: 1, configHash: ccloopHash(adapter) }] }));
+await writeFile(planPath, JSON.stringify({ targetRepo: repo, ccloopBin, runsDir: join(root, "unused-runs"), workBranch: "orca/unused", policy: "local-merge", ledgerMode: "out-of-repo", goal: "live acceptance", successConditions: ["answer.txt holds 42"], tasks: [{ taskId: "a", contract: contractPath, dependsOn: [], targetVersion: 1, configHash: resolution.configHash }] }));
 
 // The shipped ccloop's capability answer; a null context window makes the estimate blocked-capability (spec §11 D1).
 const profilePath = join(root, "profile.json");
@@ -134,7 +141,7 @@ const humanBefore = human();
 
 const repoId = controlRepoKey("live");
 const repos = [{ projectKey: "live", path: repo }];
-const env: NodeJS.ProcessEnv = { ORCA_CONTROL_DIR: join(root, "control"), ORCA_CORRECTIONS_DIR: join(root, "corrections"), ORCA_CCLOOP_BIN: ccloopBin, ORCA_CCLOOP_ADAPTER_CONFIG: adapterPath };
+const env: NodeJS.ProcessEnv = { ORCA_CONTROL_DIR: join(root, "control"), ORCA_CORRECTIONS_DIR: join(root, "corrections"), ORCA_CCLOOP_BIN: ccloopBin, ORCA_AGENTS_TABLE: tablePath };
 process.env.ORCA_CORRECTIONS_DIR = env.ORCA_CORRECTIONS_DIR;
 const { rejection, ...control } = resolveControlOptions(["--plan", `plan=${repoId}=${planPath}`, "--profile", profilePath, "--estimator-profile", "all", "--estimate-mode", "soft", "--control-wake-ms", "200"], env, repos);
 if (rejection !== null) throw new Error(rejection);
@@ -149,7 +156,7 @@ const workStatus = (runtime: ControlRuntime): string =>
   JSON.parse(String(runtime.store.db.prepare("SELECT body FROM work_items WHERE group_id='g' AND id='a'").get()!.body)).status;
 
 const checks: Record<string, boolean> = {};
-const summary: Record<string, unknown> = { mode: fake ? "fake" : "live", model: adapter.model, groupTokens, taskTokens, deadlineMs, startedAt: new Date().toISOString(), root };
+const summary: Record<string, unknown> = { mode: fake ? "fake" : "live", model: resolution.selection.model, groupTokens, taskTokens, deadlineMs, startedAt: new Date().toISOString(), root };
 const runtime = await assembleControlRuntime({ control, repos, epoch: "epoch-live-1", env });
 if (runtime === null) throw new Error("the control plane did not assemble");
 const runsRoot = `${runtime.store.stateDir}.runs`;
@@ -158,6 +165,11 @@ try {
   await runtime.recover();
   const imported = await runtime.service.importPlan(raw(runtime, "import", "import-plan", { groupId: "g", repoId, planId: "plan" }));
   summary.imported = imported;
+  // Agent selection plan T7 bridge, TEMPORARY -- plan T11 freezes the task's selection at confirm and deletes this:
+  // nothing in the product writes a work item's selection before then, so the one the configHash came from is set.
+  for (const row of runtime.store.db.prepare("SELECT id,body FROM work_items WHERE group_id='g'").all()) {
+    runtime.store.db.prepare("UPDATE work_items SET body=? WHERE group_id='g' AND id=?").run(JSON.stringify({ ...JSON.parse(String(row.body)), agent: resolution.selection }), String(row.id));
+  }
   // A blocked-capability estimate leaves complex-1m-default allocations (task work 3M tokens, 3 attempts), and
   // confirm derives the contract's tokenBudget/maxAttempts/totalRuntimeBudgetMs from them, overriding the
   // contract's own. So the caps go in here, before confirm, as a human's proposal-edit -- the Web path.

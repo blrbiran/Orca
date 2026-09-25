@@ -5,6 +5,7 @@ import { basename, join } from "node:path";
 import { promisify } from "node:util";
 import type { TaskGraph } from "./graph.js";
 import type { PlanFile, PlanTask } from "./planFile.js";
+import type { AgentSelection } from "../control/agentSelection.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -45,7 +46,23 @@ export interface TaskRun {
   attemptSha: string | null;
 }
 
-export interface RunTaskOptions {
+interface RunTaskCommonOptions {
+  /**
+   * Execution driver spec §5.3(6): called with the ccloop process id as soon as it is spawned, so a
+   * caller can record it durably and, after its own restart, tell a live reconciliation from a dead one.
+   */
+  onSpawn?: (pid: number) => void;
+  /**
+   * Execution driver final review I3: when set, ccloop is spawned detached (its own process group leader),
+   * with stdout and stderr written to `ccloop.stdout.log` / `ccloop.stderr.log` (created 0600) in this
+   * directory instead of pipes, and unref'd -- so it outlives the process that spawned it, which a restarted
+   * caller then waits on by pid. Unset (`orca run`): attached and piped, exactly as before.
+   */
+  detachedLogDir?: string;
+}
+
+/** `orca run` (the legacy scheduler): `ccloop run --adapter <a> --adapter-config <file>`, unchanged by agent selection. */
+export interface AdapterRunTaskOptions extends RunTaskCommonOptions {
   /**
    * G13 / spec §1.2 rule 6: v1 runs entirely on `scripted` and spends no model
    * money. Passed rather than defaulted so the choice is visible at each call
@@ -59,18 +76,40 @@ export interface RunTaskOptions {
    * is a decision that belongs to the orchestration task, not to this module.
    */
   adapterConfig: string;
-  /**
-   * Execution driver spec §5.3(6): called with the ccloop process id as soon as it is spawned, so a
-   * caller can record it durably and, after its own restart, tell a live reconciliation from a dead one.
-   */
-  onSpawn?: (pid: number) => void;
-  /**
-   * Execution driver final review I3: when set, ccloop is spawned detached (its own process group leader),
-   * with stdout and stderr written to `ccloop.stdout.log` / `ccloop.stderr.log` (created 0600) in this
-   * directory instead of pipes, and unref'd -- so it outlives the process that spawned it, which a restarted
-   * caller then waits on by pid. Unset (`orca run`): attached and piped, exactly as before.
-   */
-  detachedLogDir?: string;
+}
+
+/**
+ * Agent selection spec §4.9 (the driver's reconciliation): `ccloop run --agents <table> --agent-selection <file>`.
+ * The selection file `{selection, configHash}` is written 0600 into the run's own workdir; ccloop materializes the
+ * selection against the table and refuses to run when the hash (or the installed version) no longer matches.
+ */
+export interface AgentsRunTaskOptions extends RunTaskCommonOptions {
+  agentsTable: string;
+  agentSelection: { selection: AgentSelection; configHash: string };
+}
+
+export type RunTaskOptions = AdapterRunTaskOptions | AgentsRunTaskOptions;
+
+/** The selection file's name inside a run's workdir. */
+export const AGENT_SELECTION_FILE = "agent-selection.json";
+
+/**
+ * Agent selection plan T6 ruling: `ccloop run --agents` exits 1 on every refusal (a stale configHash, a drifted
+ * version, a bad table or selection file) and 2 only for a run that completed without succeeding -- the opposite of
+ * `ccloop control`, whose named refusals exit 2. So this reads its own exit code: 1 is a refusal, named by the code
+ * its stderr starts with (null when the stderr names none), and no loop state is looked for.
+ */
+export class AgentsRunRefused extends Error {
+  constructor(readonly refusal: string | null, readonly stderr: string) {
+    super(`ccloop run --agents refused${refusal === null ? "" : `: ${refusal}`}`);
+    this.name = "AgentsRunRefused";
+  }
+}
+
+/** The error code a refusing `ccloop run --agents` printed first on stderr (`<code>[: <detail>]`), if any. */
+export function agentsRunRefusalCode(stderr: string): string | null {
+  const match = /^([a-z][a-z0-9]*(?:-[a-z0-9]+)+)(?::|\s|$)/.exec(stderr.trim());
+  return match ? match[1]! : null;
 }
 
 /**
@@ -275,18 +314,25 @@ export async function runTask(
   await writeFile(contractPath, JSON.stringify(rewritten, null, 2));
 
   await mkdir(loopDir, { recursive: true });
+  let agentArgs: string[];
+  if ("agentsTable" in options) {
+    const selectionPath = join(workdir, AGENT_SELECTION_FILE);
+    // "wx": the workdir is this run's alone, so an existing file is someone else's and is not overwritten.
+    await writeFile(selectionPath, JSON.stringify(options.agentSelection), { mode: 0o600, flag: "wx" });
+    agentArgs = ["--agents", options.agentsTable, "--agent-selection", selectionPath];
+  } else {
+    agentArgs = ["--adapter", options.adapter, "--adapter-config", options.adapterConfig];
+  }
   const spawned = await spawnCcloop(plan.ccloopBin, [
     "run",
     "--contract",
     contractPath,
     "--run-dir",
     loopDir,
-    "--adapter",
-    options.adapter,
-    "--adapter-config",
-    options.adapterConfig,
+    ...agentArgs,
   ], options.onSpawn, options.detachedLogDir);
 
+  if ("agentsTable" in options && spawned.code === 1) throw new AgentsRunRefused(agentsRunRefusalCode(spawned.stderr), spawned.stderr);
   const outcome = await readTerminalStatus(loopDir, spawned);
   const attemptSha = await latestAttemptSha(clone, runId);
   return { runId, workdir, outcome, attemptSha };

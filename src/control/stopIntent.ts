@@ -16,6 +16,7 @@ import type { Amount, HandoffRequest } from "./types.js";
 import type { ExecutionProfileRouter } from "./profiles.js";
 import type { AdmissionGate } from "./admissionGate.js";
 import type { ControlStore } from "./store.js";
+import type { AgentSelection } from "./agentSelection.js";
 
 export type StopMode = "pause" | "shutdown" | "handoff";
 export type StopState = "paused" | "handoff-pending" | "handoff-partial" | "handoff-unresolved" | "handoff-complete";
@@ -114,6 +115,8 @@ export interface RunBody {
   failureCode: string | null;
   executionProfile: { profileId: string; profileHash: string };
   handoffProfile: { profileId: string; profileHash: string } | null;
+  /** Absent on an estimate run, which has no agent selection (plan T10 gives it the estimator's). */
+  agent?: AgentSelection;
   [key: string]: unknown;
 }
 
@@ -559,7 +562,8 @@ export async function beginHandoffAttempt(deps: StopDeps, requestId: string): Pr
 
     if (prepared.execution === "model-assisted-v1") {
       const profile = profileRouter.resolve("handoff", run.handoffProfile!.profileId, run.handoffProfile!.profileHash);
-      const observed = await profileRouter.probe(profile);
+      // Agent selection spec §6.4: handoff has no slot; it is probed with the handed-off run's frozen selection.
+      const observed = await profileRouter.probe(profile, run.agent);
       const cap: CapabilityViewV1 = observed.observed;
       if (observed.probeFailureCode !== null || cap.handoffControl !== "durable" || cap.handoffExecution !== "model-assisted-v1") {
         const reasonCode = "handoff-capability-unavailable";
