@@ -260,3 +260,24 @@ Task 9 Fix round 1（commit 3351438，只改 handoffE2E.test.ts 判据本身）�
 - 主树：`vitest run` 四文件（handoffGuards、driverHandoff、handoffStop、driverContinuation）51/51 绿；全量 `vitest run --reporter=json` 1844/1845，唯一红为已知负载抖动 `controlShutdown` SIGTERM（`expected 143 to be +0`），单文件重跑 6/6 绿；`npm run typecheck` RC 0；web build RC 0。
 
 附带观察（只报不修）：T3-DEFER-1 的守卫在未变异时正确拒绝，但被拒的 run 随后由驱动环 `pass()` 的通用 catch 按 `stepOf` 重新标成 `blockedAt: "E"`（blocked 态的 `stepOf` 落到 default）；下一轮 `closeBlocked` 把 E 当「执行已结束」去 `savedReport`，抛 `control-terminal-pending` 并覆写 `blockedReason`。结果仍是 fail-closed（请求不结、任务不移交），但名字不再说真实原因。判据因此只跑一轮就量。
+
+---
+
+## Final fix wave — FR-C1／FR-C2（判据 commit 9f803ff、0794bf2；变异副本 clone 自 57baf0a）
+
+归属：终审修复席（Claude Opus 5.5，会话 session_018mArcQDZBWMymL3MHT6WzR），2026-09-25。上方各节原文不动，本节只追加。
+
+跑法：`git clone --local` 到 `scratchpad/ffix/orca`（HEAD 57baf0a），把修复后的四份文件 `cat >` 进副本并在副本里提交为基线 `aba8de1`（与主树 9f803ff／0794bf2 的四份文件 `cmp` 逐字节相同），软链 `node_modules`；基线 `runContinuable.test.ts`＋`blockedStaysPut.test.ts` 11/11 绿（`scratchpad/ffix/mut-base.log`）。变异由 `scratchpad/ffix/mutate.py` 逐条 apply（锚点命中数 1，`sha256` 前后不同）→ 跑两文件 → `git show HEAD:<file> > <file>` 还原；每条还原后 `git diff`／`git diff --cached` 均 **0 字节**（`mut-<ID>.apply.txt`）。
+
+| ID | 变异（删掉修复自身的哪一支） | 红集（python 读 `mut-<ID>.log`） |
+|---|---|---|
+| FF-C1a | `continuableRun` 删 `work.currentRunId !== run.runId` | 1 条：「offers only the newest link of a continuation chain…」— 前任 `continuable:true`（flags 的 `toEqual`） |
+| FF-C1b | `continuableRun` 删 `work.status !== "held"` | 1 条：同上判据 — 已登记未领取（`continuing`）的 run 仍 `continuable`（`toMatchObject({continuable:false})`） |
+| FF-C2 | catch 的「已 blocked 保留 `blockedAt`」一支改成 `if (false)`（回到 `stepOf`） | 4 条：`blockedStaysPut.test.ts` 全部 — `['blocked','E']` vs `C`；`[['blocked','E']]` vs `D`；retry 前 `every(...C)` 为假 |
+| FF-C2r | `laterError` 只返回新错误（丢原因前缀） | 2 条：「records the later error…」与「a conflict-parked run…」（`'control-terminal-pending'` vs `'reconcile-budget \| then: …'`） |
+| FF-C2g | `laterError` 不截旧的 `then:` 段（原因逐轮变长） | 1 条：「records the later error…, without growing it…」 |
+
+判定：五条全部见红，无等价变异。附注：probe2 形状（续跑已落地后再 stop）的判据在 C1a、C1b 单独变异下都不红 —— 该形状下两个条件任一都足以挡住前任；两个同删才红。每条条件各自已由链式判据钉红。
+
+测量命令（观测于 0794bf2 工作树）：主树 `vitest run --reporter=json` 全量 1851/1851（`scratchpad/ffix/gates/test.json`）；web `vitest run --reporter=json` 首跑 77/78，唯一红 `web/tests/controlCommandRecovery.test.tsx` > "drops the id when the lookup returns the command's retained result"（本轮未动 web），该文件单独重跑 3/3 次绿、web 全量重跑 78/78（`gates/web2.json`）；`npm run typecheck` RC 0；web build RC 0；`npm run --ws check` RC 0（78/78）。
+判定器：原版 `scratchpad/t10/check-handoff.py`（sha256 `143fe402…6e857`）对本轮 json RC 1（`runContinuable` 期望 5、实有 7）；更新副本 `scratchpad/ffix/check-handoff.py`（sha256 `352a77c3…6d5f`；`runContinuable` 7、新增 `blockedStaysPut` 4、G 加入 FLAKE 名单且计数检查在 `--flake-rerun-ok` 下对具名 flake 放行）RC 0；红证：翻一条 `blockedStaysPut` 为 failed ⇒ RC 1（即使带 `--flake-rerun-ok`）；翻 G ⇒ 不带 `--flake-rerun-ok` RC 1、带则 RC 0。ccloop json 沿用 T10 `gates/ccloop.json`（ccloop HEAD 仍 `acc9b4b`）。
