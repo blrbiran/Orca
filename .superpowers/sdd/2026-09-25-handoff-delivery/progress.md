@@ -109,3 +109,8 @@ Ruling: [FR-C2] 驱动环通用 catch 对已 blocked 的 run 保留原 blockedAt
 Ruling: [FR-I1] 冻结的 budget-estimate run 请求无消费方（上游既有）⇒ 登记进 handoff，本轮不修 — 超出本片范围（spec §2）— 若错：人对含在飞预估的组发 stop 会永停。
 Ruling: [FR-minor] T9 的 G 并入 FLAKE 名单；T6 两条与 M9「组永久停住」写进 handoff 登记；ccloop protocol.ts/types.ts 注释把推测写成事实 ⇒ 已发布，登记不改 — 若错：无。
 Final fix wave: dispatched (opus; Orca BASE 9b9ecd3)
+Final fix wave: DONE 9f803ff, 0794bf2, 0e149fd; full 1851/1851; checker（更新副本 scratchpad/ffix/check-handoff.py）RC 0
+Ruling: [FR-C2 偏离] 接受 blockedReason = "<原因> | then: <最新错误>"（原因作前缀保留，路由按前缀）而非字面保留 — 字面保留会打红未授权改写的 T3-DEFER-1 判据；schema 不变 — 若错：原因字段变长，含一段瞬时错误。
+Final fix wave: 新 flake 候选 web/tests controlCommandRecovery "drops the id when the lookup returns the command's retained result"（单跑 3/3 绿）⇒ 登记
+Final fix wave: scoped re-review dispatched
+Final fix wave: scoped re-review — all addressed, no new breakage ⇒ round complete
