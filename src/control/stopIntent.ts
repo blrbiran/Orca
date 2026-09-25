@@ -12,7 +12,7 @@ import { rearmFailedContinuation } from "./continuation.js";
 import { resumeBlockedDriverRun } from "./driveRecord.js";
 import { dispatchEnvelopeSchema, type CapabilityViewV1, type CommandErrorBodyV1, type CommandSuccessV1, type RawAuthorityCommandV1 } from "./webProtocol.js";
 import { idSchema, safeInteger, canonicalTimestampSchema } from "./schema.js";
-import type { Amount } from "./types.js";
+import type { Amount, HandoffRequest } from "./types.js";
 import type { ExecutionProfileRouter } from "./profiles.js";
 import type { AdmissionGate } from "./admissionGate.js";
 import type { ControlStore } from "./store.js";
@@ -51,7 +51,7 @@ const MAX_STOP_INSTANT = "9999-12-31T23:59:59.999Z";
 export const HANDOFF_DEADLINE_MS = 30 * 60_000;
 const OPEN_STATES = ["request-pending", "latched", "collecting"];
 /** An outcome-unknown request still owns its run, so a later stop joins it rather than opening a second one. */
-const ADOPTABLE_STATES = [...OPEN_STATES, "outcome-unknown"];
+export const ADOPTABLE_STATES = [...OPEN_STATES, "outcome-unknown"];
 const SETTLED_STATES = ["settled-recoverable", "settled-restartable", "settled-unrecoverable"];
 
 const stopIntentBodySchema = z
@@ -76,7 +76,7 @@ const handoffRequestBodySchema = z
   })
   .strict();
 
-type HandoffRequestBody = z.infer<typeof handoffRequestBodySchema>;
+export type HandoffRequestBody = z.infer<typeof handoffRequestBodySchema>;
 export type GroupBody = {
   groupId: string;
   status: string;
@@ -189,7 +189,7 @@ export function readHandoffRequest(store: ControlStore, groupId: string, request
 }
 
 /** The newest request a run owns is the only one a stop may act on. */
-function latestRequestForRun(store: ControlStore, groupId: string, runId: string): HandoffRequestBody | null {
+export function latestRequestForRun(store: ControlStore, groupId: string, runId: string): HandoffRequestBody | null {
   const row = store.db.prepare("SELECT id FROM handoff_requests WHERE group_id=? AND run_id=? ORDER BY rowid DESC LIMIT 1").get(groupId, runId);
   return row ? readHandoffRequest(store, groupId, String(row.id)).request : null;
 }
@@ -286,7 +286,15 @@ export function freezeRun(store: ControlStore, groupId: string, runId: string, s
   const run = readRunBody(store, runId);
   const existing = latestRequestForRun(store, groupId, runId);
   if (existing) {
-    if (!ADOPTABLE_STATES.includes(existing.state)) return blocked("handoff-request-already-settled");
+    if (!ADOPTABLE_STATES.includes(existing.state)) {
+      // Handoff delivery spec §13.1 C-5 (human ruling 2026-09-25) with Web spec §6.2: an active run whose request
+      // already settled is a contradiction to record, not a reason to refuse the whole stop -- the group's other
+      // runs still have to stop. It never opens a second request for the run.
+      store.db.prepare("INSERT INTO recovery_blockers(id,group_id,run_id,scope,code,body) VALUES (?,?,?,'run','handoff-request-already-settled',?) ON CONFLICT(id) DO NOTHING")
+        .run(`handoff-settled-active:${runId}:${existing.requestId}`, groupId, runId, canonicalBytes({ evidenceIds: [] }).toString("utf8"));
+      recordProjectionChange(store, [groupId]);
+      return existing.requestId;
+    }
     return adoptRequest(store, groupId, run, existing, desired, acceptedAt, deadlineAt, origin);
   }
   const request: HandoffRequestBody = {
@@ -619,7 +627,7 @@ function requestedGroup(store: ControlStore, requestId: string): string {
   return String(row.group_id);
 }
 
-function settleHandoffRequestInTransaction(
+export function settleHandoffRequestInTransaction(
   deps: StopDeps,
   groupId: string,
   requestId: string,
@@ -657,6 +665,25 @@ function terminaliseRun(store: ControlStore, groupId: string, run: RunBody, outc
     return;
   }
   const work = readWork(store, groupId, run.workItemId) as unknown as { status: string; grant: { work: Amount; handoff: Amount } };
+  if (outcome === "settled-restartable") {
+    // Handoff delivery spec §11 I9, §13.2 C-6, Minor a (controller decisions, 2026-09-25): a run proved never to
+    // have started keeps the task's commitment -- nothing is released. A plain run's task is claimable again and
+    // its allocation stays `confirmed`; a continuation gives the task back to the predecessor it continued, so
+    // that predecessor's checkpoint can be chosen again (otherwise its half-done work is silently dropped).
+    const record = work as unknown as { status: string; currentRunId: string | null; pendingRunId: string | null; continuation?: { continuationIntentId: string; predecessorRunId: string } | null };
+    const continuationIntentId = typeof run.continuationIntentId === "string" ? run.continuationIntentId : null;
+    if (continuationIntentId !== null) {
+      const registered = record.continuation ?? null;
+      if (registered === null || registered.continuationIntentId !== continuationIntentId) return blocked(`restartable-continuation:${run.runId}`);
+      Object.assign(record, { status: "held", currentRunId: registered.predecessorRunId, pendingRunId: null, continuation: null });
+      saveWork(store, groupId, record as never);
+      setAllocationStates(store, groupId, run.workItemId, "held");
+      return;
+    }
+    record.status = "ready";
+    saveWork(store, groupId, record as never);
+    return;
+  }
   if (outcome === "settled-unrecoverable") {
     setAllocationStates(store, groupId, run.workItemId, "terminal");
     work.status = "blocked";
@@ -728,4 +755,35 @@ export function readFrozenSnapshotHash(store: ControlStore, groupId: string): st
   const proposal = readBudgetProposal(store, groupId);
   if (proposal.state !== "confirmed" || proposal.executionSnapshotHash === null) throw new ControlError("group-state-invalid");
   return proposal.executionSnapshotHash;
+}
+
+/**
+ * Handoff delivery spec §11 C1 (with §13.2 I-1): a frozen run the driver settled through its own E step already
+ * has its final run, work and allocation state; its request then settles recoverably on its own. Never
+ * `terminaliseRun`, which would park a finished task as `held`. Idempotent: a closed request is left alone.
+ */
+export function settleCompletedRunRequestInTransaction(store: ControlStore, groupId: string, requestId: string): void {
+  const request = readHandoffRequest(store, groupId, requestId).request;
+  if (!ADOPTABLE_STATES.includes(request.state)) return;
+  saveHandoffRequest(store, groupId, { ...request, state: "settled-recoverable", failureCode: null });
+  const intent = readStopIntent(store, groupId);
+  if (intent && intent.mode !== "pause") rewriteStopIntentState(store, groupId, intent, deriveStopState(store, groupId, intent.frozenRunIds));
+}
+
+const handoffOutboxSchema = z.object({
+  desiredRequestId: z.string().min(1), requestId: idSchema, groupId: idSchema, runId: idSchema, generation: safeInteger.positive(),
+  origin: z.enum(["handoff", "shutdown"]), acceptedAt: canonicalTimestampSchema, deadlineAt: canonicalTimestampSchema,
+}).strict();
+
+/**
+ * Handoff delivery spec §13.2 I-10 (controller decision): the request the driver sends ccloop is rebuilt from the
+ * request's original outbox row, never from the request row -- `adoptRequest` and `deliverHandoffStop` shorten
+ * the row's deadline, and ccloop judges a replay by the whole request's canonical hash, so only the first bytes
+ * replay safely. A shortened deadline therefore never reaches ccloop (registered, spec §11 I4).
+ */
+export function handoffRequestFromOutbox(store: ControlStore, requestId: string): HandoffRequest {
+  const row = store.db.prepare("SELECT body FROM outbox WHERE kind='handoff-request' AND json_extract(body,'$.requestId')=? ORDER BY rowid LIMIT 1").get(requestId);
+  if (!row) return blocked(`handoff-outbox-missing:${requestId}`);
+  const body = parseStored(handoffOutboxSchema, String(row.body), "handoff-outbox-invalid");
+  return { protocol: 1, requestId: body.requestId, runId: body.runId, generation: body.generation, reason: body.origin === "shutdown" ? "shutdown" : "human", deadlineAt: body.deadlineAt };
 }

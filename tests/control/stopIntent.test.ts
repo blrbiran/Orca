@@ -329,14 +329,20 @@ describe("one open handoff request per run and generation", () => {
     } finally { await h.dispose(); }
   });
 
+  // Handoff delivery (human ruling 2026-09-25, spec §12: this slice may rewrite criteria; ruling 88 (b)(c)): spec §13.1 C-5 --
+  // an active run whose only request already settled is recorded as a run-scope recovery blocker (Web spec §6.2) and the
+  // stop is not refused as a whole; the run still never gets a second request.
   it("treats an active run whose only request already settled as a recovery blocker, not as permission for a second request", async () => {
     const { h, service } = await startedFixture(); try {
       const runId = workRuns(h.store).find((run) => run.phase === "work")!.runId;
       const existing = seedRequest(h.store, "g", runId, "settled-recoverable", "2026-09-20T11:00:00.000Z");
       const result = await service.handoffStop(h.command("handoff-stop", {}));
-      expect(result).toMatchObject({ error: { code: "recovery-blocked" } });
+      if ("error" in result || result.result.kind !== "handoff-stopped") throw new Error(`handoff-stop refused: ${JSON.stringify(result)}`);
+      expect(result.result.requestIds).toEqual([existing]);
       expect(requests(h.store).map((request) => request.requestId)).toEqual([existing]);
-      expect(readStopIntent(h.store, "g")).toBeNull();
+      expect(h.store.db.prepare("SELECT run_id,scope,code FROM recovery_blockers WHERE group_id='g'").all().map((row) => ({ ...row })))
+        .toEqual([{ run_id: runId, scope: "run", code: "handoff-request-already-settled" }]);
+      expect(readStopIntent(h.store, "g")).toMatchObject({ mode: "handoff", frozenRunIds: [runId] });
     } finally { await h.dispose(); }
   });
 });

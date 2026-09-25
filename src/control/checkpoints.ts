@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { open, readFile } from "node:fs/promises";
-import { existsSync, readFileSync, renameSync } from "node:fs";
+import { existsSync, readFileSync, renameSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import type { ControlStore } from "./store.js";
 import type { Candidate, ArtifactRef } from "./types.js";
@@ -12,6 +12,7 @@ import { readGroup, readWork, saveGroup, saveWork } from "./queries.js";
 import { privateDirectory, syncDirectory, assertRegular } from "./paths.js";
 import { candidateSchema } from "./schema.js";
 import { hashPayload } from "./commands.js";
+import { canonicalBytes } from "./canonicalJson.js";
 export interface CommitDependencies {
  afterArchive?:()=>Promise<void>;
  afterTransaction?:()=>Promise<void>;
@@ -41,10 +42,18 @@ export async function acceptanceEvidence(store:ControlStore,runId:string):Promis
  const proof=JSON.parse((await readArtifact(store,record.source as ArtifactRef)).toString());
  return record.runId===runId && record.accepted===true && proof.runId===runId && proof.checksPassed===true && proof.landing==="landed";
 }
+/** Handoff delivery spec §13.2 C-1 (preflight I11): the atomic staging write both checkpoint persisters share,
+ * parameterized by the byte form each one owns (`JSON.stringify(c)` here, `canonicalBytes(c)` for the H-settle
+ * writer) -- everything after the write differs in how each one treats an existing file, so it stays put. */
+async function writeCheckpointStaging(dir:string,bytes:Buffer):Promise<string> {
+ const temp=join(dir,".staging-"+randomUUID());
+ const file=await open(temp,"wx",0o600);try{await file.writeFile(bytes);await file.sync();}finally{await file.close();}
+ return temp;
+}
 async function persistImmutableCheckpoint(store:ControlStore,c:Candidate):Promise<{checkpointId:string;hash:string}> {
  const dir=privateDirectory(join(store.stateDir,"checkpoints",c.runId)),path=join(dir,c.checkpointId+".json");
- const bytes=Buffer.from(JSON.stringify(c)),temp=join(dir,".staging-"+randomUUID());
- const file=await open(temp,"wx",0o600);try{await file.writeFile(bytes);await file.sync();}finally{await file.close();}
+ const bytes=Buffer.from(JSON.stringify(c));
+ const temp=await writeCheckpointStaging(dir,bytes);
  // The service owns this directory. Keep the final existence check and rename in
  // one synchronous section so concurrent commits cannot replace immutable IDs.
  store.assertOwner();
@@ -127,4 +136,22 @@ export async function repairAcceptedWork(store:ControlStore,runId:string,deps:{a
   work.status="done";saveWork(store,run.groupId,work);
  });
  deps.admit?deps.admit(repair):repair();
+}
+
+/**
+ * Handoff delivery spec §13.2 C-1 (controller decision): a handoff checkpoint's file and its row body are one and
+ * the same canonical bytes, and its hash is sha256Canonical(candidate) -- the only identity that
+ * readCommittedCheckpoint (file == body), exportResumeBundle (JSON.stringify(JSON.parse(file))) and
+ * assertPredecessor (sha256Canonical) all accept. persistImmutableCheckpoint's JSON.stringify(c) keeps the
+ * schema's key order and fails assertPredecessor by construction. Idempotent on equal bytes.
+ */
+export async function persistCanonicalCheckpoint(store:ControlStore,candidate:Candidate):Promise<{checkpointId:string;hash:string;body:string}> {
+ const c=candidateSchema.parse(candidate),bytes=canonicalBytes(c),hash=createHash("sha256").update(bytes).digest("hex");
+ const dir=privateDirectory(join(store.stateDir,"checkpoints",c.runId)),path=join(dir,c.checkpointId+".json");
+ const same=():boolean=>{assertRegular(path);if(!readFileSync(path).equals(bytes))throw new ControlError("checkpoint-id-conflict");return true;};
+ if(existsSync(path)&&same())return {checkpointId:c.checkpointId,hash,body:bytes.toString("utf8")};
+ const temp=await writeCheckpointStaging(dir,bytes);
+ store.assertOwner();
+ if(existsSync(path)){unlinkSync(temp);same();}else{renameSync(temp,path);syncDirectory(dir);}
+ return {checkpointId:c.checkpointId,hash,body:bytes.toString("utf8")};
 }

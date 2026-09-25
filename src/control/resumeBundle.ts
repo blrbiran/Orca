@@ -72,19 +72,28 @@ async function rereadRegular(path: string, expectedHash?: string): Promise<Buffe
   return bytes;
 }
 
-export async function exportResumeBundle(store: ControlStore, input: { predecessorRunId: string; newSourceDir: string }, deps: ResumeBundleDependencies = {}): Promise<InputCheckpointV1> {
-  if (!isAbsolute(input.newSourceDir)) throw new ControlError("resume-source-dir-not-absolute");
-  const run = readRun(store, input.predecessorRunId);
-  if (run.state !== "settled" || !run.recoverable || !run.checkpointId) throw new ControlError("resume-predecessor-unrecoverable");
-  const checkpoint = await readCommittedCheckpoint(store, input.predecessorRunId);
-  // Ruling (2026-09-22, §6.3 correction): a bundle exists to continue from a checkpoint, so what
-  // has to be whole here is the snapshot and the evidence, not the predecessor's terminal outcome.
-  if (checkpoint.missing.length || !checkpoint.snapshot) throw new ControlError("resume-predecessor-unrecoverable");
-
+/** The predecessor's committed checkpoint, verified against the `checkpoints` row's hash -- the identity check
+ * both `exportResumeBundle` and `readExistingResumeBundle` need before doing anything else with it. */
+async function readVerifiedCheckpoint(
+  store: ControlStore, predecessorRunId: string,
+): Promise<{ checkpoint: Awaited<ReturnType<typeof readCommittedCheckpoint>>; checkpointBytes: Buffer; checkpointHash: string }> {
+  const checkpoint = await readCommittedCheckpoint(store, predecessorRunId);
   const checkpointBytes = Buffer.from(JSON.stringify(checkpoint));
   const checkpointHash = sha256(checkpointBytes);
   const row = store.db.prepare("SELECT hash FROM checkpoints WHERE id=? AND run_id=?").get(checkpoint.checkpointId, checkpoint.runId);
   if (!row || String(row.hash) !== checkpointHash) throw new ControlError("checkpoint-hash-mismatch");
+  return { checkpoint, checkpointBytes, checkpointHash };
+}
+
+export async function exportResumeBundle(store: ControlStore, input: { predecessorRunId: string; newSourceDir: string }, deps: ResumeBundleDependencies = {}): Promise<InputCheckpointV1> {
+  if (!isAbsolute(input.newSourceDir)) throw new ControlError("resume-source-dir-not-absolute");
+  const run = readRun(store, input.predecessorRunId);
+  // Handoff delivery spec §11 C2: a Web predecessor settled by the driver's H-settle is `settled-recoverable`.
+  if ((run.state !== "settled" && (run.state as string) !== "settled-recoverable") || !run.recoverable || !run.checkpointId) throw new ControlError("resume-predecessor-unrecoverable");
+  const { checkpoint, checkpointBytes, checkpointHash } = await readVerifiedCheckpoint(store, input.predecessorRunId);
+  // Ruling (2026-09-22, §6.3 correction): a bundle exists to continue from a checkpoint, so what
+  // has to be whole here is the snapshot and the evidence, not the predecessor's terminal outcome.
+  if (checkpoint.missing.length || !checkpoint.snapshot) throw new ControlError("resume-predecessor-unrecoverable");
 
   const snapshotBytes = await readArtifact(store, checkpoint.snapshot);
   const parsed = snapshotSchema.safeParse(JSON.parse(snapshotBytes.toString()));
@@ -150,4 +159,19 @@ export async function exportResumeBundle(store: ControlStore, input: { predecess
   } finally {
     await rm(staging, { recursive: true, force: true });
   }
+}
+
+/**
+ * Handoff delivery spec §11 I5: exportResumeBundle is not idempotent (a second export is `resume-bundle-exists`),
+ * so a continuation whose A2 died after exporting reuses the published bundle -- re-verified against the
+ * predecessor's committed checkpoint before its identity is handed to ccloop again.
+ */
+export async function readExistingResumeBundle(store: ControlStore, input: { predecessorRunId: string; newSourceDir: string }): Promise<InputCheckpointV1> {
+  const { checkpoint, checkpointHash } = await readVerifiedCheckpoint(store, input.predecessorRunId);
+  const bundlePath = join(input.newSourceDir, "input", checkpoint.checkpointId);
+  const manifest = JSON.parse((await rereadRegular(join(bundlePath, "resume-bundle.json"))).toString()) as ResumeBundleV1;
+  if (manifest.protocol !== 1 || manifest.predecessorRunId !== input.predecessorRunId || manifest.checkpointId !== checkpoint.checkpointId
+    || manifest.checkpointHash !== checkpointHash) throw new ControlError("resume-bundle-hash-mismatch");
+  await rereadRegular(join(bundlePath, "checkpoint.json"), checkpointHash);
+  return { predecessorRunId: input.predecessorRunId, checkpointId: checkpoint.checkpointId, checkpointHash, bundlePath };
 }
