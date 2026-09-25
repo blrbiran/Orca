@@ -2,11 +2,11 @@ import { describe, expect, it } from "vitest";
 import { capabilityViewSchema } from "../../src/control/webProtocol.js";
 
 // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): the protocol-2 payload
-// (`capabilitiesSchema`, the view plus a protocol tag) is gone. Capabilities protocol 3 carries the eight-field view
+// (`capabilitiesSchema`, the view plus a protocol tag) is gone. Capabilities protocol 3 carries the seven-key view
 // untagged inside one selection's resolution (spec §4.6), so this now pins that the view stays closed: no tag of any
 // protocol, no retired v1 field, no value outside the vocabulary.
 describe("capabilityViewSchema", () => {
-  it("is the closed eight-field view that capabilities protocol 3 carries untagged", () => {
+  it("is the closed seven-key view that capabilities protocol 3 carries untagged", () => {
     const view = {
       usageObservation: "phase-end",
       budgetEnforcement: "soft",
