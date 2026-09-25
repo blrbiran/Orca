@@ -1,0 +1,344 @@
+# Agent 选择：安装表、分层默认值、claude 走 ccloop control —— 设计
+
+> **归属**：Orca 控制器会话 `75ec878e`（Claude Opus 5.5），2026-09-26。
+> **人裁（本会话逐项点选或原话）**：
+> - 「claude 走 ccloop control 模式」扩为：每个用户可设默认 agent、默认 model、默认上下文长度；task 等各层可覆盖；同一次 ccloop run 用同一组值；为 opencode／oh-my-pi／pi／litellm 多 provider 预留接口；subagent 级切换「不排除后续」。
+> - 拆分：「片 1 ＋ 片 2 合并一轮」（agent 接口的缝＋claude 实现，与分层默认值同轮）。
+> - 「用户」＝「身份先留接口」：按本机操作者实现，偏好按 `operatorId` 分键。
+> - 冻结方式：「A＋C 合并」（安装表是机器事实、选择随 envelope 下发），「不介意大改，想要为以后打好基础，项目暂时没有上线」。
+> - 安装表：「各个 agent 有一个默认的文件，先检测本机安装的 agent，再基于安装表微调」，参考 cc-switch（人授权读其源码）。
+> - 第 1 节（概念与分层）、第 2 节（ccloop 侧，含三点：`--adapter` 形态直接换掉、`configHash` 重定义为物化配置的哈希、stream-json 延后）、第 3 节（Orca 侧）、第 4 节（错误、判据、不做的事）逐节同意。
+> - profile 升 v2、删 adapter 身份字段：「同意删」。面板 UI：「本轮做全」。
+>
+> **观测锚点**：Orca 主题行 `docs(handoff): the handoff delivery round is done; claude over control is next` 那一笔；
+> ccloop 主题行 `docs(handoff): roll the Orca section: C5-C7 and C-3 landed here for the handoff delivery round` 那一笔。
+> **行号会移动 ⇒ 引用前现测。** 标「**控制器决定**」的是人没逐条点过、按 Rule 1 自决的；标「**Task 0 现量**」的是写 spec 时未量清、计划第一个 Task 必须先量并据实改落点的。
+> 上游 spec：`2026-09-25-handoff-delivery-design.md`（§13.4 ＞ §13 ＞ §12 ＞ §11 ＞ 正文）、`2026-09-25-execution-driver-design.md`（§11、§12 优先）、`2026-09-19-web-recoverable-control-design.md`。
+
+---
+
+## 1. 问题（现量）
+
+### 1.1 ccloop control 只接 codex
+
+- `src/control/command.ts:123`：`if (argv[2] !== "codex") throw new Error("control-adapter-unsupported")`。
+- `src/control/accept.ts:91`、`src/control/worker.ts:107`：`parseCodexConfig(...)`；`worker.ts:153`：`runLoop(contract, runDir, () => new CodexAdapter(config), …)`。
+- `capabilities` 答一份与配置无关的常量（`command.ts` 的 `defaultHandler`），`contextWindowTokens: null`。
+
+### 1.2 🔴 现有 claude 适配器放进 control 会让停机证明空洞成立
+
+`src/runtime/claude/subprocessClaudeAdapter.ts` 的 `runPhase`：非 `detached` spawn、只对子进程发 `SIGTERM`、**从不调 `context.onProcessRegistered`**。而：
+
+- `src/control/stopProof.ts` 的 `probeAll(processes, probe)` 对空数组恒 `true` ⇒ 在 claude 下 `processes.json` 恒为 `[]`，**`isolated: true` 空洞成立**（跨仓词表不一致第五次：「isolated」＝「所有已注册进程组都静默」，零注册时它不再意味着隔离）。
+- `worker.ts` 的「prompt 前闩住」检查（`control-handoff-latched-before-prompt`）挂在 `onProcessRegistered` 上 ⇒ claude 下永不触发。
+
+### 1.3 usage 也只在阶段末
+
+`scripts/claude-phase-runner.mjs` 用 `claude -p --output-format json`，usage 取自最后一次性打出的信封（`buildUsageEvidence`）⇒ 阶段被中止时没有可观测的 usage，与真 codex 同形（④ 的 D-C3）。
+
+### 1.4 Orca 侧写死 codex 的地方
+
+`src/panel/controlAssembly.ts:135`（选端口）、`src/control/ccloopPort.ts:33-35`（端口选项与校验）、`src/control/executionPort.ts:24`、`src/control/driverLanding.ts:285`（解冲突 `ccloop run`）、`src/control/webProtocol.ts:143`（profile 只对 codex 加约束）。
+
+### 1.5 选择表达不出来，profile 的 adapter 身份没绑到任何东西
+
+- 一个面板只有一份 `ORCA_CCLOOP_ADAPTER_CONFIG`；任务的 `configHash` 来自人手写的 plan 文件（`src/scheduler/planFile.ts` 的 `planTaskSchema`），且必须等于那唯一一份配置的 canonical hash（ccloop `accept.ts` 核）⇒ **「按任务换模型」今天表达不出来**。
+- execution profile 快照声明了 `adapter`／`adapterConfigRef`／`modelPolicyRef` 与 `resolved.adapterConfigContentHash` 等（`webProtocol.ts` 的 `executionProfileSnapshotSchema`），但 `src/` 里**没有任何代码**把它们与端口实际用的配置对上（`grep adapterConfigRef src` 只命中 schema 定义）。
+
+### 1.6 已经具备、本设计复用的
+
+- **冻结机制**：claim 的 `configHash` 在 ccloop accept 时核对；Orca 的 continuation（`continuation.ts:35`）、驱动环（`executionDriver.ts:314`）、dispatch（`dispatch.ts:24`）都按 `configHash` 相等核身份 ⇒ **「同一次 run 同一组值」已被机械保证**，只要让 `configHash` 覆盖选择。
+- **命令台账**：`set-workspace-mode`（`src/control/workspaceSettings.ts`）是「操作者设置走 `orca-raw-command-v1`、带 `expectedRevision`」的现成形状。
+- **提案版本**：`proposal-edit` 推进 `proposalVersion`，`confirm` 绑定 `proposalVersion`（`webProtocol.ts` 的 `confirmPayloadSchema`）。
+
+### 1.7 cc-switch 的参考（人授权读源码，`/Users/biran/code/skills/cc-switch`；控制器抽查三处引用已核）
+
+- 支持的 app：`src-tauri/src/app_config.rs` 的 `enum AppType`（Claude／ClaudeDesktop／Codex／Gemini／GrokBuild／OpenCode／OpenClaw／Hermes／Pi／Mcode）。**没有一张统一的 agent 注册表**，二进制名、配置目录、npm 包分散在十几个文件里。
+- 探测（`src-tauri/src/commands/misc.rs`）：先在登录 shell 跑 `<tool> --version`（exit 127 ＝ 没装）；没找到再按 `build_tool_search_paths` 的候选目录扫（`~/.local/bin`、npm-global、`~/n/bin`、volta、mise、homebrew、fnm、nvm，外加每种 agent 自己的目录），最后扫 PATH；版本用正则 `\d+\.\d+\.\d+(-[\w.]+)?` 取。
+- 多份安装全列：`enumerate_tool_installations` ＋ `struct ToolInstallation { path, version, runnable, error, source, is_path_default, real }` —— **本设计安装表的行模板**。
+- 1M 上下文：`claude_desktop_config.rs` 的 `ONE_M_CONTEXT_MARKER = "[1m]"`，写在 model 名的后缀上；代理转发时剥掉后缀、改发 beta header。
+- 导入：首次运行把现有配置导入为 `default`；补齐缺失的字段，**从不覆盖已有值**。
+- cc-switch **不认** `CLAUDE_CONFIG_DIR`／`CODEX_HOME`；本设计认。
+
+---
+
+## 2. 范围
+
+**做**：
+1. ccloop：agent 注册表（描述、安装表 schema、探测、选择校验、适配器工厂）；`ccloop agents detect|validate`；`control` 改为 `--agents <table>`；envelope v2（claim 带选择）；`capabilities` 带选择；新 `ClaudeAgentAdapter`（进程组注册）；fake claude 与 fake codex 对等；`ccloop run` 加 `--agents --agent-selection`。
+2. Orca：四层解析（出厂 → 操作者 → 组 → 任务）、三个槽位（worker／estimator／reconcile）、确认时冻结、profile v2、端口改为「一个二进制＋一张表」、`orca agents init|show`、plan 文件 `agent` 字段（删 `configHash`）、两个新命令动词、面板设置页与提案视图的选择编辑。
+3. 驱动环 E2E（fake claude＋fake codex 混组）与全套门。
+
+**不做**（每条都登记在 §11）：真 claude 付费跑；stream-json 逐条 usage；opencode／oh-my-pi／pi／litellm 的实际接入（只留注册表接口）；subagent 级切换；多用户身份与鉴权；删旧的 `SubprocessClaudeAdapter`；`capabilities` 计算化（`requestBoundProof` 仍 `null`）；⑤ 预算预估链；strict 组。
+
+---
+
+## 3. 概念
+
+| 概念 | 是什么 | 住在哪 | 谁写 |
+|---|---|---|---|
+| **Agent 描述**（descriptor） | 每种 agent kind 一项：二进制名、候选目录顺序、版本探测命令、配置目录及其环境变量、出厂默认 model、能表达的上下文档位、`validateSelection`、`createAdapter` | ccloop 代码常量（`src/agents/`） | 随代码发布 |
+| **安装表**（installation table） | 按 `installationId` 分键：`{kind, command, version, timeoutMs, killGraceMs, …kind 专属字段}` | 一个 JSON 文件，Orca 默认 `~/.orca/agents.json`，可由 `ORCA_AGENTS_TABLE` 改道（§8） | `agents detect` 出草稿，人（或代劳的 agent）微调 |
+| **选择**（selection，`agent-selection-v1`） | `{agent: installationId, model: string, contextWindowTokens: positiveSafeInteger \| null}` | 解析后冻结在 work item 与 start envelope claim 里 | 由分层解析得出 |
+| **偏好层** | 各层对选择的部分覆盖（只写想覆盖的字段） | 见 §6.2 | 操作者、plan 文件、面板 |
+| **物化配置** | `{schema: "ccloop-agent-config-v1", kind, installation: <表里那一条>, selection: <填满默认值后>}` | 只存在于计算中与 ccloop `<sourceDir>/control/config.json` | ccloop 计算 |
+
+**不变量**：
+- **I1**：一次 ccloop run 从 accept 到 settle 只用一份物化配置；它的 canonical hash 就是 claim 的 `configHash`。续跑、解冲突继承同一份选择（解冲突用组的 reconcile 槽，§6.1）。
+- **I2**：model 与上下文对 Orca 是**不透明值**；只有该 kind 的 `validateSelection` 判断能否表达、`createAdapter` 负责翻译成 CLI 参数。Orca 不据上下文长度截断、压缩或估算。
+- **I3**：**物化规则只住在 ccloop 一处**（Rule 5）。Orca 不重算 `configHash`，一律从 `control capabilities` 的应答里拿。
+- **I4**：安装表里**不放密钥**。将来 provider 类记录（如 litellm 端点）只存环境变量**名**。
+
+**为以后预留的接口**：
+- 新 agent kind ＝ 一个描述 ＋ 一个适配器，注册进 `src/agents/registry.ts`；Orca 零改动（kind 对 Orca 也是不透明值，面板从 `agents show` 的应答里取列表）。
+- 多 provider：同一 kind 的第二条安装记录（例：`{id: "claude-litellm", kind: "claude", env: {ANTHROPIC_BASE_URL: …}, secretEnv: ["ANTHROPIC_AUTH_TOKEN"]}`），**选择层不改**；model 字符串（如 `litellm/anthropic/claude-…`）由该 kind 的适配器解释。`env`／`secretEnv` 两个字段**本轮不实现**，schema 以 `.strict()` 拒收，届时随 provider 那一片一起加 —— **控制器决定**：预留的是「按 id 分键」这个形状，不是字段。
+- subagent 级切换：会破 I1，届时与 `agent-selection-v2` 一起设计，**本轮不留字段**。
+
+---
+
+## 4. ccloop 侧
+
+### 4.1 注册表与描述（`src/agents/`）
+
+```ts
+interface AgentDescriptor<I, S> {
+  kind: string;                       // "claude" | "codex"（今天）
+  binary: string;                     // "claude" | "codex"
+  searchDirs(env, home, platform): string[];     // 有序候选目录
+  configDir: { envVar: string | null; fallback: string };  // CLAUDE_CONFIG_DIR / CODEX_HOME
+  defaults: { model: string; contextWindowTokens: number | null };
+  installationSchema: ZodType<I>;     // kind 专属字段，strict
+  validateSelection(sel): S;          // 表达不了 ⇒ throw 具名错误
+  capabilities(installation: I, sel: S): CapabilityViewV2;
+  createAdapter(installation: I, sel: S): RuntimeAdapter;
+}
+```
+
+- **claude**：`defaults = {model: "opus-5.5"（人给的例子）, contextWindowTokens: null}`；能表达的上下文档位是 `null`（agent 自己的默认）与 `1_000_000`。
+  🔴 **Task 0 现量**：1M 怎么传给 claude CLI。本机 `claude --help`（2.1.282）的 `--model` 只写了「别名或全名」，**没写 `[1m]` 后缀**；另有 `--autocompact <auto|tokens>`（100k–1M）。cc-switch 用 `[1m]` 后缀，但那是 `settings.json` 的 env 路径，不是 `--model` 参数。⇒ Task 0 先做零成本的核对（`--help`、源码或文档、不发请求的参数解析），核不清就把 `1_000_000` 档位**关掉**（`validateSelection` 拒 `agent-context-unsupported`），留到真 claude 付费跑那一片再开。**不许在没核清时假定它能用。**
+- **codex**：`defaults = {model: "gpt-6-sol"（人给的例子）, contextWindowTokens: null}`；本轮只表达 `null`。installation 专属字段：`sandbox`、`budgetMode: "soft"`（沿用 `parseCodexConfig` 的约束）。
+- 出厂默认 model 的**具体字符串**：以上两个是人给的例子，写进描述前 **Task 0 现量**本机两个 CLI 接受的写法（`claude --help` 已示别名 `opus`／全名 `claude-fable-5`）。
+
+### 4.2 安装表 schema（`agents-table-v1`）
+
+```json
+{
+  "schema": "ccloop-agents-table-v1",
+  "installations": {
+    "claude": { "kind": "claude", "command": "/abs/path/claude", "version": "2.1.282",
+                "timeoutMs": 1800000, "killGraceMs": 5000 },
+    "codex":  { "kind": "codex", "command": "/abs/path/codex", "version": "…",
+                "timeoutMs": 1800000, "killGraceMs": 5000, "sandbox": "workspace-write", "budgetMode": "soft" }
+  }
+}
+```
+
+- 读表：`O_NOFOLLOW`、必须是普通文件、`realpath` 等于自身（沿用 `command.ts` 对 `--adapter-config` 的检查）；不合法 ⇒ `agents-table-invalid`。
+- `installationId` 用 `idSchema`；`command` 必须是绝对路径；`version` 是探测时记下的字符串，**只作记录，不参与校验**（**控制器决定**：版本漂移由 `configHash` 捕获 —— 人重新 detect 并改了表 ⇒ 哈希变 ⇒ 在飞的 run 被 accept 拒；不引入版本比较语义）。
+
+### 4.3 探测：`ccloop agents detect [--home <dir>] [--path <PATH>]`
+
+- 对每个描述：先按 `searchDirs` 与 `PATH` 找出**全部**候选，按 realpath 去重；每个跑 `<path> --version`（超时 10 s，只跑这一条命令），记 `{path, realpath, version, runnable, source, isPathDefault}`（仿 cc-switch `ToolInstallation`）。
+- **不走登录 shell**（**控制器决定**，与 cc-switch 不同）：登录 shell 会执行人的 rc 文件，结果不可复现、判据也没法改道；我们用显式的候选目录表 ＋ 调用方给的 `PATH`，`--home`／`--path` 让判据能完全改道。代价：只装在 rc 文件里临时加的目录下的 agent 探不到 —— 人在草稿里手填即可。
+- 输出（只到 stdout，**ccloop 不往用户目录写任何东西**）：`{schema: "ccloop-agents-detect-v1", table: <草稿安装表，每种 kind 选 isPathDefault 那一份，否则第一份 runnable>, candidates: {<kind>: [...全部候选]}}`。
+- 什么都没探到的 kind 不进草稿表，只出现在 `candidates` 里（空数组）。
+
+### 4.4 `ccloop agents validate <table>`
+
+校验表（§4.2）并对每条跑一次 `--version`；输出每条的 `{id, ok, error?}`；RC 0 ⇔ 全部 ok。Orca 的 `agents show` 用它。
+
+### 4.5 control 命令形态（直接换掉，人裁）
+
+`ccloop control <method> --agents <table>`。`--adapter`／`--adapter-config` 在 control 下**不再接受**（`control-command-invalid`）。
+
+### 4.6 envelope v2 与 `capabilities`
+
+**StartEnvelopeV2** ＝ V1，改动只有：`protocol: 2`；`claim` 新增 `agent: AgentSelectionV1`（**已填满默认值的完整选择**）；`configHash` 的含义改为「物化配置的 canonical hash」。`HandoffRequestV1` 不变。
+
+**`capabilities`**：请求 `{agent: PartialSelection | null}`。
+- `null` ⇒ 答表级视图：`{protocol: 3, installations: [{id, kind, defaults, contextOptions}]}`（面板用来列 agent）。
+- 非 `null` ⇒ 先用描述默认值补满，再 `validateSelection`，再物化 ⇒ 答 `{protocol: 3, selection: <完整选择>, configHash, capabilities: <八字段，contextWindowTokens 取自选择>}`。
+- 🔴 **线上协议版本**：capabilities 的应答形状变了 ⇒ `protocol` 从 2 升到 3（**控制器决定**：沿用「形状变则升号」的已有做法，G1 缝 A 就是 1→2）。Orca 的 `capabilitiesSchema` 同步改。
+
+**accept**：按 `claim.agent.agent` 在表里找安装记录 → `validateSelection(claim.agent)` → 物化 → `canonicalHash` 必须等于 `claim.configHash`，否则 `control-config-hash-mismatch`；物化配置写进 `<sourceDir>/control/config.json`（取代今天的 codex 配置）。
+**worker**：读 `config.json` → 按 `kind` 取描述 → `createAdapter(installation, selection)`。
+
+### 4.7 `ClaudeAgentAdapter`（新写，旧的不动）
+
+形状照 `src/runtime/codex/runCodexPhase.ts`：
+- `spawn(node, [claude-phase-runner, …], {detached: true})`，runner 通过环境变量拿到安装表里的 claude 绝对路径、`--model` 参数与上下文参数（Task 0 定形）。**runner 与 claude 子进程同属该进程组。**
+- `once("spawn")` 后取 `ps -o lstart=` 做进程身份，**先 `await context.onProcessRegistered(...)` 再写 stdin 的 prompt**（与 codex 同序；闩住检查因此生效）。
+- 超时 `min(installation.timeoutMs, state.budgetSnapshot.timeRemainingMs)`；中止：对 `-pgid` 发 `SIGTERM`，`killGraceMs` 后 `SIGKILL`。
+- 证据：`run/claude/<attempt>/<phase>/call-*/{request.json, stdout.json, stderr.log, process.json, outcome.json}`，0600／0700。
+- usage：沿用 runner 的 `usageEvidence`／`tokenUsage`；被中止 ⇒ 抛带 `observedTokens: null` 的 `ClaudePhaseAborted`（形状同 `CodexPhaseAborted`），**不当 0、不估**。
+- runner（`scripts/claude-phase-runner.mjs`）只**加**：从环境变量取二进制路径（缺省仍是 `claude`，旧路径行为不变）与额外参数。
+
+### 4.8 fake claude 与 fake codex 对等（`tests/fixtures/fake-claude.mjs`）
+
+补：脚本条目 `delayMs`、按 `<task>#continuation` 取、`.tasks` 日志、`usageBeforeDelay`（C5 的四项）；**把收到的 argv（含 `--model`）逐次写进 `.calls` 日志** —— E2E 用它证明选择一路到了 CLI 参数。fake codex 同样补 argv 记录（只加字段）。
+
+### 4.9 `ccloop run --agents <table> --agent-selection <file>`
+
+与旧 flag 互斥；Orca 的解冲突 run 走这个形态。选择文件 0600，由 Orca 写在该解冲突 run 自己的 workdir 里（已在 runs 目录下）。
+
+### 4.10 既有判据（**不许自改，人按人裁 88 指名**）
+
+预计受影响（**Task 0 现量**逐条列出测试全名后报人指名）：`tests/control/command.test.ts` 钉死八字段那一条；control accept／worker／endToEnd 里写死 `--adapter codex` 与 v1 envelope 的判据；`verify-control-protocol.mjs`。**未被指名的一条不动**；能「只加不改」的一律只加。
+
+---
+
+## 5. 线上契约变化汇总（两仓同步落地）
+
+| 项 | 旧 | 新 |
+|---|---|---|
+| control 调用 | `--adapter codex --adapter-config <file>` | `--agents <table>` |
+| start envelope | `protocol: 1` | `protocol: 2`，claim 加 `agent` |
+| `configHash` | codex 配置的 canonical hash | 物化配置 `{schema, kind, installation, selection}` 的 canonical hash |
+| `capabilities` 请求 | `{}` | `{agent: PartialSelection \| null}` |
+| `capabilities` 应答 | `protocol: 2` 八字段 | `protocol: 3`：表级视图或 `{selection, configHash, capabilities}` |
+| 解冲突 run | `ccloop run --adapter codex --adapter-config` | `ccloop run --agents --agent-selection` |
+
+🔴 **推送顺序**（沿用 G1 的教训）：两仓的这几笔要么都在远端、要么都不在；**先推 ccloop 再推 Orca**。推送归人（Rule 15），本设计只把顺序写进 awaitingHuman。
+
+---
+
+## 6. Orca 侧
+
+### 6.1 槽位
+
+| 槽位 | 粒度 | 可覆盖的层 | 缺省 |
+|---|---|---|---|
+| worker | 按任务 | 操作者 → 组 → 任务 | — |
+| estimator（`budget-estimate` run） | 按组 | 操作者 → 组 | 操作者默认 |
+| reconcile（解冲突 run） | 按组 | 操作者 → 组 | worker 槽按层 0–2 的解析结果（即不含任务层；组没设 worker 就落到操作者的 worker 默认） |
+
+handoff 是 `mechanical-in-run-v1`、零模型调用 ⇒ 无槽位。goal-review 今天没有执行路径 ⇒ **本轮不设槽位**（**控制器决定**，有了执行路径再加）。
+
+### 6.2 各层载体
+
+| 层 | 载体 | 写入 |
+|---|---|---|
+| 0 出厂 | ccloop 描述 | 不可写 |
+| 1 操作者 | 控制 store 新表 `agent_preferences(operator_id PK, revision, doc_json)`，`doc = {defaultAgent?, perAgent: {<installationId>: {model?, contextWindowTokens?}}, estimator?: Partial, reconcile?: Partial}` | 新动词 `set-agent-preferences`（`orca-raw-command-v1`、`expectedRevision`、目标是当前 `panelOperatorId`） |
+| 2 组 | plan 文件顶层 `agent?`、`estimatorAgent?`、`reconcileAgent?`；面板组级设置 | 新动词 `proposal-set-agent`（目标 group 或 task，推进 `proposalVersion`） |
+| 3 任务 | plan 文件任务字段 `agent?`；面板逐任务设置 | 同上 |
+
+- 每层都是 `PartialSelection = {agent?, model?, contextWindowTokens?}`，**逐字段合并**。
+- **换 agent 的层会重置下层继承来的 model／上下文**：若某层设了 `agent` 而没设 `model`，model 取 `perAgent[该 agent].model` → 描述默认值，**不继承上层为另一个 agent 设的 model**（**控制器决定**：否则「操作者默认 claude/opus-5.5，任务改成 codex」会解析出 `codex + opus-5.5`，是个必错的组合）。
+- plan 文件的 `configHash` 字段**删除**（`planTaskSchema` 改）；plan 文件的 `targetVersion` 不变。
+
+### 6.3 解析（纯函数，`src/control/agentSelection.ts`）
+
+`resolveSelection(layers) → {partial: PartialSelection, provenance: {agent, model, contextWindowTokens: "descriptor"|"operator"|"group"|"task"}}`。它**只合并**，不补描述默认值（那是 ccloop 的事，I3）；描述默认值的来源标注由 capabilities 应答里「哪些字段是补上的」反推（应答的 `selection` 与请求的 `partial` 逐字段比）。
+
+### 6.4 冻结（确认时）
+
+1. 对每个任务的 worker 槽、组的 estimator／reconcile 槽，求 `partial`；
+2. 按 `partial` 的 canonical JSON 去重后调 `port.capabilities({agent: partial})`；
+3. 任何一个失败 ⇒ **整次 confirm 拒**，错误点名任务与 ccloop 给的错误码；
+4. 全部成功 ⇒ work item 写入 `agent`（完整选择）、`agentProvenance`、`configHash`；组记录写入 estimator／reconcile 的完整选择与 `configHash`；
+5. 确认之后改操作者默认值，**对已确认的组不生效**。
+
+`budget-estimate` 在 plan 导入时就跑（`planImport.ts`）⇒ estimator 槽在**导入**时按层 0–2 冻结（组级值取 plan 文件顶层），不等确认。`reestimate` 按**当时**的层 0–2（含面板上后改的组级 estimator 值）重新解析并冻结给那一次预估 run；已跑完的预估不回改。
+
+### 6.5 profile v2
+
+- 删：`profile.adapter`、`adapterConfigRef`、`modelPolicyRef`、`resolved.adapterConfigContentHash`／`modelPolicyContentHash`／`adapterImplementationHash`／`adapterProtocolVersion`；`webProtocol.ts:143` 的「codex 必须 phase-end／soft」约束随之删（能力改由选择的 capabilities 应答给出，I3）。
+- 留：`profileId`、`allowedWorkKinds`、`contextTokenizer`、`workMaxOutputTokens`、`capabilities`（声明）、`estimatorPreflight`、`resolved` 里的 tokenizer／proof／secret 哈希。
+- schema 名 `orca-execution-profile-snapshot-v2`；v1 拒收（项目未上线，**人裁**「不介意大改」）。
+- 能力交集：`intersectCapabilities(profile.declared, capabilitiesOf(selection))`，**按 (profile, 选择) 求**，在冻结时算一次、随 work item 冻结；`router.probe(profile)` 的面板展示改为对「操作者默认选择」求。
+- ⚠️ §9.1 的挂账「生产 execution profile 快照」**没被做掉**，只是形状变了；它仍归人。
+
+### 6.6 端口与环境
+
+- `createCcloopExecutionPort({binary, agentsTablePath, timeoutMs})`；每次调用带 `--agents <table>`；`accept`／`inspect`／… 的 envelope 自带选择。
+- `ORCA_CCLOOP_ADAPTER_CONFIG` → `ORCA_AGENTS_TABLE`（`realpath` 等于自身、普通文件；判据指向 `/private/tmp/…` 下 0600 的表，指向副本 build 的 fake claude／fake codex）。
+- `handoffGraceMsOf(run)`：按该 run 冻结选择的 `installationId` 从表里读 `killGraceMs`（读不到 ⇒ 0，同今天的 fail-safe 口径）。
+- `driverLanding.ts` 的解冲突 run：写选择文件 → `ccloop run --agents <table> --agent-selection <file>`。
+
+### 6.7 CLI
+
+- `orca agents init`：调 `ccloop agents detect`；表不存在 ⇒ 写入（目录 0700、文件 0600）；**表已存在 ⇒ 写 `<table>.draft.json`（0600）并打印与现表的 diff，绝不覆盖**；草稿已存在 ⇒ 覆盖草稿（草稿是 Orca 自己的产物）。
+- `orca agents show`：调 `ccloop agents validate` 与 `control capabilities {agent: null}`，打印每条安装记录与当前操作者默认值的解析结果。
+
+### 6.8 面板 UI（本轮做全，人裁）
+
+- **设置页「Agents」**：列出安装表（来自 capabilities 表级视图）；编辑操作者默认值（默认 agent、每个 agent 的 model／上下文、estimator／reconcile 槽）→ `set-agent-preferences`；上下文档位用该 kind 的 `contextOptions` 做下拉，**不允许自由输入**。
+- **提案视图**：组级与逐任务的选择编辑 → `proposal-set-agent`；每个任务显示解析结果，**每个字段标来源层**；确认前对当前 `proposalVersion` 预解析一次，失败的任务标红并显示 ccloop 的错误码。
+- 确认请求绑定用户看到的 `proposalVersion`（已有机制）。
+
+---
+
+## 7. 错误（一律具名、fail closed）
+
+| 情形 | 在哪一步 | 错误码 |
+|---|---|---|
+| 表文件软链／非普通文件／JSON 坏／schema 不合 | 读表 | `agents-table-invalid` |
+| 选择的 installationId 不在表里 | capabilities／accept | `agent-installation-missing` |
+| 上下文档位该 kind 表达不了 | 同上 | `agent-context-unsupported` |
+| model 为空或不合该 kind | 同上 | `agent-selection-invalid` |
+| 表那一条在确认后被改 | accept | `control-config-hash-mismatch`（已有） |
+| 任一槽位解析失败 | confirm／plan 导入 | `agent-selection-rejected:<taskId|slot>:<ccloop 码>` |
+| `set-agent-preferences` 的 revision 过期 | 命令台账 | 已有的 revision 冲突码 |
+
+---
+
+## 8. 仓库外写入登记（Rule 17）
+
+| 路径 | 谁触发 | 模式 | 失败残留 |
+|---|---|---|---|
+| `$ORCA_AGENTS_TABLE`，缺省 `~/.orca/agents.json` | `orca agents init`（表不存在时） | 目录 0700、文件 0600；已存在的目录／文件**不改 mode** | 原子替换（先写临时文件再 rename）；失败时残留一个同目录的临时文件，下次 init 清掉 |
+| `<table>.draft.json` | `orca agents init`（表已存在时） | 0600 | 同上 |
+
+ccloop 侧**零**仓库外写入（detect／validate 只读、只打 stdout）。判据一律用改道后的临时目录，并沿用 Orca 端到端判据「`HOME` 与四个 XDG 根改道、断言零写入」的形状。
+
+---
+
+## 9. 判据与变异（成功判据全部是 0／非 0 命令，计划逐条写成命令）
+
+**ccloop**：
+1. 探测：假 `HOME`＋假 `PATH` 下候选目录顺序、realpath 去重、`isPathDefault`、不可运行的候选记 `runnable:false`。变异：去掉去重 ⇒ 红；把 PATH 扫描挪到最前 ⇒ 红。
+2. 表校验与物化哈希稳定：同一表＋同一选择 ⇒ 同一哈希；改表里任一字段 ⇒ 哈希变。
+3. 🔴 **空洞成立的回归判据**：`ClaudeAgentAdapter` 下 `processes.json` 非空；进程组还活着时 `proveStopped` 返回 `null`。**变异：删掉 `onProcessRegistered` 调用 ⇒ 必须红**（这是本轮最承重的一条）。
+4. prompt 在注册之后才写：注册回调里抛错 ⇒ fake claude 从未收到 prompt（`.calls` 为空）。变异：把写 stdin 挪到注册之前 ⇒ 红。
+5. 中止杀整组：runner 的子进程（fake claude 起的孙进程）在 `killGraceMs` 后不存在。变异：只 kill 子进程不 kill 组 ⇒ 红。
+6. envelope v2／capabilities v3 的 schema 与 accept 的哈希核对（改选择任一字段 ⇒ `control-config-hash-mismatch`）。
+
+**Orca**：
+7. `resolveSelection` 纯函数：四层逐字段覆盖；「换 agent 重置 model」（§6.2）；来源标注。变异：去掉重置规则 ⇒ 红。
+8. 冻结：任一任务解析失败 ⇒ 整次 confirm 拒且零 work item 写入；确认后改操作者默认值 ⇒ 已冻结的 `configHash` 不变。
+9. profile v2：v1 快照拒收；能力按 (profile, 选择) 求交。
+10. `orca agents init`：表不存在写入且模式 0700／0600；表存在只写草稿、原表逐字节不变（`cmp`）。
+11. **驱动环 E2E（fake claude＋fake codex 混组）**：操作者默认 claude／opus-5.5，某一任务覆盖成 codex；确认 → 跑完 → 落到 `orca/<g>`；fake claude 的 `.calls` 出现选择的 model，fake codex 的出现它自己的 model。**再在 fake claude 下各跑一次 ④ 的 handoff、续跑、三路冲突**。
+12. 面板：设置页、提案视图、确认绑定 `proposalVersion` 的 web 测试。
+13. 全套门：两仓 typecheck、全量测试（json reporter ＋ 机械判定器）、`verify:*`、`--ws check`、`check-claude-md-lines`、`check-hooks-path`、ccloop `check-known-reds` 全 RC 0（已登记 flake 除外，按判别式处理）。
+
+**方法**（承 §6.14）：RED 阶段就绿的判据，先打一条删掉被测分支的变异；每新增一个分支点名删掉它自己的那条变异并看见红；变异只在 `git clone --local` 副本里做；每一波后复审、全部完成后终审。
+
+---
+
+## 10. 实施分波（计划据此展开）
+
+| 波 | 内容 | 依赖 |
+|---|---|---|
+| 0 | Task 0 现量：1M 怎么传给 claude、两个 CLI 接受的默认 model 写法、受影响的既有判据全名清单（报人指名） | — |
+| 1 | ccloop：注册表、描述、表 schema、detect／validate、`ClaudeAgentAdapter`、fake claude 对等 | 0 |
+| 2 | 线上 v2／v3：ccloop control 与 Orca 端口同步改；`ccloop run --agents` | 1 |
+| 3 | Orca：`resolveSelection`、偏好表与两个动词、plan 文件、冻结、profile v2、解冲突 run、`orca agents` | 2 |
+| 4 | 面板：设置页、提案视图 | 3 |
+| 5 | E2E（fake claude＋fake codex 混组、④ 三件在 fake claude 下）与全套门；终审 | 4 |
+
+每波之后派一席复审；全部完成后一席终审（④ 的复审＋终审共抓出 8 条 Critical，**不省**）。
+
+---
+
+## 11. 登记（不做但记下的）
+
+- 真 claude 付费跑：另问人；先用 proposal-edit 封顶（默认每任务 3M token、3 次尝试）。
+- stream-json 逐条 usage（让 claude 下 deadline 中止的 run 可续）：下一片，字段形状要真 claude 实测。
+- opencode／oh-my-pi／pi／litellm：注册表接口已留，各自一片。
+- 安装记录的 `env`／`secretEnv`（provider 端点）：随 provider 那一片加。
+- subagent 级切换：破 I1，另立设计。
+- 多用户身份与鉴权：偏好已按 `operatorId` 分键，身份接入另立。
+- 旧 `SubprocessClaudeAdapter` 与 `ccloop run --adapter claude`：保留不动，清理另立。
+- 探测不走登录 shell 的代价（rc 文件里临时加的目录探不到）：人在草稿里手填。
