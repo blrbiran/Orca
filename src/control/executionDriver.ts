@@ -9,9 +9,10 @@ import { ControlError } from "./errors.js";
 import { readConfirmedTaskExecution } from "./executionSnapshot.js";
 import { privateDirectory } from "./paths.js";
 import { publishPending } from "./projection.js";
-import { readBudgetProposal, readGroup } from "./queries.js";
+import { readBudgetProposal, readGroup, readWork } from "./queries.js";
 import { readCanonicalRecord, writeCanonicalRecord } from "./snapshot.js";
 import { toStartEnvelope } from "./startEnvelope.js";
+import { exportResumeBundle, readExistingResumeBundle, type InputCheckpointV1 } from "./resumeBundle.js";
 import { recordUsage } from "./usage.js";
 import { isWebWorkRun, nextClaimableTask, readWorkClaimEnvelope, reserveProviderAttemptInTransaction } from "./webDispatch.js";
 import { readWorkspaceSetting, type WorkspaceMode } from "./workspaceSettings.js";
@@ -171,7 +172,8 @@ function newDrive(roots: WorkspaceRoots, runId: string, workspaceMode: Workspace
 /**
  * A1 (spec §2.2): one transaction reserves the provider attempt and records where the run will live.
  * Only a `starting` run enters, so a restart that finds `start-pending` never reserves a second one.
- * A strict group is refused before any attempt (spec §1, §8); so is a continuation (deviation D21).
+ * A strict group is refused before any attempt (spec §1, §8). A continuation is no longer refused here
+ * (handoff delivery spec §4 removes deviation D21); its budget is the task's remaining grant (A2, §13.2 I-5).
  */
 export function stepA1(deps: ExecutionDriverDeps, runId: string): boolean {
   const { store } = deps;
@@ -187,7 +189,6 @@ export function stepA1(deps: ExecutionDriverDeps, runId: string): boolean {
       return true;
     };
     if (readBudgetProposal(store, run.groupId).budgetMode === "strict") return refuse("strict-proof-unimplemented");
-    if (run.continuationIntentId) return refuse("continuation-unsupported");
     if (store.dispatchBlocked || groupHeld(store, run.groupId)) return false;
     const reservation = reserveProviderAttemptInTransaction(store, runId, "work");
     if (reservation.kind === "suppressed") return refuse(`attempt-suppressed:${reservation.requestId ?? "unknown"}`);
@@ -211,15 +212,30 @@ export async function stepA2(deps: ExecutionDriverDeps, runId: string): Promise<
   let targetRepo: string;
   try { targetRepo = deps.resolveRepository(groupRepoId(store, run.groupId)); }
   catch { blockRun(deps, runId, "A2", "repository-path"); return true; }
-  const base = await ensureWorkBranch(targetRepo, run.groupId);
+  const continued = run.continuationIntentId ? continuationOf(store, run) : null;
+  if (run.continuationIntentId && continued === null) { blockRun(deps, runId, "A2", "continuation-registration"); return true; }
+  // Handoff delivery spec §4 (human ruling, plan X): a continuation keeps its predecessor's base and never reads
+  // the current tip -- ccloop rebuilds the predecessor's tree on the snapshot HEAD, a descendant of that base
+  // (spec §11 I6), so C's bounds check, D's findLanding and the other side of a conflict all count from it.
+  const base = continued !== null ? continued.base : await ensureWorkBranch(targetRepo, run.groupId);
   privateDirectory(drive.sourceDir);
   await ensureWorkspace(targetRepo, drive.workspaceMode, drive.workspacePath, base, deps.roots);
   deps.crash?.("A2-after-workspace");
+  let inputCheckpoint: InputCheckpointV1 | null = null;
+  if (continued !== null) {
+    inputCheckpoint = await continuationBundle(deps, continued.predecessorRunId, drive.sourceDir);
+    deps.crash?.("A2-after-bundle");
+    // spec §4: the predecessor's workspace goes only once the bundle exists and has verified itself.
+    await cleanupPredecessor(deps, targetRepo, continued.predecessorRunId);
+  }
   const confirmed = readConfirmedTaskExecution(store, run.groupId, run.taskId);
   // ccloop opens its attempt worktrees from repoPath's HEAD, not from `base` (spec §3.2), so the
   // contract points at this run's own workspace. The frozen derivedContractHash is unchanged.
-  const contract = { ...confirmed.contract, context: { ...confirmed.contract.context, repoPath: drive.workspacePath } };
-  const envelope = toStartEnvelope(readWorkClaimEnvelope(store, run.groupId, runId), run, { sourceDir: drive.sourceDir, targetRepo, base }, contract);
+  const contract = {
+    ...confirmed.contract, context: { ...confirmed.contract.context, repoPath: drive.workspacePath },
+    ...(continued !== null ? { executionPolicy: withinGrant(confirmed.contract.executionPolicy, (run.grant as { work: { tokens: number; activeMs: number; attempts: number } }).work) } : {}),
+  };
+  const envelope = toStartEnvelope(readWorkClaimEnvelope(store, run.groupId, runId), run, { sourceDir: drive.sourceDir, targetRepo, base }, contract, inputCheckpoint);
   const envelopeHash = sha256Canonical(envelope);
   return write(deps, () => {
     writeCanonicalRecord(store, run.groupId, envelopeHash, canonicalBytes(envelope).toString("utf8"));
@@ -229,6 +245,48 @@ export async function stepA2(deps: ExecutionDriverDeps, runId: string): Promise<
     saveDriverRun(store, current);
     return true;
   });
+}
+
+/** The registration this continuation run was claimed from, and its predecessor's base (spec §4). */
+function continuationOf(store: ControlStore, run: DriverRun): { predecessorRunId: string; base: string } | null {
+  const work = readWork(store, run.groupId, run.workItemId) as unknown as { continuation?: { continuationIntentId: string; predecessorRunId: string } | null };
+  const registered = work.continuation ?? null;
+  if (registered === null || registered.continuationIntentId !== run.continuationIntentId) return null;
+  const base = readDriverRun(store, registered.predecessorRunId).drive?.base ?? null;
+  return base === null ? null : { predecessorRunId: registered.predecessorRunId, base };
+}
+
+/** spec §11 I5: exportResumeBundle refuses a second export, so a restarted A2 reuses (and re-verifies) the first. */
+async function continuationBundle(deps: ExecutionDriverDeps, predecessorRunId: string, sourceDir: string): Promise<InputCheckpointV1> {
+  try { return await exportResumeBundle(deps.store, { predecessorRunId, newSourceDir: sourceDir }, archiveAdmission(deps)); }
+  catch (error) {
+    if (!(error instanceof ControlError && error.code === "resume-bundle-exists")) throw error;
+    return readExistingResumeBundle(deps.store, { predecessorRunId, newSourceDir: sourceDir });
+  }
+}
+
+/** spec §4, §7: the predecessor's own workspace; its source directory and archived snapshot stay. */
+async function cleanupPredecessor(deps: ExecutionDriverDeps, targetRepo: string, predecessorRunId: string): Promise<void> {
+  const predecessor = readDriverRun(deps.store, predecessorRunId);
+  if (predecessor.drive === undefined || predecessor.drive.cleanedUp) return;
+  await cleanupRunWorkspace(targetRepo, deps.roots, predecessorRunId, predecessor.drive.workspacePath);
+  write(deps, () => {
+    const current = readDriverRun(deps.store, predecessorRunId);
+    current.drive = { ...current.drive!, cleanedUp: true, cleanupError: null };
+    saveDriverRun(deps.store, current);
+  });
+}
+
+/**
+ * spec §13.2 I-5 (controller decision): ccloop spends by the contract, not by the grant, so a continuation's
+ * contract is cut to what its task has left. The contract hash stays the frozen derivedContractHash, the same
+ * rule as the repoPath rewrite above.
+ */
+export function withinGrant<P extends { maxAttempts: number; tokenBudget: number; totalRuntimeBudgetMs: number }>(policy: P, grant: { tokens: number; activeMs: number; attempts: number }): P {
+  return {
+    ...policy, maxAttempts: Math.min(policy.maxAttempts, grant.attempts), tokenBudget: Math.min(policy.tokenBudget, grant.tokens),
+    totalRuntimeBudgetMs: Math.min(policy.totalRuntimeBudgetMs, grant.activeMs),
+  };
 }
 
 /** spec §2.2 B and B': one place turns a port answer into a run state. Answers whether the state changed. */

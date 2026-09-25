@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { readCanonicalRecord } from "../../src/control/snapshot.js";
-import { stepA1, type CrashPoint, DriverCrash, createExecutionDriver } from "../../src/control/executionDriver.js";
+import { stepA1, stepA2, type CrashPoint, DriverCrash, createExecutionDriver } from "../../src/control/executionDriver.js";
 import { applySetWorkspaceMode } from "../../src/control/workspaceSettings.js";
 import { createExecutionProfileRouter, resolveProfile } from "../../src/control/profiles.js";
 import type { ExecutionPort } from "../../src/control/executionPort.js";
@@ -256,14 +256,20 @@ describe("Fix round 1 (task-4-review.md, 2026-09-25): refusals the first round l
     } finally { await t.h.dispose(); }
   });
 
-  it("D21: blocks a continuation run before any provider attempt, by name", async () => {
+  // Handoff delivery (human ruling 2026-09-25, spec §12: this slice may rewrite criteria; ruling 88 (b)(c)): spec §4 removes
+  // deviation D21 -- a continuation passes A1; one whose registration does not match its work item is blocked by name at
+  // A2, still before any provider attempt.
+  it("D21 (superseded by handoff delivery §4): blocks a continuation run without its registration before any provider attempt, by name", async () => {
     const t = await driverHarness([{ taskId: "a" }]); try {
       const runId = await t.claim();
       const body = t.body(runId);
       body.continuationIntentId = "continuation-1";
       t.h.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify(body), runId);
       expect(stepA1(t.deps, runId)).toBe(true);
-      expect(t.body(runId)).toMatchObject({ state: "blocked", providerAttemptOrdinal: 0, drive: { blockedAt: "A1", blockedReason: "continuation-unsupported" } });
+      expect(t.body(runId)).toMatchObject({ state: "start-pending", providerAttemptOrdinal: 1 });
+      expect(await stepA2(t.deps, runId)).toBe(true);
+      expect(t.body(runId)).toMatchObject({ state: "blocked", drive: { blockedAt: "A2", blockedReason: "continuation-registration" } });
+      expect(t.fake.calls.accept).toHaveLength(0);
     } finally { await t.h.dispose(); }
   });
 

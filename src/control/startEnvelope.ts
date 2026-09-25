@@ -3,6 +3,7 @@ import { ControlError } from "./errors.js";
 import type { StartEnvelope } from "./executionPort.js";
 import { dispatchEnvelopeSchema, type DispatchEnvelopeV1 } from "./webProtocol.js";
 import { grantSchema, idSchema, safeInteger, startEnvelopeSchema } from "./schema.js";
+import type { InputCheckpointV1 } from "./resumeBundle.js";
 
 /**
  * Assembly plan Task 4. The ledger freezes a `DispatchEnvelopeV1`; the execution port speaks
@@ -55,6 +56,8 @@ export function toStartEnvelope(
   run: unknown,
   work: StartEnvelopeWork,
   contract: unknown,
+  // Handoff delivery spec §4, §11 M4: a continuation carries the checkpoint ccloop rebuilds its first workspace from.
+  inputCheckpoint: InputCheckpointV1 | null = null,
 ): StartEnvelope {
   const parsedEnvelope = dispatchEnvelopeSchema.safeParse(envelope);
   if (!parsedEnvelope.success) {
@@ -88,7 +91,7 @@ export function toStartEnvelope(
     // The ledger's derived hash, never one recomputed here: recomputing would let a contract that
     // drifted after the freeze pass as the one the claim was made against.
     contractHash: frozen.derivedContractHash,
-    inputCheckpoint: null,
+    inputCheckpoint,
     work: { contract, targetRepo: work.targetRepo, base: work.base, sourceDir: work.sourceDir },
   };
   // Parsed against the repository's own start-envelope schema rather than merely typed as one, so
