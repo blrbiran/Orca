@@ -1,17 +1,10 @@
-import { execFileSync } from "node:child_process";
-import { createHash } from "node:crypto";
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import { canonicalBytes } from "../../src/control/canonicalJson.js";
-import { DriverCrash, type CrashPoint } from "../../src/control/executionDriver.js";
-import { readArchivedPlan, readBudgetProposal } from "../../src/control/queries.js";
-import { assembleControlRuntime, type ControlRuntime } from "../../src/panel/controlAssembly.js";
-import { controlRepoKey, resolveControlOptions } from "../../src/panel/controlOptions.js";
+import { existsSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
+import { afterAll, describe, expect, it } from "vitest";
+import { DriverCrash } from "../../src/control/executionDriver.js";
+import type { ControlRuntime } from "../../src/panel/controlAssembly.js";
 import { readControlGroup } from "../../src/panel/controlViews.js";
-import { profileSnapshot } from "./fixtures/web.js";
+import { ccloopWorlds, g, noBlocked, raw, realBinary, startGroup, until, workRuns } from "./fixtures/ccloopWorld.js";
 
 /**
  * Execution driver spec §7.2 E1, E2, W1, T1 and R1 against the real ccloop build (ORCA_CCLOOP_BIN, which
@@ -19,178 +12,21 @@ import { profileSnapshot } from "./fixtures/web.js";
  * temporary root. The honest claim these support (deviation D1): with fake codex, a soft group, and an
  * estimator whose estimate is blocked-capability because contextWindowTokens is null, Web dispatch runs
  * from confirm to settle and lands on orca/<groupId>. Not "Web dispatch works".
+ *
+ * The world, its boot/die/teardown and the command helpers live in fixtures/ccloopWorld.ts (moved there
+ * unchanged for handoffE2E.test.ts, handoff delivery preflight I11).
  */
-const realBinary = process.env.ORCA_CCLOOP_BIN;
-const roots: string[] = [];
+const { world, removeRoots, relocateHome } = ccloopWorlds({ rootPrefix: "orca-driver-e2e-", epochPrefix: "epoch-e2e-" });
 // Retried: every scenario shuts its runtime down in a finally, but a shutdown does not wait for a
 // background reconciliation `ccloop run` (the Task 6 deferral), so after a failed E1 that child can
 // still be writing under the root when this runs. A passing scenario leaves no child behind.
-afterAll(async () => { for (const root of roots) await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); });
+afterAll(removeRoots);
 
-const g = (cwd: string, ...args: string[]): string =>
-  execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "core.hooksPath=/dev/null", ...args], { cwd, encoding: "utf8" }).trim();
-const sha256 = (path: string): string => createHash("sha256").update(readFileSync(path)).digest("hex");
-
-/** ccloop's canonicalHash (ccloop src/control/protocol.ts:172-192): keys sorted by localeCompare, JSON, sha256. */
-function ccloopHash(value: unknown): string {
-  const canonical = (item: unknown): unknown => Array.isArray(item) ? item.map(canonical)
-    : item !== null && typeof item === "object"
-      ? Object.fromEntries(Object.entries(item as Record<string, unknown>).sort(([left], [right]) => left.localeCompare(right)).map(([key, nested]) => [key, canonical(nested)]))
-      : item;
-  return createHash("sha256").update(JSON.stringify(canonical(value))).digest("hex");
-}
-
-/** What the shipped ccloop answers (pinned in webCcloopSmoke.test.ts); a null window blocks the estimate (D1). */
-const CCLOOP_CAPABILITIES = {
-  usageObservation: "phase-end", budgetEnforcement: "soft", contextObservation: "unavailable", handoffControl: "durable",
-  handoffExecution: "mechanical-in-run-v1", contextWindowTokens: null, requestBoundProof: null,
-} as const;
-
-interface Task { taskId: string; dependsOn?: string[]; targetPaths: string[]; requiredChecks?: string[]; verifierType?: "agent" | "command" }
-
-async function world(tasks: Task[], script: Record<string, { files: Record<string, string> }>) {
-  const root = await realpath(await mkdtemp(join(tmpdir(), "orca-driver-e2e-")));
-  roots.push(root);
-  const repo = join(root, "target");
-  await mkdir(repo);
-  g(repo, "init", "-q", "-b", "main");
-  await writeFile(join(repo, "shared.txt"), "base\n");
-  g(repo, "add", "shared.txt");
-  g(repo, "commit", "-qm", "base");
-  const marker = join(root, "codex-marker.json");
-  const scriptPath = join(root, "codex-script.json");
-  await writeFile(scriptPath, JSON.stringify(script));
-  const fakeCodex = resolve(dirname(realBinary!), "..", "tests", "fixtures", "fake-codex.mjs");
-  const adapter = { command: [process.execPath, fakeCodex, "script", marker, scriptPath], model: "fixture-model", budgetMode: "soft", sandbox: "workspace-write", timeoutMs: 120_000, killGraceMs: 5_000 };
-  const adapterPath = join(root, "adapter.json");
-  await writeFile(adapterPath, JSON.stringify(adapter), { mode: 0o600 });
-  const contracts = join(root, "contracts");
-  await mkdir(contracts);
-  const planTasks = [];
-  for (const task of tasks) {
-    const checks = task.requiredChecks ?? ["true"];
-    // Agent by default, so the verify phase's provider call is exercised; E1's task c and T1 use a
-    // command verifier, whose verify phase calls no provider. Before ccloop C4 (9a91d2b) that phase
-    // reported null usage, Orca booked it as unknown work usage and the run could not settle
-    // (settle-incomplete, measured against ccloop 5c05ed3); C4 reports 0.
-    const contract = {
-      objective: { taskId: task.taskId, goal: `write ${task.targetPaths.join(", ")}`, successCondition: "the files hold the scripted text", nonGoals: [] },
-      context: { repoPath: repo, targetPaths: task.targetPaths, relevantDocs: [], buildTestCommands: checks, constraints: [] },
-      executionPolicy: { autonomyLevel: "L2", maxAttempts: 1, perAttemptTimeoutMs: 120_000, totalRuntimeBudgetMs: 240_000, tokenBudget: 100_000, worktreeRequired: true, partialOutcomeRecoveryWindowMs: 1_000 },
-      safetyPolicy: { allowlistPaths: [], denylistPaths: [], maxFilesTouched: 2, humanGateConditions: [] },
-      verification: { verifierType: task.verifierType ?? "agent", requiredChecks: checks, rejectOn: ["failure"], evidenceRequired: [] },
-      escalationAndExit: { escalationTargets: [], pauseOn: [], stopOn: [], terminalStates: ["succeeded", "blocked_waiting_human", "exhausted", "cancelled", "failed"] },
-    };
-    const path = join(contracts, `${task.taskId}.json`);
-    await writeFile(path, canonicalBytes(contract));
-    planTasks.push({ taskId: task.taskId, contract: path, dependsOn: task.dependsOn ?? [], targetVersion: 1, configHash: ccloopHash(adapter) });
-  }
-  const planPath = join(repo, "plan.json");
-  await writeFile(planPath, JSON.stringify({ targetRepo: repo, ccloopBin: realBinary, runsDir: join(root, "unused-runs"), workBranch: "orca/unused", policy: "local-merge", ledgerMode: "out-of-repo", goal: "ship", successConditions: ["the files hold the scripted text"], tasks: planTasks }));
-  const snapshot = profileSnapshot();
-  snapshot.profile.capabilities = { ...CCLOOP_CAPABILITIES };
-  const profilePath = join(root, "profile.json");
-  await writeFile(profilePath, JSON.stringify(snapshot));
-  const repoId = controlRepoKey("e2e");
-  const repos = [{ projectKey: "e2e", path: repo }];
-  const env: NodeJS.ProcessEnv = { ORCA_CONTROL_DIR: join(root, "control"), ORCA_CCLOOP_BIN: realBinary!, ORCA_CCLOOP_ADAPTER_CONFIG: adapterPath };
-  const { rejection, ...control } = resolveControlOptions(["--plan", `plan=${repoId}=${planPath}`, "--profile", profilePath, "--estimator-profile", "all", "--estimate-mode", "soft", "--control-wake-ms", "50"], env, repos);
-  if (rejection !== null) throw new Error(rejection);
-  let epoch = 0;
-  // Every runtime this world booted and has not closed; `teardown` shuts each down and closes it, so a
-  // failing scenario leaves no pump or driver running into the next one.
-  const live = new Set<ControlRuntime>();
-  const boot = async (driverCrash?: (point: CrashPoint) => void): Promise<ControlRuntime> => {
-    const runtime = await assembleControlRuntime({ control, repos, epoch: `epoch-e2e-${++epoch}`, env, driverCrash });
-    if (runtime === null) throw new Error("the control plane did not assemble");
-    live.add(runtime);
-    await runtime.recover();
-    return runtime;
-  };
-  /** A process death: no shutdown, just the store let go. */
-  const die = (runtime: ControlRuntime): void => { live.delete(runtime); runtime.close(); };
-  const teardown = async (): Promise<void> => {
-    for (const runtime of live) {
-      live.delete(runtime);
-      try { await runtime.shutdown(); } finally { runtime.close(); }
-    }
-  };
-  const calls = (): string[] => existsSync(`${marker}.calls`) ? readFileSync(`${marker}.calls`, "utf8").trim().split("\n") : [];
-  const human = () => ({ symbolic: g(repo, "symbolic-ref", "HEAD"), head: g(repo, "rev-parse", "HEAD"), index: sha256(join(repo, ".git", "index")), file: readFileSync(join(repo, "shared.txt"), "utf8"), status: g(repo, "status", "--porcelain") });
-  const worktrees = (): string[] => g(repo, "worktree", "list", "--porcelain").split("\n").filter((line) => line.startsWith("worktree "));
-  /** Commits orca/g gained over main along its first parent: one per landing. */
-  const landings = (): number => Number(g(repo, "rev-list", "--first-parent", "--count", "main..refs/heads/orca/g"));
-  return { root, repo, repoId, boot, die, teardown, calls, human, worktrees, landings };
-}
-
-const raw = (runtime: ControlRuntime, commandId: string, verb: string, payload: unknown, target: unknown = { kind: "group", groupId: "g" }) => ({
-  schema: "orca-raw-command-v1", commandId, actorId: "human", verb, target, payload,
-  // A new group, and a repository setting nobody has set yet, are both at revision 0.
-  expectedRevision: verb === "import-plan" || verb === "set-workspace-mode" ? 0 : Number(runtime.store.db.prepare("SELECT revision FROM groups WHERE id='g'").get()!.revision),
-}) as never;
-
-/** Import, confirm soft, optionally widen the token ceiling, start -- through the assembled service. */
-async function startGroup(runtime: ControlRuntime, repoId: string, raiseTokens = 0): Promise<void> {
-  const imported = await runtime.service.importPlan(raw(runtime, "import", "import-plan", { groupId: "g", repoId, planId: "plan" }));
-  expect(imported).toMatchObject({ result: { kind: "imported", estimateState: "blocked-capability" } });
-  const hash = runtime.router.list()[0]!.profileHash;
-  const confirmed = runtime.service.confirm(raw(runtime, "confirm", "confirm", {
-    planHash: readArchivedPlan(runtime.store, "g").planHash, proposalVersion: readBudgetProposal(runtime.store, "g").proposalVersion, budgetMode: "soft",
-    profileIds: { estimator: "all", worker: "all", handoff: "all", goalReview: "all" }, profileHashes: { estimator: hash, worker: hash, handoff: hash, goalReview: hash },
-    contextPolicy: { handoffAtContextTokens: null },
-  }));
-  expect("error" in confirmed ? confirmed.error : "confirmed").toBe("confirmed");
-  if (raiseTokens > 0) {
-    const limit = readControlGroup(runtime.store, runtime.epoch, "g").ledger.groupLimit;
-    const raised = runtime.service.setLimit(raw(runtime, "raise", "set-limit", { limit: { ...limit, tokens: limit.tokens + raiseTokens } }));
-    expect("error" in raised ? raised.error : "raised").toBe("raised");
-  }
-  const started = await runtime.service.start(raw(runtime, "start", "start", {}));
-  expect("error" in started ? started.error : "started").toBe("started");
-}
-
-interface RunRow { runId: string; task: string; body: Record<string, any> }
-const workRuns = (runtime: ControlRuntime): RunRow[] => runtime.store.db.prepare("SELECT id,work_item_id,body FROM runs WHERE group_id='g' ORDER BY id").all()
-  .map((row) => ({ runId: String(row.id), task: String(row.work_item_id), body: JSON.parse(String(row.body)) }))
-  .filter((row) => row.body.phase === "work");
 const workStatus = (runtime: ControlRuntime, taskId: string): string =>
   JSON.parse(String(runtime.store.db.prepare("SELECT body FROM work_items WHERE group_id='g' AND id=?").get(taskId)!.body)).status;
 
-async function until(predicate: () => boolean, ms: number, what: string, poll = 100): Promise<void> {
-  const deadline = Date.now() + ms;
-  while (!predicate()) {
-    if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}`);
-    await new Promise((resolve) => setTimeout(resolve, poll));
-  }
-}
-
-/** A run that stopped moving on its own is a failure to report by its reason, not a timeout to wait out. */
-function noBlocked(runtime: ControlRuntime): void {
-  const blocked = workRuns(runtime).filter((run) => run.body.state === "blocked");
-  if (blocked.length > 0) throw new Error(`blocked: ${blocked.map((run) => `${run.task}=${run.body.drive?.blockedReason}`).join(", ")}`);
-}
-
-/** Every file and directory under `dir`, relative, sorted. */
-function tree(dir: string): string[] {
-  return readdirSync(dir, { recursive: true, encoding: "utf8" }).sort();
-}
-
 describe.skipIf(!realBinary)("the execution driver against real ccloop (spec §7.2)", { timeout: 420_000 }, () => {
-  // Rule 17: every ccloop child (control calls, its detached worker, the reconciliation `ccloop run`,
-  // fake codex, git) inherits this worker's environment, so HOME and the XDG roots are moved to an
-  // empty temporary directory for the whole file, and each scenario must leave it empty.
-  const saved: Record<string, string | undefined> = {};
-  const HOME_KEYS = ["HOME", "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME"] as const;
-  let fakeHome = "";
-  beforeAll(async () => {
-    fakeHome = await realpath(await mkdtemp(join(tmpdir(), "orca-driver-e2e-home-")));
-    roots.push(fakeHome);
-    for (const key of HOME_KEYS) saved[key] = process.env[key];
-    process.env.HOME = fakeHome;
-    for (const key of HOME_KEYS.slice(1)) process.env[key] = join(fakeHome, key.toLowerCase());
-  });
-  afterAll(() => { for (const key of HOME_KEYS) { if (saved[key] === undefined) delete process.env[key]; else process.env[key] = saved[key]; } });
-  afterEach(() => { expect(tree(fakeHome)).toEqual([]); });
+  relocateHome("orca-driver-e2e-home-");
 
   it("E1: three tasks, two in conflict and one dependent, from confirm to settle on orca/<group>, spending no more than planned", async () => {
     const w = await world([

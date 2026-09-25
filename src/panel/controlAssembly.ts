@@ -8,6 +8,7 @@ import type { ExecutionPort } from "../control/executionPort.js";
 import { deliverSchedulerWakes } from "../control/dispatch.js";
 import { recoverControl } from "../control/recovery.js";
 import { createExecutionDriver, type CrashPoint, type ExecutionDriver } from "../control/executionDriver.js";
+import { HANDOFF_EXTRA_GRACE_MS } from "../control/driverHandoff.js";
 import { controlWorkspaceRoots } from "../control/workspace.js";
 import { createWebWakeHandlers } from "../control/webDispatch.js";
 import { createExecutionProfileRouter, resolveProfile, type ExecutionProfileRouter, type FrozenProfile } from "../control/profiles.js";
@@ -105,6 +106,21 @@ export interface ControlAssemblyInput {
   env: NodeJS.ProcessEnv;
   /** Test-only fault injection for the execution driver (spec §7.2 R1). Never set by the CLI. */
   driverCrash?: (point: CrashPoint) => void;
+}
+
+/**
+ * Handoff delivery spec §3 (controller decision): a delivered request that yields nothing is judged
+ * outcome-unknown only past its deadline plus the adapter's own killGraceMs plus HANDOFF_EXTRA_GRACE_MS.
+ * Read once, here. A config that cannot be read, or whose killGraceMs is not a non-negative safe integer,
+ * counts 0: the grace is never shorter than the fixed part, and an unusable config is the port's to refuse.
+ */
+export function handoffGraceMsOf(adapterConfigPath: string): number {
+  let killGraceMs = 0;
+  try {
+    const value = (JSON.parse(readFileSync(adapterConfigPath, "utf8")) as { killGraceMs?: unknown } | null)?.killGraceMs;
+    if (typeof value === "number" && Number.isSafeInteger(value) && value >= 0) killGraceMs = value;
+  } catch { killGraceMs = 0; }
+  return killGraceMs + HANDOFF_EXTRA_GRACE_MS;
 }
 
 /**
@@ -238,6 +254,7 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
       resolveRepository: (repoId) => config.resolveRepository(repoId),
       ccloopBin: env.ORCA_CCLOOP_BIN!, adapterConfigPath: env.ORCA_CCLOOP_ADAPTER_CONFIG!,
       kickPump: () => { void pump(); }, crash: input.driverCrash,
+      handoffGraceMs: handoffGraceMsOf(env.ORCA_CCLOOP_ADAPTER_CONFIG!),
     });
   }
 
