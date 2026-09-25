@@ -1,0 +1,53 @@
+
+
+# 计划分片 W3：T5 —— ccloop control 走安装表（envelope v2、capabilities v3、accept 物化、worker 经描述建 adapter）
+
+> **归属**：Orca 控制器会话 `75ec878e` 派出的计划写作席 W3（Claude Opus 5.5），2026-09-26。
+> **观测锚点**：ccloop 主题行 `docs(handoff): roll the Orca section: C5-C7 and C-3 landed here for the handoff delivery round`（写作时 `f4e49a2`）；Orca 主题行 `chore(checkpoint): orca-dev-75ec878e, level 335434 of 1000000 (T1 330000, T2 450000, band 1)`。**行号会移动 ⇒ 实施前现测。**
+> **探针**：全部只在 `scratchpad/W3/` 下：`ccloop-base/`（基线副本，`npm run build` 后逐文件跑）、`ccloop-probe/`（最小行为探针：envelope 升 2＋claim 加 `agent`、capabilities 要 `{agent}`、`--agents` 形态、binding 改名、worker 要物化配置 —— 用来**现量**哪些既有判据会红）。主树零触碰。
+> **消费的别席产物（按骨架名字）**：T1 `src/agents/{types,registry,table,materialize}.ts`（`AgentError`、`getDescriptor`、`readAgentsTable`、`parseAgentsTable`、`assertAgentsTablePath`、`resolveAgent`、`probeVersion`、类型）；T3 `tests/fixtures/fake-claude-cli.mjs`、`ClaudeAgentAdapter`、fake codex 的 `.argv`；T4 `phases-completed.json` 计数（T4 改 `worker.ts` 的 `onPhaseSettled`，本 Task 对 `worker.ts` 一律用**锚点**改，不用行号）。
+
+---
+
+## W3 现量
+
+### (一) 本 Task 依赖的现量
+
+| # | 现量 | 证据（file:line ＋ 命令） |
+|---|---|---|
+| 1 | control 命令形态写死 `--adapter codex --adapter-config <file>`，5 个 argv；非 codex ⇒ `control-adapter-unsupported`；配置文件路径检查 realpath＝自身、普通文件 | ccloop `src/control/command.ts:113-137`（`:120-123`）；命令 `cat -n src/control/command.ts` |
+| 2 | `capabilities` 答常量、响应 schema `protocol: z.literal(2)` 八键 | `command.ts:27-47`（schema）、`:143-154`（常量） |
+| 3 | 退出码：`ControlProtocolError` ⇒ 2，其余 ⇒ 1；stderr ＝ `error.message` | `command.ts:212-218` |
+| 4 | Orca 侧：`ccloopPort` 把非 0 退出包成 `control-peer-exit`，detail ＝ `<退出码>:<stderr 去空白>`；驱动环 accept 见到 `2:` 前缀 ⇒ `blockRun(... "accept-refused:<detail>")`，其余 ⇒ 当 `unknown` 重试 | Orca `src/control/ccloopPort.ts:38-39`；`src/control/executionDriver.ts:358-362`（`Read` 读） |
+| 5 | envelope：`StartEnvelopeV1.protocol: 1`、`ClaimV1` 无 agent；`startEnvelopeSchema` 字面量 1；`capabilities` 负载 `z.object({}).strict()`；`protocolVersion()` 读顶层 `protocol`，否则读 `input.protocol`；`version !== 1` ⇒ `control-protocol-unsupported` | `src/control/protocol.ts:27-39`、`:53-64`、`:110-124`、`:143-151`（`:145`）、`:163-170`（`:164`）、`:224-230`、`:246` |
+| 6 | `StartEnvelopeV1` 的 src 消费者：`accept.ts`、`collect.ts`、`handoff.ts`、`paths.ts`、`resultRepository.ts`、`worker.ts`、`protocol.ts`；`ClaimV1`／`ControlPayloadV1` 只在 `protocol.ts` | `grep -rn -e StartEnvelopeV1 … src scripts`；`grep -rn -E "ClaimV1|ControlPayloadV1|ControlRequestV1|ControlMethodV1" src tests scripts`（`scratchpad/W3/grep-types.txt`） |
+| 7 | accept：已有记录 ⇒ 先重放（不读配置）；否则 `parseCodexConfig(readConfig(path))`、`canonicalHash(config) !== claim.configHash` ⇒ `control-config-hash-mismatch`；把 codex 配置写进 `control/config.json` | `src/control/accept.ts:85-89`（重放）、`:91-95`、`:112-116`；`AdapterBindingV1` `:39-45`；`readConfig` `:47-60` |
+| 8 | worker：`parseCodexConfig(readJson("config.json"))`、`runLoop(..., () => new CodexAdapter(config), …)` | `src/control/worker.ts:3-4`（import）、`:106-107`、`:153` |
+| 9 | 🔴 fake codex **不答 `--version`**：`node tests/fixtures/fake-codex.mjs integration <m> --version </dev/null` 写出 marker 文件、`JSON.parse` 崩、RC 1 | `tests/fixtures/fake-codex.mjs:3-11`、`:19`；日志 `scratchpad/W3/fc-version.log` |
+| 10 | 🔴 `tsconfig.json` 的 `include` 含 `tests/**/*.ts` ⇒ `npm run build`（E2E 前必跑）也对**测试文件**做类型检查，任一测试文件类型错 ⇒ `dist/cli.js` 不生成 | `tsconfig.json`；`package.json` 的 `build` 脚本（`tsc -p tsconfig.json && node -e …`）；探针 `scratchpad/W3/probe-build.log`（类型错 ⇒ `dist/cli.js` 缺失） |
+| 11 | 三个 phase 的 prompt 是 claude／codex 共用的（`Plan one isolated L2 attempt for task <id>.` 等）⇒ fake claude CLI 的 `script` 模式可按同样的 task 键取条目 | `src/runtime/claude/prompts.ts:15`；`fake-codex.mjs:34` |
+| 12 | 旧 claude runner 以 worktree 为 cwd 起 claude | `scripts/claude-phase-runner.mjs:199`、`:214`、`:392` |
+| 13 | `verify-control-protocol.mjs` 要 `ORCA_CCLOOP_BIN`＋`ORCA_CCLOOP_ADAPTER_CONFIG`，先 build 再核「fixture 配置」（`model==="fixture"` 且 `command` 含 `fake-codex.mjs`），再跑 `tests/control`、`tests/controller/codex.integration.test.ts`、`tests/runtime/codex` | `scripts/verify-control-protocol.mjs:9-13`、`:21`、`:28-37`、`:44-51`；Orca 调用方 `scripts/verify-control.mjs:6-11`（T7 改 env） |
+| 14 | 基线（`ccloop-base`，`npm run build` RC 0，逐文件 json reporter）：protocol 7/7、accept 7/7、workerLaunch 1/1、command 7/7、resultRepository 2/2、handoffDeadlineUsage 1/1、collect 3/3、handoff 6/6、materialize 14/14、worker 8/8、endToEnd 6/6、handoffEnteredPhases 7/7、usage 4/4、stopProof 2/3（红的是已登记已知红 `quiet execution proof > does not treat leader exit…`，`scripts/check-known-reds.mjs:40`） | 命令 `./node_modules/.bin/vitest run tests/control/<f>.test.ts --reporter=json --outputFile=…`（逐个、串行）；汇总 `scratchpad/W3/base-summ.txt` |
+| 15 | 探针（`ccloop-probe`）现量的红：见下方「会红的既有判据」；类型红见 `scratchpad/W3/probe-tsc.log`（9 个测试文件：accept、collect、endToEnd、handoff×2 处、handoffDeadlineUsage、handoffEnteredPhases、protocol、workerLaunch） | `scratchpad/W3/probe-summ.txt`、`probe-e2e.txt`、`probe-tsc.log` |
+| 16 | 其余 11 个候选文件（台账 §1：`tests/runtime/codex/{protocol,fileBoundary,abortedUsage}`、`tests/cli/{cli,codex}`、`tests/sweep/sweepRuns`、`tests/control/{materialize,worker,stopProof,usage}`、`tests/validation/{evidence,prepareA04}`、`scripts/validate-codex-adapter.mjs`）**不因 T5 红**：它们只经 `ccloop run/resume/sweep --adapter`（T5 不动 `cli.ts` 的 `parseArgs`，T6 的事）或 `parseCodexConfig`（T5 不动）；T5 改的四个 src 文件没有被它们 import（唯一 import `src/control/` 的非 control 测试是 `tests/runtime/codex/fakeCodexDelay.test.ts`，它读 `materialize.ts`，T5 不动）；`tests/cli/*.test.ts` 不含 `control` 路由判据 | `grep -n -E "…" <11 个文件>`（`scratchpad/W3/grep-other.txt`，106 行命中全是 `run/resume/sweep` 与 `parseCodexConfig`）；`grep -rln "src/control/" tests validation scripts`；`grep -n control tests/cli/*.test.ts`；探针里 `worker`、`materialize`、`usage`、`stopProof` 与基线逐条相同 |
+
+### (二) 与 spec／骨架不符之处（**控制器裁定**；正文按「建议」一栏写）
+
+| 编号 | 不符 | 建议 |
+|---|---|---|
+| D-W3-1 | 🔴 T5 起 accept／capabilities 要跑 `<command> --version`（spec §4.2、骨架 `resolveAgent` 的 `probeVersion`），而写作时 **fake codex 不答 `--version`**（现量 9：写 marker、崩）⇒ 所有 codex 的 control 判据都会在 accept 处失败 | **已裁（控制器 2026-09-26，转自 W2）**：fake codex 与 fake claude CLI 都由 **T3** 答 `--version`。T5 只在 Step 0 核它，并要求该分支**不写任何文件**（marker、`.calls`、`.tasks`、`.argv`）—— `endToEnd` 的 `.calls` 断言、`handoff` 的 marker 轮询靠这个；若 T3 的实现会写文件，T5 停下报控制器，不改 T3 的文件 |
+| D-W3-2 | `AgentError` 过 control 边界时的退出码与 stderr 形状，骨架／spec 都没定 | **退出码 2（具名拒绝）；stderr ＝ `error.message` 原文**（控制器裁定 2：`message` 以码开头，`<code>` 或 `<code>: <detail>`，CLI 原样打印 —— 与 `ccloop agents` 同一规矩，不另起一套）。理由：Orca 驱动环只对 `2:` 前缀做确定性阻塞（现量 4），版本漂移／安装缺失重试十次无意义。**给 T7／T11 的解析约定**：`control-peer-exit` 的 detail 是 `2:<code>[: <detail>]` ⇒ ccloop 码 ＝ `detail.slice(2)` 到第一个 `:` 为止（码本身不含 `:`）。判据对 stderr 一律断言「第一个 token 是码」（`/^<code>(: .*)?\n$/`），不断言 detail 原文 |
+| D-W3-3 | worker 要校验 `control/config.json`（今天 `parseCodexConfig` 校验），骨架没有物化配置的解析函数 | **已由 T1 提供**（W1-8／W1-9 与控制器 W1-19 转达）：`parseMaterializedAgentConfig(raw)`（`src/agents/materialize.ts`），坏了抛 `AgentError("agent-config-invalid")`（kind 不一、多键、schema 字面量不对）或安装记录／选择各自的码。T5 的 worker 直接调它；它的内部分支与变异归 T1，T5 只负责「worker 读回时经过它」这一条接线（变异 M13） |
+| D-W3-4 | 🔴 线上 zod schema 与 **ESM 循环 import**：T1 在 `src/agents/types.ts` 定义并导出 `contextWindowSchema`／`agentSelectionSchema`／`partialSelectionSchema`，且 `types.ts` 从 `../control/protocol.js` import `idSchema`（值）；T5 的 `protocol.ts` 要用这两个选择 schema 造 `claimSchema` 与 capabilities 负载（模块顶层求值）。若 `protocol.ts` 再从 `agents/types.ts` import 它们 ⇒ `types ⇄ protocol` 成环，先加载哪一边都会在顶层碰到另一边尚在 TDZ 的 `const`（`ReferenceError`） | **把三个 schema 的定义挪进 `src/control/protocol.ts`（紧跟 `idSchema`），`src/agents/types.ts` 改为从 protocol 转出口**（`export { contextWindowSchema, agentSelectionSchema, partialSelectionSchema } from "../control/protocol.js";`）。依赖方向保持 T1 定下的 `agents → control/protocol` 单向，定义只有一份，T1 的 import 点（`materialize.ts` 等从 `./types.js` 取）不用改。备选：`protocol.ts` 本地另写一份同形 schema（两份定义，Rule 7 不取）。schema 只核类型形状（`model: z.string()` 不设上下限），model 语义约束留给 kind 的 `validateSelection`，这样错误码才是 spec §7 的 `agent-selection-invalid` |
+| D-W3-13 | **控制器裁定 W1-19**：T4 新写的 `tests/control/phasesCompleted.test.ts` ＞ the control worker counts completed phases ＞ writes one count per phase a registering adapter completed, and the run still proves isolation 按 v1 envelope＋codex `config.json` 造 worker 输入，T5 之后必红 | T5 整条改写：v2 envelope＋`sealCodex` 的物化配置；「只数带结果完成的阶段」「三条注册」「仍给隔离证明」三个断言一字不动（Step 11） |
+| D-W3-5 | `probeVersion(command)` 的调用形状 | **已裁（控制器 2026-09-26）**：`[...command, "--version"]`，`--version` 在最后。T5 的判据不写死版本字面量：夹具用 `probeVersion(command)` 现取替身答的版本写表（`agentsFixture.ts`），漂移用例写 `"0.0.0-stale"` 并先断言它不等于现取值；`.argv` 若也记了版本探测行，claude 判据按 `includes("--version")` 滤掉 |
+| D-W3-12 | **控制器裁定（2026-09-26，转自 W2）**：W2 的判据 3（`processes.json` 非空、组活着时 `proveStopped` 为 `null`）只覆盖孤立的 `ClaudeAgentAdapter`；T5 要在 **worker 层**再证一次 | 新判据 `agentsControl.test.ts` ＞ claude process registration through the control worker (agent selection) ＞ registers the claude phase's process group in processes.json, and that record proves nothing while the group lives（Step 5 文件内、Step 11／13 跑），变异 M16 ＝ 删掉 worker 传给 `runLoop` 的 `onProcessRegistered` 接线。「组活着 ⇒ null」要单独量组：真 worker 在跑时 `proveStopped` 本来就因「worker 未封存、lease 未释放」而为 null（`stopProof.test.ts` ＞ quiet execution proof ＞ requires a sealed worker and released owner lease），直接断言它会**空洞成立**；所以把 worker 登记的那几条抄进一个「其余条件都满足」（封存、lease 已释放）的探针目录，只让进程组决定结果，停机后同一探针必须给出证明 |
+| D-W3-6 | capabilities 表级视图：spec §4.6 为 `{id, kind, defaults, contextOptions}`，骨架多一个 `version` | 按骨架（带 `version`）。另：骨架 `AgentResolutionV1.capabilities` 注释「the eight fields, no protocol」—— 去掉 `protocol` 后是 **7** 个键（现量 2）；schema 按 7 个写 |
+| D-W3-7 | 类型改名 | `StartEnvelopeV1→StartEnvelopeV2`、`ClaimV1→ClaimV2`（形状变了）、`AdapterBindingV1→AgentBindingV1`；新增 `CapabilitiesRequestV3`；**保留** `ControlMethodV1`／`ControlRequestV1`／`ControlPayloadV1` 与 `protocol.test.ts` 的 describe 名 `control protocol v1`（它们指方法集，不指 envelope 版本；改名只是搬动） |
+| D-W3-8 | 表级视图（`agent: null`）要不要跑 `--version` | 不跑（spec 只对「带选择」与 accept 要求核对；表级视图是给面板列 agent 的，跑一遍 N 个 CLI 没有读者） |
+| D-W3-9 | 🔴 跨仓时序：T5 落地后，Orca 里凡是用真 ccloop build 走 `--adapter` 的判据（`ccloopPort.ts:38`、`webCcloopSmoke`、`handoffE2E`、`verify-control.mjs`）在 T7 落地前都红；ccloop `verify-control-protocol.mjs` 改读 `ORCA_AGENTS_TABLE`，与 T7 的 Orca `scripts/verify-control.mjs` 必须同名 | 控制器按波次：T5 与 T7 之间不跑 Orca 的 control 门；T7 的 Orca 侧 env 名用 `ORCA_AGENTS_TABLE` |
+| D-W3-10 | `assertAgentsTablePath` 的边界：spec 5d「accept 之后把表写坏，collect 仍成功」要求它**不读内容** | **已由 W1 的正文确认**：T1 的 `assertAgentsTablePath` 只做 `isAbsolute`＋`realpath`＋`lstat().isFile()`，不打开读内容（plan-part-W1 Step 1.14 的代码）；T5 的判据只把表**内容**写坏、不删表 |
+| D-W3-11 | ccloop `CLAUDE.md` Rule 15（a）要人**指名到具体测试**；台账 §0 的人裁是概括授权 | 本分片把每条被改写的判据全名列在下方；控制器按台账 §0「事后逐条列名报人」转人（ccloop Rule 18：控制器不代人宣布） |
+
+---
