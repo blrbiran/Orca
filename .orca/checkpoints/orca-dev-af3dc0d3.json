@@ -3,33 +3,34 @@
   "runId": "orca-dev-af3dc0d3",
   "runtime": "claude-code",
   "sessionRef": "af3dc0d3-b6e4-4b97-b41a-7f75552cf74c",
-  "writtenAt": "2026-09-25T01:55:41.853Z",
-  "head": "b6c1a93718677acbf04c530783765ff87ba83fb2",
+  "writtenAt": "2026-09-25T03:55:12.374Z",
+  "head": "64a05e13dd1dac53c678abc35bf7b92371353ab0",
   "level": {
     "kind": "reading",
-    "level": 130118,
+    "level": 334374,
     "windowTokens": 1000000,
     "t1": 330000,
     "t2": 450000,
-    "band": 0
+    "band": 1
   },
   "next": [
-    "Execution driver first slice (①②③) is done under fake codex; see docs/handoff/handoff.md §4.0 and .superpowers/sdd/2026-09-25-execution-driver/. Do not resume its plan.",
-    "Human opened A then B on 2026-09-25 (session af3dc0d3). A first: real-codex live acceptance of the execution driver (real money) - write an acceptance procedure with a spend ceiling and get the human's go before any paid run. Then B: ④ handoff delivery via superpowers:brainstorming -> spec -> plan; no implementation before the human approves the spec.",
-    "Driver-loop E2E needs a ccloop main build containing C1-C4: fresh git clone --local into the session scratchpad, symlink node_modules, npm run build; adapter config under /private/tmp, mode 0600, pointing at ccloop's fake codex."
+    "A done: one paid real-codex run passed (ledger .superpowers/sdd/2026-09-25-live-acceptance/progress.md). Do not rerun.",
+    "B (④ handoff delivery + continuation + N-way parallel landing + m5): spec docs/superpowers/specs/2026-09-25-handoff-delivery-design.md is committed; an independent read-only spec review is in flight (report: session scratchpad handoff-spec-review.md). Verify each load-bearing reviewer claim, fix the spec, then add the human's 2026-09-25 rulings below, re-review, and only then writing-plans.",
+    "Human rulings 2026-09-25 to fold into the spec: m5 agreed; C5 agreed; add fake claude after fake codex (and wire real claude as an agent if needed) - ccloop control mode is codex-only today (accept.ts:91, worker.ts:107/153), so this needs a ccloop change C6; existing criteria may be rewritten this round under ruling 88 (b)(c)."
   ],
   "open": [
     "executionDriverE2E and driverSettle show timing reds under load: rerun the file alone before judging; controlShutdown's SIGTERM case is a known flake.",
-    "Subagent briefs must forbid touching the main worktree (no stash/checkout/reset, no mutation in the main tree); commit own changes before dispatching one that may touch it."
+    "Subagent briefs must forbid touching the main worktree (no stash/checkout/reset, no mutation in the main tree); commit own changes before dispatching one that may touch it.",
+    "Controller context crossed T1 (330395) in session af3dc0d3."
   ],
   "awaitingHuman": [
     {
       "kind": "named-authorization",
-      "what": "Go-ahead and spend ceiling for the first paid real-codex run (A is opened, but the paid run itself waits for the human); until it passes do not claim Web dispatch works"
+      "what": "Whether wiring real claude as an agent through Orca's driver belongs in this slice, and any paid claude live run"
     },
     {
       "kind": "named-authorization",
-      "what": "⑤ budget estimate chain, strict groups, and the §9.0 registered residuals: each needs the human to open it"
+      "what": "Web dispatch default of complex-1m-default (3M tokens, 3 attempts per task) overriding contract caps: change the default or surface it in the panel?"
     },
     {
       "kind": "irreversible",
@@ -40,9 +41,9 @@
     {
       "command": "npm run typecheck",
       "exitCode": 0,
-      "commit": "b6c1a93718677acbf04c530783765ff87ba83fb2",
-      "observedAt": "2026-09-25T01:55:41.807Z",
-      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-af3dc0d3-fw6fn4/1.txt"
+      "commit": "64a05e13dd1dac53c678abc35bf7b92371353ab0",
+      "observedAt": "2026-09-25T03:55:12.327Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-af3dc0d3-n7qPyU/1.txt"
     }
   ]
 }
