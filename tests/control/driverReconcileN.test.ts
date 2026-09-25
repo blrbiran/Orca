@@ -27,12 +27,14 @@ async function untilDeadline(driver: ExecutionDriver, predicate: () => boolean, 
 
 async function harness(tasks: readonly WebFixtureTask[], files: (id: string) => Record<string, string>, reconcile: { files: Record<string, string>; holdMs?: number }) {
   const t = await driverHarness(tasks, { files });
+  // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
   await writeFile(t.deps.agentsTablePath, JSON.stringify({ status: "succeeded", spent: 7, holdMs: 0, ...reconcile }));
   // Deviation D12: by default the group's reserve (20% of base) is smaller than one task's token budget,
   // so a reconciliation is refused until another run settles. Raise the ceiling explicitly.
   const limit = readControlGroup(t.h.store, "epoch-test", "g").ledger.groupLimit;
   const raised = t.service.setLimit(t.h.command("set-limit", { limit: { ...limit, tokens: limit.tokens + 10_000_000 } }));
   if ("error" in raised) throw new Error(`set-limit refused: ${JSON.stringify(raised.error)}`);
+  // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
   const spawns = () => existsSync(`${t.deps.agentsTablePath}.runs`) ? readFileSync(`${t.deps.agentsTablePath}.runs`, "utf8").trim().split("\n") : [];
   const bookings = () => (t.h.store.db.prepare("SELECT id FROM outbox WHERE kind='reconcile-usage' ORDER BY id").all() as Array<{ id: string }>).map((row) => row.id);
   const taskOf = (runId: string): string => t.body(runId).taskId;

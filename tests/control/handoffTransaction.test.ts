@@ -14,6 +14,7 @@ import { fakePeer } from "./fixtures/peer.js";
 import { openTestStore,seedBudgetCase,amount } from "./fixtures/store.js";
 
 describe("handoff transaction",{timeout:30000},()=>{
+  // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
   async function started(h:Awaited<ReturnType<typeof openTestStore>>,s:ReturnType<typeof seedBudgetCase>,parent:ReturnType<typeof claimWork>,peer:ReturnType<typeof fakePeer>){const sourceDir=join(h.root,"runs",parent.runId);await mkdir(sourceDir,{recursive:true});await startClaim(h.store,peer,{protocol:2,claim:parent,contractHash:hashPayload(s.w1.contract),inputCheckpoint:null,work:{contract:s.w1.contract,targetRepo:h.root,base:"HEAD",sourceDir}});}
   it("persists one immutable request intent before RPC and retries the same request",async()=>{
     const h=await openTestStore();try{const s=seedBudgetCase(h.store),parent=claimWork(h.store,s.t1Claim);
@@ -42,6 +43,7 @@ describe("handoff transaction",{timeout:30000},()=>{
     const h=await candidateCase();try{
       const parentWork=readWork(h.store,"g1","T1"),{targetVersion:_targetVersion,status:_status,...workInput}=parentWork;putWork(h.store,"g1",{...workInput,workItemId:"handoff-T1",kind:"handoff",parentRunId:h.claim.runId,grant:{work:amount(0,0,0,0),handoff:parentWork.grant.handoff}},{commandId:"register-proven-handoff",expectedRevision:3,by:"service"});
       const before=getGroup(h.store,"g1").reserved.tokens,raw={...h.candidate,snapshot:null};
+      // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
       const port={...fakePeer(join(h.root,"peer")),resolveAgent:async()=>{const fixtures=await import("./fixtures/store.js");return fixtures.resolvedAs(fixtures.caps);},requestHandoff:async()=>({kind:"complete" as const,requestId:"proven",checkpointId:raw.checkpointId}),collect:async()=>({events:[],candidate:raw,terminal:{outcome:"succeeded" as const,attemptSha:null,sourceDir:h.sourceDir,repoDir:h.repoDir}}),readEvidence:(ref:typeof raw.handoff)=>readArtifact(h.store,ref)};
       await new ControlService(h.store,port).requestHandoff("g1",h.claim.runId,{requestId:"proven",reason:"context",deadlineAt:"2030-01-01T00:00:00Z"});
       expect(getRun(h.store,h.claim.runId)).toMatchObject({state:"settled",checkpointId:"cp1",recoverable:true});expect(getGroup(h.store,"g1").reserved.tokens).toBeLessThan(before);expect(h.store.db.prepare("SELECT delivered FROM outbox WHERE id=?").get("handoff-request:"+h.claim.runId)?.delivered).toBe(1);

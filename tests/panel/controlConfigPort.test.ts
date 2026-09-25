@@ -44,12 +44,15 @@ async function setup() {
   const plan = join(repo, "ship.json");
   await writeFile(plan, "{}", { mode: 0o600 });
   const binary = join(root, "ccloop");
+  // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
   const agentsTable = join(root, "agents.json");
   await writeFile(binary, "#!/bin/sh\n", { mode: 0o700 });
   await chmod(binary, 0o700);
+  // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
   await writeFile(agentsTable, "{}", { mode: 0o600 });
   const router = (port: ExecutionPort) => createExecutionProfileRouter([resolveProfile(snapshot(), port)]);
   const base = (over: Partial<TrustedControlConfigInput> = {}): TrustedControlConfigInput => ({
+    // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
     epoch: "epoch-1", stateDir: root, executablePath: binary, agentsTablePath: agentsTable,
     executionPort: "configured", archiveRoot: root, exportRoot: root, evidenceRoot: root, shutdownGraceMs: 30_000,
     repositories: [{ repoId: "repo", displayName: "Repo", path: repo }],
@@ -67,12 +70,14 @@ async function setup() {
     readEvidence: async () => Buffer.alloc(0), accept: async () => ({ kind: "unknown" }), inspect: async () => ({ kind: "unknown" }),
     requestHandoff: async () => ({ kind: "unknown" }), collect: async () => ({ events: [], candidate: null, terminal: null }),
   } as unknown as ExecutionPort;
+  // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
   return { root, repo, plan, binary, agentsTable, router, base, capablePort };
 }
 
 describe("the served config states whether an execution port is configured", () => {
   it("serves \"unconfigured\" when the panel was started without one", async () => {
     const h = await setup();
+    // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
     const config = createTrustedControlConfig(h.base({ executionPort: "unconfigured", agentsTablePath: null }), h.router(createUnconfiguredControlPort()));
     // Parsed by the protocol schema rather than read off the input object: an input that is never
     // copied into the view would pass an assertion made against the input.
@@ -124,6 +129,7 @@ describe("the two pairs cannot disagree", () => {
   // table now (spec §6.6), and the refinement is named for it.
   it("refuses a configured port with no agents table", async () => {
     const h = await setup();
+    // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
     expect(detail(() => createTrustedControlConfig(h.base({ executionPort: "configured", agentsTablePath: null }), h.router(h.capablePort))))
       .toBe("execution-port-agents-table-mismatch");
   });

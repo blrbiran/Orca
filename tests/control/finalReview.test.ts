@@ -5,6 +5,7 @@ import { candidateCase } from "./fixtures/candidate.js";
 import { archiveCase } from "./fixtures/archive.js";
 import { crashCase } from "./fixtures/crashCase.js";
 import { roundPeer } from "./fixtures/roundPeer.js";
+// Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
 import { agentsView,caps,amount,openTestStore,resolvedAs,seedBudgetCase } from "./fixtures/store.js";
 import { commitCandidate,readCommittedCheckpoint } from "../../src/control/checkpoints.js";
 import { publishPending } from "../../src/control/projection.js";
@@ -39,6 +40,7 @@ describe("final review regressions",{timeout:30000},()=>{
    const handoff=await writeArtifact(h.store,"handoff-observations",Buffer.from(JSON.stringify({protocol:1,identity:{groupId:h.claim.groupId,workItemId:h.claim.workItemId,taskId:h.claim.taskId,runId:h.claim.runId,generation:h.claim.generation,graphVersion:h.claim.graphVersion,targetVersion:h.claim.targetVersion},request:null,runState:{status:"succeeded"},completed:[],unfinished:[],pendingDecisions:[],awaitingHuman:[],validationCommands:[],rawLogs:[],usageHighWater:seq,unresolvedRequestIds:[],artifacts:[]})));
    const a=await archiveRun(h.store,{runId:h.claim.runId,sourceDir:h.sourceDir,repoDir:h.repoDir,stopProof});
    const reserved=getGroup(h.store,"g1").reserved;
+   // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
    const {commandId:_commandId,configHash:_configHash,agent:_agent,grant:_grant,ownerToken:_ownerToken,...candidateIdentity}=h.claim;
    await commitCandidate(h.store,{...candidateIdentity,checkpointId:"observations",usageHighWater:seq,result:"complete",artifacts:[...a.artifacts,source,proofSource,handoff],snapshot:a.snapshot,missing:[],unresolvedRequestIds:[],stopProof,terminalOutcome:"succeeded",handoff});
    expect(getGroup(h.store,"g1").used.tokens).toBe(0);
@@ -66,6 +68,7 @@ describe("final review regressions",{timeout:30000},()=>{
   const h=await candidateCase();try{
    await commitCandidate(h.store,h.candidate);const {targetVersion,status,...w}=readWork(h.store,"g1","T1");
    putWork(h.store,"g1",{...w,contract:{updated:true},grant:{work:amount(20,100,1,1),handoff:amount(0,0,0,0)}},{commandId:"update",expectedRevision:3,by:"human"});
+   // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
    const service=new ControlService(h.store,{resolveAgent:async partial=>resolvedAs(caps,partial),listAgents:async()=>agentsView} as ExecutionPort);const before=getGroup(h.store,"g1").reserved.tokens;
    const c=await service.claim("g1","T1");expect(c.runId).not.toBe(h.claim.runId);expect(c.targetVersion).toBe(2);expect(c.graphVersion).toBe(4);expect(getGroup(h.store,"g1").reserved.tokens).toBe(before+20);
    expect((await service.claim("g1","T1")).runId).toBe(c.runId);expect(getGroup(h.store,"g1").reserved.tokens).toBe(before+20);
@@ -84,6 +87,7 @@ describe("final review regressions",{timeout:30000},()=>{
  });
  it("refuses recovery while live service orchestration owns the store",async()=>{
   const h=await openTestStore(),entered=latch(),resume=latch();try{
+   // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
    seedBudgetCase(h.store);const service=new ControlService(h.store,{...roundPeer(join(h.root,"peer")),resolveAgent:async()=>{entered.release();await resume.promise;throw new Error("end-live-probe");}} as ExecutionPort);
    const running=service.run("g1","unused").catch(e=>e.message);await entered.promise;
    await expect(recoverControl(h.store,{inspect:async()=>{throw new Error("unexpected inspect");}} as unknown as ExecutionPort)).rejects.toThrow("control-operation-in-progress");
@@ -101,6 +105,7 @@ describe("final review regressions",{timeout:30000},()=>{
   const h=await openTestStore();try{
    const s=seedBudgetCase(h.store);createGroup(h.store,{groupId:"distinct",projectKey:"project",goal:"goal",successConditions:["okay"],limit:amount(200),reviewReserve:amount(0,0,0,0),deadlineAt:null},{commandId:"create",expectedRevision:0,by:"human"});
    putWork(h.store,"distinct",{...s.w1,workItemId:"WI1"},{commandId:"w1",expectedRevision:1,by:"human"});putWork(h.store,"distinct",{...s.w2,workItemId:"WI2",dependsOn:["WI1"]},{commandId:"w2",expectedRevision:2,by:"human"});
+   // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
    const service=new ControlService(h.store,{...roundPeer(join(h.root,"peer")),resolveAgent:async partial=>resolvedAs(caps,partial),readEvidence:async()=>Buffer.from("")},{targetRepo:h.root});
    await expect(makeControlledExecution(service,"distinct").preflight({plan:{targetRepo:h.root,tasks:[{taskId:"T1",dependsOn:[]},{taskId:"T2",dependsOn:["T1"]}]},contracts:new Map([["T1",s.w1.contract],["T2",s.w2.contract]])} as never)).resolves.toBeUndefined();
   }finally{await h.dispose();}

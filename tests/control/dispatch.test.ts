@@ -8,6 +8,7 @@ import { getGroup,getRun } from "../../src/control/queries.js";
 import { hashPayload,setGroupStopped } from "../../src/control/commands.js";
 import { openTestStore,seedBudgetCase } from "./fixtures/store.js";
 import { fakePeer } from "./fixtures/peer.js";
+// Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
 const setup=async()=>{const h=await openTestStore();const s=seedBudgetCase(h.store);const claim=claimWork(h.store,s.t1Claim);return {...h,envelope:{protocol:2 as const,claim,contractHash:hashPayload(s.w1.contract),inputCheckpoint:null,work:{contract:s.w1.contract,targetRepo:h.root,base:"HEAD",sourceDir:h.root}}};};
 describe("durable starts",()=>{
  it("recovers the accepted identity after the peer drops its response, without another launch",async()=>{
@@ -73,6 +74,7 @@ describe("durable starts",()=>{
    // `resolveAgent` of the claim's selection now (spec §6.4); stop still lands during it and is still re-checked.
    await expect(startClaim(h.store,{...peer,resolveAgent:async partial=>{
     setGroupStopped(h.store,"g1",true,{commandId:"stop-during-discovery",expectedRevision:3,by:"human"});
+    // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
     return peer.resolveAgent(partial);
    }},h.envelope)).rejects.toThrow("group-stopped");
    await expect(readFile(join(root,"launches"))).rejects.toThrow();

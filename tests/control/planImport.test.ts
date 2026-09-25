@@ -88,6 +88,7 @@ async function setup() {
   const frozen = resolveProfile(profile(), port);
   const router = createExecutionProfileRouter([frozen]);
   const trustedConfig = createTrustedControlConfig({
+    // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
     epoch: "epoch", stateDir: h.store.stateDir, executablePath: binary, agentsTablePath: adapter,
     executionPort: "configured" as const,  // Task 4b: a real agents table (agent selection spec §6.6) is configured here.
     archiveRoot: h.root, exportRoot: h.root, evidenceRoot: h.root, shutdownGraceMs: 1_000,

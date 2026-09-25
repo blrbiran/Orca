@@ -104,6 +104,7 @@ async function setup(): Promise<Harness> {
   const frozen = resolveProfile(snapshot, port);
   const router = createExecutionProfileRouter([frozen], { now: () => new Date("2030-01-01T00:00:00.000Z") });
   const trustedConfig = createTrustedControlConfig({
+    // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
     epoch: "epoch-test", stateDir: h.store.stateDir, executablePath: binary, agentsTablePath: adapter,
       executionPort: "configured" as const,  // Task 4b: these fixtures configure a real agents table, so the pair says "configured".
     archiveRoot: h.root, exportRoot: h.root, evidenceRoot: h.root, shutdownGraceMs: 1_000,

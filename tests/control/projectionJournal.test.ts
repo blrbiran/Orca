@@ -103,6 +103,7 @@ describe("projection journal", () => {
 
       const beforeStart = readVersions(h.store, "g1");
       await startClaim(h.store, fakePeer(`${h.root}/accepted-peer`), {
+        // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
         protocol: 2,
         claim,
         contractHash: hashPayload(seeded.w1.contract),
@@ -123,6 +124,7 @@ describe("projection journal", () => {
       const claim = claimWork(h.store, seeded.t1Claim);
       const before = readVersions(h.store, "g1");
       await expect(startClaim(h.store, fakePeer(`${h.root}/unknown-peer`, "drop"), {
+        // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
         protocol: 2,
         claim,
         contractHash: hashPayload(seeded.w1.contract),

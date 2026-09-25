@@ -5,6 +5,7 @@ import { commitCandidate } from "../../src/control/checkpoints.js";
 import { getGroup } from "../../src/control/queries.js";
 import { candidateCase } from "./fixtures/candidate.js";
 import { ControlService } from "../../src/control/service.js";
+// Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
 import { agentsView, caps, resolvedAs } from "./fixtures/store.js";
 import type { ExecutionPort,StartEnvelope } from "../../src/control/executionPort.js";
 import { recordUsage } from "../../src/control/usage.js";
@@ -30,6 +31,7 @@ describe("continuation claims",{timeout:30000},()=>{
   });
   it("exports and binds the verified resume bundle before starting and replays one new run",async()=>{
     const h=await candidateCase();try{await commitCandidate(h.store,h.candidate);let accepted:StartEnvelope|undefined;
+      // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
       const port:ExecutionPort={resolveAgent:async partial=>resolvedAs(caps,partial),listAgents:async()=>agentsView,readEvidence:async()=>Buffer.alloc(0),accept:async input=>(accepted=input,{kind:"accepted",executionId:"continued",configHash:input.claim.configHash}),inspect:async input=>({kind:"accepted",executionId:"continued",configHash:input.claim.configHash}),requestHandoff:async(_input,request)=>({kind:"latched",requestId:request.requestId}),collect:async()=>({events:[],candidate:null,terminal:null})};
       const service=new ControlService(h.store,port),first=await service.continueTask("g1","T1",{commandId:"continue-service",expectedRevision:3});
       expect(first.runId).not.toBe(h.claim.runId);expect(accepted?.inputCheckpoint).toMatchObject({predecessorRunId:h.claim.runId,checkpointId:"cp1"});expect(accepted?.work.sourceDir).toContain(first.runId);

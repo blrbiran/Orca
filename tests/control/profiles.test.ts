@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+// Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
 import type { ExecutionPort } from "../../src/control/executionPort.js";
 import type { PartialSelection } from "../../src/control/agentSelection.js";
 import {
@@ -7,6 +8,7 @@ import {
   resolveProfile,
   unavailableCapabilities,
 } from "../../src/control/profiles.js";
+// Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
 import type { CapabilityViewV1, ExecutionProfileSnapshotV1 } from "../../src/control/webProtocol.js";
 
 const hash = (value: string) => value.repeat(64);
@@ -62,6 +64,7 @@ const asked: PartialSelection[] = [];
 function port(probe: CapabilityViewV1 | (() => Promise<CapabilityViewV1>)): ExecutionPort {
   const result = typeof probe === "function" ? probe : async () => probe;
   return {
+    // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
     resolveAgent: async (partial) => {
       asked.push(partial);
       return { selection: { agent: "codex", model: "fixture-model", contextWindow: "agent-default", ...partial }, configHash: hash("c"), timeoutMs: 1, killGraceMs: 0, capabilities: await result() };
@@ -108,6 +111,7 @@ describe("trusted execution profiles", () => {
     const frozen = resolveProfile(snapshot(), mutablePort);
     const router = createExecutionProfileRouter([frozen]);
     const owned = router.resolve("task", "worker", frozen.profileHash);
+    // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
     mutablePort.resolveAgent = async () => { throw new Error("the replaced method was called"); };
     mutablePort.accept = async () => ({ kind: "accepted", executionId: "mutated", configHash: hash("0") });
 
@@ -142,6 +146,7 @@ describe("trusted execution profiles", () => {
 
   it("intersects every ordered capability and keeps proof only on exact descriptor equality", () => {
     const declared = snapshot().profile.capabilities;
+    // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
     const observed: CapabilityViewV1 = {
       usageObservation: "phase-end",
       budgetEnforcement: "soft",

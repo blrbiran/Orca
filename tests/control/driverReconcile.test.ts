@@ -28,8 +28,10 @@ async function untilDeadline(driver: ExecutionDriver, predicate: () => boolean, 
   if (!predicate()) throw new Error("the driver did not reach the expected state before the deadline");
 }
 
+// Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
 async function twoConflicting(reconcile: { files: Record<string, string>; status?: string; spent?: number; holdMs?: number; refuse?: string }, affordable = true) {
   const t = await driverHarness(conflicting, { files });
+  // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
   await writeFile(t.deps.agentsTablePath, JSON.stringify({ status: "succeeded", spent: 7, holdMs: 0, ...reconcile }));
   if (affordable) {
     // Deviation D12: by default the group's reserve (20% of base) is smaller than one task's token
@@ -39,6 +41,7 @@ async function twoConflicting(reconcile: { files: Record<string, string>; status
     if ("error" in raised) throw new Error(`set-limit refused: ${JSON.stringify(raised.error)}`);
   }
   const ids = [await t.claim(), await t.claim()];
+  // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
   const spawns = () => existsSync(`${t.deps.agentsTablePath}.runs`) ? readFileSync(`${t.deps.agentsTablePath}.runs`, "utf8").trim().split("\n") : [];
   return { ...t, ids, spawns };
 }
@@ -281,6 +284,7 @@ describe("a person's retry of a run blocked at R (final review I4)", { timeout: 
       const runId = t.ids.find((id) => t.body(id).state === "blocked")!;
       expect(t.body(runId).drive.blockedReason).toBe("reconcile-terminal:failed");
       expect(bookings(t)).toHaveLength(1);
+      // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
       await writeFile(t.deps.agentsTablePath, JSON.stringify({ status: "succeeded", spent: 7, holdMs: 0, files: { "shared.txt": "A\nB\n" } }));
       const retried = await t.service.recoveryRetry(t.h.runCommand("recovery-retry", runId, { scope: "run", runId }));
       expect(retried).toMatchObject({ result: { kind: "recovery-observed", resolved: true } });

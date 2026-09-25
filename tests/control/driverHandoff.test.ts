@@ -408,6 +408,7 @@ describe("a landing whose worktree removal failed after the swap (controller rul
     const t = await driverHarness([{ taskId: "a", targetPaths: ["shared.txt"] }, { taskId: "b", targetPaths: ["shared.txt"] }],
       { files: (id) => ({ "shared.txt": id === "a" ? "A\n" : "B\n" }) }); try {
       // As tests/control/driverReconcile.test.ts's `twoConflicting`: a reconciliation that succeeds, and a group that can afford it.
+      // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
       await writeFile(t.deps.agentsTablePath, JSON.stringify({ status: "succeeded", spent: 7, holdMs: 0, files: { "shared.txt": "A\nB\n" } }));
       const limit = readControlGroup(t.h.store, "epoch-test", "g").ledger.groupLimit;
       const raised = t.service.setLimit(t.h.command("set-limit", { limit: { ...limit, tokens: limit.tokens + 10_000_000 } }));

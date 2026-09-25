@@ -8,6 +8,7 @@ import { ControlService, type ExecutionProfileSelection } from "../../src/contro
 import type { ExecutionProfileSnapshotV1 } from "../../src/control/webProtocol.js";
 import { collectControlled } from "../../src/control/schedulerBridge.js";
 import { getGroup } from "../../src/control/queries.js";
+// Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
 import { amount, openTestStore, resolvedAs, seedBudgetCase } from "./fixtures/store.js";
 
 const digest = (byte: string) => byte.repeat(64);
@@ -59,6 +60,7 @@ const probing = (view: () => ReturnType<typeof capableProbe> | Promise<ReturnTyp
 
 function port(overrides: Partial<ExecutionPort> = {}): ExecutionPort {
   return {
+    // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
     ...probing(() => capableProbe()),
     listAgents: async () => ({ installations: [] }),
     readEvidence: async () => Buffer.alloc(0),
@@ -80,6 +82,7 @@ function serviceWith(store: Awaited<ReturnType<typeof openTestStore>>["store"], 
 }
 
 function envelope(claim: Awaited<ReturnType<ControlService["claimProfiled"]>>, contract: unknown, root: string): StartEnvelope {
+  // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
   return { protocol: 2, claim, contractHash: hashPayload(contract), inputCheckpoint: null, work: { contract, targetRepo: root, base: "HEAD", sourceDir: `${root}/${claim.runId}` } };
 }
 
@@ -91,6 +94,7 @@ describe("profiled service execution", () => {
         seedBudgetCase(h.store);
         let accepts = 0;
         const selected = port({
+          // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
           ...probing(() => mode === "unavailable" ? { ...capableProbe(), handoffControl: "unavailable" } : capableProbe()),
           accept: async () => { accepts += 1; return { kind: "unknown" }; },
         });
@@ -128,6 +132,7 @@ describe("profiled service execution", () => {
         const seeded = seedBudgetCase(h.store);
         let available = true, accepts = 0;
         const selected = port({
+          // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
           ...probing(() => available ? capableProbe() : { ...capableProbe(), handoffControl: "unavailable" }),
           accept: async () => { accepts += 1; return { kind: "unknown" }; },
         });
@@ -153,6 +158,7 @@ describe("profiled service execution", () => {
         const seeded = seedBudgetCase(h.store);
         let available = true, accepts = 0;
         const selected = port({
+          // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
           ...probing(() => available ? capableProbe() : { ...capableProbe(), handoffControl: "unavailable" }),
           accept: async () => { accepts += 1; throw new Error("lost-start-response"); },
           inspect: async () => ({ kind: "absent" }),
@@ -181,6 +187,7 @@ describe("profiled service execution", () => {
         seedBudgetCase(h.store);
         const workerSnapshot = profileSnapshot();
         workerSnapshot.profile.capabilities.requestBoundProof!.workDimensions = workDimensions;
+        // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
         const selected = port({ ...probing(() => structuredClone(workerSnapshot.profile.capabilities)) });
         const worker = resolveProfile(workerSnapshot, selected), handoff = resolveProfile(handoffSnapshot(), port());
         const router = createExecutionProfileRouter([worker, handoff]);
@@ -210,6 +217,7 @@ describe("profiled service execution", () => {
     const entered = latch(), resume = latch();
     try {
       seedBudgetCase(h.store);
+      // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
       const { service, selection, handoffSelection } = serviceWith(h.store, port({ ...probing(async () => { entered.release(); await resume.promise; return capableProbe(); }) }));
       const claim = service.claimProfiled("g1", "T1", selection, handoffSelection);
       await entered.promise;
@@ -225,6 +233,7 @@ describe("profiled service execution", () => {
     const entered = latch(), resume = latch();
     try {
       seedBudgetCase(h.store);
+      // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
       const { service, selection, handoffSelection } = serviceWith(h.store, port({ ...probing(async () => { entered.release(); await resume.promise; return capableProbe(); }) }));
       const reconcile = service.reconcileBudgetProfiled("g1", "T1", selection, handoffSelection);
       await entered.promise;

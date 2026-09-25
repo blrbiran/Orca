@@ -80,8 +80,10 @@ it("blocks recovery of a missing current checkpoint instead of selecting an olde
 // `contextObservation`, a field no guard clause after the schema check reads, so it pins the schema
 // check itself: only `capabilitiesSchema.safeParse` catches a boolean where an enum string is required.
 it("rejects a malformed peer capability answer the guard clauses never read",async()=>{
+ // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
  const {ControlService}=await import("../../src/control/service.js");const {openTestStore,seedBudgetCase,caps,resolvedAs}=await import("./fixtures/store.js");
  const h=await openTestStore();try{seedBudgetCase(h.store);
+  // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
   const service=new ControlService(h.store,{resolveAgent:async()=>resolvedAs({...caps,contextObservation:false} as never)} as never);
   await expect(service.claim("g1","T1")).rejects.toThrow("control-capability-unsupported");
   expect(h.store.db.prepare("SELECT count(*) AS n FROM runs").get()?.n).toBe(0);

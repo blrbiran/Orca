@@ -103,6 +103,7 @@ describe("a blocked run keeps the step it was blocked at through a later error (
       expect(t.body(parked)).toMatchObject({ state: "collected", drive: { landedCommit: null } });
       // From D the run tries its landing again; the conflict's reconciliation (scripted to fail, so nothing lands)
       // runs in its own process, so rounds are paced by the clock until the request closes.
+      // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
       await writeFile(t.deps.agentsTablePath, JSON.stringify({ status: "failed", spent: 1, holdMs: 0, files: {} }));
       const after: Array<[string, string | null]> = [];
       const deadline = Date.now() + 30_000;

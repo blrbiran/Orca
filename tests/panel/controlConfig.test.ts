@@ -21,9 +21,11 @@ async function setup() {
   const plan = join(plans, "ship.json");
   await writeFile(plan, "{}", { mode: 0o600 });
   const binary = join(root, "ccloop");
+  // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
   const agentsTable = join(root, "agents.json");
   await writeFile(binary, "#!/bin/sh\n", { mode: 0o700 });
   await chmod(binary, 0o700);
+  // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
   await writeFile(agentsTable, "{}", { mode: 0o600 });
 
   const snapshot: ExecutionProfileSnapshotV1 = {
@@ -57,6 +59,7 @@ async function setup() {
   } as unknown as ExecutionPort;
   const frozen = resolveProfile(snapshot, port);
   const router = createExecutionProfileRouter([frozen]);
+  // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
   return { root, repo, plan, binary, agentsTable, frozen, router };
 }
 
@@ -64,6 +67,7 @@ describe("trusted panel control config", () => {
   it("resolves only stable repository and plan IDs and never exposes trusted paths", async () => {
     const h = await setup();
     const config = createTrustedControlConfig({
+      // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
       epoch: "epoch-1", stateDir: h.root, executablePath: h.binary, agentsTablePath: h.agentsTable,
       executionPort: "configured" as const,  // Task 4b: these fixtures configure a real agents table, so the pair says "configured".
       archiveRoot: h.root, exportRoot: h.root, evidenceRoot: h.root, shutdownGraceMs: 30_000,
@@ -93,6 +97,7 @@ describe("trusted panel control config", () => {
     const link = join(h.repo, "linked-plan.json");
     await symlink(outside, link);
     const base = {
+      // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
       epoch: "epoch-1", stateDir: h.root, executablePath: h.binary, agentsTablePath: h.agentsTable,
       executionPort: "configured" as const,  // Task 4b: these fixtures configure a real agents table, so the pair says "configured".
       archiveRoot: h.root, exportRoot: h.root, evidenceRoot: h.root, shutdownGraceMs: 30_000,
@@ -107,6 +112,7 @@ describe("trusted panel control config", () => {
   it("rejects a plan or ancestor swapped to a symlink after startup", async () => {
     const h = await setup();
     const config = createTrustedControlConfig({
+      // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
       epoch: "epoch-1", stateDir: h.root, executablePath: h.binary, agentsTablePath: h.agentsTable,
       executionPort: "configured" as const,  // Task 4b: these fixtures configure a real agents table, so the pair says "configured".
       archiveRoot: h.root, exportRoot: h.root, evidenceRoot: h.root, shutdownGraceMs: 30_000,
@@ -123,6 +129,7 @@ describe("trusted panel control config", () => {
   it("rejects duplicate IDs and invalid trusted executable paths before serving config", async () => {
     const h = await setup();
     const input = {
+      // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
       epoch: "epoch-1", stateDir: h.root, executablePath: h.binary, agentsTablePath: h.agentsTable,
       executionPort: "configured" as const,  // Task 4b: these fixtures configure a real agents table, so the pair says "configured".
       archiveRoot: h.root, exportRoot: h.root, evidenceRoot: h.root, shutdownGraceMs: 30_000,

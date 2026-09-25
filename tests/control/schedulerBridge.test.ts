@@ -36,12 +36,14 @@ it("checks execution capabilities before reading or mutating the prepared target
 
 it("reserves reconciliation once from remaining group budget and refuses stopped groups",async()=>{
  const {ControlService}=await import("../../src/control/service.js");
+ // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
  const {openTestStore,seedBudgetCase,caps,amount,resolvedAs}=await import("./fixtures/store.js");
  const {claimWork}=await import("../../src/control/budget.js");
  const {getGroup}=await import("../../src/control/queries.js");
  const {setGroupStopped}=await import("../../src/control/commands.js");
  const h=await openTestStore();try{
   const seeded=seedBudgetCase(h.store);claimWork(h.store,seeded.t1Claim);
+  // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
   const service=new ControlService(h.store,{resolveAgent:async()=>resolvedAs(caps)} as never,{reconcileGrant:{work:amount(7,500,1,1),handoff:amount(2,50,0,0)}});
   const first=await service.reconcileBudget("g1","T1");
   expect(first.tokenBudget).toBe(7);expect(first.totalRuntimeBudgetMs).toBe(500);
@@ -59,9 +61,11 @@ it("reserves reconciliation once from remaining group budget and refuses stopped
 // shape this test pinned before.
 it("gets capabilities from the peer before a service claim",async()=>{
  const {ControlService}=await import("../../src/control/service.js");
+ // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
  const {openTestStore,seedBudgetCase,caps,resolvedAs}=await import("./fixtures/store.js");
  const h=await openTestStore();try{
   seedBudgetCase(h.store);
+  // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
   const service=new ControlService(h.store,{resolveAgent:async()=>resolvedAs({...caps,handoffExecution:null})} as never);
   await expect(service.claim("g1","T1")).rejects.toThrow("control-capability-unsupported");
   expect(h.store.db.prepare("SELECT count(*) AS n FROM runs").get()?.n).toBe(0);
@@ -73,6 +77,7 @@ it.each(["success","budget","stopped","crash"])("runs a real conflicting graph t
  const {makeControlledExecution}=await import("../../src/control/schedulerBridge.js");
  const {runPreparedRound,loadRound}=await import("../../src/scheduler/run.js");
  const {seedLyingPlan,showFileAt}=await import("../scheduler/sandbox.js");
+ // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
  const {openTestStore,amount,fixtureAgent}=await import("./fixtures/store.js");
  const {roundPeer}=await import("./fixtures/roundPeer.js");
  const {createGroup,putWork}=await import("../../src/control/commands.js");
@@ -83,6 +88,7 @@ it.each(["success","budget","stopped","crash"])("runs a real conflicting graph t
   const p=await seedLyingPlan(s),loaded=await loadRound(p.planPath);if("rejections" in loaded)throw new Error(JSON.stringify(loaded));
   createGroup(h.store,{groupId:"g",projectKey:"offline/project",goal:"both changes",successConditions:["checks"],limit:amount(100,100000,10,10),reviewReserve:amount(10,100,1,1),deadlineAt:null},{commandId:"g",expectedRevision:0,by:"human"});
   let revision=1;
+  // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
   for(const task of loaded.round.plan.tasks)putWork(h.store,"g",{workItemId:task.taskId,taskId:task.taskId,kind:"task",dependsOn:task.dependsOn,contract:loaded.round.contracts.get(task.taskId),configHash:"offline",agent:fixtureAgent,grant:{work:amount(35,20000,1,1),handoff:amount(5,100,0,0)}},{commandId:task.taskId,expectedRevision:revision++,by:"human"});
   const service=new ControlService(h.store,roundPeer(join(h.root,"peer")),{targetRepo:s.targetRepo,reconcileGrant:{work:amount(mode==="budget"?0:7,500,1,1),handoff:amount(1,50,0,0)}});
   const messages:string[]=[];
