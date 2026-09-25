@@ -10,7 +10,7 @@ import { readGroup, saveGroup } from "./queries.js";
 import { ORCA_IDENTITY, git } from "../scheduler/gitExec.js";
 import { TERMINAL_OUTCOMES, cloneDirOf, latestAttemptSha, loopDirOf, runTask } from "../scheduler/ccloopRunner.js";
 import { netChangeSet } from "../scheduler/harvest.js";
-import { markersRemaining, materialiseConflict, pinConflictCommit, rebuildMergeCommit, synthesizeReconcileContract } from "../scheduler/reconcile.js";
+import { markersRemaining, materialiseConflict, pinConflictCommit, rebuildMergeCommit, synthesizeReconcileContractOf } from "../scheduler/reconcile.js";
 import { blockRun, describeError, groupRepoId, readDriverRun, saveDriverRun, write, type DriverContext, type DriverRun, type ExecutionDriverDeps } from "./executionDriver.js";
 import { QUIET_GIT, compareAndSwap, conflictPathOf, incomingRefOf, landingPathOf, reconcileRunsDirOf, removeOwnPath, revParse, workBranchRef } from "./workspace.js";
 import type { ReconcileRecord } from "./driveRecord.js";
@@ -80,6 +80,11 @@ export async function stepD(deps: ExecutionDriverDeps, runId: string): Promise<b
   const { store } = deps;
   const run = readDriverRun(store, runId);
   if (run.state !== "collected" || run.drive?.attemptSha == null || run.drive.base === null) return false;
+  // Handoff delivery spec §5.2 N2 (controller decision): at most one landing of a group is reconciling. A
+  // sibling landing now would move the tip under it and make it land, and maybe pay, again.
+  for (const row of store.db.prepare("SELECT body FROM runs WHERE group_id=? AND active=1").all(run.groupId)) {
+    if ((JSON.parse(String(row.body)) as DriverRun).state === "reconciling") return false;
+  }
   const drive = run.drive;
   let targetRepo: string;
   try { targetRepo = deps.resolveRepository(groupRepoId(store, run.groupId)); }
@@ -110,8 +115,12 @@ export async function stepD(deps: ExecutionDriverDeps, runId: string): Promise<b
  * spec §5.3(2), deviation D11: the other side is a run of this group that landed after this run's
  * base and whose own change (base..its attempt, the landing's second parent) touches a conflicted
  * path. Exactly one, or the reconciliation would carry a side this driver picked.
+ *
+ * Handoff delivery spec §5.2 N1 (controller decision, 2026-09-25): every such task, sorted by task id, so
+ * the reconciliation carries all of them and none is picked. None is still an escalation: the conflict
+ * then comes from a commit no run of this group landed.
  */
-export async function otherSideOfWeb(store: ControlStore, targetRepo: string, run: DriverRun, conflictedPaths: readonly string[]): Promise<{ taskId: string } | { escalate: string }> {
+export async function otherSideOfWeb(store: ControlStore, targetRepo: string, run: DriverRun, conflictedPaths: readonly string[]): Promise<{ taskIds: string[] } | { escalate: string }> {
   const conflicted = new Set(conflictedPaths);
   const touched = new Set<string>();
   for (const row of store.db.prepare("SELECT body FROM runs WHERE group_id=? ORDER BY id").all(run.groupId)) {
@@ -129,7 +138,7 @@ export async function otherSideOfWeb(store: ControlStore, targetRepo: string, ru
     const changed = await netChangeSet(targetRepo, other.drive.base, `${landed}^2`);
     if (changed.some((path) => conflicted.has(path))) touched.add(other.taskId);
   }
-  return touched.size === 1 ? { taskId: [...touched][0]! } : { escalate: String(touched.size) };
+  return touched.size === 0 ? { escalate: "0" } : { taskIds: [...touched].sort() };
 }
 
 /** spec §5.3(5), deviation D12: a read-only check, not a reservation (registered as a known gap). */
@@ -153,20 +162,28 @@ async function beginReconcile(deps: ExecutionDriverDeps, runId: string, targetRe
   await pinConflictCommit(copy, runId, conflict.conflictCommit);
   const other = await otherSideOfWeb(store, targetRepo, run, conflict.conflictedPaths);
   if ("escalate" in other) { blockRun(deps, runId, "D", `reconcile-other-side:${other.escalate}`); return true; }
-  const contracts = new Map<string, unknown>([
-    [run.taskId!, readConfirmedTaskExecution(store, run.groupId, run.taskId!).contract],
-    [other.taskId, readConfirmedTaskExecution(store, run.groupId, other.taskId).contract],
-  ]);
+  const others = other.taskIds;
+  const contracts = new Map<string, unknown>(
+    [run.taskId!, ...others].map((taskId) => [taskId, readConfirmedTaskExecution(store, run.groupId, taskId).contract]),
+  );
   const runsDir = privateDirectory(reconcileRunsDirOf(roots, runId));
+  // A reconciliation reset by a moved tip left its terminal loop state here; a new one must not collect
+  // it. Measured (handoff delivery Task 6): it did, and landed a tree built on the old tip.
+  await rm(join(runsDir, `reconcile-${runId}`), { recursive: true, force: true });
   const side = (taskId: string): PlanTask => ({ taskId, contract: "", dependsOn: [] });
-  const synthesized = await synthesizeReconcileContract(side(run.taskId!), side(other.taskId), contracts, runsDir, conflict);
+  const synthesized = await synthesizeReconcileContractOf(side(run.taskId!), others.map(side), contracts, runsDir, conflict);
   if ("escalate" in synthesized) { blockRun(deps, runId, "D", `reconcile-contract:${synthesized.escalate}`); return true; }
   const tokenBudget = (JSON.parse(await readFile(synthesized.path, "utf8")) as { executionPolicy: { tokenBudget: number } }).executionPolicy.tokenBudget;
   if (!reconcileAffordable(store, run.groupId, tokenBudget)) { blockRun(deps, runId, "D", "reconcile-budget"); return true; }
   const record: ReconcileRecord = {
-    copyPath: copy, old, conflictCommit: conflict.conflictCommit, conflictedPaths: conflict.conflictedPaths, otherTaskId: other.taskId,
+    copyPath: copy, old, conflictCommit: conflict.conflictCommit, conflictedPaths: conflict.conflictedPaths, otherTaskId: others[0]!, otherTaskIds: others,
     reconcileRunId: `reconcile-${runId}`, runsDir, contractPath: synthesized.path, tokenBudget, spawning: false, pid: null, outcome: null, attemptSha: null,
-    spawnSeq: 0,
+    // Handoff delivery spec §11 I7, §13.2 I-6: the spawn key is monotonic per run. A moved-tip reset clears
+    // this record, so it resumes from the spawns already booked instead of from 0 (a booked key collides).
+    // Controller ruling D-SPAWNKEY (2026-09-25): MAX of the booked spawn numbers, not a row count -- a spawn
+    // whose process died unbooked would make a count collide with a booked key.
+    spawnSeq: Number(store.db.prepare("SELECT COALESCE(MAX(CAST(substr(id, ?) AS INTEGER)), 0) AS n FROM outbox WHERE id LIKE ?")
+      .get(`reconcile-usage:${runId}:spawn-`.length + 1, `reconcile-usage:${runId}:spawn-%`)!.n),
   };
   return write(deps, () => {
     const current = readDriverRun(store, runId);
@@ -307,7 +324,7 @@ async function finishReconcile(
   try { targetRepo = deps.resolveRepository(groupRepoId(store, run.groupId)); }
   catch { blockRun(deps, runId, "R", "repository-path"); return true; }
   const tree = (await git(record.copyPath, [...QUIET_GIT, "rev-parse", `${attemptSha}^{tree}`])).trim();
-  const merged = await rebuildMergeCommit(record.copyPath, record.old, incomingRefOf(runId), tree, `orca: land ${runId} (reconciled with ${record.otherTaskId})`);
+  const merged = await rebuildMergeCommit(record.copyPath, record.old, incomingRefOf(runId), tree, `orca: land ${runId} (reconciled with ${(record.otherTaskIds ?? [record.otherTaskId]).join(", ")})`);
   await git(record.copyPath, [...QUIET_GIT, "update-ref", `refs/orca/merged/${runId}`, merged]);
   const landed = await landOnTip(deps, targetRepo, runId, run.groupId, record.old, async (landing) => {
     // A bare sha is fetchable because refs/orca/merged/<runId> advertises it in the copy.

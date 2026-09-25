@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { TERMINAL_OUTCOMES } from "./ccloopRunner.js";
@@ -499,4 +500,127 @@ export async function markersRemaining(copy: string, commit: string, paths: stri
  */
 export async function writeTree(copy: string): Promise<string> {
   return (await git(copy, ["write-tree"])).trim();
+}
+
+/**
+ * Orca handoff delivery spec §5.2 N1 (controller decision; human ruling "parallel is not only two"):
+ * the N-ary reconciliation plan. Added beside the two-sided function, which `orca run` keeps using
+ * unchanged; with two sides it answers exactly what `planReconciliation(a, b)` answers.
+ */
+export function planReconciliationOf(sides: readonly unknown[]): ReconciliationPlan {
+  if (sides.length < 2) throw new Error(`orca: a reconciliation needs at least two sides, got ${sides.length}`);
+  let union = requiredChecksUnion(sides[0], sides[1]);
+  for (const side of sides.slice(2)) union = requiredChecksUnion({ verification: { requiredChecks: union } }, side);
+  // An empty union escalates with the two-sided function's own words: two sides contributing nothing.
+  return union.length === 0 ? planReconciliation(undefined, undefined) : { escalate: false, requiredChecks: union };
+}
+
+/** idSchema's ceiling (src/control/schema.ts): a longer synthesized task id is shortened by a hash. */
+const RECONCILE_ID_LIMIT = 200;
+
+/**
+ * Handoff delivery spec §5.2 N1 and §11 M5: one landing run reconciled against every landed task its
+ * conflict touches. `others` is sorted by task id by the caller. With one other side the contract and
+ * its file are byte-for-byte what `synthesizeReconcileContract(self, other, ...)` writes (criterion
+ * N-parity); every rule of the two-sided function holds for N sides: all sides contribute intent and
+ * budget or the round escalates, the checks are the union of every side's, the budget is the max.
+ */
+export async function synthesizeReconcileContractOf(
+  self: PlanTask,
+  others: readonly PlanTask[],
+  contracts: Map<string, unknown>,
+  runsDir: string,
+  conflict: MaterialisedConflict,
+): Promise<{ path: string } | { escalate: string }> {
+  if (others.length === 0) return { escalate: "a reconciliation needs at least one other side" };
+  const all = [self, ...others];
+  const intents = all.map((task) => ({ task, intent: intentOf(contracts.get(task.taskId)) }));
+  const oneSided = intents.filter((s) => s.intent === null).map((s) => s.task.taskId);
+  if (oneSided.length > 0) {
+    return {
+      escalate:
+        `cannot synthesize a reconciliation contract for ${all.map((task) => task.taskId).join(" x ")}: ` +
+        `${oneSided.join(", ")} contributed no goal, successCondition or execution budget, so the contract ` +
+        `would carry only the other side's intent and the reconciler would be the conflicting party ` +
+        `(spec §5.2)`,
+    };
+  }
+  const sides = intents.map((s) => s.intent!);
+  const plan = planReconciliationOf(all.map((task) => contracts.get(task.taskId)));
+  if (plan.escalate) return { escalate: plan.why };
+
+  const two = others.length === 1;
+  const partners = two ? `task ${others[0]!.taskId}` : `tasks ${others.map((task) => task.taskId).join(", ")}`;
+  const goal =
+    `Reconcile the merge conflict between task ${self.taskId} and ${partners}. ` +
+    `HEAD is a commit that records the conflict itself, so the conflict markers are ordinary text in ` +
+    `the working tree. Remove every conflict marker in: ${conflict.conflictedPaths.join(", ")}.\n\n` +
+    all.map((task, index) =>
+      `${task.taskId} was trying to: ${sides[index]!.goal}\n` +
+      `${task.taskId} counts as done when: ${sides[index]!.successCondition}\n\n`).join("") +
+    (two
+      ? `Both intents must survive. Where a block cannot satisfy both, it is a semantic conflict and belongs ` +
+        `to a human: leave that block alone and stop, rather than choosing one side.`
+      : `Every intent must survive. Where a block cannot satisfy all of them, it is a semantic conflict and belongs ` +
+        `to a human: leave that block alone and stop, rather than choosing a side.`);
+
+  const joined = `${slug(self.taskId)}-${others.map((task) => slug(task.taskId)).join("-")}`;
+  const stem = `reconcile-${joined}`.length <= RECONCILE_ID_LIMIT
+    ? joined
+    : `${slug(self.taskId).slice(0, 100)}-${createHash("sha256").update(others.map((task) => task.taskId).join("\0")).digest("hex").slice(0, 16)}`;
+  const max = (pick: (side: SideIntent) => number): number => Math.max(...sides.map(pick));
+  const contract = {
+    objective: {
+      taskId: `reconcile-${stem}`,
+      goal,
+      successCondition:
+        `No file in ${conflict.conflictedPaths.join(", ")} contains a conflict marker, and ${two ? "both tasks'" : "every task's"} ` +
+        `required checks pass.`,
+      nonGoals: [
+        "changing anything outside the conflicting blocks",
+        two ? "deciding a block that cannot satisfy both intents at once" : "deciding a block that cannot satisfy every intent at once",
+      ],
+    },
+    context: {
+      repoPath: conflict.copyPath,
+      targetPaths: conflict.conflictedPaths,
+      relevantDocs: [],
+      buildTestCommands: plan.requiredChecks,
+      constraints: [
+        `The conflict is recorded in commit ${conflict.conflictCommit}, whose parents are ${conflict.wTip} ` +
+          `(the work branch) and ${conflict.incomingRef} (the incoming task).`,
+      ],
+    },
+    executionPolicy: {
+      autonomyLevel: "L2",
+      maxAttempts: 1,
+      perAttemptTimeoutMs: max((side) => side.perAttemptTimeoutMs),
+      totalRuntimeBudgetMs: max((side) => side.totalRuntimeBudgetMs),
+      tokenBudget: max((side) => side.tokenBudget),
+      worktreeRequired: true,
+      partialOutcomeRecoveryWindowMs: 0,
+    },
+    safetyPolicy: {
+      allowlistPaths: [],
+      denylistPaths: [],
+      maxFilesTouched: conflict.conflictedPaths.length,
+      humanGateConditions: [],
+    },
+    verification: {
+      verifierType: "command",
+      requiredChecks: plan.requiredChecks,
+      rejectOn: ["nonzero exit"],
+      evidenceRequired: [],
+    },
+    escalationAndExit: {
+      escalationTargets: [],
+      pauseOn: [],
+      stopOn: [],
+      terminalStates: [...TERMINAL_OUTCOMES],
+    },
+  };
+
+  const path = join(runsDir, `contract-reconcile-${stem}.json`);
+  await writeFile(path, JSON.stringify(contract, null, 2));
+  return { path };
 }

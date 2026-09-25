@@ -23,6 +23,10 @@ export const reconcileRecordSchema = z.object({
   conflictCommit: commitSchema,
   conflictedPaths: z.array(z.string().min(1)),
   otherTaskId: idSchema,
+  // Handoff delivery spec §5.2 N1 (controller decision, 2026-09-25): every landed task the conflict touches,
+  // sorted by task id; `otherTaskId` is its first. Optional so a record from before this field still parses;
+  // readers use `otherTaskIds ?? [otherTaskId]`.
+  otherTaskIds: z.array(idSchema).min(1).optional(),
   reconcileRunId: z.string().min(1),
   runsDir: z.string().min(1),
   contractPath: z.string().min(1),
