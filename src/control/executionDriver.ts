@@ -587,6 +587,13 @@ export function driverRunIds(store: ControlStore): string[] {
   return ids;
 }
 
+/** How a blocked run's reason records a later error: the reason it was blocked for, then only the newest error. */
+export const LATER_ERROR = " | then: ";
+function laterError(reason: string | null, error: string): string {
+  const original = reason === null ? "" : reason.split(LATER_ERROR)[0]!;
+  return original === "" ? error : `${original}${LATER_ERROR}${error}`;
+}
+
 /** The step a run is at, for blocking it where it failed. `running` is persisted `accepted` (deviation D3). */
 export function stepOf(run: DriverRun): DriveStep {
   switch (run.state) {
@@ -659,7 +666,15 @@ export function createExecutionDriver(deps: ExecutionDriverDeps): ExecutionDrive
           continue;
         }
         if (run.drive === undefined) { process.stderr.write(`orca-driver: ${runId}: ${describeError(error)}\n`); continue; }
-        blockRun(deps, runId, stepOf(run), describeError(error));
+        // Final fix wave (FR-C2, controller ruling 2026-09-25): a run that is already blocked stays blocked where it
+        // was. `blockedAt` decides which branch closes it under a stop (spec §13.2 I-3) and where a retry resumes it,
+        // so a later error on it (a transient collect failure, an H-settle that threw) never moves it -- `stepOf`
+        // would name "E" for every blocked run. The original reason is kept as the prefix; the new error follows it.
+        if (run.state === "blocked" && run.drive.blockedAt !== null) {
+          blockRun(deps, runId, run.drive.blockedAt, laterError(run.drive.blockedReason, describeError(error)));
+        } else {
+          blockRun(deps, runId, stepOf(run), describeError(error));
+        }
         progressed = true;
       }
     }
