@@ -103,3 +103,9 @@ Task 10b: dispatched (implementer opus; Orca BASE dfdc676; 只加判据补六条
 Task 10b: complete (Orca commits dfdc676..16b4aff; 6/6 gaps red; tests-only) — Ruling: T10b 只加测试，其评审并入终审 — 若错：终审兜底。
 Task 10b: minor (deferred): T3-DEFER-1 守卫拒绝后，驱动环通用 catch 以 step E 重 block，下一轮 blockedReason 被覆盖为 control-terminal-pending（仍 fail closed，原因失真）
 Final review: dispatched (opus; Orca 29fe36d..HEAD, ccloop a5dc529..acc9b4b)
+Final review: 2C/1I/9M（final-review.md；探针 scratchpad/fr/）
+Ruling: [FR-C1] continuableRun 追加 work.currentRunId===runId 且 work.status==="held"（与 assertPredecessor 对齐）；顺修 T8 runContinuable 恒真断言 — 面板无出口 — 若错：无。
+Ruling: [FR-C2] 驱动环通用 catch 对已 blocked 的 run 保留原 blockedAt/blockedReason（不改写为 E），瞬时错误另记；配 probe4/5/6 形状的判据 — 否则组永卡 handoff-pending、recovery-retry 可把未落地 run 写成 landed、违反 §3 — 若错：瞬时错误信息只在另一字段。
+Ruling: [FR-I1] 冻结的 budget-estimate run 请求无消费方（上游既有）⇒ 登记进 handoff，本轮不修 — 超出本片范围（spec §2）— 若错：人对含在飞预估的组发 stop 会永停。
+Ruling: [FR-minor] T9 的 G 并入 FLAKE 名单；T6 两条与 M9「组永久停住」写进 handoff 登记；ccloop protocol.ts/types.ts 注释把推测写成事实 ⇒ 已发布，登记不改 — 若错：无。
+Final fix wave: dispatched (opus; Orca BASE 9b9ecd3)
