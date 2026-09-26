@@ -453,3 +453,43 @@ ccloop 侧**零**仓库外写入（detect／validate 只读、只打 stdout）�
 
 另：人 2026-09-26「同意修改几个仓库的现有test」写进 §4.10。Task 0 的三项现量（1M 写法、两个默认 model、受影响判据文件）记在台账 §1 并已写进 §4.1。
 
+
+---
+
+## 13. 实施期更正（2026-09-26，控制器会话 `ab5a693c` 追加；上文一字未动）
+
+> 本 spec 已发布（`ls-remote` 现测远端含本文件）⇒ 上文原文逐字保留，偏离与新增一律在本节登记。
+> 来源：进度台账 `.superpowers/sdd/2026-09-26-agent-selection/progress.md` 的 `Ruling:` 行、各波复审报告 `wave1..5-review.md`、计划 §0 的 R1–R8。**冲突时本节优先于上文与 §12。**
+> 每条都是控制器替人做的决定（人：「执行过程中如果有问题，先按你的建议执行。执行完在最后阶段报给我审核」），**人要审**。
+
+### 13.1 对正文的偏离
+
+| # | 正文 | 实际 | 依据 |
+|---|---|---|---|
+| D1 | §6.4／§6.2：estimator 槽在导入时按操作者 → 组 → plan 分层解析，plan 文件可写 estimator | 导入时 estimator 只解析操作者两层（worker 默认 < `operator.estimator`）；plan 文件**不加** `estimatorAgent`；组级 estimator 只来自面板 `proposal-set-agent`（slot estimator），在 reestimate 时生效 | 计划 R7（W5-M16）：选项 A 会放宽受保护判据 `planImport.test.ts > immutable plan import > rechecks revision after a successful in-flight probe before source I/O`；估算 run 今天无执行方（⑤），导入时 plan 层不生效无实际后果 |
+| D2 | §6.2「逐字段合并」 | 面板对组层／任务层是**整层替换**，不与 plan 值逐字段合并 | 计划 R6（W5-M4） |
+| D3 | §6.4 闸门探测 | 组内对冻结选择去重后探测；任一降级 ⇒ 整组阻塞 | W5-M12 |
+| D4 | §6.5 上下文阈值 | 上下文阈值仍按 profile 声明的窗口判，不按冻结选择的 `contextWindow` | W5-M15；波 3 复审 M-4 指出交集已可廉价取得，未改 |
+| D5 | §6.4 预览 | `resolveGroupSelections` 分预览／确认两种模式：预览把瞬时失败记为逐槽 `unavailable`（`selectionsHash` 为 null、不可确认）；确认仍抛出、可重试 | 波 3 I-1 |
+| D6 | §6.4 `selectionsHash` | hash 只含 `{partial, selection, configHash}`，**不含来源层（provenance）**；来源改变而选择不变时不作废确认 | 波 3 M-2（按正文定义如此，登记其时间窗） |
+| D7 | §5.1 升级 | **无迁移**：T11 之前确认的组、v1 profile 文件、带 `configHash` 的 plan 文件、缺 `estimatorSlot` 的估算记录一律拒或 `recovery-blocked` | T10／T11 Ruling（项目未上线） |
+| D8 | `orca agents show` | 不读控制 store | 计划 R8（M-8） |
+| D9 | 面板 | 仍要求 `ORCA_CCLOOP_BIN` 与 `ORCA_AGENTS_TABLE` 两个 env 都给；缺省路径只给 `orca agents` | 计划 R8（M-9） |
+| D10 | §4.2 端口 | Orca `ccloopPort` 构造时只核表路径形状（绝对、非软链），存在性交 ccloop 的 capabilities／accept 判 —— 保住 ccloop「删表不挡回收」 | 波 2 I-1 |
+| D11 | §4.2 C6 版本比对 | 观测到版本且不等 ⇒ 具名 `agent-version-drift`；**探不到版本（`probeVersion` 为 null）⇒ 非具名失败**（control 退 1 ⇒ Orca 视为 unknown 可重试，由 `INSPECT_UNKNOWN_LIMIT` 兜底；`run --agents` ⇒ `reconcile-spawn`）。代价：`probeFailureCode` 诊断粒度变粗 | 波 2 I-3 |
+
+### 13.2 正文未写、实施期新增的契约
+
+- **退出码两套约定**（P20）：`ccloop control` 的具名拒绝退 2、stderr `<code>[: detail]`；`ccloop run --agents` 的拒绝退 1（2 ＝ run 跑完未成功）。Orca 的解冲突路径自己解释 `run --agents` 的退出码，不复用 `ccloopPort` 的 `"2:"` 前缀判定；codex 非拒绝型 exit 1 的 stderr 首行恒为 budget 提示，Orca 取首个非提示行作原因（波 2 I-2）。
+- **新阻塞码**（`drive.blockedReason`，`reconcile-*` 家族）：`reconcile-refused:<code>`（T7）、`reconcile-agent-unfrozen`（波 3 I-2：组记录的 reconcile 冻结值与快照不一致 ⇒ 不起解冲突 run）。
+- **新码**：`agent-selection-file-invalid`、`agent-config-invalid`、`agents-command-invalid`（R2）。
+- **确认时的瞬时错误**经面板映射为 500 `control-internal-error`（既有兜底，非本轮引入；T14 minor）。
+- **面板**：`unavailable` 槽不自动轮询，给手动 Re-read，另有一次有界重试与请求序号守卫（T15 Ruling）；`agent-selection-rejected` 后预览作废（波 4 M-1）。
+- **测试专用钩子** `ControlAssemblyInput.wrapPort`（T16）：CLI 与 `live-driver-acceptance` 均不设；不设时行为不变（波 5 复审核）。
+
+### 13.3 登记（不修）
+
+- 旧服务路径 `ControlService.startClaim`（`dispatch.ts`）与 `claimContinuation`（`continuation.ts`）没有「活偏好不泄漏」判据：波 5 复审的条件泄漏变异 L2／L4 全绿。复审以逐行扫生产调用方判为**生产不可达**（`ControlService` 只在 recovery 构造且不走这两支；面板 continue-task 走 `WebControlService`）。将来接回生产前要先补判据（可选：限定 import `readAgentPreferences` 的文件）。
+- reestimate 事务内不重核操作者层（T10 minor／波 3 M-3）；冻结的 `agentCapabilities` 只写不读（波 3 M-4）。
+- T7 的 `versionOf` 用 `execFileSync` 无超时（波 5 m-2）；零写入守卫抓不到只改 mtime、不查真 HOME（波 5 m-3）。
+- 其余 deferred minor 以台账 `Task N: minor (deferred)` 行为准。
