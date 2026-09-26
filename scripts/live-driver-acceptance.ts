@@ -15,8 +15,17 @@
 // ~/.codex and writes its own logs there (accepted by the human, 2026-09-25, session af3dc0d3).
 //
 // usage: tsx scripts/live-driver-acceptance.ts --ccloop-bin <abs dist/cli.js> --output <new dir>
-//          (--codex <abs codex binary> --model <name> | --fake)
-//          [--group-tokens 300000] [--task-tokens 150000] [--deadline-ms 900000]
+//          (--codex <abs codex binary> --model <name> | --fake | --claude <abs claude binary> --model <name> | --fake-claude)
+//          [--group-tokens 300000] [--task-tokens 150000] [--task-attempts 1] [--active-ms 600000]
+//          [--call-usd 2] [--deadline-ms 900000]
+//
+// Ruling review 2026-09-27 (paid claude round): --claude runs the real claude CLI. HOME is again NOT relocated (claude
+// reads its OAuth login from the keychain under the real HOME), but the installation's command isolates the call from
+// the person's own Claude Code setup and caps it in dollars (CLAUDE_ISOLATION below), and every CLAUDE* variable this
+// process inherited (a Claude Code session's messaging socket, session id, entrypoint) is removed before anything
+// starts, so the nested claude neither joins that session nor believes it runs inside one. scripts/claude-tee.mjs keeps
+// each call's raw `-p` envelope, whose total_cost_usd and cache counts the summary copies (ccloop keeps only
+// input/output tokens).
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
@@ -36,6 +45,7 @@ function parseArgs(argv: string[]): Record<string, string> {
     const key = argv[i]!;
     if (!key.startsWith("--")) throw new Error(`unexpected argument ${key}`);
     if (key === "--fake") { out.fake = "1"; continue; }
+    if (key === "--fake-claude") { out["fake-claude"] = "1"; continue; }
     const value = argv[++i];
     if (value === undefined) throw new Error(`${key} needs a value`);
     out[key.slice(2)] = value;
@@ -48,12 +58,28 @@ const fake = args.fake === "1";
 const ccloopBin = args["ccloop-bin"];
 const output = args.output;
 if (!ccloopBin || !isAbsolute(ccloopBin) || !output) throw new Error("--ccloop-bin <absolute> and --output <new dir> are required");
-if (fake === (args.codex !== undefined)) throw new Error("give exactly one of --codex <abs path> --model <name>, or --fake");
-if (!fake && (!isAbsolute(args.codex!) || !args.model)) throw new Error("--codex must be absolute and --model is required");
+const fakeClaude = args["fake-claude"] === "1";
+const modes = [fake, args.codex !== undefined, fakeClaude, args.claude !== undefined].filter(Boolean).length;
+if (modes !== 1) throw new Error("give exactly one of --codex <abs path> --model <name>, --fake, --claude <abs path> --model <name>, or --fake-claude");
+const live = args.codex ?? args.claude;
+if (live !== undefined && (!isAbsolute(live) || !args.model)) throw new Error("--codex/--claude must be absolute and --model is required");
+const kind: "codex" | "claude" = args.claude !== undefined || fakeClaude ? "claude" : "codex";
+const isFake = fake || fakeClaude;
+for (const key of Object.keys(process.env)) if (key.startsWith("CLAUDE") && key !== "CLAUDE_CONFIG_DIR") delete process.env[key];
 if (existsSync(output)) throw new Error(`refusing an existing --output ${output}`);
 const groupTokens = Number(args["group-tokens"] ?? 300_000);
 const taskTokens = Number(args["task-tokens"] ?? 150_000);
 const deadlineMs = Number(args["deadline-ms"] ?? 900_000);
+const taskAttempts = Number(args["task-attempts"] ?? 1);
+const activeMs = Number(args["active-ms"] ?? 600_000);
+const callUsd = String(args["call-usd"] ?? "2");
+/**
+ * The real claude call, isolated from the person's own Claude Code setup: no user settings (so no hooks and no
+ * plugins, which would also record this session), no MCP servers, no skills, no session written under ~/.claude,
+ * edits accepted but nothing else, and claude's own dollar ceiling per call. These go in the installation's
+ * command, which ccloop puts before `-p` and which is outside configHash (ruling review R1).
+ */
+const CLAUDE_ISOLATION = ["--permission-mode", "acceptEdits", "--no-session-persistence", "--setting-sources", "project,local", "--strict-mcp-config", "--disable-slash-commands", "--max-budget-usd", callUsd];
 
 const g = (cwd: string, ...rest: string[]): string =>
   execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "core.hooksPath=/dev/null", ...rest], { cwd, encoding: "utf8" }).trim();
@@ -101,13 +127,19 @@ const marker = join(root, "codex-marker.json");
 const scriptPath = join(root, "codex-script.json");
 await writeFile(scriptPath, JSON.stringify({ a: { files: { "answer.txt": "42\n" } } }));
 const fakeCodex = resolve(dirname(ccloopBin), "..", "tests", "fixtures", "fake-codex.mjs");
-// Agent selection spec §4.2, §6.6: one codex installation in an agents table handed over as ORCA_AGENTS_TABLE; the
+const fakeClaudeCli = resolve(dirname(ccloopBin), "..", "tests", "fixtures", "fake-claude-cli.mjs");
+const claudeRaw = join(root, "claude-raw");
+// Agent selection spec §4.2, §6.6: one installation in an agents table handed over as ORCA_AGENTS_TABLE; the
 // model is a selection field (the operator's preference below), and confirmation freezes ccloop's configHash for it.
-const codexCommand = fake ? [process.execPath, fakeCodex, "script", marker, scriptPath] : [args.codex!];
+const codexCommand = fake ? [process.execPath, fakeCodex, "script", marker, scriptPath] : [args.codex ?? ""];
+const claudeCommand = fakeClaude
+  ? [process.execPath, fakeClaudeCli, "script", marker, scriptPath]
+  : [process.execPath, resolve(import.meta.dirname, "claude-tee.mjs"), claudeRaw, args.claude ?? "", ...CLAUDE_ISOLATION];
 const tablePath = join(root, "agents.json");
-await writeFile(tablePath, JSON.stringify({ schema: "ccloop-agents-table-v1", installations: {
-  codex: { kind: "codex", command: codexCommand, version: versionOf(codexCommand), configDir: null, timeoutMs: 120_000, killGraceMs: 5_000, sandbox: "workspace-write", budgetMode: "soft" },
-} }), { mode: 0o600 });
+const installation = kind === "codex"
+  ? { kind: "codex", command: codexCommand, version: versionOf(codexCommand), configDir: null, timeoutMs: 120_000, killGraceMs: 5_000, sandbox: "workspace-write", budgetMode: "soft" }
+  : { kind: "claude", command: claudeCommand, version: versionOf(claudeCommand), configDir: null, timeoutMs: 600_000, killGraceMs: 5_000 };
+await writeFile(tablePath, JSON.stringify({ schema: "ccloop-agents-table-v1", installations: { [kind]: installation } }), { mode: 0o600 });
 
 const check = 'test "$(cat answer.txt)" = 42';
 const contract = {
@@ -156,7 +188,7 @@ const workStatus = (runtime: ControlRuntime): string =>
   JSON.parse(String(runtime.store.db.prepare("SELECT body FROM work_items WHERE group_id='g' AND id='a'").get()!.body)).status;
 
 const checks: Record<string, boolean> = {};
-const summary: Record<string, unknown> = { mode: fake ? "fake" : "live", model: null as string | null, groupTokens, taskTokens, deadlineMs, startedAt: new Date().toISOString(), root };
+const summary: Record<string, unknown> = { mode: isFake ? "fake" : "live", kind, model: null as string | null, groupTokens, taskTokens, taskAttempts, activeMs, deadlineMs, installationCommand: installation.command, installationVersion: installation.version, startedAt: new Date().toISOString(), root };
 const runtime = await assembleControlRuntime({ control, repos, epoch: "epoch-live-1", env });
 if (runtime === null) throw new Error("the control plane did not assemble");
 const runsRoot = `${runtime.store.stateDir}.runs`;
@@ -167,7 +199,7 @@ try {
   summary.imported = imported;
   // Agent selection spec §6.2 layer 1: the operator's default is the table's codex installation, with --model when live.
   const preferences = await runtime.service.setAgentPreferences(raw(runtime, "preferences", "set-agent-preferences",
-    { preferences: { defaultAgent: "codex", perAgent: fake ? {} : { codex: { model: args.model! } } } }, { kind: "operator", operatorId: "human" }));
+    { preferences: { defaultAgent: kind, perAgent: isFake ? {} : { [kind]: { model: args.model! } } } }, { kind: "operator", operatorId: "human" }));
   if ("error" in preferences) throw new Error(`set-agent-preferences refused: ${JSON.stringify(preferences.error)}`);
   // A blocked-capability estimate leaves complex-1m-default allocations (task work 3M tokens, 3 attempts), and
   // confirm derives the contract's tokenBudget/maxAttempts/totalRuntimeBudgetMs from them, overriding the
@@ -178,7 +210,7 @@ try {
   const edited = runtime.service.editProposal(raw(runtime, "caps", "proposal-edit", {
     baseProposalVersion: readBudgetProposal(runtime.store, "g").proposalVersion,
     operations: [
-      ...dims("a", "work", { tokens: taskTokens, attempts: 1, sessions: 1, activeMs: 600_000 }),
+      ...dims("a", "work", { tokens: taskTokens, attempts: taskAttempts, sessions: taskAttempts, activeMs }),
       ...dims("a", "handoff", { tokens: 0 }),
       { target: { scope: "goal-review", dimension: "tokens" }, value: 1, provenance: "human" },
     ],
@@ -226,13 +258,34 @@ const ledger = readControlGroup(runtime.store, runtime.epoch, "g").ledger;
 summary.ledger = ledger;
 const delivered = (id: string): unknown => runtime.store.db.prepare("SELECT delivered FROM outbox WHERE id=?").get(id);
 
-// Usage copied from ccloop's retained codex evidence: the turn.completed row of each provider call.
-const calls = findAll(runsRoot, "events.jsonl").filter((file) => file.includes("/codex/")).map((file) => {
-  const completed = readFileSync(file, "utf8").split("\n").filter((line) => line.trim()).map((line) => JSON.parse(line)).filter((row) => row.type === "turn.completed");
-  const usage = completed.at(-1)?.usage ?? null;
-  const phase = file.split("/codex/")[1]!.split("/")[1]!;
-  return { phase, file, usage, total: usage === null ? null : Number(usage.input_tokens) + Number(usage.output_tokens) };
-});
+// Usage copied from ccloop's retained evidence. codex: the turn.completed row of each provider call. claude: the
+// runner's answer in stdout.json, whose tokenUsage is input + output as ccloop books it.
+const calls = kind === "codex"
+  ? findAll(runsRoot, "events.jsonl").filter((file) => file.includes("/codex/")).map((file) => {
+    const completed = readFileSync(file, "utf8").split("\n").filter((line) => line.trim()).map((line) => JSON.parse(line)).filter((row) => row.type === "turn.completed");
+    const usage = completed.at(-1)?.usage ?? null;
+    const phase = file.split("/codex/")[1]!.split("/")[1]!;
+    return { phase, file, usage, total: usage === null ? null : Number(usage.input_tokens) + Number(usage.output_tokens) };
+  })
+  : findAll(runsRoot, "stdout.json").filter((file) => file.includes("/claude/")).map((file) => {
+    const text = readFileSync(file, "utf8");
+    let answer: { tokenUsage?: number; usageEvidence?: unknown } | null = null;
+    try { answer = text.trim() === "" ? null : JSON.parse(text); } catch { answer = null; }
+    const phase = file.split("/claude/")[1]!.split("/")[1]!;
+    return { phase, file, usage: answer?.usageEvidence ?? null, total: typeof answer?.tokenUsage === "number" ? answer.tokenUsage : null };
+  });
+// Claude's own report per call (scripts/claude-tee.mjs): dollars and cache counts ccloop does not keep.
+const rawClaude = existsSync(claudeRaw) ? readdirSync(claudeRaw).sort().map((name) => {
+  const text = readFileSync(join(claudeRaw, name), "utf8");
+  try {
+    const envelope = JSON.parse(text) as { total_cost_usd?: number; usage?: Record<string, unknown>; modelUsage?: unknown; is_error?: boolean; subtype?: string; num_turns?: number; duration_ms?: number };
+    return { name, subtype: envelope.subtype ?? null, isError: envelope.is_error ?? null, totalCostUsd: envelope.total_cost_usd ?? null, usage: envelope.usage ?? null, modelUsage: envelope.modelUsage ?? null, numTurns: envelope.num_turns ?? null, durationMs: envelope.duration_ms ?? null };
+  } catch { return { name, unparsed: text.slice(0, 500) }; }
+}) : [];
+summary.claudeRawCalls = rawClaude;
+// Null, not zero, when no envelope was kept (fake modes, or a call that never answered).
+summary.claudeReportedUsd = rawClaude.length > 0 && rawClaude.every((call) => "totalCostUsd" in call && typeof call.totalCostUsd === "number")
+  ? rawClaude.reduce((sum, call) => sum + ("totalCostUsd" in call ? Number(call.totalCostUsd) : 0), 0) : null;
 summary.providerCalls = calls;
 const ccloopTotal = calls.reduce((sum, call) => sum + (call.total ?? 0), 0);
 summary.ccloopReportedTokens = ccloopTotal;
@@ -240,7 +293,7 @@ summary.ccloopReportedTokens = ccloopTotal;
 // The spend cap as ccloop itself received it, not as Orca meant it.
 const policies = findAll(runsRoot, "loop-contract.json").map((file) => JSON.parse(readFileSync(file, "utf8")).executionPolicy);
 summary.ccloopExecutionPolicies = policies;
-checks.ccloopPolicyCapped = policies.length === 1 && policies[0].tokenBudget === taskTokens && policies[0].maxAttempts === 1;
+checks.ccloopPolicyCapped = policies.length === 1 && policies[0].tokenBudget === taskTokens && policies[0].maxAttempts === taskAttempts;
 checks.notTimedOut = !timedOut;
 checks.runSettled = run?.body.state === "settled";
 checks.workDone = workStatus(runtime) === "done";
@@ -261,6 +314,7 @@ checks.ledgerKnown = ledger.usageUnknown === false;
 checks.ledgerMatchesCcloop = ledger.used.tokens === ccloopTotal;
 checks.orcaHomeUntouched = JSON.stringify(snapshot(orcaHome)) === JSON.stringify(orcaHomeBefore);
 if (fake) checks.fakeCallsExact = existsSync(`${marker}.calls`) && readFileSync(`${marker}.calls`, "utf8").trim().split("\n").join(",") === "plan,execute,verify";
+if (fakeClaude) checks.fakeCallsExact = existsSync(`${marker}.tasks`) && readFileSync(`${marker}.tasks`, "utf8").trim().split("\n").map((line) => line.split(" ")[0]).join(",") === "plan,execute,verify";
 checks.shutdownClean = summary.shutdown === true;
 
 summary.checks = checks;
@@ -268,5 +322,5 @@ summary.finishedAt = new Date().toISOString();
 runtime.close();
 await writeFile(join(root, "summary.json"), JSON.stringify(summary, null, 2), { mode: 0o600 });
 const failed = Object.entries(checks).filter(([, ok]) => !ok).map(([name]) => name);
-console.log(JSON.stringify({ summary: join(root, "summary.json"), ccloopReportedTokens: ccloopTotal, ledgerUsedTokens: ledger.used.tokens, failed }, null, 2));
+console.log(JSON.stringify({ summary: join(root, "summary.json"), ccloopReportedTokens: ccloopTotal, ledgerUsedTokens: ledger.used.tokens, claudeReportedUsd: summary.claudeReportedUsd ?? null, failed }, null, 2));
 process.exit(failed.length === 0 ? 0 : 1);
