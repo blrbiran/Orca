@@ -555,3 +555,18 @@ only, not by existence」，3 条：缺表装配成功、相对路径仍拒、�
 - **登记：生产不可达、不补判据**：`dispatch.ts` 的 accept 应答 hash 核对（审计 K1）、`continuation.ts` 前任 hash 核对（K3）、`budget.ts` handoff claim 的父 run hash 核对（K4）、`ownership.ts`、`schedulerBridge.ts` 的 `identity`、`service.ts` 的两个 claim 方法 —— 全部只经 `ControlService` 的 claim／continue 路径，而生产里 `ControlService` 只在 recovery 构造、只调 `confirmLanding`／`collectControlled`／`disposeControlled`（python 逐行扫调用方）。与 §13.3 旧路径的登记同源；将来接回生产前要先补判据。
 - **本轮之前的缺口（非成功终态被当成功）**：审计的 R1（`ccloopRunner.readTerminalStatus` 一律读成 succeeded）在全套上其实被 11 条 scheduler 判据抓住（审计只在 15 个文件上跑过），且到不了驱动环的解冲突路径（`stepR` 丢弃 `runTask` 的结果，`finishReconcile` 自己读 `loop-state.json`）。**真正的缺口在下一层的消费方守卫**：`driverLanding.ts` `finishReconcile` 只被 `failed` 的判据守（exhausted／blocked_waiting_human／cancelled 的解冲突会落地成合并）；`src/scheduler/run.ts` 每任务守卫里 exhausted 那一格无判据（ccloop 发布了 attempt 提交，会被收割并合并上 W）。补法：`tests/control/driverReconcile.test.ts` 加一个 `it.each`（3 行）＋ 新文件 `tests/scheduler/scenarios/nonSucceededNeverLands.test.ts`（2 行，真 ccloop scripted adapter）；都在收窄守卫的变异下见红。**生产代码一行未改**（守卫本身是对的，缺的是判据）。
 - **残留（登记）**：`orca run` 解冲突守卫收窄到 exhausted 的变异（M4n）无判据 —— 合成的解冲突契约固定 `maxAttempts:1`、`stopOn:[]` 等，经真 ccloop 被拒只会是 exhausted（已有判据）；剩下的只有 ccloop 内部错误与解冲突中途 Ctrl-C，「信号取消的解冲突是否仍发布 attempt ref」没量过。
+
+### 13.9 人审 Ruling 清单之后的落地与更正（2026-09-27，控制器会话 `43e3e1d8`；13.1–13.8 原文保留）
+
+> 来源：进度台账 `.superpowers/sdd/2026-09-26-agent-selection/progress.md` §13（人对 R1–R30 的逐条表态，编号见同目录 `ruling-review.md`）与 §14（执行）。**冲突时本节优先于上文。**
+
+- **更正 §13.6「安装记录的其余字段（`command`、`configDir`、`timeoutMs`、`killGraceMs`、kind 自带字段）与选择仍全部进哈希」**（人裁 R1「command 等安装字段 => 同意移除hash」）：`agentConfigHash` 现在去掉 `version`、`command`、`timeoutMs`、`killGraceMs`；`configDir`、kind 自带字段与选择仍进哈希。§13.6「仍然成立的限制」里「`command`／`configDir` 等其它安装字段改了，已开跑的组仍然永久无出路」对 `command` 不再成立，对 `configDir` 与 kind 字段仍成立。
+- **更正 §13.6「升级后的出路 … 本轮未单独实测」**（人裁 R3）：已实测（`tests/control/agentUpgradeE2E.test.ts`）。另有正文未写的一条路：**confirm 与 start 之间升级 ⇒ `start` 本身被拒 `control-capability-unsupported`（不可重试）**，改表后重新 start 即可。
+- **推翻 §13.1 D2（整层替换）**（人裁 R7）：每一级（组、组 reconcile、任务）是 plan 的层在下、面板的层在上，逐字段合并；层名 `group-plan`／`group`、`group-reconcile-plan`／`group-reconcile`、`task-plan`／`task`（面板沿用旧名）。面板层字段三态：缺省＝继承、值＝覆盖、`null`＝当作同一级的 plan 没写这个字段（照常往下继承，不跳到描述默认值）；面板 `agent: null` 丢掉同一级 plan 的整层。导入**不再**把 plan 的层抄进 `agentOverrides`／`agentOverride`（二者只存面板的层），plan 的层每次从存档的 plan 读；预览多一个 `planLayers`。`proposal-set-agent` 仍是替换面板层（控制器裁定，可逆）。estimator 无 plan 层（R8 维持 D1）。
+- **更正 §13.2「面板：`unavailable` 槽不自动轮询，给手动 Re-read，另有一次有界重试」**（人裁 R17）：预览读失败、预览里有 `unavailable` 槽、安装表／偏好读失败 ⇒ 按 10、20、40、80、160 秒最多重试 5 次，页面隐藏时不重试；页面获焦或变为可见时重读表、偏好与当前预览一次；安装表内容进预览的键（同一张表再读一次不再重读预览）；Re-read 保留；界面显示第 k/5 次与倒计时。具名 `rejected` 不重试。
+- **更正 §13.3／§13.5「`versionOf` 用 `execFileSync` 无超时」**（R28）：`versionOf` 只在判据夹具与 `scripts/live-driver-acceptance.ts` 里（不在生产代码），现在有 10 s 超时。
+- **补登（付费真 claude 那一轮，§11「真 claude 付费跑」的兑现）**：
+  - ccloop runner 的 execute `--json-schema` 顶层是裸 `oneOf`，真 API 拒为 `400 tools.N.custom.input_schema.type: Field required`；已改为单一 object，partial 的配对规则改在代码里查。runner 在 claude 非零退出时丢掉它的 stdout，真因只在验收脚本的 tee 里 —— **登记不修**。
+  - ccloop 只把 `input_tokens＋output_tokens` 记账；真 claude 的 cache 创建／读取不进账（一次单任务 1,329 对约 14.5 万）⇒ token 软上限对真 claude 几乎不设防；**归人**。
+  - `ccloop agents detect`／`orca agents init` 出的 claude 安装是裸 `command: [claude]`：真跑会加载使用者全部 user settings／hooks／插件／MCP，且 `-p` 下没有写权限。验收脚本用的隔离参数（`--permission-mode acceptEdits --no-session-persistence --setting-sources project,local --strict-mcp-config --disable-slash-commands --max-budget-usd <n>`）只住在脚本里；产品默认带不带 —— **归人**。
+  - Rule 17 残留：`--no-session-persistence` 下 claude 仍在真实 `~/.claude/projects/<目标仓库路径>/` 建一个空 `memory/`（0755）。
