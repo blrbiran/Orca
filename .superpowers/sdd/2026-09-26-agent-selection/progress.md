@@ -456,3 +456,17 @@
 - 终审 I-1 修复：complete（Orca `test(panel): pin the agents table's assembly-time check to shape only (final review I-1)` 与 `fix(panel): check the agents table path by shape only at assembly (final review I-1)`；修复席 sonnet，工具报数 174,174 token／78 次；报告 `final-fix-report.md`，spec §13.4 由修复席追加）。控制器核原始日志（`$S/fix-final/`）：RED 4 failed／33 passed／1 skipped；GREEN 37＋1 skipped，真 ccloop 下 38/38；邻居 51/51；变异 I1F-M1（改回 `checkedPath(…,"file")`）4 failed，diff 已读；tsc RC 0。
 - 修复后重跑（生产代码在门之后动过）：Orca 全量 `vitest --reporter=json`（`gates-env.sh`）586 文件／1980 条，1979 passed／1 failed／0 pending，唯一红是已登记 flake `controlShutdown.test.ts > a real SIGTERM … one shutdown row for its epoch`（`expected 143 to be +0`），单文件重跑 RC 0；判定器（本次 orca json ＋ 门席的 web／ccloop json ＋ 重跑 json）**RC 0 `OK`**；typecheck RC 0。日志 `$S/t17/gates2/`。其余门（web、verify:*）未重跑 —— 改动只在 `src/panel/controlConfig.ts` 与 `src/control/ccloopPort.ts` 的一个导出。
 - spec §13.5：控制器追加终审其余更正与补登（D11 措辞、I-2 登记、m-1 契约、D6 时间窗、m-3…m-8）。
+
+## §11 人审与终审 I-2（控制器会话 `8c6302e0`，Claude Opus 5.5，2026-09-26；接在 §10 之后）
+
+- 开工现测（`/usr/bin/git ls-remote origin refs/heads/main`）：三仓远端 main 均等于本地 HEAD（人手动推送；人原话「三个仓库我都手动push了」）。
+- Human：「codex cli 的 weekly limit 已经超了，在我告诉你可以测试之前暂时不要测试。」⇒ 本节一切运行只用 fake。
+- 现测：本机 claude 安装目录 `package.json` 的 `version` 为 `2.1.283`（mtime 2026-09-26 17:58:44），§1 Task 0 当日测的是 `2.1.282` ⇒ 自动更新在一天内发生过（读文件，未运行 CLI）。
+- Human（I-2）：「I-2 只选 (a)。或者说 (c) 可以有但是默认允许claude 等agent升级。我们希望保留 agent 升级获取更多功能的能力。」；「授权改判据」（指名见 spec §13.6）；「派独立审计」（夹具层是否放宽既有判据，结果另记）。
+- I-2 (a) 实施：ccloop `agentConfigHash` 去掉 `installation.version`。先在 `git clone --local`（scratchpad `i2/ccloop`，基于 ccloop 主题行 `docs(handoff): roll the Orca section: agent selection finished, final-review I-2 touches the config hash`）里改与测，再以 `git apply` 搬进主树，主树 diff 与副本 diff `cmp` 逐字节相同。HOME 与四个 XDG 根改道到 scratchpad。
+  - typecheck RC 0、build RC 0。
+  - 只改生产代码时既有判据红 3 条（外加名单内 stopProof）＝ 人指名改写的 3 条。
+  - M1（改回 `canonicalHash(config)`）：新 3 条全红，原因分别为哈希不等、`control-config-hash-mismatch`（run --agents）、`ControlProtocolError: control-config-hash-mismatch`（accept）。M2（再丢 `configDir`）：既有 `changes with every field…` 等 4 条红。两次变异后 `cmp` 还原 RC 0。
+  - 全量（json）：991 条，986 过／5 败／0 pending；`check-known-reds.mjs` **RC 1**：4 条名单内，1 条名单外 `run-scenario CLI > records claudeChildExited as NOT_OBSERVABLE when no adapter descendant was tracked`（`tests/validation/evidence.test.ts`，5000 ms 超时；同时刻 load 39，独立审计席在并跑）；单文件重跑 3/3 RC 0 ⇒ 判为负载超时，**不是本改动的回归**。Ruling：不加进名单（名单归人）。
+  - Orca 侧：Orca `git clone --local`（HEAD 主题行 `docs(handoff): agent selection is done under fake agents; the human's review and final-review I-2 come next`）以新 ccloop build 为 `ORCA_CCLOOP_BIN`、scratchpad 里 0600 的 fake codex 表为 `ORCA_AGENTS_TABLE`，跑 10 个门控文件（controlOptions、controlAssemblyDriver、agents/command、handoffE2E、webCcloopSmoke、agentSelectionE2E、ccloopPortMissingTable、ccloopProtocol.integration、executionDriverE2E、scheduler/sandbox）：95 条全过、0 pending；改道 HOME 下零写入；真 `~/.orca` 两个残留文件 `stat` 前后 `cmp` RC 0。
+  - Ruling：`materialized config hash > is the canonical hash of the materialized config` 的标题与 describe 注释「the hash covers exactly one installation record plus the selection」现在不精确（去掉了 version），**未改名、未改注释**（改名即改写既有判据，未获指名）；以 spec §13.6 为准。
