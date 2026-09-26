@@ -126,6 +126,30 @@ describe("import freezes the estimator slot from the operator's layers (spec §6
     } finally { await h.dispose(); }
   });
 
+  it("never claims an estimate that froze no estimator selection (spec §12 C5)", async () => {
+    const h = await webFixture(); try {
+      const row = h.store.db.prepare("SELECT body FROM estimates WHERE group_id='g' AND id=?").get(h.estimateId)!;
+      h.store.db.prepare("UPDATE estimates SET body=? WHERE group_id='g' AND id=?")
+        .run(canonicalBytes({ ...JSON.parse(String(row.body)), estimatorSlot: null }).toString("utf8"), h.estimateId);
+      await expect(new WebControlService(h.deps).claimEstimate("g", h.estimateId)).rejects.toThrow("recovery-blocked:estimator-slot-missing");
+      expect(h.store.db.prepare("SELECT id FROM runs WHERE group_id='g'").get()).toBeUndefined();
+    } finally { await h.dispose(); }
+  });
+
+  it("reads a selection-refused estimate only when it froze neither a slot nor a request", async () => {
+    const h = await webFixture(); try {
+      const queued = JSON.parse(String(h.store.db.prepare("SELECT body FROM estimates WHERE group_id='g' AND id=?").get(h.estimateId)!.body));
+      const store = (body: object) => h.store.db.prepare("UPDATE estimates SET state='blocked-capability',body=? WHERE group_id='g' AND id=?")
+        .run(canonicalBytes({ ...queued, state: "blocked-capability", reasonCode: "agent-selection-rejected:estimator:agent-installation-missing", ...body }).toString("utf8"), h.estimateId);
+      store({ request: null, requestHash: null, estimatorSlot: null });
+      expect(readEstimateRecord(h.store, "g", h.estimateId)).toMatchObject({ state: "blocked-capability", estimatorSlot: null });
+      store({ request: null, requestHash: null });
+      expect(() => readEstimateRecord(h.store, "g", h.estimateId)).toThrow("recovery-blocked");
+      store({ estimatorSlot: null });
+      expect(() => readEstimateRecord(h.store, "g", h.estimateId)).toThrow("recovery-blocked");
+    } finally { await h.dispose(); }
+  });
+
   it("shows an estimate run only while it carries its estimate's frozen selection (spec §12 C5)", async () => {
     const h = await webFixture(); try {
       const run = await new WebControlService(h.deps).claimEstimate("g", h.estimateId);
