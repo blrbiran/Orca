@@ -126,3 +126,20 @@
 - Task 14: fix round 1/5 (5 addressed, 0 open — slot schema cases, preview unavailable mode (波3 I-1), stepR via snapshot (波3 I-2), overrides recovery-blocked (M-1), group view reconcile (M-5); commits 7536a0d..2e87cd6)
 - Task 14: complete (Orca commits 7e66947..2e87cd6, review clean after round 1). 实施席 214,754＋283,587 token。
 - Task 14: minor (deferred): 确认时瞬时错误经面板映射为 500 `control-internal-error`（既有兜底，非本轮引入；T17 登记）；两条改写的组视图判据未给 `agents` 字段单独负向断言；`readConfirmedReconcileSlot` 类型层面把不可达的 null 断言为 FrozenSlot。
+- Task 15: review → Approved with 1 Important：`unavailable` 槽触发每 2 s 无上限自动重读预览（每次拉起 ccloop），实施席自行扩的范围、风险未入顾虑。实施席 259,667 token。
+- Task 15: Ruling: 去掉 `unavailable` 的自动轮询，改为手动「Re-read」按钮；同时加预览请求序号守卫（晚到旧答复不覆盖新的）—— 错的代价：安装恢复后需人点一下。fix round 1 发出。
+- Task 15: minor (deferred): `AgentFields.tsx` fieldset 的 aria-label 与 legend 重复。
+- Task 15: fix round 1/5 (1 addressed, 0 open — manual Re-read, one bounded retry, seq guard; commits c047651..6b62f22)
+- Task 15: complete (Orca commits 673dc1a..6b62f22, review clean after round 1). 实施席 259,667＋301,011 token。
+- Task 15: minor (deferred): `agentPreviewRefresh.test.tsx` 两条用固定 100 ms 真实等待（`settle()`），负载下理论上可能假绿；应改 `vi.waitFor`。agents／preferences 读失败无重试，需刷新页面。
+- 波 4 复审（opus）：`wave4-review.md`，0 Critical／1 Important／6 Minor；契约双向一致；确认绑定成立（浏览器过期状态最多换来一次拒绝）；无无上限循环（一次预览／确认拉起 D×(ccloop＋CLI --version) 个进程，D＝去重 partial 数）。
+- Ruling（波 4）：I-1（agents 读失败或端口未配置 ⇒ 编辑器卡在 Resolving…、Re-read 无效）与 M-1（`agent-selection-rejected` 拒绝后预览不作废、按钮仍可点）交接前修，续用 T15 实施席。给 T16 的更正（brief:158 偏好载荷带 expectedRevision 违反 P5；`confirmAgentGroup` 应比对存储里的冻结值而非预览本身）写进交接。其余 Minor 见 wave4-review.md。
+- 🔴 2026-09-26 控制器现测（`/usr/bin/git ls-remote origin refs/heads/main`）：**ccloop 远端 ＝ af70fd6（本轮 ccloop 全部提交已在远端）；Orca 远端 ＝ d64342e（T15 第一笔；其后 a76b4b2…75b44c3 与台账提交只在本地）**。本会话无任何一席执行 `git push` ⇒ 推送来自会话外（人，或 handoff §九 记的 post-commit 钩子）。⇒ 本轮 spec／plan／已推代码与注释从此为**已发布文本**，只能追加具名更正。
+- 波 4 修复：complete (Orca 6b62f22..75b44c3；复审 ADDRESSED ×2，无新的无上限循环)。实施席续用 T15 那一席（325,637 token）。复审席自报误写 `reverify-w4.log` 进 sdd 目录并随即删除（`git status --short` 核实无残留）。
+
+## §6 交接点（2026-09-26，人：「T15完成后，我们先做一次交接」「先把波 4 复审也做完再交接」）
+
+- **已完成**：ccloop T1–T6（含波 1、波 2 修复）；Orca T7–T15（含波 2、波 3、波 4 修复）。各 Task 的完成行、修复轮、`Ruling:` 行、deferred minor 都在上文。
+- **未做（下一会话按顺序）**：T16（驱动环 E2E，fake claude＋fake codex 混组；含判据 8 的 `.argv --model` 一半、§9.11 reconcile 选择进 `.argv`）→ 波 5 复审 → T17（两仓全套门、疑似 flake 判定、控制器汇总 `mutations.md`、spec §13 实施期更正）→ 终审（opus）→ 报人（Ruling 清单、改写过的既有判据清单）。
+- **给 T16 的更正（波 4）**：task-16-brief.md:158 的偏好载荷带 `expectedRevision` 违反 P5，只发 `{preferences}`；`confirmAgentGroup` 的断言应与存储里的冻结值比对，而不是与预览本身比（后者恒真）。
+- **全量门本轮一次都没跑**（Rule 14）：各 Task 只跑了聚焦文件与邻居；现行全量基线仍是 ④ 轮的，已过期。
