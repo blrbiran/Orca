@@ -481,3 +481,23 @@
 - **合并后的全量验证**（全新 `git clone --local`，HEAD 主题行即席 C 那一笔；ccloop build 同 §11 的副本；HOME 与四个 XDG 根改道；`ORCA_CCLOOP_BIN`／`ORCA_AGENTS_TABLE` 为 fake）：web build RC 0、typecheck RC 0、全量 json **218 文件／1992 条全过、0 pending**；真 `~/.orca` 两个残留文件 `stat` 前后 `cmp` RC 0；改道 HOME 下只有 npm 自己的 `_logs`／`_update-notifier-last-checked`。
 - Ruling：`verify:*` 分组门、`check-agents.py` 判定器本节没重跑（全量已覆盖其文件；判定器在旧会话 scratchpad）。
 - 本会话的检查点：`chore(checkpoint): orca-dev-8c6302e0, level 333665 …`（水位钩子过 T1 时写；人本轮已说不考虑上下文大小）。
+
+## §13 人审 Ruling 清单（控制器会话 `43e3e1d8`，Claude Opus 5.5，2026-09-27；接在 §12 之后；观测锚点＝主题行 `docs(handoff): I-2 landed as (a), the fixture audit and its follow-up are done; …`）
+
+- 清单：同目录 `ruling-review.md`（R1–R30；控制器按「一个可独立推翻的决定＝一项」从本文件所有含 `Ruling` 的行与 spec §12–§13.8 重拆）。计数更正：handoff 写的「约 55 条」与「B1 16／B2 8／B3 12／B4 4」（和为 40）都不是可复核的数，分组未曾落盘；本文件实测 `Ruling:` 出现 23 次，多行一行打包多条。
+- 更正（控制器自己的）：`ruling-review.md` 的 R7「错了的代价」栏与对话里第一次解释说「effort 等字段会一起被丢掉，且界面上不一定看得出」—— **假**：选择只有 `agent`／`model`／`contextWindow` 三字段；面板表单以当前层预填（`web/src/AgentFields.tsx` `partialFromFields`），正常操作不丢字段。R28 的建议由「维持」改为「付费轮前修」（`execFileSync` 会阻塞面板事件循环）。
+- 3a 实测（人授权）：`scratchpad/probe3a/probe.py`，`env -i` 只给 PATH／HOME／四个 XDG 根／TMPDIR（均为新建 0700 空目录）；判定器先以三个假二进制自检（写 sandbox ⇒ added；静默 ⇒ 空；写改道的「真 HOME」⇒ real hit）。真 claude `~/.nvm/versions/node/v22.13.1/bin/claude`：stdout `2.1.283 (Claude Code)`、RC 0、26 ms；sandbox added／removed／changed 全空；真 HOME 的 `.claude`／`.claude.json`／`.config`／`.cache`／`.local` 窗口内零改动；前后 `package.json` 版本与 mtime 不变 ⇒ spec §13.5 m-8 已量：`--version` 不写配置目录。本机另有 `/opt/homebrew/bin/claude`（未运行）。
+- 现核：波 1 I-1 已落地（ccloop `scripts/claude-phase-runner.mjs:406` 剥掉 `CCLOOP_CLAUDE_COMMAND`／`_EXTRA_ARGS` 再 spawn）。
+- Human（2026-09-27）：「都同意，先做第 1 步，3a 也授权」
+- Human（2026-09-27）：「R1 command 等安装字段 => 同意移除hash」「R2-R6 同意」「R7 需要单独讨论。effort 为什么需要丢掉？这里整层替换具体是什么意思？你再思考下有没有更好的方案。」「R8 需要具体讨论。」「R9 同意。 维持，把"统一退出码"登记为 ccloop 侧的候选改动。」「R10 同意维持，登记为脆弱点。」「B组中， R17 需要具体讨论。其他按你的建议做。」「C组，同意你的建议」「D组，同意你的建议」「R30 授权改判据」
+- Human（2026-09-27）：「R7 倾向于逐字段合并。没替换的部分应该用默认值吧？如果要清空默认值，应该传空值。」「R8 同意你的方案。现在保持 B，等 ⑤ 设计时再在 A 和 E 之间选。」「R17 同意你的方案。a+b+c 另外需要加 回退式轮询（2、4、8…秒，最多 5 次）也作为兜底。有的时候会出现网络故障等问题（经常会出现），这种时候用回退式轮询会比较好用。」
+- Human（2026-09-27）：R7「1. null 往下退到哪里。 => 同意你的建议」「2. 任务层 null 屏蔽了 task·plan 之后，组层照常生效。 => 同意」；R17「节奏改为 10、20、40、80、160 可能更好」「其他同意你的方案」。
+- 由此定下的（逐项引 `ruling-review.md` 编号）：
+  - R1：`command`（连同 `timeoutMs`、`killGraceMs`）移出 ccloop `configHash`；`configDir` 留在 hash 内（控制器建议，人「同意移除hash」针对「command 等安装字段」）。
+  - R2 维持并加限定「只在上线前成立」；R3 维持 fail closed，付费轮前在 fake 下实测「升级 → 改表 → recovery-retry → 续跑」；R4 `claude-opus-5-5`、R5 `gpt-6-sol` 维持；R6 维持，付费首轮不带 `[1m]`、n＝1。
+  - R7：**推翻 spec §13.1 D2**，改逐字段合并。每一级拆成 `plan` 与 `panel` 两层，层序 `[operator, group·plan, group·panel, task·plan, task·panel]`（reconcile 同理）；panel 字段三态：缺省＝继承、`null`＝当作同级 plan 未写该字段（照常往下继承，不跳到描述默认）、值＝覆盖；panel 的 `agent: null` 丢掉同级 plan 的整层；任务层 null 后组层照常生效；清空 panel 层＝回到 plan。`resolveSelection` 不改，null 在进解析器前预处理。
+  - Ruling（人未单独表态，可逆）：`proposal-set-agent` 仍是「替换 panel 层」而非补丁式写入（补丁式要第四态「本次未提及」）。
+  - R8：维持 B（D1），⑤ 设计时在 A（放宽 `planImport.test.ts > … before source I/O`）与 E（永久去掉 plan 层）之间选。
+  - R9 维持，「统一退出码」登记为 ccloop 侧候选；R10 维持，登记为脆弱点。
+  - R11–R16、R18–R20 维持；R17：去掉无上限轮询的裁定维持，并加 (a) 页面获焦／可见时重读一次 agents 表与预览、(b) 安装表内容 hash 进预览缓存键、(c) 保留 Re-read、(d) 回退式轮询 10、20、40、80、160 秒最多 5 次 —— 覆盖预览请求失败、`unavailable` 槽、`loadAgents` 失败；不覆盖具名 `rejected`；不重叠；读成功／换组／proposal 版本变化／手动 Re-read／获焦时清零；页面隐藏时暂停；界面显示第 k/5 次与倒计时；同一错误码一轮只提示一次。
+  - R21–R25 知悉；R26 不再派审计；R27 维持；R28 付费轮前给 `versionOf` 加超时；R29 把 `tests/validation/evidence.test.ts > run-scenario CLI > records claudeChildExited as NOT_OBSERVABLE when no adapter descendant was tracked` 加进 ccloop 已知红名单；R30 人指名授权改名 `materialize.test.ts` 的 `is the canonical hash of the materialized config`（标题与 describe 注释，断言不动）；孤儿进程由人处理。
