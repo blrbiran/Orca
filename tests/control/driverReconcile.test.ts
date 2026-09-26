@@ -220,6 +220,27 @@ describe("reconciling a conflict (spec §5.3)", { timeout: 30_000 }, () => {
     } finally { await t.h.dispose(); }
   });
 
+  // Seat C (session 8c6302e0, 2026-09-26; follow-up to audit finding R1): finishReconcile refuses a reconciliation
+  // by `loop.status !== "succeeded"`, and the criterion above only ever feeds it `failed`. Narrowing that guard to
+  // `loop.status === "failed"` (mutation M5n) made nothing red, although it would land an exhausted, blocked or
+  // cancelled reconciliation as a merge on orca/<group>. Each of ccloop's other non-succeeded terminal statuses must
+  // block the run at R under its own name, leave orca/<group> where the landed run put it, and still book the spend.
+  // The fake publishes an attempt ref for every status, so the terminal status is the only thing that can refuse it.
+  // The wait ends on "every run landed or blocked", so a mutant that lands both fails at the assertions, not the deadline.
+  it.each(["exhausted", "blocked_waiting_human", "cancelled"])("blocks a reconciliation that ended %s instead of landing it, and still books its spend", async (status) => {
+    const t = await twoConflicting({ files: { "shared.txt": "A\nB\n" }, status, spent: 7 }); try {
+      const driver = t.driver();
+      await untilDeadline(driver, () => t.ids.every((id) => [...LANDED, "blocked"].includes(t.body(id).state)));
+      const blocked = t.ids.filter((id) => t.body(id).state === "blocked");
+      expect(blocked).toHaveLength(1);
+      expect(t.body(blocked[0]!).drive).toMatchObject({ blockedAt: "R", blockedReason: `reconcile-terminal:${status}`, reconcile: { outcome: status } });
+      const landed = t.ids.find((id) => id !== blocked[0])!;
+      expect(git(t.repo, "rev-parse", "refs/heads/orca/g")).toBe(t.body(landed).drive.landedCommit);
+      expect(readWebGroup(t.h.store, "g").used.tokens).toBe(27);
+      expect(t.spawns()).toHaveLength(1);
+    } finally { await t.h.dispose(); }
+  });
+
   // Fix round 1 (m9): spec §5.3(6) checks affordability again before every spawn, not only at D.
   it("blocks at R, before spawning, a reconciliation the group can no longer afford", async () => {
     const t = await twoConflicting({ files: { "shared.txt": "A\nB\n" } }); try {
