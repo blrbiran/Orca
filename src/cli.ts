@@ -21,6 +21,7 @@ import { CheckpointRejection, describeLevel } from "./checkpoint/schema.js";
 import { writeCheckpoint } from "./checkpoint/write.js";
 import { resumeOutcome } from "./checkpoint/resume.js";
 import { runChainCommand } from "./chain/command.js";
+import { runAgentsCommand } from "./agents/command.js";
 
 const USAGE = `usage:
   orca validate <path...>        validate ledger file(s) or directory (directory scans top-level *.jsonl only)
@@ -99,6 +100,11 @@ const USAGE = `usage:
   orca chain unlock --repo <path>
                                  after checking its supervisor is gone: remove a chain's lock and record the
                                  chain as stopped (unlocked-by-human)
+  orca agents init               detect the installed agents (ccloop agents detect) and write the installation table to
+                                 $ORCA_AGENTS_TABLE (default ~/.orca/agents.json; directory 0700, file 0600). An existing
+                                 table is never overwritten: the detection goes to <table>.draft.json and the diff is printed
+  orca agents show               validate the installation table (ccloop agents validate) and print what each installation
+                                 resolves to with no layer overriding it; exit 1 if any entry is refused
 `;
 
 async function collectLedgerFiles(paths: string[]): Promise<{ files: string[]; errors: string[] }> {
@@ -555,6 +561,10 @@ export async function main(argv: string[], stdinText?: string): Promise<number> 
 
   if (command === "chain") {
     return runChainCommand(rest);
+  }
+
+  if (command === "agents") {
+    return runAgentsCommand(rest, process.env, { stdout: (text) => process.stdout.write(text), stderr: (text) => process.stderr.write(text) });
   }
 
   if (command === "checkpoint") {
