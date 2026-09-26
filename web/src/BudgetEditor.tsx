@@ -89,8 +89,8 @@ export interface BudgetEditorProps {
   onDraft: (key: string, text: string) => void;
   onCommand: (action: ControlAction) => void;
   /**
-   * Agent selection spec §6.4 step 3: the hash of the selections the operator sees; confirming needs it (W5-M9).
-   * Plan T15 wires the preview that supplies it; until then confirming is refused here, never sent unbound.
+   * Agent selection spec §6.4 step 3: the hash of the agent resolution on screen (the group's preview, T15).
+   * Without one, confirm is not offered: a confirmation is never sent unbound to the selections the operator saw.
    */
   selectionsHash?: string | null;
 }
@@ -108,7 +108,8 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
   // There is then nothing to fall back to, so confirming is refused here rather than sent with a
   // guessed profile or a guessed mode -- guessing the mode is the strict-versus-soft fault itself.
   const defaults = config.defaults;
-  const confirmBlocked = (defaults === null && (view.proposal.profiles === null || view.proposal.budgetMode === null)) || !props.selectionsHash;
+  const confirmBlocked = defaults === null && (view.proposal.profiles === null || view.proposal.budgetMode === null);
+  const shownSelectionsHash = props.selectionsHash ?? null;
   const confirmProfile = (kind: "estimator" | "worker" | "handoff" | "goalReview") =>
     view.proposal.profiles?.[kind] ?? { profileId: defaults?.estimatorProfileId ?? "", profileHash: defaults?.estimatorProfileHash ?? "" };
 
@@ -126,7 +127,7 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
     onCommand({ verb: "set-limit", groupId, expectedRevision: view.summary.commandRevision, payload: { limit: limitAmount(view, drafts) } });
   };
   const submitConfirm = (): void => {
-    if (confirmBlocked) return;
+    if (confirmBlocked || shownSelectionsHash === null) return;
     const contextDraft = drafts[CONTEXT_POLICY_KEY(groupId)];
     const tokens = contextDraft === undefined || contextDraft.trim() === "" ? null : Number(contextDraft);
     onCommand({
@@ -146,7 +147,7 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
           handoff: confirmProfile("handoff").profileHash, goalReview: confirmProfile("goalReview").profileHash,
         },
         contextPolicy: { handoffAtContextTokens: tokens === null || !Number.isSafeInteger(tokens) ? null : tokens },
-        selectionsHash: props.selectionsHash!,
+        selectionsHash: shownSelectionsHash,
       },
     });
   };
@@ -237,7 +238,8 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
       </p>
       <button type="button" disabled={!editable || editedOperations(view, drafts).length === 0} onClick={submitEdit}>Save proposal</button>
       {estimator !== null && <button type="button" onClick={submitEstimate}>Re-estimate</button>}
-      <button type="button" onClick={submitConfirm}>Confirm budget</button>
+      {editable && shownSelectionsHash === null && <p role="note">Confirm waits for this proposal version's agent selections to resolve.</p>}
+      <button type="button" disabled={shownSelectionsHash === null} onClick={submitConfirm}>Confirm budget</button>
     </section>
   );
 }

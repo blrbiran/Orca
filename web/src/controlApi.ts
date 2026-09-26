@@ -11,6 +11,9 @@
  */
 import { failureFrom, panelToken } from "./api.js";
 import type {
+  AgentPreferencesViewV1,
+  AgentSelectionPreviewV1,
+  AgentsViewV1,
   CommandEnvelopeV1,
   CommandErrorV1,
   CommandLookupV1,
@@ -25,6 +28,7 @@ import type {
   HandoffStopPayloadV1,
   ImportPlanPayloadV1,
   ProposalEditPayloadV1,
+  ProposalSetAgentPayloadV1,
   RecoveryRetryPayloadV1,
   RecoveryViewV1,
   RepositoryWorkspaceV1,
@@ -89,6 +93,15 @@ export const fetchControlRecovery = (): Promise<RecoveryViewV1> => controlGet<Re
 /** GET /api/control/runs/:runId/evidence -- the manifest of raw evidence retained for one run. */
 export const fetchRunEvidence = (runId: string): Promise<EvidenceManifestV1> =>
   controlGet<EvidenceManifestV1>(`/api/control/runs/${segment(runId)}/evidence`);
+
+/** Agent selection spec §6.8: the installation table, as ccloop answered it through the panel. */
+export const fetchAgentsView = (): Promise<AgentsViewV1> => controlGet<AgentsViewV1>("/api/control/agents");
+export const AGENT_PREFERENCES_PATH = "/api/control/operator/agent-preferences";
+/** This panel operator's defaults and the revision they are at. */
+export const fetchAgentPreferences = (): Promise<AgentPreferencesViewV1> => controlGet<AgentPreferencesViewV1>(AGENT_PREFERENCES_PATH);
+/** The confirm's own resolution of a group's agent slots, for the proposal version the server holds now. */
+export const fetchAgentPreview = (groupId: string): Promise<AgentSelectionPreviewV1> =>
+  controlGet<AgentSelectionPreviewV1>(`/api/control/groups/${segment(groupId)}/agent-preview`);
 
 /** Execution driver spec §3.2: a trusted repository's workspace mode and the revision it is at. */
 export const fetchRepositoryWorkspace = (repoId: string): Promise<RepositoryWorkspaceV1> =>
@@ -172,6 +185,7 @@ export async function recoverUncertainCommand(groupId: string, commandId: string
 export type ControlAction =
   | { verb: "import-plan"; groupId: string; expectedRevision: number; payload: ImportPlanPayloadV1 }
   | { verb: "proposal-edit"; groupId: string; expectedRevision: number; payload: ProposalEditPayloadV1 }
+  | { verb: "proposal-set-agent"; groupId: string; expectedRevision: number; payload: ProposalSetAgentPayloadV1 }
   | { verb: "estimate"; groupId: string; expectedRevision: number; payload: EstimatePayloadV1 }
   | { verb: "confirm"; groupId: string; expectedRevision: number; payload: ConfirmPayloadV1 }
   | { verb: "set-limit"; groupId: string; expectedRevision: number; payload: SetLimitPayloadV1 }
@@ -189,6 +203,8 @@ export function controlCommandPath(action: ControlAction): string {
       return "/api/control/groups/import-plan";
     case "proposal-edit":
       return `${group}/proposal/edit`;
+    case "proposal-set-agent":
+      return `${group}/proposal/agent`;
     case "estimate":
       return `${group}/estimates`;
     case "confirm":

@@ -9,9 +9,12 @@
  */
 import type { JSX } from "react";
 import type { ControlAction } from "./controlApi.js";
+import { AgentSelectionEditor, selectionsHashFor } from "./AgentSelectionEditor.js";
 import { BudgetEditor } from "./BudgetEditor.js";
 import { EvidenceLink } from "./EvidenceLink.js";
-import type { ControlConfigV1, ContinuationSelectionV1, GroupViewV1, RunViewV1 } from "./controlTypes.js";
+import type {
+  AgentSelectionPreviewV1, AgentsViewV1, ControlConfigV1, ContinuationSelectionV1, GroupViewV1, OperatorPreferencesV1, RunViewV1,
+} from "./controlTypes.js";
 import type { UncertainCommand } from "./controlState.js";
 
 const short = (hash: string): string => hash.slice(0, 12);
@@ -35,6 +38,12 @@ export interface ControlGroupViewProps {
   drafts: Record<string, string>;
   onDraft: (key: string, text: string) => void;
   onCommand: (action: ControlAction) => void;
+  /** Agent selection spec §6.8: absent on a page that never reads the installation table (and in older criteria). */
+  agents?: AgentsViewV1 | null;
+  /** The server's resolution of this group's agent slots; the confirm carries its hash. */
+  preview?: AgentSelectionPreviewV1 | null;
+  /** This operator's defaults, for the agent an unnamed layer inherits. */
+  agentPreferences?: OperatorPreferencesV1 | null;
 }
 
 export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
@@ -61,7 +70,13 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
           {view.stop.frozenRunIds.length} frozen run(s): {view.stop.frozenRunIds.join(", ") || "none"}
         </p>
       )}
-      <BudgetEditor view={view} config={config} drafts={drafts} onDraft={onDraft} onCommand={onCommand} />
+      <BudgetEditor view={view} config={config} drafts={drafts} onDraft={onDraft} onCommand={onCommand} selectionsHash={selectionsHashFor(view, props.preview)} />
+      {props.agents !== undefined && (
+        <AgentSelectionEditor
+          view={view} agents={props.agents} preview={props.preview ?? null} preferences={props.agentPreferences}
+          drafts={drafts} onDraft={onDraft} onCommand={onCommand}
+        />
+      )}
 
       <h3>Work items</h3>
       <table>

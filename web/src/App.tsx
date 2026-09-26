@@ -37,6 +37,7 @@ import { bannersFor, readDismissed, writeDismissed } from "./chainBanner.js";
 import { ChainPanel } from "./ChainPanel.js";
 import type { ChainOutcome } from "./ChainPanel.js";
 import {
+  AGENT_PREFERENCES_PATH,
   commandEnvelope,
   controlCommandPath,
   controlFailureFrom,
@@ -44,6 +45,9 @@ import {
   fetchControlGroup,
   fetchControlRecovery,
   fetchControlSummary,
+  fetchAgentPreferences,
+  fetchAgentPreview,
+  fetchAgentsView,
   fetchRepositoryWorkspace,
   nextCommandId,
   readUncertainCommands,
@@ -57,7 +61,9 @@ import type { ControlAction } from "./controlApi.js";
 import { ControlPanel } from "./ControlPanel.js";
 import { initialControlState, reduceControlState, summaryView } from "./controlState.js";
 import type { UncertainCommand } from "./controlState.js";
-import type { ControlConfigV1, RepositoryWorkspaceV1 } from "./controlTypes.js";
+import type {
+  AgentPreferencesViewV1, AgentSelectionPreviewV1, AgentsViewV1, ControlConfigV1, OperatorPreferencesV1, RepositoryWorkspaceV1,
+} from "./controlTypes.js";
 import { DecisionDetail } from "./DecisionDetail.js";
 import type { Decision } from "./DecisionDetail.js";
 import { ErrorPage } from "./ErrorPage.js";
@@ -113,6 +119,17 @@ export function App(): JSX.Element {
   const [controlConfig, setControlConfig] = useState<ControlConfigV1 | null>(null);
   /** Execution driver spec §3.2: the first trusted repository's workspace mode, null until read. */
   const [workspace, setWorkspace] = useState<RepositoryWorkspaceV1 | null>(null);
+  /** Agent selection spec §6.8: the installation table and this operator's defaults; null until read, or when the port refuses. */
+  const [agents, setAgents] = useState<AgentsViewV1 | null>(null);
+  const [agentPreferences, setAgentPreferences] = useState<AgentPreferencesViewV1 | null>(null);
+  /** The server's resolution per open group; a new proposal version or new preferences re-read it. */
+  const [previews, setPreviews] = useState<Record<string, AgentSelectionPreviewV1>>({});
+  /**
+   * Wave 3 review I-3: bumped to re-read the open group's preview when the one on screen can no longer be
+   * confirmed -- the server refused it as agent-selection-changed, the read did not conclude, or a slot was
+   * unavailable for now. The key below does not move for any of these on its own.
+   */
+  const [previewNonce, setPreviewNonce] = useState(0);
   // The ids still waiting on a lookup are restored in the initializer, not in an
   // effect: the effect that mirrors the reducer's list back into sessionStorage runs
   // on the very same mount commit, and would clear the key before anything read it.
@@ -211,8 +228,24 @@ export function App(): JSX.Element {
       return;
     }
     dispatchControl({ type: "command-resolved", value: command });
-    if (answer.status >= 400) dispatchControl({ type: "refusal", groupId: action.groupId, value: refusalFromAnswer(answer) });
+    if (answer.status >= 400) {
+      const refusal = refusalFromAnswer(answer);
+      dispatchControl({ type: "refusal", groupId: action.groupId, value: refusal });
+      // The server re-resolved at confirm time and got another hash: the preview on screen is void.
+      if (refusal.code === "agent-selection-changed") rereadPreview(action.groupId, 0);
+    }
     await readControlGroup(action.groupId);
+  };
+
+  /** Drop a group's preview, so no confirm can carry it, and read it again after `delayMs`. */
+  const rereadPreview = (groupId: string, delayMs: number): void => {
+    setPreviews((prior) => {
+      const next = { ...prior };
+      delete next[groupId];
+      return next;
+    });
+    if (delayMs === 0) setPreviewNonce((value) => value + 1);
+    else setTimeout(() => setPreviewNonce((value) => value + 1), delayMs);
   };
 
   /** Name the choice under the revision it was read at; whatever the server says is read back, not assumed. */
@@ -223,6 +256,17 @@ export function App(): JSX.Element {
     if (answer.kind === "uncertain") dispatchControl({ type: "refusal", groupId: scope, value: answer.refusal });
     else if (answer.status >= 400) dispatchControl({ type: "refusal", groupId: scope, value: refusalFromAnswer(answer) });
     try { setWorkspace(await fetchRepositoryWorkspace(workspace.repoId)); } catch { /* the refusal above already says why */ }
+  };
+
+  /** Name the operator's new defaults under the revision they were read at; whatever the server says is read back. */
+  const sendAgentPreferences = async (preferences: OperatorPreferencesV1, expectedRevision: number): Promise<void> => {
+    if (agentPreferences === null) return;
+    const scope = `@operator:${agentPreferences.operatorId}`;
+    // Review P5: the payload is { preferences } only; the revision travels in the envelope.
+    const answer = await sendControlCommand(AGENT_PREFERENCES_PATH, { commandId: nextCommandId(), expectedRevision, payload: { preferences } });
+    if (answer.kind === "uncertain") dispatchControl({ type: "refusal", groupId: scope, value: answer.refusal });
+    else if (answer.status >= 400) dispatchControl({ type: "refusal", groupId: scope, value: refusalFromAnswer(answer) });
+    try { setAgentPreferences(await fetchAgentPreferences()); } catch { /* the refusal above already says why */ }
   };
 
   useEffect(() => {
@@ -249,6 +293,41 @@ export function App(): JSX.Element {
   useEffect(() => {
     writeUncertainCommands(browserSession(), control.uncertainCommandIds);
   }, [control.uncertainCommandIds]);
+
+  // Agent selection spec §6.8: an unconfigured port has no installation table to read.
+  useEffect(() => {
+    if (controlConfig?.executionPort !== "configured") return;
+    void (async () => {
+      try {
+        setAgents(await fetchAgentsView());
+        setAgentPreferences(await fetchAgentPreferences());
+      } catch (err) {
+        dispatchControl({ type: "refusal", groupId: null, value: controlFailureFrom(err) });
+      }
+    })();
+  }, [controlConfig]);
+
+  // The preview is re-read whenever what it depends on moved: the open group, its proposal version, the
+  // preferences -- or the page decided the one it holds is void (previewNonce).
+  const openGroup = selectedGroup === null ? undefined : control.canonical[selectedGroup];
+  const previewKey = openGroup === undefined || openGroup.proposal.state !== "editable"
+    ? null
+    : `${openGroup.summary.groupId}\0${openGroup.proposal.proposalVersion}\0${agentPreferences?.revision ?? -1}\0${previewNonce}`;
+  useEffect(() => {
+    if (previewKey === null || openGroup === undefined || agents === null) return;
+    const groupId = openGroup.summary.groupId;
+    void fetchAgentPreview(groupId).then(
+      (value) => {
+        setPreviews((prior) => ({ ...prior, [groupId]: value }));
+        // Spec §6.8 / wave 3 I-1: an unavailable slot is ccloop not answering this time, so it is asked again.
+        if (value.slots.some((slot) => slot.outcome.kind === "unavailable")) setTimeout(() => setPreviewNonce((n) => n + 1), CONTROL_POLL_MS);
+      },
+      (err) => {
+        dispatchControl({ type: "refusal", groupId, value: controlFailureFrom(err) });
+        rereadPreview(groupId, CONTROL_POLL_MS);
+      },
+    );
+  }, [previewKey, agents]);
 
   // Opening a group, a voided cache and a projection gap all mean: re-read it canonically.
   useEffect(() => {
@@ -359,6 +438,10 @@ export function App(): JSX.Element {
           }}
           workspace={workspace}
           onWorkspaceMode={(mode, revision) => { void sendWorkspaceMode(mode, revision); }}
+          agents={agents}
+          preferences={agentPreferences}
+          previews={previews}
+          onAgentPreferences={(preferences, revision) => { void sendAgentPreferences(preferences, revision); }}
         />
       )}
       <PanelHome todo={home.todo} report={home.report} coverage={home.coverage} onOpen={setSelected} />

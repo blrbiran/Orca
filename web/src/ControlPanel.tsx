@@ -9,11 +9,15 @@
  * whether an unknown run is finished.
  */
 import type { JSX } from "react";
+import { AgentSettings } from "./AgentSettings.js";
 import { nextCommandId, type ControlAction } from "./controlApi.js";
 import { ControlGroupView } from "./ControlGroupView.js";
 import { RecoveryView } from "./RecoveryView.js";
 import { WorkspaceModeSelector } from "./WorkspaceModeSelector.js";
-import type { ControlConfigV1, ControlSummaryV1, GroupViewV1, RecoveryViewV1, RepositoryWorkspaceV1 } from "./controlTypes.js";
+import type {
+  AgentPreferencesViewV1, AgentSelectionPreviewV1, AgentsViewV1, ControlConfigV1, ControlSummaryV1, GroupViewV1, OperatorPreferencesV1,
+  RecoveryViewV1, RepositoryWorkspaceV1,
+} from "./controlTypes.js";
 import type { ControlRefusal, UncertainCommand } from "./controlState.js";
 
 export interface ControlPanelProps {
@@ -32,6 +36,12 @@ export interface ControlPanelProps {
   /** Execution driver spec §3.2: the first trusted repository's workspace mode, once read. */
   workspace?: RepositoryWorkspaceV1 | null;
   onWorkspaceMode?: (mode: "worktree" | "clone", expectedRevision: number) => void;
+  /** Agent selection spec §6.8: the installation table and this operator's defaults, once read. */
+  agents?: AgentsViewV1 | null;
+  preferences?: AgentPreferencesViewV1 | null;
+  /** The server's agent resolution per group, keyed by groupId. */
+  previews?: Record<string, AgentSelectionPreviewV1>;
+  onAgentPreferences?: (preferences: OperatorPreferencesV1, expectedRevision: number) => void;
 }
 
 function ImportForm(props: { config: ControlConfigV1; onCommand: (action: ControlAction) => void }): JSX.Element {
@@ -107,6 +117,9 @@ export function ControlPanel(props: ControlPanelProps): JSX.Element {
       {recovery.dispatchBlocked && <p role="alert">dispatch blocked · recovery must be observed</p>}
       <ImportForm config={config} onCommand={props.onCommand} />
       {props.workspace && props.onWorkspaceMode && <WorkspaceModeSelector workspace={props.workspace} onChange={props.onWorkspaceMode} />}
+      {props.agents && props.preferences && props.onAgentPreferences && (
+        <AgentSettings agents={props.agents} preferences={props.preferences} drafts={drafts} onDraft={props.onDraft} onSave={props.onAgentPreferences} />
+      )}
       <nav aria-label="Control groups">
         {summary.groups.length === 0 && <p>No control groups yet.</p>}
         {summary.groups.map((group) => (
@@ -125,6 +138,9 @@ export function ControlPanel(props: ControlPanelProps): JSX.Element {
           drafts={drafts}
           onDraft={props.onDraft}
           onCommand={props.onCommand}
+          agents={props.agents}
+          preview={props.previews?.[view.summary.groupId] ?? null}
+          agentPreferences={props.preferences?.preferences ?? null}
         />
       )}
       {view === undefined && selected !== null && <p role="status">Reading {selected}…</p>}
