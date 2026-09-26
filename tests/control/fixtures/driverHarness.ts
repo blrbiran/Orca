@@ -7,6 +7,7 @@ import { deliverScheduledStart } from "../../../src/control/webDispatch.js";
 import { controlWorkspaceRoots } from "../../../src/control/workspace.js";
 import { createExecutionDriver, type ExecutionDriver, type ExecutionDriverDeps } from "../../../src/control/executionDriver.js";
 import { fakeCcloopPort, type FakeBehaviour } from "./driverPort.js";
+import type { StartEnvelope } from "../../../src/control/executionPort.js";
 import { profileSnapshot, webFixture, type WebFixtureOptions, type WebFixtureTask } from "./web.js";
 
 /** A `ccloop run` stand-in for reconciliation criteria (created in Task 6). */
@@ -29,6 +30,10 @@ export interface HarnessOptions {
   killGraceMs?: number;
   /** Agent selection plan T12: the plan's group agent layers (spec §6.2), so a criterion can freeze a reconcile slot that differs from the worker slot. */
   planAgents?: WebFixtureOptions["planAgents"];
+  /** Audit 2026-09-26 (seat B): confirmation freezes a distinct configHash per selection (web.ts `distinctConfigHash`). */
+  distinctConfigHash?: boolean;
+  /** Audit 2026-09-26 (seat B): the configHash the synthetic ccloop's `accept` answers, instead of echoing the claim's. */
+  acceptedConfigHash?: (envelope: StartEnvelope) => string;
 }
 
 /**
@@ -37,7 +42,7 @@ export interface HarnessOptions {
  */
 export async function driverHarness(tasks: readonly WebFixtureTask[], options: HarnessOptions = {}) {
   const snapshot = profileSnapshot();
-  const h = await webFixture(snapshot, tasks, { killGraceMs: options.killGraceMs, planAgents: options.planAgents });
+  const h = await webFixture(snapshot, tasks, { killGraceMs: options.killGraceMs, planAgents: options.planAgents, ...(options.distinctConfigHash ? { distinctConfigHash: true } : {}) });
   const repo = await realpath(join(h.root, "repo"));
   git(repo, "init", "-q", "-b", "main");
   await writeFile(join(repo, "base.txt"), "base\n");
@@ -50,6 +55,7 @@ export async function driverHarness(tasks: readonly WebFixtureTask[], options: H
     capabilities: snapshot.profile.capabilities, behaviour: options.behaviour ?? (() => "succeed"),
     files: options.files ?? ((id) => ({ [id]: `${id}\n` })), delayAccept: options.delayAccept,
     workTokens: options.workTokens, duringCollect: options.duringCollect,
+    ...(options.acceptedConfigHash ? { acceptedConfigHash: options.acceptedConfigHash } : {}),
   });
   const deps: ExecutionDriverDeps = {
     store: h.store, router: createExecutionProfileRouter([resolveProfile(snapshot, fake.port)]), admissionGate: h.deps.admissionGate,

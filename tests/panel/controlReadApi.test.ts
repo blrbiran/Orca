@@ -498,6 +498,27 @@ describe("canonical control read API", () => {
     expect(missingCurrentRun.status).toBe(423);
   });
 
+  // Audit 2026-09-26 (seat A's RA7, assigned to seat B): agent selection spec §6.4 / §3 I1 -- a run carries its work
+  // item's frozen selection byte for byte (controlViews.ts `sameFrozenRecords(run, work)`). The sibling criterion above
+  // never alters those fields, so dropping the check was green. A run row whose configHash, or whose agent, is not its
+  // work item's is a run dispatched under another task's (or no task's) frozen config: the read fails closed on it.
+  it("fails closed on a run row whose frozen configHash or agent is not its work item's", async () => {
+    const groupId = "group-a";
+    await confirmGroup(h, groupId);
+    const valid = insertValidTaskRun(h, groupId) as { configHash: string; agent: Record<string, unknown> };
+    expect((await request(h, `/api/control/groups/${groupId}`)).status).toBe(200);
+    const drifted = {
+      configHash: { ...valid, configHash: hash("e") },
+      agent: { ...valid, agent: { ...valid.agent, model: "another-model" } },
+    };
+    for (const [field, body] of Object.entries(drifted)) {
+      h.store.db.prepare("UPDATE runs SET body=? WHERE id='run-one'").run(canonicalBytes(body).toString("utf8"));
+      const response = await request(h, `/api/control/groups/${groupId}`);
+      expect(response.status, field).toBe(423);
+      expect((await response.json() as { error: { code: string } }).error.code, field).toBe("recovery-blocked");
+    }
+  });
+
   it("requires canonical stop authority and preserves revision and blocker evidence on group read failures", async () => {
     const groupId = "group-a";
     const row = h.store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId)!;

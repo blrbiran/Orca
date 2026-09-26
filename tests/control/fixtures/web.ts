@@ -34,6 +34,8 @@ export interface WebFixtureOptions {
   planAgents?: { agent?: PartialSelection; reconcileAgent?: PartialSelection };
   /** The killGraceMs the fixture's ccloop answers for every selection (5 000 unless said otherwise), frozen at confirmation. */
   killGraceMs?: number;
+  /** Audit 2026-09-26 (seat B): the fixture's ccloop answers each selection its own configHash (agents.ts `fixtureConfigHashOf`). */
+  distinctConfigHash?: boolean;
 }
 
 /** Agent selection spec §3: the complete selection this fixture's task work items are frozen with. */
@@ -52,7 +54,7 @@ export async function webFixture(snapshot = profileSnapshot(), tasks: readonly W
   // Plan T11: the answer is `resolveAgent`, a mock a criterion may inspect or re-implement (agents.ts), which refuses an
   // installation it does not know as ccloop would.
   const asked: PartialSelection[] = [];
-  const resolveAgent = fixtureResolveAgent(() => observed, { killGraceMs: options.killGraceMs });
+  const resolveAgent = fixtureResolveAgent(() => observed, { killGraceMs: options.killGraceMs, ...(options.distinctConfigHash ? { distinctConfigHash: true } : {}) });
   const port = { accept, resolveAgent: async (partial: PartialSelection) => (asked.push(structuredClone(partial)), resolveAgent(partial)),
     listAgents: async () => ({ installations: [{ id: "codex", kind: "codex", defaults: { model: "fixture-model", contextWindow: "agent-default" as const }, contextOptions: ["agent-default" as const], version: "0.0.0-fixture" }] }),
     readEvidence: async () => Buffer.alloc(0), inspect: async () => ({ kind: "unknown" }), requestHandoff: async () => ({ kind: "unknown" }), collect: async () => ({ events: [], candidate: null, terminal: null }) } as unknown as ExecutionPort;

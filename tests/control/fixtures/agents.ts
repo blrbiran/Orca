@@ -1,6 +1,6 @@
 import { vi } from "vitest";
 import { applySetAgentPreferences, readAgentPreferences } from "../../../src/control/agentPreferences.js";
-import type { AgentResolution, OperatorPreferences, PartialSelection } from "../../../src/control/agentSelection.js";
+import type { AgentResolution, AgentSelection, OperatorPreferences, PartialSelection } from "../../../src/control/agentSelection.js";
 import { canonicalBytes, sha256Canonical } from "../../../src/control/canonicalJson.js";
 import { ControlError } from "../../../src/control/errors.js";
 import type { ControlStore } from "../../../src/control/store.js";
@@ -21,15 +21,26 @@ const FIXTURE_DEFAULT_MODELS: Record<string, string> = { [FIXTURE_AGENT_ID]: "fi
  * requested fields are echoed, the rest are the installation's defaults (no agent: the fixture agent), and an unknown
  * installation is refused by ccloop's own code. The capabilities are whatever `capabilities()` answers at call time.
  */
-export function fixtureResolveAgent(capabilities: () => CapabilityViewV1, options: { killGraceMs?: number } = {}) {
+export function fixtureResolveAgent(capabilities: () => CapabilityViewV1, options: { killGraceMs?: number; distinctConfigHash?: boolean } = {}) {
   return vi.fn(async (partial: PartialSelection): Promise<AgentResolution> => {
     const agent = partial.agent ?? FIXTURE_AGENT_ID;
     if (!Object.hasOwn(FIXTURE_DEFAULT_MODELS, agent)) throw new ControlError("agent-installation-missing", agent);
+    const selection = { agent, model: partial.model ?? FIXTURE_DEFAULT_MODELS[agent]!, contextWindow: partial.contextWindow ?? "agent-default" as const };
     return {
-      selection: { agent, model: partial.model ?? FIXTURE_DEFAULT_MODELS[agent]!, contextWindow: partial.contextWindow ?? "agent-default" },
-      configHash: sha256Canonical({}), timeoutMs: 120_000, killGraceMs: options.killGraceMs ?? 5_000, capabilities: capabilities(),
+      selection,
+      configHash: options.distinctConfigHash ? fixtureConfigHashOf(selection) : sha256Canonical({}), timeoutMs: 120_000, killGraceMs: options.killGraceMs ?? 5_000, capabilities: capabilities(),
     };
   });
+}
+
+/**
+ * Audit 2026-09-26 (seat B, K1-K4): with `distinctConfigHash` the stand-in answers each complete selection its own
+ * configHash, as real ccloop does (it hashes the materialized config), instead of one constant for every selection. A
+ * criterion reads the expected hash from here -- the stand-in's answer, not anything Orca computed -- so a production
+ * slip that hands a task another task's configHash is visible. Opt-in: without it every existing caller is unchanged.
+ */
+export function fixtureConfigHashOf(selection: AgentSelection): string {
+  return sha256Canonical({ fixtureConfig: selection });
 }
 
 /** Sets `operatorId`'s preferences through the real command (and its ledger row), as the panel would. */

@@ -44,6 +44,8 @@ export function fakeCcloopPort(input: {
   workTokens?: (workItemId: string) => number;
   /** Handoff delivery (Task 4): runs inside every `collect` that found an execution, before it answers. */
   duringCollect?: () => Promise<void>;
+  /** Audit 2026-09-26 (seat B): what `accept` answers as the execution's configHash; absent, the claim's is echoed. */
+  acceptedConfigHash?: (envelope: StartEnvelope) => string;
 }): FakeCcloop {
   const calls = { accept: [] as StartEnvelope[], inspect: 0, collect: 0, handoff: [] as HandoffRequest[] };
   const handoffs = new Map<string, HandoffRequest>();
@@ -119,7 +121,7 @@ export function fakeCcloopPort(input: {
       const executionId = executions.get(runId) ?? `execution-${runId}`;
       executions.set(runId, executionId);
       if (behaviour === "lost-accept") return { kind: "unknown" };
-      return { kind: "accepted", executionId, configHash: behaviour === "wrong-config" ? "f".repeat(64) : configHash };
+      return { kind: "accepted", executionId, configHash: behaviour === "wrong-config" ? "f".repeat(64) : input.acceptedConfigHash?.(envelope) ?? configHash };
     },
     async inspect(envelope) {
       calls.inspect += 1;
