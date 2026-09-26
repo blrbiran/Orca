@@ -64,7 +64,9 @@ const sha256 = (path: string): string => createHash("sha256").update(readFileSyn
  * stdout of `[...command, "--version"]`. The configHash is never computed here: ccloop answers it (spec I3).
  */
 function versionOf(command: string[]): string {
-  const printed = execFileSync(command[0]!, [...command.slice(1), "--version"], { encoding: "utf8", input: "" });
+  // Orca ruling review R28 (2026-09-27, wave 5 m-2): a synchronous probe that hangs cannot be interrupted by any
+  // timer on this thread, so it carries its own bound (ccloop's probeVersion uses the same 10 s).
+  const printed = execFileSync(command[0]!, [...command.slice(1), "--version"], { encoding: "utf8", input: "", timeout: 10_000, killSignal: "SIGKILL" });
   const match = /\d+\.\d+\.\d+(-[\w.]+)?/.exec(printed);
   if (!match) throw new Error(`no version in ${JSON.stringify(printed)}`);
   return match[0];
