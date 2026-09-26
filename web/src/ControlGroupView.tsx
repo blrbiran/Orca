@@ -44,6 +44,8 @@ export interface ControlGroupViewProps {
   preview?: AgentSelectionPreviewV1 | null;
   /** This operator's defaults, for the agent an unnamed layer inherits. */
   agentPreferences?: OperatorPreferencesV1 | null;
+  /** Drop this group's agent preview and read it again. */
+  onRereadPreview?: () => void;
 }
 
 export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
@@ -74,6 +76,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       {props.agents !== undefined && (
         <AgentSelectionEditor
           view={view} agents={props.agents} preview={props.preview ?? null} preferences={props.agentPreferences}
+          onReread={props.onRereadPreview}
           drafts={drafts} onDraft={onDraft} onCommand={onCommand}
         />
       )}

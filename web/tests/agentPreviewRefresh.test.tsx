@@ -7,7 +7,7 @@
  * last describe covers the rest of App's agent wiring (the preferences command and what it hands the view).
  */
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/App.js";
 import type {
   AgentPreferencesViewV1, AgentSelectionPreviewV1, AgentsViewV1, Amount, ControlConfigV1, ControlSummaryV1, GroupViewV1, RecoveryViewV1,
@@ -108,10 +108,16 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   cleanup();
   window.sessionStorage.clear();
 });
 
+const rereadButton = (): HTMLButtonElement => screen.getByRole("button", { name: "Re-read agent selections" }) as HTMLButtonElement;
+/** Fake timers that still follow the wall clock, so testing-library's own waits keep working; `pass` jumps ahead. */
+const pass = async (ms: number): Promise<void> => { await vi.advanceTimersByTimeAsync(ms); };
+/** Real time for an answer the test just released to reach the page. */
+const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 100));
 const confirmButton = (): HTMLButtonElement => screen.getByRole("button", { name: "Confirm budget" }) as HTMLButtonElement;
 
 async function openGroup(): Promise<void> {
@@ -152,14 +158,69 @@ describe("App re-reads a group's agent preview when the one on screen can no lon
     await waitFor(() => expect(confirmButton().disabled).toBe(false));
   }, 10_000);
 
-  it("re-reads a preview in which a slot was unavailable for now, and offers the confirm once it resolves", async () => {
+  // Rewritten in T15 fix round 1 (controller ruling; this criterion was new in T15): an unavailable slot used to
+  // be re-read every 2 s forever, and every read spawns ccloop. Now nothing re-reads it without the operator.
+  it("does not re-read a preview in which a slot was unavailable for now until the operator asks, and then reads it once", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     previewAnswers = [() => json(preview(null, true)), () => json(preview(FIRST))];
     await openGroup();
     await screen.findByText(/unavailable for now/);
     expect(confirmButton().disabled).toBe(true);
-    await waitFor(() => expect(previewReads).toBe(2), { timeout: 5_000 });
+    await pass(20_000);
+    expect(previewReads).toBe(1);
+    fireEvent.click(rereadButton());
     await waitFor(() => expect(confirmButton().disabled).toBe(false));
-  }, 10_000);
+    await pass(20_000);
+    expect(previewReads).toBe(2);
+  });
+
+  it("retries a preview read that did not conclude exactly once, and then waits for the operator's Re-read", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const failed = () => json({ error: { code: "control-internal-error", message: "ccloop did not answer", commandRevision: null, evidenceIds: [], retryable: true } }, 500);
+    previewAnswers = [failed, failed, () => json(preview(FIRST))];
+    await openGroup();
+    await waitFor(() => expect(previewReads).toBe(1));
+    await pass(20_000);
+    expect(previewReads).toBe(2);
+    await pass(20_000);
+    expect(previewReads).toBe(2);
+    expect(confirmButton().disabled).toBe(true);
+    fireEvent.click(rereadButton());
+    await waitFor(() => expect(confirmButton().disabled).toBe(false));
+    expect(previewReads).toBe(3);
+  });
+
+  it("keeps the newer preview when the answer to an older read arrives after it", async () => {
+    let release = (): void => {};
+    const held = new Promise<Response>((resolve) => { release = () => resolve(json(preview(FIRST))); });
+    previewAnswers = [() => held, () => json(preview(SECOND))];
+    confirmAnswers = [() => json({ error: { code: "revision-conflict", message: "stop here", commandRevision: 6, evidenceIds: [], retryable: false } }, 409)];
+    await openGroup();
+    await waitFor(() => expect(previewReads).toBe(1));
+    fireEvent.click(rereadButton());
+    await waitFor(() => expect(confirmButton().disabled).toBe(false));
+    release();
+    await settle();
+    fireEvent.click(confirmButton());
+    await waitFor(() => expect(confirmedHashes).toEqual([SECOND]));
+  });
+
+  it("ignores a failure that answers an older read after a newer read concluded", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    let fail = (): void => {};
+    const held = new Promise<Response>((resolve) => { fail = () => resolve(json({ error: { code: "control-internal-error", message: "late", commandRevision: null, evidenceIds: [], retryable: true } }, 500)); });
+    previewAnswers = [() => held, () => json(preview(SECOND))];
+    await openGroup();
+    await waitFor(() => expect(previewReads).toBe(1));
+    fireEvent.click(rereadButton());
+    await waitFor(() => expect(confirmButton().disabled).toBe(false));
+    fail();
+    await settle();
+    await pass(20_000);
+    // Neither dropped nor retried: the late failure belongs to a read nobody is waiting for.
+    expect(confirmButton().disabled).toBe(false);
+    expect(previewReads).toBe(2);
+  });
 });
 
 describe("App wires the operator's agent defaults (agent selection spec §6.8)", () => {

@@ -126,10 +126,17 @@ export function App(): JSX.Element {
   const [previews, setPreviews] = useState<Record<string, AgentSelectionPreviewV1>>({});
   /**
    * Wave 3 review I-3: bumped to re-read the open group's preview when the one on screen can no longer be
-   * confirmed -- the server refused it as agent-selection-changed, the read did not conclude, or a slot was
-   * unavailable for now. The key below does not move for any of these on its own.
+   * confirmed -- the server refused it as agent-selection-changed, the read did not conclude (one automatic
+   * retry), or the operator pressed Re-read. The key below does not move for any of these on its own.
    */
   const [previewNonce, setPreviewNonce] = useState(0);
+  /** T15 fix round 1: only the answer to the latest preview request may land; an older one arriving late is dropped. */
+  const previewSeq = useRef(0);
+  /**
+   * T15 fix round 1: a failed preview read is retried automatically once; after that the operator's Re-read
+   * is the way on. Every read spawns ccloop, so nothing here polls it. Cleared by a read that concludes.
+   */
+  const previewRetried = useRef(false);
   // The ids still waiting on a lookup are restored in the initializer, not in an
   // effect: the effect that mirrors the reducer's list back into sessionStorage runs
   // on the very same mount commit, and would clear the key before anything read it.
@@ -316,14 +323,19 @@ export function App(): JSX.Element {
   useEffect(() => {
     if (previewKey === null || openGroup === undefined || agents === null) return;
     const groupId = openGroup.summary.groupId;
+    const seq = ++previewSeq.current;
     void fetchAgentPreview(groupId).then(
       (value) => {
+        if (seq !== previewSeq.current) return;
+        previewRetried.current = false;
+        // An unavailable slot (spec §6.8, wave 3 I-1) is shown red with its code; the Re-read control asks again.
         setPreviews((prior) => ({ ...prior, [groupId]: value }));
-        // Spec §6.8 / wave 3 I-1: an unavailable slot is ccloop not answering this time, so it is asked again.
-        if (value.slots.some((slot) => slot.outcome.kind === "unavailable")) setTimeout(() => setPreviewNonce((n) => n + 1), CONTROL_POLL_MS);
       },
       (err) => {
+        if (seq !== previewSeq.current) return;
         dispatchControl({ type: "refusal", groupId, value: controlFailureFrom(err) });
+        if (previewRetried.current) return;
+        previewRetried.current = true;
         rereadPreview(groupId, CONTROL_POLL_MS);
       },
     );
@@ -442,6 +454,7 @@ export function App(): JSX.Element {
           preferences={agentPreferences}
           previews={previews}
           onAgentPreferences={(preferences, revision) => { void sendAgentPreferences(preferences, revision); }}
+          onRereadPreview={(groupId) => rereadPreview(groupId, 0)}
         />
       )}
       <PanelHome todo={home.todo} report={home.report} coverage={home.coverage} onOpen={setSelected} />

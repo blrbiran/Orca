@@ -54,7 +54,7 @@ function FailedCell(props: { outcome: Exclude<SlotOutcomeV1, { kind: "resolved" 
   const { outcome } = props;
   return (
     <td colSpan={3} role="alert" data-outcome={outcome.kind} style={{ color: "red" }}>
-      {outcome.kind === "rejected" ? "rejected" : "unavailable for now, re-reading"} · {outcome.code}
+      {outcome.kind === "rejected" ? "rejected" : "unavailable for now, Re-read to ask again"} · {outcome.code}
     </td>
   );
 }
@@ -68,6 +68,11 @@ export interface AgentSelectionEditorProps {
   drafts: Record<string, string>;
   onDraft: (key: string, text: string) => void;
   onCommand: (action: ControlAction) => void;
+  /**
+   * T15 fix round 1: invalidate and re-fetch this group's preview. Nothing re-reads it on a timer (each read
+   * spawns ccloop), so an unavailable slot or a read that failed twice waits for this.
+   */
+  onReread?: () => void;
 }
 
 export function AgentSelectionEditor(props: AgentSelectionEditorProps): JSX.Element {
@@ -98,8 +103,9 @@ export function AgentSelectionEditor(props: AgentSelectionEditorProps): JSX.Elem
     );
   }
 
+  const reread = props.onReread && <button type="button" onClick={props.onReread}>Re-read agent selections</button>;
   if (agents === null || preview === null) {
-    return <section aria-label="Agent selection"><h3>Agents</h3><p role="status">Resolving agent selections…</p></section>;
+    return <section aria-label="Agent selection"><h3>Agents</h3><p role="status">Resolving agent selections…</p>{reread}</section>;
   }
 
   const stale = preview.proposalVersion !== view.proposal.proposalVersion;
@@ -116,6 +122,7 @@ export function AgentSelectionEditor(props: AgentSelectionEditorProps): JSX.Elem
       <h3>Agents · proposal v{view.proposal.proposalVersion}</h3>
       {stale && <p role="status">The resolution shown is for proposal v{preview.proposalVersion}; re-reading. Confirm waits for it.</p>}
       {preview.selectionsHash === null && <p role="alert">A selection below did not resolve; confirm is not offered until every slot resolves.</p>}
+      {reread}
       {(["worker", "estimator", "reconcile"] as const).map((slot) => {
         const scope: Scope = { kind: "group", slot };
         const prefix = agentDraftPrefix(groupId, scope);

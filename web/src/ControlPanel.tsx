@@ -42,6 +42,8 @@ export interface ControlPanelProps {
   /** The server's agent resolution per group, keyed by groupId. */
   previews?: Record<string, AgentSelectionPreviewV1>;
   onAgentPreferences?: (preferences: OperatorPreferencesV1, expectedRevision: number) => void;
+  /** Drop a group's agent preview and read it again (the operator's Re-read). */
+  onRereadPreview?: (groupId: string) => void;
 }
 
 function ImportForm(props: { config: ControlConfigV1; onCommand: (action: ControlAction) => void }): JSX.Element {
@@ -141,6 +143,7 @@ export function ControlPanel(props: ControlPanelProps): JSX.Element {
           agents={props.agents}
           preview={props.previews?.[view.summary.groupId] ?? null}
           agentPreferences={props.preferences?.preferences ?? null}
+          onRereadPreview={props.onRereadPreview && (() => props.onRereadPreview?.(view.summary.groupId))}
         />
       )}
       {view === undefined && selected !== null && <p role="status">Reading {selected}…</p>}
