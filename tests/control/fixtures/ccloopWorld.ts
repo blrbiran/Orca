@@ -216,7 +216,7 @@ export const raw = (runtime: ControlRuntime, commandId: string, verb: string, pa
  * for that selection onto every task, agent selection spec §6.4), optionally widen the token ceiling, start -- through
  * the assembled service.
  */
-export async function startGroup(runtime: ControlRuntime, repoId: string, raiseTokens = 0): Promise<void> {
+export async function startGroup(runtime: ControlRuntime, repoId: string, raiseTokens = 0, beforeStart?: () => Promise<void>): Promise<void> {
   const imported = await runtime.service.importPlan(raw(runtime, "import", "import-plan", { groupId: "g", repoId, planId: "plan" }));
   expect(imported).toMatchObject({ result: { kind: "imported", estimateState: "blocked-capability" } });
   // Agent selection spec §6.2 layer 1: the operator's default worker is the world's installation (set after the
@@ -236,6 +236,8 @@ export async function startGroup(runtime: ControlRuntime, repoId: string, raiseT
     const raised = runtime.service.setLimit(raw(runtime, "raise", "set-limit", { limit: { ...limit, tokens: limit.tokens + raiseTokens } }));
     expect("error" in raised ? raised.error : "raised").toBe("raised");
   }
+  // Ruling review R3: a criterion may change the world between confirmation and start (a CLI upgrading itself).
+  await beforeStart?.();
   const started = await runtime.service.start(raw(runtime, "start", "start", {}));
   expect("error" in started ? started.error : "started").toBe("started");
 }
