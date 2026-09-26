@@ -8,6 +8,7 @@ import { readArchivedPlan, readEstimateRecord } from "../../src/control/queries.
 import { controlPlanSchema } from "../../src/control/webProtocol.js";
 import { WebControlService } from "../../src/control/webService.js";
 import { loadPlan } from "../../src/scheduler/planFile.js";
+import { readControlGroup } from "../../src/panel/controlViews.js";
 import { FIXTURE_AGENT_ID, seedPreferences } from "./fixtures/agents.js";
 import { FIXTURE_AGENT, profileSnapshot, webFixture } from "./fixtures/web.js";
 
@@ -122,6 +123,18 @@ describe("import freezes the estimator slot from the operator's layers (spec §6
       expect(run!.configHash).not.toBe(h.frozen.profileHash);
       // Spec §6.4 last paragraph: the claim's capability probe is of the frozen selection itself.
       expect(h.asked.at(-1)).toEqual(slot.selection);
+    } finally { await h.dispose(); }
+  });
+
+  it("shows an estimate run only while it carries its estimate's frozen selection (spec §12 C5)", async () => {
+    const h = await webFixture(); try {
+      const run = await new WebControlService(h.deps).claimEstimate("g", h.estimateId);
+      expect(readControlGroup(h.store, "epoch", "g").runs.map((view) => view.runId)).toEqual([run!.runId]);
+      const tamper = (patch: object) => h.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify({ ...run, ...patch }), run!.runId);
+      tamper({ agent: { ...FIXTURE_AGENT, model: "another-model" } });
+      expect(() => readControlGroup(h.store, "epoch", "g")).toThrow(`recovery-blocked:run-estimate-agent:${run!.runId}`);
+      tamper({ configHash: h.frozen.profileHash });
+      expect(() => readControlGroup(h.store, "epoch", "g")).toThrow(`recovery-blocked:run-estimate-agent:${run!.runId}`);
     } finally { await h.dispose(); }
   });
 
