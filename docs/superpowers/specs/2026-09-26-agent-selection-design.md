@@ -521,3 +521,11 @@ only, not by existence」，3 条：缺表装配成功、相对路径仍拒、�
 `tests/panel/controlAssemblyDriver.test.ts`（新增一条：`assembleControlRuntime` 在表被删除后仍装配成功
 且驱动仍起来）。变异：把 `agentsTablePath(input.agentsTablePath)` 改回
 `checkedPath(input.agentsTablePath, "file")`，上述 4 条判据全部转红。
+
+### 13.5 终审其余更正与补登（2026-09-26，控制器会话 `ab5a693c`；终审报告 `.superpowers/sdd/2026-09-26-agent-selection/final-review.md`；D10 的更正见 13.4；13.1–13.4 原文保留）
+
+- **更正 D11**：「探不到版本 ⇒ unknown 可重试」只对 accept 路径成立。在派活闸门路径上，探测失败经 `probeFailureCode` 判为降级 ⇒ 写 `claim-capability-unavailable` 组级阻塞 ⇒ 此后的 wake 一律 deferred，直到人 recovery-retry（终审 m-2）。仍是 fail closed。
+- **登记（要人裁，付费真 claude 那一轮之前必须定）**：安装记录的 `version` 进 `configHash`（ccloop `agentConfigHash` 哈希整份物化配置），而开跑的组不能重新冻结（`prestart` 拒 running／review／done）。⇒ CLI 原地升级后，已开跑组剩下的任务、续跑、解冲突先报 `agent-version-drift`，改表后又报 `control-config-hash-mismatch`，**永久无出路**；不会跑错 agent（终审 I-2，`hashprobe` 实测两份只差 version 的配置 hash 不等）。可选：(a) hash 不含 version，版本只由漂移检查管；(b) 给 running 组加「重新冻结某槽」的动词，走 preview／`selectionsHash`；(c) 只登记，并在付费轮关掉 claude 自动更新。
+- **补登的契约**（终审 m-1）：面板读路由 `GET /api/control/agents`、`/api/control/operator/agent-preferences`、`/api/control/groups/:g/agent-preview`；预览逐槽 `resolved|rejected|unavailable`、`selectionsHash: string|null`；组视图 `agents.reconcile`；schema 名 `orca-agents-view-v1`、`orca-agent-preferences-v1`；`GET /agents` 的具名拒绝把 ccloop stderr 的 detail 原样透给浏览器；capabilities 表级视图比 §4.6 多一个 `version` 字段；`configDir: null` ＝ 继承 worker 所在环境、不进哈希（同一 configHash 可在不同账户下跑）；确认后开跑前改组级 estimator 会把提案打回可编辑并清掉全部冻结字段；注册只读路由时即 mint `panelOperatorId`。
+- **D6 的时间窗**：偏好 revision 变了而解析出的选择不变时，旧预览仍能确认，冻结的来源层可能与屏幕上显示的不同。
+- **登记（不修）**：派活用 run 行的 `agent`／`configHash`，未与确认快照比对（解冲突已经比对；只在存储损坏时有差别，m-4）；claude model 以 `[1m]` 结尾可绕过上下文档位（m-5）；`handoffGraceMsOf` 在冻结值无效时退回 0 而非上限（m-6）；`versionOf` 无超时，另有 `scripts/live-driver-acceptance.ts` 在 live 模式对真 codex 同步跑 `--version`（m-3）；真 CLI 的 `--version` 会不会写配置目录没量过，且 `probeVersion` 不设 `CLAUDE_CONFIG_DIR`／`CODEX_HOME`（m-8，付费轮前在改道 HOME 下量）。
