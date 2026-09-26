@@ -1690,3 +1690,46 @@ Appended 2026-09-25 by the implementer of Task 7 of the handoff delivery plan, u
    `sha256Canonical(candidate)`), then one transaction inserts the checkpoint row with `result: "partial"`, sets
    `checkpointId`/`recoverable`, parks the remaining commitment as `held`, settles the request `settled-recoverable`, and
    leaves the run `settled-recoverable` with its work `held`. `commitCandidate` is not on that path.
+
+## ERRATUM (agent selection, 2026-09-26) — `ControlPlanV1.tasks[].configHash` and where a task's configuration is frozen
+
+Appended 2026-09-26 by the implementer of Task 13 of the agent selection plan, under controller session `75ec878e`
+(Claude Sonnet 5), in the commit whose subject is `docs(spec): errata for agent selection in the Web control spec`.
+The statements below are superseded by `docs/superpowers/specs/2026-09-26-agent-selection-design.md` (§4.6, §6.2,
+§6.4, §6.6 and §12 I3). The original text above is kept verbatim.
+
+1. **`ControlPlanV1.tasks[].configHash` (section 4.2, the `configHash: string;` line of the `ControlPlanV1` type) no
+   longer exists**, and so it is no longer part of the bytes `planHash` covers. The source plan supplies no config hash
+   any more: the sentence "`configHash` is the validated lower-case hex SHA-256 supplied by the source plan for that
+   task's execution configuration" no longer holds, and a source plan that still carries a `configHash` is refused. A task
+   (or the plan as a whole) may instead name a partial agent selection; which fields, and how the layers merge, is
+   agent selection spec §6.2–§6.3.
+2. **Import no longer writes a task's config hash** ("target and config hashes" in the list of what import writes, section
+   4.2): a draft work item's `configHash` is `null`. The configuration a task runs with is frozen at `confirm`: the
+   resolved selection, its `configHash` (computed by ccloop from the materialized agent configuration and answered by
+   `control capabilities`; Orca never computes it), `timeoutMs`, `killGraceMs` and the capability view are written into
+   each work item and into the execution snapshot (now version 2), bound by the confirm payload's `selectionsHash`.
+3. **The trusted startup configuration (section 3.1, the line "adapter type and adapter configuration;")** is now the
+   ccloop binary plus an agents installation table (`ORCA_AGENTS_TABLE`, default `~/.orca/agents.json`); there is no
+   single adapter configuration. The table stays server-side and trusted: the browser never sends it, a path to it, or
+   any part of an installation record.
+
+## ERRATUM (agent selection, 2026-09-26) — what the browser may send (section 3.1)
+
+Appended 2026-09-26 by the implementer of Task 13 of the agent selection plan, under controller session `75ec878e`
+(Claude Sonnet 5), in the commit whose subject is `docs(spec): errata for agent selection in the Web control spec`.
+This relaxes section 3.1 under `docs/superpowers/specs/2026-09-26-agent-selection-design.md` §6.2 and §12 I14. The
+original text above is kept verbatim.
+
+- Section 3.1 says "The browser may send stable IDs, group commands, and editable numeric policy values." Two new
+  commands, `set-agent-preferences` and `proposal-set-agent`, also let the browser send an **agent selection**: an
+  installation id (a stable id, `idSchema`), a **model name, which is a free string**, and a context window, which is
+  either `"agent-default"` or a positive safe integer the panel offers only from that installation's `contextOptions`.
+  The model string is the relaxation: it is not a stable id and not a number.
+- What bounds it: Orca checks only its shape (1 to 200 characters) and never interprets, concatenates or rewrites it;
+  ccloop's descriptor for the installation's kind is the only judge (`validateSelection`), refusing a model that starts
+  with `-`, contains whitespace or control characters, or is longer than 200 characters, with `agent-selection-invalid`;
+  and ccloop passes it to the agent CLI as one argument of an argv array, never through a shell. A selection that ccloop
+  refuses at confirm refuses the whole confirm (`agent-selection-rejected:<taskId|slot>:<code>`).
+- Everything else in section 3.1 stands: the browser still may not send an executable, an adapter or installation
+  definition, a filesystem root, a repository path, a plan path or an evidence path.
