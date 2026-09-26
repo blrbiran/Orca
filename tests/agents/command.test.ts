@@ -17,21 +17,34 @@ import { AgentsPathError, agentsTablePath } from "../../src/agents/paths.js";
 // As a second, process-level guard (belt and braces, since a regression that reintroduced `os.homedir()` would
 // otherwise still read the real HOME here), this file's own `beforeAll` redirects `process.env.HOME` and
 // `process.env.ORCA_AGENTS_TABLE` to temporary locations for its whole duration and restores them afterwards.
+//
+// P23 m7 (fix round 1): the same redirection covers the four XDG roots, mirroring the `relocateHome` convention
+// in tests/control/fixtures/ccloopWorld.ts:166-176 -- any code reached through this file that consults
+// XDG_CONFIG_HOME/XDG_CACHE_HOME/XDG_DATA_HOME/XDG_STATE_HOME (directly or via a library) lands in a temporary
+// directory too, never a real one.
+const XDG_KEYS = ["XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME"] as const;
 let realHome: string | undefined;
 let realTable: string | undefined;
+const realXdg: Partial<Record<(typeof XDG_KEYS)[number], string | undefined>> = {};
 let guardRoot: string;
 
 beforeAll(async () => {
   realHome = process.env.HOME;
   realTable = process.env.ORCA_AGENTS_TABLE;
+  for (const key of XDG_KEYS) realXdg[key] = process.env[key];
   guardRoot = await realpath(await mkdtemp(join(tmpdir(), "orca-agents-cli-guard-")));
   process.env.HOME = join(guardRoot, "home");
   process.env.ORCA_AGENTS_TABLE = join(guardRoot, "unused", "agents.json");
+  for (const key of XDG_KEYS) process.env[key] = join(guardRoot, key.toLowerCase());
 });
 
 afterAll(async () => {
   process.env.HOME = realHome;
   process.env.ORCA_AGENTS_TABLE = realTable;
+  for (const key of XDG_KEYS) {
+    if (realXdg[key] === undefined) delete process.env[key];
+    else process.env[key] = realXdg[key];
+  }
   await rm(guardRoot, { recursive: true, force: true });
 });
 
@@ -45,6 +58,13 @@ async function world(script: Record<string, unknown> = {}) {
   roots.push(root);
   const home = join(root, "home");
   await mkdir(home);
+  // P23 m7 (fix round 1): each world gets its own four XDG roots, pre-created so `tree()` can prove them empty
+  // (not merely absent) both before and after every command this world runs.
+  const xdgConfig = join(root, "xdg-config"), xdgCache = join(root, "xdg-cache"), xdgData = join(root, "xdg-data"), xdgState = join(root, "xdg-state");
+  await mkdir(xdgConfig);
+  await mkdir(xdgCache);
+  await mkdir(xdgData);
+  await mkdir(xdgState);
   const binary = join(root, "ccloop");
   const scriptPath = join(root, "script.json");
   await writeFile(scriptPath, JSON.stringify({ table: TABLE, ...script }));
@@ -65,14 +85,38 @@ if (a === "control" && b === "capabilities" && c === "--agents") {
 } else { process.stderr.write("unexpected " + process.argv.slice(2).join(" ") + "\\n"); process.exit(9); }
 `, { mode: 0o700 });
   const table = join(root, "orca", "nested", "agents.json");
-  const env: NodeJS.ProcessEnv = { PATH: process.env.PATH, HOME: home, ORCA_CCLOOP_BIN: binary, ORCA_AGENTS_TABLE: table };
+  const env: NodeJS.ProcessEnv = {
+    PATH: process.env.PATH, HOME: home, ORCA_CCLOOP_BIN: binary, ORCA_AGENTS_TABLE: table,
+    XDG_CONFIG_HOME: xdgConfig, XDG_CACHE_HOME: xdgCache, XDG_DATA_HOME: xdgData, XDG_STATE_HOME: xdgState,
+  };
   const out: string[] = [], err: string[] = [];
   const io = { stdout: (text: string) => { out.push(text); }, stderr: (text: string) => { err.push(text); } };
   const agents = (verb: string, over: NodeJS.ProcessEnv = {}) => runAgentsCommand([verb], { ...env, ...over }, io);
-  return { root, home, binary, table, env, out, err, agents, scriptPath };
+  return { root, home, binary, table, env, out, err, agents, scriptPath, xdgConfig, xdgCache, xdgData, xdgState };
 }
 
 const modeOf = async (path: string): Promise<number> => (await lstat(path)).mode & 0o777;
+
+/** Every file and directory under `dir`, relative, sorted; `[]` for a directory that does not exist. */
+async function tree(dir: string): Promise<string[]> {
+  try { return (await readdir(dir, { recursive: true })).sort(); } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw error;
+  }
+}
+
+/**
+ * P23 m7 (fix round 1): after `init` or `show`, none of the four XDG roots gained anything, and HOME gained
+ * nothing beyond the entries the caller names (the table and/or its draft, for the one criterion where the
+ * table lives under HOME itself).
+ */
+async function assertNoStrayWrites(w: { home: string; xdgConfig: string; xdgCache: string; xdgData: string; xdgState: string }, expectedHomeEntries: string[] = []): Promise<void> {
+  expect(await tree(w.home)).toEqual(expectedHomeEntries);
+  expect(await tree(w.xdgConfig)).toEqual([]);
+  expect(await tree(w.xdgCache)).toEqual([]);
+  expect(await tree(w.xdgData)).toEqual([]);
+  expect(await tree(w.xdgState)).toEqual([]);
+}
 
 describe("agentsTablePath (agent selection plan review P1)", () => {
   it("prefers ORCA_AGENTS_TABLE verbatim, ignoring HOME entirely", () => {
@@ -102,6 +146,7 @@ describe("orca agents init (agent selection spec §6.7, §8)", () => {
     expect(await readdir(join(w.root, "orca", "nested"))).toEqual(["agents.json"]);
     expect(await readdir(w.home)).toEqual([]);
     expect(w.out.join("")).toContain(`wrote ${w.table}`);
+    await assertNoStrayWrites(w);
   });
 
   // Plan review P1: with no override at all, the table must land under the given HOME's own ~/.orca, never the
@@ -114,6 +159,8 @@ describe("orca agents init (agent selection spec §6.7, §8)", () => {
     expect(await modeOf(expectedTable)).toBe(0o600);
     expect(await modeOf(join(w.home, ".orca"))).toBe(0o700);
     expect(await readdir(join(w.home, ".orca"))).toEqual(["agents.json"]);
+    // The table lands under HOME on this path, so the "nothing else" carve-out is HOME's own .orca entries.
+    await assertNoStrayWrites(w, [".orca", join(".orca", "agents.json")]);
   });
 
   it("never overwrites an existing table: the bytes and mode stay, the detection goes to the draft 0600, and the diff is printed", async () => {
@@ -202,6 +249,9 @@ describe("orca agents show (agent selection spec §6.7)", () => {
     const printed = w.out.join("");
     expect(printed).toContain('[{"id":"claude","ok":true}]');
     expect(printed).toContain(`claude (claude 2.1.282): {"agent":"claude","model":"claude-opus-5-5","contextWindow":"agent-default"} configHash ${"e".repeat(64)}`);
+    // `show` reads only (M-8: no control store, no writes anywhere) -- HOME is untouched here since this world's
+    // table lives beside `root`, not under HOME.
+    await assertNoStrayWrites(w);
   });
 
   it("exits 1 and names the refusal when ccloop refuses an installation or the validation fails", async () => {
@@ -209,8 +259,10 @@ describe("orca agents show (agent selection spec §6.7)", () => {
     expect(await drift.agents("init")).toBe(0);
     expect(await drift.agents("show")).toBe(1);
     expect(drift.out.join("")).toContain("claude (claude 2.1.282): refused: agent-version-drift");
+    await assertNoStrayWrites(drift);
     const invalid = await world({ validateOk: false });
     expect(await invalid.agents("init")).toBe(0);
     expect(await invalid.agents("show")).toBe(1);
+    await assertNoStrayWrites(invalid);
   });
 });
