@@ -5,9 +5,10 @@ import { writeFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import { createExecutionDriver, stepE, type ExecutionDriver } from "../../src/control/executionDriver.js";
 import { reconcileNextAction, stepD } from "../../src/control/driverLanding.js";
+import { readConfirmedReconcileSlot } from "../../src/control/executionSnapshot.js";
 import { readWebGroup } from "../../src/control/webService.js";
 import { readControlGroup } from "../../src/panel/controlViews.js";
-import { driverHarness, git } from "./fixtures/driverHarness.js";
+import { driverHarness, git, type HarnessOptions } from "./fixtures/driverHarness.js";
 
 // Execution driver spec §5.3: a conflicting landing is reconciled by a separate run (human ruling),
 // charged to the group, and lands as an ordinary merge of the tip and the run's own attempt.
@@ -29,8 +30,12 @@ async function untilDeadline(driver: ExecutionDriver, predicate: () => boolean, 
 }
 
 // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
-async function twoConflicting(reconcile: { files: Record<string, string>; status?: string; spent?: number; holdMs?: number; refuse?: string; fail?: string }, affordable = true) {
-  const t = await driverHarness(conflicting, { files });
+async function twoConflicting(
+  reconcile: { files: Record<string, string>; status?: string; spent?: number; holdMs?: number; refuse?: string; fail?: string },
+  affordable = true,
+  planAgents?: HarnessOptions["planAgents"],
+) {
+  const t = await driverHarness(conflicting, { files, planAgents });
   // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
   await writeFile(t.deps.agentsTablePath, JSON.stringify({ status: "succeeded", spent: 7, holdMs: 0, ...reconcile }));
   if (affordable) {
@@ -67,17 +72,36 @@ describe("reconciling a conflict (spec §5.3)", { timeout: 30_000 }, () => {
     } finally { await t.h.dispose(); }
   });
 
-  it("spawns the reconciliation as ccloop run --agents <table> --agent-selection <file>, the file 0600 and holding a frozen selection with its configHash (agent selection spec §4.9)", async () => {
-    const t = await twoConflicting({ files: { "shared.txt": "A\nB\n" } }); try {
+  // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): plan T7 spawned the
+  // reconciliation with the conflicted run's own selection as a bridge (P9); spec §6.1 gives it the GROUP's reconcile
+  // slot instead. The plan gives the group's reconcile slot a different model than the workers' default so the
+  // criterion actually discriminates which slot the driver used, and the expected value is read off the confirmed
+  // snapshot (`readConfirmedReconcileSlot`, plan T11) rather than a literal or the run's own frozen agent.
+  it("spawns the reconciliation as ccloop run --agents <table> --agent-selection <file>, the file 0600 and holding the group's frozen reconcile selection with its configHash (agent selection spec §4.9, §6.1)", async () => {
+    const t = await twoConflicting({ files: { "shared.txt": "A\nB\n" } }, true, { reconcileAgent: { model: "reconcile-model" } }); try {
       const driver = t.driver();
       await untilDeadline(driver, () => t.ids.every((id) => [...LANDED, "blocked"].includes(t.body(id).state)));
       expect(t.ids.every((id) => LANDED.includes(t.body(id).state))).toBe(true);
-      const reconciled = t.ids.find((id) => t.body(id).drive.reconcile !== null)!;
+      const slot = readConfirmedReconcileSlot(t.h.store, "g");
       const selections = readFileSync(`${t.deps.agentsTablePath}.selections`, "utf8").trim().split("\n").map((line) => JSON.parse(line));
-      // Agent selection plan T7 bridge -- T11 leaves it, plan T12 deletes this (plan P9) and asserts the group's frozen
-      // reconcile slot instead: until then the reconciliation runs with the conflicted run's own selection and configHash.
-      expect(selections).toEqual([{ selection: { selection: t.body(reconciled).agent, configHash: t.body(reconciled).configHash }, mode: 0o600 }]);
-      expect(t.body(reconciled).agent).toEqual({ agent: "codex", model: "fixture-model", contextWindow: "agent-default" });
+      expect(selections).toEqual([{ selection: { selection: slot.selection, configHash: slot.configHash }, mode: 0o600 }]);
+      // Discriminates which slot was used: the workers were frozen with their own (unmodified) default model, distinct
+      // from the group's reconcile slot -- so a driver that used a worker's selection here would not match `slot`.
+      expect(slot.selection.model).toBe("reconcile-model");
+      expect(t.ids.every((id) => t.body(id).agent.model === "fixture-model")).toBe(true);
+      expect(slot.selection).not.toEqual(t.body(t.ids[0]!).agent);
+    } finally { await t.h.dispose(); }
+  });
+
+  it("blocks a conflict whose group has no frozen reconcile selection, before any reconciliation run (agent selection spec §6.1)", async () => {
+    const t = await twoConflicting({ files: { "shared.txt": "A\nB\n" } }); try {
+      const group = JSON.parse(String(t.h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!.body));
+      t.h.store.db.prepare("UPDATE groups SET body=? WHERE id='g'").run(JSON.stringify({ ...group, reconcileSlot: null }));
+      const driver = t.driver();
+      await untilDeadline(driver, () => t.ids.some((id) => t.body(id).state === "blocked"));
+      const blocked = t.ids.find((id) => t.body(id).state === "blocked")!;
+      expect(t.body(blocked).drive).toMatchObject({ blockedAt: "R", blockedReason: "reconcile-agent-unfrozen" });
+      expect(t.spawns()).toEqual([]);
     } finally { await t.h.dispose(); }
   });
 

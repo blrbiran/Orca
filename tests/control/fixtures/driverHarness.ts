@@ -7,7 +7,7 @@ import { deliverScheduledStart } from "../../../src/control/webDispatch.js";
 import { controlWorkspaceRoots } from "../../../src/control/workspace.js";
 import { createExecutionDriver, type ExecutionDriver, type ExecutionDriverDeps } from "../../../src/control/executionDriver.js";
 import { fakeCcloopPort, type FakeBehaviour } from "./driverPort.js";
-import { profileSnapshot, webFixture, type WebFixtureTask } from "./web.js";
+import { profileSnapshot, webFixture, type WebFixtureOptions, type WebFixtureTask } from "./web.js";
 
 /** A `ccloop run` stand-in for reconciliation criteria (created in Task 6). */
 export const FAKE_CCLOOP_RUN = resolve("tests/control/fixtures/fake-ccloop-run.mjs");
@@ -27,6 +27,8 @@ export interface HarnessOptions {
    * and run. The driver's synthetic ccloop keeps answering its own default (0), so only the frozen value can matter.
    */
   killGraceMs?: number;
+  /** Agent selection plan T12: the plan's group agent layers (spec §6.2), so a criterion can freeze a reconcile slot that differs from the worker slot. */
+  planAgents?: WebFixtureOptions["planAgents"];
 }
 
 /**
@@ -35,7 +37,7 @@ export interface HarnessOptions {
  */
 export async function driverHarness(tasks: readonly WebFixtureTask[], options: HarnessOptions = {}) {
   const snapshot = profileSnapshot();
-  const h = await webFixture(snapshot, tasks, { killGraceMs: options.killGraceMs });
+  const h = await webFixture(snapshot, tasks, { killGraceMs: options.killGraceMs, planAgents: options.planAgents });
   const repo = await realpath(join(h.root, "repo"));
   git(repo, "init", "-q", "-b", "main");
   await writeFile(join(repo, "base.txt"), "base\n");

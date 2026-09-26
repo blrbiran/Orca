@@ -16,6 +16,7 @@ import { QUIET_GIT, compareAndSwap, conflictPathOf, incomingRefOf, landingPathOf
 import type { ReconcileRecord } from "./driveRecord.js";
 import type { ControlStore } from "./store.js";
 import type { PlanFile, PlanTask } from "../scheduler/planFile.js";
+import type { FrozenSlot } from "./agentSelection.js";
 
 /**
  * Execution driver spec §5. Nothing here runs in the person's checkout: every merge happens in a
@@ -272,6 +273,12 @@ export async function stepR(deps: ExecutionDriverDeps, runId: string, context: D
   if (action === "collect") return finishReconcile(deps, runId, record, loop, await latestAttemptSha(cloneDirOf(workdir), record.reconcileRunId));
   if (context.stopped || deps.admissionGate?.draining) return false;
   if (!reconcileAffordable(store, run.groupId, record.tokenBudget)) { blockRun(deps, runId, "R", "reconcile-budget"); return true; }
+  // Agent selection spec §6.1, §4.9 (plan T12, P9): a reconciliation runs with the GROUP's reconcile slot, frozen at
+  // confirm (plan T11) -- never the conflicted run's own worker selection. `GroupRecord` does not declare the field,
+  // so it is read off the group's raw body; a group confirmed without one (should not happen, but is not assumed) is
+  // refused here rather than falling back to some other selection.
+  const reconcileSlot = (readGroup(store, run.groupId) as unknown as { reconcileSlot?: FrozenSlot | null }).reconcileSlot ?? null;
+  if (reconcileSlot === null) { blockRun(deps, runId, "R", "reconcile-agent-unfrozen"); return true; }
   await rm(workdir, { recursive: true, force: true });
   const setRecord = (patch: Partial<ReconcileRecord>): void => write(deps, () => {
     const current = readDriverRun(store, runId);
@@ -282,10 +289,9 @@ export async function stepR(deps: ExecutionDriverDeps, runId: string, context: D
   const plan: PlanFile = { targetRepo: record.copyPath, ccloopBin: deps.ccloopBin, runsDir: record.runsDir, workBranch: `orca/${run.groupId}`, policy: "local-merge", ledgerMode: "out-of-repo", tasks: [] };
   const task: PlanTask = { taskId: record.reconcileRunId, contract: record.contractPath, dependsOn: [] };
   const running = runTask(plan, task, record.conflictCommit, record.reconcileRunId, {
-    // Agent selection spec §4.9. Agent selection plan T7 bridge -- T11 leaves it, plan T12 deletes this (plan P9) for
-    // the group's frozen reconcile slot (§6.1): until then, the conflicted run's own frozen selection and configHash,
-    // exactly what the reconciliation ran with before.
-    agentsTable: deps.agentsTablePath, agentSelection: { selection: run.agent, configHash: run.configHash },
+    // Agent selection spec §4.9: ccloop materializes this selection against the table and refuses to run when the
+    // hash or the installed version no longer matches.
+    agentsTable: deps.agentsTablePath, agentSelection: { selection: reconcileSlot.selection, configHash: reconcileSlot.configHash },
     // Final review I3: its own process group, output in files inside its runs dir, unref'd -- the panel
     // closing (or a Ctrl-C to its process group) does not end it, and a restarted driver waits on its pid.
     detachedLogDir: workdir,
