@@ -177,7 +177,7 @@ describe("App re-reads a group's agent preview when the one on screen can no lon
   it("retries a preview read that did not conclude exactly once, and then waits for the operator's Re-read", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const failed = () => json({ error: { code: "control-internal-error", message: "ccloop did not answer", commandRevision: null, evidenceIds: [], retryable: true } }, 500);
-    previewAnswers = [failed, failed, () => json(preview(FIRST))];
+    previewAnswers = [failed, failed, () => json(preview(FIRST)), failed, () => json(preview(SECOND))];
     await openGroup();
     await waitFor(() => expect(previewReads).toBe(1));
     await pass(20_000);
@@ -188,6 +188,12 @@ describe("App re-reads a group's agent preview when the one on screen can no lon
     fireEvent.click(rereadButton());
     await waitFor(() => expect(confirmButton().disabled).toBe(false));
     expect(previewReads).toBe(3);
+    // A read that concluded gives the next failure its one retry back.
+    fireEvent.click(rereadButton());
+    await waitFor(() => expect(previewReads).toBe(4));
+    await pass(20_000);
+    await waitFor(() => expect(confirmButton().disabled).toBe(false));
+    expect(previewReads).toBe(5);
   });
 
   it("keeps the newer preview when the answer to an older read arrives after it", async () => {
