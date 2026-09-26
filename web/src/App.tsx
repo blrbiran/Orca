@@ -122,6 +122,11 @@ export function App(): JSX.Element {
   /** Agent selection spec §6.8: the installation table and this operator's defaults; null until read, or when the port refuses. */
   const [agents, setAgents] = useState<AgentsViewV1 | null>(null);
   const [agentPreferences, setAgentPreferences] = useState<AgentPreferencesViewV1 | null>(null);
+  /**
+   * Wave 4 review I-1: the code the server gave when the installation table or the preferences could not be
+   * read (e.g. control-port-unconfigured), so the proposal view says why instead of resolving forever.
+   */
+  const [agentsFailure, setAgentsFailure] = useState<string | null>(null);
   /** The server's resolution per open group; a new proposal version or new preferences re-read it. */
   const [previews, setPreviews] = useState<Record<string, AgentSelectionPreviewV1>>({});
   /**
@@ -238,14 +243,36 @@ export function App(): JSX.Element {
     if (answer.status >= 400) {
       const refusal = refusalFromAnswer(answer);
       dispatchControl({ type: "refusal", groupId: action.groupId, value: refusal });
-      // The server re-resolved at confirm time and got another hash: the preview on screen is void.
-      if (refusal.code === "agent-selection-changed") rereadPreview(action.groupId, 0);
+      // The server re-resolved at confirm time and got another hash (changed), or found a slot it refuses
+      // (rejected, wave 4 M-1): either way the preview on screen is void and must not be sent again.
+      if (refusal.code === "agent-selection-changed" || refusal.code === "agent-selection-rejected") rereadPreview(action.groupId, 0);
     }
     await readControlGroup(action.groupId);
   };
 
+  /**
+   * Read the installation table and this operator's defaults. Wave 4 review I-1: a read that failed is
+   * retried once automatically (when `retryOnce`), and after that by the operator's Re-read.
+   */
+  const loadAgents = async (retryOnce: boolean): Promise<void> => {
+    try {
+      const table = await fetchAgentsView();
+      const preferences = await fetchAgentPreferences();
+      setAgents(table);
+      setAgentPreferences(preferences);
+    } catch (err) {
+      const refusal = controlFailureFrom(err);
+      setAgentsFailure(refusal.code);
+      dispatchControl({ type: "refusal", groupId: null, value: refusal });
+      // An unconfigured port stays so until the panel restarts: nothing to retry.
+      if (retryOnce && controlConfig?.executionPort === "configured") setTimeout(() => void loadAgents(false), CONTROL_POLL_MS);
+    }
+  };
+
   /** Drop a group's preview, so no confirm can carry it, and read it again after `delayMs`. */
   const rereadPreview = (groupId: string, delayMs: number): void => {
+    // Wave 4 review I-1: without the table or the preferences no preview is read at all, so read them first.
+    if (agents === null || agentPreferences === null) void loadAgents(false);
     setPreviews((prior) => {
       const next = { ...prior };
       delete next[groupId];
@@ -301,17 +328,10 @@ export function App(): JSX.Element {
     writeUncertainCommands(browserSession(), control.uncertainCommandIds);
   }, [control.uncertainCommandIds]);
 
-  // Agent selection spec §6.8: an unconfigured port has no installation table to read.
+  // Agent selection spec §6.8. An unconfigured port is asked too: its refusal code is what the proposal view shows.
   useEffect(() => {
-    if (controlConfig?.executionPort !== "configured") return;
-    void (async () => {
-      try {
-        setAgents(await fetchAgentsView());
-        setAgentPreferences(await fetchAgentPreferences());
-      } catch (err) {
-        dispatchControl({ type: "refusal", groupId: null, value: controlFailureFrom(err) });
-      }
-    })();
+    if (controlConfig === null) return;
+    void loadAgents(true);
   }, [controlConfig]);
 
   // The preview is re-read whenever what it depends on moved: the open group, its proposal version, the
@@ -455,6 +475,7 @@ export function App(): JSX.Element {
           previews={previews}
           onAgentPreferences={(preferences, revision) => { void sendAgentPreferences(preferences, revision); }}
           onRereadPreview={(groupId) => rereadPreview(groupId, 0)}
+          agentsFailure={agentsFailure}
         />
       )}
       <PanelHome todo={home.todo} report={home.report} coverage={home.coverage} onOpen={setSelected} />

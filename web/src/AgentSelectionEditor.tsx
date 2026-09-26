@@ -73,6 +73,11 @@ export interface AgentSelectionEditorProps {
    * spawns ccloop), so an unavailable slot or a read that failed twice waits for this.
    */
   onReread?: () => void;
+  /**
+   * Wave 4 review I-1: the server's code when the installation table or the preferences could not be read
+   * (control-port-unconfigured, or a failure Re-read may cure). Shown instead of "Resolving…", which never ends.
+   */
+  agentsFailure?: string | null;
 }
 
 export function AgentSelectionEditor(props: AgentSelectionEditorProps): JSX.Element {
@@ -104,6 +109,15 @@ export function AgentSelectionEditor(props: AgentSelectionEditorProps): JSX.Elem
   }
 
   const reread = props.onReread && <button type="button" onClick={props.onReread}>Re-read agent selections</button>;
+  if (agents === null && props.agentsFailure) {
+    return (
+      <section aria-label="Agent selection">
+        <h3>Agents</h3>
+        <p role="alert">Agent selections cannot be read · {props.agentsFailure}. Confirm is not offered without them.</p>
+        {reread}
+      </section>
+    );
+  }
   if (agents === null || preview === null) {
     return <section aria-label="Agent selection"><h3>Agents</h3><p role="status">Resolving agent selections…</p>{reread}</section>;
   }

@@ -44,6 +44,8 @@ export interface ControlPanelProps {
   onAgentPreferences?: (preferences: OperatorPreferencesV1, expectedRevision: number) => void;
   /** Drop a group's agent preview and read it again (the operator's Re-read). */
   onRereadPreview?: (groupId: string) => void;
+  /** The server's code for why the installation table or the preferences could not be read. */
+  agentsFailure?: string | null;
 }
 
 function ImportForm(props: { config: ControlConfigV1; onCommand: (action: ControlAction) => void }): JSX.Element {
@@ -144,6 +146,7 @@ export function ControlPanel(props: ControlPanelProps): JSX.Element {
           preview={props.previews?.[view.summary.groupId] ?? null}
           agentPreferences={props.preferences?.preferences ?? null}
           onRereadPreview={props.onRereadPreview && (() => props.onRereadPreview?.(view.summary.groupId))}
+          agentsFailure={props.agentsFailure}
         />
       )}
       {view === undefined && selected !== null && <p role="status">Reading {selected}…</p>}

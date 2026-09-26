@@ -46,6 +46,8 @@ export interface ControlGroupViewProps {
   agentPreferences?: OperatorPreferencesV1 | null;
   /** Drop this group's agent preview and read it again. */
   onRereadPreview?: () => void;
+  /** Why the installation table or the preferences could not be read (the server's code). */
+  agentsFailure?: string | null;
 }
 
 export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
@@ -77,6 +79,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
         <AgentSelectionEditor
           view={view} agents={props.agents} preview={props.preview ?? null} preferences={props.agentPreferences}
           onReread={props.onRereadPreview}
+          agentsFailure={props.agentsFailure}
           drafts={drafts} onDraft={onDraft} onCommand={onCommand}
         />
       )}

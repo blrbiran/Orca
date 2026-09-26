@@ -66,24 +66,34 @@ let confirmAnswers: Array<() => Response>;
 let previewReads: number;
 let confirmedHashes: string[];
 let preferenceReads: number;
+/** Wave 4 review I-1: the configuration served, and answers the installation table read gives before it succeeds. */
+let servedConfig: ControlConfigV1;
+let agentsFailures: Array<() => Response>;
+let agentsReads: number;
 let preferencePosts: unknown[];
 
 beforeEach(() => {
   previewReads = 0;
   confirmedHashes = [];
   preferenceReads = 0;
+  servedConfig = config;
+  agentsFailures = [];
+  agentsReads = 0;
   preferencePosts = [];
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const url = String(input);
     if (url === "/api/todo") return json({ rows: [] });
     if (url === "/api/metrics") return json({ report: REPORT, panel_review_coverage: { reviewed_high_tier: 0, high_tier_total: 0, rate: 0, caveat: "" } });
     if (url === "/api/chains") return json({ repos: [] });
-    if (url === "/api/control/config") return json(config);
+    if (url === "/api/control/config") return json(servedConfig);
     if (url.startsWith("/api/control/summary")) return json(summary);
     if (url === "/api/control/recovery") return json(recovery);
     if (url === "/api/control/repositories/orca/workspace") return json({ schema: "orca-repository-workspace-v1", repoId: "orca", workspaceMode: "worktree", revision: 0 });
     if (url === "/api/control/groups/g") return json(group);
-    if (url === "/api/control/agents") return json(agents);
+    if (url === "/api/control/agents") {
+      agentsReads += 1;
+      return agentsFailures.shift()?.() ?? json(agents);
+    }
     if (url === "/api/control/operator/agent-preferences" && init?.method === "POST") {
       preferencePosts.push(JSON.parse(String(init.body)));
       return json({ error: { code: "revision-conflict", message: "stale", commandRevision: 2, evidenceIds: [], retryable: false } }, 409);
@@ -226,6 +236,60 @@ describe("App re-reads a group's agent preview when the one on screen can no lon
     // Neither dropped nor retried: the late failure belongs to a read nobody is waiting for.
     expect(confirmButton().disabled).toBe(false);
     expect(previewReads).toBe(2);
+  });
+});
+
+describe("the proposal view when the installation table cannot be read, and after a refused selection (wave 4 review I-1, M-1)", () => {
+  const agentSection = (): HTMLElement => document.querySelector('section[aria-label="Agent selection"]') as HTMLElement;
+
+  it("retries a failed installation table read once, then re-reads it and the preview when the operator presses Re-read", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const failed = () => json({ error: { code: "control-internal-error", message: "ccloop did not answer", commandRevision: null, evidenceIds: [], retryable: true } }, 500);
+    agentsFailures = [failed, failed];
+    previewAnswers = [() => json(preview(FIRST))];
+    await openGroup();
+    await waitFor(() => expect(agentSection().textContent).toContain("control-internal-error"));
+    await pass(20_000);
+    expect(agentsReads).toBe(2);
+    await pass(20_000);
+    expect(agentsReads).toBe(2);
+    expect(previewReads).toBe(0);
+    expect(agentSection().textContent).not.toContain("Resolving");
+    expect(confirmButton().disabled).toBe(true);
+    fireEvent.click(rereadButton());
+    await waitFor(() => expect(confirmButton().disabled).toBe(false));
+    expect(agentsReads).toBe(3);
+    expect(previewReads).toBe(1);
+  });
+
+  it("says why on an unconfigured port -- the server's code, no endless resolving, no retry -- and offers no confirm", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    servedConfig = { ...config, executionPort: "unconfigured" };
+    const unconfigured = () => json({ error: { code: "control-port-unconfigured", message: "No execution port is configured.", commandRevision: null, evidenceIds: [], retryable: false } }, 422);
+    agentsFailures = [unconfigured, unconfigured, unconfigured];
+    previewAnswers = [];
+    await openGroup();
+    await waitFor(() => expect(agentSection().textContent).toContain("control-port-unconfigured"));
+    expect(agentSection().textContent).not.toContain("Resolving");
+    await pass(20_000);
+    expect(agentsReads).toBe(1);
+    expect(previewReads).toBe(0);
+    expect(confirmButton().disabled).toBe(true);
+  });
+
+  it("drops the preview a confirm was refused on as agent-selection-rejected, so the refused hash cannot be sent again", async () => {
+    let release = (): void => {};
+    const held = new Promise<Response>((resolve) => { release = () => resolve(json(preview(SECOND))); });
+    previewAnswers = [() => json(preview(FIRST)), () => held];
+    confirmAnswers = [() => json({ error: { code: "agent-selection-rejected", message: "a:agent-version-drift", commandRevision: 6, evidenceIds: [], retryable: false } }, 422)];
+    await openGroup();
+    await waitFor(() => expect(confirmButton().disabled).toBe(false));
+    fireEvent.click(confirmButton());
+    await waitFor(() => expect(previewReads).toBe(2));
+    expect(confirmButton().disabled).toBe(true);
+    release();
+    await waitFor(() => expect(confirmButton().disabled).toBe(false));
+    expect(confirmedHashes).toEqual([FIRST]);
   });
 });
 
