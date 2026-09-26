@@ -128,6 +128,27 @@ describe("production ccloop execution port",()=>{
     const h=await fixture();expect(()=>createCcloopExecutionPort({binary:"relative",agentsTablePath:h.table,timeoutMs:1})).toThrow("control-binary-invalid");
     const link=join(h.root,"table-link");await symlink(h.table,link);expect(()=>createCcloopExecutionPort({binary:h.binary,agentsTablePath:link,timeoutMs:1})).toThrow("control-agents-table-invalid");
   });
+  // Wave-2 review I-1 (2026-09-26): a deleted agents table must not keep the port from being built -- the panel builds
+  // it once, and without it no run already in flight can be inspected, collected or handed off (ccloop T5 fix I-1).
+  // Only the path's shape is Orca's to check; nothing at the path is ccloop's to refuse, at capabilities and accept.
+  // The real-peer half (inspect and collect of an accepted run, capabilities refused) is ccloopPortMissingTable.test.ts.
+  it("builds on an absolute agents table path with nothing at it, and still refuses a path of the wrong shape",async()=>{
+    const h=await fixture(),missing=join(h.root,"deleted-agents.json");
+    expect(()=>createCcloopExecutionPort({binary:h.binary,agentsTablePath:missing,timeoutMs:1})).not.toThrow();
+    expect(()=>createCcloopExecutionPort({binary:h.binary,agentsTablePath:"deleted-agents.json",timeoutMs:1})).toThrow("control-agents-table-invalid");
+    const dangling=join(h.root,"dangling-link");await symlink(join(h.root,"nowhere.json"),dangling);
+    expect(()=>createCcloopExecutionPort({binary:h.binary,agentsTablePath:dangling,timeoutMs:1})).toThrow("control-agents-table-invalid");
+    expect(()=>createCcloopExecutionPort({binary:h.binary,agentsTablePath:h.root,timeoutMs:1})).toThrow("control-agents-table-invalid");
+    const linkedDir=join(h.root,"linked-dir");await symlink(h.root,linkedDir);
+    expect(()=>createCcloopExecutionPort({binary:h.binary,agentsTablePath:join(linkedDir,"agents.json"),timeoutMs:1})).toThrow("control-agents-table-invalid");
+  });
+  // Wave-2 review m-1 (2026-09-26): real ccloop refuses a partial selection with no agent as agent-unselected, exit 2
+  // (measured against the ccloop build); it is a refusal of the selection, so it comes back under its own name rather
+  // than as a transient control-peer-exit.
+  it("rethrows ccloop's agent-unselected refusal under its own name",async()=>{
+    await expect((await fixture("ok",{refuse:"agent-unselected"})).port.resolveAgent({})).rejects.toMatchObject({name:"ControlError",code:"agent-unselected"});
+    await expect((await fixture("ok",{refuse:"agent-unselected"})).port.listAgents()).rejects.toMatchObject({name:"ControlError",code:"agent-unselected"});
+  });
   it("asks capabilities about exactly the given selection and returns ccloop's resolution without the protocol tag",async()=>{
     const h=await fixture();
     const resolution=await h.port.resolveAgent({agent:"codex",model:"gpt-6-sol"});

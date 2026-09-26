@@ -41,7 +41,9 @@ export function peerErrorCode(error:unknown):string|null {
  const match=/^[^:]*:([a-z][a-z0-9-]*)/.exec(error.detail);return match?match[1]!:null;
 }
 /** Agent selection spec §7: ccloop's refusals of a selection or table, which a caller must be able to tell apart. */
-const NAMED_REFUSALS=new Set(["agent-installation-missing","agent-context-unsupported","agent-selection-invalid","agent-version-drift","agents-table-invalid"] as const);
+// Wave-2 review m-1 (2026-09-26): agent-unselected too -- ccloop refuses a partial selection with no agent by that name
+// (exit 2), and it is a selection refusal like the others, not a transient peer exit.
+const NAMED_REFUSALS=new Set(["agent-installation-missing","agent-context-unsupported","agent-selection-invalid","agent-version-drift","agents-table-invalid","agent-unselected"] as const);
 type NamedRefusal=typeof NAMED_REFUSALS extends Set<infer T>?T:never;
 /** A capabilities call's failure: one of ccloop's named refusals is rethrown under its own name, anything else as it was. */
 function named(error:unknown):unknown {
@@ -53,8 +55,23 @@ function regularAbsolute(path:string,code:NonDurableControlErrorCode,executable=
  try {const stat=lstatSync(path);if(!isAbsolute(path)||realpathSync(path)!==path||!stat.isFile()||stat.isSymbolicLink()||(executable&&(stat.mode&0o111)===0))throw new Error();return path;}
  catch{throw new ControlError(code);}
 }
+/**
+ * Wave-2 review I-1 (2026-09-26): the agents table's path is checked for its shape only, as ccloop's own
+ * assertAgentsTablePath does -- absolute, and if anything is there, a canonical regular file (a symlink, dangling or
+ * not, is refused). A path with nothing at it passes: a deleted table must not keep the port from being built, or no
+ * run already in flight could be inspected, collected or handed off (ccloop T5 fix I-1, spec §12 I4). Whether the
+ * table exists and holds is ccloop's to say, at capabilities and accept (agents-table-invalid).
+ */
+function agentsTablePath(path:string):string {
+ const invalid=()=>new ControlError("control-agents-table-invalid");
+ if(!isAbsolute(path))throw invalid();
+ let stat;
+ try{stat=lstatSync(path);}catch(error){if((error as NodeJS.ErrnoException).code==="ENOENT")return path;throw invalid();}
+ try{if(stat.isSymbolicLink()||!stat.isFile()||realpathSync(path)!==path)throw new Error();}catch{throw invalid();}
+ return path;
+}
 export function createCcloopExecutionPort(options:{binary:string;agentsTablePath:string;timeoutMs:number}):ExecutionPort {
- const binary=regularAbsolute(options.binary,"control-binary-invalid",true),table=regularAbsolute(options.agentsTablePath,"control-agents-table-invalid");
+ const binary=regularAbsolute(options.binary,"control-binary-invalid",true),table=agentsTablePath(options.agentsTablePath);
  if(!Number.isSafeInteger(options.timeoutMs)||options.timeoutMs<=0)throw new ControlError("control-port-options-invalid");
  const evidenceContext=new Map<string,StartEnvelope>(),key=(ref:ArtifactRef)=>`${ref.artifactId}:${ref.hash}`;
  const raw=(method:string,payload:unknown)=>new Promise<unknown>((resolve,reject)=>{
