@@ -128,6 +128,8 @@ const HALVES: Record<string, ScriptEntry> = { a: { files: { "a1.txt": "A1\n" }, 
 const HALVES_TASKS: Task[] = [{ taskId: "a", targetPaths: ["a1.txt", "a2.txt"] }];
 const HALVES_SCRIPTED = ["plan a", "execute a", "plan a#continuation", "execute a#continuation", "verify a"];
 const CLAUDE: AgentSelection = { agent: "claude", model: "claude-opus-5-5", contextWindow: "agent-default" };
+/** A default set after confirm that nothing already frozen may pick up: the same agent, another model. */
+const POISONED: OperatorPreferences = { defaultAgent: "claude", perAgent: { claude: { model: "claude-poisoned" } } };
 
 describe.skipIf(!realBinary)("agent selection against real ccloop (spec §9 criteria 8 and 11)", { timeout: 420_000 }, () => {
   relocateHome("orca-agents-e2e-home-");
@@ -211,6 +213,8 @@ describe.skipIf(!realBinary)("agent selection against real ccloop (spec §9 crit
       const parked = readDriverRun(runtime.store, predecessor!.runId) as unknown as Record<string, any>;
       expect(parked).toMatchObject({ state: "settled-recoverable", recoverable: true });
       expect(readStopIntent(runtime.store, "g")!.state).toBe("handoff-complete");
+      // The operator's default moves while the run is parked; the continuation must not pick it up (spec §3 I1).
+      await setPreferences(runtime, POISONED);
       const selections = panelSelections(runtime);
       expect(selections).toEqual([{ taskId: "a", predecessorRunId: predecessor!.runId, checkpointId: parked.checkpointId }]);
       const resumed = await runtime.service.resumeFromHandoff(raw(runtime, `resume-${++seq}`, "resume-from-handoff", { selections }));
@@ -241,6 +245,7 @@ describe.skipIf(!realBinary)("agent selection against real ccloop (spec §9 crit
       const [requestId] = await handoffStop(runtime);
       await until(() => { noBlocked(runtime); return requestState(runtime, requestId!) === "settled-recoverable"; }, 120_000, "the request to settle recoverable");
       const parked = readDriverRun(runtime.store, predecessor!.runId) as unknown as Record<string, any>;
+      await setPreferences(runtime, POISONED);
       // continue-task needs a dispatch-enabled group (continuation.ts applyContinueTask): an empty resume reopens it
       // and leaves a held (continuation.ts applyResumeFromHandoff registers nothing for an empty selection).
       const reopened = await runtime.service.resumeFromHandoff(raw(runtime, `resume-${++seq}`, "resume-from-handoff", { selections: [] }));
