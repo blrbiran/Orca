@@ -103,3 +103,11 @@
 - Task 10: implementer DONE (Orca 24e8c8e..353a9c1). Ruling: 既有 store 里的估算记录缺 `estimatorSlot` ⇒ 读为 recovery-blocked、不写迁移（spec §5.1「升级不跨越在飞的 run」，项目未上线）—— 错的代价：一个已有 store 的在飞估算需人重建。Ruling: T10→T14 之间面板导入／重估一律 `agent-selection-rejected:estimator:agent-unselected`（无偏好入口），本轮内部过渡态。
 - Task 10: complete (Orca commits 24e8c8e..353a9c1, review clean). 实施席 370,482 token／100 次。受保护判据经 `cmp` 与 BASE 逐字节相同；T10-M3 实跑红。
 - Task 10: minor (deferred): `planImport.test.ts:319-326`「turns a real probe failure…」未按 brief 加强到异步路径钉码；reestimate 不在事务内重核操作者层（竞态）；`queries.ts` 接受 `agent-selection-rejected:estimator:` 后任意后缀；`webService.ts` 对损坏的 `agentOverrides` 抛 ZodError 而非 `recovery-blocked`；`agentPlanImport.test.ts` 一条 `toMatchObject` 读回自写值（真正判别在 toThrow 两例）。
+- Task 11: implementer DONE (Orca c97a4b6..106eaf9)。实测既有判据红 267 条（W5 静态预测 251）。Ruling: 无迁移 —— 确认于 T11 之前的组、v1 profile 文件、带 `configHash` 的 plan 文件一律拒／blocked（与 §5.1、T10 同一裁定）；T11→T15 面板不能确认、HTTP 判据用夹具 `Panel.selectionsHash()` 代 T14 预览路由（过渡态）；W5-M15（上下文阈值仍按 profile 声明窗口判）未改，T17 登记 spec §13。
+- Task 11: review (opus) → Needs fixes: I1 spec §9 判据 8 只观测了闸门探测，`claim.agent` 读回存储；I2 瞬时／具名分支（`agentFreeze.ts:337-338`）与 `failure` 重抛无判据。抽查约 60 条改写无放宽；事务内 `currentPartials` 重核经变异证明承重。实施席 568,754 token／156 次。
+- Task 11: Ruling: 判据 8 的「fake `.argv --model`」一半归 T16（计划 F1 场景本就覆盖），T11 只补「经 driverHarness 真发 claim、观测 envelope `claim.agent` ＝ 冻结值」—— 错的代价：若 T16 漏做，argv 一半无人观测（T16 派发里重申）。
+- Task 11: fix round 1 → I1（envelope 一半）＋ I2 ＋ Minor 3（`control-port-unconfigured` 原名透出）＋ Minor 4（事务内同时重核 provenance）。
+- Task 11: minor (deferred): 无冻结字段的 work item 在 webDispatch 闸门抛非持久 `recovery-blocked`（与无迁移裁定同源）；「keeps the canonical identity of what it froze」无分支无变异；`webProtocol.test.ts:4158` 标题仍说 Codex；`profiledService.test.ts:3333` `proofDocumentContentHashes` 改值无注释。
+- Task 11: fix round 1/5 (4 addressed, 0 open — claim envelope observed, transient rethrow, no-port by name, provenance re-check; commits 106eaf9..2236991; re-review replayed F1–F4 itself)
+- Task 11: complete (Orca commits c97a4b6..2236991, review clean after round 1). 实施席 568,754＋589,087 token。
+- Task 11: minor (deferred): 判据「sends ccloop the frozen selection in the claim…」的 preview 取于 driverHarness 内部确认**之后**（靠夹具确定性才等价；应改读 driverHarness 确认前的解析或 mock 的记录）。
