@@ -1,4 +1,4 @@
-import { copyFile, chmod, mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { copyFile, chmod, mkdir, mkdtemp, realpath, rm, unlink, writeFile } from "node:fs/promises";
 import { existsSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -84,5 +84,30 @@ describe("the execution driver in the panel's assembly (spec §2.1)", () => {
     // Idempotent: a second stop resolves, and nothing restarts a stopped driver.
     await expect(driver.stop()).resolves.toBeUndefined();
     expect(driver.start(1_000)).toBe(false);
+  });
+
+  // Final review I-1 (2026-09-26): the panel used to fail to assemble at all when the agents table file
+  // had been deleted (e.g. while it is being regenerated) -- createTrustedControlConfig required it to
+  // exist, which defeated ccloop T5 fix I-1 / wave-2 I-1's "a deleted table must not block recovering a
+  // run already in flight" at the one place that guarantee is actually exercised in production
+  // (controlAssembly.ts, before `server.ts` starts listening). Existence and content are ccloop's to
+  // judge, at capabilities and accept, not assembly's.
+  it("assembles and starts the driver when the agents table file has been deleted before assembly", async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), "orca-assembly-missing-table-")));
+    roots.push(root);
+    const repo = join(root, "repo");
+    await mkdir(repo);
+    const binary = join(root, "ccloop");
+    await copyFile(resolve("tests/control/fixtures/fake-ccloop-control.mjs"), binary);
+    await chmod(binary, 0o700);
+    const table = join(root, "agents.json");
+    await writeFile(table, "{}", { mode: 0o600 });
+    const env: NodeJS.ProcessEnv = { ORCA_CONTROL_DIR: join(root, "control"), ORCA_CCLOOP_BIN: binary, ORCA_AGENTS_TABLE: table };
+    const { rejection, ...control } = resolveControlOptions([], env, [{ projectKey: "proj", path: repo }]);
+    expect(rejection).toBe(null);
+    await unlink(table);
+    const runtime = await assembleControlRuntime({ control, repos: [{ projectKey: "proj", path: repo }], epoch: "epoch-missing-table", env });
+    expect(runtime).not.toBe(null);
+    try { expect(runtime!.driver).not.toBe(null); } finally { runtime!.close(); }
   });
 });

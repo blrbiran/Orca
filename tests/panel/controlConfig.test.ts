@@ -141,4 +141,53 @@ describe("trusted panel control config", () => {
     expect(() => createTrustedControlConfig({ ...input, repositories: input.repositories.slice(0, 1), executablePath: "relative" }, h.router)).toThrow("control-trusted-config-invalid");
     expect(() => createTrustedControlConfig({ ...input, repositories: input.repositories.slice(0, 1), browserPath: "/tmp/evil" } as never, h.router)).toThrow("control-trusted-config-invalid");
   });
+
+  // Final review I-1 (2026-09-26): a second, forgotten existence check on the agents table's path, made at
+  // assembly rather than at port construction, kept ccloop T5 fix I-1 / wave-2 I-1's "a deleted table must
+  // not block recovering a run already in flight" from ever reaching the one place it is called from
+  // (controlAssembly.ts). Only the path's shape is checked here now, exactly as the port's own
+  // agentsTablePath does; whether the table exists and holds is ccloop's to say, at capabilities and accept.
+  describe("the agents table path is checked by shape only, not by existence", () => {
+    it("assembles when the agents table has nothing at it", async () => {
+      const h = await setup();
+      const missing = join(h.root, "no-such-agents.json");
+      const config = createTrustedControlConfig({
+        epoch: "epoch-1", stateDir: h.root, executablePath: h.binary, agentsTablePath: missing,
+        executionPort: "configured" as const,
+        archiveRoot: h.root, exportRoot: h.root, evidenceRoot: h.root, shutdownGraceMs: 30_000,
+        repositories: [{ repoId: "repo", displayName: "Repo", path: h.repo }],
+        plans: [{ planId: "ship", repoId: "repo", displayName: "Ship", path: h.plan }],
+        defaultEstimatorProfileId: "estimator", defaultEstimateMode: "soft",
+      }, h.router);
+      expect(config).toBeTruthy();
+    });
+
+    it("still refuses a relative agents table path", async () => {
+      const h = await setup();
+      expect(() => createTrustedControlConfig({
+        epoch: "epoch-1", stateDir: h.root, executablePath: h.binary, agentsTablePath: "relative-agents.json",
+        executionPort: "configured" as const,
+        archiveRoot: h.root, exportRoot: h.root, evidenceRoot: h.root, shutdownGraceMs: 30_000,
+        repositories: [{ repoId: "repo", displayName: "Repo", path: h.repo }],
+        plans: [{ planId: "ship", repoId: "repo", displayName: "Ship", path: h.plan }],
+        defaultEstimatorProfileId: "estimator", defaultEstimateMode: "soft",
+      }, h.router)).toThrow("control-agents-table-invalid");
+    });
+
+    it("still refuses a symlinked agents table", async () => {
+      const h = await setup();
+      const real = join(h.root, "real-agents.json");
+      await writeFile(real, "{}", { mode: 0o600 });
+      const link = join(h.root, "linked-agents.json");
+      await symlink(real, link);
+      expect(() => createTrustedControlConfig({
+        epoch: "epoch-1", stateDir: h.root, executablePath: h.binary, agentsTablePath: link,
+        executionPort: "configured" as const,
+        archiveRoot: h.root, exportRoot: h.root, evidenceRoot: h.root, shutdownGraceMs: 30_000,
+        repositories: [{ repoId: "repo", displayName: "Repo", path: h.repo }],
+        plans: [{ planId: "ship", repoId: "repo", displayName: "Ship", path: h.plan }],
+        defaultEstimatorProfileId: "estimator", defaultEstimateMode: "soft",
+      }, h.router)).toThrow("control-agents-table-invalid");
+    });
+  });
 });
