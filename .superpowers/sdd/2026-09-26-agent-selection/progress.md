@@ -418,3 +418,31 @@
 - REWRITTEN: orca:tests/control/driverHandoff.test.ts > the grace is the run's own agent killGraceMs plus the fixed minute (spec §3; agent selection spec §6.6) > does not call a request outcome-unknown before the killGraceMs ccloop answers for the run's selection has passed
 - REWRITTEN: orca:tests/panel/controlApi.test.ts > web control acceptance over a real panel (task 10 step 1) > takes a plan from import to a continued task, and the ledger's own state is durable at every boundary
 - REWRITTEN: orca:tests/panel/webParity.test.ts > (compile-time half) controlGroupWebToServer
+
+## §9 T17 收尾补记（控制器会话 `ab5a693c`，2026-09-26）
+
+- ccloop `verify:control` 机械判定（门席报 RC 1、唯一红为 stopProof，属读日志判断）：控制器在同一副本 `$S/t17/ccloop-gates`、同一 env 下按 `scripts/verify-control-protocol.mjs` 的同一组文件（`tests/control`、`tests/controller/codex.integration.test.ts`、`tests/runtime/codex`）以 json 重跑：vitest RC 1；`node scripts/check-known-reds.mjs <json>` **RC 0**（roster 13／failed 1／unexpected 0，唯一红 `quiet execution proof > does not treat leader exit as group quiet and proves only after the full tree is gone`）。日志 `$S/t17/gates/ccloop-verify-control-knownreds.log`。
+- Ruling: 门席未匹配的 45 条 REWRITTEN 中，改名后现名可确认的（控制器逐文件读注释与 `it` 核对，difflib 最近名经人工核实）补成判定器格式如下；28 条助手／夹具级、3 条 `…`／`%s` 复合条目不是单条判据，判定器格式表达不了，留在各报告里人审 —— 错的代价：这些改写没有机械的「仍在且通过」检查（它们所在文件的全部判据在全量里通过）。
+- REWRITTEN: ccloop:tests/agents/registry.test.ts > agent descriptors > builds a ClaudeAgentAdapter from the claude descriptor
+- REWRITTEN: orca:tests/control/capabilitySchema.test.ts > capabilityViewSchema > is the closed seven-key view that capabilities protocol 3 carries untagged
+- REWRITTEN: orca:tests/control/ccloopPort.test.ts > production ccloop execution port > passes the peer's own capabilities-v3 view through, substituting nothing
+- REWRITTEN: orca:tests/control/ccloopPort.test.ts > production ccloop execution port > therefore, with a peer answering the default view, keeps handoffControl durable and handoffExecution non-null through intersectCapabilities
+- REWRITTEN: orca:tests/control/ccloopPort.test.ts > production ccloop execution port > requires absolute canonical regular binary and agents table files
+- REWRITTEN: orca:tests/control/errorClassification.test.ts > control error classification > classifies helper-mediated control-binary-invalid as internal
+- REWRITTEN: orca:tests/control/errorClassification.test.ts > control error classification > classifies helper-mediated control-agents-table-invalid as internal
+- REWRITTEN: orca:tests/control/unconfiguredPort.test.ts > the unconfigured execution port > exposes the probe, so a missing port is never reported as a missing capability
+- REWRITTEN: orca:tests/panel/assemblyHandoffGrace.test.ts > the handoff grace the driver waits (spec §3) > is the agent's killGraceMs plus the fixed extra, and only the fixed extra when killGraceMs is unusable
+- REWRITTEN: orca:tests/panel/controlConfigPort.test.ts > the two pairs cannot disagree > refuses a configured port with no agents table
+- REWRITTEN: orca:tests/control/driverReconcile.test.ts > reconciling a conflict (spec §5.3) > spawns the reconciliation as ccloop run --agents <table> --agent-selection <file>, the file 0600 and holding the group's frozen reconcile selection with its configHash (agent selection spec §4.9, §6.1)
+- REWRITTEN: orca:tests/control/webProtocol.test.ts > Web control protocol > enforces canonical group allocation ownership and command revision nullability
+- REWRITTEN: web:web/tests/agentPreviewRefresh.test.tsx > App re-reads a group's agent preview when the one on screen can no longer be confirmed (wave 3 I-3) > does not re-read a preview in which a slot was unavailable for now until the operator asks, and then reads it once
+- REWRITTEN: ccloop:tests/agents/materialize.test.ts > resolving a selection against the table > refuses an installation whose CLI no longer reports the table's version
+- 判定器复跑（门席的 json ＋ 本节补的行）：`python3 $S/t17/check-agents.py …` **RC 0 `OK`**（`$S/t17/check-final2.log`）。红证：把本节两条补行的名字各改一个字喂它 ⇒ **RC 1**，两行 `rewritten criterion missing or not passed`（`$S/t17/check-red3.log`）—— 证明补行确实被检查。
+- 🔴 现场发现：本机有 75ec878e 会话留下的孤儿进程（PPID 1）：三个 `ccloop-agents-version-*/cli.mjs --version`（fixture 内容 `setInterval(() => {}, 1000)`，来自 `ccloop/tests/agents/materialize.test.ts` 的挂起探测；起于 01:56／02:08／03:23，早于本会话）与两个 `worker.js`（路径在 75ec878e scratchpad 的 `t5-mut`、`ccloop-w2fix` 副本里，即变异副本）。本会话 T17 两次全量之后 `pgrep` 未见新增 ⇒ 判为旧变异／写作期残留，非现行代码泄漏（未证实）。Ruling: 不杀（不是本会话起的进程），列 awaitingHuman；变异电池席要在前后各 `pgrep` 一次、只清自己 scratchpad 路径下的进程。
+- T17 门席：complete（Orca `docs(sdd): record the agent selection gates and judge`，§8）。工具报数 260,770 token／80 次工具调用。门席收尾时 `ls-remote`：ccloop 远端已到本地 HEAD 那一笔（主题行 `docs(handoff): roll the Orca section: T1-T6 of agent selection landed here`），Orca 远端到 T16 第二笔 —— 会话中途又被会话外推动；本会话无一席 push。
+- T17 变异电池：两席并行（ccloop sonnet、Orca opus），共同指令 `$S/battery-common.md`（每席一次一个 vitest；红必须是被变异断言，超时不算）。Ruling: 两仓并行而非串行 —— 两个聚焦 vitest 的负载有限，且判红规则排除超时；错的代价：负载型假红被当成真红，由「超时不算、重跑一次」兜住。
+- 变异电池（ccloop，sonnet）：`battery-ccloop-report.md`。工具报数 416,801 token／189 次工具调用。**109 条全部按预言见红**，0 target gone，0 无独占判据，0 超时；T6M3 在终树上红 2 条（波 2 修复新增判据共用同一 `resolveAgent`）。席自报事故：驱动脚本对两条脚本级检查（M15、F4）传空文件列表，`vitest run` 因此在副本里跑了一次全套；发现后停掉并手工重做两条。副本 diff 0 字节、主树未动、副本已删。
+- 孤儿进程归因（控制器现测）：本会话 15:44 新出现一个 `ccloop-agents-version-*/cli.mjs --version`（PPID 1），时刻落在电池 T1 段，而 T1-M24（删掉 `probeVersion` 的超时 kill）正是让挂起 fixture 不被杀的变异 ⇒ 那三个旧孤儿同形，判为历次变异残留，不是现行代码泄漏。本会话那一个（pid 4929）已由控制器 `kill`；旧的三个与两个旧 `worker.js` 不是本会话起的，留给人。
+- 变异电池（Orca，opus）：`battery-orca-report.md`。工具报数 270,336 token／83 次工具调用。名单 213 条：**207 按预言红**、1 红但集合变了（T11-M4：`probes and claims with the frozen selection…` 现绿，另红 T11 fix 1 加的 `sends ccloop the frozen selection in the claim…`，按实测登记）、3 绿且预言本就绿（M13-6 等价变异；T16-M2b／M4 旧路径，见 §7 波 5 Ruling）、**0 条预言红却绿**、2 条 target gone（M7-4 `temporaryProbeSelection` 已由 T11 删；T15-M22 自动重读已由 F1T15 有意删，其反向变异 F1T15-M1 红）；17 条锚点过期、改锚到终树等价分支（逐条在报告表内）；跨 Task 红证 T16-M2a／M3／M4w 真的重跑、全红；0 超时；两副本 diff 0／0 字节。副本留在 `$S/battery-orca/`（scratchpad，未删）。
+- 该席留下一个孤儿 `worker.js`（pid 43085，路径在本会话 `$S/impl/ccloop-build`，16:13:24 起，正是 W2F-M1 变异那次运行结束时刻）⇒ 变异运行的残留；控制器已 `kill`。旧会话同形的 96061（`orca-port-missing-table`）同理，留给人。T17 两次全量（未变异）之后未见新增。
+- Task 17: complete（门、判定器、变异电池、`mutations.md` 汇总）。spec §13 由控制器追加（下一笔）。
