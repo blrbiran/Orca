@@ -87,31 +87,19 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 
 *** **④ handoff 投递＋续跑＋N 路并行落地＋m5 也做完了（2026-09-25，会话 `e5f56bfe`）。** *** 细节与诚实的验收表述见 §四 4.0；现在的下一件事也在 4.0。
 
-🟡 *** **agent 选择一轮（2026-09-26，会话 `75ec878e`）在飞：T1–T15 做完，T16／波 5 复审／T17／终审未做。** *** 细节与下一步见 §四 4.0。
-⚠️ **本轮一次全量门都没跑**（各 Task 只跑聚焦文件＋邻居）⇒ 下面「现行基线」是 ④ 轮的，**已过期**，以 T17 现测为准。
+✅ *** **agent 选择一轮（2026-09-26，会话 `75ec878e` 做 T1–T15、会话 `ab5a693c` 做 T16／T17／终审）做完了，只在 fake agent 下验过。** *** 细节、诚实表述与下一步见 §四 4.0。
 
-**还不能说的**：*** **「Web 派活可用」仍然不是事实。** *** 能说的只有：**真 codex 下单任务主链跑通过一次**（2026-09-25，会话 `af3dc0d3`，
-请求模型 gpt-6-luna，服务层不含 HTTP，n＝1；台账 `.superpowers/sdd/2026-09-25-live-acceptance/progress.md` §5 是唯一可引的表述）。
-冲突／解冲突、依赖、崩溃恢复、面板 HTTP、strict 组、④ handoff、⑤ 预估链都没在真 codex 下验过。**驱动环只在 port `configured` 时挂；未配置时行为逐字节同前。**
+**还不能说的**：*** **「Web 派活可用」「claude 可用」「分层选择可用」都不是事实。** *** 能说的只有：**真 codex 下单任务主链跑通过一次**（2026-09-25，会话 `af3dc0d3`，
+请求模型 gpt-6-luna，服务层不含 HTTP，n＝1；台账 `.superpowers/sdd/2026-09-25-live-acceptance/progress.md` §5 是唯一可引的表述）；**真 claude 一次都没跑过**。
+冲突／解冲突、依赖、崩溃恢复、面板 HTTP、strict 组、④ handoff、⑤ 预估链、agent 选择都没在真 agent 下验过。**驱动环只在 port `configured` 时挂；未配置时行为逐字节同前。**
 
-**④ 轮基线（已被 agent 选择一轮的改动过期，T17 重测前只作对照）**：env ＝ `ORCA_CCLOOP_BIN` 指 **含 C1–C7＋C-3＋D-C7′ 的 ccloop main build**（`git clone --local` 到会话 scratchpad ＋ 软链 `node_modules` ＋ `npm run build`）＋ 指向该 build 的 fake-codex adapter config（`/private/tmp/…`、0600）。
-- **观测锚点** ＝ 主题行 `fix(control): keep a blocked run's step through a later error` 那一笔（其后只有一笔 `docs(sdd)`）。全量 `./node_modules/.bin/vitest run --reporter=json`：**1851/1851、0 pending**（文件数本轮没单独记）；`npm run typecheck` RC 0；web build RC 0；`npm run --ws check` RC 0。
-- 全套门（Task 10 那一次，锚点＝主题行 `test(control): pin the deadline case to the phase the deadline cut`）：typecheck／web-build／web-test／`verify:control`／`verify:web-control`／`:consumer`／`verify:scheduler`／`verify:panel`／`--ws check`／`check-claude-md-lines`／`check-hooks-path` 全 RC 0；全量与 `verify:chain` 各 RC 1，**唯一的红都是 driverRecovery 那条已登记 flake，单文件重跑 8/8 绿**；`ledger validate` RC 2（允许）。ccloop：typecheck／build RC 0，`check-known-reds` RC 0（唯一红仍是 `stopProof`）。
-- 机械判定器不入库：`scratchpad/…/ffix/check-handoff.py`（会话 scratchpad，会被清）。⚠️ 它的 EXPECTED 表**没收** T10b 的 `tests/control/handoffGuards.test.ts`（6 条）——下一轮若要复用，先补。
-
-**上一轮基线（执行驱动轮，已被上一段取代，留作对照）**（只抄工具报数；env ＝ `ORCA_CCLOOP_BIN` 指 **含 C1–C4 的 ccloop main build** ＋ fake-codex adapter config，见 §8.2；
-**观测锚点** ＝ 主题行 `test(control): give the real-git settle criteria an explicit timeout` 那一笔；门逐段单跑，门清单见本轮计划 Task 11）：
-
-| 门 | RC | 结果 |
-|---|---|---|
-| `typecheck` | **0** | 0 错误 |
-| 全量 vitest（json） | **0** | 195 文件；**1756/1756**，0 pending／todo；判定器（本轮 12 个新／改判据文件全过）RC 0 |
-| `executionDriverE2E` 单跑 | **0** | 无并发负载下连跑 3 次，每次 9/9 |
-| `verify:control` | **0** | 54/54 文件；562/562，**0 skipped**（前一笔之上测） |
-| `verify:web-control`／`:consumer` | **0** | 18 文件 197/197；5/5 |
-| `verify:chain` | **0** | 第二段全套 195 文件、1756/1756 |
-| `verify:scheduler`／`verify:panel`／`--ws check`／web build／`check-claude-md-lines`／`check-hooks-path` | **0** | scheduler 51/51、167/167；panel `PASS` 15/15；ws 16/16、75/75 |
-| `ledger validate` | **2** | `verify` 脚本本身容忍 2（历史 bound 行） |
+**现行基线（agent 选择一轮 T17，取代 ④ 轮与执行驱动轮的基线；那两份的原文在 git 历史里）**：只抄工具报数，门表全文在台账 `.superpowers/sdd/2026-09-26-agent-selection/progress.md` §8–§10。
+- env：`ORCA_CCLOOP_BIN` 指 ccloop main 的 `git clone --local` build（会话 scratchpad、软链 `node_modules`、`npm run build`）；`ORCA_AGENTS_TABLE` 指 `/private/tmp/…` 下的夹具表（0600，`command` 只指副本里的 fake）；**HOME 与四个 XDG 根全部改道**。ccloop 的门一律在 clone 里跑。
+- Orca（观测锚点＝主题行 `docs(sdd): record the agent selection gates and judge` 那一笔）：web-build／typecheck／web-test／`verify:control`／`verify:web-control`／`:consumer`／`verify:scheduler`／`verify:panel`／`--ws check`／`check-claude-md-lines`／`check-hooks-path` 全 RC 0；`ledger validate` RC 2（允许）；全量 1976 条与 `verify:chain` 各 RC 1，唯一红是已登记 flake `driverRecovery`，单跑 8/8 绿；机械判定器 `check-agents.py` RC 0（红证两次 RC 1 在案）。
+- 终审 I-1 修复后重跑（锚点＝主题行 `fix(panel): check the agents table path by shape only at assembly (final review I-1)` 之上）：全量 586 文件／1980 条，1979 passed／1 failed（已登记 flake `controlShutdown`，单跑绿）／0 pending；判定器 RC 0；typecheck RC 0。**其余门在修复后没重跑。**
+- ccloop（clone，头提交主题行 `docs(handoff): roll the Orca section: T1-T6 of agent selection landed here`）：typecheck／build RC 0；全量 988 条 1 failed，`check-known-reds` RC 0；`verify:control` 那组文件以 json 重跑后 `check-known-reds` RC 0（唯一红仍是 `stopProof`）。
+- 变异电池（终树上重跑全部记录的变异）：ccloop 109 条全红；Orca 213 条中 207 按预言红、0 条「预言红却绿」，细节 `mutations.md` 末节。
+- 判定器与门脚本不入库（`scratchpad/…/t17/check-agents.py`、`gates-agents.sh`，会话 scratchpad 会被清；判定器全文在计划 Task 17 Step 1，EXPECTED 计数以台账 §8 为准）。
 
 ⚠️ *** **新登记的负载型 flake**：`tests/control/executionDriverE2E.test.ts` 在重负载（两份 clone 并跑变异）下出现过 5/9（R1 子场景）；无负载单跑 3/3 全绿。
 `tests/control/driverSettle.test.ts` 的真 git 场景曾在全量＋并发负载下撞默认 5 s 超时，已给 30 s（主题行见上）。 ***
@@ -133,17 +121,17 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 
 ## 四、⛔ 下一件事
 
-### 4.0 ⛔ 现在的下一件事（2026-09-26 会话 `75ec878e` 改写，**本节优先于下面的 4.0.0、4.0.1 与 1–3**）
+### 4.0 ⛔ 现在的下一件事（2026-09-26 会话 `ab5a693c` 改写，**本节优先于下面的 4.0.0、4.0.1 与 1–3**）
 
-**agent 选择一轮**（人裁：claude 走 ccloop control ＋ 分层默认值 agent／model／上下文，「A＋C 合并」，面板 UI 本轮做全；项目未上线、允许大改）：
-- **材料（按优先级读）**：spec `docs/superpowers/specs/2026-09-26-agent-selection-design.md`（**§12 复审裁定优先于正文**）；计划 `docs/superpowers/plans/2026-09-26-agent-selection.md`（**§0 执行顺序与 R1–R8、§0.2 复审更正 P1–P23 优先于各分节正文**；分节正文是六席并行写的，前面 Task 落地后锚点会过期 ⇒ 以真实的树为准）；
-  **唯一进度源** `.superpowers/sdd/2026-09-26-agent-selection/progress.md`（**全部 `Ruling:` 行＝控制器替人做的决定，人要审**；§6 是交接点）；同目录 `impl-common.md`（派发通用禁令）、`plan-rulings.md`、`review-common.md`、各 `task-N-brief.md`／`task-N-report.md`、`wave1..4-review.md`。
-- **做完的**（按主题行找，别数笔数）：ccloop 从 `feat(agents): add agent descriptors for claude and codex with selection validation` 到 `fix(agents): keep an unobservable CLI version out of the named drift refusal`（T1–T6＋两波修复）；Orca 从 `feat(control): add the pure layered agent selection resolver` 到 `fix(web): recover the agent editor from a failed table read, say why on an unconfigured port, and void a rejected preview`（T7–T15＋修复）。每个 Task 都过了任务复审（多数一轮修复），波 1–4 各一席跨 Task 复审。
-- 🔴 *** **诚实表述**：只在 **fake** 下、且**只跑了聚焦文件**验过；**全量门、T16 的混组 E2E、终审都没做**；真 claude 一次没跑（人：留到下一轮）。**不许说「claude 可用」或「分层选择可用」。** ***
-- ⛔ **下一件事（按顺序）**：
-  1. **T16** 驱动环 E2E（`task-16-brief.md`，带台账 §6 的两条更正：偏好载荷只发 `{preferences}`；`confirmAgentGroup` 比对存储里的冻结值）。必须覆盖：混组 `.argv --model`、解冲突 reconcile 选择进 `.argv`（spec §9.11）、**确认后改默认值再派活仍发冻结值的 `.argv` 一半**（T11 复审留给 T16）、④ 三件在 fake claude 下各一次。
-  2. **波 5 复审** → 3. **T17**（两仓全套门＋判定器＋`check-known-reds`；判定 `runCodexPhase > kills a TERM-ignoring process before returning abort` 是否新 flake；控制器把各报告的 `MUTATION:` 行汇总成 `mutations.md`；给 spec **追加** §13 实施期更正，清单见台账：R7、W5-M4、W5-M12、W5-M15、R8 M-8、新阻塞码 `reconcile-refused:<code>`／`reconcile-agent-unfrozen`、确认瞬时错误映射 500 等）→ 4. **终审**（opus）→ 5. 报人（Ruling 清单＋改写过的既有判据清单，台账里逐条 `REWRITTEN`／报告里）。
-  6. 付费真 claude：另问人，先 proposal-edit 封顶（每任务 3M token、3 次尝试）。stream-json 逐条 usage、opencode／pi／litellm、subagent 级切换都是后续片。
+**agent 选择一轮做完了（fake agent 下）**：人裁「claude 走 ccloop control ＋ 分层默认值 agent／model／上下文，A＋C 合并，面板 UI 本轮做全」。
+- **材料**：spec `docs/superpowers/specs/2026-09-26-agent-selection-design.md`（**§13.5 ＞ §13.4 ＞ §13.1–13.3 ＞ §12 ＞ 正文**）；计划 `docs/superpowers/plans/2026-09-26-agent-selection.md`；**唯一进度源** `.superpowers/sdd/2026-09-26-agent-selection/progress.md`（§0–§6 会话 `75ec878e`，§7–§10 会话 `ab5a693c`；**全部 `Ruling:` 行＝控制器替人做的决定，人还没审**）；同目录 `mutations.md`（变异台账，末节是终树重跑）、`final-review.md`、`wave1..5-review.md`、各 `task-N-report.md`、`battery-*-report.md`。
+- **做完的**（按主题行找）：ccloop 从 `feat(agents): add agent descriptors for claude and codex with selection validation` 到 `fix(agents): keep an unobservable CLI version out of the named drift refusal`；Orca 从 `feat(control): add the pure layered agent selection resolver` 到 `fix(panel): check the agents table path by shape only at assembly (final review I-1)`，其后只有 `docs(spec)`／`docs(sdd)`。T16 是驱动环 E2E（`tests/control/agentSelectionE2E.test.ts` 5 条：fake claude＋fake codex 混组的 `.argv --model`、解冲突 run 的选择进 `.argv`、确认后改默认值仍发冻结值、④ 三件在 fake claude 下各一次）。
+- 🔴 *** **诚实表述（只能这么说）**：在 fake claude／fake codex 下，分层选择经预览 → 确认 → 冻结 → 派活／闸门／解冲突／handoff／续跑，全程只用确认时冻结的值；两仓全套门绿（红只有已登记 flake 与 ccloop 的 `stopProof`，均经机械判定）；终审 0 Critical。**真 claude 一次没跑，不许说「claude 可用」「分层选择可用」。** ***
+- ⛔ **下一件事（都归人，按顺序）**：
+  1. **审**：台账全部 `Ruling:` 行（约 50 条）、spec §13 的偏离 D1–D11 与 §13.4／§13.5 更正、改写过的既有判据（ccloop 约 47 条、Orca 数百条，判定器格式的在台账 §8／§9 `REWRITTEN:` 行，其余在各 `task-N-report.md`）。
+  2. 🔴 **终审 I-2 要人裁（付费真 claude 之前必须定）**：安装表的 `version` 进 `configHash`，而开跑的组不能重新冻结 ⇒ CLI 一次原地升级（真 claude 默认自动更新）就让已开跑组剩下的任务、续跑、解冲突永久无出路（fail closed，不会跑错 agent）。选项 (a) hash 去掉 version；(b) 给 running 组加重新冻结某槽的动词；(c) 只登记、付费轮关 claude 自动更新。见 spec §13.5。
+  3. **付费真 claude 那一轮**：另问人，先 proposal-edit 封顶（每任务 3M token、3 次尝试）；前置条件：I-2 已裁、在改道 HOME 下量一次真 CLI 的 `--version` 写不写配置目录（Rule 17，§13.5 m-8）。
+  4. 其后：stream-json 逐条 usage（让 claude 下 deadline 中止可续）、opencode／pi／litellm、subagent 级切换。
 - 本轮执行规矩（人原话，下一轮是否沿用要人重新说）：「尽量将这些要做的task完整做完，这个session暂时不要考虑context大小」「执行过程中如果有问题，先按你的建议执行。执行完在最后阶段报给我审核」「同意修改几个仓库的现有test」（概括授权改既有判据，但**仍不许放宽**，人裁 88 (b)(c) 照旧）。
 
 ### 4.0.0 ④（2026-09-25 会话 `e5f56bfe`，**已做完，不要重做**；原 4.0 的结论保留于此）
@@ -594,7 +582,7 @@ ccloop 的 I-2 里，spec 第一版把「渲染成 `JSON.stringify`」贴在那�
 - *** **计划席的「待裁」没改干净会误导实施席** *** —— 预检扫描抓出十几处按旧裁定写的句子。⇒ 裁定后把「裁定」写进计划 §0.1 并在每个派发里重申，或者直接改正文。
 - 成本（只抄工具报数）：复审席 353,115 token；计划席自身未报、其五个写作席合计约 116 万 token；各实施／评审席单席 6 万–29 万 token；美元全部未知。
 
-### 6.15 本轮（2026-09-26，agent 选择一轮，会话 `75ec878e`）新栽的
+### 6.15 agent 选择一轮（2026-09-26，会话 `75ec878e` 与 `ab5a693c`）新栽的
 
 - 🔴 *** **写作期的一条变异往真实 `~/.orca/` 写了文件**（`agents.json`、`agents.json.draft.json`，0600，内容是判据夹具）。根因：计划代码缺省路径用了 `os.homedir()` 而非传入的 `env.HOME`。 *** ⇒ 仓库外路径的缺省值一律从**传入的 env** 推；**计划写作席也会跑变异，禁令要对写作席同样写死**。残留未删（归人，§9.0c）。
 - 🔴 *** **并行写计划 ⇒ 后面 Task 的 before 锚点写的是前面 Task 落地之前的代码。** *** 计划复审抓出 8 条 Critical 全是这一类（T3 覆盖 T1、T10 冲掉 T7 的夹具……）。⇒ 不重出计划，改在计划前加一节**权威的复审更正（P1–P23）**，每个派发重申相关条目，并写死「树是真相：增量改、不重建、不重复声明」。
@@ -604,6 +592,14 @@ ccloop 的 I-2 里，spec 第一版把「渲染成 `JSON.stringify`」贴在那�
 - *** **子代理报「RED 阶段就绿」「变异跑过」要核原始日志。** *** 本轮两次：一条变异声称跑过但 scratchpad 无任何证据（T3）；一对变异只改了比较的一侧、让所有确认都失败，判据因错误原因变绿（T11）。
 - *** **API 周额度会中途打断子代理**（HTTP 429）。 *** 打断后先现核两仓 `git status`／`log`，零改动就原样重派。
 - 成本（只抄工具报数；美元全部未知）：六个计划写作席合计约 260 万 token（W1 329,736／W2 294,732／W3 438,566／W4 683,868／W5 626,377／W6 426,820）；实施席单席 12 万–59 万；opus 复审席单席 20 万–36 万。
+
+- *** **（会话 `ab5a693c`）判定器读的行格式与报告写的格式不一样 ⇒ 判定器检查零行、照样 `OK`。** *** 计划要台账里有 `- REWRITTEN: <repo>:<path> > …` 行，实施席却都写在报告里、格式不同 ⇒ 台账 0 行，「改写过的判据仍在且通过」这一项空转。补法：转换后逐行对 json 全名、对不上的单列给人；并把补行改一个字喂判定器，看它退 1。
+- *** **修「某检查挡住了 X」时，要找齐所有同类检查。** *** 波 2 只改了端口构造那一道存在性检查，装配层还有第二道 ⇒ 「删表不挡回收」只在端口层成立，面板整个起不来；原判据只量端口层，一直绿。终审靠探针把整条装配路径跑一遍才看见。⇒ 判据要量保证被宣称的那一层（这里是「面板能起来」），不是修改点那一层。
+- *** **两条各自合理的设计叠在一起会出死路，而分开审查看不见。** *** 「版本进 configHash」（C6）＋「开跑的组不能重新冻结」⇒ CLI 原地升级即永久卡组（终审 I-2）。fake 轮里版本从不变化，判据看不到。
+- *** **变异会留孤儿进程。** *** 删掉 `probeVersion` 超时 kill 的变异、以及让 E2E 起 worker 的变异，都在 PPID 1 下留了长寿进程；fixture 在 `/var/folders/…/T/` 下，命令行不含席的 scratchpad 路径，席的「只杀自己路径」规则认不出它。⇒ 变异席前后各 `pgrep` 一次，按起始时刻对到具体变异。
+- 驱动脚本给 `vitest run` 传空文件列表 ⇒ 跑的是**全套**，不是空跑。脚本级检查（非 vitest）要单独分支。
+- 远端在一次会话里又被会话外推动两次（`ls-remote` 现测），本会话无一席 push。
+- 成本（会话 `ab5a693c`，只抄工具报数；美元未知）：T16 实施 242,107；波 5 复审 199,243；T17 门席 260,770；变异电池 ccloop 416,801／Orca 270,336；终审 393,278；终审修复 174,174（token）。
 
 ## 七、工具骗法（**每一条都真栽过**）
 
@@ -869,13 +865,14 @@ Orca 要求排序去重的四值枚举 ⇒ 将来非 null 且写错时 Orca 整�
 - 实施席的 `Co-Authored-By` 写的是各自的模型（Sonnet／Opus），与历轮同一裁定；**不 amend**。
 - 旧的 `git stash@{0}`（2026-09-25 07:54，基于更早的一笔 `docs(spec)`）不是本会话留的，未动 —— 删不删归人。
 
-### 9.0c agent 选择一轮登记、归人的（2026-09-26，会话 `75ec878e`）
+### 9.0c agent 选择一轮登记、归人的（2026-09-26，会话 `75ec878e`／`ab5a693c`）
 
-- 🔴 **真实 `~/.orca/agents.json` 与 `~/.orca/agents.json.draft.json`**（2026-09-26 02:51，写作期变异残留，内容是判据夹具 `"command":["/opt/claude"]`）—— 删不删归人。`orca agents init` 在它们存在时只写草稿、`show` 会读到这张假表。
-- 🔴 **远端在本会话中途被推动**：`ls-remote` 现测 ccloop 远端含本轮全部 ccloop 提交、Orca 远端含到 T15 第一笔（主题行 `feat(web): edit agent defaults and a proposal's agents, and confirm on the resolution shown`）。本会话无一席执行 `git push` ⇒ 来自会话外（人或 post-commit 钩子）。**推送顺序仍是先 ccloop 后 Orca**；两仓线上协议是 envelope 2／capabilities 3 —— 已发布的两个 main 此刻是否对得上线，推之前现测。
-- **审**：台账 `.superpowers/sdd/2026-09-26-agent-selection/progress.md` 全部 `Ruling:` 行（约 40 条）；尤其 **W5-M16／R7 对 spec 的偏离**（导入时 estimator 只解析操作者层、plan 文件无 `estimatorAgent`，为不放宽受保护判据）、「无迁移：旧组／v1 profile／带 `configHash` 的 plan 一律拒」、`probeFailureCode` 诊断粒度变粗。
-- **审**：本轮改写的既有判据（人概括授权「同意修改几个仓库的现有test」）—— ccloop 约 47 条（T5 45＋T3 1＋波 2 修复 1），Orca 数百条（T7 147＋T10 42＋T11 267＋其它），逐条 `REWRITTEN` 在各 `task-N-report.md`。
-- 挂账（不修，登记）：旧 `SubprocessClaudeAdapter` 保留；`ccloop resume`／`sweep` 不支持 `--agents` 起的 run；claude 工具进程另开进程组时杀不到；profile 分词器与模型身份脱钩；真 claude `-p` 写配置目录（付费跑那一片按 Rule 17 登记）。
+- 🔴 **终审 I-2**（见 §4.0 第 2 条）：CLI 原地升级会永久卡住已开跑的组 —— 三选一由人定，**付费真 claude 之前必须定**。
+- 🔴 **真实 `~/.orca/agents.json` 与 `~/.orca/agents.json.draft.json`**（2026-09-26 02:51，写作期变异残留，内容是判据夹具 `"command":["/opt/claude"]`）—— 删不删归人。`orca agents init` 在它们存在时只写草稿、`show` 会读到这张假表。本轮 T17 与终审前后各 `stat` 过，未被动。
+- 🔴 **推送**：本轮远端被会话外推动多次（本会话无一席 `git push`）。推送顺序仍是**先 ccloop 后 Orca**；两仓线上协议是 envelope 2／capabilities 3。现在哪些笔在远端，跑 `/usr/bin/git ls-remote` 自查，本文不记。
+- **孤儿进程**（历次变异残留，PPID 1，都不耗 CPU）：三个 `…/T/ccloop-agents-version-*/cli.mjs --version`（fixture `setInterval`）与两个会话 `75ec878e` scratchpad 里的 `worker.js`（`t5-mut`、`ccloop-w2fix` 副本）。不是本会话起的，没杀；`pgrep -fl 'ccloop-agents-version|worker.js'` 可见。本会话起的两个已杀。
+- **审**：台账全部 `Ruling:` 行（约 50 条）；spec §13 的 D1–D11（尤其 **D1＝R7／W5-M16**：导入时 estimator 只解析操作者层、plan 文件无 `estimatorAgent`，为不放宽受保护判据）、「无迁移：旧组／v1 profile／带 `configHash` 的 plan 一律拒」、D11 诊断粒度变粗且在闸门上是持久组级阻塞；改写过的既有判据（ccloop 约 47 条，Orca 数百条）。
+- 挂账（登记不修，spec §11／§13.3／§13.5）：旧 `SubprocessClaudeAdapter` 保留；`ccloop resume`／`sweep` 不支持 `--agents` 起的 run；claude 工具进程另开进程组时杀不到；profile 分词器与模型身份脱钩；真 claude `-p` 写配置目录；旧服务路径 `startClaim`／`claimContinuation` 无「活偏好不泄漏」判据（生产不可达）；派活不与确认快照比对；claude model 以 `[1m]` 结尾可绕过上下文档位；handoff 宽限在冻结值无效时退回 0；`versionOf`（测试夹具与 `scripts/live-driver-acceptance.ts`）无超时。
 
 ### 9.1 G1 缝 A 之后归人的（**2026-09-24 替换上一版「执行前必须由人给的」——那些授权都已给出并用完**）
 
