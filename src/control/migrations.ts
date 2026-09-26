@@ -1,6 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
 
-export const schemaVersion = "4";
+export const schemaVersion = "5";
 export const legacySchema = `CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;
 CREATE TABLE groups(id TEXT PRIMARY KEY, revision INTEGER NOT NULL, graph_version INTEGER NOT NULL, body TEXT NOT NULL) STRICT;
 CREATE TABLE work_items(group_id TEXT NOT NULL REFERENCES groups(id), id TEXT NOT NULL, target_version INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY(group_id,id)) STRICT;
@@ -61,12 +61,17 @@ CREATE TABLE context_latches(run_id TEXT NOT NULL REFERENCES runs(id), generatio
 export const schema3To4 = `CREATE TABLE repository_settings(repo_id TEXT PRIMARY KEY, body TEXT NOT NULL) STRICT;
 `;
 
-export const initialSchema = legacySchema + schema1To2 + schema2To3 + schema3To4;
+// Agent selection spec §6.2 layer 1: one preference document per operator, under its own revision.
+export const schema4To5 = `CREATE TABLE agent_preferences(operator_id TEXT PRIMARY KEY, revision INTEGER NOT NULL CHECK(revision > 0 AND revision <= 9007199254740991), doc_json TEXT NOT NULL) STRICT;
+`;
+
+export const initialSchema = legacySchema + schema1To2 + schema2To3 + schema3To4 + schema4To5;
 
 export function migrateSchema(store: DatabaseSync, fromVersion: string): void {
-  if (fromVersion === "1") store.exec(schema1To2 + schema2To3 + schema3To4);
-  else if (fromVersion === "2") store.exec(schema2To3 + schema3To4);
-  else if (fromVersion === "3") store.exec(schema3To4);
+  if (fromVersion === "1") store.exec(schema1To2 + schema2To3 + schema3To4 + schema4To5);
+  else if (fromVersion === "2") store.exec(schema2To3 + schema3To4 + schema4To5);
+  else if (fromVersion === "3") store.exec(schema3To4 + schema4To5);
+  else if (fromVersion === "4") store.exec(schema4To5);
   else throw new Error("control-schema-unsupported");
   store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
 }

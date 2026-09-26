@@ -133,7 +133,9 @@ function parseStored<T>(schema: z.ZodType<T>, value: string, detail: string): T 
 }
 
 export function groupCommandTarget(command: RawAuthorityCommandV1): string {
-  if (command.target.kind === "global" || command.target.kind === "repository") throw new ControlError("control-target-not-allowed");
+  // Agent selection spec §12 I10 (plan-review P7): positively exclude the settings-scoped targets
+  // (repository, operator) instead of assuming everything else carries a groupId.
+  if (command.target.kind !== "group" && command.target.kind !== "task" && command.target.kind !== "run") throw new ControlError("control-target-not-allowed");
   return command.target.groupId;
 }
 
@@ -416,7 +418,9 @@ export function applyRecoveryRetry(deps: StopDeps, command: RecoveryRetryCommand
       expand: () => ({ ...command, schema: "orca-authority-command-v1" }),
       apply: context => {
         const target = command.target;
-        if (target.kind === "global" || target.kind === "repository") throw new ControlError("control-target-not-allowed");
+        // Agent selection spec §12 I10 (plan-review P7): positively exclude the settings-scoped targets
+        // (repository, operator) instead of assuming everything else carries a groupId.
+        if (target.kind !== "group" && target.kind !== "task" && target.kind !== "run") throw new ControlError("control-target-not-allowed");
         const groupId = target.groupId;
         const observed = target.kind === "run"
           ? retryRun(store, groupId, target.runId, context)

@@ -66,16 +66,20 @@ describe("repository workspace mode (execution driver §3.2)", () => {
     } finally { await h.dispose(); }
   });
 
+  // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): a version 3 store
+  // migrates through 4 to 5, gaining both the workspace settings table and the operator preferences table.
   it("migrates a version 3 store by adding the settings table", async () => {
     const root = await realpath(await mkdtemp(join(tmpdir(), "orca-migrate-4-")));
     try {
       const first = await openControlStore({ stateDir: join(root, "state") });
       first.db.exec("DROP TABLE repository_settings");
+      first.db.exec("DROP TABLE agent_preferences");
       first.db.prepare("UPDATE meta SET value='3' WHERE key='schemaVersion'").run();
       first.close();
       const second = await openControlStore({ stateDir: join(root, "state") });
-      expect(second.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()!.value).toBe("4");
+      expect(second.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()!.value).toBe("5");
       expect(readWorkspaceSetting(second, "repo")).toEqual({ workspaceMode: "worktree", revision: 0 });
+      expect(second.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='agent_preferences'").get()).toEqual({ name: "agent_preferences" });
       second.close();
     } finally { await rm(root, { recursive: true, force: true }); }
   });

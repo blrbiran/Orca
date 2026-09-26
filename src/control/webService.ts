@@ -15,6 +15,7 @@ import { scheduleStart, type StartCommand } from "./webDispatch.js";
 import { applyHandoffStop, applyPauseDispatch, applyRecoveryRetry, applyResumeDispatch, type HandoffStopCommand, type PauseCommand, type RecoveryRetryCommand, type ResumeDispatchCommand, type StopDeps } from "./stopIntent.js";
 import { applyContinueTask, applyResumeFromHandoff, type ContinueTaskCommand, type ResumeFromHandoffCommand } from "./continuation.js";
 import { applySetWorkspaceMode, type SetWorkspaceModeCommand } from "./workspaceSettings.js";
+import { applySetAgentPreferences, type SetAgentPreferencesCommand } from "./agentPreferences.js";
 import { recordProjectionChange } from "./projectionJournal.js";
 import type { Amount } from "./types.js";
 import type { ControlStore } from "./store.js";
@@ -145,7 +146,9 @@ function success(context: WebCommandContext, result: CommandSuccessV1["result"],
     effectivePayloadHash: context.effectivePayloadHash, authorityCommandHash: context.authorityCommandHash, result } };
 }
 function groupId(command: RawAuthorityCommandV1): string {
-  if (command.target.kind === "global" || command.target.kind === "repository") throw new ControlError("group-not-found");
+  // Agent selection spec §12 I10 (plan-review P7): positively exclude the settings-scoped targets
+  // (repository, operator) instead of assuming everything else carries a groupId.
+  if (command.target.kind !== "group" && command.target.kind !== "task" && command.target.kind !== "run") throw new ControlError("group-not-found");
   return command.target.groupId;
 }
 function allocationFor(proposal: BudgetProposalRecord, target: EffectiveProposalEditPayload["operations"][number]["target"]) {
@@ -378,6 +381,10 @@ export class WebControlService {
     return applySetWorkspaceMode({ store: this.store, admissionGate: this.deps.admissionGate, knownRepository: this.deps.knownRepository ?? (() => false) }, command) as WebCommandResult;
   }
   repositoryKnown(repoId: string): boolean { return this.deps.knownRepository?.(repoId) ?? false; }
+  /** Agent selection spec §6.2 layer 1: the operator's defaults, under their own revision. */
+  async setAgentPreferences(command: SetAgentPreferencesCommand): Promise<WebCommandResult> {
+    return applySetAgentPreferences({ store: this.store, admissionGate: this.deps.admissionGate }, command) as WebCommandResult;
+  }
   async resumeFromHandoff(command: ResumeFromHandoffCommand): Promise<WebCommandResult> {
     return applyResumeFromHandoff(this.stopDeps(), command) as WebCommandResult;
   }

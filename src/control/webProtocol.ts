@@ -1,5 +1,8 @@
 import { z } from "zod";
-import { amountSchema, canonicalTimestampSchema, commandEnvelopeSchema, idSchema, safeInteger } from "./schema.js";
+import { agentSelectionSchema, amountSchema, canonicalTimestampSchema, commandEnvelopeSchema, contextWindowSchema, idSchema, partialSelectionSchema, safeInteger } from "./schema.js";
+// Agent selection spec §12 I10 (plan-review P18): the selection/context/partial schemas are T7's, defined once
+// in schema.ts; webProtocol.ts re-exports them so every downstream import can come from one wire module.
+export { agentSelectionSchema, contextWindowSchema, partialSelectionSchema } from "./schema.js";
 
 const nonemptyString = z.string().min(1);
 const hashSchema = z.string().regex(/^[a-f0-9]{64}$/);
@@ -44,6 +47,17 @@ const orderedUniqueNonemptyStringsSchema = z
   .min(1)
   .superRefine((values, ctx) => requireUnique(values, String, ctx, []));
 const orderedUniqueStringsSchema = z.array(nonemptyString).superRefine((values, ctx) => requireUnique(values, String, ctx, []));
+// Agent selection spec §6.2 layer 1: an operator's own defaults document (agentSelection.ts's OperatorPreferences).
+// Spec §3 I2: model is opaque to Orca; only ccloop's descriptor judges it (§4.1). Orca bounds length only.
+const preferenceModelSchema = z.string().min(1).max(200);
+export const operatorPreferencesSchema = z
+  .object({
+    defaultAgent: idSchema.optional(),
+    perAgent: z.record(idSchema, z.object({ model: preferenceModelSchema.optional(), contextWindow: contextWindowSchema.optional() }).strict()),
+    estimator: partialSelectionSchema.optional(),
+    reconcile: partialSelectionSchema.optional(),
+  })
+  .strict();
 const sortedDimensionsSchema = z
   .array(amountDimensionSchema)
   .superRefine((values, ctx) => requireSortedUnique(values, String, ctx, []));
@@ -527,9 +541,12 @@ export const commandVerbSchema = z.enum([
   "recovery-retry",
   "shutdown",
   "set-workspace-mode",
+  "set-agent-preferences",
 ]);
 
 const repositoryCommandTargetSchema = z.object({ kind: z.literal("repository"), repoId: idSchema }).strict();
+// Agent selection spec §6.2 / §12 I10: an operator-scoped setting, keyed like the actor that sets it.
+const operatorCommandTargetSchema = z.object({ kind: z.literal("operator"), operatorId: nonemptyString }).strict();
 
 export const commandTargetSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("group"), groupId: idSchema }).strict(),
@@ -537,6 +554,7 @@ export const commandTargetSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("run"), groupId: idSchema, runId: idSchema }).strict(),
   z.object({ kind: z.literal("global"), epoch: nonemptyString }).strict(),
   repositoryCommandTargetSchema,
+  operatorCommandTargetSchema,
 ]);
 
 export const emptyPayloadSchema = z.object({}).strict();
@@ -640,6 +658,8 @@ export const shutdownPayloadSchema = z
   .strict();
 export const workspaceModeSchema = z.enum(["worktree", "clone"]);
 export const setWorkspaceModePayloadSchema = z.object({ workspaceMode: workspaceModeSchema }).strict();
+// Controller ruling W6-8: the envelope's expectedRevision (checked against agent_preferences.revision) is the only one.
+export const setAgentPreferencesPayloadSchema = z.object({ preferences: operatorPreferencesSchema }).strict();
 
 const groupCommandTargetSchema = z.object({ kind: z.literal("group"), groupId: idSchema }).strict();
 const taskCommandTargetSchema = z.object({ kind: z.literal("task"), groupId: idSchema, taskId: idSchema }).strict();
@@ -674,6 +694,7 @@ const rawAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...rawCommandFields, verb: z.literal("recovery-retry"), target: commandTargetSchema, payload: recoveryRetryPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("shutdown"), target: globalCommandTargetSchema, payload: shutdownPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-workspace-mode"), target: repositoryCommandTargetSchema, payload: setWorkspaceModePayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("set-agent-preferences"), target: operatorCommandTargetSchema, payload: setAgentPreferencesPayloadSchema }).strict(),
 ]);
 
 const effectiveAuthorityCommandVariants = z.discriminatedUnion("verb", [
@@ -708,6 +729,7 @@ const effectiveAuthorityCommandVariants = z.discriminatedUnion("verb", [
     .strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("shutdown"), target: globalCommandTargetSchema, payload: shutdownPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-workspace-mode"), target: repositoryCommandTargetSchema, payload: setWorkspaceModePayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("set-agent-preferences"), target: operatorCommandTargetSchema, payload: setAgentPreferencesPayloadSchema }).strict(),
 ]);
 
 function refineCommandIdentity(
@@ -1087,6 +1109,7 @@ const commandResultSchema = z.discriminatedUnion("kind", [
     .strict(),
   z.object({ kind: z.literal("limit-set"), limit: amountSchema }).strict(),
   z.object({ kind: z.literal("workspace-mode-set"), repoId: idSchema, workspaceMode: workspaceModeSchema }).strict(),
+  z.object({ kind: z.literal("agent-preferences-set"), operatorId: nonemptyString, revision: positiveSafeInteger }).strict(),
   z
     .object({
       kind: z.literal("task-continuing"),
@@ -1152,7 +1175,7 @@ export const commandSuccessSchema = z
     const isShutdown = value.verb === "shutdown";
     // Execution driver spec §3.2: a repository-scoped command has its setting's revision and no group
     // projection.
-    const projectionless = isShutdown || value.verb === "set-workspace-mode";
+    const projectionless = isShutdown || value.verb === "set-workspace-mode" || value.verb === "set-agent-preferences";
     if (isShutdown ? value.commandRevision !== null : value.commandRevision === null) {
       issue(ctx, ["commandRevision"], "command-revision-nullability-mismatch");
     }
@@ -1219,3 +1242,4 @@ export const repositoryWorkspaceSchema = z
   .strict();
 export type RepositoryWorkspaceV1 = z.infer<typeof repositoryWorkspaceSchema>;
 export type SetWorkspaceModePayload = z.infer<typeof setWorkspaceModePayloadSchema>;
+export type SetAgentPreferencesPayload = z.infer<typeof setAgentPreferencesPayloadSchema>;

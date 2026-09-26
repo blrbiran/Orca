@@ -37,14 +37,20 @@ export interface WebCommandInput<T> {
 type CommandRow = { raw_request_hash: unknown; original_status: unknown; body_json: unknown };
 type CommandBody = CommandLookupV1["body"];
 
-type CommandScope = { key: string; kind: "group" | "global" | "repository"; id: string; groupId: string | null; repoId: string | null };
+type CommandScope = {
+  key: string; kind: "group" | "global" | "repository" | "operator"; id: string;
+  groupId: string | null; repoId: string | null; operatorId: string | null;
+};
 
 function scope(command: RawAuthorityCommandV1): CommandScope {
-  if (command.target.kind === "global") return { key: "@global", kind: "global", id: "global", groupId: null, repoId: null };
+  if (command.target.kind === "global") return { key: "@global", kind: "global", id: "global", groupId: null, repoId: null, operatorId: null };
   if (command.target.kind === "repository") {
-    return { key: `@repository:${command.target.repoId}`, kind: "repository", id: command.target.repoId, groupId: null, repoId: command.target.repoId };
+    return { key: `@repository:${command.target.repoId}`, kind: "repository", id: command.target.repoId, groupId: null, repoId: command.target.repoId, operatorId: null };
   }
-  return { key: command.target.groupId, kind: "group", id: command.target.groupId, groupId: command.target.groupId, repoId: null };
+  if (command.target.kind === "operator") {
+    return { key: `@operator:${command.target.operatorId}`, kind: "operator", id: command.target.operatorId, groupId: null, repoId: null, operatorId: command.target.operatorId };
+  }
+  return { key: command.target.groupId, kind: "group", id: command.target.groupId, groupId: command.target.groupId, repoId: null, operatorId: null };
 }
 
 /**
@@ -57,6 +63,22 @@ function repositoryRevision(store: ControlStore, repoId: string): number {
   const revision = (JSON.parse(String(row.body)) as { revision?: unknown }).revision;
   if (typeof revision !== "number" || !Number.isSafeInteger(revision) || revision <= 0) throw new ControlError("recovery-blocked", "repository-settings-invalid");
   return revision;
+}
+
+/** Agent selection spec §12 I10: an operator-scoped command is checked against agent_preferences.revision (0 with no row). */
+function operatorRevision(store: ControlStore, operatorId: string): number {
+  const row = store.db.prepare("SELECT revision FROM agent_preferences WHERE operator_id=?").get(operatorId);
+  if (!row) return 0;
+  const revision = Number(row.revision);
+  if (!Number.isSafeInteger(revision) || revision <= 0) throw new ControlError("recovery-blocked", "agent-preferences-invalid");
+  return revision;
+}
+
+/** A settings scope carries its own revision; null means the scope is a group or global one. */
+function settingRevision(store: ControlStore, commandScope: CommandScope): number | null {
+  if (commandScope.repoId !== null) return repositoryRevision(store, commandScope.repoId);
+  if (commandScope.operatorId !== null) return operatorRevision(store, commandScope.operatorId);
+  return null;
 }
 
 function invalidResult(): never {
@@ -110,11 +132,12 @@ export function preflightWebCommand<T = CommandBody>(store: ControlStore, input:
 
     const commandScope = scope(rawCommand);
     const groupRow = commandScope.groupId === null ? undefined : store.db.prepare("SELECT revision,projection_seq FROM groups WHERE id=?").get(commandScope.groupId);
-    const currentCommandRevision = commandScope.repoId !== null ? repositoryRevision(store, commandScope.repoId)
+    const setting = settingRevision(store, commandScope);
+    const currentCommandRevision = setting !== null ? setting
       : commandScope.groupId === null ? 0 : Number(groupRow?.revision ?? 0);
     if (rawCommand.expectedRevision === currentCommandRevision) return null;
 
-    const commandRevision = commandScope.repoId !== null ? currentCommandRevision : commandScope.groupId === null ? null : currentCommandRevision;
+    const commandRevision = setting !== null ? currentCommandRevision : commandScope.groupId === null ? null : currentCommandRevision;
     const projectionSeq = commandScope.groupId === null || !groupRow ? null : Number(groupRow.projection_seq);
     const conflict = revisionConflict(currentCommandRevision);
     const outcome = validatedOutcome(conflict.status, conflict.body);
@@ -252,9 +275,10 @@ export function applyWebCommand<T>(store: ControlStore, input: WebCommandInput<T
     }
 
     const groupRow = commandScope.groupId === null ? undefined : store.db.prepare("SELECT revision,projection_seq FROM groups WHERE id=?").get(commandScope.groupId);
-    const currentCommandRevision = commandScope.repoId !== null ? repositoryRevision(store, commandScope.repoId)
+    const setting = settingRevision(store, commandScope);
+    const currentCommandRevision = setting !== null ? setting
       : commandScope.groupId === null ? 0 : Number(groupRow?.revision ?? 0);
-    const resultCommandRevision = commandScope.repoId !== null ? currentCommandRevision : commandScope.groupId === null ? null : currentCommandRevision;
+    const resultCommandRevision = setting !== null ? currentCommandRevision : commandScope.groupId === null ? null : currentCommandRevision;
     const currentProjectionSeq = commandScope.groupId === null || !groupRow ? null : Number(groupRow.projection_seq);
     const nextCommandRevision = currentCommandRevision === Number.MAX_SAFE_INTEGER ? Number.MAX_SAFE_INTEGER : currentCommandRevision + 1;
     const nextProjectionSeq = currentProjectionSeq === null
@@ -321,8 +345,8 @@ export function applyWebCommand<T>(store: ControlStore, input: WebCommandInput<T
     if (projectionGroups.length > 0) recordProjectionChange(store, projectionGroups);
 
     const finalGroup = commandScope.groupId === null ? undefined : store.db.prepare("SELECT revision,projection_seq FROM groups WHERE id=?").get(commandScope.groupId);
-    const commandRevision = commandScope.repoId !== null ? repositoryRevision(store, commandScope.repoId)
-      : commandScope.groupId === null ? null : Number(finalGroup?.revision ?? currentCommandRevision);
+    const commandRevision = settingRevision(store, commandScope)
+      ?? (commandScope.groupId === null ? null : Number(finalGroup?.revision ?? currentCommandRevision));
     const projectionSeq = commandScope.groupId === null || !finalGroup ? null : Number(finalGroup.projection_seq);
     assertFinalVersions(outcome.body, commandRevision, projectionSeq);
     persistCommandOutcome(store, rawCommand, outcome, commandRevision, projectionSeq, {

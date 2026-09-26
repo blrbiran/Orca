@@ -182,7 +182,8 @@ export type CommandTargetV1 =
   | { kind: "task"; groupId: string; taskId: string }
   | { kind: "run"; groupId: string; runId: string }
   | { kind: "global"; epoch: string }
-  | { kind: "repository"; repoId: string };
+  | { kind: "repository"; repoId: string }
+  | { kind: "operator"; operatorId: string };
 
 /** What a mutation POST carries: an id the ledger dedupes on, the revision it expects, and the verb's payload. */
 export type CommandEnvelopeV1 = { commandId: string; expectedRevision: number; payload?: unknown };
@@ -225,7 +226,7 @@ export type CommandSuccessV1 = {
   schema: "orca-command-success-v1";
   commandId: string;
   actorId: string;
-  verb: "import-plan" | "proposal-edit" | "estimate" | "confirm" | "start" | "pause-dispatch" | "handoff-stop" | "resume-dispatch" | "resume-from-handoff" | "set-limit" | "continue-task" | "recovery-retry" | "shutdown" | "set-workspace-mode";
+  verb: "import-plan" | "proposal-edit" | "estimate" | "confirm" | "start" | "pause-dispatch" | "handoff-stop" | "resume-dispatch" | "resume-from-handoff" | "set-limit" | "continue-task" | "recovery-retry" | "shutdown" | "set-workspace-mode" | "set-agent-preferences";
   target: CommandTargetV1;
   commandRevision: number | null;
   projectionSeq: number | null;
@@ -242,6 +243,7 @@ export type CommandSuccessV1 = {
     | { kind: "resumed-from-handoff"; wakeId: string; pendingRuns: Array<{ taskId: string; continuationIntentId: string; pendingRunId: string; claimOrdinal: number }> }
     | { kind: "limit-set"; limit: Amount }
     | { kind: "workspace-mode-set"; repoId: string; workspaceMode: "worktree" | "clone" }
+    | { kind: "agent-preferences-set"; operatorId: string; revision: number }
     | { kind: "task-continuing"; continuationIntentId: string; pendingRunId: string; claimOrdinal: number; wakeId: string }
     | { kind: "recovery-observed"; resolved: boolean; blockerCodes: string[]; evidenceIds: string[]; wakeIds: string[] }
     | { kind: "shutdown"; groups: Array<{ groupId: string; disposition: "created" | "strengthened-pause" | "preserved-pause" | "preserved-handoff" | "preserved-shutdown" | "blocked-inconsistent" | "skipped-driver-owned"; changed: boolean; commandRevision: number; projectionSeq: number; frozenRunIds: string[]; requestIds: string[]; blockerCode: string | null }> };
