@@ -1,0 +1,52 @@
+{
+  "v": 1,
+  "runId": "orca-dev-43e3e1d8",
+  "runtime": "claude-code",
+  "sessionRef": "43e3e1d8-bc87-4863-8c9d-3e8dab3e8d7c",
+  "writtenAt": "2026-09-26T18:12:36.031Z",
+  "head": "52363330ecc200ede3c2f04aab3401de6f907126",
+  "level": {
+    "kind": "reading",
+    "level": 334985,
+    "windowTokens": 1000000,
+    "t1": 330000,
+    "t2": 450000,
+    "band": 1
+  },
+  "next": [
+    "Orca: timeout on versionOf in tests/control/fixtures/ccloopWorld.ts and scripts/live-driver-acceptance.ts (R28, corrected: fixture/script, not production)",
+    "Orca: R3 fake experiment upgrade -> table edit -> recovery-retry -> continue",
+    "paid real claude round via scripts/live-driver-acceptance.ts extended with --claude (n=1, cap 3M/3 attempts, no [1m])",
+    "Orca: R7 per-field plan/panel merge with null masking; R17 focus/table-hash re-read + backoff 10/20/40/80/160 s x5",
+    "spec section 13.9 corrections; handoffs for Orca/ccloop/ccmem"
+  ],
+  "open": [
+    "ccloop runLoop > continues normally when execute returns a complete result during the recovery window: red once at load 27.8, 3/3 green alone; not in roster"
+  ],
+  "awaitingHuman": [
+    {
+      "kind": "irreversible",
+      "what": "push Orca and ccloop (ccloop first)"
+    },
+    {
+      "kind": "named-authorization",
+      "what": "ccloop criteria rewritten under R1: materialize fills-unset + changes-with-every-field, agentsControl answers-capabilities + seals-config"
+    }
+  ],
+  "measurements": [
+    {
+      "command": "/usr/bin/git -C /Users/biran/code/skills/loop/ccloop log -1 --format=%s",
+      "exitCode": 0,
+      "commit": "52363330ecc200ede3c2f04aab3401de6f907126",
+      "observedAt": "2026-09-26T18:12:30.835Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-43e3e1d8-Wf56tJ/1.txt"
+    },
+    {
+      "command": "/usr/bin/git ls-remote origin refs/heads/main",
+      "exitCode": 0,
+      "commit": "52363330ecc200ede3c2f04aab3401de6f907126",
+      "observedAt": "2026-09-26T18:12:35.978Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-43e3e1d8-Wf56tJ/2.txt"
+    }
+  ]
+}
