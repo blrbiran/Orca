@@ -446,3 +446,13 @@
 - 变异电池（Orca，opus）：`battery-orca-report.md`。工具报数 270,336 token／83 次工具调用。名单 213 条：**207 按预言红**、1 红但集合变了（T11-M4：`probes and claims with the frozen selection…` 现绿，另红 T11 fix 1 加的 `sends ccloop the frozen selection in the claim…`，按实测登记）、3 绿且预言本就绿（M13-6 等价变异；T16-M2b／M4 旧路径，见 §7 波 5 Ruling）、**0 条预言红却绿**、2 条 target gone（M7-4 `temporaryProbeSelection` 已由 T11 删；T15-M22 自动重读已由 F1T15 有意删，其反向变异 F1T15-M1 红）；17 条锚点过期、改锚到终树等价分支（逐条在报告表内）；跨 Task 红证 T16-M2a／M3／M4w 真的重跑、全红；0 超时；两副本 diff 0／0 字节。副本留在 `$S/battery-orca/`（scratchpad，未删）。
 - 该席留下一个孤儿 `worker.js`（pid 43085，路径在本会话 `$S/impl/ccloop-build`，16:13:24 起，正是 W2F-M1 变异那次运行结束时刻）⇒ 变异运行的残留；控制器已 `kill`。旧会话同形的 96061（`orca-port-missing-table`）同理，留给人。T17 两次全量（未变异）之后未见新增。
 - Task 17: complete（门、判定器、变异电池、`mutations.md` 汇总）。spec §13 由控制器追加（下一笔）。
+
+## §10 终审（2026-09-26，控制器会话 `ab5a693c`）
+
+- 终审（opus）：`final-review.md`，0 Critical／2 Important／8 Minor。工具报数 393,278 token／64 次工具调用。「未看到的选择被冻结或派出」全链追踪无口子；两仓线上契约一致。
+- I-1（控制器现核属实：`src/panel/controlConfig.ts` `createTrustedControlConfig` 对 `agentsTablePath` 做 `checkedPath(…, "file")`，终审探针日志 `$S/final/probeB.log` 报 `control-trusted-config-invalid:path-missing`）：表被删 ⇒ 面板装配抛错、进程起不来 ⇒ spec §13 D10「保住删表不挡回收」不成立。Ruling: 修 —— 装配只核形状（与 `ccloopPort` 同口径），补判据＋变异；spec 追加 §13.4 更正 D10。
+- I-2：表的 `version` 进 `configHash` ⇒ CLI 原地升级后已开跑的组永久卡住（先 `agent-version-drift`，改表后 `control-config-hash-mismatch`；fail closed，不会跑错 agent）。Ruling: **不替人定**（Rule 7：去掉 version／加重冻结命令／只登记并在付费轮关自动更新，三者各有依据），登记 spec §13.4 与 awaitingHuman；**付费真 claude 那一轮之前必须由人裁**。
+- Ruling（Minor）：§13 漏登记的契约、D11 措辞（探不到版本在派活闸门上是持久组级阻塞，不是「可重试」）一并写进 §13.4；两份 handoff 的过期说法在收尾更新时改；`versionOf` 无超时、派活不与快照比对、handoff 宽限在冻结值无效时退回 0、`--version` 是否写配置目录未量 —— 登记不修；波 5 旧路径的 import 限制判据不补（终审「不硬推」）。
+- 终审 I-1 修复：complete（Orca `test(panel): pin the agents table's assembly-time check to shape only (final review I-1)` 与 `fix(panel): check the agents table path by shape only at assembly (final review I-1)`；修复席 sonnet，工具报数 174,174 token／78 次；报告 `final-fix-report.md`，spec §13.4 由修复席追加）。控制器核原始日志（`$S/fix-final/`）：RED 4 failed／33 passed／1 skipped；GREEN 37＋1 skipped，真 ccloop 下 38/38；邻居 51/51；变异 I1F-M1（改回 `checkedPath(…,"file")`）4 failed，diff 已读；tsc RC 0。
+- 修复后重跑（生产代码在门之后动过）：Orca 全量 `vitest --reporter=json`（`gates-env.sh`）586 文件／1980 条，1979 passed／1 failed／0 pending，唯一红是已登记 flake `controlShutdown.test.ts > a real SIGTERM … one shutdown row for its epoch`（`expected 143 to be +0`），单文件重跑 RC 0；判定器（本次 orca json ＋ 门席的 web／ccloop json ＋ 重跑 json）**RC 0 `OK`**；typecheck RC 0。日志 `$S/t17/gates2/`。其余门（web、verify:*）未重跑 —— 改动只在 `src/panel/controlConfig.ts` 与 `src/control/ccloopPort.ts` 的一个导出。
+- spec §13.5：控制器追加终审其余更正与补登（D11 措辞、I-2 登记、m-1 契约、D6 时间窗、m-3…m-8）。
