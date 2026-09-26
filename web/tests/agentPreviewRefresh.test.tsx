@@ -3,7 +3,8 @@
  * Wave 3 review I-3 (plan T15): the preview a confirm carries is the server's resolution at one moment. The
  * server re-resolves at confirm time, so when the installation table or ccloop's answer moved, the confirm is
  * refused with `agent-selection-changed` -- and a page that keeps offering the old hash could then never
- * confirm without a reload. `App` owns the reads, so these criteria drive `App` against a fake panel.
+ * confirm without a reload. `App` owns the reads, so these criteria drive `App` against a fake panel; the
+ * last describe covers the rest of App's agent wiring (the preferences command and what it hands the view).
  */
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -64,10 +65,14 @@ let previewAnswers: Array<() => Response>;
 let confirmAnswers: Array<() => Response>;
 let previewReads: number;
 let confirmedHashes: string[];
+let preferenceReads: number;
+let preferencePosts: unknown[];
 
 beforeEach(() => {
   previewReads = 0;
   confirmedHashes = [];
+  preferenceReads = 0;
+  preferencePosts = [];
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const url = String(input);
     if (url === "/api/todo") return json({ rows: [] });
@@ -79,7 +84,14 @@ beforeEach(() => {
     if (url === "/api/control/repositories/orca/workspace") return json({ schema: "orca-repository-workspace-v1", repoId: "orca", workspaceMode: "worktree", revision: 0 });
     if (url === "/api/control/groups/g") return json(group);
     if (url === "/api/control/agents") return json(agents);
-    if (url === "/api/control/operator/agent-preferences") return json(preferences);
+    if (url === "/api/control/operator/agent-preferences" && init?.method === "POST") {
+      preferencePosts.push(JSON.parse(String(init.body)));
+      return json({ error: { code: "revision-conflict", message: "stale", commandRevision: 2, evidenceIds: [], retryable: false } }, 409);
+    }
+    if (url === "/api/control/operator/agent-preferences") {
+      preferenceReads += 1;
+      return json(preferences);
+    }
     if (url === PREVIEW_PATH) {
       previewReads += 1;
       const answer = previewAnswers.shift();
@@ -142,4 +154,22 @@ describe("App re-reads a group's agent preview when the one on screen can no lon
     await waitFor(() => expect(previewReads).toBe(2), { timeout: 5_000 });
     await waitFor(() => expect(confirmButton().disabled).toBe(false));
   }, 10_000);
+});
+
+describe("App wires the operator's agent defaults (agent selection spec §6.8)", () => {
+  it("saves the defaults as { preferences } under the revision read, reads them back, and hands them to the proposal view", async () => {
+    previewAnswers = [() => json(preview(FIRST))];
+    const { container } = render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Save agent preferences" }));
+    // Review P5: the revision lives in the envelope only.
+    await waitFor(() => expect(preferencePosts).toHaveLength(1));
+    expect(preferencePosts[0]).toMatchObject({ expectedRevision: 1, payload: { preferences: { defaultAgent: "claude", perAgent: {} } } });
+    expect(Object.keys((preferencePosts[0] as { payload: object }).payload)).toEqual(["preferences"]);
+    await waitFor(() => expect(preferenceReads).toBe(2));
+    // The group worker layer names no agent, so its context offers what the operator's default (claude) can express.
+    fireEvent.click(await screen.findByRole("button", { name: /^g · draft/ }));
+    await waitFor(() => expect(confirmButton().disabled).toBe(false));
+    const options = [...container.querySelectorAll('select[name="g:agent:group:worker:context"] option')].map((option) => (option as HTMLOptionElement).value);
+    expect(options).toEqual(["", "agent-default", "1000000"]);
+  });
 });
