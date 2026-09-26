@@ -6,11 +6,13 @@ import { dimensions, zero } from "./commands.js";
 import { ControlError } from "./errors.js";
 import { buildBudgetEstimateRequest, ESTIMATE_GRANT, GOAL_REVIEW, TASK_HANDOFF, TASK_WORK, provenance, residual, safeNumber, sumAmounts, persistEstimateArtifacts, estimateCapabilityDegraded, validateEstimateOutput } from "./estimator.js";
 import { prepareExecutionSnapshot } from "./executionSnapshot.js";
-import { importControlPlanAsync, type AsyncImportDeps, type ImportCommand } from "./planImport.js";
+import { estimatorSlotFor, importControlPlanAsync, rejectedEstimatorRequest, type AsyncImportDeps, type ImportCommand } from "./planImport.js";
+import { intersectCapabilities } from "./profiles.js";
+import type { FrozenSlot } from "./agentSelection.js";
 import { readArchivedPlan, readBudgetProposal, readEstimateRecord, type BudgetProposalRecord } from "./queries.js";
 import { amountSchema } from "./schema.js";
 import { writeCanonicalRecord, readCanonicalRecord } from "./snapshot.js";
-import { dispatchEnvelopeSchema, estimateExecutionContractSchema } from "./webProtocol.js";
+import { dispatchEnvelopeSchema, estimateExecutionContractSchema, groupAgentOverridesSchema } from "./webProtocol.js";
 import { scheduleStart, type StartCommand } from "./webDispatch.js";
 import { applyHandoffStop, applyPauseDispatch, applyRecoveryRetry, applyResumeDispatch, type HandoffStopCommand, type PauseCommand, type RecoveryRetryCommand, type ResumeDispatchCommand, type StopDeps } from "./stopIntent.js";
 import { applyContinueTask, applyResumeFromHandoff, type ContinueTaskCommand, type ResumeFromHandoffCommand } from "./continuation.js";
@@ -27,6 +29,7 @@ export type ProposalEditCommand = Extract<RawAuthorityCommandV1, { verb: "propos
 export type ReestimateCommand = Extract<RawAuthorityCommandV1, { verb: "estimate" }>;
 export type ConfirmCommand = Extract<RawAuthorityCommandV1, { verb: "confirm" }>;
 export type SetLimitCommand = Extract<RawAuthorityCommandV1, { verb: "set-limit" }>;
+export type ProposalSetAgentCommand = Extract<RawAuthorityCommandV1, { verb: "proposal-set-agent" }>;
 export type WebCommandResult = CommandLookupV1["body"];
 export interface WebServiceDeps extends AsyncImportDeps { admissionGate?: AdmissionGate; now?: () => Date; knownRepository?: (repoId: string) => boolean }
 interface EstimateRun { runId: string; groupId: string; workItemId: string; phase: string; state: string; claimOrdinal: null; providerAttemptOrdinal: number; remaining: { work: Amount; handoff: Amount }; cumulative: { work: Amount; handoff: Amount }; unknown: { work: boolean; handoff: boolean }; [key: string]: unknown }
@@ -163,6 +166,23 @@ function verifyModelField(store: ControlStore, id: string, proposal: BudgetPropo
   if (!suggestion || suggestion[target.dimension] !== value) throw new ControlError("proposal-version-conflict");
 }
 
+/** Any proposal change returns it to editable: the version advances and every confirmation-time fact is dropped. */
+function reopenProposal(store: ControlStore, id: string, group: Group, proposal: BudgetProposalRecord, commitments: Amount): void {
+  proposal.proposalVersion = safeNumber(BigInt(proposal.proposalVersion) + 1n);
+  proposal.state = "editable"; proposal.budgetMode = null; proposal.profiles = null; proposal.executionSnapshotHash = null;
+  proposal.contextPolicy = { handoffAtContextTokens: null };
+  proposal.allocations.forEach(a => { a.state = "draft-encumbered"; });
+  group.status = "draft"; group.ledger.committedRemaining = commitments;
+  for (const row of store.db.prepare("SELECT id,body FROM work_items WHERE group_id=?").all(id)) {
+    const work = JSON.parse(String(row.body));
+    if (work.kind !== "task") continue;
+    work.status = "draft"; work.derivedContractHash = null;
+    work.grant = { work: proposal.allocations.find(a => a.ownerId === row.id && a.bucket === "work")!.amount, handoff: proposal.allocations.find(a => a.ownerId === row.id && a.bucket === "handoff")!.amount };
+    store.db.prepare("UPDATE work_items SET body=? WHERE group_id=? AND id=?").run(JSON.stringify(work), id, row.id);
+  }
+  saveWebAuthority(store, group, proposal);
+}
+
 /** Web commands only publish durable authority. Provider invocation belongs to scheduler delivery. */
 export class WebControlService {
   readonly store: ControlStore;
@@ -200,19 +220,39 @@ export class WebControlService {
         const commitments = sumAmounts([...proposal.allocations.filter(a => a.ownerKind !== "reserve").map(a => a.amount), ...estimateCommitments(this.store, id).map(a => a.amount)]);
         setReserve(proposal, residual(proposal.groupLimit, group.used, commitments));
         if (before.equals(canonicalBytes({ allocations: proposal.allocations, limit: proposal.groupLimit }))) throw new ControlError("no-op-command");
-        proposal.proposalVersion = safeNumber(BigInt(proposal.proposalVersion) + 1n);
-        proposal.state = "editable"; proposal.budgetMode = null; proposal.profiles = null; proposal.executionSnapshotHash = null;
-        proposal.contextPolicy = { handoffAtContextTokens: null };
-        proposal.allocations.forEach(a => { a.state = "draft-encumbered"; });
-        group.status = "draft"; group.ledger.committedRemaining = commitments;
-        for (const row of this.store.db.prepare("SELECT id,body FROM work_items WHERE group_id=?").all(id)) {
-          const work = JSON.parse(String(row.body));
-          if (work.kind !== "task") continue;
-          work.status = "draft"; work.derivedContractHash = null;
-          work.grant = { work: proposal.allocations.find(a => a.ownerId === row.id && a.bucket === "work")!.amount, handoff: proposal.allocations.find(a => a.ownerId === row.id && a.bucket === "handoff")!.amount };
-          this.store.db.prepare("UPDATE work_items SET body=? WHERE group_id=? AND id=?").run(JSON.stringify(work), id, row.id);
+        reopenProposal(this.store, id, group, proposal, commitments);
+        return success(context, { kind: "proposal-edited", proposalVersion: proposal.proposalVersion });
+      },
+    }).body);
+  }
+  /** Agent selection spec §6.2 (W6-20): replace or clear one selection layer -- a proposal change like any other. */
+  async proposalSetAgent(command: ProposalSetAgentCommand): Promise<WebCommandResult> {
+    return this.mutate(() => applyWebCommand(this.store, {
+      rawCommand: command, expand: () => ({ ...command, schema: "orca-authority-command-v1" }),
+      apply: context => {
+        const id = groupId(command), group = readWebGroup(this.store, id), proposal = readBudgetProposal(this.store, id);
+        const { scope, partial, baseProposalVersion } = command.payload;
+        if (proposal.proposalVersion !== baseProposalVersion) throw new ControlError("proposal-version-conflict");
+        prestart(group);
+        assertKnownConservation(this.store, group, proposal);
+        if (scope.kind === "group") {
+          const overrides = groupAgentOverridesSchema.parse((group as { agentOverrides?: unknown }).agentOverrides ?? {});
+          const before = canonicalBytes(overrides);
+          if (partial === null) delete overrides[scope.slot];
+          else overrides[scope.slot] = partial;
+          if (before.equals(canonicalBytes(overrides))) throw new ControlError("no-op-command");
+          (group as Record<string, unknown>).agentOverrides = overrides;
+        } else {
+          const row = this.store.db.prepare("SELECT body FROM work_items WHERE group_id=? AND id=?").get(id, scope.taskId);
+          const work = row ? JSON.parse(String(row.body)) : null;
+          if (!work || work.kind !== "task") throw new ControlError("work-not-found");
+          if (canonicalBytes(work.agentOverride ?? null).equals(canonicalBytes(partial))) throw new ControlError("no-op-command");
+          work.agentOverride = partial;
+          this.store.db.prepare("UPDATE work_items SET body=? WHERE group_id=? AND id=?").run(JSON.stringify(work), id, scope.taskId);
         }
-        saveWebAuthority(this.store, group, proposal);
+        const commitments = sumAmounts([...proposal.allocations.filter(a => a.ownerKind !== "reserve").map(a => a.amount), ...estimateCommitments(this.store, id).map(a => a.amount)]);
+        setReserve(proposal, residual(proposal.groupLimit, group.used, commitments));
+        reopenProposal(this.store, id, group, proposal, commitments);
         return success(context, { kind: "proposal-edited", proposalVersion: proposal.proposalVersion });
       },
     }).body);
@@ -222,14 +262,21 @@ export class WebControlService {
     try {
       const replay = preflightWebCommand(this.store, command); if (replay) return replay.body;
       let prepared: ReturnType<typeof buildBudgetEstimateRequest>;
+      let estimatorSlot: FrozenSlot | null;
       try {
         const id = groupId(command), group = readWebGroup(this.store, id);
         const plan = readArchivedPlan(this.store, id), proposal = readBudgetProposal(this.store, id);
         if (proposal.proposalVersion !== command.payload.proposalVersion) throw new ControlError("proposal-version-conflict");
         prestart(group);
         const profile = this.deps.profileRouter.resolve("budget-estimate", command.payload.estimatorProfileId, command.payload.estimatorProfileHash);
-        const observation = await this.deps.profileRouter.probe(profile);
-        prepared = buildBudgetEstimateRequest({ planHash: plan.planHash, planCanonicalJson: plan.canonicalJson, profile, observation, mode: command.payload.estimateMode, exactTokenCount: this.deps.exactTokenCount });
+        // Spec §6.4: a re-estimate resolves the estimator layers as they are now -- including the group's, which only
+        // the panel sets (controller ruling R7) -- and freezes them for this estimate only.
+        const overrides = groupAgentOverridesSchema.parse((group as { agentOverrides?: unknown }).agentOverrides ?? {});
+        const slot = await estimatorSlotFor({ store: this.store, profileRouter: this.deps.profileRouter }, command.actorId, overrides, profile);
+        estimatorSlot = slot.outcome.kind === "frozen" ? slot.outcome.slot : null;
+        prepared = slot.outcome.kind === "rejected"
+          ? rejectedEstimatorRequest(slot.outcome.code)
+          : buildBudgetEstimateRequest({ planHash: plan.planHash, planCanonicalJson: plan.canonicalJson, profile, observation: slot.observation, mode: command.payload.estimateMode, exactTokenCount: this.deps.exactTokenCount });
       } catch (error) {
         return applyWebCommand<WebCommandResult>(this.store, { rawCommand: command, expand: () => { throw error; }, apply: () => { throw error; } }).body;
       }
@@ -248,7 +295,7 @@ export class WebControlService {
             setReserve(proposal, residual(group.limit, group.used, group.ledger.committedRemaining));
           }
           const estimate = { estimateId, estimateVersion, state: prepared.state, profile: { profileId: command.payload.estimatorProfileId, profileHash: command.payload.estimatorProfileHash }, mode: command.payload.estimateMode,
-            requestHash: prepared.requestHash, request: prepared.request, outputHash: null, output: null, reasonCode: prepared.reasonCode, grant: ESTIMATE_GRANT };
+            requestHash: prepared.requestHash, request: prepared.request, outputHash: null, output: null, reasonCode: prepared.reasonCode, grant: ESTIMATE_GRANT, estimatorSlot };
           this.store.db.prepare("INSERT INTO estimates(group_id,id,estimate_version,state,body) VALUES (?,?,?,?,?)").run(id, estimateId, estimateVersion, prepared.state, canonicalBytes(estimate).toString("utf8"));
           persistEstimateArtifacts(this.store, id, estimateId, prepared);
           const wakeId = prepared.state === "queued" ? `scheduler-wake:${id}:estimate:${estimateId}` : null;
@@ -266,7 +313,9 @@ export class WebControlService {
       const initial = readEstimateRecord(this.store, id, estimateId);
       if (!["queued", "running", "start-unknown"].includes(initial.state)) return null;
       const profile = this.deps.profileRouter.resolve("budget-estimate", initial.profile.profileId, initial.profile.profileHash);
-      const observation = await this.deps.profileRouter.probe(profile);
+      // Spec §6.4 last paragraph: the claim probes the estimate's frozen estimator selection. An estimate without one is
+      // never queued; asking `{}` lets the port refuse it, which degrades the estimate below.
+      const observation = await this.deps.profileRouter.probe(profile, initial.estimatorSlot?.selection ?? {});
       return this.store.transaction(() => {
         const estimate = readEstimateRecord(this.store, id, estimateId), group = readWebGroup(this.store, id), proposal = readBudgetProposal(this.store, id);
         if (!["queued", "running", "start-unknown"].includes(estimate.state)) return null;
@@ -290,9 +339,14 @@ export class WebControlService {
         const contract = estimateExecutionContractSchema.parse(JSON.parse(readCanonicalRecord(this.store, binding.contractHash)));
         if (contract.requestHash !== estimate.requestHash || !same(contract.profile, estimate.profile) || !same(contract.grant, estimate.grant)
           || !same(contract.estimatorCapabilities, estimate.request.estimatorCapabilities)) throw new ControlError("recovery-blocked");
+        // Spec §12 C5: the estimate run's configHash is its frozen estimator selection's, never the profile hash.
+        const slot = estimate.estimatorSlot;
+        if (!slot) throw new ControlError("recovery-blocked", "estimator-slot-missing");
         const plan = readArchivedPlan(this.store, id), runId = `run-${randomUUID()}`, ownerToken = randomUUID(), grant = { work: estimate.grant, handoff: zero() };
         const run: EstimateRun = { runId, groupId: id, workItemId: estimateId, taskId: null, estimateId, generation: 1, graphVersion: plan.graphVersion, targetVersion: estimate.estimateVersion,
-          commandId: estimateId, configHash: estimate.profile.profileHash, grant, ownerToken, executionProfile: { workKind: "budget-estimate", ...estimate.profile }, handoffProfile: null,
+          commandId: estimateId, configHash: slot.configHash, agent: slot.selection, agentProvenance: slot.provenance, timeoutMs: slot.timeoutMs, killGraceMs: slot.killGraceMs,
+          agentCapabilities: intersectCapabilities(profile.snapshot.profile.capabilities, slot.capabilities),
+          grant, ownerToken, executionProfile: { workKind: "budget-estimate", ...estimate.profile }, handoffProfile: null,
           executionId: null, state: "starting", checkpointId: null, recoverable: false, remaining: structuredClone(grant), cumulative: { work: zero(), handoff: zero() }, unknown: { work: false, handoff: false },
           highWater: 0, breaches: [], handoffWorkItemId: null, phase: "estimate", claimOrdinal: null, providerAttemptOrdinal: 0, failureCode: null };
         const envelope = dispatchEnvelopeSchema.parse({ schema: "orca-dispatch-envelope-v1", phase: "estimate", groupId: id, workItemId: estimateId, runId, generation: 1,

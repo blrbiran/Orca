@@ -4,7 +4,7 @@ import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { describe, expect, it, vi } from "vitest";
 import { createExecutionProfileRouter, resolveProfile } from "../../src/control/profiles.js";
-import { importControlPlan, importControlPlanAsync, type ImportCommand } from "../../src/control/planImport.js";
+import { estimatorSlotFor, importControlPlan, importControlPlanAsync, type ImportCommand } from "../../src/control/planImport.js";
 import { readArchivedContract, readArchivedPlan, readBudgetProposal, readEstimateRecord } from "../../src/control/queries.js";
 import { createTrustedControlConfig } from "../../src/panel/controlConfig.js";
 import type { ExecutionPort } from "../../src/control/executionPort.js";
@@ -14,6 +14,7 @@ import { openControlStore } from "../../src/control/store.js";
 import { canonicalBytes } from "../../src/control/canonicalJson.js";
 import { lookupCommandResult } from "../../src/control/commandLedger.js";
 import { ControlError } from "../../src/control/errors.js";
+import { FIXTURE_AGENT_ID, writePreferencesRow } from "./fixtures/agents.js";
 
 const hash = (letter: string) => letter.repeat(64);
 const contract = (taskId: string, tokenBudget = 100) => ({
@@ -97,7 +98,16 @@ async function setup() {
     defaultEstimatorProfileId: "estimator", defaultEstimateMode: "strict",
   }, router);
   let defaults = { estimatorProfileId: "estimator", estimatorProfileHash: frozen.profileHash, estimateMode: "strict" as const };
-  return { ...h, repo, planPath, plan, router, trustedConfig, frozen, deps: { store: h.store, trustedConfig, profileRouter: router, defaults: () => defaults, estimatorObservation: (selected: typeof frozen) => ({ profile: selected, observed: selected.snapshot.profile.capabilities, probeFailureCode: null }) }, setDefaults: (next: typeof defaults) => { defaults = next; } };
+  // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): the importing operator
+  // ("operator") prefers the fixture agent, and the injected observation carries ccloop's answer for that selection
+  // (controller ruling R7), so the synchronous imports freeze an estimator slot and the baseline estimate stays queued;
+  // the port above still refuses, so a real router probe of it still fails.
+  // (Written as a row, not a command: several criteria below count every row of the command ledger.)
+  writePreferencesRow(h.store, "operator", { defaultAgent: FIXTURE_AGENT_ID, perAgent: {} });
+  const resolution = { selection: { agent: FIXTURE_AGENT_ID, model: "fixture-model", contextWindow: "agent-default" as const }, configHash: hash("7"), timeoutMs: 60_000, killGraceMs: 1_000, capabilities: profile().profile.capabilities };
+  const estimatorObservation = (selected: typeof frozen) => ({ profile: selected, observed: selected.snapshot.profile.capabilities, probeFailureCode: null, resolution });
+  const prepared = await estimatorSlotFor({ store: h.store, profileRouter: { ...router, probe: async (selected) => ({ ...estimatorObservation(selected), observedAt: new Date(0).toISOString() }) } }, "operator", {}, frozen);
+  return { ...h, repo, planPath, plan, router, trustedConfig, frozen, deps: { store: h.store, trustedConfig, profileRouter: router, defaults: () => defaults, estimatorObservation, estimatorSlot: prepared.outcome }, setDefaults: (next: typeof defaults) => { defaults = next; } };
 }
 
 describe("immutable plan import", () => {
@@ -384,12 +394,15 @@ describe("immutable plan import", () => {
     } finally { await h.dispose(); }
   });
 
+  // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): the crashing child imports with
+  // the estimator slot the parent resolved (spec §6.4: a synchronous import is handed its slot); what is killed and
+  // what must be absent or replayable is unchanged.
   it.each(["before-commit", "after-commit"] as const)("is absent or fully replayable after real SIGKILL %s", async point => {
     const h = await setup();
     const config = {
       point, stateDir: h.store.stateDir, repositoryPath: h.repo, planPath: h.planPath,
       profile: h.frozen.snapshot, profileHash: h.frozen.profileHash,
-      command: command(), cwd: process.cwd(),
+      command: command(), cwd: process.cwd(), estimatorSlot: h.deps.estimatorSlot,
     };
     h.store.close();
     const script = `
@@ -404,7 +417,7 @@ describe("immutable plan import", () => {
       const frozen = { snapshot: c.profile, profileHash: c.profileHash, port: {} };
       const router = { resolve(kind,id,hash) { if (kind !== "budget-estimate" || id !== "estimator" || hash !== c.profileHash) throw new Error("profile"); return frozen; }, list() { return [frozen]; }, async probe() { throw new Error("unused"); } };
       const stop = label => { writeSync(1, label + "\\n"); Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0); };
-      const deps = { store, profileRouter: router, trustedConfig: { resolveTarget() { return { repositoryPath: c.repositoryPath, planPath: c.planPath, validatePlanDescriptor() {} }; } }, defaults: () => ({ estimatorProfileId: "estimator", estimatorProfileHash: c.profileHash, estimateMode: "strict" }), estimatorObservation: selected => ({ profile: selected, observed: selected.snapshot.profile.capabilities, probeFailureCode: null }), ...(c.point === "before-commit" ? { beforeCommit: () => stop("BEFORE_COMMIT") } : {}) };
+      const deps = { store, profileRouter: router, trustedConfig: { resolveTarget() { return { repositoryPath: c.repositoryPath, planPath: c.planPath, validatePlanDescriptor() {} }; } }, defaults: () => ({ estimatorProfileId: "estimator", estimatorProfileHash: c.profileHash, estimateMode: "strict" }), estimatorObservation: selected => ({ profile: selected, observed: selected.snapshot.profile.capabilities, probeFailureCode: null }), estimatorSlot: c.estimatorSlot, ...(c.point === "before-commit" ? { beforeCommit: () => stop("BEFORE_COMMIT") } : {}) };
       importControlPlan(deps, c.command);
       stop("AFTER_COMMIT");
     `;

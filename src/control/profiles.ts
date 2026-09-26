@@ -1,6 +1,6 @@
 import { ControlError, type KnownControlErrorCode } from "./errors.js";
 import type { ExecutionPort } from "./executionPort.js";
-import type { AgentSelection, PartialSelection } from "./agentSelection.js";
+import type { AgentResolution, PartialSelection } from "./agentSelection.js";
 import { sha256Canonical } from "./canonicalJson.js";
 import {
   capabilityViewSchema,
@@ -23,6 +23,11 @@ export interface ObservedProfile {
   readonly observed: CapabilityViewV1;
   readonly observedAt: string;
   readonly probeFailureCode: KnownControlErrorCode | null;
+  /**
+   * Agent selection spec §4.6: ccloop's answer for the selection the caller asked about -- what an import or a
+   * re-estimate freezes. Null when the probe failed, or took the TEMPORARY no-selection path (plan T11 removes it).
+   */
+  readonly resolution: AgentResolution | null;
 }
 
 export interface ExecutionProfileRouter {
@@ -31,8 +36,10 @@ export interface ExecutionProfileRouter {
    * Agent selection spec §6.4 (C3): a probe is of one selection -- the one the caller is about to dispatch, freeze
    * or show. `selection` is optional only until agent selection plan T11, which makes it required and passes the
    * frozen one at every gate; until then a call without it takes the TEMPORARY path of `temporaryProbeSelection`.
+   * Plan T10: a layered (partial) selection may be asked too -- ccloop fills what it leaves out -- so the import and
+   * a re-estimate probe the very selection they freeze.
    */
-  probe(profile: FrozenProfile, selection?: AgentSelection): Promise<ObservedProfile>;
+  probe(profile: FrozenProfile, selection?: PartialSelection): Promise<ObservedProfile>;
   list(): readonly FrozenProfile[];
 }
 
@@ -163,17 +170,19 @@ export function createExecutionProfileRouter(
       }
       return profile;
     },
-    async probe(profile: FrozenProfile, selection?: AgentSelection): Promise<ObservedProfile> {
+    async probe(profile: FrozenProfile, selection?: PartialSelection): Promise<ObservedProfile> {
       if (byId.get(profile.snapshot.profile.profileId) !== profile) throw new ControlError("profile-changed");
       try {
         const agent: PartialSelection = selection ?? await temporaryProbeSelection(profile.port);
-        const result = capabilityViewSchema.safeParse((await profile.port.resolveAgent(agent)).capabilities);
+        const resolution = await profile.port.resolveAgent(agent);
+        const result = capabilityViewSchema.safeParse(resolution.capabilities);
         if (!result.success) throw new ControlError("control-capability-probe-failed");
         return Object.freeze({
           profile,
           observed: deepFreeze(intersectCapabilities(profile.snapshot.profile.capabilities, result.data)),
           observedAt: now().toISOString(),
           probeFailureCode: null,
+          resolution: selection === undefined ? null : deepFreeze(structuredClone({ ...resolution, capabilities: result.data })),
         });
       } catch (error) {
         return Object.freeze({
@@ -181,6 +190,7 @@ export function createExecutionProfileRouter(
           observed: unavailableCapabilities,
           observedAt: now().toISOString(),
           probeFailureCode: probeFailureCode(error),
+          resolution: null,
         });
       }
     },

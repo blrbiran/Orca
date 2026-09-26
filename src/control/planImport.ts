@@ -1,8 +1,10 @@
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { applyWebCommand, preflightWebCommand, type WebCommandContext } from "./commandLedger.js";
 import { dimensions, zero } from "./commands.js";
-import { ControlError } from "./errors.js";
-import type { ExecutionProfileRouter, FrozenProfile, ObservedProfile } from "./profiles.js";
+import { ControlError, type KnownControlErrorCode } from "./errors.js";
+import { readAgentPreferences } from "./agentPreferences.js";
+import { descriptorProvenance, resolveSelection, slotLayers, type FrozenSlot, type GroupAgentOverrides, type PartialSelection } from "./agentSelection.js";
+import { unavailableCapabilities, type ExecutionProfileRouter, type FrozenProfile, type ObservedProfile } from "./profiles.js";
 import type { ControlStore } from "./store.js";
 import type { Amount } from "./types.js";
 import {
@@ -27,17 +29,24 @@ export interface ImportDefaults {
   estimateMode: "strict" | "soft";
 }
 
+/** Agent selection spec §6.4 (§12 I9): the estimator slot, resolved before the import's transaction. */
+export type EstimatorSlotOutcome =
+  | { kind: "frozen"; partial: PartialSelection; slot: FrozenSlot }
+  | { kind: "rejected"; partial: PartialSelection | null; code: KnownControlErrorCode };
+export interface PreparedEstimatorSlot { outcome: EstimatorSlotOutcome; observation: ObservedProfile }
+
 export interface ImportDeps {
   store: ControlStore;
   trustedConfig: Pick<TrustedControlConfig, "resolveTarget">;
   profileRouter: ExecutionProfileRouter;
   defaults: () => ImportDefaults;
   estimatorObservation: (profile: FrozenProfile) => Pick<ObservedProfile, "profile" | "observed" | "probeFailureCode">;
+  estimatorSlot: EstimatorSlotOutcome;
   exactTokenCount?: (profile: FrozenProfile, canonicalRequestBytes: Buffer) => number;
   beforeCommit?: () => void;
 }
 
-export type AsyncImportDeps = Omit<ImportDeps, "estimatorObservation">;
+export type AsyncImportDeps = Omit<ImportDeps, "estimatorObservation" | "estimatorSlot">;
 
 function compare(left: string, right: string): number { return left < right ? -1 : left > right ? 1 : 0; }
 function cloneAmount(value: Amount): Amount { return { ...value }; }
@@ -106,11 +115,14 @@ export function normalizeControlPlan(source: AllowlistedPlanSource): ControlPlan
     planId: source.planId,
     goal: source.goal,
     successConditions: [...source.successConditions],
+    ...(source.agent ? { agent: source.agent } : {}),
+    ...(source.reconcileAgent ? { reconcileAgent: source.reconcileAgent } : {}),
     tasks: source.tasks.map(task => ({
       taskId: task.taskId,
       dependencyTaskIds: [...task.dependencyTaskIds].sort(compare),
       targetVersion: task.targetVersion,
       configHash: task.configHash,
+      ...(task.agent ? { agent: task.agent } : {}),
       originalContractHash: task.originalContractHash,
       originalContractCanonicalJson: task.originalContractCanonicalJson,
     })).sort((left, right) => compare(left.taskId, right.taskId)),
@@ -118,6 +130,78 @@ export function normalizeControlPlan(source: AllowlistedPlanSource): ControlPlan
   const parsed = controlPlanSchema.safeParse(candidate);
   if (!parsed.success) return reject(parsed.error.issues[0]?.message ?? "normalized-plan");
   return parsed.data;
+}
+
+/** The plan's group layers, as the group's initial agentOverrides (W6-20: one layer, no plan/panel split). */
+export function planGroupLayer(plan: ControlPlanV1): GroupAgentOverrides {
+  return {
+    ...(plan.agent ? { worker: plan.agent } : {}),
+    ...(plan.reconcileAgent ? { reconcile: plan.reconcileAgent } : {}),
+  };
+}
+
+/** Spec §6.4 / §7: an estimator selection that failed is a blocked estimate named after the failure. */
+const ESTIMATOR_REJECTED_PREFIX = "agent-selection-rejected:estimator:";
+export function rejectedEstimatorRequest(code: KnownControlErrorCode): FrozenEstimateRequest {
+  return { state: "blocked-capability", reasonCode: `${ESTIMATOR_REJECTED_PREFIX}${code}`, requestHash: null, request: null, contract: null, contractHash: null, inputTokens: null, requiredRequestTokens: null };
+}
+
+/** The estimator slot's layered partial as the store has it now; null when no layer names an agent. */
+function currentEstimatorPartial(store: ControlStore, operatorId: string, group: GroupAgentOverrides): PartialSelection | null {
+  const prefs = readAgentPreferences(store, operatorId).preferences;
+  try { return resolveSelection(slotLayers("estimator", prefs, group), prefs.perAgent).partial; }
+  catch (error) {
+    if (error instanceof ControlError && error.code === "agent-unselected") return null;
+    throw error;
+  }
+}
+
+/**
+ * Spec §6.3 estimator layers, then ccloop's answer through the router (spec §6.4 last paragraph: the probe is of
+ * the selection). A failed selection is an outcome, not a throw: the estimate degrades instead (§12 I9). Nothing
+ * is awaited before the probe, so a racing command is still rechecked after it (planImport.test.ts).
+ */
+export async function estimatorSlotFor(
+  deps: { store: ControlStore; profileRouter: ExecutionProfileRouter },
+  operatorId: string,
+  group: GroupAgentOverrides,
+  profile: FrozenProfile,
+): Promise<PreparedEstimatorSlot> {
+  const prefs = readAgentPreferences(deps.store, operatorId).preferences;
+  let resolved: ReturnType<typeof resolveSelection>;
+  try { resolved = resolveSelection(slotLayers("estimator", prefs, group), prefs.perAgent); }
+  catch (error) {
+    if (!(error instanceof ControlError) || error.code !== "agent-unselected") throw error;
+    return {
+      outcome: { kind: "rejected", partial: null, code: "agent-unselected" },
+      observation: { profile, observed: unavailableCapabilities, observedAt: new Date().toISOString(), probeFailureCode: "agent-unselected", resolution: null },
+    };
+  }
+  const { partial, provenance } = resolved;
+  const observation = await deps.profileRouter.probe(profile, partial);
+  if (observation.probeFailureCode !== null || observation.resolution === null) {
+    return { outcome: { kind: "rejected", partial, code: observation.probeFailureCode ?? "control-capability-probe-failed" }, observation };
+  }
+  try {
+    const labelled = descriptorProvenance(partial, observation.resolution.selection, provenance);
+    return { outcome: { kind: "frozen", partial, slot: { ...structuredClone(observation.resolution), partial, provenance: labelled } }, observation };
+  } catch (error) {
+    if (!(error instanceof ControlError)) throw error;
+    return { outcome: { kind: "rejected", partial, code: error.code }, observation: { ...observation, observed: unavailableCapabilities, probeFailureCode: error.code, resolution: null } };
+  }
+}
+
+/**
+ * The asynchronous importer's preparation. Controller ruling R7 (W5-M16): the import-time slot is resolved from the
+ * importing operator's layers only, so preparing it reads no plan source before the probe; a group estimator layer
+ * comes from the panel and takes effect on re-estimate.
+ */
+export async function prepareEstimatorSlot(
+  deps: { store: ControlStore; profileRouter: ExecutionProfileRouter },
+  command: ImportCommand,
+  profile: FrozenProfile,
+): Promise<PreparedEstimatorSlot> {
+  return estimatorSlotFor(deps, command.actorId, {}, profile);
 }
 
 type EstimateState = "queued" | "blocked-capability" | "input-too-large";
@@ -171,7 +255,13 @@ export function importControlPlan(deps: ImportDeps, command: ImportCommand): Imp
       const planCanonicalJson = canonicalBytes(plan).toString("utf8");
       const planHash = sha256Canonical(plan);
       const estimatorProfile = deps.profileRouter.resolve("budget-estimate", payload.estimatorProfileId, payload.estimatorProfileHash);
-      const preflight = preflightEstimate(deps, planHash, planCanonicalJson, estimatorProfile, payload.estimateMode);
+      // Spec §6.4 (frozen = seen): the operator layers the estimator slot was resolved from must be the layers now.
+      const partialNow = currentEstimatorPartial(deps.store, context.rawCommand.actorId, {});
+      if (!canonicalBytes(partialNow).equals(canonicalBytes(deps.estimatorSlot.partial))) throw new ControlError("plan-version-conflict", "estimator-selection-changed");
+      const estimatorSlot = deps.estimatorSlot.kind === "frozen" ? deps.estimatorSlot.slot : null;
+      const preflight = deps.estimatorSlot.kind === "rejected"
+        ? rejectedEstimatorRequest(deps.estimatorSlot.code)
+        : preflightEstimate(deps, planHash, planCanonicalJson, estimatorProfile, payload.estimateMode);
       const estimateId = `estimate-${sha256Canonical({ groupId: payload.groupId, planHash, version: 1 }).slice(0, 24)}`;
       const taskAllocations = plan.tasks.flatMap(task => [
         { ownerKind: "task", ownerId: task.taskId, bucket: "work", state: "draft-encumbered", amount: cloneAmount(TASK_WORK), fieldProvenance: defaultProvenance() },
@@ -199,6 +289,8 @@ export function importControlPlan(deps: ImportDeps, command: ImportCommand): Imp
         proposal: { state: "editable", proposalVersion: 1, planHash, budgetMode: null, contextPolicy: { handoffAtContextTokens: null }, profiles: null, executionSnapshotHash: null },
         ledger: { groupLimit, used: zero(), committedRemaining, explicitUnallocatedReserve, budgetDeficit: zero(), usageUnknown: false },
         importDefaults: { estimatorProfileId: payload.estimatorProfileId, estimatorProfileHash: payload.estimatorProfileHash, estimateMode: payload.estimateMode },
+        // Agent selection spec §6.2/§6.4: the plan's layers become the group's; the slot is what this import froze.
+        agentOverrides: planGroupLayer(plan), estimatorSlot, reconcileSlot: null,
       };
       deps.store.db.prepare("INSERT INTO groups(id,revision,graph_version,projection_seq,body) VALUES (?,?,?,0,?)")
         .run(payload.groupId, 0, 1, JSON.stringify(group));
@@ -210,6 +302,7 @@ export function importControlPlan(deps: ImportDeps, command: ImportCommand): Imp
           contract: { contentAddressedHash: task.originalContractHash }, configHash: task.configHash,
           grant: { work: cloneAmount(TASK_WORK), handoff: cloneAmount(TASK_HANDOFF) }, targetVersion: task.targetVersion,
           status: "draft", originalContractHash: task.originalContractHash, derivedContractHash: null,
+          agentOverride: task.agent ?? null,
         };
         deps.store.db.prepare("INSERT INTO work_items(group_id,id,target_version,body) VALUES (?,?,?,?)")
           .run(payload.groupId, task.taskId, task.targetVersion, JSON.stringify(work));
@@ -224,7 +317,7 @@ export function importControlPlan(deps: ImportDeps, command: ImportCommand): Imp
         estimateId, estimateVersion: 1, state: preflight.state,
         profile: { profileId: payload.estimatorProfileId, profileHash: payload.estimatorProfileHash }, mode: payload.estimateMode,
         requestHash: preflight.requestHash, request: preflight.request, outputHash: null, output: null, reasonCode: preflight.reasonCode,
-        grant: cloneAmount(ESTIMATE_GRANT),
+        grant: cloneAmount(ESTIMATE_GRANT), estimatorSlot,
       };
       deps.store.db.prepare("INSERT INTO estimates(group_id,id,estimate_version,state,body) VALUES (?,?,?,?,?)")
         .run(payload.groupId, estimateId, 1, preflight.state, canonicalBytes(estimate).toString("utf8"));
@@ -261,7 +354,7 @@ export async function importControlPlanAsync(deps: AsyncImportDeps, command: Imp
 
   let frozenDefaults: ImportDefaults;
   let profile: FrozenProfile;
-  let observation: ObservedProfile;
+  let prepared: PreparedEstimatorSlot;
   try {
     const raw = command.payload;
     const currentDefaults = deps.defaults();
@@ -271,16 +364,17 @@ export async function importControlPlanAsync(deps: AsyncImportDeps, command: Imp
       estimateMode: raw.estimateMode ?? currentDefaults.estimateMode,
     };
     profile = deps.profileRouter.resolve("budget-estimate", frozenDefaults.estimatorProfileId, frozenDefaults.estimatorProfileHash);
-    observation = await deps.profileRouter.probe(profile);
+    prepared = await prepareEstimatorSlot(deps, command, profile);
   } catch (error) {
     return persistAsyncPreparationFailure(deps.store, command, error);
   }
   return importControlPlan({
     ...deps,
     defaults: () => frozenDefaults,
+    estimatorSlot: prepared.outcome,
     estimatorObservation: selected => {
       if (selected !== profile) throw new ControlError("profile-changed");
-      return observation;
+      return prepared.observation;
     },
   }, command);
 }

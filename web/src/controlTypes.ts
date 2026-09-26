@@ -221,12 +221,21 @@ export type ContinuationSelectionV1 = { taskId: string; predecessorRunId: string
 export type ResumeFromHandoffPayloadV1 = { selections: ContinuationSelectionV1[] };
 export type ContinueTaskPayloadV1 = { predecessorRunId: string; checkpointId: string };
 export type RecoveryRetryPayloadV1 = { scope: "run"; runId: string } | { scope: "group"; groupId: string };
+/** Agent selection spec §3: model and context window are opaque here; ccloop's descriptor judges them. */
+export type ContextWindowV1 = "agent-default" | number;
+export type PartialSelectionV1 = { agent?: string; model?: string; contextWindow?: ContextWindowV1 };
+/** Spec §6.2 (W6-20): replace one selection layer of the proposal, or clear it with null. */
+export type ProposalSetAgentPayloadV1 = {
+  baseProposalVersion: number;
+  scope: { kind: "group"; slot: "worker" | "estimator" | "reconcile" } | { kind: "task"; taskId: string };
+  partial: PartialSelectionV1 | null;
+};
 
 export type CommandSuccessV1 = {
   schema: "orca-command-success-v1";
   commandId: string;
   actorId: string;
-  verb: "import-plan" | "proposal-edit" | "estimate" | "confirm" | "start" | "pause-dispatch" | "handoff-stop" | "resume-dispatch" | "resume-from-handoff" | "set-limit" | "continue-task" | "recovery-retry" | "shutdown" | "set-workspace-mode" | "set-agent-preferences";
+  verb: "import-plan" | "proposal-edit" | "estimate" | "confirm" | "start" | "pause-dispatch" | "handoff-stop" | "resume-dispatch" | "resume-from-handoff" | "set-limit" | "continue-task" | "recovery-retry" | "shutdown" | "set-workspace-mode" | "set-agent-preferences" | "proposal-set-agent";
   target: CommandTargetV1;
   commandRevision: number | null;
   projectionSeq: number | null;

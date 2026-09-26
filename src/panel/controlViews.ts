@@ -13,6 +13,7 @@ import { agentSelectionSchema, amountSchema, artifactSchema, canonicalTimestampS
 import { taskContractSchema } from "../scheduler/planFile.js";
 import {
   allocationViewSchema,
+  capabilityViewSchema,
   controlSummarySchema,
   evidenceManifestSchema,
   executionSnapshotSchema,
@@ -20,6 +21,7 @@ import {
   groupViewSchema,
   profileBindingSchema,
   recoveryViewSchema,
+  selectionProvenanceSchema,
   type AllocationViewV1,
   type CheckpointViewV1,
   type ControlSummaryV1,
@@ -115,8 +117,13 @@ const persistedRunSchema = z.object({
   targetVersion: safeInteger.positive(),
   commandId: idSchema,
   configHash: hashSchema,
-  // Agent selection spec I1: a work run carries its frozen selection; an estimate run has none (plan T10 gives it one).
+  // Agent selection spec I1: a work run carries its frozen selection. Plan T10: an estimate run carries its estimate's
+  // frozen estimator slot -- selection, provenance, timeouts and the capabilities it was claimed under.
   agent: agentSelectionSchema.optional(),
+  agentProvenance: selectionProvenanceSchema.optional(),
+  timeoutMs: safeInteger.positive().optional(),
+  killGraceMs: safeInteger.optional(),
+  agentCapabilities: capabilityViewSchema.optional(),
   grant: grantSchema,
   ownerToken: idSchema,
   executionProfile: executionProfileAuthoritySchema,
@@ -515,6 +522,9 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
       if (!sameBinding(run.executionProfile, estimate.profile, "budget-estimate")
         || canonicalBytes(run.grant.work).compare(canonicalBytes(estimate.grant)) !== 0
         || canonicalBytes(run.grant.handoff).compare(canonicalBytes(zero)) !== 0) return blocked(`run-estimate-profile:${runId}`);
+      // Spec §12 C5: an estimate run carries its estimate's frozen estimator selection and nothing else.
+      if (!estimate.estimatorSlot || run.configHash !== estimate.estimatorSlot.configHash
+        || canonicalBytes(run.agent ?? null).compare(canonicalBytes(estimate.estimatorSlot.selection)) !== 0) return blocked(`run-estimate-agent:${runId}`);
       profile = profileView(run.executionProfile);
     } else {
       if (!proposal.profiles) return blocked(`run-profile-missing:${runId}`);

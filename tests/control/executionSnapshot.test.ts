@@ -72,6 +72,9 @@ beforeEach(async () => {
     profile: { profileId: "e", profileHash: hash("b") }, mode: "strict",
     requestHash: sha256Canonical(request), request, outputHash: null, output: null,
     reasonCode: null, grant: amount(10, 10, 1, 1),
+    // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): an estimate row records the
+    // estimator slot frozen for it (spec §6.4); none here, as this estimate is never claimed.
+    estimatorSlot: null,
   };
   harness.store.db.prepare("INSERT INTO estimates(group_id,id,estimate_version,state,body) VALUES ('g','estimate-1',1,'queued',?)")
     .run(canonicalBytes(estimate).toString("utf8"));

@@ -58,6 +58,10 @@ export const operatorPreferencesSchema = z
     reconcile: partialSelectionSchema.optional(),
   })
   .strict();
+// Agent selection spec §6.2 (W6-20): a group's own selection layers, one per slot; a panel write replaces a whole layer.
+export const groupAgentOverridesSchema = z
+  .object({ worker: partialSelectionSchema.optional(), estimator: partialSelectionSchema.optional(), reconcile: partialSelectionSchema.optional() })
+  .strict();
 const sortedDimensionsSchema = z
   .array(amountDimensionSchema)
   .superRefine((values, ctx) => requireSortedUnique(values, String, ctx, []));
@@ -96,6 +100,26 @@ export const capabilityViewSchema = z
     handoffExecution: z.enum(["mechanical-in-run-v1", "model-assisted-v1"]).nullable(),
     contextWindowTokens: positiveSafeInteger.nullable(),
     requestBoundProof: requestBoundProofDescriptorSchema.nullable(),
+  })
+  .strict();
+
+// Agent selection spec §6.3: where each resolved field came from (agentSelection.ts's ProvenanceSource).
+export const provenanceSourceSchema = z.enum([
+  "operator", "operator-estimator", "operator-reconcile", "group", "group-estimator", "group-reconcile", "task", "operator-agent", "descriptor",
+]);
+export const selectionProvenanceSchema = z
+  .object({ agent: provenanceSourceSchema, model: provenanceSourceSchema, contextWindow: provenanceSourceSchema })
+  .strict();
+// Spec §6.4 / §12 I5: one frozen slot -- what was asked, where each field came from, and ccloop's capabilities-v3 answer.
+export const frozenSlotSchema = z
+  .object({
+    partial: partialSelectionSchema,
+    provenance: selectionProvenanceSchema,
+    selection: agentSelectionSchema,
+    configHash: hashSchema,
+    timeoutMs: positiveSafeInteger.max(2_147_483_647),
+    killGraceMs: safeInteger.max(60_000),
+    capabilities: capabilityViewSchema,
   })
   .strict();
 
@@ -387,6 +411,10 @@ export const controlPlanSchema = z
     planId: idSchema,
     goal: nonemptyString,
     successConditions: orderedUniqueNonemptyStringsSchema,
+    // Agent selection spec §6.2: the plan's group layers; absent keys stay absent. Controller ruling R7: a plan
+    // names no estimator selection (the import-time estimator slot is the operator's; a group's comes from the panel).
+    agent: partialSelectionSchema.optional(),
+    reconcileAgent: partialSelectionSchema.optional(),
     tasks: z.array(
       z
         .object({
@@ -394,6 +422,7 @@ export const controlPlanSchema = z
           dependencyTaskIds: sortedIdArraySchema,
           targetVersion: positiveSafeInteger,
           configHash: hashSchema,
+          agent: partialSelectionSchema.optional(),
           originalContractHash: hashSchema,
           originalContractCanonicalJson: nonemptyString,
         })
@@ -542,6 +571,7 @@ export const commandVerbSchema = z.enum([
   "shutdown",
   "set-workspace-mode",
   "set-agent-preferences",
+  "proposal-set-agent",
 ]);
 
 const repositoryCommandTargetSchema = z.object({ kind: z.literal("repository"), repoId: idSchema }).strict();
@@ -607,6 +637,18 @@ const proposalOperationSchema = z
 
 export const proposalEditPayloadSchema = z
   .object({ baseProposalVersion: positiveSafeInteger, operations: z.array(proposalOperationSchema), proposedGroupLimit: amountSchema.optional() })
+  .strict();
+
+// Agent selection spec §6.2 (W6-6/W6-20): replace one selection layer of the proposal, or clear it with null.
+export const proposalSetAgentPayloadSchema = z
+  .object({
+    baseProposalVersion: positiveSafeInteger,
+    scope: z.discriminatedUnion("kind", [
+      z.object({ kind: z.literal("group"), slot: z.enum(["worker", "estimator", "reconcile"]) }).strict(),
+      z.object({ kind: z.literal("task"), taskId: idSchema }).strict(),
+    ]),
+    partial: partialSelectionSchema.nullable(),
+  })
   .strict();
 
 export const reestimatePayloadSchema = z
@@ -680,6 +722,7 @@ const effectiveCommandFields = {
 const rawAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...rawCommandFields, verb: z.literal("import-plan"), target: groupCommandTargetSchema, payload: importPlanPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("proposal-edit"), target: groupCommandTargetSchema, payload: proposalEditPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("proposal-set-agent"), target: groupCommandTargetSchema, payload: proposalSetAgentPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("estimate"), target: groupCommandTargetSchema, payload: reestimatePayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("confirm"), target: groupCommandTargetSchema, payload: confirmPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("start"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
@@ -704,6 +747,7 @@ const effectiveAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z
     .object({ ...effectiveCommandFields, verb: z.literal("proposal-edit"), target: groupCommandTargetSchema, payload: effectiveProposalEditPayloadSchema })
     .strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("proposal-set-agent"), target: groupCommandTargetSchema, payload: proposalSetAgentPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("estimate"), target: groupCommandTargetSchema, payload: reestimatePayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("confirm"), target: groupCommandTargetSchema, payload: confirmPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("start"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
@@ -1243,3 +1287,4 @@ export const repositoryWorkspaceSchema = z
 export type RepositoryWorkspaceV1 = z.infer<typeof repositoryWorkspaceSchema>;
 export type SetWorkspaceModePayload = z.infer<typeof setWorkspaceModePayloadSchema>;
 export type SetAgentPreferencesPayload = z.infer<typeof setAgentPreferencesPayloadSchema>;
+export type ProposalSetAgentPayload = z.infer<typeof proposalSetAgentPayloadSchema>;

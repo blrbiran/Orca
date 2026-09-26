@@ -7,7 +7,7 @@ import { writeArtifact } from "../../src/control/archive.js";
 import { canonicalBytes, sha256Canonical } from "../../src/control/canonicalJson.js";
 import { lookupCommandResult } from "../../src/control/commandLedger.js";
 import { prepareExecutionSnapshot, type PreparedExecutionSnapshot } from "../../src/control/executionSnapshot.js";
-import { importControlPlan, type ImportCommand } from "../../src/control/planImport.js";
+import { importControlPlan, prepareEstimatorSlot, type ImportCommand } from "../../src/control/planImport.js";
 import { createExecutionProfileRouter, resolveProfile } from "../../src/control/profiles.js";
 import { readArchivedPlan, readBudgetProposal, readEstimateRecord } from "../../src/control/queries.js";
 import { recordProjectionChange, readProjectionState } from "../../src/control/projectionJournal.js";
@@ -25,6 +25,7 @@ import { buildApi } from "../../src/panel/api.js";
 import { createTrustedControlConfig } from "../../src/panel/controlConfig.js";
 import { ReviewsWriter } from "../../src/panel/reviewsStore.js";
 import { openTestStore } from "../control/fixtures/store.js";
+import { FIXTURE_AGENT_ID, seedPreferences } from "../control/fixtures/agents.js";
 
 const token = "a".repeat(64);
 const hash = (letter: string) => letter.repeat(64);
@@ -112,10 +113,15 @@ async function setup(): Promise<Harness> {
     plans: [{ planId: "plan", repoId: "repo", displayName: "Plan", path: planPath }],
     defaultEstimatorProfileId: "estimator", defaultEstimateMode: "strict",
   }, router);
+  // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): the importing operator prefers
+  // the fixture agent, so both groups import with the estimator slot the port answers for it (spec §6.4).
+  seedPreferences(h.store, "operator", { defaultAgent: FIXTURE_AGENT_ID, perAgent: {} });
+  const prepared = await prepareEstimatorSlot({ store: h.store, profileRouter: router }, command("group-b", "prepare"), router.resolve("budget-estimate", "estimator", frozen.profileHash));
   const deps = {
     store: h.store, trustedConfig, profileRouter: router,
     defaults: () => ({ estimatorProfileId: "estimator", estimatorProfileHash: frozen.profileHash, estimateMode: "strict" as const }),
     estimatorObservation: (selected: typeof frozen) => ({ profile: selected, observed: selected.snapshot.profile.capabilities, probeFailureCode: null }),
+    estimatorSlot: prepared.outcome,
   };
   for (const groupId of ["group-b", "group-a"]) importControlPlan(deps, command(groupId, `import-${groupId}`));
 

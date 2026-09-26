@@ -27,6 +27,7 @@ import type {
   HandoffStopPayload as ServerHandoffStopPayload,
   ImportPlanPayload as ServerImportPlanPayload,
   ProposalEditPayload as ServerProposalEditPayload,
+  ProposalSetAgentPayload as ServerProposalSetAgentPayload,
   RecoveryRetryPayload as ServerRecoveryRetryPayload,
   RecoveryViewV1 as ServerRecoveryViewV1,
   ReestimatePayload as ServerReestimatePayload,
@@ -48,6 +49,7 @@ import type {
   HandoffStopPayloadV1 as WebHandoffStopPayloadV1,
   ImportPlanPayloadV1 as WebImportPlanPayloadV1,
   ProposalEditPayloadV1 as WebProposalEditPayloadV1,
+  ProposalSetAgentPayloadV1 as WebProposalSetAgentPayloadV1,
   RecoveryRetryPayloadV1 as WebRecoveryRetryPayloadV1,
   RecoveryViewV1 as WebRecoveryViewV1,
   ResumeFromHandoffPayloadV1 as WebResumeFromHandoffPayloadV1,
@@ -158,6 +160,9 @@ function continueTaskServerToWeb(x: ServerContinueTaskPayload): WebContinueTaskP
 function continueTaskWebToServer(x: WebContinueTaskPayloadV1): ServerContinueTaskPayload { return x; }
 function recoveryRetryServerToWeb(x: ServerRecoveryRetryPayload): WebRecoveryRetryPayloadV1 { return x; }
 function recoveryRetryWebToServer(x: WebRecoveryRetryPayloadV1): ServerRecoveryRetryPayload { return x; }
+// Agent selection plan T10: the proposal's selection layer command (spec §6.2).
+function proposalSetAgentServerToWeb(x: ServerProposalSetAgentPayload): WebProposalSetAgentPayloadV1 { return x; }
+function proposalSetAgentWebToServer(x: WebProposalSetAgentPayloadV1): ServerProposalSetAgentPayload { return x; }
 
 // Referenced so nothing above is dead code the compiler is free to ignore;
 // never invoked for its behavior, only so the assignments above are real
@@ -207,4 +212,6 @@ export const __webParityAssignabilityChecks__ = [
   continueTaskWebToServer,
   recoveryRetryServerToWeb,
   recoveryRetryWebToServer,
+  proposalSetAgentServerToWeb,
+  proposalSetAgentWebToServer,
 ] as const;

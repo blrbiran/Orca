@@ -4,7 +4,8 @@ import { z } from "zod";
 import { RUN_ID } from "../ledger/writer.js";
 import { canonicalBytes, sha256Canonical } from "../control/canonicalJson.js";
 import { ControlError } from "../control/errors.js";
-import { safeInteger } from "../control/schema.js";
+import { partialSelectionSchema, safeInteger } from "../control/schema.js";
+import type { PartialSelection } from "../control/agentSelection.js";
 import { detectCycle } from "./graph.js";
 
 export interface PlanTask {
@@ -13,6 +14,8 @@ export interface PlanTask {
   dependsOn: string[];
   targetVersion?: number;
   configHash?: string;
+  /** Agent selection spec §6.2: this task's worker layer. */
+  agent?: PartialSelection;
 }
 
 export interface PlanFile {
@@ -24,17 +27,23 @@ export interface PlanFile {
   ledgerMode: "in-repo" | "out-of-repo";
   goal?: string;
   successConditions?: string[];
+  /** Agent selection spec §6.2: the group worker and reconcile layers (controller ruling R7: no estimator layer). */
+  agent?: PartialSelection;
+  reconcileAgent?: PartialSelection;
   tasks: PlanTask[];
 }
 
 export interface SchedulerControlPlanSource {
   goal: string;
   successConditions: string[];
+  agent?: PartialSelection;
+  reconcileAgent?: PartialSelection;
   tasks: Array<{
     taskId: string;
     dependencyTaskIds: string[];
     targetVersion: number;
     configHash: string;
+    agent?: PartialSelection;
     originalContract: unknown;
     originalContractCanonicalJson: string;
     originalContractHash: string;
@@ -106,6 +115,7 @@ const planTaskSchema = z
     dependsOn: z.array(z.string()),
     targetVersion: safeInteger.positive().optional(),
     configHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+    agent: partialSelectionSchema.optional(),
   })
   .strict();
 
@@ -123,6 +133,9 @@ const planFileSchema = z
     ledgerMode: z.enum(["in-repo", "out-of-repo"]),
     goal: z.string().min(1).optional(),
     successConditions: z.array(z.string().min(1)).optional(),
+    // Agent selection spec §6.2; controller ruling R7: there is no estimatorAgent, so the strict schema refuses one.
+    agent: partialSelectionSchema.optional(),
+    reconcileAgent: partialSelectionSchema.optional(),
     tasks: z.array(planTaskSchema),
   })
   .strict();
@@ -242,6 +255,8 @@ export function readSchedulerControlPlanSource(target: TrustedSchedulerPlanTarge
   return {
     goal: plan.goal,
     successConditions: [...plan.successConditions],
+    ...(plan.agent ? { agent: plan.agent } : {}),
+    ...(plan.reconcileAgent ? { reconcileAgent: plan.reconcileAgent } : {}),
     tasks: plan.tasks.map(task => {
       const original = parseContract(task.contract, task.taskId);
       return {
@@ -249,6 +264,7 @@ export function readSchedulerControlPlanSource(target: TrustedSchedulerPlanTarge
         dependencyTaskIds: [...task.dependsOn],
         targetVersion: task.targetVersion!,
         configHash: task.configHash!,
+        ...(task.agent ? { agent: task.agent } : {}),
         originalContract: original.value,
         originalContractCanonicalJson: original.canonicalJson,
         originalContractHash: original.hash,

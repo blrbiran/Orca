@@ -29,6 +29,7 @@ import { createTrustedControlConfig } from "../../../src/panel/controlConfig.js"
 import { ReviewsWriter } from "../../../src/panel/reviewsStore.js";
 import { FIXTURE_AGENT, profileSnapshot } from "../../control/fixtures/web.js";
 import type { PartialSelection } from "../../../src/control/agentSelection.js";
+import { FIXTURE_AGENT_ID, seedPanelOperator } from "../../control/fixtures/agents.js";
 
 export const PANEL_TOKEN = "b".repeat(64);
 export const GROUP = "grp-1";
@@ -110,6 +111,9 @@ export function createHarness(): Harness {
     async boot(epoch, paths, options = {}): Promise<Panel> {
       const root = roots[roots.length - 1];
       const store = await openControlStore({ stateDir: join(root, "state") });
+      // Agent selection plan T10 (spec §6.2 layer 1, §6.4): the panel's operator prefers the fixture agent, so an import
+      // through the panel freezes an estimator slot. A reboot on the same state keeps the id and the preferences.
+      seedPanelOperator(store, { defaultAgent: FIXTURE_AGENT_ID, perAgent: {} });
       const capabilities = options.capabilities ?? healthy;
       // Human authorization 2026-09-24, G1 seam A Task 6 (capability vocabulary sync): the mock now
       // answers the v2 vocabulary, spread from the same declared capabilities the profile snapshot

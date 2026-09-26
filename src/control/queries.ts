@@ -1,6 +1,6 @@
 import type { ControlStore } from "./store.js";
 import type { ArtifactRef, Amount, GroupInput, GroupView, RunView, WorkInput } from "./types.js";
-import type { AgentSelection } from "./agentSelection.js";
+import type { AgentSelection, FrozenSlot } from "./agentSelection.js";
 import { ControlError } from "./errors.js";
 import { recordProjectionChange } from "./projectionJournal.js";
 import { readCanonicalRecord } from "./snapshot.js";
@@ -9,6 +9,7 @@ import {
   budgetEstimateRequestSchema,
   budgetEstimateSchema,
   controlPlanSchema,
+  frozenSlotSchema,
   profileBindingSchema,
   type BudgetEstimateRequestV1,
   type BudgetEstimateV1,
@@ -221,6 +222,8 @@ const estimateRecordSchema = z.object({
   profile: profileBindingSchema, mode: z.enum(["strict", "soft"]), requestHash: hashSchema.nullable(),
   request: budgetEstimateRequestSchema.nullable(), outputHash: hashSchema.nullable(), output: budgetEstimateSchema.nullable(),
   reasonCode: z.string().min(1).nullable(), grant: amountSchema,
+  // Agent selection spec §6.4: the estimator selection frozen for this estimate (null when it was not resolved).
+  estimatorSlot: frozenSlotSchema.nullable(),
 }).strict().superRefine((value, ctx) => {
   if ((value.request === null) !== (value.requestHash === null)) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["request"], message: "estimate-request-hash-mismatch" });
@@ -235,6 +238,12 @@ export interface EstimateRecord {
   state: "queued" | "running" | "start-unknown" | "ready" | "failed" | "interrupted" | "blocked-capability" | "input-too-large";
   profile: ProfileBindingV1; mode: "strict" | "soft"; requestHash: string | null; request: BudgetEstimateRequestV1 | null;
   outputHash: string | null; output: BudgetEstimateV1 | null; reasonCode: string | null; grant: Amount;
+  estimatorSlot: FrozenSlot | null;
+}
+
+/** Spec §6.4 / §7 (planImport.ts rejectedEstimatorRequest): an estimate blocked because its selection was refused froze none. */
+function rejectedEstimatorSelection(estimate: z.infer<typeof estimateRecordSchema>): boolean {
+  return (estimate.reasonCode ?? "").startsWith("agent-selection-rejected:estimator:") && estimate.estimatorSlot === null && estimate.request === null;
 }
 
 export function readEstimateRecord(store: ControlStore, groupId: string, estimateId: string): EstimateRecord {
@@ -258,7 +267,8 @@ export function readEstimateRecord(store: ControlStore, groupId: string, estimat
   }
   if ((estimate.state === "queued" && (estimate.request === null || estimate.reasonCode !== null))
     || (estimate.state === "input-too-large" && (estimate.request === null || estimate.reasonCode !== "estimate-input-too-large"))
-    || (estimate.state === "blocked-capability" && !["estimate-blocked-capability", "estimate-capability-degraded"].includes(estimate.reasonCode ?? ""))) return recoveryBlocked();
+    || (estimate.state === "blocked-capability" && !["estimate-blocked-capability", "estimate-capability-degraded"].includes(estimate.reasonCode ?? "")
+      && !rejectedEstimatorSelection(estimate))) return recoveryBlocked();
   if (estimate.output) {
     const expectedTaskIds = archivedPlan.plan.tasks.map(task => task.taskId);
     if (estimate.output.tasks.map(task => task.taskId).join("\0") !== expectedTaskIds.join("\0")) return recoveryBlocked();

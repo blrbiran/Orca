@@ -4,11 +4,12 @@ import { vi } from "vitest";
 import { openTestStore } from "./store.js";
 import { createAdmissionGate } from "../../../src/control/admissionGate.js";
 import { resolveProfile, createExecutionProfileRouter } from "../../../src/control/profiles.js";
-import { importControlPlan } from "../../../src/control/planImport.js";
+import { importControlPlan, prepareEstimatorSlot, type ImportCommand } from "../../../src/control/planImport.js";
 import { canonicalBytes, sha256Canonical } from "../../../src/control/canonicalJson.js";
 import { readArchivedPlan, readBudgetProposal } from "../../../src/control/queries.js";
 import type { ExecutionPort } from "../../../src/control/executionPort.js";
-import type { AgentSelection, PartialSelection } from "../../../src/control/agentSelection.js";
+import type { AgentSelection, OperatorPreferences, PartialSelection } from "../../../src/control/agentSelection.js";
+import { FIXTURE_AGENT_ID, seedPanelOperator, seedPreferences } from "./agents.js";
 import type { CapabilityViewV1, ExecutionProfileSnapshotV1, RawAuthorityCommandV1, ConfirmPayload } from "../../../src/control/webProtocol.js";
 
 export const profileSnapshot = (): ExecutionProfileSnapshotV1 => ({
@@ -21,12 +22,20 @@ export const profileSnapshot = (): ExecutionProfileSnapshotV1 => ({
 });
 
 // Seam B (human ruling 2026-09-24, named under ruling 88): targetVersion is one positive safe integer from plan to wire.
-export interface WebFixtureTask { taskId: string; dependsOn?: string[]; targetVersion?: number; configHash?: string; targetPaths?: string[] }
+export interface WebFixtureTask { taskId: string; dependsOn?: string[]; targetVersion?: number; configHash?: string; targetPaths?: string[]; agent?: PartialSelection }
+/**
+ * Agent selection plan T10 (spec §6.2): the importing operator's ("human") preferences -- `null` leaves them unset, absent
+ * seeds a default agent so the import-time estimator slot resolves -- and the plan's group layers (R7: no estimatorAgent).
+ */
+export interface WebFixtureOptions {
+  preferences?: OperatorPreferences | null;
+  planAgents?: { agent?: PartialSelection; reconcileAgent?: PartialSelection };
+}
 
 /** Agent selection spec §3: the complete selection this fixture's task work items are frozen with. */
-export const FIXTURE_AGENT: AgentSelection = { agent: "codex", model: "fixture-model", contextWindow: "agent-default" };
+export const FIXTURE_AGENT: AgentSelection = { agent: FIXTURE_AGENT_ID, model: "fixture-model", contextWindow: "agent-default" };
 
-export async function webFixture(snapshot = profileSnapshot(), tasks: readonly WebFixtureTask[] = [{ taskId: "a" }]) {
+export async function webFixture(snapshot = profileSnapshot(), tasks: readonly WebFixtureTask[] = [{ taskId: "a" }], options: WebFixtureOptions = {}) {
   const h = await openTestStore();
   let observed: CapabilityViewV1 = structuredClone(snapshot.profile.capabilities);
   const accept = vi.fn(async () => ({ kind: "unknown" as const }));
@@ -55,13 +64,19 @@ export async function webFixture(snapshot = profileSnapshot(), tasks: readonly W
     const contractPath = join(h.root, `contract-${task.taskId}.json`);
     await writeFile(contractPath, canonicalBytes(contract));
     // Seam B (human ruling 2026-09-24, named under ruling 88): targetVersion is one positive safe integer from plan to wire.
-    planTasks.push({ taskId: task.taskId, contract: contractPath, dependsOn: task.dependsOn ?? [], targetVersion: task.targetVersion ?? 1, configHash: task.configHash ?? sha256Canonical({}) });
+    planTasks.push({ taskId: task.taskId, contract: contractPath, dependsOn: task.dependsOn ?? [], targetVersion: task.targetVersion ?? 1, configHash: task.configHash ?? sha256Canonical({}), ...(task.agent ? { agent: task.agent } : {}) });
   }
-  await writeFile(planPath, JSON.stringify({ targetRepo: repo, ccloopBin: "/bin/true", runsDir: h.root, workBranch: "orca/work", policy: "local-merge", ledgerMode: "out-of-repo", goal: "ship", successConditions: ["passes"], tasks: planTasks }));
+  await writeFile(planPath, JSON.stringify({ targetRepo: repo, ccloopBin: "/bin/true", runsDir: h.root, workBranch: "orca/work", policy: "local-merge", ledgerMode: "out-of-repo", goal: "ship", successConditions: ["passes"], ...options.planAgents, tasks: planTasks }));
+  // Agent selection plan T10 (spec §6.4): the import freezes the estimator slot resolved from the importing operator's
+  // layers, so the operator prefers the fixture agent unless a criterion says otherwise.
+  const preferences = options.preferences === undefined ? { defaultAgent: FIXTURE_AGENT_ID, perAgent: {} } : options.preferences;
+  // The panel's operator (a criterion that mounts the mutation routes acts as it) is given the same preferences.
+  if (preferences !== null) { seedPreferences(h.store, "human", preferences); seedPanelOperator(h.store, preferences); }
+  const importCommand: ImportCommand = { schema: "orca-raw-command-v1", commandId: "import", expectedRevision: 0, actorId: "human", verb: "import-plan", target: { kind: "group", groupId: "g" }, payload: { groupId: "g", repoId: "repo", planId: "plan" } };
+  const prepared = await prepareEstimatorSlot({ store: h.store, profileRouter: router }, importCommand, frozen);
   const deps = { store: h.store, admissionGate: createAdmissionGate(), profileRouter: router, trustedConfig: { resolveTarget: () => ({ repositoryPath: repo, planPath, validatePlanDescriptor() {} }) },
-    defaults: () => ({ estimatorProfileId: "all", estimatorProfileHash: frozen.profileHash, estimateMode: "soft" as const }) };
-  const imported = importControlPlan({ ...deps, estimatorObservation: () => ({ profile: frozen, observed, probeFailureCode: null }) }, {
-    schema: "orca-raw-command-v1", commandId: "import", expectedRevision: 0, actorId: "human", verb: "import-plan", target: { kind: "group", groupId: "g" }, payload: { groupId: "g", repoId: "repo", planId: "plan" } });
+    defaults: () => ({ estimatorProfileId: "all", estimatorProfileHash: frozen.profileHash, estimateMode: "soft" as const }), estimatorSlot: prepared.outcome };
+  const imported = importControlPlan({ ...deps, estimatorObservation: () => ({ profile: frozen, observed, probeFailureCode: null }) }, importCommand);
   if ("error" in imported || imported.result.kind !== "imported") throw new Error(JSON.stringify(imported));
   // Agent selection plan T7 bridge -- plan T11 freezes a selection into every task work item at confirm and deletes
   // this. Until then nothing in the product writes one, so the fixture does, or no claim could carry `claim.agent`.
@@ -84,5 +99,5 @@ export async function webFixture(snapshot = profileSnapshot(), tasks: readonly W
     raw(`command-${++sequence}`, currentRevision(), verb, { kind: "run", groupId: "g", runId }, payload) as Extract<RawAuthorityCommandV1, { verb: V }>;
   const confirmPayload = (): ConfirmPayload => ({ planHash: readArchivedPlan(h.store, "g").planHash, proposalVersion: readBudgetProposal(h.store, "g").proposalVersion, budgetMode: "strict",
     profileIds: { estimator: "all", worker: "all", handoff: "all", goalReview: "all" }, profileHashes: { estimator: frozen.profileHash, worker: frozen.profileHash, handoff: frozen.profileHash, goalReview: frozen.profileHash }, contextPolicy: { handoffAtContextTokens: 800_000 } });
-  return { ...h, deps, frozen, accept, command, taskCommand, runCommand, rawCommand: raw, confirmPayload, estimateId: imported.result.estimateId, setObserved: (value: typeof observed) => { observed = value; }, asked };
+  return { ...h, deps, frozen, accept, imported, command, taskCommand, runCommand, rawCommand: raw, confirmPayload, estimateId: imported.result.estimateId, setObserved: (value: typeof observed) => { observed = value; }, asked };
 }
