@@ -1,0 +1,45 @@
+{
+  "v": 1,
+  "runId": "orca-dev-8c6302e0",
+  "runtime": "claude-code",
+  "sessionRef": "8c6302e0-16c8-4cf5-b500-403fcf653e13",
+  "writtenAt": "2026-09-26T16:19:18.138Z",
+  "head": "3f94de308716d933a2b2ec74b2bb191b65817cff",
+  "level": {
+    "kind": "reading",
+    "level": 333665,
+    "windowTokens": 1000000,
+    "t1": 330000,
+    "t2": 450000,
+    "band": 1
+  },
+  "next": [
+    "Wait for the full Orca verification run on the new HEAD (fresh clone, gated env), judge reds against the flake list",
+    "Append spec section 13.8 (seat A/B/C results, K1/K3/K4 unreachable registration, M4n residual) and ledger section 12, commit",
+    "Rewrite the three handoffs (Orca §3/§4.0/§9.0c; ccloop and ccmem Orca sections replaced in place, no hashes), commit",
+    "Give the human a <=10-line executive summary in chat only"
+  ],
+  "open": [
+    "Spec 13.7 (MC1) appended in the Orca main tree but not committed yet",
+    "ccloop full-suite known-reds judge was RC 1 once on a load timeout of run-scenario CLI (not in the roster); roster change is the human's"
+  ],
+  "awaitingHuman": [
+    {
+      "kind": "irreversible",
+      "what": "push of ccloop 825bb1b and Orca 941da93..HEAD"
+    },
+    {
+      "kind": "named-authorization",
+      "what": "whether to add the run-scenario CLI NOT_OBSERVABLE load timeout to check-known-reds roster"
+    }
+  ],
+  "measurements": [
+    {
+      "command": "/usr/bin/git -C /Users/biran/code/skills/loop/Orca ls-remote origin refs/heads/main",
+      "exitCode": 0,
+      "commit": "3f94de308716d933a2b2ec74b2bb191b65817cff",
+      "observedAt": "2026-09-26T16:19:18.088Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-8c6302e0-S4cowQ/1.txt"
+    }
+  ]
+}
