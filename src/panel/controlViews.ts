@@ -1,5 +1,6 @@
 import { frozenAllocationShape } from "../control/executionSnapshot.js";
-import { frozenWorkAgent } from "../control/agentFreeze.js";
+import { frozenWorkAgent, resolveGroupSelections } from "../control/agentFreeze.js";
+import type { ExecutionPort } from "../control/executionPort.js";
 import { z } from "zod";
 import { readArtifact } from "../control/archive.js";
 import { canonicalBytes, sha256Canonical } from "../control/canonicalJson.js";
@@ -13,6 +14,7 @@ import type { ControlStore } from "../control/store.js";
 import { agentSelectionSchema, amountSchema, artifactSchema, canonicalTimestampSchema, grantSchema, idSchema, safeInteger } from "../control/schema.js";
 import { taskContractSchema } from "../scheduler/planFile.js";
 import {
+  agentSelectionPreviewSchema,
   allocationViewSchema,
   capabilityViewSchema,
   controlSummarySchema,
@@ -23,6 +25,7 @@ import {
   profileBindingSchema,
   recoveryViewSchema,
   selectionProvenanceSchema,
+  type AgentSelectionPreviewV1,
   type AllocationViewV1,
   type CheckpointViewV1,
   type ControlSummaryV1,
@@ -742,5 +745,22 @@ export async function readRunEvidence(store: ControlStore, runId: string): Promi
   }));
   const parsed = evidenceManifestSchema.safeParse({ schema: "orca-run-evidence-v1", runId, entries });
   if (!parsed.success) return blocked(`evidence-manifest:${parsed.error.issues[0]?.message ?? "invalid"}`);
+  return parsed.data;
+}
+
+/**
+ * Agent selection spec §6.8 (plan T14): the preview the panel binds its confirm to. It is the confirm's own
+ * resolution (W6-1), not a second implementation -- a hash computed two ways would refuse every confirm as
+ * agent-selection-changed, or accept one it should not. An unknown group is `group-not-found`, from the resolution.
+ */
+export async function readSelectionPreview(
+  store: ControlStore,
+  port: Pick<ExecutionPort, "resolveAgent">,
+  operatorId: string,
+  groupId: string,
+): Promise<AgentSelectionPreviewV1> {
+  const resolved = await resolveGroupSelections({ store, port }, groupId, operatorId);
+  const parsed = agentSelectionPreviewSchema.safeParse({ schema: "orca-agent-selection-preview-v1", groupId, ...resolved });
+  if (!parsed.success) return blocked(`agent-preview:${parsed.error.issues[0]?.path.join(".")}:${parsed.error.issues[0]?.message}`);
   return parsed.data;
 }

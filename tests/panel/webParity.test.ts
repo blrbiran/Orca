@@ -14,6 +14,9 @@ import type {
 import { WEB_CORRECTION_KINDS, WEB_LIST_FIELDS, WEB_REPORT_FIELDS } from "../../web/src/types.js";
 import { CORRECTION_KINDS } from "../../src/corrections/schema.js";
 import type {
+  AgentPreferencesViewV1 as ServerAgentPreferencesViewV1,
+  AgentSelectionPreviewV1 as ServerAgentSelectionPreviewV1,
+  AgentsViewV1 as ServerAgentsViewV1,
   CommandEnvelopeV1 as ServerCommandEnvelopeV1,
   CommandErrorV1 as ServerCommandErrorV1,
   CommandLookupV1 as ServerCommandLookupV1,
@@ -32,9 +35,13 @@ import type {
   RecoveryViewV1 as ServerRecoveryViewV1,
   ReestimatePayload as ServerReestimatePayload,
   ResumeFromHandoffPayload as ServerResumeFromHandoffPayload,
+  SetAgentPreferencesPayload as ServerSetAgentPreferencesPayload,
   SetLimitPayload as ServerSetLimitPayload,
 } from "../../src/control/webProtocol.js";
 import type {
+  AgentPreferencesViewV1 as WebAgentPreferencesViewV1,
+  AgentSelectionPreviewV1 as WebAgentSelectionPreviewV1,
+  AgentsViewV1 as WebAgentsViewV1,
   CommandEnvelopeV1 as WebCommandEnvelopeV1,
   CommandErrorV1 as WebCommandErrorV1,
   CommandLookupV1 as WebCommandLookupV1,
@@ -53,6 +60,7 @@ import type {
   RecoveryRetryPayloadV1 as WebRecoveryRetryPayloadV1,
   RecoveryViewV1 as WebRecoveryViewV1,
   ResumeFromHandoffPayloadV1 as WebResumeFromHandoffPayloadV1,
+  SetAgentPreferencesPayloadV1 as WebSetAgentPreferencesPayloadV1,
   SetLimitPayloadV1 as WebSetLimitPayloadV1,
 } from "../../web/src/controlTypes.js";
 
@@ -168,6 +176,15 @@ function recoveryRetryWebToServer(x: WebRecoveryRetryPayloadV1): ServerRecoveryR
 // Agent selection plan T10: the proposal's selection layer command (spec §6.2).
 function proposalSetAgentServerToWeb(x: ServerProposalSetAgentPayload): WebProposalSetAgentPayloadV1 { return x; }
 function proposalSetAgentWebToServer(x: WebProposalSetAgentPayloadV1): ServerProposalSetAgentPayload { return x; }
+// Agent selection plan T14 (spec §6.8): the agent UI's three reads and the operator preferences command.
+function agentsViewServerToWeb(x: ServerAgentsViewV1): WebAgentsViewV1 { return x; }
+function agentsViewWebToServer(x: WebAgentsViewV1): ServerAgentsViewV1 { return x; }
+function agentPreferencesServerToWeb(x: ServerAgentPreferencesViewV1): WebAgentPreferencesViewV1 { return x; }
+function agentPreferencesWebToServer(x: WebAgentPreferencesViewV1): ServerAgentPreferencesViewV1 { return x; }
+function agentPreviewServerToWeb(x: ServerAgentSelectionPreviewV1): WebAgentSelectionPreviewV1 { return x; }
+function agentPreviewWebToServer(x: WebAgentSelectionPreviewV1): ServerAgentSelectionPreviewV1 { return x; }
+function setAgentPreferencesServerToWeb(x: ServerSetAgentPreferencesPayload): WebSetAgentPreferencesPayloadV1 { return x; }
+function setAgentPreferencesWebToServer(x: WebSetAgentPreferencesPayloadV1): ServerSetAgentPreferencesPayload { return x; }
 
 // Referenced so nothing above is dead code the compiler is free to ignore;
 // never invoked for its behavior, only so the assignments above are real
@@ -219,4 +236,12 @@ export const __webParityAssignabilityChecks__ = [
   recoveryRetryWebToServer,
   proposalSetAgentServerToWeb,
   proposalSetAgentWebToServer,
+  agentsViewServerToWeb,
+  agentsViewWebToServer,
+  agentPreferencesServerToWeb,
+  agentPreferencesWebToServer,
+  agentPreviewServerToWeb,
+  agentPreviewWebToServer,
+  setAgentPreferencesServerToWeb,
+  setAgentPreferencesWebToServer,
 ] as const;

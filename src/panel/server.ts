@@ -182,7 +182,7 @@ export async function createPanelServer(opts: PanelOptions, env: NodeJS.ProcessE
     opts, token, reviews, statics,
     // Disabled means no `control` key at all -- byte-for-byte the shape that shipped before this
     // existed, so `controlApi.ts` registers nothing and every /api/control path is a 404.
-    ...(control === null ? {} : { control: { store: control.store, epoch, config: control.config, service: control.service } }),
+    ...(control === null ? {} : { control: { store: control.store, epoch, config: control.config, service: control.service, port: control.port } }),
   });
   if (control === null && opts.control.enabled) {
     process.stderr.write("orca-panel: another process holds this repository's control store; this panel serves reviews and decisions only\n");

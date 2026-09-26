@@ -1300,3 +1300,65 @@ export type RepositoryWorkspaceV1 = z.infer<typeof repositoryWorkspaceSchema>;
 export type SetWorkspaceModePayload = z.infer<typeof setWorkspaceModePayloadSchema>;
 export type SetAgentPreferencesPayload = z.infer<typeof setAgentPreferencesPayloadSchema>;
 export type ProposalSetAgentPayload = z.infer<typeof proposalSetAgentPayloadSchema>;
+
+// Agent selection spec §6.8 (plan T14): the three reads the panel's agent UI is built on. The component schemas
+// (contextWindowSchema, partialSelectionSchema, operatorPreferencesSchema, groupAgentOverridesSchema,
+// frozenSlotSchema) are T7-T11's; these only compose them into what one GET answers.
+export const agentsViewSchema = z
+  .object({
+    schema: z.literal("orca-agents-view-v1"),
+    installations: z.array(
+      z
+        .object({
+          id: idSchema,
+          kind: nonemptyString,
+          defaults: z.object({ model: nonemptyString, contextWindow: contextWindowSchema }).strict(),
+          contextOptions: z.array(contextWindowSchema).min(1),
+          version: nonemptyString,
+        })
+        .strict(),
+    ),
+  })
+  .strict()
+  .superRefine((value, ctx) => requireSortedUnique(value.installations, (entry) => entry.id, ctx, ["installations"]));
+
+export const agentPreferencesViewSchema = z
+  .object({ schema: z.literal("orca-agent-preferences-v1"), operatorId: nonemptyString, revision: safeInteger, preferences: operatorPreferencesSchema })
+  .strict();
+
+const slotOutcomeSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("resolved"), frozen: frozenSlotSchema }).strict(),
+  z.object({ kind: z.literal("rejected"), code: nonemptyString }).strict(),
+]);
+
+/**
+ * W6-1/W6-2: the confirm's own resolution (agentFreeze.ts resolveGroupSelections), as the panel shows it. A slot's
+ * key is `task:<taskId>` or `reconcile`; the hash exists exactly when every slot resolved, because a confirm can only
+ * bind to a resolution it could freeze whole (spec §6.4 step 2).
+ */
+export const agentSelectionPreviewSchema = z
+  .object({
+    schema: z.literal("orca-agent-selection-preview-v1"),
+    groupId: idSchema,
+    proposalVersion: positiveSafeInteger,
+    groupOverrides: groupAgentOverridesSchema,
+    taskOverrides: z.record(idSchema, partialSelectionSchema.nullable()),
+    slots: z.array(
+      z.object({ key: nonemptyString, slot: z.enum(["worker", "reconcile"]), taskId: idSchema.nullable(), outcome: slotOutcomeSchema }).strict(),
+    ),
+    selectionsHash: hashSchema.nullable(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    requireSortedUnique(value.slots, (entry) => entry.key, ctx, ["slots"]);
+    value.slots.forEach((entry, index) => {
+      if ((entry.slot === "worker") !== (entry.taskId !== null)) issue(ctx, ["slots", index, "taskId"], "slot-task-mismatch");
+      if (entry.key !== (entry.taskId === null ? "reconcile" : `task:${entry.taskId}`)) issue(ctx, ["slots", index, "key"], "slot-key-mismatch");
+    });
+    const rejected = value.slots.some((entry) => entry.outcome.kind === "rejected");
+    if (rejected !== (value.selectionsHash === null)) issue(ctx, ["selectionsHash"], "selections-hash-rejection-mismatch");
+  });
+
+export type AgentsViewV1 = z.infer<typeof agentsViewSchema>;
+export type AgentPreferencesViewV1 = z.infer<typeof agentPreferencesViewSchema>;
+export type AgentSelectionPreviewV1 = z.infer<typeof agentSelectionPreviewSchema>;

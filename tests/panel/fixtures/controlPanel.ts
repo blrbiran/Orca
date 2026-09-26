@@ -28,7 +28,9 @@ import { verifyControlJsonBody } from "../../../src/panel/controlApi.js";
 import { createTrustedControlConfig } from "../../../src/panel/controlConfig.js";
 import { ReviewsWriter } from "../../../src/panel/reviewsStore.js";
 import { FIXTURE_AGENT, profileSnapshot } from "../../control/fixtures/web.js";
-import type { PartialSelection } from "../../../src/control/agentSelection.js";
+import type { AgentResolution, PartialSelection } from "../../../src/control/agentSelection.js";
+import { ControlError } from "../../../src/control/errors.js";
+import type { AgentsView } from "../../../src/control/executionPort.js";
 import { FIXTURE_AGENT_ID, PANEL_OPERATOR, seedPanelOperator } from "../../control/fixtures/agents.js";
 import { resolveGroupSelections } from "../../../src/control/agentFreeze.js";
 
@@ -63,6 +65,12 @@ export interface Panel {
 export interface BootOptions {
   /** What the adapter reports about the worker and handoff profiles; the dispatcher re-probes on every claim. */
   capabilities?: () => Record<string, unknown>;
+  /** Agent selection spec §6.8 (plan T14, P8): the installation table the port lists; the T10 single-codex table when absent. */
+  agents?: AgentsView;
+  /** What the port answers for one partial selection; the T10 echo-the-fixture-agent answer when absent. */
+  resolveAgent?: (partial: PartialSelection) => Promise<AgentResolution>;
+  /** `false`: the panel operator is neither fixed nor given preferences, so the mutation routes mint it with none. */
+  seedPreferences?: false;
 }
 
 export interface Harness {
@@ -119,14 +127,15 @@ export function createHarness(): Harness {
       const store = await openControlStore({ stateDir: join(root, "state") });
       // Agent selection plan T10 (spec §6.2 layer 1, §6.4): the panel's operator prefers the fixture agent, so an import
       // through the panel freezes an estimator slot. A reboot on the same state keeps the id and the preferences.
-      seedPanelOperator(store, { defaultAgent: FIXTURE_AGENT_ID, perAgent: {} });
+      // Plan T14 (P8): `seedPreferences: false` leaves both unset -- the panel's own first-boot state.
+      if (options.seedPreferences !== false) seedPanelOperator(store, { defaultAgent: FIXTURE_AGENT_ID, perAgent: {} });
       const capabilities = options.capabilities ?? healthy;
       // Human authorization 2026-09-24, G1 seam A Task 6 (capability vocabulary sync): the mock now
       // answers the v2 vocabulary, spread from the same declared capabilities the profile snapshot
       // carries, so the peer's raw answer stays schema-valid and strict-mode-safe.
       const port = {
-        resolveAgent: async (partial: PartialSelection) => ({ selection: { ...FIXTURE_AGENT, ...partial }, configHash: "c".repeat(64), timeoutMs: 120_000, killGraceMs: 5_000, capabilities: capabilities() }) as never,
-        listAgents: async () => ({ installations: [{ id: "codex", kind: "codex", defaults: { model: "fixture-model", contextWindow: "agent-default" as const }, contextOptions: ["agent-default" as const], version: "0.0.0-fixture" }] }),
+        resolveAgent: options.resolveAgent ?? (async (partial: PartialSelection) => ({ selection: { ...FIXTURE_AGENT, ...partial }, configHash: "c".repeat(64), timeoutMs: 120_000, killGraceMs: 5_000, capabilities: capabilities() }) as never),
+        listAgents: async () => options.agents ?? ({ installations: [{ id: "codex", kind: "codex", defaults: { model: "fixture-model", contextWindow: "agent-default" as const }, contextOptions: ["agent-default" as const], version: "0.0.0-fixture" }] }),
         readEvidence: async () => Buffer.alloc(0), accept: async () => ({ kind: "unknown" }), inspect: async () => ({ kind: "unknown" }),
         requestHandoff: async (_input: unknown, request: { requestId: string }) => ({ kind: "unknown", requestId: request.requestId }),
         collect: async () => ({ events: [], candidate: null, terminal: null }),
@@ -156,7 +165,8 @@ export function createHarness(): Harness {
       buildApi(app, {
         opts: { by: "operator", bind: "127.0.0.1", port: 0, confirmedExternal: false, correctionsDir: join(root, "corrections"), repos: [] },
         token: PANEL_TOKEN, reviews, statics: { get: () => undefined, indexHtml: undefined, names: [] },
-        control: { store, epoch, config: trustedConfig, service },
+        // Plan T14 (W6-10/W6-19): the read routes ask the same port object the service confirms through.
+        control: { store, epoch, config: trustedConfig, service, port },
       } as never);
 
       const server: Server = createServer(app);
@@ -255,4 +265,36 @@ export async function settleRecoverableWork(panel: Panel, runId: string, checkpo
 /** One human edit of the goal-review reserve -- the smallest draft-legal mutation of the proposal. */
 export function proposalEdit(tokens: number): Record<string, unknown> {
   return { baseProposalVersion: 1, operations: [{ target: { scope: "goal-review", dimension: "tokens" }, value: tokens, provenance: "human" }] };
+}
+
+/** Plan T14 (P8): two installations, sorted by id -- the shape ccloop's capabilities v3 answers with `{agent: null}`. */
+export const CLAUDE_CODEX_AGENTS: AgentsView = {
+  installations: [
+    { id: "claude", kind: "claude", defaults: { model: "claude-opus-5-5", contextWindow: "agent-default" }, contextOptions: ["agent-default", 1_000_000], version: "2.1.282" },
+    { id: "codex", kind: "codex", defaults: { model: "gpt-6-sol", contextWindow: "agent-default" }, contextOptions: ["agent-default"], version: "0.155.1" },
+  ],
+};
+
+/**
+ * Plan T14 (P8): a stand-in for ccloop's capabilities v3 with a selection over CLAUDE_CODEX_AGENTS, reduced to what
+ * the panel can observe: an unknown installation and a context the kind cannot express are refused by their ccloop
+ * codes, missing fields are filled from the installation's defaults, and a field the request gave is echoed as given
+ * (spec §4.6). The capabilities are the fixture profile's declared ones -- ccloop's rule for them is ccloop's to test.
+ */
+export async function claudeCodexResolveAgent(partial: PartialSelection): Promise<AgentResolution> {
+  const installation = CLAUDE_CODEX_AGENTS.installations.find((row) => row.id === partial.agent);
+  if (!installation) throw new ControlError("agent-installation-missing");
+  const selection = {
+    agent: installation.id,
+    model: partial.model ?? installation.defaults.model,
+    contextWindow: partial.contextWindow ?? installation.defaults.contextWindow,
+  };
+  if (!installation.contextOptions.includes(selection.contextWindow)) throw new ControlError("agent-context-unsupported");
+  return {
+    selection,
+    configHash: sha256Canonical({ kind: installation.kind, selection }),
+    timeoutMs: 120_000,
+    killGraceMs: 7_000,
+    capabilities: { ...profileSnapshot().profile.capabilities },
+  };
 }

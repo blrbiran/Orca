@@ -63,6 +63,15 @@ describe("a shipped panel mounts the control plane by default", () => {
     expect((await response.json() as Record<string, unknown>).schema).toBe("orca-control-recovery-v1");
   });
 
+  // Agent selection plan T14 (W6-10): the agents view asks the port the shipped process assembled. With no port
+  // configured the answer is that port's own refusal by name -- a panel that did not hand its port to the read
+  // routes would answer route-not-found instead, and the settings page would have nothing to say why.
+  it("answers the agents view from the assembled port, which with no port configured refuses by name", async () => {
+    const h = await workspace();
+    const response = await get(await boot(h), "/api/control/agents");
+    expect((await response.json() as { error: { code: string } }).error.code).toBe("control-port-unconfigured");
+  });
+
   it("a criterion asserting the boot failed is itself red, so the success above is not vacuous", async () => {
     // The plan asks for this explicitly. If parsing or booting ever starts refusing, the three
     // judgements above would pass by never running; this one turns that into a failure.

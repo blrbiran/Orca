@@ -268,3 +268,36 @@ export type CommandSuccessV1 = {
 };
 export type CommandLookupV1 = { schema: "orca-command-lookup-v1"; originalStatus: number; body: CommandSuccessV1 | { error: CommandErrorV1 } };
 export type RepositoryWorkspaceV1 = { schema: "orca-repository-workspace-v1"; repoId: string; workspaceMode: "worktree" | "clone"; revision: number };
+
+// Agent selection spec §6.8 (plan T14): the agent UI's reads and its preferences command, mirrors of
+// src/control/webProtocol.ts checked both ways in tests/panel/webParity.test.ts.
+export type AgentSelectionV1 = { agent: string; model: string; contextWindow: ContextWindowV1 };
+export type SelectionProvenanceV1 = { agent: ProvenanceSourceV1; model: ProvenanceSourceV1; contextWindow: ProvenanceSourceV1 };
+export type AgentSlotV1 = "worker" | "estimator" | "reconcile";
+export type GroupAgentOverridesV1 = { worker?: PartialSelectionV1; estimator?: PartialSelectionV1; reconcile?: PartialSelectionV1 };
+export type OperatorPreferencesV1 = {
+  defaultAgent?: string;
+  perAgent: Record<string, { model?: string; contextWindow?: ContextWindowV1 }>;
+  estimator?: PartialSelectionV1;
+  reconcile?: PartialSelectionV1;
+};
+export type AgentInstallationV1 = { id: string; kind: string; defaults: { model: string; contextWindow: ContextWindowV1 }; contextOptions: ContextWindowV1[]; version: string };
+export type AgentsViewV1 = { schema: "orca-agents-view-v1"; installations: AgentInstallationV1[] };
+export type AgentPreferencesViewV1 = { schema: "orca-agent-preferences-v1"; operatorId: string; revision: number; preferences: OperatorPreferencesV1 };
+export type FrozenSlotV1 = {
+  partial: PartialSelectionV1; provenance: SelectionProvenanceV1;
+  selection: AgentSelectionV1; configHash: string; timeoutMs: number; killGraceMs: number; capabilities: CapabilityViewV1;
+};
+export type SlotOutcomeV1 = { kind: "resolved"; frozen: FrozenSlotV1 } | { kind: "rejected"; code: string };
+/** W6-1/W6-2: the confirm's own resolution; `selectionsHash` is null exactly when some slot was rejected. */
+export type AgentSelectionPreviewV1 = {
+  schema: "orca-agent-selection-preview-v1";
+  groupId: string;
+  proposalVersion: number;
+  groupOverrides: GroupAgentOverridesV1;
+  taskOverrides: Record<string, PartialSelectionV1 | null>;
+  slots: Array<{ key: string; slot: "worker" | "reconcile"; taskId: string | null; outcome: SlotOutcomeV1 }>;
+  selectionsHash: string | null;
+};
+/** Plan-review P5 (W6-8): the revision travels in the envelope's expectedRevision only. */
+export type SetAgentPreferencesPayloadV1 = { preferences: OperatorPreferencesV1 };
