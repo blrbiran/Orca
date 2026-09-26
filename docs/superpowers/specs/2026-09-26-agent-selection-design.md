@@ -493,3 +493,31 @@ ccloop 侧**零**仓库外写入（detect／validate 只读、只打 stdout）�
 - reestimate 事务内不重核操作者层（T10 minor／波 3 M-3）；冻结的 `agentCapabilities` 只写不读（波 3 M-4）。
 - T7 的 `versionOf` 用 `execFileSync` 无超时（波 5 m-2）；零写入守卫抓不到只改 mtime、不查真 HOME（波 5 m-3）。
 - 其余 deferred minor 以台账 `Task N: minor (deferred)` 行为准。
+
+### 13.4 D10 更正（2026-09-26，终审 I-1；上文 §13.1 D10 一字未动，本节单独记更正）
+
+> 依据：终审报告 `.superpowers/sdd/2026-09-26-agent-selection/final-review.md` I-1；修复报告
+> `.superpowers/sdd/2026-09-26-agent-selection/final-fix-report.md`。**人要审**（同 §13 头部）。
+
+D10 写的「Orca `ccloopPort` 构造时只核表路径形状……保住 ccloop『删表不挡回收』」只对了一半：
+`ccloopPort.ts` 的端口构造（波 2 I-1 已修）确实只核形状，但生产装配路径上还有**第二道**独立的存在性检查——
+`src/panel/controlConfig.ts` 的 `createTrustedControlConfig`（`assembleControlRuntime` 唯一的调用方，在
+`server.ts` 监听之前跑）对 `agentsTablePath` 做的是 `checkedPath(..., "file")`，表文件不在就抛
+`control-trusted-config-invalid:path-missing`，**整个面板进程装配失败**，比波 2 I-1 描述的后果更重：
+不只是执行端口，评审／决策面板本身也起不来，在飞 run 的 inspect／collect／handoff 全部做不了。
+
+终审的探针 `scratchpad/final/orca/tests/panel/finalProbe.test.ts`（PROBE-B）实测复现：同一份表被删除后，
+`assembleControlRuntime` 在装配阶段就抛出上述错误，而不是像 D10 所说那样把「表存在与否」完全交给 ccloop 在
+capabilities／accept 时判定。
+
+**更正**：`createTrustedControlConfig` 现在对 `agentsTablePath` 复用 `ccloopPort.ts` 导出的
+`agentsTablePath()` 同一个形状检查（绝对路径；若有东西在，必须是 canonical 的普通文件、不是软链；
+路径上什么都没有则放行），不再单独调用 `checkedPath(..., "file")`。至此 D10 描述的保证——「一张被删的表
+不得挡住已在飞的 run 的回收」——在生产唯一的调用路径（`controlAssembly.ts` → `createTrustedControlConfig`）
+上才真正成立；此前它只在端口构造这一层成立，从未传到装配层。
+
+判据：`tests/panel/controlConfig.test.ts`（新增 describe「the agents table path is checked by shape
+only, not by existence」，3 条：缺表装配成功、相对路径仍拒、软链表仍拒）与
+`tests/panel/controlAssemblyDriver.test.ts`（新增一条：`assembleControlRuntime` 在表被删除后仍装配成功
+且驱动仍起来）。变异：把 `agentsTablePath(input.agentsTablePath)` 改回
+`checkedPath(input.agentsTablePath, "file")`，上述 4 条判据全部转红。
