@@ -143,3 +143,278 @@
 - **未做（下一会话按顺序）**：T16（驱动环 E2E，fake claude＋fake codex 混组；含判据 8 的 `.argv --model` 一半、§9.11 reconcile 选择进 `.argv`）→ 波 5 复审 → T17（两仓全套门、疑似 flake 判定、控制器汇总 `mutations.md`、spec §13 实施期更正）→ 终审（opus）→ 报人（Ruling 清单、改写过的既有判据清单）。
 - **给 T16 的更正（波 4）**：task-16-brief.md:158 的偏好载荷带 `expectedRevision` 违反 P5，只发 `{preferences}`；`confirmAgentGroup` 的断言应与存储里的冻结值比对，而不是与预览本身比（后者恒真）。
 - **全量门本轮一次都没跑**（Rule 14）：各 Task 只跑了聚焦文件与邻居；现行全量基线仍是 ④ 轮的，已过期。
+
+## §7 接手（2026-09-26，控制器会话 `ab5a693c`，Claude Opus 5.5；接在 §6 交接点之后）
+
+- 开工现测（`/usr/bin/git ls-remote origin refs/heads/main` ＋ `fetch` 后 `rev-list --left-right --count HEAD...origin/main`）：Orca 本地领先远端 7 笔、不落后（远端尖端主题行 `feat(web): edit agent defaults and a proposal's agents, and confirm on the resolution shown`）；ccloop 领先 1、不落后（远端尖端 `fix(agents): keep an unobservable CLI version out of the named drift refusal`）；ccmem 领先 1、不落后。push 归人，本会话不 push。
+- 真实 `~/.orca/agents.json`、`agents.json.draft.json` 仍在（0600、270B），按 §9.0c 不碰。
+- 派发覆盖（impl-common.md 原文不改，派发里重申）：scratchpad 改为本会话的 `/private/tmp/claude-501/-Users-biran-code-skills-loop-Orca/ab5a693c-690d-47ff-9b2d-04c2449d055e/scratchpad/impl/`；`Claude-Session` 尾行改为 `https://claude.ai/code/session_01PGz7gxavNQANRnQh1F1MgN`。
+- Human（2026-09-26，会话 `ab5a693c`）：「好，按这个顺序继续。这个session中，尽量将这些要做的task完整做完，这个session暂时不要考虑context大小.」「这一轮执行过程中如果有问题，先按你的建议执行。执行完在最后阶段报给我审核。」收尾时更新三仓 handoff（ccloop／ccmem 的 Orca 章节不许无限增长、不写死 HEAD），另在对话里给 ≤10 行的 executive summary（不落文件）。
+- T16 实施席已派（opus，后台）。
+- Task 16: implemented (Orca commits 5f65b17..1999e21，两笔)。实施席（opus）工具报数 242,107 token／70 次工具调用。控制器核原始日志：`scratchpad/impl/t16-e2e-2.log` 5 passed；M1／M2a／M3／M4w／M5／M6／M7 各见红，M2b（`dispatch.ts` startClaim）与 M4（`continuation.ts`）绿 —— 实施席判为驱动环不走的旧路径；全部 18 份还原 diff 0 字节。第二笔：CH／CC 原 brief 在确认后不改默认值 ⇒ 续跑判据不可能红，补了确认后改偏好。
+- Ruling: 波 5 只含 T16（P21），任务复审与波 5 复审合并为一席 opus —— 同一范围派两席只是重复读同一份 diff；合并席按 review-common 的任务尺子 ＋ 跨 Task 契约（T3/T5/T7/T11/T12/T14）两件一起查，并点名判定 M2b／M4 的「旧路径」在生产里是否真不可达。
+- 波 5 复审（T16＋波 5 合并，opus）：`wave5-review.md`，0 Critical／0 Important／5 Minor，Approved。M2b／M4 的旧路径经 python 逐行扫生产调用方判为生产不可达（`startClaim`／`claimContinuation` 只在 `ControlService` 内调用，`ControlService` 只在 recovery 构造且不走这两支；面板 continue-task 走 `WebControlService`）。
+- Task 16: complete (Orca commits 5f65b17..1999e21, review clean)。
+- Ruling（波 5）：m-1（旧路径无「活偏好不泄漏」判据，复审席条件泄漏变异 L2／L4 全绿）登记 spec §13，不补判据 —— 生产不可达；错的代价：将来有人把旧路径接回生产时无判据守。m-2（T7 `versionOf` 用 `execFileSync` 无超时）、m-3（零写入守卫抓不到只改 mtime、不查真 HOME）、m-4、m-5 记 deferred。
+- Task 16: minor (deferred): 见 wave5-review.md m-2…m-5。
+
+## §8 T17 门席：全套门、判定器、REWRITTEN 收口（2026-09-26，控制器会话 `ab5a693c` 派出的 T17 门席，Claude Opus 5.5）
+
+> 归属：T17 门席（brief 步骤 1、2、5 ＋ REWRITTEN 收口；步骤 3 变异电池**未做**，归其后的变异席）。观测时 Orca HEAD `1999e21`（主题行 `test(control): move the operator's default while a fake claude run is parked, so its continuation proves it keeps the frozen selection`），ccloop main HEAD `87aef9a`（`docs(handoff): roll the Orca section: T1-T6 of agent selection landed here`）。脚本、日志、json 全在 scratchpad `…/ab5a693c-…/scratchpad/t17/`（不入库）；席报告 `task-17-gates-report.md`（同目录）。
+
+- **ccloop build**：Orca 的 E2E 用 `scratchpad/impl/ccloop-build`（`t16-env.sh` 的 `ORCA_CCLOOP_BIN`），其 HEAD `87aef9a` ＝ ccloop main HEAD（P17 断言成立，写在 `gates/summary.txt` 第 3 行）。ccloop 的门全在新 `git clone --local` 副本 `t17/ccloop-gates`（HEAD `87aef9a docs(handoff): roll the Orca section: T1-T6 of agent selection landed here`）里跑，ccloop 主树零触碰。
+- **环境**：每个测试进程的 HOME 与四个 XDG 根改道到 `t17/home/`；`ORCA_AGENTS_TABLE` 指向 scratchpad 里的 fake-codex 表（0700／0600）。
+- **门表**（`t17/gates/summary.txt`，RC 与起止时刻照抄；条数照抄日志／json）：
+
+| 段 | RC | 条数 | 起止 |
+|---|---|---|---|
+| ccloop-typecheck | 0 | — | 14:48:36–14:48:40 |
+| ccloop-build | 0 | — | 14:48:40–14:48:43 |
+| ccloop-test | 1 | json：81 文件，988 条，987 过、1 败、0 pending；唯一失败 ＝ 名单第 1 条 stopProof | 14:48:43–14:49:27 |
+| ccloop-known-reds | 0 | `failed: 1`、`unexpected: 0` | 14:49:27 |
+| ccloop-verify-control | 1 | `Test Files 1 failed \| 34 passed (35)`、`Tests 1 failed \| 363 passed (364)`，唯一 FAIL ＝ stopProof（名单第 1 条，稳定红） | 14:49:27–14:50:02 |
+| web-build | 0 | — | 14:50:02–14:50:03 |
+| typecheck | 0 | — | 14:50:03–14:50:09 |
+| test | 1 | json：216 文件，1976 条，1975 过、1 败、0 pending；唯一失败 `tests/control/driverRecovery.test.ts` 的 recovery-retry 条（5000 ms 超时，已登记 flake 文件） | 14:50:09–14:58:35 |
+| web-test | 0 | json：21 文件，105 条全过 | 14:58:35–14:58:41 |
+| verify-control | 0 | `69 passed (69)`、`735 passed (735)` | 14:58:41–15:05:54 |
+| web-control | 0 | `18 passed`、`198 passed` | 15:05:54–15:06:01 |
+| web-control-consumer | 0 | `1 passed`、`5 passed` | 15:06:01–15:06:05 |
+| scheduler | 0 | `52 passed`、`172 passed` | 15:06:05–15:06:24 |
+| chain | 1 | 第一段 `13 passed`／`213 passed`；带链会话变量的全量重跑 `Tests 1 failed \| 1975 passed (1976)`，唯一失败同上 driverRecovery | 15:06:24–15:15:35 |
+| panel | 0 | 15 行 `PASS` | 15:15:35–15:15:49 |
+| ws-check | 0 | `21 passed`、`105 passed` | 15:15:49–15:15:57 |
+| claude-md | 0 | `150/200 lines` | 15:15:57 |
+| hooks-path | 0 | — | 15:15:57 |
+| ledger | 2 | 降级（允许集 {0,2}） | 15:15:57 |
+| rerun-1 driverRecovery 单跑 | 0 | 8 条全过 | 15:15:57–15:16:01 |
+| check（判定器，本节 REWRITTEN 行在内） | 0 | `OK` | — |
+
+- ⚠️ brief 的判定句要求 `ccloop-verify-control` RC 0；只要名单第 1 条（stopProof，稳定红）还红，它不可能是 0。本席按「失败 ⊆ 名单」判它过（日志唯一 FAIL 就是这一条），**不是**机械判定 —— 报控制器。
+- **判定器红证**（`t17/check-agents.py`，EXPECTED 按报告推导而非 brief 数：agentSelectionApi 12、webParity 3、agentSelectionE2E 5、agentSettings 5、agentSelectionEditor 10，与本轮 json 全部一致）：
+  - (a) 开工前的 json（`git clone --local` 于 Orca `545f452`、ccloop `f4e49a2`，本席现跑）＋本轮 `added.txt`＋本节 REWRITTEN 行 ⇒ **RC 1**，104 行：EXPECTED 4 行 `expected N passed, got []`（webParity 开工前已有 3 条且全过，所以这一格不红 —— brief 预言的「五行」里 webParity 那行只在 brief 的 4 条下才会红，该格对本轮无判别力）、新增判据文件 27 行、REWRITTEN 18 行、开工前的失败 53 行、pending 1 行、flake 未单跑 1 行。
+  - (b) 本轮 Orca json 把 agentSelectionApi 第一条改成 `failed` ⇒ **RC 1**：EXPECTED 行、新增文件行、`orca unexpected failure` 行各一。
+- **flake**：`runCodexPhase > kills a TERM-ignoring process before returning abort` 在 ccloop-test 与 ccloop-verify-control 两次全量里都**过了**（json 194.7 ms），不需要单跑；注意它**已经在** ccloop `check-known-reds.mjs` 的名单里（`Codex phase process > kills a TERM-ignoring process before returning abort`，历史 load flake 条目），T5 报告说「不在名单里」与名单原文不符。Orca 侧 driverRecovery 在 test 与 chain 各败一次、单跑 8/8 绿。
+- **真 `~/.orca`**：门前后 `stat -f '%N %m %z %p'` 逐字节相同（`cmp` rc=0）；两个残留文件 mtime 仍为 1790362284／1790362289，未碰。
+- **REWRITTEN 收口**：各报告共 277 条 REWRITTEN 行，转成判定器格式后与 json 全名**精确**对上的去重 220 行（orca 174、ccloop 45、web 1；含 1 条 `(compile-time half)`，文件里有改写注释），另 13 条重复；**45 条对不上**（助手函数／夹具级条目 28；旧名 11 —— 其中 7 条是 T7 报告内已另起行更正的旧名，其余 4 条改名后报告没给新全名：T3 registry、T12 driverReconcile、T7 errorClassification 的 `it.each`、波 2 修复 materialize 的 describe 写成了 `probing an installed CLI's version`；`…`／占位 describe 3；`%s` 模板或复合条 3），逐条列在 `task-17-gates-report.md` 与 `t17/rw-unmatched.txt`，**不改名迁就**，交控制器。下列 220 行即判定器读的行：
+
+- REWRITTEN: ccloop:tests/control/protocol.test.ts > control protocol v1 > round-trips the strict payload for every method
+- REWRITTEN: ccloop:tests/control/protocol.test.ts > control protocol v1 > names unsupported protocol versions separately from invalid requests
+- REWRITTEN: ccloop:tests/control/command.test.ts > control command boundary > rejects a relative agents table before dispatch
+- REWRITTEN: ccloop:tests/control/command.test.ts > control command boundary > maps named protocol rejections to exit 2 without contaminating stdout
+- REWRITTEN: ccloop:tests/control/command.test.ts > control command boundary > maps malformed JSON and non-protocol failures to exit 1
+- REWRITTEN: ccloop:tests/control/command.test.ts > control command boundary > does not print until a handler result passes the response schema
+- REWRITTEN: ccloop:tests/control/command.test.ts > control command boundary > routes the real CLI through control before legacy parsing and emits one JSON value
+- REWRITTEN: ccloop:tests/control/accept.test.ts > durable control acceptance > seals the materialized agent config so later table drift has no effect
+- REWRITTEN: ccloop:tests/control/handoff.test.ts > named handoff request > watches a latched deadline through packet, zero handoff usage, seal, and released lease
+- REWRITTEN: ccloop:tests/control/handoffDeadlineUsage.test.ts > deadline-aborted execute with observed usage (Orca handoff delivery C-3) > books the observed tokens as a known cumulative and still hands off a partial candidate that answers its request
+- REWRITTEN: ccloop:tests/control/phasesCompleted.test.ts > the control worker counts completed phases > writes one count per phase a registering adapter completed, and the run still proves isolation
+- REWRITTEN: ccloop:tests/control/protocol.test.ts > control protocol v1 > rejects unsafe integers, malformed identities, and malformed hashes
+- REWRITTEN: ccloop:tests/control/protocol.test.ts > control protocol v1 > requires a canonical absolute sourceDir with no symlink ancestor
+- REWRITTEN: ccloop:tests/control/protocol.test.ts > control protocol v1 > keeps an input bundle inside the canonical source input directory
+- REWRITTEN: ccloop:tests/control/protocol.test.ts > control protocol v1 > derives the control root from the accepted source directory
+- REWRITTEN: ccloop:tests/control/accept.test.ts > durable control acceptance > persists accepted before one exclusive worker claim and replays idempotently
+- REWRITTEN: ccloop:tests/control/accept.test.ts > durable control acceptance > serializes concurrent identical accepts into one durable launch
+- REWRITTEN: ccloop:tests/control/accept.test.ts > durable control acceptance > refuses the same identity with a different envelope
+- REWRITTEN: ccloop:tests/control/accept.test.ts > durable control acceptance > recovers a dropped accept response through inspect without another worker
+- REWRITTEN: ccloop:tests/control/accept.test.ts > durable control acceptance > keeps an intended crash ambiguous and never launches a replacement
+- REWRITTEN: ccloop:tests/control/accept.test.ts > durable control acceptance > rejects a claim config hash mismatch before creating a worker
+- REWRITTEN: ccloop:tests/control/endToEnd.test.ts > control protocol through the built CLI > keeps one execution identity across dropped/duplicate accept and exposes complete evidence
+- REWRITTEN: ccloop:tests/control/endToEnd.test.ts > control protocol through the built CLI > deduplicates named handoff and rejects old generation or changed envelope without another phase
+- REWRITTEN: ccloop:tests/control/endToEnd.test.ts > control protocol through the built CLI > recovers the synchronized SIGKILL boundary: accepted-fsynced
+- REWRITTEN: ccloop:tests/control/endToEnd.test.ts > control protocol through the built CLI > recovers the synchronized SIGKILL boundary: worker-claimed
+- REWRITTEN: ccloop:tests/control/endToEnd.test.ts > control protocol through the built CLI > recovers the synchronized SIGKILL boundary: handoff-fsynced
+- REWRITTEN: ccloop:tests/control/endToEnd.test.ts > control protocol through the built CLI > recovers the synchronized SIGKILL boundary: candidate-fsynced
+- REWRITTEN: ccloop:tests/control/handoff.test.ts > named handoff request > fsyncs before an idempotent ack and rejects changed or stale identity
+- REWRITTEN: ccloop:tests/control/handoff.test.ts > named handoff request > starts no phase when already latched and starts no next phase after a cooperative boundary
+- REWRITTEN: ccloop:tests/control/handoff.test.ts > named handoff request > persists an external deadline abort as handoff interruption rather than failure or exhaustion
+- REWRITTEN: ccloop:tests/control/handoff.test.ts > mechanical handoff packet > derives blocked facts and explicit logs without an LLM call
+- REWRITTEN: ccloop:tests/control/handoff.test.ts > mechanical handoff packet > allows request:null only for natural terminal runs and retains handoff refs for every result
+- REWRITTEN: ccloop:tests/control/workerLaunch.test.ts > worker process identity > does not accept a recycled live PID with a mismatched UTC start identity
+- REWRITTEN: ccloop:tests/control/collect.test.ts > control collection > filters afterSeq without renumbering
+- REWRITTEN: ccloop:tests/control/collect.test.ts > bounded evidence reads > rechecks the content hash on every read
+- REWRITTEN: ccloop:tests/control/collect.test.ts > bounded evidence reads > rejects traversal, symlink, FIFO, and evidence over 16 MiB
+- REWRITTEN: ccloop:tests/control/handoffEnteredPhases.test.ts > handoff packet of a run stopped between phases (ccloop C7) > does not list the execute and verify files of an attempt stopped at the boundary after plan
+- REWRITTEN: ccloop:tests/control/handoffEnteredPhases.test.ts > handoff packet of a run stopped between phases (ccloop C7) > does not list the verify file of an attempt stopped after execute, once execute was entered and wrote its file
+- REWRITTEN: ccloop:tests/control/handoffEnteredPhases.test.ts > handoff packet of a run stopped between phases (ccloop C7) > still lists an entered phase whose file is absent: execute, and verify after execution_finished
+- REWRITTEN: ccloop:tests/control/handoffEnteredPhases.test.ts > handoff packet of a run stopped between phases (ccloop C7) > counts only the current attempt's events as entered
+- REWRITTEN: ccloop:tests/control/handoffEnteredPhases.test.ts > handoff packet of a run stopped between phases (ccloop C7) > does not list an entered phase's file as missing when a handoff deadline interrupted it (D-C7' (α))
+- REWRITTEN: ccloop:tests/control/handoffEnteredPhases.test.ts > handoff packet of a run stopped between phases (ccloop C7) > keeps requiring all three phase files for terminal runs, with or without a request
+- REWRITTEN: ccloop:tests/control/handoffEnteredPhases.test.ts > handoff candidate of a deadline-interrupted run (ccloop C6 with C7) > answers its request: result stays partial, no unresolved request on candidate or packet, nothing missing
+- REWRITTEN: ccloop:tests/control/resultRepository.test.ts > the result repository a control run materializes (Orca execution driver C1/C2) > C2 reads its own run's attempt ref, not the shared path-derived one a later run overwrote
+- REWRITTEN: ccloop:tests/control/resultRepository.test.ts > the result repository a control run materializes (Orca execution driver C1/C2) > C1 shares the object store by hard links instead of copying it
+- REWRITTEN: orca:tests/control/blockedStaysPut.test.ts > a blocked run keeps the step it was blocked at through a later error (final fix wave FR-C2) > a conflict-parked run whose H-settle throws once stays at D; a retry resumes it at D and it is parked held, its change in a checkpoint
+- REWRITTEN: orca:tests/control/ccloopPort.test.ts > production ccloop execution port > answers a profile probe through the router instead of being reported as a failed probe
+- REWRITTEN: orca:tests/control/ccloopPort.test.ts > production ccloop execution port > does not invent a substitute source for a peer's observation -- an overridden field passes through unchanged
+- REWRITTEN: orca:tests/control/ccloopPort.test.ts > production ccloop execution port > uses direct argv plus stdin JSON and validates successful responses
+- REWRITTEN: orca:tests/control/ccloopPort.test.ts > production ccloop execution port > propagates exit 2 stably and refuses malformed or oversized stdout
+- REWRITTEN: orca:tests/control/ccloopPort.test.ts > production ccloop execution port > validates evidence identity, base64 and hash
+- REWRITTEN: orca:tests/control/commands.test.ts > control commands > rejects dangling dependencies, duplicate task IDs and cycles while preserving approved graph
+- REWRITTEN: orca:tests/control/commands.test.ts > control commands > latches stop and retains a proposal instead of replacing an active contract
+- REWRITTEN: orca:tests/control/continuation.test.ts > continuation claims > exports and binds the verified resume bundle before starting and replays one new run
+- REWRITTEN: orca:tests/control/dispatch.test.ts > durable starts > recovers the accepted identity after the peer drops its response, without another launch
+- REWRITTEN: orca:tests/control/dispatch.test.ts > durable starts > writes the full immutable intent before handing off to the peer and rejects altered identity
+- REWRITTEN: orca:tests/control/dispatch.test.ts > durable starts > keeps unknown ownership despite a dead service PID, expired clock or unavailable inspect
+- REWRITTEN: orca:tests/control/dispatch.test.ts > durable starts > does not send an absent start after stop is latched
+- REWRITTEN: orca:tests/control/dispatch.test.ts > durable starts > rechecks stop after asynchronous capability discovery before creating a start intent
+- REWRITTEN: orca:tests/control/driverHandoff.test.ts > a landing whose worktree removal failed after the swap (controller ruling T4-I1) > leaves a run blocked at R whose reconciled merge is already on orca/g to a person: its request stays open
+- REWRITTEN: orca:tests/control/driverReconcile.test.ts > reconciling a conflict (spec §5.3) > RC1: a separate run resolves the conflict and it lands as a merge of the tip and the run's own attempt
+- REWRITTEN: orca:tests/control/driverReconcile.test.ts > reconciling a conflict (spec §5.3) > books the reconciliation's spend on the group once, and the ledger still conserves
+- REWRITTEN: orca:tests/control/driverReconcile.test.ts > reconciling a conflict (spec §5.3) > blocks the conflict before any reconciliation run when the group cannot afford it
+- REWRITTEN: orca:tests/control/driverReconcile.test.ts > reconciling a conflict (spec §5.3) > blocks a reconciliation that leaves conflict markers, and orca/<group> keeps only the first landing
+- REWRITTEN: orca:tests/control/driverReconcile.test.ts > reconciling a conflict (spec §5.3) > blocks a reconciliation that ended failed, and still books its spend on the group
+- REWRITTEN: orca:tests/control/driverReconcile.test.ts > reconciling a conflict (spec §5.3) > blocks at R, before spawning, a reconciliation the group can no longer afford
+- REWRITTEN: orca:tests/control/driverReconcile.test.ts > reconciling a conflict (spec §5.3) > waits for a reconciliation still running, and collects it once it ends, with one spawn
+- REWRITTEN: orca:tests/control/driverReconcile.test.ts > reconciling a conflict (spec §5.3) > after a restart, waits on a recorded live reconciliation process instead of spawning a second one
+- REWRITTEN: orca:tests/control/driverReconcile.test.ts > reconciling a conflict (spec §5.3) > spawns the reconciliation as its own process group with its output in files, and a new driver after stop() finishes it with one spawn
+- REWRITTEN: orca:tests/control/driverReconcile.test.ts > reconciling a conflict (spec §5.3) > after a restart with a spawn recorded but no process id, blocks instead of running a second reconciliation
+- REWRITTEN: orca:tests/control/driverReconcile.test.ts > a reconciliation whose landing swap fails without the tip moving (final review I2) > blocks at R naming the leftover lock, and spawns no second reconciliation
+- REWRITTEN: orca:tests/control/driverReconcile.test.ts > a person's retry of a run blocked at R (final review I4) > re-runs a failed reconciliation: two spawns, two distinct bookings, never three
+- REWRITTEN: orca:tests/control/driverReconcile.test.ts > a person's retry of a run blocked at R (final review I4) > retries a collected reconciliation whose landing failed without running it again or booking it twice
+- REWRITTEN: orca:tests/control/driverReconcileN.test.ts > N1u: the other side of a conflict is every landed task it touches (spec §5.2 N1) > answers both landed tasks, sorted by task id, where the two-sided rule escalated "2"; none still escalates "0"
+- REWRITTEN: orca:tests/control/driverReconcileN.test.ts > three runs conflicting on one file (spec §5.2 N1, N2) > lands all three with exactly two reconciliations, the second against both landed tasks
+- REWRITTEN: orca:tests/control/driverReconcileN.test.ts > three runs conflicting on one file (spec §5.2 N1, N2) > N2: while one run of the group is reconciling, a sibling collected run does not land until the reconciliation has
+- REWRITTEN: orca:tests/control/driverReconcileN.test.ts > a reconciliation reset by a moved tip and spawned again (spec §11 I7, §13.2 I-6) > books both spawns on the group under two distinct keys
+- REWRITTEN: orca:tests/control/driverReconcileN.test.ts > the spawn key after a spawn that died unbooked (controller ruling D-SPAWNKEY, 2026-09-25) > resumes above the largest booked spawn number, not the number of booked spawns
+- REWRITTEN: orca:tests/control/endToEnd.test.ts > rejects a malformed peer capability answer the guard clauses never read
+- REWRITTEN: orca:tests/control/finalReview.test.ts > final review regressions > requires explicit observations of both budget buckets: none
+- REWRITTEN: orca:tests/control/finalReview.test.ts > final review regressions > requires explicit observations of both budget buckets: work
+- REWRITTEN: orca:tests/control/finalReview.test.ts > final review regressions > requires explicit observations of both budget buckets: handoff
+- REWRITTEN: orca:tests/control/finalReview.test.ts > final review regressions > requires explicit observations of both budget buckets: both
+- REWRITTEN: orca:tests/control/finalReview.test.ts > final review regressions > claims the newly approved target version while preserving same-version idempotence
+- REWRITTEN: orca:tests/control/finalReview.test.ts > final review regressions > refuses recovery while live service orchestration owns the store
+- REWRITTEN: orca:tests/control/handoffTransaction.test.ts > handoff transaction > persists one immutable request intent before RPC and retries the same request
+- REWRITTEN: orca:tests/control/handoffTransaction.test.ts > handoff transaction > keeps both reservations and ownership when no quiet proof is available
+- REWRITTEN: orca:tests/control/planImport.test.ts > immutable plan import > normalizes sets, archives contracts, and keeps imported authority unchanged after source edits
+- REWRITTEN: orca:tests/control/planImport.test.ts > immutable plan import > replays the original result without rereading a changed source or changed server defaults
+- REWRITTEN: orca:tests/control/planImport.test.ts > immutable plan import > replays asynchronously before capability I/O and cannot hang on a lost-response retry
+- REWRITTEN: orca:tests/control/planImport.test.ts > immutable plan import > returns a same-id raw conflict before capability I/O
+- REWRITTEN: orca:tests/control/planImport.test.ts > immutable plan import > durably rejects an initially stale import before any defaults, profile, probe, or source callbacks
+- REWRITTEN: orca:tests/control/planImport.test.ts > immutable plan import > rechecks revision after a successful in-flight probe before source I/O
+- REWRITTEN: orca:tests/control/planImport.test.ts > immutable plan import > rechecks command identity after an in-flight probe and creates no duplicate effects
+- REWRITTEN: orca:tests/control/planImport.test.ts > immutable plan import > persists and replays a durable missing profile rejection across a later config change
+- REWRITTEN: orca:tests/control/planImport.test.ts > immutable plan import > persists and replays a durable changed profile rejection across a later config change
+- REWRITTEN: orca:tests/control/planImport.test.ts > immutable plan import > lets a concurrent same-id commit win when an in-flight probe rejects durably
+- REWRITTEN: orca:tests/control/planImport.test.ts > immutable plan import > persists revision conflict before a failing in-flight probe and replays it before changed defaults
+- REWRITTEN: orca:tests/control/planImport.test.ts > immutable plan import > does not persist an unexpected asynchronous preparation failure
+- REWRITTEN: orca:tests/control/planImport.test.ts > immutable plan import > does not persist an transient asynchronous preparation failure
+- REWRITTEN: orca:tests/control/planImport.test.ts > immutable plan import > turns a real probe failure into a terminal import without optimistic capability
+- REWRITTEN: orca:tests/control/planImport.test.ts > immutable plan import > persists a terminal blocked-capability preflight without a scheduler wake
+- REWRITTEN: orca:tests/control/planImport.test.ts > immutable plan import > persists a terminal input-too-large preflight without a scheduler wake
+- REWRITTEN: orca:tests/control/planImport.test.ts > immutable plan import > rejects duplicate task and leaves the group completely absent
+- REWRITTEN: orca:tests/control/planImport.test.ts > immutable plan import > rejects duplicate dependency and leaves the group completely absent
+- REWRITTEN: orca:tests/control/planImport.test.ts > immutable plan import > rejects dangling dependency and leaves the group completely absent
+- REWRITTEN: orca:tests/control/planImport.test.ts > immutable plan import > rejects a contract outside the closed ccloop V1 schema
+- REWRITTEN: orca:tests/control/planImport.test.ts > immutable plan import > rolls back every import row when interrupted before commit
+- REWRITTEN: orca:tests/control/planImport.test.ts > immutable plan import > rejects a plan inode swap between trusted resolution and descriptor validation
+- REWRITTEN: orca:tests/control/planImport.test.ts > immutable plan import > is absent or fully replayable after real SIGKILL before-commit
+- REWRITTEN: orca:tests/control/planImport.test.ts > immutable plan import > is absent or fully replayable after real SIGKILL after-commit
+- REWRITTEN: orca:tests/control/planImport.test.ts > immutable plan import > fails closed when an archived content-addressed plan is missing or damaged
+- REWRITTEN: orca:tests/control/planImport.test.ts > immutable plan import > fails closed on structurally valid but malformed proposal and estimate authority
+- REWRITTEN: orca:tests/control/planImport.test.ts > immutable plan import > fails closed on noncanonical proposal bytes and an estimate request hash mismatch
+- REWRITTEN: orca:tests/control/planImport.test.ts > immutable plan import > persists non-allowlisted source rejection without creating a group
+- REWRITTEN: orca:tests/control/profiledService.test.ts > profiled service execution > rejects stale, missing, and unavailable profiles before claim state or provider invocation
+- REWRITTEN: orca:tests/control/profiledService.test.ts > profiled service execution > persists the binding and starts only through the selected profile port
+- REWRITTEN: orca:tests/control/profiledService.test.ts > profiled service execution > freshly rejects stale, missing, and unavailable profiles at start without invoking a provider
+- REWRITTEN: orca:tests/control/profiledService.test.ts > profiled service execution > freshly validates the persisted profile before reconciling an unknown start
+- REWRITTEN: orca:tests/control/profiledService.test.ts > profiled service execution > rejects strict profiles whose matching proof omits the tokens work dimension
+- REWRITTEN: orca:tests/control/profiledService.test.ts > profiled service execution > rejects a task-only profile where a separate handoff profile is required
+- REWRITTEN: orca:tests/control/profiledService.test.ts > profiled service execution > lets drain pass a hanging claim probe, then rejects its writer
+- REWRITTEN: orca:tests/control/profiledService.test.ts > profiled service execution > lets drain pass a hanging reconcile probe, then rejects its writer
+- REWRITTEN: orca:tests/control/profiledService.test.ts > profiled service execution > lets drain pass a hanging start call and forbids its post-I/O status write
+- REWRITTEN: orca:tests/control/profiledService.test.ts > profiled service execution > lets drain pass hanging evidence I/O and rejects every later evidence writer
+- REWRITTEN: orca:tests/control/profiledService.test.ts > profiled service execution > lets drain pass a hanging handoff call and rejects its later evidence writer
+- REWRITTEN: orca:tests/control/profiledService.test.ts > profiled service execution > releases admission after reconcile and claim exceptions
+- REWRITTEN: orca:tests/control/profiles.test.ts > trusted execution profiles > routes only an allowlisted work kind with the exact frozen hash
+- REWRITTEN: orca:tests/control/profiles.test.ts > trusted execution profiles > rejects forged router entries and refuses to probe a profile from another router
+- REWRITTEN: orca:tests/control/profiles.test.ts > trusted execution profiles > owns immutable snapshot and port method bindings after construction
+- REWRITTEN: orca:tests/control/profiles.test.ts > trusted execution profiles > preserves the original receiver for captured port methods
+- REWRITTEN: orca:tests/control/profiles.test.ts > trusted execution profiles > degrades a failed or malformed capability probe to wholly unavailable
+- REWRITTEN: orca:tests/control/projectionJournal.test.ts > projection journal > projects claim, starting, and accepted run/work transitions once per transaction
+- REWRITTEN: orca:tests/control/projectionJournal.test.ts > projection journal > projects starting and unknown run transitions without changing authority
+- REWRITTEN: orca:tests/control/schedulerBridge.test.ts > reserves reconciliation once from remaining group budget and refuses stopped groups
+- REWRITTEN: orca:tests/control/schedulerBridge.test.ts > gets capabilities from the peer before a service claim
+- REWRITTEN: orca:tests/control/schedulerBridge.test.ts > runs a real conflicting graph through durable control: success
+- REWRITTEN: orca:tests/control/schedulerBridge.test.ts > runs a real conflicting graph through durable control: budget
+- REWRITTEN: orca:tests/control/schedulerBridge.test.ts > runs a real conflicting graph through durable control: stopped
+- REWRITTEN: orca:tests/control/schedulerBridge.test.ts > runs a real conflicting graph through durable control: crash
+- REWRITTEN: orca:tests/control/startEnvelope.test.ts > translating a frozen dispatch envelope into a start envelope > copies the claim from the run row and the contract hash from the ledger, field by field
+- REWRITTEN: orca:tests/control/startEnvelope.test.ts > translating a frozen dispatch envelope into a start envelope > drops the run row's own extra columns instead of smuggling them onto the wire
+- REWRITTEN: orca:tests/control/startEnvelope.test.ts > translating a frozen dispatch envelope into a start envelope > translates a handoff-phase envelope with the same claim and the same ledger hash
+- REWRITTEN: orca:tests/control/startEnvelope.test.ts > translating a frozen dispatch envelope into a start envelope > carries a continuation's ledger hash rather than the predecessor's
+- REWRITTEN: orca:tests/control/startEnvelope.test.ts > the translation refuses before anything is dispatched > refuses a run row missing a claim field, rather than dispatching the string "undefined"
+- REWRITTEN: orca:tests/control/startEnvelope.test.ts > the translation refuses before anything is dispatched > refuses when the envelope and the run name different runs
+- REWRITTEN: orca:tests/control/startEnvelope.test.ts > the translation refuses before anything is dispatched > refuses when they disagree about the generation, not only the run id
+- REWRITTEN: orca:tests/control/unconfiguredPort.test.ts > the unconfigured execution port > refuses every method it has, not merely the obvious ones
+- REWRITTEN: orca:tests/control/unconfiguredPort.test.ts > the unconfigured execution port > refuses a second time exactly as it refused the first, holding no state
+- REWRITTEN: orca:tests/control/webCcloopSmoke.test.ts > the frozen dispatch envelope reaches a real process (task 10 step 4) > carries the ledger's claim identity byte-for-byte and is durably accepted once
+- REWRITTEN: orca:tests/control/webCcloopSmoke.test.ts > the frozen dispatch envelope reaches a real process (task 10 step 4) > latches the stop under the ledger's request identity and returns evidence the store re-hashes
+- REWRITTEN: orca:tests/panel/controlAssemblyDriver.test.ts > the execution driver in the panel's assembly (spec §2.1) > knows its own repository for set-workspace-mode only with a configured port (configured=true)
+- REWRITTEN: orca:tests/panel/controlAssemblyDriver.test.ts > the execution driver in the panel's assembly (spec §2.1) > is present with a configured port, with its roots created 0700 beside the store directory, and shuts down cleanly
+- REWRITTEN: orca:tests/panel/controlAssemblyDriver.test.ts > the execution driver in the panel's assembly (spec §2.1) > stops the driver on a close with no shutdown before it, and a stopped driver stays stopped (ruling P10)
+- REWRITTEN: orca:tests/panel/controlConfig.test.ts > trusted panel control config > resolves only stable repository and plan IDs and never exposes trusted paths
+- REWRITTEN: orca:tests/panel/controlConfig.test.ts > trusted panel control config > rejects allowlisted plan escapes and symlinked path components at startup
+- REWRITTEN: orca:tests/panel/controlConfig.test.ts > trusted panel control config > rejects a plan or ancestor swapped to a symlink after startup
+- REWRITTEN: orca:tests/panel/controlConfig.test.ts > trusted panel control config > rejects duplicate IDs and invalid trusted executable paths before serving config
+- REWRITTEN: orca:tests/panel/controlConfigPort.test.ts > the served config states whether an execution port is configured > serves "unconfigured" when the panel was started without one
+- REWRITTEN: orca:tests/panel/controlConfigPort.test.ts > the served config states whether an execution port is configured > serves "configured" when it was
+- REWRITTEN: orca:tests/panel/controlConfigPort.test.ts > the served config states whether an execution port is configured > does not answer the port question from a profile's probe failure
+- REWRITTEN: orca:tests/panel/controlConfigPort.test.ts > the served config states whether an estimator was chosen > serves null defaults rather than refusing to build
+- REWRITTEN: orca:tests/panel/controlConfigPort.test.ts > the served config states whether an estimator was chosen > still refuses an estimator that was named and does not resolve
+- REWRITTEN: orca:tests/panel/controlConfigPort.test.ts > the two pairs cannot disagree > refuses an unconfigured port that still carries one, which is the other direction
+- REWRITTEN: orca:tests/panel/controlConfigPort.test.ts > the two pairs cannot disagree > refuses half an estimator in both directions
+- REWRITTEN: orca:tests/panel/controlOptions.test.ts > resolveControlOptions reports whether an execution port is configured > calls the port configured only when both are set and non-empty
+- REWRITTEN: orca:tests/panel/controlReadApi.test.ts > canonical control read API > authenticates reads, enforces canonical sinceChangeSeq spelling, and keeps immediate kill absent
+- REWRITTEN: orca:tests/panel/controlReadApi.test.ts > canonical control read API > returns sorted complete, incremental, ahead, and retained-gap summaries
+- REWRITTEN: orca:tests/panel/controlReadApi.test.ts > canonical control read API > reloads confirmed profiles, snapshot hashes, estimate output, and paused state without exposing trusted paths
+- REWRITTEN: orca:tests/panel/controlReadApi.test.ts > canonical control read API > fails closed when confirmed allocation or derived-contract authority is missing, forged, or belongs to another task
+- REWRITTEN: orca:tests/panel/controlReadApi.test.ts > canonical control read API > accepts a globally deduplicated derived contract when each group snapshot independently proves its authority
+- REWRITTEN: orca:tests/panel/controlReadApi.test.ts > canonical control read API > rejects malformed or cross-record-inconsistent persisted run authority instead of synthesizing display values
+- REWRITTEN: orca:tests/panel/controlReadApi.test.ts > canonical control read API > requires canonical stop authority and preserves revision and blocker evidence on group read failures
+- REWRITTEN: orca:tests/panel/controlReadApi.test.ts > canonical control read API > rejects budget and graph legacy stopped flags without canonical stop intents
+- REWRITTEN: orca:tests/panel/controlReadApi.test.ts > canonical control read API > blocks a 'checkpoint' evidence collection containing a 'null' element
+- REWRITTEN: orca:tests/panel/controlReadApi.test.ts > canonical control read API > blocks a 'checkpoint' evidence collection containing a 'invalid' element
+- REWRITTEN: orca:tests/panel/controlReadApi.test.ts > canonical control read API > blocks a 'outbox' evidence collection containing a 'null' element
+- REWRITTEN: orca:tests/panel/controlReadApi.test.ts > canonical control read API > blocks a 'outbox' evidence collection containing a 'invalid' element
+- REWRITTEN: orca:tests/panel/controlReadApi.test.ts > canonical control read API > blocks a 'handoff' evidence collection containing a 'null' element
+- REWRITTEN: orca:tests/panel/controlReadApi.test.ts > canonical control read API > blocks a 'handoff' evidence collection containing a 'invalid' element
+- REWRITTEN: orca:tests/panel/controlReadApi.test.ts > canonical control read API > blocks a 'recovery' evidence collection containing a 'null' element
+- REWRITTEN: orca:tests/panel/controlReadApi.test.ts > canonical control read API > blocks a 'recovery' evidence collection containing a 'invalid' element
+- REWRITTEN: orca:tests/panel/controlReadApi.test.ts > canonical control read API > returns persisted command results, sorted recovery, verified evidence manifests, and exact typed misses
+- REWRITTEN: web:web/tests/controlPortBanner.test.tsx > the panel says when it has no execution port > shows it, and names the two variables that fix it
+- REWRITTEN: orca:tests/control/capabilitySchema.test.ts > capabilityViewSchema > is the closed seven-key view that capabilities protocol 3 carries untagged
+- REWRITTEN: orca:tests/control/ccloopPort.test.ts > production ccloop execution port > passes the peer's own capabilities-v3 view through, substituting nothing
+- REWRITTEN: orca:tests/control/ccloopPort.test.ts > production ccloop execution port > therefore, with a peer answering the default view, keeps handoffControl durable and handoffExecution non-null through intersectCapabilities
+- REWRITTEN: orca:tests/control/ccloopPort.test.ts > production ccloop execution port > requires absolute canonical regular binary and agents table files
+- REWRITTEN: orca:tests/control/unconfiguredPort.test.ts > the unconfigured execution port > exposes the probe, so a missing port is never reported as a missing capability
+- REWRITTEN: orca:tests/panel/assemblyHandoffGrace.test.ts > the handoff grace the driver waits (spec §3) > is the agent's killGraceMs plus the fixed extra, and only the fixed extra when killGraceMs is unusable
+- REWRITTEN: orca:tests/panel/controlOptions.test.ts > resolveControlOptions reports whether an execution port is configured > needs both variables, not either one
+- REWRITTEN: orca:tests/control/webCcloopSmoke.test.ts > the shipped consumer answers for its own capabilities (task 10 step 4) > claims phase-end usage and soft enforcement, and the ledger opens no strict run on it
+- REWRITTEN: orca:tests/control/webCcloopSmoke.test.ts > the shipped consumer answers for its own capabilities (task 10 step 4) > blocks only at delivery when the observation degrades after a clean schedule
+- REWRITTEN: orca:tests/control/webCcloopSmoke.test.ts > the shipped consumer answers for its own capabilities (task 10 step 4) > refuses an envelope that is not V2 and reads a well-formed one as no execution yet
+- REWRITTEN: orca:tests/control/workspaceSettings.test.ts > repository workspace mode (execution driver §3.2) > migrates a version 3 store by adding the settings table
+- REWRITTEN: orca:tests/control/confirmation.test.ts > atomic confirmation > freezes every profile and derived grant and invalidates confirmation on prestart edit
+- REWRITTEN: orca:tests/control/confirmation.test.ts > atomic confirmation > updates the reserved goal-review grant and rejects understated live commitments
+- REWRITTEN: orca:tests/control/confirmation.test.ts > atomic confirmation > reads only archived derived execution authority after the original source changes
+- REWRITTEN: orca:tests/control/confirmation.test.ts > atomic confirmation > confirms against remaining active estimate commitment after accounted usage
+- REWRITTEN: orca:tests/control/confirmation.test.ts > atomic confirmation > rejects model-assisted handoff without all required grant dimensions
+- REWRITTEN: orca:tests/control/confirmation.test.ts > atomic confirmation > set-limit changes only live ceiling/reserve and preserves readable frozen authority
+- REWRITTEN: orca:tests/control/confirmation.test.ts > atomic confirmation > rolls back confirmation for unknown usage, invalid context and publication failure
+- REWRITTEN: orca:tests/control/estimator.test.ts > frozen estimator > holds gaps/unknown usage and refunds only settled remainder after confirmed usage
+- REWRITTEN: orca:tests/control/estimator.test.ts > frozen estimator > freezes exact input formula, contract constants, and checks later degradation
+- REWRITTEN: orca:tests/control/proposal.test.ts > proposal commands > checks proposal version before domain state and applies allocation plus limit atomically
+- REWRITTEN: orca:tests/control/proposal.test.ts > proposal commands > validates explicit model field provenance again at confirmation
+- REWRITTEN: orca:tests/control/proposal.test.ts > proposal commands > serves closed mutation envelopes with exact durable statuses and replay lookup
+- REWRITTEN: orca:tests/control/targetVersion.test.ts > wire schemas refuse a string targetVersion (seam B) > N7 ControlPlanV1 takes 3 and refuses "3"
+- REWRITTEN: orca:tests/control/stopIntent.test.ts > model-assisted handoff attempts > settles the request unrecoverably when the frozen handoff profile disappears
+- REWRITTEN: orca:tests/control/webFaults.test.ts > commit boundaries (task 10 step 3) > dies before the confirmation commit with an editable proposal, and the retry confirms once
+- REWRITTEN: orca:tests/control/profiles.test.ts > trusted execution profiles > changes profileHash when any resolved execution byte changes
+- REWRITTEN: orca:tests/control/profiles.test.ts > trusted execution profiles > refuses a v2 snapshot that carries adapter: "codex"
+- REWRITTEN: orca:tests/control/webProtocol.test.ts > Web control protocol > validates normalized plans and rejects unsorted or duplicate sets
+- REWRITTEN: orca:tests/control/webProtocol.test.ts > Web control protocol > accepts an explicit Codex phase-end plus soft profile snapshot
+- REWRITTEN: orca:tests/control/webProtocol.test.ts > Web control protocol > validates a complete, canonically ordered execution snapshot
+- REWRITTEN: orca:tests/control/webProtocol.test.ts > Web control protocol > enforces canonical group allocation ownership and command revision nullability
+- REWRITTEN: orca:tests/control/driverHandoff.test.ts > nothing arrives (spec §3 grace, §11 I3) > turns the request outcome-unknown past deadline + grace, keeps collecting without killing, and H-settles a late candidate
+- REWRITTEN: orca:tests/control/driverHandoff.test.ts > the grace is the run's own agent killGraceMs plus the fixed minute (spec §3; agent selection spec §6.6) > does not call a request outcome-unknown before the killGraceMs ccloop answers for the run's selection has passed
+- REWRITTEN: orca:tests/panel/controlApi.test.ts > web control acceptance over a real panel (task 10 step 1) > takes a plan from import to a continued task, and the ledger's own state is durable at every boundary
+- REWRITTEN: orca:tests/panel/webParity.test.ts > (compile-time half) controlGroupWebToServer
