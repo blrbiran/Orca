@@ -123,3 +123,6 @@
 - Ruling（波 3 I-3）：写进 T15 派发 —— 收到 `agent-selection-changed` 或预览请求失败 ⇒ 作废并重取该组预览。
 - Ruling：波 3 I-1／I-2 ＋ M-1（`agentOverrides` 损坏 ⇒ `recovery-blocked` 而非 400 non-json）＋ M-5（组视图带冻结的 reconcile 选择）合入 T14 修复轮一次做。其余 Minor（M-2 来源不在 hash 内、M-3、M-4 W5-M15 且交集已可得、M-6 新阻塞码 `reconcile-agent-unfrozen` 等）T17 登记 spec §13。
 - Task 14: review → Needs fixes: 1 Important（`slot-task-mismatch` 分支无判据无变异）；预览／确认同函数同操作者 id（复审核）。fix round 1 发出，合入波 3 I-1／I-2／M-1／M-5。
+- Task 14: fix round 1/5 (5 addressed, 0 open — slot schema cases, preview unavailable mode (波3 I-1), stepR via snapshot (波3 I-2), overrides recovery-blocked (M-1), group view reconcile (M-5); commits 7536a0d..2e87cd6)
+- Task 14: complete (Orca commits 7e66947..2e87cd6, review clean after round 1). 实施席 214,754＋283,587 token。
+- Task 14: minor (deferred): 确认时瞬时错误经面板映射为 500 `control-internal-error`（既有兜底，非本轮引入；T17 登记）；两条改写的组视图判据未给 `agents` 字段单独负向断言；`readConfirmedReconcileSlot` 类型层面把不可达的 null 断言为 FrozenSlot。
