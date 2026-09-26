@@ -1,3 +1,5 @@
+import express from "express";
+import { createServer } from "node:http";
 import { describe, expect, it } from "vitest";
 import { resolveGroupSelections } from "../../src/control/agentFreeze.js";
 import { canonicalBytes, sha256Canonical } from "../../src/control/canonicalJson.js";
@@ -11,7 +13,8 @@ import { executionProfileSnapshotSchema, executionSnapshotSchema } from "../../s
 import { WebControlService } from "../../src/control/webService.js";
 import { loadPlan } from "../../src/scheduler/planFile.js";
 import { readControlGroup } from "../../src/panel/controlViews.js";
-import { FIXTURE_AGENT_ID, FIXTURE_OTHER_AGENT_ID, fixtureResolveAgent, seedPreferences } from "./fixtures/agents.js";
+import { registerControlReadRoutes } from "../../src/panel/controlApi.js";
+import { FIXTURE_AGENT_ID, FIXTURE_OTHER_AGENT_ID, PANEL_OPERATOR, fixtureResolveAgent, seedPreferences } from "./fixtures/agents.js";
 import { profileSnapshot, webFixture } from "./fixtures/web.js";
 
 // Agent selection spec §6.4 (confirm freezes; §12 C4 selectionsHash; §12 C3 gates use the frozen selection),
@@ -120,13 +123,15 @@ describe("confirm freezes the selection the operator saw (spec §6.4, §12 C4)",
   it("freezes each task's capabilities as the worker profile's declaration intersected with ccloop's answer for that task", async () => {
     const h = await webFixture(profileSnapshot(), [{ taskId: "a" }, { taskId: "b", agent: { agent: FIXTURE_OTHER_AGENT_ID } }]); try {
       const answer = h.resolveAgent.getMockImplementation()!;
+      // b's answer claims more than the profile declares (a 2M window) and less in one field (soft enforcement).
       h.resolveAgent.mockImplementation(async (partial) => {
         const base = await answer(partial);
-        return partial.agent === FIXTURE_OTHER_AGENT_ID ? { ...base, capabilities: { ...base.capabilities, contextWindowTokens: 200_000 } } : base;
+        return partial.agent === FIXTURE_OTHER_AGENT_ID ? { ...base, capabilities: { ...base.capabilities, contextWindowTokens: 2_000_000, budgetEnforcement: "soft" as const } } : base;
       });
-      const confirmed = await new WebControlService(h.deps).confirm(h.command("confirm", { ...(await h.confirmPayload()), contextPolicy: { handoffAtContextTokens: 100_000 } }));
+      const confirmed = await new WebControlService(h.deps).confirm(h.command("confirm", await h.confirmPayload()));
       if ("error" in confirmed) throw new Error(JSON.stringify(confirmed));
-      expect([work(h, "a").agentCapabilities.contextWindowTokens, work(h, "b").agentCapabilities.contextWindowTokens]).toEqual([1_000_000, 200_000]);
+      expect(work(h, "b").agentCapabilities).toMatchObject({ contextWindowTokens: 1_000_000, budgetEnforcement: "soft" });
+      expect(work(h, "a").agentCapabilities).toEqual(profileSnapshot().profile.capabilities);
     } finally { await h.dispose(); }
   });
 
@@ -193,6 +198,21 @@ describe("after confirmation the frozen selection is the one used (spec §9 crit
     } finally { await h.dispose(); }
   });
 
+  it("shows a run only while it carries its work item's frozen selection byte for byte (spec §3 I1)", async () => {
+    const h = await webFixture(); try {
+      const service = new WebControlService(h.deps);
+      await service.confirm(h.command("confirm", await h.confirmPayload()));
+      const deps = { store: h.store, profileRouter: h.deps.profileRouter, admissionGate: h.deps.admissionGate };
+      await scheduleStart(deps, h.command("start", {}));
+      const delivered = await deliverScheduledStart(deps, "g");
+      if (delivered.kind !== "claimed") throw new Error(JSON.stringify(delivered));
+      expect(readControlGroup(h.store, "epoch-test", "g").runs.map((run) => run.runId)).toEqual([delivered.runId]);
+      const run = JSON.parse(String(h.store.db.prepare("SELECT body FROM runs WHERE id=?").get(delivered.runId)!.body));
+      h.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify({ ...run, killGraceMs: run.killGraceMs + 1 }), delivered.runId);
+      expect(() => readControlGroup(h.store, "epoch-test", "g")).toThrow(`run-work-identity:${delivered.runId}`);
+    } finally { await h.dispose(); }
+  });
+
   it("blocks the whole group's start when any one task's frozen selection probes degraded (W5-M12)", async () => {
     const h = await webFixture(profileSnapshot(), [{ taskId: "a" }, { taskId: "b", agent: { agent: FIXTURE_OTHER_AGENT_ID } }]); try {
       await new WebControlService(h.deps).confirm(h.command("confirm", await h.confirmPayload()));
@@ -205,6 +225,34 @@ describe("after confirmation the frozen selection is the one used (spec §9 crit
       expect(await scheduleStart(deps, h.command("start", {}))).toMatchObject({ error: { code: "control-capability-unsupported" } });
       expect(h.resolveAgent.mock.calls.map(([partial]) => partial.agent)).toContain(FIXTURE_OTHER_AGENT_ID);
     } finally { await h.dispose(); }
+  });
+});
+
+describe("the panel's profile display probes the operator's default (spec §6.4 last paragraph, W5-M14)", () => {
+  /** What GET /api/control/config asked the trusted config to probe. */
+  async function askedByConfigRoute(h: Fixture): Promise<unknown> {
+    const asked: unknown[] = [];
+    const app = express();
+    registerControlReadRoutes(app, { store: h.store, epoch: "epoch-test", config: { readView: async (selection) => { asked.push(selection); throw new Error("probe recorded"); } } });
+    const server = createServer(app); await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    try {
+      const address = server.address(); if (!address || typeof address === "string") throw new Error("address");
+      await fetch(`http://127.0.0.1:${address.port}/api/control/config`);
+    } finally { await new Promise<void>((resolve) => server.close(() => resolve())); }
+    expect(asked).toHaveLength(1);
+    return asked[0];
+  }
+
+  it("asks the panel operator's worker default, and {} when no operator has chosen an agent", async () => {
+    const h = await webFixture(); try {
+      seedPreferences(h.store, PANEL_OPERATOR, { defaultAgent: FIXTURE_OTHER_AGENT_ID, perAgent: { [FIXTURE_OTHER_AGENT_ID]: { model: "panel-model" } } }, 1);
+      expect(await askedByConfigRoute(h)).toEqual({ agent: FIXTURE_OTHER_AGENT_ID, model: "panel-model" });
+      seedPreferences(h.store, PANEL_OPERATOR, { perAgent: {} }, 2);
+      expect(await askedByConfigRoute(h)).toEqual({});
+    } finally { await h.dispose(); }
+    const bare = await webFixture(profileSnapshot(), [{ taskId: "a" }], { preferences: null }); try {
+      expect(await askedByConfigRoute(bare)).toEqual({});
+    } finally { await bare.dispose(); }
   });
 });
 

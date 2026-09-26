@@ -156,6 +156,13 @@ describe("execution snapshot preparation", () => {
     expect(() => buildExecutionSnapshot(candidate)).toThrow("plan-version-conflict");
   });
 
+  // Agent selection spec §6.4 step 4 (plan T11): the frozen selections must be exactly the derived tasks'.
+  it("refuses frozen selections whose task set is not the plan's", () => {
+    expect(() => prepareExecutionSnapshot({ ...input(), agents: { ...input().agents, tasks: [] } })).toThrow("plan-version-conflict");
+    const extra = { ...input().agents.tasks[0]!, taskId: "b" };
+    expect(() => prepareExecutionSnapshot({ ...input(), agents: { ...input().agents, tasks: [...input().agents.tasks, extra] } })).toThrow("plan-version-conflict");
+  });
+
   it("rejects component over-limit and safe-integer sum overflow", () => {
     const over = input();
     const overEstimate = over.allocations.find(allocation => allocation.ownerKind === "estimate")!;
