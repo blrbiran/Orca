@@ -105,6 +105,11 @@ export interface ControlAssemblyInput {
   env: NodeJS.ProcessEnv;
   /** Test-only fault injection for the execution driver (spec §7.2 R1). Never set by the CLI. */
   driverCrash?: (point: CrashPoint) => void;
+  /**
+   * Test-only (agent selection spec §9 criterion 8, plan T16): wraps the chosen port, before any profile or service
+   * is built on it, so a criterion can record which selection each gate asked ccloop about. Never set by the CLI.
+   */
+  wrapPort?: (port: ExecutionPort) => ExecutionPort;
 }
 
 /**
@@ -144,7 +149,8 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
   const { control, repos, env, epoch } = input;
   if (!control.enabled || control.stateDir === null) throw new ControlError("control-trusted-config-invalid", "assembly-called-while-disabled");
 
-  const port = choosePort(control, env);
+  const chosen = choosePort(control, env);
+  const port = input.wrapPort ? input.wrapPort(chosen) : chosen;
   const profiles = loadProfiles(control.profilePaths, port);
   const router = createExecutionProfileRouter(profiles);
 

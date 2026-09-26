@@ -7,7 +7,9 @@ import { dirname, join, resolve } from "node:path";
 import { afterAll, afterEach, beforeAll, expect } from "vitest";
 import { canonicalBytes } from "../../../src/control/canonicalJson.js";
 import { resolveGroupSelections } from "../../../src/control/agentFreeze.js";
+import type { PartialSelection } from "../../../src/control/agentSelection.js";
 import type { CrashPoint } from "../../../src/control/executionDriver.js";
+import type { ExecutionPort } from "../../../src/control/executionPort.js";
 import { readArchivedPlan, readBudgetProposal } from "../../../src/control/queries.js";
 import { assembleControlRuntime, type ControlRuntime } from "../../../src/panel/controlAssembly.js";
 import { controlRepoKey, resolveControlOptions } from "../../../src/panel/controlOptions.js";
@@ -50,12 +52,17 @@ const CCLOOP_CAPABILITIES = {
   handoffExecution: "mechanical-in-run-v1", contextWindowTokens: null, requestBoundProof: null,
 } as const;
 
-export interface Task { taskId: string; dependsOn?: string[]; targetPaths: string[]; requiredChecks?: string[]; verifierType?: "agent" | "command" }
+export interface Task { taskId: string; dependsOn?: string[]; targetPaths: string[]; requiredChecks?: string[]; verifierType?: "agent" | "command"; agent?: PartialSelection }
 /**
  * One fake codex script entry: the files execute writes; ccloop C5 adds how long each phase sleeps first,
  * and ccloop C-3 whether the phase reports its usage before that sleep.
  */
 export interface ScriptEntry { files: Record<string, string>; delayMs?: { plan?: number; execute?: number; verify?: number }; usageBeforeDelay?: boolean }
+/**
+ * Agent selection (plan T16): a world may also carry ccloop's CLI-level fake claude (tests/fixtures/fake-claude-cli.mjs) as a
+ * `claude` installation beside the fake codex, with its own marker and script.
+ */
+export interface WorldOptions { claudeScript?: Record<string, ScriptEntry> }
 
 /** The codex installation's killGraceMs in every world; handoffE2E's G scenario tells it apart from HANDOFF_EXTRA_GRACE_MS alone. */
 export const KILL_GRACE_MS = 5_000;
@@ -69,7 +76,7 @@ export type World = Awaited<ReturnType<ReturnType<typeof ccloopWorlds>["world"]>
 export function ccloopWorlds(options: { rootPrefix: string; epochPrefix: string }) {
   const roots: string[] = [];
 
-  async function world(tasks: Task[], script: Record<string, ScriptEntry>) {
+  async function world(tasks: Task[], script: Record<string, ScriptEntry>, worldOptions: WorldOptions = {}) {
     const root = await realpath(await mkdtemp(join(tmpdir(), options.rootPrefix)));
     roots.push(root);
     const repo = join(root, "target");
@@ -89,6 +96,14 @@ export function ccloopWorlds(options: { rootPrefix: string; epochPrefix: string 
     const agentsTable = { schema: "ccloop-agents-table-v1", installations: {
       codex: { kind: "codex", command: codexCommand, version: versionOf(codexCommand), configDir: null, timeoutMs: 120_000, killGraceMs: KILL_GRACE_MS, sandbox: "workspace-write", budgetMode: "soft" },
     } as Record<string, Record<string, unknown>> };
+    const claudeMarker = join(root, "claude-marker.json");
+    if (worldOptions.claudeScript !== undefined) {
+      const claudeScriptPath = join(root, "claude-script.json");
+      await writeFile(claudeScriptPath, JSON.stringify(worldOptions.claudeScript));
+      const fakeClaude = resolve(dirname(realBinary!), "..", "tests", "fixtures", "fake-claude-cli.mjs");
+      const claudeCommand = [process.execPath, fakeClaude, "script", claudeMarker, claudeScriptPath];
+      agentsTable.installations.claude = { kind: "claude", command: claudeCommand, version: versionOf(claudeCommand), configDir: null, timeoutMs: 120_000, killGraceMs: KILL_GRACE_MS };
+    }
     await writeFile(table, JSON.stringify(agentsTable), { mode: 0o600 });
     const contracts = join(root, "contracts");
     await mkdir(contracts);
@@ -109,7 +124,7 @@ export function ccloopWorlds(options: { rootPrefix: string; epochPrefix: string 
       };
       const path = join(contracts, `${task.taskId}.json`);
       await writeFile(path, canonicalBytes(contract));
-      planTasks.push({ taskId: task.taskId, contract: path, dependsOn: task.dependsOn ?? [], targetVersion: 1 });
+      planTasks.push({ taskId: task.taskId, contract: path, dependsOn: task.dependsOn ?? [], targetVersion: 1, ...(task.agent === undefined ? {} : { agent: task.agent }) });
     }
     const planPath = join(repo, "plan.json");
     await writeFile(planPath, JSON.stringify({ targetRepo: repo, ccloopBin: realBinary, runsDir: join(root, "unused-runs"), workBranch: "orca/unused", policy: "local-merge", ledgerMode: "out-of-repo", goal: "ship", successConditions: ["the files hold the scripted text"], tasks: planTasks }));
@@ -126,8 +141,8 @@ export function ccloopWorlds(options: { rootPrefix: string; epochPrefix: string 
     // Every runtime this world booted and has not closed; `teardown` shuts each down and closes it, so a
     // failing scenario leaves no pump or driver running into the next one.
     const live = new Set<ControlRuntime>();
-    const boot = async (driverCrash?: (point: CrashPoint) => void): Promise<ControlRuntime> => {
-      const runtime = await assembleControlRuntime({ control, repos, epoch: `${options.epochPrefix}${++epoch}`, env, driverCrash });
+    const boot = async (driverCrash?: (point: CrashPoint) => void, wrapPort?: (port: ExecutionPort) => ExecutionPort): Promise<ControlRuntime> => {
+      const runtime = await assembleControlRuntime({ control, repos, epoch: `${options.epochPrefix}${++epoch}`, env, driverCrash, wrapPort });
       if (runtime === null) throw new Error("the control plane did not assemble");
       live.add(runtime);
       await runtime.recover();
@@ -146,13 +161,18 @@ export function ccloopWorlds(options: { rootPrefix: string; epochPrefix: string 
     const calls = (): string[] => lines(`${marker}.calls`);
     /** One `<phase> <script key>` line per provider call (ccloop C5): which entry answered it. */
     const scripted = (): string[] => lines(`${marker}.tasks`);
+    // Agent selection (plan T16): the same logs per CLI. `.argv` is one JSON array per invocation (ccloop T3); neither
+    // fake writes it for a `--version` probe, so nothing is filtered here.
+    const markerOf = (kind: "claude" | "codex"): string => (kind === "claude" ? claudeMarker : marker);
+    const argv = (kind: "claude" | "codex"): string[][] => lines(`${markerOf(kind)}.argv`).map((line) => JSON.parse(line) as string[]);
+    const scriptedOf = (kind: "claude" | "codex"): string[] => lines(`${markerOf(kind)}.tasks`);
     const human = () => ({ symbolic: g(repo, "symbolic-ref", "HEAD"), head: g(repo, "rev-parse", "HEAD"), index: sha256(join(repo, ".git", "index")), file: readFileSync(join(repo, "shared.txt"), "utf8"), status: g(repo, "status", "--porcelain") });
     const worktrees = (): string[] => g(repo, "worktree", "list", "--porcelain").split("\n").filter((line) => line.startsWith("worktree "));
     /** Commits orca/g gained over main along its first parent: one per landing. */
     const landings = (): number => Number(g(repo, "rev-list", "--first-parent", "--count", "main..refs/heads/orca/g"));
     const show = (path: string): string => g(repo, "show", `refs/heads/orca/g:${path}`);
     const tip = (): string => g(repo, "rev-parse", "refs/heads/orca/g");
-    return { root, repo, repoId, table, agentsTable, boot, die, teardown, calls, scripted, human, worktrees, landings, show, tip };
+    return { root, repo, repoId, table, agentsTable, boot, die, teardown, calls, scripted, argv, scriptedOf, human, worktrees, landings, show, tip };
   }
 
   const removeRoots = async (): Promise<void> => {
