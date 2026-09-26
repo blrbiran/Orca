@@ -28,6 +28,9 @@ export const groupSchema = z.object({groupId:idSchema,projectKey:z.string().trim
 export const contextWindowSchema = z.union([z.literal("agent-default"),z.number().int().positive().max(Number.MAX_SAFE_INTEGER)]);
 export const agentSelectionSchema = z.object({agent:idSchema,model:z.string().min(1).max(200),contextWindow:contextWindowSchema}).strict();
 export const partialSelectionSchema = z.object({agent:idSchema.optional(),model:z.string().min(1).max(200).optional(),contextWindow:contextWindowSchema.optional()}).strict();
+// Ruling review R7 (human ruling 2026-09-27): a panel layer's field is absent (inherit), a value (override), or null
+// (as if the plan had not written that field at this level; see agentSelection.ts levelLayers).
+export const panelPartialSelectionSchema = z.object({agent:idSchema.nullable().optional(),model:z.string().min(1).max(200).nullable().optional(),contextWindow:contextWindowSchema.nullable().optional()}).strict();
 export const workSchema = z.object({workItemId:idSchema,taskId:idSchema.nullable(),kind:z.enum(["task","decompose","reconcile","handoff","goal-review","memory"]),dependsOn:z.array(idSchema),contract:z.unknown(),configHash:z.string().min(1),agent:agentSelectionSchema,grant:grantSchema,parentRunId:idSchema.optional()}).strict().superRefine((value,ctx)=>{
   if ((value.kind === "handoff") !== (value.parentRunId !== undefined)) ctx.addIssue({code:"custom",message:"handoff-parent-required"});
 });

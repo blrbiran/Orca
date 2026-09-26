@@ -1,8 +1,8 @@
 import { z } from "zod";
-import { agentSelectionSchema, amountSchema, canonicalTimestampSchema, commandEnvelopeSchema, contextWindowSchema, idSchema, partialSelectionSchema, safeInteger } from "./schema.js";
+import { agentSelectionSchema, amountSchema, canonicalTimestampSchema, commandEnvelopeSchema, contextWindowSchema, idSchema, panelPartialSelectionSchema, partialSelectionSchema, safeInteger } from "./schema.js";
 // Agent selection spec §12 I10 (plan-review P18): the selection/context/partial schemas are T7's, defined once
 // in schema.ts; webProtocol.ts re-exports them so every downstream import can come from one wire module.
-export { agentSelectionSchema, contextWindowSchema, partialSelectionSchema } from "./schema.js";
+export { agentSelectionSchema, contextWindowSchema, panelPartialSelectionSchema, partialSelectionSchema } from "./schema.js";
 
 const nonemptyString = z.string().min(1);
 const hashSchema = z.string().regex(/^[a-f0-9]{64}$/);
@@ -60,7 +60,7 @@ export const operatorPreferencesSchema = z
   .strict();
 // Agent selection spec §6.2 (W6-20): a group's own selection layers, one per slot; a panel write replaces a whole layer.
 export const groupAgentOverridesSchema = z
-  .object({ worker: partialSelectionSchema.optional(), estimator: partialSelectionSchema.optional(), reconcile: partialSelectionSchema.optional() })
+  .object({ worker: panelPartialSelectionSchema.optional(), estimator: panelPartialSelectionSchema.optional(), reconcile: panelPartialSelectionSchema.optional() })
   .strict();
 const sortedDimensionsSchema = z
   .array(amountDimensionSchema)
@@ -106,6 +106,8 @@ export const capabilityViewSchema = z
 // Agent selection spec §6.3: where each resolved field came from (agentSelection.ts's ProvenanceSource).
 export const provenanceSourceSchema = z.enum([
   "operator", "operator-estimator", "operator-reconcile", "group", "group-estimator", "group-reconcile", "task", "operator-agent", "descriptor",
+  // Ruling review R7: the plan file's half of each level, below the panel's (which keeps the older names).
+  "group-plan", "group-reconcile-plan", "task-plan",
 ]);
 export const selectionProvenanceSchema = z
   .object({ agent: provenanceSourceSchema, model: provenanceSourceSchema, contextWindow: provenanceSourceSchema })
@@ -653,7 +655,8 @@ export const proposalSetAgentPayloadSchema = z
       z.object({ kind: z.literal("group"), slot: z.enum(["worker", "estimator", "reconcile"]) }).strict(),
       z.object({ kind: z.literal("task"), taskId: idSchema }).strict(),
     ]),
-    partial: partialSelectionSchema.nullable(),
+    // Ruling review R7: the panel's own layer, whose null fields mask the plan's; null clears the panel layer.
+    partial: panelPartialSelectionSchema.nullable(),
   })
   .strict();
 
@@ -1347,7 +1350,12 @@ export const agentSelectionPreviewSchema = z
     groupId: idSchema,
     proposalVersion: positiveSafeInteger,
     groupOverrides: groupAgentOverridesSchema,
-    taskOverrides: z.record(idSchema, partialSelectionSchema.nullable()),
+    taskOverrides: z.record(idSchema, panelPartialSelectionSchema.nullable()),
+    // Ruling review R7: the plan file's layers, shown under the panel's (the plan's half of each level).
+    planLayers: z.object({
+      group: z.object({ worker: partialSelectionSchema.optional(), reconcile: partialSelectionSchema.optional() }).strict(),
+      tasks: z.record(idSchema, partialSelectionSchema.nullable()),
+    }).strict(),
     slots: z.array(
       z.object({ key: nonemptyString, slot: z.enum(["worker", "reconcile"]), taskId: idSchema.nullable(), outcome: slotOutcomeSchema }).strict(),
     ),

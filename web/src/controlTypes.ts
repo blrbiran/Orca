@@ -233,13 +233,18 @@ export type RecoveryRetryPayloadV1 = { scope: "run"; runId: string } | { scope: 
 /** Agent selection spec §3: model and context window are opaque here; ccloop's descriptor judges them. */
 export type ContextWindowV1 = "agent-default" | number;
 /** Spec §6.3: where a resolved selection field came from. */
-export type ProvenanceSourceV1 = "operator" | "operator-estimator" | "operator-reconcile" | "group" | "group-estimator" | "group-reconcile" | "task" | "operator-agent" | "descriptor";
+export type ProvenanceSourceV1 =
+  | "operator" | "operator-estimator" | "operator-reconcile" | "group" | "group-estimator" | "group-reconcile" | "task" | "operator-agent" | "descriptor"
+  // Ruling review R7: the plan file's half of each level, below the panel's.
+  | "group-plan" | "group-reconcile-plan" | "task-plan";
 export type PartialSelectionV1 = { agent?: string; model?: string; contextWindow?: ContextWindowV1 };
-/** Spec §6.2 (W6-20): replace one selection layer of the proposal, or clear it with null. */
+/** Ruling review R7: a panel layer; a null field masks the plan's value for that field at the same level. */
+export type PanelPartialSelectionV1 = { agent?: string | null; model?: string | null; contextWindow?: ContextWindowV1 | null };
+/** Spec §6.2 (W6-20, R7): replace the panel's own layer of one level, or clear it with null. */
 export type ProposalSetAgentPayloadV1 = {
   baseProposalVersion: number;
   scope: { kind: "group"; slot: "worker" | "estimator" | "reconcile" } | { kind: "task"; taskId: string };
-  partial: PartialSelectionV1 | null;
+  partial: PanelPartialSelectionV1 | null;
 };
 
 export type CommandSuccessV1 = {
@@ -276,7 +281,7 @@ export type RepositoryWorkspaceV1 = { schema: "orca-repository-workspace-v1"; re
 export type AgentSelectionV1 = { agent: string; model: string; contextWindow: ContextWindowV1 };
 export type SelectionProvenanceV1 = { agent: ProvenanceSourceV1; model: ProvenanceSourceV1; contextWindow: ProvenanceSourceV1 };
 export type AgentSlotV1 = "worker" | "estimator" | "reconcile";
-export type GroupAgentOverridesV1 = { worker?: PartialSelectionV1; estimator?: PartialSelectionV1; reconcile?: PartialSelectionV1 };
+export type GroupAgentOverridesV1 = { worker?: PanelPartialSelectionV1; estimator?: PanelPartialSelectionV1; reconcile?: PanelPartialSelectionV1 };
 export type OperatorPreferencesV1 = {
   defaultAgent?: string;
   perAgent: Record<string, { model?: string; contextWindow?: ContextWindowV1 }>;
@@ -297,7 +302,9 @@ export type AgentSelectionPreviewV1 = {
   groupId: string;
   proposalVersion: number;
   groupOverrides: GroupAgentOverridesV1;
-  taskOverrides: Record<string, PartialSelectionV1 | null>;
+  taskOverrides: Record<string, PanelPartialSelectionV1 | null>;
+  /** Ruling review R7: the plan file's own layers, below the panel's. */
+  planLayers: { group: { worker?: PartialSelectionV1; reconcile?: PartialSelectionV1 }; tasks: Record<string, PartialSelectionV1 | null> };
   slots: Array<{ key: string; slot: "worker" | "reconcile"; taskId: string | null; outcome: SlotOutcomeV1 }>;
   selectionsHash: string | null;
 };

@@ -92,6 +92,20 @@ function browserSession(): Storage | undefined {
 
 /** The control summary is polled this fast (spec §9.2); the panel itself never pushes. */
 const CONTROL_POLL_MS = 2_000;
+/**
+ * Ruling review R17 (human ruling 2026-09-27, "节奏改为 10、20、40、80、160"): a read of the agent preview or of the
+ * installation table that failed, or a preview in which ccloop could not answer a slot for now, is read again after
+ * these delays -- at most this many times, never while the page is hidden -- and then waits for the operator.
+ */
+export const AGENT_RETRY_DELAYS_MS = [10_000, 20_000, 40_000, 80_000, 160_000] as const;
+type RetryState = { state: "waiting"; attempt: number; delayMs: number } | { state: "stopped" } | { state: "paused" } | null;
+const retryNotice = (retry: RetryState): string | null => {
+  if (retry === null) return null;
+  if (retry.state === "waiting") return `Reading again in ${retry.delayMs / 1000} s (retry ${retry.attempt}/${AGENT_RETRY_DELAYS_MS.length}).`;
+  if (retry.state === "paused") return "Retrying is paused while the page is hidden; it resumes when you come back.";
+  return `Stopped after ${AGENT_RETRY_DELAYS_MS.length} retries; Re-read asks again.`;
+};
+const pageHidden = (): boolean => typeof document !== "undefined" && document.visibilityState === "hidden";
 
 interface HomeState {
   todo: DecisionListRow[];
@@ -138,10 +152,17 @@ export function App(): JSX.Element {
   /** T15 fix round 1: only the answer to the latest preview request may land; an older one arriving late is dropped. */
   const previewSeq = useRef(0);
   /**
-   * T15 fix round 1: a failed preview read is retried automatically once; after that the operator's Re-read
-   * is the way on. Every read spawns ccloop, so nothing here polls it. Cleared by a read that concludes.
+   * Ruling review R17: retries spent in the current round and the pending timer. One failure code is one report on
+   * the page without any bookkeeping here: the control state keeps one refusal per group (battery R17-M8 measured it).
    */
-  const previewRetried = useRef(false);
+  const previewRetries = useRef(0);
+  const previewTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const agentsRetries = useRef(0);
+  const agentsTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const [previewRetry, setPreviewRetry] = useState<RetryState>(null);
+  const [agentsRetry, setAgentsRetry] = useState<RetryState>(null);
+  /** Bumped when the page comes back into view (R17 a): the table, the preferences and the open preview are read again. */
+  const [returnNonce, setReturnNonce] = useState(0);
   // The ids still waiting on a lookup are restored in the initializer, not in an
   // effect: the effect that mirrors the reducer's list back into sessionStorage runs
   // on the very same mount commit, and would clear the key before anything read it.
@@ -251,22 +272,67 @@ export function App(): JSX.Element {
   };
 
   /**
-   * Read the installation table and this operator's defaults. Wave 4 review I-1: a read that failed is
-   * retried once automatically (when `retryOnce`), and after that by the operator's Re-read.
+   * Read the installation table and this operator's defaults. Wave 4 review I-1, ruling review R17: a read that
+   * failed is retried on AGENT_RETRY_DELAYS_MS while the page is visible (when `retry`), then by the operator.
    */
-  const loadAgents = async (retryOnce: boolean): Promise<void> => {
+  const loadAgents = async (retry: boolean): Promise<void> => {
     try {
       const table = await fetchAgentsView();
       const preferences = await fetchAgentPreferences();
       setAgents(table);
       setAgentPreferences(preferences);
+      agentsRetries.current = 0;
+      setAgentsRetry(null);
     } catch (err) {
       const refusal = controlFailureFrom(err);
-      setAgentsFailure(refusal.code);
       dispatchControl({ type: "refusal", groupId: null, value: refusal });
+      setAgentsFailure(refusal.code);
       // An unconfigured port stays so until the panel restarts: nothing to retry.
-      if (retryOnce && controlConfig?.executionPort === "configured") setTimeout(() => void loadAgents(false), CONTROL_POLL_MS);
+      if (!retry || controlConfig?.executionPort !== "configured") return;
+      clearTimeout(agentsTimer.current);
+      if (pageHidden()) { setAgentsRetry({ state: "paused" }); return; }
+      const attempt = agentsRetries.current;
+      if (attempt >= AGENT_RETRY_DELAYS_MS.length) { setAgentsRetry({ state: "stopped" }); return; }
+      agentsRetries.current = attempt + 1;
+      const delayMs = AGENT_RETRY_DELAYS_MS[attempt]!;
+      setAgentsRetry({ state: "waiting", attempt: attempt + 1, delayMs });
+      agentsTimer.current = setTimeout(() => {
+        if (pageHidden()) { setAgentsRetry({ state: "paused" }); return; }
+        void loadAgents(true);
+      }, delayMs);
     }
+  };
+
+  /**
+   * Ruling review R17 (d): the open preview is read again after the next backoff delay -- without dropping the one
+   * on screen, which cannot be confirmed anyway (its hash is null) and shows which slot is waiting.
+   */
+  const schedulePreviewRetry = (): void => {
+    clearTimeout(previewTimer.current);
+    if (pageHidden()) { setPreviewRetry({ state: "paused" }); return; }
+    const attempt = previewRetries.current;
+    if (attempt >= AGENT_RETRY_DELAYS_MS.length) { setPreviewRetry({ state: "stopped" }); return; }
+    previewRetries.current = attempt + 1;
+    const delayMs = AGENT_RETRY_DELAYS_MS[attempt]!;
+    setPreviewRetry({ state: "waiting", attempt: attempt + 1, delayMs });
+    previewTimer.current = setTimeout(() => {
+      if (pageHidden()) { setPreviewRetry({ state: "paused" }); return; }
+      setPreviewNonce((value) => value + 1);
+    }, delayMs);
+  };
+  /** A new round: no retry pending, none spent. */
+  const resetPreviewRetries = (): void => {
+    clearTimeout(previewTimer.current);
+    previewRetries.current = 0;
+    setPreviewRetry(null);
+  };
+  /** The operator's Re-read (R17 c): a fresh round of retries, the table and preferences again if they are missing. */
+  const manualReread = (groupId: string): void => {
+    resetPreviewRetries();
+    clearTimeout(agentsTimer.current);
+    agentsRetries.current = 0;
+    setAgentsRetry(null);
+    rereadPreview(groupId, 0);
   };
 
   /** Drop a group's preview, so no confirm can carry it, and read it again after `delayMs`. */
@@ -334,12 +400,36 @@ export function App(): JSX.Element {
     void loadAgents(true);
   }, [controlConfig]);
 
+  // Ruling review R17 (a): the operator usually fixes an installation outside this page (a terminal), so coming back
+  // to the page -- focus, or the tab becoming visible -- reads the table, the preferences and the open preview again.
+  useEffect(() => {
+    const back = (): void => { if (!pageHidden()) setReturnNonce((value) => value + 1); };
+    window.addEventListener("focus", back);
+    document.addEventListener("visibilitychange", back);
+    return () => { window.removeEventListener("focus", back); document.removeEventListener("visibilitychange", back); };
+  }, []);
+  useEffect(() => {
+    if (returnNonce === 0 || controlConfig === null || controlConfig.executionPort !== "configured") return;
+    clearTimeout(agentsTimer.current);
+    agentsRetries.current = 0;
+    setAgentsRetry(null);
+    void loadAgents(true);
+    resetPreviewRetries();
+    setPreviewNonce((value) => value + 1);
+  }, [returnNonce]);
+
   // The preview is re-read whenever what it depends on moved: the open group, its proposal version, the
   // preferences -- or the page decided the one it holds is void (previewNonce).
   const openGroup = selectedGroup === null ? undefined : control.canonical[selectedGroup];
-  const previewKey = openGroup === undefined || openGroup.proposal.state !== "editable"
+  // Ruling review R17 (b): the installation table's content is part of the key, so a table that changed (a new
+  // version recorded after an upgrade) re-reads the preview by itself; the same table read again does not.
+  const agentsKey = agents === null ? null : JSON.stringify(agents.installations);
+  const baseKey = openGroup === undefined || openGroup.proposal.state !== "editable"
     ? null
-    : `${openGroup.summary.groupId}\0${openGroup.proposal.proposalVersion}\0${agentPreferences?.revision ?? -1}\0${previewNonce}`;
+    : `${openGroup.summary.groupId}\0${openGroup.proposal.proposalVersion}\0${agentPreferences?.revision ?? -1}\0${agentsKey}`;
+  const previewKey = baseKey === null ? null : `${baseKey}\0${previewNonce}`;
+  // Another group, proposal version, preferences or table is a new round of retries (R17).
+  useEffect(() => { resetPreviewRetries(); }, [baseKey]);
   useEffect(() => {
     if (previewKey === null || openGroup === undefined || agents === null) return;
     const groupId = openGroup.summary.groupId;
@@ -347,19 +437,18 @@ export function App(): JSX.Element {
     void fetchAgentPreview(groupId).then(
       (value) => {
         if (seq !== previewSeq.current) return;
-        previewRetried.current = false;
-        // An unavailable slot (spec §6.8, wave 3 I-1) is shown red with its code; the Re-read control asks again.
+        // An unavailable slot (spec §6.8, wave 3 I-1) is shown red with its code; R17 reads it again on the backoff.
         setPreviews((prior) => ({ ...prior, [groupId]: value }));
+        if (value.slots.some((slot) => slot.outcome.kind === "unavailable")) schedulePreviewRetry();
+        else resetPreviewRetries();
       },
       (err) => {
         if (seq !== previewSeq.current) return;
         dispatchControl({ type: "refusal", groupId, value: controlFailureFrom(err) });
-        if (previewRetried.current) return;
-        previewRetried.current = true;
-        rereadPreview(groupId, CONTROL_POLL_MS);
+        schedulePreviewRetry();
       },
     );
-  }, [previewKey, agents]);
+  }, [previewKey]);
 
   // Opening a group, a voided cache and a projection gap all mean: re-read it canonically.
   useEffect(() => {
@@ -474,7 +563,8 @@ export function App(): JSX.Element {
           preferences={agentPreferences}
           previews={previews}
           onAgentPreferences={(preferences, revision) => { void sendAgentPreferences(preferences, revision); }}
-          onRereadPreview={(groupId) => rereadPreview(groupId, 0)}
+          onRereadPreview={manualReread}
+            retryNotice={retryNotice(agents === null ? agentsRetry : previewRetry)}
           agentsFailure={agentsFailure}
         />
       )}

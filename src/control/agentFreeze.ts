@@ -1,11 +1,11 @@
 import { readAgentPreferences } from "./agentPreferences.js";
-import { descriptorProvenance, resolveSelection, selectionsHash, slotLayers, type AgentResolution, type FrozenSlot, type GroupAgentOverrides, type PartialSelection, type ProvenanceSource } from "./agentSelection.js";
+import { descriptorProvenance, resolveSelection, selectionsHash, slotLayers, type AgentResolution, type FrozenSlot, type GroupAgentOverrides, type PanelPartialSelection, type PartialSelection, type ProvenanceSource } from "./agentSelection.js";
 import { canonicalBytes } from "./canonicalJson.js";
 import { ControlError, nonDurableControlErrorClassifications } from "./errors.js";
 import type { ExecutionPort } from "./executionPort.js";
 import { readArchivedPlan, readBudgetProposal } from "./queries.js";
 import type { ControlStore } from "./store.js";
-import { frozenTaskAgentSchema, groupAgentOverridesSchema, partialSelectionSchema } from "./webProtocol.js";
+import { frozenTaskAgentSchema, groupAgentOverridesSchema, panelPartialSelectionSchema } from "./webProtocol.js";
 
 /**
  * Agent selection spec §6.4 (W6-1/W6-2): the slots a confirmation freezes -- one worker slot per task, keyed
@@ -28,7 +28,9 @@ export interface SlotResolution {
 export interface GroupSelectionResolution {
   proposalVersion: number;
   groupOverrides: GroupAgentOverrides;
-  taskOverrides: Record<string, PartialSelection | null>;
+  taskOverrides: Record<string, PanelPartialSelection | null>;
+  /** Ruling review R7: the archived plan's own layers, below the panel's. */
+  planLayers: { group: { worker?: PartialSelection; reconcile?: PartialSelection }; tasks: Record<string, PartialSelection | null> };
   /** Sorted by key. */
   slots: SlotResolution[];
   /** Null iff any slot was not resolved. */
@@ -55,7 +57,8 @@ export function readGroupAgentOverrides(group: unknown): GroupAgentOverrides {
  * preferences of the operator who confirms). confirm runs it again inside its transaction to prove nothing moved.
  */
 export function groupSelectionPartials(store: ControlStore, groupId: string, operatorId: string): {
-  proposalVersion: number; groupOverrides: GroupAgentOverrides; taskOverrides: Record<string, PartialSelection | null>; slots: SlotPartial[];
+  proposalVersion: number; groupOverrides: GroupAgentOverrides; taskOverrides: Record<string, PanelPartialSelection | null>;
+  planLayers: GroupSelectionResolution["planLayers"]; slots: SlotPartial[];
 } {
   const prefs = readAgentPreferences(store, operatorId).preferences;
   const row = store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId);
@@ -70,22 +73,28 @@ export function groupSelectionPartials(store: ControlStore, groupId: string, ope
       throw error;
     }
   };
-  const taskOverrides: Record<string, PartialSelection | null> = {};
+  const taskOverrides: Record<string, PanelPartialSelection | null> = {};
+  // Ruling review R7: the plan's layers are read from the archived plan every time, never copied into the group.
+  const planGroup = { ...(plan.agent ? { worker: plan.agent } : {}), ...(plan.reconcileAgent ? { reconcile: plan.reconcileAgent } : {}) };
+  const planTasks: Record<string, PartialSelection | null> = {};
   const slots: SlotPartial[] = [];
   for (const task of plan.tasks) {
     const workRow = store.db.prepare("SELECT body FROM work_items WHERE group_id=? AND id=?").get(groupId, task.taskId);
     if (!workRow) invalid(`work-item-missing:${task.taskId}`);
     const stored = (JSON.parse(String(workRow.body)) as { agentOverride?: unknown }).agentOverride ?? null;
-    const override = stored === null ? null : partialSelectionSchema.safeParse(stored);
+    const override = stored === null ? null : panelPartialSelectionSchema.safeParse(stored);
     if (override !== null && !override.success) invalid(`agent-override-invalid:${task.taskId}`);
-    const partial = override === null ? null : override.data as PartialSelection;
+    const partial = override === null ? null : override.data as PanelPartialSelection;
     taskOverrides[task.taskId] = partial;
+    planTasks[task.taskId] = task.agent ?? null;
+    const plan = { group: planGroup.worker, task: task.agent };
     slots.push({ key: taskSlotKey(task.taskId), slot: "worker", taskId: task.taskId,
-      ...attempt(() => resolveSelection(slotLayers("worker", prefs, groupOverrides, partial ?? undefined), prefs.perAgent)) });
+      ...attempt(() => resolveSelection(slotLayers("worker", prefs, groupOverrides, partial ?? undefined, plan), prefs.perAgent)) });
   }
-  slots.push({ key: RECONCILE_SLOT_KEY, slot: "reconcile", taskId: null, ...attempt(() => resolveSelection(slotLayers("reconcile", prefs, groupOverrides), prefs.perAgent)) });
+  slots.push({ key: RECONCILE_SLOT_KEY, slot: "reconcile", taskId: null,
+    ...attempt(() => resolveSelection(slotLayers("reconcile", prefs, groupOverrides, undefined, { group: planGroup.worker, reconcile: planGroup.reconcile }), prefs.perAgent)) });
   slots.sort((left, right) => (left.key < right.key ? -1 : left.key > right.key ? 1 : 0));
-  return { proposalVersion, groupOverrides, taskOverrides, slots };
+  return { proposalVersion, groupOverrides, taskOverrides, planLayers: { group: planGroup, tasks: planTasks }, slots };
 }
 
 /**
@@ -129,7 +138,7 @@ export async function resolveGroupSelections(
   const frozen: Record<string, FrozenSlot> = {};
   for (const slot of slots) if (slot.outcome.kind === "resolved") frozen[slot.key] = slot.outcome.frozen;
   return {
-    proposalVersion: base.proposalVersion, groupOverrides: base.groupOverrides, taskOverrides: base.taskOverrides, slots,
+    proposalVersion: base.proposalVersion, groupOverrides: base.groupOverrides, taskOverrides: base.taskOverrides, planLayers: base.planLayers, slots,
     selectionsHash: Object.keys(frozen).length === slots.length ? selectionsHash(frozen) : null,
   };
 }

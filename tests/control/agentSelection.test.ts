@@ -46,14 +46,17 @@ describe("resolveSelection follows the spec §6.3 formal definition", () => {
   it("(c) each slot has the spec's layer order, lowest priority first", () => {
     const operator = prefs({ defaultAgent: "claude", estimator: { model: "e" }, reconcile: { model: "r" } });
     const group = { worker: { model: "w" }, estimator: { model: "ge" }, reconcile: { model: "gr" } };
+    // Rewritten for ruling review R7 (human ruling 2026-09-27): each group or task level is the plan's layer under the
+    // panel's; with no plan layers given they are empty, and the order is otherwise the spec's.
     expect(slotLayers("worker", operator, group, { model: "t" })).toEqual([
-      layer("operator", { agent: "claude" }), layer("group", { model: "w" }), layer("task", { model: "t" }),
+      layer("operator", { agent: "claude" }), layer("group-plan", {}), layer("group", { model: "w" }), layer("task-plan", {}), layer("task", { model: "t" }),
     ]);
     expect(slotLayers("estimator", operator, group)).toEqual([
       layer("operator", { agent: "claude" }), layer("operator-estimator", { model: "e" }), layer("group-estimator", { model: "ge" }),
     ]);
     expect(slotLayers("reconcile", operator, group)).toEqual([
-      layer("operator", { agent: "claude" }), layer("operator-reconcile", { model: "r" }), layer("group", { model: "w" }), layer("group-reconcile", { model: "gr" }),
+      layer("operator", { agent: "claude" }), layer("operator-reconcile", { model: "r" }), layer("group-plan", {}), layer("group", { model: "w" }),
+      layer("group-reconcile-plan", {}), layer("group-reconcile", { model: "gr" }),
     ]);
     // An operator with no default agent contributes an empty layer, not an `agent: undefined` key.
     expect(slotLayers("worker", prefs(), {})[0]).toEqual(layer("operator", {}));

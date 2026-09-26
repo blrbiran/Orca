@@ -131,14 +131,6 @@ export function normalizeControlPlan(source: AllowlistedPlanSource): ControlPlan
   return parsed.data;
 }
 
-/** The plan's group layers, as the group's initial agentOverrides (W6-20: one layer, no plan/panel split). */
-export function planGroupLayer(plan: ControlPlanV1): GroupAgentOverrides {
-  return {
-    ...(plan.agent ? { worker: plan.agent } : {}),
-    ...(plan.reconcileAgent ? { reconcile: plan.reconcileAgent } : {}),
-  };
-}
-
 /** Spec §6.4 / §7: an estimator selection that failed is a blocked estimate named after the failure. */
 const ESTIMATOR_REJECTED_PREFIX = "agent-selection-rejected:estimator:";
 export function rejectedEstimatorRequest(code: KnownControlErrorCode): FrozenEstimateRequest {
@@ -288,8 +280,9 @@ export function importControlPlan(deps: ImportDeps, command: ImportCommand): Imp
         proposal: { state: "editable", proposalVersion: 1, planHash, budgetMode: null, contextPolicy: { handoffAtContextTokens: null }, profiles: null, executionSnapshotHash: null },
         ledger: { groupLimit, used: zero(), committedRemaining, explicitUnallocatedReserve, budgetDeficit: zero(), usageUnknown: false },
         importDefaults: { estimatorProfileId: payload.estimatorProfileId, estimatorProfileHash: payload.estimatorProfileHash, estimateMode: payload.estimateMode },
-        // Agent selection spec §6.2/§6.4: the plan's layers become the group's; the slot is what this import froze.
-        agentOverrides: planGroupLayer(plan), estimatorSlot, reconcileSlot: null,
+        // Ruling review R7: the panel's layers start empty -- the plan's own layers are read from the archived plan
+        // (agentFreeze.ts groupSelectionPartials), below the panel's. The estimator slot is what this import froze.
+        agentOverrides: {}, estimatorSlot, reconcileSlot: null,
       };
       deps.store.db.prepare("INSERT INTO groups(id,revision,graph_version,projection_seq,body) VALUES (?,?,?,0,?)")
         .run(payload.groupId, 0, 1, JSON.stringify(group));
@@ -303,7 +296,8 @@ export function importControlPlan(deps: ImportDeps, command: ImportCommand): Imp
           configHash: null,
           grant: { work: cloneAmount(TASK_WORK), handoff: cloneAmount(TASK_HANDOFF) }, targetVersion: task.targetVersion,
           status: "draft", originalContractHash: task.originalContractHash, derivedContractHash: null,
-          agentOverride: task.agent ?? null,
+          // Ruling review R7: the task's panel layer; the plan's `agent` for this task stays in the archived plan.
+          agentOverride: null,
         };
         deps.store.db.prepare("INSERT INTO work_items(group_id,id,target_version,body) VALUES (?,?,?,?)")
           .run(payload.groupId, task.taskId, task.targetVersion, JSON.stringify(work));

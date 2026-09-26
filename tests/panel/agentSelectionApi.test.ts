@@ -212,6 +212,8 @@ describe("agent selection over a real panel (agent selection spec §6.8)", () =>
   it("the preview schema refuses a selectionsHash beside a rejected slot, and a slot key that does not name its task", () => {
     const rejected = {
       schema: "orca-agent-selection-preview-v1", groupId: "g", proposalVersion: 1, groupOverrides: {}, taskOverrides: { a: null },
+      // Ruling review R7: the document now carries the plan's layers; the assertions below are unchanged.
+      planLayers: { group: {}, tasks: { a: null } },
       slots: [{ key: "task:a", slot: "worker", taskId: "a", outcome: { kind: "rejected", code: "agent-unselected" } }], selectionsHash: null,
     };
     // The unmutated document passes, so each refusal below is the property's own.
@@ -223,7 +225,8 @@ describe("agent selection over a real panel (agent selection spec §6.8)", () =>
   // Plan T14 fix round 1 (T14 review): each of the schema's remaining properties refused on its own.
   it("the preview schema refuses a worker slot with no task, and slots that are not sorted and unique by key", () => {
     const slot = (taskId: string) => ({ key: `task:${taskId}`, slot: "worker", taskId, outcome: { kind: "rejected", code: "agent-unselected" } });
-    const base = { schema: "orca-agent-selection-preview-v1", groupId: "g", proposalVersion: 1, groupOverrides: {}, taskOverrides: {}, selectionsHash: null };
+    // Ruling review R7: the document now carries the plan's layers; the assertions below are unchanged.
+    const base = { schema: "orca-agent-selection-preview-v1", groupId: "g", proposalVersion: 1, groupOverrides: {}, taskOverrides: {}, planLayers: { group: {}, tasks: {} }, selectionsHash: null };
     expect(agentSelectionPreviewSchema.safeParse({ ...base, slots: [slot("a"), slot("b")] }).success).toBe(true);
     // key "reconcile" agrees with taskId null, so only the slot kind is wrong.
     expect(agentSelectionPreviewSchema.safeParse({ ...base, slots: [{ ...slot("a"), key: "reconcile", taskId: null }] }).success).toBe(false);

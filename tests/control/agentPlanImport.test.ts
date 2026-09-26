@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { groupSelectionPartials } from "../../src/control/agentFreeze.js";
 import { canonicalBytes, sha256Canonical } from "../../src/control/canonicalJson.js";
 import { ControlError } from "../../src/control/errors.js";
 import type { ExecutionPort } from "../../src/control/executionPort.js";
@@ -69,10 +70,16 @@ describe("import freezes the estimator slot from the operator's layers (spec §6
       const expected = { ...answered(partial), partial, provenance: { agent: "operator", model: "operator-agent", contextWindow: "operator-estimator" } };
       expect(group(h).estimatorSlot).toEqual(expected);
       expect(readEstimateRecord(h.store, "g", h.estimateId)).toMatchObject({ state: "queued", estimatorSlot: expected });
-      // W6-20: the plan's layers become the group's and the task's override layers, verbatim.
-      expect(group(h).agentOverrides).toEqual({ worker: { agent: "other", model: "group-worker-model" }, reconcile: { model: "plan-reconcile-model" } });
+      // Rewritten for ruling review R7 (human ruling 2026-09-27; was W6-20 "the plan's layers become the group's and the
+      // task's override layers, verbatim"): those layers are now the panel's own and start empty; the plan's layers stay
+      // in the archived plan and reach resolution from there, verbatim.
+      expect(group(h).agentOverrides).toEqual({});
       expect(group(h).reconcileSlot).toBeNull();
-      expect(work(h, "a").agentOverride).toEqual({ agent: "other", model: "task-model" });
+      expect(work(h, "a").agentOverride).toBeNull();
+      expect(groupSelectionPartials(h.store, "g", "human").planLayers).toEqual({
+        group: { worker: { agent: "other", model: "group-worker-model" }, reconcile: { model: "plan-reconcile-model" } },
+        tasks: { a: { agent: "other", model: "task-model" } },
+      });
     } finally { await h.dispose(); }
   });
 
@@ -200,18 +207,24 @@ describe("proposal-set-agent (spec §6.2, W6-20)", () => {
   it("clears a layer with null, and refuses a stale base, an unknown task and a no-op", async () => {
     const h = await webFixture(profileSnapshot(), [{ taskId: "a", agent: { model: "plan-task-model" } }], { planAgents: { reconcileAgent: { agent: "other" } } }); try {
       const service = new WebControlService(h.deps);
-      expect(group(h).agentOverrides).toEqual({ reconcile: { agent: "other" } });
-      await service.proposalSetAgent(h.command("proposal-set-agent", { baseProposalVersion: 1, scope: { kind: "group", slot: "reconcile" }, partial: null }));
+      // Rewritten for ruling review R7 (human ruling 2026-09-27): the plan's layers are no longer the starting panel
+      // layers, so a panel layer is written first and then cleared; a panel null (mask) is stored as given.
       expect(group(h).agentOverrides).toEqual({});
-      await service.proposalSetAgent(h.command("proposal-set-agent", { baseProposalVersion: 2, scope: { kind: "task", taskId: "a" }, partial: null }));
+      await service.proposalSetAgent(h.command("proposal-set-agent", { baseProposalVersion: 1, scope: { kind: "group", slot: "reconcile" }, partial: { agent: null, model: "panel-model" } }));
+      expect(group(h).agentOverrides).toEqual({ reconcile: { agent: null, model: "panel-model" } });
+      await service.proposalSetAgent(h.command("proposal-set-agent", { baseProposalVersion: 2, scope: { kind: "group", slot: "reconcile" }, partial: null }));
+      expect(group(h).agentOverrides).toEqual({});
+      await service.proposalSetAgent(h.command("proposal-set-agent", { baseProposalVersion: 3, scope: { kind: "task", taskId: "a" }, partial: { model: null } }));
+      expect(work(h, "a").agentOverride).toEqual({ model: null });
+      await service.proposalSetAgent(h.command("proposal-set-agent", { baseProposalVersion: 4, scope: { kind: "task", taskId: "a" }, partial: null }));
       expect(work(h, "a").agentOverride).toBeNull();
       expect(await service.proposalSetAgent(h.command("proposal-set-agent", { baseProposalVersion: 1, scope: { kind: "task", taskId: "a" }, partial: { model: "x" } })))
         .toMatchObject({ error: { code: "proposal-version-conflict" } });
-      expect(await service.proposalSetAgent(h.command("proposal-set-agent", { baseProposalVersion: 3, scope: { kind: "task", taskId: "missing" }, partial: { model: "x" } })))
+      expect(await service.proposalSetAgent(h.command("proposal-set-agent", { baseProposalVersion: 5, scope: { kind: "task", taskId: "missing" }, partial: { model: "x" } })))
         .toMatchObject({ error: { code: "work-not-found" } });
-      expect(await service.proposalSetAgent(h.command("proposal-set-agent", { baseProposalVersion: 3, scope: { kind: "task", taskId: "a" }, partial: null })))
+      expect(await service.proposalSetAgent(h.command("proposal-set-agent", { baseProposalVersion: 5, scope: { kind: "task", taskId: "a" }, partial: null })))
         .toMatchObject({ error: { code: "no-op-command" } });
-      expect(await service.proposalSetAgent(h.command("proposal-set-agent", { baseProposalVersion: 3, scope: { kind: "group", slot: "reconcile" }, partial: null })))
+      expect(await service.proposalSetAgent(h.command("proposal-set-agent", { baseProposalVersion: 5, scope: { kind: "group", slot: "reconcile" }, partial: null })))
         .toMatchObject({ error: { code: "no-op-command" } });
       expect(canonicalBytes(work(h, "a").agentOverride).toString("utf8")).toBe("null");
     } finally { await h.dispose(); }

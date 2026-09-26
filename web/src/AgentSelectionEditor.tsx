@@ -6,10 +6,10 @@
  */
 import type { JSX } from "react";
 import type { ControlAction } from "./controlApi.js";
-import { SelectionFields, contextLabel, partialFromFields } from "./AgentFields.js";
+import { SelectionFields, contextLabel, panelPartialFromFields } from "./AgentFields.js";
 import type {
   AgentSelectionPreviewV1, AgentSelectionV1, AgentSlotV1, AgentsViewV1, GroupAgentOverridesV1, GroupViewV1, OperatorPreferencesV1,
-  PartialSelectionV1, SelectionProvenanceV1, SlotOutcomeV1,
+  PanelPartialSelectionV1, PartialSelectionV1, SelectionProvenanceV1, SlotOutcomeV1,
 } from "./controlTypes.js";
 
 type Scope = { kind: "group"; slot: AgentSlotV1 } | { kind: "task"; taskId: string };
@@ -30,12 +30,23 @@ export function selectionsHashFor(view: GroupViewV1, preview: AgentSelectionPrev
  * group worker layer); the estimator's group layer on operator → operator-estimator, never the group worker
  * layer; the reconcile group layer on operator → operator-reconcile → group worker.
  */
-export function inheritedAgentFor(scope: Scope, preferences: OperatorPreferencesV1 | null | undefined, overrides: GroupAgentOverridesV1): string | undefined {
+export function inheritedAgentFor(
+  scope: Scope, preferences: OperatorPreferencesV1 | null | undefined, overrides: GroupAgentOverridesV1,
+  planLayers?: AgentSelectionPreviewV1["planLayers"],
+): string | undefined {
   const operator = preferences?.defaultAgent;
-  if (scope.kind === "task") return overrides.worker?.agent ?? operator;
+  // Ruling review R7: a group level is the plan's layer under the panel's; a null panel agent masks the plan's.
+  const groupWorker = (below: string | undefined): string | undefined => levelAgent(overrides.worker, planLayers?.group.worker, below);
+  if (scope.kind === "task") return groupWorker(operator);
   if (scope.slot === "worker") return operator;
   if (scope.slot === "estimator") return preferences?.estimator?.agent ?? operator;
-  return overrides.worker?.agent ?? preferences?.reconcile?.agent ?? operator;
+  return groupWorker(preferences?.reconcile?.agent ?? operator);
+}
+
+/** The agent one level ends up naming: the panel's own, else (unless the panel masks it) the plan's, else `below`. */
+function levelAgent(panel: PanelPartialSelectionV1 | undefined, plan: PartialSelectionV1 | undefined, below: string | undefined): string | undefined {
+  if (typeof panel?.agent === "string") return panel.agent;
+  return panel?.agent === null ? below : plan?.agent ?? below;
 }
 
 function SelectionCells(props: { selection: AgentSelectionV1; provenance: SelectionProvenanceV1 }): JSX.Element {
@@ -78,6 +89,8 @@ export interface AgentSelectionEditorProps {
    * (control-port-unconfigured, or a failure Re-read may cure). Shown instead of "Resolving…", which never ends.
    */
   agentsFailure?: string | null;
+  /** Ruling review R17: the page's backoff retry, shown so the operator knows it is retrying and when it stopped. */
+  retryNotice?: string | null;
 }
 
 export function AgentSelectionEditor(props: AgentSelectionEditorProps): JSX.Element {
@@ -108,7 +121,12 @@ export function AgentSelectionEditor(props: AgentSelectionEditorProps): JSX.Elem
     );
   }
 
-  const reread = props.onReread && <button type="button" onClick={props.onReread}>Re-read agent selections</button>;
+  const reread = (
+    <>
+      {props.onReread && <button type="button" onClick={props.onReread}>Re-read agent selections</button>}
+      {props.retryNotice ? <p role="status" data-retry="">{props.retryNotice}</p> : null}
+    </>
+  );
   if (agents === null && props.agentsFailure) {
     return (
       <section aria-label="Agent selection">
@@ -123,13 +141,17 @@ export function AgentSelectionEditor(props: AgentSelectionEditorProps): JSX.Elem
   }
 
   const stale = preview.proposalVersion !== view.proposal.proposalVersion;
-  const send = (scope: Scope, partial: PartialSelectionV1 | null): void => {
+  const send = (scope: Scope, partial: PanelPartialSelectionV1 | null): void => {
     onCommand({
       verb: "proposal-set-agent", groupId, expectedRevision: view.summary.commandRevision,
       payload: { baseProposalVersion: view.proposal.proposalVersion, scope, partial },
     });
   };
-  const inherited = (scope: Scope): string | undefined => inheritedAgentFor(scope, props.preferences, preview.groupOverrides);
+  const inherited = (scope: Scope): string | undefined => inheritedAgentFor(scope, props.preferences, preview.groupOverrides, preview.planLayers);
+  // Ruling review R7: the plan's values at each level (the estimator has no plan layer, ruling R8).
+  const plannedFor = (scope: Scope): PartialSelectionV1 | undefined =>
+    scope.kind === "task" ? preview.planLayers.tasks[scope.taskId] ?? undefined
+      : scope.slot === "estimator" ? undefined : preview.planLayers.group[scope.slot];
 
   return (
     <section aria-label="Agent selection">
@@ -140,10 +162,10 @@ export function AgentSelectionEditor(props: AgentSelectionEditorProps): JSX.Elem
       {(["worker", "estimator", "reconcile"] as const).map((slot) => {
         const scope: Scope = { kind: "group", slot };
         const prefix = agentDraftPrefix(groupId, scope);
-        const partial = partialFromFields(agents, prefix, preview.groupOverrides[slot], drafts, inherited(scope));
+        const partial = panelPartialFromFields(agents, prefix, preview.groupOverrides[slot], plannedFor(scope), drafts, inherited(scope));
         return (
           <div key={slot}>
-            <SelectionFields agents={agents} prefix={prefix} label={`Group ${slot}`} current={preview.groupOverrides[slot]} inheritedAgent={inherited(scope)} drafts={drafts} onDraft={onDraft} />
+            <SelectionFields agents={agents} prefix={prefix} label={`Group ${slot}`} current={preview.groupOverrides[slot]} planned={plannedFor(scope)} inheritedAgent={inherited(scope)} drafts={drafts} onDraft={onDraft} />
             <button type="button" disabled={Object.keys(partial).length === 0} onClick={() => send(scope, partial)}>Set group {slot} agent</button>
             <button type="button" disabled={preview.groupOverrides[slot] === undefined} onClick={() => send(scope, null)}>Clear group {slot} agent</button>
             {slot === "estimator" && (
@@ -161,7 +183,7 @@ export function AgentSelectionEditor(props: AgentSelectionEditorProps): JSX.Elem
             const own = taskId === null ? undefined : preview.taskOverrides[taskId] ?? undefined;
             const scope: Scope | null = taskId === null ? null : { kind: "task", taskId };
             const prefix = scope === null ? "" : agentDraftPrefix(groupId, scope);
-            const partial = scope === null ? {} : partialFromFields(agents, prefix, own, drafts, inherited(scope));
+            const partial = scope === null ? {} : panelPartialFromFields(agents, prefix, own, plannedFor(scope), drafts, inherited(scope));
             return (
               <tr key={entry.key} data-slot={entry.key}>
                 <td>{taskId ?? "reconcile"}</td>
@@ -171,7 +193,7 @@ export function AgentSelectionEditor(props: AgentSelectionEditorProps): JSX.Elem
                 <td>
                   {scope !== null && (
                     <>
-                      <SelectionFields agents={agents} prefix={prefix} label={`Task ${taskId}`} current={own} inheritedAgent={inherited(scope)} drafts={drafts} onDraft={onDraft} />
+                      <SelectionFields agents={agents} prefix={prefix} label={`Task ${taskId}`} current={own} planned={plannedFor(scope)} inheritedAgent={inherited(scope)} drafts={drafts} onDraft={onDraft} />
                       <button type="button" disabled={Object.keys(partial).length === 0} onClick={() => send(scope, partial)}>Set agent for task {taskId}</button>
                       <button type="button" disabled={own === undefined} onClick={() => send(scope, null)}>Clear agent for task {taskId}</button>
                     </>

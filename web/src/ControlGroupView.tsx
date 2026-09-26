@@ -48,6 +48,8 @@ export interface ControlGroupViewProps {
   onRereadPreview?: () => void;
   /** Why the installation table or the preferences could not be read (the server's code). */
   agentsFailure?: string | null;
+  /** Ruling review R17: what the page's retry of the agent reads is doing, if anything. */
+  retryNotice?: string | null;
 }
 
 export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
@@ -80,6 +82,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
           view={view} agents={props.agents} preview={props.preview ?? null} preferences={props.agentPreferences}
           onReread={props.onRereadPreview}
           agentsFailure={props.agentsFailure}
+          retryNotice={props.retryNotice}
           drafts={drafts} onDraft={onDraft} onCommand={onCommand}
         />
       )}

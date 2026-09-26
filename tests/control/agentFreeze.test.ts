@@ -42,8 +42,11 @@ describe("resolveGroupSelections (W6-1, spec §6.3/§6.4 step 1)", () => {
       expect(resolution.slots.map((slot) => [slot.key, slot.slot, slot.taskId])).toEqual([["reconcile", "reconcile", null], ["task:a", "worker", "a"], ["task:b", "worker", "b"]]);
       // task a and the reconcile slot resolve to the same partial: one call answers both.
       expect(h.resolveAgent.mock.calls.map(([partial]) => partial)).toEqual([{ agent: FIXTURE_AGENT_ID }, { agent: FIXTURE_OTHER_AGENT_ID }]);
-      expect(resolved(resolution, "task:b").provenance).toEqual({ agent: "task", model: "descriptor", contextWindow: "descriptor" });
-      expect(resolution.taskOverrides).toEqual({ a: null, b: { agent: FIXTURE_OTHER_AGENT_ID } });
+      // Rewritten for ruling review R7 (human ruling 2026-09-27): b's agent is written by the plan, which is now a layer
+      // of its own below the panel's -- labelled task-plan -- and taskOverrides holds the panel's layers only.
+      expect(resolved(resolution, "task:b").provenance).toEqual({ agent: "task-plan", model: "descriptor", contextWindow: "descriptor" });
+      expect(resolution.taskOverrides).toEqual({ a: null, b: null });
+      expect(resolution.planLayers.tasks).toEqual({ a: null, b: { agent: FIXTURE_OTHER_AGENT_ID } });
       expect(resolution.selectionsHash).toBe(sha256Canonical(Object.fromEntries(resolution.slots.map((slot) => {
         const frozen = resolved(resolution, slot.key);
         return [slot.key, { partial: frozen.partial, selection: frozen.selection, configHash: frozen.configHash }];

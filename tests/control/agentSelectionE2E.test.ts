@@ -149,7 +149,8 @@ describe.skipIf(!realBinary)("agent selection against real ccloop (spec §9 crit
       expect(Object.keys(frozen).sort()).toEqual(["reconcile", "task:a", "task:b", "task:c"]);
       expect(frozen["task:a"]!.selection).toEqual(CLAUDE);
       expect(frozen["task:b"]!.selection).toEqual({ agent: "codex", model: "gpt-6-sol", contextWindow: "agent-default" });
-      expect(frozen["task:b"]!.provenance).toEqual({ agent: "task", model: "descriptor", contextWindow: "descriptor" });
+      // Rewritten for ruling review R7 (human ruling 2026-09-27): b's agent comes from the plan, now its own layer (task-plan).
+      expect(frozen["task:b"]!.provenance).toEqual({ agent: "task-plan", model: "descriptor", contextWindow: "descriptor" });
       expect(frozen["task:c"]!.selection).toEqual({ ...CLAUDE, contextWindow: 1_000_000 });
       expect(frozen.reconcile!.selection).toEqual({ agent: "codex", model: "gpt-6-reconcile", contextWindow: "agent-default" });
       await startConfirmed(runtime, 10_000_000);

@@ -48,6 +48,8 @@ const resolved = { kind: "resolved", frozen: {
 } } as const;
 const preview = (selectionsHash: string | null, unavailable = false): AgentSelectionPreviewV1 => ({
   schema: "orca-agent-selection-preview-v1", groupId: "g", proposalVersion: 3, groupOverrides: {}, taskOverrides: { a: null },
+  // Ruling review R7: the plan's layers ride along with the preview; this fixture's plan names none.
+  planLayers: { group: {}, tasks: { a: null } },
   slots: [
     { key: "reconcile", slot: "reconcile", taskId: null, outcome: resolved },
     { key: "task:a", slot: "worker", taskId: "a", outcome: unavailable ? { kind: "unavailable", code: "control-peer-exit" } : resolved },
@@ -70,6 +72,9 @@ let preferenceReads: number;
 let servedConfig: ControlConfigV1;
 let agentsFailures: Array<() => Response>;
 let agentsReads: number;
+/** Ruling review R17: the installation table served (a criterion may record a new version), and the page's visibility. */
+let servedAgents: AgentsViewV1;
+let visibility: DocumentVisibilityState;
 let preferencePosts: unknown[];
 
 beforeEach(() => {
@@ -79,6 +84,9 @@ beforeEach(() => {
   servedConfig = config;
   agentsFailures = [];
   agentsReads = 0;
+  servedAgents = agents;
+  visibility = "visible";
+  Object.defineProperty(document, "visibilityState", { configurable: true, get: () => visibility });
   preferencePosts = [];
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const url = String(input);
@@ -92,7 +100,7 @@ beforeEach(() => {
     if (url === "/api/control/groups/g") return json(group);
     if (url === "/api/control/agents") {
       agentsReads += 1;
-      return agentsFailures.shift()?.() ?? json(agents);
+      return agentsFailures.shift()?.() ?? json(servedAgents);
     }
     if (url === "/api/control/operator/agent-preferences" && init?.method === "POST") {
       preferencePosts.push(JSON.parse(String(init.body)));
@@ -100,8 +108,9 @@ beforeEach(() => {
     }
     if (url === "/api/control/operator/agent-preferences") {
       preferenceReads += 1;
-      // After a save the server is at the next revision (another tab may have saved, too).
-      return json(preferenceReads === 1 ? preferences : { ...preferences, revision: 2 });
+      // After a save the server is at the next revision (another tab may have saved, too). Ruling review R17: keyed on
+      // the save having happened, since reads now also come from the page coming back into view.
+      return json(preferencePosts.length === 0 ? preferences : { ...preferences, revision: 2 });
     }
     if (url === PREVIEW_PATH) {
       previewReads += 1;
@@ -159,51 +168,123 @@ describe("App re-reads a group's agent preview when the one on screen can no lon
     expect(previewReads).toBe(2);
   });
 
-  it("re-reads the preview after a read that did not conclude, and only then offers the confirm", async () => {
+  // Rewritten for ruling review R17 (human ruling 2026-09-27: backoff 10, 20, 40, 80, 160 s): the first retry of a
+  // read that did not conclude now comes after 10 s, not 2 s; it still offers the confirm only once a read concludes.
+  it("re-reads the preview 10 s after a read that did not conclude, and only then offers the confirm", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     previewAnswers = [() => json({ error: { code: "control-internal-error", message: "ccloop did not answer", commandRevision: null, evidenceIds: [], retryable: true } }, 500), () => json(preview(FIRST))];
     await openGroup();
     await waitFor(() => expect(previewReads).toBe(1));
     expect(confirmButton().disabled).toBe(true);
-    await waitFor(() => expect(previewReads).toBe(2), { timeout: 5_000 });
+    await pass(9_000);
+    expect(previewReads).toBe(1);
+    await pass(1_500);
+    await waitFor(() => expect(previewReads).toBe(2));
     await waitFor(() => expect(confirmButton().disabled).toBe(false));
-  }, 10_000);
+  });
 
-  // Rewritten in T15 fix round 1 (controller ruling; this criterion was new in T15): an unavailable slot used to
-  // be re-read every 2 s forever, and every read spawns ccloop. Now nothing re-reads it without the operator.
-  it("does not re-read a preview in which a slot was unavailable for now until the operator asks, and then reads it once", async () => {
+  // Rewritten for ruling review R17 (human ruling 2026-09-27; earlier rewritten in T15 fix round 1): an unavailable
+  // slot is read again on the bounded backoff -- 10, 20, 40, 80, 160 s, five retries -- and then waits for the
+  // operator's Re-read, which reads it once. The bound is what the T15 ruling was about: every read spawns ccloop.
+  it("re-reads a preview whose slot was unavailable five times on the backoff, then waits for the operator's Re-read", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    previewAnswers = [...Array.from({ length: 6 }, () => () => json(preview(null, true))), () => json(preview(FIRST))];
+    await openGroup();
+    await screen.findByText(/unavailable for now/);
+    expect(confirmButton().disabled).toBe(true);
+    for (const [index, delay] of [10_000, 20_000, 40_000, 80_000, 160_000].entries()) {
+      // Half way the next read has not happened; just past its delay it has (margins that do not add up step by step).
+      await pass(delay / 2);
+      expect(previewReads).toBe(index + 1);
+      await pass(delay / 2 + 1_000);
+      await waitFor(() => expect(previewReads).toBe(index + 2));
+    }
+    await waitFor(() => expect(screen.getByText(/Stopped after 5 retries/)).toBeTruthy());
+    await pass(600_000);
+    expect(previewReads).toBe(6);
+    fireEvent.click(rereadButton());
+    await waitFor(() => expect(confirmButton().disabled).toBe(false));
+    await pass(600_000);
+    expect(previewReads).toBe(7);
+  });
+
+  // Rewritten for ruling review R17 (human ruling 2026-09-27): "exactly once" became the bounded backoff -- five retries
+  // at 10, 20, 40, 80, 160 s -- after which the page waits for the operator; a read that concluded starts a new round.
+  it("retries a preview read that did not conclude five times on the backoff, reports the failure once, and then waits for the operator's Re-read", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const failed = () => json({ error: { code: "control-internal-error", message: "ccloop did not answer", commandRevision: null, evidenceIds: [], retryable: true } }, 500);
+    previewAnswers = [...Array.from({ length: 6 }, () => failed), () => json(preview(FIRST)), failed, () => json(preview(SECOND))];
+    await openGroup();
+    await waitFor(() => expect(previewReads).toBe(1));
+    for (const [index, delay] of [10_000, 20_000, 40_000, 80_000, 160_000].entries()) {
+      // Half way the next read has not happened; just past its delay it has (margins that do not add up step by step).
+      await pass(delay / 2);
+      expect(previewReads).toBe(index + 1);
+      await pass(delay / 2 + 1_000);
+      await waitFor(() => expect(previewReads).toBe(index + 2));
+    }
+    await pass(600_000);
+    expect(previewReads).toBe(6);
+    expect(confirmButton().disabled).toBe(true);
+    // Six failures of one code are one report on the page, not six.
+    expect(screen.getAllByText(/ccloop did not answer/)).toHaveLength(1);
+    fireEvent.click(rereadButton());
+    await waitFor(() => expect(confirmButton().disabled).toBe(false));
+    expect(previewReads).toBe(7);
+    // A read that concluded gives the next failure a new round.
+    fireEvent.click(rereadButton());
+    await waitFor(() => expect(previewReads).toBe(8));
+    await pass(10_500);
+    await waitFor(() => expect(confirmButton().disabled).toBe(false));
+    expect(previewReads).toBe(9);
+  });
+
+  // Ruling review R17 (a), human ruling 2026-09-27: the operator fixes an installation outside the page, so coming back
+  // to it reads the table, the preferences and the open preview again -- once, and a new round of retries.
+  it("reads the table, the preferences and the open preview again when the page comes back into view", async () => {
+    previewAnswers = [() => json(preview(FIRST)), () => json(preview(SECOND))];
+    await openGroup();
+    await waitFor(() => expect(previewReads).toBe(1));
+    const before = { agents: agentsReads, preferences: preferenceReads };
+    fireEvent.focus(window);
+    await waitFor(() => expect(previewReads).toBe(2));
+    await waitFor(() => expect({ agents: agentsReads, preferences: preferenceReads }).toEqual({ agents: before.agents + 1, preferences: before.preferences + 1 }));
+    await settle();
+    expect(previewReads).toBe(2);
+  });
+
+  // Ruling review R17 (b): the table's content, not the object read, keys the preview. Coming back with the same table
+  // reads the preview once (the return itself); with a table that changed meanwhile, once more for the new table.
+  it("reads the preview again for a table whose content changed, and not for the same table read again", async () => {
+    previewAnswers = [() => json(preview(FIRST)), () => json(preview(FIRST)), () => json(preview(SECOND)), () => json(preview(SECOND))];
+    await openGroup();
+    await waitFor(() => expect(previewReads).toBe(1));
+    fireEvent.focus(window);
+    await waitFor(() => expect(previewReads).toBe(2));
+    await settle(); await settle();
+    expect(previewReads).toBe(2);
+    servedAgents = { ...agents, installations: [{ ...agents.installations[0]!, version: "2.1.283" }] };
+    fireEvent.focus(window);
+    await waitFor(() => expect(previewReads).toBe(4));
+    await settle(); await settle();
+    expect(previewReads).toBe(4);
+  });
+
+  // Ruling review R17 (d): nothing is retried while the page is hidden; the return reads again and starts a new round.
+  it("pauses the backoff while the page is hidden and reads again when it comes back", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     previewAnswers = [() => json(preview(null, true)), () => json(preview(FIRST))];
     await openGroup();
     await screen.findByText(/unavailable for now/);
-    expect(confirmButton().disabled).toBe(true);
-    await pass(20_000);
+    visibility = "hidden";
+    document.dispatchEvent(new Event("visibilitychange"));
+    await pass(400_000);
     expect(previewReads).toBe(1);
-    fireEvent.click(rereadButton());
+    await waitFor(() => expect(screen.getByText(/paused while the page is hidden/)).toBeTruthy());
+    visibility = "visible";
+    document.dispatchEvent(new Event("visibilitychange"));
     await waitFor(() => expect(confirmButton().disabled).toBe(false));
-    await pass(20_000);
     expect(previewReads).toBe(2);
-  });
-
-  it("retries a preview read that did not conclude exactly once, and then waits for the operator's Re-read", async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    const failed = () => json({ error: { code: "control-internal-error", message: "ccloop did not answer", commandRevision: null, evidenceIds: [], retryable: true } }, 500);
-    previewAnswers = [failed, failed, () => json(preview(FIRST)), failed, () => json(preview(SECOND))];
-    await openGroup();
-    await waitFor(() => expect(previewReads).toBe(1));
-    await pass(20_000);
-    expect(previewReads).toBe(2);
-    await pass(20_000);
-    expect(previewReads).toBe(2);
-    expect(confirmButton().disabled).toBe(true);
-    fireEvent.click(rereadButton());
-    await waitFor(() => expect(confirmButton().disabled).toBe(false));
-    expect(previewReads).toBe(3);
-    // A read that concluded gives the next failure its one retry back.
-    fireEvent.click(rereadButton());
-    await waitFor(() => expect(previewReads).toBe(4));
-    await pass(20_000);
-    await waitFor(() => expect(confirmButton().disabled).toBe(false));
-    expect(previewReads).toBe(5);
   });
 
   it("keeps the newer preview when the answer to an older read arrives after it", async () => {
@@ -242,23 +323,29 @@ describe("App re-reads a group's agent preview when the one on screen can no lon
 describe("the proposal view when the installation table cannot be read, and after a refused selection (wave 4 review I-1, M-1)", () => {
   const agentSection = (): HTMLElement => document.querySelector('section[aria-label="Agent selection"]') as HTMLElement;
 
-  it("retries a failed installation table read once, then re-reads it and the preview when the operator presses Re-read", async () => {
+  // Rewritten for ruling review R17 (human ruling 2026-09-27): "once" became the bounded backoff, five retries at 10,
+  // 20, 40, 80, 160 s; after them the operator's Re-read still reads the table and then the preview.
+  it("retries a failed installation table read five times on the backoff, then re-reads it and the preview when the operator presses Re-read", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const failed = () => json({ error: { code: "control-internal-error", message: "ccloop did not answer", commandRevision: null, evidenceIds: [], retryable: true } }, 500);
-    agentsFailures = [failed, failed];
+    agentsFailures = Array.from({ length: 6 }, () => failed);
     previewAnswers = [() => json(preview(FIRST))];
     await openGroup();
     await waitFor(() => expect(agentSection().textContent).toContain("control-internal-error"));
-    await pass(20_000);
-    expect(agentsReads).toBe(2);
-    await pass(20_000);
-    expect(agentsReads).toBe(2);
+    for (const [index, delay] of [10_000, 20_000, 40_000, 80_000, 160_000].entries()) {
+      await pass(delay / 2);
+      expect(agentsReads).toBe(index + 1);
+      await pass(delay / 2 + 1_000);
+      await waitFor(() => expect(agentsReads).toBe(index + 2));
+    }
+    await pass(600_000);
+    expect(agentsReads).toBe(6);
     expect(previewReads).toBe(0);
     expect(agentSection().textContent).not.toContain("Resolving");
     expect(confirmButton().disabled).toBe(true);
     fireEvent.click(rereadButton());
     await waitFor(() => expect(confirmButton().disabled).toBe(false));
-    expect(agentsReads).toBe(3);
+    expect(agentsReads).toBe(7);
     expect(previewReads).toBe(1);
   });
 

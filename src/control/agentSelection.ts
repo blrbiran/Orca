@@ -10,7 +10,11 @@ import type { CapabilityViewV1 } from "./webProtocol.js";
 export type ContextWindow = "agent-default" | number;
 export interface AgentSelection { agent: string; model: string; contextWindow: ContextWindow }
 export interface PartialSelection { agent?: string; model?: string; contextWindow?: ContextWindow }
-export type LayerName = "operator" | "operator-estimator" | "operator-reconcile" | "group" | "group-estimator" | "group-reconcile" | "task";
+/** Ruling review R7: a panel layer; null masks the same field of the plan layer at the same level. */
+export interface PanelPartialSelection { agent?: string | null; model?: string | null; contextWindow?: ContextWindow | null }
+export type LayerName =
+  | "operator" | "operator-estimator" | "operator-reconcile"
+  | "group-plan" | "group" | "group-estimator" | "group-reconcile-plan" | "group-reconcile" | "task-plan" | "task";
 export type ProvenanceSource = LayerName | "operator-agent" | "descriptor";
 export interface SelectionLayer { name: LayerName; partial: PartialSelection }
 export interface OperatorPreferences {
@@ -19,7 +23,10 @@ export interface OperatorPreferences {
   estimator?: PartialSelection;
   reconcile?: PartialSelection;
 }
-export interface GroupAgentOverrides { worker?: PartialSelection; estimator?: PartialSelection; reconcile?: PartialSelection }
+/** The panel's own layers of a group (ruling review R7: the plan's layers are no longer copied in). */
+export interface GroupAgentOverrides { worker?: PanelPartialSelection; estimator?: PanelPartialSelection; reconcile?: PanelPartialSelection }
+/** The plan file's layers of a group and of one task (spec §6.2 layers 2 and 3, plan half). */
+export interface PlanAgentLayers { group?: PartialSelection; reconcile?: PartialSelection; task?: PartialSelection }
 export type Slot = "worker" | "estimator" | "reconcile";
 type Field = "agent" | "model" | "contextWindow";
 type Provenance = Record<Field, ProvenanceSource | null>;
@@ -27,16 +34,39 @@ type Provenance = Record<Field, ProvenanceSource | null>;
 export interface AgentResolution { selection: AgentSelection; configHash: string; timeoutMs: number; killGraceMs: number; capabilities: CapabilityViewV1 }
 export interface FrozenSlot extends AgentResolution { partial: PartialSelection; provenance: Record<Field, ProvenanceSource> }
 
-/** Spec §6.3 layer order per slot, lowest priority first. `task` is read for the worker slot only. */
-export function slotLayers(slot: Slot, prefs: OperatorPreferences, group: GroupAgentOverrides, task?: PartialSelection): SelectionLayer[] {
+/** A panel layer without its nulls: what it itself chooses. */
+function panelChoices(panel: PanelPartialSelection | undefined): PartialSelection {
+  const out: PartialSelection = {};
+  if (typeof panel?.agent === "string") out.agent = panel.agent;
+  if (typeof panel?.model === "string") out.model = panel.model;
+  if (panel?.contextWindow !== undefined && panel.contextWindow !== null) out.contextWindow = panel.contextWindow;
+  return out;
+}
+
+/**
+ * Ruling review R7 (human ruling 2026-09-27, overturning spec §13.1 D2): one level (group, group reconcile, task) is
+ * two layers, the plan's below the panel's, merged per field by resolveSelection like any other pair of layers. A
+ * panel field that is null means "as if the plan had not written this field at this level": the plan layer loses it
+ * and the value is inherited from below as usual. A null agent drops the plan's whole layer, since its model and
+ * context were chosen for the agent being masked.
+ */
+export function levelLayers(planName: LayerName, panelName: LayerName, plan: PartialSelection | undefined, panel: PanelPartialSelection | undefined): SelectionLayer[] {
+  const fromPlan: PartialSelection = panel?.agent === null ? {} : { ...(plan ?? {}) };
+  for (const field of ["model", "contextWindow"] as const) if (panel?.[field] === null) delete fromPlan[field];
+  return [{ name: planName, partial: fromPlan }, { name: panelName, partial: panelChoices(panel) }];
+}
+
+/** Spec §6.3 layer order per slot, lowest priority first (R7: each group or task level is plan, then panel). */
+export function slotLayers(slot: Slot, prefs: OperatorPreferences, group: GroupAgentOverrides, task?: PanelPartialSelection, plan: PlanAgentLayers = {}): SelectionLayer[] {
   const operator: SelectionLayer = { name: "operator", partial: prefs.defaultAgent === undefined ? {} : { agent: prefs.defaultAgent } };
-  if (slot === "worker") return [operator, { name: "group", partial: group.worker ?? {} }, { name: "task", partial: task ?? {} }];
+  if (slot === "worker") return [operator, ...levelLayers("group-plan", "group", plan.group, group.worker), ...levelLayers("task-plan", "task", plan.task, task)];
   if (slot === "estimator") {
-    return [operator, { name: "operator-estimator", partial: prefs.estimator ?? {} }, { name: "group-estimator", partial: group.estimator ?? {} }];
+    // Ruling R8 keeps D1: the plan has no estimator layer; a null in the panel's is simply no choice.
+    return [operator, { name: "operator-estimator", partial: prefs.estimator ?? {} }, { name: "group-estimator", partial: panelChoices(group.estimator) }];
   }
   return [
     operator, { name: "operator-reconcile", partial: prefs.reconcile ?? {} },
-    { name: "group", partial: group.worker ?? {} }, { name: "group-reconcile", partial: group.reconcile ?? {} },
+    ...levelLayers("group-plan", "group", plan.group, group.worker), ...levelLayers("group-reconcile-plan", "group-reconcile", plan.reconcile, group.reconcile),
   ];
 }
 

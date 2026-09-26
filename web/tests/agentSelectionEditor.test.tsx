@@ -37,6 +37,8 @@ const frozen = (selection: AgentSelectionV1, provenance: SelectionProvenanceV1):
 const HASH = "f".repeat(64);
 const resolvedPreview = (over: Partial<AgentSelectionPreviewV1> = {}): AgentSelectionPreviewV1 => ({
   schema: "orca-agent-selection-preview-v1", groupId: "g", proposalVersion: 3, groupOverrides: {}, taskOverrides: { a: null, b: { agent: "codex" } },
+  // Ruling review R7: the plan's layers ride along with the preview; this fixture's plan names none.
+  planLayers: { group: {}, tasks: { a: null, b: null } },
   slots: [
     { key: "reconcile", slot: "reconcile", taskId: null, outcome: { kind: "resolved", frozen: frozen(claude, { agent: "operator", model: "descriptor", contextWindow: "descriptor" }) } },
     { key: "task:a", slot: "worker", taskId: "a", outcome: { kind: "resolved", frozen: frozen(claude, { agent: "operator", model: "operator-agent", contextWindow: "descriptor" }) } },
@@ -194,5 +196,61 @@ describe("agent selection in the proposal view (agent selection spec §6.8)", ()
   it("routes proposal-set-agent to the group's proposal/agent path", () => {
     expect(controlCommandPath({ verb: "proposal-set-agent", groupId: "g", expectedRevision: 1, payload: { baseProposalVersion: 1, scope: { kind: "task", taskId: "a" }, partial: null } }))
       .toBe("/api/control/groups/g/proposal/agent");
+  });
+});
+
+// Ruling review R7 (human ruling 2026-09-27): each level shows the plan's values under the panel's own layer; a field
+// the operator leaves empty is not sent (it inherits the plan's value), and "ignore the plan's <field>" sends null.
+describe("the plan's layer under the panel's at each level (ruling review R7)", () => {
+  const withPlan = (over: Partial<AgentSelectionPreviewV1> = {}): AgentSelectionPreviewV1 => resolvedPreview({
+    taskOverrides: { a: null, b: null },
+    planLayers: { group: { worker: { agent: "codex", model: "gpt-6-plan" } }, tasks: { a: { model: "task-plan-model" }, b: null } },
+    ...over,
+  });
+  const prefs: OperatorPreferencesV1 = { defaultAgent: "claude", perAgent: {} };
+  const box = (container: HTMLElement, name: string): HTMLInputElement | null => container.querySelector(`input[type="checkbox"][name="${name}"]`);
+
+  it("shows the plan's values with a box to ignore each, and sends a ticked one as null", () => {
+    const onCommand = vi.fn();
+    const { container } = renderView({ onCommand, preview: withPlan(), preferences: prefs, drafts: { "g:agent:task:a:mask:model": "1" } });
+    expect(screen.getByText(/ignore the plan's agent \(codex\)/)).toBeTruthy();
+    expect(screen.getByText(/ignore the plan's model \(gpt-6-plan\)/)).toBeTruthy();
+    expect(box(container, "g:agent:task:a:mask:model")!.checked).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Set agent for task a" }));
+    expect(onCommand).toHaveBeenCalledTimes(1);
+    expect(onCommand.mock.calls[0]![0].payload.partial).toEqual({ model: null });
+  });
+
+  it("sends only the field the operator set, leaving the plan's others to be inherited", () => {
+    const onCommand = vi.fn();
+    renderView({ onCommand, preview: withPlan(), preferences: prefs, drafts: { "g:agent:group:worker:model": "gpt-6-panel" } });
+    fireEvent.click(screen.getByRole("button", { name: "Set group worker agent" }));
+    expect(onCommand.mock.calls[0]![0].payload).toEqual({ baseProposalVersion: 3, scope: { kind: "group", slot: "worker" }, partial: { model: "gpt-6-panel" } });
+  });
+
+  it("sends agent null when the plan's agent is ignored, and offers the context of the agent below instead of the plan's", () => {
+    const onCommand = vi.fn();
+    const unmasked = renderView({ preview: withPlan(), preferences: prefs });
+    expect(options(unmasked.container, "g:agent:group:worker:context")).toEqual(["", "agent-default"]);
+    unmasked.unmount();
+    const { container } = renderView({ onCommand, preview: withPlan(), preferences: prefs, drafts: { "g:agent:group:worker:mask:agent": "1", "g:agent:group:worker:context": "1000000" } });
+    expect(options(container, "g:agent:group:worker:context")).toEqual(["", "agent-default", "1000000"]);
+    fireEvent.click(screen.getByRole("button", { name: "Set group worker agent" }));
+    expect(onCommand).toHaveBeenCalledTimes(1);
+    // The 1M window is sent: it is what the agent below (claude) can express, though the plan's codex cannot.
+    expect(onCommand.mock.calls[0]![0].payload.partial).toEqual({ agent: null, contextWindow: 1_000_000 });
+  });
+
+  it("offers no box where the plan wrote nothing at that level", () => {
+    const { container } = renderView({ preview: withPlan(), preferences: prefs });
+    expect(container.querySelectorAll('input[type="checkbox"][name^="g:agent:task:b:mask:"]')).toHaveLength(0);
+    expect(container.querySelectorAll('input[type="checkbox"][name^="g:agent:group:estimator:mask:"]')).toHaveLength(0);
+  });
+
+  it("shows a stored panel null as the plan's value ignored", () => {
+    const { container } = renderView({ preview: withPlan({ taskOverrides: { a: { model: null }, b: null } }), preferences: prefs });
+    const ticked = box(container, "g:agent:task:a:mask:model");
+    expect(ticked).not.toBeNull();
+    expect(ticked!.checked).toBe(true);
   });
 });

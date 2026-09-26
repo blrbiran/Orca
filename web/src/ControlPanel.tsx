@@ -46,6 +46,8 @@ export interface ControlPanelProps {
   onRereadPreview?: (groupId: string) => void;
   /** The server's code for why the installation table or the preferences could not be read. */
   agentsFailure?: string | null;
+  /** Ruling review R17: what the page's retry of the agent reads is doing, if anything. */
+  retryNotice?: string | null;
 }
 
 function ImportForm(props: { config: ControlConfigV1; onCommand: (action: ControlAction) => void }): JSX.Element {
@@ -147,6 +149,7 @@ export function ControlPanel(props: ControlPanelProps): JSX.Element {
           agentPreferences={props.preferences?.preferences ?? null}
           onRereadPreview={props.onRereadPreview && (() => props.onRereadPreview?.(view.summary.groupId))}
           agentsFailure={props.agentsFailure}
+          retryNotice={props.retryNotice}
         />
       )}
       {view === undefined && selected !== null && <p role="status">Reading {selected}…</p>}
