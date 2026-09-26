@@ -116,3 +116,10 @@
 - Task 13: fix round 1/5 (2 addressed, 0 open — XDG zero-write + P1 mutations; commits cb88485..23d4446)
 - Task 13: complete (Orca commits 06a1953..23d4446, review clean after round 1). 实施席 237,191＋280,685 token。真 ~/.orca 两个残留文件的 mtime 仍为 02:51:24／02:51:29（控制器 stat 现测）。
 - 波 3（T8–T13）完成；派波次复审（P21），与 T14 并行。
+- Task 14: implementer DONE (Orca 7e66947..868ca7f)，实施席 214,754 token；复审进行中。
+- 波 3 复审（opus）：`wave3-review.md`，0 Critical／3 Important／9 Minor；选择生命周期一致；确认后无派活路径读活偏好；Rule 17 无破口。
+- Ruling（波 3 I-1）：`resolveGroupSelections` 加预览／确认两种模式：预览把瞬时失败记为逐槽 `unavailable`（hash 为 null、不可确认），确认仍抛出重试 —— 错的代价：预览 schema 多一支。
+- Ruling（波 3 I-2）：`driverLanding.ts` 的 stepR 改用 `readConfirmedReconcileSlot`，不一致 ⇒ `reconcile-agent-unfrozen` 阻塞；判据：篡改组记录的 reconcileSlot ⇒ 不起解冲突 run。
+- Ruling（波 3 I-3）：写进 T15 派发 —— 收到 `agent-selection-changed` 或预览请求失败 ⇒ 作废并重取该组预览。
+- Ruling：波 3 I-1／I-2 ＋ M-1（`agentOverrides` 损坏 ⇒ `recovery-blocked` 而非 400 non-json）＋ M-5（组视图带冻结的 reconcile 选择）合入 T14 修复轮一次做。其余 Minor（M-2 来源不在 hash 内、M-3、M-4 W5-M15 且交集已可得、M-6 新阻塞码 `reconcile-agent-unfrozen` 等）T17 登记 spec §13。
+- Task 14: review → Needs fixes: 1 Important（`slot-task-mismatch` 分支无判据无变异）；预览／确认同函数同操作者 id（复审核）。fix round 1 发出，合入波 3 I-1／I-2／M-1／M-5。
