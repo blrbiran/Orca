@@ -121,7 +121,6 @@ export function normalizeControlPlan(source: AllowlistedPlanSource): ControlPlan
       taskId: task.taskId,
       dependencyTaskIds: [...task.dependencyTaskIds].sort(compare),
       targetVersion: task.targetVersion,
-      configHash: task.configHash,
       ...(task.agent ? { agent: task.agent } : {}),
       originalContractHash: task.originalContractHash,
       originalContractCanonicalJson: task.originalContractCanonicalJson,
@@ -299,7 +298,9 @@ export function importControlPlan(deps: ImportDeps, command: ImportCommand): Imp
         writeCanonicalRecord(deps.store, payload.groupId, task.originalContractHash, task.originalContractCanonicalJson);
         const work = {
           workItemId: task.taskId, taskId: task.taskId, kind: "task", dependsOn: task.dependencyTaskIds,
-          contract: { contentAddressedHash: task.originalContractHash }, configHash: task.configHash,
+          contract: { contentAddressedHash: task.originalContractHash },
+          // Agent selection spec §6.2 / §12 I3: a draft has no configHash; confirmation freezes ccloop's.
+          configHash: null,
           grant: { work: cloneAmount(TASK_WORK), handoff: cloneAmount(TASK_HANDOFF) }, targetVersion: task.targetVersion,
           status: "draft", originalContractHash: task.originalContractHash, derivedContractHash: null,
           agentOverride: task.agent ?? null,

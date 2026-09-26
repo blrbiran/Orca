@@ -334,7 +334,7 @@ describe.skipIf(!realBinary)("handoff delivery against real ccloop (spec §9.2)"
       const [requestId] = await handoffStop(runtime, { handoffDeadlineAt: deadlineAt });
       await until(() => requestState(runtime, requestId!) === "outcome-unknown", 180_000, "the request to turn outcome-unknown");
       const observed = Date.now();
-      // The grace the assembly read from this world's adapter config (killGraceMs 5 s) is what the driver used:
+      // The grace is the run's frozen killGraceMs (the world's installation table answers 5 s at confirmation):
       // HANDOFF_EXTRA_GRACE_MS alone would have turned it at deadline + 60 s.
       expect(observed).toBeGreaterThanOrEqual(Date.parse(deadlineAt) + KILL_GRACE_MS + 60_000);
       expect(observed).toBeLessThan(Date.parse(deadlineAt) + KILL_GRACE_MS + 60_000 + 30_000);

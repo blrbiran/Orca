@@ -68,7 +68,8 @@ async function confirmedByAdapter(budgetMode: "strict" | "soft", probe: Capabili
   const f = await webFixture(profileSnapshot(), [{ taskId: "a" }]);
   f.setObserved(probe);
   const service = new WebControlService(f.deps);
-  const confirmed = await service.confirm(f.command("confirm", { ...f.confirmPayload(), budgetMode }));
+  // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): confirmation resolves agent selections through ccloop first, so it is awaited and carries the previewed selectionsHash.
+  const confirmed = await service.confirm(f.command("confirm", { ...(await f.confirmPayload()), budgetMode }));
   if ("error" in confirmed) throw new Error(`confirm refused: ${JSON.stringify(confirmed.error)}`);
   const deps = { store: f.store, profileRouter: f.deps.profileRouter, admissionGate: f.deps.admissionGate };
   return { f, service, deps };
@@ -129,7 +130,8 @@ async function consumer(knobs: Record<string, unknown> = {}) {
 async function claimedWith(mode: "strict" | "soft") {
   const f = await webFixture(profileSnapshot(), [{ taskId: "a" }]);
   const service = new WebControlService(f.deps);
-  const confirmed = await service.confirm(f.command("confirm", { ...f.confirmPayload(), budgetMode: mode }));
+  // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): confirmation resolves agent selections through ccloop first, so it is awaited and carries the previewed selectionsHash.
+  const confirmed = await service.confirm(f.command("confirm", { ...(await f.confirmPayload()), budgetMode: mode }));
   if ("error" in confirmed) throw new Error(`confirm refused: ${JSON.stringify(confirmed.error)}`);
   const started = await service.start(f.command("start", {}));
   if ("error" in started) throw new Error(`start refused: ${JSON.stringify(started.error)}`);

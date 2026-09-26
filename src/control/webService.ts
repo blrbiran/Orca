@@ -6,6 +6,8 @@ import { dimensions, zero } from "./commands.js";
 import { ControlError } from "./errors.js";
 import { buildBudgetEstimateRequest, ESTIMATE_GRANT, GOAL_REVIEW, TASK_HANDOFF, TASK_WORK, provenance, residual, safeNumber, sumAmounts, persistEstimateArtifacts, estimateCapabilityDegraded, validateEstimateOutput } from "./estimator.js";
 import { prepareExecutionSnapshot } from "./executionSnapshot.js";
+import { answeredPartials, currentPartials, RECONCILE_SLOT_KEY, resolveGroupSelections, taskSlotKey, type GroupSelectionResolution } from "./agentFreeze.js";
+import type { ExecutionPort } from "./executionPort.js";
 import { estimatorSlotFor, importControlPlanAsync, rejectedEstimatorRequest, type AsyncImportDeps, type ImportCommand } from "./planImport.js";
 import { intersectCapabilities } from "./profiles.js";
 import type { FrozenSlot } from "./agentSelection.js";
@@ -31,7 +33,11 @@ export type ConfirmCommand = Extract<RawAuthorityCommandV1, { verb: "confirm" }>
 export type SetLimitCommand = Extract<RawAuthorityCommandV1, { verb: "set-limit" }>;
 export type ProposalSetAgentCommand = Extract<RawAuthorityCommandV1, { verb: "proposal-set-agent" }>;
 export type WebCommandResult = CommandLookupV1["body"];
-export interface WebServiceDeps extends AsyncImportDeps { admissionGate?: AdmissionGate; now?: () => Date; knownRepository?: (repoId: string) => boolean }
+export interface WebServiceDeps extends AsyncImportDeps {
+  admissionGate?: AdmissionGate; now?: () => Date; knownRepository?: (repoId: string) => boolean;
+  /** Agent selection spec §6.4 (W6-19): the same port the panel's profiles use; confirm resolves selections through it. */
+  port: Pick<ExecutionPort, "resolveAgent">;
+}
 interface EstimateRun { runId: string; groupId: string; workItemId: string; phase: string; state: string; claimOrdinal: null; providerAttemptOrdinal: number; remaining: { work: Amount; handoff: Amount }; cumulative: { work: Amount; handoff: Amount }; unknown: { work: boolean; handoff: boolean }; [key: string]: unknown }
 
 const ledgerSchema = z.object({ groupLimit: amountSchema, used: amountSchema, committedRemaining: amountSchema, explicitUnallocatedReserve: amountSchema, budgetDeficit: amountSchema, usageUnknown: z.boolean() }).strict();
@@ -177,9 +183,13 @@ function reopenProposal(store: ControlStore, id: string, group: Group, proposal:
     const work = JSON.parse(String(row.body));
     if (work.kind !== "task") continue;
     work.status = "draft"; work.derivedContractHash = null;
+    // Agent selection spec §6.4: a reopened proposal has no frozen selection; the next confirmation freezes one.
+    work.configHash = null;
+    for (const key of ["agent", "agentProvenance", "timeoutMs", "killGraceMs", "agentCapabilities"]) delete work[key];
     work.grant = { work: proposal.allocations.find(a => a.ownerId === row.id && a.bucket === "work")!.amount, handoff: proposal.allocations.find(a => a.ownerId === row.id && a.bucket === "handoff")!.amount };
     store.db.prepare("UPDATE work_items SET body=? WHERE group_id=? AND id=?").run(JSON.stringify(work), id, row.id);
   }
+  (group as Record<string, unknown>).reconcileSlot = null;
   saveWebAuthority(store, group, proposal);
 }
 
@@ -445,52 +455,88 @@ export class WebControlService {
   async continueTask(command: ContinueTaskCommand): Promise<WebCommandResult> {
     return applyContinueTask(this.stopDeps(), command) as WebCommandResult;
   }
-  confirm(command: ConfirmCommand): WebCommandResult {
-    return this.mutate(() => applyWebCommand(this.store, {
-      rawCommand: command, expand: () => ({ ...command, schema: "orca-authority-command-v1" }),
-      apply: context => {
-        const id = groupId(command), group = readWebGroup(this.store, id), plan = readArchivedPlan(this.store, id), proposal = readBudgetProposal(this.store, id), payload = command.payload;
-        if (payload.planHash !== plan.planHash) throw new ControlError("plan-version-conflict");
-        if (payload.proposalVersion !== proposal.proposalVersion) throw new ControlError("proposal-version-conflict");
-        prestart(group);
-        if (proposal.state === "confirmed") throw new ControlError("no-op-command");
-        assertKnownConservation(this.store, group, proposal);
-        const selected = { estimator: this.deps.profileRouter.resolve("budget-estimate", payload.profileIds.estimator, payload.profileHashes.estimator), worker: this.deps.profileRouter.resolve("task", payload.profileIds.worker, payload.profileHashes.worker), handoff: this.deps.profileRouter.resolve("handoff", payload.profileIds.handoff, payload.profileHashes.handoff), goalReview: this.deps.profileRouter.resolve("goal-review", payload.profileIds.goalReview, payload.profileHashes.goalReview) };
-        const window = selected.worker.snapshot.profile.capabilities.contextWindowTokens, threshold = payload.contextPolicy.handoffAtContextTokens;
-        if (window === null ? threshold !== null : threshold === null || threshold > window) throw new ControlError("execution-policy-unrepresentable");
-        const profiles = Object.fromEntries(Object.entries(selected).map(([slot, p]) => [slot, { profileId: p.snapshot.profile.profileId, profileHash: p.profileHash }])) as Record<keyof typeof selected, ProfileBindingV1>;
-        for (const row of proposal.allocations) for (const d of dimensions) {
-          const source = row.fieldProvenance[d];
-          if (source.provenance !== "model") continue;
-          if (row.ownerKind === "reserve") throw new ControlError("proposal-version-conflict");
-          const target = row.ownerKind === "goal-review" ? { scope: "goal-review" as const, dimension: d } : { scope: "task" as const, taskId: row.ownerId, allocation: row.bucket as "work" | "handoff", dimension: d };
-          verifyModelField(this.store, id, proposal, target, row.amount[d], source.estimateId!);
-        }
-        const tasks = plan.plan.tasks.map(task => {
-          const work = proposal.allocations.find(a => a.ownerId === task.taskId && a.bucket === "work")!.amount;
-          const handoff = proposal.allocations.find(a => a.ownerId === task.taskId && a.bucket === "handoff")!.amount;
-          if (selected.handoff.snapshot.profile.capabilities.handoffExecution === "model-assisted-v1" && dimensions.some(d => handoff[d] < 1)) throw new ControlError("handoff-grant-insufficient");
-          return { ...task, work, handoff };
-        });
-        const prepared = prepareExecutionSnapshot({ store: this.store, groupId: id, planHash: plan.planHash, graphVersion: plan.graphVersion, proposalVersion: proposal.proposalVersion,
-          proposalIdentity: { groupId: id, planHash: plan.planHash, proposalVersion: proposal.proposalVersion }, groupLimit: proposal.groupLimit, budgetMode: payload.budgetMode, contextPolicy: payload.contextPolicy, profiles,
-          allocations: [...proposal.allocations.map(({ state: _state, ...a }) => a), ...estimateCommitments(this.store, id)], tasks });
-        for (const derived of prepared.derivedContracts) {
-          writeCanonicalRecord(this.store, id, derived.derivedContractHash, derived.canonicalJson);
-          const workRow = this.store.db.prepare("SELECT body FROM work_items WHERE group_id=? AND id=?").get(id, derived.taskId);
-          if (!workRow) throw new ControlError("recovery-blocked");
-          const work = JSON.parse(String(workRow.body));
-          work.derivedContractHash = derived.derivedContractHash; work.status = "ready"; work.claimOrdinal = 0; work.currentRunId = null; work.pendingRunId = null; work.lineageRunIds = [];
-          this.store.db.prepare("UPDATE work_items SET body=? WHERE group_id=? AND id=?").run(JSON.stringify(work), id, derived.taskId);
-        }
-        writeCanonicalRecord(this.store, id, prepared.snapshotHash, prepared.canonicalJson);
-        proposal.state = "confirmed"; proposal.budgetMode = payload.budgetMode; proposal.contextPolicy = payload.contextPolicy; proposal.profiles = profiles; proposal.executionSnapshotHash = prepared.snapshotHash;
-        proposal.allocations.forEach(a => { a.state = "confirmed"; }); group.status = "ready"; group.budgetMode = payload.budgetMode;
-        saveWebAuthority(this.store, group, proposal);
-        this.deps.beforeCommit?.();
-        return success(context, { kind: "confirmed", executionSnapshotHash: prepared.snapshotHash });
-      },
-    }).body);
+  /**
+   * Agent selection spec §6.4 (§12 C4): resolve every slot through ccloop outside the transaction, then freeze only
+   * if what was resolved is what the operator saw and no layer moved since. A slot failure is decided inside the
+   * transaction, after every existing check, so the precedence of the existing error codes is unchanged.
+   */
+  async confirm(command: ConfirmCommand): Promise<WebCommandResult> {
+    const release = this.deps.admissionGate?.enter();
+    try {
+      const replay = preflightWebCommand<WebCommandResult>(this.store, command); if (replay) return replay.body;
+      const prepared: GroupSelectionResolution | { failure: unknown } = await resolveGroupSelections({ store: this.store, port: this.deps.port }, groupId(command), command.actorId)
+        .catch((failure: unknown) => ({ failure }));
+      return applyWebCommand<WebCommandResult>(this.store, {
+        rawCommand: command, expand: () => ({ ...command, schema: "orca-authority-command-v1" }),
+        apply: context => {
+          const id = groupId(command), group = readWebGroup(this.store, id), plan = readArchivedPlan(this.store, id), proposal = readBudgetProposal(this.store, id), payload = command.payload;
+          if (payload.planHash !== plan.planHash) throw new ControlError("plan-version-conflict");
+          if (payload.proposalVersion !== proposal.proposalVersion) throw new ControlError("proposal-version-conflict");
+          prestart(group);
+          if (proposal.state === "confirmed") throw new ControlError("no-op-command");
+          assertKnownConservation(this.store, group, proposal);
+          const selected = { estimator: this.deps.profileRouter.resolve("budget-estimate", payload.profileIds.estimator, payload.profileHashes.estimator), worker: this.deps.profileRouter.resolve("task", payload.profileIds.worker, payload.profileHashes.worker), handoff: this.deps.profileRouter.resolve("handoff", payload.profileIds.handoff, payload.profileHashes.handoff), goalReview: this.deps.profileRouter.resolve("goal-review", payload.profileIds.goalReview, payload.profileHashes.goalReview) };
+          const window = selected.worker.snapshot.profile.capabilities.contextWindowTokens, threshold = payload.contextPolicy.handoffAtContextTokens;
+          if (window === null ? threshold !== null : threshold === null || threshold > window) throw new ControlError("execution-policy-unrepresentable");
+          const profiles = Object.fromEntries(Object.entries(selected).map(([slot, p]) => [slot, { profileId: p.snapshot.profile.profileId, profileHash: p.profileHash }])) as Record<keyof typeof selected, ProfileBindingV1>;
+          for (const row of proposal.allocations) for (const d of dimensions) {
+            const source = row.fieldProvenance[d];
+            if (source.provenance !== "model") continue;
+            if (row.ownerKind === "reserve") throw new ControlError("proposal-version-conflict");
+            const target = row.ownerKind === "goal-review" ? { scope: "goal-review" as const, dimension: d } : { scope: "task" as const, taskId: row.ownerId, allocation: row.bucket as "work" | "handoff", dimension: d };
+            verifyModelField(this.store, id, proposal, target, row.amount[d], source.estimateId!);
+          }
+          // Spec §6.4 step 2: any failed slot refuses the whole confirmation, named after the first one by key.
+          if ("failure" in prepared) throw prepared.failure;
+          const resolution: GroupSelectionResolution = prepared;
+          const rejected = resolution.slots.find(slot => slot.outcome.kind === "rejected");
+          if (rejected && rejected.outcome.kind === "rejected") throw new ControlError("agent-selection-rejected", `${rejected.taskId ?? RECONCILE_SLOT_KEY}:${rejected.outcome.code}`);
+          // Step 3: what was resolved is what the operator saw, and the layers have not moved since (checked inside the transaction).
+          if (payload.selectionsHash !== resolution.selectionsHash || resolution.proposalVersion !== proposal.proposalVersion
+            || !canonicalBytes(answeredPartials(resolution)).equals(canonicalBytes(currentPartials(this.store, id, command.actorId)))) throw new ControlError("agent-selection-changed");
+          const frozenOf = (key: string) => {
+            const slot = resolution.slots.find(entry => entry.key === key);
+            if (!slot || slot.outcome.kind !== "resolved") throw new ControlError("recovery-blocked", `slot-missing:${key}`);
+            return slot.outcome.frozen;
+          };
+          // Spec §6.5: a task's capabilities are the worker profile's declaration intersected with ccloop's answer for its selection.
+          const workerDeclared = selected.worker.snapshot.profile.capabilities;
+          const agentTasks = plan.plan.tasks.map(task => {
+            const frozen = frozenOf(taskSlotKey(task.taskId));
+            return { taskId: task.taskId, agent: frozen.selection, agentProvenance: frozen.provenance, configHash: frozen.configHash,
+              timeoutMs: frozen.timeoutMs, killGraceMs: frozen.killGraceMs, agentCapabilities: intersectCapabilities(workerDeclared, frozen.capabilities) };
+          });
+          const reconcileSlot = frozenOf(RECONCILE_SLOT_KEY);
+          const tasks = plan.plan.tasks.map(task => {
+            const work = proposal.allocations.find(a => a.ownerId === task.taskId && a.bucket === "work")!.amount;
+            const handoff = proposal.allocations.find(a => a.ownerId === task.taskId && a.bucket === "handoff")!.amount;
+            if (selected.handoff.snapshot.profile.capabilities.handoffExecution === "model-assisted-v1" && dimensions.some(d => handoff[d] < 1)) throw new ControlError("handoff-grant-insufficient");
+            return { ...task, work, handoff };
+          });
+          const built = prepareExecutionSnapshot({ store: this.store, groupId: id, planHash: plan.planHash, graphVersion: plan.graphVersion, proposalVersion: proposal.proposalVersion,
+            proposalIdentity: { groupId: id, planHash: plan.planHash, proposalVersion: proposal.proposalVersion }, groupLimit: proposal.groupLimit, budgetMode: payload.budgetMode, contextPolicy: payload.contextPolicy, profiles,
+            allocations: [...proposal.allocations.map(({ state: _state, ...a }) => a), ...estimateCommitments(this.store, id)], tasks, agents: { tasks: agentTasks, reconcile: reconcileSlot } });
+          for (const derived of built.derivedContracts) {
+            writeCanonicalRecord(this.store, id, derived.derivedContractHash, derived.canonicalJson);
+            const workRow = this.store.db.prepare("SELECT body FROM work_items WHERE group_id=? AND id=?").get(id, derived.taskId);
+            if (!workRow) throw new ControlError("recovery-blocked");
+            const work = JSON.parse(String(workRow.body));
+            // Spec §6.4 step 4: the work item carries exactly what the snapshot freezes for its task.
+            const { taskId: _taskId, ...frozen } = agentTasks.find(entry => entry.taskId === derived.taskId)!;
+            Object.assign(work, frozen);
+            work.derivedContractHash = derived.derivedContractHash; work.status = "ready"; work.claimOrdinal = 0; work.currentRunId = null; work.pendingRunId = null; work.lineageRunIds = [];
+            this.store.db.prepare("UPDATE work_items SET body=? WHERE group_id=? AND id=?").run(JSON.stringify(work), id, derived.taskId);
+          }
+          writeCanonicalRecord(this.store, id, built.snapshotHash, built.canonicalJson);
+          (group as Record<string, unknown>).reconcileSlot = reconcileSlot;
+          proposal.state = "confirmed"; proposal.budgetMode = payload.budgetMode; proposal.contextPolicy = payload.contextPolicy; proposal.profiles = profiles; proposal.executionSnapshotHash = built.snapshotHash;
+          proposal.allocations.forEach(a => { a.state = "confirmed"; }); group.status = "ready"; group.budgetMode = payload.budgetMode;
+          saveWebAuthority(this.store, group, proposal);
+          this.deps.beforeCommit?.();
+          return success(context, { kind: "confirmed", executionSnapshotHash: built.snapshotHash });
+        },
+      }).body;
+    } finally { release?.(); }
   }
   setLimit(command: SetLimitCommand): WebCommandResult {
     return this.mutate(() => applyWebCommand(this.store, {

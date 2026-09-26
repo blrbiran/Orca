@@ -17,14 +17,13 @@ function snapshot(
   resolved: Partial<ExecutionProfileSnapshotV1["resolved"]> = {},
   profile: Partial<ExecutionProfileSnapshotV1["profile"]> = {},
 ): ExecutionProfileSnapshotV1 {
+  // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): profile v2 (spec §6.5) -- no adapter
+  // identity in `profile` or `resolved`; every other declared and resolved field is the same.
   return {
-    schema: "orca-execution-profile-snapshot-v1",
+    schema: "orca-execution-profile-snapshot-v2",
     profile: {
       profileId: "worker",
       allowedWorkKinds: ["task"],
-      adapter: "test-adapter",
-      adapterConfigRef: "adapter-config",
-      modelPolicyRef: "model-policy",
       contextTokenizer: { tokenizerId: "tok", tokenizerVersion: "1" },
       workMaxOutputTokens: 4096,
       capabilities: {
@@ -46,11 +45,7 @@ function snapshot(
       ...profile,
     },
     resolved: {
-      adapterConfigContentHash: hash("a"),
-      modelPolicyContentHash: hash("b"),
       proofDocumentContentHashes: [hash("c")],
-      adapterImplementationHash: hash("d"),
-      adapterProtocolVersion: "1",
       tokenizerArtifactHashes: [{ purpose: "context", contentHash: hash("e") }],
       secretValueHashes: [{ name: "/adapter/token", valueHash: hash("f") }],
       ...resolved,
@@ -80,8 +75,10 @@ function port(probe: CapabilityViewV1 | (() => Promise<CapabilityViewV1>)): Exec
 
 describe("trusted execution profiles", () => {
   it("changes profileHash when any resolved execution byte changes", () => {
-    const a = resolveProfile(snapshot({ adapterImplementationHash: hash("a") }), port(unavailableCapabilities));
-    const b = resolveProfile(snapshot({ adapterImplementationHash: hash("b") }), port(unavailableCapabilities));
+    // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): v2 has no adapter implementation hash, so the
+    // resolved byte that differs is a proof document's content hash; a different resolved byte still changes the hash.
+    const a = resolveProfile(snapshot({ proofDocumentContentHashes: [hash("a")] }), port(unavailableCapabilities));
+    const b = resolveProfile(snapshot({ proofDocumentContentHashes: [hash("b")] }), port(unavailableCapabilities));
     expect(a.profileHash).not.toBe(b.profileHash);
   });
 
@@ -100,9 +97,11 @@ describe("trusted execution profiles", () => {
     const frozen = resolveProfile(snapshot(), port(unavailableCapabilities));
     expect(() => createExecutionProfileRouter([{ ...frozen, profileHash: hash("0") }])).toThrow("control-profile-invalid");
 
-    const other = resolveProfile(snapshot({ adapterImplementationHash: hash("9") }, { profileId: "other" }), port(unavailableCapabilities));
+    // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): the foreign profile differs by a proof hash (v2 has
+    // no adapter hash) and the probe names a selection (now required); a profile from another router is still refused.
+    const other = resolveProfile(snapshot({ proofDocumentContentHashes: [hash("9")] }, { profileId: "other" }), port(unavailableCapabilities));
     const router = createExecutionProfileRouter([frozen]);
-    await expect(router.probe(other)).rejects.toThrow("profile-changed");
+    await expect(router.probe(other, { agent: "codex" })).rejects.toThrow("profile-changed");
   });
 
   it("owns immutable snapshot and port method bindings after construction", async () => {
@@ -115,7 +114,9 @@ describe("trusted execution profiles", () => {
     mutablePort.resolveAgent = async () => { throw new Error("the replaced method was called"); };
     mutablePort.accept = async () => ({ kind: "accepted", executionId: "mutated", configHash: hash("0") });
 
-    await router.probe(owned);
+    // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): the probe names a selection (now required); it
+    // still goes to the method bound at construction, not the replaced one.
+    await router.probe(owned, { agent: "codex" });
     expect(first).toBe(1);
     await expect(owned.port.accept({} as never)).resolves.toEqual({ kind: "unknown" });
     expect(owned).not.toBe(frozen);
@@ -170,17 +171,19 @@ describe("trusted execution profiles", () => {
 
   it("degrades a failed or malformed capability probe to wholly unavailable", async () => {
     const failed = resolveProfile(snapshot(), port(async () => { throw new Error("offline"); }));
-    const malformed = resolveProfile(snapshot({ adapterImplementationHash: hash("9") }, { profileId: "malformed" }), port({
+    // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): the second profile differs by a proof hash (v2 has
+    // no adapter hash) and each probe names a selection (now required); both still degrade to wholly unavailable.
+    const malformed = resolveProfile(snapshot({ proofDocumentContentHashes: [hash("9")] }, { profileId: "malformed" }), port({
       ...unavailableCapabilities,
       usageObservation: "future" as never,
     }));
     const router = createExecutionProfileRouter([failed, malformed]);
 
-    await expect(router.probe(router.resolve("task", "worker", failed.profileHash))).resolves.toMatchObject({
+    await expect(router.probe(router.resolve("task", "worker", failed.profileHash), { agent: "codex" })).resolves.toMatchObject({
       observed: unavailableCapabilities,
       probeFailureCode: "control-capability-probe-failed",
     });
-    await expect(router.probe(router.resolve("task", "malformed", malformed.profileHash))).resolves.toMatchObject({
+    await expect(router.probe(router.resolve("task", "malformed", malformed.profileHash), { agent: "codex" })).resolves.toMatchObject({
       observed: unavailableCapabilities,
       probeFailureCode: "control-capability-probe-failed",
     });
@@ -200,10 +203,15 @@ describe("trusted execution profiles", () => {
     expect(() => resolveProfile(snapshot({}, { workMaxOutputTokens: null }), port(unavailableCapabilities))).toThrow("control-profile-invalid");
   });
 
-  it("keeps Codex phase-end and soft", () => {
+  // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): plan review P22 -- profile v2 drops the adapter
+  // identity fields (spec §6.5), so what this now encodes is that a v2 snapshot naming an adapter is refused outright
+  // (and with it the codex-only phase-end/soft rule, whose capabilities now come from ccloop's answer per selection).
+  it("refuses a v2 snapshot that carries adapter: \"codex\"", () => {
     expect(() => resolveProfile(snapshot({}, {
       adapter: "codex",
-      capabilities: { ...snapshot().profile.capabilities, budgetEnforcement: "bounded" },
-    }), port(unavailableCapabilities))).toThrow("control-profile-invalid");
+      capabilities: { ...snapshot().profile.capabilities, usageObservation: "phase-end", budgetEnforcement: "soft" },
+    } as never), port(unavailableCapabilities))).toThrow("control-profile-invalid");
+    expect(() => resolveProfile(snapshot({ adapterImplementationHash: hash("d") } as never), port(unavailableCapabilities))).toThrow("control-profile-invalid");
+    expect(() => resolveProfile(snapshot({}, { capabilities: { ...snapshot().profile.capabilities, usageObservation: "phase-end", budgetEnforcement: "soft" } }), port(unavailableCapabilities))).not.toThrow();
   });
 });

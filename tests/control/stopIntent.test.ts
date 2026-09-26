@@ -34,7 +34,8 @@ async function stopFixture(capabilityPatch: Partial<CapabilityViewV1> = {}, snap
   const clock = { value: new Date(ACCEPTED_AT) };
   const deps = { ...h.deps, now: () => clock.value };
   const service = new WebControlService(deps);
-  service.confirm(h.command("confirm", h.confirmPayload()));
+  // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): confirmation resolves agent selections through ccloop first, so it is awaited and carries the previewed selectionsHash.
+  await service.confirm(h.command("confirm", await h.confirmPayload()));
   const stopped = (beforeCommit?: () => void) => new WebControlService(beforeCommit ? { ...deps, beforeCommit } : deps);
   return { h, service, clock, deps, stopped };
 }
@@ -603,7 +604,9 @@ describe("model-assisted handoff attempts", () => {
       const requestId = requests(h.store)[0].requestId;
       const foreign = structuredClone(profileSnapshot());
       foreign.profile.capabilities.handoffExecution = "model-assisted-v1";
-      foreign.resolved.adapterImplementationHash = "e".repeat(64);
+      // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): the foreign profile's other profileHash comes
+      // from a different proof hash (profile v2 has no adapter implementation hash); it is still another profile.
+      foreign.resolved.proofDocumentContentHashes = ["e".repeat(64)];
       const router = createExecutionProfileRouter([resolveProfile(foreign)]);
       expect(await beginHandoffAttempt({ store: h.store, profileRouter: router }, requestId))
         .toMatchObject({ kind: "settled-unrecoverable", reasonCode: "profile-changed" });
@@ -746,7 +749,8 @@ async function modelAssistedFixture() {
     ],
   }));
   if ("error" in edited) throw new Error(`model-assisted fixture edit rejected: ${JSON.stringify(edited)}`);
-  service.confirm(h.command("confirm", h.confirmPayload()));
+  // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): confirmation resolves agent selections through ccloop first, so it is awaited and carries the previewed selectionsHash.
+  await service.confirm(h.command("confirm", await h.confirmPayload()));
   await service.start(h.command("start", {}));
   await deliverScheduledStart({ store: h.store, profileRouter: h.deps.profileRouter, admissionGate: h.deps.admissionGate }, "g");
   await service.handoffStop(h.command("handoff-stop", {}));

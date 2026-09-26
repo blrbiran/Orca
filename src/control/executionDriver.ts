@@ -64,7 +64,7 @@ export interface ExecutionDriverDeps {
   beforeCas?: () => Promise<void>;
   /** Handoff delivery spec §3: the clock a request's grace is judged by (tests move it). */
   now?: () => Date;
-  /** Test override of the handoff grace; absent, it is the run's agent killGraceMs + 60 s (driverHandoff.handoffGraceMsOf). */
+  /** Test seam only: overrides handoffGraceMsOf(run) (agent selection spec §6.6: the run's frozen killGraceMs + 60 s). */
   handoffGraceMs?: number;
 }
 

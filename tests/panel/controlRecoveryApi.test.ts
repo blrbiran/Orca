@@ -57,6 +57,9 @@ async function confirmSoft(panel: Panel): Promise<string> {
       profileIds: { estimator: "all", worker: "all", handoff: "all", goalReview: "all" },
       profileHashes: { estimator: hash, worker: hash, handoff: hash, goalReview: hash },
       contextPolicy: { handoffAtContextTokens: 800_000 },
+      // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): the confirm envelope carries the
+      // selectionsHash the panel operator previewed (spec §6.4 step 3); each criterion using this helper is otherwise as before.
+      selectionsHash: await panel.selectionsHash(),
     },
   });
   expect(confirmed.status).toBe(200);

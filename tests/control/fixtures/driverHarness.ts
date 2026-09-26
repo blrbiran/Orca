@@ -22,7 +22,10 @@ export interface HarnessOptions {
   delayAccept?: () => Promise<void>;
   workTokens?: (workItemId: string) => number;
   duringCollect?: () => Promise<void>;
-  /** Agent selection: the killGraceMs the synthetic ccloop answers for every selection. */
+  /**
+   * Agent selection spec §6.6 (plan T11): the killGraceMs ccloop answers at confirmation, frozen onto every work item
+   * and run. The driver's synthetic ccloop keeps answering its own default (0), so only the frozen value can matter.
+   */
   killGraceMs?: number;
 }
 
@@ -32,19 +35,19 @@ export interface HarnessOptions {
  */
 export async function driverHarness(tasks: readonly WebFixtureTask[], options: HarnessOptions = {}) {
   const snapshot = profileSnapshot();
-  const h = await webFixture(snapshot, tasks);
+  const h = await webFixture(snapshot, tasks, { killGraceMs: options.killGraceMs });
   const repo = await realpath(join(h.root, "repo"));
   git(repo, "init", "-q", "-b", "main");
   await writeFile(join(repo, "base.txt"), "base\n");
   git(repo, "add", "base.txt");
   git(repo, "commit", "-qm", "base");
   const service = new WebControlService({ ...h.deps, knownRepository: (repoId: string) => repoId === "repo" });
-  const confirmed = service.confirm(h.command("confirm", { ...h.confirmPayload(), budgetMode: options.budgetMode ?? "soft" }));
+  const confirmed = await service.confirm(h.command("confirm", { ...(await h.confirmPayload()), budgetMode: options.budgetMode ?? "soft" }));
   if ("error" in confirmed) throw new Error(`confirm refused: ${JSON.stringify(confirmed.error)}`);
   const fake = fakeCcloopPort({
     capabilities: snapshot.profile.capabilities, behaviour: options.behaviour ?? (() => "succeed"),
     files: options.files ?? ((id) => ({ [id]: `${id}\n` })), delayAccept: options.delayAccept,
-    workTokens: options.workTokens, duringCollect: options.duringCollect, killGraceMs: options.killGraceMs,
+    workTokens: options.workTokens, duringCollect: options.duringCollect,
   });
   const deps: ExecutionDriverDeps = {
     store: h.store, router: createExecutionProfileRouter([resolveProfile(snapshot, fake.port)]), admissionGate: h.deps.admissionGate,

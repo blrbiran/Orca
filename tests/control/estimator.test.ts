@@ -24,7 +24,9 @@ describe("frozen estimator", () => {
   it("freezes exact input formula, contract constants, and checks later degradation", async () => {
     const h = await webFixture(); try {
       const plan = readArchivedPlan(h.store, "g");
-      const observation = await h.deps.profileRouter.probe(h.frozen);
+      // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): the probe names the selection it is about
+      // (now required) -- the fixture operator's; the request formula and degradation checks are judged as before.
+      const observation = await h.deps.profileRouter.probe(h.frozen, { agent: "codex" });
       const result = buildBudgetEstimateRequest({ planHash: plan.planHash, planCanonicalJson: plan.canonicalJson, profile: h.frozen, observation, mode: "strict" });
       expect(result.state).toBe("queued");
       const serialized = Math.ceil(canonicalBytes(result.request).length * 2 / 3);
@@ -199,9 +201,11 @@ describe("frozen estimator", () => {
       const service = new WebControlService(h.deps), run = await service.claimEstimate("g", h.estimateId);
       const event = { runId: run!.runId, generation: 1, bucket: "work" as const, source: { artifactId: "event", hash: "a".repeat(64) } };
       recordUsage(h.store, { ...event, eventSeq: 2, cumulative: { tokens: 1000, activeMs: 100, attempts: 0, sessions: 0 } });
-      expect(service.confirm(h.command("confirm", h.confirmPayload()))).toMatchObject({ error: { code: "recovery-blocked" } });
+      // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): each confirmation is awaited and carries the
+      // previewed selectionsHash; a usage gap still refuses it and the settled remainder is still the only refund.
+      expect(await service.confirm(h.command("confirm", await h.confirmPayload()))).toMatchObject({ error: { code: "recovery-blocked" } });
       recordUsage(h.store, { ...event, eventSeq: 1, cumulative: null });
-      expect(service.confirm(h.command("confirm", h.confirmPayload()))).toMatchObject({ result: { kind: "confirmed" } });
+      expect(await service.confirm(h.command("confirm", await h.confirmPayload()))).toMatchObject({ result: { kind: "confirmed" } });
       const before = readBudgetProposal(h.store, "g");
       const row = JSON.parse(String(h.store.db.prepare("SELECT body FROM runs WHERE id=?").get(run!.runId)!.body));
       row.state = "settled-restartable";

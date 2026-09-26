@@ -41,11 +41,12 @@ const contract = (taskId: string) => ({
 });
 
 function profile(): ExecutionProfileSnapshotV1 {
+  // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): profile v2 (spec §6.5): no adapter identity
+  // fields; the declared capabilities and the remaining resolved hashes these criteria depend on are the same.
   return {
-    schema: "orca-execution-profile-snapshot-v1",
+    schema: "orca-execution-profile-snapshot-v2",
     profile: {
-      profileId: "estimator", allowedWorkKinds: ["budget-estimate"], adapter: "bounded",
-      adapterConfigRef: "adapter", modelPolicyRef: "policy", contextTokenizer: null, workMaxOutputTokens: null,
+      profileId: "estimator", allowedWorkKinds: ["budget-estimate"], contextTokenizer: null, workMaxOutputTokens: null,
       capabilities: {
         usageObservation: "realtime", budgetEnforcement: "bounded", contextObservation: "unavailable",
         handoffControl: "durable", handoffExecution: "mechanical-in-run-v1", contextWindowTokens: 1_000_000,
@@ -53,7 +54,7 @@ function profile(): ExecutionProfileSnapshotV1 {
       },
       estimatorPreflight: { instructionVersion: "1", schemaVersion: "budget-estimate-v1", maxOutputTokens: 1_000, framingTokenOverhead: 10, tokenizer: { kind: "utf8-upper-bound", numerator: 1, denominator: 1, proofRef: "proof" } },
     },
-    resolved: { adapterConfigContentHash: hash("a"), modelPolicyContentHash: hash("b"), proofDocumentContentHashes: [hash("c")], adapterImplementationHash: hash("d"), adapterProtocolVersion: "1", tokenizerArtifactHashes: [], secretValueHashes: [] },
+    resolved: { proofDocumentContentHashes: [hash("c")], tokenizerArtifactHashes: [], secretValueHashes: [] },
   };
 }
 
@@ -87,8 +88,9 @@ async function setup(): Promise<Harness> {
     goal: "Ship", successConditions: ["tests pass"],
     tasks: [
       // Seam B (human ruling 2026-09-24, named under ruling 88): targetVersion is one positive safe integer from plan to wire.
-      { taskId: "b", contract: b, dependsOn: ["a"], targetVersion: 2, configHash: hash("e") },
-      { taskId: "a", contract: a, dependsOn: [], targetVersion: 1, configHash: hash("f") },
+      // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): plan tasks carry no configHash (spec §6.2); confirmation freezes ccloop's.
+      { taskId: "b", contract: b, dependsOn: ["a"], targetVersion: 2 },
+      { taskId: "a", contract: a, dependsOn: [], targetVersion: 1 },
     ],
   }));
   const snapshot = profile();
@@ -145,6 +147,20 @@ async function request(h: Harness, path: string, authenticated = true, init: Req
   return fetch(`${h.url}${path}`, { ...init, headers: { ...(authenticated ? { "x-orca-token": token } : {}), ...init.headers } });
 }
 
+// Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): what a confirmation freezes for the selection this
+// file's port answers (spec §6.4 step 4): each task's fields, and the group's reconcile slot. confirmGroup writes them
+// into the snapshot, the work items and the group, and insertValidTaskRun copies them onto the run, exactly as the
+// product does; the read model's judgement of everything else is unchanged.
+const frozenAgent = () => ({
+  agent: { agent: FIXTURE_AGENT_ID, model: "fixture-model", contextWindow: "agent-default" as const },
+  agentProvenance: { agent: "operator" as const, model: "descriptor" as const, contextWindow: "descriptor" as const },
+  configHash: hash("d"), timeoutMs: 1, killGraceMs: 0, agentCapabilities: profile().profile.capabilities,
+});
+const frozenReconcile = () => {
+  const { agent, agentProvenance, agentCapabilities, ...rest } = frozenAgent();
+  return { partial: { agent: FIXTURE_AGENT_ID }, provenance: agentProvenance, selection: agent, capabilities: agentCapabilities, ...rest };
+};
+
 async function confirmGroup(h: Harness, groupId: string, stopped = false): Promise<{
   estimateId: string;
   output: BudgetEstimateV1;
@@ -187,6 +203,7 @@ async function confirmGroup(h: Harness, groupId: string, stopped = false): Promi
       work: allocations.find(row => row.ownerKind === "task" && row.ownerId === task.taskId && row.bucket === "work")!.amount,
       handoff: allocations.find(row => row.ownerKind === "task" && row.ownerId === task.taskId && row.bucket === "handoff")!.amount,
     })),
+    agents: { tasks: plan.plan.tasks.map(task => ({ taskId: task.taskId, ...frozenAgent() })), reconcile: frozenReconcile() },
   });
   const confirmedProposal = {
     ...proposal,
@@ -205,6 +222,7 @@ async function confirmGroup(h: Harness, groupId: string, stopped = false): Promi
     const body = JSON.parse(String(row.body));
     body.status = "ready";
     body.stopped = stopped;
+    body.reconcileSlot = frozenReconcile();
     body.proposal = {
       state: "confirmed", proposalVersion: proposal.proposalVersion, planHash: plan.planHash,
       budgetMode: "strict", contextPolicy: prepared.snapshot.contextPolicy, profiles,
@@ -216,6 +234,7 @@ async function confirmGroup(h: Harness, groupId: string, stopped = false): Promi
       const work = JSON.parse(String(workRow.body));
       work.status = "ready";
       work.derivedContractHash = derived.derivedContractHash;
+      Object.assign(work, frozenAgent());
       h.store.db.prepare("UPDATE work_items SET body=? WHERE group_id=? AND id=?")
         .run(JSON.stringify(work), groupId, derived.taskId);
     }
@@ -238,7 +257,8 @@ function insertValidTaskRun(h: Harness, groupId: string, runId = "run-one"): Rec
   const run = {
     groupId, workItemId: "a", taskId: "a", estimateId: null, runId, generation: 1,
     graphVersion: 1, targetVersion: work.targetVersion, commandId: `start-${runId}`,
-    configHash: work.configHash, grant: work.grant, ownerToken: `owner-${runId}`,
+    configHash: work.configHash, agent: work.agent, agentProvenance: work.agentProvenance, timeoutMs: work.timeoutMs,
+    killGraceMs: work.killGraceMs, agentCapabilities: work.agentCapabilities, grant: work.grant, ownerToken: `owner-${runId}`,
     executionProfile: { workKind: "task", ...binding },
     handoffProfile: { workKind: "handoff", ...proposal.profiles!.handoff },
     executionId: `execution-${runId}`, state: "accepted", checkpointId: null, recoverable: false,

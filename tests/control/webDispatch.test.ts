@@ -17,7 +17,8 @@ async function startedFixture(observed = structuredClone(profileSnapshot().profi
   const h = await webFixture(snapshot);
   h.setObserved(observed);
   const service = new WebControlService(h.deps);
-  service.confirm(h.command("confirm", h.confirmPayload()));
+  // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): confirmation resolves agent selections through ccloop first, so it is awaited and carries the previewed selectionsHash.
+  await service.confirm(h.command("confirm", await h.confirmPayload()));
   return { h, service };
 }
 

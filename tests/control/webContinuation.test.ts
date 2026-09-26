@@ -127,7 +127,8 @@ async function continuationFixture(tasks: readonly WebFixtureTask[] = [{ taskId:
   const clock = { value: new Date(ACCEPTED_AT) };
   const deps = { ...h.deps, now: () => clock.value };
   const service = new WebControlService(deps);
-  service.confirm(h.command("confirm", h.confirmPayload()));
+  // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): confirmation resolves agent selections through ccloop first, so it is awaited and carries the previewed selectionsHash.
+  await service.confirm(h.command("confirm", await h.confirmPayload()));
   await service.start(h.command("start", {}));
   return { h, deps, service, clock };
 }

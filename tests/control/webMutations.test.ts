@@ -33,7 +33,8 @@ const editTokens = (tokens: number) => ({ baseProposalVersion: 1, operations: [{
 async function ready(budgetMode: "strict" | "soft" = "strict") {
   const f = await webFixture(profileSnapshot(), [{ taskId: "a" }]);
   const service = new WebControlService(f.deps);
-  const confirmed = service.confirm(f.command("confirm", { ...f.confirmPayload(), budgetMode }));
+  // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): confirmation resolves agent selections through ccloop first, so it is awaited and carries the previewed selectionsHash.
+  const confirmed = await service.confirm(f.command("confirm", { ...(await f.confirmPayload()), budgetMode }));
   if ("error" in confirmed) throw new Error("confirm refused: " + confirmed.error.code);
   const deps = { store: f.store, profileRouter: f.deps.profileRouter, admissionGate: f.deps.admissionGate };
   return { f, service, deps, capable: () => f.setObserved({ ...f.frozen.snapshot.profile.capabilities }), unproven: () => f.setObserved({ ...f.frozen.snapshot.profile.capabilities, requestBoundProof: null }) };

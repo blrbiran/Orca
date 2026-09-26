@@ -1,13 +1,36 @@
+import { vi } from "vitest";
 import { applySetAgentPreferences, readAgentPreferences } from "../../../src/control/agentPreferences.js";
-import type { OperatorPreferences } from "../../../src/control/agentSelection.js";
-import { canonicalBytes } from "../../../src/control/canonicalJson.js";
+import type { AgentResolution, OperatorPreferences, PartialSelection } from "../../../src/control/agentSelection.js";
+import { canonicalBytes, sha256Canonical } from "../../../src/control/canonicalJson.js";
+import { ControlError } from "../../../src/control/errors.js";
 import type { ControlStore } from "../../../src/control/store.js";
+import type { CapabilityViewV1 } from "../../../src/control/webProtocol.js";
 
 /**
  * Agent selection spec §6.2 layer 1. The installation id the Web fixtures' ports answer for by default
  * (web.ts `FIXTURE_AGENT.agent`); named `_ID` so it never shadows web.ts's complete `FIXTURE_AGENT` selection.
  */
 export const FIXTURE_AGENT_ID = "codex";
+/** Agent selection plan T11: a second installation the fixture ports know, so a criterion can tell two selections apart. */
+export const FIXTURE_OTHER_AGENT_ID = "claude";
+/** Each known installation's descriptor default model; an id not here is refused as ccloop refuses one not in its table. */
+const FIXTURE_DEFAULT_MODELS: Record<string, string> = { [FIXTURE_AGENT_ID]: "fixture-model", [FIXTURE_OTHER_AGENT_ID]: "fixture-claude-model" };
+
+/**
+ * A stand-in for ccloop's capabilities-v3 resolution (spec §4.6), as a mock a criterion can inspect or re-implement:
+ * requested fields are echoed, the rest are the installation's defaults (no agent: the fixture agent), and an unknown
+ * installation is refused by ccloop's own code. The capabilities are whatever `capabilities()` answers at call time.
+ */
+export function fixtureResolveAgent(capabilities: () => CapabilityViewV1, options: { killGraceMs?: number } = {}) {
+  return vi.fn(async (partial: PartialSelection): Promise<AgentResolution> => {
+    const agent = partial.agent ?? FIXTURE_AGENT_ID;
+    if (!Object.hasOwn(FIXTURE_DEFAULT_MODELS, agent)) throw new ControlError("agent-installation-missing", agent);
+    return {
+      selection: { agent, model: partial.model ?? FIXTURE_DEFAULT_MODELS[agent]!, contextWindow: partial.contextWindow ?? "agent-default" },
+      configHash: sha256Canonical({}), timeoutMs: 120_000, killGraceMs: options.killGraceMs ?? 5_000, capabilities: capabilities(),
+    };
+  });
+}
 
 /** Sets `operatorId`'s preferences through the real command (and its ledger row), as the panel would. */
 export function seedPreferences(store: ControlStore, operatorId: string, preferences: OperatorPreferences, expectedRevision = 0): void {

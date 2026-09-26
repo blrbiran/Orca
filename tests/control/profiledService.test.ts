@@ -17,11 +17,12 @@ const digest = (byte: string) => byte.repeat(64);
 const latch = () => { let release!: () => void; const promise = new Promise<void>((resolve) => { release = resolve; }); return { promise, release }; };
 
 function profileSnapshot(): ExecutionProfileSnapshotV1 {
+  // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): profile v2 (spec §6.5): no adapter identity
+  // fields; every declared capability and resolved hash these criteria depend on is the same.
   return {
-    schema: "orca-execution-profile-snapshot-v1",
+    schema: "orca-execution-profile-snapshot-v2",
     profile: {
-      profileId: "worker", allowedWorkKinds: ["task"], adapter: "test-adapter",
-      adapterConfigRef: "adapter", modelPolicyRef: "policy", contextTokenizer: null,
+      profileId: "worker", allowedWorkKinds: ["task"], contextTokenizer: null,
       workMaxOutputTokens: 4096,
       capabilities: {
         usageObservation: "realtime", budgetEnforcement: "bounded", contextObservation: "unavailable",
@@ -33,10 +34,7 @@ function profileSnapshot(): ExecutionProfileSnapshotV1 {
       },
       estimatorPreflight: null,
     },
-    resolved: {
-      adapterConfigContentHash: digest("a"), modelPolicyContentHash: digest("b"), proofDocumentContentHashes: [],
-      adapterImplementationHash: digest("c"), adapterProtocolVersion: "1", tokenizerArtifactHashes: [], secretValueHashes: [],
-    },
+    resolved: { proofDocumentContentHashes: [digest("c")], tokenizerArtifactHashes: [], secretValueHashes: [] },
   };
 }
 
@@ -45,7 +43,9 @@ function handoffSnapshot(): ExecutionProfileSnapshotV1 {
   value.profile.profileId = "handoff";
   value.profile.allowedWorkKinds = ["handoff"];
   value.profile.workMaxOutputTokens = null;
-  value.resolved.adapterImplementationHash = digest("d");
+  // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): the handoff profile's other profileHash comes from a
+  // different proof hash (v2 has no adapter implementation hash).
+  value.resolved.proofDocumentContentHashes = [digest("d")];
   return value;
 }
 
@@ -83,7 +83,7 @@ function serviceWith(store: Awaited<ReturnType<typeof openTestStore>>["store"], 
   const handoff = resolveProfile(handoffSnapshot(), handoffPort);
   const real = createExecutionProfileRouter([frozen, handoff]);
   // Marks the port calls made from inside the router's probe (see `probing`); every other method is the router's own.
-  const router: typeof real = Object.freeze({ ...real, probe: async (profile: Parameters<typeof real.probe>[0], agent?: Parameters<typeof real.probe>[1]) => { routerProbing += 1; try { return await real.probe(profile, agent); } finally { routerProbing -= 1; } } });
+  const router: typeof real = Object.freeze({ ...real, probe: async (profile: Parameters<typeof real.probe>[0], agent: Parameters<typeof real.probe>[1]) => { routerProbing += 1; try { return await real.probe(profile, agent); } finally { routerProbing -= 1; } } });
   const selection: ExecutionProfileSelection = { workKind: "task", profileId: "worker", profileHash: frozen.profileHash };
   const handoffSelection: ExecutionProfileSelection = { workKind: "handoff", profileId: "handoff", profileHash: handoff.profileHash };
   return { service: new ControlService(store, fallback, { profileRouter: router, reconcileGrant: { work: amount(7, 500, 1, 1), handoff: amount(2, 50, 0, 0) } }), selection, handoffSelection, frozen };

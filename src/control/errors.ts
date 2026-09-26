@@ -27,6 +27,9 @@ export const durableCommandErrorStatuses = {
   "route-not-found": 404,
 
   // Optimistic concurrency, immutable identity, and ownership conflicts.
+  // Agent selection spec §6.4 step 3 (W6-12): the selections a confirmation resolves are no longer the ones the
+  // operator saw (the previewed selectionsHash, or a layer that moved while ccloop answered).
+  "agent-selection-changed": 409,
   "artifact-id-conflict": 409,
   "checkpoint-id-conflict": 409,
   "checkpoint-identity-conflict": 409,
@@ -69,6 +72,8 @@ export const durableCommandErrorStatuses = {
   // Agent selection spec §6.3 (e) and §4.6 (M5): no layer chose an agent; an answer did not echo a requested field.
   "agent-unselected": 422,
   "agent-selection-invalid": 422,
+  // Spec §6.4 step 2 (W6-12): a slot ccloop refused; the detail is `<taskId|reconcile>:<ccloop code>`.
+  "agent-selection-rejected": 422,
   "cleanup-not-recoverable": 422,
   "budget-overflow": 422,
   "continuation-budget-unavailable": 422,

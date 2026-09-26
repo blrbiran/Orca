@@ -62,7 +62,8 @@ async function claimed(snapshot = profileSnapshot()) {
   const fault = commitFault();
   const service = new WebControlService({ ...h.deps, beforeCommit: fault.hook });
   const deps = { store: h.store, profileRouter: h.deps.profileRouter, admissionGate: h.deps.admissionGate };
-  const confirmed = service.confirm(h.command("confirm", h.confirmPayload()));
+  // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): confirmation resolves agent selections through ccloop first, so it is awaited and carries the previewed selectionsHash.
+  const confirmed = await service.confirm(h.command("confirm", await h.confirmPayload()));
   if ("error" in confirmed) throw new Error(`confirm refused: ${JSON.stringify(confirmed.error)}`);
   const started = await service.start(h.command("start", {}));
   if ("error" in started) throw new Error(`start refused: ${JSON.stringify(started.error)}`);
@@ -139,16 +140,18 @@ describe("commit boundaries (task 10 step 3)", () => {
     try {
       const fault = commitFault();
       const service = new WebControlService({ ...h.deps, beforeCommit: fault.hook });
-      const command = h.command("confirm", h.confirmPayload(), "crash-confirm");
+      // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): confirmation resolves the
+      // selections through ccloop first, so the fault surfaces as a rejected promise; nothing may survive it all the same.
+      const command = h.command("confirm", await h.confirmPayload(), "crash-confirm");
       fault.arm();
-      expect(() => service.confirm(command)).toThrow("fault-before-commit");
+      await expect(service.confirm(command)).rejects.toThrow("fault-before-commit");
       // The canonical records a prepared confirm wrote are content-addressed bytes that nothing
       // references; what must not survive is the authority to dispatch.
       expect(proposalBody(h.store)).toMatchObject({ state: "editable", executionSnapshotHash: null });
       expect(String(h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!.body)).toContain('"status":"draft"');
       expect(count(h.store, "commands", "id='crash-confirm'")).toBe(0);
       fault.clear();
-      service.confirm(command);
+      await service.confirm(command);
       expect(proposalBody(h.store)).toMatchObject({ state: "confirmed", executionSnapshotHash: expect.any(String) });
       expect(count(h.store, "commands", "id='crash-confirm'")).toBe(1);
     } finally { await h.dispose(); }

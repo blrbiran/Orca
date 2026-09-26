@@ -11,6 +11,7 @@ import type { AdmissionGate } from "./admissionGate.js";
 import type { WakeHandler, WakeHandlers } from "./dispatch.js";
 import type { ControlStore } from "./store.js";
 import type { AgentSelection } from "./agentSelection.js";
+import { frozenWorkAgent } from "./agentFreeze.js";
 import { claimableContinuations, continuationAlreadyClaimed, continuationWakeBody, type RegisteredContinuation } from "./continuation.js";
 
 export type Phase = "estimate" | "work" | "handoff";
@@ -64,6 +65,26 @@ function resolveBindings(router: ExecutionProfileRouter, snapshot: ExecutionSnap
   return { worker: router.resolve("task", snapshot.profiles.worker.profileId, snapshot.profiles.worker.profileHash), handoff: router.resolve("handoff", snapshot.profiles.handoff.profileId, snapshot.profiles.handoff.profileHash) };
 }
 
+/**
+ * Agent selection spec §6.4 last paragraph (W5-M12): the start gates run before a task is chosen, so they probe each
+ * distinct selection the group's tasks were frozen with -- never the operator's current default. Any degraded one
+ * blocks the group, as one degraded profile did.
+ */
+function frozenTaskSelections(store: ControlStore, groupId: string): AgentSelection[] {
+  const seen = new Map<string, AgentSelection>();
+  for (const row of store.db.prepare("SELECT body FROM work_items WHERE group_id=? ORDER BY id").all(groupId)) {
+    const work = JSON.parse(String(row.body)) as { kind: string };
+    if (work.kind !== "task") continue;
+    const { agent } = frozenWorkAgent(work);
+    seen.set(canonicalBytes(agent).toString("utf8"), agent);
+  }
+  return [...seen.values()];
+}
+
+function probeFrozen(router: ExecutionProfileRouter, bindings: { worker: FrozenProfile; handoff: FrozenProfile }, selections: AgentSelection[]): Promise<ObservedProfile[]> {
+  return Promise.all(selections.flatMap((selection) => [router.probe(bindings.worker, selection), router.probe(bindings.handoff, selection)]));
+}
+
 function success(context: WebCommandContext, result: CommandSuccessV1["result"], status = 200): { status: number; body: CommandSuccessV1 } {
   return { status, body: {
     schema: "orca-command-success-v1", commandId: context.rawCommand.commandId, actorId: context.rawCommand.actorId, verb: context.rawCommand.verb,
@@ -83,7 +104,7 @@ export async function scheduleStart(deps: WebDispatchDeps, command: StartCommand
     try {
       const snapshot = readFrozenSnapshot(store, groupTarget(command));
       const bindings = resolveBindings(profileRouter, snapshot);
-      const observations = await Promise.all([profileRouter.probe(bindings.worker), profileRouter.probe(bindings.handoff)]);
+      const observations = await probeFrozen(profileRouter, bindings, frozenTaskSelections(store, groupTarget(command)));
       degraded = observations.some((observation) => probeBlocksDispatch(observation, snapshot.budgetMode));
     } catch (error) {
       // profile-changed and the remaining precedence codes are decided by the synchronous walk below.
@@ -163,7 +184,7 @@ export async function deliverScheduledStart(deps: WebDispatchDeps, groupId: stri
     let blocked = false;
     try {
       const bindings = resolveBindings(profileRouter, snapshot);
-      const observations = await Promise.all([profileRouter.probe(bindings.worker), profileRouter.probe(bindings.handoff)]);
+      const observations = await probeFrozen(profileRouter, bindings, frozenTaskSelections(store, groupId));
       blocked = observations.some((observation) => probeBlocksDispatch(observation, snapshot.budgetMode));
     } catch (error) {
       if (!(error instanceof ControlError) || error.code !== "profile-changed") throw error;
@@ -259,6 +280,7 @@ function createStartingRun(
   continuation?: RegisteredContinuation,
 ): DispatchRun {
   const work = readWork(store, groupId, target.workItemId);
+  const frozen = frozenWorkAgent(work);
   const claimOrdinal = continuation ? continuation.claimOrdinal : ((work as unknown as { claimOrdinal?: number }).claimOrdinal ?? 0) + 1;
   const claimIdentity = continuation
     ? `${continuation.desiredIntentId}:attempt:${claimOrdinal}`
@@ -281,7 +303,10 @@ function createStartingRun(
     runId, groupId, workItemId: work.workItemId, taskId: work.taskId, estimateId: null, generation: 1,
     graphVersion: snapshot.graphVersion, targetVersion: work.targetVersion,
     commandId: continuation ? `continue-${groupId}-${continuation.resumeRevision}-${work.workItemId}` : `start-${groupId}-${startRevision}-${work.workItemId}`,
-    configHash: work.configHash, agent: work.agent, grant, ownerToken, executionId: null, state: "starting", checkpointId: null, recoverable: false,
+    // Agent selection spec §6.4 / §3 I1: a run (and a continuation of it) carries its work item's frozen selection unchanged.
+    configHash: frozen.configHash, agent: frozen.agent, agentProvenance: frozen.agentProvenance, timeoutMs: frozen.timeoutMs,
+    killGraceMs: frozen.killGraceMs, agentCapabilities: frozen.agentCapabilities,
+    grant, ownerToken, executionId: null, state: "starting", checkpointId: null, recoverable: false,
     remaining: structuredClone(grant), cumulative: { work: zero(), handoff: zero() }, unknown: { work: false, handoff: false },
     highWater: 0, breaches: [], handoffWorkItemId: null, phase: "work", claimOrdinal, providerAttemptOrdinal: 0, failureCode: null,
     continuationIntentId: continuation?.continuationIntentId ?? null,

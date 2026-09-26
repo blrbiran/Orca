@@ -28,11 +28,12 @@ async function setup() {
   // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
   await writeFile(agentsTable, "{}", { mode: 0o600 });
 
+  // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): profile v2 (spec §6.5): no adapter identity
+  // fields; the declared capabilities these criteria depend on are the same.
   const snapshot: ExecutionProfileSnapshotV1 = {
-    schema: "orca-execution-profile-snapshot-v1",
+    schema: "orca-execution-profile-snapshot-v2",
     profile: {
-      profileId: "estimator", allowedWorkKinds: ["budget-estimate"], adapter: "codex",
-      adapterConfigRef: "adapter", modelPolicyRef: "policy", contextTokenizer: null,
+      profileId: "estimator", allowedWorkKinds: ["budget-estimate"], contextTokenizer: null,
       workMaxOutputTokens: null,
       capabilities: {
         usageObservation: "phase-end", budgetEnforcement: "soft", contextObservation: "unavailable",
@@ -41,10 +42,7 @@ async function setup() {
       },
       estimatorPreflight: null,
     },
-    resolved: {
-      adapterConfigContentHash: hash("a"), modelPolicyContentHash: hash("b"), proofDocumentContentHashes: [],
-      adapterImplementationHash: hash("c"), adapterProtocolVersion: "1", tokenizerArtifactHashes: [], secretValueHashes: [],
-    },
+    resolved: { proofDocumentContentHashes: [hash("c")], tokenizerArtifactHashes: [], secretValueHashes: [] },
   };
   // Human authorization 2026-09-24, G1 seam A Task 6 (capability vocabulary sync): the mock now
   // answers the v2 vocabulary, spread from the same declared capabilities the profile snapshot
@@ -80,7 +78,9 @@ describe("trusted panel control config", () => {
     expect(() => config.resolveTarget({ repoId: "repo", planId: "ship", path: "/tmp/evil" } as never)).toThrow("control-target-not-allowed");
     expect(() => config.resolveTarget({ repoId: "missing", planId: "ship" })).toThrow("control-target-not-allowed");
 
-    const view = await config.readView();
+    // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): the view is read for a selection (the panel
+    // passes the operator's default, W5-M14); what it may expose is judged exactly as before.
+    const view = await config.readView({ agent: "codex" });
     const serialized = JSON.stringify(view);
     expect(view.defaults).toEqual({ estimatorProfileId: "estimator", estimatorProfileHash: h.frozen.profileHash, estimateMode: "soft" });
     expect(serialized).not.toContain(h.root);

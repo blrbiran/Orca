@@ -25,7 +25,7 @@ export interface ObservedProfile {
   readonly probeFailureCode: KnownControlErrorCode | null;
   /**
    * Agent selection spec §4.6: ccloop's answer for the selection the caller asked about -- what an import or a
-   * re-estimate freezes. Null when the probe failed, or took the TEMPORARY no-selection path (plan T11 removes it).
+   * re-estimate freezes. Null when the probe failed.
    */
   readonly resolution: AgentResolution | null;
 }
@@ -34,12 +34,11 @@ export interface ExecutionProfileRouter {
   resolve(workKind: WebWorkKindV1, profileId: string, expectedHash: string): FrozenProfile;
   /**
    * Agent selection spec §6.4 (C3): a probe is of one selection -- the one the caller is about to dispatch, freeze
-   * or show. `selection` is optional only until agent selection plan T11, which makes it required and passes the
-   * frozen one at every gate; until then a call without it takes the TEMPORARY path of `temporaryProbeSelection`.
-   * Plan T10: a layered (partial) selection may be asked too -- ccloop fills what it leaves out -- so the import and
-   * a re-estimate probe the very selection they freeze.
+   * or show (plan T11: required; every gate passes the run's or work item's frozen one, and only the panel's profile
+   * display the operator's default). A layered (partial) selection may be asked too -- ccloop fills what it leaves
+   * out -- so the import and a re-estimate probe the very selection they freeze.
    */
-  probe(profile: FrozenProfile, selection?: PartialSelection): Promise<ObservedProfile>;
+  probe(profile: FrozenProfile, selection: PartialSelection): Promise<ObservedProfile>;
   list(): readonly FrozenProfile[];
 }
 
@@ -119,18 +118,6 @@ export function intersectCapabilities(declared: DeclaredCapabilities, observed: 
   };
 }
 
-/**
- * TEMPORARY (agent selection plan T7; plan T11 deletes it with the optional parameter above). What a probe with no
- * selection asks about: the installation with the lexically first id in the port's own table, with no field
- * overridden, so the capabilities still come from ccloop for an installation that exists (nothing is taken from the
- * profile's declaration). With several installations this is arbitrary; that is why it may not outlive T11.
- */
-async function temporaryProbeSelection(port: ExecutionPort): Promise<PartialSelection> {
-  const ids = (await port.listAgents()).installations.map((installation) => installation.id).sort();
-  if (ids.length === 0) throw new ControlError("control-capability-probe-failed", "agents-table-empty");
-  return { agent: ids[0] };
-}
-
 export function resolveProfile(snapshot: ExecutionProfileSnapshotV1, port: ExecutionPort = unboundPort): FrozenProfile {
   const parsed = executionProfileSnapshotSchema.safeParse(snapshot);
   if (!parsed.success) throw new ControlError("control-profile-invalid", parsed.error.issues[0]?.message);
@@ -170,11 +157,10 @@ export function createExecutionProfileRouter(
       }
       return profile;
     },
-    async probe(profile: FrozenProfile, selection?: PartialSelection): Promise<ObservedProfile> {
+    async probe(profile: FrozenProfile, selection: PartialSelection): Promise<ObservedProfile> {
       if (byId.get(profile.snapshot.profile.profileId) !== profile) throw new ControlError("profile-changed");
       try {
-        const agent: PartialSelection = selection ?? await temporaryProbeSelection(profile.port);
-        const resolution = await profile.port.resolveAgent(agent);
+        const resolution = await profile.port.resolveAgent(selection);
         const result = capabilityViewSchema.safeParse(resolution.capabilities);
         if (!result.success) throw new ControlError("control-capability-probe-failed");
         return Object.freeze({
@@ -182,7 +168,7 @@ export function createExecutionProfileRouter(
           observed: deepFreeze(intersectCapabilities(profile.snapshot.profile.capabilities, result.data)),
           observedAt: now().toISOString(),
           probeFailureCode: null,
-          resolution: selection === undefined ? null : deepFreeze(structuredClone({ ...resolution, capabilities: result.data })),
+          resolution: deepFreeze(structuredClone({ ...resolution, capabilities: result.data })),
         });
       } catch (error) {
         return Object.freeze({

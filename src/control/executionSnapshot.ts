@@ -1,3 +1,5 @@
+import { frozenWorkAgent, type FrozenWorkAgent } from "./agentFreeze.js";
+import type { FrozenSlot } from "./agentSelection.js";
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { ControlError } from "./errors.js";
 import { amountSchema, idSchema } from "./schema.js";
@@ -12,7 +14,7 @@ import {
 } from "./webProtocol.js";
 import type { Amount } from "./types.js";
 import { taskContractSchema } from "../scheduler/planFile.js";
-import { readArchivedPlan, readBudgetProposal, readEstimateRecord } from "./queries.js";
+import { readArchivedPlan, readBudgetProposal, readEstimateRecord, readWork } from "./queries.js";
 import type { ControlStore } from "./store.js";
 import { readCanonicalRecord } from "./snapshot.js";
 
@@ -44,6 +46,8 @@ export interface ConfirmedProposal {
     work: Amount;
     handoff: Amount;
   }>;
+  /** Agent selection spec §6.4 step 4: each task's frozen selection and the group's reconcile slot. */
+  agents: ExecutionSnapshotV1["agents"];
 }
 
 export interface PreparedExecutionSnapshot {
@@ -234,8 +238,10 @@ export function prepareExecutionSnapshot(input: ConfirmedProposal): PreparedExec
       throw new ControlError("execution-policy-unrepresentable");
     }
   }
+  const agentTasks = [...input.agents.tasks].sort((left, right) => compare(left.taskId, right.taskId));
+  if (agentTasks.map(task => task.taskId).join("\0") !== derivedContracts.map(contract => contract.taskId).join("\0")) throw new ControlError("plan-version-conflict");
   const snapshot = executionSnapshotSchema.parse({
-    schema: "orca-execution-snapshot-v1",
+    schema: "orca-execution-snapshot-v2",
     groupId: input.groupId,
     planHash: input.planHash,
     graphVersion: input.graphVersion,
@@ -246,6 +252,7 @@ export function prepareExecutionSnapshot(input: ConfirmedProposal): PreparedExec
     profiles: input.profiles,
     allocations,
     derivedContracts: derivedContracts.map(({ taskId, derivedContractHash }) => ({ taskId, derivedContractHash })),
+    agents: { tasks: agentTasks, reconcile: input.agents.reconcile },
   });
   const canonicalJson = canonicalBytes(snapshot).toString("utf8");
   return { snapshot, canonicalJson, snapshotHash: sha256Canonical(snapshot), derivedContracts };
@@ -290,8 +297,30 @@ export function readConfirmedTaskExecution(store: ControlStore, groupId: string,
     const expected = deriveContract({ ...task, work: work.amount, handoff: handoff.amount }, proposal.proposalVersion);
     const canonicalJson = readCanonicalRecord(store, ref.derivedContractHash);
     if (canonicalJson !== expected.canonicalJson || ref.derivedContractHash !== expected.derivedContractHash) throw new ControlError("recovery-blocked");
+    // Agent selection spec §6.4 step 4 (§12 I3): the snapshot is the authority for the frozen selection; the work item must agree.
+    const entry = snapshot.agents.tasks.find(t => t.taskId === taskId);
+    if (!entry) throw new ControlError("recovery-blocked");
+    const { taskId: _taskId, ...agent } = entry;
+    if (sha256Canonical(frozenWorkAgent(readWork(store, groupId, taskId))) !== sha256Canonical(agent)) throw new ControlError("recovery-blocked");
+    const frozen: FrozenWorkAgent = agent;
     return { derivedContractHash: ref.derivedContractHash, contractCanonicalJson: expected.contractCanonicalJson,
-      contract: taskContractSchema.parse(JSON.parse(expected.contractCanonicalJson)), grant: { work: work.amount, handoff: handoff.amount } };
+      contract: taskContractSchema.parse(JSON.parse(expected.contractCanonicalJson)), grant: { work: work.amount, handoff: handoff.amount }, agent: frozen };
+  } catch (error) {
+    if (error instanceof ControlError) throw error;
+    throw new ControlError("recovery-blocked");
+  }
+}
+
+/** Spec §6.1 / §6.4 step 4: the group's frozen reconcile slot, as the confirmed snapshot records it (plan T12's reconciliation run uses it). */
+export function readConfirmedReconcileSlot(store: ControlStore, groupId: string): FrozenSlot {
+  const proposal = readBudgetProposal(store, groupId);
+  if (proposal.state !== "confirmed" || !proposal.executionSnapshotHash) throw new ControlError("group-state-invalid");
+  try {
+    const snapshot = executionSnapshotSchema.parse(JSON.parse(readCanonicalRecord(store, proposal.executionSnapshotHash)));
+    const row = store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId);
+    const stored = row ? (JSON.parse(String(row.body)) as { reconcileSlot?: unknown }).reconcileSlot : undefined;
+    if (sha256Canonical(stored ?? null) !== sha256Canonical(snapshot.agents.reconcile)) throw new ControlError("recovery-blocked");
+    return snapshot.agents.reconcile as FrozenSlot;
   } catch (error) {
     if (error instanceof ControlError) throw error;
     throw new ControlError("recovery-blocked");

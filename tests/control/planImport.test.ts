@@ -27,11 +27,12 @@ const contract = (taskId: string, tokenBudget = 100) => ({
 });
 
 function profile(): ExecutionProfileSnapshotV1 {
+  // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): profile v2 (spec §6.5): no adapter identity
+  // fields; the declared capabilities and the remaining resolved hashes these criteria depend on are the same.
   return {
-    schema: "orca-execution-profile-snapshot-v1",
+    schema: "orca-execution-profile-snapshot-v2",
     profile: {
-      profileId: "estimator", allowedWorkKinds: ["budget-estimate"], adapter: "bounded",
-      adapterConfigRef: "adapter", modelPolicyRef: "policy", contextTokenizer: null, workMaxOutputTokens: null,
+      profileId: "estimator", allowedWorkKinds: ["budget-estimate"], contextTokenizer: null, workMaxOutputTokens: null,
       capabilities: {
         usageObservation: "realtime", budgetEnforcement: "bounded", contextObservation: "unavailable",
         handoffControl: "durable", handoffExecution: "mechanical-in-run-v1", contextWindowTokens: 1_000_000,
@@ -39,7 +40,7 @@ function profile(): ExecutionProfileSnapshotV1 {
       },
       estimatorPreflight: { instructionVersion: "1", schemaVersion: "budget-estimate-v1", maxOutputTokens: 1_000, framingTokenOverhead: 10, tokenizer: { kind: "utf8-upper-bound", numerator: 1, denominator: 1, proofRef: "proof" } },
     },
-    resolved: { adapterConfigContentHash: hash("a"), modelPolicyContentHash: hash("b"), proofDocumentContentHashes: [hash("c")], adapterImplementationHash: hash("d"), adapterProtocolVersion: "1", tokenizerArtifactHashes: [], secretValueHashes: [] },
+    resolved: { proofDocumentContentHashes: [hash("c")], tokenizerArtifactHashes: [], secretValueHashes: [] },
   };
 }
 
@@ -67,8 +68,9 @@ async function setup() {
     goal: "Ship", successConditions: ["tests pass"],
     tasks: [
       // Seam B (human ruling 2026-09-24, named under ruling 88): targetVersion is one positive safe integer from plan to wire.
-      { taskId: "b", contract: b, dependsOn: ["a"], targetVersion: 2, configHash: hash("e") },
-      { taskId: "a", contract: a, dependsOn: [], targetVersion: 1, configHash: hash("f") },
+      // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): plan tasks carry no configHash (spec §6.2); confirmation freezes ccloop's.
+      { taskId: "b", contract: b, dependsOn: ["a"], targetVersion: 2 },
+      { taskId: "a", contract: a, dependsOn: [], targetVersion: 1 },
     ],
   };
   await writeFile(planPath, JSON.stringify(plan));

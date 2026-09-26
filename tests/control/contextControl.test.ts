@@ -18,7 +18,8 @@ async function runFixture(contextObservation: "realtime" | "phase-end", threshol
   snapshot.profile.capabilities.contextObservation = contextObservation;
   const h = await webFixture(snapshot);
   const service = new WebControlService(h.deps);
-  service.confirm(h.command("confirm", { ...h.confirmPayload(), contextPolicy: { handoffAtContextTokens: threshold } }));
+  // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): confirmation resolves agent selections through ccloop first, so it is awaited and carries the previewed selectionsHash.
+  await service.confirm(h.command("confirm", { ...(await h.confirmPayload()), contextPolicy: { handoffAtContextTokens: threshold } }));
   await scheduleStart({ store: h.store, profileRouter: h.deps.profileRouter }, h.command("start", {}));
   const claimed = await deliverScheduledStart({ store: h.store, profileRouter: h.deps.profileRouter }, "g");
   if (claimed.kind !== "claimed") throw new Error(`claim did not start a run: ${claimed.kind}`);

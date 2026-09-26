@@ -193,6 +193,8 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
   const admissionGate = createAdmissionGate();
   const service = new WebControlService({
     store,
+    // Agent selection W6-19: confirm resolves selections through the very port the profiles probe.
+    port,
     admissionGate,
     profileRouter: router,
     trustedConfig: config,
@@ -236,7 +238,7 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
       store, router, admissionGate, roots: controlWorkspaceRoots(store.stateDir),
       resolveRepository: (repoId) => config.resolveRepository(repoId),
       ccloopBin: env.ORCA_CCLOOP_BIN!, agentsTablePath: env.ORCA_AGENTS_TABLE!,
-      // Handoff grace: the run's agent killGraceMs + 60 s, asked of the port per run (driverHandoff.handoffGraceMsOf).
+      // Handoff grace: the run's frozen killGraceMs + 60 s (driverHandoff.handoffGraceMsOf, agent selection spec §6.6).
       kickPump: () => { void pump(); }, crash: input.driverCrash,
     });
   }

@@ -13,8 +13,7 @@ export interface PlanTask {
   contract: string;
   dependsOn: string[];
   targetVersion?: number;
-  configHash?: string;
-  /** Agent selection spec §6.2: this task's worker layer. */
+  /** Agent selection spec §6.2: this task's worker layer (a plan carries no configHash; confirmation freezes ccloop's). */
   agent?: PartialSelection;
 }
 
@@ -42,7 +41,6 @@ export interface SchedulerControlPlanSource {
     taskId: string;
     dependencyTaskIds: string[];
     targetVersion: number;
-    configHash: string;
     agent?: PartialSelection;
     originalContract: unknown;
     originalContractCanonicalJson: string;
@@ -114,7 +112,6 @@ const planTaskSchema = z
     contract: z.string().min(1),
     dependsOn: z.array(z.string()),
     targetVersion: safeInteger.positive().optional(),
-    configHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
     agent: partialSelectionSchema.optional(),
   })
   .strict();
@@ -250,7 +247,7 @@ export function readSchedulerControlPlanSource(target: TrustedSchedulerPlanTarge
   for (const task of plan.tasks) {
     if (new Set(task.dependsOn).size !== task.dependsOn.length) return sourceRejected(`duplicate-dependency:${task.taskId}`);
     if (task.dependsOn.some(dependency => !taskIds.has(dependency))) return sourceRejected(`dangling-dependency:${task.taskId}`);
-    if (task.targetVersion === undefined || task.configHash === undefined) return sourceRejected(`task-control-metadata:${task.taskId}`);
+    if (task.targetVersion === undefined) return sourceRejected(`task-control-metadata:${task.taskId}`);
   }
   return {
     goal: plan.goal,
@@ -263,7 +260,6 @@ export function readSchedulerControlPlanSource(target: TrustedSchedulerPlanTarge
         taskId: task.taskId,
         dependencyTaskIds: [...task.dependsOn],
         targetVersion: task.targetVersion!,
-        configHash: task.configHash!,
         ...(task.agent ? { agent: task.agent } : {}),
         originalContract: original.value,
         originalContractCanonicalJson: original.canonicalJson,

@@ -15,11 +15,12 @@ const hash = (value: string) => value.repeat(64);
 
 /** A fully capable snapshot, so anything observed below is about the port, never about the profile. */
 function controlProfileSnapshot(profileId: string, workKinds: ExecutionProfileSnapshotV1["profile"]["allowedWorkKinds"]): ExecutionProfileSnapshotV1 {
+  // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): profile v2 (spec §6.5): no adapter identity
+  // fields; still fully capable, so anything observed is about the port.
   return {
-    schema: "orca-execution-profile-snapshot-v1",
+    schema: "orca-execution-profile-snapshot-v2",
     profile: {
-      profileId, allowedWorkKinds: workKinds, adapter: "test-adapter", adapterConfigRef: "adapter-config",
-      modelPolicyRef: "model-policy", contextTokenizer: { tokenizerId: "tok", tokenizerVersion: "1" },
+      profileId, allowedWorkKinds: workKinds, contextTokenizer: { tokenizerId: "tok", tokenizerVersion: "1" },
       // The schema ties the work output limit to whether the profile does work at all.
       workMaxOutputTokens: workKinds.includes("task") ? 4096 : null,
       capabilities: {
@@ -30,8 +31,7 @@ function controlProfileSnapshot(profileId: string, workKinds: ExecutionProfileSn
       estimatorPreflight: null,
     },
     resolved: {
-      adapterConfigContentHash: hash("a"), modelPolicyContentHash: hash("b"), proofDocumentContentHashes: [hash("c")],
-      adapterImplementationHash: hash("d"), adapterProtocolVersion: "1",
+      proofDocumentContentHashes: [hash("c")],
       tokenizerArtifactHashes: [{ purpose: "context", contentHash: hash("e") }], secretValueHashes: [{ name: "/adapter/token", valueHash: hash("f") }],
     },
   };
@@ -76,7 +76,9 @@ describe("the unconfigured execution port", () => {
     // operator who forgot an environment variable is told their adapter is inadequate.
     expect(typeof port.resolveAgent).toBe("function");
     const router = createExecutionProfileRouter([resolveProfile(controlProfileSnapshot("worker", ["task"]), port)]);
-    const observed = await router.probe(router.list()[0]!);
+    // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): the probe names a selection (now required);
+    // the refusal it reports is still the port's own name.
+    const observed = await router.probe(router.list()[0]!, { agent: "codex" });
     expect(observed.probeFailureCode).toBe("control-port-unconfigured");
     expect(observed.probeFailureCode).not.toBe("control-capability-probe-failed");
   });

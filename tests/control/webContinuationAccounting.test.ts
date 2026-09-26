@@ -95,7 +95,8 @@ async function runningTasks(tasks: string[]) {
   const h = await webFixture(profileSnapshot(), tasks.map(taskId => ({ taskId })));
   const deps = { ...h.deps, now: () => new Date(ACCEPTED_AT) };
   const service = new WebControlService(deps);
-  service.confirm(h.command("confirm", h.confirmPayload()));
+  // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): confirmation resolves agent selections through ccloop first, so it is awaited and carries the previewed selectionsHash.
+  await service.confirm(h.command("confirm", await h.confirmPayload()));
   await service.start(h.command("start", {}));
   await deliverScheduledStart(deps, "g");
   for (let extra = 1; extra < tasks.length; extra += 1) {

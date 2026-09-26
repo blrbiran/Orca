@@ -76,7 +76,12 @@ export type WorkItemViewV1 = {
   status: "draft" | "ready" | "starting" | "start-unknown" | "active" | "held" | "continuing" | "completed" | "blocked";
   dependencyTaskIds: string[];
   targetVersion: number;
-  configHash: string;
+  // Agent selection spec §6.2 / §12 I3 (W6-9): null until confirmation freezes a selection. `agent` and
+  // `agentProvenance` are optional on the Web side only, like `blockedReason`, so literal fixtures need no edit;
+  // webParity.test.ts normalises an absent value to null in the web-to-server direction.
+  configHash: string | null;
+  agent?: { agent: string; model: string; contextWindow: ContextWindowV1 } | null;
+  agentProvenance?: { agent: ProvenanceSourceV1; model: ProvenanceSourceV1; contextWindow: ProvenanceSourceV1 } | null;
   originalContractHash: string;
   derivedContractHash: string | null;
   currentRunId: string | null;
@@ -206,6 +211,8 @@ export type ConfirmPayloadV1 = {
   profileIds: { estimator: string; worker: string; handoff: string; goalReview: string };
   profileHashes: { estimator: string; worker: string; handoff: string; goalReview: string };
   contextPolicy: { handoffAtContextTokens: number | null };
+  /** Agent selection spec §6.4 step 3: the hash of the selections the operator saw. */
+  selectionsHash: string;
 };
 export type SetLimitPayloadV1 = { limit: Amount };
 export type ImportPlanPayloadV1 = {
@@ -223,6 +230,8 @@ export type ContinueTaskPayloadV1 = { predecessorRunId: string; checkpointId: st
 export type RecoveryRetryPayloadV1 = { scope: "run"; runId: string } | { scope: "group"; groupId: string };
 /** Agent selection spec §3: model and context window are opaque here; ccloop's descriptor judges them. */
 export type ContextWindowV1 = "agent-default" | number;
+/** Spec §6.3: where a resolved selection field came from. */
+export type ProvenanceSourceV1 = "operator" | "operator-estimator" | "operator-reconcile" | "group" | "group-estimator" | "group-reconcile" | "task" | "operator-agent" | "descriptor";
 export type PartialSelectionV1 = { agent?: string; model?: string; contextWindow?: ContextWindowV1 };
 /** Spec §6.2 (W6-20): replace one selection layer of the proposal, or clear it with null. */
 export type ProposalSetAgentPayloadV1 = {

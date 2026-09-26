@@ -6,6 +6,8 @@ import { ZodError } from "zod";
 import { lookupCommandResult } from "../control/commandLedger.js";
 import { ControlError } from "../control/errors.js";
 import { readVersions } from "../control/queries.js";
+import { readAgentPreferences } from "../control/agentPreferences.js";
+import { resolveSelection, slotLayers, type PartialSelection } from "../control/agentSelection.js";
 import { idSchema } from "../control/schema.js";
 import { recoveryRetryPayloadSchema, commandEnvelopeSchema, controlConfigSchema, rawAuthorityCommandSchema, repositoryWorkspaceSchema, type CommandTargetV1, type CommandVerbV1, type RawAuthorityCommandV1 } from "../control/webProtocol.js";
 import { readWorkspaceSetting } from "../control/workspaceSettings.js";
@@ -71,10 +73,26 @@ function readErrorContext(store: ControlStore, groupId: string): { commandRevisi
   return { commandRevision: Number(group.revision), evidenceIds: [...evidenceIds].sort() };
 }
 
+/**
+ * Agent selection spec §6.4 last paragraph (W5-M14): the panel's profile display is the one place that probes the
+ * operator's default rather than a frozen selection -- the panel operator's worker slot with no group or task layer.
+ * No operator yet, or none that chose an agent, asks `{}`, which ccloop refuses: shown as the probe's failure code.
+ */
+function operatorDefaultSelection(store: ControlStore): PartialSelection {
+  const row = store.db.prepare("SELECT value FROM meta WHERE key='panelOperatorId'").get();
+  if (!row) return {};
+  const prefs = readAgentPreferences(store, String(row.value)).preferences;
+  try { return resolveSelection(slotLayers("worker", prefs, {}), prefs.perAgent).partial; }
+  catch (error) {
+    if (error instanceof ControlError && error.code === "agent-unselected") return {};
+    throw error;
+  }
+}
+
 export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps): void {
   if (deps.service) registerControlMutationRoutes(app, deps.store, deps.service);
   app.get("/api/control/config", asyncRoute(async (_req, res) => {
-    const base = await deps.config.readView();
+    const base = await deps.config.readView(operatorDefaultSelection(deps.store));
     res.json(controlConfigSchema.parse({ ...base, epoch: deps.epoch, errorCatalog: controlErrorCatalog() }));
   }));
 
@@ -240,7 +258,7 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
         case "import-plan": await service.importPlan(command); break;
         case "proposal-edit": service.editProposal(command); break;
         case "estimate": await service.createEstimate(command); break;
-        case "confirm": service.confirm(command); break;
+        case "confirm": await service.confirm(command); break;
         case "set-limit": service.setLimit(command); break;
         case "start": await service.start(command); break;
         case "pause-dispatch": await service.pauseDispatch(command); break;

@@ -25,7 +25,8 @@ function authority() {
   const plan = controlPlanSchema.parse({
     schema: "orca-control-plan-v1", repoId: "repo", planId: "plan", goal: "ship", successConditions: ["passes"],
     // Seam B (human ruling 2026-09-24, named under ruling 88): targetVersion is one positive safe integer from plan to wire.
-    tasks: [{ taskId: "a", dependencyTaskIds: [], targetVersion: 1, configHash: hash("f"),
+    // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): a plan task carries no configHash (spec §6.2).
+    tasks: [{ taskId: "a", dependencyTaskIds: [], targetVersion: 1,
       originalContractHash: sha256Canonical(contract), originalContractCanonicalJson }],
   });
   const planCanonicalJson = canonicalBytes(plan).toString("utf8");
@@ -98,6 +99,16 @@ function input(): ConfirmedProposal {
       { ownerKind: "estimate", ownerId: "estimate-1", bucket: "work", amount: amount(10, 10, 1, 1), fieldProvenance: provenance("system") },
     ],
     tasks: [{ taskId: "a", originalContractHash: sha256Canonical(a.contract), originalContractCanonicalJson: a.originalContractCanonicalJson, work, handoff }],
+    // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): confirmation also freezes each task's selection and the
+    // group's reconcile slot into the snapshot (spec §6.4 step 4); every other input, and every refusal judged below, is as before.
+    agents: {
+      tasks: [{ taskId: "a", agent: { agent: "fixture-agent", model: "m", contextWindow: "agent-default" }, agentProvenance: { agent: "operator", model: "descriptor", contextWindow: "descriptor" },
+        configHash: hash("9"), timeoutMs: 1_800_000, killGraceMs: 5_000,
+        agentCapabilities: { usageObservation: "realtime", budgetEnforcement: "bounded", contextObservation: "unavailable", handoffControl: "durable", handoffExecution: "mechanical-in-run-v1", contextWindowTokens: null, requestBoundProof: null } }],
+      reconcile: { partial: { agent: "fixture-agent" }, provenance: { agent: "operator", model: "descriptor", contextWindow: "descriptor" },
+        selection: { agent: "fixture-agent", model: "m", contextWindow: "agent-default" }, configHash: hash("9"), timeoutMs: 1_800_000, killGraceMs: 5_000,
+        capabilities: { usageObservation: "realtime", budgetEnforcement: "bounded", contextObservation: "unavailable", handoffControl: "durable", handoffExecution: "mechanical-in-run-v1", contextWindowTokens: null, requestBoundProof: null } },
+    },
   };
 }
 

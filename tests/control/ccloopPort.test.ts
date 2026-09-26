@@ -24,15 +24,16 @@ async function fixture(mode = "ok", extra:Record<string,unknown> = {}) {
 
 const hx=(v:string)=>v.repeat(64);
 /** Declares everything, so that anything the probe reports as missing is the port's answer. */
-const probeSnapshot=():ExecutionProfileSnapshotV1=>({schema:"orca-execution-profile-snapshot-v1",
- profile:{profileId:"worker",allowedWorkKinds:["task"],adapter:"test",adapterConfigRef:"a",modelPolicyRef:"m",
+// Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): profile v2 (spec §6.5) -- no adapter identity
+// fields; it still declares everything.
+const probeSnapshot=():ExecutionProfileSnapshotV1=>({schema:"orca-execution-profile-snapshot-v2",
+ profile:{profileId:"worker",allowedWorkKinds:["task"],
   contextTokenizer:{tokenizerId:"tok",tokenizerVersion:"1"},workMaxOutputTokens:4096,
   capabilities:{usageObservation:"realtime",budgetEnforcement:"bounded",contextObservation:"realtime",handoffControl:"durable",
    handoffExecution:"mechanical-in-run-v1",contextWindowTokens:100_000,
    requestBoundProof:{scheme:"adapter-request-bound-v1",version:"1",workDimensions:["tokens"],handoffDimensions:["activeMs"],evidenceKind:"request-bound-v1"}},
   estimatorPreflight:null},
- resolved:{adapterConfigContentHash:hx("a"),modelPolicyContentHash:hx("b"),proofDocumentContentHashes:[hx("c")],
-  adapterImplementationHash:hx("d"),adapterProtocolVersion:"1",tokenizerArtifactHashes:[{purpose:"context",contentHash:hx("e")}],
+ resolved:{proofDocumentContentHashes:[hx("c")],tokenizerArtifactHashes:[{purpose:"context",contentHash:hx("e")}],
   secretValueHashes:[{name:"/adapter/token",valueHash:hx("f")}]}});
 
 describe("production ccloop execution port",()=>{
@@ -170,15 +171,6 @@ describe("production ccloop execution port",()=>{
   it("refuses a capabilities answer in the retired protocol-2 shape",async()=>{
     await expect((await fixture("protocol-2")).port.resolveAgent({agent:"codex"})).rejects.toThrow("control-response-invalid");
     await expect((await fixture("protocol-2")).port.listAgents()).rejects.toThrow("control-response-invalid");
-  });
-  it("TEMPORARY (plan T11 deletes it): a probe given no selection asks about the table's first installation, with nothing overridden",async()=>{
-    const h=await fixture("ok",{installations:[{id:"zeta",kind:"claude",defaults:{model:"m",contextWindow:"agent-default"},contextOptions:["agent-default"],version:"1.0.0"},{id:"alpha",kind:"codex",defaults:{model:"m",contextWindow:"agent-default"},contextOptions:["agent-default"],version:"1.0.0"}]});
-    const router=createExecutionProfileRouter([resolveProfile(probeSnapshot(),h.port)]);
-    expect((await router.probe(router.list()[0]!)).probeFailureCode).toBe(null);
-    expect(JSON.parse(JSON.parse(await readFile(h.record,"utf8")).stdin)).toEqual({agent:{agent:"alpha"}});
-    const empty=await fixture("ok",{installations:[]});
-    const emptyRouter=createExecutionProfileRouter([resolveProfile(probeSnapshot(),empty.port)]);
-    expect((await emptyRouter.probe(emptyRouter.list()[0]!)).probeFailureCode).toBe("control-capability-probe-failed");
   });
   it("rethrows ccloop's named refusals of a selection or table under their own names, and any other exit as a peer exit (agent selection spec §7)",async()=>{
     for(const code of ["agent-installation-missing","agent-context-unsupported","agent-selection-invalid","agent-version-drift","agents-table-invalid"]){

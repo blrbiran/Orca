@@ -567,7 +567,8 @@ export async function beginHandoffAttempt(deps: StopDeps, requestId: string): Pr
     if (prepared.execution === "model-assisted-v1") {
       const profile = profileRouter.resolve("handoff", run.handoffProfile!.profileId, run.handoffProfile!.profileHash);
       // Agent selection spec §6.4: handoff has no slot; it is probed with the handed-off run's frozen selection.
-      const observed = await profileRouter.probe(profile, run.agent);
+      // A run with no frozen selection asks `{}`, which ccloop refuses: capability-unavailable, never a guessed agent.
+      const observed = await profileRouter.probe(profile, run.agent ?? {});
       const cap: CapabilityViewV1 = observed.observed;
       if (observed.probeFailureCode !== null || cap.handoffControl !== "durable" || cap.handoffExecution !== "model-assisted-v1") {
         const reasonCode = "handoff-capability-unavailable";

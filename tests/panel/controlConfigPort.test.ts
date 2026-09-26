@@ -19,21 +19,19 @@ const roots: string[] = [];
 afterEach(async () => { while (roots.length) await rm(roots.pop()!, { recursive: true, force: true }); });
 const hash = (value: string) => value.repeat(64);
 
+// Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): profile v2 (spec §6.5): no adapter identity fields;
+// the declared capabilities these criteria depend on are the same.
 const snapshot = (): ExecutionProfileSnapshotV1 => ({
-  schema: "orca-execution-profile-snapshot-v1",
+  schema: "orca-execution-profile-snapshot-v2",
   profile: {
-    profileId: "estimator", allowedWorkKinds: ["budget-estimate"], adapter: "codex",
-    adapterConfigRef: "adapter", modelPolicyRef: "policy", contextTokenizer: null, workMaxOutputTokens: null,
+    profileId: "estimator", allowedWorkKinds: ["budget-estimate"], contextTokenizer: null, workMaxOutputTokens: null,
     capabilities: {
       usageObservation: "phase-end", budgetEnforcement: "soft", contextObservation: "unavailable",
       handoffControl: "durable", handoffExecution: "mechanical-in-run-v1", contextWindowTokens: null, requestBoundProof: null,
     },
     estimatorPreflight: null,
   },
-  resolved: {
-    adapterConfigContentHash: hash("a"), modelPolicyContentHash: hash("b"), proofDocumentContentHashes: [],
-    adapterImplementationHash: hash("c"), adapterProtocolVersion: "1", tokenizerArtifactHashes: [], secretValueHashes: [],
-  },
+  resolved: { proofDocumentContentHashes: [hash("c")], tokenizerArtifactHashes: [], secretValueHashes: [] },
 });
 
 async function setup() {
@@ -81,13 +79,16 @@ describe("the served config states whether an execution port is configured", () 
     const config = createTrustedControlConfig(h.base({ executionPort: "unconfigured", agentsTablePath: null }), h.router(createUnconfiguredControlPort()));
     // Parsed by the protocol schema rather than read off the input object: an input that is never
     // copied into the view would pass an assertion made against the input.
-    const view = controlConfigSchema.parse(await config.readView());
+    // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): the view is read for a selection (the panel
+    // passes the operator's default, W5-M14); the port field is judged as before.
+    const view = controlConfigSchema.parse(await config.readView({ agent: "codex" }));
     expect(view.executionPort).toBe("unconfigured");
   });
 
   it("serves \"configured\" when it was", async () => {
     const h = await setup();
-    const view = controlConfigSchema.parse(await createTrustedControlConfig(h.base(), h.router(h.capablePort)).readView());
+    // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): the view is read for a selection (W5-M14).
+    const view = controlConfigSchema.parse(await createTrustedControlConfig(h.base(), h.router(h.capablePort)).readView({ agent: "codex" }));
     expect(view.executionPort).toBe("configured");
   });
 
@@ -98,7 +99,8 @@ describe("the served config states whether an execution port is configured", () 
     const h = await setup();
     // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): the failing probe is resolveAgent.
     const failing = { ...h.capablePort, resolveAgent: async () => { throw new ControlError("control-capability-probe-failed"); } } as ExecutionPort;
-    const view = controlConfigSchema.parse(await createTrustedControlConfig(h.base(), h.router(failing)).readView());
+    // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): the view is read for a selection (W5-M14).
+    const view = controlConfigSchema.parse(await createTrustedControlConfig(h.base(), h.router(failing)).readView({ agent: "codex" }));
     expect(view.profiles[0]!.probeFailureCode).toBe("control-capability-probe-failed");
     expect(view.executionPort).toBe("configured");
   });
@@ -108,7 +110,8 @@ describe("the served config states whether an estimator was chosen", () => {
   it("serves null defaults rather than refusing to build", async () => {
     const h = await setup();
     const config = createTrustedControlConfig(h.base({ defaultEstimatorProfileId: null, defaultEstimateMode: null }), h.router(h.capablePort));
-    const view = controlConfigSchema.parse(await config.readView());
+    // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): the view is read for a selection (W5-M14).
+    const view = controlConfigSchema.parse(await config.readView({ agent: "codex" }));
     expect(view.defaults).toBe(null);
   });
 

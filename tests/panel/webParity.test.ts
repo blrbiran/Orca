@@ -123,8 +123,13 @@ function controlGroupServerToWeb(x: ServerGroupViewV1): WebGroupViewV1 { return 
 // zero-rewrite principle); normalize it here so the rest of the shape still gets checked both ways.
 // Handoff delivery (human ruling 2026-09-25, spec §12: this slice may rewrite criteria; ruling 88 (b)(c)): `continuable` is
 // optional on the Web side for the same reason as `blockedReason`, and an absent flag reads as "not continuable".
+// Agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"; W6-9): a work item's `agent` and
+// `agentProvenance` are optional on the Web side for the same reason, and an absent value reads as null. The
+// server's new fields still have same-typed mirrors, so assignability is checked both ways as before.
 function controlGroupWebToServer(x: WebGroupViewV1): ServerGroupViewV1 {
-  return { ...x, runs: x.runs.map((run) => ({ ...run, blockedReason: run.blockedReason ?? null, continuable: run.continuable ?? false })) };
+  return { ...x,
+    runs: x.runs.map((run) => ({ ...run, blockedReason: run.blockedReason ?? null, continuable: run.continuable ?? false })),
+    workItems: x.workItems.map((item) => ({ ...item, agent: item.agent ?? null, agentProvenance: item.agentProvenance ?? null })) };
 }
 function recoveryServerToWeb(x: ServerRecoveryViewV1): WebRecoveryViewV1 { return x; }
 function recoveryWebToServer(x: WebRecoveryViewV1): ServerRecoveryViewV1 { return x; }

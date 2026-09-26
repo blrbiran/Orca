@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { afterAll, afterEach, beforeAll, expect } from "vitest";
 import { canonicalBytes } from "../../../src/control/canonicalJson.js";
-import { createCcloopExecutionPort } from "../../../src/control/ccloopPort.js";
+import { resolveGroupSelections } from "../../../src/control/agentFreeze.js";
 import type { CrashPoint } from "../../../src/control/executionDriver.js";
 import { readArchivedPlan, readBudgetProposal } from "../../../src/control/queries.js";
 import { assembleControlRuntime, type ControlRuntime } from "../../../src/panel/controlAssembly.js";
@@ -90,9 +90,6 @@ export function ccloopWorlds(options: { rootPrefix: string; epochPrefix: string 
       codex: { kind: "codex", command: codexCommand, version: versionOf(codexCommand), configDir: null, timeoutMs: 120_000, killGraceMs: KILL_GRACE_MS, sandbox: "workspace-write", budgetMode: "soft" },
     } as Record<string, Record<string, unknown>> };
     await writeFile(table, JSON.stringify(agentsTable), { mode: 0o600 });
-    // Agent selection plan T7 bridge -- plan T10 drops configHash from the plan and plan T11 deletes this (with this
-    // `resolution`): the plan still carries a configHash, and it is ccloop's, for the selection every task runs with.
-    const resolution = await createCcloopExecutionPort({ binary: realBinary!, agentsTablePath: table, timeoutMs: 60_000 }).resolveAgent({ agent: "codex" });
     const contracts = join(root, "contracts");
     await mkdir(contracts);
     const planTasks = [];
@@ -112,7 +109,7 @@ export function ccloopWorlds(options: { rootPrefix: string; epochPrefix: string 
       };
       const path = join(contracts, `${task.taskId}.json`);
       await writeFile(path, canonicalBytes(contract));
-      planTasks.push({ taskId: task.taskId, contract: path, dependsOn: task.dependsOn ?? [], targetVersion: 1, configHash: resolution.configHash });
+      planTasks.push({ taskId: task.taskId, contract: path, dependsOn: task.dependsOn ?? [], targetVersion: 1 });
     }
     const planPath = join(repo, "plan.json");
     await writeFile(planPath, JSON.stringify({ targetRepo: repo, ccloopBin: realBinary, runsDir: join(root, "unused-runs"), workBranch: "orca/unused", policy: "local-merge", ledgerMode: "out-of-repo", goal: "ship", successConditions: ["the files hold the scripted text"], tasks: planTasks }));
@@ -188,26 +185,28 @@ export function ccloopWorlds(options: { rootPrefix: string; epochPrefix: string 
 
 export const raw = (runtime: ControlRuntime, commandId: string, verb: string, payload: unknown, target: unknown = { kind: "group", groupId: "g" }) => ({
   schema: "orca-raw-command-v1", commandId, actorId: "human", verb, target, payload,
-  // A new group, and a repository setting nobody has set yet, are both at revision 0.
-  expectedRevision: verb === "import-plan" || verb === "set-workspace-mode" ? 0 : Number(runtime.store.db.prepare("SELECT revision FROM groups WHERE id='g'").get()!.revision),
+  // A new group, and a repository setting or operator preferences nobody has set yet, are all at revision 0.
+  expectedRevision: verb === "import-plan" || verb === "set-workspace-mode" || verb === "set-agent-preferences" ? 0 : Number(runtime.store.db.prepare("SELECT revision FROM groups WHERE id='g'").get()!.revision),
 }) as never;
 
-/** Import, confirm soft, optionally widen the token ceiling, start -- through the assembled service. */
+/**
+ * Import, choose the world's installation as the operator's default agent, confirm soft (freezing ccloop's own answer
+ * for that selection onto every task, agent selection spec §6.4), optionally widen the token ceiling, start -- through
+ * the assembled service.
+ */
 export async function startGroup(runtime: ControlRuntime, repoId: string, raiseTokens = 0): Promise<void> {
   const imported = await runtime.service.importPlan(raw(runtime, "import", "import-plan", { groupId: "g", repoId, planId: "plan" }));
   expect(imported).toMatchObject({ result: { kind: "imported", estimateState: "blocked-capability" } });
-  // Agent selection plan T7 bridge -- plan T11 freezes each task's selection at confirm and deletes this. Until then
-  // nothing in the product writes one; the selection is the one the plan's configHash was resolved from, asked of
-  // the assembled port again.
-  const { selection } = await runtime.port.resolveAgent({ agent: "codex" });
-  for (const row of runtime.store.db.prepare("SELECT id,body FROM work_items WHERE group_id='g'").all()) {
-    runtime.store.db.prepare("UPDATE work_items SET body=? WHERE group_id='g' AND id=?").run(JSON.stringify({ ...JSON.parse(String(row.body)), agent: selection }), String(row.id));
-  }
+  // Agent selection spec §6.2 layer 1: the operator's default worker is the world's installation (set after the
+  // import, so the import's estimator still degrades to blocked-capability, as asserted above).
+  const preferences = await runtime.service.setAgentPreferences(raw(runtime, "preferences", "set-agent-preferences", { preferences: { defaultAgent: "codex", perAgent: {} } }, { kind: "operator", operatorId: "human" }));
+  expect("error" in preferences ? preferences.error : "set").toBe("set");
+  const selections = await resolveGroupSelections({ store: runtime.store, port: runtime.port }, "g", "human");
   const hash = runtime.router.list()[0]!.profileHash;
-  const confirmed = runtime.service.confirm(raw(runtime, "confirm", "confirm", {
+  const confirmed = await runtime.service.confirm(raw(runtime, "confirm", "confirm", {
     planHash: readArchivedPlan(runtime.store, "g").planHash, proposalVersion: readBudgetProposal(runtime.store, "g").proposalVersion, budgetMode: "soft",
     profileIds: { estimator: "all", worker: "all", handoff: "all", goalReview: "all" }, profileHashes: { estimator: hash, worker: hash, handoff: hash, goalReview: hash },
-    contextPolicy: { handoffAtContextTokens: null },
+    contextPolicy: { handoffAtContextTokens: null }, selectionsHash: selections.selectionsHash,
   }));
   expect("error" in confirmed ? confirmed.error : "confirmed").toBe("confirmed");
   if (raiseTokens > 0) {

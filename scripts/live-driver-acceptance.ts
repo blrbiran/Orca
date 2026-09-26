@@ -24,7 +24,7 @@ import { mkdir, realpath, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { canonicalBytes } from "../src/control/canonicalJson.js";
-import { createCcloopExecutionPort } from "../src/control/ccloopPort.js";
+import { resolveGroupSelections } from "../src/control/agentFreeze.js";
 import { readArchivedPlan, readBudgetProposal } from "../src/control/queries.js";
 import { assembleControlRuntime, type ControlRuntime } from "../src/panel/controlAssembly.js";
 import { controlRepoKey, resolveControlOptions } from "../src/panel/controlOptions.js";
@@ -100,14 +100,12 @@ const scriptPath = join(root, "codex-script.json");
 await writeFile(scriptPath, JSON.stringify({ a: { files: { "answer.txt": "42\n" } } }));
 const fakeCodex = resolve(dirname(ccloopBin), "..", "tests", "fixtures", "fake-codex.mjs");
 // Agent selection spec §4.2, §6.6: one codex installation in an agents table handed over as ORCA_AGENTS_TABLE; the
-// model is a selection field, and the plan's configHash is ccloop's answer for that selection.
+// model is a selection field (the operator's preference below), and confirmation freezes ccloop's configHash for it.
 const codexCommand = fake ? [process.execPath, fakeCodex, "script", marker, scriptPath] : [args.codex!];
 const tablePath = join(root, "agents.json");
 await writeFile(tablePath, JSON.stringify({ schema: "ccloop-agents-table-v1", installations: {
   codex: { kind: "codex", command: codexCommand, version: versionOf(codexCommand), configDir: null, timeoutMs: 120_000, killGraceMs: 5_000, sandbox: "workspace-write", budgetMode: "soft" },
 } }), { mode: 0o600 });
-const resolution = await createCcloopExecutionPort({ binary: ccloopBin, agentsTablePath: tablePath, timeoutMs: 60_000 })
-  .resolveAgent(fake ? { agent: "codex" } : { agent: "codex", model: args.model! });
 
 const check = 'test "$(cat answer.txt)" = 42';
 const contract = {
@@ -122,16 +120,16 @@ const contractPath = join(root, "contract-a.json");
 await writeFile(contractPath, canonicalBytes(contract));
 // The trusted control config requires the plan file inside its repository (controlConfig.ts, control-path-escape).
 const planPath = join(repo, "plan.json");
-await writeFile(planPath, JSON.stringify({ targetRepo: repo, ccloopBin, runsDir: join(root, "unused-runs"), workBranch: "orca/unused", policy: "local-merge", ledgerMode: "out-of-repo", goal: "live acceptance", successConditions: ["answer.txt holds 42"], tasks: [{ taskId: "a", contract: contractPath, dependsOn: [], targetVersion: 1, configHash: resolution.configHash }] }));
+await writeFile(planPath, JSON.stringify({ targetRepo: repo, ccloopBin, runsDir: join(root, "unused-runs"), workBranch: "orca/unused", policy: "local-merge", ledgerMode: "out-of-repo", goal: "live acceptance", successConditions: ["answer.txt holds 42"], tasks: [{ taskId: "a", contract: contractPath, dependsOn: [], targetVersion: 1 }] }));
 
 // The shipped ccloop's capability answer; a null context window makes the estimate blocked-capability (spec §11 D1).
 const profilePath = join(root, "profile.json");
 await writeFile(profilePath, JSON.stringify({
-  schema: "orca-execution-profile-snapshot-v1",
-  profile: { profileId: "all", allowedWorkKinds: ["budget-estimate", "goal-review", "handoff", "task"], adapter: "codex", adapterConfigRef: "adapter", modelPolicyRef: "policy", contextTokenizer: null, workMaxOutputTokens: 1000,
+  schema: "orca-execution-profile-snapshot-v2",
+  profile: { profileId: "all", allowedWorkKinds: ["budget-estimate", "goal-review", "handoff", "task"], contextTokenizer: null, workMaxOutputTokens: 1000,
     capabilities: { usageObservation: "phase-end", budgetEnforcement: "soft", contextObservation: "unavailable", handoffControl: "durable", handoffExecution: "mechanical-in-run-v1", contextWindowTokens: null, requestBoundProof: null },
     estimatorPreflight: { instructionVersion: "1", schemaVersion: "budget-estimate-v1", maxOutputTokens: 64_000, framingTokenOverhead: 17, tokenizer: { kind: "utf8-upper-bound", numerator: 2, denominator: 3, proofRef: "proof" } } },
-  resolved: { adapterConfigContentHash: "a".repeat(64), modelPolicyContentHash: "b".repeat(64), proofDocumentContentHashes: ["c".repeat(64)], adapterImplementationHash: "d".repeat(64), adapterProtocolVersion: "1", tokenizerArtifactHashes: [], secretValueHashes: [] },
+  resolved: { proofDocumentContentHashes: ["c".repeat(64)], tokenizerArtifactHashes: [], secretValueHashes: [] },
 }));
 
 const orcaHome = join(homedir(), ".orca");
@@ -146,9 +144,9 @@ process.env.ORCA_CORRECTIONS_DIR = env.ORCA_CORRECTIONS_DIR;
 const { rejection, ...control } = resolveControlOptions(["--plan", `plan=${repoId}=${planPath}`, "--profile", profilePath, "--estimator-profile", "all", "--estimate-mode", "soft", "--control-wake-ms", "200"], env, repos);
 if (rejection !== null) throw new Error(rejection);
 
-const raw = (runtime: ControlRuntime, commandId: string, verb: string, payload: unknown) => ({
-  schema: "orca-raw-command-v1", commandId, actorId: "human", verb, target: { kind: "group", groupId: "g" }, payload,
-  expectedRevision: verb === "import-plan" ? 0 : Number(runtime.store.db.prepare("SELECT revision FROM groups WHERE id='g'").get()!.revision),
+const raw = (runtime: ControlRuntime, commandId: string, verb: string, payload: unknown, target: unknown = { kind: "group", groupId: "g" }) => ({
+  schema: "orca-raw-command-v1", commandId, actorId: "human", verb, target, payload,
+  expectedRevision: verb === "import-plan" || verb === "set-agent-preferences" ? 0 : Number(runtime.store.db.prepare("SELECT revision FROM groups WHERE id='g'").get()!.revision),
 }) as never;
 const workRun = (runtime: ControlRuntime) => runtime.store.db.prepare("SELECT id,body FROM runs WHERE group_id='g' ORDER BY id").all()
   .map((row) => ({ runId: String(row.id), body: JSON.parse(String(row.body)) })).find((row) => row.body.phase === "work");
@@ -156,7 +154,7 @@ const workStatus = (runtime: ControlRuntime): string =>
   JSON.parse(String(runtime.store.db.prepare("SELECT body FROM work_items WHERE group_id='g' AND id='a'").get()!.body)).status;
 
 const checks: Record<string, boolean> = {};
-const summary: Record<string, unknown> = { mode: fake ? "fake" : "live", model: resolution.selection.model, groupTokens, taskTokens, deadlineMs, startedAt: new Date().toISOString(), root };
+const summary: Record<string, unknown> = { mode: fake ? "fake" : "live", model: null as string | null, groupTokens, taskTokens, deadlineMs, startedAt: new Date().toISOString(), root };
 const runtime = await assembleControlRuntime({ control, repos, epoch: "epoch-live-1", env });
 if (runtime === null) throw new Error("the control plane did not assemble");
 const runsRoot = `${runtime.store.stateDir}.runs`;
@@ -165,11 +163,10 @@ try {
   await runtime.recover();
   const imported = await runtime.service.importPlan(raw(runtime, "import", "import-plan", { groupId: "g", repoId, planId: "plan" }));
   summary.imported = imported;
-  // Agent selection plan T7 bridge, TEMPORARY -- plan T11 freezes the task's selection at confirm and deletes this:
-  // nothing in the product writes a work item's selection before then, so the one the configHash came from is set.
-  for (const row of runtime.store.db.prepare("SELECT id,body FROM work_items WHERE group_id='g'").all()) {
-    runtime.store.db.prepare("UPDATE work_items SET body=? WHERE group_id='g' AND id=?").run(JSON.stringify({ ...JSON.parse(String(row.body)), agent: resolution.selection }), String(row.id));
-  }
+  // Agent selection spec §6.2 layer 1: the operator's default is the table's codex installation, with --model when live.
+  const preferences = await runtime.service.setAgentPreferences(raw(runtime, "preferences", "set-agent-preferences",
+    { preferences: { defaultAgent: "codex", perAgent: fake ? {} : { codex: { model: args.model! } } } }, { kind: "operator", operatorId: "human" }));
+  if ("error" in preferences) throw new Error(`set-agent-preferences refused: ${JSON.stringify(preferences.error)}`);
   // A blocked-capability estimate leaves complex-1m-default allocations (task work 3M tokens, 3 attempts), and
   // confirm derives the contract's tokenBudget/maxAttempts/totalRuntimeBudgetMs from them, overriding the
   // contract's own. So the caps go in here, before confirm, as a human's proposal-edit -- the Web path.
@@ -187,12 +184,15 @@ try {
   }));
   if ("error" in edited) throw new Error(`proposal-edit refused: ${JSON.stringify(edited.error)}`);
   const hash = runtime.router.list()[0]!.profileHash;
-  const confirmed = runtime.service.confirm(raw(runtime, "confirm", "confirm", {
+  // Spec §6.4: confirmation freezes ccloop's answer for the selections this preview resolved.
+  const selections = await resolveGroupSelections({ store: runtime.store, port: runtime.port }, "g", "human");
+  const confirmed = await runtime.service.confirm(raw(runtime, "confirm", "confirm", {
     planHash: readArchivedPlan(runtime.store, "g").planHash, proposalVersion: readBudgetProposal(runtime.store, "g").proposalVersion, budgetMode: "soft",
     profileIds: { estimator: "all", worker: "all", handoff: "all", goalReview: "all" }, profileHashes: { estimator: hash, worker: hash, handoff: hash, goalReview: hash },
-    contextPolicy: { handoffAtContextTokens: null },
+    contextPolicy: { handoffAtContextTokens: null }, selectionsHash: selections.selectionsHash,
   }));
   if ("error" in confirmed) throw new Error(`confirm refused: ${JSON.stringify(confirmed.error)}`);
+  summary.model = JSON.parse(String(runtime.store.db.prepare("SELECT body FROM work_items WHERE group_id='g' AND id='a'").get()!.body)).agent.model;
   summary.confirmedLedger = readControlGroup(runtime.store, runtime.epoch, "g").ledger;
   summary.proposal = readBudgetProposal(runtime.store, "g");
   const started = await runtime.service.start(raw(runtime, "start", "start", {}));

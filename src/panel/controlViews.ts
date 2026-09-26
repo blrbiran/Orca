@@ -1,4 +1,5 @@
 import { frozenAllocationShape } from "../control/executionSnapshot.js";
+import { frozenWorkAgent } from "../control/agentFreeze.js";
 import { z } from "zod";
 import { readArtifact } from "../control/archive.js";
 import { canonicalBytes, sha256Canonical } from "../control/canonicalJson.js";
@@ -61,7 +62,8 @@ const workBodySchema = z.object({
   kind: z.string().min(1),
   dependsOn: z.array(idSchema),
   contract: z.unknown(),
-  configHash: hashSchema,
+  // Agent selection spec §6.2 / §12 I3: null on a draft; confirmation freezes ccloop's.
+  configHash: hashSchema.nullable(),
   grant: grantSchema,
   targetVersion: safeInteger.positive(),
   status: workStatusSchema,
@@ -117,13 +119,13 @@ const persistedRunSchema = z.object({
   targetVersion: safeInteger.positive(),
   commandId: idSchema,
   configHash: hashSchema,
-  // Agent selection spec I1: a work run carries its frozen selection. Plan T10: an estimate run carries its estimate's
-  // frozen estimator slot -- selection, provenance, timeouts and the capabilities it was claimed under.
-  agent: agentSelectionSchema.optional(),
-  agentProvenance: selectionProvenanceSchema.optional(),
-  timeoutMs: safeInteger.positive().optional(),
-  killGraceMs: safeInteger.optional(),
-  agentCapabilities: capabilityViewSchema.optional(),
+  // Agent selection spec I1: a work run carries its work item's frozen selection (plan T11), an estimate run its
+  // estimate's frozen estimator slot (plan T10) -- selection, provenance, timeouts and the capabilities it runs under.
+  agent: agentSelectionSchema,
+  agentProvenance: selectionProvenanceSchema,
+  timeoutMs: safeInteger.positive(),
+  killGraceMs: safeInteger,
+  agentCapabilities: capabilityViewSchema,
   grant: grantSchema,
   ownerToken: idSchema,
   executionProfile: executionProfileAuthoritySchema,
@@ -318,6 +320,9 @@ function validateExecutionSnapshot(
     || canonicalBytes(parsed.data.allocations.filter(a => a.ownerKind !== "reserve").map(settledShape)).compare(canonicalBytes(proposalAllocations.filter(a => a.ownerKind !== "reserve"))) !== 0) {
     return blocked("execution-snapshot-identity");
   }
+  // Agent selection spec §6.4 step 4: the group's reconcile slot is the snapshot's.
+  const storedReconcile = (groupBody(store, groupId) as { reconcileSlot?: unknown }).reconcileSlot ?? null;
+  if (canonicalBytes(storedReconcile).compare(canonicalBytes(parsed.data.agents.reconcile)) !== 0) return blocked("execution-snapshot-agents");
   // Limits and residual reserve may change after confirmation. Frozen grants
   // remain exact above; mutable accounting must independently conserve capacity.
   const live = groupBody(store, groupId).ledger;
@@ -384,6 +389,18 @@ function estimateViews(store: ControlStore, groupId: string): { views: EstimateV
   return { views, allocations };
 }
 
+/** The six frozen fields of `record` are byte-for-byte `entry`'s (its taskId aside). */
+function sameFrozen(record: unknown, entry: { taskId: string } & Record<string, unknown>): boolean {
+  const { taskId: _taskId, ...expected } = entry;
+  try { return canonicalBytes(frozenWorkAgent(record)).equals(canonicalBytes(expected)); }
+  catch { return false; }
+}
+
+function sameFrozenRecords(left: unknown, right: unknown): boolean {
+  try { return canonicalBytes(frozenWorkAgent(left)).equals(canonicalBytes(frozenWorkAgent(right))); }
+  catch { return false; }
+}
+
 function workViews(
   store: ControlStore,
   groupId: string,
@@ -400,8 +417,11 @@ function workViews(
     if (!row) return blocked(`work-item-missing:${task.taskId}`);
     const body = parseStored(workBodySchema, row.body, `work-item-invalid:${task.taskId}`);
     const contract = body.contract as { contentAddressedHash?: unknown };
+    // Agent selection spec §6.4 step 4 (§12 I3): a draft has no configHash; a confirmed work item carries exactly the snapshot's selection.
+    const frozenEntry = snapshot?.agents.tasks.find(entry => entry.taskId === task.taskId) ?? null;
+    if (snapshot === null ? body.configHash !== null : frozenEntry === null || !sameFrozen(body, frozenEntry)) return blocked(`work-item-agent:${task.taskId}`);
     if (body.workItemId !== task.taskId || body.taskId !== task.taskId
-      || body.configHash !== task.configHash || body.targetVersion !== task.targetVersion
+      || body.targetVersion !== task.targetVersion
       || body.originalContractHash !== task.originalContractHash
       || contract?.contentAddressedHash !== task.originalContractHash
       || (snapshot !== null && body.derivedContractHash !== derivedByTask.get(task.taskId))
@@ -425,7 +445,8 @@ function workViews(
     const status: WorkItemViewV1["status"] = body.status === "running" ? "active" : body.status === "done" ? "completed" : body.status;
     return {
       taskId: task.taskId, status, dependencyTaskIds: [...task.dependencyTaskIds], targetVersion: task.targetVersion,
-      configHash: task.configHash, originalContractHash: task.originalContractHash,
+      configHash: body.configHash, agent: frozenEntry?.agent ?? null, agentProvenance: frozenEntry?.agentProvenance ?? null,
+      originalContractHash: task.originalContractHash,
       derivedContractHash: body.derivedContractHash,
       currentRunId: body.currentRunId ?? null, pendingRunId: body.pendingRunId ?? null,
       lineageRunIds: sortedUnique(lineage),
@@ -538,7 +559,8 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
       // run of the task's lineage keeps the grant it was claimed with.
       const current = work.currentRunId === runId;
       const claimed = current && run.state === "settled-recoverable" ? run.remaining : run.grant;
-      if (work.workItemId !== run.workItemId || work.taskId !== run.taskId || work.configHash !== run.configHash
+      // Agent selection spec §6.4 / §3 I1: the run carries its work item's frozen selection, byte for byte.
+      if (work.workItemId !== run.workItemId || work.taskId !== run.taskId || !sameFrozenRecords(run, work)
         || work.targetVersion !== run.targetVersion
         || (current && canonicalBytes(work.grant).compare(canonicalBytes(claimed)) !== 0)
         || !sameBinding(run.executionProfile, proposal.profiles.worker, "task")

@@ -29,7 +29,8 @@ import { createTrustedControlConfig } from "../../../src/panel/controlConfig.js"
 import { ReviewsWriter } from "../../../src/panel/reviewsStore.js";
 import { FIXTURE_AGENT, profileSnapshot } from "../../control/fixtures/web.js";
 import type { PartialSelection } from "../../../src/control/agentSelection.js";
-import { FIXTURE_AGENT_ID, seedPanelOperator } from "../../control/fixtures/agents.js";
+import { FIXTURE_AGENT_ID, PANEL_OPERATOR, seedPanelOperator } from "../../control/fixtures/agents.js";
+import { resolveGroupSelections } from "../../../src/control/agentFreeze.js";
 
 export const PANEL_TOKEN = "b".repeat(64);
 export const GROUP = "grp-1";
@@ -51,6 +52,11 @@ export interface Panel {
   stopDeps: StopDeps;
   /** The Panel process's own wake engine: the browser never triggers it, so the test does. */
   drainWakes(): Promise<void>;
+  /**
+   * Agent selection spec §6.4 step 3: the selectionsHash of what the panel operator would see for `groupId` now, the
+   * value a confirm envelope carries. Plan T14 serves it as the preview route; until then the test asks the same code.
+   */
+  selectionsHash(groupId?: string): Promise<string>;
   close(): Promise<void>;
 }
 
@@ -97,7 +103,7 @@ export function createHarness(): Harness {
       targetRepo: repo, ccloopBin: binary, runsDir: root, workBranch: "orca/work", policy: "local-merge", ledgerMode: "out-of-repo",
       goal: "Ship a", successConditions: ["a passes"],
       // Seam B (human ruling 2026-09-24, named under ruling 88): targetVersion is one positive safe integer from plan to wire.
-      tasks: [{ taskId: "a", contract: contractPath, dependsOn: [], targetVersion: 1, configHash: "c".repeat(64) }],
+      tasks: [{ taskId: "a", contract: contractPath, dependsOn: [], targetVersion: 1 }],
     }));
     return { planPath, binary, agentsTable, repo };
   }
@@ -136,7 +142,7 @@ export function createHarness(): Harness {
         defaultEstimatorProfileId: "all", defaultEstimateMode: "soft",
       }, router);
       const deps = {
-        store, admissionGate: createAdmissionGate(), profileRouter: router, trustedConfig,
+        store, port, admissionGate: createAdmissionGate(), profileRouter: router, trustedConfig,
         defaults: () => ({ estimatorProfileId: "all", estimatorProfileHash: frozen.profileHash, estimateMode: "soft" as const }),
         estimatorObservation: (selected: typeof frozen) => ({ profile: selected, observed: selected.snapshot.profile.capabilities, probeFailureCode: null }),
         knownRepository: (repoId: string) => repoId === "repo",
@@ -159,6 +165,11 @@ export function createHarness(): Harness {
       if (address === null || typeof address === "string") throw new Error("panel has no port");
       const panel: Panel = {
         url: `http://127.0.0.1:${address.port}`, epoch, root, store, service, stopDeps: deps,
+        selectionsHash: async (groupId = GROUP) => {
+          const hash = (await resolveGroupSelections({ store, port }, groupId, PANEL_OPERATOR)).selectionsHash;
+          if (hash === null) throw new Error("a selection slot was refused; there is no selectionsHash to confirm with");
+          return hash;
+        },
         drainWakes: async () => {
           await deliverSchedulerWakes(store, createWebWakeHandlers({ store, profileRouter: router, admissionGate: deps.admissionGate, service }));
         },

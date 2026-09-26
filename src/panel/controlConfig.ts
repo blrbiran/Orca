@@ -4,6 +4,7 @@ import { z } from "zod";
 import { durableCommandErrorStatuses } from "../control/errors.js";
 import { ControlError } from "../control/errors.js";
 import type { ExecutionProfileRouter } from "../control/profiles.js";
+import type { PartialSelection } from "../control/agentSelection.js";
 import { controlConfigSchema, type ControlConfigV1 } from "../control/webProtocol.js";
 import { idSchema, safeInteger } from "../control/schema.js";
 import type { TrustedSchedulerPlanTarget } from "../scheduler/planFile.js";
@@ -46,7 +47,8 @@ export interface TrustedControlConfigInput {
 export interface TrustedControlConfig {
   resolveTarget(input: unknown): TrustedSchedulerPlanTarget;
   resolveRepository(repoId: string): string;
-  readView(): Promise<ControlConfigV1>;
+  /** Agent selection spec §6.4 last paragraph (W5-M14): the profiles as observed for `selection`, the operator's default. */
+  readView(selection: PartialSelection): Promise<ControlConfigV1>;
   readonly shutdownGraceMs: number;
 }
 
@@ -203,8 +205,8 @@ export function createTrustedControlConfig(
       if (!repository) throw new ControlError("control-target-not-allowed");
       return revalidatePath(repository.witness);
     },
-    async readView(): Promise<ControlConfigV1> {
-      const observations = await Promise.all(profiles.map((profile) => router.probe(profile)));
+    async readView(selection: PartialSelection): Promise<ControlConfigV1> {
+      const observations = await Promise.all(profiles.map((profile) => router.probe(profile, selection)));
       const view: ControlConfigV1 = {
         schema: "orca-control-config-v1",
         epoch: input.epoch,

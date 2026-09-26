@@ -13,10 +13,12 @@ import { webFixture, profileSnapshot } from "./fixtures/web.js";
 // Seam B (spec docs/superpowers/specs/2026-09-24-g1-seam-b-target-version-design.md): one
 // targetVersion, a positive safe integer, from the human-written plan to the start envelope.
 
+// Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): a plan task carries no configHash (spec §6.2),
+// so the helper's task no longer does; N0-N2 still judge the targetVersion value alone.
 const planWith = (targetVersion: unknown) => ({
   targetRepo: "/abs/repo", ccloopBin: "/abs/cli.js", runsDir: "/abs/runs", workBranch: "orca/w/x",
   policy: "local-merge", ledgerMode: "in-repo",
-  tasks: [{ taskId: "T1", contract: "/abs/t1.json", dependsOn: [], targetVersion, configHash: "a".repeat(64) }],
+  tasks: [{ taskId: "T1", contract: "/abs/t1.json", dependsOn: [], targetVersion }],
 });
 
 function malformedAt(result: ReturnType<typeof loadPlan>): string[] {
@@ -39,7 +41,8 @@ function setBody(store: ControlStore, table: "work_items" | "runs", where: strin
 async function importedAt3() {
   const h = await webFixture(profileSnapshot(), [{ taskId: "a", targetVersion: 3 }]);
   const service = new WebControlService(h.deps);
-  service.confirm(h.command("confirm", h.confirmPayload()));
+  // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): confirmation resolves agent selections through ccloop first, so it is awaited and carries the previewed selectionsHash.
+  await service.confirm(h.command("confirm", await h.confirmPayload()));
   return h;
 }
 
@@ -146,7 +149,9 @@ describe("the panel refuses a targetVersion that is not the plan's integer (seam
 });
 
 describe("wire schemas refuse a string targetVersion (seam B)", () => {
-  const task = { taskId: "a", dependencyTaskIds: [], configHash: "c".repeat(64), originalContractHash: "c".repeat(64), originalContractCanonicalJson: '{"schema":"orca-task-contract-v1"}' };
+  // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): a ControlPlanV1 task carries no configHash
+  // (spec §6.2); N7 still judges targetVersion's type alone.
+  const task = { taskId: "a", dependencyTaskIds: [], originalContractHash: "c".repeat(64), originalContractCanonicalJson: '{"schema":"orca-task-contract-v1"}' };
   const plan = (targetVersion: unknown) => ({ schema: "orca-control-plan-v1", repoId: "repo", planId: "plan", goal: "ship", successConditions: ["checks pass"], tasks: [{ ...task, targetVersion }] });
 
   it("N7 ControlPlanV1 takes 3 and refuses \"3\"", () => {

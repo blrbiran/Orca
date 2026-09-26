@@ -27,7 +27,8 @@ const count = (store: ControlStore, sql: string): number => Number(store.db.prep
 async function group(options: { start: boolean; claim: boolean }): Promise<{ h: Fixture; service: WebControlService; runId: string | null }> {
   const h = await webFixture();
   const service = new WebControlService(h.deps);
-  const confirmed = service.confirm(h.command("confirm", h.confirmPayload()));
+  // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): confirmation resolves agent selections through ccloop first, so it is awaited and carries the previewed selectionsHash.
+  const confirmed = await service.confirm(h.command("confirm", await h.confirmPayload()));
   if ("error" in confirmed) throw new Error(JSON.stringify(confirmed));
   let runId: string | null = null;
   if (options.start) {

@@ -105,6 +105,9 @@ describe("web control acceptance over a real panel (task 10 step 1)", () => {
         profileIds: { estimator: "all", worker: "all", handoff: "all", goalReview: "all" },
         profileHashes: { estimator: binding.profileHash, worker: binding.profileHash, handoff: binding.profileHash, goalReview: binding.profileHash },
         contextPolicy: { handoffAtContextTokens: 800_000 },
+        // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): the confirm envelope carries the
+        // selectionsHash the panel operator previewed (spec §6.4 step 3); the rest of the journey is judged as before.
+        selectionsHash: await panel.selectionsHash(),
       },
     });
     expect(confirmed.status).toBe(200);

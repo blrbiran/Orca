@@ -88,6 +88,11 @@ export interface BudgetEditorProps {
   drafts: Record<string, string>;
   onDraft: (key: string, text: string) => void;
   onCommand: (action: ControlAction) => void;
+  /**
+   * Agent selection spec §6.4 step 3: the hash of the selections the operator sees; confirming needs it (W5-M9).
+   * Plan T15 wires the preview that supplies it; until then confirming is refused here, never sent unbound.
+   */
+  selectionsHash?: string | null;
 }
 
 export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
@@ -103,7 +108,7 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
   // There is then nothing to fall back to, so confirming is refused here rather than sent with a
   // guessed profile or a guessed mode -- guessing the mode is the strict-versus-soft fault itself.
   const defaults = config.defaults;
-  const confirmBlocked = defaults === null && (view.proposal.profiles === null || view.proposal.budgetMode === null);
+  const confirmBlocked = (defaults === null && (view.proposal.profiles === null || view.proposal.budgetMode === null)) || !props.selectionsHash;
   const confirmProfile = (kind: "estimator" | "worker" | "handoff" | "goalReview") =>
     view.proposal.profiles?.[kind] ?? { profileId: defaults?.estimatorProfileId ?? "", profileHash: defaults?.estimatorProfileHash ?? "" };
 
@@ -141,6 +146,7 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
           handoff: confirmProfile("handoff").profileHash, goalReview: confirmProfile("goalReview").profileHash,
         },
         contextPolicy: { handoffAtContextTokens: tokens === null || !Number.isSafeInteger(tokens) ? null : tokens },
+        selectionsHash: props.selectionsHash!,
       },
     });
   };

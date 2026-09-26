@@ -13,7 +13,8 @@ import { webFixture } from "./fixtures/web.js";
 async function claimedSoft() {
   const h = await webFixture();
   const service = new WebControlService(h.deps);
-  service.confirm(h.command("confirm", { ...h.confirmPayload(), budgetMode: "soft" }));
+  // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): confirmation resolves agent selections through ccloop first, so it is awaited and carries the previewed selectionsHash.
+  await service.confirm(h.command("confirm", { ...(await h.confirmPayload()), budgetMode: "soft" }));
   await service.start(h.command("start", {}));
   const claim = await deliverScheduledStart({ store: h.store, profileRouter: h.deps.profileRouter, admissionGate: h.deps.admissionGate }, "g");
   if (claim.kind !== "claimed") throw new Error(`claim refused: ${JSON.stringify(claim)}`);

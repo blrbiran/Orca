@@ -48,8 +48,10 @@ async function shutdownHarness(claims: readonly string[] = []) {
   const deps = { store: h.store, profileRouter: h.deps.profileRouter, admissionGate: gate, epoch: EPOCH, shutdownGraceMs: GRACE_MS,
     now: () => clock.value, beforeCommit: undefined as (() => void) | undefined };
   const service = new WebControlService({ ...h.deps, admissionGate: gate, now: () => clock.value });
-  service.confirm(h.command("confirm", h.confirmPayload()));
-  service.confirm(groupCommand("h", revisionOf(h.store, "h"), "confirm", h.confirmPayload()) as never);
+  // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): confirmation resolves agent selections through ccloop first, so it is awaited and carries the previewed selectionsHash.
+  // Group "h" is imported from the same plan by the same operator, so the previewed hash is the same.
+  await service.confirm(h.command("confirm", await h.confirmPayload()));
+  await service.confirm(groupCommand("h", revisionOf(h.store, "h"), "confirm", await h.confirmPayload()) as never);
   for (const groupId of claims) {
     await service.start(groupCommand(groupId, revisionOf(h.store, groupId), "start", {}) as never);
     expect((await deliverScheduledStart({ store: h.store, profileRouter: h.deps.profileRouter, admissionGate: gate }, groupId)).kind).toBe("claimed");

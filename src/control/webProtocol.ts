@@ -122,6 +122,18 @@ export const frozenSlotSchema = z
     capabilities: capabilityViewSchema,
   })
   .strict();
+// Agent selection spec §6.4 step 4: what confirmation froze onto one task's work item, and what its runs carry.
+export const frozenTaskAgentSchema = z
+  .object({
+    taskId: idSchema,
+    agent: agentSelectionSchema,
+    agentProvenance: selectionProvenanceSchema,
+    configHash: hashSchema,
+    timeoutMs: positiveSafeInteger.max(2_147_483_647),
+    killGraceMs: safeInteger.max(60_000),
+    agentCapabilities: capabilityViewSchema,
+  })
+  .strict();
 
 const declaredCapabilitiesSchema = capabilityViewSchema.extend({
   handoffExecution: z.enum(["mechanical-in-run-v1", "model-assisted-v1"]),
@@ -131,9 +143,12 @@ const declaredCapabilitiesSchema = capabilityViewSchema.extend({
 // answers protocol 3 (a table view, or one selection's resolution whose `capabilities` is this view with
 // no protocol tag); those response schemas live with the port that parses them (ccloopPort.ts).
 
+// Agent selection spec §6.5 (human ruling "同意删"): profile v2 drops the adapter identity fields -- which agent and
+// which model are the frozen selection's now, and capabilities come from ccloop's answer for that selection (spec
+// §3 I3), intersected with this declaration per (profile, selection). So the codex-only phase-end/soft rule is gone.
 export const executionProfileSnapshotSchema = z
   .object({
-    schema: z.literal("orca-execution-profile-snapshot-v1"),
+    schema: z.literal("orca-execution-profile-snapshot-v2"),
     profile: z
       .object({
         profileId: idSchema,
@@ -141,9 +156,6 @@ export const executionProfileSnapshotSchema = z
           .array(webWorkKindSchema)
           .min(1)
           .superRefine((values, ctx) => requireSortedUnique(values, String, ctx, [])),
-        adapter: nonemptyString,
-        adapterConfigRef: nonemptyString,
-        modelPolicyRef: nonemptyString,
         contextTokenizer: z.object({ tokenizerId: nonemptyString, tokenizerVersion: nonemptyString }).strict().nullable(),
         workMaxOutputTokens: positiveSafeInteger.nullable(),
         capabilities: declaredCapabilitiesSchema,
@@ -161,11 +173,7 @@ export const executionProfileSnapshotSchema = z
       .strict(),
     resolved: z
       .object({
-        adapterConfigContentHash: hashSchema,
-        modelPolicyContentHash: hashSchema,
         proofDocumentContentHashes: sortedHashArraySchema,
-        adapterImplementationHash: hashSchema,
-        adapterProtocolVersion: nonemptyString,
         tokenizerArtifactHashes: z.array(
           z.object({ purpose: z.enum(["context", "estimator"]), contentHash: hashSchema }).strict(),
         ),
@@ -176,14 +184,6 @@ export const executionProfileSnapshotSchema = z
   .strict()
   .superRefine((value, ctx) => {
     const { profile, resolved } = value;
-    if (profile.adapter === "codex") {
-      if (profile.capabilities.usageObservation !== "phase-end") {
-        issue(ctx, ["profile", "capabilities", "usageObservation"], "codex-usage-observation-must-be-phase-end");
-      }
-      if (profile.capabilities.budgetEnforcement !== "soft") {
-        issue(ctx, ["profile", "capabilities", "budgetEnforcement"], "codex-budget-enforcement-must-be-soft");
-      }
-    }
     const observesContext = profile.capabilities.contextObservation !== "unavailable";
     if (observesContext !== (profile.contextTokenizer !== null)) {
       issue(ctx, ["profile", "contextTokenizer"], "context-tokenizer-capability-mismatch");
@@ -421,7 +421,7 @@ export const controlPlanSchema = z
           taskId: idSchema,
           dependencyTaskIds: sortedIdArraySchema,
           targetVersion: positiveSafeInteger,
-          configHash: hashSchema,
+          // Agent selection spec §6.2 / §12 I3: a plan carries no configHash; confirmation freezes ccloop's.
           agent: partialSelectionSchema.optional(),
           originalContractHash: hashSchema,
           originalContractCanonicalJson: nonemptyString,
@@ -460,7 +460,7 @@ const executionAllocationSchema = z
 
 export const executionSnapshotSchema = z
   .object({
-    schema: z.literal("orca-execution-snapshot-v1"),
+    schema: z.literal("orca-execution-snapshot-v2"),
     groupId: idSchema,
     planHash: hashSchema,
     graphVersion: positiveSafeInteger,
@@ -473,10 +473,16 @@ export const executionSnapshotSchema = z
       .strict(),
     allocations: z.array(executionAllocationSchema),
     derivedContracts: z.array(z.object({ taskId: idSchema, derivedContractHash: hashSchema }).strict()),
+    // Agent selection spec §6.4 step 4 (§12 I3): each task's frozen selection and the group's reconcile slot.
+    agents: z.object({ tasks: z.array(frozenTaskAgentSchema), reconcile: frozenSlotSchema }).strict(),
   })
   .strict()
   .superRefine((value, ctx) => {
     requireSortedUnique(value.derivedContracts, (contract) => contract.taskId, ctx, ["derivedContracts"]);
+    requireSortedUnique(value.agents.tasks, (task) => task.taskId, ctx, ["agents", "tasks"]);
+    if (value.agents.tasks.map((task) => task.taskId).join("\0") !== value.derivedContracts.map((contract) => contract.taskId).join("\0")) {
+      issue(ctx, ["agents", "tasks"], "agent-task-set-mismatch");
+    }
     requireSortedUnique(
       value.allocations,
       (allocation) => `${allocation.ownerKind}\0${allocation.ownerId}\0${allocation.bucket}`,
@@ -662,6 +668,9 @@ export const confirmPayloadSchema = z
     profileIds: z.object({ estimator: idSchema, worker: idSchema, handoff: idSchema, goalReview: idSchema }).strict(),
     profileHashes: z.object({ estimator: hashSchema, worker: hashSchema, handoff: hashSchema, goalReview: hashSchema }).strict(),
     contextPolicy: z.object({ handoffAtContextTokens: positiveSafeInteger.nullable() }).strict(),
+    // Agent selection spec §6.4 step 3 (§12 C4): the hash of the selections the operator saw; refused as
+    // agent-selection-changed when what confirmation resolves is not that.
+    selectionsHash: hashSchema,
   })
   .strict();
 export const setLimitPayloadSchema = z.object({ limit: amountSchema }).strict();
@@ -891,7 +900,10 @@ export const workItemViewSchema = z
     status: z.enum(["draft", "ready", "starting", "start-unknown", "active", "held", "continuing", "completed", "blocked"]),
     dependencyTaskIds: sortedIdArraySchema,
     targetVersion: positiveSafeInteger,
-    configHash: hashSchema,
+    // Agent selection spec §6.2 / §12 I3 (W6-9): null until confirmation freezes a selection onto the work item.
+    configHash: hashSchema.nullable(),
+    agent: agentSelectionSchema.nullable(),
+    agentProvenance: selectionProvenanceSchema.nullable(),
     originalContractHash: hashSchema,
     derivedContractHash: hashSchema.nullable(),
     currentRunId: idSchema.nullable(),

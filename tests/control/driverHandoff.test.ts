@@ -255,11 +255,15 @@ describe("nothing arrives (spec §3 grace, §11 I3)", { timeout: 60_000 }, () =>
       await driver.round();
       expect(requestState(t, requestId!)).toBe("collecting");
       // The deadline alone is not the bound: ccloop is given its kill grace plus the extra minute to answer.
+      // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): the bound is the run's frozen
+      // killGraceMs (ccloop's answer at confirmation, 5 000 in this fixture) plus the extra minute, not the minute alone.
       const deadline = Date.parse(readHandoffRequest(t.h.store, "g", requestId!).request.deadlineAt);
-      now = deadline + HANDOFF_EXTRA_GRACE_MS;
+      const killGraceMs = t.body(runId).killGraceMs as number;
+      expect(killGraceMs).toBeGreaterThan(0);
+      now = deadline + killGraceMs + HANDOFF_EXTRA_GRACE_MS;
       await driver.round();
       expect(requestState(t, requestId!)).toBe("collecting");
-      now = deadline + HANDOFF_EXTRA_GRACE_MS + 1;
+      now = deadline + killGraceMs + HANDOFF_EXTRA_GRACE_MS + 1;
       await t.until(driver, () => requestState(t, requestId!) === "outcome-unknown");
       expect(t.body(runId).state).toBe("accepted");
       expect(readStopIntent(t.h.store, "g")!.state).toBe("handoff-unresolved");
@@ -271,8 +275,11 @@ describe("nothing arrives (spec §3 grace, §11 I3)", { timeout: 60_000 }, () =>
 });
 
 describe("the grace is the run's own agent killGraceMs plus the fixed minute (spec §3; agent selection spec §6.6)", { timeout: 60_000 }, () => {
+  // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): the killGraceMs is the one frozen at
+  // confirmation (7 000 here, unlike the fixture's default 5 000 and the driver port's own answer 0, plan P23 m2), so
+  // a grace taken from the port at run time, or from the default, would call the request unknown too early or too late.
   it("does not call a request outcome-unknown before the killGraceMs ccloop answers for the run's selection has passed", async () => {
-    const t = await driverHarness([{ taskId: "a" }], { behaviour: () => "stoppable-silent", killGraceMs: 5_000 }); try {
+    const t = await driverHarness([{ taskId: "a" }], { behaviour: () => "stoppable-silent", killGraceMs: 7_000 }); try {
       const runId = await t.claim();
       let now = Date.now();
       const driver = createExecutionDriver({ ...t.deps, now: () => new Date(now) });
@@ -283,10 +290,10 @@ describe("the grace is the run's own agent killGraceMs plus the fixed minute (sp
       now = deadline + HANDOFF_EXTRA_GRACE_MS + 1;
       await driver.round();
       expect(requestState(t, requestId!)).toBe("collecting");
-      now = deadline + HANDOFF_EXTRA_GRACE_MS + 5_000;
+      now = deadline + HANDOFF_EXTRA_GRACE_MS + 7_000;
       await driver.round();
       expect(requestState(t, requestId!)).toBe("collecting");
-      now = deadline + HANDOFF_EXTRA_GRACE_MS + 5_001;
+      now = deadline + HANDOFF_EXTRA_GRACE_MS + 7_001;
       await t.until(driver, () => requestState(t, requestId!) === "outcome-unknown");
     } finally { await t.h.dispose(); }
   });

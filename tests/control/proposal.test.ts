@@ -35,7 +35,9 @@ describe("proposal commands", () => {
       h.store.db.prepare("UPDATE groups SET body=? WHERE id='g'").run(JSON.stringify(group));
       expect(service.editProposal(h.command("proposal-edit", { baseProposalVersion: 1, operations: [operation] }))).toMatchObject({ error: { code: "proposal-version-conflict" } });
       expect(await service.createEstimate(h.command("estimate", { proposalVersion: 1, estimatorProfileId: "all", estimatorProfileHash: h.frozen.profileHash, estimateMode: "soft" }))).toMatchObject({ error: { code: "proposal-version-conflict" } });
-      expect(service.confirm(h.command("confirm", { ...h.confirmPayload(), proposalVersion: 1 }))).toMatchObject({ error: { code: "proposal-version-conflict" } });
+      // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): the confirmation is awaited and carries the
+      // previewed selectionsHash; a stale proposal version is still refused before anything else.
+      expect(await service.confirm(h.command("confirm", { ...(await h.confirmPayload()), proposalVersion: 1 }))).toMatchObject({ error: { code: "proposal-version-conflict" } });
     } finally { await h.dispose(); }
   });
   it("validates explicit model field provenance again at confirmation", async () => {
@@ -50,7 +52,9 @@ describe("proposal commands", () => {
       expect(service.editProposal(h.command("proposal-edit", { baseProposalVersion: 1, operations: [{ ...operation, value: 2000000 }] }))).toMatchObject({ result: { proposalVersion: 2 } });
       const applied = readBudgetProposal(h.store, "g").allocations.find(a => a.ownerKind === "task" && a.bucket === "work")!;
       expect(applied.fieldProvenance.tokens).toEqual({ provenance: "model", estimateId: h.estimateId });
-      expect(service.confirm(h.command("confirm", h.confirmPayload()))).toMatchObject({ result: { kind: "confirmed" } });
+      // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): awaited, with the previewed selectionsHash; model
+      // provenance is still re-validated at confirmation and dropped by a later default edit.
+      expect(await service.confirm(h.command("confirm", await h.confirmPayload()))).toMatchObject({ result: { kind: "confirmed" } });
       expect(service.editProposal(h.command("proposal-edit", { baseProposalVersion: 2, operations: [{ target: operation.target, value: 3000000, provenance: "complex-1m-default" }] }))).toMatchObject({ result: { proposalVersion: 3 } });
       expect(readBudgetProposal(h.store, "g").allocations.find(a => a.ownerKind === "task" && a.bucket === "work")!.fieldProvenance.tokens.estimateId).toBeNull();
     } finally { await h.dispose(); }
@@ -72,7 +76,9 @@ describe("proposal commands", () => {
       const duplicate = { target: { scope: "goal-review", dimension: "tokens" }, value: 1, provenance: "human" };
       const rejected = await post("/groups/g/proposal/edit", { commandId: "http-duplicate", expectedRevision: 2, payload: { baseProposalVersion: 1, operations: [duplicate, duplicate] } });
       expect(rejected.status).toBe(422); expect(await rejected.json()).toMatchObject({ error: { code: "duplicate-proposal-target", retryable: false } });
-      expect((await post("/groups/g/confirm", { commandId: "http-confirm", expectedRevision: 2, payload: h.confirmPayload() })).status).toBe(200);
+      // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): the confirm envelope carries the previewed
+      // selectionsHash; the panel operator was given the fixture operator's preferences, so the hash is the same one.
+      expect((await post("/groups/g/confirm", { commandId: "http-confirm", expectedRevision: 2, payload: await h.confirmPayload() })).status).toBe(200);
       expect((await post("/groups/g/set-limit", { commandId: "http-limit", expectedRevision: 3, payload: { limit: { ...readBudgetProposal(h.store, "g").groupLimit, tokens: 9999999 } } })).status).toBe(200);
       expect((await post("/groups/import-plan", { commandId: "http-import", expectedRevision: 0, payload: { groupId: "other", repoId: "repo", planId: "plan" } })).status).toBe(201);
       expect((await post("/groups/g/estimates", { ...body, actorId: "forged" })).status).toBe(400);

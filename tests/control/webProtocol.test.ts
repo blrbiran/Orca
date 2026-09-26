@@ -102,6 +102,8 @@ describe("Web control protocol", () => {
     ).toBe(false);
   });
 
+  // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): a normalized plan task carries no configHash
+  // (spec §6.2: confirmation freezes ccloop's); one that still does is refused, like any other unknown key.
   it("validates normalized plans and rejects unsorted or duplicate sets", () => {
     const plan = {
       schema: "orca-control-plan-v1",
@@ -115,7 +117,6 @@ describe("Web control protocol", () => {
           dependencyTaskIds: [],
           // Seam B (human ruling 2026-09-24, named under ruling 88): targetVersion is one positive safe integer from plan to wire.
           targetVersion: 1,
-          configHash: hash,
           originalContractHash: hash,
           originalContractCanonicalJson: '{"schema":"orca-task-contract-v1"}',
         },
@@ -124,7 +125,6 @@ describe("Web control protocol", () => {
           dependencyTaskIds: ["a"],
           // Seam B (human ruling 2026-09-24, named under ruling 88): targetVersion is one positive safe integer from plan to wire.
           targetVersion: 1,
-          configHash: hash,
           originalContractHash: hash,
           originalContractCanonicalJson: '{"schema":"orca-task-contract-v1"}',
         },
@@ -137,17 +137,18 @@ describe("Web control protocol", () => {
       controlPlanSchema.safeParse({ ...plan, tasks: [plan.tasks[0], { ...plan.tasks[1], dependencyTaskIds: ["a", "a"] }] })
         .success,
     ).toBe(false);
+    expect(controlPlanSchema.safeParse({ ...plan, tasks: [{ ...plan.tasks[0], configHash: hash }, plan.tasks[1]] }).success).toBe(false);
   });
 
+  // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): profile v2 carries no adapter identity
+  // (spec §6.5), so the codex-only phase-end/soft rule is gone -- capabilities come from ccloop's answer for the
+  // selection -- and a snapshot naming an adapter, or still on the v1 schema, is refused; the shape rules stay.
   it("accepts an explicit Codex phase-end plus soft profile snapshot", () => {
     const snapshot = {
-      schema: "orca-execution-profile-snapshot-v1",
+      schema: "orca-execution-profile-snapshot-v2",
       profile: {
         profileId: "codex-worker",
         allowedWorkKinds: ["task"],
-        adapter: "codex",
-        adapterConfigRef: "adapter-config",
-        modelPolicyRef: "model-policy",
         contextTokenizer: { tokenizerId: "tok", tokenizerVersion: "1" },
         workMaxOutputTokens: 4096,
         capabilities: {
@@ -161,47 +162,15 @@ describe("Web control protocol", () => {
         },
         estimatorPreflight: null,
       },
-      resolved: {
-        adapterConfigContentHash: hash,
-        modelPolicyContentHash: hash,
-        proofDocumentContentHashes: [],
-        adapterImplementationHash: hash,
-        adapterProtocolVersion: "1",
-        tokenizerArtifactHashes: [{ purpose: "context", contentHash: hash }],
-        secretValueHashes: [],
-      },
+      resolved: { proofDocumentContentHashes: [], tokenizerArtifactHashes: [{ purpose: "context", contentHash: hash }], secretValueHashes: [] },
     };
     expect(executionProfileSnapshotSchema.parse(snapshot)).toEqual(snapshot);
-    expect(
-      executionProfileSnapshotSchema.safeParse({
-        ...snapshot,
-        profile: { ...snapshot.profile, estimatorPreflight: undefined },
-      }).success,
-    ).toBe(false);
-    expect(
-      executionProfileSnapshotSchema.safeParse({
-        ...snapshot,
-        profile: { ...snapshot.profile, allowedWorkKinds: ["task", "task"] },
-      }).success,
-    ).toBe(false);
-    expect(
-      executionProfileSnapshotSchema.safeParse({
-        ...snapshot,
-        profile: {
-          ...snapshot.profile,
-          capabilities: { ...snapshot.profile.capabilities, usageObservation: "realtime" },
-        },
-      }).success,
-    ).toBe(false);
-    expect(
-      executionProfileSnapshotSchema.safeParse({
-        ...snapshot,
-        profile: {
-          ...snapshot.profile,
-          capabilities: { ...snapshot.profile.capabilities, budgetEnforcement: "bounded" },
-        },
-      }).success,
-    ).toBe(false);
+    expect(executionProfileSnapshotSchema.safeParse({ ...snapshot, profile: { ...snapshot.profile, estimatorPreflight: undefined } }).success).toBe(false);
+    expect(executionProfileSnapshotSchema.safeParse({ ...snapshot, profile: { ...snapshot.profile, allowedWorkKinds: ["task", "task"] } }).success).toBe(false);
+    expect(executionProfileSnapshotSchema.safeParse({ ...snapshot, schema: "orca-execution-profile-snapshot-v1" }).success).toBe(false);
+    expect(executionProfileSnapshotSchema.safeParse({ ...snapshot, profile: { ...snapshot.profile, adapter: "codex" } }).success).toBe(false);
+    expect(executionProfileSnapshotSchema.safeParse({ ...snapshot, resolved: { ...snapshot.resolved, adapterImplementationHash: hash } }).success).toBe(false);
+    expect(executionProfileSnapshotSchema.safeParse({ ...snapshot, profile: { ...snapshot.profile, contextTokenizer: null } }).success).toBe(false);
   });
 
   it("enforces dispatch phase grants and proof attempt/session maxima", () => {
@@ -277,10 +246,15 @@ describe("Web control protocol", () => {
     ).toBe(false);
   });
 
+  // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): execution snapshot v2 (spec §6.4 step 4)
+  // also freezes each task's selection and the group's reconcile slot; a task set that is not the derived-contract
+  // set is refused beside the existing ordering and provenance rules.
   it("validates a complete, canonically ordered execution snapshot", () => {
     const binding = { profileId: "p", profileHash: hash };
+    const capabilities = { usageObservation: "realtime", budgetEnforcement: "bounded", contextObservation: "unavailable", handoffControl: "durable", handoffExecution: "mechanical-in-run-v1", contextWindowTokens: null, requestBoundProof: null };
+    const provenanceOf = { agent: "operator", model: "descriptor", contextWindow: "descriptor" };
     const snapshot = {
-      schema: "orca-execution-snapshot-v1",
+      schema: "orca-execution-snapshot-v2",
       groupId: "g",
       planHash: hash,
       graphVersion: 1,
@@ -296,8 +270,16 @@ describe("Web control protocol", () => {
         { ownerKind: "task", ownerId: "a", bucket: "work", amount, fieldProvenance: provenance },
       ],
       derivedContracts: [{ taskId: "a", derivedContractHash: hash }],
+      agents: {
+        tasks: [{ taskId: "a", agent: { agent: "claude", model: "claude-opus-5-5", contextWindow: "agent-default" }, agentProvenance: provenanceOf,
+          configHash: hash, timeoutMs: 1_800_000, killGraceMs: 5_000, agentCapabilities: capabilities }],
+        reconcile: { partial: { agent: "claude" }, provenance: provenanceOf, selection: { agent: "claude", model: "claude-opus-5-5", contextWindow: "agent-default" },
+          configHash: hash, timeoutMs: 1_800_000, killGraceMs: 5_000, capabilities },
+      },
     };
     expect(executionSnapshotSchema.parse(snapshot)).toEqual(snapshot);
+    expect(executionSnapshotSchema.safeParse({ ...snapshot, agents: { ...snapshot.agents, tasks: [] } }).success).toBe(false);
+    expect(executionSnapshotSchema.safeParse({ ...snapshot, schema: "orca-execution-snapshot-v1" }).success).toBe(false);
     expect(executionSnapshotSchema.safeParse({ ...snapshot, allocations: [...snapshot.allocations].reverse() }).success).toBe(false);
     expect(executionSnapshotSchema.safeParse({ ...snapshot, allocations: snapshot.allocations.slice(0, -1) }).success).toBe(false);
     expect(
@@ -397,7 +379,11 @@ describe("Web control protocol", () => {
           dependencyTaskIds: [],
           // Seam B (human ruling 2026-09-24, named under ruling 88): targetVersion is one positive safe integer from plan to wire.
           targetVersion: 1,
+          // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): a work item view names its frozen selection
+          // (W6-9), null on a draft; configHash is nullable, not necessarily null.
           configHash: hash,
+          agent: null,
+          agentProvenance: null,
           originalContractHash: hash,
           derivedContractHash: null,
           currentRunId: null,
