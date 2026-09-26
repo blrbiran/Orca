@@ -5,7 +5,8 @@
  * preview computed a second way would fail one of the two.
  */
 import { afterAll, describe, expect, it } from "vitest";
-import { selectionsHash } from "../../src/control/agentSelection.js";
+import { selectionsHash, type PartialSelection } from "../../src/control/agentSelection.js";
+import { ControlError } from "../../src/control/errors.js";
 import { readConfirmedReconcileSlot } from "../../src/control/executionSnapshot.js";
 import {
   agentPreferencesViewSchema,
@@ -32,8 +33,8 @@ afterAll(async () => { await h.dispose(); });
 
 const PREFS = "/api/control/operator/agent-preferences";
 /** Every criterion here asks the claude/codex double, from a panel whose operator has no preferences yet (P8). */
-const boot = async (epoch: string, options: { agents?: typeof CLAUDE_CODEX_AGENTS } = {}) =>
-  h.boot(epoch, await h.workspace(), { resolveAgent: claudeCodexResolveAgent, agents: options.agents ?? CLAUDE_CODEX_AGENTS, seedPreferences: false });
+const boot = async (epoch: string, options: { agents?: typeof CLAUDE_CODEX_AGENTS; resolveAgent?: typeof claudeCodexResolveAgent } = {}) =>
+  h.boot(epoch, await h.workspace(), { resolveAgent: options.resolveAgent ?? claudeCodexResolveAgent, agents: options.agents ?? CLAUDE_CODEX_AGENTS, seedPreferences: false });
 
 async function preview(panel: Panel) {
   const response = await get(panel, `/api/control/groups/${GROUP}/agent-preview`);
@@ -217,5 +218,78 @@ describe("agent selection over a real panel (agent selection spec §6.8)", () =>
     expect(agentSelectionPreviewSchema.safeParse(rejected).success).toBe(true);
     expect(agentSelectionPreviewSchema.safeParse({ ...rejected, selectionsHash: "a".repeat(64) }).success).toBe(false);
     expect(agentSelectionPreviewSchema.safeParse({ ...rejected, slots: [{ ...rejected.slots[0], key: "task:b" }] }).success).toBe(false);
+  });
+
+  // Plan T14 fix round 1 (T14 review): each of the schema's remaining properties refused on its own.
+  it("the preview schema refuses a worker slot with no task, and slots that are not sorted and unique by key", () => {
+    const slot = (taskId: string) => ({ key: `task:${taskId}`, slot: "worker", taskId, outcome: { kind: "rejected", code: "agent-unselected" } });
+    const base = { schema: "orca-agent-selection-preview-v1", groupId: "g", proposalVersion: 1, groupOverrides: {}, taskOverrides: {}, selectionsHash: null };
+    expect(agentSelectionPreviewSchema.safeParse({ ...base, slots: [slot("a"), slot("b")] }).success).toBe(true);
+    // key "reconcile" agrees with taskId null, so only the slot kind is wrong.
+    expect(agentSelectionPreviewSchema.safeParse({ ...base, slots: [{ ...slot("a"), key: "reconcile", taskId: null }] }).success).toBe(false);
+    expect(agentSelectionPreviewSchema.safeParse({ ...base, slots: [slot("b"), slot("a")] }).success).toBe(false);
+    expect(agentSelectionPreviewSchema.safeParse({ ...base, slots: [slot("a"), slot("a")] }).success).toBe(false);
+  });
+
+  // Wave 3 ruling I-1: one installation that cannot be asked just now must not take the whole preview down with it.
+  it("previews a slot whose installation fails transiently as unavailable beside the slots that resolved, with no selectionsHash, and the confirm still retries", async () => {
+    const flaky = async (partial: PartialSelection) => {
+      if (partial.agent === "codex") throw new ControlError("control-peer-exit");
+      return claudeCodexResolveAgent(partial);
+    };
+    const panel = await boot("epoch-agents-unavailable", { resolveAgent: flaky });
+    expect((await setPreferences(panel, "prefs-u", { defaultAgent: "claude", perAgent: {} })).status).toBe(200);
+    await importPlan(panel);
+    const before = await view(panel);
+    expect((await command(panel, `/api/control/groups/${GROUP}/proposal/agent`, {
+      commandId: "agent-task-flaky", expectedRevision: before.summary.commandRevision,
+      payload: { baseProposalVersion: before.proposal.proposalVersion, scope: { kind: "task", taskId: "a" }, partial: { agent: "codex" } },
+    })).status).toBe(200);
+    const response = await get(panel, `/api/control/groups/${GROUP}/agent-preview`);
+    expect(response.status).toBe(200);
+    const answer = agentSelectionPreviewSchema.parse(await json(response));
+    expect(answer.slots.find((slot) => slot.key === "task:a")!.outcome).toEqual({ kind: "unavailable", code: "control-peer-exit" });
+    expect(answer.slots.find((slot) => slot.key === "reconcile")!.outcome).toMatchObject({ kind: "resolved", frozen: { selection: { agent: "claude" } } });
+    expect(answer.selectionsHash).toBeNull();
+    // The confirm is not bound to a partial resolution: the transient failure is rethrown, which the panel serves as
+    // a retryable internal error (a transient code has no durable status) -- not as a selection refusal.
+    const confirmed = await confirm(panel, "agents-confirm-flaky", "0".repeat(64));
+    expect(confirmed.status).toBe(500);
+    expect(confirmed.body).toMatchObject({ error: { code: "control-internal-error", retryable: true } });
+    await panel.close();
+  });
+
+  // Wave 3 M-1: a damaged stored overrides document is the store's fault, and is named as it is on the preview.
+  it("refuses a proposal-set-agent and a re-estimate over a damaged group overrides document as recovery-blocked, not as a malformed request", async () => {
+    const panel = await boot("epoch-agents-damaged");
+    expect((await setPreferences(panel, "prefs-d", { defaultAgent: "claude", perAgent: {} })).status).toBe(200);
+    await importPlan(panel);
+    const row = panel.store.db.prepare("SELECT body FROM groups WHERE id=?").get(GROUP)!;
+    panel.store.db.prepare("UPDATE groups SET body=? WHERE id=?").run(JSON.stringify({ ...JSON.parse(String(row.body)), agentOverrides: { worker: { agent: "not an id!" } } }), GROUP);
+    const current = await view(panel);
+    const set = await command(panel, `/api/control/groups/${GROUP}/proposal/agent`, {
+      commandId: "agent-group-damaged", expectedRevision: current.summary.commandRevision,
+      payload: { baseProposalVersion: current.proposal.proposalVersion, scope: { kind: "group", slot: "worker" }, partial: { agent: "codex" } },
+    });
+    expect((set.body as { error: { code: string } }).error.code).toBe("recovery-blocked");
+    const config = controlConfigSchema.parse(await json(await get(panel, "/api/control/config")));
+    const estimate = await command(panel, `/api/control/groups/${GROUP}/estimates`, {
+      commandId: "estimate-damaged", expectedRevision: current.summary.commandRevision,
+      payload: { proposalVersion: current.proposal.proposalVersion, estimatorProfileId: "all", estimatorProfileHash: config.profiles[0]!.profileHash, estimateMode: "soft" },
+    });
+    expect((estimate.body as { error: { code: string } }).error.code).toBe("recovery-blocked");
+    await panel.close();
+  });
+
+  // Wave 3 M-5: the confirmed group's reconcile selection is on the group view, as the snapshot froze it.
+  it("shows no reconcile selection on a draft group's view, and after the confirm exactly the one its preview showed", async () => {
+    const panel = await boot("epoch-agents-view-reconcile");
+    expect((await setPreferences(panel, "prefs-v", { defaultAgent: "claude", perAgent: {}, reconcile: { agent: "codex" } })).status).toBe(200);
+    await importPlan(panel);
+    const seen = await preview(panel);
+    expect((await view(panel)).agents).toEqual({ reconcile: null });
+    expect((await confirm(panel, "agents-confirm-view", seen.selectionsHash!)).status).toBe(200);
+    expect((await view(panel)).agents).toEqual({ reconcile: frozenOf(seen, "reconcile") });
+    await panel.close();
   });
 });

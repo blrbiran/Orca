@@ -134,8 +134,12 @@ function controlGroupServerToWeb(x: ServerGroupViewV1): WebGroupViewV1 { return 
 // Agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"; W6-9): a work item's `agent` and
 // `agentProvenance` are optional on the Web side for the same reason, and an absent value reads as null. The
 // server's new fields still have same-typed mirrors, so assignability is checked both ways as before.
+// Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): plan T14 fix round 1 (wave 3 M-5) adds the
+// group's frozen reconcile slot, `agents`, optional on the Web side for the same reason and normalised to
+// `{ reconcile: null }` when absent; every other field, and `agents` itself when present, is still checked both ways.
 function controlGroupWebToServer(x: WebGroupViewV1): ServerGroupViewV1 {
   return { ...x,
+    agents: x.agents ?? { reconcile: null },
     runs: x.runs.map((run) => ({ ...run, blockedReason: run.blockedReason ?? null, continuable: run.continuable ?? false })),
     workItems: x.workItems.map((item) => ({ ...item, agent: item.agent ?? null, agentProvenance: item.agentProvenance ?? null })) };
 }

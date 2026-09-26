@@ -1035,6 +1035,9 @@ export const groupViewSchema = z
       .strict(),
     allocations: z.array(allocationViewSchema),
     workItems: z.array(workItemViewSchema),
+    // Wave 3 M-5 (agent selection spec §6.1, §6.4 step 4): the group's frozen reconcile selection, from the confirmed
+    // snapshot; null until confirmation.
+    agents: z.object({ reconcile: frozenSlotSchema.nullable() }).strict(),
     estimates: z.array(estimateViewSchema),
     runs: z.array(runViewSchema),
     checkpoints: z.array(checkpointViewSchema),
@@ -1329,6 +1332,8 @@ export const agentPreferencesViewSchema = z
 const slotOutcomeSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("resolved"), frozen: frozenSlotSchema }).strict(),
   z.object({ kind: z.literal("rejected"), code: nonemptyString }).strict(),
+  // Wave 3 ruling I-1: ccloop could not be asked about this slot just now (a transient failure); not confirmable.
+  z.object({ kind: z.literal("unavailable"), code: nonemptyString }).strict(),
 ]);
 
 /**
@@ -1355,8 +1360,8 @@ export const agentSelectionPreviewSchema = z
       if ((entry.slot === "worker") !== (entry.taskId !== null)) issue(ctx, ["slots", index, "taskId"], "slot-task-mismatch");
       if (entry.key !== (entry.taskId === null ? "reconcile" : `task:${entry.taskId}`)) issue(ctx, ["slots", index, "key"], "slot-key-mismatch");
     });
-    const rejected = value.slots.some((entry) => entry.outcome.kind === "rejected");
-    if (rejected !== (value.selectionsHash === null)) issue(ctx, ["selectionsHash"], "selections-hash-rejection-mismatch");
+    const unresolved = value.slots.some((entry) => entry.outcome.kind !== "resolved");
+    if (unresolved !== (value.selectionsHash === null)) issue(ctx, ["selectionsHash"], "selections-hash-rejection-mismatch");
   });
 
 export type AgentsViewV1 = z.infer<typeof agentsViewSchema>;

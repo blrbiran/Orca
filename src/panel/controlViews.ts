@@ -640,6 +640,8 @@ export function readControlGroup(store: ControlStore, epoch: string, groupId: st
     ledger: body.ledger,
     allocations,
     workItems: workViews(store, groupId, archived.plan, snapshot),
+    // validateExecutionSnapshot has already proved the group record's reconcile slot equals the snapshot's.
+    agents: { reconcile: snapshot?.agents.reconcile ?? null },
     estimates: estimates.views,
     runs: runViews(store, groupId, archived.graphVersion, proposal),
     checkpoints: checkpointViews(store, groupId),
@@ -759,7 +761,7 @@ export async function readSelectionPreview(
   operatorId: string,
   groupId: string,
 ): Promise<AgentSelectionPreviewV1> {
-  const resolved = await resolveGroupSelections({ store, port }, groupId, operatorId);
+  const resolved = await resolveGroupSelections({ store, port }, groupId, operatorId, "preview");
   const parsed = agentSelectionPreviewSchema.safeParse({ schema: "orca-agent-selection-preview-v1", groupId, ...resolved });
   if (!parsed.success) return blocked(`agent-preview:${parsed.error.issues[0]?.path.join(".")}:${parsed.error.issues[0]?.message}`);
   return parsed.data;

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { add, budgetBalance, readRun, syncWebBudget } from "./budget.js";
 import { canonicalBytes } from "./canonicalJson.js";
 import { ControlError } from "./errors.js";
-import { readConfirmedTaskExecution } from "./executionSnapshot.js";
+import { readConfirmedReconcileSlot, readConfirmedTaskExecution } from "./executionSnapshot.js";
 import { privateDirectory } from "./paths.js";
 import { readGroup, saveGroup } from "./queries.js";
 import { ORCA_IDENTITY, git } from "../scheduler/gitExec.js";
@@ -274,11 +274,17 @@ export async function stepR(deps: ExecutionDriverDeps, runId: string, context: D
   if (context.stopped || deps.admissionGate?.draining) return false;
   if (!reconcileAffordable(store, run.groupId, record.tokenBudget)) { blockRun(deps, runId, "R", "reconcile-budget"); return true; }
   // Agent selection spec §6.1, §4.9 (plan T12, P9): a reconciliation runs with the GROUP's reconcile slot, frozen at
-  // confirm (plan T11) -- never the conflicted run's own worker selection. `GroupRecord` does not declare the field,
-  // so it is read off the group's raw body; a group confirmed without one (should not happen, but is not assumed) is
-  // refused here rather than falling back to some other selection.
-  const reconcileSlot = (readGroup(store, run.groupId) as unknown as { reconcileSlot?: FrozenSlot | null }).reconcileSlot ?? null;
-  if (reconcileSlot === null) { blockRun(deps, runId, "R", "reconcile-agent-unfrozen"); return true; }
+  // confirm (plan T11) -- never the conflicted run's own worker selection. Spec §6.4 step 4 (P14, wave 3 ruling I-2):
+  // it is read through the confirmed snapshot's authority, which also proves the group record still agrees; a group
+  // with no such slot, or one whose record has moved away from the snapshot, is refused here rather than run with
+  // some other selection.
+  let reconcileSlot: FrozenSlot;
+  try { reconcileSlot = readConfirmedReconcileSlot(store, run.groupId); }
+  catch (error) {
+    if (!(error instanceof ControlError)) throw error;
+    blockRun(deps, runId, "R", "reconcile-agent-unfrozen");
+    return true;
+  }
   await rm(workdir, { recursive: true, force: true });
   const setRecord = (patch: Partial<ReconcileRecord>): void => write(deps, () => {
     const current = readDriverRun(store, runId);

@@ -19,7 +19,11 @@ export interface SlotResolution {
   key: string;
   slot: "worker" | "reconcile";
   taskId: string | null;
-  outcome: { kind: "resolved"; frozen: FrozenSlot } | { kind: "rejected"; code: string };
+  /**
+   * `unavailable` (wave 3 ruling I-1): a transient failure to ask ccloop about this slot -- only a preview records it;
+   * a confirm rethrows it so the command is retried rather than bound to a resolution it could not complete.
+   */
+  outcome: { kind: "resolved"; frozen: FrozenSlot } | { kind: "rejected"; code: string } | { kind: "unavailable"; code: string };
 }
 export interface GroupSelectionResolution {
   proposalVersion: number;
@@ -27,7 +31,7 @@ export interface GroupSelectionResolution {
   taskOverrides: Record<string, PartialSelection | null>;
   /** Sorted by key. */
   slots: SlotResolution[];
-  /** Null iff any slot was rejected. */
+  /** Null iff any slot was not resolved. */
   selectionsHash: string | null;
 }
 
@@ -35,6 +39,16 @@ type Resolved = ReturnType<typeof resolveSelection>;
 type SlotPartial = { key: string; slot: "worker" | "reconcile"; taskId: string | null } & ({ resolved: Resolved } | { code: "agent-unselected" });
 
 function invalid(detail: string): never { throw new ControlError("recovery-blocked", detail); }
+
+/**
+ * A group record's own selection layers (spec §6.2). A stored value that is not a valid overrides document is the
+ * store's damage, refused as recovery-blocked -- never as a malformed request (wave 3 M-1).
+ */
+export function readGroupAgentOverrides(group: unknown): GroupAgentOverrides {
+  const overrides = groupAgentOverridesSchema.safeParse((group as { agentOverrides?: unknown }).agentOverrides ?? {});
+  if (!overrides.success) invalid("agent-overrides-invalid");
+  return overrides.data as GroupAgentOverrides;
+}
 
 /**
  * The synchronous half of spec §6.4 step 1: each slot's partial from the layers as stored now (W6-16: the
@@ -46,9 +60,7 @@ export function groupSelectionPartials(store: ControlStore, groupId: string, ope
   const prefs = readAgentPreferences(store, operatorId).preferences;
   const row = store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId);
   if (!row) throw new ControlError("group-not-found");
-  const overrides = groupAgentOverridesSchema.safeParse((JSON.parse(String(row.body)) as { agentOverrides?: unknown }).agentOverrides ?? {});
-  if (!overrides.success) invalid("agent-overrides-invalid");
-  const groupOverrides = overrides.data as GroupAgentOverrides;
+  const groupOverrides = readGroupAgentOverrides(JSON.parse(String(row.body)));
   const plan = readArchivedPlan(store, groupId).plan;
   const proposalVersion = readBudgetProposal(store, groupId).proposalVersion;
   const attempt = (resolve: () => Resolved): { resolved: Resolved } | { code: "agent-unselected" } => {
@@ -78,12 +90,15 @@ export function groupSelectionPartials(store: ControlStore, groupId: string, ope
 
 /**
  * Spec §6.4 steps 1-3 (W6-1): resolve every slot through ccloop, once per distinct partial. A named refusal is the
- * slot's outcome (W6-11); a transient port failure is thrown, so it is retried rather than frozen as a rejection.
+ * slot's outcome (W6-11). A transient port failure is thrown in `confirm` mode, so the confirm is retried rather than
+ * frozen as a rejection; in `preview` mode (wave 3 ruling I-1) it is that slot's `unavailable` outcome, so the panel
+ * can mark the one slot it could not resolve -- the hash is then null, so nothing can be confirmed from it.
  */
 export async function resolveGroupSelections(
   deps: { store: ControlStore; port: Pick<ExecutionPort, "resolveAgent"> },
   groupId: string,
   operatorId: string,
+  mode: "preview" | "confirm" = "confirm",
 ): Promise<GroupSelectionResolution> {
   const base = groupSelectionPartials(deps.store, groupId, operatorId);
   const answers = new Map<string, Promise<AgentResolution>>();
@@ -100,10 +115,14 @@ export async function resolveGroupSelections(
       slots.push({ ...identity, outcome: { kind: "resolved", frozen } });
     } catch (error) {
       if (!(error instanceof ControlError)) throw error;
-      if ((nonDurableControlErrorClassifications as Record<string, string>)[error.code] === "transient") throw error;
       // Assembly spec §3 / ruling R5 (as service.ts profiledCapabilities): "there is no port" is not a refusal of this
       // selection, so it is raised by its own name rather than recorded against the slot.
       if (error.code === "control-port-unconfigured") throw error;
+      if ((nonDurableControlErrorClassifications as Record<string, string>)[error.code] === "transient") {
+        if (mode === "confirm") throw error;
+        slots.push({ ...identity, outcome: { kind: "unavailable", code: error.code } });
+        continue;
+      }
       slots.push({ ...identity, outcome: { kind: "rejected", code: error.code } });
     }
   }

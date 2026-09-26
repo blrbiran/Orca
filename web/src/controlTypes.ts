@@ -160,6 +160,8 @@ export type GroupViewV1 = {
   ledger: { groupLimit: Amount; used: Amount; committedRemaining: Amount; explicitUnallocatedReserve: Amount; budgetDeficit: Amount; usageUnknown: boolean };
   allocations: AllocationViewV1[];
   workItems: WorkItemViewV1[];
+  /** Wave 3 M-5: the group's frozen reconcile selection. Optional here only so literal fixtures need no edit; absent reads as null. */
+  agents?: { reconcile: FrozenSlotV1 | null };
   estimates: EstimateViewV1[];
   runs: RunViewV1[];
   checkpoints: CheckpointViewV1[];
@@ -288,8 +290,8 @@ export type FrozenSlotV1 = {
   partial: PartialSelectionV1; provenance: SelectionProvenanceV1;
   selection: AgentSelectionV1; configHash: string; timeoutMs: number; killGraceMs: number; capabilities: CapabilityViewV1;
 };
-export type SlotOutcomeV1 = { kind: "resolved"; frozen: FrozenSlotV1 } | { kind: "rejected"; code: string };
-/** W6-1/W6-2: the confirm's own resolution; `selectionsHash` is null exactly when some slot was rejected. */
+export type SlotOutcomeV1 = { kind: "resolved"; frozen: FrozenSlotV1 } | { kind: "rejected"; code: string } | { kind: "unavailable"; code: string };
+/** W6-1/W6-2: the confirm's own resolution; `selectionsHash` is null exactly when some slot did not resolve. */
 export type AgentSelectionPreviewV1 = {
   schema: "orca-agent-selection-preview-v1";
   groupId: string;

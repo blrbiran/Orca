@@ -105,6 +105,21 @@ describe("reconciling a conflict (spec §5.3)", { timeout: 30_000 }, () => {
     } finally { await t.h.dispose(); }
   });
 
+  // Plan T14 fix round 1 (wave 3 ruling I-2, spec §6.4 step 4): the confirmed snapshot is the authority for the reconcile
+  // slot. A group record that has moved away from it -- here only the model -- is not run with either value.
+  it("blocks a conflict whose group record's reconcile selection no longer matches the confirmed snapshot, before any reconciliation run", async () => {
+    const t = await twoConflicting({ files: { "shared.txt": "A\nB\n" } }); try {
+      const group = JSON.parse(String(t.h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!.body));
+      const tampered = { ...group.reconcileSlot, selection: { ...group.reconcileSlot.selection, model: "tampered-model" } };
+      t.h.store.db.prepare("UPDATE groups SET body=? WHERE id='g'").run(JSON.stringify({ ...group, reconcileSlot: tampered }));
+      const driver = t.driver();
+      await untilDeadline(driver, () => t.ids.some((id) => t.body(id).state === "blocked"));
+      const blocked = t.ids.find((id) => t.body(id).state === "blocked")!;
+      expect(t.body(blocked).drive).toMatchObject({ blockedAt: "R", blockedReason: "reconcile-agent-unfrozen" });
+      expect(t.spawns()).toEqual([]);
+    } finally { await t.h.dispose(); }
+  });
+
   // Plan T6 ruling (agent selection): `ccloop run --agents` exits 1 on any refusal -- a stale configHash, a drifted
   // version -- with the refusal's code first on stderr, and 2 only for a run that completed without succeeding. The
   // reconciliation reads its own exit codes (never the control wire's "2:" rule): a refusal blocks the run under

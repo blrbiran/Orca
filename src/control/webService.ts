@@ -6,7 +6,7 @@ import { dimensions, zero } from "./commands.js";
 import { ControlError } from "./errors.js";
 import { buildBudgetEstimateRequest, ESTIMATE_GRANT, GOAL_REVIEW, TASK_HANDOFF, TASK_WORK, provenance, residual, safeNumber, sumAmounts, persistEstimateArtifacts, estimateCapabilityDegraded, validateEstimateOutput } from "./estimator.js";
 import { prepareExecutionSnapshot } from "./executionSnapshot.js";
-import { answeredPartials, currentPartials, RECONCILE_SLOT_KEY, resolveGroupSelections, taskSlotKey, type GroupSelectionResolution } from "./agentFreeze.js";
+import { answeredPartials, currentPartials, readGroupAgentOverrides, RECONCILE_SLOT_KEY, resolveGroupSelections, taskSlotKey, type GroupSelectionResolution } from "./agentFreeze.js";
 import type { ExecutionPort } from "./executionPort.js";
 import { estimatorSlotFor, importControlPlanAsync, rejectedEstimatorRequest, type AsyncImportDeps, type ImportCommand } from "./planImport.js";
 import { intersectCapabilities } from "./profiles.js";
@@ -14,7 +14,7 @@ import type { FrozenSlot } from "./agentSelection.js";
 import { readArchivedPlan, readBudgetProposal, readEstimateRecord, type BudgetProposalRecord } from "./queries.js";
 import { amountSchema } from "./schema.js";
 import { writeCanonicalRecord, readCanonicalRecord } from "./snapshot.js";
-import { dispatchEnvelopeSchema, estimateExecutionContractSchema, groupAgentOverridesSchema } from "./webProtocol.js";
+import { dispatchEnvelopeSchema, estimateExecutionContractSchema } from "./webProtocol.js";
 import { scheduleStart, type StartCommand } from "./webDispatch.js";
 import { applyHandoffStop, applyPauseDispatch, applyRecoveryRetry, applyResumeDispatch, type HandoffStopCommand, type PauseCommand, type RecoveryRetryCommand, type ResumeDispatchCommand, type StopDeps } from "./stopIntent.js";
 import { applyContinueTask, applyResumeFromHandoff, type ContinueTaskCommand, type ResumeFromHandoffCommand } from "./continuation.js";
@@ -246,7 +246,7 @@ export class WebControlService {
         prestart(group);
         assertKnownConservation(this.store, group, proposal);
         if (scope.kind === "group") {
-          const overrides = groupAgentOverridesSchema.parse((group as { agentOverrides?: unknown }).agentOverrides ?? {});
+          const overrides = readGroupAgentOverrides(group);
           const before = canonicalBytes(overrides);
           if (partial === null) delete overrides[scope.slot];
           else overrides[scope.slot] = partial;
@@ -281,7 +281,7 @@ export class WebControlService {
         const profile = this.deps.profileRouter.resolve("budget-estimate", command.payload.estimatorProfileId, command.payload.estimatorProfileHash);
         // Spec §6.4: a re-estimate resolves the estimator layers as they are now -- including the group's, which only
         // the panel sets (controller ruling R7) -- and freezes them for this estimate only.
-        const overrides = groupAgentOverridesSchema.parse((group as { agentOverrides?: unknown }).agentOverrides ?? {});
+        const overrides = readGroupAgentOverrides(group);
         const slot = await estimatorSlotFor({ store: this.store, profileRouter: this.deps.profileRouter }, command.actorId, overrides, profile);
         estimatorSlot = slot.outcome.kind === "frozen" ? slot.outcome.slot : null;
         prepared = slot.outcome.kind === "rejected"
@@ -464,7 +464,7 @@ export class WebControlService {
     const release = this.deps.admissionGate?.enter();
     try {
       const replay = preflightWebCommand<WebCommandResult>(this.store, command); if (replay) return replay.body;
-      const prepared: GroupSelectionResolution | { failure: unknown } = await resolveGroupSelections({ store: this.store, port: this.deps.port }, groupId(command), command.actorId)
+      const prepared: GroupSelectionResolution | { failure: unknown } = await resolveGroupSelections({ store: this.store, port: this.deps.port }, groupId(command), command.actorId, "confirm")
         .catch((failure: unknown) => ({ failure }));
       return applyWebCommand<WebCommandResult>(this.store, {
         rawCommand: command, expand: () => ({ ...command, schema: "orca-authority-command-v1" }),

@@ -391,6 +391,9 @@ describe("Web control protocol", () => {
           lineageRunIds: [],
         },
       ],
+      // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): plan T14 fix round 1 (wave 3 M-5): a group
+      // view names its frozen reconcile slot, null on a draft; the criterion's refusals are unchanged.
+      agents: { reconcile: null },
       estimates: [],
       runs: [],
       checkpoints: [],
