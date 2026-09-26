@@ -14,6 +14,8 @@ import { WebControlService } from "../../src/control/webService.js";
 import { loadPlan } from "../../src/scheduler/planFile.js";
 import { readControlGroup } from "../../src/panel/controlViews.js";
 import { registerControlReadRoutes } from "../../src/panel/controlApi.js";
+import { ControlError } from "../../src/control/errors.js";
+import { driverHarness } from "./fixtures/driverHarness.js";
 import { FIXTURE_AGENT_ID, FIXTURE_OTHER_AGENT_ID, PANEL_OPERATOR, fixtureResolveAgent, seedPreferences } from "./fixtures/agents.js";
 import { profileSnapshot, webFixture } from "./fixtures/web.js";
 
@@ -98,6 +100,48 @@ describe("confirm freezes the selection the operator saw (spec §6.4, §12 C4)",
       release();
       expect(await pending).toMatchObject({ error: { code: "agent-selection-changed" } });
       expect(work(h, "a").configHash).toBeNull();
+    } finally { await h.dispose(); }
+  });
+
+  // Fix round 1: a transient port failure is retried, never frozen as a refusal of the slot (W6-11).
+  it("does not record a transient port failure as a refused slot: nothing is durable and a retry confirms", async () => {
+    const h = await webFixture(); try {
+      const payload = await h.confirmPayload();
+      h.resolveAgent.mockImplementationOnce(async () => { throw new ControlError("control-peer-exit", "1:peer died"); });
+      const service = new WebControlService(h.deps);
+      const command = h.command("confirm", payload);
+      await expect(service.confirm(command)).rejects.toMatchObject({ code: "control-peer-exit" });
+      expect(h.store.db.prepare("SELECT count(*) AS n FROM commands WHERE id=?").get(command.commandId)!.n).toBe(0);
+      expect(work(h, "a").configHash).toBeNull();
+      expect(await service.confirm(command)).toMatchObject({ result: { kind: "confirmed" } });
+    } finally { await h.dispose(); }
+  });
+
+  // Fix round 1 (assembly ruling R5): "no port" is named as such, not blamed on the operator's selection.
+  it("refuses a confirmation on an unconfigured port by the port's own name", async () => {
+    const h = await webFixture(); try {
+      const payload = await h.confirmPayload();
+      h.resolveAgent.mockImplementation(async () => { throw new ControlError("control-port-unconfigured"); });
+      expect(await new WebControlService(h.deps).confirm(h.command("confirm", payload))).toMatchObject({ error: { code: "control-port-unconfigured" } });
+    } finally { await h.dispose(); }
+  });
+
+  // Fix round 1: the provenance is frozen with the slot, so a layer change that keeps the partial (and so the
+  // selectionsHash) but moves a field's source while ccloop answers is refused too.
+  it("re-checks where each field came from, not only the partial, inside the transaction", async () => {
+    const before = { defaultAgent: FIXTURE_AGENT_ID, perAgent: { [FIXTURE_AGENT_ID]: { model: "m" } } };
+    const h = await webFixture(profileSnapshot(), [{ taskId: "a" }], { preferences: before }); try {
+      const payload = await h.confirmPayload();
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => { release = resolve; });
+      const answer = h.resolveAgent.getMockImplementation()!;
+      h.resolveAgent.mockImplementation(async (partial) => { await gate; return answer(partial); });
+      const pending = new WebControlService(h.deps).confirm(h.command("confirm", payload));
+      // The reconcile slot's model is still "m", now from the operator's reconcile layer instead of perAgent.
+      seedPreferences(h.store, "human", { ...before, reconcile: { model: "m" } }, 1);
+      release();
+      expect(await pending).toMatchObject({ error: { code: "agent-selection-changed" } });
+      expect(groupBody(h).reconcileSlot).toBeNull();
     } finally { await h.dispose(); }
   });
 
@@ -192,10 +236,22 @@ describe("after confirmation the frozen selection is the one used (spec §9 crit
       if (delivered.kind !== "claimed") throw new Error(JSON.stringify(delivered));
       expect(h.resolveAgent.mock.calls.length).toBeGreaterThan(0);
       for (const [partial] of h.resolveAgent.mock.calls) expect(partial).toEqual(frozen.selection);
-      const run = JSON.parse(String(h.store.db.prepare("SELECT body FROM runs WHERE id=?").get(delivered.runId)!.body));
-      expect({ agent: run.agent, configHash: run.configHash, killGraceMs: run.killGraceMs, agentProvenance: run.agentProvenance })
-        .toEqual({ agent: frozen.selection, configHash: frozen.configHash, killGraceMs: frozen.killGraceMs, agentProvenance: frozen.provenance });
     } finally { await h.dispose(); }
+  });
+
+  // Fix round 1 (spec §12 I13): the claim half is observed where it leaves Orca -- the start envelope the port is
+  // sent -- and compared with what ccloop answered for the preview, never read back from the run row.
+  it("sends ccloop the frozen selection in the claim even after the operator switches default agent", async () => {
+    const t = await driverHarness([{ taskId: "a" }]); try {
+      const preview = await resolveGroupSelections({ store: t.h.store, port: { resolveAgent: t.h.resolveAgent } }, "g", "human");
+      const frozen = resolved(preview, "task:a");
+      seedPreferences(t.h.store, "human", { defaultAgent: FIXTURE_OTHER_AGENT_ID, perAgent: {} }, 1);
+      await t.claim();
+      const driver = t.driver();
+      await t.until(driver, () => t.fake.calls.accept.length > 0);
+      expect(t.fake.calls.accept[0]!.claim.agent).toEqual(frozen.selection);
+      expect(t.fake.calls.accept[0]!.claim.configHash).toBe(frozen.configHash);
+    } finally { await t.h.dispose(); }
   });
 
   it("shows a run only while it carries its work item's frozen selection byte for byte (spec §3 I1)", async () => {

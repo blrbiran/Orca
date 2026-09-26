@@ -1,5 +1,5 @@
 import { readAgentPreferences } from "./agentPreferences.js";
-import { descriptorProvenance, resolveSelection, selectionsHash, slotLayers, type AgentResolution, type FrozenSlot, type GroupAgentOverrides, type PartialSelection } from "./agentSelection.js";
+import { descriptorProvenance, resolveSelection, selectionsHash, slotLayers, type AgentResolution, type FrozenSlot, type GroupAgentOverrides, type PartialSelection, type ProvenanceSource } from "./agentSelection.js";
 import { canonicalBytes } from "./canonicalJson.js";
 import { ControlError, nonDurableControlErrorClassifications } from "./errors.js";
 import type { ExecutionPort } from "./executionPort.js";
@@ -101,6 +101,9 @@ export async function resolveGroupSelections(
     } catch (error) {
       if (!(error instanceof ControlError)) throw error;
       if ((nonDurableControlErrorClassifications as Record<string, string>)[error.code] === "transient") throw error;
+      // Assembly spec §3 / ruling R5 (as service.ts profiledCapabilities): "there is no port" is not a refusal of this
+      // selection, so it is raised by its own name rather than recorded against the slot.
+      if (error.code === "control-port-unconfigured") throw error;
       slots.push({ ...identity, outcome: { kind: "rejected", code: error.code } });
     }
   }
@@ -112,12 +115,24 @@ export async function resolveGroupSelections(
   };
 }
 
-/** Per slot key, the partial it was resolved from (or its refusal): a resolution compared with the layers as they are now. */
-export function answeredPartials(resolution: GroupSelectionResolution): Array<[string, PartialSelection | string]> {
-  return resolution.slots.map((slot) => [slot.key, slot.outcome.kind === "resolved" ? slot.outcome.frozen.partial : slot.outcome.code]);
+type AnsweredLayers = { partial: PartialSelection; provenance: Record<"agent" | "model" | "contextWindow", ProvenanceSource> } | string;
+
+/**
+ * Per slot key, the partial it was resolved from and where each field came from (or its refusal): a resolution
+ * compared with the layers as they are now. The provenance is compared too, because it is frozen with the slot and a
+ * layer change can move a field's source while leaving the partial -- and so the selectionsHash -- unchanged.
+ */
+export function answeredPartials(resolution: GroupSelectionResolution): Array<[string, AnsweredLayers]> {
+  return resolution.slots.map((slot) => [slot.key, slot.outcome.kind === "resolved"
+    ? { partial: slot.outcome.frozen.partial, provenance: slot.outcome.frozen.provenance } : slot.outcome.code]);
 }
-export function currentPartials(store: ControlStore, groupId: string, operatorId: string): Array<[string, PartialSelection | string]> {
-  return groupSelectionPartials(store, groupId, operatorId).slots.map((slot) => [slot.key, "code" in slot ? slot.code : slot.resolved.partial]);
+export function currentPartials(store: ControlStore, groupId: string, operatorId: string): Array<[string, AnsweredLayers]> {
+  return groupSelectionPartials(store, groupId, operatorId).slots.map((slot) => {
+    if ("code" in slot) return [slot.key, slot.code];
+    // What descriptorProvenance freezes: a field no layer chose is the descriptor's.
+    const { agent, model, contextWindow } = slot.resolved.provenance;
+    return [slot.key, { partial: slot.resolved.partial, provenance: { agent: agent ?? "descriptor", model: model ?? "descriptor", contextWindow: contextWindow ?? "descriptor" } }];
+  });
 }
 
 const frozenWorkAgentSchema = frozenTaskAgentSchema.omit({ taskId: true });
