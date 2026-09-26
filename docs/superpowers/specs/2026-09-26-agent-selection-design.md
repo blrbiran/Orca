@@ -539,3 +539,11 @@ only, not by existence」，3 条：缺表装配成功、相对路径仍拒、�
 - **仍然成立的限制**：同一个组的 run 可能跨 CLI 版本（每个 run 的版本在各自封存的 `config.json` 里）；`command`／`configDir` 等其它安装字段改了，已开跑的组仍然永久无出路（与 (a) 之前相同，登记不修）；按 D7 无迁移，版本号进过哈希的旧冻结值一律不再相等。
 - **判据**（ccloop，只加不改 3 条）：`tests/agents/materialize.test.ts > materialized config hash > does not change when the table records an upgraded CLI's new version`；`tests/control/agentsControl.test.ts > accept under the installation table (agent selection) > accepts a claim frozen before the CLI was upgraded, once the table records the new version`；`tests/cli/agentsRun.test.ts > ccloop run --agents --agent-selection (Orca agent selection, spec §4.9) > runs a selection frozen before the CLI was upgraded, once the table records the new version`。**人指名改写 3 条**（「授权改判据」，改为「等于去掉 version 后的 canonical hash」，仍是精确相等）：materialize `resolving a selection against the table > fills unset fields…`、agentsControl `answers capabilities for a selection…`、`seals the materialized agent config whose canonical hash the claim carries`。
 - **变异**：M1 把 `agentConfigHash` 改回 `canonicalHash(config)` ⇒ 新 3 条全红（解冲突与 accept 两层都红在 `control-config-hash-mismatch`）；M2 再多丢 `configDir` ⇒ 既有 `changes with every field of the selected record and of the selection` 红。明细见台账 §11。
+
+### 13.7 独立审计 MC1：Orca 不再独立复核 ccloop 的 `configHash`（2026-09-26，控制器会话 `8c6302e0`；人裁「接受，并在 spec §13 登记」）
+
+- **来源**：夹具层独立审计（审计席报告在会话 scratchpad，不入库；结论记在台账 §12）。审计对象：本轮改夹具转绿的既有判据有没有被放宽。
+- **发现**：本轮之前，Orca 的 `tests/control/fixtures/ccloopWorld.ts`（本地 `ccloopHash`）与 `tests/control/ccloopProtocol.integration.test.ts` 的 setup（`hashPayload(config)`）**自己重算** ccloop 的 config hash；本轮按 §3 I3（「Orca 不重算 `configHash`」）改为取 ccloop 应答里的值。
+- **后果（实测）**：变异「ccloop `canonicalHash` 加盐（ccloop 内部自洽）」在 BASE 上让 Orca 10 条既有判据红（`executionDriverE2E` 9 条、`ccloopProtocol.integration` 第一条；其中 6 条直接红在 `accept-refused:2:control-config-hash-mismatch`，其余是同一场景的下游症状），在 HEAD 上全绿。同一变异在 ccloop 自己的判据里 BASE 与 HEAD 都红 7 条（`tests/control/protocol.test.ts` 的规范化判据与 `endToEnd` 6 条）。
+- **裁定**：接受。丢掉的只是 Orca 一侧的独立交叉核对；hash 的规则只住在 ccloop 一处（Rule 5），由 ccloop 的判据守。保留 Orca 侧重算等于两仓各持一份规则 —— 本日 §13.6 去掉 version 时，它会要求两仓同步改，漏改则静默分叉。
+- **以后要知道的**：Orca 的判据对「ccloop 怎么算 hash」不再有判别力；改 hash 规则只需、也只能在 ccloop 侧补判据。
