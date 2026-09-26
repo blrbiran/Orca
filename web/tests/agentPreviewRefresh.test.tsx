@@ -61,7 +61,7 @@ const json = (body: unknown, status = 200): Response => new Response(JSON.string
 const REPORT = { as_of: "2026-09-26T00:00:00.000Z", as_of_mode: "wall_clock", repos: [], correction_rate: { numerator_corrections_excluding_stale: 0, denominator_decisions: 0, rate_excluding_stale: null, corrections_total_including_stale: 0, by_decision_kind: [], buckets: [], caveats: [] }, repair_rate: { numerator_overturned: 0, denominator_corrections_including_stale: 0, rate: null, stale_only: { numerator_overturned: 0, denominator_corrections: 0, rate: null, known_bias: "" }, buckets: [], caveats: [] }, backlog: { open_corrections: 0, oldest_age_ms: null, oldest_correction_id: null, by_correction_kind: [] }, breakdown_by_correction_kind_including_stale: [], review_coverage: { available: false, reason: "none" }, unresolved_decisions: [], unkeyable_repos: [], malformed_lines: [] };
 
 /** The answers the fake panel gives, in order, to the preview reads and to the confirms. */
-let previewAnswers: Array<() => Response>;
+let previewAnswers: Array<() => Response | Promise<Response>>;
 let confirmAnswers: Array<() => Response>;
 let previewReads: number;
 let confirmedHashes: string[];
@@ -90,7 +90,8 @@ beforeEach(() => {
     }
     if (url === "/api/control/operator/agent-preferences") {
       preferenceReads += 1;
-      return json(preferences);
+      // After a save the server is at the next revision (another tab may have saved, too).
+      return json(preferenceReads === 1 ? preferences : { ...preferences, revision: 2 });
     }
     if (url === PREVIEW_PATH) {
       previewReads += 1;
@@ -121,7 +122,9 @@ async function openGroup(): Promise<void> {
 
 describe("App re-reads a group's agent preview when the one on screen can no longer be confirmed (wave 3 I-3)", () => {
   it("re-reads the preview once after a confirm refused with agent-selection-changed, and the next confirm carries the new hash", async () => {
-    previewAnswers = [() => json(preview(FIRST)), () => json(preview(SECOND))];
+    let release = (): void => {};
+    const held = new Promise<Response>((resolve) => { release = () => resolve(json(preview(SECOND))); });
+    previewAnswers = [() => json(preview(FIRST)), () => held];
     confirmAnswers = [
       () => json({ error: { code: "agent-selection-changed", message: "The agent selections changed since the preview.", commandRevision: 6, evidenceIds: [], retryable: false } }, 409),
       () => json({ error: { code: "revision-conflict", message: "stop here", commandRevision: 6, evidenceIds: [], retryable: false } }, 409),
@@ -131,6 +134,9 @@ describe("App re-reads a group's agent preview when the one on screen can no lon
     expect(previewReads).toBe(1);
     fireEvent.click(confirmButton());
     await waitFor(() => expect(previewReads).toBe(2));
+    // While the new resolution is on its way, the refused one is gone: nothing can confirm on it again.
+    expect(confirmButton().disabled).toBe(true);
+    release();
     await waitFor(() => expect(confirmButton().disabled).toBe(false));
     fireEvent.click(confirmButton());
     await waitFor(() => expect(confirmedHashes).toEqual([FIRST, SECOND]));
@@ -157,19 +163,22 @@ describe("App re-reads a group's agent preview when the one on screen can no lon
 });
 
 describe("App wires the operator's agent defaults (agent selection spec §6.8)", () => {
-  it("saves the defaults as { preferences } under the revision read, reads them back, and hands them to the proposal view", async () => {
-    previewAnswers = [() => json(preview(FIRST))];
+  it("saves the defaults as { preferences } under the revision read, reads them back, re-reads the open group's preview, and hands them to the proposal view", async () => {
+    previewAnswers = [() => json(preview(FIRST)), () => json(preview(SECOND))];
     const { container } = render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: "Save agent preferences" }));
+    fireEvent.click(await screen.findByRole("button", { name: /^g · draft/ }));
+    await waitFor(() => expect(confirmButton().disabled).toBe(false));
+    // The group worker layer names no agent, so its context offers what the operator's default (claude) can express.
+    const options = [...container.querySelectorAll('select[name="g:agent:group:worker:context"] option')].map((option) => (option as HTMLOptionElement).value);
+    expect(options).toEqual(["", "agent-default", "1000000"]);
+    expect(previewReads).toBe(1);
+    fireEvent.click(screen.getByRole("button", { name: "Save agent preferences" }));
     // Review P5: the revision lives in the envelope only.
     await waitFor(() => expect(preferencePosts).toHaveLength(1));
     expect(preferencePosts[0]).toMatchObject({ expectedRevision: 1, payload: { preferences: { defaultAgent: "claude", perAgent: {} } } });
     expect(Object.keys((preferencePosts[0] as { payload: object }).payload)).toEqual(["preferences"]);
     await waitFor(() => expect(preferenceReads).toBe(2));
-    // The group worker layer names no agent, so its context offers what the operator's default (claude) can express.
-    fireEvent.click(await screen.findByRole("button", { name: /^g · draft/ }));
-    await waitFor(() => expect(confirmButton().disabled).toBe(false));
-    const options = [...container.querySelectorAll('select[name="g:agent:group:worker:context"] option')].map((option) => (option as HTMLOptionElement).value);
-    expect(options).toEqual(["", "agent-default", "1000000"]);
+    // New preferences may resolve the group differently, so its preview is read again.
+    await waitFor(() => expect(previewReads).toBe(2));
   });
 });
