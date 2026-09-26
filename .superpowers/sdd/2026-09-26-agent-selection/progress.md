@@ -90,3 +90,16 @@
 - Task 7: fix round 2/5 (1 addressed, 0 open — profiled-branch criteria + F2-1..F2-3; commits 111d06f..b549a58)
 - Task 7: complete (Orca commits c23f262..b549a58, review clean after round 2). 实施席续用同一席，工具报数累计见各通知（264,518／341,602／350,256）。复审席自报曾误写 `.claude_scratch_report.txt` 到 Orca 根目录并随即删除（控制器 `git status --untracked-files=all` 现核：只剩本台账）。
 - 波 2（T6、T5、T7）完成：ccloop 988f82b..a8037ad、Orca c23f262..b549a58；派波次复审（P21），与 T9 并行。
+- 2026-09-26：波 2 复审席与 T9 实施席均被 API 周额度（HTTP 429）中途打断；控制器现核两仓零改动、零新提交、无报告 ⇒ 两席原样重派。
+- 波 2 复审（opus，重派）：`wave2-review.md`，0 Critical／3 Important／7 Minor；过线的词两边一致（证据：clone 里真 ccloop build 的定点探测）。
+- Ruling（波 2 I-1）：Orca `ccloopPort.ts` 构造时拒绝不存在的表，使 ccloop T5「删表不挡回收」在真实路径上失效 ⇒ 端口构造只核路径形状（绝对、非软链），存在性交 ccloop 的 capabilities／accept 判 —— 错的代价：启动时表不存在要到第一次调用才报。
+- Ruling（波 2 I-2）：codex `run --agents` 非拒绝型 exit 1 的 stderr 首行恒为 budget 提示 ⇒ Orca 取首个非 budget 提示行作原因；`fake-ccloop-run` 照真 peer 打印该提示，使判据不空。
+- Ruling（波 2 I-3）：版本探测失败（`probeVersion` 返回 null）不再作具名拒绝 `agent-version-drift`，改为非具名失败（control 退 1 ⇒ Orca 视为 unknown 可重试；`run --agents` ⇒ `reconcile-spawn`）；只有观测到版本且不等才是 `agent-version-drift` —— 错的代价：一个永久缺失的二进制会被反复重试（由现有 unknown 次数上限兜底）。
+- 三条合为一个「波 2 修复」派发，等 T9 落地后做（两仓；避免与 T9 并行改 Orca）。Minor 见 wave2-review.md（`named()` 白名单漏 `agent-unselected` 等码并入该修复；T11 收尾 grep 加 `T7 hook`）。
+- Task 9: complete (Orca commits 7e04de1..b0a2814, review clean). 实施席 230,866 token／148 次。未先见模块缺失的 RED（测试与实现同写），复审核过 7 条变异原始日志，判为足够替代。P7 放宽为 group/task/run 正向白名单，复审逐一核对与旧排除式等价。
+- Task 9: minor (deferred): `operatorRevision` 的防御式守卫与 `applySetAgentPreferences` 的 `target.kind!=="operator"` 半支按构造不可达、无变异（与既有 repositoryRevision 同惯例）；`preferenceModelSchema` 与 schema.ts 内联的 model 约束重复一份字面量。
+- 波 2 修复：complete (ccloop a8037ad..af70fd6; Orca b0a2814..24e8c8e; 复审全部 ADDRESSED，独立复测数字与报告一致；null 探测 ⇒ unknown ⇒ `INSPECT_UNKNOWN_LIMIT=10` 兜底，已核)。修复席 198,826 token。改写 1 条既有 ccloop 判据（`tests/agents/materialize.test.ts` > … > "refuses an installation whose CLI no longer reports the table's version"，加严不放宽）。
+- 波 2 修复: minor (deferred): 真 peer 坏合同时 reconcile-spawn 原因为 zod JSON 的 `[`；`ccloop agents` 诊断仍把不可观测版本报成 drift；`probeFailureCode` 对「探不到版本」从 `agent-version-drift` 退化为 `control-peer-exit`（诊断粒度变粗）。
+- Task 10: implementer DONE (Orca 24e8c8e..353a9c1). Ruling: 既有 store 里的估算记录缺 `estimatorSlot` ⇒ 读为 recovery-blocked、不写迁移（spec §5.1「升级不跨越在飞的 run」，项目未上线）—— 错的代价：一个已有 store 的在飞估算需人重建。Ruling: T10→T14 之间面板导入／重估一律 `agent-selection-rejected:estimator:agent-unselected`（无偏好入口），本轮内部过渡态。
+- Task 10: complete (Orca commits 24e8c8e..353a9c1, review clean). 实施席 370,482 token／100 次。受保护判据经 `cmp` 与 BASE 逐字节相同；T10-M3 实跑红。
+- Task 10: minor (deferred): `planImport.test.ts:319-326`「turns a real probe failure…」未按 brief 加强到异步路径钉码；reestimate 不在事务内重核操作者层（竞态）；`queries.ts` 接受 `agent-selection-rejected:estimator:` 后任意后缀；`webService.ts` 对损坏的 `agentOverrides` 抛 ZodError 而非 `recovery-blocked`；`agentPlanImport.test.ts` 一条 `toMatchObject` 读回自写值（真正判别在 toThrow 两例）。
