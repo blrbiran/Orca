@@ -30,6 +30,12 @@ appendFileSync(`${configPath}.runs`, `${basename(runDir)} ${process.pid}\n`);
 appendFileSync(`${configPath}.selections`, `${JSON.stringify({ selection: JSON.parse(readFileSync(selectionPath, "utf8")), mode: statSync(selectionPath).mode & 0o777 })}\n`);
 
 if (config.refuse) { process.stderr.write(`${config.refuse}\n`); process.exit(1); }
+// Wave-2 review I-2 (2026-09-26): like real `ccloop run --agents` for a codex installation (the reconciliation's, in
+// every world this stand-in serves), the soft-budget notice goes to stderr after the refusals above and before the
+// contract is loaded -- so it is the first stderr line of every later failure. A `fail` knob is such a failure: a
+// non-refusal exit 1 after the notice (a bad contract, a crash inside the run), writing no loop state.
+process.stderr.write("Codex budgetMode=soft: token usage is accounted after each phase; no strict token cap is guaranteed.\n");
+if (config.fail) { process.stderr.write(`${config.fail}\n`); process.exit(1); }
 
 function finish() {
   const repo = contract.context.repoPath;

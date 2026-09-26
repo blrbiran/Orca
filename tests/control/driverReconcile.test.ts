@@ -29,7 +29,7 @@ async function untilDeadline(driver: ExecutionDriver, predicate: () => boolean, 
 }
 
 // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
-async function twoConflicting(reconcile: { files: Record<string, string>; status?: string; spent?: number; holdMs?: number; refuse?: string }, affordable = true) {
+async function twoConflicting(reconcile: { files: Record<string, string>; status?: string; spent?: number; holdMs?: number; refuse?: string; fail?: string }, affordable = true) {
   const t = await driverHarness(conflicting, { files });
   // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
   await writeFile(t.deps.agentsTablePath, JSON.stringify({ status: "succeeded", spent: 7, holdMs: 0, ...reconcile }));
@@ -108,6 +108,21 @@ describe("reconciling a conflict (spec §5.3)", { timeout: 30_000 }, () => {
       expect(reason.startsWith("reconcile-spawn:")).toBe(true);
       expect(reason).toContain("TypeError: something broke inside the run");
       expect(reason).not.toContain("at somewhere");
+    } finally { await t.h.dispose(); }
+  });
+
+  // Wave-2 review I-2 (2026-09-26): for a codex installation real ccloop prints its soft-budget notice before loading
+  // the contract, so every non-refusal exit 1 after that point has the notice as its first stderr line (measured
+  // against the ccloop build). The stand-in prints it the same way; the blocked reason must carry the failure itself,
+  // the first line that is not the notice -- not the notice, which says nothing about why the run did not start.
+  it("blocks a non-refusal exit 1 printed after codex's budget notice under the failure's own line, not the notice", async () => {
+    const t = await twoConflicting({ files: { "shared.txt": "A\nB\n" }, fail: "Contract invalid: objective.taskId is required\n    at loadContract" }); try {
+      const driver = t.driver();
+      await untilDeadline(driver, () => t.ids.some((id) => t.body(id).state === "blocked"));
+      const blocked = t.ids.find((id) => t.body(id).state === "blocked")!;
+      const reason: string = t.body(blocked).drive.blockedReason;
+      expect(reason).toBe("reconcile-spawn:ccloop run --agents exited 1: Contract invalid: objective.taskId is required");
+      expect(reason).not.toContain("budgetMode");
     } finally { await t.h.dispose(); }
   });
 

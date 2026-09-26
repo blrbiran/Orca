@@ -101,10 +101,19 @@ export const AGENT_SELECTION_FILE = "agent-selection.json";
  */
 export class AgentsRunRefused extends Error {
   constructor(readonly refusal: string | null, readonly stderr: string) {
-    // With no code, the first stderr line is kept: it is all anyone will have to go on (T7 fix round 1).
-    super(refusal === null ? `ccloop run --agents exited 1: ${stderr.trim().split("\n")[0] || "<empty stderr>"}` : `ccloop run --agents refused: ${refusal}`);
+    // With no code, the first stderr line is kept: it is all anyone will have to go on (T7 fix round 1). Wave-2 review
+    // I-2: for a codex installation ccloop prints its soft-budget notice before loading the contract, so on any failure
+    // after that point the notice is stderr's first line; the first line that is not the notice is the reason.
+    super(refusal === null ? `ccloop run --agents exited 1: ${firstReasonLine(stderr) ?? "<empty stderr>"}` : `ccloop run --agents refused: ${refusal}`);
     this.name = "AgentsRunRefused";
   }
+}
+
+/** What ccloop `run --agents` prints for a codex installation before it loads the contract (ccloop src/cli.ts). */
+const CODEX_BUDGET_NOTICE = "Codex budgetMode=soft: token usage is accounted after each phase; no strict token cap is guaranteed.";
+
+function firstReasonLine(stderr: string): string | null {
+  return stderr.split("\n").map((line) => line.trim()).find((line) => line !== "" && line !== CODEX_BUDGET_NOTICE) ?? null;
 }
 
 /** The error code a refusing `ccloop run --agents` printed first on stderr (`<code>[: <detail>]`), if any. */
