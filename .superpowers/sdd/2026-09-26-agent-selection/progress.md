@@ -111,3 +111,8 @@
 - Task 11: fix round 1/5 (4 addressed, 0 open — claim envelope observed, transient rethrow, no-port by name, provenance re-check; commits 106eaf9..2236991; re-review replayed F1–F4 itself)
 - Task 11: complete (Orca commits c97a4b6..2236991, review clean after round 1). 实施席 568,754＋589,087 token。
 - Task 11: minor (deferred): 判据「sends ccloop the frozen selection in the claim…」的 preview 取于 driverHarness 内部确认**之后**（靠夹具确定性才等价；应改读 driverHarness 确认前的解析或 mock 的记录）。
+- Task 12: complete (Orca commits daa04af..06a1953, review clean). 实施席 192,225 token。「T7 bridge|T7 hook」grep rc=1（六处删净）。复审确认 spec §9.11「reconcile 选择进 `.argv`」不在 T12、归 T16（T16 派发重申）。
+- Task 13: review → Needs fixes: P23 m7 HOME＋四个 XDG 根改道零写入断言缺；P1 新增的 HOME 缺省／拒绝两支无变异。复审确认全仓无 homedir 回落、真 ~/.orca 未动。实施席 237,191 token。fix round 1 发出。
+- Task 13: fix round 1/5 (2 addressed, 0 open — XDG zero-write + P1 mutations; commits cb88485..23d4446)
+- Task 13: complete (Orca commits 06a1953..23d4446, review clean after round 1). 实施席 237,191＋280,685 token。真 ~/.orca 两个残留文件的 mtime 仍为 02:51:24／02:51:29（控制器 stat 现测）。
+- 波 3（T8–T13）完成；派波次复审（P21），与 T14 并行。
