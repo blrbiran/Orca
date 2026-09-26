@@ -3,6 +3,7 @@ import { isAbsolute, parse, relative, resolve, sep } from "node:path";
 import { z } from "zod";
 import { durableCommandErrorStatuses } from "../control/errors.js";
 import { ControlError } from "../control/errors.js";
+import { agentsTablePath } from "../control/ccloopPort.js";
 import type { ExecutionProfileRouter } from "../control/profiles.js";
 import type { PartialSelection } from "../control/agentSelection.js";
 import { controlConfigSchema, type ControlConfigV1 } from "../control/webProtocol.js";
@@ -148,7 +149,13 @@ export function createTrustedControlConfig(
 
   checkedPath(input.stateDir, "directory");
   checkedPath(input.executablePath, "file");
-  if (input.agentsTablePath !== null) checkedPath(input.agentsTablePath, "file");
+  // Final review I-1 (2026-09-26): only the path's shape is checked here, exactly as ccloopPort's own
+  // agentsTablePath does (the two share this one function). A missing table must not keep the panel
+  // from assembling -- ccloop T5 fix I-1 / spec §12 I4 say a deleted table must not block recovering
+  // a run already in flight, and this was the second, forgotten existence check that reintroduced the
+  // block wave-2 I-1 thought it had removed (§13 D10 correction, §13.4). Existence and content are
+  // ccloop's to judge, at capabilities and accept (agents-table-invalid).
+  if (input.agentsTablePath !== null) agentsTablePath(input.agentsTablePath);
   checkedPath(input.archiveRoot, "directory");
   checkedPath(input.exportRoot, "directory");
   checkedPath(input.evidenceRoot, "directory");

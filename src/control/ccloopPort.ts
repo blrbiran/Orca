@@ -61,8 +61,12 @@ function regularAbsolute(path:string,code:NonDurableControlErrorCode,executable=
  * not, is refused). A path with nothing at it passes: a deleted table must not keep the port from being built, or no
  * run already in flight could be inspected, collected or handed off (ccloop T5 fix I-1, spec §12 I4). Whether the
  * table exists and holds is ccloop's to say, at capabilities and accept (agents-table-invalid).
+ *
+ * Exported for final review I-1 (2026-09-26): `createTrustedControlConfig` (src/panel/controlConfig.ts) has its own,
+ * separate existence check on this same path at assembly, which the port-level fix above never reached. It reuses
+ * this same shape check rather than a second copy of it, so the two checks cannot drift again.
  */
-function agentsTablePath(path:string):string {
+export function agentsTablePath(path:string):string {
  const invalid=()=>new ControlError("control-agents-table-invalid");
  if(!isAbsolute(path))throw invalid();
  let stat;
