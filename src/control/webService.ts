@@ -373,54 +373,7 @@ export class WebControlService {
   }
   /** The scheduler verifies evidence first, then commits terminal state in this same transaction. */
   completeEstimate(id: string, estimateId: string, rawOutput: unknown, commitTerminal?: () => void): void {
-    this.mutate(() => this.store.transaction(() => {
-      const estimate = readEstimateRecord(this.store, id, estimateId), receiptId = `estimate-result:${id}:${estimateId}`;
-      const { rawHash, rawIdentity, canonicalJson: rawCanonicalJson } = identifyRawEstimateOutput(rawOutput);
-      const receipt = this.store.db.prepare("SELECT body FROM outbox WHERE id=? AND kind='estimate-result'").get(receiptId);
-      if (receipt) {
-        const retained = JSON.parse(String(receipt.body));
-        if (retained.rawHash !== rawHash || retained.rawIdentity !== rawIdentity) throw new ControlError("report-identity-conflict");
-        return;
-      }
-      commitTerminal?.();
-      if (!["running", "start-unknown"].includes(estimate.state)) throw new ControlError("start-state-conflict");
-      const rows = this.store.db.prepare("SELECT id,active,body FROM runs WHERE group_id=? AND work_item_id=?").all(id, estimateId);
-      if (rows.length !== 1) throw new ControlError("recovery-blocked");
-      const run = JSON.parse(String(rows[0].body)) as EstimateRun;
-      if (!["failed-before-provider", "settled-recoverable", "settled-restartable", "settled-unrecoverable"].includes(run.state)
-        || run.groupId !== id || run.workItemId !== estimateId || run.unknown.work || run.unknown.handoff) throw new ControlError("run-stop-unconfirmed");
-      amountSchema.parse(run.remaining.work); amountSchema.parse(run.cumulative.work);
-      const grants = z.object({ work: amountSchema, handoff: amountSchema }).strict().safeParse(run.grant);
-      if (Number(rows[0].active) !== 1 || run.runId !== String(rows[0].id) || !grants.success || !same(grants.data.work, estimate.grant)
-        || !same(grants.data.handoff, zero()) || !same(run.remaining.handoff, zero()) || !same(run.cumulative.handoff, zero())
-        || dimensions.some(d => run.remaining.work[d] !== Math.max(estimate.grant[d] - run.cumulative.work[d], 0))
-        || this.store.db.prepare("SELECT seq FROM usage_events WHERE run_id=? AND seq>?").get(run.runId, Number(run.highWater))) throw new ControlError("recovery-blocked");
-      const group = readWebGroup(this.store, id), proposal = readBudgetProposal(this.store, id), plan = readArchivedPlan(this.store, id);
-      if (group.ledger.usageUnknown) throw new ControlError("recovery-blocked");
-      if (dimensions.some(d => group.used[d] < run.cumulative.work[d])) throw new ControlError("recovery-blocked");
-      const currentBalance = budgetBalance(group.limit, group.used, group.reserved);
-      if (!same(currentBalance.reserve, proposal.explicitUnallocatedReserve) || !same(currentBalance.deficit, group.ledger.budgetDeficit)) throw new ControlError("recovery-blocked");
-      // Single-call estimate spec §6.4: a failed estimate carries its own reason. A schema-valid answer that is not
-      // canonical JSON (a lone surrogate, a negative zero) cannot be hashed, so it is an invalid answer too.
-      const classified = classifyEstimateOutput(rawOutput, plan.planHash, plan.plan.tasks.map(t => t.taskId));
-      let output: BudgetEstimateV1 | null = null, outputHash: string | null = null;
-      let reasonCode: string | null = classified.ok ? null : classified.reasonCode;
-      if (classified.ok) {
-        try { outputHash = sha256Canonical(classified.output); output = classified.output; }
-        catch (error) { if (!(error instanceof ControlError)) throw error; reasonCode = "estimate-output-invalid"; }
-      }
-      estimate.state = output ? "ready" : "failed"; estimate.output = output; estimate.outputHash = outputHash; estimate.reasonCode = reasonCode;
-      if (rawCanonicalJson !== null) writeCanonicalRecord(this.store, id, rawHash, rawCanonicalJson);
-      if (output) writeCanonicalRecord(this.store, id, estimate.outputHash!, canonicalBytes(output).toString("utf8"));
-      group.ledger.committedRemaining = residual(group.reserved, zero(), run.remaining.work);
-      const settledBalance = budgetBalance(group.limit, group.used, group.ledger.committedRemaining);
-      group.ledger.budgetDeficit = settledBalance.deficit;
-      setReserve(proposal, settledBalance.reserve);
-      this.store.db.prepare("UPDATE estimates SET state=?,body=? WHERE group_id=? AND id=?").run(estimate.state, canonicalBytes(estimate).toString("utf8"), id, estimateId);
-      this.store.db.prepare("UPDATE runs SET active=0 WHERE id=?").run(run.runId);
-      this.store.db.prepare("INSERT INTO outbox(id,kind,body,delivered) VALUES (?,'estimate-result',?,1)").run(receiptId, canonicalBytes({ groupId: id, estimateId, runId: run.runId, rawHash, rawIdentity }).toString("utf8"));
-      saveWebAuthority(this.store, group, proposal); recordProjectionChange(this.store, [id]);
-    }));
+    completeEstimateInStore({ store: this.store, admissionGate: this.deps.admissionGate }, id, estimateId, rawOutput, commitTerminal);
   }
   async start(command: StartCommand): Promise<WebCommandResult> {
     return scheduleStart({ store: this.store, profileRouter: this.deps.profileRouter, admissionGate: this.deps.admissionGate }, command);
@@ -556,4 +509,63 @@ export class WebControlService {
       },
     }).body);
   }
+}
+
+/**
+ * The estimate's terminal settlement (formerly WebControlService.completeEstimate's body, moved unchanged so the
+ * execution driver can call it -- single-call estimate spec §6.3, drafter finding F13). `commitTerminal` runs first, in
+ * the same transaction, and a throw from anything here rolls it back with the rest.
+ */
+export function completeEstimateInStore(deps: { store: ControlStore; admissionGate?: AdmissionGate }, id: string, estimateId: string, rawOutput: unknown, commitTerminal?: () => void): void {
+  const release = deps.admissionGate?.enter();
+  try {
+    deps.store.transaction(() => {
+      const estimate = readEstimateRecord(deps.store, id, estimateId), receiptId = `estimate-result:${id}:${estimateId}`;
+      const { rawHash, rawIdentity, canonicalJson: rawCanonicalJson } = identifyRawEstimateOutput(rawOutput);
+      const receipt = deps.store.db.prepare("SELECT body FROM outbox WHERE id=? AND kind='estimate-result'").get(receiptId);
+      if (receipt) {
+        const retained = JSON.parse(String(receipt.body));
+        if (retained.rawHash !== rawHash || retained.rawIdentity !== rawIdentity) throw new ControlError("report-identity-conflict");
+        return;
+      }
+      commitTerminal?.();
+      if (!["running", "start-unknown"].includes(estimate.state)) throw new ControlError("start-state-conflict");
+      const rows = deps.store.db.prepare("SELECT id,active,body FROM runs WHERE group_id=? AND work_item_id=?").all(id, estimateId);
+      if (rows.length !== 1) throw new ControlError("recovery-blocked");
+      const run = JSON.parse(String(rows[0].body)) as EstimateRun;
+      if (!["failed-before-provider", "settled-recoverable", "settled-restartable", "settled-unrecoverable"].includes(run.state)
+        || run.groupId !== id || run.workItemId !== estimateId || run.unknown.work || run.unknown.handoff) throw new ControlError("run-stop-unconfirmed");
+      amountSchema.parse(run.remaining.work); amountSchema.parse(run.cumulative.work);
+      const grants = z.object({ work: amountSchema, handoff: amountSchema }).strict().safeParse(run.grant);
+      if (Number(rows[0].active) !== 1 || run.runId !== String(rows[0].id) || !grants.success || !same(grants.data.work, estimate.grant)
+        || !same(grants.data.handoff, zero()) || !same(run.remaining.handoff, zero()) || !same(run.cumulative.handoff, zero())
+        || dimensions.some(d => run.remaining.work[d] !== Math.max(estimate.grant[d] - run.cumulative.work[d], 0))
+        || deps.store.db.prepare("SELECT seq FROM usage_events WHERE run_id=? AND seq>?").get(run.runId, Number(run.highWater))) throw new ControlError("recovery-blocked");
+      const group = readWebGroup(deps.store, id), proposal = readBudgetProposal(deps.store, id), plan = readArchivedPlan(deps.store, id);
+      if (group.ledger.usageUnknown) throw new ControlError("recovery-blocked");
+      if (dimensions.some(d => group.used[d] < run.cumulative.work[d])) throw new ControlError("recovery-blocked");
+      const currentBalance = budgetBalance(group.limit, group.used, group.reserved);
+      if (!same(currentBalance.reserve, proposal.explicitUnallocatedReserve) || !same(currentBalance.deficit, group.ledger.budgetDeficit)) throw new ControlError("recovery-blocked");
+      // Single-call estimate spec §6.4: a failed estimate carries its own reason. A schema-valid answer that is not
+      // canonical JSON (a lone surrogate, a negative zero) cannot be hashed, so it is an invalid answer too.
+      const classified = classifyEstimateOutput(rawOutput, plan.planHash, plan.plan.tasks.map(t => t.taskId));
+      let output: BudgetEstimateV1 | null = null, outputHash: string | null = null;
+      let reasonCode: string | null = classified.ok ? null : classified.reasonCode;
+      if (classified.ok) {
+        try { outputHash = sha256Canonical(classified.output); output = classified.output; }
+        catch (error) { if (!(error instanceof ControlError)) throw error; reasonCode = "estimate-output-invalid"; }
+      }
+      estimate.state = output ? "ready" : "failed"; estimate.output = output; estimate.outputHash = outputHash; estimate.reasonCode = reasonCode;
+      if (rawCanonicalJson !== null) writeCanonicalRecord(deps.store, id, rawHash, rawCanonicalJson);
+      if (output) writeCanonicalRecord(deps.store, id, estimate.outputHash!, canonicalBytes(output).toString("utf8"));
+      group.ledger.committedRemaining = residual(group.reserved, zero(), run.remaining.work);
+      const settledBalance = budgetBalance(group.limit, group.used, group.ledger.committedRemaining);
+      group.ledger.budgetDeficit = settledBalance.deficit;
+      setReserve(proposal, settledBalance.reserve);
+      deps.store.db.prepare("UPDATE estimates SET state=?,body=? WHERE group_id=? AND id=?").run(estimate.state, canonicalBytes(estimate).toString("utf8"), id, estimateId);
+      deps.store.db.prepare("UPDATE runs SET active=0 WHERE id=?").run(run.runId);
+      deps.store.db.prepare("INSERT INTO outbox(id,kind,body,delivered) VALUES (?,'estimate-result',?,1)").run(receiptId, canonicalBytes({ groupId: id, estimateId, runId: run.runId, rawHash, rawIdentity }).toString("utf8"));
+      saveWebAuthority(deps.store, group, proposal); recordProjectionChange(deps.store, [id]);
+    });
+  } finally { release?.(); }
 }

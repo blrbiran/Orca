@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { z } from "zod";
 import { join } from "node:path";
 import { archiveRun, readArtifact, writeArtifact } from "./archive.js";
 import { readRun, saveRun } from "./budget.js";
@@ -6,15 +7,18 @@ import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { commitCandidate } from "./checkpoints.js";
 import { hashPayload } from "./commands.js";
 import { ControlError } from "./errors.js";
+import { BUDGET_ESTIMATE_JSON_SCHEMA, buildEstimatePrompt } from "./estimatePrompt.js";
+import { readEstimateContract } from "./estimator.js";
 import { readConfirmedTaskExecution } from "./executionSnapshot.js";
 import { privateDirectory } from "./paths.js";
 import { publishPending } from "./projection.js";
-import { readBudgetProposal, readGroup, readWork } from "./queries.js";
+import { readBudgetProposal, readEstimateRecord, readGroup, readWork } from "./queries.js";
 import { readCanonicalRecord, writeCanonicalRecord } from "./snapshot.js";
-import { toStartEnvelope } from "./startEnvelope.js";
+import { toSingleCallEnvelope, toStartEnvelope } from "./startEnvelope.js";
 import { exportResumeBundle, readExistingResumeBundle, type InputCheckpointV1 } from "./resumeBundle.js";
 import { recordUsage } from "./usage.js";
-import { isWebWorkRun, nextClaimableTask, readWorkClaimEnvelope, reserveProviderAttemptInTransaction } from "./webDispatch.js";
+import { isEstimateRun, isWebWorkRun, nextClaimableTask, readEstimateClaimEnvelope, readWorkClaimEnvelope, reserveProviderAttemptInTransaction } from "./webDispatch.js";
+import { completeEstimateInStore } from "./webService.js";
 import { readWorkspaceSetting, type WorkspaceMode } from "./workspaceSettings.js";
 import { cleanupRunWorkspace, commitAttempt, ensureWorkBranch, ensureWorkspace, sourceDirOf, workspacePathOf, type WorkspaceRoots } from "./workspace.js";
 import { stepD, stepR } from "./driverLanding.js";
@@ -152,9 +156,9 @@ export function groupHeld(store: ControlStore, groupId: string): boolean {
   return groupStopped(store, groupId) || readGroup(store, groupId).status === "blocked";
 }
 
-/** The frozen worker profile's port: the one the run was claimed against. */
+/** The frozen profile's port: the one the run was claimed against -- the estimator's for an estimate run (F2). */
 export function portFor(deps: Pick<ExecutionDriverDeps, "router">, run: DriverRun): ExecutionPort {
-  return deps.router.resolve("task", run.executionProfile.profileId, run.executionProfile.profileHash).port;
+  return deps.router.resolve(run.phase === "estimate" ? "budget-estimate" : "task", run.executionProfile.profileId, run.executionProfile.profileHash).port;
 }
 
 export function readStartEnvelope(store: ControlStore, run: DriverRun): StartEnvelope {
@@ -162,12 +166,18 @@ export function readStartEnvelope(store: ControlStore, run: DriverRun): StartEnv
   return JSON.parse(readCanonicalRecord(store, run.drive.envelopeHash)) as StartEnvelope;
 }
 
-function newDrive(roots: WorkspaceRoots, runId: string, workspaceMode: WorkspaceMode): DriveRecord {
+function newDrive(roots: WorkspaceRoots, runId: string, workspaceMode: WorkspaceMode, workspace: boolean): DriveRecord {
   return {
-    workspaceMode, sourceDir: sourceDirOf(roots, runId), workspacePath: workspacePathOf(roots, runId), targetRepo: null,
+    workspaceMode, sourceDir: sourceDirOf(roots, runId), workspacePath: workspace ? workspacePathOf(roots, runId) : null, targetRepo: null,
     prepared: false, base: null, envelopeHash: null, inspectUnknown: 0, outcome: null, attemptSha: null, landedCommit: null,
     reconcile: null, blockedAt: null, blockedReason: null, cleanedUp: false, cleanupError: null, publishError: null,
   };
+}
+
+/** A work run's workspace; only an estimate run has none (spec §6.2), and it never reaches the steps that need one. */
+export function workspaceOf(drive: DriveRecord): string {
+  if (drive.workspacePath === null) throw new ControlError("recovery-blocked", "workspace-missing");
+  return drive.workspacePath;
 }
 
 /**
@@ -175,13 +185,15 @@ function newDrive(roots: WorkspaceRoots, runId: string, workspaceMode: Workspace
  * Only a `starting` run enters, so a restart that finds `start-pending` never reserves a second one.
  * A strict group is refused before any attempt (spec §1, §8). A continuation is no longer refused here
  * (handoff delivery spec §4 removes deviation D21); its budget is the task's remaining grant (A2, §13.2 I-5).
+ * Single-call estimate spec §6.2: an estimate run enters the same way, with no workspace.
  */
 export function stepA1(deps: ExecutionDriverDeps, runId: string): boolean {
   const { store } = deps;
   return write(deps, () => {
     const run = readDriverRun(store, runId);
     if (run.state !== "starting") return false;
-    const drive = newDrive(deps.roots, runId, readWorkspaceSetting(store, groupRepoId(store, run.groupId)).workspaceMode);
+    const estimate = run.phase === "estimate";
+    const drive = newDrive(deps.roots, runId, readWorkspaceSetting(store, groupRepoId(store, run.groupId)).workspaceMode, !estimate);
     const refuse = (reason: string): boolean => {
       const current = readDriverRun(store, runId);
       current.state = "blocked";
@@ -191,7 +203,7 @@ export function stepA1(deps: ExecutionDriverDeps, runId: string): boolean {
     };
     if (readBudgetProposal(store, run.groupId).budgetMode === "strict") return refuse("strict-proof-unimplemented");
     if (store.dispatchBlocked || groupHeld(store, run.groupId)) return false;
-    const reservation = reserveProviderAttemptInTransaction(store, runId, "work");
+    const reservation = reserveProviderAttemptInTransaction(store, runId, estimate ? "estimate" : "work");
     if (reservation.kind === "suppressed") return refuse(`attempt-suppressed:${reservation.requestId ?? "unknown"}`);
     const reserved = readDriverRun(store, runId);
     reserved.state = "start-pending";
@@ -220,7 +232,7 @@ export async function stepA2(deps: ExecutionDriverDeps, runId: string): Promise<
   // (spec §11 I6), so C's bounds check, D's findLanding and the other side of a conflict all count from it.
   const base = continued !== null ? continued.base : await ensureWorkBranch(targetRepo, run.groupId);
   privateDirectory(drive.sourceDir);
-  await ensureWorkspace(targetRepo, drive.workspaceMode, drive.workspacePath, base, deps.roots);
+  await ensureWorkspace(targetRepo, drive.workspaceMode, workspaceOf(drive), base, deps.roots);
   deps.crash?.("A2-after-workspace");
   let inputCheckpoint: InputCheckpointV1 | null = null;
   if (continued !== null) {
@@ -233,7 +245,7 @@ export async function stepA2(deps: ExecutionDriverDeps, runId: string): Promise<
   // ccloop opens its attempt worktrees from repoPath's HEAD, not from `base` (spec §3.2), so the
   // contract points at this run's own workspace. The frozen derivedContractHash is unchanged.
   const contract = {
-    ...confirmed.contract, context: { ...confirmed.contract.context, repoPath: drive.workspacePath },
+    ...confirmed.contract, context: { ...confirmed.contract.context, repoPath: workspaceOf(drive) },
     ...(continued !== null ? { executionPolicy: withinGrant(confirmed.contract.executionPolicy, (run.grant as { work: { tokens: number; activeMs: number; attempts: number } }).work) } : {}),
   };
   const envelope = toStartEnvelope(readWorkClaimEnvelope(store, run.groupId, runId), run, { sourceDir: drive.sourceDir, targetRepo, base }, contract, inputCheckpoint);
@@ -275,7 +287,7 @@ async function cleanupPredecessor(deps: ExecutionDriverDeps, targetRepo: string,
   const predecessor = readDriverRun(deps.store, predecessorRunId);
   if (predecessor.drive === undefined || predecessor.drive.cleanedUp) return;
   let cleanupError: string | null = null;
-  try { await cleanupRunWorkspace(targetRepo, deps.roots, predecessorRunId, predecessor.drive.workspacePath); }
+  try { await cleanupRunWorkspace(targetRepo, deps.roots, predecessorRunId, workspaceOf(predecessor.drive)); }
   catch (error) { cleanupError = describeError(error); }
   write(deps, () => {
     const current = readDriverRun(deps.store, predecessorRunId);
@@ -451,6 +463,91 @@ export async function stepC(deps: ExecutionDriverDeps, runId: string): Promise<b
   });
 }
 
+/**
+ * A2 of an estimate run (single-call estimate spec §6.2): a private source directory, the prompt (§4.2) and the
+ * hand-written response schema in a protocol-3 single-call envelope. No workspace, no branch, no read of the target
+ * repository. Everything is redone while `prepared` is false, as for a work run.
+ */
+export async function stepA2Estimate(deps: ExecutionDriverDeps, runId: string): Promise<boolean> {
+  const { store } = deps;
+  const run = readDriverRun(store, runId);
+  if (run.phase !== "estimate" || run.state !== "start-pending" || run.drive === undefined || run.drive.prepared) return false;
+  const estimateId = String(run.estimateId);
+  const estimate = readEstimateRecord(store, run.groupId, estimateId);
+  if (estimate.request === null) { blockRun(deps, runId, "A2", "estimate-request-missing"); return true; }
+  const contract = readEstimateContract(store, run.groupId, estimateId);
+  privateDirectory(run.drive.sourceDir);
+  const envelope = toSingleCallEnvelope(readEstimateClaimEnvelope(store, run.groupId, runId), run, {
+    sourceDir: run.drive.sourceDir,
+    prompt: buildEstimatePrompt(contract.instructionVersion, canonicalBytes(estimate.request).toString("utf8")),
+    responseSchema: BUDGET_ESTIMATE_JSON_SCHEMA as Record<string, unknown>,
+    maxOutputTokens: contract.maxOutputTokens,
+  });
+  const envelopeHash = sha256Canonical(envelope);
+  return write(deps, () => {
+    writeCanonicalRecord(store, run.groupId, envelopeHash, canonicalBytes(envelope).toString("utf8"));
+    const current = readDriverRun(store, runId);
+    if (current.state !== "start-pending" || current.drive === undefined || current.drive.prepared) return false;
+    current.drive = { ...current.drive, envelopeHash, prepared: true };
+    saveDriverRun(store, current);
+    return true;
+  });
+}
+
+/** ccloop's record of one single call (contract: `ccloop-single-call-record-v1`). */
+const singleCallRecordSchema = z.object({
+  schema: z.literal("ccloop-single-call-record-v1"),
+  promptSha256: z.string().regex(/^[a-f0-9]{64}$/),
+  responseSchemaSha256: z.string().regex(/^[a-f0-9]{64}$/),
+  outcome: z.enum(["complete", "aborted", "failed"]),
+  outputRef: z.object({ artifactId: z.string().min(1), hash: z.string().regex(/^[a-f0-9]{64}$/) }).strict().nullable(),
+  errorCode: z.string().min(1).nullable(),
+}).strict();
+
+/**
+ * C of an estimate run (single-call estimate spec §6.3): collect as C does; once the stop is proved, check that the
+ * call ccloop made is the one Orca sent (the prompt's hash against the stored envelope, controller ruling F10), then
+ * settle the estimate and the run in one transaction. A call with no observed usage (aborted or failed) cannot settle
+ * (run-stop-unconfirmed) and is blocked by name instead of retried every round. A stop that arrived while this step
+ * was collecting wins (drafter finding F6): the settlement yields and step H closes the run next round.
+ */
+export async function stepCEstimate(deps: ExecutionDriverDeps, runId: string): Promise<boolean> {
+  const { store } = deps;
+  const run = readDriverRun(store, runId);
+  if (run.phase !== "estimate" || run.state !== "accepted" || run.drive === undefined) return false;
+  const report = await collectInto(deps, run);
+  const candidate = report.candidate;
+  if (!candidate?.stopProof) return report.events.length > 0;
+  const envelope = readStartEnvelope(store, run);
+  if (envelope.work.kind !== "single-call") throw new ControlError("recovery-blocked", `envelope-kind:${runId}`);
+  const record = singleCallRecordSchema.parse(JSON.parse((await readArtifact(store, candidate.handoff)).toString("utf8")));
+  // Controller ruling F10 (2026-09-28): only the prompt is compared. It is one string, byte-exact on both sides; the
+  // schema's hash depends on key order, which ccloop re-sorts (localeCompare) when it stores the envelope, and a
+  // tampered schema cannot slip an invalid answer past classifyEstimateOutput's zod check anyway.
+  if (record.promptSha256 !== createHash("sha256").update(envelope.work.prompt, "utf8").digest("hex")) {
+    blockRun(deps, runId, "C", "single-call-prompt-mismatch");
+    return true;
+  }
+  let rawOutput: unknown = null;
+  if (record.outcome === "complete" && record.outputRef !== null) {
+    const text = (await readArtifact(store, record.outputRef)).toString("utf8");
+    try { rawOutput = JSON.parse(text); } catch { rawOutput = text; }
+  }
+  try {
+    completeEstimateInStore({ store, admissionGate: deps.admissionGate }, run.groupId, String(run.estimateId), rawOutput, () => {
+      if (openRequestOf(store, run) !== null) throw new ControlError("handoff-request-conflict", "estimate-yields-to-handoff");
+      const current = readDriverRun(store, runId);
+      current.state = "settled-restartable";
+      saveDriverRun(store, current);
+    });
+  } catch (error) {
+    if (error instanceof ControlError && error.code === "run-stop-unconfirmed") { blockRun(deps, runId, "C", "estimate-usage-unknown"); return true; }
+    if (error instanceof ControlError && error.code === "handoff-request-conflict" && error.detail === "estimate-yields-to-handoff") return false;
+    throw error;
+  }
+  return true;
+}
+
 export async function savedReport(store: ControlStore, runId: string): Promise<ExecutionReport> {
   const row = store.db.prepare("SELECT body FROM outbox WHERE id=? AND kind='report'").get(`report:${runId}`);
   if (!row) throw new ControlError("control-terminal-pending");
@@ -526,7 +623,7 @@ export async function stepE(deps: ExecutionDriverDeps, runId: string): Promise<b
   }
   const afterPublish = readDriverRun(store, runId);
   if (afterPublish.state !== "settled" || afterPublish.drive === undefined || afterPublish.drive.cleanedUp) return settledJustNow;
-  await cleanupRunWorkspace(deps.resolveRepository(groupRepoId(store, afterPublish.groupId)), deps.roots, runId, afterPublish.drive.workspacePath);
+  await cleanupRunWorkspace(deps.resolveRepository(groupRepoId(store, afterPublish.groupId)), deps.roots, runId, workspaceOf(afterPublish.drive));
   write(deps, () => {
     const current = readDriverRun(store, runId);
     current.drive = { ...current.drive!, cleanedUp: true, cleanupError: null };
@@ -582,7 +679,9 @@ export function driverRunIds(store: ControlStore): string[] {
   for (const row of store.db.prepare("SELECT id,body FROM runs ORDER BY id").all()) {
     const runId = String(row.id);
     const run = JSON.parse(String(row.body)) as DriverRun;
-    if (run.phase !== "work" || !isWebWorkRun(store, runId)) continue;
+    // Single-call estimate spec §6.1: an estimate run the Web ledger claimed is the driver's too.
+    const ours = (run.phase === "work" && isWebWorkRun(store, runId)) || (run.phase === "estimate" && isEstimateRun(store, runId));
+    if (!ours) continue;
     if (DRIVEN.has(run.state) || (run.state === "settled" && run.drive !== undefined && (!run.drive.cleanedUp || run.drive.publishError !== null))) ids.push(runId);
   }
   return ids;
@@ -611,6 +710,16 @@ export function stepOf(run: DriverRun): DriveStep {
 /** One step for one run (spec §2.2 table). Later tasks add D, R and E here. */
 export async function advance(deps: ExecutionDriverDeps, runId: string, context: DriverContext): Promise<boolean> {
   const run = readDriverRun(deps.store, runId);
+  // Single-call estimate spec §6.1: an estimate run has its own chain; the work chain below is unchanged.
+  if (run.phase === "estimate") {
+    switch (run.state) {
+      case "starting": return stepA1(deps, runId);
+      case "start-pending": return run.drive?.prepared ? stepB(deps, runId) : stepA2Estimate(deps, runId);
+      case "unknown": return stepBPrime(deps, runId);
+      case "accepted": return stepCEstimate(deps, runId);
+      default: return false;
+    }
+  }
   switch (run.state) {
     case "starting": return stepA1(deps, runId);
     case "start-pending": return run.drive?.prepared ? stepB(deps, runId) : stepA2(deps, runId);

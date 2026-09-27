@@ -372,6 +372,16 @@ export function readWorkClaimEnvelope(store: ControlStore, groupId: string, runI
   return dispatchEnvelopeSchema.parse(JSON.parse(readCanonicalRecord(store, envelopeHash)));
 }
 
+/** Single-call estimate spec §6.1: the dispatch envelope claimEstimate froze for this estimate run (webService.ts claimEstimate). */
+export function readEstimateClaimEnvelope(store: ControlStore, groupId: string, runId: string): DispatchEnvelopeV1 {
+  const run = readDispatchRun(store, runId);
+  const row = store.db.prepare("SELECT body FROM outbox WHERE id=? AND kind='estimate-claim'").get(`estimate:${groupId}:${run.workItemId}`);
+  if (!row) throw new ControlError("start-intent-missing");
+  const { runId: claimed, envelopeHash } = JSON.parse(String(row.body)) as { runId: string; envelopeHash: string };
+  if (claimed !== runId) throw new ControlError("start-intent-missing");
+  return dispatchEnvelopeSchema.parse(JSON.parse(readCanonicalRecord(store, envelopeHash)));
+}
+
 export type AttemptReservation =
   | { kind: "reserved"; providerAttemptOrdinal: number; envelope: DispatchEnvelopeV1 }
   | { kind: "suppressed"; requestId: string | null };
@@ -392,7 +402,7 @@ export function reserveProviderAttemptInTransaction(store: ControlStore, runId: 
   }
   run.providerAttemptOrdinal += 1;
   saveDispatchRun(store, run);
-  return { kind: "reserved", providerAttemptOrdinal: run.providerAttemptOrdinal, envelope: readWorkClaimEnvelope(store, run.groupId, runId) };
+  return { kind: "reserved", providerAttemptOrdinal: run.providerAttemptOrdinal, envelope: phase === "estimate" ? readEstimateClaimEnvelope(store, run.groupId, runId) : readWorkClaimEnvelope(store, run.groupId, runId) };
 }
 
 /**
@@ -482,4 +492,15 @@ export function isWebWorkRun(store: ControlStore, runId: string): boolean {
   const row = store.db.prepare("SELECT group_id FROM runs WHERE id=?").get(runId);
   if (!row) return false;
   return store.db.prepare("SELECT id FROM outbox WHERE id=? AND kind='work-claim'").get(`work:${String(row.group_id)}:${runId}`) !== undefined;
+}
+
+/**
+ * Single-call estimate spec §6.1: a run claimEstimate made for an estimate -- phase `estimate`, and the
+ * `estimate:<group>:<estimate>` claim row names this very run (a re-claim after a failure names another).
+ */
+export function isEstimateRun(store: ControlStore, runId: string): boolean {
+  const row = store.db.prepare("SELECT group_id,work_item_id,body FROM runs WHERE id=?").get(runId);
+  if (!row || (JSON.parse(String(row.body)) as { phase?: string }).phase !== "estimate") return false;
+  const claim = store.db.prepare("SELECT body FROM outbox WHERE id=? AND kind='estimate-claim'").get(`estimate:${String(row.group_id)}:${String(row.work_item_id)}`);
+  return claim !== undefined && (JSON.parse(String(claim.body)) as { runId?: string }).runId === runId;
 }

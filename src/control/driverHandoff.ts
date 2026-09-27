@@ -93,7 +93,8 @@ export async function restartRun(deps: ExecutionDriverDeps, runId: string, reque
   const { store } = deps;
   const run = readDriverRun(store, runId);
   let cleanupError: string | null = null;
-  if (run.drive !== undefined) {
+  // Single-call estimate spec §6.2: an estimate run has no workspace (workspacePath null), so there is nothing to remove.
+  if (run.drive !== undefined && run.drive.workspacePath !== null) {
     try { await cleanupRunWorkspace(deps.resolveRepository(groupRepoId(store, run.groupId)), deps.roots, runId, run.drive.workspacePath); }
     catch (error) { cleanupError = describeError(error); }
   }

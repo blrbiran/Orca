@@ -46,7 +46,8 @@ export type ReconcileRecord = z.infer<typeof reconcileRecordSchema>;
 export const driveRecordSchema = z.object({
   workspaceMode: z.enum(["worktree", "clone"]),
   sourceDir: z.string().min(1),
-  workspacePath: z.string().min(1),
+  // Single-call estimate spec §6.2 (review I3): null for an estimate run, which has no workspace to make or clean.
+  workspacePath: z.string().min(1).nullable(),
   targetRepo: z.string().min(1).nullable(),
   prepared: z.boolean(),
   base: commitSchema.nullable(),
