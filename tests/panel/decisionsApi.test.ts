@@ -98,9 +98,15 @@ describe("the decisions endpoints (spec sections 4.2 and 4.3.1)", () => {
             correctionsDir: dir,
             now: () => new Date().toISOString(),
           });
-          const expected = observations.decisions.map((d) =>
-            Object.fromEntries(LIST_FIELDS.map((f) => [f, d[f]])),
-          );
+          // REWRITTEN (panel UI redesign spec §2/§6.1, human ruling U1, authorised as U4 in
+          // session a50f4d80): rows now carry `question`. The expected value is still built
+          // by hand -- not by projectForList or loadQuestions -- so the equality cannot move
+          // together with the implementation. Both decisions in this ledger were written
+          // from ORIGINAL, whose question is a literal the fixture owns.
+          const expected = observations.decisions.map((d) => ({
+            ...Object.fromEntries(LIST_FIELDS.map((f) => [f, d[f]])),
+            question: ORIGINAL.question,
+          }));
           expect(body.rows).toStrictEqual(expected);
           expect(body.rows.length).toBeGreaterThan(1);
         } finally {

@@ -174,8 +174,8 @@ export interface PanelCoverage {
   caveat: string;
 }
 
-/** Mirrors src/panel/listProjection.ts's DecisionListRow. */
-export type DecisionListRow = Pick<DecisionObservation, "projectKey" | "id" | "at" | "kind" | "scope" | "verdict">;
+/** Mirrors src/panel/listProjection.ts's DecisionListRow (question: panel UI redesign spec §4, ruling U1). */
+export type DecisionListRow = Pick<DecisionObservation, "projectKey" | "id" | "at" | "kind" | "scope" | "verdict"> & { question?: string | null };
 
 /** Mirrors src/panel/listProjection.ts's LIST_FIELDS -- same SET, order not load-bearing here. */
 export const WEB_LIST_FIELDS = [
