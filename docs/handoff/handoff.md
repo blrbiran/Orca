@@ -121,7 +121,7 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 ### 4.0 ⛔ 现在的下一件事（2026-09-27 会话 `43e3e1d8` 改写、会话 `94b09282` 更新，**本节优先于下面的 4.0.0、4.0.1 与 1–3**）
 
 **agent 选择一轮做完；人审了 R1–R30 并落地；真 claude 跑通过一次单任务；§14／§15 的改写判据人已认可（会话 `94b09282`），付费轮四个发现已裁定并落地（B4 只登记）。**
-- **材料**：spec `docs/superpowers/specs/2026-09-26-agent-selection-design.md`（**§13.10 ＞ §13.9 ＞ §13.8 ＞ §13.7 ＞ … ＞ 正文**）；计划 `docs/superpowers/plans/2026-09-26-agent-selection.md`；**唯一进度源** `.superpowers/sdd/2026-09-26-agent-selection/progress.md`（§13 人审原话与逐条裁定、§14 执行与付费轮、§15 R7／R17、§16 付费轮四个发现的落地与现行基线）；审阅清单 `…/ruling-review.md`（R1–R30 编号以它为准）；付费轮证据 `…/evidence/live-claude-{1,2}-*.json`。
+- **材料**：spec `docs/superpowers/specs/2026-09-26-agent-selection-design.md`（**§13.11 ＞ §13.10 ＞ §13.9 ＞ §13.8 ＞ §13.7 ＞ … ＞ 正文**）；计划 `docs/superpowers/plans/2026-09-26-agent-selection.md`；**唯一进度源** `.superpowers/sdd/2026-09-26-agent-selection/progress.md`（§13 人审原话与逐条裁定、§14 执行与付费轮、§15 R7／R17、§16 付费轮四个发现的落地与现行基线、§17 B4 根治）；审阅清单 `…/ruling-review.md`（R1–R30 编号以它为准）；付费轮证据 `…/evidence/live-claude-{1,2}-*.json`。
 - ✅ **会话 `43e3e1d8` 落地的**（按主题行找，别数笔数）：
   - **R1**（ccloop）：`configHash` 再去掉 `command`、`timeoutMs`、`killGraceMs`（只剩 kind、`configDir`、kind 字段、选择）。**R29** 名单加一条负载超时；**R30** 判据改名。
   - **R3**：`tests/control/agentUpgradeE2E.test.ts` 实测升级出路 —— 已开跑组：漂移挡新派活 → 只 retry 仍挡 → 改表后 retry 落地、hash 不变；🔴 **confirm 与 start 之间升级 ⇒ `start` 本身被拒 `control-capability-unsupported`（不可重试），改表后重新 start**。
@@ -133,10 +133,10 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 - ✅ **会话 `94b09282` 落地的**（人裁「A 认可，W2 同意；B1–B3 按你推荐，B4 先登记」「B3 和 B1 授权改写」；细节在台账 §16、spec §13.10）：**B2** runner 失败时错误带 claude 的 stdout 与 stderr（各留末 8192 字符）；**B3** `agents detect` 的 claude 草稿带五个隔离参数（不含 `--max-budget-usd`），`orca agents init` 原样转、Orca 零改动；**B1** claude 的 cache 创建／读取 token 计入 `tokenUsage`（与 codex 同口径），🔴 **同一 token 上限对真 claude 约紧了两个数量级**（付费轮那个任务按新口径 146,241，不是 1,329）；**B4** 登记为 Rule 17 第三方写入（spec §13.10）。改写的既有判据 16 条都由人点名（B3 2 条、B1 14 条），名字在台账 §16。三笔都在 ccloop，Orca 只改文档。
 - ⛔ **下一件事（都归人）**：
   1. 发布状态不写在这里：跑 `/usr/bin/git ls-remote` 自查。若两仓都有未推的笔，Orca 的端到端判据是对新 ccloop build 跑绿的（顺序见 §9.0c）。
-  2. **B4 的根治要不要量**：安装记录 `configDir` 指专用目录（`CLAUDE_CONFIG_DIR`）能否保住 keychain OAuth，只有付费真 claude 能量；`--max-budget-usd` 要不要进 detect 默认、默认多少；付费轮留在真实 `~/.claude/projects/` 下的两个空目录删不删。
-  2b. 已登记、人未开口：面板切回页面不节流（每次切回读一次预览＝起一个 ccloop，spec §13.10 末条）。
+  2. ✅ B4 已根治（会话 `94b09282`，台账 §17、spec §13.11）：detect 给 claude 的草稿再加 `--settings {"autoMemoryEnabled":false}` 与 `--max-budget-usd 100`；付费验证一次 plan 调用 RC 0、`~/.claude/projects` 没有新条目、$0.152572。两个旧残留目录已删。⚠️ 已有的安装表不会自动带上新参数，要人自己改或重新 `orca agents init`。
+  2b. **切回页面要不要节流**，人未定。每次切回起 1＋N 个 `ccloop control capabilities`，每个解析选择的还会跑一次 agent CLI `--version`；不调模型、不写文件（spec §13.11 末条）。
   3. 其后可选：更多真 claude 形状（解冲突经 `ccloop run --agents`、`[1m]`、混 kind）；stream-json 逐条 usage（让 claude 下 deadline 中止可续）；opencode／pi／litellm；subagent 级切换。🔴 **codex 周额度已用完：人说可以之前，任何真 codex 都不许跑。**
-- 执行规矩：会话 `43e3e1d8` 那一轮的「授权跑真实 claude」等**不延续**；会话 `94b09282` 零付费调用。再跑付费 claude、真 codex、改既有判据，都要人重新逐次开口。
+- 执行规矩：会话 `43e3e1d8` 那一轮的「授权跑真实 claude」等**不延续**。会话 `94b09282` 只在人授权 B4 付费验证后调用过一次真 claude（$0.152572）。再跑付费 claude、真 codex、改既有判据，都要人重新逐次开口。
 
 ### 4.0.0 ④（2026-09-25 会话 `e5f56bfe`，**已做完，不要重做**；原 4.0 的结论保留于此）
 
@@ -899,7 +899,7 @@ Orca 要求排序去重的四值枚举 ⇒ 将来非 null 且写错时 Orca 整�
 - ✅ ~~审 `Ruling:` 行~~ —— 人 2026-09-27 逐条审完（台账 §13；R1–R30 见 `ruling-review.md`），裁定的已落地（§4.0）。
 - ✅ ~~审改写判据与四个付费轮发现~~ —— 会话 `94b09282` 人已认可 §14／§15 的改写，B1–B3 已落地，B4 已登记（台账 §16、spec §13.10）。仍归人的是 §4.0「下一件事」第 2 条。
 - 🆕 **ccloop 新负载 flake** `runLoop > continues normally when execute returns a complete result during the recovery window` 要不要进名单；Orca `gateCheck` K12 5 s 超时一次（单跑绿）。
-- 🆕 **真实 `~/.claude/projects/` 下两个空 `memory/` 目录**（付费轮残留，目录名含 `…scratchpad-live-claude-{1,2}-target`）—— 删不删归人。
+- ✅ ~~真实 `~/.claude/projects/` 下两个空 `memory/` 目录~~ —— 人裁「删」，会话 `94b09282` 已用 `rmdir` 删除；残留的根源已由 ccloop 主题行 `feat(agents): draft claude with auto memory off …` 消除（台账 §17）。
 - 🔴 **真实 `~/.orca/agents.json` 与 `~/.orca/agents.json.draft.json`**（2026-09-26 02:51，写作期变异残留，内容是判据夹具 `"command":["/opt/claude"]`）—— 删不删归人。`orca agents init` 在它们存在时只写草稿、`show` 会读到这张假表。会话 `8c6302e0` 前后多次 `stat`，未被动。
 - 🔴 **推送**：会话 `94b09282` 开工时三仓远端＝本地；该会话往 ccloop 提交了三笔（B2／B3／B1），往 Orca 提交了文档。推送顺序仍是**先 ccloop 后 Orca**：Orca 的端到端判据以新 ccloop build 为准，线上协议形状没变。现在哪些笔在远端，跑 `/usr/bin/git ls-remote` 自查。
 - ✅ ~~ccloop 已知红名单加 `run-scenario CLI > records claudeChildExited as NOT_OBSERVABLE …`~~ —— 人裁 R29，已随 ccloop 主题行 `fix(agents): leave where the CLI is installed and its run limits out of configHash …` 进名单（现 14 个名字）。

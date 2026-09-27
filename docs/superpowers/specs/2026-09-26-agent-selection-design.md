@@ -587,3 +587,14 @@ only, not by existence」，3 条：缺表装配成功、相对路径仍拒、�
   §8 那句「ccloop 侧零仓库外写入」对 ccloop **自己的代码**仍然成立；本行是它启动的第三方 CLI 的写入。
   可能的根治是安装记录的 `configDir` 指向专用目录（ccloop 设 `CLAUDE_CONFIG_DIR`），**未验证**：换目录后 keychain 里的 OAuth 是否仍可用，要一次付费真 claude 才能量，归人。付费轮留下的两个真实目录（`…scratchpad-live-claude-{1,2}-target`）删不删，也归人。
 - **登记（不做，人未开口）**：面板在页面获焦或变为可见时无条件重读一次预览，没有节流。每次重读起一个 ccloop 进程，频繁切窗口就频繁起进程。实测一次切回（`visibilitychange` 加 `focus`）只多读一次，两次分开的切回读两次。
+
+### 13.11 B4 根治与每次调用的美元上限（2026-09-27，控制器会话 `94b09282`；13.1–13.10 原文保留）
+
+> 来源：台账 `.superpowers/sdd/2026-09-26-agent-selection/progress.md` §17。人原话：「B4 要不要根治 => 根治。同意付费验证」「--max-budget-usd … => 放，默认填100USD」「上次付费跑留在真实 ~/.claude/projects/ 下的两个空目录 … => 删」「同意改判据」。**冲突时本节优先于上文。**
+
+- **更正 §13.10 的 Rule 17 那一行**：残留已根治。ccloop 主题行 `feat(agents): draft claude with auto memory off and a 100 USD cap per call`：`agents detect` 的 claude 草稿在五个隔离参数后面再加 `--settings {"autoMemoryEnabled":false}` 与 `--max-budget-usd 100`。§13.10 设想的 `configDir`（`CLAUDE_CONFIG_DIR`）方案**没有采用**：它要另登录一次，还会把 claude 的全部状态挪走。
+  - 免费实测（`ANTHROPIC_BASE_URL` 指向无人监听的端口，一个请求都发不出去）：不带开关 ⇒ 启动时就建 `~/.claude/projects/<cwd>/memory/`；带 `--settings {"autoMemoryEnabled":false}` ⇒ 不建；带 `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` ⇒ 也不建。
+  - 付费实测（一次 plan 调用，经 ccloop runner，command 取自 `detect` 对真 claude 2.1.283 的草稿）：RC 0，`~/.claude/projects` 前后没有新条目，claude 自报 $0.152572。**只量了 `projects` 这一处，也只跑了 plan 阶段。**
+  - 付费轮留下的两个真实空目录，经人授权已用 `rmdir` 删除。
+- **补充 §13.10「`--max-budget-usd` 不在默认里」**：现在在，为 100（美元），作用于每一次 claude 调用。对已有的安装表不起作用：表是人的数据，需要自己改或重新 `orca agents init`。
+- **更正 §13.10 末条（切回页面不节流）里「每次重读起一个 ccloop 进程」**：说少了。实际是每次切回起 1＋N 个 `ccloop control capabilities`（1 个读表，N＝预览里不同选择的个数）。每个解析选择的 ccloop 还会启动一次对应 agent CLI 的 `<command> --version`（真 claude 实测 26 ms、零写入，台账 §13 的 3a）。全程不调模型。节流做不做，人未定。

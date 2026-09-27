@@ -549,3 +549,16 @@
   - **更正 §15「改道目录为空」**：改道 HOME 下会有 `~/.npm/_logs` 与 `_update-notifier-last-checked`。来源是既有判据自己跑的 `npm test`／`npm run build`／`npm exec tsx`（日志里的 argv 可查），不是任何一笔改动带来的；除 `.npm` 外为空。
 - **Orca 侧只改文档**：spec §13.10（人裁、落地、Rule 17 登记、切回节流登记）＋本节＋handoff。
 - **成本**：本会话零付费 CLI 调用；会话自身的美元数工具没给最终值（中途会话钩子报过约 $13.91），不自估。
+
+## §17 B4 根治、美元上限进 detect 默认（控制器会话 `94b09282`，2026-09-27；接在 §16 之后）
+
+- Human（2026-09-27）：「B4 要不要根治 => 根治。同意付费验证」「--max-budget-usd 要不要放进 detect 的默认参数，默认填多少。 => 放，默认填100USD」「上次付费跑留在真实 ~/.claude/projects/ 下的两个空目录，删不删。 => 删」；随后「同意改判据」。切回节流：人问「具体做什么事情」，未裁定。
+- 删除：两个 `…43e3e1d8…scratchpad-live-claude-{1,2}-target` 删前用 `find -ls` 核过，每个只含一个空 `memory/`；用 `rmdir`（非空即失败）删掉。
+- 免费探针（`scratchpad/b4probe/probe.py`；`ANTHROPIC_BASE_URL=http://127.0.0.1:9`、去掉 `CLAUDE*` 变量、付费轮那组隔离参数、60 s 超时；三格都在 60.0 s 超时，没有请求发出）：A0 基线 ⇒ 新建 `<cwd 编码>/memory`（正向对照成立）；A1 `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` ⇒ 无新条目；A2 `--settings {"autoMemoryEnabled":false}` ⇒ 无新条目。A0 的残留是控制器自己造的，已 `rmdir`。开关名来自对本机 claude 二进制做 `strings`。
+- 选 A2（参数形式）：在 `command` 里，不进 hash，表里看得见也改得了；不用给 adapter 加环境变量；不用 `CLAUDE_CONFIG_DIR`。
+- 付费验证（`scratchpad/b4paid/paid.mts`，在 clone `ccloop-b3` 里跑）：`detectAgents` 对真 claude 生成草稿（七组参数齐），经 Orca `scripts/claude-tee.mjs` 与 ccloop runner 跑一次 plan 阶段，`--model claude-opus-5-5`，去掉 `CLAUDE*` 变量，真 HOME：runner RC 0、8.0 s；`~/.claude/projects` 前后无新条目；claude 自报 **$0.152572**（input 2／output 207／cache 创建 18,553）。第一次尝试因 tsx 不支持 CJS 的顶层 await 在转译阶段就失败了，没有发出调用；改用 `.mts` 后重跑。
+- ccloop 主题行 `feat(agents): draft claude with auto memory off and a 100 USD cap per call`。**人指名改写**（「同意改判据」）：`tests/agents/detect.test.ts > … > lists search directories before PATH, deduplicates by realpath and drafts the PATH default`、`tests/agents/command.test.ts > ccloop agents detect > prints the detect result for the given home and PATH`、`tests/agents/detectIsolation.test.ts > … > hands the detected claude the isolation arguments ahead of -p, and still reads its version through them`：三条的期望 command 各加两组参数。变异：删 `--settings` 这组 ⇒ 3 红；删 `--max-budget-usd` 这组 ⇒ 3 红。全量（clone，HOME＋四个 XDG 根改道）：85 文件／1005 条，1004 过，唯一红 `stopProof`，`check-known-reds` RC 0。
+- **更正 §16 与 spec §13.10 对切回节流的描述**：代码核实，每次切回＝1 个 `capabilities {agent:null}`（读表，不起 agent CLI）＋N 个 `capabilities {agent:<选择>}`，每个都跑 `probeVersion`，即 `<command> --version`。控制器在对话里说的「只起一个 ccloop 进程」不准，已当面更正。
+- 本会话付费合计（工具报数）：$0.152572。
+- 更正（控制器自己的）：§16 末条「本会话零付费 CLI 调用」只到 §16 写完为止成立；其后本节的付费验证花了 $0.152572。
+- Orca 全量对 B4 那一笔的 ccloop build 重跑（同一个全新 clone、同一张夹具表，HOME＋四个 XDG 根改道）：220 文件／2003 条全过，0 pending；真实 `~/.orca` 前后 `stat` 相同。web 工作区未重跑：Orca 代码自 §16 那次起没有变。
