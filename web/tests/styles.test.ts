@@ -33,4 +33,11 @@ describe("styles.css", () => {
   it("marks the open control group the way it marks the open decision", () => {
     expect(rule('nav[aria-label="Control groups"] button[aria-current="true"]')).toContain("background: var(--accent-subtle)");
   });
+
+  // Human ruling (session f8281a60): each importance level paints the kind pill's dot its own colour.
+  it("gives each kind importance level its own dot colour", () => {
+    for (const level of [1, 2, 3]) {
+      expect(rule(`.field-kind[data-level="${level}"]::before`)).toContain(`background: var(--kind-${level})`);
+    }
+  });
 });

@@ -13,6 +13,7 @@
  * object still cannot reach the markup. Text above kept verbatim.
  */
 import type { JSX } from "react";
+import { kindLevel } from "./kindRank.js";
 import type { DecisionListRow } from "./types.js";
 
 /**
@@ -66,7 +67,7 @@ export function DecisionList({
           <li key={key}>
             <button type="button" className="decision-row" aria-current={key === selectedKey ? "true" : undefined} onClick={() => onOpen?.(row)}>
               <span className="row-meta">
-                <span className="pill field-kind">{String(row.kind)}</span>
+                <span className="pill field-kind" data-level={kindLevel(String(row.kind))}>{String(row.kind)}</span>
                 <span className="pill field-scope">{String(row.scope)}</span>
                 {row.verdict !== "ok" && <span className="pill pill-warn field-verdict">{String(row.verdict)}</span>}
                 <span className="row-project field-projectKey">{String(row.projectKey)}</span>

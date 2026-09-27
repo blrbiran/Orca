@@ -55,9 +55,11 @@ describe("DecisionsView (rulings U1, U2; K5's intent)", () => {
 
   // Final review Important 1: a filter value whose last row was just reviewed away must stay
   // visible in its select, or the pane shows "any" over an empty list with no way to tell why.
+  // REWRITTEN (human authorisation, session f8281a60): the option's text now carries the kind's
+  // importance mark; only the expected text changed, the intent did not.
   it("keeps showing a filter value that no longer matches any row", () => {
     const html = renderToStaticMarkup(<DecisionsView rows={[rows[0]!]} filter={{ ...NO_FILTER, kind: "boundary" }} />);
-    expect(html).toMatch(/<select name="filter-kind">[\s\S]*?<option value="boundary" selected="">boundary<\/option>[\s\S]*?<\/select>/);
+    expect(html).toMatch(/<select name="filter-kind">[\s\S]*?<option value="boundary" selected="">🟠 boundary<\/option>[\s\S]*?<\/select>/);
     expect(html).toContain("No decision matches these filters.");
   });
 
@@ -83,6 +85,16 @@ describe("DecisionsView (rulings U1, U2; K5's intent)", () => {
     // App hands `null` while the detail is still loading: no detail on screen, so nothing to explain.
     const loading = renderToStaticMarkup(<DecisionsView rows={rows} filter={NO_FILTER} selected={{ projectKey: "proj", id: "run/9" }} detail={null} />);
     expect(loading).not.toContain(NOT_IN_LIST);
+  });
+});
+describe("the kind filter (human ruling, session f8281a60)", () => {
+  it("lists kinds most-important first, each option marked with its level", () => {
+    const all = ["scheduling", "reconcile", "boundary", "abandon"].map((kind, i) => row({ id: `run/${i}`, kind: kind as DecisionListRow["kind"] }));
+    const html = renderToStaticMarkup(<DecisionsView rows={all} filter={NO_FILTER} />);
+    const select = /<select name="filter-kind">([\s\S]*?)<\/select>/.exec(html)![1]!;
+    expect([...select.matchAll(/<option value="([^"]*)"(?: selected="")?>([^<]*)<\/option>/g)].map((m) => `${m[1]}|${m[2]}`)).toEqual([
+      "|any", "reconcile|🔴 reconcile", "abandon|🔴 abandon", "boundary|🟠 boundary", "scheduling|🟡 scheduling",
+    ]);
   });
 });
 describe("DecisionDetail's action copy (spec §5.2)", () => {

@@ -1,7 +1,7 @@
 # Orca 面板 UI 重做 —— handoff（UI 这一批专用）
 
-> ✅ **已由人 merge 进 main（2026-09-27）；结论已并回 `docs/handoff/handoff.md` §三、§四 4.0.a、§6.19、§9.0d —— 以那里为准。**
-> 本文只留作这一批的过程记录，**下一个 agent 不需要读**；删不删归人。
+> ✅ **第一批（§〇–§五）已由人 merge 进 main（2026-09-27）；结论已并回 `docs/handoff/handoff.md` §三、§四 4.0.a、§6.19、§9.0d —— 以那里为准。**
+> 🔵 **第二批在飞：读 §六**（人要求后续问题继续追加在本文）。
 
 > **读者是下一个 agent。** 这一批 UI 改动的交接写在本文，**不写进 `docs/handoff/handoff.md`**；
 > 等 UI 基本 ready、由人决定合并时，再把本文的结论并回 `handoff.md`。
@@ -121,3 +121,36 @@ U3 主题跟随系统深浅、可手动切；U4 授权改写四条既有判据�
 | `superpowers:test-driven-development` | 修延后的 Minor 时：先写会红的判据 |
 | `superpowers:finishing-a-development-branch` | 人决定合并时（合并本身人来做） |
 | `superpowers:brainstorming` | UI 下一轮有新需求（例如 Chains／Task control 区的交互改造）时 —— 本批只换了样式，没动它们的交互 |
+
+---
+
+## 六、第二批：深色对比度 ＋ kind 重要性（分支 `ui/panel-contrast`，会话 `f8281a60`，2026-09-27）
+
+**worktree**：从 main（主题行 `docs(handoff): fold the panel UI redesign's conclusions into handoff.md…` 那一笔）拉的新分支 `ui/panel-contrast`，目录在会话 `f8281a60` 的 scratchpad 下（`git worktree list` 查；重启会丢目录，提交不会丢）。
+**状态自查**：`git log --oneline main..ui/panel-contrast` 非空 ⇒ 还没合；为空 ⇒ 已合，本节只剩历史意义。人要求合并，agent 的 `git merge --no-ff` 被 Tier 0 闸门拦下（不重试）⇒ 由人执行（命令见下）。
+
+**人的输入（视觉验收）**：深色模式对比度差，#decisions 尤甚；参考 `/Users/biran/code/skills/writing/md2publish-skills` 的模板；kind 下拉框按重要性排序并带图标／颜色。
+
+**人裁**：
+- 重要性三档（「错了多难挽回」）：🔴 `reconcile`、`abandon` ＞ 🟠 `interface`、`dependency`、`boundary` ＞ 🟡 `criteria`、`scheduling`（档内按此序）。只是 UI 序，`KIND_TIER` 里七个仍全是 high。
+- 授权改写 `web/tests/decisionsView.test.tsx` 的 "keeps showing a filter value that no longer matches any row"：只改期望的选项文字（`boundary` → `🟠 boundary`），意图不变。
+
+**做了什么**（按主题行找）：
+- `fix(web): step the dark surfaces lighter…` —— 只改深色 token：卡 < 浮层 < hover < 边线逐级往亮里走、选中行底 12%→22%、正文与次要文字各提亮一档。判据 `web/tests/contrast.test.ts` 直接读 `styles.css` 的深色 `:root` token、按 WCAG 公式算比值（jsdom 不渲染样式，只能这样量）。改前实测：边线／卡 **1.08**、卡／底 **1.08**、选中行／卡 **1.21**、次要文字／选中行 **4.29**；正文从来不是瓶颈（9.29）。
+- `feat(web): order the kind filter by importance…` —— `web/src/kindRank.ts`（`Record<DecisionKind, …>`，新 kind 不分档即编译失败）；kind 下拉框按档排序、选项文字带 🔴🟠🟡（原生 `<option>` 在 macOS 上不认 CSS 颜色，只能走文字）；列表行 kind 徽章带 `data-level`，CSS `::before` 画同色圆点（`--kind-1..3`，深浅各一套）。scope／repo 两个下拉框不变。
+- `fix(web): give the primary button a dark label…` —— 第一次修完截图才看到：深色下 Agree 是白字叠浅蓝 **2.54:1**。加 `--on-accent`（深色 `#0b1220`、浅色 `#ffffff`），判据加一条。
+- 🔴 **这些深色值被 `contrast.test.ts` 钉着，别往暗里调** —— md2publish `docs/theme-design-lessons.md` 规则 7／10 的原话：「暗色主题上，分层靠往亮里走，往暗里走会一起糊进背景；文字对比度不是这里的瓶颈，量错了对象就会连修两轮」。借的是这条方法与 midnight-study「面板比底亮一档、边线再亮一档」的结构，**没抄它的色值**（它自己卡／底 1.10、边线／卡 1.34，低于本判据门槛）。
+
+**现测**（干净 clone，分支尖端＝主题行 `fix(web): give the primary button a dark label…`，env 同 §二）：web build／typecheck／`--ws check`（web 26 文件／142 条）／`verify:panel`（15 PASS）RC 0；根 vitest 222 文件／2009 条，红 2 ＝ `driverRecovery` "drives a retried run…"（5 s 超时）＋ `controlShutdown` SIGTERM（143），都在已登记 flake 名单；`uptime` load 5.8 时两文件单跑 3 次 14/14 绿。
+- 变异（新 clone，`web` 全套）：Mc1–Mc4 把 border／accent-subtle／card／muted 改回旧值 → 对比度判据各红；Mk1 改 reconcile 的序、Mk2 去掉标记、Mk3 去掉 `data-level`、Mk4 删 level 2 的 CSS、Mk5 不传 `order`、Mk6 把 boundary 降档 → 各自判据红。clone diff 0 字节。`on-accent` 那条先以 `#ffffff` 实测红在 2.54，再改值。
+- 真面板目测（`--port 7789`，`ORCA_CORRECTIONS_DIR`／`ORCA_CONTROL_DIR` 改道到 scratchpad）：深浅两套截图在会话 scratchpad 的 `shots/`；kind 选项实际顺序与色点在两套主题下都对；无 pageerror。
+
+**⚠️ 发现（非本分支造成）**：真 `~/.orca` 又出现了（`reviews.jsonl` 840B ＋ `control/`）—— 人删除之后，端口 7777 上人自己起的面板在视觉验收时写的（多半还是 `ORCA_*` 变量没 `export`）。人的数据，未动（Rule 17）；本分支的目测面板前后没改它（`ls -la` 前后相同）。
+
+**awaitingHuman**：
+- 对第二批做视觉验收（要看新样式，需要重新 `npm run build --workspace web` 再起面板）。
+- 🔴 合并 `ui/panel-contrast` 进 main、push —— 人做：`cd /Users/biran/code/skills/loop/Orca && git pull --ff-only && git merge --no-ff ui/panel-contrast && git push`。
+  main 在分支之后被别的 agent 推进过（只动 `docs/handoff/handoff.md`），`--ff-only` 不成；只读 `git merge-tree --write-tree main ui/panel-contrast` 无冲突，合并结果的代码与上面全量验过的树相同。另一个 agent 在等这次合并。
+- 真 `~/.orca` 新写入的数据留不留。
+- 未钉住的一处：`contrast.test.ts` 只量深色块；浅色的 `--on-accent`（白字叠 `#2563eb`，约 5.17）没有判据。
+

@@ -6,6 +6,7 @@
  */
 import type { JSX, ReactNode } from "react";
 import { DecisionList } from "./DecisionList.js";
+import { kindLabel, sortKinds } from "./kindRank.js";
 import type { DecisionListRow } from "./types.js";
 
 export interface DecisionFilter {
@@ -36,11 +37,14 @@ function FilterSelect(props: {
   values: string[];
   filter: DecisionFilter;
   onFilter?: (f: DecisionFilter) => void;
+  order?: (values: readonly string[]) => string[];
+  optionText?: (value: string) => string;
 }): JSX.Element {
   // A value whose last row was just reviewed away stays listed, so the select still shows
   // what is filtering the (now empty) list instead of claiming "any" (final review Important 1).
   const current = props.filter[props.name];
-  const values = current === "" || props.values.includes(current) ? props.values : [...props.values, current].sort();
+  const order = props.order ?? ((v: readonly string[]) => [...v].sort());
+  const values = order(current === "" || props.values.includes(current) ? props.values : [...props.values, current]);
   return (
     <label>
       {props.label}
@@ -50,7 +54,7 @@ function FilterSelect(props: {
         onChange={(e) => props.onFilter?.({ ...props.filter, [props.name]: e.currentTarget.value })}
       >
         <option value="">any</option>
-        {values.map((v) => <option key={v} value={v}>{v}</option>)}
+        {values.map((v) => <option key={v} value={v}>{props.optionText ? props.optionText(v) : v}</option>)}
       </select>
     </label>
   );
@@ -81,7 +85,7 @@ export function DecisionsView(props: {
         High-tier decisions an agent recorded that nobody has reviewed yet. Open one, read it, then Agree or Correct.
       </p>
       <div className="filters">
-        <FilterSelect label="Kind" name="kind" values={distinct(props.rows, (r) => String(r.kind))} filter={props.filter} onFilter={props.onFilter} />
+        <FilterSelect label="Kind" name="kind" values={distinct(props.rows, (r) => String(r.kind))} filter={props.filter} onFilter={props.onFilter} order={sortKinds} optionText={kindLabel} />
         <FilterSelect label="Scope" name="scope" values={distinct(props.rows, (r) => String(r.scope))} filter={props.filter} onFilter={props.onFilter} />
         <FilterSelect label="Repository" name="projectKey" values={distinct(props.rows, (r) => r.projectKey)} filter={props.filter} onFilter={props.onFilter} />
       </div>
