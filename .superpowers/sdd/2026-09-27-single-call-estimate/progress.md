@@ -79,3 +79,9 @@ SDD ledger — plan: docs/superpowers/plans/2026-09-27-single-call-estimate.md
 - Ruling: 评审的 Important「Step 6 台账未写」— 该步由控制器在派发时明确保留（台账在 Orca 仓、实施席只在 ccloop 仓写），控制器在本节补写 — 若错：无代码后果。
 - Task 1: minor (deferred): brief 的变异清单没覆盖 `loopWorkSchema` 的 `kind: z.literal("loop")` 与 single-call `sourceDir` 规范化两支（终审时看要不要补变异）。
 - Task 1: complete (commits 8d4d406..06b6453, review clean after controller ruling on the ledger step)
+
+### §3.4 Task 2 完成（ccloop）
+
+- 提交：`feat(control): answer whether an agent can run a single call, and refuse single-call work for one that cannot`（d85776b，BASE 06b6453）。没有改既有判据（未用 S6）。
+- 实施席自报：RED 时 C1、C3 如预言红；GREEN 10 文件／114 条全过；typecheck rc=0；4 条变异在副本里都打红了预言的判据。评审直接读过 `$SCRATCH` 里的 red／green／tsc／mut1 原始输出，与报告一致。
+- Task 2: complete (commits 06b6453..d85776b, review clean)
