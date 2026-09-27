@@ -225,3 +225,14 @@ Expected（落地后）：普查只剩 `capabilitySchema.test.ts:21`、`webFault
 - Task O4: minor (deferred): 两种情形没有判据：用量未知的估算 run 遇到 stop 时，照 spec §6.5.1 结算成 `settled-restartable`（组的 `usageUnknown` 仍然为真，不会当成 0）；已 prepared 的 `start-pending`／`unknown` 估算 run 走 `inspectUnderStop`。
 - 残留：`$SCRATCH/o4-mut`。
 - Task O4: complete (commits 55abc88..7fce7d8, review clean)
+
+### §3.13 Task O5 完成（Orca）
+
+- 提交：`test(control): an estimate runs end to end under real ccloop and fake claude, and its advice reaches the proposal`（9553ff3，BASE 8ed12b8）。
+- 实施席自报：`estimateE2E.test.ts` E1／E2／E3 3 过、0 skipped（真 ccloop 0bd781f ＋ fake claude），typecheck rc=0。
+- 变异 M-O5a：`driverRunIds` 去掉估算分支 ⇒ E1 红，红因是「估算 running；confirm confirmed；start 回 `estimate-in-flight`」。这就是 spec §1 推断的「claude 1M 导入后卡死」的实测。
+- 变异 M-O5b：`maxOutputTokens` 改成 1 ⇒ E1 只红在 `maxOutputTokensEnv` 那一行。
+- Ruling: 实施席改了 brief 字面范围之外的既有 helper `confirmSoft`（之前没有调用方），把 `handoffAtContextTokens` 从 null 改成回显 profile 声明的窗口。原因：只要窗口已知，confirm 就拒 null（`webService.ts:433` 的 `execution-policy-unrepresentable`）；评审确认这处改动不削弱 E1、不影响其他判据 — 若错：只影响测试 helper。
+- ⚠️ **产品问题，归人**：夹具与 Web 部署都常用「一个 profile 给所有角色」，estimator 要跑就得声明窗口（claude 1M），而 worker 共用同一个 profile，于是 confirm 强制操作者给一个数值 handoff 阈值，没法表达「不按上下文交接」。这是 agent 选择那一轮就有的不变式，本轮只是让它更容易撞上。本轮不改。
+- Task O5: minor (deferred): 计划文件 Part B 那一处 `handoffAtContextTokens: null` 字面量同样过不了 confirm（计划是已提交的文档，由终审或 handoff 记更正）。
+- Task O5: complete (commits 8ed12b8..9553ff3, review clean)
