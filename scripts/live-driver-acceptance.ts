@@ -17,19 +17,28 @@
 // usage: tsx scripts/live-driver-acceptance.ts --ccloop-bin <abs dist/cli.js> --output <new dir>
 //          (--codex <abs codex binary> --model <name> | --fake | --claude <abs claude binary> --model <name> | --fake-claude)
 //          [--group-tokens 300000] [--task-tokens 150000] [--task-attempts 1] [--active-ms 600000]
-//          [--call-usd 2] [--deadline-ms 900000] [--context-window 1000000] [--scenario single|conflict]
+//          [--call-usd 2] [--deadline-ms 900000] [--context-window 1000000] [--scenario single|conflict|deadline]
 //
 // --context-window sets the operator's contextWindow for the agent (claude: 1000000 is `--model <model>[1m]`, spelled
 // by ccloop). --scenario conflict runs two tasks that both append a line to the same file from the same base, so the
 // second to land conflicts and is reconciled by `ccloop run --agents` under the group's reconcile slot.
+//
+// --scenario deadline (claude kinds only; Orca claude stream usage (2026-09-27), spec §6.4): the one path that round
+// exists for, run end to end. One task writes five files one at a time, so its execute is still running once claude
+// has closed its first message; the script then issues handoff-stop with a deadline 2 s out, so ccloop cuts that
+// execute instead of waiting for it. The cut phase answers no tokenUsage, only the usage ccloop's runner observed in
+// the stream (observed-usage.json); Orca must book it (the run is not usage-unknown), park the run recoverable, and
+// the panel's resume must continue it to a landing. Every step reads what D1 in tests/control/agentSelectionE2E.test.ts
+// reads, and the checks fail -- not pass by accident -- if the execute finished before the deadline.
 //
 // Ruling review 2026-09-27 (paid claude round): --claude runs the real claude CLI. HOME is again NOT relocated (claude
 // reads its OAuth login from the keychain under the real HOME), but the installation's command isolates the call from
 // the person's own Claude Code setup and caps it in dollars (CLAUDE_ISOLATION below), and every CLAUDE* variable this
 // process inherited (a Claude Code session's messaging socket, session id, entrypoint) is removed before anything
 // starts, so the nested claude neither joins that session nor believes it runs inside one. scripts/claude-tee.mjs keeps
-// each call's raw `-p` envelope, whose total_cost_usd and cache counts the summary copies (ccloop keeps only
-// input/output tokens).
+// each call's raw `-p` output, whose total_cost_usd and cache counts the summary copies (ccloop keeps only
+// input/output tokens). Since Orca claude stream usage (2026-09-27) ccloop runs claude with
+// `--output-format stream-json`, so that output is NDJSON and the envelope is its last `type: "result"` line.
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
@@ -38,6 +47,7 @@ import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { canonicalBytes } from "../src/control/canonicalJson.js";
 import { resolveGroupSelections } from "../src/control/agentFreeze.js";
+import { readDriverRun } from "../src/control/executionDriver.js";
 import { readArchivedPlan, readBudgetProposal } from "../src/control/queries.js";
 import { assembleControlRuntime, type ControlRuntime } from "../src/panel/controlAssembly.js";
 import { controlRepoKey, resolveControlOptions } from "../src/panel/controlOptions.js";
@@ -74,13 +84,17 @@ if (existsSync(output)) throw new Error(`refusing an existing --output ${output}
 const groupTokens = Number(args["group-tokens"] ?? 300_000);
 const taskTokens = Number(args["task-tokens"] ?? 150_000);
 const deadlineMs = Number(args["deadline-ms"] ?? 900_000);
-const taskAttempts = Number(args["task-attempts"] ?? 1);
+// deadline: the continuation is a second attempt and session of the same task, so a grant of one leaves it nothing
+// and the task stays held (observed 2026-09-27 under --fake-claude); two is its default, an explicit value still wins.
+const taskAttempts = Number(args["task-attempts"] ?? (args.scenario === "deadline" ? 2 : 1));
 const activeMs = Number(args["active-ms"] ?? 600_000);
 const callUsd = String(args["call-usd"] ?? "2");
 const contextWindow = args["context-window"] === undefined ? undefined : Number(args["context-window"]);
 if (contextWindow !== undefined && (!Number.isSafeInteger(contextWindow) || contextWindow <= 0)) throw new Error("--context-window must be a positive integer");
 const scenario = args.scenario ?? "single";
-if (scenario !== "single" && scenario !== "conflict") throw new Error("--scenario is single or conflict");
+if (scenario !== "single" && scenario !== "conflict" && scenario !== "deadline") throw new Error("--scenario is single, conflict or deadline");
+// The deadline scenario reads what ccloop's claude runner observed in the stream; codex has no such file.
+if (scenario === "deadline" && kind !== "claude") throw new Error("--scenario deadline needs --claude or --fake-claude");
 /**
  * The real claude call, isolated from the person's own Claude Code setup: no user settings (so no hooks and no
  * plugins, which would also record this session), no MCP servers, no skills, no session written under ~/.claude,
@@ -136,7 +150,13 @@ g(repo, "commit", "-qm", "base");
 const marker = join(root, "codex-marker.json");
 const scriptPath = join(root, "codex-script.json");
 // The fakes' answers, keyed by task (the reconciliation's key is `reconcile-<self>-<other>`, whichever lands second).
-await writeFile(scriptPath, JSON.stringify(scenario === "single" ? { a: { files: { "answer.txt": "42\n" } } } : {
+// deadline: the execute answers only after 120 s but streams one closed message first (usageBeforeDelay), so it is
+// cut with observed usage; the fake keys the continuation run as `a#continuation`.
+const NUMBERS = ["one", "two", "three", "four", "five"];
+const numberFiles = Object.fromEntries(NUMBERS.map((word) => [`${word}.txt`, `${word}\n`]));
+await writeFile(scriptPath, JSON.stringify(scenario === "single" ? { a: { files: { "answer.txt": "42\n" } } } : scenario === "deadline" ? {
+  a: { files: numberFiles, delayMs: { execute: 120_000 }, usageBeforeDelay: true }, "a#continuation": { files: numberFiles },
+} : {
   a: { files: { "shared.txt": "base\nA\n" } }, b: { files: { "shared.txt": "base\nB\n" } },
   "reconcile-a-b": { files: { "shared.txt": "base\nA\nB\n" } }, "reconcile-b-a": { files: { "shared.txt": "base\nA\nB\n" } },
 }));
@@ -157,11 +177,16 @@ const installation = kind === "codex"
   : { kind: "claude", command: claudeCommand, version: versionOf(claudeCommand), configDir: null, timeoutMs: 600_000, killGraceMs: 5_000 };
 await writeFile(tablePath, JSON.stringify({ schema: "ccloop-agents-table-v1", installations: { [kind]: installation } }), { mode: 0o600 });
 
-type LiveTask = { taskId: string; file: string; goal: string; successCondition: string; check: string };
+type LiveTask = { taskId: string; files: string[]; goal: string; successCondition: string; check: string };
 const tasks: LiveTask[] = scenario === "single"
-  ? [{ taskId: "a", file: "answer.txt", goal: "Create a file named answer.txt at the repository root whose entire content is the characters 42 followed by one newline. Change no other file.", successCondition: "answer.txt holds exactly 42 and a newline", check: 'test "$(cat answer.txt)" = 42' }]
+  ? [{ taskId: "a", files: ["answer.txt"], goal: "Create a file named answer.txt at the repository root whose entire content is the characters 42 followed by one newline. Change no other file.", successCondition: "answer.txt holds exactly 42 and a newline", check: 'test "$(cat answer.txt)" = 42' }]
+  : scenario === "deadline"
+  ? [{ taskId: "a", files: Object.keys(numberFiles),
+    goal: "Create five files one.txt, two.txt, three.txt, four.txt and five.txt at the repository root, one at a time, each holding its own number word and a newline (one.txt holds one, two.txt holds two, and so on). Change no other file.",
+    successCondition: "each of one.txt ... five.txt holds exactly its own number word and a newline",
+    check: NUMBERS.map((word) => `test "$(cat ${word}.txt)" = ${word}`).join(" && ") }]
   : ["A", "B"].map((line) => ({
-    taskId: line.toLowerCase(), file: "shared.txt",
+    taskId: line.toLowerCase(), files: ["shared.txt"],
     goal: `Append one line containing exactly the single character ${line} to the end of shared.txt at the repository root. Keep every existing line unchanged and in its place. Change no other file.`,
     successCondition: `shared.txt still holds its existing lines and also a line that is exactly ${line}`,
     check: `grep -qx base shared.txt && grep -qx ${line} shared.txt`,
@@ -170,10 +195,10 @@ const taskIds = tasks.map((task) => task.taskId);
 const planTasks = [];
 for (const task of tasks) {
   const contract = {
-    objective: { taskId: task.taskId, goal: task.goal, successCondition: task.successCondition, nonGoals: [`changing any file other than ${task.file}`] },
-    context: { repoPath: repo, targetPaths: [task.file], relevantDocs: [], buildTestCommands: [task.check], constraints: [] },
+    objective: { taskId: task.taskId, goal: task.goal, successCondition: task.successCondition, nonGoals: [`changing any file other than ${task.files.join(", ")}`] },
+    context: { repoPath: repo, targetPaths: task.files, relevantDocs: [], buildTestCommands: [task.check], constraints: [] },
     executionPolicy: { autonomyLevel: "L2", maxAttempts: 1, perAttemptTimeoutMs: 420_000, totalRuntimeBudgetMs: 600_000, tokenBudget: taskTokens, worktreeRequired: true, partialOutcomeRecoveryWindowMs: 1_000 },
-    safetyPolicy: { allowlistPaths: [], denylistPaths: [], maxFilesTouched: 1, humanGateConditions: [] },
+    safetyPolicy: { allowlistPaths: [], denylistPaths: [], maxFilesTouched: task.files.length, humanGateConditions: [] },
     verification: { verifierType: "agent", requiredChecks: [task.check], rejectOn: ["failure"], evidenceRequired: [] },
     escalationAndExit: { escalationTargets: [], pauseOn: [], stopOn: [], terminalStates: ["succeeded", "blocked_waiting_human", "exhausted", "cancelled", "failed"] },
   };
@@ -221,6 +246,24 @@ const workItem = (runtime: ControlRuntime, taskId: string) =>
   JSON.parse(String(runtime.store.db.prepare("SELECT body FROM work_items WHERE group_id='g' AND id=?").get(taskId)!.body));
 const allDone = (runtime: ControlRuntime): boolean => taskIds.every((id) => workItem(runtime, id).status === "done");
 
+const blocked = (runtime: ControlRuntime): boolean => workRuns(runtime).some((run) => run.body.state === "blocked");
+const settledAll = (runtime: ControlRuntime): boolean => {
+  const runs = workRuns(runtime);
+  return allDone(runtime) && runs.length > 0 && runs.every((run) => run.body.drive?.cleanedUp === true);
+};
+const requestState = (runtime: ControlRuntime, requestId: string): string =>
+  String(runtime.store.db.prepare("SELECT state FROM handoff_requests WHERE id=?").get(requestId)!.state);
+/** deadline: the first work run's execute observation, once it holds a closed message (D1's `inExecute`, observed instead of scripted). */
+const closedObservation = (): { path: string; total: unknown } | null => {
+  for (const path of findEvidence("observed-usage.json").filter((file) => /\/claude\/1\/execute\/call-[^/]+\/observed-usage\.json$/.test(file))) {
+    try {
+      const observed = JSON.parse(readFileSync(path, "utf8")) as { openMessage?: unknown; total?: unknown };
+      if (observed.openMessage === false) return { path, total: observed.total };
+    } catch { /* written by rename, but a foreign or partial file is simply not yet the answer */ }
+  }
+  return null;
+};
+
 const checks: Record<string, boolean> = {};
 const summary: Record<string, unknown> = { mode: isFake ? "fake" : "live", kind, scenario, contextWindow: contextWindow ?? null, agents: null as unknown, groupTokens, taskTokens, taskAttempts, activeMs, deadlineMs, installationCommand: installation.command, installationVersion: installation.version, startedAt: new Date().toISOString(), root };
 const runtime = await assembleControlRuntime({ control, repos, epoch: "epoch-live-1", env });
@@ -231,6 +274,9 @@ const runsRoot = `${runtime.store.stateDir}.runs`;
 const evidenceRoots = [runsRoot, `${runtime.store.stateDir}.workspaces`];
 const findEvidence = (name: string): string[] => evidenceRoots.flatMap((dir) => findAll(dir, name));
 let timedOut = false;
+let firstRunId: string | null = null;
+let observedPath: string | null = null;
+let handoffState: string | null = null;
 try {
   await runtime.recover();
   const imported = await runtime.service.importPlan(raw(runtime, "import", "import-plan", { groupId: "g", repoId, planId: "plan" }));
@@ -271,13 +317,51 @@ try {
   runtime.startPump(200);
 
   const deadline = Date.now() + deadlineMs;
-  for (;;) {
-    const runs = workRuns(runtime);
-    if (runs.some((run) => run.body.state === "blocked")) break;
-    if (allDone(runtime) && runs.length > 0 && runs.every((run) => run.body.drive?.cleanedUp === true)) break;
-    if (Date.now() > deadline) { timedOut = true; break; }
-    await new Promise((r) => setTimeout(r, 1000));
+  /** Polls `done` until it holds (true), a run is blocked or the work already settled (false), or the watchdog fires. */
+  const waitFor = async (done: () => boolean, pollMs: number): Promise<boolean> => {
+    for (;;) {
+      if (done()) return true;
+      if (blocked(runtime) || settledAll(runtime)) return false;
+      if (Date.now() > deadline) { timedOut = true; return false; }
+      await new Promise((r) => setTimeout(r, pollMs));
+    }
+  };
+  let settle = true;
+  if (scenario === "deadline") {
+    settle = false;
+    // Stop only once claude has closed a message inside execute, so the cut phase has usage to report.
+    if (await waitFor(() => closedObservation() !== null, 200)) {
+      const observed = closedObservation()!;
+      observedPath = observed.path;
+      firstRunId = workRuns(runtime)[0]!.runId;
+      const stopAt = Date.now();
+      summary.stopAt = { at: new Date(stopAt).toISOString(), observedTotal: observed.total, observedPath: observed.path, runId: firstRunId };
+      const stopped = await runtime.service.handoffStop(raw(runtime, "stop", "handoff-stop", { handoffDeadlineAt: new Date(stopAt + 2_000).toISOString() }));
+      if ("error" in stopped || stopped.result.kind !== "handoff-stopped") throw new Error(`handoff-stop refused: ${JSON.stringify(stopped)}`);
+      const [requestId] = stopped.result.requestIds;
+      summary.handoffRequestIds = stopped.result.requestIds;
+      if (requestId !== undefined) {
+        await waitFor(() => ["settled-recoverable", "settled-unrecoverable", "outcome-unknown"].includes(requestState(runtime, requestId)), 200);
+        handoffState = requestState(runtime, requestId);
+        summary.handoffRequestState = handoffState;
+        summary.handoffSettledMs = Date.now() - stopAt;
+      }
+      if (handoffState === "settled-recoverable") {
+        // The panel's rule (web/src/ControlGroupView.tsx `continuableRuns`), as D1's panelSelections applies it.
+        const view = readControlGroup(runtime.store, runtime.epoch, "g");
+        const selections = view.runs.flatMap((run) => {
+          if (run.taskId === null || run.continuable !== true) return [];
+          const checkpoint = view.checkpoints.find((candidate) => candidate.runId === run.runId && candidate.state !== "unknown");
+          return checkpoint ? [{ taskId: run.taskId, predecessorRunId: run.runId, checkpointId: checkpoint.checkpointId }] : [];
+        });
+        summary.resumeSelections = selections;
+        const resumed = await runtime.service.resumeFromHandoff(raw(runtime, "resume", "resume-from-handoff", { selections }));
+        summary.resumed = "error" in resumed ? resumed.error : resumed.result.kind;
+        settle = !("error" in resumed);
+      }
+    }
   }
+  if (settle) await waitFor(() => false, 1000);
 } finally {
   summary.shutdown = await runtime.shutdown().catch((e: unknown) => `threw: ${String(e)}`);
   // Outer watchdog: whatever the ending, no codex process group ccloop registered may outlive this script.
@@ -296,8 +380,12 @@ summary.ledger = ledger;
 const delivered = (id: string): unknown => runtime.store.db.prepare("SELECT delivered FROM outbox WHERE id=?").get(id);
 
 // Usage copied from ccloop's retained evidence. codex: the turn.completed row of each provider call. claude: the
-// runner's answer in stdout.json, whose tokenUsage is input + output as ccloop books it.
-const calls = kind === "codex"
+// runner's answer in stdout.json, whose tokenUsage is input + output as ccloop books it; a call cut before it answered
+// (no tokenUsage) books what the runner observed in the stream, observed-usage.json's total (Orca claude stream usage
+// (2026-09-27), spec §6.4), marked `observed`. `aborted` and `endedAt` come from ccloop's outcome.json, so the
+// deadline scenario can order the continuation after the cut.
+type Call = { role: string; phase: string; file: string; usage: unknown; total: number | null; observed?: boolean; aborted?: boolean; endedAt?: number };
+const calls: Call[] = kind === "codex"
   ? findEvidence("events.jsonl").filter((file) => file.includes("/codex/")).map((file) => {
     const completed = readFileSync(file, "utf8").split("\n").filter((line) => line.trim()).map((line) => JSON.parse(line)).filter((row) => row.type === "turn.completed");
     const usage = completed.at(-1)?.usage ?? null;
@@ -309,15 +397,26 @@ const calls = kind === "codex"
     let answer: { tokenUsage?: number; usageEvidence?: unknown } | null = null;
     try { answer = text.trim() === "" ? null : JSON.parse(text); } catch { answer = null; }
     const phase = file.split("/claude/")[1]!.split("/")[1]!;
-    return { role: file.includes("/reconcile-") ? "reconcile" : "worker", phase, file, usage: answer?.usageEvidence ?? null, total: typeof answer?.tokenUsage === "number" ? answer.tokenUsage : null };
+    const dir = dirname(file);
+    const outcomePath = join(dir, "outcome.json");
+    const outcome = existsSync(outcomePath) ? JSON.parse(readFileSync(outcomePath, "utf8")) as { reason?: string } : null;
+    const base = { role: file.includes("/reconcile-") ? "reconcile" : "worker", phase, file, aborted: outcome?.reason === "aborted", endedAt: existsSync(outcomePath) ? statSync(outcomePath).mtimeMs : undefined };
+    if (typeof answer?.tokenUsage === "number") return { ...base, usage: answer.usageEvidence ?? null, total: answer.tokenUsage, observed: false };
+    let observed: { total?: unknown } | null = null;
+    try { observed = JSON.parse(readFileSync(join(dir, "observed-usage.json"), "utf8")); } catch { observed = null; }
+    return { ...base, usage: observed, total: typeof observed?.total === "number" ? observed.total : null, observed: observed !== null };
   });
-// Claude's own report per call (scripts/claude-tee.mjs): dollars and cache counts ccloop does not keep.
+// Claude's own report per call (scripts/claude-tee.mjs): dollars and cache counts ccloop does not keep. The kept
+// output is stream-json NDJSON; the envelope is its LAST `type: "result"` line. A call with none (cut before it
+// answered) reported no dollars: it is kept as aborted with a null cost, never estimated.
+type Envelope = { type?: string; total_cost_usd?: number; usage?: Record<string, unknown>; modelUsage?: unknown; is_error?: boolean; subtype?: string; num_turns?: number; duration_ms?: number };
 const rawClaude = existsSync(claudeRaw) ? readdirSync(claudeRaw).filter((name) => !name.endsWith(".argv.json")).sort().map((name) => {
-  const text = readFileSync(join(claudeRaw, name), "utf8");
-  try {
-    const envelope = JSON.parse(text) as { total_cost_usd?: number; usage?: Record<string, unknown>; modelUsage?: unknown; is_error?: boolean; subtype?: string; num_turns?: number; duration_ms?: number };
-    return { name, subtype: envelope.subtype ?? null, isError: envelope.is_error ?? null, totalCostUsd: envelope.total_cost_usd ?? null, usage: envelope.usage ?? null, modelUsage: envelope.modelUsage ?? null, numTurns: envelope.num_turns ?? null, durationMs: envelope.duration_ms ?? null };
-  } catch { return { name, unparsed: text.slice(0, 500) }; }
+  const events = readFileSync(join(claudeRaw, name), "utf8").split("\n").flatMap((line): Envelope[] => {
+    try { const event = JSON.parse(line) as unknown; return event !== null && typeof event === "object" && !Array.isArray(event) ? [event as Envelope] : []; } catch { return []; }
+  });
+  const envelope = events.filter((event) => event.type === "result").at(-1);
+  if (envelope === undefined) return { name, aborted: true, totalCostUsd: null, lines: events.length };
+  return { name, aborted: false, subtype: envelope.subtype ?? null, isError: envelope.is_error ?? null, totalCostUsd: envelope.total_cost_usd ?? null, usage: envelope.usage ?? null, modelUsage: envelope.modelUsage ?? null, numTurns: envelope.num_turns ?? null, durationMs: envelope.duration_ms ?? null };
 }) : [];
 summary.claudeRawCalls = rawClaude;
 // The --model each claude call actually received, from the tee's argv files (the agent's own record, not Orca's).
@@ -327,9 +426,10 @@ const claudeModels = existsSync(claudeRaw) ? readdirSync(claudeRaw).filter((name
   return index < 0 ? null : argv[index + 1] ?? null;
 }) : [];
 summary.claudeArgvModels = claudeModels;
-// Null, not zero, when no envelope was kept (fake modes, or a call that never answered).
-summary.claudeReportedUsd = rawClaude.length > 0 && rawClaude.every((call) => "totalCostUsd" in call && typeof call.totalCostUsd === "number")
-  ? rawClaude.reduce((sum, call) => sum + ("totalCostUsd" in call ? Number(call.totalCostUsd) : 0), 0) : null;
+// The sum over the calls that reported a cost -- null, not zero, when none did (fake modes) -- and how many did not.
+const costed = rawClaude.filter((call) => typeof call.totalCostUsd === "number");
+summary.claudeReportedUsd = costed.length > 0 ? costed.reduce((sum, call) => sum + Number(call.totalCostUsd), 0) : null;
+summary.claudeCallsWithoutCost = rawClaude.length - costed.length;
 summary.providerCalls = calls;
 const ccloopTotal = calls.reduce((sum, call) => sum + (call.total ?? 0), 0);
 summary.ccloopReportedTokens = ccloopTotal;
@@ -340,29 +440,59 @@ summary.ccloopExecutionPolicies = policies;
 // Every contract ccloop received -- the reconciliation's included -- is within the per-task cap.
 checks.ccloopPolicyCapped = policies.length >= taskIds.length && policies.every((policy) => policy.tokenBudget <= taskTokens && policy.maxAttempts <= taskAttempts);
 checks.notTimedOut = !timedOut;
-checks.runSettled = runs.length >= taskIds.length && runs.every((run) => run.body.state === "settled");
+// deadline: the cut run parks settled-recoverable (D1); every other run -- the continuation -- settles.
+checks.runSettled = runs.length >= taskIds.length && runs.every((run) => run.body.state === (run.runId === firstRunId ? "settled-recoverable" : "settled"));
 checks.workDone = allDone(runtime);
 checks.cleanedUp = runs.length > 0 && runs.every((run) => run.body.drive?.cleanedUp === true);
-const landedFile = tasks[0]!.file;
-let landed: string | null = null;
-try { landed = execFileSync("git", ["show", `refs/heads/orca/g:${landedFile}`], { cwd: repo, encoding: "utf8" }); } catch { landed = null; }
-summary.landedContent = landed;
+const landedFiles = tasks[0]!.files;
+const landedOf = (file: string): string | null => {
+  try { return execFileSync("git", ["show", `refs/heads/orca/g:${file}`], { cwd: repo, encoding: "utf8" }); } catch { return null; }
+};
+const landed = landedOf(landedFiles[0]!);
+summary.landedContent = scenario === "deadline" ? Object.fromEntries(landedFiles.map((file) => [file, landedOf(file)])) : landed;
 // conflict: the base line first, then A and B in either order, nothing else (a reconciliation leaving markers is refused by Orca).
-checks.landedBytes = scenario === "single" ? landed === "42\n" : landed !== null && ["base\nA\nB\n", "base\nB\nA\n"].includes(landed);
-checks.onlyTargetChanged = (() => { try { return g(repo, "diff", "--name-only", "main", "refs/heads/orca/g") === landedFile; } catch { return false; } })();
+checks.landedBytes = scenario === "single" ? landed === "42\n"
+  : scenario === "deadline" ? landedFiles.every((file) => landedOf(file) === numberFiles[file])
+  : landed !== null && ["base\nA\nB\n", "base\nB\nA\n"].includes(landed);
+checks.onlyTargetChanged = (() => { try { return g(repo, "diff", "--name-only", "main", "refs/heads/orca/g") === [...landedFiles].sort().join("\n"); } catch { return false; } })();
 const reconciled = runs.filter((run) => run.body.drive?.reconcile != null);
 summary.reconciled = reconciled.map((run) => ({ runId: run.runId, task: run.task, reconcile: run.body.drive.reconcile }));
-checks.reconciledAsExpected = scenario === "single" ? reconciled.length === 0 : reconciled.length === 1 && reconciled[0]!.body.drive.reconcile.outcome === "succeeded";
+checks.reconciledAsExpected = scenario !== "conflict" ? reconciled.length === 0 : reconciled.length === 1 && reconciled[0]!.body.drive.reconcile.outcome === "succeeded";
 checks.humanUntouched = JSON.stringify(human()) === JSON.stringify(humanBefore);
 checks.dispatchNotBlocked = runtime.store.dispatchBlocked === false;
-checks.published = runs.length > 0 && runs.every((run) => run.body.drive?.publishError === null
-  && JSON.stringify(delivered(`projection:${run.body.checkpointId}`)) === JSON.stringify({ delivered: 1 })
-  && JSON.stringify(delivered(`task-handoff:g:${run.task}:${run.body.checkpointId}`)) === JSON.stringify({ delivered: 1 }));
+// deadline: the run parked recoverable publishes no projection or task handoff for its checkpoint (the continuation's
+// landing does), so for it only the publish error is checked.
+checks.published = runs.length > 0 && runs.every((run) => run.body.drive?.publishError === null && (run.runId === firstRunId
+  || JSON.stringify(delivered(`projection:${run.body.checkpointId}`)) === JSON.stringify({ delivered: 1 }))
+  && (run.runId === firstRunId || JSON.stringify(delivered(`task-handoff:g:${run.task}:${run.body.checkpointId}`)) === JSON.stringify({ delivered: 1 })));
 // Workers: plan, execute, verify per task. The reconciliation: none in single, at least one call in conflict (its
 // phases are recorded, not predicted).
 const phasesOf = (role: string) => calls.filter((call) => call.role === role).map((call) => call.phase).sort();
-checks.providerCalls = JSON.stringify(phasesOf("worker")) === JSON.stringify(taskIds.flatMap(() => ["execute", "plan", "verify"]).sort())
-  && (scenario === "single" ? phasesOf("reconcile").length === 0 : phasesOf("reconcile").length > 0);
+if (scenario === "deadline") {
+  // Recorded, not predicted: at least one execute was cut, and after the (first) cut a plan, an execute and a verify ran.
+  const workers = calls.filter((call) => call.role === "worker");
+  const cut = workers.filter((call) => call.phase === "execute" && call.aborted === true).map((call) => call.endedAt ?? Infinity).sort((x, y) => x - y)[0];
+  const after = new Set(workers.filter((call) => cut !== undefined && call.aborted !== true && (call.endedAt ?? -Infinity) > cut).map((call) => call.phase));
+  checks.providerCalls = cut !== undefined && ["plan", "execute", "verify"].every((phase) => after.has(phase)) && phasesOf("reconcile").length === 0;
+} else {
+  checks.providerCalls = JSON.stringify(phasesOf("worker")) === JSON.stringify(taskIds.flatMap(() => ["execute", "plan", "verify"]).sort())
+    && (scenario === "single" ? phasesOf("reconcile").length === 0 : phasesOf("reconcile").length > 0);
+}
+if (scenario === "deadline") {
+  // The execute the stop was aimed at did not finish: ccloop's own outcome for that call says it was aborted.
+  const outcomePath = observedPath === null ? null : join(dirname(observedPath), "outcome.json");
+  checks.executeWasCut = outcomePath !== null && existsSync(outcomePath) && JSON.parse(readFileSync(outcomePath, "utf8")).reason === "aborted";
+  // What Orca booked for the cut run (D1): every work usage event known, and the last above the first.
+  const workUsage = firstRunId === null ? [] : runtime.store.db.prepare("SELECT body FROM usage_events WHERE run_id=? ORDER BY seq").all(firstRunId)
+    .map((row) => JSON.parse(String(row.body)) as { bucket: string; cumulative: { tokens: number } | null })
+    .filter((event) => event.bucket === "work");
+  summary.firstRunWorkUsage = workUsage;
+  checks.observedUsageBooked = workUsage.length >= 2 && workUsage.every((event) => event.cumulative !== null)
+    && workUsage.at(-1)!.cumulative!.tokens > workUsage[0]!.cumulative!.tokens;
+  checks.requestRecoverable = handoffState === "settled-recoverable";
+  const parked = firstRunId === null ? null : readDriverRun(runtime.store, firstRunId) as unknown as { unknown?: { work?: unknown } };
+  checks.unknownWorkFalse = parked?.unknown?.work === false;
+}
 checks.everyCallHasUsage = calls.length > 0 && calls.every((call) => call.total !== null && call.total > 0);
 checks.ledgerKnown = ledger.usageUnknown === false;
 checks.ledgerMatchesCcloop = ledger.used.tokens === ccloopTotal;
