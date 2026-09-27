@@ -89,11 +89,15 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 
 ✅ *** **agent 选择一轮（2026-09-26，会话 `75ec878e` 做 T1–T15、会话 `ab5a693c` 做 T16／T17／终审）做完了。** *** 其后会话 `8c6302e0` 裁了终审 I-2、做了夹具层审计；会话 `43e3e1d8`（2026-09-27）完成人对 R1–R30 的逐条审、落地 R1／R3／R7／R17／R28，并**第一次跑了付费真 claude**。细节与下一步见 §四 4.0。 会话 `94b09282`（同日）让人审完改写判据，并落地了付费轮四个发现的裁定（B1–B3 修，B4 登记）。会话 `4d2e426e`（同日）删了 `~/.orca` 的夹具残留，并付费跑了真 claude 的 `[1m]` 与两任务解冲突（台账 §19／§20）。随后开了 **claude 中止前观测用量（stream-json）** 一轮：会话 `4d2e426e` 落了 Task 1–2，会话 `5b01dbd9` 落了 Task 3–6、终审与修复，**本轮已收口、人已审过，真 claude 下付费跑通一次**，见 §四 4.0。
 
+✅ *** **面板 UI 重做一轮（2026-09-27，会话 `a50f4d80` 做计划 Task 0–6 与终审修复，会话 `f8281a60` 做人裁后续）已由人 merge 进 main。** *** 细节见 §四 4.0.a。
+
 **还不能说的**：*** **「Web 派活可用」「claude 可用」「分层选择可用」都不是事实。** *** 能说的只有：**真 codex 下单任务主链跑通过一次**（2026-09-25，会话 `af3dc0d3`，
 请求模型 gpt-6-luna，服务层不含 HTTP，n＝1；台账 `.superpowers/sdd/2026-09-25-live-acceptance/progress.md` §5 是唯一可引的表述）；**真 claude 下单任务主链跑通过一次**（2026-09-27，会话 `43e3e1d8`，claude 2.1.283、请求模型 claude-opus-5-5、隔离参数、n＝1；台账 `.superpowers/sdd/2026-09-26-agent-selection/progress.md` §14 是唯一可引的表述）；**真 claude 下 1M 窗口单任务、两任务冲突经 `ccloop run --agents` 解开各跑通过一次**（2026-09-27，会话 `4d2e426e`，各 n＝1；同一台账 §20 是唯一可引的表述）。
 依赖、崩溃恢复、面板 HTTP、strict 组、④ handoff、⑤ 预估链、混 kind 都没在真 agent 下验过；冲突／解冲突只在真 claude 下跑过一次（两任务、一处冲突），真 codex 下没跑过。**驱动环只在 port `configured` 时挂；未配置时行为逐字节同前。**
 
-**现行基线（会话 `5b01dbd9` 收尾，取代下面 `94b09282` 那一版）**：只抄工具报数，细节在台账 `.superpowers/sdd/2026-09-27-claude-stream-usage/progress.md` §3 末尾。env 同下（夹具表 fake codex `integration`、HOME＋四个 XDG 根改道），两份都是新 clone，门跑期间没有任何一席在里面做变异。
+**Orca 现行基线（会话 `f8281a60`，合并前预演，取代下面 `5b01dbd9` 那一版里的 Orca 一行）**：内容＝只读 `git merge-tree --write-tree main ui/panel-redesign` 的结果树（分支尖端在主题行 `docs(handoff): Minor e landed; …` 那一笔；其后分支上只多了一笔文档）。env 同下，树 `git archive` 进 clone：web build／typecheck／`--ws check`（web 24 文件／134 条）／`verify:panel`（step 0–14 PASS）RC 0；**222 文件／2009 条全过**、0 pending；真 `~/.orca` 前后都不存在。台账 `.superpowers/sdd/2026-09-27-panel-ui-redesign/progress.md` 末节。
+
+**ccloop 现行基线、Orca 上一版基线（会话 `5b01dbd9` 收尾，取代下面 `94b09282` 那一版）**：只抄工具报数，细节在台账 `.superpowers/sdd/2026-09-27-claude-stream-usage/progress.md` §3 末尾。env 同下（夹具表 fake codex `integration`、HOME＋四个 XDG 根改道），两份都是新 clone，门跑期间没有任何一席在里面做变异。
 - ccloop（内容＝主题行 `test(claude): wait for the fake's message to close before aborting, and pin each branch of the line cap` 那一笔）：typecheck／build RC 0；**88 文件／1028 条、1025 过、3 红**，`check-known-reds` **RC 0**（名单 14 个名字；红的是 `stopProof` 和名单内两条负载 flake）。
 - Orca（内容＝主题行 `test(control): continue a claude run cut at the handoff deadline, …` 那一笔）：web build／typecheck／web tsc RC 0；**220 文件／2004 条、2003 过、1 红、0 pending**；web 21 文件／113 条全过；真 `~/.orca` 前后 `stat` 相同。唯一的红是 `driverRecovery` 那条已登记的负载 flake：高负载下单文件**连红 3 次**，负载降下来后同一命令 3/3 过（判别过程在台账）。
 
@@ -116,6 +120,7 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 ⇒ 看到它红：**先单文件重跑**，绿了就不是回归。未验证的推测：判据连发两次 SIGTERM，第二次若经 tsx 转发时晚于
 `src/panel/server.ts` 在 `closed` 之后摘掉处理器，内层 node 按默认处置死，tsx 转成 143。
 （已排除「信号先于处理器安装」：处理器在 `src/cli.ts` 打印 ready 之前同步装好。）
+2026-09-27 会话 `f8281a60` 在全量里又见一次（同样 143），单文件重跑 3/3 绿。
 
 ⚠️ **判别式**：看到红，先问「是不是上面那条 flake」，是就单文件重跑。缝 B 的机械判定器（全套 json ⇒ smoke 5 条全过、
 失败 ⊆ {那条 flake}、0 pending）代码全文在同一份计划的 Task 4 Step 1（可直接抄）。
@@ -154,6 +159,15 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 - **归人**：推送（先 ccloop、再 Orca、再 ccmem）；下一轮排什么（更多真 claude 形状、⑤ 预估链、strict 组、上面的挂账，§九）。
 - **执行规矩**：授权都不延续。付费 claude、真 codex、改既有判据、删用户数据、杀进程，每一次都要人重新开口。
 - ✅ **更早的一轮（agent 选择）已收口，不要重做**：结论在 §三，过程在台账 `.superpowers/sdd/2026-09-26-agent-selection/progress.md` §13–§20。
+
+### 4.0.a 面板 UI 重做（2026-09-27 会话 `a50f4d80`／`f8281a60`，**已并入 main，不要重做**）
+
+- **做成了什么**：左侧导航＋四个分区（Chains／Task control／Decisions／Metrics，按 hash 寻址，默认 Decisions）；决策区左列表、右详情，列表行带 question 摘要（两行截断，`null` 显示占位）、按 kind／scope／repo 筛选；主题跟随系统深浅、可手动切（按浏览器存）；详情所在的行被筛掉或已审掉时，详情区顶部有提示；列表日期是浏览器本地日期。
+- **材料**：spec `docs/superpowers/specs/2026-09-27-panel-ui-redesign-design.md`（§1 是人裁 U1–U5 原话）；计划 `docs/superpowers/plans/2026-09-27-panel-ui-redesign.md`；台账 `.superpowers/sdd/2026-09-27-panel-ui-redesign/progress.md`（全部 `Ruling:`、变异、两轮全量）；被推翻的旧规定见 `docs/superpowers/specs/2026-09-09-panel-design.md` 末尾 ERRATUM（列表不带 question 被 U1 推翻）。过程交接在 `docs/handoff/handoff_ui.md`，结论都已并入本节、§6.19、§9.0d。
+- 🔴 *** **最承重的约束：四个分区始终挂载，非当前区只由 `styles.css` 的 `.section-pane:not([data-active="true"]) { display: none }` 隐藏** *** —— 不许条件渲染、不许 `hidden` 属性。变异实测：改成只渲染当前区 ⇒ `agentPreviewRefresh`＋`controlCommandRecovery` 共 16 条既有判据红。jsdom 不加载 CSS ⇒ 可见性由 `web/tests/shell.test.tsx`（钉 `data-active`）与 `web/tests/styles.test.ts`（直接读样式表）守。
+- 🔴 **`orca panel` 的 ready 行一个字节都不能改**（`scripts/verify-panel.ts` 的正则、`tests/panel/endToEnd.test.ts` 钉着，`controlShutdown` 按子串等它）。给人看的「在浏览器打开这个 url」提示写在 **stderr**，stdout 仍只有一行（`tests/panel/readyHint.test.ts`）。`/` 不要 token（服务端注入 `index.html`），只有 `/api/*` 验 `x-orca-token`。
+- **`DecisionListRow.question` 前后端都必填**（`string | null`，读不到台账 ⇒ `null`，列表不失败）；`projectForList` 展开进带类型的字面量，漏写即编译失败。
+- **诚实的表述**：只在数据目录改道的真面板上用 Playwright 看过深浅两套截图；**人的视觉验收还没做**。本轮只换了布局与样式，Chains／Task control 的交互一行没动 —— 要改它们的交互是新一轮，先 brainstorming。
 
 ### 4.0.0 ④（2026-09-25 会话 `e5f56bfe`，**已做完，不要重做**；原 4.0 的结论保留于此）
 
@@ -658,6 +672,18 @@ ccloop 的 I-2 里，spec 第一版把「渲染成 `JSON.stringify`」贴在那�
 - 成本（工具报数）：付费 claude $0.152572（一次 plan 调用）；无外派子代理；会话自身最终美元数工具未给（中途钩子报过约 $13.91）。
 
 
+### 6.19 面板 UI 重做一轮（2026-09-27，会话 `a50f4d80`／`f8281a60`）新栽的
+
+- 🔴 **在 worktree 里改代码时，别同时在同一棵树上跑全量**：第一次基线就因为和编辑并发而作废。基线一律在干净 clone 上跑。
+- 🔴 **按子串做锚点的替换会误中更深缩进的同形行**（`"      ))}\n"` 是 `"              ))}\n"` 的后缀）⇒ 截代码块用**整行相等**匹配。
+- 🔴 *** **`Record`＋`as` 构造出来的对象，类型里的必填字段是空话**：`question` 收紧为必填后根 tsc 仍是 0。 *** ⇒ 展开进带类型的字面量，再用「删掉这个字段」的变异确认 tsc 真的红。
+- **类型变化会波及未授权的测试**（字面量、`webParity` 的互赋值检查）⇒ 动共享类型前先两侧 `tsc`，再决定改类型还是请人授权改测试；只放宽一侧会被 `webParity` 打红。
+- **改既有判据前，先看它在新行为下真的红**（同文件其余判据绿），这是改写必要性的证据。
+- **jsdom 不加载 CSS** ⇒ 任何只靠 CSS 实现的行为，都要有一条直接读样式表的判据。
+- **调用方给的「没有」是 `null` 还是 `undefined`，先读调用方再写条件**：App 在详情加载中传 `null`，按 `=== undefined` 写的提示会在加载时误出。
+- **Tier 0 闸门也拦 scratch clone 里对名为 `main` 的分支做 `git merge`，以及含 `reset --hard` 或解析不了的 `cd $VAR` 的组合命令**（不重试、不换说法）⇒ 合并预演用只读 `git merge-tree --write-tree`，把结果树 `git archive` 进新 clone 跑全量；路径写字面量。
+- **人手动起面板时，`ORCA_*=…` 单独成行、既没 `export` 也没行尾 `\`，就传不进子进程**，结果写进了真 `~/.orca`（已由人决定删除，挪进了废纸篓）。
+
 ## 七、工具骗法（**每一条都真栽过**）
 
 ### 7.1 rtk（**六种**）
@@ -845,7 +871,7 @@ Orca 要求排序去重的四值枚举 ⇒ 将来非 null 且写错时 Orca 整�
 ### 8.5 基线的演进（**每一个都作废前一个；只有最后一行现行**）
 
 `95/561 → 95/566 → 100/606 → 100/608 → 107/663 → 107/664 → 111/810 → 129/1074 →
-129/1075 → 172/1516 → 180/1618 → 183/1622 → 184/1636 → 195/1756 → ?/1851 → 220/2003`（195/1756 是执行驱动轮之后；?/1851 是 ④ 轮收口的全量 vitest，全绿，文件数没单独记；220/2003 是会话 `94b09282` 收尾的全新 clone，全过）。**现行值见 §三。**
+129/1075 → 172/1516 → 180/1618 → 183/1622 → 184/1636 → 195/1756 → ?/1851 → 220/2003 → 222/2009`（222/2009 是会话 `f8281a60` 对 UI 合并结果树的预演，全过；195/1756 是执行驱动轮之后；?/1851 是 ④ 轮收口的全量 vitest，全绿，文件数没单独记；220/2003 是会话 `94b09282` 收尾的全新 clone，全过）。**现行值见 §三。**
 ⚠️ **引用任何基线数前现测。** 历史值只用来判断「一份旧文档有多旧」。
 
 ### 8.6 成本量级对照（**只抄工具报数，一个自估都没有**）
@@ -940,6 +966,14 @@ Orca 要求排序去重的四值枚举 ⇒ 将来非 null 且写错时 Orca 整�
   - `orca run` 解冲突时「信号取消是否仍发布 attempt ref」没量；
   - 本轮之前就弱的判据：ccloopProtocol 的 SIGKILL 两行、controlReadApi 的键数与 `objective.taskId`、controlConfigPort 的 `defaults`。
 - 更正（本次重写时）：旧版挂账里「`versionOf` 无超时」自 R28 起已不成立（10 s 超时）；「`command` 改了已开跑的组永久无出路」自 R1 起已不成立。
+
+### 9.0d 面板 UI 重做一轮登记、归人的（2026-09-27，会话 `a50f4d80`／`f8281a60`）
+
+- **人的视觉验收**还没做。
+- **四条被改写的既有判据尚未人审**：名单在计划 Global Constraints，每条旁有 `REWRITTEN … U1 … U4 … a50f4d80` 注释。
+- **worktree 与 `ui/panel-redesign` 分支删不删**：worktree 目录在会话 `a50f4d80` 的 scratchpad 下（`git worktree list` 查），重启会丢目录；删 worktree／分支、`git worktree prune` 都归人。
+- **真 `~/.orca` 的旧数据**（人手动起面板写的 `reviews.jsonl`＋`control/orca-e0c92460/`）已挪到 `~/.Trash/orca-real-data-2026-09-27`，清不清废纸篓归人。
+- **控制器替人做的决定**：台账的 `Ruling:` 行（含跳过 `orca level` hook 的 `checkpoint write` —— 本批因此没有 `.orca/checkpoints` 记录）。
 
 ### 9.1 G1 缝 A 之后归人的（**2026-09-24 替换上一版「执行前必须由人给的」——那些授权都已给出并用完**）
 
