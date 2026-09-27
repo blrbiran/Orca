@@ -1,0 +1,43 @@
+{
+  "v": 1,
+  "runId": "orca-dev-f341f05f",
+  "runtime": "claude-code",
+  "sessionRef": "f341f05f-84e7-49c6-b186-2e7b5855627a",
+  "writtenAt": "2026-09-27T16:21:30.089Z",
+  "head": "1447cd3438e2e1f32d3cb7648ee9c3cb1353f453",
+  "level": {
+    "kind": "reading",
+    "level": 333616,
+    "windowTokens": 1000000,
+    "t1": 330000,
+    "t2": 450000,
+    "band": 1
+  },
+  "next": [
+    "merge ccloop/orca plan drafts into docs/superpowers/plans/2026-09-27-single-call-estimate.md, self-review, commit",
+    "apply spec corrections (F3 frozen slots spread, zero handoff event, portFor/A1 by phase, prompt-only hash compare)",
+    "execute plan subagent-driven: ccloop T1-T5 then Orca O1-O7, then mutations, gates, ledger, three handoffs"
+  ],
+  "open": [
+    "context crossed T1 (330k) under human ruling S8 (context size not a concern this session); recorded, not silent"
+  ],
+  "awaitingHuman": [
+    {
+      "kind": "named-authorization",
+      "what": "S6 blanket authorization used for ccloop criteria listed in ledger; ccloop Rule 15(a) wants per-test naming — human reviews at the end"
+    },
+    {
+      "kind": "irreversible",
+      "what": "push of ccloop then Orca then ccmem"
+    }
+  ],
+  "measurements": [
+    {
+      "command": "/usr/bin/git -C /Users/biran/code/skills/loop/Orca log --oneline -5",
+      "exitCode": 0,
+      "commit": "1447cd3438e2e1f32d3cb7648ee9c3cb1353f453",
+      "observedAt": "2026-09-27T16:21:30.039Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-f341f05f-u21F64/1.txt"
+    }
+  ]
+}
