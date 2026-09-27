@@ -17,7 +17,9 @@ import { profileSnapshot, webFixture } from "./web.js";
 const sha = (bytes: Buffer): string => createHash("sha256").update(bytes).digest("hex");
 type Outcome = "complete" | "failed" | "aborted";
 interface SingleCallOptions {
-  outcome?: Outcome; tokens?: number | null; output?: (planHash: string) => unknown; tamper?: "prompt";
+  outcome?: Outcome; tokens?: number | null; output?: (planHash: string) => unknown;
+  /** "prompt": the record names another prompt; "record": the record is not a ccloop single-call record at all. */
+  tamper?: "prompt" | "record";
   /** Until a handoff request arrives, collect reports usage but no candidate (the call is still running). */
   stoppable?: boolean;
   /** Runs inside the first collect that has a candidate to give, before it answers. */
@@ -64,7 +66,8 @@ function singleCallPort(options: SingleCallOptions, planHash: () => string) {
         result: outcome === "complete" ? "complete" : outcome === "aborted" ? "partial" : "failed",
         artifacts: outputRef === null ? [] : [outputRef], snapshot: null, missing: [], unresolvedRequestIds: [],
         stopProof: { executionId, generation: claim.generation, isolated: true, source: put(`stop-${claim.runId}`, Buffer.from(`stop ${executionId}`)) },
-        terminalOutcome: `single-call-${outcome}`, handoff: put(`call-${claim.runId}`, canonicalBytes(record)),
+        terminalOutcome: `single-call-${outcome}`,
+        handoff: put(`call-${claim.runId}`, canonicalBytes(options.tamper === "record" ? { ...record, schema: "ccloop-single-call-record-v0" } : record)),
       };
       return { events, candidate, terminal: null };
     },

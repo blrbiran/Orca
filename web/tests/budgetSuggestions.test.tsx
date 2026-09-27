@@ -6,7 +6,7 @@
  */
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { BudgetEditor, adviceOf, suggestedOperations } from "../src/BudgetEditor.js";
+import { BudgetEditor, DIMENSIONS, adviceOf, suggestedOperations } from "../src/BudgetEditor.js";
 import type { Amount, ControlConfigV1, EstimateViewV1, GroupViewV1 } from "../src/controlTypes.js";
 
 const amount = (tokens: number): Amount => ({ tokens, activeMs: tokens * 10, attempts: 1, sessions: 1 });
@@ -88,6 +88,29 @@ describe("the budget editor's suggestion controls (single-call estimate spec §7
     expect(today).not.toContain("<th>suggestion</th>");
     for (const unusable of [view({ estimates: [estimate({ output: { ...suggestion, planHash: "f".repeat(64) } })] }), view({ estimates: [estimate({ state: "failed", output: null, outputHash: null, reasonCode: "estimate-output-invalid" })] })]) {
       expect(render(<BudgetEditor view={unusable} config={config} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />).container.innerHTML).toBe(today);
+      cleanup();
+    }
+  });
+
+  // Final review O-e (2026-09-28): the comparison above cannot see a cell every no-advice render would gain alike (an
+  // ungated per-row suggestion cell adds the same empty <td> to `today` and to each unusable view). So count directly:
+  // with no usable advice each row has exactly its owner, bucket, state and dimension cells, and there is no rationale.
+  it("adds no suggestion cell to any row and no rationale when no estimate may advise", () => {
+    const plain = 3 + DIMENSIONS.length;
+    const advising = render(<BudgetEditor view={view()} config={config} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />).container;
+    // The count is meaningful: an advising editor does add the cell to every row.
+    expect([...advising.querySelectorAll("tbody tr")].map((row) => row.querySelectorAll("td").length)).toEqual(view().allocations.map(() => plain + 1));
+    cleanup();
+    for (const unusable of [
+      view({ estimates: [estimate({ state: "queued", output: null, outputHash: null })] }),
+      view({ estimates: [estimate({ output: { ...suggestion, planHash: "f".repeat(64) } })] }),
+      view({ estimates: [estimate({ state: "failed", output: null, outputHash: null, reasonCode: "estimate-output-invalid" })] }),
+    ]) {
+      const container = render(<BudgetEditor view={unusable} config={config} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />).container;
+      const rows = [...container.querySelectorAll("tbody tr")];
+      expect(rows).toHaveLength(unusable.allocations.length);
+      expect(rows.map((row) => row.querySelectorAll("td").length)).toEqual(unusable.allocations.map(() => plain));
+      expect(container.querySelectorAll("details")).toHaveLength(0);
       cleanup();
     }
   });

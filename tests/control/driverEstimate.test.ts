@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { canonicalBytes, sha256Canonical } from "../../src/control/canonicalJson.js";
 import { BUDGET_ESTIMATE_JSON_SCHEMA, buildEstimatePrompt } from "../../src/control/estimatePrompt.js";
-import { driverRunIds, stepA1 } from "../../src/control/executionDriver.js";
+import { advance, driverRunIds, stepA1, stepCEstimate } from "../../src/control/executionDriver.js";
 import { readArchivedPlan } from "../../src/control/queries.js";
 import { recordUsage } from "../../src/control/usage.js";
 import { isEstimateRun } from "../../src/control/webDispatch.js";
@@ -90,6 +90,45 @@ describe("the estimate chain (single-call estimate spec §6.1-§6.3)", () => {
       await x.driver.round();
       expect(x.fake.calls.collect).toBe(collects);
       expect(x.body().state).toBe("blocked");
+    } finally { await x.h.dispose(); }
+  });
+
+  // Final review O-d (2026-09-28): a call record that is not ccloop's single-call record cannot be settled by any later
+  // round, so it is blocked by name at C -- not thrown every round, not collected again.
+  it("blocks as single-call-record-invalid, not in a retry loop, when ccloop's call record is not a single-call record", async () => {
+    const x = await estimateHarness({ tamper: "record" }); try {
+      await x.rounds(() => x.body().state === "blocked");
+      expect(x.body().drive).toMatchObject({ blockedAt: "C", blockedReason: "single-call-record-invalid" });
+      expect(x.estimate().state).toBe("running");
+      expect(x.active()).toBe(1);
+      const collects = x.fake.calls.collect;
+      await x.driver.round();
+      expect(x.fake.calls.collect).toBe(collects);
+      expect(x.body().state).toBe("blocked");
+    } finally { await x.h.dispose(); }
+  });
+
+  // Final review O-a (2026-09-28): the run can move off `accepted` while C awaits ccloop with no handoff request open
+  // (here: blocked). The settlement re-reads the run inside its transaction and yields; it must neither settle the
+  // estimate nor overwrite the run's new state.
+  it("yields without settling when the run moved off accepted while C collected, with no handoff request", async () => {
+    let x!: Awaited<ReturnType<typeof estimateHarness>>;
+    x = await estimateHarness({ duringCollect: async () => {
+      const row = x.body();
+      row.state = "blocked";
+      row.drive = { ...row.drive, blockedAt: "C", blockedReason: "moved-while-collecting" };
+      x.h.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify(row), x.runId);
+    } }); try {
+      const context = { reconciling: new Map(), stopped: false };
+      for (let i = 0; i < 10 && x.body().state !== "accepted"; i += 1) await advance(x.deps, x.runId, context);
+      expect(x.body().state).toBe("accepted");
+      expect(await stepCEstimate(x.deps, x.runId)).toBe(false);
+      expect(x.fake.calls.collect).toBe(1);
+      expect(x.h.store.db.prepare("SELECT COUNT(*) AS n FROM handoff_requests").get()!.n).toBe(0);
+      expect(x.estimate()).toMatchObject({ state: "running", output: null });
+      expect(x.h.store.db.prepare("SELECT id FROM outbox WHERE id=?").get(`estimate-result:g:${x.h.estimateId}`)).toBeUndefined();
+      expect(x.body()).toMatchObject({ state: "blocked", drive: { blockedReason: "moved-while-collecting" } });
+      expect(x.active()).toBe(1);
     } finally { await x.h.dispose(); }
   });
 

@@ -519,8 +519,18 @@ export async function stepCEstimate(deps: ExecutionDriverDeps, runId: string): P
   const candidate = report.candidate;
   if (!candidate?.stopProof) return report.events.length > 0;
   const envelope = readStartEnvelope(store, run);
-  if (envelope.work.kind !== "single-call") throw new ControlError("recovery-blocked", `envelope-kind:${runId}`);
-  const record = singleCallRecordSchema.parse(JSON.parse((await readArtifact(store, candidate.handoff)).toString("utf8")));
+  // Final review (2026-09-28): a call record that is not ccloop's single-call record, or a stored envelope that is not a
+  // single call, cannot be settled by any later round either -- block it by name instead of throwing every round.
+  let recordJson: unknown;
+  try { recordJson = JSON.parse((await readArtifact(store, candidate.handoff)).toString("utf8")); } catch (error) {
+    if (!(error instanceof SyntaxError)) throw error;
+  }
+  const parsedRecord = singleCallRecordSchema.safeParse(recordJson);
+  if (envelope.work.kind !== "single-call" || !parsedRecord.success) {
+    blockRun(deps, runId, "C", "single-call-record-invalid");
+    return true;
+  }
+  const record = parsedRecord.data;
   // Controller ruling F10 (2026-09-28): only the prompt is compared. It is one string, byte-exact on both sides; the
   // schema's hash depends on key order, which ccloop re-sorts (localeCompare) when it stores the envelope, and a
   // tampered schema cannot slip an invalid answer past classifyEstimateOutput's zod check anyway.

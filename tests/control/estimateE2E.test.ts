@@ -88,6 +88,9 @@ describe.skipIf(!realBinary)("the estimate chain against real ccloop and fake cl
   it("E3: a restart with the call in flight leaves dispatch open, and the driver reconciles the estimate to ready", async () => {
     const w = await world(TASKS, CODEX, { claudeScript: {}, declaredContextWindowTokens: 1_000_000 });
     try {
+      // Final review O-b (2026-09-28): as E1/E2, the call never touches the target repository's worktrees -- here
+      // across the restart too.
+      const worktreesBefore = w.worktrees();
       const first = await w.boot();
       const { estimateId, planHash } = await importWithClaudeEstimator(first, w);
       await writeFile(w.claudeScriptPath, JSON.stringify({ "single-call": { output: estimateOutput(planHash), delayMs: { "single-call": 5_000 } } }));
@@ -100,6 +103,7 @@ describe.skipIf(!realBinary)("the estimate chain against real ccloop and fake cl
       await until(() => readEstimateRecord(second.store, "g", estimateId).state !== "running", 90_000, "the estimate to settle after the restart", 50);
       expect(readEstimateRecord(second.store, "g", estimateId)).toMatchObject({ state: "ready", output: estimateOutput(planHash) });
       expect(estimateRun(second)!.body.state).toBe("settled-restartable");
+      expect(w.worktrees()).toEqual(worktreesBefore);
     } finally { await w.teardown(); }
   });
 

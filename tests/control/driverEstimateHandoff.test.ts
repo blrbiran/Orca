@@ -78,6 +78,27 @@ describe("an estimate run under a stop (single-call estimate spec §6.5)", () =>
     } finally { await x.h.dispose(); }
   });
 
+  // Final review O-c (2026-09-28): a run blocked because its call observed no usage is closed by a stop like any blocked
+  // estimate run -- and its unknown usage stays unknown in the group's ledger, never booked as 0 on the way out.
+  it("H5: an estimate run blocked estimate-usage-unknown is closed by a stop and its usage stays unknown", async () => {
+    const x = await estimateHarness({ outcome: "aborted", tokens: null }); try {
+      await x.rounds(() => x.body().state === "blocked");
+      expect(x.body().drive).toMatchObject({ blockedAt: "C", blockedReason: "estimate-usage-unknown" });
+      expect(readControlGroup(x.h.store, "epoch", "g").ledger.usageUnknown).toBe(true);
+      const stopped = await x.service.handoffStop(x.h.command("handoff-stop", {}));
+      if ("error" in stopped || stopped.result.kind !== "handoff-stopped") throw new Error(JSON.stringify(stopped));
+      const [requestId] = stopped.result.requestIds;
+      const request = () => String(x.h.store.db.prepare("SELECT state FROM handoff_requests WHERE id=?").get(requestId)!.state);
+      await x.rounds(() => !["request-pending", "latched", "collecting"].includes(request()));
+      expect(request()).toBe("settled-restartable");
+      expect(x.estimate()).toMatchObject({ state: "interrupted", output: null });
+      const ledger = readControlGroup(x.h.store, "epoch", "g").ledger;
+      expect(ledger.usageUnknown).toBe(true);
+      expect(x.body().unknown.work).toBe(true);
+      expect(ledger.used.tokens).toBe(0);
+    } finally { await x.h.dispose(); }
+  });
+
   it("H4: a blocked estimate run is still closed by a stop (it is visited only through its request)", async () => {
     const x = await estimateHarness({ tamper: "prompt" }); try {
       await x.rounds(() => x.body().state === "blocked");
