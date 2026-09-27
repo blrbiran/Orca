@@ -1,0 +1,50 @@
+{
+  "v": 1,
+  "runId": "orca-dev-5b01dbd9",
+  "runtime": "claude-code",
+  "sessionRef": "5b01dbd9-b39e-4ad9-9580-d6041840e94b",
+  "writtenAt": "2026-09-27T12:11:35.894Z",
+  "head": "407301ab005cac7d1ddaa0ac5a74402b41185f58",
+  "level": {
+    "kind": "reading",
+    "level": 340939,
+    "windowTokens": 1000000,
+    "t1": 330000,
+    "t2": 450000,
+    "band": 1
+  },
+  "next": [
+    "Extend scripts/live-driver-acceptance.ts with a deadline scenario (spec §6.4): real claude, execute cut by a handoff-stop deadline once observed-usage.json exists, then resume-from-handoff and land; fix claude-tee/rawClaude parsing for stream-json output (result line)",
+    "Verify the new scenario under --fake-claude first (free), then run it once with --claude (human authorized exactly one paid run, 2026-09-27)",
+    "Ledger the paid run in .superpowers/sdd/2026-09-27-claude-stream-usage/progress.md §3 and roll the three handoffs"
+  ],
+  "open": [
+    "claude-tee keeps raw stdout as one .json; under stream-json the stdout is NDJSON so rawClaude/claudeReportedUsd parsing in live-driver-acceptance.ts will fail until it reads the last type:result line"
+  ],
+  "awaitingHuman": [
+    {
+      "kind": "irreversible",
+      "what": "push ccloop, then Orca, then ccmem (human does it; agent never pushes)"
+    },
+    {
+      "kind": "named-authorization",
+      "what": "remaining controller Ruling: lines of the stream-usage round (human approved the seven named rewrites and one paid verification only)"
+    }
+  ],
+  "measurements": [
+    {
+      "command": "/usr/bin/git ls-remote origin refs/heads/main (in each of the three repos)",
+      "exitCode": 2,
+      "commit": "407301ab005cac7d1ddaa0ac5a74402b41185f58",
+      "observedAt": "2026-09-27T12:11:35.835Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-5b01dbd9-ZQ2znP/1.txt"
+    },
+    {
+      "command": "node_modules/.bin/tsx scripts/live-driver-acceptance.ts --fake-claude --scenario deadline ... (exit 0)",
+      "exitCode": 2,
+      "commit": "407301ab005cac7d1ddaa0ac5a74402b41185f58",
+      "observedAt": "2026-09-27T12:11:35.845Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-5b01dbd9-ZQ2znP/2.txt"
+    }
+  ]
+}
