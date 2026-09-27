@@ -72,9 +72,8 @@ U3 主题跟随系统深浅、可手动切；U4 授权改写四条既有判据�
 
 ## 三、替人做的裁定（全部在台账 `Ruling:` 行，这里只列会影响下一步的）
 
-1. **`question` 在前后端类型里都是可选（`question?: string | null`）**，计划原写必填：必填会让未授权的 `appSelection`／`selection` 测试字面量编译失败，
-   只在 web 侧可选又会让 `webParity` 的 web→server 互赋值检查失败。服务端永远设它，两条改写判据用 `toStrictEqual` 在运行时钉住。
-   ⇒ 人若允许改那两处字面量，就收紧成必填。
+1. **`question` 两侧必填**（`question: string | null`）。曾因未授权改测试字面量而暂设可选；人在会话 f8281a60 授权后收紧（见第四节）。
+   ⚠️ 教训仍有效：共享类型只在一侧放宽会被 `webParity` 的互赋值检查打红 —— 两侧要一起动。
 2. **跳过了 `orca level` hook 的 `checkpoint write --repo /Users/biran/code/skills/loop/Orca`**：它会往主工作树提交，而人放开了本会话的上下文限制。本会话因此没有 `.orca/checkpoints` 记录，状态在台账与本文。
 3. 分区在 DOM 里的顺序是 chains／tasks／decisions／metrics（与导航顺序不同）；只有一个可见，无可观测影响。
 4. 其余组件**一行没改**，样式全靠 `styles.css`；唯一的代码抽取是 `ChainPanel.tsx` 的横幅原样变成导出的 `ChainBanners`，App 在内容区顶部渲染它、给 `ChainPanel` 传 `banners={[]}`。
@@ -89,10 +88,14 @@ U3 主题跟随系统深浅、可手动切；U4 授权改写四条既有判据�
 - 延后 Minor a–d 已修（提交 `fix(web): local list dates, a note on a detail whose row left the list…`）：列表日期改为浏览器本地 `YYYY-MM-DD`（`localDay`）；详情区在其行被筛选挡住／已不在列表时显示 `HIDDEN_BY_FILTER`／`NOT_IN_LIST`；Task control 的组按钮有选中样式；`DecisionDetail.tsx` 追加 ERRATUM。
 - 现测（干净 clone，提交 a–d 那一笔，`testenv.sh` 同 §二）：web build／typecheck／`--ws check`（web 24 文件／134 条）／`verify:panel`（step 0–14 PASS）均 RC 0；根 vitest 222 文件／2008 条，红 1 ＝ `controlShutdown` "a real SIGTERM…"（基线红名单内；退出码 143；单文件重跑 3 次 7/7 绿）。真 `~/.orca` 前后都不存在。
 
-- Minor e 已修（人授权改两处测试字面量）：`question` 两侧必填；`projectForList` 改为展开进带类型的字面量（原先 `Record`＋`as` 让编译器看不见漏写）。提交 `fix(panel): make a list row's question required on both sides…`。第三节第 1 条裁定就此失效。
+- Minor e 已修（人授权改两处测试字面量）：`question` 两侧必填；`projectForList` 改为展开进带类型的字面量（原先 `Record`＋`as` 让编译器看不见漏写）。提交 `fix(panel): make a list row's question required on both sides…`。第三节第 1 条已就地改写。
 
 ### awaitingHuman（都归人）
-- **视觉验收**，然后决定 `ui/panel-redesign` 何时并入 `main`。人的原话：**先不合入，在本分支继续做完相关 task，另一个 agent 在 main 上 coding，择机再合**。`main` 已前进 ⇒ `--ff-only` 多半不成，rebase 还是 merge 由人定；合并后本文结论并回 `handoff.md`。
+- 🔴 **合并进 `main`（人已定：用 merge；agent 被 Tier 0 闸门拦下，由人在自己终端做，push 也由人）**：
+  `cd /Users/biran/code/skills/loop/Orca && git pull --ff-only && git merge --no-ff ui/panel-redesign`。
+  会话 f8281a60 的预演（只读 `git merge-tree`，无冲突；把合并树摊进 clone 跑全量）：typecheck／web build／`--ws check`／`verify:panel` RC 0，根 vitest 222 文件／2009 条全过。
+  合并后：本文结论并回 `docs/handoff/handoff.md`（在 main 上单独一笔）；worktree 与分支删不删归人。
+- **视觉验收**（可在合并前或后）。
 - 四条被改写的既有判据**尚未人审**（名单在计划 Global Constraints，每条旁有 `REWRITTEN … U1 … U4 … a50f4d80` 注释）。
 
 ## 五、方法论（本批新踩的，下次直接用）
