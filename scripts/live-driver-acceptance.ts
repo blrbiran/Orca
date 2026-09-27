@@ -17,7 +17,11 @@
 // usage: tsx scripts/live-driver-acceptance.ts --ccloop-bin <abs dist/cli.js> --output <new dir>
 //          (--codex <abs codex binary> --model <name> | --fake | --claude <abs claude binary> --model <name> | --fake-claude)
 //          [--group-tokens 300000] [--task-tokens 150000] [--task-attempts 1] [--active-ms 600000]
-//          [--call-usd 2] [--deadline-ms 900000]
+//          [--call-usd 2] [--deadline-ms 900000] [--context-window 1000000] [--scenario single|conflict]
+//
+// --context-window sets the operator's contextWindow for the agent (claude: 1000000 is `--model <model>[1m]`, spelled
+// by ccloop). --scenario conflict runs two tasks that both append a line to the same file from the same base, so the
+// second to land conflicts and is reconciled by `ccloop run --agents` under the group's reconcile slot.
 //
 // Ruling review 2026-09-27 (paid claude round): --claude runs the real claude CLI. HOME is again NOT relocated (claude
 // reads its OAuth login from the keychain under the real HOME), but the installation's command isolates the call from
@@ -73,13 +77,18 @@ const deadlineMs = Number(args["deadline-ms"] ?? 900_000);
 const taskAttempts = Number(args["task-attempts"] ?? 1);
 const activeMs = Number(args["active-ms"] ?? 600_000);
 const callUsd = String(args["call-usd"] ?? "2");
+const contextWindow = args["context-window"] === undefined ? undefined : Number(args["context-window"]);
+if (contextWindow !== undefined && (!Number.isSafeInteger(contextWindow) || contextWindow <= 0)) throw new Error("--context-window must be a positive integer");
+const scenario = args.scenario ?? "single";
+if (scenario !== "single" && scenario !== "conflict") throw new Error("--scenario is single or conflict");
 /**
  * The real claude call, isolated from the person's own Claude Code setup: no user settings (so no hooks and no
  * plugins, which would also record this session), no MCP servers, no skills, no session written under ~/.claude,
- * edits accepted but nothing else, and claude's own dollar ceiling per call. These go in the installation's
+ * no auto-memory directory made under ~/.claude/projects at start-up, edits accepted but nothing else, and claude's
+ * own dollar ceiling per call -- the arguments `ccloop agents detect` drafts for claude. These go in the installation's
  * command, which ccloop puts before `-p` and which is outside configHash (ruling review R1).
  */
-const CLAUDE_ISOLATION = ["--permission-mode", "acceptEdits", "--no-session-persistence", "--setting-sources", "project,local", "--strict-mcp-config", "--disable-slash-commands", "--max-budget-usd", callUsd];
+const CLAUDE_ISOLATION = ["--permission-mode", "acceptEdits", "--no-session-persistence", "--setting-sources", "project,local", "--strict-mcp-config", "--disable-slash-commands", "--settings", '{"autoMemoryEnabled":false}', "--max-budget-usd", callUsd];
 
 const g = (cwd: string, ...rest: string[]): string =>
   execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "core.hooksPath=/dev/null", ...rest], { cwd, encoding: "utf8" }).trim();
@@ -121,40 +130,60 @@ await mkdir(repo);
 g(repo, "init", "-q", "-b", "main");
 await writeFile(join(repo, "README.md"), "live acceptance target\n");
 g(repo, "add", "README.md");
+if (scenario === "conflict") { await writeFile(join(repo, "shared.txt"), "base\n"); g(repo, "add", "shared.txt"); }
 g(repo, "commit", "-qm", "base");
 
 const marker = join(root, "codex-marker.json");
 const scriptPath = join(root, "codex-script.json");
-await writeFile(scriptPath, JSON.stringify({ a: { files: { "answer.txt": "42\n" } } }));
+// The fakes' answers, keyed by task (the reconciliation's key is `reconcile-<self>-<other>`, whichever lands second).
+await writeFile(scriptPath, JSON.stringify(scenario === "single" ? { a: { files: { "answer.txt": "42\n" } } } : {
+  a: { files: { "shared.txt": "base\nA\n" } }, b: { files: { "shared.txt": "base\nB\n" } },
+  "reconcile-a-b": { files: { "shared.txt": "base\nA\nB\n" } }, "reconcile-b-a": { files: { "shared.txt": "base\nA\nB\n" } },
+}));
 const fakeCodex = resolve(dirname(ccloopBin), "..", "tests", "fixtures", "fake-codex.mjs");
 const fakeClaudeCli = resolve(dirname(ccloopBin), "..", "tests", "fixtures", "fake-claude-cli.mjs");
 const claudeRaw = join(root, "claude-raw");
 // Agent selection spec §4.2, §6.6: one installation in an agents table handed over as ORCA_AGENTS_TABLE; the
 // model is a selection field (the operator's preference below), and confirmation freezes ccloop's configHash for it.
 const codexCommand = fake ? [process.execPath, fakeCodex, "script", marker, scriptPath] : [args.codex ?? ""];
+// Both claude modes go through the tee, so the argv each call received is observed the same way.
+const claudeTee = [process.execPath, resolve(import.meta.dirname, "claude-tee.mjs"), claudeRaw];
 const claudeCommand = fakeClaude
-  ? [process.execPath, fakeClaudeCli, "script", marker, scriptPath]
-  : [process.execPath, resolve(import.meta.dirname, "claude-tee.mjs"), claudeRaw, args.claude ?? "", ...CLAUDE_ISOLATION];
+  ? [...claudeTee, process.execPath, fakeClaudeCli, "script", marker, scriptPath]
+  : [...claudeTee, args.claude ?? "", ...CLAUDE_ISOLATION];
 const tablePath = join(root, "agents.json");
 const installation = kind === "codex"
   ? { kind: "codex", command: codexCommand, version: versionOf(codexCommand), configDir: null, timeoutMs: 120_000, killGraceMs: 5_000, sandbox: "workspace-write", budgetMode: "soft" }
   : { kind: "claude", command: claudeCommand, version: versionOf(claudeCommand), configDir: null, timeoutMs: 600_000, killGraceMs: 5_000 };
 await writeFile(tablePath, JSON.stringify({ schema: "ccloop-agents-table-v1", installations: { [kind]: installation } }), { mode: 0o600 });
 
-const check = 'test "$(cat answer.txt)" = 42';
-const contract = {
-  objective: { taskId: "a", goal: "Create a file named answer.txt at the repository root whose entire content is the characters 42 followed by one newline. Change no other file.", successCondition: "answer.txt holds exactly 42 and a newline", nonGoals: ["changing any file other than answer.txt"] },
-  context: { repoPath: repo, targetPaths: ["answer.txt"], relevantDocs: [], buildTestCommands: [check], constraints: [] },
-  executionPolicy: { autonomyLevel: "L2", maxAttempts: 1, perAttemptTimeoutMs: 420_000, totalRuntimeBudgetMs: 600_000, tokenBudget: taskTokens, worktreeRequired: true, partialOutcomeRecoveryWindowMs: 1_000 },
-  safetyPolicy: { allowlistPaths: [], denylistPaths: [], maxFilesTouched: 1, humanGateConditions: [] },
-  verification: { verifierType: "agent", requiredChecks: [check], rejectOn: ["failure"], evidenceRequired: [] },
-  escalationAndExit: { escalationTargets: [], pauseOn: [], stopOn: [], terminalStates: ["succeeded", "blocked_waiting_human", "exhausted", "cancelled", "failed"] },
-};
-const contractPath = join(root, "contract-a.json");
-await writeFile(contractPath, canonicalBytes(contract));
+type LiveTask = { taskId: string; file: string; goal: string; successCondition: string; check: string };
+const tasks: LiveTask[] = scenario === "single"
+  ? [{ taskId: "a", file: "answer.txt", goal: "Create a file named answer.txt at the repository root whose entire content is the characters 42 followed by one newline. Change no other file.", successCondition: "answer.txt holds exactly 42 and a newline", check: 'test "$(cat answer.txt)" = 42' }]
+  : ["A", "B"].map((line) => ({
+    taskId: line.toLowerCase(), file: "shared.txt",
+    goal: `Append one line containing exactly the single character ${line} to the end of shared.txt at the repository root. Keep every existing line unchanged and in its place. Change no other file.`,
+    successCondition: `shared.txt still holds its existing lines and also a line that is exactly ${line}`,
+    check: `grep -qx base shared.txt && grep -qx ${line} shared.txt`,
+  }));
+const taskIds = tasks.map((task) => task.taskId);
+const planTasks = [];
+for (const task of tasks) {
+  const contract = {
+    objective: { taskId: task.taskId, goal: task.goal, successCondition: task.successCondition, nonGoals: [`changing any file other than ${task.file}`] },
+    context: { repoPath: repo, targetPaths: [task.file], relevantDocs: [], buildTestCommands: [task.check], constraints: [] },
+    executionPolicy: { autonomyLevel: "L2", maxAttempts: 1, perAttemptTimeoutMs: 420_000, totalRuntimeBudgetMs: 600_000, tokenBudget: taskTokens, worktreeRequired: true, partialOutcomeRecoveryWindowMs: 1_000 },
+    safetyPolicy: { allowlistPaths: [], denylistPaths: [], maxFilesTouched: 1, humanGateConditions: [] },
+    verification: { verifierType: "agent", requiredChecks: [task.check], rejectOn: ["failure"], evidenceRequired: [] },
+    escalationAndExit: { escalationTargets: [], pauseOn: [], stopOn: [], terminalStates: ["succeeded", "blocked_waiting_human", "exhausted", "cancelled", "failed"] },
+  };
+  const contractPath = join(root, `contract-${task.taskId}.json`);
+  await writeFile(contractPath, canonicalBytes(contract));
+  planTasks.push({ taskId: task.taskId, contract: contractPath, dependsOn: [], targetVersion: 1 });
+}
 // The trusted control config requires the plan file inside its repository (controlConfig.ts, control-path-escape).
 const planPath = join(repo, "plan.json");
-await writeFile(planPath, JSON.stringify({ targetRepo: repo, ccloopBin, runsDir: join(root, "unused-runs"), workBranch: "orca/unused", policy: "local-merge", ledgerMode: "out-of-repo", goal: "live acceptance", successConditions: ["answer.txt holds 42"], tasks: [{ taskId: "a", contract: contractPath, dependsOn: [], targetVersion: 1 }] }));
+await writeFile(planPath, JSON.stringify({ targetRepo: repo, ccloopBin, runsDir: join(root, "unused-runs"), workBranch: "orca/unused", policy: "local-merge", ledgerMode: "out-of-repo", goal: "live acceptance", successConditions: tasks.map((task) => task.successCondition), tasks: planTasks }));
 
 // The shipped ccloop's capability answer; a null context window makes the estimate blocked-capability (spec §11 D1).
 const profilePath = join(root, "profile.json");
@@ -168,6 +197,10 @@ await writeFile(profilePath, JSON.stringify({
 
 const orcaHome = join(homedir(), ".orca");
 const orcaHomeBefore = snapshot(orcaHome);
+// Only the entries directly under ~/.claude/projects: claude's own session files elsewhere may legitimately move.
+const claudeProjects = join(homedir(), ".claude", "projects");
+const claudeProjectsList = (): string[] => existsSync(claudeProjects) ? readdirSync(claudeProjects).sort() : ["<absent>"];
+const claudeProjectsBefore = claudeProjectsList();
 const human = () => ({ symbolic: g(repo, "symbolic-ref", "HEAD"), head: g(repo, "rev-parse", "HEAD"), index: sha256(join(repo, ".git", "index")), status: g(repo, "status", "--porcelain") });
 const humanBefore = human();
 
@@ -182,16 +215,21 @@ const raw = (runtime: ControlRuntime, commandId: string, verb: string, payload: 
   schema: "orca-raw-command-v1", commandId, actorId: "human", verb, target, payload,
   expectedRevision: verb === "import-plan" || verb === "set-agent-preferences" ? 0 : Number(runtime.store.db.prepare("SELECT revision FROM groups WHERE id='g'").get()!.revision),
 }) as never;
-const workRun = (runtime: ControlRuntime) => runtime.store.db.prepare("SELECT id,body FROM runs WHERE group_id='g' ORDER BY id").all()
-  .map((row) => ({ runId: String(row.id), body: JSON.parse(String(row.body)) })).find((row) => row.body.phase === "work");
-const workStatus = (runtime: ControlRuntime): string =>
-  JSON.parse(String(runtime.store.db.prepare("SELECT body FROM work_items WHERE group_id='g' AND id='a'").get()!.body)).status;
+const workRuns = (runtime: ControlRuntime) => runtime.store.db.prepare("SELECT id,work_item_id,body FROM runs WHERE group_id='g' ORDER BY id").all()
+  .map((row) => ({ runId: String(row.id), task: String(row.work_item_id), body: JSON.parse(String(row.body)) })).filter((row) => row.body.phase === "work");
+const workItem = (runtime: ControlRuntime, taskId: string) =>
+  JSON.parse(String(runtime.store.db.prepare("SELECT body FROM work_items WHERE group_id='g' AND id=?").get(taskId)!.body));
+const allDone = (runtime: ControlRuntime): boolean => taskIds.every((id) => workItem(runtime, id).status === "done");
 
 const checks: Record<string, boolean> = {};
-const summary: Record<string, unknown> = { mode: isFake ? "fake" : "live", kind, model: null as string | null, groupTokens, taskTokens, taskAttempts, activeMs, deadlineMs, installationCommand: installation.command, installationVersion: installation.version, startedAt: new Date().toISOString(), root };
+const summary: Record<string, unknown> = { mode: isFake ? "fake" : "live", kind, scenario, contextWindow: contextWindow ?? null, agents: null as unknown, groupTokens, taskTokens, taskAttempts, activeMs, deadlineMs, installationCommand: installation.command, installationVersion: installation.version, startedAt: new Date().toISOString(), root };
 const runtime = await assembleControlRuntime({ control, repos, epoch: "epoch-live-1", env });
 if (runtime === null) throw new Error("the control plane did not assemble");
 const runsRoot = `${runtime.store.stateDir}.runs`;
+// A reconciliation's `ccloop run` keeps its evidence (and registers its process groups) under the workspaces dir,
+// not the runs dir; every count and the watchdog below cover both.
+const evidenceRoots = [runsRoot, `${runtime.store.stateDir}.workspaces`];
+const findEvidence = (name: string): string[] => evidenceRoots.flatMap((dir) => findAll(dir, name));
 let timedOut = false;
 try {
   await runtime.recover();
@@ -199,7 +237,7 @@ try {
   summary.imported = imported;
   // Agent selection spec §6.2 layer 1: the operator's default is the table's codex installation, with --model when live.
   const preferences = await runtime.service.setAgentPreferences(raw(runtime, "preferences", "set-agent-preferences",
-    { preferences: { defaultAgent: kind, perAgent: isFake ? {} : { [kind]: { model: args.model! } } } }, { kind: "operator", operatorId: "human" }));
+    { preferences: { defaultAgent: kind, perAgent: { [kind]: { ...(isFake ? {} : { model: args.model! }), ...(contextWindow === undefined ? {} : { contextWindow }) } } } }, { kind: "operator", operatorId: "human" }));
   if ("error" in preferences) throw new Error(`set-agent-preferences refused: ${JSON.stringify(preferences.error)}`);
   // A blocked-capability estimate leaves complex-1m-default allocations (task work 3M tokens, 3 attempts), and
   // confirm derives the contract's tokenBudget/maxAttempts/totalRuntimeBudgetMs from them, overriding the
@@ -210,8 +248,7 @@ try {
   const edited = runtime.service.editProposal(raw(runtime, "caps", "proposal-edit", {
     baseProposalVersion: readBudgetProposal(runtime.store, "g").proposalVersion,
     operations: [
-      ...dims("a", "work", { tokens: taskTokens, attempts: taskAttempts, sessions: taskAttempts, activeMs }),
-      ...dims("a", "handoff", { tokens: 0 }),
+      ...taskIds.flatMap((id) => [...dims(id, "work", { tokens: taskTokens, attempts: taskAttempts, sessions: taskAttempts, activeMs }), ...dims(id, "handoff", { tokens: 0 })]),
       { target: { scope: "goal-review", dimension: "tokens" }, value: 1, provenance: "human" },
     ],
     proposedGroupLimit: { ...readBudgetProposal(runtime.store, "g").groupLimit, tokens: groupTokens },
@@ -226,7 +263,7 @@ try {
     contextPolicy: { handoffAtContextTokens: null }, selectionsHash: selections.selectionsHash,
   }));
   if ("error" in confirmed) throw new Error(`confirm refused: ${JSON.stringify(confirmed.error)}`);
-  summary.model = JSON.parse(String(runtime.store.db.prepare("SELECT body FROM work_items WHERE group_id='g' AND id='a'").get()!.body)).agent.model;
+  summary.agents = Object.fromEntries(taskIds.map((id) => [id, workItem(runtime, id).agent]));
   summary.confirmedLedger = readControlGroup(runtime.store, runtime.epoch, "g").ledger;
   summary.proposal = readBudgetProposal(runtime.store, "g");
   const started = await runtime.service.start(raw(runtime, "start", "start", {}));
@@ -235,9 +272,9 @@ try {
 
   const deadline = Date.now() + deadlineMs;
   for (;;) {
-    const run = workRun(runtime);
-    if (run?.body.state === "blocked") break;
-    if (workStatus(runtime) === "done" && run?.body.drive?.cleanedUp === true) break;
+    const runs = workRuns(runtime);
+    if (runs.some((run) => run.body.state === "blocked")) break;
+    if (allDone(runtime) && runs.length > 0 && runs.every((run) => run.body.drive?.cleanedUp === true)) break;
     if (Date.now() > deadline) { timedOut = true; break; }
     await new Promise((r) => setTimeout(r, 1000));
   }
@@ -245,15 +282,15 @@ try {
   summary.shutdown = await runtime.shutdown().catch((e: unknown) => `threw: ${String(e)}`);
   // Outer watchdog: whatever the ending, no codex process group ccloop registered may outlive this script.
   const killed: number[] = [];
-  for (const file of findAll(runsRoot, "process.json")) {
+  for (const file of findEvidence("process.json")) {
     const { pgid } = JSON.parse(readFileSync(file, "utf8")) as { pgid: number };
     try { process.kill(-pgid, "SIGKILL"); killed.push(pgid); } catch { /* already gone */ }
   }
   summary.killedProcessGroups = killed;
 }
 
-const run = workRun(runtime);
-summary.run = run === undefined ? null : { runId: run.runId, state: run.body.state, drive: run.body.drive };
+const runs = workRuns(runtime);
+summary.runs = runs.map((run) => ({ runId: run.runId, task: run.task, state: run.body.state, drive: run.body.drive }));
 const ledger = readControlGroup(runtime.store, runtime.epoch, "g").ledger;
 summary.ledger = ledger;
 const delivered = (id: string): unknown => runtime.store.db.prepare("SELECT delivered FROM outbox WHERE id=?").get(id);
@@ -261,21 +298,21 @@ const delivered = (id: string): unknown => runtime.store.db.prepare("SELECT deli
 // Usage copied from ccloop's retained evidence. codex: the turn.completed row of each provider call. claude: the
 // runner's answer in stdout.json, whose tokenUsage is input + output as ccloop books it.
 const calls = kind === "codex"
-  ? findAll(runsRoot, "events.jsonl").filter((file) => file.includes("/codex/")).map((file) => {
+  ? findEvidence("events.jsonl").filter((file) => file.includes("/codex/")).map((file) => {
     const completed = readFileSync(file, "utf8").split("\n").filter((line) => line.trim()).map((line) => JSON.parse(line)).filter((row) => row.type === "turn.completed");
     const usage = completed.at(-1)?.usage ?? null;
     const phase = file.split("/codex/")[1]!.split("/")[1]!;
-    return { phase, file, usage, total: usage === null ? null : Number(usage.input_tokens) + Number(usage.output_tokens) };
+    return { role: file.includes("/reconcile-") ? "reconcile" : "worker", phase, file, usage, total: usage === null ? null : Number(usage.input_tokens) + Number(usage.output_tokens) };
   })
-  : findAll(runsRoot, "stdout.json").filter((file) => file.includes("/claude/")).map((file) => {
+  : findEvidence("stdout.json").filter((file) => file.includes("/claude/")).map((file) => {
     const text = readFileSync(file, "utf8");
     let answer: { tokenUsage?: number; usageEvidence?: unknown } | null = null;
     try { answer = text.trim() === "" ? null : JSON.parse(text); } catch { answer = null; }
     const phase = file.split("/claude/")[1]!.split("/")[1]!;
-    return { phase, file, usage: answer?.usageEvidence ?? null, total: typeof answer?.tokenUsage === "number" ? answer.tokenUsage : null };
+    return { role: file.includes("/reconcile-") ? "reconcile" : "worker", phase, file, usage: answer?.usageEvidence ?? null, total: typeof answer?.tokenUsage === "number" ? answer.tokenUsage : null };
   });
 // Claude's own report per call (scripts/claude-tee.mjs): dollars and cache counts ccloop does not keep.
-const rawClaude = existsSync(claudeRaw) ? readdirSync(claudeRaw).sort().map((name) => {
+const rawClaude = existsSync(claudeRaw) ? readdirSync(claudeRaw).filter((name) => !name.endsWith(".argv.json")).sort().map((name) => {
   const text = readFileSync(join(claudeRaw, name), "utf8");
   try {
     const envelope = JSON.parse(text) as { total_cost_usd?: number; usage?: Record<string, unknown>; modelUsage?: unknown; is_error?: boolean; subtype?: string; num_turns?: number; duration_ms?: number };
@@ -283,6 +320,13 @@ const rawClaude = existsSync(claudeRaw) ? readdirSync(claudeRaw).sort().map((nam
   } catch { return { name, unparsed: text.slice(0, 500) }; }
 }) : [];
 summary.claudeRawCalls = rawClaude;
+// The --model each claude call actually received, from the tee's argv files (the agent's own record, not Orca's).
+const claudeModels = existsSync(claudeRaw) ? readdirSync(claudeRaw).filter((name) => name.endsWith(".argv.json")).sort().map((name) => {
+  const argv = JSON.parse(readFileSync(join(claudeRaw, name), "utf8")) as string[];
+  const index = argv.indexOf("--model");
+  return index < 0 ? null : argv[index + 1] ?? null;
+}) : [];
+summary.claudeArgvModels = claudeModels;
 // Null, not zero, when no envelope was kept (fake modes, or a call that never answered).
 summary.claudeReportedUsd = rawClaude.length > 0 && rawClaude.every((call) => "totalCostUsd" in call && typeof call.totalCostUsd === "number")
   ? rawClaude.reduce((sum, call) => sum + ("totalCostUsd" in call ? Number(call.totalCostUsd) : 0), 0) : null;
@@ -291,30 +335,48 @@ const ccloopTotal = calls.reduce((sum, call) => sum + (call.total ?? 0), 0);
 summary.ccloopReportedTokens = ccloopTotal;
 
 // The spend cap as ccloop itself received it, not as Orca meant it.
-const policies = findAll(runsRoot, "loop-contract.json").map((file) => JSON.parse(readFileSync(file, "utf8")).executionPolicy);
+const policies = findEvidence("loop-contract.json").map((file) => JSON.parse(readFileSync(file, "utf8")).executionPolicy);
 summary.ccloopExecutionPolicies = policies;
-checks.ccloopPolicyCapped = policies.length === 1 && policies[0].tokenBudget === taskTokens && policies[0].maxAttempts === taskAttempts;
+// Every contract ccloop received -- the reconciliation's included -- is within the per-task cap.
+checks.ccloopPolicyCapped = policies.length >= taskIds.length && policies.every((policy) => policy.tokenBudget <= taskTokens && policy.maxAttempts <= taskAttempts);
 checks.notTimedOut = !timedOut;
-checks.runSettled = run?.body.state === "settled";
-checks.workDone = workStatus(runtime) === "done";
-checks.cleanedUp = run?.body.drive?.cleanedUp === true;
+checks.runSettled = runs.length >= taskIds.length && runs.every((run) => run.body.state === "settled");
+checks.workDone = allDone(runtime);
+checks.cleanedUp = runs.length > 0 && runs.every((run) => run.body.drive?.cleanedUp === true);
+const landedFile = tasks[0]!.file;
 let landed: string | null = null;
-try { landed = execFileSync("git", ["show", "refs/heads/orca/g:answer.txt"], { cwd: repo, encoding: "utf8" }); } catch { landed = null; }
-summary.landedAnswer = landed;
-checks.landedBytes = landed === "42\n";
-checks.onlyAnswerChanged = (() => { try { return g(repo, "diff", "--name-only", "main", "refs/heads/orca/g") === "answer.txt"; } catch { return false; } })();
+try { landed = execFileSync("git", ["show", `refs/heads/orca/g:${landedFile}`], { cwd: repo, encoding: "utf8" }); } catch { landed = null; }
+summary.landedContent = landed;
+// conflict: the base line first, then A and B in either order, nothing else (a reconciliation leaving markers is refused by Orca).
+checks.landedBytes = scenario === "single" ? landed === "42\n" : landed !== null && ["base\nA\nB\n", "base\nB\nA\n"].includes(landed);
+checks.onlyTargetChanged = (() => { try { return g(repo, "diff", "--name-only", "main", "refs/heads/orca/g") === landedFile; } catch { return false; } })();
+const reconciled = runs.filter((run) => run.body.drive?.reconcile != null);
+summary.reconciled = reconciled.map((run) => ({ runId: run.runId, task: run.task, reconcile: run.body.drive.reconcile }));
+checks.reconciledAsExpected = scenario === "single" ? reconciled.length === 0 : reconciled.length === 1 && reconciled[0]!.body.drive.reconcile.outcome === "succeeded";
 checks.humanUntouched = JSON.stringify(human()) === JSON.stringify(humanBefore);
 checks.dispatchNotBlocked = runtime.store.dispatchBlocked === false;
-checks.published = run !== undefined && run.body.drive?.publishError === null
+checks.published = runs.length > 0 && runs.every((run) => run.body.drive?.publishError === null
   && JSON.stringify(delivered(`projection:${run.body.checkpointId}`)) === JSON.stringify({ delivered: 1 })
-  && JSON.stringify(delivered(`task-handoff:g:a:${run.body.checkpointId}`)) === JSON.stringify({ delivered: 1 });
-checks.threeProviderCalls = JSON.stringify(calls.map((call) => call.phase).sort()) === JSON.stringify(["execute", "plan", "verify"]);
+  && JSON.stringify(delivered(`task-handoff:g:${run.task}:${run.body.checkpointId}`)) === JSON.stringify({ delivered: 1 }));
+// Workers: plan, execute, verify per task. The reconciliation: none in single, at least one call in conflict (its
+// phases are recorded, not predicted).
+const phasesOf = (role: string) => calls.filter((call) => call.role === role).map((call) => call.phase).sort();
+checks.providerCalls = JSON.stringify(phasesOf("worker")) === JSON.stringify(taskIds.flatMap(() => ["execute", "plan", "verify"]).sort())
+  && (scenario === "single" ? phasesOf("reconcile").length === 0 : phasesOf("reconcile").length > 0);
 checks.everyCallHasUsage = calls.length > 0 && calls.every((call) => call.total !== null && call.total > 0);
 checks.ledgerKnown = ledger.usageUnknown === false;
 checks.ledgerMatchesCcloop = ledger.used.tokens === ccloopTotal;
 checks.orcaHomeUntouched = JSON.stringify(snapshot(orcaHome)) === JSON.stringify(orcaHomeBefore);
-if (fake) checks.fakeCallsExact = existsSync(`${marker}.calls`) && readFileSync(`${marker}.calls`, "utf8").trim().split("\n").join(",") === "plan,execute,verify";
-if (fakeClaude) checks.fakeCallsExact = existsSync(`${marker}.tasks`) && readFileSync(`${marker}.tasks`, "utf8").trim().split("\n").map((line) => line.split(" ")[0]).join(",") === "plan,execute,verify";
+checks.claudeProjectsUntouched = JSON.stringify(claudeProjectsList()) === JSON.stringify(claudeProjectsBefore);
+if (kind === "claude") {
+  // Each claude call's --model is what the frozen selection spells: `<model>[1m]` exactly when the window is 1M.
+  const expected = (m: string) => contextWindow === 1_000_000 ? `${m}[1m]` : m;
+  const models = Object.values(summary.agents as Record<string, { model: string }>).map((agent) => expected(agent.model));
+  checks.claudeArgvModel = claudeModels.length > 0 && claudeModels.length === rawClaude.length && claudeModels.every((model) => model !== null && models.includes(model));
+}
+if (fake && scenario === "single") checks.fakeCallsExact = existsSync(`${marker}.calls`) && readFileSync(`${marker}.calls`, "utf8").trim().split("\n").join(",") === "plan,execute,verify";
+if (fakeClaude && scenario === "single") checks.fakeCallsExact = existsSync(`${marker}.tasks`) && readFileSync(`${marker}.tasks`, "utf8").trim().split("\n").map((line) => line.split(" ")[0]).join(",") === "plan,execute,verify";
+if (isFake) summary.fakeScripted = existsSync(`${marker}.tasks`) ? readFileSync(`${marker}.tasks`, "utf8").trim().split("\n") : null;
 checks.shutdownClean = summary.shutdown === true;
 
 summary.checks = checks;

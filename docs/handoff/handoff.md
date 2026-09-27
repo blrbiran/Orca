@@ -87,11 +87,11 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 
 *** **④ handoff 投递＋续跑＋N 路并行落地＋m5 也做完了（2026-09-25，会话 `e5f56bfe`）。** *** 细节与诚实的验收表述见 §四 4.0；现在的下一件事也在 4.0。
 
-✅ *** **agent 选择一轮（2026-09-26，会话 `75ec878e` 做 T1–T15、会话 `ab5a693c` 做 T16／T17／终审）做完了。** *** 其后会话 `8c6302e0` 裁了终审 I-2、做了夹具层审计；会话 `43e3e1d8`（2026-09-27）完成人对 R1–R30 的逐条审、落地 R1／R3／R7／R17／R28，并**第一次跑了付费真 claude**。细节与下一步见 §四 4.0。 会话 `94b09282`（同日）让人审完改写判据，并落地了付费轮四个发现的裁定（B1–B3 修，B4 登记）。
+✅ *** **agent 选择一轮（2026-09-26，会话 `75ec878e` 做 T1–T15、会话 `ab5a693c` 做 T16／T17／终审）做完了。** *** 其后会话 `8c6302e0` 裁了终审 I-2、做了夹具层审计；会话 `43e3e1d8`（2026-09-27）完成人对 R1–R30 的逐条审、落地 R1／R3／R7／R17／R28，并**第一次跑了付费真 claude**。细节与下一步见 §四 4.0。 会话 `94b09282`（同日）让人审完改写判据，并落地了付费轮四个发现的裁定（B1–B3 修，B4 登记）。会话 `4d2e426e`（同日）删了 `~/.orca` 的夹具残留，并付费跑了真 claude 的 `[1m]` 与两任务解冲突（台账 §19／§20）。
 
 **还不能说的**：*** **「Web 派活可用」「claude 可用」「分层选择可用」都不是事实。** *** 能说的只有：**真 codex 下单任务主链跑通过一次**（2026-09-25，会话 `af3dc0d3`，
-请求模型 gpt-6-luna，服务层不含 HTTP，n＝1；台账 `.superpowers/sdd/2026-09-25-live-acceptance/progress.md` §5 是唯一可引的表述）；**真 claude 下单任务主链跑通过一次**（2026-09-27，会话 `43e3e1d8`，claude 2.1.283、请求模型 claude-opus-5-5、隔离参数、n＝1；台账 `.superpowers/sdd/2026-09-26-agent-selection/progress.md` §14 是唯一可引的表述）。
-冲突／解冲突、依赖、崩溃恢复、面板 HTTP、strict 组、④ handoff、⑤ 预估链、agent 选择都没在真 agent 下验过。**驱动环只在 port `configured` 时挂；未配置时行为逐字节同前。**
+请求模型 gpt-6-luna，服务层不含 HTTP，n＝1；台账 `.superpowers/sdd/2026-09-25-live-acceptance/progress.md` §5 是唯一可引的表述）；**真 claude 下单任务主链跑通过一次**（2026-09-27，会话 `43e3e1d8`，claude 2.1.283、请求模型 claude-opus-5-5、隔离参数、n＝1；台账 `.superpowers/sdd/2026-09-26-agent-selection/progress.md` §14 是唯一可引的表述）；**真 claude 下 1M 窗口单任务、两任务冲突经 `ccloop run --agents` 解开各跑通过一次**（2026-09-27，会话 `4d2e426e`，各 n＝1；同一台账 §20 是唯一可引的表述）。
+依赖、崩溃恢复、面板 HTTP、strict 组、④ handoff、⑤ 预估链、混 kind 都没在真 agent 下验过；冲突／解冲突只在真 claude 下跑过一次（两任务、一处冲突），真 codex 下没跑过。**驱动环只在 port `configured` 时挂；未配置时行为逐字节同前。**
 
 **现行基线（会话 `94b09282` 收尾，取代 `43e3e1d8` 那一版；旧版在同一台账 §15，更早的在 §8–§12）**：只抄工具报数，细节在台账 `.superpowers/sdd/2026-09-26-agent-selection/progress.md` §16–§18。
 - env：`ORCA_CCLOOP_BIN` 指 ccloop main 的 `git clone --local` build（会话 scratchpad、软链 `node_modules`、`npm run build`）；`ORCA_AGENTS_TABLE` 指 scratchpad 里的夹具表（0600 文件在 0700 目录，`command` ＝ `[node, <副本>/tests/fixtures/fake-codex.mjs, "integration", <marker>]`，`version: "9.9.9-fake"`）—— 🔴 **模式必须是 `integration`**，`ok`／`script` 会让 `ccloopProtocol.integration` 红；**HOME 与四个 XDG 根全部改道**。ccloop 的门一律在 clone 里跑。
@@ -134,10 +134,11 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 
     Orca 代码没动，只改文档。真实 `~/.claude/projects` 下的两个残留目录和 5 个孤儿进程都已按人授权清掉。
 - 🔴 *** **fake 下能说的**：分层选择经预览 → 确认 → 冻结 → 派活／闸门／解冲突／handoff／续跑，全程只用确认时冻结的值；两仓全套绿（§三）。 ***
-- 🔴 *** **真 claude 下能说的只有这两件**：①单任务主链跑通过一次（会话 `43e3e1d8`，n＝1，台账 §14）；②`detect` 为 claude 2.1.283 生成的草稿 command 经 runner 跑过一次 plan 阶段，RC 0，`~/.claude/projects` 没有新条目（台账 §17）。**多任务、解冲突、依赖、handoff、`[1m]`、混 kind、面板 HTTP、n＞1 都没跑过 ⇒ 不许说「claude 可用」「分层选择可用」。** ***
+- 🔴 *** **真 claude 下能说的只有这四件**：①单任务主链跑通过一次（会话 `43e3e1d8`，n＝1，台账 §14）；②`detect` 为 claude 2.1.283 生成的草稿 command 经 runner 跑过一次 plan 阶段，RC 0，`~/.claude/projects` 没有新条目（台账 §17）；③1M 窗口选择下单任务跑通一次，三次调用的 argv 都是 `--model claude-opus-5-5[1m]`（会话 `4d2e426e`，n＝1，台账 §20，claude 自报 $0.5266506）；④两个并行任务改同一文件，冲突由组的 reconcile 槽经 `ccloop run --agents` 用真 claude 解开并落地，台账与 ccloop 用量一致（同上，n＝1，$0.383211）。**依赖、handoff／续跑、混 kind、三路以上冲突、解冲突失败路径、面板 HTTP、n＞1 都没跑过 ⇒ 不许说「claude 可用」「分层选择可用」。** ***
+- 会话 `4d2e426e` 改了验收工具（不动 `src/`）：`scripts/live-driver-acceptance.ts` 加 `--context-window`、`--scenario conflict`，隔离参数补关 auto memory；`scripts/claude-tee.mjs` 并行安全并记 argv。🔴 **reconcile 的 `ccloop run` 把证据和进程组登记放在 `<stateDir>.workspaces/`，不在 `.runs/`** —— 旧脚本的看门狗与用量清点都漏了它，现已两处都扫（台账 §20）。
 - ⛔ **下一件事（都归人，人开口前别动）**：
   1. ✅ **真实 `~/.orca/agents.json` 与 `.draft.json` 两个夹具残留已删**（2026-09-27，会话 `4d2e426e`，人授权；台账 §19）。现在真实 `~/.orca` 下只剩空的 `control/`，没有安装表 ⇒ 按 `orca agents init` 在表存在时只写草稿的规则，下一次 init 应写正式表（本会话未实测）。⚠️ 别处已有的安装表不会自动带上 detect 的新默认参数。
-  2. 可选方向：更多真 claude 形状（解冲突经 `ccloop run --agents`、`[1m]`、混 kind）；stream-json 逐条 usage（让 claude 下 deadline 中止可续）；opencode／pi／litellm；subagent 级切换；老账 `stopProof`／Linux／ccloop M3、M4。
+  2. 可选方向：更多真 claude 形状（✅ `[1m]` 与两任务解冲突已各跑一次；混 kind 要真 codex；依赖、handoff／续跑、三路冲突未跑）；stream-json 逐条 usage（让 claude 下 deadline 中止可续）；opencode／pi／litellm；subagent 级切换；老账 `stopProof`／Linux／ccloop M3、M4。
   3. 发布状态：跑 `/usr/bin/git ls-remote` 自查；推送顺序先 ccloop 后 Orca（§9.0c）。
 - **执行规矩**：上一轮人给的授权**都不延续**。付费 claude、真 codex（🔴 **codex 周额度已用完**）、改既有判据（要人逐条点名）、删用户数据、杀进程，每一次都要人重新开口。会话 `94b09282` 的付费合计 $0.152572（工具报数）。
 

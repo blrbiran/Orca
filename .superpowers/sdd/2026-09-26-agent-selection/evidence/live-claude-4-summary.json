@@ -1,0 +1,1279 @@
+{
+  "mode": "live",
+  "kind": "claude",
+  "scenario": "conflict",
+  "contextWindow": null,
+  "agents": {
+    "a": {
+      "agent": "claude",
+      "model": "claude-opus-5-5",
+      "contextWindow": "agent-default"
+    },
+    "b": {
+      "agent": "claude",
+      "model": "claude-opus-5-5",
+      "contextWindow": "agent-default"
+    }
+  },
+  "groupTokens": 3100000,
+  "taskTokens": 1000000,
+  "taskAttempts": 1,
+  "activeMs": 600000,
+  "deadlineMs": 540000,
+  "installationCommand": [
+    "/Users/biran/.nvm/versions/node/v22.13.1/bin/node",
+    "/Users/biran/code/skills/loop/Orca/scripts/claude-tee.mjs",
+    "/private/tmp/claude-501/-Users-biran-code-skills-loop-Orca/4d2e426e-680f-4b31-a30b-5fbbdaf72a1f/scratchpad/live-s2-conflict/claude-raw",
+    "/Users/biran/.nvm/versions/node/v22.13.1/bin/claude",
+    "--permission-mode",
+    "acceptEdits",
+    "--no-session-persistence",
+    "--setting-sources",
+    "project,local",
+    "--strict-mcp-config",
+    "--disable-slash-commands",
+    "--settings",
+    "{\"autoMemoryEnabled\":false}",
+    "--max-budget-usd",
+    "2"
+  ],
+  "installationVersion": "2.1.283",
+  "startedAt": "2026-09-27T05:29:01.224Z",
+  "root": "/private/tmp/claude-501/-Users-biran-code-skills-loop-Orca/4d2e426e-680f-4b31-a30b-5fbbdaf72a1f/scratchpad/live-s2-conflict",
+  "imported": {
+    "schema": "orca-command-success-v1",
+    "commandId": "import",
+    "actorId": "human",
+    "verb": "import-plan",
+    "target": {
+      "kind": "group",
+      "groupId": "g"
+    },
+    "commandRevision": 1,
+    "projectionSeq": 1,
+    "effectivePayloadHash": "b972553c344e9976c03c5d325caf90bde910f96ae988861e07331a2534fddc5b",
+    "authorityCommandHash": "deb804086af57719958671d97171f1251e5f27c1dd4ef2d47ecd8eeca124ef74",
+    "result": {
+      "kind": "imported",
+      "groupId": "g",
+      "estimateId": "estimate-9e943b2dfebed977beaab2e6",
+      "estimateState": "blocked-capability",
+      "estimateReasonCode": "agent-selection-rejected:estimator:agent-unselected"
+    }
+  },
+  "confirmedLedger": {
+    "groupLimit": {
+      "tokens": 3100000,
+      "activeMs": 44280000,
+      "attempts": 10,
+      "sessions": 10
+    },
+    "used": {
+      "tokens": 0,
+      "activeMs": 0,
+      "attempts": 0,
+      "sessions": 0
+    },
+    "committedRemaining": {
+      "tokens": 2000001,
+      "activeMs": 8400000,
+      "attempts": 3,
+      "sessions": 3
+    },
+    "explicitUnallocatedReserve": {
+      "tokens": 1099999,
+      "activeMs": 35880000,
+      "attempts": 7,
+      "sessions": 7
+    },
+    "budgetDeficit": {
+      "tokens": 0,
+      "activeMs": 0,
+      "attempts": 0,
+      "sessions": 0
+    },
+    "usageUnknown": false
+  },
+  "proposal": {
+    "proposalVersion": 2,
+    "state": "confirmed",
+    "planHash": "ff4ffecce0697c8baf79f9a6031ba15a99e31975e679a7dea07613c5ae82d2e8",
+    "groupLimit": {
+      "tokens": 3100000,
+      "activeMs": 44280000,
+      "attempts": 10,
+      "sessions": 10
+    },
+    "explicitUnallocatedReserve": {
+      "tokens": 1099999,
+      "activeMs": 35880000,
+      "attempts": 7,
+      "sessions": 7
+    },
+    "allocations": [
+      {
+        "ownerKind": "goal-review",
+        "ownerId": "g:goal-review",
+        "bucket": "review",
+        "state": "confirmed",
+        "amount": {
+          "tokens": 1,
+          "activeMs": 3600000,
+          "attempts": 1,
+          "sessions": 1
+        },
+        "fieldProvenance": {
+          "tokens": {
+            "provenance": "human",
+            "estimateId": null
+          },
+          "activeMs": {
+            "provenance": "complex-1m-default",
+            "estimateId": null
+          },
+          "attempts": {
+            "provenance": "complex-1m-default",
+            "estimateId": null
+          },
+          "sessions": {
+            "provenance": "complex-1m-default",
+            "estimateId": null
+          }
+        }
+      },
+      {
+        "ownerKind": "reserve",
+        "ownerId": "g:reserve",
+        "bucket": "reserve",
+        "state": "confirmed",
+        "amount": {
+          "tokens": 1099999,
+          "activeMs": 35880000,
+          "attempts": 7,
+          "sessions": 7
+        },
+        "fieldProvenance": {
+          "tokens": {
+            "provenance": "system",
+            "estimateId": null
+          },
+          "activeMs": {
+            "provenance": "system",
+            "estimateId": null
+          },
+          "attempts": {
+            "provenance": "system",
+            "estimateId": null
+          },
+          "sessions": {
+            "provenance": "system",
+            "estimateId": null
+          }
+        }
+      },
+      {
+        "ownerKind": "task",
+        "ownerId": "a",
+        "bucket": "handoff",
+        "state": "confirmed",
+        "amount": {
+          "tokens": 0,
+          "activeMs": 1800000,
+          "attempts": 0,
+          "sessions": 0
+        },
+        "fieldProvenance": {
+          "tokens": {
+            "provenance": "human",
+            "estimateId": null
+          },
+          "activeMs": {
+            "provenance": "complex-1m-default",
+            "estimateId": null
+          },
+          "attempts": {
+            "provenance": "complex-1m-default",
+            "estimateId": null
+          },
+          "sessions": {
+            "provenance": "complex-1m-default",
+            "estimateId": null
+          }
+        }
+      },
+      {
+        "ownerKind": "task",
+        "ownerId": "a",
+        "bucket": "work",
+        "state": "confirmed",
+        "amount": {
+          "tokens": 1000000,
+          "activeMs": 600000,
+          "attempts": 1,
+          "sessions": 1
+        },
+        "fieldProvenance": {
+          "tokens": {
+            "provenance": "human",
+            "estimateId": null
+          },
+          "activeMs": {
+            "provenance": "human",
+            "estimateId": null
+          },
+          "attempts": {
+            "provenance": "human",
+            "estimateId": null
+          },
+          "sessions": {
+            "provenance": "human",
+            "estimateId": null
+          }
+        }
+      },
+      {
+        "ownerKind": "task",
+        "ownerId": "b",
+        "bucket": "handoff",
+        "state": "confirmed",
+        "amount": {
+          "tokens": 0,
+          "activeMs": 1800000,
+          "attempts": 0,
+          "sessions": 0
+        },
+        "fieldProvenance": {
+          "tokens": {
+            "provenance": "human",
+            "estimateId": null
+          },
+          "activeMs": {
+            "provenance": "complex-1m-default",
+            "estimateId": null
+          },
+          "attempts": {
+            "provenance": "complex-1m-default",
+            "estimateId": null
+          },
+          "sessions": {
+            "provenance": "complex-1m-default",
+            "estimateId": null
+          }
+        }
+      },
+      {
+        "ownerKind": "task",
+        "ownerId": "b",
+        "bucket": "work",
+        "state": "confirmed",
+        "amount": {
+          "tokens": 1000000,
+          "activeMs": 600000,
+          "attempts": 1,
+          "sessions": 1
+        },
+        "fieldProvenance": {
+          "tokens": {
+            "provenance": "human",
+            "estimateId": null
+          },
+          "activeMs": {
+            "provenance": "human",
+            "estimateId": null
+          },
+          "attempts": {
+            "provenance": "human",
+            "estimateId": null
+          },
+          "sessions": {
+            "provenance": "human",
+            "estimateId": null
+          }
+        }
+      }
+    ],
+    "budgetMode": "soft",
+    "contextPolicy": {
+      "handoffAtContextTokens": null
+    },
+    "profiles": {
+      "estimator": {
+        "profileId": "all",
+        "profileHash": "e20ca502a1c564ba784159441bc51e62375b7bf58e52ea8d7f176634735184fb"
+      },
+      "worker": {
+        "profileId": "all",
+        "profileHash": "e20ca502a1c564ba784159441bc51e62375b7bf58e52ea8d7f176634735184fb"
+      },
+      "handoff": {
+        "profileId": "all",
+        "profileHash": "e20ca502a1c564ba784159441bc51e62375b7bf58e52ea8d7f176634735184fb"
+      },
+      "goalReview": {
+        "profileId": "all",
+        "profileHash": "e20ca502a1c564ba784159441bc51e62375b7bf58e52ea8d7f176634735184fb"
+      }
+    },
+    "executionSnapshotHash": "931ca7689a883fc3709347aac523d67fa11bc5d54f36d7f1d33a5ea65d15ee09"
+  },
+  "shutdown": true,
+  "killedProcessGroups": [],
+  "runs": [
+    {
+      "runId": "run-2f464809-cca7-471c-8c4f-8aac60989ba9",
+      "task": "a",
+      "state": "settled",
+      "drive": {
+        "workspaceMode": "worktree",
+        "sourceDir": "/private/tmp/claude-501/-Users-biran-code-skills-loop-Orca/4d2e426e-680f-4b31-a30b-5fbbdaf72a1f/scratchpad/live-s2-conflict/control/live-247610f4.runs/run-2f464809-cca7-471c-8c4f-8aac60989ba9",
+        "workspacePath": "/private/tmp/claude-501/-Users-biran-code-skills-loop-Orca/4d2e426e-680f-4b31-a30b-5fbbdaf72a1f/scratchpad/live-s2-conflict/control/live-247610f4.workspaces/run-2f464809-cca7-471c-8c4f-8aac60989ba9",
+        "targetRepo": "/private/tmp/claude-501/-Users-biran-code-skills-loop-Orca/4d2e426e-680f-4b31-a30b-5fbbdaf72a1f/scratchpad/live-s2-conflict/target",
+        "prepared": true,
+        "base": "5a7ef3c6a97ce002bbc18eda1f1f790778cb37f7",
+        "envelopeHash": "a64b9364c8b7ed6265acce0482dbf0eccb1106f6e0175094593cd72071d3d593",
+        "inspectUnknown": 0,
+        "outcome": "succeeded",
+        "attemptSha": "07c7e5ef70f4dc5704f20edef6320b1ed56309c2",
+        "landedCommit": "0e7575139d77a3bf3f2f703e42a6d65721ee7011",
+        "reconcile": null,
+        "blockedAt": null,
+        "blockedReason": null,
+        "cleanedUp": true,
+        "cleanupError": null,
+        "publishError": null
+      }
+    },
+    {
+      "runId": "run-81d7ce5f-ee6e-4638-b5dd-42472ae6c238",
+      "task": "b",
+      "state": "settled",
+      "drive": {
+        "workspaceMode": "worktree",
+        "sourceDir": "/private/tmp/claude-501/-Users-biran-code-skills-loop-Orca/4d2e426e-680f-4b31-a30b-5fbbdaf72a1f/scratchpad/live-s2-conflict/control/live-247610f4.runs/run-81d7ce5f-ee6e-4638-b5dd-42472ae6c238",
+        "workspacePath": "/private/tmp/claude-501/-Users-biran-code-skills-loop-Orca/4d2e426e-680f-4b31-a30b-5fbbdaf72a1f/scratchpad/live-s2-conflict/control/live-247610f4.workspaces/run-81d7ce5f-ee6e-4638-b5dd-42472ae6c238",
+        "targetRepo": "/private/tmp/claude-501/-Users-biran-code-skills-loop-Orca/4d2e426e-680f-4b31-a30b-5fbbdaf72a1f/scratchpad/live-s2-conflict/target",
+        "prepared": true,
+        "base": "5a7ef3c6a97ce002bbc18eda1f1f790778cb37f7",
+        "envelopeHash": "913bb2ad328c71470739fe012819036cf7381638caa76440739682b36dc6a381",
+        "inspectUnknown": 0,
+        "outcome": "succeeded",
+        "attemptSha": "cd4e0cd7a5caadb8df4fcd0c451584faf3441fe1",
+        "landedCommit": "dbfd0747ecd8e21071d2ed13d58b0bf5e12d63ed",
+        "reconcile": {
+          "copyPath": "/private/tmp/claude-501/-Users-biran-code-skills-loop-Orca/4d2e426e-680f-4b31-a30b-5fbbdaf72a1f/scratchpad/live-s2-conflict/control/live-247610f4.workspaces/conflict-run-81d7ce5f-ee6e-4638-b5dd-42472ae6c238",
+          "old": "0e7575139d77a3bf3f2f703e42a6d65721ee7011",
+          "conflictCommit": "462abf07d4d7ca5c80f2f1273a6bf31b5df16888",
+          "conflictedPaths": [
+            "shared.txt"
+          ],
+          "otherTaskId": "a",
+          "otherTaskIds": [
+            "a"
+          ],
+          "reconcileRunId": "reconcile-run-81d7ce5f-ee6e-4638-b5dd-42472ae6c238",
+          "runsDir": "/private/tmp/claude-501/-Users-biran-code-skills-loop-Orca/4d2e426e-680f-4b31-a30b-5fbbdaf72a1f/scratchpad/live-s2-conflict/control/live-247610f4.workspaces/reconcile-run-81d7ce5f-ee6e-4638-b5dd-42472ae6c238",
+          "contractPath": "/private/tmp/claude-501/-Users-biran-code-skills-loop-Orca/4d2e426e-680f-4b31-a30b-5fbbdaf72a1f/scratchpad/live-s2-conflict/control/live-247610f4.workspaces/reconcile-run-81d7ce5f-ee6e-4638-b5dd-42472ae6c238/contract-reconcile-b-a.json",
+          "tokenBudget": 1000000,
+          "spawning": true,
+          "pid": 57952,
+          "outcome": "succeeded",
+          "attemptSha": "a47df14210a9e591e7c040b202c4a302ded1d828",
+          "spawnSeq": 1
+        },
+        "blockedAt": null,
+        "blockedReason": null,
+        "cleanedUp": true,
+        "cleanupError": null,
+        "publishError": null
+      }
+    }
+  ],
+  "ledger": {
+    "groupLimit": {
+      "tokens": 3100000,
+      "activeMs": 44280000,
+      "attempts": 10,
+      "sessions": 10
+    },
+    "used": {
+      "tokens": 432894,
+      "activeMs": 77416,
+      "attempts": 3,
+      "sessions": 3
+    },
+    "committedRemaining": {
+      "tokens": 1,
+      "activeMs": 3600000,
+      "attempts": 1,
+      "sessions": 1
+    },
+    "explicitUnallocatedReserve": {
+      "tokens": 2667105,
+      "activeMs": 40602584,
+      "attempts": 6,
+      "sessions": 6
+    },
+    "budgetDeficit": {
+      "tokens": 0,
+      "activeMs": 0,
+      "attempts": 0,
+      "sessions": 0
+    },
+    "usageUnknown": false
+  },
+  "claudeRawCalls": [
+    {
+      "name": "001790486943273-53735.json",
+      "subtype": "success",
+      "isError": false,
+      "totalCostUsd": 0.0235286,
+      "usage": {
+        "input_tokens": 2,
+        "cache_creation_input_tokens": 2038,
+        "cache_read_input_tokens": 16983,
+        "output_tokens": 191,
+        "output_tokens_details": {
+          "thinking_tokens": 0
+        },
+        "server_tool_use": {
+          "web_search_requests": 0,
+          "web_fetch_requests": 0
+        },
+        "service_tier": "standard",
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 2038,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "inference_geo": "not_available",
+        "iterations": [
+          {
+            "input_tokens": 2,
+            "output_tokens": 191,
+            "cache_read_input_tokens": 16983,
+            "cache_creation_input_tokens": 2038,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 2038
+            },
+            "type": "message"
+          }
+        ],
+        "speed": "standard"
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "inputTokens": 2,
+          "outputTokens": 191,
+          "cacheReadInputTokens": 16983,
+          "cacheCreationInputTokens": 2038,
+          "webSearchRequests": 0,
+          "costUSD": 0.0235286,
+          "contextWindow": 1000000,
+          "maxOutputTokens": 128000,
+          "thinkingTokens": 0,
+          "canonicalModel": "claude-opus-5-5",
+          "provider": "firstParty",
+          "costBasis": "list"
+        }
+      },
+      "numTurns": 2,
+      "durationMs": 3404
+    },
+    {
+      "name": "001790486944077-53848.json",
+      "subtype": "success",
+      "isError": false,
+      "totalCostUsd": 0.0241326,
+      "usage": {
+        "input_tokens": 2,
+        "cache_creation_input_tokens": 2041,
+        "cache_read_input_tokens": 16983,
+        "output_tokens": 220,
+        "output_tokens_details": {
+          "thinking_tokens": 0
+        },
+        "server_tool_use": {
+          "web_search_requests": 0,
+          "web_fetch_requests": 0
+        },
+        "service_tier": "standard",
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 2041,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "inference_geo": "not_available",
+        "iterations": [
+          {
+            "input_tokens": 2,
+            "output_tokens": 220,
+            "cache_read_input_tokens": 16983,
+            "cache_creation_input_tokens": 2041,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 2041
+            },
+            "type": "message"
+          }
+        ],
+        "speed": "standard"
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "inputTokens": 2,
+          "outputTokens": 220,
+          "cacheReadInputTokens": 16983,
+          "cacheCreationInputTokens": 2041,
+          "webSearchRequests": 0,
+          "costUSD": 0.0241326,
+          "contextWindow": 1000000,
+          "maxOutputTokens": 128000,
+          "thinkingTokens": 0,
+          "canonicalModel": "claude-opus-5-5",
+          "provider": "firstParty",
+          "costBasis": "list"
+        }
+      },
+      "numTurns": 2,
+      "durationMs": 3785
+    },
+    {
+      "name": "001790486951347-54043.json",
+      "subtype": "success",
+      "isError": false,
+      "totalCostUsd": 0.047130200000000004,
+      "usage": {
+        "input_tokens": 6,
+        "cache_creation_input_tokens": 3065,
+        "cache_read_input_tokens": 56831,
+        "output_tokens": 561,
+        "output_tokens_details": {
+          "thinking_tokens": 0
+        },
+        "server_tool_use": {
+          "web_search_requests": 0,
+          "web_fetch_requests": 0
+        },
+        "service_tier": "standard",
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 3065,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "inference_geo": "not_available",
+        "iterations": [
+          {
+            "input_tokens": 2,
+            "output_tokens": 365,
+            "cache_read_input_tokens": 19948,
+            "cache_creation_input_tokens": 236,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 236
+            },
+            "type": "message"
+          }
+        ],
+        "speed": "standard"
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "inputTokens": 6,
+          "outputTokens": 561,
+          "cacheReadInputTokens": 56831,
+          "cacheCreationInputTokens": 3065,
+          "webSearchRequests": 0,
+          "costUSD": 0.047130200000000004,
+          "contextWindow": 1000000,
+          "maxOutputTokens": 128000,
+          "thinkingTokens": 0,
+          "canonicalModel": "claude-opus-5-5",
+          "provider": "firstParty",
+          "costBasis": "list"
+        }
+      },
+      "numTurns": 4,
+      "durationMs": 11062
+    },
+    {
+      "name": "001790486952161-54107.json",
+      "subtype": "success",
+      "isError": false,
+      "totalCostUsd": 0.0486358,
+      "usage": {
+        "input_tokens": 6,
+        "cache_creation_input_tokens": 3099,
+        "cache_read_input_tokens": 56899,
+        "output_tokens": 622,
+        "output_tokens_details": {
+          "thinking_tokens": 0
+        },
+        "server_tool_use": {
+          "web_search_requests": 0,
+          "web_fetch_requests": 0
+        },
+        "service_tier": "standard",
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 3099,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "inference_geo": "not_available",
+        "iterations": [
+          {
+            "input_tokens": 2,
+            "output_tokens": 417,
+            "cache_read_input_tokens": 19981,
+            "cache_creation_input_tokens": 237,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 237
+            },
+            "type": "message"
+          }
+        ],
+        "speed": "standard"
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "inputTokens": 6,
+          "outputTokens": 622,
+          "cacheReadInputTokens": 56899,
+          "cacheCreationInputTokens": 3099,
+          "webSearchRequests": 0,
+          "costUSD": 0.0486358,
+          "contextWindow": 1000000,
+          "maxOutputTokens": 128000,
+          "thinkingTokens": 0,
+          "canonicalModel": "claude-opus-5-5",
+          "provider": "firstParty",
+          "costBasis": "list"
+        }
+      },
+      "numTurns": 4,
+      "durationMs": 14478
+    },
+    {
+      "name": "001790486965699-55288.json",
+      "subtype": "success",
+      "isError": false,
+      "totalCostUsd": 0.0528328,
+      "usage": {
+        "input_tokens": 6,
+        "cache_creation_input_tokens": 3620,
+        "cache_read_input_tokens": 58144,
+        "output_tokens": 611,
+        "output_tokens_details": {
+          "thinking_tokens": 0
+        },
+        "server_tool_use": {
+          "web_search_requests": 0,
+          "web_fetch_requests": 0
+        },
+        "service_tier": "standard",
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 3620,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "inference_geo": "not_available",
+        "iterations": [
+          {
+            "input_tokens": 2,
+            "output_tokens": 360,
+            "cache_read_input_tokens": 20579,
+            "cache_creation_input_tokens": 223,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 223
+            },
+            "type": "message"
+          }
+        ],
+        "speed": "standard"
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "inputTokens": 6,
+          "outputTokens": 611,
+          "cacheReadInputTokens": 58144,
+          "cacheCreationInputTokens": 3620,
+          "webSearchRequests": 0,
+          "costUSD": 0.0528328,
+          "contextWindow": 1000000,
+          "maxOutputTokens": 128000,
+          "thinkingTokens": 0,
+          "canonicalModel": "claude-opus-5-5",
+          "provider": "firstParty",
+          "costBasis": "list"
+        }
+      },
+      "numTurns": 4,
+      "durationMs": 11592
+    },
+    {
+      "name": "001790486969833-55434.json",
+      "subtype": "success",
+      "isError": false,
+      "totalCostUsd": 0.054516800000000004,
+      "usage": {
+        "input_tokens": 6,
+        "cache_creation_input_tokens": 3791,
+        "cache_read_input_tokens": 58324,
+        "output_tokens": 625,
+        "output_tokens_details": {
+          "thinking_tokens": 0
+        },
+        "server_tool_use": {
+          "web_search_requests": 0,
+          "web_fetch_requests": 0
+        },
+        "service_tier": "standard",
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 3791,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "inference_geo": "not_available",
+        "iterations": [
+          {
+            "input_tokens": 2,
+            "output_tokens": 364,
+            "cache_read_input_tokens": 20670,
+            "cache_creation_input_tokens": 303,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 303
+            },
+            "type": "message"
+          }
+        ],
+        "speed": "standard"
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "inputTokens": 6,
+          "outputTokens": 625,
+          "cacheReadInputTokens": 58324,
+          "cacheCreationInputTokens": 3791,
+          "webSearchRequests": 0,
+          "costUSD": 0.054516800000000004,
+          "contextWindow": 1000000,
+          "maxOutputTokens": 128000,
+          "thinkingTokens": 0,
+          "canonicalModel": "claude-opus-5-5",
+          "provider": "firstParty",
+          "costBasis": "list"
+        }
+      },
+      "numTurns": 4,
+      "durationMs": 11503
+    },
+    {
+      "name": "001790486992531-57998.json",
+      "subtype": "success",
+      "isError": false,
+      "totalCostUsd": 0.0448258,
+      "usage": {
+        "input_tokens": 4,
+        "cache_creation_input_tokens": 3085,
+        "cache_read_input_tokens": 36649,
+        "output_tokens": 640,
+        "output_tokens_details": {
+          "thinking_tokens": 0
+        },
+        "server_tool_use": {
+          "web_search_requests": 0,
+          "web_fetch_requests": 0
+        },
+        "service_tier": "standard",
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 3085,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "inference_geo": "not_available",
+        "iterations": [
+          {
+            "input_tokens": 2,
+            "output_tokens": 376,
+            "cache_read_input_tokens": 19666,
+            "cache_creation_input_tokens": 402,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 402
+            },
+            "type": "message"
+          }
+        ],
+        "speed": "standard"
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "inputTokens": 4,
+          "outputTokens": 640,
+          "cacheReadInputTokens": 36649,
+          "cacheCreationInputTokens": 3085,
+          "webSearchRequests": 0,
+          "costUSD": 0.0448258,
+          "contextWindow": 1000000,
+          "maxOutputTokens": 128000,
+          "thinkingTokens": 0,
+          "canonicalModel": "claude-opus-5-5",
+          "provider": "firstParty",
+          "costBasis": "list"
+        }
+      },
+      "numTurns": 3,
+      "durationMs": 8321
+    },
+    {
+      "name": "001790487004030-58229.json",
+      "subtype": "success",
+      "isError": false,
+      "totalCostUsd": 0.0876084,
+      "usage": {
+        "input_tokens": 10,
+        "cache_creation_input_tokens": 5007,
+        "cache_read_input_tokens": 101462,
+        "output_tokens": 1361,
+        "output_tokens_details": {
+          "thinking_tokens": 0
+        },
+        "server_tool_use": {
+          "web_search_requests": 0,
+          "web_fetch_requests": 0
+        },
+        "service_tier": "standard",
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 5007,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "inference_geo": "not_available",
+        "iterations": [
+          {
+            "input_tokens": 2,
+            "output_tokens": 573,
+            "cache_read_input_tokens": 21915,
+            "cache_creation_input_tokens": 211,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 211
+            },
+            "type": "message"
+          }
+        ],
+        "speed": "standard"
+      },
+      "modelUsage": {
+        "claude-opus-5-5": {
+          "inputTokens": 10,
+          "outputTokens": 1361,
+          "cacheReadInputTokens": 101462,
+          "cacheCreationInputTokens": 5007,
+          "webSearchRequests": 0,
+          "costUSD": 0.0876084,
+          "contextWindow": 1000000,
+          "maxOutputTokens": 128000,
+          "thinkingTokens": 0,
+          "canonicalModel": "claude-opus-5-5",
+          "provider": "firstParty",
+          "costBasis": "list"
+        }
+      },
+      "numTurns": 7,
+      "durationMs": 20426
+    }
+  ],
+  "claudeArgvModels": [
+    "claude-opus-5-5",
+    "claude-opus-5-5",
+    "claude-opus-5-5",
+    "claude-opus-5-5",
+    "claude-opus-5-5",
+    "claude-opus-5-5",
+    "claude-opus-5-5",
+    "claude-opus-5-5"
+  ],
+  "claudeReportedUsd": 0.3832110000000001,
+  "providerCalls": [
+    {
+      "role": "worker",
+      "phase": "execute",
+      "file": "/private/tmp/claude-501/-Users-biran-code-skills-loop-Orca/4d2e426e-680f-4b31-a30b-5fbbdaf72a1f/scratchpad/live-s2-conflict/control/live-247610f4.runs/run-2f464809-cca7-471c-8c4f-8aac60989ba9/run/claude/1/execute/call-vY2f3z/stdout.json",
+      "usage": {
+        "usageStatus": "present",
+        "fields": {
+          "input_tokens": {
+            "status": "finite",
+            "value": 6
+          },
+          "inputTokens": {
+            "status": "absent"
+          },
+          "output_tokens": {
+            "status": "finite",
+            "value": 561
+          },
+          "outputTokens": {
+            "status": "absent"
+          }
+        },
+        "cacheFields": {
+          "cache_creation_input_tokens": {
+            "status": "finite",
+            "value": 3065
+          },
+          "cache_read_input_tokens": {
+            "status": "finite",
+            "value": 56831
+          }
+        },
+        "selectedInputField": "input_tokens",
+        "selectedOutputField": "output_tokens",
+        "normalizedTotal": 60463
+      },
+      "total": 60463
+    },
+    {
+      "role": "worker",
+      "phase": "plan",
+      "file": "/private/tmp/claude-501/-Users-biran-code-skills-loop-Orca/4d2e426e-680f-4b31-a30b-5fbbdaf72a1f/scratchpad/live-s2-conflict/control/live-247610f4.runs/run-2f464809-cca7-471c-8c4f-8aac60989ba9/run/claude/1/plan/call-kXlhnY/stdout.json",
+      "usage": {
+        "usageStatus": "present",
+        "fields": {
+          "input_tokens": {
+            "status": "finite",
+            "value": 2
+          },
+          "inputTokens": {
+            "status": "absent"
+          },
+          "output_tokens": {
+            "status": "finite",
+            "value": 191
+          },
+          "outputTokens": {
+            "status": "absent"
+          }
+        },
+        "cacheFields": {
+          "cache_creation_input_tokens": {
+            "status": "finite",
+            "value": 2038
+          },
+          "cache_read_input_tokens": {
+            "status": "finite",
+            "value": 16983
+          }
+        },
+        "selectedInputField": "input_tokens",
+        "selectedOutputField": "output_tokens",
+        "normalizedTotal": 19214
+      },
+      "total": 19214
+    },
+    {
+      "role": "worker",
+      "phase": "verify",
+      "file": "/private/tmp/claude-501/-Users-biran-code-skills-loop-Orca/4d2e426e-680f-4b31-a30b-5fbbdaf72a1f/scratchpad/live-s2-conflict/control/live-247610f4.runs/run-2f464809-cca7-471c-8c4f-8aac60989ba9/run/claude/1/verify/call-5yuZPB/stdout.json",
+      "usage": {
+        "usageStatus": "present",
+        "fields": {
+          "input_tokens": {
+            "status": "finite",
+            "value": 6
+          },
+          "inputTokens": {
+            "status": "absent"
+          },
+          "output_tokens": {
+            "status": "finite",
+            "value": 611
+          },
+          "outputTokens": {
+            "status": "absent"
+          }
+        },
+        "cacheFields": {
+          "cache_creation_input_tokens": {
+            "status": "finite",
+            "value": 3620
+          },
+          "cache_read_input_tokens": {
+            "status": "finite",
+            "value": 58144
+          }
+        },
+        "selectedInputField": "input_tokens",
+        "selectedOutputField": "output_tokens",
+        "normalizedTotal": 62381
+      },
+      "total": 62381
+    },
+    {
+      "role": "worker",
+      "phase": "execute",
+      "file": "/private/tmp/claude-501/-Users-biran-code-skills-loop-Orca/4d2e426e-680f-4b31-a30b-5fbbdaf72a1f/scratchpad/live-s2-conflict/control/live-247610f4.runs/run-81d7ce5f-ee6e-4638-b5dd-42472ae6c238/run/claude/1/execute/call-zNUWLF/stdout.json",
+      "usage": {
+        "usageStatus": "present",
+        "fields": {
+          "input_tokens": {
+            "status": "finite",
+            "value": 6
+          },
+          "inputTokens": {
+            "status": "absent"
+          },
+          "output_tokens": {
+            "status": "finite",
+            "value": 622
+          },
+          "outputTokens": {
+            "status": "absent"
+          }
+        },
+        "cacheFields": {
+          "cache_creation_input_tokens": {
+            "status": "finite",
+            "value": 3099
+          },
+          "cache_read_input_tokens": {
+            "status": "finite",
+            "value": 56899
+          }
+        },
+        "selectedInputField": "input_tokens",
+        "selectedOutputField": "output_tokens",
+        "normalizedTotal": 60626
+      },
+      "total": 60626
+    },
+    {
+      "role": "worker",
+      "phase": "plan",
+      "file": "/private/tmp/claude-501/-Users-biran-code-skills-loop-Orca/4d2e426e-680f-4b31-a30b-5fbbdaf72a1f/scratchpad/live-s2-conflict/control/live-247610f4.runs/run-81d7ce5f-ee6e-4638-b5dd-42472ae6c238/run/claude/1/plan/call-Gohtlm/stdout.json",
+      "usage": {
+        "usageStatus": "present",
+        "fields": {
+          "input_tokens": {
+            "status": "finite",
+            "value": 2
+          },
+          "inputTokens": {
+            "status": "absent"
+          },
+          "output_tokens": {
+            "status": "finite",
+            "value": 220
+          },
+          "outputTokens": {
+            "status": "absent"
+          }
+        },
+        "cacheFields": {
+          "cache_creation_input_tokens": {
+            "status": "finite",
+            "value": 2041
+          },
+          "cache_read_input_tokens": {
+            "status": "finite",
+            "value": 16983
+          }
+        },
+        "selectedInputField": "input_tokens",
+        "selectedOutputField": "output_tokens",
+        "normalizedTotal": 19246
+      },
+      "total": 19246
+    },
+    {
+      "role": "worker",
+      "phase": "verify",
+      "file": "/private/tmp/claude-501/-Users-biran-code-skills-loop-Orca/4d2e426e-680f-4b31-a30b-5fbbdaf72a1f/scratchpad/live-s2-conflict/control/live-247610f4.runs/run-81d7ce5f-ee6e-4638-b5dd-42472ae6c238/run/claude/1/verify/call-7OzY0N/stdout.json",
+      "usage": {
+        "usageStatus": "present",
+        "fields": {
+          "input_tokens": {
+            "status": "finite",
+            "value": 6
+          },
+          "inputTokens": {
+            "status": "absent"
+          },
+          "output_tokens": {
+            "status": "finite",
+            "value": 625
+          },
+          "outputTokens": {
+            "status": "absent"
+          }
+        },
+        "cacheFields": {
+          "cache_creation_input_tokens": {
+            "status": "finite",
+            "value": 3791
+          },
+          "cache_read_input_tokens": {
+            "status": "finite",
+            "value": 58324
+          }
+        },
+        "selectedInputField": "input_tokens",
+        "selectedOutputField": "output_tokens",
+        "normalizedTotal": 62746
+      },
+      "total": 62746
+    },
+    {
+      "role": "reconcile",
+      "phase": "execute",
+      "file": "/private/tmp/claude-501/-Users-biran-code-skills-loop-Orca/4d2e426e-680f-4b31-a30b-5fbbdaf72a1f/scratchpad/live-s2-conflict/control/live-247610f4.workspaces/reconcile-run-81d7ce5f-ee6e-4638-b5dd-42472ae6c238/reconcile-run-81d7ce5f-ee6e-4638-b5dd-42472ae6c238/loop/reconcile-run-81d7ce5f-ee6e-4638-b5dd-42472ae6c238/claude/1/execute/call-A0gVV2/stdout.json",
+      "usage": {
+        "usageStatus": "present",
+        "fields": {
+          "input_tokens": {
+            "status": "finite",
+            "value": 10
+          },
+          "inputTokens": {
+            "status": "absent"
+          },
+          "output_tokens": {
+            "status": "finite",
+            "value": 1361
+          },
+          "outputTokens": {
+            "status": "absent"
+          }
+        },
+        "cacheFields": {
+          "cache_creation_input_tokens": {
+            "status": "finite",
+            "value": 5007
+          },
+          "cache_read_input_tokens": {
+            "status": "finite",
+            "value": 101462
+          }
+        },
+        "selectedInputField": "input_tokens",
+        "selectedOutputField": "output_tokens",
+        "normalizedTotal": 107840
+      },
+      "total": 107840
+    },
+    {
+      "role": "reconcile",
+      "phase": "plan",
+      "file": "/private/tmp/claude-501/-Users-biran-code-skills-loop-Orca/4d2e426e-680f-4b31-a30b-5fbbdaf72a1f/scratchpad/live-s2-conflict/control/live-247610f4.workspaces/reconcile-run-81d7ce5f-ee6e-4638-b5dd-42472ae6c238/reconcile-run-81d7ce5f-ee6e-4638-b5dd-42472ae6c238/loop/reconcile-run-81d7ce5f-ee6e-4638-b5dd-42472ae6c238/claude/1/plan/call-obAKzL/stdout.json",
+      "usage": {
+        "usageStatus": "present",
+        "fields": {
+          "input_tokens": {
+            "status": "finite",
+            "value": 4
+          },
+          "inputTokens": {
+            "status": "absent"
+          },
+          "output_tokens": {
+            "status": "finite",
+            "value": 640
+          },
+          "outputTokens": {
+            "status": "absent"
+          }
+        },
+        "cacheFields": {
+          "cache_creation_input_tokens": {
+            "status": "finite",
+            "value": 3085
+          },
+          "cache_read_input_tokens": {
+            "status": "finite",
+            "value": 36649
+          }
+        },
+        "selectedInputField": "input_tokens",
+        "selectedOutputField": "output_tokens",
+        "normalizedTotal": 40378
+      },
+      "total": 40378
+    }
+  ],
+  "ccloopReportedTokens": 432894,
+  "ccloopExecutionPolicies": [
+    {
+      "autonomyLevel": "L2",
+      "maxAttempts": 1,
+      "perAttemptTimeoutMs": 420000,
+      "totalRuntimeBudgetMs": 600000,
+      "tokenBudget": 1000000,
+      "worktreeRequired": true,
+      "partialOutcomeRecoveryWindowMs": 1000
+    },
+    {
+      "autonomyLevel": "L2",
+      "maxAttempts": 1,
+      "perAttemptTimeoutMs": 420000,
+      "totalRuntimeBudgetMs": 600000,
+      "tokenBudget": 1000000,
+      "worktreeRequired": true,
+      "partialOutcomeRecoveryWindowMs": 1000
+    },
+    {
+      "autonomyLevel": "L2",
+      "maxAttempts": 1,
+      "perAttemptTimeoutMs": 420000,
+      "totalRuntimeBudgetMs": 600000,
+      "tokenBudget": 1000000,
+      "worktreeRequired": true,
+      "partialOutcomeRecoveryWindowMs": 0
+    }
+  ],
+  "landedContent": "base\nA\nB\n",
+  "reconciled": [
+    {
+      "runId": "run-81d7ce5f-ee6e-4638-b5dd-42472ae6c238",
+      "task": "b",
+      "reconcile": {
+        "copyPath": "/private/tmp/claude-501/-Users-biran-code-skills-loop-Orca/4d2e426e-680f-4b31-a30b-5fbbdaf72a1f/scratchpad/live-s2-conflict/control/live-247610f4.workspaces/conflict-run-81d7ce5f-ee6e-4638-b5dd-42472ae6c238",
+        "old": "0e7575139d77a3bf3f2f703e42a6d65721ee7011",
+        "conflictCommit": "462abf07d4d7ca5c80f2f1273a6bf31b5df16888",
+        "conflictedPaths": [
+          "shared.txt"
+        ],
+        "otherTaskId": "a",
+        "otherTaskIds": [
+          "a"
+        ],
+        "reconcileRunId": "reconcile-run-81d7ce5f-ee6e-4638-b5dd-42472ae6c238",
+        "runsDir": "/private/tmp/claude-501/-Users-biran-code-skills-loop-Orca/4d2e426e-680f-4b31-a30b-5fbbdaf72a1f/scratchpad/live-s2-conflict/control/live-247610f4.workspaces/reconcile-run-81d7ce5f-ee6e-4638-b5dd-42472ae6c238",
+        "contractPath": "/private/tmp/claude-501/-Users-biran-code-skills-loop-Orca/4d2e426e-680f-4b31-a30b-5fbbdaf72a1f/scratchpad/live-s2-conflict/control/live-247610f4.workspaces/reconcile-run-81d7ce5f-ee6e-4638-b5dd-42472ae6c238/contract-reconcile-b-a.json",
+        "tokenBudget": 1000000,
+        "spawning": true,
+        "pid": 57952,
+        "outcome": "succeeded",
+        "attemptSha": "a47df14210a9e591e7c040b202c4a302ded1d828",
+        "spawnSeq": 1
+      }
+    }
+  ],
+  "checks": {
+    "ccloopPolicyCapped": true,
+    "notTimedOut": true,
+    "runSettled": true,
+    "workDone": true,
+    "cleanedUp": true,
+    "landedBytes": true,
+    "onlyTargetChanged": true,
+    "reconciledAsExpected": true,
+    "humanUntouched": true,
+    "dispatchNotBlocked": true,
+    "published": true,
+    "providerCalls": true,
+    "everyCallHasUsage": true,
+    "ledgerKnown": true,
+    "ledgerMatchesCcloop": true,
+    "orcaHomeUntouched": true,
+    "claudeProjectsUntouched": true,
+    "claudeArgvModel": true,
+    "shutdownClean": true
+  },
+  "finishedAt": "2026-09-27T05:30:31.416Z"
+}

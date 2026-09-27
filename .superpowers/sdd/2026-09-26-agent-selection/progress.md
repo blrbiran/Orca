@@ -582,3 +582,19 @@
 - 备份：会话 scratchpad 的 `orca-residue-backup/` 下各一份，sha256 与原件相同（scratchpad 是会话临时目录，不保证长期留存）。
 - 删除：`/bin/rm -f` 只点名这两个文件，RC 0。删后 `/bin/ls -la ~/.orca`：只剩空目录 `control/`（mtime 2026-09-22，未动）；`test -e` 两个文件均为 1（不存在）。
 - 未实测：删表后 `orca agents init` 的行为（按既有记录，表存在时只写草稿；表不存在时应写正式表）。
+
+## §20 付费真 claude：`[1m]` 单任务与两任务解冲突（控制器会话 `4d2e426e`，2026-09-27；接在 §19 之后）
+
+- Human（2026-09-27）：「ccmem 也提交，其他按顺序做」；控制器按 spike 路径提出探法（S1 `[1m]`、S2 解冲突；混 kind 因 codex 周额度用完不做；各 n＝1、每次调用 `--max-budget-usd 2`、红了先停不重跑）；Human：「批准，按你的建议继续」。
+- 验收工具改动（不动 `src/`，与本节同一笔提交）：
+  - `scripts/claude-tee.mjs`：回包按 `<ms>-<pid>.json` 命名（原「现有文件数＋1」在并行收尾时会互相覆盖），旁边另存 `<ms>-<pid>.argv.json`。
+  - `scripts/live-driver-acceptance.ts`：`--context-window`（进操作者偏好的 `perAgent`）；`--scenario conflict`（基线 `shared.txt` ＝ `base\n`，任务 a／b 各追加一行 `A`／`B`）；隔离参数补 `--settings {"autoMemoryEnabled":false}`（与 `agents detect` 的草稿对齐）；fake claude 也走 tee；检查推广到多任务，新增 `reconciledAsExpected`、`claudeArgvModel`（每次调用的 `--model` 等于冻结选择拼出的值，1M 时为 `<model>[1m]`）、`claudeProjectsUntouched`（`~/.claude/projects` 顶层条目前后相同）；`providerCalls` 按 worker／reconcile 分开数。
+  - ⚠️ 首版在 fake 冲突场景下红 `providerCalls`、`ledgerMatchesCcloop`（ccloop 90 ／台账 120）：reconcile 的 `ccloop run` 证据与进程组登记在 `<stateDir>.workspaces/`，不在 `.runs/` ⇒ 脚本漏数了它的调用，**看门狗也杀不到它的进程组**。改为两处都扫后回绿。
+- fake claude（ccloop clone `ccloop-live`，内容＝主题行 `docs(handoff): replace the Orca section with a thirteenth version …`，已 `npm run build`）：single、single＋`--context-window 1000000`、conflict 三格 RC 0、失败项为空；conflict 的 ccloop 120 ＝ 台账 120，reconcile 调用 plan＋execute。tsc（含 scripts）RC 0。
+- 变异（Orca `git clone --local` 副本 `orca-mut`，先把两个脚本的工作树版本 `cat` 进去，`cmp` 相同）：M1 期望值去掉 `[1m]` ⇒ RC 1，只红 `claudeArgvModel`；M2 fake 的 reconcile 多写一行 `X` ⇒ RC 1，只红 `landedBytes`。
+- 付费（claude 2.1.283，`~/.nvm/versions/node/v22.13.1/bin/claude`；`--model claude-opus-5-5`；HOME 不改道；ccloop build 同上）：
+  - **S1**（2026-09-27T05:27:57Z–05:28:44Z，`--context-window 1000000`，task 3,000,000／group 3,100,000）：**RC 0，19 项检查全过**。三次调用 argv 的 `--model` 都是 `claude-opus-5-5[1m]`，回包 `modelUsage` 的键也是 `claude-opus-5-5[1m]`；`answer.txt` ＝ `42\n`；ccloop 142,540 ＝ 台账 142,540。claude 自报 plan $0.15704、execute $0.182881、verify $0.1867296，**合计 $0.5266506**。证据 `evidence/live-claude-3-*`。
+  - **S2**（2026-09-27T05:28:58Z–05:30:31Z，`--scenario conflict`，task 1,000,000／group 3,100,000）：**RC 0，19 项检查全过**。a 先落地；b 冲突于 `shared.txt`，由组的 reconcile 槽（冻结为 `claude-opus-5-5`／`agent-default`）经 `ccloop run --agents` 解开，`outcome: succeeded`；`orca/g:shared.txt` ＝ `base\nA\nB\n`，落地提交 `orca: land … (reconciled with a)`。8 次调用：worker 6 次（每任务 plan／execute／verify）、reconcile 2 次（plan、execute）；三份 `loop-contract.json` 的 tokenBudget 都是 1,000,000；ccloop 432,894 ＝ 台账 432,894（attempts 3、sessions 3）。claude 自报**合计 $0.383211**（各次见证据）。证据 `evidence/live-claude-4-*`。
+  - 两次都：看门狗没杀任何进程组；`~/.orca` 与 `~/.claude/projects` 前后相同；之后 `pgrep -fl "ccloop-agents-version|worker.js|claude.exe -p|fake-claude-cli"` RC 1。
+  - 本会话付费合计（工具报数相加）：$0.5266506＋$0.383211＝**$0.9098616**。
+- **诚实表述（只能这么说）**：在真 claude（2.1.283，请求模型 claude-opus-5-5，隔离参数含关 auto memory）、soft 组、服务层（不含 HTTP）下，各 n＝1：①单任务在 1M 窗口选择下跑通，1M 以 `[1m]` 后缀到达 claude CLI；②两个并行任务改同一文件，冲突经 `ccloop run --agents` 由真 claude 解开并落地，台账与 ccloop 用量一致。**仍没验过**：依赖、崩溃恢复、handoff／续跑、面板 HTTP／UI、混 kind（需真 codex）、三路以上冲突、解冲突失败路径、n＞1。⇒ 仍然**不说「claude 可用」「分层选择可用」**。
