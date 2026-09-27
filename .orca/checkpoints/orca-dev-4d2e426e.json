@@ -1,0 +1,44 @@
+{
+  "v": 1,
+  "runId": "orca-dev-4d2e426e",
+  "runtime": "claude-code",
+  "sessionRef": "4d2e426e-680f-4b31-a30b-5fbbdaf72a1f",
+  "writtenAt": "2026-09-27T08:11:06.115Z",
+  "head": "59418f135344301b08427a66560e604660538112",
+  "level": {
+    "kind": "reading",
+    "level": 334495,
+    "windowTokens": 1000000,
+    "t1": 330000,
+    "t2": 450000,
+    "band": 1
+  },
+  "next": [
+    "write the implementation plan for docs/superpowers/specs/2026-09-27-claude-stream-usage-design.md",
+    "execute it subagent-driven (ccloop runner/adapter/fake/tests, Orca O1)",
+    "roll the three handoffs"
+  ],
+  "open": [
+    "human said this session ignores context size (T1 crossed on purpose)",
+    "spec approved implicitly by 'continue with writing-plan'; the four named criterion rewrites in spec §5.3 treated as authorized under 'follow your recommendation', to be reported for review"
+  ],
+  "awaitingHuman": [
+    {
+      "kind": "irreversible",
+      "what": "push ccloop then Orca then ccmem (local commits ahead of remote)"
+    },
+    {
+      "kind": "named-authorization",
+      "what": "paid real-claude verification of a deadline-aborted continuation (spec §6.4)"
+    }
+  ],
+  "measurements": [
+    {
+      "command": "/usr/bin/git -C /Users/biran/code/skills/loop/Orca ls-remote origin refs/heads/main",
+      "exitCode": 0,
+      "commit": "59418f135344301b08427a66560e604660538112",
+      "observedAt": "2026-09-27T08:11:06.050Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-4d2e426e-PPvslq/1.txt"
+    }
+  ]
+}
