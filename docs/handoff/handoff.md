@@ -87,13 +87,17 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 
 *** **④ handoff 投递＋续跑＋N 路并行落地＋m5 也做完了（2026-09-25，会话 `e5f56bfe`）。** *** 细节与诚实的验收表述见 §四 4.0；现在的下一件事也在 4.0。
 
-✅ *** **agent 选择一轮（2026-09-26，会话 `75ec878e` 做 T1–T15、会话 `ab5a693c` 做 T16／T17／终审）做完了。** *** 其后会话 `8c6302e0` 裁了终审 I-2、做了夹具层审计；会话 `43e3e1d8`（2026-09-27）完成人对 R1–R30 的逐条审、落地 R1／R3／R7／R17／R28，并**第一次跑了付费真 claude**。细节与下一步见 §四 4.0。 会话 `94b09282`（同日）让人审完改写判据，并落地了付费轮四个发现的裁定（B1–B3 修，B4 登记）。会话 `4d2e426e`（同日）删了 `~/.orca` 的夹具残留，并付费跑了真 claude 的 `[1m]` 与两任务解冲突（台账 §19／§20）。随后开了 **claude 中止前观测用量（stream-json）** 一轮：spec、计划已入库，ccloop 落了 Task 1–2，**Task 3–6 在飞**，见 §四 4.0。
+✅ *** **agent 选择一轮（2026-09-26，会话 `75ec878e` 做 T1–T15、会话 `ab5a693c` 做 T16／T17／终审）做完了。** *** 其后会话 `8c6302e0` 裁了终审 I-2、做了夹具层审计；会话 `43e3e1d8`（2026-09-27）完成人对 R1–R30 的逐条审、落地 R1／R3／R7／R17／R28，并**第一次跑了付费真 claude**。细节与下一步见 §四 4.0。 会话 `94b09282`（同日）让人审完改写判据，并落地了付费轮四个发现的裁定（B1–B3 修，B4 登记）。会话 `4d2e426e`（同日）删了 `~/.orca` 的夹具残留，并付费跑了真 claude 的 `[1m]` 与两任务解冲突（台账 §19／§20）。随后开了 **claude 中止前观测用量（stream-json）** 一轮：会话 `4d2e426e` 落了 Task 1–2，会话 `5b01dbd9` 落了 Task 3–6、终审与修复，**本轮实施已收口，等人审**，见 §四 4.0。
 
 **还不能说的**：*** **「Web 派活可用」「claude 可用」「分层选择可用」都不是事实。** *** 能说的只有：**真 codex 下单任务主链跑通过一次**（2026-09-25，会话 `af3dc0d3`，
 请求模型 gpt-6-luna，服务层不含 HTTP，n＝1；台账 `.superpowers/sdd/2026-09-25-live-acceptance/progress.md` §5 是唯一可引的表述）；**真 claude 下单任务主链跑通过一次**（2026-09-27，会话 `43e3e1d8`，claude 2.1.283、请求模型 claude-opus-5-5、隔离参数、n＝1；台账 `.superpowers/sdd/2026-09-26-agent-selection/progress.md` §14 是唯一可引的表述）；**真 claude 下 1M 窗口单任务、两任务冲突经 `ccloop run --agents` 解开各跑通过一次**（2026-09-27，会话 `4d2e426e`，各 n＝1；同一台账 §20 是唯一可引的表述）。
 依赖、崩溃恢复、面板 HTTP、strict 组、④ handoff、⑤ 预估链、混 kind 都没在真 agent 下验过；冲突／解冲突只在真 claude 下跑过一次（两任务、一处冲突），真 codex 下没跑过。**驱动环只在 port `configured` 时挂；未配置时行为逐字节同前。**
 
-**现行基线（会话 `94b09282` 收尾，取代 `43e3e1d8` 那一版；旧版在同一台账 §15，更早的在 §8–§12）**：只抄工具报数，细节在台账 `.superpowers/sdd/2026-09-26-agent-selection/progress.md` §16–§18。
+**现行基线（会话 `5b01dbd9` 收尾，取代下面 `94b09282` 那一版）**：只抄工具报数，细节在台账 `.superpowers/sdd/2026-09-27-claude-stream-usage/progress.md` §3 末尾。env 同下（夹具表 fake codex `integration`、HOME＋四个 XDG 根改道），两份都是新 clone，门跑期间没有任何一席在里面做变异。
+- ccloop（内容＝主题行 `test(claude): wait for the fake's message to close before aborting, and pin each branch of the line cap` 那一笔）：typecheck／build RC 0；**88 文件／1028 条、1025 过、3 红**，`check-known-reds` **RC 0**（名单 14 个名字；红的是 `stopProof` 和名单内两条负载 flake）。
+- Orca（内容＝主题行 `test(control): continue a claude run cut at the handoff deadline, …` 那一笔）：web build／typecheck／web tsc RC 0；**220 文件／2004 条、2003 过、1 红、0 pending**；web 21 文件／113 条全过；真 `~/.orca` 前后 `stat` 相同。唯一的红是 `driverRecovery` 那条已登记的负载 flake：高负载下单文件**连红 3 次**，负载降下来后同一命令 3/3 过（判别过程在台账）。
+
+**上一版基线（会话 `94b09282` 收尾，取代 `43e3e1d8` 那一版；旧版在同一台账 §15，更早的在 §8–§12）**：只抄工具报数，细节在台账 `.superpowers/sdd/2026-09-26-agent-selection/progress.md` §16–§18。
 - env：`ORCA_CCLOOP_BIN` 指 ccloop main 的 `git clone --local` build（会话 scratchpad、软链 `node_modules`、`npm run build`）；`ORCA_AGENTS_TABLE` 指 scratchpad 里的夹具表（0600 文件在 0700 目录，`command` ＝ `[node, <副本>/tests/fixtures/fake-codex.mjs, "integration", <marker>]`，`version: "9.9.9-fake"`）—— 🔴 **模式必须是 `integration`**，`ok`／`script` 会让 `ccloopProtocol.integration` 红；**HOME 与四个 XDG 根全部改道**。ccloop 的门一律在 clone 里跑。
 - Orca（全新 clone，内容＝主题行 `docs(handoff): the ruling review is done and landed, …` 那一笔；`ORCA_CCLOOP_BIN`＝ccloop clone 的 `dist/cli.js`；对 B1 和 B4 两版 build 各跑一次，结果相同）：🔴 **clone 里先 `npm run build --workspace web`**（不 build 会有 14 条 `panel-dist-missing` 假红）；web build／typecheck RC 0；全量 **220 文件／2003 条全过**、0 pending；web tsc RC 0、21 文件／113 条全过；真 `~/.orca` 前后 `stat` 相同。**`verify:*` 分组门没跑。**
 - ccloop（clone，HOME＋四个 XDG 根改道）：会话 `94b09282` 在 B1、B4、flake 修复三笔之上各跑一次全量，三次都是 typecheck／build RC 0、85 文件／1005 条、1004 过、唯一红 `stopProof`、`check-known-reds` **RC 0**（名单 14 个名字）。最后一次的内容＝主题行 `test(runLoop): give the recovery-window criterion a per-phase timeout …` 那一笔。改道 HOME 下只会有 `~/.npm/_logs`（既有判据自己跑 npm 留的），别的应为空。
@@ -101,6 +105,7 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 ⚠️ *** **新登记的负载型 flake**：`tests/control/executionDriverE2E.test.ts` 在重负载（两份 clone 并跑变异）下出现过 5/9（R1 子场景）；无负载单跑 3/3 全绿。
 `tests/control/driverSettle.test.ts` 的真 git 场景曾在全量＋并发负载下撞默认 5 s 超时，已给 30 s（主题行见上）。 ***
 ⇒ **看到这两个文件红：先单文件重跑，绿了就不是回归。**
+⚠️ *** **（2026-09-27 会话 `5b01dbd9` 新登记）`tests/chain/gateCheck.test.ts` 的 K13 在全量里撞过 5 s 超时，单跑 3/3 绿。另有一个反例要记住：`driverRecovery` 那条在高负载时（load 约 37）单文件也能连红 3 次。** *** ⇒ 所以单跑判别要在负载降下来之后做，并同时记下 `uptime`，不能只看一次单跑。
 ⚠️ *** **④ 轮新增的负载型 flake（同样规则：单文件重跑绿 ＝ 不是回归）**：`tests/control/driverRecovery.test.ts` 的 "drives a retried run on from where it was blocked, to settled"、`tests/control/driverLanding.test.ts` 两条、`tests/control/handoffE2E.test.ts` 的 G（依赖 30 s 实时窗）、`web/tests/controlCommandRecovery.test.tsx` 的 "drops the id when the lookup returns the command's retained result"（单跑 3/3 绿）。 ***
 
 ⚠️ *** **已知 flake（2026-09-24 会话 `ae4061a5` 现测登记，根因未查；2026-09-25 那一轮全套里没出现）**：
@@ -118,21 +123,41 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 
 ## 四、⛔ 下一件事
 
-### 4.0 ⛔ 现在的下一件事（2026-09-27 会话 `4d2e426e` 改写，**本节优先于下面的 4.0.0、4.0.1 与 1–3**）
+### 4.0 ⛔ 现在的下一件事（2026-09-27 会话 `5b01dbd9` 改写，**本节优先于下面的 4.0.0、4.0.1 与 1–3**）
 
-**在飞：claude 中止前观测用量（stream-json 逐条 usage）一轮，Task 1–2 已落 ccloop，Task 3–6 未开始。下一会话从 Task 3 接手。**
+**claude 中止前观测用量（stream-json）一轮：实施已收口，没有在飞的代码工作。下一件事是人审（见下面「归人」）。**
 
-- **材料**（先读这三份，别从对话推）：spec `docs/superpowers/specs/2026-09-27-claude-stream-usage-design.md`（§2 实测、§3 设计、§5 判据与变异；§5.3 末尾有「第五条改写」的更正）；计划 `docs/superpowers/plans/2026-09-27-claude-stream-usage.md`；**唯一进度源** `.superpowers/sdd/2026-09-27-claude-stream-usage/progress.md`（§1 探针与 brainstorming、§2 人审 spec、§3 SDD ledger，全部 `Ruling:` 行都在 §3）。同目录有 `task-N-brief.md`／`task-N-report.md`／`review-*.diff`、`constraints.md`（每次派发都带）与 `evidence/`（三次付费探针的原始流）。
-- **要做成什么**：真 claude 的阶段被 handoff 请求的 deadline（或 handoff-stop 中途中止）打断时，ccloop 报「中止前从 stream 观测到的用量（下界）」而不是 `null` ⇒ Orca 下该 run 可续、组不置 `usageUnknown`。正常跑完的阶段记账逐位不变。Orca 不改代码。
-- ✅ **已落 ccloop**（按主题行 `git log --grep` 找）：
-  - Task 1 `test(claude): let the fake claude CLI answer stream-json in the order real claude streams it` ＋ `test(claude): send one message_start in the fake's flood mode`。
-  - Task 2 `feat(claude): read claude's stream line by line and keep the usage it streamed on disk`：新模块 `scripts/claude-stream.mjs`；runner 改 `spawn`、`-p --output-format stream-json --verbose --include-partial-messages`、只留 `result` 行＋观测＋末 8,192 字符；观测原子写到 `CCLOOP_CLAUDE_OBSERVED_USAGE_PATH`（**adapter 还没设它**，那是 Task 3）。`tests/runtime/claude` 9 文件／79 条全绿（实施者报数），M11 在 clone 里实测只红 N10。
-- ⛔ **下一件事**：用 `superpowers:subagent-driven-development` 从计划 **Task 3**（adapter 设路径、读观测、`ClaudePhaseAborted.observedTokens`、execute 有观测就抛）继续 → Task 4（ccloop control 的 claude 版 deadline 判据，期望 `[15, 1124]`）→ Task 5（Orca `agentSelectionE2E` 的 D1，要 ccloop Task 1–3 的 clone build）→ Task 6（控制器自己跑 M1–M11、两仓全量门）→ 终审 → 台账与三份 handoff。
-  - 🔴 **Task 1–2 各撞上一处计划没预见的既有判据，都按人「有问题先按你的建议执行」裁了**：①fake 的漂移判据拿 `--verbose` 当「runner 永不传的参数」⇒ 改用 `--continue`（**第五条点名改写**，spec §5.3 更正）；②旧 `SubprocessClaudeAdapter` 的 28 条判据的替身吐裸 `{structured_output, usage}` ⇒ runner 回包规则加兼容（最后一条 `type:"result"`，否则最后一个带 `structured_output` 的对象行），**没改那 28 条**。⇒ **后面 Task 再红出计划外的既有判据，照这个路子：停、裁、记 `Ruling:`，不让实施者自改。**
-  - deferred（台账 §3）：观测文件的 `fields` 照抄原始 usage 对象（建议收窄为白名单字段）；另有几条 Minor。
-- **归人（本轮结束时一并报审）**：spec §5.3 的五条点名改写与上面两条裁定是否认可；spec §6 第 4 条付费验证（真 claude 一次「deadline 中止 → 续跑落地」）要人单独点头；推送（先 ccloop 后 Orca 再 ccmem）。
-- ✅ **上一轮（agent 选择）已收口，不要重做**：结论与可说的范围在 §三；过程在台账 `.superpowers/sdd/2026-09-26-agent-selection/progress.md` §13–§20。会话 `4d2e426e` 在那一轮之后还做了：删真实 `~/.orca` 的两个夹具残留（台账 §19）；付费真 claude 跑通 `[1m]` 单任务与两任务解冲突各一次（台账 §20，验收脚本 `scripts/live-driver-acceptance.ts --context-window`／`--scenario conflict`）。
-- **执行规矩**：上一轮人给的授权**都不延续**。付费 claude、真 codex（人 2026-09-27 说 codex 周额度**已 reset**，但每次仍要人点头）、改既有判据（要人逐条点名或按本轮人给的「按你的建议执行」裁定并报审）、删用户数据、杀进程，每一次都要人重新开口。会话 `4d2e426e` 的付费（claude 自报，逐次见台账）：agent-selection 台账 §20 两次、stream-usage 台账 §1 三次探针。
+- **材料**（先读这三份，别从对话推）：
+  - spec `docs/superpowers/specs/2026-09-27-claude-stream-usage-design.md`。**§8「实施期更正」优先于上文**。
+  - 计划 `docs/superpowers/plans/2026-09-27-claude-stream-usage.md`。
+  - **唯一进度源**是台账 `.superpowers/sdd/2026-09-27-claude-stream-usage/progress.md` 的 §3：全部 `Ruling:`、变异表、两仓门、终审与复审都在这里。同目录有 `constraints.md`，还有 `evidence/`（三次付费探针的原始流）。其余 brief、报告和 review 包是不入库的过程文件。
+- **做成了什么**：fake claude 下，一个 claude 阶段被 handoff 请求的 deadline（或 handoff-stop）打断时，ccloop 报的是「中止前从 stream 观测到的用量（下界）」，不再是 `null`。所以 Orca 下这个 run 可续、组不会被置 `usageUnknown`，续跑能落地（Orca 判据 D1）。正常跑完的阶段仍用 `result` 事件记账。Orca 没改生产代码。
+  - ccloop 的提交按主题行找：
+    - `test(claude): let the fake claude CLI answer stream-json …` 与 `… send one message_start in the fake's flood mode`（Task 1）
+    - `feat(claude): read claude's stream line by line …`（Task 2）
+    - `feat(claude): report the usage claude streamed before a phase was aborted`（Task 3）
+    - `test(control): book the usage a claude execute streamed before the handoff deadline cut it`（Task 4）
+    - `test(claude): wait for the fake's message to close before aborting, and pin each branch of the line cap`（终审修复）
+  - Orca 的提交：`test(control): continue a claude run cut at the handoff deadline, …`（Task 5，D1）。
+- **验证**（数字都来自工具报数，在台账 §3）：
+  - spec §5.4 的 M1–M11：每条都见到了红，还原后 0 字节。O1（D1）在 M1、M7 的 build 上红在 `settled-recoverable`，实际得到 `settled-unrecoverable`。
+  - 两仓干净全量门的数字见 §三「现行基线」。
+  - 终审员另跑了 11 条变异。其中四处分支删掉没有判据会红，已写进 spec §8.4 挂账。
+- 🔴 *** **诚实的表述（只能这么说）**：只在 **fake claude** 下验证过。**真 claude 下的 deadline 中止一次都没跑过**，那是 spec §6.4 的付费验证，要人单独点头。「claude 可用」「分层选择可用」仍然都不是事实。 ***
+- ⚠️ **本轮新的教训**：
+  - **被别的门当作 `ORCA_CCLOOP_BIN` 的 clone，不许同时拿来做变异。** 本轮第一次 Orca 全量因此作废：终审员在同一份 clone 里改过 runner，而 runner 是 adapter 从 clone 的 `scripts/` 现读的。
+  - **负载高时，单文件也能连红 3 次**（见 §三 的 flake 条）。
+  - **等「文件存在」就中止的判据会竞态**：fake 分两次 `write`，只等文件出现就中止，可能停在开口快照那一步。本轮的 N6 就是这样被看见红的，修法是等到 `openMessage === false`。
+- **归人（本轮结束时一并报审）**：
+  1. spec §5.3 加 §8.2 的**七条点名改写**是否认可：前四条改 argv 前缀、位置与长度；第五条是 `--verbose` 换成 `--continue`；第六条是证据目录清单加 `observed-usage.json`；第七条是 N6 的等待条件，N6 已发布。
+  2. 台账 §3 的全部 `Ruling:` 是否认可。承重的几条：
+     - runner 回包兼容裸 `{structured_output}` 行；
+     - Task 5 的「本轮之前 build 应红」窄化为 M1／M7；
+     - 四处无红证分支只挂账不修。
+  3. spec §6.4 的付费验证：真 claude 跑一次「执行中途 deadline 中止 → 续跑落地」，n＝1。
+  4. 推送：先 ccloop、再 Orca、再 ccmem。
+- **执行规矩**：上一轮人给的授权**都不延续**。付费 claude、真 codex（周额度人说已 reset，每次仍要人点头）、改既有判据、删用户数据、杀进程，每一次都要人重新开口。本会话**没有付费调用**，没杀任何进程，也没 push。
+- ✅ **更早的一轮（agent 选择）已收口，不要重做**：结论在 §三，过程在台账 `.superpowers/sdd/2026-09-26-agent-selection/progress.md` §13–§20。
 
 ### 4.0.0 ④（2026-09-25 会话 `e5f56bfe`，**已做完，不要重做**；原 4.0 的结论保留于此）
 

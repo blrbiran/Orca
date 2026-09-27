@@ -175,3 +175,18 @@ agent 选择 spec §11 把这件事登记为「下一片，字段形状要真 cl
 ## 7. 仓库外写入（Rule 17）
 
 本轮不新增仓库外写入：观测文件写在 ccloop 的阶段证据目录（run 目录内）。付费验证沿用 `live-driver-acceptance.ts` 既有的改道与快照检查（`~/.orca`、`~/.claude/projects`）。
+
+## 8. 实施期更正（控制器会话 `5b01dbd9`，2026-09-27；本 spec 已发布，上文逐字保留，以本节为准）
+
+1. **§3.1(3)「没有 `result` 行 ⇒ 按回包无法解析的失败路径走」不完全成立。** Task 2 实施时，旧 `SubprocessClaudeAdapter` 的 28 条判据的替身只吐一行裸对象 `{structured_output, usage}`（没有 `type:"result"`）。控制器裁定（台账 §3）：runner 取回包 ＝ 最后一条 `type:"result"` 的行；没有时取最后一个带 `structured_output` 键的 JSON 对象行。真 claude 的流里只有 `result` 事件带 `structured_output`（§2），所以真 claude 的行为不变。副作用：回包无法解析时，报错文字从 `JSON.parse` 的 SyntaxError 变为 `Claude CLI did not return structured_output`（失败路径不变）。
+2. **§5.3 名单再加两条**（依据都是人「有问题先按你的建议执行」下的控制器裁定，台账 §3，**待人审**）：
+   6. `tests/runtime/claude/claudeAgentAdapter.test.ts > ClaudeAgentAdapter (Orca agent selection, spec §4.7) > keeps private per-call evidence and does not record the environment in request.json`：证据目录的精确文件名清单加 `observed-usage.json`。依据 §3.1(6)：runner 写观测时并不知道阶段会不会被中止，所以正常跑完的阶段也留下观测文件；判据仍是精确 `toEqual`，且它的「每个文件 0600」循环从此也钉住观测文件。
+   7. `tests/runtime/claude/claudePhaseRunnerStream.test.ts > claude phase runner over stream-json (Orca claude stream usage) > N6: …`（Task 2 那一笔已发布）：等待条件由「观测文件存在」改为「解析后 `openMessage === false`」，断言不动。终审见它因竞态红过一次：fake 分两次 `write` 吐 `message_start` 与消息尾，只等文件存在就 SIGKILL，可能停在 1103 那一步。同形的 N2／N4／N8 属未发布的本轮新判据，一并改了。
+3. **§5.4 实测与预言的差异**（全表在台账 §3）：
+   - 每条变异都见到了红。多数变异红得比预言多，例如 M2／M3 还红了 N4、N6、N8。
+   - M1 下 N9a 不红，本来就不该红：N9a 测的是「不给路径就不写」。
+   - M8 同轮还红了已知 flake 名单里的一条，那条在 `SubprocessClaudeAdapter`，本变异没碰。
+   - O1 在 M1、M7 的 build 上都红在 `settled-recoverable`，实际得到的是 `settled-unrecoverable`。
+4. **已知局限**（未测量）：
+   - `message_delta` 与最近一条 `message_start` 配对，不看 `parent_tool_use_id`。子代理（Task 工具）的流事件若与主代理交错，可能配错。§2 的探针 n＝1，也没有子代理。
+   - 以下分支删掉后没有判据会红，登记挂账：runner 的 `setEncoding("utf8")`（跨块多字节）；写观测处的 `catch`（spec 没定义路径不可写时该怎么办）；`total !== null` 写入守卫（删掉无害：adapter 拒收 null）；`outcome.json` 的 `observedUsagePath`（没有读者）。另外，单行上限的「缓冲超限即清空」那半支是等价变异，它的可观测作用只剩内存上界。

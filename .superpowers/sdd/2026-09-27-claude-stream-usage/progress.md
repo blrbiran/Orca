@@ -67,3 +67,70 @@ spec：`docs/superpowers/specs/2026-09-27-claude-stream-usage-design.md`。
 - Task 2: minor (deferred): 同内容的 `message_delta` 重复时仍重写一次观测文件；`createLineSplitter` 对未收尾长行每块都重算 `Buffer.byteLength`（正确但二次方）；`writeObservation` 在写与 rename 之间被 SIGKILL 会在证据目录留 `observed-usage.json.tmp-<pid>`；没有跨块多字节 UTF-8 的判据；`claudePhaseRunnerEnv` 一处改写注释位置在被改行之后。
 - Task 2: complete (ccloop commits df6c636..d743172, review clean after M11)
 - **人（2026-09-27）：`/mattpocock-skills:handoff task 2完成后先做交接…`** ⇒ 本会话到此停止派发；Task 3–6 未开始，由下一会话从 Task 3 接手（见 handoff）。
+- **接手（控制器会话 `5b01dbd9`，Claude Opus 5.5，2026-09-27）**：开工 `ls-remote` 三仓远端 main 均等于本地 main（ccloop 主题行 `docs(handoff): replace the Orca section with a fourteenth version …`、Orca 主题行 `docs(handoff): hand the stream-usage round over at Task 3 …`、ccmem 主题行 `docs(handoff): real claude also ran a 1M window …`）；三仓工作树干净。Human：「同意，继续」（对控制器列出的 Task 3→6、终审、handoff 的做法）。task-3/4/5-brief 与计划原文逐字相同（`diff` 只差计划里的 Task 6，那是控制器自己做的）。
+- Ruling: `constraints.md` 里的日志目录指向上一会话的 scratchpad；本会话每次派发附一句改用 `/private/tmp/claude-501/-Users-biran-code-skills-loop-Orca/5b01dbd9-b39e-4ad9-9580-d6041840e94b/scratchpad/sdd/`，`constraints.md` 原文不改 —— Rule 13（本目录历史不改）—— 错了的代价：无，日志只是过程文件。
+- Ruling: 本 skill 要求收尾删掉 plan workspace；本轮**不删**（沿用上一会话同名裁定）—— 错了的代价：多留一个目录。
+- Task 3: BASE ccloop `93bd3f5`（主题行 `docs(handoff): replace the Orca section with a fourteenth version …`）。
+- Task 3: 实施者 BLOCKED（未提交）—— 5 条新判据全绿，但既有判据 `tests/runtime/claude/claudeAgentAdapter.test.ts > ClaudeAgentAdapter (Orca agent selection, spec §4.7) > keeps private per-call evidence and does not record the environment in request.json` 红：它用 `toEqual` 钉死证据目录恰好 6 个文件名，而 adapter 从此总设观测路径、runner 在正常跑完的阶段也会写 `observed-usage.json`。计划与 spec §5.3 的全树扫描都没扫到这种「证据目录清单」断言。
+- Ruling: 该判据的文件名清单加 `observed-usage.json`（仍是精确 `toEqual`），其余一字不动 —— spec §3.1(6) 规定 runner 每次观测变化就写、写时并不知道阶段会不会被中止，所以正常阶段留下观测文件是 spec 的直接推论；改后的清单仍精确，且判据里既有的「每个文件 0600」循环从此也钉住观测文件的权限；另一条路（阶段正常结束时删观测文件）要加 spec 没有的代码并丢掉证据 —— 错了的代价：人若要「正常阶段不留观测文件」，回退这一处断言并在 adapter 里加删除（Task 3 那一笔）。这是**第六条**点名改写，spec §5.3 另起更正（spec 已发布，只追加）。
+- Task 3: 实施者 DONE —— ccloop 主题行 `feat(claude): report the usage claude streamed before a phase was aborted`（2 个文件；`tests/runtime/claude` 9 文件／84 条全过，typecheck RC 0，实施者报数；并实测 fake `ok` 模式经 runner 确实写出 `observed-usage.json`，total 1109）。review 包 `review-task3.diff`（SDD 脚本的 review-package 在 Orca 仓里找不到 ccloop 的提交 ⇒ 控制器在 ccloop 里手工生成同样三段：log、stat、`diff -U10`）。
+- Task 3 评审（opus）：Spec ✅、Approved，0 Critical／0 Important；两处命名风险（`ClaudePhaseAborted`／`observedTokens` 的其他消费点 —— 只有 `runLoop.ts` 的 `observedTokensOf`、与 codex 同路；环境变量不进 `request.json`）核过；评审员列了 8 条变异各自由哪条判据打红（控制器在 Task 6 实测 spec 的 M7／M8）。
+- Task 3: minor (deferred): `outcome.json` 的 `observedUsagePath` 字段无判据钉（删掉全绿）。
+- Task 3: minor (deferred): N2／N4 按「文件存在」轮询，若 `message_delta` 与 `message_start` 分两次到达 runner，中止可能落在两者之间而读到 1103（低概率 flake；可改为轮询到 `openMessage === false`）。
+- Task 3: minor (deferred): `readObservedTokens` 的 docstring 与 `run()` 新 env 行没写 round 名／spec 节与「为什么给路径」。
+- Task 3: minor (deferred): runner 在 write 与 rename 之间被 SIGKILL 会留 `observed-usage.json.tmp-<pid>`（与 Task 2 那条同一件事）。
+- Task 3: complete (ccloop commits 93bd3f5..11eb860, review clean)
+- Task 4: BASE ccloop `11eb860`。
+- Task 4: 实施者 DONE —— ccloop 主题行 `test(control): book the usage a claude execute streamed before the handoff deadline cut it`（`agentsFixture.ts` 只加 `sealClaude`、新文件 `claudeHandoffDeadlineUsage.test.ts`；新判据 1 条过、codex 版 `handoffDeadlineUsage` 仍过、typecheck RC 0，实施者报数；用量实测正是 `[["work",15],["work",1124],["handoff",0]]`）。实施者的红证：把本判据脚本的 `usageBeforeDelay` 改 false ⇒ 红在等观测文件的 poll（不是用量断言本身；产品侧变异 M7／M8 由控制器在 Task 6 实测）。
+- 归属记录：Task 3 那一笔的 trailer 写 `Claude Opus 5.5 (1M context)`（实施者实为 sonnet，照 constraints.md 抄的），Task 4 那一笔写 `Claude Sonnet 5`（实施者按其系统提示）。两笔都不改（只在本地，但 CLAUDE.md 偏好新提交而非 amend；trailer 不影响判据）。
+- Task 4: BASE 11eb860，review 包 `review-task4.diff`。
+- Task 4 评审（sonnet）：Spec ✅、Approved，0 Critical／0 Important；评审员用字面 `diff` 对照 codex 原判据，差异只有 brief 列的几处。
+- Task 4: minor (deferred): 实施者的红证只打到「没有观测」那一支（红在 poll），没打到「观测存在但值错／为 null」那一支 ⇒ **Task 6 的 M7 必须对 `claudeHandoffDeadlineUsage.test.ts` 实跑、确认红在用量断言**。
+- Task 4: complete (ccloop commits 11eb860..fee7f2a, review clean)
+- Ruling: Task 5 Step 2 的「用本轮之前的 ccloop build 跑一次 D1 应红」改由控制器在 Task 6 做：在 Task 1–3 的 build 上只打 M7（adapter 读观测处写死 null）再跑 D1 —— 本轮之前的 clone（`fe4f3ed`）里的 fake claude 不认 stream-json／`usageBeforeDelay`，D1 在那上面红的原因会混进夹具，不能单独归因到产品 —— 错了的代价：无（变异更窄）。
+- Task 5: BASE Orca `b76fa0f`；控制器给的 env：`ORCA_CCLOOP_BIN` ＝ scratchpad `ccloop-t3/dist/cli.js`（ccloop `11eb860` 的 clone build，含 Task 1–3），`ORCA_AGENTS_TABLE` ＝ scratchpad `fixture-table/agents.json`（fake codex `integration`、`9.9.9-fake`）。⚠️ `agentSelectionE2E` 整个 describe 是 `skipIf(!realBinary)` ⇒ 不设 `ORCA_CCLOOP_BIN` 时 D1 静默跳过，必须核「1 passed」而不是「0 failed」。
+- Task 5: 实施者 DONE —— Orca 主题行 `test(control): continue a claude run cut at the handoff deadline, now that ccloop reports what claude streamed`（只追加 D1、`handoffStop` 加可选 payload）；`-t D1` ⇒ 1 passed／5 skipped（不是整文件跳过）；整文件 6 passed、248.83 s；typecheck RC 0（实施者报数；env 为控制器给的 `ccloop-t3` build 与夹具表，HOME＋四个 XDG 根改道）。review 包 `review-task5.diff`。
+- Task 5 评审（sonnet）：Spec ✅、Approved，0 Critical／0 Important／0 Minor；`handoffStop` 既有三处调用都不带第二参、行为不变；评审员沿 `recordUsage`／`collectInto` 追了 D1 的用量断言在 M7／M8 下各在哪一层红（预言，Task 6 实测）。
+- Task 5: complete (Orca commits b76fa0f..d8f3046, review clean)
+- Task 6: 开始（控制器自己做）。变异副本 scratchpad `ccloop-mut`（ccloop `fee7f2a`，`npm run build` RC 0），脚本 scratchpad `mutations.py`（逐条整串锚点、命中数必须为 1；跑 `tests/runtime/claude` ＋ `tests/control/claudeHandoffDeadlineUsage.test.ts` 的 json 报告；`git checkout -- <file>` 还原并量 `git diff`／`git diff --cached` 字节数；HOME＋四个 XDG 根改道到输出目录）。
+- Task 6 变异实测（控制器会话 `5b01dbd9`；副本 `ccloop-mut` ＝ ccloop `fee7f2a`；命令 `python3 scratchpad/mutations.py <clone> <out>`，每条跑 `tests/runtime/claude` ＋ `tests/control/claudeHandoffDeadlineUsage.test.ts` 的 json 报告，原始报告 `scratchpad/mut/M*.json`、汇总 `summary.json`）。N 编号：N1／N6／N7／N9a／N10 在 `claudePhaseRunnerStream.test.ts`，N5 在 `claudeStream.test.ts`，N2／N3／N4／N5b／N9b 在 `claudeAgentAdapter.test.ts`，N8 ＝ `claudeHandoffDeadlineUsage.test.ts`。每条还原后 `git diff`／`git diff --cached` 都是 **0 字节**；跑完后副本里的 `tests/runtime/claude`、两个 control 判据文件、`scripts/`、`src/runtime/claude` 与 ccloop 主树逐字节相同（`diff -r`）；副本 `git status --short` 只有 `?? node_modules`（软链）。
+
+| | 预言红 | 实测红（全名见 summary.json） | 对上 |
+|---|---|---|---|
+| M0 基线 | — | 0 红，85 过 | — |
+| M1 不写观测 | N2 N3 N4 N6 N8 N9 O1 | N2 N3 N4 N6 N8 N9b ＋ 证据清单判据（第六条改写那条）；N9a 不红（它测的是「无路径时不写」，与本变异同向） | 是（O1 另跑） |
+| M2 收尾用 start 值 | N2 | N2 N4 N6 N8 ＋ `counts each message once` | 是 |
+| M3 不按 id 去重 | N2 | N2 N4 N6 N8 ＋ `counts each message once` | 是 |
+| M4 总数 0 也写 | N5 | `gives no total for nothing, for zero …`（N5）＋ `ignores a message_delta with no open message …` | 是 |
+| M5 只在退出时写 | N6 | N2 N3 N4 N6 N8 N9b | 是 |
+| M6 回到 json | N7（N1 可能） | N7 ＋ 12 条（含 argv 改写的四条、N2–N4、N6、N8、N9b）；N1 不红 | 是 |
+| M7 adapter 写死 null | N2 N3 N4 N8 O1 | N2 N3 N4 N8 —— **N8 红在 `claudeHandoffDeadlineUsage.test.ts:74` 的用量 `toEqual`**（闭合 Task 4 那条 deferred） | 是（O1 另跑） |
+| M8 中止 execute 有观测也回 null | N4 | N4 N8 ＋ `SubprocessClaudeAdapter > waits for close before interrupting a close-pending successful execute`（**已知红名单第 51 行那条 flake**，本变异不碰 `SubprocessClaudeAdapter`） | 是 |
+| M9 runner 不剥路径变量 | N9 | N9a | 是 |
+| M10 写到 worktree | N9 | N2 N3 N4 N6 N8 N9b ＋ 证据清单判据 | 是 |
+| M11 整条累积＋10 MiB 上限 | N10 | N10（与上一会话在 `d743172` 上的实测一致） | 是 |
+- Task 6 O1 实测：副本 `ccloop-m1`／`ccloop-m7`（ccloop `fee7f2a` ＋ 各一处变异，`git diff --stat` 各 1 行，build RC 0）作 `ORCA_CCLOOP_BIN`，Orca 主树只跑 `tests/control/agentSelectionE2E.test.ts -t D1`（HOME＋四个 XDG 根改道）：两次都 `1 failed | 5 skipped`，红在 `agentSelectionE2E.test.ts:324` —— `expected 'settled-unrecoverable' to be 'settled-recoverable'`（日志 `scratchpad/sdd/o1-m1.log`、`o1-m7.log`）。⇒ 这就是 Task 5 Step 2「本轮之前的行为应红」的窄化形态（控制器裁定见上）。
+- Task 6 ccloop 全量门（副本 `ccloop-mut` ＝ ccloop `fee7f2a`，未变异；`cd` 进副本；`ECC_GATEGUARD=off DISABLE_OMC=1`，HOME＋四个 XDG 根改道到 `scratchpad/ccloop-full-home`）：`npm run typecheck` RC 0；`npm run build` RC 0；`vitest run --reporter=json` RC 1 ⇒ **88 文件／1027 条，1024 过、3 红、0 pending**，json 里 88 个文件路径全在副本下；`node scripts/check-known-reds.mjs` **RC 0**（名单 14、failed 3、unexpected 0）：`stopProof`（稳定红）、`codexWatchdog` 的 `still reaps registered groups when the observation file becomes unwritable`、`run-scenario CLI > records env names only …`（后两条是名单内的负载型 flake）。改道 HOME 下只有 `.npm/`（`_logs` 与 `_update-notifier-last-checked`）。日志 `scratchpad/sdd/ccloop-full.*`。跑前 `pgrep -fl "ccloop-agents-version|worker.js|fake-claude-cli|fake-codex"` RC 1（无进程）。
+- 终审（opus，一席看两仓，包 `review-final.diff`）：**Needs fixes**，0 Critical。Important：①N6（`claudePhaseRunnerStream.test.ts:77–81`）有竞态、评审员在一次与 N6 无关的变异下**亲眼见它红**（fake 把 `message_start` 与消息尾分两次 `write`，N6 只等文件存在就 SIGKILL，delta 可能来不及处理）；N2／N4（`claudeAgentAdapter.test.ts`，即 Task 3 那条 deferred）与 N8（`claudeHandoffDeadlineUsage.test.ts:59`）同形、较少暴露；②Orca 全量门未入账。Minor：spec §3.1(3) 没为回包兼容裁定追加更正；无法解析回包的报错文字变了（路径不变）；`message_delta` 配对不看 `parent_tool_use_id`（未测量，登记为已知局限）；`claudeStream.test.ts:45` 的单行上限两支各自删掉都不红。评审员自跑 11 条变异（`scratchpad/review-muts.py`、`sdd/review-mut/`，还原后 0 字节）：RA／RC／RF／RG／RH／RK 见红；**RB1、RB2（上限两支）、RD（`setEncoding`）、RE（写观测的 catch）、RI（`total !== null` 守卫）、RJ（`outcome.json.observedUsagePath`）不红**。评审员对本轮全部 `Ruling:` 判 sound（四条 §5.3 改写的认可「成立但薄」，建议终审时把六条当面列给人）。
+- 🔴 **作废：会话中的第一次 Orca 全量（`scratchpad/sdd/orca-full.*`，19:22 起跑）** —— 它的 `ORCA_CCLOOP_BIN` 指 `ccloop-mut`，而终审员 19:27–19:29 在同一副本里改过 `scripts/claude-phase-runner.mjs`（runner 由 adapter 从副本的 `scripts/` 现读），且加了并发负载。该次结果不作为证据；修复后在新副本上重跑两仓全量门。该进程不杀（杀进程要人授权），让它自己跑完。教训：**被别的门当作 `ORCA_CCLOOP_BIN` 的副本，不许同时拿来做变异。**
+- Ruling: 终审 Important ① 修：N6、N2、N4、N8 四处的等待条件由「观测文件存在」改为「解析后 `openMessage === false`」，断言本身一字不动；N3 本来就要开口快照，保持等文件存在 —— 等待条件只是让测试等到 fake 已吐完的状态，判据更严不更松；N6 所在的 Task 2 那一笔**已在远端**（`git merge-base --is-ancestor` 现测），所以 N6 这一处是本轮第**七**条点名改写，spec §5.3 另起更正；N2／N4／N8 属未发布的本轮新判据 —— 错了的代价：回退这四处等待条件（一笔提交）。
+- Ruling: 终审 Minor「上限两支各自不红」修（只加判据，`claudeStream.test.ts` 追加一条，分别打 `:91` 与 `:97` 两支）；RD／RE／RI／RJ、`parent_tool_use_id` 配对、报错文字变化登记为挂账不修 —— RD 要改 fake 的输出方式（夹具被多条既有判据共用），RE 的行为 spec 没定义，RI 删掉无害（adapter 拒收 null），RJ 无读者 —— 错了的代价：这四处分支仍无红证，留给人决定。
+- Ruling: spec §3.1(3) 的回包兼容更正由控制器在收尾追加（spec 已发布，只追加）—— 错了的代价：无。
+- 作废那次 Orca 全量的结果（**只作线索，不作证据**）：web build／typecheck／web tsc RC 0；根 vitest 220 文件／2004 条、2001 过、3 红、0 pending；web vitest 21 文件／113 条全过；真 `~/.orca` 三个条目前后 `stat` 相同。红：`driverLanding.test.ts` X1、`controlShutdown.test.ts`（两条都是 handoff 登记的负载型 flake）、**`tests/chain/gateCheck.test.ts` K13（`without CLAUDE_CONFIG_DIR the user-level settings are $HOME/.claude/settings.json …`）——不在任何名单里，待干净重跑时单文件判别**。
+- K13 判别：作废那次全量里它是 `Test timed out in 5000ms`；在同一副本 `orca-full`（Orca `d8f3046`）单跑 `tests/chain/gateCheck.test.ts` 连 3 次（HOME＋四个 XDG 根改道）都 RC 0、19/19 过、K13 355 ms（日志 `scratchpad/sdd/k13-{1,2,3}.log`）⇒ **新登记的负载型 flake**（与本轮改动无关：本轮 Orca 只加了 D1）。
+- 终审修复 DONE —— ccloop 主题行 `test(claude): wait for the fake's message to close before aborting, and pin each branch of the line cap`（4 文件；实施者报数：主树 `tests/runtime/claude` ＋ `claudeHandoffDeadlineUsage` 连 3 次各 86/86、typecheck RC 0；副本 `scratchpad/fix/ccloop-fixmut` 里：删上限 A 支 ⇒ 新判据红；B 支**整支删掉是等价变异**（任何以换行收尾的输入都被 A 支的长度检查遮住，B 支的可观测作用只剩内存上界），只去掉 `dropping = true` ⇒ 新判据红；runner 不写观测 ⇒ N6 N2 N4 N8 全红；每次还原 0 字节）。报告 `final-fix-report.md`，复审包 `review-final-fix.diff`。
+- 干净重跑的两仓门（**取代作废那一次**）：副本 `scratchpad/ccloop-gate`（ccloop 主题行同上那一笔）与 `scratchpad/orca-gate`（Orca 主题行 `test(control): continue a claude run cut at the handoff deadline …` 那一笔）都是新 clone，门跑期间**没有任何一席在它们里面做变异**。
+  - ccloop（`cd` 进副本，`ECC_GATEGUARD=off DISABLE_OMC=1`，HOME＋四个 XDG 根改道）：typecheck RC 0；build RC 0；vitest json **88 文件／1028 条，1025 过、3 红、0 pending**，路径全在副本下；`check-known-reds` **RC 0**（名单 14、failed 3、unexpected 0：`stopProof`、`codexWatchdog … unwritable`、`run-scenario CLI > records claudeChildExited as NOT_OBSERVABLE …`）；改道 HOME 下只有 `.npm/`；副本 `git status` 只有 `?? node_modules`。日志 `scratchpad/sdd/gate2/ccloop-*`。
+- 终审修复复审（sonnet）：F1、F2 都 ADDRESSED，修复 diff 没有新问题；等价变异论证经复审员手工追 `createLineSplitter` 核实。
+- 终审收口：Critical 0；Important 两条 —— 竞态已修；Orca 全量门见下一行。Minor 的处置见上面的裁定与 spec §8。spec 追加 §8「实施期更正」（原文不动）。
+  - Orca（`orca-gate`，`ORCA_CCLOOP_BIN` ＝ `ccloop-gate/dist/cli.js`，夹具表 fake codex `integration`，HOME＋四个 XDG 根改道）：web build RC 0；typecheck RC 0；根 vitest json **220 文件／2004 条，2003 过、1 红、0 pending、0 todo**；web tsc RC 0；web vitest **21 文件／113 条全过**；D1 过；真 `~/.orca` 三个条目前后 `stat` 相同；改道 HOME 下只有 `.npm/`；副本 `git status` 只有两个 `node_modules` 软链。日志 `scratchpad/sdd/gate2/orca-*`。
+  - 唯一的红：`tests/control/driverRecovery.test.ts > … > drives a retried run on from where it was blocked, to settled`（`Test timed out in 5000ms`），handoff §三已把它登记为 ④ 轮的负载型 flake。**判别过程（systematic-debugging）**：
+    - 同一副本、同一命令单文件先连跑 3 次，**3/3 红**，都是 5.0 s 超时；所以一开始不能按「单跑绿就不是回归」放过。
+    - 这条判据用的是假 port，不读 `ORCA_CCLOOP_BIN`／`ORCA_AGENTS_TABLE`／HOME；本轮 Orca 只在另一个文件里加了 D1。
+    - 放宽超时后，主树、副本不带 env、副本只改 HOME、副本只设 ORCA 变量，四种都在 1.8–2.0 s 内过。整文件放宽超时 8/8 过，该条 1840 ms。
+    - 随后用**与最初完全相同的命令**又跑 3 次，**3/3 过**，该条 1778／1914／2283 ms；那时 load average 在 21–24，而最初连红时约为 37（20:01 的 `uptime`）。
+    - 高负载主要来自本会话以外：WindowServer、Chrome、cmux，还有一个不是本会话起的 `node (vitest 6)`，已跑 7 分钟、没动它。
+    ⇒ 定为负载依赖的超时，与本轮改动无关。**但它在高负载下能连红 3 次，「单跑一次绿就放过」对它不够用；应在负载降下来之后再重跑，并记下 `uptime`。**
+- 收尾 `pgrep -fl "ccloop-agents-version|worker.js|fake-claude-cli|fake-codex"` RC 1（没有孤儿进程）。
+- Task 6: complete（变异表、两仓干净门、终审与修复、复审都已入账）。
+- 收尾：spec 追加 §8「实施期更正」；三份 handoff 滚动更新（Orca §三／§4.0，ccloop「Orca 那条线」第十五版，ccmem §15 第十三版）。本会话**没有付费调用**、没杀任何进程、没 push。scratchpad 里的 clone（`ccloop-pre`／`-t3`／`-mut`／`-m1`／`-m7`／`-gate`、`orca-full`／`-gate`、`fix/ccloop-fixmut`）是本会话自己的临时副本，没删（删要人开口；它们不是仓库的 worktree）。
