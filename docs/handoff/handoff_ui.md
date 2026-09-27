@@ -89,10 +89,11 @@ U3 主题跟随系统深浅、可手动切；U4 授权改写四条既有判据�
 - 延后 Minor a–d 已修（提交 `fix(web): local list dates, a note on a detail whose row left the list…`）：列表日期改为浏览器本地 `YYYY-MM-DD`（`localDay`）；详情区在其行被筛选挡住／已不在列表时显示 `HIDDEN_BY_FILTER`／`NOT_IN_LIST`；Task control 的组按钮有选中样式；`DecisionDetail.tsx` 追加 ERRATUM。
 - 现测（干净 clone，提交 a–d 那一笔，`testenv.sh` 同 §二）：web build／typecheck／`--ws check`（web 24 文件／134 条）／`verify:panel`（step 0–14 PASS）均 RC 0；根 vitest 222 文件／2008 条，红 1 ＝ `controlShutdown` "a real SIGTERM…"（基线红名单内；退出码 143；单文件重跑 3 次 7/7 绿）。真 `~/.orca` 前后都不存在。
 
+- Minor e 已修（人授权改两处测试字面量）：`question` 两侧必填；`projectForList` 改为展开进带类型的字面量（原先 `Record`＋`as` 让编译器看不见漏写）。提交 `fix(panel): make a list row's question required on both sides…`。第三节第 1 条裁定就此失效。
+
 ### awaitingHuman（都归人）
 - **视觉验收**，然后决定 `ui/panel-redesign` 何时并入 `main`。人的原话：**先不合入，在本分支继续做完相关 task，另一个 agent 在 main 上 coding，择机再合**。`main` 已前进 ⇒ `--ff-only` 多半不成，rebase 还是 merge 由人定；合并后本文结论并回 `handoff.md`。
 - 四条被改写的既有判据**尚未人审**（名单在计划 Global Constraints，每条旁有 `REWRITTEN … U1 … U4 … a50f4d80` 注释）。
-- **Minor e：`question` 收紧为必填** —— 人要求先说明理由再定，**未动**。要做需人授权改 `web/tests/appSelection.test.tsx`、`web/tests/selection.test.tsx` 的行字面量（补 `question: null`）。
 
 ## 五、方法论（本批新踩的，下次直接用）
 
