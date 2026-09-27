@@ -256,3 +256,21 @@ Expected（落地后）：普查只剩 `capabilitySchema.test.ts:21`、`webFault
 - Ruling: 实施席多改了 `checks.providerCalls` 里 reconcile 计数的那个三元式（brief 没点到的第 4 处 `scenario === "single"`）。它先实测到 `failed: ["providerCalls"]`，再改 — 若错：只影响验收脚本。
 - 真 `~/.orca` 前后 `ls -la` 相同（控制器现测：只有 2026-09-27 21:36／21:37 的 `control/` 与 `reviews.jsonl`）。
 - Task O7: complete (commits f8dfdce..1e40cc6, review clean)
+
+### §3.16 终审（Opus，只读，跨两仓）
+
+- 结论：**With fixes**。Critical 0。
+- Important #1：`claude-timeout`／`exit-error`／`spawn-error` 时 work 记 null，组被 `usageUnknown` 永久卡住。比 spec §10 登记的「中止且无观测」更宽。
+- Important #2：§8.5 的干净门与变异总表还没入台账。
+- Minor 1–6。
+- Ruling（修复波，一次派发，Opus）：以下几项现在修：
+  - ccloop：C1（超时及其他失败带上观测用量）、C2（T5 两个判断对调）、C3（single-call 超时 = grant − 10 s）；
+  - Orca：O-a（(d) 守卫判据）、O-b（E3 断言 worktree 不变）、O-c（用量未知时 stop 的判据）、O-d（调用记录不合法 ⇒ block `single-call-record-invalid`）、O-e（web 基线加直接断言）。
+  - 依据：终审分诊与 Rule 9；§10 登记之外、能直接卡死组的路径能修就修。若错：多一轮修复。
+- Ruling：以下几项登记、不修，写进 spec §10 更正与 handoff：
+  - Minor 2：prompt 作为单个 argv 参数，Linux 上限 128 KiB；
+  - Minor 3：`--tools ""` 只做过静态验证；
+  - Minor 6：应用建议后，未保存的 draft 仍会显示；
+  - 修复后仍剩的一个窗口：spawn 失败、或出流之前就退出 ⇒ 用量 null ⇒ 组卡在 usageUnknown。
+  - 依据：前三项都不在本轮验收路径上；最后一项是 Web spec 对用量未知的既定语义，要改它就得先定义「可证明零花费」，那是新设计。若错：Linux 部署时估算会 spawn 失败，并卡住组。
+- 终审分诊中标为 keep 的 deferred 项与 Ruling：照单保留。见终审报告：T1、T3、T4×2、T5（请求先于注册）、O2、O3、O4（readFileSync 等）、O5 计划字面量，以及 §3 的全部 Ruling。

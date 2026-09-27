@@ -218,3 +218,13 @@ JSON Schema 常量表达不了 `requireSortedUnique`，由 `validateEstimateOutp
 - S7 的已知后果：升级前在飞的 run 升级后被拒（§4.1）。
 - 冻结下已完成的调用被记 `interrupted`，那次花费白花（§6.5）。
 - 中止且无观测用量 ⇒ 估算停 `running`、组 `usageUnknown`（§6.3 第 4 步，既定语义）。
+
+## 11. 实施期更正（2026-09-28，控制器会话 f341f05f；本 spec 未发布，但为保证证据链，另起一节而不回改上文）
+
+1. **§10 第 3 条的范围比原文宽**（终审 Important #1）：除「中止且无观测」外，`claude-timeout`／`exit-error`／`spawn-error` 同样会让 work 记 null、组 `usageUnknown` 卡住。修复波把**有观测文件的失败**（含超时）改为报观测值（ccloop `singleCall` 的失败分支带 `observedTokens`）；**剩下的窗口**是「spawn 失败或出流前退出」：花费事实上为 0，但记 null ⇒ 组卡住。挂账，归人（要改需先定义「可证明零花费」）。
+2. **single-call 的超时留 10 s 余量**：`timeoutMs = grant.activeMs − 10_000`，避免报出的 `activeMs` 超过 grant 被记成 breach。
+3. **调用记录不合法** ⇒ Ce 以 `single-call-record-invalid` block，不再每轮抛错空转。
+4. **§4.4 的「冻结记录逐字段写」、§6.3 只比 prompt 哈希、§6.5 恢复范围**：见文件头「修订二」。
+5. **挂账（新增，未修）**：prompt 作为单个 argv 参数，Linux `MAX_ARG_STRLEN` 128 KiB 会让大 plan 的估算 spawn 失败（macOS 无此限）；`--tools ""` 与 `CLAUDE_CODE_MAX_OUTPUT_TOKENS` 只有静态证据，真 claude 付费跑归人；面板「应用建议」后同字段未保存的 draft 仍显示旧值。
+6. **产品问题（归人）**：一个 profile 给所有角色时，estimator 要声明窗口 ⇒ worker 同一窗口 ⇒ confirm 强制数值 handoff 阈值，无法表达「不按上下文交接」（agent 选择一轮的既有不变式）。
+
