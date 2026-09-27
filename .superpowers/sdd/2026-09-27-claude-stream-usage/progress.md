@@ -141,3 +141,13 @@ spec：`docs/superpowers/specs/2026-09-27-claude-stream-usage-design.md`。
   - ❌ **续跑没有落地**：续跑 run 在 execute 后 `loop_exhausted`（"runtime or token budget exhausted"），状态 `blocked`／`terminal:exhausted`，没有 verify。原因已核：续跑 contract 的 `tokenBudget` 是 **90,477**（任务额度 150,000 减去前任已用），续跑的 plan 19,347 ＋ execute 109,588 ＝ 128,935，超了。这是脚本默认 `--task-tokens 150000` 太紧，不是本轮代码的缺陷。连带失败的检查：`runSettled`、`workDone`、`cleanedUp`、`landedBytes`、`onlyTargetChanged`、`published`、`providerCalls`。
   - **花费（claude 自报，逐次原样）**：`0.15783999999999998`、`0.0273526`、`0.1074448`（三次完成的调用，合计 `claudeReportedUsd` 0.2926374）；另有**被中止的 execute 一次，花费拿不到**（`claudeCallsWithoutCost` 1）。
   - ⇒ **能说的只有**：真 claude 下，被 handoff deadline 中止的 execute 报出了观测到的用量，run 可续、组用量已知（n＝1）。**续跑落地在真 claude 下没跑成**；要证明它，得加大 `--task-tokens` 再付费跑一次，这需要人重新点头。
+- Human（2026-09-27）：「把 --task-tokens 调大（比如 400000）再付费跑一次。实际工作中 --task-tokens 应该调到 1000000 以上（另外你要区分这是累计 tokens 还是单次最大 tokens，如果是累计 tokens 的话应该更大，否则什么都跑不出来结果）。你测试中可以适当调小。…台账里其余裁定 => 同意你的裁定」⇒ 台账 §3 全部 `Ruling:` 由人认可；再授权一次付费验证。
+- 口径（现核，不是推断）：`--task-tokens` 进两处，一是该任务 work 分配的 `tokens`（`scripts/live-driver-acceptance.ts` 的 proposal-edit），二是 contract 的 `tokenBudget`。它是**累计**额度，一个任务所有阶段、所有尝试加起来算，续跑也从同一笔里扣：上一次付费运行里续跑的 `tokenBudget` 是 90,477，正好等于 150,000 减去前任已用的量。`--group-tokens` 是整组的累计上限。单次调用的上限另有一道，是 claude 自己的 `--max-budget-usd`（美元）。
+- **第二次付费验证（人授权，n＝1）**：2026-09-27T12:50:02Z–12:51:32Z。命令与第一次相同，只加 `--task-tokens 400000 --group-tokens 800000`，输出在 `scratchpad/live-deadline-2/`。**RC 0，`failed: []`**。
+  - execute 被中止：中止时的观测总数 20,060，被中止的 execute 最终记账 40,206（`observed: true`）；请求 `settled-recoverable`。
+  - 续跑（plan 19,620、execute 104,887、verify 65,233）`settled` 并落地：`refs/heads/orca/g` 上五个文件的字节都对（`one\n` … `five\n`），`onlyTargetChanged` 成立。
+  - 账本 249,285 ＝ ccloop 报数，`usageUnknown` false。
+  - 5 次调用的 `--model` 都是 `claude-opus-5-5`；`~/.orca`、`~/.claude/projects` 都没被碰；收尾 `pgrep -fl "claude.exe -p"` RC 1。
+  - **花费（claude 自报，逐次原样）**：`0.0252366`、`0.030400599999999996`、`0.08245179999999999`、`0.19901240000000003`，合计 `claudeReportedUsd` 0.3371014；被中止的 execute 一次拿不到花费。
+  - 两次付费合计（只列工具报数）：第一次 0.2926374 ＋ 第二次 0.3371014，另有两次被中止的调用花费未知。
+  - ⇒ **能说的**：真 claude 下「handoff deadline 中止 execute → 报观测用量 → 可续 → 续跑落地」跑通过一次（n＝1，单任务，claude 2.1.283，`claude-opus-5-5`，任务累计额度 400,000）。不能说「claude 可用」。
