@@ -144,6 +144,9 @@ agent 选择 spec §11 把这件事登记为「下一片，字段形状要真 cl
 
 改写后每条旁边写明它现在编码什么、依据哪条人裁。实施时若全量又红出别的既有判据，**停下报人**，不自改。
 
+⚠️ **更正（实施 Task 1 时发现，控制器会话 `4d2e426e`，2026-09-27）**：上面的扫描只找了 argv 位置／长度断言，漏了第五条 ——
+5. `tests/runtime/claude/fakeClaudeCli.test.ts > fake claude CLI (Orca agent selection, spec §4.8) > rejects an argument the phase runner never passes, so runner drift is loud`：它用 `--verbose` 作「runner 永不传的参数」，本轮起 runner 就传它。改为用 `--continue` 作例，其余不动（控制器按人「有问题先按你的建议执行」裁定，台账 §3）。
+
 ### 5.4 变异（在 `git clone --local` 副本里，每条都要看见红）
 
 | | 变异 | 预期红 |
