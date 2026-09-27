@@ -5,6 +5,7 @@
 - 进度源：`.superpowers/sdd/2026-09-27-single-call-estimate/progress.md`（计划落地时新建）
 - 路径：architectural（跨 ccloop／Orca，改 start envelope 线协议与 capabilities 应答，驱动环加一个 workKind）
 - 人在对话里逐节认可了 §3–§8 的设计（2026-09-27，每节「同意，继续」），人裁见 §2。
+- 修订（同一会话，人要求审 spec 后，未发布、就地改）：C1 能力位改为解析应答的兄弟字段（§4.4）；I1 守恒式前提进 Task 0（§8.1）；I2 `exact` tokenizer 也数整条 prompt（§4.2）；I3 估算 run 无工作区、清理跳过（§6.2、§6.5）；M1、M2 措辞与零写判据（§1、§8.2）。
 
 ## 1. 要解决的问题
 
@@ -13,7 +14,7 @@ Web spec（`2026-09-19-web-recoverable-control-design.md`）§2.1 目标 4、§5
 - 导入（`src/control/planImport.ts`）与重估（`WebControlService.createEstimate`）会建估算记录；探测到的 `contextWindowTokens` 非 null 时进 `queued`，由 wake 调 `claimEstimate`（`src/control/webService.ts`）建一个 `phase:"estimate"` 的 run、写 `estimate-claim` outbox、把估算置 `running`。
 - ⚠️ **`src/` 里没有任何代码执行这个 run，也没有任何代码调用 `completeEstimate`**（只有 `tests/control/estimator.test.ts` 手改 run 状态后调它）。`driverRunIds`（`src/control/executionDriver.ts`）只收 `phase === "work"`。
 - ⇒ 估算永远停在 `running`，`scheduleStart`（`src/control/webDispatch.ts`）以 `estimate-in-flight` 拒 start。
-- 今天能走到这里的形状：ccloop 给 claude 1M 答 `contextWindowTokens: 1000000`（ccloop `src/agents/claude.ts`）；codex 恒 `null` ⇒ 恒 `blocked-capability`，不卡。**claude 1M 的 estimator 槽 ⇒ 导入后组卡死**（推断，未实测，§8 Task 0 不量它，E1 的反面就是它）。
+- 今天能走到这里的形状：ccloop 给 claude 1M 答 `contextWindowTokens: 1000000`（ccloop `src/agents/claude.ts`）；codex 恒 `null` ⇒ 恒 `blocked-capability`，不卡。**claude 1M 的 estimator 槽 ⇒ 导入后组卡死**（推断，未实测；由 §8.4 的变异「`driverRunIds` 不收估算 ⇒ E1 红在 `estimate-in-flight`」实测）。
 - 附带两处卡死（静态读出，未跑判据）：
   1. 冻结（handoff-stop／shutdown）时估算 run 的 handoff 请求没有消费方（`handoffRunIds` 只收 work run）⇒ 组永停 `handoff-pending`。
   2. 启动恢复（`src/control/recovery.ts`）在 `driverOwnsWebRuns` 下只跳过 `isWebWorkRun`；估算 run 没有 `start:` outbox ⇒ 进 `blocked` ⇒ **整个 store** `dispatchBlocked`（推断，§8 Task 0 实测）。
@@ -62,7 +63,7 @@ work:
 - prompt ＝ 指令正文（按 `instructionVersion` 存在 Orca 的常量里）＋ `"\n\n"` ＋ 估算请求的 canonical 字节。Web spec §5.4 的「原样交出」落在这里：ccloop 不拼、不改。
 - 今天 profile 里只有版本号 `"1"`，没有正文 ⇒ 本轮写出 v1 正文：读 plan 快照，按 `budget-estimate-v1` 给每个任务的 `work`／`handoff`（四维）、`complexity`、`confidence`、`rationale`、`assumptions`（排序去重），以及 `goalReviewReserve`、`groupRationale`；`planHash` 原样回显；`tasks` 与 plan 快照同序。
 - profile 的 `instructionVersion` 不是 Orca 认得的版本 ⇒ 预检退回 `blocked-capability`（`estimate-blocked-capability`，现有 reasonCode）。
-- **输入 token 的诚实性**：今天 `inputTokens` ＝ 请求字节按 tokenizer 比例取上界 ＋ `framingTokenOverhead`，没有指令正文。本轮把指令正文与分隔符的字节也按同一比例取上界加进去；超窗或超 grant 照旧 `input-too-large`。钉 `inputTokens` 具体数值的既有判据若因此变 ⇒ 按 S6 改写。
+- **输入 token 的诚实性**：今天 `inputTokens` ＝ 请求字节的 token 数（`utf8-upper-bound` 按比例取上界；`exact` 调 `exactTokenCount`）＋ `framingTokenOverhead`，没有指令正文。本轮两个分支都改为对**整条 prompt**（指令正文 ＋ 分隔符 ＋ 请求字节）计数；超窗或超 grant 照旧 `input-too-large`。钉 `inputTokens` 具体数值的既有判据若因此变 ⇒ 按 S6 改写。
 - ccloop 在调用记录里记 prompt 与 `responseSchema` 的 sha256；Orca 结算时比对（§6.3）。
 
 ### 4.3 收取结果不改 schema
@@ -71,8 +72,10 @@ work:
 
 ### 4.4 能力位 `singleCallExecution`
 
-- capabilities 应答（七键 `capabilityViewSchema`，两边 strict）加第八键 `singleCallExecution: "v1" | null`，两边同时改。
-- Orca 估算预检（`buildBudgetEstimateRequest`、`estimateCapabilityDegraded`）多一条：`singleCallExecution === null` ⇒ `blocked-capability`（`estimate-blocked-capability`）／claim 时退化（`estimate-capability-degraded`）。今天的 `handoffControl`／`handoffExecution` 两条保留不动。
+- ⚠️ **不进七键 `capabilityViewSchema`**（审查 C1）：那个 schema 还嵌在人写的 profile 文件（`declaredCapabilitiesSchema` 由它 `.extend`）、导入／确认时冻结进库的记录（估算槽、`frozenTaskAgentSchema.agentCapabilities`）、下发 web 的 control config 视图里，全是 strict；加键会让旧 profile 文件被拒、现有 store 的冻结记录读回 `recovery-blocked`。S7 只免了 ccloop 的兼容性，不免这些。
+- 所以：ccloop「按 selection 解析」的 capabilities 应答（`{protocol: 3, selection, configHash, timeoutMs, killGraceMs, capabilities}`）加**顶层兄弟字段** `singleCallExecution: "v1" | null`，与 `capabilities` 平级；表视图（`agent: null`）不加。两边的解析应答 schema 同时改（ccloop `command.ts`、Orca `ccloopPort.ts` 的 `agentResolutionSchema`）。
+- Orca 在 `ObservedProfile.resolution` 上读它（探测失败时 `resolution` 为 null ⇒ 视为 null）。冻结记录逐字段显式写，不带它 ⇒ 不改任何持久化 schema。
+- Orca 估算预检（`buildBudgetEstimateRequest`、`estimateCapabilityDegraded`）多一条：`singleCallExecution` 不是 `"v1"` ⇒ `blocked-capability`（`estimate-blocked-capability`）／claim 时退化（`estimate-capability-degraded`）。今天的 `handoffControl`／`handoffExecution` 两条保留不动。
 - 某个 kind 的 descriptor 只有在「输出上限」与「关工具／只读」两件都能做到时才答 `"v1"`（§8 Task 0 量），否则 `null`。
 
 ## 5. ccloop 侧
@@ -116,7 +119,7 @@ worker 已有的轮询发现请求 ⇒ abort 这次调用 ⇒ 走 §5.2 第 4 �
 
 | 步 | 做什么 |
 |---|---|
-| A1 | 同一函数：预留 provider attempt、记 `sourceDir`；strict 组照样拒。`estimate-claim` 与 `work-claim` 都是 `attemptReservation: 0`，形状相同 |
+| A1 | 同一函数：预留 provider attempt、记 `sourceDir`；strict 组照样拒。`estimate-claim` 与 `work-claim` 都是 `attemptReservation: 0`，形状相同。估算 run 的 drive **不带工作区**（`workspacePath` 不建、不清，审查 I3） |
 | A2e | 建私有 `sourceDir`；拼 prompt（§4.2）；`responseSchema` ＝ `budget-estimate-v1` 的**手写 JSON Schema 常量**；写 `protocol: 3`、`kind: "single-call"` 的 envelope；`prepared = true`。不建工作区、不建分支、不读目标仓库 |
 | B／B′ | `accept`／`inspect` 原样；exit 2 ⇒ blocked |
 | Ce | `collectInto` 原样（验哈希、归档、`recordUsage`）；见停机证明后结算（§6.3） |
@@ -145,6 +148,7 @@ JSON Schema 常量表达不了 `requireSortedUnique`，由 `validateEstimateOutp
 ### 6.5 冻结、关机、恢复
 
 1. **冻结**：`handoffRunIds` 多收有未结请求的估算 run，交给 `stepH`：`starting`／未 prepared 的 `start-pending` ⇒ 现有 `restartRun`；已 prepared 或 `unknown` ⇒ `inspectUnderStop`；`accepted` ⇒ 投请求给 ccloop、`collectInto` 取观测用量与停机证明。估算 run 的请求**一律以 `settled-restartable` 结算** ⇒ 现有 `terminaliseRun` → `interruptEstimate` 记 `interrupted` 并退回未用承诺。**停机到达时调用恰好已完成、输出也在 ⇒ 仍记 `interrupted`**，输出只作 evidence 留存（Web spec §6；避免 `completeEstimate` 与 handoff 结算抢同一个 run）；人可 Re-estimate。
+   ⚠️ 今天的 `restartRun` 与 E 步会对 `drive.workspacePath` 调 `cleanupRunWorkspace(目标仓库, …)`；估算 run 一律跳过（审查 I3），判据量目标仓库 `git worktree list` 前后相同。
 2. **关机**：不改。含在飞估算的组照 §6.4 冻结（`tests/panel/shutdownDriverGroup.test.ts` 的 H7 钉着），冻结后由第 1 条接住。
 3. **恢复**：`recoverControl` 在 `driverOwnsWebRuns` 下对估算 run 与 work run 一样跳过，交驱动环逐个对账。Task 0 先量「在飞估算 ⇒ 全局 `dispatchBlocked`」是否为真：真 ⇒ 这条改动有依据；假 ⇒ 只加防回归判据。钉着现行为的既有判据 ⇒ 按 S6 改写。
 
@@ -165,14 +169,15 @@ JSON Schema 常量表达不了 `requireSortedUnique`，由 `validateEstimateOutp
 1. claude／codex 各自「输出 token 上限」与「关工具／只读」的办法：先 `--help`，再用 fake 读 argv 核；要跑真 CLI 另问人。任一做不到 ⇒ 该 kind 答 `singleCallExecution: null`。
 2. 在飞估算 ⇒ 重启时整个 store `dispatchBlocked`：真假。
 3. `provenance: "model"` 的 `proposal-edit` 今天有没有真 store 判据。
+4. A1 的 `reserveProviderAttemptInTransaction` ＋ `recordUsage` 之后，估算 run 能否满足 `completeEstimate` 的守恒式（每维 `remaining.work[d] === max(grant[d] − cumulative[d], 0)`、`highWater` 之后无未处理事件）。现有判据都是手改 run 状态再调它，这条真实路径没走过（审查 I1）。不满足 ⇒ 停下报人，不改守恒式。
 
 ### 8.2 ccloop 判据
 
 - 协议：3 的两种 kind 可解析；2 被拒；多一个字段被拒；`responseSchema` 顶层非 object 被拒；`single-call` 带非 null `inputCheckpoint` 被拒。
 - accept：`singleCallExecution: null` 的 agent 收 `single-call` ⇒ `single-call-unsupported`（exit 2）。
-- worker 分支（都经 `collect` 读回）：成功（输出 artifact、调用记录、usage event、停机证明俱在）；输出不合 schema ⇒ `failed`；handoff 中止有观测 ⇒ `cumulative` 等于观测值；中止无观测 ⇒ `cumulative: null`；零写：不碰任何 git 仓库、不写 attempt ref。
+- worker 分支（都经 `collect` 读回）：成功（输出 artifact、调用记录、usage event、停机证明俱在）；输出不合 schema ⇒ `failed`；handoff 中止有观测 ⇒ `cumulative` 等于观测值；中止无观测 ⇒ `cumulative: null`；零写：调用后 cwd 目录为空、`sourceDir` 的文件清单等于预期清单、envelope 里没有任何仓库路径、不写 attempt ref。
 - adapter：直接读 runner 实际传给 CLI 的 argv／env（stream-usage 一轮 N7 的做法），确认 schema 来自请求、输出上限与关工具生效。
-- capabilities：八键应答 `toEqual` 钉死（改写既有的 `command.test.ts` 那条 ⇒ S6）。
+- capabilities：解析应答带 `singleCallExecution` 的 `toEqual` 钉死（改写既有的 `command.test.ts` 那条 ⇒ S6）；七键视图不变。
 
 ### 8.3 Orca 判据
 
@@ -180,11 +185,11 @@ JSON Schema 常量表达不了 `requireSortedUnique`，由 `validateEstimateOutp
   - **E1** 导入 ⇒ 估算自动跑完 `ready` ⇒ start 不被 `estimate-in-flight` 拒 ⇒ 应用一条建议 ⇒ confirm ⇒ start。
   - **E2** 估算在飞时 handoff-stop ⇒ 估算 `interrupted`、未用承诺退回 ⇒ 组到 `handoff-complete`。
   - **E3** 估算在飞时重启 ⇒ 不全局 `dispatchBlocked` ⇒ 驱动环对账完。
-- 单元：三个 `reasonCode`；prompt 哈希不一致 ⇒ block；JSON Schema 常量 vs zod 的必收／必拒样本；`singleCallExecution` 预检与退化；`inputTokens` 含指令正文；`protocol: 3` 的 `loop` envelope；§7 的 `suggestedOperations`（三粒度；值相同不产出；`planHash` 不一致整体不产出）与组件（显示条件、每种按钮发出的命令字面量）。
+- 单元：三个 `reasonCode`；prompt 哈希不一致 ⇒ block；JSON Schema 常量 vs zod 的必收／必拒样本；`singleCallExecution` 预检与退化；`inputTokens` 含指令正文（两个 tokenizer 分支各一）；估算 run 冻结与结算都不碰目标仓库的 worktree；`protocol: 3` 的 `loop` envelope；§7 的 `suggestedOperations`（三粒度；值相同不产出；`planHash` 不一致整体不产出）与组件（显示条件、每种按钮发出的命令字面量）。
 
 ### 8.4 变异
 
-每新增一个分支点名一条删掉**它自己**的变异，并**亲眼看到红**。表在计划里按 Task 列全；至少含：`single-call` 分叉、`singleCallExecution` 闸（accept 与 Orca 预检各一）、调用记录哈希比对、三个 `reasonCode` 各一、`handoffRunIds` 收估算、恢复跳过估算、`inputTokens` 加指令、`suggestedOperations` 的「值相同不发」与 `planHash` 守卫。变异只在单独的 `git clone --local` 里做，**不在被当作 `ORCA_CCLOOP_BIN` 的那份 clone 里做**。
+每新增一个分支点名一条删掉**它自己**的变异，并**亲眼看到红**。表在计划里按 Task 列全；至少含：`driverRunIds` 不收估算（⇒ E1 红在 `estimate-in-flight`，这就是今天卡死的实测）、估算 run 跳过工作区清理、`single-call` 分叉、`singleCallExecution` 闸（accept 与 Orca 预检各一）、调用记录哈希比对、三个 `reasonCode` 各一、`handoffRunIds` 收估算、恢复跳过估算、`inputTokens` 加指令、`suggestedOperations` 的「值相同不发」与 `planHash` 守卫。变异只在单独的 `git clone --local` 里做，**不在被当作 `ORCA_CCLOOP_BIN` 的那份 clone 里做**。
 
 ### 8.5 门（只抄工具报数）
 
