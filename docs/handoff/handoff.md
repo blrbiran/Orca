@@ -903,7 +903,7 @@ Orca 要求排序去重的四值枚举 ⇒ 将来非 null 且写错时 Orca 整�
 - 🔴 **真实 `~/.orca/agents.json` 与 `~/.orca/agents.json.draft.json`**（2026-09-26 02:51，写作期变异残留，内容是判据夹具 `"command":["/opt/claude"]`）—— 删不删归人。`orca agents init` 在它们存在时只写草稿、`show` 会读到这张假表。会话 `8c6302e0` 前后多次 `stat`，未被动。
 - 🔴 **推送**：会话 `94b09282` 开工时三仓远端＝本地；该会话往 ccloop 提交了三笔（B2／B3／B1），往 Orca 提交了文档。推送顺序仍是**先 ccloop 后 Orca**：Orca 的端到端判据以新 ccloop build 为准，线上协议形状没变。现在哪些笔在远端，跑 `/usr/bin/git ls-remote` 自查。
 - ✅ ~~ccloop 已知红名单加 `run-scenario CLI > records claudeChildExited as NOT_OBSERVABLE …`~~ —— 人裁 R29，已随 ccloop 主题行 `fix(agents): leave where the CLI is installed and its run limits out of configHash …` 进名单（现 14 个名字）。
-- **孤儿进程**（历次变异残留，PPID 1）：三个 `…/T/ccloop-agents-version-*/cli.mjs --version` 与两个会话 `75ec878e` scratchpad 里的 `worker.js`。`pgrep -fl 'ccloop-agents-version|worker.js'` 可见；不是后来会话起的，没杀。
+- ✅ ~~孤儿进程~~ —— 人「孤儿进程清掉」，会话 `94b09282` 用 SIGTERM 清掉了 5 个（三个 `ccloop-agents-version-*/cli.mjs --version`、两个 `75ec878e` scratchpad 里的 `worker.js`），`pgrep` 为 0（台账 §18）。⚠️ 变异仍可能留下新的孤儿：挂起夹具被杀掉的只是父进程。做完变异后跑一次 `pgrep -fl "ccloop-agents-version|worker.js"`。
 - 挂账（登记不修，spec §11／§13.3／§13.5／§13.8）：旧 `SubprocessClaudeAdapter` 保留；`ccloop resume`／`sweep` 不支持 `--agents` 起的 run；claude 工具进程另开进程组时杀不到；真 claude `-p` 写配置目录；旧 `ControlService` claim／continue 路径（K1／K3／K4 等）生产不可达、无判据；派活不与确认快照比对；claude model 以 `[1m]` 结尾可绕过上下文档位；handoff 宽限在冻结值无效时退回 0；`versionOf` 无超时；安装记录里 `version` 以外的字段（`command`／`configDir` 等）改了，已开跑的组仍永久无出路；`orca run` 解冲突「信号取消是否仍发布 attempt ref」没量；本轮之前就弱的判据（ccloopProtocol SIGKILL 两行、controlReadApi 的键数与 `objective.taskId`、controlConfigPort 的 `defaults`）。
 
 ### 9.1 G1 缝 A 之后归人的（**2026-09-24 替换上一版「执行前必须由人给的」——那些授权都已给出并用完**）
