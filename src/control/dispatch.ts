@@ -47,7 +47,7 @@ async function send(store:ControlStore,port:ExecutionPort,input:StartEnvelope,ga
 export async function startClaim(store:ControlStore,port:ExecutionPort,input:StartEnvelope,gate?:AdmissionGate):Promise<RunView> {
  input=startEnvelopeSchema.parse(input) as StartEnvelope;
  assertClaimIdentity(store,input.claim);
- if(input.protocol!==2) throw new ControlError("control-protocol-unavailable");
+ if(input.protocol!==3||input.work.kind!=="loop") throw new ControlError("control-protocol-unavailable");
  const group=readGroup(store,input.claim.groupId);
  // Agent selection spec §6.4 (C3): the gate asks about the claim's own frozen selection, the one ccloop will run.
  assertCapabilities(group.budgetMode??"strict",(await port.resolveAgent(input.claim.agent)).capabilities);

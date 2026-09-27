@@ -290,11 +290,13 @@ export async function claudeCodexResolveAgent(partial: PartialSelection): Promis
     contextWindow: partial.contextWindow ?? installation.defaults.contextWindow,
   };
   if (!installation.contextOptions.includes(selection.contextWindow)) throw new ControlError("agent-context-unsupported");
+  // Human ruling S6 (2026-09-27, session f341f05f, tsc-surfaced beyond the table): singleCallExecution beside the view.
   return {
     selection,
     configHash: sha256Canonical({ kind: installation.kind, selection }),
     timeoutMs: 120_000,
     killGraceMs: 7_000,
     capabilities: { ...profileSnapshot().profile.capabilities },
+    singleCallExecution: "v1",
   };
 }

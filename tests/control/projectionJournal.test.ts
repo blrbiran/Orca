@@ -103,12 +103,12 @@ describe("projection journal", () => {
 
       const beforeStart = readVersions(h.store, "g1");
       await startClaim(h.store, fakePeer(`${h.root}/accepted-peer`), {
-        // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
-        protocol: 2,
+        // Human ruling S6 (2026-09-27, session f341f05f): envelopes are protocol 3, work tagged as a loop (single-call estimate spec §4.1); what the criterion encodes is unchanged.
+        protocol: 3,
         claim,
         contractHash: hashPayload(seeded.w1.contract),
         inputCheckpoint: null,
-        work: { contract: seeded.w1.contract, targetRepo: h.root, base: "HEAD", sourceDir: h.root },
+        work: { kind: "loop", contract: seeded.w1.contract, targetRepo: h.root, base: "HEAD", sourceDir: h.root },
       });
       expect(getRun(h.store, claim.runId).state).toBe("accepted");
       expect(readVersions(h.store, "g1")).toEqual({ commandRevision: beforeStart.commandRevision, projectionSeq: beforeStart.projectionSeq + 2 });
@@ -124,12 +124,12 @@ describe("projection journal", () => {
       const claim = claimWork(h.store, seeded.t1Claim);
       const before = readVersions(h.store, "g1");
       await expect(startClaim(h.store, fakePeer(`${h.root}/unknown-peer`, "drop"), {
-        // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
-        protocol: 2,
+        // Human ruling S6 (2026-09-27, session f341f05f): envelopes are protocol 3, work tagged as a loop (single-call estimate spec §4.1); what the criterion encodes is unchanged.
+        protocol: 3,
         claim,
         contractHash: hashPayload(seeded.w1.contract),
         inputCheckpoint: null,
-        work: { contract: seeded.w1.contract, targetRepo: h.root, base: "HEAD", sourceDir: h.root },
+        work: { kind: "loop", contract: seeded.w1.contract, targetRepo: h.root, base: "HEAD", sourceDir: h.root },
       })).rejects.toThrow("start-outcome-unknown");
       expect(getRun(h.store, claim.runId).state).toBe("unknown");
       expect(readVersions(h.store, "g1")).toEqual({ commandRevision: before.commandRevision, projectionSeq: before.projectionSeq + 2 });

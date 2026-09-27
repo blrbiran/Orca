@@ -24,7 +24,7 @@ export const caps:CapabilityViewV1={usageObservation:"realtime",budgetEnforcemen
 /** Agent selection spec §3: the complete selection every legacy fixture work item is frozen with. */
 export const fixtureAgent:AgentSelection={agent:"codex",model:"fixture-model",contextWindow:"agent-default"};
 /** A capabilities-v3 answer for `partial`: the given fields echoed (spec M5), the fixture's defaults for the rest. */
-export const resolvedAs=(capabilities:CapabilityViewV1,partial:PartialSelection={}):AgentResolution=>({selection:{...fixtureAgent,...partial},configHash:"config1",timeoutMs:120_000,killGraceMs:5_000,capabilities});
+export const resolvedAs=(capabilities:CapabilityViewV1,partial:PartialSelection={}):AgentResolution=>({selection:{...fixtureAgent,...partial},configHash:"config1",timeoutMs:120_000,killGraceMs:5_000,capabilities,singleCallExecution:"v1"});
 export const agentsView:AgentsView={installations:[{id:"codex",kind:"codex",defaults:{model:"fixture-model",contextWindow:"agent-default"},contextOptions:["agent-default"],version:"0.0.0-fixture"}]};
 export const amount=(tokens:number,activeMs=10000,attempts=10,sessions=10)=>({tokens,activeMs,attempts,sessions});
 export function seedBudgetCase(store:ControlStore,mode:"strict"|"soft"="strict") {

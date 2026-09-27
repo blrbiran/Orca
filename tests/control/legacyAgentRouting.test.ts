@@ -98,7 +98,8 @@ describe("legacy dispatch asks about, and freezes, the selection it dispatches (
       expect(parent.agent).toEqual(AGENT_A);
       const basePeer = fakePeer(join(h.root, "peer"));
       const sourceDir = join(h.root, "runs", parent.runId); await mkdir(sourceDir, { recursive: true });
-      await startClaim(h.store, basePeer, { protocol: 2, claim: parent, contractHash: hashPayload(s.w1.contract), inputCheckpoint: null, work: { contract: s.w1.contract, targetRepo: h.root, base: "HEAD", sourceDir } });
+      // Human ruling S6 (2026-09-27, session f341f05f): envelopes are protocol 3, work tagged as a loop (single-call estimate spec §4.1).
+      await startClaim(h.store, basePeer, { protocol: 3, claim: parent, contractHash: hashPayload(s.w1.contract), inputCheckpoint: null, work: { kind: "loop", contract: s.w1.contract, targetRepo: h.root, base: "HEAD", sourceDir } });
       putWork(h.store, "g1", { ...s.w1, workItemId: "handoff-T1", kind: "handoff", parentRunId: parent.runId, agent: AGENT_B, grant: { work: amount(0, 0, 0, 0), handoff: s.w1.grant.handoff } }, { commandId: "register-handoff", expectedRevision: 3, by: "service" });
       const { port, asked } = recording({ ...basePeer, requestHandoff: async () => { throw new Error("lost-response"); } });
       await expect(new ControlService(h.store, port).requestHandoff("g1", parent.runId, { requestId: "r1", reason: "context", deadlineAt: "2030-01-01T00:00:00Z" })).rejects.toThrow("handoff-outcome-unknown");

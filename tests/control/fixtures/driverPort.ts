@@ -63,6 +63,7 @@ export function fakeCcloopPort(input: {
 
   const execute = (envelope: StartEnvelope, executionId: string, stop: { request: HandoffRequest | null; terminal: boolean } = { request: null, terminal: true }): ExecutionReport => {
     const { claim, work } = envelope;
+    if (work.kind !== "loop") throw new Error("driverPort: loop work only");
     const workspace = (work.contract as { context: { repoPath: string } }).context.repoPath;
     const repo = join(work.sourceDir, "repo");
     const head = execFileSync("git", ["-C", workspace, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
@@ -108,7 +109,7 @@ export function fakeCcloopPort(input: {
 
   const port: ExecutionPort = {
     // Agent selection spec §4.6: capabilities protocol 3 -- the selection asked about, echoed and filled.
-    resolveAgent: async (partial) => ({ selection: { agent: "codex", model: "fixture-model", contextWindow: "agent-default", ...partial }, configHash: "c".repeat(64), timeoutMs: 120_000, killGraceMs: 0, capabilities: input.capabilities }),
+    resolveAgent: async (partial) => ({ selection: { agent: "codex", model: "fixture-model", contextWindow: "agent-default", ...partial }, configHash: "c".repeat(64), timeoutMs: 120_000, killGraceMs: 0, capabilities: input.capabilities, singleCallExecution: "v1" }),
     listAgents: async () => ({ installations: [] }),
     async accept(envelope) {
       calls.accept.push(structuredClone(envelope));

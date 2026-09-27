@@ -16,6 +16,8 @@ export function roundPeer(root:string):ExecutionPort {
    const reportPath=join(root,input.claim.runId,"terminal.json");
    try{return JSON.parse(await readFile(reportPath,"utf8"));}catch(error){if((error as NodeJS.ErrnoException).code!=="ENOENT")throw error;}
    const work=input.work!;await mkdir(work.sourceDir,{recursive:true});
+   // Human ruling S6 (2026-09-27, session f341f05f, tsc-surfaced beyond the table): work is now a tagged loop or single call (single-call estimate spec §4.1); this peer only ever runs a loop.
+   if(work.kind!=="loop")throw new Error("roundPeer: loop work only");
    const repo=join(work.sourceDir,"repo");git(work.targetRepo,"clone","--no-hardlinks",work.targetRepo,repo);git(repo,"checkout","--detach",work.base);
    const id=input.claim.taskId!;
    if(id==="T1") {await writeFile(join(repo,"a.txt"),"a1\n");await writeFile(join(repo,"shared.txt"),"T1 changed\n");}

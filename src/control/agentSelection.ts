@@ -31,8 +31,21 @@ export type Slot = "worker" | "estimator" | "reconcile";
 type Field = "agent" | "model" | "contextWindow";
 type Provenance = Record<Field, ProvenanceSource | null>;
 
-export interface AgentResolution { selection: AgentSelection; configHash: string; timeoutMs: number; killGraceMs: number; capabilities: CapabilityViewV1 }
-export interface FrozenSlot extends AgentResolution { partial: PartialSelection; provenance: Record<Field, ProvenanceSource> }
+/** Single-call estimate spec §4.4: `singleCallExecution` sits beside the seven-key view, like timeoutMs/killGraceMs. */
+export interface AgentResolution { selection: AgentSelection; configHash: string; timeoutMs: number; killGraceMs: number; capabilities: CapabilityViewV1; singleCallExecution: "v1" | null }
+/** What confirmation and import freeze; `singleCallExecution` is never frozen (spec §4.4: no persisted schema changes). */
+export interface FrozenSlot extends Omit<AgentResolution, "singleCallExecution"> { partial: PartialSelection; provenance: Record<Field, ProvenanceSource> }
+
+/**
+ * Single-call estimate spec §4.4 (drafter finding F3): a frozen slot is written field by field, so a field ccloop adds
+ * to its resolution never reaches frozenSlotSchema (strict), the estimate record or the execution snapshot.
+ */
+export function frozenSlotOf(resolution: AgentResolution, partial: PartialSelection, provenance: Record<Field, ProvenanceSource>): FrozenSlot {
+  return {
+    selection: resolution.selection, configHash: resolution.configHash, timeoutMs: resolution.timeoutMs,
+    killGraceMs: resolution.killGraceMs, capabilities: resolution.capabilities, partial, provenance,
+  };
+}
 
 /** A panel layer without its nulls: what it itself chooses. */
 function panelChoices(panel: PanelPartialSelection | undefined): PartialSelection {

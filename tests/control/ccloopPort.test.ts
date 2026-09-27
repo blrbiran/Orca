@@ -18,7 +18,8 @@ async function fixture(mode = "ok", extra:Record<string,unknown> = {}) {
   const record=join(root,"record.json"),table=join(root,"agents.json");
   await writeFile(table,JSON.stringify({mode,record,...extra}),{mode:0o600});
   const port=createCcloopExecutionPort({binary,agentsTablePath:table,timeoutMs:10_000});
-  const envelope:StartEnvelope={protocol:2,claim:{groupId:"g",workItemId:"w",taskId:"t",runId:"r",generation:1,graphVersion:1,targetVersion:1,commandId:"c",configHash:"a".repeat(64),agent:{agent:"codex",model:"fixture-model",contextWindow:"agent-default"},grant:{work:{tokens:1,activeMs:1,attempts:1,sessions:1},handoff:{tokens:1,activeMs:1,attempts:0,sessions:0}},ownerToken:"owner"},contractHash:"b".repeat(64),inputCheckpoint:null,work:{contract:{objective:"ship",scope:{allowedPaths:["src/**"]},acceptance:{commands:["true"]}},targetRepo:root,base:"HEAD",sourceDir:root}};
+  // Human ruling S6 (2026-09-27, session f341f05f): protocol 3, work tagged as a loop (single-call estimate spec §4.1).
+  const envelope:StartEnvelope={protocol:3,claim:{groupId:"g",workItemId:"w",taskId:"t",runId:"r",generation:1,graphVersion:1,targetVersion:1,commandId:"c",configHash:"a".repeat(64),agent:{agent:"codex",model:"fixture-model",contextWindow:"agent-default"},grant:{work:{tokens:1,activeMs:1,attempts:1,sessions:1},handoff:{tokens:1,activeMs:1,attempts:0,sessions:0}},ownerToken:"owner"},contractHash:"b".repeat(64),inputCheckpoint:null,work:{kind:"loop",contract:{objective:"ship",scope:{allowedPaths:["src/**"]},acceptance:{commands:["true"]}},targetRepo:root,base:"HEAD",sourceDir:root}};
   return {root,binary,table,record,port,envelope};
 }
 
@@ -154,8 +155,10 @@ describe("production ccloop execution port",()=>{
     const h=await fixture();
     const resolution=await h.port.resolveAgent({agent:"codex",model:"gpt-6-sol"});
     expect(JSON.parse(JSON.parse(await readFile(h.record,"utf8")).stdin)).toEqual({agent:{agent:"codex",model:"gpt-6-sol"}});
+    // Human ruling S6 (2026-09-27, session f341f05f): the stand-in's default answer for singleCallExecution -- null,
+    // the real ccloop's answer for codex -- now travels beside the seven-key view (single-call estimate spec §4.4).
     expect(resolution).toEqual({selection:{agent:"codex",model:"gpt-6-sol",contextWindow:"agent-default"},configHash:"d".repeat(64),timeoutMs:120000,killGraceMs:5000,
-      capabilities:{usageObservation:"phase-end",budgetEnforcement:"soft",contextObservation:"unavailable",handoffControl:"durable",handoffExecution:"mechanical-in-run-v1",contextWindowTokens:null,requestBoundProof:null}});
+      capabilities:{usageObservation:"phase-end",budgetEnforcement:"soft",contextObservation:"unavailable",handoffControl:"durable",handoffExecution:"mechanical-in-run-v1",contextWindowTokens:null,requestBoundProof:null},singleCallExecution:null});
   });
   it("lists the installations by asking capabilities with agent null",async()=>{
     const h=await fixture();

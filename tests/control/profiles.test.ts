@@ -59,10 +59,11 @@ const asked: PartialSelection[] = [];
 function port(probe: CapabilityViewV1 | (() => Promise<CapabilityViewV1>)): ExecutionPort {
   const result = typeof probe === "function" ? probe : async () => probe;
   return {
-    // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
+    // Human ruling S6 (2026-09-27, session f341f05f, tsc-surfaced beyond the table): a resolution now answers
+    // singleCallExecution beside the view (single-call estimate spec §4.4).
     resolveAgent: async (partial) => {
       asked.push(partial);
-      return { selection: { agent: "codex", model: "fixture-model", contextWindow: "agent-default", ...partial }, configHash: hash("c"), timeoutMs: 1, killGraceMs: 0, capabilities: await result() };
+      return { selection: { agent: "codex", model: "fixture-model", contextWindow: "agent-default", ...partial }, configHash: hash("c"), timeoutMs: 1, killGraceMs: 0, capabilities: await result(), singleCallExecution: "v1" };
     },
     listAgents: async () => ({ installations: [{ id: "codex", kind: "codex", defaults: { model: "fixture-model", contextWindow: "agent-default" as const }, contextOptions: ["agent-default" as const], version: "0.0.0-fixture" }] }),
     readEvidence: async () => Buffer.alloc(0),
@@ -127,7 +128,8 @@ describe("trusted execution profiles", () => {
       #accepts = 0;
       // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): the two capability
       // methods are the resolution and the table view now; unused by this criterion's assertions.
-      resolveAgent = async () => ({ selection: { agent: "codex", model: "m", contextWindow: "agent-default" as const }, configHash: hash("c"), timeoutMs: 1, killGraceMs: 0, capabilities: snapshot().profile.capabilities });
+      // Human ruling S6 (2026-09-27, session f341f05f, tsc-surfaced beyond the table): singleCallExecution beside the view.
+      resolveAgent = async () => ({ selection: { agent: "codex", model: "m", contextWindow: "agent-default" as const }, configHash: hash("c"), timeoutMs: 1, killGraceMs: 0, capabilities: snapshot().profile.capabilities, singleCallExecution: "v1" as const });
       listAgents = async () => ({ installations: [] });
       readEvidence = async () => Buffer.alloc(0);
       async accept() { this.#accepts += 1; return { kind: "accepted" as const, executionId: `receiver-${this.#accepts}`, configHash: hash("a") }; }

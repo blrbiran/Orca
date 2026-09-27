@@ -106,7 +106,8 @@ async function setup() {
   // the port above still refuses, so a real router probe of it still fails.
   // (Written as a row, not a command: several criteria below count every row of the command ledger.)
   writePreferencesRow(h.store, "operator", { defaultAgent: FIXTURE_AGENT_ID, perAgent: {} });
-  const resolution = { selection: { agent: FIXTURE_AGENT_ID, model: "fixture-model", contextWindow: "agent-default" as const }, configHash: hash("7"), timeoutMs: 60_000, killGraceMs: 1_000, capabilities: profile().profile.capabilities };
+  // Human ruling S6 (2026-09-27, session f341f05f): a resolution now answers singleCallExecution beside the view (single-call estimate spec §4.4).
+  const resolution = { selection: { agent: FIXTURE_AGENT_ID, model: "fixture-model", contextWindow: "agent-default" as const }, configHash: hash("7"), timeoutMs: 60_000, killGraceMs: 1_000, capabilities: profile().profile.capabilities, singleCallExecution: "v1" as const };
   const estimatorObservation = (selected: typeof frozen) => ({ profile: selected, observed: selected.snapshot.profile.capabilities, probeFailureCode: null, resolution });
   const prepared = await estimatorSlotFor({ store: h.store, profileRouter: { ...router, probe: async (selected) => ({ ...estimatorObservation(selected), observedAt: new Date(0).toISOString() }) } }, "operator", {}, frozen);
   return { ...h, repo, planPath, plan, router, trustedConfig, frozen, deps: { store: h.store, trustedConfig, profileRouter: router, defaults: () => defaults, estimatorObservation, estimatorSlot: prepared.outcome }, setDefaults: (next: typeof defaults) => { defaults = next; } };

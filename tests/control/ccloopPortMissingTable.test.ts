@@ -49,12 +49,13 @@ describe.skipIf(!realBinary)("the ccloop port over a deleted agents table (real 
       verification: { verifierType: "command", requiredChecks: ["true"], rejectOn: ["failure"], evidenceRequired: [] },
       escalationAndExit: { escalationTargets: [], pauseOn: [], stopOn: [], terminalStates: ["succeeded", "blocked_waiting_human", "exhausted", "cancelled", "failed"] },
     };
+    // Human ruling S6 (2026-09-27, session f341f05f): protocol 3, work tagged as a loop (single-call estimate spec §4.1).
     const envelope = {
-      protocol: 2,
+      protocol: 3,
       claim: { groupId: "g", workItemId: "T1", taskId: "T1", runId: "run-1", generation: 1, graphVersion: 1, targetVersion: 1, commandId: "c1",
         configHash: resolution.configHash, agent: resolution.selection, grant: { work: amount(1_000, 60_000, 3, 3), handoff: amount(100, 10_000, 1, 1) }, ownerToken: "owner" },
       contractHash: "b".repeat(64), inputCheckpoint: null,
-      work: { contract, targetRepo: target, base: git(target, "rev-parse", "HEAD"), sourceDir },
+      work: { kind: "loop", contract, targetRepo: target, base: git(target, "rev-parse", "HEAD"), sourceDir },
     } as unknown as StartEnvelope;
     const accepted = await before.accept(envelope);
     expect(accepted.kind).toBe("accepted");

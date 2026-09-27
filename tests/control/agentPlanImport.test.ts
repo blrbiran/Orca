@@ -26,6 +26,11 @@ const work = (h: Fixture, taskId: string) => JSON.parse(String(h.store.db.prepar
 const planBase = { targetRepo: "/abs/repo", ccloopBin: "/abs/ccloop", runsDir: "/abs/runs", workBranch: "orca/w", policy: "local-merge", ledgerMode: "out-of-repo" };
 const task = { taskId: "a", contract: "/abs/a.json", dependsOn: [] };
 /** What the fixture port answers for `partial` (web.ts): requested fields echoed, the rest from FIXTURE_AGENT. */
+/**
+ * Deliberately shaped like a `FrozenSlot`, not an `AgentResolution`: this is the baseline every `expected` frozen-slot
+ * equality in this file spreads (drafter finding F3 -- `singleCallExecution` is never frozen). A caller that instead
+ * needs a real resolution (e.g. a mock port's `resolveAgent`) adds `singleCallExecution` at that call site.
+ */
 const answered = (partial: object) => ({
   selection: { ...FIXTURE_AGENT, ...partial }, configHash: sha256Canonical({}), timeoutMs: 120_000, killGraceMs: 5_000,
   capabilities: profileSnapshot().profile.capabilities,
@@ -106,7 +111,9 @@ describe("import freezes the estimator slot from the operator's layers (spec §6
 
   it("refuses to freeze an answer that does not echo what was asked (spec §4.6 M5)", async () => {
     const h = await webFixture(); try {
-      const drifting = createExecutionProfileRouter([resolveProfile(profileSnapshot(), portWith(async (partial) => ({ ...answered(partial), selection: { ...FIXTURE_AGENT, ...partial, agent: "someone-else" } })))]);
+      // Human ruling S6 (2026-09-27, session f341f05f, tsc-surfaced beyond the table): the mock port's resolveAgent
+      // answers a real AgentResolution, so singleCallExecution is added here, not on the FrozenSlot baseline `answered`.
+      const drifting = createExecutionProfileRouter([resolveProfile(profileSnapshot(), portWith(async (partial) => ({ ...answered(partial), selection: { ...FIXTURE_AGENT, ...partial, agent: "someone-else" }, singleCallExecution: "v1" })))]);
       const prepared = await estimatorSlotFor({ store: h.store, profileRouter: drifting }, "human", {}, drifting.list()[0]!);
       expect(prepared.outcome).toEqual({ kind: "rejected", partial: { agent: FIXTURE_AGENT_ID }, code: "agent-selection-invalid" });
       expect(prepared.observation).toMatchObject({ probeFailureCode: "agent-selection-invalid", resolution: null });

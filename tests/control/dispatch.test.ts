@@ -8,8 +8,8 @@ import { getGroup,getRun } from "../../src/control/queries.js";
 import { hashPayload,setGroupStopped } from "../../src/control/commands.js";
 import { openTestStore,seedBudgetCase } from "./fixtures/store.js";
 import { fakePeer } from "./fixtures/peer.js";
-// Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
-const setup=async()=>{const h=await openTestStore();const s=seedBudgetCase(h.store);const claim=claimWork(h.store,s.t1Claim);return {...h,envelope:{protocol:2 as const,claim,contractHash:hashPayload(s.w1.contract),inputCheckpoint:null,work:{contract:s.w1.contract,targetRepo:h.root,base:"HEAD",sourceDir:h.root}}};};
+// Human ruling S6 (2026-09-27, session f341f05f): envelopes are protocol 3, work tagged as a loop (single-call estimate spec §4.1); what the criterion encodes is unchanged.
+const setup=async()=>{const h=await openTestStore();const s=seedBudgetCase(h.store);const claim=claimWork(h.store,s.t1Claim);return {...h,envelope:{protocol:3 as const,claim,contractHash:hashPayload(s.w1.contract),inputCheckpoint:null,work:{kind:"loop" as const,contract:s.w1.contract,targetRepo:h.root,base:"HEAD",sourceDir:h.root}}};};
 describe("durable starts",()=>{
  it("recovers the accepted identity after the peer drops its response, without another launch",async()=>{
   const h=await setup();try{

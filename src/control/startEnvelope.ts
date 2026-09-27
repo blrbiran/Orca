@@ -40,6 +40,32 @@ export interface StartEnvelopeWork {
   base: string;
 }
 
+/** The checks both translations share (see toStartEnvelope's comment), and the claim built from the run row. */
+function frozenClaim(envelope: DispatchEnvelopeV1, run: unknown): { frozen: DispatchEnvelopeV1; claim: StartEnvelope["claim"] } {
+  const parsedEnvelope = dispatchEnvelopeSchema.safeParse(envelope);
+  if (!parsedEnvelope.success) {
+    throw new ControlError("start-envelope-conflict", `schema:${parsedEnvelope.error.issues[0]?.message ?? "invalid"}`);
+  }
+  const parsedRun = startEnvelopeSourceSchema.safeParse(run);
+  if (!parsedRun.success) {
+    throw new ControlError("start-envelope-conflict", `run:${parsedRun.error.issues[0]?.path.join(".") || "invalid"}`);
+  }
+  const source = parsedRun.data;
+  const frozen = parsedEnvelope.data;
+  if (frozen.runId !== source.runId || frozen.generation !== source.generation
+    || frozen.groupId !== source.groupId || frozen.workItemId !== source.workItemId) {
+    throw new ControlError("start-envelope-conflict", `identity:${frozen.runId}`);
+  }
+  return {
+    frozen,
+    claim: {
+      groupId: source.groupId, workItemId: source.workItemId, taskId: source.taskId, runId: source.runId, generation: source.generation,
+      graphVersion: source.graphVersion, targetVersion: source.targetVersion, commandId: source.commandId, configHash: source.configHash,
+      agent: source.agent, grant: source.grant, ownerToken: source.ownerToken,
+    },
+  };
+}
+
 /**
  * Refuses before it builds, and refuses before any port object is touched. Three ways a dispatch
  * can be wrong here, each named in the detail:
@@ -61,44 +87,39 @@ export function toStartEnvelope(
   // Handoff delivery spec §4, §11 M4: a continuation carries the checkpoint ccloop rebuilds its first workspace from.
   inputCheckpoint: InputCheckpointV1 | null = null,
 ): StartEnvelope {
-  const parsedEnvelope = dispatchEnvelopeSchema.safeParse(envelope);
-  if (!parsedEnvelope.success) {
-    throw new ControlError("start-envelope-conflict", `schema:${parsedEnvelope.error.issues[0]?.message ?? "invalid"}`);
-  }
-  const parsedRun = startEnvelopeSourceSchema.safeParse(run);
-  if (!parsedRun.success) {
-    throw new ControlError("start-envelope-conflict", `run:${parsedRun.error.issues[0]?.path.join(".") || "invalid"}`);
-  }
-  const claim = parsedRun.data;
-  const frozen = parsedEnvelope.data;
-  if (frozen.runId !== claim.runId || frozen.generation !== claim.generation
-    || frozen.groupId !== claim.groupId || frozen.workItemId !== claim.workItemId) {
-    throw new ControlError("start-envelope-conflict", `identity:${frozen.runId}`);
-  }
-  const built = {
-    protocol: 2 as const,
-    claim: {
-      groupId: claim.groupId,
-      workItemId: claim.workItemId,
-      taskId: claim.taskId,
-      runId: claim.runId,
-      generation: claim.generation,
-      graphVersion: claim.graphVersion,
-      targetVersion: claim.targetVersion,
-      commandId: claim.commandId,
-      configHash: claim.configHash,
-      agent: claim.agent,
-      grant: claim.grant,
-      ownerToken: claim.ownerToken,
-    },
+  const { frozen, claim } = frozenClaim(envelope, run);
+  // Single-call estimate spec §4.1: an estimate claim is one single call, never a loop.
+  if (frozen.phase === "estimate") throw new ControlError("start-envelope-conflict", "phase:estimate");
+  const built: StartEnvelope = {
+    protocol: 3,
+    claim,
     // The ledger's derived hash, never one recomputed here: recomputing would let a contract that
     // drifted after the freeze pass as the one the claim was made against.
     contractHash: frozen.derivedContractHash,
     inputCheckpoint,
-    work: { contract, targetRepo: work.targetRepo, base: work.base, sourceDir: work.sourceDir },
+    work: { kind: "loop", contract, targetRepo: work.targetRepo, base: work.base, sourceDir: work.sourceDir },
   };
   // Parsed against the repository's own start-envelope schema rather than merely typed as one, so
   // that a field this function assembles wrongly is refused here instead of at the peer.
+  const checked = startEnvelopeSchema.safeParse(built);
+  if (!checked.success) throw new ControlError("start-envelope-conflict", `built:${checked.error.issues[0]?.path.join(".") || "invalid"}`);
+  return built;
+}
+
+export interface SingleCallEnvelopeWork { sourceDir: string; prompt: string; responseSchema: Record<string, unknown>; maxOutputTokens: number }
+
+/**
+ * Single-call estimate spec §4.1, §6.2 (A2 of an estimate run): the same claim and the same ledger contract hash as
+ * toStartEnvelope, and one single call as the work -- the prompt and response schema Orca assembled, handed to ccloop
+ * byte for byte (Web spec §5.4). Never a checkpoint: an estimate is not resumed.
+ */
+export function toSingleCallEnvelope(envelope: DispatchEnvelopeV1, run: unknown, work: SingleCallEnvelopeWork): StartEnvelope {
+  const { frozen, claim } = frozenClaim(envelope, run);
+  if (frozen.phase !== "estimate") throw new ControlError("start-envelope-conflict", `phase:${frozen.phase}`);
+  const built: StartEnvelope = {
+    protocol: 3, claim, contractHash: frozen.derivedContractHash, inputCheckpoint: null,
+    work: { kind: "single-call", prompt: work.prompt, responseSchema: work.responseSchema, maxOutputTokens: work.maxOutputTokens, sourceDir: work.sourceDir },
+  };
   const checked = startEnvelopeSchema.safeParse(built);
   if (!checked.success) throw new ControlError("start-envelope-conflict", `built:${checked.error.issues[0]?.path.join(".") || "invalid"}`);
   return built;

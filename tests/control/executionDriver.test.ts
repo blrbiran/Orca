@@ -60,6 +60,8 @@ describe("A2: the workspace and the whole start envelope (spec §2.2, §3)", () 
       expect(git(t.repo, "rev-parse", "refs/heads/orca/g")).toBe(head);
       expect(git(t.repo, "worktree", "list", "--porcelain").split("\n")).toContain(`worktree ${drive.workspacePath}`);
       const envelope = JSON.parse(readCanonicalRecord(t.h.store, drive.envelopeHash));
+      // Human ruling S6 (2026-09-27, session f341f05f): work is now a tagged loop or single call (single-call estimate spec §4.1); the assertion is unchanged.
+      if (envelope.work.kind !== "loop") throw new Error("loop expected");
       expect(envelope.work).toMatchObject({ targetRepo: t.repo, base: head, sourceDir: drive.sourceDir });
       expect(envelope.work.contract.context.repoPath).toBe(drive.workspacePath);
       expect(git(t.repo, "symbolic-ref", "HEAD")).toBe("refs/heads/main");

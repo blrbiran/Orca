@@ -158,8 +158,8 @@ export function makeControlledExecution(service:ControlService,groupId:string,se
      current.contract=contract;saveWork(service.store,groupId,current);
     }));
    } else if(!confirmed && hashPayload(contract)!==hashPayload(work.contract)) throw new ControlError("start-contract-conflict");
-   const root=service.write(()=>privateDirectory(plan.runsDir)),input:StartEnvelope={protocol:2,claim,contractHash:hashPayload(contract),inputCheckpoint:null,
-    work:{contract,targetRepo:await realpath(plan.targetRepo),base,sourceDir:join(root,claim.runId)}};
+   const root=service.write(()=>privateDirectory(plan.runsDir)),input:StartEnvelope={protocol:3,claim,contractHash:hashPayload(contract),inputCheckpoint:null,
+    work:{kind:"loop",contract,targetRepo:await realpath(plan.targetRepo),base,sourceDir:join(root,claim.runId)}};
    if(selection)await service.startProfiled(selection,input);else await service.startLegacy(input);
    const report=await collectControlled(service,claim.runId);
    if(!report.terminal) throw new ControlError("control-terminal-pending");

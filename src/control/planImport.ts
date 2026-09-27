@@ -3,7 +3,7 @@ import { applyWebCommand, preflightWebCommand, type WebCommandContext } from "./
 import { dimensions, zero } from "./commands.js";
 import { ControlError, type KnownControlErrorCode } from "./errors.js";
 import { readAgentPreferences } from "./agentPreferences.js";
-import { descriptorProvenance, resolveSelection, slotLayers, type FrozenSlot, type GroupAgentOverrides, type PartialSelection } from "./agentSelection.js";
+import { descriptorProvenance, frozenSlotOf, resolveSelection, slotLayers, type FrozenSlot, type GroupAgentOverrides, type PartialSelection } from "./agentSelection.js";
 import { unavailableCapabilities, type ExecutionProfileRouter, type FrozenProfile, type ObservedProfile } from "./profiles.js";
 import type { ControlStore } from "./store.js";
 import type { Amount } from "./types.js";
@@ -175,7 +175,7 @@ export async function estimatorSlotFor(
   }
   try {
     const labelled = descriptorProvenance(partial, observation.resolution.selection, provenance);
-    return { outcome: { kind: "frozen", partial, slot: { ...structuredClone(observation.resolution), partial, provenance: labelled } }, observation };
+    return { outcome: { kind: "frozen", partial, slot: frozenSlotOf(structuredClone(observation.resolution), partial, labelled) }, observation };
   } catch (error) {
     if (!(error instanceof ControlError)) throw error;
     return { outcome: { kind: "rejected", partial, code: error.code }, observation: { ...observation, observed: unavailableCapabilities, probeFailureCode: error.code, resolution: null } };

@@ -56,7 +56,8 @@ describe.skipIf(!binary || !agentsTablePath)("real ccloop protocol",()=>{
   const claim=await service.claim("g1","T1"),sourceDir=join(runs,claim.runId);await mkdir(sourceDir,{mode:0o700});
   const contract=(JSON.parse(String(store.db.prepare("SELECT body FROM work_items WHERE group_id='g1' AND id='T1'").get()?.body))).contract;
   const base=await git(target,"rev-parse","HEAD");
-  const first=await startClaim(store,service.executionPort(),{protocol:2,claim,contractHash:hashPayload(contract),inputCheckpoint:null,work:{contract,targetRepo:target,base,sourceDir}});
+  // Human ruling S6 (2026-09-27, session f341f05f): envelopes are protocol 3, work tagged as a loop (single-call estimate spec §4.1).
+  const first=await startClaim(store,service.executionPort(),{protocol:3,claim,contractHash:hashPayload(contract),inputCheckpoint:null,work:{kind:"loop",contract,targetRepo:target,base,sourceDir}});
   const replay=await service.executionPort().accept(JSON.parse(String(store.db.prepare("SELECT body FROM outbox WHERE id=?").get("start:"+claim.runId)?.body)));
   expect(replay).toMatchObject({kind:"accepted",executionId:first.executionId});
   const report=await completed(claim.runId);expect(report.terminal?.outcome).toBe("succeeded");expect(report.candidate?.result).toBe("complete");expect(Number(store.db.prepare("SELECT count(*) AS n FROM usage_events WHERE run_id=?").get(claim.runId)?.n)).toBeGreaterThan(0);expect(report.candidate?.usageHighWater).toBeGreaterThan(0);const proof=report.candidate!.stopProof!,proofRaw=JSON.parse((await readArtifact(store,proof.source)).toString());expect(proofRaw).toMatchObject({executionId:first.executionId,generation:claim.generation,isolated:true});expect(getRun(store,claim.runId).executionId).toBe(proofRaw.executionId);

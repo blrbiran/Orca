@@ -4,7 +4,7 @@ import { readFile, writeFile } from "node:fs/promises";
 
 // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): this stand-in speaks the wire
 // of agent selection spec §4.5/§4.6/§5 -- `control <method> --agents <table>` (the retired `--adapter` form is
-// refused by name, as ccloop refuses it), envelope protocol 2 with `claim.agent`, and capabilities protocol 3: the
+// refused by name, as ccloop refuses it), envelope protocol 3 with `claim.agent`, and capabilities protocol 3: the
 // table view for `{agent: null}`, one selection's resolution for `{agent: partial}` (requested fields echoed, the
 // fixture's defaults for the rest). Its own knobs live in the file passed as the table: it never parses a real one.
 // Exit codes and stderr follow real ccloop's `control` (plan P15, ccloop T5): a named refusal -- an agent error or a
@@ -26,8 +26,8 @@ const payload = JSON.parse(stdin || "{}");
 const view = { usageObservation:"phase-end",budgetEnforcement:"soft",contextObservation:"unavailable",handoffControl:"durable",handoffExecution:"mechanical-in-run-v1",contextWindowTokens:null,requestBoundProof:null };
 const defaults = { agent:"codex",model:"fixture-model",contextWindow:"agent-default" };
 const refuse = (code) => { process.stderr.write(`${code}\n`); process.exit(2); };
-// Real ccloop refuses any envelope that is not protocol 2 by name, and a protocol-2 one without a selection as invalid.
-const envelopeOk = (input) => { if (input?.protocol !== 2) refuse("control-protocol-unsupported"); if (input.claim?.agent === undefined) refuse("control-request-invalid"); return true; };
+// Real ccloop refuses any envelope that is not protocol 3 by name, and one without a selection or a known work kind as invalid.
+const envelopeOk = (input) => { if (input?.protocol !== 3) refuse("control-protocol-unsupported"); if (input.work?.kind !== "loop" && input.work?.kind !== "single-call") refuse("control-request-invalid"); if (input.claim?.agent === undefined) refuse("control-request-invalid"); return true; };
 let value;
 if (method === "capabilities") {
   // Capabilities v3 requires the `agent` key (null for the table view); `{}` is refused as real ccloop refuses it.
@@ -37,7 +37,7 @@ if (method === "capabilities") {
   else {
     const selection = { ...defaults, ...payload.agent };
     if (config.mode === "rewrite-model") selection.model = "rewritten-model";
-    value = { protocol:3,selection,configHash:config.configHash ?? "d".repeat(64),timeoutMs:120000,killGraceMs:5000,capabilities:config.capabilities ?? view };
+    value = { protocol:3,selection,configHash:config.configHash ?? "d".repeat(64),timeoutMs:120000,killGraceMs:5000,capabilities:config.capabilities ?? view, ...(config.omitSingleCall ? {} : { singleCallExecution: config.singleCallExecution ?? null }) };
   }
 }
 else if (method === "accept" || method === "inspect") {

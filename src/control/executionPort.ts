@@ -3,7 +3,10 @@ import type { InputCheckpointV1 } from "./resumeBundle.js";
 import { ControlError } from "./errors.js";
 import { createCcloopExecutionPort } from "./ccloopPort.js";
 import type { AgentResolution, ContextWindow, PartialSelection } from "./agentSelection.js";
-export interface StartEnvelope { protocol:2;claim:Claim;contractHash:string;inputCheckpoint:InputCheckpointV1|null; work:{contract:unknown;targetRepo:string;base:string;sourceDir:string} }
+/** Single-call estimate spec §4.1: protocol 3's two kinds of work. */
+export interface LoopWork { kind:"loop";contract:unknown;targetRepo:string;base:string;sourceDir:string }
+export interface SingleCallWork { kind:"single-call";prompt:string;responseSchema:Record<string,unknown>;maxOutputTokens:number;sourceDir:string }
+export interface StartEnvelope { protocol:3;claim:Claim;contractHash:string;inputCheckpoint:InputCheckpointV1|null; work:LoopWork|SingleCallWork }
 export type ExecutionStatus={kind:"absent"}|{kind:"accepted";executionId:string;configHash:string}|{kind:"unknown"}|{kind:"stopped";proof:StopProof};
 export interface ExecutionReport {
  events:UsageEvent[];candidate:Candidate|null;

@@ -1,5 +1,5 @@
 import { readAgentPreferences } from "./agentPreferences.js";
-import { descriptorProvenance, resolveSelection, selectionsHash, slotLayers, type AgentResolution, type FrozenSlot, type GroupAgentOverrides, type PanelPartialSelection, type PartialSelection, type ProvenanceSource } from "./agentSelection.js";
+import { descriptorProvenance, frozenSlotOf, resolveSelection, selectionsHash, slotLayers, type AgentResolution, type FrozenSlot, type GroupAgentOverrides, type PanelPartialSelection, type PartialSelection, type ProvenanceSource } from "./agentSelection.js";
 import { canonicalBytes } from "./canonicalJson.js";
 import { ControlError, nonDurableControlErrorClassifications } from "./errors.js";
 import type { ExecutionPort } from "./executionPort.js";
@@ -120,7 +120,7 @@ export async function resolveGroupSelections(
     if (!answers.has(id)) answers.set(id, deps.port.resolveAgent(partial));
     try {
       const resolution = structuredClone(await answers.get(id)!);
-      const frozen: FrozenSlot = { ...resolution, partial, provenance: descriptorProvenance(partial, resolution.selection, provenance) };
+      const frozen: FrozenSlot = frozenSlotOf(resolution, partial, descriptorProvenance(partial, resolution.selection, provenance));
       slots.push({ ...identity, outcome: { kind: "resolved", frozen } });
     } catch (error) {
       if (!(error instanceof ControlError)) throw error;

@@ -66,6 +66,8 @@ describe("a continuation run (spec §4)", { timeout: 60_000 }, () => {
       expect(envelope.inputCheckpoint).toMatchObject({ predecessorRunId: predecessor, checkpointId });
       expect(envelope.inputCheckpoint!.bundlePath).toBe(join(run.drive.sourceDir, "input", checkpointId));
       expect(envelope.inputCheckpoint!.checkpointHash).toBe(String(t.h.store.db.prepare("SELECT hash FROM checkpoints WHERE id=?").get(checkpointId)!.hash));
+      // Human ruling S6 (2026-09-27, session f341f05f): work is now a tagged loop or single call (single-call estimate spec §4.1); the assertion is unchanged.
+      if (envelope.work.kind !== "loop") throw new Error("loop expected");
       const policy = (envelope.work.contract as { executionPolicy: { maxAttempts: number; tokenBudget: number; totalRuntimeBudgetMs: number } }).executionPolicy;
       const confirmed = readConfirmedTaskExecution(t.h.store, "g", "a").contract.executionPolicy;
       expect(policy).toEqual(withinGrant(confirmed, run.grant.work));

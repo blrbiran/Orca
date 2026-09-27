@@ -50,7 +50,8 @@ describe("translating a frozen dispatch envelope into a start envelope", () => {
   // and the run's frozen selection travels in the claim (spec §4.6).
   it("copies the claim from the run row and the contract hash from the ledger, field by field", () => {
     const built = toStartEnvelope(ledgerEnvelope(), runRow(), work, contract);
-    expect(built.protocol).toBe(2);
+    // Human ruling S6 (2026-09-27, session f341f05f): the start envelope is protocol 3 now (single-call estimate spec §4.1).
+    expect(built.protocol).toBe(3);
     expect(built.claim).toEqual({
       groupId: "g1", workItemId: "w1", taskId: "t1", runId: "run-1", generation: 2,
       graphVersion: 4, targetVersion: 7, commandId: "start-g1-w1", configHash: hx("c"),
@@ -61,7 +62,8 @@ describe("translating a frozen dispatch envelope into a start envelope", () => {
     // rather than the run, and it is the one a recomputation would quietly change.
     expect(built.contractHash).toBe(hx("b"));
     expect(built.inputCheckpoint).toBe(null);
-    expect(built.work).toEqual({ contract, targetRepo: "/tmp/repo", base: "v1", sourceDir: "/tmp/src" });
+    // Human ruling S6 (2026-09-27, session f341f05f): work is now a tagged loop (single-call estimate spec §4.1).
+    expect(built.work).toEqual({ kind: "loop", contract, targetRepo: "/tmp/repo", base: "v1", sourceDir: "/tmp/src" });
   });
 
   // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): `agent` is a claim field now.

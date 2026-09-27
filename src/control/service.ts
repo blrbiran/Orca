@@ -183,8 +183,10 @@ export class ControlService {
     const claim=this.write(()=>claimContinuation(this.store,{groupId,predecessorRunId:predecessor.runId,workItemId:work.workItemId,taskId,graphVersion:group.graphVersion,targetVersion:work.targetVersion,commandId:input.commandId,expectedRevision:input.expectedRevision,by:"human",executionProfile:binding,handoffProfile:handoffBinding}));
     const port=selected.profile?.port??this.legacyExecutionPort();
     if(this.store.db.prepare("SELECT id FROM outbox WHERE id=?").get("start:"+claim.runId))return reconcileStart(this.store,port,claim.runId,this.admissionGate);
-    const previous=readEnvelope(this.store,predecessor.runId),sourceDir=join(dirname(previous.work.sourceDir),claim.runId);
+    const previous=readEnvelope(this.store,predecessor.runId);
+    if(previous.work.kind!=="loop")throw new ControlError("start-envelope-conflict","work-kind");
+    const sourceDir=join(dirname(previous.work.sourceDir),claim.runId);
     const checkpoint=await exportResumeBundle(this.store,{predecessorRunId:predecessor.runId,newSourceDir:sourceDir},{admit:operation=>this.writeAsync(operation)});
-    return startClaim(this.store,port,{protocol:2,claim,contractHash:hashPayload(work.contract),inputCheckpoint:checkpoint,work:{contract:work.contract,targetRepo:previous.work.targetRepo,base:previous.work.base,sourceDir}},this.admissionGate);
+    return startClaim(this.store,port,{protocol:3,claim,contractHash:hashPayload(work.contract),inputCheckpoint:checkpoint,work:{kind:"loop",contract:work.contract,targetRepo:previous.work.targetRepo,base:previous.work.base,sourceDir}},this.admissionGate);
   }
 }

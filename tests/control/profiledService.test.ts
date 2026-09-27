@@ -90,8 +90,8 @@ function serviceWith(store: Awaited<ReturnType<typeof openTestStore>>["store"], 
 }
 
 function envelope(claim: Awaited<ReturnType<ControlService["claimProfiled"]>>, contract: unknown, root: string): StartEnvelope {
-  // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
-  return { protocol: 2, claim, contractHash: hashPayload(contract), inputCheckpoint: null, work: { contract, targetRepo: root, base: "HEAD", sourceDir: `${root}/${claim.runId}` } };
+  // Human ruling S6 (2026-09-27, session f341f05f): envelopes are protocol 3, work tagged as a loop (single-call estimate spec §4.1); what the criterion encodes is unchanged.
+  return { protocol: 3, claim, contractHash: hashPayload(contract), inputCheckpoint: null, work: { kind: "loop", contract, targetRepo: root, base: "HEAD", sourceDir: `${root}/${claim.runId}` } };
 }
 
 describe("profiled service execution", () => {

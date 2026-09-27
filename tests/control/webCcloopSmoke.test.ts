@@ -203,9 +203,9 @@ describe("the shipped consumer answers for its own capabilities (task 10 step 4)
     } finally { await soft.f.dispose(); }
   });
 
-  // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): the frozen shape is envelope
-  // protocol 2 now (the claim carries the selection), so protocol 1 is the foreign version that must be refused.
-  it.skipIf(!realBinary)("refuses an envelope that is not V2 and reads a well-formed one as no execution yet", async () => {
+  // Human ruling S6 (2026-09-27, session f341f05f): the frozen shape is envelope protocol 3 now (single-call estimate
+  // spec §4.1), with work tagged as a loop, so protocol 2 is the foreign version that must be refused.
+  it.skipIf(!realBinary)("refuses an envelope that is not V3 and reads a well-formed one as no execution yet", async () => {
     const root = await tempRoot("orca-web-real-env-");
     const sourceDir = join(root, "run");
     await mkdir(sourceDir, { mode: 0o700 });
@@ -213,7 +213,7 @@ describe("the shipped consumer answers for its own capabilities (task 10 step 4)
     await mkdir(bundlePath, { recursive: true, mode: 0o700 });
     const port = createCcloopExecutionPort({ binary: await realpath(realBinary!), agentsTablePath: await realTable(root), timeoutMs: 15_000 });
     const envelope: StartEnvelope = {
-      protocol: 2,
+      protocol: 3,
       claim: {
         groupId: "g", workItemId: "a", taskId: "a", runId: "run-web-smoke", generation: 1, graphVersion: 1, targetVersion: 1,
         commandId: "start-g-2-a", configHash: sha256("config"), agent: { agent: "codex", model: "gpt-6-sol", contextWindow: "agent-default" },
@@ -222,7 +222,7 @@ describe("the shipped consumer answers for its own capabilities (task 10 step 4)
       },
       contractHash: sha256("contract"),
       inputCheckpoint: null,
-      work: { contract: loopContract("a"), targetRepo: root, base: "v1", sourceDir },
+      work: { kind: "loop", contract: loopContract("a"), targetRepo: root, base: "v1", sourceDir },
     };
 
     // Nothing has been accepted for this run, so the shipped consumer parses the envelope and
@@ -235,7 +235,9 @@ describe("the shipped consumer answers for its own capabilities (task 10 step 4)
     })).toEqual({ kind: "absent" });
     // A foreign protocol version, an unsafe claim integer, and a bundle that escapes the run
     // directory are each refused before a worker could exist.
-    await expect(port.inspect({ ...envelope, protocol: 1 as 2 })).rejects.toThrow("control-peer-exit:2:control-protocol-unsupported");
+    // Human ruling S6 (2026-09-27, session f341f05f): the foreign version is now 2 -- the current protocol is 3 --
+    // and this still encodes "anything but this protocol is refused".
+    await expect(port.inspect({ ...envelope, protocol: 2 as 3 })).rejects.toThrow("control-peer-exit:2:control-protocol-unsupported");
     await expect(port.inspect({ ...envelope, claim: { ...envelope.claim, generation: 0 } })).rejects.toThrow("control-peer-exit:2:control-request-invalid");
     await expect(port.inspect({
       ...envelope,

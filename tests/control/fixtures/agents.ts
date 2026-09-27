@@ -21,7 +21,7 @@ const FIXTURE_DEFAULT_MODELS: Record<string, string> = { [FIXTURE_AGENT_ID]: "fi
  * requested fields are echoed, the rest are the installation's defaults (no agent: the fixture agent), and an unknown
  * installation is refused by ccloop's own code. The capabilities are whatever `capabilities()` answers at call time.
  */
-export function fixtureResolveAgent(capabilities: () => CapabilityViewV1, options: { killGraceMs?: number; distinctConfigHash?: boolean } = {}) {
+export function fixtureResolveAgent(capabilities: () => CapabilityViewV1, options: { killGraceMs?: number; distinctConfigHash?: boolean; singleCallExecution?: "v1" | null } = {}) {
   return vi.fn(async (partial: PartialSelection): Promise<AgentResolution> => {
     const agent = partial.agent ?? FIXTURE_AGENT_ID;
     if (!Object.hasOwn(FIXTURE_DEFAULT_MODELS, agent)) throw new ControlError("agent-installation-missing", agent);
@@ -29,6 +29,7 @@ export function fixtureResolveAgent(capabilities: () => CapabilityViewV1, option
     return {
       selection,
       configHash: options.distinctConfigHash ? fixtureConfigHashOf(selection) : sha256Canonical({}), timeoutMs: 120_000, killGraceMs: options.killGraceMs ?? 5_000, capabilities: capabilities(),
+      singleCallExecution: options.singleCallExecution === undefined ? "v1" : options.singleCallExecution,
     };
   });
 }
@@ -71,4 +72,16 @@ export const PANEL_OPERATOR = "operator-00000000-0000-4000-8000-000000000000";
 export function seedPanelOperator(store: ControlStore, preferences: OperatorPreferences): void {
   store.db.prepare("INSERT INTO meta(key,value) VALUES ('panelOperatorId',?) ON CONFLICT(key) DO NOTHING").run(PANEL_OPERATOR);
   if (readAgentPreferences(store, PANEL_OPERATOR).revision === 0) seedPreferences(store, PANEL_OPERATOR, preferences);
+}
+
+/**
+ * Single-call estimate spec §4.4: the stand-in's answer for the fixture agent, as a value, for an injected observation
+ * (the synchronous imports' `estimatorObservation`). "v1" by default: these fixtures' estimates queue, as they did
+ * before the single-call gate existed.
+ */
+export function fixtureResolutionFor(capabilities: CapabilityViewV1, singleCallExecution: "v1" | null = "v1"): AgentResolution {
+  return {
+    selection: { agent: FIXTURE_AGENT_ID, model: FIXTURE_DEFAULT_MODELS[FIXTURE_AGENT_ID]!, contextWindow: "agent-default" },
+    configHash: sha256Canonical({}), timeoutMs: 120_000, killGraceMs: 5_000, capabilities, singleCallExecution,
+  };
 }
