@@ -151,3 +151,5 @@ spec：`docs/superpowers/specs/2026-09-27-claude-stream-usage-design.md`。
   - **花费（claude 自报，逐次原样）**：`0.0252366`、`0.030400599999999996`、`0.08245179999999999`、`0.19901240000000003`，合计 `claudeReportedUsd` 0.3371014；被中止的 execute 一次拿不到花费。
   - 两次付费合计（只列工具报数）：第一次 0.2926374 ＋ 第二次 0.3371014，另有两次被中止的调用花费未知。
   - ⇒ **能说的**：真 claude 下「handoff deadline 中止 execute → 报观测用量 → 可续 → 续跑落地」跑通过一次（n＝1，单任务，claude 2.1.283，`claude-opus-5-5`，任务累计额度 400,000）。不能说「claude 可用」。
+- 清理（Human：「清理，但是你只清你创建的」）：已删本会话 scratchpad 下 11 个 clone：`ccloop-pre`、`ccloop-t3`、`ccloop-mut`、`ccloop-m1`、`ccloop-m7`、`ccloop-gate`、`orca-full`、`orca-gate`、`sdd/fix/ccloop-fixmut`、`t7/orca-head`、`t7/ccloop-m7`。删前逐个核过：`origin` 指 ccloop／Orca 主仓；`node_modules`（以及 Orca 的 `web/node_modules`）都是软链；都不在任何仓库的 `git worktree list` 里。删后三个主树的 `node_modules/.bin` 仍在。**别的会话的 scratchpad（例如 UI 改动那一席的 `…/a50f4d80-…/scratchpad/orca-ui` worktree）一律没碰。** 保留：两次付费运行的输出目录 `live-deadline`、`live-deadline-2`（含 `summary.json` 与目标仓库），以及 `sdd/` 日志、`mut/` 变异报告。
+- 三份 handoff 收尾改写（会话 `5b01dbd9`）：Orca §4.0 改为「已收口、人已审、真 claude 跑通一次」；ccloop「Orca 那条线」第十五版、ccmem §15 第十三版里的「等人审」都已改掉。

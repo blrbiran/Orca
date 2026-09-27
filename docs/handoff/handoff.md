@@ -87,7 +87,7 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 
 *** **④ handoff 投递＋续跑＋N 路并行落地＋m5 也做完了（2026-09-25，会话 `e5f56bfe`）。** *** 细节与诚实的验收表述见 §四 4.0；现在的下一件事也在 4.0。
 
-✅ *** **agent 选择一轮（2026-09-26，会话 `75ec878e` 做 T1–T15、会话 `ab5a693c` 做 T16／T17／终审）做完了。** *** 其后会话 `8c6302e0` 裁了终审 I-2、做了夹具层审计；会话 `43e3e1d8`（2026-09-27）完成人对 R1–R30 的逐条审、落地 R1／R3／R7／R17／R28，并**第一次跑了付费真 claude**。细节与下一步见 §四 4.0。 会话 `94b09282`（同日）让人审完改写判据，并落地了付费轮四个发现的裁定（B1–B3 修，B4 登记）。会话 `4d2e426e`（同日）删了 `~/.orca` 的夹具残留，并付费跑了真 claude 的 `[1m]` 与两任务解冲突（台账 §19／§20）。随后开了 **claude 中止前观测用量（stream-json）** 一轮：会话 `4d2e426e` 落了 Task 1–2，会话 `5b01dbd9` 落了 Task 3–6、终审与修复，**本轮实施已收口，等人审**，见 §四 4.0。
+✅ *** **agent 选择一轮（2026-09-26，会话 `75ec878e` 做 T1–T15、会话 `ab5a693c` 做 T16／T17／终审）做完了。** *** 其后会话 `8c6302e0` 裁了终审 I-2、做了夹具层审计；会话 `43e3e1d8`（2026-09-27）完成人对 R1–R30 的逐条审、落地 R1／R3／R7／R17／R28，并**第一次跑了付费真 claude**。细节与下一步见 §四 4.0。 会话 `94b09282`（同日）让人审完改写判据，并落地了付费轮四个发现的裁定（B1–B3 修，B4 登记）。会话 `4d2e426e`（同日）删了 `~/.orca` 的夹具残留，并付费跑了真 claude 的 `[1m]` 与两任务解冲突（台账 §19／§20）。随后开了 **claude 中止前观测用量（stream-json）** 一轮：会话 `4d2e426e` 落了 Task 1–2，会话 `5b01dbd9` 落了 Task 3–6、终审与修复，**本轮已收口、人已审过，真 claude 下付费跑通一次**，见 §四 4.0。
 
 **还不能说的**：*** **「Web 派活可用」「claude 可用」「分层选择可用」都不是事实。** *** 能说的只有：**真 codex 下单任务主链跑通过一次**（2026-09-25，会话 `af3dc0d3`，
 请求模型 gpt-6-luna，服务层不含 HTTP，n＝1；台账 `.superpowers/sdd/2026-09-25-live-acceptance/progress.md` §5 是唯一可引的表述）；**真 claude 下单任务主链跑通过一次**（2026-09-27，会话 `43e3e1d8`，claude 2.1.283、请求模型 claude-opus-5-5、隔离参数、n＝1；台账 `.superpowers/sdd/2026-09-26-agent-selection/progress.md` §14 是唯一可引的表述）；**真 claude 下 1M 窗口单任务、两任务冲突经 `ccloop run --agents` 解开各跑通过一次**（2026-09-27，会话 `4d2e426e`，各 n＝1；同一台账 §20 是唯一可引的表述）。
@@ -123,40 +123,36 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 
 ## 四、⛔ 下一件事
 
-### 4.0 ⛔ 现在的下一件事（2026-09-27 会话 `5b01dbd9` 改写，**本节优先于下面的 4.0.0、4.0.1 与 1–3**）
+### 4.0 ⛔ 现在的下一件事（2026-09-27 会话 `5b01dbd9` 收尾改写，**本节优先于下面的 4.0.0、4.0.1 与 1–3**）
 
-**claude 中止前观测用量（stream-json）一轮：实施已收口，没有在飞的代码工作。下一件事是人审（见下面「归人」）。**
+**没有在飞的工作。claude 中止前观测用量（stream-json）一轮已收口，人已审过；下一轮做什么由人选（见「归人」）。**
 
-- **材料**（先读这三份，别从对话推）：
-  - spec `docs/superpowers/specs/2026-09-27-claude-stream-usage-design.md`。**§8「实施期更正」优先于上文**。
-  - 计划 `docs/superpowers/plans/2026-09-27-claude-stream-usage.md`。
-  - **唯一进度源**是台账 `.superpowers/sdd/2026-09-27-claude-stream-usage/progress.md` 的 §3：全部 `Ruling:`、变异表、两仓门、终审与复审都在这里。同目录有 `constraints.md`，还有 `evidence/`（三次付费探针的原始流）。其余 brief、报告和 review 包是不入库的过程文件。
-- **做成了什么**：fake claude 下，一个 claude 阶段被 handoff 请求的 deadline（或 handoff-stop）打断时，ccloop 报的是「中止前从 stream 观测到的用量（下界）」，不再是 `null`。所以 Orca 下这个 run 可续、组不会被置 `usageUnknown`，续跑能落地（Orca 判据 D1）。正常跑完的阶段仍用 `result` 事件记账。Orca 没改生产代码。
-  - ccloop 的提交按主题行找：
-    - `test(claude): let the fake claude CLI answer stream-json …` 与 `… send one message_start in the fake's flood mode`（Task 1）
-    - `feat(claude): read claude's stream line by line …`（Task 2）
-    - `feat(claude): report the usage claude streamed before a phase was aborted`（Task 3）
-    - `test(control): book the usage a claude execute streamed before the handoff deadline cut it`（Task 4）
-    - `test(claude): wait for the fake's message to close before aborting, and pin each branch of the line cap`（终审修复）
-  - Orca 的提交：`test(control): continue a claude run cut at the handoff deadline, …`（Task 5，D1）。
-- **验证**（数字都来自工具报数，在台账 §3）：
-  - spec §5.4 的 M1–M11：每条都见到了红，还原后 0 字节。O1（D1）在 M1、M7 的 build 上红在 `settled-recoverable`，实际得到 `settled-unrecoverable`。
-  - 两仓干净全量门的数字见 §三「现行基线」。
-  - 终审员另跑了 11 条变异。其中四处分支删掉没有判据会红，已写进 spec §8.4 挂账。
-- 🔴 *** **诚实的表述（只能这么说）**：fake claude 下全链路成立（D1）。真 claude 下付费跑了两次（spec §6.4，人授权，各 n＝1，台账 §3 末尾）。**第二次整条链跑通**：handoff deadline 中止 execute → 报出观测用量 → 可续 → 续跑落地，`failed: []`，claude 自报 $0.3371014，另有被中止的一次拿不到花费。第一次用的是默认 `--task-tokens 150000`，续跑被判 exhausted。这个额度是任务的**累计**上限，续跑也从同一笔里扣；人说实际工作要设到 1,000,000 以上。「claude 可用」「分层选择可用」仍然都不是事实。 ***
-- ⚠️ **本轮新的教训**：
-  - **被别的门当作 `ORCA_CCLOOP_BIN` 的 clone，不许同时拿来做变异。** 本轮第一次 Orca 全量因此作废：终审员在同一份 clone 里改过 runner，而 runner 是 adapter 从 clone 的 `scripts/` 现读的。
-  - **负载高时，单文件也能连红 3 次**（见 §三 的 flake 条）。
-  - **等「文件存在」就中止的判据会竞态**：fake 分两次 `write`，只等文件出现就中止，可能停在开口快照那一步。本轮的 N6 就是这样被看见红的，修法是等到 `openMessage === false`。
-- **归人（本轮结束时一并报审）**：
-  1. spec §5.3 加 §8.2 的**七条点名改写**是否认可：前四条改 argv 前缀、位置与长度；第五条是 `--verbose` 换成 `--continue`；第六条是证据目录清单加 `observed-usage.json`；第七条是 N6 的等待条件，N6 已发布。
-  2. ✅（人已认可）台账 §3 的全部 `Ruling:`。承重的几条：
-     - runner 回包兼容裸 `{structured_output}` 行；
-     - Task 5 的「本轮之前 build 应红」窄化为 M1／M7；
-     - 四处无红证分支只挂账不修。
-  3. ✅ 七条点名改写与台账全部 `Ruling:` 已由人认可；付费验证已跑两次，第二次通过。
-  4. 推送：先 ccloop、再 Orca、再 ccmem。
-- **执行规矩**：上一轮人给的授权**都不延续**。付费 claude、真 codex（周额度人说已 reset，每次仍要人点头）、改既有判据、删用户数据、杀进程，每一次都要人重新开口。本会话**没有付费调用**，没杀任何进程，也没 push。
+- **这一轮做成了什么**：claude 阶段被 handoff 请求的 deadline（或 handoff-stop）打断时，ccloop 报的是中止前从 stream 观测到的用量（下界），不再是 `null`。所以 Orca 下这个 run 可续、组不会被置 `usageUnknown`，续跑能落地。正常跑完的阶段记账不变。Orca 没改生产代码，只加了判据 D1 和验收脚本的 `--scenario deadline`。
+- **材料**（要细节就读这些，别从对话推）：
+  - spec `docs/superpowers/specs/2026-09-27-claude-stream-usage-design.md`，**§8「实施期更正」优先**；
+  - 计划 `docs/superpowers/plans/2026-09-27-claude-stream-usage.md`；
+  - 台账 `.superpowers/sdd/2026-09-27-claude-stream-usage/progress.md` §3：全部 `Ruling:`、M1–M11 变异表、两仓干净门、终审与修复、两次付费运行的原始报数，都在这里。
+- **提交**（按主题行 `git log --grep` 找）：
+  - ccloop 六笔：从 `test(claude): let the fake claude CLI answer stream-json …` 到 `test(claude): wait for the fake's message to close before aborting, and pin each branch of the line cap`。
+  - Orca：`test(control): continue a claude run cut at the handoff deadline, …`（D1）和 `test(control): a live deadline scenario for claude, and read the stream-json envelope the tee now keeps`。
+- **人已拍板（2026-09-27）**：七条点名改写的既有判据（spec §5.3 ＋ §8.2）认可；台账全部 `Ruling:` 认可；两次付费验证授权；推送由人做，agent 不做。
+- 🔴 *** **诚实的表述（只能这么说）**：
+  - fake claude 下全链路成立（D1）。
+  - 真 claude 下付费跑了两次（各 n＝1，单任务，claude 2.1.283，`claude-opus-5-5`）：
+    - **第二次**（`--task-tokens 400000 --group-tokens 800000`）整条链跑通：execute 被中止 → 报出观测用量 → 可续 → 续跑落地，`failed: []`；claude 自报 $0.3371014，被中止的那次花费拿不到。
+    - **第一次**用的是默认额度 150,000，续跑被判 exhausted。
+  - 「claude 可用」「分层选择可用」仍然都不是事实；依赖、混 kind、n＞1 都没跑过。 ***
+- 🔴 **token 额度的口径**：`--task-tokens`（即任务 work 分配的 `tokens` 与 contract 的 `tokenBudget`）是**累计**上限，所有阶段、尝试、续跑都从同一笔里扣。`--group-tokens` 是整组的累计上限。单次调用的上限另有一道：claude 的 `--max-budget-usd`（美元）。**人要求：实际工作设到 1,000,000 以上**，只有测试可以调小。
+- **挂账**（都登记了，没修，人没要求修）：
+  - 以下分支删掉后没有判据会红（spec §8.4）：`setEncoding`、写观测时的 `catch`、`total !== null` 守卫、`outcome.json.observedUsagePath`。
+  - `message_delta` 配对不看 `parent_tool_use_id`（未测量）。
+  - 验收脚本 `--scenario conflict` 用默认额度会在 proposal-edit 报 `group-budget-unavailable`（本轮之前就如此）。
+- **本轮新的教训**：
+  - 被别的门当作 `ORCA_CCLOOP_BIN` 的 clone，不许同时拿来做变异（adapter 从 clone 的 `scripts/` 现读 runner）。
+  - 高负载下单文件也能连红 3 次，所以判 flake 要等负载降下来、并记 `uptime`（§三 flake 条）。
+  - 判据只等「文件存在」就中止，会和分两次写的夹具竞态，要等到真正要断言的那个状态。
+- **归人**：推送（先 ccloop、再 Orca、再 ccmem）；下一轮排什么（更多真 claude 形状、⑤ 预估链、strict 组、上面的挂账，§九）。
+- **执行规矩**：授权都不延续。付费 claude、真 codex、改既有判据、删用户数据、杀进程，每一次都要人重新开口。
 - ✅ **更早的一轮（agent 选择）已收口，不要重做**：结论在 §三，过程在台账 `.superpowers/sdd/2026-09-26-agent-selection/progress.md` §13–§20。
 
 ### 4.0.0 ④（2026-09-25 会话 `e5f56bfe`，**已做完，不要重做**；原 4.0 的结论保留于此）
