@@ -113,3 +113,62 @@ SDD ledger — plan: docs/superpowers/plans/2026-09-27-single-call-estimate.md
 - Task 5: minor (deferred): 一般失败路径（`claude-exit-error`／`claude-timeout`，work 记 null）没有 ccloop 判据，这正是起草发现 7 那条路。
 - Task 5: minor (deferred): 「请求在进程注册之前就已经落盘」这条路径没有判据。
 - Task 5: complete (commits 731f450..0bd781f, review clean)
+
+### §3.8 Part B 的 S6 名单（Orca，控制器 2026-09-28 在改写之前记入）
+
+依据同 §3.2（S6 ＋ S8）。表外判据一条不改。
+
+#### O1
+
+- [ ] **Step 5: S6 改写既有判据（逐条；只动点名的行）**
+
+| 文件:行 | 所在 `it`（或 helper） | 改成 |
+|---|---|---|
+| `tests/control/startEnvelope.test.ts:53` | `copies the claim from the run row and the contract hash from the ledger, field by field` | `expect(built.protocol).toBe(3);` |
+| `tests/control/startEnvelope.test.ts:64` | 同上 | `expect(built.work).toEqual({ kind: "loop", contract, targetRepo: "/tmp/repo", base: "v1", sourceDir: "/tmp/src" });` |
+| `tests/control/ccloopPort.test.ts:21` | helper `fixture()`（文件内每个用 `envelope` 的 `it`） | `protocol:3`，`work:{kind:"loop",…}` |
+| `tests/control/ccloopPort.test.ts:157` | `asks capabilities about exactly the given selection and returns ccloop's resolution without the protocol tag` | `toEqual` 对象末尾加 `singleCallExecution:null`（替身默认值，=真 ccloop 对 codex 的答案） |
+| `tests/control/webCcloopSmoke.test.ts:216` | `refuses an envelope that is not V2 and reads a well-formed one as no execution yet`（真 ccloop） | 信封改 `protocol: 3`、`work: { kind: "loop", … }`；**`it` 名改为 `…that is not V3…`** |
+| `tests/control/webCcloopSmoke.test.ts:237` | 同上 | `port.inspect({ ...envelope, protocol: 2 as 3 })` 仍期望 `control-peer-exit:2:control-protocol-unsupported`（外来版本现在是 2，编码的仍是「非本协议即拒」） |
+| `tests/control/ccloopPortMissingTable.test.ts:53` | `still inspects and collects an accepted run, and capabilities is refused as agents-table-invalid` | `protocol: 3`，`work: { kind: "loop", … }` |
+| `tests/control/projectionJournal.test.ts:107` | `projects claim, starting, and accepted run/work transitions once per transaction` | 同上 |
+| `tests/control/projectionJournal.test.ts:128` | `projects starting and unknown run transitions without changing authority` | 同上 |
+| `tests/control/dispatch.test.ts:12` | helper `setup`（文件内全部 `it`） | 同上 |
+| `tests/control/handoffTransaction.test.ts:18` | helper `started`（文件内全部 `it`） | 同上 |
+| `tests/control/legacyAgentRouting.test.ts:101` | `requests a handoff after asking about the handed-off run's selection, not the handoff item's` | 同上 |
+| `tests/control/ccloopProtocol.integration.test.ts:59` | `accepts, accounts, commits a handoff, resumes a dirty snapshot, and collects a fresh execution`（真 ccloop） | 同上 |
+| `tests/control/profiledService.test.ts:94` | 信封 helper（文件内用到它的全部 `it`） | 同上 |
+| `tests/control/executionDriver.test.ts:64` | `builds the workspace at orca/<group>'s tip and stores the rewritten envelope, leaving the person's checkout alone` | 断言前加 `if (envelope.work.kind !== "loop") throw new Error("loop expected");`（类型收窄，断言不变） |
+| `tests/control/driverContinuation.test.ts:69` | `keeps its predecessor's base though the tip moved, carries the checkpoint, is cut to the remaining grant, and lands` | 同上 |
+| `tests/control/planImport.test.ts:109` | helper `setup` | resolution 字面量加 `singleCallExecution: "v1" as const`（tsc 强制） |
+
+不需要改的（登记理由）：`tests/control/capabilitySchema.test.ts:21`、`tests/control/webFaults.test.ts:277`、`fake-ccloop-control.mjs:35` 说的是 **capabilities** 的旧 protocol 2，与信封无关；`tests/control/unconfiguredPort.test.ts:42` 是 `as never` 的占位，端口在读信封之前就抛。
+
+普查（落地前后各跑一次，结果写进台账）：
+
+```bash
+: "${SCRATCH:?set SCRATCH first}"
+cd /Users/biran/code/skills/loop/Orca && rg -n "protocol: ?2\b|\"protocol\": ?2\b" src tests scripts web/src web/tests > "$SCRATCH/o1-census.txt" 2>&1; echo rc=$?
+cd /Users/biran/code/skills/loop/Orca && npm run typecheck > "$SCRATCH/o1-tsc.txt" 2>&1; echo rc=$?
+```
+Expected（落地后）：普查只剩 `capabilitySchema.test.ts:21`、`webFaults.test.ts:277`、`fake-ccloop-control.mjs:35`、`unconfiguredPort.test.ts:42`、`webCcloopSmoke.test.ts` 那条故意喂 2 的外来版本；tsc rc=0。tsc 若点出本表之外缺 `singleCallExecution` 的 resolution 字面量（测试夹具）⇒ 补 `singleCallExecution: "v1"`，并**逐条补进本表与台账**。
+
+#### O2
+
+- [ ] **Step 6: S6 改写与夹具补 resolution**
+
+| 文件:行 | 所在 `it`（或 helper） | 改成 | 类别 |
+|---|---|---|---|
+| `tests/control/estimator.test.ts:32-34` | `freezes exact input formula, contract constants, and checks later degradation` | `const serialized = Math.ceil((Buffer.byteLength(ESTIMATE_INSTRUCTIONS["1"]!) + 2 + canonicalBytes(result.request).length) * 2 / 3);`，:33-34 两句不动；上方注释 `// Human ruling S6 (2026-09-27, session f341f05f): the input formula counts the whole prompt ccloop hands the model -- the v1 instruction, a blank line and the request bytes (single-call estimate spec §4.2) -- not the request alone.`；import 加 `ESTIMATE_INSTRUCTIONS` | 判据改写 |
+| `tests/control/fixtures/web.ts:88` | `webFixture` | `estimatorObservation: () => ({ profile: frozen, observed, probeFailureCode: null, resolution: prepared.observation.resolution })` | 夹具 |
+| `tests/panel/controlLifecycle.test.ts:44` | helper `shutdownHarness` | 桩加 `resolution: fixtureResolutionFor(profileSnapshot().profile.capabilities)` | 夹具 |
+| `tests/panel/controlReadApi.test.ts:125` | 文件内 helper | 桩加 `resolution: fixtureResolutionFor(selected.snapshot.profile.capabilities)` | 夹具 |
+| `tests/panel/fixtures/controlPanel.ts:156` | helper | 同上 | 夹具 |
+| `tests/control/planImport.test.ts:339` | `persists a terminal %s preflight without a scheduler wake` | 桩加 `resolution: fixtureResolutionFor(observed)` | 夹具 |
+| `tests/control/planImport.test.ts:422` | 崩溃点 `it.each` 的 deps | 桩加 `resolution: fixtureResolutionFor(selected.snapshot.profile.capabilities)` | 夹具 |
+| `tests/control/agentPlanImport.test.ts:119` | `refuses an import whose operator layers changed after the estimator slot was resolved` | 桩加 `resolution: fixtureResolutionFor(h.frozen.snapshot.profile.capabilities)` | 夹具 |
+| `tests/control/webFaults.test.ts:81` | `dies before the import commit with nothing booked, and the identical command then imports once` | 同上 | 夹具 |
+| `tests/control/webFaults.test.ts:249` | `applies a cross-group shutdown to every group or to none, and an epoch replays it once` | 同上 | 夹具 |
+
+每处夹具改动的注释：`// Single-call estimate spec §4.4: the injected observation carries ccloop's resolution, which answers singleCallExecution "v1", so this estimate queues exactly as before the single-call gate.`（夹具不是判据，不写 S6；照 Global Constraints 列进台账「夹具改动」）。
+不改的、已核过的：`tests/control/fixtures/ccloopWorld.ts` 的 `startGroup:221`／`agentSelectionE2E.test.ts:75` 断言导入为 `blocked-capability`——真 ccloop 对 codex 答 `singleCallExecution: null`、`contextWindowTokens: null`，结论不变；`estimator.test.ts:36-43` 与 `:68-78` 的退化判据用的是真 router 探测（fixture 答 `"v1"`），只靠 handoff 两条子句拦，不变。
