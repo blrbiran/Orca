@@ -23,6 +23,7 @@ import { App } from "../src/App.js";
 import type { Decision } from "../src/DecisionDetail.js";
 import type { DecisionListRow, MetricsReport, PanelCoverage } from "../src/types.js";
 
+// `question: null` added on both rows: the field became required (Minor e, human-authorised, session f8281a60).
 const ROW_A: DecisionListRow = {
   projectKey: "project-key-of-row-a",
   id: "run-a/1",
@@ -30,6 +31,7 @@ const ROW_A: DecisionListRow = {
   kind: "interface",
   scope: "repo",
   verdict: "ok",
+  question: null,
 };
 
 const ROW_B: DecisionListRow = {
@@ -39,6 +41,7 @@ const ROW_B: DecisionListRow = {
   kind: "scheduling",
   scope: "task",
   verdict: "ok",
+  question: null,
 };
 
 /**

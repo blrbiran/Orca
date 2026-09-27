@@ -30,16 +30,16 @@ export const LIST_FIELDS = [
   "verdict",
 ] as const satisfies readonly (keyof DecisionObservation)[];
 
-// `question` is optional in the TYPE only, on both sides (web/src/types.ts mirrors it), so the web
-// criteria's existing literal rows still type-check without an edit nobody authorised; projectForList
-// always sets it, and the two list criteria pin its presence with toStrictEqual.
-export type DecisionListRow = Pick<DecisionObservation, (typeof LIST_FIELDS)[number]> & { question?: string | null };
+// `question` is required on both sides (web/src/types.ts mirrors it): every row carries it, the
+// ledger's value or null. It was optional until the human authorised editing the web literal rows
+// (session f8281a60); required, a projection that forgets it no longer type-checks.
+export type DecisionListRow = Pick<DecisionObservation, (typeof LIST_FIELDS)[number]> & { question: string | null };
 
 export function projectForList(decision: DecisionObservation, question: string | null): DecisionListRow {
   const row = {} as Record<string, unknown>;
   for (const field of LIST_FIELDS) row[field] = decision[field];
-  row.question = question;
-  return row as DecisionListRow;
+  // Spread into a typed literal rather than cast, so dropping `question` here is a compile error.
+  return { ...(row as Omit<DecisionListRow, "question">), question };
 }
 
 /** The ONE place a detail URL is spelled. Criteria and verify-panel.mjs both call it. */
