@@ -19,6 +19,7 @@ import { recoverControl } from "../../src/control/recovery.js";
 import { WebControlService } from "../../src/control/webService.js";
 import { applyPanelShutdown, runControlPanelStartup, shutdownCommandId } from "../../src/panel/controlLifecycle.js";
 import { profileSnapshot, webFixture } from "./fixtures/web.js";
+import { fixtureResolutionFor } from "./fixtures/agents.js";
 import type { RawAuthorityCommandV1 } from "../../src/control/webProtocol.js";
 import type { ControlStore } from "../../src/control/store.js";
 
@@ -78,7 +79,8 @@ describe("commit boundaries (task 10 step 3)", () => {
     try {
       const fault = commitFault();
       const command = h.rawCommand("crash-import", 0, "import-plan", { kind: "group", groupId: "g2" }, { groupId: "g2", repoId: "repo", planId: "plan" }) as Extract<RawAuthorityCommandV1, { verb: "import-plan" }>;
-      const deps = { ...h.deps, beforeCommit: fault.hook, estimatorObservation: () => ({ profile: h.frozen, observed: h.frozen.snapshot.profile.capabilities, probeFailureCode: null }) };
+      // Single-call estimate spec §4.4: the injected observation carries ccloop's resolution, which answers singleCallExecution "v1", so this estimate queues exactly as before the single-call gate.
+      const deps = { ...h.deps, beforeCommit: fault.hook, estimatorObservation: () => ({ profile: h.frozen, observed: h.frozen.snapshot.profile.capabilities, probeFailureCode: null, resolution: fixtureResolutionFor(h.frozen.snapshot.profile.capabilities) }) };
       fault.arm();
       expect(() => importControlPlan(deps, command)).toThrow("fault-before-commit");
       // Half an import is not a state the ledger may hold: no group, no estimate, no command record.
@@ -246,7 +248,8 @@ describe("commit boundaries (task 10 step 3)", () => {
   it("applies a cross-group shutdown to every group or to none, and an epoch replays it once", async () => {
     const { h, deps } = await claimed();
     try {
-      const imports = { ...h.deps, estimatorObservation: () => ({ profile: h.frozen, observed: h.frozen.snapshot.profile.capabilities, probeFailureCode: null }) };
+      // Single-call estimate spec §4.4: the injected observation carries ccloop's resolution, which answers singleCallExecution "v1", so this estimate queues exactly as before the single-call gate.
+      const imports = { ...h.deps, estimatorObservation: () => ({ profile: h.frozen, observed: h.frozen.snapshot.profile.capabilities, probeFailureCode: null, resolution: fixtureResolutionFor(h.frozen.snapshot.profile.capabilities) }) };
       const second = importControlPlan(imports, h.rawCommand("shutdown-second", 0, "import-plan", { kind: "group", groupId: "g2" }, { groupId: "g2", repoId: "repo", planId: "plan" }) as Extract<RawAuthorityCommandV1, { verb: "import-plan" }>);
       expect("error" in second ? JSON.stringify(second.error) : second.result.kind).toBe("imported");
       const epoch = "epoch-crash";

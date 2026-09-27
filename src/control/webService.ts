@@ -4,7 +4,7 @@ import { applyWebCommand, preflightWebCommand, type WebCommandContext } from "./
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { dimensions, zero } from "./commands.js";
 import { ControlError } from "./errors.js";
-import { buildBudgetEstimateRequest, ESTIMATE_GRANT, GOAL_REVIEW, TASK_HANDOFF, TASK_WORK, provenance, residual, safeNumber, sumAmounts, persistEstimateArtifacts, estimateCapabilityDegraded, validateEstimateOutput } from "./estimator.js";
+import { buildBudgetEstimateRequest, ESTIMATE_GRANT, GOAL_REVIEW, TASK_HANDOFF, TASK_WORK, provenance, residual, safeNumber, sumAmounts, persistEstimateArtifacts, estimateCapabilityDegraded, classifyEstimateOutput } from "./estimator.js";
 import { prepareExecutionSnapshot } from "./executionSnapshot.js";
 import { answeredPartials, currentPartials, readGroupAgentOverrides, RECONCILE_SLOT_KEY, resolveGroupSelections, taskSlotKey, type GroupSelectionResolution } from "./agentFreeze.js";
 import type { ExecutionPort } from "./executionPort.js";
@@ -23,7 +23,7 @@ import { applySetAgentPreferences, type SetAgentPreferencesCommand } from "./age
 import { recordProjectionChange } from "./projectionJournal.js";
 import type { Amount } from "./types.js";
 import type { ControlStore } from "./store.js";
-import type { CommandLookupV1, CommandSuccessV1, EffectiveProposalEditPayload, RawAuthorityCommandV1, ProfileBindingV1 } from "./webProtocol.js";
+import type { BudgetEstimateV1, CommandLookupV1, CommandSuccessV1, EffectiveProposalEditPayload, RawAuthorityCommandV1, ProfileBindingV1 } from "./webProtocol.js";
 import type { AdmissionGate } from "./admissionGate.js";
 import { budgetBalance } from "./budget.js";
 
@@ -400,16 +400,16 @@ export class WebControlService {
       if (dimensions.some(d => group.used[d] < run.cumulative.work[d])) throw new ControlError("recovery-blocked");
       const currentBalance = budgetBalance(group.limit, group.used, group.reserved);
       if (!same(currentBalance.reserve, proposal.explicitUnallocatedReserve) || !same(currentBalance.deficit, group.ledger.budgetDeficit)) throw new ControlError("recovery-blocked");
-      let output, outputHash: string | null = null;
-      try {
-        output = validateEstimateOutput(rawOutput, plan.planHash, plan.plan.tasks.map(t => t.taskId));
-        outputHash = sha256Canonical(output);
+      // Single-call estimate spec §6.4: a failed estimate carries its own reason. A schema-valid answer that is not
+      // canonical JSON (a lone surrogate, a negative zero) cannot be hashed, so it is an invalid answer too.
+      const classified = classifyEstimateOutput(rawOutput, plan.planHash, plan.plan.tasks.map(t => t.taskId));
+      let output: BudgetEstimateV1 | null = null, outputHash: string | null = null;
+      let reasonCode: string | null = classified.ok ? null : classified.reasonCode;
+      if (classified.ok) {
+        try { outputHash = sha256Canonical(classified.output); output = classified.output; }
+        catch (error) { if (!(error instanceof ControlError)) throw error; reasonCode = "estimate-output-invalid"; }
       }
-      catch (error) {
-        if (!(error instanceof ControlError)) throw error;
-        output = undefined; outputHash = null;
-      }
-      estimate.state = output ? "ready" : "failed"; estimate.output = output ?? null; estimate.outputHash = outputHash; estimate.reasonCode = output ? null : "plan-version-conflict";
+      estimate.state = output ? "ready" : "failed"; estimate.output = output; estimate.outputHash = outputHash; estimate.reasonCode = reasonCode;
       if (rawCanonicalJson !== null) writeCanonicalRecord(this.store, id, rawHash, rawCanonicalJson);
       if (output) writeCanonicalRecord(this.store, id, estimate.outputHash!, canonicalBytes(output).toString("utf8"));
       group.ledger.committedRemaining = residual(group.reserved, zero(), run.remaining.work);

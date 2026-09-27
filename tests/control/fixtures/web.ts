@@ -85,7 +85,8 @@ export async function webFixture(snapshot = profileSnapshot(), tasks: readonly W
   const prepared = await prepareEstimatorSlot({ store: h.store, profileRouter: router }, importCommand, frozen);
   const deps = { store: h.store, port, admissionGate: createAdmissionGate(), profileRouter: router, trustedConfig: { resolveTarget: () => ({ repositoryPath: repo, planPath, validatePlanDescriptor() {} }) },
     defaults: () => ({ estimatorProfileId: "all", estimatorProfileHash: frozen.profileHash, estimateMode: "soft" as const }), estimatorSlot: prepared.outcome };
-  const imported = importControlPlan({ ...deps, estimatorObservation: () => ({ profile: frozen, observed, probeFailureCode: null }) }, importCommand);
+  // Single-call estimate spec §4.4: the injected observation carries ccloop's resolution, which answers singleCallExecution "v1", so this estimate queues exactly as before the single-call gate.
+  const imported = importControlPlan({ ...deps, estimatorObservation: () => ({ profile: frozen, observed, probeFailureCode: null, resolution: prepared.observation.resolution }) }, importCommand);
   if ("error" in imported || imported.result.kind !== "imported") throw new Error(JSON.stringify(imported));
   let sequence = 0;
   const raw = (commandId: string, expectedRevision: number, verb: RawAuthorityCommandV1["verb"], target: RawAuthorityCommandV1["target"], payload: unknown) => ({

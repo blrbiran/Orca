@@ -25,7 +25,7 @@ import { buildApi } from "../../src/panel/api.js";
 import { createTrustedControlConfig } from "../../src/panel/controlConfig.js";
 import { ReviewsWriter } from "../../src/panel/reviewsStore.js";
 import { openTestStore } from "../control/fixtures/store.js";
-import { FIXTURE_AGENT_ID, seedPreferences } from "../control/fixtures/agents.js";
+import { FIXTURE_AGENT_ID, fixtureResolutionFor, seedPreferences } from "../control/fixtures/agents.js";
 
 const token = "a".repeat(64);
 const hash = (letter: string) => letter.repeat(64);
@@ -123,7 +123,8 @@ async function setup(): Promise<Harness> {
   const deps = {
     store: h.store, trustedConfig, profileRouter: router,
     defaults: () => ({ estimatorProfileId: "estimator", estimatorProfileHash: frozen.profileHash, estimateMode: "strict" as const }),
-    estimatorObservation: (selected: typeof frozen) => ({ profile: selected, observed: selected.snapshot.profile.capabilities, probeFailureCode: null }),
+    // Single-call estimate spec §4.4: the injected observation carries ccloop's resolution, which answers singleCallExecution "v1", so this estimate queues exactly as before the single-call gate.
+    estimatorObservation: (selected: typeof frozen) => ({ profile: selected, observed: selected.snapshot.profile.capabilities, probeFailureCode: null, resolution: fixtureResolutionFor(selected.snapshot.profile.capabilities) }),
     estimatorSlot: prepared.outcome,
   };
   for (const groupId of ["group-b", "group-a"]) importControlPlan(deps, command(groupId, `import-${groupId}`));

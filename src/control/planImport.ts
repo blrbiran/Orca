@@ -40,9 +40,9 @@ export interface ImportDeps {
   trustedConfig: Pick<TrustedControlConfig, "resolveTarget">;
   profileRouter: ExecutionProfileRouter;
   defaults: () => ImportDefaults;
-  estimatorObservation: (profile: FrozenProfile) => Pick<ObservedProfile, "profile" | "observed" | "probeFailureCode">;
+  estimatorObservation: (profile: FrozenProfile) => Pick<ObservedProfile, "profile" | "observed" | "probeFailureCode" | "resolution">;
   estimatorSlot: EstimatorSlotOutcome;
-  exactTokenCount?: (profile: FrozenProfile, canonicalRequestBytes: Buffer) => number;
+  exactTokenCount?: (profile: FrozenProfile, promptBytes: Buffer) => number;
   beforeCommit?: () => void;
 }
 

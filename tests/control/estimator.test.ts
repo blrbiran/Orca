@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildBudgetEstimateRequest, complex1mDefaults, estimateCapabilityDegraded } from "../../src/control/estimator.js";
+import { ESTIMATE_INSTRUCTIONS } from "../../src/control/estimatePrompt.js";
 import { canonicalBytes } from "../../src/control/canonicalJson.js";
 import { readArchivedPlan, readBudgetProposal, readEstimateRecord } from "../../src/control/queries.js";
 import { WebControlService } from "../../src/control/webService.js";
@@ -29,7 +30,8 @@ describe("frozen estimator", () => {
       const observation = await h.deps.profileRouter.probe(h.frozen, { agent: "codex" });
       const result = buildBudgetEstimateRequest({ planHash: plan.planHash, planCanonicalJson: plan.canonicalJson, profile: h.frozen, observation, mode: "strict" });
       expect(result.state).toBe("queued");
-      const serialized = Math.ceil(canonicalBytes(result.request).length * 2 / 3);
+      // Human ruling S6 (2026-09-27, session f341f05f): the input formula counts the whole prompt ccloop hands the model -- the v1 instruction, a blank line and the request bytes (single-call estimate spec §4.2) -- not the request alone.
+      const serialized = Math.ceil((Buffer.byteLength(ESTIMATE_INSTRUCTIONS["1"]!) + 2 + canonicalBytes(result.request).length) * 2 / 3);
       expect(result.inputTokens).toBe(serialized + 17);
       expect(result.requiredRequestTokens).toBe(serialized + 17 + 64000);
       expect(result.contract).toMatchObject({ requestHash: result.requestHash, framingTokenOverhead: 17, maxOutputTokens: 64000 });

@@ -10,7 +10,7 @@ import { controlPlanSchema } from "../../src/control/webProtocol.js";
 import { WebControlService } from "../../src/control/webService.js";
 import { loadPlan } from "../../src/scheduler/planFile.js";
 import { readControlGroup } from "../../src/panel/controlViews.js";
-import { FIXTURE_AGENT_ID, seedPreferences } from "./fixtures/agents.js";
+import { FIXTURE_AGENT_ID, fixtureResolutionFor, seedPreferences } from "./fixtures/agents.js";
 import { FIXTURE_AGENT, profileSnapshot, webFixture } from "./fixtures/web.js";
 
 // Agent selection spec §6.2 (plan layers), §6.4 (the estimator slot is frozen at import, and a failure degrades
@@ -123,7 +123,8 @@ describe("import freezes the estimator slot from the operator's layers (spec §6
   it("refuses an import whose operator layers changed after the estimator slot was resolved", async () => {
     const h = await webFixture(); try {
       seedPreferences(h.store, "human", { defaultAgent: "other", perAgent: {} }, 1);
-      const stale = importControlPlan({ ...h.deps, estimatorObservation: () => ({ profile: h.frozen, observed: h.frozen.snapshot.profile.capabilities, probeFailureCode: null }) }, importG2(h));
+      // Single-call estimate spec §4.4: the injected observation carries ccloop's resolution, which answers singleCallExecution "v1", so this estimate queues exactly as before the single-call gate.
+      const stale = importControlPlan({ ...h.deps, estimatorObservation: () => ({ profile: h.frozen, observed: h.frozen.snapshot.profile.capabilities, probeFailureCode: null, resolution: fixtureResolutionFor(h.frozen.snapshot.profile.capabilities) }) }, importG2(h));
       expect(stale).toMatchObject({ error: { code: "plan-version-conflict" } });
       expect(h.store.db.prepare("SELECT id FROM groups WHERE id='g2'").get()).toBeUndefined();
     } finally { await h.dispose(); }

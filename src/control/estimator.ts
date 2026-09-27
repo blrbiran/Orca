@@ -1,10 +1,11 @@
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { dimensions, zero } from "./commands.js";
 import { ControlError } from "./errors.js";
+import { ESTIMATE_INSTRUCTIONS, buildEstimatePrompt } from "./estimatePrompt.js";
 import { intersectCapabilities, type FrozenProfile, type ObservedProfile } from "./profiles.js";
 import { amountSchema } from "./schema.js";
 import type { ControlStore } from "./store.js";
-import { writeCanonicalRecord } from "./snapshot.js";
+import { readCanonicalRecord, writeCanonicalRecord } from "./snapshot.js";
 import type { Amount } from "./types.js";
 import { budgetEstimateRequestSchema, budgetEstimateSchema, controlPlanSchema, estimateExecutionContractSchema,
   type AmountProvenanceV1, type BudgetEstimateRequestV1, type BudgetEstimateV1, type EstimateExecutionContractV1 } from "./webProtocol.js";
@@ -49,9 +50,9 @@ export function complex1mDefaults(taskCount: number): DefaultLedger {
 }
 export interface EstimateInput {
   planHash: string; planCanonicalJson: string; profile: FrozenProfile;
-  observation: Pick<ObservedProfile, "profile" | "observed" | "probeFailureCode">;
+  observation: Pick<ObservedProfile, "profile" | "observed" | "probeFailureCode" | "resolution">;
   mode: "strict" | "soft";
-  exactTokenCount?: (profile: FrozenProfile, bytes: Buffer) => number;
+  exactTokenCount?: (profile: FrozenProfile, promptBytes: Buffer) => number;
 }
 export interface FrozenEstimateRequest {
   state: "queued" | "blocked-capability" | "input-too-large"; reasonCode: string | null;
@@ -68,23 +69,30 @@ export function buildBudgetEstimateRequest(input: EstimateInput): FrozenEstimate
   const preflight = profile.snapshot.profile.estimatorPreflight;
   const blocked: FrozenEstimateRequest = { state: "blocked-capability", reasonCode: "estimate-blocked-capability", requestHash: null, request: null, contract: null, contractHash: null, inputTokens: null, requiredRequestTokens: null };
   // Active time, attempts and sessions are bounded by the accounted claim path.
-  if (observation.probeFailureCode !== null || !preflight || observed.contextWindowTokens === null || observed.handoffControl !== "durable" || observed.handoffExecution === null
+  // Single-call estimate spec §4.4: the estimate runs as one ccloop single call, so ccloop must answer v1 for this
+  // selection (a failed probe has no resolution); spec §4.2: and Orca must hold the instruction the profile names.
+  if (observation.probeFailureCode !== null || !preflight || observation.resolution?.singleCallExecution !== "v1"
+    || !Object.hasOwn(ESTIMATE_INSTRUCTIONS, preflight.instructionVersion)
+    || observed.contextWindowTokens === null || observed.handoffControl !== "durable" || observed.handoffExecution === null
     || observed.usageObservation === "unavailable" || observed.budgetEnforcement === "unavailable"
     || (input.mode === "strict" && (observed.budgetEnforcement !== "bounded" || !observed.requestBoundProof?.workDimensions.includes("tokens")))) return blocked;
   const request = budgetEstimateRequestSchema.parse({ schema: "budget-estimate-request-v1", planHash: input.planHash,
     planSnapshotCanonicalJson: input.planCanonicalJson, estimatorProfile: { profileId: profile.snapshot.profile.profileId, profileHash: profile.profileHash },
     estimatorCapabilities: { contextWindowTokens: observed.contextWindowTokens, usageObservation: observed.usageObservation, budgetEnforcement: observed.budgetEnforcement, contextObservation: observed.contextObservation },
     responseSchemaVersion: preflight.schemaVersion, instructionVersion: preflight.instructionVersion });
-  const bytes = canonicalBytes(request), requestHash = sha256Canonical(request);
+  const requestHash = sha256Canonical(request);
+  // Spec §4.2 (review I2): both branches count the whole prompt ccloop hands the model -- instruction, blank line and
+  // request bytes -- not the request alone.
+  const promptBytes = Buffer.from(buildEstimatePrompt(preflight.instructionVersion, canonicalBytes(request).toString("utf8")), "utf8");
   let serialized: bigint;
   if (preflight.tokenizer.kind === "exact") {
     if (!input.exactTokenCount) return { ...blocked, request, requestHash };
-    const count = input.exactTokenCount(profile, bytes);
+    const count = input.exactTokenCount(profile, promptBytes);
     if (!Number.isSafeInteger(count) || count < 0) throw new ControlError("numeric-overflow");
     serialized = BigInt(count);
   } else {
     const { numerator, denominator } = preflight.tokenizer;
-    serialized = (BigInt(bytes.length) * BigInt(numerator) + BigInt(denominator) - 1n) / BigInt(denominator);
+    serialized = (BigInt(promptBytes.length) * BigInt(numerator) + BigInt(denominator) - 1n) / BigInt(denominator);
   }
   const inputTokens = safeNumber(serialized + BigInt(preflight.framingTokenOverhead));
   const requiredRequestTokens = safeNumber(BigInt(inputTokens) + BigInt(preflight.maxOutputTokens));
@@ -95,21 +103,38 @@ export function buildBudgetEstimateRequest(input: EstimateInput): FrozenEstimate
   return { state: tooLarge ? "input-too-large" : "queued", reasonCode: tooLarge ? "estimate-input-too-large" : null,
     request, requestHash, contract, contractHash: sha256Canonical(contract), inputTokens, requiredRequestTokens };
 }
-export function estimateCapabilityDegraded(request: BudgetEstimateRequestV1, observation: Pick<ObservedProfile, "profile" | "observed" | "probeFailureCode">, mode: "strict" | "soft" = "strict"): boolean {
+export function estimateCapabilityDegraded(request: BudgetEstimateRequestV1, observation: Pick<ObservedProfile, "profile" | "observed" | "probeFailureCode" | "resolution">, mode: "strict" | "soft" = "strict"): boolean {
   if (observation.profile.profileHash !== request.estimatorProfile.profileHash) throw new ControlError("profile-changed");
   const current = intersectCapabilities(observation.profile.snapshot.profile.capabilities, observation.observed), frozen = request.estimatorCapabilities;
   const order = ["unavailable", "phase-end", "realtime"], budgetOrder = ["unavailable", "soft", "bounded"];
-  return observation.probeFailureCode !== null || current.contextWindowTokens === null || current.contextWindowTokens < frozen.contextWindowTokens
+  return observation.probeFailureCode !== null || observation.resolution?.singleCallExecution !== "v1"
+    || current.contextWindowTokens === null || current.contextWindowTokens < frozen.contextWindowTokens
     || order.indexOf(current.usageObservation) < order.indexOf(frozen.usageObservation)
     || order.indexOf(current.contextObservation) < order.indexOf(frozen.contextObservation)
     || budgetOrder.indexOf(current.budgetEnforcement) < budgetOrder.indexOf(frozen.budgetEnforcement)
     || current.handoffControl !== "durable" || current.handoffExecution === null
     || (mode === "strict" && !current.requestBoundProof?.workDimensions.includes("tokens"));
 }
-export function validateEstimateOutput(value: unknown, planHash: string, taskIds: string[]): BudgetEstimateV1 {
+export type EstimateOutputClass =
+  | { ok: true; output: BudgetEstimateV1 }
+  | { ok: false; reasonCode: "estimate-call-failed" | "estimate-output-invalid" | "estimate-output-plan-mismatch" };
+/** Single-call estimate spec §6.4: why an estimate failed, by its own code (it used to borrow plan-version-conflict). */
+export function classifyEstimateOutput(value: unknown, planHash: string, taskIds: string[]): EstimateOutputClass {
+  if (value === null) return { ok: false, reasonCode: "estimate-call-failed" };
   const parsed = budgetEstimateSchema.safeParse(value);
-  if (!parsed.success || parsed.data.planHash !== planHash || parsed.data.tasks.map(task => task.taskId).join("\0") !== taskIds.join("\0")) throw new ControlError("plan-version-conflict", "invalid-estimate-output");
-  return parsed.data;
+  if (!parsed.success) return { ok: false, reasonCode: "estimate-output-invalid" };
+  if (parsed.data.planHash !== planHash || parsed.data.tasks.map(task => task.taskId).join("\0") !== taskIds.join("\0")) {
+    return { ok: false, reasonCode: "estimate-output-plan-mismatch" };
+  }
+  return { ok: true, output: parsed.data };
+}
+
+/** The contract an estimate was queued under (persistEstimateArtifacts wrote it); its instruction version and output cap drive the call. */
+export function readEstimateContract(store: ControlStore, groupId: string, estimateId: string): EstimateExecutionContractV1 {
+  const row = store.db.prepare("SELECT body FROM outbox WHERE id=? AND kind='estimate-contract'").get(`estimate-contract:${groupId}:${estimateId}`);
+  if (!row) throw new ControlError("recovery-blocked", `estimate-contract-missing:${estimateId}`);
+  const { contractHash } = JSON.parse(String(row.body)) as { contractHash: string };
+  return estimateExecutionContractSchema.parse(JSON.parse(readCanonicalRecord(store, contractHash)));
 }
 
 export function persistEstimateArtifacts(store: ControlStore, groupId: string, estimateId: string, prepared: FrozenEstimateRequest): void {

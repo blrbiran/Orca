@@ -31,7 +31,7 @@ import { FIXTURE_AGENT, profileSnapshot } from "../../control/fixtures/web.js";
 import type { AgentResolution, PartialSelection } from "../../../src/control/agentSelection.js";
 import { ControlError } from "../../../src/control/errors.js";
 import type { AgentsView } from "../../../src/control/executionPort.js";
-import { FIXTURE_AGENT_ID, PANEL_OPERATOR, seedPanelOperator } from "../../control/fixtures/agents.js";
+import { FIXTURE_AGENT_ID, PANEL_OPERATOR, fixtureResolutionFor, seedPanelOperator } from "../../control/fixtures/agents.js";
 import { resolveGroupSelections } from "../../../src/control/agentFreeze.js";
 
 export const PANEL_TOKEN = "b".repeat(64);
@@ -134,7 +134,11 @@ export function createHarness(): Harness {
       // answers the v2 vocabulary, spread from the same declared capabilities the profile snapshot
       // carries, so the peer's raw answer stays schema-valid and strict-mode-safe.
       const port = {
-        resolveAgent: options.resolveAgent ?? (async (partial: PartialSelection) => ({ selection: { ...FIXTURE_AGENT, ...partial }, configHash: "c".repeat(64), timeoutMs: 120_000, killGraceMs: 5_000, capabilities: capabilities() }) as never),
+        // Fixture completion (not S6: this default mock's return literal, cast `as never`, predates the single-call
+        // estimate gate and was missed when O1 added AgentResolution.singleCallExecution -- unlike its sibling
+        // claudeCodexResolveAgent below, which O1 did update). Without this the real router's probe answers no
+        // resolution, and every real-panel import here degrades to blocked-capability under O2's gate.
+        resolveAgent: options.resolveAgent ?? (async (partial: PartialSelection) => ({ selection: { ...FIXTURE_AGENT, ...partial }, configHash: "c".repeat(64), timeoutMs: 120_000, killGraceMs: 5_000, capabilities: capabilities(), singleCallExecution: "v1" }) as never),
         listAgents: async () => options.agents ?? ({ installations: [{ id: "codex", kind: "codex", defaults: { model: "fixture-model", contextWindow: "agent-default" as const }, contextOptions: ["agent-default" as const], version: "0.0.0-fixture" }] }),
         readEvidence: async () => Buffer.alloc(0), accept: async () => ({ kind: "unknown" }), inspect: async () => ({ kind: "unknown" }),
         requestHandoff: async (_input: unknown, request: { requestId: string }) => ({ kind: "unknown", requestId: request.requestId }),
@@ -153,7 +157,8 @@ export function createHarness(): Harness {
       const deps = {
         store, port, admissionGate: createAdmissionGate(), profileRouter: router, trustedConfig,
         defaults: () => ({ estimatorProfileId: "all", estimatorProfileHash: frozen.profileHash, estimateMode: "soft" as const }),
-        estimatorObservation: (selected: typeof frozen) => ({ profile: selected, observed: selected.snapshot.profile.capabilities, probeFailureCode: null }),
+        // Single-call estimate spec §4.4: the injected observation carries ccloop's resolution, which answers singleCallExecution "v1", so this estimate queues exactly as before the single-call gate.
+        estimatorObservation: (selected: typeof frozen) => ({ profile: selected, observed: selected.snapshot.profile.capabilities, probeFailureCode: null, resolution: fixtureResolutionFor(selected.snapshot.profile.capabilities) }),
         knownRepository: (repoId: string) => repoId === "repo",
       };
       const service = new WebControlService(deps);

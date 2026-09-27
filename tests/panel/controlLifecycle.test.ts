@@ -9,6 +9,7 @@ import { createAdmissionGate } from "../../src/control/admissionGate.js";
 import { canonicalBytes } from "../../src/control/canonicalJson.js";
 import { ControlError } from "../../src/control/errors.js";
 import { profileSnapshot, webFixture } from "../control/fixtures/web.js";
+import { fixtureResolutionFor } from "../control/fixtures/agents.js";
 import type { CommandSuccessV1, RawAuthorityCommandV1 } from "../../src/control/webProtocol.js";
 import type { ControlStore } from "../../src/control/store.js";
 
@@ -41,7 +42,8 @@ async function shutdownHarness(claims: readonly string[] = []) {
   const next = () => `command-${++sequence}`;
   const groupCommand = (groupId: string, expectedRevision: number, verb: RawAuthorityCommandV1["verb"], payload: unknown) =>
     h.rawCommand(next(), expectedRevision, verb, { kind: "group", groupId }, payload) as never;
-  const imported = importControlPlan({ ...h.deps, estimatorObservation: () => ({ profile: h.frozen, observed: profileSnapshot().profile.capabilities, probeFailureCode: null }) },
+  // Single-call estimate spec §4.4: the injected observation carries ccloop's resolution, which answers singleCallExecution "v1", so this estimate queues exactly as before the single-call gate.
+  const imported = importControlPlan({ ...h.deps, estimatorObservation: () => ({ profile: h.frozen, observed: profileSnapshot().profile.capabilities, probeFailureCode: null, resolution: fixtureResolutionFor(profileSnapshot().profile.capabilities) }) },
     groupCommand("h", 0, "import-plan", { groupId: "h", repoId: "repo", planId: "plan" }) as never);
   if ("error" in imported) throw new Error(`second group import failed: ${JSON.stringify(imported)}`);
   const clock = { value: new Date(ACCEPTED_AT) };

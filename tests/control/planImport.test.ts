@@ -14,7 +14,7 @@ import { openControlStore } from "../../src/control/store.js";
 import { canonicalBytes } from "../../src/control/canonicalJson.js";
 import { lookupCommandResult } from "../../src/control/commandLedger.js";
 import { ControlError } from "../../src/control/errors.js";
-import { FIXTURE_AGENT_ID, writePreferencesRow } from "./fixtures/agents.js";
+import { FIXTURE_AGENT_ID, fixtureResolutionFor, writePreferencesRow } from "./fixtures/agents.js";
 
 const hash = (letter: string) => letter.repeat(64);
 const contract = (taskId: string, tokenBudget = 100) => ({
@@ -335,9 +335,10 @@ describe("immutable plan import", () => {
     const h = await setup();
     try {
       const observed = { ...h.frozen.snapshot.profile.capabilities, ...observedPatch };
+      // Single-call estimate spec §4.4: the injected observation carries ccloop's resolution, which answers singleCallExecution "v1", so this estimate queues exactly as before the single-call gate.
       const result = importControlPlan({
         ...h.deps,
-        estimatorObservation: selected => ({ profile: selected, observed, probeFailureCode: null }),
+        estimatorObservation: selected => ({ profile: selected, observed, probeFailureCode: null, resolution: fixtureResolutionFor(observed) }),
       }, command());
       expect(result).toMatchObject({ result: { kind: "imported", estimateState: state } });
       expect(h.store.db.prepare("SELECT id FROM scheduler_wakes WHERE group_id='g'").get()).toBeUndefined();
@@ -416,11 +417,16 @@ describe("immutable plan import", () => {
       const fromRoot = p => pathToFileURL(join(c.cwd, p)).href;
       const { openControlStore } = await import(fromRoot("src/control/store.ts"));
       const { importControlPlan } = await import(fromRoot("src/control/planImport.ts"));
+      const { sha256Canonical } = await import(fromRoot("src/control/canonicalJson.ts"));
       const store = await openControlStore({ stateDir: c.stateDir });
       const frozen = { snapshot: c.profile, profileHash: c.profileHash, port: {} };
       const router = { resolve(kind,id,hash) { if (kind !== "budget-estimate" || id !== "estimator" || hash !== c.profileHash) throw new Error("profile"); return frozen; }, list() { return [frozen]; }, async probe() { throw new Error("unused"); } };
       const stop = label => { writeSync(1, label + "\\n"); Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0); };
-      const deps = { store, profileRouter: router, trustedConfig: { resolveTarget() { return { repositoryPath: c.repositoryPath, planPath: c.planPath, validatePlanDescriptor() {} }; } }, defaults: () => ({ estimatorProfileId: "estimator", estimatorProfileHash: c.profileHash, estimateMode: "strict" }), estimatorObservation: selected => ({ profile: selected, observed: selected.snapshot.profile.capabilities, probeFailureCode: null }), estimatorSlot: c.estimatorSlot, ...(c.point === "before-commit" ? { beforeCommit: () => stop("BEFORE_COMMIT") } : {}) };
+      // Single-call estimate spec §4.4: the injected observation carries ccloop's resolution, which answers singleCallExecution "v1", so this estimate queues exactly as before the single-call gate.
+      // Inlined (not fixtures/agents.ts's fixtureResolutionFor): that module imports "vitest" at load time, which this
+      // spawned child process (not a vitest worker) cannot initialize.
+      const resolutionFor = capabilities => ({ selection: { agent: "codex", model: "fixture-model", contextWindow: "agent-default" }, configHash: sha256Canonical({}), timeoutMs: 120_000, killGraceMs: 5_000, capabilities, singleCallExecution: "v1" });
+      const deps = { store, profileRouter: router, trustedConfig: { resolveTarget() { return { repositoryPath: c.repositoryPath, planPath: c.planPath, validatePlanDescriptor() {} }; } }, defaults: () => ({ estimatorProfileId: "estimator", estimatorProfileHash: c.profileHash, estimateMode: "strict" }), estimatorObservation: selected => ({ profile: selected, observed: selected.snapshot.profile.capabilities, probeFailureCode: null, resolution: resolutionFor(selected.snapshot.profile.capabilities) }), estimatorSlot: c.estimatorSlot, ...(c.point === "before-commit" ? { beforeCommit: () => stop("BEFORE_COMMIT") } : {}) };
       importControlPlan(deps, c.command);
       stop("AFTER_COMMIT");
     `;
