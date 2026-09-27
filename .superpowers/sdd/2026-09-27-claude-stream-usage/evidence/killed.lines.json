@@ -1,0 +1,43 @@
+{
+ "args": [
+  "-p",
+  "--output-format",
+  "stream-json",
+  "--verbose",
+  "--json-schema",
+  "{\"type\":\"object\",\"properties\":{\"summary\":{\"type\":\"string\"},\"changedFiles\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}}},\"required\":[\"summary\",\"changedFiles\"],\"additionalProperties\":false}",
+  "--model",
+  "claude-opus-5-5",
+  "--permission-mode",
+  "acceptEdits",
+  "--no-session-persistence",
+  "--setting-sources",
+  "project,local",
+  "--strict-mcp-config",
+  "--disable-slash-commands",
+  "--settings",
+  "{\"autoMemoryEnabled\":false}",
+  "--max-budget-usd",
+  "2",
+  "Create a file named answer.txt in the current directory whose entire content is 42 followed by one newline, then read it back to confirm. Answer with a one-sentence summary and the list of files you changed."
+ ],
+ "code": 143,
+ "signal": null,
+ "killedAt": 5306,
+ "durationMs": 7346,
+ "stderr": "",
+ "lines": [
+  {
+   "ms": 2459,
+   "line": "{\"type\":\"system\",\"subtype\":\"init\",\"cwd\":\"/private/tmp/claude-501/-Users-biran-code-skills-loop-Orca/4d2e426e-680f-4b31-a30b-5fbbdaf72a1f/scratchpad/sjprobe/killed-repo\",\"session_id\":\"b3a2e628-f972-4fe5-a060-55e51e38e535\",\"tools\":[\"Task\",\"Bash\",\"CronCreate\",\"CronDelete\",\"CronList\",\"DesignSync\",\"Edit\",\"EnterWorktree\",\"ExitWorktree\",\"ListAgents\",\"Monitor\",\"NotebookEdit\",\"PushNotification\",\"Read\",\"RemoteTrigger\",\"ReportFindings\",\"ScheduleWakeup\",\"SendMessage\",\"StructuredOutput\",\"TaskStop\",\"ToolSearch\",\"WebFetch\",\"WebSearch\",\"Workflow\",\"Write\"],\"mcp_servers\":[],\"model\":\"claude-opus-5-5\",\"permissionMode\":\"acceptEdits\",\"slash_commands\":[],\"apiKeySource\":\"none\",\"claude_code_version\":\"2.1.283\",\"output_style\":\"default\",\"agents\":[\"claude\",\"Explore\",\"general-purpose\",\"Plan\",\"statusline-setup\"],\"skills\":[],\"plugins\":[{\"name\":\"agents-md\",\"path\":\"builtin\",\"source\":\"agents-md@builtin\"},{\"name\":\"telemetry\",\"path\":\"builtin\",\"source\":\"telemetry@builtin\"}],\"capabilities\":[\"interrupt_receipt_v1\",\"interrupt_cancel_queued_v1\",\"msg_lifecycle_v1\",\"mcp_read_resource_v1\",\"mcp_tool_ui_meta_v1\"],\"analytics_disabled\":false,\"product_feedback_disabled\":false,\"uuid\":\"20254cc2-ed1f-40a3-93e9-9280856abbb9\",\"messaging_socket_path\":\"/tmp/cc-socks/99784.sock\",\"fast_mode_state\":\"off\",\"fast_mode_disabled_reason\":\"sdk_opt_in_required\",\"per_turn_effort_active\":true,\"view_mode\":\"default\"}"
+  },
+  {
+   "ms": 5306,
+   "line": "{\"type\":\"assistant\",\"message\":{\"model\":\"claude-opus-5-5\",\"id\":\"msg_011CfTRp3bM8rJp8DL2Xoa7a\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_017PQL5kEd2t54o5B1pKm12t\",\"name\":\"Write\",\"input\":{\"file_path\":\"/private/tmp/claude-501/-Users-biran-code-skills-loop-Orca/4d2e426e-680f-4b31-a30b-5fbbdaf72a1f/scratchpad/sjprobe/killed-repo/answer.txt\",\"content\":\"42\\n\"},\"caller\":{\"type\":\"direct\"}}],\"container\":null,\"stop_reason\":null,\"stop_sequence\":null,\"stop_details\":null,\"usage\":{\"input_tokens\":2,\"cache_creation_input_tokens\":1610,\"cache_read_input_tokens\":16975,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":1610},\"output_tokens\":16,\"service_tier\":\"standard\",\"inference_geo\":\"not_available\"},\"input_transformations\":[],\"diagnostics\":null,\"context_management\":null},\"parent_tool_use_id\":null,\"session_id\":\"b3a2e628-f972-4fe5-a060-55e51e38e535\",\"uuid\":\"3dad38e9-d975-4a28-9822-0967d34474c7\",\"timestamp\":\"2026-09-27T05:56:16.318Z\",\"request_id\":\"req_011CfTRp2wR43GTgmp3mSfx6\",\"wire_tool_inputs\":{\"toolu_017PQL5kEd2t54o5B1pKm12t\":{\"file_path\":\"/private/tmp/claude-501/-Users-biran-code-skills-loop-Orca/4d2e426e-680f-4b31-a30b-5fbbdaf72a1f/scratchpad/sjprobe/killed-repo/answer.txt\",\"content\":\"42\\n\"}}}"
+  },
+  {
+   "ms": 5319,
+   "line": "{\"type\":\"rate_limit_event\",\"rate_limit_info\":{\"status\":\"allowed\",\"resetsAt\":1790504400,\"rateLimitType\":\"five_hour\",\"overageStatus\":\"rejected\",\"overageDisabledReason\":\"org_level_disabled\",\"isUsingOverage\":false,\"unifiedWindows\":{\"five_hour\":{\"utilization\":0.06,\"resetsAt\":1790504400},\"seven_day\":{\"utilization\":0.24,\"resetsAt\":1790643600}}},\"uuid\":\"40d0e936-a6a4-4ba2-ba0f-e2d97800e2ad\",\"session_id\":\"b3a2e628-f972-4fe5-a060-55e51e38e535\"}"
+  }
+ ]
+}
