@@ -102,3 +102,14 @@ SDD ledger — plan: docs/superpowers/plans/2026-09-27-single-call-estimate.md
 - Task 4: minor (deferred): runner 与 adapter 的输出有效性检查重复，runner 那一支不承重（变异 6 活着）。
 - Task 4: minor (deferred): adapter 的 `phase()` 与 `singleCall()` 处理 outcome 的代码几乎逐字重复（brief 原样指定）。
 - Task 4: complete (commits 05fd82f..731f450, review clean)
+
+### §3.7 Task 5 完成（ccloop）——Part A 全部落地
+
+- 提交：`feat(control): run single-call work in the worker without touching git, and settle it like any run`（0bd781f，BASE 731f450）。没有用 S6。
+- 实施席自报：先看到红（W1／W2 红在 `control-work-kind-unsupported`，W3／W4 红在轮询超时）；9 个判据文件 53/53 通过；typecheck rc=0；13 条变异（brief 12 条，加一条 m13）都红，还原后 diff 为 0 字节。
+- Ruling（F10 补正）: brief 里 W1 那一行拿内存里的 schema 算 `JSON.stringify` 是错的。accept 用 ccloop 的 `canonicalJson`（按 `localeCompare` 排 key）写 `envelope.json`，所以真正交给 `--json-schema` 的字符串已经重排过 key。实施席把判据改成直接读 fake 记下的 argv，评审确认这才是 F10 要量的东西 — Orca 永远不拿这个哈希去比（F10：只比 prompt）— 若错：无代码后果。
+- 残留：变异 m02 超时，在 OS tmpdir 留下 4 个目录 `ccloop-single-call-{source-DsM2xH,source-htHYQo,aux-05ypLh,aux-BDC0v8}`，另外 `$SCRATCH/t5-mut-clone` 还在；fake／worker 进程 `pgrep` 为空。删不删归人（未动）。
+- Task 5: minor (deferred): `singleCall.ts` 先判 `signal.aborted`、后判 `SingleCallOutputInvalid`。竞态下会把 adapter 已经量到的 usage 丢掉，记成 null。结果仍是安全的（null，从不当 0），修法是把两个判断对调。
+- Task 5: minor (deferred): 一般失败路径（`claude-exit-error`／`claude-timeout`，work 记 null）没有 ccloop 判据，这正是起草发现 7 那条路。
+- Task 5: minor (deferred): 「请求在进程注册之前就已经落盘」这条路径没有判据。
+- Task 5: complete (commits 731f450..0bd781f, review clean)
