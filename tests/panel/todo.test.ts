@@ -137,19 +137,24 @@ describe("GET /api/todo (task 8 ruling K5, HTTP)", () => {
 
           // Built by hand from LIST_FIELDS, NOT by calling projectForList --
           // same tautology guard as decisionsApi.test.ts's comment explains.
-          const expectedRow = Object.fromEntries(
-            LIST_FIELDS.map((field) => {
-              const value: Record<string, unknown> = {
-                projectKey: "proj",
-                id: second.id,
-                at: second.at,
-                kind: second.kind,
-                scope: second.scope,
-                verdict: "ok",
-              };
-              return [field, value[field]];
-            }),
-          );
+          // REWRITTEN (panel UI redesign spec §2/§6.1, human ruling U1, authorised as U4 in
+          // session a50f4d80): the row now also carries the ledger's question, still by hand.
+          const expectedRow = {
+            ...Object.fromEntries(
+              LIST_FIELDS.map((field) => {
+                const value: Record<string, unknown> = {
+                  projectKey: "proj",
+                  id: second.id,
+                  at: second.at,
+                  kind: second.kind,
+                  scope: second.scope,
+                  verdict: "ok",
+                };
+                return [field, value[field]];
+              }),
+            ),
+            question: second.question,
+          };
           expect(body.rows).toStrictEqual([expectedRow]);
 
           const rows = await readReviews(dir);

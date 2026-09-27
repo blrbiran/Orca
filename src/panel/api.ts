@@ -11,8 +11,9 @@ import { MetricsRejection } from "../metrics/rejection.js";
 import type { DecisionObservation } from "../metrics/types.js";
 import { registerChainRoutes } from "./chains.js";
 import { computePanelCoverage, unreviewedHighTier } from "./coverage.js";
-import { loadDecisionRow } from "./decisionSource.js";
+import { loadDecisionRow, loadQuestionsOrEmpty } from "./decisionSource.js";
 import { DECISION_NOT_FOUND, projectForList } from "./listProjection.js";
+import type { DecisionListRow } from "./listProjection.js";
 import { PANEL_BAD_REQUEST, PanelRejection, TOKEN_REQUIRED } from "./rejection.js";
 import { readReviews } from "./reviewsStore.js";
 import type { ReviewsWriter } from "./reviewsStore.js";
@@ -21,6 +22,19 @@ import type { StaticFiles } from "./staticFiles.js";
 import { tokenMatches } from "./token.js";
 import { registerControlReadRoutes, type ControlReadApiDeps } from "./controlApi.js";
 import { controlErrorBody } from "./controlErrors.js";
+
+/**
+ * Panel UI redesign spec §4 (ruling U1): one ledger read per repository per request; a
+ * repository whose ledger cannot be read gets null summaries, never a failed list.
+ */
+async function listRows(
+  repos: ReadonlyArray<{ projectKey: string; path: string }>,
+  decisions: readonly DecisionObservation[],
+): Promise<DecisionListRow[]> {
+  const byRepo = new Map<string, Map<string, string>>();
+  for (const repo of repos) byRepo.set(repo.projectKey, await loadQuestionsOrEmpty(repo.path));
+  return decisions.map((d) => projectForList(d, byRepo.get(d.projectKey)?.get(d.id) ?? null));
+}
 
 export interface ApiDeps {
   opts: PanelOptions;
@@ -191,7 +205,7 @@ export function buildApi(app: Express, deps: ApiDeps): void {
     void (async () => {
       const { observations } = await currentMetrics(deps.opts);
       const reviews = await readReviews(deps.opts.correctionsDir);
-      res.json({ rows: unreviewedHighTier(observations.decisions, reviews).map(projectForList) });
+      res.json({ rows: await listRows(observations.repos, unreviewedHighTier(observations.decisions, reviews)) });
     })().catch(next);
   });
 
@@ -202,7 +216,7 @@ export function buildApi(app: Express, deps: ApiDeps): void {
       // mutation L-3): a browsed list must not itself count as review
       // coverage, or the coverage number would move just because someone
       // opened the panel.
-      res.json({ rows: observations.decisions.map(projectForList) });
+      res.json({ rows: await listRows(observations.repos, observations.decisions) });
     })().catch(next);
   });
 

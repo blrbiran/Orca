@@ -6,9 +6,13 @@
  * fields `WEB_LIST_FIELDS` names -- it never spreads or reads any other key
  * off a row, so an extra field on the row object (a server bug, or a test
  * fixture probing for one) can never leak into the markup.
+ *
+ * *** ERRATUM (2026-09-27, session a50f4d80, human ruling U1) ***
+ * The row now also shows `question` (panel UI redesign spec §2). What still holds: this
+ * component reads each field by name and never spreads the row, so any OTHER key on the
+ * object still cannot reach the markup. Text above kept verbatim.
  */
 import type { JSX } from "react";
-import { WEB_LIST_FIELDS } from "./types.js";
 import type { DecisionListRow } from "./types.js";
 
 /**
@@ -34,26 +38,46 @@ export function rowKey(row: Pick<DecisionListRow, "projectKey" | "id">): string 
   return JSON.stringify([row.projectKey, row.id]);
 }
 
+export const NO_QUESTION = "(no question recorded)";
+
+/** spec §5.1: the viewer's local date, YYYY-MM-DD; an unparseable `at` shows its own first ten characters. */
+export function localDay(at: string): string {
+  const d = new Date(at);
+  if (Number.isNaN(d.getTime())) return at.slice(0, 10);
+  const pad = (n: number): string => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 export function DecisionList({
   rows,
+  selected,
   onOpen,
 }: {
   rows: readonly DecisionListRow[];
+  selected?: Pick<DecisionListRow, "projectKey" | "id"> | null;
   onOpen?: (row: DecisionListRow) => void;
 }): JSX.Element {
+  const selectedKey = selected ? rowKey(selected) : null;
   return (
     <ul className="decision-list">
-      {rows.map((row) => (
-        <li key={rowKey(row)}>
-          <button type="button" onClick={() => onOpen?.(row)}>
-            {WEB_LIST_FIELDS.map((field) => (
-              <span key={field} className={`field-${field}`}>
-                {String(row[field])}
+      {rows.map((row) => {
+        const key = rowKey(row);
+        return (
+          <li key={key}>
+            <button type="button" className="decision-row" aria-current={key === selectedKey ? "true" : undefined} onClick={() => onOpen?.(row)}>
+              <span className="row-meta">
+                <span className="pill field-kind">{String(row.kind)}</span>
+                <span className="pill field-scope">{String(row.scope)}</span>
+                {row.verdict !== "ok" && <span className="pill pill-warn field-verdict">{String(row.verdict)}</span>}
+                <span className="row-project field-projectKey">{String(row.projectKey)}</span>
+                <time className="row-at field-at" dateTime={String(row.at)}>{localDay(String(row.at))}</time>
               </span>
-            ))}
-          </button>
-        </li>
-      ))}
+              <span className="row-question">{row.question ?? NO_QUESTION}</span>
+              <span className="row-id field-id">{String(row.id)}</span>
+            </button>
+          </li>
+        );
+      })}
     </ul>
   );
 }

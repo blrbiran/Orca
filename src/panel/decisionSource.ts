@@ -39,3 +39,41 @@ export async function loadDecisionRow(repoPath: string, decisionId: string): Pro
   }
   return undefined;
 }
+
+/**
+ * Panel UI redesign spec §4 (human ruling U1, session a50f4d80): the list rows now
+ * carry each decision's question. Same file set and order as `loadDecisionRow`, and
+ * the FIRST line for an id wins -- the same line `loadDecisionRow` opens -- so the
+ * summary on a row and the detail behind it are never two different decisions.
+ */
+export async function loadQuestions(repoPath: string): Promise<Map<string, string>> {
+  const questions = new Map<string, string>();
+  // An id is claimed by its FIRST decision line even when that line's question is
+  // unusable, so a later line can never lend a question to a detail that shows another.
+  const seen = new Set<string>();
+  for (const file of await ledgerFiles(repoPath)) {
+    const read = await readLedgerLeniently(file);
+    for (const row of read.rows) {
+      if (row.kind !== "decision") continue;
+      const value = row.value as { id?: unknown; question?: unknown };
+      if (typeof value.id !== "string" || seen.has(value.id)) continue;
+      seen.add(value.id);
+      if (typeof value.question !== "string" || value.question === "") continue;
+      questions.set(value.id, value.question);
+    }
+  }
+  return questions;
+}
+
+/**
+ * The list is a to-do list: a summary that cannot be read must not take the rows
+ * away with it. `ledgerFiles` already swallows a readdir failure; what can still
+ * throw is reading one ledger file.
+ */
+export async function loadQuestionsOrEmpty(repoPath: string): Promise<Map<string, string>> {
+  try {
+    return await loadQuestions(repoPath);
+  } catch {
+    return new Map();
+  }
+}

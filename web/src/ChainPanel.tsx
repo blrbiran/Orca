@@ -29,6 +29,33 @@ export function progressText(chain: ChainView): string {
   return `session ${n}; ${costText(chain.costUsd)}`;
 }
 
+/**
+ * Panel UI redesign spec §5.1: the banners, lifted out verbatim so App can show them above
+ * every section. ChainPanel still renders the ones it is given (App passes none).
+ */
+export function ChainBanners({ banners, onDismiss }: { banners: readonly Banner[]; onDismiss?: (chainId: string) => void }): JSX.Element {
+  return (
+    <>
+      {banners.map((b) => (
+        <div key={b.chainId} role="alert" className={`chain-banner chain-banner-${b.category}`} data-chain-id={b.chainId}>
+          <strong>{b.text}</strong>
+          <span>{` ${b.repoKey}: ${b.reason}`}</span>
+          {b.awaitingHuman.length > 0 && (
+            <ul>
+              {b.awaitingHuman.map((a) => (
+                <li key={a}>{a}</li>
+              ))}
+            </ul>
+          )}
+          <button type="button" data-action="dismiss" onClick={() => onDismiss?.(b.chainId)}>
+            Got it
+          </button>
+        </div>
+      ))}
+    </>
+  );
+}
+
 export function ChainPanel({
   repos,
   banners,
@@ -55,22 +82,7 @@ export function ChainPanel({
   return (
     <section className="chains">
       <h2>Chains</h2>
-      {banners.map((b) => (
-        <div key={b.chainId} role="alert" className={`chain-banner chain-banner-${b.category}`} data-chain-id={b.chainId}>
-          <strong>{b.text}</strong>
-          <span>{` ${b.repoKey}: ${b.reason}`}</span>
-          {b.awaitingHuman.length > 0 && (
-            <ul>
-              {b.awaitingHuman.map((a) => (
-                <li key={a}>{a}</li>
-              ))}
-            </ul>
-          )}
-          <button type="button" data-action="dismiss" onClick={() => onDismiss?.(b.chainId)}>
-            Got it
-          </button>
-        </div>
-      ))}
+      <ChainBanners banners={banners} onDismiss={onDismiss} />
       {repos.map((r) => (
         <div key={r.repoKey} className="chain-repo" data-repo-key={r.repoKey}>
           <h3>{r.repoKey}</h3>

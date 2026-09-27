@@ -9,6 +9,7 @@ import type { DecisionListRow } from "../src/types.js";
  * App.tsx's criteria (web/tests/appSelection.test.tsx) drive it through the
  * live component; these pin the predicate itself.
  */
+// `question: null` added: the field became required (Minor e, human-authorised, session f8281a60).
 const row = (projectKey: string, id: string): DecisionListRow => ({
   projectKey,
   id,
@@ -16,6 +17,7 @@ const row = (projectKey: string, id: string): DecisionListRow => ({
   kind: "interface",
   scope: "repo",
   verdict: "ok",
+  question: null,
 });
 
 describe("acceptArrival (parked finding N-1, ruling R71)", () => {

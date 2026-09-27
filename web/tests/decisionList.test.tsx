@@ -9,8 +9,13 @@ import type { DecisionListRow } from "../src/types.js";
  * (or a looser type somewhere upstream) could still hand the component an
  * object that has it. The criterion: that value never reaches the HTML, while
  * the row's own `id` (a real list field) does.
+ *
+ * REWRITTEN under ruling U1 -- see the comment on the first criterion.
  */
 describe("DecisionList (task 8 ruling K6)", () => {
+  // REWRITTEN (panel UI redesign spec §2/§6.1, human ruling U1, authorised as U4 in session
+  // a50f4d80). The question now belongs on the row; the half of this criterion that still
+  // matters is "the component never spreads the row", so a DIFFERENT extra field probes it.
   it("renders only the list fields, never an extra field on the row", () => {
     const row = {
       projectKey: "proj",
@@ -19,12 +24,32 @@ describe("DecisionList (task 8 ruling K6)", () => {
       kind: "interface",
       scope: "repo",
       verdict: "ok",
-      question: "a reasoning value that must never leak into the list",
+      question: "the question text that now belongs on the row",
+      because: "a reasoning value that must never leak into the list",
     } as unknown as DecisionListRow;
 
     const html = renderToStaticMarkup(<DecisionList rows={[row]} />);
     expect(html).toContain("run/1");
+    expect(html).toContain("the question text that now belongs on the row");
     expect(html).not.toContain("a reasoning value that must never leak into the list");
+  });
+
+  // Deferred final-review Minor (human go-ahead, session f8281a60): spec §5.1 says the row's date is
+  // the LOCAL short date, not the UTC one `at.slice(0, 10)` gave. Two zones on either side of UTC,
+  // each picked so the UTC date and the local date differ.
+  it("shows the date in the viewer's own time zone", () => {
+    const before = process.env.TZ;
+    const at = (tz: string, value: string): string => {
+      process.env.TZ = tz;
+      const row = { projectKey: "p", id: "r/1", at: value, kind: "interface", scope: "repo", verdict: "ok", question: "q" } as DecisionListRow;
+      return renderToStaticMarkup(<DecisionList rows={[row]} />);
+    };
+    try {
+      expect(at("Asia/Shanghai", "2026-09-01T20:00:00.000Z")).toContain(">2026-09-02</time>");
+      expect(at("America/Los_Angeles", "2026-09-01T03:00:00.000Z")).toContain(">2026-08-31</time>");
+    } finally {
+      if (before === undefined) delete process.env.TZ; else process.env.TZ = before;
+    }
   });
 
   /**

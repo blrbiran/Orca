@@ -373,6 +373,9 @@ async function runPanel(args: string[]): Promise<number> {
     // criterion that cannot read its own subject is exactly the "success
     // criterion that never exits 0" E2 §7.1 caught.
     process.stdout.write(`orca-panel ready url=${started.url} token=${started.token}\n`);
+    // For the person at the terminal, on stderr so stdout keeps its one line: `/` needs no
+    // token (the server injects it into index.html), so the bare url is all they need.
+    process.stderr.write(`orca-panel: open ${started.url} in a browser (the page already carries the token)\n`);
     await started.closed;
     return 0;
   } catch (err) {

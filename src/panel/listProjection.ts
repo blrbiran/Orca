@@ -13,6 +13,13 @@ import type { DecisionObservation } from "../metrics/types.js";
  *
  * The `satisfies` constraint buys a compile error for a name that is not a real
  * field, the same lever CORRECTION_FIELDS uses.
+ *
+ * *** ERRATUM (2026-09-27, session a50f4d80, branch ui/panel-redesign, human ruling U1) ***
+ * The paragraph above no longer governs the list. The human, shown "keep the spec and fix
+ * only the layout" as the recommended option, chose "show the question on the list".
+ * Rows now carry `question` (the ledger's own value, or null) beside these six fields;
+ * `reviewed` is still the only numerator of coverage, and `opened` is now weaker still.
+ * See docs/superpowers/specs/2026-09-27-panel-ui-redesign-design.md §2. Text above kept verbatim.
  */
 export const LIST_FIELDS = [
   "projectKey",
@@ -23,12 +30,16 @@ export const LIST_FIELDS = [
   "verdict",
 ] as const satisfies readonly (keyof DecisionObservation)[];
 
-export type DecisionListRow = Pick<DecisionObservation, (typeof LIST_FIELDS)[number]>;
+// `question` is required on both sides (web/src/types.ts mirrors it): every row carries it, the
+// ledger's value or null. It was optional until the human authorised editing the web literal rows
+// (session f8281a60); required, a projection that forgets it no longer type-checks.
+export type DecisionListRow = Pick<DecisionObservation, (typeof LIST_FIELDS)[number]> & { question: string | null };
 
-export function projectForList(decision: DecisionObservation): DecisionListRow {
+export function projectForList(decision: DecisionObservation, question: string | null): DecisionListRow {
   const row = {} as Record<string, unknown>;
   for (const field of LIST_FIELDS) row[field] = decision[field];
-  return row as DecisionListRow;
+  // Spread into a typed literal rather than cast, so dropping `question` here is a compile error.
+  return { ...(row as Omit<DecisionListRow, "question">), question };
 }
 
 /** The ONE place a detail URL is spelled. Criteria and verify-panel.mjs both call it. */

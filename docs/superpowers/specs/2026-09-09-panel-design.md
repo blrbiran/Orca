@@ -507,3 +507,10 @@ ORCA_CORRECTIONS_DIR 改道；造一个带 origin remote 的一次性目标仓�
 外部绑定模式同样开放（R11），token 泄漏的后果登记在 D-launch spec §7-1。
 判据：`tests/panel/chainsApi.test.ts` C1（链记录的 `supervisorPid` 不是面板进程）与 C9（`src/panel/**` 无 `"commit"` 字面量、不 import 链的提交模块）。
 详见 `docs/superpowers/specs/2026-09-18-d-launch-design.md` §6.3。原文逐字保留。
+
+***ERRATUM (2026-09-27, 会话 `a50f4d80`, 分支 `ui/panel-redesign`, 人裁 U1)***
+§1.5 的实测（`question` 装着推理）仍然为真；但 §4.2「列表不带 `question` 及其任何派生」**已被人推翻**：
+人在看过「守 spec，只改布局」这一推荐选项后，选了「列表显示问题摘要」。
+⇒ `/api/todo` 与 `/api/decisions` 的行现在带 `question`；`reviewed` 仍是覆盖率唯一分子（不变）；
+`opened` 从此**更弱** —— 人可以从列表读完 question 而不产生任何 `opened`，任何把它读成「看过」的用法都是错的。
+详见 `docs/superpowers/specs/2026-09-27-panel-ui-redesign-design.md` §2。原文逐字保留。
