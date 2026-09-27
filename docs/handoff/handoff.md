@@ -90,6 +90,7 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 ✅ *** **agent 选择一轮（2026-09-26，会话 `75ec878e` 做 T1–T15、会话 `ab5a693c` 做 T16／T17／终审）做完了。** *** 其后会话 `8c6302e0` 裁了终审 I-2、做了夹具层审计；会话 `43e3e1d8`（2026-09-27）完成人对 R1–R30 的逐条审、落地 R1／R3／R7／R17／R28，并**第一次跑了付费真 claude**。细节与下一步见 §四 4.0。 会话 `94b09282`（同日）让人审完改写判据，并落地了付费轮四个发现的裁定（B1–B3 修，B4 登记）。会话 `4d2e426e`（同日）删了 `~/.orca` 的夹具残留，并付费跑了真 claude 的 `[1m]` 与两任务解冲突（台账 §19／§20）。随后开了 **claude 中止前观测用量（stream-json）** 一轮：会话 `4d2e426e` 落了 Task 1–2，会话 `5b01dbd9` 落了 Task 3–6、终审与修复，**本轮已收口、人已审过，真 claude 下付费跑通一次**，见 §四 4.0。
 
 ✅ *** **面板 UI 重做一轮（2026-09-27，会话 `a50f4d80` 做计划 Task 0–6 与终审修复，会话 `f8281a60` 做人裁后续）已由人 merge 进 main。** *** 细节见 §四 4.0.a。
+🔵 **UI 第二批（深色对比度＋kind 重要性，分支 `ui/panel-contrast`，会话 `f8281a60`）做完、全量验过，等人 merge**（agent 的 `git merge` 进 main 被 Tier 0 闸门拦下）。`git log --oneline main..ui/panel-contrast` 非空 ⇒ 还没合；为空 ⇒ 已合。细节见 §四 4.0.a 末条。
 
 **还不能说的**：*** **「Web 派活可用」「claude 可用」「分层选择可用」都不是事实。** *** 能说的只有：**真 codex 下单任务主链跑通过一次**（2026-09-25，会话 `af3dc0d3`，
 请求模型 gpt-6-luna，服务层不含 HTTP，n＝1；台账 `.superpowers/sdd/2026-09-25-live-acceptance/progress.md` §5 是唯一可引的表述）；**真 claude 下单任务主链跑通过一次**（2026-09-27，会话 `43e3e1d8`，claude 2.1.283、请求模型 claude-opus-5-5、隔离参数、n＝1；台账 `.superpowers/sdd/2026-09-26-agent-selection/progress.md` §14 是唯一可引的表述）；**真 claude 下 1M 窗口单任务、两任务冲突经 `ccloop run --agents` 解开各跑通过一次**（2026-09-27，会话 `4d2e426e`，各 n＝1；同一台账 §20 是唯一可引的表述）。
@@ -132,7 +133,7 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 
 **没有在飞的工作。claude 中止前观测用量（stream-json）一轮已收口，人已审过；下一轮做什么由人选（见「归人」）。**
 
-⚠️ **（2026-09-27 会话 `498aae1d` 补记）UI 线另有一席**：面板 UI 重做并入 main 之后，会话 `f8281a60` 提了一轮 UI 后续设计（深色模式对比度、decisions 页 kind 下拉按重要性排序并加标记，计划分支 `ui/panel-contrast`），**补记时还在等人确认，尚未开工**。一旦开工，它会在自己的 worktree 里改，过程记在 `docs/handoff/handoff_ui.md`。**这是别的 agent 的工作树和分支，不要碰**；它的状态以 `git worktree list` 和 `handoff_ui.md` 为准，不以本行为准。
+⚠️ **UI 线另有一席（会话 `f8281a60`）**：UI 第二批已在分支 `ui/panel-contrast` 做完，只差人 merge（见 §三、§4.0.a 末条、§9.0d）。会话 `498aae1d` 当时补记的「还在等人确认、尚未开工」已过期（被该分支上主题行 `fix(web): step the dark surfaces lighter…` 起的四笔取代）。**合并前别在 main 上动 `web/src/styles.css`、`DecisionsView.tsx`、`DecisionList.tsx`、`docs/handoff/handoff_ui.md`**，免得冲突。
 
 - **这一轮做成了什么**：claude 阶段被 handoff 请求的 deadline（或 handoff-stop）打断时，ccloop 报的是中止前从 stream 观测到的用量（下界），不再是 `null`。所以 Orca 下这个 run 可续、组不会被置 `usageUnknown`，续跑能落地。正常跑完的阶段记账不变。Orca 没改生产代码，只加了判据 D1 和验收脚本的 `--scenario deadline`。
 - **材料**（要细节就读这些，别从对话推）：
@@ -170,6 +171,10 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 - 🔴 **`orca panel` 的 ready 行一个字节都不能改**（`scripts/verify-panel.ts` 的正则、`tests/panel/endToEnd.test.ts` 钉着，`controlShutdown` 按子串等它）。给人看的「在浏览器打开这个 url」提示写在 **stderr**，stdout 仍只有一行（`tests/panel/readyHint.test.ts`）。`/` 不要 token（服务端注入 `index.html`），只有 `/api/*` 验 `x-orca-token`。
 - **`DecisionListRow.question` 前后端都必填**（`string | null`，读不到台账 ⇒ `null`，列表不失败）；`projectForList` 展开进带类型的字面量，漏写即编译失败。
 - **诚实的表述**：只在数据目录改道的真面板上用 Playwright 看过深浅两套截图；**人的视觉验收还没做**。本轮只换了布局与样式，Chains／Task control 的交互一行没动 —— 要改它们的交互是新一轮，先 brainstorming。
+- **第二批（分支 `ui/panel-contrast`，人视觉验收后提的）**：
+  - 深色 token 逐层往亮里走（卡＜浮层＜hover＜边线），选中行底 22%，正文／次要文字各提亮；`--on-accent` 让深色下 Agree 用深色字（原白字叠浅蓝 2.54:1）。🔴 **这些值被 `web/tests/contrast.test.ts` 钉着**：它读 `styles.css` 深色 `:root` 的 token、按 WCAG 公式算比值（边线／卡 ≥1.4、卡／底 ≥1.12、选中行／卡 ≥1.4、正文 ≥7、次要文字 ≥4.5、按钮字 ≥4.5）。**别往暗里调。**
+  - kind 重要性（人裁，只是 UI 序，`KIND_TIER` 仍全 high）：🔴 reconcile、abandon ＞ 🟠 interface、dependency、boundary ＞ 🟡 criteria、scheduling。定义在 `web/src/kindRank.ts`（`Record<DecisionKind, …>`，新 kind 不分档即编译失败）；kind 下拉按档排序、选项文字带 emoji（原生 `<option>` 在 macOS 不认 CSS 颜色）；列表徽章 `data-level` ＋ CSS 色点。
+  - 过程、现测、变异：`docs/handoff/handoff_ui.md` §六（**合并后**才在 main 上可见；合并前在分支上读）。
 
 ### 4.0.0 ④（2026-09-25 会话 `e5f56bfe`，**已做完，不要重做**；原 4.0 的结论保留于此）
 
@@ -684,6 +689,9 @@ ccloop 的 I-2 里，spec 第一版把「渲染成 `JSON.stringify`」贴在那�
 - **jsdom 不加载 CSS** ⇒ 任何只靠 CSS 实现的行为，都要有一条直接读样式表的判据。
 - **调用方给的「没有」是 `null` 还是 `undefined`，先读调用方再写条件**：App 在详情加载中传 `null`，按 `=== undefined` 写的提示会在加载时误出。
 - **Tier 0 闸门也拦 scratch clone 里对名为 `main` 的分支做 `git merge`，以及含 `reset --hard` 或解析不了的 `cd $VAR` 的组合命令**（不重试、不换说法）⇒ 合并预演用只读 `git merge-tree --write-tree`，把结果树 `git archive` 进新 clone 跑全量；路径写字面量。
+- 🔴 **「token 不存在」的红不是判据被看见红**：新加的对比度断言第一次红在 `no dark token --on-accent`，量的是「有没有这个名字」，不是比值。⇒ 先把现值原样抽成 token，看它红在**实测比值**（2.54），再改值。
+- **对比度问题先量再修，量对对象**：深色「对比度差」量出来文字全过、只有层次（边线／卡 1.08）不过 —— 与 md2publish `theme-design-lessons.md` 规则 7／10 同一结论。jsdom 不渲染 ⇒ 判据直接对 CSS token 做 WCAG 计算。
+- **main 会在你做分支时被别的 agent 推进**：合并前重新 `git ls-remote`／`merge-base --is-ancestor`，`--ff-only` 不成就只读 `git merge-tree --write-tree` 查冲突；只多了文档的话，分支上的全量结论对合并结果仍然成立。
 - **人手动起面板时，`ORCA_*=…` 单独成行、既没 `export` 也没行尾 `\`，就传不进子进程**，结果写进了真 `~/.orca`（已由人决定删除，挪进了废纸篓）。
 
 ## 七、工具骗法（**每一条都真栽过**）
@@ -971,10 +979,11 @@ Orca 要求排序去重的四值枚举 ⇒ 将来非 null 且写错时 Orca 整�
 
 ### 9.0d 面板 UI 重做一轮登记、归人的（2026-09-27，会话 `a50f4d80`／`f8281a60`）
 
-- **人的视觉验收**还没做。
+- 🔴 **合并 `ui/panel-contrast` 进 main（人已要求，agent 被 Tier 0 闸门拦下）**：`cd /Users/biran/code/skills/loop/Orca && git pull --ff-only && git merge --no-ff ui/panel-contrast && git push`。只读 `merge-tree` 无冲突（main 相对分支只多了本文的文档行）。合并后等着的那个 agent 可以继续。
+- **视觉验收**：第一批人已看过（提出了深色对比度与 kind 排序 ⇒ 第二批）；**第二批还没看**。看之前要 `npm run build --workspace web` 再重起面板（旧进程服务的是旧 `web/dist`）。
 - **四条被改写的既有判据尚未人审**：名单在计划 Global Constraints，每条旁有 `REWRITTEN … U1 … U4 … a50f4d80` 注释。
-- **worktree 与 `ui/panel-redesign` 分支删不删**：worktree 目录在会话 `a50f4d80` 的 scratchpad 下（`git worktree list` 查），重启会丢目录；删 worktree／分支、`git worktree prune` 都归人。
-- **真 `~/.orca` 的旧数据**（人手动起面板写的 `reviews.jsonl`＋`control/orca-e0c92460/`）已挪到 `~/.Trash/orca-real-data-2026-09-27`，清不清废纸篓归人。
+- **真 `~/.orca`**：第一次的数据已挪到 `~/.Trash/orca-real-data-2026-09-27`（清不清归人）；**之后又被写了**（`reviews.jsonl` 840B＋`control/`，人在 7777 端口起的面板视觉验收时写的，多半仍是 `ORCA_*` 没 `export`）—— 人的数据，未动。
+- **两个 UI 分支与 worktree 删不删**：`ui/panel-redesign`（已合）、`ui/panel-contrast`（待合），worktree 都在会话 scratchpad 下（`git worktree list`）；`docs/handoff/handoff_ui.md` 合并后要不要删、并回本文 —— 都归人。
 - **控制器替人做的决定**：台账的 `Ruling:` 行（含跳过 `orca level` hook 的 `checkpoint write` —— 本批因此没有 `.orca/checkpoints` 记录）。
 
 ### 9.1 G1 缝 A 之后归人的（**2026-09-24 替换上一版「执行前必须由人给的」——那些授权都已给出并用完**）
