@@ -79,8 +79,9 @@ if (a === "control" && b === "capabilities" && c === "--agents") {
     const request = JSON.parse(stdin);
     if (request.agent === null) process.stdout.write(JSON.stringify({ protocol: 3, installations: [{ id: "claude", kind: "claude", defaults: { model: "claude-opus-5-5", contextWindow: "agent-default" }, contextOptions: ["agent-default", 1000000], version: "2.1.282" }] }));
     else if (script.driftFor === request.agent.agent) { process.stderr.write("agent-version-drift\\n"); process.exit(1); }
+    // Single-call estimate (2026-09-28): ccloop's resolution answer now carries singleCallExecution beside capabilities (spec §4.4); fixture input only.
     else process.stdout.write(JSON.stringify({ protocol: 3, selection: { model: "claude-opus-5-5", contextWindow: "agent-default", ...request.agent }, configHash: "e".repeat(64), timeoutMs: 1800000, killGraceMs: 5000,
-      capabilities: { usageObservation: "phase-end", budgetEnforcement: "soft", contextObservation: "unavailable", handoffControl: "durable", handoffExecution: "mechanical-in-run-v1", contextWindowTokens: null, requestBoundProof: null } }));
+      capabilities: { usageObservation: "phase-end", budgetEnforcement: "soft", contextObservation: "unavailable", handoffControl: "durable", handoffExecution: "mechanical-in-run-v1", contextWindowTokens: null, requestBoundProof: null }, singleCallExecution: "v1" }));
   });
 } else { process.stderr.write("unexpected " + process.argv.slice(2).join(" ") + "\\n"); process.exit(9); }
 `, { mode: 0o700 });

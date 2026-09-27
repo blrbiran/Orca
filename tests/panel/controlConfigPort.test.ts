@@ -63,7 +63,8 @@ async function setup() {
   // carries, so the peer's raw answer stays schema-valid.
   const capablePort = {
     // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): capabilities protocol 3.
-    resolveAgent: async () => ({ selection: { agent: "codex", model: "fixture-model", contextWindow: "agent-default" }, configHash: "d".repeat(64), timeoutMs: 1, killGraceMs: 0, capabilities: { ...snapshot().profile.capabilities } }),
+    // Single-call estimate (2026-09-28): ccloop's resolution answer now carries singleCallExecution beside capabilities (spec §4.4); fixture input only.
+    resolveAgent: async () => ({ selection: { agent: "codex", model: "fixture-model", contextWindow: "agent-default" }, configHash: "d".repeat(64), timeoutMs: 1, killGraceMs: 0, capabilities: { ...snapshot().profile.capabilities }, singleCallExecution: null }),
     listAgents: async () => ({ installations: [{ id: "codex", kind: "codex", defaults: { model: "fixture-model", contextWindow: "agent-default" as const }, contextOptions: ["agent-default" as const], version: "0.0.0-fixture" }] }),
     readEvidence: async () => Buffer.alloc(0), accept: async () => ({ kind: "unknown" }), inspect: async () => ({ kind: "unknown" }),
     requestHandoff: async () => ({ kind: "unknown" }), collect: async () => ({ events: [], candidate: null, terminal: null }),
