@@ -11,8 +11,10 @@
 import type { JSX } from "react";
 import type { ControlAction } from "./controlApi.js";
 import type {
+  AllocationViewV1,
   Amount,
   AmountDimensionV1,
+  BudgetEstimateV1,
   ControlConfigV1,
   FieldProvenanceV1,
   GroupViewV1,
@@ -70,6 +72,56 @@ export function editedOperations(view: GroupViewV1, drafts: Record<string, strin
   return operations;
 }
 
+/** Single-call estimate spec §7: what one "apply" control covers. */
+export type SuggestionScope =
+  | { kind: "field"; target: ProposalTargetV1 }
+  | { kind: "row"; ownerKind: "task" | "goal-review"; ownerId: string; bucket: "work" | "handoff" | "review" }
+  | { kind: "all" };
+
+/**
+ * The estimate that may advise this proposal, or null: the newest by version (the view lists estimates by id, drafter
+ * finding F12), and only when it is ready, for this plan, and the proposal is still editable. Anything else and the
+ * editor is exactly what it was before suggestions existed.
+ */
+export function adviceOf(view: GroupViewV1): { estimateId: string; output: BudgetEstimateV1 } | null {
+  if (view.proposal.state !== "editable") return null;
+  let newest: GroupViewV1["estimates"][number] | null = null;
+  for (const estimate of view.estimates) if (newest === null || estimate.estimateVersion > newest.estimateVersion) newest = estimate;
+  if (newest === null || newest.state !== "ready" || newest.output === null || newest.output.planHash !== view.plan.planHash) return null;
+  return { estimateId: newest.estimateId, output: newest.output };
+}
+
+function suggestedAmount(output: BudgetEstimateV1, allocation: AllocationViewV1): Amount | null {
+  if (allocation.ownerKind === "goal-review" && allocation.bucket === "review") return output.goalReviewReserve;
+  if (allocation.ownerKind !== "task" || (allocation.bucket !== "work" && allocation.bucket !== "handoff")) return null;
+  return output.tasks.find((task) => task.taskId === allocation.ownerId)?.[allocation.bucket] ?? null;
+}
+
+/**
+ * The only place that decides which suggestions a control sends (the editedOperations of the model's advice): each
+ * field in `scope` whose suggested value differs from the proposal's, as provenance "model" with the estimate's id --
+ * the exact number the server re-checks (verifyModelField). A field already at its suggestion sends nothing.
+ */
+export function suggestedOperations(view: GroupViewV1, scope: SuggestionScope): ProposalOperationV1[] {
+  const advice = adviceOf(view);
+  if (advice === null) return [];
+  const groupId = view.summary.groupId;
+  const operations: ProposalOperationV1[] = [];
+  for (const allocation of view.allocations) {
+    const suggested = suggestedAmount(advice.output, allocation);
+    if (suggested === null) continue;
+    if (scope.kind === "row" && (allocation.ownerKind !== scope.ownerKind || allocation.ownerId !== scope.ownerId || allocation.bucket !== scope.bucket)) continue;
+    for (const dimension of DIMENSIONS) {
+      const target = targetOf(view, allocation.ownerId, allocation.bucket, dimension);
+      if (target === null) continue;
+      if (scope.kind === "field" && budgetFieldKey(groupId, target) !== budgetFieldKey(groupId, scope.target)) continue;
+      if (suggested[dimension] === allocation.amount[dimension]) continue;
+      operations.push({ target, value: suggested[dimension], provenance: "model", estimateId: advice.estimateId });
+    }
+  }
+  return operations;
+}
+
 function limitAmount(view: GroupViewV1, drafts: Record<string, string>): Amount {
   const groupId = view.summary.groupId;
   const limit = { ...view.ledger.groupLimit };
@@ -100,6 +152,13 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
   const groupId = view.summary.groupId;
   const editable = view.proposal.state === "editable";
   const estimator = view.estimates.at(-1) ?? null;
+  const advice = adviceOf(view);
+  const allSuggested = suggestedOperations(view, { kind: "all" });
+  // Spec §7: applying a suggestion is its own command, never a draft; the server re-checks every value.
+  const applySuggestions = (operations: ProposalOperationV1[]): void => {
+    if (operations.length === 0) return;
+    onCommand({ verb: "proposal-edit", groupId, expectedRevision: view.summary.commandRevision, payload: { baseProposalVersion: view.proposal.proposalVersion, operations } });
+  };
   const observedEnforcement = view.proposal.profiles === null
     ? config.profiles[0]?.observed.budgetEnforcement ?? "unknown"
     : "frozen at confirmation";
@@ -178,7 +237,7 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
       )}
       <table>
         <thead>
-          <tr><th>owner</th><th>bucket</th><th>state</th>{DIMENSIONS.map((dimension) => <th key={dimension}>{dimension}</th>)}</tr>
+          <tr><th>owner</th><th>bucket</th><th>state</th>{DIMENSIONS.map((dimension) => <th key={dimension}>{dimension}</th>)}{advice !== null && <th>suggestion</th>}</tr>
         </thead>
         <tbody>
           {view.allocations.map((allocation) => (
@@ -190,6 +249,7 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
                 const target = targetOf(view, allocation.ownerId, allocation.bucket, dimension);
                 if (target === null) return <td key={dimension}>{allocation.amount[dimension]}</td>;
                 const key = budgetFieldKey(groupId, target);
+                const [fieldOperation] = suggestedOperations(view, { kind: "field", target });
                 return (
                   <td key={dimension}>
                     <label>
@@ -202,13 +262,38 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
                       />
                       <small>{provenanceText(allocation.fieldProvenance[dimension])}</small>
                     </label>
+                    {fieldOperation !== undefined && (
+                      <button type="button" aria-label={`use ${fieldOperation.value} for ${allocation.ownerId} ${allocation.bucket} ${dimension}`}
+                        onClick={() => applySuggestions([fieldOperation])}>use {fieldOperation.value}</button>
+                    )}
                   </td>
                 );
               })}
+              {advice !== null && (() => {
+                const row = allocation.ownerKind === "task" || allocation.ownerKind === "goal-review"
+                  ? suggestedOperations(view, { kind: "row", ownerKind: allocation.ownerKind, ownerId: allocation.ownerId, bucket: allocation.bucket as "work" | "handoff" | "review" })
+                  : [];
+                return <td>{row.length > 0 && <button type="button" aria-label={`Apply row ${allocation.ownerId} ${allocation.bucket}`} onClick={() => applySuggestions(row)}>Apply row</button>}</td>;
+              })()}
             </tr>
           ))}
         </tbody>
       </table>
+      {allSuggested.length > 0 && <button type="button" onClick={() => applySuggestions(allSuggested)}>Apply all suggestions</button>}
+      {advice !== null && (
+        <details>
+          <summary>Estimate rationale ({advice.estimateId})</summary>
+          <p>{advice.output.groupRationale}</p>
+          <ul>
+            {advice.output.tasks.map((task) => (
+              <li key={task.taskId}>
+                {task.taskId} · {task.complexity} · confidence {task.confidence} · {task.rationale}
+                <ul>{task.assumptions.map((assumption) => <li key={assumption}>{assumption}</li>)}</ul>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
       <fieldset>
         <legend>Group limit</legend>
         {DIMENSIONS.map((dimension) => (
