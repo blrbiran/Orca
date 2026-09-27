@@ -67,7 +67,8 @@ import type {
 import { DecisionDetail } from "./DecisionDetail.js";
 import type { Decision } from "./DecisionDetail.js";
 import { ErrorPage } from "./ErrorPage.js";
-import { PanelHome } from "./PanelHome.js";
+import { DecisionsView, NO_FILTER } from "./DecisionsView.js";
+import { MetricsView } from "./MetricsView.js";
 import { Refusal } from "./Refusal.js";
 import { acceptArrival } from "./selection.js";
 import type { ChainRepoView, DecisionListRow, MetricsReport, PanelCoverage } from "./types.js";
@@ -568,7 +569,8 @@ export function App(): JSX.Element {
           agentsFailure={agentsFailure}
         />
       )}
-      <PanelHome todo={home.todo} report={home.report} coverage={home.coverage} onOpen={setSelected} />
+      <DecisionsView rows={home.todo} filter={NO_FILTER} selected={selected} onOpen={setSelected} />
+      <MetricsView report={home.report} coverage={home.coverage} />
       {selected !== null && decision !== null && (
         <>
           <DecisionDetail

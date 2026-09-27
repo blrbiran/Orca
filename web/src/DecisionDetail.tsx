@@ -39,6 +39,15 @@ export interface Decision {
   alternatives: DecisionAlternative[];
 }
 
+export const AGREE_HELP = "Mark reviewed: I read this and it needs no change. Counts toward review coverage.";
+export const CORRECT_NOTE =
+  "This records a correction; it does not edit the ledger. To change the decision itself, close it with orca correct --close or let the fix agent do it.";
+export const KIND_HELP: Record<CorrectionKind, string> = {
+  wrong: "the choice was wrong",
+  not_my_taste: "defensible, but not what I would choose",
+  stale: "it was right then, no longer true",
+};
+
 export function DecisionDetail({
   decision,
   onAgree,
@@ -50,60 +59,76 @@ export function DecisionDetail({
 }): JSX.Element {
   return (
     <article className="decision-detail">
+      <p className="row-id">{decision.id}</p>
       <h2 data-testid="decision-question">{decision.question}</h2>
-      <p className="chose" data-testid="decision-chose">
-        {decision.chose}
-      </p>
-      <p className="because" data-testid="decision-because">
-        {decision.because}
-      </p>
-      <ul className="alternatives">
-        {decision.alternatives.map((alt) => (
-          <li key={alt.option}>
-            <span className="option" data-testid="alternative-option">
-              {alt.option}
-            </span>
-            <span className="why-not" data-testid="alternative-why-not">
-              {alt.why_not}
-            </span>
-          </li>
-        ))}
-      </ul>
-      <button type="button" onClick={onAgree}>
-        Agree
-      </button>
-      <form
-        className="correction-form"
-        onSubmit={(event) => {
-          event.preventDefault();
-          const data = new FormData(event.currentTarget);
-          onCorrect?.({
-            kind: String(data.get("kind")) as CorrectionKind,
-            because: String(data.get("because") ?? ""),
-            chose_instead: String(data.get("chose_instead") ?? ""),
-          });
-        }}
-      >
-        <label>
-          Kind
-          <select name="kind" defaultValue={WEB_CORRECTION_KINDS[0]}>
-            {WEB_CORRECTION_KINDS.map((kind) => (
-              <option key={kind} value={kind}>
-                {kind}
-              </option>
+      <div className="detail-block">
+        <h3>Chose</h3>
+        <p className="chose" data-testid="decision-chose">
+          {decision.chose}
+        </p>
+      </div>
+      <div className="detail-block">
+        <h3>Because</h3>
+        <p className="because" data-testid="decision-because">
+          {decision.because}
+        </p>
+      </div>
+      {decision.alternatives.length > 0 && (
+        <div className="detail-block">
+          <h3>Rejected alternatives</h3>
+          <ul className="alternatives">
+            {decision.alternatives.map((alt) => (
+              <li key={alt.option}>
+                <span className="option" data-testid="alternative-option">
+                  {alt.option}
+                </span>
+                <span className="why-not" data-testid="alternative-why-not">
+                  {alt.why_not}
+                </span>
+              </li>
             ))}
-          </select>
-        </label>
-        <label>
-          Because
-          <textarea name="because" required />
-        </label>
-        <label>
-          Chose instead (optional)
-          <input name="chose_instead" type="text" />
-        </label>
-        <button type="submit">Correct</button>
-      </form>
+          </ul>
+        </div>
+      )}
+      <div className="actions">
+        <button type="button" className="btn-primary" onClick={onAgree}>
+          Agree
+        </button>
+        <p className="detail-help">{AGREE_HELP}</p>
+        <form
+          className="correction-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const data = new FormData(event.currentTarget);
+            onCorrect?.({
+              kind: String(data.get("kind")) as CorrectionKind,
+              because: String(data.get("because") ?? ""),
+              chose_instead: String(data.get("chose_instead") ?? ""),
+            });
+          }}
+        >
+          <label>
+            Kind
+            <select name="kind" defaultValue={WEB_CORRECTION_KINDS[0]}>
+              {WEB_CORRECTION_KINDS.map((kind) => (
+                <option key={kind} value={kind}>
+                  {`${kind} — ${KIND_HELP[kind]}`}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Because
+            <textarea name="because" required />
+          </label>
+          <label>
+            Chose instead (optional)
+            <input name="chose_instead" type="text" />
+          </label>
+          <button type="submit">Correct</button>
+          <p className="detail-help">{CORRECT_NOTE}</p>
+        </form>
+      </div>
     </article>
   );
 }
