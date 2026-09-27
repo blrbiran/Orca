@@ -20,4 +20,11 @@ describe("styles.css", () => {
   it("hides inactive panes by class, the only thing allowed to hide one (spec §5.1)", () => {
     expect(rule('.section-pane:not([data-active="true"])')).toContain("display: none");
   });
+
+  // Final review Important 2: the global label rule stacks its children, which put every radio and
+  // checkbox above its own text (WorkspaceModeSelector, AgentFields) and "Theme" above its select.
+  it("keeps a radio's or a checkbox's label, and the theme picker, on one row", () => {
+    const r = rule('label:has(> input[type="radio"]), label:has(> input[type="checkbox"]), .theme-pick');
+    expect(r).toContain("flex-direction: row");
+  });
 });

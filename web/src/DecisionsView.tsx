@@ -34,6 +34,10 @@ function FilterSelect(props: {
   filter: DecisionFilter;
   onFilter?: (f: DecisionFilter) => void;
 }): JSX.Element {
+  // A value whose last row was just reviewed away stays listed, so the select still shows
+  // what is filtering the (now empty) list instead of claiming "any" (final review Important 1).
+  const current = props.filter[props.name];
+  const values = current === "" || props.values.includes(current) ? props.values : [...props.values, current].sort();
   return (
     <label>
       {props.label}
@@ -43,7 +47,7 @@ function FilterSelect(props: {
         onChange={(e) => props.onFilter?.({ ...props.filter, [props.name]: e.currentTarget.value })}
       >
         <option value="">any</option>
-        {props.values.map((v) => <option key={v} value={v}>{v}</option>)}
+        {values.map((v) => <option key={v} value={v}>{v}</option>)}
       </select>
     </label>
   );

@@ -53,6 +53,14 @@ describe("DecisionsView (rulings U1, U2; K5's intent)", () => {
     expect(html).toMatch(/data-testid="decision-count"[^>]*>0 of 3</);
   });
 
+  // Final review Important 1: a filter value whose last row was just reviewed away must stay
+  // visible in its select, or the pane shows "any" over an empty list with no way to tell why.
+  it("keeps showing a filter value that no longer matches any row", () => {
+    const html = renderToStaticMarkup(<DecisionsView rows={[rows[0]!]} filter={{ ...NO_FILTER, kind: "boundary" }} />);
+    expect(html).toMatch(/<select name="filter-kind">[\s\S]*?<option value="boundary" selected="">boundary<\/option>[\s\S]*?<\/select>/);
+    expect(html).toContain("No decision matches these filters.");
+  });
+
   it("marks the selected row and renders the detail it is given", () => {
     const html = renderToStaticMarkup(
       <DecisionsView rows={rows} filter={NO_FILTER} selected={{ projectKey: "proj", id: "run/2" }} detail={<p>detail-slot</p>} />,
