@@ -52,6 +52,16 @@ describe("DecisionList (task 8 ruling K6)", () => {
     }
   });
 
+  // Human ruling (session f8281a60): the kind pill carries the kind's importance level, which
+  // styles.css turns into the same coloured dot the filter's options show; an unknown kind gets none.
+  it("marks the kind pill with its importance level", () => {
+    const one = (kind: string): string =>
+      renderToStaticMarkup(<DecisionList rows={[{ projectKey: "p", id: "r/1", at: "2026-09-01T00:00:00.000Z", kind, scope: "repo", verdict: "ok", question: "q" } as DecisionListRow]} />);
+    expect(one("abandon")).toContain('<span class="pill field-kind" data-level="1">abandon</span>');
+    expect(one("criteria")).toContain('<span class="pill field-kind" data-level="3">criteria</span>');
+    expect(one("zzz-unknown")).toContain('<span class="pill field-kind">zzz-unknown</span>');
+  });
+
   /**
    * review finding I-1 / controller ruling R60. A fixed-separator join (the
    * earlier double-colon join) collides on exactly this pair: {projectKey:
