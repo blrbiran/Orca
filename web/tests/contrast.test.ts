@@ -61,6 +61,11 @@ describe("dark theme contrast (human visual review, session f8281a60)", () => {
     expect(ratio(hex(token("text-strong")), selected)).toBeGreaterThanOrEqual(7);
   });
 
+  // Seen on the screenshot after the first fix: Agree was white on the light accent blue.
+  it("keeps a primary button's label readable on the accent (Agree, submit)", () => {
+    expect(ratio(hex(token("on-accent")), hex(token("accent")))).toBeGreaterThanOrEqual(4.5);
+  });
+
   it("separates the layers: a card from the page, an edge from its card, the open row from the rest", () => {
     expect(ratio(card, bg)).toBeGreaterThanOrEqual(1.12);
     expect(ratio(hex(token("border")), card)).toBeGreaterThanOrEqual(1.4);
