@@ -570,3 +570,20 @@ only, not by existence」，3 条：缺表装配成功、相对路径仍拒、�
   - ccloop 只把 `input_tokens＋output_tokens` 记账；真 claude 的 cache 创建／读取不进账（一次单任务 1,329 对约 14.5 万）⇒ token 软上限对真 claude 几乎不设防；**归人**。
   - `ccloop agents detect`／`orca agents init` 出的 claude 安装是裸 `command: [claude]`：真跑会加载使用者全部 user settings／hooks／插件／MCP，且 `-p` 下没有写权限。验收脚本用的隔离参数（`--permission-mode acceptEdits --no-session-persistence --setting-sources project,local --strict-mcp-config --disable-slash-commands --max-budget-usd <n>`）只住在脚本里；产品默认带不带 —— **归人**。
   - Rule 17 残留：`--no-session-persistence` 下 claude 仍在真实 `~/.claude/projects/<目标仓库路径>/` 建一个空 `memory/`（0755）。
+
+### 13.10 付费轮四个发现的人裁与落地（2026-09-27，控制器会话 `94b09282`；13.1–13.9 原文保留）
+
+> 来源：进度台账 `.superpowers/sdd/2026-09-26-agent-selection/progress.md` §16。人原话：「B1–B3 按你推荐，B4 先登记」「B3 和 B1 授权改写」。**冲突时本节优先于上文。**
+
+- **更正 §13.9「runner 在 claude 非零退出时丢掉它的 stdout …… 登记不修」**：已修（ccloop 主题行 `fix(claude): keep claude's stdout when it exits non-zero, where -p puts the API error`）。错误里带退出码、stderr 与 stdout，各留末尾 8192 个字符并写明丢了多少。
+- **更正 §13.9「ccloop 只把 `input_tokens＋output_tokens` 记账 …… 归人」**：人裁计入。ccloop 主题行 `fix(claude): count the tokens claude wrote to and read from its cache`：`cache_creation_input_tokens`／`cache_read_input_tokens` 进白名单（`usageEvidence.cacheFields`），每个有限值加进 `normalizedTotal`／`tokenUsage`。依据是与 codex 同口径：codex 的 `input_tokens` 本身含 cached。ccloop 2026-07-18 usage 证据 spec 追加了 §10 更正。**Orca 侧零改动**：Orca 不读 `usageEvidence`，只收 `tokenUsage`。⚠️ 同一个 token 上限对真 claude 现在大约紧了两个数量级（付费轮那一个任务按新口径约 14.6 万，不再是 1,329）。
+- **更正 §13.9「`agents detect`／`orca agents init` 出裸 `command: [claude]` …… 归人」**：人裁带隔离参数。ccloop 主题行 `feat(agents): draft claude with the paid round's isolation arguments in agents detect`：claude 草稿的 `command` ＝ `[<path>, --permission-mode, acceptEdits, --no-session-persistence, --setting-sources, project,local, --strict-mcp-config, --disable-slash-commands]`；codex 不加参数。**`--max-budget-usd` 不在默认里**（美元上限的默认值另归人）。`orca agents init` 原样转 ccloop 的草稿，Orca 零改动。
+- **补登 §8（Rule 17，人裁「B4 先登记」）**：
+
+  | 路径 | 谁触发 | 模式 | 残留 |
+  |---|---|---|---|
+  | 真实 `~/.claude/projects/<目标仓库 cwd 编码>/memory/` | **claude CLI 自己**（Claude Code 的 auto-memory）。Orca／ccloop 经真 claude 跑任务、安装记录 `configDir: null` 时触发；带 `--no-session-persistence` 也照建 | claude 决定（实测 0755），**Orca／ccloop 不设也不改** | 每个目标仓库一个空目录；Orca／ccloop **不建也不删** |
+
+  §8 那句「ccloop 侧零仓库外写入」对 ccloop **自己的代码**仍然成立；本行是它启动的第三方 CLI 的写入。
+  可能的根治是安装记录的 `configDir` 指向专用目录（ccloop 设 `CLAUDE_CONFIG_DIR`），**未验证**：换目录后 keychain 里的 OAuth 是否仍可用，要一次付费真 claude 才能量，归人。付费轮留下的两个真实目录（`…scratchpad-live-claude-{1,2}-target`）删不删，也归人。
+- **登记（不做，人未开口）**：面板在页面获焦或变为可见时无条件重读一次预览，没有节流。每次重读起一个 ccloop 进程，频繁切窗口就频繁起进程。实测一次切回（`visibilitychange` 加 `focus`）只多读一次，两次分开的切回读两次。
