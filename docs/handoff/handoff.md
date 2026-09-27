@@ -132,6 +132,8 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 
 **没有在飞的工作。claude 中止前观测用量（stream-json）一轮已收口，人已审过；下一轮做什么由人选（见「归人」）。**
 
+⚠️ **（2026-09-27 会话 `498aae1d` 补记）UI 线另有一席**：面板 UI 重做并入 main 之后，会话 `f8281a60` 提了一轮 UI 后续设计（深色模式对比度、decisions 页 kind 下拉按重要性排序并加标记，计划分支 `ui/panel-contrast`），**补记时还在等人确认，尚未开工**。一旦开工，它会在自己的 worktree 里改，过程记在 `docs/handoff/handoff_ui.md`。**这是别的 agent 的工作树和分支，不要碰**；它的状态以 `git worktree list` 和 `handoff_ui.md` 为准，不以本行为准。
+
 - **这一轮做成了什么**：claude 阶段被 handoff 请求的 deadline（或 handoff-stop）打断时，ccloop 报的是中止前从 stream 观测到的用量（下界），不再是 `null`。所以 Orca 下这个 run 可续、组不会被置 `usageUnknown`，续跑能落地。正常跑完的阶段记账不变。Orca 没改生产代码，只加了判据 D1 和验收脚本的 `--scenario deadline`。
 - **材料**（要细节就读这些，别从对话推）：
   - spec `docs/superpowers/specs/2026-09-27-claude-stream-usage-design.md`，**§8「实施期更正」优先**；
