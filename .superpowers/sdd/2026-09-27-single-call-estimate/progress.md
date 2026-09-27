@@ -70,3 +70,12 @@ SDD ledger — plan: docs/superpowers/plans/2026-09-27-single-call-estimate.md
 | `tests/control/endToEnd.test.ts` | 29 行（单行字面量） | `control protocol through the built CLI` 下全部判据（跑的是 build，只在门上跑） |
 | `tests/control/resultRepository.test.ts` | 44–47 行（`as unknown as` 强转） | `C2 reads its own run's attempt ref, not the shared path-derived one a later run overwrote`、`C1 shares the object store by hard links instead of copying it` |
 | `tests/control/agentsFixture.ts`（helper `startEnvelope`） | 96–115 行 | `agentsControl.test.ts` 里用到它的判据：`acceptFixture()` 的全部使用者（`seals the materialized agent config whose canonical hash the claim carries`、`refuses a claim whose selection changed after its configHash was taken, before any worker`、`accepts a claim frozen before the CLI was upgraded, once the table records the new version`、`accepts a claim frozen before the CLI moved or its run limits changed, under the table as it is now`、`refuses a CLI whose --version drifted from the table, before anything is persisted`、`fails without a code and without persisting anything`、`reads the table only for capabilities and accept: a table broken after accept blocks neither inspect nor collect`、`keeps inspect and collect working after the table is deleted, while capabilities still refuses it`），外加 `refuses a sealed config whose schema or kind does not hold, or that is not JSON, before any phase`、`registers the claude phase's process group in processes.json, and that record proves nothing while the group lives` |
+
+### §3.3 Task 1 完成（ccloop）
+
+- 提交（ccloop main，本地）：`feat(control): carry loop or single-call work in a protocol-3 start envelope`（06b6453，BASE 8d4d406）。
+- 实施席自报：RED 12 failed／2 passed（改回 protocol.ts、判据已改写）；GREEN 14 文件／94 条全过、0 skipped；`npm run typecheck` rc=0；brief 的 6 条变异在 `git clone --local` 副本里各自打红预言的判据后还原。报告全文：`task-1-report.md`（本目录，未入库过程文件）。
+- S6 实际改写：与 §3.2 名单逐文件一致（评审逐文件核过；`StartEnvelopeV2` 全树零命中；唯一残留 `protocol: 2,` 在 `tests/control/command.test.ts:102`，是已退役的 capabilities 应答字面量，不在名单内、未改）。
+- Ruling: 评审的 Important「Step 6 台账未写」— 该步由控制器在派发时明确保留（台账在 Orca 仓、实施席只在 ccloop 仓写），控制器在本节补写 — 若错：无代码后果。
+- Task 1: minor (deferred): brief 的变异清单没覆盖 `loopWorkSchema` 的 `kind: z.literal("loop")` 与 single-call `sourceDir` 规范化两支（终审时看要不要补变异）。
+- Task 1: complete (commits 8d4d406..06b6453, review clean after controller ruling on the ledger step)
