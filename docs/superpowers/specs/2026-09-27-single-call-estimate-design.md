@@ -74,6 +74,7 @@ work:
 
 - ⚠️ **不进七键 `capabilityViewSchema`**（审查 C1）：那个 schema 还嵌在人写的 profile 文件（`declaredCapabilitiesSchema` 由它 `.extend`）、导入／确认时冻结进库的记录（估算槽、`frozenTaskAgentSchema.agentCapabilities`）、下发 web 的 control config 视图里，全是 strict；加键会让旧 profile 文件被拒、现有 store 的冻结记录读回 `recovery-blocked`。S7 只免了 ccloop 的兼容性，不免这些。
 - 所以：ccloop「按 selection 解析」的 capabilities 应答（`{protocol: 3, selection, configHash, timeoutMs, killGraceMs, capabilities}`）加**顶层兄弟字段** `singleCallExecution: "v1" | null`，与 `capabilities` 平级；表视图（`agent: null`）不加。两边的解析应答 schema 同时改（ccloop `command.ts`、Orca `ccloopPort.ts` 的 `agentResolutionSchema`）。
+- **为什么这是长远最优，不只是省事**（人 2026-09-27 要求按全局最优定，并授权必要时手修 store；控制器判定不需要）：解析应答里本来就有两类 agent 事实——七键视图（要与 profile 声明**求交**、确认时冻结进每个任务、参与快照哈希的预算／handoff 契约），与**不求交**的兄弟字段 `timeoutMs`／`killGraceMs`。`singleCallExecution` 属后一类：profile 要不要跑估算已由 `allowedWorkKinds` 含不含 `budget-estimate` 表达，再让 profile 声明它是冗余；放进视图还会让每个任务的冻结记录带一个与任务无关的字段；手修 store 要重算 canonical 哈希链，风险大于收益。反方（「agent 能力都该在视图里，否则是第二条能力通道」）被上面的既有兄弟字段先例推翻。可逆：将来真需要「声明 ∩ 观测」时再迁入视图。
 - Orca 在 `ObservedProfile.resolution` 上读它（探测失败时 `resolution` 为 null ⇒ 视为 null）。冻结记录逐字段显式写，不带它 ⇒ 不改任何持久化 schema。
 - Orca 估算预检（`buildBudgetEstimateRequest`、`estimateCapabilityDegraded`）多一条：`singleCallExecution` 不是 `"v1"` ⇒ `blocked-capability`（`estimate-blocked-capability`）／claim 时退化（`estimate-capability-degraded`）。今天的 `handoffControl`／`handoffExecution` 两条保留不动。
 - 某个 kind 的 descriptor 只有在「输出上限」与「关工具／只读」两件都能做到时才答 `"v1"`（§8 Task 0 量），否则 `null`。
