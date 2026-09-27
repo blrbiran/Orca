@@ -198,3 +198,17 @@ Expected（落地后）：普查只剩 `capabilitySchema.test.ts:21`、`webFault
 - 挂账（O1 残留）：O1 评审漏看了 `controlPanel.ts` 那处 mock，所以 O1 的「夹具改动」清单不全；O2 已补上。
 - Task O2: minor (deferred): `readEstimateContract` 在 O2 没有判据，由 O3 用到。
 - Task O2: complete (commits d04f5dd..4b5db1f, review clean)
+
+### §3.11 Task O3 完成（Orca）
+
+- 提交：`feat(control): drive an estimate run through one ccloop single call and settle it into the estimate`（6224f92，BASE c1dd788）。
+- **Task 0 第 4 项实测**：修 F1 之前，A1 抛 `start-intent-missing`（webDispatch.ts:370，经 reserveProviderAttemptInTransaction:395、stepA1:181），如预言红；修 F1 之后，「A1 ＋ recordUsage ＋ completeEstimate」的守恒式成立，由 `driverEstimate.test.ts` 的 Task 0 判据钉住。
+- 实施席自报：10 个点名文件 141/141；typecheck rc=0；另加一条判据「调用失败且无用量 ⇒ `estimate-usage-unknown`」；M-O3a–h 都红（M-O3b 红在 B′ 的 `inspect-unknown`，不是预言的 `profile-changed`）；自加的 M-O3i（删 F6 让出检查）存活，归 O4 H3 补红。
+- Ruling: `driverHandoff.ts` 的 `restartRun` 加了「无工作区就跳过清理」，超出 brief 文件清单 — tsc 要求，且估算 run 走得到这里；和计划分给 O4 的是同一段代码 — 若错：O4 这一处只剩改注释。
+- 转给 O4（评审 ⚠️）：
+  - (a) H2 的红预言已经过期（守卫已在），H2 的红证改由 M-O4c 提供；
+  - (b) F6 让出之后 run 仍是 `accepted`，下一轮走的是 `stepH → deliverAndCollect` 的 work 路径，要到 O4 加上估算分支才真正闭环；
+  - (c) 经 `restartRun` 结算的估算 run 只结算了请求，估算本身仍是 `running`、run 仍是 `active=1`，O4 要保证记成 `interrupted` 并退回承诺；
+  - (d) `stepCEstimate` 的 `commitTerminal` 在 await 之后没有复查 `state === "accepted"`（Minor 1），O4 正好改到这段，顺手补上。
+- Task O3: minor (deferred): 估算 run 在 A1 因确定性原因抛错时（`drive` 为 undefined），每轮只打 stderr、重试，从不 block。这是既有模式，work run 也一样。
+- Task O3: complete (commits c1dd788..6224f92, review clean)
