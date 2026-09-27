@@ -92,3 +92,13 @@ SDD ledger — plan: docs/superpowers/plans/2026-09-27-single-call-estimate.md
 - 实施席自报：`fakeClaudeCli.test.ts` 16/16 通过（RED 时新增的 4 条红，既有 12 条保持绿）；typecheck 干净；4 条变异都打红了预言的判据。F3 在 RED 时红成 5000ms 超时，而不是预言的「unknown argument --tools」文字。根因相同（fake 在吐流之前就退出了），只是红的表现形式不同。
 - Task 3: minor (deferred): 两条路径没有判据覆盖：`mode: "ok"` 下 single-call 的默认回答；single-call 找不到脚本条目时的 exit 3。
 - Task 3: complete (commits d85776b..05fd82f, review clean)
+
+### §3.6 Task 4 完成（ccloop）
+
+- 提交：`feat(claude): run one tool-less structured call with an output cap through the phase runner`（731f450，BASE 05fd82f）。
+- 实施席自报：`tests/runtime/claude` 10 文件／96 条全过；typecheck rc=0；8 条变异里 7 条打红了预言的判据。实施席没有在实现前先看红，而是改用变异逐条证明每条判据都能红；评审判定这份替代证据够用。
+- 变异 6（runner 里 `valid` 恒 true）没打红：adapter 会再做一遍同样的结构检查，把它盖住了。runner 那一行因此不承重；adapter 条件里的 `outputError !== null` 一支也被 `output === null` 完全吸收。
+- Ruling: 提交归属行写的是实施席自己的模型（Sonnet 5），不是 brief 里写的 Opus 5.5 — 与 Orca handoff §九历轮裁定一致：作者确实是它，写成 Opus 才是假话；不 amend — 若错：人决定是否改写这批提交的元数据。
+- Task 4: minor (deferred): runner 与 adapter 的输出有效性检查重复，runner 那一支不承重（变异 6 活着）。
+- Task 4: minor (deferred): adapter 的 `phase()` 与 `singleCall()` 处理 outcome 的代码几乎逐字重复（brief 原样指定）。
+- Task 4: complete (commits 05fd82f..731f450, review clean)
