@@ -212,3 +212,16 @@ Expected（落地后）：普查只剩 `capabilitySchema.test.ts:21`、`webFault
   - (d) `stepCEstimate` 的 `commitTerminal` 在 await 之后没有复查 `state === "accepted"`（Minor 1），O4 正好改到这段，顺手补上。
 - Task O3: minor (deferred): 估算 run 在 A1 因确定性原因抛错时（`drive` 为 undefined），每轮只打 stderr、重试，从不 block。这是既有模式，work run 也一样。
 - Task O3: complete (commits c1dd788..6224f92, review clean)
+
+### §3.12 Task O4 完成（Orca）
+
+- 提交：`feat(control): stop, restart and recover an estimate run without touching the target repository`（7fce7d8，BASE 55abc88）。无 S6、无夹具输入改动；harness 原样挪到 `tests/control/fixtures/estimateHarness.ts`（评审逐行核过，是纯挪动）。
+- **Task 0 第 2 项实测（真）**：修复前 `recoverControl(…, {driverOwnsWebRuns:true})` 把在飞与已完成（`ready`）两种估算 run 都放进 `blockedRunIds`。E3 在 M-O4d 下直接量到 `dispatchBlocked === true`。修复后在 `driverOwnsWebRuns` 下，任何状态的估算 run 都会被跳过。
+- 实施席自报：8 个单元文件 116/116；typecheck rc=0；E2／E3 2/2、0 skipped（ccloop-bin 在 0bd781f）；M-O4a–e 都打红了预言的判据。M-O4e 现在能杀死 O3 里存活的那条 F6 变异。
+- (c) 实测：`restartRun` 已经会走到 `terminaliseRun → interruptEstimate`，H2 已钉住。
+- Task O4: minor (deferred): (d) 的守卫（await 之后复查 `accepted`）没有判据，M-O4f 存活。今天走不到它，但按 Rule 9 应补一条 `duringCollect` 注入判据 ⇒ 列入终审修复清单。
+- Task O4: minor (deferred): E3 没有断言重启前后 `git worktree list` 不变 ⇒ 列入终审修复清单。
+- Task O4: minor (deferred): `estimateE2E.test.ts` 有未用的 `readFileSync` import；还导出了尚未被引用的 helper，其中 `estimateOutput` 与夹具里的同名、内容却不同。
+- Task O4: minor (deferred): 两种情形没有判据：用量未知的估算 run 遇到 stop 时，照 spec §6.5.1 结算成 `settled-restartable`（组的 `usageUnknown` 仍然为真，不会当成 0）；已 prepared 的 `start-pending`／`unknown` 估算 run 走 `inspectUnderStop`。
+- 残留：`$SCRATCH/o4-mut`。
+- Task O4: complete (commits 55abc88..7fce7d8, review clean)
