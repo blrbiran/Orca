@@ -49,6 +49,9 @@ panel spec（`2026-09-09-panel-design.md`）§1.5 实测 89% 的 `question` 装�
 3. Decisions 区：筛选条（kind／scope／repo）＋列表（徽章＋两行截断的 question）＋详情（分块）＋动作说明。
 4. 后端：列表行加 `question`。
 5. 其余各区**只换样式与包裹结构**：可见文字、按钮名、`aria-label`、`data-*`、`data-testid` 一律不变（既有判据靠它们定位）。
+6. 🔴 **决策区也有必须保留的锚点**（`web/tests/appSelection.test.tsx`、`App.test.tsx`、`decisionDetail.test.tsx` 靠它们）：
+   标题文字 `Unreviewed high-tier decisions`；选择器 `.decision-list li button`（每行一个 button）；按钮名 `Agree`、`Correct`；
+   `form.correction-form`、`textarea[name="because"]`、`input[name="chose_instead"]`、`data-testid="decision-*"`／`alternative-*`；loading 文案里的 `orca panel`。
 
 **不做：** 控制面逻辑、新 API（`question` 除外）、面板写台账、组件库、路由库。
 
@@ -64,7 +67,7 @@ panel spec（`2026-09-09-panel-design.md`）§1.5 实测 89% 的 `question` 装�
   ```
   `LIST_FIELDS` 仍是那六个 observation 字段（它的 `satisfies keyof DecisionObservation` 约束不动）；`question` 是单独的一个键。
 - `src/panel/api.ts` 的 `/api/todo` 与 `/api/decisions`：按 `observations.repos` 每个仓库读一次 `loadQuestions`，行里 `question = map.get(id) ?? null`。
-  读失败（目录不可读等）⇒ 该仓库所有行 `question: null`，**不让列表失败**：列表是待办，不能因为摘要读不到而整页消失。
+  读失败（`ledgerFiles` 已吞掉 readdir 错误；真正会抛的是 `readLedgerLeniently` 读单个文件）⇒ 每个仓库整体 try/catch，该仓库所有行 `question: null`，**不让列表失败**：列表是待办，不能因为摘要读不到而整页消失。
 - `web/src/types.ts`：`WEB_LIST_FIELDS` 不变；`DecisionListRow` 同步加 `question: string | null`（`webParity` 的编译期互赋值检查会核它）。
 
 ## 5. 前端
@@ -75,25 +78,31 @@ panel spec（`2026-09-09-panel-design.md`）§1.5 实测 89% 的 `question` 装�
 |---|---|
 | `styles.css` 🆕 | token（颜色／字号／间距／圆角／阴影）、深浅两套、基础元素、通用类 `.btn` `.pill` `.card` `.callout` `.stat` `.field` |
 | `theme.ts` 🆕 | `readTheme()`／`writeTheme()`：`"system" \| "light" \| "dark"`，存 `localStorage`，读写全包 try/catch，失败回 `"system"`；在 `<html>` 上设 `data-theme` |
-| `Shell.tsx` 🆕 | 纯组件：侧栏＋内容区。入参：当前分区、各区徽标（未审数、chain 是否在跑、Task control 是否有告警）、`by`／epoch／dispatch 文本 |
+| `Shell.tsx` 🆕 | 纯组件：侧栏＋内容区。入参：当前分区、各区徽标、`by`／epoch／dispatch 文本。徽标：Decisions ＝ 未审总数（不随筛选变）；Chains ＝ 有 `running` 的链时一个点；Task control 告警点 ＝ 以下任一成立：port 未配置、`refetchRequired`、恢复阻塞数 > 0、`control.refusal` 非空 |
 | `sections.ts` 🆕 | 分区枚举与 URL hash 的互转（`#decisions` 默认；未知 hash ⇒ decisions） |
 | `DecisionsView.tsx` 🆕 | 纯组件：筛选条＋`DecisionList`＋`DecisionDetail`（或空态「选一条决策查看内容」） |
 | `DecisionList.tsx` | 行：kind／scope 徽章、repo、日期（本地短格式）、question 两行截断（`null` ⇒「(no question recorded)」）；选中行高亮 |
 | `DecisionDetail.tsx` | 分块：Question ／ Chose ／ Because ／ Rejected alternatives；动作区见 §5.2 |
 | `PanelHome.tsx` | **删除**，职责由 `DecisionsView` 接；`MetricsView` 移到 Metrics 区 |
-| `App.tsx` | 新增 state：当前分区（与 hash 同步）、筛选条件；其余 fetch／轮询／命令逻辑不动 |
+| `App.tsx` | 新增 state：当前分区（与 hash 同步）、筛选条件；其余 fetch／轮询／命令逻辑不动。Chain 横幅（`bannersFor`）渲染在内容区顶部、**不属于任何分区** —— 人停在别的区也要看得见 |
 | `main.tsx` | import `styles.css`，启动时应用主题 |
 | 其余组件 | 只加 className、调整包裹 |
+
+🔴 **分区切换：四个区始终挂载，非当前区只由 `styles.css` 的类隐藏（`.section:not([data-active="true"]) { display: none }`），不卸载、不用 `hidden` 属性。**
+理由（现测）：`web/tests/agentPreviewRefresh.test.tsx` 渲染整个 `<App />` 后按 role 找 Task control 的按钮；
+卸载或 `hidden` 会让它在默认分区（decisions）下找不到，而 `getByRole` 本身会跳过带 `hidden` 的元素；卸载还会丢 `ChainPanel` 自己的 `repoKey` state。
+测试环境不加载 CSS ⇒ 既有判据看到的 DOM 与今天相同。⚠️ **这意味着既有判据不验证分区可见性** —— 可见性由 §6.2 的 `Shell`／`sections` 判据钉（断言当前区的 `data-active="true"`、其余为 `"false"`）。
 
 ⚠️ `staticFiles.ts` 按精确文件名伺服、不拼路径 ⇒ vite 产出的 `index.css` 必须能作为一个键被找到。`vite.config.ts` 的 `assetFileNames: "[name].[ext]"` 已覆盖；实施时**现测** `web/dist/` 里的文件名与面板实际伺服（curl 拿 200）。
 
 ### 5.2 决策动作的说明文字（写死在 UI 上）
 
 - **Agree** —— 「Mark reviewed: I read this and it needs no change. Counts toward review coverage.」
-- **Correct**（折叠表单，展开才显示）——
+- **Correct**（表单**始终展开**，不折叠 —— `appSelection.test.tsx` 与 `decisionDetail.test.tsx` 断言详情一出现 `textarea[name="because"]` 就在）——
   - kind 每项一句：`wrong`「the choice was wrong」／`not_my_taste`「defensible, but not what I would choose」／`stale`「it was right then, no longer true」
   - 表单下方固定一句：「This records a correction; it does not edit the ledger. To change the decision itself, close it with `orca correct --close` or let the fix agent do it.」
-- 成功后：状态行 ＋ 自动选中列表里的下一条（没有下一条 ⇒ 空态）。
+- 成功后：状态行（现有行为）。**不自动选中下一条** —— 那会替人发一次 `GET /api/decision`，写一条人没打开过的 `opened`。
+- 列表头：`N of M`（N ＝ 筛选后，M ＝ 未审总数）。
 
 ### 5.3 视觉
 
@@ -123,7 +132,7 @@ panel spec（`2026-09-09-panel-design.md`）§1.5 实测 89% 的 `question` 装�
 |---|---|
 | `loadQuestions`：缺失／非字符串 ⇒ 不进表；重复 id 与 `loadDecisionRow` 同规则 | 去掉类型检查；改成另一种重复规则 |
 | `/api/todo` 行带 `question`；某仓库台账不可读 ⇒ 行仍在、`question: null` | 删掉拼接那行；让读失败向上抛 |
-| `Shell`：未审数显示；Task control 有告警时出现告警点，无告警时不出现 | 删告警点分支（正反两向都要看） |
+| `Shell`：未审数显示；Task control 告警点对 §5.1 的四个条件各自出现、全不成立时不出现；当前区 `data-active="true"`、其余 `"false"` | 删告警点的任一条件；把 `data-active` 恒置 true |
 | `sections`：hash ↔ 分区互转，未知 ⇒ decisions | 未知 hash 映到别的区 |
 | `theme`：storage 抛错 ⇒ `"system"`；非法值 ⇒ `"system"` | 去掉 try/catch |
 | `DecisionDetail`：Correct 表单下方有「does not edit the ledger」那句 | 删那句 |
