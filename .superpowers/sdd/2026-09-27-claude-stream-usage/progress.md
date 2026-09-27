@@ -134,3 +134,4 @@ spec：`docs/superpowers/specs/2026-09-27-claude-stream-usage-design.md`。
 - 收尾 `pgrep -fl "ccloop-agents-version|worker.js|fake-claude-cli|fake-codex"` RC 1（没有孤儿进程）。
 - Task 6: complete（变异表、两仓干净门、终审与修复、复审都已入账）。
 - 收尾：spec 追加 §8「实施期更正」；三份 handoff 滚动更新（Orca §三／§4.0，ccloop「Orca 那条线」第十五版，ccmem §15 第十三版）。本会话**没有付费调用**、没杀任何进程、没 push。scratchpad 里的 clone（`ccloop-pre`／`-t3`／`-mut`／`-m1`／`-m7`／`-gate`、`orca-full`／`-gate`、`fix/ccloop-fixmut`）是本会话自己的临时副本，没删（删要人开口；它们不是仓库的 worktree）。
+- Human（2026-09-27，会话 `5b01dbd9` 收尾报审之后）：「认可改写判据。允许付费验证。推送都是我来做，你不要做」⇒ spec §5.3＋§8.2 的七条点名改写由人认可；spec §6.4 付费验证（真 claude，deadline 中止 → 续跑落地，n＝1）由人授权**一次**；推送归人，控制器不 push。（台账里其余 `Ruling:` 人未逐条表态。）
