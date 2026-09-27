@@ -243,3 +243,16 @@ Expected（落地后）：普查只剩 `capabilitySchema.test.ts:21`、`webFault
 - 实施席自报：`budgetSuggestions.test.tsx` 5/5；相关 web 判据共 33/33；web tsc 干净；`webParity` 3/3；M-O6a–e 都红。
 - Ruling: 新判据有两处与 brief 字面不同，评审认可：① 基线夹具改成带一个 `queued` 估算，因为既有的 Re-estimate 按钮只要有估算就会渲染；② brief 给的判据抓不到 M-O6d，另加一条直接断言，让它能红 — 若错：只影响新判据。
 - Task O6: complete (commits 2b199a7..356ecc0, review clean)
+
+### §3.15 Task O7 完成（Orca）——计划的全部 Task 落地
+
+- 提交：`test(scripts): a live estimate scenario for claude, run first against the fake`（1e40cc6，BASE f8dfdce）。
+- 实施席自报：
+  - typecheck rc=0；
+  - `--fake-claude --scenario estimate --task-tokens 150000 --group-tokens 800000`：rc=0、`failed: []`，estimateQueued／estimateReady／estimateUsageBooked／estimateToolsOff／startAllowed／orcaHomeUntouched 全为 true；
+  - `--fake-claude --scenario single` 回归：rc=0；
+  - M-O7a（`driverRunIds` 去掉估算分支）：rc=1，estimateReady、startAllowed 如预言红，另有 12 条连带红。
+- Ruling: confirm 的 `handoffAtContextTokens` 改为回显 profile 声明的窗口，与 O5 的 `confirmSoft` 同一修法。评审确认 single／conflict／deadline 三个场景的窗口仍是 null，行为不变 — 若错：只影响验收脚本。
+- Ruling: 实施席多改了 `checks.providerCalls` 里 reconcile 计数的那个三元式（brief 没点到的第 4 处 `scenario === "single"`）。它先实测到 `failed: ["providerCalls"]`，再改 — 若错：只影响验收脚本。
+- 真 `~/.orca` 前后 `ls -la` 相同（控制器现测：只有 2026-09-27 21:36／21:37 的 `control/` 与 `reviews.jsonl`）。
+- Task O7: complete (commits f8dfdce..1e40cc6, review clean)
