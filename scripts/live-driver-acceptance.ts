@@ -17,7 +17,7 @@
 // usage: tsx scripts/live-driver-acceptance.ts --ccloop-bin <abs dist/cli.js> --output <new dir>
 //          (--codex <abs codex binary> --model <name> | --fake | --claude <abs claude binary> --model <name> | --fake-claude)
 //          [--group-tokens 300000] [--task-tokens 150000] [--task-attempts 1] [--active-ms 600000]
-//          [--call-usd 2] [--deadline-ms 900000] [--context-window 1000000] [--scenario single|conflict|deadline]
+//          [--call-usd 2] [--deadline-ms 900000] [--context-window 1000000] [--scenario single|conflict|deadline|estimate]
 //
 // --context-window sets the operator's contextWindow for the agent (claude: 1000000 is `--model <model>[1m]`, spelled
 // by ccloop). --scenario conflict runs two tasks that both append a line to the same file from the same base, so the
@@ -30,6 +30,12 @@
 // the stream (observed-usage.json); Orca must book it (the run is not usage-unknown), park the run recoverable, and
 // the panel's resume must continue it to a landing. Every step reads what D1 in tests/control/agentSelectionE2E.test.ts
 // reads, and the checks fail -- not pass by accident -- if the execute finished before the deadline.
+//
+// --scenario estimate (claude kinds only; single-call estimate spec §8.6): the estimator runs as one ccloop single
+// call. The profile declares claude's 1M window and the operator's preferences are set BEFORE the import, so the
+// import's estimator slot is claude 1M and the estimate queues; under --fake-claude the fake's single-call answer is
+// written after the import (the plan hash is known then) and before the pump starts. Checks: the estimate is ready,
+// start is not refused (estimate-in-flight is what a stuck estimate costs), and its usage is booked.
 //
 // Ruling review 2026-09-27 (paid claude round): --claude runs the real claude CLI. HOME is again NOT relocated (claude
 // reads its OAuth login from the keychain under the real HOME), but the installation's command isolates the call from
@@ -48,7 +54,7 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 import { canonicalBytes } from "../src/control/canonicalJson.js";
 import { resolveGroupSelections } from "../src/control/agentFreeze.js";
 import { readDriverRun } from "../src/control/executionDriver.js";
-import { readArchivedPlan, readBudgetProposal } from "../src/control/queries.js";
+import { readArchivedPlan, readBudgetProposal, readEstimateRecord } from "../src/control/queries.js";
 import { assembleControlRuntime, type ControlRuntime } from "../src/panel/controlAssembly.js";
 import { controlRepoKey, resolveControlOptions } from "../src/panel/controlOptions.js";
 import { readControlGroup } from "../src/panel/controlViews.js";
@@ -89,12 +95,14 @@ const deadlineMs = Number(args["deadline-ms"] ?? 900_000);
 const taskAttempts = Number(args["task-attempts"] ?? (args.scenario === "deadline" ? 2 : 1));
 const activeMs = Number(args["active-ms"] ?? 600_000);
 const callUsd = String(args["call-usd"] ?? "2");
-const contextWindow = args["context-window"] === undefined ? undefined : Number(args["context-window"]);
-if (contextWindow !== undefined && (!Number.isSafeInteger(contextWindow) || contextWindow <= 0)) throw new Error("--context-window must be a positive integer");
 const scenario = args.scenario ?? "single";
-if (scenario !== "single" && scenario !== "conflict" && scenario !== "deadline") throw new Error("--scenario is single, conflict or deadline");
+if (scenario !== "single" && scenario !== "conflict" && scenario !== "deadline" && scenario !== "estimate") throw new Error("--scenario is single, conflict, deadline or estimate");
 // The deadline scenario reads what ccloop's claude runner observed in the stream; codex has no such file.
 if (scenario === "deadline" && kind !== "claude") throw new Error("--scenario deadline needs --claude or --fake-claude");
+if (scenario === "estimate" && kind !== "claude") throw new Error("--scenario estimate needs --claude or --fake-claude");
+const contextWindow = args["context-window"] === undefined ? (scenario === "estimate" ? 1_000_000 : undefined) : Number(args["context-window"]);
+if (contextWindow !== undefined && (!Number.isSafeInteger(contextWindow) || contextWindow <= 0)) throw new Error("--context-window must be a positive integer");
+if (scenario === "estimate" && contextWindow !== 1_000_000) throw new Error("--scenario estimate needs the 1M window (ccloop reports contextWindowTokens only for it)");
 /**
  * The real claude call, isolated from the person's own Claude Code setup: no user settings (so no hooks and no
  * plugins, which would also record this session), no MCP servers, no skills, no session written under ~/.claude,
@@ -154,7 +162,7 @@ const scriptPath = join(root, "codex-script.json");
 // cut with observed usage; the fake keys the continuation run as `a#continuation`.
 const NUMBERS = ["one", "two", "three", "four", "five"];
 const numberFiles = Object.fromEntries(NUMBERS.map((word) => [`${word}.txt`, `${word}\n`]));
-await writeFile(scriptPath, JSON.stringify(scenario === "single" ? { a: { files: { "answer.txt": "42\n" } } } : scenario === "deadline" ? {
+await writeFile(scriptPath, JSON.stringify(scenario === "single" || scenario === "estimate" ? { a: { files: { "answer.txt": "42\n" } } } : scenario === "deadline" ? {
   a: { files: numberFiles, delayMs: { execute: 120_000 }, usageBeforeDelay: true }, "a#continuation": { files: numberFiles },
 } : {
   a: { files: { "shared.txt": "base\nA\n" } }, b: { files: { "shared.txt": "base\nB\n" } },
@@ -178,7 +186,7 @@ const installation = kind === "codex"
 await writeFile(tablePath, JSON.stringify({ schema: "ccloop-agents-table-v1", installations: { [kind]: installation } }), { mode: 0o600 });
 
 type LiveTask = { taskId: string; files: string[]; goal: string; successCondition: string; check: string };
-const tasks: LiveTask[] = scenario === "single"
+const tasks: LiveTask[] = scenario === "single" || scenario === "estimate"
   ? [{ taskId: "a", files: ["answer.txt"], goal: "Create a file named answer.txt at the repository root whose entire content is the characters 42 followed by one newline. Change no other file.", successCondition: "answer.txt holds exactly 42 and a newline", check: 'test "$(cat answer.txt)" = 42' }]
   : scenario === "deadline"
   ? [{ taskId: "a", files: Object.keys(numberFiles),
@@ -211,11 +219,12 @@ const planPath = join(repo, "plan.json");
 await writeFile(planPath, JSON.stringify({ targetRepo: repo, ccloopBin, runsDir: join(root, "unused-runs"), workBranch: "orca/unused", policy: "local-merge", ledgerMode: "out-of-repo", goal: "live acceptance", successConditions: tasks.map((task) => task.successCondition), tasks: planTasks }));
 
 // The shipped ccloop's capability answer; a null context window makes the estimate blocked-capability (spec §11 D1).
+// estimate: the window claude 1M answers, so the estimate is not blocked-capability.
 const profilePath = join(root, "profile.json");
 await writeFile(profilePath, JSON.stringify({
   schema: "orca-execution-profile-snapshot-v2",
   profile: { profileId: "all", allowedWorkKinds: ["budget-estimate", "goal-review", "handoff", "task"], contextTokenizer: null, workMaxOutputTokens: 1000,
-    capabilities: { usageObservation: "phase-end", budgetEnforcement: "soft", contextObservation: "unavailable", handoffControl: "durable", handoffExecution: "mechanical-in-run-v1", contextWindowTokens: null, requestBoundProof: null },
+    capabilities: { usageObservation: "phase-end", budgetEnforcement: "soft", contextObservation: "unavailable", handoffControl: "durable", handoffExecution: "mechanical-in-run-v1", contextWindowTokens: scenario === "estimate" ? 1_000_000 : null, requestBoundProof: null },
     estimatorPreflight: { instructionVersion: "1", schemaVersion: "budget-estimate-v1", maxOutputTokens: 64_000, framingTokenOverhead: 17, tokenizer: { kind: "utf8-upper-bound", numerator: 2, denominator: 3, proofRef: "proof" } } },
   resolved: { proofDocumentContentHashes: ["c".repeat(64)], tokenizerArtifactHashes: [], secretValueHashes: [] },
 }));
@@ -277,14 +286,38 @@ let timedOut = false;
 let firstRunId: string | null = null;
 let observedPath: string | null = null;
 let handoffState: string | null = null;
+let estimateId: string | null = null;
 try {
   await runtime.recover();
+  // Agent selection spec §6.2 layer 1: the operator's default is the table's codex installation, with --model when live.
+  const setPreferences = async () => {
+    const preferences = await runtime.service.setAgentPreferences(raw(runtime, "preferences", "set-agent-preferences",
+      { preferences: { defaultAgent: kind, perAgent: { [kind]: { ...(isFake ? {} : { model: args.model! }), ...(contextWindow === undefined ? {} : { contextWindow }) } } } }, { kind: "operator", operatorId: "human" }));
+    if ("error" in preferences) throw new Error(`set-agent-preferences refused: ${JSON.stringify(preferences.error)}`);
+  };
+  // estimate: the estimator's slot freezes at import, so the operator's claude-1M preference must be set beforehand.
+  if (scenario === "estimate") await setPreferences();
   const imported = await runtime.service.importPlan(raw(runtime, "import", "import-plan", { groupId: "g", repoId, planId: "plan" }));
   summary.imported = imported;
-  // Agent selection spec §6.2 layer 1: the operator's default is the table's codex installation, with --model when live.
-  const preferences = await runtime.service.setAgentPreferences(raw(runtime, "preferences", "set-agent-preferences",
-    { preferences: { defaultAgent: kind, perAgent: { [kind]: { ...(isFake ? {} : { model: args.model! }), ...(contextWindow === undefined ? {} : { contextWindow }) } } } }, { kind: "operator", operatorId: "human" }));
-  if ("error" in preferences) throw new Error(`set-agent-preferences refused: ${JSON.stringify(preferences.error)}`);
+  if (scenario !== "estimate") await setPreferences();
+  if (scenario === "estimate") {
+    const result = (imported as { result?: { estimateId?: string; estimateState?: string } }).result;
+    checks.estimateQueued = result?.estimateState === "queued";
+    estimateId = result?.estimateId ?? null;
+    const planHash = readArchivedPlan(runtime.store, "g").planHash;
+    if (fakeClaude) {
+      const answer = { schema: "budget-estimate-v1", planHash,
+        tasks: [{ taskId: "a", complexity: "S", confidence: "high", work: { tokens: taskTokens, activeMs, attempts: taskAttempts, sessions: taskAttempts }, handoff: { tokens: 0, activeMs: 0, attempts: 0, sessions: 0 }, rationale: "one file with one line", assumptions: ["answer.txt does not exist yet"] }],
+        goalReviewReserve: { tokens: 1, activeMs: 1, attempts: 0, sessions: 0 }, groupRationale: "a single one-line task" };
+      await writeFile(scriptPath, JSON.stringify({ a: { files: { "answer.txt": "42\n" } }, "single-call": { output: answer } }));
+    }
+    runtime.startPump(200);
+    const settleBy = Date.now() + deadlineMs;
+    while (estimateId !== null && ["queued", "running"].includes(readEstimateRecord(runtime.store, "g", estimateId).state) && Date.now() < settleBy) await new Promise((r) => setTimeout(r, 200));
+    const record = estimateId === null ? null : readEstimateRecord(runtime.store, "g", estimateId);
+    summary.estimate = record;
+    checks.estimateReady = record?.state === "ready";
+  }
   // A blocked-capability estimate leaves complex-1m-default allocations (task work 3M tokens, 3 attempts), and
   // confirm derives the contract's tokenBudget/maxAttempts/totalRuntimeBudgetMs from them, overriding the
   // contract's own. So the caps go in here, before confirm, as a human's proposal-edit -- the Web path.
@@ -300,21 +333,28 @@ try {
     proposedGroupLimit: { ...readBudgetProposal(runtime.store, "g").groupLimit, tokens: groupTokens },
   }));
   if ("error" in edited) throw new Error(`proposal-edit refused: ${JSON.stringify(edited.error)}`);
-  const hash = runtime.router.list()[0]!.profileHash;
+  const profile = runtime.router.list()[0]!;
+  const hash = profile.profileHash;
   // Spec §6.4: confirmation freezes ccloop's answer for the selections this preview resolved.
   const selections = await resolveGroupSelections({ store: runtime.store, port: runtime.port }, "g", "human");
+  // O5 fix (measured 2026-09-28, session f341f05f, estimateE2E.test.ts confirmSoft): the one profile binds every
+  // role, including the worker, so a non-null declaredContextWindowTokens (estimate's 1M) makes webService.ts's
+  // confirm require a non-null handoffAtContextTokens no greater than that window; null only clears when the
+  // window itself is null. Read the profile's declared window and echo it back, rather than hardcoding null.
+  const declaredWindow = profile.snapshot.profile.capabilities.contextWindowTokens;
   const confirmed = await runtime.service.confirm(raw(runtime, "confirm", "confirm", {
     planHash: readArchivedPlan(runtime.store, "g").planHash, proposalVersion: readBudgetProposal(runtime.store, "g").proposalVersion, budgetMode: "soft",
     profileIds: { estimator: "all", worker: "all", handoff: "all", goalReview: "all" }, profileHashes: { estimator: hash, worker: hash, handoff: hash, goalReview: hash },
-    contextPolicy: { handoffAtContextTokens: null }, selectionsHash: selections.selectionsHash,
+    contextPolicy: { handoffAtContextTokens: declaredWindow }, selectionsHash: selections.selectionsHash,
   }));
   if ("error" in confirmed) throw new Error(`confirm refused: ${JSON.stringify(confirmed.error)}`);
   summary.agents = Object.fromEntries(taskIds.map((id) => [id, workItem(runtime, id).agent]));
   summary.confirmedLedger = readControlGroup(runtime.store, runtime.epoch, "g").ledger;
   summary.proposal = readBudgetProposal(runtime.store, "g");
   const started = await runtime.service.start(raw(runtime, "start", "start", {}));
-  if ("error" in started) throw new Error(`start refused: ${JSON.stringify(started.error)}`);
-  runtime.startPump(200);
+  if (scenario === "estimate") { checks.startAllowed = !("error" in started); summary.started = "error" in started ? started.error : "started"; }
+  if ("error" in started) { if (scenario !== "estimate") throw new Error(`start refused: ${JSON.stringify(started.error)}`); }
+  else runtime.startPump(200);
 
   const deadline = Date.now() + deadlineMs;
   /** Polls `done` until it holds (true), a run is blocked or the work already settled (false), or the watchdog fires. */
@@ -326,7 +366,7 @@ try {
       await new Promise((r) => setTimeout(r, pollMs));
     }
   };
-  let settle = true;
+  let settle = !(scenario === "estimate" && checks.startAllowed === false);
   if (scenario === "deadline") {
     settle = false;
     // Stop only once claude has closed a message inside execute, so the cut phase has usage to report.
@@ -374,6 +414,9 @@ try {
 }
 
 const runs = workRuns(runtime);
+const estimateRow = runtime.store.db.prepare("SELECT body FROM runs WHERE group_id='g' AND json_extract(body,'$.phase')='estimate'").get();
+const estimateBody = estimateRow === undefined ? null : JSON.parse(String(estimateRow.body)) as { runId: string; drive?: { sourceDir: string }; unknown: { work: boolean }; cumulative: { work: { tokens: number } } };
+const estimateSourceDir = estimateBody?.drive?.sourceDir ?? null;
 summary.runs = runs.map((run) => ({ runId: run.runId, task: run.task, state: run.body.state, drive: run.body.drive }));
 const ledger = readControlGroup(runtime.store, runtime.epoch, "g").ledger;
 summary.ledger = ledger;
@@ -390,7 +433,7 @@ const calls: Call[] = kind === "codex"
     const completed = readFileSync(file, "utf8").split("\n").filter((line) => line.trim()).map((line) => JSON.parse(line)).filter((row) => row.type === "turn.completed");
     const usage = completed.at(-1)?.usage ?? null;
     const phase = file.split("/codex/")[1]!.split("/")[1]!;
-    return { role: file.includes("/reconcile-") ? "reconcile" : "worker", phase, file, usage, total: usage === null ? null : Number(usage.input_tokens) + Number(usage.output_tokens) };
+    return { role: estimateSourceDir !== null && file.startsWith(`${estimateSourceDir}/`) ? "estimate" : file.includes("/reconcile-") ? "reconcile" : "worker", phase, file, usage, total: usage === null ? null : Number(usage.input_tokens) + Number(usage.output_tokens) };
   })
   : findEvidence("stdout.json").filter((file) => file.includes("/claude/")).map((file) => {
     const text = readFileSync(file, "utf8");
@@ -400,7 +443,7 @@ const calls: Call[] = kind === "codex"
     const dir = dirname(file);
     const outcomePath = join(dir, "outcome.json");
     const outcome = existsSync(outcomePath) ? JSON.parse(readFileSync(outcomePath, "utf8")) as { reason?: string } : null;
-    const base = { role: file.includes("/reconcile-") ? "reconcile" : "worker", phase, file, aborted: outcome?.reason === "aborted", endedAt: existsSync(outcomePath) ? statSync(outcomePath).mtimeMs : undefined };
+    const base = { role: estimateSourceDir !== null && file.startsWith(`${estimateSourceDir}/`) ? "estimate" : file.includes("/reconcile-") ? "reconcile" : "worker", phase, file, aborted: outcome?.reason === "aborted", endedAt: existsSync(outcomePath) ? statSync(outcomePath).mtimeMs : undefined };
     if (typeof answer?.tokenUsage === "number") return { ...base, usage: answer.usageEvidence ?? null, total: answer.tokenUsage, observed: false };
     let observed: { total?: unknown } | null = null;
     try { observed = JSON.parse(readFileSync(join(dir, "observed-usage.json"), "utf8")); } catch { observed = null; }
@@ -451,7 +494,7 @@ const landedOf = (file: string): string | null => {
 const landed = landedOf(landedFiles[0]!);
 summary.landedContent = scenario === "deadline" ? Object.fromEntries(landedFiles.map((file) => [file, landedOf(file)])) : landed;
 // conflict: the base line first, then A and B in either order, nothing else (a reconciliation leaving markers is refused by Orca).
-checks.landedBytes = scenario === "single" ? landed === "42\n"
+checks.landedBytes = (scenario === "single" || scenario === "estimate") ? landed === "42\n"
   : scenario === "deadline" ? landedFiles.every((file) => landedOf(file) === numberFiles[file])
   : landed !== null && ["base\nA\nB\n", "base\nB\nA\n"].includes(landed);
 checks.onlyTargetChanged = (() => { try { return g(repo, "diff", "--name-only", "main", "refs/heads/orca/g") === [...landedFiles].sort().join("\n"); } catch { return false; } })();
@@ -476,7 +519,7 @@ if (scenario === "deadline") {
   checks.providerCalls = cut !== undefined && ["plan", "execute", "verify"].every((phase) => after.has(phase)) && phasesOf("reconcile").length === 0;
 } else {
   checks.providerCalls = JSON.stringify(phasesOf("worker")) === JSON.stringify(taskIds.flatMap(() => ["execute", "plan", "verify"]).sort())
-    && (scenario === "single" ? phasesOf("reconcile").length === 0 : phasesOf("reconcile").length > 0);
+    && ((scenario === "single" || scenario === "estimate") ? phasesOf("reconcile").length === 0 : phasesOf("reconcile").length > 0);
 }
 if (scenario === "deadline") {
   // The execute the stop was aimed at did not finish: ccloop's own outcome for that call says it was aborted.
@@ -493,9 +536,21 @@ if (scenario === "deadline") {
   const parked = firstRunId === null ? null : readDriverRun(runtime.store, firstRunId) as unknown as { unknown?: { work?: unknown } };
   checks.unknownWorkFalse = parked?.unknown?.work === false;
 }
-checks.everyCallHasUsage = calls.length > 0 && calls.every((call) => call.total !== null && call.total > 0);
+if (scenario === "estimate") {
+  // The usage ccloop reported for the estimate run, as Orca booked it: known, positive, equal to ccloop's last event.
+  const events = estimateBody === null ? [] : runtime.store.db.prepare("SELECT body FROM usage_events WHERE run_id=? ORDER BY seq").all(estimateBody.runId)
+    .map((row) => JSON.parse(String(row.body)) as { bucket: string; cumulative: { tokens: number } | null }).filter((event) => event.bucket === "work");
+  summary.estimateUsage = events;
+  const booked = estimateBody?.cumulative.work.tokens ?? null;
+  checks.estimateUsageBooked = estimateBody !== null && estimateBody.unknown.work === false && booked !== null && booked > 0
+    && events.length > 0 && events.at(-1)!.cumulative?.tokens === booked;
+  // Tools off, as the claude CLI received it (the tee's argv files, the agent's own record).
+  const argvs = existsSync(claudeRaw) ? readdirSync(claudeRaw).filter((name) => name.endsWith(".argv.json")).map((name) => JSON.parse(readFileSync(join(claudeRaw, name), "utf8")) as string[]) : [];
+  checks.estimateToolsOff = argvs.some((argv) => { const i = argv.indexOf("--tools"); return i >= 0 && argv[i + 1] === ""; });
+}
+checks.everyCallHasUsage = calls.filter((call) => call.role !== "estimate").length > 0 && calls.filter((call) => call.role !== "estimate").every((call) => call.total !== null && call.total > 0);
 checks.ledgerKnown = ledger.usageUnknown === false;
-checks.ledgerMatchesCcloop = ledger.used.tokens === ccloopTotal;
+checks.ledgerMatchesCcloop = scenario === "estimate" ? ledger.used.tokens === calls.filter((call) => call.role !== "estimate").reduce((sum, call) => sum + (call.total ?? 0), 0) + (estimateBody?.cumulative.work.tokens ?? 0) : ledger.used.tokens === ccloopTotal;
 checks.orcaHomeUntouched = JSON.stringify(snapshot(orcaHome)) === JSON.stringify(orcaHomeBefore);
 checks.claudeProjectsUntouched = JSON.stringify(claudeProjectsList()) === JSON.stringify(claudeProjectsBefore);
 if (kind === "claude") {
