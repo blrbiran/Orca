@@ -172,3 +172,16 @@ Expected（落地后）：普查只剩 `capabilitySchema.test.ts:21`、`webFault
 
 每处夹具改动的注释：`// Single-call estimate spec §4.4: the injected observation carries ccloop's resolution, which answers singleCallExecution "v1", so this estimate queues exactly as before the single-call gate.`（夹具不是判据，不写 S6；照 Global Constraints 列进台账「夹具改动」）。
 不改的、已核过的：`tests/control/fixtures/ccloopWorld.ts` 的 `startGroup:221`／`agentSelectionE2E.test.ts:75` 断言导入为 `blocked-capability`——真 ccloop 对 codex 答 `singleCallExecution: null`、`contextWindowTokens: null`，结论不变；`estimator.test.ts:36-43` 与 `:68-78` 的退化判据用的是真 router 探测（fixture 答 `"v1"`），只靠 handoff 两条子句拦，不变。
+
+### §3.9 Task O1 完成（Orca）
+
+- 提交：`feat(control): speak start envelope protocol 3 and read ccloop's single-call capability beside the seven keys`（dfe2398，BASE 60b5d58）。
+- 实施席自报：`singleCallWire.test.ts` 4/4；brief 点名的 14 个文件 178/178；typecheck rc=0；真 ccloop E2E（ccloop 0bd781f 在 scratchpad build）9/9、0 skipped；M-O1a–f 六条变异都打红了预言的判据。评审自己复跑 typecheck 与 72 条聚焦判据，并做了 `protocol: 2` 普查，结果与报告一致。
+- S6 改写：§3.8 O1 表里 15 处，全部照表执行。
+- 夹具改动（S6 表之外，只为通过 tsc，不改任何断言；评审逐个读过所在文件的全部断言后确认）：
+  - `tests/control/profiles.test.ts` 两处 resolution 字面量补 `singleCallExecution`；
+  - `tests/panel/controlReadApi.test.ts` 一处；
+  - `tests/panel/fixtures/controlPanel.ts` 一处；
+  - `tests/control/agentPlanImport.test.ts` 只改一处 mock-port 调用点。`answered()` 这个 helper 刻意不动，因为它兼作 FrozenSlot 的相等基线：若给它补上 `singleCallExecution`，一条未点名的既有判据会红；
+  - `roundPeer.ts` 按 kind 收窄。
+- Task O1: complete (commits 60b5d58..dfe2398, review clean)
