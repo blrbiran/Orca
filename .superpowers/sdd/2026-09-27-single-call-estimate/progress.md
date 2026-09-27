@@ -236,3 +236,10 @@ Expected（落地后）：普查只剩 `capabilitySchema.test.ts:21`、`webFault
 - ⚠️ **产品问题，归人**：夹具与 Web 部署都常用「一个 profile 给所有角色」，estimator 要跑就得声明窗口（claude 1M），而 worker 共用同一个 profile，于是 confirm 强制操作者给一个数值 handoff 阈值，没法表达「不按上下文交接」。这是 agent 选择那一轮就有的不变式，本轮只是让它更容易撞上。本轮不改。
 - Task O5: minor (deferred): 计划文件 Part B 那一处 `handoffAtContextTokens: null` 字面量同样过不了 confirm（计划是已提交的文档，由终审或 handoff 记更正）。
 - Task O5: complete (commits 8ed12b8..9553ff3, review clean)
+
+### §3.14 Task O6 完成（Orca web）
+
+- 提交：`feat(web): apply the model's suggestions per field, per row or all at once, and show its reasons`（356ecc0，BASE 2b199a7）。只改了 `web/src/BudgetEditor.tsx` 和一个新判据文件，没有新增 CSS（沿用 `button` 的主题 token）。
+- 实施席自报：`budgetSuggestions.test.tsx` 5/5；相关 web 判据共 33/33；web tsc 干净；`webParity` 3/3；M-O6a–e 都红。
+- Ruling: 新判据有两处与 brief 字面不同，评审认可：① 基线夹具改成带一个 `queued` 估算，因为既有的 Re-estimate 按钮只要有估算就会渲染；② brief 给的判据抓不到 M-O6d，另加一条直接断言，让它能红 — 若错：只影响新判据。
+- Task O6: complete (commits 2b199a7..356ecc0, review clean)
