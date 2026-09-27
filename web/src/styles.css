@@ -1,17 +1,20 @@
 /* Panel UI redesign spec §5.3. Tokens after openclaw ui/src/styles/base.css; accent is the info blue, not coral. */
+/* Dark surfaces step LIGHTER layer by layer (card < elevated < hover < border): the human's visual
+   review found the old ones melting together (border on card 1.08:1). These values are pinned by
+   web/tests/contrast.test.ts -- do not darken a surface or lighten --bg without re-running it. */
 :root {
   color-scheme: dark;
   --bg: #0e1015;
-  --bg-elevated: #191c24;
-  --bg-hover: #1f2330;
-  --card: #161920;
-  --border: #1e2028;
-  --border-strong: #2e3040;
-  --text: #bcbcc0;
-  --text-strong: #f4f4f5;
-  --muted: #8b8b94;
+  --bg-elevated: #1c202b;
+  --bg-hover: #262b3a;
+  --card: #1a1e28;
+  --border: #343a4c;
+  --border-strong: #474e64;
+  --text: #d4d4d8;
+  --text-strong: #fafafa;
+  --muted: #a8a8b3;
   --accent: #60a5fa;
-  --accent-subtle: rgba(96, 165, 250, 0.12);
+  --accent-subtle: rgba(96, 165, 250, 0.22);
   --ok: #22c55e;
   --ok-subtle: rgba(34, 197, 94, 0.08);
   --warn: #f59e0b;
