@@ -6,6 +6,7 @@
 - 路径：architectural（跨 ccloop／Orca，改 start envelope 线协议与 capabilities 应答，驱动环加一个 workKind）
 - 人在对话里逐节认可了 §3–§8 的设计（2026-09-27，每节「同意，继续」），人裁见 §2。
 - 修订（同一会话，人要求审 spec 后，未发布、就地改）：C1 能力位改为解析应答的兄弟字段（§4.4）；I1 守恒式前提进 Task 0（§8.1）；I2 `exact` tokenizer 也数整条 prompt（§4.2）；I3 估算 run 无工作区、清理跳过（§6.2、§6.5）；M1、M2 措辞与零写判据（§1、§8.2）。
+- 修订二（2026-09-28，写计划时两位起草席对真代码核出，控制器依人裁 S8 就地改，未发布）：§4.4 冻结记录「逐字段写」为假（`agentFreeze.ts`、`planImport.ts` 展开整个 resolution）⇒ 加 `frozenSlotOf`；§5.2 另写一条零 `handoff` event；§6.2 A1 按 phase 读 claim、`portFor` 按 phase；§6.3 只比 prompt 哈希；§6.5 恢复对任何状态的估算 run 都会阻塞；Ce 与冻结的竞态；§7「最新估算」按版本；§8.2 能力位判据是新增不是改写、零写判据不做子串扫描。逐条见计划各 Part 开头的 Drafter findings。
 
 ## 1. 要解决的问题
 
@@ -75,7 +76,7 @@ work:
 - ⚠️ **不进七键 `capabilityViewSchema`**（审查 C1）：那个 schema 还嵌在人写的 profile 文件（`declaredCapabilitiesSchema` 由它 `.extend`）、导入／确认时冻结进库的记录（估算槽、`frozenTaskAgentSchema.agentCapabilities`）、下发 web 的 control config 视图里，全是 strict；加键会让旧 profile 文件被拒、现有 store 的冻结记录读回 `recovery-blocked`。S7 只免了 ccloop 的兼容性，不免这些。
 - 所以：ccloop「按 selection 解析」的 capabilities 应答（`{protocol: 3, selection, configHash, timeoutMs, killGraceMs, capabilities}`）加**顶层兄弟字段** `singleCallExecution: "v1" | null`，与 `capabilities` 平级；表视图（`agent: null`）不加。两边的解析应答 schema 同时改（ccloop `command.ts`、Orca `ccloopPort.ts` 的 `agentResolutionSchema`）。
 - **为什么这是长远最优，不只是省事**（人 2026-09-27 要求按全局最优定，并授权必要时手修 store；控制器判定不需要）：解析应答里本来就有两类 agent 事实——七键视图（要与 profile 声明**求交**、确认时冻结进每个任务、参与快照哈希的预算／handoff 契约），与**不求交**的兄弟字段 `timeoutMs`／`killGraceMs`。`singleCallExecution` 属后一类：profile 要不要跑估算已由 `allowedWorkKinds` 含不含 `budget-estimate` 表达，再让 profile 声明它是冗余；放进视图还会让每个任务的冻结记录带一个与任务无关的字段；手修 store 要重算 canonical 哈希链，风险大于收益。反方（「agent 能力都该在视图里，否则是第二条能力通道」）被上面的既有兄弟字段先例推翻。可逆：将来真需要「声明 ∩ 观测」时再迁入视图。
-- Orca 在 `ObservedProfile.resolution` 上读它（探测失败时 `resolution` 为 null ⇒ 视为 null）。冻结记录逐字段显式写，不带它 ⇒ 不改任何持久化 schema。
+- Orca 在 `ObservedProfile.resolution` 上读它（探测失败时 `resolution` 为 null ⇒ 视为 null）。⚠️（修订二更正）今天两处冻结代码**展开整个 resolution**（`agentFreeze.ts`、`planImport.ts`），不是逐字段写 ⇒ 本轮加 `frozenSlotOf(resolution, partial, provenance)` 逐字段构造、两处改用它；`FrozenSlot` 不含 `singleCallExecution` ⇒ 持久化 schema 仍然不改。
 - Orca 估算预检（`buildBudgetEstimateRequest`、`estimateCapabilityDegraded`）多一条：`singleCallExecution` 不是 `"v1"` ⇒ `blocked-capability`（`estimate-blocked-capability`）／claim 时退化（`estimate-capability-degraded`）。今天的 `handoffControl`／`handoffExecution` 两条保留不动。
 - 某个 kind 的 descriptor 只有在「输出上限」与「关工具／只读」两件都能做到时才答 `"v1"`（§8 Task 0 量），否则 `null`。
 
@@ -96,6 +97,7 @@ work:
 5. evidence：成功时写结构化输出的 canonical JSON；总是写调用记录 `ccloop-single-call-record-v1`：`{ promptSha256, responseSchemaSha256, outcome: "complete"|"aborted"|"failed", outputRef, errorCode }`。
 6. candidate：`handoff` ＝ 调用记录；`artifacts` ＝ [输出]（有时）；`result` ＝ `complete`／`partial`（中止）／`failed`；`terminalOutcome` ＝ `single-call-complete`／`single-call-aborted`／`single-call-failed`。
 7. 写已释放的 owner-record（`leaseAffirmedAt: null`），seal ⇒ `proveStopped` 的四个条件都能成立。
+   （修订二）第 3／4 步之外再写一条机械的零 `handoff` usage event（照 loop worker 的写法）：Orca 的 `hasObservedUsage` 与 `completeEstimate` 要 `work` 与 `handoff` 两个 bucket 都已知。
 8. 输出不合 `responseSchema`（adapter 解析失败）⇒ `outcome: "failed"`、无输出 artifact，用量照报。
 
 ### 5.3 handoff
@@ -120,7 +122,7 @@ worker 已有的轮询发现请求 ⇒ abort 这次调用 ⇒ 走 §5.2 第 4 �
 
 | 步 | 做什么 |
 |---|---|
-| A1 | 同一函数：预留 provider attempt、记 `sourceDir`；strict 组照样拒。`estimate-claim` 与 `work-claim` 都是 `attemptReservation: 0`，形状相同。估算 run 的 drive **不带工作区**（`workspacePath` 不建、不清，审查 I3） |
+| A1 | 同一函数：预留 provider attempt、记 `sourceDir`；strict 组照样拒。（修订二）`reserveProviderAttemptInTransaction` 今天写死读 `work-claim` ⇒ 按 phase 读 claim 行（估算读 `estimate-claim`）；`portFor` 今天写死 `"task"` ⇒ 按 phase 选 work kind。`estimate-claim` 与 `work-claim` 都是 `attemptReservation: 0`，形状相同。估算 run 的 drive **不带工作区**（`workspacePath` 不建、不清，审查 I3） |
 | A2e | 建私有 `sourceDir`；拼 prompt（§4.2）；`responseSchema` ＝ `budget-estimate-v1` 的**手写 JSON Schema 常量**；写 `protocol: 3`、`kind: "single-call"` 的 envelope；`prepared = true`。不建工作区、不建分支、不读目标仓库 |
 | B／B′ | `accept`／`inspect` 原样；exit 2 ⇒ blocked |
 | Ce | `collectInto` 原样（验哈希、归档、`recordUsage`）；见停机证明后结算（§6.3） |
@@ -129,7 +131,7 @@ JSON Schema 常量表达不了 `requireSortedUnique`，由 `validateEstimateOutp
 
 ### 6.3 Ce 的结算
 
-1. 读 `candidate.handoff` 的调用记录，`promptSha256`／`responseSchemaSha256` 必须等于 A2e 算出的值，否则 `blockRun("Ce", "single-call-prompt-mismatch")`，不结算。
+1. 读 `candidate.handoff` 的调用记录，`promptSha256` 必须等于 A2e 算出的值（修订二：只比 prompt；`responseSchemaSha256` 是 ccloop 交给 `--json-schema` 的字符串的哈希，只作证据——ccloop accept 时按它自己的 key 排序重写 envelope，两边 canonical 算法不同；被篡改的 schema 也过不了 zod），否则 `blockRun("Ce", "single-call-prompt-mismatch")`，不结算。
 2. `outcome === "complete"` ⇒ `rawOutput` ＝ 输出 artifact 的 JSON；否则 `rawOutput = null`。
 3. `completeEstimate(groupId, estimateId, rawOutput, commitTerminal)`，`commitTerminal` 在同一事务里把 run 置 `settled-restartable`（`estimator.test.ts` 用的形状；「可重启」无实际后果，结算时 `active` 置 0）。合法 ⇒ `ready`，否则 `failed`（§6.4）。
 4. 调用中止且无观测用量 ⇒ `unknown.work` 为真 ⇒ `completeEstimate` 抛 `run-stop-unconfirmed`、事务回滚（`commitTerminal` 一并撤销）⇒ Ce 接住它并 `blockRun("Ce", "estimate-usage-unknown")`，不在每轮重试里空转；估算停 `running`、组 `usageUnknown` 置真。这是 Web spec 对用量未知的既定处理（`tests/control/stopIntent.test.ts` 钉着），估算与普通任务一样。claude 的中止路径有观测用量，通常到不了这里。`completeEstimate` 抛的其他错误照 C 步今天的处理（异常冒出、本轮不推进）。
@@ -150,14 +152,15 @@ JSON Schema 常量表达不了 `requireSortedUnique`，由 `validateEstimateOutp
 
 1. **冻结**：`handoffRunIds` 多收有未结请求的估算 run，交给 `stepH`：`starting`／未 prepared 的 `start-pending` ⇒ 现有 `restartRun`；已 prepared 或 `unknown` ⇒ `inspectUnderStop`；`accepted` ⇒ 投请求给 ccloop、`collectInto` 取观测用量与停机证明。估算 run 的请求**一律以 `settled-restartable` 结算** ⇒ 现有 `terminaliseRun` → `interruptEstimate` 记 `interrupted` 并退回未用承诺。**停机到达时调用恰好已完成、输出也在 ⇒ 仍记 `interrupted`**，输出只作 evidence 留存（Web spec §6；避免 `completeEstimate` 与 handoff 结算抢同一个 run）；人可 Re-estimate。
    ⚠️ 今天的 `restartRun` 与 E 步会对 `drive.workspacePath` 调 `cleanupRunWorkspace(目标仓库, …)`；估算 run 一律跳过（审查 I3），判据量目标仓库 `git worktree list` 前后相同。
+4. **Ce 与冻结的竞态**（修订二）：Ce 在收集期间组被冻结 ⇒ `commitTerminal` 在同一事务里复查未结请求，有就回滚、让给 H（估算记 `interrupted`，与第 1 条一致）。
 2. **关机**：不改。含在飞估算的组照 §6.4 冻结（`tests/panel/shutdownDriverGroup.test.ts` 的 H7 钉着），冻结后由第 1 条接住。
-3. **恢复**：`recoverControl` 在 `driverOwnsWebRuns` 下对估算 run 与 work run 一样跳过，交驱动环逐个对账。Task 0 先量「在飞估算 ⇒ 全局 `dispatchBlocked`」是否为真：真 ⇒ 这条改动有依据；假 ⇒ 只加防回归判据。钉着现行为的既有判据 ⇒ 按 S6 改写。
+3. **恢复**：（修订二）静态读出范围比 §1 说的大：**任何状态**的估算 run（含已完成的）都会被加进 `blocked` ⇒ 只要库里有过估算 run，此后每次重启都全局阻塞。`recoverControl` 在 `driverOwnsWebRuns` 下对估算 run（不论状态）与 work run 一样跳过，交驱动环逐个对账。Task 0 先量「在飞估算 ⇒ 全局 `dispatchBlocked`」是否为真：真 ⇒ 这条改动有依据；假 ⇒ 只加防回归判据。钉着现行为的既有判据 ⇒ 按 S6 改写。
 
 ## 7. 面板「应用建议」
 
 服务端不改：`proposal-edit` 已收 `provenance: "model"` ＋ `estimateId`，`verifyModelField` 逐字段核（估算 `ready`、`planHash` 一致、值等于建议）；组视图已下发估算 `output`。只改 `web/`。
 
-- **显示条件**（缺一条则与今天逐字相同）：proposal `editable`；最新估算 `ready`；`output.planHash === view.plan.planHash`。
+- **显示条件**（缺一条则与今天逐字相同）：proposal `editable`；最新估算（修订二：按 `estimateVersion` 取最大，视图按 id 排序，`at(-1)` 不是最新）`ready`；`output.planHash === view.plan.planHash`。
 - **三种粒度**（Web spec §5.5）：格子下的「use N」（该字段）；每行「Apply row」（该行值不同的字段）；表下「Apply all suggestions」（全部值不同的字段）。都发**一条** `proposal-edit`，每个操作带 `provenance: "model"` 与 `estimateId`；值相同不发；无可发则不显示按钮。
 - 只读的判断依据：每任务的 `complexity`／`confidence`／`rationale`／`assumptions` 与 `groupRationale`，放表下折叠区。
 - 形状：仿 `editedOperations` 的纯函数 `suggestedOperations(view, scope)`（`scope`：field／row／all），只有它决定发哪些操作；组件只渲染与调用。应用不经 drafts；成功后来源显示为 `model est-…`（`provenanceText` 已有）。
@@ -176,9 +179,9 @@ JSON Schema 常量表达不了 `requireSortedUnique`，由 `validateEstimateOutp
 
 - 协议：3 的两种 kind 可解析；2 被拒；多一个字段被拒；`responseSchema` 顶层非 object 被拒；`single-call` 带非 null `inputCheckpoint` 被拒。
 - accept：`singleCallExecution: null` 的 agent 收 `single-call` ⇒ `single-call-unsupported`（exit 2）。
-- worker 分支（都经 `collect` 读回）：成功（输出 artifact、调用记录、usage event、停机证明俱在）；输出不合 schema ⇒ `failed`；handoff 中止有观测 ⇒ `cumulative` 等于观测值；中止无观测 ⇒ `cumulative: null`；零写：调用后 cwd 目录为空、`sourceDir` 的文件清单等于预期清单、envelope 里没有任何仓库路径、不写 attempt ref。
+- worker 分支（都经 `collect` 读回）：成功（输出 artifact、调用记录、usage event、停机证明俱在）；输出不合 schema ⇒ `failed`；handoff 中止有观测 ⇒ `cumulative` 等于观测值；中止无观测 ⇒ `cumulative: null`；零写：调用后 cwd 目录为空、`sourceDir` 的文件清单等于预期清单、`single-call` 的 envelope 没有 `targetRepo`／`base` 字段（修订二：prompt 里的 plan 快照必然含 `repoPath`，不能做子串扫描）、不写 attempt ref。
 - adapter：直接读 runner 实际传给 CLI 的 argv／env（stream-usage 一轮 N7 的做法），确认 schema 来自请求、输出上限与关工具生效。
-- capabilities：解析应答带 `singleCallExecution` 的 `toEqual` 钉死（改写既有的 `command.test.ts` 那条 ⇒ S6）；七键视图不变。
+- capabilities：解析应答带 `singleCallExecution` 的 `toEqual` 钉死（修订二：`command.test.ts` 里没有钉解析应答的 `toEqual`，改为**新增**判据，不用 S6）；七键视图不变。
 
 ### 8.3 Orca 判据
 
