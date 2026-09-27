@@ -562,3 +562,13 @@
 - 本会话付费合计（工具报数）：$0.152572。
 - 更正（控制器自己的）：§16 末条「本会话零付费 CLI 调用」只到 §16 写完为止成立；其后本节的付费验证花了 $0.152572。
 - Orca 全量对 B4 那一笔的 ccloop build 重跑（同一个全新 clone、同一张夹具表，HOME＋四个 XDG 根改道）：220 文件／2003 条全过，0 pending；真实 `~/.orca` 前后 `stat` 相同。web 工作区未重跑：Orca 代码自 §16 那次起没有变。
+
+## §18 切回不节流；ccloop 负载 flake 从根上修（控制器会话 `94b09282`，2026-09-27；接在 §17 之后）
+
+- Human（2026-09-27）：「先不节流，clone 可以删了」；问 flake「这个具体是什么？」，控制器给出 (a) 进名单／(b) 维持／(c) 放宽判据余量三选；Human：「c 同意修改」。
+- 删除：scratchpad 下 `orca-probe`、`ccloop-b`、`ccloop-b3`、`orca-full` 四个 clone。删前逐个用 `test -L` 确认六个 `node_modules` 都是软链；删后三个主树的 `node_modules/.bin` 仍在。
+- **根因更正（控制器自己的）**：对话里曾说这条 flake 是「execute 在 40 ms 交回、离 50 ms 截止只差 10 ms」，**不对**。`runLoop` 不执行恢复窗口，execute 超时后照收结果（`awaitAbortedResult: true`，`src/controller/runLoop.ts`）；`perAttemptTimeoutMs` 同时约束 plan／verify，而它们超时后结果会被丢弃。主树里按错误根因做的第一版改动（execute 100 ms、窗口 300 ms）在提交前推翻。
+- 实测（clone `ccloop-flake`，内容＝HEAD；判据里临时加一行探针打印结局与事件；20 个 `yes` 忙循环，负载均值约 50）：原判据 8 次红 5 次，5 次都是 `loop_exhausted: verify phase exceeded per-attempt timeout of 20ms`（execute 都已 `execution_finished`）。
+- ⚠️ **控制器失手（已处理）**：第一轮负载脚本在 zsh 里用未加引号的 `$pids` 去 kill，zsh 不拆分这个变量 ⇒ `kill` 报 illegal pid，随后的「是否存活」检查也是空检查，报了假的「burners-stopped」。随即按 PID 逐个核对 `ps -o comm=`，20 个都是控制器自己起的 `yes`，逐个 kill，确认 0 存活；它们多烧了大约 1 分钟 CPU。第二轮改用 bash 数组，并逐个 `ps -p` 核对，0 存活。
+- 修复（ccloop 主题行 `test(runLoop): give the recovery-window criterion a per-phase timeout verify can meet under load`）：**人指名改写** `tests/controller/runLoop.integration.test.ts > runLoop > continues normally when execute returns a complete result during the recovery window`：`perAttemptTimeoutMs` 20→1000，execute 延迟 40→1500，窗口 30→2000，测试超时 30 s；断言一字未动。同样负载（负载均值升到约 86）：8／8 绿。变异：runLoop 对 execute 改成丢弃超时结果 ⇒ 红，报 `execute phase exceeded per-attempt timeout of 1000ms`，证明改后仍走「超时照收」这条路。全量（clone，HOME＋四个 XDG 根改道）：85 文件／1005 条，1004 过，唯一红 `stopProof`，`check-known-reds` RC 0。
+- `runLoop.ts` 那段注释里的计数（`perAttemptTimeoutMs: 20,` 出现 13 次）在本笔之前就已经不准：HEAD 现数为 20，本笔之后 19。注释自己写着「这个数会过期，要现数」⇒ 未动注释。

@@ -134,7 +134,7 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 - ⛔ **下一件事（都归人）**：
   1. 发布状态不写在这里：跑 `/usr/bin/git ls-remote` 自查。若两仓都有未推的笔，Orca 的端到端判据是对新 ccloop build 跑绿的（顺序见 §9.0c）。
   2. ✅ B4 已根治（会话 `94b09282`，台账 §17、spec §13.11）：detect 给 claude 的草稿再加 `--settings {"autoMemoryEnabled":false}` 与 `--max-budget-usd 100`；付费验证一次 plan 调用 RC 0、`~/.claude/projects` 没有新条目、$0.152572。两个旧残留目录已删。⚠️ 已有的安装表不会自动带上新参数，要人自己改或重新 `orca agents init`。
-  2b. **切回页面要不要节流**，人未定。每次切回起 1＋N 个 `ccloop control capabilities`，每个解析选择的还会跑一次 agent CLI `--version`；不调模型、不写文件（spec §13.11 末条）。
+  2b. ✅ 切回页面**不节流**（人 2026-09-27「先不节流」）。每次切回起 1＋N 个 `ccloop control capabilities`，每个解析选择的还会跑一次 agent CLI `--version`（spec §13.11 末条）。
   3. 其后可选：更多真 claude 形状（解冲突经 `ccloop run --agents`、`[1m]`、混 kind）；stream-json 逐条 usage（让 claude 下 deadline 中止可续）；opencode／pi／litellm；subagent 级切换。🔴 **codex 周额度已用完：人说可以之前，任何真 codex 都不许跑。**
 - 执行规矩：会话 `43e3e1d8` 那一轮的「授权跑真实 claude」等**不延续**。会话 `94b09282` 只在人授权 B4 付费验证后调用过一次真 claude（$0.152572）。再跑付费 claude、真 codex、改既有判据，都要人重新逐次开口。
 
@@ -898,7 +898,7 @@ Orca 要求排序去重的四值枚举 ⇒ 将来非 null 且写错时 Orca 整�
 - ✅ ~~终审 I-2~~ —— 人裁 (a)，已落地（§4.0）。
 - ✅ ~~审 `Ruling:` 行~~ —— 人 2026-09-27 逐条审完（台账 §13；R1–R30 见 `ruling-review.md`），裁定的已落地（§4.0）。
 - ✅ ~~审改写判据与四个付费轮发现~~ —— 会话 `94b09282` 人已认可 §14／§15 的改写，B1–B3 已落地，B4 已登记（台账 §16、spec §13.10）。仍归人的是 §4.0「下一件事」第 2 条。
-- 🆕 **ccloop 新负载 flake** `runLoop > continues normally when execute returns a complete result during the recovery window` 要不要进名单；Orca `gateCheck` K12 5 s 超时一次（单跑绿）。
+- ✅ ~~ccloop 新负载 flake `runLoop > continues normally when execute returns a complete result during the recovery window`~~ —— 人选「从根上修」，已由 ccloop 主题行 `test(runLoop): give the recovery-window criterion a per-phase timeout verify can meet under load` 修掉：真因是 verify 阶段撞上 20 ms 超时，不是 execute（台账 §18）。Orca `gateCheck` K12 5 s 超时一次（单跑绿）仍只是登记。
 - ✅ ~~真实 `~/.claude/projects/` 下两个空 `memory/` 目录~~ —— 人裁「删」，会话 `94b09282` 已用 `rmdir` 删除；残留的根源已由 ccloop 主题行 `feat(agents): draft claude with auto memory off …` 消除（台账 §17）。
 - 🔴 **真实 `~/.orca/agents.json` 与 `~/.orca/agents.json.draft.json`**（2026-09-26 02:51，写作期变异残留，内容是判据夹具 `"command":["/opt/claude"]`）—— 删不删归人。`orca agents init` 在它们存在时只写草稿、`show` 会读到这张假表。会话 `8c6302e0` 前后多次 `stat`，未被动。
 - 🔴 **推送**：会话 `94b09282` 开工时三仓远端＝本地；该会话往 ccloop 提交了三笔（B2／B3／B1），往 Orca 提交了文档。推送顺序仍是**先 ccloop 后 Orca**：Orca 的端到端判据以新 ccloop build 为准，线上协议形状没变。现在哪些笔在远端，跑 `/usr/bin/git ls-remote` 自查。
