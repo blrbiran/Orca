@@ -143,7 +143,7 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
   - spec §5.4 的 M1–M11：每条都见到了红，还原后 0 字节。O1（D1）在 M1、M7 的 build 上红在 `settled-recoverable`，实际得到 `settled-unrecoverable`。
   - 两仓干净全量门的数字见 §三「现行基线」。
   - 终审员另跑了 11 条变异。其中四处分支删掉没有判据会红，已写进 spec §8.4 挂账。
-- 🔴 *** **诚实的表述（只能这么说）**：只在 **fake claude** 下验证过。**真 claude 下的 deadline 中止一次都没跑过**，那是 spec §6.4 的付费验证，要人单独点头。「claude 可用」「分层选择可用」仍然都不是事实。 ***
+- 🔴 *** **诚实的表述（只能这么说）**：fake claude 下全链路成立（D1）。**真 claude 下跑过一次**（spec §6.4，人授权，n＝1，台账 §3 末尾）：被中止的 execute 报出了中止前观测到的用量（40,176 token），run 可续、组用量已知。**但续跑没有落地**：续跑的 token 额度只剩 90,477，而它用了 128,935，ccloop 判 exhausted。原因是验收脚本默认的 `--task-tokens 150000` 太紧。要证明落地，得加大额度再付费跑一次，要人重新点头。claude 自报花费：三次完成的调用合计 $0.2926374，被中止的那次拿不到。「claude 可用」「分层选择可用」仍然都不是事实。 ***
 - ⚠️ **本轮新的教训**：
   - **被别的门当作 `ORCA_CCLOOP_BIN` 的 clone，不许同时拿来做变异。** 本轮第一次 Orca 全量因此作废：终审员在同一份 clone 里改过 runner，而 runner 是 adapter 从 clone 的 `scripts/` 现读的。
   - **负载高时，单文件也能连红 3 次**（见 §三 的 flake 条）。
@@ -154,7 +154,7 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
      - runner 回包兼容裸 `{structured_output}` 行；
      - Task 5 的「本轮之前 build 应红」窄化为 M1／M7；
      - 四处无红证分支只挂账不修。
-  3. spec §6.4 的付费验证：真 claude 跑一次「执行中途 deadline 中止 → 续跑落地」，n＝1。
+  3. ✅ 七条点名改写已由人认可；spec §6.4 付费验证已按人授权跑过一次（结果见上）。**是否加大 `--task-tokens` 再付费跑一次，证明续跑落地**，归人。
   4. 推送：先 ccloop、再 Orca、再 ccmem。
 - **执行规矩**：上一轮人给的授权**都不延续**。付费 claude、真 codex（周额度人说已 reset，每次仍要人点头）、改既有判据、删用户数据、杀进程，每一次都要人重新开口。本会话**没有付费调用**，没杀任何进程，也没 push。
 - ✅ **更早的一轮（agent 选择）已收口，不要重做**：结论在 §三，过程在台账 `.superpowers/sdd/2026-09-26-agent-selection/progress.md` §13–§20。
