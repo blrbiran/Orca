@@ -85,3 +85,10 @@ SDD ledger — plan: docs/superpowers/plans/2026-09-27-single-call-estimate.md
 - 提交：`feat(control): answer whether an agent can run a single call, and refuse single-call work for one that cannot`（d85776b，BASE 06b6453）。没有改既有判据（未用 S6）。
 - 实施席自报：RED 时 C1、C3 如预言红；GREEN 10 文件／114 条全过；typecheck rc=0；4 条变异在副本里都打红了预言的判据。评审直接读过 `$SCRATCH` 里的 red／green／tsc／mut1 原始输出，与报告一致。
 - Task 2: complete (commits 06b6453..d85776b, review clean)
+
+### §3.5 Task 3 完成（ccloop）
+
+- 提交：`test(claude): let the fake claude CLI answer one tool-less structured call`（05fd82f，BASE d85776b）。没有用 S6。
+- 实施席自报：`fakeClaudeCli.test.ts` 16/16 通过（RED 时新增的 4 条红，既有 12 条保持绿）；typecheck 干净；4 条变异都打红了预言的判据。F3 在 RED 时红成 5000ms 超时，而不是预言的「unknown argument --tools」文字。根因相同（fake 在吐流之前就退出了），只是红的表现形式不同。
+- Task 3: minor (deferred): 两条路径没有判据覆盖：`mode: "ok"` 下 single-call 的默认回答；single-call 找不到脚本条目时的 exit 3。
+- Task 3: complete (commits d85776b..05fd82f, review clean)
