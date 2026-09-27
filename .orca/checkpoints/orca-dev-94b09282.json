@@ -1,0 +1,51 @@
+{
+  "v": 1,
+  "runId": "orca-dev-94b09282",
+  "runtime": "claude-code",
+  "sessionRef": "94b09282-d3a1-428a-aa4c-a9220da8ee60",
+  "writtenAt": "2026-09-27T01:43:45.472Z",
+  "head": "8ef35b1d83f81f1173aad78f8d1ad89a886a9461",
+  "level": {
+    "kind": "reading",
+    "level": 332776,
+    "windowTokens": 1000000,
+    "t1": 330000,
+    "t2": 450000,
+    "band": 1
+  },
+  "next": [
+    "Paid verification (human authorized): one real-claude plan-phase call through ccloop's runner with the command agents detect drafts (isolation args + --settings autoMemoryEnabled false + --max-budget-usd 100), cwd a fresh git repo; confirm RC 0 and no new ~/.claude/projects entry; copy total_cost_usd from the tee'd envelope",
+    "After the human names the three criteria (detect.test lists search directories..., agents command.test prints the detect result..., detectIsolation hands the detected claude...), rewrite them, run ccloop full in a clone, commit, update Orca spec 13.10 / ledger §17 / handoffs"
+  ],
+  "open": [
+    "ccloop working tree: src/agents/claude.ts adds --settings {\"autoMemoryEnabled\":false} and --max-budget-usd 100 to draftCommandArgs (uncommitted)",
+    "Free probes (API unreachable): A0 baseline makes ~/.claude/projects/<cwd>/memory at start-up; A1 CLAUDE_CODE_DISABLE_AUTO_MEMORY=1 and A2 --settings autoMemoryEnabled false make nothing; A0 residue removed",
+    "Human deleted-by-authorization: the two live-claude-{1,2}-target dirs under ~/.claude/projects were rmdir'd"
+  ],
+  "awaitingHuman": [
+    {
+      "kind": "named-authorization",
+      "what": "Rewrite three ccloop criteria that pin detect's full claude command (detect.test.ts lists search directories..., agents/command.test.ts prints the detect result..., detectIsolation.test.ts hands the detected claude...)"
+    },
+    {
+      "kind": "irreversible",
+      "what": "Push: ccloop 4 commits and Orca 1 commit ahead of origin (human times pushes; ccloop before Orca)"
+    }
+  ],
+  "measurements": [
+    {
+      "command": "/usr/bin/git -C /Users/biran/code/skills/loop/ccloop status --porcelain",
+      "exitCode": 0,
+      "commit": "8ef35b1d83f81f1173aad78f8d1ad89a886a9461",
+      "observedAt": "2026-09-27T01:43:45.410Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-94b09282-nBvlmX/1.txt"
+    },
+    {
+      "command": "ls ~/.claude/projects | grep -c scratchpad",
+      "exitCode": 0,
+      "commit": "8ef35b1d83f81f1173aad78f8d1ad89a886a9461",
+      "observedAt": "2026-09-27T01:43:45.423Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-94b09282-nBvlmX/2.txt"
+    }
+  ]
+}
