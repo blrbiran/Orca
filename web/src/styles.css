@@ -151,6 +151,10 @@ th, td { padding: 6px 8px; border-bottom: 1px solid var(--border); }
 .alternatives .why-not { display: block; color: var(--muted); font-size: var(--text-sm); }
 .actions { border-top: 1px solid var(--border); margin-top: 16px; padding-top: 16px; }
 .detail-help { color: var(--muted); font-size: var(--text-xs); margin: 6px 0 14px; }
+.detail-note { color: var(--warn); background: var(--warn-subtle); padding: 6px 10px; border-radius: var(--radius-sm); font-size: var(--text-xs); margin: 0 0 12px; }
+
+/* Task control */
+nav[aria-label="Control groups"] button[aria-current="true"] { background: var(--accent-subtle); border-color: var(--accent); }
 
 /* Metrics (existing MetricsView markup) */
 .section-pane [data-testid$="-rate"], .section-pane [data-testid="panel-coverage-rate"] { font-size: 24px; font-weight: 700; color: var(--text-strong); letter-spacing: -0.03em; }

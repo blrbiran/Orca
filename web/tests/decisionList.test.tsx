@@ -34,6 +34,24 @@ describe("DecisionList (task 8 ruling K6)", () => {
     expect(html).not.toContain("a reasoning value that must never leak into the list");
   });
 
+  // Deferred final-review Minor (human go-ahead, session f8281a60): spec §5.1 says the row's date is
+  // the LOCAL short date, not the UTC one `at.slice(0, 10)` gave. Two zones on either side of UTC,
+  // each picked so the UTC date and the local date differ.
+  it("shows the date in the viewer's own time zone", () => {
+    const before = process.env.TZ;
+    const at = (tz: string, value: string): string => {
+      process.env.TZ = tz;
+      const row = { projectKey: "p", id: "r/1", at: value, kind: "interface", scope: "repo", verdict: "ok", question: "q" } as DecisionListRow;
+      return renderToStaticMarkup(<DecisionList rows={[row]} />);
+    };
+    try {
+      expect(at("Asia/Shanghai", "2026-09-01T20:00:00.000Z")).toContain(">2026-09-02</time>");
+      expect(at("America/Los_Angeles", "2026-09-01T03:00:00.000Z")).toContain(">2026-08-31</time>");
+    } finally {
+      if (before === undefined) delete process.env.TZ; else process.env.TZ = before;
+    }
+  });
+
   /**
    * review finding I-1 / controller ruling R60. A fixed-separator join (the
    * earlier double-colon join) collides on exactly this pair: {projectKey:

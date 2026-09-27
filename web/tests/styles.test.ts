@@ -27,4 +27,10 @@ describe("styles.css", () => {
     const r = rule('label:has(> input[type="radio"]), label:has(> input[type="checkbox"]), .theme-pick');
     expect(r).toContain("flex-direction: row");
   });
+
+  // Deferred final-review Minor (human go-ahead, session f8281a60): the open control group carries
+  // aria-current like the open decision row does, and gets the same selected look.
+  it("marks the open control group the way it marks the open decision", () => {
+    expect(rule('nav[aria-label="Control groups"] button[aria-current="true"]')).toContain("background: var(--accent-subtle)");
+  });
 });

@@ -15,6 +15,11 @@
  * correction. It is now a form: `kind` (every correction kind), `because`
  * (required) and `chose_instead` (optional). The form hands `onCorrect` the
  * boxes as typed; `correctionBody` (web/src/api.ts) decides what is sent.
+ *
+ * *** ERRATUM (2026-09-27, session f8281a60, human ruling U1) ***
+ * The first paragraph is no longer true of `question`: the list row now carries it
+ * (panel UI redesign spec §2). `chose`, `because` and the alternatives are still
+ * withheld from the list and appear only here. Text above kept verbatim.
  */
 import type { JSX } from "react";
 import type { CorrectionForm } from "./api.js";

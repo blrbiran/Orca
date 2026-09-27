@@ -40,6 +40,14 @@ export function rowKey(row: Pick<DecisionListRow, "projectKey" | "id">): string 
 
 export const NO_QUESTION = "(no question recorded)";
 
+/** spec §5.1: the viewer's local date, YYYY-MM-DD; an unparseable `at` shows its own first ten characters. */
+export function localDay(at: string): string {
+  const d = new Date(at);
+  if (Number.isNaN(d.getTime())) return at.slice(0, 10);
+  const pad = (n: number): string => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 export function DecisionList({
   rows,
   selected,
@@ -62,7 +70,7 @@ export function DecisionList({
                 <span className="pill field-scope">{String(row.scope)}</span>
                 {row.verdict !== "ok" && <span className="pill pill-warn field-verdict">{String(row.verdict)}</span>}
                 <span className="row-project field-projectKey">{String(row.projectKey)}</span>
-                <time className="row-at field-at" dateTime={String(row.at)}>{String(row.at).slice(0, 10)}</time>
+                <time className="row-at field-at" dateTime={String(row.at)}>{localDay(String(row.at))}</time>
               </span>
               <span className="row-question">{row.question ?? NO_QUESTION}</span>
               <span className="row-id field-id">{String(row.id)}</span>

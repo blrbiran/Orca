@@ -15,6 +15,9 @@ export interface DecisionFilter {
 }
 export const NO_FILTER: DecisionFilter = { kind: "", scope: "", projectKey: "" };
 
+export const HIDDEN_BY_FILTER = "This decision is hidden by the current filters.";
+export const NOT_IN_LIST = "This decision is no longer in the list: it has been reviewed.";
+
 export function filterRows(rows: readonly DecisionListRow[], filter: DecisionFilter): DecisionListRow[] {
   return rows.filter(
     (r) =>
@@ -62,6 +65,12 @@ export function DecisionsView(props: {
   detail?: ReactNode;
 }): JSX.Element {
   const shown = filterRows(props.rows, props.filter);
+  // A detail stays open after its row leaves the list (filtered away, or reviewed); say which.
+  const same = (r: DecisionListRow): boolean => r.projectKey === props.selected?.projectKey && r.id === props.selected?.id;
+  const note = !props.selected || props.detail == null ? null
+    : !props.rows.some(same) ? NOT_IN_LIST
+    : !shown.some(same) ? HIDDEN_BY_FILTER
+    : null;
   return (
     <div className="decisions">
       <div className="section-head">
@@ -86,7 +95,10 @@ export function DecisionsView(props: {
             <DecisionList rows={shown} selected={props.selected} onOpen={props.onOpen} />
           )}
         </div>
-        <div className="split-detail">{props.detail ?? <p className="empty">Select a decision to read it.</p>}</div>
+        <div className="split-detail">
+          {note !== null && <p className="detail-note" role="note">{note}</p>}
+          {props.detail ?? <p className="empty">Select a decision to read it.</p>}
+        </div>
       </div>
     </div>
   );

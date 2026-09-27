@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { NO_QUESTION } from "../src/DecisionList.js";
-import { DecisionsView, NO_FILTER, filterRows } from "../src/DecisionsView.js";
+import { DecisionsView, HIDDEN_BY_FILTER, NOT_IN_LIST, NO_FILTER, filterRows } from "../src/DecisionsView.js";
 import { DecisionDetail, CORRECT_NOTE, AGREE_HELP } from "../src/DecisionDetail.js";
 import type { DecisionListRow } from "../src/types.js";
 
@@ -68,6 +68,21 @@ describe("DecisionsView (rulings U1, U2; K5's intent)", () => {
     expect(html.match(/aria-current="true"/g)).toHaveLength(1);
     expect(html).toContain("detail-slot");
     expect(html).not.toContain("Select a decision to read it.");
+  });
+
+  // Deferred final-review Minor (human go-ahead, session f8281a60): a detail whose row is not in the
+  // list on the left must say why, or the person reads a decision the list no longer shows them.
+  it("notes when the open decision is hidden by the filters, or no longer in the list at all", () => {
+    const view = (id: string, filter = NO_FILTER): string =>
+      renderToStaticMarkup(<DecisionsView rows={rows} filter={filter} selected={{ projectKey: "proj", id }} detail={<p>detail-slot</p>} />);
+    expect(view("run/2", { ...NO_FILTER, kind: "interface" })).toContain(HIDDEN_BY_FILTER);
+    expect(view("run/9")).toContain(NOT_IN_LIST);
+    const shown = view("run/2");
+    expect(shown).not.toContain(HIDDEN_BY_FILTER);
+    expect(shown).not.toContain(NOT_IN_LIST);
+    // App hands `null` while the detail is still loading: no detail on screen, so nothing to explain.
+    const loading = renderToStaticMarkup(<DecisionsView rows={rows} filter={NO_FILTER} selected={{ projectKey: "proj", id: "run/9" }} detail={null} />);
+    expect(loading).not.toContain(NOT_IN_LIST);
   });
 });
 describe("DecisionDetail's action copy (spec §5.2)", () => {
