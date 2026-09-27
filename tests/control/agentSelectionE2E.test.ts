@@ -100,8 +100,8 @@ async function startConfirmed(runtime: ControlRuntime, raiseTokens = 0): Promise
   expect("error" in started ? started.error : "started").toBe("started");
 }
 
-async function handoffStop(runtime: ControlRuntime): Promise<string[]> {
-  const stopped = await runtime.service.handoffStop(raw(runtime, `stop-${++seq}`, "handoff-stop", {}));
+async function handoffStop(runtime: ControlRuntime, payload: Record<string, unknown> = {}): Promise<string[]> {
+  const stopped = await runtime.service.handoffStop(raw(runtime, `stop-${++seq}`, "handoff-stop", payload));
   if ("error" in stopped || stopped.result.kind !== "handoff-stopped") throw new Error(`handoff-stop refused: ${JSON.stringify(stopped)}`);
   return stopped.result.requestIds;
 }
@@ -299,6 +299,44 @@ describe.skipIf(!realBinary)("agent selection against real ccloop (spec §9 crit
       // worker calls at the worker model; 2 reconciliations (plan, execute) = 4 calls at the reconcile slot's model.
       expect(tally(w.argv("claude").map(modelOf))).toEqual({ "claude-opus-5-5": 15, "claude-fable-5": 4 });
       expect(w.argv("codex")).toEqual([]);
+      expect(await runtime.shutdown()).toBe(true);
+    } finally { await w.teardown(); }
+  });
+
+  // Orca claude stream usage (2026-09-27), spec §5.2 O1: the goal of that round. Under fake claude an execute cut at the
+  // handoff request's deadline (not waited out: the phase sleeps 120 s) reports the usage it streamed, so the run is not
+  // usage-unknown, its checkpoint is continuable and the continuation lands -- as handoffE2E's deadline case under codex.
+  it("D1: under fake claude, an execute cut at the handoff deadline reports its streamed usage and its continuation lands", async () => {
+    const w = await world([{ taskId: "a", targetPaths: ["a1.txt", "a2.txt"] }], {}, { claudeScript: {
+      a: { files: { "a1.txt": "A1\n" }, delayMs: { execute: 120_000 }, usageBeforeDelay: true },
+      "a#continuation": { files: { "a1.txt": "A1\n", "a2.txt": "A2\n" } },
+    } });
+    const runtime = await w.boot(); try {
+      await confirmAgentGroup(runtime, w.repoId, { defaultAgent: "claude", perAgent: {} });
+      await startConfirmed(runtime, 10_000_000);
+      runtime.startPump(50);
+      await inExecute(w, runtime, ["a"]);
+      const [a] = runsOf(runtime, "a");
+      const stoppedAt = Date.now();
+      const [requestId] = await handoffStop(runtime, { handoffDeadlineAt: new Date(stoppedAt + 3_000).toISOString() });
+      await until(() => ["settled-recoverable", "settled-unrecoverable", "outcome-unknown"].includes(requestState(runtime, requestId!)), 120_000, "the request to settle");
+      expect(Date.now() - stoppedAt).toBeLessThan(60_000);
+      expect(requestState(runtime, requestId!)).toBe("settled-recoverable");
+      const parked = readDriverRun(runtime.store, a!.runId) as unknown as Record<string, any>;
+      expect(parked.unknown.work).toBe(false);
+      const workUsage = runtime.store.db.prepare("SELECT body FROM usage_events WHERE run_id=? ORDER BY seq").all(a!.runId)
+        .map((row) => JSON.parse(String(row.body)) as { bucket: string; cumulative: { tokens: number } | null })
+        .filter((event) => event.bucket === "work");
+      expect(workUsage.length).toBeGreaterThanOrEqual(2);
+      expect(workUsage.every((event) => event.cumulative !== null)).toBe(true);
+      expect(workUsage.at(-1)!.cumulative!.tokens).toBeGreaterThan(workUsage[0]!.cumulative!.tokens);
+      expect(readControlGroup(runtime.store, runtime.epoch, "g").ledger.usageUnknown).toBe(false);
+      const selections = panelSelections(runtime);
+      expect(selections.map((selection) => selection.taskId)).toEqual(["a"]);
+      const resumed = await runtime.service.resumeFromHandoff(raw(runtime, `resume-${++seq}`, "resume-from-handoff", { selections }));
+      expect("error" in resumed ? resumed.error : resumed.result.kind).toBe("resumed-from-handoff");
+      await until(() => { noBlocked(runtime); return settledAll(runtime, ["a"]); }, 240_000, "the continuation to land");
+      expect([w.show("a1.txt"), w.show("a2.txt")]).toEqual(["A1", "A2"]);
       expect(await runtime.shutdown()).toBe(true);
     } finally { await w.teardown(); }
   });
