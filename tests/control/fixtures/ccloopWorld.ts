@@ -64,7 +64,9 @@ export interface ScriptEntry { files: Record<string, string>; delayMs?: { plan?:
  * Agent selection (plan T16): a world may also carry ccloop's CLI-level fake claude (tests/fixtures/fake-claude-cli.mjs) as a
  * `claude` installation beside the fake codex, with its own marker and script.
  */
-export interface WorldOptions { claudeScript?: Record<string, ScriptEntry> }
+/** Single-call estimate (F15, ccloop's fake claude): the answer to one single call, optionally after a delay, optionally streaming one closed message first. */
+export interface SingleCallScriptEntry { output: unknown; delayMs?: { "single-call": number }; usageBeforeDelay?: boolean }
+export interface WorldOptions { claudeScript?: Record<string, ScriptEntry | SingleCallScriptEntry>; /** Single-call estimate: the profile's declared context window (null otherwise, so the estimate stays blocked-capability). */ declaredContextWindowTokens?: number }
 
 /** The codex installation's killGraceMs in every world; handoffE2E's G scenario tells it apart from HANDOFF_EXTRA_GRACE_MS alone. */
 export const KILL_GRACE_MS = 5_000;
@@ -131,7 +133,7 @@ export function ccloopWorlds(options: { rootPrefix: string; epochPrefix: string 
     const planPath = join(repo, "plan.json");
     await writeFile(planPath, JSON.stringify({ targetRepo: repo, ccloopBin: realBinary, runsDir: join(root, "unused-runs"), workBranch: "orca/unused", policy: "local-merge", ledgerMode: "out-of-repo", goal: "ship", successConditions: ["the files hold the scripted text"], tasks: planTasks }));
     const snapshot = profileSnapshot();
-    snapshot.profile.capabilities = { ...CCLOOP_CAPABILITIES };
+    snapshot.profile.capabilities = { ...CCLOOP_CAPABILITIES, contextWindowTokens: worldOptions.declaredContextWindowTokens ?? null };
     const profilePath = join(root, "profile.json");
     await writeFile(profilePath, JSON.stringify(snapshot));
     const repoId = controlRepoKey("e2e");
@@ -174,7 +176,7 @@ export function ccloopWorlds(options: { rootPrefix: string; epochPrefix: string 
     const landings = (): number => Number(g(repo, "rev-list", "--first-parent", "--count", "main..refs/heads/orca/g"));
     const show = (path: string): string => g(repo, "show", `refs/heads/orca/g:${path}`);
     const tip = (): string => g(repo, "rev-parse", "refs/heads/orca/g");
-    return { root, repo, repoId, table, agentsTable, boot, die, teardown, calls, scripted, argv, scriptedOf, human, worktrees, landings, show, tip };
+    return { root, repo, repoId, table, agentsTable, boot, die, teardown, calls, scripted, argv, scriptedOf, human, worktrees, landings, show, tip, claudeScriptPath: join(root, "claude-script.json"), claudeMarker };
   }
 
   const removeRoots = async (): Promise<void> => {

@@ -537,12 +537,15 @@ export async function stepCEstimate(deps: ExecutionDriverDeps, runId: string): P
     completeEstimateInStore({ store, admissionGate: deps.admissionGate }, run.groupId, String(run.estimateId), rawOutput, () => {
       if (openRequestOf(store, run) !== null) throw new ControlError("handoff-request-conflict", "estimate-yields-to-handoff");
       const current = readDriverRun(store, runId);
+      // As stepC: the run may have moved while this step awaited ccloop; only an `accepted` run is settled here.
+      if (current.state !== "accepted") throw new ControlError("start-state-conflict", "estimate-run-moved");
       current.state = "settled-restartable";
       saveDriverRun(store, current);
     });
   } catch (error) {
     if (error instanceof ControlError && error.code === "run-stop-unconfirmed") { blockRun(deps, runId, "C", "estimate-usage-unknown"); return true; }
     if (error instanceof ControlError && error.code === "handoff-request-conflict" && error.detail === "estimate-yields-to-handoff") return false;
+    if (error instanceof ControlError && error.code === "start-state-conflict" && error.detail === "estimate-run-moved") return false;
     throw error;
   }
   return true;

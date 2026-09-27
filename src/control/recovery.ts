@@ -1,7 +1,7 @@
 import type { ControlStore } from "./store.js";
 import type { ExecutionPort } from "./executionPort.js";
 import { reconcileStart, deliverSchedulerWakes, type WakeHandlers } from "./dispatch.js";
-import { isWebWorkRun } from "./webDispatch.js";
+import { isEstimateRun, isWebWorkRun } from "./webDispatch.js";
 import { readRun } from "./budget.js";
 import { readCommittedCheckpoint,verifyCandidateArtifacts,repairAcceptedWork } from "./checkpoints.js";
 import { publishPending } from "./projection.js";
@@ -23,8 +23,9 @@ export async function recoverControl(store:ControlStore,port:ExecutionPort,wakes
  }
  for(const row of store.db.prepare("SELECT id FROM runs ORDER BY rowid").all()) {
   const runId=String(row.id);
-  // Execution driver spec §4: with a driver present, a Web work run is the driver's to reconcile, run by run.
-  if(options.driverOwnsWebRuns && isWebWorkRun(store,runId)) continue;
+  // Execution driver spec §4: with a driver present, a Web work run is the driver's to reconcile, run by run -- and so
+  // is an estimate run, in any state (single-call estimate spec §6.5.3; drafter finding F7: it has no start: row).
+  if(options.driverOwnsWebRuns && (isWebWorkRun(store,runId)||isEstimateRun(store,runId))) continue;
   let run=readRun(store,runId);
   try {
    if(run.checkpointId) await verifyCandidateArtifacts(store,await readCommittedCheckpoint(store,runId));

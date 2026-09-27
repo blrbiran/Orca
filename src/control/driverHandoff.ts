@@ -8,7 +8,7 @@ import {
   ADOPTABLE_STATES, handoffRequestFromOutbox, latestRequestForRun, readHandoffRequest, saveHandoffRequest,
   settleCompletedRunRequestInTransaction, settleHandoffRequestInTransaction, type HandoffRequestBody,
 } from "./stopIntent.js";
-import { isWebWorkRun } from "./webDispatch.js";
+import { isEstimateRun, isWebWorkRun } from "./webDispatch.js";
 import { cleanupRunWorkspace, revParse, workBranchRef } from "./workspace.js";
 import { findLanding } from "./driverLanding.js";
 import {
@@ -39,7 +39,7 @@ export function openRequestOf(store: ControlStore, run: Pick<DriverRun, "groupId
   return request !== null && ADOPTABLE_STATES.includes(request.state) ? request : null;
 }
 
-/** spec §13.2 I-2: every Web work run with an open request, whatever its state (blocked and settled included). */
+/** spec §13.2 I-2: every Web work run (and estimate run) with an open request, whatever its state (blocked and settled included). */
 export function handoffRunIds(store: ControlStore): string[] {
   const ids: string[] = [];
   for (const row of store.db.prepare("SELECT DISTINCT run_id FROM handoff_requests ORDER BY run_id").all()) {
@@ -47,7 +47,9 @@ export function handoffRunIds(store: ControlStore): string[] {
     const body = store.db.prepare("SELECT body FROM runs WHERE id=?").get(runId);
     if (!body) continue;
     const run = JSON.parse(String(body.body)) as DriverRun;
-    if (run.phase === "work" && isWebWorkRun(store, runId) && openRequestOf(store, run) !== null) ids.push(runId);
+    // Single-call estimate spec §6.5: an estimate run's request is the driver's to close too.
+    const ours = (run.phase === "work" && isWebWorkRun(store, runId)) || (run.phase === "estimate" && isEstimateRun(store, runId));
+    if (ours && openRequestOf(store, run) !== null) ids.push(runId);
   }
   return ids;
 }
@@ -93,7 +95,7 @@ export async function restartRun(deps: ExecutionDriverDeps, runId: string, reque
   const { store } = deps;
   const run = readDriverRun(store, runId);
   let cleanupError: string | null = null;
-  // Single-call estimate spec §6.2: an estimate run has no workspace (workspacePath null), so there is nothing to remove.
+  // Single-call estimate spec §6.5 (review I3): an estimate run has no workspace; nothing in the target repository is touched.
   if (run.drive !== undefined && run.drive.workspacePath !== null) {
     try { await cleanupRunWorkspace(deps.resolveRepository(groupRepoId(store, run.groupId)), deps.roots, runId, run.drive.workspacePath); }
     catch (error) { cleanupError = describeError(error); }
@@ -170,12 +172,26 @@ async function deliverAndCollect(deps: ExecutionDriverDeps, run: DriverRun, requ
     });
   }
   const report = await collectInto(deps, run);
+  // Single-call estimate spec §6.5: an estimate run's stop always settles restartable -- its estimate is interrupted and
+  // its unused commitment returned (terminaliseRun) -- even when the call had already finished; the output stays as
+  // evidence and a person can re-estimate. Never a checkpoint: there is no work to continue.
+  if (run.phase === "estimate" && report.candidate?.stopProof) return settleEstimateUnderStop(deps, run, request);
   if (report.terminal !== null && report.candidate?.stopProof && run.state === "accepted") return stepC(deps, run.runId);
   if (report.candidate?.stopProof) {
     deps.crash?.("H-after-candidate");
     return settleHandoffCheckpoint(deps, run.runId, request.requestId, report);
   }
   return (await settleIfPastGrace(deps, run, request)) || report.events.length > 0;
+}
+
+/** Single-call estimate spec §6.5: the stop proof of an estimate run's call closes its request restartable, nothing else. */
+function settleEstimateUnderStop(deps: ExecutionDriverDeps, run: DriverRun, request: HandoffRequestBody): boolean {
+  return write(deps, () => {
+    const current = readHandoffRequest(deps.store, run.groupId, request.requestId).request;
+    if (!ADOPTABLE_STATES.includes(current.state)) return false;
+    settleHandoffRequestInTransaction(stopDeps(deps), run.groupId, request.requestId, "settled-restartable", null);
+    return true;
+  });
 }
 
 /**
