@@ -573,3 +573,12 @@
 - 修复（ccloop 主题行 `test(runLoop): give the recovery-window criterion a per-phase timeout verify can meet under load`）：**人指名改写** `tests/controller/runLoop.integration.test.ts > runLoop > continues normally when execute returns a complete result during the recovery window`：`perAttemptTimeoutMs` 20→1000，execute 延迟 40→1500，窗口 30→2000，测试超时 30 s；断言一字未动。同样负载（负载均值升到约 86）：8／8 绿。变异：runLoop 对 execute 改成丢弃超时结果 ⇒ 红，报 `execute phase exceeded per-attempt timeout of 1000ms`，证明改后仍走「超时照收」这条路。全量（clone，HOME＋四个 XDG 根改道）：85 文件／1005 条，1004 过，唯一红 `stopProof`，`check-known-reds` RC 0。
 - `runLoop.ts` 那段注释里的计数（`perAttemptTimeoutMs: 20,` 出现 13 次）在本笔之前就已经不准：HEAD 现数为 20，本笔之后 19。注释自己写着「这个数会过期，要现数」⇒ 未动注释。
 - Human（2026-09-27）：「孤儿进程清掉」。`pgrep -f 'ccloop-agents-version|worker.js'` 列出 5 个，与 handoff 记录逐一对上，PPID 都是 1，都在 2026-09-26 启动：PID 48757／52908／63821 是 `…/T/ccloop-agents-version-*/cli.mjs --version`（materialize 判据的卡死夹具）；PID 22012／96061 是会话 `75ec878e` scratchpad 里 `t5-mut`／`ccloop-w2fix` 的 `dist/src/control/worker.js`。每个 PID 在 kill 前再核一次命令行，发 SIGTERM，5 个都退出，没有用到 SIGKILL；之后 `pgrep` 为 0。
+
+## §19 删除真实 `~/.orca` 下的两个夹具残留（控制器会话 `4d2e426e`，Claude Opus 5.5，2026-09-27；接在 §18 之后；开工观测锚点＝主题行 `docs(handoff): roll 4.0 onto a closed round: rulings landed in ccloop, residues and orphans cleared, what the human still holds`）
+
+- 开工核对（`/usr/bin/git ls-remote origin refs/heads/main` 与本地比）：三仓远端均为本地祖先，本地领先 ccloop 10 笔、Orca 6 笔、ccmem 1 笔；三仓工作区干净。`pgrep -fl "ccloop-agents-version|worker.js"` RC 1（无孤儿进程）。
+- Human（2026-09-27）：「删掉 ~/.orca 那两个夹具残留。同意按你说的方向做」。
+- 删前：`~/.orca/agents.json` 与 `~/.orca/agents.json.draft.json` 各 270 字节、`-rw-------`、mtime 2026-09-26 02:51:24／02:51:29；两份逐字节相同（`cmp`），sha256 `19b70e2b70720a6c0aaeeaaf93e9542f948222849c1d16d94d2852849d7a42de`；内容是判据夹具（`kind: claude`、`command: ["/opt/claude"]`、`version: "2.1.282"`），与 §9.0c 的登记对上。
+- 备份：会话 scratchpad 的 `orca-residue-backup/` 下各一份，sha256 与原件相同（scratchpad 是会话临时目录，不保证长期留存）。
+- 删除：`/bin/rm -f` 只点名这两个文件，RC 0。删后 `/bin/ls -la ~/.orca`：只剩空目录 `control/`（mtime 2026-09-22，未动）；`test -e` 两个文件均为 1（不存在）。
+- 未实测：删表后 `orca agents init` 的行为（按既有记录，表存在时只写草稿；表不存在时应写正式表）。

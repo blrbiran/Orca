@@ -136,7 +136,7 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 - 🔴 *** **fake 下能说的**：分层选择经预览 → 确认 → 冻结 → 派活／闸门／解冲突／handoff／续跑，全程只用确认时冻结的值；两仓全套绿（§三）。 ***
 - 🔴 *** **真 claude 下能说的只有这两件**：①单任务主链跑通过一次（会话 `43e3e1d8`，n＝1，台账 §14）；②`detect` 为 claude 2.1.283 生成的草稿 command 经 runner 跑过一次 plan 阶段，RC 0，`~/.claude/projects` 没有新条目（台账 §17）。**多任务、解冲突、依赖、handoff、`[1m]`、混 kind、面板 HTTP、n＞1 都没跑过 ⇒ 不许说「claude 可用」「分层选择可用」。** ***
 - ⛔ **下一件事（都归人，人开口前别动）**：
-  1. **真实 `~/.orca/agents.json` 与 `.draft.json` 这两个夹具残留删不删**（§9.0c）。⚠️ 人若要用 detect 的新默认参数，已有的安装表不会自动更新：要么自己改，要么删表后重新 `orca agents init`，而表存在时 init 只写草稿。
+  1. ✅ **真实 `~/.orca/agents.json` 与 `.draft.json` 两个夹具残留已删**（2026-09-27，会话 `4d2e426e`，人授权；台账 §19）。现在真实 `~/.orca` 下只剩空的 `control/`，没有安装表 ⇒ 按 `orca agents init` 在表存在时只写草稿的规则，下一次 init 应写正式表（本会话未实测）。⚠️ 别处已有的安装表不会自动带上 detect 的新默认参数。
   2. 可选方向：更多真 claude 形状（解冲突经 `ccloop run --agents`、`[1m]`、混 kind）；stream-json 逐条 usage（让 claude 下 deadline 中止可续）；opencode／pi／litellm；subagent 级切换；老账 `stopProof`／Linux／ccloop M3、M4。
   3. 发布状态：跑 `/usr/bin/git ls-remote` 自查；推送顺序先 ccloop 后 Orca（§9.0c）。
 - **执行规矩**：上一轮人给的授权**都不延续**。付费 claude、真 codex（🔴 **codex 周额度已用完**）、改既有判据（要人逐条点名）、删用户数据、杀进程，每一次都要人重新开口。会话 `94b09282` 的付费合计 $0.152572（工具报数）。
@@ -591,7 +591,7 @@ ccloop 的 I-2 里，spec 第一版把「渲染成 `JSON.stringify`」贴在那�
 
 ### 6.15 agent 选择一轮（2026-09-26，会话 `75ec878e` 与 `ab5a693c`）新栽的
 
-- 🔴 *** **写作期的一条变异往真实 `~/.orca/` 写了文件**（`agents.json`、`agents.json.draft.json`，0600，内容是判据夹具）。根因：计划代码缺省路径用了 `os.homedir()` 而非传入的 `env.HOME`。 *** ⇒ 仓库外路径的缺省值一律从**传入的 env** 推；**计划写作席也会跑变异，禁令要对写作席同样写死**。残留未删（归人，§9.0c）。
+- 🔴 *** **写作期的一条变异往真实 `~/.orca/` 写了文件**（`agents.json`、`agents.json.draft.json`，0600，内容是判据夹具）。根因：计划代码缺省路径用了 `os.homedir()` 而非传入的 `env.HOME`。 *** ⇒ 仓库外路径的缺省值一律从**传入的 env** 推；**计划写作席也会跑变异，禁令要对写作席同样写死**。残留已于 2026-09-27 按人授权删除（会话 `4d2e426e`，台账 §19）。
 - 🔴 *** **并行写计划 ⇒ 后面 Task 的 before 锚点写的是前面 Task 落地之前的代码。** *** 计划复审抓出 8 条 Critical 全是这一类（T3 覆盖 T1、T10 冲掉 T7 的夹具……）。⇒ 不重出计划，改在计划前加一节**权威的复审更正（P1–P23）**，每个派发重申相关条目，并写死「树是真相：增量改、不重建、不重复声明」。
 - 🔴 *** **改写既有判据时用一句套话注释「编码不变」会藏住放宽。** *** T7 的 147 条改写里三条被放宽，复审用「同一变异 BASE 红、HEAD 绿」证实。⇒ 改写注释必须写**这条现在编码什么**；复审对可疑改写跑 BASE vs HEAD 的同一变异。
 - *** **跨仓词表不一致第五、六次**：「isolated」（零注册时空洞成立）、「fake claude」（runner 层 vs CLI 层）；另有**同一错误码两种退出码语义**（`ccloop control` 具名拒绝退 2，`ccloop run --agents` 拒绝退 1）。 *** ⇒ 接新 CLI 形态时逐个问「退出码与 stderr 的约定是不是同一套」。
@@ -910,8 +910,7 @@ Orca 要求排序去重的四值枚举 ⇒ 将来非 null 且写错时 Orca 整�
 
 ### 9.0c agent 选择一轮登记、归人的（2026-09-26／27，会话 `75ec878e`／`ab5a693c`／`8c6302e0`／`43e3e1d8`／`94b09282`）
 
-已由人裁定、已落地的条目（终审 I-2、R1–R30 人审、改写判据人审、付费轮 B1–B4、R29 名单、负载 flake、`~/.claude/projects` 残留、孤儿进程）已从本节删去，结论都在 §4.0 与台账 §11–§18。
-- 🔴 **真实 `~/.orca/agents.json` 与 `~/.orca/agents.json.draft.json`**（2026-09-26 02:51，写作期变异残留，内容是判据夹具 `"command":["/opt/claude"]`）—— 删不删归人。表存在时 `orca agents init` 只写草稿，`show` 会读到这张假表。会话 `94b09282` 前后 `stat` 相同，未动。
+已由人裁定、已落地的条目（终审 I-2、R1–R30 人审、改写判据人审、付费轮 B1–B4、R29 名单、负载 flake、`~/.claude/projects` 残留、孤儿进程、真实 `~/.orca` 下的两个夹具残留）已从本节删去，结论都在 §4.0 与台账 §11–§19。
 - 🔴 **推送**：顺序**先 ccloop 后 Orca**。Orca 的端到端判据是对新 ccloop build 跑绿的；线上协议形状没变。哪些笔已在远端，跑 `/usr/bin/git ls-remote` 自查。
 - **负载型 flake（登记，单跑绿）**：Orca `gateCheck` K12 5 s 超时一次。ccloop `runLoop.integration.test.ts` 里另有 19 条 `perAttemptTimeoutMs: 20,`，其中真要跑 plan／verify 的在重负载下可能同样会红，特征是「… phase exceeded per-attempt timeout of 20ms」（台账 §18）。
 - **变异会留孤儿进程**：做完变异后跑 `pgrep -fl "ccloop-agents-version|worker.js"`，杀进程要人授权。
