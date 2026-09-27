@@ -16,6 +16,11 @@
  * followed by a refetch of the to-do list and metrics. A load failure renders
  * `ErrorPage` with the server's code and message. `Refusal` and `ErrorPage`
  * are pure and carry the criteria (web/tests/outcome.test.tsx).
+ *
+ * *** ERRATUM (2026-09-27, session a50f4d80, rulings U1/U2) ***
+ * PanelHome is gone: the default view is the Decisions pane (DecisionsView), inside Shell.
+ * Every pane stays mounted and only styles.css hides the inactive ones (panel UI redesign
+ * spec §5.1): App-level criteria find Task control's buttons by role from the default pane.
  */
 import { useEffect, useReducer, useRef, useState } from "react";
 import type { JSX } from "react";
@@ -34,7 +39,7 @@ import {
 } from "./api.js";
 import type { PanelRefusal, PostResult, RecordCorrectionInput } from "./api.js";
 import { bannersFor, readDismissed, writeDismissed } from "./chainBanner.js";
-import { ChainPanel } from "./ChainPanel.js";
+import { ChainBanners, ChainPanel } from "./ChainPanel.js";
 import type { ChainOutcome } from "./ChainPanel.js";
 import {
   AGENT_PREFERENCES_PATH,
@@ -68,8 +73,14 @@ import { DecisionDetail } from "./DecisionDetail.js";
 import type { Decision } from "./DecisionDetail.js";
 import { ErrorPage } from "./ErrorPage.js";
 import { DecisionsView, NO_FILTER } from "./DecisionsView.js";
+import type { DecisionFilter } from "./DecisionsView.js";
 import { MetricsView } from "./MetricsView.js";
 import { Refusal } from "./Refusal.js";
+import { DEFAULT_SECTION, sectionFromHash } from "./sections.js";
+import type { Section } from "./sections.js";
+import { SectionPane, Shell, controlAlert } from "./Shell.js";
+import { applyTheme, readTheme, writeTheme } from "./theme.js";
+import type { ThemePref } from "./theme.js";
 import { acceptArrival } from "./selection.js";
 import type { ChainRepoView, DecisionListRow, MetricsReport, PanelCoverage } from "./types.js";
 
@@ -129,6 +140,17 @@ export function App(): JSX.Element {
   const [chains, setChains] = useState<ChainRepoView[] | null>(null);
   const [chainOutcome, setChainOutcome] = useState<ChainOutcome | null>(null);
   const [dismissed, setDismissed] = useState<Set<string>>(() => readDismissed(browserStorage()));
+  // Panel UI redesign spec §5.1: the active section lives in the URL hash; the theme choice in this browser only.
+  const [section, setSection] = useState<Section>(() =>
+    typeof window === "undefined" ? DEFAULT_SECTION : sectionFromHash(window.location.hash),
+  );
+  const [filter, setFilter] = useState<DecisionFilter>(NO_FILTER);
+  const [theme, setTheme] = useState<ThemePref>(() => readTheme(browserStorage()));
+  useEffect(() => {
+    const onHash = (): void => setSection(sectionFromHash(window.location.hash));
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
 
   /** Null while the control plane is not mounted on this panel; then the page shows no control section at all. */
   const [controlConfig, setControlConfig] = useState<ControlConfigV1 | null>(null);
@@ -515,19 +537,76 @@ export function App(): JSX.Element {
   if (error !== null) return <ErrorPage failure={error} />;
   if (home === null) return <main>orca panel loading…</main>;
 
+  const dismiss = (chainId: string): void => {
+    const next = new Set(dismissed);
+    next.add(chainId);
+    setDismissed(next);
+    writeDismissed(browserStorage(), next);
+  };
+  const summary = controlConfig !== null && control.recovery !== null ? summaryView(control) : null;
+  const detail =
+    selected !== null && decision !== null ? (
+      <>
+      <DecisionDetail
+        decision={decision}
+        onAgree={() => {
+          void send(() => recordReview(selected.projectKey, selected.id), "Recorded as reviewed.");
+        }}
+        onCorrect={(form) => {
+          const body = correctionBody({ projectKey: selected.projectKey, decisionId: selected.id }, form);
+          setLastCorrection(body);
+          void send(() => recordCorrection(body), "Correction recorded.");
+        }}
+      />
+      {outcome?.kind === "recorded" && <p role="status">{outcome.text}</p>}
+      {outcome?.kind === "refused" && (
+        <Refusal
+          refusal={outcome.refusal}
+          onRecordAnother={() => {
+            if (lastCorrection === null) return;
+            void send(() => recordCorrection({ ...lastCorrection, again: true }), "Correction recorded.");
+          }}
+        />
+      )}
+      </>
+    ) : null;
+
   return (
-    <main>
+    <Shell
+      active={section}
+      badges={{
+        unreviewed: home.todo.length,
+        chainRunning: chains?.some((r) => r.chain?.state === "running") ?? false,
+        controlAlert: controlAlert(
+          summary === null || controlConfig === null || control.recovery === null
+            ? null
+            : {
+                executionPort: controlConfig.executionPort,
+                resetRequired: summary.resetRequired,
+                refetchRequired: control.refetchRequired,
+                dispatchBlocked: summary.dispatchBlocked || control.recovery.dispatchBlocked,
+                blockers: control.recovery.blockers.length,
+                refusal: control.refusal !== null,
+              },
+        ),
+      }}
+      footer={summary === null ? [] : [`epoch ${summary.epoch}`, summary.dispatchBlocked ? "dispatch blocked" : "dispatch live"]}
+      theme={theme}
+      onTheme={(pref) => {
+        setTheme(pref);
+        writeTheme(browserStorage(), pref);
+        applyTheme(document.documentElement, pref);
+      }}
+      banners={chains !== null ? <ChainBanners banners={bannersFor(chains, dismissed)} onDismiss={dismiss} /> : null}
+    >
+      <SectionPane section="chains" active={section}>
+      {chains === null && <p className="empty">Chains have not loaded.</p>}
       {chains !== null && (
         <ChainPanel
           repos={chains}
-          banners={bannersFor(chains, dismissed)}
+          banners={[]}
           outcome={chainOutcome}
-          onDismiss={(chainId) => {
-            const next = new Set(dismissed);
-            next.add(chainId);
-            setDismissed(next);
-            writeDismissed(browserStorage(), next);
-          }}
+          onDismiss={dismiss}
           onStart={(form) => {
             void chainAction(async () => {
               const r = await requestChainStart(startChainBody(form));
@@ -541,6 +620,11 @@ export function App(): JSX.Element {
             });
           }}
         />
+      )}
+      </SectionPane>
+      <SectionPane section="tasks" active={section}>
+      {(controlConfig === null || control.recovery === null) && (
+        <p className="empty">The task control plane is not available on this panel.</p>
       )}
       {controlConfig !== null && control.recovery !== null && (
         <ControlPanel
@@ -569,33 +653,13 @@ export function App(): JSX.Element {
           agentsFailure={agentsFailure}
         />
       )}
-      <DecisionsView rows={home.todo} filter={NO_FILTER} selected={selected} onOpen={setSelected} />
-      <MetricsView report={home.report} coverage={home.coverage} />
-      {selected !== null && decision !== null && (
-        <>
-          <DecisionDetail
-            decision={decision}
-            onAgree={() => {
-              void send(() => recordReview(selected.projectKey, selected.id), "Recorded as reviewed.");
-            }}
-            onCorrect={(form) => {
-              const body = correctionBody({ projectKey: selected.projectKey, decisionId: selected.id }, form);
-              setLastCorrection(body);
-              void send(() => recordCorrection(body), "Correction recorded.");
-            }}
-          />
-          {outcome?.kind === "recorded" && <p role="status">{outcome.text}</p>}
-          {outcome?.kind === "refused" && (
-            <Refusal
-              refusal={outcome.refusal}
-              onRecordAnother={() => {
-                if (lastCorrection === null) return;
-                void send(() => recordCorrection({ ...lastCorrection, again: true }), "Correction recorded.");
-              }}
-            />
-          )}
-        </>
-      )}
-    </main>
+      </SectionPane>
+      <SectionPane section="decisions" active={section}>
+        <DecisionsView rows={home.todo} filter={filter} onFilter={setFilter} selected={selected} onOpen={setSelected} detail={detail} />
+      </SectionPane>
+      <SectionPane section="metrics" active={section}>
+        <MetricsView report={home.report} coverage={home.coverage} />
+      </SectionPane>
+    </Shell>
   );
 }
