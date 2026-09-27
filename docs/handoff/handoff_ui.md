@@ -126,7 +126,8 @@ U3 主题跟随系统深浅、可手动切；U4 授权改写四条既有判据�
 
 ## 六、第二批：深色对比度 ＋ kind 重要性（分支 `ui/panel-contrast`，会话 `f8281a60`，2026-09-27）
 
-**worktree**：从 main（主题行 `docs(handoff): fold the panel UI redesign's conclusions into handoff.md…` 那一笔）拉的新分支 `ui/panel-contrast`，目录在会话 `f8281a60` 的 scratchpad 下（`git worktree list` 查）。未合并、未 push —— 合并与 push 归人（Tier 0 闸门会拦 agent 的 `git merge` 进 main）。
+**worktree**：从 main（主题行 `docs(handoff): fold the panel UI redesign's conclusions into handoff.md…` 那一笔）拉的新分支 `ui/panel-contrast`，目录在会话 `f8281a60` 的 scratchpad 下（`git worktree list` 查；重启会丢目录，提交不会丢）。
+**状态自查**：`git log --oneline main..ui/panel-contrast` 非空 ⇒ 还没合；为空 ⇒ 已合，本节只剩历史意义。人要求合并，agent 的 `git merge --no-ff` 被 Tier 0 闸门拦下（不重试）⇒ 由人执行（命令见下）。
 
 **人的输入（视觉验收）**：深色模式对比度差，#decisions 尤甚；参考 `/Users/biran/code/skills/writing/md2publish-skills` 的模板；kind 下拉框按重要性排序并带图标／颜色。
 
@@ -148,7 +149,8 @@ U3 主题跟随系统深浅、可手动切；U4 授权改写四条既有判据�
 
 **awaitingHuman**：
 - 对第二批做视觉验收（要看新样式，需要重新 `npm run build --workspace web` 再起面板）。
-- 合并 `ui/panel-contrast` 进 main、push —— 人做。
+- 🔴 合并 `ui/panel-contrast` 进 main、push —— 人做：`cd /Users/biran/code/skills/loop/Orca && git pull --ff-only && git merge --no-ff ui/panel-contrast && git push`。
+  main 在分支之后被别的 agent 推进过（只动 `docs/handoff/handoff.md`），`--ff-only` 不成；只读 `git merge-tree --write-tree main ui/panel-contrast` 无冲突，合并结果的代码与上面全量验过的树相同。另一个 agent 在等这次合并。
 - 真 `~/.orca` 新写入的数据留不留。
 - 未钉住的一处：`contrast.test.ts` 只量深色块；浅色的 `--on-accent`（白字叠 `#2563eb`，约 5.17）没有判据。
 
