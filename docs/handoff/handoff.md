@@ -90,13 +90,20 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 ✅ *** **agent 选择一轮（2026-09-26，会话 `75ec878e` 做 T1–T15、会话 `ab5a693c` 做 T16／T17／终审）做完了。** *** 其后会话 `8c6302e0` 裁了终审 I-2、做了夹具层审计；会话 `43e3e1d8`（2026-09-27）完成人对 R1–R30 的逐条审、落地 R1／R3／R7／R17／R28，并**第一次跑了付费真 claude**。细节与下一步见 §四 4.0。 会话 `94b09282`（同日）让人审完改写判据，并落地了付费轮四个发现的裁定（B1–B3 修，B4 登记）。会话 `4d2e426e`（同日）删了 `~/.orca` 的夹具残留，并付费跑了真 claude 的 `[1m]` 与两任务解冲突（台账 §19／§20）。随后开了 **claude 中止前观测用量（stream-json）** 一轮：会话 `4d2e426e` 落了 Task 1–2，会话 `5b01dbd9` 落了 Task 3–6、终审与修复，**本轮已收口、人已审过，真 claude 下付费跑通一次**，见 §四 4.0。
 
 ✅ *** **面板 UI 重做一轮（2026-09-27，会话 `a50f4d80` 做计划 Task 0–6 与终审修复，会话 `f8281a60` 做人裁后续）已由人 merge 进 main。** *** 细节见 §四 4.0.a。
-🔵 **UI 第二批（深色对比度＋kind 重要性，分支 `ui/panel-contrast`，会话 `f8281a60`）做完、全量验过，等人 merge**（agent 的 `git merge` 进 main 被 Tier 0 闸门拦下）。`git log --oneline main..ui/panel-contrast` 非空 ⇒ 还没合；为空 ⇒ 已合。细节见 §四 4.0.a 末条。
+✅ **UI 第二批（深色对比度＋kind 重要性，会话 `f8281a60`）已由人并入 main**（主题行 `Merge branch 'ui/panel-contrast'`）。细节见 §四 4.0.a 末条。
+
+🆕 *** **⑤ 预算预估链（2026-09-28，会话 `f341f05f`）落地了，终审修复已过，等人审**：配置了 estimator 的 Web 组导入后，估算经 ccloop 新增的 `single-call` 活真的跑一次、结算成 `ready`／`failed`，start 不再被 `estimate-in-flight` 永久挡住；冻结与重启不再因估算 run 卡死；面板能按字段／行／整体应用建议。 *** 细节与诚实的表述见 §四 4.0。
 
 **还不能说的**：*** **「Web 派活可用」「claude 可用」「分层选择可用」都不是事实。** *** 能说的只有：**真 codex 下单任务主链跑通过一次**（2026-09-25，会话 `af3dc0d3`，
 请求模型 gpt-6-luna，服务层不含 HTTP，n＝1；台账 `.superpowers/sdd/2026-09-25-live-acceptance/progress.md` §5 是唯一可引的表述）；**真 claude 下单任务主链跑通过一次**（2026-09-27，会话 `43e3e1d8`，claude 2.1.283、请求模型 claude-opus-5-5、隔离参数、n＝1；台账 `.superpowers/sdd/2026-09-26-agent-selection/progress.md` §14 是唯一可引的表述）；**真 claude 下 1M 窗口单任务、两任务冲突经 `ccloop run --agents` 解开各跑通过一次**（2026-09-27，会话 `4d2e426e`，各 n＝1；同一台账 §20 是唯一可引的表述）。
-依赖、崩溃恢复、面板 HTTP、strict 组、④ handoff、⑤ 预估链、混 kind 都没在真 agent 下验过；冲突／解冲突只在真 claude 下跑过一次（两任务、一处冲突），真 codex 下没跑过。**驱动环只在 port `configured` 时挂；未配置时行为逐字节同前。**
+依赖、崩溃恢复、面板 HTTP、strict 组、④ handoff、⑤ 预估链（single-call 估算）、混 kind 都没在真 agent 下验过；冲突／解冲突只在真 claude 下跑过一次（两任务、一处冲突），真 codex 下没跑过。**驱动环只在 port `configured` 时挂；未配置时行为逐字节同前。**
 
-**Orca 现行基线（会话 `f8281a60`，合并前预演，取代下面 `5b01dbd9` 那一版里的 Orca 一行）**：内容＝只读 `git merge-tree --write-tree main ui/panel-redesign` 的结果树（分支尖端在主题行 `docs(handoff): Minor e landed; …` 那一笔；其后分支上只多了一笔文档）。env 同下，树 `git archive` 进 clone：web build／typecheck／`--ws check`（web 24 文件／134 条）／`verify:panel`（step 0–14 PASS）RC 0；**222 文件／2009 条全过**、0 pending；真 `~/.orca` 前后都不存在。台账 `.superpowers/sdd/2026-09-27-panel-ui-redesign/progress.md` 末节。
+**Orca／ccloop 现行基线（会话 `f341f05f`，2026-09-28，⑤ 一轮收尾；取代下面 `f8281a60` 与 `5b01dbd9` 两版）**：干净 clone，env 同下（夹具表 fake codex `integration`、HOME＋四个 XDG 根改道），`ORCA_CCLOOP_BIN` ＝ ccloop 修复波那一笔（主题行 `fix(control): book a failed single call's observed usage, …`）的 clone build，门跑期间无人在那份 clone 里做变异。
+- ccloop（内容＝同一笔）：build／typecheck RC 0；**1059 条、1057 过、2 红**（`stopProof`＋codexWatchdog 日期 flake），`check-known-reds` **RC 0**。
+- Orca（内容＝主题行 `test(agents): let the embedded fake ccloop answer singleCallExecution beside capabilities` 那一笔）：web build RC 0；**229 文件／2084 条、2083 过、1 红、0 pending**，唯一的红是已登记的负载 flake `driverRecovery`（同一 clone 单跑 3/3 过，load 5.6–8.6）；`estimateE2E` 3 过 0 skipped、`singleCallWire` 4 过 0 skipped；真 `~/.orca` 前后 `stat` 相同。
+- web 套件（148/148）、web tsc、typecheck、`verify:panel`（15/15 PASS）RC 0 是在前一笔（`docs(spec): record what the final review changed …`）的 clone 上跑的；最后一笔只改了 `tests/agents`、`tests/panel` 两类判据文件，不涉及 web 与 panel 构建。原始报数在台账 `.superpowers/sdd/2026-09-27-single-call-estimate/progress.md` §3.18。
+
+**上一版 Orca 基线（会话 `f8281a60`，合并前预演，取代下面 `5b01dbd9` 那一版里的 Orca 一行）**：内容＝只读 `git merge-tree --write-tree main ui/panel-redesign` 的结果树（分支尖端在主题行 `docs(handoff): Minor e landed; …` 那一笔；其后分支上只多了一笔文档）。env 同下，树 `git archive` 进 clone：web build／typecheck／`--ws check`（web 24 文件／134 条）／`verify:panel`（step 0–14 PASS）RC 0；**222 文件／2009 条全过**、0 pending；真 `~/.orca` 前后都不存在。台账 `.superpowers/sdd/2026-09-27-panel-ui-redesign/progress.md` 末节。
 
 **ccloop 现行基线、Orca 上一版基线（会话 `5b01dbd9` 收尾，取代下面 `94b09282` 那一版）**：只抄工具报数，细节在台账 `.superpowers/sdd/2026-09-27-claude-stream-usage/progress.md` §3 末尾。env 同下（夹具表 fake codex `integration`、HOME＋四个 XDG 根改道），两份都是新 clone，门跑期间没有任何一席在里面做变异。
 - ccloop（内容＝主题行 `test(claude): wait for the fake's message to close before aborting, and pin each branch of the line cap` 那一笔）：typecheck／build RC 0；**88 文件／1028 条、1025 过、3 红**，`check-known-reds` **RC 0**（名单 14 个名字；红的是 `stopProof` 和名单内两条负载 flake）。
@@ -129,39 +136,75 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 
 ## 四、⛔ 下一件事
 
-### 4.0 ⛔ 现在的下一件事（2026-09-27 会话 `5b01dbd9` 收尾改写，**本节优先于下面的 4.0.0、4.0.1 与 1–3**）
+### 4.0 ⛔ 现在的下一件事（2026-09-28 会话 `f341f05f` 收尾改写，**本节优先于下面的 4.0.b、4.0.0、4.0.1 与 1–3**）
 
-**没有在飞的工作。claude 中止前观测用量（stream-json）一轮已收口，人已审过；下一轮做什么由人选（见「归人」）。**
+**没有在飞的工作。⑤ 预算预估链一轮已落地、终审修复与复审已过，全部只在本地；等人审（见「归人」）。**
 
-⚠️ **UI 线另有一席（会话 `f8281a60`）**：UI 第二批已在分支 `ui/panel-contrast` 做完，只差人 merge（见 §三、§4.0.a 末条、§9.0d）。会话 `498aae1d` 当时补记的「还在等人确认、尚未开工」已过期（被该分支上主题行 `fix(web): step the dark surfaces lighter…` 起的四笔取代）。**合并前别在 main 上动 `web/src/styles.css`、`DecisionsView.tsx`、`DecisionList.tsx`、`docs/handoff/handoff_ui.md`**，免得冲突。
-
-- **这一轮做成了什么**：claude 阶段被 handoff 请求的 deadline（或 handoff-stop）打断时，ccloop 报的是中止前从 stream 观测到的用量（下界），不再是 `null`。所以 Orca 下这个 run 可续、组不会被置 `usageUnknown`，续跑能落地。正常跑完的阶段记账不变。Orca 没改生产代码，只加了判据 D1 和验收脚本的 `--scenario deadline`。
-- **材料**（要细节就读这些，别从对话推）：
-  - spec `docs/superpowers/specs/2026-09-27-claude-stream-usage-design.md`，**§8「实施期更正」优先**；
-  - 计划 `docs/superpowers/plans/2026-09-27-claude-stream-usage.md`；
-  - 台账 `.superpowers/sdd/2026-09-27-claude-stream-usage/progress.md` §3：全部 `Ruling:`、M1–M11 变异表、两仓干净门、终审与修复、两次付费运行的原始报数，都在这里。
+- **人裁**（spec §2 逐字）：
+  - S1「A 更多真 claude 形状 + B ⑤ 预算预估链」「先做 B，再做 A」⇒ **A 线还没开**；
+  - S2 完整 ⑤；
+  - S3 连「应用建议」一起做；
+  - S4 方案一（估算作为第二种活走 control 生命周期）；
+  - S6「这个session 中如果有需要的话，我授权你改」（改既有判据的一揽子授权）；
+  - S7「ccloop 现在没有发布，暂时不用考虑兼容性」；
+  - S8「问题先按你的建议执行，最后报我审核」「这个session暂时不要考虑context大小」。
+  - ⚠️ S6、S8 **只限那一会话**，不延续。
+- **做成了什么**：
+  - ccloop 新增通用的 `single-call` 活：envelope `protocol: 3`，`work` 分 `loop`／`single-call`；解析应答加兄弟字段 `singleCallExecution`（claude `"v1"`，codex `null`）。
+  - 驱动环按 phase 分流出估算链 A1 → A2e → B／B′ → Ce。Ce 只比 prompt 哈希，然后在同一事务里调 `completeEstimateInStore`。
+  - `failed` 的原因分三种：`estimate-call-failed`／`estimate-output-invalid`／`estimate-output-plan-mismatch`。
+  - 冻结：`handoffRunIds`／`deliverAndCollect` 认估算 run，一律 `settled-restartable` ⇒ 估算 `interrupted`、退回承诺。
+  - 恢复：在 `driverOwnsWebRuns` 下跳过任何状态的估算 run。
+  - 估算 run 没有工作区，不碰目标仓库。
+  - 面板 `suggestedOperations`：use N、Apply row、Apply all，都发 `provenance: "model"`。
+- **实测修掉的三个卡死**（修前都看到红）：
+  - 估算永远 `running` ⇒ start 被 `estimate-in-flight` 拒。E1 的变异实测过：claude 1M 的 estimator 今天就会这样。
+  - 冻结时估算 run 的请求没人接 ⇒ 组停在 `handoff-pending`。
+  - **只要库里有过一个估算 run（含已完成的），每次重启都整库 `dispatchBlocked`**。
+- **材料**：
+  - spec `docs/superpowers/specs/2026-09-27-single-call-estimate-design.md`：**§11「实施期更正」与文件头「修订二」优先**；
+  - 计划 `docs/superpowers/plans/2026-09-27-single-call-estimate.md`：开头两张 Drafter findings 表是起草时对真代码核出的偏差；
+  - 台账 `.superpowers/sdd/2026-09-27-single-call-estimate/progress.md` §3：全部 `Ruling:`、S6 名单（§3.2 ccloop、§3.8 Orca）、夹具改动、终审分诊、两仓门的原始报数。
 - **提交**（按主题行 `git log --grep` 找）：
-  - ccloop 六笔：从 `test(claude): let the fake claude CLI answer stream-json …` 到 `test(claude): wait for the fake's message to close before aborting, and pin each branch of the line cap`。
-  - Orca：`test(control): continue a claude run cut at the handoff deadline, …`（D1）和 `test(control): a live deadline scenario for claude, and read the stream-json envelope the tee now keeps`。
-- **人已拍板（2026-09-27）**：七条点名改写的既有判据（spec §5.3 ＋ §8.2）认可；台账全部 `Ruling:` 认可；两次付费验证授权；推送由人做，agent 不做。
+  - ccloop 六笔：从 `feat(control): carry loop or single-call work in a protocol-3 start envelope` 到 `fix(control): book a failed single call's observed usage, …`。
+  - Orca 九笔代码：
+    - `feat(control): speak start envelope protocol 3 …`
+    - `feat(control): write the v1 estimate instruction and its JSON Schema, …`
+    - `feat(control): drive an estimate run through one ccloop single call …`
+    - `feat(control): stop, restart and recover an estimate run …`
+    - `test(control): an estimate runs end to end under real ccloop and fake claude, …`
+    - `feat(web): apply the model's suggestions per field, per row or all at once, …`
+    - `test(scripts): a live estimate scenario for claude, …`
+    - `fix(control): block an unreadable single-call record by name, …`
+    - `test(agents): let the embedded fake ccloop answer singleCallExecution beside capabilities`
 - 🔴 *** **诚实的表述（只能这么说）**：
-  - fake claude 下全链路成立（D1）。
-  - 真 claude 下付费跑了两次（各 n＝1，单任务，claude 2.1.283，`claude-opus-5-5`）：
-    - **第二次**（`--task-tokens 400000 --group-tokens 800000`）整条链跑通：execute 被中止 → 报出观测用量 → 可续 → 续跑落地，`failed: []`；claude 自报 $0.3371014，被中止的那次花费拿不到。
-    - **第一次**用的是默认额度 150,000，续跑被判 exhausted。
-  - 「claude 可用」「分层选择可用」仍然都不是事实；依赖、混 kind、n＞1 都没跑过。 ***
-- 🔴 **token 额度的口径**：`--task-tokens`（即任务 work 分配的 `tokens` 与 contract 的 `tokenBudget`）是**累计**上限，所有阶段、尝试、续跑都从同一笔里扣。`--group-tokens` 是整组的累计上限。单次调用的上限另有一道：claude 的 `--max-budget-usd`（美元）。**人要求：实际工作设到 1,000,000 以上**，只有测试可以调小。
-- **挂账**（都登记了，没修，人没要求修）：
-  - 以下分支删掉后没有判据会红（spec §8.4）：`setEncoding`、写观测时的 `catch`、`total !== null` 守卫、`outcome.json.observedUsagePath`。
-  - `message_delta` 配对不看 `parent_tool_use_id`（未测量）。
-  - 验收脚本 `--scenario conflict` 用默认额度会在 proposal-edit 报 `group-budget-unavailable`（本轮之前就如此）。
-- **本轮新的教训**：
-  - 被别的门当作 `ORCA_CCLOOP_BIN` 的 clone，不许同时拿来做变异（adapter 从 clone 的 `scripts/` 现读 runner）。
-  - 高负载下单文件也能连红 3 次，所以判 flake 要等负载降下来、并记 `uptime`（§三 flake 条）。
-  - 判据只等「文件存在」就中止，会和分两次写的夹具竞态，要等到真正要断言的那个状态。
-- **归人**：推送（先 ccloop、再 Orca、再 ccmem）；下一轮排什么（更多真 claude 形状、⑤ 预估链、strict 组、上面的挂账，§九）。
+  - fake claude ＋ 真 ccloop build 下，E1／E2／E3 端到端成立：
+    - E1：导入 → 估算 `ready` → 应用一条建议 → confirm → start → 落地；
+    - E2：估算在飞时 handoff-stop → `interrupted` → `handoff-complete`；
+    - E3：估算在飞时重启 → 不全局阻塞。
+  - 验收脚本 `--fake-claude --scenario estimate` 跑绿。
+  - **真 claude 下 single-call 估算一次都没跑过**。`--tools ""` 与 `CLAUDE_CODE_MAX_OUTPUT_TOKENS` 只有静态证据（claude 2.1.283 的 `--help` 与包内字符串）。
+  - 「claude 可用」「分层选择可用」「Web 派活可用」仍然都不是事实。 ***
+- **门**（2026-09-28，干净 clone，env 照 §三）：
+  - ccloop（内容＝修复波那一笔）：build／typecheck RC 0；1059 条、1057 过、2 红（`stopProof`＋codexWatchdog 日期 flake），`check-known-reds` RC 0。
+  - Orca：229 文件／2084 条、2083 过、1 红（已登记负载 flake `driverRecovery`，单跑 3/3 过）；web 148/148；`verify:panel` 15/15（详见 §三「现行基线」）。
+- 🔴 **token 额度的口径未变**：`--task-tokens` 是一个任务所有阶段、尝试、续跑共用的**累计**上限，**实际工作设到 1,000,000 以上**，只有测试可以调小。估算自己的 grant 是 Orca 常量 `ESTIMATE_GRANT`（250k token／900 s），single-call 的超时是 grant 减 10 s。
+- **挂账**（spec §10／§11，没修）：
+  - spawn 失败或出流前退出 ⇒ 用量 null ⇒ 组 `usageUnknown` 卡住；
+  - prompt 作为单个 argv 参数，Linux 上限 128 KiB；
+  - 面板「应用建议」后，同一字段的未保存 draft 仍显示；
+  - loop 阶段超时不带观测用量；
+  - 冻结时已完成的调用照样记 `interrupted`，那次花费白花。
+- **归人**：见 §九 9.0e。
+- **本轮新的教训**：见 §六 6.20。
 - **执行规矩**：授权都不延续。付费 claude、真 codex、改既有判据、删用户数据、杀进程，每一次都要人重新开口。
-- ✅ **更早的一轮（agent 选择）已收口，不要重做**：结论在 §三，过程在台账 `.superpowers/sdd/2026-09-26-agent-selection/progress.md` §13–§20。
+
+### 4.0.b claude 中止前观测用量（stream-json）（2026-09-27 会话 `4d2e426e`／`5b01dbd9`，**人已审过，不要重做**）
+
+- claude 阶段被 handoff deadline 或 handoff-stop 中止时，ccloop 报中止前从 stream 观测到的用量下界，不再报 `null`。于是 run 可续，组不会被置 `usageUnknown`。正常跑完的阶段记账不变。
+- 材料：spec `2026-09-27-claude-stream-usage-design.md`（§8 优先）；台账 `.superpowers/sdd/2026-09-27-claude-stream-usage/progress.md` §3。七条点名改写与全部裁定都已由人认可。
+- 诚实的表述：真 claude 下付费跑了两次（各 n＝1），第二次（`--task-tokens 400000`）整条链跑通，claude 自报 $0.3371014，被中止的那次花费拿不到；第一次用默认 150,000 额度，续跑被判 exhausted。
+- 挂账：`setEncoding`、写观测时的 `catch`、`total !== null` 守卫、`outcome.json.observedUsagePath` 四处删掉后没有判据会红；`message_delta` 配对不看 `parent_tool_use_id`；`--scenario conflict` 用默认额度会报 `group-budget-unavailable`。
 
 ### 4.0.a 面板 UI 重做（2026-09-27 会话 `a50f4d80`／`f8281a60`，**已并入 main，不要重做**）
 
@@ -171,10 +214,10 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 - 🔴 **`orca panel` 的 ready 行一个字节都不能改**（`scripts/verify-panel.ts` 的正则、`tests/panel/endToEnd.test.ts` 钉着，`controlShutdown` 按子串等它）。给人看的「在浏览器打开这个 url」提示写在 **stderr**，stdout 仍只有一行（`tests/panel/readyHint.test.ts`）。`/` 不要 token（服务端注入 `index.html`），只有 `/api/*` 验 `x-orca-token`。
 - **`DecisionListRow.question` 前后端都必填**（`string | null`，读不到台账 ⇒ `null`，列表不失败）；`projectForList` 展开进带类型的字面量，漏写即编译失败。
 - **诚实的表述**：只在数据目录改道的真面板上用 Playwright 看过深浅两套截图；**人的视觉验收还没做**。本轮只换了布局与样式，Chains／Task control 的交互一行没动 —— 要改它们的交互是新一轮，先 brainstorming。
-- **第二批（分支 `ui/panel-contrast`，人视觉验收后提的）**：
+- **第二批（人视觉验收后提的；已由人并入 main，主题行 `Merge branch 'ui/panel-contrast'`）**：
   - 深色 token 逐层往亮里走（卡＜浮层＜hover＜边线），选中行底 22%，正文／次要文字各提亮；`--on-accent` 让深色下 Agree 用深色字（原白字叠浅蓝 2.54:1）。🔴 **这些值被 `web/tests/contrast.test.ts` 钉着**：它读 `styles.css` 深色 `:root` 的 token、按 WCAG 公式算比值（边线／卡 ≥1.4、卡／底 ≥1.12、选中行／卡 ≥1.4、正文 ≥7、次要文字 ≥4.5、按钮字 ≥4.5）。**别往暗里调。**
   - kind 重要性（人裁，只是 UI 序，`KIND_TIER` 仍全 high）：🔴 reconcile、abandon ＞ 🟠 interface、dependency、boundary ＞ 🟡 criteria、scheduling。定义在 `web/src/kindRank.ts`（`Record<DecisionKind, …>`，新 kind 不分档即编译失败）；kind 下拉按档排序、选项文字带 emoji（原生 `<option>` 在 macOS 不认 CSS 颜色）；列表徽章 `data-level` ＋ CSS 色点。
-  - 过程、现测、变异：`docs/handoff/handoff_ui.md` §六（**合并后**才在 main 上可见；合并前在分支上读）。
+  - 过程、现测、变异：`docs/handoff/handoff_ui.md` §六（已在 main 上）。
 
 ### 4.0.0 ④（2026-09-25 会话 `e5f56bfe`，**已做完，不要重做**；原 4.0 的结论保留于此）
 
@@ -694,6 +737,16 @@ ccloop 的 I-2 里，spec 第一版把「渲染成 `JSON.stringify`」贴在那�
 - **main 会在你做分支时被别的 agent 推进**：合并前重新 `git ls-remote`／`merge-base --is-ancestor`，`--ff-only` 不成就只读 `git merge-tree --write-tree` 查冲突；只多了文档的话，分支上的全量结论对合并结果仍然成立。
 - **人手动起面板时，`ORCA_*=…` 单独成行、既没 `export` 也没行尾 `\`，就传不进子进程**，结果写进了真 `~/.orca`（已由人决定删除，挪进了废纸篓）。
 
+
+### 6.20 ⑤ 预算预估链一轮（2026-09-28，会话 `f341f05f`）新栽的
+
+- 🔴 *** **逐 Task 只跑点名的判据文件，会漏掉嵌在别处的同形夹具。** *** 线上应答加了一个必填字段，每个 Task 都绿；干净 clone 的全量门才抓到 `tests/agents/command.test.ts` 里内嵌的假 ccloop 应答缺那个字段（3/3 稳定红）。⇒ **改线上 schema 的轮次，收尾全量门不能省，且门要在最终树上重跑。**
+- 🔴 **两个仓的 canonical JSON 排 key 算法不同**（ccloop `localeCompare`，Orca 按 code unit），**且 ccloop accept 存盘时会按自己的算法重写 envelope** ⇒ 跨仓比对哈希只对「单个字符串」可靠（prompt），对对象不可靠（schema）。
+- 🔴 **spec 里写的「冻结记录逐字段写」是读代码时的想当然**：两处冻结点都是 `{ ...resolution }` 展开。⇒ 声称「不改持久化 schema」之前，数一遍所有写入点，看是展开还是逐字段。
+- **同一个 profile 给所有角色时，一个角色的能力声明会变成另一个角色的约束**：estimator 要声明 1M 窗口 ⇒ worker 同窗口 ⇒ confirm 拒 `handoffAtContextTokens: null`（产品问题，§9.0e）。
+- **计划起草交给两位子代理并行写、控制器合稿时，两边的接口会各自发明**（这次是 fake 的 `delayMs` 形状）⇒ 合稿前先写一份共享接口契约，合稿后逐名对一遍。
+- 被当作 `ORCA_CCLOOP_BIN` 的 clone 不许同时做变异（上一轮的教训，本轮照做无事故）；判 flake 等负载降下来并记 `uptime`（§三）；判据等真正要断言的状态，不等「文件存在」。
+
 ## 七、工具骗法（**每一条都真栽过**）
 
 ### 7.1 rtk（**六种**）
@@ -985,6 +1038,16 @@ Orca 要求排序去重的四值枚举 ⇒ 将来非 null 且写错时 Orca 整�
 - **真 `~/.orca`**：第一次的数据已挪到 `~/.Trash/orca-real-data-2026-09-27`（清不清归人）；**之后又被写了**（`reviews.jsonl` 840B＋`control/`，人在 7777 端口起的面板视觉验收时写的，多半仍是 `ORCA_*` 没 `export`）—— 人的数据，未动。
 - **两个 UI 分支与 worktree 删不删**：`ui/panel-redesign`（已合）、`ui/panel-contrast`（待合），worktree 都在会话 scratchpad 下（`git worktree list`）；`docs/handoff/handoff_ui.md` 合并后要不要删、并回本文 —— 都归人。
 - **控制器替人做的决定**：台账的 `Ruling:` 行（含跳过 `orca level` hook 的 `checkpoint write` —— 本批因此没有 `.orca/checkpoints` 记录）。
+
+### 9.0e ⑤ 预算预估链一轮登记、归人的（2026-09-28，会话 `f341f05f`）
+
+- **审这一轮**：全部 `Ruling:`（台账 §3）；**S6 名单**（ccloop §3.2：13 个测试文件＋helper，只改 envelope 字面量，真正改断言的是 `protocol.test.ts` 的「names unsupported protocol versions…」；Orca §3.8：O1 的 15 处、O2 的 1 处），以及台账列出的「夹具改动」。⚠️ ccloop Rule 15(a) 要逐条指名，S6 是一揽子授权 ⇒ **要人事后逐条认可或回退**。
+- **推送**：ccloop 六笔、Orca 本轮全部提交都只在本地（写本节时现测）。顺序先 ccloop 后 Orca：Orca 这批只发 `protocol: 3`，旧 ccloop 会拒。
+- **付费验证**：`--claude --scenario estimate`（`--task-tokens` ≥1,000,000）从没跑过；`--tools ""` 与输出上限只有静态证据。
+- **产品问题**：一个 profile 给所有角色时，estimator 声明窗口 ⇒ confirm 强制数值 handoff 阈值（无法表达「不按上下文交接」）。
+- **挂账要不要修**：spawn 失败／出流前退出 ⇒ `usageUnknown` 卡组（要先定义「可证明零花费」）；Linux argv 128 KiB；应用建议后 draft 仍显示；loop 阶段超时不带观测用量。
+- **残留**：OS tmp 下 4 个 `ccloop-single-call-*` 目录（变异超时留下）、scratchpad 里的 clone；本会话 `ccloop-bin` 的一个孤儿 `worker.js` 进程（未杀）。删、杀都要人点头。
+- **A 线（更多真 claude 形状：依赖、handoff、混 kind、n＞1）**：人裁 S1 排在 B 之后，还没开。
 
 ### 9.1 G1 缝 A 之后归人的（**2026-09-24 替换上一版「执行前必须由人给的」——那些授权都已给出并用完**）
 

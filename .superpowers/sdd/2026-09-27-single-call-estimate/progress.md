@@ -274,3 +274,46 @@ Expected（落地后）：普查只剩 `capabilitySchema.test.ts:21`、`webFault
   - 修复后仍剩的一个窗口：spawn 失败、或出流之前就退出 ⇒ 用量 null ⇒ 组卡在 usageUnknown。
   - 依据：前三项都不在本轮验收路径上；最后一项是 Web spec 对用量未知的既定语义，要改它就得先定义「可证明零花费」，那是新设计。若错：Linux 部署时估算会 spawn 失败，并卡住组。
 - 终审分诊中标为 keep 的 deferred 项与 Ruling：照单保留。见终审报告：T1、T3、T4×2、T5（请求先于注册）、O2、O3、O4（readFileSync 等）、O5 计划字面量，以及 §3 的全部 Ruling。
+
+### §3.17 终审修复波与复审
+
+- 提交：
+  - ccloop `fix(control): book a failed single call's observed usage, keep output-invalid ahead of a racing stop, and leave a time margin under the grant`（e7c964b）；
+  - Orca `fix(control): block an unreadable single-call record by name, and pin the estimate's final-review criteria`（5b116ce）。
+- 实施席自报：
+  - ccloop 两个 single-call 判据文件 17 过；Orca driverEstimate＋driverEstimateHandoff 18 过；web budgetSuggestions 6 过；全部 0 skipped；
+  - estimateE2E 3 过、0 skipped，ORCA_CCLOOP_BIN 用 e7c964b 的 build；
+  - 三仓 typecheck 干净；C1、C2、C3、M-O4f、O-d、O-e 各自的变异都红。
+- 复审（Sonnet，限定范围）：8 项全部 ADDRESSED，无新破损，没有改写任何既有判据。
+- O-d 前提更正：修复前坏记录并不会每轮抛错。driver 的 pass 级 catch 当轮就把 run block 掉，只是原因写的是原始 zod 文本；这次修复把它改成具名的 `single-call-record-invalid`。终审那句「spins forever」不准确。
+- Final: minor (deferred)：
+  - grant ≤ 10 s 时，调用的超时只剩 1 ms。生产的 `ESTIMATE_GRANT` 是 900 s，不受影响。
+  - W8 的竞态是用 spy 注入的，真 runner 走不到。
+  - loop 阶段超时仍不带观测用量（C1 只改了 single-call）。
+  - `errorCodeOf` 用冒号切分，路径里带冒号时会切错（既有代码）。
+- 变异总表（Ruling）：每个 Task 的 Mutation 行都由实施席在各自的 `git clone --local` 里跑过，看到红，还原为 0 字节 diff。逐条结果在各 `task-*-report.md` 与 `final-fix-report.md`。控制器不再重跑一遍全部 ~60 条，独立证据交给下面两仓的干净门 — 若错：某条变异的「红」只有实施席自报；每个 Task 的评审都读过报告，O1、T2 的评审还直接读过原始输出。
+
+### §3.18 两仓干净门（2026-09-28）
+
+- **ccloop**（Sonnet 门席；clone 内容＝e7c964b，HOME＋四个 XDG 根改道）：
+  - build／typecheck RC 0；
+  - vitest json 1059 条、1057 过、2 红：`stopProof`，以及 codexWatchdog 的日期 flake；
+  - `node scripts/check-known-reds.mjs` **RC 0**（名单 14 个，意外 0）；
+  - 改道后的 HOME 下只有 `~/.npm/_logs`。
+- **Orca 第一次**（门席；clone 内容＝b7ff534）：
+  - web build／typecheck／web tsc RC 0；
+  - 2084 条、2082 过、2 红：
+    - `driverRecovery`：负载 flake，单跑 3/3 过；
+    - **`tests/agents/command.test.ts` >「orca agents show … exits 0」**：3/3 稳定红。根因是测试里内嵌的假 ccloop 应答缺 `singleCallExecution`，属于 O1 的遗漏。
+  - web 148/148；`verify:panel` 15/15 PASS；estimateE2E 3/3、singleCallWire 4/4，均 0 skipped；真 `~/.orca` 前后 stat 相同。
+- **修复**：`test(agents): let the embedded fake ccloop answer singleCallExecution beside capabilities`（18ace7e）。
+  - 同形的还有 `tests/panel/controlConfig.test.ts:52` 与 `controlConfigPort.test.ts:66`（codex ⇒ null），一并补上。只补夹具输入，不改任何断言。
+  - Ruling: 不单独派评审 — 与 O1、O2 已认可的夹具改动同形，改后又在最终树上重跑了全量 — 若错：人审夹具改动时一并看。
+- **Orca 最终树重跑**（控制器；clone 内容＝18ace7e，env 同上，开跑前 uptime 5.69／5.31／6.38）：
+  - web build RC 0；
+  - 229 文件／2084 条、2083 过、1 红（`driverRecovery`），0 pending；
+  - 同一 clone 单跑 `driverRecovery` 3 次，3/3 rc=0（load 5.58–8.58）⇒ 负载 flake；
+  - `tests/agents/command.test.ts` 13/13；estimateE2E 3/3、singleCallWire 4/4，0 skipped；
+  - 真 `~/.orca` stat 前后 diff 为空。
+- 孤儿进程：本会话 `ccloop-bin` clone 的 `worker.js`（pid 66955，E2E 留下），未杀，归人。
+- **本轮收口。** 全部提交只在本地，推送归人。
