@@ -83,23 +83,16 @@ U3 主题跟随系统深浅、可手动切；U4 授权改写四条既有判据�
 
 ## 四、下一步
 
+### 已由人拍板并落地（会话 f8281a60，详情在台账 `## Follow-up (session f8281a60…)`）
+- ready 提示行：写在 **stderr**（`orca-panel: open <url> in a browser …`），stdout 仍只有那一行机读行；判据 `tests/panel/readyHint.test.ts`。🔴 **ready 行本身不能改**：`scripts/verify-panel.ts` 的正则与 `tests/panel/endToEnd.test.ts` 钉着它，`controlShutdown` 按子串等它。提交 `feat(panel): tell the person at the terminal to open the url…`。
+- 真 `~/.orca`（`reviews.jsonl` ＋ `control/orca-e0c92460/`，整个目录只有这两样）已由人同意删除 —— 实际是 `mv` 到 `~/.Trash/orca-real-data-2026-09-27`，可恢复。
+- 延后 Minor a–d 已修（提交 `fix(web): local list dates, a note on a detail whose row left the list…`）：列表日期改为浏览器本地 `YYYY-MM-DD`（`localDay`）；详情区在其行被筛选挡住／已不在列表时显示 `HIDDEN_BY_FILTER`／`NOT_IN_LIST`；Task control 的组按钮有选中样式；`DecisionDetail.tsx` 追加 ERRATUM。
+- 现测（干净 clone，提交 a–d 那一笔，`testenv.sh` 同 §二）：web build／typecheck／`--ws check`（web 24 文件／134 条）／`verify:panel`（step 0–14 PASS）均 RC 0；根 vitest 222 文件／2008 条，红 1 ＝ `controlShutdown` "a real SIGTERM…"（基线红名单内；退出码 143；单文件重跑 3 次 7/7 绿）。真 `~/.orca` 前后都不存在。
+
 ### awaitingHuman（都归人）
-- **视觉验收**，然后决定 `ui/panel-redesign` 何时并入 `main`（`main` 已被别的 agent 推进 ⇒ `--ff-only` 多半不成，rebase 还是 merge 由人定）；合并后本文结论并回 `handoff.md`。
+- **视觉验收**，然后决定 `ui/panel-redesign` 何时并入 `main`。人的原话：**先不合入，在本分支继续做完相关 task，另一个 agent 在 main 上 coding，择机再合**。`main` 已前进 ⇒ `--ff-only` 多半不成，rebase 还是 merge 由人定；合并后本文结论并回 `handoff.md`。
 - 四条被改写的既有判据**尚未人审**（名单在计划 Global Constraints，每条旁有 `REWRITTEN … U1 … U4 … a50f4d80` 注释）。
-- 🔴 **真 `~/.orca` 里现有 `reviews.jsonl`（3 条 `by biran` 的 `opened`，写于 2026-09-27 16:07 本地时间）与 `control/orca-e0c92460/`**：
-  来自人手动起的面板 —— 人的 `local_run.md` 里两行 `ORCA_CORRECTIONS_DIR=…`／`ORCA_CONTROL_DIR=…` 既没 `export` 也没行尾 `\`，没传进 `tsx`。
-  **删不删归人**（Rule 17：不替人处理人的数据）；本批代码没有写过真 `~/.orca`。
-- 可选的小改（人尚未答复）：ready 行之后另加一行人读的提示（「直接在浏览器开这个 url，页面里已带 token」）。**ready 行本身不能改**：`scripts/verify-panel.ts` 的正则与 `tests/panel/endToEnd.test.ts` 钉着它。
-  背景：`/` 不要 token、服务端把 token 注入 `index.html`；只有 `/api/*` 验 `x-orca-token` 头；`?token=` 没人读。
-
-### 终审延后的 Minor（台账 `Final: minor (deferred)` 行，人没拍板前别顺手修）
-- 列表日期是 `at.slice(0,10)`（UTC 日期），spec §5.1 写的是「本地短格式」—— 修代码或改 spec，二选一。
-- `web/src/DecisionDetail.tsx` 头部注释仍说「列表故意不给推理」，缺一条像另外三处那样追加的 ERRATUM。
-- 被筛选挡住或被 Agree 移出列表的已选决策，详情仍在、没有提示。
-- `ControlPanel` 的组按钮有 `aria-current` 却没有选中样式（决策行有）。
-- 上面第三节第 1 条（类型收紧）。
-
----
+- **Minor e：`question` 收紧为必填** —— 人要求先说明理由再定，**未动**。要做需人授权改 `web/tests/appSelection.test.tsx`、`web/tests/selection.test.tsx` 的行字面量（补 `question: null`）。
 
 ## 五、方法论（本批新踩的，下次直接用）
 
