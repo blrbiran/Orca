@@ -185,3 +185,16 @@ Expected（落地后）：普查只剩 `capabilitySchema.test.ts:21`、`webFault
   - `tests/control/agentPlanImport.test.ts` 只改一处 mock-port 调用点。`answered()` 这个 helper 刻意不动，因为它兼作 FrozenSlot 的相等基线：若给它补上 `singleCallExecution`，一条未点名的既有判据会红；
   - `roundPeer.ts` 按 kind 收窄。
 - Task O1: complete (commits 60b5d58..dfe2398, review clean)
+
+### §3.10 Task O2 完成（Orca）
+
+- 提交：`feat(control): write the v1 estimate instruction and its JSON Schema, count the whole prompt, and gate on single-call`（4b5db1f，BASE d04f5dd）。
+- 实施席自报：Step 7 命令 11 文件／160 条全过；typecheck rc=0；M-O2a–j 十条变异都打红了预言的判据。
+- S6 改写：只有一条，`tests/control/estimator.test.ts` > 「freezes exact input formula…」，输入公式现在数整条 prompt（指令＋空行＋请求）。
+- 夹具改动（brief 表之外）：
+  - `tests/control/planImport.test.ts` 的 SIGKILL 子进程脚本：`fixtures/agents.ts` 在模块顶层 import vitest，子进程里加载不了，改为内联一份与 `fixtureResolutionFor` 逐字段相同的字面量；
+  - `tests/panel/fixtures/controlPanel.ts` 默认的 `port.resolveAgent` mock 补 `singleCallExecution`：O1 漏了这一处，O2 的闸一读它，`controlApi.test.ts` 就红了。
+- Ruling: 上面两处夹具改动事后认可 — 按 brief 字面，表外判据红了应该停下报控制器；但这两处都只是补输入、不改任何断言，评审独立核过 — 若错：无行为后果，只是流程上没停。
+- 挂账（O1 残留）：O1 评审漏看了 `controlPanel.ts` 那处 mock，所以 O1 的「夹具改动」清单不全；O2 已补上。
+- Task O2: minor (deferred): `readEstimateContract` 在 O2 没有判据，由 O3 用到。
+- Task O2: complete (commits d04f5dd..4b5db1f, review clean)
