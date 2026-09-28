@@ -563,3 +563,9 @@ Expected（落地后）：普查只剩 `capabilitySchema.test.ts:21`、`webFault
 **登记，没做**：
 - Orca `$TMPDIR` 存量 `orca-*` 删不删，归人。
 - `docs/handoff/.handoff.md.swp`（16 KiB，mtime 2026-09-28 19:54）在 Orca 主树里未跟踪，查时没有 vim 进程在跑。不是本会话建的，没动。
+
+### §3.25 删 Orca `$TMPDIR` 存量（会话 `2724716d`，2026-09-28；本节只追加，上文一字未改）
+
+- 人的授权（原话）：「Orca 的 $TMPDIR 存量删不删 => 删」。同一条回复里人说 `docs/handoff/.handoff.md.swp` 是他退出 vim 前留下的；现测该文件已不存在。
+- 删前现测：真 `$TMPDIR` 下 `orca-*` 93,963 个，10 分钟内被改过的 0 个。有一个人开着的 `orca panel`（端口 7777）在跑，`lsof` 显示它在 `$TMPDIR` 下只打开了 `tsx-501/<pid>.pipe`，不在清单里。清单在本会话 scratchpad 的 `delete-orca.txt`。
+- 结果：删 93,963、失败 0、残留 0；删后 `orca-*` 为 0，`$TMPDIR` 共 1,692 个条目；那个 panel 删后仍在运行。
