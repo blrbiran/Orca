@@ -98,6 +98,8 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 请求模型 gpt-6-luna，服务层不含 HTTP，n＝1；台账 `.superpowers/sdd/2026-09-25-live-acceptance/progress.md` §5 是唯一可引的表述）；**真 claude 下单任务主链跑通过一次**（2026-09-27，会话 `43e3e1d8`，claude 2.1.283、请求模型 claude-opus-5-5、隔离参数、n＝1；台账 `.superpowers/sdd/2026-09-26-agent-selection/progress.md` §14 是唯一可引的表述）；**真 claude 下 1M 窗口单任务、两任务冲突经 `ccloop run --agents` 解开各跑通过一次**（2026-09-27，会话 `4d2e426e`，各 n＝1；同一台账 §20 是唯一可引的表述）。
 依赖、崩溃恢复、面板 HTTP、strict 组、④ handoff、⑤ 预估链（single-call 估算）、混 kind 都没在真 agent 下验过；冲突／解冲突只在真 claude 下跑过一次（两任务、一处冲突），真 codex 下没跑过。**驱动环只在 port `configured` 时挂；未配置时行为逐字节同前。**
 
+**最近一次全量（会话 `fa672d9e`，2026-09-28，变异对照组 M0）**：干净 clone，内容＝主题行 `docs(handoff): the estimate round is pushed; stop saying it is local only` 那一笔；env 同下；2084 条，2083 过，1 红（已登记 flake `controlShutdown`），0 pending。之后两笔只动注释、台账和本文。
+
 **Orca／ccloop 现行基线（会话 `f341f05f`，2026-09-28，⑤ 一轮收尾；取代下面 `f8281a60` 与 `5b01dbd9` 两版）**：干净 clone，env 同下（夹具表 fake codex `integration`、HOME＋四个 XDG 根改道），`ORCA_CCLOOP_BIN` ＝ ccloop 修复波那一笔（主题行 `fix(control): book a failed single call's observed usage, …`）的 clone build，门跑期间无人在那份 clone 里做变异。
 - ccloop（内容＝同一笔）：build／typecheck RC 0；**1059 条、1057 过、2 红**（`stopProof`＋codexWatchdog 日期 flake），`check-known-reds` **RC 0**。
 - Orca（内容＝主题行 `test(agents): let the embedded fake ccloop answer singleCallExecution beside capabilities` 那一笔）：web build RC 0；**229 文件／2084 条、2083 过、1 红、0 pending**，唯一的红是已登记的负载 flake `driverRecovery`（同一 clone 单跑 3/3 过，load 5.6–8.6）；`estimateE2E` 3 过 0 skipped、`singleCallWire` 4 过 0 skipped；真 `~/.orca` 前后 `stat` 相同。
@@ -195,6 +197,13 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
   - 面板「应用建议」后，同一字段的未保存 draft 仍显示；
   - loop 阶段超时不带观测用量；
   - 冻结时已完成的调用照样记 `interrupted`，那次花费白花。
+- **人审准备（2026-09-28 会话 `fa672d9e`，人已授权）**：
+  - 已发布的归属注释被 `dfe2398` 就地替换 ⇒ 已逐字还原（主题行 `test(control): put back the published agent-selection ruling comments …`）；
+  - 两个错数已更正（台账 §3.19）；
+  - `dfe2398` 漏登记的 6 个夹具文件已补登（§3.19）；
+  - 夹具默认 `"v1"` **不是空绿**：4 条变异全量量过（§3.20）。但两处 v1 闸门**只有一条判据守着**；
+  - 5 处 doc 注释随代码改写：4 处保留，`schema.ts` 补回了 spec 指针（§3.20）。
+  - **人审清单已按编号 1–27 在会话里交给人**。编号到条目的对照见 §9.0e，人回复「认可/回退 N」时按那张表找。
 - **归人**：见 §九 9.0e。
 - **本轮新的教训**：见 §六 6.20。
 - **执行规矩**：授权都不延续。付费 claude、真 codex、改既有判据、删用户数据、杀进程，每一次都要人重新开口。
@@ -745,6 +754,8 @@ ccloop 的 I-2 里，spec 第一版把「渲染成 `JSON.stringify`」贴在那�
 - 🔴 **spec 里写的「冻结记录逐字段写」是读代码时的想当然**：两处冻结点都是 `{ ...resolution }` 展开。⇒ 声称「不改持久化 schema」之前，数一遍所有写入点，看是展开还是逐字段。
 - **同一个 profile 给所有角色时，一个角色的能力声明会变成另一个角色的约束**：estimator 要声明 1M 窗口 ⇒ worker 同窗口 ⇒ confirm 拒 `handoffAtContextTokens: null`（产品问题，§9.0e）。
 - **计划起草交给两位子代理并行写、控制器合稿时，两边的接口会各自发明**（这次是 fake 的 `delayMs` 形状）⇒ 合稿前先写一份共享接口契约，合稿后逐名对一遍。
+- 🔴 *** **（会话 `fa672d9e` 核出）一揽子授权（S6）下改写判据时，实施席把上一轮已发布的归属注释整行替换掉了**，台账和评审都没发现。 *** ⇒ 验收改写类提交时，用 python 扫一遍 diff 里被删的注释行，逐行查它在远端 main 上是否存在；存在的就只许追加，不许替换。ccloop 那一侧做对了（保留原文加 ERRATUM），可以直接抄。
+- **量「夹具默认值会不会造成空绿」要两个方向一起量**：①删掉闸门，看有没有判据红（证明闸门有守卫）；②把夹具默认值翻转，看有没有判据红（证明默认值承重）。只做一个方向，另一个方向的空绿仍然可能存在（§3.20）。
 - 被当作 `ORCA_CCLOOP_BIN` 的 clone 不许同时做变异（上一轮的教训，本轮照做无事故）；判 flake 等负载降下来并记 `uptime`（§三）；判据等真正要断言的状态，不等「文件存在」。
 
 ## 七、工具骗法（**每一条都真栽过**）
@@ -1041,13 +1052,47 @@ Orca 要求排序去重的四值枚举 ⇒ 将来非 null 且写错时 Orca 整�
 
 ### 9.0e ⑤ 预算预估链一轮登记、归人的（2026-09-28，会话 `f341f05f`）
 
-- **审这一轮**：全部 `Ruling:`（台账 §3）；**S6 名单**（ccloop §3.2：12 个测试文件加 helper `agentsFixture.ts`，只改 envelope 字面量，真正改断言的是 `protocol.test.ts` 的「names unsupported protocol versions…」；Orca §3.8：O1 表 17 行、O2 的 1 处），以及台账列出的「夹具改动」（§3.19 补了 `dfe2398` 漏登记的 6 个夹具文件，其中 fake ccloop 替身的行为变了）。已发布的归属注释被就地替换那件事已还原（台账 §3.19）；源码 doc 注释随代码改写的 5 处算不算违规，归人裁。⚠️ ccloop Rule 15(a) 要逐条指名，S6 是一揽子授权 ⇒ **要人事后逐条认可或回退**。
+- **审这一轮**：全部 `Ruling:`（台账 §3）；**S6 名单**（ccloop §3.2：12 个测试文件加 helper `agentsFixture.ts`，只改 envelope 字面量，真正改断言的是 `protocol.test.ts` 的「names unsupported protocol versions…」；Orca §3.8：O1 表 17 行、O2 的 1 处），以及台账列出的「夹具改动」（§3.19 补了 `dfe2398` 漏登记的 6 个夹具文件，其中 fake ccloop 替身的行为变了）。已发布的归属注释被就地替换那件事已还原（台账 §3.19）；源码 doc 注释随代码改写的 5 处已由控制器按仓库先例裁定：4 处保留，`schema.ts` 补回指针（§3.20）。⚠️ ccloop Rule 15(a) 要逐条指名，S6 是一揽子授权 ⇒ **要人事后逐条认可或回退**。
 - ~~推送~~：人已在 2026-09-28 推了三个仓（会话 `fa672d9e` 用 `ls-remote` 现测，远端等于那一会话开工时的本地 HEAD）。之后的新笔以现跑 `ls-remote` 为准。⚠️ 这批笔里的注释从此是**已发布文本**，只能追加具名更正。
 - **付费验证**：`--claude --scenario estimate`（`--task-tokens` ≥1,000,000）从没跑过；`--tools ""` 与输出上限只有静态证据。
 - **产品问题**：一个 profile 给所有角色时，estimator 声明窗口 ⇒ confirm 强制数值 handoff 阈值（无法表达「不按上下文交接」）。
 - **挂账要不要修**：spawn 失败／出流前退出 ⇒ `usageUnknown` 卡组（要先定义「可证明零花费」）；Linux argv 128 KiB；应用建议后 draft 仍显示；loop 阶段超时不带观测用量。
 - **残留**：OS tmp 下 4 个 `ccloop-single-call-*` 目录（变异超时留下）、scratchpad 里的 clone；删都要人点头。（孤儿 `worker.js` 已由人授权杀掉，2026-09-28 会话 `fa672d9e`。）
 - **A 线（更多真 claude 形状：依赖、handoff、混 kind、n＞1）**：人裁 S1 排在 B 之后，还没开。
+- **人审清单编号表**（会话 `fa672d9e` 交给人；人回「认可/回退 N」时按此对照；细节在台账 §3.2／§3.8／§3.19／§3.20）：
+  - **A1 ccloop S6（`06b6453`）**
+    - 1：`protocol.test.ts`「names unsupported protocol versions…」改成拒 1、2、4（唯一改了断言的一条）；
+    - 2：其余 12 个文件只改 envelope 字面量，含 helper `agentsFixture.ts`。
+  - **A2 Orca S6**
+    - 3：`startEnvelope`「copies the claim…」；
+    - 4：`ccloopPort`「asks capabilities about exactly…」末尾加 `singleCallExecution: null`；
+    - 5：`webCcloopSmoke`，V2→V3，外来版本 1→2；
+    - 6：`estimator`「freezes exact input formula…」改为数整条 prompt（`4b5db1f`）；
+    - 7：其余 11 个文件只改字面量或做类型收窄。
+  - **B 夹具改动**
+    - 8：台账原有登记的夹具（`dfe2398`／`4b5db1f`／`18ace7e`）；
+    - 9：§3.19 补登的 6 个，含 fake ccloop 替身的行为变化。
+  - **D Ruling**
+    - 10：claude `"v1"`、codex null；
+    - 11：直接在 main 上落提交；
+    - 12：F10 只比 prompt 哈希；
+    - 13：归属行写实施席自己的模型、不 amend；
+    - 14：ccloop W1 判据读 argv；
+    - 15：O2 两处表外夹具事后认可；
+    - 16：`restartRun` 无工作区就跳过清理；
+    - 17：`confirmSoft` 与验收脚本回显窗口；
+    - 18：`providerCalls` 三元式；
+    - 19：O6 新判据两处与 brief 不同；
+    - 20：修复波 C1–C3、O-a–O-e；
+    - 21：终审登记不修的 4 项；
+    - 22：约 60 条变异没有重跑；
+    - 23：`18ace7e` 不单独派评审。
+  - **E 开放问题**
+    - 24：两处 v1 闸门要不要补第二条独立判据（现在只有 `estimatePrompt.test.ts`「is blocked-capability unless … v1 …」一条）；
+    - 25：单 profile 下 confirm 强制数值阈值的产品问题；
+    - 26：挂账修哪几条；
+    - 27：OS tmp 下 4 个 `ccloop-single-call-*` 目录，以及会话 `f341f05f`、`fa672d9e` scratchpad 里的 clone，删不删。
+  - ⚠️ 人回「回退」某条时，回退对象按台账 §3 对应的 Ruling 行或 S6 表找；**回退动的是已发布的笔，只能追加新提交，不能改写历史**。
 
 ### 9.1 G1 缝 A 之后归人的（**2026-09-24 替换上一版「执行前必须由人给的」——那些授权都已给出并用完**）
 
