@@ -489,3 +489,173 @@ Orca 作为消费方引入；**Orca 自己的 Web 协议留在 Orca**。
 | 中期第 9 项「按 G5 的裁决选 (i) 或 (ii)」 | **选 (i)** ⇒ 中期多一项：**syncskill 的三件实施**，它是本轮唯一新增的跨仓工作量 |
 
 **§6「明确不做」不受这六条影响，一条未变。**
+
+---
+
+## 9. 对齐：做了什么、离本文多远（2026-09-28，会话 `292277d5`）
+
+> **归属**：会话 `292277d5`（Claude Code 交互会话）；2026-09-28；观测锚点＝主题行
+> `docs(handoff): record the review preparation, the numbered checklist the human answers against, and two lessons` 那一笔。
+> 下表每一格都用 python 扫过 `src/`、`web/src/`、`scripts/` 现测，**引用前请再测**。本节不改上文。
+
+### 9.1 本文 §4 分期的现状
+
+| 本文条目 | 现状 | 差距 |
+|---|---|---|
+| 近期 1：`targetVersion` 那条缝 | ✅ G1 缝 B 做完（2026-09-25）：正安全整数，ccloop 定型 | — |
+| 近期 2：ccloop 补 capability 字段 | ✅ 缝 A 做完（v2 八字段），之后协议又升到 3，加了 `singleCallExecution` | — |
+| 近期 4 的终点：「Web 派活到真 ccloop 能开出一个 run」 | 🟡 **部分**：真 codex、真 claude 的单任务主链各跑通过一次（n＝1），但走的是服务层，**没经过 HTTP** | 面板 HTTP 这条路没在真 agent 下跑过 |
+| §3.9 的「ccloop 走 npm 依赖锁版本」 | ❌ 没变。`package.json` 的 `dependencies` 仍然只有 `express`、`zod`，执行端仍然靠 `ORCA_CCLOOP_BIN` | 仍然是已知缺口 |
+| 中期 5：§3.3 loop 方案层 | ❌ **零代码**。`planFile.ts:159` 仍是 `autonomyLevel: z.literal("L2")` | 整层没开 |
+| 中期 6：§3.4 看板 | 🟡 面板重做完了（`web/src/sections.ts`：decisions／chains／tasks／metrics），tasks 有「needs attention」红点 | **G4 完成度（完成数／总数，外加 attempt n/max）没做**；依赖关系图没画；git 方案没显示 |
+| 中期 7：§3.2 给 agent 的接口（HTTP／MCP） | ❌ 零代码。面板有 `/api/control`，但那是面板自用的，不是面向 agent 的接口 | 整条没开 |
+| 中期 8：§3.5 litellm | ❌ 零代码（全树 0 命中） | — |
+| 中期 9：§3.6 syncskill（G5 选了 (i)） | ❌ 零代码，syncskill 那一轮也没开 | — |
+| 远期 10：§3.7 A2A 只读状态外壳（G6） | ❌ 零代码 | — |
+
+### 9.2 做了、但本文没写的（都来自 spec `2026-09-19-web-recoverable-control-design.md` 这条线）
+
+执行驱动；④ handoff 投递、续跑、N 路并行；agent 选择（claude／codex，分层偏好）；claude 中止前观测用量；⑤ 预算预估链（single-call 估算和「应用建议」）。
+它们都属于北极星里「**掰得回来**」和「成本只报工具给出的数」这两条。**本文目标树里没有这个能力域，§10 N0 补上。**
+
+### 9.3 一句话结论
+
+**过去一周的投入几乎都花在控制面的可靠性上**（能停、能续、能记账、能估算）。本文目标树的中期能力一项都还没开。
+而人新提的使用方式（§10 N1）要求的「需求 → 拆分」这一段，**目前完全没有**：Orca 今天吃的是人手写的 plan 文件（`src/scheduler/planFile.ts`），自己只做依赖和写集的校验。
+
+---
+
+## 10. 新诉求（2026-09-28 人提出，同日人裁，裁决见 §10.2）
+
+> **归属**同 §9。每条格式：人原话要点 → 控制器的建议 → 判定（四档词汇同 §0）→ 待人裁的点（编号 G7 起）。
+> 人对 N1、N3 的补充意见已并入正文；G7–G11 的裁决见 §10.2。**以后引用时引 §10.2 的编号。**
+
+### N0 目标树补一个能力域：控制面（停、续、记账、预估）
+
+把 §9.2 那五件归进来，写成 3.10。**判定：🟢 已大部分落地**，剩下的是 A 线（真 claude 下的依赖、handoff、混 kind、n＞1）和 §9.0e 的挂账。
+
+### N1 主要使用方式：提想法 → Orca 确认需求 → 拆成串联／并联的 task → 实现（**人已同意**）
+
+- **分工**（Rule 5）：
+  - **模型做判断题**：追问、澄清需求，起草拆分方案（task 列表、每个 task 的验收判据、写集的声明）。
+  - **代码做校验**：拆分方案必须能展开成今天的 plan 文件（`planFile.ts` 的 schema），然后照常走 `graph.ts` 的依赖判定和写集冲突判定。串联还是并联**由代码从依赖和写集算出来**，不由模型宣布。
+  - **人确认**：拆分方案出来后停一次，等人确认。确认沿用已有的 confirm 路径。
+- 概念映射：**一个需求 ＝ 今天的一个 group**。「需求 → plan」是新增的一段，plan 之后的链路一律复用。
+- **追问怎么做**（人要求参考 mattpocock-skills 的 `productivity/grilling`、`productivity/grill-me`、`engineering/grill-with-docs`，路径在 `/Users/biran/code/skills/mattpocock-skills/skills/`）。借它们的四条思想：
+  1. **把需求当设计树，按轮次推进。** 每轮只问「前沿」上的问题，即前提已经定下来的问题。每题编号，并附上推荐答案。依赖本轮其他未答问题的，留到下一轮再问。
+  2. **事实自己查，决策交给人。** 能从目标仓库的代码、文档、台账里查到的，由 Orca 自己去查（派子代理），不问人。只有真正的决策才交给人。
+  3. **前沿问空才算结束**：设计树的每个分支都走过，没有被默认掉的假设。**人明确确认「已达成共识」之前，不进入拆分。**
+  4. **边问边落文档**（grill-with-docs ＝ grilling ＋ domain-modeling）：
+     - 术语一旦定下来，就写进需求文档的术语表。术语表只放术语，不放实现。
+     - 只有同时满足「难以逆转」「没有上下文会让人意外」「是真实的权衡」三条时，才写一条决策记录（ADR）。
+- **落到 Orca 的形状**：
+  - 每一轮问答是一条持久化的记录，走现有的命令模型（`commandId`、`expectedRevision`），可以断点续答；
+  - Web UI 按轮渲染「问题 ＋ 推荐答案 ＋ 人的回答」，别的 agent 走 N2 的 CLI 答；
+  - 前沿怎么算是模型的判断，但「这一轮问了什么、人答了什么、人确认过共识没有」**全部由代码记录和判定**。
+- **产物（G7 已裁：要）**：一份单独的需求文档，内容是需求陈述、术语表、问答记录（按轮次）、决策记录、验收判据。**拆分方案引用它**，每个 task 都能追溯到文档里的某一条。
+  - 放哪里：按 §3.1「Orca 能对任意目标仓库工作」和台账住在目标仓库的原则，**建议放在目标仓库**，与 `.decisions/` 相邻。具体路径与格式在 N1 的 spec 里定。这一点可逆，由控制器先定，写进 spec 时报人。
+- 参考：deepseek-harness 的 `packages/experimental/agent-team/src/types.ts:74` `TeamTaskSnapshot`（`blockedBy` 无环依赖、`writeScopes` 前缀、`revision` CAS）和 Orca 的任务图几乎同构，可以拿来对照查漏。它的 `dsh-workflow` 让模型现写脚本决定串并，**违反 Rule 5，不借**。
+- **判定：🟡 需要前置**：前置是 §3.3（验收判据要有模板可套）和 N8（标签决定用哪个模板）。
+
+### N2 控制入口：人用 Web UI；别的 agent 用 MCP，或 skill＋CLI
+
+- 和 §3.2 一致，这里只补一个顺序建议：
+  1. **CLI 加 `--json`**，复用同一套命令模型（`commandId`、`expectedRevision`，错误码原样透出）；
+  2. **skill** 包一层 CLI，这是最便宜的 agent 入口，今天的 claude 和 codex 都能用；
+  3. **MCP 薄壳**：只做读快照和投递命令（§3.2 的约束不变，run 不建模成 MCP Task）。
+- **判定：🟡**，前置是 G1 已定的契约面，这条已经满足。实际上**现在就能开**。
+
+### N3 进度：Web UI 和别的 agent 都能看到「这个 task 到哪了」「这个需求整体到哪了」，有百分比，能点进去看细节
+
+- **百分比的口径沿用 G4，并且必须由代码算**：
+  - 需求级 ＝ 已完成 task 数／总数；
+  - task 级**不给一个假的百分比**，给**阶段**：plan → execute → verify，加上 attempt n/max 和已用预算占 grant 的比例（用量只取工具报的数）；
+  - 点进去看细节：session 历史、阶段事件、evidence。
+- **人问：HTTP ＋ SSE 有没有必要做，能不能先延后？控制器的结论：没有必要，延后。** 依据（2026-09-28 现读）：
+  - 面板已经每 2 秒按 `changeSeq` 增量拉取控制面投影（`web/src/App.tsx:106`、`:233`、`:412`），缺口时会自动整份重读（`refetchRequired`）。对 Web UI 来说，这已经相当于一条增量事件流，SSE 只是把 2 秒的延迟压下来。
+  - 阶段数据的来源本来就是 ccloop：Orca 用 `collect(afterSeq)` 按游标拉 ccloop 的事件。agent 的 headless 输出（claude `stream-json`）由 ccloop 的 runner 读取，并作为 attempt 日志和 evidence 保存下来，**点进去看细节时直接读这些现有的 evidence 就够了**，不用另开一条流。
+  - ⚠️ headless 输出**只能覆盖「一个 agent 会话内部」**：需求级的进度仍然要由 Orca 的任务图算。codex 的输出格式和 claude 不一样，细节视图要分别处理。
+  - ⇒ **现在要做的只有**：G4 完成度的计算、task 级阶段视图、从 evidence 读出细节。**SSE 和 A2A 投影都延后**，等到出现一个真正需要推送的外部消费方（N7 的 A2A server）再做。
+- **A2A 能不能承载**（2026-09-28 调研，A2A v1.0.1，https://a2a-protocol.org/latest/specification/ ）：
+  - 有 `TaskStatusUpdateEvent` 和 SSE，每个对象都带自由的 `metadata`；
+  - **没有标准的百分比字段**，扩展索引里也没有官方的进度扩展（这是「没找到」，不是「spec 明说没有」）；
+  - 惯用做法是自己定义一个 extension URI，把进度放进 `metadata`；需求级的汇总要用 `contextId` 分组后自己算；
+  - `TaskArtifactUpdateEvent` 的 `append`／`lastChunk` 是产物分片，不是进度。
+- **判定**：内部进度 🟢；SSE 与 A2A 投影 ⏸ 延后。
+
+### N4 Slogan
+
+原意：「leave it to orca，put your every idea to real」。「put … to real」不是地道的英文，候选：
+- **Leave it to Orca — every idea, made real.**（推荐：保留原句的两段结构，最短）
+- Leave it to Orca. Turn every idea into shipped work.
+- Hand it to Orca — from idea to done.
+- **G8**：选哪句。
+
+### N5 Memory：Web UI 加一个 memory tab，第一版只接 ccmem，以后能接别的 memory 插件
+
+- **建议的 adapter 层**（接口草案，名字待定）：
+  - `MemoryAdapter { id; capabilities(); health(); search(query, { projectKey, limit }); get(ref); }`；
+  - 写入口**只有一个**：`recordCorrection(sample)`，复用 `orca correct` 已有的样本形状（ccmem handoff §15 里「对照样本」的语义）。
+- **约束**：
+  - ccmem 一个字都不 vendor，走 CLI／DB 接口（spec §9.1）；
+  - `projectKey` 沿用 `src/corrections/projectKey.ts`，**改算法要两边核对**（ccmem handoff 已登记这个风险）；
+  - adapter 缺省路径必须从传入的 env 推，判据走改道后的目录（Rule 17）；
+  - UI 第一版**只读**（搜索、查看、这条记忆由哪次 correction 产生）。
+- **判定：🟡**，前置是 ccmem 的 CLI 能不能输出 JSON、支不支持按 `projectKey` 查，**没核过**，下一步要读 ccmem 源码。
+- **G9**：memory tab 第一版要不要能写（人在 UI 上手动加或删记忆）？建议不要，写入只走 correction。
+
+### N6 可以利用或借鉴的外部实现
+
+| 来源 | 借 | 不借 |
+|---|---|---|
+| deepseek-harness（`/Users/biran/code/skills/harness/deepseek-harness`） | ① `agent-team` 的任务图形状与无环校验、CAS（见 N1）；② `subagent-claude-code`／`subagent-codex` 的失败分类和「原生配置为准、绝不 fallback」的纪律，可以拿来对照 ccloop 的 adapter 查漏；③ `workflow/phase`、`workflow/log` 的事件命名，作为 N3 事件流的词汇参考 | `dsh-workflow` 由模型写调度脚本（违反 Rule 5）；`token-meter` 的启发式 token 估算（违反 Rule 14）；整个 Cordis 插件框架（迁移代价远大于收益） |
+| claude-code mods（`~/code/skills/agent/claude-code/mods/`） | ① 「一个 noun 一份契约类型、消费方引用不复制」的纪律；② 用每个 worktree 里的 `CLAUDE.md`／`AGENTS.md` 注入任务专属指令，这是 stock CLI 就有的行为，用不上 mod，可以接 §3.3 loop 方案 | mod 本身：`register(on)` 函数钩子是 early access（`mods/README.md:114`），`telemetry` 只服务 builtin tier，`sec-default` 用 `--plugin-dir` 加载时形同虚设。Orca 驱动的是 **stock CLI**，吃不到这些钩子 |
+
+以上各条来自子代理读源码。其中 `agent-team/src/types.ts:74-82` 已由控制器现读核实，其余在成为某个设计的承重前提之前，要先自己读一遍。
+
+### N7 A2A：Orca 要不要能控制别的 agent？Orca 要不要作为一个能被 A2A 控制的 agent？
+
+- **Orca 作为 A2A server**（外部 agent 把需求交给 Orca，然后跟进度）：**建议做，排在远期**。
+  - 映射：一个需求对应一个 `contextId`；「等人确认拆分」对应 `input-required`；进度照 N3 走 extension metadata。
+  - A2A 不保证幂等（`SendMessage` 只是 MAY）、不保证断线重放、不保证任务保留期、取消只是协作式 ⇒ **Orca 内部仍然以自己的命令模型为真相**，A2A 只是一个入口。这和 G6 的精神一致：承重语义不塞进 `metadata`。
+- **Orca 作为 A2A client 去控制别的 agent 当 worker**：**建议现在不做（🔴）**。
+  - Orca 对 worker 的要求（幂等 accept、崩溃恢复、按 deadline 强制中止、usage 上报、证据 hash）A2A 一条都保证不了。这正是 G6 当初的理由。
+  - 真要接 A2A agent，得在 ccloop 里给它写一个 adapter，并如实答 capabilities（多半是 `unavailable`）。
+- TS SDK：`@a2a-js/sdk`，client 和 server 都有，已过 1.0。**版本号来自搜索摘要，接入前先 `npm view @a2a-js/sdk time` 现测**。
+- **G10**：G6 当初只管 ccloop 对外暴露 A2A。现在的问题换了：(a) Orca 要不要作为 A2A server？(b) Orca 要不要作为 A2A client？建议是 (a) 做、(b) 不做。
+
+### N8 Task 标签：可以带 bug、task、doc 等，一个 task 可以同时带多个
+
+- **建议的初始词表**（闭集，改词表要走 schema 版本）：`feature`、`bug`、`refactor`、`test`、`doc`、`design`（spec／方案）、`investigate`（只读调研）、`perf`、`security`、`chore`（构建、依赖、CI）。
+  人原话里的 `task` 太泛，建议不进词表：没打标签的 task 就是普通 task。
+- **标签的用处**，都由代码消费：
+  - ① 看板筛选；
+  - ② 选默认的 loop 方案（§3.3），例如 `bug` → `bugfix-tdd`，`investigate` → `investigate-only`，`refactor` → `refactor-guarded`，`design`／`doc` → `spec-then-plan`。一个 task 有多个标签时，**按固定优先级表选**，不由模型选；
+  - ③ 指标按标签切分。
+- schema：plan 文件的 task 加一个 `labels: string[]`（默认空，**只增不改**，旧 plan 照样能读）。
+- **判定：🟢**，是加法式改动；但接 loop 方案的那部分要等 §3.3。
+- **G11**：词表就用上面这些，还是你要增删？
+
+### 10.1 建议的先后（只排先后，不排日期）
+
+1. **N8 标签**，加 **N3 内部进度**（G4 完成度、task 级阶段视图、从 evidence 读细节；**不做 SSE**）：数据都在，最便宜，马上让 UI 有用。
+2. **§3.3 loop 方案层**：N1 和 N8 都依赖它。
+3. **N1 需求 → 拆分**：真正改变使用方式的一步。
+4. **N2 CLI `--json` → skill → MCP**。
+5. **N5 memory tab**（只读，ccmem）。
+6. 远期：**N7 (a)** Orca 作为 A2A server；§3.7 其余。
+
+### 10.2 人裁记录（2026-09-28，会话 `292277d5`）
+
+| 编号 | 问题 | 人裁 |
+|---|---|---|
+| **N1** | 需求 → 拆分的方案 | 同意。追问部分参考 grilling、grill-me、grill-with-docs 的思想（已并入 N1 正文） |
+| **N3** | 要不要先做 HTTP ＋ SSE | 人：「你看有没有必要，如果没必要可以先延后」⇒ 控制器判定没有必要，延后（依据在 N3 正文） |
+| **G7** | 需求澄清的结果要不要落成一份单独的需求文档 | **要** |
+| **G8** | slogan | **先用 "Leave it to Orca — every idea, made real."** |
+| **G9** | memory tab 第一版只读，写入只走 correction | **同意** |
+| **G10** | A2A：Orca 做 server、不做 client | **同意，排在远期** |
+| **G11** | 标签词表 `feature`、`bug`、`refactor`、`test`、`doc`、`design`、`investigate`、`perf`、`security`、`chore` | **同意** |
+
+N0、N2、N5、N6 人没有提异议，按正文的建议执行。§10.1 的先后照旧。
+

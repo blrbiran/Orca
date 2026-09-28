@@ -410,3 +410,15 @@ Expected（落地后）：普查只剩 `capabilitySchema.test.ts:21`、`webFault
     - `table`、`admitted`、`refused` 出自 ccloop `tests/control/singleCallCapability.test.ts:20,54,63`，**文件里没有任何 `rm`**。**每跑一次 ccloop 全量就漏 6 个目录**（4 个 table、1 个 refused、1 个 admitted）。
     - 这是本轮 ccloop 提交带进来的**新缺陷**，只登记，没修。
   - 删的时候，Orca 会话 `f341f05f`、`fa672d9e` 的 scratchpad clone 也在范围内。删之前要再现测一遍清单。52 个是否都在人说的「删」里面，交给人确认。
+
+### §3.22 25、27 的人裁（会话 `292277d5`，2026-09-28；本节只追加）
+
+- **25：采纳控制器的建议。** 人原话：「25 同意建议」。建议内容：
+  - **现在不改代码，只登记**：confirm 强制填数值阈值这件事今天是惰性的，因为 ccloop 对两种 agent 都答 `contextObservation: "unavailable"`（`src/control/contextControl.ts:59`）。
+  - **等 ccloop 能实时观测上下文时，加一个显式的关闭值**，例如 `{ kind: "off" } | { kind: "at", tokens }`。**不放宽 `null`**，否则「忘了填」和「选择不交接」分不出来。
+  - 今天的绕法：给 estimator 和 worker 选不同的 profile。
+  - UI 上标明「当前 agent 不观测上下文，此值不生效」，这一条可以并进 26 一起做。
+- **27：删全部。** 人原话：「包括全部，且需要后续尽快修」。
+  - 范围是 §3.21 现测的 52 个 `ccloop-single-call-*`，加上会话 `f341f05f`、`fa672d9e` 的 scratchpad clone。
+  - 泄漏源 `singleCallCapability.test.ts` 要**尽快修**，优先级高于 26。修它要改 ccloop 的既有判据文件（只加清理，不改断言），按 ccloop Rule 15(a) 开工前要逐条列出给人看。
+  - **本会话仍然不执行**（人在上一条说过「先不做」）。
