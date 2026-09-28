@@ -144,7 +144,7 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 
 **还挂着的**（下一件事由人选）：
 - **26(a)**：spawn 失败或出流前退出 ⇒ 用量记 null ⇒ 组卡在 `usageUnknown`。要先定义「可证明零花费」，是设计，先走 brainstorming。
-- **Orca `$TMPDIR` 存量**：`orca-*` 还有数万个（`orca-repo` 约 2.5 万、`orca-writer` 约 1.2 万等），删不删归人。
+- ~~Orca `$TMPDIR` 存量~~：人授权后已删 93,963 个（台账 §3.25）。
 - runner 的 stderr 按块 `toString`，与 26(b) 修的那处同形，只影响错误信息文字。只登记。
 - **之后的方向由人选**：A 线（更多真 claude 形状）、付费估算验证（`--claude --scenario estimate`，`--task-tokens` ≥1,000,000，这次还能顺带验证 stdin 传 prompt），或者 `docs/handoff/goal.md` §10.1 的新路线（标签和内部进度 → loop 方案层 → 需求追问与拆分 → CLI／skill／MCP → memory tab → A2A server）。**goal.md §10.2 是人裁 G7–G11 的出处。**
 
@@ -1077,7 +1077,7 @@ Orca 要求排序去重的四值枚举 ⇒ 将来非 null 且写错时 Orca 整�
 
 - 🆕 **会话 `c85d2c4e`（2026-09-28）做完了待办 1–6**（台账 §3.23）。下面「已授权、未做」里的 24、26 的 b／c／d、27，以及泄漏修复，都已做完；**本节再往下的原文保留作出处，不再是当前状态**。现在归人的：
   - ~~审 §3.23 的 `Ruling:` 行~~：人已全部认可（会话 `2724716d`，台账 §3.24）。
-  - ~~ccloop 全套临时目录泄漏~~：已修、`ccloop-*` 存量已删（台账 §3.24）。**Orca 的 `orca-*` 存量删不删仍归人。**
+  - ~~ccloop 全套临时目录泄漏~~：已修、`ccloop-*` 存量已删（台账 §3.24）。`orca-*` 存量也已删（§3.25）。
   - **26(a)** 仍挂着（要先做设计）。
   - **付费验证**：估算与 stdin 传 prompt 都没在真 claude 下跑过。
 
