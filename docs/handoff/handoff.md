@@ -101,7 +101,7 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 **现行基线（会话 `c85d2c4e`，2026-09-28，待办 1–6 收尾；取代会话 `fa672d9e`、`f341f05f`、`f8281a60`、`5b01dbd9` 的四版，那几版的原始报数在各自台账：`2026-09-27-single-call-estimate` §3.18／§3.20、`2026-09-27-panel-ui-redesign` 末节、`2026-09-27-claude-stream-usage` §3）**：只抄工具报数，原始数在台账 `.superpowers/sdd/2026-09-27-single-call-estimate/progress.md` §3.23。env 同下（夹具表 fake codex `integration`、HOME＋四个 XDG 根改道），两份都是新 clone，门跑期间没人在里面做变异。
 - ccloop（内容＝主题行 `fix(claude): hand claude a prompt too large for argv on stdin, …` 那一笔）：build／typecheck RC 0；**1066 条、1065 过、1 红**（`stopProof`），`check-known-reds` **RC 0**（名单 14 个名字）。
 - Orca（内容＝主题行 `fix(web): applying a suggestion drops the unsaved draft …` 那一笔，`ORCA_CCLOOP_BIN`＝上面那份 ccloop clone 的 build）：web build／typecheck RC 0；**230 文件／2087 条全过、0 pending**；`verify:panel` RC 0；web check 27 文件／149 条；真 `~/.orca` 前后 `stat` 相同。
-- 🆕 **ccloop 全套每跑一次会在 `$TMPDIR` 漏约 805 个目录**（几十个前缀，不只 single-call 那一个文件）。量泄漏时把 `TMPDIR` 改道到一个空目录再跑，才数得清；判据写法见台账 §3.23 ①。修它要人授权（§9.0e）。
+- ✅ **两仓临时目录泄漏已修（会话 `2724716d`，台账 §3.24）**：每个测试文件一个临时根（`tests/setup/scopeTmpdir.ts`），全量跑完 `TMPDIR` 剩 0（修前 ccloop 805、Orca 364）；护栏 `node scripts/check-tmp-leak.mjs`（两仓都有）剩任何条目退 1。量泄漏或跑门时 `TMPDIR` 要用**短路径的真目录**（见 §6.22）。修后在新 clone 上重跑的门：ccloop 1066 条、1065 过、1 红（`stopProof`），`check-known-reds` RC 0；Orca 2087 条、2086 过、1 红（`controlShutdown`，单文件重跑 3/3 绿），web 149 条、`verify:panel` 15 PASS，真 `~/.orca` 不变。
 - ⚠️ 负载：`driverRecovery` 在高负载（load 约 37）下单文件也能连红 3 次，负载降下来后 3/3 过 ⇒ 判 flake 要等负载降下来并记 `uptime`（会话 `5b01dbd9` 实测）。
 
 **上一版基线（会话 `94b09282` 收尾，取代 `43e3e1d8` 那一版；旧版在同一台账 §15，更早的在 §8–§12）**：只抄工具报数，细节在台账 `.superpowers/sdd/2026-09-26-agent-selection/progress.md` §16–§18。
@@ -131,19 +131,20 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 
 ## 四、⛔ 下一件事
 
-### 4.0 ⛔ 现在的下一件事（2026-09-28 会话 `c85d2c4e` 收尾改写，**本节优先于下面的 4.0.b、4.0.0、4.0.1 与 1–3**）
+### 4.0 ⛔ 现在的下一件事（2026-09-28 会话 `c85d2c4e` 收尾改写、会话 `2724716d` 更新，**本节优先于下面的 4.0.b、4.0.0、4.0.1 与 1–3**）
 
-**没有在飞的工作。** ⑤ 预算预估链已落地、已推送，人已审完（台账 `.superpowers/sdd/2026-09-27-single-call-estimate/progress.md` §3.21、§3.22）。人随后授权「不需要 brainstorm 的 1–6 全部做，有问题先按控制器的建议执行，最后报人审」，会话 `c85d2c4e` 已做完（台账 §3.23，**其中的 `Ruling:` 行人还没审**）：
+**没有在飞的工作。** ⑤ 预算预估链已落地、已推送，人已审完（台账 `.superpowers/sdd/2026-09-27-single-call-estimate/progress.md` §3.21、§3.22）。人随后授权「不需要 brainstorm 的 1–6 全部做，有问题先按控制器的建议执行，最后报人审」，会话 `c85d2c4e` 已做完（台账 §3.23；其 7 条 `Ruling:` 行人已全部认可，见 §3.24）：
 1. ✅ ccloop `singleCallCapability.test.ts` 不再漏临时目录（主题行 `test(control): stop singleCallCapability from leaking six temp dirs per run`）。
 2. ✅ 27：删掉了 52 个 `ccloop-single-call-*` 和两个旧会话 scratchpad 里的 17 个 git clone；报告文件和 `accept-*/target` 小仓库留着。
 3. ✅ 24：两处 v1 闸门各有一条经 service 的独立判据（Orca `tests/control/estimateSingleCallGate.test.ts`），M1、M2 各只红自己那一条。
 4. ✅ 26(d)：claude、codex 的 loop 阶段超时或失败时，带上已观测的用量（ccloop 主题行 `fix(runtime): a loop phase that times out carries the usage …`）。
 5. ✅ 26(c)：面板应用建议时，清掉那些字段的未保存 draft（Orca 主题行 `fix(web): applying a suggestion drops the unsaved draft …`）。
 6. ✅ 26(b)：prompt 超过 100 KiB 时经 stdin 交给 claude；顺带修了 runner 读请求时把多字节字符切成 U+FFFD 的既有缺陷（ccloop 主题行 `fix(claude): hand claude a prompt too large for argv on stdin, …`）。**stdin 这条路只有静态证据，真 claude 没跑过。**
+7. ✅ （会话 `2724716d`，人授权）ccloop 与 Orca 全套的临时目录泄漏：每个测试文件一个临时根，外加护栏脚本 `scripts/check-tmp-leak.mjs`；`verify:panel` 不再漏它的控制目录；真 `$TMPDIR` 里的 `ccloop-*` 存量 94,729 个已删（台账 §3.24）。
 
 **还挂着的**（下一件事由人选）：
 - **26(a)**：spawn 失败或出流前退出 ⇒ 用量记 null ⇒ 组卡在 `usageUnknown`。要先定义「可证明零花费」，是设计，先走 brainstorming。
-- **ccloop 全套临时目录泄漏普查**（本会话新发现）：每跑一次全量约漏 805 个目录，来自几十个前缀；`$TMPDIR` 下现存约 19 万个条目。修它要动大量既有判据文件、删存量，**都要人授权**。纯机械活，工作量大，不需要 brainstorm；ccmem handoff ⅩⅬⅡ.3 有先例。
+- **Orca `$TMPDIR` 存量**：`orca-*` 还有数万个（`orca-repo` 约 2.5 万、`orca-writer` 约 1.2 万等），删不删归人。
 - runner 的 stderr 按块 `toString`，与 26(b) 修的那处同形，只影响错误信息文字。只登记。
 - **之后的方向由人选**：A 线（更多真 claude 形状）、付费估算验证（`--claude --scenario estimate`，`--task-tokens` ≥1,000,000，这次还能顺带验证 stdin 传 prompt），或者 `docs/handoff/goal.md` §10.1 的新路线（标签和内部进度 → loop 方案层 → 需求追问与拆分 → CLI／skill／MCP → memory tab → A2A server）。**goal.md §10.2 是人裁 G7–G11 的出处。**
 
@@ -768,11 +769,17 @@ ccloop 的 I-2 里，spec 第一版把「渲染成 `JSON.stringify`」贴在那�
 
 ### 6.21 待办 1–6 那一轮（2026-09-28，会话 `c85d2c4e`）新栽的
 
-- 🔴 **人给的判据也可能量不出来**：「全量前后 `$TMPDIR` 目录总数要一样」在 ccloop 上永远不成立，因为全套本来就漏约 805 个。⇒ 先跑一次修复前的量测，确认判据能分出修前修后；分不出就把 `TMPDIR` 改道到空目录、按前缀数，并把改法记进台账。
+- 🔴 **人给的判据也可能量不出来**：「全量前后 `$TMPDIR` 目录总数要一样」在当时的 ccloop 上永远不成立，因为全套本来就漏约 805 个（会话 `2724716d` 修后为 0）。⇒ 先跑一次修复前的量测，确认判据能分出修前修后；分不出就把 `TMPDIR` 改道到空目录、按前缀数，并把改法记进台账。
 - 🔴 **单文件连跑 10 次全绿，不能证明清理没问题**：负载下的全量里，C4 的清理撞上 fake worker 还在写，报了 `ENOTEMPTY`。⇒ 清理一个会派生进程的判据时，先等那个进程退出（pid 在记录里），再在全量里验证。
 - 🔴 **只用 ASCII 的判据看不见编码缺陷**：runner 按块解码 stdin 的缺陷，是边界判据刚好用了 `é` 才露出来的。⇒ 涉及传输的判据至少放一个多字节字符的样本，并让它跨过读块的边界。
 - **变异红在前一条断言上，不等于量到了目标**：24 的第一版红在 `group-budget-unavailable`，26(c) 的变异红在 drafts 的相等比较上 ⇒ 去掉前面的断言或改夹具，直接量目标值（台账 §3.23 都记了）。
 - **工具层**：Orca 的门会拦下 clone 里的 `git pull`（用 `cat 主树文件 > clone 文件` 同步）；`rm -rf $(…)` 会被安全检查拦下，要先打印路径，再删字面路径；本机 `cp` 带 `-i`，会静默拒绝覆盖，一律用 `cat >`。
+
+### 6.22 两仓临时目录泄漏那一轮（2026-09-28，会话 `2724716d`）新栽的
+
+- 🔴 **`TMPDIR` 改道本身会造出假红**：放在会话 scratchpad 下太长（tsx 的 socket `$TMPDIR/tsx-<uid>/<pid>.pipe` 超过 macOS 104 字节，撞名 `EADDRINUSE`）；用软链（`/tmp/...`）则 git 报真实路径、比路径的判据红。两次各红 7 条，都不是回归。⇒ **`TMPDIR` 用短路径的真目录**（如 `/private/tmp/<短名>` 或 `mktemp -d "${TMPDIR%/}/cl-XXXX"`）。
+- **能在一处兜住的，不要逐个改**：人授权的是逐个改 35 个判据文件；实测一个 setup 文件（每个测试文件一个临时根）就让泄漏归零，且一个既有判据都不动。⇒ 动手前先找一处能覆盖全部的位置。
+- **模块顶层的副作用会随 import 扩散**：`verify-panel.ts` 在顶层 `mkdtemp`，判据 import 它的纯函数时也会建一个目录。
 
 ## 七、工具骗法（**每一条都真栽过**）
 
@@ -1069,10 +1076,8 @@ Orca 要求排序去重的四值枚举 ⇒ 将来非 null 且写错时 Orca 整�
 ### 9.0e ⑤ 预算预估链一轮登记、归人的（2026-09-28，会话 `f341f05f`）
 
 - 🆕 **会话 `c85d2c4e`（2026-09-28）做完了待办 1–6**（台账 §3.23）。下面「已授权、未做」里的 24、26 的 b／c／d、27，以及泄漏修复，都已做完；**本节再往下的原文保留作出处，不再是当前状态**。现在归人的：
-  - **审 §3.23 的 `Ruling:` 行**，其中最值得看的两条：
-    - 26(b) 顺带修了 runner `readStdin` 的 UTF-8 切分缺陷，它不在命名清单里；
-    - 26(c) 在点击时就清 draft，不等命令成功。
-  - **ccloop 全套临时目录泄漏**：每跑一次约漏 805 个；`$TMPDIR` 存量约 19 万个条目。修不修、删不删存量，都归人。
+  - ~~审 §3.23 的 `Ruling:` 行~~：人已全部认可（会话 `2724716d`，台账 §3.24）。
+  - ~~ccloop 全套临时目录泄漏~~：已修、`ccloop-*` 存量已删（台账 §3.24）。**Orca 的 `orca-*` 存量删不删仍归人。**
   - **26(a)** 仍挂着（要先做设计）。
   - **付费验证**：估算与 stdin 传 prompt 都没在真 claude 下跑过。
 

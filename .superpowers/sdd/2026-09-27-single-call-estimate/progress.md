@@ -508,3 +508,58 @@ Expected（落地后）：普查只剩 `capabilitySchema.test.ts:21`、`webFault
 - 🔴 **ccloop 全套每跑一次共漏约 805–811 个 `$TMPDIR` 目录**，来自几十个前缀。本会话三次全量分别量到 811（修前）、806（修后第一次）、805（收尾）。`accept.test.ts`、`agentsControl.test.ts` 里都没有 `rm`。`$TMPDIR` 下现存约 19 万个条目，其中 `ccloop-run` 24196、`ccloop-repo` 15197、`ccloop-crash-gap` 8890 等（现测，2026-09-28，python 按 `rsplit('-',1)[0]` 统计）。修它要动大量既有判据文件，存量也要删，**两件都要人授权**。ccmem 做过同形的一轮（它的 handoff ⅩⅬⅡ.3）。
 - runner 的 stderr 按块 `toString`（与 ⑥ 同形，只影响错误信息文字）。
 - 26(a) 仍然挂着；真 claude 下 single-call 估算、stdin 传 prompt 都没跑过。
+
+### §3.24 人审 §3.23 ＋ 两仓临时目录泄漏（会话 `2724716d`，2026-09-28；本节只追加，上文一字未改）
+
+**人审 §3.23**：人回复「7 条 Ruling => 都认可」。§3.23 的 7 条 `Ruling:` 行全部由人认可，包括 26(b) 顺带修 `readStdin`、26(c) 点击时清 draft。
+
+**人的授权**（原话）：「1. 修 35 个既有判据文件（按 Rule 15(a) 逐个指名）=> 同意」「2. 新增一个回归护栏脚本 => 同意」「3. 删真实 $TMPDIR 里的 ccloop-* 存量（94,729 个）=> 同意」「4. 删我这次测量留下的残留：/private/tmp/ccl2724 => 同意」「5. Orca 自己的泄漏要不要另开一轮 => 这次一起做」。只限本会话。
+
+**普查**（ccloop HEAD＝主题行 `docs(handoff): the Orca line's nineteenth version: …` 那一笔，scratchpad 的 `git clone --local`，HOME 与四个 XDG 根改道，`TMPDIR`＝`/private/tmp/ccl2724/<子目录>`，json reporter，python 读回）：
+- 全量：1066 条、1065 过、1 红（`stopProof`），`check-known-reds` RC 0；漏 805 个，105 个前缀。
+- 逐文件单跑（93 个文件各用一个空 `TMPDIR`）：35 个判据文件漏，合计 803；另 12 个是 `tsx`／`node-compile` 工具缓存。`src/` 两处 `mkdtemp` 都建在证据根下，生产代码不漏。
+- Orca（主题行 `chore(checkpoint): orca-dev-c85d2c4e, …` 那一笔，`ORCA_CCLOOP_BIN`＝一份不做变异的 ccloop clone build，夹具表 fake codex `integration`）：2087 条全过；根套件漏 364 个，web 套件漏 0。
+- 真 `$TMPDIR` 存量（只读统计）：190,381 个条目，`ccloop-*` 94,729，`orca-*` 数万（`orca-repo` 24,710、`orca-writer` 12,206 等）。
+
+**测量本身踩的两个坑**（前两次全量的 7 条额外红都来自这里，不是回归）：
+- `TMPDIR` 放在 scratchpad 下太长：tsx 的 IPC socket 在 `$TMPDIR/tsx-<uid>/<pid>.pipe`，134 字节超过 macOS 104 字节上限，截断后撞名 `EADDRINUSE`，`agentsControl`／`command`／`evidence` 7 条红。
+- `TMPDIR` 用软链（`/tmp/...`）：git 报真实路径 `/private/tmp/...`，`runLoop` 7 条比路径的判据红。
+- ⇒ `TMPDIR` 要用**短路径的真目录**。
+
+- Ruling: 不逐个改 35 个判据文件，改为每个测试文件一个临时根：新 setup 文件 `tests/setup/scopeTmpdir.ts` 在文件开跑时 `mkdtemp` 一个根、把 `TMPDIR` 指过去，文件结束时还原 `TMPDIR` 并带重试删根（`maxRetries: 10`，对付子进程还在写的 `ENOTEMPTY`）；`vitest.config.ts` 的 `setupFiles` 加一项。理由：人授权的是「逐个文件只加清理、不改断言」，这个做法**一个既有判据文件都不动**，覆盖面还包括判据派生的子进程（`os.tmpdir()` 每次读 `TMPDIR`，子进程继承 env），并且两个仓同形。代价：显式构造 env 且不带 `TMPDIR` 的子进程仍会写到外层；护栏脚本能看见这种情况。Orca 里它排在 `relocateUserData.ts` 之前，使后者的 `orca-test-control-*` 也落进根里。
+- Ruling: web 套件实测漏 0，不动。
+- Ruling: `scripts/verify-panel.ts` 在模块顶层 `mkdtemp` 了 `orca-panel-verify-control-*`，脚本从不删它（判据 import 它的纯函数时也会建一个，现在由 setup 兜住）。已在 `main` 的 cleanups 第一项登记删除（倒序执行，排在所有 panel 退出之后）。这是人第 5 条授权「Orca 自己的泄漏一起做」的范围。
+- Ruling: 护栏 `scripts/check-tmp-leak.mjs`（两仓同一份，只差一句注释）：在 `os.tmpdir()` 下建一个短名空目录作 `TMPDIR` 跑全量；剩任何条目退 1（列出并保留目录），没有测试结果退 2，否则删目录退 0。测试红本身不让它失败（那归 `check-known-reds`）。不允许任何白名单：带 setup 时 `tsx`／`node-compile` 缓存也落在各文件根里。
+
+**变异**（都在 scratchpad clone 里做；还原证明：变异后文件与变异前副本 `cmp` 相同，`git diff` 字节数与变异前相同）：
+
+| 仓 | 格 | 预期 | 实测 |
+|---|---|---|---|
+| ccloop | G0 带修复 | 退 0 | 退 0，1066 条，剩 0 |
+| ccloop | E2 过滤不到任何文件 | 退 2 | 退 2，0 条 |
+| ccloop | M1 删 setup 的 `rmSync` | 退 1 | 退 1，剩 93（每文件一个 `ccloop-tmp-*`） |
+| ccloop | M2 删 `setupFiles` 那一行 | 退 1 | 退 1，剩 805 |
+| Orca | G0 | 退 0 | 退 0，2087 条，剩 0 |
+| Orca | E2 | 退 2 | 退 2 |
+| Orca | M1 | 退 1 | 退 1，剩 230 |
+| Orca | M2 删 `scopeTmpdir` 那一项 | 退 1 | 退 1，剩 365 |
+| Orca | verify:panel 修前／修后 | 修前剩 1 个 `orca-panel-verify-control-*` | 修后只剩 `tsx-501`、`node-compile-cache`（共享缓存，复用） |
+
+**提交**（按主题行找）：
+- ccloop：`test: give every test file a temp root of its own, and a check that the suite leaves nothing in TMPDIR`
+- Orca：同名一笔；`fix(scripts): verify:panel removes the control directory it relocates into`
+
+**门**（全新 clone，HOME 与四个 XDG 根改道，`TMPDIR` 短真目录，json reporter，重定向到文件后 python 读回）：
+- ccloop（内容＝上面 ccloop 那一笔）：build／typecheck RC 0；**1066 条、1065 过、1 红（`stopProof`），`check-known-reds` RC 0**；`TMPDIR` 剩 0。
+- Orca（内容＝上面 Orca 第一笔，`ORCA_CCLOOP_BIN`＝上面 ccloop clone 的 build）：web build／typecheck RC 0；**2087 条、2086 过、1 红**：`controlShutdown`（已登记 flake，单文件重跑 3/3 绿，load 约 9）；web check 27 文件／149 条；`verify:panel` RC 0（15 PASS）；真 `~/.orca` 前后 `stat` 相同。`verify-panel.ts` 修复那一笔另在同一 clone 里跑了 typecheck RC 0、`verify:panel` RC 0（15 PASS）。
+- 同轮观测到的负载 flake：Orca 修复后第一次全量红过 `driverRecovery`＋`controlShutdown`，单文件各重跑 3/3 绿（load 9–11）。
+
+**删除**（人第 3、4 条授权）：
+- 删前现测：真 `$TMPDIR` 下 `ccloop-*` 94,729 个，10 分钟内被改过的 0 个；`pgrep` 无 vitest／fake agent 进程。另加本会话护栏变异留下的 4 个 `cl-*`（`cl-63fTVq`、`cl-Zgqe1L`、`cl-5u6KWE`、`cl-K7jaRD`）。清单在本会话 scratchpad 的 `delete-list.txt`。
+- 结果：删 94,733、失败 0、残留 0；删后 `ccloop-*` 为 0，`$TMPDIR` 共 95,657 个条目。
+- `/private/tmp/ccl2724`（本会话建的测量目录）已删。
+- **没删**：`orca-*` 存量（不在授权里）、上一会话的 `ccgt-*`。
+
+**登记，没做**：
+- Orca `$TMPDIR` 存量 `orca-*` 删不删，归人。
+- `docs/handoff/.handoff.md.swp`（16 KiB，mtime 2026-09-28 19:54）在 Orca 主树里未跟踪，查时没有 vim 进程在跑。不是本会话建的，没动。
