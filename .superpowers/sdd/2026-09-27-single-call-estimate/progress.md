@@ -422,3 +422,89 @@ Expected（落地后）：普查只剩 `capabilitySchema.test.ts:21`、`webFault
   - 范围是 §3.21 现测的 52 个 `ccloop-single-call-*`，加上会话 `f341f05f`、`fa672d9e` 的 scratchpad clone。
   - 泄漏源 `singleCallCapability.test.ts` 要**尽快修**，优先级高于 26。修它要改 ccloop 的既有判据文件（只加清理，不改断言），按 ccloop Rule 15(a) 开工前要逐条列出给人看。
   - **本会话仍然不执行**（人在上一条说过「先不做」）。
+
+### §3.23 已授权待办 1–6 的执行（会话 `c85d2c4e`，2026-09-28；本节只追加，上文一字未改）
+
+人的授权（原话摘录）：「不需要brainstorm的模块，这一个session你列的顺序列表中的顺序 1-6 的task全部都做」「这一轮执行过程中如果有问题，先按你的建议执行（不要再找我）。执行完在最后阶段报给我审核」「这个session暂时不要考虑context大小」。
+「1–6」指本会话开头列给人的那张顺序表：① ccloop 临时目录泄漏；② 27 删残留；③ 24；④ 26(d) loop 阶段超时带观测用量；⑤ 26(c) 应用建议后 draft 仍显示；⑥ 26(b) Linux argv 128 KiB。第 7 条 26(a)（spawn 失败卡在 `usageUnknown`）要先定义「可证明零花费」，是设计，**本会话没做**。
+⚠️ 这份授权只限本会话，不延续。下面的 `Ruling:` 行都是控制器替人做的决定，**人还没审**。
+
+**提交**（按主题行 `git log --grep` 找）：
+- ccloop：
+  - ① `test(control): stop singleCallCapability from leaking six temp dirs per run`
+  - ④ `fix(runtime): a loop phase that times out carries the usage the agent was seen spending`
+  - ⑥ `fix(claude): hand claude a prompt too large for argv on stdin, and stop the runner mangling non-ASCII requests`
+- Orca：
+  - ③ `test(control): give each of the estimator's two single-call gates a criterion of its own`
+  - ⑤ `fix(web): applying a suggestion drops the unsaved draft of the fields it applies`
+
+**① 临时目录泄漏**
+- 改动：`tests/control/singleCallCapability.test.ts` 加 `afterEach` 清理，三处 `mkdtemp` 各 `dirs.push`。**没有改任何断言。**
+- Ruling: 判据改成「只数 `ccloop-single-call-{table,refused,admitted}-` 这三个前缀」，并把 `TMPDIR` 改道到一个空目录，这样每个漏出的目录都数得清。人原来给的判据是「前后数 `$TMPDIR` 目录总数要一样」，但它成立不了：ccloop 全套每跑一次共漏约 805 个目录，来自几十个前缀（见下文「新发现」）。
+- Ruling: 第一版清理在全量里红过一次：负载下 C4 的 `rm` 撞上 fake worker 还在 seal，报 `ENOTEMPTY`，同时漏了 1 个 `admitted`。现在的清理会先读 `control/accepted.json` 里的 `worker.pid`，等它退出（最多 10 s）再删。探针量到：C4 结束时 worker 确实还活着，轮询 2 次后才退出。
+- 量测：scratchpad 的 `git clone --local`，`TMPDIR` 改道，HOME 与四个 XDG 根改道。
+  - 修前（内容＝主题行 `docs(handoff): the Orca line's eighteenth version: …` 那一笔）：三个前缀依次漏 4／1／1。
+  - 修后：0／0／0。
+  - 三条变异（各删一处 `push`）都让对应前缀的泄漏重新出现（4、1、1）。
+
+**② 27 删残留**
+- 删前现测：`$TMPDIR` 下 52 个 `ccloop-single-call-*`，全是目录，前缀计数与 §3.21 相同。两个旧 scratchpad 里有 17 个 git clone（会话 `f341f05f` 15 个、`fa672d9e` 2 个），`pgrep` 显示没有进程在用它们。
+- 执行：逐条按清单 `/bin/rm -rf`，删后逐条核对不存在，剩余 `ccloop-single-call-*` 数为 0。清单文件在本会话 scratchpad 的 `tmp-to-delete.txt`、`clones-to-delete.txt`。
+- Ruling: 只删 git clone。两个 scratchpad 里的报告文件、验收脚本留下的 `accept-*/target` 小仓库（非 clone）都留着，理由是拿不准的一律不删。删后两个目录分别剩 68M、4.8M。
+
+**③ 24**
+- 新文件 `tests/control/estimateSingleCallGate.test.ts`，只新增。经 service 调用两处闸门，窗口保持已知数：
+  - `createEstimate` 答 v1 ⇒ `queued`，答 null ⇒ `blocked-capability`；
+  - `claimEstimate` 在冻结选择改答 null 时降级，且不建 run。
+- 变异（clone 内，照 §3.20 的写法）：
+  - M1 只让「answer null」的 createEstimate 那条红，收到的是 `queued`；
+  - M2 只让 claimEstimate 那条红，收到的是一个 run。
+- 第一版把两次 createEstimate 放在同一个夹具里，M1 下红的原因是 `group-budget-unavailable`（第一次排队占了预算），不是直接量到闸门，于是改成每种回答各用一个新夹具。
+
+**④ 26(d)**
+- claude、codex 两个 adapter 在超时或失败（非 aborted）时，把已观测的用量挂到错误的 `observedTokens` 上。`runLoop` 本来就经 `observedTokensOf` 给 `PhaseExecutionError` 记账（`tests/control/phasesCompleted.test.ts` 钉着这一层）。错误消息不变，所以既有的超时判据（`/^claude-timeout: /` 等）一条没动。
+- Ruling: 两个 adapter 一起改。挂账原文只写「loop 阶段超时」，stream-usage spec §3.4 把两边口径写成一致（都报 null），只改一边会打破这个一致。
+- 新判据 `tests/runtime/phaseTimeoutUsage.test.ts`：撤回 claude 的改动只红 claude 两条，撤回 codex 的改动只红 codex 两条。
+
+**⑤ 26(c)**
+- `applySuggestions` 清掉被应用字段的 draft，其他字段的 draft 保留。
+- Ruling: 在点击时就清，不等命令成功。代价是命令被拒时，这几个字段手敲的数没了，字段回到服务端的值（建议按钮还在，可以重试）。
+- 判据追加在 `web/tests/budgetSuggestions.test.tsx`（新增一个 `it` 和两个 import，原有的 6 个测试一字未改），drafts 走真 reducer。撤回修复后，字段显示 `'111'`，而期望是 `'45000'`（单独去掉前面那条 drafts 断言量出来的）。
+- 25 里「UI 上标明当前 agent 不观测上下文」：`web/src/BudgetEditor.tsx` 已有 `context observation unavailable · the context watermark cannot hand off automatically` 这条 note，**没有改动**。
+
+**⑥ 26(b)**
+- runner：prompt 超过 100 KiB（`PROMPT_ARGV_MAX_BYTES`）时不再作为参数，改为写进 claude 的 stdin；小于等于 100 KiB 仍是最后一个参数，与付费跑过的形式逐字节相同。
+- Ruling: 按阈值分流，而不是一律改走 stdin。理由：小 prompt 的 argv 路径是真 claude 付费跑过的，一律改走 stdin 会让那些证据失效。stdin 路径只有静态证据（claude 2.1.283 包内字符串 "Input must be provided either through stdin or as a prompt argument when using --print"），**真 claude 没跑过**。
+- 顺带发现并修了一个既有缺陷：runner 的 `readStdin` 按块 `chunk.toString()`，多字节字符落在块边界上就变成 U+FFFD。现测：一个 102400 字节的 `é` prompt 到达 fake claude 时是 51212 个字符、含 U+FFFD，而 adapter 侧的 `request.json` 里是完好的 51200 个字符。凡是超过约 64 KiB 的非 ASCII prompt（例如中文 plan）都会被改坏，argv 路径也一样。
+- Ruling: 这一处也修了（改为 `process.stdin.setEncoding("utf8")`），虽然它不在命名清单里。理由：26(b) 要保证大 prompt 完好地送到 claude，而这个缺陷正卡在同一条通道上。⚠️ 这与 ccloop handoff 方法论第 11 条「看见了就报，不要顺手修」有张力，**请人审**。同形但只影响错误信息文字的 stderr 按块 `toString` **没修**，只登记。
+- fake claude 夹具的改动：没有位置参数时从 stdin 读 prompt，marker 多一个 `promptVia` 字段。
+- 新判据 `tests/runtime/claude/largePrompt.test.ts`，变异：
+  - 旧 runner 下 1.5 MiB prompt 报 `claude-exit-error`（spawn 失败，本机 macOS 也能复现）；
+  - 去掉 `setEncoding`，中文 prompt 那条红（含 U+FFFD）；
+  - 一律走 argv，或把 `>` 改成 `>=`，边界那条红。
+
+**Rule 15(a) 名单（这一轮动到的既有判据文件或夹具）**：
+- ccloop `tests/control/singleCallCapability.test.ts`：只加清理；
+- ccloop `tests/fixtures/fake-claude-cli.mjs`：夹具，行为扩展见 ⑥；
+- Orca `web/tests/budgetSuggestions.test.tsx`：只追加。
+- 其余都是新文件。
+
+**门**（全新 clone，HOME 与四个 XDG 根改道，json reporter，结果重定向到文件后用 python 读回）：
+- ccloop（内容＝主题行 `fix(claude): hand claude a prompt too large for argv on stdin, …` 那一笔）：
+  - build／typecheck RC 0；
+  - **1066 条、1065 过、1 红**（`stopProof`），`check-known-reds` **RC 0**；
+  - `TMPDIR` 改道后三个 single-call 前缀漏 0，全套共漏 805 个；
+  - 改道后的 HOME 下只有 `.npm`。
+- Orca（内容＝主题行 `fix(web): applying a suggestion drops the unsaved draft …` 那一笔）：
+  - `ORCA_CCLOOP_BIN` ＝ 上面那份 ccloop clone 的 build（门跑期间没人在里面做变异）；`ORCA_AGENTS_TABLE` ＝ fake codex `integration`、`9.9.9-fake`；
+  - web build RC 0、typecheck RC 0；
+  - **230 文件／2087 条全过，0 pending**；
+  - `verify:panel` RC 0（15 个 PASS）；web check RC 0（27 文件／149 条）；
+  - 真 `~/.orca` 前后 `stat` 相同；
+  - 两次开跑时的 load 分别是 3.97、4.09。
+- 变异全部在 scratchpad clone 里做，主工作树零触碰；收尾时 `pgrep` 查不到孤儿进程。
+
+**新发现，只登记，没修**：
+- 🔴 **ccloop 全套每跑一次共漏约 805–811 个 `$TMPDIR` 目录**，来自几十个前缀。本会话三次全量分别量到 811（修前）、806（修后第一次）、805（收尾）。`accept.test.ts`、`agentsControl.test.ts` 里都没有 `rm`。`$TMPDIR` 下现存约 19 万个条目，其中 `ccloop-run` 24196、`ccloop-repo` 15197、`ccloop-crash-gap` 8890 等（现测，2026-09-28，python 按 `rsplit('-',1)[0]` 统计）。修它要动大量既有判据文件，存量也要删，**两件都要人授权**。ccmem 做过同形的一轮（它的 handoff ⅩⅬⅡ.3）。
+- runner 的 stderr 按块 `toString`（与 ⑥ 同形，只影响错误信息文字）。
+- 26(a) 仍然挂着；真 claude 下 single-call 估算、stdin 传 prompt 都没跑过。
