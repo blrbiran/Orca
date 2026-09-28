@@ -142,6 +142,8 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 6. ✅ 26(b)：prompt 超过 100 KiB 时经 stdin 交给 claude；顺带修了 runner 读请求时把多字节字符切成 U+FFFD 的既有缺陷（ccloop 主题行 `fix(claude): hand claude a prompt too large for argv on stdin, …`）。**stdin 这条路只有静态证据，真 claude 没跑过。**
 7. ✅ （会话 `2724716d`，人授权）ccloop 与 Orca 全套的临时目录泄漏：每个测试文件一个临时根，外加护栏脚本 `scripts/check-tmp-leak.mjs`；`verify:panel` 不再漏它的控制目录；真 `$TMPDIR` 里的 `ccloop-*` 存量 94,729 个已删（台账 §3.24）。
 
+🆕 **在飞（会话 `2724716d`）**：goal.md §10.1 第 1 项「N8 标签 ＋ N3 内部进度」的 spec 已写好并提交：`docs/superpowers/specs/2026-09-28-labels-and-progress-design.md`（人裁 L-1–L-6 在它的 §1；L-6 是对 G11 的补充）。**下一步：等人审 spec → `superpowers:writing-plans`。** 还没写一行代码。⚠️ 这一轮推送要**先 Orca 后 ccloop**（spec §3.3）。
+
 **还挂着的**（下一件事由人选）：
 - **26(a)**：spawn 失败或出流前退出 ⇒ 用量记 null ⇒ 组卡在 `usageUnknown`。要先定义「可证明零花费」，是设计，先走 brainstorming。
 - ~~Orca `$TMPDIR` 存量~~：人授权后已删 93,963 个（台账 §3.25）。
