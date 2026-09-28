@@ -203,6 +203,8 @@ describe("the shipped consumer answers for its own capabilities (task 10 step 4)
     } finally { await soft.f.dispose(); }
   });
 
+  // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): the frozen shape is envelope
+  // protocol 2 now (the claim carries the selection), so protocol 1 is the foreign version that must be refused.
   // Human ruling S6 (2026-09-27, session f341f05f): the frozen shape is envelope protocol 3 now (single-call estimate
   // spec §4.1), with work tagged as a loop, so protocol 2 is the foreign version that must be refused.
   it.skipIf(!realBinary)("refuses an envelope that is not V3 and reads a well-formed one as no execution yet", async () => {

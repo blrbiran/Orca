@@ -4,11 +4,13 @@ import { readFile, writeFile } from "node:fs/promises";
 
 // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): this stand-in speaks the wire
 // of agent selection spec §4.5/§4.6/§5 -- `control <method> --agents <table>` (the retired `--adapter` form is
-// refused by name, as ccloop refuses it), envelope protocol 3 with `claim.agent`, and capabilities protocol 3: the
+// refused by name, as ccloop refuses it), envelope protocol 2 with `claim.agent`, and capabilities protocol 3: the
 // table view for `{agent: null}`, one selection's resolution for `{agent: partial}` (requested fields echoed, the
 // fixture's defaults for the rest). Its own knobs live in the file passed as the table: it never parses a real one.
 // Exit codes and stderr follow real ccloop's `control` (plan P15, ccloop T5): a named refusal -- an agent error or a
 // protocol refusal -- exits 2 with `<code>[: <detail>]` on stderr; a bad argv (or any unnamed failure) exits 1.
+// Human ruling S6 (2026-09-27, session f341f05f) ERRATUM: where the paragraph above says envelope protocol 2, the
+// stand-in now speaks envelope protocol 3, whose work is tagged `loop` or `single-call` (single-call estimate spec §4.1).
 const [control, method, agentsFlag, tablePath, ...rest] = process.argv.slice(2);
 if (control !== "control" || agentsFlag !== "--agents" || tablePath === undefined || rest.length > 0) {
   process.stderr.write("control-command-invalid\n"); process.exit(1);
@@ -26,7 +28,9 @@ const payload = JSON.parse(stdin || "{}");
 const view = { usageObservation:"phase-end",budgetEnforcement:"soft",contextObservation:"unavailable",handoffControl:"durable",handoffExecution:"mechanical-in-run-v1",contextWindowTokens:null,requestBoundProof:null };
 const defaults = { agent:"codex",model:"fixture-model",contextWindow:"agent-default" };
 const refuse = (code) => { process.stderr.write(`${code}\n`); process.exit(2); };
-// Real ccloop refuses any envelope that is not protocol 3 by name, and one without a selection or a known work kind as invalid.
+// Real ccloop refuses any envelope that is not protocol 2 by name, and a protocol-2 one without a selection as invalid.
+// Human ruling S6 (2026-09-27, session f341f05f) ERRATUM: real ccloop now refuses any envelope that is not protocol 3
+// by name, and one without a selection or a known work kind as invalid.
 const envelopeOk = (input) => { if (input?.protocol !== 3) refuse("control-protocol-unsupported"); if (input.work?.kind !== "loop" && input.work?.kind !== "single-call") refuse("control-request-invalid"); if (input.claim?.agent === undefined) refuse("control-request-invalid"); return true; };
 let value;
 if (method === "capabilities") {

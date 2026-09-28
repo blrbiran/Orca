@@ -103,6 +103,7 @@ describe("projection journal", () => {
 
       const beforeStart = readVersions(h.store, "g1");
       await startClaim(h.store, fakePeer(`${h.root}/accepted-peer`), {
+        // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
         // Human ruling S6 (2026-09-27, session f341f05f): envelopes are protocol 3, work tagged as a loop (single-call estimate spec §4.1); what the criterion encodes is unchanged.
         protocol: 3,
         claim,
@@ -124,6 +125,7 @@ describe("projection journal", () => {
       const claim = claimWork(h.store, seeded.t1Claim);
       const before = readVersions(h.store, "g1");
       await expect(startClaim(h.store, fakePeer(`${h.root}/unknown-peer`, "drop"), {
+        // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
         // Human ruling S6 (2026-09-27, session f341f05f): envelopes are protocol 3, work tagged as a loop (single-call estimate spec §4.1); what the criterion encodes is unchanged.
         protocol: 3,
         claim,

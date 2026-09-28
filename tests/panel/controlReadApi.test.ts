@@ -98,6 +98,7 @@ async function setup(): Promise<Harness> {
   // answers the v2 vocabulary, spread from the same declared capabilities the profile snapshot
   // carries, so the peer's raw answer stays schema-valid and strict-mode-safe.
   const port: ExecutionPort = {
+    // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): capabilities protocol 3.
     // Human ruling S6 (2026-09-27, session f341f05f, tsc-surfaced beyond the table): capabilities protocol 3, and a
     // resolution now answers singleCallExecution beside the view (single-call estimate spec §4.4).
     resolveAgent: async (partial) => ({ selection: { agent: "codex", model: "fixture-model", contextWindow: "agent-default", ...partial }, configHash: hash("d"), timeoutMs: 1, killGraceMs: 0, capabilities: snapshot.profile.capabilities, singleCallExecution: "v1" }),

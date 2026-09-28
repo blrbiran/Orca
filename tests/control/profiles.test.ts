@@ -59,6 +59,7 @@ const asked: PartialSelection[] = [];
 function port(probe: CapabilityViewV1 | (() => Promise<CapabilityViewV1>)): ExecutionPort {
   const result = typeof probe === "function" ? probe : async () => probe;
   return {
+    // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
     // Human ruling S6 (2026-09-27, session f341f05f, tsc-surfaced beyond the table): a resolution now answers
     // singleCallExecution beside the view (single-call estimate spec §4.4).
     resolveAgent: async (partial) => {

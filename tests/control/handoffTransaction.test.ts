@@ -14,6 +14,7 @@ import { fakePeer } from "./fixtures/peer.js";
 import { openTestStore,seedBudgetCase,amount } from "./fixtures/store.js";
 
 describe("handoff transaction",{timeout:30000},()=>{
+  // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
   // Human ruling S6 (2026-09-27, session f341f05f): envelopes are protocol 3, work tagged as a loop (single-call estimate spec §4.1); what the criterion encodes is unchanged.
   async function started(h:Awaited<ReturnType<typeof openTestStore>>,s:ReturnType<typeof seedBudgetCase>,parent:ReturnType<typeof claimWork>,peer:ReturnType<typeof fakePeer>){const sourceDir=join(h.root,"runs",parent.runId);await mkdir(sourceDir,{recursive:true});await startClaim(h.store,peer,{protocol:3,claim:parent,contractHash:hashPayload(s.w1.contract),inputCheckpoint:null,work:{kind:"loop",contract:s.w1.contract,targetRepo:h.root,base:"HEAD",sourceDir}});}
   it("persists one immutable request intent before RPC and retries the same request",async()=>{
