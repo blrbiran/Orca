@@ -155,8 +155,15 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
   const advice = adviceOf(view);
   const allSuggested = suggestedOperations(view, { kind: "all" });
   // Spec §7: applying a suggestion is its own command, never a draft; the server re-checks every value.
+  // Ruling 26 (Orca ledger 2026-09-27-single-call-estimate §3.21; session c85d2c4e, 2026-09-28): an unsaved draft of a
+  // field being applied was left in place and kept masking the applied value, so applying drops those fields' drafts --
+  // choosing the model's number replaces what was typed there. Drafts of other fields stay.
   const applySuggestions = (operations: ProposalOperationV1[]): void => {
     if (operations.length === 0) return;
+    for (const operation of operations) {
+      const key = budgetFieldKey(groupId, operation.target);
+      if (drafts[key] !== undefined) onDraft(key, "");
+    }
     onCommand({ verb: "proposal-edit", groupId, expectedRevision: view.summary.commandRevision, payload: { baseProposalVersion: view.proposal.proposalVersion, operations } });
   };
   const observedEnforcement = view.proposal.profiles === null

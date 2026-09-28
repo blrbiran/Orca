@@ -6,7 +6,8 @@
  */
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { BudgetEditor, DIMENSIONS, adviceOf, suggestedOperations } from "../src/BudgetEditor.js";
+import { BudgetEditor, DIMENSIONS, adviceOf, budgetFieldKey, suggestedOperations } from "../src/BudgetEditor.js";
+import { initialControlState, reduceControlState } from "../src/controlState.js";
 import type { Amount, ControlConfigV1, EstimateViewV1, GroupViewV1 } from "../src/controlTypes.js";
 
 const amount = (tokens: number): Amount => ({ tokens, activeMs: tokens * 10, attempts: 1, sessions: 1 });
@@ -126,6 +127,27 @@ describe("the budget editor's suggestion controls (single-call estimate spec §7
     // No control for a field or a row that has nothing to change.
     expect(screen.queryByRole("button", { name: "use 3000 for a work tokens" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Apply row a handoff" })).toBeNull();
+  });
+
+  // Ruling 26 (Orca ledger 2026-09-27-single-call-estimate §3.21; session c85d2c4e, 2026-09-28), appended -- no test
+  // above changed: an unsaved draft of an applied field kept showing its typed number over the applied one. Drafts go
+  // through the real reducer, and the field is read back from the rendered input once the server's new view arrives.
+  it("drops the unsaved drafts of the fields it applies, so the applied value shows, and keeps every other draft", () => {
+    const work = (dimension: string) => budgetFieldKey("g", { scope: "task", taskId: "a", allocation: "work", dimension } as never);
+    let state = initialControlState();
+    for (const [key, text] of [[work("activeMs"), "111"], [work("tokens"), "7777"]] as const) state = reduceControlState(state, { type: "draft", key, text });
+    const onDraft = (key: string, text: string) => { state = reduceControlState(state, { type: "draft", key, text }); };
+    const onCommand = vi.fn();
+    const { rerender } = render(<BudgetEditor view={view()} config={config} drafts={state.drafts} onDraft={onDraft} onCommand={onCommand} />);
+    expect((screen.getByLabelText(/^a work activeMs/) as HTMLInputElement).value).toBe("111");
+    fireEvent.click(screen.getByRole("button", { name: "use 45000 for a work activeMs" }));
+    expect(onCommand).toHaveBeenCalledTimes(1);
+    expect(state.drafts).toEqual({ [work("tokens")]: "7777" });
+    // The server answers with the applied value; the field now shows it, and the untouched draft still shows its text.
+    const applied = view({ allocations: view().allocations.map((a) => a.ownerKind === "task" && a.bucket === "work" ? { ...a, amount: { ...a.amount, activeMs: 45_000 } } : a) });
+    rerender(<BudgetEditor view={applied} config={config} drafts={state.drafts} onDraft={onDraft} onCommand={onCommand} />);
+    expect((screen.getByLabelText(/^a work activeMs/) as HTMLInputElement).value).toBe("45000");
+    expect((screen.getByLabelText(/^a work tokens/) as HTMLInputElement).value).toBe("7777");
   });
 
   it("shows the model's reasons read-only under the table", () => {
