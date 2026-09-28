@@ -391,3 +391,22 @@ Expected（落地后）：普查只剩 `capabilitySchema.test.ts:21`、`webFault
   - `executionDriver.ts` 的 `portFor`、`driverHandoff.ts` 的 `handoffRunIds`、`recovery.ts` 的跳过注释，都与现在的代码相符，保留；
   - `live-driver-acceptance.ts` 的 agent-selection 注释是随代码挪进 `setPreferences()` 的，原文逐字还在，保留；
   - `schema.ts`：两行意思重复，而且丢了 `Agent selection spec §4.6` 指针。**本笔把重复的那一行改成带回这个指针**，只改注释，`npm run typecheck` rc=0。
+
+### §3.21 人审结论（会话 `292277d5`，2026-09-28；本节只追加，上文一字未改）
+
+人对 handoff §9.0e 编号 1–27 的回复（原话摘录）：「24 … => 补」「25 … => 你的建议是什么？为什么？」「26 挂账修哪几条？ => 同意候选的四条」「27 残留删不删？ => 删」「审阅清单的其他部分同意」「这次session 你可以先把我的决策记下来，先不做。」
+
+- **1–23：认可。** 含 S6 两份名单（ccloop §3.2、Orca §3.8）、夹具改动（§3.9、§3.19）与 §3 的全部 `Ruling:`。**不回退任何一条。**
+- **24：补。** 给 `estimator.ts` 的两处 v1 闸门（`buildBudgetEstimateRequest`、`estimateCapabilityDegraded`）各补一条独立于 `estimatePrompt.test.ts` 的判据。判据要在 §3.20 的 M1、M2 下被看见红，而且不能靠 `contextWindowTokens: null` 顺带拦下。**未做。**
+- **25：未决。** 人要控制器给建议和理由，建议写在本会话的对话里，等人拍板。控制器现测到的事实（观测时 HEAD＝主题行 `docs(handoff): record the review preparation, the numbered checklist the human answers against, and two lessons`）：
+  - confirm 的规则在 `src/control/webService.ts:433`：窗口已知 ⇒ 阈值必须是 ≤ 窗口的数；窗口为 null ⇒ 阈值必须是 null。
+  - 这个阈值今天是**惰性**的：`src/control/contextControl.ts:59` 在 `contextObservation` 不是 `realtime`／`phase-end` 时直接返回 invalid，而 ccloop 对 claude 和 codex 都答 `"unavailable"`。
+- **26：四条都修。** 四条是：spawn 失败或出流前退出 ⇒ `usageUnknown` 卡组（要先定义「可证明零花费」）；Linux argv 128 KiB；应用建议后 draft 仍显示；loop 阶段超时不带观测用量。**未做。**
+- **27：删。** **未做**（人说「先不做」）。范围按现测更正：
+  - handoff 写的「4 个」不对。现测 `$TMPDIR` 下共有 **52 个** `ccloop-single-call-*`：`table` 32、`admitted` 8、`refused` 8、`aux` 2、`source` 2。
+    测量命令：python 按 `rsplit('-',1)[0]` 统计 `ls $TMPDIR` 的结果。mtime 分布是 2026-09-28 01 时 42 个、02 时 4 个、06 时 6 个。
+  - 来源：
+    - `aux`、`source` 出自 ccloop `tests/control/singleCall.test.ts`。这个文件有 `afterEach` 负责 `rm`，所以只有超时或被杀时才会留下。这 4 个就是 handoff 里说的「4 个」。
+    - `table`、`admitted`、`refused` 出自 ccloop `tests/control/singleCallCapability.test.ts:20,54,63`，**文件里没有任何 `rm`**。**每跑一次 ccloop 全量就漏 6 个目录**（4 个 table、1 个 refused、1 个 admitted）。
+    - 这是本轮 ccloop 提交带进来的**新缺陷**，只登记，没修。
+  - 删的时候，Orca 会话 `f341f05f`、`fa672d9e` 的 scratchpad clone 也在范围内。删之前要再现测一遍清单。52 个是否都在人说的「删」里面，交给人确认。
