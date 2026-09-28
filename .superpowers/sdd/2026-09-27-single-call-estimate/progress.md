@@ -317,3 +317,40 @@ Expected（落地后）：普查只剩 `capabilitySchema.test.ts:21`、`webFault
   - 真 `~/.orca` stat 前后 diff 为空。
 - 孤儿进程：本会话 `ccloop-bin` clone 的 `worker.js`（pid 66955，E2E 留下），未杀，归人。
 - **本轮收口。** 全部提交只在本地，推送归人。
+
+### §3.19 人审前的更正（会话 `fa672d9e`，2026-09-28；本节只追加，上文一字未改）
+
+人在会话里说「注释还原和改数都做，stash 删」，另外授权杀孤儿进程。本节记下这几件事，以及人审准备过程中核出的偏差。
+
+- **更正 §3.9「§3.8 O1 表里 15 处」**：O1 表是 **17 行**。
+  - 测量：python 数 `#### O1` 到 `#### O2` 之间以 `` | `tests `` 开头的行，观测时在提交 `71cc92f` 上。
+  - 17 行逐条点名见 §3.8 的 O1 表本身；按表执行这一点不变。
+- **更正两份 handoff 里的「13 个测试文件＋helper」**（Orca 和 ccloop 的 handoff 都有这句；它们是活文档，已就地改）：
+  - `06b6453` 动的是 **12 个测试文件，加 helper `tests/control/agentsFixture.ts`**，共 13 个路径。§3.2 的表本身是对的。
+  - 测量：`git -C ccloop show --name-only --format= 06b6453 -- tests`。
+- **补 §3.9 的「夹具改动」清单**：`dfe2398` 还动了下面这些，台账此前没登记：
+  - `tests/control/fixtures/fake-ccloop-control.mjs`：**替身的行为改了**：
+    - 信封只认 3；
+    - `work.kind` 未知时以 `control-request-invalid` 拒绝，这是新增的拒绝；
+    - capabilities 应答新增 `singleCallExecution`，默认 null；
+    - 新增旋钮 `omitSingleCall`／`singleCallExecution`。
+  - `tests/control/fixtures/agents.ts`：`fixtureResolveAgent` 默认答 `"v1"`；新增 `fixtureResolutionFor`。
+  - `tests/control/fixtures/store.ts`：`resolvedAs` 默认答 `"v1"`。
+  - `tests/control/fixtures/driverPort.ts`：遇到非 loop 的 work 抛错；`resolveAgent` 答 `"v1"`。
+  - `tests/control/fixtures/archive.ts`、`tests/control/fixtures/crash-worker.mjs`：只改 envelope 字面量。
+  - ⚠️ 默认 `"v1"` 有没有让某条「不该排队」的判据变成空绿，**没量过**。
+- **注释还原**：提交 `71cc92f`，主题行 `test(control): put back the published agent-selection ruling comments the protocol-3 rewrite replaced`。
+  - 起因：`dfe2398` 用 S6 行替换了远端 `bc9a466` 上已发布的归属注释 `Rewritten for agent selection (2026-09-26, human ruling …)`，还就地改写了 fake 替身里两行已发布注释。
+  - 做法：原文逐字放回，S6 行留在它下面作为更正；fake 替身的两行各加一条具名 ERRATUM。
+  - 证明：
+    - diff 只含注释行；
+    - 补回的 11 行都与 `bc9a466` 上的文件逐字相同（python 核对，rc=0）；
+    - `npm run typecheck` rc=0；
+    - 8 个相关文件的 vitest 79 过、3 skipped。skipped 的是 `webCcloopSmoke` 里要真 ccloop 二进制的那几条，本次没有设 `ORCA_CCLOOP_BIN`，**没跑**。
+  - 没动的：源码 doc 注释随代码一起改写的 5 处。它们算不算违反「已发布注释不改」，归人裁：
+    - `src/control/schema.ts`、`src/control/executionDriver.ts`、`src/control/driverHandoff.ts`、`src/control/recovery.ts`（出自 `dfe2398`／`6224f92`／`7fce7d8`）；
+    - `scripts/live-driver-acceptance.ts`（出自 `1e40cc6`）。
+- **残留处置（人授权）**：
+  - 孤儿 `worker.js`（pid 66955）已杀，`pgrep` rc=1；
+  - Orca `stash@{0}` 已删，它就是 §九 记的那个旧 stash，内容是更早轮次的 handoff 编辑；
+  - OS tmp 下 4 个 `ccloop-single-call-*` 目录与 scratchpad 里的各个 clone **未动**。

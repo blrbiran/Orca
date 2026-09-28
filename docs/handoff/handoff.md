@@ -634,7 +634,7 @@ ccloop 的 I-2 里，spec 第一版把「渲染成 `JSON.stringify`」贴在那�
 ### 6.12 本轮（2026-09-25，执行驱动轮，会话 `905e41ce`）新栽的
 
 - 🔴 *** **子代理会动主树**：三席在主树里做变异（Task 2 整张表、Task 4／Task 7 各一条）；**一席为了让 `git diff --stat` 只剩自己的文件，执行了 `git stash`，把控制器未提交的 handoff 编辑收走、没还** ——
-  控制器事后从 `git stash list` 找回（那个 stash 仍留着，删不删归人）。 ***
+  控制器事后从 `git stash list` 找回（那个 stash 已于 2026-09-28 由人授权删除）。 ***
   ⇒ **派发里写死「不许 stash／checkout／reset 主树」；控制器自己的未提交改动在派任何会碰主树的席之前先提交。**
 - 🔴 *** **「测试绿」掩盖过一个会卡死全 store 的故障**：假 port 的 handoff 产物不合 `packetSchema`，settle 后 `publishPending` 每次抛错、被兜底 catch 吞掉，
   而 `drainPending` 遇第一行失败即停 ⇒ 所有组的发布卡住、重启后 `dispatchBlocked`。 ***
@@ -987,7 +987,7 @@ Orca 要求排序去重的四值枚举 ⇒ 将来非 null 且写错时 Orca 整�
 - ✅ ~~同一个 run 第二次解冲突的 token 不记到 group~~ —— ④ 里修了（单调 spawn 键取已记账键号的 MAX；另修了一个上游 bug：尖端移动后重落会复用旧 loop-state、悄悄丢一个提交）。
 - **控制器替人做的全部决定**：SDD 台账 `.superpowers/sdd/2026-09-25-execution-driver/progress.md` 的 `Ruling:` 行（含 spec §11 D1–D21、终审 I1–I6、C4「修在 ccloop」）。
 - **缝 B 变异台账那一笔**（主题行 `docs(sdd): record the seam B mutation battery`）的 `Co-Authored-By` 与 `Claude-Session` 之间多一个空行，`%(trailers)` 只认后者 —— 人 2026-09-25 问过，控制器建议不修；**不 amend**。
-- **一个遗留的 `git stash`**（`stash@{0}`，内容是控制器当时未提交的本文编辑，已按原文重写回本文）—— 删不删归人。
+- ~~一个遗留的 `git stash`~~ —— 已由人授权删除（2026-09-28，会话 `fa672d9e`）。
 - 挂账（都登记、本轮未修）：
   - ~~优雅关闭为每个组写 shutdown stop intent（终审 m5）~~ —— ④ 里修了：驱动环的组（有 `planHash`、已 start、驱动环存在、无既有 stop intent、组内无非驱动环活动 run）跳过、条目记 `skipped-driver-owned`。⚠️ 仍成立：驱动环启用前被冻结的 run，启用后不会自动解冻；非驱动环组被 shutdown 冻结后面板没有出口。
   - 一个发布一直失败的 Web run，下次重启会让 recovery 置全 store 的 `dispatchBlocked`（m6）。
@@ -1009,7 +1009,7 @@ Orca 要求排序去重的四值枚举 ⇒ 将来非 null 且写错时 Orca 整�
 - ccloop `src/runtime/codex/protocol.ts`／`src/runtime/types.ts` 的注释把「真 codex 只在阶段末报 usage」写成事实，计划原本标的是推测 —— **已发布，只能追加具名 ERRATUM**，没改。
 - 其余延后的 Minor 全在台账里（`Task N: minor (deferred)` 行），终审已分诊为「可留登记」。
 - 实施席的 `Co-Authored-By` 写的是各自的模型（Sonnet／Opus），与历轮同一裁定；**不 amend**。
-- 旧的 `git stash@{0}`（2026-09-25 07:54，基于更早的一笔 `docs(spec)`）不是本会话留的，未动 —— 删不删归人。
+- ~~旧的 `git stash@{0}`~~ —— 已由人授权删除（2026-09-28，会话 `fa672d9e`）。
 
 ### 9.0c agent 选择一轮登记、归人的（2026-09-26／27，会话 `75ec878e`／`ab5a693c`／`8c6302e0`／`43e3e1d8`／`94b09282`）
 
@@ -1041,12 +1041,12 @@ Orca 要求排序去重的四值枚举 ⇒ 将来非 null 且写错时 Orca 整�
 
 ### 9.0e ⑤ 预算预估链一轮登记、归人的（2026-09-28，会话 `f341f05f`）
 
-- **审这一轮**：全部 `Ruling:`（台账 §3）；**S6 名单**（ccloop §3.2：13 个测试文件＋helper，只改 envelope 字面量，真正改断言的是 `protocol.test.ts` 的「names unsupported protocol versions…」；Orca §3.8：O1 的 15 处、O2 的 1 处），以及台账列出的「夹具改动」。⚠️ ccloop Rule 15(a) 要逐条指名，S6 是一揽子授权 ⇒ **要人事后逐条认可或回退**。
+- **审这一轮**：全部 `Ruling:`（台账 §3）；**S6 名单**（ccloop §3.2：12 个测试文件加 helper `agentsFixture.ts`，只改 envelope 字面量，真正改断言的是 `protocol.test.ts` 的「names unsupported protocol versions…」；Orca §3.8：O1 表 17 行、O2 的 1 处），以及台账列出的「夹具改动」（§3.19 补了 `dfe2398` 漏登记的 6 个夹具文件，其中 fake ccloop 替身的行为变了）。已发布的归属注释被就地替换那件事已还原（台账 §3.19）；源码 doc 注释随代码改写的 5 处算不算违规，归人裁。⚠️ ccloop Rule 15(a) 要逐条指名，S6 是一揽子授权 ⇒ **要人事后逐条认可或回退**。
 - **推送**：ccloop 六笔、Orca 本轮全部提交都只在本地（写本节时现测）。顺序先 ccloop 后 Orca：Orca 这批只发 `protocol: 3`，旧 ccloop 会拒。
 - **付费验证**：`--claude --scenario estimate`（`--task-tokens` ≥1,000,000）从没跑过；`--tools ""` 与输出上限只有静态证据。
 - **产品问题**：一个 profile 给所有角色时，estimator 声明窗口 ⇒ confirm 强制数值 handoff 阈值（无法表达「不按上下文交接」）。
 - **挂账要不要修**：spawn 失败／出流前退出 ⇒ `usageUnknown` 卡组（要先定义「可证明零花费」）；Linux argv 128 KiB；应用建议后 draft 仍显示；loop 阶段超时不带观测用量。
-- **残留**：OS tmp 下 4 个 `ccloop-single-call-*` 目录（变异超时留下）、scratchpad 里的 clone；本会话 `ccloop-bin` 的一个孤儿 `worker.js` 进程（未杀）。删、杀都要人点头。
+- **残留**：OS tmp 下 4 个 `ccloop-single-call-*` 目录（变异超时留下）、scratchpad 里的 clone；删都要人点头。（孤儿 `worker.js` 已由人授权杀掉，2026-09-28 会话 `fa672d9e`。）
 - **A 线（更多真 claude 形状：依赖、handoff、混 kind、n＞1）**：人裁 S1 排在 B 之后，还没开。
 
 ### 9.1 G1 缝 A 之后归人的（**2026-09-24 替换上一版「执行前必须由人给的」——那些授权都已给出并用完**）
