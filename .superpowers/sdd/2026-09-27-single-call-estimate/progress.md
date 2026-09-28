@@ -354,3 +354,40 @@ Expected（落地后）：普查只剩 `capabilitySchema.test.ts:21`、`webFault
   - 孤儿 `worker.js`（pid 66955）已杀，`pgrep` rc=1；
   - Orca `stash@{0}` 已删，它就是 §九 记的那个旧 stash，内容是更早轮次的 handoff 编辑；
   - OS tmp 下 4 个 `ccloop-single-call-*` 目录与 scratchpad 里的各个 clone **未动**。
+
+### §3.20 夹具默认 `"v1"` 会不会让判据空绿（会话 `fa672d9e`，2026-09-28；本节只追加）
+
+人要求：「量一下夹具默认 v1 会不会让判据空绿。doc注释的修改你看下是否合理，不合理就改回去。」
+
+**环境**：
+- 全新 `git clone --local`，内容＝`4ada41d`，放在本会话 scratchpad，软链 `node_modules`，先 build web；
+- `ORCA_CCLOOP_BIN` 指 ccloop clone 的 build，内容＝`66729d6`；
+- `ORCA_AGENTS_TABLE` 是 fake codex `integration` 模式的夹具表；
+- HOME 与四个 XDG 根改道；
+- 每条都跑全量：`vitest run --reporter=json`，结果重定向到文件后用 python 读回；
+- 主工作树零触碰；每条变异跑完 `git checkout` 还原，`git diff` 与 `git diff --cached` 都是 0 字节。
+
+**结果**（「新红」＝M0 基线里没有的红）：
+
+| 变异 | 改了什么 | 结果 |
+|---|---|---|
+| M0 | 不改 | 2084 条、2083 过、1 红、0 pending。红的是已登记 flake `controlShutdown`（`a real SIGTERM…`），开跑时 load 3.88 |
+| M1 | `estimator.ts` 的 `buildBudgetEstimateRequest` 删掉 `singleCallExecution !== "v1"` 条件 | 新红：`estimatePrompt.test.ts` >「is blocked-capability unless ccloop answers singleCallExecution v1, and a claim degrades the same way」；另有已登记负载 flake `driverRecovery` |
+| M2 | `estimator.ts` 的 `estimateCapabilityDegraded` 删掉同一条件 | 新红与 M1 相同（同一条判据，加上 `driverRecovery` flake） |
+| M3 | 共享夹具的默认值 `"v1"` 改成 null，共 6 处：`fixtures/agents.ts` 两处、`fixtures/store.ts`、`fixtures/driverPort.ts`、`panel/fixtures/controlPanel.ts` 两处 | 2014 过、70 红；除 `controlShutdown` 外 69 条新红，分布在 16 个文件（清单在本会话 scratchpad 的 `m/M3.json`） |
+| M4 | `ccloopPort.ts` 解析之后强行把 `singleCallExecution` 置为 `"v1"` | 新红：`ccloopPort.test.ts` >「asks capabilities about exactly the given selection…」、`singleCallWire.test.ts` >「returns ccloop's answer as given, and refuses an answer without the field」；另有已登记负载 flake `driverRecovery`、`handoffE2E` H5 |
+
+**结论**：
+- **没有发现空绿。**
+  - 默认 `"v1"` 是承重的：翻成 null 后，69 条读这些夹具的判据全红，说明它们确实观测到了估算排队。
+  - 闸门两处、port 直通这一处，都各有判据能被看见红。
+- ⚠️ 弱点：`estimator.ts` 的两处闸门**只有 `estimatePrompt.test.ts` 那一条判据守着**。
+  - `agentSelectionE2E` 在真 ccloop 下对 codex 断言 `blocked-capability`，但在 M1 下仍然是绿的：`contextWindowTokens: null` 这个条件同样会把它拦下，所以它不是这道闸门的独立守卫。§3.8 已经写过「结论不变」，本次量到的也是这样。
+  - 要不要补第二条独立守卫，归人定。
+
+**doc 注释（§3.19 留下的 5 处）**：
+- 先例（python 扫 2026-09-15 到 09-27 期间动过 `src` 的 159 笔）：删掉的注释行有 75 行，ERRATUM 只有 9 条，而且这 9 条都是在更正原本就写错的注释。代码行为变了、doc 注释跟着就地改，是本仓库的常规做法。
+- 逐处核对：
+  - `executionDriver.ts` 的 `portFor`、`driverHandoff.ts` 的 `handoffRunIds`、`recovery.ts` 的跳过注释，都与现在的代码相符，保留；
+  - `live-driver-acceptance.ts` 的 agent-selection 注释是随代码挪进 `setPreferences()` 的，原文逐字还在，保留；
+  - `schema.ts`：两行意思重复，而且丢了 `Agent selection spec §4.6` 指针。**本笔把重复的那一行改成带回这个指针**，只改注释，`npm run typecheck` rc=0。

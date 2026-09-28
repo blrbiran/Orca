@@ -38,7 +38,8 @@ export const workSchema = z.object({workItemId:idSchema,taskId:idSchema.nullable
 export const artifactSchema=z.object({artifactId:idSchema,hash:z.string().regex(/^[a-f0-9]{64}$/)}).strict();
 export const inputCheckpointSchema=z.object({predecessorRunId:idSchema,checkpointId:idSchema,checkpointHash:z.string().regex(/^[a-f0-9]{64}$/),bundlePath:z.string().min(1)}).strict();
 export const handoffRequestSchema=z.object({protocol:z.literal(1),requestId:idSchema,runId:idSchema,generation:safeInteger.positive(),reason:z.enum(["budget","context","human","graph-change","shutdown"]),deadlineAt:z.string().datetime({offset:true})}).strict();
-// Single-call estimate spec §4.1: StartEnvelopeV3 -- V2's claim, and work tagged as a loop or a single call.
+// Agent selection spec §4.6: the claim carries the complete, frozen selection (since StartEnvelopeV2); single-call
+// estimate spec §4.1: StartEnvelopeV3 keeps that claim and tags work as a loop or a single call.
 // Single-call estimate spec §4.1 (human ruling S7): start envelope protocol 3 only. `work` is a loop -- the four fields
 // protocol 2 carried, now tagged -- or one single call whose prompt and response schema Orca assembled (spec §4.2).
 const loopWorkSchema=z.object({kind:z.literal("loop"),contract:z.unknown(),targetRepo:z.string().min(1),base:z.string().min(1),sourceDir:z.string().min(1)}).strict();
