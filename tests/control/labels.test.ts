@@ -38,7 +38,7 @@ describe("the label vocabulary and the input door (spec §2.1, §8 R15)", () => 
   it("L3: accepts a Chinese custom label and stores every custom label NFC-normalized", () => {
     expect(normalizeInputLabels(["custom:前端"])).toEqual({ ok: true, labels: ["custom:前端"] });
     // "e" + U+0301 (NFD) and U+00E9 (NFC) are one label after normalization.
-    expect(normalizeInputLabels(["custom:café", "custom:café"])).toEqual({ ok: true, labels: ["custom:café"] });
+    expect(normalizeInputLabels(["custom:café", "custom:café"])).toEqual({ ok: true, labels: ["custom:café"] });
   });
 
   it("L3: counts a custom label in NFC code points, without the prefix", () => {
