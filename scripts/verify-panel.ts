@@ -560,6 +560,12 @@ async function apiPost(baseUrl: string, path: string, body: unknown, token: stri
 async function main(): Promise<number> {
   const homeBefore = await snapshotHomeOrca();
   const cleanups: Array<{ what: string; run: () => Promise<void> | void }> = [];
+  // Registered first so it runs last, after every panel that wrote into it is gone. Before this,
+  // each run of this script left the directory behind in $TMPDIR (measured 2026-09-28).
+  cleanups.push({
+    what: "remove the relocated ORCA_CONTROL_DIR",
+    run: () => guardedRmRecursive(VERIFY_CONTROL_ROOT, "orca-panel-verify-control-"),
+  });
   let exitCode = 0;
 
   try {
