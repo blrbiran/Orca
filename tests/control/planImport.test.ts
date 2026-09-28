@@ -534,3 +534,55 @@ describe("immutable plan import", () => {
     } finally { await h.dispose(); }
   });
 });
+
+describe("plan task labels through the import (labels and progress spec §2.3, criteria L1, L2, L3; §8 R12)", () => {
+  // Measured before labels existed (plan drafter finding F12, Orca 084f15f; plan Task 0 re-measures it): the archived
+  // plan of this file's label-free fixture. A label-free plan must archive to exactly these bytes for as long as it exists.
+  const LABEL_FREE_PLAN_HASH = "e38685e8b39330ab91ccbbc73c6bc60cb432e627e4811e1854b73bc13de27c5f";
+  const LABEL_FREE_PLAN_BYTES = 2251;
+
+  it("L1: archives a label-free plan to the bytes and planHash it had before labels existed", async () => {
+    const h = await setup();
+    try {
+      const imported = importControlPlan(h.deps, command());
+      if ("error" in imported) throw new Error(imported.error.code);
+      const archived = readArchivedPlan(h.store, "g");
+      expect(archived.planHash).toBe(LABEL_FREE_PLAN_HASH);
+      expect(Buffer.byteLength(archived.canonicalJson, "utf8")).toBe(LABEL_FREE_PLAN_BYTES);
+      expect(archived.plan.tasks.every(task => !("labels" in task))).toBe(true);
+    } finally { await h.dispose(); }
+  });
+
+  it("L1: an empty labels list archives exactly like no labels at all", async () => {
+    const h = await setup();
+    try {
+      await writeFile(h.planPath, JSON.stringify({ ...h.plan, tasks: h.plan.tasks.map(task => ({ ...task, labels: [] })) }));
+      const imported = importControlPlan(h.deps, command());
+      if ("error" in imported) throw new Error(imported.error.code);
+      expect(readArchivedPlan(h.store, "g").planHash).toBe(LABEL_FREE_PLAN_HASH);
+    } finally { await h.dispose(); }
+  });
+
+  it("L1/L2: archives a task's labels sorted and deduplicated, and reads the archive back", async () => {
+    const h = await setup();
+    try {
+      await writeFile(h.planPath, JSON.stringify({ ...h.plan, tasks: [{ ...h.plan.tasks[0], labels: ["test", "custom:前端", "bug", "bug"] }, h.plan.tasks[1]] }));
+      const imported = importControlPlan(h.deps, command());
+      if ("error" in imported) throw new Error(imported.error.code);
+      const archived = readArchivedPlan(h.store, "g");
+      expect(archived.plan.tasks.find(task => task.taskId === "b")!.labels).toEqual(["bug", "custom:前端", "test"]);
+      expect(archived.plan.tasks.find(task => task.taskId === "a")).not.toHaveProperty("labels");
+      expect(archived.planHash).not.toBe(LABEL_FREE_PLAN_HASH);
+    } finally { await h.dispose(); }
+  });
+
+  it("L3/R12: refuses a bare word outside the vocabulary on the Web import too, naming it in the detail", async () => {
+    const h = await setup();
+    try {
+      await writeFile(h.planPath, JSON.stringify({ ...h.plan, tasks: [{ ...h.plan.tasks[0], labels: ["Feature"] }, h.plan.tasks[1]] }));
+      expect(importControlPlan(h.deps, command())).toMatchObject({
+        error: { code: "control-plan-rejected", message: "control-plan-rejected:malformed:tasks.0.labels: labels-invalid:Feature" },
+      });
+    } finally { await h.dispose(); }
+  });
+});

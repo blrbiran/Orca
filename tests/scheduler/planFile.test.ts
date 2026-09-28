@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { PLAN_LEVEL_CHECKS, loadPlan, type PlanRejection, type PlanTask } from "../../src/scheduler/planFile.js";
+import { SYSTEM_LABELS } from "../../src/control/labels.js";
 
 function codes(r: { plan: unknown } | { rejections: PlanRejection[] }): string[] {
   return "rejections" in r ? r.rejections.map((x) => x.code) : [];
@@ -145,5 +146,25 @@ describe("PLAN_LEVEL_CHECKS is the list loadPlan actually emits (final review, I
     };
     const emitted = new Set(codes(loadPlan(everythingWrong, "main")));
     expect([...emitted].sort()).toEqual([...PLAN_LEVEL_CHECKS].sort());
+  });
+});
+
+describe("plan task labels (labels and progress spec §2.2, criterion L3)", () => {
+  it("normalizes a task's labels: any order and duplicates in, sorted and deduplicated out", () => {
+    const r = loadPlan({ ...OK, tasks: [{ ...OK.tasks[0], labels: ["test", "custom:前端", "bug", "bug"] }] }, "main");
+    if (!("plan" in r)) throw new Error(JSON.stringify(r.rejections));
+    expect(r.plan.tasks[0]!.labels).toEqual(["bug", "custom:前端", "test"]);
+  });
+
+  it("refuses the whole plan as malformed for a bare word outside the vocabulary, naming it", () => {
+    const r = loadPlan({ ...OK, tasks: [{ ...OK.tasks[0], labels: ["bug", "Feature"] }] }, "main");
+    expect(codes(r)).toEqual(["malformed"]);
+    expect("rejections" in r && r.rejections[0]!.message).toBe("tasks.0.labels: labels-invalid:Feature");
+  });
+
+  it("refuses a 17th distinct label", () => {
+    const labels = [...SYSTEM_LABELS, ...Array.from({ length: 7 }, (_, i) => `custom:c${i}`)];
+    const r = loadPlan({ ...OK, tasks: [{ ...OK.tasks[0], labels }] }, "main");
+    expect("rejections" in r && r.rejections[0]!.message).toBe("tasks.0.labels: labels-invalid:count:17");
   });
 });

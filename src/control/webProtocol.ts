@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { agentSelectionSchema, amountSchema, canonicalTimestampSchema, commandEnvelopeSchema, contextWindowSchema, idSchema, panelPartialSelectionSchema, partialSelectionSchema, safeInteger } from "./schema.js";
+import { nonEmptyStoredLabelsSchema } from "./labels.js";
 // Agent selection spec §12 I10 (plan-review P18): the selection/context/partial schemas are T7's, defined once
 // in schema.ts; webProtocol.ts re-exports them so every downstream import can come from one wire module.
 export { agentSelectionSchema, contextWindowSchema, panelPartialSelectionSchema, partialSelectionSchema } from "./schema.js";
@@ -425,6 +426,10 @@ export const controlPlanSchema = z
           targetVersion: positiveSafeInteger,
           // Agent selection spec §6.2 / §12 I3: a plan carries no configHash; confirmation freezes ccloop's.
           agent: partialSelectionSchema.optional(),
+          // Labels and progress spec §2.3: optional, format only, never empty -- a label-free plan's archive bytes and
+          // planHash stay what they were. Never `.default([])`: every archive re-parses to its own bytes (queries.ts,
+          // executionSnapshot.ts, estimator.ts), and a default would turn every older group recovery-blocked.
+          labels: nonEmptyStoredLabelsSchema.optional(),
           originalContractHash: hashSchema,
           originalContractCanonicalJson: nonemptyString,
         })

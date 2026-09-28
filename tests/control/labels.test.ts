@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ControlError } from "../../src/control/errors.js";
+import { canonicalBytes } from "../../src/control/canonicalJson.js";
+import { controlPlanSchema } from "../../src/control/webProtocol.js";
 import {
   CUSTOM_LABEL_PREFIX,
   MAX_TASK_LABELS,
@@ -100,5 +102,17 @@ describe("a task's effective labels (spec §2.4, §2.5, criterion L5)", () => {
     expect(effectiveTaskLabels({ override: [], version: 2 }, ["bug"])).toEqual({ labels: [], provenance: "operator" });
     expect(effectiveTaskLabels({ override: null, version: 3 }, ["bug"])).toEqual({ labels: ["bug"], provenance: "plan" });
     expect(effectiveTaskLabels({ override: null, version: 0 }, undefined)).toEqual({ labels: [], provenance: "plan" });
+  });
+});
+
+describe("the archived plan keeps a label the vocabulary no longer has (criterion L2, spec §2.3)", () => {
+  it("parses and re-encodes it byte for byte, and refuses an archived empty list", () => {
+    const plan = {
+      schema: "orca-control-plan-v1", repoId: "repo", planId: "plan", goal: "ship", successConditions: ["pass"],
+      tasks: [{ taskId: "a", dependencyTaskIds: [], targetVersion: 1, labels: ["zz-retired-word"], originalContractHash: "a".repeat(64), originalContractCanonicalJson: "{}" }],
+    };
+    const bytes = canonicalBytes(plan);
+    expect(canonicalBytes(controlPlanSchema.parse(JSON.parse(bytes.toString("utf8"))))).toEqual(bytes);
+    expect(controlPlanSchema.safeParse({ ...plan, tasks: [{ ...plan.tasks[0], labels: [] }] }).success).toBe(false);
   });
 });

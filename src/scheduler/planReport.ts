@@ -155,7 +155,9 @@ export function renderPlanReport(
   // tell which one a task's contract contains.
   lines.push("Write sets:");
   for (const task of plan.tasks) {
-    lines.push(`  ${task.taskId}:`);
+    // Labels and progress spec §2.2: a task's labels ride on its own line of the report a human approves a round from.
+    const labels = task.labels ?? [];
+    lines.push(labels.length > 0 ? `  ${task.taskId}: [${labels.join(", ")}]` : `  ${task.taskId}:`);
     const claims = g.writeSets.get(task.taskId) ?? [];
     if (claims.length === 0) {
       lines.push("    (none declared)");

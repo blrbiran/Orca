@@ -286,3 +286,12 @@ describe("emptyRequiredChecksPairs (fix round 1 finding 2 — the real wiring)",
     expect(emptyRequiredChecksPairs(twoTaskGraph, contracts)).toEqual([]);
   });
 });
+
+describe("task labels in the report (labels and progress spec §2.2, criterion L6)", () => {
+  it("prints a task's labels on its own line, and leaves a label-free task's line as it was", () => {
+    const labelled: PlanFile = { ...p, tasks: [{ ...p.tasks[0]!, labels: ["bug", "custom:前端"] }, p.tasks[1]!, p.tasks[2]!] };
+    const lines = renderPlanReport(g, labelled, pf, { verbose: false, base: BASE }).split("\n");
+    expect(lines).toContain("  T1: [bug, custom:前端]");
+    expect(lines).toContain("  T2:");
+  });
+});

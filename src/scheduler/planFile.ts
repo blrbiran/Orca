@@ -6,6 +6,7 @@ import { canonicalBytes, sha256Canonical } from "../control/canonicalJson.js";
 import { ControlError } from "../control/errors.js";
 import { partialSelectionSchema, safeInteger } from "../control/schema.js";
 import type { PartialSelection } from "../control/agentSelection.js";
+import { inputLabelsSchema } from "../control/labels.js";
 import { detectCycle } from "./graph.js";
 
 export interface PlanTask {
@@ -15,6 +16,8 @@ export interface PlanTask {
   targetVersion?: number;
   /** Agent selection spec §6.2: this task's worker layer (a plan carries no configHash; confirmation freezes ccloop's). */
   agent?: PartialSelection;
+  /** Labels and progress spec §2.2: sorted and deduplicated by the parser; absent when the plan names none. */
+  labels?: string[];
 }
 
 export interface PlanFile {
@@ -42,6 +45,7 @@ export interface SchedulerControlPlanSource {
     dependencyTaskIds: string[];
     targetVersion: number;
     agent?: PartialSelection;
+    labels?: string[];
     originalContract: unknown;
     originalContractCanonicalJson: string;
     originalContractHash: string;
@@ -113,6 +117,8 @@ const planTaskSchema = z
     dependsOn: z.array(z.string()),
     targetVersion: safeInteger.positive().optional(),
     agent: partialSelectionSchema.optional(),
+    // Labels and progress spec §2.2: the vocabulary is checked here, at the input door; any order and duplicates in.
+    labels: inputLabelsSchema.optional(),
   })
   .strict();
 
@@ -237,7 +243,8 @@ export function readSchedulerControlPlanSource(target: TrustedSchedulerPlanTarge
     return sourceRejected("plan-json");
   }
   const loaded = loadPlan(raw, "");
-  if ("rejections" in loaded) return sourceRejected(loaded.rejections.map(item => item.code).join(","));
+  // Labels and progress spec §8 R12: a malformed plan's message -- which names a refused label -- travels in the detail.
+  if ("rejections" in loaded) return sourceRejected(loaded.rejections.map(item => item.code === "malformed" ? `malformed:${item.message}` : item.code).join(","));
   const plan = loaded.plan;
   if (plan.targetRepo !== repositoryPath || plan.goal === undefined || plan.successConditions === undefined || plan.successConditions.length === 0) {
     return sourceRejected("control-metadata");
@@ -261,6 +268,7 @@ export function readSchedulerControlPlanSource(target: TrustedSchedulerPlanTarge
         dependencyTaskIds: [...task.dependsOn],
         targetVersion: task.targetVersion!,
         ...(task.agent ? { agent: task.agent } : {}),
+        ...(task.labels && task.labels.length > 0 ? { labels: [...task.labels] } : {}),
         originalContract: original.value,
         originalContractCanonicalJson: original.canonicalJson,
         originalContractHash: original.hash,

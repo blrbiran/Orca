@@ -122,6 +122,8 @@ export function normalizeControlPlan(source: AllowlistedPlanSource): ControlPlan
       dependencyTaskIds: [...task.dependencyTaskIds].sort(compare),
       targetVersion: task.targetVersion,
       ...(task.agent ? { agent: task.agent } : {}),
+      // Spec §2.3: written only when non-empty, like `agent`; never `labels: undefined` (canonicalBytes refuses it).
+      ...(task.labels && task.labels.length > 0 ? { labels: [...task.labels] } : {}),
       originalContractHash: task.originalContractHash,
       originalContractCanonicalJson: task.originalContractCanonicalJson,
     })).sort((left, right) => compare(left.taskId, right.taskId)),
