@@ -1,0 +1,62 @@
+{
+  "v": 1,
+  "runId": "orca-dev-c85d2c4e",
+  "runtime": "claude-code",
+  "sessionRef": "c85d2c4e-5662-4e8d-8d38-32fb94fa1036",
+  "writtenAt": "2026-09-28T06:47:57.582Z",
+  "head": "eec4f4e8299dde3414fd0eef7abd182e97e84ab7",
+  "level": {
+    "kind": "reading",
+    "level": 335986,
+    "windowTokens": 1000000,
+    "t1": 330000,
+    "t2": 450000,
+    "band": 1
+  },
+  "next": [
+    "Finish Orca handoff §9.0e and §6.21 edits, commit Orca docs (ledger §3.23 + handoff)",
+    "Rewrite ccloop handoff 'Orca 那条线' section (nineteenth version, replace whole) and commit",
+    "Replace ccmem handoff Orca section (seventeenth version) and commit",
+    "Final ls-remote in three repos; report to human with review list and executive summary"
+  ],
+  "open": [
+    "ccloop full suite leaks ~805 TMPDIR dirs per run across dozens of prefixes (needs authorization)",
+    "26(a) spawn failure -> usageUnknown needs design",
+    "runner stderr chunk toString (same shape as fixed stdin defect)",
+    "stdin prompt path only statically evidenced; real claude never run"
+  ],
+  "awaitingHuman": [
+    {
+      "kind": "irreversible",
+      "what": "push ccloop, Orca, ccmem (ccloop first)"
+    },
+    {
+      "kind": "named-authorization",
+      "what": "review Ruling lines in Orca ledger 2026-09-27-single-call-estimate §3.23, including the in-passing readStdin decode fix"
+    },
+    {
+      "kind": "named-authorization",
+      "what": "whether to fix the ccloop-wide TMPDIR leak and delete the ~190k existing entries"
+    },
+    {
+      "kind": "tied-evidence",
+      "what": "paid claude run of --claude --scenario estimate"
+    }
+  ],
+  "measurements": [
+    {
+      "command": "/usr/bin/git -C /Users/biran/code/skills/loop/ccloop ls-remote origin refs/heads/main",
+      "exitCode": 0,
+      "commit": "eec4f4e8299dde3414fd0eef7abd182e97e84ab7",
+      "observedAt": "2026-09-28T06:47:52.430Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-c85d2c4e-GfAgqQ/1.txt"
+    },
+    {
+      "command": "/usr/bin/git -C /Users/biran/code/skills/loop/Orca ls-remote origin refs/heads/main",
+      "exitCode": 0,
+      "commit": "eec4f4e8299dde3414fd0eef7abd182e97e84ab7",
+      "observedAt": "2026-09-28T06:47:57.521Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-c85d2c4e-GfAgqQ/2.txt"
+    }
+  ]
+}
