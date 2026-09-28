@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { agentSelectionSchema, amountSchema, canonicalTimestampSchema, commandEnvelopeSchema, contextWindowSchema, idSchema, panelPartialSelectionSchema, partialSelectionSchema, safeInteger } from "./schema.js";
-import { nonEmptyStoredLabelsSchema } from "./labels.js";
+import { nonEmptyStoredLabelsSchema, storedLabelsSchema } from "./labels.js";
 // Agent selection spec §12 I10 (plan-review P18): the selection/context/partial schemas are T7's, defined once
 // in schema.ts; webProtocol.ts re-exports them so every downstream import can come from one wire module.
 export { agentSelectionSchema, contextWindowSchema, panelPartialSelectionSchema, partialSelectionSchema } from "./schema.js";
@@ -866,6 +866,9 @@ export const groupSummarySchema = z
     stopState: z.enum(["paused", "handoff-pending", "handoff-partial", "handoff-unresolved", "handoff-complete"]).nullable(),
     claimBlocked: z.boolean(),
     recoveryBlockerCount: safeInteger,
+    // Labels and progress spec §4.1 (§8 R14, R19): tasks done out of the plan's tasks. Optional on the wire so older
+    // fixtures still parse; the server always gives it. The group view's `summary` is this same object (finding F7).
+    completion: z.object({ done: safeInteger, total: safeInteger }).strict().optional(),
   })
   .strict();
 
@@ -917,6 +920,11 @@ export const workItemViewSchema = z
     currentRunId: idSchema.nullable(),
     pendingRunId: idSchema.nullable(),
     lineageRunIds: sortedIdArraySchema,
+    // Labels and progress spec §2.5, §4.1 (§8 R19): the task's effective labels, where they came from, and the version a
+    // set-task-labels must name. Optional on the wire; the server always gives them.
+    labels: storedLabelsSchema.optional(),
+    labelsProvenance: z.enum(["plan", "operator"]).optional(),
+    labelsVersion: safeInteger.optional(),
   })
   .strict();
 

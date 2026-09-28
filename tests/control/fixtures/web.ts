@@ -24,7 +24,8 @@ export const profileSnapshot = (): ExecutionProfileSnapshotV1 => ({
 });
 
 // Seam B (human ruling 2026-09-24, named under ruling 88): targetVersion is one positive safe integer from plan to wire.
-export interface WebFixtureTask { taskId: string; dependsOn?: string[]; targetVersion?: number; targetPaths?: string[]; agent?: PartialSelection }
+// Labels and progress plan Task 3 (finding F14): a task may carry plan labels; absent, the plan file is unchanged.
+export interface WebFixtureTask { taskId: string; dependsOn?: string[]; targetVersion?: number; targetPaths?: string[]; agent?: PartialSelection; labels?: string[] }
 /**
  * Agent selection plan T10 (spec §6.2): the importing operator's ("human") preferences -- `null` leaves them unset, absent
  * seeds a default agent so the import-time estimator slot resolves -- and the plan's group layers (R7: no estimatorAgent).
@@ -73,7 +74,7 @@ export async function webFixture(snapshot = profileSnapshot(), tasks: readonly W
     const contractPath = join(h.root, `contract-${task.taskId}.json`);
     await writeFile(contractPath, canonicalBytes(contract));
     // Seam B (human ruling 2026-09-24, named under ruling 88): targetVersion is one positive safe integer from plan to wire.
-    planTasks.push({ taskId: task.taskId, contract: contractPath, dependsOn: task.dependsOn ?? [], targetVersion: task.targetVersion ?? 1, ...(task.agent ? { agent: task.agent } : {}) });
+    planTasks.push({ taskId: task.taskId, contract: contractPath, dependsOn: task.dependsOn ?? [], targetVersion: task.targetVersion ?? 1, ...(task.agent ? { agent: task.agent } : {}), ...(task.labels ? { labels: task.labels } : {}) });
   }
   await writeFile(planPath, JSON.stringify({ targetRepo: repo, ccloopBin: "/bin/true", runsDir: h.root, workBranch: "orca/work", policy: "local-merge", ledgerMode: "out-of-repo", goal: "ship", successConditions: ["passes"], ...options.planAgents, tasks: planTasks }));
   // Agent selection plan T10 (spec §6.4): the import freezes the estimator slot resolved from the importing operator's

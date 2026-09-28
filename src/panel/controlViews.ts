@@ -8,6 +8,7 @@ import { dimensions } from "../control/commands.js";
 import { driveRecordSchema } from "../control/driveRecord.js";
 import { ControlError } from "../control/errors.js";
 import { readProjectionChanges, readProjectionState } from "../control/projectionJournal.js";
+import { effectiveTaskLabels, readTaskLabelState } from "../control/labels.js";
 import { readArchivedPlan, readBudgetProposal, readEstimateRecord } from "../control/queries.js";
 import { readCanonicalRecord } from "../control/snapshot.js";
 import type { ControlStore } from "../control/store.js";
@@ -242,9 +243,26 @@ function stopView(store: ControlStore, groupId: string, legacyStopped: boolean):
   return stop;
 }
 
+/**
+ * Labels and progress spec §4.1 (§8 R14): `done` is the plan tasks whose work item the view shows as `completed` (stored
+ * `done`, or already `completed`); `total` is the archived plan's task count, never the work_items rows (a handoff has
+ * one too). Lenient on purpose (plan finding F5): a work item this cannot read counts as not done, and the group view's
+ * workViews names it exactly as before; a summary list must not go dark over one bad row.
+ */
+function taskCompletion(store: ControlStore, groupId: string, plan: ReturnType<typeof readArchivedPlan>["plan"]): { done: number; total: number } {
+  let done = 0;
+  for (const task of plan.tasks) {
+    const row = store.db.prepare("SELECT body FROM work_items WHERE group_id=? AND id=?").get(groupId, task.taskId);
+    let status: unknown = null;
+    try { status = row === undefined ? null : (JSON.parse(String(row.body)) as { status?: unknown }).status; } catch { status = null; }
+    if (status === "done" || status === "completed") done += 1;
+  }
+  return { done, total: plan.tasks.length };
+}
+
 export function readGroupSummary(store: ControlStore, groupId: string): GroupSummaryV1 {
   const body = groupBody(store, groupId);
-  readArchivedPlan(store, groupId);
+  const archived = readArchivedPlan(store, groupId);
   readBudgetProposal(store, groupId);
   const versions = store.db.prepare("SELECT revision,projection_seq FROM groups WHERE id=?").get(groupId);
   if (!versions) throw new ControlError("group-not-found");
@@ -259,6 +277,7 @@ export function readGroupSummary(store: ControlStore, groupId: string): GroupSum
     stopState: stop?.state ?? null,
     claimBlocked: blockers.length > 0,
     recoveryBlockerCount: blockers.length,
+    completion: taskCompletion(store, groupId, archived.plan),
   };
   const parsed = groupSummarySchema.safeParse(summary);
   if (!parsed.success) return blocked(`group-summary:${parsed.error.issues[0]?.message ?? "invalid"}`);
@@ -446,6 +465,9 @@ function workViews(
     if (body.pendingRunId && persistedRunIds.includes(body.pendingRunId)) return blocked(`work-item-pending-run:${task.taskId}`);
     const lineage = body.lineageRunIds ?? [];
     const status: WorkItemViewV1["status"] = body.status === "running" ? "active" : body.status === "done" ? "completed" : body.status;
+    // Spec §2.5: the one computation of a task's labels (labels.ts), from the work item's layer and the archived plan.
+    const labelState = readTaskLabelState(body);
+    const effective = effectiveTaskLabels(labelState, task.labels);
     return {
       taskId: task.taskId, status, dependencyTaskIds: [...task.dependencyTaskIds], targetVersion: task.targetVersion,
       configHash: body.configHash, agent: frozenEntry?.agent ?? null, agentProvenance: frozenEntry?.agentProvenance ?? null,
@@ -453,6 +475,7 @@ function workViews(
       derivedContractHash: body.derivedContractHash,
       currentRunId: body.currentRunId ?? null, pendingRunId: body.pendingRunId ?? null,
       lineageRunIds: sortedUnique(lineage),
+      labels: effective.labels, labelsProvenance: effective.provenance, labelsVersion: labelState.version,
     };
   });
 }
