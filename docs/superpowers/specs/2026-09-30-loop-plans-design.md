@@ -1,28 +1,34 @@
 # Loop plans (goal.md §3.3) — design
 
 > Session `1d7d9aa0`, 2026-09-30. Source: `docs/handoff/goal.md` §3.3 and §10.1 item 2; N1 and N8 depend on it.
-> Design only, no implementation. The plan is written only after the human has reviewed this file.
-> Every code reference was read during this session on Orca `0cc3c07` and ccloop `6ece875`. Line numbers move:
-> re-measure before citing (Rule 14).
+> Revision 2: rewritten after an independent review (§10 lists every finding and what changed). Design only.
+> Code references were read on Orca at the spec commit's parent chain (`0cc3c07` … `5b2b006`) and ccloop `6ece875`.
+> Line numbers move: re-measure before citing (Rule 14).
 
 ## 0. What this builds
 
 A **loop plan** is a named, built-in recipe that turns a few task-specific inputs into a complete ccloop task contract.
 A task in a plan file can name a loop plan (or let its labels choose one) instead of pointing at a hand-written
 contract. The panel shows the plan in plain words and lets a person change it — the plan, its inputs, and the task's
-budget — until the task starts, before or after the group is confirmed.
+work budget — until the task starts, before or after the group is confirmed.
+
+Two parts, implemented in this order (one plan, two parts, a gate after each):
+
+- **Part A** — plan registry and expansion, the plan-file `loop` form, CLI refusal, Web import with the recipe in the
+  archived plan, a read-only panel card.
+- **Part B** — task amendments (the effective-contract reader), the `set-task-loop` command with budget moves and the
+  snapshot rebuild, the editable card.
 
 ### 0.1 Not in v1
 
 - Git workspace scheme and skill set (goal.md §3.3 table): the ccloop contract cannot express them today
   (`worktreeRequired` is `true` only; landing policy is `local-merge` only; no skill injection exists). The panel shows
   them as fixed / unsupported (§4.1). Ruling D1.
-- User-defined plans (in `~/.orca/` or in a target repository). Ruling D2.
+- User-defined plans. Ruling D2.
 - A different loop shape (plan → execute → verify is fixed by ccloop) and any autonomy level but `L2`.
-- `loop` tasks on the CLI path (`orca plan`, `orca run`): refused by name (§3.4). Controller decision C1, reversible.
-- Changing a task after it has started.
-- Per-plan budget defaults (§2.3).
-- Converting a hand-written-contract task to a loop plan.
+- `loop` tasks on the CLI path (`orca plan`, `orca run`, controlled CLI rounds): refused by name (§3.4). C1.
+- Changing a task after it has started; changing a hand-written-contract task's contract.
+- Per-plan budget defaults (§2.3); editing the handoff allocation from the card.
 
 ## 1. Rulings (this session, human's words quoted)
 
@@ -34,42 +40,68 @@ budget — until the task starts, before or after the group is confirmed.
 | D4 | When the panel may change a task's plan | "B：确认后也能改，只对还没开始的 task 生效" |
 | D5 | What may change after confirmation | "C：钱也能随便改。往上调要从组余量里扣，不够就拒绝 … 都换方案了，结果预算不能改是很奇怪的一件事" |
 | D6 | Label → default plan table and priority | "可以，按这张表和优先级" (§2.4) |
-| D7 | Implementation route | "可以，按路子 1 往下走" — expand at import into the original contract; downstream unchanged |
-| D8 | Execute-abort recovery window default | 60 s ("可以，用 60 秒"); minute-scale wrap-up time is registered as a follow-up (§8) |
-| D9 | Display principle | The panel shows high-level plain-language descriptions, not code or contract JSON (human, this session) |
+| D7 | Implementation route | "可以，按路子 1 往下走" — expand at import into the original contract. ⚠️ Corrected by R1 (§10): a *later change* cannot leave downstream untouched |
+| D8 | Execute-abort recovery window default | 60 s ("可以，用 60 秒"); minute-scale wrap-up is registered (§8) |
+| D9 | Display principle | The panel shows high-level plain-language descriptions, not code or contract JSON |
+| D10 | Standing instruction for this round | "这一轮执行过程中如果有问题，先按你的建议执行（不要再找我）。执行完在最后阶段报给我审核" — the controller decisions below are made under it and reported at the end |
 
-Controller decisions (reversible, reported to the human): C1 CLI refuses `loop` tasks; C2 `maxFilesTouched` default 25
-(unmeasured); C3 `perAttemptTimeoutMs` default 3 600 000 (unmeasured); C4 the plans' `rejectOn` strings (§2.2,
-unmeasured against real verifier output).
+Controller decisions (reversible, reported to the human):
+
+- C1 CLI refuses `loop` tasks.
+- C2 `maxFilesTouched` default 25 (unmeasured).
+- C3 `perAttemptTimeoutMs` default 3 600 000 (unmeasured).
+- C4 `rejectOn` tokens (§2.2; unmeasured against a real verifier — measuring needs a paid call).
+- C5 amendments as a hashed override layer, not a rewritten archived plan (R1).
+- C6 who owns a task's work budget (§4.3).
+- C7 summary text built server-side.
 
 ⚠️ goal.md §3.3 hard constraint 1 says the expansion "must be pure code". That means **the expansion is done by
 deterministic code, never by a model** (Rule 5). It is not a display rule; D9 is the display rule.
 
 ## 2. The five plans
 
-### 2.1 What ccloop enforces (read on ccloop `6ece875`)
+### 2.1 What is actually enforced (ccloop `6ece875`, Orca)
 
-- Hard, enforced by code: `verification.requiredChecks` (run in the attempt worktree, `src/controller/runLoop.ts`
-  `runVerification`); `safetyPolicy.allowlistPaths` / `denylistPaths` / `maxFilesTouched` (`src/policy/pathPolicy.ts`,
-  a violation is a human gate).
-- Semi-hard: `verification.verifierType: "agent"` adds a model verification after every check passed;
-  `rejectOn` / `evidenceRequired` are substring matches on the verifier's evidence (`enforceVerificationContract`).
-- Soft: `objective.nonGoals` and `context.constraints` only reach the prompts (`src/runtime/claude/prompts.ts`).
+- **Hard**:
+  - `verification.requiredChecks` run in the attempt worktree; a failing check rejects the attempt (ccloop
+    `src/controller/runLoop.ts` `runRequiredChecks`, `runVerification`).
+  - Orca's own write-set check on the **real diff** at driver step C: `harvest(…, writeSetOf(contract))` refuses a
+    change outside `targetPaths ∪ allowlistPaths` as `out-of-bounds` (`src/control/executionDriver.ts`,
+    `src/scheduler/writeSet.ts` `writeSetOf`).
+- **Model-reported only**: ccloop's path policy (`allowlistPaths` / `denylistPaths` / `maxFilesTouched`,
+  `src/policy/pathPolicy.ts`) runs on the executor's self-reported `changedFiles` (for a completed execute, the model's
+  structured output; git porcelain only for partial outcomes, `scripts/claude-phase-runner.mjs`). So
+  **`denylistPaths` and `maxFilesTouched` have no git-backed check anywhere**.
+- **Semi-hard**: `verifierType: "agent"` adds a model verification after every check passed; `rejectOn` /
+  `evidenceRequired` are case-sensitive substring matches over every evidence string (`enforceVerificationContract`); a
+  match sets `safeToRetry: false`, which ends the run `failed` with no retry.
+- **Soft**: `objective.nonGoals` reach the planner prompt only; `context.constraints` reach planner and executor, not
+  the verifier (`src/runtime/claude/prompts.ts`). The verifier prompt lists the `rejectOn` phrases verbatim.
+- Codex reuses the same prompts and the same `runLoop` enforcement (`src/runtime/codex/codexAdapter.ts`), so all of the
+  above holds for both runtimes. D8's window is claude-only (§2.3).
 
 ### 2.2 The plans (version 1)
 
-| id | Panel name | Hard | Soft constraints (appended to `context.constraints`) | `verifierType` | `rejectOn` |
-|---|---|---|---|---|---|
-| `standard` | 标准 | allowlist = `targetPaths` | — | `command` | `a required check was skipped` |
-| `bugfix` | 修 bug（先红后绿） | allowlist = `targetPaths` | `First add or change a test that reproduces the bug and fails for that reason; only then change the code so that it passes.` · `Do not change behavior the bug does not involve.` | `agent` | `the reproducing test did not fail before the fix` |
-| `refactor` | 安全重构 | allowlist = `targetPaths`; denylist = `protectedPaths` | `Change no observable behavior; every existing check must pass unchanged.` | `command` | `a required check was skipped` |
-| `design` | 先写设计／文档 | allowlist = `targetPaths` (documents) | `The deliverable is a document; change no code.` | `agent` | `the document is empty` |
-| `investigate` | 只调研不改代码 | allowlist = `targetPaths` (exactly one report file); `maxFilesTouched` = 1 | `Investigate only; write the findings to the report file and change nothing else.` | `agent` | `the report is empty` |
+| id | Panel name | Hard (git-backed) | Model-reported | Soft constraints (→ `context.constraints`) | `verifierType` | `rejectOn` |
+|---|---|---|---|---|---|---|
+| `standard` | 标准 | write set = `targetPaths` | — | — | `command` | `REJECT:unused` |
+| `bugfix` | 修 bug（先红后绿） | write set = `targetPaths` | — | `First add or change a test that reproduces the bug and fails for that reason; only then change the code so that it passes.` · `Do not change behavior the bug does not involve.` | `agent` | `REJECT:no-red-first` |
+| `refactor` | 安全重构 | write set = `targetPaths` | denylist = `protectedPaths` | `Change no observable behavior; every existing check must pass unchanged.` | `command` | `REJECT:unused` |
+| `design` | 先写设计／文档 | write set = `targetPaths` (documents) | — | `The deliverable is a document; change no code.` | `agent` | `REJECT:empty-document` |
+| `investigate` | 只调研不改代码 | write set = the one report file | `maxFilesTouched` = 1 | `Investigate only; write the findings to the report file and change nothing else.` | `agent` | `REJECT:empty-report` |
 
-- `bugfix`'s "red first" is semi-hard only: nothing in ccloop can prove a test was red before the fix. The panel says
-  so (§4.1).
-- `denylistPaths` = `protectedPaths` for every plan that has them, not only `refactor`.
-- The soft-constraint wording above is plan version 1. Any change to a plan's text or rules bumps that plan's version.
+- `rejectOn` must be non-empty (ccloop schema). For the two `command` plans it is a **dead placeholder**: a command
+  verifier's evidence is only the checks' output, and ccloop runs every check or fails, so nothing emits it. The panel
+  never shows it as a discipline.
+- For `agent` plans the token is distinctive on purpose (case-sensitive substring): an echo such as "checked whether the
+  report is empty: it is not" can no longer match. Whether a real verifier emits the token when it rejects is
+  **unmeasured** (C4; measuring needs a paid call) — registered in §8.
+- `bugfix`'s "red first" rests on the verifier and its `rejectOn` token only (constraints do not reach the verifier).
+  The panel says "由模型核对，不是机械证明".
+- `denylistPaths` = `protectedPaths` for every plan that is given them; it is model-reported (§2.1) and the panel marks
+  it so.
+- The texts above are plan version 1. Any change to a plan's text or rules adds a new version; **every version's
+  definition stays in the registry** so old recipes still render and still re-expand to their stored bytes.
 
 ### 2.3 Defaults shared by every plan
 
@@ -78,18 +110,22 @@ deterministic code, never by a model** (Rule 5). It is not a display rule; D9 is
 `safetyPolicy.maxFilesTouched` 25 (C2) unless the input overrides it (`investigate`: always 1).
 `escalationAndExit`: the schema defaults. `evidenceRequired`, `humanGateConditions`: empty.
 
-The budget numbers equal today's Web default allocation `TASK_WORK` (`src/control/estimator.ts`). Plans do not differ in
-budget: there is no measurement to justify different numbers (Rule 14). People change budgets per task (§4.2).
-
-D8 basis: the window is how long the claude runner waits after SIGTERM before SIGKILL
-(`scripts/claude-phase-runner.mjs` `terminateClaudeProcess`). The adapter kills the runner's whole group within the
-frozen `killGraceMs` (at most 60 s) of an abort, so the effective window is `min(window, killGraceMs)`; and Orca's
-outcome-unknown grace is deadline + `killGraceMs` + 60 s (`handoffGraceMsOf`). A longer window would be cut short, and
-if it were not, Orca would call a stop unknown while ccloop still waited.
+- The budget numbers equal today's Web default allocation `TASK_WORK` (`src/control/estimator.ts`); import keeps giving
+  `TASK_WORK`. Plans do not differ in budget: no measurement justifies different numbers (Rule 14).
+- On the Web path `deriveContract` overrides `tokenBudget` / `maxAttempts` / `totalRuntimeBudgetMs` with the confirmed
+  work allocation and clamps `perAttemptTimeoutMs` (≤ work.activeMs) and the recovery window (≤ handoff.activeMs,
+  1 800 000 by default) (`src/control/executionSnapshot.ts` `deriveContract`).
+- `maxAttempts` 3 is rarely reached: a failed required check or a `rejectOn` match is terminal, and a retry after
+  attempt 1 needs a person (ccloop `stopController.ts`). The panel words attempts as "最多尝试次数".
+- D8 basis (claude only): the window is how long the claude runner waits after SIGTERM before SIGKILL
+  (`scripts/claude-phase-runner.mjs` `terminateClaudeProcess`). The adapter kills the runner's whole group within the
+  frozen `killGraceMs` (≤ 60 s) of an abort, so the effective window is `min(window, killGraceMs)`; Orca's
+  outcome-unknown grace is deadline + `killGraceMs` + 60 s (`handoffGraceMsOf`). Codex only mentions the window in the
+  prompt and uses `killGraceMs` itself.
 
 ### 2.4 Choosing a plan from labels (D6)
 
-When `loop.plan` is absent, the plan is the first match in this priority order over the task's system labels:
+When no plan is named, the plan is the first match in this priority order over the task's system labels:
 
 | Priority | Label(s) | Plan |
 |---|---|---|
@@ -97,13 +133,13 @@ When `loop.plan` is absent, the plan is the first match in this priority order o
 | 2 | `design`, `doc` | `design` |
 | 3 | `bug` | `bugfix` |
 | 4 | `refactor` | `refactor` |
-| 5 | anything else, or no label | `standard` |
+| 5 | `feature`, `test`, `perf`, `security`, `chore`, or no label | `standard` |
 
-`investigate` first because such a task must never change code; `bugfix` before `refactor` because a fix changes
-behavior, which `refactor` forbids. `custom:` labels are ignored. The choice is made **when the task is imported or
-when a person changes its plan**, and recorded (§3.3); changing labels later does not change the plan.
+`custom:` labels are ignored. The labels used are **the plan file's labels at import**. A change through `set-task-loop`
+always names its plan (the form's picker is pre-filled with the current one), so labels never choose a plan after
+import, and changing labels never changes a plan.
 
-## 3. Plan file and expansion
+## 3. Plan file, expansion, import (Part A)
 
 ### 3.1 The `loop` form (D3)
 
@@ -112,23 +148,25 @@ when a person changes its plan**, and recorded (§3.3); changing labels later do
   "loop": {
     "plan": "bugfix",
     "goal": "...", "successCondition": "...",
-    "targetPaths": ["src/auth/**"],
+    "targetPaths": ["src/auth/**", "tests/auth/**"],
     "checks": ["npm test"],
     "nonGoals": [], "relevantDocs": [],
-    "protectedPaths": ["tests/**"],
+    "protectedPaths": ["tests/fixtures/**"],
     "maxFilesTouched": 25
   } }
 ```
 
 - Required: `goal`, `successCondition`, `targetPaths` (≥ 1), `checks` (≥ 1). Optional: `plan`, `nonGoals`,
-  `relevantDocs`, `protectedPaths`, `maxFilesTouched` (positive safe integer). The object is `.strict()`.
+  `relevantDocs`, `protectedPaths`, `maxFilesTouched` (positive safe integer). `.strict()`.
 - A task carries exactly one of `contract` and `loop`; both or neither is `malformed`.
-- No budget in the plan file: Web import never read the contract's budget (every task gets `TASK_WORK`,
-  `src/control/planImport.ts`), so the panel is the one place budgets change.
+- `bugfix` needs its test paths inside `targetPaths` (the test must be written first); the example shows it.
+- No budget in the plan file: Web import never read the contract's budget.
+- `loadPlan`'s path checks (relative-path on `contract`, contract-inside-target-repo) apply to `contract` tasks only;
+  the `PlanTask` type becomes `contract?: string` with `loop?: LoopInput`, and every reader of `task.contract` narrows.
 
-### 3.2 Expansion — `expandLoopTask(taskId, targetRepo, loop, labels) → contract`
+### 3.2 Expansion — `expandLoopTask(taskId, targetRepo, loop, labels) → { contract, recipe }`
 
-A pure function (no clock, no filesystem, no model). Mapping:
+A pure function (no clock, filesystem or model):
 
 | Contract field | Value |
 |---|---|
@@ -136,129 +174,233 @@ A pure function (no clock, no filesystem, no model). Mapping:
 | `context` | `{ repoPath: targetRepo, targetPaths, relevantDocs, buildTestCommands: checks, constraints: <plan's soft constraints> }` |
 | `executionPolicy` | §2.3 |
 | `safetyPolicy` | `{ allowlistPaths: targetPaths, denylistPaths: protectedPaths, maxFilesTouched, humanGateConditions: [] }` |
-| `verification` | `{ verifierType, requiredChecks: checks, rejectOn, evidenceRequired: [] }` per plan |
+| `verification` | `{ verifierType, requiredChecks: checks, rejectOn: [token], evidenceRequired: [] }` per plan |
 | `escalationAndExit` | schema defaults |
 
-The result must parse under `taskContractSchema` (`src/scheduler/planFile.ts`). Per-plan validation, refused at import
-as `loop-plan-invalid:<taskId>:<reason>`: `investigate` needs exactly one `targetPaths` entry with no `*`; `design`
-refuses a `targetPaths` entry equal to `**`; an unknown `plan` id is refused.
+`recipe` = `{ schema: "orca-loop-recipe-v1", planId, planVersion, chosenBy: "explicit" | "labels", inputs }`.
 
-### 3.3 What is stored (D7)
+The contract must parse under `taskContractSchema`. Refusals, as `loop-plan-invalid:<taskId>:<reason>`:
 
-- The expanded contract is stored exactly where today's original contract is (canonical record +
-  `originalContractHash`). Estimation, confirmation (`deriveContract`), the A2 re-derivation and ccloop are unchanged:
-  they see an ordinary contract. "Original contract" now means "hand-written, or expanded from a loop plan".
-- The work item also carries a **recipe**: `{ planId, planVersion, chosenBy: "explicit" | "labels", inputs, loopVersion }`
-  where `inputs` are the `loop` fields and `loopVersion` counts changes (starts at 1). The panel reads the recipe; the
-  change command re-expands from it.
-- A plan version bump does not touch imported tasks (their expansion is stored). A later change re-expands with the
-  **current** version; the panel says "plan updated from v1 to v2".
+- `unknown-plan`.
+- `path-shape`: every `targetPaths` / `protectedPaths` entry must be an exact relative path, `<prefix>/**`, or `**` —
+  the only shapes ccloop's matcher and Orca's write set understand. `*` anywhere else, absolute paths and `..` are
+  refused.
+- `investigate-target`: `investigate` needs exactly one `targetPaths` entry, an exact file path.
+- `design-target`: `design` refuses `**`.
+
+### 3.3 Import
+
+- `readSchedulerControlPlanSource` (`src/scheduler/planFile.ts`) expands a `loop` task in place of `parseContract`, using
+  `plan.targetRepo`. The resulting `originalContract*` fields are exactly what a hand-written contract produces, so
+  estimation, confirmation, A2 and ccloop see an ordinary contract.
+- The control plan's task entry gains an optional `loop` field holding the recipe (`controlPlanSchema`,
+  `src/control/webProtocol.ts`; `normalizeControlPlan`, `src/control/planImport.ts`). It is inside the archived plan, so
+  **`planHash` covers it** (recipe integrity).
+- The projection checks `expand(recipe)` against the stored contract bytes; a mismatch blocks the task with a named
+  code, like the existing identity checks in `src/panel/controlViews.ts`.
 
 ### 3.4 CLI path (C1)
 
-`orca plan` / `orca run` read each task's contract file at run time (`src/scheduler/run.ts`, `ccloopRunner.ts`). A plan
-with a `loop` task is refused there by name, `loop-plan-cli-unsupported:<taskId>`. Follow-up in §8.
+`loadPlan` accepts the `loop` form (it is shared), but the CLI consumers refuse it by name,
+`loop-plan-cli-unsupported:<taskId>`: in the up-front rejections `orca plan` prints, in `orca run`
+(`src/scheduler/run.ts`), and in controlled CLI rounds (`src/control/schedulerBridge.ts`).
 
 ## 4. Panel
 
-### 4.1 Display (D9)
+### 4.1 Display (D9, C7)
 
-The task detail panel gets a "做法" card, generated by code from the recipe — never the contract:
+The task view gains a named field `loopPlan` (`workItemViewSchema` is `.strict()` in `src/control/webProtocol.ts`,
+mirrored in `web/src/controlTypes.ts`): `null` for a hand-written contract, else
+`{ planId, planVersion, planName, chosenBy, amended, inputs, summary: string[], hardness: … }`. The summary is built
+**server-side** by a pure function of `(planId, planVersion, inputs)` in the projection. The card shows:
 
-- Title: plan name, version, and how it was chosen ("修 bug（先红后绿）· v1 · 按标签 `bug` 选择" / "· 人指定").
-- Plain-language summary: goal and success condition (the person's own words); "只改：…", "不许改：…",
-  "最多改 N 个文件"; "验收：运行 N 条检查命令，全部通过", with the command text **collapsed** (shown on demand);
-  one line of discipline with its strength marked, e.g. `bugfix`: "先写能复现的失败测试再修（由模型核对，不是机械证明）".
-- Budget: tokens, active time, attempts. Today's budget editor moves into this card — one place per number.
-- Two fixed lines (D1): "git 工作区：独立 worktree，合回 `orca/<组>` 分支，push 由人做"; "skill 集：暂不支持".
-- A hand-written-contract task shows "手写契约" with its goal and success condition; no plan change in v1.
-- The task list shows a small plan-name chip next to the labels.
+- Title: plan name, version, how it was chosen ("修 bug（先红后绿）· v1 · 按标签 `bug` 选择" / "· 人指定"), and
+  "已修改" when amended.
+- Summary lines: goal and success condition (the person's words); "只改：…" (hard); "不许改：…（由 agent 自报，
+  不是 git 检查）"; "最多改 N 个文件（由 agent 自报）"; "验收：运行 N 条检查命令，全部通过" with the command text
+  **collapsed**; one discipline line with its strength ("先写能复现的失败测试再修（由模型核对，不是机械证明）").
+- Budget: tokens, active time, "最多尝试次数".
+- Fixed lines (D1): "git 工作区：独立 worktree，合回 `orca/<组>` 分支，push 由人做"; "skill 集：暂不支持".
+- A hand-written-contract task shows "手写契约" with its goal and success condition.
+- The task list shows a plan-name chip next to the labels.
 
-The summary text is a pure function of `(planId, planVersion, inputs)`.
+### 4.2 Change (Part B)
 
-### 4.2 Change
+- "修改做法" opens a form: plan picker (pre-filled), the `loop` inputs, and the work budget (tokens, active time,
+  attempts). The draft remembers the `loopVersion` it started from (label-editor pattern).
+- The submit button states the consequence ("预算 +500 000 token，从组余量扣；余量剩 X"), disabled with the
+  shortfall named when the reserve cannot cover it.
+- Once the task has started: read-only, "已开始，做法已冻结".
 
-- "修改做法" opens a form: plan picker, the `loop` inputs, and the task's work budget.
-- The draft remembers the `loopVersion` it started from (same pattern as the label editor).
-- The submit button states the consequence ("预算 +500 000 token，从组余量扣；余量剩 X"); it is disabled, with
-  the shortfall named, when the reserve cannot cover it.
-- Once the task has started, the card is read-only: "已开始，做法已冻结".
+### 4.3 Who owns a task's work budget (C6, Rule 7)
 
-## 5. The change command `set-task-loop` (D4, D5)
+- A **loop** task's work allocation is changed only by `set-task-loop`, before and after confirmation. `proposal-edit`
+  refuses an operation targeting it (`budget-owned-by-loop-plan`); the budget editor shows those rows read-only with
+  "在做法卡片里改".
+- A **hand-written** task keeps today's path: `proposal-edit`, which after confirmation reopens the whole proposal.
+- Group limit, handoff allocations and goal review stay with `proposal-edit`.
 
-One command before and after confirmation, through `applyWebCommand` (`commandId`, `expectedRevision`,
-`BEGIN IMMEDIATE`). Any failure rolls the whole transaction back.
+## 5. Task amendments and `set-task-loop` (Part B)
 
-Payload: `{ groupId, taskId, baseLoopVersion, plan, inputs, work: { tokens, activeMs, attempts } }`.
+### 5.1 The effective contract (C5)
 
-1. Ledger known (`assertKnownConservation`), else `recovery-blocked`; group stopped or finished ⇒ `group-state-invalid`.
-2. Not started: work item status `draft` or `ready` **and no `runs` row for it at all** (active or not), else
-   `task-already-started`. Decided inside the transaction, so a command and the driver's claim
-   (`nextClaimableTask` / `createStartingRun`, `src/control/webDispatch.ts`) cannot both win.
-3. `baseLoopVersion` ≠ recipe's `loopVersion` ⇒ `task-loop-version-conflict`; no recipe ⇒ `task-has-no-loop-plan`.
-4. Expand (§3.2); invalid ⇒ `loop-plan-invalid:<reason>`. Same contract bytes and same budget ⇒ `no-op-command`.
-5. Write the new original-contract record; update the work item's contract hash and recipe (`loopVersion` + 1).
-6. Budget, per dimension of the work allocation: delta = new − old. Group limit unchanged; the delta comes out of or goes
-   back to the reserve. Update the allocation (`fieldProvenance` human), `group.reserved` /
+- A change never rewrites the archived plan (its `planHash` reaches the proposal, the snapshot, the confirm check and
+  estimate validity). It writes a canonical **amendment record**:
+  `{ schema: "orca-task-amendment-v1", groupId, taskId, loopVersion, previousContractHash, recipe,
+  originalContractHash, originalContractCanonicalJson }`, stored with `writeCanonicalRecord`; the work item holds
+  `amendmentHash`.
+- One function, `effectivePlanTask(store, groupId, archivedTask, work)`, returns the archived task entry, or — when the
+  work item has an `amendmentHash` — that entry with the amendment's recipe and `originalContract*` fields, after
+  verifying: the record's hash, `groupId`/`taskId`, the contract parses and hashes to `originalContractHash`, and
+  `expand(recipe)` equals the contract bytes. Any failure ⇒ `recovery-blocked`.
+- Every reader of a task's original contract goes through it:
+  - the confirm path's snapshot input and its plan-authority check (`src/control/executionSnapshot.ts`
+    `verifyPlanAuthority`, `prepareExecutionSnapshot`);
+  - A2 (`readConfirmedTaskExecution`);
+  - the single-task contract reader (`src/control/queries.ts`);
+  - the projection's identity checks and task view (`src/panel/controlViews.ts`).
+  `readArchivedPlan` keeps verifying the archived bytes against `planHash` unchanged. The plan lists every reader found
+  by `git grep` of `originalContractHash|originalContractCanonicalJson|readArchivedPlan` and routes or justifies each.
+- The estimator's input stays the archived plan; an estimate made before a change reflects the old contract. v1:
+  `set-task-loop` refuses while an estimate is in flight (`estimate-in-flight`, existing code); a finished estimate's
+  suggestions stay applicable (they are numbers).
+
+### 5.2 The command
+
+One command before and after confirmation, through `applyWebCommand` (`commandId`, `expectedRevision` against
+`groups.revision`, `BEGIN IMMEDIATE`). Any failure rolls the whole transaction back.
+
+Payload: `{ groupId, taskId, baseLoopVersion, plan, inputs, work: { tokens, activeMs, attempts } }`. `sessions` is not in
+the payload: it is carried over unchanged (it is never mapped into the contract and only has to be > 0).
+
+1. Ledger known (`assertKnownConservation`), else `recovery-blocked`. Group status must be `draft` or `ready`, and not
+   stopped, else `group-state-invalid` (Web group statuses: `src/control/webService.ts`).
+2. Not started: work item status `draft` or `ready` **and no `runs` row for it at all** (a finished run returns a task
+   to `ready`, `webDispatch.ts`), else `task-already-started`. Decided inside the transaction, so the command and the
+   driver's claim (`nextClaimableTask` / `createStartingRun`) cannot both win.
+3. An estimate in flight ⇒ `estimate-in-flight`. `baseLoopVersion` ≠ the current `loopVersion` ⇒
+   `task-loop-version-conflict`; a hand-written task ⇒ `task-has-no-loop-plan`.
+4. Expand (§3.2); invalid ⇒ `loop-plan-invalid:<reason>`. Same contract bytes and same budget ⇒ `no-op-command` (a
+   plan-version bump with identical bytes is a no-op; the recipe keeps its version).
+5. Write the amendment record; set the work item's `amendmentHash`, contract hash and `loopVersion`.
+6. Budget, per dimension of the work allocation: delta = new − old. Group limit unchanged; the delta comes out of or
+   goes back to the reserve. Update the allocation (`fieldProvenance` human), `group.reserved` /
    `ledger.committedRemaining`, the reserve row / `explicitUnallocatedReserve`, and `work.grant.work`. A reserve that
    would go negative in any dimension ⇒ `group-reserve-insufficient:<dimension>:<shortfall>`. `used` never changes.
-   The handoff allocation is not editable in v1.
-7. Confirmed group only: re-derive this task's contract with the same `derivationVersion`; rebuild the group's execution
-   snapshot; write the new snapshot hash everywhere the old one is referenced (proposal, the group's mirror, queued
-   start wakes). `proposalVersion` does **not** change (it is inside every task's derived record). Old snapshots are
-   kept.
-8. Self-check before commit: run the A2 check for this task (`readConfirmedTaskExecution`,
-   `src/control/executionSnapshot.ts`) and `assertKnownConservation`; either failing throws and rolls back. So "the
-   command succeeded" implies "this task can start".
+7. Draft group: the proposal version advances (as every proposal change does), so a stale confirm is refused.
+   Confirmed group:
+   - `proposalVersion` does **not** change — it is inside every task's derived record and checked at A2 and in the
+     projection, so changing it would invalidate every other task;
+   - re-derive only this task's contract (same `derivationVersion`) and write its record;
+   - build the new snapshot by **copying the old snapshot and replacing only this task's `derivedContracts` entry and
+     its two allocations**; every other task's entries, `agents` and the rest stay byte-identical (a full rebuild would
+     re-derive held/continuing/terminal tasks from their re-amounted allocations and change their hashes);
+   - write it and point `proposal.executionSnapshotHash` and the group's mirror (`group.proposal`, kept in step by
+     `saveWebAuthority`) at it. Old snapshots are kept. Wakes carry the hash but nothing reads it back; they are left as
+     they are.
+8. Self-check before commit: `readConfirmedTaskExecution` for this task (confirmed group) and
+   `assertKnownConservation`; either failing throws and rolls back.
 
-⚠️ **Measure first (plan Task 0), not yet measured**: whether a task already running reads the snapshot hash it
-captured and compares it with the proposal's current one. If so, changing an unstarted task would turn running tasks
-`recovery-blocked`. The plan's first task lists every place that stores or compares the snapshot hash and writes the
-criterion of §6 item 9; if it is red, **stop and report to the human** rather than choose a fix.
-
-⚠️ Also to measure in Task 0: what the `sessions` budget dimension governs, and whether the form must keep it in step
-with `attempts` (today both are 3 in `TASK_WORK`).
+Measured by reading (independent review, §10 R3): no run, envelope, driver step or checkpoint stores the snapshot hash
+and compares it later; every reader resolves `proposal.executionSnapshotHash` live. The collateral risks are the full
+rebuild (fixed by step 7's copy) and `proposalVersion` (kept). §6 item 9 still measures it end to end.
 
 ## 6. Criteria
 
 Each states what it protects (Rule 9); every new branch gets a deletion mutation seen red (Rule 9 corollary 1).
 
+Part A:
+
 1. Expansion is pure: each plan's fixed input expands to pinned bytes; twice ⇒ same hash; changing any one input
    changes the hash.
-2. Each plan's hard constraints land in the contract: allowlist, denylist, `maxFilesTouched`, `verifierType`,
-   `rejectOn` — one assertion per plan per field.
-3. Plan file: `contract` + `loop` and neither are refused; per-plan validation refusals; the old `contract` form still
-   loads; the CLI refuses a `loop` task by name.
-4. Label choice: one row per table line; multi-label takes the highest; an explicit `plan` wins over labels.
-5. Summary text: same recipe ⇒ same text; command text is not in the summary body; the "由模型核对" line appears
-   for `bugfix` only.
-6. `set-task-loop`: one criterion per refusal code — started (`running`, and a task with a dead run), version conflict,
-   no recipe, invalid plan, no-op, insufficient reserve (dimension and shortfall named).
-7. Conservation before and after confirmation, raising and lowering: per dimension, reserved + reserve =
-   limit − used, and `used` unchanged.
-8. After a post-confirmation change, the task starts, passes A2, and ccloop receives the newly expanded contract (real
-   ccloop build + fake agent E2E).
-9. Not collateral: changing task A while task B runs leaves B able to proceed to settled.
-10. Race with the driver, both orders: claim first ⇒ `task-already-started`; command first ⇒ the claim uses the new
-    snapshot.
+2. Each plan's fields land in the contract: allowlist, denylist, `maxFilesTouched`, `verifierType`, `rejectOn`,
+   constraints — one assertion per plan per field.
+3. Refusals: unknown plan, each `path-shape` case, `investigate-target`, `design-target`.
+4. Plan file: `contract` + `loop` and neither refused; the old form still loads; `loadPlan`'s path checks skip `loop`
+   tasks; `orca plan`, `orca run` and a controlled CLI round refuse a `loop` task by name.
+5. Label choice: one row per table line; multi-label takes the highest; `custom:` ignored; an explicit plan wins.
+6. Import: a `loop` task's archived entry carries the recipe; `planHash` changes when an input changes; the stored
+   contract equals the expansion; a tampered recipe blocks the task in the projection.
+7. Summary: same recipe ⇒ same lines; command text not in the lines; the "由模型核对" line for `bugfix` only;
+   `rejectOn` tokens never shown.
 
-Mutations (in a `clone --local` copy only): drop `protectedPaths` from the expansion; drop a plan's soft constraints;
-hard-code `maxFilesTouched`; swap priorities 3 and 4; count only active runs as started; drop the reserve check; update
-`reserved` but not the reserve row; leave queued start wakes on the old hash; skip the self-check; put the command text
-into the summary body.
+Part B:
+
+8. `set-task-loop` refusals, one criterion each: `group-state-invalid` (per refused status), `recovery-blocked`,
+   `task-already-started` (running, and a task with a finished run), `estimate-in-flight`,
+   `task-loop-version-conflict`, `task-has-no-loop-plan`, `loop-plan-invalid`, `no-op-command`,
+   `group-reserve-insufficient` (dimension and shortfall); `proposal-edit` on a loop task's work row ⇒
+   `budget-owned-by-loop-plan`.
+9. Conservation before and after confirmation, raising and lowering: per dimension, reserved + reserve =
+   limit − used; `used` and `sessions` unchanged.
+10. Confirmed change: every other task's snapshot entries and allocations are byte-identical before and after;
+    `proposalVersion` unchanged; the changed task passes A2 and ccloop receives the newly expanded contract (real
+    ccloop build + fake agent E2E).
+11. Not collateral: changing A while B runs leaves B able to proceed to settled.
+12. Race with the driver, both orders: claim first ⇒ `task-already-started`; command first ⇒ the claim runs the new
+    contract.
+13. Effective-contract reader: a tampered amendment record (hash, task, recipe/contract mismatch) ⇒ `recovery-blocked`.
+
+Mutations (only in a `clone --local` copy): drop `protectedPaths` from the expansion; drop a plan's soft constraints;
+hard-code `maxFilesTouched`; swap priorities 3 and 4; accept a `*.ts` path shape; count only active runs as started;
+drop the reserve check; update `reserved` but not the reserve row; full snapshot rebuild instead of copy; bump
+`proposalVersion` on a confirmed change; skip the self-check; bypass `effectivePlanTask` in A2; put the command text into
+the summary.
 
 ## 7. Existing criteria
 
-None is expected to change. Import's allocation for a `loop` task stays `TASK_WORK`; the plan-file schema only adds an
-alternative. If any existing criterion turns red, stop and report it by name — rewriting one needs the human to name it.
+None is expected to change: import's allocation stays `TASK_WORK`; the schema only adds alternatives; readers see the
+archived entry when there is no amendment. If any existing criterion turns red, stop and report it by name — rewriting
+one needs the human to name it.
 
 ## 8. Registered, not in this design
 
 - **Minute-scale execute wrap-up** (D8): needs ccloop's `killGraceMs` ceiling (60 s) and Orca's outcome-unknown grace
   redesigned together.
+- **Git-backed `denylistPaths` / `maxFilesTouched`** (R4): Orca's write-set check could also refuse denylist hits and
+  count files on the real diff; that changes hand-written contracts' behavior, so it needs its own ruling.
+- **`rejectOn` tokens against a real verifier** (C4): one paid run per `agent` plan.
 - **`proposal-edit` on a Web group whose tasks have started** (read from code, not measured): the Web claim path leaves
   the group `ready`, so `prestart` does not refuse, and `reopenProposal` would return running tasks to `draft` while
-  their ccloop runs continue (`src/control/webService.ts` `prestart`, `editProposal`, `reopenProposal`). Needs a
-  criterion seen red before any fix. Related to the handoff's open item "can a Web group really enter `running`".
-- `loop` tasks on the CLI path (C1).
-- Per-plan budget defaults, once there is usage data per plan.
+  their ccloop runs continue (`src/control/webService.ts`). Needs a criterion seen red before any fix.
+- `loop` tasks on the CLI path (C1); per-plan budget defaults; converting hand-written tasks.
+
+## 9. Assumptions the plan must re-check before building on them
+
+- The exact list of original-contract readers (§5.1) — by `git grep`, not from this file.
+- That `groups.revision` refuses a stale `set-task-loop` the same way it refuses other commands
+  (`src/control/commandLedger.ts`).
+
+## 10. Independent review (revision 1 → 2)
+
+An independent agent reviewed revision 1 (read-only; its report is in the session transcript). The controller verified
+the two Critical findings against the source before acting. Finding → change:
+
+- **R1 (Critical)** A2 derives from the archived plan entry, which `planHash` covers
+  (`readConfirmedTaskExecution`: `plan.plan.tasks.find`), so revision 1's "update the work item's contract hash" could
+  never pass A2, and D7's "downstream unchanged" cannot hold for a later change. → §5.1 amendment records and
+  `effectivePlanTask` (C5), chosen over rewriting the archived plan because a new `planHash` cascades into the proposal,
+  the snapshot, the confirm check and estimate validity.
+- **R2 (Critical)** A full snapshot rebuild re-derives held/continuing/terminal tasks from re-amounted allocations. →
+  §5.2 step 7 copies the old snapshot and replaces one task; criterion 10.
+- **R3** The "measure first" risk is answered by reading: nothing stores and compares the snapshot hash; rewriting wakes
+  is unnecessary. → §5.2 last paragraph; wake rewriting removed.
+- **R4** Denylist and `maxFilesTouched` are checked on model-reported files only; the hard check is Orca's write set. →
+  §2.1, §2.2 columns, §4.1 wording, §8.
+- **R5** `rejectOn` is a case-sensitive substring over all evidence, terminal on match, and is echo-prone in an agent
+  verifier; for command verifiers it can never fire. → §2.2 tokens and notes.
+- **R6** `nonGoals` reach the planner only, constraints not the verifier; codex shares prompts; D8 is claude-only. →
+  §2.1, §2.3.
+- **R7** The bugfix example put tests in `protectedPaths`. → §3.1 example and note.
+- **R8** ccloop matches only exact, `prefix/**`, `**`. → `path-shape` refusal, criterion 3.
+- **R9** `contract` is required and read unconditionally by `loadPlan` and CLI consumers, including
+  `schedulerBridge.ts`. → §3.1, §3.4, criterion 4.
+- **R10** `sessions` is never mapped into the contract. → carried over unchanged (§5.2).
+- **R11** The view schema is strict; the summary needs a home; old plan versions must be kept; two commands would own
+  one budget. → §4.1, §2.2 last bullet, §4.3.
+- **R12** The recipe lived in an unhashed work item. → recipe in the archived plan entry (import) or the hashed
+  amendment record (change), checked against the contract bytes.
+- **R13** Missing criteria and ambiguities (state refusals, same-bytes version bump, which labels choose). → §6, §5.2
+  step 4, §2.4.
+- **R14–R16 (Minor)** Commit reference, the implicit label rows, reachable attempts. → header, §2.4, §2.3.
+- Scope: split into Part A and Part B (§0); both are implemented this round, with a gate after each.
