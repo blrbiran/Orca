@@ -1,5 +1,7 @@
 # Orca
 
+_Leave it to Orca — every idea, made real._
+
 Orca is subsystem C of the A′ decision-ledger design: a scheduler that runs a
 plan of tasks over ccloop (a sibling repository), reconciles their results
 against a shared work branch, and records every scheduling and reconciliation

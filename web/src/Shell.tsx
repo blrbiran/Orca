@@ -58,7 +58,7 @@ export function Shell(props: {
   return (
     <div className="shell">
       <nav className="sidebar" aria-label="Sections">
-        <div className="brand"><span className="brand-dot" />Orca</div>
+        <div className="brand" title="Leave it to Orca — every idea, made real."><span className="brand-dot" />Orca</div>
         <ul className="nav">
           {SECTIONS.map((section) => (
             <li key={section}>

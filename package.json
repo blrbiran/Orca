@@ -1,6 +1,7 @@
 {
   "name": "orca",
   "version": "0.1.0",
+  "description": "Leave it to Orca — every idea, made real.",
   "private": true,
   "workspaces": [
     "web"

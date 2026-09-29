@@ -16,7 +16,7 @@
 //
 // usage: tsx scripts/live-driver-acceptance.ts --ccloop-bin <abs dist/cli.js> --output <new dir>
 //          (--codex <abs codex binary> --model <name> | --fake | --claude <abs claude binary> --model <name> | --fake-claude)
-//          [--group-tokens 300000] [--task-tokens 150000] [--task-attempts 1] [--active-ms 600000]
+//          [--group-tokens 3000000] [--task-tokens 1000000] [--task-attempts 1] [--active-ms 600000]
 //          [--call-usd 2] [--deadline-ms 900000] [--context-window 1000000] [--scenario single|conflict|deadline|estimate]
 //
 // --context-window sets the operator's contextWindow for the agent (claude: 1000000 is `--model <model>[1m]`, spelled
@@ -87,8 +87,10 @@ const kind: "codex" | "claude" = args.claude !== undefined || fakeClaude ? "clau
 const isFake = fake || fakeClaude;
 for (const key of Object.keys(process.env)) if (key.startsWith("CLAUDE") && key !== "CLAUDE_CONFIG_DIR") delete process.env[key];
 if (existsSync(output)) throw new Error(`refusing an existing --output ${output}`);
-const groupTokens = Number(args["group-tokens"] ?? 300_000);
-const taskTokens = Number(args["task-tokens"] ?? 150_000);
+// Backlog #16 (2026-09-29; Orca handoff §4.0): real work needs a task grant of 1,000,000 tokens or more, cumulative
+// over every phase, attempt and continuation; the group default grows with it so the default proposal still fits.
+const groupTokens = Number(args["group-tokens"] ?? 3_000_000);
+const taskTokens = Number(args["task-tokens"] ?? 1_000_000);
 const deadlineMs = Number(args["deadline-ms"] ?? 900_000);
 // deadline: the continuation is a second attempt and session of the same task, so a grant of one leaves it nothing
 // and the task stays held (observed 2026-09-27 under --fake-claude); two is its default, an explicit value still wins.
