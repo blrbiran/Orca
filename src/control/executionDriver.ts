@@ -670,27 +670,38 @@ export const DISPATCHABLE_GROUP_STATES = new Set(["ready", "running", "review"])
 export function replenishStartWakes(deps: Pick<ExecutionDriverDeps, "store" | "admissionGate">): string[] {
   const { store } = deps;
   if (store.dispatchBlocked) return [];
-  return write(deps, () => {
+  const failed: string[] = [];
+  const armedIds = write(deps, () => {
     const armed: string[] = [];
     for (const row of store.db.prepare("SELECT id,body FROM groups ORDER BY id").all()) {
       const groupId = String(row.id);
-      const group = JSON.parse(String(row.body)) as { planHash?: string; status: string; stopped: boolean };
-      if (group.planHash === undefined || group.stopped || !DISPATCHABLE_GROUP_STATES.has(group.status)) continue;
-      if (store.db.prepare("SELECT group_id FROM stop_intents WHERE group_id=?").get(groupId)) continue;
-      if (store.db.prepare("SELECT id FROM recovery_blockers WHERE group_id=? AND scope='group'").get(groupId)) continue;
-      if (store.db.prepare("SELECT id FROM scheduler_wakes WHERE group_id=? AND kind IN ('start','no-start','resume') AND delivered=0").get(groupId)) continue;
-      const last = store.db.prepare("SELECT body FROM scheduler_wakes WHERE group_id=? AND kind='start' ORDER BY rowid DESC LIMIT 1").get(groupId);
-      if (!last || nextClaimableTask(store, groupId) === null) continue;
-      const body = JSON.parse(String(last.body)) as { startRevision: number; executionSnapshotHash?: string };
-      const ordinal = Number(store.db.prepare("SELECT COUNT(*) AS n FROM scheduler_wakes WHERE group_id=? AND id LIKE ?").get(groupId, `drive:${groupId}:%`)!.n) + 1;
-      const wakeId = `drive:${groupId}:${ordinal}`;
-      store.db.prepare("INSERT INTO scheduler_wakes(id,group_id,kind,body,delivered) VALUES (?,?,'start',?,0)").run(wakeId, groupId, canonicalBytes({
-        groupId, startRevision: body.startRevision, ...(body.executionSnapshotHash === undefined ? {} : { executionSnapshotHash: body.executionSnapshotHash }),
-      }).toString("utf8"));
-      armed.push(wakeId);
+      // Backlog #3 (Orca handoff §9.0 挂账): a group whose wake cannot be armed -- a row that does not parse, a query
+      // that throws -- is skipped and named on stderr below, like every failure the driver cannot pin on a run. It no
+      // longer takes every other group's wake, and the whole round, down with it. Each group writes at most one row,
+      // last, so a group that failed wrote nothing.
+      try {
+        const group = JSON.parse(String(row.body)) as { planHash?: string; status: string; stopped: boolean };
+        if (group.planHash === undefined || group.stopped || !DISPATCHABLE_GROUP_STATES.has(group.status)) continue;
+        if (store.db.prepare("SELECT group_id FROM stop_intents WHERE group_id=?").get(groupId)) continue;
+        if (store.db.prepare("SELECT id FROM recovery_blockers WHERE group_id=? AND scope='group'").get(groupId)) continue;
+        if (store.db.prepare("SELECT id FROM scheduler_wakes WHERE group_id=? AND kind IN ('start','no-start','resume') AND delivered=0").get(groupId)) continue;
+        const last = store.db.prepare("SELECT body FROM scheduler_wakes WHERE group_id=? AND kind='start' ORDER BY rowid DESC LIMIT 1").get(groupId);
+        if (!last || nextClaimableTask(store, groupId) === null) continue;
+        const body = JSON.parse(String(last.body)) as { startRevision: number; executionSnapshotHash?: string };
+        const ordinal = Number(store.db.prepare("SELECT COUNT(*) AS n FROM scheduler_wakes WHERE group_id=? AND id LIKE ?").get(groupId, `drive:${groupId}:%`)!.n) + 1;
+        const wakeId = `drive:${groupId}:${ordinal}`;
+        store.db.prepare("INSERT INTO scheduler_wakes(id,group_id,kind,body,delivered) VALUES (?,?,'start',?,0)").run(wakeId, groupId, canonicalBytes({
+          groupId, startRevision: body.startRevision, ...(body.executionSnapshotHash === undefined ? {} : { executionSnapshotHash: body.executionSnapshotHash }),
+        }).toString("utf8"));
+        armed.push(wakeId);
+      } catch (error) {
+        failed.push(`${groupId}: ${describeError(error)}`);
+      }
     }
     return armed;
   });
+  for (const line of failed) process.stderr.write(`orca-driver: group ${line}\n`);
+  return armedIds;
 }
 
 const DRIVEN = new Set(["starting", "start-pending", "accepted", "unknown", "collected", "landed", "reconciling"]);
@@ -783,35 +794,44 @@ export function createExecutionDriver(deps: ExecutionDriverDeps): ExecutionDrive
         if (error instanceof DriverCrash) throw error;
         // A draining panel refuses every write; the round ends and no run is blamed for it.
         if (error instanceof ControlError && error.code === "panel-draining") return progressed;
-        const run = readDriverRun(deps.store, runId);
-        // A settled run stays settled: whatever failed here is the settle step's own cleanup work,
-        // never a reason to reopen it as blocked at an earlier step (controller ruling P7,
-        // 2026-09-25). Record the failure on the run and leave it for the next round to retry --
-        // re-checked inside the write since another write may have landed while this step was
-        // in flight (the deferred note from Task 4's review: never write after an await without
-        // re-reading state first).
-        if (run.state === "settled") {
-          write(deps, () => {
-            const current = readDriverRun(deps.store, runId);
-            if (current.state === "settled" && current.drive !== undefined && !current.drive.cleanedUp) {
-              current.drive = { ...current.drive, cleanupError: describeError(error) };
-              saveDriverRun(deps.store, current);
-            }
-          });
-          process.stderr.write(`orca-driver: ${runId}: ${describeError(error)}\n`);
-          continue;
+        // Backlog #3 (Orca handoff §9.0 挂账): recording this run's failure can fail too -- a write the store refuses,
+        // a row that no longer reads. That second failure is this run's alone: it is named on stderr with both errors,
+        // and the round goes on to the next run instead of ending for every group.
+        try {
+          const run = readDriverRun(deps.store, runId);
+          // A settled run stays settled: whatever failed here is the settle step's own cleanup work,
+          // never a reason to reopen it as blocked at an earlier step (controller ruling P7,
+          // 2026-09-25). Record the failure on the run and leave it for the next round to retry --
+          // re-checked inside the write since another write may have landed while this step was
+          // in flight (the deferred note from Task 4's review: never write after an await without
+          // re-reading state first).
+          if (run.state === "settled") {
+            write(deps, () => {
+              const current = readDriverRun(deps.store, runId);
+              if (current.state === "settled" && current.drive !== undefined && !current.drive.cleanedUp) {
+                current.drive = { ...current.drive, cleanupError: describeError(error) };
+                saveDriverRun(deps.store, current);
+              }
+            });
+            process.stderr.write(`orca-driver: ${runId}: ${describeError(error)}\n`);
+            continue;
+          }
+          if (run.drive === undefined) { process.stderr.write(`orca-driver: ${runId}: ${describeError(error)}\n`); continue; }
+          // Final fix wave (FR-C2, controller ruling 2026-09-25): a run that is already blocked stays blocked where it
+          // was. `blockedAt` decides which branch closes it under a stop (spec §13.2 I-3) and where a retry resumes it,
+          // so a later error on it (a transient collect failure, an H-settle that threw) never moves it -- `stepOf`
+          // would name "E" for every blocked run. The original reason is kept as the prefix; the new error follows it.
+          if (run.state === "blocked" && run.drive.blockedAt !== null) {
+            blockRun(deps, runId, run.drive.blockedAt, laterError(run.drive.blockedReason, describeError(error)));
+          } else {
+            blockRun(deps, runId, stepOf(run), describeError(error));
+          }
+          progressed = true;
+        } catch (recordError) {
+          if (recordError instanceof DriverCrash) throw recordError;
+          if (recordError instanceof ControlError && recordError.code === "panel-draining") return progressed;
+          process.stderr.write(`orca-driver: ${runId}: ${describeError(error)}; recording it failed: ${describeError(recordError)}\n`);
         }
-        if (run.drive === undefined) { process.stderr.write(`orca-driver: ${runId}: ${describeError(error)}\n`); continue; }
-        // Final fix wave (FR-C2, controller ruling 2026-09-25): a run that is already blocked stays blocked where it
-        // was. `blockedAt` decides which branch closes it under a stop (spec §13.2 I-3) and where a retry resumes it,
-        // so a later error on it (a transient collect failure, an H-settle that threw) never moves it -- `stepOf`
-        // would name "E" for every blocked run. The original reason is kept as the prefix; the new error follows it.
-        if (run.state === "blocked" && run.drive.blockedAt !== null) {
-          blockRun(deps, runId, run.drive.blockedAt, laterError(run.drive.blockedReason, describeError(error)));
-        } else {
-          blockRun(deps, runId, stepOf(run), describeError(error));
-        }
-        progressed = true;
       }
     }
     return progressed;
