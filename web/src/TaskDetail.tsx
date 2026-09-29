@@ -13,6 +13,7 @@ import type { JSX } from "react";
 import { controlFailureFrom, downloadEvidenceArtifact, fetchRunEvidence, type ControlAction } from "./controlApi.js";
 import { CUSTOM_LABEL_PREFIX, WEB_SYSTEM_LABELS } from "./controlTypes.js";
 import type { EvidenceManifestV1, GroupViewV1, WorkItemProgressV1, WorkItemViewV1 } from "./controlTypes.js";
+import { LoopPlanCard } from "./LoopPlanCard.js";
 
 export const labelsDraftKey = (groupId: string, taskId: string): string => `labels:${groupId}:${taskId}`;
 
@@ -158,6 +159,7 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
         progress: {progressText(item.progress)}
         {item.progress?.lastTransitionAt ? ` · last transition ${item.progress.lastTransitionAt}` : ""}
       </p>
+      <LoopPlanCard view={view} item={item} />
       <h5>Runs of {item.taskId}</h5>
       {runs.length === 0 ? <p>none</p> : (
         <ul>

@@ -127,7 +127,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
                 </button>
               </td>
               <td>{item.status}</td>
-              <td><LabelChips labels={item.labels} /></td>
+              <td><LabelChips labels={item.labels} />{item.loopPlan ? <span className="plan-chip"> {item.loopPlan.planName}</span> : null}</td>
               <td>{progressText(item.progress)}</td>
               <td>{item.currentRunId ?? "none"}</td>
               <td>{item.pendingRunId ?? "none"}</td>
