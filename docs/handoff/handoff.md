@@ -145,12 +145,20 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 
 ### 4.0 ⛔ 现在的下一件事（2026-09-29 会话 `2724716d` 收尾改写，会话 `2f65a729` 续改；**本节优先于下面的 4.0.c、4.0.b、4.0.0、4.0.1 与 1–3**）
 
+**⛔ 下一会话按这个顺序做（人 2026-09-29 在会话 `2f65a729` 末尾的原话裁决）：**
+1. **#13(a)／#13(b)：人已授权改既有判据**（原话「#13(a)/(b) 改测试部分同意」）。
+   - #13(a)（ccloop）：照 Orca 计划 `docs/superpowers/plans/2026-09-29-backlog-hardening.md` Task 7 原样执行；**人授权改写** ccloop `tests/agents/registry.test.ts:56-61`「accepts opaque models it cannot interpret, including aliases with a [1m] suffix and 200 characters」——从数组里去掉 `"sonnet[1m]"`（行号先现测）。
+   - #13(b)（Orca）：`handoffGraceMsOf` 冻结值无效时的回退由 `0` 改 `60_000`；**人授权改写** `tests/panel/assemblyHandoffGrace.test.ts` >「is the agent's killGraceMs plus the fixed extra, and only the fixed extra when killGraceMs is unusable」与 `tests/control/agentFreeze.test.ts` >「judges a handoff's grace by the run's frozen killGraceMs plus the fixed extra」（`:351-354`），`-1, 1.5, "5000", null, undefined, {}` 那几行期望改为 `120_000`。出处：同一计划 Drafter findings 的 #13(b) 行。
+2. 然后 brainstorm goal.md §10.1 第 2 项 §3.3 loop 方案层（人：「同意，按顺序之后可以开始」）。
+- ✅ **会话 `2f65a729` 的全部 `Ruling:` 行人已审、同意**（`findCcloopRoot` 抛错不读 lockfile；只改跳过机制不算改判据）。会话 `2724716d` 那一轮的 `Ruling:` 行也在同一句「审 Ruling => 同意」里。
+- 待人答（会话 `2f65a729` 已在对话里给了逐条建议）：#4 的设计走向、memory tab Q1–Q7；计划 C Task 5（人那一步）已给出可直接照做的命令。
+
 **没有在飞的工作。** 会话 `2f65a729`（人授权「Web 面板的 bug 也排进这一轮」）做完了上一版「还挂着的」前两条，台账 `.superpowers/sdd/2026-09-29-evidence-root-and-refetch/progress.md`（§3、§4 两项，§5 门）：
 - ✅ `fix(scheduler): stop recording the installing repository's HEAD as ccloop's evidence`：`findCcloopRoot` 还要求 `package.json` 的 `name === "ccloop"`；装在别的仓库 `node_modules` 里的 ccloop 没有 `.git` ⇒ 具名抛错，不再记下安装方仓库的 HEAD。五处「ccloop 永远不是 npm 依赖」的已发布注释追加了具名 ERRATUM。**Ruling（人未审）**：拿不到 HEAD 时抛错，不读 Orca lockfile 的 `resolved`。
 - ✅ `fix(web): read a voided group once, and lift the refetch mark on the next whole summary`：开组 effect 只在组未缓存时读（修前判据量到 500 ms 内 399 次 GET）；`refetchRequired` 在一份自身不 purge、不缺口的完整摘要到达时复位（修前横幅永亮、轮询永远整份读）。它不挡任何命令。残留（只登记）：缺口前发出、缺口后才到的组读取会被 `reduceGroup` 收下，要等该组下一次变化才被刷新。
 - 两项都只加判据、没改既有判据；变异各 3 条都被看见红（台账表）。本轮零 push。
 
-以下是会话 `2724716d` 的原文（仍然成立）：本会话做完三份计划（台账 `.superpowers/sdd/2026-09-29-labels-progress-and-backlog/progress.md`，总账在 §2.2；逐 Task 在同目录旁的三个 SDD 工作区）。**所有 `Ruling:` 行人还没审。**
+以下是会话 `2724716d` 的原文（仍然成立）：本会话做完三份计划（台账 `.superpowers/sdd/2026-09-29-labels-progress-and-backlog/progress.md`，总账在 §2.2；逐 Task 在同目录旁的三个 SDD 工作区）。**所有 `Ruling:` 行人还没审。**（⚠️ 已过期：人 2026-09-29 在会话 `2f65a729` 裁「审 Ruling => 同意」。）
 - ✅ **标签＋内部进度**（goal.md N8＋N3，spec `docs/superpowers/specs/2026-09-28-labels-and-progress-design.md`，§8 优先）：plan 文件与面板都能写标签（10 个系统词＋`custom:`，词表只在输入口查）；`set-task-labels` 命令任何状态可用、不动提案；组完成度 `done/total`；task 的 `step`／尝试 n/max／token 占比（拿不到就 unknown）；task 详情面板（标签编辑、draft 记住起始版本、evidence 逐件下载）。ccloop `collect` 多答 `progress`。真 ccloop＋fake claude 的 E2E 看到 `execute` 并在结束读到 1/1。
 - ✅ **待办批量**（计划 `docs/superpowers/plans/2026-09-29-backlog-hardening.md`）：ERRATA、stderr 按流解码、stream-usage 四处守卫各有判据、`message_delta` 按流配对、续跑输入进 prompt、描述符维度收紧、M3 单事件、M4 零写快照记根、驱动环一组失败不拖垮整轮（每组 SAVEPOINT）、A2 只派确认时冻结的选择、strict 分支要求约束 tokens、预算编辑器点名挡派活的 handoff 能力、slogan、验收脚本默认额度 1M／3M。
 - ✅ **ccloop 走 git 依赖**（计划 `docs/superpowers/plans/2026-09-29-ccloop-git-dependency.md`，**文末「更正」节优先**）：ccloop 有 `prepare`＋`files`；Orca 没设 `ORCA_CCLOOP_BIN` 时从已装的包解析（只在 panel 启动与 `orca agents` 处填默认）。**`package.json` 的依赖行与 lock 是人的一步，没做**（计划 Task 5）。
@@ -162,7 +170,7 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 - ✅ **Orca `check-tmp-leak` 剩 1 个空目录已修**（会话 `2f65a729`，主题行 `test(control): gate the default-ccloop E2E at run time so its temp root is removed`，台账 `.superpowers/sdd/2026-09-29-tmp-leak-skipped-file/progress.md`）。🔴 **原先「flake 红的那一轮里 worker 被杀」的归因是错的**：`ccloopDefaultE2E.test.ts` 用 `describe.skipIf` 整文件在收集期跳过，vitest 对这样的文件不跑任何文件级 hook（`@vitest/runner` `runSuite`，`mode === "skip"`），而 setup 文件已经建了目录 ⇒ 每次全量必漏 1 个。改成 `beforeEach` 里 `ctx.skip()`，断言一个字没动。**Ruling（人未审）**：只改跳过机制不算「改既有判据」。
   ⇒ ⚠️ **以后写开关控制的 E2E，不要让整个文件在收集期被跳过**（`scopeTmpdir.ts` 的 ERRATUM 记了这条）。另有 9 个 `tests/control` 文件用 `skipIf`，门的环境里都会跑；不设 `ORCA_CCLOOP_BIN` 等变量的环境里若整文件跳过也会漏，只登记。
 - 人那一步（计划 C Task 5 ＋ 文末更正节）：前置「ccloop 的打包提交先到 GitHub」**已满足**（会话 `2f65a729` 开工时 `ls-remote` 三仓与本地一致）。
-- 要人裁的：#13(a) `[1m]`（要指名改 ccloop `tests/agents/registry.test.ts:56-61`）；#13(b)（要指名改 `assemblyHandoffGrace.test.ts`、`agentFreeze.test.ts:351-354`）；#4 resume／sweep `--agents`（要设计）；Web 组能不能真的进 `running`（标签判据里手写了这个状态）。
+- 要人裁的：~~#13(a)、#13(b)~~（人已授权，见本节开头）；#4 resume／sweep `--agents`（要设计）；Web 组能不能真的进 `running`（标签判据里手写了这个状态）。
 - 旧挂账不变：26(a)「可证明零花费」（设计）；D12 解冲突预留差 1 token（验收脚本 `--fake --scenario conflict` 仍以 `reconcile-budget` 挡住）。
 - **之后的方向**：goal.md §10.1 第 2 项 §3.3 loop 方案层（要 brainstorm）；A 线与付费估算验证（每次要人点头）。
 
