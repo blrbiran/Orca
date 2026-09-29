@@ -266,6 +266,29 @@ export function buildExecutionSnapshot(input: ConfirmedProposal): ExecutionSnaps
 }
 
 /**
+ * Loop plans spec §5.2 step 7 (independent review R2): a confirmed task's change rewrites only that task's derived
+ * contract entry and its two allocations. Every other entry, the agents and the rest are copied byte for byte: a full
+ * rebuild would re-derive held, continuing and terminal tasks from their re-amounted allocations and change their
+ * hashes, and would rewrite the reserve row.
+ */
+export function replaceTaskInSnapshot(
+  snapshot: ExecutionSnapshotV1, taskId: string, derivedContractHash: string,
+  allocations: { work: ExecutionAllocation; handoff: ExecutionAllocation },
+): { snapshot: ExecutionSnapshotV1; canonicalJson: string; snapshotHash: string } {
+  const next = structuredClone(snapshot);
+  const ref = next.derivedContracts.find(entry => entry.taskId === taskId);
+  if (!ref) throw new ControlError("recovery-blocked");
+  ref.derivedContractHash = derivedContractHash;
+  for (const bucket of ["work", "handoff"] as const) {
+    const index = next.allocations.findIndex(row => row.ownerKind === "task" && row.ownerId === taskId && row.bucket === bucket);
+    if (index < 0) throw new ControlError("recovery-blocked");
+    next.allocations[index] = structuredClone(allocations[bucket]);
+  }
+  const parsed = executionSnapshotSchema.parse(next);
+  return { snapshot: parsed, canonicalJson: canonicalBytes(parsed).toString("utf8"), snapshotHash: sha256Canonical(parsed) };
+}
+
+/**
  * Handoff delivery plan deviation D-SNAP (2026-09-25): the shape a live allocation is compared to its frozen
  * counterpart in. Web spec §5.1.1 re-amounts a parked task allocation (held, then continuing) to its remaining
  * grant, and it keeps that amount once terminal; those amounts are the ledger's settlement, not a drift from the

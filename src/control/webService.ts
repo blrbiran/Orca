@@ -5,7 +5,7 @@ import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { dimensions, zero } from "./commands.js";
 import { ControlError } from "./errors.js";
 import { buildBudgetEstimateRequest, ESTIMATE_GRANT, GOAL_REVIEW, TASK_HANDOFF, TASK_WORK, provenance, residual, safeNumber, sumAmounts, persistEstimateArtifacts, estimateCapabilityDegraded, classifyEstimateOutput } from "./estimator.js";
-import { deriveContract, prepareExecutionSnapshot, readConfirmedTaskExecution } from "./executionSnapshot.js";
+import { deriveContract, prepareExecutionSnapshot, readConfirmedTaskExecution, replaceTaskInSnapshot } from "./executionSnapshot.js";
 import { answeredPartials, currentPartials, readGroupAgentOverrides, RECONCILE_SLOT_KEY, resolveGroupSelections, taskSlotKey, type GroupSelectionResolution } from "./agentFreeze.js";
 import type { ExecutionPort } from "./executionPort.js";
 import { estimatorSlotFor, importControlPlanAsync, rejectedEstimatorRequest, type AsyncImportDeps, type ImportCommand } from "./planImport.js";
@@ -14,7 +14,7 @@ import type { FrozenSlot } from "./agentSelection.js";
 import { readArchivedPlan, readBudgetProposal, readEstimateRecord, type BudgetProposalRecord } from "./queries.js";
 import { amountSchema } from "./schema.js";
 import { writeCanonicalRecord, readCanonicalRecord } from "./snapshot.js";
-import { dispatchEnvelopeSchema, estimateExecutionContractSchema } from "./webProtocol.js";
+import { dispatchEnvelopeSchema, estimateExecutionContractSchema, executionSnapshotSchema } from "./webProtocol.js";
 import { scheduleStart, type StartCommand } from "./webDispatch.js";
 import { applyHandoffStop, applyPauseDispatch, applyRecoveryRetry, applyResumeDispatch, type HandoffStopCommand, type PauseCommand, type RecoveryRetryCommand, type ResumeDispatchCommand, type StopDeps } from "./stopIntent.js";
 import { applyContinueTask, applyResumeFromHandoff, type ContinueTaskCommand, type ResumeFromHandoffCommand } from "./continuation.js";
@@ -635,7 +635,13 @@ export class WebControlService {
           work.derivedContractHash = derived.derivedContractHash;
           work.grant = { ...(work.grant as Record<string, unknown>), work: next };
           this.store.db.prepare("UPDATE work_items SET body=? WHERE group_id=? AND id=?").run(JSON.stringify(work), id, taskId);
-          // (Task B3 inserts the snapshot copy here.)
+          // Step 7: copy the confirmed snapshot, replacing only this task's derived contract and its two allocations,
+          // and point the proposal (and, through saveWebAuthority, the group's mirror) at it. Old snapshots are kept.
+          const frozen = executionSnapshotSchema.parse(JSON.parse(readCanonicalRecord(this.store, proposal.executionSnapshotHash!)));
+          const bare = ({ state: _state, ...rest }: BudgetProposalRecord["allocations"][number]) => rest;
+          const rebuilt = replaceTaskInSnapshot(frozen, taskId, derived.derivedContractHash, { work: bare(allocation), handoff: bare(handoff) });
+          writeCanonicalRecord(this.store, id, rebuilt.snapshotHash, rebuilt.canonicalJson);
+          proposal.executionSnapshotHash = rebuilt.snapshotHash;
           saveWebAuthority(this.store, group, proposal);
           // Step 8: the changed task passes A2 before this commits.
           readConfirmedTaskExecution(this.store, id, taskId);
