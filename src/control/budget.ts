@@ -84,7 +84,8 @@ export function componentMin(a:Amount,b:Amount):Amount {
 export function assertCapabilities(mode:BudgetMode,c:CapabilityViewV1):void {
   if(!capabilityViewSchema.safeParse(c).success) throw new ControlError("control-capability-unsupported");
   if(c.usageObservation==="unavailable" || c.budgetEnforcement==="unavailable" || c.handoffControl!=="durable" || c.handoffExecution===null) throw new ControlError("control-capability-unsupported");
-  if(mode==="strict" && (c.budgetEnforcement!=="bounded" || c.requestBoundProof===null)) throw new ControlError("control-capability-unsupported");
+  // Backlog #11(a) (Orca handoff §9.1): strict needs the proof to bound tokens, as probeBlocksDispatch, profiledCapabilities and the estimator's gate already require.
+  if(mode==="strict" && (c.budgetEnforcement!=="bounded" || c.requestBoundProof===null || !c.requestBoundProof.workDimensions.includes("tokens"))) throw new ControlError("control-capability-unsupported");
 }
 export function claimWork(store:ControlStore,input:ClaimInput, preparedWork?:WorkInput):Claim {
   const {groupId,workItemId,graphVersion,targetVersion,capabilities,executionProfile,handoffProfile,...meta}=input;
