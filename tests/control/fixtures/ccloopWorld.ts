@@ -54,7 +54,11 @@ const CCLOOP_CAPABILITIES = {
   handoffExecution: "mechanical-in-run-v1", contextWindowTokens: null, requestBoundProof: null,
 } as const;
 
-export interface Task { taskId: string; dependsOn?: string[]; targetPaths: string[]; requiredChecks?: string[]; verifierType?: "agent" | "command"; agent?: PartialSelection }
+export interface Task {
+  taskId: string; dependsOn?: string[]; targetPaths: string[]; requiredChecks?: string[]; verifierType?: "agent" | "command"; agent?: PartialSelection;
+  // Loop plans spec §3.1: a task that names a loop plan instead of a contract file.
+  loop?: Record<string, unknown>;
+}
 /**
  * One fake codex script entry: the files execute writes; ccloop C5 adds how long each phase sleeps first,
  * and ccloop C-3 whether the phase reports its usage before that sleep.
@@ -113,6 +117,11 @@ export function ccloopWorlds(options: { rootPrefix: string; epochPrefix: string 
     await mkdir(contracts);
     const planTasks = [];
     for (const task of tasks) {
+      if (task.loop !== undefined) {
+        // Loop plans spec §3.1: the plan file names a loop plan; import expands it (planFile.ts).
+        planTasks.push({ taskId: task.taskId, loop: task.loop, dependsOn: task.dependsOn ?? [], targetVersion: 1, ...(task.agent === undefined ? {} : { agent: task.agent }) });
+        continue;
+      }
       const checks = task.requiredChecks ?? ["true"];
       // Agent by default, so the verify phase's provider call is exercised; E1's task c and T1 use a
       // command verifier, whose verify phase calls no provider. Before ccloop C4 (9a91d2b) that phase
