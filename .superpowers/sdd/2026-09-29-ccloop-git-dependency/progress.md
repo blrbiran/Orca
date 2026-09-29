@@ -1,0 +1,13 @@
+# SDD ledger — plan: docs/superpowers/plans/2026-09-29-ccloop-git-dependency.md
+Task 1: complete (ccloop 2190b89..0b31ea8, review clean; mutations MP1–MP5 deferred to Task 4 by design)
+Task 2: complete (Orca e66f4bc, review clean; mutations M-B1..M-B7 deferred to Task 4)
+Task 2: ⚠️ for Task 3 review: ccloopBin.ts claims the resolved path must be a realpath because ccloopPort regularAbsolute requires it — check at wiring.
+Task 3: Ruling: implementer proceeded although Step 0 found tests/control/ccloopBin.test.ts (Task 2's own test, not in the brief's list) — why: it only exercises the helper, it is re-run in Step 6 and passed 6/6 — cost if wrong: none observed.
+Task 3: Ruling: reword the plan-mandated README claim so it is true before the human's Task 5 (option a), and fold two ccloopBin.ts fixes into the same round (realpathSync under --preserve-symlinks; corrupt manifest → CcloopNotInstalled instead of crashing panel boot) — why: docs must not state future facts; "never a crash" is load-bearing — cost if wrong: Task 2's file touched in Task 3's fix round.
+Task 3: minor (deferred): `orca agents` with no/bad verb prints ccloop-not-installed instead of usage when the package is missing (brief-mandated order).
+Task 3: fix round 1/5 (3 addressed, 0 open — README true today, realpathSync, unreadable manifest named; 030704a..48dd1c3). The non-JSON manifest test was already green before the fix (Node's resolver rejects it first); the EACCES test is the one that measures the fix.
+Task 3: complete (Orca 030704a..48dd1c3, review clean after 1 fix round)
+Task 4: complete (scratch only) — offline npm pack (prepare ran), 130 files, E2E ccloopDefaultE2E + ccloopBin 12/12 with ORCA_CCLOOP_BIN unset; mutations 17/17 red on their own tests (incl. M-B8 realpathSync :104, M-B9 manifest try/catch :115), restores 0/0. Plan gap: Task 4 must build web/dist in the clone. M-B9 guarded only by the EACCES test (needs non-root).
+Task 5: human step, written in the plan, not executed.
+Final review (plan C): code ready; Task 5 human checklist corrected in a plan correction section (/bin/test, 12 tests, web/dist, npm ci, push order). Deferred as next round's first item: findCcloopRoot (ledgerWiring.ts:290-298) can record Orca's HEAD as ccloop evidence when the bin is under node_modules — silent wrong evidence, reachable only via an explicit orca run plan path. Deferred minors: CcloopNotInstalled text and cli usage assume Task 5 landed; sandbox.ts:79,101 and ledgerWiring/run.ts comments say ccloop is never an npm dependency; agents/command.ts USAGE omits the default.
+PLAN C COMPLETE (except the human Task 5).
