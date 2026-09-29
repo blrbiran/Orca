@@ -10,6 +10,7 @@ import { randomUUID } from "node:crypto";
 import { assembleControlRuntime, type ControlRuntime } from "./controlAssembly.js";
 import { runControlPanelStartup } from "./controlLifecycle.js";
 import { resolveControlOptions, type ControlOptionsResolution } from "./controlOptions.js";
+import { withDefaultCcloopBin } from "../control/ccloopBin.js";
 import { NO_VIEWER_IDENTITY, PanelRejection } from "./rejection.js";
 import { ReviewsWriter } from "./reviewsStore.js";
 import { loadStaticFiles } from "./staticFiles.js";
@@ -248,5 +249,9 @@ export async function createPanelServer(opts: PanelOptions, env: NodeJS.ProcessE
 }
 
 export async function startPanelFromArgs(args: string[]): Promise<StartedPanel> {
-  return createPanelServer(parsePanelArgs(args, process.env), process.env);
+  // ccloop dependency plan (2026-09-29): ORCA_CCLOOP_BIN unset ⇒ the installed ccloop package. Filled here, at the
+  // process boundary, so resolveControlOptions and its criteria keep reading only the environment. A missing package
+  // leaves the variable unset and the panel boots without an execution port, as ruling R5 requires.
+  const { env } = withDefaultCcloopBin(process.env);
+  return createPanelServer(parsePanelArgs(args, env), env);
 }

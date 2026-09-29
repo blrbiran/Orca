@@ -398,3 +398,13 @@ A claim without a prepared dispatch intent remains blocked for explicit recovery
 Run the offline control gate with `npm run verify:control`; it is included in
 `npm run verify`. Scheduler integration tests require the existing ccloop build
 through `ORCA_CCLOOP_BIN` when the checkout has no sibling ccloop repository.
+
+`orca panel` and `orca agents` find ccloop through `ORCA_CCLOOP_BIN` when it is set
+(an empty value means "no execution port"), and otherwise through the ccloop package
+installed as Orca's dependency (`package.json` pins it to a commit by git URL). With
+neither, `orca agents` stops with `ccloop-not-installed` and the panel starts without
+an execution port. The real-ccloop criteria under `tests/control` and
+`npm run verify:control` still need `ORCA_CCLOOP_BIN` pointing at a ccloop checkout's
+build, because they use fixtures from ccloop's `tests/` tree, which the package does
+not ship. `ORCA_CCLOOP_DEFAULT_E2E=1` (with `ORCA_CCLOOP_BIN` unset) runs
+`tests/control/ccloopDefaultE2E.test.ts` against the installed package.

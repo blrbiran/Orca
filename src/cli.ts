@@ -22,6 +22,7 @@ import { writeCheckpoint } from "./checkpoint/write.js";
 import { resumeOutcome } from "./checkpoint/resume.js";
 import { runChainCommand } from "./chain/command.js";
 import { runAgentsCommand } from "./agents/command.js";
+import { withDefaultCcloopBin } from "./control/ccloopBin.js";
 
 const USAGE = `usage:
   orca validate <path...>        validate ledger file(s) or directory (directory scans top-level *.jsonl only)
@@ -57,7 +58,8 @@ const USAGE = `usage:
                                  it off. Its state lives under $ORCA_CONTROL_DIR (default
                                  ~/.orca/control/<repo key>); more than one --repo has no key to
                                  name it after, so it needs --control-state-dir. Running work also
-                                 needs ORCA_CCLOOP_BIN + ORCA_AGENTS_TABLE and the two
+                                 needs ORCA_AGENTS_TABLE, ccloop (ORCA_CCLOOP_BIN, else the ccloop
+                                 package installed with Orca) and the two
                                  estimator flags -- without them the panel still starts and still
                                  shows recovery, and refuses those commands by name.
   orca compact-reviews [--apply] [--root <dir>] [--repo <key>=<path>]...
@@ -567,7 +569,13 @@ export async function main(argv: string[], stdinText?: string): Promise<number> 
   }
 
   if (command === "agents") {
-    return runAgentsCommand(rest, process.env, { stdout: (text) => process.stdout.write(text), stderr: (text) => process.stderr.write(text) });
+    // ccloop dependency plan (2026-09-29): ORCA_CCLOOP_BIN unset ⇒ the installed ccloop package; neither ⇒ stop by name.
+    const { env, notInstalled } = withDefaultCcloopBin(process.env);
+    if (notInstalled !== null) {
+      process.stderr.write(`orca agents: ${notInstalled.message}\n`);
+      return 1;
+    }
+    return runAgentsCommand(rest, env, { stdout: (text) => process.stdout.write(text), stderr: (text) => process.stderr.write(text) });
   }
 
   if (command === "checkpoint") {
