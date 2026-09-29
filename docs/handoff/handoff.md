@@ -94,20 +94,19 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 
 ✅ *** **⑤ 预算预估链（2026-09-28，会话 `f341f05f`）已落地、已推送、人已审完；人授权的待办 1–6 已由会话 `c85d2c4e`（同日）做完**：ccloop 临时目录泄漏、删残留（27）、两处 v1 闸门的独立判据（24）、挂账三条（26 的 b／c／d）。*** 只剩 26(a)（要先做设计）。细节与诚实的表述见 §四 4.0。
 
+✅ *** **loop 方案层（goal.md §3.3）两部分都做完了（2026-09-30，会话 `1d7d9aa0`）**：plan 文件的 task 可以写 `loop`（五个内置方案）代替手写契约，面板显示白话做法卡片，`set-task-loop` 在 task 开跑前（确认前后都行）改方案、输入与预算。*** 细节与诚实的表述见 §4.0。
+
 **还不能说的**：*** **「Web 派活可用」「claude 可用」「分层选择可用」都不是事实。** *** 能说的只有：**真 codex 下单任务主链跑通过一次**（2026-09-25，会话 `af3dc0d3`，
 请求模型 gpt-6-luna，服务层不含 HTTP，n＝1；台账 `.superpowers/sdd/2026-09-25-live-acceptance/progress.md` §5 是唯一可引的表述）；**真 claude 下单任务主链跑通过一次**（2026-09-27，会话 `43e3e1d8`，claude 2.1.283、请求模型 claude-opus-5-5、隔离参数、n＝1；台账 `.superpowers/sdd/2026-09-26-agent-selection/progress.md` §14 是唯一可引的表述）；**真 claude 下 1M 窗口单任务、两任务冲突经 `ccloop run --agents` 解开各跑通过一次**（2026-09-27，会话 `4d2e426e`，各 n＝1；同一台账 §20 是唯一可引的表述）。
 依赖、崩溃恢复、面板 HTTP、strict 组、④ handoff、⑤ 预估链（single-call 估算）、混 kind 都没在真 agent 下验过；冲突／解冲突只在真 claude 下跑过一次（两任务、一处冲突），真 codex 下没跑过。**驱动环只在 port `configured` 时挂；未配置时行为逐字节同前。**
 
-**现行基线（会话 `2f65a729`，2026-09-29，临时目录泄漏修复之后；原始报数在台账 `.superpowers/sdd/2026-09-29-tmp-leak-skipped-file/progress.md` §5，输出在该会话 scratchpad `gate3/`）**：环境同下。
+**现行基线（会话 `1d7d9aa0`，2026-09-30，loop 方案层 Part B 与终审修复之后；原始报数在台账 `.superpowers/sdd/2026-09-30-loop-plans/progress.md` 的 Task B8 行，输出在该会话 scratchpad `gate-partB/`）**：全新 clone，HOME＋四个 XDG 根改道，TMPDIR 短真目录，夹具表 fake codex `integration`，clone 里先 build web。
+- ccloop（内容＝主题行 `fix(agents): refuse a claude model that carries the [1m] context suffix itself`）：build／typecheck RC 0；**1087 条、1086 过、1 红（`stopProof`）**；`check-known-reds` RC 0；`check-tmp-leak` RC 0。
+- Orca（内容＝主题行 `fix(web): freeze the plan card where the server refuses, and name its discard button`）：web build／typecheck RC 0；**2331 条、2327 过、1 红（`driverLanding` X1，5 s 超时，全量期间 1 分钟负载 48；单文件 3/3 绿）、3 pending（`ccloopDefaultE2E`，全量里默认关，门里单独那一步 3/3 过）**；web check 37 文件／193 条；`verify:panel` 15 PASS；`verify:ccloop-pin` RC 0；✅ `check-tmp-leak` RC 0；真 `~/.orca` 不变。`verify:control` 没跑。
+- 同会话更早的 Part A 门（内容＝主题行 `feat(web): show a task's loop plan on its card and in the task list`）与 #13／重钉脚本那一次门，结果同形，原始报数在同一台账与 `.superpowers/sdd/2026-09-30-13ab-and-pin-script/progress.md` §6。
+
+**上一版基线（会话 `2f65a729`，2026-09-29，临时目录泄漏修复之后；原始报数在台账 `.superpowers/sdd/2026-09-29-tmp-leak-skipped-file/progress.md` §5，输出在该会话 scratchpad `gate3/`）**：环境同下。
 - Orca（内容＝主题行 `test(control): gate the default-ccloop E2E at run time …`）：typecheck RC 0；**2153 条、2149 过、1 红（`driverRecovery` 5 s 超时，单独 3/3 绿）、3 pending（`ccloopDefaultE2E`，现在是运行时跳过）**；✅ **`check-tmp-leak` RC 0**，第一次全量跑完的 `TMPDIR` 也剩 0；真 `~/.orca` 不变。web check／`verify:panel` 这次没跑（web 与面板没改）。
-
-**上一版基线（会话 `2f65a729`，2026-09-29，前两项收尾；原始报数在台账 `.superpowers/sdd/2026-09-29-evidence-root-and-refetch/progress.md` §5，输出在该会话 scratchpad `gate/`）**：全新 clone，HOME＋四个 XDG 根改道，TMPDIR 短真目录，夹具表 fake codex `integration`。
-- Orca（内容＝主题行 `fix(web): read a voided group once, …`）：typecheck RC 0；**2153 条、2146 过、4 红（`driverLanding` D、`driverProgress` R2、`driverRecovery` 三条 5 s 超时，`controlShutdown` 143；全量期间 5 分钟负载到 10.6；四个文件单独各 3/3 绿）、3 pending（`ccloopDefaultE2E` 开关未开）**；web check 33 文件／167 条；`verify:panel` 15 PASS；真 `~/.orca` 不变。🔴 `check-tmp-leak` RC 1（剩 1 个空 `orca-test-control-*`；根因见现行基线那条的台账，与 flake 无关）。`verify:control` 没跑。
-- ccloop 本轮零改动，没跑它的门；它的现行基线仍是下一条里会话 `2724716d` 那一版。
-
-**上一版基线（会话 `2724716d`，2026-09-29；原始报数在台账 `.superpowers/sdd/2026-09-29-labels-progress-and-backlog/progress.md` §2.2，输出在该会话 scratchpad `gate2-out/`）**：环境同上。
-- ccloop（内容＝主题行 `build: ship ccloop as a git dependency …`）：typecheck RC 0；**1086 条、1085 过、1 红（`stopProof`）**，`check-known-reds` RC 0，`check-tmp-leak` RC 0。
-- Orca（内容＝主题行 `docs(plan): correct the human step …`）：typecheck RC 0；**2152 条、2146 过、3 红（`driverRecovery`、`handoffE2E` H5、`controlShutdown`，都是已登记 flake，单文件各 3/3 绿）、3 pending（`ccloopDefaultE2E` 开关未开）**；`progressE2E` passed；web check 32 文件／164 条；`verify:panel` 15 PASS；`verify:control` 887 过 3 skip；真 `~/.orca` 不变。🔴 `check-tmp-leak` RC 1（剩 1 个空目录，见 §4.0）。
 
 **更早一版基线（会话 `c85d2c4e`，2026-09-28，待办 1–6 收尾；取代会话 `fa672d9e`、`f341f05f`、`f8281a60`、`5b01dbd9` 的四版，那几版的原始报数在各自台账：`2026-09-27-single-call-estimate` §3.18／§3.20、`2026-09-27-panel-ui-redesign` 末节、`2026-09-27-claude-stream-usage` §3）**：只抄工具报数，原始数在台账 `.superpowers/sdd/2026-09-27-single-call-estimate/progress.md` §3.23。env 同下（夹具表 fake codex `integration`、HOME＋四个 XDG 根改道），两份都是新 clone，门跑期间没人在里面做变异。
 - ccloop（内容＝主题行 `fix(claude): hand claude a prompt too large for argv on stdin, …` 那一笔）：build／typecheck RC 0；**1066 条、1065 过、1 红**（`stopProof`），`check-known-reds` **RC 0**（名单 14 个名字）。
@@ -125,6 +124,7 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 ⇒ **看到这两个文件红：先单文件重跑，绿了就不是回归。**
 ⚠️ *** **（2026-09-27 会话 `5b01dbd9` 新登记）`tests/chain/gateCheck.test.ts` 的 K13 在全量里撞过 5 s 超时，单跑 3/3 绿。另有一个反例要记住：`driverRecovery` 那条在高负载时（load 约 37）单文件也能连红 3 次。** *** ⇒ 所以单跑判别要在负载降下来之后做，并同时记下 `uptime`，不能只看一次单跑。
 ⚠️ *** **④ 轮新增的负载型 flake（同样规则：单文件重跑绿 ＝ 不是回归）**：`tests/control/driverRecovery.test.ts` 的 "drives a retried run on from where it was blocked, to settled"、`tests/control/driverLanding.test.ts` 两条、`tests/control/handoffE2E.test.ts` 的 G（依赖 30 s 实时窗）、`web/tests/controlCommandRecovery.test.tsx` 的 "drops the id when the lookup returns the command's retained result"（单跑 3/3 绿）。 ***
+⚠️ **（2026-09-30 会话 `1d7d9aa0` 新登记）`tests/control/driverLanding.test.ts` 的 "X1: lands while the person has orca/<group> checked out, leaving their files and index alone"**：全量里 5 s 超时（1 分钟负载 43／48），单文件 3/3 绿；同轮 `driverRecovery` "drives a retried run on…" 也在负载 43 时红过一次，单文件 3/3 绿。
 ⚠️ **（2026-09-29 会话 `2f65a729` 新登记）`tests/control/driverProgress.test.ts` 的 "R2: books exactly the usage of a collect without progress, and nothing twice"**：全量里 5 s 超时一次（5 分钟负载 10.6），单文件 3/3 绿。同一轮 `driverLanding` D 也以 5 s 超时红过一次。
 
 ⚠️ *** **已知 flake（2026-09-24 会话 `ae4061a5` 现测登记，根因未查；2026-09-25 那一轮全套里没出现）**：
@@ -143,40 +143,46 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 
 ## 四、⛔ 下一件事
 
-### 4.0 ⛔ 现在的下一件事（2026-09-29 会话 `2724716d` 收尾改写，会话 `2f65a729` 续改；**本节优先于下面的 4.0.c、4.0.b、4.0.0、4.0.1 与 1–3**）
+### 4.0 ⛔ 现在的下一件事（2026-09-30 会话 `1d7d9aa0` 收尾整节改写；**本节优先于下面的 4.0.c、4.0.b、4.0.0、4.0.1 与 1–3**）
 
-**⛔ 下一会话按这个顺序做（人 2026-09-29 在会话 `2f65a729` 末尾的原话裁决）：**
-1. **#13(a)／#13(b)：人已授权改既有判据**（原话「#13(a)/(b) 改测试部分同意」）。
-   - #13(a)（ccloop）：照 Orca 计划 `docs/superpowers/plans/2026-09-29-backlog-hardening.md` Task 7 原样执行；**人授权改写** ccloop `tests/agents/registry.test.ts:56-61`「accepts opaque models it cannot interpret, including aliases with a [1m] suffix and 200 characters」——从数组里去掉 `"sonnet[1m]"`（行号先现测）。
-   - #13(b)（Orca）：`handoffGraceMsOf` 冻结值无效时的回退由 `0` 改 `60_000`；**人授权改写** `tests/panel/assemblyHandoffGrace.test.ts` >「is the agent's killGraceMs plus the fixed extra, and only the fixed extra when killGraceMs is unusable」与 `tests/control/agentFreeze.test.ts` >「judges a handoff's grace by the run's frozen killGraceMs plus the fixed extra」（`:351-354`），`-1, 1.5, "5000", null, undefined, {}` 那几行期望改为 `120_000`。出处：同一计划 Drafter findings 的 #13(b) 行。
-2. **重钉 ccloop 的脚本与门里那一步**（人 2026-09-29：「同意」）：写 `scripts/pin-ccloop.mjs <sha>`——`npm install github:blrbiran/ccloop#<sha>` 加计划 C Task 5 Step 3 的五项核对（含更正节第 1–4 条），任何一项不为 0 就非 0 退出；门脚本加一步 `env -u ORCA_CCLOOP_BIN ORCA_CCLOOP_DEFAULT_E2E=1` 跑 `tests/control/ccloopDefaultE2E.test.ts`（先 `npm run build --workspace web`），让钉旧了在门里变红。脚本本身要有判据，变异要看见红。
-3. 然后 brainstorm goal.md §10.1 第 2 项 §3.3 loop 方案层（人：「同意，按顺序之后可以开始」）。
-- ✅ **会话 `2f65a729` 的全部 `Ruling:` 行人已审、同意**（`findCcloopRoot` 抛错不读 lockfile；只改跳过机制不算改判据）。会话 `2724716d` 那一轮的 `Ruling:` 行也在同一句「审 Ruling => 同意」里。
-- ✅ 计划 C Task 5 人已做完：主题行 `build: pin ccloop as a git dependency at 926d74f5c2bb`（lock 的 `resolved` 是 `git+ssh://…`，别的机器 `npm ci` 需要 GitHub SSH 凭据）。
-- ✅ memory tab Q1–Q7 人已裁「按建议定」，记在 spec `docs/superpowers/specs/2026-09-29-memory-tab-design.md` §9；实现排在 §3.3 之后，实现前先读 ccmem 源码核 Q6 的两处。
-- #4：人倾向方案 A（`run --agents` 把选择原字节冻结进 `<runDir>/agent-selection.json`，`resume`／`sweep` 读它、物化、比 hash）。控制器补充的事实：Orca 从不对 ccloop 调 `resume`／`sweep`，ccloop `sweep` 已具名拒绝 `--agents` ⇒ 今天只影响人手动续跑；**人裁：设计定为 A，时机按控制器建议——与「Orca 续跑被打断的解冲突 run」一起做**，不单独做。
-- ✅ **钉版本的规矩（人 2026-09-29 已同意，重钉由 agent 做）**：只有 Orca 依赖了 ccloop 的**新行为**（线协议、新命令）时才要重钉；顺序是 ccloop 提交 → 人推 ccloop → agent 跑 `npm install github:blrbiran/ccloop#<SHA>` 与计划 C Task 5 Step 3 的核对 → agent 提交 → 人推 Orca。建议做成脚本 `scripts/pin-ccloop.mjs`，并在门里加一步：`env -u ORCA_CCLOOP_BIN ORCA_CCLOOP_DEFAULT_E2E=1` 跑 `ccloopDefaultE2E`，让钉旧了在门里变红。
+**⛔ 下一会话按这个顺序做：**
+1. **先等人审本会话的裁定**：人 2026-09-30 的原话是「这一轮执行过程中如果有问题，先按你的建议执行（不要再找我）。执行完在最后阶段报给我审核」。要审的是：
+   - spec 的 D10 与控制器决定 C1–C7（`docs/superpowers/specs/2026-09-30-loop-plans-design.md` §1、§10、§11）；
+   - 计划头部的「Controller rulings on the draft」（R-F5 面板英文、R-F15）；
+   - 台账 `.superpowers/sdd/2026-09-30-loop-plans/progress.md` 里全部 `Ruling:` 行（P1–P10 在同目录 `rulings.md`）。
+   人回「认可／回退 X」之前，不要在这些点上继续加东西。
+2. **推送归人**：ccloop 本地领先远端（上一会话的 handoff 一笔，加 `fix(agents): refuse a claude model that carries the [1m] context suffix itself`），Orca 本地领先很多笔。以 `/usr/bin/git ls-remote` 现测为准。**这次不需要重钉 ccloop**：Orca 不依赖 #13(a) 的新行为。
+3. **然后由人选下一件**（goal.md §10.1 的顺序是 N1 → N2 → N5）：
+   - **N5 memory tab**：spec 已裁（`docs/superpowers/specs/2026-09-29-memory-tab-design.md` §9），handoff 早先定过「排在 §3.3 之后」，现在可以开。实现前先读 ccmem 源码，核 Q6 的两处。
+   - **N1 需求 → 拆分**：要先 brainstorm。它依赖的 §3.3 与 N8 都已落地。
 
-**没有在飞的工作。** 会话 `2f65a729`（人授权「Web 面板的 bug 也排进这一轮」）做完了上一版「还挂着的」前两条，台账 `.superpowers/sdd/2026-09-29-evidence-root-and-refetch/progress.md`（§3、§4 两项，§5 门）：
-- ✅ `fix(scheduler): stop recording the installing repository's HEAD as ccloop's evidence`：`findCcloopRoot` 还要求 `package.json` 的 `name === "ccloop"`；装在别的仓库 `node_modules` 里的 ccloop 没有 `.git` ⇒ 具名抛错，不再记下安装方仓库的 HEAD。五处「ccloop 永远不是 npm 依赖」的已发布注释追加了具名 ERRATUM。**Ruling（人未审）**：拿不到 HEAD 时抛错，不读 Orca lockfile 的 `resolved`。
-- ✅ `fix(web): read a voided group once, and lift the refetch mark on the next whole summary`：开组 effect 只在组未缓存时读（修前判据量到 500 ms 内 399 次 GET）；`refetchRequired` 在一份自身不 purge、不缺口的完整摘要到达时复位（修前横幅永亮、轮询永远整份读）。它不挡任何命令。残留（只登记）：缺口前发出、缺口后才到的组读取会被 `reduceGroup` 收下，要等该组下一次变化才被刷新。
-- 两项都只加判据、没改既有判据；变异各 3 条都被看见红（台账表）。本轮零 push。
+**本会话做完了什么**（全在本地，零 push）：
+- ✅ #13(a)（ccloop，主题行 `fix(agents): refuse a claude model that carries the [1m] context suffix itself`）：model 自带 `[1m]` 后缀一律拒，`agent-context-unsupported`，不分大小写。按人授权改写了 `tests/agents/registry.test.ts` 那条判据（去掉 `"sonnet[1m]"`，名字里那半句也删了，因为留着是假话）。
+- ✅ #13(b)（Orca，主题行 `fix(control): count an unusable frozen killGraceMs as its 60 s ceiling, not 0`）：两条授权判据改为 `120_000`；已发布注释追加具名 ERRATUM。
+- ✅ 重钉脚本与门（主题行 `build: re-pin ccloop by script, and let the gate run the default-ccloop E2E`）：`node scripts/pin-ccloop.mjs <sha>`；`npm run verify` 在 web build 之后多一步 `verify:ccloop-pin`。计划 C Task 5 有两处照抄会错，脚本已按重钉改写：lock 条目是「变」不是「加」；`npm ci` 要先拷工作树的两个文件进副本。**用真 npm 在副本里钉到 `927bbfe` 真跑过一次，RC 0**。台账 `.superpowers/sdd/2026-09-30-13ab-and-pin-script/progress.md`。
+- ✅ **loop 方案层**：spec `docs/superpowers/specs/2026-09-30-loop-plans-design.md`（第 2 版，经独立评审；§10 逐条列评审发现，§11 是计划阶段更正），计划 `docs/superpowers/plans/2026-09-30-loop-plans.md`，台账 `.superpowers/sdd/2026-09-30-loop-plans/progress.md`（15 个 task 都经过任务评审，终审「修后可交」，F1–F11 修完复审全过）。
+  - 五个内置方案：`standard`／`bugfix`／`refactor`／`design`／`investigate`，v1。展开是纯函数（`src/control/loopPlans.ts`），导入时展开成普通契约；配方存进归档 plan，受 `planHash` 覆盖。
+  - 导入后再改走**修订记录**（`src/control/taskAmendments.ts`）：所有读原始契约的地方统一经 `effectivePlanTask`。确认后改只替换整组快照里那一个 task 的条目，`proposalVersion` 不变。
+  - `set-task-loop`（`POST /api/control/groups/:groupId/tasks/:taskId/loop`）：task 未开跑时可用，预算差额从组余量扣或还。loop task 的 work 预算只归它管，`proposal-edit` 拒 `budget-owned-by-loop-plan`。
+  - 面板：做法卡片（英文白话，命令折叠），「Change plan」表单；组不在 draft／ready 或已停时只读。
+  - CLI（`orca plan`／`orca run`／受控轮）遇到 `loop` task 具名拒绝 `loop-plan-cli-unsupported:<taskId>`。
 
-以下是会话 `2724716d` 的原文（仍然成立）：本会话做完三份计划（台账 `.superpowers/sdd/2026-09-29-labels-progress-and-backlog/progress.md`，总账在 §2.2；逐 Task 在同目录旁的三个 SDD 工作区）。**所有 `Ruling:` 行人还没审。**（⚠️ 已过期：人 2026-09-29 在会话 `2f65a729` 裁「审 Ruling => 同意」。）
-- ✅ **标签＋内部进度**（goal.md N8＋N3，spec `docs/superpowers/specs/2026-09-28-labels-and-progress-design.md`，§8 优先）：plan 文件与面板都能写标签（10 个系统词＋`custom:`，词表只在输入口查）；`set-task-labels` 命令任何状态可用、不动提案；组完成度 `done/total`；task 的 `step`／尝试 n/max／token 占比（拿不到就 unknown）；task 详情面板（标签编辑、draft 记住起始版本、evidence 逐件下载）。ccloop `collect` 多答 `progress`。真 ccloop＋fake claude 的 E2E 看到 `execute` 并在结束读到 1/1。
-- ✅ **待办批量**（计划 `docs/superpowers/plans/2026-09-29-backlog-hardening.md`）：ERRATA、stderr 按流解码、stream-usage 四处守卫各有判据、`message_delta` 按流配对、续跑输入进 prompt、描述符维度收紧、M3 单事件、M4 零写快照记根、驱动环一组失败不拖垮整轮（每组 SAVEPOINT）、A2 只派确认时冻结的选择、strict 分支要求约束 tokens、预算编辑器点名挡派活的 handoff 能力、slogan、验收脚本默认额度 1M／3M。
-- ✅ **ccloop 走 git 依赖**（计划 `docs/superpowers/plans/2026-09-29-ccloop-git-dependency.md`，**文末「更正」节优先**）：ccloop 有 `prepare`＋`files`；Orca 没设 `ORCA_CCLOOP_BIN` 时从已装的包解析（只在 panel 启动与 `orca agents` 处填默认）。**`package.json` 的依赖行与 lock 是人的一步，没做**（计划 Task 5）。
-- 📝 **memory tab 只写了 spec**：`docs/superpowers/specs/2026-09-29-memory-tab-design.md`，Q1–Q7 待人裁（其中 Q2：`ccmem export` 可能在真实 `~/.claude/ccmem` 上触发迁移与约 200 MB 备份）。
+**诚实的表述**：fake codex ＋ 真 ccloop build 下，「确认后改一个 task → A2 读到新契约 → ccloop 收到新展开的契约 → 落地」端到端成立（`tests/control/loopPlanE2E.test.ts`）。**真 claude／真 codex 下一次都没跑过**；各方案的 `rejectOn` 令牌对真 verifier 会不会误伤也没量过（要付费）。
 
-**诚实的表述**：fake claude＋真 ccloop 下标签与进度端到端成立；真 claude 下 single-call 估算、stdin 传 prompt、`progress`、子代理 stream 配对都没跑过。
+**这一轮挂账**（都在 spec §8 与台账里；这里只列会咬人的）：
+- `denylistPaths`（受保护路径）与 `maxFilesTouched` 只查 agent **自报**的文件，没有 git 硬检查；硬的只有 Orca 的写集检查与检查命令。
+- 修订后的「已结算 task 被整组重算」那一格没被任何判据构造过（U8）。
+- 分钟级收尾窗口（需 ccloop `killGraceMs` 上限与 Orca handoff 宽限一起改）。
+- 读码推断、未实测：Web 组开跑后组状态仍是 `ready`，`proposal-edit` 可能把在跑的 task 退回 `draft`（`webService.ts` `prestart`／`reopenProposal`）。先写判据看红再谈修。
+- 卡片看 `summary.stopMode`，服务端看 `group.stopped`；两者会不会不一致没追。
+- fake codex 恒报改了 `answer.txt` ⇒ 以后用它跑 loop task 的 E2E，`targetPaths` 要带上 `answer.txt`（loop 方案的 allowlist 就是 `targetPaths`，ccloop 会以 `allowlist miss` 停下）。
 
-**还挂着的**（下一件事由人选）：
-- ✅ **Orca `check-tmp-leak` 剩 1 个空目录已修**（会话 `2f65a729`，主题行 `test(control): gate the default-ccloop E2E at run time so its temp root is removed`，台账 `.superpowers/sdd/2026-09-29-tmp-leak-skipped-file/progress.md`）。🔴 **原先「flake 红的那一轮里 worker 被杀」的归因是错的**：`ccloopDefaultE2E.test.ts` 用 `describe.skipIf` 整文件在收集期跳过，vitest 对这样的文件不跑任何文件级 hook（`@vitest/runner` `runSuite`，`mode === "skip"`），而 setup 文件已经建了目录 ⇒ 每次全量必漏 1 个。改成 `beforeEach` 里 `ctx.skip()`，断言一个字没动。**Ruling（人未审）**：只改跳过机制不算「改既有判据」。
-  ⇒ ⚠️ **以后写开关控制的 E2E，不要让整个文件在收集期被跳过**（`scopeTmpdir.ts` 的 ERRATUM 记了这条）。另有 9 个 `tests/control` 文件用 `skipIf`，门的环境里都会跑；不设 `ORCA_CCLOOP_BIN` 等变量的环境里若整文件跳过也会漏，只登记。
-- 人那一步（计划 C Task 5 ＋ 文末更正节）：前置「ccloop 的打包提交先到 GitHub」**已满足**（会话 `2f65a729` 开工时 `ls-remote` 三仓与本地一致）。
-- 要人裁的：~~#13(a)、#13(b)~~（人已授权，见本节开头）；#4 resume／sweep `--agents`（要设计）；Web 组能不能真的进 `running`（标签判据里手写了这个状态）。
-- 旧挂账不变：26(a)「可证明零花费」（设计）；D12 解冲突预留差 1 token（验收脚本 `--fake --scenario conflict` 仍以 `reconcile-budget` 挡住）。
-- **之后的方向**：goal.md §10.1 第 2 项 §3.3 loop 方案层（要 brainstorm）；A 线与付费估算验证（每次要人点头）。
+**上一会话（`2f65a729`／`2724716d`）留下、仍然成立的**：
+- memory tab Q1–Q7 人已裁「按建议定」（spec §9）。
+- #4（`resume`／`sweep` 支持 `run --agents` 起的 run）：人裁设计为 A，时机与「Orca 续跑被打断的解冲突 run」一起做。
+- 钉版本规矩：只有 Orca 依赖了 ccloop 的新行为才重钉；顺序是 ccloop 提交 → 人推 ccloop → agent 跑 `node scripts/pin-ccloop.mjs <SHA>` → agent 提交 → 人推 Orca。
+- 旧挂账：26(a)「可证明零花费」（要设计）；D12 解冲突预留差 1 token；Web 组能不能真的进 `running`；`tests/control` 里另有 9 个文件用 `skipIf`，在不设 `ORCA_CCLOOP_BIN` 的环境里整文件跳过会漏临时目录（只登记）。
+- 语言规则：只有对话与 handoff 用中文；代码、注释、commit、新建的台账／spec／plan 用英文。**面板文案也是英文**（本轮 R-F5）。
 
 ### 4.0.c ⑤ 预算预估链与其后续修复（2026-09-28 会话 `f341f05f`／`c85d2c4e`，**已完成、人已审完**）
 
@@ -1177,6 +1183,14 @@ Orca 要求排序去重的四值枚举 ⇒ 将来非 null 且写错时 Orca 整�
     - 26：挂账修哪几条；
     - 27：OS tmp 下 4 个 `ccloop-single-call-*` 目录，以及会话 `f341f05f`、`fa672d9e` scratchpad 里的 clone，删不删。
   - ⚠️ 人回「回退」某条时，回退对象按台账 §3 对应的 Ruling 行或 S6 表找；**回退动的是已发布的笔，只能追加新提交，不能改写历史**。
+
+### 9.0f #13／重钉脚本／loop 方案层一轮登记、归人的（2026-09-30，会话 `1d7d9aa0`）
+
+- **人审**：本会话按人的授权「先按你的建议执行，最后报给我审核」替人定了很多点，清单见 §4.0 第 1 步。
+- **归属行**：本轮全部实施子代理都跑在 Opus 5.5 上，所以统一的 `Co-Authored-By: Claude Opus 5.5 (1M context)` 是真话（台账 P8）。评审子代理不提交。
+- **上下文额度**：本会话越过了 Rule 6 的 T1（330k）与 T2（450k）。人事先明说「这个session暂时不要考虑context大小」；越线在 Orca 检查点 `orca-dev-1d7d9aa0` 与本节都有记录。
+- **付费**：本会话零付费调用；loop 方案在真 agent 下没跑过，`rejectOn` 令牌对真 verifier 的测量要一次付费跑（spec §8）。
+- 变异副本留在会话 scratchpad（`mut-*`、`gate-*`），没删；删要人点头。
 
 ### 9.1 G1 缝 A 之后归人的（**2026-09-24 替换上一版「执行前必须由人给的」——那些授权都已给出并用完**）
 
