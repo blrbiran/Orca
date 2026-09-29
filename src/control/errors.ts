@@ -45,8 +45,6 @@ export const durableCommandErrorStatuses = {
   "handoff-request-conflict": 409,
   // Labels and progress spec §3.1 (§8 R7): the task's labels moved since the person read them (plan finding F17).
   "labels-version-conflict": 409,
-  // Loop plans spec §5.2 step 3: the task's plan moved since the person read it.
-  "task-loop-version-conflict": 409,
   "landing-branch-conflict": 409,
   "plan-version-conflict": 409,
   "profile-changed": 409,
@@ -68,6 +66,8 @@ export const durableCommandErrorStatuses = {
   "stop-already-active": 409,
   "stop-mode-conflict": 409,
   "target-version-conflict": 409,
+  // Loop plans spec §5.2 step 3: the task's plan moved since the person read it.
+  "task-loop-version-conflict": 409,
   "usage-event-conflict": 409,
   "work-already-active": 409,
   "work-already-done": 409,
@@ -80,6 +80,8 @@ export const durableCommandErrorStatuses = {
   "agent-selection-rejected": 422,
   "cleanup-not-recoverable": 422,
   "budget-overflow": 422,
+  // Loop plans spec §4.3 (C6): a loop task's work allocation is changed only by set-task-loop.
+  "budget-owned-by-loop-plan": 422,
   "continuation-budget-unavailable": 422,
   "continuation-predecessor-unrecoverable": 422,
   "control-capability-unsupported": 422,
@@ -113,17 +115,10 @@ export const durableCommandErrorStatuses = {
   "group-budget-unavailable": 422,
   "group-deadline-expired": 422,
   "group-project-binding-required": 422,
-  "group-review-budget-unavailable": 422,
-  "group-state-invalid": 422,
   // Loop plans spec §5.2 (step 6): a raise the group's reserve cannot cover; the detail is `<dimension>:<shortfall>`.
   "group-reserve-insufficient": 422,
-  // Loop plans spec §3.2 / §5.2 step 4: the expansion refused the plan or its inputs; the detail names the reason.
-  "loop-plan-invalid": 422,
-  // Loop plans spec §5.2 steps 2-3: a task that has started, or that has no loop plan, cannot be changed.
-  "task-already-started": 422,
-  "task-has-no-loop-plan": 422,
-  // Loop plans spec §4.3 (C6): a loop task's work allocation is changed only by set-task-loop.
-  "budget-owned-by-loop-plan": 422,
+  "group-review-budget-unavailable": 422,
+  "group-state-invalid": 422,
   "group-stopped": 422,
   "handoff-budget-unavailable": 422,
   "handoff-grant-insufficient": 422,
@@ -133,6 +128,8 @@ export const durableCommandErrorStatuses = {
   "labels-invalid": 422,
   "landing-not-confirmed": 422,
   "landing-needs-review": 422,
+  // Loop plans spec §3.2 / §5.2 step 4: the expansion refused the plan or its inputs; the detail names the reason.
+  "loop-plan-invalid": 422,
   "no-op-command": 422,
   "numeric-overflow": 422,
   "reconcile-budget-unapproved": 422,
@@ -145,6 +142,9 @@ export const durableCommandErrorStatuses = {
   "snapshot-partial": 422,
   "snapshot-invalid": 422,
   "snapshot-required": 422,
+  // Loop plans spec §5.2 steps 2-3: a task that has started, or that has no loop plan, cannot be changed.
+  "task-already-started": 422,
+  "task-has-no-loop-plan": 422,
   "usage-gap": 422,
 
   // A durable recovery lock is immutable for this command ID.

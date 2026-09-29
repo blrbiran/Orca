@@ -27,6 +27,7 @@ export const taskAmendmentSchema = z
     groupId: idSchema,
     taskId: idSchema,
     loopVersion: safeInteger.positive(),
+    // History only: effectivePlanTask does not verify it against the archived or prior contract (final review Minor 6).
     previousContractHash: hashSchema,
     recipe: loopRecipeSchema,
     originalContractHash: hashSchema,
