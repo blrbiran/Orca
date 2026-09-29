@@ -76,6 +76,16 @@ describe("labels and progress in the work item table (spec §4.2)", () => {
     expect(rows()).toEqual(["a", "b"]);
   });
 
+  it("drops a checked label that no task carries any more, so the table does not stay empty", () => {
+    const { rerender } = render(<Stateful view={view([workItem({ taskId: "a", labels: ["bug"] }), workItem({ taskId: "b", labels: ["perf"] })])} onCommand={vi.fn()} />);
+    fireEvent.click(screen.getByRole("checkbox", { name: "bug" }));
+    expect(rows()).toEqual(["a"]);
+    // The person removed "bug" from its last task: the next read carries it on no task, so its checkbox is gone.
+    rerender(<Stateful view={view([workItem({ taskId: "a", labels: [] }), workItem({ taskId: "b", labels: ["perf"] })])} onCommand={vi.fn()} />);
+    expect(screen.queryByRole("checkbox", { name: "bug" })).toBeNull();
+    expect(rows()).toEqual(["a", "b"]);
+  });
+
   it("says unknown when the run's usage is unknown -- never a percentage -- and notes that usage arrives at phase end", () => {
     expect(progressText({ runId: "r", step: "execute", attempt: { current: 1, max: 3 }, tokens: null, lastTransitionAt: null })).toBe("execute · attempt 1/3 · tokens unknown");
     expect(progressText({ runId: "r", step: null, attempt: null, tokens: { used: 0, grant: 200 }, lastTransitionAt: null })).toBe("not reported yet · attempt unknown · tokens 0% (reported at phase end)");

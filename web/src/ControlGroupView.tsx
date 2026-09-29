@@ -66,9 +66,12 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
   const [labelFilter, setLabelFilter] = useState<string[]>([]);
   const [openTask, setOpenTask] = useState<string | null>(null);
   const allLabels = [...new Set(view.workItems.flatMap((item) => item.labels ?? []))].sort();
-  const shownItems = labelFilter.length === 0
+  // A checked label no task carries any more (removed in the detail editor, or by another read) has no checkbox left to
+  // uncheck, so it must stop filtering -- otherwise the table stays empty with no way out.
+  const activeFilter = labelFilter.filter((label) => allLabels.includes(label));
+  const shownItems = activeFilter.length === 0
     ? view.workItems
-    : view.workItems.filter((item) => (item.labels ?? []).some((label) => labelFilter.includes(label)));
+    : view.workItems.filter((item) => (item.labels ?? []).some((label) => activeFilter.includes(label)));
   const toggleFilter = (label: string): void =>
     setLabelFilter((current) => (current.includes(label) ? current.filter((other) => other !== label) : [...current, label]));
   const openItem = view.workItems.find((item) => item.taskId === openTask);
@@ -105,7 +108,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
           <legend>labels (any of)</legend>
           {allLabels.map((label) => (
             <label key={label}>
-              <input type="checkbox" checked={labelFilter.includes(label)} onChange={() => toggleFilter(label)} />
+              <input type="checkbox" checked={activeFilter.includes(label)} onChange={() => toggleFilter(label)} />
               {label}
             </label>
           ))}
