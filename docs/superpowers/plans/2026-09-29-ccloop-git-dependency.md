@@ -937,3 +937,20 @@ cd /Users/biran/code/skills/loop/Orca
 5. **名字一致**：`CcloopNotInstalled`／`installedCcloopBin`／`withDefaultCcloopBin`／`ccloop-not-installed`／`ORCA_CCLOOP_DEFAULT_E2E` 在 Interfaces、代码、判据、README、交接里拼写一致。
 6. **既有判据零改动**：ccloop 只加 `tests/packaging/gitDependency.test.ts`；Orca 只加两个测试文件，`controlOptions.test.ts`、`agents/command.test.ts`、`readyHint.test.ts`、`sandbox.test.ts` 与所有 `skipIf(!ORCA_CCLOOP_BIN)` 文件不动（Task 3 Step 6 跑前三个确认不变色）。
 7. **未实测、只推理的点**（Rule 12，照实标出）：npm 对 `github:` 简写写进 `package.json`／lock 的确切形式（F12，Task 5 Step 3 的 1)、2) 会量出来）；`npm pack` 是否保留 `dist/cli.js` 的可执行位（Task 4 Step 2 的 `binExecutable` 会量出来）；`agents show` 对 fake codex 的 `resolveAgent` 在真 ccloop 下 exit 0（Task 4 Step 4 会量出来）。
+
+---
+
+## 更正（2026-09-29 终审之后，会话 `2724716d`；上文原样保留，执行 Task 5 时以本节为准）
+
+1. **Task 5 Step 3 核对 4)**：macOS 没有 `/usr/bin/test`（只有 `/bin/test`）。上文所有 `/usr/bin/test` 一律读作 `/bin/test`，否则核对必然以 rc=127 误红，别据此判成「prepare 没跑」。
+2. **Task 5 Step 3 核对 5) 的期望条数**：48dd1c3 之后是 `Tests 12 passed (12)`（`ccloopBin.test.ts` 9 条＋`ccloopDefaultE2E.test.ts` 3 条），0 skipped，不是 9。
+3. **Task 5 Step 3 核对 5) 之前先确保 `web/dist` 在**：`/bin/test -f web/dist/index.html || npm run build --workspace web`。E2E 第 3 条起 panel，缺 `web/dist` 会以 `panel-dist-missing` 红（Task 4 实测到的同一个缺口；Task 4 的离线验证已补做 web build，结论成立）。
+4. **新增 Step 3.6（`npm ci` 能复现 lock）**，在提交 `package.json`／`package-lock.json` 之前做：
+   ```bash
+   D=$(mktemp -d /private/tmp/cl-XXXX); /usr/bin/git clone --local . "$D/o" && cd "$D/o" && npm ci > "$D/ci.txt" 2>&1; echo rc=$?
+   /bin/test -x node_modules/ccloop/dist/cli.js && /bin/test -f node_modules/ccloop/scripts/claude-stream.mjs; echo rc=$?
+   ```
+   两个 rc 都要是 0。`npm ci` 按 lock 的 `resolved` 重新 clone 并再跑一次 `prepare`；若 `resolved` 写成了 `git+ssh://…`，这一步也会暴露本机或 CI 的 GitHub 凭据问题（上文 F12）。
+5. **推送顺序（写实）**：先推 ccloop（含 `0b31ea8`），再做 Task 5；Orca 的 Task 5 那一笔**不能早于** ccloop 的那个 SHA 出现在 GitHub 上，否则别人 `npm ci` 失败。Orca 本支已有的三笔（`e66f4bc`、`030704a`、`48dd1c3`）可以先推：没装包时 panel 照常起（无执行端口），`orca agents` 报具名的 `ccloop-not-installed`。
+6. **Task 4 的计划缺口**：离线验证要在 Orca 副本里先 `npm run build --workspace web`（上文没写）；`npm pack --ignore-scripts` 在 npm 10.9.2 下照样跑 `prepare`，上文说法不准，结论不受影响。
+7. **本支让它变得可达、但延后到下一轮首项的静默错证据**：`src/scheduler/ledgerWiring.ts:290-298` 的 `findCcloopRoot` 从 bin 往上找第一个同时有 `package.json` 与 `.git` 的目录；bin 在 `Orca/node_modules/ccloop/dist/cli.js` 时会落到 **Orca 根目录**，把 Orca 的 HEAD 记成 ccloop 的证据（两边都是 0.1.0，看不出）。只有 `orca run` 的计划文件显式写了 node_modules 路径才会触发。修法：只接受 `package.json` 的 `name === "ccloop"` 且带 `.git` 的目录，找不到就沿用现有的具名抛错；同一轮更正 `ledgerWiring.ts:300-306`、`run.ts:725-727`、`tests/scheduler/sandbox.ts:79,101` 里「ccloop 永远不是 npm 依赖」的说法。
