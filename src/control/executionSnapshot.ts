@@ -169,7 +169,7 @@ function verifyConservation(input: ConfirmedProposal): ExecutionAllocation[] {
     .map(allocation => structuredClone(allocation));
 }
 
-function deriveContract(task: ConfirmedProposal["tasks"][number], proposalVersion: number): {
+export function deriveContract(task: ConfirmedProposal["tasks"][number], proposalVersion: number): {
   canonicalJson: string; contractCanonicalJson: string; derivedContractHash: string;
 } {
   amountSchema.parse(task.work);

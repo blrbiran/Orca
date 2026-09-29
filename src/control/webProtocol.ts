@@ -590,6 +590,7 @@ export const commandVerbSchema = z.enum([
   "set-agent-preferences",
   "proposal-set-agent",
   "set-task-labels",
+  "set-task-loop",
 ]);
 
 const repositoryCommandTargetSchema = z.object({ kind: z.literal("repository"), repoId: idSchema }).strict();
@@ -730,6 +731,17 @@ export const setAgentPreferencesPayloadSchema = z.object({ preferences: operator
 export const setTaskLabelsPayloadSchema = z
   .object({ labels: z.array(z.string()).max(64).nullable(), baseLabelsVersion: safeInteger })
   .strict();
+// Loop plans spec §5.2 (Drafter finding F3): the task is the target; sessions is not here -- it is never mapped into the
+// contract and is carried over unchanged (R10). Shape only: the plan id and the path shapes are judged in apply, so a
+// refusal is ledgered and named (loop-plan-invalid).
+export const setTaskLoopPayloadSchema = z
+  .object({
+    baseLoopVersion: safeInteger,
+    plan: nonemptyString,
+    inputs: loopInputsSchema,
+    work: z.object({ tokens: positiveSafeInteger, activeMs: positiveSafeInteger, attempts: positiveSafeInteger }).strict(),
+  })
+  .strict();
 
 const groupCommandTargetSchema = z.object({ kind: z.literal("group"), groupId: idSchema }).strict();
 const taskCommandTargetSchema = z.object({ kind: z.literal("task"), groupId: idSchema, taskId: idSchema }).strict();
@@ -767,6 +779,7 @@ const rawAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...rawCommandFields, verb: z.literal("set-workspace-mode"), target: repositoryCommandTargetSchema, payload: setWorkspaceModePayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-agent-preferences"), target: operatorCommandTargetSchema, payload: setAgentPreferencesPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-task-labels"), target: taskCommandTargetSchema, payload: setTaskLabelsPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("set-task-loop"), target: taskCommandTargetSchema, payload: setTaskLoopPayloadSchema }).strict(),
 ]);
 
 const effectiveAuthorityCommandVariants = z.discriminatedUnion("verb", [
@@ -804,6 +817,7 @@ const effectiveAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...effectiveCommandFields, verb: z.literal("set-workspace-mode"), target: repositoryCommandTargetSchema, payload: setWorkspaceModePayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-agent-preferences"), target: operatorCommandTargetSchema, payload: setAgentPreferencesPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-task-labels"), target: taskCommandTargetSchema, payload: setTaskLabelsPayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("set-task-loop"), target: taskCommandTargetSchema, payload: setTaskLoopPayloadSchema }).strict(),
 ]);
 
 function refineCommandIdentity(
@@ -1234,6 +1248,7 @@ const commandResultSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("workspace-mode-set"), repoId: idSchema, workspaceMode: workspaceModeSchema }).strict(),
   z.object({ kind: z.literal("agent-preferences-set"), operatorId: nonemptyString, revision: positiveSafeInteger }).strict(),
   z.object({ kind: z.literal("task-labels-set"), taskId: idSchema, labelsVersion: positiveSafeInteger }).strict(),
+  z.object({ kind: z.literal("task-loop-set"), taskId: idSchema, loopVersion: positiveSafeInteger, proposalVersion: positiveSafeInteger }).strict(),
   z
     .object({
       kind: z.literal("task-continuing"),
@@ -1370,6 +1385,7 @@ export type SetWorkspaceModePayload = z.infer<typeof setWorkspaceModePayloadSche
 export type SetAgentPreferencesPayload = z.infer<typeof setAgentPreferencesPayloadSchema>;
 export type ProposalSetAgentPayload = z.infer<typeof proposalSetAgentPayloadSchema>;
 export type SetTaskLabelsPayload = z.infer<typeof setTaskLabelsPayloadSchema>;
+export type SetTaskLoopPayload = z.infer<typeof setTaskLoopPayloadSchema>;
 
 // Agent selection spec §6.8 (plan T14): the three reads the panel's agent UI is built on. The component schemas
 // (contextWindowSchema, partialSelectionSchema, operatorPreferencesSchema, groupAgentOverridesSchema,

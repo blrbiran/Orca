@@ -45,6 +45,8 @@ export const durableCommandErrorStatuses = {
   "handoff-request-conflict": 409,
   // Labels and progress spec §3.1 (§8 R7): the task's labels moved since the person read them (plan finding F17).
   "labels-version-conflict": 409,
+  // Loop plans spec §5.2 step 3: the task's plan moved since the person read it.
+  "task-loop-version-conflict": 409,
   "landing-branch-conflict": 409,
   "plan-version-conflict": 409,
   "profile-changed": 409,
@@ -113,6 +115,13 @@ export const durableCommandErrorStatuses = {
   "group-project-binding-required": 422,
   "group-review-budget-unavailable": 422,
   "group-state-invalid": 422,
+  // Loop plans spec §5.2 (step 6): a raise the group's reserve cannot cover; the detail is `<dimension>:<shortfall>`.
+  "group-reserve-insufficient": 422,
+  // Loop plans spec §3.2 / §5.2 step 4: the expansion refused the plan or its inputs; the detail names the reason.
+  "loop-plan-invalid": 422,
+  // Loop plans spec §5.2 steps 2-3: a task that has started, or that has no loop plan, cannot be changed.
+  "task-already-started": 422,
+  "task-has-no-loop-plan": 422,
   "group-stopped": 422,
   "handoff-budget-unavailable": 422,
   "handoff-grant-insufficient": 422,

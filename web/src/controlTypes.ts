@@ -261,7 +261,7 @@ export type CommandSuccessV1 = {
   schema: "orca-command-success-v1";
   commandId: string;
   actorId: string;
-  verb: "import-plan" | "proposal-edit" | "estimate" | "confirm" | "start" | "pause-dispatch" | "handoff-stop" | "resume-dispatch" | "resume-from-handoff" | "set-limit" | "continue-task" | "recovery-retry" | "shutdown" | "set-workspace-mode" | "set-agent-preferences" | "proposal-set-agent" | "set-task-labels";
+  verb: "import-plan" | "proposal-edit" | "estimate" | "confirm" | "start" | "pause-dispatch" | "handoff-stop" | "resume-dispatch" | "resume-from-handoff" | "set-limit" | "continue-task" | "recovery-retry" | "shutdown" | "set-workspace-mode" | "set-agent-preferences" | "proposal-set-agent" | "set-task-labels" | "set-task-loop";
   target: CommandTargetV1;
   commandRevision: number | null;
   projectionSeq: number | null;
@@ -280,6 +280,7 @@ export type CommandSuccessV1 = {
     | { kind: "workspace-mode-set"; repoId: string; workspaceMode: "worktree" | "clone" }
     | { kind: "agent-preferences-set"; operatorId: string; revision: number }
     | { kind: "task-labels-set"; taskId: string; labelsVersion: number }
+    | { kind: "task-loop-set"; taskId: string; loopVersion: number; proposalVersion: number }
     | { kind: "task-continuing"; continuationIntentId: string; pendingRunId: string; claimOrdinal: number; wakeId: string }
     | { kind: "recovery-observed"; resolved: boolean; blockerCodes: string[]; evidenceIds: string[]; wakeIds: string[] }
     | { kind: "shutdown"; groups: Array<{ groupId: string; disposition: "created" | "strengthened-pause" | "preserved-pause" | "preserved-handoff" | "preserved-shutdown" | "blocked-inconsistent" | "skipped-driver-owned"; changed: boolean; commandRevision: number; projectionSeq: number; frozenRunIds: string[]; requestIds: string[]; blockerCode: string | null }> };
@@ -344,3 +345,5 @@ export type LoopPlanViewV1 = {
   planId: LoopPlanIdV1; planVersion: number; planName: string; chosenBy: "explicit" | "labels"; chosenByLabel: string | null;
   amended: boolean; loopVersion: number; inputs: LoopInputsV1; summary: string[];
 };
+/** Loop plans spec §5.2: change a loop task's plan, inputs and work budget (sessions is carried over). */
+export type SetTaskLoopPayloadV1 = { baseLoopVersion: number; plan: string; inputs: LoopInputsV1; work: { tokens: number; activeMs: number; attempts: number } };

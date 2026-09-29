@@ -40,6 +40,7 @@ import type {
   SetAgentPreferencesPayload as ServerSetAgentPreferencesPayload,
   SetLimitPayload as ServerSetLimitPayload,
   SetTaskLabelsPayload as ServerSetTaskLabelsPayload,
+  SetTaskLoopPayload as ServerSetTaskLoopPayload,
 } from "../../src/control/webProtocol.js";
 import type {
   AgentPreferencesViewV1 as WebAgentPreferencesViewV1,
@@ -66,6 +67,7 @@ import type {
   SetAgentPreferencesPayloadV1 as WebSetAgentPreferencesPayloadV1,
   SetLimitPayloadV1 as WebSetLimitPayloadV1,
   SetTaskLabelsPayloadV1 as WebSetTaskLabelsPayloadV1,
+  SetTaskLoopPayloadV1 as WebSetTaskLoopPayloadV1,
 } from "../../web/src/controlTypes.js";
 
 /**
@@ -203,6 +205,9 @@ function setAgentPreferencesWebToServer(x: WebSetAgentPreferencesPayloadV1): Ser
 // Labels and progress spec §3.1: the set-task-labels command's payload.
 function setTaskLabelsServerToWeb(x: ServerSetTaskLabelsPayload): WebSetTaskLabelsPayloadV1 { return x; }
 function setTaskLabelsWebToServer(x: WebSetTaskLabelsPayloadV1): ServerSetTaskLabelsPayload { return x; }
+// Loop plans spec §5.2: the set-task-loop command's payload.
+function setTaskLoopServerToWeb(x: ServerSetTaskLoopPayload): WebSetTaskLoopPayloadV1 { return x; }
+function setTaskLoopWebToServer(x: WebSetTaskLoopPayloadV1): ServerSetTaskLoopPayload { return x; }
 
 // Referenced so nothing above is dead code the compiler is free to ignore;
 // never invoked for its behavior, only so the assignments above are real
@@ -264,4 +269,6 @@ export const __webParityAssignabilityChecks__ = [
   setAgentPreferencesWebToServer,
   setTaskLabelsServerToWeb,
   setTaskLabelsWebToServer,
+  setTaskLoopServerToWeb,
+  setTaskLoopWebToServer,
 ] as const;

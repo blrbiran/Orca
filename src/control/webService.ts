@@ -5,7 +5,7 @@ import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { dimensions, zero } from "./commands.js";
 import { ControlError } from "./errors.js";
 import { buildBudgetEstimateRequest, ESTIMATE_GRANT, GOAL_REVIEW, TASK_HANDOFF, TASK_WORK, provenance, residual, safeNumber, sumAmounts, persistEstimateArtifacts, estimateCapabilityDegraded, classifyEstimateOutput } from "./estimator.js";
-import { prepareExecutionSnapshot } from "./executionSnapshot.js";
+import { deriveContract, prepareExecutionSnapshot, readConfirmedTaskExecution } from "./executionSnapshot.js";
 import { answeredPartials, currentPartials, readGroupAgentOverrides, RECONCILE_SLOT_KEY, resolveGroupSelections, taskSlotKey, type GroupSelectionResolution } from "./agentFreeze.js";
 import type { ExecutionPort } from "./executionPort.js";
 import { estimatorSlotFor, importControlPlanAsync, rejectedEstimatorRequest, type AsyncImportDeps, type ImportCommand } from "./planImport.js";
@@ -22,7 +22,9 @@ import { applySetWorkspaceMode, type SetWorkspaceModeCommand } from "./workspace
 import { applySetAgentPreferences, type SetAgentPreferencesCommand } from "./agentPreferences.js";
 import { recordProjectionChange } from "./projectionJournal.js";
 import { effectiveTaskLabels, normalizeInputLabels, readTaskLabelState } from "./labels.js";
-import { effectivePlanTask, workBodyOf } from "./taskAmendments.js";
+import { TASK_AMENDMENT_SCHEMA, effectivePlanTask, workBodyOf, writeTaskAmendment } from "./taskAmendments.js";
+import { expandLoopPlan } from "./loopPlans.js";
+import { taskContractSchema } from "../scheduler/planFile.js";
 import type { Amount } from "./types.js";
 import type { ControlStore } from "./store.js";
 import type { BudgetEstimateV1, CommandLookupV1, CommandSuccessV1, EffectiveProposalEditPayload, RawAuthorityCommandV1, ProfileBindingV1 } from "./webProtocol.js";
@@ -35,6 +37,7 @@ export type ConfirmCommand = Extract<RawAuthorityCommandV1, { verb: "confirm" }>
 export type SetLimitCommand = Extract<RawAuthorityCommandV1, { verb: "set-limit" }>;
 export type ProposalSetAgentCommand = Extract<RawAuthorityCommandV1, { verb: "proposal-set-agent" }>;
 export type SetTaskLabelsCommand = Extract<RawAuthorityCommandV1, { verb: "set-task-labels" }>;
+export type SetTaskLoopCommand = Extract<RawAuthorityCommandV1, { verb: "set-task-loop" }>;
 export type WebCommandResult = CommandLookupV1["body"];
 export interface WebServiceDeps extends AsyncImportDeps {
   admissionGate?: AdmissionGate; now?: () => Date; knownRepository?: (repoId: string) => boolean;
@@ -175,6 +178,17 @@ function verifyModelField(store: ControlStore, id: string, proposal: BudgetPropo
   if (!suggestion || suggestion[target.dimension] !== value) throw new ControlError("proposal-version-conflict");
 }
 
+/**
+ * A draft proposal's commitments -- every non-reserve allocation plus every in-flight estimate -- with the reserve row
+ * reset to what the group limit leaves of them. Shared by every proposal change (editProposal, proposalSetAgent,
+ * setTaskLoop; loop plans ruling P5), each of which then reopens the proposal with the returned commitments.
+ */
+function resetDraftReserve(store: ControlStore, id: string, group: Group, proposal: BudgetProposalRecord): Amount {
+  const commitments = sumAmounts([...proposal.allocations.filter(a => a.ownerKind !== "reserve").map(a => a.amount), ...estimateCommitments(store, id).map(a => a.amount)]);
+  setReserve(proposal, residual(proposal.groupLimit, group.used, commitments));
+  return commitments;
+}
+
 /** Any proposal change returns it to editable: the version advances and every confirmation-time fact is dropped. */
 function reopenProposal(store: ControlStore, id: string, group: Group, proposal: BudgetProposalRecord, commitments: Amount): void {
   proposal.proposalVersion = safeNumber(BigInt(proposal.proposalVersion) + 1n);
@@ -230,8 +244,7 @@ export class WebControlService {
           row.fieldProvenance[op.target.dimension] = { provenance: op.provenance, estimateId: op.estimateId };
         }
         proposal.groupLimit = payload.proposedGroupLimit ?? proposal.groupLimit;
-        const commitments = sumAmounts([...proposal.allocations.filter(a => a.ownerKind !== "reserve").map(a => a.amount), ...estimateCommitments(this.store, id).map(a => a.amount)]);
-        setReserve(proposal, residual(proposal.groupLimit, group.used, commitments));
+        const commitments = resetDraftReserve(this.store, id, group, proposal);
         if (before.equals(canonicalBytes({ allocations: proposal.allocations, limit: proposal.groupLimit }))) throw new ControlError("no-op-command");
         reopenProposal(this.store, id, group, proposal, commitments);
         return success(context, { kind: "proposal-edited", proposalVersion: proposal.proposalVersion });
@@ -263,8 +276,7 @@ export class WebControlService {
           work.agentOverride = partial;
           this.store.db.prepare("UPDATE work_items SET body=? WHERE group_id=? AND id=?").run(JSON.stringify(work), id, scope.taskId);
         }
-        const commitments = sumAmounts([...proposal.allocations.filter(a => a.ownerKind !== "reserve").map(a => a.amount), ...estimateCommitments(this.store, id).map(a => a.amount)]);
-        setReserve(proposal, residual(proposal.groupLimit, group.used, commitments));
+        const commitments = resetDraftReserve(this.store, id, group, proposal);
         reopenProposal(this.store, id, group, proposal, commitments);
         return success(context, { kind: "proposal-edited", proposalVersion: proposal.proposalVersion });
       },
@@ -545,6 +557,92 @@ export class WebControlService {
         work.labelsOverride = next; work.labelsVersion = state.version + 1;
         this.store.db.prepare("UPDATE work_items SET body=? WHERE group_id=? AND id=?").run(JSON.stringify(work), id, taskId);
         return success(context, { kind: "task-labels-set", taskId, labelsVersion: state.version + 1 });
+      },
+    }).body);
+  }
+  /**
+   * Loop plans spec §5.2 (C5, C6): change a not-yet-started loop task's plan, inputs and work budget, before or after
+   * confirmation. The archived plan is never rewritten: the new contract lives in a hashed amendment record that
+   * effectivePlanTask verifies (taskAmendments.ts). The budget's delta comes out of, or goes back to, the group's
+   * reserve; the group limit, `used` and `sessions` never move. Any failure rolls the whole transaction back.
+   */
+  setTaskLoop(command: SetTaskLoopCommand): WebCommandResult {
+    return this.mutate(() => applyWebCommand(this.store, {
+      rawCommand: command, expand: () => ({ ...command, schema: "orca-authority-command-v1" }),
+      apply: context => {
+        const id = groupId(command), taskId = command.target.taskId, payload = command.payload;
+        const group = readWebGroup(this.store, id), proposal = readBudgetProposal(this.store, id), plan = readArchivedPlan(this.store, id);
+        // Step 1. Not prestart: the spec names one code for every state but draft/ready (prestart answers
+        // grant-amendment-unsupported for running/review/done), and a stopped group is refused too.
+        assertKnownConservation(this.store, group, proposal);
+        if ((group.status !== "draft" && group.status !== "ready") || group.stopped) throw new ControlError("group-state-invalid");
+        const body = workBodyOf(this.store, id, taskId);
+        const work = typeof body === "object" && body !== null && !Array.isArray(body) ? body as Record<string, unknown> : null;
+        const archived = plan.plan.tasks.find(task => task.taskId === taskId);
+        if (!work || work.kind !== "task" || !archived) throw new ControlError("work-not-found");
+        // Step 2: any runs row counts -- a finished run returns its task to ready. Decided inside this transaction, so
+        // this command and the driver's claim (webDispatch.ts nextClaimableTask, createStartingRun) cannot both win.
+        if ((work.status !== "draft" && work.status !== "ready")
+          || this.store.db.prepare("SELECT id FROM runs WHERE group_id=? AND work_item_id=?").get(id, taskId)) throw new ControlError("task-already-started");
+        // Step 3. The in-flight predicate is scheduleStart's (webDispatch.ts), Drafter finding F8.
+        for (const estimate of this.store.db.prepare("SELECT state FROM estimates WHERE group_id=?").all(id)) {
+          if (["running", "start-unknown"].includes(String(estimate.state))) throw new ControlError("estimate-in-flight");
+        }
+        const loopVersion = typeof work.loopVersion === "number" ? work.loopVersion : 0;
+        if (payload.baseLoopVersion !== loopVersion) throw new ControlError("task-loop-version-conflict");
+        if (archived.loop === undefined) throw new ControlError("task-has-no-loop-plan");
+        // Step 4. repoPath is the current contract's own (Drafter finding F9).
+        const current = effectivePlanTask(this.store, id, archived, work);
+        const repoPath = taskContractSchema.parse(JSON.parse(current.originalContractCanonicalJson)).context.repoPath;
+        const expanded = expandLoopPlan(taskId, repoPath, payload.plan, payload.inputs);
+        if (!expanded.ok) throw new ControlError("loop-plan-invalid", expanded.reason);
+        const allocation = proposal.allocations.find(a => a.ownerKind === "task" && a.ownerId === taskId && a.bucket === "work");
+        const handoff = proposal.allocations.find(a => a.ownerKind === "task" && a.ownerId === taskId && a.bucket === "handoff");
+        if (!allocation || !handoff) throw new ControlError("recovery-blocked");
+        const before = allocation.amount;
+        // R10: sessions is not in the payload; it is carried over unchanged.
+        const next: Amount = { ...before, tokens: payload.work.tokens, activeMs: payload.work.activeMs, attempts: payload.work.attempts };
+        // A plan-version bump with identical bytes is a no-op too; the recipe then keeps its version.
+        if (expanded.canonicalJson === current.originalContractCanonicalJson && same(next, before)) throw new ControlError("no-op-command");
+        // Step 6's refusal, before anything is written: the reserve may not go negative in any dimension.
+        for (const d of dimensions) {
+          const shortfall = next[d] - before[d] - proposal.explicitUnallocatedReserve[d];
+          if (shortfall > 0) throw new ControlError("group-reserve-insufficient", `${d}:${shortfall}`);
+        }
+        if (loopVersion === Number.MAX_SAFE_INTEGER) throw new ControlError("numeric-overflow");
+        // Step 5.
+        const amendmentHash = writeTaskAmendment(this.store, id, {
+          schema: TASK_AMENDMENT_SCHEMA, groupId: id, taskId, loopVersion: loopVersion + 1, previousContractHash: current.originalContractHash,
+          recipe: expanded.recipe, originalContractHash: expanded.hash, originalContractCanonicalJson: expanded.canonicalJson,
+        });
+        writeCanonicalRecord(this.store, id, expanded.hash, expanded.canonicalJson);
+        // Drafter finding F10: the projection compares both contract hashes; the claim copies derivedContractHash and grant.
+        Object.assign(work, { amendmentHash, loopVersion: loopVersion + 1, originalContractHash: expanded.hash, contract: { contentAddressedHash: expanded.hash } });
+        // Step 6.
+        for (const d of dimensions) if (next[d] !== before[d]) allocation.fieldProvenance[d] = { provenance: "human", estimateId: null };
+        allocation.amount = next;
+        if (proposal.state === "editable") {
+          // Step 7, draft: the proposal version advances, as every proposal change does, so a stale confirm is refused.
+          this.store.db.prepare("UPDATE work_items SET body=? WHERE group_id=? AND id=?").run(JSON.stringify(work), id, taskId);
+          reopenProposal(this.store, id, group, proposal, resetDraftReserve(this.store, id, group, proposal));
+        } else {
+          // Step 7, confirmed: proposalVersion is inside every derived record and checked at A2 and in the projection,
+          // so it does not move; only this task's contract is re-derived, at the same derivationVersion.
+          for (const d of dimensions) group.ledger.committedRemaining[d] += next[d] - before[d];
+          setReserve(proposal, residual(proposal.groupLimit, group.used, group.ledger.committedRemaining));
+          const derived = deriveContract({ taskId, originalContractHash: expanded.hash, originalContractCanonicalJson: expanded.canonicalJson, work: next, handoff: handoff.amount }, proposal.proposalVersion);
+          writeCanonicalRecord(this.store, id, derived.derivedContractHash, derived.canonicalJson);
+          work.derivedContractHash = derived.derivedContractHash;
+          work.grant = { ...(work.grant as Record<string, unknown>), work: next };
+          this.store.db.prepare("UPDATE work_items SET body=? WHERE group_id=? AND id=?").run(JSON.stringify(work), id, taskId);
+          // (Task B3 inserts the snapshot copy here.)
+          saveWebAuthority(this.store, group, proposal);
+          // Step 8: the changed task passes A2 before this commits.
+          readConfirmedTaskExecution(this.store, id, taskId);
+        }
+        // Step 8: the ledger still conserves.
+        assertKnownConservation(this.store, readWebGroup(this.store, id), readBudgetProposal(this.store, id));
+        return success(context, { kind: "task-loop-set", taskId, loopVersion: loopVersion + 1, proposalVersion: proposal.proposalVersion });
       },
     }).body);
   }
