@@ -221,6 +221,16 @@ export async function stepA2(deps: ExecutionDriverDeps, runId: string): Promise<
   const { store } = deps;
   const run = readDriverRun(store, runId);
   if (run.state !== "start-pending" || run.drive === undefined || run.drive.prepared || run.taskId === null) return false;
+  // Backlog #13(c) (agent selection spec §12 m-4, Orca handoff §9.0c): the claim ccloop receives is built from this run
+  // row (startEnvelope.ts frozenClaim), so the row must still carry the selection the confirmed snapshot froze for the
+  // task -- readConfirmedTaskExecution has already proved the work item agrees with the snapshot. Checked before any
+  // workspace, bundle or predecessor cleanup, so a refusal leaves nothing behind; as R does for the reconcile slot, a
+  // row that moved away is blocked by name, never dispatched and never silently repaired.
+  const frozenAgent = readConfirmedTaskExecution(store, run.groupId, run.taskId).agent;
+  if (run.configHash !== frozenAgent.configHash || sha256Canonical(run.agent) !== sha256Canonical(frozenAgent.agent)) {
+    blockRun(deps, runId, "A2", "agent-unfrozen");
+    return true;
+  }
   const drive = run.drive;
   let targetRepo: string;
   try { targetRepo = deps.resolveRepository(groupRepoId(store, run.groupId)); }
