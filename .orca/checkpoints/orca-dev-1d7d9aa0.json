@@ -1,0 +1,45 @@
+{
+  "v": 1,
+  "runId": "orca-dev-1d7d9aa0",
+  "runtime": "claude-code",
+  "sessionRef": "1d7d9aa0-4a2b-478b-b0ec-d970d3a51afe",
+  "writtenAt": "2026-09-29T18:00:51.275Z",
+  "head": "038bb2be9cab6dde78aa885dcb9395e0a77a4d5b",
+  "level": {
+    "kind": "reading",
+    "level": 335248,
+    "windowTokens": 1000000,
+    "t1": 330000,
+    "t2": 450000,
+    "band": 1
+  },
+  "next": [
+    "Independent review of docs/superpowers/specs/2026-09-30-loop-plans-design.md is running; fix its findings, then writing-plans, then subagent implementation, gate, handoffs"
+  ],
+  "open": [
+    "#13(a) ccloop commit and Orca #13(b)/pin-script/ledger/spec commits are local only",
+    "Task 0 of the loop-plans plan must measure whether a snapshot-hash refresh blocks running tasks"
+  ],
+  "awaitingHuman": [
+    {
+      "kind": "irreversible",
+      "what": "push ccloop (2 local commits incl. fix(agents): refuse a claude model that carries the [1m] context suffix itself) and Orca (local commits since docs(handoff): record the narrowed language rule)"
+    }
+  ],
+  "measurements": [
+    {
+      "command": "/usr/bin/git -C /Users/biran/code/skills/loop/Orca ls-remote origin refs/heads/main",
+      "exitCode": 0,
+      "commit": "038bb2be9cab6dde78aa885dcb9395e0a77a4d5b",
+      "observedAt": "2026-09-29T18:00:49.394Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-1d7d9aa0-13mfi2/1.txt"
+    },
+    {
+      "command": "/usr/bin/git -C /Users/biran/code/skills/loop/ccloop ls-remote origin refs/heads/main",
+      "exitCode": 0,
+      "commit": "038bb2be9cab6dde78aa885dcb9395e0a77a4d5b",
+      "observedAt": "2026-09-29T18:00:51.231Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-1d7d9aa0-13mfi2/2.txt"
+    }
+  ]
+}
