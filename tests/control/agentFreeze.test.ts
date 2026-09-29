@@ -348,9 +348,11 @@ describe("plan files and grace (spec §6.2, §6.6)", () => {
       .toMatchObject({ rejections: [{ code: "malformed" }] });
   });
 
+  // Orca backlog #13(b), rewritten under the human's 2026-09-29 authorization (session 2f65a729): an unusable frozen
+  // killGraceMs counts as the frozen slot's 60 s ceiling, so the grace is 120 s, never the bare fixed extra.
   it("judges a handoff's grace by the run's frozen killGraceMs plus the fixed extra", () => {
     expect(handoffGraceMsOf({ killGraceMs: 7_000 })).toBe(7_000 + HANDOFF_EXTRA_GRACE_MS);
-    for (const killGraceMs of [undefined, -1, 1.5, "5000", null]) expect(handoffGraceMsOf({ killGraceMs })).toBe(HANDOFF_EXTRA_GRACE_MS);
+    for (const killGraceMs of [undefined, -1, 1.5, "5000", null]) expect(handoffGraceMsOf({ killGraceMs })).toBe(120_000);
   });
 
   it("keeps the canonical identity of what it froze (the snapshot hash is over canonical bytes)", async () => {

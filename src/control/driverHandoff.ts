@@ -200,10 +200,15 @@ function settleEstimateUnderStop(deps: ExecutionDriverDeps, run: DriverRun, requ
  * a shorter grace would call a stop unknown while ccloop is still finishing it. Agent selection spec §6.6 (§12 I5):
  * the killGraceMs is the run's frozen one -- ccloop's capabilities-v3 answer at confirmation -- and Orca never reads
  * the installation table; a value that is not a non-negative safe integer counts 0, never shorter than the fixed part.
+ *
+ * *** ERRATUM (2026-09-29, run orca-dev-1d7d9aa0, Orca backlog #13(b), human authorization in session 2f65a729) ***
+ * "counts 0" above is no longer true: an unusable value now counts 60_000, the ceiling the frozen slot allows
+ * (webProtocol.ts frozenSlotSchema, killGraceMs max 60_000). Falling back to the floor was not fail closed -- too
+ * short a grace calls a stop unknown while ccloop may still be finishing it; too long a grace only delays that call.
  */
 export function handoffGraceMsOf(run: { killGraceMs?: unknown }): number {
   const value = run.killGraceMs;
-  const killGraceMs = typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : 0;
+  const killGraceMs = typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : 60_000;
   return killGraceMs + HANDOFF_EXTRA_GRACE_MS;
 }
 
