@@ -347,3 +347,11 @@ export type LoopPlanViewV1 = {
 };
 /** Loop plans spec §5.2: change a loop task's plan, inputs and work budget (sessions is carried over). */
 export type SetTaskLoopPayloadV1 = { baseLoopVersion: number; plan: string; inputs: LoopInputsV1; work: { tokens: number; activeMs: number; attempts: number } };
+/** Loop plans spec §2.2: the plans a person can pick and their panel names -- a mirror of src/control/loopPlans.ts, compared by tests/panel/taskLoopApi.test.ts. */
+export const WEB_LOOP_PLANS: ReadonlyArray<{ planId: LoopPlanIdV1; name: string }> = [
+  { planId: "standard", name: "Standard" },
+  { planId: "bugfix", name: "Bug fix (red first)" },
+  { planId: "refactor", name: "Safe refactor" },
+  { planId: "design", name: "Design / docs first" },
+  { planId: "investigate", name: "Investigate only" },
+];

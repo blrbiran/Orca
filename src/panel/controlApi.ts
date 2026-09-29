@@ -302,6 +302,15 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
         return { groupId, target: { kind: "task", groupId, taskId: idSchema.parse(params.taskId) } };
       },
     },
+    // Loop plans spec §5.2: the ledger key is the group's, as for set-task-labels.
+    {
+      path: "/api/control/groups/:groupId/tasks/:taskId/loop",
+      verb: "set-task-loop",
+      target: (params) => {
+        const groupId = idSchema.parse(params.groupId);
+        return { groupId, target: { kind: "task", groupId, taskId: idSchema.parse(params.taskId) } };
+      },
+    },
   ];
   for (const route of routes) app.post(route.path, asyncRoute(async (req, res) => {
     let id: string | null = null;
@@ -327,6 +336,7 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
         case "set-agent-preferences": await service.setAgentPreferences(command); break;
         case "proposal-set-agent": await service.proposalSetAgent(command); break;
         case "set-task-labels": service.setTaskLabels(command); break;
+        case "set-task-loop": service.setTaskLoop(command); break;
         default: throw new ControlError("route-not-found");
       }
       const result = lookupCommandResult(store, id, command.commandId);
