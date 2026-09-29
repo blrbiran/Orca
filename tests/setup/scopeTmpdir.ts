@@ -17,6 +17,13 @@ import { afterAll } from "vitest";
  * directory. `scripts/check-tmp-leak.mjs` is the guard that would show it.
  * ⚠️ Keep the prefix short: tsx puts its IPC socket at `$TMPDIR/tsx-<uid>/<pid>.pipe`, and macOS
  * caps a socket path at 104 bytes.
+ *
+ * *** ERRATUM (2026-09-29, session 2f65a729) ***
+ * "The root is removed when the file is done" does not hold for a file whose every test is skipped at
+ * collection (describe.skipIf / it.skipIf on all of them): vitest then runs none of that file's hooks,
+ * this afterAll included, while this module has already created the root. Gate such a file at run time
+ * with `ctx.skip()` in a beforeEach instead (tests/control/ccloopDefaultE2E.test.ts does).
+ * scripts/check-tmp-leak.mjs is what catches a new one. Text above kept verbatim.
  */
 const outer = process.env.TMPDIR;
 const scoped = mkdtempSync(join(tmpdir(), "orca-tmp-"));

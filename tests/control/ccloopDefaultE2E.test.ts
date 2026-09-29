@@ -5,7 +5,7 @@ import { chmod, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } fro
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { installedCcloopBin } from "../../src/control/ccloopBin.js";
 
 /**
@@ -89,7 +89,12 @@ async function panelStderr(w: World, over: NodeJS.ProcessEnv): Promise<string> {
   return stderr;
 }
 
-describe.skipIf(!formal)("Orca with ccloop installed as its dependency and ORCA_CCLOOP_BIN unset", () => {
+// Skipped at run time, not with describe.skipIf: a file whose every test is skipped at collection never runs its
+// file-level hooks, so tests/setup's afterAll never removes the temp root it already created (one directory left per
+// suite run, measured by scripts/check-tmp-leak.mjs).
+describe("Orca with ccloop installed as its dependency and ORCA_CCLOOP_BIN unset", () => {
+  beforeEach((ctx) => { if (!formal) ctx.skip(); });
+
   it("resolves the package in this checkout, whose runtime finds the scripts the package ships", async () => {
     const bin = installedCcloopBin();
     expect(bin).toBe(await realpath(resolve("node_modules/ccloop/dist/cli.js")));
