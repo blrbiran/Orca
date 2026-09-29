@@ -9,6 +9,8 @@ import { driveRecordSchema } from "../control/driveRecord.js";
 import { ControlError } from "../control/errors.js";
 import { readProjectionChanges, readProjectionState } from "../control/projectionJournal.js";
 import { effectiveTaskLabels, readTaskLabelState } from "../control/labels.js";
+import { choosePlanByLabels, describeLoopPlan } from "../control/loopPlans.js";
+import { recipeExpandsTo } from "../control/loopRecipeCheck.js";
 import { readArchivedPlan, readBudgetProposal, readEstimateRecord } from "../control/queries.js";
 import { readCanonicalRecord } from "../control/snapshot.js";
 import type { ControlStore } from "../control/store.js";
@@ -77,6 +79,9 @@ const workBodySchema = z.object({
   currentRunId: idSchema.nullable().optional(),
   pendingRunId: idSchema.nullable().optional(),
   lineageRunIds: z.array(idSchema).optional(),
+  // Loop plans spec §5.1: a loop task's amendment and version; absent until its first set-task-loop.
+  amendmentHash: hashSchema.nullable().optional(),
+  loopVersion: safeInteger.optional(),
 }).passthrough();
 
 const stopBodySchema = z.object({
@@ -465,6 +470,33 @@ function currentProgress(runs: ReadonlyArray<Record<string, unknown>>, currentRu
   return progressOfRun(parseStored(persistedRunSchema, row.body, `run-invalid:${currentRunId}`));
 }
 
+/**
+ * Loop plans spec §3.3, §4.1 (C7): the task's plan as its card shows it. The recipe must re-expand to the contract bytes
+ * the task carries (repoPath excepted: it is the stored contract's own, Drafter finding F9). A registry that no longer
+ * does -- a plan's text edited instead of versioned, spec §2.2 -- blocks the task by name rather than showing a plan
+ * that is not the one that runs.
+ */
+function taskPlanView(
+  task: ReturnType<typeof readArchivedPlan>["plan"]["tasks"][number],
+  body: { amendmentHash?: string | null; loopVersion?: number },
+): { loopPlan: WorkItemViewV1["loopPlan"]; objective: WorkItemViewV1["objective"] } {
+  const contract = parseStored(taskContractSchema, task.originalContractCanonicalJson, `original-contract-invalid:${task.taskId}`);
+  const objective = { goal: contract.objective.goal, successCondition: contract.objective.successCondition };
+  if (task.loop === undefined) return { loopPlan: null, objective };
+  if (!recipeExpandsTo(task.taskId, contract.context.repoPath, task.loop, task.originalContractCanonicalJson)) return blocked(`loop-plan-recipe-mismatch:${task.taskId}`);
+  // The recipe re-expanded, so its plan version exists and describeLoopPlan cannot answer null here.
+  const described = describeLoopPlan(task.loop)!;
+  return {
+    objective,
+    loopPlan: {
+      planId: task.loop.planId, planVersion: task.loop.planVersion, planName: described.planName, chosenBy: task.loop.chosenBy,
+      chosenByLabel: task.loop.chosenBy === "labels" ? choosePlanByLabels(task.labels ?? []).label : null,
+      amended: typeof body.amendmentHash === "string", loopVersion: body.loopVersion ?? 0,
+      inputs: task.loop.inputs, summary: described.summary,
+    },
+  };
+}
+
 function workViews(
   store: ControlStore,
   groupId: string,
@@ -519,6 +551,7 @@ function workViews(
       lineageRunIds: sortedUnique(lineage),
       labels: effective.labels, labelsProvenance: effective.provenance, labelsVersion: labelState.version,
       progress: currentProgress(runs, body.currentRunId ?? null),
+      ...taskPlanView(task, body),
     };
   });
 }

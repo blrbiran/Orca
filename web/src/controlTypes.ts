@@ -94,6 +94,9 @@ export type WorkItemViewV1 = {
   labelsProvenance?: "plan" | "operator";
   labelsVersion?: number;
   progress?: WorkItemProgressV1 | null;
+  // Loop plans spec §4.1: optional here so literal fixtures need no edit; the server always sends both.
+  loopPlan?: LoopPlanViewV1 | null;
+  objective?: { goal: string; successCondition: string };
 };
 export type RunViewV1 = {
   runId: string;
@@ -332,3 +335,12 @@ export type WorkItemProgressV1 = {
 };
 /** Spec §3.1 (§8 R16): replace the task's operator labels, or null to go back to the plan's. */
 export type SetTaskLabelsPayloadV1 = { labels: string[] | null; baseLabelsVersion: number };
+/** Loop plans spec §2.2: the built-in plans (mirrors src/control/loopPlans.ts LOOP_PLAN_IDS). */
+export type LoopPlanIdV1 = "standard" | "bugfix" | "refactor" | "design" | "investigate";
+/** Loop plans spec §3.2: a recipe's inputs, every optional field filled. */
+export type LoopInputsV1 = { goal: string; successCondition: string; targetPaths: string[]; checks: string[]; nonGoals: string[]; relevantDocs: string[]; protectedPaths: string[]; maxFilesTouched: number | null };
+/** Loop plans spec §4.1: the server-built description of a loop task's plan. */
+export type LoopPlanViewV1 = {
+  planId: LoopPlanIdV1; planVersion: number; planName: string; chosenBy: "explicit" | "labels"; chosenByLabel: string | null;
+  amended: boolean; loopVersion: number; inputs: LoopInputsV1; summary: string[];
+};

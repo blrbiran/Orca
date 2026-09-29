@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { agentSelectionSchema, amountSchema, canonicalTimestampSchema, commandEnvelopeSchema, contextWindowSchema, idSchema, panelPartialSelectionSchema, partialSelectionSchema, safeInteger } from "./schema.js";
 import { nonEmptyStoredLabelsSchema, storedLabelsSchema } from "./labels.js";
-import { loopRecipeSchema } from "./loopPlans.js";
+import { LOOP_PLAN_IDS, loopInputsSchema, loopRecipeSchema } from "./loopPlans.js";
 // Agent selection spec §12 I10 (plan-review P18): the selection/context/partial schemas are T7's, defined once
 // in schema.ts; webProtocol.ts re-exports them so every downstream import can come from one wire module.
 export { agentSelectionSchema, contextWindowSchema, panelPartialSelectionSchema, partialSelectionSchema } from "./schema.js";
@@ -931,6 +931,22 @@ export const workItemProgressSchema = z
   })
   .strict();
 
+// Loop plans spec §4.1 (D9, C7): a loop task's plan in plain words, built server-side from its effective recipe.
+// chosenByLabel is the plan file's label that chose it (spec §2.4); loopVersion is what set-task-loop must name.
+export const loopPlanViewSchema = z
+  .object({
+    planId: z.enum(LOOP_PLAN_IDS),
+    planVersion: positiveSafeInteger,
+    planName: nonemptyString,
+    chosenBy: z.enum(["explicit", "labels"]),
+    chosenByLabel: nonemptyString.nullable(),
+    amended: z.boolean(),
+    loopVersion: safeInteger,
+    inputs: loopInputsSchema,
+    summary: z.array(nonemptyString).min(1),
+  })
+  .strict();
+
 export const workItemViewSchema = z
   .object({
     taskId: idSchema,
@@ -953,6 +969,10 @@ export const workItemViewSchema = z
     labelsVersion: safeInteger.optional(),
     // §8 R19: optional on the wire, always given by the server; null when the task has no current run.
     progress: workItemProgressSchema.nullable().optional(),
+    // Loop plans spec §4.1: null for a hand-written contract. Optional on the wire like labels; the server always gives it.
+    loopPlan: loopPlanViewSchema.nullable().optional(),
+    // Loop plans spec §4.1 (Drafter finding F4): the effective contract's goal and success condition.
+    objective: z.object({ goal: nonemptyString, successCondition: nonemptyString }).strict().optional(),
   })
   .strict();
 
