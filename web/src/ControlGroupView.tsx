@@ -136,7 +136,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
           ))}
         </tbody>
       </table>
-      {openItem !== undefined && <TaskDetail view={view} item={openItem} drafts={drafts} onDraft={onDraft} onCommand={onCommand} />}
+      {openItem !== undefined && <TaskDetail key={openItem.taskId} view={view} item={openItem} drafts={drafts} onDraft={onDraft} onCommand={onCommand} />}
 
       <h3>Runs</h3>
       <table>

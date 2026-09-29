@@ -139,6 +139,7 @@ export function ControlPanel(props: ControlPanelProps): JSX.Element {
       </nav>
       {view !== undefined && (
         <ControlGroupView
+          key={view.summary.groupId}
           view={view}
           config={config}
           uncertain={waiting}
