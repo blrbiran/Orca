@@ -106,4 +106,10 @@ describe("the loop plan card (spec §4.1)", () => {
     render(<ControlGroupView view={view([item()])} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
     expect(document.querySelector("td span.plan-chip")?.textContent?.trim()).toBe("Bug fix (red first)");
   });
+
+  it("puts no plan chip next to a hand-written task", () => {
+    render(<ControlGroupView view={view([item({ loopPlan: null })])} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
+    expect(screen.getByRole("button", { name: "a" })).toBeTruthy();
+    expect(document.querySelector("span.plan-chip")).toBeNull();
+  });
 });

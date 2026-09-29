@@ -109,6 +109,10 @@ function LoopPlanEditor(props: LoopPlanCardProps & { plan: LoopPlanViewV1; curre
   // Spec §4.2 (D4): only a task that has not started may change; a finished run counts (spec §5.2 step 2).
   const started = (item.status !== "draft" && item.status !== "ready") || item.lineageRunIds.length > 0;
   if (started) return <p>Started; the plan is frozen</p>;
+  // Spec §5.2 step 1: the server refuses every group state but draft/ready, and a stopped group, as group-state-invalid;
+  // offering the form there would only let a person fill it in to be refused (final review, B6).
+  const open = (view.summary.state === "draft" || view.summary.state === "ready") && view.summary.stopMode === null;
+  if (!open) return <p>The group is not open for changes; the plan is frozen</p>;
   if (draft === null) return <button type="button" onClick={() => onDraft(key, JSON.stringify(draftOf(plan, current)))}>Change plan</button>;
   const set = (patch: Partial<LoopDraft>): void => onDraft(key, JSON.stringify({ ...draft, ...patch }));
   const checked = payloadOf(draft);
@@ -137,7 +141,7 @@ function LoopPlanEditor(props: LoopPlanCardProps & { plan: LoopPlanViewV1; curre
       ))}
       {blocked !== null && <p role="alert">{blocked}</p>}
       <button type="submit" disabled={blocked !== null}>{consequence?.text ?? blocked}</button>
-      <button type="button" onClick={() => onDraft(key, "")}>Discard draft</button>
+      <button type="button" onClick={() => onDraft(key, "")}>Discard plan draft</button>
     </form>
   );
 }

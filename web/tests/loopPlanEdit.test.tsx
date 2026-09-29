@@ -98,7 +98,28 @@ describe("changing a loop task's plan on its card (spec §4.2)", () => {
     expect(onCommand).not.toHaveBeenCalled();
   });
 
-  it("says a lowered budget goes back to the reserve, an unchanged one is unchanged, and Discard draft drops the draft", () => {
+  it("names only the first dimension the reserve cannot cover", () => {
+    render(<Stateful view={view([item()])} onCommand={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Change plan" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Token budget" }), { target: { value: String(3_000_000 + 6_000_000 + 1) } });
+    fireEvent.change(screen.getByRole("textbox", { name: "Active time (ms)" }), { target: { value: String(14_400_000 + 14_400_000 + 2) } });
+    expect(screen.getByRole("alert").textContent).toBe("Group reserve too small: tokens short by 1");
+  });
+
+  it("sends the goal and the done-when trimmed, and one entry per non-blank line, trimmed", () => {
+    const onCommand = vi.fn();
+    render(<Stateful view={view([item()])} onCommand={onCommand} />);
+    fireEvent.click(screen.getByRole("button", { name: "Change plan" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Goal" }), { target: { value: "  fix login  " } });
+    fireEvent.change(screen.getByRole("textbox", { name: "Done when" }), { target: { value: " the login test passes " } });
+    fireEvent.change(screen.getByRole("textbox", { name: "Only changes (one path per line)" }), { target: { value: " src/auth/** \n\n  \n src/login/** " } });
+    fireEvent.click(screen.getByRole("button", { name: "Budget unchanged" }));
+    expect(onCommand).toHaveBeenLastCalledWith(expect.objectContaining({ payload: expect.objectContaining({
+      inputs: { ...PLAN.inputs, goal: "fix login", successCondition: "the login test passes", targetPaths: ["src/auth/**", "src/login/**"] },
+    }) }));
+  });
+
+  it("says a lowered budget goes back to the reserve, an unchanged one is unchanged, and Discard plan draft drops the draft", () => {
     const onCommand = vi.fn();
     render(<Stateful view={view([item()])} onCommand={onCommand} />);
     fireEvent.click(screen.getByRole("button", { name: "Change plan" }));
@@ -106,8 +127,10 @@ describe("changing a loop task's plan on its card (spec §4.2)", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "Max attempts" }), { target: { value: "2" } });
     fireEvent.click(screen.getByRole("button", { name: "Budget -1 attempts, returned to the group reserve; 4 left" }));
     expect(onCommand).toHaveBeenLastCalledWith(expect.objectContaining({ payload: expect.objectContaining({ work: { tokens: 3_000_000, activeMs: 14_400_000, attempts: 2 } }) }));
-    // The label editor has its own "Discard draft"; this is the plan form's.
-    fireEvent.click(within(screen.getByRole("form", { name: "Change plan a" })).getByRole("button", { name: "Discard draft" }));
+    // The label editor keeps its own "Discard draft"; the plan form's has a name of its own (final review, B6).
+    expect(screen.getAllByRole("button", { name: "Discard draft" })).toHaveLength(1);
+    expect(within(screen.getByRole("form", { name: "Change plan a" })).queryByRole("button", { name: "Discard draft" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Discard plan draft" }));
     expect(screen.queryByRole("textbox", { name: "Goal" })).toBeNull();
     expect(screen.getByRole("button", { name: "Change plan" })).toBeTruthy();
   });
@@ -119,6 +142,18 @@ describe("changing a loop task's plan on its card (spec §4.2)", () => {
     cleanup();
     render(<Stateful view={view([item({ loopPlan: null, objective: { goal: "ship", successCondition: "passes" } })])} onCommand={vi.fn()} />);
     expect(screen.queryByRole("button", { name: "Change plan" })).toBeNull();
+  });
+
+  it("offers no change while the group is past ready or stopped, where the server always refuses (group-state-invalid)", () => {
+    const at = (summary: Partial<GroupViewV1["summary"]>): GroupViewV1 => { const base = view([item()]); return { ...base, summary: { ...base.summary, ...summary } }; };
+    for (const shown of [at({ state: "running" }), at({ state: "review" }), at({ stopMode: "pause", stopState: "paused" })]) {
+      render(<Stateful view={shown} onCommand={vi.fn()} />);
+      expect(screen.queryByRole("button", { name: "Change plan" })).toBeNull();
+      expect(screen.getByText("The group is not open for changes; the plan is frozen")).toBeTruthy();
+      cleanup();
+    }
+    render(<Stateful view={at({ state: "draft" })} onCommand={vi.fn()} />);
+    expect(screen.getByRole("button", { name: "Change plan" })).toBeTruthy();
   });
 
   it("counts a task as started by its status alone, or by a run in its lineage alone (spec §5.2 step 2)", () => {

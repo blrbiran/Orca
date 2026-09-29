@@ -56,6 +56,21 @@ describe("a loop task's work row is the plan card's (spec §4.3)", () => {
     expect(screen.getByRole("textbox", { name: /^c work tokens/ })).toBeTruthy();
   });
 
+  it("points only the loop task's own work row at the card, not another bucket of it nor another owner with its id", () => {
+    // Neither row occurs today (final review, B4 MB4-9/10); each reaches the read-only cell, where only the guards keep
+    // the hint off it.
+    const odd: GroupViewV1 = { ...view, allocations: [
+      ...view.allocations,
+      { ownerKind: "task", ownerId: "a", bucket: "reserve", state: "draft-encumbered", amount: amount(1), fieldProvenance: provenance },
+      { ownerKind: "estimate", ownerId: "a", bucket: "work", state: "draft-encumbered", amount: amount(2), fieldProvenance: provenance },
+    ] };
+    const { container } = render(<BudgetEditor view={odd} config={config(DURABLE)} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
+    const hinted = [...container.querySelectorAll("tbody tr")]
+      .filter((row) => row.textContent?.includes("Change it in the plan card"))
+      .map((row) => [...row.querySelectorAll("td")].slice(0, 2).map((cell) => cell.textContent).join(" / "));
+    expect(hinted).toEqual(["task a / work"]);
+  });
+
   it("never turns a draft of the loop task's work row into a proposal-edit operation", () => {
     const key = budgetFieldKey("g", { scope: "task", taskId: "a", allocation: "work", dimension: "tokens" });
     expect(editedOperations(view, { [key]: "5" })).toEqual([]);

@@ -18,7 +18,9 @@ const config: ControlConfigV1 = {
 };
 const summary: ControlSummaryV1 = {
   schema: "orca-control-summary-v1", epoch: "epoch-a", changeSeq: 4, resetRequired: false, dispatchBlocked: false,
-  groups: [{ groupId: "g", state: "running", commandRevision: 6, projectionSeq: 4, stopMode: null, stopState: null, claimBlocked: false, recoveryBlockerCount: 0 }],
+  // Confirmed and not started: "ready". A running group is one the server refuses set-task-loop in, and the card offers
+  // no change there (final review, B6).
+  groups: [{ groupId: "g", state: "ready", commandRevision: 6, projectionSeq: 4, stopMode: null, stopState: null, claimBlocked: false, recoveryBlockerCount: 0 }],
 };
 const recovery: RecoveryViewV1 = { schema: "orca-control-recovery-v1", epoch: "epoch-a", dispatchBlocked: false, blockers: [] };
 const groupView: GroupViewV1 = {
@@ -76,7 +78,7 @@ describe("the loop draft survives a refusal and is cleared by a success (spec §
       { status: 200, body: { schema: "orca-command-success-v1", commandId: "x", actorId: "operator", verb: "set-task-loop", target: { kind: "task", groupId: "g", taskId: "a" }, commandRevision: 7, projectionSeq: 5, effectivePayloadHash: "1".repeat(64), authorityCommandHash: "2".repeat(64), result: { kind: "task-loop-set", taskId: "a", loopVersion: 1, proposalVersion: 2 } } },
     ];
     render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: /^g · running/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /^g · ready/ }));
     fireEvent.click(await screen.findByRole("button", { name: "a" }));
     // The import form has its own "Goal" box, so the card's fields are looked up inside the card.
     const card = (): HTMLElement => screen.getByRole("region", { name: "Plan a" });
