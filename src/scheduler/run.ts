@@ -156,14 +156,20 @@ export async function loadRound(planPath: string): Promise<{ round: Round } | { 
   const baseSha = targetRepo ? await resolveBaseSha(targetRepo, baseBranch) : null;
 
   const result = loadPlan(raw, baseBranch);
-  if ("rejections" in result) return result;
   // Loop plans spec §3.4 (C1): a loop task names a recipe only Web import expands. Refused by name, before any contract
-  // is read -- never dropped from the round.
-  const loopRejections = result.plan.tasks.filter(isLoopPlanTask).map((task) => ({
-    code: `loop-plan-cli-unsupported:${task.taskId}`,
-    message: `task ${task.taskId} names a loop plan; loop plans run only through the Web panel (orca panel)`,
-  }));
-  if (loopRejections.length > 0) return { rejections: loopRejections };
+  // is read -- never dropped from the round -- and reported with loadPlan's other rejections, all at once (final review
+  // Minor 3), so it is read from the raw tasks: a plan loadPlan rejects has no parsed tasks.
+  const rawTasks = (raw as { tasks?: unknown } | null)?.tasks;
+  const loopRejections: PlanRejection[] = (Array.isArray(rawTasks) ? rawTasks : []).flatMap((task: unknown) => {
+    const taskId = typeof task === "object" && task !== null && "loop" in task ? (task as { taskId?: unknown }).taskId : undefined;
+    return typeof taskId === "string" ? [{
+      code: `loop-plan-cli-unsupported:${taskId}`,
+      message: `task ${taskId} names a loop plan; loop plans run only through the Web panel (orca panel)`,
+    }] : [];
+  });
+  if ("rejections" in result || loopRejections.length > 0) {
+    return { rejections: [..."rejections" in result ? result.rejections : [], ...loopRejections] };
+  }
   const plan: PlanFile = { ...result.plan, tasks: result.plan.tasks.filter((task): task is PlanTask => !isLoopPlanTask(task)) };
 
   // buildGraph's contracts map is the already-loaded contract per task, not a
