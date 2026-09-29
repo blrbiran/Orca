@@ -1,0 +1,48 @@
+{
+  "v": 1,
+  "runId": "orca-dev-2f65a729",
+  "runtime": "claude-code",
+  "sessionRef": "2f65a729-54fb-4d8f-8a7b-01510795b8d8",
+  "writtenAt": "2026-09-29T13:27:38.267Z",
+  "head": "3d37b4432edadae921f9edf28e29360531203a74",
+  "level": {
+    "kind": "reading",
+    "level": 341116,
+    "windowTokens": 1000000,
+    "t1": 330000,
+    "t2": 450000,
+    "band": 1
+  },
+  "next": [
+    "#13(a) in ccloop: run Orca plan docs/superpowers/plans/2026-09-29-backlog-hardening.md Task 7 as written; the human authorised rewriting ccloop tests/agents/registry.test.ts:56-61 to drop \"sonnet[1m]\" (re-measure line numbers first)",
+    "#13(b) in Orca: handoffGraceMsOf fallback 0 -> 60_000; the human authorised rewriting tests/panel/assemblyHandoffGrace.test.ts 'is the agent's killGraceMs plus the fixed extra, and only the fixed extra when killGraceMs is unusable' and tests/control/agentFreeze.test.ts 'judges a handoff's grace by the run's frozen killGraceMs plus the fixed extra' (expected 120_000 for the unusable inputs)",
+    "Then brainstorm goal.md §10.1 item 2, the §3.3 loop plan layer"
+  ],
+  "open": [
+    "Web panel residual: a group read sent before a gap and arriving after it is accepted by reduceGroup (registered in .superpowers/sdd/2026-09-29-evidence-root-and-refetch/progress.md §4)",
+    "Nine tests/control files gate with skipIf and would leak a temp root if skipped whole in an environment without ORCA_CCLOOP_BIN (registered in .superpowers/sdd/2026-09-29-tmp-leak-skipped-file/progress.md §4)"
+  ],
+  "awaitingHuman": [
+    {
+      "kind": "irreversible",
+      "what": "push Orca and ccloop main (local commits after this session's last push)"
+    },
+    {
+      "kind": "named-authorization",
+      "what": "plan C Task 5: add the ccloop git dependency line and lock in Orca (the human's step; commands given in the conversation)"
+    },
+    {
+      "kind": "named-authorization",
+      "what": "#4 design direction and memory tab spec Q1-Q7 (recommendations given in the conversation)"
+    }
+  ],
+  "measurements": [
+    {
+      "command": "/Users/biran/code/skills/loop/Orca/node_modules/.bin/tsc --noEmit -p /Users/biran/code/skills/loop/Orca/tsconfig.json",
+      "exitCode": 0,
+      "commit": "3d37b4432edadae921f9edf28e29360531203a74",
+      "observedAt": "2026-09-29T13:27:38.226Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-2f65a729-nX8YYD/1.txt"
+    }
+  ]
+}
