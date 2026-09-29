@@ -28,6 +28,31 @@ describe("a round goes on past one group's failure (backlog #3)", () => {
     } finally { await t.h.dispose(); }
   });
 
+  it("fails the round with the real cause when a group's write takes the whole transaction down, and leaves no wake", async () => {
+    const t = await driverHarness([{ taskId: "a" }, { taskId: "b" }]); try {
+      await t.claim();
+      // Plan B final review (2026-09-29): SQLITE_FULL inside one group's INSERT rolls back the whole transaction, not
+      // just the statement. Before the per-group savepoint the catch above swallowed it as that group's failure, and the
+      // round then died on a COMMIT/ROLLBACK with "no transaction is active" instead of the full disk. The database is
+      // capped at its current size and the scheduler_wakes pages filled with tiny rows, so the wake cannot fit. Filler
+      // ids sort beside `drive:g:` but do not match `drive:g:%`, so the wake's ordinal is unchanged.
+      const db = t.h.store.db;
+      db.exec(`PRAGMA max_page_count=${Number(db.prepare("PRAGMA page_count").get()!.page_count)}`);
+      const fill = db.prepare("INSERT INTO scheduler_wakes(id,group_id,kind,body,delivered) VALUES (?,NULL,'filler','',1)");
+      let full = "";
+      for (let n = 0; full === "" && n < 100_000; n += 1) {
+        try { fill.run(`drive:g!${String(n).padStart(6, "0")}`); } catch (error) { full = (error as Error).message; }
+      }
+      expect(full).toBe("database or disk is full");
+      captureStderr();
+      await t.driver().round();
+      const failed = lines.filter((line) => line.startsWith("orca-driver: round failed: "));
+      expect(failed).toEqual(["orca-driver: round failed: database or disk is full\n"]);
+      expect(lines.filter((line) => line.startsWith("orca-driver: group "))).toEqual([]);
+      expect(db.prepare("SELECT id FROM scheduler_wakes WHERE id LIKE 'drive:%' AND kind='start'").all()).toEqual([]);
+    } finally { await t.h.dispose(); }
+  });
+
   it("names a run whose failure it could not record, and still moves the next run in the same round", async () => {
     const t = await driverHarness([{ taskId: "a" }, { taskId: "b" }]); try {
       const a = await t.claim();

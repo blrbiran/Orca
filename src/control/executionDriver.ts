@@ -689,6 +689,11 @@ export function replenishStartWakes(deps: Pick<ExecutionDriverDeps, "store" | "a
       // that throws -- is skipped and named on stderr below, like every failure the driver cannot pin on a run. It no
       // longer takes every other group's wake, and the whole round, down with it. Each group writes at most one row,
       // last, so a group that failed wrote nothing.
+      // Plan B final review (2026-09-29): each group runs under its own savepoint. A failure SQLite pins on the
+      // statement is undone to it and stays this group's; one that takes the whole transaction down (SQLITE_FULL,
+      // IOERR, NOMEM) leaves no savepoint to return to, and is rethrown so the round fails with its real cause.
+      let open = true;
+      store.db.exec("SAVEPOINT replenish_group");
       try {
         const group = JSON.parse(String(row.body)) as { planHash?: string; status: string; stopped: boolean };
         if (group.planHash === undefined || group.stopped || !DISPATCHABLE_GROUP_STATES.has(group.status)) continue;
@@ -705,7 +710,11 @@ export function replenishStartWakes(deps: Pick<ExecutionDriverDeps, "store" | "a
         }).toString("utf8"));
         armed.push(wakeId);
       } catch (error) {
+        open = false;
+        try { store.db.exec("ROLLBACK TO replenish_group"); store.db.exec("RELEASE replenish_group"); } catch { throw error; }
         failed.push(`${groupId}: ${describeError(error)}`);
+      } finally {
+        if (open) store.db.exec("RELEASE replenish_group");
       }
     }
     return armed;

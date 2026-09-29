@@ -132,7 +132,12 @@ export async function openControlStore(options:{stateDir:string;recovery?:boolea
             const result = fn();
             if (result && typeof (result as {then?:unknown}).then === "function") throw new ControlError("control-async-transaction");
             connection.exec("COMMIT"); return result;
-          } catch (error) { connection.exec("ROLLBACK"); throw error; }
+          } catch (error) {
+            // SQLITE_FULL, IOERR and NOMEM can end the transaction themselves; ROLLBACK then fails with "no transaction
+            // is active" and would hide the error that did it (plan B final review, 2026-09-29). The cause is thrown.
+            try { connection.exec("ROLLBACK"); } catch { /* already rolled back by SQLite */ }
+            throw error;
+          }
           finally { finishProjectionTransaction(store); inTransaction = false; }
         });
       },
