@@ -65,6 +65,10 @@ describe("the set-task-loop route (spec §5.2)", () => {
     const answer = await command(panel, LOOP_ROUTE, { commandId: "loop-shape", expectedRevision: (await view(panel)).summary.commandRevision, payload: { baseLoopVersion: 0, plan: "standard" } });
     expect(answer.status).toBe(400);
     expect(answer.body).toMatchObject({ error: { code: "control-non-json-payload" } });
+    // Before the ledger: no result was retained under the command's id (a ledgered refusal would answer 200 here).
+    const lookup = await get(panel, `/api/control/groups/${GROUP}/commands/loop-shape`);
+    expect(lookup.status).toBe(404);
+    expect(await lookup.json()).toMatchObject({ error: { code: "command-result-not-found" } });
     await panel.close();
   });
 

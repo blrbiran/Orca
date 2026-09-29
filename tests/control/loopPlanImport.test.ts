@@ -27,12 +27,14 @@ describe("Web import of a loop task (spec §3.3, criterion 6)", () => {
     } finally { await h.dispose(); }
   });
 
-  // Controller ruling P7: the self-equality `sha256Canonical(archived.plan) === archived.planHash` is dropped (it cannot
-  // fail); the removal of the recipe must change the hash.
+  // Final review Important 1 (correcting controller ruling P7, which dropped the equality as a self-read): the equality
+  // recomputes the hash from the archived plan, recipe included, and compares it with the stored planHash -- it is what
+  // ties planHash to these bytes; the inequality alone holds for a planHash computed over anything else.
   it("puts the recipe under planHash: the same plan without it hashes differently", async () => {
     const h = await webFixture(undefined, [{ taskId: "a", loop: LOOP }]);
     try {
       const archived = readArchivedPlan(h.store, "g");
+      expect(sha256Canonical(archived.plan)).toBe(archived.planHash);
       const withoutRecipe = { ...archived.plan, tasks: archived.plan.tasks.map(({ loop: _loop, ...task }) => task) };
       expect(sha256Canonical(withoutRecipe)).not.toBe(archived.planHash);
     } finally { await h.dispose(); }

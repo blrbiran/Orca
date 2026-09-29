@@ -25,7 +25,8 @@ const without = (snapshot: any, taskId: string) => ({
 });
 // A loop plan's allowlist is its targetPaths (spec §3), and ccloop's fake codex reports `answer.txt` as changed on every
 // execute whatever it writes (tests/fixtures/fake-codex.mjs), so the allowlist names it too, or ccloop stops the attempt
-// at `allowlist miss: answer.txt` (measured: b7/dbg.json.root).
+// at `allowlist miss: answer.txt` (measured: b7/dbg.json.root). Tasks a and b therefore share answer.txt in their write
+// sets on purpose (final review Minor 8 / B7): it is the fake codex's, not a real overlap between the two tasks.
 const loopFor = (goal: string, path: string) => ({ plan: "standard", goal, successCondition: `${path} holds the scripted text`, targetPaths: [path, "answer.txt"], checks: ["true"] });
 
 describe("a loop task changed after confirmation, against real ccloop (spec §6 criterion 10)", { timeout: 420_000 }, () => {
