@@ -115,10 +115,11 @@ describe("set-task-labels (spec §3.1, criteria L3, L4; §8 R6-R8, R15, R16)", (
       expect(service.setTaskLabels(h.taskCommand("set-task-labels", "a", { labels: ["Feature"], baseLabelsVersion: 0 })))
         .toMatchObject({ error: { code: "labels-invalid", message: "labels-invalid:Feature" } });
       const sixteen = [...SYSTEM_LABELS, ...Array.from({ length: 6 }, (_, i) => `custom:c${i}`)];
-      expect(service.setTaskLabels(h.taskCommand("set-task-labels", "a", { labels: [...sixteen, "custom:c16"], baseLabelsVersion: 0 })))
-        .toMatchObject({ error: { code: "labels-invalid", message: "labels-invalid:count:17" } });
+      // 17 raw items that deduplicate to 16 are accepted first, so a raw cap of 16 goes red here (M4h), not on the refusal below.
       expect(service.setTaskLabels(h.taskCommand("set-task-labels", "a", { labels: [...sixteen, "bug"], baseLabelsVersion: 0 })))
         .toMatchObject({ result: { labelsVersion: 1 } });
+      expect(service.setTaskLabels(h.taskCommand("set-task-labels", "a", { labels: [...sixteen, "custom:c16"], baseLabelsVersion: 1 })))
+        .toMatchObject({ error: { code: "labels-invalid", message: "labels-invalid:count:17" } });
       expect(service.setTaskLabels(h.taskCommand("set-task-labels", "a", { labels: ["custom:café"], baseLabelsVersion: 1 })))
         .toMatchObject({ result: { labelsVersion: 2 } });
       expect(itemOf(h).labels).toEqual(["custom:café"]);
@@ -153,6 +154,8 @@ describe("set-task-labels (spec §3.1, criteria L3, L4; §8 R6-R8, R15, R16)", (
       const before = readBudgetProposal(t.h.store, "g");
       expect(before.state).toBe("confirmed");
       expect(t.service.setTaskLabels(t.h.taskCommand("set-task-labels", "a", { labels: ["perf"], baseLabelsVersion: 0 }))).toMatchObject({ result: { labelsVersion: 1 } });
+      // Read before any group view: a moved proposalVersion also breaks the view's snapshot identity, which would go red first (M4b).
+      expect(readBudgetProposal(t.h.store, "g").proposalVersion).toBe(before.proposalVersion);
       await t.claim();
       expect(readControlGroup(t.h.store, "epoch", "g").workItems[0]!.status).toBe("active");
       // A claim moves the task's run, not the group's own status (which the Web path leaves at "ready"), so the group's

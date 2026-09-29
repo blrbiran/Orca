@@ -50,6 +50,18 @@ describe("the set-task-labels route (spec §3.1, §8 R7-R9)", () => {
     await panel.close();
   });
 
+  it("R7: refuses a stale labelsVersion as a ledgered labels-version-conflict", async () => {
+    const panel = await importedPanel("epoch-labels-version");
+    const first = await command(panel, LABELS, { commandId: "labels-v1", expectedRevision: await revision(panel), payload: { labels: ["bug"], baseLabelsVersion: 0 } });
+    expect(first.status).toBe(200);
+    const stale = await command(panel, LABELS, { commandId: "labels-stale", expectedRevision: await revision(panel), payload: { labels: ["perf"], baseLabelsVersion: 0 } });
+    expect(stale.status).toBe(409);
+    expect(stale.body).toMatchObject({ error: { code: "labels-version-conflict" } });
+    const lookup = commandLookupSchema.parse(await json(await get(panel, `/api/control/groups/${GROUP}/commands/labels-stale`)));
+    expect(lookup).toMatchObject({ originalStatus: 409, body: { error: { code: "labels-version-conflict" } } });
+    await panel.close();
+  });
+
   it("R8: a payload of the wrong shape is refused before the ledger, as control-non-json-payload", async () => {
     const panel = await importedPanel("epoch-labels-shape");
     const answer = await command(panel, LABELS, { commandId: "labels-shape", expectedRevision: await revision(panel), payload: { labels: [1], baseLabelsVersion: 0 } });
