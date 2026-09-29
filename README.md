@@ -400,10 +400,12 @@ Run the offline control gate with `npm run verify:control`; it is included in
 through `ORCA_CCLOOP_BIN` when the checkout has no sibling ccloop repository.
 
 `orca panel` and `orca agents` find ccloop through `ORCA_CCLOOP_BIN` when it is set
-(an empty value means "no execution port"), and otherwise through the ccloop package
-installed as Orca's dependency (`package.json` pins it to a commit by git URL). With
-neither, `orca agents` stops with `ccloop-not-installed` and the panel starts without
-an execution port. The real-ccloop criteria under `tests/control` and
+(an empty value means "no execution port"), and otherwise through a ccloop package
+installed in Orca's `node_modules` (Orca's `package.json` is meant to pin it to a commit
+by git URL -- see the human step in
+`docs/superpowers/plans/2026-09-29-ccloop-git-dependency.md`, Task 5). With neither,
+`orca agents` stops with `ccloop-not-installed` and the panel starts without an
+execution port. The real-ccloop criteria under `tests/control` and
 `npm run verify:control` still need `ORCA_CCLOOP_BIN` pointing at a ccloop checkout's
 build, because they use fixtures from ccloop's `tests/` tree, which the package does
 not ship. `ORCA_CCLOOP_DEFAULT_E2E=1` (with `ORCA_CCLOOP_BIN` unset) runs

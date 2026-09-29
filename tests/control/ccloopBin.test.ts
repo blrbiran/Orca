@@ -1,6 +1,7 @@
-import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { realpathSync } from "node:fs";
+import { chmod, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
 import { CcloopNotInstalled, installedCcloopBin, withDefaultCcloopBin } from "../../src/control/ccloopBin.js";
@@ -79,5 +80,57 @@ describe("the ccloop binary Orca uses when ORCA_CCLOOP_BIN is unset", () => {
     const c = await consumer({ manifest: { name: "ccloop", version: "0.1.0" } });
     expect(() => installedCcloopBin(c.from)).toThrow(CcloopNotInstalled);
     expect(() => installedCcloopBin(c.from)).toThrow(/names no bin\.ccloop/);
+  });
+});
+
+describe("ccloop dependency plan Task 3 fix round 1: what the resolved default must satisfy", () => {
+  it("is a realpath even when the install reaches its build through symlinks, as ccloopPort's regularAbsolute requires", async () => {
+    // A package directory whose dist/ is a symlink to a build elsewhere: Node's resolution realpaths the manifest,
+    // but the bin joined onto it still runs through the dist/ link. (--preserve-symlinks, which leaves even the
+    // manifest unresolved, cannot be switched on inside this worker; this layout reaches the same unresolved join.)
+    const root = await realpath(await mkdtemp(join(tmpdir(), "ccb-")));
+    roots.push(root);
+    const build = join(root, "elsewhere", "dist");
+    await mkdir(build, { recursive: true });
+    await writeFile(join(build, "cli.js"), "#!/usr/bin/env node\n", { mode: 0o755 });
+    const pkg = join(root, "store", "ccloop");
+    await mkdir(pkg, { recursive: true });
+    await writeFile(join(pkg, "package.json"), JSON.stringify({ name: "ccloop", version: "0.1.0", bin: { ccloop: "dist/cli.js" } }));
+    await symlink(build, join(pkg, "dist"));
+    await mkdir(join(root, "node_modules"), { recursive: true });
+    await symlink(pkg, join(root, "node_modules", "ccloop"));
+    await mkdir(join(root, "src", "control"), { recursive: true });
+    const bin = installedCcloopBin(join(root, "src", "control", "ccloopBin.js"));
+    expect(bin).toBe(realpathSync(bin));
+    expect(bin).toBe(join(build, "cli.js"));
+  });
+
+  it("names a manifest it cannot read instead of crashing the panel's boot", async () => {
+    // Node's resolution treats an unreadable package.json as absent and still resolves the path, so the read that
+    // follows is where it fails. Needs a non-root user, for whom mode 000 denies the read.
+    const c = await consumer({});
+    const manifest = join(dirname(dirname(c.bin)), "package.json");
+    await chmod(manifest, 0o000);
+    try {
+      expect(() => installedCcloopBin(c.from)).toThrow(CcloopNotInstalled);
+      expect(() => installedCcloopBin(c.from)).toThrow(/EACCES/);
+      const result = withDefaultCcloopBin({}, c.from);
+      expect(result.notInstalled).toBeInstanceOf(CcloopNotInstalled);
+      expect(result.env).toEqual({});
+    } finally {
+      await chmod(manifest, 0o600);
+    }
+  });
+
+  it("names a manifest that is not JSON instead of crashing the panel's boot", async () => {
+    // Node's resolution already refuses this one (ERR_INVALID_PACKAGE_CONFIG) before the manifest is read here; the
+    // criterion pins the named outcome whichever of the two layers catches it.
+    const c = await consumer({});
+    await writeFile(join(dirname(dirname(c.bin)), "package.json"), "{ not json");
+    expect(() => installedCcloopBin(c.from)).toThrow(CcloopNotInstalled);
+    expect(() => installedCcloopBin(c.from)).toThrow(/^ccloop-not-installed: /);
+    const result = withDefaultCcloopBin({}, c.from);
+    expect(result.notInstalled).toBeInstanceOf(CcloopNotInstalled);
+    expect(result.env).toEqual({});
   });
 });
