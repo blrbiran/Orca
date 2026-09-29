@@ -12,7 +12,7 @@ import { effectiveTaskLabels, readTaskLabelState } from "../control/labels.js";
 import { readArchivedPlan, readBudgetProposal, readEstimateRecord } from "../control/queries.js";
 import { readCanonicalRecord } from "../control/snapshot.js";
 import type { ControlStore } from "../control/store.js";
-import { agentSelectionSchema, amountSchema, artifactSchema, canonicalTimestampSchema, grantSchema, idSchema, safeInteger } from "../control/schema.js";
+import { agentSelectionSchema, amountSchema, artifactSchema, canonicalTimestampSchema, grantSchema, idSchema, runProgressSchema, safeInteger, type RunProgress } from "../control/schema.js";
 import { taskContractSchema } from "../scheduler/planFile.js";
 import {
   agentSelectionPreviewSchema,
@@ -38,6 +38,7 @@ import {
   type HandoffRequestViewV1,
   type RecoveryViewV1,
   type RunViewV1,
+  type WorkItemProgressV1,
   type WorkItemViewV1,
 } from "../control/webProtocol.js";
 
@@ -155,6 +156,9 @@ const persistedRunSchema = z.object({
   continuationIntentId: idSchema.nullable().optional(),
   providerAttemptOrdinal: safeInteger,
   failureCode: z.string().min(1).nullable(),
+  // Labels and progress spec §2.6 (§8 R1): ccloop's latest progress; a run written before it existed has no key and
+  // reads as null. Never back-filled.
+  progress: runProgressSchema.nullable().optional(),
   drive: driveRecordSchema.optional(),
 }).strict();
 
@@ -423,6 +427,44 @@ function sameFrozenRecords(left: unknown, right: unknown): boolean {
   catch { return false; }
 }
 
+/** Labels and progress spec §4.1 (§8 R18): ccloop's status as the step the panel shows. */
+const STEP_OF = {
+  queued: "queued", planning: "plan", executing: "execute", verifying: "verify",
+  succeeded: "succeeded", blocked_waiting_human: "blocked_waiting_human", exhausted: "exhausted", cancelled: "cancelled", failed: "failed",
+} as const satisfies Record<RunProgress["status"], NonNullable<WorkItemProgressV1["step"]>>;
+
+/**
+ * Labels and progress spec §4.1 (§8 R11, R18): one run's progress as its work item shows it. The attempt's two numbers
+ * come from ccloop's one snapshot and are never mixed with Orca's grant. Tokens are judged per run, in the run's own
+ * bucket: null when that bucket's usage is unknown or the run overran; before the first usage event they are 0 of the
+ * grant, a real 0 -- ccloop reports usage at phase end (the UI says so).
+ */
+export function progressOfRun(
+  run: Pick<z.infer<typeof persistedRunSchema>, "runId" | "phase" | "grant" | "cumulative" | "unknown" | "breaches" | "progress">,
+): WorkItemProgressV1 {
+  const bucket = run.phase === "handoff" ? "handoff" : "work";
+  const reported = run.progress ?? null;
+  return {
+    runId: run.runId,
+    step: reported === null ? null : STEP_OF[reported.status],
+    attempt: reported === null ? null : { current: reported.currentAttempt, max: reported.attemptsUsed + reported.attemptsRemaining },
+    tokens: run.unknown[bucket] || run.breaches.length > 0 ? null : { used: run.cumulative[bucket].tokens, grant: run.grant[bucket].tokens },
+    lastTransitionAt: reported?.lastTransitionAt ?? null,
+  };
+}
+
+/**
+ * §8 R10: the current run is the work item's currentRunId -- the view has already proved it is the task's newest run by
+ * rowid -- or none. No "last of lineageRunIds" fallback: lineage is sorted by id, not by age.
+ */
+function currentProgress(runs: ReadonlyArray<Record<string, unknown>>, currentRunId: string | null): WorkItemProgressV1 | null {
+  if (currentRunId === null) return null;
+  const row = runs.find((run) => String(run.id) === currentRunId);
+  if (!row) return blocked(`work-item-current-run:${currentRunId}`);
+  // Same detail as runViews' own parse, so a bad run body is reported exactly as before.
+  return progressOfRun(parseStored(persistedRunSchema, row.body, `run-invalid:${currentRunId}`));
+}
+
 function workViews(
   store: ControlStore,
   groupId: string,
@@ -476,6 +518,7 @@ function workViews(
       currentRunId: body.currentRunId ?? null, pendingRunId: body.pendingRunId ?? null,
       lineageRunIds: sortedUnique(lineage),
       labels: effective.labels, labelsProvenance: effective.provenance, labelsVersion: labelState.version,
+      progress: currentProgress(runs, body.currentRunId ?? null),
     };
   });
 }

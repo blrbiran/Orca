@@ -194,3 +194,19 @@ describe("production ccloop execution port",()=>{
     expect(peerErrorCode(new Error("control-peer-exit:2:agent-version-drift"))).toBe(null);
   });
 });
+
+describe("collect's progress through the real port (labels and progress spec §3.2, criterion P2; §8 R4)",()=>{
+  const progress={status:"executing",currentAttempt:1,attemptsUsed:1,attemptsRemaining:2,lastTransitionAt:"2026-09-29T00:00:00.000Z"};
+  it("passes ccloop's progress through, and reads an answer without one as null",async()=>{
+    const answered=await fixture("ok",{progress});
+    expect((await answered.port.collect(answered.envelope,0)).progress).toEqual(progress);
+    const older=await fixture();
+    expect((await older.port.collect(older.envelope,0)).progress).toBeNull();
+  });
+  it("refuses the whole answer when progress has the wrong shape",async()=>{
+    const unknownStatus=await fixture("ok",{progress:{...progress,status:"thinking"}});
+    await expect(unknownStatus.port.collect(unknownStatus.envelope,0)).rejects.toThrow("control-response-invalid");
+    const missingField=await fixture("ok",{progress:{status:"executing"}});
+    await expect(missingField.port.collect(missingField.envelope,0)).rejects.toThrow("control-response-invalid");
+  });
+});

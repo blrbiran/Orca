@@ -1,4 +1,5 @@
 import type { Candidate, Claim, StopProof, UsageEvent, ArtifactRef, HandoffRequest, HandoffAck } from "./types.js";
+import type { RunProgress } from "./schema.js";
 import type { InputCheckpointV1 } from "./resumeBundle.js";
 import { ControlError } from "./errors.js";
 import { createCcloopExecutionPort } from "./ccloopPort.js";
@@ -11,6 +12,8 @@ export type ExecutionStatus={kind:"absent"}|{kind:"accepted";executionId:string;
 export interface ExecutionReport {
  events:UsageEvent[];candidate:Candidate|null;
  terminal:{outcome:"succeeded"|"blocked_waiting_human"|"exhausted"|"cancelled"|"failed";attemptSha:string|null;sourceDir:string;repoDir:string}|null;
+ /** Labels and progress spec §3.2 (§8 R5): optional so the synthetic ports need no edit; absent reads as null. */
+ progress?:RunProgress|null;
 }
 /** Agent selection spec §4.6: `control capabilities` with `agent: null` -- the installation table as ccloop reads it. */
 export interface AgentsView { installations: Array<{ id: string; kind: string; defaults: { model: string; contextWindow: ContextWindow }; contextOptions: ContextWindow[]; version: string }> }

@@ -914,6 +914,19 @@ export const allocationViewSchema = z
     }
   });
 
+// Labels and progress spec §4.1 (§8 R10, R11, R18; plan finding F6): the current run's progress. Step, attempt and
+// lastTransitionAt are ccloop's, null until it reported any; tokens are the run's booked tokens out of its grant, null
+// when unknown or overrun -- never 0 for "unknown".
+export const workItemProgressSchema = z
+  .object({
+    runId: idSchema,
+    step: z.enum(["queued", "plan", "execute", "verify", "succeeded", "blocked_waiting_human", "exhausted", "cancelled", "failed"]).nullable(),
+    attempt: z.object({ current: safeInteger, max: safeInteger }).strict().nullable(),
+    tokens: z.object({ used: safeInteger, grant: safeInteger }).strict().nullable(),
+    lastTransitionAt: nonemptyString.nullable(),
+  })
+  .strict();
+
 export const workItemViewSchema = z
   .object({
     taskId: idSchema,
@@ -934,6 +947,8 @@ export const workItemViewSchema = z
     labels: storedLabelsSchema.optional(),
     labelsProvenance: z.enum(["plan", "operator"]).optional(),
     labelsVersion: safeInteger.optional(),
+    // §8 R19: optional on the wire, always given by the server; null when the task has no current run.
+    progress: workItemProgressSchema.nullable().optional(),
   })
   .strict();
 
@@ -1310,6 +1325,7 @@ export type FieldProvenanceV1 = z.infer<typeof fieldProvenanceSchema>;
 export type AmountProvenanceV1 = z.infer<typeof amountProvenanceSchema>;
 export type AllocationViewV1 = z.infer<typeof allocationViewSchema>;
 export type WorkItemViewV1 = z.infer<typeof workItemViewSchema>;
+export type WorkItemProgressV1 = z.infer<typeof workItemProgressSchema>;
 export type RunViewV1 = z.infer<typeof runViewSchema>;
 export type EstimateViewV1 = z.infer<typeof estimateViewSchema>;
 export type CheckpointViewV1 = z.infer<typeof checkpointViewSchema>;

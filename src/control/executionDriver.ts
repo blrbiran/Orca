@@ -414,6 +414,19 @@ export async function collectInto(deps: ExecutionDriverDeps, run: DriverRun): Pr
     if (event.runId !== runId || event.generation !== run.generation) throw new ControlError("report-identity-conflict");
     admitted(deps, () => recordUsage(store, event));
   }
+  // Labels and progress spec §3.4 (§8 R2, R3): the latest progress, stored on a FRESH read after the usage above --
+  // `run` here predates recordUsage, and saving it would roll cumulative, remaining and highWater back. saveDriverRun
+  // writes (and moves changeSeq) only when the body changed. A port that answered no progress field writes nothing, and
+  // a null answer over a run that never had progress is no change (absent reads as null, R1; plan finding F15).
+  if (report.progress !== undefined) {
+    const progress = report.progress;
+    write(deps, () => {
+      const current = readDriverRun(store, runId);
+      if (current.progress === undefined && progress === null) return;
+      current.progress = progress;
+      saveDriverRun(store, current);
+    });
+  }
   const candidate = report.candidate;
   if (candidate && (candidate.runId !== runId || candidate.generation !== run.generation || candidate.workItemId !== run.workItemId)) {
     throw new ControlError("report-identity-conflict");

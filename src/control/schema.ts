@@ -54,3 +54,7 @@ export const candidateSchema=z.object({
  missing:z.array(z.string()),unresolvedRequestIds:z.array(z.string()),terminalOutcome:z.string().min(1),
  stopProof:z.object({executionId:z.string().min(1),generation:safeInteger.positive(),isolated:z.literal(true),source:artifactSchema}).strict().nullable(),handoff:artifactSchema,
 }).strict();
+// Labels and progress spec §2.6 / §3.2 (§8 R17): ccloop's latest loop-state snapshot as collect answers it -- the status,
+// every step and terminal included, the attempt numbers from that same snapshot, and when it last moved.
+export const runProgressSchema=z.object({status:z.enum(["queued","planning","executing","verifying","succeeded","blocked_waiting_human","exhausted","cancelled","failed"]),currentAttempt:safeInteger,attemptsUsed:safeInteger,attemptsRemaining:safeInteger,lastTransitionAt:z.string().min(1)}).strict();
+export type RunProgress=z.infer<typeof runProgressSchema>;

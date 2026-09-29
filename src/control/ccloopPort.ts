@@ -7,7 +7,7 @@ import type { AgentsView, ExecutionPort, ExecutionReport, ExecutionStatus, Start
 import type { ArtifactRef, HandoffAck, HandoffRequest } from "./types.js";
 import type { AgentResolution, PartialSelection } from "./agentSelection.js";
 import { ControlError, type NonDurableControlErrorCode } from "./errors.js";
-import { agentSelectionSchema, artifactSchema, candidateSchema, contextWindowSchema, idSchema, safeInteger } from "./schema.js";
+import { agentSelectionSchema, artifactSchema, candidateSchema, contextWindowSchema, idSchema, runProgressSchema, safeInteger } from "./schema.js";
 import { capabilityViewSchema } from "./webProtocol.js";
 
 const MAX_OUTPUT=24*1024*1024;
@@ -24,7 +24,9 @@ const handoffAckSchema=z.discriminatedUnion("kind",[
 const amountSchema=z.object({tokens:safeInteger,activeMs:safeInteger,attempts:safeInteger,sessions:safeInteger}).strict();
 const eventSchema=z.object({runId:z.string().min(1),generation:safeInteger.positive(),eventSeq:safeInteger.positive(),bucket:z.enum(["work","handoff"]),cumulative:amountSchema.nullable(),source:artifactSchema}).strict();
 const terminalSchema=z.object({status:z.enum(["succeeded","blocked_waiting_human","exhausted","cancelled","failed"]),currentAttempt:safeInteger,attemptsUsed:safeInteger,lastTransitionAt:z.string(),waitingOnHuman:z.boolean(),stopReason:z.string().nullable(),budgetSnapshot:z.object({attemptsRemaining:safeInteger,timeRemainingMs:safeInteger,tokenBudgetRemaining:safeInteger}).strict(),recentFailures:z.array(z.object({rejectCategory:z.string(),primaryTargetPaths:z.array(z.string()),failingCommand:z.string().nullable()}).strict())}).strict();
-const collectionSchema=z.object({events:z.array(eventSchema),candidate:candidateSchema.nullable(),terminal:terminalSchema.nullable()}).strict();
+// Labels and progress spec §3.2 (§8 R4, R5): progress is optional, so an Orca landed before ccloop emits it still reads
+// every answer (push Orca first); its shape is strict, so a wrong one refuses the whole answer.
+const collectionSchema=z.object({events:z.array(eventSchema),candidate:candidateSchema.nullable(),terminal:terminalSchema.nullable(),progress:runProgressSchema.nullable().optional()}).strict();
 const evidenceSchema=z.object({artifactId:z.string().min(1),hash:z.string().regex(/^[a-f0-9]{64}$/),base64:z.string()}).strict();
 // Agent selection spec §4.6: capabilities protocol 3. Two shapes, chosen by the request: `agent: null` answers the
 // table view, a partial selection answers that selection's resolution (its seven-key capability view carries no protocol tag).
@@ -114,7 +116,7 @@ export function createCcloopExecutionPort(options:{binary:string;agentsTablePath
   async accept(input){return parse(executionStatusSchema,await raw("accept",input)) as ExecutionStatus;},
   async inspect(input){return parse(executionStatusSchema,await raw("inspect",input)) as ExecutionStatus;},
   async requestHandoff(input,request){return parse(handoffAckSchema,await raw("handoff",{input,request})) as HandoffAck;},
-  async collect(input,afterSeq){const response=parse(collectionSchema,await raw("collect",{input,afterSeq}));for(const ref of [...response.events.map(event=>event.source),...(response.candidate?.artifacts??[]),...(response.candidate?[response.candidate.handoff]:[]),...(response.candidate?.stopProof?[response.candidate.stopProof.source]:[])])evidenceContext.set(key(ref),input);return {events:response.events,candidate:response.candidate,terminal:response.terminal?{outcome:response.terminal.status,attemptSha:null,sourceDir:input.work.sourceDir,repoDir:join(input.work.sourceDir,"repo")}:null} as ExecutionReport;},
+  async collect(input,afterSeq){const response=parse(collectionSchema,await raw("collect",{input,afterSeq}));for(const ref of [...response.events.map(event=>event.source),...(response.candidate?.artifacts??[]),...(response.candidate?[response.candidate.handoff]:[]),...(response.candidate?.stopProof?[response.candidate.stopProof.source]:[])])evidenceContext.set(key(ref),input);return {events:response.events,candidate:response.candidate,terminal:response.terminal?{outcome:response.terminal.status,attemptSha:null,sourceDir:input.work.sourceDir,repoDir:join(input.work.sourceDir,"repo")}:null,progress:response.progress??null} as ExecutionReport;},
   async readEvidence(ref:ArtifactRef){
    const input=evidenceContext.get(key(ref));if(!input)throw new ControlError("control-evidence-context-missing");const value=parse(evidenceSchema,await raw("read-evidence",{input,ref}));
    if(value.artifactId!==ref.artifactId||value.hash!==ref.hash)throw new ControlError("artifact-hash-mismatch");
