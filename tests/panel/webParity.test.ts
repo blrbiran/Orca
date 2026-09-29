@@ -13,6 +13,8 @@ import type {
 } from "../../web/src/types.js";
 import { WEB_CORRECTION_KINDS, WEB_LIST_FIELDS, WEB_REPORT_FIELDS } from "../../web/src/types.js";
 import { CORRECTION_KINDS } from "../../src/corrections/schema.js";
+import { CUSTOM_LABEL_PREFIX, SYSTEM_LABELS } from "../../src/control/labels.js";
+import { CUSTOM_LABEL_PREFIX as WEB_CUSTOM_LABEL_PREFIX, WEB_SYSTEM_LABELS } from "../../web/src/controlTypes.js";
 import type {
   AgentPreferencesViewV1 as ServerAgentPreferencesViewV1,
   AgentSelectionPreviewV1 as ServerAgentSelectionPreviewV1,
@@ -37,6 +39,7 @@ import type {
   ResumeFromHandoffPayload as ServerResumeFromHandoffPayload,
   SetAgentPreferencesPayload as ServerSetAgentPreferencesPayload,
   SetLimitPayload as ServerSetLimitPayload,
+  SetTaskLabelsPayload as ServerSetTaskLabelsPayload,
 } from "../../src/control/webProtocol.js";
 import type {
   AgentPreferencesViewV1 as WebAgentPreferencesViewV1,
@@ -62,6 +65,7 @@ import type {
   ResumeFromHandoffPayloadV1 as WebResumeFromHandoffPayloadV1,
   SetAgentPreferencesPayloadV1 as WebSetAgentPreferencesPayloadV1,
   SetLimitPayloadV1 as WebSetLimitPayloadV1,
+  SetTaskLabelsPayloadV1 as WebSetTaskLabelsPayloadV1,
 } from "../../web/src/controlTypes.js";
 
 /**
@@ -92,6 +96,13 @@ describe("web/src/types.ts stays in lockstep with the server shapes (task 8 ruli
   // person cannot record, an extra one is a select option the seam refuses.
   it("WEB_CORRECTION_KINDS is the same SET as CORRECTION_KINDS", () => {
     expect([...WEB_CORRECTION_KINDS].sort()).toEqual([...CORRECTION_KINDS].sort());
+  });
+
+  // Labels and progress spec §2.1 (plan finding F1): the editor's system-label select offers exactly the vocabulary the
+  // server's input doors accept -- a missing word cannot be chosen, an extra one would be refused as labels-invalid.
+  it("WEB_SYSTEM_LABELS is the same list as SYSTEM_LABELS, and the custom prefix is the same", () => {
+    expect([...WEB_SYSTEM_LABELS]).toEqual([...SYSTEM_LABELS]);
+    expect(WEB_CUSTOM_LABEL_PREFIX).toBe(CUSTOM_LABEL_PREFIX);
   });
 });
 
@@ -189,6 +200,9 @@ function agentPreviewServerToWeb(x: ServerAgentSelectionPreviewV1): WebAgentSele
 function agentPreviewWebToServer(x: WebAgentSelectionPreviewV1): ServerAgentSelectionPreviewV1 { return x; }
 function setAgentPreferencesServerToWeb(x: ServerSetAgentPreferencesPayload): WebSetAgentPreferencesPayloadV1 { return x; }
 function setAgentPreferencesWebToServer(x: WebSetAgentPreferencesPayloadV1): ServerSetAgentPreferencesPayload { return x; }
+// Labels and progress spec §3.1: the set-task-labels command's payload.
+function setTaskLabelsServerToWeb(x: ServerSetTaskLabelsPayload): WebSetTaskLabelsPayloadV1 { return x; }
+function setTaskLabelsWebToServer(x: WebSetTaskLabelsPayloadV1): ServerSetTaskLabelsPayload { return x; }
 
 // Referenced so nothing above is dead code the compiler is free to ignore;
 // never invoked for its behavior, only so the assignments above are real
@@ -248,4 +262,6 @@ export const __webParityAssignabilityChecks__ = [
   agentPreviewWebToServer,
   setAgentPreferencesServerToWeb,
   setAgentPreferencesWebToServer,
+  setTaskLabelsServerToWeb,
+  setTaskLabelsWebToServer,
 ] as const;

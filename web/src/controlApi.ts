@@ -34,6 +34,7 @@ import type {
   RepositoryWorkspaceV1,
   ResumeFromHandoffPayloadV1,
   SetLimitPayloadV1,
+  SetTaskLabelsPayloadV1,
 } from "./controlTypes.js";
 import type { ControlRefusal, UncertainCommand } from "./controlState.js";
 
@@ -124,6 +125,26 @@ export function saveEvidenceManifest(manifest: EvidenceManifestV1): void {
   setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
+/**
+ * Labels and progress spec §4.2: one piece of a run's evidence, fetched with the panel token (the route answers to the
+ * header only, like the manifest) and offered as a download named after its evidence id.
+ */
+export async function downloadEvidenceArtifact(entry: EvidenceManifestV1["entries"][number]): Promise<void> {
+  let res: Response;
+  try {
+    res = await fetch(entry.downloadUrl, { headers: { "x-orca-token": panelToken() } });
+  } catch (err) {
+    throw new ControlRequestError(refusalOf(`GET ${entry.downloadUrl}`, null, undefined, err instanceof Error ? err.message : "no answer"));
+  }
+  if (!res.ok) throw new ControlRequestError(refusalOf(`GET ${entry.downloadUrl}`, res.status, await res.json().catch(() => undefined), `answered ${res.status}`));
+  const url = URL.createObjectURL(await res.blob());
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = entry.evidenceId;
+  anchor.click();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
 export type ControlAnswer = { kind: "answered"; status: number; body: CommandSuccessV1 | { error: CommandErrorV1 } } | { kind: "uncertain"; refusal: ControlRefusal };
 
 /**
@@ -193,7 +214,8 @@ export type ControlAction =
   | { verb: "handoff-stop"; groupId: string; expectedRevision: number; payload: HandoffStopPayloadV1 }
   | { verb: "resume-from-handoff"; groupId: string; expectedRevision: number; payload: ResumeFromHandoffPayloadV1 }
   | { verb: "continue-task"; groupId: string; taskId: string; expectedRevision: number; payload: ContinueTaskPayloadV1 }
-  | { verb: "recovery-retry"; groupId: string; expectedRevision: number; payload: RecoveryRetryPayloadV1 };
+  | { verb: "recovery-retry"; groupId: string; expectedRevision: number; payload: RecoveryRetryPayloadV1 }
+  | { verb: "set-task-labels"; groupId: string; taskId: string; expectedRevision: number; payload: SetTaskLabelsPayloadV1 };
 
 /** The route a verb is served on -- src/panel/controlApi.ts's mutation table. */
 export function controlCommandPath(action: ControlAction): string {
@@ -223,6 +245,8 @@ export function controlCommandPath(action: ControlAction): string {
       return `${group}/resume-from-handoff`;
     case "continue-task":
       return `${group}/tasks/${segment(action.taskId)}/continue`;
+    case "set-task-labels":
+      return `${group}/tasks/${segment(action.taskId)}/labels`;
     case "recovery-retry":
       return "/api/control/recovery/retry";
   }

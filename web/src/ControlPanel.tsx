@@ -131,6 +131,7 @@ export function ControlPanel(props: ControlPanelProps): JSX.Element {
         {summary.groups.map((group) => (
           <button key={group.groupId} type="button" aria-current={group.groupId === selected} onClick={() => props.onSelect(group.groupId)}>
             {group.groupId} · {group.state}
+            {group.completion !== undefined ? ` · ${group.completion.done}/${group.completion.total} done` : ""}
             {group.stopState !== null ? ` · ${group.stopState}` : ""}
             {group.recoveryBlockerCount > 0 ? ` · ${group.recoveryBlockerCount} blocker(s)` : ""}
           </button>

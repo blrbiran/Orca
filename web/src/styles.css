@@ -182,3 +182,14 @@ nav[aria-label="Control groups"] button[aria-current="true"] { background: var(-
   .split-detail { position: static; max-height: none; }
   .content { padding: 16px; }
 }
+
+/* Labels and progress spec §4.2: a system label and a custom label look different. */
+.label { display: inline-block; margin-right: 4px; padding: 0 6px; border-radius: var(--radius-sm); font-size: var(--text-xs); }
+.label-system {
+  background: var(--accent-subtle);
+  color: var(--text-strong);
+}
+.label-custom {
+  border: 1px dashed var(--border-strong);
+  color: var(--text);
+}

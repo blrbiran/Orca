@@ -50,6 +50,8 @@ export type GroupSummaryV1 = {
   stopState: null | "paused" | "handoff-pending" | "handoff-partial" | "handoff-unresolved" | "handoff-complete";
   claimBlocked: boolean;
   recoveryBlockerCount: number;
+  /** Labels and progress spec §4.1: tasks done out of the plan's tasks. Optional so literal fixtures need no edit. */
+  completion?: { done: number; total: number };
 };
 
 export type ControlSummaryV1 = {
@@ -87,6 +89,11 @@ export type WorkItemViewV1 = {
   currentRunId: string | null;
   pendingRunId: string | null;
   lineageRunIds: string[];
+  // Labels and progress spec §4.1 (§8 R19): optional here so literal fixtures need no edit; the server always sends them.
+  labels?: string[];
+  labelsProvenance?: "plan" | "operator";
+  labelsVersion?: number;
+  progress?: WorkItemProgressV1 | null;
 };
 export type RunViewV1 = {
   runId: string;
@@ -311,3 +318,17 @@ export type AgentSelectionPreviewV1 = {
 };
 /** Plan-review P5 (W6-8): the revision travels in the envelope's expectedRevision only. */
 export type SetAgentPreferencesPayloadV1 = { preferences: OperatorPreferencesV1 };
+
+/** Labels and progress spec §2.1: G11's system words -- a mirror of src/control/labels.ts, compared by webParity (finding F1). */
+export const WEB_SYSTEM_LABELS = ["feature", "bug", "refactor", "test", "doc", "design", "investigate", "perf", "security", "chore"] as const;
+export const CUSTOM_LABEL_PREFIX = "custom:";
+/** Spec §4.1 (§8 R10, R11, R18): the current run's step, attempt and tokens; null fields are "not reported" or "unknown". */
+export type WorkItemProgressV1 = {
+  runId: string;
+  step: "queued" | "plan" | "execute" | "verify" | "succeeded" | "blocked_waiting_human" | "exhausted" | "cancelled" | "failed" | null;
+  attempt: { current: number; max: number } | null;
+  tokens: { used: number; grant: number } | null;
+  lastTransitionAt: string | null;
+};
+/** Spec §3.1 (§8 R16): replace the task's operator labels, or null to go back to the plan's. */
+export type SetTaskLabelsPayloadV1 = { labels: string[] | null; baseLabelsVersion: number };

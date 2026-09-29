@@ -8,6 +8,7 @@
  * execution is still alive.
  */
 import type { JSX } from "react";
+import { useState } from "react";
 import type { ControlAction } from "./controlApi.js";
 import { AgentSelectionEditor, selectionsHashFor } from "./AgentSelectionEditor.js";
 import { BudgetEditor } from "./BudgetEditor.js";
@@ -16,6 +17,7 @@ import type {
   AgentSelectionPreviewV1, AgentsViewV1, ControlConfigV1, ContinuationSelectionV1, GroupViewV1, OperatorPreferencesV1, RunViewV1,
 } from "./controlTypes.js";
 import type { UncertainCommand } from "./controlState.js";
+import { LabelChips, TaskDetail, progressText } from "./TaskDetail.js";
 
 const short = (hash: string): string => hash.slice(0, 12);
 
@@ -60,6 +62,16 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
   const continuable = continuableRuns(view);
   const selections = (): ContinuationSelectionV1[] =>
     continuable.map(({ run, checkpointId }) => ({ taskId: String(run.taskId), predecessorRunId: run.runId, checkpointId }));
+  // Labels and progress spec §4.2: the label filter (any of) and the open task live in page memory only.
+  const [labelFilter, setLabelFilter] = useState<string[]>([]);
+  const [openTask, setOpenTask] = useState<string | null>(null);
+  const allLabels = [...new Set(view.workItems.flatMap((item) => item.labels ?? []))].sort();
+  const shownItems = labelFilter.length === 0
+    ? view.workItems
+    : view.workItems.filter((item) => (item.labels ?? []).some((label) => labelFilter.includes(label)));
+  const toggleFilter = (label: string): void =>
+    setLabelFilter((current) => (current.includes(label) ? current.filter((other) => other !== label) : [...current, label]));
+  const openItem = view.workItems.find((item) => item.taskId === openTask);
 
   return (
     <section aria-label={`Control group ${groupId}`}>
@@ -88,15 +100,32 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       )}
 
       <h3>Work items</h3>
+      {allLabels.length > 0 && (
+        <fieldset aria-label="Filter work items by label">
+          <legend>labels (any of)</legend>
+          {allLabels.map((label) => (
+            <label key={label}>
+              <input type="checkbox" checked={labelFilter.includes(label)} onChange={() => toggleFilter(label)} />
+              {label}
+            </label>
+          ))}
+        </fieldset>
+      )}
       <table>
         <thead>
-          <tr><th>task</th><th>status</th><th>run</th><th>pending</th><th>depends on</th></tr>
+          <tr><th>task</th><th>status</th><th>labels</th><th>progress</th><th>run</th><th>pending</th><th>depends on</th></tr>
         </thead>
         <tbody>
-          {view.workItems.map((item) => (
+          {shownItems.map((item) => (
             <tr key={item.taskId}>
-              <td>{item.taskId}</td>
+              <td>
+                <button type="button" aria-expanded={openTask === item.taskId} onClick={() => setOpenTask(openTask === item.taskId ? null : item.taskId)}>
+                  {item.taskId}
+                </button>
+              </td>
               <td>{item.status}</td>
+              <td><LabelChips labels={item.labels} /></td>
+              <td>{progressText(item.progress)}</td>
               <td>{item.currentRunId ?? "none"}</td>
               <td>{item.pendingRunId ?? "none"}</td>
               <td>{item.dependencyTaskIds.join(", ") || "none"}</td>
@@ -104,6 +133,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
           ))}
         </tbody>
       </table>
+      {openItem !== undefined && <TaskDetail view={view} item={openItem} drafts={drafts} onDraft={onDraft} onCommand={onCommand} />}
 
       <h3>Runs</h3>
       <table>
