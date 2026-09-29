@@ -226,3 +226,31 @@ export function choosePlanByLabels(labels: readonly string[]): { planId: LoopPla
   }
   return { planId: "standard", label: null };
 }
+
+/** `1 file`, `2 files` (ruling P1: the panel says the singular for 1). */
+function countOf(n: number, noun: string): string {
+  return `${n} ${noun}${n === 1 ? "" : "s"}`;
+}
+
+/**
+ * Spec §4.1 (D9, C7): the card's lines for one recipe, built server-side. Each line states how hard it is (spec §2.1):
+ * the write set is git-checked; protected paths and the file cap are only what the agent reports; the discipline line
+ * says who checks it. The check commands' text is never in a line -- the card shows it collapsed.
+ */
+export function describeLoopPlan(recipe: Pick<LoopRecipe, "planId" | "planVersion" | "inputs">): { planName: string; summary: string[] } | null {
+  const plan = loopPlanDefinition(recipe.planId, recipe.planVersion);
+  if (plan === null) return null;
+  const { inputs } = recipe;
+  return {
+    planName: plan.name,
+    summary: [
+      `Goal: ${inputs.goal}`,
+      `Done when: ${inputs.successCondition}`,
+      `Only changes: ${inputs.targetPaths.join(", ")}`,
+      ...(inputs.protectedPaths.length > 0 ? [`Must not change: ${inputs.protectedPaths.join(", ")} (reported by the agent, not checked in git)`] : []),
+      `At most ${countOf(maxFilesOf(plan, inputs), "file")} changed (reported by the agent)`,
+      `Acceptance: ${countOf(inputs.checks.length, "check command")}, all must pass`,
+      ...(plan.discipline === null ? [] : [plan.discipline]),
+    ],
+  };
+}
