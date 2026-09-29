@@ -151,7 +151,10 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
    - #13(b)（Orca）：`handoffGraceMsOf` 冻结值无效时的回退由 `0` 改 `60_000`；**人授权改写** `tests/panel/assemblyHandoffGrace.test.ts` >「is the agent's killGraceMs plus the fixed extra, and only the fixed extra when killGraceMs is unusable」与 `tests/control/agentFreeze.test.ts` >「judges a handoff's grace by the run's frozen killGraceMs plus the fixed extra」（`:351-354`），`-1, 1.5, "5000", null, undefined, {}` 那几行期望改为 `120_000`。出处：同一计划 Drafter findings 的 #13(b) 行。
 2. 然后 brainstorm goal.md §10.1 第 2 项 §3.3 loop 方案层（人：「同意，按顺序之后可以开始」）。
 - ✅ **会话 `2f65a729` 的全部 `Ruling:` 行人已审、同意**（`findCcloopRoot` 抛错不读 lockfile；只改跳过机制不算改判据）。会话 `2724716d` 那一轮的 `Ruling:` 行也在同一句「审 Ruling => 同意」里。
-- 待人答（会话 `2f65a729` 已在对话里给了逐条建议）：#4 的设计走向、memory tab Q1–Q7；计划 C Task 5（人那一步）已给出可直接照做的命令。
+- ✅ 计划 C Task 5 人已做完：主题行 `build: pin ccloop as a git dependency at 926d74f5c2bb`（lock 的 `resolved` 是 `git+ssh://…`，别的机器 `npm ci` 需要 GitHub SSH 凭据）。
+- ✅ memory tab Q1–Q7 人已裁「按建议定」，记在 spec `docs/superpowers/specs/2026-09-29-memory-tab-design.md` §9；实现排在 §3.3 之后，实现前先读 ccmem 源码核 Q6 的两处。
+- #4：人倾向方案 A（`run --agents` 把选择原字节冻结进 `<runDir>/agent-selection.json`，`resume`／`sweep` 读它、物化、比 hash）。控制器补充的事实：Orca 从不对 ccloop 调 `resume`／`sweep`，ccloop `sweep` 已具名拒绝 `--agents` ⇒ 今天只影响人手动续跑；建议 A 与「Orca 续跑被打断的解冲突 run」一起做，否则是没人调用的代码。待人定时机。
+- ⚠️ **钉版本的后续规矩（待人确认，会话 `2f65a729` 的建议）**：只有 Orca 依赖了 ccloop 的**新行为**（线协议、新命令）时才要重钉；顺序是 ccloop 提交 → 人推 ccloop → agent 跑 `npm install github:blrbiran/ccloop#<SHA>` 与计划 C Task 5 Step 3 的核对 → agent 提交 → 人推 Orca。建议做成脚本 `scripts/pin-ccloop.mjs`，并在门里加一步：`env -u ORCA_CCLOOP_BIN ORCA_CCLOOP_DEFAULT_E2E=1` 跑 `ccloopDefaultE2E`，让钉旧了在门里变红。
 
 **没有在飞的工作。** 会话 `2f65a729`（人授权「Web 面板的 bug 也排进这一轮」）做完了上一版「还挂着的」前两条，台账 `.superpowers/sdd/2026-09-29-evidence-root-and-refetch/progress.md`（§3、§4 两项，§5 门）：
 - ✅ `fix(scheduler): stop recording the installing repository's HEAD as ccloop's evidence`：`findCcloopRoot` 还要求 `package.json` 的 `name === "ccloop"`；装在别的仓库 `node_modules` 里的 ccloop 没有 `.git` ⇒ 具名抛错，不再记下安装方仓库的 HEAD。五处「ccloop 永远不是 npm 依赖」的已发布注释追加了具名 ERRATUM。**Ruling（人未审）**：拿不到 HEAD 时抛错，不读 Orca lockfile 的 `resolved`。

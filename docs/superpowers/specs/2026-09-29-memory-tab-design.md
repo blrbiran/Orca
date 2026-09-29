@@ -325,3 +325,14 @@ node scripts/check-tmp-leak.mjs                                    # RC 0
 - **Q5** 没有 remote 的仓库，项目记忆可能对不上（§3.2）。v1 只在 UI 上说明，不修。要修就得改 ccmem（例如让 export 接受显式的 `--project-key`），属于 ccmem 仓的人裁。
 - **Q6** 超时 30 秒、输出上限 64 MiB 都是估的。量真实 export 的大小与耗时就要对真实数据根跑一次 ccmem（或者用 `sqlite3 -readonly` 做 `.backup` 再量副本），都属于碰你的数据。是否授权量一次？不授权就按估值做，第一次真用时看到 `ccmem-timeout`／`ccmem-output-too-large` 再调。
 - **Q7** 「这条记忆由哪次 correction 产生」移出 v1（§0.1）。以后要做，需要 ccmem 侧先能存外部引用，这要不要在 ccmem 仓立项、何时立项。
+
+## 9. 人裁（2026-09-29，会话 `2f65a729` 追加；上文原样保留）
+
+人原话：「Q1–Q7 按上面的建议定」。逐条：
+- **Q1／S-2**：**不提前**；排在 goal.md §10.1 的 §3.3 loop 方案层之后。
+- **Q2／S-3**：**接受** `ccmem export --json` 与 §4 登记的迁移后果（迁移是 ccmem 自己的行为，下一次 Claude 会话的钩子开库同样会触发）。
+- **Q3**：`ORCA_CCMEM_BIN` 没设 ⇒ 未配置、不启动（维持本文）。
+- **Q4**：接受护栏形状与它的盲区（「打开一个已有的库」看不见）。
+- **Q5**：v1 只在 UI 上说明，不修；要修归 ccmem 仓。
+- **Q6**：**不对真实数据量**；实现前先**读 ccmem 源码**核 §4 的两处「未核」——① 被杀在复制途中的半截 `global.db.bak.<ts>` 会不会被当成可复用备份；② `runVersionedMigration` 是否整体在一个事务里。结论安全就按估值（30 s／64 MiB）做；不安全则先在 ccmem 侧加保护，届时再找人。
+- **Q7**：现在不在 ccmem 仓立项。
