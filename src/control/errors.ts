@@ -122,6 +122,8 @@ export const durableCommandErrorStatuses = {
   // Loop plans spec §5.2 steps 2-3: a task that has started, or that has no loop plan, cannot be changed.
   "task-already-started": 422,
   "task-has-no-loop-plan": 422,
+  // Loop plans spec §4.3 (C6): a loop task's work allocation is changed only by set-task-loop.
+  "budget-owned-by-loop-plan": 422,
   "group-stopped": 422,
   "handoff-budget-unavailable": 422,
   "handoff-grant-insufficient": 422,

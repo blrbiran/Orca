@@ -20,6 +20,7 @@ import type {
   GroupViewV1,
   ProposalOperationV1,
   ProposalTargetV1,
+  WorkItemViewV1,
 } from "./controlTypes.js";
 
 export const DIMENSIONS: AmountDimensionV1[] = ["tokens", "activeMs", "attempts", "sessions"];
@@ -41,10 +42,15 @@ export function provenanceText(provenance: FieldProvenanceV1): string {
   return provenance.provenance === "complex-1m-default" ? "complex-1m default" : provenance.provenance;
 }
 
+/** Loop plans spec §4.3 (C6): a loop task's work budget is changed only on its plan card (set-task-loop). */
+export const loopOwned = (item: WorkItemViewV1): boolean => item.loopPlan !== undefined && item.loopPlan !== null;
+
 function targetOf(view: GroupViewV1, ownerId: string, bucket: string, dimension: AmountDimensionV1): ProposalTargetV1 | null {
   if (bucket === "review") return { scope: "goal-review", dimension };
   if (bucket !== "work" && bucket !== "handoff") return null;
   const task = view.workItems.find((item) => item.taskId === ownerId);
+  // Read-only here, so no edit and no suggestion button ever sends proposal-edit for it (Drafter finding F14).
+  if (task !== undefined && bucket === "work" && loopOwned(task)) return null;
   return task ? { scope: "task", taskId: ownerId, allocation: bucket, dimension } : null;
 }
 
@@ -265,7 +271,10 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
               <td>{allocation.state}</td>
               {DIMENSIONS.map((dimension) => {
                 const target = targetOf(view, allocation.ownerId, allocation.bucket, dimension);
-                if (target === null) return <td key={dimension}>{allocation.amount[dimension]}</td>;
+                if (target === null) {
+                  const owned = allocation.ownerKind === "task" && allocation.bucket === "work" && view.workItems.some((item) => item.taskId === allocation.ownerId && loopOwned(item));
+                  return <td key={dimension}>{allocation.amount[dimension]}{owned ? <small> Change it in the plan card</small> : null}</td>;
+                }
                 const key = budgetFieldKey(groupId, target);
                 const [fieldOperation] = suggestedOperations(view, { kind: "field", target });
                 return (

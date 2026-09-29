@@ -228,11 +228,14 @@ export class WebControlService {
         if (proposal.proposalVersion !== payload.baseProposalVersion) throw new ControlError("proposal-version-conflict");
         prestart(group);
         assertKnownConservation(this.store, group, proposal);
+        // Loop plans spec §4.3 (C6, Rule 7): a loop task's work allocation has one owner, set-task-loop.
+        const loopTasks = new Set(readArchivedPlan(this.store, id).plan.tasks.filter(task => task.loop !== undefined).map(task => task.taskId));
         const seen = new Set<string>();
         const before = canonicalBytes({ allocations: proposal.allocations, limit: proposal.groupLimit });
         for (const op of payload.operations) {
           const key = canonicalBytes(op.target).toString("utf8");
           if (seen.has(key)) throw new ControlError("duplicate-proposal-target"); seen.add(key);
+          if (op.target.scope === "task" && op.target.allocation === "work" && loopTasks.has(op.target.taskId)) throw new ControlError("budget-owned-by-loop-plan");
           const row = allocationFor(proposal, op.target);
           if (row.bucket === "work" && op.value <= 0) throw new ControlError("execution-policy-unrepresentable");
           if (op.provenance === "model") verifyModelField(this.store, id, proposal, op.target, op.value, op.estimateId!);
