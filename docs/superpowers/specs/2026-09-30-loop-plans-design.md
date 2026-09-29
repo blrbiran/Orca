@@ -404,3 +404,17 @@ the two Critical findings against the source before acting. Finding → change:
   step 4, §2.4.
 - **R14–R16 (Minor)** Commit reference, the implicit label rows, reachable attempts. → header, §2.4, §2.3.
 - Scope: split into Part A and Part B (§0); both are implemented this round, with a gate after each.
+
+## 11. Plan-stage corrections (controller, under D10)
+
+Made while reviewing the drafted plan `docs/superpowers/plans/2026-09-30-loop-plans.md` ("Controller rulings on the
+draft" there has the details):
+
+- **Panel strings are English.** The Chinese strings in §2.2, §4.1 and §4.2 were illustrations; the panel speaks English
+  (Rule 11) and UI strings are code under the language rule. The plan carries the exact English table.
+- **Criterion 7** reads: the red-first line for `bugfix` only; "checked by a model" on exactly the three `agent` plans
+  (§2.1 already says all three are model-checked).
+- **`investigate` + `maxFilesTouched` ≠ 1 is refused** (`investigate-max-files`), not silently replaced by 1 (Rule 12).
+- The command's `groupId` / `taskId` travel in the command target, as `set-task-labels` does (Rule 11).
+- A draft-group change goes through `reopenProposal`, as every draft proposal change does.
+- The CLI refusal sits in `loadRound`, the one door `orca plan`, `orca run` and controlled rounds share.
