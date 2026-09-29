@@ -35,6 +35,7 @@ import type {
   ResumeFromHandoffPayloadV1,
   SetLimitPayloadV1,
   SetTaskLabelsPayloadV1,
+  SetTaskLoopPayloadV1,
 } from "./controlTypes.js";
 import type { ControlRefusal, UncertainCommand } from "./controlState.js";
 
@@ -215,7 +216,8 @@ export type ControlAction =
   | { verb: "resume-from-handoff"; groupId: string; expectedRevision: number; payload: ResumeFromHandoffPayloadV1 }
   | { verb: "continue-task"; groupId: string; taskId: string; expectedRevision: number; payload: ContinueTaskPayloadV1 }
   | { verb: "recovery-retry"; groupId: string; expectedRevision: number; payload: RecoveryRetryPayloadV1 }
-  | { verb: "set-task-labels"; groupId: string; taskId: string; expectedRevision: number; payload: SetTaskLabelsPayloadV1 };
+  | { verb: "set-task-labels"; groupId: string; taskId: string; expectedRevision: number; payload: SetTaskLabelsPayloadV1 }
+  | { verb: "set-task-loop"; groupId: string; taskId: string; expectedRevision: number; payload: SetTaskLoopPayloadV1 };
 
 /** The route a verb is served on -- src/panel/controlApi.ts's mutation table. */
 export function controlCommandPath(action: ControlAction): string {
@@ -247,6 +249,8 @@ export function controlCommandPath(action: ControlAction): string {
       return `${group}/tasks/${segment(action.taskId)}/continue`;
     case "set-task-labels":
       return `${group}/tasks/${segment(action.taskId)}/labels`;
+    case "set-task-loop":
+      return `${group}/tasks/${segment(action.taskId)}/loop`;
     case "recovery-retry":
       return "/api/control/recovery/retry";
   }

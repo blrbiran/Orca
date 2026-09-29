@@ -159,7 +159,7 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
         progress: {progressText(item.progress)}
         {item.progress?.lastTransitionAt ? ` · last transition ${item.progress.lastTransitionAt}` : ""}
       </p>
-      <LoopPlanCard view={view} item={item} />
+      <LoopPlanCard view={view} item={item} drafts={drafts} onDraft={onDraft} onCommand={onCommand} />
       <h5>Runs of {item.taskId}</h5>
       {runs.length === 0 ? <p>none</p> : (
         <ul>

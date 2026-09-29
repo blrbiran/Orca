@@ -77,6 +77,7 @@ import type { DecisionFilter } from "./DecisionsView.js";
 import { MetricsView } from "./MetricsView.js";
 import { Refusal } from "./Refusal.js";
 import { labelsDraftKey } from "./TaskDetail.js";
+import { loopDraftKey } from "./LoopPlanCard.js";
 import { DEFAULT_SECTION, sectionFromHash } from "./sections.js";
 import type { Section } from "./sections.js";
 import { SectionPane, Shell, controlAlert } from "./Shell.js";
@@ -288,6 +289,8 @@ export function App(): JSX.Element {
     // Labels and progress spec §4.2 (plan finding F11): a label draft is the person's own data -- cleared only once this
     // command succeeded; a refusal (and an uncertain answer, above) leaves it for them.
     if (answer.status < 400 && action.verb === "set-task-labels") dispatchControl({ type: "draft", key: labelsDraftKey(action.groupId, action.taskId), text: "" });
+    // Loop plans spec §4.2: a loop draft is the person's own data, cleared only once set-task-loop succeeded.
+    if (answer.status < 400 && action.verb === "set-task-loop") dispatchControl({ type: "draft", key: loopDraftKey(action.groupId, action.taskId), text: "" });
     if (answer.status >= 400) {
       const refusal = refusalFromAnswer(answer);
       dispatchControl({ type: "refusal", groupId: action.groupId, value: refusal });
