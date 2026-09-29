@@ -69,3 +69,9 @@
   - `controlShutdown`「makes it exit cleanly …」—— `expected 143 to be +0`（已登记，同一特征）。
   - 全量期间 `uptime` 5 分钟负载到 10.62。四个文件在同一 clone 各单独重跑 3 次，**12/12 绿**（`gate/rerun/`，跑时 1 分钟负载约 5.3–5.5）。四个文件都不在本轮改动面里。
 - 🔴 `check-tmp-leak` RC 1：`vitest exit 1, 2153 tests, 1 entries left`，剩 `orca-tmp-9aEkR9/orca-test-control-9kPzfs`（空目录）—— 与上一轮（会话 `2724716d`）同形，那一轮也是在有 flake 红的一轮里剩 1 个。登记，未修。
+
+## §6 更正（同一会话，稍后追加；上文原样保留）
+
+- §5 末条说剩下的空目录「与上一轮同形，那一轮也是在有 flake 红的一轮里剩 1 个」—— 这句暗示的因果（flake 红 ⇒ 泄漏）是错的。
+  根因是 `ccloopDefaultE2E.test.ts` 整文件在收集期被跳过，vitest 不跑它的文件级 hook；每次全量必漏 1 个。§5 的门里第一次全量（`TMPDIR=$T/or`，不是 `check-tmp-leak` 那次）其实也剩了 1 个（`orca-tmp-4bv5vZ`），当时没数到。
+  见 `.superpowers/sdd/2026-09-29-tmp-leak-skipped-file/progress.md`。

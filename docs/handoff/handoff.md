@@ -98,8 +98,11 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 请求模型 gpt-6-luna，服务层不含 HTTP，n＝1；台账 `.superpowers/sdd/2026-09-25-live-acceptance/progress.md` §5 是唯一可引的表述）；**真 claude 下单任务主链跑通过一次**（2026-09-27，会话 `43e3e1d8`，claude 2.1.283、请求模型 claude-opus-5-5、隔离参数、n＝1；台账 `.superpowers/sdd/2026-09-26-agent-selection/progress.md` §14 是唯一可引的表述）；**真 claude 下 1M 窗口单任务、两任务冲突经 `ccloop run --agents` 解开各跑通过一次**（2026-09-27，会话 `4d2e426e`，各 n＝1；同一台账 §20 是唯一可引的表述）。
 依赖、崩溃恢复、面板 HTTP、strict 组、④ handoff、⑤ 预估链（single-call 估算）、混 kind 都没在真 agent 下验过；冲突／解冲突只在真 claude 下跑过一次（两任务、一处冲突），真 codex 下没跑过。**驱动环只在 port `configured` 时挂；未配置时行为逐字节同前。**
 
-**现行基线（会话 `2f65a729`，2026-09-29 收尾；原始报数在台账 `.superpowers/sdd/2026-09-29-evidence-root-and-refetch/progress.md` §5，输出在该会话 scratchpad `gate/`）**：全新 clone，HOME＋四个 XDG 根改道，TMPDIR 短真目录，夹具表 fake codex `integration`。
-- Orca（内容＝主题行 `fix(web): read a voided group once, …`）：typecheck RC 0；**2153 条、2146 过、4 红（`driverLanding` D、`driverProgress` R2、`driverRecovery` 三条 5 s 超时，`controlShutdown` 143；全量期间 5 分钟负载到 10.6；四个文件单独各 3/3 绿）、3 pending（`ccloopDefaultE2E` 开关未开）**；web check 33 文件／167 条；`verify:panel` 15 PASS；真 `~/.orca` 不变。🔴 `check-tmp-leak` RC 1（剩 1 个空 `orca-test-control-*`，与上一版同形）。`verify:control` 没跑。
+**现行基线（会话 `2f65a729`，2026-09-29，临时目录泄漏修复之后；原始报数在台账 `.superpowers/sdd/2026-09-29-tmp-leak-skipped-file/progress.md` §5，输出在该会话 scratchpad `gate3/`）**：环境同下。
+- Orca（内容＝主题行 `test(control): gate the default-ccloop E2E at run time …`）：typecheck RC 0；**2153 条、2149 过、1 红（`driverRecovery` 5 s 超时，单独 3/3 绿）、3 pending（`ccloopDefaultE2E`，现在是运行时跳过）**；✅ **`check-tmp-leak` RC 0**，第一次全量跑完的 `TMPDIR` 也剩 0；真 `~/.orca` 不变。web check／`verify:panel` 这次没跑（web 与面板没改）。
+
+**上一版基线（会话 `2f65a729`，2026-09-29，前两项收尾；原始报数在台账 `.superpowers/sdd/2026-09-29-evidence-root-and-refetch/progress.md` §5，输出在该会话 scratchpad `gate/`）**：全新 clone，HOME＋四个 XDG 根改道，TMPDIR 短真目录，夹具表 fake codex `integration`。
+- Orca（内容＝主题行 `fix(web): read a voided group once, …`）：typecheck RC 0；**2153 条、2146 过、4 红（`driverLanding` D、`driverProgress` R2、`driverRecovery` 三条 5 s 超时，`controlShutdown` 143；全量期间 5 分钟负载到 10.6；四个文件单独各 3/3 绿）、3 pending（`ccloopDefaultE2E` 开关未开）**；web check 33 文件／167 条；`verify:panel` 15 PASS；真 `~/.orca` 不变。🔴 `check-tmp-leak` RC 1（剩 1 个空 `orca-test-control-*`；根因见现行基线那条的台账，与 flake 无关）。`verify:control` 没跑。
 - ccloop 本轮零改动，没跑它的门；它的现行基线仍是下一条里会话 `2724716d` 那一版。
 
 **上一版基线（会话 `2724716d`，2026-09-29；原始报数在台账 `.superpowers/sdd/2026-09-29-labels-progress-and-backlog/progress.md` §2.2，输出在该会话 scratchpad `gate2-out/`）**：环境同上。
@@ -156,7 +159,8 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 **诚实的表述**：fake claude＋真 ccloop 下标签与进度端到端成立；真 claude 下 single-call 估算、stdin 传 prompt、`progress`、子代理 stream 配对都没跑过。
 
 **还挂着的**（下一件事由人选）：
-- 🔴 **Orca `check-tmp-leak` 在有 flake 红的一轮里剩 1 个空目录**（`orca-tmp-*/orca-test-control-*`，某文件 `afterAll` 没跑）。登记未修；会话 `2f65a729` 的门里**再现一次**（同形，那一轮也有 4 条负载 flake 红）。
+- ✅ **Orca `check-tmp-leak` 剩 1 个空目录已修**（会话 `2f65a729`，主题行 `test(control): gate the default-ccloop E2E at run time so its temp root is removed`，台账 `.superpowers/sdd/2026-09-29-tmp-leak-skipped-file/progress.md`）。🔴 **原先「flake 红的那一轮里 worker 被杀」的归因是错的**：`ccloopDefaultE2E.test.ts` 用 `describe.skipIf` 整文件在收集期跳过，vitest 对这样的文件不跑任何文件级 hook（`@vitest/runner` `runSuite`，`mode === "skip"`），而 setup 文件已经建了目录 ⇒ 每次全量必漏 1 个。改成 `beforeEach` 里 `ctx.skip()`，断言一个字没动。**Ruling（人未审）**：只改跳过机制不算「改既有判据」。
+  ⇒ ⚠️ **以后写开关控制的 E2E，不要让整个文件在收集期被跳过**（`scopeTmpdir.ts` 的 ERRATUM 记了这条）。另有 9 个 `tests/control` 文件用 `skipIf`，门的环境里都会跑；不设 `ORCA_CCLOOP_BIN` 等变量的环境里若整文件跳过也会漏，只登记。
 - 人那一步（计划 C Task 5 ＋ 文末更正节）：前置「ccloop 的打包提交先到 GitHub」**已满足**（会话 `2f65a729` 开工时 `ls-remote` 三仓与本地一致）。
 - 要人裁的：#13(a) `[1m]`（要指名改 ccloop `tests/agents/registry.test.ts:56-61`）；#13(b)（要指名改 `assemblyHandoffGrace.test.ts`、`agentFreeze.test.ts:351-354`）；#4 resume／sweep `--agents`（要设计）；Web 组能不能真的进 `running`（标签判据里手写了这个状态）。
 - 旧挂账不变：26(a)「可证明零花费」（设计）；D12 解冲突预留差 1 token（验收脚本 `--fake --scenario conflict` 仍以 `reconcile-budget` 挡住）。

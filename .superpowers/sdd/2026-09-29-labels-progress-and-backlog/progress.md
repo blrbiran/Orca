@@ -47,3 +47,9 @@
 - 🔴 **Orca `check-tmp-leak` RC 1**：剩 1 个空目录 `orca-tmp-*/orca-test-control-*`——某个测试文件的 `afterAll` 没跑（推测：flake 红的那一轮里有 worker 被中途杀掉）。**登记，没修，没重跑**；上一会话同一护栏在无红的一轮里剩 0。
 
 **Ruling 汇总**：每条的「为什么／错了的代价」在各 SDD 工作区台账里，最终报告里逐条列给人。
+
+## §3 更正（会话 `2f65a729`，2026-09-29 追加；上文原样保留）
+
+- §2.2 收尾门里「Orca `check-tmp-leak` RC 1 …某个测试文件的 `afterAll` 没跑（推测：flake 红的那一轮里有 worker 被中途杀掉）」—— **推测是错的**。
+  「`afterAll` 没跑」成立，原因不是 worker 被杀：`tests/control/ccloopDefaultE2E.test.ts` 用 `describe.skipIf(!formal)` 把整个文件在收集期跳过，vitest 对这样的文件不调用任何文件级 hook，而 setup 文件已经建了目录。每次全量必漏 1 个，与 flake 无关。
+  单跑该文件复现 2/2；已修（主题行 `test(control): gate the default-ccloop E2E at run time so its temp root is removed`）。证据与门在 `.superpowers/sdd/2026-09-29-tmp-leak-skipped-file/progress.md`。
