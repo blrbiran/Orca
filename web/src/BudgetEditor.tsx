@@ -170,6 +170,12 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
     ? config.profiles[0]?.observed.budgetEnforcement ?? "unknown"
     : "frozen at confirmation";
   const contextUnavailable = config.profiles.some((profile) => profile.observed.contextObservation === "unavailable");
+  // Backlog #11(b) (Orca handoff §9.1): handoffControl "durable" and a handoffExecution are what dispatch requires of a
+  // task or handoff profile (webDispatch.ts probeBlocksDispatch, budget.ts assertCapabilities); a group bound to one
+  // that lacks them is refused as claim-capability-unavailable and nothing more, so the two values are named here.
+  const handoffBlocked = config.profiles.filter((profile) =>
+    (profile.allowedWorkKinds.includes("task") || profile.allowedWorkKinds.includes("handoff"))
+    && (profile.observed.handoffControl !== "durable" || profile.observed.handoffExecution === null));
   // Ruling R7: a panel started without --estimator-profile/--estimate-mode serves `defaults: null`.
   // There is then nothing to fall back to, so confirming is refused here rather than sent with a
   // guessed profile or a guessed mode -- guessing the mode is the strict-versus-soft fault itself.
@@ -242,6 +248,11 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
       {contextUnavailable && (
         <p role="note">context observation unavailable · the context watermark cannot hand off automatically</p>
       )}
+      {handoffBlocked.map((profile) => (
+        <p role="note" key={`handoff-capability:${profile.profileId}`}>
+          profile {profile.profileId}: handoff control {profile.observed.handoffControl} · handoff execution {profile.observed.handoffExecution ?? "none"} · work bound to it is not dispatched (claim-capability-unavailable)
+        </p>
+      ))}
       <table>
         <thead>
           <tr><th>owner</th><th>bucket</th><th>state</th>{DIMENSIONS.map((dimension) => <th key={dimension}>{dimension}</th>)}{advice !== null && <th>suggestion</th>}</tr>
