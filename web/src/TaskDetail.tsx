@@ -2,9 +2,11 @@
  * Labels and progress spec §4.2: one task, opened from the group's work item table -- its labels and an editor for them,
  * its progress, and every run it had with that run's evidence, piece by piece.
  *
- * The editor keeps what the person chose as a draft (the page's `drafts`, one key per task) and sends it with the
- * labelsVersion it was read at. The draft is the person's own data: the page clears it only when the command succeeded
- * (App.tsx, plan finding F11), so a refusal -- shown by its code like every other refusal -- leaves it where it was.
+ * The editor keeps what the person chose as a draft (the page's `drafts`, one key per task) together with the
+ * labelsVersion the draft started from, and sends that version -- never the one the latest poll read -- so a draft
+ * begun before someone else's change is refused as labels-version-conflict instead of overwriting it (final review
+ * finding 1). The draft is the person's own data: the page clears it only when the command succeeded (App.tsx, plan
+ * finding F11) or when the person discards it, so a refusal -- shown by its code like every other refusal -- leaves it.
  */
 import { useState } from "react";
 import type { JSX } from "react";
@@ -43,12 +45,20 @@ export function progressText(progress: WorkItemProgressV1 | null | undefined): s
   return `${step} · ${attempt} · ${tokens}`;
 }
 
-function draftLabels(drafts: Record<string, string>, key: string): string[] | null {
+/** A label draft: the labels the person chose and the labelsVersion shown when they started choosing. */
+interface LabelsDraft { base: number; labels: string[] }
+
+/** Anything else under the key -- including the earlier bare-array form, which carries no base -- is no draft. */
+function readDraft(drafts: Record<string, string>, key: string): LabelsDraft | null {
   const raw = drafts[key];
   if (raw === undefined) return null;
   try {
     const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed) && parsed.every((label) => typeof label === "string") ? parsed : null;
+    if (typeof parsed !== "object" || parsed === null) return null;
+    const { base, labels } = parsed as Record<string, unknown>;
+    if (!Number.isSafeInteger(base) || (base as number) < 0) return null;
+    if (!Array.isArray(labels) || !labels.every((label) => typeof label === "string")) return null;
+    return { base: base as number, labels };
   } catch {
     return null;
   }
@@ -96,15 +106,17 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
   const { view, item, drafts, onDraft, onCommand } = props;
   const groupId = view.summary.groupId;
   const key = labelsDraftKey(groupId, item.taskId);
-  const draft = draftLabels(drafts, key);
-  const labels = draft ?? item.labels ?? [];
+  const draft = readDraft(drafts, key);
+  const current = item.labelsVersion ?? 0;
+  const labels = draft?.labels ?? item.labels ?? [];
   const [system, setSystem] = useState<string>(WEB_SYSTEM_LABELS[0]);
   const [custom, setCustom] = useState("");
   // Sorted by code unit like the server (spec §8 R15), so what is sent is what will be shown back.
-  const setDraft = (next: string[]): void => onDraft(key, JSON.stringify([...new Set(next)].sort()));
-  const send = (next: string[] | null): void => onCommand({
+  // A draft keeps the version it started from through every later edit.
+  const setDraft = (next: string[]): void => onDraft(key, JSON.stringify({ base: draft?.base ?? current, labels: [...new Set(next)].sort() }));
+  const send = (next: string[] | null, base: number): void => onCommand({
     verb: "set-task-labels", groupId, taskId: item.taskId, expectedRevision: view.summary.commandRevision,
-    payload: { labels: next, baseLabelsVersion: item.labelsVersion ?? 0 },
+    payload: { labels: next, baseLabelsVersion: base },
   });
   const addCustom = (): void => {
     const text = custom.trim();
@@ -120,6 +132,11 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
         labels from {item.labelsProvenance ?? "plan"} · version {item.labelsVersion ?? 0}
         {draft !== null ? " · unsaved draft" : ""}
       </p>
+      {draft !== null && draft.base !== current && (
+        <p role="status">
+          labels changed since your draft (v{draft.base} → v{current}) · now: <LabelChips labels={item.labels} />
+        </p>
+      )}
       <ul aria-label={`Labels of ${item.taskId}`}>
         {labels.map((label) => (
           <li key={label}>
@@ -134,8 +151,9 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
       <button type="button" onClick={() => setDraft([...labels, system])}>Add system label</button>
       <input aria-label="Custom label" value={custom} onChange={(event) => setCustom(event.target.value)} />
       <button type="button" onClick={addCustom}>Add custom label</button>
-      <button type="button" disabled={draft === null} onClick={() => send(labels)}>Save labels</button>
-      <button type="button" onClick={() => send(null)}>Restore plan labels</button>
+      <button type="button" disabled={draft === null} onClick={() => draft !== null && send(draft.labels, draft.base)}>Save labels</button>
+      <button type="button" disabled={draft === null} onClick={() => onDraft(key, "")}>Discard draft</button>
+      <button type="button" onClick={() => send(null, current)}>Restore plan labels</button>
       <p>
         progress: {progressText(item.progress)}
         {item.progress?.lastTransitionAt ? ` · last transition ${item.progress.lastTransitionAt}` : ""}
