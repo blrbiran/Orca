@@ -22,6 +22,7 @@ import { applySetWorkspaceMode, type SetWorkspaceModeCommand } from "./workspace
 import { applySetAgentPreferences, type SetAgentPreferencesCommand } from "./agentPreferences.js";
 import { recordProjectionChange } from "./projectionJournal.js";
 import { effectiveTaskLabels, normalizeInputLabels, readTaskLabelState } from "./labels.js";
+import { effectivePlanTask, workBodyOf } from "./taskAmendments.js";
 import type { Amount } from "./types.js";
 import type { ControlStore } from "./store.js";
 import type { BudgetEstimateV1, CommandLookupV1, CommandSuccessV1, EffectiveProposalEditPayload, RawAuthorityCommandV1, ProfileBindingV1 } from "./webProtocol.js";
@@ -462,7 +463,9 @@ export class WebControlService {
               timeoutMs: frozen.timeoutMs, killGraceMs: frozen.killGraceMs, agentCapabilities: intersectCapabilities(workerDeclared, frozen.capabilities) };
           });
           const reconcileSlot = frozenOf(RECONCILE_SLOT_KEY);
-          const tasks = plan.plan.tasks.map(task => {
+          // Loop plans spec §5.1 (C5): each task is frozen with its contract as amended, when it was.
+          const tasks = plan.plan.tasks.map(archived => {
+            const task = effectivePlanTask(this.store, id, archived, workBodyOf(this.store, id, archived.taskId));
             const work = proposal.allocations.find(a => a.ownerId === task.taskId && a.bucket === "work")!.amount;
             const handoff = proposal.allocations.find(a => a.ownerId === task.taskId && a.bucket === "handoff")!.amount;
             if (selected.handoff.snapshot.profile.capabilities.handoffExecution === "model-assisted-v1" && dimensions.some(d => handoff[d] < 1)) throw new ControlError("handoff-grant-insufficient");

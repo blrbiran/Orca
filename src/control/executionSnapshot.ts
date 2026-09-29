@@ -17,6 +17,7 @@ import { taskContractSchema } from "../scheduler/planFile.js";
 import { readArchivedPlan, readBudgetProposal, readEstimateRecord, readWork } from "./queries.js";
 import type { ControlStore } from "./store.js";
 import { readCanonicalRecord } from "./snapshot.js";
+import { effectivePlanTask, workBodyOf } from "./taskAmendments.js";
 
 type ExecutionAllocation = ExecutionSnapshotV1["allocations"][number];
 export interface EstimateAllocation {
@@ -106,7 +107,9 @@ function verifyTaskSet(input: ConfirmedProposal, plan: ControlPlanV1): void {
     supplied.set(task.taskId, task);
   }
   if (supplied.size !== plan.tasks.length) throw new ControlError("plan-version-conflict");
-  for (const authority of plan.tasks) {
+  for (const archived of plan.tasks) {
+    // Loop plans spec §5.1 (C5): the confirmation freezes a task's contract as amended, when it was.
+    const authority = effectivePlanTask(input.store, input.groupId, archived, workBodyOf(input.store, input.groupId, archived.taskId));
     const task = supplied.get(authority.taskId);
     if (!task || task.originalContractHash !== authority.originalContractHash
       || task.originalContractCanonicalJson !== authority.originalContractCanonicalJson) {
@@ -290,7 +293,9 @@ export function readConfirmedTaskExecution(store: ControlStore, groupId: string,
       || sha256Canonical(snapshot.profiles) !== sha256Canonical(proposal.profiles)
       || sha256Canonical(snapshot.contextPolicy) !== sha256Canonical(proposal.contextPolicy)
       || sha256Canonical(snapshot.allocations.filter(a => a.ownerKind !== "reserve").map(settledShape)) !== sha256Canonical(proposal.allocations.filter(a => a.ownerKind !== "reserve").map(({ state: _state, ...a }) => settledShape(a)))) throw new ControlError("recovery-blocked");
-    const task = plan.plan.tasks.find(t => t.taskId === taskId), ref = snapshot.derivedContracts.find(t => t.taskId === taskId);
+    const archived = plan.plan.tasks.find(t => t.taskId === taskId), ref = snapshot.derivedContracts.find(t => t.taskId === taskId);
+    // Loop plans spec §5.1 (C5): A2 derives from the task's effective contract, never the archived entry alone.
+    const task = archived === undefined ? undefined : effectivePlanTask(store, groupId, archived, workBodyOf(store, groupId, taskId));
     const work = snapshot.allocations.find(a => a.ownerKind === "task" && a.ownerId === taskId && a.bucket === "work");
     const handoff = snapshot.allocations.find(a => a.ownerKind === "task" && a.ownerId === taskId && a.bucket === "handoff");
     if (!task || !ref || !work || !handoff) throw new ControlError("recovery-blocked");

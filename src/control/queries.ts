@@ -19,6 +19,7 @@ import {
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { amountSchema, idSchema, safeInteger } from "./schema.js";
 import { taskContractSchema } from "../scheduler/planFile.js";
+import { effectivePlanTask, workBodyOf } from "./taskAmendments.js";
 import { z } from "zod";
 export type GroupRecord = GroupView & GroupInput & {budgetVersion:number;reviewRemaining:Amount;proposal?:{work:WorkInput;commandId:string}};
 export type WorkRecord = WorkInput & {targetVersion:number;status:"ready"|"running"|"done"|"blocked"};
@@ -137,8 +138,10 @@ export function readArchivedContract(store: ControlStore, groupId: string, taskI
   groupId: string; taskId: string; contractHash: string; canonicalJson: string; contract: z.infer<typeof taskContractSchema>;
 } {
   const archivedPlan = readArchivedPlan(store, groupId);
-  const task = archivedPlan.plan.tasks.find(candidate => candidate.taskId === taskId);
-  if (!task) return recoveryBlocked();
+  const archived = archivedPlan.plan.tasks.find(candidate => candidate.taskId === taskId);
+  if (!archived) return recoveryBlocked();
+  // Loop plans spec §5.1 (C5): the single-task reader answers the task's contract as amended, when it was.
+  const task = effectivePlanTask(store, groupId, archived, workBodyOf(store, groupId, taskId));
   const canonicalJson = readCanonicalRecord(store, task.originalContractHash);
   try {
     const contract = taskContractSchema.parse(JSON.parse(canonicalJson));

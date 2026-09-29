@@ -13,6 +13,7 @@ import { choosePlanByLabels, describeLoopPlan } from "../control/loopPlans.js";
 import { recipeExpandsTo } from "../control/loopRecipeCheck.js";
 import { readArchivedPlan, readBudgetProposal, readEstimateRecord } from "../control/queries.js";
 import { readCanonicalRecord } from "../control/snapshot.js";
+import { effectivePlanTask, workBodyOf } from "../control/taskAmendments.js";
 import type { ControlStore } from "../control/store.js";
 import { agentSelectionSchema, amountSchema, artifactSchema, canonicalTimestampSchema, grantSchema, idSchema, runProgressSchema, safeInteger, type RunProgress } from "../control/schema.js";
 import { taskContractSchema } from "../scheduler/planFile.js";
@@ -717,7 +718,9 @@ export function readControlGroup(store: ControlStore, epoch: string, groupId: st
   const body = groupBody(store, groupId);
   const archived = readArchivedPlan(store, groupId);
   const proposal = readBudgetProposal(store, groupId);
-  const snapshot = validateExecutionSnapshot(store, groupId, archived.graphVersion, proposal, archived.plan);
+  // Loop plans spec §5.1 (C5): the projection's identity checks and task view read every task as amended.
+  const plan = { ...archived.plan, tasks: archived.plan.tasks.map(task => effectivePlanTask(store, groupId, task, workBodyOf(store, groupId, task.taskId))) };
+  const snapshot = validateExecutionSnapshot(store, groupId, archived.graphVersion, proposal, plan);
   const estimates = estimateViews(store, groupId);
   const summary = readGroupSummary(store, groupId);
   const blockers = blockerRows(store, groupId).map(({ groupId: _groupId, ...blocker }) => blocker);
@@ -738,7 +741,7 @@ export function readControlGroup(store: ControlStore, epoch: string, groupId: st
     },
     ledger: body.ledger,
     allocations,
-    workItems: workViews(store, groupId, archived.plan, snapshot),
+    workItems: workViews(store, groupId, plan, snapshot),
     // validateExecutionSnapshot has already proved the group record's reconcile slot equals the snapshot's.
     agents: { reconcile: snapshot?.agents.reconcile ?? null },
     estimates: estimates.views,
