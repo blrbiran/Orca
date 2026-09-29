@@ -21,6 +21,7 @@ import { applyContinueTask, applyResumeFromHandoff, type ContinueTaskCommand, ty
 import { applySetWorkspaceMode, type SetWorkspaceModeCommand } from "./workspaceSettings.js";
 import { applySetAgentPreferences, type SetAgentPreferencesCommand } from "./agentPreferences.js";
 import { recordProjectionChange } from "./projectionJournal.js";
+import { effectiveTaskLabels, normalizeInputLabels, readTaskLabelState } from "./labels.js";
 import type { Amount } from "./types.js";
 import type { ControlStore } from "./store.js";
 import type { BudgetEstimateV1, CommandLookupV1, CommandSuccessV1, EffectiveProposalEditPayload, RawAuthorityCommandV1, ProfileBindingV1 } from "./webProtocol.js";
@@ -32,6 +33,7 @@ export type ReestimateCommand = Extract<RawAuthorityCommandV1, { verb: "estimate
 export type ConfirmCommand = Extract<RawAuthorityCommandV1, { verb: "confirm" }>;
 export type SetLimitCommand = Extract<RawAuthorityCommandV1, { verb: "set-limit" }>;
 export type ProposalSetAgentCommand = Extract<RawAuthorityCommandV1, { verb: "proposal-set-agent" }>;
+export type SetTaskLabelsCommand = Extract<RawAuthorityCommandV1, { verb: "set-task-labels" }>;
 export type WebCommandResult = CommandLookupV1["body"];
 export interface WebServiceDeps extends AsyncImportDeps {
   admissionGate?: AdmissionGate; now?: () => Date; knownRepository?: (repoId: string) => boolean;
@@ -506,6 +508,40 @@ export class WebControlService {
         setReserve(proposal, residual(limit, group.used, group.reserved));
         saveWebAuthority(this.store, group, proposal);
         return success(context, { kind: "limit-set", limit });
+      },
+    }).body);
+  }
+  /**
+   * Labels and progress spec §3.1 (§8 R6-R8, R16; human ruling L-2): replace or clear a task's operator label layer.
+   * Any group state, no proposal change, no re-confirmation: labels are not budget authority. Checked in the spec's
+   * order -- the work item, the labels version, the labels themselves, then no-op -- and the vocabulary here, not in the
+   * payload schema, so a refusal is ledgered and names the label (R8).
+   */
+  setTaskLabels(command: SetTaskLabelsCommand): WebCommandResult {
+    return this.mutate(() => applyWebCommand(this.store, {
+      rawCommand: command, expand: () => ({ ...command, schema: "orca-authority-command-v1" }),
+      apply: context => {
+        const id = groupId(command), taskId = command.target.taskId;
+        readWebGroup(this.store, id);
+        const row = this.store.db.prepare("SELECT body FROM work_items WHERE group_id=? AND id=?").get(id, taskId);
+        const work = row ? JSON.parse(String(row.body)) as Record<string, unknown> : null;
+        if (!work || work.kind !== "task") throw new ControlError("work-not-found");
+        const state = readTaskLabelState(work);
+        if (command.payload.baseLabelsVersion !== state.version) throw new ControlError("labels-version-conflict");
+        let next: string[] | null = null;
+        if (command.payload.labels === null) {
+          if (state.override === null) throw new ControlError("no-op-command");
+        } else {
+          const checked = normalizeInputLabels(command.payload.labels);
+          if (!checked.ok) throw new ControlError("labels-invalid", checked.detail);
+          const planTask = readArchivedPlan(this.store, id).plan.tasks.find(task => task.taskId === taskId);
+          if (same(checked.labels, effectiveTaskLabels(state, planTask?.labels).labels)) throw new ControlError("no-op-command");
+          next = checked.labels;
+        }
+        if (state.version === Number.MAX_SAFE_INTEGER) throw new ControlError("numeric-overflow");
+        work.labelsOverride = next; work.labelsVersion = state.version + 1;
+        this.store.db.prepare("UPDATE work_items SET body=? WHERE group_id=? AND id=?").run(JSON.stringify(work), id, taskId);
+        return success(context, { kind: "task-labels-set", taskId, labelsVersion: state.version + 1 });
       },
     }).body);
   }

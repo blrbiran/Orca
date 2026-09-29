@@ -293,6 +293,15 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
       target: () => ({ groupId: `@operator:${actorId}`, target: { kind: "operator", operatorId: actorId } }),
     },
     { path: "/api/control/groups/:groupId/proposal/agent", verb: "proposal-set-agent", target: fromParams },
+    // Labels and progress spec §8 R9: the one new route; the ledger key is the group's, as for continue-task.
+    {
+      path: "/api/control/groups/:groupId/tasks/:taskId/labels",
+      verb: "set-task-labels",
+      target: (params) => {
+        const groupId = idSchema.parse(params.groupId);
+        return { groupId, target: { kind: "task", groupId, taskId: idSchema.parse(params.taskId) } };
+      },
+    },
   ];
   for (const route of routes) app.post(route.path, asyncRoute(async (req, res) => {
     let id: string | null = null;
@@ -317,6 +326,7 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
         case "set-workspace-mode": await service.setWorkspaceMode(command); break;
         case "set-agent-preferences": await service.setAgentPreferences(command); break;
         case "proposal-set-agent": await service.proposalSetAgent(command); break;
+        case "set-task-labels": service.setTaskLabels(command); break;
         default: throw new ControlError("route-not-found");
       }
       const result = lookupCommandResult(store, id, command.commandId);

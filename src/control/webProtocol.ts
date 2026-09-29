@@ -585,6 +585,7 @@ export const commandVerbSchema = z.enum([
   "set-workspace-mode",
   "set-agent-preferences",
   "proposal-set-agent",
+  "set-task-labels",
 ]);
 
 const repositoryCommandTargetSchema = z.object({ kind: z.literal("repository"), repoId: idSchema }).strict();
@@ -719,6 +720,12 @@ export const workspaceModeSchema = z.enum(["worktree", "clone"]);
 export const setWorkspaceModePayloadSchema = z.object({ workspaceMode: workspaceModeSchema }).strict();
 // Controller ruling W6-8: the envelope's expectedRevision (checked against agent_preferences.revision) is the only one.
 export const setAgentPreferencesPayloadSchema = z.object({ preferences: operatorPreferencesSchema }).strict();
+// Labels and progress spec §3.1 (§8 R8, R16): shape only -- a list of strings, or null to drop the operator layer. The
+// vocabulary, prefix, NFC and the 16-label cap are checked in apply, so a refusal is ledgered and names the label. The
+// raw cap (64) only bounds the request: 16 is counted after deduplication (R15; plan finding F2).
+export const setTaskLabelsPayloadSchema = z
+  .object({ labels: z.array(z.string()).max(64).nullable(), baseLabelsVersion: safeInteger })
+  .strict();
 
 const groupCommandTargetSchema = z.object({ kind: z.literal("group"), groupId: idSchema }).strict();
 const taskCommandTargetSchema = z.object({ kind: z.literal("task"), groupId: idSchema, taskId: idSchema }).strict();
@@ -755,6 +762,7 @@ const rawAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...rawCommandFields, verb: z.literal("shutdown"), target: globalCommandTargetSchema, payload: shutdownPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-workspace-mode"), target: repositoryCommandTargetSchema, payload: setWorkspaceModePayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-agent-preferences"), target: operatorCommandTargetSchema, payload: setAgentPreferencesPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("set-task-labels"), target: taskCommandTargetSchema, payload: setTaskLabelsPayloadSchema }).strict(),
 ]);
 
 const effectiveAuthorityCommandVariants = z.discriminatedUnion("verb", [
@@ -791,6 +799,7 @@ const effectiveAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...effectiveCommandFields, verb: z.literal("shutdown"), target: globalCommandTargetSchema, payload: shutdownPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-workspace-mode"), target: repositoryCommandTargetSchema, payload: setWorkspaceModePayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-agent-preferences"), target: operatorCommandTargetSchema, payload: setAgentPreferencesPayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("set-task-labels"), target: taskCommandTargetSchema, payload: setTaskLabelsPayloadSchema }).strict(),
 ]);
 
 function refineCommandIdentity(
@@ -1185,6 +1194,7 @@ const commandResultSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("limit-set"), limit: amountSchema }).strict(),
   z.object({ kind: z.literal("workspace-mode-set"), repoId: idSchema, workspaceMode: workspaceModeSchema }).strict(),
   z.object({ kind: z.literal("agent-preferences-set"), operatorId: nonemptyString, revision: positiveSafeInteger }).strict(),
+  z.object({ kind: z.literal("task-labels-set"), taskId: idSchema, labelsVersion: positiveSafeInteger }).strict(),
   z
     .object({
       kind: z.literal("task-continuing"),
@@ -1319,6 +1329,7 @@ export type RepositoryWorkspaceV1 = z.infer<typeof repositoryWorkspaceSchema>;
 export type SetWorkspaceModePayload = z.infer<typeof setWorkspaceModePayloadSchema>;
 export type SetAgentPreferencesPayload = z.infer<typeof setAgentPreferencesPayloadSchema>;
 export type ProposalSetAgentPayload = z.infer<typeof proposalSetAgentPayloadSchema>;
+export type SetTaskLabelsPayload = z.infer<typeof setTaskLabelsPayloadSchema>;
 
 // Agent selection spec §6.8 (plan T14): the three reads the panel's agent UI is built on. The component schemas
 // (contextWindowSchema, partialSelectionSchema, operatorPreferencesSchema, groupAgentOverridesSchema,

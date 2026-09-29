@@ -43,6 +43,8 @@ export const durableCommandErrorStatuses = {
   "group-project-conflict": 409,
   "handoff-identity-conflict": 409,
   "handoff-request-conflict": 409,
+  // Labels and progress spec §3.1 (§8 R7): the task's labels moved since the person read them (plan finding F17).
+  "labels-version-conflict": 409,
   "landing-branch-conflict": 409,
   "plan-version-conflict": 409,
   "profile-changed": 409,
@@ -116,6 +118,8 @@ export const durableCommandErrorStatuses = {
   "handoff-grant-insufficient": 422,
   "handoff-parent-invalid": 422,
   "identity-space-exhausted": 422,
+  // Labels and progress spec §3.1 (§8 R8): an input label the vocabulary or the format refuses; the detail names it.
+  "labels-invalid": 422,
   "landing-not-confirmed": 422,
   "landing-needs-review": 422,
   "no-op-command": 422,
