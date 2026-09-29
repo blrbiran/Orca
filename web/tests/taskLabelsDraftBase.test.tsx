@@ -80,11 +80,13 @@ describe("a label draft is sent with the labelsVersion it started from (final re
     render(<App />);
     await openTaskA();
     fireEvent.click(screen.getByRole("button", { name: "Add system label" })); // the select starts on "feature"
-    // Someone else sets the labels to v1 meanwhile; the next poll sees a gap and re-reads the group canonically.
+    // Someone else sets the labels to v1 meanwhile. The page's next canonical read of the group picks that up (probe at
+    // 7a91fc0: App re-reads the open group on its own well before the 2 s summary tick; the summary's gap would force it
+    // too), so the draft below was started at v0 and the view under it now says v1.
     groupView = groupViewAt(6, ["security"], 1);
     summary = summaryAt(6);
     await screen.findByText("security", { selector: "td span.label" }, { timeout: 6_000 });
-    // The re-read dropped the cached view (and the open detail with it), so the task is opened again.
+    // A re-read forced by a summary gap drops the cached view and the open detail with it; if so, open the task again.
     if (screen.queryByRole("region", { name: "Task a" }) === null) fireEvent.click(screen.getByRole("button", { name: "a" }));
     expect(screen.getByText(/labels changed since your draft \(v0 → v1\)/).textContent).toContain("now: security");
     expect(screen.getByRole("button", { name: "Remove feature" })).toBeTruthy();
