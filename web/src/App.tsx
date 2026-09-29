@@ -478,12 +478,13 @@ export function App(): JSX.Element {
   }, [previewKey]);
 
   // Opening a group, a voided cache and a projection gap all mean: re-read it canonically.
+  // Each of those empties the cache entry it voids, so "not cached" is the whole trigger: also reading while the
+  // voided mark is still up made every arriving body the cause of the next GET.
   useEffect(() => {
     if (controlConfig === null || selectedGroup === null) return;
-    const cached = control.canonical[selectedGroup] !== undefined;
-    if (cached && !control.refetchRequired) return;
+    if (control.canonical[selectedGroup] !== undefined) return;
     void readControlGroup(selectedGroup);
-  }, [controlConfig, selectedGroup, control.canonical, control.refetchRequired]);
+  }, [controlConfig, selectedGroup, control.canonical]);
 
   const loadHome = async (): Promise<void> => {
     try {

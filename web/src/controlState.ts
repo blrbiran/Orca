@@ -99,7 +99,9 @@ function reduceSummary(state: ControlClientState, event: Extract<ControlClientEv
     changeSeq: value.changeSeq,
     resetRequired: value.resetRequired,
     dispatchBlocked: value.dispatchBlocked,
-    refetchRequired: base.refetchRequired || gap,
+    // Only a complete summary that itself neither purged nor gapped shows the projection whole again; a partial
+    // one lists only what moved, so it cannot lift the mark.
+    refetchRequired: purge || gap || (event.partial === true && base.refetchRequired),
     // A complete summary lists every group there is; a `sinceChangeSeq` answer lists
     // only the ones that moved, so the rest of the cache has to stay.
     groups: purge || !event.partial ? summaries(value.groups) : { ...base.groups, ...summaries(value.groups) },

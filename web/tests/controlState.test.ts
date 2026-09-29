@@ -101,6 +101,18 @@ describe("control client state machine", () => {
     expect(Object.keys(next.groups)).toEqual(["g"]);
   });
 
+  it("lifts the refetch mark on the next complete summary, but not on a partial one", () => {
+    // Only a complete summary lists every group, so only it can show the projection is whole again; a partial
+    // one lists what moved and says nothing about the rest. Left up, the mark keeps the page alarmed and keeps
+    // every tick asking for everything.
+    const gapped = reduceControlState(populatedState(), { type: "summary", value: summary({ changeSeq: 30 }) });
+    expect(gapped.refetchRequired).toBe(true);
+    const partial = reduceControlState(gapped, { type: "summary", value: summary({ changeSeq: 31 }), partial: true });
+    expect(partial.refetchRequired).toBe(true);
+    const complete = reduceControlState(gapped, { type: "summary", value: summary({ changeSeq: 31 }) });
+    expect(complete.refetchRequired).toBe(false);
+  });
+
   it("keeps the newer canonical body when an older group read arrives late", () => {
     const state = apply(initialControlState(), { type: "summary", value: summary() }, { type: "group", value: groupView({ changeSeq: 7 }) });
     const next = reduceControlState(state, { type: "group", value: groupView({ changeSeq: 5 }) });
