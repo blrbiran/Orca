@@ -25,7 +25,9 @@ export const profileSnapshot = (): ExecutionProfileSnapshotV1 => ({
 
 // Seam B (human ruling 2026-09-24, named under ruling 88): targetVersion is one positive safe integer from plan to wire.
 // Labels and progress plan Task 3 (finding F14): a task may carry plan labels; absent, the plan file is unchanged.
-export interface WebFixtureTask { taskId: string; dependsOn?: string[]; targetVersion?: number; targetPaths?: string[]; agent?: PartialSelection; labels?: string[] }
+export interface WebFixtureTask { taskId: string; dependsOn?: string[]; targetVersion?: number; targetPaths?: string[]; agent?: PartialSelection; labels?: string[];
+  // Loop plans spec §3.1: a task that names a loop plan instead of a contract file.
+  loop?: Record<string, unknown> }
 /**
  * Agent selection plan T10 (spec §6.2): the importing operator's ("human") preferences -- `null` leaves them unset, absent
  * seeds a default agent so the import-time estimator slot resolves -- and the plan's group layers (R7: no estimatorAgent).
@@ -65,6 +67,11 @@ export async function webFixture(snapshot = profileSnapshot(), tasks: readonly W
   const planPath = join(repo, "plan.json");
   const planTasks = [];
   for (const task of tasks) {
+    if (task.loop !== undefined) {
+      // Loop plans spec §3.1 (D3): the plan file names the loop plan; import expands it (planFile.ts).
+      planTasks.push({ taskId: task.taskId, loop: task.loop, dependsOn: task.dependsOn ?? [], targetVersion: task.targetVersion ?? 1, ...(task.agent ? { agent: task.agent } : {}), ...(task.labels ? { labels: task.labels } : {}) });
+      continue;
+    }
     const contract = { objective: { taskId: task.taskId, goal: "ship", successCondition: "passes", nonGoals: [] },
       context: { repoPath: repo, targetPaths: task.targetPaths ?? [task.taskId], relevantDocs: [], buildTestCommands: ["true"], constraints: [] },
       executionPolicy: { autonomyLevel: "L2", maxAttempts: 9, perAttemptTimeoutMs: 60_000, totalRuntimeBudgetMs: 90_000, tokenBudget: 99_000, worktreeRequired: true, partialOutcomeRecoveryWindowMs: 30_000 },

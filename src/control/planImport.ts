@@ -124,6 +124,8 @@ export function normalizeControlPlan(source: AllowlistedPlanSource): ControlPlan
       ...(task.agent ? { agent: task.agent } : {}),
       // Spec §2.3: written only when non-empty, like `agent`; never `labels: undefined` (canonicalBytes refuses it).
       ...(task.labels && task.labels.length > 0 ? { labels: [...task.labels] } : {}),
+      // Loop plans spec §3.3: written only for a loop task, like labels.
+      ...(task.loop ? { loop: task.loop } : {}),
       originalContractHash: task.originalContractHash,
       originalContractCanonicalJson: task.originalContractCanonicalJson,
     })).sort((left, right) => compare(left.taskId, right.taskId)),

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { agentSelectionSchema, amountSchema, canonicalTimestampSchema, commandEnvelopeSchema, contextWindowSchema, idSchema, panelPartialSelectionSchema, partialSelectionSchema, safeInteger } from "./schema.js";
 import { nonEmptyStoredLabelsSchema, storedLabelsSchema } from "./labels.js";
+import { loopRecipeSchema } from "./loopPlans.js";
 // Agent selection spec §12 I10 (plan-review P18): the selection/context/partial schemas are T7's, defined once
 // in schema.ts; webProtocol.ts re-exports them so every downstream import can come from one wire module.
 export { agentSelectionSchema, contextWindowSchema, panelPartialSelectionSchema, partialSelectionSchema } from "./schema.js";
@@ -430,6 +431,9 @@ export const controlPlanSchema = z
           // planHash stay what they were. Never `.default([])`: every archive re-parses to its own bytes (queries.ts,
           // executionSnapshot.ts, estimator.ts), and a default would turn every older group recovery-blocked.
           labels: nonEmptyStoredLabelsSchema.optional(),
+          // Loop plans spec §3.3 (R12): the recipe a loop task was expanded from, inside the entry planHash covers. Optional
+          // and never defaulted, for the reason given for labels above.
+          loop: loopRecipeSchema.optional(),
           originalContractHash: hashSchema,
           originalContractCanonicalJson: nonemptyString,
         })
