@@ -286,16 +286,34 @@ export async function writeEscalationFile(runsDir: string, facts: EscalationFact
  * today (package.json's own `bin` field, "dist/cli.js") but is not this
  * module's fact to assume, and ORCA_CCLOOP_BIN (sandbox.ts's escape hatch) is
  * free to point anywhere on disk.
+ *
+ * *** ERRATUM (2026-09-29, session 2f65a729, plan 2026-09-29-ccloop-git-dependency correction 7) ***
+ * "The directory holding both its package.json and its .git" is no longer the test: an
+ * installed git dependency has a package.json and no .git, so that walk stopped at the
+ * repository that installed ccloop and recorded its HEAD. The directory must also name
+ * itself "ccloop" in its package.json. Text above kept verbatim.
  */
 async function findCcloopRoot(ccloopBin: string): Promise<string> {
   let dir = dirname(ccloopBin);
   for (let i = 0; i < 8; i += 1) {
-    if (existsSync(join(dir, "package.json")) && existsSync(join(dir, ".git"))) return dir;
+    if (existsSync(join(dir, ".git")) && (await packageName(dir)) === "ccloop") return dir;
     const parent = dirname(dir);
     if (parent === dir) break;
     dir = parent;
   }
   throw new Error(`orca: cannot find ccloop's repository root walking up from ${ccloopBin}`);
+}
+
+// Only a directory that names itself "ccloop" counts: an installed git
+// dependency ("<repo>/node_modules/ccloop") carries no .git, so without the
+// name check the walk would stop at the repository that installed it and
+// record that repository's HEAD as ccloop's.
+async function packageName(dir: string): Promise<unknown> {
+  try {
+    return (JSON.parse(await readFile(join(dir, "package.json"), "utf8")) as { name?: unknown }).name;
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -310,6 +328,12 @@ async function findCcloopRoot(ccloopBin: string): Promise<string> {
  * Returned as a single-element array (DecisionEvent's `evidence` field is
  * `string[]`) rather than two, so a reader sees version and sha together
  * rather than having to remember which array index means which.
+ *
+ * *** ERRATUM (2026-09-29, session 2f65a729, plan 2026-09-29-ccloop-git-dependency correction 7) ***
+ * "It can never be an npm dependency" is no longer true: ccloop now ships as a git
+ * dependency (`prepare` builds dist/, `files` ships it). An installed copy has no .git,
+ * so this function cannot read a HEAD from it and throws by name instead; the sha of an
+ * installed copy lives in Orca's lockfile, which this function does not read. Text above kept verbatim.
  */
 export async function ccloopEvidence(ccloopBin: string): Promise<string[]> {
   const root = await findCcloopRoot(ccloopBin);

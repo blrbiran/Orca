@@ -724,6 +724,8 @@ export async function runPreparedRound(round: Round, options: RunOptions, execut
     // spec §9.1: every decision C generates this round carries which ccloop
     // it actually ran on — see ccloopEvidence's own comment for why that is
     // what stands in for a locked npm dependency ccloop cannot offer today.
+    // *** ERRATUM (2026-09-29, session 2f65a729): ccloop can now be a git dependency;
+    // see the ERRATUM on ccloopEvidence. Text above kept verbatim. ***
     // Read once per round, not once per decision: it is the same ccloop for
     // every task in a round, and reading it per-decision would just make the
     // round slower for an answer that cannot change.

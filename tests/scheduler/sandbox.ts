@@ -91,14 +91,17 @@ export async function git(repo: string, args: string[]): Promise<string> {
 // named error survives the override and says which of the two sources the
 // path came from, because "ENOENT spawning /some/path" many frames away is
 // exactly the diagnosis this error exists to replace.
+// *** ERRATUM (2026-09-29, session 2f65a729): "never an npm dependency" is no longer
+// true — ccloop now ships as a git dependency. The sandbox still spawns the sibling
+// checkout's own build, which is what the scenarios measure. Text above kept verbatim. ***
 function resolveCcloopBin(): string {
   const override = process.env.ORCA_CCLOOP_BIN;
   const bin = override ?? resolve(dirname(new URL(import.meta.url).pathname), "../../../ccloop/dist/cli.js");
   if (!existsSync(bin)) {
     const source = override === undefined ? "the sibling-directory default" : "ORCA_CCLOOP_BIN";
     throw new Error(
-      `ccloop bin not found at ${bin} (from ${source}). ccloop's package.json is private and its bin ` +
-        `is never an npm dependency — run "npm run build" inside the ccloop repo first, ` +
+      `ccloop bin not found at ${bin} (from ${source}). The scheduler scenarios spawn a ccloop ` +
+        `checkout's own build — run "npm run build" inside the ccloop repo first, ` +
         `or point ORCA_CCLOOP_BIN at its dist/cli.js.`,
     );
   }

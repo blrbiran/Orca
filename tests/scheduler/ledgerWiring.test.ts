@@ -1,4 +1,5 @@
-import { readFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { validateLine } from "../../src/ledger/validateLine.js";
@@ -105,6 +106,8 @@ describe("ledger wiring (spec 8.0)", () => {
     // ccloop cannot satisfy today (private: true, bin pointing at an unbuilt
     // dist). Recording which ccloop this round actually ran on pins the fact
     // reproduction needs, which is what locking a version was for.
+    // *** ERRATUM (2026-09-29, session 2f65a729): ccloop can now be a git dependency;
+    // see the ERRATUM on ccloopEvidence. Text above kept verbatim. ***
     const s = await makeSandbox();
     try {
       const p = await seedDisjointPlan(s);
@@ -131,6 +134,33 @@ describe("ledger wiring (spec 8.0)", () => {
       await s.cleanup();
     }
   }, 180_000);
+
+  it("refuses a ccloop installed under another repository's node_modules rather than recording that repository's HEAD", async () => {
+    // Once ccloop ships as a git dependency, its bin can sit at
+    // "<orca>/node_modules/ccloop/dist/cli.js". The installed package has a
+    // package.json but no .git, so a walk that stops at the first directory
+    // holding both lands on Orca's own root and records Orca's HEAD as
+    // ccloop's evidence — both declare 0.1.0, so nothing downstream can tell.
+    // The outer repository is given a real commit so that wrong walk would
+    // succeed with a well-formed sha: the criterion fails on silently wrong
+    // evidence, not on git refusing an empty repository.
+    const outer = await mkdtemp(join(tmpdir(), "orca-ccloop-root-"));
+    try {
+      await writeFile(join(outer, "package.json"), JSON.stringify({ name: "orca", version: "0.1.0" }));
+      await git(outer, ["init", "-q"]);
+      await git(outer, ["add", "package.json"]);
+      await git(outer, ["-c", "user.name=orca-test", "-c", "user.email=orca-test@invalid", "commit", "-q", "-m", "outer"]);
+      const installed = join(outer, "node_modules", "ccloop");
+      await mkdir(join(installed, "dist"), { recursive: true });
+      await writeFile(join(installed, "package.json"), JSON.stringify({ name: "ccloop", version: "0.1.0" }));
+      const bin = join(installed, "dist", "cli.js");
+      await writeFile(bin, "");
+
+      await expect(ccloopEvidence(bin)).rejects.toThrow(/cannot find ccloop's repository root/);
+    } finally {
+      await rm(outer, { recursive: true, force: true });
+    }
+  });
 
   it("ccloopEvidence resolves the same HEAD sha git itself reports for ccloop's repository", async () => {
     const s = await makeSandbox();
