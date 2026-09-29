@@ -21,7 +21,7 @@ import {
   writeEscalationFile,
 } from "./ledgerWiring.js";
 import type { EscalationSide } from "./ledgerWiring.js";
-import { loadPlan } from "./planFile.js";
+import { isLoopPlanTask, loadPlan } from "./planFile.js";
 import type { PlanFile, PlanRejection, PlanTask } from "./planFile.js";
 import { reduceExitCode } from "./exitCode.js";
 import type { ExitContribution } from "./exitCode.js";
@@ -157,7 +157,14 @@ export async function loadRound(planPath: string): Promise<{ round: Round } | { 
 
   const result = loadPlan(raw, baseBranch);
   if ("rejections" in result) return result;
-  const { plan } = result;
+  // Loop plans spec §3.4 (C1): a loop task names a recipe only Web import expands. Refused by name, before any contract
+  // is read -- never dropped from the round.
+  const loopRejections = result.plan.tasks.filter(isLoopPlanTask).map((task) => ({
+    code: `loop-plan-cli-unsupported:${task.taskId}`,
+    message: `task ${task.taskId} names a loop plan; loop plans run only through the Web panel (orca panel)`,
+  }));
+  if (loopRejections.length > 0) return { rejections: loopRejections };
+  const plan: PlanFile = { ...result.plan, tasks: result.plan.tasks.filter((task): task is PlanTask => !isLoopPlanTask(task)) };
 
   // buildGraph's contracts map is the already-loaded contract per task, not a
   // path to go read one (graph.ts's own doc comment on that parameter) —

@@ -30,7 +30,7 @@ export interface TaskGraph {
  * buildGraph's dedup below), so they cannot introduce a cycle that this
  * function would have missed.
  */
-export function detectCycle(tasks: PlanTask[]): boolean {
+export function detectCycle(tasks: ReadonlyArray<Pick<PlanTask, "taskId" | "dependsOn">>): boolean {
   const byId = new Map(tasks.map((task) => [task.taskId, task]));
   const WHITE = 0;
   const GRAY = 1;

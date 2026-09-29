@@ -47,7 +47,7 @@ export class ControlService {
     const {loadRound,runPreparedRound}=await import("../scheduler/run.js");
     const {makeControlledExecution}=await import("./schedulerBridge.js");
     const loaded=await loadRound(planPath);
-    if("rejections" in loaded) throw new ControlError("control-plan-rejected");
+    if("rejections" in loaded) throw new ControlError("control-plan-rejected", loaded.rejections.map(rejection => rejection.code).join(","));
     return await runPreparedRound(loaded.round,options,makeControlledExecution(this,groupId));
     } finally {release();}
   }
@@ -57,7 +57,7 @@ export class ControlService {
       const {loadRound,runPreparedRound}=await import("../scheduler/run.js");
       const {makeControlledExecution}=await import("./schedulerBridge.js");
       const loaded=await loadRound(planPath);
-      if("rejections" in loaded) throw new ControlError("control-plan-rejected");
+      if("rejections" in loaded) throw new ControlError("control-plan-rejected", loaded.rejections.map(rejection => rejection.code).join(","));
       return await runPreparedRound(loaded.round,options,makeControlledExecution(this,groupId,selection,handoffSelection));
     } finally {release();}
   }

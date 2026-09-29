@@ -8,6 +8,7 @@ import { partialSelectionSchema, safeInteger } from "../control/schema.js";
 import type { PartialSelection } from "../control/agentSelection.js";
 import { inputLabelsSchema } from "../control/labels.js";
 import { detectCycle } from "./graph.js";
+import { expandLoopTask, loopPlanFileSchema, type LoopPlanFileInput, type LoopRecipe } from "../control/loopPlans.js";
 
 export interface PlanTask {
   taskId: string;
@@ -18,6 +19,23 @@ export interface PlanTask {
   agent?: PartialSelection;
   /** Labels and progress spec §2.2: sorted and deduplicated by the parser; absent when the plan names none. */
   labels?: string[];
+}
+
+/**
+ * Loop plans spec §3.1 (D3): a task that names a built-in loop plan instead of a contract file. Web import expands it
+ * (readSchedulerControlPlanSource); every CLI consumer refuses it by name (run.ts loadRound, spec §3.4, C1).
+ */
+export interface LoopPlanTask {
+  taskId: string;
+  loop: LoopPlanFileInput;
+  dependsOn: string[];
+  targetVersion?: number;
+  agent?: PartialSelection;
+  labels?: string[];
+}
+
+export function isLoopPlanTask(task: PlanTask | LoopPlanTask): task is LoopPlanTask {
+  return "loop" in task;
 }
 
 export interface PlanFile {
@@ -35,6 +53,9 @@ export interface PlanFile {
   tasks: PlanTask[];
 }
 
+/** What loadPlan accepts (spec §3.1): either form of task. The CLI narrows it to a PlanFile once, in run.ts loadRound. */
+export type LoadedPlanFile = Omit<PlanFile, "tasks"> & { tasks: Array<PlanTask | LoopPlanTask> };
+
 export interface SchedulerControlPlanSource {
   goal: string;
   successConditions: string[];
@@ -46,6 +67,8 @@ export interface SchedulerControlPlanSource {
     targetVersion: number;
     agent?: PartialSelection;
     labels?: string[];
+    /** Loop plans spec §3.3: the recipe a loop task was expanded from; absent for a contract task. */
+    loop?: LoopRecipe;
     originalContract: unknown;
     originalContractCanonicalJson: string;
     originalContractHash: string;
@@ -113,14 +136,34 @@ const {
 const planTaskSchema = z
   .object({
     taskId: z.string().min(1),
-    contract: z.string().min(1),
+    // Loop plans spec §3.1 (D3): exactly one of a contract file and a loop plan; both or neither is malformed.
+    contract: z.string().min(1).optional(),
+    loop: loopPlanFileSchema.optional(),
     dependsOn: z.array(z.string()),
     targetVersion: safeInteger.positive().optional(),
     agent: partialSelectionSchema.optional(),
     // Labels and progress spec §2.2: the vocabulary is checked here, at the input door; any order and duplicates in.
     labels: inputLabelsSchema.optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((task, ctx) => {
+    if ((task.contract === undefined) === (task.loop === undefined)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "exactly-one-of-contract-or-loop" });
+    }
+  });
+
+function loadedTask(task: z.infer<typeof planTaskSchema>): PlanTask | LoopPlanTask {
+  const { contract, loop, ...rest } = task;
+  // planTaskSchema's refinement admitted exactly one of the two.
+  return contract !== undefined ? { ...rest, contract } : { ...rest, loop: loop! };
+}
+
+/** Loop plans spec §3.3: a loop task's expansion stands where a contract file's parse would. */
+function expandPlanFileLoop(task: LoopPlanTask, targetRepo: string): { value: unknown; canonicalJson: string; hash: string; recipe: LoopRecipe } {
+  const expanded = expandLoopTask(task.taskId, targetRepo, task.loop, task.labels ?? []);
+  if (!expanded.ok) return sourceRejected(`loop-plan-invalid:${task.taskId}:${expanded.reason}`);
+  return { value: expanded.contract, canonicalJson: expanded.canonicalJson, hash: expanded.hash, recipe: expanded.recipe };
+}
 
 // Shape-only: policy and workBranch are checked for the well-formed literal
 // values a valid plan could have, but the *content* checks (unsupported
@@ -262,13 +305,14 @@ export function readSchedulerControlPlanSource(target: TrustedSchedulerPlanTarge
     ...(plan.agent ? { agent: plan.agent } : {}),
     ...(plan.reconcileAgent ? { reconcileAgent: plan.reconcileAgent } : {}),
     tasks: plan.tasks.map(task => {
-      const original = parseContract(task.contract, task.taskId);
+      const original = isLoopPlanTask(task) ? expandPlanFileLoop(task, plan.targetRepo) : { ...parseContract(task.contract, task.taskId), recipe: undefined };
       return {
         taskId: task.taskId,
         dependencyTaskIds: [...task.dependsOn],
         targetVersion: task.targetVersion!,
         ...(task.agent ? { agent: task.agent } : {}),
         ...(task.labels && task.labels.length > 0 ? { labels: [...task.labels] } : {}),
+        ...(original.recipe ? { loop: original.recipe } : {}),
         originalContract: original.value,
         originalContractCanonicalJson: original.canonicalJson,
         originalContractHash: original.hash,
@@ -313,7 +357,7 @@ function isInsideRepo(targetRepo: string, contract: string): boolean {
  * filesystem, no git. baseBranch is passed in because discovering it belongs
  * to the CLI, against the target repo, not to this module.
  */
-export function loadPlan(raw: unknown, baseBranch: string): { plan: PlanFile } | { rejections: PlanRejection[] } {
+export function loadPlan(raw: unknown, baseBranch: string): { plan: LoadedPlanFile } | { rejections: PlanRejection[] } {
   const parsed = planFileSchema.safeParse(raw);
   if (!parsed.success) {
     return {
@@ -334,7 +378,8 @@ export function loadPlan(raw: unknown, baseBranch: string): { plan: PlanFile } |
     ["runsDir", data.runsDir],
   ];
   for (const task of data.tasks) {
-    pathFields.push([`tasks[${task.taskId}].contract`, task.contract]);
+    // Loop plans spec §3.1: only a contract task names a file; a loop task has no path to check.
+    if (task.contract !== undefined) pathFields.push([`tasks[${task.taskId}].contract`, task.contract]);
   }
   for (const [field, value] of pathFields) {
     if (!isAbsolute(value)) {
@@ -364,7 +409,7 @@ export function loadPlan(raw: unknown, baseBranch: string): { plan: PlanFile } |
   // computed once, at graph construction time: a contract inside the repo
   // could be rewritten by an upstream task (spec §2.4.1).
   for (const task of data.tasks) {
-    if (isInsideRepo(data.targetRepo, task.contract)) {
+    if (task.contract !== undefined && isInsideRepo(data.targetRepo, task.contract)) {
       rejections.push({
         code: CONTRACT_INSIDE_TARGET_REPO,
         message: `contract for ${task.taskId} lives inside targetRepo: ${task.contract}`,
@@ -415,5 +460,5 @@ export function loadPlan(raw: unknown, baseBranch: string): { plan: PlanFile } |
     return { rejections };
   }
 
-  return { plan: { ...data, policy: "local-merge" } };
+  return { plan: { ...data, policy: "local-merge", tasks: data.tasks.map(loadedTask) } };
 }
