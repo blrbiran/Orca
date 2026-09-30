@@ -418,3 +418,32 @@ draft" there has the details):
 - The command's `groupId` / `taskId` travel in the command target, as `set-task-labels` does (Rule 11).
 - A draft-group change goes through `reopenProposal`, as every draft proposal change does.
 - The CLI refusal sits in `loadRound`, the one door `orca plan`, `orca run` and controlled rounds share.
+
+## 12. Corrections after the human's review (2026-10-01, session `e604b1ba`)
+
+The text above stays as written; where it differs from this section, this section wins. Rulings are quoted in
+`.superpowers/sdd/2026-10-01-loop-plans-followups/progress.md` (H1–H20).
+
+- **C2, C3 → plans v2.** New tasks expand at version 2 of all five plans: `safetyPolicy.maxFilesTouched` defaults to
+  no limit (`Number.MAX_SAFE_INTEGER`; `investigate` stays 1), `executionPolicy.perAttemptTimeoutMs` to
+  `MAX_TIMER_MS` = 2 147 483 647, so on the Web path each phase may use the task's whole active time. Version 1 stays
+  in the registry unchanged. Orca caps every derived phase timeout at `MAX_TIMER_MS`, because Node's `setTimeout`
+  turns a larger delay into 1 ms.
+- **A budget-only `set-task-loop` keeps the task's plan version**; only a change of plan or inputs expands at the
+  current version.
+- **C4 measured** (six paid real-claude verify calls). §2.1's "a match sets `safeToRetry: false`, which ends the run
+  `failed` with no retry" holds only when the verifier approved: a rejecting verifier sets its own `safeToRetry`
+  (retryable in every measured case) and the token then changes nothing. An approving verifier quoted the rule
+  ("…so REJECT:empty-document does not apply") in two of three good runs, and the substring match failed that good
+  work with no retry. §2.2's claim that a distinctive token prevents echo matches is therefore false. The v2 change
+  that stops relying on these tokens waits for the human to name the criteria it rewrites.
+- **C6 kept, R-F14 superseded**: an estimate's suggestion for a loop task's work budget is applied in one click and
+  sent as `set-task-loop` with model provenance, verified against the estimate.
+- **§5.1 estimates**: an estimate is built from every task's effective contract; one made before a plan change is
+  marked stale and its suggestions cannot be applied (`estimate-stale`). Values applied before the change stay.
+- **§4.1 "changed"**: shown once a task's contract was ever changed by `set-task-loop`, also after a change back; a
+  budget-only change never shows it.
+- **§8 `proposal-edit` on a started Web group**: measured red and fixed — edit, set-agent and confirm refuse
+  `grant-amendment-unsupported` once any task left draft/ready. The group-state column still never leaves `ready`.
+- **C7 and R-F5 superseded** by `docs/superpowers/specs/2026-10-01-panel-i18n-design.md`: the panel speaks English or
+  Chinese; the server sends loop-plan fields, not sentences.
