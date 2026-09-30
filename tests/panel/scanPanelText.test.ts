@@ -29,6 +29,15 @@ const SAMPLE = [
   "}",
   "export const message = (status: number): string => `answered ${status}`;",
   "export const path = (id: string): string => `/api/${id}/x`;",
+  // Lines 17-22 pin the remaining skip and class branches: a re-export source, a quoted key and an indexed key are
+  // never sites; a two-word `case` label is code; a plain template literal is listed like a string; punctuation alone
+  // (" · ") is no site at all.
+  'export { thing as other } from "./other words.js";',
+  'const TABLE = { "two key words": 1 };',
+  'const pick = TABLE["two key words"];',
+  'switch (KEY) { case "two case words": break; }',
+  "const NOSUB = `plain template words`;",
+  'export const Dot = () => <i>{" · "}</i>;',
   "",
 ].join("\n");
 
@@ -60,6 +69,8 @@ describe("the panel text scan (spec §3, §8)", () => {
       "ui\tweb/src/Sample.tsx:11\tjsx-expr\t`/api/path/${props.id}/tail`",
       "ui\tweb/src/Sample.tsx:15\treturn\t`answered ${status}`",
       "code\tweb/src/Sample.tsx:16\treturn\t`/api/${id}/x`",
+      'code\tweb/src/Sample.tsx:20\tcase\t"two case words"',
+      'ui\tweb/src/Sample.tsx:21\tconst:NOSUB\t"plain template words"',
       "",
     ]);
   });
@@ -68,6 +79,6 @@ describe("the panel text scan (spec §3, §8)", () => {
     const { rc, out } = scan(["--ui"]);
     expect(rc).toBe(0);
     expect(out.split("\n").filter((line) => line !== "").every((line) => line.startsWith("ui\t"))).toBe(true);
-    expect(out.split("\n").filter((line) => line !== "").length).toBe(8);
+    expect(out.split("\n").filter((line) => line !== "").length).toBe(9);
   });
 });
