@@ -9,7 +9,9 @@
  * person is about to type over it.
  */
 import type { JSX } from "react";
+import { useTranslation } from "react-i18next";
 import type { ControlAction } from "./controlApi.js";
+import i18n, { enumText } from "./i18n.js";
 import type {
   AllocationViewV1,
   Amount,
@@ -39,8 +41,8 @@ export function groupLimitKey(groupId: string, dimension: AmountDimensionV1): st
 export const CONTEXT_POLICY_KEY = (groupId: string): string => `${groupId}:context-policy`;
 
 export function provenanceText(provenance: FieldProvenanceV1): string {
-  if (provenance.provenance === "model") return `model ${provenance.estimateId ?? ""}`.trim();
-  return provenance.provenance === "complex-1m-default" ? "complex-1m default" : provenance.provenance;
+  if (provenance.provenance === "model" && provenance.estimateId) return i18n.t("budget.provenanceModel", { estimateId: provenance.estimateId });
+  return enumText("fieldProvenance", provenance.provenance);
 }
 
 /** Loop plans spec §4.3 (C6): a loop task's work budget is changed only through set-task-loop (its plan card, or a suggestion). */
@@ -216,6 +218,7 @@ export interface BudgetEditorProps {
 
 export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
   const { view, config, drafts, onDraft, onCommand } = props;
+  const { t } = useTranslation();
   const groupId = view.summary.groupId;
   const editable = view.proposal.state === "editable";
   const estimator = view.estimates.at(-1) ?? null;
@@ -237,9 +240,10 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
     if (actions.length > 1 && props.onCommands !== undefined) props.onCommands(actions);
     else onCommand(actions[0]!);
   };
+  const firstProfile = config.profiles[0];
   const observedEnforcement = view.proposal.profiles === null
-    ? config.profiles[0]?.observed.budgetEnforcement ?? "unknown"
-    : "frozen at confirmation";
+    ? firstProfile === undefined ? t("common.unknown") : enumText("budgetEnforcement", firstProfile.observed.budgetEnforcement)
+    : t("budget.frozenAtConfirmation");
   const contextUnavailable = config.profiles.some((profile) => profile.observed.contextObservation === "unavailable");
   // Backlog #11(b) (Orca handoff §9.1): handoffControl "durable" and a handoffExecution are what dispatch requires of a
   // task or handoff profile (webDispatch.ts probeBlocksDispatch, budget.ts assertCapabilities); a group bound to one
@@ -310,30 +314,30 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
   };
 
   return (
-    <section aria-label="Budget proposal">
-      <h3>Proposal v{view.proposal.proposalVersion} · {view.proposal.state}</h3>
+    <section aria-label={t("budget.region")}>
+      <h3>{t("budget.heading", { version: view.proposal.proposalVersion, state: enumText("proposalState", view.proposal.state) })}</h3>
       <p role="status">
-        budget mode {view.proposal.budgetMode ?? "not chosen"} · observed enforcement {observedEnforcement}
-        {view.proposal.budgetMode === "soft" ? " · soft: an overrun is settled after the fact, not prevented" : ""}
+        {t("budget.modeLine", { mode: view.proposal.budgetMode === null ? t("budget.notChosen") : enumText("budgetMode", view.proposal.budgetMode), enforcement: observedEnforcement })}
+        {view.proposal.budgetMode === "soft" ? t("budget.softNote") : ""}
       </p>
       {contextUnavailable && (
-        <p role="note">context observation unavailable · the context watermark cannot hand off automatically</p>
+        <p role="note">{t("budget.contextUnavailable")}</p>
       )}
       {handoffBlocked.map((profile) => (
         <p role="note" key={`handoff-capability:${profile.profileId}`}>
-          profile {profile.profileId}: handoff control {profile.observed.handoffControl} · handoff execution {profile.observed.handoffExecution ?? "none"} · work bound to it is not dispatched (claim-capability-unavailable)
+          {t("budget.handoffBlocked", { profileId: profile.profileId, control: enumText("handoffControl", profile.observed.handoffControl), execution: profile.observed.handoffExecution === null ? t("common.none") : enumText("handoffExecution", profile.observed.handoffExecution) })}
         </p>
       ))}
       <table>
         <thead>
-          <tr><th>owner</th><th>bucket</th><th>state</th>{DIMENSIONS.map((dimension) => <th key={dimension}>{dimension}</th>)}{advice !== null && <th>suggestion</th>}</tr>
+          <tr><th>{t("budget.th.owner")}</th><th>{t("budget.th.bucket")}</th><th>{t("budget.th.state")}</th>{DIMENSIONS.map((dimension) => <th key={dimension}>{enumText("dimension", dimension)}</th>)}{advice !== null && <th>{t("budget.th.suggestion")}</th>}</tr>
         </thead>
         <tbody>
           {view.allocations.map((allocation) => (
             <tr key={`${allocation.ownerKind}:${allocation.ownerId}:${allocation.bucket}`}>
-              <td>{allocation.ownerKind} {allocation.ownerId}</td>
-              <td>{allocation.bucket}</td>
-              <td>{allocation.state}</td>
+              <td>{enumText("ownerKind", allocation.ownerKind)} {allocation.ownerId}</td>
+              <td>{enumText("bucket", allocation.bucket)}</td>
+              <td>{enumText("allocationState", allocation.state)}</td>
               {DIMENSIONS.map((dimension) => {
                 const target = targetOf(view, allocation.ownerId, allocation.bucket, dimension);
                 if (target === null) {
@@ -342,10 +346,10 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
                   const loopValue = loopAction?.verb === "set-task-loop" && dimension !== "sessions" ? loopAction.payload.work[dimension] : null;
                   return (
                     <td key={dimension}>
-                      {allocation.amount[dimension]}{owned ? <small> Change it in the plan card</small> : null}
+                      {allocation.amount[dimension]}{owned ? <small>{t("budget.changeInCard")}</small> : null}
                       {loopValue !== null && (
-                        <button type="button" aria-label={`use ${loopValue} for ${allocation.ownerId} ${allocation.bucket} ${dimension}`}
-                          onClick={() => applySuggestions([loopAction!])}>use {loopValue}</button>
+                        <button type="button" aria-label={t("budget.useFor", { value: loopValue, owner: allocation.ownerId, bucket: enumText("bucket", allocation.bucket), dimension: enumText("dimension", dimension) })}
+                          onClick={() => applySuggestions([loopAction!])}>{t("budget.use", { value: loopValue })}</button>
                       )}
                     </td>
                   );
@@ -355,7 +359,7 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
                 return (
                   <td key={dimension}>
                     <label>
-                      <span className="sr-only">{allocation.ownerId} {allocation.bucket} {dimension}</span>
+                      <span className="sr-only">{allocation.ownerId} {enumText("bucket", allocation.bucket)} {enumText("dimension", dimension)}</span>
                       <input
                         value={valueFor(drafts, key, allocation.amount[dimension])}
                         readOnly={!editable}
@@ -365,8 +369,8 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
                       <small>{provenanceText(allocation.fieldProvenance[dimension])}</small>
                     </label>
                     {fieldOperation !== undefined && (
-                      <button type="button" aria-label={`use ${fieldOperation.value} for ${allocation.ownerId} ${allocation.bucket} ${dimension}`}
-                        onClick={() => applySuggestions(suggestionActions(view, { kind: "field", target }))}>use {fieldOperation.value}</button>
+                      <button type="button" aria-label={t("budget.useFor", { value: fieldOperation.value, owner: allocation.ownerId, bucket: enumText("bucket", allocation.bucket), dimension: enumText("dimension", dimension) })}
+                        onClick={() => applySuggestions(suggestionActions(view, { kind: "field", target }))}>{t("budget.use", { value: fieldOperation.value })}</button>
                     )}
                   </td>
                 );
@@ -375,22 +379,22 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
                 const row = allocation.ownerKind === "task" || allocation.ownerKind === "goal-review"
                   ? suggestionActions(view, { kind: "row", ownerKind: allocation.ownerKind, ownerId: allocation.ownerId, bucket: allocation.bucket as "work" | "handoff" | "review" })
                   : [];
-                return <td>{row.length > 0 && <button type="button" aria-label={`Apply row ${allocation.ownerId} ${allocation.bucket}`} onClick={() => applySuggestions(row)}>Apply row</button>}</td>;
+                return <td>{row.length > 0 && <button type="button" aria-label={t("budget.applyRowFor", { owner: allocation.ownerId, bucket: enumText("bucket", allocation.bucket) })} onClick={() => applySuggestions(row)}>{t("budget.applyRow")}</button>}</td>;
               })()}
             </tr>
           ))}
         </tbody>
       </table>
-      {advice?.stale === true && <p role="note">This estimate predates a plan change; estimate again to update the suggestions</p>}
-      {allSuggested.length > 0 && <button type="button" onClick={() => applySuggestions(allSuggested)}>Apply all suggestions</button>}
+      {advice?.stale === true && <p role="note">{t("budget.staleEstimate")}</p>}
+      {allSuggested.length > 0 && <button type="button" onClick={() => applySuggestions(allSuggested)}>{t("budget.applyAll")}</button>}
       {advice !== null && (
         <details>
-          <summary>Estimate rationale ({advice.estimateId})</summary>
+          <summary>{t("budget.rationale", { estimateId: advice.estimateId })}</summary>
           <p>{advice.output.groupRationale}</p>
           <ul>
             {advice.output.tasks.map((task) => (
               <li key={task.taskId}>
-                {task.taskId} · {task.complexity} · confidence {task.confidence} · {task.rationale}
+                {t("budget.rationaleLine", { taskId: task.taskId, complexity: enumText("complexity", task.complexity), confidence: enumText("confidence", task.confidence), rationale: task.rationale })}
                 <ul>{task.assumptions.map((assumption) => <li key={assumption}>{assumption}</li>)}</ul>
               </li>
             ))}
@@ -398,10 +402,10 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
         </details>
       )}
       <fieldset>
-        <legend>Group limit</legend>
+        <legend>{t("budget.groupLimit")}</legend>
         {DIMENSIONS.map((dimension) => (
           <label key={dimension}>
-            {dimension}
+            {enumText("dimension", dimension)}
             <input
               value={valueFor(drafts, groupLimitKey(groupId, dimension), view.ledger.groupLimit[dimension])}
               inputMode="numeric"
@@ -409,10 +413,10 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
             />
           </label>
         ))}
-        <button type="button" onClick={submitLimit}>Set limit</button>
+        <button type="button" onClick={submitLimit}>{t("budget.setLimit")}</button>
       </fieldset>
       <label>
-        Hand off at context tokens (blank keeps it unset)
+        {t("budget.handoffAt")}
         <input
           value={valueFor(drafts, CONTEXT_POLICY_KEY(groupId), view.proposal.contextPolicy.handoffAtContextTokens ?? 0)}
           inputMode="numeric"
@@ -420,14 +424,14 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
         />
       </label>
       <p>
-        used {view.ledger.used.tokens} · committed {view.ledger.committedRemaining.tokens} · reserve {view.ledger.explicitUnallocatedReserve.tokens}
-        {view.ledger.budgetDeficit.tokens > 0 ? ` · deficit ${view.ledger.budgetDeficit.tokens}` : ""}
-        {view.ledger.usageUnknown ? " · usage unknown" : ""}
+        {t("budget.ledger", { used: view.ledger.used.tokens, committed: view.ledger.committedRemaining.tokens, reserve: view.ledger.explicitUnallocatedReserve.tokens })}
+        {view.ledger.budgetDeficit.tokens > 0 ? t("budget.deficit", { deficit: view.ledger.budgetDeficit.tokens }) : ""}
+        {view.ledger.usageUnknown ? t("budget.usageUnknown") : ""}
       </p>
-      <button type="button" disabled={!editable || editedOperations(view, drafts).length === 0} onClick={submitEdit}>Save proposal</button>
-      {estimator !== null && <button type="button" onClick={submitEstimate}>Re-estimate</button>}
-      {editable && shownSelectionsHash === null && <p role="note">Confirm waits for this proposal version's agent selections to resolve.</p>}
-      <button type="button" disabled={shownSelectionsHash === null} onClick={submitConfirm}>Confirm budget</button>
+      <button type="button" disabled={!editable || editedOperations(view, drafts).length === 0} onClick={submitEdit}>{t("budget.save")}</button>
+      {estimator !== null && <button type="button" onClick={submitEstimate}>{t("budget.reestimate")}</button>}
+      {editable && shownSelectionsHash === null && <p role="note">{t("budget.confirmWaits")}</p>}
+      <button type="button" disabled={shownSelectionsHash === null} onClick={submitConfirm}>{t("budget.confirm")}</button>
     </section>
   );
 }

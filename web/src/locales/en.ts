@@ -6,7 +6,7 @@
 import type { ThemePref } from "../theme.js";
 import type { ChainStopCategory, CorrectionKind, DecisionKind, DecisionObservation, DecisionScope, MetricsNoteCode } from "../types.js";
 import type {
-  EstimateViewV1, GroupSummaryV1, HandoffRequestViewV1, RecoveryViewV1, RunViewV1, WorkItemProgressV1, WorkItemViewV1,
+  AllocationViewV1, AmountDimensionV1, BudgetEstimateV1, CapabilityViewV1, EstimateViewV1, FieldProvenanceV1, GroupSummaryV1, GroupViewV1, HandoffRequestViewV1, RecoveryViewV1, RunViewV1, WorkItemProgressV1, WorkItemViewV1,
 } from "../controlTypes.js";
 
 /** The Chinese resource's type: the same key set, every value widened to string (spec §2). */
@@ -69,6 +69,25 @@ const progressStep = {
   queued: "queued", plan: "plan", execute: "execute", verify: "verify", succeeded: "succeeded", blocked_waiting_human: "blocked_waiting_human",
   exhausted: "exhausted", cancelled: "cancelled", failed: "failed",
 } as const satisfies Record<NonNullable<WorkItemProgressV1["step"]>, string>;
+
+const proposalState = { editable: "editable", confirmed: "confirmed" } as const satisfies Record<GroupViewV1["proposal"]["state"], string>;
+const ownerKind = { estimate: "estimate", task: "task", "goal-review": "goal-review", reserve: "reserve" } as const satisfies Record<AllocationViewV1["ownerKind"], string>;
+const bucket = { work: "work", handoff: "handoff", review: "review", reserve: "reserve" } as const satisfies Record<AllocationViewV1["bucket"], string>;
+const allocationState = {
+  "draft-encumbered": "draft-encumbered", confirmed: "confirmed", active: "active", held: "held", continuing: "continuing", terminal: "terminal", unknown: "unknown",
+} as const satisfies Record<AllocationViewV1["state"], string>;
+const dimension = { tokens: "tokens", activeMs: "activeMs", attempts: "attempts", sessions: "sessions" } as const satisfies Record<AmountDimensionV1, string>;
+type EstimatedTask = BudgetEstimateV1["tasks"][number];
+const complexity = { S: "S", M: "M", L: "L", XL: "XL" } as const satisfies Record<EstimatedTask["complexity"], string>;
+const confidence = { low: "low", medium: "medium", high: "high" } as const satisfies Record<EstimatedTask["confidence"], string>;
+const handoffControl = { durable: "durable", "phase-end": "phase-end", unavailable: "unavailable" } as const satisfies Record<CapabilityViewV1["handoffControl"], string>;
+const handoffExecution = {
+  "mechanical-in-run-v1": "mechanical-in-run-v1", "model-assisted-v1": "model-assisted-v1",
+} as const satisfies Record<NonNullable<CapabilityViewV1["handoffExecution"]>, string>;
+const budgetEnforcement = { bounded: "bounded", soft: "soft", unavailable: "unavailable" } as const satisfies Record<CapabilityViewV1["budgetEnforcement"], string>;
+const fieldProvenance = {
+  "complex-1m-default": "complex-1m default", model: "model", human: "human", system: "system",
+} as const satisfies Record<FieldProvenanceV1["provenance"], string>;
 
 export const en = {
   nav: { sections: "Sections", decisions: "Decisions", chains: "Chains", tasks: "Task control", metrics: "Metrics" },
@@ -248,6 +267,37 @@ export const en = {
     evidence: " · evidence {{ids}}",
     runEvidence: "run evidence",
   },
+  budget: {
+    region: "Budget proposal",
+    heading: "Proposal v{{version}} · {{state}}",
+    modeLine: "budget mode {{mode}} · observed enforcement {{enforcement}}",
+    notChosen: "not chosen",
+    frozenAtConfirmation: "frozen at confirmation",
+    softNote: " · soft: an overrun is settled after the fact, not prevented",
+    contextUnavailable: "context observation unavailable · the context watermark cannot hand off automatically",
+    handoffBlocked: "profile {{profileId}}: handoff control {{control}} · handoff execution {{execution}} · work bound to it is not dispatched (claim-capability-unavailable)",
+    th: { owner: "owner", bucket: "bucket", state: "state", suggestion: "suggestion" },
+    changeInCard: " Change it in the plan card",
+    useFor: "use {{value}} for {{owner}} {{bucket}} {{dimension}}",
+    use: "use {{value}}",
+    applyRowFor: "Apply row {{owner}} {{bucket}}",
+    applyRow: "Apply row",
+    staleEstimate: "This estimate predates a plan change; estimate again to update the suggestions",
+    applyAll: "Apply all suggestions",
+    rationale: "Estimate rationale ({{estimateId}})",
+    rationaleLine: "{{taskId}} · {{complexity}} · confidence {{confidence}} · {{rationale}}",
+    groupLimit: "Group limit",
+    setLimit: "Set limit",
+    handoffAt: "Hand off at context tokens (blank keeps it unset)",
+    ledger: "used {{used}} · committed {{committed}} · reserve {{reserve}}",
+    deficit: " · deficit {{deficit}}",
+    usageUnknown: " · usage unknown",
+    save: "Save proposal",
+    reestimate: "Re-estimate",
+    confirmWaits: "Confirm waits for this proposal version's agent selections to resolve.",
+    confirm: "Confirm budget",
+    provenanceModel: "model {{estimateId}}",
+  },
   loopPlan: {
     // Panel i18n spec §3.1, §6.9: one entry per registry version, equal to src/control/loopPlans.ts (the English source of
     // record); a version with no discipline has no discipline key.
@@ -283,6 +333,41 @@ export const en = {
       checks_other: "Acceptance: {{count}} check commands, all must pass",
       pathSeparator: ", ",
     },
+    region: "Plan {{taskId}}",
+    handWritten: "Hand-written contract",
+    summaryRegion: "Plan summary {{taskId}}",
+    checkCommands: "Check commands ({{n}})",
+    budgetLine: "Budget: {{tokens}} tokens · active time {{activeMs}} ms · max attempts {{attempts}}",
+    git: "Git workspace: its own worktree, merged back into <code>orca/{{groupId}}</code>; pushing is done by a person",
+    skills: "Skill set: not supported yet",
+    started: "Started; the plan is frozen",
+    notOpen: "The group is not open for changes; the plan is frozen",
+    changePlan: "Change plan",
+    changePlanFor: "Change plan {{taskId}}",
+    draftBehind: "The plan changed after you started this draft (v{{base}} → v{{current}})",
+    planLabel: "Plan",
+    discard: "Discard plan draft",
+    field: {
+      goal: "Goal",
+      successCondition: "Done when",
+      targetPaths: "Only changes (one path per line)",
+      checks: "Check commands (one per line)",
+      nonGoals: "Non-goals (one per line)",
+      relevantDocs: "Relevant docs (one per line)",
+      protectedPaths: "Must not change (one path per line)",
+      maxFilesTouched: "Max files changed (blank for default)",
+      tokens: "Token budget",
+      activeMs: "Active time (ms)",
+      attempts: "Max attempts",
+    },
+    badBudget: "Budgets must be positive integers",
+    badFileCap: "Max files changed must be a positive integer",
+    unit: { tokens: "tokens", activeMs: "ms active time", attempts: "attempts" },
+    budgetTaken: "Budget {{delta}} {{unit}}, taken from the group reserve; {{left}} left",
+    budgetReturned: "Budget {{delta}} {{unit}}, returned to the group reserve; {{left}} left",
+    partSeparator: "; ",
+    shortfall: "Group reserve too small: {{dimension}} short by {{short}}",
+    unchanged: "Budget unchanged",
   },
   metrics: {
     unknownRate: "unknown",
@@ -300,5 +385,6 @@ export const en = {
   enums: {
     theme, decisionKind, decisionScope, decisionVerdict, correctionKind, chainStopCategory,
     groupState, stopMode, stopState, workStatus, runPhase, runState, requestState, estimateState, budgetMode, blockerScope, progressStep,
+    proposalState, ownerKind, bucket, allocationState, dimension, complexity, confidence, handoffControl, handoffExecution, budgetEnforcement, fieldProvenance,
   },
 } as const;

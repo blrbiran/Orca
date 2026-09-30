@@ -8,9 +8,9 @@
  * plan version (panel i18n spec §3.1).
  */
 import type { JSX } from "react";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 import type { ControlAction } from "./controlApi.js";
-import i18n from "./i18n.js";
+import i18n, { enumText } from "./i18n.js";
 import { WEB_LOOP_PLANS } from "./controlTypes.js";
 import type { Amount, GroupViewV1, LoopPlanIdV1, LoopPlanViewV1, SetTaskLoopPayloadV1, WorkItemViewV1 } from "./controlTypes.js";
 
@@ -58,13 +58,12 @@ export function loopSummaryLines(plan: LoopPlanViewV1): string[] {
 const FIELDS = ["goal", "successCondition", "targetPaths", "checks", "nonGoals", "relevantDocs", "protectedPaths", "maxFilesTouched", "tokens", "activeMs", "attempts"] as const;
 type Field = (typeof FIELDS)[number];
 const LIST_FIELDS = new Set<Field>(["targetPaths", "checks", "nonGoals", "relevantDocs", "protectedPaths"]);
-const FIELD_LABEL: Record<Field, string> = {
-  goal: "Goal", successCondition: "Done when", targetPaths: "Only changes (one path per line)", checks: "Check commands (one per line)",
-  nonGoals: "Non-goals (one per line)", relevantDocs: "Relevant docs (one per line)", protectedPaths: "Must not change (one path per line)",
-  maxFilesTouched: "Max files changed (blank for default)", tokens: "Token budget", activeMs: "Active time (ms)", attempts: "Max attempts",
-};
-const BAD_BUDGET = "Budgets must be positive integers";
-const BAD_FILE_CAP = "Max files changed must be a positive integer";
+const FIELD_KEY = {
+  goal: "loopPlan.field.goal", successCondition: "loopPlan.field.successCondition", targetPaths: "loopPlan.field.targetPaths",
+  checks: "loopPlan.field.checks", nonGoals: "loopPlan.field.nonGoals", relevantDocs: "loopPlan.field.relevantDocs",
+  protectedPaths: "loopPlan.field.protectedPaths", maxFilesTouched: "loopPlan.field.maxFilesTouched", tokens: "loopPlan.field.tokens",
+  activeMs: "loopPlan.field.activeMs", attempts: "loopPlan.field.attempts",
+} as const satisfies Record<Field, string>;
 
 /** What the person typed, as text, and the loopVersion shown when they started. */
 interface LoopDraft { base: number; plan: LoopPlanIdV1; text: Record<Field, string> }
@@ -102,10 +101,10 @@ const positive = (text: string): number | null => {
 /** The payload a draft sends, or why it cannot be sent yet (a number that is not a positive safe integer; the server re-checks everything). */
 function payloadOf(draft: LoopDraft): { payload: SetTaskLoopPayloadV1 } | { invalid: string } {
   const tokens = positive(draft.text.tokens), activeMs = positive(draft.text.activeMs), attempts = positive(draft.text.attempts);
-  if (tokens === null || activeMs === null || attempts === null) return { invalid: BAD_BUDGET };
+  if (tokens === null || activeMs === null || attempts === null) return { invalid: i18n.t("loopPlan.badBudget") };
   const blankCap = draft.text.maxFilesTouched.trim() === "";
   const cap = blankCap ? null : positive(draft.text.maxFilesTouched);
-  if (!blankCap && cap === null) return { invalid: BAD_FILE_CAP };
+  if (!blankCap && cap === null) return { invalid: i18n.t("loopPlan.badFileCap") };
   return { payload: {
     baseLoopVersion: draft.base, plan: draft.plan,
     inputs: {
@@ -122,13 +121,16 @@ export function consequenceOf(view: GroupViewV1, current: Amount, work: { tokens
   const reserve = view.ledger.explicitUnallocatedReserve;
   const parts: string[] = [];
   let shortfall: string | null = null;
-  for (const [dimension, unit] of [["tokens", "tokens"], ["activeMs", "ms active time"], ["attempts", "attempts"]] as const) {
+  for (const dimension of ["tokens", "activeMs", "attempts"] as const) {
     const delta = work[dimension] - current[dimension];
     if (delta === 0) continue;
-    parts.push(`Budget ${delta > 0 ? "+" : ""}${delta} ${unit}, ${delta > 0 ? "taken from the group reserve" : "returned to the group reserve"}; ${reserve[dimension] - delta} left`);
-    if (delta > reserve[dimension] && shortfall === null) shortfall = `Group reserve too small: ${dimension} short by ${delta - reserve[dimension]}`;
+    const values = { delta: `${delta > 0 ? "+" : ""}${delta}`, unit: i18n.t(`loopPlan.unit.${dimension}`), left: reserve[dimension] - delta };
+    parts.push(delta > 0 ? i18n.t("loopPlan.budgetTaken", values) : i18n.t("loopPlan.budgetReturned", values));
+    if (delta > reserve[dimension] && shortfall === null) {
+      shortfall = i18n.t("loopPlan.shortfall", { dimension: enumText("dimension", dimension), short: delta - reserve[dimension] });
+    }
   }
-  return { text: parts.length === 0 ? "Budget unchanged" : parts.join("; "), shortfall };
+  return { text: parts.length === 0 ? i18n.t("loopPlan.unchanged") : parts.join(i18n.t("loopPlan.partSeparator")), shortfall };
 }
 
 export interface LoopPlanCardProps {
@@ -140,61 +142,62 @@ export interface LoopPlanCardProps {
 }
 
 function LoopPlanEditor(props: LoopPlanCardProps & { plan: LoopPlanViewV1; current: Amount }): JSX.Element {
+  const { t } = useTranslation();
   const { view, item, drafts, onDraft, onCommand, plan, current } = props;
   const groupId = view.summary.groupId, key = loopDraftKey(groupId, item.taskId), draft = readLoopDraft(drafts, key);
   // Spec §4.2 (D4): only a task that has not started may change; a finished run counts (spec §5.2 step 2).
   const started = (item.status !== "draft" && item.status !== "ready") || item.lineageRunIds.length > 0;
-  if (started) return <p>Started; the plan is frozen</p>;
+  if (started) return <p>{t("loopPlan.started")}</p>;
   // Spec §5.2 step 1: the server refuses every group state but draft/ready, and a stopped group, as group-state-invalid;
   // offering the form there would only let a person fill it in to be refused (final review, B6).
   const open = (view.summary.state === "draft" || view.summary.state === "ready") && view.summary.stopMode === null;
-  if (!open) return <p>The group is not open for changes; the plan is frozen</p>;
-  if (draft === null) return <button type="button" onClick={() => onDraft(key, JSON.stringify(draftOf(plan, current)))}>Change plan</button>;
+  if (!open) return <p>{t("loopPlan.notOpen")}</p>;
+  if (draft === null) return <button type="button" onClick={() => onDraft(key, JSON.stringify(draftOf(plan, current)))}>{t("loopPlan.changePlan")}</button>;
   const set = (patch: Partial<LoopDraft>): void => onDraft(key, JSON.stringify({ ...draft, ...patch }));
   const checked = payloadOf(draft);
   const payload = "payload" in checked ? checked.payload : null;
   const consequence = payload === null ? null : consequenceOf(view, current, payload.work);
   const blocked = "invalid" in checked ? checked.invalid : consequence!.shortfall;
   return (
-    <form aria-label={`Change plan ${item.taskId}`} onSubmit={(event) => {
+    <form aria-label={t("loopPlan.changePlanFor", { taskId: item.taskId })} onSubmit={(event) => {
       event.preventDefault();
       if (payload !== null && blocked === null) onCommand({ verb: "set-task-loop", groupId, taskId: item.taskId, expectedRevision: view.summary.commandRevision, payload });
     }}>
-      {draft.base !== plan.loopVersion && <p role="status">The plan changed after you started this draft (v{draft.base} → v{plan.loopVersion})</p>}
+      {draft.base !== plan.loopVersion && <p role="status">{t("loopPlan.draftBehind", { base: draft.base, current: plan.loopVersion })}</p>}
       <label>
-        Plan
-        <select aria-label="Plan" value={draft.plan} onChange={(event) => set({ plan: event.target.value as LoopPlanIdV1 })}>
+        {t("loopPlan.planLabel")}
+        <select aria-label={t("loopPlan.planLabel")} value={draft.plan} onChange={(event) => set({ plan: event.target.value as LoopPlanIdV1 })}>
           {WEB_LOOP_PLANS.map((option) => <option key={option.planId} value={option.planId}>{planText(option.planId, option.version, "name")}</option>)}
         </select>
       </label>
       {FIELDS.map((field) => (
         <label key={field}>
-          {FIELD_LABEL[field]}
+          {t(FIELD_KEY[field])}
           {LIST_FIELDS.has(field)
-            ? <textarea aria-label={FIELD_LABEL[field]} value={draft.text[field]} onChange={(event) => set({ text: { ...draft.text, [field]: event.target.value } })} />
-            : <input aria-label={FIELD_LABEL[field]} value={draft.text[field]} onChange={(event) => set({ text: { ...draft.text, [field]: event.target.value } })} />}
+            ? <textarea aria-label={t(FIELD_KEY[field])} value={draft.text[field]} onChange={(event) => set({ text: { ...draft.text, [field]: event.target.value } })} />
+            : <input aria-label={t(FIELD_KEY[field])} value={draft.text[field]} onChange={(event) => set({ text: { ...draft.text, [field]: event.target.value } })} />}
         </label>
       ))}
       {blocked !== null && <p role="alert">{blocked}</p>}
       <button type="submit" disabled={blocked !== null}>{consequence?.text ?? blocked}</button>
-      <button type="button" onClick={() => onDraft(key, "")}>Discard plan draft</button>
+      <button type="button" onClick={() => onDraft(key, "")}>{t("loopPlan.discard")}</button>
     </form>
   );
 }
 
 export function LoopPlanCard(props: LoopPlanCardProps): JSX.Element | null {
-  useTranslation();
+  const { t } = useTranslation();
   const { view, item } = props;
   // A view that says nothing about the plan (an older server, a literal fixture) gets no card rather than a wrong one.
   if (item.loopPlan === undefined) return null;
   if (item.loopPlan === null) {
     return (
-      <section aria-label={`Plan ${item.taskId}`}>
-        <h5>Hand-written contract</h5>
+      <section aria-label={t("loopPlan.region", { taskId: item.taskId })}>
+        <h5>{t("loopPlan.handWritten")}</h5>
         {item.objective !== undefined && (
           <ul>
-            <li>Goal: {item.objective.goal}</li>
-            <li>Done when: {item.objective.successCondition}</li>
+            <li>{t("loopPlan.summary.goal", { goal: item.objective.goal })}</li>
+            <li>{t("loopPlan.summary.doneWhen", { condition: item.objective.successCondition })}</li>
           </ul>
         )}
       </section>
@@ -203,18 +206,18 @@ export function LoopPlanCard(props: LoopPlanCardProps): JSX.Element | null {
   const plan = item.loopPlan;
   const work = view.allocations.find((row) => row.ownerKind === "task" && row.ownerId === item.taskId && row.bucket === "work");
   return (
-    <section aria-label={`Plan ${item.taskId}`}>
+    <section aria-label={t("loopPlan.region", { taskId: item.taskId })}>
       <h5>{loopPlanTitle(plan)}</h5>
-      <ul aria-label={`Plan summary ${item.taskId}`}>
+      <ul aria-label={t("loopPlan.summaryRegion", { taskId: item.taskId })}>
         {loopSummaryLines(plan).map((line, index) => <li key={index}>{line}</li>)}
       </ul>
       <details>
-        <summary>Check commands ({plan.inputs.checks.length})</summary>
+        <summary>{t("loopPlan.checkCommands", { n: plan.inputs.checks.length })}</summary>
         <ul>{plan.inputs.checks.map((check, index) => <li key={index}><code>{check}</code></li>)}</ul>
       </details>
-      {work !== undefined && <p>Budget: {work.amount.tokens} tokens · active time {work.amount.activeMs} ms · max attempts {work.amount.attempts}</p>}
-      <p>Git workspace: its own worktree, merged back into <code>orca/{view.summary.groupId}</code>; pushing is done by a person</p>
-      <p>Skill set: not supported yet</p>
+      {work !== undefined && <p>{t("loopPlan.budgetLine", { tokens: work.amount.tokens, activeMs: work.amount.activeMs, attempts: work.amount.attempts })}</p>}
+      <p><Trans i18nKey="loopPlan.git" values={{ groupId: view.summary.groupId }} components={{ code: <code /> }} /></p>
+      <p>{t("loopPlan.skills")}</p>
       {work !== undefined && <LoopPlanEditor {...props} plan={plan} current={work.amount} />}
     </section>
   );
