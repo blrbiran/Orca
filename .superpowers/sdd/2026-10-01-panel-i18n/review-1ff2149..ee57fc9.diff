@@ -1,0 +1,84 @@
+# Review package: 1ff2149..ee57fc9
+
+## Commits
+ee57fc9 fix(web): keep the web's own sentence in the Chinese http-status refusal
+
+## Files changed
+ web/src/locales/zh.ts          | 2 +-
+ web/tests/refusalText.test.tsx | 8 +++++++-
+ 2 files changed, 8 insertions(+), 2 deletions(-)
+
+## Diff
+diff --git a/web/src/locales/zh.ts b/web/src/locales/zh.ts
+index 40b35e8..24a2c11 100644
+--- a/web/src/locales/zh.ts
++++ b/web/src/locales/zh.ts
+@@ -525,21 +525,21 @@ export const zhErrors: Record<string, string> = {
+   "task-checkpoint-not-committed": "任务的检查点尚未提交。",
+   "task-has-no-loop-plan": "这个任务没有 loop 做法。",
+   "task-loop-version-conflict": "你开始草稿后做法已被改过，请重新读取后再提交。",
+   "token-required": "这个面板需要它的一次性 token。",
+   "usage-event-conflict": "用量事件冲突。",
+   "usage-gap": "用量记录有缺口。",
+   "work-already-active": "工作已经在进行。",
+   "work-already-done": "工作已经完成。",
+   "work-not-found": "找不到这项工作。",
+   // Spec §3.2: the codes the web itself makes (api.ts, controlApi.ts); http-<n> is one entry.
+-  "http-status": "面板返回了 HTTP {{status}}，没有给出错误码。",
++  "http-status": "面板返回了 HTTP {{status}}，没有给出错误码：{{message}}",
+   "http-unreachable": "没有连上面板：{{message}}",
+   "panel-unreachable": "没有连上面板：{{message}}",
+   "command-result-invalid": "面板的回答里没有命令结果。",
+   // Spec §3.2: inline server codes with no catalog, listed by hand (src/panel/api.ts, reviewsLock.ts, compactReviews.ts, src/corrections/*, src/metrics/*, src/panel/chains.ts and the ChainRejection codes its log line relays).
+   "decision-not-found": "找不到这条决策。",
+   "panel-bad-request": "面板读不懂这个请求：{{message}}",
+   "panel-internal-error": "面板内部出错：{{message}}",
+   "reviews-store-busy": "评审记录正被另一个写入者占用：{{message}}",
+   "reviews-store-is-symlink": "评审记录文件是符号链接，面板拒绝写入：{{message}}",
+   "correction-row-invalid": "这不是一条合法的纠正：{{message}}",
+diff --git a/web/tests/refusalText.test.tsx b/web/tests/refusalText.test.tsx
+index b4f7b18..0879cae 100644
+--- a/web/tests/refusalText.test.tsx
++++ b/web/tests/refusalText.test.tsx
+@@ -57,21 +57,21 @@ describe("refusals in the reader's language (spec §3.2, §6.4)", () => {
+     expect(screen.getByTestId("error-message").textContent).toBe(SENT);
+     expect(screen.getByTestId("error-status").textContent).toBe("answered 409");
+     cleanup();
+     expect(controlLine({ status: 409, code: "revision-conflict", message: SENT, commandRevision: 7 })).toBe(`revision-conflict · HTTP 409 · server revision 7 · ${SENT}`);
+   });
+ 
+   it("shows the Chinese entry for a known code, with the server's detail where the entry carries it, and keeps the code", async () => {
+     await i18n.changeLanguage("zh");
+     expect(refusalText({ code: "revision-conflict", message: SENT, status: 409 })).toBe("版本冲突：别的标签页或会话先提交了，请重新读取。");
+     expect(refusalText({ code: "loop-plan-invalid", message: "loop-plan-invalid:path-shape", status: 422 })).toBe("做法的输入不合法：loop-plan-invalid:path-shape");
+-    expect(refusalText({ code: "http-503", message: "GET /api/x answered 503", status: 503 })).toBe("面板返回了 HTTP 503，没有给出错误码。");
++    expect(refusalText({ code: "http-503", message: "GET /api/x answered 503", status: 503 })).toBe("面板返回了 HTTP 503，没有给出错误码：GET /api/x answered 503");
+     // Spec §4.3.1: a failed reviewed mark relays reviews-store-* with the only sentence saying the correction landed.
+     const landed = "the correction was recorded (id c-1), but the reviewed mark could not be written: busy";
+     expect(refusalText({ code: "reviews-store-busy", message: landed, status: 409 })).toBe(`评审记录正被另一个写入者占用：${landed}`);
+     expect(refusalText({ code: "reviews-store-is-symlink", message: landed, status: 409 })).toBe(`评审记录文件是符号链接，面板拒绝写入：${landed}`);
+     render(<Refusal refusal={{ status: 409, code: "correction-already-recorded", message: SENT, retry_field: "again" }} />);
+     expect(screen.getByTestId("refusal-code").textContent).toBe("correction-already-recorded");
+     expect(screen.getByTestId("refusal-message").textContent).toContain("你已经对这条决策记录过纠正。");
+     expect(screen.getByTestId("record-another").textContent).toBe("再记录一条");
+     cleanup();
+     render(<ErrorPage failure={{ status: null, code: "panel-unreachable", message: "Failed to fetch" }} />);
+@@ -109,12 +109,18 @@ describe("refusals in the reader's language (spec §3.2, §6.4)", () => {
+     vi.stubGlobal("fetch", vi.fn(() => Promise.reject("gone")));
+     expect(await refusedWith(fetchControlConfig)).toBe("GET /api/control/config: 没有回应");
+     expect(await refusedWith(() => downloadEvidenceArtifact(entry))).toBe(`GET ${entry.downloadUrl}: 没有回应`);
+     expect(await sendControlCommand("/api/control/x", envelope)).toMatchObject({ kind: "uncertain", refusal: { message: "POST /api/control/x: 一直没有回应" } });
+     // An answer with no body the page can read.
+     vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(new Response("not json", { status: 409 }))));
+     expect(await refusedWith(fetchControlConfig)).toBe("GET /api/control/config: 返回了 409");
+     expect(await refusedWith(() => downloadEvidenceArtifact(entry))).toBe(`GET ${entry.downloadUrl}: 返回了 409`);
+     vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(new Response("not json", { status: 503 }))));
+     expect(await sendControlCommand("/api/control/x", envelope)).toMatchObject({ kind: "uncertain", refusal: { message: "POST /api/control/x: 面板可能没有提交这条命令" } });
++    // Task 10 review Important 1: an unparsable 5xx is http-<n>, and the control line must still say the command may not
++    // have committed -- for a workspace-mode or agent-preferences POST it is the only notice.
++    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(new Response("Bad Gateway", { status: 502 }))));
++    const answer = await sendControlCommand("/api/control/x", envelope);
++    if (answer.kind !== "uncertain") throw new Error(`expected an uncertain answer, got ${answer.kind}`);
++    expect(controlLine(answer.refusal)).toBe("http-502 · HTTP 502 · 面板返回了 HTTP 502，没有给出错误码：POST /api/control/x: 面板可能没有提交这条命令");
+   });
+ });

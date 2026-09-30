@@ -1,0 +1,326 @@
+# Review package: 2bcd2b0..c73b220
+
+## Commits
+c73b220 fix(web): show an unknown label source as sent; correct stale criterion text
+0698645 fix(control): keep a label-chosen loop task's chosenBy on a budget-only change
+
+## Files changed
+ src/control/webService.ts               |  5 +-
+ tests/control/loopPlanView.test.ts      |  7 +--
+ tests/control/setTaskLoopLabels.test.ts | 81 +++++++++++++++++++++++++++++++++
+ tests/panel/taskLoopApi.test.ts         |  3 +-
+ web/src/TaskDetail.tsx                  |  8 +++-
+ web/tests/labelSourceFallback.test.tsx  | 46 +++++++++++++++++++
+ web/vite.config.ts                      |  3 +-
+ 7 files changed, 145 insertions(+), 8 deletions(-)
+
+## Diff
+diff --git a/src/control/webService.ts b/src/control/webService.ts
+index 3b5ed5d..67edfc9 100644
+--- a/src/control/webService.ts
++++ b/src/control/webService.ts
+@@ -616,24 +616,25 @@ export class WebControlService {
+           if (["running", "start-unknown"].includes(String(estimate.state))) throw new ControlError("estimate-in-flight");
+         }
+         const loopVersion = typeof work.loopVersion === "number" ? work.loopVersion : 0;
+         if (payload.baseLoopVersion !== loopVersion) throw new ControlError("task-loop-version-conflict");
+         if (archived.loop === undefined) throw new ControlError("task-has-no-loop-plan");
+         // Step 4. repoPath is the current contract's own (Drafter finding F9).
+         const current = effectivePlanTask(this.store, id, archived, work);
+         const repoPath = taskContractSchema.parse(JSON.parse(current.originalContractCanonicalJson)).context.repoPath;
+         // W7 ruling: the task's own plan with its own inputs keeps the recipe's plan version, so a budget-only change (or an
+         // estimate's suggestion) never silently re-expands an older version's task at the current one; a change of plan
+-        // or inputs expands at the current version.
++        // or inputs expands at the current version. The kept recipe keeps its chosenBy too (final review C1): the plan is
++        // still the one the labels chose, and rewriting it would change the effective plan and make every estimate stale.
+         const kept = current.loop !== undefined && current.loop.planId === payload.plan
+           && canonicalBytes(current.loop.inputs).equals(canonicalBytes(payload.inputs));
+-        const expanded: LoopTaskExpansion = kept ? keptExpansion(taskId, repoPath, { ...current.loop!, chosenBy: "explicit", inputs: structuredClone(payload.inputs) })
++        const expanded: LoopTaskExpansion = kept ? keptExpansion(taskId, repoPath, { ...current.loop!, inputs: structuredClone(payload.inputs) })
+           : expandLoopPlan(taskId, repoPath, payload.plan, payload.inputs);
+         if (!expanded.ok) throw new ControlError("loop-plan-invalid", expanded.reason);
+         const allocation = proposal.allocations.find(a => a.ownerKind === "task" && a.ownerId === taskId && a.bucket === "work");
+         const handoff = proposal.allocations.find(a => a.ownerKind === "task" && a.ownerId === taskId && a.bucket === "handoff");
+         if (!allocation || !handoff) throw new ControlError("recovery-blocked");
+         const before = allocation.amount;
+         // R10: sessions is not in the payload; it is carried over unchanged.
+         const next: Amount = { ...before, tokens: payload.work.tokens, activeMs: payload.work.activeMs, attempts: payload.work.attempts };
+         // A plan-version bump with identical bytes is a no-op too; the recipe then keeps its version.
+         if (expanded.canonicalJson === current.originalContractCanonicalJson && same(next, before)) throw new ControlError("no-op-command");
+diff --git a/tests/control/loopPlanView.test.ts b/tests/control/loopPlanView.test.ts
+index 7837bfc..a0ab69d 100644
+--- a/tests/control/loopPlanView.test.ts
++++ b/tests/control/loopPlanView.test.ts
+@@ -1,26 +1,27 @@
+ import { describe, expect, it } from "vitest";
+ import { expandLoopPlan } from "../../src/control/loopPlans.js";
+ import { readArchivedPlan } from "../../src/control/queries.js";
+ import { writeCanonicalRecord } from "../../src/control/snapshot.js";
+ import { writeTaskAmendment } from "../../src/control/taskAmendments.js";
+ import { readControlGroup } from "../../src/panel/controlViews.js";
+ import { webFixture } from "./fixtures/web.js";
+ 
+ /**
+- * Loop plans spec §4.1 (D9, C7): the task view names its loop plan in plain words, built server-side from the recipe;
+- * a hand-written task has no plan but still shows its contract's goal and success condition.
++ * Loop plans spec §4.1 (D9, C7), panel i18n spec §3.1: the task view carries its loop plan as the recipe's fields, from
++ * which the panel builds the words; a hand-written task has no plan but still shows its contract's goal and success
++ * condition.
+  */
+ const LOOP = { goal: "fix login", successCondition: "the login test passes", targetPaths: ["a"], checks: ["npm test"] };
+ 
+ describe("a task's plan in the group view (spec §4.1)", () => {
+-  it("shows the plan, how it was chosen and its summary lines for a loop task", async () => {
++  it("shows the plan, how it was chosen and the fields its lines are built from for a loop task", async () => {
+     // Rewritten under human ruling H19 (2026-10-01) for loop plans v2.
+     // Rewritten under human ruling H18 (2026-10-01) for panel i18n: the view carries the fields its lines are built from.
+     const h = await webFixture(undefined, [{ taskId: "a", labels: ["bug", "custom:x"], loop: LOOP }]);
+     try {
+       const recipe = readArchivedPlan(h.store, "g").plan.tasks[0]!.loop!;
+       const item = readControlGroup(h.store, "epoch", "g").workItems[0]!;
+       expect(item.loopPlan).toEqual({
+         planId: "bugfix", planVersion: 2, chosenBy: "labels", chosenByLabel: "bug",
+         amended: false, loopVersion: 0, inputs: recipe.inputs, maxFiles: Number.MAX_SAFE_INTEGER, hasDiscipline: true,
+       });
+diff --git a/tests/control/setTaskLoopLabels.test.ts b/tests/control/setTaskLoopLabels.test.ts
+new file mode 100644
+index 0000000..a02777a
+--- /dev/null
++++ b/tests/control/setTaskLoopLabels.test.ts
+@@ -0,0 +1,81 @@
++import { describe, expect, it } from "vitest";
++import { readArchivedPlan, readEstimateRecord } from "../../src/control/queries.js";
++import { WebControlService } from "../../src/control/webService.js";
++import { readControlGroup } from "../../src/panel/controlViews.js";
++import { errorOf, workAllocation, type Fixture } from "./fixtures/taskLoop.js";
++import { webFixture } from "./fixtures/web.js";
++
++/**
++ * Final review C1 (2026-10-01): a loop task whose plan its labels chose (a plan file task with labels and no `plan`) is the
++ * default kind of loop task. A set-task-loop that keeps its plan and inputs (W7's kept version) is a budget change, not a
++ * plan change: it must keep the recipe's `chosenBy`. If it rewrote it to "explicit", the effective plan's bytes would
++ * change, so the estimate's one-click suggestion (H6, "Apply all" H16) would be refused `estimate-stale` for every such
++ * task, and a budget-only change would mark every ready estimate stale and retitle the task "chosen by hand".
++ */
++const SUGGESTED = { tokens: 1_500_000, activeMs: 7_000_000, attempts: 2, sessions: 1 };
++const labelsLoop = { goal: "write a", successCondition: "a exists", targetPaths: ["a"], checks: ["true"] };
++const fixture = () => webFixture(undefined, [{ taskId: "a", loop: labelsLoop, labels: ["bug"] }, { taskId: "c" }]);
++
++async function readyEstimate(h: Fixture, service: WebControlService): Promise<void> {
++  const run = await service.claimEstimate("g", h.estimateId);
++  const row = JSON.parse(String(h.store.db.prepare("SELECT body FROM runs WHERE id=?").get(run!.runId)!.body));
++  row.state = "settled-restartable";
++  h.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify(row), run!.runId);
++  const task = (taskId: string) => ({ taskId, complexity: "M", confidence: "high", work: SUGGESTED, handoff: { tokens: 1, activeMs: 1, attempts: 0, sessions: 0 }, rationale: "small", assumptions: ["clean"] });
++  service.completeEstimate("g", h.estimateId, { schema: "budget-estimate-v1", planHash: readArchivedPlan(h.store, "g").planHash,
++    tasks: [task("a"), task("c")], goalReviewReserve: { tokens: 1, activeMs: 1, attempts: 1, sessions: 1 }, groupRationale: "small" });
++  expect(readEstimateRecord(h.store, "g", h.estimateId).state).toBe("ready");
++}
++const view = (h: Fixture) => readControlGroup(h.store, "epoch", "g");
++const loopPlanOf = (h: Fixture) => view(h).workItems.find((w) => w.taskId === "a")!.loopPlan!;
++/** A set-task-loop on task a keeping its plan; `goal` changes its inputs, `provenance` marks tokens as the estimate's. */
++function setLoop(h: Fixture, tokens: number, options: { provenance?: boolean; goal?: string } = {}) {
++  const current = loopPlanOf(h), work = workAllocation(h, "a").amount;
++  return h.taskCommand("set-task-loop", "a", {
++    baseLoopVersion: current.loopVersion, plan: current.planId,
++    inputs: options.goal === undefined ? current.inputs : { ...current.inputs, goal: options.goal },
++    work: { tokens, activeMs: work.activeMs, attempts: work.attempts },
++    ...(options.provenance ? { workProvenance: { tokens: { provenance: "model", estimateId: h.estimateId } } } : {}),
++  });
++}
++
++describe("set-task-loop on a loop task its labels chose (final review C1)", () => {
++  it("accepts the estimate's one-click suggestion and the task stays chosen by its label", async () => {
++    const h = await fixture();
++    try {
++      const service = new WebControlService(h.deps);
++      await readyEstimate(h, service);
++      expect(loopPlanOf(h)).toMatchObject({ planId: "bugfix", chosenBy: "labels", chosenByLabel: "bug" });
++      const answer = service.setTaskLoop(setLoop(h, SUGGESTED.tokens, { provenance: true }));
++      expect(errorOf(answer)).toBeUndefined();
++      expect(answer).toMatchObject({ result: { kind: "task-loop-set", taskId: "a", loopVersion: 1 } });
++      expect(workAllocation(h, "a").amount.tokens).toBe(SUGGESTED.tokens);
++      expect(loopPlanOf(h)).toMatchObject({ planId: "bugfix", chosenBy: "labels", chosenByLabel: "bug", amended: false });
++      expect(view(h).estimates[0]!.stale).toBe(false);
++    } finally { await h.dispose(); }
++  });
++
++  it("a budget-only change leaves ready estimates current and the title chosen by the label, not by hand", async () => {
++    const h = await fixture();
++    try {
++      const service = new WebControlService(h.deps);
++      await readyEstimate(h, service);
++      expect(view(h).estimates[0]!.stale).toBe(false);
++      expect(service.setTaskLoop(setLoop(h, workAllocation(h, "a").amount.tokens + 1))).toMatchObject({ result: { kind: "task-loop-set", loopVersion: 1 } });
++      expect(view(h).estimates[0]!.stale).toBe(false);
++      expect(loopPlanOf(h)).toMatchObject({ chosenBy: "labels", chosenByLabel: "bug", amended: false });
++    } finally { await h.dispose(); }
++  });
++
++  it("a change of inputs is a person's choice: the recipe records it as explicit and the estimate goes stale", async () => {
++    const h = await fixture();
++    try {
++      const service = new WebControlService(h.deps);
++      await readyEstimate(h, service);
++      expect(service.setTaskLoop(setLoop(h, workAllocation(h, "a").amount.tokens, { goal: "write a, changed" })))
++        .toMatchObject({ result: { kind: "task-loop-set", loopVersion: 1 } });
++      expect(loopPlanOf(h)).toMatchObject({ chosenBy: "explicit", chosenByLabel: null, amended: true });
++      expect(view(h).estimates[0]!.stale).toBe(true);
++    } finally { await h.dispose(); }
++  });
++});
+diff --git a/tests/panel/taskLoopApi.test.ts b/tests/panel/taskLoopApi.test.ts
+index 3d6842f..b35b436 100644
+--- a/tests/panel/taskLoopApi.test.ts
++++ b/tests/panel/taskLoopApi.test.ts
+@@ -3,21 +3,22 @@ import { dirname } from "node:path";
+ import { afterAll, describe, expect, it } from "vitest";
+ import { LOOP_PLAN_IDS, currentLoopPlanVersion, loopPlanDefinition } from "../../src/control/loopPlans.js";
+ import { commandLookupSchema, commandSuccessSchema } from "../../src/control/webProtocol.js";
+ import { WEB_LOOP_PLANS } from "../../web/src/controlTypes.js";
+ import { en } from "../../web/src/locales/en.js";
+ import { zh } from "../../web/src/locales/zh.js";
+ import { GROUP, command, createHarness, get, json, view } from "./fixtures/controlPanel.js";
+ 
+ /**
+  * Loop plans spec §5.2 over a real Panel: the one new POST route, a refusal that is ledgered and names its reason, a
+- * wrong-shaped payload that never reaches the ledger, and the web mirror of the plans' names (spec §2.2).
++ * wrong-shaped payload that never reaches the ledger, and the web mirror of the plans' versions with the panel's English
++ * plan texts pinned to the registry (spec §2.2; panel i18n spec §3.1).
+  */
+ const h = createHarness();
+ afterAll(async () => { await h.dispose(); });
+ 
+ const LOOP_ROUTE = `/api/control/groups/${GROUP}/tasks/a/loop`;
+ const LOOP = { plan: "standard", goal: "ship a", successCondition: "a passes", targetPaths: ["a.ts"], checks: ["true"] };
+ 
+ async function importedLoopPanel(epoch: string) {
+   const paths = await h.workspace();
+   // The harness's plan names a contract file for task a; this criterion needs the same task as a loop task (spec §3.1).
+diff --git a/web/src/TaskDetail.tsx b/web/src/TaskDetail.tsx
+index f5baa64..8bd6518 100644
+--- a/web/src/TaskDetail.tsx
++++ b/web/src/TaskDetail.tsx
+@@ -44,20 +44,26 @@ export function progressText(progress: WorkItemProgressV1 | null | undefined): s
+     ? i18n.t("control.progress.attemptUnknown")
+     : i18n.t("control.progress.attempt", { current: progress.attempt.current, max: progress.attempt.max });
+   const tokens = progress.tokens === null
+     ? i18n.t("control.progress.tokensUnknown")
+     : progress.tokens.grant === 0
+       ? i18n.t("control.progress.tokensOfZero", { used: progress.tokens.used })
+       : i18n.t("control.progress.tokensPercent", { percent: Math.floor((progress.tokens.used * 100) / progress.tokens.grant) });
+   return i18n.t("control.progress.line", { step, attempt, tokens });
+ }
+ 
++/** Spec §3.5, as enumText: where the labels came from in words; a source this panel has no words for is shown as sent. */
++function labelSourceText(source: string): string {
++  const key = `control.task.labelSource.${source}`;
++  return i18n.exists(key) ? (i18n.t(key as never) as string) : source;
++}
++
+ /** A label draft: the labels the person chose and the labelsVersion shown when they started choosing. */
+ interface LabelsDraft { base: number; labels: string[] }
+ 
+ /** Anything else under the key -- including the earlier bare-array form, which carries no base -- is no draft. */
+ function readDraft(drafts: Record<string, string>, key: string): LabelsDraft | null {
+   const raw = drafts[key];
+   if (raw === undefined) return null;
+   try {
+     const parsed: unknown = JSON.parse(raw);
+     if (typeof parsed !== "object" || parsed === null) return null;
+@@ -130,21 +136,21 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
+     const text = custom.trim();
+     if (text === "") return;
+     setDraft([...labels, text.startsWith(CUSTOM_LABEL_PREFIX) ? text : `${CUSTOM_LABEL_PREFIX}${text}`]);
+     setCustom("");
+   };
+   const runs = view.runs.filter((run) => run.taskId === item.taskId);
+   return (
+     <section aria-label={t("control.task.region", { taskId: item.taskId })}>
+       <h4>{t("control.task.region", { taskId: item.taskId })}</h4>
+       <p>
+-        {t("control.task.labelsFrom", { source: t(`control.task.labelSource.${item.labelsProvenance ?? "plan"}`), version: item.labelsVersion ?? 0 })}
++        {t("control.task.labelsFrom", { source: labelSourceText(item.labelsProvenance ?? "plan"), version: item.labelsVersion ?? 0 })}
+         {draft !== null ? t("control.task.unsavedDraft") : ""}
+       </p>
+       {draft !== null && draft.base !== current && (
+         <p role="status">
+           {t("control.task.labelsChanged", { base: draft.base, current })}<LabelChips labels={item.labels} />
+         </p>
+       )}
+       <ul aria-label={t("control.task.labelsOf", { taskId: item.taskId })}>
+         {labels.map((label) => (
+           <li key={label}>
+diff --git a/web/tests/labelSourceFallback.test.tsx b/web/tests/labelSourceFallback.test.tsx
+new file mode 100644
+index 0000000..e464b11
+--- /dev/null
++++ b/web/tests/labelSourceFallback.test.tsx
+@@ -0,0 +1,46 @@
++// @vitest-environment jsdom
++/**
++ * Panel i18n spec §3.5 (final review Minor 3, Task 7 review Minor 2): where a task's labels came from is an enum the
++ * server sends. A value this panel has no words for (a newer server) is shown as sent, the way enumText shows every
++ * other family -- never as the translation key's path.
++ */
++import { cleanup, render } from "@testing-library/react";
++import { afterEach, describe, expect, it, vi } from "vitest";
++import i18n from "../src/i18n.js";
++import { TaskDetail } from "../src/TaskDetail.js";
++import type { Amount, GroupViewV1, WorkItemViewV1 } from "../src/controlTypes.js";
++
++const amount = (tokens: number): Amount => ({ tokens, activeMs: tokens * 10, attempts: 1, sessions: 1 });
++const item = (labelsProvenance: string): WorkItemViewV1 => ({
++  taskId: "a", status: "ready", dependencyTaskIds: [], targetVersion: 1, configHash: null, originalContractHash: "e".repeat(64),
++  derivedContractHash: null, currentRunId: null, pendingRunId: null, lineageRunIds: [], labels: ["bug"],
++  labelsProvenance: labelsProvenance as WorkItemViewV1["labelsProvenance"], labelsVersion: 3, progress: null,
++});
++const view = (workItem: WorkItemViewV1): GroupViewV1 => ({
++  schema: "orca-control-group-v1", epoch: "epoch-a", changeSeq: 4,
++  summary: { groupId: "g", state: "ready", commandRevision: 6, projectionSeq: 4, stopMode: null, stopState: null, claimBlocked: false, recoveryBlockerCount: 0 },
++  graphVersion: 1, plan: { repoId: "orca", planId: "plan-demo", planHash: "a".repeat(64), goal: "Ship", successConditions: ["done"] },
++  proposal: { state: "editable", proposalVersion: 2, planHash: "a".repeat(64), budgetMode: "soft", contextPolicy: { handoffAtContextTokens: null }, profiles: null, executionSnapshotHash: null },
++  ledger: { groupLimit: amount(100), used: amount(0), committedRemaining: amount(0), explicitUnallocatedReserve: amount(100), budgetDeficit: amount(0), usageUnknown: false },
++  allocations: [], workItems: [workItem], estimates: [], runs: [], checkpoints: [], handoffRequests: [], stop: null, recoveryBlockers: [], recentCommandIds: [],
++});
++/** The task detail's "labels from …" line. */
++function labelsLine(labelsProvenance: string): string {
++  const workItem = item(labelsProvenance);
++  const { container } = render(<TaskDetail view={view(workItem)} item={workItem} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
++  return container.querySelector("section > p")!.textContent ?? "";
++}
++
++afterEach(cleanup);
++
++describe("where a task's labels came from", () => {
++  it.each([
++    ["en", "labels from imported · version 3", "labels from operator · version 3"],
++    ["zh", "标签来自imported · 版本 3", "标签来自操作者 · 版本 3"],
++  ])("in %s, shows a source this panel has no words for as sent and one it knows in words", async (language, unknown, known) => {
++    await i18n.changeLanguage(language);
++    expect(labelsLine("imported")).toBe(unknown);
++    cleanup();
++    expect(labelsLine("operator")).toBe(known);
++  });
++});
+diff --git a/web/vite.config.ts b/web/vite.config.ts
+index 6475016..f13dca0 100644
+--- a/web/vite.config.ts
++++ b/web/vite.config.ts
+@@ -6,14 +6,15 @@ export default defineConfig({
+   build: {
+     // Flat names, no hashed subdirectories: staticFiles.ts serves by exact
+     // filename out of a Map and never joins a path, so every emitted asset has
+     // to be reachable as one key. See spec §2.2.
+     assetsDir: ".",
+     rollupOptions: { output: { entryFileNames: "[name].js", assetFileNames: "[name].[ext]" } },
+   },
+   server: { proxy: { "/api": "http://127.0.0.1:7777" } },
+   test: {
+     environment: "node", include: ["tests/**/*.test.ts", "tests/**/*.test.tsx"], setupFiles: ["tests/setup.ts"],
+-    // The App timer-driven criteria re-render the whole panel many times and each translated string adds per-render cost; the default 5 s left agentPreviewRefresh at 4968 ms before i18n.
++    // The App timer-driven criteria re-render the whole panel many times and each translated string adds per-render cost; the default 5 s left agentPreviewRefresh at 4968 ms before i18n
++    // (`npm run check --workspace web` at 4ff8d23, the full web suite; Task 7 report, .superpowers/sdd/2026-10-01-panel-i18n/task-7-report.md).
+     testTimeout: 15000,
+   },
+ });

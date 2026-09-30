@@ -1,0 +1,1066 @@
+# Review package: c9d30ab..f1ec75b
+
+## Commits
+f1ec75b feat(web): translate the budget editor and the loop plan card
+
+## Files changed
+ web/src/BudgetEditor.tsx      |  76 +++++++++--------
+ web/src/LoopPlanCard.tsx      |  77 +++++++++---------
+ web/src/locales/en.ts         |  88 +++++++++++++++++++-
+ web/src/locales/zh.ts         |  77 ++++++++++++++++++
+ web/tests/budgetI18n.test.tsx | 185 ++++++++++++++++++++++++++++++++++++++++++
+ web/tests/i18nWidth.test.ts   |  43 ++++++++++
+ 6 files changed, 472 insertions(+), 74 deletions(-)
+
+## Diff
+diff --git a/web/src/BudgetEditor.tsx b/web/src/BudgetEditor.tsx
+index bbf9258..e76f4f5 100644
+--- a/web/src/BudgetEditor.tsx
++++ b/web/src/BudgetEditor.tsx
+@@ -2,21 +2,23 @@
+  * Task 9: the budget editor.
+  *
+  * It renders the proposal the server already computed, takes the person's typed
+  * numbers as drafts, and hands one command back per action. It never derives a
+  * reserve, a deficit, an "is there budget" answer or a snapshot hash: those are
+  * the ledger's, and the panel shows them read-only. A field whose value came
+  * from the model or a complex-1m default says so next to the box, because the
+  * person is about to type over it.
+  */
+ import type { JSX } from "react";
++import { useTranslation } from "react-i18next";
+ import type { ControlAction } from "./controlApi.js";
++import i18n, { enumText } from "./i18n.js";
+ import type {
+   AllocationViewV1,
+   Amount,
+   AmountDimensionV1,
+   BudgetEstimateV1,
+   ControlConfigV1,
+   FieldProvenanceV1,
+   GroupViewV1,
+   ProposalOperationV1,
+   ProposalTargetV1,
+@@ -32,22 +34,22 @@ export function budgetFieldKey(groupId: string, target: ProposalTargetV1): strin
+     : `${groupId}:goal-review:${target.dimension}`;
+ }
+ 
+ export function groupLimitKey(groupId: string, dimension: AmountDimensionV1): string {
+   return `${groupId}:group-limit:${dimension}`;
+ }
+ 
+ export const CONTEXT_POLICY_KEY = (groupId: string): string => `${groupId}:context-policy`;
+ 
+ export function provenanceText(provenance: FieldProvenanceV1): string {
+-  if (provenance.provenance === "model") return `model ${provenance.estimateId ?? ""}`.trim();
+-  return provenance.provenance === "complex-1m-default" ? "complex-1m default" : provenance.provenance;
++  if (provenance.provenance === "model" && provenance.estimateId) return i18n.t("budget.provenanceModel", { estimateId: provenance.estimateId });
++  return enumText("fieldProvenance", provenance.provenance);
+ }
+ 
+ /** Loop plans spec §4.3 (C6): a loop task's work budget is changed only through set-task-loop (its plan card, or a suggestion). */
+ export const loopOwned = (item: WorkItemViewV1): boolean => item.loopPlan !== undefined && item.loopPlan !== null;
+ 
+ function targetOf(view: GroupViewV1, ownerId: string, bucket: string, dimension: AmountDimensionV1): ProposalTargetV1 | null {
+   if (bucket === "review") return { scope: "goal-review", dimension };
+   if (bucket !== "work" && bucket !== "handoff") return null;
+   const task = view.workItems.find((item) => item.taskId === ownerId);
+   // Read-only here, so no edit and no suggestion ever sends proposal-edit for it (Drafter finding F14); its suggestions
+@@ -209,20 +211,21 @@ export interface BudgetEditorProps {
+   onCommands?: (actions: ControlAction[]) => void;
+   /**
+    * Agent selection spec §6.4 step 3: the hash of the agent resolution on screen (the group's preview, T15).
+    * Without one, confirm is not offered: a confirmation is never sent unbound to the selections the operator saw.
+    */
+   selectionsHash?: string | null;
+ }
+ 
+ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
+   const { view, config, drafts, onDraft, onCommand } = props;
++  const { t } = useTranslation();
+   const groupId = view.summary.groupId;
+   const editable = view.proposal.state === "editable";
+   const estimator = view.estimates.at(-1) ?? null;
+   const advice = adviceOf(view);
+   const allSuggested = suggestionActions(view, { kind: "all" });
+   // Spec §7: applying a suggestion is its own command, never a draft; the server re-checks every value.
+   // Ruling 26 (Orca ledger 2026-09-27-single-call-estimate §3.21; session c85d2c4e, 2026-09-28): an unsaved draft of a
+   // field being applied was left in place and kept masking the applied value, so applying drops those fields' drafts --
+   // choosing the model's number replaces what was typed there. Drafts of other fields stay.
+   const applySuggestions = (actions: ControlAction[]): void => {
+@@ -230,23 +233,24 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
+     for (const action of actions) {
+       if (action.verb !== "proposal-edit") continue;
+       for (const operation of action.payload.operations) {
+         const key = budgetFieldKey(groupId, operation.target);
+         if (drafts[key] !== undefined) onDraft(key, "");
+       }
+     }
+     if (actions.length > 1 && props.onCommands !== undefined) props.onCommands(actions);
+     else onCommand(actions[0]!);
+   };
++  const firstProfile = config.profiles[0];
+   const observedEnforcement = view.proposal.profiles === null
+-    ? config.profiles[0]?.observed.budgetEnforcement ?? "unknown"
+-    : "frozen at confirmation";
++    ? firstProfile === undefined ? t("common.unknown") : enumText("budgetEnforcement", firstProfile.observed.budgetEnforcement)
++    : t("budget.frozenAtConfirmation");
+   const contextUnavailable = config.profiles.some((profile) => profile.observed.contextObservation === "unavailable");
+   // Backlog #11(b) (Orca handoff §9.1): handoffControl "durable" and a handoffExecution are what dispatch requires of a
+   // task or handoff profile (webDispatch.ts probeBlocksDispatch, budget.ts assertCapabilities); a group bound to one
+   // that lacks them is refused as claim-capability-unavailable and nothing more, so the two values are named here.
+   const handoffBlocked = config.profiles.filter((profile) =>
+     (profile.allowedWorkKinds.includes("task") || profile.allowedWorkKinds.includes("handoff"))
+     && (profile.observed.handoffControl !== "durable" || profile.observed.handoffExecution === null));
+   // Ruling R7: a panel started without --estimator-profile/--estimate-mode serves `defaults: null`.
+   // There is then nothing to fall back to, so confirming is refused here rather than sent with a
+   // guessed profile or a guessed mode -- guessing the mode is the strict-versus-soft fault itself.
+@@ -303,131 +307,131 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
+       payload: {
+         proposalVersion: view.proposal.proposalVersion,
+         estimatorProfileId: estimator.profile.profileId,
+         estimatorProfileHash: estimator.profile.profileHash,
+         estimateMode: estimator.mode,
+       },
+     });
+   };
+ 
+   return (
+-    <section aria-label="Budget proposal">
+-      <h3>Proposal v{view.proposal.proposalVersion} · {view.proposal.state}</h3>
++    <section aria-label={t("budget.region")}>
++      <h3>{t("budget.heading", { version: view.proposal.proposalVersion, state: enumText("proposalState", view.proposal.state) })}</h3>
+       <p role="status">
+-        budget mode {view.proposal.budgetMode ?? "not chosen"} · observed enforcement {observedEnforcement}
+-        {view.proposal.budgetMode === "soft" ? " · soft: an overrun is settled after the fact, not prevented" : ""}
++        {t("budget.modeLine", { mode: view.proposal.budgetMode === null ? t("budget.notChosen") : enumText("budgetMode", view.proposal.budgetMode), enforcement: observedEnforcement })}
++        {view.proposal.budgetMode === "soft" ? t("budget.softNote") : ""}
+       </p>
+       {contextUnavailable && (
+-        <p role="note">context observation unavailable · the context watermark cannot hand off automatically</p>
++        <p role="note">{t("budget.contextUnavailable")}</p>
+       )}
+       {handoffBlocked.map((profile) => (
+         <p role="note" key={`handoff-capability:${profile.profileId}`}>
+-          profile {profile.profileId}: handoff control {profile.observed.handoffControl} · handoff execution {profile.observed.handoffExecution ?? "none"} · work bound to it is not dispatched (claim-capability-unavailable)
++          {t("budget.handoffBlocked", { profileId: profile.profileId, control: enumText("handoffControl", profile.observed.handoffControl), execution: profile.observed.handoffExecution === null ? t("common.none") : enumText("handoffExecution", profile.observed.handoffExecution) })}
+         </p>
+       ))}
+       <table>
+         <thead>
+-          <tr><th>owner</th><th>bucket</th><th>state</th>{DIMENSIONS.map((dimension) => <th key={dimension}>{dimension}</th>)}{advice !== null && <th>suggestion</th>}</tr>
++          <tr><th>{t("budget.th.owner")}</th><th>{t("budget.th.bucket")}</th><th>{t("budget.th.state")}</th>{DIMENSIONS.map((dimension) => <th key={dimension}>{enumText("dimension", dimension)}</th>)}{advice !== null && <th>{t("budget.th.suggestion")}</th>}</tr>
+         </thead>
+         <tbody>
+           {view.allocations.map((allocation) => (
+             <tr key={`${allocation.ownerKind}:${allocation.ownerId}:${allocation.bucket}`}>
+-              <td>{allocation.ownerKind} {allocation.ownerId}</td>
+-              <td>{allocation.bucket}</td>
+-              <td>{allocation.state}</td>
++              <td>{enumText("ownerKind", allocation.ownerKind)} {allocation.ownerId}</td>
++              <td>{enumText("bucket", allocation.bucket)}</td>
++              <td>{enumText("allocationState", allocation.state)}</td>
+               {DIMENSIONS.map((dimension) => {
+                 const target = targetOf(view, allocation.ownerId, allocation.bucket, dimension);
+                 if (target === null) {
+                   const owned = allocation.ownerKind === "task" && allocation.bucket === "work" && view.workItems.some((item) => item.taskId === allocation.ownerId && loopOwned(item));
+                   const [loopAction] = owned ? suggestedLoopActions(view, { kind: "field", target: { scope: "task", taskId: allocation.ownerId, allocation: "work", dimension } }) : [];
+                   const loopValue = loopAction?.verb === "set-task-loop" && dimension !== "sessions" ? loopAction.payload.work[dimension] : null;
+                   return (
+                     <td key={dimension}>
+-                      {allocation.amount[dimension]}{owned ? <small> Change it in the plan card</small> : null}
++                      {allocation.amount[dimension]}{owned ? <small>{t("budget.changeInCard")}</small> : null}
+                       {loopValue !== null && (
+-                        <button type="button" aria-label={`use ${loopValue} for ${allocation.ownerId} ${allocation.bucket} ${dimension}`}
+-                          onClick={() => applySuggestions([loopAction!])}>use {loopValue}</button>
++                        <button type="button" aria-label={t("budget.useFor", { value: loopValue, owner: allocation.ownerId, bucket: enumText("bucket", allocation.bucket), dimension: enumText("dimension", dimension) })}
++                          onClick={() => applySuggestions([loopAction!])}>{t("budget.use", { value: loopValue })}</button>
+                       )}
+                     </td>
+                   );
+                 }
+                 const key = budgetFieldKey(groupId, target);
+                 const [fieldOperation] = suggestedOperations(view, { kind: "field", target });
+                 return (
+                   <td key={dimension}>
+                     <label>
+-                      <span className="sr-only">{allocation.ownerId} {allocation.bucket} {dimension}</span>
++                      <span className="sr-only">{allocation.ownerId} {enumText("bucket", allocation.bucket)} {enumText("dimension", dimension)}</span>
+                       <input
+                         value={valueFor(drafts, key, allocation.amount[dimension])}
+                         readOnly={!editable}
+                         inputMode="numeric"
+                         onChange={(event) => onDraft(key, event.target.value)}
+                       />
+                       <small>{provenanceText(allocation.fieldProvenance[dimension])}</small>
+                     </label>
+                     {fieldOperation !== undefined && (
+-                      <button type="button" aria-label={`use ${fieldOperation.value} for ${allocation.ownerId} ${allocation.bucket} ${dimension}`}
+-                        onClick={() => applySuggestions(suggestionActions(view, { kind: "field", target }))}>use {fieldOperation.value}</button>
++                      <button type="button" aria-label={t("budget.useFor", { value: fieldOperation.value, owner: allocation.ownerId, bucket: enumText("bucket", allocation.bucket), dimension: enumText("dimension", dimension) })}
++                        onClick={() => applySuggestions(suggestionActions(view, { kind: "field", target }))}>{t("budget.use", { value: fieldOperation.value })}</button>
+                     )}
+                   </td>
+                 );
+               })}
+               {advice !== null && (() => {
+                 const row = allocation.ownerKind === "task" || allocation.ownerKind === "goal-review"
+                   ? suggestionActions(view, { kind: "row", ownerKind: allocation.ownerKind, ownerId: allocation.ownerId, bucket: allocation.bucket as "work" | "handoff" | "review" })
+                   : [];
+-                return <td>{row.length > 0 && <button type="button" aria-label={`Apply row ${allocation.ownerId} ${allocation.bucket}`} onClick={() => applySuggestions(row)}>Apply row</button>}</td>;
++                return <td>{row.length > 0 && <button type="button" aria-label={t("budget.applyRowFor", { owner: allocation.ownerId, bucket: enumText("bucket", allocation.bucket) })} onClick={() => applySuggestions(row)}>{t("budget.applyRow")}</button>}</td>;
+               })()}
+             </tr>
+           ))}
+         </tbody>
+       </table>
+-      {advice?.stale === true && <p role="note">This estimate predates a plan change; estimate again to update the suggestions</p>}
+-      {allSuggested.length > 0 && <button type="button" onClick={() => applySuggestions(allSuggested)}>Apply all suggestions</button>}
++      {advice?.stale === true && <p role="note">{t("budget.staleEstimate")}</p>}
++      {allSuggested.length > 0 && <button type="button" onClick={() => applySuggestions(allSuggested)}>{t("budget.applyAll")}</button>}
+       {advice !== null && (
+         <details>
+-          <summary>Estimate rationale ({advice.estimateId})</summary>
++          <summary>{t("budget.rationale", { estimateId: advice.estimateId })}</summary>
+           <p>{advice.output.groupRationale}</p>
+           <ul>
+             {advice.output.tasks.map((task) => (
+               <li key={task.taskId}>
+-                {task.taskId} · {task.complexity} · confidence {task.confidence} · {task.rationale}
++                {t("budget.rationaleLine", { taskId: task.taskId, complexity: enumText("complexity", task.complexity), confidence: enumText("confidence", task.confidence), rationale: task.rationale })}
+                 <ul>{task.assumptions.map((assumption) => <li key={assumption}>{assumption}</li>)}</ul>
+               </li>
+             ))}
+           </ul>
+         </details>
+       )}
+       <fieldset>
+-        <legend>Group limit</legend>
++        <legend>{t("budget.groupLimit")}</legend>
+         {DIMENSIONS.map((dimension) => (
+           <label key={dimension}>
+-            {dimension}
++            {enumText("dimension", dimension)}
+             <input
+               value={valueFor(drafts, groupLimitKey(groupId, dimension), view.ledger.groupLimit[dimension])}
+               inputMode="numeric"
+               onChange={(event) => onDraft(groupLimitKey(groupId, dimension), event.target.value)}
+             />
+           </label>
+         ))}
+-        <button type="button" onClick={submitLimit}>Set limit</button>
++        <button type="button" onClick={submitLimit}>{t("budget.setLimit")}</button>
+       </fieldset>
+       <label>
+-        Hand off at context tokens (blank keeps it unset)
++        {t("budget.handoffAt")}
+         <input
+           value={valueFor(drafts, CONTEXT_POLICY_KEY(groupId), view.proposal.contextPolicy.handoffAtContextTokens ?? 0)}
+           inputMode="numeric"
+           onChange={(event) => onDraft(CONTEXT_POLICY_KEY(groupId), event.target.value)}
+         />
+       </label>
+       <p>
+-        used {view.ledger.used.tokens} · committed {view.ledger.committedRemaining.tokens} · reserve {view.ledger.explicitUnallocatedReserve.tokens}
+-        {view.ledger.budgetDeficit.tokens > 0 ? ` · deficit ${view.ledger.budgetDeficit.tokens}` : ""}
+-        {view.ledger.usageUnknown ? " · usage unknown" : ""}
++        {t("budget.ledger", { used: view.ledger.used.tokens, committed: view.ledger.committedRemaining.tokens, reserve: view.ledger.explicitUnallocatedReserve.tokens })}
++        {view.ledger.budgetDeficit.tokens > 0 ? t("budget.deficit", { deficit: view.ledger.budgetDeficit.tokens }) : ""}
++        {view.ledger.usageUnknown ? t("budget.usageUnknown") : ""}
+       </p>
+-      <button type="button" disabled={!editable || editedOperations(view, drafts).length === 0} onClick={submitEdit}>Save proposal</button>
+-      {estimator !== null && <button type="button" onClick={submitEstimate}>Re-estimate</button>}
+-      {editable && shownSelectionsHash === null && <p role="note">Confirm waits for this proposal version's agent selections to resolve.</p>}
+-      <button type="button" disabled={shownSelectionsHash === null} onClick={submitConfirm}>Confirm budget</button>
++      <button type="button" disabled={!editable || editedOperations(view, drafts).length === 0} onClick={submitEdit}>{t("budget.save")}</button>
++      {estimator !== null && <button type="button" onClick={submitEstimate}>{t("budget.reestimate")}</button>}
++      {editable && shownSelectionsHash === null && <p role="note">{t("budget.confirmWaits")}</p>}
++      <button type="button" disabled={shownSelectionsHash === null} onClick={submitConfirm}>{t("budget.confirm")}</button>
+     </section>
+   );
+ }
+diff --git a/web/src/LoopPlanCard.tsx b/web/src/LoopPlanCard.tsx
+index 8e50d6b..77c0f41 100644
+--- a/web/src/LoopPlanCard.tsx
++++ b/web/src/LoopPlanCard.tsx
+@@ -1,23 +1,23 @@
+ /**
+  * Loop plans spec §4.1, §4.2 (D1, D4, D5, D9): a task's loop plan in plain words, and -- until the task starts -- a form
+  * to change the plan, its inputs and its work budget (set-task-loop). The form keeps what the person typed as a draft
+  * together with the loopVersion it started from, and sends that version, never the one the latest poll read, so a draft
+  * begun before someone else's change is refused as task-loop-version-conflict instead of overwriting it (the label
+  * editor's pattern, TaskDetail.tsx). The submit states its consequence for the group's reserve; that arithmetic is
+  * display only -- the ledger decides and refuses by name. The plan's words come from the panel's resources, keyed by
+  * plan version (panel i18n spec §3.1).
+  */
+ import type { JSX } from "react";
+-import { useTranslation } from "react-i18next";
++import { Trans, useTranslation } from "react-i18next";
+ import type { ControlAction } from "./controlApi.js";
+-import i18n from "./i18n.js";
++import i18n, { enumText } from "./i18n.js";
+ import { WEB_LOOP_PLANS } from "./controlTypes.js";
+ import type { Amount, GroupViewV1, LoopPlanIdV1, LoopPlanViewV1, SetTaskLoopPayloadV1, WorkItemViewV1 } from "./controlTypes.js";
+ 
+ export const loopDraftKey = (groupId: string, taskId: string): string => `loop:${groupId}:${taskId}`;
+ 
+ /**
+  * Panel i18n spec §3.1: a plan version's name or discipline line from the panel's resources (the registry is the English
+  * source of record, §6.9). A version this panel has no words for (a newer server) shows the plan id, never nothing.
+  */
+ export function planText(planId: LoopPlanIdV1, version: number, part: "name" | "discipline"): string {
+@@ -51,27 +51,26 @@ export function loopSummaryLines(plan: LoopPlanViewV1): string[] {
+     ...(inputs.protectedPaths.length > 0 ? [i18n.t("loopPlan.summary.mustNotChange", { paths: inputs.protectedPaths.join(separator) })] : []),
+     plan.maxFiles === Number.MAX_SAFE_INTEGER ? i18n.t("loopPlan.summary.noFileLimit") : i18n.t("loopPlan.summary.files", { count: plan.maxFiles }),
+     i18n.t("loopPlan.summary.checks", { count: inputs.checks.length }),
+     ...(plan.hasDiscipline ? [planText(plan.planId, plan.planVersion, "discipline")] : []),
+   ];
+ }
+ 
+ const FIELDS = ["goal", "successCondition", "targetPaths", "checks", "nonGoals", "relevantDocs", "protectedPaths", "maxFilesTouched", "tokens", "activeMs", "attempts"] as const;
+ type Field = (typeof FIELDS)[number];
+ const LIST_FIELDS = new Set<Field>(["targetPaths", "checks", "nonGoals", "relevantDocs", "protectedPaths"]);
+-const FIELD_LABEL: Record<Field, string> = {
+-  goal: "Goal", successCondition: "Done when", targetPaths: "Only changes (one path per line)", checks: "Check commands (one per line)",
+-  nonGoals: "Non-goals (one per line)", relevantDocs: "Relevant docs (one per line)", protectedPaths: "Must not change (one path per line)",
+-  maxFilesTouched: "Max files changed (blank for default)", tokens: "Token budget", activeMs: "Active time (ms)", attempts: "Max attempts",
+-};
+-const BAD_BUDGET = "Budgets must be positive integers";
+-const BAD_FILE_CAP = "Max files changed must be a positive integer";
++const FIELD_KEY = {
++  goal: "loopPlan.field.goal", successCondition: "loopPlan.field.successCondition", targetPaths: "loopPlan.field.targetPaths",
++  checks: "loopPlan.field.checks", nonGoals: "loopPlan.field.nonGoals", relevantDocs: "loopPlan.field.relevantDocs",
++  protectedPaths: "loopPlan.field.protectedPaths", maxFilesTouched: "loopPlan.field.maxFilesTouched", tokens: "loopPlan.field.tokens",
++  activeMs: "loopPlan.field.activeMs", attempts: "loopPlan.field.attempts",
++} as const satisfies Record<Field, string>;
+ 
+ /** What the person typed, as text, and the loopVersion shown when they started. */
+ interface LoopDraft { base: number; plan: LoopPlanIdV1; text: Record<Field, string> }
+ 
+ function readLoopDraft(drafts: Record<string, string>, key: string): LoopDraft | null {
+   const raw = drafts[key];
+   if (raw === undefined) return null;
+   try {
+     const parsed = JSON.parse(raw) as Partial<LoopDraft>;
+     if (!Number.isSafeInteger(parsed.base) || !WEB_LOOP_PLANS.some((plan) => plan.planId === parsed.plan)) return null;
+@@ -95,127 +94,131 @@ function draftOf(plan: LoopPlanViewV1, work: Amount): LoopDraft {
+ 
+ const lines = (text: string): string[] => text.split("\n").map((line) => line.trim()).filter((line) => line !== "");
+ const positive = (text: string): number | null => {
+   const value = Number(text.trim());
+   return text.trim() !== "" && Number.isSafeInteger(value) && value > 0 ? value : null;
+ };
+ 
+ /** The payload a draft sends, or why it cannot be sent yet (a number that is not a positive safe integer; the server re-checks everything). */
+ function payloadOf(draft: LoopDraft): { payload: SetTaskLoopPayloadV1 } | { invalid: string } {
+   const tokens = positive(draft.text.tokens), activeMs = positive(draft.text.activeMs), attempts = positive(draft.text.attempts);
+-  if (tokens === null || activeMs === null || attempts === null) return { invalid: BAD_BUDGET };
++  if (tokens === null || activeMs === null || attempts === null) return { invalid: i18n.t("loopPlan.badBudget") };
+   const blankCap = draft.text.maxFilesTouched.trim() === "";
+   const cap = blankCap ? null : positive(draft.text.maxFilesTouched);
+-  if (!blankCap && cap === null) return { invalid: BAD_FILE_CAP };
++  if (!blankCap && cap === null) return { invalid: i18n.t("loopPlan.badFileCap") };
+   return { payload: {
+     baseLoopVersion: draft.base, plan: draft.plan,
+     inputs: {
+       goal: draft.text.goal.trim(), successCondition: draft.text.successCondition.trim(), targetPaths: lines(draft.text.targetPaths),
+       checks: lines(draft.text.checks), nonGoals: lines(draft.text.nonGoals), relevantDocs: lines(draft.text.relevantDocs),
+       protectedPaths: lines(draft.text.protectedPaths), maxFilesTouched: cap,
+     },
+     work: { tokens, activeMs, attempts },
+   } };
+ }
+ 
+ /** Spec §4.2: what the submit does to the group's reserve, and the shortfall that disables it (display only). */
+ export function consequenceOf(view: GroupViewV1, current: Amount, work: { tokens: number; activeMs: number; attempts: number }): { text: string; shortfall: string | null } {
+   const reserve = view.ledger.explicitUnallocatedReserve;
+   const parts: string[] = [];
+   let shortfall: string | null = null;
+-  for (const [dimension, unit] of [["tokens", "tokens"], ["activeMs", "ms active time"], ["attempts", "attempts"]] as const) {
++  for (const dimension of ["tokens", "activeMs", "attempts"] as const) {
+     const delta = work[dimension] - current[dimension];
+     if (delta === 0) continue;
+-    parts.push(`Budget ${delta > 0 ? "+" : ""}${delta} ${unit}, ${delta > 0 ? "taken from the group reserve" : "returned to the group reserve"}; ${reserve[dimension] - delta} left`);
+-    if (delta > reserve[dimension] && shortfall === null) shortfall = `Group reserve too small: ${dimension} short by ${delta - reserve[dimension]}`;
++    const values = { delta: `${delta > 0 ? "+" : ""}${delta}`, unit: i18n.t(`loopPlan.unit.${dimension}`), left: reserve[dimension] - delta };
++    parts.push(delta > 0 ? i18n.t("loopPlan.budgetTaken", values) : i18n.t("loopPlan.budgetReturned", values));
++    if (delta > reserve[dimension] && shortfall === null) {
++      shortfall = i18n.t("loopPlan.shortfall", { dimension: enumText("dimension", dimension), short: delta - reserve[dimension] });
++    }
+   }
+-  return { text: parts.length === 0 ? "Budget unchanged" : parts.join("; "), shortfall };
++  return { text: parts.length === 0 ? i18n.t("loopPlan.unchanged") : parts.join(i18n.t("loopPlan.partSeparator")), shortfall };
+ }
+ 
+ export interface LoopPlanCardProps {
+   view: GroupViewV1;
+   item: WorkItemViewV1;
+   drafts: Record<string, string>;
+   onDraft: (key: string, text: string) => void;
+   onCommand: (action: ControlAction) => void;
+ }
+ 
+ function LoopPlanEditor(props: LoopPlanCardProps & { plan: LoopPlanViewV1; current: Amount }): JSX.Element {
++  const { t } = useTranslation();
+   const { view, item, drafts, onDraft, onCommand, plan, current } = props;
+   const groupId = view.summary.groupId, key = loopDraftKey(groupId, item.taskId), draft = readLoopDraft(drafts, key);
+   // Spec §4.2 (D4): only a task that has not started may change; a finished run counts (spec §5.2 step 2).
+   const started = (item.status !== "draft" && item.status !== "ready") || item.lineageRunIds.length > 0;
+-  if (started) return <p>Started; the plan is frozen</p>;
++  if (started) return <p>{t("loopPlan.started")}</p>;
+   // Spec §5.2 step 1: the server refuses every group state but draft/ready, and a stopped group, as group-state-invalid;
+   // offering the form there would only let a person fill it in to be refused (final review, B6).
+   const open = (view.summary.state === "draft" || view.summary.state === "ready") && view.summary.stopMode === null;
+-  if (!open) return <p>The group is not open for changes; the plan is frozen</p>;
+-  if (draft === null) return <button type="button" onClick={() => onDraft(key, JSON.stringify(draftOf(plan, current)))}>Change plan</button>;
++  if (!open) return <p>{t("loopPlan.notOpen")}</p>;
++  if (draft === null) return <button type="button" onClick={() => onDraft(key, JSON.stringify(draftOf(plan, current)))}>{t("loopPlan.changePlan")}</button>;
+   const set = (patch: Partial<LoopDraft>): void => onDraft(key, JSON.stringify({ ...draft, ...patch }));
+   const checked = payloadOf(draft);
+   const payload = "payload" in checked ? checked.payload : null;
+   const consequence = payload === null ? null : consequenceOf(view, current, payload.work);
+   const blocked = "invalid" in checked ? checked.invalid : consequence!.shortfall;
+   return (
+-    <form aria-label={`Change plan ${item.taskId}`} onSubmit={(event) => {
++    <form aria-label={t("loopPlan.changePlanFor", { taskId: item.taskId })} onSubmit={(event) => {
+       event.preventDefault();
+       if (payload !== null && blocked === null) onCommand({ verb: "set-task-loop", groupId, taskId: item.taskId, expectedRevision: view.summary.commandRevision, payload });
+     }}>
+-      {draft.base !== plan.loopVersion && <p role="status">The plan changed after you started this draft (v{draft.base} → v{plan.loopVersion})</p>}
++      {draft.base !== plan.loopVersion && <p role="status">{t("loopPlan.draftBehind", { base: draft.base, current: plan.loopVersion })}</p>}
+       <label>
+-        Plan
+-        <select aria-label="Plan" value={draft.plan} onChange={(event) => set({ plan: event.target.value as LoopPlanIdV1 })}>
++        {t("loopPlan.planLabel")}
++        <select aria-label={t("loopPlan.planLabel")} value={draft.plan} onChange={(event) => set({ plan: event.target.value as LoopPlanIdV1 })}>
+           {WEB_LOOP_PLANS.map((option) => <option key={option.planId} value={option.planId}>{planText(option.planId, option.version, "name")}</option>)}
+         </select>
+       </label>
+       {FIELDS.map((field) => (
+         <label key={field}>
+-          {FIELD_LABEL[field]}
++          {t(FIELD_KEY[field])}
+           {LIST_FIELDS.has(field)
+-            ? <textarea aria-label={FIELD_LABEL[field]} value={draft.text[field]} onChange={(event) => set({ text: { ...draft.text, [field]: event.target.value } })} />
+-            : <input aria-label={FIELD_LABEL[field]} value={draft.text[field]} onChange={(event) => set({ text: { ...draft.text, [field]: event.target.value } })} />}
++            ? <textarea aria-label={t(FIELD_KEY[field])} value={draft.text[field]} onChange={(event) => set({ text: { ...draft.text, [field]: event.target.value } })} />
++            : <input aria-label={t(FIELD_KEY[field])} value={draft.text[field]} onChange={(event) => set({ text: { ...draft.text, [field]: event.target.value } })} />}
+         </label>
+       ))}
+       {blocked !== null && <p role="alert">{blocked}</p>}
+       <button type="submit" disabled={blocked !== null}>{consequence?.text ?? blocked}</button>
+-      <button type="button" onClick={() => onDraft(key, "")}>Discard plan draft</button>
++      <button type="button" onClick={() => onDraft(key, "")}>{t("loopPlan.discard")}</button>
+     </form>
+   );
+ }
+ 
+ export function LoopPlanCard(props: LoopPlanCardProps): JSX.Element | null {
+-  useTranslation();
++  const { t } = useTranslation();
+   const { view, item } = props;
+   // A view that says nothing about the plan (an older server, a literal fixture) gets no card rather than a wrong one.
+   if (item.loopPlan === undefined) return null;
+   if (item.loopPlan === null) {
+     return (
+-      <section aria-label={`Plan ${item.taskId}`}>
+-        <h5>Hand-written contract</h5>
++      <section aria-label={t("loopPlan.region", { taskId: item.taskId })}>
++        <h5>{t("loopPlan.handWritten")}</h5>
+         {item.objective !== undefined && (
+           <ul>
+-            <li>Goal: {item.objective.goal}</li>
+-            <li>Done when: {item.objective.successCondition}</li>
++            <li>{t("loopPlan.summary.goal", { goal: item.objective.goal })}</li>
++            <li>{t("loopPlan.summary.doneWhen", { condition: item.objective.successCondition })}</li>
+           </ul>
+         )}
+       </section>
+     );
+   }
+   const plan = item.loopPlan;
+   const work = view.allocations.find((row) => row.ownerKind === "task" && row.ownerId === item.taskId && row.bucket === "work");
+   return (
+-    <section aria-label={`Plan ${item.taskId}`}>
++    <section aria-label={t("loopPlan.region", { taskId: item.taskId })}>
+       <h5>{loopPlanTitle(plan)}</h5>
+-      <ul aria-label={`Plan summary ${item.taskId}`}>
++      <ul aria-label={t("loopPlan.summaryRegion", { taskId: item.taskId })}>
+         {loopSummaryLines(plan).map((line, index) => <li key={index}>{line}</li>)}
+       </ul>
+       <details>
+-        <summary>Check commands ({plan.inputs.checks.length})</summary>
++        <summary>{t("loopPlan.checkCommands", { n: plan.inputs.checks.length })}</summary>
+         <ul>{plan.inputs.checks.map((check, index) => <li key={index}><code>{check}</code></li>)}</ul>
+       </details>
+-      {work !== undefined && <p>Budget: {work.amount.tokens} tokens · active time {work.amount.activeMs} ms · max attempts {work.amount.attempts}</p>}
+-      <p>Git workspace: its own worktree, merged back into <code>orca/{view.summary.groupId}</code>; pushing is done by a person</p>
+-      <p>Skill set: not supported yet</p>
++      {work !== undefined && <p>{t("loopPlan.budgetLine", { tokens: work.amount.tokens, activeMs: work.amount.activeMs, attempts: work.amount.attempts })}</p>}
++      <p><Trans i18nKey="loopPlan.git" values={{ groupId: view.summary.groupId }} components={{ code: <code /> }} /></p>
++      <p>{t("loopPlan.skills")}</p>
+       {work !== undefined && <LoopPlanEditor {...props} plan={plan} current={work.amount} />}
+     </section>
+   );
+ }
+diff --git a/web/src/locales/en.ts b/web/src/locales/en.ts
+index 335e4e2..388b12d 100644
+--- a/web/src/locales/en.ts
++++ b/web/src/locales/en.ts
+@@ -1,19 +1,19 @@
+ /**
+  * Panel i18n spec §2: the English resource. It is the source shape (`as const`), and every value is today's panel text
+  * byte for byte. Keys are grouped by panel area. Enum families (spec §3.5) are Records over the value unions, so a new
+  * value is a compile error here until it has its words. Tasks 3-10 add their areas.
+  */
+ import type { ThemePref } from "../theme.js";
+ import type { ChainStopCategory, CorrectionKind, DecisionKind, DecisionObservation, DecisionScope, MetricsNoteCode } from "../types.js";
+ import type {
+-  EstimateViewV1, GroupSummaryV1, HandoffRequestViewV1, RecoveryViewV1, RunViewV1, WorkItemProgressV1, WorkItemViewV1,
++  AllocationViewV1, AmountDimensionV1, BudgetEstimateV1, CapabilityViewV1, EstimateViewV1, FieldProvenanceV1, GroupSummaryV1, GroupViewV1, HandoffRequestViewV1, RecoveryViewV1, RunViewV1, WorkItemProgressV1, WorkItemViewV1,
+ } from "../controlTypes.js";
+ 
+ /** The Chinese resource's type: the same key set, every value widened to string (spec §2). */
+ export type Translation<T> = { [K in keyof T]: T[K] extends string ? string : Translation<T[K]> };
+ 
+ const theme = { system: "system", light: "light", dark: "dark" } as const satisfies Record<ThemePref, string>;
+ const decisionKind = {
+   dependency: "dependency", interface: "interface", scheduling: "scheduling", abandon: "abandon", criteria: "criteria", boundary: "boundary", reconcile: "reconcile",
+ } as const satisfies Record<DecisionKind, string>;
+ const decisionScope = { file: "file", task: "task", repo: "repo", "cross-repo": "cross-repo" } as const satisfies Record<DecisionScope, string>;
+@@ -63,20 +63,39 @@ const estimateState = {
+   queued: "queued", running: "running", "start-unknown": "start-unknown", ready: "ready", failed: "failed", interrupted: "interrupted",
+   "blocked-capability": "blocked-capability", "input-too-large": "input-too-large",
+ } as const satisfies Record<EstimateViewV1["state"], string>;
+ const budgetMode = { strict: "strict", soft: "soft" } as const satisfies Record<EstimateViewV1["mode"], string>;
+ const blockerScope = { global: "global", group: "group", run: "run" } as const satisfies Record<RecoveryViewV1["blockers"][number]["scope"], string>;
+ const progressStep = {
+   queued: "queued", plan: "plan", execute: "execute", verify: "verify", succeeded: "succeeded", blocked_waiting_human: "blocked_waiting_human",
+   exhausted: "exhausted", cancelled: "cancelled", failed: "failed",
+ } as const satisfies Record<NonNullable<WorkItemProgressV1["step"]>, string>;
+ 
++const proposalState = { editable: "editable", confirmed: "confirmed" } as const satisfies Record<GroupViewV1["proposal"]["state"], string>;
++const ownerKind = { estimate: "estimate", task: "task", "goal-review": "goal-review", reserve: "reserve" } as const satisfies Record<AllocationViewV1["ownerKind"], string>;
++const bucket = { work: "work", handoff: "handoff", review: "review", reserve: "reserve" } as const satisfies Record<AllocationViewV1["bucket"], string>;
++const allocationState = {
++  "draft-encumbered": "draft-encumbered", confirmed: "confirmed", active: "active", held: "held", continuing: "continuing", terminal: "terminal", unknown: "unknown",
++} as const satisfies Record<AllocationViewV1["state"], string>;
++const dimension = { tokens: "tokens", activeMs: "activeMs", attempts: "attempts", sessions: "sessions" } as const satisfies Record<AmountDimensionV1, string>;
++type EstimatedTask = BudgetEstimateV1["tasks"][number];
++const complexity = { S: "S", M: "M", L: "L", XL: "XL" } as const satisfies Record<EstimatedTask["complexity"], string>;
++const confidence = { low: "low", medium: "medium", high: "high" } as const satisfies Record<EstimatedTask["confidence"], string>;
++const handoffControl = { durable: "durable", "phase-end": "phase-end", unavailable: "unavailable" } as const satisfies Record<CapabilityViewV1["handoffControl"], string>;
++const handoffExecution = {
++  "mechanical-in-run-v1": "mechanical-in-run-v1", "model-assisted-v1": "model-assisted-v1",
++} as const satisfies Record<NonNullable<CapabilityViewV1["handoffExecution"]>, string>;
++const budgetEnforcement = { bounded: "bounded", soft: "soft", unavailable: "unavailable" } as const satisfies Record<CapabilityViewV1["budgetEnforcement"], string>;
++const fieldProvenance = {
++  "complex-1m-default": "complex-1m default", model: "model", human: "human", system: "system",
++} as const satisfies Record<FieldProvenanceV1["provenance"], string>;
++
+ export const en = {
+   nav: { sections: "Sections", decisions: "Decisions", chains: "Chains", tasks: "Task control", metrics: "Metrics" },
+   shell: {
+     brandTitle: "Leave it to Orca — every idea, made real.",
+     chainRunning: "a chain is running",
+     needsAttention: "needs attention",
+     theme: "Theme",
+     language: "Language",
+     loading: "orca panel loading…",
+     epoch: "epoch {{epoch}}",
+@@ -241,20 +260,51 @@ export const en = {
+   recovery: {
+     title: "Recovery",
+     none: "No recovery blockers.",
+     retry: "Retry recovery",
+     dispatchBlocked: "dispatch blocked · the panel will not start new runs until recovery is observed",
+     allGroups: "all groups",
+     run: " · run {{runId}}",
+     evidence: " · evidence {{ids}}",
+     runEvidence: "run evidence",
+   },
++  budget: {
++    region: "Budget proposal",
++    heading: "Proposal v{{version}} · {{state}}",
++    modeLine: "budget mode {{mode}} · observed enforcement {{enforcement}}",
++    notChosen: "not chosen",
++    frozenAtConfirmation: "frozen at confirmation",
++    softNote: " · soft: an overrun is settled after the fact, not prevented",
++    contextUnavailable: "context observation unavailable · the context watermark cannot hand off automatically",
++    handoffBlocked: "profile {{profileId}}: handoff control {{control}} · handoff execution {{execution}} · work bound to it is not dispatched (claim-capability-unavailable)",
++    th: { owner: "owner", bucket: "bucket", state: "state", suggestion: "suggestion" },
++    changeInCard: " Change it in the plan card",
++    useFor: "use {{value}} for {{owner}} {{bucket}} {{dimension}}",
++    use: "use {{value}}",
++    applyRowFor: "Apply row {{owner}} {{bucket}}",
++    applyRow: "Apply row",
++    staleEstimate: "This estimate predates a plan change; estimate again to update the suggestions",
++    applyAll: "Apply all suggestions",
++    rationale: "Estimate rationale ({{estimateId}})",
++    rationaleLine: "{{taskId}} · {{complexity}} · confidence {{confidence}} · {{rationale}}",
++    groupLimit: "Group limit",
++    setLimit: "Set limit",
++    handoffAt: "Hand off at context tokens (blank keeps it unset)",
++    ledger: "used {{used}} · committed {{committed}} · reserve {{reserve}}",
++    deficit: " · deficit {{deficit}}",
++    usageUnknown: " · usage unknown",
++    save: "Save proposal",
++    reestimate: "Re-estimate",
++    confirmWaits: "Confirm waits for this proposal version's agent selections to resolve.",
++    confirm: "Confirm budget",
++    provenanceModel: "model {{estimateId}}",
++  },
+   loopPlan: {
+     // Panel i18n spec §3.1, §6.9: one entry per registry version, equal to src/control/loopPlans.ts (the English source of
+     // record); a version with no discipline has no discipline key.
+     plan: {
+       standard: { v1: { name: "Standard" }, v2: { name: "Standard" } },
+       bugfix: {
+         v1: { name: "Bug fix (red first)", discipline: "Write a failing test that reproduces the bug, then fix it (checked by a model, not proven mechanically)" },
+         v2: { name: "Bug fix (red first)", discipline: "Write a failing test that reproduces the bug, then fix it (checked by a model, not proven mechanically)" },
+       },
+       refactor: {
+@@ -276,29 +326,65 @@ export const en = {
+       doneWhen: "Done when: {{condition}}",
+       onlyChanges: "Only changes: {{paths}}",
+       mustNotChange: "Must not change: {{paths}} (reported by the agent, not checked in git)",
+       files_one: "At most {{count}} file changed (reported by the agent)",
+       files_other: "At most {{count}} files changed (reported by the agent)",
+       noFileLimit: "No file limit",
+       checks_one: "Acceptance: {{count}} check command, all must pass",
+       checks_other: "Acceptance: {{count}} check commands, all must pass",
+       pathSeparator: ", ",
+     },
++    region: "Plan {{taskId}}",
++    handWritten: "Hand-written contract",
++    summaryRegion: "Plan summary {{taskId}}",
++    checkCommands: "Check commands ({{n}})",
++    budgetLine: "Budget: {{tokens}} tokens · active time {{activeMs}} ms · max attempts {{attempts}}",
++    git: "Git workspace: its own worktree, merged back into <code>orca/{{groupId}}</code>; pushing is done by a person",
++    skills: "Skill set: not supported yet",
++    started: "Started; the plan is frozen",
++    notOpen: "The group is not open for changes; the plan is frozen",
++    changePlan: "Change plan",
++    changePlanFor: "Change plan {{taskId}}",
++    draftBehind: "The plan changed after you started this draft (v{{base}} → v{{current}})",
++    planLabel: "Plan",
++    discard: "Discard plan draft",
++    field: {
++      goal: "Goal",
++      successCondition: "Done when",
++      targetPaths: "Only changes (one path per line)",
++      checks: "Check commands (one per line)",
++      nonGoals: "Non-goals (one per line)",
++      relevantDocs: "Relevant docs (one per line)",
++      protectedPaths: "Must not change (one path per line)",
++      maxFilesTouched: "Max files changed (blank for default)",
++      tokens: "Token budget",
++      activeMs: "Active time (ms)",
++      attempts: "Max attempts",
++    },
++    badBudget: "Budgets must be positive integers",
++    badFileCap: "Max files changed must be a positive integer",
++    unit: { tokens: "tokens", activeMs: "ms active time", attempts: "attempts" },
++    budgetTaken: "Budget {{delta}} {{unit}}, taken from the group reserve; {{left}} left",
++    budgetReturned: "Budget {{delta}} {{unit}}, returned to the group reserve; {{left}} left",
++    partSeparator: "; ",
++    shortfall: "Group reserve too small: {{dimension}} short by {{short}}",
++    unchanged: "Budget unchanged",
+   },
+   metrics: {
+     unknownRate: "unknown",
+     correctionRate: "Correction rate",
+     repairRate: "Repair rate",
+     reviewCoverage: "Review coverage",
+     unresolvedTitle: "Unresolved decisions",
+     unresolvedCount: "Unresolved decisions: {{n}}",
+     malformedTitle: "Malformed lines",
+     malformedCount: "Malformed lines: {{n}}",
+     futureTitle: "Excluded as future",
+     futureCount: "Excluded as future: {{n}}",
+     note: metricsNote,
+   },
+   enums: {
+     theme, decisionKind, decisionScope, decisionVerdict, correctionKind, chainStopCategory,
+     groupState, stopMode, stopState, workStatus, runPhase, runState, requestState, estimateState, budgetMode, blockerScope, progressStep,
++    proposalState, ownerKind, bucket, allocationState, dimension, complexity, confidence, handoffControl, handoffExecution, budgetEnforcement, fieldProvenance,
+   },
+ } as const;
+diff --git a/web/src/locales/zh.ts b/web/src/locales/zh.ts
+index db32546..b0d5d89 100644
+--- a/web/src/locales/zh.ts
++++ b/web/src/locales/zh.ts
+@@ -177,20 +177,51 @@ export const zh: Translation<typeof en> = {
+   recovery: {
+     title: "恢复",
+     none: "没有恢复阻塞项。",
+     retry: "重试恢复",
+     dispatchBlocked: "派发已阻断 · 在观察到恢复之前，面板不会启动新的运行",
+     allGroups: "所有组",
+     run: " · 运行 {{runId}}",
+     evidence: " · 证据 {{ids}}",
+     runEvidence: "运行证据",
+   },
++  budget: {
++    region: "预算提案",
++    heading: "提案 v{{version}} · {{state}}",
++    modeLine: "预算模式 {{mode}} · 观测到的约束方式 {{enforcement}}",
++    notChosen: "未选择",
++    frozenAtConfirmation: "确认时已冻结",
++    softNote: " · 宽松：超支事后结算，不会被阻止",
++    contextUnavailable: "上下文观测不可用 · 上下文水位线无法自动交接",
++    handoffBlocked: "profile {{profileId}}：交接控制 {{control}} · 交接执行 {{execution}} · 绑定到它的工作不会被派发（claim-capability-unavailable）",
++    th: { owner: "归属", bucket: "桶", state: "状态", suggestion: "建议" },
++    changeInCard: " 在做法卡片里改",
++    useFor: "对 {{owner}} {{bucket}} {{dimension}} 采用 {{value}}",
++    use: "采用 {{value}}",
++    applyRowFor: "应用整行 {{owner}} {{bucket}}",
++    applyRow: "应用整行",
++    staleEstimate: "这份估算早于一次做法修改；重新估算以更新建议",
++    applyAll: "应用全部建议",
++    rationale: "估算理由（{{estimateId}}）",
++    rationaleLine: "{{taskId}} · {{complexity}} · 置信度 {{confidence}} · {{rationale}}",
++    groupLimit: "组上限",
++    setLimit: "设置上限",
++    handoffAt: "上下文达到多少 token 时交接（留空则不设）",
++    ledger: "已用 {{used}} · 已承诺 {{committed}} · 余量 {{reserve}}",
++    deficit: " · 缺口 {{deficit}}",
++    usageUnknown: " · 用量未知",
++    save: "保存提案",
++    reestimate: "重新估算",
++    confirmWaits: "确认要等这个提案版本的 agent 选择解析完成。",
++    confirm: "确认预算",
++    provenanceModel: "模型 {{estimateId}}",
++  },
+   loopPlan: {
+     plan: {
+       standard: { v1: { name: "标准" }, v2: { name: "标准" } },
+       bugfix: {
+         v1: { name: "修 bug（先红后绿）", discipline: "先写能复现的失败测试再修（由模型核对，不是机械证明）" },
+         v2: { name: "修 bug（先红后绿）", discipline: "先写能复现的失败测试再修（由模型核对，不是机械证明）" },
+       },
+       refactor: {
+         v1: { name: "安全重构", discipline: "不改可观察行为（写给 agent 的约束；只有检查命令是硬的）" },
+         v2: { name: "安全重构", discipline: "不改可观察行为（写给 agent 的约束；只有检查命令是硬的）" },
+@@ -210,20 +241,55 @@ export const zh: Translation<typeof en> = {
+       doneWhen: "完成条件：{{condition}}",
+       onlyChanges: "只改：{{paths}}",
+       mustNotChange: "不许改：{{paths}}（由 agent 自报，不是 git 检查）",
+       files_one: "最多改 {{count}} 个文件（由 agent 自报）",
+       files_other: "最多改 {{count}} 个文件（由 agent 自报）",
+       noFileLimit: "不限文件数",
+       checks_one: "验收：运行 {{count}} 条检查命令，全部通过",
+       checks_other: "验收：运行 {{count}} 条检查命令，全部通过",
+       pathSeparator: "、",
+     },
++    region: "做法 {{taskId}}",
++    handWritten: "手写契约",
++    summaryRegion: "做法摘要 {{taskId}}",
++    checkCommands: "检查命令（{{n}} 条）",
++    budgetLine: "预算：{{tokens}} token · 活跃时间 {{activeMs}} ms · 最多尝试次数 {{attempts}}",
++    git: "git 工作区：独立 worktree，合回 <code>orca/{{groupId}}</code> 分支，push 由人做",
++    skills: "skill 集：暂不支持",
++    started: "已开始，做法已冻结",
++    notOpen: "组当前不接受修改，做法已冻结",
++    changePlan: "修改做法",
++    changePlanFor: "修改做法 {{taskId}}",
++    draftBehind: "你开始这份草稿后做法已变（v{{base}} → v{{current}}）",
++    planLabel: "做法",
++    discard: "丢弃做法草稿",
++    field: {
++      goal: "目标",
++      successCondition: "完成条件",
++      targetPaths: "只改（每行一个路径）",
++      checks: "检查命令（每行一条）",
++      nonGoals: "不做的事（每行一条）",
++      relevantDocs: "相关文档（每行一个）",
++      protectedPaths: "不许改（每行一个路径）",
++      maxFilesTouched: "最多改几个文件（留空按默认）",
++      tokens: "token 预算",
++      activeMs: "活跃时间（ms）",
++      attempts: "最多尝试次数",
++    },
++    badBudget: "预算要填正整数",
++    badFileCap: "最多改几个文件要填正整数",
++    unit: { tokens: "token", activeMs: "ms 活跃时间", attempts: "次尝试" },
++    budgetTaken: "预算 {{delta}} {{unit}}，从组余量扣；余量剩 {{left}}",
++    budgetReturned: "预算 {{delta}} {{unit}}，退回组余量；余量剩 {{left}}",
++    partSeparator: "；",
++    shortfall: "组余量不够：{{dimension}} 还差 {{short}}",
++    unchanged: "预算不变",
+   },
+   metrics: {
+     unknownRate: "未知",
+     correctionRate: "纠正率",
+     repairRate: "修复率",
+     reviewCoverage: "评审覆盖率",
+     unresolvedTitle: "未解析的决策",
+     unresolvedCount: "未解析的决策：{{n}}",
+     malformedTitle: "格式错误的行",
+     malformedCount: "格式错误的行：{{n}}",
+@@ -254,14 +320,25 @@ export const zh: Translation<typeof en> = {
+       "settled-unrecoverable": "已结算（不可恢复）", collected: "已收集", landed: "已合入", reconciling: "协调中", blocked: "已阻塞",
+     },
+     requestState: {
+       "request-pending": "请求待处理", latched: "已锁定", collecting: "收集中", "settled-recoverable": "已结算（可恢复）",
+       "settled-restartable": "已结算（可重启）", "settled-unrecoverable": "已结算（不可恢复）", "outcome-unknown": "结果未知",
+     },
+     estimateState: { queued: "排队中", running: "运行中", "start-unknown": "启动情况未知", ready: "就绪", failed: "失败", interrupted: "已中断", "blocked-capability": "能力不足、已阻塞", "input-too-large": "输入过大" },
+     budgetMode: { strict: "严格", soft: "宽松" },
+     blockerScope: { global: "全局", group: "组", run: "运行" },
+     progressStep: { queued: "排队中", plan: "计划", execute: "执行", verify: "验证", succeeded: "已成功", blocked_waiting_human: "等人处理", exhausted: "已耗尽", cancelled: "已取消", failed: "失败" },
++    proposalState: { editable: "可编辑", confirmed: "已确认" },
++    ownerKind: { estimate: "估算", task: "任务", "goal-review": "目标评审", reserve: "余量" },
++    bucket: { work: "工作", handoff: "交接", review: "评审", reserve: "余量" },
++    allocationState: { "draft-encumbered": "草稿占用", confirmed: "已确认", active: "进行中", held: "已挂起", continuing: "续跑中", terminal: "已终结", unknown: "未知" },
++    dimension: { tokens: "token", activeMs: "活跃毫秒", attempts: "尝试次数", sessions: "会话数" },
++    complexity: { S: "S", M: "M", L: "L", XL: "XL" },
++    confidence: { low: "低", medium: "中", high: "高" },
++    handoffControl: { durable: "持久", "phase-end": "阶段结束时", unavailable: "不可用" },
++    handoffExecution: { "mechanical-in-run-v1": "运行内机械交接 v1", "model-assisted-v1": "模型辅助交接 v1" },
++    budgetEnforcement: { bounded: "有界", soft: "宽松", unavailable: "不可用" },
++    fieldProvenance: { "complex-1m-default": "complex-1m 默认值", model: "模型", human: "人", system: "系统" },
+   },
+ };
+ 
+ export const zhErrors: Record<string, string> = {};
+diff --git a/web/tests/budgetI18n.test.tsx b/web/tests/budgetI18n.test.tsx
+new file mode 100644
+index 0000000..eed2240
+--- /dev/null
++++ b/web/tests/budgetI18n.test.tsx
+@@ -0,0 +1,185 @@
++// @vitest-environment jsdom
++/**
++ * Panel i18n spec §3.3, §3.5, §5: the budget editor (its notes, table, suggestion buttons and their accessible names,
++ * rationale, limit and ledger line) and the loop card (the read-only card, the change form with its labels, the draft
++ * notice, the invalid-number message and the consequence of a change) in Chinese.
++ */
++import { cleanup, render, screen } from "@testing-library/react";
++import { afterEach, describe, expect, it, vi } from "vitest";
++import { BudgetEditor } from "../src/BudgetEditor.js";
++import i18n from "../src/i18n.js";
++import { LoopPlanCard, loopDraftKey } from "../src/LoopPlanCard.js";
++import type { Amount, ControlConfigV1, GroupViewV1, LoopPlanViewV1, WorkItemViewV1 } from "../src/controlTypes.js";
++
++const amount = (tokens: number): Amount => ({ tokens, activeMs: 14_400_000, attempts: 3, sessions: 3 });
++const human = { provenance: "human", estimateId: null } as const;
++const provenance = { tokens: human, activeMs: human, attempts: human, sessions: human };
++const capability = { usageObservation: "phase-end", budgetEnforcement: "soft", contextObservation: "unavailable", handoffControl: "phase-end", handoffExecution: null, contextWindowTokens: null, requestBoundProof: null } as const;
++const config: ControlConfigV1 = {
++  schema: "orca-control-config-v1", epoch: "epoch-a", repositories: [{ repoId: "orca", displayName: "Repo X" }],
++  plans: [{ planId: "plan-demo", repoId: "orca", displayName: "Demo P" }],
++  profiles: [{ profileId: "all", profileHash: "b".repeat(64), allowedWorkKinds: ["task", "budget-estimate", "handoff", "goal-review"], contextTokenizer: null, workMaxOutputTokens: 1000, declared: capability, observed: capability, observedAt: "2026-10-01T00:00:00.000Z", probeFailureCode: null }],
++  defaults: { estimatorProfileId: "all", estimatorProfileHash: "b".repeat(64), estimateMode: "soft" }, executionPort: "configured", errorCatalog: [],
++};
++const PLAN: LoopPlanViewV1 = {
++  planId: "bugfix", planVersion: 2, chosenBy: "labels", chosenByLabel: "bug", amended: false, loopVersion: 1,
++  inputs: { goal: "fix login", successCondition: "the login test passes", targetPaths: ["src/auth/**"], checks: ["npm test"], nonGoals: [], relevantDocs: [], protectedPaths: [], maxFilesTouched: null },
++  maxFiles: Number.MAX_SAFE_INTEGER, hasDiscipline: true,
++};
++const item = (taskId: string, over: Partial<WorkItemViewV1> = {}): WorkItemViewV1 => ({
++  taskId, status: "draft", dependencyTaskIds: [], targetVersion: 1, configHash: null, originalContractHash: "e".repeat(64), derivedContractHash: null,
++  currentRunId: null, pendingRunId: null, lineageRunIds: [], labels: ["bug"], labelsProvenance: "plan", labelsVersion: 0, progress: null, ...over,
++});
++const view: GroupViewV1 = {
++  schema: "orca-control-group-v1", epoch: "epoch-a", changeSeq: 4,
++  summary: { groupId: "g", state: "draft", commandRevision: 6, projectionSeq: 4, stopMode: null, stopState: null, claimBlocked: false, recoveryBlockerCount: 0 },
++  graphVersion: 1, plan: { repoId: "orca", planId: "plan-demo", planHash: "a".repeat(64), goal: "goal-x", successConditions: ["s-1"] },
++  proposal: { state: "editable", proposalVersion: 2, planHash: "a".repeat(64), budgetMode: "soft", contextPolicy: { handoffAtContextTokens: null }, profiles: null, executionSnapshotHash: null },
++  ledger: { groupLimit: amount(9_000_000), used: amount(0), committedRemaining: amount(3_000_000), explicitUnallocatedReserve: amount(6_000_000), budgetDeficit: amount(0), usageUnknown: false },
++  allocations: [
++    { ownerKind: "task", ownerId: "a", bucket: "work", state: "draft-encumbered", amount: amount(3_000_000), fieldProvenance: provenance },
++    { ownerKind: "task", ownerId: "b", bucket: "work", state: "draft-encumbered", amount: amount(3_000_000), fieldProvenance: { ...provenance, tokens: { provenance: "model", estimateId: "est-1" } } },
++  ],
++  workItems: [item("a", { loopPlan: PLAN, objective: { goal: "fix login", successCondition: "the login test passes" } }), item("b", { loopPlan: null, objective: { goal: "ship", successCondition: "passes" } })],
++  estimates: [{
++    estimateId: "est-1", estimateVersion: 1, state: "ready", profile: { profileId: "all", profileHash: "b".repeat(64) }, mode: "soft", requestHash: null, outputHash: null, reasonCode: null,
++    output: { schema: "budget-estimate-v1", planHash: "a".repeat(64), tasks: [{ taskId: "b", complexity: "M", confidence: "high", work: amount(2_000_000), handoff: amount(0), rationale: "rationale-x", assumptions: ["assumption-x"] }], goalReviewReserve: amount(0), groupRationale: "group-rationale-x" },
++  }],
++  runs: [], checkpoints: [], handoffRequests: [], stop: null, recoveryBlockers: [], recentCommandIds: [],
++};
++const draft = (tokens: string) => JSON.stringify({ base: 0, plan: "bugfix", text: {
++  goal: "fix login", successCondition: "the login test passes", targetPaths: "src/auth/**", checks: "npm test", nonGoals: "", relevantDocs: "", protectedPaths: "",
++  maxFilesTouched: "", tokens, activeMs: "14400000", attempts: "3",
++} });
++
++/** A task-a draft with every field as the plan has it, but these changed. */
++const draftWith = (text: Record<string, string>) => {
++  const parsed = JSON.parse(draft("3000000")) as { text: Record<string, string> };
++  return JSON.stringify({ ...parsed, text: { ...parsed.text, ...text } });
++};
++const texts = (selector: string): Array<string | null> => [...document.querySelectorAll(selector)].map((node) => node.textContent);
++
++afterEach(cleanup);
++
++describe("the budget editor and the loop card in Chinese", () => {
++  it("shows the budget editor in Chinese, suggestion buttons named in Chinese", async () => {
++    await i18n.changeLanguage("zh");
++    const text = render(<BudgetEditor view={view} config={config} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />).container.textContent ?? "";
++    for (const expected of [
++      "提案 v2 · 可编辑", "预算模式 宽松 · 观测到的约束方式 宽松 · 宽松：超支事后结算，不会被阻止", "上下文观测不可用 · 上下文水位线无法自动交接",
++      "profile all：交接控制 阶段结束时 · 交接执行 无 · 绑定到它的工作不会被派发（claim-capability-unavailable）",
++      "归属", "桶", "活跃毫秒", "会话数", "建议", "任务 a", "草稿占用", " 在做法卡片里改", "模型 est-1", "采用 2000000", "应用整行", "应用全部建议",
++      "估算理由（est-1）", "b · M · 置信度 高 · rationale-x", "组上限", "设置上限", "上下文达到多少 token 时交接（留空则不设）",
++      "已用 0 · 已承诺 3000000 · 余量 6000000", "保存提案", "重新估算", "确认要等这个提案版本的 agent 选择解析完成。", "确认预算",
++    ]) expect(text, expected).toContain(expected);
++    expect(screen.getByRole("button", { name: "对 b 工作 token 采用 2000000" })).toBeTruthy();
++    expect(screen.getByRole("button", { name: "应用整行 b 工作" })).toBeTruthy();
++    expect(screen.getByLabelText(/^b 工作 token/)).toBeTruthy();
++    // Preflight P3: the table headers themselves, not a word the limit labels also render.
++    expect(texts("thead th")).toEqual(["归属", "桶", "状态", "token", "活跃毫秒", "尝试次数", "会话数", "建议"]);
++    const rowB = [...document.querySelectorAll("tbody tr")][1]!;
++    expect([...rowB.querySelectorAll("td")].slice(0, 3).map((cell) => cell.textContent)).toEqual(["任务 b", "工作", "草稿占用"]);
++    expect(texts("td small")).toEqual([...Array<string>(4).fill(" 在做法卡片里改"), "模型 est-1", "人", "人", "人"]);
++    expect(texts("span.sr-only")).toEqual(["b 工作 token", "b 工作 活跃毫秒", "b 工作 尝试次数", "b 工作 会话数"]);
++    expect(texts("fieldset label")).toEqual(["token", "活跃毫秒", "尝试次数", "会话数"]);
++    expect(screen.getByRole("region", { name: "预算提案" })).toBeTruthy();
++  });
++
++  it("shows the budget editor's other states in Chinese: confirmed, frozen, no mode, deficit, stale, loop suggestions", async () => {
++    await i18n.changeLanguage("zh");
++    const executing = { ...capability, handoffExecution: "mechanical-in-run-v1" } as const;
++    const bound = { profileId: "all", profileHash: "b".repeat(64) };
++    const confirmed: GroupViewV1 = {
++      ...view,
++      proposal: { ...view.proposal, state: "confirmed", budgetMode: null, profiles: { estimator: bound, worker: bound, handoff: bound, goalReview: bound } },
++      ledger: { ...view.ledger, budgetDeficit: amount(5), usageUnknown: true },
++      allocations: [view.allocations[0]!, { ...view.allocations[1]!, fieldProvenance: { ...provenance, activeMs: { provenance: "complex-1m-default", estimateId: null }, attempts: { provenance: "system", estimateId: null } } }],
++    };
++    let text = render(<BudgetEditor view={confirmed} config={{ ...config, profiles: [{ ...config.profiles[0]!, observed: executing }] }} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />).container.textContent ?? "";
++    for (const expected of [
++      "提案 v2 · 已确认", "预算模式 未选择 · 观测到的约束方式 确认时已冻结",
++      "profile all：交接控制 阶段结束时 · 交接执行 运行内机械交接 v1 · 绑定到它的工作不会被派发（claim-capability-unavailable）",
++      "已用 0 · 已承诺 3000000 · 余量 6000000 · 缺口 5 · 用量未知",
++    ]) expect(text, expected).toContain(expected);
++    expect(texts("td small").slice(4)).toEqual(["人", "complex-1m 默认值", "系统", "人"]);
++    cleanup();
++    const stale: GroupViewV1 = { ...view, estimates: [{ ...view.estimates[0]!, stale: true }] };
++    text = render(<BudgetEditor view={stale} config={{ ...config, profiles: [] }} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />).container.textContent ?? "";
++    for (const expected of ["观测到的约束方式 未知", "这份估算早于一次做法修改；重新估算以更新建议"]) expect(text, expected).toContain(expected);
++    cleanup();
++    const estimate = view.estimates[0]!;
++    const withLoop: GroupViewV1 = { ...view, estimates: [{ ...estimate, output: { ...estimate.output!, tasks: [...estimate.output!.tasks, { ...estimate.output!.tasks[0]!, taskId: "a", work: amount(4_000_000) }] } }] };
++    render(<BudgetEditor view={withLoop} config={config} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
++    expect(screen.getByRole("button", { name: "对 a 工作 token 采用 4000000" }).textContent).toBe("采用 4000000");
++  });
++
++  it("shows the loop card, its change form and the consequence of a change in Chinese", async () => {
++    await i18n.changeLanguage("zh");
++    const a = view.workItems[0]!;
++    const invalid = render(<LoopPlanCard view={view} item={a} drafts={{ [loopDraftKey("g", "a")]: draft("x") }} onDraft={vi.fn()} onCommand={vi.fn()} />).container.textContent ?? "";
++    for (const expected of [
++      "修 bug（先红后绿） · v2 · 按标签 `bug` 选择", "检查命令（1 条）", "预算：3000000 token · 活跃时间 14400000 ms · 最多尝试次数 3",
++      "git 工作区：独立 worktree，合回 orca/g 分支，push 由人做", "skill 集：暂不支持", "你开始这份草稿后做法已变（v0 → v1）",
++      "做法", "目标", "只改（每行一个路径）", "最多改几个文件（留空按默认）", "token 预算", "预算要填正整数", "丢弃做法草稿",
++    ]) expect(invalid, expected).toContain(expected);
++    expect(screen.getByRole("region", { name: "做法 a" })).toBeTruthy();
++    expect(screen.getByRole("form", { name: "修改做法 a" })).toBeTruthy();
++    cleanup();
++    render(<LoopPlanCard view={view} item={a} drafts={{ [loopDraftKey("g", "a")]: draft("3000500") }} onDraft={vi.fn()} onCommand={vi.fn()} />);
++    expect(screen.getByRole("button", { name: "预算 +500 token，从组余量扣；余量剩 5999500" })).toBeTruthy();
++    cleanup();
++    const handWritten = render(<LoopPlanCard view={view} item={view.workItems[1]!} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />).container.textContent ?? "";
++    for (const expected of ["手写契约", "目标：ship", "完成条件：passes"]) expect(handWritten, expected).toContain(expected);
++    expect(screen.getByRole("region", { name: "做法 b" })).toBeTruthy();
++  });
++
++  it("names every field of the change form, the plan summary and each frozen state in Chinese", async () => {
++    await i18n.changeLanguage("zh");
++    const a = view.workItems[0]!;
++    const card = (over: { view?: GroupViewV1; item?: WorkItemViewV1; drafts?: Record<string, string> } = {}) =>
++      render(<LoopPlanCard view={over.view ?? view} item={over.item ?? a} drafts={over.drafts ?? {}} onDraft={vi.fn()} onCommand={vi.fn()} />);
++    card();
++    expect(screen.getByRole("list", { name: "做法摘要 a" })).toBeTruthy();
++    expect(screen.getByRole("button", { name: "修改做法" })).toBeTruthy();
++    cleanup();
++    expect(card({ item: { ...a, status: "active" } }).container.textContent).toContain("已开始，做法已冻结");
++    cleanup();
++    expect(card({ view: { ...view, summary: { ...view.summary, state: "running" } } }).container.textContent).toContain("组当前不接受修改，做法已冻结");
++    cleanup();
++    card({ drafts: { [loopDraftKey("g", "a")]: draftWith({ maxFilesTouched: "x" }) } });
++    const form = screen.getByRole("form", { name: "修改做法 a" });
++    expect([...form.querySelectorAll("label")].map((label) => label.childNodes[0]?.textContent)).toEqual([
++      "做法", "目标", "完成条件", "只改（每行一个路径）", "检查命令（每行一条）", "不做的事（每行一条）", "相关文档（每行一个）",
++      "不许改（每行一个路径）", "最多改几个文件（留空按默认）", "token 预算", "活跃时间（ms）", "最多尝试次数",
++    ]);
++    expect([...form.querySelectorAll("select, input, textarea")].map((box) => box.getAttribute("aria-label"))).toEqual([
++      "做法", "目标", "完成条件", "只改（每行一个路径）", "检查命令（每行一条）", "不做的事（每行一条）", "相关文档（每行一个）",
++      "不许改（每行一个路径）", "最多改几个文件（留空按默认）", "token 预算", "活跃时间（ms）", "最多尝试次数",
++    ]);
++    expect(screen.getByRole("alert").textContent).toBe("最多改几个文件要填正整数");
++    cleanup();
++    for (const [text, expected] of [
++      [{ tokens: "2999500" }, "预算 -500 token，退回组余量；余量剩 6000500"],
++      [{ activeMs: "14400001", attempts: "4" }, "预算 +1 ms 活跃时间，从组余量扣；余量剩 14399999；预算 +1 次尝试，从组余量扣；余量剩 2"],
++      [{}, "预算不变"],
++    ] as const) {
++      card({ drafts: { [loopDraftKey("g", "a")]: draftWith(text) } });
++      expect(screen.getByRole("button", { name: expected })).toBeTruthy();
++      cleanup();
++    }
++    card({ drafts: { [loopDraftKey("g", "a")]: draftWith({ tokens: "9000001" }) } });
++    expect(screen.getByRole("alert").textContent).toBe("组余量不够：token 还差 1");
++  });
++
++  it("names each plan in the plan picker in the chosen language (Task 3 review)", async () => {
++    const options = (): Array<string | null> => {
++      render(<LoopPlanCard view={view} item={view.workItems[0]!} drafts={{ [loopDraftKey("g", "a")]: draft("3000000") }} onDraft={vi.fn()} onCommand={vi.fn()} />);
++      const names = texts("option");
++      cleanup();
++      return names;
++    };
++    expect(options()).toEqual(["Standard", "Bug fix (red first)", "Safe refactor", "Design / docs first", "Investigate only"]);
++    await i18n.changeLanguage("zh");
++    expect(options()).toEqual(["标准", "修 bug（先红后绿）", "安全重构", "先写设计／文档", "只调研不改代码"]);
++  });
++});
+diff --git a/web/tests/i18nWidth.test.ts b/web/tests/i18nWidth.test.ts
+new file mode 100644
+index 0000000..73ee5be
+--- /dev/null
++++ b/web/tests/i18nWidth.test.ts
+@@ -0,0 +1,43 @@
++import { describe, expect, it } from "vitest";
++import { en } from "../src/locales/en.js";
++import { zh } from "../src/locales/zh.js";
++
++/**
++ * Review Focus 5 (panel i18n plan): jsdom lays nothing out, so a width proxy pins that a Chinese value does not widen a
++ * narrow table cell or a button: its display width (CJK and full-width forms count 2 columns) is at most the English
++ * width + 2, for every table header, every in-table enum value and every button label listed here.
++ */
++type Tree = { readonly [key: string]: string | Tree };
++function flatten(node: Tree, prefix = ""): Record<string, string> {
++  const out: Record<string, string> = {};
++  for (const [key, value] of Object.entries(node)) {
++    const path = prefix === "" ? key : `${prefix}.${key}`;
++    if (typeof value === "string") out[path] = value;
++    else Object.assign(out, flatten(value, path));
++  }
++  return out;
++}
++const EN = flatten(en as unknown as Tree);
++const ZH = flatten(zh as unknown as Tree);
++const width = (text: string): number => [...text].reduce((n, ch) => n + (/[⺀-鿿　-〿＀-￯]/.test(ch) ? 2 : 1), 0);
++const NARROW_PREFIXES = [
++  "control.group.th.", "control.group.runsTh.", "budget.th.", "enums.workStatus.", "enums.runPhase.", "enums.runState.",
++  "enums.allocationState.", "enums.bucket.", "enums.ownerKind.", "enums.dimension.",
++];
++const BUTTONS = [
++  "control.group.start", "control.group.pause", "control.group.handoffStop", "control.group.resume", "control.group.resumeNoContinuation",
++  "control.task.addSystem", "control.task.addCustom", "control.task.save", "control.task.discard", "control.task.restore",
++  "budget.applyRow", "budget.applyAll", "budget.setLimit", "budget.save", "budget.reestimate", "budget.confirm",
++  "loopPlan.changePlan", "loopPlan.discard", "chains.start", "chains.stop", "decisions.agree", "decisions.correct", "recovery.retry",
++];
++
++describe("Chinese in narrow places (Review Focus 5)", () => {
++  it("keeps every table header, in-table enum value and button no wider in Chinese than in English + 2 columns", () => {
++    const keys = [...Object.keys(EN).filter((key) => NARROW_PREFIXES.some((prefix) => key.startsWith(prefix))), ...BUTTONS];
++    expect(keys.length).toBeGreaterThanOrEqual(85);
++    for (const key of keys) {
++      expect(EN[key], key).toBeDefined();
++      expect(width(ZH[key]!), `${key}: ${EN[key]} → ${ZH[key]}`).toBeLessThanOrEqual(width(EN[key]!) + 2);
++    }
++  });
++});

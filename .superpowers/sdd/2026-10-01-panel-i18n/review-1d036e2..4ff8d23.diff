@@ -1,0 +1,597 @@
+# Review package: 1d036e2..4ff8d23
+
+## Commits
+4ff8d23 feat(web): translate the chains area and its banners
+
+## Files changed
+ web/src/App.tsx               |  2 +-
+ web/src/ChainPanel.tsx        | 51 +++++++++++++----------
+ web/src/chainBanner.ts        | 12 +++---
+ web/src/locales/en.ts         | 39 +++++++++++++++++-
+ web/src/locales/zh.ts         | 28 +++++++++++++
+ web/tests/chainsI18n.test.tsx | 94 +++++++++++++++++++++++++++++++++++++++++++
+ web/tests/i18nSwitch.test.tsx | 14 +++++++
+ 7 files changed, 209 insertions(+), 31 deletions(-)
+
+## Diff
+diff --git a/web/src/App.tsx b/web/src/App.tsx
+index 5ddbf80..5cf1271 100644
+--- a/web/src/App.tsx
++++ b/web/src/App.tsx
+@@ -635,21 +635,21 @@ export function App(): JSX.Element {
+         void i18n.changeLanguage(lang);
+       }}
+       onTheme={(pref) => {
+         setTheme(pref);
+         writeTheme(browserStorage(), pref);
+         applyTheme(document.documentElement, pref);
+       }}
+       banners={chains !== null ? <ChainBanners banners={bannersFor(chains, dismissed)} onDismiss={dismiss} /> : null}
+     >
+       <SectionPane section="chains" active={section}>
+-      {chains === null && <p className="empty">Chains have not loaded.</p>}
++      {chains === null && <p className="empty">{t("chains.notLoaded")}</p>}
+       {chains !== null && (
+         <ChainPanel
+           repos={chains}
+           banners={[]}
+           outcome={chainOutcome}
+           onDismiss={dismiss}
+           onStart={(form) => {
+             void chainAction(async () => {
+               const r = await requestChainStart(startChainBody(form));
+               return r.ok ? { kind: "started", chainId: r.body.chainId } : { kind: "refused", refusal: r };
+diff --git a/web/src/ChainPanel.tsx b/web/src/ChainPanel.tsx
+index 43424cf..f4ffb44 100644
+--- a/web/src/ChainPanel.tsx
++++ b/web/src/ChainPanel.tsx
+@@ -1,61 +1,69 @@
+ /**
+  * D-launch spec §6.2: status, start form, stop button, banners. Pure except for the selected repository, so a
+  * criterion renders it with renderToStaticMarkup (plan ruling 2). Every text node is one expression: adjacent JSX
+  * text would render with `<!-- -->` between the parts.
+  */
+ import { useState } from "react";
+ import type { FormEvent, JSX } from "react";
++import { useTranslation } from "react-i18next";
+ import type { PanelRefusal } from "./api.js";
+ import type { Banner } from "./chainBanner.js";
++import i18n, { enumText } from "./i18n.js";
+ import { Refusal } from "./Refusal.js";
+ import type { ChainRepoView, ChainView } from "./types.js";
+ 
+ export type ChainOutcome = { kind: "started"; chainId: string } | { kind: "stop-requested"; chainId: string } | { kind: "refused"; refusal: PanelRefusal };
+ export interface ChainForm {
+   repoKey: string;
+   goal: string;
+   maxSessions: string;
+   maxCostUsd: string;
+   sessionTimeoutMin: string;
+ }
+ 
+ export function chainStateText(chain: ChainView): string {
+-  if (chain.state === "stopped") return `stopped: ${chain.stop?.reason ?? "unknown"} (${chain.stop?.category ?? "unknown"})`;
+-  return chain.holderGone ? "running (supervisor is gone)" : "running";
++  if (chain.state === "stopped") {
++    return i18n.t("chains.stateStopped", {
++      reason: chain.stop?.reason ?? i18n.t("common.unknown"),
++      category: chain.stop ? enumText("chainStopCategory", chain.stop.category) : i18n.t("common.unknown"),
++    });
++  }
++  return chain.holderGone ? i18n.t("chains.stateOrphaned") : i18n.t("chains.stateRunning");
+ }
+-export const costText = (usd: number | null): string => (usd === null ? "cost unreadable" : `USD ${usd.toFixed(2)}`);
++export const costText = (usd: number | null): string => (usd === null ? i18n.t("chains.costUnreadable") : i18n.t("chains.cost", { amount: usd.toFixed(2) }));
+ export function progressText(chain: ChainView): string {
+   const n = chain.state === "running" && !chain.holderGone ? chain.sessionsDone + 1 : chain.sessionsDone;
+-  return `session ${n}; ${costText(chain.costUsd)}`;
++  return i18n.t("chains.sessionProgress", { n, cost: costText(chain.costUsd) });
+ }
+ 
+ /**
+  * Panel UI redesign spec §5.1: the banners, lifted out verbatim so App can show them above
+  * every section. ChainPanel still renders the ones it is given (App passes none).
+  */
+ export function ChainBanners({ banners, onDismiss }: { banners: readonly Banner[]; onDismiss?: (chainId: string) => void }): JSX.Element {
++  const { t } = useTranslation();
+   return (
+     <>
+       {banners.map((b) => (
+         <div key={b.chainId} role="alert" className={`chain-banner chain-banner-${b.category}`} data-chain-id={b.chainId}>
+           <strong>{b.text}</strong>
+           <span>{` ${b.repoKey}: ${b.reason}`}</span>
+           {b.awaitingHuman.length > 0 && (
+             <ul>
+               {b.awaitingHuman.map((a) => (
+                 <li key={a}>{a}</li>
+               ))}
+             </ul>
+           )}
+           <button type="button" data-action="dismiss" onClick={() => onDismiss?.(b.chainId)}>
+-            Got it
++            {t("chains.gotIt")}
+           </button>
+         </div>
+       ))}
+     </>
+   );
+ }
+ 
+ export function ChainPanel({
+   repos,
+   banners,
+@@ -64,87 +72,88 @@ export function ChainPanel({
+   onStart,
+   onStop,
+ }: {
+   repos: readonly ChainRepoView[];
+   banners: readonly Banner[];
+   outcome: ChainOutcome | null;
+   onDismiss?: (chainId: string) => void;
+   onStart?: (form: ChainForm) => void;
+   onStop?: (repoKey: string, chainId: string) => void;
+ }): JSX.Element {
++  const { t } = useTranslation();
+   const [repoKey, setRepoKey] = useState(repos[0]?.repoKey ?? "");
+   const selected = repos.find((r) => r.repoKey === repoKey);
+   const submit = (e: FormEvent<HTMLFormElement>): void => {
+     e.preventDefault();
+     const d = new FormData(e.currentTarget);
+     const text = (name: string): string => String(d.get(name) ?? "");
+     onStart?.({ repoKey, goal: text("goal"), maxSessions: text("maxSessions"), maxCostUsd: text("maxCostUsd"), sessionTimeoutMin: text("sessionTimeoutMin") });
+   };
+   return (
+     <section className="chains">
+-      <h2>Chains</h2>
++      <h2>{t("chains.title")}</h2>
+       <ChainBanners banners={banners} onDismiss={onDismiss} />
+       {repos.map((r) => (
+         <div key={r.repoKey} className="chain-repo" data-repo-key={r.repoKey}>
+           <h3>{r.repoKey}</h3>
+           {r.problem !== null && <p className="chain-problem">{r.problem}</p>}
+           {r.chain === null ? (
+-            <p>No chain yet.</p>
++            <p>{t("chains.noChain")}</p>
+           ) : (
+             <dl>
+-              <dt>Goal</dt>
++              <dt>{t("chains.goal")}</dt>
+               <dd>{r.chain.goal}</dd>
+-              <dt>By</dt>
++              <dt>{t("chains.by")}</dt>
+               <dd>{r.chain.by}</dd>
+-              <dt>Progress</dt>
++              <dt>{t("chains.progress")}</dt>
+               <dd>{progressText(r.chain)}</dd>
+-              <dt>State</dt>
++              <dt>{t("chains.state")}</dt>
+               <dd data-testid="chain-state">{chainStateText(r.chain)}</dd>
+             </dl>
+           )}
+           {r.chain !== null && r.chain.state === "running" && !r.chain.holderGone && (
+             <p>
+               <button type="button" data-action="stop-chain" onClick={() => onStop?.(r.repoKey, (r.chain as ChainView).chainId)}>
+-                Stop chain
++                {t("chains.stop")}
+               </button>
+-              <span>{" Stops after the current session ends."}</span>
++              <span>{t("chains.stopsAfter")}</span>
+             </p>
+           )}
+         </div>
+       ))}
+       <form className="chain-start" onSubmit={submit}>
+         <label>
+-          {"Repository "}
++          {t("chains.formRepository")}
+           <select name="repoKey" value={repoKey} onChange={(e) => setRepoKey(e.target.value)}>
+             {repos.map((r) => (
+               <option key={r.repoKey} value={r.repoKey}>
+                 {r.repoKey}
+               </option>
+             ))}
+           </select>
+         </label>
+         <label>
+-          {"Goal "}
++          {t("chains.formGoal")}
+           <textarea name="goal" required />
+         </label>
+         <label>
+-          {"Max sessions "}
++          {t("chains.formMaxSessions")}
+           <input name="maxSessions" type="number" min="1" step="1" required />
+         </label>
+         <label>
+-          {"Max cost in USD (a soft limit) "}
++          {t("chains.formMaxCost")}
+           <input name="maxCostUsd" type="number" min="0.01" step="0.01" required />
+         </label>
+         <label>
+-          {"Session timeout in minutes "}
++          {t("chains.formTimeout")}
+           <input key={repoKey} name="sessionTimeoutMin" type="number" min="1" defaultValue={selected?.defaultSessionTimeoutMin ?? ""} />
+         </label>
+         <button type="submit" data-action="start-chain">
+-          Start chain
++          {t("chains.start")}
+         </button>
+       </form>
+-      {outcome?.kind === "started" && <p role="status">{`Chain ${outcome.chainId} started.`}</p>}
+-      {outcome?.kind === "stop-requested" && <p role="status">{`Chain ${outcome.chainId} will stop after the current session ends.`}</p>}
++      {outcome?.kind === "started" && <p role="status">{t("chains.started", { chainId: outcome.chainId })}</p>}
++      {outcome?.kind === "stop-requested" && <p role="status">{t("chains.stopRequested", { chainId: outcome.chainId })}</p>}
+       {outcome?.kind === "refused" && <Refusal refusal={outcome.refusal} />}
+     </section>
+   );
+ }
+diff --git a/web/src/chainBanner.ts b/web/src/chainBanner.ts
+index e0c7f54..1e1672a 100644
+--- a/web/src/chainBanner.ts
++++ b/web/src/chainBanner.ts
+@@ -1,40 +1,38 @@
+ /**
+  * D-launch spec §6.2: one banner per stopped chain, by category, until "Got it". Dismissals are kept in this browser
+  * only (localStorage), never in ~/.orca. Storage can be missing or throw (private mode, blocked site data); then
+  * nothing is remembered and nothing breaks.
+  */
++import i18n from "./i18n.js";
++import { en } from "./locales/en.js";
+ import type { ChainRepoView, ChainStopCategory } from "./types.js";
+ 
+-export const BANNER_TEXT: Record<ChainStopCategory, string> = {
+-  done: "Chain finished",
+-  blocked: "Chain is waiting for you",
+-  limit: "Chain stopped at a limit",
+-  anomaly: "Chain stopped on an anomaly",
+-};
++/** In English (criteria read it); bannersFor translates when it is called (panel i18n spec §3.3). */
++export const BANNER_TEXT: Record<ChainStopCategory, string> = en.chains.banner;
+ export const DISMISSED_KEY = "orca.chains.dismissed";
+ 
+ export interface Banner {
+   repoKey: string;
+   chainId: string;
+   category: ChainStopCategory;
+   text: string;
+   reason: string;
+   awaitingHuman: string[];
+ }
+ 
+ export function bannersFor(repos: readonly ChainRepoView[], dismissed: ReadonlySet<string>): Banner[] {
+   const out: Banner[] = [];
+   for (const r of repos) {
+     const c = r.chain;
+     if (c === null || c.state !== "stopped" || c.stop === null || dismissed.has(c.chainId)) continue;
+-    out.push({ repoKey: r.repoKey, chainId: c.chainId, category: c.stop.category, text: BANNER_TEXT[c.stop.category], reason: c.stop.reason, awaitingHuman: c.stop.awaitingHuman });
++    out.push({ repoKey: r.repoKey, chainId: c.chainId, category: c.stop.category, text: i18n.t(`chains.banner.${c.stop.category}`), reason: c.stop.reason, awaitingHuman: c.stop.awaitingHuman });
+   }
+   return out;
+ }
+ 
+ export function readDismissed(storage: Pick<Storage, "getItem"> | undefined): Set<string> {
+   try {
+     const raw = storage?.getItem(DISMISSED_KEY);
+     const value: unknown = raw ? JSON.parse(raw) : [];
+     return new Set(Array.isArray(value) ? value.filter((x): x is string => typeof x === "string") : []);
+   } catch {
+diff --git a/web/src/locales/en.ts b/web/src/locales/en.ts
+index 2456468..9328e97 100644
+--- a/web/src/locales/en.ts
++++ b/web/src/locales/en.ts
+@@ -1,17 +1,17 @@
+ /**
+  * Panel i18n spec §2: the English resource. It is the source shape (`as const`), and every value is today's panel text
+  * byte for byte. Keys are grouped by panel area. Enum families (spec §3.5) are Records over the value unions, so a new
+  * value is a compile error here until it has its words. Tasks 3-10 add their areas.
+  */
+ import type { ThemePref } from "../theme.js";
+-import type { CorrectionKind, DecisionKind, DecisionObservation, DecisionScope, MetricsNoteCode } from "../types.js";
++import type { ChainStopCategory, CorrectionKind, DecisionKind, DecisionObservation, DecisionScope, MetricsNoteCode } from "../types.js";
+ 
+ /** The Chinese resource's type: the same key set, every value widened to string (spec §2). */
+ export type Translation<T> = { [K in keyof T]: T[K] extends string ? string : Translation<T[K]> };
+ 
+ const theme = { system: "system", light: "light", dark: "dark" } as const satisfies Record<ThemePref, string>;
+ const decisionKind = {
+   dependency: "dependency", interface: "interface", scheduling: "scheduling", abandon: "abandon", criteria: "criteria", boundary: "boundary", reconcile: "reconcile",
+ } as const satisfies Record<DecisionKind, string>;
+ const decisionScope = { file: "file", task: "task", repo: "repo", "cross-repo": "cross-repo" } as const satisfies Record<DecisionScope, string>;
+ const decisionVerdict = { ok: "ok", downgraded: "downgraded" } as const satisfies Record<DecisionObservation["verdict"], string>;
+@@ -23,20 +23,28 @@ const kindHelp = {
+ } as const satisfies Record<CorrectionKind, string>;
+ 
+ // Panel i18n spec §3.4: each English note is the server's sentence byte for byte (tests/metrics/noteCodes.test.ts).
+ const metricsNote = {
+   "no-review-coverage": "review coverage has no data: its only producer is the panel (E2 spec §3.5), and A' §4.4 says the correction rate must never be read on its own",
+   "unresolved-decisions": "some corrections point at decisions outside what was scanned (see unresolved_decisions); they count in the totals but sit in no decision-kind bucket",
+   "stale-bias": "systematically low: closing a stale correction requires the chose_instead field (CLI flag --chose-instead) that corrections/schema.ts says a stale may not have (E2 spec §3.2.1, A' ERRATUM 3)",
+   "reviewed-is-deliberate": "`reviewed` is a deliberate act, so this number can sit near zero for a long time -- and a long-zero coverage is not distinguishable from nobody looking. Read it with the backlog, not on its own.",
+ } as const satisfies Record<MetricsNoteCode | "reviewed-is-deliberate", string>;
+ 
++const chainStopCategory = { done: "done", blocked: "blocked", limit: "limit", anomaly: "anomaly" } as const satisfies Record<ChainStopCategory, string>;
++const chainBanner = {
++  done: "Chain finished",
++  blocked: "Chain is waiting for you",
++  limit: "Chain stopped at a limit",
++  anomaly: "Chain stopped on an anomaly",
++} as const satisfies Record<ChainStopCategory, string>;
++
+ export const en = {
+   nav: { sections: "Sections", decisions: "Decisions", chains: "Chains", tasks: "Task control", metrics: "Metrics" },
+   shell: {
+     brandTitle: "Leave it to Orca — every idea, made real.",
+     chainRunning: "a chain is running",
+     needsAttention: "needs attention",
+     theme: "Theme",
+     language: "Language",
+     loading: "orca panel loading…",
+     epoch: "epoch {{epoch}}",
+@@ -63,20 +71,47 @@ export const en = {
+     agreeHelp: "Mark reviewed: I read this and it needs no change. Counts toward review coverage.",
+     correctNote: "This records a correction; it does not edit the ledger. To change the decision itself, close it with orca correct --close or let the fix agent do it.",
+     kind: "Kind",
+     kindOption: "{{kind}} — {{help}}",
+     kindHelp,
+     choseInstead: "Chose instead (optional)",
+     correct: "Correct",
+     recordedReviewed: "Recorded as reviewed.",
+     correctionRecorded: "Correction recorded.",
+   },
++  chains: {
++    notLoaded: "Chains have not loaded.",
++    title: "Chains",
++    noChain: "No chain yet.",
++    goal: "Goal",
++    by: "By",
++    progress: "Progress",
++    state: "State",
++    stop: "Stop chain",
++    stopsAfter: " Stops after the current session ends.",
++    formRepository: "Repository ",
++    formGoal: "Goal ",
++    formMaxSessions: "Max sessions ",
++    formMaxCost: "Max cost in USD (a soft limit) ",
++    formTimeout: "Session timeout in minutes ",
++    start: "Start chain",
++    started: "Chain {{chainId}} started.",
++    stopRequested: "Chain {{chainId}} will stop after the current session ends.",
++    gotIt: "Got it",
++    stateStopped: "stopped: {{reason}} ({{category}})",
++    stateRunning: "running",
++    stateOrphaned: "running (supervisor is gone)",
++    costUnreadable: "cost unreadable",
++    cost: "USD {{amount}}",
++    sessionProgress: "session {{n}}; {{cost}}",
++    banner: chainBanner,
++  },
+   loopPlan: {
+     // Panel i18n spec §3.1, §6.9: one entry per registry version, equal to src/control/loopPlans.ts (the English source of
+     // record); a version with no discipline has no discipline key.
+     plan: {
+       standard: { v1: { name: "Standard" }, v2: { name: "Standard" } },
+       bugfix: {
+         v1: { name: "Bug fix (red first)", discipline: "Write a failing test that reproduces the bug, then fix it (checked by a model, not proven mechanically)" },
+         v2: { name: "Bug fix (red first)", discipline: "Write a failing test that reproduces the bug, then fix it (checked by a model, not proven mechanically)" },
+       },
+       refactor: {
+@@ -112,12 +147,12 @@ export const en = {
+     repairRate: "Repair rate",
+     reviewCoverage: "Review coverage",
+     unresolvedTitle: "Unresolved decisions",
+     unresolvedCount: "Unresolved decisions: {{n}}",
+     malformedTitle: "Malformed lines",
+     malformedCount: "Malformed lines: {{n}}",
+     futureTitle: "Excluded as future",
+     futureCount: "Excluded as future: {{n}}",
+     note: metricsNote,
+   },
+-  enums: { theme, decisionKind, decisionScope, decisionVerdict, correctionKind },
++  enums: { theme, decisionKind, decisionScope, decisionVerdict, correctionKind, chainStopCategory },
+ } as const;
+diff --git a/web/src/locales/zh.ts b/web/src/locales/zh.ts
+index 3be6e98..27bd164 100644
+--- a/web/src/locales/zh.ts
++++ b/web/src/locales/zh.ts
+@@ -39,20 +39,47 @@ export const zh: Translation<typeof en> = {
+     agreeHelp: "标记为已评审：我读过了，不需要改。计入评审覆盖率。",
+     correctNote: "这会记录一条纠正；它不改台账。要改决策本身，用 orca correct --close 关闭它，或交给修复 agent。",
+     kind: "类型",
+     kindOption: "{{kind}} —— {{help}}",
+     kindHelp: { wrong: "选错了", not_my_taste: "说得通，但不是我会选的", stale: "当时对，现在不成立了" },
+     choseInstead: "改选（可选）",
+     correct: "纠正",
+     recordedReviewed: "已记录为已评审。",
+     correctionRecorded: "纠正已记录。",
+   },
++  chains: {
++    notLoaded: "链尚未加载。",
++    title: "链",
++    noChain: "还没有链。",
++    goal: "目标",
++    by: "发起人",
++    progress: "进度",
++    state: "状态",
++    stop: "停止链",
++    stopsAfter: " 当前会话结束后停止。",
++    formRepository: "仓库 ",
++    formGoal: "目标 ",
++    formMaxSessions: "最多会话数 ",
++    formMaxCost: "费用上限（美元，软限制） ",
++    formTimeout: "会话超时（分钟） ",
++    start: "启动链",
++    started: "链 {{chainId}} 已启动。",
++    stopRequested: "链 {{chainId}} 将在当前会话结束后停止。",
++    gotIt: "知道了",
++    stateStopped: "已停止：{{reason}}（{{category}}）",
++    stateRunning: "运行中",
++    stateOrphaned: "运行中（监督进程已不在）",
++    costUnreadable: "费用读不出",
++    cost: "USD {{amount}}",
++    sessionProgress: "第 {{n}} 个会话；{{cost}}",
++    banner: { done: "链已完成", blocked: "链在等你", limit: "链因触达上限而停止", anomaly: "链因异常而停止" },
++  },
+   loopPlan: {
+     plan: {
+       standard: { v1: { name: "标准" }, v2: { name: "标准" } },
+       bugfix: {
+         v1: { name: "修 bug（先红后绿）", discipline: "先写能复现的失败测试再修（由模型核对，不是机械证明）" },
+         v2: { name: "修 bug（先红后绿）", discipline: "先写能复现的失败测试再修（由模型核对，不是机械证明）" },
+       },
+       refactor: {
+         v1: { name: "安全重构", discipline: "不改可观察行为（写给 agent 的约束；只有检查命令是硬的）" },
+         v2: { name: "安全重构", discipline: "不改可观察行为（写给 agent 的约束；只有检查命令是硬的）" },
+@@ -97,14 +124,15 @@ export const zh: Translation<typeof en> = {
+       "stale-bias": "系统性偏低：关闭一条 stale 纠正需要 chose_instead 字段（CLI 参数 --chose-instead），而 corrections/schema.ts 规定 stale 不能带它（E2 spec §3.2.1，A' ERRATUM 3）",
+       "reviewed-is-deliberate": "`reviewed` 是一个有意的动作，所以这个数字可能长时间接近零——而长期为零的覆盖率与没人看无法区分。请结合积压一起看，不要单独看。",
+     },
+   },
+   enums: {
+     theme: { system: "跟随系统", light: "浅色", dark: "深色" },
+     decisionKind: { dependency: "依赖", interface: "接口", scheduling: "调度", abandon: "放弃", criteria: "判据", boundary: "边界", reconcile: "协调" },
+     decisionScope: { file: "文件", task: "任务", repo: "仓库", "cross-repo": "跨仓库" },
+     decisionVerdict: { ok: "正常", downgraded: "已降级" },
+     correctionKind: { wrong: "错了", not_my_taste: "不合我意", stale: "过时" },
++    chainStopCategory: { done: "已完成", blocked: "等人处理", limit: "触达上限", anomaly: "异常" },
+   },
+ };
+ 
+ export const zhErrors: Record<string, string> = {};
+diff --git a/web/tests/chainsI18n.test.tsx b/web/tests/chainsI18n.test.tsx
+new file mode 100644
+index 0000000..35cb98a
+--- /dev/null
++++ b/web/tests/chainsI18n.test.tsx
+@@ -0,0 +1,94 @@
++// @vitest-environment jsdom
++/**
++ * Panel i18n spec §3.3: the chains area's own sentences (state, cost, progress, outcomes, the form and the banners) in
++ * Chinese; the stop reason is shown as sent (data), its category in words.
++ */
++import { cleanup, render, screen, waitFor } from "@testing-library/react";
++import { renderToStaticMarkup } from "react-dom/server";
++import { afterEach, describe, expect, it } from "vitest";
++import { App } from "../src/App.js";
++import { bannersFor } from "../src/chainBanner.js";
++import { ChainBanners, ChainPanel, chainStateText, costText } from "../src/ChainPanel.js";
++import i18n from "../src/i18n.js";
++import type { ChainRepoView, ChainView } from "../src/types.js";
++
++const chain = (over: Partial<ChainView> = {}): ChainView => ({
++  chainId: "chain-0000000b", goal: "g-1", by: "amy", via: "cli", startedAt: "2026-10-01T00:00:00.000Z",
++  state: "running", holderGone: false, sessionsDone: 2, costUsd: null, stop: null, ...over,
++});
++const stopped: ChainView = chain({ state: "stopped", costUsd: 1.5, stop: { reason: "r-1", category: "limit", at: "2026-10-01T01:00:00.000Z", awaitingHuman: [], detail: null } });
++const repos: ChainRepoView[] = [
++  { repoKey: "acme-alpha", defaultSessionTimeoutMin: 30, chain: chain(), problem: null },
++  { repoKey: "acme-beta", defaultSessionTimeoutMin: null, chain: stopped, problem: null },
++  { repoKey: "acme-gamma", defaultSessionTimeoutMin: null, chain: null, problem: null },
++];
++
++const json = (body: unknown, status = 200): Response =>
++  new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
++// Copied verbatim from web/tests/i18nSwitch.test.tsx (the page reads the metrics on load).
++const METRICS = { report: { as_of: "2026-09-21T00:00:00.000Z", as_of_mode: "wall_clock", repos: [], correction_rate: { numerator_corrections_excluding_stale: 0, denominator_decisions: 0, rate_excluding_stale: null, corrections_total_including_stale: 0, by_decision_kind: [], buckets: [], caveats: [] }, repair_rate: { numerator_overturned: 0, denominator_corrections_including_stale: 0, rate: null, stale_only: { numerator_overturned: 0, denominator_corrections: 0, rate: null, known_bias: "" }, buckets: [], caveats: [] }, backlog: { open_corrections: 0, oldest_age_ms: null, oldest_correction_id: null, by_correction_kind: [] }, breakdown_by_correction_kind_including_stale: [], review_coverage: { available: false, reason: "none" }, unresolved_decisions: [], unkeyable_repos: [], malformed_lines: [] }, panel_review_coverage: { reviewed_high_tier: 0, high_tier_total: 0, rate: 0, caveat: "" } };
++
++afterEach(cleanup);
++
++describe("the chains area in Chinese", () => {
++  it("shows state, cost, progress, the form, outcomes and banners in Chinese", async () => {
++    await i18n.changeLanguage("zh");
++    expect(chainStateText(stopped)).toBe("已停止：r-1（触达上限）");
++    expect(chainStateText(chain({ holderGone: true }))).toBe("运行中（监督进程已不在）");
++    expect(costText(null)).toBe("费用读不出");
++    const html = renderToStaticMarkup(<ChainPanel repos={repos} banners={[]} outcome={{ kind: "stop-requested", chainId: "chain-0000000b" }} />);
++    for (const expected of ["链", "还没有链。", "发起人", "第 3 个会话；费用读不出", "运行中", "停止链", " 当前会话结束后停止。", "会话超时（分钟） ", "启动链", "链 chain-0000000b 将在当前会话结束后停止。"]) expect(html).toContain(expected);
++    const banner = renderToStaticMarkup(<ChainBanners banners={bannersFor([repos[1]!], new Set())} />);
++    expect(banner).toContain("链因触达上限而停止");
++    expect(banner).toContain("知道了");
++  });
++
++  // Task 6 implementer addition: each site read on its own node (whole text, bounded by its tags), so no assertion
++  // passes on a neighbour's text -- "链" alone is inside nearly every Chinese string here.
++  it("puts each chains sentence on its own node, the missing stop reason and category read 未知, and cost keeps its amount", async () => {
++    await i18n.changeLanguage("zh");
++    expect(chainStateText(chain({ state: "stopped", stop: null }))).toBe("已停止：未知（未知）");
++    expect(costText(1.5)).toBe("USD 1.50");
++    const html = renderToStaticMarkup(<ChainPanel repos={repos} banners={[]} outcome={{ kind: "stop-requested", chainId: "chain-0000000b" }} />);
++    for (const expected of [
++      "<h2>链</h2>",
++      "<p>还没有链。</p>",
++      "<dt>目标</dt>",
++      "<dt>发起人</dt>",
++      "<dt>进度</dt>",
++      "<dt>状态</dt>",
++      "<dd>第 3 个会话；费用读不出</dd>",
++      "<dd>第 2 个会话；USD 1.50</dd>",
++      '<dd data-testid="chain-state">运行中</dd>',
++      '<dd data-testid="chain-state">已停止：r-1（触达上限）</dd>',
++      ">停止链</button>",
++      "<span> 当前会话结束后停止。</span>",
++      '<label>仓库 <select name="repoKey">',
++      '<label>目标 <textarea name="goal"',
++      '<label>最多会话数 <input type="number" min="1" step="1" required="" name="maxSessions"/></label>',
++      '<label>费用上限（美元，软限制） <input type="number" min="0.01" step="0.01" required="" name="maxCostUsd"/></label>',
++      '<label>会话超时（分钟） <input type="number" min="1" name="sessionTimeoutMin"',
++      ">启动链</button>",
++      '<p role="status">链 chain-0000000b 将在当前会话结束后停止。</p>',
++    ]) expect(html).toContain(expected);
++    const started = renderToStaticMarkup(<ChainPanel repos={repos} banners={[]} outcome={{ kind: "started", chainId: "chain-0000000b" }} />);
++    expect(started).toContain('<p role="status">链 chain-0000000b 已启动。</p>');
++    const banner = renderToStaticMarkup(<ChainBanners banners={bannersFor([repos[1]!], new Set())} />);
++    expect(banner).toContain("<strong>链因触达上限而停止</strong>");
++    expect(banner).toContain('data-action="dismiss">知道了</button>');
++  });
++
++  it("says the chains have not loaded in Chinese while the page waits for them", async () => {
++    await i18n.changeLanguage("zh");
++    // /api/chains never answers, so the page keeps its not-loaded line; there is no control plane.
++    globalThis.fetch = (async (input: RequestInfo | URL): Promise<Response> => {
++      const url = String(input);
++      if (url === "/api/chains") return new Promise<Response>(() => {});
++      if (url === "/api/todo") return json({ rows: [] });
++      if (url === "/api/metrics") return json(METRICS);
++      return json({ error: { code: "control-port-unconfigured", message: "no control plane in this criterion" } }, 404);
++    }) as typeof fetch;
++    render(<App />);
++    await waitFor(() => expect(screen.getByText("链尚未加载。").className).toBe("empty"));
++  });
++});
+diff --git a/web/tests/i18nSwitch.test.tsx b/web/tests/i18nSwitch.test.tsx
+index 81c3b86..6570cb2 100644
+--- a/web/tests/i18nSwitch.test.tsx
++++ b/web/tests/i18nSwitch.test.tsx
+@@ -49,19 +49,33 @@ describe("the language switch (spec §6.7)", () => {
+     expect(window.localStorage.getItem("orca.panel.lang")).toBe("zh");
+     expect(document.documentElement.lang).toBe("zh");
+     expect(select.value).toBe("zh");
+     expect(container.textContent).toContain("主题");
+     fireEvent.change(select, { target: { value: "en" } });
+     await waitFor(() => expect(screen.getByRole("link", { name: /Decisions/ })).toBeTruthy());
+     expect(window.localStorage.getItem("orca.panel.lang")).toBe("en");
+     expect(document.documentElement.lang).toBe("en");
+   });
+ 
++  it("re-renders a helper-built string too: the chain banner bannersFor builds", async () => {
++    chainRepos = [{
++      repoKey: "acme-alpha", defaultSessionTimeoutMin: null, problem: null,
++      chain: { chainId: "chain-0000000b", goal: "g-1", by: "amy", via: "cli", startedAt: "2026-10-01T00:00:00.000Z", state: "stopped", holderGone: false, sessionsDone: 2, costUsd: 1.5, stop: { reason: "r-1", category: "done", at: "2026-10-01T01:00:00.000Z", awaitingHuman: [], detail: null } },
++    }];
++    const { container } = render(<App />);
++    const select = await languageSelect(container);
++    await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("Chain finished"));
++    fireEvent.change(select, { target: { value: "zh" } });
++    await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("链已完成"));
++    fireEvent.change(select, { target: { value: "en" } });
++    await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("Chain finished"));
++  });
++
+   it("still switches when this browser refuses to store the choice (a full or blocked storage costs the memory, not the switch)", async () => {
+     const { container } = render(<App />);
+     const select = await languageSelect(container);
+     vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("QuotaExceededError"); });
+     fireEvent.change(select, { target: { value: "zh" } });
+     await waitFor(() => expect(screen.getByRole("link", { name: /决策/ })).toBeTruthy());
+     expect(document.documentElement.lang).toBe("zh");
+   });
+ });

@@ -1,0 +1,926 @@
+# Review package: bd6ccfc..4977c10
+
+## Commits
+4977c10 feat(metrics): give each metrics sentence a stable code the panel can translate
+d812323 chore(checkpoint): orca-dev-e604b1ba, level 454155 of 1000000 (T1 330000, T2 450000, band 2)
+
+## Files changed
+ .orca/checkpoints/orca-dev-e604b1ba.json | 45 +++++++++++----------
+ src/metrics/compute.ts                   | 13 ++++++-
+ src/metrics/types.ts                     | 12 ++++++
+ src/panel/coverage.ts                    |  3 ++
+ tests/fixtures/metrics/golden.json       | 13 ++++++-
+ tests/metrics/noteCodes.test.ts          | 37 ++++++++++++++++++
+ tests/panel/webParity.test.ts            | 16 +++++++-
+ web/src/MetricsView.tsx                  | 48 ++++++++++++++---------
+ web/src/locales/en.ts                    | 22 +++++++++++
+ web/src/locales/zh.ts                    | 18 +++++++++
+ web/src/types.ts                         | 13 +++++++
+ web/tests/metricsNotes.test.tsx          | 67 ++++++++++++++++++++++++++++++++
+ 12 files changed, 261 insertions(+), 46 deletions(-)
+
+## Diff
+diff --git a/.orca/checkpoints/orca-dev-e604b1ba.json b/.orca/checkpoints/orca-dev-e604b1ba.json
+index 03f6cd7..e044379 100644
+--- a/.orca/checkpoints/orca-dev-e604b1ba.json
++++ b/.orca/checkpoints/orca-dev-e604b1ba.json
+@@ -1,53 +1,56 @@
+ {
+   "v": 1,
+   "runId": "orca-dev-e604b1ba",
+   "runtime": "claude-code",
+   "sessionRef": "e604b1ba-577a-4ce7-8f12-db0a3ee0d5b1",
+-  "writtenAt": "2026-09-30T17:55:08.165Z",
+-  "head": "c60559cdeb486deb61467405d077999279cb54e2",
++  "writtenAt": "2026-09-30T20:57:12.678Z",
++  "head": "bd6ccfcaba592bb6758e7302b50763083c622782",
+   "level": {
+     "kind": "reading",
+-    "level": 341008,
++    "level": 454155,
+     "windowTokens": 1000000,
+     "t1": 330000,
+     "t2": 450000,
+-    "band": 1
++    "band": 2
+   },
+   "next": [
+-    "On the human's naming of the six W7 criteria: resume the W7 implementer with the rewrites, v2 perAttemptTimeoutMs 2147483647 plus the Orca clamp, then commits 2 (budget-only change keeps plan version) and 3 (suggestion keeps plan-card draft)",
+-    "After W7: dispatch an Opus drafter for the i18n plan (spec f4dbe5f approved, H18) and self-review it per writing-plans",
+-    "After W7: C4 paid measurement, 6 real-claude verify calls, $1 cap each (H4)",
+-    "Final gate in fresh clones, then update docs/handoff/handoff.md"
++    "Continue the panel-i18n plan by subagent-driven development: Task 4 dispatched (metrics codes), then Tasks 5-11, then Task 12 gate, final whole-branch review; ledger .superpowers/sdd/2026-10-01-panel-i18n/progress.md is the recovery map (Tasks 1-3 complete)",
++    "Then update docs/handoff/handoff.md in Orca, ccloop, ccmem (Orca sections in ccloop/ccmem replaced, not appended; no hard HEAD); give the human the executive summary and the rulings list"
+   ],
+   "open": [
+-    "Ledger .superpowers/sdd/2026-10-01-loop-plans-followups/progress.md holds every ruling H1-H18 and controller Ruling lines",
+-    "ccloop setTimeout overflow above 2147483647 ms for other clients: registered only",
+-    "New load flake: tests/control/ccloopPort.test.ts"
++    "Past T2 by the human's instruction H20 (context size not a stop condition this session)",
++    "C4 v2 plan content change waits for the human to name tests/control/loopPlans.test.ts 'each plan's rules land in the contract (criterion 2)' rows and the loopPlanView objective line (patch scratchpad/w7/c4-impl-only.patch)",
++    "ccloop rejectOn substring match over free-text evidence: registered for ccloop",
++    "npm audit: vitest/vite dev-dependency findings registered"
+   ],
+   "awaitingHuman": [
+     {
+       "kind": "named-authorization",
+-      "what": "Rewrite six 2026-09-30 criteria that pin plan v1 (loopPlans x3, loopPlanSummary, loopPlanView, loopPlanImport) for plans v2"
++      "what": "C4 v2 plan content: rewrite loopPlans criterion 2 rows (bugfix/design/investigate) and the loopPlanView successCondition line"
++    },
++    {
++      "kind": "ccloop-change",
++      "what": "rejectOn match rule: whole-entry or dedicated field instead of substring over evidence"
+     },
+     {
+       "kind": "irreversible",
+-      "what": "Push Orca (local ahead of origin) and ccloop; human-timed"
++      "what": "Push Orca and ccloop; human-timed"
+     }
+   ],
+   "measurements": [
+     {
+-      "command": "/usr/bin/git -C /Users/biran/code/skills/loop/Orca ls-remote origin refs/heads/main",
++      "command": "/usr/bin/git -C /Users/biran/code/skills/loop/Orca log --oneline 9d4a335..main",
+       "exitCode": 0,
+-      "commit": "c60559cdeb486deb61467405d077999279cb54e2",
+-      "observedAt": "2026-09-30T17:55:08.093Z",
+-      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-e604b1ba-zjXfyG/1.txt"
++      "commit": "bd6ccfcaba592bb6758e7302b50763083c622782",
++      "observedAt": "2026-09-30T20:57:08.239Z",
++      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-e604b1ba-mMjh2p/1.txt"
+     },
+     {
+-      "command": "/usr/bin/git -C /Users/biran/code/skills/loop/Orca log --oneline 9d4a335..main",
++      "command": "/usr/bin/git -C /Users/biran/code/skills/loop/Orca ls-remote origin refs/heads/main",
+       "exitCode": 0,
+-      "commit": "c60559cdeb486deb61467405d077999279cb54e2",
+-      "observedAt": "2026-09-30T17:55:08.125Z",
+-      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-e604b1ba-zjXfyG/2.txt"
++      "commit": "bd6ccfcaba592bb6758e7302b50763083c622782",
++      "observedAt": "2026-09-30T20:57:12.625Z",
++      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-e604b1ba-mMjh2p/2.txt"
+     }
+   ]
+ }
+diff --git a/src/metrics/compute.ts b/src/metrics/compute.ts
+index 880b82a..5c1e9fb 100644
+--- a/src/metrics/compute.ts
++++ b/src/metrics/compute.ts
+@@ -2,20 +2,21 @@ import { CORRECTION_KINDS } from "../corrections/schema.js";
+ import type { CorrectionKind } from "../corrections/schema.js";
+ import { KIND_ORDER, KIND_TIER } from "./highTier.js";
+ import type { Observations } from "./collect.js";
+ import type {
+   Backlog,
+   BacklogSlice,
+   CorrectionKindCount,
+   CorrectionRate,
+   CorrectionRateBucket,
+   CorrectionRateSlice,
++  MetricsNoteCode,
+   MetricsReport,
+   RepairRate,
+   RepairRateBucket,
+   RepoSummary,
+ } from "./types.js";
+ 
+ /**
+  * 🔴 Pure: zero fs, zero clock, zero git. `now` never appears — every instant
+  * this function uses comes in as `obs.asOf`, injected by the caller (spec §4.3,
+  * §5). This is the one module E3 and E4 both consume, and a metrics layer with
+@@ -118,30 +119,36 @@ export function computeMetrics(
+     return {
+       bucket,
+       numerator_corrections_excluding_stale: numer,
+       denominator_decisions: inBucket.length,
+       rate_excluding_stale: rate(numer, inBucket.length),
+       counted_through: obs.asOf,
+     };
+   });
+ 
+   const correctionCaveats = [NO_REVIEW_COVERAGE];
+-  if (obs.unresolvedDecisions.length > 0) correctionCaveats.push(UNRESOLVED_CAVEAT);
++  // Panel i18n spec §3.4: a stable code beside each sentence, index for index; the sentences stay for the CLI.
++  const correctionCaveatCodes: MetricsNoteCode[] = ["no-review-coverage"];
++  if (obs.unresolvedDecisions.length > 0) {
++    correctionCaveats.push(UNRESOLVED_CAVEAT);
++    correctionCaveatCodes.push("unresolved-decisions");
++  }
+ 
+   const correction_rate: CorrectionRate = {
+     numerator_corrections_excluding_stale: scoring.length,
+     denominator_decisions: denominatorDecisions,
+     rate_excluding_stale: rate(scoring.length, denominatorDecisions),
+     corrections_total_including_stale: obs.corrections.length,
+     by_decision_kind: kindSlices,
+     buckets: correctionBuckets,
+     caveats: correctionCaveats,
++    caveatCodes: correctionCaveatCodes,
+   };
+ 
+   // ---- repair rate ---------------------------------------------------------
+   // `stale` STAYS in this denominator: it measures whether a correction someone
+   // raised was ever acted on, and a stale nobody redid IS the backlog.
+   const closed = obs.corrections.filter((c) => closedIds.has(c.row.id));
+   const staleAll = obs.corrections.filter((c) => c.row.kind === "stale");
+   const staleClosed = staleAll.filter((c) => closedIds.has(c.row.id));
+ 
+   const repairBucketKeys = [...new Set(obs.corrections.map((c) => bucketOf(c.row.at)))].sort();
+@@ -159,23 +166,25 @@ export function computeMetrics(
+ 
+   const repair_rate: RepairRate = {
+     numerator_overturned: closed.length,
+     denominator_corrections_including_stale: obs.corrections.length,
+     rate: rate(closed.length, obs.corrections.length),
+     stale_only: {
+       numerator_overturned: staleClosed.length,
+       denominator_corrections: staleAll.length,
+       rate: rate(staleClosed.length, staleAll.length),
+       known_bias: STALE_BIAS,
++      knownBiasCode: "stale-bias",
+     },
+     buckets: repairBuckets,
+     caveats: [NO_REVIEW_COVERAGE],
++    caveatCodes: ["no-review-coverage"],
+   };
+ 
+   // ---- backlog -------------------------------------------------------------
+   // Wall clock, deliberately (spec §4.1): "nine days of backlog" has to include
+   // the days the laptop was shut, which is what a monotonic clock cannot do.
+   const open = obs.corrections.filter((c) => !closedIds.has(c.row.id));
+   const oldest = open.reduce<{ id: string; at: string } | undefined>((acc, c) => {
+     if (acc === undefined || Date.parse(c.row.at) < Date.parse(acc.at)) {
+       return { id: c.row.id, at: c.row.at };
+     }
+@@ -220,21 +229,21 @@ export function computeMetrics(
+     .sort((a, b) => (a.projectKey < b.projectKey ? -1 : a.projectKey > b.projectKey ? 1 : 0));
+ 
+   return {
+     as_of: obs.asOf,
+     as_of_mode: obs.asOfMode,
+     repos,
+     correction_rate,
+     repair_rate,
+     backlog,
+     breakdown_by_correction_kind_including_stale: breakdown,
+-    review_coverage: { available: false, reason: NO_REVIEW_COVERAGE },
++    review_coverage: { available: false, reason: NO_REVIEW_COVERAGE, reasonCode: "no-review-coverage" },
+     excluded_as_future: obs.excludedAsFuture,
+     unresolved_decisions: [...obs.unresolvedDecisions].sort((a, b) =>
+       a.correctionId < b.correctionId ? -1 : a.correctionId > b.correctionId ? 1 : 0,
+     ),
+     unkeyable_repos: [...obs.unkeyableRepos].sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0)),
+     malformed_lines: [...obs.malformed].sort((a, b) =>
+       a.file !== b.file ? (a.file < b.file ? -1 : 1) : a.line - b.line,
+     ),
+   };
+ }
+diff --git a/src/metrics/types.ts b/src/metrics/types.ts
+index 2b64d0f..da0c2fd 100644
+--- a/src/metrics/types.ts
++++ b/src/metrics/types.ts
+@@ -103,29 +103,37 @@ export interface CorrectionRateBucket {
+    * cohort bucket never closes, a decision from any month can be corrected
+    * tomorrow — and a constant field is one no mutation can turn red. This
+    * carries the as-of instead: the number is what was observable through this
+    * instant, and re-running with a later --as-of can only raise it. It also
+    * gives the "read the wall clock instead of as-of" mutation a place to land
+    * in the golden diff.
+    */
+   counted_through: string;
+ }
+ 
++/**
++ * Panel i18n spec §3.4: the stable code beside each sentence the metrics carry, so the panel can show the note in the
++ * reader's language. The sentences stay: the CLI prints them.
++ */
++export type MetricsNoteCode = "no-review-coverage" | "unresolved-decisions" | "stale-bias";
++
+ export interface CorrectionRate {
+   numerator_corrections_excluding_stale: number;
+   denominator_decisions: number;
+   /** null when the denominator is 0 — that is a different claim from 0. */
+   rate_excluding_stale: number | null;
+   corrections_total_including_stale: number;
+   by_decision_kind: CorrectionRateSlice[];
+   buckets: CorrectionRateBucket[];
+   caveats: string[];
++  /** Index for index with caveats (panel i18n spec §3.4). */
++  caveatCodes: MetricsNoteCode[];
+ }
+ 
+ export interface RepairRateBucket {
+   /** cohort by correction.at, "YYYY-MM" */
+   bucket: string;
+   numerator_overturned: number;
+   denominator_corrections_including_stale: number;
+   rate: number | null;
+   counted_through: string;
+ }
+@@ -138,23 +146,26 @@ export interface RepairRate {
+    * spec §3.2.1 / A' ERRATUM 3: closing a `stale` needs a --chose-instead that
+    * schema.ts says it may not have, so its repair rate is systematically low
+    * and reads as "nobody is doing the work". Split out and labelled here; the
+    * writer in E1 is NOT changed by this cut.
+    */
+   stale_only: {
+     numerator_overturned: number;
+     denominator_corrections: number;
+     rate: number | null;
+     known_bias: string;
++    knownBiasCode: MetricsNoteCode;
+   };
+   buckets: RepairRateBucket[];
+   caveats: string[];
++  /** Index for index with caveats (panel i18n spec §3.4). */
++  caveatCodes: MetricsNoteCode[];
+ }
+ 
+ export interface BacklogSlice {
+   kind: CorrectionKind;
+   open: number;
+   oldest_age_ms: number | null;
+ }
+ 
+ export interface Backlog {
+   open_corrections: number;
+@@ -171,20 +182,21 @@ export interface CorrectionKindCount {
+ 
+ /**
+  * spec §3.5: this cut does not compute review coverage — its only producer is
+  * the panel (E3). `available` is deliberately a constant until then, and what
+  * is pinned is NOT this boolean but the caveat it forces into BOTH rates:
+  * A' §4.4 says the correction rate must never be read alone.
+  */
+ export interface ReviewCoverage {
+   available: false;
+   reason: string;
++  reasonCode: MetricsNoteCode;
+ }
+ 
+ export interface MetricsReport {
+   as_of: string;
+   as_of_mode: "explicit" | "wall_clock";
+   /** projectKey ascending */
+   repos: RepoSummary[];
+   correction_rate: CorrectionRate;
+   repair_rate: RepairRate;
+   backlog: Backlog;
+diff --git a/src/panel/coverage.ts b/src/panel/coverage.ts
+index aa54245..a70b216 100644
+--- a/src/panel/coverage.ts
++++ b/src/panel/coverage.ts
+@@ -1,20 +1,22 @@
+ import { isHighTier } from "../metrics/highTier.js";
+ import type { DecisionObservation } from "../metrics/types.js";
+ import type { ReviewRow } from "./reviewsStore.js";
+ 
+ export interface PanelCoverage {
+   reviewed_high_tier: number;
+   high_tier_total: number;
+   /** null, never 0, when the denominator is 0. */
+   rate: number | null;
+   caveat: string;
++  /** Panel i18n spec §3.4: the caveat's stable code. */
++  caveatCode: "reviewed-is-deliberate";
+ }
+ 
+ // A NUL (U+0000) join, not a space: spec section 4.2 keys by (projectKey, id) because a
+ // decision id repeats across clones and forks (compute.ts's decisionByKey
+ // carries the same lesson). A space-joined key would collide whenever either
+ // half itself contains a space; neither projectKey nor a decision id is
+ // guaranteed free of one.
+ const keyOf = (projectKey: string, id: string): string => `${projectKey}\x00${id}`;
+ 
+ /**
+@@ -46,20 +48,21 @@ export function computePanelCoverage(
+     if (highTier.has(key)) reviewed.add(key);
+   }
+   return {
+     reviewed_high_tier: reviewed.size,
+     high_tier_total: highTier.size,
+     rate: highTier.size === 0 ? null : reviewed.size / highTier.size,
+     caveat:
+       "`reviewed` is a deliberate act, so this number can sit near zero for a long time -- and " +
+       "a long-zero coverage is not distinguishable from nobody looking. Read it with the backlog, " +
+       "not on its own.",
++    caveatCode: "reviewed-is-deliberate",
+   };
+ }
+ 
+ /**
+  * spec section 4.2's mitigation, task 8 ruling K5: the panel's default view is
+  * a to-do list of unreviewed high-tier decisions, because `reviewed` coverage
+  * can sit near zero for a long time (the caveat above) and a click landing on
+  * the work a person already owes is better than one landing nowhere.
+  *
+  * Reuses `keyOf` -- the SAME (projectKey, id) key `computePanelCoverage` uses
+diff --git a/tests/fixtures/metrics/golden.json b/tests/fixtures/metrics/golden.json
+index faabb67..17ac87e 100644
+--- a/tests/fixtures/metrics/golden.json
++++ b/tests/fixtures/metrics/golden.json
+@@ -69,50 +69,58 @@
+         "bucket": "2026-02",
+         "numerator_corrections_excluding_stale": 0,
+         "denominator_decisions": 1,
+         "rate_excluding_stale": 0,
+         "counted_through": "2026-09-09T00:00:00.000Z"
+       }
+     ],
+     "caveats": [
+       "review coverage has no data: its only producer is the panel (E2 spec §3.5), and A' §4.4 says the correction rate must never be read on its own",
+       "some corrections point at decisions outside what was scanned (see unresolved_decisions); they count in the totals but sit in no decision-kind bucket"
++    ],
++    "caveatCodes": [
++      "no-review-coverage",
++      "unresolved-decisions"
+     ]
+   },
+   "repair_rate": {
+     "numerator_overturned": 1,
+     "denominator_corrections_including_stale": 3,
+     "rate": 0.3333333333333333,
+     "stale_only": {
+       "numerator_overturned": 0,
+       "denominator_corrections": 1,
+       "rate": 0,
+-      "known_bias": "systematically low: closing a stale correction requires the chose_instead field (CLI flag --chose-instead) that corrections/schema.ts says a stale may not have (E2 spec §3.2.1, A' ERRATUM 3)"
++      "known_bias": "systematically low: closing a stale correction requires the chose_instead field (CLI flag --chose-instead) that corrections/schema.ts says a stale may not have (E2 spec §3.2.1, A' ERRATUM 3)",
++      "knownBiasCode": "stale-bias"
+     },
+     "buckets": [
+       {
+         "bucket": "2026-03",
+         "numerator_overturned": 1,
+         "denominator_corrections_including_stale": 2,
+         "rate": 0.5,
+         "counted_through": "2026-09-09T00:00:00.000Z"
+       },
+       {
+         "bucket": "2026-04",
+         "numerator_overturned": 0,
+         "denominator_corrections_including_stale": 1,
+         "rate": 0,
+         "counted_through": "2026-09-09T00:00:00.000Z"
+       }
+     ],
+     "caveats": [
+       "review coverage has no data: its only producer is the panel (E2 spec §3.5), and A' §4.4 says the correction rate must never be read on its own"
++    ],
++    "caveatCodes": [
++      "no-review-coverage"
+     ]
+   },
+   "backlog": {
+     "open_corrections": 2,
+     "oldest_age_ms": 16502400000,
+     "oldest_correction_id": "c_0975f73383016b90",
+     "by_correction_kind": [
+       {
+         "kind": "wrong",
+         "open": 0,
+@@ -149,21 +157,22 @@
+       "kind": "not_my_taste",
+       "corrections": 1
+     },
+     {
+       "kind": "stale",
+       "corrections": 1
+     }
+   ],
+   "review_coverage": {
+     "available": false,
+-    "reason": "review coverage has no data: its only producer is the panel (E2 spec §3.5), and A' §4.4 says the correction rate must never be read on its own"
++    "reason": "review coverage has no data: its only producer is the panel (E2 spec §3.5), and A' §4.4 says the correction rate must never be read on its own",
++    "reasonCode": "no-review-coverage"
+   },
+   "excluded_as_future": 0,
+   "unresolved_decisions": [
+     {
+       "correctionId": "c_e26ea320c00e0138",
+       "projectKey": "github.com/biran/beta",
+       "decisionId": "orca-dev-b/1"
+     }
+   ],
+   "unkeyable_repos": [],
+diff --git a/tests/metrics/noteCodes.test.ts b/tests/metrics/noteCodes.test.ts
+new file mode 100644
+index 0000000..6bb6ad5
+--- /dev/null
++++ b/tests/metrics/noteCodes.test.ts
+@@ -0,0 +1,37 @@
++import { describe, expect, it } from "vitest";
++import { computeMetrics } from "../../src/metrics/compute.js";
++import { computePanelCoverage } from "../../src/panel/coverage.js";
++import { en } from "../../web/src/locales/en.js";
++import { OBS } from "./fixture.js";
++
++/**
++ * Panel i18n spec §3.4, §6.10: every sentence the metrics and the coverage carry has a stable code beside it, index for
++ * index, so the panel can show it in the reader's language; and the panel's English note for each code is the server's
++ * sentence byte for byte, so English stays what it was (spec §2).
++ */
++const notes = en.metrics.note as Record<string, string>;
++
++describe("metrics sentence codes (spec §3.4, §6.10)", () => {
++  it("puts a code beside each sentence, index for index, and the panel's English note is the sentence", () => {
++    const r = computeMetrics(OBS, { bucket: "month" }); // OBS has one correction whose decision was not scanned
++    expect(r.correction_rate.caveatCodes).toEqual(["no-review-coverage", "unresolved-decisions"]);
++    expect(r.repair_rate.caveatCodes).toEqual(["no-review-coverage"]);
++    const pairs: Array<[string, string]> = [
++      ...r.correction_rate.caveats.map((sentence, i): [string, string] => [r.correction_rate.caveatCodes[i]!, sentence]),
++      ...r.repair_rate.caveats.map((sentence, i): [string, string] => [r.repair_rate.caveatCodes[i]!, sentence]),
++      [r.repair_rate.stale_only.knownBiasCode, r.repair_rate.stale_only.known_bias],
++      [r.review_coverage.reasonCode, r.review_coverage.reason],
++    ];
++    for (const [code, sentence] of pairs) expect(notes[code], code).toBe(sentence);
++  });
++
++  it("gives no unresolved code when nothing is unresolved", () => {
++    expect(computeMetrics({ ...OBS, unresolvedDecisions: [] }, { bucket: "month" }).correction_rate.caveatCodes).toEqual(["no-review-coverage"]);
++  });
++
++  it("gives the coverage caveat its code, and the panel's English note is the caveat", () => {
++    const coverage = computePanelCoverage([], []);
++    expect(coverage.caveatCode).toBe("reviewed-is-deliberate");
++    expect(notes["reviewed-is-deliberate"]).toBe(coverage.caveat);
++  });
++});
+diff --git a/tests/panel/webParity.test.ts b/tests/panel/webParity.test.ts
+index 984d7c6..7701aa8 100644
+--- a/tests/panel/webParity.test.ts
++++ b/tests/panel/webParity.test.ts
+@@ -106,28 +106,40 @@ describe("web/src/types.ts stays in lockstep with the server shapes (task 8 ruli
+     expect([...WEB_SYSTEM_LABELS]).toEqual([...SYSTEM_LABELS]);
+     expect(WEB_CUSTOM_LABEL_PREFIX).toBe(CUSTOM_LABEL_PREFIX);
+   });
+ });
+ 
+ // --- compile-time mutual-assignability checks (never called at runtime) ---
+ 
+ function reportServerToWeb(x: ServerMetricsReport): WebMetricsReport {
+   return x;
+ }
++// Rewritten under human ruling H18 (2026-10-01) for panel i18n: the metrics note codes are optional on the Web side so
++// literal fixtures need no edit (spec §3.4); an absent code is normalised here, so the rest is still checked both ways.
+ function reportWebToServer(x: WebMetricsReport): ServerMetricsReport {
+-  return x;
++  return {
++    ...x,
++    correction_rate: { ...x.correction_rate, caveatCodes: x.correction_rate.caveatCodes ?? [] },
++    repair_rate: {
++      ...x.repair_rate,
++      caveatCodes: x.repair_rate.caveatCodes ?? [],
++      stale_only: { ...x.repair_rate.stale_only, knownBiasCode: x.repair_rate.stale_only.knownBiasCode ?? "stale-bias" },
++    },
++    review_coverage: { ...x.review_coverage, reasonCode: x.review_coverage.reasonCode ?? "no-review-coverage" },
++  };
+ }
+ function coverageServerToWeb(x: ServerPanelCoverage): WebPanelCoverage {
+   return x;
+ }
++// Rewritten under human ruling H18 (2026-10-01) for panel i18n.
+ function coverageWebToServer(x: WebPanelCoverage): ServerPanelCoverage {
+-  return x;
++  return { ...x, caveatCode: x.caveatCode ?? "reviewed-is-deliberate" };
+ }
+ function listRowServerToWeb(x: ServerDecisionListRow): WebDecisionListRow {
+   return x;
+ }
+ function listRowWebToServer(x: WebDecisionListRow): ServerDecisionListRow {
+   return x;
+ }
+ function correctionKindServerToWeb(x: ServerCorrectionKind): WebCorrectionKind {
+   return x;
+ }
+diff --git a/web/src/MetricsView.tsx b/web/src/MetricsView.tsx
+index 37c7e04..243adf5 100644
+--- a/web/src/MetricsView.tsx
++++ b/web/src/MetricsView.tsx
+@@ -8,62 +8,72 @@
+  * annotations that MUST be displayed, never silently dropped alongside the
+  * numbers they qualify (A' section 4.4: the correction rate must never be
+  * read alone): the review-coverage reason (E2 3.5), both rates' own
+  * `caveats` arrays, unresolved decisions (3.4.1), malformed lines rendered
+  * ALONGSIDE the full report (5.2), the stale repair-rate bias (3.2.1) and the
+  * count excluded as future (4.2). A view that renders the rate and drops
+  * these passes "the frontend does not compute" completely -- which is why
+  * task 8's criteria pin every one of them by name.
+  */
+ import type { JSX } from "react";
++import { useTranslation } from "react-i18next";
++import i18n from "./i18n.js";
++import { en } from "./locales/en.js";
+ import type { MetricsReport, PanelCoverage } from "./types.js";
+ 
+-/** The one literal the null-rate branch prints (task 8 ruling K4). */
+-export const UNKNOWN_RATE = "unknown";
++/** The one literal the null-rate branch prints (task 8 ruling K4), in English; the render uses the reader's language. */
++export const UNKNOWN_RATE = en.metrics.unknownRate;
+ 
+ /** Formats what it is given. It does not divide anything. */
+ function formatRate(rate: number | null): string {
+-  return rate === null ? UNKNOWN_RATE : `${(rate * 100).toFixed(0)}%`;
++  return rate === null ? i18n.t("metrics.unknownRate") : `${(rate * 100).toFixed(0)}%`;
++}
++
++/** Panel i18n spec §3.4: a metrics sentence in the reader's language when its code is known here, else as the server sent it. */
++function noteText(sentence: string, code: string | undefined): string {
++  const key = `metrics.note.${code ?? ""}`;
++  return code !== undefined && i18n.exists(key) ? (i18n.t(key as never) as string) : sentence;
+ }
+ 
+ export function MetricsView({ report, coverage }: { report: MetricsReport; coverage: PanelCoverage }): JSX.Element {
++  const { t } = useTranslation();
+   return (
+     <section>
+-      <h2>Correction rate</h2>
++      <h2>{t("metrics.correctionRate")}</h2>
+       <p data-testid="correction-rate">{formatRate(report.correction_rate.rate_excluding_stale)}</p>
+       <ul className="caveats" data-testid="correction-rate-caveats">
+-        {report.correction_rate.caveats.map((caveat) => (
+-          <li key={caveat}>{caveat}</li>
++        {report.correction_rate.caveats.map((caveat, index) => (
++          <li key={caveat}>{noteText(caveat, report.correction_rate.caveatCodes?.[index])}</li>
+         ))}
+       </ul>
+ 
+-      <h2>Repair rate</h2>
++      <h2>{t("metrics.repairRate")}</h2>
+       <p data-testid="repair-rate">{formatRate(report.repair_rate.rate)}</p>
+       <ul className="caveats" data-testid="repair-rate-caveats">
+-        {report.repair_rate.caveats.map((caveat) => (
+-          <li key={caveat}>{caveat}</li>
++        {report.repair_rate.caveats.map((caveat, index) => (
++          <li key={caveat}>{noteText(caveat, report.repair_rate.caveatCodes?.[index])}</li>
+         ))}
+       </ul>
+       <p className="stale-bias" data-testid="stale-bias">
+-        {report.repair_rate.stale_only.known_bias}
++        {noteText(report.repair_rate.stale_only.known_bias, report.repair_rate.stale_only.knownBiasCode)}
+       </p>
+ 
+-      <h2>Review coverage</h2>
++      <h2>{t("metrics.reviewCoverage")}</h2>
+       <p className="caveat" data-testid="review-coverage-reason">
+-        {report.review_coverage.reason}
++        {noteText(report.review_coverage.reason, report.review_coverage.reasonCode)}
+       </p>
+       <p data-testid="panel-coverage-rate">{formatRate(coverage.rate)}</p>
+       <p className="caveat" data-testid="panel-coverage-caveat">
+-        {coverage.caveat}
++        {noteText(coverage.caveat, coverage.caveatCode)}
+       </p>
+ 
+-      <h2>Unresolved decisions</h2>
+-      <p data-testid="unresolved-count">Unresolved decisions: {report.unresolved_decisions.length}</p>
++      <h2>{t("metrics.unresolvedTitle")}</h2>
++      <p data-testid="unresolved-count">{t("metrics.unresolvedCount", { n: report.unresolved_decisions.length })}</p>
+ 
+-      <h2>Malformed lines</h2>
+-      <p data-testid="malformed-count">Malformed lines: {report.malformed_lines.length}</p>
++      <h2>{t("metrics.malformedTitle")}</h2>
++      <p data-testid="malformed-count">{t("metrics.malformedCount", { n: report.malformed_lines.length })}</p>
+ 
+-      <h2>Excluded as future</h2>
+-      <p data-testid="excluded-as-future">Excluded as future: {report.excluded_as_future}</p>
++      <h2>{t("metrics.futureTitle")}</h2>
++      <p data-testid="excluded-as-future">{t("metrics.futureCount", { n: report.excluded_as_future })}</p>
+     </section>
+   );
+ }
+diff --git a/web/src/locales/en.ts b/web/src/locales/en.ts
+index 2f9a547..4a331bc 100644
+--- a/web/src/locales/en.ts
++++ b/web/src/locales/en.ts
+@@ -1,22 +1,31 @@
+ /**
+  * Panel i18n spec §2: the English resource. It is the source shape (`as const`), and every value is today's panel text
+  * byte for byte. Keys are grouped by panel area. Enum families (spec §3.5) are Records over the value unions, so a new
+  * value is a compile error here until it has its words. Tasks 3-10 add their areas.
+  */
+ import type { ThemePref } from "../theme.js";
++import type { MetricsNoteCode } from "../types.js";
+ 
+ /** The Chinese resource's type: the same key set, every value widened to string (spec §2). */
+ export type Translation<T> = { [K in keyof T]: T[K] extends string ? string : Translation<T[K]> };
+ 
+ const theme = { system: "system", light: "light", dark: "dark" } as const satisfies Record<ThemePref, string>;
+ 
++// Panel i18n spec §3.4: each English note is the server's sentence byte for byte (tests/metrics/noteCodes.test.ts).
++const metricsNote = {
++  "no-review-coverage": "review coverage has no data: its only producer is the panel (E2 spec §3.5), and A' §4.4 says the correction rate must never be read on its own",
++  "unresolved-decisions": "some corrections point at decisions outside what was scanned (see unresolved_decisions); they count in the totals but sit in no decision-kind bucket",
++  "stale-bias": "systematically low: closing a stale correction requires the chose_instead field (CLI flag --chose-instead) that corrections/schema.ts says a stale may not have (E2 spec §3.2.1, A' ERRATUM 3)",
++  "reviewed-is-deliberate": "`reviewed` is a deliberate act, so this number can sit near zero for a long time -- and a long-zero coverage is not distinguishable from nobody looking. Read it with the backlog, not on its own.",
++} as const satisfies Record<MetricsNoteCode | "reviewed-is-deliberate", string>;
++
+ export const en = {
+   nav: { sections: "Sections", decisions: "Decisions", chains: "Chains", tasks: "Task control", metrics: "Metrics" },
+   shell: {
+     brandTitle: "Leave it to Orca — every idea, made real.",
+     chainRunning: "a chain is running",
+     needsAttention: "needs attention",
+     theme: "Theme",
+     language: "Language",
+     loading: "orca panel loading…",
+     epoch: "epoch {{epoch}}",
+@@ -51,12 +60,25 @@ export const en = {
+       onlyChanges: "Only changes: {{paths}}",
+       mustNotChange: "Must not change: {{paths}} (reported by the agent, not checked in git)",
+       files_one: "At most {{count}} file changed (reported by the agent)",
+       files_other: "At most {{count}} files changed (reported by the agent)",
+       noFileLimit: "No file limit",
+       checks_one: "Acceptance: {{count}} check command, all must pass",
+       checks_other: "Acceptance: {{count}} check commands, all must pass",
+       pathSeparator: ", ",
+     },
+   },
++  metrics: {
++    unknownRate: "unknown",
++    correctionRate: "Correction rate",
++    repairRate: "Repair rate",
++    reviewCoverage: "Review coverage",
++    unresolvedTitle: "Unresolved decisions",
++    unresolvedCount: "Unresolved decisions: {{n}}",
++    malformedTitle: "Malformed lines",
++    malformedCount: "Malformed lines: {{n}}",
++    futureTitle: "Excluded as future",
++    futureCount: "Excluded as future: {{n}}",
++    note: metricsNote,
++  },
+   enums: { theme },
+ } as const;
+diff --git a/web/src/locales/zh.ts b/web/src/locales/zh.ts
+index 2002675..d724641 100644
+--- a/web/src/locales/zh.ts
++++ b/web/src/locales/zh.ts
+@@ -45,14 +45,32 @@ export const zh: Translation<typeof en> = {
+       onlyChanges: "只改：{{paths}}",
+       mustNotChange: "不许改：{{paths}}（由 agent 自报，不是 git 检查）",
+       files_one: "最多改 {{count}} 个文件（由 agent 自报）",
+       files_other: "最多改 {{count}} 个文件（由 agent 自报）",
+       noFileLimit: "不限文件数",
+       checks_one: "验收：运行 {{count}} 条检查命令，全部通过",
+       checks_other: "验收：运行 {{count}} 条检查命令，全部通过",
+       pathSeparator: "、",
+     },
+   },
++  metrics: {
++    unknownRate: "未知",
++    correctionRate: "纠正率",
++    repairRate: "修复率",
++    reviewCoverage: "评审覆盖率",
++    unresolvedTitle: "未解析的决策",
++    unresolvedCount: "未解析的决策：{{n}}",
++    malformedTitle: "格式错误的行",
++    malformedCount: "格式错误的行：{{n}}",
++    futureTitle: "因日期在未来而排除",
++    futureCount: "因日期在未来而排除：{{n}}",
++    note: {
++      "no-review-coverage": "评审覆盖率没有数据：它唯一的来源是面板（E2 spec §3.5），而 A' §4.4 规定纠正率绝不能单独解读",
++      "unresolved-decisions": "有些纠正指向的决策不在扫描范围内（见 unresolved_decisions）；它们计入总数，但不属于任何决策类型分组",
++      "stale-bias": "系统性偏低：关闭一条 stale 纠正需要 chose_instead 字段（CLI 参数 --chose-instead），而 corrections/schema.ts 规定 stale 不能带它（E2 spec §3.2.1，A' ERRATUM 3）",
++      "reviewed-is-deliberate": "`reviewed` 是一个有意的动作，所以这个数字可能长时间接近零——而长期为零的覆盖率与没人看无法区分。请结合积压一起看，不要单独看。",
++    },
++  },
+   enums: { theme: { system: "跟随系统", light: "浅色", dark: "深色" } },
+ };
+ 
+ export const zhErrors: Record<string, string> = {};
+diff --git a/web/src/types.ts b/web/src/types.ts
+index 35d9293..ee5f85a 100644
+--- a/web/src/types.ts
++++ b/web/src/types.ts
+@@ -56,20 +56,23 @@ export interface UnresolvedDecision {
+   correctionId: string;
+   projectKey: string;
+   decisionId: string;
+ }
+ 
+ export interface RepoSummary {
+   projectKey: string;
+   decisions: number;
+ }
+ 
++/** Mirrors src/metrics/types.ts's MetricsNoteCode (panel i18n spec §3.4). */
++export type MetricsNoteCode = "no-review-coverage" | "unresolved-decisions" | "stale-bias";
++
+ export interface CorrectionRateSlice {
+   kind: DecisionKind;
+   tier: "high" | "low";
+   numerator_corrections_excluding_stale: number;
+   denominator_decisions: number;
+   rate_excluding_stale: number | null;
+ }
+ 
+ export interface CorrectionRateBucket {
+   bucket: string;
+@@ -80,42 +83,48 @@ export interface CorrectionRateBucket {
+ }
+ 
+ export interface CorrectionRate {
+   numerator_corrections_excluding_stale: number;
+   denominator_decisions: number;
+   rate_excluding_stale: number | null;
+   corrections_total_including_stale: number;
+   by_decision_kind: CorrectionRateSlice[];
+   buckets: CorrectionRateBucket[];
+   caveats: string[];
++  // Panel i18n spec §3.4: optional here so literal fixtures need no edit; the server always sends it.
++  caveatCodes?: MetricsNoteCode[];
+ }
+ 
+ export interface RepairRateBucket {
+   bucket: string;
+   numerator_overturned: number;
+   denominator_corrections_including_stale: number;
+   rate: number | null;
+   counted_through: string;
+ }
+ 
+ export interface RepairRate {
+   numerator_overturned: number;
+   denominator_corrections_including_stale: number;
+   rate: number | null;
+   stale_only: {
+     numerator_overturned: number;
+     denominator_corrections: number;
+     rate: number | null;
+     known_bias: string;
++    // Panel i18n spec §3.4: optional here so literal fixtures need no edit; the server always sends it.
++    knownBiasCode?: MetricsNoteCode;
+   };
+   buckets: RepairRateBucket[];
+   caveats: string[];
++  // Panel i18n spec §3.4: optional here so literal fixtures need no edit; the server always sends it.
++  caveatCodes?: MetricsNoteCode[];
+ }
+ 
+ export interface BacklogSlice {
+   kind: CorrectionKind;
+   open: number;
+   oldest_age_ms: number | null;
+ }
+ 
+ export interface Backlog {
+   open_corrections: number;
+@@ -125,20 +134,22 @@ export interface Backlog {
+ }
+ 
+ export interface CorrectionKindCount {
+   kind: CorrectionKind;
+   corrections: number;
+ }
+ 
+ export interface ReviewCoverage {
+   available: false;
+   reason: string;
++  // Panel i18n spec §3.4: optional here so literal fixtures need no edit; the server always sends it.
++  reasonCode?: MetricsNoteCode;
+ }
+ 
+ export interface MetricsReport {
+   as_of: string;
+   as_of_mode: "explicit" | "wall_clock";
+   repos: RepoSummary[];
+   correction_rate: CorrectionRate;
+   repair_rate: RepairRate;
+   backlog: Backlog;
+   breakdown_by_correction_kind_including_stale: CorrectionKindCount[];
+@@ -165,20 +176,22 @@ export const WEB_REPORT_FIELDS = [
+   "malformed_lines",
+ ] as const satisfies readonly (keyof MetricsReport)[];
+ 
+ /** Mirrors src/panel/coverage.ts's PanelCoverage. */
+ export interface PanelCoverage {
+   reviewed_high_tier: number;
+   high_tier_total: number;
+   /** null, never 0, when the denominator is 0. */
+   rate: number | null;
+   caveat: string;
++  // Panel i18n spec §3.4: optional here so literal fixtures need no edit; the server always sends it.
++  caveatCode?: "reviewed-is-deliberate";
+ }
+ 
+ /** Mirrors src/panel/listProjection.ts's DecisionListRow (question: panel UI redesign spec §4, ruling U1). */
+ export type DecisionListRow = Pick<DecisionObservation, "projectKey" | "id" | "at" | "kind" | "scope" | "verdict"> & { question: string | null };
+ 
+ /** Mirrors src/panel/listProjection.ts's LIST_FIELDS -- same SET, order not load-bearing here. */
+ export const WEB_LIST_FIELDS = [
+   "projectKey",
+   "id",
+   "at",
+diff --git a/web/tests/metricsNotes.test.tsx b/web/tests/metricsNotes.test.tsx
+new file mode 100644
+index 0000000..1549332
+--- /dev/null
++++ b/web/tests/metricsNotes.test.tsx
+@@ -0,0 +1,67 @@
++// @vitest-environment jsdom
++/**
++ * Panel i18n spec §3.4, §6.10: a metrics sentence whose code this panel knows is shown in the reader's language; one whose
++ * code it does not know (a newer server), or that has no code, is shown as the server sent it -- never as a key.
++ */
++import { cleanup, render } from "@testing-library/react";
++import { afterEach, describe, expect, it } from "vitest";
++import i18n from "../src/i18n.js";
++import { en } from "../src/locales/en.js";
++import { zh } from "../src/locales/zh.js";
++import { MetricsView } from "../src/MetricsView.js";
++import type { MetricsNoteCode, MetricsReport, PanelCoverage } from "../src/types.js";
++
++const UNKNOWN = "a-code-this-panel-does-not-know" as unknown as MetricsNoteCode;
++const KNOWN_SENTENCE = "the server's sentence beside the known code";
++const UNKNOWN_SENTENCE = "the server's sentence beside the unknown code";
++const report: MetricsReport = {
++  as_of: "2026-10-01T00:00:00.000Z", as_of_mode: "wall_clock", repos: [],
++  correction_rate: {
++    numerator_corrections_excluding_stale: 0, denominator_decisions: 0, rate_excluding_stale: null, corrections_total_including_stale: 0,
++    by_decision_kind: [], buckets: [], caveats: [KNOWN_SENTENCE, UNKNOWN_SENTENCE], caveatCodes: ["no-review-coverage", UNKNOWN],
++  },
++  repair_rate: {
++    numerator_overturned: 0, denominator_corrections_including_stale: 0, rate: null,
++    stale_only: { numerator_overturned: 0, denominator_corrections: 0, rate: null, known_bias: "the server's bias sentence", knownBiasCode: "stale-bias" },
++    buckets: [], caveats: ["the server's repair sentence, no code"],
++  },
++  backlog: { open_corrections: 0, oldest_age_ms: null, oldest_correction_id: null, by_correction_kind: [] },
++  breakdown_by_correction_kind_including_stale: [],
++  review_coverage: { available: false, reason: "the server's reason sentence", reasonCode: "no-review-coverage" },
++  excluded_as_future: 0, unresolved_decisions: [], unkeyable_repos: [], malformed_lines: [],
++};
++const coverage: PanelCoverage = { reviewed_high_tier: 1, high_tier_total: 4, rate: 0.25, caveat: "the server's coverage sentence", caveatCode: "reviewed-is-deliberate" };
++
++afterEach(cleanup);
++
++describe("metrics notes in the reader's language (spec §6.10)", () => {
++  it("shows a known code's note in Chinese, and the server's sentence for an unknown code or none", async () => {
++    await i18n.changeLanguage("zh");
++    const view = render(<MetricsView report={report} coverage={coverage} />);
++    const text = view.container.textContent ?? "";
++    expect(text).toContain(zh.metrics.note["no-review-coverage"]);
++    expect(text).toContain(zh.metrics.note["stale-bias"]);
++    expect(text).toContain(zh.metrics.note["reviewed-is-deliberate"]);
++    expect(text).toContain(UNKNOWN_SENTENCE);
++    expect(text).toContain("the server's repair sentence, no code");
++    expect(text).not.toContain(KNOWN_SENTENCE);
++    expect(text).not.toContain("metrics.note");
++    // Every heading, count and unknown rate is in the reader's language, read where it is shown: "纠正率" alone would
++    // also match inside the no-review-coverage note, so a heading left in English could not turn this red.
++    expect([...view.container.querySelectorAll("h2")].map((h) => h.textContent)).toEqual([
++      zh.metrics.correctionRate, zh.metrics.repairRate, zh.metrics.reviewCoverage,
++      zh.metrics.unresolvedTitle, zh.metrics.malformedTitle, zh.metrics.futureTitle,
++    ]);
++    expect(view.getByTestId("correction-rate").textContent).toBe(zh.metrics.unknownRate);
++    expect(view.getByTestId("unresolved-count").textContent).toBe("未解析的决策：0");
++    expect(view.getByTestId("malformed-count").textContent).toBe("格式错误的行：0");
++    expect(view.getByTestId("excluded-as-future").textContent).toBe("因日期在未来而排除：0");
++  });
++
++  it("shows a known code's English note in English, and the server's sentence for an unknown code", () => {
++    const text = render(<MetricsView report={report} coverage={coverage} />).container.textContent ?? "";
++    expect(text).toContain(en.metrics.note["no-review-coverage"]);
++    expect(text).toContain(UNKNOWN_SENTENCE);
++    expect(text).toContain("Correction rate");
++  });
++});

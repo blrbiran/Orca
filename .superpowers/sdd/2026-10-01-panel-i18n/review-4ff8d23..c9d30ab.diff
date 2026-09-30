@@ -1,0 +1,1613 @@
+# Review package: 4ff8d23..c9d30ab
+
+## Commits
+c9d30ab feat(web): translate the task control and recovery areas
+c1b77d0 test(web): give web criteria a 15 s default timeout
+
+## Files changed
+ web/src/App.tsx                   |   2 +-
+ web/src/ControlGroupView.tsx      |  98 +++++++++------
+ web/src/ControlPanel.tsx          |  57 ++++-----
+ web/src/EvidenceLink.tsx          |   6 +-
+ web/src/RecoveryView.tsx          |  27 ++--
+ web/src/TaskDetail.tsx            |  75 ++++++-----
+ web/src/WorkspaceModeSelector.tsx |  14 ++-
+ web/src/locales/en.ts             | 148 +++++++++++++++++++++-
+ web/src/locales/zh.ts             | 129 +++++++++++++++++++
+ web/tests/controlI18n.test.tsx    | 256 ++++++++++++++++++++++++++++++++++++++
+ web/vite.config.ts                |   6 +-
+ 11 files changed, 698 insertions(+), 120 deletions(-)
+
+## Diff
+diff --git a/web/src/App.tsx b/web/src/App.tsx
+index 5cf1271..8427a9c 100644
+--- a/web/src/App.tsx
++++ b/web/src/App.tsx
+@@ -659,21 +659,21 @@ export function App(): JSX.Element {
+             void chainAction(async () => {
+               const r = await requestChainStop(repoKey, chainId);
+               return r.ok ? { kind: "stop-requested", chainId } : { kind: "refused", refusal: r };
+             });
+           }}
+         />
+       )}
+       </SectionPane>
+       <SectionPane section="tasks" active={section}>
+       {(controlConfig === null || control.recovery === null) && (
+-        <p className="empty">The task control plane is not available on this panel.</p>
++        <p className="empty">{t("control.unavailable")}</p>
+       )}
+       {controlConfig !== null && control.recovery !== null && (
+         <ControlPanel
+           config={controlConfig}
+           summary={summaryView(control)}
+           recovery={control.recovery}
+           groups={control.canonical}
+           selected={selectedGroup}
+           drafts={control.drafts}
+           uncertain={control.uncertainCommandIds}
+diff --git a/web/src/ControlGroupView.tsx b/web/src/ControlGroupView.tsx
+index 4110388..d2def6d 100644
+--- a/web/src/ControlGroupView.tsx
++++ b/web/src/ControlGroupView.tsx
+@@ -2,30 +2,32 @@
+  * Task 9: one group, exactly as the server described it.
+  *
+  * The buttons here only name an intent and the revision this view was read at;
+  * every answer -- accepted, refused, deferred, unknown -- comes back through the
+  * reads. A run whose stop is still unresolved stays displayed as unresolved
+  * rather than being painted green, because the ledger has not decided whether an
+  * execution is still alive.
+  */
+ import type { JSX } from "react";
+ import { useState } from "react";
++import { useTranslation } from "react-i18next";
+ import type { ControlAction } from "./controlApi.js";
+ import { AgentSelectionEditor, selectionsHashFor } from "./AgentSelectionEditor.js";
+ import { BudgetEditor } from "./BudgetEditor.js";
+ import { EvidenceLink } from "./EvidenceLink.js";
+ import type {
+   AgentSelectionPreviewV1, AgentsViewV1, ControlConfigV1, ContinuationSelectionV1, GroupViewV1, OperatorPreferencesV1, RunViewV1,
+ } from "./controlTypes.js";
+ import type { UncertainCommand } from "./controlState.js";
+ import { LabelChips, TaskDetail, progressText } from "./TaskDetail.js";
+ import { planText } from "./LoopPlanCard.js";
++import { enumText } from "./i18n.js";
+ 
+ const short = (hash: string): string => hash.slice(0, 12);
+ 
+ /**
+  * A held run the person may continue: the server marks it `continuable` (handoff delivery spec §13.1 C-4),
+  * because a normally completed run also displays as `settled-recoverable` and must never be continued.
+  */
+ export function continuableRuns(view: GroupViewV1): Array<{ run: RunViewV1; checkpointId: string }> {
+   return view.runs.flatMap((run) => {
+     if (run.taskId === null || run.continuable !== true) return [];
+@@ -52,20 +54,21 @@ export interface ControlGroupViewProps {
+   /** Drop this group's agent preview and read it again. */
+   onRereadPreview?: () => void;
+   /** Why the installation table or the preferences could not be read (the server's code). */
+   agentsFailure?: string | null;
+   /** Ruling review R17: what the page's retry of the agent reads is doing, if anything. */
+   retryNotice?: string | null;
+ }
+ 
+ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
+   const { view, config, uncertain, drafts, onDraft, onCommand } = props;
++  const { t } = useTranslation();
+   const groupId = view.summary.groupId;
+   const revision = view.summary.commandRevision;
+   const handoffActive = view.summary.stopMode === "handoff";
+   const continuable = continuableRuns(view);
+   const selections = (): ContinuationSelectionV1[] =>
+     continuable.map(({ run, checkpointId }) => ({ taskId: String(run.taskId), predecessorRunId: run.runId, checkpointId }));
+   // Labels and progress spec §4.2: the label filter (any of) and the open task live in page memory only.
+   const [labelFilter, setLabelFilter] = useState<string[]>([]);
+   const [openTask, setOpenTask] = useState<string | null>(null);
+   const allLabels = [...new Set(view.workItems.flatMap((item) => item.labels ?? []))].sort();
+@@ -73,202 +76,223 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
+   // uncheck, so it must stop filtering -- otherwise the table stays empty with no way out.
+   const activeFilter = labelFilter.filter((label) => allLabels.includes(label));
+   const shownItems = activeFilter.length === 0
+     ? view.workItems
+     : view.workItems.filter((item) => (item.labels ?? []).some((label) => activeFilter.includes(label)));
+   const toggleFilter = (label: string): void =>
+     setLabelFilter((current) => (current.includes(label) ? current.filter((other) => other !== label) : [...current, label]));
+   const openItem = view.workItems.find((item) => item.taskId === openTask);
+ 
+   return (
+-    <section aria-label={`Control group ${groupId}`}>
++    <section aria-label={t("control.group.region", { groupId })}>
+       <h2>
+-        {groupId} · {view.summary.state} · revision {revision} · projection {view.summary.projectionSeq}
++        {t("control.group.heading", { groupId, state: enumText("groupState", view.summary.state), revision, projection: view.summary.projectionSeq })}
+       </h2>
+-      {view.summary.claimBlocked && <p role="alert">claim blocked · new runs are not being started</p>}
++      {view.summary.claimBlocked && <p role="alert">{t("control.group.claimBlocked")}</p>}
+       <p>
+-        {view.plan.goal} · plan {short(view.plan.planHash)} · graph v{view.graphVersion}
++        {t("control.group.planLine", { goal: view.plan.goal, hash: short(view.plan.planHash), graphVersion: view.graphVersion })}
+       </p>
+       {view.stop !== null && (
+         <p role="status">
+-          stop {view.stop.mode} {view.stop.state} · accepted {view.stop.acceptedAt ?? "n/a"} · deadline {view.stop.deadlineAt ?? "none"} ·{" "}
+-          {view.stop.frozenRunIds.length} frozen run(s): {view.stop.frozenRunIds.join(", ") || "none"}
++          {t("control.group.stop", {
++            mode: enumText("stopMode", view.stop.mode),
++            state: enumText("stopState", view.stop.state),
++            accepted: view.stop.acceptedAt ?? t("common.na"),
++            deadline: view.stop.deadlineAt ?? t("common.none"),
++            n: view.stop.frozenRunIds.length,
++            runs: view.stop.frozenRunIds.join(", ") || t("common.none"),
++          })}
+         </p>
+       )}
+       <BudgetEditor view={view} config={config} drafts={drafts} onDraft={onDraft} onCommand={onCommand} onCommands={props.onCommands} selectionsHash={selectionsHashFor(view, props.preview)} />
+       {props.agents !== undefined && (
+         <AgentSelectionEditor
+           view={view} agents={props.agents} preview={props.preview ?? null} preferences={props.agentPreferences}
+           onReread={props.onRereadPreview}
+           agentsFailure={props.agentsFailure}
+           retryNotice={props.retryNotice}
+           drafts={drafts} onDraft={onDraft} onCommand={onCommand}
+         />
+       )}
+ 
+-      <h3>Work items</h3>
++      <h3>{t("control.group.workItems")}</h3>
+       {allLabels.length > 0 && (
+-        <fieldset aria-label="Filter work items by label">
+-          <legend>labels (any of)</legend>
++        <fieldset aria-label={t("control.group.filterRegion")}>
++          <legend>{t("control.group.filterLegend")}</legend>
+           {allLabels.map((label) => (
+             <label key={label}>
+               <input type="checkbox" checked={activeFilter.includes(label)} onChange={() => toggleFilter(label)} />
+               {label}
+             </label>
+           ))}
+         </fieldset>
+       )}
+       <table>
+         <thead>
+-          <tr><th>task</th><th>status</th><th>labels</th><th>progress</th><th>run</th><th>pending</th><th>depends on</th></tr>
++          <tr>
++            <th>{t("control.group.th.task")}</th><th>{t("control.group.th.status")}</th><th>{t("control.group.th.labels")}</th>
++            <th>{t("control.group.th.progress")}</th><th>{t("control.group.th.run")}</th><th>{t("control.group.th.pending")}</th>
++            <th>{t("control.group.th.dependsOn")}</th>
++          </tr>
+         </thead>
+         <tbody>
+           {shownItems.map((item) => (
+             <tr key={item.taskId}>
+               <td>
+                 <button type="button" aria-expanded={openTask === item.taskId} onClick={() => setOpenTask(openTask === item.taskId ? null : item.taskId)}>
+                   {item.taskId}
+                 </button>
+               </td>
+-              <td>{item.status}</td>
++              <td>{enumText("workStatus", item.status)}</td>
+               <td><LabelChips labels={item.labels} />{item.loopPlan ? <span className="plan-chip"> {planText(item.loopPlan.planId, item.loopPlan.planVersion, "name")}</span> : null}</td>
+               <td>{progressText(item.progress)}</td>
+-              <td>{item.currentRunId ?? "none"}</td>
+-              <td>{item.pendingRunId ?? "none"}</td>
+-              <td>{item.dependencyTaskIds.join(", ") || "none"}</td>
++              <td>{item.currentRunId ?? t("common.none")}</td>
++              <td>{item.pendingRunId ?? t("common.none")}</td>
++              <td>{item.dependencyTaskIds.join(", ") || t("common.none")}</td>
+             </tr>
+           ))}
+         </tbody>
+       </table>
+       {openItem !== undefined && <TaskDetail key={openItem.taskId} view={view} item={openItem} drafts={drafts} onDraft={onDraft} onCommand={onCommand} />}
+ 
+-      <h3>Runs</h3>
++      <h3>{t("control.group.runs")}</h3>
+       <table>
+         <thead>
+-          <tr><th>run</th><th>phase</th><th>state</th><th>profile</th><th>used</th><th>remaining</th><th>evidence</th></tr>
++          <tr>
++            <th>{t("control.group.runsTh.run")}</th><th>{t("control.group.runsTh.phase")}</th><th>{t("control.group.runsTh.state")}</th>
++            <th>{t("control.group.runsTh.profile")}</th><th>{t("control.group.runsTh.used")}</th><th>{t("control.group.runsTh.remaining")}</th>
++            <th>{t("control.group.runsTh.evidence")}</th>
++          </tr>
+         </thead>
+         <tbody>
+           {view.runs.map((run) => (
+             <tr key={run.runId}>
+               <td>{run.taskId ?? run.estimateId ?? run.runId}</td>
+-              <td>{run.phase}</td>
++              <td>{enumText("runPhase", run.phase)}</td>
+               <td>
+-                {run.state}
++                {enumText("runState", run.state)}
+                 {run.blockedReason ? ` — ${run.blockedReason}` : ""}
+                 {run.failureCode !== null ? ` (${run.failureCode})` : ""}
+-                {` · attempt ${run.providerAttemptOrdinal} of claim ${run.claimOrdinal ?? "n/a"}`}
++                {t("control.group.attempt", { attempt: run.providerAttemptOrdinal, claim: run.claimOrdinal ?? t("common.na") })}
+                 {/* Execution driver final review I5: a run the driver blocked carries its reason on the run, not as a
+                     recovery blocker, so its one remedy (spec §2.3, the run-scope recovery-retry) is offered here. */}
+                 {run.state === "blocked" && run.blockedReason ? (
+                   <button
+                     type="button"
+                     onClick={() => onCommand({ verb: "recovery-retry", groupId, expectedRevision: revision, payload: { scope: "run", runId: run.runId } })}
+                   >
+-                    Retry run {run.taskId ?? run.runId}
++                    {t("control.group.retryRun", { id: run.taskId ?? run.runId })}
+                   </button>
+                 ) : null}
+               </td>
+               <td>{run.profile.profileId} {short(run.profile.profileHash)}</td>
+               <td>{run.used.tokens}</td>
+               <td>{run.remaining.tokens}</td>
+               <td>
+                 <EvidenceLink runId={run.runId} />
+                 {run.evidenceIds.length > 0 ? ` ${run.evidenceIds.join(", ")}` : ""}
+               </td>
+             </tr>
+           ))}
+         </tbody>
+       </table>
+ 
+       {view.handoffRequests.length > 0 && (
+         <>
+-          <h3>Handoff requests</h3>
++          <h3>{t("control.group.handoffRequests")}</h3>
+           <ul>
+             {view.handoffRequests.map((request) => (
+               <li key={request.requestId}>
+-                {request.requestId} · run {request.runId} · {request.state} · deadline {request.deadlineAt}
+-                {request.failureCode !== null ? ` · ${request.failureCode}` : ""} · evidence {request.evidenceIds.join(", ") || "none"}
++                {t("control.group.handoffLine", { requestId: request.requestId, runId: request.runId, state: enumText("requestState", request.state), deadline: request.deadlineAt })}
++                {request.failureCode !== null ? ` · ${request.failureCode}` : ""}
++                {t("control.group.handoffEvidence", { ids: request.evidenceIds.join(", ") || t("common.none") })}
+               </li>
+             ))}
+           </ul>
+         </>
+       )}
+ 
+       {view.estimates.length > 0 && (
+         <>
+-          <h3>Estimates</h3>
++          <h3>{t("control.group.estimates")}</h3>
+           <ul>
+             {view.estimates.map((estimate) => (
+               <li key={estimate.estimateId}>
+-                {estimate.estimateId} · v{estimate.estimateVersion} · {estimate.state} · {estimate.mode} profile{" "}
+-                {estimate.profile.profileId} {short(estimate.profile.profileHash)}
++                {t("control.group.estimateLine", {
++                  estimateId: estimate.estimateId,
++                  version: estimate.estimateVersion,
++                  state: enumText("estimateState", estimate.state),
++                  mode: enumText("budgetMode", estimate.mode),
++                  profileId: estimate.profile.profileId,
++                  hash: short(estimate.profile.profileHash),
++                })}
+                 {estimate.reasonCode !== null ? ` · ${estimate.reasonCode}` : ""}
+               </li>
+             ))}
+           </ul>
+         </>
+       )}
+ 
+       {uncertain.length > 0 && (
+-        <p role="status">Waiting for the ledger to answer: {uncertain.map((command) => command.commandId).join(", ")}</p>
++        <p role="status">{t("control.group.waiting", { commands: uncertain.map((command) => command.commandId).join(", ") })}</p>
+       )}
+ 
+-      <h3>Dispatch</h3>
++      <h3>{t("control.group.dispatch")}</h3>
+       {view.summary.state === "ready" && !handoffActive && (
+-        <button type="button" onClick={() => onCommand({ verb: "start", groupId, expectedRevision: revision, payload: {} })}>Start</button>
++        <button type="button" onClick={() => onCommand({ verb: "start", groupId, expectedRevision: revision, payload: {} })}>{t("control.group.start")}</button>
+       )}
+       {!handoffActive && view.summary.stopMode !== "pause" && (
+         <>
+-          <button type="button" onClick={() => onCommand({ verb: "pause-dispatch", groupId, expectedRevision: revision, payload: {} })}>Pause dispatch</button>
+-          <button type="button" onClick={() => onCommand({ verb: "handoff-stop", groupId, expectedRevision: revision, payload: {} })}>Handoff stop</button>
++          <button type="button" onClick={() => onCommand({ verb: "pause-dispatch", groupId, expectedRevision: revision, payload: {} })}>{t("control.group.pause")}</button>
++          <button type="button" onClick={() => onCommand({ verb: "handoff-stop", groupId, expectedRevision: revision, payload: {} })}>{t("control.group.handoffStop")}</button>
+         </>
+       )}
+       {view.summary.stopMode === "pause" && (
+-        <button type="button" onClick={() => onCommand({ verb: "resume-dispatch", groupId, expectedRevision: revision, payload: {} })}>Resume dispatch</button>
++        <button type="button" onClick={() => onCommand({ verb: "resume-dispatch", groupId, expectedRevision: revision, payload: {} })}>{t("control.group.resume")}</button>
+       )}
+       {handoffActive && view.summary.stopState === "handoff-complete" && continuable.length > 0 && (
+         <>
+           <button
+             type="button"
+             onClick={() => onCommand({ verb: "resume-from-handoff", groupId, expectedRevision: revision, payload: { selections: selections() } })}
+           >
+-            Continue selected tasks ({continuable.length})
++            {t("control.group.continueSelected", { n: continuable.length })}
+           </button>
+           {continuable.map(({ run, checkpointId }) => (
+             <button
+               key={run.runId}
+               type="button"
+               onClick={() => onCommand({
+                 verb: "continue-task",
+                 groupId,
+                 taskId: String(run.taskId),
+                 expectedRevision: revision,
+                 payload: { predecessorRunId: run.runId, checkpointId },
+               })}
+             >
+-              Continue task {run.taskId}
++              {t("control.group.continueTask", { taskId: String(run.taskId) })}
+             </button>
+           ))}
+         </>
+       )}
+       {/* Handoff delivery spec §13.1 I-4: when every frozen run finished or restarted, nothing is continuable,
+           and the group's only way out of handoff-complete is a resume with no selections. */}
+       {handoffActive && view.summary.stopState === "handoff-complete" && continuable.length === 0 && (
+         <button
+           type="button"
+           onClick={() => onCommand({ verb: "resume-from-handoff", groupId, expectedRevision: revision, payload: { selections: [] } })}
+         >
+-          Resume (no continuation)
++          {t("control.group.resumeNoContinuation")}
+         </button>
+       )}
+       {view.recoveryBlockers.length > 0 && (
+         <button
+           type="button"
+           onClick={() => onCommand({ verb: "recovery-retry", groupId, expectedRevision: revision, payload: { scope: "group", groupId } })}
+         >
+-          Retry recovery for {groupId}
++          {t("control.group.retryRecovery", { groupId })}
+         </button>
+       )}
+-      <p>Recent commands: {view.recentCommandIds.join(", ") || "none"}</p>
++      <p>{t("control.group.recent", { commands: view.recentCommandIds.join(", ") || t("common.none") })}</p>
+     </section>
+   );
+ }
+diff --git a/web/src/ControlPanel.tsx b/web/src/ControlPanel.tsx
+index feec03c..8a4be7c 100644
+--- a/web/src/ControlPanel.tsx
++++ b/web/src/ControlPanel.tsx
+@@ -2,25 +2,27 @@
+  * Task 9: the control panel's shell.
+  *
+  * Every number and state on this page is the server's: the panel polls the
+  * summary, re-reads whichever group is open, and shows the ledger's own answer
+  * to a command it is still waiting on. The one thing a browser is allowed to
+  * originate is an intent -- which button was pressed and under which revision --
+  * so nothing here decides whether a group may start, how much budget is free, or
+  * whether an unknown run is finished.
+  */
+ import type { JSX } from "react";
++import { useTranslation } from "react-i18next";
+ import { AgentSettings } from "./AgentSettings.js";
+ import { nextCommandId, type ControlAction } from "./controlApi.js";
+ import { ControlGroupView } from "./ControlGroupView.js";
+ import { RecoveryView } from "./RecoveryView.js";
+ import { WorkspaceModeSelector } from "./WorkspaceModeSelector.js";
++import { enumText } from "./i18n.js";
+ import type {
+   AgentPreferencesViewV1, AgentSelectionPreviewV1, AgentsViewV1, ControlConfigV1, ControlSummaryV1, GroupViewV1, OperatorPreferencesV1,
+   RecoveryViewV1, RepositoryWorkspaceV1,
+ } from "./controlTypes.js";
+ import type { ControlRefusal, UncertainCommand } from "./controlState.js";
+ 
+ export interface ControlPanelProps {
+   config: ControlConfigV1;
+   summary: ControlSummaryV1;
+   recovery: RecoveryViewV1;
+@@ -46,103 +48,102 @@ export interface ControlPanelProps {
+   onAgentPreferences?: (preferences: OperatorPreferencesV1, expectedRevision: number) => void;
+   /** Drop a group's agent preview and read it again (the operator's Re-read). */
+   onRereadPreview?: (groupId: string) => void;
+   /** The server's code for why the installation table or the preferences could not be read. */
+   agentsFailure?: string | null;
+   /** Ruling review R17: what the page's retry of the agent reads is doing, if anything. */
+   retryNotice?: string | null;
+ }
+ 
+ function ImportForm(props: { config: ControlConfigV1; onCommand: (action: ControlAction) => void }): JSX.Element {
++  const { t } = useTranslation();
+   const repository = props.config.repositories[0];
+   const plan = props.config.plans[0];
+   return (
+-    <section aria-label="Import plan">
+-      <h3>Import a plan</h3>
++    <section aria-label={t("control.import.region")}>
++      <h3>{t("control.import.title")}</h3>
+       {props.config.defaults === null ? (
+-        <p role="note">
+-          No estimator profile is configured for this panel, so a plan cannot be imported. Restart it
+-          with --estimator-profile and --estimate-mode.
+-        </p>
++        <p role="note">{t("control.import.noEstimator")}</p>
+       ) : repository === undefined || plan === undefined ? (
+-        <p role="note">No trusted repository and plan are configured for this panel.</p>
++        <p role="note">{t("control.import.noRepository")}</p>
+       ) : (
+         <>
+           <p>
+-            {repository.displayName} · {plan.displayName} · estimate mode {props.config.defaults?.estimateMode ?? "not configured"}
++            {t("control.import.summary", {
++              repository: repository.displayName,
++              plan: plan.displayName,
++              mode: props.config.defaults === null ? t("control.import.notConfigured") : enumText("budgetMode", props.config.defaults.estimateMode),
++            })}
+           </p>
+           <button
+             type="button"
+             onClick={() => {
+               const groupId = `group-${nextCommandId()}`;
+               props.onCommand({
+                 verb: "import-plan",
+                 groupId,
+                 expectedRevision: 0,
+                 payload: {
+                   groupId,
+                   repoId: repository.repoId,
+                   planId: plan.planId,
+                   estimatorProfileId: props.config.defaults!.estimatorProfileId,
+                   estimatorProfileHash: props.config.defaults!.estimatorProfileHash,
+                   estimateMode: props.config.defaults!.estimateMode,
+                 },
+               });
+             }}
+           >
+-            Import plan
++            {t("control.import.button")}
+           </button>
+         </>
+       )}
+     </section>
+   );
+ }
+ 
+ export function ControlPanel(props: ControlPanelProps): JSX.Element {
++  const { t } = useTranslation();
+   const { config, summary, recovery, groups, selected, drafts, uncertain, refusal, refetchRequired } = props;
+   const view = selected === null ? undefined : groups[selected];
+   const waiting = uncertain.filter((command) => command.groupId === (selected ?? command.groupId));
+   return (
+-    <section aria-label="Task control">
+-      <h2>Task control</h2>
++    <section aria-label={t("control.title")}>
++      <h2>{t("control.title")}</h2>
+       <p>
+-        epoch {summary.epoch} · projection {summary.changeSeq} ·{" "}
+-        {summary.dispatchBlocked ? "dispatch blocked" : "dispatch live"}
++        {t("control.summaryLine", { epoch: summary.epoch, seq: summary.changeSeq, dispatch: t(summary.dispatchBlocked ? "common.dispatchBlocked" : "common.dispatchLive") })}
+       </p>
+       {/*
+         * Ruling R6. Read from the config's own field, never inferred from profiles[].probeFailureCode:
+         * that answers a per-profile, per-probe question, and this one is per process for the life of
+         * the epoch. A panel with no port still serves every read -- which is the point, because the
+         * reads are what a person needs after a crash -- so this says why the commands will refuse.
+         */}
+       {config.executionPort === "unconfigured" && (
+-        <p role="alert">
+-          no execution port configured · this panel serves recovery and evidence, and refuses to start
+-          work · set ORCA_CCLOOP_BIN and ORCA_AGENTS_TABLE and restart it
+-        </p>
++        <p role="alert">{t("control.noPort")}</p>
+       )}
+-      {summary.resetRequired && <p role="alert">server reset required · this page must re-read before it trusts any cached view</p>}
+-      {refetchRequired && <p role="alert">projection refetch required · re-reading the open groups</p>}
+-      {recovery.dispatchBlocked && <p role="alert">dispatch blocked · recovery must be observed</p>}
++      {summary.resetRequired && <p role="alert">{t("control.resetRequired")}</p>}
++      {refetchRequired && <p role="alert">{t("control.refetchRequired")}</p>}
++      {recovery.dispatchBlocked && <p role="alert">{t("control.dispatchBlockedRecovery")}</p>}
+       <ImportForm config={config} onCommand={props.onCommand} />
+       {props.workspace && props.onWorkspaceMode && <WorkspaceModeSelector workspace={props.workspace} onChange={props.onWorkspaceMode} />}
+       {props.agents && props.preferences && props.onAgentPreferences && (
+         <AgentSettings agents={props.agents} preferences={props.preferences} drafts={drafts} onDraft={props.onDraft} onSave={props.onAgentPreferences} />
+       )}
+-      <nav aria-label="Control groups">
+-        {summary.groups.length === 0 && <p>No control groups yet.</p>}
++      <nav aria-label={t("control.groupsNav")}>
++        {summary.groups.length === 0 && <p>{t("control.noGroups")}</p>}
+         {summary.groups.map((group) => (
+           <button key={group.groupId} type="button" aria-current={group.groupId === selected} onClick={() => props.onSelect(group.groupId)}>
+-            {group.groupId} · {group.state}
+-            {group.completion !== undefined ? ` · ${group.completion.done}/${group.completion.total} done` : ""}
+-            {group.stopState !== null ? ` · ${group.stopState}` : ""}
+-            {group.recoveryBlockerCount > 0 ? ` · ${group.recoveryBlockerCount} blocker(s)` : ""}
++            {group.groupId} · {enumText("groupState", group.state)}
++            {group.completion !== undefined ? t("control.groupDone", { done: group.completion.done, total: group.completion.total }) : ""}
++            {group.stopState !== null ? ` · ${enumText("stopState", group.stopState)}` : ""}
++            {group.recoveryBlockerCount > 0 ? t("control.groupBlockers", { n: group.recoveryBlockerCount }) : ""}
+           </button>
+         ))}
+       </nav>
+       {view !== undefined && (
+         <ControlGroupView
+           key={view.summary.groupId}
+           view={view}
+           config={config}
+           uncertain={waiting}
+           drafts={drafts}
+@@ -150,25 +151,25 @@ export function ControlPanel(props: ControlPanelProps): JSX.Element {
+           onCommand={props.onCommand}
+           onCommands={props.onCommands}
+           agents={props.agents}
+           preview={props.previews?.[view.summary.groupId] ?? null}
+           agentPreferences={props.preferences?.preferences ?? null}
+           onRereadPreview={props.onRereadPreview && (() => props.onRereadPreview?.(view.summary.groupId))}
+           agentsFailure={props.agentsFailure}
+           retryNotice={props.retryNotice}
+         />
+       )}
+-      {view === undefined && selected !== null && <p role="status">Reading {selected}…</p>}
++      {view === undefined && selected !== null && <p role="status">{t("control.reading", { groupId: selected })}</p>}
+       <RecoveryView recovery={recovery} group={view ?? null} onCommand={props.onCommand} />
+       {waiting.length > 0 && (
+         <p role="status">
+-          Command outcome unknown, being looked up: {waiting.map((command) => `${command.commandId} (${command.groupId})`).join(", ")}
++          {t("control.outcomeUnknown", { commands: waiting.map((command) => `${command.commandId} (${command.groupId})`).join(", ") })}
+         </p>
+       )}
+       {refusal !== null && (
+         <p role="alert" data-status={refusal.status ?? ""}>
+           {refusal.code}
+           {refusal.status !== null ? ` · HTTP ${refusal.status}` : ""}
+           {refusal.commandRevision !== null ? ` · server revision ${refusal.commandRevision}` : ""} · {refusal.message}
+         </p>
+       )}
+     </section>
+diff --git a/web/src/EvidenceLink.tsx b/web/src/EvidenceLink.tsx
+index cdc3f7c..f03183c 100644
+--- a/web/src/EvidenceLink.tsx
++++ b/web/src/EvidenceLink.tsx
+@@ -1,29 +1,31 @@
+ /**
+  * Review finding (Task 10 round): one run's evidence, reachable from the page.
+  *
+  * `/api/control/*` authenticates by the `x-orca-token` header, which a bare
+  * `<a href>` cannot send -- so the links here used to answer 401. The manifest
+  * is fetched through the same client as every other control read and handed to
+  * the browser as a download; a refusal is named rather than swallowed.
+  */
+ import { useState } from "react";
+ import type { JSX } from "react";
++import { useTranslation } from "react-i18next";
+ import { controlFailureFrom, fetchRunEvidence, saveEvidenceManifest } from "./controlApi.js";
+ 
+ export function EvidenceLink(props: { runId: string; label?: string }): JSX.Element {
++  const { t } = useTranslation();
+   const [refusal, setRefusal] = useState<string | null>(null);
+   const load = async (): Promise<void> => {
+     setRefusal(null);
+     try {
+       saveEvidenceManifest(await fetchRunEvidence(props.runId));
+     } catch (err) {
+       setRefusal(controlFailureFrom(err).code);
+     }
+   };
+   return (
+     <>
+-      <button type="button" onClick={() => void load()}>{props.label ?? "evidence"}</button>
+-      {refusal !== null && <span role="alert">{`evidence refused · ${refusal}`}</span>}
++      <button type="button" onClick={() => void load()}>{props.label ?? t("control.evidence.button")}</button>
++      {refusal !== null && <span role="alert">{t("control.evidence.refused", { code: refusal })}</span>}
+     </>
+   );
+ }
+diff --git a/web/src/RecoveryView.tsx b/web/src/RecoveryView.tsx
+index 6a03da4..a656cdd 100644
+--- a/web/src/RecoveryView.tsx
++++ b/web/src/RecoveryView.tsx
+@@ -1,59 +1,62 @@
+ /**
+  * Task 9: recovery. A blocker is the ledger saying "this cannot go on until
+  * something is proved" -- the page lists what, where and with which evidence, and
+  * only offers the one command that re-observes it. Nothing here clears a blocker
+  * locally, and an unknown outcome stays unknown until the server says otherwise.
+  */
+ import type { JSX } from "react";
++import { useTranslation } from "react-i18next";
+ import type { ControlAction } from "./controlApi.js";
+ import { EvidenceLink } from "./EvidenceLink.js";
+ import type { GroupViewV1, RecoveryViewV1 } from "./controlTypes.js";
++import { enumText } from "./i18n.js";
+ 
+ export interface RecoveryViewProps {
+   recovery: RecoveryViewV1;
+   group: GroupViewV1 | null;
+   onCommand: (action: ControlAction) => void;
+ }
+ 
+ export function RecoveryView(props: RecoveryViewProps): JSX.Element {
++  const { t } = useTranslation();
+   const { recovery, group, onCommand } = props;
+   const revision = group?.summary.commandRevision ?? null;
+   if (!recovery.dispatchBlocked && recovery.blockers.length === 0 && (group?.recoveryBlockers.length ?? 0) === 0) {
+-    return <section aria-label="Recovery"><p>No recovery blockers.</p></section>;
++    return <section aria-label={t("recovery.title")}><p>{t("recovery.none")}</p></section>;
+   }
+   const retry = (payload: { scope: "group"; groupId: string } | { scope: "run"; runId: string }, groupId: string): JSX.Element | null =>
+     revision === null ? null : (
+-      <button type="button" onClick={() => onCommand({ verb: "recovery-retry", groupId, expectedRevision: revision, payload })}>Retry recovery</button>
++      <button type="button" onClick={() => onCommand({ verb: "recovery-retry", groupId, expectedRevision: revision, payload })}>{t("recovery.retry")}</button>
+     );
+ 
+   return (
+-    <section aria-label="Recovery">
+-      <h3>Recovery</h3>
+-      {recovery.dispatchBlocked && <p role="alert">dispatch blocked · the panel will not start new runs until recovery is observed</p>}
++    <section aria-label={t("recovery.title")}>
++      <h3>{t("recovery.title")}</h3>
++      {recovery.dispatchBlocked && <p role="alert">{t("recovery.dispatchBlocked")}</p>}
+       <ul>
+         {recovery.blockers.map((blocker, index) => (
+           <li key={`${blocker.scope}:${blocker.groupId}:${blocker.runId ?? "-"}:${blocker.code}:${index}`}>
+-            {blocker.scope} · {blocker.groupId === "" ? "all groups" : blocker.groupId}
+-            {blocker.runId !== null ? ` · run ${blocker.runId}` : ""} · {blocker.code}
+-            {blocker.evidenceIds.length > 0 ? ` · evidence ${blocker.evidenceIds.join(", ")}` : ""}
++            {enumText("blockerScope", blocker.scope)} · {blocker.groupId === "" ? t("recovery.allGroups") : blocker.groupId}
++            {blocker.runId !== null ? t("recovery.run", { runId: blocker.runId }) : ""} · {blocker.code}
++            {blocker.evidenceIds.length > 0 ? t("recovery.evidence", { ids: blocker.evidenceIds.join(", ") }) : ""}
+             {blocker.runId !== null && retry({ scope: "run", runId: blocker.runId }, blocker.groupId)}
+             {blocker.runId === null && blocker.groupId !== "" && retry({ scope: "group", groupId: blocker.groupId }, blocker.groupId)}
+           </li>
+         ))}
+         {(group?.recoveryBlockers ?? []).map((blocker, index) => (
+           <li key={`group-view:${blocker.scope}:${blocker.runId ?? "-"}:${blocker.code}:${index}`}>
+-            {blocker.scope} · {group?.summary.groupId}
+-            {blocker.runId !== null ? ` · run ${blocker.runId}` : ""} · {blocker.code}
+-            {blocker.evidenceIds.length > 0 ? ` · evidence ${blocker.evidenceIds.join(", ")}` : ""}
++            {enumText("blockerScope", blocker.scope)} · {group?.summary.groupId}
++            {blocker.runId !== null ? t("recovery.run", { runId: blocker.runId }) : ""} · {blocker.code}
++            {blocker.evidenceIds.length > 0 ? t("recovery.evidence", { ids: blocker.evidenceIds.join(", ") }) : ""}
+             {blocker.runId !== null && (
+               <>
+-                <EvidenceLink runId={String(blocker.runId)} label="run evidence" />
++                <EvidenceLink runId={String(blocker.runId)} label={t("recovery.runEvidence")} />
+                 {retry({ scope: "run", runId: blocker.runId }, String(group?.summary.groupId ?? ""))}
+               </>
+             )}
+           </li>
+         ))}
+       </ul>
+     </section>
+   );
+ }
+diff --git a/web/src/TaskDetail.tsx b/web/src/TaskDetail.tsx
+index dc801d8..f5baa64 100644
+--- a/web/src/TaskDetail.tsx
++++ b/web/src/TaskDetail.tsx
+@@ -3,54 +3,59 @@
+  * its progress, and every run it had with that run's evidence, piece by piece.
+  *
+  * The editor keeps what the person chose as a draft (the page's `drafts`, one key per task) together with the
+  * labelsVersion the draft started from, and sends that version -- never the one the latest poll read -- so a draft
+  * begun before someone else's change is refused as labels-version-conflict instead of overwriting it (final review
+  * finding 1). The draft is the person's own data: the page clears it only when the command succeeded (App.tsx, plan
+  * finding F11) or when the person discards it, so a refusal -- shown by its code like every other refusal -- leaves it.
+  */
+ import { useState } from "react";
+ import type { JSX } from "react";
++import { useTranslation } from "react-i18next";
+ import { controlFailureFrom, downloadEvidenceArtifact, fetchRunEvidence, type ControlAction } from "./controlApi.js";
+ import { CUSTOM_LABEL_PREFIX, WEB_SYSTEM_LABELS } from "./controlTypes.js";
+ import type { EvidenceManifestV1, GroupViewV1, WorkItemProgressV1, WorkItemViewV1 } from "./controlTypes.js";
+ import { LoopPlanCard } from "./LoopPlanCard.js";
++import i18n, { enumText } from "./i18n.js";
+ 
+ export const labelsDraftKey = (groupId: string, taskId: string): string => `labels:${groupId}:${taskId}`;
+ 
+ /** A system label and a custom one look different (spec §4.2); the class is the whole difference. */
+ export function LabelChips(props: { labels: string[] | undefined }): JSX.Element {
++  const { t } = useTranslation();
+   const labels = props.labels ?? [];
+-  if (labels.length === 0) return <>none</>;
++  if (labels.length === 0) return <>{t("common.none")}</>;
+   return (
+     <>
+       {labels.map((label) => (
+         <span key={label} className={label.startsWith(CUSTOM_LABEL_PREFIX) ? "label label-custom" : "label label-system"}>{label}</span>
+       ))}
+     </>
+   );
+ }
+ 
+ /**
+  * Spec §4.1/§4.2 (§8 R11, R18): step · attempt n/max · tokens. Unknown usage says "unknown", never a percentage; a known
+- * number is annotated, because ccloop reports usage only when a phase ends (finding F10: the panel speaks English).
++ * number is annotated, because ccloop reports usage only when a phase ends (panel i18n spec §3.3: in the reader's language).
+  */
+ export function progressText(progress: WorkItemProgressV1 | null | undefined): string {
+-  if (progress === undefined || progress === null) return "no run";
+-  const step = progress.step ?? "not reported yet";
+-  const attempt = progress.attempt === null ? "attempt unknown" : `attempt ${progress.attempt.current}/${progress.attempt.max}`;
++  if (progress === undefined || progress === null) return i18n.t("control.progress.noRun");
++  const step = progress.step === null ? i18n.t("control.progress.notReported") : enumText("progressStep", progress.step);
++  const attempt = progress.attempt === null
++    ? i18n.t("control.progress.attemptUnknown")
++    : i18n.t("control.progress.attempt", { current: progress.attempt.current, max: progress.attempt.max });
+   const tokens = progress.tokens === null
+-    ? "tokens unknown"
++    ? i18n.t("control.progress.tokensUnknown")
+     : progress.tokens.grant === 0
+-      ? `tokens ${progress.tokens.used} of 0`
+-      : `tokens ${Math.floor((progress.tokens.used * 100) / progress.tokens.grant)}% (reported at phase end)`;
+-  return `${step} · ${attempt} · ${tokens}`;
++      ? i18n.t("control.progress.tokensOfZero", { used: progress.tokens.used })
++      : i18n.t("control.progress.tokensPercent", { percent: Math.floor((progress.tokens.used * 100) / progress.tokens.grant) });
++  return i18n.t("control.progress.line", { step, attempt, tokens });
+ }
+ 
+ /** A label draft: the labels the person chose and the labelsVersion shown when they started choosing. */
+ interface LabelsDraft { base: number; labels: string[] }
+ 
+ /** Anything else under the key -- including the earlier bare-array form, which carries no base -- is no draft. */
+ function readDraft(drafts: Record<string, string>, key: string): LabelsDraft | null {
+   const raw = drafts[key];
+   if (raw === undefined) return null;
+   try {
+@@ -60,58 +65,60 @@ function readDraft(drafts: Record<string, string>, key: string): LabelsDraft | n
+     if (!Number.isSafeInteger(base) || (base as number) < 0) return null;
+     if (!Array.isArray(labels) || !labels.every((label) => typeof label === "string")) return null;
+     return { base: base as number, labels };
+   } catch {
+     return null;
+   }
+ }
+ 
+ /** One run's evidence manifest, listed on demand; each piece is downloaded through the token-carrying client. */
+ export function EvidenceList(props: { runId: string }): JSX.Element {
++  const { t } = useTranslation();
+   const [manifest, setManifest] = useState<EvidenceManifestV1 | null>(null);
+   const [refusal, setRefusal] = useState<string | null>(null);
+   const load = async (): Promise<void> => {
+     setRefusal(null);
+     try { setManifest(await fetchRunEvidence(props.runId)); } catch (err) { setRefusal(controlFailureFrom(err).code); }
+   };
+   const download = async (entry: EvidenceManifestV1["entries"][number]): Promise<void> => {
+     setRefusal(null);
+     try { await downloadEvidenceArtifact(entry); } catch (err) { setRefusal(controlFailureFrom(err).code); }
+   };
+   return (
+     <>
+-      <button type="button" onClick={() => void load()}>List evidence of {props.runId}</button>
+-      {refusal !== null && <span role="alert">{`evidence refused · ${refusal}`}</span>}
+-      {manifest !== null && (manifest.entries.length === 0 ? <span> no evidence</span> : (
+-        <ul aria-label={`Evidence of ${props.runId}`}>
++      <button type="button" onClick={() => void load()}>{t("control.evidence.list", { runId: props.runId })}</button>
++      {refusal !== null && <span role="alert">{t("control.evidence.refused", { code: refusal })}</span>}
++      {manifest !== null && (manifest.entries.length === 0 ? <span>{t("control.evidence.none")}</span> : (
++        <ul aria-label={t("control.evidence.region", { runId: props.runId })}>
+           {manifest.entries.map((entry) => (
+             <li key={entry.evidenceId}>
+-              {entry.evidenceId} · {entry.kind} · {entry.byteLength} bytes{" "}
+-              <button type="button" onClick={() => void download(entry)}>Download {entry.evidenceId}</button>
++              {t("control.evidence.entry", { id: entry.evidenceId, kind: entry.kind, bytes: entry.byteLength })}{" "}
++              <button type="button" onClick={() => void download(entry)}>{t("control.evidence.download", { id: entry.evidenceId })}</button>
+             </li>
+           ))}
+         </ul>
+       ))}
+     </>
+   );
+ }
+ 
+ export interface TaskDetailProps {
+   view: GroupViewV1;
+   item: WorkItemViewV1;
+   drafts: Record<string, string>;
+   onDraft: (key: string, text: string) => void;
+   onCommand: (action: ControlAction) => void;
+ }
+ 
+ export function TaskDetail(props: TaskDetailProps): JSX.Element {
+   const { view, item, drafts, onDraft, onCommand } = props;
++  const { t } = useTranslation();
+   const groupId = view.summary.groupId;
+   const key = labelsDraftKey(groupId, item.taskId);
+   const draft = readDraft(drafts, key);
+   const current = item.labelsVersion ?? 0;
+   const labels = draft?.labels ?? item.labels ?? [];
+   const [system, setSystem] = useState<string>(WEB_SYSTEM_LABELS[0]);
+   const [custom, setCustom] = useState("");
+   // Sorted by code unit like the server (spec §8 R15), so what is sent is what will be shown back.
+   // A draft keeps the version it started from through every later edit.
+   const setDraft = (next: string[]): void => onDraft(key, JSON.stringify({ base: draft?.base ?? current, labels: [...new Set(next)].sort() }));
+@@ -120,56 +127,56 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
+     payload: { labels: next, baseLabelsVersion: base },
+   });
+   const addCustom = (): void => {
+     const text = custom.trim();
+     if (text === "") return;
+     setDraft([...labels, text.startsWith(CUSTOM_LABEL_PREFIX) ? text : `${CUSTOM_LABEL_PREFIX}${text}`]);
+     setCustom("");
+   };
+   const runs = view.runs.filter((run) => run.taskId === item.taskId);
+   return (
+-    <section aria-label={`Task ${item.taskId}`}>
+-      <h4>Task {item.taskId}</h4>
++    <section aria-label={t("control.task.region", { taskId: item.taskId })}>
++      <h4>{t("control.task.region", { taskId: item.taskId })}</h4>
+       <p>
+-        labels from {item.labelsProvenance ?? "plan"} · version {item.labelsVersion ?? 0}
+-        {draft !== null ? " · unsaved draft" : ""}
++        {t("control.task.labelsFrom", { source: t(`control.task.labelSource.${item.labelsProvenance ?? "plan"}`), version: item.labelsVersion ?? 0 })}
++        {draft !== null ? t("control.task.unsavedDraft") : ""}
+       </p>
+       {draft !== null && draft.base !== current && (
+         <p role="status">
+-          labels changed since your draft (v{draft.base} → v{current}) · now: <LabelChips labels={item.labels} />
++          {t("control.task.labelsChanged", { base: draft.base, current })}<LabelChips labels={item.labels} />
+         </p>
+       )}
+-      <ul aria-label={`Labels of ${item.taskId}`}>
++      <ul aria-label={t("control.task.labelsOf", { taskId: item.taskId })}>
+         {labels.map((label) => (
+           <li key={label}>
+             <LabelChips labels={[label]} />{" "}
+-            <button type="button" onClick={() => setDraft(labels.filter((other) => other !== label))}>Remove {label}</button>
++            <button type="button" onClick={() => setDraft(labels.filter((other) => other !== label))}>{t("control.task.remove", { label })}</button>
+           </li>
+         ))}
+       </ul>
+-      <select aria-label="System label" value={system} onChange={(event) => setSystem(event.target.value)}>
++      <select aria-label={t("control.task.systemLabel")} value={system} onChange={(event) => setSystem(event.target.value)}>
+         {WEB_SYSTEM_LABELS.map((word) => <option key={word} value={word}>{word}</option>)}
+       </select>
+-      <button type="button" onClick={() => setDraft([...labels, system])}>Add system label</button>
+-      <input aria-label="Custom label" value={custom} onChange={(event) => setCustom(event.target.value)} />
+-      <button type="button" onClick={addCustom}>Add custom label</button>
+-      <button type="button" disabled={draft === null} onClick={() => draft !== null && send(draft.labels, draft.base)}>Save labels</button>
+-      <button type="button" disabled={draft === null} onClick={() => onDraft(key, "")}>Discard draft</button>
+-      <button type="button" onClick={() => send(null, current)}>Restore plan labels</button>
++      <button type="button" onClick={() => setDraft([...labels, system])}>{t("control.task.addSystem")}</button>
++      <input aria-label={t("control.task.customLabel")} value={custom} onChange={(event) => setCustom(event.target.value)} />
++      <button type="button" onClick={addCustom}>{t("control.task.addCustom")}</button>
++      <button type="button" disabled={draft === null} onClick={() => draft !== null && send(draft.labels, draft.base)}>{t("control.task.save")}</button>
++      <button type="button" disabled={draft === null} onClick={() => onDraft(key, "")}>{t("control.task.discard")}</button>
++      <button type="button" onClick={() => send(null, current)}>{t("control.task.restore")}</button>
+       <p>
+-        progress: {progressText(item.progress)}
+-        {item.progress?.lastTransitionAt ? ` · last transition ${item.progress.lastTransitionAt}` : ""}
++        {t("control.task.progress", { progress: progressText(item.progress) })}
++        {item.progress?.lastTransitionAt ? t("control.task.lastTransition", { at: item.progress.lastTransitionAt }) : ""}
+       </p>
+       <LoopPlanCard view={view} item={item} drafts={drafts} onDraft={onDraft} onCommand={onCommand} />
+-      <h5>Runs of {item.taskId}</h5>
+-      {runs.length === 0 ? <p>none</p> : (
++      <h5>{t("control.task.runsOf", { taskId: item.taskId })}</h5>
++      {runs.length === 0 ? <p>{t("common.none")}</p> : (
+         <ul>
+           {runs.map((run) => (
+             <li key={run.runId}>
+-              {run.runId} · {run.phase} · {run.state} <EvidenceList runId={run.runId} />
++              {run.runId} · {enumText("runPhase", run.phase)} · {enumText("runState", run.state)} <EvidenceList runId={run.runId} />
+             </li>
+           ))}
+         </ul>
+       )}
+     </section>
+   );
+ }
+diff --git a/web/src/WorkspaceModeSelector.tsx b/web/src/WorkspaceModeSelector.tsx
+index 2032d6c..ff21a80 100644
+--- a/web/src/WorkspaceModeSelector.tsx
++++ b/web/src/WorkspaceModeSelector.tsx
+@@ -1,31 +1,37 @@
+ import type { JSX } from "react";
++import { useTranslation } from "react-i18next";
+ import type { RepositoryWorkspaceV1 } from "./controlTypes.js";
+ 
+ /**
+  * Execution driver spec §3.2: how a repository's runs get their workspace. The server holds the value
+  * and its revision; this only names the choice and the revision it was read at, and the change reaches
+  * only runs that start afterwards.
+  */
+ export function WorkspaceModeSelector(props: { workspace: RepositoryWorkspaceV1; onChange: (mode: "worktree" | "clone", expectedRevision: number) => void }): JSX.Element {
++  const { t } = useTranslation();
+   const { workspace } = props;
+   return (
+-    <section aria-label="Workspace mode">
+-      <h3>Workspace mode</h3>
++    <section aria-label={t("control.workspace.region")}>
++      <h3>{t("control.workspace.region")}</h3>
+       <p>
+-        New runs in {workspace.repoId} use {workspace.workspaceMode === "worktree" ? "a git worktree" : "a private clone"} (setting revision {workspace.revision}). Runs already started keep theirs.
++        {t("control.workspace.line", {
++          repoId: workspace.repoId,
++          mode: t(workspace.workspaceMode === "worktree" ? "control.workspace.aWorktree" : "control.workspace.aClone"),
++          revision: workspace.revision,
++        })}
+       </p>
+       {(["worktree", "clone"] as const).map((mode) => (
+         <label key={mode}>
+           <input
+             type="radio"
+             name={`workspace-mode-${workspace.repoId}`}
+             value={mode}
+             checked={workspace.workspaceMode === mode}
+             onChange={() => props.onChange(mode, workspace.revision)}
+           />
+-          {mode === "worktree" ? "git worktree (default)" : "private clone"}
++          {t(mode === "worktree" ? "control.workspace.worktreeOption" : "control.workspace.cloneOption")}
+         </label>
+       ))}
+     </section>
+   );
+ }
+diff --git a/web/src/locales/en.ts b/web/src/locales/en.ts
+index 9328e97..335e4e2 100644
+--- a/web/src/locales/en.ts
++++ b/web/src/locales/en.ts
+@@ -1,17 +1,20 @@
+ /**
+  * Panel i18n spec §2: the English resource. It is the source shape (`as const`), and every value is today's panel text
+  * byte for byte. Keys are grouped by panel area. Enum families (spec §3.5) are Records over the value unions, so a new
+  * value is a compile error here until it has its words. Tasks 3-10 add their areas.
+  */
+ import type { ThemePref } from "../theme.js";
+ import type { ChainStopCategory, CorrectionKind, DecisionKind, DecisionObservation, DecisionScope, MetricsNoteCode } from "../types.js";
++import type {
++  EstimateViewV1, GroupSummaryV1, HandoffRequestViewV1, RecoveryViewV1, RunViewV1, WorkItemProgressV1, WorkItemViewV1,
++} from "../controlTypes.js";
+ 
+ /** The Chinese resource's type: the same key set, every value widened to string (spec §2). */
+ export type Translation<T> = { [K in keyof T]: T[K] extends string ? string : Translation<T[K]> };
+ 
+ const theme = { system: "system", light: "light", dark: "dark" } as const satisfies Record<ThemePref, string>;
+ const decisionKind = {
+   dependency: "dependency", interface: "interface", scheduling: "scheduling", abandon: "abandon", criteria: "criteria", boundary: "boundary", reconcile: "reconcile",
+ } as const satisfies Record<DecisionKind, string>;
+ const decisionScope = { file: "file", task: "task", repo: "repo", "cross-repo": "cross-repo" } as const satisfies Record<DecisionScope, string>;
+ const decisionVerdict = { ok: "ok", downgraded: "downgraded" } as const satisfies Record<DecisionObservation["verdict"], string>;
+@@ -31,20 +34,49 @@ const metricsNote = {
+ } as const satisfies Record<MetricsNoteCode | "reviewed-is-deliberate", string>;
+ 
+ const chainStopCategory = { done: "done", blocked: "blocked", limit: "limit", anomaly: "anomaly" } as const satisfies Record<ChainStopCategory, string>;
+ const chainBanner = {
+   done: "Chain finished",
+   blocked: "Chain is waiting for you",
+   limit: "Chain stopped at a limit",
+   anomaly: "Chain stopped on an anomaly",
+ } as const satisfies Record<ChainStopCategory, string>;
+ 
++const groupState = { draft: "draft", ready: "ready", running: "running", review: "review", done: "done", blocked: "blocked" } as const satisfies Record<GroupSummaryV1["state"], string>;
++const stopMode = { pause: "pause", shutdown: "shutdown", handoff: "handoff" } as const satisfies Record<NonNullable<GroupSummaryV1["stopMode"]>, string>;
++const stopState = {
++  paused: "paused", "handoff-pending": "handoff-pending", "handoff-partial": "handoff-partial", "handoff-unresolved": "handoff-unresolved", "handoff-complete": "handoff-complete",
++} as const satisfies Record<NonNullable<GroupSummaryV1["stopState"]>, string>;
++const workStatus = {
++  draft: "draft", ready: "ready", starting: "starting", "start-unknown": "start-unknown", active: "active", held: "held", continuing: "continuing", completed: "completed", blocked: "blocked",
++} as const satisfies Record<WorkItemViewV1["status"], string>;
++const runPhase = { estimate: "estimate", work: "work", handoff: "handoff" } as const satisfies Record<RunViewV1["phase"], string>;
++const runState = {
++  starting: "starting", unknown: "unknown", "attempt-unknown": "attempt-unknown", "attempt-proof-invalid": "attempt-proof-invalid", running: "running",
++  "failed-before-provider": "failed-before-provider", "settled-recoverable": "settled-recoverable", "settled-restartable": "settled-restartable",
++  "settled-unrecoverable": "settled-unrecoverable", collected: "collected", landed: "landed", reconciling: "reconciling", blocked: "blocked",
++} as const satisfies Record<RunViewV1["state"], string>;
++const requestState = {
++  "request-pending": "request-pending", latched: "latched", collecting: "collecting", "settled-recoverable": "settled-recoverable",
++  "settled-restartable": "settled-restartable", "settled-unrecoverable": "settled-unrecoverable", "outcome-unknown": "outcome-unknown",
++} as const satisfies Record<HandoffRequestViewV1["state"], string>;
++const estimateState = {
++  queued: "queued", running: "running", "start-unknown": "start-unknown", ready: "ready", failed: "failed", interrupted: "interrupted",
++  "blocked-capability": "blocked-capability", "input-too-large": "input-too-large",
++} as const satisfies Record<EstimateViewV1["state"], string>;
++const budgetMode = { strict: "strict", soft: "soft" } as const satisfies Record<EstimateViewV1["mode"], string>;
++const blockerScope = { global: "global", group: "group", run: "run" } as const satisfies Record<RecoveryViewV1["blockers"][number]["scope"], string>;
++const progressStep = {
++  queued: "queued", plan: "plan", execute: "execute", verify: "verify", succeeded: "succeeded", blocked_waiting_human: "blocked_waiting_human",
++  exhausted: "exhausted", cancelled: "cancelled", failed: "failed",
++} as const satisfies Record<NonNullable<WorkItemProgressV1["step"]>, string>;
++
+ export const en = {
+   nav: { sections: "Sections", decisions: "Decisions", chains: "Chains", tasks: "Task control", metrics: "Metrics" },
+   shell: {
+     brandTitle: "Leave it to Orca — every idea, made real.",
+     chainRunning: "a chain is running",
+     needsAttention: "needs attention",
+     theme: "Theme",
+     language: "Language",
+     loading: "orca panel loading…",
+     epoch: "epoch {{epoch}}",
+@@ -98,20 +130,131 @@ export const en = {
+     stopRequested: "Chain {{chainId}} will stop after the current session ends.",
+     gotIt: "Got it",
+     stateStopped: "stopped: {{reason}} ({{category}})",
+     stateRunning: "running",
+     stateOrphaned: "running (supervisor is gone)",
+     costUnreadable: "cost unreadable",
+     cost: "USD {{amount}}",
+     sessionProgress: "session {{n}}; {{cost}}",
+     banner: chainBanner,
+   },
++  control: {
++    unavailable: "The task control plane is not available on this panel.",
++    title: "Task control",
++    summaryLine: "epoch {{epoch}} · projection {{seq}} · {{dispatch}}",
++    noPort: "no execution port configured · this panel serves recovery and evidence, and refuses to start work · set ORCA_CCLOOP_BIN and ORCA_AGENTS_TABLE and restart it",
++    resetRequired: "server reset required · this page must re-read before it trusts any cached view",
++    refetchRequired: "projection refetch required · re-reading the open groups",
++    dispatchBlockedRecovery: "dispatch blocked · recovery must be observed",
++    groupsNav: "Control groups",
++    noGroups: "No control groups yet.",
++    groupDone: " · {{done}}/{{total}} done",
++    groupBlockers: " · {{n}} blocker(s)",
++    reading: "Reading {{groupId}}…",
++    outcomeUnknown: "Command outcome unknown, being looked up: {{commands}}",
++    import: {
++      region: "Import plan",
++      title: "Import a plan",
++      noEstimator: "No estimator profile is configured for this panel, so a plan cannot be imported. Restart it with --estimator-profile and --estimate-mode.",
++      noRepository: "No trusted repository and plan are configured for this panel.",
++      summary: "{{repository}} · {{plan}} · estimate mode {{mode}}",
++      notConfigured: "not configured",
++      button: "Import plan",
++    },
++    group: {
++      region: "Control group {{groupId}}",
++      heading: "{{groupId}} · {{state}} · revision {{revision}} · projection {{projection}}",
++      claimBlocked: "claim blocked · new runs are not being started",
++      planLine: "{{goal}} · plan {{hash}} · graph v{{graphVersion}}",
++      stop: "stop {{mode}} {{state}} · accepted {{accepted}} · deadline {{deadline}} · {{n}} frozen run(s): {{runs}}",
++      workItems: "Work items",
++      filterRegion: "Filter work items by label",
++      filterLegend: "labels (any of)",
++      th: { task: "task", status: "status", labels: "labels", progress: "progress", run: "run", pending: "pending", dependsOn: "depends on" },
++      runs: "Runs",
++      runsTh: { run: "run", phase: "phase", state: "state", profile: "profile", used: "used", remaining: "remaining", evidence: "evidence" },
++      attempt: " · attempt {{attempt}} of claim {{claim}}",
++      retryRun: "Retry run {{id}}",
++      handoffRequests: "Handoff requests",
++      handoffLine: "{{requestId}} · run {{runId}} · {{state}} · deadline {{deadline}}",
++      handoffEvidence: " · evidence {{ids}}",
++      estimates: "Estimates",
++      estimateLine: "{{estimateId}} · v{{version}} · {{state}} · {{mode}} profile {{profileId}} {{hash}}",
++      waiting: "Waiting for the ledger to answer: {{commands}}",
++      dispatch: "Dispatch",
++      start: "Start",
++      pause: "Pause dispatch",
++      handoffStop: "Handoff stop",
++      resume: "Resume dispatch",
++      continueSelected: "Continue selected tasks ({{n}})",
++      continueTask: "Continue task {{taskId}}",
++      resumeNoContinuation: "Resume (no continuation)",
++      retryRecovery: "Retry recovery for {{groupId}}",
++      recent: "Recent commands: {{commands}}",
++    },
++    task: {
++      region: "Task {{taskId}}",
++      labelsFrom: "labels from {{source}} · version {{version}}",
++      labelSource: { plan: "plan", operator: "operator" },
++      unsavedDraft: " · unsaved draft",
++      labelsChanged: "labels changed since your draft (v{{base}} → v{{current}}) · now: ",
++      labelsOf: "Labels of {{taskId}}",
++      remove: "Remove {{label}}",
++      systemLabel: "System label",
++      addSystem: "Add system label",
++      customLabel: "Custom label",
++      addCustom: "Add custom label",
++      save: "Save labels",
++      discard: "Discard draft",
++      restore: "Restore plan labels",
++      progress: "progress: {{progress}}",
++      lastTransition: " · last transition {{at}}",
++      runsOf: "Runs of {{taskId}}",
++    },
++    progress: {
++      noRun: "no run",
++      notReported: "not reported yet",
++      attemptUnknown: "attempt unknown",
++      attempt: "attempt {{current}}/{{max}}",
++      tokensUnknown: "tokens unknown",
++      tokensOfZero: "tokens {{used}} of 0",
++      tokensPercent: "tokens {{percent}}% (reported at phase end)",
++      line: "{{step}} · {{attempt}} · {{tokens}}",
++    },
++    evidence: {
++      button: "evidence",
++      refused: "evidence refused · {{code}}",
++      list: "List evidence of {{runId}}",
++      none: " no evidence",
++      region: "Evidence of {{runId}}",
++      entry: "{{id}} · {{kind}} · {{bytes}} bytes",
++      download: "Download {{id}}",
++    },
++    workspace: {
++      region: "Workspace mode",
++      line: "New runs in {{repoId}} use {{mode}} (setting revision {{revision}}). Runs already started keep theirs.",
++      aWorktree: "a git worktree",
++      aClone: "a private clone",
++      worktreeOption: "git worktree (default)",
++      cloneOption: "private clone",
++    },
++  },
++  recovery: {
++    title: "Recovery",
++    none: "No recovery blockers.",
++    retry: "Retry recovery",
++    dispatchBlocked: "dispatch blocked · the panel will not start new runs until recovery is observed",
++    allGroups: "all groups",
++    run: " · run {{runId}}",
++    evidence: " · evidence {{ids}}",
++    runEvidence: "run evidence",
++  },
+   loopPlan: {
+     // Panel i18n spec §3.1, §6.9: one entry per registry version, equal to src/control/loopPlans.ts (the English source of
+     // record); a version with no discipline has no discipline key.
+     plan: {
+       standard: { v1: { name: "Standard" }, v2: { name: "Standard" } },
+       bugfix: {
+         v1: { name: "Bug fix (red first)", discipline: "Write a failing test that reproduces the bug, then fix it (checked by a model, not proven mechanically)" },
+         v2: { name: "Bug fix (red first)", discipline: "Write a failing test that reproduces the bug, then fix it (checked by a model, not proven mechanically)" },
+       },
+       refactor: {
+@@ -147,12 +290,15 @@ export const en = {
+     repairRate: "Repair rate",
+     reviewCoverage: "Review coverage",
+     unresolvedTitle: "Unresolved decisions",
+     unresolvedCount: "Unresolved decisions: {{n}}",
+     malformedTitle: "Malformed lines",
+     malformedCount: "Malformed lines: {{n}}",
+     futureTitle: "Excluded as future",
+     futureCount: "Excluded as future: {{n}}",
+     note: metricsNote,
+   },
+-  enums: { theme, decisionKind, decisionScope, decisionVerdict, correctionKind, chainStopCategory },
++  enums: {
++    theme, decisionKind, decisionScope, decisionVerdict, correctionKind, chainStopCategory,
++    groupState, stopMode, stopState, workStatus, runPhase, runState, requestState, estimateState, budgetMode, blockerScope, progressStep,
++  },
+ } as const;
+diff --git a/web/src/locales/zh.ts b/web/src/locales/zh.ts
+index 27bd164..db32546 100644
+--- a/web/src/locales/zh.ts
++++ b/web/src/locales/zh.ts
+@@ -66,20 +66,131 @@ export const zh: Translation<typeof en> = {
+     stopRequested: "链 {{chainId}} 将在当前会话结束后停止。",
+     gotIt: "知道了",
+     stateStopped: "已停止：{{reason}}（{{category}}）",
+     stateRunning: "运行中",
+     stateOrphaned: "运行中（监督进程已不在）",
+     costUnreadable: "费用读不出",
+     cost: "USD {{amount}}",
+     sessionProgress: "第 {{n}} 个会话；{{cost}}",
+     banner: { done: "链已完成", blocked: "链在等你", limit: "链因触达上限而停止", anomaly: "链因异常而停止" },
+   },
++  control: {
++    unavailable: "这个面板上没有任务控制面。",
++    title: "任务控制",
++    summaryLine: "纪元 {{epoch}} · 投影 {{seq}} · {{dispatch}}",
++    noPort: "未配置执行端口 · 这个面板提供恢复和证据，但拒绝开始工作 · 设置 ORCA_CCLOOP_BIN 和 ORCA_AGENTS_TABLE 后重启它",
++    resetRequired: "服务端要求重置 · 本页必须重新读取，才能信任任何缓存的视图",
++    refetchRequired: "需要重新拉取投影 · 正在重新读取打开的组",
++    dispatchBlockedRecovery: "派发已阻断 · 必须先观察到恢复",
++    groupsNav: "控制组",
++    noGroups: "还没有控制组。",
++    groupDone: " · 已完成 {{done}}/{{total}}",
++    groupBlockers: " · {{n}} 个阻塞项",
++    reading: "正在读取 {{groupId}}…",
++    outcomeUnknown: "命令结果未知，正在查询：{{commands}}",
++    import: {
++      region: "导入计划",
++      title: "导入一个计划",
++      noEstimator: "这个面板没有配置估算 profile，所以不能导入计划。请带上 --estimator-profile 和 --estimate-mode 重启它。",
++      noRepository: "这个面板没有配置受信任的仓库和计划。",
++      summary: "{{repository}} · {{plan}} · 估算模式 {{mode}}",
++      notConfigured: "未配置",
++      button: "导入计划",
++    },
++    group: {
++      region: "控制组 {{groupId}}",
++      heading: "{{groupId}} · {{state}} · 版本 {{revision}} · 投影 {{projection}}",
++      claimBlocked: "认领已阻断 · 不再启动新的运行",
++      planLine: "{{goal}} · 计划 {{hash}} · 图 v{{graphVersion}}",
++      stop: "停止 {{mode}} {{state}} · 受理于 {{accepted}} · 截止 {{deadline}} · {{n}} 个冻结的运行：{{runs}}",
++      workItems: "工作项",
++      filterRegion: "按标签筛选工作项",
++      filterLegend: "标签（任一）",
++      th: { task: "任务", status: "状态", labels: "标签", progress: "进度", run: "运行", pending: "待定", dependsOn: "依赖" },
++      runs: "运行",
++      runsTh: { run: "运行", phase: "阶段", state: "状态", profile: "配置", used: "已用", remaining: "剩余", evidence: "证据" },
++      attempt: " · 第 {{attempt}} 次尝试（认领序号 {{claim}}）",
++      retryRun: "重试运行 {{id}}",
++      handoffRequests: "交接请求",
++      handoffLine: "{{requestId}} · 运行 {{runId}} · {{state}} · 截止 {{deadline}}",
++      handoffEvidence: " · 证据 {{ids}}",
++      estimates: "估算",
++      estimateLine: "{{estimateId}} · v{{version}} · {{state}} · {{mode}} · profile {{profileId}} {{hash}}",
++      waiting: "等待台账回答：{{commands}}",
++      dispatch: "派发",
++      start: "开跑",
++      pause: "暂停派发",
++      handoffStop: "交接停止",
++      resume: "恢复派发",
++      continueSelected: "继续选中的任务（{{n}}）",
++      continueTask: "继续任务 {{taskId}}",
++      resumeNoContinuation: "恢复（不续跑）",
++      retryRecovery: "重试 {{groupId}} 的恢复",
++      recent: "最近的命令：{{commands}}",
++    },
++    task: {
++      region: "任务 {{taskId}}",
++      labelsFrom: "标签来自{{source}} · 版本 {{version}}",
++      labelSource: { plan: "计划", operator: "操作者" },
++      unsavedDraft: " · 未保存的草稿",
++      labelsChanged: "你开始草稿后标签已变（v{{base}} → v{{current}}） · 现在：",
++      labelsOf: "{{taskId}} 的标签",
++      remove: "移除 {{label}}",
++      systemLabel: "系统标签",
++      addSystem: "添加系统标签",
++      customLabel: "自定义标签",
++      addCustom: "添加自定义标签",
++      save: "保存标签",
++      discard: "丢弃草稿",
++      restore: "恢复计划里的标签",
++      progress: "进度：{{progress}}",
++      lastTransition: " · 上次变化 {{at}}",
++      runsOf: "{{taskId}} 的运行",
++    },
++    progress: {
++      noRun: "没有运行",
++      notReported: "尚未上报",
++      attemptUnknown: "尝试次数未知",
++      attempt: "尝试 {{current}}/{{max}}",
++      tokensUnknown: "token 未知",
++      tokensOfZero: "token {{used}} / 0",
++      tokensPercent: "token {{percent}}%（阶段结束时上报）",
++      line: "{{step}} · {{attempt}} · {{tokens}}",
++    },
++    evidence: {
++      button: "证据",
++      refused: "证据被拒 · {{code}}",
++      list: "列出 {{runId}} 的证据",
++      none: " 没有证据",
++      region: "{{runId}} 的证据",
++      entry: "{{id}} · {{kind}} · {{bytes}} 字节",
++      download: "下载 {{id}}",
++    },
++    workspace: {
++      region: "工作区模式",
++      line: "{{repoId}} 里新的运行使用{{mode}}（设置版本 {{revision}}）。已开始的运行保持原样。",
++      aWorktree: "git worktree",
++      aClone: "私有克隆",
++      worktreeOption: "git worktree（默认）",
++      cloneOption: "私有克隆",
++    },
++  },
++  recovery: {
++    title: "恢复",
++    none: "没有恢复阻塞项。",
++    retry: "重试恢复",
++    dispatchBlocked: "派发已阻断 · 在观察到恢复之前，面板不会启动新的运行",
++    allGroups: "所有组",
++    run: " · 运行 {{runId}}",
++    evidence: " · 证据 {{ids}}",
++    runEvidence: "运行证据",
++  },
+   loopPlan: {
+     plan: {
+       standard: { v1: { name: "标准" }, v2: { name: "标准" } },
+       bugfix: {
+         v1: { name: "修 bug（先红后绿）", discipline: "先写能复现的失败测试再修（由模型核对，不是机械证明）" },
+         v2: { name: "修 bug（先红后绿）", discipline: "先写能复现的失败测试再修（由模型核对，不是机械证明）" },
+       },
+       refactor: {
+         v1: { name: "安全重构", discipline: "不改可观察行为（写给 agent 的约束；只有检查命令是硬的）" },
+         v2: { name: "安全重构", discipline: "不改可观察行为（写给 agent 的约束；只有检查命令是硬的）" },
+@@ -125,14 +236,32 @@ export const zh: Translation<typeof en> = {
+       "reviewed-is-deliberate": "`reviewed` 是一个有意的动作，所以这个数字可能长时间接近零——而长期为零的覆盖率与没人看无法区分。请结合积压一起看，不要单独看。",
+     },
+   },
+   enums: {
+     theme: { system: "跟随系统", light: "浅色", dark: "深色" },
+     decisionKind: { dependency: "依赖", interface: "接口", scheduling: "调度", abandon: "放弃", criteria: "判据", boundary: "边界", reconcile: "协调" },
+     decisionScope: { file: "文件", task: "任务", repo: "仓库", "cross-repo": "跨仓库" },
+     decisionVerdict: { ok: "正常", downgraded: "已降级" },
+     correctionKind: { wrong: "错了", not_my_taste: "不合我意", stale: "过时" },
+     chainStopCategory: { done: "已完成", blocked: "等人处理", limit: "触达上限", anomaly: "异常" },
++    groupState: { draft: "草稿", ready: "就绪", running: "运行中", review: "待评审", done: "已完成", blocked: "已阻塞" },
++    stopMode: { pause: "暂停", shutdown: "关停", handoff: "交接" },
++    stopState: { paused: "已暂停", "handoff-pending": "交接待处理", "handoff-partial": "交接部分完成", "handoff-unresolved": "交接未决", "handoff-complete": "交接完成" },
++    workStatus: { draft: "草稿", ready: "就绪", starting: "启动中", "start-unknown": "启动情况未知", active: "进行中", held: "已挂起", continuing: "续跑中", completed: "已完成", blocked: "已阻塞" },
++    runPhase: { estimate: "估算", work: "工作", handoff: "交接" },
++    runState: {
++      starting: "启动中", unknown: "未知", "attempt-unknown": "尝试情况未知", "attempt-proof-invalid": "尝试证明无效", running: "运行中",
++      "failed-before-provider": "未到提供方即失败", "settled-recoverable": "已结算（可恢复）", "settled-restartable": "已结算（可重启）",
++      "settled-unrecoverable": "已结算（不可恢复）", collected: "已收集", landed: "已合入", reconciling: "协调中", blocked: "已阻塞",
++    },
++    requestState: {
++      "request-pending": "请求待处理", latched: "已锁定", collecting: "收集中", "settled-recoverable": "已结算（可恢复）",
++      "settled-restartable": "已结算（可重启）", "settled-unrecoverable": "已结算（不可恢复）", "outcome-unknown": "结果未知",
++    },
++    estimateState: { queued: "排队中", running: "运行中", "start-unknown": "启动情况未知", ready: "就绪", failed: "失败", interrupted: "已中断", "blocked-capability": "能力不足、已阻塞", "input-too-large": "输入过大" },
++    budgetMode: { strict: "严格", soft: "宽松" },
++    blockerScope: { global: "全局", group: "组", run: "运行" },
++    progressStep: { queued: "排队中", plan: "计划", execute: "执行", verify: "验证", succeeded: "已成功", blocked_waiting_human: "等人处理", exhausted: "已耗尽", cancelled: "已取消", failed: "失败" },
+   },
+ };
+ 
+ export const zhErrors: Record<string, string> = {};
+diff --git a/web/tests/controlI18n.test.tsx b/web/tests/controlI18n.test.tsx
+new file mode 100644
+index 0000000..f30854c
+--- /dev/null
++++ b/web/tests/controlI18n.test.tsx
+@@ -0,0 +1,256 @@
++// @vitest-environment jsdom
++/**
++ * Panel i18n spec §3.3, §3.5, §5: the task control and recovery areas in Chinese -- the control summary and its alerts,
++ * the import form, the group list, one group (heading, stop, work items, runs, handoff requests, estimates, dispatch
++ * buttons), a task's detail with its progress and label draft, recovery blockers, the workspace mode; every enum value
++ * in words. Ids, hashes, codes and dates stay as sent.
++ */
++import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
++import { afterEach, describe, expect, it, vi } from "vitest";
++import i18n from "../src/i18n.js";
++import { App } from "../src/App.js";
++import { ControlGroupView } from "../src/ControlGroupView.js";
++import { ControlPanel } from "../src/ControlPanel.js";
++import { EvidenceLink } from "../src/EvidenceLink.js";
++import { RecoveryView } from "../src/RecoveryView.js";
++import { WorkspaceModeSelector } from "../src/WorkspaceModeSelector.js";
++import { EvidenceList, TaskDetail, labelsDraftKey, progressText } from "../src/TaskDetail.js";
++import type { MetricsReport } from "../src/types.js";
++import type { Amount, ControlConfigV1, ControlSummaryV1, GroupViewV1, RecoveryViewV1, RepositoryWorkspaceV1, RunViewV1, WorkItemViewV1 } from "../src/controlTypes.js";
++
++const amount = (tokens: number): Amount => ({ tokens, activeMs: 1_000, attempts: 3, sessions: 3 });
++const capability = { usageObservation: "phase-end", budgetEnforcement: "soft", contextObservation: "realtime", handoffControl: "durable", handoffExecution: "mechanical-in-run-v1", contextWindowTokens: null, requestBoundProof: null } as const;
++const config: ControlConfigV1 = {
++  schema: "orca-control-config-v1", epoch: "epoch-a", repositories: [{ repoId: "orca", displayName: "Repo X" }],
++  plans: [{ planId: "plan-demo", repoId: "orca", displayName: "Demo P" }],
++  profiles: [{ profileId: "p1", profileHash: "b".repeat(64), allowedWorkKinds: ["task", "budget-estimate", "handoff", "goal-review"], contextTokenizer: null, workMaxOutputTokens: 1000, declared: capability, observed: capability, observedAt: "2026-10-01T00:00:00.000Z", probeFailureCode: null }],
++  defaults: null, executionPort: "unconfigured", errorCatalog: [],
++};
++const run: RunViewV1 = {
++  runId: "r1", taskId: "a", estimateId: null, generation: 1, state: "blocked", phase: "work", claimOrdinal: null, providerAttemptOrdinal: 2,
++  profile: { profileId: "p1", profileHash: "b".repeat(64) }, used: amount(10), remaining: amount(20), failureCode: null, blockedReason: "why-1", evidenceIds: ["e1"],
++};
++const item: WorkItemViewV1 = {
++  taskId: "a", status: "held", dependencyTaskIds: [], targetVersion: 1, configHash: null, originalContractHash: "e".repeat(64), derivedContractHash: null,
++  currentRunId: "r1", pendingRunId: null, lineageRunIds: ["r1"], labels: ["bug"], labelsProvenance: "operator", labelsVersion: 1,
++  progress: { runId: "r1", step: "blocked_waiting_human", attempt: null, tokens: { used: 5, grant: 0 }, lastTransitionAt: "2026-10-01T00:00:00.000Z" },
++};
++const view: GroupViewV1 = {
++  schema: "orca-control-group-v1", epoch: "epoch-a", changeSeq: 4,
++  summary: { groupId: "g", state: "running", commandRevision: 6, projectionSeq: 4, stopMode: "pause", stopState: "paused", claimBlocked: true, recoveryBlockerCount: 1 },
++  graphVersion: 1, plan: { repoId: "orca", planId: "plan-demo", planHash: "a".repeat(64), goal: "goal-x", successConditions: ["s-1"] },
++  proposal: { state: "confirmed", proposalVersion: 2, planHash: "a".repeat(64), budgetMode: "soft", contextPolicy: { handoffAtContextTokens: null }, profiles: null, executionSnapshotHash: null },
++  ledger: { groupLimit: amount(100), used: amount(10), committedRemaining: amount(20), explicitUnallocatedReserve: amount(70), budgetDeficit: amount(0), usageUnknown: false },
++  allocations: [], workItems: [item],
++  estimates: [{ estimateId: "est-1", estimateVersion: 1, state: "interrupted", profile: { profileId: "p1", profileHash: "b".repeat(64) }, mode: "strict", requestHash: null, outputHash: null, output: null, reasonCode: null }],
++  runs: [run], checkpoints: [],
++  handoffRequests: [{ requestId: "h1", runId: "r1", state: "outcome-unknown", deadlineAt: "2026-10-02T00:00:00.000Z", phaseAttemptOrdinal: 1, failureCode: null, evidenceIds: [] }],
++  stop: { mode: "pause", state: "paused", frozenRunIds: [], acceptedAt: null, deadlineAt: null },
++  recoveryBlockers: [{ scope: "run", code: "code-1", runId: "r1", evidenceIds: [] }], recentCommandIds: [],
++};
++const summary: ControlSummaryV1 = {
++  schema: "orca-control-summary-v1", epoch: "epoch-a", changeSeq: 4, resetRequired: true, dispatchBlocked: true,
++  groups: [{ ...view.summary, completion: { done: 0, total: 1 } }],
++};
++const recovery: RecoveryViewV1 = { schema: "orca-control-recovery-v1", epoch: "epoch-a", dispatchBlocked: true, blockers: [{ scope: "global", groupId: "", runId: null, code: "code-2", evidenceIds: [] }] };
++const workspace: RepositoryWorkspaceV1 = { schema: "orca-repository-workspace-v1", repoId: "orca", workspaceMode: "worktree", revision: 1 };
++
++afterEach(cleanup);
++
++describe("the task control and recovery areas in Chinese", () => {
++  it("shows the control summary, one group, recovery and the workspace mode in Chinese", async () => {
++    await i18n.changeLanguage("zh");
++    const { container } = render(
++      <ControlPanel config={config} summary={summary} recovery={recovery} groups={{ g: view }} selected="g" drafts={{}} uncertain={[{ groupId: "g", commandId: "c1" }]}
++        refusal={null} refetchRequired onSelect={vi.fn()} onDraft={vi.fn()} onCommand={vi.fn()} workspace={workspace} onWorkspaceMode={vi.fn()} />,
++    );
++    const text = container.textContent ?? "";
++    for (const expected of [
++      "纪元 epoch-a · 投影 4 · 派发已阻断", "未配置执行端口 · ", "服务端要求重置 · ", "需要重新拉取投影 · ", "派发已阻断 · 必须先观察到恢复",
++      "这个面板没有配置估算 profile", "g · 运行中 · 已完成 0/1 · 已暂停 · 1 个阻塞项",
++      "g · 运行中 · 版本 6 · 投影 4", "认领已阻断 · ", "goal-x · 计划 aaaaaaaaaaaa · 图 v1", "停止 暂停 已暂停 · 受理于 不适用 · 截止 无 · 0 个冻结的运行：无",
++      "工作项", "依赖", "已挂起", "等人处理 · 尝试次数未知 · token 5 / 0", "已阻塞 — why-1 · 第 2 次尝试（认领序号 不适用）", "重试运行 a",
++      "交接请求", "h1 · 运行 r1 · 结果未知 · 截止 2026-10-02T00:00:00.000Z · 证据 无", "est-1 · v1 · 已中断 · 严格 · profile p1 bbbbbbbbbbbb",
++      "等待台账回答：c1", "派发", "恢复派发", "重试 g 的恢复", "最近的命令：无", "命令结果未知，正在查询：c1 (g)",
++      "全局 · 所有组 · code-2", "运行 · g · 运行 r1 · code-1", "运行证据", "重试恢复",
++      "orca 里新的运行使用git worktree（设置版本 1）。已开始的运行保持原样。", "git worktree（默认）", "私有克隆",
++    ]) expect(text, expected).toContain(expected);
++    expect(screen.getAllByRole("button", { name: "证据" }).length).toBeGreaterThan(0);
++    expect(screen.getByRole("region", { name: "控制组 g" })).toBeTruthy();
++  });
++
++  it("shows a task's detail, its progress and its label draft in Chinese", async () => {
++    await i18n.changeLanguage("zh");
++    const drafts = { [labelsDraftKey("g", "a")]: JSON.stringify({ base: 0, labels: ["bug", "perf"] }) };
++    const text = render(<TaskDetail view={view} item={item} drafts={drafts} onDraft={vi.fn()} onCommand={vi.fn()} />).container.textContent ?? "";
++    for (const expected of [
++      "任务 a", "标签来自操作者 · 版本 1 · 未保存的草稿", "你开始草稿后标签已变（v0 → v1） · 现在：", "移除 perf", "添加系统标签", "添加自定义标签",
++      "保存标签", "丢弃草稿", "恢复计划里的标签", "进度：等人处理 · 尝试次数未知 · token 5 / 0 · 上次变化 2026-10-01T00:00:00.000Z",
++      "a 的运行", "r1 · 工作 · 已阻塞", "列出 r1 的证据",
++    ]) expect(text, expected).toContain(expected);
++  });
++});
++
++/** The texts of every `th` on the page, in order, so one table's header row can be matched as a run of cells. */
++const headerCells = (root: HTMLElement): string => [...root.querySelectorAll("th")].map((cell) => cell.textContent).join("|");
++/** The first body row of the table whose header row reads `header`, cell by cell. */
++const firstRow = (root: HTMLElement, header: string): string[] => {
++  const table = [...root.querySelectorAll("table")].find((candidate) => headerCells(candidate) === header);
++  return [...(table?.querySelector("tbody tr")?.querySelectorAll("td") ?? [])].map((cell) => cell.textContent ?? "");
++};
++const json = (body: unknown, status = 200): Response => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
++
++describe("the rest of the control area's branches in Chinese", () => {
++  it("shows the import form, an empty group list, a group being read and no recovery blockers in Chinese", async () => {
++    await i18n.changeLanguage("zh");
++    const ready: ControlConfigV1 = { ...config, executionPort: "configured", defaults: { estimatorProfileId: "p1", estimatorProfileHash: "b".repeat(64), estimateMode: "soft" } };
++    const { container } = render(
++      <ControlPanel config={ready} summary={{ ...summary, resetRequired: false, dispatchBlocked: false, groups: [] }} recovery={{ ...recovery, dispatchBlocked: false, blockers: [] }}
++        groups={{}} selected="zz" drafts={{}} uncertain={[]} refusal={null} refetchRequired={false} onSelect={vi.fn()} onDraft={vi.fn()} onCommand={vi.fn()} />,
++    );
++    const panel = screen.getByRole("region", { name: "任务控制" });
++    expect(within(panel).getByRole("heading", { level: 2 }).textContent).toBe("任务控制");
++    expect(container.textContent).toContain("纪元 epoch-a · 投影 4 · 派发正常");
++    const importForm = screen.getByRole("region", { name: "导入计划" });
++    expect(within(importForm).getByRole("heading", { level: 3 }).textContent).toBe("导入一个计划");
++    expect(within(importForm).getByText("Repo X · Demo P · 估算模式 宽松")).toBeTruthy();
++    expect(within(importForm).getByRole("button").textContent).toBe("导入计划");
++    expect(within(screen.getByRole("navigation", { name: "控制组" })).getByText("还没有控制组。")).toBeTruthy();
++    expect(screen.getByText("正在读取 zz…")).toBeTruthy();
++    expect(within(screen.getByRole("region", { name: "恢复" })).getByText("没有恢复阻塞项。")).toBeTruthy();
++    cleanup();
++
++    render(
++      <ControlPanel config={{ ...ready, repositories: [] }} summary={summary} recovery={recovery} groups={{}} selected={null} drafts={{}} uncertain={[]}
++        refusal={null} refetchRequired={false} onSelect={vi.fn()} onDraft={vi.fn()} onCommand={vi.fn()} />,
++    );
++    expect(screen.getByRole("note").textContent).toBe("这个面板没有配置受信任的仓库和计划。");
++  });
++
++  it("names every table column, the label filter and each dispatch button in Chinese", async () => {
++    await i18n.changeLanguage("zh");
++    const fresh: WorkItemViewV1 = { ...item, status: "ready", currentRunId: null, pendingRunId: null, dependencyTaskIds: [], progress: undefined };
++    const readyView: GroupViewV1 = {
++      ...view, summary: { ...view.summary, state: "ready", stopMode: null, stopState: null, claimBlocked: false }, stop: null, workItems: [fresh], runs: [{ ...run, state: "running", blockedReason: null }],
++    };
++    const props = { config, uncertain: [], drafts: {}, onDraft: vi.fn(), onCommand: vi.fn() };
++    const { container } = render(<ControlGroupView view={readyView} {...props} />);
++    expect(firstRow(container, "任务|状态|标签|进度|运行|待定|依赖")).toEqual(["a", "就绪", "bug", "没有运行", "无", "无", "无"]);
++    expect(firstRow(container, "运行|阶段|状态|配置|已用|剩余|证据").slice(0, 3)).toEqual(["a", "工作", "运行中 · 第 2 次尝试（认领序号 不适用）"]);
++    const filter = screen.getByRole("group", { name: "按标签筛选工作项" });
++    expect(filter.querySelector("legend")!.textContent).toBe("标签（任一）");
++    expect(screen.getByRole("heading", { name: "估算" })).toBeTruthy();
++    for (const name of ["开跑", "暂停派发", "交接停止"]) expect(screen.getByRole("button", { name }), name).toBeTruthy();
++    for (const name of ["运行", "派发"]) expect(screen.getByRole("heading", { level: 3, name }), name).toBeTruthy();
++    cleanup();
++
++    render(<ControlGroupView view={view} {...props} />);
++    expect(screen.getByRole("button", { name: "恢复派发" })).toBeTruthy();
++    cleanup();
++
++    const handoff = { ...view.summary, stopMode: "handoff" as const, stopState: "handoff-complete" as const };
++    const held: RunViewV1 = { ...run, state: "settled-recoverable", blockedReason: null, continuable: true };
++    render(<ControlGroupView view={{ ...view, summary: handoff, runs: [held], checkpoints: [{ checkpointId: "cp1", taskId: "a", runId: "r1", state: "complete", snapshotHash: null, evidenceIds: [] }] }} {...props} />);
++    expect(screen.getByRole("button", { name: "继续选中的任务（1）" })).toBeTruthy();
++    expect(screen.getByRole("button", { name: "继续任务 a" })).toBeTruthy();
++    cleanup();
++
++    render(<ControlGroupView view={{ ...view, summary: handoff, runs: [{ ...held, continuable: false }] }} {...props} />);
++    expect(screen.getByRole("button", { name: "恢复（不续跑）" })).toBeTruthy();
++  });
++
++  it("shows a task with plan labels, no progress and no runs, and every progress wording, in Chinese", async () => {
++    await i18n.changeLanguage("zh");
++    const bare: WorkItemViewV1 = { ...item, labels: [], labelsProvenance: undefined, labelsVersion: undefined, progress: undefined };
++    const drafts = { [labelsDraftKey("g", "a")]: JSON.stringify({ base: 1, labels: [] }) };
++    const { container } = render(<TaskDetail view={{ ...view, runs: [] }} item={bare} drafts={drafts} onDraft={vi.fn()} onCommand={vi.fn()} />);
++    const text = container.textContent ?? "";
++    for (const expected of ["标签来自计划 · 版本 0 · 未保存的草稿", "你开始草稿后标签已变（v1 → v0） · 现在：无", "进度：没有运行"]) expect(text, expected).toContain(expected);
++    expect(screen.getByRole("region", { name: "任务 a" })).toBeTruthy();
++    expect(screen.getByRole("list", { name: "a 的标签" })).toBeTruthy();
++    expect(screen.getByRole("combobox", { name: "系统标签" })).toBeTruthy();
++    expect(screen.getByRole("textbox", { name: "自定义标签" })).toBeTruthy();
++    expect(screen.getByRole("heading", { level: 5 }).nextElementSibling!.textContent).toBe("无");
++
++    expect(progressText({ runId: "r1", step: null, attempt: { current: 2, max: 5 }, tokens: null, lastTransitionAt: null })).toBe("尚未上报 · 尝试 2/5 · token 未知");
++    expect(progressText({ runId: "r1", step: "verify", attempt: null, tokens: { used: 5, grant: 20 }, lastTransitionAt: null })).toBe("验证 · 尝试次数未知 · token 25%（阶段结束时上报）");
++  });
++
++  it("shows recovery blockers with their evidence, a group blocker and the workspace's clone mode in Chinese", async () => {
++    await i18n.changeLanguage("zh");
++    const blocked: RecoveryViewV1 = {
++      ...recovery, blockers: [{ scope: "group", groupId: "g2", runId: null, code: "c3", evidenceIds: ["e9"] }, { scope: "run", groupId: "g2", runId: "r7", code: "c4", evidenceIds: [] }],
++    };
++    const groupView: GroupViewV1 = { ...view, recoveryBlockers: [{ scope: "run", code: "c5", runId: "r1", evidenceIds: ["e5"] }] };
++    const { container } = render(<RecoveryView recovery={blocked} group={groupView} onCommand={vi.fn()} />);
++    const items = [...container.querySelectorAll("li")].map((li) => li.textContent);
++    expect(items[0]).toBe("组 · g2 · c3 · 证据 e9重试恢复");
++    expect(items[1]).toBe("运行 · g2 · 运行 r7 · c4重试恢复");
++    expect(items[2]).toBe("运行 · g · 运行 r1 · c5 · 证据 e5运行证据重试恢复");
++    expect(within(screen.getByRole("region", { name: "恢复" })).getByRole("heading", { level: 3 }).textContent).toBe("恢复");
++    expect(screen.getByRole("alert").textContent).toBe("派发已阻断 · 在观察到恢复之前，面板不会启动新的运行");
++    cleanup();
++
++    render(<WorkspaceModeSelector workspace={{ ...workspace, workspaceMode: "clone" }} onChange={vi.fn()} />);
++    const section = screen.getByRole("region", { name: "工作区模式" });
++    expect(within(section).getByRole("heading", { level: 3 }).textContent).toBe("工作区模式");
++    expect(section.querySelector("p")!.textContent).toBe("orca 里新的运行使用私有克隆（设置版本 1）。已开始的运行保持原样。");
++  });
++
++  it("lists, downloads and refuses evidence in Chinese", async () => {
++    await i18n.changeLanguage("zh");
++    const realFetch = globalThis.fetch;
++    let answers: Response[] = [];
++    globalThis.fetch = (async () => answers.shift()!) as typeof fetch;
++    try {
++      const refused = { error: { code: "evidence-gone", message: "gone", commandRevision: null, evidenceIds: [], retryable: false } };
++      answers = [json(refused, 404)];
++      render(<EvidenceLink runId="r1" />);
++      fireEvent.click(screen.getByRole("button", { name: "证据" }));
++      expect((await screen.findByRole("alert")).textContent).toBe("证据被拒 · evidence-gone");
++      cleanup();
++
++      const entry = { evidenceId: "e1", kind: "usage", sha256: "9".repeat(64), byteLength: 12, downloadUrl: "/api/control/runs/r1/evidence/e1" };
++      answers = [json({ schema: "orca-run-evidence-v1", runId: "r1", entries: [entry] }), json(refused, 404)];
++      render(<EvidenceList runId="r1" />);
++      fireEvent.click(screen.getByRole("button", { name: "列出 r1 的证据" }));
++      const list = await screen.findByRole("list", { name: "r1 的证据" });
++      expect(list.querySelector("li")!.textContent).toBe("e1 · usage · 12 字节 下载 e1");
++      fireEvent.click(within(list).getByRole("button", { name: "下载 e1" }));
++      expect((await screen.findByRole("alert")).textContent).toBe("证据被拒 · evidence-gone");
++      cleanup();
++
++      answers = [json({ schema: "orca-run-evidence-v1", runId: "r1", entries: [] })];
++      const { container } = render(<EvidenceList runId="r1" />);
++      fireEvent.click(screen.getByRole("button", { name: "列出 r1 的证据" }));
++      await waitFor(() => expect(container.querySelector("span")?.textContent).toBe(" 没有证据"));
++    } finally {
++      globalThis.fetch = realFetch;
++    }
++  });
++
++  it("says the task control plane is unavailable in Chinese", async () => {
++    await i18n.changeLanguage("zh");
++    const realFetch = globalThis.fetch;
++    const report = {
++      as_of: "2026-10-01T00:00:00.000Z", as_of_mode: "wall_clock", repos: [],
++      correction_rate: { numerator_corrections_excluding_stale: 0, denominator_decisions: 0, rate_excluding_stale: null, corrections_total_including_stale: 0, by_decision_kind: [], buckets: [], caveats: [] },
++      repair_rate: { numerator_overturned: 0, denominator_corrections_including_stale: 0, rate: null, stale_only: { numerator_overturned: 0, denominator_corrections: 0, rate: null, known_bias: "" }, buckets: [], caveats: [] },
++      backlog: { open_corrections: 0, oldest_age_ms: null, oldest_correction_id: null, by_correction_kind: [] },
++      breakdown_by_correction_kind_including_stale: [], review_coverage: { available: false, reason: "none yet" },
++      excluded_as_future: 0, unresolved_decisions: [], unkeyable_repos: [], malformed_lines: [],
++    } as unknown as MetricsReport;
++    globalThis.fetch = (async (input: RequestInfo | URL) => {
++      const url = String(input);
++      if (url.startsWith("/api/todo")) return json({ rows: [] });
++      if (url.startsWith("/api/metrics")) return json({ report, panel_review_coverage: { reviewed_high_tier: 0, high_tier_total: 0, rate: null, caveat: "c" } });
++      return json({ error: { code: "not-here", message: "no", commandRevision: null, evidenceIds: [], retryable: false } }, 404);
++    }) as typeof fetch;
++    try {
++      render(<App />);
++      expect((await screen.findByText("这个面板上没有任务控制面。")).className).toBe("empty");
++    } finally {
++      globalThis.fetch = realFetch;
++    }
++  });
++});
+diff --git a/web/vite.config.ts b/web/vite.config.ts
+index e67f99b..6475016 100644
+--- a/web/vite.config.ts
++++ b/web/vite.config.ts
+@@ -4,12 +4,16 @@ import { defineConfig } from "vitest/config";
+ export default defineConfig({
+   plugins: [react()],
+   build: {
+     // Flat names, no hashed subdirectories: staticFiles.ts serves by exact
+     // filename out of a Map and never joins a path, so every emitted asset has
+     // to be reachable as one key. See spec §2.2.
+     assetsDir: ".",
+     rollupOptions: { output: { entryFileNames: "[name].js", assetFileNames: "[name].[ext]" } },
+   },
+   server: { proxy: { "/api": "http://127.0.0.1:7777" } },
+-  test: { environment: "node", include: ["tests/**/*.test.ts", "tests/**/*.test.tsx"], setupFiles: ["tests/setup.ts"] },
++  test: {
++    environment: "node", include: ["tests/**/*.test.ts", "tests/**/*.test.tsx"], setupFiles: ["tests/setup.ts"],
++    // The App timer-driven criteria re-render the whole panel many times and each translated string adds per-render cost; the default 5 s left agentPreviewRefresh at 4968 ms before i18n.
++    testTimeout: 15000,
++  },
+ });

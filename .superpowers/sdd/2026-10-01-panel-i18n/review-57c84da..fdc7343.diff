@@ -1,0 +1,69 @@
+# Review package: 57c84da..fdc7343
+
+## Commits
+fdc7343 test(scripts): pin the text scan's remaining skip and class branches
+
+## Files changed
+ tests/panel/scanPanelText.test.ts | 13 ++++++++++++-
+ 1 file changed, 12 insertions(+), 1 deletion(-)
+
+## Diff
+diff --git a/tests/panel/scanPanelText.test.ts b/tests/panel/scanPanelText.test.ts
+index 3bf06d4..16142a3 100644
+--- a/tests/panel/scanPanelText.test.ts
++++ b/tests/panel/scanPanelText.test.ts
+@@ -22,20 +22,29 @@ const SAMPLE = [
+   '    <section aria-label="Region name" className="some class">',
+   "      <h2>Heading text</h2>",
+   "      <p title={`Item ${props.id}`}>{\"Literal child\"}{`Count ${props.id}`}</p>",
+   '      <a href="/x y">{LABEL}{KEY}</a>',
+   "      {`/api/path/${props.id}/tail`}",
+   "    </section>",
+   "  );",
+   "}",
+   "export const message = (status: number): string => `answered ${status}`;",
+   "export const path = (id: string): string => `/api/${id}/x`;",
++  // Lines 17-22 pin the remaining skip and class branches: a re-export source, a quoted key and an indexed key are
++  // never sites; a two-word `case` label is code; a plain template literal is listed like a string; punctuation alone
++  // (" · ") is no site at all.
++  'export { thing as other } from "./other words.js";',
++  'const TABLE = { "two key words": 1 };',
++  'const pick = TABLE["two key words"];',
++  'switch (KEY) { case "two case words": break; }',
++  "const NOSUB = `plain template words`;",
++  'export const Dot = () => <i>{" · "}</i>;',
+   "",
+ ].join("\n");
+ 
+ function scan(args: string[]): { rc: number | null; out: string } {
+   const root = mkdtempSync(join(tmpdir(), "scan-"));
+   mkdirSync(join(root, "web", "src", "locales"), { recursive: true });
+   writeFileSync(join(root, "web", "src", "Sample.tsx"), SAMPLE);
+   writeFileSync(join(root, "web", "src", "i18n.ts"), 'export const inI18n = "never scanned words";\n');
+   writeFileSync(join(root, "web", "src", "locales", "en.ts"), 'export const en = { a: "never scanned words" };\n');
+   const run = spawnSync(process.execPath, [SCRIPT, ...args, root], { encoding: "utf8" });
+@@ -53,21 +62,23 @@ describe("the panel text scan (spec §3, §8)", () => {
+       'ui\tweb/src/Sample.tsx:7\tattr:aria-label\t"Region name"',
+       'code\tweb/src/Sample.tsx:7\tattr:className\t"some class"',
+       "ui\tweb/src/Sample.tsx:8\tjsx-text\tHeading text",
+       "ui\tweb/src/Sample.tsx:9\tattr:title\t`Item ${props.id}`",
+       'ui\tweb/src/Sample.tsx:9\tjsx-expr\t"Literal child"',
+       "ui\tweb/src/Sample.tsx:9\tjsx-expr\t`Count ${props.id}`",
+       'code\tweb/src/Sample.tsx:10\tattr:href\t"/x y"',
+       "ui\tweb/src/Sample.tsx:11\tjsx-expr\t`/api/path/${props.id}/tail`",
+       "ui\tweb/src/Sample.tsx:15\treturn\t`answered ${status}`",
+       "code\tweb/src/Sample.tsx:16\treturn\t`/api/${id}/x`",
++      'code\tweb/src/Sample.tsx:20\tcase\t"two case words"',
++      'ui\tweb/src/Sample.tsx:21\tconst:NOSUB\t"plain template words"',
+       "",
+     ]);
+   });
+ 
+   it("prints only the ui rows with --ui", () => {
+     const { rc, out } = scan(["--ui"]);
+     expect(rc).toBe(0);
+     expect(out.split("\n").filter((line) => line !== "").every((line) => line.startsWith("ui\t"))).toBe(true);
+-    expect(out.split("\n").filter((line) => line !== "").length).toBe(8);
++    expect(out.split("\n").filter((line) => line !== "").length).toBe(9);
+   });
+ });

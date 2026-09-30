@@ -1,0 +1,173 @@
+# Review package: a404adb..57c84da
+
+## Commits
+57c84da feat(scripts): list every text site of the web panel by a TypeScript parse
+
+## Files changed
+ scripts/scan-panel-text.mjs       | 77 +++++++++++++++++++++++++++++++++++++++
+ tests/panel/scanPanelText.test.ts | 73 +++++++++++++++++++++++++++++++++++++
+ 2 files changed, 150 insertions(+)
+
+## Diff
+diff --git a/scripts/scan-panel-text.mjs b/scripts/scan-panel-text.mjs
+new file mode 100644
+index 0000000..28ce274
+--- /dev/null
++++ b/scripts/scan-panel-text.mjs
+@@ -0,0 +1,77 @@
++#!/usr/bin/env node
++// Panel i18n spec §3, §8: list every candidate text site in web/src (not grep: a TypeScript parse), one per line:
++//   <class>\t<file>:<line>\t<context>\t<text>
++// class "ui" is text a person reads (JSX text, a text attribute, a literal rendered directly, or any other literal with
++// two words); "code" is everything else (keys, verbs, paths, comparisons). web/src/locales/ and web/src/i18n.ts are the
++// resources themselves and are not scanned.
++//   node scripts/scan-panel-text.mjs [--ui] [repo root]
++import { readdirSync, readFileSync } from "node:fs";
++import { createRequire } from "node:module";
++import { join, relative, resolve } from "node:path";
++
++const args = process.argv.slice(2);
++const uiOnly = args.includes("--ui");
++const root = resolve(args.find((arg) => arg !== "--ui") ?? process.cwd());
++const ts = createRequire(import.meta.url)("typescript");
++const dir = join(root, "web", "src");
++const files = readdirSync(dir).filter((f) => /\.(ts|tsx)$/.test(f) && f !== "i18n.ts").sort();
++const TEXT_ATTRS = new Set(["aria-label", "title", "label", "placeholder", "alt"]);
++const letters = /[A-Za-z一-鿿]/;
++const twoWords = /[A-Za-z]+[^A-Za-z]*\s[^A-Za-z]*[A-Za-z]+/;
++
++function context(node) {
++  const p = node.parent;
++  if (ts.isImportDeclaration(p) || ts.isExportDeclaration(p) || ts.isLiteralTypeNode(p)) return null;
++  if (ts.isPropertyAssignment(p) && p.name === node) return null;
++  if (ts.isElementAccessExpression(p) && p.argumentExpression === node) return null;
++  const attr = ts.isJsxAttribute(p) ? p : ts.isJsxExpression(p) && ts.isJsxAttribute(p.parent) ? p.parent : null;
++  if (attr) return `attr:${attr.name.getText()}`;
++  if (ts.isJsxExpression(p)) return "jsx-expr";
++  if (ts.isBinaryExpression(p) && [ts.SyntaxKind.EqualsEqualsEqualsToken, ts.SyntaxKind.ExclamationEqualsEqualsToken].includes(p.operatorToken.kind)) return "compare";
++  if (ts.isCaseClause(p)) return "case";
++  if (ts.isCallExpression(p)) return `arg:${p.expression.getText().slice(0, 40)}`;
++  if (ts.isPropertyAssignment(p)) return `prop:${p.name.getText()}`;
++  if (ts.isVariableDeclaration(p)) return `const:${p.name.getText()}`;
++  if (ts.isReturnStatement(p) || ts.isArrowFunction(p)) return "return";
++  if (ts.isConditionalExpression(p)) return "cond";
++  if (ts.isBinaryExpression(p)) return `binary:${p.operatorToken.getText()}`;
++  if (ts.isArrayLiteralExpression(p)) return "array";
++  return ts.SyntaxKind[p.kind];
++}
++
++// A template's static text with a word next to a space ("answered ${status}") is a sentence around data.
++const wordBySpace = /[A-Za-z]{2,}\s|\s[A-Za-z]{2,}/;
++
++function classOf(ctx, staticText, isTemplate) {
++  if (ctx === "jsx-text" || ctx === "jsx-expr") return "ui";
++  if (ctx.startsWith("attr:")) return TEXT_ATTRS.has(ctx.slice(5)) ? "ui" : "code";
++  if (ctx === "compare" || ctx === "case") return "code";
++  return twoWords.test(staticText) || (isTemplate && wordBySpace.test(staticText)) ? "ui" : "code";
++}
++
++const out = [];
++for (const file of files) {
++  const path = join(dir, file);
++  const sf = ts.createSourceFile(path, readFileSync(path, "utf8"), ts.ScriptTarget.ES2022, true, file.endsWith("x") ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
++  const emit = (node, ctx, staticText, shown, isTemplate = false) => {
++    if (ctx === null || !letters.test(staticText)) return;
++    const { line } = sf.getLineAndCharacterOfPosition(node.getStart());
++    const cls = classOf(ctx, staticText, isTemplate);
++    if (!uiOnly || cls === "ui") out.push(`${cls}\t${relative(root, path)}:${line + 1}\t${ctx}\t${shown}`);
++  };
++  const visit = (node) => {
++    if (ts.isJsxText(node)) {
++      const text = node.getText().replace(/\s+/g, " ").trim();
++      if (text !== "") emit(node, "jsx-text", text, text);
++    } else if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
++      emit(node, context(node), node.text, JSON.stringify(node.text));
++    } else if (ts.isTemplateExpression(node)) {
++      emit(node, context(node), [node.head.text, ...node.templateSpans.map((s) => s.literal.text)].join(""), node.getText(), true);
++      for (const span of node.templateSpans) visit(span.expression);
++      return;
++    }
++    ts.forEachChild(node, visit);
++  };
++  visit(sf);
++}
++process.stdout.write(out.length === 0 ? "" : `${out.join("\n")}\n`);
+diff --git a/tests/panel/scanPanelText.test.ts b/tests/panel/scanPanelText.test.ts
+new file mode 100644
+index 0000000..3bf06d4
+--- /dev/null
++++ b/tests/panel/scanPanelText.test.ts
+@@ -0,0 +1,73 @@
++import { spawnSync } from "node:child_process";
++import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
++import { tmpdir } from "node:os";
++import { join } from "node:path";
++import { describe, expect, it } from "vitest";
++
++/**
++ * Panel i18n spec §3, §8: the inventory of text the panel shows comes from a TypeScript parse of web/src, not grep, and
++ * every site is classified: `ui` is text a person reads (JSX text, a text attribute, a literal rendered directly, any
++ * other literal of two words, a template whose static text has a word next to a space), `code` is the rest. The
++ * resources themselves (web/src/i18n.ts, web/src/locales/) are never scanned. Task 11 relies on this classifier to pin
++ * that nothing but a named allow-list is left untranslated, so each rule here must be able to go red.
++ */
++const SCRIPT = join(process.cwd(), "scripts", "scan-panel-text.mjs");
++const SAMPLE = [
++  'import { thing } from "./thing words.js";',
++  'const LABEL = "Two words";',
++  'const KEY = "single";',
++  'export function Sample(props: { id: string; kind: "a b" }) {',
++  '  if (props.id === "not ui words") return null;',
++  "  return (",
++  '    <section aria-label="Region name" className="some class">',
++  "      <h2>Heading text</h2>",
++  "      <p title={`Item ${props.id}`}>{\"Literal child\"}{`Count ${props.id}`}</p>",
++  '      <a href="/x y">{LABEL}{KEY}</a>',
++  "      {`/api/path/${props.id}/tail`}",
++  "    </section>",
++  "  );",
++  "}",
++  "export const message = (status: number): string => `answered ${status}`;",
++  "export const path = (id: string): string => `/api/${id}/x`;",
++  "",
++].join("\n");
++
++function scan(args: string[]): { rc: number | null; out: string } {
++  const root = mkdtempSync(join(tmpdir(), "scan-"));
++  mkdirSync(join(root, "web", "src", "locales"), { recursive: true });
++  writeFileSync(join(root, "web", "src", "Sample.tsx"), SAMPLE);
++  writeFileSync(join(root, "web", "src", "i18n.ts"), 'export const inI18n = "never scanned words";\n');
++  writeFileSync(join(root, "web", "src", "locales", "en.ts"), 'export const en = { a: "never scanned words" };\n');
++  const run = spawnSync(process.execPath, [SCRIPT, ...args, root], { encoding: "utf8" });
++  return { rc: run.status, out: run.stdout };
++}
++
++describe("the panel text scan (spec §3, §8)", () => {
++  it("prints every text site of web/src with its class, and skips imports, literal types and the resources", () => {
++    const { rc, out } = scan([]);
++    expect(rc).toBe(0);
++    expect(out.split("\n")).toEqual([
++      'ui\tweb/src/Sample.tsx:2\tconst:LABEL\t"Two words"',
++      'code\tweb/src/Sample.tsx:3\tconst:KEY\t"single"',
++      'code\tweb/src/Sample.tsx:5\tcompare\t"not ui words"',
++      'ui\tweb/src/Sample.tsx:7\tattr:aria-label\t"Region name"',
++      'code\tweb/src/Sample.tsx:7\tattr:className\t"some class"',
++      "ui\tweb/src/Sample.tsx:8\tjsx-text\tHeading text",
++      "ui\tweb/src/Sample.tsx:9\tattr:title\t`Item ${props.id}`",
++      'ui\tweb/src/Sample.tsx:9\tjsx-expr\t"Literal child"',
++      "ui\tweb/src/Sample.tsx:9\tjsx-expr\t`Count ${props.id}`",
++      'code\tweb/src/Sample.tsx:10\tattr:href\t"/x y"',
++      "ui\tweb/src/Sample.tsx:11\tjsx-expr\t`/api/path/${props.id}/tail`",
++      "ui\tweb/src/Sample.tsx:15\treturn\t`answered ${status}`",
++      "code\tweb/src/Sample.tsx:16\treturn\t`/api/${id}/x`",
++      "",
++    ]);
++  });
++
++  it("prints only the ui rows with --ui", () => {
++    const { rc, out } = scan(["--ui"]);
++    expect(rc).toBe(0);
++    expect(out.split("\n").filter((line) => line !== "").every((line) => line.startsWith("ui\t"))).toBe(true);
++    expect(out.split("\n").filter((line) => line !== "").length).toBe(8);
++  });
++});

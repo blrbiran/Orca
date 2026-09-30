@@ -1,0 +1,142 @@
+# Review package: 5d70ca5..545f881
+
+## Commits
+545f881 test(web): pin the language switch's storage guard and the i18n init branches
+
+## Files changed
+ web/tests/i18nDetect.test.tsx | 24 ++++++++++++++++++++++++
+ web/tests/i18nSwitch.test.tsx | 16 ++++++++++++++--
+ 2 files changed, 38 insertions(+), 2 deletions(-)
+
+## Diff
+diff --git a/web/tests/i18nDetect.test.tsx b/web/tests/i18nDetect.test.tsx
+index 0d936c6..6272cc8 100644
+--- a/web/tests/i18nDetect.test.tsx
++++ b/web/tests/i18nDetect.test.tsx
+@@ -36,20 +36,29 @@ async function detect(c: Case): Promise<{ resolved: string | undefined; htmlLang
+   if (c.storage === "access-throws") override(window, "localStorage", () => { throw new Error("SecurityError"); });
+   const { default: i18n, initI18n } = await import("../src/i18n.js");
+   initI18n();
+   const { Shell } = await import("../src/Shell.js");
+   const html = renderToStaticMarkup(
+     <Shell active="decisions" badges={{ unreviewed: 0, chainRunning: false, controlAlert: false }} footer={[]} theme="system"><p>pane</p></Shell>,
+   );
+   return { resolved: i18n.resolvedLanguage, htmlLang: document.documentElement.lang, writes: setItem.mock.calls.length, html };
+ }
+ 
++/** A fresh i18n module under a browser that says the given languages, not yet initialised. */
++async function freshI18n(languages: string[]): Promise<typeof import("../src/i18n.js")> {
++  vi.resetModules();
++  window.localStorage.clear();
++  override(window.navigator, "languages", () => languages);
++  override(window.navigator, "language", () => languages[0] ?? "");
++  return import("../src/i18n.js");
++}
++
+ describe("language detection (spec §4, §6.6)", () => {
+   it("lets a stored zh beat a browser that says en-US", async () => {
+     const r = await detect({ stored: "zh", languages: ["en-US"] });
+     expect([r.resolved, r.htmlLang]).toEqual(["zh", "zh"]);
+     expect(r.html).toContain("决策");
+   });
+ 
+   it("lets a stored en beat a browser that says zh-CN", async () => {
+     const r = await detect({ stored: "en", languages: ["zh-CN"] });
+     expect([r.resolved, r.htmlLang]).toEqual(["en", "en"]);
+@@ -90,11 +99,26 @@ describe("language detection (spec §4, §6.6)", () => {
+     const r = await detect({ stored: "en", languages: ["zh-CN"], storage: "read-throws" });
+     expect(r.resolved).toBe("zh");
+     expect(r.html).toContain("决策");
+   });
+ 
+   it("uses the browser's language and still renders when touching localStorage at all throws", async () => {
+     const r = await detect({ languages: ["zh-CN"], storage: "access-throws" });
+     expect(r.resolved).toBe("zh");
+     expect(r.html).toContain("决策");
+   });
++
++  it("lets an explicit lng beat a Chinese browser, so web criteria render English on any machine (spec §6.1, tests/setup.ts)", async () => {
++    const { default: i18n, initI18n } = await freshI18n(["zh-CN"]);
++    initI18n({ lng: "en" });
++    expect(i18n.resolvedLanguage).toBe("en");
++  });
++
++  it("initialises once: a second initI18n does not re-detect and undo a language chosen since the first", async () => {
++    // i18next's own re-init merges the earlier options, so only a first init without lng re-detects on a second one.
++    const { default: i18n, initI18n } = await freshI18n(["zh-CN"]);
++    initI18n();
++    await i18n.changeLanguage("en");
++    initI18n();
++    expect(i18n.resolvedLanguage).toBe("en");
++  });
+ });
+diff --git a/web/tests/i18nSwitch.test.tsx b/web/tests/i18nSwitch.test.tsx
+index 3d167a6..81c3b86 100644
+--- a/web/tests/i18nSwitch.test.tsx
++++ b/web/tests/i18nSwitch.test.tsx
+@@ -1,17 +1,17 @@
+ // @vitest-environment jsdom
+ /**
+  * Panel i18n spec §4, §6.7: choosing 中文 in the sidebar writes orca.panel.lang = zh, sets <html lang="zh"> and
+  * re-renders the page's text; choosing English reverses all three. Task 6 adds the helper-built case (a chain banner).
+  */
+ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+-import { afterEach, beforeEach, describe, expect, it } from "vitest";
++import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+ import { App } from "../src/App.js";
+ 
+ const json = (body: unknown, status = 200): Response =>
+   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+ // Copied verbatim from web/tests/controlCommandRecovery.test.tsx:100 (the page reads the metrics on load).
+ const METRICS = { report: { as_of: "2026-09-21T00:00:00.000Z", as_of_mode: "wall_clock", repos: [], correction_rate: { numerator_corrections_excluding_stale: 0, denominator_decisions: 0, rate_excluding_stale: null, corrections_total_including_stale: 0, by_decision_kind: [], buckets: [], caveats: [] }, repair_rate: { numerator_overturned: 0, denominator_corrections_including_stale: 0, rate: null, stale_only: { numerator_overturned: 0, denominator_corrections: 0, rate: null, known_bias: "" }, buckets: [], caveats: [] }, backlog: { open_corrections: 0, oldest_age_ms: null, oldest_correction_id: null, by_correction_kind: [] }, breakdown_by_correction_kind_including_stale: [], review_coverage: { available: false, reason: "none" }, unresolved_decisions: [], unkeyable_repos: [], malformed_lines: [] }, panel_review_coverage: { reviewed_high_tier: 0, high_tier_total: 0, rate: 0, caveat: "" } };
+ /** What GET /api/chains answers; a Task 6 case puts a stopped chain here. */
+ let chainRepos: unknown[] = [];
+ 
+ beforeEach(() => {
+@@ -19,21 +19,24 @@ beforeEach(() => {
+   chainRepos = [];
+   globalThis.fetch = (async (input: RequestInfo | URL): Promise<Response> => {
+     const url = String(input);
+     if (url === "/api/todo") return json({ rows: [] });
+     if (url === "/api/metrics") return json(METRICS);
+     if (url === "/api/chains") return json({ repos: chainRepos });
+     // No control plane in this criterion: the config read is refused and the page shows no control section.
+     return json({ error: { code: "control-port-unconfigured", message: "no control plane in this criterion" } }, 404);
+   }) as typeof fetch;
+ });
+-afterEach(cleanup);
++afterEach(() => {
++  cleanup();
++  vi.restoreAllMocks();
++});
+ 
+ async function languageSelect(container: HTMLElement): Promise<HTMLSelectElement> {
+   return waitFor(() => {
+     const select = container.querySelector<HTMLSelectElement>('select[name="language"]');
+     if (select === null) throw new Error("no language switch yet");
+     return select;
+   });
+ }
+ 
+ describe("the language switch (spec §6.7)", () => {
+@@ -45,11 +48,20 @@ describe("the language switch (spec §6.7)", () => {
+     await waitFor(() => expect(screen.getByRole("link", { name: /决策/ })).toBeTruthy());
+     expect(window.localStorage.getItem("orca.panel.lang")).toBe("zh");
+     expect(document.documentElement.lang).toBe("zh");
+     expect(select.value).toBe("zh");
+     expect(container.textContent).toContain("主题");
+     fireEvent.change(select, { target: { value: "en" } });
+     await waitFor(() => expect(screen.getByRole("link", { name: /Decisions/ })).toBeTruthy());
+     expect(window.localStorage.getItem("orca.panel.lang")).toBe("en");
+     expect(document.documentElement.lang).toBe("en");
+   });
++
++  it("still switches when this browser refuses to store the choice (a full or blocked storage costs the memory, not the switch)", async () => {
++    const { container } = render(<App />);
++    const select = await languageSelect(container);
++    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("QuotaExceededError"); });
++    fireEvent.change(select, { target: { value: "zh" } });
++    await waitFor(() => expect(screen.getByRole("link", { name: /决策/ })).toBeTruthy());
++    expect(document.documentElement.lang).toBe("zh");
++  });
+ });

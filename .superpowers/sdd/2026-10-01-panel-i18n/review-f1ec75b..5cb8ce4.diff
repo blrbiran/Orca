@@ -1,0 +1,888 @@
+# Review package: f1ec75b..5cb8ce4
+
+## Commits
+5cb8ce4 feat(web): translate the agents area and the retry notice
+
+## Files changed
+ web/src/AgentFields.tsx          |  17 ++--
+ web/src/AgentSelectionEditor.tsx |  61 +++++++-------
+ web/src/AgentSettings.tsx        |  26 +++---
+ web/src/App.tsx                  |  11 +--
+ web/src/locales/en.ts            |  54 ++++++++++++-
+ web/src/locales/zh.ts            |  51 ++++++++++++
+ web/tests/agentsI18n.test.tsx    | 168 +++++++++++++++++++++++++++++++++++++++
+ web/tests/i18nWidth.test.ts      |   5 +-
+ 8 files changed, 337 insertions(+), 56 deletions(-)
+
+## Diff
+diff --git a/web/src/AgentFields.tsx b/web/src/AgentFields.tsx
+index bf9b223..24c9a86 100644
+--- a/web/src/AgentFields.tsx
++++ b/web/src/AgentFields.tsx
+@@ -1,19 +1,21 @@
+ /**
+  * Agent selection spec §6.8 (T15): one layer's partial selection as three controls. The model is a free string
+  * the panel never rewrites (ccloop validates it, §4.1); the context is a select over the options the effective
+  * agent can express and nothing else -- there is no box to type a window into.
+  */
+ import type { JSX } from "react";
++import { useTranslation } from "react-i18next";
+ import type { AgentInstallationV1, AgentsViewV1, ContextWindowV1, PanelPartialSelectionV1, PartialSelectionV1 } from "./controlTypes.js";
++import i18n from "./i18n.js";
+ 
+-export const contextLabel = (value: ContextWindowV1): string => (value === "agent-default" ? "agent default" : `${value} tokens`);
++export const contextLabel = (value: ContextWindowV1): string => (value === "agent-default" ? i18n.t("agents.contextDefault") : i18n.t("agents.contextTokens", { value }));
+ export const contextValue = (value: ContextWindowV1 | undefined): string => (value === undefined ? "" : String(value));
+ 
+ /**
+  * The draft an emptied agent field is stored as. The control reducer forgets a draft whose text is "" (a budget
+  * box then falls back to the server's value), which here would put back the very value the operator emptied.
+  */
+ export const CLEARED_DRAFT = "\u0000cleared";
+ 
+ /** A draft's text, or the server's value when there is none; an emptied field reads as "". */
+ export function draftText(drafts: Record<string, string>, key: string, fallback: string): string {
+@@ -117,60 +119,61 @@ export interface SelectionFieldsProps {
+   /** The agent whose options the context offers when this layer names none. */
+   inheritedAgent: string | undefined;
+   /** A per-agent row: the agent is fixed and not offered. */
+   fixedAgent?: string;
+   drafts: Record<string, string>;
+   onDraft: (key: string, text: string) => void;
+ }
+ 
+ export function SelectionFields(props: SelectionFieldsProps): JSX.Element {
+   const { agents, prefix, drafts, onDraft } = props;
++  const { t } = useTranslation();
+   const draft = (field: string, fallback: string): string => draftText(drafts, `${prefix}:${field}`, fallback);
+   const change = (field: string) => (event: { target: { value: string } }) => onDraft(`${prefix}:${field}`, draftOf(event.target.value));
+   const text = (value: string | null | undefined): string => (typeof value === "string" ? value : "");
+   const masked = (field: Field): boolean => isMasked(prefix, field, props.current, props.planned, drafts);
+   const agentText = props.fixedAgent ?? draft("agent", text(props.current?.agent));
+   const below = masked("agent") ? props.inheritedAgent : props.planned?.agent ?? props.inheritedAgent;
+   const effective = installationOf(agents, agentText === "" ? below : agentText);
+   const planValue = (field: Field): string | null => {
+     const value = props.planned?.[field];
+     return value === undefined ? null : field === "contextWindow" ? contextLabel(value as ContextWindowV1) : String(value);
+   };
+   const maskBox = (field: Field): JSX.Element | null => {
+     const value = planValue(field);
+     if (value === null) return null;
+     return (
+       <label>
+         <input type="checkbox" name={maskKey(prefix, field)} checked={masked(field)} onChange={(event) => onDraft(maskKey(prefix, field), event.target.checked ? "1" : "0")} />
+-        ignore the plan's {field} ({value})
++        {t("agents.ignorePlan", { field: t(`agents.field.${field}`), value })}
+       </label>
+     );
+   };
+   return (
+     <fieldset aria-label={props.label}>
+       <legend>{props.label}</legend>
+       {props.fixedAgent === undefined && (
+         <label>
+-          agent
++          {t("agents.label.agent")}
+           <select name={`${prefix}:agent`} value={agentText} onChange={change("agent")}>
+-            <option value="">{props.planned?.agent !== undefined && !masked("agent") ? `inherit (plan: ${props.planned.agent})` : "inherit"}</option>
++            <option value="">{props.planned?.agent !== undefined && !masked("agent") ? t("agents.inheritPlan", { agent: props.planned.agent }) : t("agents.inherit")}</option>
+             {agents.installations.map((row) => <option key={row.id} value={row.id}>{row.id} ({row.kind} {row.version})</option>)}
+           </select>
+         </label>
+       )}
+       {props.fixedAgent === undefined && maskBox("agent")}
+       <label>
+-        model
++        {t("agents.label.model")}
+         <input name={`${prefix}:model`} value={draft("model", text(props.current?.model))} placeholder={(masked("model") ? undefined : props.planned?.model) ?? effective?.defaults.model ?? ""} onChange={change("model")} />
+       </label>
+       {maskBox("model")}
+       <label>
+-        context
++        {t("agents.label.context")}
+         <select name={`${prefix}:context`} value={draft("context", contextValue(props.current?.contextWindow ?? undefined))} onChange={change("context")}>
+-          <option value="">inherit</option>
++          <option value="">{t("agents.inherit")}</option>
+           {(effective?.contextOptions ?? []).map((option) => <option key={String(option)} value={String(option)}>{contextLabel(option)}</option>)}
+         </select>
+       </label>
+       {maskBox("contextWindow")}
+     </fieldset>
+   );
+ }
+diff --git a/web/src/AgentSelectionEditor.tsx b/web/src/AgentSelectionEditor.tsx
+index 4cf5ab5..d25b622 100644
+--- a/web/src/AgentSelectionEditor.tsx
++++ b/web/src/AgentSelectionEditor.tsx
+@@ -1,23 +1,25 @@
+ /**
+  * Agent selection spec §6.8 (T15): the proposal view's agent editing. Group slots and each task's own layer are
+  * edited as proposal-set-agent commands under the proposal version on screen; each slot shows what the server
+  * resolved and, per field, which layer it came from. A slot ccloop refused, or could not answer for now, is red
+  * with the code. Nothing here resolves, merges or hashes anything -- the preview is the server's (T14).
+  */
+ import type { JSX } from "react";
++import { useTranslation } from "react-i18next";
+ import type { ControlAction } from "./controlApi.js";
+ import { SelectionFields, contextLabel, panelPartialFromFields } from "./AgentFields.js";
+ import type {
+   AgentSelectionPreviewV1, AgentSelectionV1, AgentSlotV1, AgentsViewV1, GroupAgentOverridesV1, GroupViewV1, OperatorPreferencesV1,
+   PanelPartialSelectionV1, PartialSelectionV1, SelectionProvenanceV1, SlotOutcomeV1,
+ } from "./controlTypes.js";
++import { enumText } from "./i18n.js";
+ 
+ type Scope = { kind: "group"; slot: AgentSlotV1 } | { kind: "task"; taskId: string };
+ 
+ export const agentDraftPrefix = (groupId: string, scope: Scope): string =>
+   scope.kind === "group" ? `${groupId}:agent:group:${scope.slot}` : `${groupId}:agent:task:${scope.taskId}`;
+ 
+ /** The hash a confirm may carry: only a resolution of this group, at this proposal version, that resolved whole. */
+ export function selectionsHashFor(view: GroupViewV1, preview: AgentSelectionPreviewV1 | null | undefined): string | null {
+   if (!preview || view.proposal.state !== "editable") return null;
+   if (preview.groupId !== view.summary.groupId || preview.proposalVersion !== view.proposal.proposalVersion) return null;
+@@ -44,35 +46,37 @@ export function inheritedAgentFor(
+ }
+ 
+ /** The agent one level ends up naming: the panel's own, else (unless the panel masks it) the plan's, else `below`. */
+ function levelAgent(panel: PanelPartialSelectionV1 | undefined, plan: PartialSelectionV1 | undefined, below: string | undefined): string | undefined {
+   if (typeof panel?.agent === "string") return panel.agent;
+   return panel?.agent === null ? below : plan?.agent ?? below;
+ }
+ 
+ function SelectionCells(props: { selection: AgentSelectionV1; provenance: SelectionProvenanceV1 }): JSX.Element {
+   const { selection, provenance } = props;
++  const { t } = useTranslation();
+   return (
+     <>
+-      <td>{selection.agent} <small>from {provenance.agent}</small></td>
+-      <td>{selection.model} <small>from {provenance.model}</small></td>
+-      <td>{contextLabel(selection.contextWindow)} <small>from {provenance.contextWindow}</small></td>
++      <td>{selection.agent} <small>{t("agents.from", { source: enumText("selectionSource", provenance.agent) })}</small></td>
++      <td>{selection.model} <small>{t("agents.from", { source: enumText("selectionSource", provenance.model) })}</small></td>
++      <td>{contextLabel(selection.contextWindow)} <small>{t("agents.from", { source: enumText("selectionSource", provenance.contextWindow) })}</small></td>
+     </>
+   );
+ }
+ 
+ /** A slot that did not resolve: refused for good (rejected), or ccloop did not answer this time (unavailable). */
+ function FailedCell(props: { outcome: Exclude<SlotOutcomeV1, { kind: "resolved" }> }): JSX.Element {
+   const { outcome } = props;
++  const { t } = useTranslation();
+   return (
+     <td colSpan={3} role="alert" data-outcome={outcome.kind} style={{ color: "red" }}>
+-      {outcome.kind === "rejected" ? "rejected" : "unavailable for now, Re-read to ask again"} · {outcome.code}
++      {outcome.kind === "rejected" ? t("agents.rejected") : t("agents.unavailable")} · {outcome.code}
+     </td>
+   );
+ }
+ 
+ export interface AgentSelectionEditorProps {
+   view: GroupViewV1;
+   agents: AgentsViewV1 | null;
+   preview: AgentSelectionPreviewV1 | null;
+   /** This operator's defaults, for the agent a layer inherits; absent until read. */
+   preferences?: OperatorPreferencesV1 | null;
+@@ -89,120 +93,121 @@ export interface AgentSelectionEditorProps {
+    * (control-port-unconfigured, or a failure Re-read may cure). Shown instead of "Resolving…", which never ends.
+    */
+   agentsFailure?: string | null;
+   /** Ruling review R17: the page's backoff retry, shown so the operator knows it is retrying and when it stopped. */
+   retryNotice?: string | null;
+ }
+ 
+ export function AgentSelectionEditor(props: AgentSelectionEditorProps): JSX.Element {
+   const { view, agents, preview, drafts, onDraft, onCommand } = props;
+   const groupId = view.summary.groupId;
++  const { t } = useTranslation();
+ 
+   if (view.proposal.state === "confirmed") {
+     const reconcile = view.agents?.reconcile ?? null;
+     return (
+-      <section aria-label="Agent selection">
+-        <h3>Agents (frozen at confirmation)</h3>
++      <section aria-label={t("agents.region")}>
++        <h3>{t("agents.frozenTitle")}</h3>
+         <table>
+-          <thead><tr><th>slot</th><th>agent</th><th>model</th><th>context</th></tr></thead>
++          <thead><tr><th>{t("agents.th.slot")}</th><th>{t("agents.th.agent")}</th><th>{t("agents.th.model")}</th><th>{t("agents.th.context")}</th></tr></thead>
+           <tbody>
+             {view.workItems.map((item) => (
+               <tr key={item.taskId} data-slot={`task:${item.taskId}`}>
+                 <td>{item.taskId}</td>
+-                {item.agent && item.agentProvenance ? <SelectionCells selection={item.agent} provenance={item.agentProvenance} /> : <td colSpan={3}>not recorded</td>}
++                {item.agent && item.agentProvenance ? <SelectionCells selection={item.agent} provenance={item.agentProvenance} /> : <td colSpan={3}>{t("agents.notRecorded")}</td>}
+               </tr>
+             ))}
+             <tr data-slot="reconcile">
+-              <td>reconcile</td>
+-              {reconcile !== null ? <SelectionCells selection={reconcile.selection} provenance={reconcile.provenance} /> : <td colSpan={3}>not recorded</td>}
++              <td>{enumText("agentSlot", "reconcile")}</td>
++              {reconcile !== null ? <SelectionCells selection={reconcile.selection} provenance={reconcile.provenance} /> : <td colSpan={3}>{t("agents.notRecorded")}</td>}
+             </tr>
+           </tbody>
+         </table>
+       </section>
+     );
+   }
+ 
+   const reread = (
+     <>
+-      {props.onReread && <button type="button" onClick={props.onReread}>Re-read agent selections</button>}
++      {props.onReread && <button type="button" onClick={props.onReread}>{t("agents.reread")}</button>}
+       {props.retryNotice ? <p role="status" data-retry="">{props.retryNotice}</p> : null}
+     </>
+   );
+   if (agents === null && props.agentsFailure) {
+     return (
+-      <section aria-label="Agent selection">
+-        <h3>Agents</h3>
+-        <p role="alert">Agent selections cannot be read · {props.agentsFailure}. Confirm is not offered without them.</p>
++      <section aria-label={t("agents.region")}>
++        <h3>{t("agents.title")}</h3>
++        <p role="alert">{t("agents.cannotRead", { code: props.agentsFailure })}</p>
+         {reread}
+       </section>
+     );
+   }
+   if (agents === null || preview === null) {
+-    return <section aria-label="Agent selection"><h3>Agents</h3><p role="status">Resolving agent selections…</p>{reread}</section>;
++    return <section aria-label={t("agents.region")}><h3>{t("agents.title")}</h3><p role="status">{t("agents.resolving")}</p>{reread}</section>;
+   }
+ 
+   const stale = preview.proposalVersion !== view.proposal.proposalVersion;
+   const send = (scope: Scope, partial: PanelPartialSelectionV1 | null): void => {
+     onCommand({
+       verb: "proposal-set-agent", groupId, expectedRevision: view.summary.commandRevision,
+       payload: { baseProposalVersion: view.proposal.proposalVersion, scope, partial },
+     });
+   };
+   const inherited = (scope: Scope): string | undefined => inheritedAgentFor(scope, props.preferences, preview.groupOverrides, preview.planLayers);
+   // Ruling review R7: the plan's values at each level (the estimator has no plan layer, ruling R8).
+   const plannedFor = (scope: Scope): PartialSelectionV1 | undefined =>
+     scope.kind === "task" ? preview.planLayers.tasks[scope.taskId] ?? undefined
+       : scope.slot === "estimator" ? undefined : preview.planLayers.group[scope.slot];
+ 
+   return (
+-    <section aria-label="Agent selection">
+-      <h3>Agents · proposal v{view.proposal.proposalVersion}</h3>
+-      {stale && <p role="status">The resolution shown is for proposal v{preview.proposalVersion}; re-reading. Confirm waits for it.</p>}
+-      {preview.selectionsHash === null && <p role="alert">A selection below did not resolve; confirm is not offered until every slot resolves.</p>}
++    <section aria-label={t("agents.region")}>
++      <h3>{t("agents.proposalTitle", { version: view.proposal.proposalVersion })}</h3>
++      {stale && <p role="status">{t("agents.staleResolution", { version: preview.proposalVersion })}</p>}
++      {preview.selectionsHash === null && <p role="alert">{t("agents.unresolved")}</p>}
+       {reread}
+       {(["worker", "estimator", "reconcile"] as const).map((slot) => {
+         const scope: Scope = { kind: "group", slot };
+         const prefix = agentDraftPrefix(groupId, scope);
+         const partial = panelPartialFromFields(agents, prefix, preview.groupOverrides[slot], plannedFor(scope), drafts, inherited(scope));
+         return (
+           <div key={slot}>
+-            <SelectionFields agents={agents} prefix={prefix} label={`Group ${slot}`} current={preview.groupOverrides[slot]} planned={plannedFor(scope)} inheritedAgent={inherited(scope)} drafts={drafts} onDraft={onDraft} />
+-            <button type="button" disabled={Object.keys(partial).length === 0} onClick={() => send(scope, partial)}>Set group {slot} agent</button>
+-            <button type="button" disabled={preview.groupOverrides[slot] === undefined} onClick={() => send(scope, null)}>Clear group {slot} agent</button>
++            <SelectionFields agents={agents} prefix={prefix} label={t("agents.groupSlot", { slot: enumText("agentSlot", slot) })} current={preview.groupOverrides[slot]} planned={plannedFor(scope)} inheritedAgent={inherited(scope)} drafts={drafts} onDraft={onDraft} />
++            <button type="button" disabled={Object.keys(partial).length === 0} onClick={() => send(scope, partial)}>{t("agents.setGroup", { slot: enumText("agentSlot", slot) })}</button>
++            <button type="button" disabled={preview.groupOverrides[slot] === undefined} onClick={() => send(scope, null)}>{t("agents.clearGroup", { slot: enumText("agentSlot", slot) })}</button>
+             {slot === "estimator" && (
+               // Wave 3 review M-7 / ruling R7: the estimator is not part of the confirm; it is used at the next re-estimate.
+-              <small> Used from the next re-estimate on; like any proposal change it moves the proposal version.</small>
++              <small>{t("agents.estimatorNote")}</small>
+             )}
+           </div>
+         );
+       })}
+       <table>
+-        <thead><tr><th>slot</th><th>agent</th><th>model</th><th>context</th><th>this task's own layer</th></tr></thead>
++        <thead><tr><th>{t("agents.th.slot")}</th><th>{t("agents.th.agent")}</th><th>{t("agents.th.model")}</th><th>{t("agents.th.context")}</th><th>{t("agents.th.ownLayer")}</th></tr></thead>
+         <tbody>
+           {preview.slots.map((entry) => {
+             const taskId = entry.taskId;
+             const own = taskId === null ? undefined : preview.taskOverrides[taskId] ?? undefined;
+             const scope: Scope | null = taskId === null ? null : { kind: "task", taskId };
+             const prefix = scope === null ? "" : agentDraftPrefix(groupId, scope);
+             const partial = scope === null ? {} : panelPartialFromFields(agents, prefix, own, plannedFor(scope), drafts, inherited(scope));
+             return (
+               <tr key={entry.key} data-slot={entry.key}>
+-                <td>{taskId ?? "reconcile"}</td>
++                <td>{taskId ?? enumText("agentSlot", "reconcile")}</td>
+                 {entry.outcome.kind === "resolved"
+                   ? <SelectionCells selection={entry.outcome.frozen.selection} provenance={entry.outcome.frozen.provenance} />
+                   : <FailedCell outcome={entry.outcome} />}
+                 <td>
+                   {scope !== null && (
+                     <>
+-                      <SelectionFields agents={agents} prefix={prefix} label={`Task ${taskId}`} current={own} planned={plannedFor(scope)} inheritedAgent={inherited(scope)} drafts={drafts} onDraft={onDraft} />
+-                      <button type="button" disabled={Object.keys(partial).length === 0} onClick={() => send(scope, partial)}>Set agent for task {taskId}</button>
+-                      <button type="button" disabled={own === undefined} onClick={() => send(scope, null)}>Clear agent for task {taskId}</button>
++                      <SelectionFields agents={agents} prefix={prefix} label={t("agents.taskLayer", { taskId: String(taskId) })} current={own} planned={plannedFor(scope)} inheritedAgent={inherited(scope)} drafts={drafts} onDraft={onDraft} />
++                      <button type="button" disabled={Object.keys(partial).length === 0} onClick={() => send(scope, partial)}>{t("agents.setTask", { taskId: String(taskId) })}</button>
++                      <button type="button" disabled={own === undefined} onClick={() => send(scope, null)}>{t("agents.clearTask", { taskId: String(taskId) })}</button>
+                     </>
+                   )}
+                 </td>
+               </tr>
+             );
+           })}
+         </tbody>
+       </table>
+     </section>
+   );
+diff --git a/web/src/AgentSettings.tsx b/web/src/AgentSettings.tsx
+index a70963b..64933de 100644
+--- a/web/src/AgentSettings.tsx
++++ b/web/src/AgentSettings.tsx
+@@ -1,16 +1,17 @@
+ /**
+  * Agent selection spec §6.8 (T15): the "Agents" settings page. It lists the installation table exactly as the
+  * server read it from ccloop and edits this operator's defaults -- the default agent, each agent's model and
+  * context, and the estimator and reconcile slots -- as one set-agent-preferences under the revision it read.
+  */
+ import type { JSX } from "react";
++import { useTranslation } from "react-i18next";
+ import { SelectionFields, contextLabel, draftOf, draftText, installationOf, partialFromFields, textOrUndefined } from "./AgentFields.js";
+ import type { AgentPreferencesViewV1, AgentsViewV1, OperatorPreferencesV1 } from "./controlTypes.js";
+ 
+ const DEFAULT_AGENT_KEY = "agents:default-agent";
+ 
+ export function preferencesFromDrafts(agents: AgentsViewV1, view: AgentPreferencesViewV1, drafts: Record<string, string>): OperatorPreferencesV1 {
+   const prefs = view.preferences;
+   const defaultAgent = textOrUndefined(draftText(drafts, DEFAULT_AGENT_KEY, prefs.defaultAgent ?? ""));
+   const perAgent: OperatorPreferencesV1["perAgent"] = {};
+   // An agent the table no longer lists keeps what the operator set for it; this page cannot edit it.
+@@ -37,56 +38,55 @@ export function preferencesFromDrafts(agents: AgentsViewV1, view: AgentPreferenc
+ export interface AgentSettingsProps {
+   agents: AgentsViewV1;
+   preferences: AgentPreferencesViewV1;
+   drafts: Record<string, string>;
+   onDraft: (key: string, text: string) => void;
+   onSave: (preferences: OperatorPreferencesV1, expectedRevision: number) => void;
+ }
+ 
+ export function AgentSettings(props: AgentSettingsProps): JSX.Element {
+   const { agents, preferences, drafts, onDraft } = props;
++  const { t } = useTranslation();
+   const defaultText = draftText(drafts, DEFAULT_AGENT_KEY, preferences.preferences.defaultAgent ?? "");
+   const defaultAgent = textOrUndefined(defaultText);
+   return (
+-    <section aria-label="Agents settings">
+-      <h3>Agents</h3>
++    <section aria-label={t("agents.settings.region")}>
++      <h3>{t("agents.title")}</h3>
+       <p>
+-        Operator {preferences.operatorId} · preferences revision {preferences.revision}. A change reaches groups confirmed after it; a
+-        confirmed group keeps the selection it froze.
++        {t("agents.settings.operatorLine", { operatorId: preferences.operatorId, revision: preferences.revision })}
+       </p>
+       {agents.installations.length === 0 && (
+         <p role="note">
+-          The installation table lists no agent. Run orca agents init, point ORCA_AGENTS_TABLE at the table it wrote
+-          (by default ~/.orca/agents.json) and restart the panel.
++          {t("agents.settings.noInstallations")}
+         </p>
+       )}
+       <table>
+         <thead>
+-          <tr><th>installation</th><th>kind</th><th>version</th><th>default model</th><th>default context</th></tr>
++          <tr><th>{t("agents.settings.th.installation")}</th><th>{t("agents.settings.th.kind")}</th><th>{t("agents.settings.th.version")}</th><th>{t("agents.settings.th.defaultModel")}</th><th>{t("agents.settings.th.defaultContext")}</th></tr>
+         </thead>
+         <tbody>
+           {agents.installations.map((row) => (
+             <tr key={row.id}>
+               <td>{row.id}</td><td>{row.kind}</td><td>{row.version}</td><td>{row.defaults.model}</td><td>{contextLabel(row.defaults.contextWindow)}</td>
+             </tr>
+           ))}
+         </tbody>
+       </table>
+       <label>
+-        Default agent
++        {t("agents.settings.defaultAgent")}
+         <select name={DEFAULT_AGENT_KEY} value={defaultText} onChange={(event) => onDraft(DEFAULT_AGENT_KEY, draftOf(event.target.value))}>
+-          <option value="">none (every group has to choose one)</option>
++          <option value="">{t("agents.settings.noDefault")}</option>
+           {agents.installations.map((row) => <option key={row.id} value={row.id}>{row.id}</option>)}
+         </select>
+       </label>
+       {agents.installations.map((row) => (
+         <SelectionFields
+-          key={row.id} agents={agents} prefix={`agents:per:${row.id}`} label={`${row.id} defaults`} fixedAgent={row.id}
++          key={row.id} agents={agents} prefix={`agents:per:${row.id}`} label={t("agents.settings.perAgent", { agentId: row.id })} fixedAgent={row.id}
+           current={preferences.preferences.perAgent[row.id]} inheritedAgent={row.id} drafts={drafts} onDraft={onDraft}
+         />
+       ))}
+-      <SelectionFields agents={agents} prefix="agents:estimator" label="Estimator slot" current={preferences.preferences.estimator} inheritedAgent={defaultAgent} drafts={drafts} onDraft={onDraft} />
+-      <SelectionFields agents={agents} prefix="agents:reconcile" label="Reconcile slot" current={preferences.preferences.reconcile} inheritedAgent={defaultAgent} drafts={drafts} onDraft={onDraft} />
+-      <button type="button" onClick={() => props.onSave(preferencesFromDrafts(agents, preferences, drafts), preferences.revision)}>Save agent preferences</button>
++      <SelectionFields agents={agents} prefix="agents:estimator" label={t("agents.settings.estimatorSlot")} current={preferences.preferences.estimator} inheritedAgent={defaultAgent} drafts={drafts} onDraft={onDraft} />
++      <SelectionFields agents={agents} prefix="agents:reconcile" label={t("agents.settings.reconcileSlot")} current={preferences.preferences.reconcile} inheritedAgent={defaultAgent} drafts={drafts} onDraft={onDraft} />
++      <button type="button" onClick={() => props.onSave(preferencesFromDrafts(agents, preferences, drafts), preferences.revision)}>{t("agents.settings.save")}</button>
+     </section>
+   );
+ }
+diff --git a/web/src/App.tsx b/web/src/App.tsx
+index 8427a9c..b55384b 100644
+--- a/web/src/App.tsx
++++ b/web/src/App.tsx
+@@ -107,26 +107,27 @@ function browserSession(): Storage | undefined {
+ }
+ 
+ /** The control summary is polled this fast (spec §9.2); the panel itself never pushes. */
+ const CONTROL_POLL_MS = 2_000;
+ /**
+  * Ruling review R17 (human ruling 2026-09-27, "节奏改为 10、20、40、80、160"): a read of the agent preview or of the
+  * installation table that failed, or a preview in which ccloop could not answer a slot for now, is read again after
+  * these delays -- at most this many times, never while the page is hidden -- and then waits for the operator.
+  */
+ export const AGENT_RETRY_DELAYS_MS = [10_000, 20_000, 40_000, 80_000, 160_000] as const;
+-type RetryState = { state: "waiting"; attempt: number; delayMs: number } | { state: "stopped" } | { state: "paused" } | null;
+-const retryNotice = (retry: RetryState): string | null => {
++export type RetryState = { state: "waiting"; attempt: number; delayMs: number } | { state: "stopped" } | { state: "paused" } | null;
++/** Ruling review R17's notice, in the reader's language (panel i18n spec §3.3); exported for the criterion. */
++export const retryNotice = (retry: RetryState): string | null => {
+   if (retry === null) return null;
+-  if (retry.state === "waiting") return `Reading again in ${retry.delayMs / 1000} s (retry ${retry.attempt}/${AGENT_RETRY_DELAYS_MS.length}).`;
+-  if (retry.state === "paused") return "Retrying is paused while the page is hidden; it resumes when you come back.";
+-  return `Stopped after ${AGENT_RETRY_DELAYS_MS.length} retries; Re-read asks again.`;
++  if (retry.state === "waiting") return i18n.t("agents.retryWaiting", { seconds: retry.delayMs / 1000, attempt: retry.attempt, total: AGENT_RETRY_DELAYS_MS.length });
++  if (retry.state === "paused") return i18n.t("agents.retryPaused");
++  return i18n.t("agents.retryStopped", { total: AGENT_RETRY_DELAYS_MS.length });
+ };
+ const pageHidden = (): boolean => typeof document !== "undefined" && document.visibilityState === "hidden";
+ 
+ /** The sidebar footer's lines (panel i18n spec §3.3); exported for the pseudo-locale criterion. */
+ export function footerLines(summary: ControlSummaryV1 | null): string[] {
+   if (summary === null) return [];
+   return [i18n.t("shell.epoch", { epoch: summary.epoch }), i18n.t(summary.dispatchBlocked ? "common.dispatchBlocked" : "common.dispatchLive")];
+ }
+ 
+ interface HomeState {
+diff --git a/web/src/locales/en.ts b/web/src/locales/en.ts
+index 388b12d..3f6e8b1 100644
+--- a/web/src/locales/en.ts
++++ b/web/src/locales/en.ts
+@@ -1,19 +1,19 @@
+ /**
+  * Panel i18n spec §2: the English resource. It is the source shape (`as const`), and every value is today's panel text
+  * byte for byte. Keys are grouped by panel area. Enum families (spec §3.5) are Records over the value unions, so a new
+  * value is a compile error here until it has its words. Tasks 3-10 add their areas.
+  */
+ import type { ThemePref } from "../theme.js";
+ import type { ChainStopCategory, CorrectionKind, DecisionKind, DecisionObservation, DecisionScope, MetricsNoteCode } from "../types.js";
+ import type {
+-  AllocationViewV1, AmountDimensionV1, BudgetEstimateV1, CapabilityViewV1, EstimateViewV1, FieldProvenanceV1, GroupSummaryV1, GroupViewV1, HandoffRequestViewV1, RecoveryViewV1, RunViewV1, WorkItemProgressV1, WorkItemViewV1,
++  AgentSlotV1, AllocationViewV1, AmountDimensionV1, BudgetEstimateV1, CapabilityViewV1, EstimateViewV1, FieldProvenanceV1, GroupSummaryV1, GroupViewV1, HandoffRequestViewV1, ProvenanceSourceV1, RecoveryViewV1, RunViewV1, WorkItemProgressV1, WorkItemViewV1,
+ } from "../controlTypes.js";
+ 
+ /** The Chinese resource's type: the same key set, every value widened to string (spec §2). */
+ export type Translation<T> = { [K in keyof T]: T[K] extends string ? string : Translation<T[K]> };
+ 
+ const theme = { system: "system", light: "light", dark: "dark" } as const satisfies Record<ThemePref, string>;
+ const decisionKind = {
+   dependency: "dependency", interface: "interface", scheduling: "scheduling", abandon: "abandon", criteria: "criteria", boundary: "boundary", reconcile: "reconcile",
+ } as const satisfies Record<DecisionKind, string>;
+ const decisionScope = { file: "file", task: "task", repo: "repo", "cross-repo": "cross-repo" } as const satisfies Record<DecisionScope, string>;
+@@ -81,20 +81,26 @@ type EstimatedTask = BudgetEstimateV1["tasks"][number];
+ const complexity = { S: "S", M: "M", L: "L", XL: "XL" } as const satisfies Record<EstimatedTask["complexity"], string>;
+ const confidence = { low: "low", medium: "medium", high: "high" } as const satisfies Record<EstimatedTask["confidence"], string>;
+ const handoffControl = { durable: "durable", "phase-end": "phase-end", unavailable: "unavailable" } as const satisfies Record<CapabilityViewV1["handoffControl"], string>;
+ const handoffExecution = {
+   "mechanical-in-run-v1": "mechanical-in-run-v1", "model-assisted-v1": "model-assisted-v1",
+ } as const satisfies Record<NonNullable<CapabilityViewV1["handoffExecution"]>, string>;
+ const budgetEnforcement = { bounded: "bounded", soft: "soft", unavailable: "unavailable" } as const satisfies Record<CapabilityViewV1["budgetEnforcement"], string>;
+ const fieldProvenance = {
+   "complex-1m-default": "complex-1m default", model: "model", human: "human", system: "system",
+ } as const satisfies Record<FieldProvenanceV1["provenance"], string>;
++const agentSlot = { worker: "worker", estimator: "estimator", reconcile: "reconcile" } as const satisfies Record<AgentSlotV1, string>;
++const selectionSource = {
++  operator: "operator", "operator-estimator": "operator-estimator", "operator-reconcile": "operator-reconcile", group: "group",
++  "group-estimator": "group-estimator", "group-reconcile": "group-reconcile", task: "task", "operator-agent": "operator-agent", descriptor: "descriptor",
++  "group-plan": "group-plan", "group-reconcile-plan": "group-reconcile-plan", "task-plan": "task-plan",
++} as const satisfies Record<ProvenanceSourceV1, string>;
+ 
+ export const en = {
+   nav: { sections: "Sections", decisions: "Decisions", chains: "Chains", tasks: "Task control", metrics: "Metrics" },
+   shell: {
+     brandTitle: "Leave it to Orca — every idea, made real.",
+     chainRunning: "a chain is running",
+     needsAttention: "needs attention",
+     theme: "Theme",
+     language: "Language",
+     loading: "orca panel loading…",
+@@ -362,29 +368,75 @@ export const en = {
+     },
+     badBudget: "Budgets must be positive integers",
+     badFileCap: "Max files changed must be a positive integer",
+     unit: { tokens: "tokens", activeMs: "ms active time", attempts: "attempts" },
+     budgetTaken: "Budget {{delta}} {{unit}}, taken from the group reserve; {{left}} left",
+     budgetReturned: "Budget {{delta}} {{unit}}, returned to the group reserve; {{left}} left",
+     partSeparator: "; ",
+     shortfall: "Group reserve too small: {{dimension}} short by {{short}}",
+     unchanged: "Budget unchanged",
+   },
++  agents: {
++    retryWaiting: "Reading again in {{seconds}} s (retry {{attempt}}/{{total}}).",
++    retryPaused: "Retrying is paused while the page is hidden; it resumes when you come back.",
++    retryStopped: "Stopped after {{total}} retries; Re-read asks again.",
++    contextDefault: "agent default",
++    contextTokens: "{{value}} tokens",
++    ignorePlan: "ignore the plan's {{field}} ({{value}})",
++    field: { agent: "agent", model: "model", contextWindow: "contextWindow" },
++    label: { agent: "agent", model: "model", context: "context" },
++    inheritPlan: "inherit (plan: {{agent}})",
++    inherit: "inherit",
++    from: "from {{source}}",
++    rejected: "rejected",
++    unavailable: "unavailable for now, Re-read to ask again",
++    region: "Agent selection",
++    frozenTitle: "Agents (frozen at confirmation)",
++    th: { slot: "slot", agent: "agent", model: "model", context: "context", ownLayer: "this task's own layer" },
++    notRecorded: "not recorded",
++    reread: "Re-read agent selections",
++    title: "Agents",
++    cannotRead: "Agent selections cannot be read · {{code}}. Confirm is not offered without them.",
++    resolving: "Resolving agent selections…",
++    proposalTitle: "Agents · proposal v{{version}}",
++    staleResolution: "The resolution shown is for proposal v{{version}}; re-reading. Confirm waits for it.",
++    unresolved: "A selection below did not resolve; confirm is not offered until every slot resolves.",
++    groupSlot: "Group {{slot}}",
++    setGroup: "Set group {{slot}} agent",
++    clearGroup: "Clear group {{slot}} agent",
++    estimatorNote: " Used from the next re-estimate on; like any proposal change it moves the proposal version.",
++    taskLayer: "Task {{taskId}}",
++    setTask: "Set agent for task {{taskId}}",
++    clearTask: "Clear agent for task {{taskId}}",
++    settings: {
++      region: "Agents settings",
++      operatorLine: "Operator {{operatorId}} · preferences revision {{revision}}. A change reaches groups confirmed after it; a confirmed group keeps the selection it froze.",
++      noInstallations: "The installation table lists no agent. Run orca agents init, point ORCA_AGENTS_TABLE at the table it wrote (by default ~/.orca/agents.json) and restart the panel.",
++      th: { installation: "installation", kind: "kind", version: "version", defaultModel: "default model", defaultContext: "default context" },
++      defaultAgent: "Default agent",
++      noDefault: "none (every group has to choose one)",
++      perAgent: "{{agentId}} defaults",
++      estimatorSlot: "Estimator slot",
++      reconcileSlot: "Reconcile slot",
++      save: "Save agent preferences",
++    },
++  },
+   metrics: {
+     unknownRate: "unknown",
+     correctionRate: "Correction rate",
+     repairRate: "Repair rate",
+     reviewCoverage: "Review coverage",
+     unresolvedTitle: "Unresolved decisions",
+     unresolvedCount: "Unresolved decisions: {{n}}",
+     malformedTitle: "Malformed lines",
+     malformedCount: "Malformed lines: {{n}}",
+     futureTitle: "Excluded as future",
+     futureCount: "Excluded as future: {{n}}",
+     note: metricsNote,
+   },
+   enums: {
+     theme, decisionKind, decisionScope, decisionVerdict, correctionKind, chainStopCategory,
+     groupState, stopMode, stopState, workStatus, runPhase, runState, requestState, estimateState, budgetMode, blockerScope, progressStep,
+     proposalState, ownerKind, bucket, allocationState, dimension, complexity, confidence, handoffControl, handoffExecution, budgetEnforcement, fieldProvenance,
++    agentSlot, selectionSource,
+   },
+ } as const;
+diff --git a/web/src/locales/zh.ts b/web/src/locales/zh.ts
+index b0d5d89..9ad2aa1 100644
+--- a/web/src/locales/zh.ts
++++ b/web/src/locales/zh.ts
+@@ -277,20 +277,65 @@ export const zh: Translation<typeof en> = {
+     },
+     badBudget: "预算要填正整数",
+     badFileCap: "最多改几个文件要填正整数",
+     unit: { tokens: "token", activeMs: "ms 活跃时间", attempts: "次尝试" },
+     budgetTaken: "预算 {{delta}} {{unit}}，从组余量扣；余量剩 {{left}}",
+     budgetReturned: "预算 {{delta}} {{unit}}，退回组余量；余量剩 {{left}}",
+     partSeparator: "；",
+     shortfall: "组余量不够：{{dimension}} 还差 {{short}}",
+     unchanged: "预算不变",
+   },
++  agents: {
++    retryWaiting: "{{seconds}} 秒后重新读取（第 {{attempt}}/{{total}} 次重试）。",
++    retryPaused: "页面隐藏期间暂停重试；回到页面后继续。",
++    retryStopped: "重试 {{total}} 次后已停止；点「重新读取」会再问一次。",
++    contextDefault: "agent 默认",
++    contextTokens: "{{value}} token",
++    ignorePlan: "忽略计划里的{{field}}（{{value}}）",
++    field: { agent: "agent", model: "模型", contextWindow: "上下文窗口" },
++    label: { agent: "agent", model: "模型", context: "上下文" },
++    inheritPlan: "继承（计划：{{agent}}）",
++    inherit: "继承",
++    from: "来自{{source}}",
++    rejected: "被拒",
++    unavailable: "暂时不可用，点「重新读取」再问一次",
++    region: "agent 选择",
++    frozenTitle: "agent（确认时已冻结）",
++    th: { slot: "槽位", agent: "agent", model: "模型", context: "上下文", ownLayer: "这个任务自己的一层" },
++    notRecorded: "未记录",
++    reread: "重新读取 agent 选择",
++    title: "agent",
++    cannotRead: "读不到 agent 选择 · {{code}}。没有它们就不提供确认。",
++    resolving: "正在解析 agent 选择…",
++    proposalTitle: "agent · 提案 v{{version}}",
++    staleResolution: "显示的解析结果属于提案 v{{version}}；正在重新读取。确认会等它。",
++    unresolved: "下面有一项选择没有解析成功；每个槽位都解析成功之前不提供确认。",
++    groupSlot: "组 {{slot}}",
++    setGroup: "设置组 {{slot}} 的 agent",
++    clearGroup: "清除组 {{slot}} 的 agent",
++    estimatorNote: " 从下次重新估算起使用；和任何提案修改一样，它会推进提案版本。",
++    taskLayer: "任务 {{taskId}}",
++    setTask: "为任务 {{taskId}} 设置 agent",
++    clearTask: "清除任务 {{taskId}} 的 agent",
++    settings: {
++      region: "agent 设置",
++      operatorLine: "操作者 {{operatorId}} · 偏好版本 {{revision}}。修改只影响之后确认的组；已确认的组保留它冻结的选择。",
++      noInstallations: "安装表里没有任何 agent。运行 orca agents init，把 ORCA_AGENTS_TABLE 指向它写出的表（默认 ~/.orca/agents.json），然后重启面板。",
++      th: { installation: "安装", kind: "类型", version: "版本", defaultModel: "默认模型", defaultContext: "默认上下文" },
++      defaultAgent: "默认 agent",
++      noDefault: "无（每个组都得自己选一个）",
++      perAgent: "{{agentId}} 的默认值",
++      estimatorSlot: "估算槽",
++      reconcileSlot: "协调槽",
++      save: "保存 agent 偏好",
++    },
++  },
+   metrics: {
+     unknownRate: "未知",
+     correctionRate: "纠正率",
+     repairRate: "修复率",
+     reviewCoverage: "评审覆盖率",
+     unresolvedTitle: "未解析的决策",
+     unresolvedCount: "未解析的决策：{{n}}",
+     malformedTitle: "格式错误的行",
+     malformedCount: "格式错误的行：{{n}}",
+     futureTitle: "因日期在未来而排除",
+@@ -331,14 +376,20 @@ export const zh: Translation<typeof en> = {
+     ownerKind: { estimate: "估算", task: "任务", "goal-review": "目标评审", reserve: "余量" },
+     bucket: { work: "工作", handoff: "交接", review: "评审", reserve: "余量" },
+     allocationState: { "draft-encumbered": "草稿占用", confirmed: "已确认", active: "进行中", held: "已挂起", continuing: "续跑中", terminal: "已终结", unknown: "未知" },
+     dimension: { tokens: "token", activeMs: "活跃毫秒", attempts: "尝试次数", sessions: "会话数" },
+     complexity: { S: "S", M: "M", L: "L", XL: "XL" },
+     confidence: { low: "低", medium: "中", high: "高" },
+     handoffControl: { durable: "持久", "phase-end": "阶段结束时", unavailable: "不可用" },
+     handoffExecution: { "mechanical-in-run-v1": "运行内机械交接 v1", "model-assisted-v1": "模型辅助交接 v1" },
+     budgetEnforcement: { bounded: "有界", soft: "宽松", unavailable: "不可用" },
+     fieldProvenance: { "complex-1m-default": "complex-1m 默认值", model: "模型", human: "人", system: "系统" },
++    agentSlot: { worker: "执行", estimator: "估算", reconcile: "协调" },
++    selectionSource: {
++      operator: "操作者", "operator-estimator": "操作者的估算槽", "operator-reconcile": "操作者的协调槽", group: "组",
++      "group-estimator": "组的估算槽", "group-reconcile": "组的协调槽", task: "任务", "operator-agent": "操作者对该 agent 的默认", descriptor: "agent 描述符",
++      "group-plan": "计划（组）", "group-reconcile-plan": "计划（组协调槽）", "task-plan": "计划（任务）",
++    },
+   },
+ };
+ 
+ export const zhErrors: Record<string, string> = {};
+diff --git a/web/tests/agentsI18n.test.tsx b/web/tests/agentsI18n.test.tsx
+new file mode 100644
+index 0000000..14abef7
+--- /dev/null
++++ b/web/tests/agentsI18n.test.tsx
+@@ -0,0 +1,168 @@
++// @vitest-environment jsdom
++/**
++ * Panel i18n spec §3.3, §3.5, §5: the agents area in Chinese -- the settings page, the proposal's agent editor (slots in
++ * words, where each field came from, a refused slot, the plan values a layer can ignore), the confirmed view, the read
++ * failure and the retry notice. Agent ids, models, versions and codes stay as sent. Each translated site is pinned by
++ * its own element's exact text, so a site that falls back to English turns its own assertion red.
++ */
++import { cleanup, render } from "@testing-library/react";
++import type { JSX } from "react";
++import { afterEach, describe, expect, it, vi } from "vitest";
++import { AgentSelectionEditor } from "../src/AgentSelectionEditor.js";
++import { AgentSettings } from "../src/AgentSettings.js";
++import { retryNotice } from "../src/App.js";
++import i18n from "../src/i18n.js";
++import type { AgentPreferencesViewV1, AgentSelectionPreviewV1, AgentsViewV1, Amount, FrozenSlotV1, GroupViewV1 } from "../src/controlTypes.js";
++
++const amount = (tokens: number): Amount => ({ tokens, activeMs: 1_000, attempts: 3, sessions: 3 });
++const capability = { usageObservation: "phase-end", budgetEnforcement: "soft", contextObservation: "realtime", handoffControl: "durable", handoffExecution: "mechanical-in-run-v1", contextWindowTokens: null, requestBoundProof: null } as const;
++const agents: AgentsViewV1 = { schema: "orca-agents-view-v1", installations: [{ id: "codex", kind: "codex", defaults: { model: "gpt-x", contextWindow: "agent-default" }, contextOptions: ["agent-default", 1_000_000], version: "1.0" }] };
++const preferences: AgentPreferencesViewV1 = { schema: "orca-agent-preferences-v1", operatorId: "op-1", revision: 3, preferences: { defaultAgent: "codex", perAgent: {} } };
++const frozen: FrozenSlotV1 = {
++  partial: {}, provenance: { agent: "operator", model: "descriptor", contextWindow: "group-plan" },
++  selection: { agent: "codex", model: "gpt-x", contextWindow: 1_000_000 }, configHash: "c".repeat(64), timeoutMs: 1_000, killGraceMs: 5_000, capabilities: capability,
++};
++const preview: AgentSelectionPreviewV1 = {
++  schema: "orca-agent-selection-preview-v1", groupId: "g", proposalVersion: 2, groupOverrides: {}, taskOverrides: {},
++  planLayers: { group: { worker: { agent: "codex", model: "gpt-5x", contextWindow: 1_000_000 } }, tasks: {} },
++  slots: [
++    { key: "task:a", slot: "worker", taskId: "a", outcome: { kind: "resolved", frozen } },
++    { key: "task:b", slot: "worker", taskId: "b", outcome: { kind: "unavailable", code: "ccloop-timeout" } },
++    { key: "reconcile", slot: "reconcile", taskId: null, outcome: { kind: "rejected", code: "agent-installation-missing" } },
++  ],
++  selectionsHash: null,
++};
++const view = (state: "editable" | "confirmed"): GroupViewV1 => ({
++  schema: "orca-control-group-v1", epoch: "epoch-a", changeSeq: 4,
++  summary: { groupId: "g", state: "draft", commandRevision: 6, projectionSeq: 4, stopMode: null, stopState: null, claimBlocked: false, recoveryBlockerCount: 0 },
++  graphVersion: 1, plan: { repoId: "orca", planId: "plan-demo", planHash: "a".repeat(64), goal: "goal-x", successConditions: ["s-1"] },
++  proposal: { state, proposalVersion: 2, planHash: "a".repeat(64), budgetMode: null, contextPolicy: { handoffAtContextTokens: null }, profiles: null, executionSnapshotHash: null },
++  ledger: { groupLimit: amount(100), used: amount(0), committedRemaining: amount(0), explicitUnallocatedReserve: amount(100), budgetDeficit: amount(0), usageUnknown: false },
++  allocations: [],
++  workItems: [{ taskId: "a", status: "draft", dependencyTaskIds: [], targetVersion: 1, configHash: null, originalContractHash: "e".repeat(64), derivedContractHash: null, currentRunId: null, pendingRunId: null, lineageRunIds: [] }],
++  estimates: [], runs: [], checkpoints: [], handoffRequests: [], stop: null, recoveryBlockers: [], recentCommandIds: [],
++});
++const textOf = (element: JSX.Element): string => render(element).container.textContent ?? "";
++
++/** Each matching element's whole text, in document order. */
++const texts = (root: ParentNode, selector: string): string[] => [...root.querySelectorAll(selector)].map((node) => node.textContent ?? "");
++/** A label's own words: its text nodes only, without the control's options. */
++const ownText = (node: Element): string => [...node.childNodes].filter((child) => child.nodeType === 3).map((child) => child.textContent).join("").trim();
++const fieldset = (root: ParentNode, legend: string): Element => {
++  const found = [...root.querySelectorAll("fieldset")].find((node) => node.querySelector("legend")?.textContent === legend);
++  if (!found) throw new Error(`no fieldset ${legend}`);
++  return found;
++};
++const firstOption = (root: Element, field: string): string => root.querySelector(`select[name$=":${field}"] option[value=""]`)?.textContent ?? "";
++const firstCell = (root: ParentNode, slot: string): string[] => texts(root, `tr[data-slot="${slot}"] > td`);
++
++afterEach(cleanup);
++
++describe("the agents area in Chinese", () => {
++  it("shows the settings page in Chinese", async () => {
++    await i18n.changeLanguage("zh");
++    const { container } = render(<AgentSettings agents={agents} preferences={preferences} drafts={{}} onDraft={vi.fn()} onSave={vi.fn()} />);
++    const text = container.textContent ?? "";
++    for (const expected of [
++      "操作者 op-1 · 偏好版本 3。修改只影响之后确认的组；已确认的组保留它冻结的选择。", "安装", "默认模型", "默认上下文", "agent 默认",
++      "默认 agent", "无（每个组都得自己选一个）", "codex 的默认值", "估算槽", "协调槽", "模型", "上下文", "继承", "保存 agent 偏好",
++    ]) expect(text, expected).toContain(expected);
++    // Each site by its own element.
++    const section = container.querySelector("section")!;
++    expect(section.getAttribute("aria-label")).toBe("agent 设置");
++    expect(texts(container, "h3")).toEqual(["agent"]);
++    expect(texts(container, "section > p")).toEqual(["操作者 op-1 · 偏好版本 3。修改只影响之后确认的组；已确认的组保留它冻结的选择。"]);
++    expect(texts(container, "thead th")).toEqual(["安装", "类型", "版本", "默认模型", "默认上下文"]);
++    expect(texts(container, "tbody td")).toEqual(["codex", "codex", "1.0", "gpt-x", "agent 默认"]);
++    const defaultLabel = container.querySelector(`select[name="agents:default-agent"]`)!.closest("label")!;
++    expect(ownText(defaultLabel)).toBe("默认 agent");
++    expect(defaultLabel.querySelector(`option[value=""]`)?.textContent).toBe("无（每个组都得自己选一个）");
++    expect(texts(container, "legend")).toEqual(["codex 的默认值", "估算槽", "协调槽"]);
++    const estimator = fieldset(container, "估算槽");
++    expect(estimator.getAttribute("aria-label")).toBe("估算槽");
++    expect([...estimator.querySelectorAll("label")].map(ownText)).toEqual(["agent", "模型", "上下文"]);
++    expect(firstOption(estimator, "agent")).toBe("继承");
++    expect(firstOption(estimator, "context")).toBe("继承");
++    expect(texts(estimator, `select[name$=":context"] option`)).toEqual(["继承", "agent 默认", "1000000 token"]);
++    expect(texts(container, "button")).toEqual(["保存 agent 偏好"]);
++    cleanup();
++    const empty = render(<AgentSettings agents={{ ...agents, installations: [] }} preferences={preferences} drafts={{}} onDraft={vi.fn()} onSave={vi.fn()} />).container;
++    expect(texts(empty, `p[role="note"]`)).toEqual(["安装表里没有任何 agent。运行 orca agents init，把 ORCA_AGENTS_TABLE 指向它写出的表（默认 ~/.orca/agents.json），然后重启面板。"]);
++  });
++
++  it("shows the proposal's agent editor, the confirmed view, the read failure and the retry notice in Chinese", async () => {
++    await i18n.changeLanguage("zh");
++    const { container } = render(
++      <AgentSelectionEditor view={view("editable")} agents={agents} preview={preview} preferences={preferences.preferences} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()}
++        onReread={vi.fn()} retryNotice={retryNotice({ state: "waiting", attempt: 1, delayMs: 10_000 })} />,
++    );
++    const editor = container.textContent ?? "";
++    for (const expected of [
++      "agent · 提案 v2", "下面有一项选择没有解析成功；每个槽位都解析成功之前不提供确认。", "重新读取 agent 选择", "10 秒后重新读取（第 1/5 次重试）。",
++      "组 执行", "设置组 执行 的 agent", "清除组 估算 的 agent", " 从下次重新估算起使用；", "忽略计划里的模型（gpt-5x）", "继承（计划：codex）",
++      "这个任务自己的一层", "codex 来自操作者", "gpt-x 来自agent 描述符", "1000000 token 来自计划（组）", "被拒 · agent-installation-missing",
++      "协调", "为任务 a 设置 agent", "清除任务 a 的 agent",
++    ]) expect(editor, expected).toContain(expected);
++    // Each site by its own element (preflight P4: the legends and the fieldsets' names exactly).
++    expect(container.querySelector("section")!.getAttribute("aria-label")).toBe("agent 选择");
++    expect(texts(container, "h3")).toEqual(["agent · 提案 v2"]);
++    expect(texts(container, `p[role="alert"]`)).toEqual(["下面有一项选择没有解析成功；每个槽位都解析成功之前不提供确认。"]);
++    expect(texts(container, `p[data-retry]`)).toEqual(["10 秒后重新读取（第 1/5 次重试）。"]);
++    expect(texts(container, "legend")).toEqual(["组 执行", "组 估算", "组 协调", "任务 a", "任务 b"]);
++    expect([...container.querySelectorAll("fieldset")].map((node) => node.getAttribute("aria-label"))).toEqual(["组 执行", "组 估算", "组 协调", "任务 a", "任务 b"]);
++    expect(texts(container, "button")).toEqual([
++      "重新读取 agent 选择", "设置组 执行 的 agent", "清除组 执行 的 agent", "设置组 估算 的 agent", "清除组 估算 的 agent", "设置组 协调 的 agent", "清除组 协调 的 agent",
++      "为任务 a 设置 agent", "清除任务 a 的 agent", "为任务 b 设置 agent", "清除任务 b 的 agent",
++    ]);
++    expect(texts(container, "small")).toContain(" 从下次重新估算起使用；和任何提案修改一样，它会推进提案版本。");
++    const worker = fieldset(container, "组 执行");
++    expect([...worker.querySelectorAll("label")].map(ownText)).toEqual(["agent", "忽略计划里的agent（codex）", "模型", "忽略计划里的模型（gpt-5x）", "上下文", "忽略计划里的上下文窗口（1000000 token）"]);
++    expect(firstOption(worker, "agent")).toBe("继承（计划：codex）");
++    expect(firstOption(worker, "context")).toBe("继承");
++    expect(firstOption(fieldset(container, "组 估算"), "agent")).toBe("继承");
++    expect(texts(container, "thead th")).toEqual(["槽位", "agent", "模型", "上下文", "这个任务自己的一层"]);
++    expect(firstCell(container, "task:a").slice(0, 4)).toEqual(["a", "codex 来自操作者", "gpt-x 来自agent 描述符", "1000000 token 来自计划（组）"]);
++    expect(firstCell(container, "task:b").slice(0, 2)).toEqual(["b", "暂时不可用，点「重新读取」再问一次 · ccloop-timeout"]);
++    expect(firstCell(container, "reconcile")).toEqual(["协调", "被拒 · agent-installation-missing", ""]);
++    cleanup();
++
++    const stale = render(<AgentSelectionEditor view={view("editable")} agents={agents} preview={{ ...preview, proposalVersion: 1 }} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />).container;
++    expect(texts(stale, `p[role="status"]`)).toEqual(["显示的解析结果属于提案 v1；正在重新读取。确认会等它。"]);
++    cleanup();
++
++    const confirmedRoot = render(<AgentSelectionEditor view={view("confirmed")} agents={agents} preview={null} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />).container;
++    const confirmed = confirmedRoot.textContent ?? "";
++    for (const expected of ["agent（确认时已冻结）", "槽位", "未记录", "协调"]) expect(confirmed, expected).toContain(expected);
++    expect(confirmedRoot.querySelector("section")!.getAttribute("aria-label")).toBe("agent 选择");
++    expect(texts(confirmedRoot, "h3")).toEqual(["agent（确认时已冻结）"]);
++    expect(texts(confirmedRoot, "thead th")).toEqual(["槽位", "agent", "模型", "上下文"]);
++    expect(firstCell(confirmedRoot, "task:a")).toEqual(["a", "未记录"]);
++    expect(firstCell(confirmedRoot, "reconcile")).toEqual(["协调", "未记录"]);
++    cleanup();
++
++    const failed = render(<AgentSelectionEditor view={view("editable")} agents={null} preview={null} agentsFailure="control-port-unconfigured" drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />).container;
++    expect(failed.textContent).toContain("读不到 agent 选择 · control-port-unconfigured。没有它们就不提供确认。");
++    expect(failed.querySelector("section")!.getAttribute("aria-label")).toBe("agent 选择");
++    expect(texts(failed, "h3")).toEqual(["agent"]);
++    expect(texts(failed, `p[role="alert"]`)).toEqual(["读不到 agent 选择 · control-port-unconfigured。没有它们就不提供确认。"]);
++    cleanup();
++
++    const resolving = render(<AgentSelectionEditor view={view("editable")} agents={agents} preview={null} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />).container;
++    expect(resolving.textContent).toContain("正在解析 agent 选择…");
++    expect(resolving.querySelector("section")!.getAttribute("aria-label")).toBe("agent 选择");
++    expect(texts(resolving, "h3")).toEqual(["agent"]);
++    expect(texts(resolving, `p[role="status"]`)).toEqual(["正在解析 agent 选择…"]);
++
++    expect(retryNotice({ state: "waiting", attempt: 1, delayMs: 10_000 })).toBe("10 秒后重新读取（第 1/5 次重试）。");
++    expect(retryNotice({ state: "paused" })).toBe("页面隐藏期间暂停重试；回到页面后继续。");
++    expect(retryNotice({ state: "stopped" })).toBe("重试 5 次后已停止；点「重新读取」会再问一次。");
++    expect(retryNotice(null)).toBeNull();
++  });
++
++  it("keeps today's English text byte for byte", async () => {
++    await i18n.changeLanguage("en");
++    expect(retryNotice({ state: "waiting", attempt: 2, delayMs: 20_000 })).toBe("Reading again in 20 s (retry 2/5).");
++    expect(retryNotice({ state: "paused" })).toBe("Retrying is paused while the page is hidden; it resumes when you come back.");
++    expect(retryNotice({ state: "stopped" })).toBe("Stopped after 5 retries; Re-read asks again.");
++  });
++});
+diff --git a/web/tests/i18nWidth.test.ts b/web/tests/i18nWidth.test.ts
+index 73ee5be..e33dd71 100644
+--- a/web/tests/i18nWidth.test.ts
++++ b/web/tests/i18nWidth.test.ts
+@@ -15,29 +15,30 @@ function flatten(node: Tree, prefix = ""): Record<string, string> {
+     if (typeof value === "string") out[path] = value;
+     else Object.assign(out, flatten(value, path));
+   }
+   return out;
+ }
+ const EN = flatten(en as unknown as Tree);
+ const ZH = flatten(zh as unknown as Tree);
+ const width = (text: string): number => [...text].reduce((n, ch) => n + (/[⺀-鿿　-〿＀-￯]/.test(ch) ? 2 : 1), 0);
+ const NARROW_PREFIXES = [
+   "control.group.th.", "control.group.runsTh.", "budget.th.", "enums.workStatus.", "enums.runPhase.", "enums.runState.",
+-  "enums.allocationState.", "enums.bucket.", "enums.ownerKind.", "enums.dimension.",
++  "enums.allocationState.", "enums.bucket.", "enums.ownerKind.", "enums.dimension.", "agents.th.", "agents.settings.th.",
+ ];
+ const BUTTONS = [
+   "control.group.start", "control.group.pause", "control.group.handoffStop", "control.group.resume", "control.group.resumeNoContinuation",
+   "control.task.addSystem", "control.task.addCustom", "control.task.save", "control.task.discard", "control.task.restore",
+   "budget.applyRow", "budget.applyAll", "budget.setLimit", "budget.save", "budget.reestimate", "budget.confirm",
+   "loopPlan.changePlan", "loopPlan.discard", "chains.start", "chains.stop", "decisions.agree", "decisions.correct", "recovery.retry",
++  "agents.reread", "agents.settings.save",
+ ];
+ 
+ describe("Chinese in narrow places (Review Focus 5)", () => {
+   it("keeps every table header, in-table enum value and button no wider in Chinese than in English + 2 columns", () => {
+     const keys = [...Object.keys(EN).filter((key) => NARROW_PREFIXES.some((prefix) => key.startsWith(prefix))), ...BUTTONS];
+-    expect(keys.length).toBeGreaterThanOrEqual(85);
++    expect(keys.length).toBeGreaterThanOrEqual(97);
+     for (const key of keys) {
+       expect(EN[key], key).toBeDefined();
+       expect(width(ZH[key]!), `${key}: ${EN[key]} → ${ZH[key]}`).toBeLessThanOrEqual(width(EN[key]!) + 2);
+     }
+   });
+ });

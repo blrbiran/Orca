@@ -1,0 +1,1221 @@
+# Review package: 545f881..bd6ccfc
+
+## Commits
+bd6ccfc feat(panel): send a loop plan's fields and build its words in the panel
+
+## Files changed
+ src/control/loopPlans.ts                 |  34 +--------
+ src/control/webProtocol.ts               |  10 +--
+ src/panel/controlViews.ts                |  19 +++---
+ tests/control/loopPlanSummary.test.ts    |  76 ---------------------
+ tests/control/loopPlanView.test.ts       |   7 +-
+ tests/control/loopPlanViewFields.test.ts |  41 +++++++++++
+ tests/control/taskAmendments.test.ts     |   3 +-
+ tests/panel/taskLoopApi.test.ts          |  24 ++++++-
+ web/src/ControlGroupView.tsx             |   3 +-
+ web/src/LoopPlanCard.tsx                 |  49 +++++++++++--
+ web/src/controlTypes.ts                  |  23 ++++---
+ web/src/locales/en.ts                    |  36 ++++++++++
+ web/src/locales/zh.ts                    |  34 +++++++++
+ web/tests/loopBudgetRows.test.tsx        |   5 +-
+ web/tests/loopPlanCard.test.tsx          |  11 +--
+ web/tests/loopPlanDraft.test.tsx         |   5 +-
+ web/tests/loopPlanEdit.test.tsx          |   5 +-
+ web/tests/loopSuggestionApply.test.tsx   |   5 +-
+ web/tests/loopSuggestionDraft.test.tsx   |   5 +-
+ web/tests/loopSummary.test.tsx           | 114 +++++++++++++++++++++++++++++++
+ 20 files changed, 351 insertions(+), 158 deletions(-)
+
+## Diff
+diff --git a/src/control/loopPlans.ts b/src/control/loopPlans.ts
+index 0f6ed88..0944d22 100644
+--- a/src/control/loopPlans.ts
++++ b/src/control/loopPlans.ts
+@@ -12,28 +12,28 @@ import { MAX_TIMER_MS, safeInteger } from "./schema.js";
+  * taskContractSchema, and the budget equals TASK_WORK -- are pinned by tests/control/loopPlans.test.ts instead.
+  */
+ 
+ export const LOOP_PLAN_IDS = ["standard", "bugfix", "refactor", "design", "investigate"] as const;
+ export type LoopPlanId = (typeof LOOP_PLAN_IDS)[number];
+ export const LOOP_RECIPE_SCHEMA = "orca-loop-recipe-v1" as const;
+ 
+ export interface LoopPlanDefinition {
+   planId: LoopPlanId;
+   version: number;
+-  /** The panel's plain-language name (spec §2.2, D9). */
++  /** The plan's name in English, the source of record the panel's English resource must equal (panel i18n spec §6.9). */
+   name: string;
+   /** Soft constraints, into context.constraints: they reach the planner and executor, never the verifier (spec §2.1). */
+   constraints: readonly string[];
+   verifierType: "command" | "agent";
+   /** A case-sensitive substring over every evidence string (spec §2.2, C4); a dead placeholder for a command verifier. */
+   rejectOn: string;
+-  /** The one discipline line the panel shows, with its strength (spec §4.1); null when the plan has none. */
++  /** The discipline line in English with its strength (spec §4.1), the panel's source of record (panel i18n spec §6.9); null when the plan has none. */
+   discipline: string | null;
+   /** Spec §2.3: the file cap when the inputs name none (investigate is always 1). */
+   defaultMaxFilesTouched: number;
+   /** Spec §2.3: executionPolicy.perAttemptTimeoutMs; the Web path clamps it to the task's active time (executionSnapshot.ts). */
+   perAttemptTimeoutMs: number;
+ }
+ 
+ /**
+  * Spec §2.2 last bullet: a change to a plan's text or rules adds a version; no version is ever edited or removed, so an
+  * old recipe still renders and still re-expands to its stored bytes (the projection checks it, controlViews.ts).
+@@ -158,21 +158,21 @@ function exactPath(entry: string): boolean {
+ /**
+  * Spec §3.2 path-shape (R8): the only shapes ccloop's matcher and Orca's write set (src/scheduler/writeSet.ts
+  * normalizeClaim) both read -- an exact relative path, `<prefix>/**`, or `**`.
+  */
+ function pathShapeOk(entry: string): boolean {
+   if (entry === "**") return true;
+   if (entry.endsWith("/**")) return exactPath(entry.slice(0, -"/**".length));
+   return exactPath(entry);
+ }
+ 
+-/** Spec §2.3: the version's default unless the input says otherwise; investigate always 1. Shared with the summary so it never disagrees. */
++/** Spec §2.3: the version's default unless the input says otherwise; investigate always 1. */
+ function maxFilesOf(plan: LoopPlanDefinition, inputs: LoopInputs): number {
+   return plan.planId === "investigate" ? 1 : inputs.maxFilesTouched ?? plan.defaultMaxFilesTouched;
+ }
+ 
+ /** Spec §3.2: the recipe's contract, for the recipe's own plan version; the re-expansion the projection checks. */
+ export function expandRecipe(taskId: string, repoPath: string, recipe: LoopRecipe): LoopExpansion {
+   const plan = loopPlanDefinition(recipe.planId, recipe.planVersion);
+   if (plan === null) return { ok: false, reason: "unknown-plan" };
+   const { inputs } = recipe;
+   if (![...inputs.targetPaths, ...inputs.protectedPaths].every(pathShapeOk)) return { ok: false, reason: "path-shape" };
+@@ -233,38 +233,10 @@ const LABEL_PRIORITY: ReadonlyArray<{ labels: readonly string[]; planId: LoopPla
+   { labels: ["feature", "test", "perf", "security", "chore"], planId: "standard" },
+ ];
+ 
+ export function choosePlanByLabels(labels: readonly string[]): { planId: LoopPlanId; label: string | null } {
+   for (const row of LABEL_PRIORITY) {
+     const hit = row.labels.find((label) => labels.includes(label));
+     if (hit !== undefined) return { planId: row.planId, label: hit };
+   }
+   return { planId: "standard", label: null };
+ }
+-
+-/** `1 file`, `2 files` (ruling P1: the panel says the singular for 1). */
+-function countOf(n: number, noun: string): string {
+-  return `${n} ${noun}${n === 1 ? "" : "s"}`;
+-}
+-
+-/**
+- * Spec §4.1 (D9, C7): the card's lines for one recipe, built server-side. Each line states how hard it is (spec §2.1):
+- * the write set is git-checked; protected paths and the file cap are only what the agent reports; the discipline line
+- * says who checks it. The check commands' text is never in a line -- the card shows it collapsed.
+- */
+-export function describeLoopPlan(recipe: Pick<LoopRecipe, "planId" | "planVersion" | "inputs">): { planName: string; summary: string[] } | null {
+-  const plan = loopPlanDefinition(recipe.planId, recipe.planVersion);
+-  if (plan === null) return null;
+-  const { inputs } = recipe;
+-  return {
+-    planName: plan.name,
+-    summary: [
+-      `Goal: ${inputs.goal}`,
+-      `Done when: ${inputs.successCondition}`,
+-      `Only changes: ${inputs.targetPaths.join(", ")}`,
+-      ...(inputs.protectedPaths.length > 0 ? [`Must not change: ${inputs.protectedPaths.join(", ")} (reported by the agent, not checked in git)`] : []),
+-      maxFilesOf(plan, inputs) === Number.MAX_SAFE_INTEGER ? "No file limit" : `At most ${countOf(maxFilesOf(plan, inputs), "file")} changed (reported by the agent)`,
+-      `Acceptance: ${countOf(inputs.checks.length, "check command")}, all must pass`,
+-      ...(plan.discipline === null ? [] : [plan.discipline]),
+-    ],
+-  };
+-}
+diff --git a/src/control/webProtocol.ts b/src/control/webProtocol.ts
+index 0d7d78f..a25c946 100644
+--- a/src/control/webProtocol.ts
++++ b/src/control/webProtocol.ts
+@@ -943,33 +943,35 @@ export const allocationViewSchema = z
+ export const workItemProgressSchema = z
+   .object({
+     runId: idSchema,
+     step: z.enum(["queued", "plan", "execute", "verify", "succeeded", "blocked_waiting_human", "exhausted", "cancelled", "failed"]).nullable(),
+     attempt: z.object({ current: safeInteger, max: safeInteger }).strict().nullable(),
+     tokens: z.object({ used: safeInteger, grant: safeInteger }).strict().nullable(),
+     lastTransitionAt: nonemptyString.nullable(),
+   })
+   .strict();
+ 
+-// Loop plans spec §4.1 (D9, C7): a loop task's plan in plain words, built server-side from its effective recipe.
+-// chosenByLabel is the plan file's label that chose it (spec §2.4); loopVersion is what set-task-loop must name.
++// Loop plans spec §4.1, panel i18n spec §3.1: a loop task's plan as the fields the panel builds its words from -- the
++// effective recipe, the expanded contract's file cap and whether the plan version has a discipline line; no English
++// sentence travels. chosenByLabel is the plan file's label that chose it (spec §2.4); loopVersion is what set-task-loop
++// must name.
+ export const loopPlanViewSchema = z
+   .object({
+     planId: z.enum(LOOP_PLAN_IDS),
+     planVersion: positiveSafeInteger,
+-    planName: nonemptyString,
+     chosenBy: z.enum(["explicit", "labels"]),
+     chosenByLabel: nonemptyString.nullable(),
+     amended: z.boolean(),
+     loopVersion: safeInteger,
+     inputs: loopInputsSchema,
+-    summary: z.array(nonemptyString).min(1),
++    maxFiles: positiveSafeInteger,
++    hasDiscipline: z.boolean(),
+   })
+   .strict();
+ 
+ export const workItemViewSchema = z
+   .object({
+     taskId: idSchema,
+     status: z.enum(["draft", "ready", "starting", "start-unknown", "active", "held", "continuing", "completed", "blocked"]),
+     dependencyTaskIds: sortedIdArraySchema,
+     targetVersion: positiveSafeInteger,
+     // Agent selection spec §6.2 / §12 I3 (W6-9): null until confirmation freezes a selection onto the work item.
+diff --git a/src/panel/controlViews.ts b/src/panel/controlViews.ts
+index b921e86..7ae1e41 100644
+--- a/src/panel/controlViews.ts
++++ b/src/panel/controlViews.ts
+@@ -2,21 +2,21 @@ import { derivedPhaseTimeoutMs, frozenAllocationShape } from "../control/executi
+ import { frozenWorkAgent, resolveGroupSelections } from "../control/agentFreeze.js";
+ import type { ExecutionPort } from "../control/executionPort.js";
+ import { z } from "zod";
+ import { readArtifact } from "../control/archive.js";
+ import { canonicalBytes, sha256Canonical } from "../control/canonicalJson.js";
+ import { dimensions } from "../control/commands.js";
+ import { driveRecordSchema } from "../control/driveRecord.js";
+ import { ControlError } from "../control/errors.js";
+ import { readProjectionChanges, readProjectionState } from "../control/projectionJournal.js";
+ import { effectiveTaskLabels, readTaskLabelState } from "../control/labels.js";
+-import { choosePlanByLabels, describeLoopPlan } from "../control/loopPlans.js";
++import { choosePlanByLabels, loopPlanDefinition } from "../control/loopPlans.js";
+ import { recipeExpandsTo } from "../control/loopRecipeCheck.js";
+ import { estimateIsStale, readArchivedPlan, readBudgetProposal, readEstimateRecord } from "../control/queries.js";
+ import { readCanonicalRecord } from "../control/snapshot.js";
+ import { effectivePlanTask, workBodyOf } from "../control/taskAmendments.js";
+ import type { ControlStore } from "../control/store.js";
+ import { agentSelectionSchema, amountSchema, artifactSchema, canonicalTimestampSchema, grantSchema, idSchema, runProgressSchema, safeInteger, type RunProgress } from "../control/schema.js";
+ import { taskContractSchema } from "../scheduler/planFile.js";
+ import {
+   agentSelectionPreviewSchema,
+   allocationViewSchema,
+@@ -468,45 +468,46 @@ export function progressOfRun(
+  */
+ function currentProgress(runs: ReadonlyArray<Record<string, unknown>>, currentRunId: string | null): WorkItemProgressV1 | null {
+   if (currentRunId === null) return null;
+   const row = runs.find((run) => String(run.id) === currentRunId);
+   if (!row) return blocked(`work-item-current-run:${currentRunId}`);
+   // Same detail as runViews' own parse, so a bad run body is reported exactly as before.
+   return progressOfRun(parseStored(persistedRunSchema, row.body, `run-invalid:${currentRunId}`));
+ }
+ 
+ /**
+- * Loop plans spec §3.3, §4.1 (C7): the task's plan as its card shows it. The recipe must re-expand to the contract bytes
+- * the task carries (repoPath excepted: it is the stored contract's own, Drafter finding F9). A registry that no longer
+- * does -- a plan's text edited instead of versioned, spec §2.2 -- blocks the task by name rather than showing a plan
+- * that is not the one that runs.
++ * Loop plans spec §3.3, §4.1; panel i18n spec §3.1: the fields the task's card is built from. The recipe must re-expand
++ * to the contract bytes the task carries (repoPath excepted: it is the stored contract's own, Drafter finding F9). A
++ * registry that no longer does -- a plan's text edited instead of versioned, spec §2.2 -- blocks the task by name rather
++ * than showing a plan that is not the one that runs.
+  */
+ function taskPlanView(
+   task: ReturnType<typeof readArchivedPlan>["plan"]["tasks"][number],
+   body: { loopVersion?: number; planChanged?: true },
+   importedContractHash: string | undefined,
+ ): { loopPlan: WorkItemViewV1["loopPlan"]; objective: WorkItemViewV1["objective"] } {
+   const contract = parseStored(taskContractSchema, task.originalContractCanonicalJson, `original-contract-invalid:${task.taskId}`);
+   const objective = { goal: contract.objective.goal, successCondition: contract.objective.successCondition };
+   if (task.loop === undefined) return { loopPlan: null, objective };
+   if (!recipeExpandsTo(task.taskId, contract.context.repoPath, task.loop, task.originalContractCanonicalJson)) return blocked(`loop-plan-recipe-mismatch:${task.taskId}`);
+-  // The recipe re-expanded, so its plan version exists and describeLoopPlan cannot answer null here.
+-  const described = describeLoopPlan(task.loop)!;
++  // The recipe re-expanded, so its plan version exists. Panel i18n spec §3.1: the contract's own file cap, and whether the
++  // version has a discipline line; the words are the panel's.
++  const plan = loopPlanDefinition(task.loop.planId, task.loop.planVersion)!;
+   return {
+     objective,
+     loopPlan: {
+-      planId: task.loop.planId, planVersion: task.loop.planVersion, planName: described.planName, chosenBy: task.loop.chosenBy,
++      planId: task.loop.planId, planVersion: task.loop.planVersion, chosenBy: task.loop.chosenBy,
+       chosenByLabel: task.loop.chosenBy === "labels" ? choosePlanByLabels(task.labels ?? []).label : null,
+       // "Changed" means the contract was changed at some point (H12: it stays so after a change back to the imported one),
+       // or is not the imported one (an amendment written without the flag). A budget-only change writes the same bytes.
+       amended: body.planChanged === true || task.originalContractHash !== importedContractHash, loopVersion: body.loopVersion ?? 0,
+-      inputs: task.loop.inputs, summary: described.summary,
++      inputs: task.loop.inputs, maxFiles: contract.safetyPolicy.maxFilesTouched, hasDiscipline: plan.discipline !== null,
+     },
+   };
+ }
+ 
+ function workViews(
+   store: ControlStore,
+   groupId: string,
+   plan: ReturnType<typeof readArchivedPlan>["plan"],
+   snapshot: ExecutionSnapshotV1 | null,
+   imported: ReturnType<typeof readArchivedPlan>["plan"],
+diff --git a/tests/control/loopPlanSummary.test.ts b/tests/control/loopPlanSummary.test.ts
+deleted file mode 100644
+index 50078ba..0000000
+--- a/tests/control/loopPlanSummary.test.ts
++++ /dev/null
+@@ -1,76 +0,0 @@
+-import { describe, expect, it } from "vitest";
+-import { LOOP_PLAN_IDS, describeLoopPlan, type LoopInputs, type LoopPlanId } from "../../src/control/loopPlans.js";
+-
+-/**
+- * Loop plans spec §4.1 (D9, C7; criterion 7): the card's plain-language lines are a pure function of the recipe, built
+- * server-side. They never carry command text (shown collapsed by the card) or a rejectOn token, and never claim more
+- * hardness than the code enforces (spec §2.1): only an agent-verified discipline says the model checks it.
+- */
+-const CHECKS = ["npm test -- --run auth/login.test.ts", "npm run lint"];
+-const inputs = (over: Partial<LoopInputs> = {}): LoopInputs => ({
+-  goal: "fix login", successCondition: "the login test passes", targetPaths: ["src/auth/**"], checks: CHECKS,
+-  nonGoals: [], relevantDocs: [], protectedPaths: [], maxFilesTouched: null, ...over,
+-});
+-const lines = (planId: LoopPlanId, over: Partial<LoopInputs> = {}): string[] => {
+-  const described = describeLoopPlan({ planId, planVersion: 1, inputs: inputs(over) });
+-  if (described === null) throw new Error("no such plan");
+-  return described.summary;
+-};
+-const AGENT_PLANS: LoopPlanId[] = ["bugfix", "design", "investigate"];
+-
+-describe("the loop plan summary (criterion 7)", () => {
+-  it("pins bugfix's lines", () => {
+-    expect(lines("bugfix", { protectedPaths: ["tests/fixtures/**"] })).toEqual([
+-      "Goal: fix login",
+-      "Done when: the login test passes",
+-      "Only changes: src/auth/**",
+-      "Must not change: tests/fixtures/** (reported by the agent, not checked in git)",
+-      "At most 25 files changed (reported by the agent)",
+-      "Acceptance: 2 check commands, all must pass",
+-      "Write a failing test that reproduces the bug, then fix it (checked by a model, not proven mechanically)",
+-    ]);
+-  });
+-
+-  it("puts another goal into another first line", () => {
+-    expect(lines("standard", { goal: "fix logout" })[0]).toBe("Goal: fix logout");
+-  });
+-
+-  it.each([...LOOP_PLAN_IDS])("%s: never puts a check command's text or a rejectOn token into a line", (plan) => {
+-    for (const line of lines(plan)) {
+-      for (const check of CHECKS) expect(line).not.toContain(check);
+-      expect(line).not.toContain("REJECT:");
+-    }
+-  });
+-
+-  it("shows the red-first discipline for bugfix only, and 'checked by a model' for exactly the agent-verified plans (Drafter finding F6)", () => {
+-    for (const plan of LOOP_PLAN_IDS) {
+-      expect(lines(plan).some((line) => line.startsWith("Write a failing test that reproduces the bug"))).toBe(plan === "bugfix");
+-      expect(lines(plan).filter((line) => line.includes("checked by a model")).length).toBe(AGENT_PLANS.includes(plan) ? 1 : 0);
+-    }
+-  });
+-
+-  it("marks protected paths and the file cap as agent-reported, shows no protected line without protected paths, and investigate's cap as 1", () => {
+-    expect(lines("standard").some((line) => line.startsWith("Must not change: "))).toBe(false);
+-    expect(lines("investigate", { targetPaths: ["docs/report.md"], maxFilesTouched: 7 })).toContain("At most 1 file changed (reported by the agent)");
+-    expect(lines("refactor", { maxFilesTouched: 7 })).toContain("At most 7 files changed (reported by the agent)");
+-  });
+-
+-  it("says a v2 task with no file cap has no file limit, and names the cap its inputs set (human ruling H2)", () => {
+-    const v2 = (planId: LoopPlanId, over: Partial<LoopInputs> = {}) => describeLoopPlan({ planId, planVersion: 2, inputs: inputs(over) })!.summary;
+-    expect(v2("standard")).toContain("No file limit");
+-    expect(v2("standard").some((line) => line.startsWith("At most"))).toBe(false);
+-    expect(v2("standard", { maxFilesTouched: 7 })).toContain("At most 7 files changed (reported by the agent)");
+-    expect(v2("investigate", { targetPaths: ["docs/report.md"] })).toContain("At most 1 file changed (reported by the agent)");
+-  });
+-
+-  it("says 1 check command in the singular (ruling P1)", () => {
+-    expect(lines("standard", { checks: ["npm run lint"] })).toContain("Acceptance: 1 check command, all must pass");
+-  });
+-
+-  it("names each plan in plain words, and knows no plan version it does not have", () => {
+-    // Rewritten under human ruling H19 (2026-10-01) for loop plans v2.
+-    expect(LOOP_PLAN_IDS.map((planId) => describeLoopPlan({ planId, planVersion: 1, inputs: inputs() })!.planName))
+-      .toEqual(["Standard", "Bug fix (red first)", "Safe refactor", "Design / docs first", "Investigate only"]);
+-    expect(describeLoopPlan({ planId: "standard", planVersion: 3, inputs: inputs() })).toBeNull();
+-  });
+-});
+diff --git a/tests/control/loopPlanView.test.ts b/tests/control/loopPlanView.test.ts
+index 3bee8c0..7837bfc 100644
+--- a/tests/control/loopPlanView.test.ts
++++ b/tests/control/loopPlanView.test.ts
+@@ -1,34 +1,35 @@
+ import { describe, expect, it } from "vitest";
+-import { describeLoopPlan, expandLoopPlan } from "../../src/control/loopPlans.js";
++import { expandLoopPlan } from "../../src/control/loopPlans.js";
+ import { readArchivedPlan } from "../../src/control/queries.js";
+ import { writeCanonicalRecord } from "../../src/control/snapshot.js";
+ import { writeTaskAmendment } from "../../src/control/taskAmendments.js";
+ import { readControlGroup } from "../../src/panel/controlViews.js";
+ import { webFixture } from "./fixtures/web.js";
+ 
+ /**
+  * Loop plans spec §4.1 (D9, C7): the task view names its loop plan in plain words, built server-side from the recipe;
+  * a hand-written task has no plan but still shows its contract's goal and success condition.
+  */
+ const LOOP = { goal: "fix login", successCondition: "the login test passes", targetPaths: ["a"], checks: ["npm test"] };
+ 
+ describe("a task's plan in the group view (spec §4.1)", () => {
+   it("shows the plan, how it was chosen and its summary lines for a loop task", async () => {
+     // Rewritten under human ruling H19 (2026-10-01) for loop plans v2.
++    // Rewritten under human ruling H18 (2026-10-01) for panel i18n: the view carries the fields its lines are built from.
+     const h = await webFixture(undefined, [{ taskId: "a", labels: ["bug", "custom:x"], loop: LOOP }]);
+     try {
+       const recipe = readArchivedPlan(h.store, "g").plan.tasks[0]!.loop!;
+       const item = readControlGroup(h.store, "epoch", "g").workItems[0]!;
+       expect(item.loopPlan).toEqual({
+-        planId: "bugfix", planVersion: 2, planName: "Bug fix (red first)", chosenBy: "labels", chosenByLabel: "bug",
+-        amended: false, loopVersion: 0, inputs: recipe.inputs, summary: describeLoopPlan(recipe)!.summary,
++        planId: "bugfix", planVersion: 2, chosenBy: "labels", chosenByLabel: "bug",
++        amended: false, loopVersion: 0, inputs: recipe.inputs, maxFiles: Number.MAX_SAFE_INTEGER, hasDiscipline: true,
+       });
+       expect(item.objective).toEqual({ goal: "fix login", successCondition: "the login test passes" });
+     } finally { await h.dispose(); }
+   });
+ 
+   it("names no label for a plan the plan file named", async () => {
+     const h = await webFixture(undefined, [{ taskId: "a", labels: ["bug"], loop: { ...LOOP, plan: "standard" } }]);
+     try {
+       expect(readControlGroup(h.store, "epoch", "g").workItems[0]!.loopPlan).toMatchObject({ planId: "standard", chosenBy: "explicit", chosenByLabel: null });
+     } finally { await h.dispose(); }
+diff --git a/tests/control/loopPlanViewFields.test.ts b/tests/control/loopPlanViewFields.test.ts
+new file mode 100644
+index 0000000..d3aa627
+--- /dev/null
++++ b/tests/control/loopPlanViewFields.test.ts
+@@ -0,0 +1,41 @@
++import { describe, expect, it } from "vitest";
++import { loopPlanViewSchema } from "../../src/control/webProtocol.js";
++import { readControlGroup } from "../../src/panel/controlViews.js";
++import { webFixture } from "./fixtures/web.js";
++
++/**
++ * Panel i18n spec §3.1, §6.8: the loop plan view carries the fields the panel builds its words from -- the expanded
++ * contract's file cap (not the input's: investigate is always 1, and a v2 plan has none unless the input sets one) and
++ * whether the plan version has a discipline line -- and no English sentence: the strict schema refuses a view that still
++ * carries summary or planName.
++ */
++const LOOP = { goal: "fix login", successCondition: "the login test passes", targetPaths: ["a"], checks: ["npm test"] };
++const FIELDS = ["amended", "chosenBy", "chosenByLabel", "hasDiscipline", "inputs", "loopVersion", "maxFiles", "planId", "planVersion"];
++
++describe("the loop plan view's fields (panel i18n spec §3.1, §6.8)", () => {
++  it("carries exactly the fields of §3.1: the contract's file cap and whether the plan version has a discipline line", async () => {
++    const h = await webFixture(undefined, [
++      { taskId: "a", loop: { ...LOOP, plan: "standard" } },
++      { taskId: "b", loop: { ...LOOP, plan: "bugfix", targetPaths: ["b"], maxFilesTouched: 7 } },
++      { taskId: "c", loop: { ...LOOP, plan: "investigate", targetPaths: ["docs/report.md"] } },
++    ]);
++    try {
++      const [a, b, c] = readControlGroup(h.store, "epoch", "g").workItems.map((item) => item.loopPlan!);
++      expect(Object.keys(a!).sort()).toEqual(FIELDS);
++      expect(a).toMatchObject({ planId: "standard", planVersion: 2, maxFiles: Number.MAX_SAFE_INTEGER, hasDiscipline: false });
++      expect(b).toMatchObject({ planId: "bugfix", planVersion: 2, maxFiles: 7, hasDiscipline: true });
++      expect(c).toMatchObject({ planId: "investigate", planVersion: 2, maxFiles: 1, hasDiscipline: true });
++    } finally { await h.dispose(); }
++  });
++
++  it("refuses a view that still carries summary or planName", () => {
++    const view = {
++      planId: "standard", planVersion: 2, chosenBy: "explicit", chosenByLabel: null, amended: false, loopVersion: 0,
++      inputs: { goal: "g", successCondition: "s", targetPaths: ["a"], checks: ["npm test"], nonGoals: [], relevantDocs: [], protectedPaths: [], maxFilesTouched: null },
++      maxFiles: 1, hasDiscipline: false,
++    };
++    expect(loopPlanViewSchema.safeParse(view).success).toBe(true);
++    expect(loopPlanViewSchema.safeParse({ ...view, summary: ["Goal: g"] }).success).toBe(false);
++    expect(loopPlanViewSchema.safeParse({ ...view, planName: "Standard" }).success).toBe(false);
++  });
++});
+diff --git a/tests/control/taskAmendments.test.ts b/tests/control/taskAmendments.test.ts
+index 2053045..0e96b04 100644
+--- a/tests/control/taskAmendments.test.ts
++++ b/tests/control/taskAmendments.test.ts
+@@ -50,21 +50,22 @@ describe("the effective contract (spec §5.1)", () => {
+     const h = await webFixture(undefined, [{ taskId: "a", loop: loop("a") }, { taskId: "b", loop: loop("b") }]);
+     try {
+       const archivedBefore = readArchivedPlan(h.store, "g");
+       apply(h, "a", amendment(h, "a", "write a, as amended"));
+       await confirm(h);
+       expect(readConfirmedTaskExecution(h.store, "g", "a").contract.objective.goal).toBe("write a, as amended");
+       expect(readConfirmedTaskExecution(h.store, "g", "b").contract.objective.goal).toBe("write b");
+       expect(readArchivedContract(h.store, "g", "a").contract.objective.goal).toBe("write a, as amended");
+       const item = readControlGroup(h.store, "epoch", "g").workItems.find((entry) => entry.taskId === "a")!;
+       expect(item.loopPlan).toMatchObject({ amended: true, loopVersion: 1, chosenBy: "explicit" });
+-      expect(item.loopPlan!.summary[0]).toBe("Goal: write a, as amended");
++      // Rewritten under human ruling H18 (2026-10-01) for panel i18n.
++      expect(item.loopPlan!.inputs.goal).toBe("write a, as amended");
+       expect(item.objective).toEqual({ goal: "write a, as amended", successCondition: "a exists" });
+       const archivedAfter = readArchivedPlan(h.store, "g");
+       expect([archivedAfter.planHash, archivedAfter.canonicalJson]).toEqual([archivedBefore.planHash, archivedBefore.canonicalJson]);
+     } finally { await h.dispose(); }
+   });
+ 
+   it("reads a task with no work row, or an unparsable one, as not amended (Drafter finding F11)", async () => {
+     const h = await webFixture(undefined, [{ taskId: "a", loop: loop("a") }]);
+     try {
+       const archived = readArchivedPlan(h.store, "g").plan.tasks[0]!;
+diff --git a/tests/panel/taskLoopApi.test.ts b/tests/panel/taskLoopApi.test.ts
+index 192372c..3d6842f 100644
+--- a/tests/panel/taskLoopApi.test.ts
++++ b/tests/panel/taskLoopApi.test.ts
+@@ -1,16 +1,18 @@
+ import { writeFile } from "node:fs/promises";
+ import { dirname } from "node:path";
+ import { afterAll, describe, expect, it } from "vitest";
+ import { LOOP_PLAN_IDS, currentLoopPlanVersion, loopPlanDefinition } from "../../src/control/loopPlans.js";
+ import { commandLookupSchema, commandSuccessSchema } from "../../src/control/webProtocol.js";
+ import { WEB_LOOP_PLANS } from "../../web/src/controlTypes.js";
++import { en } from "../../web/src/locales/en.js";
++import { zh } from "../../web/src/locales/zh.js";
+ import { GROUP, command, createHarness, get, json, view } from "./fixtures/controlPanel.js";
+ 
+ /**
+  * Loop plans spec §5.2 over a real Panel: the one new POST route, a refusal that is ledgered and names its reason, a
+  * wrong-shaped payload that never reaches the ledger, and the web mirror of the plans' names (spec §2.2).
+  */
+ const h = createHarness();
+ afterAll(async () => { await h.dispose(); });
+ 
+ const LOOP_ROUTE = `/api/control/groups/${GROUP}/tasks/a/loop`;
+@@ -65,15 +67,31 @@ describe("the set-task-loop route (spec §5.2)", () => {
+     const answer = await command(panel, LOOP_ROUTE, { commandId: "loop-shape", expectedRevision: (await view(panel)).summary.commandRevision, payload: { baseLoopVersion: 0, plan: "standard" } });
+     expect(answer.status).toBe(400);
+     expect(answer.body).toMatchObject({ error: { code: "control-non-json-payload" } });
+     // Before the ledger: no result was retained under the command's id (a ledgered refusal would answer 200 here).
+     const lookup = await get(panel, `/api/control/groups/${GROUP}/commands/loop-shape`);
+     expect(lookup.status).toBe(404);
+     expect(await lookup.json()).toMatchObject({ error: { code: "command-result-not-found" } });
+     await panel.close();
+   });
+ 
+-  it("mirrors every plan's current panel name on the web side", () => {
+-    expect(WEB_LOOP_PLANS.map((plan) => [plan.planId, plan.name]))
+-      .toEqual(LOOP_PLAN_IDS.map((planId) => [planId, loopPlanDefinition(planId, currentLoopPlanVersion(planId)!)!.name]));
++  it("mirrors every plan's current version on the web side, and the panel's English carries each version's registry text", () => {
++    // Rewritten under human ruling H18 (2026-10-01) for panel i18n: the view no longer carries a name (spec §3.1); the web
++    // side keeps each plan's current version, the English resource is pinned to the registry, the English source of
++    // record, and Chinese has the same keys (spec §6.9).
++    expect(WEB_LOOP_PLANS.map((plan) => [plan.planId, plan.version])).toEqual(LOOP_PLAN_IDS.map((planId) => [planId, currentLoopPlanVersion(planId)]));
++    type PlanTexts = Record<string, Record<string, Record<string, string>>>;
++    const enPlans = en.loopPlan.plan as unknown as PlanTexts;
++    const zhPlans = zh.loopPlan.plan as unknown as PlanTexts;
++    let versions = 0;
++    for (const planId of LOOP_PLAN_IDS) {
++      for (let version = 1; version <= currentLoopPlanVersion(planId)!; version += 1) {
++        const plan = loopPlanDefinition(planId, version)!;
++        const expected = plan.discipline === null ? { name: plan.name } : { name: plan.name, discipline: plan.discipline };
++        expect(enPlans[planId]?.[`v${version}`], `${planId} v${version}`).toEqual(expected);
++        expect(Object.keys(zhPlans[planId]?.[`v${version}`] ?? {}).sort(), `${planId} v${version}`).toEqual(Object.keys(expected).sort());
++        versions += 1;
++      }
++    }
++    expect(Object.values(enPlans).reduce((n, byVersion) => n + Object.keys(byVersion).length, 0)).toBe(versions);
+   });
+ });
+diff --git a/web/src/ControlGroupView.tsx b/web/src/ControlGroupView.tsx
+index 1b42de7..4110388 100644
+--- a/web/src/ControlGroupView.tsx
++++ b/web/src/ControlGroupView.tsx
+@@ -11,20 +11,21 @@ import type { JSX } from "react";
+ import { useState } from "react";
+ import type { ControlAction } from "./controlApi.js";
+ import { AgentSelectionEditor, selectionsHashFor } from "./AgentSelectionEditor.js";
+ import { BudgetEditor } from "./BudgetEditor.js";
+ import { EvidenceLink } from "./EvidenceLink.js";
+ import type {
+   AgentSelectionPreviewV1, AgentsViewV1, ControlConfigV1, ContinuationSelectionV1, GroupViewV1, OperatorPreferencesV1, RunViewV1,
+ } from "./controlTypes.js";
+ import type { UncertainCommand } from "./controlState.js";
+ import { LabelChips, TaskDetail, progressText } from "./TaskDetail.js";
++import { planText } from "./LoopPlanCard.js";
+ 
+ const short = (hash: string): string => hash.slice(0, 12);
+ 
+ /**
+  * A held run the person may continue: the server marks it `continuable` (handoff delivery spec §13.1 C-4),
+  * because a normally completed run also displays as `settled-recoverable` and must never be continued.
+  */
+ export function continuableRuns(view: GroupViewV1): Array<{ run: RunViewV1; checkpointId: string }> {
+   return view.runs.flatMap((run) => {
+     if (run.taskId === null || run.continuable !== true) return [];
+@@ -122,21 +123,21 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
+         </thead>
+         <tbody>
+           {shownItems.map((item) => (
+             <tr key={item.taskId}>
+               <td>
+                 <button type="button" aria-expanded={openTask === item.taskId} onClick={() => setOpenTask(openTask === item.taskId ? null : item.taskId)}>
+                   {item.taskId}
+                 </button>
+               </td>
+               <td>{item.status}</td>
+-              <td><LabelChips labels={item.labels} />{item.loopPlan ? <span className="plan-chip"> {item.loopPlan.planName}</span> : null}</td>
++              <td><LabelChips labels={item.labels} />{item.loopPlan ? <span className="plan-chip"> {planText(item.loopPlan.planId, item.loopPlan.planVersion, "name")}</span> : null}</td>
+               <td>{progressText(item.progress)}</td>
+               <td>{item.currentRunId ?? "none"}</td>
+               <td>{item.pendingRunId ?? "none"}</td>
+               <td>{item.dependencyTaskIds.join(", ") || "none"}</td>
+             </tr>
+           ))}
+         </tbody>
+       </table>
+       {openItem !== undefined && <TaskDetail key={openItem.taskId} view={view} item={openItem} drafts={drafts} onDraft={onDraft} onCommand={onCommand} />}
+ 
+diff --git a/web/src/LoopPlanCard.tsx b/web/src/LoopPlanCard.tsx
+index 6c1c153..8e50d6b 100644
+--- a/web/src/LoopPlanCard.tsx
++++ b/web/src/LoopPlanCard.tsx
+@@ -1,29 +1,65 @@
+ /**
+  * Loop plans spec §4.1, §4.2 (D1, D4, D5, D9): a task's loop plan in plain words, and -- until the task starts -- a form
+  * to change the plan, its inputs and its work budget (set-task-loop). The form keeps what the person typed as a draft
+  * together with the loopVersion it started from, and sends that version, never the one the latest poll read, so a draft
+  * begun before someone else's change is refused as task-loop-version-conflict instead of overwriting it (the label
+  * editor's pattern, TaskDetail.tsx). The submit states its consequence for the group's reserve; that arithmetic is
+- * display only -- the ledger decides and refuses by name. Strings are the panel's English (plan ruling R-F5, rulings P1).
++ * display only -- the ledger decides and refuses by name. The plan's words come from the panel's resources, keyed by
++ * plan version (panel i18n spec §3.1).
+  */
+ import type { JSX } from "react";
++import { useTranslation } from "react-i18next";
+ import type { ControlAction } from "./controlApi.js";
++import i18n from "./i18n.js";
+ import { WEB_LOOP_PLANS } from "./controlTypes.js";
+ import type { Amount, GroupViewV1, LoopPlanIdV1, LoopPlanViewV1, SetTaskLoopPayloadV1, WorkItemViewV1 } from "./controlTypes.js";
+ 
+ export const loopDraftKey = (groupId: string, taskId: string): string => `loop:${groupId}:${taskId}`;
+ 
+-/** "Bug fix (red first) · v1 · chosen by label `bug` · changed" (spec §4.1, plan ruling R-F5). */
++/**
++ * Panel i18n spec §3.1: a plan version's name or discipline line from the panel's resources (the registry is the English
++ * source of record, §6.9). A version this panel has no words for (a newer server) shows the plan id, never nothing.
++ */
++export function planText(planId: LoopPlanIdV1, version: number, part: "name" | "discipline"): string {
++  const key = `loopPlan.plan.${planId}.v${version}.${part}`;
++  if (i18n.exists(key)) return i18n.t(key as never) as string;
++  return part === "name" ? planId : `${planId} v${version}`;
++}
++
++/** "Bug fix (red first) · v1 · chosen by label `bug` · changed" (loop plans spec §4.1). */
+ export function loopPlanTitle(plan: LoopPlanViewV1): string {
+-  const how = plan.chosenBy === "explicit" ? "chosen by hand" : plan.chosenByLabel === null ? "no label, default" : `chosen by label \`${plan.chosenByLabel}\``;
+-  return `${plan.planName} · v${plan.planVersion} · ${how}${plan.amended ? " · changed" : ""}`;
++  const how = plan.chosenBy === "explicit"
++    ? i18n.t("loopPlan.title.byHand")
++    : plan.chosenByLabel === null ? i18n.t("loopPlan.title.noLabel") : i18n.t("loopPlan.title.byLabel", { label: plan.chosenByLabel });
++  const line = i18n.t("loopPlan.title.line", { name: planText(plan.planId, plan.planVersion, "name"), version: plan.planVersion, how });
++  return plan.amended ? `${line}${i18n.t("loopPlan.title.changed")}` : line;
++}
++
++/**
++ * Loop plans spec §4.1, panel i18n spec §3.1: the card's lines, each stating how hard it is (spec §2.1): the write set is
++ * git-checked; protected paths and the file cap are only what the agent reports; the discipline line says who checks it.
++ * The check commands' text is never in a line -- the card shows it collapsed. In English these are exactly the lines the
++ * server's describeLoopPlan used to send (§6.3).
++ */
++export function loopSummaryLines(plan: LoopPlanViewV1): string[] {
++  const inputs = plan.inputs;
++  const separator = i18n.t("loopPlan.summary.pathSeparator");
++  return [
++    i18n.t("loopPlan.summary.goal", { goal: inputs.goal }),
++    i18n.t("loopPlan.summary.doneWhen", { condition: inputs.successCondition }),
++    i18n.t("loopPlan.summary.onlyChanges", { paths: inputs.targetPaths.join(separator) }),
++    ...(inputs.protectedPaths.length > 0 ? [i18n.t("loopPlan.summary.mustNotChange", { paths: inputs.protectedPaths.join(separator) })] : []),
++    plan.maxFiles === Number.MAX_SAFE_INTEGER ? i18n.t("loopPlan.summary.noFileLimit") : i18n.t("loopPlan.summary.files", { count: plan.maxFiles }),
++    i18n.t("loopPlan.summary.checks", { count: inputs.checks.length }),
++    ...(plan.hasDiscipline ? [planText(plan.planId, plan.planVersion, "discipline")] : []),
++  ];
+ }
+ 
+ const FIELDS = ["goal", "successCondition", "targetPaths", "checks", "nonGoals", "relevantDocs", "protectedPaths", "maxFilesTouched", "tokens", "activeMs", "attempts"] as const;
+ type Field = (typeof FIELDS)[number];
+ const LIST_FIELDS = new Set<Field>(["targetPaths", "checks", "nonGoals", "relevantDocs", "protectedPaths"]);
+ const FIELD_LABEL: Record<Field, string> = {
+   goal: "Goal", successCondition: "Done when", targetPaths: "Only changes (one path per line)", checks: "Check commands (one per line)",
+   nonGoals: "Non-goals (one per line)", relevantDocs: "Relevant docs (one per line)", protectedPaths: "Must not change (one path per line)",
+   maxFilesTouched: "Max files changed (blank for default)", tokens: "Token budget", activeMs: "Active time (ms)", attempts: "Max attempts",
+ };
+@@ -121,39 +157,40 @@ function LoopPlanEditor(props: LoopPlanCardProps & { plan: LoopPlanViewV1; curre
+   const blocked = "invalid" in checked ? checked.invalid : consequence!.shortfall;
+   return (
+     <form aria-label={`Change plan ${item.taskId}`} onSubmit={(event) => {
+       event.preventDefault();
+       if (payload !== null && blocked === null) onCommand({ verb: "set-task-loop", groupId, taskId: item.taskId, expectedRevision: view.summary.commandRevision, payload });
+     }}>
+       {draft.base !== plan.loopVersion && <p role="status">The plan changed after you started this draft (v{draft.base} → v{plan.loopVersion})</p>}
+       <label>
+         Plan
+         <select aria-label="Plan" value={draft.plan} onChange={(event) => set({ plan: event.target.value as LoopPlanIdV1 })}>
+-          {WEB_LOOP_PLANS.map((option) => <option key={option.planId} value={option.planId}>{option.name}</option>)}
++          {WEB_LOOP_PLANS.map((option) => <option key={option.planId} value={option.planId}>{planText(option.planId, option.version, "name")}</option>)}
+         </select>
+       </label>
+       {FIELDS.map((field) => (
+         <label key={field}>
+           {FIELD_LABEL[field]}
+           {LIST_FIELDS.has(field)
+             ? <textarea aria-label={FIELD_LABEL[field]} value={draft.text[field]} onChange={(event) => set({ text: { ...draft.text, [field]: event.target.value } })} />
+             : <input aria-label={FIELD_LABEL[field]} value={draft.text[field]} onChange={(event) => set({ text: { ...draft.text, [field]: event.target.value } })} />}
+         </label>
+       ))}
+       {blocked !== null && <p role="alert">{blocked}</p>}
+       <button type="submit" disabled={blocked !== null}>{consequence?.text ?? blocked}</button>
+       <button type="button" onClick={() => onDraft(key, "")}>Discard plan draft</button>
+     </form>
+   );
+ }
+ 
+ export function LoopPlanCard(props: LoopPlanCardProps): JSX.Element | null {
++  useTranslation();
+   const { view, item } = props;
+   // A view that says nothing about the plan (an older server, a literal fixture) gets no card rather than a wrong one.
+   if (item.loopPlan === undefined) return null;
+   if (item.loopPlan === null) {
+     return (
+       <section aria-label={`Plan ${item.taskId}`}>
+         <h5>Hand-written contract</h5>
+         {item.objective !== undefined && (
+           <ul>
+             <li>Goal: {item.objective.goal}</li>
+@@ -162,21 +199,21 @@ export function LoopPlanCard(props: LoopPlanCardProps): JSX.Element | null {
+         )}
+       </section>
+     );
+   }
+   const plan = item.loopPlan;
+   const work = view.allocations.find((row) => row.ownerKind === "task" && row.ownerId === item.taskId && row.bucket === "work");
+   return (
+     <section aria-label={`Plan ${item.taskId}`}>
+       <h5>{loopPlanTitle(plan)}</h5>
+       <ul aria-label={`Plan summary ${item.taskId}`}>
+-        {plan.summary.map((line, index) => <li key={index}>{line}</li>)}
++        {loopSummaryLines(plan).map((line, index) => <li key={index}>{line}</li>)}
+       </ul>
+       <details>
+         <summary>Check commands ({plan.inputs.checks.length})</summary>
+         <ul>{plan.inputs.checks.map((check, index) => <li key={index}><code>{check}</code></li>)}</ul>
+       </details>
+       {work !== undefined && <p>Budget: {work.amount.tokens} tokens · active time {work.amount.activeMs} ms · max attempts {work.amount.attempts}</p>}
+       <p>Git workspace: its own worktree, merged back into <code>orca/{view.summary.groupId}</code>; pushing is done by a person</p>
+       <p>Skill set: not supported yet</p>
+       {work !== undefined && <LoopPlanEditor {...props} plan={plan} current={work.amount} />}
+     </section>
+diff --git a/web/src/controlTypes.ts b/web/src/controlTypes.ts
+index 4b7e7ec..df83fa0 100644
+--- a/web/src/controlTypes.ts
++++ b/web/src/controlTypes.ts
+@@ -335,29 +335,32 @@ export type WorkItemProgressV1 = {
+   attempt: { current: number; max: number } | null;
+   tokens: { used: number; grant: number } | null;
+   lastTransitionAt: string | null;
+ };
+ /** Spec §3.1 (§8 R16): replace the task's operator labels, or null to go back to the plan's. */
+ export type SetTaskLabelsPayloadV1 = { labels: string[] | null; baseLabelsVersion: number };
+ /** Loop plans spec §2.2: the built-in plans (mirrors src/control/loopPlans.ts LOOP_PLAN_IDS). */
+ export type LoopPlanIdV1 = "standard" | "bugfix" | "refactor" | "design" | "investigate";
+ /** Loop plans spec §3.2: a recipe's inputs, every optional field filled. */
+ export type LoopInputsV1 = { goal: string; successCondition: string; targetPaths: string[]; checks: string[]; nonGoals: string[]; relevantDocs: string[]; protectedPaths: string[]; maxFilesTouched: number | null };
+-/** Loop plans spec §4.1: the server-built description of a loop task's plan. */
++/** Loop plans spec §4.1, panel i18n spec §3.1: the fields a loop task's card is built from; no English sentence travels. */
+ export type LoopPlanViewV1 = {
+-  planId: LoopPlanIdV1; planVersion: number; planName: string; chosenBy: "explicit" | "labels"; chosenByLabel: string | null;
+-  amended: boolean; loopVersion: number; inputs: LoopInputsV1; summary: string[];
++  planId: LoopPlanIdV1; planVersion: number; chosenBy: "explicit" | "labels"; chosenByLabel: string | null;
++  amended: boolean; loopVersion: number; inputs: LoopInputsV1; maxFiles: number; hasDiscipline: boolean;
+ };
+ /** Loop plans spec §5.2: change a loop task's plan, inputs and work budget (sessions is carried over). */
+ export type SetTaskLoopPayloadV1 = {
+   baseLoopVersion: number; plan: string; inputs: LoopInputsV1; work: { tokens: number; activeMs: number; attempts: number };
+   /** W5: the work dimensions taken from an estimate's suggestion; the server re-checks each against it. */
+   workProvenance?: Partial<Record<"tokens" | "activeMs" | "attempts", { provenance: "model"; estimateId: string }>>;
+ };
+-/** Loop plans spec §2.2: the plans a person can pick and their panel names -- a mirror of src/control/loopPlans.ts, compared by tests/panel/taskLoopApi.test.ts. */
+-export const WEB_LOOP_PLANS: ReadonlyArray<{ planId: LoopPlanIdV1; name: string }> = [
+-  { planId: "standard", name: "Standard" },
+-  { planId: "bugfix", name: "Bug fix (red first)" },
+-  { planId: "refactor", name: "Safe refactor" },
+-  { planId: "design", name: "Design / docs first" },
+-  { planId: "investigate", name: "Investigate only" },
++/**
++ * Loop plans spec §2.2, panel i18n spec §3.1: the plans a person can pick, at their current registry version (the
++ * picker's words are keyed by version) -- a mirror of src/control/loopPlans.ts, compared by tests/panel/taskLoopApi.test.ts.
++ */
++export const WEB_LOOP_PLANS: ReadonlyArray<{ planId: LoopPlanIdV1; version: number }> = [
++  { planId: "standard", version: 2 },
++  { planId: "bugfix", version: 2 },
++  { planId: "refactor", version: 2 },
++  { planId: "design", version: 2 },
++  { planId: "investigate", version: 2 },
+ ];
+diff --git a/web/src/locales/en.ts b/web/src/locales/en.ts
+index 292e24d..2f9a547 100644
+--- a/web/src/locales/en.ts
++++ b/web/src/locales/en.ts
+@@ -15,12 +15,48 @@ export const en = {
+   shell: {
+     brandTitle: "Leave it to Orca — every idea, made real.",
+     chainRunning: "a chain is running",
+     needsAttention: "needs attention",
+     theme: "Theme",
+     language: "Language",
+     loading: "orca panel loading…",
+     epoch: "epoch {{epoch}}",
+   },
+   common: { none: "none", na: "n/a", unknown: "unknown", dispatchBlocked: "dispatch blocked", dispatchLive: "dispatch live" },
++  loopPlan: {
++    // Panel i18n spec §3.1, §6.9: one entry per registry version, equal to src/control/loopPlans.ts (the English source of
++    // record); a version with no discipline has no discipline key.
++    plan: {
++      standard: { v1: { name: "Standard" }, v2: { name: "Standard" } },
++      bugfix: {
++        v1: { name: "Bug fix (red first)", discipline: "Write a failing test that reproduces the bug, then fix it (checked by a model, not proven mechanically)" },
++        v2: { name: "Bug fix (red first)", discipline: "Write a failing test that reproduces the bug, then fix it (checked by a model, not proven mechanically)" },
++      },
++      refactor: {
++        v1: { name: "Safe refactor", discipline: "No observable behavior change (an instruction to the agent; only the checks are enforced)" },
++        v2: { name: "Safe refactor", discipline: "No observable behavior change (an instruction to the agent; only the checks are enforced)" },
++      },
++      design: {
++        v1: { name: "Design / docs first", discipline: "The deliverable is a document, no code changes (checked by a model, not proven mechanically)" },
++        v2: { name: "Design / docs first", discipline: "The deliverable is a document, no code changes (checked by a model, not proven mechanically)" },
++      },
++      investigate: {
++        v1: { name: "Investigate only", discipline: "Investigate only; findings go to the report file, nothing else changes (checked by a model, not proven mechanically)" },
++        v2: { name: "Investigate only", discipline: "Investigate only; findings go to the report file, nothing else changes (checked by a model, not proven mechanically)" },
++      },
++    },
++    title: { line: "{{name}} · v{{version}} · {{how}}", byHand: "chosen by hand", noLabel: "no label, default", byLabel: "chosen by label `{{label}}`", changed: " · changed" },
++    summary: {
++      goal: "Goal: {{goal}}",
++      doneWhen: "Done when: {{condition}}",
++      onlyChanges: "Only changes: {{paths}}",
++      mustNotChange: "Must not change: {{paths}} (reported by the agent, not checked in git)",
++      files_one: "At most {{count}} file changed (reported by the agent)",
++      files_other: "At most {{count}} files changed (reported by the agent)",
++      noFileLimit: "No file limit",
++      checks_one: "Acceptance: {{count}} check command, all must pass",
++      checks_other: "Acceptance: {{count}} check commands, all must pass",
++      pathSeparator: ", ",
++    },
++  },
+   enums: { theme },
+ } as const;
+diff --git a/web/src/locales/zh.ts b/web/src/locales/zh.ts
+index 1be1e8f..2002675 100644
+--- a/web/src/locales/zh.ts
++++ b/web/src/locales/zh.ts
+@@ -11,14 +11,48 @@ export const zh: Translation<typeof en> = {
+   shell: {
+     brandTitle: "交给 Orca —— 每个想法，都能成真。",
+     chainRunning: "有一条链在运行",
+     needsAttention: "需要处理",
+     theme: "主题",
+     language: "语言",
+     loading: "orca 面板加载中…",
+     epoch: "纪元 {{epoch}}",
+   },
+   common: { none: "无", na: "不适用", unknown: "未知", dispatchBlocked: "派发已阻断", dispatchLive: "派发正常" },
++  loopPlan: {
++    plan: {
++      standard: { v1: { name: "标准" }, v2: { name: "标准" } },
++      bugfix: {
++        v1: { name: "修 bug（先红后绿）", discipline: "先写能复现的失败测试再修（由模型核对，不是机械证明）" },
++        v2: { name: "修 bug（先红后绿）", discipline: "先写能复现的失败测试再修（由模型核对，不是机械证明）" },
++      },
++      refactor: {
++        v1: { name: "安全重构", discipline: "不改可观察行为（写给 agent 的约束；只有检查命令是硬的）" },
++        v2: { name: "安全重构", discipline: "不改可观察行为（写给 agent 的约束；只有检查命令是硬的）" },
++      },
++      design: {
++        v1: { name: "先写设计／文档", discipline: "交付物是文档，不改代码（由模型核对，不是机械证明）" },
++        v2: { name: "先写设计／文档", discipline: "交付物是文档，不改代码（由模型核对，不是机械证明）" },
++      },
++      investigate: {
++        v1: { name: "只调研不改代码", discipline: "只调研，结论写进报告文件，别的都不改（由模型核对，不是机械证明）" },
++        v2: { name: "只调研不改代码", discipline: "只调研，结论写进报告文件，别的都不改（由模型核对，不是机械证明）" },
++      },
++    },
++    title: { line: "{{name}} · v{{version}} · {{how}}", byHand: "人指定", noLabel: "无标签，按默认", byLabel: "按标签 `{{label}}` 选择", changed: " · 已修改" },
++    summary: {
++      goal: "目标：{{goal}}",
++      doneWhen: "完成条件：{{condition}}",
++      onlyChanges: "只改：{{paths}}",
++      mustNotChange: "不许改：{{paths}}（由 agent 自报，不是 git 检查）",
++      files_one: "最多改 {{count}} 个文件（由 agent 自报）",
++      files_other: "最多改 {{count}} 个文件（由 agent 自报）",
++      noFileLimit: "不限文件数",
++      checks_one: "验收：运行 {{count}} 条检查命令，全部通过",
++      checks_other: "验收：运行 {{count}} 条检查命令，全部通过",
++      pathSeparator: "、",
++    },
++  },
+   enums: { theme: { system: "跟随系统", light: "浅色", dark: "深色" } },
+ };
+ 
+ export const zhErrors: Record<string, string> = {};
+diff --git a/web/tests/loopBudgetRows.test.tsx b/web/tests/loopBudgetRows.test.tsx
+index d4f74d0..79d2dfd 100644
+--- a/web/tests/loopBudgetRows.test.tsx
++++ b/web/tests/loopBudgetRows.test.tsx
+@@ -14,24 +14,25 @@ const amount = (tokens: number): Amount => ({ tokens, activeMs: tokens * 10, att
+ const human = { provenance: "human", estimateId: null } as const;
+ const provenance = { tokens: human, activeMs: human, attempts: human, sessions: human };
+ const PLAN = "a".repeat(64);
+ const DURABLE: CapabilityViewV1 = { usageObservation: "phase-end", budgetEnforcement: "soft", contextObservation: "realtime", handoffControl: "durable", handoffExecution: "mechanical-in-run-v1", contextWindowTokens: null, requestBoundProof: null };
+ const config = (observed: CapabilityViewV1, allowedWorkKinds: ControlConfigV1["profiles"][number]["allowedWorkKinds"] = ["task", "budget-estimate", "handoff", "goal-review"]): ControlConfigV1 => ({
+   schema: "orca-control-config-v1", epoch: "epoch-a", repositories: [{ repoId: "orca", displayName: "Orca" }],
+   plans: [{ planId: "plan-demo", repoId: "orca", displayName: "Demo plan" }],
+   profiles: [{ profileId: "all", profileHash: "b".repeat(64), allowedWorkKinds, contextTokenizer: null, workMaxOutputTokens: 1000, declared: observed, observed, observedAt: "2026-09-29T00:00:00.000Z", probeFailureCode: null }],
+   defaults: { estimatorProfileId: "all", estimatorProfileHash: "b".repeat(64), estimateMode: "soft" }, executionPort: "configured", errorCatalog: [],
+ });
++// Rewritten under human ruling H18 (2026-10-01) for panel i18n.
+ const LOOP_PLAN: LoopPlanViewV1 = {
+-  planId: "bugfix", planVersion: 1, planName: "Bug fix (red first)", chosenBy: "labels", chosenByLabel: "bug", amended: false, loopVersion: 0,
++  planId: "bugfix", planVersion: 1, chosenBy: "labels", chosenByLabel: "bug", amended: false, loopVersion: 0,
+   inputs: { goal: "fix login", successCondition: "the login test passes", targetPaths: ["src/auth/**"], checks: ["npm test -- --run auth"], nonGoals: [], relevantDocs: [], protectedPaths: [], maxFilesTouched: null },
+-  summary: ["Goal: fix login", "Done when: the login test passes", "Only changes: src/auth/**", "At most 25 files changed (reported by the agent)", "Acceptance: 1 check command, all must pass", "Write a failing test that reproduces the bug, then fix it (checked by a model, not proven mechanically)"],
++  maxFiles: 25, hasDiscipline: true,
+ };
+ const view: GroupViewV1 = {
+   schema: "orca-control-group-v1", epoch: "epoch-a", changeSeq: 1,
+   summary: { groupId: "g", state: "draft", commandRevision: 3, projectionSeq: 1, stopMode: null, stopState: null, claimBlocked: false, recoveryBlockerCount: 0 },
+   graphVersion: 1,
+   plan: { repoId: "orca", planId: "plan-demo", planHash: PLAN, goal: "Ship", successConditions: ["passes"] },
+   proposal: { state: "editable", proposalVersion: 2, planHash: PLAN, budgetMode: null, contextPolicy: { handoffAtContextTokens: null }, profiles: null, executionSnapshotHash: null },
+   ledger: { groupLimit: amount(90_000), used: amount(0), committedRemaining: amount(3_300), explicitUnallocatedReserve: amount(6_000), budgetDeficit: amount(0), usageUnknown: false },
+   allocations: [
+     { ownerKind: "task", ownerId: "a", bucket: "work", state: "draft-encumbered", amount: amount(3_000), fieldProvenance: provenance },
+diff --git a/web/tests/loopPlanCard.test.tsx b/web/tests/loopPlanCard.test.tsx
+index eb97153..805bf9e 100644
+--- a/web/tests/loopPlanCard.test.tsx
++++ b/web/tests/loopPlanCard.test.tsx
+@@ -14,24 +14,25 @@ import type { Amount, ControlConfigV1, GroupViewV1, LoopPlanViewV1, WorkItemView
+ const amount = (tokens: number): Amount => ({ tokens, activeMs: 14_400_000, attempts: 3, sessions: 3 });
+ const human = { provenance: "human", estimateId: null } as const;
+ const provenance = { tokens: human, activeMs: human, attempts: human, sessions: human };
+ const capability = { usageObservation: "phase-end", budgetEnforcement: "soft", contextObservation: "unavailable", handoffControl: "durable", handoffExecution: "mechanical-in-run-v1", contextWindowTokens: null, requestBoundProof: null } as const;
+ const config: ControlConfigV1 = {
+   schema: "orca-control-config-v1", epoch: "epoch-a", repositories: [{ repoId: "orca", displayName: "Orca" }],
+   plans: [{ planId: "plan-demo", repoId: "orca", displayName: "Demo plan" }],
+   profiles: [{ profileId: "all", profileHash: "b".repeat(64), allowedWorkKinds: ["task", "budget-estimate", "handoff", "goal-review"], contextTokenizer: null, workMaxOutputTokens: 1000, declared: capability, observed: capability, observedAt: "2026-09-29T00:00:00.000Z", probeFailureCode: null }],
+   defaults: { estimatorProfileId: "all", estimatorProfileHash: "b".repeat(64), estimateMode: "soft" }, executionPort: "configured", errorCatalog: [],
+ };
++// Rewritten under human ruling H18 (2026-10-01) for panel i18n.
+ const PLAN: LoopPlanViewV1 = {
+-  planId: "bugfix", planVersion: 1, planName: "Bug fix (red first)", chosenBy: "labels", chosenByLabel: "bug", amended: false, loopVersion: 0,
++  planId: "bugfix", planVersion: 1, chosenBy: "labels", chosenByLabel: "bug", amended: false, loopVersion: 0,
+   inputs: { goal: "fix login", successCondition: "the login test passes", targetPaths: ["src/auth/**"], checks: ["npm test -- --run auth"], nonGoals: [], relevantDocs: [], protectedPaths: [], maxFilesTouched: null },
+-  summary: ["Goal: fix login", "Done when: the login test passes", "Only changes: src/auth/**", "At most 25 files changed (reported by the agent)", "Acceptance: 1 check command, all must pass", "Write a failing test that reproduces the bug, then fix it (checked by a model, not proven mechanically)"],
++  maxFiles: 25, hasDiscipline: true,
+ };
+ const item = (over: Partial<WorkItemViewV1> = {}): WorkItemViewV1 => ({
+   taskId: "a", status: "ready", dependencyTaskIds: [], targetVersion: 1, configHash: "d".repeat(64), originalContractHash: "e".repeat(64),
+   derivedContractHash: "f".repeat(64), currentRunId: null, pendingRunId: null, lineageRunIds: [], labels: ["bug"], labelsProvenance: "plan", labelsVersion: 0,
+   progress: null, objective: { goal: "fix login", successCondition: "the login test passes" }, loopPlan: PLAN, ...over,
+ });
+ const view = (items: WorkItemViewV1[]): GroupViewV1 => ({
+   schema: "orca-control-group-v1", epoch: "epoch-a", changeSeq: 4,
+   summary: { groupId: "g", state: "ready", commandRevision: 6, projectionSeq: 4, stopMode: null, stopState: null, claimBlocked: false, recoveryBlockerCount: 0 },
+   graphVersion: 1, plan: { repoId: "orca", planId: "plan-demo", planHash: "a".repeat(64), goal: "Ship", successConditions: ["done"] },
+@@ -41,21 +42,23 @@ const view = (items: WorkItemViewV1[]): GroupViewV1 => ({
+   workItems: items, estimates: [], runs: [], checkpoints: [], handoffRequests: [], stop: null, recoveryBlockers: [], recentCommandIds: [],
+ });
+ const detail = (items: WorkItemViewV1[]) => render(<TaskDetail view={view(items)} item={items[0]!} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
+ 
+ afterEach(cleanup);
+ 
+ describe("the loop plan card (spec §4.1)", () => {
+   it("titles the card with the plan, its version and how it was chosen, and lists the server's lines", () => {
+     detail([item()]);
+     expect(screen.getByRole("heading", { name: "Bug fix (red first) · v1 · chosen by label `bug`" })).toBeTruthy();
+-    expect(within(screen.getByRole("list", { name: "Plan summary a" })).getAllByRole("listitem").map((line) => line.textContent)).toEqual(PLAN.summary);
++    // Rewritten under human ruling H18 (2026-10-01) for panel i18n: the lines are built by the panel; the text is unchanged.
++    expect(within(screen.getByRole("list", { name: "Plan summary a" })).getAllByRole("listitem").map((line) => line.textContent))
++      .toEqual(["Goal: fix login", "Done when: the login test passes", "Only changes: src/auth/**", "At most 25 files changed (reported by the agent)", "Acceptance: 1 check command, all must pass", "Write a failing test that reproduces the bug, then fix it (checked by a model, not proven mechanically)"]);
+   });
+ 
+   it("keeps the check commands collapsed", () => {
+     detail([item()]);
+     const details = screen.getByText("npm test -- --run auth").closest("details");
+     expect(details).not.toBeNull();
+     expect(details!.open).toBe(false);
+     expect(details!.querySelector("summary")?.textContent).toBe("Check commands (1)");
+   });
+ 
+@@ -65,21 +68,21 @@ describe("the loop plan card (spec §4.1)", () => {
+     expect(text).toContain("Git workspace: its own worktree, merged back into orca/g; pushing is done by a person");
+     expect(text).toContain("Skill set: not supported yet");
+   });
+ 
+   it("says chosen by hand and changed when they hold", () => {
+     detail([item({ loopPlan: { ...PLAN, chosenBy: "explicit", chosenByLabel: null, amended: true } })]);
+     expect(screen.getByRole("heading", { name: "Bug fix (red first) · v1 · chosen by hand · changed" })).toBeTruthy();
+   });
+ 
+   it("says a plan chosen with no label came from the default", () => {
+-    detail([item({ labels: [], loopPlan: { ...PLAN, planId: "standard", planName: "Standard", chosenByLabel: null } })]);
++    detail([item({ labels: [], loopPlan: { ...PLAN, planId: "standard", chosenByLabel: null } })]);
+     expect(screen.getByRole("heading", { name: "Standard · v1 · no label, default" })).toBeTruthy();
+   });
+ 
+   it("shows a hand-written task's goal and success condition", () => {
+     const text = detail([item({ loopPlan: null, objective: { goal: "ship", successCondition: "passes" } })]).container.textContent ?? "";
+     expect(screen.getByRole("heading", { name: "Hand-written contract" })).toBeTruthy();
+     expect(text).toContain("Goal: ship");
+     expect(text).toContain("Done when: passes");
+   });
+ 
+diff --git a/web/tests/loopPlanDraft.test.tsx b/web/tests/loopPlanDraft.test.tsx
+index ca06170..32bd750 100644
+--- a/web/tests/loopPlanDraft.test.tsx
++++ b/web/tests/loopPlanDraft.test.tsx
+@@ -16,34 +16,35 @@ const config: ControlConfigV1 = {
+   profiles: [{ profileId: "all", profileHash: "b".repeat(64), allowedWorkKinds: ["task", "budget-estimate", "handoff", "goal-review"], contextTokenizer: null, workMaxOutputTokens: 1000, declared: capability, observed: capability, observedAt: "2026-09-29T00:00:00.000Z", probeFailureCode: null }],
+   defaults: { estimatorProfileId: "all", estimatorProfileHash: "b".repeat(64), estimateMode: "soft" }, executionPort: "configured", errorCatalog: [],
+ };
+ const summary: ControlSummaryV1 = {
+   schema: "orca-control-summary-v1", epoch: "epoch-a", changeSeq: 4, resetRequired: false, dispatchBlocked: false,
+   // Confirmed and not started: "ready". A running group is one the server refuses set-task-loop in, and the card offers
+   // no change there (final review, B6).
+   groups: [{ groupId: "g", state: "ready", commandRevision: 6, projectionSeq: 4, stopMode: null, stopState: null, claimBlocked: false, recoveryBlockerCount: 0 }],
+ };
+ const recovery: RecoveryViewV1 = { schema: "orca-control-recovery-v1", epoch: "epoch-a", dispatchBlocked: false, blockers: [] };
++// Rewritten under human ruling H18 (2026-10-01) for panel i18n.
+ const groupView: GroupViewV1 = {
+   schema: "orca-control-group-v1", epoch: "epoch-a", changeSeq: 4, summary: summary.groups[0]!, graphVersion: 1,
+   plan: { repoId: "orca", planId: "plan-demo", planHash: "a".repeat(64), goal: "Ship", successConditions: ["done"] },
+   proposal: { state: "confirmed", proposalVersion: 2, planHash: "a".repeat(64), budgetMode: "soft", contextPolicy: { handoffAtContextTokens: null }, profiles: {
+     estimator: { profileId: "all", profileHash: "b".repeat(64) }, worker: { profileId: "all", profileHash: "b".repeat(64) },
+     handoff: { profileId: "all", profileHash: "b".repeat(64) }, goalReview: { profileId: "all", profileHash: "b".repeat(64) } }, executionSnapshotHash: "c".repeat(64) },
+   ledger: { groupLimit: amount(9_000_000), used: amount(10), committedRemaining: amount(3_000_000), explicitUnallocatedReserve: amount(5_999_990), budgetDeficit: amount(0), usageUnknown: false },
+   allocations: [{ ownerKind: "task", ownerId: "a", bucket: "work", state: "confirmed", amount: { tokens: 3_000_000, activeMs: 14_400_000, attempts: 3, sessions: 3 }, fieldProvenance: { tokens: { provenance: "human", estimateId: null }, activeMs: { provenance: "human", estimateId: null }, attempts: { provenance: "human", estimateId: null }, sessions: { provenance: "human", estimateId: null } } }],
+   workItems: [{ taskId: "a", status: "ready", dependencyTaskIds: [], targetVersion: 1, configHash: "d".repeat(64), originalContractHash: "e".repeat(64), derivedContractHash: "f".repeat(64), currentRunId: null, pendingRunId: null, lineageRunIds: [], labels: [], labelsProvenance: "plan", labelsVersion: 0, progress: null,
+     objective: { goal: "fix login", successCondition: "the login test passes" },
+     loopPlan: {
+-      planId: "bugfix", planVersion: 1, planName: "Bug fix (red first)", chosenBy: "labels", chosenByLabel: "bug", amended: false, loopVersion: 0,
++      planId: "bugfix", planVersion: 1, chosenBy: "labels", chosenByLabel: "bug", amended: false, loopVersion: 0,
+       inputs: { goal: "fix login", successCondition: "the login test passes", targetPaths: ["src/auth/**"], checks: ["npm test -- --run auth"], nonGoals: [], relevantDocs: [], protectedPaths: [], maxFilesTouched: null },
+-      summary: ["Goal: fix login", "Done when: the login test passes", "Only changes: src/auth/**", "At most 25 files changed (reported by the agent)", "Acceptance: 1 check command, all must pass", "Write a failing test that reproduces the bug, then fix it (checked by a model, not proven mechanically)"],
++      maxFiles: 25, hasDiscipline: true,
+     } }],
+   estimates: [], runs: [], checkpoints: [], handoffRequests: [], stop: null, recoveryBlockers: [], recentCommandIds: [],
+ };
+ const jsonResponse = (body: unknown, status = 200): Response => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+ const LOOP_ROUTE = "/api/control/groups/g/tasks/a/loop";
+ 
+ let answers: Array<{ status: number; body: unknown }>;
+ let posted: unknown[];
+ 
+ beforeEach(() => {
+diff --git a/web/tests/loopPlanEdit.test.tsx b/web/tests/loopPlanEdit.test.tsx
+index aae08b8..076844b 100644
+--- a/web/tests/loopPlanEdit.test.tsx
++++ b/web/tests/loopPlanEdit.test.tsx
+@@ -15,24 +15,25 @@ import type { Amount, ControlConfigV1, GroupViewV1, LoopPlanViewV1, WorkItemView
+ const amount = (tokens: number): Amount => ({ tokens, activeMs: 14_400_000, attempts: 3, sessions: 3 });
+ const human = { provenance: "human", estimateId: null } as const;
+ const provenance = { tokens: human, activeMs: human, attempts: human, sessions: human };
+ const capability = { usageObservation: "phase-end", budgetEnforcement: "soft", contextObservation: "unavailable", handoffControl: "durable", handoffExecution: "mechanical-in-run-v1", contextWindowTokens: null, requestBoundProof: null } as const;
+ const config: ControlConfigV1 = {
+   schema: "orca-control-config-v1", epoch: "epoch-a", repositories: [{ repoId: "orca", displayName: "Orca" }],
+   plans: [{ planId: "plan-demo", repoId: "orca", displayName: "Demo plan" }],
+   profiles: [{ profileId: "all", profileHash: "b".repeat(64), allowedWorkKinds: ["task", "budget-estimate", "handoff", "goal-review"], contextTokenizer: null, workMaxOutputTokens: 1000, declared: capability, observed: capability, observedAt: "2026-09-29T00:00:00.000Z", probeFailureCode: null }],
+   defaults: { estimatorProfileId: "all", estimatorProfileHash: "b".repeat(64), estimateMode: "soft" }, executionPort: "configured", errorCatalog: [],
+ };
++// Rewritten under human ruling H18 (2026-10-01) for panel i18n.
+ const PLAN: LoopPlanViewV1 = {
+-  planId: "bugfix", planVersion: 1, planName: "Bug fix (red first)", chosenBy: "labels", chosenByLabel: "bug", amended: false, loopVersion: 0,
++  planId: "bugfix", planVersion: 1, chosenBy: "labels", chosenByLabel: "bug", amended: false, loopVersion: 0,
+   inputs: { goal: "fix login", successCondition: "the login test passes", targetPaths: ["src/auth/**"], checks: ["npm test -- --run auth"], nonGoals: [], relevantDocs: [], protectedPaths: [], maxFilesTouched: null },
+-  summary: ["Goal: fix login", "Done when: the login test passes", "Only changes: src/auth/**", "At most 25 files changed (reported by the agent)", "Acceptance: 1 check command, all must pass", "Write a failing test that reproduces the bug, then fix it (checked by a model, not proven mechanically)"],
++  maxFiles: 25, hasDiscipline: true,
+ };
+ const item = (over: Partial<WorkItemViewV1> = {}): WorkItemViewV1 => ({
+   taskId: "a", status: "ready", dependencyTaskIds: [], targetVersion: 1, configHash: "d".repeat(64), originalContractHash: "e".repeat(64),
+   derivedContractHash: "f".repeat(64), currentRunId: null, pendingRunId: null, lineageRunIds: [], labels: ["bug"], labelsProvenance: "plan", labelsVersion: 0,
+   progress: null, objective: { goal: "fix login", successCondition: "the login test passes" }, loopPlan: PLAN, ...over,
+ });
+ const view = (items: WorkItemViewV1[]): GroupViewV1 => ({
+   schema: "orca-control-group-v1", epoch: "epoch-a", changeSeq: 4,
+   summary: { groupId: "g", state: "ready", commandRevision: 6, projectionSeq: 4, stopMode: null, stopState: null, claimBlocked: false, recoveryBlockerCount: 0 },
+   graphVersion: 1, plan: { repoId: "orca", planId: "plan-demo", planHash: "a".repeat(64), goal: "Ship", successConditions: ["done"] },
+diff --git a/web/tests/loopSuggestionApply.test.tsx b/web/tests/loopSuggestionApply.test.tsx
+index 416cafe..1f0579d 100644
+--- a/web/tests/loopSuggestionApply.test.tsx
++++ b/web/tests/loopSuggestionApply.test.tsx
+@@ -15,24 +15,25 @@ const amount = (tokens: number): Amount => ({ tokens, activeMs: tokens * 10, att
+ const human = { provenance: "human", estimateId: null } as const;
+ const provenance = { tokens: human, activeMs: human, attempts: human, sessions: human };
+ const PLAN = "a".repeat(64);
+ const capability = { usageObservation: "phase-end", budgetEnforcement: "soft", contextObservation: "realtime", handoffControl: "durable", handoffExecution: "mechanical-in-run-v1", contextWindowTokens: null, requestBoundProof: null } as const;
+ const config: ControlConfigV1 = {
+   schema: "orca-control-config-v1", epoch: "epoch-a", repositories: [{ repoId: "orca", displayName: "Orca" }],
+   plans: [{ planId: "plan-demo", repoId: "orca", displayName: "Demo plan" }],
+   profiles: [{ profileId: "all", profileHash: "b".repeat(64), allowedWorkKinds: ["task", "budget-estimate", "handoff", "goal-review"], contextTokenizer: null, workMaxOutputTokens: 1000, declared: capability, observed: capability, observedAt: "2026-10-01T00:00:00.000Z", probeFailureCode: null }],
+   defaults: { estimatorProfileId: "all", estimatorProfileHash: "b".repeat(64), estimateMode: "soft" }, executionPort: "configured", errorCatalog: [],
+ };
++// Rewritten under human ruling H18 (2026-10-01) for panel i18n.
+ const LOOP_PLAN: LoopPlanViewV1 = {
+-  planId: "bugfix", planVersion: 1, planName: "Bug fix (red first)", chosenBy: "labels", chosenByLabel: "bug", amended: false, loopVersion: 2,
++  planId: "bugfix", planVersion: 1, chosenBy: "labels", chosenByLabel: "bug", amended: false, loopVersion: 2,
+   inputs: { goal: "fix login", successCondition: "the login test passes", targetPaths: ["src/auth/**"], checks: ["npm test -- --run auth"], nonGoals: [], relevantDocs: [], protectedPaths: [], maxFilesTouched: null },
+-  summary: ["Goal: fix login"],
++  maxFiles: 25, hasDiscipline: true,
+ };
+ // Task a (loop) and task c (plain) are both suggested 4000 work tokens / 40000 ms; attempts and sessions already match.
+ const estimate = (stale = false): EstimateViewV1 => ({
+   estimateId: "est-1", estimateVersion: 1, state: "ready", profile: { profileId: "all", profileHash: "b".repeat(64) }, mode: "soft",
+   requestHash: "c".repeat(64), outputHash: "d".repeat(64), reasonCode: null, stale,
+   output: {
+     schema: "budget-estimate-v1", planHash: PLAN, goalReviewReserve: amount(0), groupRationale: "two small changes",
+     tasks: ["a", "c"].map((taskId) => ({ taskId, complexity: "M" as const, confidence: "high" as const, work: amount(4_000), handoff: amount(300), rationale: "small", assumptions: [] })),
+   },
+ });
+diff --git a/web/tests/loopSuggestionDraft.test.tsx b/web/tests/loopSuggestionDraft.test.tsx
+index a7bcbed..3b22334 100644
+--- a/web/tests/loopSuggestionDraft.test.tsx
++++ b/web/tests/loopSuggestionDraft.test.tsx
+@@ -13,24 +13,25 @@ const amount = (tokens: number): Amount => ({ tokens, activeMs: tokens * 10, att
+ const human = { provenance: "human", estimateId: null } as const;
+ const provenance = { tokens: human, activeMs: human, attempts: human, sessions: human };
+ const PLAN = "a".repeat(64);
+ const capability = { usageObservation: "phase-end", budgetEnforcement: "soft", contextObservation: "realtime", handoffControl: "durable", handoffExecution: "mechanical-in-run-v1", contextWindowTokens: null, requestBoundProof: null } as const;
+ const config: ControlConfigV1 = {
+   schema: "orca-control-config-v1", epoch: "epoch-a", repositories: [{ repoId: "orca", displayName: "Orca" }],
+   plans: [{ planId: "plan-demo", repoId: "orca", displayName: "Demo plan" }],
+   profiles: [{ profileId: "all", profileHash: "b".repeat(64), allowedWorkKinds: ["task", "budget-estimate", "handoff", "goal-review"], contextTokenizer: null, workMaxOutputTokens: 1000, declared: capability, observed: capability, observedAt: "2026-10-01T00:00:00.000Z", probeFailureCode: null }],
+   defaults: { estimatorProfileId: "all", estimatorProfileHash: "b".repeat(64), estimateMode: "soft" }, executionPort: "configured", errorCatalog: [],
+ };
++// Rewritten under human ruling H18 (2026-10-01) for panel i18n.
+ const LOOP_PLAN: LoopPlanViewV1 = {
+-  planId: "bugfix", planVersion: 1, planName: "Bug fix (red first)", chosenBy: "labels", chosenByLabel: "bug", amended: false, loopVersion: 2,
++  planId: "bugfix", planVersion: 1, chosenBy: "labels", chosenByLabel: "bug", amended: false, loopVersion: 2,
+   inputs: { goal: "fix login", successCondition: "the login test passes", targetPaths: ["src/auth/**"], checks: ["npm test -- --run auth"], nonGoals: [], relevantDocs: [], protectedPaths: [], maxFilesTouched: null },
+-  summary: ["Goal: fix login"],
++  maxFiles: 25, hasDiscipline: true,
+ };
+ // Task a (loop) and task c (plain) are both suggested 4000 work tokens / 40000 ms; attempts and sessions already match.
+ const estimate = (stale = false): EstimateViewV1 => ({
+   estimateId: "est-1", estimateVersion: 1, state: "ready", profile: { profileId: "all", profileHash: "b".repeat(64) }, mode: "soft",
+   requestHash: "c".repeat(64), outputHash: "d".repeat(64), reasonCode: null, stale,
+   output: {
+     schema: "budget-estimate-v1", planHash: PLAN, goalReviewReserve: amount(0), groupRationale: "two small changes",
+     tasks: ["a", "c"].map((taskId) => ({ taskId, complexity: "M" as const, confidence: "high" as const, work: amount(4_000), handoff: amount(300), rationale: "small", assumptions: [] })),
+   },
+ });
+diff --git a/web/tests/loopSummary.test.tsx b/web/tests/loopSummary.test.tsx
+new file mode 100644
+index 0000000..4898c76
+--- /dev/null
++++ b/web/tests/loopSummary.test.tsx
+@@ -0,0 +1,114 @@
++/**
++ * Panel i18n spec §3.1, §6.3: the panel builds a loop task's card lines from the view's fields, and in English they are
++ * exactly the lines the server's describeLoopPlan produced before its removal -- pinned below as literals captured from it
++ * at ac969bb for every plan and version and a case set (one or two paths; protected paths or none; file cap unset, 1 or
++ * 25; one or two checks). Carried over from the removed tests/control/loopPlanSummary.test.ts (loop plans spec §2.1,
++ * §4.1): no line carries a check command's text or a rejectOn token, only the agent-verified plans say a model checks
++ * them, and the red-first line is bugfix's alone. Review Focus 3: a plan version this panel has no words for.
++ */
++import { describe, expect, it } from "vitest";
++import i18n from "../src/i18n.js";
++import { loopPlanTitle, loopSummaryLines, planText } from "../src/LoopPlanCard.js";
++import type { LoopInputsV1, LoopPlanIdV1, LoopPlanViewV1 } from "../src/controlTypes.js";
++
++type CaseName = "one-path" | "two-paths-protected-cap1" | "protected-two-cap25" | "two-paths-one-check";
++const base = { goal: "fix login", successCondition: "the login test passes", nonGoals: [], relevantDocs: [] };
++function inputsFor(planId: LoopPlanIdV1, name: CaseName): LoopInputsV1 {
++  const one = planId === "investigate" ? ["docs/report.md"] : ["src/auth/**"];
++  const two = planId === "investigate" ? ["docs/report.md"] : ["src/auth/**", "tests/auth/**"];
++  switch (name) {
++    case "one-path": return { ...base, targetPaths: one, checks: ["npm test"], protectedPaths: [], maxFilesTouched: null };
++    case "two-paths-protected-cap1": return { ...base, targetPaths: two, checks: ["npm test", "npm run lint"], protectedPaths: ["tests/fixtures/**"], maxFilesTouched: 1 };
++    case "protected-two-cap25": return { ...base, targetPaths: one, checks: ["npm test", "npm run lint"], protectedPaths: ["docs/**", "scripts/**"], maxFilesTouched: planId === "investigate" ? null : 25 };
++    case "two-paths-one-check": return { ...base, targetPaths: two, checks: ["npm run lint"], protectedPaths: [], maxFilesTouched: null };
++  }
++}
++const viewOf = (planId: LoopPlanIdV1, planVersion: number, name: CaseName, maxFiles: number, hasDiscipline: boolean): LoopPlanViewV1 => ({
++  planId, planVersion, chosenBy: "labels", chosenByLabel: "bug", amended: false, loopVersion: 0, inputs: inputsFor(planId, name), maxFiles, hasDiscipline,
++});
++
++// Captured from describeLoopPlan at ac969bb (plan Task 3 step 1 re-captures and compares before the removal).
++const ROWS: Array<[LoopPlanIdV1, number, CaseName, number, boolean, string[]]> = [
++  ["standard", 1, "one-path", 25, false, ["Goal: fix login","Done when: the login test passes","Only changes: src/auth/**","At most 25 files changed (reported by the agent)","Acceptance: 1 check command, all must pass"]],
++  ["standard", 1, "two-paths-protected-cap1", 1, false, ["Goal: fix login","Done when: the login test passes","Only changes: src/auth/**, tests/auth/**","Must not change: tests/fixtures/** (reported by the agent, not checked in git)","At most 1 file changed (reported by the agent)","Acceptance: 2 check commands, all must pass"]],
++  ["standard", 1, "protected-two-cap25", 25, false, ["Goal: fix login","Done when: the login test passes","Only changes: src/auth/**","Must not change: docs/**, scripts/** (reported by the agent, not checked in git)","At most 25 files changed (reported by the agent)","Acceptance: 2 check commands, all must pass"]],
++  ["standard", 1, "two-paths-one-check", 25, false, ["Goal: fix login","Done when: the login test passes","Only changes: src/auth/**, tests/auth/**","At most 25 files changed (reported by the agent)","Acceptance: 1 check command, all must pass"]],
++  ["standard", 2, "one-path", Number.MAX_SAFE_INTEGER, false, ["Goal: fix login","Done when: the login test passes","Only changes: src/auth/**","No file limit","Acceptance: 1 check command, all must pass"]],
++  ["standard", 2, "two-paths-protected-cap1", 1, false, ["Goal: fix login","Done when: the login test passes","Only changes: src/auth/**, tests/auth/**","Must not change: tests/fixtures/** (reported by the agent, not checked in git)","At most 1 file changed (reported by the agent)","Acceptance: 2 check commands, all must pass"]],
++  ["standard", 2, "protected-two-cap25", 25, false, ["Goal: fix login","Done when: the login test passes","Only changes: src/auth/**","Must not change: docs/**, scripts/** (reported by the agent, not checked in git)","At most 25 files changed (reported by the agent)","Acceptance: 2 check commands, all must pass"]],
++  ["standard", 2, "two-paths-one-check", Number.MAX_SAFE_INTEGER, false, ["Goal: fix login","Done when: the login test passes","Only changes: src/auth/**, tests/auth/**","No file limit","Acceptance: 1 check command, all must pass"]],
++  ["bugfix", 1, "one-path", 25, true, ["Goal: fix login","Done when: the login test passes","Only changes: src/auth/**","At most 25 files changed (reported by the agent)","Acceptance: 1 check command, all must pass","Write a failing test that reproduces the bug, then fix it (checked by a model, not proven mechanically)"]],
++  ["bugfix", 1, "two-paths-protected-cap1", 1, true, ["Goal: fix login","Done when: the login test passes","Only changes: src/auth/**, tests/auth/**","Must not change: tests/fixtures/** (reported by the agent, not checked in git)","At most 1 file changed (reported by the agent)","Acceptance: 2 check commands, all must pass","Write a failing test that reproduces the bug, then fix it (checked by a model, not proven mechanically)"]],
++  ["bugfix", 1, "protected-two-cap25", 25, true, ["Goal: fix login","Done when: the login test passes","Only changes: src/auth/**","Must not change: docs/**, scripts/** (reported by the agent, not checked in git)","At most 25 files changed (reported by the agent)","Acceptance: 2 check commands, all must pass","Write a failing test that reproduces the bug, then fix it (checked by a model, not proven mechanically)"]],
++  ["bugfix", 1, "two-paths-one-check", 25, true, ["Goal: fix login","Done when: the login test passes","Only changes: src/auth/**, tests/auth/**","At most 25 files changed (reported by the agent)","Acceptance: 1 check command, all must pass","Write a failing test that reproduces the bug, then fix it (checked by a model, not proven mechanically)"]],
++  ["bugfix", 2, "one-path", Number.MAX_SAFE_INTEGER, true, ["Goal: fix login","Done when: the login test passes","Only changes: src/auth/**","No file limit","Acceptance: 1 check command, all must pass","Write a failing test that reproduces the bug, then fix it (checked by a model, not proven mechanically)"]],
++  ["bugfix", 2, "two-paths-protected-cap1", 1, true, ["Goal: fix login","Done when: the login test passes","Only changes: src/auth/**, tests/auth/**","Must not change: tests/fixtures/** (reported by the agent, not checked in git)","At most 1 file changed (reported by the agent)","Acceptance: 2 check commands, all must pass","Write a failing test that reproduces the bug, then fix it (checked by a model, not proven mechanically)"]],
++  ["bugfix", 2, "protected-two-cap25", 25, true, ["Goal: fix login","Done when: the login test passes","Only changes: src/auth/**","Must not change: docs/**, scripts/** (reported by the agent, not checked in git)","At most 25 files changed (reported by the agent)","Acceptance: 2 check commands, all must pass","Write a failing test that reproduces the bug, then fix it (checked by a model, not proven mechanically)"]],
++  ["bugfix", 2, "two-paths-one-check", Number.MAX_SAFE_INTEGER, true, ["Goal: fix login","Done when: the login test passes","Only changes: src/auth/**, tests/auth/**","No file limit","Acceptance: 1 check command, all must pass","Write a failing test that reproduces the bug, then fix it (checked by a model, not proven mechanically)"]],
++  ["refactor", 1, "one-path", 25, true, ["Goal: fix login","Done when: the login test passes","Only changes: src/auth/**","At most 25 files changed (reported by the agent)","Acceptance: 1 check command, all must pass","No observable behavior change (an instruction to the agent; only the checks are enforced)"]],
++  ["refactor", 1, "two-paths-protected-cap1", 1, true, ["Goal: fix login","Done when: the login test passes","Only changes: src/auth/**, tests/auth/**","Must not change: tests/fixtures/** (reported by the agent, not checked in git)","At most 1 file changed (reported by the agent)","Acceptance: 2 check commands, all must pass","No observable behavior change (an instruction to the agent; only the checks are enforced)"]],
++  ["refactor", 1, "protected-two-cap25", 25, true, ["Goal: fix login","Done when: the login test passes","Only changes: src/auth/**","Must not change: docs/**, scripts/** (reported by the agent, not checked in git)","At most 25 files changed (reported by the agent)","Acceptance: 2 check commands, all must pass","No observable behavior change (an instruction to the agent; only the checks are enforced)"]],
++  ["refactor", 1, "two-paths-one-check", 25, true, ["Goal: fix login","Done when: the login test passes","Only changes: src/auth/**, tests/auth/**","At most 25 files changed (reported by the agent)","Acceptance: 1 check command, all must pass","No observable behavior change (an instruction to the agent; only the checks are enforced)"]],
++  ["refactor", 2, "one-path", Number.MAX_SAFE_INTEGER, true, ["Goal: fix login","Done when: the login test passes","Only changes: src/auth/**","No file limit","Acceptance: 1 check command, all must pass","No observable behavior change (an instruction to the agent; only the checks are enforced)"]],
++  ["refactor", 2, "two-paths-protected-cap1", 1, true, ["Goal: fix login","Done when: the login test passes","Only changes: src/auth/**, tests/auth/**","Must not change: tests/fixtures/** (reported by the agent, not checked in git)","At most 1 file changed (reported by the agent)","Acceptance: 2 check commands, all must pass","No observable behavior change (an instruction to the agent; only the checks are enforced)"]],
++  ["refactor", 2, "protected-two-cap25", 25, true, ["Goal: fix login","Done when: the login test passes","Only changes: src/auth/**","Must not change: docs/**, scripts/** (reported by the agent, not checked in git)","At most 25 files changed (reported by the agent)","Acceptance: 2 check commands, all must pass","No observable behavior change (an instruction to the agent; only the checks are enforced)"]],
++  ["refactor", 2, "two-paths-one-check", Number.MAX_SAFE_INTEGER, true, ["Goal: fix login","Done when: the login test passes","Only changes: src/auth/**, tests/auth/**","No file limit","Acceptance: 1 check command, all must pass","No observable behavior change (an instruction to the agent; only the checks are enforced)"]],
++  ["design", 1, "one-path", 25, true, ["Goal: fix login","Done when: the login test passes","Only changes: src/auth/**","At most 25 files changed (reported by the agent)","Acceptance: 1 check command, all must pass","The deliverable is a document, no code changes (checked by a model, not proven mechanically)"]],
++  ["design", 1, "two-paths-protected-cap1", 1, true, ["Goal: fix login","Done when: the login test passes","Only changes: src/auth/**, tests/auth/**","Must not change: tests/fixtures/** (reported by the agent, not checked in git)","At most 1 file changed (reported by the agent)","Acceptance: 2 check commands, all must pass","The deliverable is a document, no code changes (checked by a model, not proven mechanically)"]],
++  ["design", 1, "protected-two-cap25", 25, true, ["Goal: fix login","Done when: the login test passes","Only changes: src/auth/**","Must not change: docs/**, scripts/** (reported by the agent, not checked in git)","At most 25 files changed (reported by the agent)","Acceptance: 2 check commands, all must pass","The deliverable is a document, no code changes (checked by a model, not proven mechanically)"]],
++  ["design", 1, "two-paths-one-check", 25, true, ["Goal: fix login","Done when: the login test passes","Only changes: src/auth/**, tests/auth/**","At most 25 files changed (reported by the agent)","Acceptance: 1 check command, all must pass","The deliverable is a document, no code changes (checked by a model, not proven mechanically)"]],
++  ["design", 2, "one-path", Number.MAX_SAFE_INTEGER, true, ["Goal: fix login","Done when: the login test passes","Only changes: src/auth/**","No file limit","Acceptance: 1 check command, all must pass","The deliverable is a document, no code changes (checked by a model, not proven mechanically)"]],
++  ["design", 2, "two-paths-protected-cap1", 1, true, ["Goal: fix login","Done when: the login test passes","Only changes: src/auth/**, tests/auth/**","Must not change: tests/fixtures/** (reported by the agent, not checked in git)","At most 1 file changed (reported by the agent)","Acceptance: 2 check commands, all must pass","The deliverable is a document, no code changes (checked by a model, not proven mechanically)"]],
++  ["design", 2, "protected-two-cap25", 25, true, ["Goal: fix login","Done when: the login test passes","Only changes: src/auth/**","Must not change: docs/**, scripts/** (reported by the agent, not checked in git)","At most 25 files changed (reported by the agent)","Acceptance: 2 check commands, all must pass","The deliverable is a document, no code changes (checked by a model, not proven mechanically)"]],
++  ["design", 2, "two-paths-one-check", Number.MAX_SAFE_INTEGER, true, ["Goal: fix login","Done when: the login test passes","Only changes: src/auth/**, tests/auth/**","No file limit","Acceptance: 1 check command, all must pass","The deliverable is a document, no code changes (checked by a model, not proven mechanically)"]],
++  ["investigate", 1, "one-path", 1, true, ["Goal: fix login","Done when: the login test passes","Only changes: docs/report.md","At most 1 file changed (reported by the agent)","Acceptance: 1 check command, all must pass","Investigate only; findings go to the report file, nothing else changes (checked by a model, not proven mechanically)"]],
++  ["investigate", 1, "two-paths-protected-cap1", 1, true, ["Goal: fix login","Done when: the login test passes","Only changes: docs/report.md","Must not change: tests/fixtures/** (reported by the agent, not checked in git)","At most 1 file changed (reported by the agent)","Acceptance: 2 check commands, all must pass","Investigate only; findings go to the report file, nothing else changes (checked by a model, not proven mechanically)"]],
++  ["investigate", 1, "protected-two-cap25", 1, true, ["Goal: fix login","Done when: the login test passes","Only changes: docs/report.md","Must not change: docs/**, scripts/** (reported by the agent, not checked in git)","At most 1 file changed (reported by the agent)","Acceptance: 2 check commands, all must pass","Investigate only; findings go to the report file, nothing else changes (checked by a model, not proven mechanically)"]],
++  ["investigate", 1, "two-paths-one-check", 1, true, ["Goal: fix login","Done when: the login test passes","Only changes: docs/report.md","At most 1 file changed (reported by the agent)","Acceptance: 1 check command, all must pass","Investigate only; findings go to the report file, nothing else changes (checked by a model, not proven mechanically)"]],
++  ["investigate", 2, "one-path", 1, true, ["Goal: fix login","Done when: the login test passes","Only changes: docs/report.md","At most 1 file changed (reported by the agent)","Acceptance: 1 check command, all must pass","Investigate only; findings go to the report file, nothing else changes (checked by a model, not proven mechanically)"]],
++  ["investigate", 2, "two-paths-protected-cap1", 1, true, ["Goal: fix login","Done when: the login test passes","Only changes: docs/report.md","Must not change: tests/fixtures/** (reported by the agent, not checked in git)","At most 1 file changed (reported by the agent)","Acceptance: 2 check commands, all must pass","Investigate only; findings go to the report file, nothing else changes (checked by a model, not proven mechanically)"]],
++  ["investigate", 2, "protected-two-cap25", 1, true, ["Goal: fix login","Done when: the login test passes","Only changes: docs/report.md","Must not change: docs/**, scripts/** (reported by the agent, not checked in git)","At most 1 file changed (reported by the agent)","Acceptance: 2 check commands, all must pass","Investigate only; findings go to the report file, nothing else changes (checked by a model, not proven mechanically)"]],
++  ["investigate", 2, "two-paths-one-check", 1, true, ["Goal: fix login","Done when: the login test passes","Only changes: docs/report.md","At most 1 file changed (reported by the agent)","Acceptance: 1 check command, all must pass","Investigate only; findings go to the report file, nothing else changes (checked by a model, not proven mechanically)"]],
++];
++
++describe("the loop card's lines, built by the panel (spec §6.3)", () => {
++  it.each(ROWS)("%s v%i %s: the English lines equal describeLoopPlan's", (planId, version, name, maxFiles, hasDiscipline, lines) => {
++    expect(loopSummaryLines(viewOf(planId, version, name, maxFiles, hasDiscipline))).toEqual(lines);
++  });
++
++  it("never puts a check command's text or a rejectOn token into a line; only agent-verified plans say a model checks them", () => {
++    for (const [planId, version, name, maxFiles, hasDiscipline] of ROWS) {
++      const view = viewOf(planId, version, name, maxFiles, hasDiscipline);
++      const lines = loopSummaryLines(view);
++      for (const line of lines) {
++        for (const check of view.inputs.checks) expect(line).not.toContain(check);
++        expect(line).not.toContain("REJECT:");
++      }
++      expect(lines.filter((line) => line.includes("checked by a model")).length, `${planId} v${version}`).toBe(["bugfix", "design", "investigate"].includes(planId) ? 1 : 0);
++      expect(lines.some((line) => line.startsWith("Write a failing test")), `${planId} v${version}`).toBe(planId === "bugfix");
++    }
++  });
++
++  it("builds the lines, the title and the name in Chinese from the same fields (spec §5)", async () => {
++    await i18n.changeLanguage("zh");
++    expect(loopSummaryLines(viewOf("bugfix", 2, "two-paths-protected-cap1", 1, true))).toEqual([
++      "目标：fix login",
++      "完成条件：the login test passes",
++      "只改：src/auth/**、tests/auth/**",
++      "不许改：tests/fixtures/**（由 agent 自报，不是 git 检查）",
++      "最多改 1 个文件（由 agent 自报）",
++      "验收：运行 2 条检查命令，全部通过",
++      "先写能复现的失败测试再修（由模型核对，不是机械证明）",
++    ]);
++    expect(loopSummaryLines(viewOf("standard", 2, "one-path", Number.MAX_SAFE_INTEGER, false))).toContain("不限文件数");
++    expect(loopPlanTitle({ ...viewOf("bugfix", 2, "one-path", Number.MAX_SAFE_INTEGER, true), amended: true })).toBe("修 bug（先红后绿） · v2 · 按标签 `bug` 选择 · 已修改");
++    expect(planText("design", 1, "name")).toBe("先写设计／文档");
++  });
++
++  it("shows a plan version this panel has no words for by its id, and keeps its discipline line (Review Focus 3)", () => {
++    const unknown = viewOf("bugfix", 9, "one-path", 25, true);
++    expect(planText("bugfix", 9, "name")).toBe("bugfix");
++    expect(loopPlanTitle(unknown)).toBe("bugfix · v9 · chosen by label `bug`");
++    expect(loopSummaryLines(unknown).at(-1)).toBe("bugfix v9");
++  });
++});

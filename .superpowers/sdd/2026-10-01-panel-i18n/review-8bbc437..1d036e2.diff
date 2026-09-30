@@ -1,0 +1,868 @@
+# Review package: 8bbc437..1d036e2
+
+## Commits
+1d036e2 feat(web): translate the decisions area
+
+## Files changed
+ web/src/App.tsx                  |  13 ++--
+ web/src/DecisionDetail.tsx       |  38 ++++-----
+ web/src/DecisionList.tsx         |  15 ++--
+ web/src/DecisionsView.tsx        |  34 ++++----
+ web/src/kindRank.ts              |   3 +-
+ web/src/locales/en.ts            |  43 ++++++++++-
+ web/src/locales/zh.ts            |  36 ++++++++-
+ web/tests/decisionsI18n.test.tsx | 163 +++++++++++++++++++++++++++++++++++++++
+ 8 files changed, 297 insertions(+), 48 deletions(-)
+
+## Diff
+diff --git a/web/src/App.tsx b/web/src/App.tsx
+index 7c51010..5ddbf80 100644
+--- a/web/src/App.tsx
++++ b/web/src/App.tsx
+@@ -128,21 +128,22 @@ export function footerLines(summary: ControlSummaryV1 | null): string[] {
+   if (summary === null) return [];
+   return [i18n.t("shell.epoch", { epoch: summary.epoch }), i18n.t(summary.dispatchBlocked ? "common.dispatchBlocked" : "common.dispatchLive")];
+ }
+ 
+ interface HomeState {
+   todo: DecisionListRow[];
+   report: MetricsReport;
+   coverage: PanelCoverage;
+ }
+ 
+-type Outcome = { kind: "recorded"; text: string } | { kind: "refused"; refusal: PanelRefusal };
++type RecordedKey = "decisions.recordedReviewed" | "decisions.correctionRecorded";
++type Outcome = { kind: "recorded"; text: RecordedKey } | { kind: "refused"; refusal: PanelRefusal };
+ 
+ export function App(): JSX.Element {
+   const { t } = useTranslation();
+   const [home, setHome] = useState<HomeState | null>(null);
+   const [error, setError] = useState<PanelRefusal | null>(null);
+   const [selected, setSelected] = useState<DecisionListRow | null>(null);
+   const [decision, setDecision] = useState<Decision | null>(null);
+   const [outcome, setOutcome] = useState<Outcome | null>(null);
+   const [lastCorrection, setLastCorrection] = useState<RecordCorrectionInput | null>(null);
+   /** The row whose answer may still be applied; read by `acceptArrival` when one arrives. */
+@@ -549,21 +550,21 @@ export function App(): JSX.Element {
+         if (!acceptArrival(wanted.current, selected)) return;
+         setDecision(body.decision as Decision);
+       } catch (err) {
+         if (!acceptArrival(wanted.current, selected)) return;
+         setError(failureFrom(err));
+       }
+     })();
+   }, [selected]);
+ 
+   /** Shows what happened; after a success, refetches so the to-do list and coverage reflect it. */
+-  const send = async (post: () => Promise<PostResult<unknown>>, recorded: string): Promise<void> => {
++  const send = async (post: () => Promise<PostResult<unknown>>, recorded: RecordedKey): Promise<void> => {
+     try {
+       const result = await post();
+       if (!result.ok) {
+         setOutcome({ kind: "refused", refusal: result });
+         return;
+       }
+       setOutcome({ kind: "recorded", text: recorded });
+       await loadHome();
+     } catch (err) {
+       setOutcome({ kind: "refused", refusal: failureFrom(err) });
+@@ -579,35 +580,35 @@ export function App(): JSX.Element {
+     setDismissed(next);
+     writeDismissed(browserStorage(), next);
+   };
+   const summary = controlConfig !== null && control.recovery !== null ? summaryView(control) : null;
+   const detail =
+     selected !== null && decision !== null ? (
+       <>
+       <DecisionDetail
+         decision={decision}
+         onAgree={() => {
+-          void send(() => recordReview(selected.projectKey, selected.id), "Recorded as reviewed.");
++          void send(() => recordReview(selected.projectKey, selected.id), "decisions.recordedReviewed");
+         }}
+         onCorrect={(form) => {
+           const body = correctionBody({ projectKey: selected.projectKey, decisionId: selected.id }, form);
+           setLastCorrection(body);
+-          void send(() => recordCorrection(body), "Correction recorded.");
++          void send(() => recordCorrection(body), "decisions.correctionRecorded");
+         }}
+       />
+-      {outcome?.kind === "recorded" && <p role="status">{outcome.text}</p>}
++      {outcome?.kind === "recorded" && <p role="status">{t(outcome.text)}</p>}
+       {outcome?.kind === "refused" && (
+         <Refusal
+           refusal={outcome.refusal}
+           onRecordAnother={() => {
+             if (lastCorrection === null) return;
+-            void send(() => recordCorrection({ ...lastCorrection, again: true }), "Correction recorded.");
++            void send(() => recordCorrection({ ...lastCorrection, again: true }), "decisions.correctionRecorded");
+           }}
+         />
+       )}
+       </>
+     ) : null;
+ 
+   return (
+     <Shell
+       active={section}
+       badges={{
+diff --git a/web/src/DecisionDetail.tsx b/web/src/DecisionDetail.tsx
+index 1217189..c0aa142 100644
+--- a/web/src/DecisionDetail.tsx
++++ b/web/src/DecisionDetail.tsx
+@@ -15,21 +15,24 @@
+  * correction. It is now a form: `kind` (every correction kind), `because`
+  * (required) and `chose_instead` (optional). The form hands `onCorrect` the
+  * boxes as typed; `correctionBody` (web/src/api.ts) decides what is sent.
+  *
+  * *** ERRATUM (2026-09-27, session f8281a60, human ruling U1) ***
+  * The first paragraph is no longer true of `question`: the list row now carries it
+  * (panel UI redesign spec §2). `chose`, `because` and the alternatives are still
+  * withheld from the list and appear only here. Text above kept verbatim.
+  */
+ import type { JSX } from "react";
++import { useTranslation } from "react-i18next";
+ import type { CorrectionForm } from "./api.js";
++import { enumText } from "./i18n.js";
++import { en } from "./locales/en.js";
+ import { WEB_CORRECTION_KINDS } from "./types.js";
+ import type { CorrectionKind } from "./types.js";
+ 
+ export interface DecisionAlternative {
+   option: string;
+   why_not: string;
+ }
+ 
+ /**
+  * The raw shape `GET /api/decision` answers with (src/panel/decisionSource.ts
+@@ -37,103 +40,100 @@ export interface DecisionAlternative {
+  * `decisionEventSchema` is where these field names come from).
+  */
+ export interface Decision {
+   id: string;
+   question: string;
+   chose: string;
+   because: string;
+   alternatives: DecisionAlternative[];
+ }
+ 
+-export const AGREE_HELP = "Mark reviewed: I read this and it needs no change. Counts toward review coverage.";
+-export const CORRECT_NOTE =
+-  "This records a correction; it does not edit the ledger. To change the decision itself, close it with orca correct --close or let the fix agent do it.";
+-export const KIND_HELP: Record<CorrectionKind, string> = {
+-  wrong: "the choice was wrong",
+-  not_my_taste: "defensible, but not what I would choose",
+-  stale: "it was right then, no longer true",
+-};
++/** In English (criteria read them); the render uses the reader's language (panel i18n spec §3.3). */
++export const AGREE_HELP = en.decisions.agreeHelp;
++export const CORRECT_NOTE = en.decisions.correctNote;
++export const KIND_HELP: Record<CorrectionKind, string> = en.decisions.kindHelp;
+ 
+ export function DecisionDetail({
+   decision,
+   onAgree,
+   onCorrect,
+ }: {
+   decision: Decision;
+   onAgree?: () => void;
+   onCorrect?: (form: CorrectionForm) => void;
+ }): JSX.Element {
++  const { t } = useTranslation();
+   return (
+     <article className="decision-detail">
+       <p className="row-id">{decision.id}</p>
+       <h2 data-testid="decision-question">{decision.question}</h2>
+       <div className="detail-block">
+-        <h3>Chose</h3>
++        <h3>{t("decisions.chose")}</h3>
+         <p className="chose" data-testid="decision-chose">
+           {decision.chose}
+         </p>
+       </div>
+       <div className="detail-block">
+-        <h3>Because</h3>
++        <h3>{t("decisions.because")}</h3>
+         <p className="because" data-testid="decision-because">
+           {decision.because}
+         </p>
+       </div>
+       {decision.alternatives.length > 0 && (
+         <div className="detail-block">
+-          <h3>Rejected alternatives</h3>
++          <h3>{t("decisions.rejected")}</h3>
+           <ul className="alternatives">
+             {decision.alternatives.map((alt) => (
+               <li key={alt.option}>
+                 <span className="option" data-testid="alternative-option">
+                   {alt.option}
+                 </span>
+                 <span className="why-not" data-testid="alternative-why-not">
+                   {alt.why_not}
+                 </span>
+               </li>
+             ))}
+           </ul>
+         </div>
+       )}
+       <div className="actions">
+         <button type="button" className="btn-primary" onClick={onAgree}>
+-          Agree
++          {t("decisions.agree")}
+         </button>
+-        <p className="detail-help">{AGREE_HELP}</p>
++        <p className="detail-help">{t("decisions.agreeHelp")}</p>
+         <form
+           className="correction-form"
+           onSubmit={(event) => {
+             event.preventDefault();
+             const data = new FormData(event.currentTarget);
+             onCorrect?.({
+               kind: String(data.get("kind")) as CorrectionKind,
+               because: String(data.get("because") ?? ""),
+               chose_instead: String(data.get("chose_instead") ?? ""),
+             });
+           }}
+         >
+           <label>
+-            Kind
++            {t("decisions.kind")}
+             <select name="kind" defaultValue={WEB_CORRECTION_KINDS[0]}>
+               {WEB_CORRECTION_KINDS.map((kind) => (
+                 <option key={kind} value={kind}>
+-                  {`${kind} — ${KIND_HELP[kind]}`}
++                  {t("decisions.kindOption", { kind: enumText("correctionKind", kind), help: t(`decisions.kindHelp.${kind}`) })}
+                 </option>
+               ))}
+             </select>
+           </label>
+           <label>
+-            Because
++            {t("decisions.because")}
+             <textarea name="because" required />
+           </label>
+           <label>
+-            Chose instead (optional)
++            {t("decisions.choseInstead")}
+             <input name="chose_instead" type="text" />
+           </label>
+-          <button type="submit">Correct</button>
+-          <p className="detail-help">{CORRECT_NOTE}</p>
++          <button type="submit">{t("decisions.correct")}</button>
++          <p className="detail-help">{t("decisions.correctNote")}</p>
+         </form>
+       </div>
+     </article>
+   );
+ }
+diff --git a/web/src/DecisionList.tsx b/web/src/DecisionList.tsx
+index b8631b6..801e8db 100644
+--- a/web/src/DecisionList.tsx
++++ b/web/src/DecisionList.tsx
+@@ -6,21 +6,24 @@
+  * fields `WEB_LIST_FIELDS` names -- it never spreads or reads any other key
+  * off a row, so an extra field on the row object (a server bug, or a test
+  * fixture probing for one) can never leak into the markup.
+  *
+  * *** ERRATUM (2026-09-27, session a50f4d80, human ruling U1) ***
+  * The row now also shows `question` (panel UI redesign spec §2). What still holds: this
+  * component reads each field by name and never spreads the row, so any OTHER key on the
+  * object still cannot reach the markup. Text above kept verbatim.
+  */
+ import type { JSX } from "react";
++import { useTranslation } from "react-i18next";
++import { enumText } from "./i18n.js";
+ import { kindLevel } from "./kindRank.js";
++import { en } from "./locales/en.js";
+ import type { DecisionListRow } from "./types.js";
+ 
+ /**
+  * review finding I-1 / controller ruling R60. `projectKey` and `id` are both
+  * unrestricted strings, so a fixed-separator join (the earlier double-colon
+  * join here) collides: {projectKey: "a::b", id: "c"} and {projectKey: "a",
+  * id: "b::c"} would join to the same string. src/panel/coverage.ts's own
+  * `keyOf` avoids exactly this class of collision on the server; this file
+  * does not repeat that choice (see below).
+  *
+@@ -32,53 +35,55 @@ import type { DecisionListRow } from "./types.js";
+  * array literal. This needs no control character to make it work, which
+  * matters here specifically: a raw control byte has already slipped into
+  * this plan more than once by way of an escape sequence typed as source text
+  * (this very file, in an earlier round) -- a printable-only encoding removes
+  * that whole failure class from this key.
+  */
+ export function rowKey(row: Pick<DecisionListRow, "projectKey" | "id">): string {
+   return JSON.stringify([row.projectKey, row.id]);
+ }
+ 
+-export const NO_QUESTION = "(no question recorded)";
++/** In English (criteria read it); the render uses the reader's language. */
++export const NO_QUESTION = en.decisions.noQuestion;
+ 
+ /** spec §5.1: the viewer's local date, YYYY-MM-DD; an unparseable `at` shows its own first ten characters. */
+ export function localDay(at: string): string {
+   const d = new Date(at);
+   if (Number.isNaN(d.getTime())) return at.slice(0, 10);
+   const pad = (n: number): string => String(n).padStart(2, "0");
+   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+ }
+ 
+ export function DecisionList({
+   rows,
+   selected,
+   onOpen,
+ }: {
+   rows: readonly DecisionListRow[];
+   selected?: Pick<DecisionListRow, "projectKey" | "id"> | null;
+   onOpen?: (row: DecisionListRow) => void;
+ }): JSX.Element {
++  const { t } = useTranslation();
+   const selectedKey = selected ? rowKey(selected) : null;
+   return (
+     <ul className="decision-list">
+       {rows.map((row) => {
+         const key = rowKey(row);
+         return (
+           <li key={key}>
+             <button type="button" className="decision-row" aria-current={key === selectedKey ? "true" : undefined} onClick={() => onOpen?.(row)}>
+               <span className="row-meta">
+-                <span className="pill field-kind" data-level={kindLevel(String(row.kind))}>{String(row.kind)}</span>
+-                <span className="pill field-scope">{String(row.scope)}</span>
+-                {row.verdict !== "ok" && <span className="pill pill-warn field-verdict">{String(row.verdict)}</span>}
++                <span className="pill field-kind" data-level={kindLevel(String(row.kind))}>{enumText("decisionKind", String(row.kind))}</span>
++                <span className="pill field-scope">{enumText("decisionScope", String(row.scope))}</span>
++                {row.verdict !== "ok" && <span className="pill pill-warn field-verdict">{enumText("decisionVerdict", String(row.verdict))}</span>}
+                 <span className="row-project field-projectKey">{String(row.projectKey)}</span>
+                 <time className="row-at field-at" dateTime={String(row.at)}>{localDay(String(row.at))}</time>
+               </span>
+-              <span className="row-question">{row.question ?? NO_QUESTION}</span>
++              <span className="row-question">{row.question ?? t("decisions.noQuestion")}</span>
+               <span className="row-id field-id">{String(row.id)}</span>
+             </button>
+           </li>
+         );
+       })}
+     </ul>
+   );
+ }
+diff --git a/web/src/DecisionsView.tsx b/web/src/DecisionsView.tsx
+index bd0c3a6..820c32d 100644
+--- a/web/src/DecisionsView.tsx
++++ b/web/src/DecisionsView.tsx
+@@ -1,30 +1,34 @@
+ /**
+  * Panel UI redesign spec §5.1 (rulings U1, U2). Pure: App owns the fetches, the selection
+  * and the detail; this lays out the heading, the filters, the list and the detail slot.
+  * It takes over PanelHome's job (task 8 ruling K5): the Decisions pane is the default
+  * section, so the first screen is still the work a person owes.
+  */
+ import type { JSX, ReactNode } from "react";
++import { useTranslation } from "react-i18next";
+ import { DecisionList } from "./DecisionList.js";
++import { enumText } from "./i18n.js";
+ import { kindLabel, sortKinds } from "./kindRank.js";
++import { en } from "./locales/en.js";
+ import type { DecisionListRow } from "./types.js";
+ 
+ export interface DecisionFilter {
+   kind: string;
+   scope: string;
+   projectKey: string;
+ }
+ export const NO_FILTER: DecisionFilter = { kind: "", scope: "", projectKey: "" };
+ 
+-export const HIDDEN_BY_FILTER = "This decision is hidden by the current filters.";
+-export const NOT_IN_LIST = "This decision is no longer in the list: it has been reviewed.";
++/** In English (criteria read them); the render uses the reader's language (panel i18n spec §3.3). */
++export const HIDDEN_BY_FILTER = en.decisions.hiddenByFilter;
++export const NOT_IN_LIST = en.decisions.notInList;
+ 
+ export function filterRows(rows: readonly DecisionListRow[], filter: DecisionFilter): DecisionListRow[] {
+   return rows.filter(
+     (r) =>
+       (filter.kind === "" || r.kind === filter.kind) &&
+       (filter.scope === "" || r.scope === filter.scope) &&
+       (filter.projectKey === "" || r.projectKey === filter.projectKey),
+   );
+ }
+ 
+@@ -33,77 +37,79 @@ const distinct = (rows: readonly DecisionListRow[], pick: (r: DecisionListRow) =
+ 
+ function FilterSelect(props: {
+   label: string;
+   name: keyof DecisionFilter;
+   values: string[];
+   filter: DecisionFilter;
+   onFilter?: (f: DecisionFilter) => void;
+   order?: (values: readonly string[]) => string[];
+   optionText?: (value: string) => string;
+ }): JSX.Element {
++  const { t } = useTranslation();
+   // A value whose last row was just reviewed away stays listed, so the select still shows
+   // what is filtering the (now empty) list instead of claiming "any" (final review Important 1).
+   const current = props.filter[props.name];
+   const order = props.order ?? ((v: readonly string[]) => [...v].sort());
+   const values = order(current === "" || props.values.includes(current) ? props.values : [...props.values, current]);
+   return (
+     <label>
+       {props.label}
+       <select
+         name={`filter-${props.name}`}
+         value={props.filter[props.name]}
+         onChange={(e) => props.onFilter?.({ ...props.filter, [props.name]: e.currentTarget.value })}
+       >
+-        <option value="">any</option>
++        <option value="">{t("decisions.any")}</option>
+         {values.map((v) => <option key={v} value={v}>{props.optionText ? props.optionText(v) : v}</option>)}
+       </select>
+     </label>
+   );
+ }
+ 
+ export function DecisionsView(props: {
+   rows: readonly DecisionListRow[];
+   filter: DecisionFilter;
+   onFilter?: (f: DecisionFilter) => void;
+   selected?: Pick<DecisionListRow, "projectKey" | "id"> | null;
+   onOpen?: (row: DecisionListRow) => void;
+   detail?: ReactNode;
+ }): JSX.Element {
++  const { t } = useTranslation();
+   const shown = filterRows(props.rows, props.filter);
+   // A detail stays open after its row leaves the list (filtered away, or reviewed); say which.
+   const same = (r: DecisionListRow): boolean => r.projectKey === props.selected?.projectKey && r.id === props.selected?.id;
+   const note = !props.selected || props.detail == null ? null
+-    : !props.rows.some(same) ? NOT_IN_LIST
+-    : !shown.some(same) ? HIDDEN_BY_FILTER
++    : !props.rows.some(same) ? t("decisions.notInList")
++    : !shown.some(same) ? t("decisions.hiddenByFilter")
+     : null;
+   return (
+     <div className="decisions">
+       <div className="section-head">
+-        <h1>Unreviewed high-tier decisions</h1>
+-        <span className="count" data-testid="decision-count">{shown.length} of {props.rows.length}</span>
++        <h1>{t("decisions.title")}</h1>
++        <span className="count" data-testid="decision-count">{t("decisions.count", { shown: shown.length, total: props.rows.length })}</span>
+       </div>
+       <p className="section-lede">
+-        High-tier decisions an agent recorded that nobody has reviewed yet. Open one, read it, then Agree or Correct.
++        {t("decisions.lede")}
+       </p>
+       <div className="filters">
+-        <FilterSelect label="Kind" name="kind" values={distinct(props.rows, (r) => String(r.kind))} filter={props.filter} onFilter={props.onFilter} order={sortKinds} optionText={kindLabel} />
+-        <FilterSelect label="Scope" name="scope" values={distinct(props.rows, (r) => String(r.scope))} filter={props.filter} onFilter={props.onFilter} />
+-        <FilterSelect label="Repository" name="projectKey" values={distinct(props.rows, (r) => r.projectKey)} filter={props.filter} onFilter={props.onFilter} />
++        <FilterSelect label={t("decisions.filterKind")} name="kind" values={distinct(props.rows, (r) => String(r.kind))} filter={props.filter} onFilter={props.onFilter} order={sortKinds} optionText={kindLabel} />
++        <FilterSelect label={t("decisions.filterScope")} name="scope" values={distinct(props.rows, (r) => String(r.scope))} filter={props.filter} onFilter={props.onFilter} optionText={(value) => enumText("decisionScope", value)} />
++        <FilterSelect label={t("decisions.filterRepository")} name="projectKey" values={distinct(props.rows, (r) => r.projectKey)} filter={props.filter} onFilter={props.onFilter} />
+       </div>
+       <div className="split">
+         <div className="split-list">
+           {props.rows.length === 0 ? (
+-            <p className="empty">Nothing to review. Every high-tier decision has been reviewed.</p>
++            <p className="empty">{t("decisions.nothingToReview")}</p>
+           ) : shown.length === 0 ? (
+-            <p className="empty">No decision matches these filters.</p>
++            <p className="empty">{t("decisions.noMatch")}</p>
+           ) : (
+             <DecisionList rows={shown} selected={props.selected} onOpen={props.onOpen} />
+           )}
+         </div>
+         <div className="split-detail">
+           {note !== null && <p className="detail-note" role="note">{note}</p>}
+-          {props.detail ?? <p className="empty">Select a decision to read it.</p>}
++          {props.detail ?? <p className="empty">{t("decisions.selectOne")}</p>}
+         </div>
+       </div>
+     </div>
+   );
+ }
+diff --git a/web/src/kindRank.ts b/web/src/kindRank.ts
+index 866fba4..a6dc0a6 100644
+--- a/web/src/kindRank.ts
++++ b/web/src/kindRank.ts
+@@ -1,16 +1,17 @@
+ /**
+  * Human ruling (session f8281a60, 2026-09-27). Every decision kind is high-tier
+  * (src/metrics/highTier.ts), so this is a finer, UI-only importance: how hard a wrong
+  * call is to undo. Keyed by DecisionKind, so a new kind without a rank is a compile
+  * error -- the same lever KIND_TIER uses.
+  */
++import { enumText } from "./i18n.js";
+ import type { DecisionKind } from "./types.js";
+ 
+ export type KindLevel = 1 | 2 | 3;
+ 
+ export const KIND_RANK: Record<DecisionKind, { order: number; level: KindLevel }> = {
+   reconcile: { order: 0, level: 1 },
+   abandon: { order: 1, level: 1 },
+   interface: { order: 2, level: 2 },
+   dependency: { order: 3, level: 2 },
+   boundary: { order: 4, level: 2 },
+@@ -21,18 +22,18 @@ export const KIND_RANK: Record<DecisionKind, { order: number; level: KindLevel }
+ // A native <option> ignores CSS colour on macOS, so the level travels as text.
+ const MARK: Record<KindLevel, string> = { 1: "🔴", 2: "🟠", 3: "🟡" };
+ 
+ const rankOf = (kind: string): { order: number; level: KindLevel } | undefined =>
+   Object.prototype.hasOwnProperty.call(KIND_RANK, kind) ? KIND_RANK[kind as DecisionKind] : undefined;
+ 
+ export const kindLevel = (kind: string): KindLevel | undefined => rankOf(kind)?.level;
+ 
+ export const kindLabel = (kind: string): string => {
+   const rank = rankOf(kind);
+-  return rank ? `${MARK[rank.level]} ${kind}` : kind;
++  return rank ? `${MARK[rank.level]} ${enumText("decisionKind", kind)}` : kind;
+ };
+ 
+ /** Most important first; a value this file does not know goes last, alphabetically. */
+ export function sortKinds(kinds: readonly string[]): string[] {
+   const key = (k: string): number => rankOf(k)?.order ?? Number.MAX_SAFE_INTEGER;
+   return [...kinds].sort((a, b) => key(a) - key(b) || a.localeCompare(b));
+ }
+diff --git a/web/src/locales/en.ts b/web/src/locales/en.ts
+index 4a331bc..2456468 100644
+--- a/web/src/locales/en.ts
++++ b/web/src/locales/en.ts
+@@ -1,22 +1,33 @@
+ /**
+  * Panel i18n spec §2: the English resource. It is the source shape (`as const`), and every value is today's panel text
+  * byte for byte. Keys are grouped by panel area. Enum families (spec §3.5) are Records over the value unions, so a new
+  * value is a compile error here until it has its words. Tasks 3-10 add their areas.
+  */
+ import type { ThemePref } from "../theme.js";
+-import type { MetricsNoteCode } from "../types.js";
++import type { CorrectionKind, DecisionKind, DecisionObservation, DecisionScope, MetricsNoteCode } from "../types.js";
+ 
+ /** The Chinese resource's type: the same key set, every value widened to string (spec §2). */
+ export type Translation<T> = { [K in keyof T]: T[K] extends string ? string : Translation<T[K]> };
+ 
+ const theme = { system: "system", light: "light", dark: "dark" } as const satisfies Record<ThemePref, string>;
++const decisionKind = {
++  dependency: "dependency", interface: "interface", scheduling: "scheduling", abandon: "abandon", criteria: "criteria", boundary: "boundary", reconcile: "reconcile",
++} as const satisfies Record<DecisionKind, string>;
++const decisionScope = { file: "file", task: "task", repo: "repo", "cross-repo": "cross-repo" } as const satisfies Record<DecisionScope, string>;
++const decisionVerdict = { ok: "ok", downgraded: "downgraded" } as const satisfies Record<DecisionObservation["verdict"], string>;
++const correctionKind = { wrong: "wrong", not_my_taste: "not_my_taste", stale: "stale" } as const satisfies Record<CorrectionKind, string>;
++const kindHelp = {
++  wrong: "the choice was wrong",
++  not_my_taste: "defensible, but not what I would choose",
++  stale: "it was right then, no longer true",
++} as const satisfies Record<CorrectionKind, string>;
+ 
+ // Panel i18n spec §3.4: each English note is the server's sentence byte for byte (tests/metrics/noteCodes.test.ts).
+ const metricsNote = {
+   "no-review-coverage": "review coverage has no data: its only producer is the panel (E2 spec §3.5), and A' §4.4 says the correction rate must never be read on its own",
+   "unresolved-decisions": "some corrections point at decisions outside what was scanned (see unresolved_decisions); they count in the totals but sit in no decision-kind bucket",
+   "stale-bias": "systematically low: closing a stale correction requires the chose_instead field (CLI flag --chose-instead) that corrections/schema.ts says a stale may not have (E2 spec §3.2.1, A' ERRATUM 3)",
+   "reviewed-is-deliberate": "`reviewed` is a deliberate act, so this number can sit near zero for a long time -- and a long-zero coverage is not distinguishable from nobody looking. Read it with the backlog, not on its own.",
+ } as const satisfies Record<MetricsNoteCode | "reviewed-is-deliberate", string>;
+ 
+ export const en = {
+@@ -24,20 +35,48 @@ export const en = {
+   shell: {
+     brandTitle: "Leave it to Orca — every idea, made real.",
+     chainRunning: "a chain is running",
+     needsAttention: "needs attention",
+     theme: "Theme",
+     language: "Language",
+     loading: "orca panel loading…",
+     epoch: "epoch {{epoch}}",
+   },
+   common: { none: "none", na: "n/a", unknown: "unknown", dispatchBlocked: "dispatch blocked", dispatchLive: "dispatch live" },
++  decisions: {
++    title: "Unreviewed high-tier decisions",
++    count: "{{shown}} of {{total}}",
++    lede: "High-tier decisions an agent recorded that nobody has reviewed yet. Open one, read it, then Agree or Correct.",
++    filterKind: "Kind",
++    filterScope: "Scope",
++    filterRepository: "Repository",
++    any: "any",
++    nothingToReview: "Nothing to review. Every high-tier decision has been reviewed.",
++    noMatch: "No decision matches these filters.",
++    selectOne: "Select a decision to read it.",
++    hiddenByFilter: "This decision is hidden by the current filters.",
++    notInList: "This decision is no longer in the list: it has been reviewed.",
++    noQuestion: "(no question recorded)",
++    chose: "Chose",
++    because: "Because",
++    rejected: "Rejected alternatives",
++    agree: "Agree",
++    agreeHelp: "Mark reviewed: I read this and it needs no change. Counts toward review coverage.",
++    correctNote: "This records a correction; it does not edit the ledger. To change the decision itself, close it with orca correct --close or let the fix agent do it.",
++    kind: "Kind",
++    kindOption: "{{kind}} — {{help}}",
++    kindHelp,
++    choseInstead: "Chose instead (optional)",
++    correct: "Correct",
++    recordedReviewed: "Recorded as reviewed.",
++    correctionRecorded: "Correction recorded.",
++  },
+   loopPlan: {
+     // Panel i18n spec §3.1, §6.9: one entry per registry version, equal to src/control/loopPlans.ts (the English source of
+     // record); a version with no discipline has no discipline key.
+     plan: {
+       standard: { v1: { name: "Standard" }, v2: { name: "Standard" } },
+       bugfix: {
+         v1: { name: "Bug fix (red first)", discipline: "Write a failing test that reproduces the bug, then fix it (checked by a model, not proven mechanically)" },
+         v2: { name: "Bug fix (red first)", discipline: "Write a failing test that reproduces the bug, then fix it (checked by a model, not proven mechanically)" },
+       },
+       refactor: {
+@@ -73,12 +112,12 @@ export const en = {
+     repairRate: "Repair rate",
+     reviewCoverage: "Review coverage",
+     unresolvedTitle: "Unresolved decisions",
+     unresolvedCount: "Unresolved decisions: {{n}}",
+     malformedTitle: "Malformed lines",
+     malformedCount: "Malformed lines: {{n}}",
+     futureTitle: "Excluded as future",
+     futureCount: "Excluded as future: {{n}}",
+     note: metricsNote,
+   },
+-  enums: { theme },
++  enums: { theme, decisionKind, decisionScope, decisionVerdict, correctionKind },
+ } as const;
+diff --git a/web/src/locales/zh.ts b/web/src/locales/zh.ts
+index d724641..3be6e98 100644
+--- a/web/src/locales/zh.ts
++++ b/web/src/locales/zh.ts
+@@ -11,20 +11,48 @@ export const zh: Translation<typeof en> = {
+   shell: {
+     brandTitle: "交给 Orca —— 每个想法，都能成真。",
+     chainRunning: "有一条链在运行",
+     needsAttention: "需要处理",
+     theme: "主题",
+     language: "语言",
+     loading: "orca 面板加载中…",
+     epoch: "纪元 {{epoch}}",
+   },
+   common: { none: "无", na: "不适用", unknown: "未知", dispatchBlocked: "派发已阻断", dispatchLive: "派发正常" },
++  decisions: {
++    title: "未评审的高层级决策",
++    count: "{{shown}} / {{total}}",
++    lede: "agent 记录下、还没人评审过的高层级决策。打开一条，读完，然后点「同意」或「纠正」。",
++    filterKind: "类型",
++    filterScope: "范围",
++    filterRepository: "仓库",
++    any: "任意",
++    nothingToReview: "没有要评审的。每条高层级决策都已评审。",
++    noMatch: "没有符合这些筛选条件的决策。",
++    selectOne: "选择一条决策来阅读。",
++    hiddenByFilter: "这条决策被当前筛选条件隐藏了。",
++    notInList: "这条决策已不在列表里：它已被评审。",
++    noQuestion: "（没有记录问题）",
++    chose: "选择了",
++    because: "理由",
++    rejected: "被否决的备选",
++    agree: "同意",
++    agreeHelp: "标记为已评审：我读过了，不需要改。计入评审覆盖率。",
++    correctNote: "这会记录一条纠正；它不改台账。要改决策本身，用 orca correct --close 关闭它，或交给修复 agent。",
++    kind: "类型",
++    kindOption: "{{kind}} —— {{help}}",
++    kindHelp: { wrong: "选错了", not_my_taste: "说得通，但不是我会选的", stale: "当时对，现在不成立了" },
++    choseInstead: "改选（可选）",
++    correct: "纠正",
++    recordedReviewed: "已记录为已评审。",
++    correctionRecorded: "纠正已记录。",
++  },
+   loopPlan: {
+     plan: {
+       standard: { v1: { name: "标准" }, v2: { name: "标准" } },
+       bugfix: {
+         v1: { name: "修 bug（先红后绿）", discipline: "先写能复现的失败测试再修（由模型核对，不是机械证明）" },
+         v2: { name: "修 bug（先红后绿）", discipline: "先写能复现的失败测试再修（由模型核对，不是机械证明）" },
+       },
+       refactor: {
+         v1: { name: "安全重构", discipline: "不改可观察行为（写给 agent 的约束；只有检查命令是硬的）" },
+         v2: { name: "安全重构", discipline: "不改可观察行为（写给 agent 的约束；只有检查命令是硬的）" },
+@@ -63,14 +91,20 @@ export const zh: Translation<typeof en> = {
+     malformedCount: "格式错误的行：{{n}}",
+     futureTitle: "因日期在未来而排除",
+     futureCount: "因日期在未来而排除：{{n}}",
+     note: {
+       "no-review-coverage": "评审覆盖率没有数据：它唯一的来源是面板（E2 spec §3.5），而 A' §4.4 规定纠正率绝不能单独解读",
+       "unresolved-decisions": "有些纠正指向的决策不在扫描范围内（见 unresolved_decisions）；它们计入总数，但不属于任何决策类型分组",
+       "stale-bias": "系统性偏低：关闭一条 stale 纠正需要 chose_instead 字段（CLI 参数 --chose-instead），而 corrections/schema.ts 规定 stale 不能带它（E2 spec §3.2.1，A' ERRATUM 3）",
+       "reviewed-is-deliberate": "`reviewed` 是一个有意的动作，所以这个数字可能长时间接近零——而长期为零的覆盖率与没人看无法区分。请结合积压一起看，不要单独看。",
+     },
+   },
+-  enums: { theme: { system: "跟随系统", light: "浅色", dark: "深色" } },
++  enums: {
++    theme: { system: "跟随系统", light: "浅色", dark: "深色" },
++    decisionKind: { dependency: "依赖", interface: "接口", scheduling: "调度", abandon: "放弃", criteria: "判据", boundary: "边界", reconcile: "协调" },
++    decisionScope: { file: "文件", task: "任务", repo: "仓库", "cross-repo": "跨仓库" },
++    decisionVerdict: { ok: "正常", downgraded: "已降级" },
++    correctionKind: { wrong: "错了", not_my_taste: "不合我意", stale: "过时" },
++  },
+ };
+ 
+ export const zhErrors: Record<string, string> = {};
+diff --git a/web/tests/decisionsI18n.test.tsx b/web/tests/decisionsI18n.test.tsx
+new file mode 100644
+index 0000000..695efdb
+--- /dev/null
++++ b/web/tests/decisionsI18n.test.tsx
+@@ -0,0 +1,163 @@
++// @vitest-environment jsdom
++/**
++ * Panel i18n spec §3.3, §3.5, §5: the decisions area in Chinese -- the heading, the filters and their options, the row's
++ * pills (enum values in words; the data-* attributes keep the raw value), the missing-question placeholder, why an open
++ * decision left the list, and the detail's form with each correction kind in words.
++ */
++import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
++import { afterEach, describe, expect, it } from "vitest";
++import i18n from "../src/i18n.js";
++import { App } from "../src/App.js";
++import { DecisionDetail } from "../src/DecisionDetail.js";
++import type { Decision } from "../src/DecisionDetail.js";
++import { DecisionsView, NO_FILTER } from "../src/DecisionsView.js";
++import type { DecisionListRow, MetricsReport, PanelCoverage } from "../src/types.js";
++
++const ROW: DecisionListRow = { projectKey: "github.com/x/y", id: "run/1", at: "2026-09-16T00:00:00.000Z", kind: "reconcile", scope: "cross-repo", verdict: "downgraded", question: null };
++const DECISION: Decision = { id: "run/1", question: "q-1", chose: "c-1", because: "b-1", alternatives: [{ option: "o-1", why_not: "w-1" }] };
++const optionTexts = (container: HTMLElement, name: string): Array<string | null> =>
++  [...container.querySelectorAll(`select[name="${name}"] option`)].map((option) => option.textContent);
++/** A label's own words: its first text node, before the control it wraps. */
++const labelTexts = (container: HTMLElement, selector: string): Array<string | null> =>
++  [...container.querySelectorAll(`${selector} label`)].map((label) => label.firstChild?.textContent ?? null);
++const texts = (container: HTMLElement, selector: string): Array<string | null> =>
++  [...container.querySelectorAll(selector)].map((node) => node.textContent);
++
++afterEach(cleanup);
++
++describe("the decisions area in Chinese", () => {
++  it("shows the list, its filters, the pills and the detail's form in Chinese", async () => {
++    await i18n.changeLanguage("zh");
++    const { container } = render(<DecisionsView rows={[ROW]} filter={NO_FILTER} selected={ROW} detail={<DecisionDetail decision={DECISION} />} />);
++    const text = container.textContent ?? "";
++    for (const expected of ["未评审的高层级决策", "1 / 1", "（没有记录问题）", "选择了", "被否决的备选", "同意", "改选（可选）", "纠正"]) expect(text).toContain(expected);
++    expect(container.querySelector(".field-kind")?.textContent).toBe("协调");
++    expect(container.querySelector(".field-kind")?.getAttribute("data-level")).toBe("1");
++    expect(container.querySelector(".field-scope")?.textContent).toBe("跨仓库");
++    expect(container.querySelector(".field-verdict")?.textContent).toBe("已降级");
++    expect(optionTexts(container, "filter-kind")).toEqual(["任意", "🔴 协调"]);
++    expect(optionTexts(container, "filter-scope")).toEqual(["任意", "跨仓库"]);
++    expect(optionTexts(container, "kind")).toEqual(["错了 —— 选错了", "不合我意 —— 说得通，但不是我会选的", "过时 —— 当时对，现在不成立了"]);
++    // Each site read on its own node, so no assertion passes on a neighbour's text (task 5 implementer addition).
++    expect(container.querySelector("h1")?.textContent).toBe("未评审的高层级决策");
++    expect(container.querySelector('[data-testid="decision-count"]')?.textContent).toBe("1 / 1");
++    expect(container.querySelector(".section-lede")?.textContent).toBe("agent 记录下、还没人评审过的高层级决策。打开一条，读完，然后点「同意」或「纠正」。");
++    expect(labelTexts(container, ".filters")).toEqual(["类型", "范围", "仓库"]);
++    expect(optionTexts(container, "filter-projectKey")).toEqual(["任意", "github.com/x/y"]);
++    expect(container.querySelector(".row-question")?.textContent).toBe("（没有记录问题）");
++    expect(texts(container, ".decision-detail h3")).toEqual(["选择了", "理由", "被否决的备选"]);
++    expect(container.querySelector(".actions > button.btn-primary")?.textContent).toBe("同意");
++    expect(texts(container, ".detail-help")).toEqual([
++      "标记为已评审：我读过了，不需要改。计入评审覆盖率。",
++      "这会记录一条纠正；它不改台账。要改决策本身，用 orca correct --close 关闭它，或交给修复 agent。",
++    ]);
++    expect(labelTexts(container, ".correction-form")).toEqual(["类型", "理由", "改选（可选）"]);
++    expect(container.querySelector('.correction-form button[type="submit"]')?.textContent).toBe("纠正");
++    // Form values and data attributes keep the raw values (spec §3.5).
++    expect([...container.querySelectorAll('select[name="kind"] option')].map((o) => o.getAttribute("value"))).toEqual(["wrong", "not_my_taste", "stale"]);
++    expect([...container.querySelectorAll('select[name="filter-scope"] option')].map((o) => o.getAttribute("value"))).toEqual(["", "cross-repo"]);
++  });
++
++  it("says in Chinese why an open decision is not in the list", async () => {
++    await i18n.changeLanguage("zh");
++    const reviewed = render(<DecisionsView rows={[]} filter={NO_FILTER} selected={ROW} detail={<p>detail</p>} />).container;
++    expect(reviewed.textContent ?? "").toContain("这条决策已不在列表里：它已被评审。");
++    expect(reviewed.textContent ?? "").toContain("没有要评审的。每条高层级决策都已评审。");
++    expect(reviewed.querySelector('[role="note"]')?.textContent).toBe("这条决策已不在列表里：它已被评审。");
++    expect(reviewed.querySelector(".split-list .empty")?.textContent).toBe("没有要评审的。每条高层级决策都已评审。");
++    cleanup();
++    const hidden = render(<DecisionsView rows={[ROW]} filter={{ ...NO_FILTER, scope: "repo" }} selected={ROW} detail={<p>detail</p>} />).container;
++    expect(hidden.textContent ?? "").toContain("这条决策被当前筛选条件隐藏了。");
++    expect(hidden.textContent ?? "").toContain("没有符合这些筛选条件的决策。");
++    expect(hidden.querySelector('[role="note"]')?.textContent).toBe("这条决策被当前筛选条件隐藏了。");
++    expect(hidden.querySelector(".split-list .empty")?.textContent).toBe("没有符合这些筛选条件的决策。");
++    cleanup();
++    const unopened = render(<DecisionsView rows={[ROW]} filter={NO_FILTER} />).container;
++    expect(unopened.querySelector(".split-detail .empty")?.textContent).toBe("选择一条决策来阅读。");
++  });
++});
++
++// ---- The recorded outcome (App): it keeps its key, so the words follow a language switch (spec §3.3). ----
++
++const REPORT: MetricsReport = {
++  as_of: "2026-09-16T00:00:00.000Z",
++  as_of_mode: "wall_clock",
++  repos: [],
++  correction_rate: {
++    numerator_corrections_excluding_stale: 0,
++    denominator_decisions: 0,
++    rate_excluding_stale: null,
++    corrections_total_including_stale: 0,
++    by_decision_kind: [],
++    buckets: [],
++    caveats: [],
++  },
++  repair_rate: {
++    numerator_overturned: 0,
++    denominator_corrections_including_stale: 0,
++    rate: null,
++    stale_only: { numerator_overturned: 0, denominator_corrections: 0, rate: null, known_bias: "" },
++    buckets: [],
++    caveats: [],
++  },
++  backlog: { open_corrections: 0, oldest_age_ms: null, oldest_correction_id: null, by_correction_kind: [] },
++  breakdown_by_correction_kind_including_stale: [],
++  review_coverage: { available: false, reason: "no producer has run yet" },
++  excluded_as_future: 0,
++  unresolved_decisions: [],
++  unkeyable_repos: [],
++  malformed_lines: [],
++};
++const COVERAGE: PanelCoverage = { reviewed_high_tier: 0, high_tier_total: 1, rate: 0, caveat: "the coverage caveat" };
++
++const json = (status: number, body: unknown): Response =>
++  new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
++
++describe("the recorded outcome in Chinese", () => {
++  it("says each recorded outcome in Chinese, and in English after a switch", async () => {
++    /** Answers for POST /api/corrections, in order. */
++    const corrections: Response[] = [
++      json(200, { recorded: true }),
++      json(409, { code: "correction-already-recorded", message: "distinct refusal message", retry_field: "again" }),
++      json(200, { recorded: true }),
++    ];
++    globalThis.fetch = (async (input: RequestInfo | URL): Promise<Response> => {
++      const url = String(input);
++      if (url.startsWith("/api/todo")) return json(200, { rows: [ROW] });
++      if (url.startsWith("/api/metrics")) return json(200, { report: REPORT, panel_review_coverage: COVERAGE });
++      if (url.startsWith("/api/decision")) return json(200, { decision: DECISION });
++      if (url.startsWith("/api/reviews")) return json(200, { recorded: true });
++      if (url.startsWith("/api/corrections")) return corrections.shift() ?? json(500, { code: "no-more", message: "no more answers" });
++      throw new Error(`unexpected request: ${url}`);
++    }) as typeof fetch;
++    await i18n.changeLanguage("zh");
++    render(<App />);
++    await screen.findByText("未评审的高层级决策");
++    fireEvent.click(document.querySelector(".decision-list li button")!);
++    await screen.findByText(DECISION.question);
++
++    // Agree.
++    fireEvent.click(document.querySelector(".actions > button.btn-primary")!);
++    await waitFor(() => expect(screen.queryByRole("status")?.textContent).toBe("已记录为已评审。"));
++
++    // Correct, recorded at once.
++    const submit = (): void => {
++      fireEvent.change(document.querySelector('textarea[name="because"]')!, { target: { value: "a reason" } });
++      fireEvent.submit(document.querySelector("form.correction-form")!);
++    };
++    submit();
++    await waitFor(() => expect(screen.queryByRole("status")?.textContent).toBe("纠正已记录。"));
++
++    // Correct again: refused, then recorded through "Record another".
++    submit();
++    await screen.findByTestId("record-another");
++    expect(screen.queryByRole("status")).toBeNull();
++    fireEvent.click(screen.getByTestId("record-another"));
++    await waitFor(() => expect(screen.queryByRole("status")?.textContent).toBe("纠正已记录。"));
++
++    await act(async () => {
++      await i18n.changeLanguage("en");
++    });
++    expect(screen.queryByRole("status")?.textContent).toBe("Correction recorded.");
++  });
++});

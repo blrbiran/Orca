@@ -1,0 +1,108 @@
+# Review package: c840da5..2bcd2b0
+
+## Commits
+2bcd2b0 test(web): let the pseudo-locale see values interpolated into a translation
+
+## Files changed
+ web/tests/i18nPseudo.test.tsx | 35 ++++++++++++++++++++++++++---------
+ 1 file changed, 26 insertions(+), 9 deletions(-)
+
+## Diff
+diff --git a/web/tests/i18nPseudo.test.tsx b/web/tests/i18nPseudo.test.tsx
+index 592465a..cf64499 100644
+--- a/web/tests/i18nPseudo.test.tsx
++++ b/web/tests/i18nPseudo.test.tsx
+@@ -1,19 +1,28 @@
+ // @vitest-environment jsdom
+ /**
+- * Panel i18n spec §6.5: everything visible goes through t. A test-only pseudo-locale wraps every value as ⟦…⟧ (the zh
+- * bundle is overwritten with the wrapped English values; drafter finding F15). Every area -- nav and shell footer,
++ * Panel i18n spec §6.5: everything visible goes through t. A test-only pseudo-locale wraps the fixed text of every value
++ * as ⟦…⟧ and leaves each {{placeholder}} and <tag> outside the markers (the zh bundle is swapped for the wrapped English
++ * values; drafter finding F15), so a value interpolated into a translated string stays visible once the markers are
++ * stripped: an enum passed raw instead of through enumText is seen (Task 11 review I1). Every area -- nav and shell footer,
+  * decisions, chains, task control (loop card and budget table included), agents, metrics, recovery, error page -- is
+  * rendered with a fixture; after every ⟦…⟧ is stripped from the text and from the text attributes, no English value of at
+- * least 4 characters that has no {{ and differs from its Chinese value may remain. The same fixtures in real Chinese show
+- * a named Chinese string per area. Fixture data never equals such a value: if this criterion names a fixture string,
+- * change the fixture's data, not the rule.
++ * least 4 characters that differs from its Chinese value may remain, and no fixed fragment of at least 4 characters of a
++ * templated value that its Chinese value does not contain. The same fixtures in real Chinese show a named Chinese string
++ * per area. Fixture data never equals such a value: if this criterion names a fixture string, change the fixture's data,
++ * not the rule.
++ *
++ * What this criterion cannot see, by construction: values under 4 characters (n/a, any, By, run, ok, low, the separators)
++ * -- a substring rule for them would hit fixture ids such as run/1 -- which are the per-area i18n tests' job; branches no
++ * fixture renders (App's own loading / not-loaded / unavailable lines, EvidenceLink's refusal), which only the scan
++ * backstop (tests/panel/scanPanelText.test.ts) covers, and only against literals; and attributes other than aria-label,
++ * title, placeholder and label (none is set through t today).
+  */
+ import { cleanup, render } from "@testing-library/react";
+ import type { JSX } from "react";
+ import { afterEach, describe, expect, it, vi } from "vitest";
+ import { AgentSelectionEditor } from "../src/AgentSelectionEditor.js";
+ import { AgentSettings } from "../src/AgentSettings.js";
+ import { footerLines, retryNotice } from "../src/App.js";
+ import { bannersFor } from "../src/chainBanner.js";
+ import { ChainBanners, ChainPanel } from "../src/ChainPanel.js";
+ import { ControlPanel } from "../src/ControlPanel.js";
+@@ -37,24 +46,31 @@ import type { ChainRepoView, DecisionListRow, MetricsReport, PanelCoverage } fro
+ type Tree = { readonly [key: string]: string | Tree };
+ function flatten(node: Tree, prefix = ""): Record<string, string> {
+   const out: Record<string, string> = {};
+   for (const [key, value] of Object.entries(node)) {
+     const path = prefix === "" ? key : `${prefix}.${key}`;
+     if (typeof value === "string") out[path] = value;
+     else Object.assign(out, flatten(value, path));
+   }
+   return out;
+ }
+-const wrap = (node: Tree): Tree => Object.fromEntries(Object.entries(node).map(([key, value]) => [key, typeof value === "string" ? `⟦${value}⟧` : wrap(value)]));
++/** A value's fixed text and its {{placeholders}} / <tags>, alternating: odd indexes are the placeholders and tags. */
++const parts = (value: string): string[] => value.split(/(\{\{[^}]*\}\}|<\/?[a-z0-9]+>)/);
++const wrapValue = (value: string): string => parts(value).map((part, index) => (index % 2 === 1 || part === "" ? part : `⟦${part}⟧`)).join("");
++const wrap = (node: Tree): Tree => Object.fromEntries(Object.entries(node).map(([key, value]) => [key, typeof value === "string" ? wrapValue(value) : wrap(value)]));
+ const EN = flatten(en as unknown as Tree);
+ const ZH = flatten(zh as unknown as Tree);
+-const CHECKED = Object.entries(EN).filter(([key, value]) => value.length >= 4 && !value.includes("{{") && value !== ZH[key]);
++const WHOLE = Object.entries(EN).filter(([key, value]) => value.length >= 4 && !value.includes("{{") && value !== ZH[key]);
++const FRAGMENTS = Object.entries(EN).filter(([, value]) => value.includes("{{")).flatMap(([key, value]) =>
++  parts(value).filter((part, index) => index % 2 === 0).map((part) => part.trim()).filter((part) => part.length >= 4 && !ZH[key]!.includes(part))
++    .map((part): [string, string] => [`${key} (fixed part)`, part]));
++const CHECKED = [...WHOLE, ...FRAGMENTS];
+ const strip = (text: string): string => {
+   let out = text;
+   for (;;) {
+     const next = out.replace(/⟦[^⟦⟧]*⟧/g, "");
+     if (next === out) return out;
+     out = next;
+   }
+ };
+ function leftovers(root: HTMLElement): string[] {
+   const attributes = [...root.querySelectorAll("*")].flatMap((element) => ["aria-label", "title", "placeholder", "label"].map((name) => element.getAttribute(name) ?? ""));
+@@ -186,22 +202,23 @@ const AREAS: Array<{ name: string; chinese: string; element: () => JSX.Element }
+   { name: "metrics", chinese: "纠正率", element: () => <MetricsView report={metricsReport} coverage={coverage} /> },
+   { name: "error page and refusal", chinese: "orca 面板加载失败", element: () => (
+     <>
+       <ErrorPage failure={{ status: 409, code: "unresolved-project-keys", message: "m-2" }} />
+       <Refusal refusal={{ status: 409, code: "decision-not-found", message: "m-3", retry_field: "again" }} />
+     </>
+   ) },
+ ];
+ 
+ describe("everything visible goes through t (spec §6.5)", () => {
+-  it("checks a real set of English values", () => {
+-    expect(CHECKED.length).toBeGreaterThan(300);
++  it("checks a real set of English values, the fixed parts of templated ones included", () => {
++    expect(WHOLE.length).toBeGreaterThan(300);
++    expect(FRAGMENTS.length).toBeGreaterThan(120);
+   });
+ 
+   it.each(AREAS)("$name: no English value is left once the pseudo-locale's ⟦…⟧ are stripped", async ({ element }) => {
+     await usePseudo();
+     const { container } = render(element());
+     expect(container.textContent).toContain("⟦");
+     expect(leftovers(container)).toEqual([]);
+   });
+ 
+   it.each(AREAS)("$name: the same fixture in Chinese shows $chinese", async ({ element, chinese }) => {

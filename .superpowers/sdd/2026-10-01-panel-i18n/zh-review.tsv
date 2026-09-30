@@ -1,0 +1,694 @@
+# zh.ts ready for the human review (spec §5). Task 11 implementer, session e604b1ba, 2026-10-01, at ee57fc9 (zh.ts unchanged by Task 11).
+# Made by the Task 11 brief Step 5 command (tsx over web/src/locales/en.ts + zh.ts) into $SCRATCH/zh-review.tsv: 677 rows = 505 keys + 172 zhErrors entries; every row 3 tab-separated fields (awk NF!=3 -> empty).
+# Lines starting with # are notes. Columns: key<TAB>English<TAB>Chinese. zhErrors rows are errors.<code> with an empty English column (the English is the server message as sent).
+key	English	Chinese
+nav.sections	Sections	分区
+nav.decisions	Decisions	决策
+nav.chains	Chains	链
+nav.tasks	Task control	任务控制
+nav.metrics	Metrics	指标
+shell.brandTitle	Leave it to Orca — every idea, made real.	交给 Orca —— 每个想法，都能成真。
+shell.chainRunning	a chain is running	有一条链在运行
+shell.needsAttention	needs attention	需要处理
+shell.theme	Theme	主题
+shell.language	Language	语言
+shell.loading	orca panel loading…	orca 面板加载中…
+shell.epoch	epoch {{epoch}}	纪元 {{epoch}}
+common.none	none	无
+common.na	n/a	不适用
+common.unknown	unknown	未知
+common.dispatchBlocked	dispatch blocked	派发已阻断
+common.dispatchLive	dispatch live	派发正常
+decisions.title	Unreviewed high-tier decisions	未评审的高层级决策
+decisions.count	{{shown}} of {{total}}	{{shown}} / {{total}}
+decisions.lede	High-tier decisions an agent recorded that nobody has reviewed yet. Open one, read it, then Agree or Correct.	agent 记录下、还没人评审过的高层级决策。打开一条，读完，然后点「同意」或「纠正」。
+decisions.filterKind	Kind	类型
+decisions.filterScope	Scope	范围
+decisions.filterRepository	Repository	仓库
+decisions.any	any	任意
+decisions.nothingToReview	Nothing to review. Every high-tier decision has been reviewed.	没有要评审的。每条高层级决策都已评审。
+decisions.noMatch	No decision matches these filters.	没有符合这些筛选条件的决策。
+decisions.selectOne	Select a decision to read it.	选择一条决策来阅读。
+decisions.hiddenByFilter	This decision is hidden by the current filters.	这条决策被当前筛选条件隐藏了。
+decisions.notInList	This decision is no longer in the list: it has been reviewed.	这条决策已不在列表里：它已被评审。
+decisions.noQuestion	(no question recorded)	（没有记录问题）
+decisions.chose	Chose	选择了
+decisions.because	Because	理由
+decisions.rejected	Rejected alternatives	被否决的备选
+decisions.agree	Agree	同意
+decisions.agreeHelp	Mark reviewed: I read this and it needs no change. Counts toward review coverage.	标记为已评审：我读过了，不需要改。计入评审覆盖率。
+decisions.correctNote	This records a correction; it does not edit the ledger. To change the decision itself, close it with orca correct --close or let the fix agent do it.	这会记录一条纠正；它不改台账。要改决策本身，用 orca correct --close 关闭它，或交给修复 agent。
+decisions.kind	Kind	类型
+decisions.kindOption	{{kind}} — {{help}}	{{kind}} —— {{help}}
+decisions.kindHelp.wrong	the choice was wrong	选错了
+decisions.kindHelp.not_my_taste	defensible, but not what I would choose	说得通，但不是我会选的
+decisions.kindHelp.stale	it was right then, no longer true	当时对，现在不成立了
+decisions.choseInstead	Chose instead (optional)	改选（可选）
+decisions.correct	Correct	纠正
+decisions.recordedReviewed	Recorded as reviewed.	已记录为已评审。
+decisions.correctionRecorded	Correction recorded.	纠正已记录。
+chains.notLoaded	Chains have not loaded.	链尚未加载。
+chains.title	Chains	链
+chains.noChain	No chain yet.	还没有链。
+chains.goal	Goal	目标
+chains.by	By	发起人
+chains.progress	Progress	进度
+chains.state	State	状态
+chains.stop	Stop chain	停止链
+chains.stopsAfter	 Stops after the current session ends.	 当前会话结束后停止。
+chains.formRepository	Repository 	仓库 
+chains.formGoal	Goal 	目标 
+chains.formMaxSessions	Max sessions 	最多会话数 
+chains.formMaxCost	Max cost in USD (a soft limit) 	费用上限（美元，软限制） 
+chains.formTimeout	Session timeout in minutes 	会话超时（分钟） 
+chains.start	Start chain	启动链
+chains.started	Chain {{chainId}} started.	链 {{chainId}} 已启动。
+chains.stopRequested	Chain {{chainId}} will stop after the current session ends.	链 {{chainId}} 将在当前会话结束后停止。
+chains.gotIt	Got it	知道了
+chains.stateStopped	stopped: {{reason}} ({{category}})	已停止：{{reason}}（{{category}}）
+chains.stateRunning	running	运行中
+chains.stateOrphaned	running (supervisor is gone)	运行中（监督进程已不在）
+chains.costUnreadable	cost unreadable	费用读不出
+chains.cost	USD {{amount}}	USD {{amount}}
+chains.sessionProgress	session {{n}}; {{cost}}	第 {{n}} 个会话；{{cost}}
+chains.banner.done	Chain finished	链已完成
+chains.banner.blocked	Chain is waiting for you	链在等你
+chains.banner.limit	Chain stopped at a limit	链因触达上限而停止
+chains.banner.anomaly	Chain stopped on an anomaly	链因异常而停止
+control.unavailable	The task control plane is not available on this panel.	这个面板上没有任务控制面。
+control.title	Task control	任务控制
+control.summaryLine	epoch {{epoch}} · projection {{seq}} · {{dispatch}}	纪元 {{epoch}} · 投影 {{seq}} · {{dispatch}}
+control.noPort	no execution port configured · this panel serves recovery and evidence, and refuses to start work · set ORCA_CCLOOP_BIN and ORCA_AGENTS_TABLE and restart it	未配置执行端口 · 这个面板提供恢复和证据，但拒绝开始工作 · 设置 ORCA_CCLOOP_BIN 和 ORCA_AGENTS_TABLE 后重启它
+control.resetRequired	server reset required · this page must re-read before it trusts any cached view	服务端要求重置 · 本页必须重新读取，才能信任任何缓存的视图
+control.refetchRequired	projection refetch required · re-reading the open groups	需要重新拉取投影 · 正在重新读取打开的组
+control.dispatchBlockedRecovery	dispatch blocked · recovery must be observed	派发已阻断 · 必须先观察到恢复
+control.groupsNav	Control groups	控制组
+control.noGroups	No control groups yet.	还没有控制组。
+control.groupDone	 · {{done}}/{{total}} done	 · 已完成 {{done}}/{{total}}
+control.groupBlockers	 · {{n}} blocker(s)	 · {{n}} 个阻塞项
+control.reading	Reading {{groupId}}…	正在读取 {{groupId}}…
+control.outcomeUnknown	Command outcome unknown, being looked up: {{commands}}	命令结果未知，正在查询：{{commands}}
+control.import.region	Import plan	导入计划
+control.import.title	Import a plan	导入一个计划
+control.import.noEstimator	No estimator profile is configured for this panel, so a plan cannot be imported. Restart it with --estimator-profile and --estimate-mode.	这个面板没有配置估算 profile，所以不能导入计划。请带上 --estimator-profile 和 --estimate-mode 重启它。
+control.import.noRepository	No trusted repository and plan are configured for this panel.	这个面板没有配置受信任的仓库和计划。
+control.import.summary	{{repository}} · {{plan}} · estimate mode {{mode}}	{{repository}} · {{plan}} · 估算模式 {{mode}}
+control.import.notConfigured	not configured	未配置
+control.import.button	Import plan	导入计划
+control.group.region	Control group {{groupId}}	控制组 {{groupId}}
+control.group.heading	{{groupId}} · {{state}} · revision {{revision}} · projection {{projection}}	{{groupId}} · {{state}} · 版本 {{revision}} · 投影 {{projection}}
+control.group.claimBlocked	claim blocked · new runs are not being started	认领已阻断 · 不再启动新的运行
+control.group.planLine	{{goal}} · plan {{hash}} · graph v{{graphVersion}}	{{goal}} · 计划 {{hash}} · 图 v{{graphVersion}}
+control.group.stop	stop {{mode}} {{state}} · accepted {{accepted}} · deadline {{deadline}} · {{n}} frozen run(s): {{runs}}	停止 {{mode}} {{state}} · 受理于 {{accepted}} · 截止 {{deadline}} · {{n}} 个冻结的运行：{{runs}}
+control.group.workItems	Work items	工作项
+control.group.filterRegion	Filter work items by label	按标签筛选工作项
+control.group.filterLegend	labels (any of)	标签（任一）
+control.group.th.task	task	任务
+control.group.th.status	status	状态
+control.group.th.labels	labels	标签
+control.group.th.progress	progress	进度
+control.group.th.run	run	运行
+control.group.th.pending	pending	待定
+control.group.th.dependsOn	depends on	依赖
+control.group.runs	Runs	运行
+control.group.runsTh.run	run	运行
+control.group.runsTh.phase	phase	阶段
+control.group.runsTh.state	state	状态
+control.group.runsTh.profile	profile	配置
+control.group.runsTh.used	used	已用
+control.group.runsTh.remaining	remaining	剩余
+control.group.runsTh.evidence	evidence	证据
+control.group.attempt	 · attempt {{attempt}} of claim {{claim}}	 · 第 {{attempt}} 次尝试（认领序号 {{claim}}）
+control.group.retryRun	Retry run {{id}}	重试运行 {{id}}
+control.group.handoffRequests	Handoff requests	交接请求
+control.group.handoffLine	{{requestId}} · run {{runId}} · {{state}} · deadline {{deadline}}	{{requestId}} · 运行 {{runId}} · {{state}} · 截止 {{deadline}}
+control.group.handoffEvidence	 · evidence {{ids}}	 · 证据 {{ids}}
+control.group.estimates	Estimates	估算
+control.group.estimateLine	{{estimateId}} · v{{version}} · {{state}} · {{mode}} profile {{profileId}} {{hash}}	{{estimateId}} · v{{version}} · {{state}} · {{mode}} · profile {{profileId}} {{hash}}
+control.group.waiting	Waiting for the ledger to answer: {{commands}}	等待台账回答：{{commands}}
+control.group.dispatch	Dispatch	派发
+control.group.start	Start	开跑
+control.group.pause	Pause dispatch	暂停派发
+control.group.handoffStop	Handoff stop	交接停止
+control.group.resume	Resume dispatch	恢复派发
+control.group.continueSelected	Continue selected tasks ({{n}})	继续选中的任务（{{n}}）
+control.group.continueTask	Continue task {{taskId}}	继续任务 {{taskId}}
+control.group.resumeNoContinuation	Resume (no continuation)	恢复（不续跑）
+control.group.retryRecovery	Retry recovery for {{groupId}}	重试 {{groupId}} 的恢复
+control.group.recent	Recent commands: {{commands}}	最近的命令：{{commands}}
+control.task.region	Task {{taskId}}	任务 {{taskId}}
+control.task.labelsFrom	labels from {{source}} · version {{version}}	标签来自{{source}} · 版本 {{version}}
+control.task.labelSource.plan	plan	计划
+control.task.labelSource.operator	operator	操作者
+control.task.unsavedDraft	 · unsaved draft	 · 未保存的草稿
+control.task.labelsChanged	labels changed since your draft (v{{base}} → v{{current}}) · now: 	你开始草稿后标签已变（v{{base}} → v{{current}}） · 现在：
+control.task.labelsOf	Labels of {{taskId}}	{{taskId}} 的标签
+control.task.remove	Remove {{label}}	移除 {{label}}
+control.task.systemLabel	System label	系统标签
+control.task.addSystem	Add system label	添加系统标签
+control.task.customLabel	Custom label	自定义标签
+control.task.addCustom	Add custom label	添加自定义标签
+control.task.save	Save labels	保存标签
+control.task.discard	Discard draft	丢弃草稿
+control.task.restore	Restore plan labels	恢复计划里的标签
+control.task.progress	progress: {{progress}}	进度：{{progress}}
+control.task.lastTransition	 · last transition {{at}}	 · 上次变化 {{at}}
+control.task.runsOf	Runs of {{taskId}}	{{taskId}} 的运行
+control.progress.noRun	no run	没有运行
+control.progress.notReported	not reported yet	尚未上报
+control.progress.attemptUnknown	attempt unknown	尝试次数未知
+control.progress.attempt	attempt {{current}}/{{max}}	尝试 {{current}}/{{max}}
+control.progress.tokensUnknown	tokens unknown	token 未知
+control.progress.tokensOfZero	tokens {{used}} of 0	token {{used}} / 0
+control.progress.tokensPercent	tokens {{percent}}% (reported at phase end)	token {{percent}}%（阶段结束时上报）
+control.progress.line	{{step}} · {{attempt}} · {{tokens}}	{{step}} · {{attempt}} · {{tokens}}
+control.evidence.button	evidence	证据
+control.evidence.refused	evidence refused · {{code}}	证据被拒 · {{code}}
+control.evidence.list	List evidence of {{runId}}	列出 {{runId}} 的证据
+control.evidence.none	 no evidence	 没有证据
+control.evidence.region	Evidence of {{runId}}	{{runId}} 的证据
+control.evidence.entry	{{id}} · {{kind}} · {{bytes}} bytes	{{id}} · {{kind}} · {{bytes}} 字节
+control.evidence.download	Download {{id}}	下载 {{id}}
+control.workspace.region	Workspace mode	工作区模式
+control.workspace.line	New runs in {{repoId}} use {{mode}} (setting revision {{revision}}). Runs already started keep theirs.	{{repoId}} 里新的运行使用{{mode}}（设置版本 {{revision}}）。已开始的运行保持原样。
+control.workspace.aWorktree	a git worktree	git worktree
+control.workspace.aClone	a private clone	私有克隆
+control.workspace.worktreeOption	git worktree (default)	git worktree（默认）
+control.workspace.cloneOption	private clone	私有克隆
+recovery.title	Recovery	恢复
+recovery.none	No recovery blockers.	没有恢复阻塞项。
+recovery.retry	Retry recovery	重试恢复
+recovery.dispatchBlocked	dispatch blocked · the panel will not start new runs until recovery is observed	派发已阻断 · 在观察到恢复之前，面板不会启动新的运行
+recovery.allGroups	all groups	所有组
+recovery.run	 · run {{runId}}	 · 运行 {{runId}}
+recovery.evidence	 · evidence {{ids}}	 · 证据 {{ids}}
+recovery.runEvidence	run evidence	运行证据
+budget.region	Budget proposal	预算提案
+budget.heading	Proposal v{{version}} · {{state}}	提案 v{{version}} · {{state}}
+budget.modeLine	budget mode {{mode}} · observed enforcement {{enforcement}}	预算模式 {{mode}} · 观测到的约束方式 {{enforcement}}
+budget.notChosen	not chosen	未选择
+budget.frozenAtConfirmation	frozen at confirmation	确认时已冻结
+budget.softNote	 · soft: an overrun is settled after the fact, not prevented	 · 宽松：超支事后结算，不会被阻止
+budget.contextUnavailable	context observation unavailable · the context watermark cannot hand off automatically	上下文观测不可用 · 上下文水位线无法自动交接
+budget.handoffBlocked	profile {{profileId}}: handoff control {{control}} · handoff execution {{execution}} · work bound to it is not dispatched (claim-capability-unavailable)	profile {{profileId}}：交接控制 {{control}} · 交接执行 {{execution}} · 绑定到它的工作不会被派发（claim-capability-unavailable）
+budget.th.owner	owner	归属
+budget.th.bucket	bucket	桶
+budget.th.state	state	状态
+budget.th.suggestion	suggestion	建议
+budget.changeInCard	 Change it in the plan card	 在做法卡片里改
+budget.useFor	use {{value}} for {{owner}} {{bucket}} {{dimension}}	对 {{owner}} {{bucket}} {{dimension}} 采用 {{value}}
+budget.use	use {{value}}	采用 {{value}}
+budget.applyRowFor	Apply row {{owner}} {{bucket}}	应用整行 {{owner}} {{bucket}}
+budget.applyRow	Apply row	应用整行
+budget.staleEstimate	This estimate predates a plan change; estimate again to update the suggestions	这份估算早于一次做法修改；重新估算以更新建议
+budget.applyAll	Apply all suggestions	应用全部建议
+budget.rationale	Estimate rationale ({{estimateId}})	估算理由（{{estimateId}}）
+budget.rationaleLine	{{taskId}} · {{complexity}} · confidence {{confidence}} · {{rationale}}	{{taskId}} · {{complexity}} · 置信度 {{confidence}} · {{rationale}}
+budget.groupLimit	Group limit	组上限
+budget.setLimit	Set limit	设置上限
+budget.handoffAt	Hand off at context tokens (blank keeps it unset)	上下文达到多少 token 时交接（留空则不设）
+budget.ledger	used {{used}} · committed {{committed}} · reserve {{reserve}}	已用 {{used}} · 已承诺 {{committed}} · 余量 {{reserve}}
+budget.deficit	 · deficit {{deficit}}	 · 缺口 {{deficit}}
+budget.usageUnknown	 · usage unknown	 · 用量未知
+budget.save	Save proposal	保存提案
+budget.reestimate	Re-estimate	重新估算
+budget.confirmWaits	Confirm waits for this proposal version's agent selections to resolve.	确认要等这个提案版本的 agent 选择解析完成。
+budget.confirm	Confirm budget	确认预算
+budget.provenanceModel	model {{estimateId}}	模型 {{estimateId}}
+loopPlan.plan.standard.v1.name	Standard	标准
+loopPlan.plan.standard.v2.name	Standard	标准
+loopPlan.plan.bugfix.v1.name	Bug fix (red first)	修 bug（先红后绿）
+loopPlan.plan.bugfix.v1.discipline	Write a failing test that reproduces the bug, then fix it (checked by a model, not proven mechanically)	先写能复现的失败测试再修（由模型核对，不是机械证明）
+loopPlan.plan.bugfix.v2.name	Bug fix (red first)	修 bug（先红后绿）
+loopPlan.plan.bugfix.v2.discipline	Write a failing test that reproduces the bug, then fix it (checked by a model, not proven mechanically)	先写能复现的失败测试再修（由模型核对，不是机械证明）
+loopPlan.plan.refactor.v1.name	Safe refactor	安全重构
+loopPlan.plan.refactor.v1.discipline	No observable behavior change (an instruction to the agent; only the checks are enforced)	不改可观察行为（写给 agent 的约束；只有检查命令是硬的）
+loopPlan.plan.refactor.v2.name	Safe refactor	安全重构
+loopPlan.plan.refactor.v2.discipline	No observable behavior change (an instruction to the agent; only the checks are enforced)	不改可观察行为（写给 agent 的约束；只有检查命令是硬的）
+loopPlan.plan.design.v1.name	Design / docs first	先写设计／文档
+loopPlan.plan.design.v1.discipline	The deliverable is a document, no code changes (checked by a model, not proven mechanically)	交付物是文档，不改代码（由模型核对，不是机械证明）
+loopPlan.plan.design.v2.name	Design / docs first	先写设计／文档
+loopPlan.plan.design.v2.discipline	The deliverable is a document, no code changes (checked by a model, not proven mechanically)	交付物是文档，不改代码（由模型核对，不是机械证明）
+loopPlan.plan.investigate.v1.name	Investigate only	只调研不改代码
+loopPlan.plan.investigate.v1.discipline	Investigate only; findings go to the report file, nothing else changes (checked by a model, not proven mechanically)	只调研，结论写进报告文件，别的都不改（由模型核对，不是机械证明）
+loopPlan.plan.investigate.v2.name	Investigate only	只调研不改代码
+loopPlan.plan.investigate.v2.discipline	Investigate only; findings go to the report file, nothing else changes (checked by a model, not proven mechanically)	只调研，结论写进报告文件，别的都不改（由模型核对，不是机械证明）
+loopPlan.title.line	{{name}} · v{{version}} · {{how}}	{{name}} · v{{version}} · {{how}}
+loopPlan.title.byHand	chosen by hand	人指定
+loopPlan.title.noLabel	no label, default	无标签，按默认
+loopPlan.title.byLabel	chosen by label `{{label}}`	按标签 `{{label}}` 选择
+loopPlan.title.changed	 · changed	 · 已修改
+loopPlan.summary.goal	Goal: {{goal}}	目标：{{goal}}
+loopPlan.summary.doneWhen	Done when: {{condition}}	完成条件：{{condition}}
+loopPlan.summary.onlyChanges	Only changes: {{paths}}	只改：{{paths}}
+loopPlan.summary.mustNotChange	Must not change: {{paths}} (reported by the agent, not checked in git)	不许改：{{paths}}（由 agent 自报，不是 git 检查）
+loopPlan.summary.files_one	At most {{count}} file changed (reported by the agent)	最多改 {{count}} 个文件（由 agent 自报）
+loopPlan.summary.files_other	At most {{count}} files changed (reported by the agent)	最多改 {{count}} 个文件（由 agent 自报）
+loopPlan.summary.noFileLimit	No file limit	不限文件数
+loopPlan.summary.checks_one	Acceptance: {{count}} check command, all must pass	验收：运行 {{count}} 条检查命令，全部通过
+loopPlan.summary.checks_other	Acceptance: {{count}} check commands, all must pass	验收：运行 {{count}} 条检查命令，全部通过
+loopPlan.summary.pathSeparator	, 	、
+loopPlan.region	Plan {{taskId}}	做法 {{taskId}}
+loopPlan.handWritten	Hand-written contract	手写契约
+loopPlan.summaryRegion	Plan summary {{taskId}}	做法摘要 {{taskId}}
+loopPlan.checkCommands	Check commands ({{n}})	检查命令（{{n}} 条）
+loopPlan.budgetLine	Budget: {{tokens}} tokens · active time {{activeMs}} ms · max attempts {{attempts}}	预算：{{tokens}} token · 活跃时间 {{activeMs}} ms · 最多尝试次数 {{attempts}}
+loopPlan.git	Git workspace: its own worktree, merged back into <code>orca/{{groupId}}</code>; pushing is done by a person	git 工作区：独立 worktree，合回 <code>orca/{{groupId}}</code> 分支，push 由人做
+loopPlan.skills	Skill set: not supported yet	skill 集：暂不支持
+loopPlan.started	Started; the plan is frozen	已开始，做法已冻结
+loopPlan.notOpen	The group is not open for changes; the plan is frozen	组当前不接受修改，做法已冻结
+loopPlan.changePlan	Change plan	修改做法
+loopPlan.changePlanFor	Change plan {{taskId}}	修改做法 {{taskId}}
+loopPlan.draftBehind	The plan changed after you started this draft (v{{base}} → v{{current}})	你开始这份草稿后做法已变（v{{base}} → v{{current}}）
+loopPlan.planLabel	Plan	做法
+loopPlan.discard	Discard plan draft	丢弃做法草稿
+loopPlan.field.goal	Goal	目标
+loopPlan.field.successCondition	Done when	完成条件
+loopPlan.field.targetPaths	Only changes (one path per line)	只改（每行一个路径）
+loopPlan.field.checks	Check commands (one per line)	检查命令（每行一条）
+loopPlan.field.nonGoals	Non-goals (one per line)	不做的事（每行一条）
+loopPlan.field.relevantDocs	Relevant docs (one per line)	相关文档（每行一个）
+loopPlan.field.protectedPaths	Must not change (one path per line)	不许改（每行一个路径）
+loopPlan.field.maxFilesTouched	Max files changed (blank for default)	最多改几个文件（留空按默认）
+loopPlan.field.tokens	Token budget	token 预算
+loopPlan.field.activeMs	Active time (ms)	活跃时间（ms）
+loopPlan.field.attempts	Max attempts	最多尝试次数
+loopPlan.badBudget	Budgets must be positive integers	预算要填正整数
+loopPlan.badFileCap	Max files changed must be a positive integer	最多改几个文件要填正整数
+loopPlan.unit.tokens	tokens	token
+loopPlan.unit.activeMs	ms active time	ms 活跃时间
+loopPlan.unit.attempts	attempts	次尝试
+loopPlan.budgetTaken	Budget {{delta}} {{unit}}, taken from the group reserve; {{left}} left	预算 {{delta}} {{unit}}，从组余量扣；余量剩 {{left}}
+loopPlan.budgetReturned	Budget {{delta}} {{unit}}, returned to the group reserve; {{left}} left	预算 {{delta}} {{unit}}，退回组余量；余量剩 {{left}}
+loopPlan.partSeparator	; 	；
+loopPlan.shortfall	Group reserve too small: {{dimension}} short by {{short}}	组余量不够：{{dimension}} 还差 {{short}}
+loopPlan.unchanged	Budget unchanged	预算不变
+agents.retryWaiting	Reading again in {{seconds}} s (retry {{attempt}}/{{total}}).	{{seconds}} 秒后重新读取（第 {{attempt}}/{{total}} 次重试）。
+agents.retryPaused	Retrying is paused while the page is hidden; it resumes when you come back.	页面隐藏期间暂停重试；回到页面后继续。
+agents.retryStopped	Stopped after {{total}} retries; Re-read asks again.	重试 {{total}} 次后已停止；点「重新读取」会再问一次。
+agents.contextDefault	agent default	agent 默认
+agents.contextTokens	{{value}} tokens	{{value}} token
+agents.ignorePlan	ignore the plan's {{field}} ({{value}})	忽略计划里的{{field}}（{{value}}）
+agents.field.agent	agent	agent
+agents.field.model	model	模型
+agents.field.contextWindow	contextWindow	上下文窗口
+agents.label.agent	agent	agent
+agents.label.model	model	模型
+agents.label.context	context	上下文
+agents.inheritPlan	inherit (plan: {{agent}})	继承（计划：{{agent}}）
+agents.inherit	inherit	继承
+agents.from	from {{source}}	来自{{source}}
+agents.rejected	rejected	被拒
+agents.unavailable	unavailable for now, Re-read to ask again	暂时不可用，点「重新读取」再问一次
+agents.region	Agent selection	agent 选择
+agents.frozenTitle	Agents (frozen at confirmation)	agent（确认时已冻结）
+agents.th.slot	slot	槽位
+agents.th.agent	agent	agent
+agents.th.model	model	模型
+agents.th.context	context	上下文
+agents.th.ownLayer	this task's own layer	这个任务自己的一层
+agents.notRecorded	not recorded	未记录
+agents.reread	Re-read agent selections	重新读取 agent 选择
+agents.title	Agents	agent
+agents.cannotRead	Agent selections cannot be read · {{code}}. Confirm is not offered without them.	读不到 agent 选择 · {{code}}。没有它们就不提供确认。
+agents.resolving	Resolving agent selections…	正在解析 agent 选择…
+agents.proposalTitle	Agents · proposal v{{version}}	agent · 提案 v{{version}}
+agents.staleResolution	The resolution shown is for proposal v{{version}}; re-reading. Confirm waits for it.	显示的解析结果属于提案 v{{version}}；正在重新读取。确认会等它。
+agents.unresolved	A selection below did not resolve; confirm is not offered until every slot resolves.	下面有一项选择没有解析成功；每个槽位都解析成功之前不提供确认。
+agents.groupSlot	Group {{slot}}	组 {{slot}}
+agents.setGroup	Set group {{slot}} agent	设置组 {{slot}} 的 agent
+agents.clearGroup	Clear group {{slot}} agent	清除组 {{slot}} 的 agent
+agents.estimatorNote	 Used from the next re-estimate on; like any proposal change it moves the proposal version.	 从下次重新估算起使用；和任何提案修改一样，它会推进提案版本。
+agents.taskLayer	Task {{taskId}}	任务 {{taskId}}
+agents.setTask	Set agent for task {{taskId}}	为任务 {{taskId}} 设置 agent
+agents.clearTask	Clear agent for task {{taskId}}	清除任务 {{taskId}} 的 agent
+agents.settings.region	Agents settings	agent 设置
+agents.settings.operatorLine	Operator {{operatorId}} · preferences revision {{revision}}. A change reaches groups confirmed after it; a confirmed group keeps the selection it froze.	操作者 {{operatorId}} · 偏好版本 {{revision}}。修改只影响之后确认的组；已确认的组保留它冻结的选择。
+agents.settings.noInstallations	The installation table lists no agent. Run orca agents init, point ORCA_AGENTS_TABLE at the table it wrote (by default ~/.orca/agents.json) and restart the panel.	安装表里没有任何 agent。运行 orca agents init，把 ORCA_AGENTS_TABLE 指向它写出的表（默认 ~/.orca/agents.json），然后重启面板。
+agents.settings.th.installation	installation	安装
+agents.settings.th.kind	kind	类型
+agents.settings.th.version	version	版本
+agents.settings.th.defaultModel	default model	默认模型
+agents.settings.th.defaultContext	default context	默认上下文
+agents.settings.defaultAgent	Default agent	默认 agent
+agents.settings.noDefault	none (every group has to choose one)	无（每个组都得自己选一个）
+agents.settings.perAgent	{{agentId}} defaults	{{agentId}} 的默认值
+agents.settings.estimatorSlot	Estimator slot	估算槽
+agents.settings.reconcileSlot	Reconcile slot	协调槽
+agents.settings.save	Save agent preferences	保存 agent 偏好
+panelErrors.title	orca panel could not load	orca 面板加载失败
+panelErrors.noAnswerFromPanel	no answer from the panel	面板没有回应
+panelErrors.answered	answered {{status}}	返回了 {{status}}
+panelErrors.recordAnother	Record another	再记录一条
+panelErrors.httpStatus	 · HTTP {{status}}	 · HTTP {{status}}
+panelErrors.serverRevision	 · server revision {{revision}}	 · 服务端版本 {{revision}}
+panelErrors.whatAnswered	{{what}} answered {{status}}	{{what}} 返回了 {{status}}
+panelErrors.noAnswer	no answer	没有回应
+panelErrors.neverAnswered	never answered	一直没有回应
+panelErrors.mayNotHaveCommitted	the panel may not have committed this command	面板可能没有提交这条命令
+panelErrors.noOutcome	The panel answered without a command outcome.	面板的回答里没有命令结果。
+metrics.unknownRate	unknown	未知
+metrics.correctionRate	Correction rate	纠正率
+metrics.repairRate	Repair rate	修复率
+metrics.reviewCoverage	Review coverage	评审覆盖率
+metrics.unresolvedTitle	Unresolved decisions	未解析的决策
+metrics.unresolvedCount	Unresolved decisions: {{n}}	未解析的决策：{{n}}
+metrics.malformedTitle	Malformed lines	格式错误的行
+metrics.malformedCount	Malformed lines: {{n}}	格式错误的行：{{n}}
+metrics.futureTitle	Excluded as future	因日期在未来而排除
+metrics.futureCount	Excluded as future: {{n}}	因日期在未来而排除：{{n}}
+metrics.note.no-review-coverage	review coverage has no data: its only producer is the panel (E2 spec §3.5), and A' §4.4 says the correction rate must never be read on its own	评审覆盖率没有数据：它唯一的来源是面板（E2 spec §3.5），而 A' §4.4 规定纠正率绝不能单独解读
+metrics.note.unresolved-decisions	some corrections point at decisions outside what was scanned (see unresolved_decisions); they count in the totals but sit in no decision-kind bucket	有些纠正指向的决策不在扫描范围内（见 unresolved_decisions）；它们计入总数，但不属于任何决策类型分组
+metrics.note.stale-bias	systematically low: closing a stale correction requires the chose_instead field (CLI flag --chose-instead) that corrections/schema.ts says a stale may not have (E2 spec §3.2.1, A' ERRATUM 3)	系统性偏低：关闭一条 stale 纠正需要 chose_instead 字段（CLI 参数 --chose-instead），而 corrections/schema.ts 规定 stale 不能带它（E2 spec §3.2.1，A' ERRATUM 3）
+metrics.note.reviewed-is-deliberate	`reviewed` is a deliberate act, so this number can sit near zero for a long time -- and a long-zero coverage is not distinguishable from nobody looking. Read it with the backlog, not on its own.	`reviewed` 是一个有意的动作，所以这个数字可能长时间接近零——而长期为零的覆盖率与没人看无法区分。请结合积压一起看，不要单独看。
+enums.theme.system	system	跟随系统
+enums.theme.light	light	浅色
+enums.theme.dark	dark	深色
+enums.decisionKind.dependency	dependency	依赖
+enums.decisionKind.interface	interface	接口
+enums.decisionKind.scheduling	scheduling	调度
+enums.decisionKind.abandon	abandon	放弃
+enums.decisionKind.criteria	criteria	判据
+enums.decisionKind.boundary	boundary	边界
+enums.decisionKind.reconcile	reconcile	协调
+enums.decisionScope.file	file	文件
+enums.decisionScope.task	task	任务
+enums.decisionScope.repo	repo	仓库
+enums.decisionScope.cross-repo	cross-repo	跨仓库
+enums.decisionVerdict.ok	ok	正常
+enums.decisionVerdict.downgraded	downgraded	已降级
+enums.correctionKind.wrong	wrong	错了
+enums.correctionKind.not_my_taste	not_my_taste	不合我意
+enums.correctionKind.stale	stale	过时
+enums.chainStopCategory.done	done	已完成
+enums.chainStopCategory.blocked	blocked	等人处理
+enums.chainStopCategory.limit	limit	触达上限
+enums.chainStopCategory.anomaly	anomaly	异常
+enums.groupState.draft	draft	草稿
+enums.groupState.ready	ready	就绪
+enums.groupState.running	running	运行中
+enums.groupState.review	review	待评审
+enums.groupState.done	done	已完成
+enums.groupState.blocked	blocked	已阻塞
+enums.stopMode.pause	pause	暂停
+enums.stopMode.shutdown	shutdown	关停
+enums.stopMode.handoff	handoff	交接
+enums.stopState.paused	paused	已暂停
+enums.stopState.handoff-pending	handoff-pending	交接待处理
+enums.stopState.handoff-partial	handoff-partial	交接部分完成
+enums.stopState.handoff-unresolved	handoff-unresolved	交接未决
+enums.stopState.handoff-complete	handoff-complete	交接完成
+enums.workStatus.draft	draft	草稿
+enums.workStatus.ready	ready	就绪
+enums.workStatus.starting	starting	启动中
+enums.workStatus.start-unknown	start-unknown	启动情况未知
+enums.workStatus.active	active	进行中
+enums.workStatus.held	held	已挂起
+enums.workStatus.continuing	continuing	续跑中
+enums.workStatus.completed	completed	已完成
+enums.workStatus.blocked	blocked	已阻塞
+enums.runPhase.estimate	estimate	估算
+enums.runPhase.work	work	工作
+enums.runPhase.handoff	handoff	交接
+enums.runState.starting	starting	启动中
+enums.runState.unknown	unknown	未知
+enums.runState.attempt-unknown	attempt-unknown	尝试情况未知
+enums.runState.attempt-proof-invalid	attempt-proof-invalid	尝试证明无效
+enums.runState.running	running	运行中
+enums.runState.failed-before-provider	failed-before-provider	未到提供方即失败
+enums.runState.settled-recoverable	settled-recoverable	已结算（可恢复）
+enums.runState.settled-restartable	settled-restartable	已结算（可重启）
+enums.runState.settled-unrecoverable	settled-unrecoverable	已结算（不可恢复）
+enums.runState.collected	collected	已收集
+enums.runState.landed	landed	已合入
+enums.runState.reconciling	reconciling	协调中
+enums.runState.blocked	blocked	已阻塞
+enums.requestState.request-pending	request-pending	请求待处理
+enums.requestState.latched	latched	已锁定
+enums.requestState.collecting	collecting	收集中
+enums.requestState.settled-recoverable	settled-recoverable	已结算（可恢复）
+enums.requestState.settled-restartable	settled-restartable	已结算（可重启）
+enums.requestState.settled-unrecoverable	settled-unrecoverable	已结算（不可恢复）
+enums.requestState.outcome-unknown	outcome-unknown	结果未知
+enums.estimateState.queued	queued	排队中
+enums.estimateState.running	running	运行中
+enums.estimateState.start-unknown	start-unknown	启动情况未知
+enums.estimateState.ready	ready	就绪
+enums.estimateState.failed	failed	失败
+enums.estimateState.interrupted	interrupted	已中断
+enums.estimateState.blocked-capability	blocked-capability	能力不足、已阻塞
+enums.estimateState.input-too-large	input-too-large	输入过大
+enums.budgetMode.strict	strict	严格
+enums.budgetMode.soft	soft	宽松
+enums.blockerScope.global	global	全局
+enums.blockerScope.group	group	组
+enums.blockerScope.run	run	运行
+enums.progressStep.queued	queued	排队中
+enums.progressStep.plan	plan	计划
+enums.progressStep.execute	execute	执行
+enums.progressStep.verify	verify	验证
+enums.progressStep.succeeded	succeeded	已成功
+enums.progressStep.blocked_waiting_human	blocked_waiting_human	等人处理
+enums.progressStep.exhausted	exhausted	已耗尽
+enums.progressStep.cancelled	cancelled	已取消
+enums.progressStep.failed	failed	失败
+enums.proposalState.editable	editable	可编辑
+enums.proposalState.confirmed	confirmed	已确认
+enums.ownerKind.estimate	estimate	估算
+enums.ownerKind.task	task	任务
+enums.ownerKind.goal-review	goal-review	目标评审
+enums.ownerKind.reserve	reserve	余量
+enums.bucket.work	work	工作
+enums.bucket.handoff	handoff	交接
+enums.bucket.review	review	评审
+enums.bucket.reserve	reserve	余量
+enums.allocationState.draft-encumbered	draft-encumbered	草稿占用
+enums.allocationState.confirmed	confirmed	已确认
+enums.allocationState.active	active	进行中
+enums.allocationState.held	held	已挂起
+enums.allocationState.continuing	continuing	续跑中
+enums.allocationState.terminal	terminal	已终结
+enums.allocationState.unknown	unknown	未知
+enums.dimension.tokens	tokens	token
+enums.dimension.activeMs	activeMs	活跃毫秒
+enums.dimension.attempts	attempts	尝试次数
+enums.dimension.sessions	sessions	会话数
+enums.complexity.S	S	S
+enums.complexity.M	M	M
+enums.complexity.L	L	L
+enums.complexity.XL	XL	XL
+enums.confidence.low	low	低
+enums.confidence.medium	medium	中
+enums.confidence.high	high	高
+enums.handoffControl.durable	durable	持久
+enums.handoffControl.phase-end	phase-end	阶段结束时
+enums.handoffControl.unavailable	unavailable	不可用
+enums.handoffExecution.mechanical-in-run-v1	mechanical-in-run-v1	运行内机械交接 v1
+enums.handoffExecution.model-assisted-v1	model-assisted-v1	模型辅助交接 v1
+enums.budgetEnforcement.bounded	bounded	有界
+enums.budgetEnforcement.soft	soft	宽松
+enums.budgetEnforcement.unavailable	unavailable	不可用
+enums.fieldProvenance.complex-1m-default	complex-1m default	complex-1m 默认值
+enums.fieldProvenance.model	model	模型
+enums.fieldProvenance.human	human	人
+enums.fieldProvenance.system	system	系统
+enums.agentSlot.worker	worker	执行
+enums.agentSlot.estimator	estimator	估算
+enums.agentSlot.reconcile	reconcile	协调
+enums.selectionSource.operator	operator	操作者
+enums.selectionSource.operator-estimator	operator-estimator	操作者的估算槽
+enums.selectionSource.operator-reconcile	operator-reconcile	操作者的协调槽
+enums.selectionSource.group	group	组
+enums.selectionSource.group-estimator	group-estimator	组的估算槽
+enums.selectionSource.group-reconcile	group-reconcile	组的协调槽
+enums.selectionSource.task	task	任务
+enums.selectionSource.operator-agent	operator-agent	操作者对该 agent 的默认
+enums.selectionSource.descriptor	descriptor	agent 描述符
+enums.selectionSource.group-plan	group-plan	计划（组）
+enums.selectionSource.group-reconcile-plan	group-reconcile-plan	计划（组协调槽）
+enums.selectionSource.task-plan	task-plan	计划（任务）
+errors.agent-context-unsupported		agent 不支持这个上下文窗口：{{message}}
+errors.agent-installation-missing		安装表里没有这个 agent：{{message}}
+errors.agent-selection-changed		agent 选择在确认时已变化，请重新读取后再确认。
+errors.agent-selection-invalid		agent 选择不合法：{{message}}
+errors.agent-selection-rejected		ccloop 拒绝了这个 agent 选择：{{message}}
+errors.agent-unselected		有槽位没有选定 agent。
+errors.agent-version-drift		agent 版本与记录的不一致：{{message}}
+errors.agents-table-invalid		agent 安装表不合法：{{message}}
+errors.artifact-id-conflict		产物 id 冲突。
+errors.artifact-not-found		找不到这个产物。
+errors.budget-overflow		预算数值溢出：{{message}}
+errors.budget-owned-by-loop-plan		这个 loop 任务的工作预算只能在做法卡片里改。
+errors.checkpoint-id-conflict		检查点 id 冲突。
+errors.checkpoint-identity-conflict		检查点身份冲突。
+errors.checkpoint-not-committed		检查点尚未提交。
+errors.checkpoint-run-settled		这个运行已结算，不能再写检查点。
+errors.checkpoint-usage-high-water		检查点用量低于已记录的高水位。
+errors.cleanup-not-recoverable		清理无法恢复。
+errors.command-result-not-found		台账里没有这条命令的结果。
+errors.continuation-budget-unavailable		续跑所需的预算不够。
+errors.continuation-identity-conflict		续跑身份冲突。
+errors.continuation-predecessor-unrecoverable		前一个运行无法恢复，不能续跑。
+errors.control-capability-unsupported		所需能力不受支持：{{message}}
+errors.control-estimator-unconfigured		面板没有配置估算 profile。
+errors.control-evidence-unavailable		证据不可用。
+errors.control-internal-error		控制面内部出错：{{message}}
+errors.control-invalid-stop		停止请求不合法。
+errors.control-non-canonical-json		请求体不是规范 JSON：{{message}}
+errors.control-non-json-payload		请求体不是合法的 JSON 载荷：{{message}}
+errors.control-operation-in-progress		另一个控制操作正在进行，请稍后重试。
+errors.control-owner-changed		控制面的持有者已变化，请稍后重试。
+errors.control-plan-rejected		计划被拒绝：{{message}}
+errors.control-port-unconfigured		没有配置执行端口：面板只提供恢复和证据。
+errors.control-protocol-unavailable		控制协议不可用。
+errors.control-recovery-busy		恢复正在进行，请稍后重试。
+errors.control-recovery-required		需要先完成恢复。
+errors.control-target-not-allowed		不允许操作这个目标。
+errors.control-terminal-pending		还有未结束的终态处理。
+errors.control-writer-active		另一个写入者正在工作，请稍后重试。
+errors.dependency-not-done		依赖的任务还没完成。
+errors.duplicate-proposal-target		提案里有重复的目标：{{message}}
+errors.duplicate-task-id		任务 id 重复：{{message}}
+errors.estimate-in-flight		有一份估算正在进行。
+errors.estimate-stale		这份估算早于一次做法修改，它的建议不能再用。
+errors.execution-identity-conflict		执行身份冲突。
+errors.execution-policy-unrepresentable		执行策略无法表达：{{message}}
+errors.grant-amendment-unsupported		有任务已经开始，提案不能再改。
+errors.graph-change-needs-handoff		改任务图需要先交接。
+errors.graph-cycle		任务图有环：{{message}}
+errors.graph-dangling-dependency		任务图里有悬空的依赖：{{message}}
+errors.graph-version-conflict		任务图版本冲突。
+errors.group-already-exists		这个组已存在。
+errors.group-budget-unavailable		组预算不够。
+errors.group-deadline-expired		组的截止时间已过。
+errors.group-graph-conflict		组的任务图冲突。
+errors.group-not-found		找不到这个组。
+errors.group-project-binding-required		组必须绑定到一个项目。
+errors.group-project-conflict		组与项目的绑定冲突。
+errors.group-reserve-insufficient		组余量不够：{{message}}
+errors.group-review-budget-unavailable		组的评审预算不够。
+errors.group-state-invalid		组当前的状态不允许这个操作。
+errors.group-stopped		组已停止。
+errors.handoff-budget-unavailable		交接预算不够。
+errors.handoff-grant-insufficient		交接额度不够。
+errors.handoff-identity-conflict		交接身份冲突。
+errors.handoff-parent-invalid		交接的父运行不合法。
+errors.handoff-request-conflict		交接请求冲突。
+errors.handoff-work-not-found		找不到要交接的工作。
+errors.identity-space-exhausted		身份编号已用尽。
+errors.labels-invalid		标签不合法：{{message}}
+errors.labels-version-conflict		你开始草稿后标签已被改过，请重新读取后再保存。
+errors.landing-branch-conflict		合入分支冲突。
+errors.landing-needs-review		合入之前需要评审。
+errors.landing-not-confirmed		合入尚未确认。
+errors.loop-plan-invalid		做法的输入不合法：{{message}}
+errors.no-op-command		这条命令不会改变任何东西。
+errors.numeric-overflow		数值溢出：{{message}}
+errors.panel-draining		面板正在关闭，请稍后重试。
+errors.panel-host-not-allowed		不允许从这个主机访问面板。
+errors.plan-version-conflict		计划版本冲突。
+errors.profile-changed		profile 已变化。
+errors.proposal-version-conflict		提案版本冲突：提案在你看过之后被改过。
+errors.query-invalid		查询参数不合法：{{message}}
+errors.reconcile-budget-unapproved		协调预算尚未批准。
+errors.reconcile-registration-invalid		协调登记不合法。
+errors.reconcile-version-conflict		协调版本冲突。
+errors.recovery-blocked		恢复被阻塞：{{message}}
+errors.recovery-validation-failed		恢复校验失败：{{message}}
+errors.report-commit-invalid		报告提交不合法。
+errors.report-identity-conflict		报告身份冲突。
+errors.report-path-conflict		报告路径冲突。
+errors.resume-artifact-conflict		续跑产物冲突。
+errors.resume-bundle-exists		续跑包已存在。
+errors.resume-handoff-invalid		续跑的交接不合法。
+errors.resume-predecessor-unrecoverable		前一个运行无法恢复，不能续跑。
+errors.resume-source-dir-not-absolute		续跑的源目录不是绝对路径。
+errors.revision-conflict		版本冲突：别的标签页或会话先提交了，请重新读取。
+errors.route-not-found		没有这个接口：{{message}}
+errors.run-already-settled		这个运行已经结算。
+errors.run-generation-conflict		运行代次冲突。
+errors.run-grant-conflict		运行额度冲突。
+errors.run-not-found		找不到这个运行。
+errors.run-owner-conflict		运行持有者冲突。
+errors.run-stop-unconfirmed		运行的停止尚未确认。
+errors.snapshot-invalid		执行快照不合法：{{message}}
+errors.snapshot-partial		执行快照不完整。
+errors.snapshot-required		需要执行快照。
+errors.start-contract-conflict		启动契约冲突。
+errors.start-envelope-conflict		启动信封冲突。
+errors.start-intent-missing		找不到启动意图。
+errors.start-state-conflict		启动状态冲突。
+errors.stop-already-active		已经有一个停止在进行。
+errors.stop-mode-conflict		停止方式冲突。
+errors.target-version-conflict		目标版本冲突。
+errors.task-already-started		任务已经开始，做法不能再改。
+errors.task-checkpoint-not-committed		任务的检查点尚未提交。
+errors.task-has-no-loop-plan		这个任务没有 loop 做法。
+errors.task-loop-version-conflict		你开始草稿后做法已被改过，请重新读取后再提交。
+errors.token-required		这个面板需要它的一次性 token。
+errors.usage-event-conflict		用量事件冲突。
+errors.usage-gap		用量记录有缺口。
+errors.work-already-active		工作已经在进行。
+errors.work-already-done		工作已经完成。
+errors.work-not-found		找不到这项工作。
+errors.http-status		面板返回了 HTTP {{status}}，没有给出错误码：{{message}}
+errors.http-unreachable		没有连上面板：{{message}}
+errors.panel-unreachable		没有连上面板：{{message}}
+errors.command-result-invalid		面板的回答里没有命令结果。
+errors.decision-not-found		找不到这条决策。
+errors.panel-bad-request		面板读不懂这个请求：{{message}}
+errors.panel-internal-error		面板内部出错：{{message}}
+errors.reviews-store-busy		评审记录正被另一个写入者占用：{{message}}
+errors.reviews-store-is-symlink		评审记录文件是符号链接，面板拒绝写入：{{message}}
+errors.correction-row-invalid		这不是一条合法的纠正：{{message}}
+errors.correction-already-recorded		你已经对这条决策记录过纠正。如果要再记一条独立的纠正，选「再记录一条」，它会和第一条并存，而不是替换它。
+errors.duplicate-correction-id		纠正 id 重复：{{message}}
+errors.correction-not-found		找不到这条纠正。
+errors.corrections-store-busy		纠正记录正被另一个写入者占用，请稍后重试。
+errors.unresolved-project-keys		纠正记录里有面板解析不了的 projectKey：{{message}}
+errors.key-matches-multiple-paths		一个 projectKey 对应了多个路径：{{message}}
+errors.repo-path-missing		--repo 指向的目录不存在：{{message}}
+errors.archive-name-ambiguous		修复运行的归档名有歧义：{{message}}
+errors.future-rows-without-as-of		有记录晚于当前时间，而且没给 --as-of：{{message}}
+errors.as-of-not-a-timestamp		--as-of 不是 ISO 8601 时间：{{message}}
+errors.repo-not-found		这个面板没有这个仓库：{{message}}
+errors.chain-args-invalid		启动链的参数不合法：{{message}}
+errors.chain-start-failed		orca chain start 没启动就退出了：{{message}}
+errors.chain-start-timeout		规定时间内没看到链启动：{{message}}
+errors.chain-not-found		找不到这条链。
+errors.chain-not-running		这条链没有在运行。
+errors.chain-config-invalid		链配置不合法：{{message}}
+errors.chain-config-missing		缺少链配置：{{message}}
+errors.chain-id-exists		链 id 已存在：{{message}}
+errors.chain-id-invalid		链 id 不合法：{{message}}
+errors.chain-lock-stale		链锁已过期：{{message}}
+errors.chain-logs-not-ignored		链日志目录没有被 git 忽略：{{message}}
+errors.chain-record-invalid		链记录不合法：{{message}}
+errors.chain-running		已经有一条链在运行：{{message}}
+errors.claude-not-found		找不到 claude：{{message}}
+errors.detached-head		仓库处于 detached HEAD：{{message}}
+errors.gate-check-failed		闸门检查失败：{{message}}
+errors.level-config-invalid		档位配置不合法：{{message}}
+errors.model-window-unknown		不知道模型的上下文窗口：{{message}}
+errors.nested-chain		不能在链里再启动链：{{message}}
+errors.no-chain-lock		没有链锁：{{message}}
+errors.no-running-chain		没有正在运行的链：{{message}}
+errors.not-a-repository		不是 git 仓库：{{message}}
+errors.not-repository-top-level		不是仓库顶层目录：{{message}}
+errors.record-commit-refused		提交链记录被拒：{{message}}
+errors.repo-lock-held		仓库锁被占用：{{message}}
+errors.tsx-missing		找不到 tsx：{{message}}
+errors.worktree-dirty		工作区有未提交的修改：{{message}}
+# ---- Wording questions reviewers raised for the human (progress.md lines 41, 44, 49, 56, 63; task-5/6/7/9/10-review.md). Each: keys - question.
+# Q1 (Task 5)	enums.decisionScope.repo, decisions.filterRepository	仓库 appears twice side by side in the filter row: 「范围 [仓库]」「仓库 [github.com/…]」. English pairs repo / Repository the same way. Option: decisionScope.repo -> 单仓库 (pairs with 跨仓库).
+# Q2 (Task 5)	enums.correctionKind.wrong, decisions.kindHelp.wrong (via decisions.kindOption)	The option reads 「错了 —— 选错了」, "wrong" twice; follows English "wrong — the choice was wrong".
+# Q3 (Task 5)	decisions.chose	The h3 heading 选择了 reads as a sentence fragment beside 理由 / 被否决的备选; e.g. 所选 / 选择.
+# Q4 (Task 6)	chains.start, chains.started vs control.group.start	Chains say 启动链 / 已启动 while task control says 开跑 (spec §5 glossary: Start -> 开跑) for the same English verb; pick one reading.
+# Q5 (Task 6)	chains.cost vs chains.formMaxCost	The cost shows "USD {{amount}}" in Chinese while the form label beside it says 美元.
+# Q6 (Task 7)	control.group.runsTh.profile vs control.group.estimateLine, control.import.noEstimator, budget.handoffBlocked	"profile" is 配置 in the runs table header but stays Latin "profile" elsewhere on the same screen.
+# Q7 (Task 7)	control.group.th.pending	待定 reads as "undecided"; the column holds a pending run id (e.g. 待启动的运行 / 挂起的运行).
+# Q8 (Task 7)	control.group.stop (+ enums.stopMode.pause, enums.stopState.paused)	Renders 「停止 暂停 已暂停 · …」, faithful to "stop pause paused" but reads as three verbs; e.g. 「停止方式 暂停 · 状态 已暂停」.
+# Q9 (Task 7)	control.group.heading, control.task.labelsFrom	版本 is used both for command revision and for labels version; acceptable, noted for consistency.
+# Q10 (Task 9)	agents.from + enums.selectionSource.*, agents.ignorePlan vs agents.setGroup, agents.settings.defaultAgent	Spacing around "agent" is mixed: unspaced 来自agent 描述符, 忽略计划里的agent（codex）; spaced 设置组 执行 的 agent, 默认 agent.
+# Q11 (Task 9)	enums.agentSlot.worker vs enums.progressStep.execute	Both render 执行: a worker slot and the execute step read the same.
+# Q12 (Task 10)	every errors.* entry ending in {{message}}	When the server message is empty the Chinese text ends in a bare 「：」 (deferred minor). Also recorded: errors.http-status was changed by ruling to keep {{message}}; reviews-store-busy / reviews-store-is-symlink interpolate {{message}} (ruling, progress.md line 60).
