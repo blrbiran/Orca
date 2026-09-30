@@ -94,6 +94,17 @@ function prestart(group: Group): void {
   if (group.status === "running" || group.status === "review" || group.status === "done") throw new ControlError("grant-amendment-unsupported");
   if (group.status !== "draft" && group.status !== "ready") throw new ControlError("group-state-invalid");
 }
+/**
+ * For the commands that reopen the proposal or reset task state (edit, set-agent, confirm). Nothing on the Web path
+ * moves the group past `ready`, so a claimed task is seen only on its own work item; reopening then would return a
+ * running task to draft while its run continues. Estimates do not reset task state and keep prestart alone.
+ */
+function refuseAfterTaskStarted(store: ControlStore, id: string): void {
+  for (const row of store.db.prepare("SELECT body FROM work_items WHERE group_id=?").all(id)) {
+    const work = JSON.parse(String(row.body));
+    if (work.kind === "task" && work.status !== "draft" && work.status !== "ready") throw new ControlError("grant-amendment-unsupported");
+  }
+}
 export function estimateCommitments(store: ControlStore, groupId: string): Array<{ ownerKind: "estimate"; ownerId: string; bucket: "work"; amount: Amount; fieldProvenance: ReturnType<typeof provenance> }> {
   return store.db.prepare("SELECT id FROM estimates WHERE group_id=? ORDER BY id").all(groupId).flatMap(row => {
     const estimate = readEstimateRecord(store, groupId, String(row.id));
@@ -226,7 +237,7 @@ export class WebControlService {
         const id = groupId(command), group = readWebGroup(this.store, id), proposal = readBudgetProposal(this.store, id);
         const payload = context.effectiveCommand.payload as EffectiveProposalEditPayload;
         if (proposal.proposalVersion !== payload.baseProposalVersion) throw new ControlError("proposal-version-conflict");
-        prestart(group);
+        prestart(group); refuseAfterTaskStarted(this.store, id);
         assertKnownConservation(this.store, group, proposal);
         // Loop plans spec §4.3 (C6, Rule 7): a loop task's work allocation has one owner, set-task-loop.
         const loopTasks = new Set(readArchivedPlan(this.store, id).plan.tasks.filter(task => task.loop !== undefined).map(task => task.taskId));
@@ -262,7 +273,7 @@ export class WebControlService {
         const id = groupId(command), group = readWebGroup(this.store, id), proposal = readBudgetProposal(this.store, id);
         const { scope, partial, baseProposalVersion } = command.payload;
         if (proposal.proposalVersion !== baseProposalVersion) throw new ControlError("proposal-version-conflict");
-        prestart(group);
+        prestart(group); refuseAfterTaskStarted(this.store, id);
         assertKnownConservation(this.store, group, proposal);
         if (scope.kind === "group") {
           const overrides = readGroupAgentOverrides(group);
@@ -443,7 +454,7 @@ export class WebControlService {
           const id = groupId(command), group = readWebGroup(this.store, id), plan = readArchivedPlan(this.store, id), proposal = readBudgetProposal(this.store, id), payload = command.payload;
           if (payload.planHash !== plan.planHash) throw new ControlError("plan-version-conflict");
           if (payload.proposalVersion !== proposal.proposalVersion) throw new ControlError("proposal-version-conflict");
-          prestart(group);
+          prestart(group); refuseAfterTaskStarted(this.store, id);
           if (proposal.state === "confirmed") throw new ControlError("no-op-command");
           assertKnownConservation(this.store, group, proposal);
           const selected = { estimator: this.deps.profileRouter.resolve("budget-estimate", payload.profileIds.estimator, payload.profileHashes.estimator), worker: this.deps.profileRouter.resolve("task", payload.profileIds.worker, payload.profileHashes.worker), handoff: this.deps.profileRouter.resolve("handoff", payload.profileIds.handoff, payload.profileHashes.handoff), goalReview: this.deps.profileRouter.resolve("goal-review", payload.profileIds.goalReview, payload.profileHashes.goalReview) };

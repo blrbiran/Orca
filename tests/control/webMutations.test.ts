@@ -257,3 +257,46 @@ function countRows(store: ControlStore, table: string, where: string): number {
 function countCommands(store: ControlStore): number {
   return Number(store.db.prepare("SELECT COUNT(*) AS n FROM commands WHERE group_id='g'").get()!.n);
 }
+
+describe("proposal changes after a task has started (prestart)", () => {
+  // Nothing on the Web path moves a group past `ready`, so the group status alone cannot tell that a run is in flight.
+  /** A confirmed two-task group with one task claimed; returns the claimed task, the other one and a byte reader. */
+  async function claimedGroup() {
+    const f = await webFixture(profileSnapshot(), [{ taskId: "a" }, { taskId: "b" }]);
+    const service = new WebControlService(f.deps);
+    const confirmed = await service.confirm(f.command("confirm", await f.confirmPayload()));
+    if ("error" in confirmed) throw new Error("confirm refused: " + confirmed.error.code);
+    const deps = { store: f.store, profileRouter: f.deps.profileRouter, admissionGate: f.deps.admissionGate };
+    await service.start(f.command("start", {}));
+    expect((await deliverScheduledStart(deps, "g")).kind).toBe("claimed");
+    const works = f.store.db.prepare("SELECT id, body FROM work_items WHERE group_id='g' ORDER BY id").all()
+      .map(w => ({ id: String(w.id), status: String(JSON.parse(String(w.body)).status) }));
+    const claimed = works.find(w => w.status === "running")!, other = works.find(w => w.status !== "running")!;
+    expect(claimed).toBeDefined(); expect(other).toBeDefined();
+    const bytes = () => ({ work: String(row(f.store, "SELECT body AS v FROM work_items WHERE group_id='g' AND id=?", claimed.id).v),
+      group: String(row(f.store, "SELECT body AS v FROM groups WHERE id='g'").v) });
+    return { f, service, claimed, other, bytes };
+  }
+
+  it("refuses a proposal edit once a task of the group was claimed, because reopening would return a running task to draft while its run continues", async () => {
+    const { f, service, other, bytes } = await claimedGroup();
+    try {
+      const before = bytes();
+      const edited = service.editProposal(f.command("proposal-edit", { baseProposalVersion: readBudgetProposal(f.store, "g").proposalVersion,
+        operations: [{ target: { scope: "task", taskId: other.id, allocation: "work", dimension: "tokens" }, value: 1234, provenance: "human" }] }));
+      expect(edited).toMatchObject({ error: { code: "grant-amendment-unsupported" } });
+      expect(bytes().work).toBe(before.work);
+      expect(bytes().group).toBe(before.group);
+    } finally { await f.dispose(); }
+  });
+
+  it("refuses a re-confirmation once a task of the group was claimed, because confirming again would re-freeze a running task's work item under it", async () => {
+    const { f, service, bytes } = await claimedGroup();
+    try {
+      const before = bytes();
+      const confirmed = await service.confirm(f.command("confirm", await f.confirmPayload()));
+      expect(confirmed).toMatchObject({ error: { code: "grant-amendment-unsupported" } });
+      expect(bytes().work).toBe(before.work);
+    } finally { await f.dispose(); }
+  });
+});
