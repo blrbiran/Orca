@@ -22,7 +22,10 @@
  * withheld from the list and appear only here. Text above kept verbatim.
  */
 import type { JSX } from "react";
+import { useTranslation } from "react-i18next";
 import type { CorrectionForm } from "./api.js";
+import { enumText } from "./i18n.js";
+import { en } from "./locales/en.js";
 import { WEB_CORRECTION_KINDS } from "./types.js";
 import type { CorrectionKind } from "./types.js";
 
@@ -44,14 +47,10 @@ export interface Decision {
   alternatives: DecisionAlternative[];
 }
 
-export const AGREE_HELP = "Mark reviewed: I read this and it needs no change. Counts toward review coverage.";
-export const CORRECT_NOTE =
-  "This records a correction; it does not edit the ledger. To change the decision itself, close it with orca correct --close or let the fix agent do it.";
-export const KIND_HELP: Record<CorrectionKind, string> = {
-  wrong: "the choice was wrong",
-  not_my_taste: "defensible, but not what I would choose",
-  stale: "it was right then, no longer true",
-};
+/** In English (criteria read them); the render uses the reader's language (panel i18n spec §3.3). */
+export const AGREE_HELP = en.decisions.agreeHelp;
+export const CORRECT_NOTE = en.decisions.correctNote;
+export const KIND_HELP: Record<CorrectionKind, string> = en.decisions.kindHelp;
 
 export function DecisionDetail({
   decision,
@@ -62,25 +61,26 @@ export function DecisionDetail({
   onAgree?: () => void;
   onCorrect?: (form: CorrectionForm) => void;
 }): JSX.Element {
+  const { t } = useTranslation();
   return (
     <article className="decision-detail">
       <p className="row-id">{decision.id}</p>
       <h2 data-testid="decision-question">{decision.question}</h2>
       <div className="detail-block">
-        <h3>Chose</h3>
+        <h3>{t("decisions.chose")}</h3>
         <p className="chose" data-testid="decision-chose">
           {decision.chose}
         </p>
       </div>
       <div className="detail-block">
-        <h3>Because</h3>
+        <h3>{t("decisions.because")}</h3>
         <p className="because" data-testid="decision-because">
           {decision.because}
         </p>
       </div>
       {decision.alternatives.length > 0 && (
         <div className="detail-block">
-          <h3>Rejected alternatives</h3>
+          <h3>{t("decisions.rejected")}</h3>
           <ul className="alternatives">
             {decision.alternatives.map((alt) => (
               <li key={alt.option}>
@@ -97,9 +97,9 @@ export function DecisionDetail({
       )}
       <div className="actions">
         <button type="button" className="btn-primary" onClick={onAgree}>
-          Agree
+          {t("decisions.agree")}
         </button>
-        <p className="detail-help">{AGREE_HELP}</p>
+        <p className="detail-help">{t("decisions.agreeHelp")}</p>
         <form
           className="correction-form"
           onSubmit={(event) => {
@@ -113,25 +113,25 @@ export function DecisionDetail({
           }}
         >
           <label>
-            Kind
+            {t("decisions.kind")}
             <select name="kind" defaultValue={WEB_CORRECTION_KINDS[0]}>
               {WEB_CORRECTION_KINDS.map((kind) => (
                 <option key={kind} value={kind}>
-                  {`${kind} — ${KIND_HELP[kind]}`}
+                  {t("decisions.kindOption", { kind: enumText("correctionKind", kind), help: t(`decisions.kindHelp.${kind}`) })}
                 </option>
               ))}
             </select>
           </label>
           <label>
-            Because
+            {t("decisions.because")}
             <textarea name="because" required />
           </label>
           <label>
-            Chose instead (optional)
+            {t("decisions.choseInstead")}
             <input name="chose_instead" type="text" />
           </label>
-          <button type="submit">Correct</button>
-          <p className="detail-help">{CORRECT_NOTE}</p>
+          <button type="submit">{t("decisions.correct")}</button>
+          <p className="detail-help">{t("decisions.correctNote")}</p>
         </form>
       </div>
     </article>

@@ -13,7 +13,10 @@
  * object still cannot reach the markup. Text above kept verbatim.
  */
 import type { JSX } from "react";
+import { useTranslation } from "react-i18next";
+import { enumText } from "./i18n.js";
 import { kindLevel } from "./kindRank.js";
+import { en } from "./locales/en.js";
 import type { DecisionListRow } from "./types.js";
 
 /**
@@ -39,7 +42,8 @@ export function rowKey(row: Pick<DecisionListRow, "projectKey" | "id">): string 
   return JSON.stringify([row.projectKey, row.id]);
 }
 
-export const NO_QUESTION = "(no question recorded)";
+/** In English (criteria read it); the render uses the reader's language. */
+export const NO_QUESTION = en.decisions.noQuestion;
 
 /** spec §5.1: the viewer's local date, YYYY-MM-DD; an unparseable `at` shows its own first ten characters. */
 export function localDay(at: string): string {
@@ -58,6 +62,7 @@ export function DecisionList({
   selected?: Pick<DecisionListRow, "projectKey" | "id"> | null;
   onOpen?: (row: DecisionListRow) => void;
 }): JSX.Element {
+  const { t } = useTranslation();
   const selectedKey = selected ? rowKey(selected) : null;
   return (
     <ul className="decision-list">
@@ -67,13 +72,13 @@ export function DecisionList({
           <li key={key}>
             <button type="button" className="decision-row" aria-current={key === selectedKey ? "true" : undefined} onClick={() => onOpen?.(row)}>
               <span className="row-meta">
-                <span className="pill field-kind" data-level={kindLevel(String(row.kind))}>{String(row.kind)}</span>
-                <span className="pill field-scope">{String(row.scope)}</span>
-                {row.verdict !== "ok" && <span className="pill pill-warn field-verdict">{String(row.verdict)}</span>}
+                <span className="pill field-kind" data-level={kindLevel(String(row.kind))}>{enumText("decisionKind", String(row.kind))}</span>
+                <span className="pill field-scope">{enumText("decisionScope", String(row.scope))}</span>
+                {row.verdict !== "ok" && <span className="pill pill-warn field-verdict">{enumText("decisionVerdict", String(row.verdict))}</span>}
                 <span className="row-project field-projectKey">{String(row.projectKey)}</span>
                 <time className="row-at field-at" dateTime={String(row.at)}>{localDay(String(row.at))}</time>
               </span>
-              <span className="row-question">{row.question ?? NO_QUESTION}</span>
+              <span className="row-question">{row.question ?? t("decisions.noQuestion")}</span>
               <span className="row-id field-id">{String(row.id)}</span>
             </button>
           </li>

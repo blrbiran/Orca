@@ -4,12 +4,23 @@
  * value is a compile error here until it has its words. Tasks 3-10 add their areas.
  */
 import type { ThemePref } from "../theme.js";
-import type { MetricsNoteCode } from "../types.js";
+import type { CorrectionKind, DecisionKind, DecisionObservation, DecisionScope, MetricsNoteCode } from "../types.js";
 
 /** The Chinese resource's type: the same key set, every value widened to string (spec §2). */
 export type Translation<T> = { [K in keyof T]: T[K] extends string ? string : Translation<T[K]> };
 
 const theme = { system: "system", light: "light", dark: "dark" } as const satisfies Record<ThemePref, string>;
+const decisionKind = {
+  dependency: "dependency", interface: "interface", scheduling: "scheduling", abandon: "abandon", criteria: "criteria", boundary: "boundary", reconcile: "reconcile",
+} as const satisfies Record<DecisionKind, string>;
+const decisionScope = { file: "file", task: "task", repo: "repo", "cross-repo": "cross-repo" } as const satisfies Record<DecisionScope, string>;
+const decisionVerdict = { ok: "ok", downgraded: "downgraded" } as const satisfies Record<DecisionObservation["verdict"], string>;
+const correctionKind = { wrong: "wrong", not_my_taste: "not_my_taste", stale: "stale" } as const satisfies Record<CorrectionKind, string>;
+const kindHelp = {
+  wrong: "the choice was wrong",
+  not_my_taste: "defensible, but not what I would choose",
+  stale: "it was right then, no longer true",
+} as const satisfies Record<CorrectionKind, string>;
 
 // Panel i18n spec §3.4: each English note is the server's sentence byte for byte (tests/metrics/noteCodes.test.ts).
 const metricsNote = {
@@ -31,6 +42,34 @@ export const en = {
     epoch: "epoch {{epoch}}",
   },
   common: { none: "none", na: "n/a", unknown: "unknown", dispatchBlocked: "dispatch blocked", dispatchLive: "dispatch live" },
+  decisions: {
+    title: "Unreviewed high-tier decisions",
+    count: "{{shown}} of {{total}}",
+    lede: "High-tier decisions an agent recorded that nobody has reviewed yet. Open one, read it, then Agree or Correct.",
+    filterKind: "Kind",
+    filterScope: "Scope",
+    filterRepository: "Repository",
+    any: "any",
+    nothingToReview: "Nothing to review. Every high-tier decision has been reviewed.",
+    noMatch: "No decision matches these filters.",
+    selectOne: "Select a decision to read it.",
+    hiddenByFilter: "This decision is hidden by the current filters.",
+    notInList: "This decision is no longer in the list: it has been reviewed.",
+    noQuestion: "(no question recorded)",
+    chose: "Chose",
+    because: "Because",
+    rejected: "Rejected alternatives",
+    agree: "Agree",
+    agreeHelp: "Mark reviewed: I read this and it needs no change. Counts toward review coverage.",
+    correctNote: "This records a correction; it does not edit the ledger. To change the decision itself, close it with orca correct --close or let the fix agent do it.",
+    kind: "Kind",
+    kindOption: "{{kind}} — {{help}}",
+    kindHelp,
+    choseInstead: "Chose instead (optional)",
+    correct: "Correct",
+    recordedReviewed: "Recorded as reviewed.",
+    correctionRecorded: "Correction recorded.",
+  },
   loopPlan: {
     // Panel i18n spec §3.1, §6.9: one entry per registry version, equal to src/control/loopPlans.ts (the English source of
     // record); a version with no discipline has no discipline key.
@@ -80,5 +119,5 @@ export const en = {
     futureCount: "Excluded as future: {{n}}",
     note: metricsNote,
   },
-  enums: { theme },
+  enums: { theme, decisionKind, decisionScope, decisionVerdict, correctionKind },
 } as const;

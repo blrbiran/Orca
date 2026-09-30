@@ -4,6 +4,7 @@
  * call is to undo. Keyed by DecisionKind, so a new kind without a rank is a compile
  * error -- the same lever KIND_TIER uses.
  */
+import { enumText } from "./i18n.js";
 import type { DecisionKind } from "./types.js";
 
 export type KindLevel = 1 | 2 | 3;
@@ -28,7 +29,7 @@ export const kindLevel = (kind: string): KindLevel | undefined => rankOf(kind)?.
 
 export const kindLabel = (kind: string): string => {
   const rank = rankOf(kind);
-  return rank ? `${MARK[rank.level]} ${kind}` : kind;
+  return rank ? `${MARK[rank.level]} ${enumText("decisionKind", kind)}` : kind;
 };
 
 /** Most important first; a value this file does not know goes last, alphabetically. */

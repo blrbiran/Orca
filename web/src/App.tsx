@@ -135,7 +135,8 @@ interface HomeState {
   coverage: PanelCoverage;
 }
 
-type Outcome = { kind: "recorded"; text: string } | { kind: "refused"; refusal: PanelRefusal };
+type RecordedKey = "decisions.recordedReviewed" | "decisions.correctionRecorded";
+type Outcome = { kind: "recorded"; text: RecordedKey } | { kind: "refused"; refusal: PanelRefusal };
 
 export function App(): JSX.Element {
   const { t } = useTranslation();
@@ -556,7 +557,7 @@ export function App(): JSX.Element {
   }, [selected]);
 
   /** Shows what happened; after a success, refetches so the to-do list and coverage reflect it. */
-  const send = async (post: () => Promise<PostResult<unknown>>, recorded: string): Promise<void> => {
+  const send = async (post: () => Promise<PostResult<unknown>>, recorded: RecordedKey): Promise<void> => {
     try {
       const result = await post();
       if (!result.ok) {
@@ -586,21 +587,21 @@ export function App(): JSX.Element {
       <DecisionDetail
         decision={decision}
         onAgree={() => {
-          void send(() => recordReview(selected.projectKey, selected.id), "Recorded as reviewed.");
+          void send(() => recordReview(selected.projectKey, selected.id), "decisions.recordedReviewed");
         }}
         onCorrect={(form) => {
           const body = correctionBody({ projectKey: selected.projectKey, decisionId: selected.id }, form);
           setLastCorrection(body);
-          void send(() => recordCorrection(body), "Correction recorded.");
+          void send(() => recordCorrection(body), "decisions.correctionRecorded");
         }}
       />
-      {outcome?.kind === "recorded" && <p role="status">{outcome.text}</p>}
+      {outcome?.kind === "recorded" && <p role="status">{t(outcome.text)}</p>}
       {outcome?.kind === "refused" && (
         <Refusal
           refusal={outcome.refusal}
           onRecordAnother={() => {
             if (lastCorrection === null) return;
-            void send(() => recordCorrection({ ...lastCorrection, again: true }), "Correction recorded.");
+            void send(() => recordCorrection({ ...lastCorrection, again: true }), "decisions.correctionRecorded");
           }}
         />
       )}

@@ -5,8 +5,11 @@
  * section, so the first screen is still the work a person owes.
  */
 import type { JSX, ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { DecisionList } from "./DecisionList.js";
+import { enumText } from "./i18n.js";
 import { kindLabel, sortKinds } from "./kindRank.js";
+import { en } from "./locales/en.js";
 import type { DecisionListRow } from "./types.js";
 
 export interface DecisionFilter {
@@ -16,8 +19,9 @@ export interface DecisionFilter {
 }
 export const NO_FILTER: DecisionFilter = { kind: "", scope: "", projectKey: "" };
 
-export const HIDDEN_BY_FILTER = "This decision is hidden by the current filters.";
-export const NOT_IN_LIST = "This decision is no longer in the list: it has been reviewed.";
+/** In English (criteria read them); the render uses the reader's language (panel i18n spec §3.3). */
+export const HIDDEN_BY_FILTER = en.decisions.hiddenByFilter;
+export const NOT_IN_LIST = en.decisions.notInList;
 
 export function filterRows(rows: readonly DecisionListRow[], filter: DecisionFilter): DecisionListRow[] {
   return rows.filter(
@@ -40,6 +44,7 @@ function FilterSelect(props: {
   order?: (values: readonly string[]) => string[];
   optionText?: (value: string) => string;
 }): JSX.Element {
+  const { t } = useTranslation();
   // A value whose last row was just reviewed away stays listed, so the select still shows
   // what is filtering the (now empty) list instead of claiming "any" (final review Important 1).
   const current = props.filter[props.name];
@@ -53,7 +58,7 @@ function FilterSelect(props: {
         value={props.filter[props.name]}
         onChange={(e) => props.onFilter?.({ ...props.filter, [props.name]: e.currentTarget.value })}
       >
-        <option value="">any</option>
+        <option value="">{t("decisions.any")}</option>
         {values.map((v) => <option key={v} value={v}>{props.optionText ? props.optionText(v) : v}</option>)}
       </select>
     </label>
@@ -68,40 +73,41 @@ export function DecisionsView(props: {
   onOpen?: (row: DecisionListRow) => void;
   detail?: ReactNode;
 }): JSX.Element {
+  const { t } = useTranslation();
   const shown = filterRows(props.rows, props.filter);
   // A detail stays open after its row leaves the list (filtered away, or reviewed); say which.
   const same = (r: DecisionListRow): boolean => r.projectKey === props.selected?.projectKey && r.id === props.selected?.id;
   const note = !props.selected || props.detail == null ? null
-    : !props.rows.some(same) ? NOT_IN_LIST
-    : !shown.some(same) ? HIDDEN_BY_FILTER
+    : !props.rows.some(same) ? t("decisions.notInList")
+    : !shown.some(same) ? t("decisions.hiddenByFilter")
     : null;
   return (
     <div className="decisions">
       <div className="section-head">
-        <h1>Unreviewed high-tier decisions</h1>
-        <span className="count" data-testid="decision-count">{shown.length} of {props.rows.length}</span>
+        <h1>{t("decisions.title")}</h1>
+        <span className="count" data-testid="decision-count">{t("decisions.count", { shown: shown.length, total: props.rows.length })}</span>
       </div>
       <p className="section-lede">
-        High-tier decisions an agent recorded that nobody has reviewed yet. Open one, read it, then Agree or Correct.
+        {t("decisions.lede")}
       </p>
       <div className="filters">
-        <FilterSelect label="Kind" name="kind" values={distinct(props.rows, (r) => String(r.kind))} filter={props.filter} onFilter={props.onFilter} order={sortKinds} optionText={kindLabel} />
-        <FilterSelect label="Scope" name="scope" values={distinct(props.rows, (r) => String(r.scope))} filter={props.filter} onFilter={props.onFilter} />
-        <FilterSelect label="Repository" name="projectKey" values={distinct(props.rows, (r) => r.projectKey)} filter={props.filter} onFilter={props.onFilter} />
+        <FilterSelect label={t("decisions.filterKind")} name="kind" values={distinct(props.rows, (r) => String(r.kind))} filter={props.filter} onFilter={props.onFilter} order={sortKinds} optionText={kindLabel} />
+        <FilterSelect label={t("decisions.filterScope")} name="scope" values={distinct(props.rows, (r) => String(r.scope))} filter={props.filter} onFilter={props.onFilter} optionText={(value) => enumText("decisionScope", value)} />
+        <FilterSelect label={t("decisions.filterRepository")} name="projectKey" values={distinct(props.rows, (r) => r.projectKey)} filter={props.filter} onFilter={props.onFilter} />
       </div>
       <div className="split">
         <div className="split-list">
           {props.rows.length === 0 ? (
-            <p className="empty">Nothing to review. Every high-tier decision has been reviewed.</p>
+            <p className="empty">{t("decisions.nothingToReview")}</p>
           ) : shown.length === 0 ? (
-            <p className="empty">No decision matches these filters.</p>
+            <p className="empty">{t("decisions.noMatch")}</p>
           ) : (
             <DecisionList rows={shown} selected={props.selected} onOpen={props.onOpen} />
           )}
         </div>
         <div className="split-detail">
           {note !== null && <p className="detail-note" role="note">{note}</p>}
-          {props.detail ?? <p className="empty">Select a decision to read it.</p>}
+          {props.detail ?? <p className="empty">{t("decisions.selectOne")}</p>}
         </div>
       </div>
     </div>
