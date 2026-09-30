@@ -299,4 +299,15 @@ describe("proposal changes after a task has started (prestart)", () => {
       expect(bytes().work).toBe(before.work);
     } finally { await f.dispose(); }
   });
+
+  it("refuses an agent selection change once a task of the group was claimed, because it reopens the proposal and would return a running task to draft while its run continues", async () => {
+    const { f, service, other, bytes } = await claimedGroup();
+    try {
+      const before = bytes();
+      const set = await service.proposalSetAgent(f.command("proposal-set-agent", { baseProposalVersion: readBudgetProposal(f.store, "g").proposalVersion,
+        scope: { kind: "task", taskId: other.id }, partial: { model: "panel-task-model" } }));
+      expect(set).toMatchObject({ error: { code: "grant-amendment-unsupported" } });
+      expect(bytes().work).toBe(before.work);
+    } finally { await f.dispose(); }
+  });
 });
