@@ -5,8 +5,10 @@
  */
 import { useState } from "react";
 import type { FormEvent, JSX } from "react";
+import { useTranslation } from "react-i18next";
 import type { PanelRefusal } from "./api.js";
 import type { Banner } from "./chainBanner.js";
+import i18n, { enumText } from "./i18n.js";
 import { Refusal } from "./Refusal.js";
 import type { ChainRepoView, ChainView } from "./types.js";
 
@@ -20,13 +22,18 @@ export interface ChainForm {
 }
 
 export function chainStateText(chain: ChainView): string {
-  if (chain.state === "stopped") return `stopped: ${chain.stop?.reason ?? "unknown"} (${chain.stop?.category ?? "unknown"})`;
-  return chain.holderGone ? "running (supervisor is gone)" : "running";
+  if (chain.state === "stopped") {
+    return i18n.t("chains.stateStopped", {
+      reason: chain.stop?.reason ?? i18n.t("common.unknown"),
+      category: chain.stop ? enumText("chainStopCategory", chain.stop.category) : i18n.t("common.unknown"),
+    });
+  }
+  return chain.holderGone ? i18n.t("chains.stateOrphaned") : i18n.t("chains.stateRunning");
 }
-export const costText = (usd: number | null): string => (usd === null ? "cost unreadable" : `USD ${usd.toFixed(2)}`);
+export const costText = (usd: number | null): string => (usd === null ? i18n.t("chains.costUnreadable") : i18n.t("chains.cost", { amount: usd.toFixed(2) }));
 export function progressText(chain: ChainView): string {
   const n = chain.state === "running" && !chain.holderGone ? chain.sessionsDone + 1 : chain.sessionsDone;
-  return `session ${n}; ${costText(chain.costUsd)}`;
+  return i18n.t("chains.sessionProgress", { n, cost: costText(chain.costUsd) });
 }
 
 /**
@@ -34,6 +41,7 @@ export function progressText(chain: ChainView): string {
  * every section. ChainPanel still renders the ones it is given (App passes none).
  */
 export function ChainBanners({ banners, onDismiss }: { banners: readonly Banner[]; onDismiss?: (chainId: string) => void }): JSX.Element {
+  const { t } = useTranslation();
   return (
     <>
       {banners.map((b) => (
@@ -48,7 +56,7 @@ export function ChainBanners({ banners, onDismiss }: { banners: readonly Banner[
             </ul>
           )}
           <button type="button" data-action="dismiss" onClick={() => onDismiss?.(b.chainId)}>
-            Got it
+            {t("chains.gotIt")}
           </button>
         </div>
       ))}
@@ -71,6 +79,7 @@ export function ChainPanel({
   onStart?: (form: ChainForm) => void;
   onStop?: (repoKey: string, chainId: string) => void;
 }): JSX.Element {
+  const { t } = useTranslation();
   const [repoKey, setRepoKey] = useState(repos[0]?.repoKey ?? "");
   const selected = repos.find((r) => r.repoKey === repoKey);
   const submit = (e: FormEvent<HTMLFormElement>): void => {
@@ -81,39 +90,39 @@ export function ChainPanel({
   };
   return (
     <section className="chains">
-      <h2>Chains</h2>
+      <h2>{t("chains.title")}</h2>
       <ChainBanners banners={banners} onDismiss={onDismiss} />
       {repos.map((r) => (
         <div key={r.repoKey} className="chain-repo" data-repo-key={r.repoKey}>
           <h3>{r.repoKey}</h3>
           {r.problem !== null && <p className="chain-problem">{r.problem}</p>}
           {r.chain === null ? (
-            <p>No chain yet.</p>
+            <p>{t("chains.noChain")}</p>
           ) : (
             <dl>
-              <dt>Goal</dt>
+              <dt>{t("chains.goal")}</dt>
               <dd>{r.chain.goal}</dd>
-              <dt>By</dt>
+              <dt>{t("chains.by")}</dt>
               <dd>{r.chain.by}</dd>
-              <dt>Progress</dt>
+              <dt>{t("chains.progress")}</dt>
               <dd>{progressText(r.chain)}</dd>
-              <dt>State</dt>
+              <dt>{t("chains.state")}</dt>
               <dd data-testid="chain-state">{chainStateText(r.chain)}</dd>
             </dl>
           )}
           {r.chain !== null && r.chain.state === "running" && !r.chain.holderGone && (
             <p>
               <button type="button" data-action="stop-chain" onClick={() => onStop?.(r.repoKey, (r.chain as ChainView).chainId)}>
-                Stop chain
+                {t("chains.stop")}
               </button>
-              <span>{" Stops after the current session ends."}</span>
+              <span>{t("chains.stopsAfter")}</span>
             </p>
           )}
         </div>
       ))}
       <form className="chain-start" onSubmit={submit}>
         <label>
-          {"Repository "}
+          {t("chains.formRepository")}
           <select name="repoKey" value={repoKey} onChange={(e) => setRepoKey(e.target.value)}>
             {repos.map((r) => (
               <option key={r.repoKey} value={r.repoKey}>
@@ -123,27 +132,27 @@ export function ChainPanel({
           </select>
         </label>
         <label>
-          {"Goal "}
+          {t("chains.formGoal")}
           <textarea name="goal" required />
         </label>
         <label>
-          {"Max sessions "}
+          {t("chains.formMaxSessions")}
           <input name="maxSessions" type="number" min="1" step="1" required />
         </label>
         <label>
-          {"Max cost in USD (a soft limit) "}
+          {t("chains.formMaxCost")}
           <input name="maxCostUsd" type="number" min="0.01" step="0.01" required />
         </label>
         <label>
-          {"Session timeout in minutes "}
+          {t("chains.formTimeout")}
           <input key={repoKey} name="sessionTimeoutMin" type="number" min="1" defaultValue={selected?.defaultSessionTimeoutMin ?? ""} />
         </label>
         <button type="submit" data-action="start-chain">
-          Start chain
+          {t("chains.start")}
         </button>
       </form>
-      {outcome?.kind === "started" && <p role="status">{`Chain ${outcome.chainId} started.`}</p>}
-      {outcome?.kind === "stop-requested" && <p role="status">{`Chain ${outcome.chainId} will stop after the current session ends.`}</p>}
+      {outcome?.kind === "started" && <p role="status">{t("chains.started", { chainId: outcome.chainId })}</p>}
+      {outcome?.kind === "stop-requested" && <p role="status">{t("chains.stopRequested", { chainId: outcome.chainId })}</p>}
       {outcome?.kind === "refused" && <Refusal refusal={outcome.refusal} />}
     </section>
   );

@@ -4,7 +4,7 @@
  * value is a compile error here until it has its words. Tasks 3-10 add their areas.
  */
 import type { ThemePref } from "../theme.js";
-import type { CorrectionKind, DecisionKind, DecisionObservation, DecisionScope, MetricsNoteCode } from "../types.js";
+import type { ChainStopCategory, CorrectionKind, DecisionKind, DecisionObservation, DecisionScope, MetricsNoteCode } from "../types.js";
 
 /** The Chinese resource's type: the same key set, every value widened to string (spec §2). */
 export type Translation<T> = { [K in keyof T]: T[K] extends string ? string : Translation<T[K]> };
@@ -29,6 +29,14 @@ const metricsNote = {
   "stale-bias": "systematically low: closing a stale correction requires the chose_instead field (CLI flag --chose-instead) that corrections/schema.ts says a stale may not have (E2 spec §3.2.1, A' ERRATUM 3)",
   "reviewed-is-deliberate": "`reviewed` is a deliberate act, so this number can sit near zero for a long time -- and a long-zero coverage is not distinguishable from nobody looking. Read it with the backlog, not on its own.",
 } as const satisfies Record<MetricsNoteCode | "reviewed-is-deliberate", string>;
+
+const chainStopCategory = { done: "done", blocked: "blocked", limit: "limit", anomaly: "anomaly" } as const satisfies Record<ChainStopCategory, string>;
+const chainBanner = {
+  done: "Chain finished",
+  blocked: "Chain is waiting for you",
+  limit: "Chain stopped at a limit",
+  anomaly: "Chain stopped on an anomaly",
+} as const satisfies Record<ChainStopCategory, string>;
 
 export const en = {
   nav: { sections: "Sections", decisions: "Decisions", chains: "Chains", tasks: "Task control", metrics: "Metrics" },
@@ -69,6 +77,33 @@ export const en = {
     correct: "Correct",
     recordedReviewed: "Recorded as reviewed.",
     correctionRecorded: "Correction recorded.",
+  },
+  chains: {
+    notLoaded: "Chains have not loaded.",
+    title: "Chains",
+    noChain: "No chain yet.",
+    goal: "Goal",
+    by: "By",
+    progress: "Progress",
+    state: "State",
+    stop: "Stop chain",
+    stopsAfter: " Stops after the current session ends.",
+    formRepository: "Repository ",
+    formGoal: "Goal ",
+    formMaxSessions: "Max sessions ",
+    formMaxCost: "Max cost in USD (a soft limit) ",
+    formTimeout: "Session timeout in minutes ",
+    start: "Start chain",
+    started: "Chain {{chainId}} started.",
+    stopRequested: "Chain {{chainId}} will stop after the current session ends.",
+    gotIt: "Got it",
+    stateStopped: "stopped: {{reason}} ({{category}})",
+    stateRunning: "running",
+    stateOrphaned: "running (supervisor is gone)",
+    costUnreadable: "cost unreadable",
+    cost: "USD {{amount}}",
+    sessionProgress: "session {{n}}; {{cost}}",
+    banner: chainBanner,
   },
   loopPlan: {
     // Panel i18n spec §3.1, §6.9: one entry per registry version, equal to src/control/loopPlans.ts (the English source of
@@ -119,5 +154,5 @@ export const en = {
     futureCount: "Excluded as future: {{n}}",
     note: metricsNote,
   },
-  enums: { theme, decisionKind, decisionScope, decisionVerdict, correctionKind },
+  enums: { theme, decisionKind, decisionScope, decisionVerdict, correctionKind, chainStopCategory },
 } as const;

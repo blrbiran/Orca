@@ -642,7 +642,7 @@ export function App(): JSX.Element {
       banners={chains !== null ? <ChainBanners banners={bannersFor(chains, dismissed)} onDismiss={dismiss} /> : null}
     >
       <SectionPane section="chains" active={section}>
-      {chains === null && <p className="empty">Chains have not loaded.</p>}
+      {chains === null && <p className="empty">{t("chains.notLoaded")}</p>}
       {chains !== null && (
         <ChainPanel
           repos={chains}

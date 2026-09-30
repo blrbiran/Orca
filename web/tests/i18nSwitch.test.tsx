@@ -56,6 +56,20 @@ describe("the language switch (spec §6.7)", () => {
     expect(document.documentElement.lang).toBe("en");
   });
 
+  it("re-renders a helper-built string too: the chain banner bannersFor builds", async () => {
+    chainRepos = [{
+      repoKey: "acme-alpha", defaultSessionTimeoutMin: null, problem: null,
+      chain: { chainId: "chain-0000000b", goal: "g-1", by: "amy", via: "cli", startedAt: "2026-10-01T00:00:00.000Z", state: "stopped", holderGone: false, sessionsDone: 2, costUsd: 1.5, stop: { reason: "r-1", category: "done", at: "2026-10-01T01:00:00.000Z", awaitingHuman: [], detail: null } },
+    }];
+    const { container } = render(<App />);
+    const select = await languageSelect(container);
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("Chain finished"));
+    fireEvent.change(select, { target: { value: "zh" } });
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("链已完成"));
+    fireEvent.change(select, { target: { value: "en" } });
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("Chain finished"));
+  });
+
   it("still switches when this browser refuses to store the choice (a full or blocked storage costs the memory, not the switch)", async () => {
     const { container } = render(<App />);
     const select = await languageSelect(container);

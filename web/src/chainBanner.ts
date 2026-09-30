@@ -3,14 +3,12 @@
  * only (localStorage), never in ~/.orca. Storage can be missing or throw (private mode, blocked site data); then
  * nothing is remembered and nothing breaks.
  */
+import i18n from "./i18n.js";
+import { en } from "./locales/en.js";
 import type { ChainRepoView, ChainStopCategory } from "./types.js";
 
-export const BANNER_TEXT: Record<ChainStopCategory, string> = {
-  done: "Chain finished",
-  blocked: "Chain is waiting for you",
-  limit: "Chain stopped at a limit",
-  anomaly: "Chain stopped on an anomaly",
-};
+/** In English (criteria read it); bannersFor translates when it is called (panel i18n spec §3.3). */
+export const BANNER_TEXT: Record<ChainStopCategory, string> = en.chains.banner;
 export const DISMISSED_KEY = "orca.chains.dismissed";
 
 export interface Banner {
@@ -27,7 +25,7 @@ export function bannersFor(repos: readonly ChainRepoView[], dismissed: ReadonlyS
   for (const r of repos) {
     const c = r.chain;
     if (c === null || c.state !== "stopped" || c.stop === null || dismissed.has(c.chainId)) continue;
-    out.push({ repoKey: r.repoKey, chainId: c.chainId, category: c.stop.category, text: BANNER_TEXT[c.stop.category], reason: c.stop.reason, awaitingHuman: c.stop.awaitingHuman });
+    out.push({ repoKey: r.repoKey, chainId: c.chainId, category: c.stop.category, text: i18n.t(`chains.banner.${c.stop.category}`), reason: c.stop.reason, awaitingHuman: c.stop.awaitingHuman });
   }
   return out;
 }
