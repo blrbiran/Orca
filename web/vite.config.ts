@@ -11,5 +11,9 @@ export default defineConfig({
     rollupOptions: { output: { entryFileNames: "[name].js", assetFileNames: "[name].[ext]" } },
   },
   server: { proxy: { "/api": "http://127.0.0.1:7777" } },
-  test: { environment: "node", include: ["tests/**/*.test.ts", "tests/**/*.test.tsx"], setupFiles: ["tests/setup.ts"] },
+  test: {
+    environment: "node", include: ["tests/**/*.test.ts", "tests/**/*.test.tsx"], setupFiles: ["tests/setup.ts"],
+    // The App timer-driven criteria re-render the whole panel many times and each translated string adds per-render cost; the default 5 s left agentPreviewRefresh at 4968 ms before i18n.
+    testTimeout: 15000,
+  },
 });
