@@ -64,7 +64,7 @@ describe("refusals in the reader's language (spec §3.2, §6.4)", () => {
     await i18n.changeLanguage("zh");
     expect(refusalText({ code: "revision-conflict", message: SENT, status: 409 })).toBe("版本冲突：别的标签页或会话先提交了，请重新读取。");
     expect(refusalText({ code: "loop-plan-invalid", message: "loop-plan-invalid:path-shape", status: 422 })).toBe("做法的输入不合法：loop-plan-invalid:path-shape");
-    expect(refusalText({ code: "http-503", message: "GET /api/x answered 503", status: 503 })).toBe("面板返回了 HTTP 503，没有给出错误码。");
+    expect(refusalText({ code: "http-503", message: "GET /api/x answered 503", status: 503 })).toBe("面板返回了 HTTP 503，没有给出错误码：GET /api/x answered 503");
     // Spec §4.3.1: a failed reviewed mark relays reviews-store-* with the only sentence saying the correction landed.
     const landed = "the correction was recorded (id c-1), but the reviewed mark could not be written: busy";
     expect(refusalText({ code: "reviews-store-busy", message: landed, status: 409 })).toBe(`评审记录正被另一个写入者占用：${landed}`);
@@ -116,5 +116,11 @@ describe("refusals in the reader's language (spec §3.2, §6.4)", () => {
     expect(await refusedWith(() => downloadEvidenceArtifact(entry))).toBe(`GET ${entry.downloadUrl}: 返回了 409`);
     vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(new Response("not json", { status: 503 }))));
     expect(await sendControlCommand("/api/control/x", envelope)).toMatchObject({ kind: "uncertain", refusal: { message: "POST /api/control/x: 面板可能没有提交这条命令" } });
+    // Task 10 review Important 1: an unparsable 5xx is http-<n>, and the control line must still say the command may not
+    // have committed -- for a workspace-mode or agent-preferences POST it is the only notice.
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(new Response("Bad Gateway", { status: 502 }))));
+    const answer = await sendControlCommand("/api/control/x", envelope);
+    if (answer.kind !== "uncertain") throw new Error(`expected an uncertain answer, got ${answer.kind}`);
+    expect(controlLine(answer.refusal)).toBe("http-502 · HTTP 502 · 面板返回了 HTTP 502，没有给出错误码：POST /api/control/x: 面板可能没有提交这条命令");
   });
 });

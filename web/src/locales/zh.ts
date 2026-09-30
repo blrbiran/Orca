@@ -532,7 +532,7 @@ export const zhErrors: Record<string, string> = {
   "work-already-done": "工作已经完成。",
   "work-not-found": "找不到这项工作。",
   // Spec §3.2: the codes the web itself makes (api.ts, controlApi.ts); http-<n> is one entry.
-  "http-status": "面板返回了 HTTP {{status}}，没有给出错误码。",
+  "http-status": "面板返回了 HTTP {{status}}，没有给出错误码：{{message}}",
   "http-unreachable": "没有连上面板：{{message}}",
   "panel-unreachable": "没有连上面板：{{message}}",
   "command-result-invalid": "面板的回答里没有命令结果。",
