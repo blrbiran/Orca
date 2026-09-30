@@ -63,6 +63,9 @@ export interface RepoSummary {
   decisions: number;
 }
 
+/** Mirrors src/metrics/types.ts's MetricsNoteCode (panel i18n spec §3.4). */
+export type MetricsNoteCode = "no-review-coverage" | "unresolved-decisions" | "stale-bias";
+
 export interface CorrectionRateSlice {
   kind: DecisionKind;
   tier: "high" | "low";
@@ -87,6 +90,8 @@ export interface CorrectionRate {
   by_decision_kind: CorrectionRateSlice[];
   buckets: CorrectionRateBucket[];
   caveats: string[];
+  // Panel i18n spec §3.4: optional here so literal fixtures need no edit; the server always sends it.
+  caveatCodes?: MetricsNoteCode[];
 }
 
 export interface RepairRateBucket {
@@ -106,9 +111,13 @@ export interface RepairRate {
     denominator_corrections: number;
     rate: number | null;
     known_bias: string;
+    // Panel i18n spec §3.4: optional here so literal fixtures need no edit; the server always sends it.
+    knownBiasCode?: MetricsNoteCode;
   };
   buckets: RepairRateBucket[];
   caveats: string[];
+  // Panel i18n spec §3.4: optional here so literal fixtures need no edit; the server always sends it.
+  caveatCodes?: MetricsNoteCode[];
 }
 
 export interface BacklogSlice {
@@ -132,6 +141,8 @@ export interface CorrectionKindCount {
 export interface ReviewCoverage {
   available: false;
   reason: string;
+  // Panel i18n spec §3.4: optional here so literal fixtures need no edit; the server always sends it.
+  reasonCode?: MetricsNoteCode;
 }
 
 export interface MetricsReport {
@@ -172,6 +183,8 @@ export interface PanelCoverage {
   /** null, never 0, when the denominator is 0. */
   rate: number | null;
   caveat: string;
+  // Panel i18n spec §3.4: optional here so literal fixtures need no edit; the server always sends it.
+  caveatCode?: "reviewed-is-deliberate";
 }
 
 /** Mirrors src/panel/listProjection.ts's DecisionListRow (question: panel UI redesign spec §4, ruling U1). */

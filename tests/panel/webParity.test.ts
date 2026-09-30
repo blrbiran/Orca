@@ -113,14 +113,26 @@ describe("web/src/types.ts stays in lockstep with the server shapes (task 8 ruli
 function reportServerToWeb(x: ServerMetricsReport): WebMetricsReport {
   return x;
 }
+// Rewritten under human ruling H18 (2026-10-01) for panel i18n: the metrics note codes are optional on the Web side so
+// literal fixtures need no edit (spec §3.4); an absent code is normalised here, so the rest is still checked both ways.
 function reportWebToServer(x: WebMetricsReport): ServerMetricsReport {
-  return x;
+  return {
+    ...x,
+    correction_rate: { ...x.correction_rate, caveatCodes: x.correction_rate.caveatCodes ?? [] },
+    repair_rate: {
+      ...x.repair_rate,
+      caveatCodes: x.repair_rate.caveatCodes ?? [],
+      stale_only: { ...x.repair_rate.stale_only, knownBiasCode: x.repair_rate.stale_only.knownBiasCode ?? "stale-bias" },
+    },
+    review_coverage: { ...x.review_coverage, reasonCode: x.review_coverage.reasonCode ?? "no-review-coverage" },
+  };
 }
 function coverageServerToWeb(x: ServerPanelCoverage): WebPanelCoverage {
   return x;
 }
+// Rewritten under human ruling H18 (2026-10-01) for panel i18n.
 function coverageWebToServer(x: WebPanelCoverage): ServerPanelCoverage {
-  return x;
+  return { ...x, caveatCode: x.caveatCode ?? "reviewed-is-deliberate" };
 }
 function listRowServerToWeb(x: ServerDecisionListRow): WebDecisionListRow {
   return x;

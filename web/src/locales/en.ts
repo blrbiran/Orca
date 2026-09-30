@@ -4,11 +4,20 @@
  * value is a compile error here until it has its words. Tasks 3-10 add their areas.
  */
 import type { ThemePref } from "../theme.js";
+import type { MetricsNoteCode } from "../types.js";
 
 /** The Chinese resource's type: the same key set, every value widened to string (spec §2). */
 export type Translation<T> = { [K in keyof T]: T[K] extends string ? string : Translation<T[K]> };
 
 const theme = { system: "system", light: "light", dark: "dark" } as const satisfies Record<ThemePref, string>;
+
+// Panel i18n spec §3.4: each English note is the server's sentence byte for byte (tests/metrics/noteCodes.test.ts).
+const metricsNote = {
+  "no-review-coverage": "review coverage has no data: its only producer is the panel (E2 spec §3.5), and A' §4.4 says the correction rate must never be read on its own",
+  "unresolved-decisions": "some corrections point at decisions outside what was scanned (see unresolved_decisions); they count in the totals but sit in no decision-kind bucket",
+  "stale-bias": "systematically low: closing a stale correction requires the chose_instead field (CLI flag --chose-instead) that corrections/schema.ts says a stale may not have (E2 spec §3.2.1, A' ERRATUM 3)",
+  "reviewed-is-deliberate": "`reviewed` is a deliberate act, so this number can sit near zero for a long time -- and a long-zero coverage is not distinguishable from nobody looking. Read it with the backlog, not on its own.",
+} as const satisfies Record<MetricsNoteCode | "reviewed-is-deliberate", string>;
 
 export const en = {
   nav: { sections: "Sections", decisions: "Decisions", chains: "Chains", tasks: "Task control", metrics: "Metrics" },
@@ -57,6 +66,19 @@ export const en = {
       checks_other: "Acceptance: {{count}} check commands, all must pass",
       pathSeparator: ", ",
     },
+  },
+  metrics: {
+    unknownRate: "unknown",
+    correctionRate: "Correction rate",
+    repairRate: "Repair rate",
+    reviewCoverage: "Review coverage",
+    unresolvedTitle: "Unresolved decisions",
+    unresolvedCount: "Unresolved decisions: {{n}}",
+    malformedTitle: "Malformed lines",
+    malformedCount: "Malformed lines: {{n}}",
+    futureTitle: "Excluded as future",
+    futureCount: "Excluded as future: {{n}}",
+    note: metricsNote,
   },
   enums: { theme },
 } as const;

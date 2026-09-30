@@ -8,6 +8,8 @@ export interface PanelCoverage {
   /** null, never 0, when the denominator is 0. */
   rate: number | null;
   caveat: string;
+  /** Panel i18n spec §3.4: the caveat's stable code. */
+  caveatCode: "reviewed-is-deliberate";
 }
 
 // A NUL (U+0000) join, not a space: spec section 4.2 keys by (projectKey, id) because a
@@ -53,6 +55,7 @@ export function computePanelCoverage(
       "`reviewed` is a deliberate act, so this number can sit near zero for a long time -- and " +
       "a long-zero coverage is not distinguishable from nobody looking. Read it with the backlog, " +
       "not on its own.",
+    caveatCode: "reviewed-is-deliberate",
   };
 }
 

@@ -52,6 +52,24 @@ export const zh: Translation<typeof en> = {
       pathSeparator: "、",
     },
   },
+  metrics: {
+    unknownRate: "未知",
+    correctionRate: "纠正率",
+    repairRate: "修复率",
+    reviewCoverage: "评审覆盖率",
+    unresolvedTitle: "未解析的决策",
+    unresolvedCount: "未解析的决策：{{n}}",
+    malformedTitle: "格式错误的行",
+    malformedCount: "格式错误的行：{{n}}",
+    futureTitle: "因日期在未来而排除",
+    futureCount: "因日期在未来而排除：{{n}}",
+    note: {
+      "no-review-coverage": "评审覆盖率没有数据：它唯一的来源是面板（E2 spec §3.5），而 A' §4.4 规定纠正率绝不能单独解读",
+      "unresolved-decisions": "有些纠正指向的决策不在扫描范围内（见 unresolved_decisions）；它们计入总数，但不属于任何决策类型分组",
+      "stale-bias": "系统性偏低：关闭一条 stale 纠正需要 chose_instead 字段（CLI 参数 --chose-instead），而 corrections/schema.ts 规定 stale 不能带它（E2 spec §3.2.1，A' ERRATUM 3）",
+      "reviewed-is-deliberate": "`reviewed` 是一个有意的动作，所以这个数字可能长时间接近零——而长期为零的覆盖率与没人看无法区分。请结合积压一起看，不要单独看。",
+    },
+  },
   enums: { theme: { system: "跟随系统", light: "浅色", dark: "深色" } },
 };
 

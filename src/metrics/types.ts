@@ -110,6 +110,12 @@ export interface CorrectionRateBucket {
   counted_through: string;
 }
 
+/**
+ * Panel i18n spec §3.4: the stable code beside each sentence the metrics carry, so the panel can show the note in the
+ * reader's language. The sentences stay: the CLI prints them.
+ */
+export type MetricsNoteCode = "no-review-coverage" | "unresolved-decisions" | "stale-bias";
+
 export interface CorrectionRate {
   numerator_corrections_excluding_stale: number;
   denominator_decisions: number;
@@ -119,6 +125,8 @@ export interface CorrectionRate {
   by_decision_kind: CorrectionRateSlice[];
   buckets: CorrectionRateBucket[];
   caveats: string[];
+  /** Index for index with caveats (panel i18n spec §3.4). */
+  caveatCodes: MetricsNoteCode[];
 }
 
 export interface RepairRateBucket {
@@ -145,9 +153,12 @@ export interface RepairRate {
     denominator_corrections: number;
     rate: number | null;
     known_bias: string;
+    knownBiasCode: MetricsNoteCode;
   };
   buckets: RepairRateBucket[];
   caveats: string[];
+  /** Index for index with caveats (panel i18n spec §3.4). */
+  caveatCodes: MetricsNoteCode[];
 }
 
 export interface BacklogSlice {
@@ -178,6 +189,7 @@ export interface CorrectionKindCount {
 export interface ReviewCoverage {
   available: false;
   reason: string;
+  reasonCode: MetricsNoteCode;
 }
 
 export interface MetricsReport {

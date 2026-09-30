@@ -9,6 +9,7 @@ import type {
   CorrectionRate,
   CorrectionRateBucket,
   CorrectionRateSlice,
+  MetricsNoteCode,
   MetricsReport,
   RepairRate,
   RepairRateBucket,
@@ -125,7 +126,12 @@ export function computeMetrics(
   });
 
   const correctionCaveats = [NO_REVIEW_COVERAGE];
-  if (obs.unresolvedDecisions.length > 0) correctionCaveats.push(UNRESOLVED_CAVEAT);
+  // Panel i18n spec §3.4: a stable code beside each sentence, index for index; the sentences stay for the CLI.
+  const correctionCaveatCodes: MetricsNoteCode[] = ["no-review-coverage"];
+  if (obs.unresolvedDecisions.length > 0) {
+    correctionCaveats.push(UNRESOLVED_CAVEAT);
+    correctionCaveatCodes.push("unresolved-decisions");
+  }
 
   const correction_rate: CorrectionRate = {
     numerator_corrections_excluding_stale: scoring.length,
@@ -135,6 +141,7 @@ export function computeMetrics(
     by_decision_kind: kindSlices,
     buckets: correctionBuckets,
     caveats: correctionCaveats,
+    caveatCodes: correctionCaveatCodes,
   };
 
   // ---- repair rate ---------------------------------------------------------
@@ -166,9 +173,11 @@ export function computeMetrics(
       denominator_corrections: staleAll.length,
       rate: rate(staleClosed.length, staleAll.length),
       known_bias: STALE_BIAS,
+      knownBiasCode: "stale-bias",
     },
     buckets: repairBuckets,
     caveats: [NO_REVIEW_COVERAGE],
+    caveatCodes: ["no-review-coverage"],
   };
 
   // ---- backlog -------------------------------------------------------------
@@ -227,7 +236,7 @@ export function computeMetrics(
     repair_rate,
     backlog,
     breakdown_by_correction_kind_including_stale: breakdown,
-    review_coverage: { available: false, reason: NO_REVIEW_COVERAGE },
+    review_coverage: { available: false, reason: NO_REVIEW_COVERAGE, reasonCode: "no-review-coverage" },
     excluded_as_future: obs.excludedAsFuture,
     unresolved_decisions: [...obs.unresolvedDecisions].sort((a, b) =>
       a.correctionId < b.correctionId ? -1 : a.correctionId > b.correctionId ? 1 : 0,
