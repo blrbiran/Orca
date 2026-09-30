@@ -1,12 +1,21 @@
 // @vitest-environment jsdom
 /**
- * Panel i18n spec §6.5: everything visible goes through t. A test-only pseudo-locale wraps every value as ⟦…⟧ (the zh
- * bundle is overwritten with the wrapped English values; drafter finding F15). Every area -- nav and shell footer,
+ * Panel i18n spec §6.5: everything visible goes through t. A test-only pseudo-locale wraps the fixed text of every value
+ * as ⟦…⟧ and leaves each {{placeholder}} and <tag> outside the markers (the zh bundle is swapped for the wrapped English
+ * values; drafter finding F15), so a value interpolated into a translated string stays visible once the markers are
+ * stripped: an enum passed raw instead of through enumText is seen (Task 11 review I1). Every area -- nav and shell footer,
  * decisions, chains, task control (loop card and budget table included), agents, metrics, recovery, error page -- is
  * rendered with a fixture; after every ⟦…⟧ is stripped from the text and from the text attributes, no English value of at
- * least 4 characters that has no {{ and differs from its Chinese value may remain. The same fixtures in real Chinese show
- * a named Chinese string per area. Fixture data never equals such a value: if this criterion names a fixture string,
- * change the fixture's data, not the rule.
+ * least 4 characters that differs from its Chinese value may remain, and no fixed fragment of at least 4 characters of a
+ * templated value that its Chinese value does not contain. The same fixtures in real Chinese show a named Chinese string
+ * per area. Fixture data never equals such a value: if this criterion names a fixture string, change the fixture's data,
+ * not the rule.
+ *
+ * What this criterion cannot see, by construction: values under 4 characters (n/a, any, By, run, ok, low, the separators)
+ * -- a substring rule for them would hit fixture ids such as run/1 -- which are the per-area i18n tests' job; branches no
+ * fixture renders (App's own loading / not-loaded / unavailable lines, EvidenceLink's refusal), which only the scan
+ * backstop (tests/panel/scanPanelText.test.ts) covers, and only against literals; and attributes other than aria-label,
+ * title, placeholder and label (none is set through t today).
  */
 import { cleanup, render } from "@testing-library/react";
 import type { JSX } from "react";
@@ -44,10 +53,17 @@ function flatten(node: Tree, prefix = ""): Record<string, string> {
   }
   return out;
 }
-const wrap = (node: Tree): Tree => Object.fromEntries(Object.entries(node).map(([key, value]) => [key, typeof value === "string" ? `⟦${value}⟧` : wrap(value)]));
+/** A value's fixed text and its {{placeholders}} / <tags>, alternating: odd indexes are the placeholders and tags. */
+const parts = (value: string): string[] => value.split(/(\{\{[^}]*\}\}|<\/?[a-z0-9]+>)/);
+const wrapValue = (value: string): string => parts(value).map((part, index) => (index % 2 === 1 || part === "" ? part : `⟦${part}⟧`)).join("");
+const wrap = (node: Tree): Tree => Object.fromEntries(Object.entries(node).map(([key, value]) => [key, typeof value === "string" ? wrapValue(value) : wrap(value)]));
 const EN = flatten(en as unknown as Tree);
 const ZH = flatten(zh as unknown as Tree);
-const CHECKED = Object.entries(EN).filter(([key, value]) => value.length >= 4 && !value.includes("{{") && value !== ZH[key]);
+const WHOLE = Object.entries(EN).filter(([key, value]) => value.length >= 4 && !value.includes("{{") && value !== ZH[key]);
+const FRAGMENTS = Object.entries(EN).filter(([, value]) => value.includes("{{")).flatMap(([key, value]) =>
+  parts(value).filter((part, index) => index % 2 === 0).map((part) => part.trim()).filter((part) => part.length >= 4 && !ZH[key]!.includes(part))
+    .map((part): [string, string] => [`${key} (fixed part)`, part]));
+const CHECKED = [...WHOLE, ...FRAGMENTS];
 const strip = (text: string): string => {
   let out = text;
   for (;;) {
@@ -193,8 +209,9 @@ const AREAS: Array<{ name: string; chinese: string; element: () => JSX.Element }
 ];
 
 describe("everything visible goes through t (spec §6.5)", () => {
-  it("checks a real set of English values", () => {
-    expect(CHECKED.length).toBeGreaterThan(300);
+  it("checks a real set of English values, the fixed parts of templated ones included", () => {
+    expect(WHOLE.length).toBeGreaterThan(300);
+    expect(FRAGMENTS.length).toBeGreaterThan(120);
   });
 
   it.each(AREAS)("$name: no English value is left once the pseudo-locale's ⟦…⟧ are stripped", async ({ element }) => {
