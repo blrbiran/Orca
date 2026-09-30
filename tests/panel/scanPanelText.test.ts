@@ -82,3 +82,35 @@ describe("the panel text scan (spec §3, §8)", () => {
     expect(out.split("\n").filter((line) => line !== "").length).toBe(9);
   });
 });
+
+/**
+ * Panel i18n spec §6.5, §8 (drafter finding F18): once every area is converted, the scan finds nothing a person reads in
+ * web/src but this allow-list -- the brand, two class names, the HTTP-method-and-path part of the web's own messages and
+ * a developer error that is never rendered. A literal left in a branch no fixture renders is caught here, not by §6.5.
+ */
+const ALLOWED = [
+  "web/src/Shell.tsx\tOrca",
+  'web/src/TaskDetail.tsx\t"label label-custom"',
+  'web/src/TaskDetail.tsx\t"label label-system"',
+  "web/src/api.ts\t`GET ${path}`",
+  "web/src/api.ts\t`POST ${path}`",
+  "web/src/controlApi.ts\t`GET ${entry.downloadUrl}`",
+  "web/src/controlApi.ts\t`GET ${entry.downloadUrl}`",
+  "web/src/controlApi.ts\t`GET ${path}`",
+  "web/src/controlApi.ts\t`GET ${path}`",
+  "web/src/controlApi.ts\t`POST ${path}`",
+  "web/src/controlApi.ts\t`POST ${path}`",
+  'web/src/main.tsx\t"orca panel: #root is missing from index.html"',
+];
+
+describe("nothing left to translate (spec §6.5 backstop)", () => {
+  it("leaves nothing in web/src for a person to read but the allow-list", () => {
+    const run = spawnSync(process.execPath, [SCRIPT, "--ui", process.cwd()], { encoding: "utf8" });
+    expect(run.status).toBe(0);
+    const rows = run.stdout.split("\n").filter((line) => line !== "").map((line) => {
+      const [, where, , text] = line.split("\t");
+      return `${where!.replace(/:\d+$/, "")}\t${text}`;
+    });
+    expect(rows.sort()).toEqual([...ALLOWED].sort());
+  });
+});
