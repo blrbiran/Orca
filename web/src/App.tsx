@@ -67,7 +67,7 @@ import { ControlPanel } from "./ControlPanel.js";
 import { initialControlState, reduceControlState, summaryView } from "./controlState.js";
 import type { UncertainCommand } from "./controlState.js";
 import type {
-  AgentPreferencesViewV1, AgentSelectionPreviewV1, AgentsViewV1, ControlConfigV1, OperatorPreferencesV1, RepositoryWorkspaceV1,
+  AgentPreferencesViewV1, AgentSelectionPreviewV1, AgentsViewV1, CommandSuccessV1, ControlConfigV1, OperatorPreferencesV1, RepositoryWorkspaceV1,
 } from "./controlTypes.js";
 import { DecisionDetail } from "./DecisionDetail.js";
 import type { Decision } from "./DecisionDetail.js";
@@ -273,8 +273,11 @@ export function App(): JSX.Element {
     await readControlGroup(command.groupId);
   };
 
-  /** Send one intent. Whatever the ledger says afterwards is read, not inferred here. */
-  const sendControl = async (action: ControlAction): Promise<void> => {
+  /**
+   * Send one intent. Whatever the ledger says afterwards is read, not inferred here. Answers the commandRevision a
+   * success carries, or null when the command did not succeed (refused, or its outcome unknown).
+   */
+  const sendControl = async (action: ControlAction): Promise<number | null> => {
     const commandId = nextCommandId();
     const command = { groupId: action.groupId, commandId };
     dispatchControl({ type: "command-uncertain", value: command });
@@ -283,7 +286,7 @@ export function App(): JSX.Element {
       // The id stays where it is: sessionStorage keeps it across a reload, and the
       // next tick looks it up. The page shows that the outcome is unknown.
       dispatchControl({ type: "refusal", groupId: action.groupId, value: answer.refusal });
-      return;
+      return null;
     }
     dispatchControl({ type: "command-resolved", value: command });
     // Labels and progress spec §4.2 (plan finding F11): a label draft is the person's own data -- cleared only once this
@@ -299,6 +302,20 @@ export function App(): JSX.Element {
       if (refusal.code === "agent-selection-changed" || refusal.code === "agent-selection-rejected") rereadPreview(action.groupId, 0);
     }
     await readControlGroup(action.groupId);
+    return answer.status < 400 ? (answer.body as CommandSuccessV1).commandRevision : null;
+  };
+
+  /**
+   * W5 (human ruling H16: no manual step): one control's commands, in order. Each after the first is sent at the
+   * commandRevision the previous success returned -- the group's revision right after it, not the last poll's -- and
+   * the first that does not succeed stops the rest; its refusal shows as any refusal does.
+   */
+  const sendControlSequence = async (actions: ControlAction[]): Promise<void> => {
+    let revision: number | null = null;
+    for (const [index, action] of actions.entries()) {
+      revision = await sendControl(index === 0 ? action : { ...action, expectedRevision: revision! });
+      if (revision === null) return;
+    }
   };
 
   /**
@@ -649,6 +666,9 @@ export function App(): JSX.Element {
           onDraft={(key, text) => dispatchControl({ type: "draft", key, text })}
           onCommand={(action) => {
             void sendControl(action);
+          }}
+          onCommands={(actions) => {
+            void sendControlSequence(actions);
           }}
           workspace={workspace}
           onWorkspaceMode={(mode, revision) => { void sendWorkspaceMode(mode, revision); }}

@@ -20,6 +20,7 @@ import type {
   GroupViewV1,
   ProposalOperationV1,
   ProposalTargetV1,
+  SetTaskLoopPayloadV1,
   WorkItemViewV1,
 } from "./controlTypes.js";
 
@@ -42,14 +43,15 @@ export function provenanceText(provenance: FieldProvenanceV1): string {
   return provenance.provenance === "complex-1m-default" ? "complex-1m default" : provenance.provenance;
 }
 
-/** Loop plans spec §4.3 (C6): a loop task's work budget is changed only on its plan card (set-task-loop). */
+/** Loop plans spec §4.3 (C6): a loop task's work budget is changed only through set-task-loop (its plan card, or a suggestion). */
 export const loopOwned = (item: WorkItemViewV1): boolean => item.loopPlan !== undefined && item.loopPlan !== null;
 
 function targetOf(view: GroupViewV1, ownerId: string, bucket: string, dimension: AmountDimensionV1): ProposalTargetV1 | null {
   if (bucket === "review") return { scope: "goal-review", dimension };
   if (bucket !== "work" && bucket !== "handoff") return null;
   const task = view.workItems.find((item) => item.taskId === ownerId);
-  // Read-only here, so no edit and no suggestion button ever sends proposal-edit for it (Drafter finding F14).
+  // Read-only here, so no edit and no suggestion ever sends proposal-edit for it (Drafter finding F14); its suggestions
+  // go through set-task-loop instead (suggestedLoopActions).
   if (task !== undefined && bucket === "work" && loopOwned(task)) return null;
   return task ? { scope: "task", taskId: ownerId, allocation: bucket, dimension } : null;
 }
@@ -129,6 +131,58 @@ export function suggestedOperations(view: GroupViewV1, scope: SuggestionScope): 
   return operations;
 }
 
+const LOOP_WORK_DIMENSIONS = ["tokens", "activeMs", "attempts"] as const;
+
+/**
+ * W5 (human ruling H6, superseding plan ruling R-F14): a loop task's work suggestion is applied through its one owner,
+ * set-task-loop, keeping the task's current plan and inputs. The budget is the current work amount with each suggested
+ * dimension in `scope` that differs replaced, and workProvenance names the estimate for exactly those dimensions (the
+ * server re-checks each, verifyModelField). Sessions is not in set-task-loop's payload, so it is never suggested here.
+ */
+export function suggestedLoopActions(view: GroupViewV1, scope: SuggestionScope): ControlAction[] {
+  const advice = adviceOf(view);
+  if (advice === null || advice.stale) return [];
+  const groupId = view.summary.groupId;
+  const actions: ControlAction[] = [];
+  for (const allocation of view.allocations) {
+    if (allocation.ownerKind !== "task" || allocation.bucket !== "work") continue;
+    const plan = view.workItems.find((item) => item.taskId === allocation.ownerId)?.loopPlan;
+    if (plan === undefined || plan === null) continue;
+    if (scope.kind === "row" && (scope.ownerKind !== "task" || scope.ownerId !== allocation.ownerId || scope.bucket !== "work")) continue;
+    const suggested = suggestedAmount(advice.output, allocation);
+    if (suggested === null) continue;
+    const work = { tokens: allocation.amount.tokens, activeMs: allocation.amount.activeMs, attempts: allocation.amount.attempts };
+    const workProvenance: NonNullable<SetTaskLoopPayloadV1["workProvenance"]> = {};
+    for (const dimension of LOOP_WORK_DIMENSIONS) {
+      if (scope.kind === "field" && budgetFieldKey(groupId, scope.target) !== budgetFieldKey(groupId, { scope: "task", taskId: allocation.ownerId, allocation: "work", dimension })) continue;
+      if (suggested[dimension] === allocation.amount[dimension]) continue;
+      work[dimension] = suggested[dimension];
+      workProvenance[dimension] = { provenance: "model", estimateId: advice.estimateId };
+    }
+    if (Object.keys(workProvenance).length === 0) continue;
+    actions.push({
+      verb: "set-task-loop", groupId, taskId: allocation.ownerId, expectedRevision: view.summary.commandRevision,
+      payload: { baseLoopVersion: plan.loopVersion, plan: plan.planId, inputs: plan.inputs, work, workProvenance },
+    });
+  }
+  return actions;
+}
+
+/**
+ * Every command one suggestion control sends, in the order they must be sent: the proposal-edit first, then one
+ * set-task-loop per loop task. A set-task-loop on a draft proposal advances proposalVersion (reopenProposal), which a
+ * later proposal-edit's baseProposalVersion would miss; a proposal-edit does not touch any task's loopVersion, and one
+ * task's set-task-loop does not touch another's. So in this order only expectedRevision changes between them.
+ */
+export function suggestionActions(view: GroupViewV1, scope: SuggestionScope): ControlAction[] {
+  const operations = suggestedOperations(view, scope);
+  const edit: ControlAction[] = operations.length === 0 ? [] : [{
+    verb: "proposal-edit", groupId: view.summary.groupId, expectedRevision: view.summary.commandRevision,
+    payload: { baseProposalVersion: view.proposal.proposalVersion, operations },
+  }];
+  return [...edit, ...suggestedLoopActions(view, scope)];
+}
+
 function limitAmount(view: GroupViewV1, drafts: Record<string, string>): Amount {
   const groupId = view.summary.groupId;
   const limit = { ...view.ledger.groupLimit };
@@ -148,6 +202,12 @@ export interface BudgetEditorProps {
   onDraft: (key: string, text: string) => void;
   onCommand: (action: ControlAction) => void;
   /**
+   * W5 (human ruling H16: no manual step): send these in order, each at the commandRevision the previous one's success
+   * returned, stopping at the first that does not succeed. Used when one control needs more than one command. Absent
+   * (a render without the page around it), only the first is sent; the rest stay offered on screen.
+   */
+  onCommands?: (actions: ControlAction[]) => void;
+  /**
    * Agent selection spec §6.4 step 3: the hash of the agent resolution on screen (the group's preview, T15).
    * Without one, confirm is not offered: a confirmation is never sent unbound to the selections the operator saw.
    */
@@ -160,18 +220,22 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
   const editable = view.proposal.state === "editable";
   const estimator = view.estimates.at(-1) ?? null;
   const advice = adviceOf(view);
-  const allSuggested = suggestedOperations(view, { kind: "all" });
+  const allSuggested = suggestionActions(view, { kind: "all" });
   // Spec §7: applying a suggestion is its own command, never a draft; the server re-checks every value.
   // Ruling 26 (Orca ledger 2026-09-27-single-call-estimate §3.21; session c85d2c4e, 2026-09-28): an unsaved draft of a
   // field being applied was left in place and kept masking the applied value, so applying drops those fields' drafts --
   // choosing the model's number replaces what was typed there. Drafts of other fields stay.
-  const applySuggestions = (operations: ProposalOperationV1[]): void => {
-    if (operations.length === 0) return;
-    for (const operation of operations) {
-      const key = budgetFieldKey(groupId, operation.target);
-      if (drafts[key] !== undefined) onDraft(key, "");
+  const applySuggestions = (actions: ControlAction[]): void => {
+    if (actions.length === 0) return;
+    for (const action of actions) {
+      if (action.verb !== "proposal-edit") continue;
+      for (const operation of action.payload.operations) {
+        const key = budgetFieldKey(groupId, operation.target);
+        if (drafts[key] !== undefined) onDraft(key, "");
+      }
     }
-    onCommand({ verb: "proposal-edit", groupId, expectedRevision: view.summary.commandRevision, payload: { baseProposalVersion: view.proposal.proposalVersion, operations } });
+    if (actions.length > 1 && props.onCommands !== undefined) props.onCommands(actions);
+    else onCommand(actions[0]!);
   };
   const observedEnforcement = view.proposal.profiles === null
     ? config.profiles[0]?.observed.budgetEnforcement ?? "unknown"
@@ -274,7 +338,17 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
                 const target = targetOf(view, allocation.ownerId, allocation.bucket, dimension);
                 if (target === null) {
                   const owned = allocation.ownerKind === "task" && allocation.bucket === "work" && view.workItems.some((item) => item.taskId === allocation.ownerId && loopOwned(item));
-                  return <td key={dimension}>{allocation.amount[dimension]}{owned ? <small> Change it in the plan card</small> : null}</td>;
+                  const [loopAction] = owned ? suggestedLoopActions(view, { kind: "field", target: { scope: "task", taskId: allocation.ownerId, allocation: "work", dimension } }) : [];
+                  const loopValue = loopAction?.verb === "set-task-loop" && dimension !== "sessions" ? loopAction.payload.work[dimension] : null;
+                  return (
+                    <td key={dimension}>
+                      {allocation.amount[dimension]}{owned ? <small> Change it in the plan card</small> : null}
+                      {loopValue !== null && (
+                        <button type="button" aria-label={`use ${loopValue} for ${allocation.ownerId} ${allocation.bucket} ${dimension}`}
+                          onClick={() => applySuggestions([loopAction!])}>use {loopValue}</button>
+                      )}
+                    </td>
+                  );
                 }
                 const key = budgetFieldKey(groupId, target);
                 const [fieldOperation] = suggestedOperations(view, { kind: "field", target });
@@ -292,14 +366,14 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
                     </label>
                     {fieldOperation !== undefined && (
                       <button type="button" aria-label={`use ${fieldOperation.value} for ${allocation.ownerId} ${allocation.bucket} ${dimension}`}
-                        onClick={() => applySuggestions([fieldOperation])}>use {fieldOperation.value}</button>
+                        onClick={() => applySuggestions(suggestionActions(view, { kind: "field", target }))}>use {fieldOperation.value}</button>
                     )}
                   </td>
                 );
               })}
               {advice !== null && (() => {
                 const row = allocation.ownerKind === "task" || allocation.ownerKind === "goal-review"
-                  ? suggestedOperations(view, { kind: "row", ownerKind: allocation.ownerKind, ownerId: allocation.ownerId, bucket: allocation.bucket as "work" | "handoff" | "review" })
+                  ? suggestionActions(view, { kind: "row", ownerKind: allocation.ownerKind, ownerId: allocation.ownerId, bucket: allocation.bucket as "work" | "handoff" | "review" })
                   : [];
                 return <td>{row.length > 0 && <button type="button" aria-label={`Apply row ${allocation.ownerId} ${allocation.bucket}`} onClick={() => applySuggestions(row)}>Apply row</button>}</td>;
               })()}

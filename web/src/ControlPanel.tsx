@@ -33,6 +33,8 @@ export interface ControlPanelProps {
   onSelect: (groupId: string) => void;
   onDraft: (key: string, text: string) => void;
   onCommand: (action: ControlAction) => void;
+  /** W5: commands one control sends in order (BudgetEditor's onCommands). */
+  onCommands?: (actions: ControlAction[]) => void;
   /** Execution driver spec §3.2: the first trusted repository's workspace mode, once read. */
   workspace?: RepositoryWorkspaceV1 | null;
   onWorkspaceMode?: (mode: "worktree" | "clone", expectedRevision: number) => void;
@@ -146,6 +148,7 @@ export function ControlPanel(props: ControlPanelProps): JSX.Element {
           drafts={drafts}
           onDraft={props.onDraft}
           onCommand={props.onCommand}
+          onCommands={props.onCommands}
           agents={props.agents}
           preview={props.previews?.[view.summary.groupId] ?? null}
           agentPreferences={props.preferences?.preferences ?? null}

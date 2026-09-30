@@ -40,6 +40,8 @@ export interface ControlGroupViewProps {
   drafts: Record<string, string>;
   onDraft: (key: string, text: string) => void;
   onCommand: (action: ControlAction) => void;
+  /** W5: commands one control sends in order (BudgetEditor's onCommands). */
+  onCommands?: (actions: ControlAction[]) => void;
   /** Agent selection spec §6.8: absent on a page that never reads the installation table (and in older criteria). */
   agents?: AgentsViewV1 | null;
   /** The server's resolution of this group's agent slots; the confirm carries its hash. */
@@ -91,7 +93,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
           {view.stop.frozenRunIds.length} frozen run(s): {view.stop.frozenRunIds.join(", ") || "none"}
         </p>
       )}
-      <BudgetEditor view={view} config={config} drafts={drafts} onDraft={onDraft} onCommand={onCommand} selectionsHash={selectionsHashFor(view, props.preview)} />
+      <BudgetEditor view={view} config={config} drafts={drafts} onDraft={onDraft} onCommand={onCommand} onCommands={props.onCommands} selectionsHash={selectionsHashFor(view, props.preview)} />
       {props.agents !== undefined && (
         <AgentSelectionEditor
           view={view} agents={props.agents} preview={props.preview ?? null} preferences={props.agentPreferences}

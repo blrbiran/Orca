@@ -2,9 +2,10 @@
 /**
  * Loop plans spec §4.3 (C6, Rule 7): a loop task's work budget has one owner, set-task-loop, changed on the task's plan
  * card. The budget editor shows that row read-only and pointing at the card, and never sends proposal-edit for it --
- * neither a typed edit nor a suggestion (plan ruling R-F14). Every other row stays editable.
+ * a typed edit is not possible there, and a suggestion goes through set-task-loop (human ruling H14, superseding plan
+ * ruling R-F14). Every other row stays editable.
  */
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { BudgetEditor, budgetFieldKey, editedOperations, suggestedOperations } from "../src/BudgetEditor.js";
 import type { Amount, CapabilityViewV1, ControlConfigV1, EstimateViewV1, GroupViewV1, LoopPlanViewV1 } from "../src/controlTypes.js";
@@ -78,7 +79,8 @@ describe("a loop task's work row is the plan card's (spec §4.3)", () => {
     expect(editedOperations(view, { [other]: "5" })).toEqual([{ target: { scope: "task", taskId: "c", allocation: "work", dimension: "tokens" }, value: 5, provenance: "human" }]);
   });
 
-  it("offers no estimate suggestion for the loop task's work row (plan ruling R-F14), and still offers the rest", () => {
+  // Rewritten under human ruling H14 (2026-10-01), superseding plan ruling R-F14.
+  it("offers an Apply button on the loop task's work row that sends set-task-loop, and still offers the rest", () => {
     // A ready estimate for this plan that suggests 4000 work tokens for both tasks; handoff rows already match it.
     const estimate: EstimateViewV1 = {
       estimateId: "est-1", estimateVersion: 1, state: "ready", profile: { profileId: "all", profileHash: "b".repeat(64) }, mode: "soft",
@@ -93,9 +95,16 @@ describe("a loop task's work row is the plan card's (spec §4.3)", () => {
       { target: { scope: "task", taskId: "c", allocation: "work", dimension: "tokens" }, value: 4_000, provenance: "model", estimateId: "est-1" },
       { target: { scope: "task", taskId: "c", allocation: "work", dimension: "activeMs" }, value: 40_000, provenance: "model", estimateId: "est-1" },
     ]);
-    render(<BudgetEditor view={advised} config={config(DURABLE)} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
-    expect(screen.queryByRole("button", { name: "Apply row a work" })).toBeNull();
-    expect(screen.queryByRole("button", { name: /for a work / })).toBeNull();
+    const onCommand = vi.fn();
+    render(<BudgetEditor view={advised} config={config(DURABLE)} drafts={{}} onDraft={vi.fn()} onCommand={onCommand} />);
+    fireEvent.click(screen.getByRole("button", { name: "Apply row a work" }));
+    // The task's current plan and inputs, the suggested dimensions replaced (attempts and sessions already match), and
+    // the estimate named for exactly those dimensions.
+    const model = { provenance: "model", estimateId: "est-1" };
+    expect(onCommand.mock.calls.map((call) => call[0])).toEqual([{
+      verb: "set-task-loop", groupId: "g", taskId: "a", expectedRevision: 3,
+      payload: { baseLoopVersion: 0, plan: "bugfix", inputs: LOOP_PLAN.inputs, work: { tokens: 4_000, activeMs: 40_000, attempts: 1 }, workProvenance: { tokens: model, activeMs: model } },
+    }]);
     expect(screen.getByRole("button", { name: "Apply row c work" })).toBeTruthy();
   });
 });
