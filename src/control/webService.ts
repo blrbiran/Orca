@@ -23,7 +23,7 @@ import { applySetAgentPreferences, type SetAgentPreferencesCommand } from "./age
 import { recordProjectionChange } from "./projectionJournal.js";
 import { effectiveTaskLabels, normalizeInputLabels, readTaskLabelState } from "./labels.js";
 import { TASK_AMENDMENT_SCHEMA, effectivePlanTask, workBodyOf, writeTaskAmendment } from "./taskAmendments.js";
-import { expandLoopPlan } from "./loopPlans.js";
+import { expandLoopPlan, expandRecipe, type LoopRecipe, type LoopTaskExpansion } from "./loopPlans.js";
 import { taskContractSchema } from "../scheduler/planFile.js";
 import type { Amount } from "./types.js";
 import type { ControlStore } from "./store.js";
@@ -621,7 +621,13 @@ export class WebControlService {
         // Step 4. repoPath is the current contract's own (Drafter finding F9).
         const current = effectivePlanTask(this.store, id, archived, work);
         const repoPath = taskContractSchema.parse(JSON.parse(current.originalContractCanonicalJson)).context.repoPath;
-        const expanded = expandLoopPlan(taskId, repoPath, payload.plan, payload.inputs);
+        // W7 ruling: the task's own plan with its own inputs keeps the recipe's plan version, so a budget-only change (or an
+        // estimate's suggestion) never silently re-expands an older version's task at the current one; a change of plan
+        // or inputs expands at the current version.
+        const kept = current.loop !== undefined && current.loop.planId === payload.plan
+          && canonicalBytes(current.loop.inputs).equals(canonicalBytes(payload.inputs));
+        const expanded: LoopTaskExpansion = kept ? keptExpansion(taskId, repoPath, { ...current.loop!, chosenBy: "explicit", inputs: structuredClone(payload.inputs) })
+          : expandLoopPlan(taskId, repoPath, payload.plan, payload.inputs);
         if (!expanded.ok) throw new ControlError("loop-plan-invalid", expanded.reason);
         const allocation = proposal.allocations.find(a => a.ownerKind === "task" && a.ownerId === taskId && a.bucket === "work");
         const handoff = proposal.allocations.find(a => a.ownerKind === "task" && a.ownerId === taskId && a.bucket === "handoff");
@@ -691,6 +697,11 @@ export class WebControlService {
       },
     }).body);
   }
+}
+
+function keptExpansion(taskId: string, repoPath: string, recipe: LoopRecipe): LoopTaskExpansion {
+  const expanded = expandRecipe(taskId, repoPath, recipe);
+  return expanded.ok ? { ...expanded, recipe } : expanded;
 }
 
 /**
