@@ -11,7 +11,7 @@ import type { ExecutionPort } from "./executionPort.js";
 import { estimatorSlotFor, importControlPlanAsync, rejectedEstimatorRequest, type AsyncImportDeps, type ImportCommand } from "./planImport.js";
 import { intersectCapabilities } from "./profiles.js";
 import type { FrozenSlot } from "./agentSelection.js";
-import { readArchivedPlan, readBudgetProposal, readEstimateRecord, type BudgetProposalRecord } from "./queries.js";
+import { effectivePlanCanonicalJson, estimateIsStale, readArchivedPlan, readBudgetProposal, readEstimateRecord, type BudgetProposalRecord } from "./queries.js";
 import { amountSchema } from "./schema.js";
 import { writeCanonicalRecord, readCanonicalRecord } from "./snapshot.js";
 import { dispatchEnvelopeSchema, estimateExecutionContractSchema, executionSnapshotSchema } from "./webProtocol.js";
@@ -190,6 +190,14 @@ function verifyModelField(store: ControlStore, id: string, proposal: BudgetPropo
 }
 
 /**
+ * W6: a suggestion is applied only from an estimate built from the tasks' current effective contracts. Not part of
+ * verifyModelField: confirmation re-checks values already applied, and a later plan change does not undo them.
+ */
+function refuseStaleEstimate(store: ControlStore, id: string, estimateId: string): void {
+  if (estimateIsStale(readEstimateRecord(store, id, estimateId), effectivePlanCanonicalJson(store, id))) throw new ControlError("estimate-stale");
+}
+
+/**
  * A draft proposal's commitments -- every non-reserve allocation plus every in-flight estimate -- with the reserve row
  * reset to what the group limit leaves of them. Shared by every proposal change (editProposal, proposalSetAgent,
  * setTaskLoop; loop plans ruling P5), each of which then reopens the proposal with the returned commitments.
@@ -249,7 +257,10 @@ export class WebControlService {
           if (op.target.scope === "task" && op.target.allocation === "work" && loopTasks.has(op.target.taskId)) throw new ControlError("budget-owned-by-loop-plan");
           const row = allocationFor(proposal, op.target);
           if (row.bucket === "work" && op.value <= 0) throw new ControlError("execution-policy-unrepresentable");
-          if (op.provenance === "model") verifyModelField(this.store, id, proposal, op.target, op.value, op.estimateId!);
+          if (op.provenance === "model") {
+            verifyModelField(this.store, id, proposal, op.target, op.value, op.estimateId!);
+            refuseStaleEstimate(this.store, id, op.estimateId!);
+          }
           if (op.provenance === "complex-1m-default") {
             const defaults = op.target.scope === "goal-review" ? GOAL_REVIEW : op.target.allocation === "work" ? TASK_WORK : TASK_HANDOFF;
             if (op.value !== defaults[op.target.dimension]) throw new ControlError("proposal-version-conflict");
@@ -315,7 +326,9 @@ export class WebControlService {
         estimatorSlot = slot.outcome.kind === "frozen" ? slot.outcome.slot : null;
         prepared = slot.outcome.kind === "rejected"
           ? rejectedEstimatorRequest(slot.outcome.code)
-          : buildBudgetEstimateRequest({ planHash: plan.planHash, planCanonicalJson: plan.canonicalJson, profile, observation: slot.observation, mode: command.payload.estimateMode, exactTokenCount: this.deps.exactTokenCount });
+          // W6: the model reads each task as set-task-loop last left it; planHash stays the archive's identity.
+          : buildBudgetEstimateRequest({ planHash: plan.planHash, planCanonicalJson: plan.canonicalJson, effectivePlanCanonicalJson: effectivePlanCanonicalJson(this.store, id),
+            profile, observation: slot.observation, mode: command.payload.estimateMode, exactTokenCount: this.deps.exactTokenCount });
       } catch (error) {
         return applyWebCommand<WebCommandResult>(this.store, { rawCommand: command, expand: () => { throw error; }, apply: () => { throw error; } }).body;
       }

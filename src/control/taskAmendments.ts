@@ -88,3 +88,30 @@ export function effectivePlanTask(store: ControlStore, groupId: string, archived
     return invalid();
   }
 }
+
+/** The archived plan with every task as effectivePlanTask answers it: what an estimate is built from (W6, spec §5.1). */
+export function effectivePlan(store: ControlStore, groupId: string, plan: ControlPlanV1): ControlPlanV1 {
+  return { ...plan, tasks: plan.tasks.map(task => effectivePlanTask(store, groupId, task, workBodyOf(store, groupId, task.taskId))) };
+}
+
+/**
+ * Whether `snapshot` could be effectivePlan's answer for `archived` at some loop version: the archive itself, or the
+ * archive with loop tasks' recipes and contracts replaced by contracts that hash to their originalContractHash and that
+ * their recipes expand to (the checks effectivePlanTask makes of an amendment record). An estimate's request carries
+ * such a snapshot; readEstimateRecord refuses any other.
+ */
+export function isAmendedCopyOf(archived: ControlPlanV1, snapshot: ControlPlanV1): boolean {
+  const same = (a: unknown, b: unknown) => canonicalBytes(a).equals(canonicalBytes(b));
+  if (!same({ ...snapshot, tasks: [] }, { ...archived, tasks: [] }) || snapshot.tasks.length !== archived.tasks.length) return false;
+  return archived.tasks.every((task, index) => {
+    const entry = snapshot.tasks[index];
+    if (same(entry, task)) return true;
+    if (task.loop === undefined || entry.loop === undefined) return false;
+    try {
+      if (!same(entry, { ...task, loop: entry.loop, originalContractHash: entry.originalContractHash, originalContractCanonicalJson: entry.originalContractCanonicalJson })) return false;
+      const contract = taskContractSchema.parse(JSON.parse(entry.originalContractCanonicalJson));
+      return sha256Canonical(contract) === entry.originalContractHash
+        && recipeExpandsTo(task.taskId, contract.context.repoPath, entry.loop, entry.originalContractCanonicalJson);
+    } catch { return false; }
+  });
+}

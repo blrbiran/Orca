@@ -1035,6 +1035,9 @@ export const estimateViewSchema = z
     outputHash: hashSchema.nullable(),
     output: budgetEstimateSchema.nullable(),
     reasonCode: nonemptyString.nullable(),
+    // W6: built from contracts a set-task-loop change has since replaced; its suggestions are no longer applied. Always
+    // set by the projection; optional only so the Web mirror's literal fixtures need no edit (webParity.test.ts).
+    stale: z.boolean().optional(),
   })
   .strict()
   .superRefine((value, ctx) => {

@@ -11,7 +11,7 @@ import { readProjectionChanges, readProjectionState } from "../control/projectio
 import { effectiveTaskLabels, readTaskLabelState } from "../control/labels.js";
 import { choosePlanByLabels, describeLoopPlan } from "../control/loopPlans.js";
 import { recipeExpandsTo } from "../control/loopRecipeCheck.js";
-import { readArchivedPlan, readBudgetProposal, readEstimateRecord } from "../control/queries.js";
+import { estimateIsStale, readArchivedPlan, readBudgetProposal, readEstimateRecord } from "../control/queries.js";
 import { readCanonicalRecord } from "../control/snapshot.js";
 import { effectivePlanTask, workBodyOf } from "../control/taskAmendments.js";
 import type { ControlStore } from "../control/store.js";
@@ -399,7 +399,7 @@ function validateExecutionSnapshot(
   return parsed.data;
 }
 
-function estimateViews(store: ControlStore, groupId: string): { views: EstimateViewV1[]; allocations: AllocationViewV1[] } {
+function estimateViews(store: ControlStore, groupId: string, currentPlanCanonicalJson: string): { views: EstimateViewV1[]; allocations: AllocationViewV1[] } {
   const rows = store.db.prepare("SELECT id FROM estimates WHERE group_id=? ORDER BY id").all(groupId);
   const views: EstimateViewV1[] = [];
   const allocations: AllocationViewV1[] = [];
@@ -410,6 +410,7 @@ function estimateViews(store: ControlStore, groupId: string): { views: EstimateV
       estimateId: estimate.estimateId, estimateVersion: estimate.estimateVersion, state: estimate.state,
       profile: estimate.profile, mode: estimate.mode, requestHash: estimate.requestHash,
       outputHash: estimate.outputHash, output: estimate.output, reasonCode: estimate.reasonCode,
+      stale: estimateIsStale(estimate, currentPlanCanonicalJson),
     });
     allocations.push(allocationViewSchema.parse({
       ownerKind: "estimate", ownerId: estimate.estimateId, bucket: "work",
@@ -724,7 +725,7 @@ export function readControlGroup(store: ControlStore, epoch: string, groupId: st
   // Loop plans spec §5.1 (C5): the projection's identity checks and task view read every task as amended.
   const plan = { ...archived.plan, tasks: archived.plan.tasks.map(task => effectivePlanTask(store, groupId, task, workBodyOf(store, groupId, task.taskId))) };
   const snapshot = validateExecutionSnapshot(store, groupId, archived.graphVersion, proposal, plan);
-  const estimates = estimateViews(store, groupId);
+  const estimates = estimateViews(store, groupId, canonicalBytes(plan).toString("utf8"));
   const summary = readGroupSummary(store, groupId);
   const blockers = blockerRows(store, groupId).map(({ groupId: _groupId, ...blocker }) => blocker);
   const commandIds = store.db.prepare("SELECT id FROM commands WHERE group_id=? AND original_status IS NOT NULL ORDER BY rowid DESC LIMIT 20").all(groupId).map(row => String(row.id));

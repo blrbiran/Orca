@@ -36,6 +36,8 @@ export const durableCommandErrorStatuses = {
   "checkpoint-run-settled": 409,
   "checkpoint-usage-high-water": 409,
   "continuation-identity-conflict": 409,
+  // W6 (loop plans spec §5.1): the estimate was built from contracts a set-task-loop change has since replaced.
+  "estimate-stale": 409,
   "execution-identity-conflict": 409,
   "graph-version-conflict": 409,
   "group-already-exists": 409,

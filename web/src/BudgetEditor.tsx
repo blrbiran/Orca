@@ -89,12 +89,12 @@ export type SuggestionScope =
  * finding F12), and only when it is ready, for this plan, and the proposal is still editable. Anything else and the
  * editor is exactly what it was before suggestions existed.
  */
-export function adviceOf(view: GroupViewV1): { estimateId: string; output: BudgetEstimateV1 } | null {
+export function adviceOf(view: GroupViewV1): { estimateId: string; output: BudgetEstimateV1; stale: boolean } | null {
   if (view.proposal.state !== "editable") return null;
   let newest: GroupViewV1["estimates"][number] | null = null;
   for (const estimate of view.estimates) if (newest === null || estimate.estimateVersion > newest.estimateVersion) newest = estimate;
   if (newest === null || newest.state !== "ready" || newest.output === null || newest.output.planHash !== view.plan.planHash) return null;
-  return { estimateId: newest.estimateId, output: newest.output };
+  return { estimateId: newest.estimateId, output: newest.output, stale: newest.stale === true };
 }
 
 function suggestedAmount(output: BudgetEstimateV1, allocation: AllocationViewV1): Amount | null {
@@ -110,7 +110,8 @@ function suggestedAmount(output: BudgetEstimateV1, allocation: AllocationViewV1)
  */
 export function suggestedOperations(view: GroupViewV1, scope: SuggestionScope): ProposalOperationV1[] {
   const advice = adviceOf(view);
-  if (advice === null) return [];
+  // W6: the server refuses a stale estimate's values (estimate-stale), so none is offered.
+  if (advice === null || advice.stale) return [];
   const groupId = view.summary.groupId;
   const operations: ProposalOperationV1[] = [];
   for (const allocation of view.allocations) {
@@ -306,6 +307,7 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
           ))}
         </tbody>
       </table>
+      {advice?.stale === true && <p role="note">This estimate predates a plan change; estimate again to update the suggestions</p>}
       {allSuggested.length > 0 && <button type="button" onClick={() => applySuggestions(allSuggested)}>Apply all suggestions</button>}
       {advice !== null && (
         <details>

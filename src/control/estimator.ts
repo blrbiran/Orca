@@ -50,6 +50,11 @@ export function complex1mDefaults(taskCount: number): DefaultLedger {
 }
 export interface EstimateInput {
   planHash: string; planCanonicalJson: string; profile: FrozenProfile;
+  /**
+   * W6 (loop plans spec §5.1): the plan with every task's effective contract, which the request carries for the model to
+   * read; absent, the archive itself. planHash stays the archive's: it is the plan's identity the answer must echo.
+   */
+  effectivePlanCanonicalJson?: string;
   observation: Pick<ObservedProfile, "profile" | "observed" | "probeFailureCode" | "resolution">;
   mode: "strict" | "soft";
   exactTokenCount?: (profile: FrozenProfile, promptBytes: Buffer) => number;
@@ -77,7 +82,7 @@ export function buildBudgetEstimateRequest(input: EstimateInput): FrozenEstimate
     || observed.usageObservation === "unavailable" || observed.budgetEnforcement === "unavailable"
     || (input.mode === "strict" && (observed.budgetEnforcement !== "bounded" || !observed.requestBoundProof?.workDimensions.includes("tokens")))) return blocked;
   const request = budgetEstimateRequestSchema.parse({ schema: "budget-estimate-request-v1", planHash: input.planHash,
-    planSnapshotCanonicalJson: input.planCanonicalJson, estimatorProfile: { profileId: profile.snapshot.profile.profileId, profileHash: profile.profileHash },
+    planSnapshotCanonicalJson: input.effectivePlanCanonicalJson ?? input.planCanonicalJson, estimatorProfile: { profileId: profile.snapshot.profile.profileId, profileHash: profile.profileHash },
     estimatorCapabilities: { contextWindowTokens: observed.contextWindowTokens, usageObservation: observed.usageObservation, budgetEnforcement: observed.budgetEnforcement, contextObservation: observed.contextObservation },
     responseSchemaVersion: preflight.schemaVersion, instructionVersion: preflight.instructionVersion });
   const requestHash = sha256Canonical(request);

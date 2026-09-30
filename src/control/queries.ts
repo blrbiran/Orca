@@ -19,7 +19,7 @@ import {
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { amountSchema, idSchema, safeInteger } from "./schema.js";
 import { taskContractSchema } from "../scheduler/planFile.js";
-import { effectivePlanTask, workBodyOf } from "./taskAmendments.js";
+import { effectivePlan, effectivePlanTask, isAmendedCopyOf, workBodyOf } from "./taskAmendments.js";
 import { z } from "zod";
 export type GroupRecord = GroupView & GroupInput & {budgetVersion:number;reviewRemaining:Amount;proposal?:{work:WorkInput;commandId:string}};
 export type WorkRecord = WorkInput & {targetVersion:number;status:"ready"|"running"|"done"|"blocked"};
@@ -249,6 +249,23 @@ function rejectedEstimatorSelection(estimate: z.infer<typeof estimateRecordSchem
   return (estimate.reasonCode ?? "").startsWith("agent-selection-rejected:estimator:") && estimate.estimatorSlot === null && estimate.request === null;
 }
 
+/** W6: an estimate's plan snapshot is the archive, or the archive with loop tasks as amended (taskAmendments.ts). */
+function estimateSnapshotOf(archived: ArchivedPlanAuthority, snapshotCanonicalJson: string): boolean {
+  if (snapshotCanonicalJson === archived.canonicalJson) return true;
+  const snapshot = controlPlanSchema.safeParse(parseJson(snapshotCanonicalJson));
+  return snapshot.success && canonicalBytes(snapshot.data).toString("utf8") === snapshotCanonicalJson && isAmendedCopyOf(archived.plan, snapshot.data);
+}
+
+/** W6: the plan an estimate made now is built from, as its request carries it -- every task's effective contract. */
+export function effectivePlanCanonicalJson(store: ControlStore, groupId: string): string {
+  return canonicalBytes(effectivePlan(store, groupId, readArchivedPlan(store, groupId).plan)).toString("utf8");
+}
+
+/** W6: an estimate is stale when the contracts it was built from are no longer the tasks' effective contracts. */
+export function estimateIsStale(estimate: EstimateRecord, currentPlanCanonicalJson: string): boolean {
+  return estimate.request !== null && estimate.request.planSnapshotCanonicalJson !== currentPlanCanonicalJson;
+}
+
 export function readEstimateRecord(store: ControlStore, groupId: string, estimateId: string): EstimateRecord {
   const row = store.db.prepare("SELECT estimate_version,state,body FROM estimates WHERE group_id=? AND id=?").get(groupId, estimateId);
   if (!row) throw new ControlError("recovery-blocked");
@@ -262,7 +279,7 @@ export function readEstimateRecord(store: ControlStore, groupId: string, estimat
   if ((estimate.request === null) !== (estimate.requestHash === null)
     || (estimate.request && (estimate.requestHash !== sha256Canonical(estimate.request)
       || estimate.request.planHash !== archivedPlan.planHash
-      || estimate.request.planSnapshotCanonicalJson !== archivedPlan.canonicalJson
+      || !estimateSnapshotOf(archivedPlan, estimate.request.planSnapshotCanonicalJson)
       || canonicalBytes(estimate.request.estimatorProfile).compare(canonicalBytes(estimate.profile)) !== 0))
     || (estimate.output === null) !== (estimate.outputHash === null)
     || (estimate.output && (estimate.outputHash !== sha256Canonical(estimate.output) || estimate.output.planHash !== archivedPlan.planHash))) {
