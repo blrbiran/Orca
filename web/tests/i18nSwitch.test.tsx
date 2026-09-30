@@ -4,7 +4,7 @@
  * re-renders the page's text; choosing English reverses all three. Task 6 adds the helper-built case (a chain banner).
  */
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/App.js";
 
 const json = (body: unknown, status = 200): Response =>
@@ -26,7 +26,10 @@ beforeEach(() => {
     return json({ error: { code: "control-port-unconfigured", message: "no control plane in this criterion" } }, 404);
   }) as typeof fetch;
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 async function languageSelect(container: HTMLElement): Promise<HTMLSelectElement> {
   return waitFor(() => {
@@ -51,5 +54,14 @@ describe("the language switch (spec §6.7)", () => {
     await waitFor(() => expect(screen.getByRole("link", { name: /Decisions/ })).toBeTruthy());
     expect(window.localStorage.getItem("orca.panel.lang")).toBe("en");
     expect(document.documentElement.lang).toBe("en");
+  });
+
+  it("still switches when this browser refuses to store the choice (a full or blocked storage costs the memory, not the switch)", async () => {
+    const { container } = render(<App />);
+    const select = await languageSelect(container);
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("QuotaExceededError"); });
+    fireEvent.change(select, { target: { value: "zh" } });
+    await waitFor(() => expect(screen.getByRole("link", { name: /决策/ })).toBeTruthy());
+    expect(document.documentElement.lang).toBe("zh");
   });
 });

@@ -43,6 +43,15 @@ async function detect(c: Case): Promise<{ resolved: string | undefined; htmlLang
   return { resolved: i18n.resolvedLanguage, htmlLang: document.documentElement.lang, writes: setItem.mock.calls.length, html };
 }
 
+/** A fresh i18n module under a browser that says the given languages, not yet initialised. */
+async function freshI18n(languages: string[]): Promise<typeof import("../src/i18n.js")> {
+  vi.resetModules();
+  window.localStorage.clear();
+  override(window.navigator, "languages", () => languages);
+  override(window.navigator, "language", () => languages[0] ?? "");
+  return import("../src/i18n.js");
+}
+
 describe("language detection (spec §4, §6.6)", () => {
   it("lets a stored zh beat a browser that says en-US", async () => {
     const r = await detect({ stored: "zh", languages: ["en-US"] });
@@ -96,5 +105,20 @@ describe("language detection (spec §4, §6.6)", () => {
     const r = await detect({ languages: ["zh-CN"], storage: "access-throws" });
     expect(r.resolved).toBe("zh");
     expect(r.html).toContain("决策");
+  });
+
+  it("lets an explicit lng beat a Chinese browser, so web criteria render English on any machine (spec §6.1, tests/setup.ts)", async () => {
+    const { default: i18n, initI18n } = await freshI18n(["zh-CN"]);
+    initI18n({ lng: "en" });
+    expect(i18n.resolvedLanguage).toBe("en");
+  });
+
+  it("initialises once: a second initI18n does not re-detect and undo a language chosen since the first", async () => {
+    // i18next's own re-init merges the earlier options, so only a first init without lng re-detects on a second one.
+    const { default: i18n, initI18n } = await freshI18n(["zh-CN"]);
+    initI18n();
+    await i18n.changeLanguage("en");
+    initI18n();
+    expect(i18n.resolvedLanguage).toBe("en");
   });
 });
