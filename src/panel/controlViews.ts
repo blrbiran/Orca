@@ -479,7 +479,8 @@ function currentProgress(runs: ReadonlyArray<Record<string, unknown>>, currentRu
  */
 function taskPlanView(
   task: ReturnType<typeof readArchivedPlan>["plan"]["tasks"][number],
-  body: { amendmentHash?: string | null; loopVersion?: number },
+  body: { loopVersion?: number },
+  importedContractHash: string | undefined,
 ): { loopPlan: WorkItemViewV1["loopPlan"]; objective: WorkItemViewV1["objective"] } {
   const contract = parseStored(taskContractSchema, task.originalContractCanonicalJson, `original-contract-invalid:${task.taskId}`);
   const objective = { goal: contract.objective.goal, successCondition: contract.objective.successCondition };
@@ -492,7 +493,8 @@ function taskPlanView(
     loopPlan: {
       planId: task.loop.planId, planVersion: task.loop.planVersion, planName: described.planName, chosenBy: task.loop.chosenBy,
       chosenByLabel: task.loop.chosenBy === "labels" ? choosePlanByLabels(task.labels ?? []).label : null,
-      amended: typeof body.amendmentHash === "string", loopVersion: body.loopVersion ?? 0,
+      // "Changed" means the contract is not the imported one: a budget-only change writes an amendment with the same bytes.
+      amended: task.originalContractHash !== importedContractHash, loopVersion: body.loopVersion ?? 0,
       inputs: task.loop.inputs, summary: described.summary,
     },
   };
@@ -503,6 +505,7 @@ function workViews(
   groupId: string,
   plan: ReturnType<typeof readArchivedPlan>["plan"],
   snapshot: ExecutionSnapshotV1 | null,
+  imported: ReturnType<typeof readArchivedPlan>["plan"],
 ): WorkItemViewV1[] {
   const runs = store.db.prepare("SELECT id,work_item_id,active,body FROM runs WHERE group_id=? ORDER BY rowid").all(groupId);
   const derivedByTask = new Map(snapshot?.derivedContracts.map(contract => [contract.taskId, contract.derivedContractHash]) ?? []);
@@ -552,7 +555,7 @@ function workViews(
       lineageRunIds: sortedUnique(lineage),
       labels: effective.labels, labelsProvenance: effective.provenance, labelsVersion: labelState.version,
       progress: currentProgress(runs, body.currentRunId ?? null),
-      ...taskPlanView(task, body),
+      ...taskPlanView(task, body, imported.tasks.find(entry => entry.taskId === task.taskId)?.originalContractHash),
     };
   });
 }
@@ -741,7 +744,7 @@ export function readControlGroup(store: ControlStore, epoch: string, groupId: st
     },
     ledger: body.ledger,
     allocations,
-    workItems: workViews(store, groupId, plan, snapshot),
+    workItems: workViews(store, groupId, plan, snapshot, archived.plan),
     // validateExecutionSnapshot has already proved the group record's reconcile slot equals the snapshot's.
     agents: { reconcile: snapshot?.agents.reconcile ?? null },
     estimates: estimates.views,

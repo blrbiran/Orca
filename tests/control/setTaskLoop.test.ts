@@ -184,6 +184,17 @@ describe("a change before confirmation (criterion 9; spec §5.2 steps 5-7)", () 
       expect(workAllocation(h, "a").amount.sessions).toBe(before.work.sessions);
     } finally { await h.dispose(); }
   });
+
+  // Spec §4.1: "changed" on the card says the task's plan is not the one imported; a budget-only change moves the
+  // budget and the loopVersion (so a draft begun before it is still refused), never the plan.
+  it("a budget-only change does not show the plan as changed", async () => {
+    const h = await draft();
+    try {
+      expect(new WebControlService(h.deps).setTaskLoop(change(h, "a", { tokens: workAllocation(h, "a").amount.tokens - 1_000_000 })))
+        .toMatchObject({ result: { kind: "task-loop-set", loopVersion: 1 } });
+      expect(readControlGroup(h.store, "epoch", "g").workItems[0]!.loopPlan).toMatchObject({ amended: false, loopVersion: 1 });
+    } finally { await h.dispose(); }
+  });
 });
 
 describe("the self-check (spec §5.2 step 8)", () => {
