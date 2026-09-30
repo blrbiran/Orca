@@ -2,7 +2,7 @@ import { frozenWorkAgent, type FrozenWorkAgent } from "./agentFreeze.js";
 import type { FrozenSlot } from "./agentSelection.js";
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { ControlError } from "./errors.js";
-import { amountSchema, idSchema } from "./schema.js";
+import { MAX_TIMER_MS, amountSchema, idSchema } from "./schema.js";
 import {
   controlPlanSchema,
   executionSnapshotSchema,
@@ -169,6 +169,11 @@ function verifyConservation(input: ConfirmedProposal): ExecutionAllocation[] {
     .map(allocation => structuredClone(allocation));
 }
 
+/** A derived contract's phase timeout: the original's, at most the task's active time, and never past a Node timer's reach. */
+export function derivedPhaseTimeoutMs(originalMs: number, activeMs: number): number {
+  return Math.min(originalMs, activeMs, MAX_TIMER_MS);
+}
+
 export function deriveContract(task: ConfirmedProposal["tasks"][number], proposalVersion: number): {
   canonicalJson: string; contractCanonicalJson: string; derivedContractHash: string;
 } {
@@ -202,7 +207,7 @@ export function deriveContract(task: ConfirmedProposal["tasks"][number], proposa
     tokenBudget: task.work.tokens,
     totalRuntimeBudgetMs: task.work.activeMs,
     maxAttempts: task.work.attempts,
-    perAttemptTimeoutMs: Math.min(existing.perAttemptTimeoutMs, task.work.activeMs),
+    perAttemptTimeoutMs: derivedPhaseTimeoutMs(existing.perAttemptTimeoutMs, task.work.activeMs),
     partialOutcomeRecoveryWindowMs: Math.min(Number(existing.partialOutcomeRecoveryWindowMs), task.handoff.activeMs),
   };
   if (!taskContractSchema.safeParse(original).success) throw new ControlError("execution-policy-unrepresentable");

@@ -1,4 +1,4 @@
-import { frozenAllocationShape } from "../control/executionSnapshot.js";
+import { derivedPhaseTimeoutMs, frozenAllocationShape } from "../control/executionSnapshot.js";
 import { frozenWorkAgent, resolveGroupSelections } from "../control/agentFreeze.js";
 import type { ExecutionPort } from "../control/executionPort.js";
 import { z } from "zod";
@@ -393,7 +393,7 @@ function validateExecutionSnapshot(
       tokenBudget: work.amount.tokens,
       totalRuntimeBudgetMs: work.amount.activeMs,
       maxAttempts: work.amount.attempts,
-      perAttemptTimeoutMs: Math.min(expectedContract.executionPolicy.perAttemptTimeoutMs, work.amount.activeMs),
+      perAttemptTimeoutMs: derivedPhaseTimeoutMs(expectedContract.executionPolicy.perAttemptTimeoutMs, work.amount.activeMs),
       partialOutcomeRecoveryWindowMs: Math.min(expectedContract.executionPolicy.partialOutcomeRecoveryWindowMs, handoff.amount.activeMs),
     };
     if (canonicalBytes(contract.data).compare(canonicalBytes(expectedContract)) !== 0) return blocked("derived-contract-forged");

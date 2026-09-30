@@ -1,5 +1,10 @@
 import { z } from "zod";
 export const safeInteger = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
+/**
+ * The longest delay a Node timer holds: setTimeout turns anything above 2^31 - 1 ms (about 24.8 days) into 1 ms, and
+ * ccloop hands a contract's phase timeout to setTimeout. A phase timeout Orca derives never exceeds it.
+ */
+export const MAX_TIMER_MS = 2_147_483_647;
 export const idSchema = z.string().min(1).max(200).regex(/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/);
 const canonicalTimestampPattern = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})\.(\d{3})Z$/;
 export const canonicalTimestampSchema = z.string().regex(canonicalTimestampPattern).superRefine((value,ctx) => {

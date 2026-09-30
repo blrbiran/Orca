@@ -27,7 +27,9 @@ export const profileSnapshot = (): ExecutionProfileSnapshotV1 => ({
 // Labels and progress plan Task 3 (finding F14): a task may carry plan labels; absent, the plan file is unchanged.
 export interface WebFixtureTask { taskId: string; dependsOn?: string[]; targetVersion?: number; targetPaths?: string[]; agent?: PartialSelection; labels?: string[];
   // Loop plans spec §3.1: a task that names a loop plan instead of a contract file.
-  loop?: Record<string, unknown> }
+  loop?: Record<string, unknown>;
+  /** The hand-written contract's executionPolicy.perAttemptTimeoutMs (60 000 unless said otherwise). */
+  perAttemptTimeoutMs?: number }
 /**
  * Agent selection plan T10 (spec §6.2): the importing operator's ("human") preferences -- `null` leaves them unset, absent
  * seeds a default agent so the import-time estimator slot resolves -- and the plan's group layers (R7: no estimatorAgent).
@@ -74,7 +76,7 @@ export async function webFixture(snapshot = profileSnapshot(), tasks: readonly W
     }
     const contract = { objective: { taskId: task.taskId, goal: "ship", successCondition: "passes", nonGoals: [] },
       context: { repoPath: repo, targetPaths: task.targetPaths ?? [task.taskId], relevantDocs: [], buildTestCommands: ["true"], constraints: [] },
-      executionPolicy: { autonomyLevel: "L2", maxAttempts: 9, perAttemptTimeoutMs: 60_000, totalRuntimeBudgetMs: 90_000, tokenBudget: 99_000, worktreeRequired: true, partialOutcomeRecoveryWindowMs: 30_000 },
+      executionPolicy: { autonomyLevel: "L2", maxAttempts: 9, perAttemptTimeoutMs: task.perAttemptTimeoutMs ?? 60_000, totalRuntimeBudgetMs: 90_000, tokenBudget: 99_000, worktreeRequired: true, partialOutcomeRecoveryWindowMs: 30_000 },
       safetyPolicy: { allowlistPaths: [], denylistPaths: [], maxFilesTouched: 1, humanGateConditions: [] },
       verification: { verifierType: "command", requiredChecks: ["true"], rejectOn: ["failure"], evidenceRequired: [] },
       escalationAndExit: { escalationTargets: [], pauseOn: [], stopOn: [], terminalStates: ["succeeded", "blocked_waiting_human", "exhausted", "cancelled", "failed"] } };

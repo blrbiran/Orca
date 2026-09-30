@@ -8,7 +8,7 @@ import { assertCapabilities, claimWork, readRun, componentMin, subtract, add } f
 import { allWork, readGroup, readWork, workAgents } from "./queries.js";
 import { ControlError } from "./errors.js";
 import type { ApprovedReconcileBudget } from "../scheduler/reconcile.js";
-import { grantSchema, handoffRequestSchema } from "./schema.js";
+import { MAX_TIMER_MS, grantSchema, handoffRequestSchema } from "./schema.js";
 import { hashPayload } from "./commands.js";
 import { claimContinuation } from "./continuation.js";
 import { exportResumeBundle } from "./resumeBundle.js";
@@ -123,7 +123,8 @@ export class ControlService {
         const prepared:WorkInput={workItemId,taskId:workItemId,kind:"reconcile",dependsOn:[],contract:{pendingReconciliation:taskId},configHash:parent.configHash,agent:parent.agent,grant:{work,handoff}};
         claim=claimWork(this.store,{groupId,workItemId,capabilities,executionProfile,handoffProfile,graphVersion:group.graphVersion,targetVersion:1,commandId:`reconcile-${taskId}`,expectedRevision:group.revision,by:"control-service"},prepared);
       }
-      return {maxAttempts:claim.grant.work.attempts,perAttemptTimeoutMs:claim.grant.work.activeMs,totalRuntimeBudgetMs:claim.grant.work.activeMs,tokenBudget:claim.grant.work.tokens};
+      // The phase timeout reaches ccloop's setTimeout, which cannot hold more than MAX_TIMER_MS (schema.ts).
+      return {maxAttempts:claim.grant.work.attempts,perAttemptTimeoutMs:Math.min(claim.grant.work.activeMs,MAX_TIMER_MS),totalRuntimeBudgetMs:claim.grant.work.activeMs,tokenBudget:claim.grant.work.tokens};
     });
   }
   async reconcileBudgetLegacy(groupId:string,taskId:string):Promise<ApprovedReconcileBudget>{return this.reconcileWithCapabilities(groupId,taskId,await this.legacyCapabilities(groupId,this.parentAgent(groupId,taskId)));}
