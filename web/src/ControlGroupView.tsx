@@ -9,6 +9,7 @@
  */
 import type { JSX } from "react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { ControlAction } from "./controlApi.js";
 import { AgentSelectionEditor, selectionsHashFor } from "./AgentSelectionEditor.js";
 import { BudgetEditor } from "./BudgetEditor.js";
@@ -19,6 +20,7 @@ import type {
 import type { UncertainCommand } from "./controlState.js";
 import { LabelChips, TaskDetail, progressText } from "./TaskDetail.js";
 import { planText } from "./LoopPlanCard.js";
+import { enumText } from "./i18n.js";
 
 const short = (hash: string): string => hash.slice(0, 12);
 
@@ -59,6 +61,7 @@ export interface ControlGroupViewProps {
 
 export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
   const { view, config, uncertain, drafts, onDraft, onCommand } = props;
+  const { t } = useTranslation();
   const groupId = view.summary.groupId;
   const revision = view.summary.commandRevision;
   const handoffActive = view.summary.stopMode === "handoff";
@@ -80,18 +83,24 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
   const openItem = view.workItems.find((item) => item.taskId === openTask);
 
   return (
-    <section aria-label={`Control group ${groupId}`}>
+    <section aria-label={t("control.group.region", { groupId })}>
       <h2>
-        {groupId} · {view.summary.state} · revision {revision} · projection {view.summary.projectionSeq}
+        {t("control.group.heading", { groupId, state: enumText("groupState", view.summary.state), revision, projection: view.summary.projectionSeq })}
       </h2>
-      {view.summary.claimBlocked && <p role="alert">claim blocked · new runs are not being started</p>}
+      {view.summary.claimBlocked && <p role="alert">{t("control.group.claimBlocked")}</p>}
       <p>
-        {view.plan.goal} · plan {short(view.plan.planHash)} · graph v{view.graphVersion}
+        {t("control.group.planLine", { goal: view.plan.goal, hash: short(view.plan.planHash), graphVersion: view.graphVersion })}
       </p>
       {view.stop !== null && (
         <p role="status">
-          stop {view.stop.mode} {view.stop.state} · accepted {view.stop.acceptedAt ?? "n/a"} · deadline {view.stop.deadlineAt ?? "none"} ·{" "}
-          {view.stop.frozenRunIds.length} frozen run(s): {view.stop.frozenRunIds.join(", ") || "none"}
+          {t("control.group.stop", {
+            mode: enumText("stopMode", view.stop.mode),
+            state: enumText("stopState", view.stop.state),
+            accepted: view.stop.acceptedAt ?? t("common.na"),
+            deadline: view.stop.deadlineAt ?? t("common.none"),
+            n: view.stop.frozenRunIds.length,
+            runs: view.stop.frozenRunIds.join(", ") || t("common.none"),
+          })}
         </p>
       )}
       <BudgetEditor view={view} config={config} drafts={drafts} onDraft={onDraft} onCommand={onCommand} onCommands={props.onCommands} selectionsHash={selectionsHashFor(view, props.preview)} />
@@ -105,10 +114,10 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
         />
       )}
 
-      <h3>Work items</h3>
+      <h3>{t("control.group.workItems")}</h3>
       {allLabels.length > 0 && (
-        <fieldset aria-label="Filter work items by label">
-          <legend>labels (any of)</legend>
+        <fieldset aria-label={t("control.group.filterRegion")}>
+          <legend>{t("control.group.filterLegend")}</legend>
           {allLabels.map((label) => (
             <label key={label}>
               <input type="checkbox" checked={activeFilter.includes(label)} onChange={() => toggleFilter(label)} />
@@ -119,7 +128,11 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       )}
       <table>
         <thead>
-          <tr><th>task</th><th>status</th><th>labels</th><th>progress</th><th>run</th><th>pending</th><th>depends on</th></tr>
+          <tr>
+            <th>{t("control.group.th.task")}</th><th>{t("control.group.th.status")}</th><th>{t("control.group.th.labels")}</th>
+            <th>{t("control.group.th.progress")}</th><th>{t("control.group.th.run")}</th><th>{t("control.group.th.pending")}</th>
+            <th>{t("control.group.th.dependsOn")}</th>
+          </tr>
         </thead>
         <tbody>
           {shownItems.map((item) => (
@@ -129,33 +142,37 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
                   {item.taskId}
                 </button>
               </td>
-              <td>{item.status}</td>
+              <td>{enumText("workStatus", item.status)}</td>
               <td><LabelChips labels={item.labels} />{item.loopPlan ? <span className="plan-chip"> {planText(item.loopPlan.planId, item.loopPlan.planVersion, "name")}</span> : null}</td>
               <td>{progressText(item.progress)}</td>
-              <td>{item.currentRunId ?? "none"}</td>
-              <td>{item.pendingRunId ?? "none"}</td>
-              <td>{item.dependencyTaskIds.join(", ") || "none"}</td>
+              <td>{item.currentRunId ?? t("common.none")}</td>
+              <td>{item.pendingRunId ?? t("common.none")}</td>
+              <td>{item.dependencyTaskIds.join(", ") || t("common.none")}</td>
             </tr>
           ))}
         </tbody>
       </table>
       {openItem !== undefined && <TaskDetail key={openItem.taskId} view={view} item={openItem} drafts={drafts} onDraft={onDraft} onCommand={onCommand} />}
 
-      <h3>Runs</h3>
+      <h3>{t("control.group.runs")}</h3>
       <table>
         <thead>
-          <tr><th>run</th><th>phase</th><th>state</th><th>profile</th><th>used</th><th>remaining</th><th>evidence</th></tr>
+          <tr>
+            <th>{t("control.group.runsTh.run")}</th><th>{t("control.group.runsTh.phase")}</th><th>{t("control.group.runsTh.state")}</th>
+            <th>{t("control.group.runsTh.profile")}</th><th>{t("control.group.runsTh.used")}</th><th>{t("control.group.runsTh.remaining")}</th>
+            <th>{t("control.group.runsTh.evidence")}</th>
+          </tr>
         </thead>
         <tbody>
           {view.runs.map((run) => (
             <tr key={run.runId}>
               <td>{run.taskId ?? run.estimateId ?? run.runId}</td>
-              <td>{run.phase}</td>
+              <td>{enumText("runPhase", run.phase)}</td>
               <td>
-                {run.state}
+                {enumText("runState", run.state)}
                 {run.blockedReason ? ` — ${run.blockedReason}` : ""}
                 {run.failureCode !== null ? ` (${run.failureCode})` : ""}
-                {` · attempt ${run.providerAttemptOrdinal} of claim ${run.claimOrdinal ?? "n/a"}`}
+                {t("control.group.attempt", { attempt: run.providerAttemptOrdinal, claim: run.claimOrdinal ?? t("common.na") })}
                 {/* Execution driver final review I5: a run the driver blocked carries its reason on the run, not as a
                     recovery blocker, so its one remedy (spec §2.3, the run-scope recovery-retry) is offered here. */}
                 {run.state === "blocked" && run.blockedReason ? (
@@ -163,7 +180,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
                     type="button"
                     onClick={() => onCommand({ verb: "recovery-retry", groupId, expectedRevision: revision, payload: { scope: "run", runId: run.runId } })}
                   >
-                    Retry run {run.taskId ?? run.runId}
+                    {t("control.group.retryRun", { id: run.taskId ?? run.runId })}
                   </button>
                 ) : null}
               </td>
@@ -181,12 +198,13 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
 
       {view.handoffRequests.length > 0 && (
         <>
-          <h3>Handoff requests</h3>
+          <h3>{t("control.group.handoffRequests")}</h3>
           <ul>
             {view.handoffRequests.map((request) => (
               <li key={request.requestId}>
-                {request.requestId} · run {request.runId} · {request.state} · deadline {request.deadlineAt}
-                {request.failureCode !== null ? ` · ${request.failureCode}` : ""} · evidence {request.evidenceIds.join(", ") || "none"}
+                {t("control.group.handoffLine", { requestId: request.requestId, runId: request.runId, state: enumText("requestState", request.state), deadline: request.deadlineAt })}
+                {request.failureCode !== null ? ` · ${request.failureCode}` : ""}
+                {t("control.group.handoffEvidence", { ids: request.evidenceIds.join(", ") || t("common.none") })}
               </li>
             ))}
           </ul>
@@ -195,12 +213,18 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
 
       {view.estimates.length > 0 && (
         <>
-          <h3>Estimates</h3>
+          <h3>{t("control.group.estimates")}</h3>
           <ul>
             {view.estimates.map((estimate) => (
               <li key={estimate.estimateId}>
-                {estimate.estimateId} · v{estimate.estimateVersion} · {estimate.state} · {estimate.mode} profile{" "}
-                {estimate.profile.profileId} {short(estimate.profile.profileHash)}
+                {t("control.group.estimateLine", {
+                  estimateId: estimate.estimateId,
+                  version: estimate.estimateVersion,
+                  state: enumText("estimateState", estimate.state),
+                  mode: enumText("budgetMode", estimate.mode),
+                  profileId: estimate.profile.profileId,
+                  hash: short(estimate.profile.profileHash),
+                })}
                 {estimate.reasonCode !== null ? ` · ${estimate.reasonCode}` : ""}
               </li>
             ))}
@@ -209,21 +233,21 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       )}
 
       {uncertain.length > 0 && (
-        <p role="status">Waiting for the ledger to answer: {uncertain.map((command) => command.commandId).join(", ")}</p>
+        <p role="status">{t("control.group.waiting", { commands: uncertain.map((command) => command.commandId).join(", ") })}</p>
       )}
 
-      <h3>Dispatch</h3>
+      <h3>{t("control.group.dispatch")}</h3>
       {view.summary.state === "ready" && !handoffActive && (
-        <button type="button" onClick={() => onCommand({ verb: "start", groupId, expectedRevision: revision, payload: {} })}>Start</button>
+        <button type="button" onClick={() => onCommand({ verb: "start", groupId, expectedRevision: revision, payload: {} })}>{t("control.group.start")}</button>
       )}
       {!handoffActive && view.summary.stopMode !== "pause" && (
         <>
-          <button type="button" onClick={() => onCommand({ verb: "pause-dispatch", groupId, expectedRevision: revision, payload: {} })}>Pause dispatch</button>
-          <button type="button" onClick={() => onCommand({ verb: "handoff-stop", groupId, expectedRevision: revision, payload: {} })}>Handoff stop</button>
+          <button type="button" onClick={() => onCommand({ verb: "pause-dispatch", groupId, expectedRevision: revision, payload: {} })}>{t("control.group.pause")}</button>
+          <button type="button" onClick={() => onCommand({ verb: "handoff-stop", groupId, expectedRevision: revision, payload: {} })}>{t("control.group.handoffStop")}</button>
         </>
       )}
       {view.summary.stopMode === "pause" && (
-        <button type="button" onClick={() => onCommand({ verb: "resume-dispatch", groupId, expectedRevision: revision, payload: {} })}>Resume dispatch</button>
+        <button type="button" onClick={() => onCommand({ verb: "resume-dispatch", groupId, expectedRevision: revision, payload: {} })}>{t("control.group.resume")}</button>
       )}
       {handoffActive && view.summary.stopState === "handoff-complete" && continuable.length > 0 && (
         <>
@@ -231,7 +255,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
             type="button"
             onClick={() => onCommand({ verb: "resume-from-handoff", groupId, expectedRevision: revision, payload: { selections: selections() } })}
           >
-            Continue selected tasks ({continuable.length})
+            {t("control.group.continueSelected", { n: continuable.length })}
           </button>
           {continuable.map(({ run, checkpointId }) => (
             <button
@@ -245,7 +269,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
                 payload: { predecessorRunId: run.runId, checkpointId },
               })}
             >
-              Continue task {run.taskId}
+              {t("control.group.continueTask", { taskId: String(run.taskId) })}
             </button>
           ))}
         </>
@@ -257,7 +281,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
           type="button"
           onClick={() => onCommand({ verb: "resume-from-handoff", groupId, expectedRevision: revision, payload: { selections: [] } })}
         >
-          Resume (no continuation)
+          {t("control.group.resumeNoContinuation")}
         </button>
       )}
       {view.recoveryBlockers.length > 0 && (
@@ -265,10 +289,10 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
           type="button"
           onClick={() => onCommand({ verb: "recovery-retry", groupId, expectedRevision: revision, payload: { scope: "group", groupId } })}
         >
-          Retry recovery for {groupId}
+          {t("control.group.retryRecovery", { groupId })}
         </button>
       )}
-      <p>Recent commands: {view.recentCommandIds.join(", ") || "none"}</p>
+      <p>{t("control.group.recent", { commands: view.recentCommandIds.join(", ") || t("common.none") })}</p>
     </section>
   );
 }

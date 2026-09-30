@@ -5,6 +5,9 @@
  */
 import type { ThemePref } from "../theme.js";
 import type { ChainStopCategory, CorrectionKind, DecisionKind, DecisionObservation, DecisionScope, MetricsNoteCode } from "../types.js";
+import type {
+  EstimateViewV1, GroupSummaryV1, HandoffRequestViewV1, RecoveryViewV1, RunViewV1, WorkItemProgressV1, WorkItemViewV1,
+} from "../controlTypes.js";
 
 /** The Chinese resource's type: the same key set, every value widened to string (spec §2). */
 export type Translation<T> = { [K in keyof T]: T[K] extends string ? string : Translation<T[K]> };
@@ -37,6 +40,35 @@ const chainBanner = {
   limit: "Chain stopped at a limit",
   anomaly: "Chain stopped on an anomaly",
 } as const satisfies Record<ChainStopCategory, string>;
+
+const groupState = { draft: "draft", ready: "ready", running: "running", review: "review", done: "done", blocked: "blocked" } as const satisfies Record<GroupSummaryV1["state"], string>;
+const stopMode = { pause: "pause", shutdown: "shutdown", handoff: "handoff" } as const satisfies Record<NonNullable<GroupSummaryV1["stopMode"]>, string>;
+const stopState = {
+  paused: "paused", "handoff-pending": "handoff-pending", "handoff-partial": "handoff-partial", "handoff-unresolved": "handoff-unresolved", "handoff-complete": "handoff-complete",
+} as const satisfies Record<NonNullable<GroupSummaryV1["stopState"]>, string>;
+const workStatus = {
+  draft: "draft", ready: "ready", starting: "starting", "start-unknown": "start-unknown", active: "active", held: "held", continuing: "continuing", completed: "completed", blocked: "blocked",
+} as const satisfies Record<WorkItemViewV1["status"], string>;
+const runPhase = { estimate: "estimate", work: "work", handoff: "handoff" } as const satisfies Record<RunViewV1["phase"], string>;
+const runState = {
+  starting: "starting", unknown: "unknown", "attempt-unknown": "attempt-unknown", "attempt-proof-invalid": "attempt-proof-invalid", running: "running",
+  "failed-before-provider": "failed-before-provider", "settled-recoverable": "settled-recoverable", "settled-restartable": "settled-restartable",
+  "settled-unrecoverable": "settled-unrecoverable", collected: "collected", landed: "landed", reconciling: "reconciling", blocked: "blocked",
+} as const satisfies Record<RunViewV1["state"], string>;
+const requestState = {
+  "request-pending": "request-pending", latched: "latched", collecting: "collecting", "settled-recoverable": "settled-recoverable",
+  "settled-restartable": "settled-restartable", "settled-unrecoverable": "settled-unrecoverable", "outcome-unknown": "outcome-unknown",
+} as const satisfies Record<HandoffRequestViewV1["state"], string>;
+const estimateState = {
+  queued: "queued", running: "running", "start-unknown": "start-unknown", ready: "ready", failed: "failed", interrupted: "interrupted",
+  "blocked-capability": "blocked-capability", "input-too-large": "input-too-large",
+} as const satisfies Record<EstimateViewV1["state"], string>;
+const budgetMode = { strict: "strict", soft: "soft" } as const satisfies Record<EstimateViewV1["mode"], string>;
+const blockerScope = { global: "global", group: "group", run: "run" } as const satisfies Record<RecoveryViewV1["blockers"][number]["scope"], string>;
+const progressStep = {
+  queued: "queued", plan: "plan", execute: "execute", verify: "verify", succeeded: "succeeded", blocked_waiting_human: "blocked_waiting_human",
+  exhausted: "exhausted", cancelled: "cancelled", failed: "failed",
+} as const satisfies Record<NonNullable<WorkItemProgressV1["step"]>, string>;
 
 export const en = {
   nav: { sections: "Sections", decisions: "Decisions", chains: "Chains", tasks: "Task control", metrics: "Metrics" },
@@ -105,6 +137,117 @@ export const en = {
     sessionProgress: "session {{n}}; {{cost}}",
     banner: chainBanner,
   },
+  control: {
+    unavailable: "The task control plane is not available on this panel.",
+    title: "Task control",
+    summaryLine: "epoch {{epoch}} · projection {{seq}} · {{dispatch}}",
+    noPort: "no execution port configured · this panel serves recovery and evidence, and refuses to start work · set ORCA_CCLOOP_BIN and ORCA_AGENTS_TABLE and restart it",
+    resetRequired: "server reset required · this page must re-read before it trusts any cached view",
+    refetchRequired: "projection refetch required · re-reading the open groups",
+    dispatchBlockedRecovery: "dispatch blocked · recovery must be observed",
+    groupsNav: "Control groups",
+    noGroups: "No control groups yet.",
+    groupDone: " · {{done}}/{{total}} done",
+    groupBlockers: " · {{n}} blocker(s)",
+    reading: "Reading {{groupId}}…",
+    outcomeUnknown: "Command outcome unknown, being looked up: {{commands}}",
+    import: {
+      region: "Import plan",
+      title: "Import a plan",
+      noEstimator: "No estimator profile is configured for this panel, so a plan cannot be imported. Restart it with --estimator-profile and --estimate-mode.",
+      noRepository: "No trusted repository and plan are configured for this panel.",
+      summary: "{{repository}} · {{plan}} · estimate mode {{mode}}",
+      notConfigured: "not configured",
+      button: "Import plan",
+    },
+    group: {
+      region: "Control group {{groupId}}",
+      heading: "{{groupId}} · {{state}} · revision {{revision}} · projection {{projection}}",
+      claimBlocked: "claim blocked · new runs are not being started",
+      planLine: "{{goal}} · plan {{hash}} · graph v{{graphVersion}}",
+      stop: "stop {{mode}} {{state}} · accepted {{accepted}} · deadline {{deadline}} · {{n}} frozen run(s): {{runs}}",
+      workItems: "Work items",
+      filterRegion: "Filter work items by label",
+      filterLegend: "labels (any of)",
+      th: { task: "task", status: "status", labels: "labels", progress: "progress", run: "run", pending: "pending", dependsOn: "depends on" },
+      runs: "Runs",
+      runsTh: { run: "run", phase: "phase", state: "state", profile: "profile", used: "used", remaining: "remaining", evidence: "evidence" },
+      attempt: " · attempt {{attempt}} of claim {{claim}}",
+      retryRun: "Retry run {{id}}",
+      handoffRequests: "Handoff requests",
+      handoffLine: "{{requestId}} · run {{runId}} · {{state}} · deadline {{deadline}}",
+      handoffEvidence: " · evidence {{ids}}",
+      estimates: "Estimates",
+      estimateLine: "{{estimateId}} · v{{version}} · {{state}} · {{mode}} profile {{profileId}} {{hash}}",
+      waiting: "Waiting for the ledger to answer: {{commands}}",
+      dispatch: "Dispatch",
+      start: "Start",
+      pause: "Pause dispatch",
+      handoffStop: "Handoff stop",
+      resume: "Resume dispatch",
+      continueSelected: "Continue selected tasks ({{n}})",
+      continueTask: "Continue task {{taskId}}",
+      resumeNoContinuation: "Resume (no continuation)",
+      retryRecovery: "Retry recovery for {{groupId}}",
+      recent: "Recent commands: {{commands}}",
+    },
+    task: {
+      region: "Task {{taskId}}",
+      labelsFrom: "labels from {{source}} · version {{version}}",
+      labelSource: { plan: "plan", operator: "operator" },
+      unsavedDraft: " · unsaved draft",
+      labelsChanged: "labels changed since your draft (v{{base}} → v{{current}}) · now: ",
+      labelsOf: "Labels of {{taskId}}",
+      remove: "Remove {{label}}",
+      systemLabel: "System label",
+      addSystem: "Add system label",
+      customLabel: "Custom label",
+      addCustom: "Add custom label",
+      save: "Save labels",
+      discard: "Discard draft",
+      restore: "Restore plan labels",
+      progress: "progress: {{progress}}",
+      lastTransition: " · last transition {{at}}",
+      runsOf: "Runs of {{taskId}}",
+    },
+    progress: {
+      noRun: "no run",
+      notReported: "not reported yet",
+      attemptUnknown: "attempt unknown",
+      attempt: "attempt {{current}}/{{max}}",
+      tokensUnknown: "tokens unknown",
+      tokensOfZero: "tokens {{used}} of 0",
+      tokensPercent: "tokens {{percent}}% (reported at phase end)",
+      line: "{{step}} · {{attempt}} · {{tokens}}",
+    },
+    evidence: {
+      button: "evidence",
+      refused: "evidence refused · {{code}}",
+      list: "List evidence of {{runId}}",
+      none: " no evidence",
+      region: "Evidence of {{runId}}",
+      entry: "{{id}} · {{kind}} · {{bytes}} bytes",
+      download: "Download {{id}}",
+    },
+    workspace: {
+      region: "Workspace mode",
+      line: "New runs in {{repoId}} use {{mode}} (setting revision {{revision}}). Runs already started keep theirs.",
+      aWorktree: "a git worktree",
+      aClone: "a private clone",
+      worktreeOption: "git worktree (default)",
+      cloneOption: "private clone",
+    },
+  },
+  recovery: {
+    title: "Recovery",
+    none: "No recovery blockers.",
+    retry: "Retry recovery",
+    dispatchBlocked: "dispatch blocked · the panel will not start new runs until recovery is observed",
+    allGroups: "all groups",
+    run: " · run {{runId}}",
+    evidence: " · evidence {{ids}}",
+    runEvidence: "run evidence",
+  },
   loopPlan: {
     // Panel i18n spec §3.1, §6.9: one entry per registry version, equal to src/control/loopPlans.ts (the English source of
     // record); a version with no discipline has no discipline key.
@@ -154,5 +297,8 @@ export const en = {
     futureCount: "Excluded as future: {{n}}",
     note: metricsNote,
   },
-  enums: { theme, decisionKind, decisionScope, decisionVerdict, correctionKind, chainStopCategory },
+  enums: {
+    theme, decisionKind, decisionScope, decisionVerdict, correctionKind, chainStopCategory,
+    groupState, stopMode, stopState, workStatus, runPhase, runState, requestState, estimateState, budgetMode, blockerScope, progressStep,
+  },
 } as const;

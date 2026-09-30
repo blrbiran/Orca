@@ -1,4 +1,5 @@
 import type { JSX } from "react";
+import { useTranslation } from "react-i18next";
 import type { RepositoryWorkspaceV1 } from "./controlTypes.js";
 
 /**
@@ -7,12 +8,17 @@ import type { RepositoryWorkspaceV1 } from "./controlTypes.js";
  * only runs that start afterwards.
  */
 export function WorkspaceModeSelector(props: { workspace: RepositoryWorkspaceV1; onChange: (mode: "worktree" | "clone", expectedRevision: number) => void }): JSX.Element {
+  const { t } = useTranslation();
   const { workspace } = props;
   return (
-    <section aria-label="Workspace mode">
-      <h3>Workspace mode</h3>
+    <section aria-label={t("control.workspace.region")}>
+      <h3>{t("control.workspace.region")}</h3>
       <p>
-        New runs in {workspace.repoId} use {workspace.workspaceMode === "worktree" ? "a git worktree" : "a private clone"} (setting revision {workspace.revision}). Runs already started keep theirs.
+        {t("control.workspace.line", {
+          repoId: workspace.repoId,
+          mode: t(workspace.workspaceMode === "worktree" ? "control.workspace.aWorktree" : "control.workspace.aClone"),
+          revision: workspace.revision,
+        })}
       </p>
       {(["worktree", "clone"] as const).map((mode) => (
         <label key={mode}>
@@ -23,7 +29,7 @@ export function WorkspaceModeSelector(props: { workspace: RepositoryWorkspaceV1;
             checked={workspace.workspaceMode === mode}
             onChange={() => props.onChange(mode, workspace.revision)}
           />
-          {mode === "worktree" ? "git worktree (default)" : "private clone"}
+          {t(mode === "worktree" ? "control.workspace.worktreeOption" : "control.workspace.cloneOption")}
         </label>
       ))}
     </section>

@@ -8,9 +8,11 @@
  */
 import { useState } from "react";
 import type { JSX } from "react";
+import { useTranslation } from "react-i18next";
 import { controlFailureFrom, fetchRunEvidence, saveEvidenceManifest } from "./controlApi.js";
 
 export function EvidenceLink(props: { runId: string; label?: string }): JSX.Element {
+  const { t } = useTranslation();
   const [refusal, setRefusal] = useState<string | null>(null);
   const load = async (): Promise<void> => {
     setRefusal(null);
@@ -22,8 +24,8 @@ export function EvidenceLink(props: { runId: string; label?: string }): JSX.Elem
   };
   return (
     <>
-      <button type="button" onClick={() => void load()}>{props.label ?? "evidence"}</button>
-      {refusal !== null && <span role="alert">{`evidence refused · ${refusal}`}</span>}
+      <button type="button" onClick={() => void load()}>{props.label ?? t("control.evidence.button")}</button>
+      {refusal !== null && <span role="alert">{t("control.evidence.refused", { code: refusal })}</span>}
     </>
   );
 }

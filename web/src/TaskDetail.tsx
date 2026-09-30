@@ -10,17 +10,20 @@
  */
 import { useState } from "react";
 import type { JSX } from "react";
+import { useTranslation } from "react-i18next";
 import { controlFailureFrom, downloadEvidenceArtifact, fetchRunEvidence, type ControlAction } from "./controlApi.js";
 import { CUSTOM_LABEL_PREFIX, WEB_SYSTEM_LABELS } from "./controlTypes.js";
 import type { EvidenceManifestV1, GroupViewV1, WorkItemProgressV1, WorkItemViewV1 } from "./controlTypes.js";
 import { LoopPlanCard } from "./LoopPlanCard.js";
+import i18n, { enumText } from "./i18n.js";
 
 export const labelsDraftKey = (groupId: string, taskId: string): string => `labels:${groupId}:${taskId}`;
 
 /** A system label and a custom one look different (spec §4.2); the class is the whole difference. */
 export function LabelChips(props: { labels: string[] | undefined }): JSX.Element {
+  const { t } = useTranslation();
   const labels = props.labels ?? [];
-  if (labels.length === 0) return <>none</>;
+  if (labels.length === 0) return <>{t("common.none")}</>;
   return (
     <>
       {labels.map((label) => (
@@ -32,18 +35,20 @@ export function LabelChips(props: { labels: string[] | undefined }): JSX.Element
 
 /**
  * Spec §4.1/§4.2 (§8 R11, R18): step · attempt n/max · tokens. Unknown usage says "unknown", never a percentage; a known
- * number is annotated, because ccloop reports usage only when a phase ends (finding F10: the panel speaks English).
+ * number is annotated, because ccloop reports usage only when a phase ends (panel i18n spec §3.3: in the reader's language).
  */
 export function progressText(progress: WorkItemProgressV1 | null | undefined): string {
-  if (progress === undefined || progress === null) return "no run";
-  const step = progress.step ?? "not reported yet";
-  const attempt = progress.attempt === null ? "attempt unknown" : `attempt ${progress.attempt.current}/${progress.attempt.max}`;
+  if (progress === undefined || progress === null) return i18n.t("control.progress.noRun");
+  const step = progress.step === null ? i18n.t("control.progress.notReported") : enumText("progressStep", progress.step);
+  const attempt = progress.attempt === null
+    ? i18n.t("control.progress.attemptUnknown")
+    : i18n.t("control.progress.attempt", { current: progress.attempt.current, max: progress.attempt.max });
   const tokens = progress.tokens === null
-    ? "tokens unknown"
+    ? i18n.t("control.progress.tokensUnknown")
     : progress.tokens.grant === 0
-      ? `tokens ${progress.tokens.used} of 0`
-      : `tokens ${Math.floor((progress.tokens.used * 100) / progress.tokens.grant)}% (reported at phase end)`;
-  return `${step} · ${attempt} · ${tokens}`;
+      ? i18n.t("control.progress.tokensOfZero", { used: progress.tokens.used })
+      : i18n.t("control.progress.tokensPercent", { percent: Math.floor((progress.tokens.used * 100) / progress.tokens.grant) });
+  return i18n.t("control.progress.line", { step, attempt, tokens });
 }
 
 /** A label draft: the labels the person chose and the labelsVersion shown when they started choosing. */
@@ -67,6 +72,7 @@ function readDraft(drafts: Record<string, string>, key: string): LabelsDraft | n
 
 /** One run's evidence manifest, listed on demand; each piece is downloaded through the token-carrying client. */
 export function EvidenceList(props: { runId: string }): JSX.Element {
+  const { t } = useTranslation();
   const [manifest, setManifest] = useState<EvidenceManifestV1 | null>(null);
   const [refusal, setRefusal] = useState<string | null>(null);
   const load = async (): Promise<void> => {
@@ -79,14 +85,14 @@ export function EvidenceList(props: { runId: string }): JSX.Element {
   };
   return (
     <>
-      <button type="button" onClick={() => void load()}>List evidence of {props.runId}</button>
-      {refusal !== null && <span role="alert">{`evidence refused · ${refusal}`}</span>}
-      {manifest !== null && (manifest.entries.length === 0 ? <span> no evidence</span> : (
-        <ul aria-label={`Evidence of ${props.runId}`}>
+      <button type="button" onClick={() => void load()}>{t("control.evidence.list", { runId: props.runId })}</button>
+      {refusal !== null && <span role="alert">{t("control.evidence.refused", { code: refusal })}</span>}
+      {manifest !== null && (manifest.entries.length === 0 ? <span>{t("control.evidence.none")}</span> : (
+        <ul aria-label={t("control.evidence.region", { runId: props.runId })}>
           {manifest.entries.map((entry) => (
             <li key={entry.evidenceId}>
-              {entry.evidenceId} · {entry.kind} · {entry.byteLength} bytes{" "}
-              <button type="button" onClick={() => void download(entry)}>Download {entry.evidenceId}</button>
+              {t("control.evidence.entry", { id: entry.evidenceId, kind: entry.kind, bytes: entry.byteLength })}{" "}
+              <button type="button" onClick={() => void download(entry)}>{t("control.evidence.download", { id: entry.evidenceId })}</button>
             </li>
           ))}
         </ul>
@@ -105,6 +111,7 @@ export interface TaskDetailProps {
 
 export function TaskDetail(props: TaskDetailProps): JSX.Element {
   const { view, item, drafts, onDraft, onCommand } = props;
+  const { t } = useTranslation();
   const groupId = view.summary.groupId;
   const key = labelsDraftKey(groupId, item.taskId);
   const draft = readDraft(drafts, key);
@@ -127,45 +134,45 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
   };
   const runs = view.runs.filter((run) => run.taskId === item.taskId);
   return (
-    <section aria-label={`Task ${item.taskId}`}>
-      <h4>Task {item.taskId}</h4>
+    <section aria-label={t("control.task.region", { taskId: item.taskId })}>
+      <h4>{t("control.task.region", { taskId: item.taskId })}</h4>
       <p>
-        labels from {item.labelsProvenance ?? "plan"} · version {item.labelsVersion ?? 0}
-        {draft !== null ? " · unsaved draft" : ""}
+        {t("control.task.labelsFrom", { source: t(`control.task.labelSource.${item.labelsProvenance ?? "plan"}`), version: item.labelsVersion ?? 0 })}
+        {draft !== null ? t("control.task.unsavedDraft") : ""}
       </p>
       {draft !== null && draft.base !== current && (
         <p role="status">
-          labels changed since your draft (v{draft.base} → v{current}) · now: <LabelChips labels={item.labels} />
+          {t("control.task.labelsChanged", { base: draft.base, current })}<LabelChips labels={item.labels} />
         </p>
       )}
-      <ul aria-label={`Labels of ${item.taskId}`}>
+      <ul aria-label={t("control.task.labelsOf", { taskId: item.taskId })}>
         {labels.map((label) => (
           <li key={label}>
             <LabelChips labels={[label]} />{" "}
-            <button type="button" onClick={() => setDraft(labels.filter((other) => other !== label))}>Remove {label}</button>
+            <button type="button" onClick={() => setDraft(labels.filter((other) => other !== label))}>{t("control.task.remove", { label })}</button>
           </li>
         ))}
       </ul>
-      <select aria-label="System label" value={system} onChange={(event) => setSystem(event.target.value)}>
+      <select aria-label={t("control.task.systemLabel")} value={system} onChange={(event) => setSystem(event.target.value)}>
         {WEB_SYSTEM_LABELS.map((word) => <option key={word} value={word}>{word}</option>)}
       </select>
-      <button type="button" onClick={() => setDraft([...labels, system])}>Add system label</button>
-      <input aria-label="Custom label" value={custom} onChange={(event) => setCustom(event.target.value)} />
-      <button type="button" onClick={addCustom}>Add custom label</button>
-      <button type="button" disabled={draft === null} onClick={() => draft !== null && send(draft.labels, draft.base)}>Save labels</button>
-      <button type="button" disabled={draft === null} onClick={() => onDraft(key, "")}>Discard draft</button>
-      <button type="button" onClick={() => send(null, current)}>Restore plan labels</button>
+      <button type="button" onClick={() => setDraft([...labels, system])}>{t("control.task.addSystem")}</button>
+      <input aria-label={t("control.task.customLabel")} value={custom} onChange={(event) => setCustom(event.target.value)} />
+      <button type="button" onClick={addCustom}>{t("control.task.addCustom")}</button>
+      <button type="button" disabled={draft === null} onClick={() => draft !== null && send(draft.labels, draft.base)}>{t("control.task.save")}</button>
+      <button type="button" disabled={draft === null} onClick={() => onDraft(key, "")}>{t("control.task.discard")}</button>
+      <button type="button" onClick={() => send(null, current)}>{t("control.task.restore")}</button>
       <p>
-        progress: {progressText(item.progress)}
-        {item.progress?.lastTransitionAt ? ` · last transition ${item.progress.lastTransitionAt}` : ""}
+        {t("control.task.progress", { progress: progressText(item.progress) })}
+        {item.progress?.lastTransitionAt ? t("control.task.lastTransition", { at: item.progress.lastTransitionAt }) : ""}
       </p>
       <LoopPlanCard view={view} item={item} drafts={drafts} onDraft={onDraft} onCommand={onCommand} />
-      <h5>Runs of {item.taskId}</h5>
-      {runs.length === 0 ? <p>none</p> : (
+      <h5>{t("control.task.runsOf", { taskId: item.taskId })}</h5>
+      {runs.length === 0 ? <p>{t("common.none")}</p> : (
         <ul>
           {runs.map((run) => (
             <li key={run.runId}>
-              {run.runId} · {run.phase} · {run.state} <EvidenceList runId={run.runId} />
+              {run.runId} · {enumText("runPhase", run.phase)} · {enumText("runState", run.state)} <EvidenceList runId={run.runId} />
             </li>
           ))}
         </ul>

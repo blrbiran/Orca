@@ -9,11 +9,13 @@
  * whether an unknown run is finished.
  */
 import type { JSX } from "react";
+import { useTranslation } from "react-i18next";
 import { AgentSettings } from "./AgentSettings.js";
 import { nextCommandId, type ControlAction } from "./controlApi.js";
 import { ControlGroupView } from "./ControlGroupView.js";
 import { RecoveryView } from "./RecoveryView.js";
 import { WorkspaceModeSelector } from "./WorkspaceModeSelector.js";
+import { enumText } from "./i18n.js";
 import type {
   AgentPreferencesViewV1, AgentSelectionPreviewV1, AgentsViewV1, ControlConfigV1, ControlSummaryV1, GroupViewV1, OperatorPreferencesV1,
   RecoveryViewV1, RepositoryWorkspaceV1,
@@ -53,22 +55,24 @@ export interface ControlPanelProps {
 }
 
 function ImportForm(props: { config: ControlConfigV1; onCommand: (action: ControlAction) => void }): JSX.Element {
+  const { t } = useTranslation();
   const repository = props.config.repositories[0];
   const plan = props.config.plans[0];
   return (
-    <section aria-label="Import plan">
-      <h3>Import a plan</h3>
+    <section aria-label={t("control.import.region")}>
+      <h3>{t("control.import.title")}</h3>
       {props.config.defaults === null ? (
-        <p role="note">
-          No estimator profile is configured for this panel, so a plan cannot be imported. Restart it
-          with --estimator-profile and --estimate-mode.
-        </p>
+        <p role="note">{t("control.import.noEstimator")}</p>
       ) : repository === undefined || plan === undefined ? (
-        <p role="note">No trusted repository and plan are configured for this panel.</p>
+        <p role="note">{t("control.import.noRepository")}</p>
       ) : (
         <>
           <p>
-            {repository.displayName} · {plan.displayName} · estimate mode {props.config.defaults?.estimateMode ?? "not configured"}
+            {t("control.import.summary", {
+              repository: repository.displayName,
+              plan: plan.displayName,
+              mode: props.config.defaults === null ? t("control.import.notConfigured") : enumText("budgetMode", props.config.defaults.estimateMode),
+            })}
           </p>
           <button
             type="button"
@@ -89,7 +93,7 @@ function ImportForm(props: { config: ControlConfigV1; onCommand: (action: Contro
               });
             }}
           >
-            Import plan
+            {t("control.import.button")}
           </button>
         </>
       )}
@@ -98,15 +102,15 @@ function ImportForm(props: { config: ControlConfigV1; onCommand: (action: Contro
 }
 
 export function ControlPanel(props: ControlPanelProps): JSX.Element {
+  const { t } = useTranslation();
   const { config, summary, recovery, groups, selected, drafts, uncertain, refusal, refetchRequired } = props;
   const view = selected === null ? undefined : groups[selected];
   const waiting = uncertain.filter((command) => command.groupId === (selected ?? command.groupId));
   return (
-    <section aria-label="Task control">
-      <h2>Task control</h2>
+    <section aria-label={t("control.title")}>
+      <h2>{t("control.title")}</h2>
       <p>
-        epoch {summary.epoch} · projection {summary.changeSeq} ·{" "}
-        {summary.dispatchBlocked ? "dispatch blocked" : "dispatch live"}
+        {t("control.summaryLine", { epoch: summary.epoch, seq: summary.changeSeq, dispatch: t(summary.dispatchBlocked ? "common.dispatchBlocked" : "common.dispatchLive") })}
       </p>
       {/*
         * Ruling R6. Read from the config's own field, never inferred from profiles[].probeFailureCode:
@@ -115,27 +119,24 @@ export function ControlPanel(props: ControlPanelProps): JSX.Element {
         * reads are what a person needs after a crash -- so this says why the commands will refuse.
         */}
       {config.executionPort === "unconfigured" && (
-        <p role="alert">
-          no execution port configured · this panel serves recovery and evidence, and refuses to start
-          work · set ORCA_CCLOOP_BIN and ORCA_AGENTS_TABLE and restart it
-        </p>
+        <p role="alert">{t("control.noPort")}</p>
       )}
-      {summary.resetRequired && <p role="alert">server reset required · this page must re-read before it trusts any cached view</p>}
-      {refetchRequired && <p role="alert">projection refetch required · re-reading the open groups</p>}
-      {recovery.dispatchBlocked && <p role="alert">dispatch blocked · recovery must be observed</p>}
+      {summary.resetRequired && <p role="alert">{t("control.resetRequired")}</p>}
+      {refetchRequired && <p role="alert">{t("control.refetchRequired")}</p>}
+      {recovery.dispatchBlocked && <p role="alert">{t("control.dispatchBlockedRecovery")}</p>}
       <ImportForm config={config} onCommand={props.onCommand} />
       {props.workspace && props.onWorkspaceMode && <WorkspaceModeSelector workspace={props.workspace} onChange={props.onWorkspaceMode} />}
       {props.agents && props.preferences && props.onAgentPreferences && (
         <AgentSettings agents={props.agents} preferences={props.preferences} drafts={drafts} onDraft={props.onDraft} onSave={props.onAgentPreferences} />
       )}
-      <nav aria-label="Control groups">
-        {summary.groups.length === 0 && <p>No control groups yet.</p>}
+      <nav aria-label={t("control.groupsNav")}>
+        {summary.groups.length === 0 && <p>{t("control.noGroups")}</p>}
         {summary.groups.map((group) => (
           <button key={group.groupId} type="button" aria-current={group.groupId === selected} onClick={() => props.onSelect(group.groupId)}>
-            {group.groupId} · {group.state}
-            {group.completion !== undefined ? ` · ${group.completion.done}/${group.completion.total} done` : ""}
-            {group.stopState !== null ? ` · ${group.stopState}` : ""}
-            {group.recoveryBlockerCount > 0 ? ` · ${group.recoveryBlockerCount} blocker(s)` : ""}
+            {group.groupId} · {enumText("groupState", group.state)}
+            {group.completion !== undefined ? t("control.groupDone", { done: group.completion.done, total: group.completion.total }) : ""}
+            {group.stopState !== null ? ` · ${enumText("stopState", group.stopState)}` : ""}
+            {group.recoveryBlockerCount > 0 ? t("control.groupBlockers", { n: group.recoveryBlockerCount }) : ""}
           </button>
         ))}
       </nav>
@@ -157,11 +158,11 @@ export function ControlPanel(props: ControlPanelProps): JSX.Element {
           retryNotice={props.retryNotice}
         />
       )}
-      {view === undefined && selected !== null && <p role="status">Reading {selected}…</p>}
+      {view === undefined && selected !== null && <p role="status">{t("control.reading", { groupId: selected })}</p>}
       <RecoveryView recovery={recovery} group={view ?? null} onCommand={props.onCommand} />
       {waiting.length > 0 && (
         <p role="status">
-          Command outcome unknown, being looked up: {waiting.map((command) => `${command.commandId} (${command.groupId})`).join(", ")}
+          {t("control.outcomeUnknown", { commands: waiting.map((command) => `${command.commandId} (${command.groupId})`).join(", ") })}
         </p>
       )}
       {refusal !== null && (

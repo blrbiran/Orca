@@ -666,7 +666,7 @@ export function App(): JSX.Element {
       </SectionPane>
       <SectionPane section="tasks" active={section}>
       {(controlConfig === null || control.recovery === null) && (
-        <p className="empty">The task control plane is not available on this panel.</p>
+        <p className="empty">{t("control.unavailable")}</p>
       )}
       {controlConfig !== null && control.recovery !== null && (
         <ControlPanel
