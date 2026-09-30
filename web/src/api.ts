@@ -13,6 +13,7 @@
  * person, not just "answered 409"); a POST resolves to a typed `PostResult`
  * the page must look at, instead of a promise it could `void`.
  */
+import i18n from "./i18n.js";
 import type { ChainRepoView, CorrectionKind, DecisionListRow, MetricsReport, PanelCoverage } from "./types.js";
 
 declare global {
@@ -44,7 +45,7 @@ export function refusalFrom(what: string, status: number, body: unknown): { stat
   return {
     status,
     code: typeof fields.code === "string" ? fields.code : `http-${status}`,
-    message: typeof fields.message === "string" ? fields.message : `${what} answered ${status}`,
+    message: typeof fields.message === "string" ? fields.message : i18n.t("panelErrors.whatAnswered", { what, status }),
     ...(typeof fields.retry_field === "string" ? { retry_field: fields.retry_field } : {}),
   };
 }

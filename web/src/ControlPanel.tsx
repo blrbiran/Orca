@@ -15,7 +15,7 @@ import { nextCommandId, type ControlAction } from "./controlApi.js";
 import { ControlGroupView } from "./ControlGroupView.js";
 import { RecoveryView } from "./RecoveryView.js";
 import { WorkspaceModeSelector } from "./WorkspaceModeSelector.js";
-import { enumText } from "./i18n.js";
+import { enumText, refusalText } from "./i18n.js";
 import type {
   AgentPreferencesViewV1, AgentSelectionPreviewV1, AgentsViewV1, ControlConfigV1, ControlSummaryV1, GroupViewV1, OperatorPreferencesV1,
   RecoveryViewV1, RepositoryWorkspaceV1,
@@ -168,8 +168,8 @@ export function ControlPanel(props: ControlPanelProps): JSX.Element {
       {refusal !== null && (
         <p role="alert" data-status={refusal.status ?? ""}>
           {refusal.code}
-          {refusal.status !== null ? ` · HTTP ${refusal.status}` : ""}
-          {refusal.commandRevision !== null ? ` · server revision ${refusal.commandRevision}` : ""} · {refusal.message}
+          {refusal.status !== null ? t("panelErrors.httpStatus", { status: refusal.status }) : ""}
+          {refusal.commandRevision !== null ? t("panelErrors.serverRevision", { revision: refusal.commandRevision }) : ""} · {refusalText(refusal)}
         </p>
       )}
     </section>

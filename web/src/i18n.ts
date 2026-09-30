@@ -7,7 +7,7 @@ import { createInstance } from "i18next";
 import LanguageDetector from "i18next-browser-languagedetector";
 import { initReactI18next } from "react-i18next";
 import { en } from "./locales/en.js";
-import { zh } from "./locales/zh.js";
+import { zh, zhErrors } from "./locales/zh.js";
 
 declare module "i18next" {
   interface CustomTypeOptions {
@@ -89,4 +89,18 @@ export function initI18n(options: { lng?: string } = {}): typeof i18n {
 export function enumText<F extends keyof typeof en.enums>(family: F, value: string): string {
   const key = `enums.${family}.${value}`;
   return i18n.exists(key) ? (i18n.t(key as never) as string) : value;
+}
+
+/**
+ * Spec §3.2: what a refusal says. English shows the message as sent, byte for byte. Chinese shows the Chinese-only entry
+ * for its code (http-<n> is the one entry http-status), with {{message}} and {{status}} filled from the refusal, else the
+ * message as sent -- the code is on screen beside it, so the fallback is visible. hasOwnProperty, so a code such as
+ * "toString" never finds an Object.prototype member.
+ */
+export function refusalText(refusal: { code: string; message: string; status: number | null }): string {
+  if (currentLanguage() !== "zh") return refusal.message;
+  const key = /^http-\d+$/.test(refusal.code) ? "http-status" : refusal.code;
+  const entry = Object.prototype.hasOwnProperty.call(zhErrors, key) ? zhErrors[key] : undefined;
+  if (entry === undefined) return refusal.message;
+  return entry.replace(/\{\{(message|status)\}\}/g, (_match: string, name: string) => (name === "message" ? refusal.message : String(refusal.status ?? "")));
 }

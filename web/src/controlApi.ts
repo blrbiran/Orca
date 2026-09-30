@@ -10,6 +10,7 @@
  * a second execution the ledger never asked for.
  */
 import { failureFrom, panelToken } from "./api.js";
+import i18n from "./i18n.js";
 import type {
   AgentPreferencesViewV1,
   AgentSelectionPreviewV1,
@@ -73,10 +74,10 @@ async function controlGet<T>(path: string): Promise<T> {
   try {
     res = await fetch(path, { headers: { "x-orca-token": panelToken() } });
   } catch (err) {
-    throw new ControlRequestError(refusalOf(`GET ${path}`, null, undefined, err instanceof Error ? err.message : "no answer"));
+    throw new ControlRequestError(refusalOf(`GET ${path}`, null, undefined, err instanceof Error ? err.message : i18n.t("panelErrors.noAnswer")));
   }
   const body: unknown = await res.json().catch(() => undefined);
-  if (!res.ok) throw new ControlRequestError(refusalOf(`GET ${path}`, res.status, body, `answered ${res.status}`));
+  if (!res.ok) throw new ControlRequestError(refusalOf(`GET ${path}`, res.status, body, i18n.t("panelErrors.answered", { status: res.status })));
   return body as T;
 }
 
@@ -135,9 +136,9 @@ export async function downloadEvidenceArtifact(entry: EvidenceManifestV1["entrie
   try {
     res = await fetch(entry.downloadUrl, { headers: { "x-orca-token": panelToken() } });
   } catch (err) {
-    throw new ControlRequestError(refusalOf(`GET ${entry.downloadUrl}`, null, undefined, err instanceof Error ? err.message : "no answer"));
+    throw new ControlRequestError(refusalOf(`GET ${entry.downloadUrl}`, null, undefined, err instanceof Error ? err.message : i18n.t("panelErrors.noAnswer")));
   }
-  if (!res.ok) throw new ControlRequestError(refusalOf(`GET ${entry.downloadUrl}`, res.status, await res.json().catch(() => undefined), `answered ${res.status}`));
+  if (!res.ok) throw new ControlRequestError(refusalOf(`GET ${entry.downloadUrl}`, res.status, await res.json().catch(() => undefined), i18n.t("panelErrors.answered", { status: res.status })));
   const url = URL.createObjectURL(await res.blob());
   const anchor = document.createElement("a");
   anchor.href = url;
@@ -162,10 +163,10 @@ export async function sendControlCommand(path: string, envelope: CommandEnvelope
       body: JSON.stringify(envelope),
     });
   } catch (err) {
-    return { kind: "uncertain", refusal: refusalOf(`POST ${path}`, null, undefined, err instanceof Error ? err.message : "never answered") };
+    return { kind: "uncertain", refusal: refusalOf(`POST ${path}`, null, undefined, err instanceof Error ? err.message : i18n.t("panelErrors.neverAnswered")) };
   }
   const body: unknown = await res.json().catch(() => undefined);
-  if (res.status >= 500) return { kind: "uncertain", refusal: refusalOf(`POST ${path}`, res.status, body, "the panel may not have committed this command") };
+  if (res.status >= 500) return { kind: "uncertain", refusal: refusalOf(`POST ${path}`, res.status, body, i18n.t("panelErrors.mayNotHaveCommitted")) };
   return { kind: "answered", status: res.status, body: body as CommandSuccessV1 | { error: CommandErrorV1 } };
 }
 
@@ -175,7 +176,7 @@ export function refusalFromAnswer(answer: Extract<ControlAnswer, { kind: "answer
   return {
     status: answer.status,
     code: error?.code ?? "command-result-invalid",
-    message: error?.message ?? "The panel answered without a command outcome.",
+    message: error?.message ?? i18n.t("panelErrors.noOutcome"),
     commandRevision: error?.commandRevision ?? null,
   };
 }

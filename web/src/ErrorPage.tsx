@@ -6,19 +6,22 @@
  * something answered 409. Pure, for `renderToStaticMarkup`.
  */
 import type { JSX } from "react";
+import { useTranslation } from "react-i18next";
 import type { PanelRefusal } from "./api.js";
+import { refusalText } from "./i18n.js";
 
 export function ErrorPage({ failure }: { failure: PanelRefusal }): JSX.Element {
+  const { t } = useTranslation();
   return (
     <main className="error-page" role="alert">
-      <h1>orca panel could not load</h1>
+      <h1>{t("panelErrors.title")}</h1>
       <p data-testid="error-status">
-        {failure.status === null ? "no answer from the panel" : `answered ${failure.status}`}
+        {failure.status === null ? t("panelErrors.noAnswerFromPanel") : t("panelErrors.answered", { status: failure.status })}
       </p>
       <p>
         <code data-testid="error-code">{failure.code}</code>
       </p>
-      <p data-testid="error-message">{failure.message}</p>
+      <p data-testid="error-message">{refusalText(failure)}</p>
     </main>
   );
 }
