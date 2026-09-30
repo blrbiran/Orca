@@ -13,7 +13,8 @@ export default defineConfig({
   server: { proxy: { "/api": "http://127.0.0.1:7777" } },
   test: {
     environment: "node", include: ["tests/**/*.test.ts", "tests/**/*.test.tsx"], setupFiles: ["tests/setup.ts"],
-    // The App timer-driven criteria re-render the whole panel many times and each translated string adds per-render cost; the default 5 s left agentPreviewRefresh at 4968 ms before i18n.
+    // The App timer-driven criteria re-render the whole panel many times and each translated string adds per-render cost; the default 5 s left agentPreviewRefresh at 4968 ms before i18n
+    // (`npm run check --workspace web` at 4ff8d23, the full web suite; Task 7 report, .superpowers/sdd/2026-10-01-panel-i18n/task-7-report.md).
     testTimeout: 15000,
   },
 });

@@ -7,13 +7,14 @@ import { readControlGroup } from "../../src/panel/controlViews.js";
 import { webFixture } from "./fixtures/web.js";
 
 /**
- * Loop plans spec §4.1 (D9, C7): the task view names its loop plan in plain words, built server-side from the recipe;
- * a hand-written task has no plan but still shows its contract's goal and success condition.
+ * Loop plans spec §4.1 (D9, C7), panel i18n spec §3.1: the task view carries its loop plan as the recipe's fields, from
+ * which the panel builds the words; a hand-written task has no plan but still shows its contract's goal and success
+ * condition.
  */
 const LOOP = { goal: "fix login", successCondition: "the login test passes", targetPaths: ["a"], checks: ["npm test"] };
 
 describe("a task's plan in the group view (spec §4.1)", () => {
-  it("shows the plan, how it was chosen and its summary lines for a loop task", async () => {
+  it("shows the plan, how it was chosen and the fields its lines are built from for a loop task", async () => {
     // Rewritten under human ruling H19 (2026-10-01) for loop plans v2.
     // Rewritten under human ruling H18 (2026-10-01) for panel i18n: the view carries the fields its lines are built from.
     const h = await webFixture(undefined, [{ taskId: "a", labels: ["bug", "custom:x"], loop: LOOP }]);

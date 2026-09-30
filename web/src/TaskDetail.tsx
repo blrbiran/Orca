@@ -51,6 +51,12 @@ export function progressText(progress: WorkItemProgressV1 | null | undefined): s
   return i18n.t("control.progress.line", { step, attempt, tokens });
 }
 
+/** Spec §3.5, as enumText: where the labels came from in words; a source this panel has no words for is shown as sent. */
+function labelSourceText(source: string): string {
+  const key = `control.task.labelSource.${source}`;
+  return i18n.exists(key) ? (i18n.t(key as never) as string) : source;
+}
+
 /** A label draft: the labels the person chose and the labelsVersion shown when they started choosing. */
 interface LabelsDraft { base: number; labels: string[] }
 
@@ -137,7 +143,7 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
     <section aria-label={t("control.task.region", { taskId: item.taskId })}>
       <h4>{t("control.task.region", { taskId: item.taskId })}</h4>
       <p>
-        {t("control.task.labelsFrom", { source: t(`control.task.labelSource.${item.labelsProvenance ?? "plan"}`), version: item.labelsVersion ?? 0 })}
+        {t("control.task.labelsFrom", { source: labelSourceText(item.labelsProvenance ?? "plan"), version: item.labelsVersion ?? 0 })}
         {draft !== null ? t("control.task.unsavedDraft") : ""}
       </p>
       {draft !== null && draft.base !== current && (

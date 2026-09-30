@@ -10,7 +10,8 @@ import { GROUP, command, createHarness, get, json, view } from "./fixtures/contr
 
 /**
  * Loop plans spec §5.2 over a real Panel: the one new POST route, a refusal that is ledgered and names its reason, a
- * wrong-shaped payload that never reaches the ledger, and the web mirror of the plans' names (spec §2.2).
+ * wrong-shaped payload that never reaches the ledger, and the web mirror of the plans' versions with the panel's English
+ * plan texts pinned to the registry (spec §2.2; panel i18n spec §3.1).
  */
 const h = createHarness();
 afterAll(async () => { await h.dispose(); });
