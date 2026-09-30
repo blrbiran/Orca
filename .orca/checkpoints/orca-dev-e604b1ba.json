@@ -3,51 +3,54 @@
   "runId": "orca-dev-e604b1ba",
   "runtime": "claude-code",
   "sessionRef": "e604b1ba-577a-4ce7-8f12-db0a3ee0d5b1",
-  "writtenAt": "2026-09-30T17:55:08.165Z",
-  "head": "c60559cdeb486deb61467405d077999279cb54e2",
+  "writtenAt": "2026-09-30T20:57:12.678Z",
+  "head": "bd6ccfcaba592bb6758e7302b50763083c622782",
   "level": {
     "kind": "reading",
-    "level": 341008,
+    "level": 454155,
     "windowTokens": 1000000,
     "t1": 330000,
     "t2": 450000,
-    "band": 1
+    "band": 2
   },
   "next": [
-    "On the human's naming of the six W7 criteria: resume the W7 implementer with the rewrites, v2 perAttemptTimeoutMs 2147483647 plus the Orca clamp, then commits 2 (budget-only change keeps plan version) and 3 (suggestion keeps plan-card draft)",
-    "After W7: dispatch an Opus drafter for the i18n plan (spec f4dbe5f approved, H18) and self-review it per writing-plans",
-    "After W7: C4 paid measurement, 6 real-claude verify calls, $1 cap each (H4)",
-    "Final gate in fresh clones, then update docs/handoff/handoff.md"
+    "Continue the panel-i18n plan by subagent-driven development: Task 4 dispatched (metrics codes), then Tasks 5-11, then Task 12 gate, final whole-branch review; ledger .superpowers/sdd/2026-10-01-panel-i18n/progress.md is the recovery map (Tasks 1-3 complete)",
+    "Then update docs/handoff/handoff.md in Orca, ccloop, ccmem (Orca sections in ccloop/ccmem replaced, not appended; no hard HEAD); give the human the executive summary and the rulings list"
   ],
   "open": [
-    "Ledger .superpowers/sdd/2026-10-01-loop-plans-followups/progress.md holds every ruling H1-H18 and controller Ruling lines",
-    "ccloop setTimeout overflow above 2147483647 ms for other clients: registered only",
-    "New load flake: tests/control/ccloopPort.test.ts"
+    "Past T2 by the human's instruction H20 (context size not a stop condition this session)",
+    "C4 v2 plan content change waits for the human to name tests/control/loopPlans.test.ts 'each plan's rules land in the contract (criterion 2)' rows and the loopPlanView objective line (patch scratchpad/w7/c4-impl-only.patch)",
+    "ccloop rejectOn substring match over free-text evidence: registered for ccloop",
+    "npm audit: vitest/vite dev-dependency findings registered"
   ],
   "awaitingHuman": [
     {
       "kind": "named-authorization",
-      "what": "Rewrite six 2026-09-30 criteria that pin plan v1 (loopPlans x3, loopPlanSummary, loopPlanView, loopPlanImport) for plans v2"
+      "what": "C4 v2 plan content: rewrite loopPlans criterion 2 rows (bugfix/design/investigate) and the loopPlanView successCondition line"
+    },
+    {
+      "kind": "ccloop-change",
+      "what": "rejectOn match rule: whole-entry or dedicated field instead of substring over evidence"
     },
     {
       "kind": "irreversible",
-      "what": "Push Orca (local ahead of origin) and ccloop; human-timed"
+      "what": "Push Orca and ccloop; human-timed"
     }
   ],
   "measurements": [
     {
-      "command": "/usr/bin/git -C /Users/biran/code/skills/loop/Orca ls-remote origin refs/heads/main",
-      "exitCode": 0,
-      "commit": "c60559cdeb486deb61467405d077999279cb54e2",
-      "observedAt": "2026-09-30T17:55:08.093Z",
-      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-e604b1ba-zjXfyG/1.txt"
-    },
-    {
       "command": "/usr/bin/git -C /Users/biran/code/skills/loop/Orca log --oneline 9d4a335..main",
       "exitCode": 0,
-      "commit": "c60559cdeb486deb61467405d077999279cb54e2",
-      "observedAt": "2026-09-30T17:55:08.125Z",
-      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-e604b1ba-zjXfyG/2.txt"
+      "commit": "bd6ccfcaba592bb6758e7302b50763083c622782",
+      "observedAt": "2026-09-30T20:57:08.239Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-e604b1ba-mMjh2p/1.txt"
+    },
+    {
+      "command": "/usr/bin/git -C /Users/biran/code/skills/loop/Orca ls-remote origin refs/heads/main",
+      "exitCode": 0,
+      "commit": "bd6ccfcaba592bb6758e7302b50763083c622782",
+      "observedAt": "2026-09-30T20:57:12.625Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-e604b1ba-mMjh2p/2.txt"
     }
   ]
 }
