@@ -1,6 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App.js";
+import { initI18n } from "./i18n.js";
 import "./styles.css";
 import { applyTheme, readTheme } from "./theme.js";
 
@@ -12,6 +13,7 @@ try {
 } catch {
   storage = undefined;
 }
+initI18n();
 applyTheme(document.documentElement, readTheme(storage));
 createRoot(host).render(
   <StrictMode>

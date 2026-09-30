@@ -24,6 +24,7 @@
  */
 import { useEffect, useReducer, useRef, useState } from "react";
 import type { JSX } from "react";
+import { useTranslation } from "react-i18next";
 import {
   correctionBody,
   failureFrom,
@@ -67,11 +68,12 @@ import { ControlPanel } from "./ControlPanel.js";
 import { initialControlState, reduceControlState, summaryView } from "./controlState.js";
 import type { UncertainCommand } from "./controlState.js";
 import type {
-  AgentPreferencesViewV1, AgentSelectionPreviewV1, AgentsViewV1, CommandSuccessV1, ControlConfigV1, OperatorPreferencesV1, RepositoryWorkspaceV1,
+  AgentPreferencesViewV1, AgentSelectionPreviewV1, AgentsViewV1, CommandSuccessV1, ControlConfigV1, ControlSummaryV1, OperatorPreferencesV1, RepositoryWorkspaceV1,
 } from "./controlTypes.js";
 import { DecisionDetail } from "./DecisionDetail.js";
 import type { Decision } from "./DecisionDetail.js";
 import { ErrorPage } from "./ErrorPage.js";
+import i18n, { currentLanguage, writeLanguage } from "./i18n.js";
 import { DecisionsView, NO_FILTER } from "./DecisionsView.js";
 import type { DecisionFilter } from "./DecisionsView.js";
 import { MetricsView } from "./MetricsView.js";
@@ -121,6 +123,12 @@ const retryNotice = (retry: RetryState): string | null => {
 };
 const pageHidden = (): boolean => typeof document !== "undefined" && document.visibilityState === "hidden";
 
+/** The sidebar footer's lines (panel i18n spec §3.3); exported for the pseudo-locale criterion. */
+export function footerLines(summary: ControlSummaryV1 | null): string[] {
+  if (summary === null) return [];
+  return [i18n.t("shell.epoch", { epoch: summary.epoch }), i18n.t(summary.dispatchBlocked ? "common.dispatchBlocked" : "common.dispatchLive")];
+}
+
 interface HomeState {
   todo: DecisionListRow[];
   report: MetricsReport;
@@ -130,6 +138,7 @@ interface HomeState {
 type Outcome = { kind: "recorded"; text: string } | { kind: "refused"; refusal: PanelRefusal };
 
 export function App(): JSX.Element {
+  const { t } = useTranslation();
   const [home, setHome] = useState<HomeState | null>(null);
   const [error, setError] = useState<PanelRefusal | null>(null);
   const [selected, setSelected] = useState<DecisionListRow | null>(null);
@@ -562,7 +571,7 @@ export function App(): JSX.Element {
   };
 
   if (error !== null) return <ErrorPage failure={error} />;
-  if (home === null) return <main>orca panel loading…</main>;
+  if (home === null) return <main>{t("shell.loading")}</main>;
 
   const dismiss = (chainId: string): void => {
     const next = new Set(dismissed);
@@ -617,8 +626,13 @@ export function App(): JSX.Element {
               },
         ),
       }}
-      footer={summary === null ? [] : [`epoch ${summary.epoch}`, summary.dispatchBlocked ? "dispatch blocked" : "dispatch live"]}
+      footer={footerLines(summary)}
       theme={theme}
+      language={currentLanguage()}
+      onLanguage={(lang) => {
+        writeLanguage(browserStorage(), lang);
+        void i18n.changeLanguage(lang);
+      }}
       onTheme={(pref) => {
         setTheme(pref);
         writeTheme(browserStorage(), pref);

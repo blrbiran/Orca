@@ -9,8 +9,11 @@
     "check": "tsc --noEmit -p tsconfig.json && vitest run"
   },
   "dependencies": {
+    "i18next": "^26.4.2",
+    "i18next-browser-languagedetector": "^8.2.1",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "react-i18next": "^17.0.15"
   },
   "devDependencies": {
     "@testing-library/react": "^16.3.3",
