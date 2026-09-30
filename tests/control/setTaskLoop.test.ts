@@ -195,6 +195,24 @@ describe("a change before confirmation (criterion 9; spec §5.2 steps 5-7)", () 
       expect(readControlGroup(h.store, "epoch", "g").workItems[0]!.loopPlan).toMatchObject({ amended: false, loopVersion: 1 });
     } finally { await h.dispose(); }
   });
+
+  // H12 (human, 2026-10-01): "改过就显示 changed" -- a task whose plan was changed keeps showing "changed", even once a
+  // later change puts back exactly the imported contract; and a budget-only change after that does not clear it.
+  it("keeps showing a changed plan as changed after a change back to the imported contract", async () => {
+    const h = await draft();
+    try {
+      const service = new WebControlService(h.deps);
+      const imported = readControlGroup(h.store, "epoch", "g").workItems[0]!.originalContractHash;
+      expect(service.setTaskLoop(change(h, "a", CHANGED))).toMatchObject({ result: { kind: "task-loop-set", loopVersion: 1 } });
+      expect(service.setTaskLoop(change(h, "a", { base: 1 }))).toMatchObject({ result: { kind: "task-loop-set", loopVersion: 2 } });
+      // The change back is real: the task's contract is the imported one again, byte for byte (same hash).
+      const back = readControlGroup(h.store, "epoch", "g").workItems[0]!;
+      expect(back.originalContractHash).toBe(imported);
+      expect(back.loopPlan).toMatchObject({ amended: true, loopVersion: 2 });
+      expect(service.setTaskLoop(change(h, "a", { base: 2, tokens: workAllocation(h, "a").amount.tokens - 1_000_000 }))).toMatchObject({ result: { kind: "task-loop-set", loopVersion: 3 } });
+      expect(readControlGroup(h.store, "epoch", "g").workItems[0]!.loopPlan).toMatchObject({ amended: true, loopVersion: 3 });
+    } finally { await h.dispose(); }
+  });
 });
 
 describe("the self-check (spec §5.2 step 8)", () => {

@@ -650,6 +650,10 @@ export class WebControlService {
         writeCanonicalRecord(this.store, id, expanded.hash, expanded.canonicalJson);
         // Drafter finding F10: the projection compares both contract hashes; the claim copies derivedContractHash and grant.
         Object.assign(work, { amendmentHash, loopVersion: loopVersion + 1, originalContractHash: expanded.hash, contract: { contentAddressedHash: expanded.hash } });
+        // H12 (human, 2026-10-01): once a change writes a contract other than the task's previous one, the card keeps
+        // saying "changed", even after a later change back to the imported contract. Never cleared; a budget-only change
+        // (same contract bytes) does not set it.
+        if (expanded.canonicalJson !== current.originalContractCanonicalJson) work.planChanged = true;
         // Step 6.
         for (const d of dimensions) if (next[d] !== before[d]) allocation.fieldProvenance[d] = { provenance: "human", estimateId: null };
         for (const { dimension, estimateId } of modelDimensions) allocation.fieldProvenance[dimension] = { provenance: "model", estimateId };

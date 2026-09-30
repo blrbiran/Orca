@@ -83,6 +83,8 @@ const workBodySchema = z.object({
   // Loop plans spec §5.1: a loop task's amendment and version; absent until its first set-task-loop.
   amendmentHash: hashSchema.nullable().optional(),
   loopVersion: safeInteger.optional(),
+  // H12: set by the first set-task-loop that changed the task's contract, never cleared (webService.ts setTaskLoop).
+  planChanged: z.literal(true).optional(),
 }).passthrough();
 
 const stopBodySchema = z.object({
@@ -480,7 +482,7 @@ function currentProgress(runs: ReadonlyArray<Record<string, unknown>>, currentRu
  */
 function taskPlanView(
   task: ReturnType<typeof readArchivedPlan>["plan"]["tasks"][number],
-  body: { loopVersion?: number },
+  body: { loopVersion?: number; planChanged?: true },
   importedContractHash: string | undefined,
 ): { loopPlan: WorkItemViewV1["loopPlan"]; objective: WorkItemViewV1["objective"] } {
   const contract = parseStored(taskContractSchema, task.originalContractCanonicalJson, `original-contract-invalid:${task.taskId}`);
@@ -494,8 +496,9 @@ function taskPlanView(
     loopPlan: {
       planId: task.loop.planId, planVersion: task.loop.planVersion, planName: described.planName, chosenBy: task.loop.chosenBy,
       chosenByLabel: task.loop.chosenBy === "labels" ? choosePlanByLabels(task.labels ?? []).label : null,
-      // "Changed" means the contract is not the imported one: a budget-only change writes an amendment with the same bytes.
-      amended: task.originalContractHash !== importedContractHash, loopVersion: body.loopVersion ?? 0,
+      // "Changed" means the contract was changed at some point (H12: it stays so after a change back to the imported one),
+      // or is not the imported one (an amendment written without the flag). A budget-only change writes the same bytes.
+      amended: body.planChanged === true || task.originalContractHash !== importedContractHash, loopVersion: body.loopVersion ?? 0,
       inputs: task.loop.inputs, summary: described.summary,
     },
   };
