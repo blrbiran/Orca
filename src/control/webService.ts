@@ -623,10 +623,11 @@ export class WebControlService {
         const repoPath = taskContractSchema.parse(JSON.parse(current.originalContractCanonicalJson)).context.repoPath;
         // W7 ruling: the task's own plan with its own inputs keeps the recipe's plan version, so a budget-only change (or an
         // estimate's suggestion) never silently re-expands an older version's task at the current one; a change of plan
-        // or inputs expands at the current version.
+        // or inputs expands at the current version. The kept recipe keeps its chosenBy too (final review C1): the plan is
+        // still the one the labels chose, and rewriting it would change the effective plan and make every estimate stale.
         const kept = current.loop !== undefined && current.loop.planId === payload.plan
           && canonicalBytes(current.loop.inputs).equals(canonicalBytes(payload.inputs));
-        const expanded: LoopTaskExpansion = kept ? keptExpansion(taskId, repoPath, { ...current.loop!, chosenBy: "explicit", inputs: structuredClone(payload.inputs) })
+        const expanded: LoopTaskExpansion = kept ? keptExpansion(taskId, repoPath, { ...current.loop!, inputs: structuredClone(payload.inputs) })
           : expandLoopPlan(taskId, repoPath, payload.plan, payload.inputs);
         if (!expanded.ok) throw new ControlError("loop-plan-invalid", expanded.reason);
         const allocation = proposal.allocations.find(a => a.ownerKind === "task" && a.ownerId === taskId && a.bucket === "work");
