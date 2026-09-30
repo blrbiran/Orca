@@ -20,10 +20,11 @@ const config: ControlConfigV1 = {
   profiles: [{ profileId: "all", profileHash: "b".repeat(64), allowedWorkKinds: ["task", "budget-estimate", "handoff", "goal-review"], contextTokenizer: null, workMaxOutputTokens: 1000, declared: capability, observed: capability, observedAt: "2026-10-01T00:00:00.000Z", probeFailureCode: null }],
   defaults: { estimatorProfileId: "all", estimatorProfileHash: "b".repeat(64), estimateMode: "soft" }, executionPort: "configured", errorCatalog: [],
 };
+// Rewritten under human ruling H18 (2026-10-01) for panel i18n.
 const LOOP_PLAN: LoopPlanViewV1 = {
-  planId: "bugfix", planVersion: 1, planName: "Bug fix (red first)", chosenBy: "labels", chosenByLabel: "bug", amended: false, loopVersion: 2,
+  planId: "bugfix", planVersion: 1, chosenBy: "labels", chosenByLabel: "bug", amended: false, loopVersion: 2,
   inputs: { goal: "fix login", successCondition: "the login test passes", targetPaths: ["src/auth/**"], checks: ["npm test -- --run auth"], nonGoals: [], relevantDocs: [], protectedPaths: [], maxFilesTouched: null },
-  summary: ["Goal: fix login"],
+  maxFiles: 25, hasDiscipline: true,
 };
 // Task a (loop) and task c (plain) are both suggested 4000 work tokens / 40000 ms; attempts and sessions already match.
 const estimate = (stale = false): EstimateViewV1 => ({

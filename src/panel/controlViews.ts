@@ -9,7 +9,7 @@ import { driveRecordSchema } from "../control/driveRecord.js";
 import { ControlError } from "../control/errors.js";
 import { readProjectionChanges, readProjectionState } from "../control/projectionJournal.js";
 import { effectiveTaskLabels, readTaskLabelState } from "../control/labels.js";
-import { choosePlanByLabels, describeLoopPlan } from "../control/loopPlans.js";
+import { choosePlanByLabels, loopPlanDefinition } from "../control/loopPlans.js";
 import { recipeExpandsTo } from "../control/loopRecipeCheck.js";
 import { estimateIsStale, readArchivedPlan, readBudgetProposal, readEstimateRecord } from "../control/queries.js";
 import { readCanonicalRecord } from "../control/snapshot.js";
@@ -475,10 +475,10 @@ function currentProgress(runs: ReadonlyArray<Record<string, unknown>>, currentRu
 }
 
 /**
- * Loop plans spec §3.3, §4.1 (C7): the task's plan as its card shows it. The recipe must re-expand to the contract bytes
- * the task carries (repoPath excepted: it is the stored contract's own, Drafter finding F9). A registry that no longer
- * does -- a plan's text edited instead of versioned, spec §2.2 -- blocks the task by name rather than showing a plan
- * that is not the one that runs.
+ * Loop plans spec §3.3, §4.1; panel i18n spec §3.1: the fields the task's card is built from. The recipe must re-expand
+ * to the contract bytes the task carries (repoPath excepted: it is the stored contract's own, Drafter finding F9). A
+ * registry that no longer does -- a plan's text edited instead of versioned, spec §2.2 -- blocks the task by name rather
+ * than showing a plan that is not the one that runs.
  */
 function taskPlanView(
   task: ReturnType<typeof readArchivedPlan>["plan"]["tasks"][number],
@@ -489,17 +489,18 @@ function taskPlanView(
   const objective = { goal: contract.objective.goal, successCondition: contract.objective.successCondition };
   if (task.loop === undefined) return { loopPlan: null, objective };
   if (!recipeExpandsTo(task.taskId, contract.context.repoPath, task.loop, task.originalContractCanonicalJson)) return blocked(`loop-plan-recipe-mismatch:${task.taskId}`);
-  // The recipe re-expanded, so its plan version exists and describeLoopPlan cannot answer null here.
-  const described = describeLoopPlan(task.loop)!;
+  // The recipe re-expanded, so its plan version exists. Panel i18n spec §3.1: the contract's own file cap, and whether the
+  // version has a discipline line; the words are the panel's.
+  const plan = loopPlanDefinition(task.loop.planId, task.loop.planVersion)!;
   return {
     objective,
     loopPlan: {
-      planId: task.loop.planId, planVersion: task.loop.planVersion, planName: described.planName, chosenBy: task.loop.chosenBy,
+      planId: task.loop.planId, planVersion: task.loop.planVersion, chosenBy: task.loop.chosenBy,
       chosenByLabel: task.loop.chosenBy === "labels" ? choosePlanByLabels(task.labels ?? []).label : null,
       // "Changed" means the contract was changed at some point (H12: it stays so after a change back to the imported one),
       // or is not the imported one (an amendment written without the flag). A budget-only change writes the same bytes.
       amended: body.planChanged === true || task.originalContractHash !== importedContractHash, loopVersion: body.loopVersion ?? 0,
-      inputs: task.loop.inputs, summary: described.summary,
+      inputs: task.loop.inputs, maxFiles: contract.safetyPolicy.maxFilesTouched, hasDiscipline: plan.discipline !== null,
     },
   };
 }

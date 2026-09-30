@@ -18,6 +18,7 @@ import type {
 } from "./controlTypes.js";
 import type { UncertainCommand } from "./controlState.js";
 import { LabelChips, TaskDetail, progressText } from "./TaskDetail.js";
+import { planText } from "./LoopPlanCard.js";
 
 const short = (hash: string): string => hash.slice(0, 12);
 
@@ -129,7 +130,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
                 </button>
               </td>
               <td>{item.status}</td>
-              <td><LabelChips labels={item.labels} />{item.loopPlan ? <span className="plan-chip"> {item.loopPlan.planName}</span> : null}</td>
+              <td><LabelChips labels={item.labels} />{item.loopPlan ? <span className="plan-chip"> {planText(item.loopPlan.planId, item.loopPlan.planVersion, "name")}</span> : null}</td>
               <td>{progressText(item.progress)}</td>
               <td>{item.currentRunId ?? "none"}</td>
               <td>{item.pendingRunId ?? "none"}</td>

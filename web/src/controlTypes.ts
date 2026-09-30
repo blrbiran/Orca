@@ -342,10 +342,10 @@ export type SetTaskLabelsPayloadV1 = { labels: string[] | null; baseLabelsVersio
 export type LoopPlanIdV1 = "standard" | "bugfix" | "refactor" | "design" | "investigate";
 /** Loop plans spec §3.2: a recipe's inputs, every optional field filled. */
 export type LoopInputsV1 = { goal: string; successCondition: string; targetPaths: string[]; checks: string[]; nonGoals: string[]; relevantDocs: string[]; protectedPaths: string[]; maxFilesTouched: number | null };
-/** Loop plans spec §4.1: the server-built description of a loop task's plan. */
+/** Loop plans spec §4.1, panel i18n spec §3.1: the fields a loop task's card is built from; no English sentence travels. */
 export type LoopPlanViewV1 = {
-  planId: LoopPlanIdV1; planVersion: number; planName: string; chosenBy: "explicit" | "labels"; chosenByLabel: string | null;
-  amended: boolean; loopVersion: number; inputs: LoopInputsV1; summary: string[];
+  planId: LoopPlanIdV1; planVersion: number; chosenBy: "explicit" | "labels"; chosenByLabel: string | null;
+  amended: boolean; loopVersion: number; inputs: LoopInputsV1; maxFiles: number; hasDiscipline: boolean;
 };
 /** Loop plans spec §5.2: change a loop task's plan, inputs and work budget (sessions is carried over). */
 export type SetTaskLoopPayloadV1 = {
@@ -353,11 +353,14 @@ export type SetTaskLoopPayloadV1 = {
   /** W5: the work dimensions taken from an estimate's suggestion; the server re-checks each against it. */
   workProvenance?: Partial<Record<"tokens" | "activeMs" | "attempts", { provenance: "model"; estimateId: string }>>;
 };
-/** Loop plans spec §2.2: the plans a person can pick and their panel names -- a mirror of src/control/loopPlans.ts, compared by tests/panel/taskLoopApi.test.ts. */
-export const WEB_LOOP_PLANS: ReadonlyArray<{ planId: LoopPlanIdV1; name: string }> = [
-  { planId: "standard", name: "Standard" },
-  { planId: "bugfix", name: "Bug fix (red first)" },
-  { planId: "refactor", name: "Safe refactor" },
-  { planId: "design", name: "Design / docs first" },
-  { planId: "investigate", name: "Investigate only" },
+/**
+ * Loop plans spec §2.2, panel i18n spec §3.1: the plans a person can pick, at their current registry version (the
+ * picker's words are keyed by version) -- a mirror of src/control/loopPlans.ts, compared by tests/panel/taskLoopApi.test.ts.
+ */
+export const WEB_LOOP_PLANS: ReadonlyArray<{ planId: LoopPlanIdV1; version: number }> = [
+  { planId: "standard", version: 2 },
+  { planId: "bugfix", version: 2 },
+  { planId: "refactor", version: 2 },
+  { planId: "design", version: 2 },
+  { planId: "investigate", version: 2 },
 ];

@@ -19,14 +19,14 @@ export const LOOP_RECIPE_SCHEMA = "orca-loop-recipe-v1" as const;
 export interface LoopPlanDefinition {
   planId: LoopPlanId;
   version: number;
-  /** The panel's plain-language name (spec §2.2, D9). */
+  /** The plan's name in English, the source of record the panel's English resource must equal (panel i18n spec §6.9). */
   name: string;
   /** Soft constraints, into context.constraints: they reach the planner and executor, never the verifier (spec §2.1). */
   constraints: readonly string[];
   verifierType: "command" | "agent";
   /** A case-sensitive substring over every evidence string (spec §2.2, C4); a dead placeholder for a command verifier. */
   rejectOn: string;
-  /** The one discipline line the panel shows, with its strength (spec §4.1); null when the plan has none. */
+  /** The discipline line in English with its strength (spec §4.1), the panel's source of record (panel i18n spec §6.9); null when the plan has none. */
   discipline: string | null;
   /** Spec §2.3: the file cap when the inputs name none (investigate is always 1). */
   defaultMaxFilesTouched: number;
@@ -165,7 +165,7 @@ function pathShapeOk(entry: string): boolean {
   return exactPath(entry);
 }
 
-/** Spec §2.3: the version's default unless the input says otherwise; investigate always 1. Shared with the summary so it never disagrees. */
+/** Spec §2.3: the version's default unless the input says otherwise; investigate always 1. */
 function maxFilesOf(plan: LoopPlanDefinition, inputs: LoopInputs): number {
   return plan.planId === "investigate" ? 1 : inputs.maxFilesTouched ?? plan.defaultMaxFilesTouched;
 }
@@ -239,32 +239,4 @@ export function choosePlanByLabels(labels: readonly string[]): { planId: LoopPla
     if (hit !== undefined) return { planId: row.planId, label: hit };
   }
   return { planId: "standard", label: null };
-}
-
-/** `1 file`, `2 files` (ruling P1: the panel says the singular for 1). */
-function countOf(n: number, noun: string): string {
-  return `${n} ${noun}${n === 1 ? "" : "s"}`;
-}
-
-/**
- * Spec §4.1 (D9, C7): the card's lines for one recipe, built server-side. Each line states how hard it is (spec §2.1):
- * the write set is git-checked; protected paths and the file cap are only what the agent reports; the discipline line
- * says who checks it. The check commands' text is never in a line -- the card shows it collapsed.
- */
-export function describeLoopPlan(recipe: Pick<LoopRecipe, "planId" | "planVersion" | "inputs">): { planName: string; summary: string[] } | null {
-  const plan = loopPlanDefinition(recipe.planId, recipe.planVersion);
-  if (plan === null) return null;
-  const { inputs } = recipe;
-  return {
-    planName: plan.name,
-    summary: [
-      `Goal: ${inputs.goal}`,
-      `Done when: ${inputs.successCondition}`,
-      `Only changes: ${inputs.targetPaths.join(", ")}`,
-      ...(inputs.protectedPaths.length > 0 ? [`Must not change: ${inputs.protectedPaths.join(", ")} (reported by the agent, not checked in git)`] : []),
-      maxFilesOf(plan, inputs) === Number.MAX_SAFE_INTEGER ? "No file limit" : `At most ${countOf(maxFilesOf(plan, inputs), "file")} changed (reported by the agent)`,
-      `Acceptance: ${countOf(inputs.checks.length, "check command")}, all must pass`,
-      ...(plan.discipline === null ? [] : [plan.discipline]),
-    ],
-  };
 }

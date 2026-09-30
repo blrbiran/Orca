@@ -57,7 +57,8 @@ describe("the effective contract (spec §5.1)", () => {
       expect(readArchivedContract(h.store, "g", "a").contract.objective.goal).toBe("write a, as amended");
       const item = readControlGroup(h.store, "epoch", "g").workItems.find((entry) => entry.taskId === "a")!;
       expect(item.loopPlan).toMatchObject({ amended: true, loopVersion: 1, chosenBy: "explicit" });
-      expect(item.loopPlan!.summary[0]).toBe("Goal: write a, as amended");
+      // Rewritten under human ruling H18 (2026-10-01) for panel i18n.
+      expect(item.loopPlan!.inputs.goal).toBe("write a, as amended");
       expect(item.objective).toEqual({ goal: "write a, as amended", successCondition: "a exists" });
       const archivedAfter = readArchivedPlan(h.store, "g");
       expect([archivedAfter.planHash, archivedAfter.canonicalJson]).toEqual([archivedBefore.planHash, archivedBefore.canonicalJson]);

@@ -950,19 +950,21 @@ export const workItemProgressSchema = z
   })
   .strict();
 
-// Loop plans spec §4.1 (D9, C7): a loop task's plan in plain words, built server-side from its effective recipe.
-// chosenByLabel is the plan file's label that chose it (spec §2.4); loopVersion is what set-task-loop must name.
+// Loop plans spec §4.1, panel i18n spec §3.1: a loop task's plan as the fields the panel builds its words from -- the
+// effective recipe, the expanded contract's file cap and whether the plan version has a discipline line; no English
+// sentence travels. chosenByLabel is the plan file's label that chose it (spec §2.4); loopVersion is what set-task-loop
+// must name.
 export const loopPlanViewSchema = z
   .object({
     planId: z.enum(LOOP_PLAN_IDS),
     planVersion: positiveSafeInteger,
-    planName: nonemptyString,
     chosenBy: z.enum(["explicit", "labels"]),
     chosenByLabel: nonemptyString.nullable(),
     amended: z.boolean(),
     loopVersion: safeInteger,
     inputs: loopInputsSchema,
-    summary: z.array(nonemptyString).min(1),
+    maxFiles: positiveSafeInteger,
+    hasDiscipline: z.boolean(),
   })
   .strict();
 

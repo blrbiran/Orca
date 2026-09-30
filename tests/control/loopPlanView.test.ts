@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { describeLoopPlan, expandLoopPlan } from "../../src/control/loopPlans.js";
+import { expandLoopPlan } from "../../src/control/loopPlans.js";
 import { readArchivedPlan } from "../../src/control/queries.js";
 import { writeCanonicalRecord } from "../../src/control/snapshot.js";
 import { writeTaskAmendment } from "../../src/control/taskAmendments.js";
@@ -15,13 +15,14 @@ const LOOP = { goal: "fix login", successCondition: "the login test passes", tar
 describe("a task's plan in the group view (spec §4.1)", () => {
   it("shows the plan, how it was chosen and its summary lines for a loop task", async () => {
     // Rewritten under human ruling H19 (2026-10-01) for loop plans v2.
+    // Rewritten under human ruling H18 (2026-10-01) for panel i18n: the view carries the fields its lines are built from.
     const h = await webFixture(undefined, [{ taskId: "a", labels: ["bug", "custom:x"], loop: LOOP }]);
     try {
       const recipe = readArchivedPlan(h.store, "g").plan.tasks[0]!.loop!;
       const item = readControlGroup(h.store, "epoch", "g").workItems[0]!;
       expect(item.loopPlan).toEqual({
-        planId: "bugfix", planVersion: 2, planName: "Bug fix (red first)", chosenBy: "labels", chosenByLabel: "bug",
-        amended: false, loopVersion: 0, inputs: recipe.inputs, summary: describeLoopPlan(recipe)!.summary,
+        planId: "bugfix", planVersion: 2, chosenBy: "labels", chosenByLabel: "bug",
+        amended: false, loopVersion: 0, inputs: recipe.inputs, maxFiles: Number.MAX_SAFE_INTEGER, hasDiscipline: true,
       });
       expect(item.objective).toEqual({ goal: "fix login", successCondition: "the login test passes" });
     } finally { await h.dispose(); }

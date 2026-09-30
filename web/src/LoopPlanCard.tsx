@@ -4,19 +4,55 @@
  * together with the loopVersion it started from, and sends that version, never the one the latest poll read, so a draft
  * begun before someone else's change is refused as task-loop-version-conflict instead of overwriting it (the label
  * editor's pattern, TaskDetail.tsx). The submit states its consequence for the group's reserve; that arithmetic is
- * display only -- the ledger decides and refuses by name. Strings are the panel's English (plan ruling R-F5, rulings P1).
+ * display only -- the ledger decides and refuses by name. The plan's words come from the panel's resources, keyed by
+ * plan version (panel i18n spec §3.1).
  */
 import type { JSX } from "react";
+import { useTranslation } from "react-i18next";
 import type { ControlAction } from "./controlApi.js";
+import i18n from "./i18n.js";
 import { WEB_LOOP_PLANS } from "./controlTypes.js";
 import type { Amount, GroupViewV1, LoopPlanIdV1, LoopPlanViewV1, SetTaskLoopPayloadV1, WorkItemViewV1 } from "./controlTypes.js";
 
 export const loopDraftKey = (groupId: string, taskId: string): string => `loop:${groupId}:${taskId}`;
 
-/** "Bug fix (red first) · v1 · chosen by label `bug` · changed" (spec §4.1, plan ruling R-F5). */
+/**
+ * Panel i18n spec §3.1: a plan version's name or discipline line from the panel's resources (the registry is the English
+ * source of record, §6.9). A version this panel has no words for (a newer server) shows the plan id, never nothing.
+ */
+export function planText(planId: LoopPlanIdV1, version: number, part: "name" | "discipline"): string {
+  const key = `loopPlan.plan.${planId}.v${version}.${part}`;
+  if (i18n.exists(key)) return i18n.t(key as never) as string;
+  return part === "name" ? planId : `${planId} v${version}`;
+}
+
+/** "Bug fix (red first) · v1 · chosen by label `bug` · changed" (loop plans spec §4.1). */
 export function loopPlanTitle(plan: LoopPlanViewV1): string {
-  const how = plan.chosenBy === "explicit" ? "chosen by hand" : plan.chosenByLabel === null ? "no label, default" : `chosen by label \`${plan.chosenByLabel}\``;
-  return `${plan.planName} · v${plan.planVersion} · ${how}${plan.amended ? " · changed" : ""}`;
+  const how = plan.chosenBy === "explicit"
+    ? i18n.t("loopPlan.title.byHand")
+    : plan.chosenByLabel === null ? i18n.t("loopPlan.title.noLabel") : i18n.t("loopPlan.title.byLabel", { label: plan.chosenByLabel });
+  const line = i18n.t("loopPlan.title.line", { name: planText(plan.planId, plan.planVersion, "name"), version: plan.planVersion, how });
+  return plan.amended ? `${line}${i18n.t("loopPlan.title.changed")}` : line;
+}
+
+/**
+ * Loop plans spec §4.1, panel i18n spec §3.1: the card's lines, each stating how hard it is (spec §2.1): the write set is
+ * git-checked; protected paths and the file cap are only what the agent reports; the discipline line says who checks it.
+ * The check commands' text is never in a line -- the card shows it collapsed. In English these are exactly the lines the
+ * server's describeLoopPlan used to send (§6.3).
+ */
+export function loopSummaryLines(plan: LoopPlanViewV1): string[] {
+  const inputs = plan.inputs;
+  const separator = i18n.t("loopPlan.summary.pathSeparator");
+  return [
+    i18n.t("loopPlan.summary.goal", { goal: inputs.goal }),
+    i18n.t("loopPlan.summary.doneWhen", { condition: inputs.successCondition }),
+    i18n.t("loopPlan.summary.onlyChanges", { paths: inputs.targetPaths.join(separator) }),
+    ...(inputs.protectedPaths.length > 0 ? [i18n.t("loopPlan.summary.mustNotChange", { paths: inputs.protectedPaths.join(separator) })] : []),
+    plan.maxFiles === Number.MAX_SAFE_INTEGER ? i18n.t("loopPlan.summary.noFileLimit") : i18n.t("loopPlan.summary.files", { count: plan.maxFiles }),
+    i18n.t("loopPlan.summary.checks", { count: inputs.checks.length }),
+    ...(plan.hasDiscipline ? [planText(plan.planId, plan.planVersion, "discipline")] : []),
+  ];
 }
 
 const FIELDS = ["goal", "successCondition", "targetPaths", "checks", "nonGoals", "relevantDocs", "protectedPaths", "maxFilesTouched", "tokens", "activeMs", "attempts"] as const;
@@ -128,7 +164,7 @@ function LoopPlanEditor(props: LoopPlanCardProps & { plan: LoopPlanViewV1; curre
       <label>
         Plan
         <select aria-label="Plan" value={draft.plan} onChange={(event) => set({ plan: event.target.value as LoopPlanIdV1 })}>
-          {WEB_LOOP_PLANS.map((option) => <option key={option.planId} value={option.planId}>{option.name}</option>)}
+          {WEB_LOOP_PLANS.map((option) => <option key={option.planId} value={option.planId}>{planText(option.planId, option.version, "name")}</option>)}
         </select>
       </label>
       {FIELDS.map((field) => (
@@ -147,6 +183,7 @@ function LoopPlanEditor(props: LoopPlanCardProps & { plan: LoopPlanViewV1; curre
 }
 
 export function LoopPlanCard(props: LoopPlanCardProps): JSX.Element | null {
+  useTranslation();
   const { view, item } = props;
   // A view that says nothing about the plan (an older server, a literal fixture) gets no card rather than a wrong one.
   if (item.loopPlan === undefined) return null;
@@ -169,7 +206,7 @@ export function LoopPlanCard(props: LoopPlanCardProps): JSX.Element | null {
     <section aria-label={`Plan ${item.taskId}`}>
       <h5>{loopPlanTitle(plan)}</h5>
       <ul aria-label={`Plan summary ${item.taskId}`}>
-        {plan.summary.map((line, index) => <li key={index}>{line}</li>)}
+        {loopSummaryLines(plan).map((line, index) => <li key={index}>{line}</li>)}
       </ul>
       <details>
         <summary>Check commands ({plan.inputs.checks.length})</summary>

@@ -4,6 +4,8 @@ import { afterAll, describe, expect, it } from "vitest";
 import { LOOP_PLAN_IDS, currentLoopPlanVersion, loopPlanDefinition } from "../../src/control/loopPlans.js";
 import { commandLookupSchema, commandSuccessSchema } from "../../src/control/webProtocol.js";
 import { WEB_LOOP_PLANS } from "../../web/src/controlTypes.js";
+import { en } from "../../web/src/locales/en.js";
+import { zh } from "../../web/src/locales/zh.js";
 import { GROUP, command, createHarness, get, json, view } from "./fixtures/controlPanel.js";
 
 /**
@@ -72,8 +74,24 @@ describe("the set-task-loop route (spec §5.2)", () => {
     await panel.close();
   });
 
-  it("mirrors every plan's current panel name on the web side", () => {
-    expect(WEB_LOOP_PLANS.map((plan) => [plan.planId, plan.name]))
-      .toEqual(LOOP_PLAN_IDS.map((planId) => [planId, loopPlanDefinition(planId, currentLoopPlanVersion(planId)!)!.name]));
+  it("mirrors every plan's current version on the web side, and the panel's English carries each version's registry text", () => {
+    // Rewritten under human ruling H18 (2026-10-01) for panel i18n: the view no longer carries a name (spec §3.1); the web
+    // side keeps each plan's current version, the English resource is pinned to the registry, the English source of
+    // record, and Chinese has the same keys (spec §6.9).
+    expect(WEB_LOOP_PLANS.map((plan) => [plan.planId, plan.version])).toEqual(LOOP_PLAN_IDS.map((planId) => [planId, currentLoopPlanVersion(planId)]));
+    type PlanTexts = Record<string, Record<string, Record<string, string>>>;
+    const enPlans = en.loopPlan.plan as unknown as PlanTexts;
+    const zhPlans = zh.loopPlan.plan as unknown as PlanTexts;
+    let versions = 0;
+    for (const planId of LOOP_PLAN_IDS) {
+      for (let version = 1; version <= currentLoopPlanVersion(planId)!; version += 1) {
+        const plan = loopPlanDefinition(planId, version)!;
+        const expected = plan.discipline === null ? { name: plan.name } : { name: plan.name, discipline: plan.discipline };
+        expect(enPlans[planId]?.[`v${version}`], `${planId} v${version}`).toEqual(expected);
+        expect(Object.keys(zhPlans[planId]?.[`v${version}`] ?? {}).sort(), `${planId} v${version}`).toEqual(Object.keys(expected).sort());
+        versions += 1;
+      }
+    }
+    expect(Object.values(enPlans).reduce((n, byVersion) => n + Object.keys(byVersion).length, 0)).toBe(versions);
   });
 });
