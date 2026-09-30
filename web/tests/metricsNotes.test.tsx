@@ -23,7 +23,8 @@ const report: MetricsReport = {
   repair_rate: {
     numerator_overturned: 0, denominator_corrections_including_stale: 0, rate: null,
     stale_only: { numerator_overturned: 0, denominator_corrections: 0, rate: null, known_bias: "the server's bias sentence", knownBiasCode: "stale-bias" },
-    buckets: [], caveats: ["the server's repair sentence, no code"],
+    // One caveat with a known code and one past the end of caveatCodes (no code), so the repair index is exercised.
+    buckets: [], caveats: ["the server's repair sentence beside the known code", "the server's repair sentence, no code"], caveatCodes: ["no-review-coverage"],
   },
   backlog: { open_corrections: 0, oldest_age_ms: null, oldest_correction_id: null, by_correction_kind: [] },
   breakdown_by_correction_kind_including_stale: [],
@@ -56,6 +57,12 @@ describe("metrics notes in the reader's language (spec §6.10)", () => {
     expect(view.getByTestId("unresolved-count").textContent).toBe("未解析的决策：0");
     expect(view.getByTestId("malformed-count").textContent).toBe("格式错误的行：0");
     expect(view.getByTestId("excluded-as-future").textContent).toBe("因日期在未来而排除：0");
+    // Each note site read where it is shown: the zh no-review-coverage note is also the correction caveat's, so a
+    // toContain on the whole text could not see the review-coverage reason or a repair caveat left as sent.
+    expect(view.getByTestId("review-coverage-reason").textContent).toBe(zh.metrics.note["no-review-coverage"]);
+    expect([...view.getByTestId("repair-rate-caveats").querySelectorAll("li")].map((li) => li.textContent)).toEqual([
+      zh.metrics.note["no-review-coverage"], "the server's repair sentence, no code",
+    ]);
   });
 
   it("shows a known code's English note in English, and the server's sentence for an unknown code", () => {
