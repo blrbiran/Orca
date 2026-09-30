@@ -55,13 +55,22 @@ describe("the loop plan summary (criterion 7)", () => {
     expect(lines("refactor", { maxFilesTouched: 7 })).toContain("At most 7 files changed (reported by the agent)");
   });
 
+  it("says a v2 task with no file cap has no file limit, and names the cap its inputs set (human ruling H2)", () => {
+    const v2 = (planId: LoopPlanId, over: Partial<LoopInputs> = {}) => describeLoopPlan({ planId, planVersion: 2, inputs: inputs(over) })!.summary;
+    expect(v2("standard")).toContain("No file limit");
+    expect(v2("standard").some((line) => line.startsWith("At most"))).toBe(false);
+    expect(v2("standard", { maxFilesTouched: 7 })).toContain("At most 7 files changed (reported by the agent)");
+    expect(v2("investigate", { targetPaths: ["docs/report.md"] })).toContain("At most 1 file changed (reported by the agent)");
+  });
+
   it("says 1 check command in the singular (ruling P1)", () => {
     expect(lines("standard", { checks: ["npm run lint"] })).toContain("Acceptance: 1 check command, all must pass");
   });
 
   it("names each plan in plain words, and knows no plan version it does not have", () => {
+    // Rewritten under human ruling H19 (2026-10-01) for loop plans v2.
     expect(LOOP_PLAN_IDS.map((planId) => describeLoopPlan({ planId, planVersion: 1, inputs: inputs() })!.planName))
       .toEqual(["Standard", "Bug fix (red first)", "Safe refactor", "Design / docs first", "Investigate only"]);
-    expect(describeLoopPlan({ planId: "standard", planVersion: 2, inputs: inputs() })).toBeNull();
+    expect(describeLoopPlan({ planId: "standard", planVersion: 3, inputs: inputs() })).toBeNull();
   });
 });

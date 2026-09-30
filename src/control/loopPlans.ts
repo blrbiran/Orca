@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
-import { safeInteger } from "./schema.js";
+import { MAX_TIMER_MS, safeInteger } from "./schema.js";
 
 /**
  * Loop plans (docs/superpowers/specs/2026-09-30-loop-plans-design.md §2, §3.2; goal.md §3.3): Orca's built-in recipes
@@ -28,16 +28,28 @@ export interface LoopPlanDefinition {
   rejectOn: string;
   /** The one discipline line the panel shows, with its strength (spec §4.1); null when the plan has none. */
   discipline: string | null;
+  /** Spec §2.3: the file cap when the inputs name none (investigate is always 1). */
+  defaultMaxFilesTouched: number;
+  /** Spec §2.3: executionPolicy.perAttemptTimeoutMs; the Web path clamps it to the task's active time (executionSnapshot.ts). */
+  perAttemptTimeoutMs: number;
 }
 
 /**
  * Spec §2.2 last bullet: a change to a plan's text or rules adds a version; no version is ever edited or removed, so an
  * old recipe still renders and still re-expands to its stored bytes (the projection checks it, controlViews.ts).
  */
-const REGISTRY: readonly LoopPlanDefinition[] = [
-  { planId: "standard", version: 1, name: "Standard", constraints: [], verifierType: "command", rejectOn: "REJECT:unused", discipline: null },
+const V1_DEFAULTS = { defaultMaxFilesTouched: 25, perAttemptTimeoutMs: 3_600_000 } as const;
+/**
+ * v2 (human rulings H2/H3, 2026-10-01): no file cap unless the inputs set one (ccloop's schema needs a positive integer
+ * and only compares it, so "none" is the largest safe integer), and no phase timeout of the plan's own beyond what a
+ * Node timer holds (MAX_TIMER_MS, schema.ts). On the Web path the derived contract clamps the phase timeout to the
+ * task's active time (executionSnapshot.ts derivedPhaseTimeoutMs), so each phase may use the whole of it.
+ */
+const V2_DEFAULTS = { defaultMaxFilesTouched: Number.MAX_SAFE_INTEGER, perAttemptTimeoutMs: MAX_TIMER_MS } as const;
+const V1_PLANS: ReadonlyArray<Omit<LoopPlanDefinition, "version" | keyof typeof V1_DEFAULTS>> = [
+  { planId: "standard", name: "Standard", constraints: [], verifierType: "command", rejectOn: "REJECT:unused", discipline: null },
   {
-    planId: "bugfix", version: 1, name: "Bug fix (red first)",
+    planId: "bugfix", name: "Bug fix (red first)",
     constraints: [
       "First add or change a test that reproduces the bug and fails for that reason; only then change the code so that it passes.",
       "Do not change behavior the bug does not involve.",
@@ -46,29 +58,31 @@ const REGISTRY: readonly LoopPlanDefinition[] = [
     discipline: "Write a failing test that reproduces the bug, then fix it (checked by a model, not proven mechanically)",
   },
   {
-    planId: "refactor", version: 1, name: "Safe refactor", constraints: ["Change no observable behavior; every existing check must pass unchanged."],
+    planId: "refactor", name: "Safe refactor", constraints: ["Change no observable behavior; every existing check must pass unchanged."],
     verifierType: "command", rejectOn: "REJECT:unused",
     discipline: "No observable behavior change (an instruction to the agent; only the checks are enforced)",
   },
   {
-    planId: "design", version: 1, name: "Design / docs first", constraints: ["The deliverable is a document; change no code."],
+    planId: "design", name: "Design / docs first", constraints: ["The deliverable is a document; change no code."],
     verifierType: "agent", rejectOn: "REJECT:empty-document",
     discipline: "The deliverable is a document, no code changes (checked by a model, not proven mechanically)",
   },
   {
-    planId: "investigate", version: 1, name: "Investigate only", constraints: ["Investigate only; write the findings to the report file and change nothing else."],
+    planId: "investigate", name: "Investigate only", constraints: ["Investigate only; write the findings to the report file and change nothing else."],
     verifierType: "agent", rejectOn: "REJECT:empty-report",
     discipline: "Investigate only; findings go to the report file, nothing else changes (checked by a model, not proven mechanically)",
   },
 ];
+const REGISTRY: readonly LoopPlanDefinition[] = [
+  ...V1_PLANS.map((plan) => ({ ...plan, version: 1, ...V1_DEFAULTS })),
+  ...V1_PLANS.map((plan) => ({ ...plan, version: 2, ...V2_DEFAULTS })),
+];
 
-/** Spec §2.3: shared by every plan. The budget numbers equal TASK_WORK (estimator.ts); loopPlans.test.ts pins that. */
+/** Spec §2.3: shared by every plan and version. The budget numbers equal TASK_WORK (estimator.ts); loopPlans.test.ts pins that. */
 const EXECUTION_POLICY = {
   autonomyLevel: "L2", maxAttempts: 3, tokenBudget: 3_000_000, totalRuntimeBudgetMs: 14_400_000,
-  perAttemptTimeoutMs: 3_600_000, worktreeRequired: true, partialOutcomeRecoveryWindowMs: 60_000,
+  worktreeRequired: true, partialOutcomeRecoveryWindowMs: 60_000,
 } as const;
-/** Spec §2.3, C2 (unmeasured). */
-const DEFAULT_MAX_FILES_TOUCHED = 25;
 const TERMINAL_STATES = ["succeeded", "blocked_waiting_human", "exhausted", "cancelled", "failed"] as const;
 
 const pathEntrySchema = z.string().min(1);
@@ -151,9 +165,9 @@ function pathShapeOk(entry: string): boolean {
   return exactPath(entry);
 }
 
-/** Spec §2.3: 25 unless the input says otherwise; investigate always 1. Shared with the summary so it never disagrees. */
+/** Spec §2.3: the version's default unless the input says otherwise; investigate always 1. Shared with the summary so it never disagrees. */
 function maxFilesOf(plan: LoopPlanDefinition, inputs: LoopInputs): number {
-  return plan.planId === "investigate" ? 1 : inputs.maxFilesTouched ?? DEFAULT_MAX_FILES_TOUCHED;
+  return plan.planId === "investigate" ? 1 : inputs.maxFilesTouched ?? plan.defaultMaxFilesTouched;
 }
 
 /** Spec §3.2: the recipe's contract, for the recipe's own plan version; the re-expansion the projection checks. */
@@ -176,7 +190,7 @@ export function expandRecipe(taskId: string, repoPath: string, recipe: LoopRecip
       repoPath, targetPaths: [...inputs.targetPaths], relevantDocs: [...inputs.relevantDocs],
       buildTestCommands: [...inputs.checks], constraints: [...plan.constraints],
     },
-    executionPolicy: { ...EXECUTION_POLICY },
+    executionPolicy: { ...EXECUTION_POLICY, perAttemptTimeoutMs: plan.perAttemptTimeoutMs },
     safetyPolicy: {
       allowlistPaths: [...inputs.targetPaths], denylistPaths: [...inputs.protectedPaths],
       maxFilesTouched: maxFilesOf(plan, inputs), humanGateConditions: [],
@@ -248,7 +262,7 @@ export function describeLoopPlan(recipe: Pick<LoopRecipe, "planId" | "planVersio
       `Done when: ${inputs.successCondition}`,
       `Only changes: ${inputs.targetPaths.join(", ")}`,
       ...(inputs.protectedPaths.length > 0 ? [`Must not change: ${inputs.protectedPaths.join(", ")} (reported by the agent, not checked in git)`] : []),
-      `At most ${countOf(maxFilesOf(plan, inputs), "file")} changed (reported by the agent)`,
+      maxFilesOf(plan, inputs) === Number.MAX_SAFE_INTEGER ? "No file limit" : `At most ${countOf(maxFilesOf(plan, inputs), "file")} changed (reported by the agent)`,
       `Acceptance: ${countOf(inputs.checks.length, "check command")}, all must pass`,
       ...(plan.discipline === null ? [] : [plan.discipline]),
     ],

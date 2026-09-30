@@ -37,8 +37,11 @@ const refusal = (loop: LoopPlanFileInput): string | null => {
 
 describe("the expansion is pure and pinned (criterion 1)", () => {
   it("expands bugfix's fixed input to exactly these bytes, and records its recipe", () => {
-    const result = expanded("bugfix");
-    expect(JSON.parse(result.canonicalJson)).toEqual({
+    // Rewritten under human ruling H19 (2026-10-01) for loop plans v2.
+    // v1's bytes, from an explicit v1 recipe: an archived v1 recipe must keep re-expanding to them (spec §2.2).
+    const v1 = expandRecipe("fix-login", REPO, { ...expanded("bugfix").recipe, planVersion: 1 });
+    if (!v1.ok) throw new Error(v1.reason);
+    expect(JSON.parse(v1.canonicalJson)).toEqual({
       objective: { taskId: "fix-login", goal: "fix login", successCondition: "the login test passes", nonGoals: [] },
       context: { repoPath: REPO, targetPaths: ["src/auth/**", "tests/auth/**"], relevantDocs: [], buildTestCommands: ["npm test"], constraints: BUGFIX_CONSTRAINTS },
       executionPolicy: { autonomyLevel: "L2", maxAttempts: 3, tokenBudget: 3_000_000, totalRuntimeBudgetMs: 14_400_000, perAttemptTimeoutMs: 3_600_000, worktreeRequired: true, partialOutcomeRecoveryWindowMs: 60_000 },
@@ -46,22 +49,34 @@ describe("the expansion is pure and pinned (criterion 1)", () => {
       verification: { verifierType: "agent", requiredChecks: ["npm test"], rejectOn: ["REJECT:no-red-first"], evidenceRequired: [] },
       escalationAndExit: { escalationTargets: [], pauseOn: [], stopOn: [], terminalStates: TERMINAL },
     });
+    expect(v1.hash).toBe(sha256Canonical(JSON.parse(v1.canonicalJson)));
+    // The v2 twin (human rulings H2/H3): the same input, now with no file cap and a phase timeout of MAX_TIMER_MS.
+    const result = expanded("bugfix");
+    const v2 = JSON.parse(v1.canonicalJson);
+    v2.executionPolicy.perAttemptTimeoutMs = 2_147_483_647;
+    v2.safetyPolicy.maxFilesTouched = Number.MAX_SAFE_INTEGER;
+    expect(JSON.parse(result.canonicalJson)).toEqual(v2);
     expect(result.hash).toBe(sha256Canonical(JSON.parse(result.canonicalJson)));
     expect(result.recipe).toEqual({
-      schema: "orca-loop-recipe-v1", planId: "bugfix", planVersion: 1, chosenBy: "explicit",
+      schema: "orca-loop-recipe-v1", planId: "bugfix", planVersion: 2, chosenBy: "explicit",
       inputs: { goal: "fix login", successCondition: "the login test passes", targetPaths: ["src/auth/**", "tests/auth/**"], checks: ["npm test"], nonGoals: [], relevantDocs: [], protectedPaths: [], maxFilesTouched: null },
     });
   });
 
   it.each([...LOOP_PLAN_IDS])("%s: is a fixed point of the contract schema, re-expands from its recipe, and hashes the same twice", (plan) => {
+    // Rewritten under human ruling H19 (2026-10-01) for loop plans v2.
     const first = expanded(plan), second = expanded(plan);
     expect(second.hash).toBe(first.hash);
     // queries.ts readArchivedPlan re-parses every archived contract and compares canonical bytes (Review Focus 1).
     expect(canonicalBytes(taskContractSchema.parse(JSON.parse(first.canonicalJson))).toString("utf8")).toBe(first.canonicalJson);
     const again = expandRecipe("fix-login", REPO, first.recipe);
     expect(again.ok && again.canonicalJson).toBe(first.canonicalJson);
+    // v1 stays in the registry; the current version is the highest one (ledger 2026-09-30, MX-20b/c: with one version
+    // per plan, "newest" could not be told from "first").
     expect(loopPlanDefinition(plan, 1)).not.toBeNull();
-    expect(currentLoopPlanVersion(plan)).toBe(1);
+    expect(currentLoopPlanVersion(plan)).toBe(2);
+    expect(first.recipe.planVersion).toBe(2);
+    expect(loopPlanDefinition(plan, 3)).toBeNull();
   });
 
   const changes: Array<[string, Partial<LoopPlanFileInput>]> = [
@@ -79,6 +94,23 @@ describe("the expansion is pure and pinned (criterion 1)", () => {
       const policy = contractOf(plan).executionPolicy;
       expect([policy.tokenBudget, policy.totalRuntimeBudgetMs, policy.maxAttempts]).toEqual([TASK_WORK.tokens, TASK_WORK.activeMs, TASK_WORK.attempts]);
     }
+  });
+});
+
+describe("loop plans v2 (human rulings H2/H3, 2026-10-01)", () => {
+  it.each([...LOOP_PLAN_IDS])("%s v2: no file cap unless the inputs set one (investigate stays 1), and a phase timeout of MAX_TIMER_MS", (plan) => {
+    const contract = contractOf(plan);
+    expect(contract.safetyPolicy.maxFilesTouched).toBe(plan === "investigate" ? 1 : Number.MAX_SAFE_INTEGER);
+    expect(contract.executionPolicy.perAttemptTimeoutMs).toBe(2_147_483_647);
+  });
+
+  it.each([...LOOP_PLAN_IDS])("%s: a v1 recipe still expands with v1's defaults, so its stored bytes stay reproducible", (plan) => {
+    const v2 = expanded(plan);
+    const v1 = expandRecipe("fix-login", REPO, { ...v2.recipe, planVersion: 1 });
+    if (!v1.ok) throw new Error(v1.reason);
+    expect(v1.contract.safetyPolicy).toMatchObject({ maxFilesTouched: plan === "investigate" ? 1 : 25 });
+    expect(v1.contract.executionPolicy).toMatchObject({ perAttemptTimeoutMs: 3_600_000 });
+    expect(v1.hash).not.toBe(v2.hash);
   });
 });
 
@@ -114,9 +146,10 @@ describe("each plan's rules land in the contract (criterion 2)", () => {
 describe("refusals (criterion 3)", () => {
   it("refuses an unknown plan", () => expect(refusal(input({ plan: "yolo" }))).toBe("unknown-plan"));
   it("refuses a recipe whose plan version the registry does not hold (versions are never invented, spec §2.2)", () => {
-    const recipe = { ...expanded("bugfix").recipe, planVersion: 2 };
+    // Rewritten under human ruling H19 (2026-10-01) for loop plans v2.
+    const recipe = { ...expanded("bugfix").recipe, planVersion: 3 };
     expect(expandRecipe("fix-login", REPO, recipe)).toEqual({ ok: false, reason: "unknown-plan" });
-    expect([loopPlanDefinition("bugfix", 2), currentLoopPlanVersion("yolo")]).toEqual([null, null]);
+    expect([loopPlanDefinition("bugfix", 3), currentLoopPlanVersion("yolo")]).toEqual([null, null]);
     expect([isLoopPlanId("bugfix"), isLoopPlanId("yolo")]).toEqual([true, false]);
   });
   it.each([["/etc/passwd"], ["src/../secrets"], ["src/*.ts"], ["src/*"], ["*"], ["**/x.ts"], ["src/**/x.ts"], ["src//a.ts"], ["./src/a.ts"], ["src/"]])(
