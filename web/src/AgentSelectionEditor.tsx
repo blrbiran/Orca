@@ -5,12 +5,14 @@
  * with the code. Nothing here resolves, merges or hashes anything -- the preview is the server's (T14).
  */
 import type { JSX } from "react";
+import { useTranslation } from "react-i18next";
 import type { ControlAction } from "./controlApi.js";
 import { SelectionFields, contextLabel, panelPartialFromFields } from "./AgentFields.js";
 import type {
   AgentSelectionPreviewV1, AgentSelectionV1, AgentSlotV1, AgentsViewV1, GroupAgentOverridesV1, GroupViewV1, OperatorPreferencesV1,
   PanelPartialSelectionV1, PartialSelectionV1, SelectionProvenanceV1, SlotOutcomeV1,
 } from "./controlTypes.js";
+import { enumText } from "./i18n.js";
 
 type Scope = { kind: "group"; slot: AgentSlotV1 } | { kind: "task"; taskId: string };
 
@@ -51,11 +53,12 @@ function levelAgent(panel: PanelPartialSelectionV1 | undefined, plan: PartialSel
 
 function SelectionCells(props: { selection: AgentSelectionV1; provenance: SelectionProvenanceV1 }): JSX.Element {
   const { selection, provenance } = props;
+  const { t } = useTranslation();
   return (
     <>
-      <td>{selection.agent} <small>from {provenance.agent}</small></td>
-      <td>{selection.model} <small>from {provenance.model}</small></td>
-      <td>{contextLabel(selection.contextWindow)} <small>from {provenance.contextWindow}</small></td>
+      <td>{selection.agent} <small>{t("agents.from", { source: enumText("selectionSource", provenance.agent) })}</small></td>
+      <td>{selection.model} <small>{t("agents.from", { source: enumText("selectionSource", provenance.model) })}</small></td>
+      <td>{contextLabel(selection.contextWindow)} <small>{t("agents.from", { source: enumText("selectionSource", provenance.contextWindow) })}</small></td>
     </>
   );
 }
@@ -63,9 +66,10 @@ function SelectionCells(props: { selection: AgentSelectionV1; provenance: Select
 /** A slot that did not resolve: refused for good (rejected), or ccloop did not answer this time (unavailable). */
 function FailedCell(props: { outcome: Exclude<SlotOutcomeV1, { kind: "resolved" }> }): JSX.Element {
   const { outcome } = props;
+  const { t } = useTranslation();
   return (
     <td colSpan={3} role="alert" data-outcome={outcome.kind} style={{ color: "red" }}>
-      {outcome.kind === "rejected" ? "rejected" : "unavailable for now, Re-read to ask again"} · {outcome.code}
+      {outcome.kind === "rejected" ? t("agents.rejected") : t("agents.unavailable")} · {outcome.code}
     </td>
   );
 }
@@ -96,24 +100,25 @@ export interface AgentSelectionEditorProps {
 export function AgentSelectionEditor(props: AgentSelectionEditorProps): JSX.Element {
   const { view, agents, preview, drafts, onDraft, onCommand } = props;
   const groupId = view.summary.groupId;
+  const { t } = useTranslation();
 
   if (view.proposal.state === "confirmed") {
     const reconcile = view.agents?.reconcile ?? null;
     return (
-      <section aria-label="Agent selection">
-        <h3>Agents (frozen at confirmation)</h3>
+      <section aria-label={t("agents.region")}>
+        <h3>{t("agents.frozenTitle")}</h3>
         <table>
-          <thead><tr><th>slot</th><th>agent</th><th>model</th><th>context</th></tr></thead>
+          <thead><tr><th>{t("agents.th.slot")}</th><th>{t("agents.th.agent")}</th><th>{t("agents.th.model")}</th><th>{t("agents.th.context")}</th></tr></thead>
           <tbody>
             {view.workItems.map((item) => (
               <tr key={item.taskId} data-slot={`task:${item.taskId}`}>
                 <td>{item.taskId}</td>
-                {item.agent && item.agentProvenance ? <SelectionCells selection={item.agent} provenance={item.agentProvenance} /> : <td colSpan={3}>not recorded</td>}
+                {item.agent && item.agentProvenance ? <SelectionCells selection={item.agent} provenance={item.agentProvenance} /> : <td colSpan={3}>{t("agents.notRecorded")}</td>}
               </tr>
             ))}
             <tr data-slot="reconcile">
-              <td>reconcile</td>
-              {reconcile !== null ? <SelectionCells selection={reconcile.selection} provenance={reconcile.provenance} /> : <td colSpan={3}>not recorded</td>}
+              <td>{enumText("agentSlot", "reconcile")}</td>
+              {reconcile !== null ? <SelectionCells selection={reconcile.selection} provenance={reconcile.provenance} /> : <td colSpan={3}>{t("agents.notRecorded")}</td>}
             </tr>
           </tbody>
         </table>
@@ -123,21 +128,21 @@ export function AgentSelectionEditor(props: AgentSelectionEditorProps): JSX.Elem
 
   const reread = (
     <>
-      {props.onReread && <button type="button" onClick={props.onReread}>Re-read agent selections</button>}
+      {props.onReread && <button type="button" onClick={props.onReread}>{t("agents.reread")}</button>}
       {props.retryNotice ? <p role="status" data-retry="">{props.retryNotice}</p> : null}
     </>
   );
   if (agents === null && props.agentsFailure) {
     return (
-      <section aria-label="Agent selection">
-        <h3>Agents</h3>
-        <p role="alert">Agent selections cannot be read · {props.agentsFailure}. Confirm is not offered without them.</p>
+      <section aria-label={t("agents.region")}>
+        <h3>{t("agents.title")}</h3>
+        <p role="alert">{t("agents.cannotRead", { code: props.agentsFailure })}</p>
         {reread}
       </section>
     );
   }
   if (agents === null || preview === null) {
-    return <section aria-label="Agent selection"><h3>Agents</h3><p role="status">Resolving agent selections…</p>{reread}</section>;
+    return <section aria-label={t("agents.region")}><h3>{t("agents.title")}</h3><p role="status">{t("agents.resolving")}</p>{reread}</section>;
   }
 
   const stale = preview.proposalVersion !== view.proposal.proposalVersion;
@@ -154,10 +159,10 @@ export function AgentSelectionEditor(props: AgentSelectionEditorProps): JSX.Elem
       : scope.slot === "estimator" ? undefined : preview.planLayers.group[scope.slot];
 
   return (
-    <section aria-label="Agent selection">
-      <h3>Agents · proposal v{view.proposal.proposalVersion}</h3>
-      {stale && <p role="status">The resolution shown is for proposal v{preview.proposalVersion}; re-reading. Confirm waits for it.</p>}
-      {preview.selectionsHash === null && <p role="alert">A selection below did not resolve; confirm is not offered until every slot resolves.</p>}
+    <section aria-label={t("agents.region")}>
+      <h3>{t("agents.proposalTitle", { version: view.proposal.proposalVersion })}</h3>
+      {stale && <p role="status">{t("agents.staleResolution", { version: preview.proposalVersion })}</p>}
+      {preview.selectionsHash === null && <p role="alert">{t("agents.unresolved")}</p>}
       {reread}
       {(["worker", "estimator", "reconcile"] as const).map((slot) => {
         const scope: Scope = { kind: "group", slot };
@@ -165,18 +170,18 @@ export function AgentSelectionEditor(props: AgentSelectionEditorProps): JSX.Elem
         const partial = panelPartialFromFields(agents, prefix, preview.groupOverrides[slot], plannedFor(scope), drafts, inherited(scope));
         return (
           <div key={slot}>
-            <SelectionFields agents={agents} prefix={prefix} label={`Group ${slot}`} current={preview.groupOverrides[slot]} planned={plannedFor(scope)} inheritedAgent={inherited(scope)} drafts={drafts} onDraft={onDraft} />
-            <button type="button" disabled={Object.keys(partial).length === 0} onClick={() => send(scope, partial)}>Set group {slot} agent</button>
-            <button type="button" disabled={preview.groupOverrides[slot] === undefined} onClick={() => send(scope, null)}>Clear group {slot} agent</button>
+            <SelectionFields agents={agents} prefix={prefix} label={t("agents.groupSlot", { slot: enumText("agentSlot", slot) })} current={preview.groupOverrides[slot]} planned={plannedFor(scope)} inheritedAgent={inherited(scope)} drafts={drafts} onDraft={onDraft} />
+            <button type="button" disabled={Object.keys(partial).length === 0} onClick={() => send(scope, partial)}>{t("agents.setGroup", { slot: enumText("agentSlot", slot) })}</button>
+            <button type="button" disabled={preview.groupOverrides[slot] === undefined} onClick={() => send(scope, null)}>{t("agents.clearGroup", { slot: enumText("agentSlot", slot) })}</button>
             {slot === "estimator" && (
               // Wave 3 review M-7 / ruling R7: the estimator is not part of the confirm; it is used at the next re-estimate.
-              <small> Used from the next re-estimate on; like any proposal change it moves the proposal version.</small>
+              <small>{t("agents.estimatorNote")}</small>
             )}
           </div>
         );
       })}
       <table>
-        <thead><tr><th>slot</th><th>agent</th><th>model</th><th>context</th><th>this task's own layer</th></tr></thead>
+        <thead><tr><th>{t("agents.th.slot")}</th><th>{t("agents.th.agent")}</th><th>{t("agents.th.model")}</th><th>{t("agents.th.context")}</th><th>{t("agents.th.ownLayer")}</th></tr></thead>
         <tbody>
           {preview.slots.map((entry) => {
             const taskId = entry.taskId;
@@ -186,16 +191,16 @@ export function AgentSelectionEditor(props: AgentSelectionEditorProps): JSX.Elem
             const partial = scope === null ? {} : panelPartialFromFields(agents, prefix, own, plannedFor(scope), drafts, inherited(scope));
             return (
               <tr key={entry.key} data-slot={entry.key}>
-                <td>{taskId ?? "reconcile"}</td>
+                <td>{taskId ?? enumText("agentSlot", "reconcile")}</td>
                 {entry.outcome.kind === "resolved"
                   ? <SelectionCells selection={entry.outcome.frozen.selection} provenance={entry.outcome.frozen.provenance} />
                   : <FailedCell outcome={entry.outcome} />}
                 <td>
                   {scope !== null && (
                     <>
-                      <SelectionFields agents={agents} prefix={prefix} label={`Task ${taskId}`} current={own} planned={plannedFor(scope)} inheritedAgent={inherited(scope)} drafts={drafts} onDraft={onDraft} />
-                      <button type="button" disabled={Object.keys(partial).length === 0} onClick={() => send(scope, partial)}>Set agent for task {taskId}</button>
-                      <button type="button" disabled={own === undefined} onClick={() => send(scope, null)}>Clear agent for task {taskId}</button>
+                      <SelectionFields agents={agents} prefix={prefix} label={t("agents.taskLayer", { taskId: String(taskId) })} current={own} planned={plannedFor(scope)} inheritedAgent={inherited(scope)} drafts={drafts} onDraft={onDraft} />
+                      <button type="button" disabled={Object.keys(partial).length === 0} onClick={() => send(scope, partial)}>{t("agents.setTask", { taskId: String(taskId) })}</button>
+                      <button type="button" disabled={own === undefined} onClick={() => send(scope, null)}>{t("agents.clearTask", { taskId: String(taskId) })}</button>
                     </>
                   )}
                 </td>

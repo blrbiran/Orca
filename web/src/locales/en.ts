@@ -6,7 +6,7 @@
 import type { ThemePref } from "../theme.js";
 import type { ChainStopCategory, CorrectionKind, DecisionKind, DecisionObservation, DecisionScope, MetricsNoteCode } from "../types.js";
 import type {
-  AllocationViewV1, AmountDimensionV1, BudgetEstimateV1, CapabilityViewV1, EstimateViewV1, FieldProvenanceV1, GroupSummaryV1, GroupViewV1, HandoffRequestViewV1, RecoveryViewV1, RunViewV1, WorkItemProgressV1, WorkItemViewV1,
+  AgentSlotV1, AllocationViewV1, AmountDimensionV1, BudgetEstimateV1, CapabilityViewV1, EstimateViewV1, FieldProvenanceV1, GroupSummaryV1, GroupViewV1, HandoffRequestViewV1, ProvenanceSourceV1, RecoveryViewV1, RunViewV1, WorkItemProgressV1, WorkItemViewV1,
 } from "../controlTypes.js";
 
 /** The Chinese resource's type: the same key set, every value widened to string (spec §2). */
@@ -88,6 +88,12 @@ const budgetEnforcement = { bounded: "bounded", soft: "soft", unavailable: "unav
 const fieldProvenance = {
   "complex-1m-default": "complex-1m default", model: "model", human: "human", system: "system",
 } as const satisfies Record<FieldProvenanceV1["provenance"], string>;
+const agentSlot = { worker: "worker", estimator: "estimator", reconcile: "reconcile" } as const satisfies Record<AgentSlotV1, string>;
+const selectionSource = {
+  operator: "operator", "operator-estimator": "operator-estimator", "operator-reconcile": "operator-reconcile", group: "group",
+  "group-estimator": "group-estimator", "group-reconcile": "group-reconcile", task: "task", "operator-agent": "operator-agent", descriptor: "descriptor",
+  "group-plan": "group-plan", "group-reconcile-plan": "group-reconcile-plan", "task-plan": "task-plan",
+} as const satisfies Record<ProvenanceSourceV1, string>;
 
 export const en = {
   nav: { sections: "Sections", decisions: "Decisions", chains: "Chains", tasks: "Task control", metrics: "Metrics" },
@@ -369,6 +375,51 @@ export const en = {
     shortfall: "Group reserve too small: {{dimension}} short by {{short}}",
     unchanged: "Budget unchanged",
   },
+  agents: {
+    retryWaiting: "Reading again in {{seconds}} s (retry {{attempt}}/{{total}}).",
+    retryPaused: "Retrying is paused while the page is hidden; it resumes when you come back.",
+    retryStopped: "Stopped after {{total}} retries; Re-read asks again.",
+    contextDefault: "agent default",
+    contextTokens: "{{value}} tokens",
+    ignorePlan: "ignore the plan's {{field}} ({{value}})",
+    field: { agent: "agent", model: "model", contextWindow: "contextWindow" },
+    label: { agent: "agent", model: "model", context: "context" },
+    inheritPlan: "inherit (plan: {{agent}})",
+    inherit: "inherit",
+    from: "from {{source}}",
+    rejected: "rejected",
+    unavailable: "unavailable for now, Re-read to ask again",
+    region: "Agent selection",
+    frozenTitle: "Agents (frozen at confirmation)",
+    th: { slot: "slot", agent: "agent", model: "model", context: "context", ownLayer: "this task's own layer" },
+    notRecorded: "not recorded",
+    reread: "Re-read agent selections",
+    title: "Agents",
+    cannotRead: "Agent selections cannot be read · {{code}}. Confirm is not offered without them.",
+    resolving: "Resolving agent selections…",
+    proposalTitle: "Agents · proposal v{{version}}",
+    staleResolution: "The resolution shown is for proposal v{{version}}; re-reading. Confirm waits for it.",
+    unresolved: "A selection below did not resolve; confirm is not offered until every slot resolves.",
+    groupSlot: "Group {{slot}}",
+    setGroup: "Set group {{slot}} agent",
+    clearGroup: "Clear group {{slot}} agent",
+    estimatorNote: " Used from the next re-estimate on; like any proposal change it moves the proposal version.",
+    taskLayer: "Task {{taskId}}",
+    setTask: "Set agent for task {{taskId}}",
+    clearTask: "Clear agent for task {{taskId}}",
+    settings: {
+      region: "Agents settings",
+      operatorLine: "Operator {{operatorId}} · preferences revision {{revision}}. A change reaches groups confirmed after it; a confirmed group keeps the selection it froze.",
+      noInstallations: "The installation table lists no agent. Run orca agents init, point ORCA_AGENTS_TABLE at the table it wrote (by default ~/.orca/agents.json) and restart the panel.",
+      th: { installation: "installation", kind: "kind", version: "version", defaultModel: "default model", defaultContext: "default context" },
+      defaultAgent: "Default agent",
+      noDefault: "none (every group has to choose one)",
+      perAgent: "{{agentId}} defaults",
+      estimatorSlot: "Estimator slot",
+      reconcileSlot: "Reconcile slot",
+      save: "Save agent preferences",
+    },
+  },
   metrics: {
     unknownRate: "unknown",
     correctionRate: "Correction rate",
@@ -386,5 +437,6 @@ export const en = {
     theme, decisionKind, decisionScope, decisionVerdict, correctionKind, chainStopCategory,
     groupState, stopMode, stopState, workStatus, runPhase, runState, requestState, estimateState, budgetMode, blockerScope, progressStep,
     proposalState, ownerKind, bucket, allocationState, dimension, complexity, confidence, handoffControl, handoffExecution, budgetEnforcement, fieldProvenance,
+    agentSlot, selectionSource,
   },
 } as const;

@@ -4,9 +4,11 @@
  * agent can express and nothing else -- there is no box to type a window into.
  */
 import type { JSX } from "react";
+import { useTranslation } from "react-i18next";
 import type { AgentInstallationV1, AgentsViewV1, ContextWindowV1, PanelPartialSelectionV1, PartialSelectionV1 } from "./controlTypes.js";
+import i18n from "./i18n.js";
 
-export const contextLabel = (value: ContextWindowV1): string => (value === "agent-default" ? "agent default" : `${value} tokens`);
+export const contextLabel = (value: ContextWindowV1): string => (value === "agent-default" ? i18n.t("agents.contextDefault") : i18n.t("agents.contextTokens", { value }));
 export const contextValue = (value: ContextWindowV1 | undefined): string => (value === undefined ? "" : String(value));
 
 /**
@@ -124,6 +126,7 @@ export interface SelectionFieldsProps {
 
 export function SelectionFields(props: SelectionFieldsProps): JSX.Element {
   const { agents, prefix, drafts, onDraft } = props;
+  const { t } = useTranslation();
   const draft = (field: string, fallback: string): string => draftText(drafts, `${prefix}:${field}`, fallback);
   const change = (field: string) => (event: { target: { value: string } }) => onDraft(`${prefix}:${field}`, draftOf(event.target.value));
   const text = (value: string | null | undefined): string => (typeof value === "string" ? value : "");
@@ -141,7 +144,7 @@ export function SelectionFields(props: SelectionFieldsProps): JSX.Element {
     return (
       <label>
         <input type="checkbox" name={maskKey(prefix, field)} checked={masked(field)} onChange={(event) => onDraft(maskKey(prefix, field), event.target.checked ? "1" : "0")} />
-        ignore the plan's {field} ({value})
+        {t("agents.ignorePlan", { field: t(`agents.field.${field}`), value })}
       </label>
     );
   };
@@ -150,23 +153,23 @@ export function SelectionFields(props: SelectionFieldsProps): JSX.Element {
       <legend>{props.label}</legend>
       {props.fixedAgent === undefined && (
         <label>
-          agent
+          {t("agents.label.agent")}
           <select name={`${prefix}:agent`} value={agentText} onChange={change("agent")}>
-            <option value="">{props.planned?.agent !== undefined && !masked("agent") ? `inherit (plan: ${props.planned.agent})` : "inherit"}</option>
+            <option value="">{props.planned?.agent !== undefined && !masked("agent") ? t("agents.inheritPlan", { agent: props.planned.agent }) : t("agents.inherit")}</option>
             {agents.installations.map((row) => <option key={row.id} value={row.id}>{row.id} ({row.kind} {row.version})</option>)}
           </select>
         </label>
       )}
       {props.fixedAgent === undefined && maskBox("agent")}
       <label>
-        model
+        {t("agents.label.model")}
         <input name={`${prefix}:model`} value={draft("model", text(props.current?.model))} placeholder={(masked("model") ? undefined : props.planned?.model) ?? effective?.defaults.model ?? ""} onChange={change("model")} />
       </label>
       {maskBox("model")}
       <label>
-        context
+        {t("agents.label.context")}
         <select name={`${prefix}:context`} value={draft("context", contextValue(props.current?.contextWindow ?? undefined))} onChange={change("context")}>
-          <option value="">inherit</option>
+          <option value="">{t("agents.inherit")}</option>
           {(effective?.contextOptions ?? []).map((option) => <option key={String(option)} value={String(option)}>{contextLabel(option)}</option>)}
         </select>
       </label>

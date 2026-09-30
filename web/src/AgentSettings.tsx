@@ -4,6 +4,7 @@
  * context, and the estimator and reconcile slots -- as one set-agent-preferences under the revision it read.
  */
 import type { JSX } from "react";
+import { useTranslation } from "react-i18next";
 import { SelectionFields, contextLabel, draftOf, draftText, installationOf, partialFromFields, textOrUndefined } from "./AgentFields.js";
 import type { AgentPreferencesViewV1, AgentsViewV1, OperatorPreferencesV1 } from "./controlTypes.js";
 
@@ -44,24 +45,23 @@ export interface AgentSettingsProps {
 
 export function AgentSettings(props: AgentSettingsProps): JSX.Element {
   const { agents, preferences, drafts, onDraft } = props;
+  const { t } = useTranslation();
   const defaultText = draftText(drafts, DEFAULT_AGENT_KEY, preferences.preferences.defaultAgent ?? "");
   const defaultAgent = textOrUndefined(defaultText);
   return (
-    <section aria-label="Agents settings">
-      <h3>Agents</h3>
+    <section aria-label={t("agents.settings.region")}>
+      <h3>{t("agents.title")}</h3>
       <p>
-        Operator {preferences.operatorId} · preferences revision {preferences.revision}. A change reaches groups confirmed after it; a
-        confirmed group keeps the selection it froze.
+        {t("agents.settings.operatorLine", { operatorId: preferences.operatorId, revision: preferences.revision })}
       </p>
       {agents.installations.length === 0 && (
         <p role="note">
-          The installation table lists no agent. Run orca agents init, point ORCA_AGENTS_TABLE at the table it wrote
-          (by default ~/.orca/agents.json) and restart the panel.
+          {t("agents.settings.noInstallations")}
         </p>
       )}
       <table>
         <thead>
-          <tr><th>installation</th><th>kind</th><th>version</th><th>default model</th><th>default context</th></tr>
+          <tr><th>{t("agents.settings.th.installation")}</th><th>{t("agents.settings.th.kind")}</th><th>{t("agents.settings.th.version")}</th><th>{t("agents.settings.th.defaultModel")}</th><th>{t("agents.settings.th.defaultContext")}</th></tr>
         </thead>
         <tbody>
           {agents.installations.map((row) => (
@@ -72,21 +72,21 @@ export function AgentSettings(props: AgentSettingsProps): JSX.Element {
         </tbody>
       </table>
       <label>
-        Default agent
+        {t("agents.settings.defaultAgent")}
         <select name={DEFAULT_AGENT_KEY} value={defaultText} onChange={(event) => onDraft(DEFAULT_AGENT_KEY, draftOf(event.target.value))}>
-          <option value="">none (every group has to choose one)</option>
+          <option value="">{t("agents.settings.noDefault")}</option>
           {agents.installations.map((row) => <option key={row.id} value={row.id}>{row.id}</option>)}
         </select>
       </label>
       {agents.installations.map((row) => (
         <SelectionFields
-          key={row.id} agents={agents} prefix={`agents:per:${row.id}`} label={`${row.id} defaults`} fixedAgent={row.id}
+          key={row.id} agents={agents} prefix={`agents:per:${row.id}`} label={t("agents.settings.perAgent", { agentId: row.id })} fixedAgent={row.id}
           current={preferences.preferences.perAgent[row.id]} inheritedAgent={row.id} drafts={drafts} onDraft={onDraft}
         />
       ))}
-      <SelectionFields agents={agents} prefix="agents:estimator" label="Estimator slot" current={preferences.preferences.estimator} inheritedAgent={defaultAgent} drafts={drafts} onDraft={onDraft} />
-      <SelectionFields agents={agents} prefix="agents:reconcile" label="Reconcile slot" current={preferences.preferences.reconcile} inheritedAgent={defaultAgent} drafts={drafts} onDraft={onDraft} />
-      <button type="button" onClick={() => props.onSave(preferencesFromDrafts(agents, preferences, drafts), preferences.revision)}>Save agent preferences</button>
+      <SelectionFields agents={agents} prefix="agents:estimator" label={t("agents.settings.estimatorSlot")} current={preferences.preferences.estimator} inheritedAgent={defaultAgent} drafts={drafts} onDraft={onDraft} />
+      <SelectionFields agents={agents} prefix="agents:reconcile" label={t("agents.settings.reconcileSlot")} current={preferences.preferences.reconcile} inheritedAgent={defaultAgent} drafts={drafts} onDraft={onDraft} />
+      <button type="button" onClick={() => props.onSave(preferencesFromDrafts(agents, preferences, drafts), preferences.revision)}>{t("agents.settings.save")}</button>
     </section>
   );
 }

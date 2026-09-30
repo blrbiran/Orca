@@ -22,19 +22,20 @@ const ZH = flatten(zh as unknown as Tree);
 const width = (text: string): number => [...text].reduce((n, ch) => n + (/[⺀-鿿　-〿＀-￯]/.test(ch) ? 2 : 1), 0);
 const NARROW_PREFIXES = [
   "control.group.th.", "control.group.runsTh.", "budget.th.", "enums.workStatus.", "enums.runPhase.", "enums.runState.",
-  "enums.allocationState.", "enums.bucket.", "enums.ownerKind.", "enums.dimension.",
+  "enums.allocationState.", "enums.bucket.", "enums.ownerKind.", "enums.dimension.", "agents.th.", "agents.settings.th.",
 ];
 const BUTTONS = [
   "control.group.start", "control.group.pause", "control.group.handoffStop", "control.group.resume", "control.group.resumeNoContinuation",
   "control.task.addSystem", "control.task.addCustom", "control.task.save", "control.task.discard", "control.task.restore",
   "budget.applyRow", "budget.applyAll", "budget.setLimit", "budget.save", "budget.reestimate", "budget.confirm",
   "loopPlan.changePlan", "loopPlan.discard", "chains.start", "chains.stop", "decisions.agree", "decisions.correct", "recovery.retry",
+  "agents.reread", "agents.settings.save",
 ];
 
 describe("Chinese in narrow places (Review Focus 5)", () => {
   it("keeps every table header, in-table enum value and button no wider in Chinese than in English + 2 columns", () => {
     const keys = [...Object.keys(EN).filter((key) => NARROW_PREFIXES.some((prefix) => key.startsWith(prefix))), ...BUTTONS];
-    expect(keys.length).toBeGreaterThanOrEqual(85);
+    expect(keys.length).toBeGreaterThanOrEqual(97);
     for (const key of keys) {
       expect(EN[key], key).toBeDefined();
       expect(width(ZH[key]!), `${key}: ${EN[key]} → ${ZH[key]}`).toBeLessThanOrEqual(width(EN[key]!) + 2);

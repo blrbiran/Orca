@@ -114,12 +114,13 @@ const CONTROL_POLL_MS = 2_000;
  * these delays -- at most this many times, never while the page is hidden -- and then waits for the operator.
  */
 export const AGENT_RETRY_DELAYS_MS = [10_000, 20_000, 40_000, 80_000, 160_000] as const;
-type RetryState = { state: "waiting"; attempt: number; delayMs: number } | { state: "stopped" } | { state: "paused" } | null;
-const retryNotice = (retry: RetryState): string | null => {
+export type RetryState = { state: "waiting"; attempt: number; delayMs: number } | { state: "stopped" } | { state: "paused" } | null;
+/** Ruling review R17's notice, in the reader's language (panel i18n spec §3.3); exported for the criterion. */
+export const retryNotice = (retry: RetryState): string | null => {
   if (retry === null) return null;
-  if (retry.state === "waiting") return `Reading again in ${retry.delayMs / 1000} s (retry ${retry.attempt}/${AGENT_RETRY_DELAYS_MS.length}).`;
-  if (retry.state === "paused") return "Retrying is paused while the page is hidden; it resumes when you come back.";
-  return `Stopped after ${AGENT_RETRY_DELAYS_MS.length} retries; Re-read asks again.`;
+  if (retry.state === "waiting") return i18n.t("agents.retryWaiting", { seconds: retry.delayMs / 1000, attempt: retry.attempt, total: AGENT_RETRY_DELAYS_MS.length });
+  if (retry.state === "paused") return i18n.t("agents.retryPaused");
+  return i18n.t("agents.retryStopped", { total: AGENT_RETRY_DELAYS_MS.length });
 };
 const pageHidden = (): boolean => typeof document !== "undefined" && document.visibilityState === "hidden";
 
