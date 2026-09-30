@@ -348,7 +348,11 @@ export type LoopPlanViewV1 = {
   amended: boolean; loopVersion: number; inputs: LoopInputsV1; summary: string[];
 };
 /** Loop plans spec §5.2: change a loop task's plan, inputs and work budget (sessions is carried over). */
-export type SetTaskLoopPayloadV1 = { baseLoopVersion: number; plan: string; inputs: LoopInputsV1; work: { tokens: number; activeMs: number; attempts: number } };
+export type SetTaskLoopPayloadV1 = {
+  baseLoopVersion: number; plan: string; inputs: LoopInputsV1; work: { tokens: number; activeMs: number; attempts: number };
+  /** W5: the work dimensions taken from an estimate's suggestion; the server re-checks each against it. */
+  workProvenance?: Partial<Record<"tokens" | "activeMs" | "attempts", { provenance: "model"; estimateId: string }>>;
+};
 /** Loop plans spec §2.2: the plans a person can pick and their panel names -- a mirror of src/control/loopPlans.ts, compared by tests/panel/taskLoopApi.test.ts. */
 export const WEB_LOOP_PLANS: ReadonlyArray<{ planId: LoopPlanIdV1; name: string }> = [
   { planId: "standard", name: "Standard" },

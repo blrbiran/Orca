@@ -631,6 +631,11 @@ export class WebControlService {
         const next: Amount = { ...before, tokens: payload.work.tokens, activeMs: payload.work.activeMs, attempts: payload.work.attempts };
         // A plan-version bump with identical bytes is a no-op too; the recipe then keeps its version.
         if (expanded.canonicalJson === current.originalContractCanonicalJson && same(next, before)) throw new ControlError("no-op-command");
+        // W5: a dimension taken from an estimate is its suggestion for this task's work allocation (proposal-edit's rule).
+        const modelDimensions = Object.entries(payload.workProvenance ?? {}).flatMap(([d, source]) => source ? [{ dimension: d as "tokens" | "activeMs" | "attempts", estimateId: source.estimateId }] : []);
+        for (const { dimension, estimateId } of modelDimensions) {
+          verifyModelField(this.store, id, proposal, { scope: "task", taskId, allocation: "work", dimension }, next[dimension], estimateId);
+        }
         // Step 6's refusal, before anything is written: the reserve may not go negative in any dimension.
         for (const d of dimensions) {
           const shortfall = next[d] - before[d] - proposal.explicitUnallocatedReserve[d];
@@ -647,6 +652,7 @@ export class WebControlService {
         Object.assign(work, { amendmentHash, loopVersion: loopVersion + 1, originalContractHash: expanded.hash, contract: { contentAddressedHash: expanded.hash } });
         // Step 6.
         for (const d of dimensions) if (next[d] !== before[d]) allocation.fieldProvenance[d] = { provenance: "human", estimateId: null };
+        for (const { dimension, estimateId } of modelDimensions) allocation.fieldProvenance[dimension] = { provenance: "model", estimateId };
         allocation.amount = next;
         if (proposal.state === "editable") {
           // Step 7, draft: the proposal version advances, as every proposal change does, so a stale confirm is refused.
@@ -675,6 +681,8 @@ export class WebControlService {
         }
         // Step 8: the ledger still conserves.
         assertKnownConservation(this.store, readWebGroup(this.store, id), readBudgetProposal(this.store, id));
+        // W5/W6: the estimate still describes the contract as this command leaves it (a change in the same command makes it stale).
+        for (const { estimateId } of modelDimensions) refuseStaleEstimate(this.store, id, estimateId);
         return success(context, { kind: "task-loop-set", taskId, loopVersion: loopVersion + 1, proposalVersion: proposal.proposalVersion });
       },
     }).body);

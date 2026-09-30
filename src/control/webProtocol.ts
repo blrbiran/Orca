@@ -731,6 +731,8 @@ export const setAgentPreferencesPayloadSchema = z.object({ preferences: operator
 export const setTaskLabelsPayloadSchema = z
   .object({ labels: z.array(z.string()).max(64).nullable(), baseLabelsVersion: safeInteger })
   .strict();
+// W5: one work dimension of set-task-loop taken from an estimate (the estimate names where it came from).
+const modelProvenanceSchema = z.object({ provenance: z.literal("model"), estimateId: idSchema }).strict();
 // Loop plans spec §5.2 (Drafter finding F3): the task is the target; sessions is not here -- it is never mapped into the
 // contract and is carried over unchanged (R10). Shape only: the plan id and the path shapes are judged in apply, so a
 // refusal is ledgered and named (loop-plan-invalid).
@@ -740,6 +742,9 @@ export const setTaskLoopPayloadSchema = z
     plan: nonemptyString,
     inputs: loopInputsSchema,
     work: z.object({ tokens: positiveSafeInteger, activeMs: positiveSafeInteger, attempts: positiveSafeInteger }).strict(),
+    // W5: the work dimensions taken from an estimate's suggestion for this task, checked like proposal-edit's model
+    // fields; a dimension absent here that changes is the person's own.
+    workProvenance: z.object({ tokens: modelProvenanceSchema.optional(), activeMs: modelProvenanceSchema.optional(), attempts: modelProvenanceSchema.optional() }).strict().optional(),
   })
   .strict();
 
