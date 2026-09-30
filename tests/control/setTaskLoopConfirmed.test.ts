@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { canonicalBytes } from "../../src/control/canonicalJson.js";
+import { canonicalBytes, sha256Canonical } from "../../src/control/canonicalJson.js";
 import { readConfirmedTaskExecution, replaceTaskInSnapshot } from "../../src/control/executionSnapshot.js";
 import { readBudgetProposal } from "../../src/control/queries.js";
+import { settleHandoffRequest } from "../../src/control/stopIntent.js";
+import { recordUsage } from "../../src/control/usage.js";
+import { deliverScheduledStart } from "../../src/control/webDispatch.js";
 import { WebControlService, readWebGroup } from "../../src/control/webService.js";
 import { executionSnapshotSchema } from "../../src/control/webProtocol.js";
 import { readControlGroup } from "../../src/panel/controlViews.js";
@@ -78,6 +81,43 @@ describe("a change after confirmation (criteria 9, 10)", () => {
       expect(canonicalBytes(without(after, "a")).equals(canonicalBytes(without(before, "a")))).toBe(true);
       expect(after.derivedContracts.find((entry: { taskId: string }) => entry.taskId === "a")).not.toEqual(before.derivedContracts.find((entry: { taskId: string }) => entry.taskId === "a"));
       expect(readConfirmedTaskExecution(h.store, "g", "b").derivedContractHash).toBe(b.derivedContractHash);
+    } finally { await h.dispose(); }
+  });
+});
+
+describe("a change after confirmation leaves a re-amounted task's snapshot entry alone (U8, spec §5.2 step 7, R2)", () => {
+  // A task handed off recoverably is held with its allocation re-amounted to its unspent remainder (stopIntent.ts
+  // terminaliseRun); resume-from-handoff with no selection clears the stop and leaves it held -- the one realistic
+  // state in which set-task-loop is admitted and a full rebuild would re-derive another task's entry differently.
+  it("the held task's derived contract entry and allocation rows stay byte-identical when another task's plan changes", async () => {
+    const { h, service } = await confirmed();
+    try {
+      expect(await service.start(h.command("start", {}))).toMatchObject({ result: { kind: "scheduled" } });
+      const claimed = await deliverScheduledStart(h.deps, "g");
+      if (claimed.kind !== "claimed") throw new Error(JSON.stringify(claimed));
+      const runId = claimed.runId;
+      const held = String(JSON.parse(String(h.store.db.prepare("SELECT body FROM runs WHERE id=?").get(runId)!.body)).workItemId);
+      const other = held === "a" ? "b" : "a";
+      const used = { tokens: 10_000, activeMs: 60_000, attempts: 1, sessions: 1 };
+      recordUsage(h.store, { runId, generation: 1, eventSeq: 1, bucket: "work", cumulative: used, source: { artifactId: `usage-${runId}`, hash: sha256Canonical({ runId, used }) } });
+      expect(await service.handoffStop(h.command("handoff-stop", {}))).toMatchObject({ result: { kind: "handoff-stopped" } });
+      const requestId = String(h.store.db.prepare("SELECT id FROM handoff_requests WHERE run_id=?").get(runId)!.id);
+      settleHandoffRequest({ store: h.store, profileRouter: h.deps.profileRouter, admissionGate: h.deps.admissionGate }, { requestId, outcome: "settled-recoverable" });
+      expect(await service.resumeFromHandoff(h.command("resume-from-handoff", { selections: [] }))).toMatchObject({ result: { kind: "resumed-from-handoff" } });
+      const entryOf = (snapshot: ReturnType<typeof snapshotOf>, taskId: string) => ({
+        derived: snapshot.derivedContracts.filter((entry: { taskId: string }) => entry.taskId === taskId),
+        allocations: snapshot.allocations.filter((row: { ownerKind: string; ownerId: string }) => row.ownerKind === "task" && row.ownerId === taskId),
+      });
+      const before = entryOf(snapshotOf(h), held);
+      // The premise: the live allocation was re-amounted away from the frozen one, so a rebuild from it would differ.
+      expect(workAllocation(h, held)).toMatchObject({ state: "held" });
+      expect(workAllocation(h, held).amount).not.toEqual(before.allocations.find((row: { bucket: string }) => row.bucket === "work").amount);
+      // A plan-only change: the budget does not move, so the reserve row cannot be what a rebuild is seen through.
+      expect(service.setTaskLoop(change(h, other, { inputs: { goal: `write ${other}, changed` } }))).toMatchObject({ result: { kind: "task-loop-set", taskId: other } });
+      const after = entryOf(snapshotOf(h), held);
+      expect(after.derived).toHaveLength(1);
+      expect(after.allocations).toHaveLength(2);
+      expect(canonicalBytes(after).equals(canonicalBytes(before))).toBe(true);
     } finally { await h.dispose(); }
   });
 });
