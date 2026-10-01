@@ -392,7 +392,7 @@ export function readEstimateClaimEnvelope(store: ControlStore, groupId: string, 
 export function readSingleCallClaimEnvelope(store: ControlStore, groupId: string, runId: string): DispatchEnvelopeV1 {
   const run = readDispatchRun(store, runId);
   if (run.phase !== "estimate" && run.phase !== "single-call") throw new ControlError("start-intent-missing");
-  const claimRow = singleCallClaimRowOf(run.phase, groupId, run.workItemId);
+  const claimRow = singleCallClaimRowOf(run.phase, groupId, run.workItemId, runId);
   const row = store.db.prepare("SELECT body FROM outbox WHERE id=? AND kind=?").get(claimRow.id, claimRow.kind);
   if (!row) throw new ControlError("start-intent-missing");
   const { runId: claimed, envelopeHash } = JSON.parse(String(row.body)) as { runId: string; envelopeHash: string };
@@ -403,15 +403,16 @@ export function readSingleCallClaimEnvelope(store: ControlStore, groupId: string
 /**
  * N1 spec §5.1: a run a single-call claim made, whatever its purpose -- its claim row (singleCallClaimRowOf) names this
  * very run. The purpose is not validated here, only the claim row: a `phase: "single-call"` run is listed exactly when a
- * `single-call:<group>:<item>` row of kind `single-call-claim` names it, and nothing writes that row in phase 1, so today
- * such a run is absent from the driver's run list. A listed run whose purpose is unknown is refused by name in `advance` (DR3).
+ * `single-call:<group>:<item>:<run>` row of kind `single-call-claim` names it (one row per attempt, so every attempt of
+ * a round or draft stays a single call -- final review finding 1). A listed run whose purpose is unknown is refused by
+ * name in `advance` (DR3).
  */
 export function isSingleCallRun(store: ControlStore, runId: string): boolean {
   const row = store.db.prepare("SELECT group_id,work_item_id,body FROM runs WHERE id=?").get(runId);
   if (!row) return false;
   const phase = (JSON.parse(String(row.body)) as { phase?: string }).phase;
   if (phase !== "estimate" && phase !== "single-call") return false;
-  const claimRow = singleCallClaimRowOf(phase, String(row.group_id), String(row.work_item_id));
+  const claimRow = singleCallClaimRowOf(phase, String(row.group_id), String(row.work_item_id), runId);
   const claim = store.db.prepare("SELECT body FROM outbox WHERE id=? AND kind=?").get(claimRow.id, claimRow.kind);
   return claim !== undefined && (JSON.parse(String(claim.body)) as { runId?: string }).runId === runId;
 }

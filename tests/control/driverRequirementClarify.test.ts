@@ -4,6 +4,8 @@ import { CLARIFY_JSON_SCHEMA } from "../../src/control/requirementClarify.js";
 import { readRequirementGroup, writeRound } from "../../src/control/requirementRecords.js";
 import { groupStopState } from "../../src/control/stopIntent.js";
 import { ControlError } from "../../src/control/errors.js";
+import { recoverControl } from "../../src/control/recovery.js";
+import { isSingleCallRun } from "../../src/control/webDispatch.js";
 import { requirementHarness } from "./fixtures/requirementHarness.js";
 import { ROUND_ONE } from "./fixtures/requirementOutputs.js";
 
@@ -108,6 +110,25 @@ describe("the clarify purpose on the single-call chain (N1 spec §7)", () => {
       await x.until(() => x.runs()[0]?.state === "blocked");
       expect(x.runs()[0]).toMatchObject({ drive: { blockedAt: "A2", blockedReason: "repository-path" } });
       expect(x.fake.calls.accept).toHaveLength(0);
+    } finally { await x.dispose(); }
+  });
+});
+
+// Final review fix wave (session b5e8d368, 2026-10-02), finding 1: a round attempted twice must not look like a legacy
+// run after a panel restart -- recovery would block dispatch for every group in the panel.
+describe("a panel restart after a retried round (final review finding 1)", () => {
+  it("keeps every attempt's run a single call, so recovery leaves it to the driver and blocks no dispatch", async () => {
+    const bad = { ...ROUND_ONE, questions: [], frontierEmpty: false };
+    const x = await requirementHarness({ answers: [{ purpose: "clarify", output: bad }, { purpose: "clarify", output: ROUND_ONE }] });
+    try {
+      await x.until(() => x.round(1).state === "awaiting-answers");
+      const runs = x.runs();
+      expect(runs.map((run) => [run.workItemId, run.state])).toEqual([["round-1", "settled-restartable"], ["round-1", "settled-restartable"]]);
+      expect(runs.map((run) => isSingleCallRun(x.store, run.runId))).toEqual([true, true]);
+      await x.driver.stop();
+      const recovered = await recoverControl(x.store, x.fake.port, undefined, { driverOwnsWebRuns: true });
+      expect(recovered.blockedRunIds).toEqual([]);
+      expect(x.store.dispatchBlocked).toBe(false);
     } finally { await x.dispose(); }
   });
 });

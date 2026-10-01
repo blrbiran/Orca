@@ -13,6 +13,7 @@ import {
 import { MAX_AUTO_RETRIES, REQUIREMENT_CALL_GRANT, splitOutputSchema, type CallRecord, type DraftBody } from "./requirementSchemas.js";
 import { buildSplitPrompt, expandSplitDraft, SPLIT_JSON_SCHEMA, validateSplitDraft, type SplitPlanFile } from "./requirementSplit.js";
 import { assertCallUsageBooked, closeSingleCall, insertSingleCallRun, verifyStoppedSingleCall, type StoppedSingleCallRun } from "./singleCallLedger.js";
+import { singleCallClaimRowOf } from "./singleCall.js";
 import type { SingleCallHandler, SingleCallPrepareDeps, SingleCallRequest, SingleCallRunRow } from "./singleCallPurposes.js";
 import { writeCanonicalRecord } from "./snapshot.js";
 import type { AdmissionGate } from "./admissionGate.js";
@@ -59,8 +60,9 @@ function setWaiting(store: ControlStore, groupId: string, target: RequirementTar
 }
 
 /**
- * A requirement call's rows are keyed by work item (DR4), so each attempt of a round or draft replaces the previous
- * attempt's claim and contract rows; an earlier attempt's run is inactive by then (preflight scan m15).
+ * A requirement call's contract row is keyed by work item (DR4), so each attempt of a round or draft replaces the
+ * previous attempt's; an earlier attempt's run is inactive by then (preflight scan m15) and nothing reads its contract
+ * again. Its claim row is keyed by run (singleCallClaimRowOf), so it is never replaced (final review finding 1).
  */
 function upsertOutbox(store: ControlStore, id: string, kind: string, body: unknown): void {
   store.db.prepare("INSERT INTO outbox(id,kind,body,delivered) VALUES (?,?,?,1) ON CONFLICT(id) DO UPDATE SET body=excluded.body").run(id, kind, canonicalBytes(body).toString("utf8"));
@@ -93,7 +95,8 @@ export function claimRequirementCallInTransaction(store: ControlStore, groupId: 
     graphVersion: 1, targetVersion: attempt, commandId: target.workItemId, slot, agentCapabilities: slot.capabilities, workGrant: REQUIREMENT_CALL_GRANT, profile,
     claimIdentity: `single-call:${groupId}:${target.workItemId}:${attempt}`, derivedContractHash: contractHash,
   });
-  upsertOutbox(store, `single-call:${groupId}:${target.workItemId}`, "single-call-claim", { groupId, workItemId: target.workItemId, runId, envelopeHash });
+  const claimRow = singleCallClaimRowOf("single-call", groupId, target.workItemId, runId);
+  store.db.prepare("INSERT INTO outbox(id,kind,body,delivered) VALUES (?,?,?,1)").run(claimRow.id, claimRow.kind, canonicalBytes({ groupId, workItemId: target.workItemId, runId, envelopeHash }).toString("utf8"));
   group.reserved = reserved;
   syncLedger(group);
   saveRequirementGroup(store, group);

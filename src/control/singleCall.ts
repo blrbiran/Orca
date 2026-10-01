@@ -26,9 +26,17 @@ export function singleCallPurposeOf(run: { phase?: unknown; purpose?: unknown })
   return run.purpose;
 }
 
-/** The outbox row a single call's claim writes and the driver reads back (DR4). */
-export function singleCallClaimRowOf(phase: "estimate" | "single-call", groupId: string, workItemId: string): { id: string; kind: string } {
+/**
+ * The outbox row a single call's claim writes and the driver reads back (DR4). An estimate's row is keyed by its work
+ * item (unchanged, DR1). A clarify or split call's row is keyed by its run (as a Web work run's `work:<group>:<run>`
+ * is): a round or draft is attempted more than once under one work item (H7 retries, DR15 recovery-retry), and a row
+ * per work item let the next attempt overwrite it, so the earlier attempt's run stopped reading as a single call and a
+ * restart's recovery blocked dispatch for every group (final review finding 1).
+ */
+export function singleCallClaimRowOf(phase: "estimate", groupId: string, workItemId: string, runId?: string): { id: string; kind: string };
+export function singleCallClaimRowOf(phase: "estimate" | "single-call", groupId: string, workItemId: string, runId: string): { id: string; kind: string };
+export function singleCallClaimRowOf(phase: "estimate" | "single-call", groupId: string, workItemId: string, runId?: string): { id: string; kind: string } {
   return phase === "estimate"
     ? { id: `estimate:${groupId}:${workItemId}`, kind: "estimate-claim" }
-    : { id: `single-call:${groupId}:${workItemId}`, kind: "single-call-claim" };
+    : { id: `single-call:${groupId}:${workItemId}:${runId}`, kind: "single-call-claim" };
 }
