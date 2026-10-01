@@ -398,3 +398,12 @@ Found by the plan's drafter against the code (`docs/superpowers/plans/2026-10-02
     it; with git-lfs that writes into `.git/lfs/objects`) and nothing bounds it. The export reads raw blobs from the
     `ls-tree` listing with one `git cat-file --batch` (no filters, no attributes), every git child has a timeout, and only
     an `ok` structure result is cached (Task 5 review, controller rulings).
+11. §9.2 "a temporary index (`GIT_INDEX_FILE` under Orca's state directory)", §13's "export index" row and item 5 above
+    (the scratch `document-<groupId>.md` / `message-<groupId>.txt`): withdrawn. Building the tree through an index under
+    `umask 077` wrote the person's `.git` objects 0400 and a fan-out directory 0700 (measured), which Rule 17 forbids.
+    The export now reads `HEAD`'s trees with `ls-tree -z` as raw bytes, writes the document with
+    `hash-object -w --stdin --no-filters`, rebuilds the changed levels with `mktree -z`, and passes the message to
+    `commit-tree` on stdin; every git child runs under the target's own umask with a timeout. The export writes nothing
+    outside the repository. A `.orca` or `.orca/requirements` that is a file in `HEAD` blocks the export durably
+    (state `conflict`, reason `requirement-export-path-blocked`), and `recovery-retry` re-arms it (Task 11 reviews,
+    controller rulings).
