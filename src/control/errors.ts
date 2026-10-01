@@ -137,6 +137,10 @@ export const durableCommandErrorStatuses = {
   "reconcile-budget-unapproved": 422,
   "reconcile-registration-invalid": 422,
   "recovery-validation-failed": 422,
+  // N1 spec §11.1 (DR27): a requirement's export has not landed yet, so its group cannot start.
+  "requirement-export-pending": 422,
+  // N1 spec §4.1 (DR6): a clarifying group has no plan, proposal or work items yet.
+  "requirement-not-split": 422,
   "resume-predecessor-unrecoverable": 422,
   "resume-handoff-invalid": 422,
   "resume-source-dir-not-absolute": 422,
@@ -227,6 +231,12 @@ export const nonDurableControlErrorClassifications = {
   "request-bound-proof-invalid": "internal",
   "shutdown-frozen-set-inconsistent": "internal",
   "start-proof-outcome-unknown": "internal",
+  // N1 spec §11.1 (DR27): reason codes projected on a requirement's rounds, drafts and export, never command outcomes.
+  "clarify-output-invalid": "internal",
+  "requirement-budget-exhausted": "internal",
+  "requirement-export-conflict": "internal",
+  "split-output-invalid": "internal",
+  "split-validation-exhausted": "internal",
 } as const satisfies Record<string, NonDurableControlErrorClassification> &
   Partial<Record<keyof typeof durableCommandErrorStatuses, never>>;
 

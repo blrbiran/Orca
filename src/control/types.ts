@@ -61,7 +61,7 @@ export interface Candidate extends Identity {
 }
 export interface GroupView {
   groupId: string; revision: number; graphVersion: number; stopped: boolean;
-  status: "draft" | "ready" | "running" | "review" | "done" | "blocked";
+  status: "clarifying" | "draft" | "ready" | "running" | "review" | "done" | "blocked";
   used: Amount; reserved: Amount; limit: Amount;
 }
 export interface RunView {

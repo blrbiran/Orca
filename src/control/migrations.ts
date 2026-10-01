@@ -1,6 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
 
-export const schemaVersion = "5";
+export const schemaVersion = "6";
 export const legacySchema = `CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;
 CREATE TABLE groups(id TEXT PRIMARY KEY, revision INTEGER NOT NULL, graph_version INTEGER NOT NULL, body TEXT NOT NULL) STRICT;
 CREATE TABLE work_items(group_id TEXT NOT NULL REFERENCES groups(id), id TEXT NOT NULL, target_version INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY(group_id,id)) STRICT;
@@ -65,13 +65,21 @@ export const schema3To4 = `CREATE TABLE repository_settings(repo_id TEXT PRIMARY
 export const schema4To5 = `CREATE TABLE agent_preferences(operator_id TEXT PRIMARY KEY, revision INTEGER NOT NULL CHECK(revision > 0 AND revision <= 9007199254740991), doc_json TEXT NOT NULL) STRICT;
 `;
 
-export const initialSchema = legacySchema + schema1To2 + schema2To3 + schema3To4 + schema4To5;
+// N1 spec §4.2: a requirement's rounds and split drafts, each keyed by group_id like `estimates`. The state column mirrors
+// the body's state (requirementRecords.ts checks both on every read). IF NOT EXISTS: the version-3/4 migration criteria of
+// agentPreferences/workspaceSettings downgrade a current store by dropping only their own table, so the 5-to-6 step meets tables already there.
+export const schema5To6 = `CREATE TABLE IF NOT EXISTS requirement_rounds(group_id TEXT NOT NULL REFERENCES groups(id), round_no INTEGER NOT NULL CHECK(round_no > 0 AND round_no <= 9007199254740991), state TEXT NOT NULL CHECK(state IN ('drafting','awaiting-answers','answered','interrupted','failed')), body TEXT NOT NULL, PRIMARY KEY(group_id,round_no)) STRICT;
+CREATE TABLE IF NOT EXISTS requirement_drafts(group_id TEXT NOT NULL REFERENCES groups(id), draft_no INTEGER NOT NULL CHECK(draft_no > 0 AND draft_no <= 9007199254740991), state TEXT NOT NULL CHECK(state IN ('drafting','awaiting-review','accepted','rejected','invalid','interrupted','failed')), body TEXT NOT NULL, PRIMARY KEY(group_id,draft_no)) STRICT;
+`;
+
+export const initialSchema = legacySchema + schema1To2 + schema2To3 + schema3To4 + schema4To5 + schema5To6;
 
 export function migrateSchema(store: DatabaseSync, fromVersion: string): void {
-  if (fromVersion === "1") store.exec(schema1To2 + schema2To3 + schema3To4 + schema4To5);
-  else if (fromVersion === "2") store.exec(schema2To3 + schema3To4 + schema4To5);
-  else if (fromVersion === "3") store.exec(schema3To4 + schema4To5);
-  else if (fromVersion === "4") store.exec(schema4To5);
+  if (fromVersion === "1") store.exec(schema1To2 + schema2To3 + schema3To4 + schema4To5 + schema5To6);
+  else if (fromVersion === "2") store.exec(schema2To3 + schema3To4 + schema4To5 + schema5To6);
+  else if (fromVersion === "3") store.exec(schema3To4 + schema4To5 + schema5To6);
+  else if (fromVersion === "4") store.exec(schema4To5 + schema5To6);
+  else if (fromVersion === "5") store.exec(schema5To6);
   else throw new Error("control-schema-unsupported");
   store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
 }

@@ -2,6 +2,7 @@ import { mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { schemaVersion } from "../../src/control/migrations.js";
 import { openControlStore } from "../../src/control/store.js";
 import { applySetWorkspaceMode, readWorkspaceSetting, type SetWorkspaceModeCommand } from "../../src/control/workspaceSettings.js";
 import { createAdmissionGate } from "../../src/control/admissionGate.js";
@@ -77,7 +78,9 @@ describe("repository workspace mode (execution driver §3.2)", () => {
       first.db.prepare("UPDATE meta SET value='3' WHERE key='schemaVersion'").run();
       first.close();
       const second = await openControlStore({ stateDir: join(root, "state") });
-      expect(second.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()!.value).toBe("5");
+      // N1 plan DR5 (controller ruling PR-I8 under the human's standing instruction, 2026-10-02): the migration ends at the current version, which N1 made 6;
+      // this criterion still encodes "a store from before this layer migrates to the current schema".
+      expect(second.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()!.value).toBe(schemaVersion);
       expect(readWorkspaceSetting(second, "repo")).toEqual({ workspaceMode: "worktree", revision: 0 });
       expect(second.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='agent_preferences'").get()).toEqual({ name: "agent_preferences" });
       second.close();
