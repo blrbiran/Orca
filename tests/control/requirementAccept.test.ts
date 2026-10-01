@@ -118,9 +118,11 @@ describe("requirement-draft-accept (N1 spec §9.1)", () => {
       expect(await accept(x)).toMatchObject({ error: { code: "group-state-invalid" } });
       x.store.db.prepare("UPDATE groups SET body=json_set(body,'$.reserved.tokens',0) WHERE id='r'").run();
       expect(readWebGroup(x.store, "r").status).toBe("clarifying");
-      // Accepted once; draft 1 forced back to awaiting-review is still refused, because the group is a plan group now.
+      // Accepted once; draft 1 forced back to awaiting-review is still refused, because the group is a plan group now --
+      // with its commitments cleared too, so the status check is the only refusal left.
       expect(await accept(x)).toMatchObject({ result: { kind: "requirement-draft-accepted" } });
       writeDraft(x.store, "r", { ...readDraft(x.store, "r", 1), state: "awaiting-review" });
+      x.store.db.prepare("UPDATE groups SET body=json_set(body,'$.reserved',json('{\"tokens\":0,\"activeMs\":0,\"attempts\":0,\"sessions\":0}')) WHERE id='r'").run();
       expect(await accept(x, hash)).toMatchObject({ error: { code: "group-state-invalid" } });
     } finally { await x.dispose(); }
   });
