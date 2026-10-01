@@ -117,6 +117,8 @@ export async function correct(argv: string[], opts: { now?: () => Date } = {}): 
   // release written as the last statement is skipped by every one of them, and
   // the leftover lock directory then blocks every future `orca run` on this
   // repository until someone deletes it by hand.
+  // *** ERRATUM (consolidation step 3 final review, 2026-10-01, Orca session be653b22, controller ruling FW-8) -- `orca run` is deleted; the leftover lock
+  // now blocks every future round on this repository (runPreparedRound takes the same lock, on the control path). ***
   const repoLock = await acquireRepoLock(parsed.repo).catch((err: unknown) => {
     throw new CorrectRejection(
       REPO_LOCKED,

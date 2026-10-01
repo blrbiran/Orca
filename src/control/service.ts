@@ -40,7 +40,7 @@ export class ControlService {
   async writeAsync<T>(operation:()=>Promise<T>):Promise<T> {
     const release=this.admissionGate.enter();try{return await operation();}finally{release();}
   }
-  async run(groupId:string, planPath:string, options: Omit<import("../scheduler/run.js").RunOptions,"adapter"|"adapterConfig"> = {}):Promise<number> {
+  async run(groupId:string, planPath:string, options: import("../scheduler/run.js").RunOptions = {}):Promise<number> {
     const release=this.store.beginOperation();
     try {
     for(const agent of workAgents(this.store,groupId))await this.legacyCapabilities(groupId,agent);
@@ -51,7 +51,7 @@ export class ControlService {
     return await runPreparedRound(loaded.round,options,makeControlledExecution(this,groupId));
     } finally {release();}
   }
-  async runProfiled(groupId:string,planPath:string,selection:ExecutionProfileSelection,handoffSelection:ExecutionProfileSelection,options:Omit<import("../scheduler/run.js").RunOptions,"adapter"|"adapterConfig">={}):Promise<number> {
+  async runProfiled(groupId:string,planPath:string,selection:ExecutionProfileSelection,handoffSelection:ExecutionProfileSelection,options:import("../scheduler/run.js").RunOptions={}):Promise<number> {
     const release=this.store.beginOperation();
     try {
       const {loadRound,runPreparedRound}=await import("../scheduler/run.js");

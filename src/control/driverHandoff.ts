@@ -32,6 +32,13 @@ export const HANDOFF_EXTRA_GRACE_MS = 60_000;
 
 /** ccloop consolidation step 1 (ccloop src/runtime/claude/claudeAgentAdapter.ts, PARTIAL_FLUSH_MARGIN_MS): ccloop waits this past the recovery window before it kills an execute. */
 export const PARTIAL_FLUSH_MARGIN_MS = 5_000;
+/**
+ * ccloop consolidation step 1, final review I1 (controller ruling, Orca session be653b22): an unusable recovery window
+ * (an invalid value, or a start envelope that cannot be read) counts as Orca's own default window, the 60_000 every
+ * loop plan freezes (loopPlans.ts EXECUTION_POLICY.partialOutcomeRecoveryWindowMs). That makes the fallback grace no
+ * shorter than any default run's; it is not a true ceiling, since a plan may freeze a window up to handoff.activeMs.
+ */
+export const UNUSABLE_RECOVERY_WINDOW_MS = 60_000;
 const usableMs = (v: unknown): v is number => typeof v === "number" && Number.isSafeInteger(v) && v >= 0;
 
 const stopDeps = (deps: ExecutionDriverDeps) => ({ store: deps.store, profileRouter: deps.router });
@@ -214,13 +221,14 @@ function settleEstimateUnderStop(deps: ExecutionDriverDeps, run: DriverRun, requ
  * "ccloop waits killGraceMs before it kills a phase" above is no longer true for execute: ccloop now waits
  * max(killGraceMs, partialOutcomeRecoveryWindowMs + PARTIAL_FLUSH_MARGIN_MS) before it kills one. The grace is that
  * bound plus HANDOFF_EXTRA_GRACE_MS, the window read from the run's frozen contract (recoveryWindowOf; 0 before a
- * start envelope exists). An unusable window counts as the ceiling grace, 120_000, as an unusable killGraceMs does
- * (ccloop docs/superpowers/specs/2026-10-01-claude-adapter-consolidation-step1-design.md §6, §11).
+ * start envelope exists). An unusable window counts as UNUSABLE_RECOVERY_WINDOW_MS (60_000, Orca's default window), so
+ * that grace is max(killGraceMs, 65_000) + 60_000: no shorter than any default run's grace, though not a true ceiling
+ * (ccloop docs/superpowers/specs/2026-10-01-claude-adapter-consolidation-step1-design.md §6, §11, §13).
  */
 export function handoffGraceMsOf(run: { killGraceMs?: unknown }, recoveryWindowMs: unknown): number {
-  if (!usableMs(recoveryWindowMs)) return 120_000;
+  const windowMs = usableMs(recoveryWindowMs) ? recoveryWindowMs : UNUSABLE_RECOVERY_WINDOW_MS;
   const killGraceMs = usableMs(run.killGraceMs) ? run.killGraceMs : 60_000;
-  return Math.max(killGraceMs, recoveryWindowMs + PARTIAL_FLUSH_MARGIN_MS) + HANDOFF_EXTRA_GRACE_MS;
+  return Math.max(killGraceMs, windowMs + PARTIAL_FLUSH_MARGIN_MS) + HANDOFF_EXTRA_GRACE_MS;
 }
 
 /** The frozen contract's partialOutcomeRecoveryWindowMs; 0 for a single call (it has no execute to stop). */
@@ -233,7 +241,8 @@ export function recoveryWindowOf(envelope: StartEnvelope): unknown {
 /**
  * ccloop consolidation step 1 (spec §6, §11): the run's frozen recovery window. No start envelope yet means ccloop never
  * started, so there is no window to wait (0). An envelope that cannot be read is a corrupt state: its window is
- * unusable (undefined), so the grace is the ceiling, never a throw that would keep the request from outcome-unknown.
+ * unusable (undefined), so it counts as UNUSABLE_RECOVERY_WINDOW_MS, never a throw that would keep the request from
+ * outcome-unknown.
  */
 function frozenRecoveryWindowOf(deps: ExecutionDriverDeps, run: DriverRun): unknown {
   if (run.drive?.envelopeHash == null) return 0;

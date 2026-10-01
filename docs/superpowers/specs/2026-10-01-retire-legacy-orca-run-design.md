@@ -92,3 +92,19 @@ for this step; the repin after step 4 picks everything up.
 
 - With `orca run` gone, the only way to run a round is the panel/control path; the `--serial` / `--keep-workdirs` /
   `--verbose` options of `orca run` go with it (control has its own equivalents where it needs them).
+
+## 7. Correction after implementation (2026-10-01)
+
+Recorded by the final-review fix agent, Orca session `be653b22`, from the Orca final whole-branch review (m3). The
+sections above keep their words; read them with these corrections. Source: the step's ledger
+(`.superpowers/sdd/2026-10-01-retire-legacy-orca-run/progress.md`, Task 2 line; `task-2-report.md`) and commit
+`refactor(scheduler): retire orca run --adapter-config; the round criteria run through ccloop --agents`.
+
+- §2/§3.2 say 56 criteria in 28 files. Implementation migrated **57 criteria in 29 files** (the survey missed
+  `tests/scheduler/loopPlanCli.test.ts`'s `it.each(["plan","run"])`). §3.3's deletions were **none**: no criterion
+  was deleted.
+- §3.1 says `RoundExecution.mode`'s `"legacy"` value is deleted. It is **kept**, for the test execution only
+  (implementer ruling C-5): `"controlled"` throws without an approved reconciliation grant, which the test harness's
+  round (like `runRound` before it) never has. No production caller takes the `"legacy"` branch.
+- Not in this spec (implementer ruling C-6): the `tests/scheduler/ccloopRunner.test.ts` "no terminal status" stub now
+  exits 2 instead of 1, because exit 1 now means ccloop refused the `--agents` run. Its assertion is unchanged.

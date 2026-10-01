@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { HANDOFF_EXTRA_GRACE_MS, PARTIAL_FLUSH_MARGIN_MS, handoffGraceMsOf, recoveryWindowOf } from "../../src/control/driverHandoff.js";
+import { HANDOFF_EXTRA_GRACE_MS, PARTIAL_FLUSH_MARGIN_MS, UNUSABLE_RECOVERY_WINDOW_MS, handoffGraceMsOf, recoveryWindowOf } from "../../src/control/driverHandoff.js";
 import type { StartEnvelope } from "../../src/control/executionPort.js";
 
 // Handoff delivery spec §3 (controller decision) and §10: a delivered request that yields nothing turns
@@ -38,9 +38,17 @@ describe("the handoff grace the driver waits (spec §3)", () => {
     expect(handoffGraceMsOf({ killGraceMs: 30_000 }, 1_000)).toBe(90_000);
   });
 
-  // ccloop consolidation step 1 (spec §6): fail closed, as an unusable killGraceMs does.
-  it("an unusable recovery window falls back to the ceiling grace", () => {
-    for (const w of [-1, 1.5, "1000", null, undefined]) expect(handoffGraceMsOf({ killGraceMs: 5_000 }, w)).toBe(120_000);
+  // ccloop consolidation step 1 (spec §6, §13; final review I1, controller ruling, Orca session be653b22): an unusable
+  // window counts as Orca's default window, 60_000 (every loop plan freezes it; loopPlans.test.ts pins that), so the
+  // grace is never shorter than a default run's 125_000 -- a fixed 120_000 was 5 s shorter, calling a stop unknown while
+  // ccloop may still be inside its window + margin. killGraceMs still decides when it is longer than window + margin.
+  it("an unusable recovery window counts as the default window, so the grace is no shorter than a default run's", () => {
+    expect(UNUSABLE_RECOVERY_WINDOW_MS).toBe(60_000);
+    const defaultRun = handoffGraceMsOf({ killGraceMs: 5_000 }, 60_000);
+    expect(defaultRun).toBe(125_000);
+    for (const w of [-1, 1.5, "1000", null, undefined]) expect(handoffGraceMsOf({ killGraceMs: 5_000 }, w)).toBe(defaultRun);
+    expect(handoffGraceMsOf({}, undefined)).toBe(125_000); // max(60_000 fallback, 65_000) + 60_000
+    expect(handoffGraceMsOf({ killGraceMs: 90_000 }, undefined)).toBe(150_000); // killGraceMs above window + margin decides
   });
 
   // ccloop consolidation step 1 (spec §6): the window is the run's frozen contract's; a single call has no execute to stop.

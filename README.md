@@ -389,6 +389,10 @@ A claim without a prepared dispatch intent remains blocked for explicit recovery
 Run the offline control gate with `npm run verify:control`; it is included in
 `npm run verify`. Scheduler integration tests require the existing ccloop build
 through `ORCA_CCLOOP_BIN` when the checkout has no sibling ccloop repository.
+The round criteria in `tests/scheduler` need a ccloop checkout (the sibling `../ccloop`, or
+`ORCA_CCLOOP_BIN` pointing at a checkout's `dist/cli.js`) at or after the ccloop commit titled
+`test(fixtures): fake codex plays scripted frames per attempt, for callers leaving --adapter scripted`:
+they run that checkout's `tests/fixtures/fake-codex.mjs`, which the pinned ccloop package does not ship.
 
 `orca panel` and `orca agents` find ccloop through `ORCA_CCLOOP_BIN` when it is set
 (an empty value means "no execution port"), and otherwise through a ccloop package

@@ -118,6 +118,9 @@ async function resolveBaseSha(repoPath: string, branch: string): Promise<string 
 /**
  * Everything `orca plan` prints and everything `orca run` needs before it
  * spends a cent, derived exactly once.
+ * *** ERRATUM (consolidation step 3 final review, 2026-10-01, Orca session be653b22, controller ruling FW-8) -- `orca run` is deleted; what
+ * needs this before a round spends anything is now runPreparedRound, called by the control path and the test
+ * harness (tests/scheduler/sandbox.ts runRoundForTest). Text kept verbatim. ***
  *
  * spec §9.4 is the reason this type exists at all: two implementations of
  * "read → validate → compute write sets → build the graph → layer it" WILL
@@ -239,6 +242,8 @@ export function renderRound(round: Round, preflightReport: PreflightReport, verb
     // Final review, Important 7: where W starts, printed for the human who
     // approves the round. Read once, in loadRound, from the same values
     // `runRound` schedules on — not re-read here, where HEAD may already be W.
+    // *** ERRATUM (consolidation step 3 final review, 2026-10-01, Orca session be653b22, controller ruling FW-8) -- `runRound` is deleted; the round that
+    // schedules on these values is runPreparedRound's. ***
     base: { branch: round.baseBranch, sha: round.baseSha },
   });
 }
@@ -642,7 +647,7 @@ export async function runPreparedRound(round: Round, options: RunOptions, execut
   // would silently ignore what the plan asked for, and that is the exact
   // silent-degradation shape §0.1 forbids.
   if (plan.ledgerMode !== "in-repo") {
-    logError(`orca run: ledgerMode ${JSON.stringify(plan.ledgerMode)} is not implemented yet (spec §8.5)`);
+    logError(`round: ledgerMode ${JSON.stringify(plan.ledgerMode)} is not implemented yet (spec §8.5)`);
     return 1;
   }
 

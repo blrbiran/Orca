@@ -307,9 +307,11 @@ describe("the grace is the run's own agent killGraceMs plus the fixed minute (sp
 
 describe("an unreadable start envelope under a stop (ccloop consolidation step 1, spec §6, §11)", { timeout: 60_000 }, () => {
   // Controller ruling M1 (Task 4 fix round 1, Orca session be653b22): a frozen envelope that cannot be read is a corrupt
-  // state; its recovery window counts as unusable, so the grace is the 120_000 ceiling -- the request still reaches
-  // outcome-unknown, instead of the window read throwing and keeping it open for good.
-  it("waits the ceiling grace and then turns an undeliverable request outcome-unknown", async () => {
+  // state; its recovery window counts as unusable -- the request still reaches outcome-unknown, instead of the window
+  // read throwing and keeping it open for good. Final review I1 (controller ruling, same session): an unusable window
+  // counts as Orca's default window, 60_000, so with this harness's killGraceMs 5_000 the grace is
+  // max(5_000, 60_000 + 5_000) + 60_000 = 125_000 -- no shorter than a default run's (the earlier fixed 120_000 was).
+  it("waits the default run's grace and then turns an undeliverable request outcome-unknown", async () => {
     const t = await driverHarness([{ taskId: "a" }], { behaviour: () => "stoppable-silent" }); try {
       const runId = await t.claim();
       let now = Date.now();
@@ -319,10 +321,10 @@ describe("an unreadable start envelope under a stop (ccloop consolidation step 1
       t.h.store.db.prepare("UPDATE execution_snapshots SET body=? WHERE hash=?").run("{}", envelopeHash);
       const [requestId] = await stop(t);
       const deadline = Date.parse(readHandoffRequest(t.h.store, "g", requestId!).request.deadlineAt);
-      now = deadline + 120_000;
+      now = deadline + 125_000;
       await driver.round();
       expect(requestState(t, requestId!)).toBe("request-pending");
-      now = deadline + 120_001;
+      now = deadline + 125_001;
       await t.until(driver, () => requestState(t, requestId!) === "outcome-unknown");
     } finally { await t.h.dispose(); }
   });
