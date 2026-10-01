@@ -58,6 +58,9 @@ describe("requirement-open (N1 spec §11.1 item 1)", () => {
       expect(await x.service.openRequirement({ ...(open("r") as object), expectedRevision: 1 } as never)).toMatchObject({ error: { code: "group-already-exists" } });
       expect(readRequirementGroup(x.store, "r").requirement.requirementId).toBe("0123456789abcdef0123456789abcdef");
       expect(rawAuthorityCommandSchema.safeParse(open("big", { idea: "x".repeat(32 * 1024 + 1) })).success).toBe(false);
+      expect(rawAuthorityCommandSchema.safeParse(open("big", { idea: "x".repeat(32 * 1024) })).success).toBe(true);
+      // The target names the group the payload opens (as import-plan's does).
+      expect(rawAuthorityCommandSchema.safeParse({ ...(open("m") as object), target: { kind: "group", groupId: "other" } }).success).toBe(false);
       expect(x.store.db.prepare("SELECT COUNT(*) AS n FROM groups WHERE id IN ('m','big')").get()!.n).toBe(0);
     } finally { await x.dispose(); }
   });
@@ -213,6 +216,16 @@ describe("requirement-draft-feedback and recovery-retry (N1 spec §11.1 item 4, 
       const second = x.fake.calls.accept[1]!;
       expect(second.work.kind === "single-call" && second.work.prompt).toContain("Merge the two tasks into one.");
       expect(readDraft(x.store, "r", 2).autoRetry).toBe(0);
+    } finally { await x.dispose(); }
+  });
+
+  it("starts the draft after feedback at a fresh retry count, even when the rejected one was itself a retry (DR9)", async () => {
+    const x = await requirementHarness({ answers: [INVALID_SPLIT, VALID_SPLIT, VALID_SPLIT].map((output) => ({ purpose: "split" as const, output })), startAt: "split" });
+    try {
+      await x.until(() => readDraft(x.store, "r", 2).state === "awaiting-review");
+      expect(readDraft(x.store, "r", 2).autoRetry).toBe(1);
+      expect(x.service.requirementDraftFeedback(x.command("requirement-draft-feedback", { draftNo: 2, feedback: "One task is enough." }))).toMatchObject({ result: { nextDraftNo: 3 } });
+      expect(readDraft(x.store, "r", 3)).toMatchObject({ state: "drafting", autoRetry: 0 });
     } finally { await x.dispose(); }
   });
 
