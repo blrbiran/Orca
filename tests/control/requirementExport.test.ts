@@ -3,13 +3,14 @@ import { createHash } from "node:crypto";
 import { chmodSync, existsSync, lstatSync, readFileSync, readdirSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createAdmissionGate } from "../../src/control/admissionGate.js";
 import { resolveGroupSelections } from "../../src/control/agentFreeze.js";
 import { readArchivedPlan, readBudgetProposal } from "../../src/control/queries.js";
 import { exportPendingRequirements, exportRequirementDocument } from "../../src/control/requirementExport.js";
 import { readDraft, readRequirementGroup } from "../../src/control/requirementRecords.js";
 import { readCanonicalRecord } from "../../src/control/snapshot.js";
+import { requirementSummaryOf } from "../../src/panel/controlViews.js";
 import { requirementHarness } from "./fixtures/requirementHarness.js";
 import { VALID_SPLIT } from "./fixtures/requirementOutputs.js";
 
@@ -125,6 +126,7 @@ describe("exporting the requirement document (N1 spec §9.2)", () => {
       expect(await exportRequirementDocument(exportDeps(x), "r")).toBe("conflict");
       expect(x.git("rev-parse", "refs/heads/orca/r")).toBe(tip);
       expect(readRequirementGroup(x.store, "r").requirement.export).toMatchObject({ state: "conflict", detail: expect.stringContaining("requirement-export-conflict") });
+      expect(requirementSummaryOf(x.store, "r")).toMatchObject({ exportState: "conflict", reasonCode: "requirement-export-conflict" });
     } finally { await x.dispose(); }
   });
 
@@ -167,22 +169,56 @@ describe("the tree the export builds, level by level (controller ruling on the T
     } finally { await x.dispose(); }
   });
 
-  it("refuses a .orca in HEAD that is not a directory, never replacing it, and creates no branch", async () => {
+  it("keeps an entry whose name is not valid UTF-8 byte for byte, at the root and beside the document", async () => {
     const { x } = await accepted();
     try {
-      await commitIn(x, { ".orca": "a file\n" });
-      await expect(exportRequirementDocument(exportDeps(x), "r")).rejects.toThrow("requirement export: .orca in HEAD is not a directory");
-      expect(() => x.git("rev-parse", "--verify", "-q", "refs/heads/orca/r")).toThrow();
-      expect(readRequirementGroup(x.store, "r").requirement.export.state).toBe("pending");
+      // Bytes 0xff 0xfe in the names, which no JS string can carry: written through the shell's printf. The fixture
+      // repository has no hooks, so the commit needs no override.
+      execFileSync("/bin/sh", ["-c", [
+        "B=$(printf 'odd\\n' | git hash-object -w --stdin)",
+        "git update-index --add --cacheinfo \"100644,$B,$(printf 'bad\\377\\376.txt')\"",
+        "git update-index --add --cacheinfo \"100644,$B,$(printf '.orca/requirements/bad\\377\\376.md')\"",
+        "git -c user.name=t -c user.email=t@t commit -qm odd",
+      ].join(" && ")], { cwd: x.repo });
+      expect(await exportRequirementDocument(exportDeps(x), "r")).toBe("done");
+      const trees = indexTree(x);
+      expect(trees.built).toBe(trees.expected);
+      const names = (tree: string) => execFileSync("git", ["ls-tree", "-r", "-z", "--name-only", tree], { cwd: x.repo });
+      for (const name of [Buffer.from([0x62, 0x61, 0x64, 0xff, 0xfe, 0x2e, 0x74, 0x78, 0x74]), Buffer.concat([Buffer.from(".orca/requirements/bad"), Buffer.from([0xff, 0xfe]), Buffer.from(".md")])]) {
+        expect(names("refs/heads/orca/r").includes(Buffer.concat([name, Buffer.from([0])]))).toBe(true);
+      }
     } finally { await x.dispose(); }
   });
+});
 
-  it("refuses a .orca/requirements in HEAD that is not a directory, and creates no branch", async () => {
-    const { x } = await accepted();
+describe("a .orca level in HEAD that is not a directory (controller ruling, fix round 2)", () => {
+  for (const [path, reason] of [[".orca", ".orca in HEAD is not a directory"], [".orca/requirements", ".orca/requirements in HEAD is not a directory"]] as const) {
+    it(`blocks requirement-export-path-blocked on a ${path} file, delivers its wake once, never replaces it and names the reason in the summary`, async () => {
+      const { x } = await accepted();
+      const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+      try {
+        await commitIn(x, { [path]: "a file\n" });
+        expect(await exportPendingRequirements(exportDeps(x))).toBe(true);
+        expect(await exportPendingRequirements(exportDeps(x))).toBe(false);
+        expect(stderr.mock.calls.filter(([line]) => String(line).includes("requirement export"))).toEqual([]);
+        expect(readRequirementGroup(x.store, "r").requirement.export).toEqual({ state: "conflict", path: null, commit: null, parent: null, detail: `requirement-export-path-blocked:${reason}` });
+        expect(x.store.db.prepare("SELECT delivered FROM scheduler_wakes WHERE id='scheduler-wake:r:requirement-export'").get()).toEqual({ delivered: 1 });
+        expect(requirementSummaryOf(x.store, "r")).toMatchObject({ exportState: "conflict", reasonCode: "requirement-export-path-blocked" });
+        expect(() => x.git("rev-parse", "--verify", "-q", "refs/heads/orca/r")).toThrow();
+      } finally { stderr.mockRestore(); await x.dispose(); }
+    });
+  }
+
+  it("exports after the person fixes HEAD and asks recovery-retry", async () => {
+    const { x, text } = await accepted();
     try {
-      await commitIn(x, { ".orca/requirements": "a file\n" });
-      await expect(exportRequirementDocument(exportDeps(x), "r")).rejects.toThrow("requirement export: .orca/requirements in HEAD is not a directory");
-      expect(() => x.git("rev-parse", "--verify", "-q", "refs/heads/orca/r")).toThrow();
+      await commitIn(x, { ".orca": "a file\n" });
+      await exportPendingRequirements(exportDeps(x));
+      x.git("rm", "-q", ".orca"); x.git("commit", "-qm", "the person moves .orca away");
+      expect(await x.service.recoveryRetry(x.command("recovery-retry", { scope: "group", groupId: "r" }))).toMatchObject({ result: { resolved: true, wakeIds: ["scheduler-wake:r:requirement-export"] } });
+      expect(await exportPendingRequirements(exportDeps(x))).toBe(true);
+      expect(readRequirementGroup(x.store, "r").requirement.export.state).toBe("done");
+      expect(x.git("show", `refs/heads/orca/r:${readRequirementGroup(x.store, "r").requirement.export.path}`)).toBe(text.trimEnd());
     } finally { await x.dispose(); }
   });
 });

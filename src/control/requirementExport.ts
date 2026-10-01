@@ -6,9 +6,16 @@ import { readCanonicalRecord } from "./snapshot.js";
 import type { AdmissionGate } from "./admissionGate.js";
 import type { ControlStore } from "./store.js";
 import { QUIET_GIT, workBranchRef } from "./workspace.js";
-import { git, type GitOptions } from "../scheduler/gitExec.js";
+import { git, gitBytes, type GitOptions } from "../scheduler/gitExec.js";
 
 const TRAILER = "Orca-Document-Sha256";
+/** The two reasons an export is blocked (state "conflict"); each is the prefix of the export's detail. */
+export const EXPORT_CONFLICT = "requirement-export-conflict";
+export const EXPORT_PATH_BLOCKED = "requirement-export-path-blocked";
+/** The reason a blocked export names, for the panel's summary: the code its detail starts with. */
+export function exportReasonOf(detail: string | null): typeof EXPORT_CONFLICT | typeof EXPORT_PATH_BLOCKED {
+  return detail !== null && detail.startsWith(`${EXPORT_PATH_BLOCKED}:`) ? EXPORT_PATH_BLOCKED : EXPORT_CONFLICT;
+}
 /** N1 spec §15 item 10 (the Task 5 lesson): every git child the export starts is killed after this long. */
 const GIT_EXPORT_TIMEOUT_MS = 30_000;
 
@@ -30,32 +37,48 @@ function record(deps: ExportDeps, groupId: string, exported: RequirementBlock["e
  */
 function exportGit(deps: ExportDeps, repo: string) {
   const timeoutMs = deps.gitTimeoutMs ?? GIT_EXPORT_TIMEOUT_MS;
-  return async (args: string[], options: Omit<GitOptions, "timeoutMs"> = {}): Promise<string> => git(repo, [...QUIET_GIT, ...args], { ...options, timeoutMs });
+  const run = async (args: string[], options: Omit<GitOptions, "timeoutMs"> = {}): Promise<string> => git(repo, [...QUIET_GIT, ...args], { ...options, timeoutMs });
+  return Object.assign(run, {
+    bytes: async (args: string[], options: Omit<GitOptions, "timeoutMs"> = {}): Promise<Buffer> => gitBytes(repo, [...QUIET_GIT, ...args], { ...options, timeoutMs }),
+  });
 }
 type ExportGit = ReturnType<typeof exportGit>;
 const revParse = async (run: ExportGit, rev: string): Promise<string> => (await run(["rev-parse", "--verify", `${rev}^{commit}`])).trim();
 const tipOf = async (run: ExportGit, ref: string): Promise<string | null> => revParse(run, ref).catch(() => null);
 
-/** One `ls-tree -z` entry, kept as git printed it so that mktree writes it back byte for byte. */
-interface TreeEntry { mode: string; type: string; oid: string; name: string }
+/**
+ * One `ls-tree -z` entry, kept as the bytes git printed: the name is never decoded, so a name that is not valid UTF-8
+ * goes back into mktree unchanged (Task 11 review, fix round 2).
+ */
+interface TreeEntry { header: Buffer; type: string; oid: string; name: Buffer }
 async function listTree(run: ExportGit, tree: string): Promise<TreeEntry[]> {
-  return (await run(["ls-tree", "-z", tree])).split("\0").filter((line) => line.length > 0).map((line) => {
-    const tab = line.indexOf("\t");
-    const [mode, type, oid] = line.slice(0, tab).split(" ") as [string, string, string];
-    return { mode, type, oid, name: line.slice(tab + 1) };
-  });
+  const out = await run.bytes(["ls-tree", "-z", tree]);
+  const entries: TreeEntry[] = [];
+  for (let at = 0; at < out.length;) {
+    const end = out.indexOf(0, at), record = out.subarray(at, end === -1 ? out.length : end);
+    at = end === -1 ? out.length : end + 1;
+    if (record.length === 0) continue;
+    const tab = record.indexOf(9);
+    const [, type, oid] = record.subarray(0, tab).toString("latin1").split(" ") as [string, string, string];
+    entries.push({ header: record.subarray(0, tab), type, oid, name: record.subarray(tab + 1) });
+  }
+  return entries;
 }
-/** The entries of directory `name` in `entries`: none when it is absent; a non-directory there is refused, never replaced. */
+const entryOf = (mode: string, type: string, oid: string, name: string): TreeEntry => ({ header: Buffer.from(`${mode} ${type} ${oid}`, "latin1"), type, oid, name: Buffer.from(name, "utf8") });
+/** A level of HEAD that is there but is not a directory: the export is blocked by name, never replaced. */
+class PathBlocked extends Error { constructor(readonly path: string) { super(`${path} in HEAD is not a directory`); } }
+/** The entries of directory `name` in `entries`: none when it is absent; a non-directory there is refused (PathBlocked). */
 async function subtree(run: ExportGit, entries: TreeEntry[], name: string, path: string): Promise<TreeEntry[]> {
-  const entry = entries.find((candidate) => candidate.name === name);
+  const entry = entries.find((candidate) => candidate.name.equals(Buffer.from(name, "utf8")));
   if (entry === undefined) return [];
-  if (entry.type !== "tree") throw new Error(`requirement export: ${path} in HEAD is not a directory`);
+  if (entry.type !== "tree") throw new PathBlocked(path);
   return listTree(run, entry.oid);
 }
 /** `entries` with `entry` put in place of any entry by its name; mktree sorts them as git does. */
 async function makeTree(run: ExportGit, entries: TreeEntry[], entry: TreeEntry): Promise<string> {
-  const all = [...entries.filter((candidate) => candidate.name !== entry.name), entry];
-  return (await run(["mktree", "-z"], { input: all.map((e) => `${e.mode} ${e.type} ${e.oid}\t${e.name}\0`).join("") })).trim();
+  const all = [...entries.filter((candidate) => !candidate.name.equals(entry.name)), entry];
+  const input = Buffer.concat(all.flatMap((e) => [e.header, Buffer.from([9]), e.name, Buffer.from([0])]));
+  return (await run(["mktree", "-z"], { input })).trim();
 }
 
 /** DR21: a commit is this document's when its message carries the hash and it adds exactly one requirement file with these bytes. */
@@ -71,7 +94,8 @@ async function documentCommitPath(run: ExportGit, commit: string, requirement: R
 /**
  * N1 spec §9.2 (as corrected by the controller's ruling on the Task 11 review): git plumbing only -- hash-object and
  * mktree on stdin, commit-tree on HEAD, and a create-only update-ref of orca/<groupId>. The person's working tree and index are never read
- * or written. A branch that already exists with anything else blocks (requirement-export-conflict) and is never moved.
+ * or written. A branch that already exists with anything else blocks (requirement-export-conflict) and is never moved;
+ * a .orca or .orca/requirements in HEAD that is not a directory blocks (requirement-export-path-blocked).
  */
 export async function exportRequirementDocument(deps: ExportDeps, groupId: string): Promise<"done" | "conflict" | "nothing"> {
   const group = readRequirementGroup(deps.store, groupId);
@@ -86,7 +110,7 @@ export async function exportRequirementDocument(deps: ExportDeps, groupId: strin
   if (existing !== null) {
     const path = await documentCommitPath(run, existing, requirement);
     if (path === null) {
-      record(deps, groupId, { ...requirement.export, state: "conflict", detail: `requirement-export-conflict:${ref} is at ${existing}` });
+      record(deps, groupId, { ...requirement.export, state: "conflict", detail: `${EXPORT_CONFLICT}:${ref} is at ${existing}` });
       return "conflict";
     }
     record(deps, groupId, { state: "done", path, commit: existing, parent: await revParse(run, `${existing}^`), detail: null });
@@ -97,16 +121,25 @@ export async function exportRequirementDocument(deps: ExportDeps, groupId: strin
   // levels are read with ls-tree, and each changed level is written bottom-up with mktree, every child under the
   // target's own umask, so the objects get the modes git gives them there.
   const root = await listTree(run, `${head}^{tree}`);
-  const orca = await subtree(run, root, ".orca", ".orca");
-  const requirements = await subtree(run, orca, "requirements", ".orca/requirements");
-  const names = new Set(requirements.map((entry) => entry.name));
+  let orca: TreeEntry[], requirements: TreeEntry[];
+  try {
+    orca = await subtree(run, root, ".orca", ".orca");
+    requirements = await subtree(run, orca, "requirements", ".orca/requirements");
+  } catch (error) {
+    if (!(error instanceof PathBlocked)) throw error;
+    // Controller ruling (fix round 2): durable, like a conflict -- the wake is delivered, and recovery-retry re-arms it
+    // once the person has changed HEAD.
+    record(deps, groupId, { ...requirement.export, state: "conflict", detail: `${EXPORT_PATH_BLOCKED}:${error.message}` });
+    return "conflict";
+  }
+  const taken = (name: string) => requirements.some((entry) => entry.name.equals(Buffer.from(name, "utf8")));
   let suffix = 1;
-  while (names.has(documentPathOf(requirement.createdOn, requirement.slug, suffix).slice(".orca/requirements/".length))) suffix += 1;
+  while (taken(documentPathOf(requirement.createdOn, requirement.slug, suffix).slice(".orca/requirements/".length))) suffix += 1;
   const path = documentPathOf(requirement.createdOn, requirement.slug, suffix);
   const blob = (await run(["hash-object", "-w", "--stdin", "--no-filters"], { input: text })).trim();
-  const requirementsTree = await makeTree(run, requirements, { mode: "100644", type: "blob", oid: blob, name: path.slice(".orca/requirements/".length) });
-  const orcaTree = await makeTree(run, orca, { mode: "040000", type: "tree", oid: requirementsTree, name: "requirements" });
-  const tree = await makeTree(run, root, { mode: "040000", type: "tree", oid: orcaTree, name: ".orca" });
+  const requirementsTree = await makeTree(run, requirements, entryOf("100644", "blob", blob, path.slice(".orca/requirements/".length)));
+  const orcaTree = await makeTree(run, orca, entryOf("040000", "tree", requirementsTree, "requirements"));
+  const tree = await makeTree(run, root, entryOf("040000", "tree", orcaTree, ".orca"));
   // DR21: dated at the freeze, so a re-run builds the same commit. commit-tree signs only with -S: a target's
   // commit.gpgSign is not read (measured on git 2.50.1; the criterion pins that no signing program runs).
   const at = requirement.document.frozenAt;

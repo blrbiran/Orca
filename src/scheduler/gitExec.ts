@@ -24,17 +24,26 @@ const execFileAsync = promisify(execFile);
  * would make a task id with a `;` in it a command.
  */
 export async function git(repo: string, args: string[], options: GitOptions = {}): Promise<string> {
-  // N1 plan F14: the requirement export sets the commit identity per call, bounds every child, and feeds the document
-  // and the commit message on stdin. Every other caller passes nothing and gets exactly the call it had.
+  return (await runGit(repo, args, options, "utf8")) as string;
+}
+
+/** As `git`, but stdout as the raw bytes git wrote: a path that is not valid UTF-8 survives (N1 Task 11 review). */
+export async function gitBytes(repo: string, args: string[], options: GitOptions = {}): Promise<Buffer> {
+  return (await runGit(repo, args, options, "buffer")) as Buffer;
+}
+
+async function runGit(repo: string, args: string[], options: GitOptions, encoding: "utf8" | "buffer"): Promise<string | Buffer> {
+  // N1 plan F14: the requirement export sets the commit identity per call, bounds every child, and feeds the document,
+  // the trees and the commit message on stdin. Every other caller passes nothing and gets exactly the call it had.
   const pending = execFileAsync("git", args, {
     cwd: repo,
+    encoding,
     ...(options.env === undefined ? {} : { env: { ...process.env, ...options.env } }),
     ...(options.timeoutMs === undefined ? {} : { timeout: options.timeoutMs, killSignal: "SIGKILL" as const }),
   });
   // A child that exits before reading all of it fails through `pending`; the pipe's EPIPE is that same failure.
   if (options.input !== undefined) { pending.child.stdin?.on("error", () => undefined); pending.child.stdin?.end(options.input); }
-  const { stdout } = await pending;
-  return stdout;
+  return (await pending).stdout;
 }
 
 export interface GitOptions {
@@ -43,7 +52,7 @@ export interface GitOptions {
   /** The child is killed (SIGKILL) after this long. */
   timeoutMs?: number;
   /** Written to the child's stdin, which is then closed. */
-  input?: string;
+  input?: string | Buffer;
 }
 
 /**

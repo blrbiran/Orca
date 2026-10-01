@@ -18,6 +18,7 @@ import { effectivePlanTask, workBodyOf } from "../control/taskAmendments.js";
 import type { ControlStore } from "../control/store.js";
 import { agentSelectionSchema, amountSchema, artifactSchema, canonicalTimestampSchema, grantSchema, idSchema, runProgressSchema, safeInteger, type RunProgress } from "../control/schema.js";
 import { taskContractSchema } from "../scheduler/planFile.js";
+import { exportReasonOf } from "../control/requirementExport.js";
 import {
   agentSelectionPreviewSchema,
   allocationViewSchema,
@@ -284,7 +285,7 @@ export function requirementSummaryOf(store: ControlStore, groupId: string): Requ
     roundNo: round?.roundNo ?? null, roundState: round?.state ?? null, openQuestions,
     draftNo: draft?.draftNo ?? null, draftState: draft?.state ?? null,
     waiting: (group.requirement.consensus === null ? round?.waiting : draft?.waiting) ?? null,
-    reasonCode: (group.requirement.consensus === null ? round?.reasonCode : draft?.reasonCode) ?? (group.requirement.export.state === "conflict" ? "requirement-export-conflict" : null),
+    reasonCode: (group.requirement.consensus === null ? round?.reasonCode : draft?.reasonCode) ?? (group.requirement.export.state === "conflict" ? exportReasonOf(group.requirement.export.detail) : null),
     exportState: group.requirement.export.state,
     used: group.used, reserved: group.reserved, limit: group.limit, usageUnknown: group.ledger.usageUnknown,
   };

@@ -235,6 +235,7 @@ export const nonDurableControlErrorClassifications = {
   "clarify-output-invalid": "internal",
   "requirement-budget-exhausted": "internal",
   "requirement-export-conflict": "internal",
+  "requirement-export-path-blocked": "internal",
   "split-output-invalid": "internal",
   "split-validation-exhausted": "internal",
 } as const satisfies Record<string, NonDurableControlErrorClassification> &
