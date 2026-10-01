@@ -23,9 +23,28 @@ const execFileAsync = promisify(execFile);
  * a commit message) and several of them come out of a plan file, so a shell
  * would make a task id with a `;` in it a command.
  */
-export async function git(repo: string, args: string[]): Promise<string> {
-  const { stdout } = await execFileAsync("git", args, { cwd: repo });
+export async function git(repo: string, args: string[], options: GitOptions = {}): Promise<string> {
+  // N1 plan F14: the requirement export sets GIT_INDEX_FILE and the commit identity per call, bounds every child, and
+  // runs the children that write its temporary index under umask 077 (controller ruling PR-I6). Every other caller
+  // passes nothing and gets exactly the call it had.
+  const exec = {
+    cwd: repo,
+    ...(options.env === undefined ? {} : { env: { ...process.env, ...options.env } }),
+    ...(options.timeoutMs === undefined ? {} : { timeout: options.timeoutMs, killSignal: "SIGKILL" as const }),
+  };
+  const { stdout } = options.privateFiles === true
+    ? await execFileAsync("/bin/sh", ["-c", 'umask 077 && exec git "$@"', "sh", ...args], exec)
+    : await execFileAsync("git", args, exec);
   return stdout;
+}
+
+export interface GitOptions {
+  /** Merged over process.env for this child only. */
+  env?: NodeJS.ProcessEnv;
+  /** The child is killed (SIGKILL) after this long. */
+  timeoutMs?: number;
+  /** Run under umask 077, so a file the child creates outside the repository is 0600. */
+  privateFiles?: boolean;
 }
 
 /**

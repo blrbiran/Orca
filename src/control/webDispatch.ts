@@ -15,6 +15,7 @@ import { frozenWorkAgent } from "./agentFreeze.js";
 import { claimableContinuations, continuationAlreadyClaimed, continuationWakeBody, type RegisteredContinuation } from "./continuation.js";
 import { singleCallClaimRowOf } from "./singleCall.js";
 import { claimRequirementCall } from "./requirementCalls.js";
+import { hasRequirementBlock, readRequirementGroup } from "./requirementRecords.js";
 
 export type Phase = "estimate" | "work" | "handoff" | "single-call";
 export type StartCommand = Extract<RawAuthorityCommandV1, { verb: "start" }>;
@@ -121,6 +122,8 @@ export async function scheduleStart(deps: WebDispatchDeps, command: StartCommand
         const group = readGroup(store, groupId);
         if ((group as { status: string }).status === "clarifying") throw new ControlError("requirement-not-split");
         if (group.status !== "ready") throw new ControlError("group-state-invalid");
+        // N1 spec §9.3: a requirement's group starts only on top of its exported document.
+        if (hasRequirementBlock(group as { requirement?: unknown }) && readRequirementGroup(store, groupId).requirement.export.state !== "done") throw new ControlError("requirement-export-pending");
         const snapshot = readFrozenSnapshot(store, groupId);
         if (group.graphVersion !== snapshot.graphVersion) throw new ControlError("plan-version-conflict");
         if (store.dispatchBlocked || (group as unknown as { ledger?: { usageUnknown?: boolean } }).ledger?.usageUnknown) throw new ControlError("recovery-blocked");

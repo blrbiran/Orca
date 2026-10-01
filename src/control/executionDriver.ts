@@ -15,6 +15,7 @@ import { readCanonicalRecord, writeCanonicalRecord } from "./snapshot.js";
 import { toSingleCallEnvelope, toStartEnvelope } from "./startEnvelope.js";
 import { exportResumeBundle, readExistingResumeBundle, type InputCheckpointV1 } from "./resumeBundle.js";
 import { recordUsage } from "./usage.js";
+import { exportPendingRequirements } from "./requirementExport.js";
 import { isSingleCallRun, isWebWorkRun, nextClaimableTask, readSingleCallClaimEnvelope, readWorkClaimEnvelope, reserveProviderAttemptInTransaction } from "./webDispatch.js";
 import { singleCallPurposeOf } from "./singleCall.js";
 import { singleCallHandler } from "./singleCallPurposes.js";
@@ -866,6 +867,10 @@ export function createExecutionDriver(deps: ExecutionDriverDeps): ExecutionDrive
         }
       }
     }
+    // N1 spec §9.2 (DR14): a requirement's export has git side effects, so it is the driver's, once per round. It runs
+    // after the runs: an await before them would let a stop() issued with the round land before the round's first step.
+    try { if (await exportPendingRequirements(deps)) progressed = true; }
+    catch (error) { if (error instanceof ControlError && error.code === "panel-draining") return progressed; throw error; }
     return progressed;
   };
 
