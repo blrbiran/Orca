@@ -25,6 +25,8 @@ export interface LoopPlanDefinition {
   constraints: readonly string[];
   verifierType: "command" | "agent";
   /** A case-sensitive substring over every evidence string (spec §2.2, C4); a dead placeholder for a command verifier. */
+  // ERRATUM (ccloop pin 1e4e434, 2026-10-01): from that ccloop on, rejectOn is only a condition in the verifier prompt;
+  // ccloop no longer searches evidence for it (ccloop spec 2026-10-01-rejecton-verifier-judgment-design.md).
   rejectOn: string;
   /** The discipline line in English with its strength (spec §4.1), the panel's source of record (panel i18n spec §6.9); null when the plan has none. */
   discipline: string | null;
@@ -57,6 +59,8 @@ const V2_DEFAULTS = { defaultMaxFilesTouched: Number.MAX_SAFE_INTEGER, perAttemp
  * no v2 plan relies on a token: design and investigate are checked by a command (each target document exists and is
  * not empty), and bugfix's red-first requirement is part of the success condition its verifier reads. The human ruled
  * (2026-10-01) that this edits v2 in place, a one-off exception to spec §2.2 above: v2 was pushed but no task used it.
+ * ERRATUM (ccloop pin 1e4e434, 2026-10-01): "ccloop's substring match then fails good work" held for the ccloop this
+ * was measured on; the pinned ccloop no longer searches evidence for rejectOn, so v1's tokens are prompt-only too.
  */
 const V2_CHANGES: Partial<Record<LoopPlanId, Partial<LoopPlanDefinition>>> = {
   bugfix: { rejectOn: "REJECT:unused", successConditionSuffix: "Also: a test that reproduces the bug was added, and it failed before the fix." },

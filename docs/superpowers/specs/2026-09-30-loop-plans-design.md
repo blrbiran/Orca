@@ -468,3 +468,13 @@ The text above stays as written; where it differs from this section, this sectio
   placeholder (needs a paid call).
 - The panel card's "Acceptance: N check commands" still counts the task's own checks only; the document checks are
   named in the plan's discipline line.
+
+## 14. ccloop no longer searches evidence for rejectOn (2026-10-01, session `ceca1c47`)
+
+The text above stays as written; where it differs from this section, this section wins. Orca pins ccloop at
+`1e4e43437c72a405fccd09f0158b87593218cc9e`, where `rejectOn` is only a condition in the verifier prompt (ccloop spec
+`docs/superpowers/specs/2026-10-01-rejecton-verifier-judgment-design.md`, human ruling "D"). So §2.1's "a match sets
+`safeToRetry: false`, which ends the run `failed`" and §2.2's description of a case-sensitive substring over every
+evidence string no longer hold for any version: an approving verifier is never overridden by a token, and a check's
+output containing one does not reject either. v1's agent plans keep their tokens (versions are not edited), which now
+reach the verifier only as bare conditions in its prompt; no stored task uses v1 (real `~/.orca`: 0 loop recipes).

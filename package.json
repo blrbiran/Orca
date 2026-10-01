@@ -28,7 +28,7 @@
     "prepare": "git rev-parse --git-dir >/dev/null 2>&1 && git config core.hooksPath scripts/githooks || true"
   },
   "dependencies": {
-    "ccloop": "github:blrbiran/ccloop#926d74f5c2bb42d8009d25258623c276e98e3ee9",
+    "ccloop": "github:blrbiran/ccloop#1e4e43437c72a405fccd09f0158b87593218cc9e",
     "express": "^5.1.0",
     "zod": "^3.23.8"
   },
