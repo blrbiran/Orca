@@ -298,6 +298,7 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
     { path: "/api/control/groups/:groupId/requirement/answer", verb: "requirement-answer", target: fromParams },
     { path: "/api/control/groups/:groupId/requirement/consensus", verb: "requirement-consensus", target: fromParams },
     { path: "/api/control/groups/:groupId/requirement/feedback", verb: "requirement-draft-feedback", target: fromParams },
+    { path: "/api/control/groups/:groupId/requirement/accept", verb: "requirement-draft-accept", target: fromParams },
     // Labels and progress spec §8 R9: the one new route; the ledger key is the group's, as for continue-task.
     {
       path: "/api/control/groups/:groupId/tasks/:taskId/labels",
@@ -346,6 +347,7 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
         case "requirement-answer": service.answerRequirement(command); break;
         case "requirement-consensus": service.requirementConsensus(command); break;
         case "requirement-draft-feedback": service.requirementDraftFeedback(command); break;
+        case "requirement-draft-accept": await service.acceptRequirementDraft(command); break;
         default: throw new ControlError("route-not-found");
       }
       const result = lookupCommandResult(store, id, command.commandId);

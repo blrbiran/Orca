@@ -32,4 +32,17 @@ describe("requirement routes (N1 spec §11.1)", () => {
       expect(panel.store.db.prepare("SELECT verb FROM commands WHERE group_id='n' AND id=?").get(`${path}-n`)).toEqual({ verb });
     }
   });
+
+  // N1 spec §9.1 (Task 10): the accept route reaches its verb; a group with no draft refuses it by the draft's absence.
+  it("routes accept to requirement-draft-accept, booked under the group", async () => {
+    const panel = await h.boot("epoch-requirement-accept", await h.workspace());
+    const opened = await command(panel, "/api/control/requirements", {
+      commandId: "open-a", expectedRevision: 0, payload: { groupId: "a", repoId: "repo", idea: "Let people export their notes as Markdown." },
+    });
+    expect(opened.status).toBe(201);
+    const at = Number(panel.store.db.prepare("SELECT revision FROM groups WHERE id='a'").get()!.revision);
+    const refused = await command(panel, "/api/control/groups/a/requirement/accept", { commandId: "accept-a", expectedRevision: at, payload: { draftNo: 1, draftHash: "0".repeat(64) } });
+    expect([refused.status, refused.body]).toMatchObject([404, { error: { code: "work-not-found" } }]);
+    expect(panel.store.db.prepare("SELECT verb FROM commands WHERE group_id='a' AND id='accept-a'").get()).toEqual({ verb: "requirement-draft-accept" });
+  });
 });

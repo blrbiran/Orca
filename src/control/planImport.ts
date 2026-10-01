@@ -3,6 +3,7 @@ import { applyWebCommand, preflightWebCommand, type WebCommandContext } from "./
 import { dimensions, zero } from "./commands.js";
 import { ControlError, type KnownControlErrorCode } from "./errors.js";
 import { readAgentPreferences } from "./agentPreferences.js";
+import { readGroupAgentOverrides } from "./agentFreeze.js";
 import { descriptorProvenance, frozenSlotOf, resolveSelection, slotLayers, type FrozenSlot, type GroupAgentOverrides, type PartialSelection } from "./agentSelection.js";
 import { unavailableCapabilities, type ExecutionProfileRouter, type FrozenProfile, type ObservedProfile } from "./profiles.js";
 import type { ControlStore } from "./store.js";
@@ -230,6 +231,113 @@ function success(context: WebCommandContext, groupId: string, estimateId: string
   };
 }
 
+export interface ImportedPlanWrite {
+  groupId: string; repoId: string; planId: string; plan: ControlPlanV1; actorId: string;
+  estimatorProfileId: string; estimatorProfileHash: string; estimateMode: "strict" | "soft";
+}
+/** N1 spec §9.1: what a requirement brings into the plan group it becomes. */
+export interface RequirementCarryOver { existingBody: Record<string, unknown>; used: Amount; traces: Readonly<Record<string, readonly string[]>> }
+
+/**
+ * The import's writes, shared by import-plan (a new group, carry null) and requirement-draft-accept (N1 spec §9.1: the
+ * same group, its clarifying spend carried over -- `used` unchanged and the limit raised by exactly that much, so the
+ * reserve, `limit - used - committed`, is what a fresh import would have).
+ */
+export function writeImportedPlan(deps: ImportDeps, input: ImportedPlanWrite, carry: RequirementCarryOver | null): { estimateId: string; preflight: FrozenEstimateRequest } {
+  const plan = input.plan;
+  const planCanonicalJson = canonicalBytes(plan).toString("utf8");
+  const planHash = sha256Canonical(plan);
+  const estimatorProfile = deps.profileRouter.resolve("budget-estimate", input.estimatorProfileId, input.estimatorProfileHash);
+  // Spec §6.4 (frozen = seen): the operator layers the estimator slot was resolved from must be the layers now.
+  const partialNow = currentEstimatorPartial(deps.store, input.actorId, carry === null ? {} : readGroupAgentOverrides(carry.existingBody));
+  if (!canonicalBytes(partialNow).equals(canonicalBytes(deps.estimatorSlot.partial))) throw new ControlError("plan-version-conflict", "estimator-selection-changed");
+  const estimatorSlot = deps.estimatorSlot.kind === "frozen" ? deps.estimatorSlot.slot : null;
+  const preflight = deps.estimatorSlot.kind === "rejected"
+    ? rejectedEstimatorRequest(deps.estimatorSlot.code)
+    : preflightEstimate(deps, planHash, planCanonicalJson, estimatorProfile, input.estimateMode);
+  const estimateId = `estimate-${sha256Canonical({ groupId: input.groupId, planHash, version: 1 }).slice(0, 24)}`;
+  const taskAllocations = plan.tasks.flatMap(task => [
+    { ownerKind: "task", ownerId: task.taskId, bucket: "work", state: "draft-encumbered", amount: cloneAmount(TASK_WORK), fieldProvenance: defaultProvenance() },
+    { ownerKind: "task", ownerId: task.taskId, bucket: "handoff", state: "draft-encumbered", amount: cloneAmount(TASK_HANDOFF), fieldProvenance: defaultProvenance() },
+  ]);
+  let base = checkedAdd(ESTIMATE_GRANT, GOAL_REVIEW);
+  for (const _task of plan.tasks) base = checkedAdd(base, checkedAdd(TASK_WORK, TASK_HANDOFF));
+  const initialReserve = reserve20(base);
+  const explicitUnallocatedReserve = preflight.state === "queued" ? initialReserve : checkedAdd(initialReserve, ESTIMATE_GRANT);
+  const groupLimit = checkedAdd(base, initialReserve);
+  const used = carry === null ? zero() : { ...carry.used };
+  const limit = checkedAdd(groupLimit, used);
+  let committedRemaining = checkedAdd(GOAL_REVIEW, zero());
+  for (const _task of plan.tasks) committedRemaining = checkedAdd(committedRemaining, checkedAdd(TASK_WORK, TASK_HANDOFF));
+  if (preflight.state === "queued") committedRemaining = checkedAdd(committedRemaining, ESTIMATE_GRANT);
+  const allocations = [
+    ...taskAllocations,
+    { ownerKind: "goal-review", ownerId: `${input.groupId}:goal-review`, bucket: "review", state: "draft-encumbered", amount: cloneAmount(GOAL_REVIEW), fieldProvenance: defaultProvenance() },
+    { ownerKind: "reserve", ownerId: `${input.groupId}:reserve`, bucket: "reserve", state: "draft-encumbered", amount: explicitUnallocatedReserve, fieldProvenance: systemProvenance() },
+  ].sort((left, right) => compare(`${left.ownerKind}\0${left.ownerId}\0${left.bucket}`, `${right.ownerKind}\0${right.ownerId}\0${right.bucket}`));
+  const group = {
+    ...(carry === null ? {} : carry.existingBody),
+    groupId: input.groupId, projectKey: input.repoId, goal: plan.goal, successConditions: plan.successConditions,
+    budgetMode: input.estimateMode, limit, reviewReserve: cloneAmount(GOAL_REVIEW), deadlineAt: null,
+    revision: 0, commandRevision: 0, graphVersion: 1, stopped: false, status: "draft", used, reserved: committedRemaining,
+    // N1 spec §9.1: the budget version keeps counting from the clarifying phase's usage bookings (usage.ts), so a
+    // group-handoff outbox id is never reused; revision and commandRevision are set by applyWebCommand afterwards.
+    reviewRemaining: cloneAmount(GOAL_REVIEW), budgetVersion: carry === null ? 1 : carry.existingBody.budgetVersion, planHash,
+    plan: { repoId: input.repoId, planId: input.planId, planHash, goal: plan.goal, successConditions: plan.successConditions },
+    proposal: { state: "editable", proposalVersion: 1, planHash, budgetMode: null, contextPolicy: { handoffAtContextTokens: null }, profiles: null, executionSnapshotHash: null },
+    ledger: { groupLimit: limit, used, committedRemaining, explicitUnallocatedReserve, budgetDeficit: zero(), usageUnknown: false },
+    importDefaults: { estimatorProfileId: input.estimatorProfileId, estimatorProfileHash: input.estimatorProfileHash, estimateMode: input.estimateMode },
+    // Ruling review R7: the panel's layers start empty -- the plan's own layers are read from the archived plan
+    // (agentFreeze.ts groupSelectionPartials), below the panel's. The estimator slot is what this import froze.
+    // N1 spec §9.1: an accepted requirement keeps the layers its clarifying group was opened with.
+    agentOverrides: carry === null ? {} : (carry.existingBody.agentOverrides ?? {}), estimatorSlot, reconcileSlot: null,
+  };
+  if (carry === null) {
+    deps.store.db.prepare("INSERT INTO groups(id,revision,graph_version,projection_seq,body) VALUES (?,?,?,0,?)")
+      .run(input.groupId, 0, 1, JSON.stringify(group));
+  } else {
+    deps.store.db.prepare("UPDATE groups SET graph_version=1, body=? WHERE id=?").run(JSON.stringify(group), input.groupId);
+  }
+  writeCanonicalRecord(deps.store, input.groupId, planHash, planCanonicalJson);
+  for (const task of plan.tasks) {
+    writeCanonicalRecord(deps.store, input.groupId, task.originalContractHash, task.originalContractCanonicalJson);
+    const work = {
+      workItemId: task.taskId, taskId: task.taskId, kind: "task", dependsOn: task.dependencyTaskIds,
+      contract: { contentAddressedHash: task.originalContractHash },
+      // Agent selection spec §6.2 / §12 I3: a draft has no configHash; confirmation freezes ccloop's.
+      configHash: null,
+      grant: { work: cloneAmount(TASK_WORK), handoff: cloneAmount(TASK_HANDOFF) }, targetVersion: task.targetVersion,
+      status: "draft", originalContractHash: task.originalContractHash, derivedContractHash: null,
+      // Ruling review R7: the task's panel layer; the plan's `agent` for this task stays in the archived plan.
+      agentOverride: null,
+      ...(carry === null ? {} : { traces: [...(carry.traces[task.taskId] ?? [])] }),
+    };
+    deps.store.db.prepare("INSERT INTO work_items(group_id,id,target_version,body) VALUES (?,?,?,?)")
+      .run(input.groupId, task.taskId, task.targetVersion, JSON.stringify(work));
+  }
+  const proposal = {
+    proposalVersion: 1, state: "editable", planHash, groupLimit: limit, explicitUnallocatedReserve,
+    allocations, budgetMode: null, contextPolicy: { handoffAtContextTokens: null }, profiles: null, executionSnapshotHash: null,
+  };
+  deps.store.db.prepare("INSERT INTO budget_proposals(group_id,proposal_version,body) VALUES (?,?,?)")
+    .run(input.groupId, 1, canonicalBytes(proposal).toString("utf8"));
+  const estimate = {
+    estimateId, estimateVersion: 1, state: preflight.state,
+    profile: { profileId: input.estimatorProfileId, profileHash: input.estimatorProfileHash }, mode: input.estimateMode,
+    requestHash: preflight.requestHash, request: preflight.request, outputHash: null, output: null, reasonCode: preflight.reasonCode,
+    grant: cloneAmount(ESTIMATE_GRANT), estimatorSlot,
+  };
+  deps.store.db.prepare("INSERT INTO estimates(group_id,id,estimate_version,state,body) VALUES (?,?,?,?,?)")
+    .run(input.groupId, estimateId, 1, preflight.state, canonicalBytes(estimate).toString("utf8"));
+  persistEstimateArtifacts(deps.store, input.groupId, estimateId, preflight);
+  if (preflight.state === "queued") {
+    const wakeId = `scheduler-wake:${input.groupId}:estimate:${estimateId}`;
+    deps.store.db.prepare("INSERT INTO scheduler_wakes(id,group_id,kind,body,delivered) VALUES (?,?, 'budget-estimate', ?, 0)")
+      .run(wakeId, input.groupId, JSON.stringify({ groupId: input.groupId, estimateId, planHash }));
+  }
+  return { estimateId, preflight };
+}
+
 export function importControlPlan(deps: ImportDeps, command: ImportCommand): ImportResult {
   const outcome = applyWebCommand<CommandSuccessV1>(deps.store, {
     rawCommand: command,
@@ -249,85 +357,8 @@ export function importControlPlan(deps: ImportDeps, command: ImportCommand): Imp
       const target = deps.trustedConfig.resolveTarget({ repoId: payload.repoId, planId: payload.planId });
       const source = readSchedulerControlPlanSource(target);
       const plan = normalizeControlPlan({ ...source, repoId: payload.repoId, planId: payload.planId });
-      const planCanonicalJson = canonicalBytes(plan).toString("utf8");
-      const planHash = sha256Canonical(plan);
-      const estimatorProfile = deps.profileRouter.resolve("budget-estimate", payload.estimatorProfileId, payload.estimatorProfileHash);
-      // Spec §6.4 (frozen = seen): the operator layers the estimator slot was resolved from must be the layers now.
-      const partialNow = currentEstimatorPartial(deps.store, context.rawCommand.actorId, {});
-      if (!canonicalBytes(partialNow).equals(canonicalBytes(deps.estimatorSlot.partial))) throw new ControlError("plan-version-conflict", "estimator-selection-changed");
-      const estimatorSlot = deps.estimatorSlot.kind === "frozen" ? deps.estimatorSlot.slot : null;
-      const preflight = deps.estimatorSlot.kind === "rejected"
-        ? rejectedEstimatorRequest(deps.estimatorSlot.code)
-        : preflightEstimate(deps, planHash, planCanonicalJson, estimatorProfile, payload.estimateMode);
-      const estimateId = `estimate-${sha256Canonical({ groupId: payload.groupId, planHash, version: 1 }).slice(0, 24)}`;
-      const taskAllocations = plan.tasks.flatMap(task => [
-        { ownerKind: "task", ownerId: task.taskId, bucket: "work", state: "draft-encumbered", amount: cloneAmount(TASK_WORK), fieldProvenance: defaultProvenance() },
-        { ownerKind: "task", ownerId: task.taskId, bucket: "handoff", state: "draft-encumbered", amount: cloneAmount(TASK_HANDOFF), fieldProvenance: defaultProvenance() },
-      ]);
-      let base = checkedAdd(ESTIMATE_GRANT, GOAL_REVIEW);
-      for (const _task of plan.tasks) base = checkedAdd(base, checkedAdd(TASK_WORK, TASK_HANDOFF));
-      const initialReserve = reserve20(base);
-      const explicitUnallocatedReserve = preflight.state === "queued" ? initialReserve : checkedAdd(initialReserve, ESTIMATE_GRANT);
-      const groupLimit = checkedAdd(base, initialReserve);
-      let committedRemaining = checkedAdd(GOAL_REVIEW, zero());
-      for (const _task of plan.tasks) committedRemaining = checkedAdd(committedRemaining, checkedAdd(TASK_WORK, TASK_HANDOFF));
-      if (preflight.state === "queued") committedRemaining = checkedAdd(committedRemaining, ESTIMATE_GRANT);
-      const allocations = [
-        ...taskAllocations,
-        { ownerKind: "goal-review", ownerId: `${payload.groupId}:goal-review`, bucket: "review", state: "draft-encumbered", amount: cloneAmount(GOAL_REVIEW), fieldProvenance: defaultProvenance() },
-        { ownerKind: "reserve", ownerId: `${payload.groupId}:reserve`, bucket: "reserve", state: "draft-encumbered", amount: explicitUnallocatedReserve, fieldProvenance: systemProvenance() },
-      ].sort((left, right) => compare(`${left.ownerKind}\0${left.ownerId}\0${left.bucket}`, `${right.ownerKind}\0${right.ownerId}\0${right.bucket}`));
-      const group = {
-        groupId: payload.groupId, projectKey: payload.repoId, goal: plan.goal, successConditions: plan.successConditions,
-        budgetMode: payload.estimateMode, limit: groupLimit, reviewReserve: cloneAmount(GOAL_REVIEW), deadlineAt: null,
-        revision: 0, commandRevision: 0, graphVersion: 1, stopped: false, status: "draft", used: zero(), reserved: committedRemaining,
-        reviewRemaining: cloneAmount(GOAL_REVIEW), budgetVersion: 1, planHash,
-        plan: { repoId: payload.repoId, planId: payload.planId, planHash, goal: plan.goal, successConditions: plan.successConditions },
-        proposal: { state: "editable", proposalVersion: 1, planHash, budgetMode: null, contextPolicy: { handoffAtContextTokens: null }, profiles: null, executionSnapshotHash: null },
-        ledger: { groupLimit, used: zero(), committedRemaining, explicitUnallocatedReserve, budgetDeficit: zero(), usageUnknown: false },
-        importDefaults: { estimatorProfileId: payload.estimatorProfileId, estimatorProfileHash: payload.estimatorProfileHash, estimateMode: payload.estimateMode },
-        // Ruling review R7: the panel's layers start empty -- the plan's own layers are read from the archived plan
-        // (agentFreeze.ts groupSelectionPartials), below the panel's. The estimator slot is what this import froze.
-        agentOverrides: {}, estimatorSlot, reconcileSlot: null,
-      };
-      deps.store.db.prepare("INSERT INTO groups(id,revision,graph_version,projection_seq,body) VALUES (?,?,?,0,?)")
-        .run(payload.groupId, 0, 1, JSON.stringify(group));
-      writeCanonicalRecord(deps.store, payload.groupId, planHash, planCanonicalJson);
-      for (const task of plan.tasks) {
-        writeCanonicalRecord(deps.store, payload.groupId, task.originalContractHash, task.originalContractCanonicalJson);
-        const work = {
-          workItemId: task.taskId, taskId: task.taskId, kind: "task", dependsOn: task.dependencyTaskIds,
-          contract: { contentAddressedHash: task.originalContractHash },
-          // Agent selection spec §6.2 / §12 I3: a draft has no configHash; confirmation freezes ccloop's.
-          configHash: null,
-          grant: { work: cloneAmount(TASK_WORK), handoff: cloneAmount(TASK_HANDOFF) }, targetVersion: task.targetVersion,
-          status: "draft", originalContractHash: task.originalContractHash, derivedContractHash: null,
-          // Ruling review R7: the task's panel layer; the plan's `agent` for this task stays in the archived plan.
-          agentOverride: null,
-        };
-        deps.store.db.prepare("INSERT INTO work_items(group_id,id,target_version,body) VALUES (?,?,?,?)")
-          .run(payload.groupId, task.taskId, task.targetVersion, JSON.stringify(work));
-      }
-      const proposal = {
-        proposalVersion: 1, state: "editable", planHash, groupLimit, explicitUnallocatedReserve,
-        allocations, budgetMode: null, contextPolicy: { handoffAtContextTokens: null }, profiles: null, executionSnapshotHash: null,
-      };
-      deps.store.db.prepare("INSERT INTO budget_proposals(group_id,proposal_version,body) VALUES (?,?,?)")
-        .run(payload.groupId, 1, canonicalBytes(proposal).toString("utf8"));
-      const estimate = {
-        estimateId, estimateVersion: 1, state: preflight.state,
-        profile: { profileId: payload.estimatorProfileId, profileHash: payload.estimatorProfileHash }, mode: payload.estimateMode,
-        requestHash: preflight.requestHash, request: preflight.request, outputHash: null, output: null, reasonCode: preflight.reasonCode,
-        grant: cloneAmount(ESTIMATE_GRANT), estimatorSlot,
-      };
-      deps.store.db.prepare("INSERT INTO estimates(group_id,id,estimate_version,state,body) VALUES (?,?,?,?,?)")
-        .run(payload.groupId, estimateId, 1, preflight.state, canonicalBytes(estimate).toString("utf8"));
-      persistEstimateArtifacts(deps.store, payload.groupId, estimateId, preflight);
-      if (preflight.state === "queued") {
-        const wakeId = `scheduler-wake:${payload.groupId}:estimate:${estimateId}`;
-        deps.store.db.prepare("INSERT INTO scheduler_wakes(id,group_id,kind,body,delivered) VALUES (?,?, 'budget-estimate', ?, 0)")
-          .run(wakeId, payload.groupId, JSON.stringify({ groupId: payload.groupId, estimateId, planHash }));
-      }
+      const { estimateId, preflight } = writeImportedPlan(deps, { groupId: payload.groupId, repoId: payload.repoId, planId: payload.planId, plan, actorId: context.rawCommand.actorId,
+        estimatorProfileId: payload.estimatorProfileId, estimatorProfileHash: payload.estimatorProfileHash, estimateMode: payload.estimateMode }, null);
       deps.beforeCommit?.();
       return success(context, payload.groupId, estimateId, preflight.state, preflight.reasonCode);
     },

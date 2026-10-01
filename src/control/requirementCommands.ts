@@ -1,12 +1,20 @@
+import { createHash } from "node:crypto";
+import { readGroupAgentOverrides } from "./agentFreeze.js";
 import { applyWebCommand, preflightWebCommand } from "./commandLedger.js";
-import { sha256Canonical } from "./canonicalJson.js";
+import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
+import { dimensions } from "./commands.js";
 import { ControlError } from "./errors.js";
-import { estimatorSlotFor, type ImportDefaults, type PreparedEstimatorSlot } from "./planImport.js";
-import type { ExecutionProfileRouter, FrozenProfile } from "./profiles.js";
 import {
-  insertClarifyingGroup, latestDraft, latestRound, newDraft, newRound, queueRequirementCall, readRequirementGroup, readRounds, saveRequirementGroup,
+  estimatorSlotFor, normalizeControlPlan, writeImportedPlan, type AsyncImportDeps, type ImportDefaults, type ImportDeps, type PreparedEstimatorSlot,
+} from "./planImport.js";
+import type { ExecutionProfileRouter, FrozenProfile } from "./profiles.js";
+import { renderRequirementDocument } from "./requirementDocument.js";
+import {
+  insertClarifyingGroup, latestDraft, latestRound, newDraft, newRound, queueRequirementCall, readDraft, readRequirementGroup, readRounds, saveRequirementGroup,
   writeDraft, writeRound,
 } from "./requirementRecords.js";
+import { writeCanonicalRecord } from "./snapshot.js";
+import { schedulerControlPlanSourceOf } from "../scheduler/planFile.js";
 import { REQUIREMENT_LIMIT_DEFAULT } from "./requirementSchemas.js";
 import { commandSuccess } from "./stopIntent.js";
 import type { ControlStore } from "./store.js";
@@ -155,4 +163,65 @@ export function applyRequirementDraftFeedback(deps: RequirementCommandDeps, comm
       return commandSuccess(context, { kind: "requirement-draft-rejected", draftNo: draft.draftNo, nextDraftNo: draft.draftNo + 1, wakeId });
     },
   }).body);
+}
+
+/**
+ * N1 spec §9.1: one transaction -- freeze the document, import the stored plan into this group (clarifying -> draft),
+ * carry the clarifying spend over, record each work item's traces, and queue the export. The estimator slot is
+ * resolved before it, under the admission gate, as requirement-open resolves its own.
+ */
+export async function applyRequirementDraftAccept(
+  deps: AsyncImportDeps & { admissionGate?: AdmissionGate; now?: () => Date },
+  command: RequirementDraftAcceptCommand,
+): Promise<Result> {
+  const release = deps.admissionGate?.enter();
+  try {
+    const replay = preflightWebCommand<Result>(deps.store, command);
+    if (replay) return replay.body;
+    const id = command.target.groupId;
+    let defaults: ImportDefaults, profile: FrozenProfile, slot: PreparedEstimatorSlot;
+    try {
+      defaults = deps.defaults();
+      profile = deps.profileRouter.resolve("budget-estimate", defaults.estimatorProfileId, defaults.estimatorProfileHash);
+      slot = await estimatorSlotFor({ store: deps.store, profileRouter: deps.profileRouter }, command.actorId, readGroupAgentOverrides(readRequirementGroup(deps.store, id)), profile);
+    } catch (error) {
+      return applyWebCommand<Result>(deps.store, { rawCommand: command, expand: () => { throw error; }, apply: () => { throw error; } }).body;
+    }
+    const now = nowOf(deps);
+    return applyWebCommand<Result>(deps.store, {
+      rawCommand: command, expand: () => ({ ...command, schema: "orca-authority-command-v1" }),
+      apply: (context) => {
+        const group = clarifying(deps.store, id);
+        const draft = readDraft(deps.store, id, command.payload.draftNo);
+        if (draft.state !== "awaiting-review" || draft.plan === null || draft.output === null) return invalid("draft-not-awaiting-review");
+        // DR12: the hash names the expanded plan the person reviewed; any other bytes are a stale view.
+        if (draft.draftHash !== command.payload.draftHash) throw new ControlError("plan-version-conflict", "draft-hash");
+        if (deps.store.db.prepare("SELECT id FROM runs WHERE group_id=? AND active=1").get(id) || dimensions.some((d) => group.reserved[d] !== 0)) invalid("call-in-flight");
+        // 1. Freeze the document: rendered from the records now, stored once, named by its hash (spec §4.3, §10).
+        const text = renderRequirementDocument({ groupId: id, requirement: group.requirement, rounds: readRounds(deps.store, id), acceptedSplit: draft.output });
+        const record = { schema: "orca-requirement-document-v1", text }, recordHash = sha256Canonical(record);
+        writeCanonicalRecord(deps.store, id, recordHash, canonicalBytes(record).toString("utf8"));
+        const documentSha256 = createHash("sha256").update(text, "utf8").digest("hex");
+        // DR21: the export commit is dated at the freeze; Task 11's export reads `frozenAt`.
+        group.requirement = { ...group.requirement, acceptedDraftNo: draft.draftNo, document: { sha256: documentSha256, recordHash, frozenAt: now.toISOString() },
+          export: { state: "pending", path: null, commit: null, parent: null, detail: null } };
+        // 2. Import the stored plan into this group (spec §9.1: a stored plan instead of an allowlisted file; DR23 planId).
+        const stored = draft.plan as { targetRepo: string };
+        const planId = `requirement-draft-${draft.draftNo}`;
+        const plan = normalizeControlPlan({ ...schedulerControlPlanSourceOf(stored, stored.targetRepo), repoId: group.requirement.repoId, planId });
+        const importDeps: ImportDeps = { ...deps, defaults: () => defaults, estimatorSlot: slot.outcome,
+          estimatorObservation: (selected) => { if (selected !== profile) throw new ControlError("profile-changed"); return slot.observation; } };
+        const { estimateId, preflight } = writeImportedPlan(importDeps, { groupId: id, repoId: group.requirement.repoId, planId, plan, actorId: command.actorId,
+          estimatorProfileId: defaults.estimatorProfileId, estimatorProfileHash: defaults.estimatorProfileHash, estimateMode: defaults.estimateMode },
+          { existingBody: { ...group }, used: group.used, traces: Object.fromEntries(draft.output.tasks.map((task) => [task.taskId, task.traces])) });
+        writeDraft(deps.store, id, { ...draft, state: "accepted" });
+        // 3. The export has git side effects, so the driver performs it (DR14).
+        const exportWakeId = `scheduler-wake:${id}:requirement-export`;
+        deps.store.db.prepare("INSERT INTO scheduler_wakes(id,group_id,kind,body,delivered) VALUES (?,?,'requirement-export',?,0) ON CONFLICT(id) DO NOTHING")
+          .run(exportWakeId, id, canonicalBytes({ groupId: id }).toString("utf8"));
+        deps.beforeCommit?.();
+        return commandSuccess(context, { kind: "requirement-draft-accepted", draftNo: draft.draftNo, estimateId, estimateState: preflight.state, documentSha256, exportWakeId });
+      },
+    }).body;
+  } finally { release?.(); }
 }
