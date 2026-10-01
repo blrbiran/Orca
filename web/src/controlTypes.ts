@@ -72,6 +72,93 @@ export type GroupSummaryV1 = {
   requirement?: RequirementSummaryV1;
 };
 
+/** N1 spec §4.2 and §7: a round's records (src/control/requirementSchemas.ts roundBodySchema, field for field). */
+export type RequirementCallRecordV1 = {
+  runId: string;
+  overviewHash: string | null;
+  commit: string | null;
+  usage: Amount | null;
+  outcome: "valid" | "invalid" | "failed" | "interrupted";
+  reason: string | null;
+};
+export type ClarifyResultV1 = {
+  slug: string | null;
+  statement: string;
+  acceptanceCriteria: Array<{ id: string; text: string }>;
+  questions: Array<{ id: string; key: string; question: string; recommendedAnswer: string; why: string; dependsOn: string[] }>;
+  frontierEmpty: boolean;
+  openBranches: string[];
+  glossary: Array<{ id: string; term: string; definition: string }>;
+  adrs: Array<{ id: string; title: string; context: string; decision: string; consequences: string }>;
+};
+export type RoundBodyV1 = {
+  roundNo: number;
+  state: "drafting" | "awaiting-answers" | "answered" | "interrupted" | "failed";
+  retries: number;
+  lastInvalidReason: string | null;
+  waiting: null | "requirement-budget-exhausted";
+  result: ClarifyResultV1 | null;
+  answers: Array<{ id: string; kind: "recommended" | "text"; text: string }> | null;
+  glossaryDecisions: RequirementDecisionInputV1[] | null;
+  adrDecisions: RequirementDecisionInputV1[] | null;
+  answeredAt: string | null;
+  closedByConsensus: boolean;
+  reasonCode: null | "clarify-output-invalid";
+  calls: RequirementCallRecordV1[];
+};
+export type SplitTaskV1 = {
+  taskId: string;
+  title: string;
+  labels: string[];
+  loopPlan?: string;
+  goal: string;
+  successCondition: string;
+  targetPaths: string[];
+  checks: string[];
+  dependsOn: string[];
+  traces: string[];
+};
+/** N1 spec §8: a draft as the requirement view shows it -- the stored plan is left out (draftBodySchema without `plan`). */
+export type DraftViewV1 = {
+  draftNo: number;
+  state: "drafting" | "awaiting-review" | "accepted" | "rejected" | "invalid" | "interrupted" | "failed";
+  autoRetry: number;
+  waiting: null | "requirement-budget-exhausted";
+  feedback: string | null;
+  output: { tasks: SplitTaskV1[]; notes: string } | null;
+  draftHash: string | null;
+  reasons: string[];
+  layers: string[][] | null;
+  implicitEdges: Array<{ from: string; to: string; conflicts: Array<{ a: string; b: string }> }> | null;
+  reasonCode: null | "split-output-invalid" | "split-validation-exhausted";
+  calls: RequirementCallRecordV1[];
+};
+/** N1 spec §11.2: one requirement in full (src/control/webProtocol.ts requirementViewSchema, field for field). */
+export type RequirementViewV1 = {
+  schema: "orca-requirement-view-v1";
+  epoch: string;
+  changeSeq: number;
+  summary: GroupSummaryV1;
+  requirement: {
+    requirementId: string;
+    repoId: string;
+    slug: string | null;
+    contentLanguage: "en" | "zh";
+    createdOn: string;
+    idea: string;
+    consensus: null | { roundNo: number; at: string; openBranches: string[]; openQuestions: string[] };
+    acceptedDraftNo: number | null;
+    document: null | { sha256: string; frozenAt: string };
+    /** Task 11: a blocked export is "conflict"; the summary's reasonCode tells a path block from a branch conflict. */
+    export: { state: "not-due" | "pending" | "done" | "conflict"; path: string | null; commit: string | null; parent: string | null; detail: string | null };
+  };
+  ledger: { limit: Amount; used: Amount; reserved: Amount; usageUnknown: boolean };
+  rounds: RoundBodyV1[];
+  drafts: DraftViewV1[];
+  /** The live document until accept, the frozen text after. */
+  document: string;
+};
+
 export type ControlSummaryV1 = {
   schema: "orca-control-summary-v1";
   epoch: string;
@@ -122,7 +209,9 @@ export type RunViewV1 = {
   estimateId: string | null;
   generation: number;
   state: "starting" | "unknown" | "attempt-unknown" | "attempt-proof-invalid" | "running" | "failed-before-provider" | "settled-recoverable" | "settled-restartable" | "settled-unrecoverable" | "collected" | "landed" | "reconciling" | "blocked";
-  phase: "estimate" | "work" | "handoff";
+  phase: "estimate" | "work" | "handoff" | "single-call";
+  /** N1 DR26: what a `single-call` run of a requirement was for; absent on every other phase. */
+  purpose?: "clarify" | "split";
   claimOrdinal: number | null;
   providerAttemptOrdinal: number;
   profile: ProfileBindingV1;

@@ -13,7 +13,8 @@ import { choosePlanByLabels, loopPlanDefinition } from "../control/loopPlans.js"
 import { recipeExpandsTo } from "../control/loopRecipeCheck.js";
 import { estimateIsStale, readArchivedPlan, readBudgetProposal, readEstimateRecord } from "../control/queries.js";
 import { readCanonicalRecord } from "../control/snapshot.js";
-import { hasRequirementBlock, latestDraft, latestRound, readRequirementGroup, refuseClarifying } from "../control/requirementRecords.js";
+import { hasRequirementBlock, latestDraft, latestRound, readDrafts, readRequirementGroup, readRounds, refuseClarifying } from "../control/requirementRecords.js";
+import { renderRequirementDocument } from "../control/requirementDocument.js";
 import { effectivePlanTask, workBodyOf } from "../control/taskAmendments.js";
 import type { ControlStore } from "../control/store.js";
 import { agentSelectionSchema, amountSchema, artifactSchema, canonicalTimestampSchema, grantSchema, idSchema, runProgressSchema, safeInteger, type RunProgress } from "../control/schema.js";
@@ -30,6 +31,7 @@ import {
   groupViewSchema,
   profileBindingSchema,
   recoveryViewSchema,
+  requirementViewSchema,
   selectionProvenanceSchema,
   type AgentSelectionPreviewV1,
   type AllocationViewV1,
@@ -43,6 +45,7 @@ import {
   type HandoffRequestViewV1,
   type RecoveryViewV1,
   type RequirementSummaryV1,
+  type RequirementViewV1,
   type RunViewV1,
   type WorkItemProgressV1,
   type WorkItemViewV1,
@@ -163,7 +166,10 @@ const persistedRunSchema = z.object({
   breaches: z.array(safeInteger.positive()),
   handoffWorkItemId: idSchema.nullable(),
   predecessorRunId: idSchema.optional(),
-  phase: z.enum(["estimate", "work", "handoff"]),
+  phase: z.enum(["estimate", "work", "handoff", "single-call"]),
+  // N1 DR1: a `single-call` run names its purpose, and the overview its prompt was built from once A2 stored it.
+  purpose: z.enum(["clarify", "split"]).optional(),
+  overview: z.object({ hash: hashSchema, commit: z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/) }).strict().nullable().optional(),
   claimOrdinal: safeInteger.positive().nullable(),
   continuationIntentId: idSchema.nullable().optional(),
   providerAttemptOrdinal: safeInteger,
@@ -668,7 +674,15 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
     }
 
     let profile: RunViewV1["profile"];
-    if (run.phase === "estimate") {
+    if (run.phase === "single-call") {
+      // N1 DR26: a clarify or split call of the requirement this group was, frozen with the requirement's profile and agent.
+      const requirement = readRequirementGroup(store, groupId).requirement;
+      if (run.taskId !== null || run.estimateId !== null || run.claimOrdinal !== null || run.handoffProfile !== null || run.purpose === undefined
+        || !/^(round|draft)-[1-9]\d*$/.test(run.workItemId) || run.executionProfile.workKind !== "budget-estimate") return blocked(`run-requirement-identity:${runId}`);
+      if (!sameBinding(run.executionProfile, requirement.profile, "budget-estimate") || run.configHash !== requirement.agentSlot.configHash
+        || canonicalBytes(run.agent).compare(canonicalBytes(requirement.agentSlot.selection)) !== 0) return blocked(`run-requirement-agent:${runId}`);
+      profile = profileView(run.executionProfile);
+    } else if (run.phase === "estimate") {
       if (run.taskId !== null || run.estimateId === null || run.claimOrdinal !== null || run.handoffProfile !== null
         || run.workItemId !== run.estimateId || run.executionProfile.workKind !== "budget-estimate") return blocked(`run-estimate-identity:${runId}`);
       const estimate = readEstimateRecord(store, groupId, run.estimateId);
@@ -712,6 +726,7 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
     const bucket = run.phase === "handoff" ? "handoff" : "work";
     return {
       runId, taskId: run.taskId, estimateId: run.estimateId, generation: run.generation, state, phase: run.phase,
+      ...(run.purpose === undefined ? {} : { purpose: run.purpose }),
       claimOrdinal: run.claimOrdinal, providerAttemptOrdinal: run.providerAttemptOrdinal, profile,
       used: run.cumulative[bucket], remaining: run.remaining[bucket], failureCode: run.failureCode,
       blockedReason: run.drive?.blockedReason ?? null,
@@ -786,6 +801,27 @@ export function readControlGroup(store: ControlStore, epoch: string, groupId: st
   };
   const parsed = groupViewSchema.safeParse(view);
   if (!parsed.success) return blocked(`group-view:${parsed.error.issues[0]?.path.join(".")}:${parsed.error.issues[0]?.message}`);
+  return parsed.data;
+}
+
+/** N1 spec §11.2: one requirement in full; the live document until accept, the frozen one after. */
+export function readRequirementView(store: ControlStore, epoch: string, groupId: string): RequirementViewV1 {
+  const group = readRequirementGroup(store, groupId);
+  const rounds = readRounds(store, groupId), drafts = readDrafts(store, groupId);
+  const requirement = group.requirement;
+  const document = requirement.document !== null
+    ? (JSON.parse(readCanonicalRecord(store, requirement.document.recordHash)) as { text: string }).text
+    : renderRequirementDocument({ groupId, requirement, rounds, acceptedSplit: null });
+  const view = {
+    schema: "orca-requirement-view-v1" as const, epoch, changeSeq: readProjectionState(store).changeSeq, summary: readGroupSummary(store, groupId),
+    requirement: { requirementId: requirement.requirementId, repoId: requirement.repoId, slug: requirement.slug, contentLanguage: requirement.contentLanguage,
+      createdOn: requirement.createdOn, idea: requirement.idea, consensus: requirement.consensus, acceptedDraftNo: requirement.acceptedDraftNo,
+      document: requirement.document === null ? null : { sha256: requirement.document.sha256, frozenAt: requirement.document.frozenAt }, export: requirement.export },
+    ledger: { limit: group.limit, used: group.used, reserved: group.reserved, usageUnknown: group.ledger.usageUnknown },
+    rounds, drafts: drafts.map(({ plan: _plan, ...rest }) => rest), document,
+  };
+  const parsed = requirementViewSchema.safeParse(view);
+  if (!parsed.success) return blocked(`requirement-view:${parsed.error.issues[0]?.message ?? "invalid"}`);
   return parsed.data;
 }
 

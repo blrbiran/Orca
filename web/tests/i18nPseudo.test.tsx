@@ -285,7 +285,8 @@ describe("every enum value has its words in both languages (spec §3.5)", () => 
   it("reads every family", () => {
     expect(FAMILIES.length).toBe(30);
     // Now counts groupState.clarifying (N1 Task 4, controller ruling: a named rewrite; the count follows the catalogue).
-    expect(ENUM_VALUES.length).toBe(147);
+    // And runPhase.single-call (N1 Task 12, the same named rewrite: a requirement's runs in the group view, DR26).
+    expect(ENUM_VALUES.length).toBe(148);
   });
 
   it("in Chinese shows zh.ts's words for every value, words that differ from the English ones", async () => {

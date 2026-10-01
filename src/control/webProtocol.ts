@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { agentSelectionSchema, amountSchema, canonicalTimestampSchema, commandEnvelopeSchema, contextWindowSchema, idSchema, panelPartialSelectionSchema, partialSelectionSchema, safeInteger } from "./schema.js";
 import { nonEmptyStoredLabelsSchema, storedLabelsSchema } from "./labels.js";
-import { DRAFT_STATES, IDEA_MAX_BYTES, ROUND_STATES, questionIdSchema } from "./requirementSchemas.js";
+import { DRAFT_STATES, IDEA_MAX_BYTES, ROUND_STATES, draftBodySchema, questionIdSchema, requirementExportSchema, roundBodySchema } from "./requirementSchemas.js";
 import { LOOP_PLAN_IDS, loopInputsSchema, loopRecipeSchema } from "./loopPlans.js";
 // Agent selection spec §12 I10 (plan-review P18): the selection/context/partial schemas are T7's, defined once
 // in schema.ts; webProtocol.ts re-exports them so every downstream import can come from one wire module.
@@ -963,6 +963,23 @@ export const groupSummarySchema = z
   })
   .strict();
 
+/** N1 spec §11.2: one requirement in full, for the Requirements section. Model content is passed as written. */
+export const requirementViewSchema = z.object({
+  schema: z.literal("orca-requirement-view-v1"), epoch: nonemptyString, changeSeq: safeInteger, summary: groupSummarySchema,
+  requirement: z.object({
+    requirementId: z.string().regex(/^[a-f0-9]{32}$/), repoId: idSchema, slug: nonemptyString.nullable(), contentLanguage: z.enum(["en", "zh"]),
+    createdOn: nonemptyString, idea: nonemptyString,
+    consensus: z.object({ roundNo: positiveSafeInteger, at: canonicalTimestampSchema, openBranches: z.array(nonemptyString), openQuestions: z.array(nonemptyString) }).strict().nullable(),
+    acceptedDraftNo: positiveSafeInteger.nullable(), document: z.object({ sha256: hashSchema, frozenAt: canonicalTimestampSchema }).strict().nullable(),
+    export: requirementExportSchema,
+  }).strict(),
+  ledger: z.object({ limit: amountSchema, used: amountSchema, reserved: amountSchema, usageUnknown: z.boolean() }).strict(),
+  rounds: z.array(roundBodySchema),
+  drafts: z.array(draftBodySchema.omit({ plan: true })),
+  document: z.string(),
+}).strict();
+export type RequirementViewV1 = z.infer<typeof requirementViewSchema>;
+
 export const controlSummarySchema = z
   .object({
     schema: z.literal("orca-control-summary-v1"),
@@ -1077,7 +1094,9 @@ export const runViewSchema = z
       "reconciling",
       "blocked",
     ]),
-    phase: z.enum(["estimate", "work", "handoff"]),
+    phase: z.enum(["estimate", "work", "handoff", "single-call"]),
+    // N1 DR26: what a `single-call` run of a requirement was for; absent on every other phase.
+    purpose: z.enum(["clarify", "split"]).optional(),
     claimOrdinal: positiveSafeInteger.nullable(),
     providerAttemptOrdinal: safeInteger,
     profile: profileBindingSchema,

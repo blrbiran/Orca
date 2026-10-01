@@ -371,7 +371,7 @@ export const zh: Translation<typeof en> = {
     stopMode: { pause: "暂停", shutdown: "关停", handoff: "交接" },
     stopState: { paused: "已暂停", "handoff-pending": "交接待处理", "handoff-partial": "交接部分完成", "handoff-unresolved": "交接未决", "handoff-complete": "交接完成" },
     workStatus: { draft: "草稿", ready: "就绪", starting: "启动中", "start-unknown": "启动情况未知", active: "进行中", held: "已挂起", continuing: "续跑中", completed: "已完成", blocked: "已阻塞" },
-    runPhase: { estimate: "估算", work: "工作", handoff: "交接" },
+    runPhase: { estimate: "估算", work: "工作", handoff: "交接", "single-call": "单次调用" },
     runState: {
       starting: "启动中", unknown: "未知", "attempt-unknown": "尝试情况未知", "attempt-proof-invalid": "尝试证明无效", running: "运行中",
       "failed-before-provider": "未到提供方即失败", "settled-recoverable": "已结算（可恢复）", "settled-restartable": "已结算（可重启）",

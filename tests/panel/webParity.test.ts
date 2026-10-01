@@ -36,6 +36,12 @@ import type {
   RecoveryRetryPayload as ServerRecoveryRetryPayload,
   RecoveryViewV1 as ServerRecoveryViewV1,
   ReestimatePayload as ServerReestimatePayload,
+  RequirementAnswerPayload as ServerRequirementAnswerPayload,
+  RequirementConsensusPayload as ServerRequirementConsensusPayload,
+  RequirementDraftAcceptPayload as ServerRequirementDraftAcceptPayload,
+  RequirementDraftFeedbackPayload as ServerRequirementDraftFeedbackPayload,
+  RequirementOpenPayload as ServerRequirementOpenPayload,
+  RequirementViewV1 as ServerRequirementViewV1,
   ResumeFromHandoffPayload as ServerResumeFromHandoffPayload,
   SetAgentPreferencesPayload as ServerSetAgentPreferencesPayload,
   SetLimitPayload as ServerSetLimitPayload,
@@ -63,6 +69,12 @@ import type {
   ProposalSetAgentPayloadV1 as WebProposalSetAgentPayloadV1,
   RecoveryRetryPayloadV1 as WebRecoveryRetryPayloadV1,
   RecoveryViewV1 as WebRecoveryViewV1,
+  RequirementAnswerPayloadV1 as WebRequirementAnswerPayloadV1,
+  RequirementConsensusPayloadV1 as WebRequirementConsensusPayloadV1,
+  RequirementDraftAcceptPayloadV1 as WebRequirementDraftAcceptPayloadV1,
+  RequirementDraftFeedbackPayloadV1 as WebRequirementDraftFeedbackPayloadV1,
+  RequirementOpenPayloadV1 as WebRequirementOpenPayloadV1,
+  RequirementViewV1 as WebRequirementViewV1,
   ResumeFromHandoffPayloadV1 as WebResumeFromHandoffPayloadV1,
   SetAgentPreferencesPayloadV1 as WebSetAgentPreferencesPayloadV1,
   SetLimitPayloadV1 as WebSetLimitPayloadV1,
@@ -220,6 +232,21 @@ function setTaskLabelsWebToServer(x: WebSetTaskLabelsPayloadV1): ServerSetTaskLa
 // Loop plans spec §5.2: the set-task-loop command's payload.
 function setTaskLoopServerToWeb(x: ServerSetTaskLoopPayload): WebSetTaskLoopPayloadV1 { return x; }
 function setTaskLoopWebToServer(x: WebSetTaskLoopPayloadV1): ServerSetTaskLoopPayload { return x; }
+// Rewritten under controller ruling PR-I7 (N1 Task 12, 2026-10-02): the requirement view (spec §11.2) and the five
+// requirement command payloads (spec §11.1, Task 9) are checked both ways like every other wire type; the run view's
+// `single-call` phase and `purpose` ride the group view's pair above.
+function requirementViewServerToWeb(x: ServerRequirementViewV1): WebRequirementViewV1 { return x; }
+function requirementViewWebToServer(x: WebRequirementViewV1): ServerRequirementViewV1 { return x; }
+function requirementOpenServerToWeb(x: ServerRequirementOpenPayload): WebRequirementOpenPayloadV1 { return x; }
+function requirementOpenWebToServer(x: WebRequirementOpenPayloadV1): ServerRequirementOpenPayload { return x; }
+function requirementAnswerServerToWeb(x: ServerRequirementAnswerPayload): WebRequirementAnswerPayloadV1 { return x; }
+function requirementAnswerWebToServer(x: WebRequirementAnswerPayloadV1): ServerRequirementAnswerPayload { return x; }
+function requirementConsensusServerToWeb(x: ServerRequirementConsensusPayload): WebRequirementConsensusPayloadV1 { return x; }
+function requirementConsensusWebToServer(x: WebRequirementConsensusPayloadV1): ServerRequirementConsensusPayload { return x; }
+function requirementFeedbackServerToWeb(x: ServerRequirementDraftFeedbackPayload): WebRequirementDraftFeedbackPayloadV1 { return x; }
+function requirementFeedbackWebToServer(x: WebRequirementDraftFeedbackPayloadV1): ServerRequirementDraftFeedbackPayload { return x; }
+function requirementAcceptServerToWeb(x: ServerRequirementDraftAcceptPayload): WebRequirementDraftAcceptPayloadV1 { return x; }
+function requirementAcceptWebToServer(x: WebRequirementDraftAcceptPayloadV1): ServerRequirementDraftAcceptPayload { return x; }
 
 // Referenced so nothing above is dead code the compiler is free to ignore;
 // never invoked for its behavior, only so the assignments above are real
@@ -283,4 +310,16 @@ export const __webParityAssignabilityChecks__ = [
   setTaskLabelsWebToServer,
   setTaskLoopServerToWeb,
   setTaskLoopWebToServer,
+  requirementViewServerToWeb,
+  requirementViewWebToServer,
+  requirementOpenServerToWeb,
+  requirementOpenWebToServer,
+  requirementAnswerServerToWeb,
+  requirementAnswerWebToServer,
+  requirementConsensusServerToWeb,
+  requirementConsensusWebToServer,
+  requirementFeedbackServerToWeb,
+  requirementFeedbackWebToServer,
+  requirementAcceptServerToWeb,
+  requirementAcceptWebToServer,
 ] as const;

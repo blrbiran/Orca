@@ -38,6 +38,7 @@ import type {
   RequirementDraftAcceptPayloadV1,
   RequirementDraftFeedbackPayloadV1,
   RequirementOpenPayloadV1,
+  RequirementViewV1,
   ResumeFromHandoffPayloadV1,
   SetLimitPayloadV1,
   SetTaskLabelsPayloadV1,
@@ -96,6 +97,9 @@ export function fetchControlSummary(sinceChangeSeq?: number): Promise<ControlSum
 /** GET /api/control/groups/:groupId -- the canonical view of one group. */
 export const fetchControlGroup = (groupId: string): Promise<GroupViewV1> =>
   controlGet<GroupViewV1>(`/api/control/groups/${segment(groupId)}`);
+/** GET /api/control/groups/:groupId/requirement -- one requirement in full (N1 spec §11.2). */
+export const fetchRequirement = (groupId: string): Promise<RequirementViewV1> =>
+  controlGet<RequirementViewV1>(`/api/control/groups/${segment(groupId)}/requirement`);
 /** GET /api/control/recovery -- every blocker the panel can see, across groups. */
 export const fetchControlRecovery = (): Promise<RecoveryViewV1> => controlGet<RecoveryViewV1>("/api/control/recovery");
 /** GET /api/control/runs/:runId/evidence -- the manifest of raw evidence retained for one run. */

@@ -49,7 +49,7 @@ const stopState = {
 const workStatus = {
   draft: "draft", ready: "ready", starting: "starting", "start-unknown": "start-unknown", active: "active", held: "held", continuing: "continuing", completed: "completed", blocked: "blocked",
 } as const satisfies Record<WorkItemViewV1["status"], string>;
-const runPhase = { estimate: "estimate", work: "work", handoff: "handoff" } as const satisfies Record<RunViewV1["phase"], string>;
+const runPhase = { estimate: "estimate", work: "work", handoff: "handoff", "single-call": "single call" } as const satisfies Record<RunViewV1["phase"], string>;
 const runState = {
   starting: "starting", unknown: "unknown", "attempt-unknown": "attempt-unknown", "attempt-proof-invalid": "attempt-proof-invalid", running: "running",
   "failed-before-provider": "failed-before-provider", "settled-recoverable": "settled-recoverable", "settled-restartable": "settled-restartable",

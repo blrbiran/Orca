@@ -16,7 +16,7 @@ import type { ExecutionPort } from "../control/executionPort.js";
 import type { ControlStore } from "../control/store.js";
 import type { TrustedControlConfig } from "./controlConfig.js";
 import { controlErrorCatalog, sendControlError, sendMappedControlError } from "./controlErrors.js";
-import { readControlGroup, readControlRecovery, readControlSummary, readRunEvidence, readSelectionPreview } from "./controlViews.js";
+import { readControlGroup, readControlRecovery, readControlSummary, readRequirementView, readRunEvidence, readSelectionPreview } from "./controlViews.js";
 
 export interface ControlReadApiDeps {
   store: ControlStore;
@@ -125,6 +125,16 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
 
   app.get("/api/control/groups", (_req, res) => {
     res.json(readControlSummary(deps.store, deps.epoch, null, true));
+  });
+
+  // N1 spec §11.2: a requirement's details; its group view is refused while it is clarifying (DR25).
+  app.get("/api/control/groups/:groupId/requirement", (req, res) => {
+    const groupId = String(req.params.groupId);
+    try { res.json(readRequirementView(deps.store, deps.epoch, groupId)); }
+    catch (error) {
+      if (error instanceof ControlError && error.code === "group-not-found") { sendControlError(res, 404, error.code, "No control group was found."); return; }
+      sendMappedControlError(res, error, readErrorContext(deps.store, groupId));
+    }
   });
 
   app.get("/api/control/groups/:groupId", (req, res) => {
