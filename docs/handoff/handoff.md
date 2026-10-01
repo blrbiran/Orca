@@ -102,6 +102,8 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 
 ✅ *** **loop 方案人审后的跟进（W1–W7）与面板中英双语（2026-10-01，会话 `e604b1ba`）做完了**：细节、要人审的点、诚实表述见 §4.0。 ***
 
+✅ *** **C4 ＋ v2 阶段超时 3 小时（Orca）与 ccloop `rejectOn` 改为 verifier 判断（2026-10-01，会话 `ceca1c47`）做完了**：见 §4.0。 ***
+
 **现行基线（会话 `e604b1ba`，2026-10-01，本轮终审修复之后；原始报数在 `.superpowers/sdd/2026-10-01-panel-i18n/task-12-report.md`，输出在该会话 scratchpad `gate-final/`）**：全新 clone，HOME＋四个 XDG 根改道，TMPDIR 短真目录，夹具表 fake codex `integration`，clone 里先 build web。
 - ccloop（内容＝主题行 `docs(handoff): stop naming #13(a) as the next thing in the title line; it has landed`，本轮零改动）：build／typecheck RC 0；**1087 条、1085 过、2 红（`stopProof`；`codexWatchdog` "matches historical double-space start identities on single-digit days" 负载 33 下 poll 超时，单独 3/3 绿，在已知名单里）**；`check-known-reds` RC 0；`check-tmp-leak` RC 0。
 - Orca（内容＝主题行 `fix(web): show an unknown label source as sent; correct stale criterion text`）：web build／typecheck RC 0；**2362 条、2358 过、1 红（`driverRecovery` "drives a retried run on…"，5 s 超时，单文件 3/3 绿）、3 pending（`ccloopDefaultE2E`，门里 `verify:ccloop-pin` 3/3 过）**；web check 54 文件／318 条；`verify:panel` 15 PASS；`check-tmp-leak` RC 0；真 `~/.orca` 逐字节不变。同一门在终审修复前那一版（主题行 `test(web): let the pseudo-locale see values interpolated into a translation`）上也跑过：2359 条、3 红（`driverLanding` 两条、`controlShutdown`，都单文件 3/3 绿）。
@@ -150,37 +152,30 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 
 ## 四、⛔ 下一件事
 
-### 4.0 ⛔ 现在的下一件事（2026-10-01 会话 `e604b1ba` 收尾整节改写；**本节优先于下面的 4.0.d、4.0.c、4.0.b、4.0.0、4.0.1 与 1–3**）
+### 4.0 ⛔ 现在的下一件事（2026-10-01 会话 `ceca1c47` 收尾整节改写；**本节优先于下面的 4.0.d、4.0.c、4.0.b、4.0.0、4.0.1 与 1–3**）
 
 **⛔ 下一会话按这个顺序做：**
-1. **先等人审本会话替人定的点**（人的原话「这一轮执行过程中如果有问题，先按你的建议执行（不要再找我）。执行完在最后阶段报给我审核」，台账记为 H20）。要审的：
-   - 跟进一轮台账 `.superpowers/sdd/2026-10-01-loop-plans-followups/progress.md` 里全部 `Ruling:` 行（H1–H20 是人的原话，不用审）；
-   - 双语一轮台账 `.superpowers/sdd/2026-10-01-panel-i18n/progress.md` 里全部 `Ruling:` 行，以及计划 `docs/superpowers/plans/2026-10-01-panel-i18n.md` 头部「Controller rulings」（F2/F6/F8/F9/F12/F13、预检 P1–P18）；
-   - 中文译文：同一目录的 `zh-review.tsv`（505 个 key ＋ 172 条拒绝码中文，末尾 Q1–Q12 是评审员提的措辞问题）。
-   人回「认可／回退 X」之前，不要在这些点上继续加东西。
-2. **C4 那笔 v2 方案改动等人点名**：真 claude 实测（6 次，claude 自报合计 0.4917684 美元）证明 agent 审核的三个方案的 `rejectOn` 令牌有害——verifier 通过时会在解释里原样引用规则（「…so REJECT:empty-document does not apply」），ccloop 的子串匹配把好活判成不重试的失败（3 个里 2 个）。改动（design／investigate 改命令审核＝文档存在且非空；bugfix 的「先红」写进 successCondition、令牌换占位）**只在 scratch 补丁里**（`…/e604b1ba…/scratchpad/w7/c4-impl-only.patch`），没提交：它会打红 `tests/control/loopPlans.test.ts` 的 "each plan's rules land in the contract (criterion 2)"（bugfix／design／investigate 共 7 格）和 `loopPlanView` 的 successCondition 一行。**人点名后再做。** ccloop 侧根治（整条匹配或专用字段）也要人开口。
-3. **推送归人**：Orca 本地领先远端很多笔（以 `/usr/bin/git ls-remote` 现测为准）；ccloop 本轮零改动。不需要重钉。
-4. **然后由人选下一件**：N5 memory tab（spec 已裁，先核 ccmem Q6）或 N1 需求 → 拆分（先 brainstorm）。
+1. **ccloop：claude adapter 合并、CLI 老入口删除——先出 spec，人审后再动。** 人的原话：「claude adapter只需要保留一个，旧的是不是可以将有用的部分吸收之后删掉了？ CLI也只需要保留新入口，老入口也是看下有没有可用的部分，吸收之后删掉。」本会话只做了只读盘点（结论记在 ccloop handoff「Orca 那条线」）：
+   - 只删 `--adapter claude`／`SubprocessClaudeAdapter` 是 ccloop 内部的事；外部使用者只有 ccloop 的 validation/v1 工具链、README、examples。`subprocessClaudeAdapter.test.ts` 多数判据测的是 `claude-phase-runner.mjs`（两个 adapter 共用），要迁不要删。
+   - 整个老入口（`--adapter`＋`--adapter-config`）还承载 `scripted`（**Orca 旧 `orca run` 路径约 76 条判据、29 个文件靠它**）、`--adapter codex`、以及**唯一能用的 `resume`／`sweep`**（ccloop #4「冻结选择进 `<runDir>/agent-selection.json`」未做；Orca 现在把选择文件写在 workdir，不在 ccloop 的 run 目录）。⇒ 要拆成几步，顺序由 spec 定、人审。
+2. **推送归人**：Orca、ccloop 本地都领先远端（以 `/usr/bin/git ls-remote` 现测为准）。**ccloop 推了之后**，Orca 才能重钉拿到 `rejectOn` 修正（`node scripts/pin-ccloop.mjs <SHA>`）；重钉那一轮要同时更正 Orca 里描述子串规则的注释（`src/control/loopPlans.ts` 的 `rejectOn` 字段注释与 C4 注释）和 loop 方案 spec 的 §2.1/§2.2（追加更正节）。不重钉也不出错：v2 方案已不依赖令牌。
+3. **人之后要审的**：`zh-review.tsv`（`.superpowers/sdd/2026-10-01-panel-i18n/zh-review.tsv`，人已「先认可、之后再审」；末尾已追加评审员原文）；本轮 `zh.ts` 新增的两行 v2 说明。
+4. **然后由人选**：N5 memory tab（先核 ccmem Q6）或 N1 需求 → 拆分（先 brainstorm）。
 
 **本会话做完了什么**（全在本地，零 push）：
-- **loop 方案层人审后的跟进（W1–W7）**，材料：上面那本跟进台账、spec `docs/superpowers/specs/2026-09-30-loop-plans-design.md` **§12（本轮更正，优先于上文）**：
-  - W1：组里任一 task 开跑后，`proposal-edit`／`proposal-set-agent`／`confirm` 拒 `grant-amendment-unsupported`（修前实测：在跑的 task 被退回 draft）。估算照常。⚠️ Web 组的状态列仍永远停在 `ready`（登记）。
-  - W3/W3b：只改预算不显示 changed；改过一次契约就一直显示（人裁 H12）。
-  - W4：U8 量了——被 handoff 冻结、额度重分配的 task 在别的 task 改方案后快照条目逐字节不变；新判据能抓住旧判据漏掉的一种回归。
-  - W5：估算建议可一键应用到 loop task（走 `set-task-loop` 带 `workProvenance`，服务端核值）；Apply all 按序连发、用上一条成功回复里的 `commandRevision`，无人工步骤。R-F14 那条判据按人裁 H14 改写。
-  - W6：估算读每个 task 的有效契约；改方案之前的估算标「过时」，服务端拒 `estimate-stale`，面板提示重估。确认时不查过时（人裁 H15）。
-  - W7：方案 **v2**（五个都有）：文件数默认不设限（`MAX_SAFE_INTEGER`，investigate 仍 1），阶段超时默认 `MAX_TIMER_MS`＝2,147,483,647（Node `setTimeout` 超过它会变成 1 ms，实测）；Orca 三处派生阶段超时的地方都截到它；只改预算保留原方案版本；一键应用保留卡片草稿。v1 定义不变。
-- **面板中英双语**（spec `docs/superpowers/specs/2026-10-01-panel-i18n-design.md` 第 2 版，经独立评审，人已认可；计划 `docs/superpowers/plans/2026-10-01-panel-i18n.md`；SDD 台账 `.superpowers/sdd/2026-10-01-panel-i18n/progress.md`）：react-i18next；默认跟浏览器语言，手动选择存 `orca.panel.lang`；侧栏 Theme 旁的 Language 下拉；英文与改前逐字节相同。服务端的 loop 摘要改发字段（C7 推翻），指标句子旁加 code（`orca metrics --json` 多了字段），拒绝码的中文是面板里的 `zhErrors` 表（查不到就显示服务端原句，码始终可见）。伪语言判据证明可见文字都过了 `t`（3 个字符以下的值看不见，由各区中文判据兜）。12 个 task 全过任务评审（5 个修过一轮），整轮终审（Fable）抓出 1 条 Critical（按标签选方案的 task 一键应用被拒 `estimate-stale`，所有服务端夹具都是手选才漏掉），已修并复审。
+- **人审完上一轮**：两本台账其余 `Ruling:` 行「都认可」；zh-review.tsv 先认可。
+- **Orca：C4 ＋ 阶段超时 3 小时**（主题行 `feat(control): loop plans v2 stop relying on rejectOn tokens and give each phase three hours`；台账 `.superpowers/sdd/2026-10-01-c4-and-phase-timeout/progress.md`；spec `2026-09-30-loop-plans-design.md` §13）。人裁就地改 v2（已推但无人用）：design／investigate 改 command verifier（每个目标一条「存在且非空」检查，`documentCheck`）；bugfix 的先红要求进 successCondition；三者 `rejectOn` 都是 `REJECT:unused`；v2 阶段超时 10,800,000 ms（Web 路径仍截到 task 的 activeMs 与 `MAX_TIMER_MS`）。人点名改写全部相关判据。8 条变异全红。
+- **ccloop：`rejectOn` 改为只交给 verifier 判断**（方案 D，人裁；spec／计划／台账见 ccloop handoff）。删掉 evidence 子串搜索，提示词改一行；独立评审 0 Critical／0 Important。
+- **zh-review.tsv**：人自己的改动（行尾空白、Step 5→6）已提交；按人裁 (a) 末尾追加评审员原文（Q1–Q12 原段保留）。
+- **删了旧会话 scratchpad 里的 314 个 git clone**（人批准；日志和证据文件保留，2.8G → 647M）。
 
-**诚实的表述**：以上全部只在 fake codex／jsdom 下成立；真 claude 只跑过 C4 那 6 次单独的 verify 调用；**人的视觉验收（中文界面）还没做**。
+**诚实的表述**：C4 改动与 3 小时只在 fake／jsdom 下验过；`rejectOn` 新提示词在真 claude 下没跑过（Orca v1 方案的裸令牌在新提示词下的表现未测，需付费跑）。
 
-**这一轮挂账**（台账里都有，这里只列会咬人的）：
-- 两个「已开跑」定义（W1 看 work status，set-task-loop 看 runs 行）——登记待人裁。
-- `chosenByLabel` 按当前标签重算；改过标签后可能显示一个并没选中方案的标签（C1 修后更常见）。
-- web 测试默认超时从 5 s 调到 15 s（App 定时器驱动的判据每次重渲染都更慢了；`agentPreviewRefresh` 在改前已 4968 ms）。
-- npm audit：vitest/vite/esbuild 5 条（开发依赖，与 i18n 无关）没升级。
-- ccloop 的 `setTimeout` 超过 2,147,483,647 ms 的溢出对别的客户端仍在（Orca 已截）。
-- 变异副本与门副本都留在会话 scratchpad（人的全局规则：递归删除要人批准）。⚠️ 本轮早期几个子代理用 `/bin/rm -rf` 删过自己的 scratch 副本，事后才定「一律保留」——已报人。
+**这一轮的门**（原始报数在两本台账）：
+- Orca（全新 clone，内容＝C4 改动提交前的工作区，与提交逐字节相同）：2365 条、2359 过、3 红（`driverLanding` D、`driverRecovery`、`controlShutdown`，负载 43–45；各单文件 3/3 绿，负载 5–6）、3 pending；web check 318 过；`verify:panel`、`verify:ccloop-pin`、`check-tmp-leak` RC 0；`~/.orca` 不变。
+- ccloop（全新 clone，内容＝主题行 `docs: rejectOn is the verifier's judgment; README, framework spec correction, ledger, handoff`）：1091 条、1090 过、1 红（`stopProof`）；`check-known-reds`、`check-tmp-leak` RC 0。
+
+**这一轮挂账**：`evidenceRequired` 同形的子串问题（ccloop spec §7，含 README 示例 `"command output"` 恒满足）；Orca `reconcile.ts` 的 `rejectOn: ["nonzero exit"]` 在 ccloop 新行为下彻底无效（无害）；Web 卡片的「Acceptance: N check commands」不计文档检查。
 
 ### 4.0.d loop 方案层（2026-09-30 会话 `1d7d9aa0`，**已完成、人已审**）
 
