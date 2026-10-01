@@ -106,32 +106,20 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 
 ✅ *** **adapter／CLI 合并四步全部做完（2026-10-01，会话 `be653b22`）**：`orca run` 旧路径已退役（**`orca run` 命令不存在了**，跑一轮只能走面板／控制路径）；ccloop 只剩 `--agents` 入口。细节、人要审的裁定、推送顺序见 §4.0。 ***
 
-**现行基线（会话 `be653b22`，2026-10-01，合并四步与终审修复之后；原始报数在该会话 scratchpad `gate/gate-report.md`）**：全新 clone，HOME＋四个 XDG 根改道，TMPDIR 短真目录，夹具表 fake codex `integration`，clone 里先 build web；`ORCA_CCLOOP_BIN`＝同一次门里 ccloop clone 的 `dist/cli.js`。
+✅ *** **N1「提想法 → 澄清需求 → 拆分 → 确认」第一版做完（2026-10-02，会话 `b5e8d368`）**：需求就是一个 `clarifying` 状态的 group；预估链泛化成按 `purpose` 分派的单次调用；面板第五个分区「需求」。只在 fake claude 下验过。细节、替人定的裁定、下一步见 §4.0。 ***
+
+**现行基线（会话 `b5e8d368`，2026-10-02，N1 需求→拆分做完、终审修复波之后；原始报数在台账 `.superpowers/sdd/2026-10-02-requirement-to-split/progress.md` 的 Task 15 行，输出在该会话 scratchpad `gate2/`）**：全新 clone，HOME＋四个 XDG 根改道，TMPDIR 短真目录，夹具表 fake codex `integration`，clone 里先 build web；`ORCA_CCLOOP_BIN`＝同一次门里 ccloop clone 的 `dist/cli.js`（该 clone 含本会话 ccloop 的夹具队列模式）。
+- ccloop（内容＝主题行 `test(fixtures): pin that a single-call entry beats a single-call-queue beside it …`）：build／typecheck RC 0；**1047 条、1046 过、1 红（`stopProof`）**；`check-known-reds` RC 0；`check-tmp-leak` RC 0。
+- Orca（内容＝主题行 `docs(plan): N1 corrections after execution …`）：web build／typecheck RC 0；**2539 条、2533 过、3 红、3 pending（`ccloopDefaultE2E`，`verify:ccloop-pin` 里 3/3）**；三条红都在开跑时 1 分钟负载 88 下 5 s 超时、负载 6–15 时单文件 3/3 绿：`driverRecovery`、`controlShutdown`（已登记）与 **新登记的** `driverRequirementSplit` "fails the third consecutive invalid draft …"。`requirementE2E` 1 过 0 跳过；真 ast-grep 判据真跑了；`estimateE2E` 3/3；web check 347 条；`verify:panel` 15 PASS；`check-tmp-leak` RC 0；真 `~/.orca` stat 与 sha 前后相同。
+
+**上一版基线（会话 `be653b22`，2026-10-01，合并四步与终审修复之后；原始报数在该会话 scratchpad `gate/gate-report.md`）**：全新 clone，HOME＋四个 XDG 根改道，TMPDIR 短真目录，夹具表 fake codex `integration`，clone 里先 build web；`ORCA_CCLOOP_BIN`＝同一次门里 ccloop clone 的 `dist/cli.js`。
 - ccloop（内容＝主题行 `fix(review): final-review fixes -- strict codex row names its refusal, README run-dir, errata, spec §13`）：build／typecheck RC 0；**1043 条、1042 过、1 红（`stopProof`）**；`check-known-reds` RC 0（名单现为 9 个名字）；`check-tmp-leak` RC 0。
 - Orca（内容＝主题行 `fix(control): an unusable recovery window counts as the default 60_000; final-review wording, README and spec fixes`）：web build／typecheck RC 0；**2369 条、2366 过、0 红、3 pending（`ccloopDefaultE2E`）**；web check 54 文件／318 条；`verify:panel` 15 PASS；`verify:ccloop-pin` RC 0（不设 `ORCA_CCLOOP_BIN`，用钉住的旧包）；`check-tmp-leak` RC 0 —— ⚠️ 但该脚本内部自己重跑的那遍全量**退出 1、有一条没报名字的红**，没查；正式记录的那遍全量全绿。真 `~/.orca` 前后逐字节相同。
 
-**上一版基线（会话 `e604b1ba`，2026-10-01，本轮终审修复之后；原始报数在 `.superpowers/sdd/2026-10-01-panel-i18n/task-12-report.md`，输出在该会话 scratchpad `gate-final/`）**：全新 clone，HOME＋四个 XDG 根改道，TMPDIR 短真目录，夹具表 fake codex `integration`，clone 里先 build web。
-- ccloop（内容＝主题行 `docs(handoff): stop naming #13(a) as the next thing in the title line; it has landed`，本轮零改动）：build／typecheck RC 0；**1087 条、1085 过、2 红（`stopProof`；`codexWatchdog` "matches historical double-space start identities on single-digit days" 负载 33 下 poll 超时，单独 3/3 绿，在已知名单里）**；`check-known-reds` RC 0；`check-tmp-leak` RC 0。
-- Orca（内容＝主题行 `fix(web): show an unknown label source as sent; correct stale criterion text`）：web build／typecheck RC 0；**2362 条、2358 过、1 红（`driverRecovery` "drives a retried run on…"，5 s 超时，单文件 3/3 绿）、3 pending（`ccloopDefaultE2E`，门里 `verify:ccloop-pin` 3/3 过）**；web check 54 文件／318 条；`verify:panel` 15 PASS；`check-tmp-leak` RC 0；真 `~/.orca` 逐字节不变。同一门在终审修复前那一版（主题行 `test(web): let the pseudo-locale see values interpolated into a translation`）上也跑过：2359 条、3 红（`driverLanding` 两条、`controlShutdown`，都单文件 3/3 绿）。
-
-**上一版基线（会话 `1d7d9aa0`，2026-09-30，loop 方案层 Part B 与终审修复之后；原始报数在台账 `.superpowers/sdd/2026-09-30-loop-plans/progress.md` 的 Task B8 行，输出在该会话 scratchpad `gate-partB/`）**：全新 clone，HOME＋四个 XDG 根改道，TMPDIR 短真目录，夹具表 fake codex `integration`，clone 里先 build web。
-- ccloop（内容＝主题行 `fix(agents): refuse a claude model that carries the [1m] context suffix itself`）：build／typecheck RC 0；**1087 条、1086 过、1 红（`stopProof`）**；`check-known-reds` RC 0；`check-tmp-leak` RC 0。
-- Orca（内容＝主题行 `fix(web): freeze the plan card where the server refuses, and name its discard button`）：web build／typecheck RC 0；**2331 条、2327 过、1 红（`driverLanding` X1，5 s 超时，全量期间 1 分钟负载 48；单文件 3/3 绿）、3 pending（`ccloopDefaultE2E`，全量里默认关，门里单独那一步 3/3 过）**；web check 37 文件／193 条；`verify:panel` 15 PASS；`verify:ccloop-pin` RC 0；✅ `check-tmp-leak` RC 0；真 `~/.orca` 不变。`verify:control` 没跑。
-- 同会话更早的 Part A 门（内容＝主题行 `feat(web): show a task's loop plan on its card and in the task list`）与 #13／重钉脚本那一次门，结果同形，原始报数在同一台账与 `.superpowers/sdd/2026-09-30-13ab-and-pin-script/progress.md` §6。
-
-**上一版基线（会话 `2f65a729`，2026-09-29，临时目录泄漏修复之后；原始报数在台账 `.superpowers/sdd/2026-09-29-tmp-leak-skipped-file/progress.md` §5，输出在该会话 scratchpad `gate3/`）**：环境同下。
-- Orca（内容＝主题行 `test(control): gate the default-ccloop E2E at run time …`）：typecheck RC 0；**2153 条、2149 过、1 红（`driverRecovery` 5 s 超时，单独 3/3 绿）、3 pending（`ccloopDefaultE2E`，现在是运行时跳过）**；✅ **`check-tmp-leak` RC 0**，第一次全量跑完的 `TMPDIR` 也剩 0；真 `~/.orca` 不变。web check／`verify:panel` 这次没跑（web 与面板没改）。
-
-**更早一版基线（会话 `c85d2c4e`，2026-09-28，待办 1–6 收尾；取代会话 `fa672d9e`、`f341f05f`、`f8281a60`、`5b01dbd9` 的四版，那几版的原始报数在各自台账：`2026-09-27-single-call-estimate` §3.18／§3.20、`2026-09-27-panel-ui-redesign` 末节、`2026-09-27-claude-stream-usage` §3）**：只抄工具报数，原始数在台账 `.superpowers/sdd/2026-09-27-single-call-estimate/progress.md` §3.23。env 同下（夹具表 fake codex `integration`、HOME＋四个 XDG 根改道），两份都是新 clone，门跑期间没人在里面做变异。
-- ccloop（内容＝主题行 `fix(claude): hand claude a prompt too large for argv on stdin, …` 那一笔）：build／typecheck RC 0；**1066 条、1065 过、1 红**（`stopProof`），`check-known-reds` **RC 0**（名单 14 个名字）。
-- Orca（内容＝主题行 `fix(web): applying a suggestion drops the unsaved draft …` 那一笔，`ORCA_CCLOOP_BIN`＝上面那份 ccloop clone 的 build）：web build／typecheck RC 0；**230 文件／2087 条全过、0 pending**；`verify:panel` RC 0；web check 27 文件／149 条；真 `~/.orca` 前后 `stat` 相同。
-- ✅ **两仓临时目录泄漏已修（会话 `2724716d`，台账 §3.24）**：每个测试文件一个临时根（`tests/setup/scopeTmpdir.ts`），全量跑完 `TMPDIR` 剩 0（修前 ccloop 805、Orca 364）；护栏 `node scripts/check-tmp-leak.mjs`（两仓都有）剩任何条目退 1。量泄漏或跑门时 `TMPDIR` 要用**短路径的真目录**（见 §6.22）。修后在新 clone 上重跑的门：ccloop 1066 条、1065 过、1 红（`stopProof`），`check-known-reds` RC 0；Orca 2087 条、2086 过、1 红（`controlShutdown`，单文件重跑 3/3 绿），web 149 条、`verify:panel` 15 PASS，真 `~/.orca` 不变。
-- ⚠️ 负载：`driverRecovery` 在高负载（load 约 37）下单文件也能连红 3 次，负载降下来后 3/3 过 ⇒ 判 flake 要等负载降下来并记 `uptime`（会话 `5b01dbd9` 实测）。
-
-**上一版基线（会话 `94b09282` 收尾，取代 `43e3e1d8` 那一版；旧版在同一台账 §15，更早的在 §8–§12）**：只抄工具报数，细节在台账 `.superpowers/sdd/2026-09-26-agent-selection/progress.md` §16–§18。
-- env：`ORCA_CCLOOP_BIN` 指 ccloop main 的 `git clone --local` build（会话 scratchpad、软链 `node_modules`、`npm run build`）；`ORCA_AGENTS_TABLE` 指 scratchpad 里的夹具表（0600 文件在 0700 目录，`command` ＝ `[node, <副本>/tests/fixtures/fake-codex.mjs, "integration", <marker>]`，`version: "9.9.9-fake"`）—— 🔴 **模式必须是 `integration`**，`ok`／`script` 会让 `ccloopProtocol.integration` 红；**HOME 与四个 XDG 根全部改道**。ccloop 的门一律在 clone 里跑。
-- Orca（全新 clone，内容＝主题行 `docs(handoff): the ruling review is done and landed, …` 那一笔；`ORCA_CCLOOP_BIN`＝ccloop clone 的 `dist/cli.js`；对 B1 和 B4 两版 build 各跑一次，结果相同）：🔴 **clone 里先 `npm run build --workspace web`**（不 build 会有 14 条 `panel-dist-missing` 假红）；web build／typecheck RC 0；全量 **220 文件／2003 条全过**、0 pending；web tsc RC 0、21 文件／113 条全过；真 `~/.orca` 前后 `stat` 相同。**`verify:*` 分组门没跑。**
-- ccloop（clone，HOME＋四个 XDG 根改道）：会话 `94b09282` 在 B1、B4、flake 修复三笔之上各跑一次全量，三次都是 typecheck／build RC 0、85 文件／1005 条、1004 过、唯一红 `stopProof`、`check-known-reds` **RC 0**（名单 14 个名字）。最后一次的内容＝主题行 `test(runLoop): give the recovery-window criterion a per-phase timeout …` 那一笔。改道 HOME 下只会有 `~/.npm/_logs`（既有判据自己跑 npm 留的），别的应为空。
+**更早的基线**（会话 `e604b1ba`、`1d7d9aa0`、`2f65a729`、`c85d2c4e`、`94b09282` 各一版；会话 `b5e8d368` 压缩本节时删去，原始报数都在各自台账：`2026-10-01-panel-i18n/task-12-report.md`、`2026-09-30-loop-plans` Task B8 行、`2026-09-29-tmp-leak-skipped-file` §5、`2026-09-27-single-call-estimate` §3.23、`2026-09-26-agent-selection` §16–§18）。它们留下的、仍然成立的结论：
+- 跑门：clone 里先 `npm run build --workspace web`（不 build 有 `panel-dist-missing` 假红）；`ORCA_AGENTS_TABLE` 夹具表的 fake codex 必须是 `integration` 模式（`ok`／`script` 会让 `ccloopProtocol.integration` 红）；改道 HOME 下只会有 `~/.npm/_logs`。
+- 临时目录泄漏已修（每个测试文件一个临时根 `tests/setup/scopeTmpdir.ts`）；护栏 `node scripts/check-tmp-leak.mjs`（两仓都有），TMPDIR 要短、要是真目录（§6.22）。
+- ⚠️ 负载：`driverRecovery` 在 load 约 37 时单文件也能连红 3 次 ⇒ 判 flake 要等负载降下来并记 `uptime`。
 
 ⚠️ *** **新登记的负载型 flake**：`tests/control/executionDriverE2E.test.ts` 在重负载（两份 clone 并跑变异）下出现过 5/9（R1 子场景）；无负载单跑 3/3 全绿。
 `tests/control/driverSettle.test.ts` 的真 git 场景曾在全量＋并发负载下撞默认 5 s 超时，已给 30 s（主题行见上）。 ***
@@ -158,41 +146,33 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 
 ## 四、⛔ 下一件事
 
-### 4.0 ⛔ 现在的下一件事（2026-10-01 会话 `be653b22` 收尾整节改写，会话 `b5e8d368` 滚动；**本节优先于下面的 4.0.d、4.0.c、4.0.b、4.0.0、4.0.1 与 1–3**）
-
-**会话 `b5e8d368`（2026-10-01）做了什么**（开工时三仓 `ls-remote` 远端＝本地，即 `be653b22` 的全部提交人已推）：
-- 人审：「替人定的裁定」全部认可（Orca step-3 台账与 ccloop 三本台账末尾各记一节 Human review）。`zh-review.tsv` 人没提，仍待审。
-- ccloop 三笔代码／台账＋一笔 handoff，**全在本地，等人推**：`refactor(cli): refuse an unknown flag on run, resume and sweep …`（人裁「直接不支持就好」：不再有 `--adapter was removed` 提示，任何不认的 `--` flag 报 `unknown flag <flag>`）；`fix(claude): deliver an interrupted execute's partial whole instead of cut at 8192 bytes`；`docs(sdd): ledger of the live claude check …`。Orca 代码零改动。
-- **付费真 claude**（人「允许跑」；claude 2.1.286、`claude-opus-5-5`、各 n＝1；台账 ccloop `.superpowers/sdd/2026-10-01-live-partial-and-resume/progress.md`）：
-  - 「中断后读 partial」**第一次跑是坏的**：runner 中断路径写完 stdout 立刻 `process.exit`，macOS 管道异步写 ⇒ partial 在 8192 字节截断、adapter 丢掉它与中断前用量。修复后重跑通过（6 个文件、`tokenUsage` 195,810 进账）。fake 判据的 partial 都很小，所以一直绿。
-  - 「`resume --agents`」：崩溃（整组 SIGKILL）的 run **没有任何 CLI 路径能续跑**——`resume`／`sweep` 只认 loop 自己在 `stale_candidate` 边界写的 `owner-transfer.json`，租约过期后报 `cannot read run artifacts: ENOENT …`。照判据 `seed` 的形状人工补齐移交记录后，真 claude 下 `resume --agents` 续跑 attempt 2 成功。⇒ 验到的是「冻结选择重建 claude adapter 并跑完」，不是「崩溃可续」。
-  - runner 以 `detached` 起，ccloop 被杀后 runner 与 claude 继续跑完（继续花钱）。
-  - 花费（claude 自报相加，被中断的两次 execute 无结果信封、拿不到）：$0.3469558。`~/.claude/projects` 前后相同。
-- 门（全新 clone，内容＝上面那笔 fix）：ccloop 1045 条、1044 过、只红 `stopProof`，`check-known-reds`／`check-tmp-leak` RC 0，typecheck／build RC 0。**Orca 本会话没跑门**（Orca 无改动）。
+### 4.0 ⛔ 现在的下一件事（2026-10-02 会话 `b5e8d368` 收尾整节改写；**本节优先于下面的 4.0.f、4.0.e、4.0.d、4.0.c、4.0.b、4.0.0、4.0.1 与 1–3**）
 
 **⛔ 下一会话按这个顺序做：**
-1. **先核推送与重钉**（推送归人）：三个仓各跑 `/usr/bin/git ls-remote origin refs/heads/main` 与本地比。⚠️ 会话 `b5e8d368` 的 ccloop 三笔要先推；之后重钉**有实际意义**——钉住的包要带上 runner 的 8192 字节修复（`orca panel` 下的真 claude 中断就走这条路）。
-   🔴 **推送顺序：ccloop 先推（或同时），再推 Orca。** 原因：Orca 的 `tests/scheduler`（`ccloopRunner`、`harvest`、`ledgerWiring` 与 `scenarios/` 下跑整轮的文件，即 `verify:scheduler` 进而 `verify`）现在要一份**含 fake codex `frames` 模式的 ccloop checkout**（兄弟目录 `../ccloop` 或 `ORCA_CCLOOP_BIN`，主题行 `test(fixtures): fake codex plays scripted frames per attempt…` 之后）；钉住的包没有测试夹具，供不了它们。
-   人推 ccloop 之后，agent 跑 `node scripts/pin-ccloop.mjs <SHA>` 重钉（七项核对），再由人推 Orca。Orca 生产代码不依赖今天的 ccloop 新行为（终审已核），重钉只是让钉住的包跟上。
-2. ✅ 「替人定的裁定」人已全部认可（会话 `b5e8d368`）。仍待人审：`zh-review.tsv`（`.superpowers/sdd/2026-10-01-panel-i18n/zh-review.tsv`）与 `zh.ts` 两行 v2 说明（上一轮留下的，未变）。
-3. **然后由人选**：N5 memory tab（先核 ccmem Q6）或 N1 需求 → 拆分（先 brainstorm）。另有两件新登记、归人的：崩溃的 ccloop run 要不要能续跑；runner 孤儿要不要收。
+1. **先核推送**（推送归人）：三个仓各跑 `/usr/bin/git ls-remote origin refs/heads/main` 与本地比。🔴 **ccloop 先推**：本会话 ccloop 有两笔测试夹具（主题行 `test(fixtures): the fake claude answers single calls from a queue, …` 与 `test(fixtures): pin that a single-call entry beats a single-call-queue beside it …`），Orca 的 `tests/control/requirementE2E.test.ts` 要一份含它们的 ccloop checkout（`ORCA_CCLOOP_BIN`）。钉住的包供不了测试夹具；**不需要重钉**（Orca 生产代码不依赖它们）。
+2. **人要审的**（控制器按「执行中有问题先按你的建议做」替人定的）：SDD 台账 `.superpowers/sdd/2026-10-02-requirement-to-split/progress.md` 里全部 `Ruling:` 行，以及下面「替人定的要点」。
+3. **付费真 claude 跑一个小需求**（spec §12.5）没跑——每次付费都要人点头。`clarify` 的 schema 里 `"type":"boolean"` 从没发给过真 claude，这次付费跑是它第一次被证明。
+4. **然后由人选**：N5 memory tab（先核 ccmem Q6）；ccloop 崩溃续跑＋孤儿 runner 收（人已定方向「都做」，控制器建议做成一件事、清理是续跑的前提）；或 N1 第二版（「事实自己查」的子代理，可在临时 clone 上用 codegraph）。
 
-**本会话做完了什么**（全在本地，零 push；四步各自 spec → 计划 → subagent 实现 → 逐任务审查 → 终审 → 修复波 → 门）：
-- **① ccloop 只剩一个 claude adapter**：删 `SubprocessClaudeAdapter` 与 `--adapter claude`；`ClaudeAgentAdapter` 在 execute 被中断或超时后**读 runner 吐出的 partial**（worktree 有改动时），带上中断前观测到的用量（无观测不填，绝不填 0）；execute 的停止宽限 = `max(killGraceMs, partialOutcomeRecoveryWindowMs + 5 s)`。v1 的 `run-scenario`／`prepare-a04` 工具链退役。spec／计划在 ccloop `docs/superpowers/{specs,plans}/2026-10-01-claude-adapter-consolidation-step1*`。
-  - **Orca 侧**：`handoffGraceMsOf` = `max(killGraceMs, 冻结的恢复窗口 + 5 s) + 60 s`（主题行 `fix(control): the handoff grace waits ccloop's execute stop bound…` 及两笔修复）；没有启动信封的 run 窗口按 0；窗口不可用（值坏或信封读不出）按默认 60 s ⇒ 宽限 ≥ 125 s。
-- **② ccloop #4**：`run --agents` 把选择冻结进 `<runDir>/agent-selection.json`（0600、`wx`，先读契约、先查 run 目录新鲜度再写）；`resume --run-dir <dir> --agents <table>` 与 `sweep --root <root> --agents <table> --max-runs <n>` 用冻结的选择重建 adapter；没有冻结文件的 run 拒绝（`agent-selection-missing`）。**Orca 仍不调 `ccloop resume`／`sweep`**（续跑解冲突孤儿 run 是另一件 Orca 的事，未做）。
-- **③ Orca 旧 `orca run <plan> --adapter-config` 路径退役**：CLI 命令、`runRound`、`runTask` 的 `--adapter` 形态删掉；**57 条判据（29 个文件）全部迁移、一条没删**——测试 sandbox 的 `runRoundForTest` 经 `ccloop run --agents` 跑 fake codex `frames` 模式，`runCli(["run", …])` 路由过去，调用点不变。`RoundExecution.mode` 的 `"legacy"` 只留给测试（裁定 C-5）。spec `docs/superpowers/specs/2026-10-01-retire-legacy-orca-run-design.md`（含 §7 实施后更正），计划同名。
-- **④ ccloop 删老入口**：`--adapter`／`--adapter-config` 一律报 `--adapter was removed; use --agents <table>`；`validate-codex-adapter.mjs` 改用 agents 表；README、`docs/codex-adapter.md`、`docs/control-protocol-v1.md` 只剩 `--agents`。`ScriptedAdapter` 类保留（约 40 条直接构造它的判据在用）。
-- 台账（ccloop）：`.superpowers/sdd/2026-10-01-{claude-adapter-consolidation-step1,agents-resume-sweep,retire-old-cli-entry}/progress.md`；（Orca）：`.superpowers/sdd/2026-10-01-retire-legacy-orca-run/progress.md`；终审与门的报告在会话 scratchpad `final/`、`gate/`。
+**本会话做完了什么**（全在本地；spec `docs/superpowers/specs/2026-10-02-requirement-to-split-design.md`，**§15 是 11 条实施期更正，优先于正文**；计划同名于 `docs/superpowers/plans/`，末尾有预检裁定与执行后更正）：
+- **第一段（纯重构）**：预估链变成按 `purpose` 分派的单次调用（`src/control/singleCall.ts`）；已存的预估 run 仍是 `phase: "estimate"`、一行不改；⑤ 的既有判据一条没改、全绿；中间过了一道全新 clone 的门。
+- **第二段**：控制 store 升到 **schema 6**（两张表 `requirement_rounds`／`requirement_drafts`；⚠️ 旧版 Orca 打开迁移后的真 `~/.orca` 会报 `control-schema-unsupported`）；group 新状态 `clarifying`，所有读 plan 的入口对它拒绝或跳过；仓库概况（`git ls-tree` 清单＋根目录说明文件＋可选 ast-grep `outline`，`@ast-grep/cli` 钉 0.45.3，blob 用 `git cat-file --batch` 原样导出、不跑目标仓库的过滤器）；`clarify`／`split` 两种调用（自动重试至多 2 次）；需求文档由一个纯函数从记录拼出；五条命令 `requirement-open`／`-answer`／`-consensus`／`-draft-feedback`／`-draft-accept` 与需求上的 `recovery-retry`；接受时导入同一个 group、追问花费结转（`limit` 加上已用）；文档以 `git mktree` 等底层命令导出成 `orca/<groupId>` 的第一笔提交（文件 `.orca/requirements/YYYY-MM-DD-<slug>.md`，**仓库外零写入**）；`start` 等导出完成；面板第五个分区「需求」（中英）。
+- 每个 task 都经过实施 → 审查 → 修复 → 复审；整支终审抓到 2 Critical（重试过一轮后重启会让所有 group 永久 `dispatchBlocked`；结构导出的路径穿越）＋5 Important，一次修复波全部关掉并复审。
+- **门**：见 §三 现行基线。
 
-**替人定的裁定（✅ 人已于 2026-10-01 全部认可，会话 `b5e8d368` 记录）**：
-- 改了人没点名的既有判据：Orca `tests/control/driverHandoff.test.ts` 两条（宽限边界随新公式改，其中一条冻结 `killGraceMs` 改成 50 000 以恢复区分度）；ccloop `tests/cli/agentsRun.test.ts` 两行（`resume`／`sweep` 不再报「only supported by run」）与三行互斥行（改为期待移除消息）；`cli.test.ts`、`codex.test.ts` 迁到 `--agents`（4＋2 条只测已删解析的判据被移除判据取代）；三份 codex 验证夹具的版本串补成 x.y.z（视为夹具构造）。名单逐条在各台账与报告里。
-- 设计：第②–④步的 spec 都是控制器定的（C-1…C-5 等）；第③步保留判据而不删；不可用窗口按 60 s；`sweepRuns` 的 `adapterName` 类型不收窄。
-- 执行：第①步的门并入最后一次门；同一仓里两个实施席并行过一次（文件不相交）。
+**替人定的要点（都可逆，台账有全文）**：schema 升 v6 并点名改写两条断言 `"5"`（DR5）；`i18nPseudo` 的枚举计数按新增值逐次点名改（146→147→148→164）；`webParity.test.ts` 点名改写（PR-I7）；导出不用临时索引、改 `mktree`（`umask 077` 会把人仓库 `.git` 里的对象写成 0400，Rule 17）；`.orca` 不是目录时导出落成持久阻塞（状态 `conflict`，原因码 `requirement-export-path-blocked`），`recovery-retry` 可重来；无产出的调用失败算一次自动重试；接受在用量未知或 group 已停止时拒绝；结构摘要只缓存 `ok`；面板加了四处计划外的界面（额度耗尽时就地加额度、无原因码的失败也给重试、命令被拒就地显示、导出等待说明）；导出状态 `conflict` 在界面上叫「受阻」／"blocked"（措辞归人审）。
 
-**诚实的表述**：四步本身只在 fake 下验过；真 claude 下「中断后读 partial」（修复后）与「`resume --agents`」（移交记录人工补齐）由会话 `b5e8d368` 各跑通一次，见上。上下文占用超过 Rule 6 的 T2（人本轮明说不考虑），检查点已记录。
+**诚实的表述**：全部只在 **fake claude**（＋真 ccloop build＋fake codex）下验过；真 claude 一次都没跑过 N1。「需求→拆分可用」不是事实。
 
-**挂账**：恢复窗口不可用时 60 s 不是真上限（窗口可到 `handoff.activeMs`；只在状态损坏时走到）；ccloop `PARTIAL_FLUSH_MARGIN_MS` 在 Orca 手抄一份，改 ccloop 时重钉不会自动发现；`agent-selection.json` 只冻结选择与 hash，`command`／`timeoutMs`／`killGraceMs` 跟随 resume 时的表；claude CLI 自动升级后旧 run 会被 `agent-version-drift` 拒绝续跑；Orca 的 57 条整轮判据跑在测试专用的 `"legacy"` 模式（无 grant 的 reconcile 分支），生产不再走它。
+**挂账**：需求上的用量一旦未知就清不掉（与 v1 plan group 相同，重试后照样停在 `requirement-usage-unknown`）；概况构建只能串行（临时目录清扫假设没有并发构建）；`hash-object --stdin --no-filters` 的 `--no-filters` 按设计红不了（保留为防线）；终审列的其余 Minor 在台账目录的 `final-review.md`（该目录未入库，只有 `progress.md` 与 `preflight-rulings.md` 入库）。
+
+### 4.0.f 上一会话（`be653b22` 合并四步，`b5e8d368` 前半）留下的结论（**已完成、人已审；过程删了，结论留在这里**）
+
+- adapter／CLI 合并四步做完：ccloop 只剩 `ClaudeAgentAdapter` 与 `--agents` 入口，`orca run` 旧路径退役（**`orca run` 命令不存在了**）；Orca 的 57 条整轮判据经 `ccloop run --agents` 跑 fake codex `frames` 模式（要含该模式的 ccloop checkout）。人已审完全部裁定（四本台账末尾 Human review）。
+- 人裁「`--adapter` 不需要提示，直接不支持」⇒ ccloop `run`／`resume`／`sweep` 对不认的 `--` flag 一律报 `unknown flag <flag>`。
+- 付费真 claude（`b5e8d368`，claude 2.1.286，各 n＝1，工具报数合计 $0.3469558）：**「中断后读 partial」第一次是坏的**——runner 写完 stdout 就 `process.exit`，macOS 管道异步写，partial 在 8192 字节截断；ccloop 已修（主题行 `fix(claude): deliver an interrupted execute's partial whole …`），修后跑通。**`resume --agents` 只在人工补齐移交记录后跑通**：被直接杀掉的 run 没有任何 CLI 路径能续跑（`resume`／`sweep` 只认 loop 在 `stale_candidate` 边界写的 `owner-transfer.json`）；ccloop 死后 runner（`detached`）与 claude 继续跑完、继续花钱。台账 ccloop `.superpowers/sdd/2026-10-01-live-partial-and-resume/progress.md`。
+- Orca 已重钉 ccloop `99054f2`（七项核对全过）。
+- 挂账（未变）：恢复窗口不可用时 60 s 不是真上限；`PARTIAL_FLUSH_MARGIN_MS` 在 Orca 手抄一份；`agent-selection.json` 只冻结选择与 hash；claude 自动升级后旧 run 会被 `agent-version-drift` 拒绝续跑。
 
 ### 4.0.e 上一会话（`ceca1c47`，2026-10-01）留下的结论（**已完成、人已审；过程删了，结论留在这里**）
 
