@@ -5077,3 +5077,13 @@ These override the task text they name. Each implementer whose task is named mus
   command that can trigger the call.
 - Minor findings (20) in preflight-scan.md table 3: each implementer reads the rows for its task and applies the ones
   that are fixes to its own text; none is load-bearing.
+
+## Corrections after execution (2026-10-02, session b5e8d368; the tasks above are kept as written)
+
+- Task 12 M12.3 is red at `run-profile-missing` (the accepted group's proposal is not confirmed, so its profiles are
+  null and that check fires first), not at `run-task-identity`.
+- Task 12 M12.4: Express's `:groupId` never matches a path containing `/`, so ordering against `/:groupId` cannot
+  matter; the mutation targets ordering against the `/api/control` catch-all 404.
+- Task 5 / Task 11: `git archive` and the temporary index were replaced (spec §15 items 10 and 11).
+- The whole-branch review ran before Task 15's gate, and its fix wave (2 Critical, 5 Important, 3 triage items) landed
+  before the gate; see the SDD ledger.
