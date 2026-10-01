@@ -372,3 +372,25 @@ redirected one.
 - `translate` as a fourth purpose of the single call, shown beside the original, never replacing it.
 - `requirement-reopen`.
 - CLI / skill / MCP (N2) over the same commands.
+
+## 15. Corrections from planning (2026-10-02, session `b5e8d368`; the text above is kept as written)
+
+Found by the plan's drafter against the code (`docs/superpowers/plans/2026-10-02-requirement-to-split.md`, rulings DR1–DR28):
+
+1. §5.1 `round:<n>` / `draft:<n>` cannot be ids (`idSchema` has no colon): the keys are `round-<n>` / `draft-<n>`.
+2. §5.1 "`phase: "single-call"`, `purpose: "estimate"`" contradicts what is on disk: `phase: "estimate"` sits in hashed
+   dispatch envelopes, an `attempt_evidence` CHECK constraint and a criterion. Stored estimate runs keep
+   `phase: "estimate"`, read as purpose `estimate` by code; new purposes are stored as `phase: "single-call"` with
+   `purpose`; no row is rewritten (DR1).
+3. §11.1: answering a round queues the next round only while the model reports the frontier open; consensus is allowed
+   when the latest round is answered, awaiting answers, failed or interrupted (DR10). As written, consensus could never
+   be reached.
+4. §12.3: the ccloop fixture need not be pushed first; Orca's criteria load it from the clone `ORCA_CCLOOP_BIN` names.
+5. §13 also gains the export's two scratch files, `document-<groupId>.md` and `message-<groupId>.txt`, beside the index,
+   with the same lifetime.
+6. §4.1: booking usage on a clarifying group keeps the ledger mirror in sync without a proposal; a clarifying group must
+   not be read as a legacy group by the `"planHash" in group` test.
+7. §11.1: a clarifying group survives a panel restart: shutdown treats it as driver-owned (DR17).
+8. §6: the ast-grep facts read from source agree with this spec; Task 0a measures them on the real binary.
+9. The control store schema goes to v6 (DR5, controller ruling under the human's standing instruction); an older Orca
+   build then refuses a migrated store with `control-schema-unsupported`.
