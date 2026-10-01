@@ -24,6 +24,16 @@ export function documentPathOf(createdOn: string, slug: string, suffix: number):
   return `.orca/requirements/${createdOn}-${slug}${suffix === 1 ? "" : `-${suffix}`}.md`;
 }
 
+/**
+ * Final review triage (T7 minors): the text is frozen into the person's repository, so model and person text stays
+ * inside the markdown construct it is written in. A list item's later lines are indented under its marker (blank lines
+ * stay empty); a heading or a table cell is one line, and a table cell's `|` is escaped.
+ */
+const lines = (text: string): string[] => text.split(/\r\n|\r|\n/);
+const item = (marker: string, text: string): string => lines(text).map((line, i) => (i === 0 ? `${marker}${line}` : line === "" ? "" : `${" ".repeat(marker.length - marker.trimStart().length + 2)}${line}`)).join("\n");
+const oneLine = (text: string): string => lines(text).join(" ");
+const cell = (text: string): string => oneLine(text).replace(/\|/g, "\\|");
+
 /** N1 spec §10 and §4.3: the one renderer; the panel shows its output and the export writes its output. */
 export function renderRequirementDocument(input: RequirementDocumentInput): string {
   const w = WORDS[input.requirement.contentLanguage];
@@ -38,28 +48,28 @@ export function renderRequirementDocument(input: RequirementDocumentInput): stri
   ];
   const section = (title: string, body: string[]) => { out.push(`## ${title}`, "", ...(body.length === 0 ? [w.none] : body), ""); };
   section(w.statement, latest === null ? [] : [latest.statement]);
-  section(w.criteria, (latest?.acceptanceCriteria ?? []).map((c) => `- ${c.id}: ${c.text}`));
-  section(w.glossary, glossary.map((entry) => `- **${entry.term}**: ${entry.definition}`));
-  section(w.decisions, adrs.flatMap((adr) => [`### ${adr.id} ${adr.title}`, "", `${w.context}${adr.context}`, `${w.decision}${adr.decision}`, `${w.consequences}${adr.consequences}`, ""]).slice(0, -1));
+  section(w.criteria, (latest?.acceptanceCriteria ?? []).map((c) => item("- ", `${c.id}: ${c.text}`)));
+  section(w.glossary, glossary.map((entry) => item("- ", `**${oneLine(entry.term)}**: ${entry.definition}`)));
+  section(w.decisions, adrs.flatMap((adr) => [`### ${adr.id} ${oneLine(adr.title)}`, "", item(w.context, adr.context), item(w.decision, adr.decision), item(w.consequences, adr.consequences), ""]).slice(0, -1));
   out.push(`## ${w.rounds}`, "");
   if (valid.length === 0) out.push(w.none, "");
   for (const round of valid) {
     const answers = new Map((round.answers ?? []).map((answer) => [answer.id, answer.text]));
     out.push(`### ${w.round} ${round.roundNo}`, "");
     if (round.result!.questions.length === 0) out.push(w.noQuestions);
-    for (const q of round.result!.questions) out.push(`- ${q.id}: ${q.question}`, `  ${w.recommended}${q.recommendedAnswer}`, `  ${w.answer}${answers.get(q.id) ?? w.unanswered}`);
+    for (const q of round.result!.questions) out.push(item("- ", `${q.id}: ${q.question}`), item(`  ${w.recommended}`, q.recommendedAnswer), item(`  ${w.answer}`, answers.get(q.id) ?? w.unanswered));
     out.push("");
   }
   const consensus = input.requirement.consensus;
   section(w.consensus, consensus === null ? [] : [
     `${w.roundLine}${consensus.roundNo}`, `${w.atLine}${consensus.at}`,
-    ...(consensus.openBranches.length === 0 ? [] : [w.openBranches, ...consensus.openBranches.map((branch) => `  - ${branch}`)]),
+    ...(consensus.openBranches.length === 0 ? [] : [w.openBranches, ...consensus.openBranches.map((branch) => item("  - ", branch))]),
     ...(consensus.openQuestions.length === 0 ? [] : [w.openQuestions, ...consensus.openQuestions.map((question) => `  - ${question}`)]),
   ]);
   if (input.acceptedSplit !== null) {
     const rows = (latest?.acceptanceCriteria ?? []).map((c) => {
       const tasks = input.acceptedSplit!.tasks.filter((task) => task.traces.includes(c.id)).map((task) => task.taskId);
-      return `| ${c.id} | ${tasks.length === 0 ? "—" : tasks.join(", ")} |`;
+      return `| ${cell(c.id)} | ${tasks.length === 0 ? "—" : tasks.map(cell).join(", ")} |`;
     });
     out.push(`## ${w.split}`, "", `| ${w.criterion} | ${w.tasks} |`, "| --- | --- |", ...rows, "");
   }

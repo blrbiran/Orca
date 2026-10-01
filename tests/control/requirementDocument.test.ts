@@ -59,3 +59,46 @@ describe("the requirement document (N1 spec §10)", () => {
     expect(documentPathOf("2026-10-02", "markdown-export", 3)).toBe(".orca/requirements/2026-10-02-markdown-export-3.md");
   });
 });
+
+// Final review fix wave (session b5e8d368, 2026-10-02): finding 6 (spec §10 "Decisions (ADRs) (accepted only)", the
+// Task 7 deferred must-fix) and the triage's newline/pipe fix -- the bytes are frozen into the person's repository.
+describe("the requirement document's decisions and its markdown (final review finding 6, triage T7)", () => {
+  function withAdrs(): RoundBody[] {
+    const [one, two] = rounds();
+    const result = { ...one!.result!, adrs: [...one!.result!.adrs, { id: "R1.ADR2", title: "Zip every export", context: "A rejected proposal.", decision: "Zip it.", consequences: "None." }] };
+    return [{ ...one!, result, adrDecisions: [{ id: "R1.ADR1", accept: true }, { id: "R1.ADR2", accept: false }] }, two!];
+  }
+  const decisions = (text: string) => text.slice(text.indexOf("## Decisions (ADRs)"), text.indexOf("## Rounds"));
+
+  it("renders an accepted ADR with its context, decision and consequences, and leaves a rejected one out", () => {
+    const text = renderRequirementDocument({ groupId: "r", requirement, rounds: withAdrs(), acceptedSplit: null });
+    expect(decisions(text)).toBe([
+      "## Decisions (ADRs)", "",
+      "### R1.ADR1 One file per note", "",
+      "- context: Notes are independent.", "- decision: Export each note to its own file.", "- consequences: Many notes make many files.", "", "",
+    ].join("\n"));
+  });
+
+  it("keeps multi-line text inside its list item, and a heading on one line", () => {
+    const [one, two] = withAdrs();
+    const result = { ...one!.result!,
+      adrs: [{ ...one!.result!.adrs[0]!, title: "One file\nper note", context: "Notes are independent.\n\nEven nested ones." }],
+      glossary: [{ ...one!.result!.glossary[0]!, definition: "One page\nof text." }] };
+    const answers = [{ id: "R1.Q1", kind: "recommended" as const, text: "CommonMark" }, { id: "R1.Q2", kind: "text" as const, text: "As links,\r\nrelative to the note\n- not a new item" }];
+    const branches = { ...requirement.consensus, openBranches: ["sync to\na cloud drive"] };
+    const text = renderRequirementDocument({ groupId: "r", requirement: { ...requirement, consensus: branches },
+      rounds: [{ ...one!, result, answers, adrDecisions: [{ id: "R1.ADR1", accept: true }] }, two!], acceptedSplit: null });
+    expect(text).toContain("- **note**: One page\n  of text.\n");
+    expect(text).toContain("### R1.ADR1 One file per note\n\n- context: Notes are independent.\n\n  Even nested ones.\n- decision: ");
+    expect(text).toContain("  - answer: As links,\n    relative to the note\n    - not a new item\n");
+    expect(text).toContain("- open branches:\n  - sync to\n    a cloud drive\n");
+  });
+
+  it("escapes a pipe in a Split table cell and keeps each row on one line", () => {
+    const [one, two] = rounds();
+    const criteria = [{ id: "AC|1", text: "A criterion id with a pipe." }, { id: "AC2", text: "Plain." }];
+    const split = { ...VALID_SPLIT, tasks: [{ ...VALID_SPLIT.tasks[0]!, taskId: "export|er", traces: ["AC|1"] }, { ...VALID_SPLIT.tasks[1]!, taskId: "images\nnext", traces: ["AC2"] }] };
+    const text = renderRequirementDocument({ groupId: "r", requirement, rounds: [one!, { ...two!, result: { ...two!.result!, acceptanceCriteria: criteria } }], acceptedSplit: split });
+    expect(text.endsWith(["## Split", "", "| Criterion | Tasks |", "| --- | --- |", "| AC\\|1 | export\\|er |", "| AC2 | images next |", ""].join("\n"))).toBe(true);
+  });
+});
