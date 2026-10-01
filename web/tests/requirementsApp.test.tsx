@@ -101,4 +101,16 @@ describe("App and the Requirements section (N1 spec §11.2, DR25)", () => {
     // The next 2 s poll answers a summary that lists r again.
     await waitFor(() => expect(requests.filter((request) => request === "GET /api/control/groups/r/requirement").length).toBeGreaterThan(before), { timeout: 4_000 });
   });
+
+  it("shows the refusal of a requirement command whose outcome is unknown in Requirements", async () => {
+    openAnswer = { status: 503, body: { error: { code: "panel-draining", message: "panel-draining", commandRevision: null } } };
+    render(<App />);
+    const form = await screen.findByRole("form", { name: "New requirement" });
+    fireEvent.change(within(form).getByRole("textbox", { name: "Idea" }), { target: { value: "Let people print a page." } });
+    fireEvent.click(within(form).getByRole("button", { name: "Start clarifying" }));
+    const section = within(screen.getByRole("region", { name: "Requirements" }));
+    expect((await section.findByRole("alert")).textContent).toMatch(/^\S+ · /);
+    expect(requests).toContain("POST /api/control/requirements");
+  });
 });
+
