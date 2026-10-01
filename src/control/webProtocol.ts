@@ -351,7 +351,9 @@ export type ContextObservationV1 = z.infer<typeof contextObservationSchema>;
 export const dispatchEnvelopeSchema = z
   .object({
     schema: z.literal("orca-dispatch-envelope-v1"),
-    phase: z.enum(["estimate", "work", "handoff"]),
+    phase: z.enum(["estimate", "work", "handoff", "single-call"]),
+    /** N1 DR1: what a `single-call` phase claim is for; an estimate's stored envelope has none. */
+    purpose: z.enum(["clarify", "split"]).optional(),
     groupId: idSchema,
     workItemId: idSchema,
     runId: idSchema,
@@ -371,15 +373,19 @@ export const dispatchEnvelopeSchema = z
     const populated = (Object.entries(value.profiles) as ["estimator" | "worker" | "handoff", unknown][])
       .filter(([, binding]) => binding !== null)
       .map(([slot]) => slot);
-    const expected = value.phase === "estimate" ? ["estimator"] : value.phase === "handoff" ? ["handoff"] : ["worker", "handoff"];
+    // N1 spec §5.1: a `single-call` claim is held to an estimate's rules (the existing issue strings, byte for byte).
+    const singleCall = value.phase === "estimate" || value.phase === "single-call";
+    const expected = singleCall ? ["estimator"] : value.phase === "handoff" ? ["handoff"] : ["worker", "handoff"];
     if (populated.join("\0") !== expected.join("\0")) issue(ctx, ["profiles"], "dispatch-profile-slot-mismatch");
-    if (value.phase === "estimate" && value.claimOrdinal !== null) issue(ctx, ["claimOrdinal"], "estimate-claim-ordinal-must-be-null");
-    if (value.phase === "estimate" && Object.values(value.grants.handoff).some((amount) => amount !== 0)) {
+    if (singleCall && value.claimOrdinal !== null) issue(ctx, ["claimOrdinal"], "estimate-claim-ordinal-must-be-null");
+    if (singleCall && Object.values(value.grants.handoff).some((amount) => amount !== 0)) {
       issue(ctx, ["grants", "handoff"], "estimate-handoff-grant-must-be-zero");
     }
-    if (value.phase !== "estimate" && value.claimOrdinal === null) {
+    if (!singleCall && value.claimOrdinal === null) {
       issue(ctx, ["claimOrdinal"], "phase-claim-ordinal-required");
     }
+    // N1 DR1: a purpose is named exactly when the phase is "single-call"; an estimate's stored envelope has none.
+    if ((value.phase === "single-call") !== (value.purpose !== undefined)) issue(ctx, ["purpose"], "single-call-purpose-mismatch");
     if (value.phase !== "work" && value.continuationIntentId !== null) {
       issue(ctx, ["continuationIntentId"], "continuation-only-valid-for-work");
     }

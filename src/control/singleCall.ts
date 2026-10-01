@@ -8,7 +8,7 @@ import { ControlError } from "./errors.js";
  * hashed dispatch envelope, in attempt evidence and in proof artifacts -- and is read here as purpose `estimate`. Any
  * other purpose is stored as `phase: "single-call"` with `purpose`. No stored row is ever rewritten.
  */
-export const SINGLE_CALL_PURPOSES = ["estimate"] as const;
+export const SINGLE_CALL_PURPOSES = ["estimate", "clarify"] as const;
 export type SingleCallPurpose = (typeof SINGLE_CALL_PURPOSES)[number];
 
 export function isSingleCallPurpose(value: unknown): value is SingleCallPurpose {

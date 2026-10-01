@@ -14,6 +14,7 @@ import type { AgentSelection } from "./agentSelection.js";
 import { frozenWorkAgent } from "./agentFreeze.js";
 import { claimableContinuations, continuationAlreadyClaimed, continuationWakeBody, type RegisteredContinuation } from "./continuation.js";
 import { singleCallClaimRowOf } from "./singleCall.js";
+import { claimRequirementCall } from "./requirementCalls.js";
 
 export type Phase = "estimate" | "work" | "handoff" | "single-call";
 export type StartCommand = Extract<RawAuthorityCommandV1, { verb: "start" }>;
@@ -511,7 +512,15 @@ export function createWebWakeHandlers(deps: WebWakeDeps): WakeHandlers {
       await deps.service.claimEstimate(wake.groupId, estimateId);
       return store.db.prepare("SELECT state FROM estimates WHERE group_id=? AND id=?").get(wake.groupId, estimateId)?.state !== "queued";
     },
+    // N1 DR14: a requirement's call is claimed here; a held (stopped) group keeps its wake pending.
+    "requirement-call": async (wake) => claimRequirementCall({ store, admissionGate: deps.admissionGate }, wake.groupId),
   };
+}
+
+/** N1 DR17: a clarify or split run -- a single call stored as phase "single-call" that its claim row names. */
+export function isRequirementCallRun(store: ControlStore, runId: string): boolean {
+  const row = store.db.prepare("SELECT body FROM runs WHERE id=?").get(runId);
+  return row !== undefined && (JSON.parse(String(row.body)) as { phase?: string }).phase === "single-call" && isSingleCallRun(store, runId);
 }
 
 /**

@@ -12,6 +12,7 @@ import { rearmFailedContinuation } from "./continuation.js";
 import { resumeBlockedDriverRun } from "./driveRecord.js";
 import { singleCallPurposeOf } from "./singleCall.js";
 import { refuseClarifying } from "./requirementRecords.js";
+import { interruptRequirementCall } from "./requirementCalls.js";
 import { dispatchEnvelopeSchema, type CapabilityViewV1, type CommandErrorBodyV1, type CommandSuccessV1, type RawAuthorityCommandV1 } from "./webProtocol.js";
 import { idSchema, safeInteger, canonicalTimestampSchema } from "./schema.js";
 import type { Amount, HandoffRequest } from "./types.js";
@@ -605,6 +606,12 @@ export async function beginHandoffAttempt(deps: StopDeps, requestId: string): Pr
 }
 
 function derivedContractHash(store: ControlStore, groupId: string, run: RunBody): string {
+  // N1 plan F15: a requirement call's contract row, written by its claim (requirementCalls.ts).
+  if (run.phase === "single-call") {
+    const row = store.db.prepare("SELECT body FROM outbox WHERE id=? AND kind='single-call-contract'").get(`single-call-contract:${groupId}:${run.workItemId}`);
+    if (!row) throw new ControlError("recovery-blocked");
+    return String((JSON.parse(String(row.body)) as { contractHash: string }).contractHash);
+  }
   if (run.phase === "estimate" || run.taskId === null) {
     const row = store.db.prepare("SELECT body FROM outbox WHERE id=? AND kind='estimate-contract'").get(`estimate-contract:${groupId}:${run.workItemId}`);
     if (!row) throw new ControlError("recovery-blocked");
@@ -677,12 +684,16 @@ function terminaliseRun(store: ControlStore, groupId: string, run: RunBody, outc
   const settled: RunBody = { ...run, state: outcome, failureCode: reasonCode };
   saveRunBody(store, settled, false);
   const released = add(settled.remaining.work, settled.remaining.handoff);
-  // N1 spec §5.1: a single call's stop is settled by its purpose; phase 2 adds the requirement purposes here.
-  if (singleCallPurposeOf(run) === "estimate" && run.estimateId !== null) {
+  // N1 spec §5.1: a single call's stop is settled by its purpose.
+  const purpose = singleCallPurposeOf(run);
+  if (purpose === "estimate" && run.estimateId !== null) {
     interruptEstimate(store, groupId, run.estimateId);
     releaseCommitment(store, groupId, settled.remaining.work);
     return;
   }
+  // N1 spec §5.2: a requirement call's round or draft is interrupted and its unused grant goes back to the clarifying
+  // ledger (never releaseCommitment, which needs a proposal; survey S28).
+  if (purpose !== null && purpose !== "estimate") { interruptRequirementCall(store, groupId, settled as never); return; }
   const work = readWork(store, groupId, run.workItemId) as unknown as { status: string; grant: { work: Amount; handoff: Amount } };
   if (outcome === "settled-restartable") {
     // Handoff delivery spec §11 I9, §13.2 C-6, Minor a (controller decisions, 2026-09-25): a run proved never to

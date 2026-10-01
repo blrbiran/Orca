@@ -7,6 +7,7 @@ import type { SingleCallPurpose } from "./singleCall.js";
 import type { ControlStore } from "./store.js";
 import type { WorkspaceRoots } from "./workspace.js";
 import { completeEstimateInStore } from "./webService.js";
+import { CLARIFY_HANDLER } from "./requirementCalls.js";
 
 /**
  * N1 spec §5.1: each purpose registers four things -- build the request and prompt, the JSON schema, classify the output,
@@ -18,6 +19,8 @@ export interface SingleCallRunRow { runId: string; groupId: string; workItemId: 
 /** What A2 of a single call may use besides the store (phase 2's purposes read the target repository through it). */
 export interface SingleCallPrepareDeps {
   store: ControlStore; roots: WorkspaceRoots; resolveRepository(repoId: string): string; ccloopBin: string; astGrepBin?: string | null;
+  /** N1 spec §6: A2 of a requirement call stores its overview in its own admitted transaction. */
+  admissionGate?: AdmissionGate;
 }
 export interface SingleCallHandler {
   readonly purpose: SingleCallPurpose;
@@ -51,7 +54,7 @@ const ESTIMATE = {
   usageUnknownReason: "estimate-usage-unknown",
 } as const satisfies SingleCallHandler;
 
-const HANDLERS: Readonly<Record<SingleCallPurpose, SingleCallHandler>> = Object.freeze({ estimate: ESTIMATE });
+const HANDLERS: Readonly<Record<SingleCallPurpose, SingleCallHandler>> = Object.freeze({ estimate: ESTIMATE, clarify: CLARIFY_HANDLER });
 
 export function singleCallHandler(purpose: SingleCallPurpose): SingleCallHandler {
   return HANDLERS[purpose];

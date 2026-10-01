@@ -14,7 +14,7 @@ import type { FrozenSlot } from "./agentSelection.js";
 import { effectivePlanCanonicalJson, estimateIsStale, readArchivedPlan, readBudgetProposal, readEstimateRecord, type BudgetProposalRecord } from "./queries.js";
 import { amountSchema } from "./schema.js";
 import { writeCanonicalRecord, readCanonicalRecord } from "./snapshot.js";
-import { dispatchEnvelopeSchema, estimateExecutionContractSchema, executionSnapshotSchema } from "./webProtocol.js";
+import { estimateExecutionContractSchema, executionSnapshotSchema } from "./webProtocol.js";
 import { scheduleStart, type StartCommand } from "./webDispatch.js";
 import { applyHandoffStop, applyPauseDispatch, applyRecoveryRetry, applyResumeDispatch, type HandoffStopCommand, type PauseCommand, type RecoveryRetryCommand, type ResumeDispatchCommand, type StopDeps } from "./stopIntent.js";
 import { applyContinueTask, applyResumeFromHandoff, type ContinueTaskCommand, type ResumeFromHandoffCommand } from "./continuation.js";
@@ -31,6 +31,7 @@ import type { BudgetEstimateV1, CommandLookupV1, CommandSuccessV1, EffectiveProp
 import type { AdmissionGate } from "./admissionGate.js";
 import { budgetBalance } from "./budget.js";
 import { refuseClarifying, setRequirementLimit } from "./requirementRecords.js";
+import { assertCallUsageBooked, closeSingleCall, insertSingleCallRun, verifyStoppedSingleCall } from "./singleCallLedger.js";
 
 export type ProposalEditCommand = Extract<RawAuthorityCommandV1, { verb: "proposal-edit" }>;
 export type ReestimateCommand = Extract<RawAuthorityCommandV1, { verb: "estimate" }>;
@@ -395,22 +396,18 @@ export class WebControlService {
         // Spec §12 C5: the estimate run's configHash is its frozen estimator selection's, never the profile hash.
         const slot = estimate.estimatorSlot;
         if (!slot) throw new ControlError("recovery-blocked", "estimator-slot-missing");
-        const plan = readArchivedPlan(this.store, id), runId = `run-${randomUUID()}`, ownerToken = randomUUID(), grant = { work: estimate.grant, handoff: zero() };
-        const run: EstimateRun = { runId, groupId: id, workItemId: estimateId, taskId: null, estimateId, generation: 1, graphVersion: plan.graphVersion, targetVersion: estimate.estimateVersion,
-          commandId: estimateId, configHash: slot.configHash, agent: slot.selection, agentProvenance: slot.provenance, timeoutMs: slot.timeoutMs, killGraceMs: slot.killGraceMs,
-          agentCapabilities: intersectCapabilities(profile.snapshot.profile.capabilities, slot.capabilities),
-          grant, ownerToken, executionProfile: { workKind: "budget-estimate", ...estimate.profile }, handoffProfile: null,
-          executionId: null, state: "starting", checkpointId: null, recoverable: false, remaining: structuredClone(grant), cumulative: { work: zero(), handoff: zero() }, unknown: { work: false, handoff: false },
-          highWater: 0, breaches: [], handoffWorkItemId: null, phase: "estimate", claimOrdinal: null, providerAttemptOrdinal: 0, failureCode: null };
-        const envelope = dispatchEnvelopeSchema.parse({ schema: "orca-dispatch-envelope-v1", phase: "estimate", groupId: id, workItemId: estimateId, runId, generation: 1,
-          claimIdentity: `estimate:${id}:${estimateId}`, ownerTokenHash: createHash("sha256").update(ownerToken).digest("hex"), continuationIntentId: null, claimOrdinal: null,
-          derivedContractHash: binding.contractHash, grants: grant, profiles: { estimator: estimate.profile, worker: null, handoff: null } });
-        const envelopeHash = sha256Canonical(envelope); writeCanonicalRecord(this.store, id, envelopeHash, canonicalBytes(envelope).toString("utf8"));
-        this.store.db.prepare("INSERT INTO runs(id,group_id,work_item_id,generation,active,body) VALUES (?,?,?,1,1,?)").run(runId, id, estimateId, JSON.stringify(run));
+        const plan = readArchivedPlan(this.store, id), runId = `run-${randomUUID()}`;
+        // N1 spec §5.1 (PR-I4): the run row and the frozen envelope are every single call's; the claim row is the estimate's.
+        const { run, envelopeHash } = insertSingleCallRun(this.store, {
+          groupId: id, workItemId: estimateId, runId, ownerToken: randomUUID(), purpose: "estimate", identity: { estimateId },
+          graphVersion: plan.graphVersion, targetVersion: estimate.estimateVersion, commandId: estimateId, slot,
+          agentCapabilities: intersectCapabilities(profile.snapshot.profile.capabilities, slot.capabilities), workGrant: estimate.grant, profile: estimate.profile,
+          claimIdentity: `estimate:${id}:${estimateId}`, derivedContractHash: binding.contractHash,
+        });
         this.store.db.prepare("INSERT INTO outbox(id,kind,body,delivered) VALUES (?,'estimate-claim',?,0)").run(`estimate:${id}:${estimateId}`, canonicalBytes({ groupId: id, estimateId, runId, envelopeHash, sessionReservation: 1, attemptReservation: 0 }).toString("utf8"));
         estimate.state = "running";
         this.store.db.prepare("UPDATE estimates SET state=?,body=? WHERE group_id=? AND id=?").run(estimate.state, canonicalBytes(estimate).toString("utf8"), id, estimateId);
-        recordProjectionChange(this.store, [id]); return run;
+        recordProjectionChange(this.store, [id]); return run as EstimateRun;
       });
     } finally { release?.(); }
   }
@@ -736,18 +733,10 @@ export function completeEstimateInStore(
       if (!["running", "start-unknown"].includes(estimate.state)) throw new ControlError("start-state-conflict");
       const rows = deps.store.db.prepare("SELECT id,active,body FROM runs WHERE group_id=? AND work_item_id=?").all(id, estimateId);
       if (rows.length !== 1) throw new ControlError("recovery-blocked");
-      const run = JSON.parse(String(rows[0].body)) as EstimateRun;
-      if (!["failed-before-provider", "settled-recoverable", "settled-restartable", "settled-unrecoverable"].includes(run.state)
-        || run.groupId !== id || run.workItemId !== estimateId || run.unknown.work || run.unknown.handoff) throw new ControlError("run-stop-unconfirmed");
-      amountSchema.parse(run.remaining.work); amountSchema.parse(run.cumulative.work);
-      const grants = z.object({ work: amountSchema, handoff: amountSchema }).strict().safeParse(run.grant);
-      if (Number(rows[0].active) !== 1 || run.runId !== String(rows[0].id) || !grants.success || !same(grants.data.work, estimate.grant)
-        || !same(grants.data.handoff, zero()) || !same(run.remaining.handoff, zero()) || !same(run.cumulative.handoff, zero())
-        || dimensions.some(d => run.remaining.work[d] !== Math.max(estimate.grant[d] - run.cumulative.work[d], 0))
-        || deps.store.db.prepare("SELECT seq FROM usage_events WHERE run_id=? AND seq>?").get(run.runId, Number(run.highWater))) throw new ControlError("recovery-blocked");
+      // N1 spec §5.1 (PR-I4): the stop and usage checks are every single call's.
+      const run = verifyStoppedSingleCall(deps.store, rows[0], { groupId: id, workItemId: estimateId, workGrant: estimate.grant });
       const group = readWebGroup(deps.store, id), proposal = readBudgetProposal(deps.store, id), plan = readArchivedPlan(deps.store, id);
-      if (group.ledger.usageUnknown) throw new ControlError("recovery-blocked");
-      if (dimensions.some(d => group.used[d] < run.cumulative.work[d])) throw new ControlError("recovery-blocked");
+      assertCallUsageBooked(group, run);
       const currentBalance = budgetBalance(group.limit, group.used, group.reserved);
       if (!same(currentBalance.reserve, proposal.explicitUnallocatedReserve) || !same(currentBalance.deficit, group.ledger.budgetDeficit)) throw new ControlError("recovery-blocked");
       // Single-call estimate spec §6.4: a failed estimate carries its own reason. A schema-valid answer that is not
@@ -767,8 +756,7 @@ export function completeEstimateInStore(
       group.ledger.budgetDeficit = settledBalance.deficit;
       setReserve(proposal, settledBalance.reserve);
       deps.store.db.prepare("UPDATE estimates SET state=?,body=? WHERE group_id=? AND id=?").run(estimate.state, canonicalBytes(estimate).toString("utf8"), id, estimateId);
-      deps.store.db.prepare("UPDATE runs SET active=0 WHERE id=?").run(run.runId);
-      deps.store.db.prepare("INSERT INTO outbox(id,kind,body,delivered) VALUES (?,'estimate-result',?,1)").run(receiptId, canonicalBytes({ groupId: id, estimateId, runId: run.runId, rawHash, rawIdentity }).toString("utf8"));
+      closeSingleCall(deps.store, run.runId, { id: receiptId, kind: "estimate-result", body: { groupId: id, estimateId, runId: run.runId, rawHash, rawIdentity } });
       saveWebAuthority(deps.store, group, proposal); recordProjectionChange(deps.store, [id]);
     });
   } finally { release?.(); }

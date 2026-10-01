@@ -13,7 +13,7 @@ import {
   saveStopIntent,
   type StopIntentV1,
 } from "../control/stopIntent.js";
-import { isWebWorkRun } from "../control/webDispatch.js";
+import { isRequirementCallRun, isWebWorkRun } from "../control/webDispatch.js";
 import type { ExecutionProfileRouter } from "../control/profiles.js";
 import type { AdmissionGate } from "../control/admissionGate.js";
 import type { ControlStore } from "../control/store.js";
@@ -138,7 +138,8 @@ function driverOwnedGroup(store: ControlStore, groupId: string): boolean {
  */
 export function shutdownGroup(store: ControlStore, groupId: string, window: ShutdownWindow, shutdownId: string, exemptDriverRuns = false): ShutdownGroupEntry {
   const intent = readStopIntent(store, groupId);
-  const active = frozenRunIds(store, groupId).filter((runId) => !(exemptDriverRuns && isWebWorkRun(store, runId)));
+  // N1 DR17: a requirement call in flight is the driver's too; a restart collects it.
+  const active = frozenRunIds(store, groupId).filter((runId) => !(exemptDriverRuns && (isWebWorkRun(store, runId) || isRequirementCallRun(store, runId))));
   if (intent !== null && frozenSetIsInconsistent(store, groupId, intent, active)) {
     recordInconsistency(store, groupId, shutdownId);
     return { groupId, disposition: "blocked-inconsistent", changed: false, ...versions(store, groupId),

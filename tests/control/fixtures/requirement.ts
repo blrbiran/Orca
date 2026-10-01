@@ -15,6 +15,6 @@ export function clarifyingInput(groupId: string, overrides: Partial<ClarifyingGr
   return {
     groupId, repoId: "repo", idea: "Let people export their notes as Markdown.", limit: { ...REQUIREMENT_LIMIT_DEFAULT },
     contentLanguage: "en", createdOn: "2026-10-02", requirementId: "0123456789abcdef0123456789abcdef",
-    profile: { profileId: "all", profileHash: "b".repeat(64) }, agentSlot: FIXTURE_SLOT, agentOverrides: {}, ...overrides,
+    profile: { profileId: "all", profileHash: "b".repeat(64) }, agentSlot: FIXTURE_SLOT, agentOverrides: {}, maxOutputTokens: 64_000, ...overrides,
   };
 }

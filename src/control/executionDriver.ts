@@ -61,6 +61,8 @@ export interface ExecutionDriverDeps {
   /** spec §5.3(6): the binary and agents table a reconciliation `ccloop run` is spawned with (agent selection spec §4.9). */
   ccloopBin: string;
   agentsTablePath: string;
+  /** N1 spec §6: the ast-grep binary the overview's structure part runs; null = unavailable. */
+  astGrepBin?: string | null;
   kickPump?: () => void;
   crash?: (point: CrashPoint) => void;
   /** Test seam (spec §5.1): runs between a landing's merge and its compare-and-swap. */
@@ -143,7 +145,11 @@ export function blockRun(deps: Pick<ExecutionDriverDeps, "store" | "admissionGat
 }
 
 export function groupRepoId(store: ControlStore, groupId: string): string {
-  return (readGroup(store, groupId) as unknown as { plan: { repoId: string } }).plan.repoId;
+  const group = readGroup(store, groupId) as unknown as { plan?: { repoId: string }; requirement?: { repoId: string } };
+  // N1 plan F16: a clarifying group has no plan yet; its requirement names the repository.
+  const repoId = group.plan?.repoId ?? group.requirement?.repoId;
+  if (repoId === undefined) throw new ControlError("recovery-blocked", `group-repository-missing:${groupId}`);
+  return repoId;
 }
 
 export function groupStopped(store: ControlStore, groupId: string): boolean {
@@ -194,8 +200,8 @@ export function stepA1(deps: ExecutionDriverDeps, runId: string): boolean {
   return write(deps, () => {
     const run = readDriverRun(store, runId);
     if (run.state !== "starting") return false;
-    const singleCall = singleCallPurposeOf(run) !== null;
-    const drive = newDrive(deps.roots, runId, readWorkspaceSetting(store, groupRepoId(store, run.groupId)).workspaceMode, !singleCall);
+    const purpose = singleCallPurposeOf(run);
+    const drive = newDrive(deps.roots, runId, readWorkspaceSetting(store, groupRepoId(store, run.groupId)).workspaceMode, purpose === null);
     const refuse = (reason: string): boolean => {
       const current = readDriverRun(store, runId);
       current.state = "blocked";
@@ -203,9 +209,10 @@ export function stepA1(deps: ExecutionDriverDeps, runId: string): boolean {
       saveDriverRun(store, current);
       return true;
     };
-    if (readBudgetProposal(store, run.groupId).budgetMode === "strict") return refuse("strict-proof-unimplemented");
+    // N1 plan F16: a requirement call has no proposal; its ledger is the clarifying group's, checked at claim time.
+    if ((purpose === null || purpose === "estimate") && readBudgetProposal(store, run.groupId).budgetMode === "strict") return refuse("strict-proof-unimplemented");
     if (store.dispatchBlocked || groupHeld(store, run.groupId)) return false;
-    const reservation = reserveProviderAttemptInTransaction(store, runId, singleCall ? "estimate" : "work");
+    const reservation = reserveProviderAttemptInTransaction(store, runId, purpose === null ? "work" : purpose === "estimate" ? "estimate" : "single-call");
     if (reservation.kind === "suppressed") return refuse(`attempt-suppressed:${reservation.requestId ?? "unknown"}`);
     const reserved = readDriverRun(store, runId);
     reserved.state = "start-pending";

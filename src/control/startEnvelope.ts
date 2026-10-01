@@ -88,8 +88,8 @@ export function toStartEnvelope(
   inputCheckpoint: InputCheckpointV1 | null = null,
 ): StartEnvelope {
   const { frozen, claim } = frozenClaim(envelope, run);
-  // Single-call estimate spec §4.1: an estimate claim is one single call, never a loop.
-  if (frozen.phase === "estimate") throw new ControlError("start-envelope-conflict", "phase:estimate");
+  // Single-call estimate spec §4.1, N1 spec §5.1: an estimate or other single-call claim is one single call, never a loop.
+  if (frozen.phase === "estimate" || frozen.phase === "single-call") throw new ControlError("start-envelope-conflict", `phase:${frozen.phase}`);
   const built: StartEnvelope = {
     protocol: 3,
     claim,
@@ -115,7 +115,7 @@ export interface SingleCallEnvelopeWork { sourceDir: string; prompt: string; res
  */
 export function toSingleCallEnvelope(envelope: DispatchEnvelopeV1, run: unknown, work: SingleCallEnvelopeWork): StartEnvelope {
   const { frozen, claim } = frozenClaim(envelope, run);
-  if (frozen.phase !== "estimate") throw new ControlError("start-envelope-conflict", `phase:${frozen.phase}`);
+  if (frozen.phase !== "estimate" && frozen.phase !== "single-call") throw new ControlError("start-envelope-conflict", `phase:${frozen.phase}`);
   const built: StartEnvelope = {
     protocol: 3, claim, contractHash: frozen.derivedContractHash, inputCheckpoint: null,
     work: { kind: "single-call", prompt: work.prompt, responseSchema: work.responseSchema, maxOutputTokens: work.maxOutputTokens, sourceDir: work.sourceDir },

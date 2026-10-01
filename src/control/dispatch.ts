@@ -82,7 +82,7 @@ export async function reconcileStart(store:ControlStore,port:ExecutionPort,runId
  return persistStatus(store,input,status,gate);
 }
 
-export type SchedulerWakeKind = "start" | "no-start" | "budget-estimate" | "resume";
+export type SchedulerWakeKind = "start" | "no-start" | "budget-estimate" | "resume" | "requirement-call" | "requirement-export";
 export interface SchedulerWake { id: string; groupId: string; kind: SchedulerWakeKind; body: Record<string, unknown> }
 /** A handler returns true only when the wake's effect is durably in place; false or a throw keeps it pending. */
 export type WakeHandler = (wake: SchedulerWake) => Promise<boolean>;

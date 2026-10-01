@@ -10,6 +10,7 @@ import { recoverControl } from "../control/recovery.js";
 import { createExecutionDriver, type CrashPoint, type ExecutionDriver } from "../control/executionDriver.js";
 import { controlWorkspaceRoots } from "../control/workspace.js";
 import { createWebWakeHandlers } from "../control/webDispatch.js";
+import { resolveAstGrepBin } from "../control/requirementOverview.js";
 import { createExecutionProfileRouter, resolveProfile, type ExecutionProfileRouter, type FrozenProfile } from "../control/profiles.js";
 import { openControlStore, type ControlStore } from "../control/store.js";
 import { WebControlService } from "../control/webService.js";
@@ -243,7 +244,7 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
     driver = createExecutionDriver({
       store, router, admissionGate, roots: controlWorkspaceRoots(store.stateDir),
       resolveRepository: (repoId) => config.resolveRepository(repoId),
-      ccloopBin: env.ORCA_CCLOOP_BIN!, agentsTablePath: env.ORCA_AGENTS_TABLE!,
+      ccloopBin: env.ORCA_CCLOOP_BIN!, agentsTablePath: env.ORCA_AGENTS_TABLE!, astGrepBin: resolveAstGrepBin(env),
       // Handoff grace: the run's frozen killGraceMs + 60 s (driverHandoff.handoffGraceMsOf, agent selection spec §6.6).
       // *** ERRATUM (ccloop consolidation step 1, 2026-10-01, Orca session be653b22, ruling R5) *** the grace is max(killGraceMs, frozen recovery window + 5 s) + 60 s.
       kickPump: () => { void pump(); }, crash: input.driverCrash,

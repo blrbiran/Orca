@@ -19,6 +19,8 @@ export const requirementBlockSchema = z.object({
   requirementId: z.string().regex(/^[a-f0-9]{32}$/), repoId: idSchema, slug: z.string().regex(SLUG_PATTERN).nullable(),
   contentLanguage: z.enum(["en", "zh"]), createdOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), idea: z.string().min(1),
   profile: profileBindingSchema, agentSlot: frozenSlotSchema,
+  /** DR8: the profile's estimatorPreflight.maxOutputTokens, frozen at open; every call of this requirement asks for it. */
+  maxOutputTokens: safeInteger.positive(),
   consensus: z.object({ roundNo: safeInteger.positive(), at: canonicalTimestampSchema, openBranches: z.array(z.string().min(1)), openQuestions: z.array(questionIdSchema) }).strict().nullable(),
   acceptedDraftNo: safeInteger.positive().nullable(),
   document: z.object({ sha256: z.string().regex(/^[a-f0-9]{64}$/), recordHash: z.string().regex(/^[a-f0-9]{64}$/), frozenAt: canonicalTimestampSchema }).strict().nullable(),
@@ -29,6 +31,7 @@ export type RequirementBlock = z.infer<typeof requirementBlockSchema>;
 export interface ClarifyingGroupInput {
   groupId: string; repoId: string; idea: string; limit: Amount; contentLanguage: "en" | "zh"; createdOn: string; requirementId: string;
   profile: { profileId: string; profileHash: string }; agentSlot: FrozenSlot; agentOverrides: { estimator?: z.infer<typeof panelPartialSelectionSchema> };
+  maxOutputTokens: number;
 }
 type Ledger = { groupLimit: Amount; used: Amount; committedRemaining: Amount; explicitUnallocatedReserve: Amount; budgetDeficit: Amount; usageUnknown: boolean };
 /** The fields of a group body this module reads and writes; the rest passes through untouched. */
@@ -58,7 +61,7 @@ export function insertClarifyingGroup(store: ControlStore, input: ClarifyingGrou
   amountSchema.parse(input.limit);
   const requirement: RequirementBlock = requirementBlockSchema.parse({
     requirementId: input.requirementId, repoId: input.repoId, slug: null, contentLanguage: input.contentLanguage, createdOn: input.createdOn,
-    idea: input.idea, profile: input.profile, agentSlot: input.agentSlot, consensus: null, acceptedDraftNo: null, document: null,
+    idea: input.idea, profile: input.profile, agentSlot: input.agentSlot, maxOutputTokens: input.maxOutputTokens, consensus: null, acceptedDraftNo: null, document: null,
     export: { state: "not-due", path: null, commit: null, parent: null, detail: null },
   });
   const firstLine = input.idea.split("\n").find((line) => line.trim().length > 0)?.trim().slice(0, 200) ?? input.groupId;
