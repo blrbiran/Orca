@@ -146,3 +146,23 @@ describe("what a clarifying group does allow (N1 spec §11.1)", () => {
     } finally { await h.dispose(); }
   });
 });
+
+// Final review fix wave (session b5e8d368, 2026-10-02), finding 7: one money rule, one answer -- unknown usage cannot
+// authorise a lower limit on a clarifying group, as it cannot on a plan group (webService.ts setLimit).
+describe("set-limit on a clarifying group whose usage is unknown (final review finding 7)", () => {
+  it("refuses a decrease by name and changes nothing, and still takes a raise", async () => {
+    const { h, service } = await fixture();
+    try {
+      const group = JSON.parse(body(h)); group.ledger.usageUnknown = true;
+      h.store.db.prepare("UPDATE groups SET body=? WHERE id='r'").run(JSON.stringify(group));
+      const before = body(h);
+      // Far above anything spent or in flight: only the unknown usage stands in the way.
+      const lowered = service.setLimit(raw(h, "set-limit", { limit: { tokens: 9_000_000, activeMs: 14_400_000, attempts: 40, sessions: 40 } }, undefined, "c-lower"));
+      expect(lowered).toMatchObject({ error: { code: "recovery-blocked" } });
+      expect(body(h)).toBe(before);
+      const raised = service.setLimit(raw(h, "set-limit", { limit: { tokens: 12_000_000, activeMs: 14_400_000, attempts: 40, sessions: 40 } }, undefined, "c-raise"));
+      expect(raised).toMatchObject({ result: { kind: "limit-set" } });
+      expect(readWebGroup(h.store, "r")).toMatchObject({ limit: { tokens: 12_000_000 }, ledger: { usageUnknown: true } });
+    } finally { await h.dispose(); }
+  });
+});

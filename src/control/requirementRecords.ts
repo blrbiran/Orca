@@ -94,12 +94,15 @@ export function saveRequirementGroup(store: ControlStore, group: RequirementGrou
 
 /**
  * N1 spec §11.1: set-limit on a clarifying group edits the reduced ledger. A limit below what is spent and in flight is
- * refused (group-budget-unavailable). A raise re-queues a call that waited with requirement-budget-exhausted (spec §5.2).
+ * refused (group-budget-unavailable), and so is any decrease while usage is unknown (recovery-blocked), as a plan
+ * group's set-limit refuses it (webService.ts setLimit; final review finding 7). A raise re-queues a call that waited
+ * with requirement-budget-exhausted (spec §5.2).
  */
 export function setRequirementLimit(store: ControlStore, groupId: string, limit: Amount): Amount {
   const group = readRequirementGroup(store, groupId);
   if (group.status !== "clarifying") throw new ControlError("group-state-invalid");
   if (canonicalBytes(limit).equals(canonicalBytes(group.limit))) throw new ControlError("no-op-command");
+  if (group.ledger.usageUnknown && dimensions.some((d) => limit[d] < group.limit[d])) throw new ControlError("recovery-blocked", "requirement-usage-unknown");
   const ledger = clarifyingLedger(limit, group.used, group.reserved, group.ledger.usageUnknown);
   if (dimensions.some((d) => ledger.budgetDeficit[d] > 0)) throw new ControlError("group-budget-unavailable");
   group.limit = limit;
