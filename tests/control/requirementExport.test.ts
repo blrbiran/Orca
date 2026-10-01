@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createAdmissionGate } from "../../src/control/admissionGate.js";
 import { resolveGroupSelections } from "../../src/control/agentFreeze.js";
 import { readArchivedPlan, readBudgetProposal } from "../../src/control/queries.js";
+import { documentPathOf } from "../../src/control/requirementDocument.js";
 import { exportPendingRequirements, exportRequirementDocument } from "../../src/control/requirementExport.js";
 import { readDraft, readRequirementGroup } from "../../src/control/requirementRecords.js";
 import { readCanonicalRecord } from "../../src/control/snapshot.js";
@@ -364,6 +365,28 @@ describe("the export's git children and Orca's environment (final review triage)
       expect(outcome).toBe("done");
       expect(x.git("rev-parse", "refs/heads/orca/r^")).toBe(x.head());
       expect(d("for-each-ref", "refs/heads/orca")).toBe("");
+    } finally { await x.dispose(); }
+  });
+});
+
+// Final review fix wave, triage (deferred T11): the export's own commit always has HEAD as its one parent, so a tip with
+// the trailer and the one document but no parent is somebody else's commit, and blocks.
+describe("an existing branch whose tip is not the export's shape (final review triage)", () => {
+  it("blocks requirement-export-conflict on a parentless tip that carries the trailer and only the document", async () => {
+    const { x, text, sha } = await accepted();
+    try {
+      const requirement = readRequirementGroup(x.store, "r").requirement;
+      const name = documentPathOf(requirement.createdOn, requirement.slug!, 1).slice(".orca/requirements/".length);
+      const plumb = (args: string[], input: string) => execFileSync("git", args, { cwd: x.repo, input, encoding: "utf8" }).trim();
+      const blob = plumb(["hash-object", "-w", "--stdin"], text);
+      const requirements = plumb(["mktree"], `100644 blob ${blob}\t${name}\n`);
+      const orca = plumb(["mktree"], `040000 tree ${requirements}\trequirements\n`);
+      const root = plumb(["mktree"], `040000 tree ${orca}\t.orca\n`);
+      const tip = plumb(["-c", "user.name=t", "-c", "user.email=t@t", "commit-tree", root], `docs(requirements): ${requirement.slug}\n\nOrca-Document-Sha256: ${sha}\n`);
+      x.git("update-ref", "refs/heads/orca/r", tip, "");
+      expect(await exportRequirementDocument(exportDeps(x), "r")).toBe("conflict");
+      expect(readRequirementGroup(x.store, "r").requirement.export).toMatchObject({ state: "conflict", commit: null });
+      expect(x.git("rev-parse", "refs/heads/orca/r")).toBe(tip);
     } finally { await x.dispose(); }
   });
 });

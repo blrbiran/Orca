@@ -82,8 +82,12 @@ async function makeTree(run: ExportGit, entries: TreeEntry[], entry: TreeEntry):
   return (await run(["mktree", "-z"], { input })).trim();
 }
 
-/** DR21: a commit is this document's when its message carries the hash and it adds exactly one requirement file with these bytes. */
+/**
+ * DR21: a commit is this document's when it has exactly one parent (the export's commit-tree always gives it HEAD; final
+ * review triage), its message carries the hash, and it adds exactly one requirement file with these bytes.
+ */
 async function documentCommitPath(run: ExportGit, commit: string, requirement: RequirementBlock): Promise<string | null> {
+  if ((await run(["rev-list", "--parents", "-n", "1", commit])).trim().split(" ").length !== 2) return null;
   const message = await run(["log", "-1", "--format=%B", commit]);
   if (!message.split("\n").includes(`${TRAILER}: ${requirement.document!.sha256}`)) return null;
   const changed = (await run(["diff-tree", "--no-commit-id", "--name-only", "-r", "--root", commit])).trim().split("\n").filter((line) => line.length > 0);
