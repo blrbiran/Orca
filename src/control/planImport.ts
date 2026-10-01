@@ -236,7 +236,7 @@ export interface ImportedPlanWrite {
   estimatorProfileId: string; estimatorProfileHash: string; estimateMode: "strict" | "soft";
 }
 /** N1 spec §9.1: what a requirement brings into the plan group it becomes. */
-export interface RequirementCarryOver { existingBody: Record<string, unknown>; used: Amount; traces: Readonly<Record<string, readonly string[]>> }
+export interface RequirementCarryOver { existingBody: Record<string, unknown>; used: Amount; usageUnknown: boolean; traces: Readonly<Record<string, readonly string[]>> }
 
 /**
  * The import's writes, shared by import-plan (a new group, carry null) and requirement-draft-accept (N1 spec §9.1: the
@@ -285,7 +285,7 @@ export function writeImportedPlan(deps: ImportDeps, input: ImportedPlanWrite, ca
     reviewRemaining: cloneAmount(GOAL_REVIEW), budgetVersion: carry === null ? 1 : carry.existingBody.budgetVersion, planHash,
     plan: { repoId: input.repoId, planId: input.planId, planHash, goal: plan.goal, successConditions: plan.successConditions },
     proposal: { state: "editable", proposalVersion: 1, planHash, budgetMode: null, contextPolicy: { handoffAtContextTokens: null }, profiles: null, executionSnapshotHash: null },
-    ledger: { groupLimit: limit, used, committedRemaining, explicitUnallocatedReserve, budgetDeficit: zero(), usageUnknown: false },
+    ledger: { groupLimit: limit, used, committedRemaining, explicitUnallocatedReserve, budgetDeficit: zero(), usageUnknown: carry === null ? false : carry.usageUnknown },
     importDefaults: { estimatorProfileId: input.estimatorProfileId, estimatorProfileHash: input.estimatorProfileHash, estimateMode: input.estimateMode },
     // Ruling review R7: the panel's layers start empty -- the plan's own layers are read from the archived plan
     // (agentFreeze.ts groupSelectionPartials), below the panel's. The estimator slot is what this import froze.

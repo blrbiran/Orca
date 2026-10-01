@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { add } from "../../src/control/budget.js";
+import { sha256Canonical } from "../../src/control/canonicalJson.js";
 import { ControlError } from "../../src/control/errors.js";
 import { complex1mDefaults } from "../../src/control/estimator.js";
 import { readArchivedPlan, readBudgetProposal } from "../../src/control/queries.js";
@@ -153,6 +154,55 @@ describe("requirement-draft-accept (N1 spec §9.1)", () => {
       expect(prepared).toBe(1);
       expect(await applyRequirementDraftAccept(deps, command)).toEqual(first);
       expect(prepared).toBe(1);
+    } finally { await x.dispose(); }
+  });
+
+  // Fix round 1, controller ruling (a): the carried `used` must be exact, so unknown usage refuses accept.
+  it("refuses while the clarifying usage is unknown, changing nothing", async () => {
+    const x = await reviewed();
+    try {
+      x.store.db.prepare("UPDATE groups SET body=json_set(body,'$.ledger.usageUnknown',json('true')) WHERE id='r'").run();
+      expect(await accept(x)).toMatchObject({ error: { code: "recovery-blocked" } });
+      expect(readDraft(x.store, "r", 1).state).toBe("awaiting-review");
+      expect(bodyOf(x)).toMatchObject({ status: "clarifying", ledger: { usageUnknown: true } });
+    } finally { await x.dispose(); }
+  });
+
+  // Fix round 1, controller ruling (b): a stopped group, and a group whose stop is still open, are refused as
+  // continue-task refuses them. Each condition alone (the handoff-stop leaves both; one is cleared by hand).
+  it("refuses a group with an open stop intent, even with the stopped flag cleared", async () => {
+    const x = await reviewed();
+    try {
+      await x.service.handoffStop(x.command("handoff-stop", {}));
+      expect(x.store.db.prepare("SELECT group_id FROM stop_intents WHERE group_id='r'").get()).toEqual({ group_id: "r" });
+      x.store.db.prepare("UPDATE groups SET body=json_set(body,'$.stopped',json('false')) WHERE id='r'").run();
+      expect(await accept(x)).toMatchObject({ error: { code: "group-stopped" } });
+      expect(readWebGroup(x.store, "r").status).toBe("clarifying");
+    } finally { await x.dispose(); }
+  });
+
+  it("refuses a stopped group with no stop intent", async () => {
+    const x = await reviewed();
+    try {
+      x.store.db.prepare("UPDATE groups SET body=json_set(body,'$.stopped',json('true')) WHERE id='r'").run();
+      expect(x.store.db.prepare("SELECT group_id FROM stop_intents WHERE group_id='r'").get()).toBeUndefined();
+      expect(await accept(x)).toMatchObject({ error: { code: "group-stopped" } });
+      expect(readWebGroup(x.store, "r").status).toBe("clarifying");
+    } finally { await x.dispose(); }
+  });
+
+  // Fix round 1, DR12: the hash Task 8's split path stored names exactly the expanded plan accept imports, and accept
+  // checks the hash against those very bytes -- a stored plan that no longer matches its hash is refused.
+  it("accepts with the hash the split path stored, which names the stored expanded plan, and refuses bytes that drifted from it", async () => {
+    const x = await reviewed();
+    try {
+      const draft = readDraft(x.store, "r", 1);
+      expect(draft.draftHash).toBe(sha256Canonical(draft.plan));
+      writeDraft(x.store, "r", { ...draft, plan: { ...draft.plan!, goal: "Something else." } });
+      expect(await accept(x, draft.draftHash!)).toMatchObject({ error: { code: "plan-version-conflict" } });
+      writeDraft(x.store, "r", draft);
+      expect(await accept(x, draft.draftHash!)).toMatchObject({ result: { kind: "requirement-draft-accepted" } });
+      expect(readArchivedPlan(x.store, "r").plan.goal).toBe((draft.plan as { goal: string }).goal);
     } finally { await x.dispose(); }
   });
 });

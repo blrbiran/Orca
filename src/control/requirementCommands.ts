@@ -16,7 +16,7 @@ import {
 import { writeCanonicalRecord } from "./snapshot.js";
 import { schedulerControlPlanSourceOf } from "../scheduler/planFile.js";
 import { REQUIREMENT_LIMIT_DEFAULT } from "./requirementSchemas.js";
-import { commandSuccess } from "./stopIntent.js";
+import { commandSuccess, readStopIntent } from "./stopIntent.js";
 import type { ControlStore } from "./store.js";
 import type { AdmissionGate } from "./admissionGate.js";
 import type { Amount } from "./types.js";
@@ -192,10 +192,16 @@ export async function applyRequirementDraftAccept(
       rawCommand: command, expand: () => ({ ...command, schema: "orca-authority-command-v1" }),
       apply: (context) => {
         const group = clarifying(deps.store, id);
+        // Controller ruling (b): a stopped group, or one with a stop still open, is not imported (as continuation.ts refuses).
+        if (group.stopped || readStopIntent(deps.store, id) !== null) throw new ControlError("group-stopped");
+        // Controller ruling (a): the carried `used` must be exact; unknown usage is refused as the Web ledger refuses it.
+        if (group.ledger.usageUnknown) throw new ControlError("recovery-blocked", "requirement-usage-unknown");
         const draft = readDraft(deps.store, id, command.payload.draftNo);
+        // plan/output are always set on a draft awaiting review (recordSplit); those two conditions only narrow the types.
         if (draft.state !== "awaiting-review" || draft.plan === null || draft.output === null) return invalid("draft-not-awaiting-review");
-        // DR12: the hash names the expanded plan the person reviewed; any other bytes are a stale view.
-        if (draft.draftHash !== command.payload.draftHash) throw new ControlError("plan-version-conflict", "draft-hash");
+        // DR12: the hash names the expanded plan the person reviewed. It is checked against the bytes imported below (the
+        // stored expansion, never a re-derivation), so a stored hash that no longer names those bytes is refused too.
+        if (sha256Canonical(draft.plan) !== command.payload.draftHash) throw new ControlError("plan-version-conflict", "draft-hash");
         if (deps.store.db.prepare("SELECT id FROM runs WHERE group_id=? AND active=1").get(id) || dimensions.some((d) => group.reserved[d] !== 0)) invalid("call-in-flight");
         // 1. Freeze the document: rendered from the records now, stored once, named by its hash (spec §4.3, §10).
         const text = renderRequirementDocument({ groupId: id, requirement: group.requirement, rounds: readRounds(deps.store, id), acceptedSplit: draft.output });
@@ -213,7 +219,7 @@ export async function applyRequirementDraftAccept(
           estimatorObservation: (selected) => { if (selected !== profile) throw new ControlError("profile-changed"); return slot.observation; } };
         const { estimateId, preflight } = writeImportedPlan(importDeps, { groupId: id, repoId: group.requirement.repoId, planId, plan, actorId: command.actorId,
           estimatorProfileId: defaults.estimatorProfileId, estimatorProfileHash: defaults.estimatorProfileHash, estimateMode: defaults.estimateMode },
-          { existingBody: { ...group }, used: group.used, traces: Object.fromEntries(draft.output.tasks.map((task) => [task.taskId, task.traces])) });
+          { existingBody: { ...group }, used: group.used, usageUnknown: group.ledger.usageUnknown, traces: Object.fromEntries(draft.output.tasks.map((task) => [task.taskId, task.traces])) });
         writeDraft(deps.store, id, { ...draft, state: "accepted" });
         // 3. The export has git side effects, so the driver performs it (DR14).
         const exportWakeId = `scheduler-wake:${id}:requirement-export`;
