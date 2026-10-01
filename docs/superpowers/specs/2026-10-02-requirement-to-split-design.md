@@ -394,3 +394,7 @@ Found by the plan's drafter against the code (`docs/superpowers/plans/2026-10-02
 8. §6: the ast-grep facts read from source agree with this spec; Task 0a measures them on the real binary.
 9. The control store schema goes to v6 (DR5, controller ruling under the human's standing instruction); an older Orca
    build then refuses a migrated store with `control-schema-unsupported`.
+10. §6 "exported with `git archive`": `git archive` runs the target repository's smudge filters (a task review measured
+    it; with git-lfs that writes into `.git/lfs/objects`) and nothing bounds it. The export reads raw blobs from the
+    `ls-tree` listing with one `git cat-file --batch` (no filters, no attributes), every git child has a timeout, and only
+    an `ok` structure result is cached (Task 5 review, controller rulings).
