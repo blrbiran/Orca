@@ -281,7 +281,7 @@ describe("the grace is the run's own agent killGraceMs plus the fixed minute (sp
   // confirmation (7 000 here, unlike the fixture's default 5 000 and the driver port's own answer 0, plan P23 m2), so
   // a grace taken from the port at run time, or from the default, would call the request unknown too early or too late.
   it("does not call a request outcome-unknown before the killGraceMs ccloop answers for the run's selection has passed", async () => {
-    const t = await driverHarness([{ taskId: "a" }], { behaviour: () => "stoppable-silent", killGraceMs: 7_000 }); try {
+    const t = await driverHarness([{ taskId: "a" }], { behaviour: () => "stoppable-silent", killGraceMs: 50_000 }); try {
       const runId = await t.claim();
       let now = Date.now();
       const driver = createExecutionDriver({ ...t.deps, now: () => new Date(now) });
@@ -293,11 +293,36 @@ describe("the grace is the run's own agent killGraceMs plus the fixed minute (sp
       await driver.round();
       expect(requestState(t, requestId!)).toBe("collecting");
       // Rewritten (ccloop consolidation step 1, controller ruling under the human's standing instruction of 2026-10-01, Orca session be653b22): the grace now waits the frozen recovery window + PARTIAL_FLUSH_MARGIN_MS when that is longer than killGraceMs.
-      // This harness freezes a recovery window of 30_000, so the grace is max(7_000, 30_000 + 5_000) + 60_000 = 95_000.
-      now = deadline + HANDOFF_EXTRA_GRACE_MS + 35_000;
+      // The frozen killGraceMs here is 50_000 (not the 7 000 named above), above this harness's frozen window + margin
+      // (30_000 + 5_000), so it is still the run's frozen killGraceMs that decides the bound: max(50_000, 35_000) + 60_000;
+      // a grace taken from the port (0) or the default (5 000) would give 95_000 and turn unknown too early.
+      now = deadline + HANDOFF_EXTRA_GRACE_MS + 50_000;
       await driver.round();
       expect(requestState(t, requestId!)).toBe("collecting");
-      now = deadline + HANDOFF_EXTRA_GRACE_MS + 35_001;
+      now = deadline + HANDOFF_EXTRA_GRACE_MS + 50_001;
+      await t.until(driver, () => requestState(t, requestId!) === "outcome-unknown");
+    } finally { await t.h.dispose(); }
+  });
+});
+
+describe("an unreadable start envelope under a stop (ccloop consolidation step 1, spec §6, §11)", { timeout: 60_000 }, () => {
+  // Controller ruling M1 (Task 4 fix round 1, Orca session be653b22): a frozen envelope that cannot be read is a corrupt
+  // state; its recovery window counts as unusable, so the grace is the 120_000 ceiling -- the request still reaches
+  // outcome-unknown, instead of the window read throwing and keeping it open for good.
+  it("waits the ceiling grace and then turns an undeliverable request outcome-unknown", async () => {
+    const t = await driverHarness([{ taskId: "a" }], { behaviour: () => "stoppable-silent" }); try {
+      const runId = await t.claim();
+      let now = Date.now();
+      const driver = createExecutionDriver({ ...t.deps, now: () => new Date(now) });
+      await t.until(driver, () => t.body(runId).state === "accepted");
+      const envelopeHash = t.body(runId).drive.envelopeHash as string;
+      t.h.store.db.prepare("UPDATE execution_snapshots SET body=? WHERE hash=?").run("{}", envelopeHash);
+      const [requestId] = await stop(t);
+      const deadline = Date.parse(readHandoffRequest(t.h.store, "g", requestId!).request.deadlineAt);
+      now = deadline + 120_000;
+      await driver.round();
+      expect(requestState(t, requestId!)).toBe("request-pending");
+      now = deadline + 120_001;
       await t.until(driver, () => requestState(t, requestId!) === "outcome-unknown");
     } finally { await t.h.dispose(); }
   });

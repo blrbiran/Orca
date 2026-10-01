@@ -230,12 +230,20 @@ export function recoveryWindowOf(envelope: StartEnvelope): unknown {
   return contract?.executionPolicy?.partialOutcomeRecoveryWindowMs;
 }
 
+/**
+ * ccloop consolidation step 1 (spec §6, §11): the run's frozen recovery window. No start envelope yet means ccloop never
+ * started, so there is no window to wait (0). An envelope that cannot be read is a corrupt state: its window is
+ * unusable (undefined), so the grace is the ceiling, never a throw that would keep the request from outcome-unknown.
+ */
+function frozenRecoveryWindowOf(deps: ExecutionDriverDeps, run: DriverRun): unknown {
+  if (run.drive?.envelopeHash == null) return 0;
+  try { return recoveryWindowOf(readStartEnvelope(deps.store, run)); } catch { return undefined; }
+}
+
 /** spec §3 grace (controller decision): past deadline + killGraceMs + 60 s with nothing collected. *** ERRATUM (ccloop consolidation step 1, 2026-10-01, Orca session be653b22, ruling R5) *** the bound is handoffGraceMsOf with the frozen recovery window. */
 async function settleIfPastGrace(deps: ExecutionDriverDeps, run: DriverRun, request: HandoffRequestBody): Promise<boolean> {
   if (request.state === "outcome-unknown") return false;
-  // ccloop consolidation step 1 (spec §11): no start envelope yet means ccloop never started, so there is no window to wait.
-  const window = run.drive?.envelopeHash == null ? 0 : recoveryWindowOf(readStartEnvelope(deps.store, run));
-  if (nowMs(deps) <= Date.parse(request.deadlineAt) + (deps.handoffGraceMs ?? handoffGraceMsOf({ killGraceMs: run.killGraceMs }, window))) return false;
+  if (nowMs(deps) <= Date.parse(request.deadlineAt) + (deps.handoffGraceMs ?? handoffGraceMsOf({ killGraceMs: run.killGraceMs }, frozenRecoveryWindowOf(deps, run)))) return false;
   return write(deps, () => {
     const current = readHandoffRequest(deps.store, run.groupId, request.requestId).request;
     if (current.state === "outcome-unknown" || !ADOPTABLE_STATES.includes(current.state)) return false;
