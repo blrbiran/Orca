@@ -155,12 +155,15 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 ### 4.0 ⛔ 现在的下一件事（2026-10-01 会话 `ceca1c47` 收尾整节改写；**本节优先于下面的 4.0.d、4.0.c、4.0.b、4.0.0、4.0.1 与 1–3**）
 
 **⛔ 下一会话按这个顺序做：**
-1. **ccloop：claude adapter 合并、CLI 老入口删除——先出 spec，人审后再动。** 人的原话：「claude adapter只需要保留一个，旧的是不是可以将有用的部分吸收之后删掉了？ CLI也只需要保留新入口，老入口也是看下有没有可用的部分，吸收之后删掉。」本会话只做了只读盘点（结论记在 ccloop handoff「Orca 那条线」）：
-   - 只删 `--adapter claude`／`SubprocessClaudeAdapter` 是 ccloop 内部的事；外部使用者只有 ccloop 的 validation/v1 工具链、README、examples。`subprocessClaudeAdapter.test.ts` 多数判据测的是 `claude-phase-runner.mjs`（两个 adapter 共用），要迁不要删。
-   - 整个老入口（`--adapter`＋`--adapter-config`）还承载 `scripted`（**Orca 旧 `orca run` 路径约 76 条判据、29 个文件靠它**）、`--adapter codex`、以及**唯一能用的 `resume`／`sweep`**（ccloop #4「冻结选择进 `<runDir>/agent-selection.json`」未做；Orca 现在把选择文件写在 workdir，不在 ccloop 的 run 目录）。⇒ 要拆成几步，顺序由 spec 定、人审。
-2. **推送归人**：Orca、ccloop 本地都领先远端（以 `/usr/bin/git ls-remote` 现测为准）。**ccloop 推了之后**，Orca 才能重钉拿到 `rejectOn` 修正（`node scripts/pin-ccloop.mjs <SHA>`）；重钉那一轮要同时更正 Orca 里描述子串规则的注释（`src/control/loopPlans.ts` 的 `rejectOn` 字段注释与 C4 注释）和 loop 方案 spec 的 §2.1/§2.2（追加更正节）。不重钉也不出错：v2 方案已不依赖令牌。
+1. **ccloop：adapter／CLI 合并，人已定顺序（2026-10-01）**，每一步各自 brainstorm → spec → 人审 → 计划 → 实现：
+   ①删 `SubprocessClaudeAdapter` 与 `--adapter claude`（**先做**；`subprocessClaudeAdapter.test.ts` 多数判据测的是两个 adapter 共用的 `claude-phase-runner.mjs`，要迁不要删；ccloop 的 validation/v1 工具链约 11 处用 `--adapter claude`，README、examples 同改）；
+   ②ccloop #4：`resume`／`sweep` 能续跑 `run --agents` 起的 run（人裁设计：冻结选择进 `<runDir>/agent-selection.json`；Orca 现在把选择文件写在 workdir，不在 ccloop 的 run 目录）；
+   ③**Orca 旧 `orca run <plan> --adapter-config` 路径退役**（人选方案二；约 76 条判据、29 个文件靠 `--adapter scripted`，迁走或删）；
+   ④最后删 ccloop 整个老入口（`--adapter`／`--adapter-config`）。
+   人原话：「先将这些问题解决，再删老入口」「同意按你建议的顺序走」「选方案二：把 Orca 旧的 orca run --adapter-config 路径一起退役」。只读盘点的事实在 ccloop handoff「Orca 那条线」。
+2. **推送归人**（以 `/usr/bin/git ls-remote` 现测为准）。本会话收尾时 Orca 领先远端：重钉一笔 ＋ 本文；ccloop 领先：handoff／台账两笔。
 3. **人之后要审的**：`zh-review.tsv`（`.superpowers/sdd/2026-10-01-panel-i18n/zh-review.tsv`，人已「先认可、之后再审」；末尾已追加评审员原文）；本轮 `zh.ts` 新增的两行 v2 说明。
-4. **然后由人选**：N5 memory tab（先核 ccmem Q6）或 N1 需求 → 拆分（先 brainstorm）。
+4. **合并做完以后由人选**：N5 memory tab（先核 ccmem Q6）或 N1 需求 → 拆分（先 brainstorm）。
 
 **本会话做完了什么**（全在本地，零 push）：
 - **人审完上一轮**：两本台账其余 `Ruling:` 行「都认可」；zh-review.tsv 先认可。
@@ -168,6 +171,7 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 - **ccloop：`rejectOn` 改为只交给 verifier 判断**（方案 D，人裁；spec／计划／台账见 ccloop handoff）。删掉 evidence 子串搜索，提示词改一行；独立评审 0 Critical／0 Important。
 - **zh-review.tsv**：人自己的改动（行尾空白、Step 5→6）已提交；按人裁 (a) 末尾追加评审员原文（Q1–Q12 原段保留）。
 - **删了旧会话 scratchpad 里的 314 个 git clone**（人批准；日志和证据文件保留，2.8G → 647M）。
+- **人认可了 ccloop 那一轮控制器替人定的全部 `Ruling:`**；人推了两仓之后，**重钉 ccloop 到 `1e4e434`**（主题行 `chore(deps): pin ccloop 1e4e434, where rejectOn is only the verifier's judgment`；`pin-ccloop.mjs` 七项核对全 ok）；`loopPlans.ts` 两处已发布注释保留原文、追加 ERRATUM；loop 方案 spec 追加 §14。本会话 scratchpad 的 clone 也按人批准删了（219M → 2.8M）。
 
 **诚实的表述**：C4 改动与 3 小时只在 fake／jsdom 下验过；`rejectOn` 新提示词在真 claude 下没跑过（Orca v1 方案的裸令牌在新提示词下的表现未测，需付费跑）。
 
