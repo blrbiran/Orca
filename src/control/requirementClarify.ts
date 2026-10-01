@@ -42,7 +42,7 @@ const CLARIFY_INSTRUCTION_V1 = [
   "Every string is non-empty. An answer that breaks any rule above is discarded whole.",
 ].join("\n");
 
-function deepFreeze<T>(value: T): T {
+export function deepFreeze<T>(value: T): T {
   if (value !== null && typeof value === "object" && !Object.isFrozen(value)) { for (const child of Object.values(value as Record<string, unknown>)) deepFreeze(child); Object.freeze(value); }
   return value;
 }

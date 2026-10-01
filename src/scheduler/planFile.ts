@@ -285,6 +285,11 @@ export function readSchedulerControlPlanSource(target: TrustedSchedulerPlanTarge
     if (error instanceof ControlError) throw error;
     return sourceRejected("plan-json");
   }
+  return schedulerControlPlanSourceOf(raw, repositoryPath);
+}
+
+/** N1 spec §8.3.1: the Web import's checks over a plan object, with no file read (the split validator calls it too). */
+export function schedulerControlPlanSourceOf(raw: unknown, repositoryPath: string): SchedulerControlPlanSource {
   const loaded = loadPlan(raw, "");
   // Labels and progress spec §8 R12: a malformed plan's message -- which names a refused label -- travels in the detail.
   if ("rejections" in loaded) return sourceRejected(loaded.rejections.map(item => item.code === "malformed" ? `malformed:${item.message}` : item.code).join(","));

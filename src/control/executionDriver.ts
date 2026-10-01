@@ -575,8 +575,10 @@ export async function stepCSingleCall(deps: ExecutionDriverDeps, runId: string):
     try { rawOutput = JSON.parse(text); } catch { rawOutput = text; }
   }
   const handler = singleCallHandler(purpose);
+  // N1 spec §8.3: a purpose that must read the target repository to judge its output does so before the transaction.
+  const settled = handler.evaluate === undefined ? rawOutput : await handler.evaluate(deps, run, rawOutput);
   try {
-    handler.complete({ store, admissionGate: deps.admissionGate }, run, rawOutput, () => {
+    handler.complete({ store, admissionGate: deps.admissionGate }, run, settled, () => {
       if (openRequestOf(store, run) !== null) throw new ControlError("handoff-request-conflict", "estimate-yields-to-handoff");
       const current = readDriverRun(store, runId);
       // As stepC: the run may have moved while this step awaited ccloop; only an `accepted` run is settled here.

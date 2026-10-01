@@ -4,20 +4,22 @@ import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { fits, zero } from "./commands.js";
 import { ControlError } from "./errors.js";
 import { buildClarifyPrompt, CLARIFY_JSON_SCHEMA, classifyClarifyOutput } from "./requirementClarify.js";
+import { renderRequirementDocument } from "./requirementDocument.js";
 import { buildRepositoryOverview } from "./requirementOverview.js";
 import {
-  clarifyingLedger, latestDraft, latestRound, queueRequirementCall, readDraft, readRequirementGroup, readRound, readRounds, saveRequirementGroup,
-  writeDraft, writeRound, type RequirementGroup,
+  clarifyingLedger, latestDraft, latestRound, newDraft, queueRequirementCall, readDraft, readDrafts, readRequirementGroup, readRound, readRounds,
+  saveRequirementGroup, writeDraft, writeRound, type RequirementGroup,
 } from "./requirementRecords.js";
-import { MAX_AUTO_RETRIES, REQUIREMENT_CALL_GRANT, type CallRecord } from "./requirementSchemas.js";
+import { MAX_AUTO_RETRIES, REQUIREMENT_CALL_GRANT, splitOutputSchema, type CallRecord, type DraftBody } from "./requirementSchemas.js";
+import { buildSplitPrompt, expandSplitDraft, SPLIT_JSON_SCHEMA, validateSplitDraft, type SplitPlanFile } from "./requirementSplit.js";
 import { assertCallUsageBooked, closeSingleCall, insertSingleCallRun, verifyStoppedSingleCall, type StoppedSingleCallRun } from "./singleCallLedger.js";
-import type { SingleCallHandler, SingleCallPrepareDeps, SingleCallRunRow } from "./singleCallPurposes.js";
+import type { SingleCallHandler, SingleCallPrepareDeps, SingleCallRequest, SingleCallRunRow } from "./singleCallPurposes.js";
 import { writeCanonicalRecord } from "./snapshot.js";
 import type { AdmissionGate } from "./admissionGate.js";
 import type { ControlStore } from "./store.js";
 
 /**
- * N1 spec §5.2, §7 (and §8 for Task 7's split): a requirement's call -- a round's clarify call or a draft's split call --
+ * N1 spec §5.2, §7 and §8: a requirement's call -- a round's clarify call or a draft's split call --
  * claimed from its durable wake, prepared at A2 with the repository overview, and settled into the clarifying group's
  * own ledger (never releaseRunReserve's legacy branch, survey S28). The claim and settlement plumbing every single call
  * shares lives in singleCallLedger.ts (PR-I4); the ledger mirror is clarifyingLedger's (PR-I5).
@@ -204,28 +206,101 @@ export function interruptRequirementCall(store: ControlStore, groupId: string, r
   saveRequirementGroup(store, group);
 }
 
+/**
+ * A2 for both requirement purposes: the round or draft must still be drafting, the overview is built and stored, then
+ * the purpose writes its prompt. Every call of a requirement asks for the frozen output cap (DR8).
+ */
+async function prepareRequirementCall(
+  deps: SingleCallPrepareDeps, run: SingleCallRunRow, responseSchema: Readonly<Record<string, unknown>>,
+  stillDrafting: (target: RequirementTarget) => boolean,
+  promptOf: (group: RequirementGroup, target: RequirementTarget, built: Awaited<ReturnType<typeof buildOverviewFor>>) => string,
+): Promise<SingleCallRequest | { blocked: string }> {
+  const group = readRequirementGroup(deps.store, run.groupId);
+  const target = targetOf(run.workItemId);
+  if (group.status !== "clarifying" || !stillDrafting(target)) return { blocked: "requirement-call-target-moved" };
+  // A resolveRepository refusal or a failed build is repository-shaped and named on the run; recovery-retry re-runs A2.
+  let built: Awaited<ReturnType<typeof buildOverviewFor>>;
+  try { built = await buildOverviewFor(deps, run, group); } catch { return { blocked: "repository-path" }; }
+  // Outside the catch: a draining panel or a store fault ends the round as any other step's does.
+  storeOverview(deps, run, built);
+  return { prompt: promptOf(group, target, built), responseSchema: responseSchema as Record<string, unknown>, maxOutputTokens: group.requirement.maxOutputTokens };
+}
+
 export const CLARIFY_HANDLER: SingleCallHandler = {
   purpose: "clarify",
   async prepare(deps, run) {
-    const group = readRequirementGroup(deps.store, run.groupId);
-    const target = targetOf(run.workItemId);
-    const round = readRound(deps.store, run.groupId, target.no);
-    if (group.status !== "clarifying" || round.state !== "drafting") return { blocked: "requirement-call-target-moved" };
-    // A resolveRepository refusal or a failed build is repository-shaped and named on the run; recovery-retry re-runs A2.
-    let built: Awaited<ReturnType<typeof buildOverviewFor>>;
-    try { built = await buildOverviewFor(deps, run, group); } catch { return { blocked: "repository-path" }; }
-    // Outside the catch: a draining panel or a store fault ends the round as any other step's does.
-    storeOverview(deps, run, built);
-    return {
-      prompt: buildClarifyPrompt({ idea: group.requirement.idea, contentLanguage: group.requirement.contentLanguage, overview: built,
-        earlier: readRounds(deps.store, run.groupId).filter((r) => r.roundNo < target.no), retryReason: round.lastInvalidReason }),
-      responseSchema: CLARIFY_JSON_SCHEMA as Record<string, unknown>,
-      maxOutputTokens: group.requirement.maxOutputTokens,
-    };
+    return prepareRequirementCall(deps, run, CLARIFY_JSON_SCHEMA, (target) => readRound(deps.store, run.groupId, target.no).state === "drafting", (group, target, built) =>
+      buildClarifyPrompt({ idea: group.requirement.idea, contentLanguage: group.requirement.contentLanguage, overview: built,
+        earlier: readRounds(deps.store, run.groupId).filter((r) => r.roundNo < target.no), retryReason: readRound(deps.store, run.groupId, target.no).lastInvalidReason }));
   },
   classify: classifyClarifyOutput,
   complete(deps, run, rawOutput, commitTerminal) {
     settleRequirementCall(deps, run, commitTerminal, (store, group, target, settled) => recordClarify(store, group, target, settled, rawOutput));
+  },
+  usageUnknownReason: "requirement-usage-unknown",
+};
+
+/** What Ce of a split judged, before its transaction: the parsed output, its expansion and every reason (spec §8.2-§8.4). */
+interface SplitEvaluation extends Omit<DraftBody, "draftNo" | "state" | "autoRetry" | "waiting" | "feedback" | "reasonCode" | "calls" | "plan"> {
+  schemaValid: boolean; ok: boolean; plan: SplitPlanFile | null;
+}
+
+/**
+ * Evaluated outside the transaction (it reads the target repository at the commit A2's overview named); its result is
+ * what `complete` records. A call that failed with no output is schema-invalid (Task 6 ruling: it uses a retry).
+ */
+async function evaluateSplit(deps: SingleCallPrepareDeps, run: SingleCallRunRow, rawOutput: unknown): Promise<SplitEvaluation> {
+  const parsed = splitOutputSchema.safeParse(rawOutput);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    return { schemaValid: false, ok: false, output: null, plan: null, draftHash: null, reasons: [`schema:${issue?.path.join(".") ?? ""}:${issue?.message ?? "invalid"}`], layers: null, implicitEdges: null };
+  }
+  const overview = (run as { overview?: { commit: string } | null }).overview ?? null;
+  if (overview === null) throw new ControlError("recovery-blocked", "requirement-overview-missing");
+  const group = readRequirementGroup(deps.store, run.groupId);
+  const rounds = readRounds(deps.store, run.groupId);
+  const latest = rounds.filter((round) => round.result !== null).at(-1)?.result ?? null;
+  if (latest === null) throw new ControlError("recovery-blocked", "requirement-understanding-missing");
+  const adrIds = rounds.flatMap((round) => (round.adrDecisions ?? []).filter((decision) => decision.accept).map((decision) => decision.id));
+  const repo = deps.resolveRepository(group.requirement.repoId);
+  const plan = expandSplitDraft(parsed.data, { targetRepo: repo, ccloopBin: deps.ccloopBin, runsDir: deps.roots.runsRoot, groupId: run.groupId, statement: latest.statement, acceptanceCriteria: latest.acceptanceCriteria });
+  const validated = await validateSplitDraft({ output: parsed.data, plan, repo, commit: overview.commit, criterionIds: latest.acceptanceCriteria.map((criterion) => criterion.id), adrIds });
+  // DR12: the hash is of the expanded plan, the bytes the person reviews.
+  return { schemaValid: true, output: parsed.data, plan, draftHash: sha256Canonical(plan), ...validated };
+}
+
+/** Spec §8.3 and H7 (DR9): a valid draft awaits review; an invalid one becomes `invalid` and the next draft is drafted, at most twice. */
+function recordSplit(store: ControlStore, group: RequirementGroup, target: RequirementTarget, run: SettledRun, ev: SplitEvaluation): void {
+  const draft = readDraft(store, group.groupId, target.no);
+  if (draft.state !== "drafting") throw new ControlError("recovery-blocked", "requirement-draft-moved");
+  draft.calls = [...draft.calls, callOf(run, ev.ok ? "valid" : "invalid", ev.ok ? null : ev.reasons.join("; "))];
+  Object.assign(draft, { output: ev.output, plan: ev.ok ? ev.plan : null, draftHash: ev.ok ? ev.draftHash : null, reasons: ev.reasons, layers: ev.layers, implicitEdges: ev.implicitEdges });
+  if (ev.ok) draft.state = "awaiting-review";
+  else if (draft.autoRetry < MAX_AUTO_RETRIES) {
+    draft.state = "invalid";
+    writeDraft(store, group.groupId, draft);
+    writeDraft(store, group.groupId, newDraft(draft.draftNo + 1, draft.autoRetry + 1));
+    queueRequirementCall(store, group.groupId, `retry-${run.runId}`);
+    return;
+  } else {
+    Object.assign(draft, { state: "failed", reasonCode: ev.schemaValid ? "split-validation-exhausted" : "split-output-invalid" });
+  }
+  writeDraft(store, group.groupId, draft);
+}
+
+export const SPLIT_HANDLER: SingleCallHandler = {
+  purpose: "split",
+  async prepare(deps, run) {
+    return prepareRequirementCall(deps, run, SPLIT_JSON_SCHEMA, (target) => readDraft(deps.store, run.groupId, target.no).state === "drafting", (group, target, built) =>
+      buildSplitPrompt({
+        document: renderRequirementDocument({ groupId: run.groupId, requirement: group.requirement, rounds: readRounds(deps.store, run.groupId), acceptedSplit: null }),
+        overview: built, earlierDrafts: readDrafts(deps.store, run.groupId).filter((draft) => draft.draftNo < target.no),
+      }));
+  },
+  evaluate: evaluateSplit,
+  classify: validateSplitDraft,
+  complete(deps, run, evaluation, commitTerminal) {
+    settleRequirementCall(deps, run, commitTerminal, (store, group, target, settled) => recordSplit(store, group, target, settled, evaluation as SplitEvaluation));
   },
   usageUnknownReason: "requirement-usage-unknown",
 };

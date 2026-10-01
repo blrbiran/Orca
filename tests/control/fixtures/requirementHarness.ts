@@ -11,7 +11,10 @@ import { createExecutionDriver, type ExecutionDriverDeps } from "../../../src/co
 import type { ExecutionPort, ExecutionReport, StartEnvelope } from "../../../src/control/executionPort.js";
 import { estimatorSlotFor } from "../../../src/control/planImport.js";
 import { createExecutionProfileRouter, resolveProfile } from "../../../src/control/profiles.js";
-import { insertClarifyingGroup, newRound, queueRequirementCall, readRound, writeRound } from "../../../src/control/requirementRecords.js";
+import { classifyClarifyOutput } from "../../../src/control/requirementClarify.js";
+import {
+  insertClarifyingGroup, newDraft, newRound, queueRequirementCall, readRequirementGroup, readRound, saveRequirementGroup, writeDraft, writeRound,
+} from "../../../src/control/requirementRecords.js";
 import { REQUIREMENT_LIMIT_DEFAULT } from "../../../src/control/requirementSchemas.js";
 import type { Amount, ArtifactRef, Candidate } from "../../../src/control/types.js";
 import { createWebWakeHandlers } from "../../../src/control/webDispatch.js";
@@ -19,6 +22,7 @@ import { WebControlService, readWebGroup } from "../../../src/control/webService
 import { controlWorkspaceRoots } from "../../../src/control/workspace.js";
 import { FIXTURE_AGENT_ID, fixtureResolveAgent, seedPanelOperator, seedPreferences } from "./agents.js";
 import { clarifyingInput } from "./requirement.js";
+import { ROUND_TWO } from "./requirementOutputs.js";
 import { openTestStore } from "./store.js";
 import { profileSnapshot } from "./web.js";
 
@@ -78,10 +82,28 @@ function queuedPort(answers: QueuedAnswer[], stoppable: boolean) {
 }
 
 /**
- * A clarifying group "r" on target repository `repo` (README.md, src/a.ts), round 1 queued as requirement-open leaves it,
- * a driver over the queued single-call port, the pump's real wake handlers, and the service for commands.
+ * Task 8 (`startAt: "split"`): round 1 answered with ROUND_TWO's statement and criteria (AC1, AC2, what VALID_SPLIT
+ * traces) and the slug `markdown-export` (controller ruling PR-B2), consensus on round 1, and draft 1 queued -- what
+ * requirement-consensus leaves behind.
  */
-export async function requirementHarness(options: { answers: QueuedAnswer[]; stoppable?: boolean; limit?: Amount } = { answers: [] }) {
+function seedConsensus(store: Awaited<ReturnType<typeof openTestStore>>["store"]): void {
+  const group = readRequirementGroup(store, "r");
+  const classified = classifyClarifyOutput({ ...ROUND_TWO, slug: "markdown-export" }, { roundNo: 1, requirementId: group.requirement.requirementId, earlierQuestionIds: [] });
+  if (!classified.ok) throw new Error(`requirementHarness: ROUND_TWO did not classify: ${classified.reason}`);
+  writeRound(store, "r", { ...newRound(1), state: "answered", result: classified.result, answers: [], glossaryDecisions: [], adrDecisions: [], answeredAt: "2026-10-02T08:05:00.000Z" });
+  group.requirement.slug = classified.result.slug;
+  group.requirement.consensus = { roundNo: 1, at: "2026-10-02T08:06:00.000Z", openBranches: [], openQuestions: [] };
+  saveRequirementGroup(store, group);
+  writeDraft(store, "r", newDraft(1, 0));
+  queueRequirementCall(store, "r", "consensus");
+}
+
+/**
+ * A clarifying group "r" on target repository `repo` (README.md, src/a.ts), round 1 queued as requirement-open leaves it
+ * (or, with `startAt: "split"`, draft 1 queued after consensus), a driver over the queued single-call port, the pump's
+ * real wake handlers, and the service for commands.
+ */
+export async function requirementHarness(options: { answers: QueuedAnswer[]; stoppable?: boolean; limit?: Amount; startAt?: "split" } = { answers: [] }) {
   const h = await openTestStore();
   const repo = join(h.root, "repo");
   await mkdir(join(repo, "src"), { recursive: true });
@@ -105,8 +127,8 @@ export async function requirementHarness(options: { answers: QueuedAnswer[]; sto
     insertClarifyingGroup(h.store, clarifyingInput("r", { limit: options.limit ?? { ...REQUIREMENT_LIMIT_DEFAULT }, profile: { profileId: "all", profileHash: profile.profileHash }, agentSlot: frozenSlot, maxOutputTokens: 64_000 }));
     updateRevision(h.store, "r", 1);
     h.store.db.prepare("UPDATE groups SET projection_seq=1 WHERE id='r'").run();
-    writeRound(h.store, "r", newRound(1));
-    queueRequirementCall(h.store, "r", "open");
+    if (options.startAt === "split") seedConsensus(h.store);
+    else { writeRound(h.store, "r", newRound(1)); queueRequirementCall(h.store, "r", "open"); }
   });
   const admissionGate = createAdmissionGate();
   const service = new WebControlService({ store: h.store, port: fake.port, admissionGate, profileRouter: router,
@@ -118,9 +140,13 @@ export async function requirementHarness(options: { answers: QueuedAnswer[]; sto
   const handlers = createWebWakeHandlers({ store: h.store, profileRouter: router, admissionGate, service });
   const driver = createExecutionDriver(deps);
   const runs = () => h.store.db.prepare("SELECT id,active,body FROM runs WHERE group_id='r' ORDER BY rowid").all().map((row) => ({ runId: String(row.id), active: Number(row.active), ...JSON.parse(String(row.body)) }));
+  // A round or draft the predicate names may not exist yet (a split's retry writes the next draft): that is "not there".
+  const holds = (predicate: () => boolean): boolean => {
+    try { return predicate(); } catch (error) { if (error instanceof ControlError && error.code === "work-not-found") return false; throw error; }
+  };
   const until = async (predicate: () => boolean, limit = 40): Promise<void> => {
-    for (let i = 0; i < limit && !predicate(); i += 1) { await deliverSchedulerWakes(h.store, handlers); await driver.round(); }
-    if (!predicate()) throw new Error(`requirementHarness: not there; runs ${JSON.stringify(runs().map((r) => [r.workItemId, r.state, r.drive?.blockedReason ?? null]))}`);
+    for (let i = 0; i < limit && !holds(predicate); i += 1) { await deliverSchedulerWakes(h.store, handlers); await driver.round(); }
+    if (!holds(predicate)) throw new Error(`requirementHarness: not there; runs ${JSON.stringify(runs().map((r) => [r.workItemId, r.state, r.drive?.blockedReason ?? null]))}`);
   };
   const revision = () => Number(h.store.db.prepare("SELECT revision FROM groups WHERE id='r'").get()!.revision);
   let sequence = 0;

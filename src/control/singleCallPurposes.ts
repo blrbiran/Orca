@@ -7,7 +7,7 @@ import type { SingleCallPurpose } from "./singleCall.js";
 import type { ControlStore } from "./store.js";
 import type { WorkspaceRoots } from "./workspace.js";
 import { completeEstimateInStore } from "./webService.js";
-import { CLARIFY_HANDLER } from "./requirementCalls.js";
+import { CLARIFY_HANDLER, SPLIT_HANDLER } from "./requirementCalls.js";
 
 /**
  * N1 spec §5.1: each purpose registers four things -- build the request and prompt, the JSON schema, classify the output,
@@ -26,6 +26,8 @@ export interface SingleCallHandler {
   readonly purpose: SingleCallPurpose;
   /** A2: the prompt, the hand-written response schema and the output cap -- or the reason the run is blocked at A2. */
   prepare(deps: SingleCallPrepareDeps, run: SingleCallRunRow): Promise<SingleCallRequest | { blocked: string }>;
+  /** Ce, before the transaction: work that reads outside the store (the target repository); its result reaches `complete`. */
+  evaluate?(deps: SingleCallPrepareDeps, run: SingleCallRunRow, rawOutput: unknown): Promise<unknown>;
   /** Ce: the purpose's own classifier of the raw output (code, never the model). */
   readonly classify: (...args: never[]) => unknown;
   /** Ce: settle the call and its run in one transaction; `commitTerminal` runs first, a throw rolls everything back. */
@@ -54,7 +56,7 @@ const ESTIMATE = {
   usageUnknownReason: "estimate-usage-unknown",
 } as const satisfies SingleCallHandler;
 
-const HANDLERS: Readonly<Record<SingleCallPurpose, SingleCallHandler>> = Object.freeze({ estimate: ESTIMATE, clarify: CLARIFY_HANDLER });
+const HANDLERS: Readonly<Record<SingleCallPurpose, SingleCallHandler>> = Object.freeze({ estimate: ESTIMATE, clarify: CLARIFY_HANDLER, split: SPLIT_HANDLER });
 
 export function singleCallHandler(purpose: SingleCallPurpose): SingleCallHandler {
   return HANDLERS[purpose];
