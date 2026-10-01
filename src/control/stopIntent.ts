@@ -10,6 +10,7 @@ import { readBudgetProposal, readWork, saveWork, type BudgetProposalRecord } fro
 import { writeCanonicalRecord } from "./snapshot.js";
 import { rearmFailedContinuation } from "./continuation.js";
 import { resumeBlockedDriverRun } from "./driveRecord.js";
+import { singleCallPurposeOf } from "./singleCall.js";
 import { dispatchEnvelopeSchema, type CapabilityViewV1, type CommandErrorBodyV1, type CommandSuccessV1, type RawAuthorityCommandV1 } from "./webProtocol.js";
 import { idSchema, safeInteger, canonicalTimestampSchema } from "./schema.js";
 import type { Amount, HandoffRequest } from "./types.js";
@@ -103,7 +104,7 @@ export interface RunBody {
   estimateId: string | null;
   generation: number;
   graphVersion: number;
-  phase: "estimate" | "work" | "handoff";
+  phase: "estimate" | "work" | "handoff" | "single-call";
   state: string;
   claimOrdinal: number | null;
   providerAttemptOrdinal: number;
@@ -671,7 +672,8 @@ function terminaliseRun(store: ControlStore, groupId: string, run: RunBody, outc
   const settled: RunBody = { ...run, state: outcome, failureCode: reasonCode };
   saveRunBody(store, settled, false);
   const released = add(settled.remaining.work, settled.remaining.handoff);
-  if (run.phase === "estimate" && run.estimateId !== null) {
+  // N1 spec §5.1: a single call's stop is settled by its purpose; phase 2 adds the requirement purposes here.
+  if (singleCallPurposeOf(run) === "estimate" && run.estimateId !== null) {
     interruptEstimate(store, groupId, run.estimateId);
     releaseCommitment(store, groupId, settled.remaining.work);
     return;

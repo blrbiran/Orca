@@ -710,7 +710,11 @@ function keptExpansion(taskId: string, repoPath: string, recipe: LoopRecipe): Lo
  * execution driver can call it -- single-call estimate spec §6.3, drafter finding F13). `commitTerminal` runs first, in
  * the same transaction, and a throw from anything here rolls it back with the rest.
  */
-export function completeEstimateInStore(deps: { store: ControlStore; admissionGate?: AdmissionGate }, id: string, estimateId: string, rawOutput: unknown, commitTerminal?: () => void): void {
+export function completeEstimateInStore(
+  deps: { store: ControlStore; admissionGate?: AdmissionGate }, id: string, estimateId: string, rawOutput: unknown, commitTerminal?: () => void,
+  // N1 spec §5.1: the estimate purpose's registered classifier (singleCallPurposes.ts); the service method keeps the default.
+  classify: typeof classifyEstimateOutput = classifyEstimateOutput,
+): void {
   const release = deps.admissionGate?.enter();
   try {
     deps.store.transaction(() => {
@@ -742,7 +746,7 @@ export function completeEstimateInStore(deps: { store: ControlStore; admissionGa
       if (!same(currentBalance.reserve, proposal.explicitUnallocatedReserve) || !same(currentBalance.deficit, group.ledger.budgetDeficit)) throw new ControlError("recovery-blocked");
       // Single-call estimate spec §6.4: a failed estimate carries its own reason. A schema-valid answer that is not
       // canonical JSON (a lone surrogate, a negative zero) cannot be hashed, so it is an invalid answer too.
-      const classified = classifyEstimateOutput(rawOutput, plan.planHash, plan.plan.tasks.map(t => t.taskId));
+      const classified = classify(rawOutput, plan.planHash, plan.plan.tasks.map(t => t.taskId));
       let output: BudgetEstimateV1 | null = null, outputHash: string | null = null;
       let reasonCode: string | null = classified.ok ? null : classified.reasonCode;
       if (classified.ok) {

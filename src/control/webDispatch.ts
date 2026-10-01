@@ -13,8 +13,9 @@ import type { ControlStore } from "./store.js";
 import type { AgentSelection } from "./agentSelection.js";
 import { frozenWorkAgent } from "./agentFreeze.js";
 import { claimableContinuations, continuationAlreadyClaimed, continuationWakeBody, type RegisteredContinuation } from "./continuation.js";
+import { singleCallClaimRowOf } from "./singleCall.js";
 
-export type Phase = "estimate" | "work" | "handoff";
+export type Phase = "estimate" | "work" | "handoff" | "single-call";
 export type StartCommand = Extract<RawAuthorityCommandV1, { verb: "start" }>;
 export interface WebDispatchDeps { store: ControlStore; profileRouter: ExecutionProfileRouter; admissionGate?: AdmissionGate }
 export interface AttemptTuple { runId: string; generation: number; phase: Phase; providerAttemptOrdinal: number }
@@ -382,6 +383,32 @@ export function readEstimateClaimEnvelope(store: ControlStore, groupId: string, 
   return dispatchEnvelopeSchema.parse(JSON.parse(readCanonicalRecord(store, envelopeHash)));
 }
 
+/** N1 spec §5.1: the dispatch envelope the claim froze for this single-call run, whatever its purpose (DR4). */
+export function readSingleCallClaimEnvelope(store: ControlStore, groupId: string, runId: string): DispatchEnvelopeV1 {
+  const run = readDispatchRun(store, runId);
+  if (run.phase !== "estimate" && run.phase !== "single-call") throw new ControlError("start-intent-missing");
+  const claimRow = singleCallClaimRowOf(run.phase, groupId, run.workItemId);
+  const row = store.db.prepare("SELECT body FROM outbox WHERE id=? AND kind=?").get(claimRow.id, claimRow.kind);
+  if (!row) throw new ControlError("start-intent-missing");
+  const { runId: claimed, envelopeHash } = JSON.parse(String(row.body)) as { runId: string; envelopeHash: string };
+  if (claimed !== runId) throw new ControlError("start-intent-missing");
+  return dispatchEnvelopeSchema.parse(JSON.parse(readCanonicalRecord(store, envelopeHash)));
+}
+
+/**
+ * N1 spec §5.1: a run a single-call claim made, whatever its purpose -- its claim row names this very run. The purpose is
+ * not validated here: a listing must not hide a run whose purpose is unknown; `advance` refuses it by name (DR3).
+ */
+export function isSingleCallRun(store: ControlStore, runId: string): boolean {
+  const row = store.db.prepare("SELECT group_id,work_item_id,body FROM runs WHERE id=?").get(runId);
+  if (!row) return false;
+  const phase = (JSON.parse(String(row.body)) as { phase?: string }).phase;
+  if (phase !== "estimate" && phase !== "single-call") return false;
+  const claimRow = singleCallClaimRowOf(phase, String(row.group_id), String(row.work_item_id));
+  const claim = store.db.prepare("SELECT body FROM outbox WHERE id=? AND kind=?").get(claimRow.id, claimRow.kind);
+  return claim !== undefined && (JSON.parse(String(claim.body)) as { runId?: string }).runId === runId;
+}
+
 export type AttemptReservation =
   | { kind: "reserved"; providerAttemptOrdinal: number; envelope: DispatchEnvelopeV1 }
   | { kind: "suppressed"; requestId: string | null };
@@ -402,7 +429,7 @@ export function reserveProviderAttemptInTransaction(store: ControlStore, runId: 
   }
   run.providerAttemptOrdinal += 1;
   saveDispatchRun(store, run);
-  return { kind: "reserved", providerAttemptOrdinal: run.providerAttemptOrdinal, envelope: phase === "estimate" ? readEstimateClaimEnvelope(store, run.groupId, runId) : readWorkClaimEnvelope(store, run.groupId, runId) };
+  return { kind: "reserved", providerAttemptOrdinal: run.providerAttemptOrdinal, envelope: phase === "estimate" || phase === "single-call" ? readSingleCallClaimEnvelope(store, run.groupId, runId) : readWorkClaimEnvelope(store, run.groupId, runId) };
 }
 
 /**

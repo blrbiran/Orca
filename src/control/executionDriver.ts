@@ -7,18 +7,17 @@ import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { commitCandidate } from "./checkpoints.js";
 import { hashPayload } from "./commands.js";
 import { ControlError } from "./errors.js";
-import { BUDGET_ESTIMATE_JSON_SCHEMA, buildEstimatePrompt } from "./estimatePrompt.js";
-import { readEstimateContract } from "./estimator.js";
 import { readConfirmedTaskExecution } from "./executionSnapshot.js";
 import { privateDirectory } from "./paths.js";
 import { publishPending } from "./projection.js";
-import { readBudgetProposal, readEstimateRecord, readGroup, readWork } from "./queries.js";
+import { readBudgetProposal, readGroup, readWork } from "./queries.js";
 import { readCanonicalRecord, writeCanonicalRecord } from "./snapshot.js";
 import { toSingleCallEnvelope, toStartEnvelope } from "./startEnvelope.js";
 import { exportResumeBundle, readExistingResumeBundle, type InputCheckpointV1 } from "./resumeBundle.js";
 import { recordUsage } from "./usage.js";
-import { isEstimateRun, isWebWorkRun, nextClaimableTask, readEstimateClaimEnvelope, readWorkClaimEnvelope, reserveProviderAttemptInTransaction } from "./webDispatch.js";
-import { completeEstimateInStore } from "./webService.js";
+import { isSingleCallRun, isWebWorkRun, nextClaimableTask, readSingleCallClaimEnvelope, readWorkClaimEnvelope, reserveProviderAttemptInTransaction } from "./webDispatch.js";
+import { singleCallPurposeOf } from "./singleCall.js";
+import { singleCallHandler } from "./singleCallPurposes.js";
 import { readWorkspaceSetting, type WorkspaceMode } from "./workspaceSettings.js";
 import { cleanupRunWorkspace, commitAttempt, ensureWorkBranch, ensureWorkspace, sourceDirOf, workspacePathOf, type WorkspaceRoots } from "./workspace.js";
 import { stepD, stepR } from "./driverLanding.js";
@@ -159,9 +158,9 @@ export function groupHeld(store: ControlStore, groupId: string): boolean {
   return groupStopped(store, groupId) || readGroup(store, groupId).status === "blocked";
 }
 
-/** The frozen profile's port: the one the run was claimed against -- the estimator's for an estimate run (F2). */
+/** The frozen profile's port: the one the run was claimed against -- the estimator's for every single call (F2 of the estimate plan). */
 export function portFor(deps: Pick<ExecutionDriverDeps, "router">, run: DriverRun): ExecutionPort {
-  return deps.router.resolve(run.phase === "estimate" ? "budget-estimate" : "task", run.executionProfile.profileId, run.executionProfile.profileHash).port;
+  return deps.router.resolve(singleCallPurposeOf(run) !== null ? "budget-estimate" : "task", run.executionProfile.profileId, run.executionProfile.profileHash).port;
 }
 
 export function readStartEnvelope(store: ControlStore, run: DriverRun): StartEnvelope {
@@ -195,8 +194,8 @@ export function stepA1(deps: ExecutionDriverDeps, runId: string): boolean {
   return write(deps, () => {
     const run = readDriverRun(store, runId);
     if (run.state !== "starting") return false;
-    const estimate = run.phase === "estimate";
-    const drive = newDrive(deps.roots, runId, readWorkspaceSetting(store, groupRepoId(store, run.groupId)).workspaceMode, !estimate);
+    const singleCall = singleCallPurposeOf(run) !== null;
+    const drive = newDrive(deps.roots, runId, readWorkspaceSetting(store, groupRepoId(store, run.groupId)).workspaceMode, !singleCall);
     const refuse = (reason: string): boolean => {
       const current = readDriverRun(store, runId);
       current.state = "blocked";
@@ -206,7 +205,7 @@ export function stepA1(deps: ExecutionDriverDeps, runId: string): boolean {
     };
     if (readBudgetProposal(store, run.groupId).budgetMode === "strict") return refuse("strict-proof-unimplemented");
     if (store.dispatchBlocked || groupHeld(store, run.groupId)) return false;
-    const reservation = reserveProviderAttemptInTransaction(store, runId, estimate ? "estimate" : "work");
+    const reservation = reserveProviderAttemptInTransaction(store, runId, singleCall ? "estimate" : "work");
     if (reservation.kind === "suppressed") return refuse(`attempt-suppressed:${reservation.requestId ?? "unknown"}`);
     const reserved = readDriverRun(store, runId);
     reserved.state = "start-pending";
@@ -490,25 +489,20 @@ export async function stepC(deps: ExecutionDriverDeps, runId: string): Promise<b
 }
 
 /**
- * A2 of an estimate run (single-call estimate spec §6.2): a private source directory, the prompt (§4.2) and the
- * hand-written response schema in a protocol-3 single-call envelope. No workspace, no branch, no read of the target
- * repository. Everything is redone while `prepared` is false, as for a work run.
+ * A2 of a single call (N1 spec §5.1; single-call estimate spec §6.2): a private source directory, and the prompt and
+ * response schema the purpose builds, in a protocol-3 single-call envelope. No workspace and no branch. Everything is
+ * redone while `prepared` is false, as for a work run.
+ * N1 spec §5.1: written once for every purpose; the purpose's handler builds, classifies and completes.
  */
-export async function stepA2Estimate(deps: ExecutionDriverDeps, runId: string): Promise<boolean> {
+export async function stepA2SingleCall(deps: ExecutionDriverDeps, runId: string): Promise<boolean> {
   const { store } = deps;
   const run = readDriverRun(store, runId);
-  if (run.phase !== "estimate" || run.state !== "start-pending" || run.drive === undefined || run.drive.prepared) return false;
-  const estimateId = String(run.estimateId);
-  const estimate = readEstimateRecord(store, run.groupId, estimateId);
-  if (estimate.request === null) { blockRun(deps, runId, "A2", "estimate-request-missing"); return true; }
-  const contract = readEstimateContract(store, run.groupId, estimateId);
+  const purpose = singleCallPurposeOf(run);
+  if (purpose === null || run.state !== "start-pending" || run.drive === undefined || run.drive.prepared) return false;
+  const prepared = await singleCallHandler(purpose).prepare(deps, run);
+  if ("blocked" in prepared) { blockRun(deps, runId, "A2", prepared.blocked); return true; }
   privateDirectory(run.drive.sourceDir);
-  const envelope = toSingleCallEnvelope(readEstimateClaimEnvelope(store, run.groupId, runId), run, {
-    sourceDir: run.drive.sourceDir,
-    prompt: buildEstimatePrompt(contract.instructionVersion, canonicalBytes(estimate.request).toString("utf8")),
-    responseSchema: BUDGET_ESTIMATE_JSON_SCHEMA as Record<string, unknown>,
-    maxOutputTokens: contract.maxOutputTokens,
-  });
+  const envelope = toSingleCallEnvelope(readSingleCallClaimEnvelope(store, run.groupId, runId), run, { sourceDir: run.drive.sourceDir, ...prepared });
   const envelopeHash = sha256Canonical(envelope);
   return write(deps, () => {
     writeCanonicalRecord(store, run.groupId, envelopeHash, canonicalBytes(envelope).toString("utf8"));
@@ -519,6 +513,8 @@ export async function stepA2Estimate(deps: ExecutionDriverDeps, runId: string): 
     return true;
   });
 }
+/** DR2: the estimate plan's name for the same step; existing criteria call it. */
+export const stepA2Estimate = stepA2SingleCall;
 
 /** ccloop's record of one single call (contract: `ccloop-single-call-record-v1`). */
 const singleCallRecordSchema = z.object({
@@ -536,11 +532,13 @@ const singleCallRecordSchema = z.object({
  * settle the estimate and the run in one transaction. A call with no observed usage (aborted or failed) cannot settle
  * (run-stop-unconfirmed) and is blocked by name instead of retried every round. A stop that arrived while this step
  * was collecting wins (drafter finding F6): the settlement yields and step H closes the run next round.
+ * N1 spec §5.1: written once for every purpose; the purpose's handler builds, classifies and completes.
  */
-export async function stepCEstimate(deps: ExecutionDriverDeps, runId: string): Promise<boolean> {
+export async function stepCSingleCall(deps: ExecutionDriverDeps, runId: string): Promise<boolean> {
   const { store } = deps;
   const run = readDriverRun(store, runId);
-  if (run.phase !== "estimate" || run.state !== "accepted" || run.drive === undefined) return false;
+  const purpose = singleCallPurposeOf(run);
+  if (purpose === null || run.state !== "accepted" || run.drive === undefined) return false;
   const report = await collectInto(deps, run);
   const candidate = report.candidate;
   if (!candidate?.stopProof) return report.events.length > 0;
@@ -569,8 +567,9 @@ export async function stepCEstimate(deps: ExecutionDriverDeps, runId: string): P
     const text = (await readArtifact(store, record.outputRef)).toString("utf8");
     try { rawOutput = JSON.parse(text); } catch { rawOutput = text; }
   }
+  const handler = singleCallHandler(purpose);
   try {
-    completeEstimateInStore({ store, admissionGate: deps.admissionGate }, run.groupId, String(run.estimateId), rawOutput, () => {
+    handler.complete({ store, admissionGate: deps.admissionGate }, run, rawOutput, () => {
       if (openRequestOf(store, run) !== null) throw new ControlError("handoff-request-conflict", "estimate-yields-to-handoff");
       const current = readDriverRun(store, runId);
       // As stepC: the run may have moved while this step awaited ccloop; only an `accepted` run is settled here.
@@ -579,13 +578,15 @@ export async function stepCEstimate(deps: ExecutionDriverDeps, runId: string): P
       saveDriverRun(store, current);
     });
   } catch (error) {
-    if (error instanceof ControlError && error.code === "run-stop-unconfirmed") { blockRun(deps, runId, "C", "estimate-usage-unknown"); return true; }
+    if (error instanceof ControlError && error.code === "run-stop-unconfirmed") { blockRun(deps, runId, "C", handler.usageUnknownReason); return true; }
     if (error instanceof ControlError && error.code === "handoff-request-conflict" && error.detail === "estimate-yields-to-handoff") return false;
     if (error instanceof ControlError && error.code === "start-state-conflict" && error.detail === "estimate-run-moved") return false;
     throw error;
   }
   return true;
 }
+/** DR2: the estimate plan's name for the same step; existing criteria call it. */
+export const stepCEstimate = stepCSingleCall;
 
 export async function savedReport(store: ControlStore, runId: string): Promise<ExecutionReport> {
   const row = store.db.prepare("SELECT body FROM outbox WHERE id=? AND kind='report'").get(`report:${runId}`);
@@ -738,8 +739,8 @@ export function driverRunIds(store: ControlStore): string[] {
   for (const row of store.db.prepare("SELECT id,body FROM runs ORDER BY id").all()) {
     const runId = String(row.id);
     const run = JSON.parse(String(row.body)) as DriverRun;
-    // Single-call estimate spec §6.1: an estimate run the Web ledger claimed is the driver's too.
-    const ours = (run.phase === "work" && isWebWorkRun(store, runId)) || (run.phase === "estimate" && isEstimateRun(store, runId));
+    // Single-call estimate spec §6.1, N1 spec §5.1: a single-call run the Web ledger claimed is the driver's too.
+    const ours = (run.phase === "work" && isWebWorkRun(store, runId)) || isSingleCallRun(store, runId);
     if (!ours) continue;
     if (DRIVEN.has(run.state) || (run.state === "settled" && run.drive !== undefined && (!run.drive.cleanedUp || run.drive.publishError !== null))) ids.push(runId);
   }
@@ -769,13 +770,13 @@ export function stepOf(run: DriverRun): DriveStep {
 /** One step for one run (spec §2.2 table). Later tasks add D, R and E here. */
 export async function advance(deps: ExecutionDriverDeps, runId: string, context: DriverContext): Promise<boolean> {
   const run = readDriverRun(deps.store, runId);
-  // Single-call estimate spec §6.1: an estimate run has its own chain; the work chain below is unchanged.
-  if (run.phase === "estimate") {
+  // N1 spec §5.1: every single call has the same chain, whatever it is for; the work chain below is unchanged.
+  if (singleCallPurposeOf(run) !== null) {
     switch (run.state) {
       case "starting": return stepA1(deps, runId);
-      case "start-pending": return run.drive?.prepared ? stepB(deps, runId) : stepA2Estimate(deps, runId);
+      case "start-pending": return run.drive?.prepared ? stepB(deps, runId) : stepA2SingleCall(deps, runId);
       case "unknown": return stepBPrime(deps, runId);
-      case "accepted": return stepCEstimate(deps, runId);
+      case "accepted": return stepCSingleCall(deps, runId);
       default: return false;
     }
   }
