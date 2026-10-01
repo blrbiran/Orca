@@ -17,3 +17,6 @@ Task 2: review — spec ✅ quality ✅ (C-5 and C-6 premises verified); minors 
 Task 2: complete (commit e3de964, review clean)
 - Ruling: Task 3 (mutations L1–L3) is folded — Task 2's implementer ran L1, L2, L3 plus M4/M5 in clones and saw each red — costs if wrong: none (evidence in task-2-report.md).
 Task 3: complete (folded)
+
+## Human review (2026-10-01, recorded by Orca session b5e8d368)
+- The human approved every `Ruling:` line above, and the criterion edits they carry, as written ("几条都同意"). Nothing is reverted.

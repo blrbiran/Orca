@@ -158,14 +158,24 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 
 ## 四、⛔ 下一件事
 
-### 4.0 ⛔ 现在的下一件事（2026-10-01 会话 `be653b22` 收尾整节改写；**本节优先于下面的 4.0.d、4.0.c、4.0.b、4.0.0、4.0.1 与 1–3**）
+### 4.0 ⛔ 现在的下一件事（2026-10-01 会话 `be653b22` 收尾整节改写，会话 `b5e8d368` 滚动；**本节优先于下面的 4.0.d、4.0.c、4.0.b、4.0.0、4.0.1 与 1–3**）
+
+**会话 `b5e8d368`（2026-10-01）做了什么**（开工时三仓 `ls-remote` 远端＝本地，即 `be653b22` 的全部提交人已推）：
+- 人审：「替人定的裁定」全部认可（Orca step-3 台账与 ccloop 三本台账末尾各记一节 Human review）。`zh-review.tsv` 人没提，仍待审。
+- ccloop 三笔代码／台账＋一笔 handoff，**全在本地，等人推**：`refactor(cli): refuse an unknown flag on run, resume and sweep …`（人裁「直接不支持就好」：不再有 `--adapter was removed` 提示，任何不认的 `--` flag 报 `unknown flag <flag>`）；`fix(claude): deliver an interrupted execute's partial whole instead of cut at 8192 bytes`；`docs(sdd): ledger of the live claude check …`。Orca 代码零改动。
+- **付费真 claude**（人「允许跑」；claude 2.1.286、`claude-opus-5-5`、各 n＝1；台账 ccloop `.superpowers/sdd/2026-10-01-live-partial-and-resume/progress.md`）：
+  - 「中断后读 partial」**第一次跑是坏的**：runner 中断路径写完 stdout 立刻 `process.exit`，macOS 管道异步写 ⇒ partial 在 8192 字节截断、adapter 丢掉它与中断前用量。修复后重跑通过（6 个文件、`tokenUsage` 195,810 进账）。fake 判据的 partial 都很小，所以一直绿。
+  - 「`resume --agents`」：崩溃（整组 SIGKILL）的 run **没有任何 CLI 路径能续跑**——`resume`／`sweep` 只认 loop 自己在 `stale_candidate` 边界写的 `owner-transfer.json`，租约过期后报 `cannot read run artifacts: ENOENT …`。照判据 `seed` 的形状人工补齐移交记录后，真 claude 下 `resume --agents` 续跑 attempt 2 成功。⇒ 验到的是「冻结选择重建 claude adapter 并跑完」，不是「崩溃可续」。
+  - runner 以 `detached` 起，ccloop 被杀后 runner 与 claude 继续跑完（继续花钱）。
+  - 花费（claude 自报相加，被中断的两次 execute 无结果信封、拿不到）：$0.3469558。`~/.claude/projects` 前后相同。
+- 门（全新 clone，内容＝上面那笔 fix）：ccloop 1045 条、1044 过、只红 `stopProof`，`check-known-reds`／`check-tmp-leak` RC 0，typecheck／build RC 0。**Orca 本会话没跑门**（Orca 无改动）。
 
 **⛔ 下一会话按这个顺序做：**
-1. **先核推送与重钉**（推送归人）：三个仓各跑 `/usr/bin/git ls-remote origin refs/heads/main` 与本地比。
+1. **先核推送与重钉**（推送归人）：三个仓各跑 `/usr/bin/git ls-remote origin refs/heads/main` 与本地比。⚠️ 会话 `b5e8d368` 的 ccloop 三笔要先推；之后重钉**有实际意义**——钉住的包要带上 runner 的 8192 字节修复（`orca panel` 下的真 claude 中断就走这条路）。
    🔴 **推送顺序：ccloop 先推（或同时），再推 Orca。** 原因：Orca 的 `tests/scheduler`（`ccloopRunner`、`harvest`、`ledgerWiring` 与 `scenarios/` 下跑整轮的文件，即 `verify:scheduler` 进而 `verify`）现在要一份**含 fake codex `frames` 模式的 ccloop checkout**（兄弟目录 `../ccloop` 或 `ORCA_CCLOOP_BIN`，主题行 `test(fixtures): fake codex plays scripted frames per attempt…` 之后）；钉住的包没有测试夹具，供不了它们。
    人推 ccloop 之后，agent 跑 `node scripts/pin-ccloop.mjs <SHA>` 重钉（七项核对），再由人推 Orca。Orca 生产代码不依赖今天的 ccloop 新行为（终审已核），重钉只是让钉住的包跟上。
-2. **人要审的（都是控制器按「先按你的建议执行」替人定的）**：见下面「替人定的裁定」，以及 `zh-review.tsv`（`.superpowers/sdd/2026-10-01-panel-i18n/zh-review.tsv`）与 `zh.ts` 两行 v2 说明（上一轮留下的，未变）。
-3. **然后由人选**：N5 memory tab（先核 ccmem Q6）或 N1 需求 → 拆分（先 brainstorm）。
+2. ✅ 「替人定的裁定」人已全部认可（会话 `b5e8d368`）。仍待人审：`zh-review.tsv`（`.superpowers/sdd/2026-10-01-panel-i18n/zh-review.tsv`）与 `zh.ts` 两行 v2 说明（上一轮留下的，未变）。
+3. **然后由人选**：N5 memory tab（先核 ccmem Q6）或 N1 需求 → 拆分（先 brainstorm）。另有两件新登记、归人的：崩溃的 ccloop run 要不要能续跑；runner 孤儿要不要收。
 
 **本会话做完了什么**（全在本地，零 push；四步各自 spec → 计划 → subagent 实现 → 逐任务审查 → 终审 → 修复波 → 门）：
 - **① ccloop 只剩一个 claude adapter**：删 `SubprocessClaudeAdapter` 与 `--adapter claude`；`ClaudeAgentAdapter` 在 execute 被中断或超时后**读 runner 吐出的 partial**（worktree 有改动时），带上中断前观测到的用量（无观测不填，绝不填 0）；execute 的停止宽限 = `max(killGraceMs, partialOutcomeRecoveryWindowMs + 5 s)`。v1 的 `run-scenario`／`prepare-a04` 工具链退役。spec／计划在 ccloop `docs/superpowers/{specs,plans}/2026-10-01-claude-adapter-consolidation-step1*`。
@@ -175,12 +185,12 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 - **④ ccloop 删老入口**：`--adapter`／`--adapter-config` 一律报 `--adapter was removed; use --agents <table>`；`validate-codex-adapter.mjs` 改用 agents 表；README、`docs/codex-adapter.md`、`docs/control-protocol-v1.md` 只剩 `--agents`。`ScriptedAdapter` 类保留（约 40 条直接构造它的判据在用）。
 - 台账（ccloop）：`.superpowers/sdd/2026-10-01-{claude-adapter-consolidation-step1,agents-resume-sweep,retire-old-cli-entry}/progress.md`；（Orca）：`.superpowers/sdd/2026-10-01-retire-legacy-orca-run/progress.md`；终审与门的报告在会话 scratchpad `final/`、`gate/`。
 
-**替人定的裁定（人要审，都可逆）**：
+**替人定的裁定（✅ 人已于 2026-10-01 全部认可，会话 `b5e8d368` 记录）**：
 - 改了人没点名的既有判据：Orca `tests/control/driverHandoff.test.ts` 两条（宽限边界随新公式改，其中一条冻结 `killGraceMs` 改成 50 000 以恢复区分度）；ccloop `tests/cli/agentsRun.test.ts` 两行（`resume`／`sweep` 不再报「only supported by run」）与三行互斥行（改为期待移除消息）；`cli.test.ts`、`codex.test.ts` 迁到 `--agents`（4＋2 条只测已删解析的判据被移除判据取代）；三份 codex 验证夹具的版本串补成 x.y.z（视为夹具构造）。名单逐条在各台账与报告里。
 - 设计：第②–④步的 spec 都是控制器定的（C-1…C-5 等）；第③步保留判据而不删；不可用窗口按 60 s；`sweepRuns` 的 `adapterName` 类型不收窄。
 - 执行：第①步的门并入最后一次门；同一仓里两个实施席并行过一次（文件不相交）。
 
-**诚实的表述**：全部只在 fake 下验过；真 claude 下「中断后读 partial」「resume --agents」都没跑过（需付费）。上下文占用超过 Rule 6 的 T2（人本轮明说不考虑），检查点已记录。
+**诚实的表述**：四步本身只在 fake 下验过；真 claude 下「中断后读 partial」（修复后）与「`resume --agents`」（移交记录人工补齐）由会话 `b5e8d368` 各跑通一次，见上。上下文占用超过 Rule 6 的 T2（人本轮明说不考虑），检查点已记录。
 
 **挂账**：恢复窗口不可用时 60 s 不是真上限（窗口可到 `handoff.activeMs`；只在状态损坏时走到）；ccloop `PARTIAL_FLUSH_MARGIN_MS` 在 Orca 手抄一份，改 ccloop 时重钉不会自动发现；`agent-selection.json` 只冻结选择与 hash，`command`／`timeoutMs`／`killGraceMs` 跟随 resume 时的表；claude CLI 自动升级后旧 run 会被 `agent-version-drift` 拒绝续跑；Orca 的 57 条整轮判据跑在测试专用的 `"legacy"` 模式（无 grant 的 reconcile 分支），生产不再走它。
 
