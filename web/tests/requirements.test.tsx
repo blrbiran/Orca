@@ -184,3 +184,28 @@ describe("a requirement whose usage is unknown (final review finding 3)", () => 
     expect(screen.queryByRole("form", { name: "Raise the limit" })).toBeNull();
   });
 });
+
+// Final review fix wave, findings 4 and 5: a blocked call is named with a run-scoped retry; a stopped requirement with
+// no call in flight offers Retry (which lifts the stop) and no second Stop.
+describe("a blocked or stopped requirement (final review findings 4 and 5)", () => {
+  const drafting = (): RequirementViewV1 => {
+    const view = requirementView("answered");
+    return withSummary({ ...view, rounds: [...view.rounds, { ...view.rounds[0]!, roundNo: 2, state: "drafting", result: null, answers: null }] }, { roundNo: 2, roundState: "drafting" });
+  };
+
+  it("names a blocked call's reason and retries that run", () => {
+    const onCommand = mount(withSummary(drafting(), { blockedRun: { runId: "run-7", reason: "repository-path" } }));
+    expect(screen.getByRole("alert").textContent).toMatch(/^repository-path · This step's call is blocked/);
+    fireEvent.click(screen.getByRole("button", { name: "Retry this call" }));
+    expect(onCommand).toHaveBeenCalledWith({ verb: "recovery-retry", groupId: "r", expectedRevision: 3, payload: { scope: "run", runId: "run-7" } });
+  });
+
+  it("offers Retry, and no Stop, on a stopped requirement whose round is still drafting", () => {
+    const view = drafting();
+    const onCommand = mount({ ...view, summary: { ...view.summary, stopMode: "handoff", stopState: "handoff-complete" } });
+    expect(screen.getByRole("alert").textContent).toMatch(/Stopped; no call is made until Retry lifts the stop\./);
+    expect(screen.queryByRole("button", { name: "Stop" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(onCommand).toHaveBeenCalledWith({ verb: "recovery-retry", groupId: "r", expectedRevision: 3, payload: { scope: "group", groupId: "r" } });
+  });
+});

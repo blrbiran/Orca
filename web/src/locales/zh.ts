@@ -381,6 +381,9 @@ export const zh: Translation<typeof en> = {
     export: "导出：{{state}}",
     exportCommit: "提交 {{commit}}",
     retry: "重试",
+    stopped: "已停止；点“重试”解除停止之前不会发起调用。",
+    blockedRun: "这一步的调用受阻；“重试这次调用”会重新执行受阻的那一步。",
+    retryRun: "重试这次调用",
     raiseLimit: "调高上限",
     reason: {
       "clarify-output-invalid": "这一轮模型的输出连续三次不合格。",

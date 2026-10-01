@@ -282,6 +282,18 @@ function taskCompletion(store: ControlStore, groupId: string, plan: ReturnType<t
   return { done, total: plan.tasks.length };
 }
 
+/**
+ * Final review finding 4: the requirement's own call (a clarify or split run, never a work run of the group it became)
+ * that the driver blocked, with its reason; null when there is none.
+ */
+function blockedRequirementRun(store: ControlStore, groupId: string): RequirementSummaryV1["blockedRun"] {
+  for (const row of store.db.prepare("SELECT id,body FROM runs WHERE group_id=? AND active=1 ORDER BY rowid").all(groupId)) {
+    const run = JSON.parse(String(row.body)) as { phase?: string; state?: string; drive?: { blockedReason?: string | null } };
+    if (run.phase === "single-call" && run.state === "blocked") return { runId: String(row.id), reason: run.drive?.blockedReason ?? null };
+  }
+  return null;
+}
+
 /** N1 spec §11.2: a requirement's state in one line (the summary); null round/draft fields before the first of each. */
 export function requirementSummaryOf(store: ControlStore, groupId: string): RequirementSummaryV1 {
   const group = readRequirementGroup(store, groupId);
@@ -294,6 +306,7 @@ export function requirementSummaryOf(store: ControlStore, groupId: string): Requ
     reasonCode: (group.requirement.consensus === null ? round?.reasonCode : draft?.reasonCode) ?? (group.requirement.export.state === "conflict" ? exportReasonOf(group.requirement.export.detail) : null),
     exportState: group.requirement.export.state,
     used: group.used, reserved: group.reserved, limit: group.limit, usageUnknown: group.ledger.usageUnknown,
+    blockedRun: blockedRequirementRun(store, groupId),
   };
 }
 

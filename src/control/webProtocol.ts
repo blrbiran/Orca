@@ -942,6 +942,9 @@ export const requirementSummarySchema = z.object({
   waiting: z.enum(REQUIREMENT_WAITING).nullable(), reasonCode: nonemptyString.nullable(),
   exportState: z.enum(["not-due", "pending", "done", "conflict"]),
   used: amountSchema, reserved: amountSchema, limit: amountSchema, usageUnknown: z.boolean(),
+  // Final review finding 4: the requirement's call blocked by the driver, and why; the group view refuses a clarifying
+  // group (DR25), so this is where its reason and its run-scoped recovery-retry are shown.
+  blockedRun: z.object({ runId: idSchema, reason: nonemptyString.nullable() }).strict().nullable(),
 }).strict();
 export type RequirementSummaryV1 = z.infer<typeof requirementSummarySchema>;
 

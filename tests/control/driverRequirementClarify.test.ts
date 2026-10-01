@@ -156,3 +156,31 @@ describe("a call while the requirement's usage is unknown (final review finding 
     } finally { await x.dispose(); }
   });
 });
+
+// Final review fix wave, finding 4: a requirement's blocked call is on the requirement summary with its reason, and
+// the documented way out -- recovery-retry on the run -- re-runs the step it was blocked at.
+describe("a blocked requirement call (final review finding 4)", () => {
+  it("shows an A2 repository-path block on the summary, and a run-scoped recovery-retry re-runs A2 to the answer", async () => {
+    const x = await requirementHarness({ answers: [{ purpose: "clarify", output: ROUND_ONE }] });
+    try {
+      const resolve = x.deps.resolveRepository;
+      x.deps.resolveRepository = () => { throw new ControlError("recovery-blocked", "repository-gone"); };
+      await x.until(() => x.runs()[0]?.state === "blocked");
+      const [run] = x.runs();
+      expect(requirementSummaryOf(x.store, "r")).toMatchObject({ roundState: "drafting", waiting: null, reasonCode: null, blockedRun: { runId: run.runId, reason: "repository-path" } });
+      x.deps.resolveRepository = resolve;
+      expect(await x.service.recoveryRetry(x.command("recovery-retry", { scope: "run", runId: run.runId }, { kind: "run", groupId: "r", runId: run.runId }))).toMatchObject({ result: { kind: "recovery-observed", resolved: true } });
+      await x.until(() => x.round(1).state === "awaiting-answers");
+      expect(x.runs()).toEqual([expect.objectContaining({ runId: run.runId, state: "settled-restartable" })]);
+      expect(requirementSummaryOf(x.store, "r").blockedRun).toBeNull();
+    } finally { await x.dispose(); }
+  });
+
+  it("names a run blocked on unknown usage at C the same way", async () => {
+    const x = await requirementHarness({ answers: [{ purpose: "clarify", output: ROUND_ONE, tokens: null }] });
+    try {
+      await x.until(() => x.runs()[0]?.state === "blocked");
+      expect(requirementSummaryOf(x.store, "r").blockedRun).toEqual({ runId: x.runs()[0]!.runId, reason: "requirement-usage-unknown" });
+    } finally { await x.dispose(); }
+  });
+});

@@ -55,6 +55,8 @@ export type RequirementSummaryV1 = {
   reserved: Amount;
   limit: Amount;
   usageUnknown: boolean;
+  /** Final review finding 4: the requirement's call the driver blocked, and why (webProtocol.ts). */
+  blockedRun: { runId: string; reason: string | null } | null;
 };
 
 export type GroupSummaryV1 = {

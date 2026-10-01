@@ -172,7 +172,11 @@ function Detail(props: { view: View; onCommand: (a: ControlAction) => void }): J
   const drafting = step?.state === "drafting";
   // Spec §11.1: recovery-retry re-queues a failed or interrupted round or draft -- one the person stopped carries no reason code.
   const stalled = step?.state === "failed" || step?.state === "interrupted";
-  const retryable = (reason !== null && RETRYABLE.includes(reason)) || stalled;
+  // Final review finding 5: a stop that completed with no call in flight interrupts nothing; recovery-retry lifts it (DR15).
+  const stopped = view.summary.state === "clarifying" && view.summary.stopState === "handoff-complete";
+  const retryable = (reason !== null && RETRYABLE.includes(reason)) || stalled || stopped;
+  // Final review finding 4: the step's call blocked by the driver, retried on its run.
+  const blockedRun = view.summary.requirement?.blockedRun ?? null;
   const exportState = view.requirement.export.state;
   return (
     <article aria-label={view.requirement.slug ?? groupId}>
@@ -190,7 +194,13 @@ function Detail(props: { view: View; onCommand: (a: ControlAction) => void }): J
       </section>
       {(reason !== null || retryable) && (
         <p role="alert">{reason !== null && <>{reason}{isReason(reason) ? ` · ${t(`requirements.reason.${reason}`, { groupId })}` : ""} </>}
+          {stopped && <>{t("requirements.stopped")} </>}
           {retryable && <button type="button" onClick={() => props.onCommand({ verb: "recovery-retry", groupId, expectedRevision: revisionOf(view), payload: { scope: "group", groupId } })}>{t("requirements.retry")}</button>}
+        </p>
+      )}
+      {blockedRun !== null && (
+        <p role="alert">{blockedRun.reason !== null && <>{blockedRun.reason} · </>}{t("requirements.blockedRun")}{" "}
+          <button type="button" onClick={() => props.onCommand({ verb: "recovery-retry", groupId, expectedRevision: revisionOf(view), payload: { scope: "run", runId: blockedRun.runId } })}>{t("requirements.retryRun")}</button>
         </p>
       )}
       {reason === BUDGET_EXHAUSTED && <RaiseLimit view={view} onCommand={props.onCommand} />}
@@ -203,7 +213,7 @@ function Detail(props: { view: View; onCommand: (a: ControlAction) => void }): J
             {r.answers?.map((a) => <p key={a.id}>{a.id}: {a.text}</p>)}
           </details>
         ))}
-        {drafting && <p role="status">{t("requirements.drafting")} <button type="button" onClick={() => props.onCommand({ verb: "handoff-stop", groupId, expectedRevision: revisionOf(view), payload: {} })}>{t("requirements.stop")}</button></p>}
+        {drafting && view.summary.stopState === null && <p role="status">{t("requirements.drafting")} <button type="button" onClick={() => props.onCommand({ verb: "handoff-stop", groupId, expectedRevision: revisionOf(view), payload: {} })}>{t("requirements.stop")}</button></p>}
         {view.requirement.consensus === null && round !== null && ["answered", "awaiting-answers", "failed", "interrupted"].includes(round.state) && valid.length > 0 && <Consensus view={view} round={round} onCommand={props.onCommand} />}
       </section>
       {view.drafts.map((d) => <DraftReview key={d.draftNo} view={view} draft={d} onCommand={props.onCommand} />)}

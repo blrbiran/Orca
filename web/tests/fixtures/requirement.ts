@@ -61,7 +61,7 @@ export function requirementView(state: RequirementFixtureState): RequirementView
     roundNo: last.roundNo, roundState: last.state, openQuestions: last.state === "awaiting-answers" ? 2 : 0,
     draftNo: drafts.at(-1)?.draftNo ?? null, draftState: drafts.at(-1)?.state ?? null, waiting: null,
     reasonCode: state === "failed" ? "clarify-output-invalid" : null, exportState: "not-due",
-    used: amount(120_000), reserved: amount(0), limit: amount(10_000_000), usageUnknown: false,
+    used: amount(120_000), reserved: amount(0), limit: amount(10_000_000), usageUnknown: false, blockedRun: null,
   };
   return {
     schema: "orca-requirement-view-v1", epoch: "e-1", changeSeq: 7,

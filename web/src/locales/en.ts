@@ -477,6 +477,9 @@ export const en = {
     export: "Export: {{state}}",
     exportCommit: "Commit {{commit}}",
     retry: "Retry",
+    stopped: "Stopped; no call is made until Retry lifts the stop.",
+    blockedRun: "This step's call is blocked; Retry this call runs the blocked step again.",
+    retryRun: "Retry this call",
     raiseLimit: "Raise the limit",
     reason: {
       "clarify-output-invalid": "The model's answers for this round were invalid three times.",
