@@ -15,7 +15,7 @@ import {
   INSPECT_UNKNOWN_LIMIT, advance, archiveAdmission, collectInto, describeError, driverRunIds, groupRepoId, portFor, readDriverRun,
   readStartEnvelope, saveDriverRun, savedReport, stepC, write, type DriverContext, type DriverRun, type ExecutionDriverDeps,
 } from "./executionDriver.js";
-import type { ExecutionPort, ExecutionReport, ExecutionStatus } from "./executionPort.js";
+import type { ExecutionPort, ExecutionReport, ExecutionStatus, StartEnvelope } from "./executionPort.js";
 import type { PartialSelection } from "./agentSelection.js";
 import type { ControlStore } from "./store.js";
 import type { Candidate } from "./types.js";
@@ -29,6 +29,10 @@ import type { Candidate } from "./types.js";
 
 /** spec §3 (controller decision): how long past a request's deadline nothing at all may arrive before outcome-unknown. */
 export const HANDOFF_EXTRA_GRACE_MS = 60_000;
+
+/** ccloop consolidation step 1 (ccloop src/runtime/claude/claudeAgentAdapter.ts, PARTIAL_FLUSH_MARGIN_MS): ccloop waits this past the recovery window before it kills an execute. */
+export const PARTIAL_FLUSH_MARGIN_MS = 5_000;
+const usableMs = (v: unknown): v is number => typeof v === "number" && Number.isSafeInteger(v) && v >= 0;
 
 const stopDeps = (deps: ExecutionDriverDeps) => ({ store: deps.store, profileRouter: deps.router });
 const nowMs = (deps: ExecutionDriverDeps): number => (deps.now ?? (() => new Date()))().getTime();
@@ -205,17 +209,33 @@ function settleEstimateUnderStop(deps: ExecutionDriverDeps, run: DriverRun, requ
  * "counts 0" above is no longer true: an unusable value now counts 60_000, the ceiling the frozen slot allows
  * (webProtocol.ts frozenSlotSchema, killGraceMs max 60_000). Falling back to the floor was not fail closed -- too
  * short a grace calls a stop unknown while ccloop may still be finishing it; too long a grace only delays that call.
+ *
+ * *** ERRATUM (ccloop consolidation step 1, 2026-10-01, Orca session be653b22, ruling R5) ***
+ * "ccloop waits killGraceMs before it kills a phase" above is no longer true for execute: ccloop now waits
+ * max(killGraceMs, partialOutcomeRecoveryWindowMs + PARTIAL_FLUSH_MARGIN_MS) before it kills one. The grace is that
+ * bound plus HANDOFF_EXTRA_GRACE_MS, the window read from the run's frozen contract (recoveryWindowOf; 0 before a
+ * start envelope exists). An unusable window counts as the ceiling grace, 120_000, as an unusable killGraceMs does
+ * (ccloop docs/superpowers/specs/2026-10-01-claude-adapter-consolidation-step1-design.md §6, §11).
  */
-export function handoffGraceMsOf(run: { killGraceMs?: unknown }): number {
-  const value = run.killGraceMs;
-  const killGraceMs = typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : 60_000;
-  return killGraceMs + HANDOFF_EXTRA_GRACE_MS;
+export function handoffGraceMsOf(run: { killGraceMs?: unknown }, recoveryWindowMs: unknown): number {
+  if (!usableMs(recoveryWindowMs)) return 120_000;
+  const killGraceMs = usableMs(run.killGraceMs) ? run.killGraceMs : 60_000;
+  return Math.max(killGraceMs, recoveryWindowMs + PARTIAL_FLUSH_MARGIN_MS) + HANDOFF_EXTRA_GRACE_MS;
 }
 
-/** spec §3 grace (controller decision): past deadline + killGraceMs + 60 s with nothing collected. */
+/** The frozen contract's partialOutcomeRecoveryWindowMs; 0 for a single call (it has no execute to stop). */
+export function recoveryWindowOf(envelope: StartEnvelope): unknown {
+  if (envelope.work.kind !== "loop") return 0;
+  const contract = envelope.work.contract as { executionPolicy?: { partialOutcomeRecoveryWindowMs?: unknown } } | null;
+  return contract?.executionPolicy?.partialOutcomeRecoveryWindowMs;
+}
+
+/** spec §3 grace (controller decision): past deadline + killGraceMs + 60 s with nothing collected. *** ERRATUM (ccloop consolidation step 1, 2026-10-01, Orca session be653b22, ruling R5) *** the bound is handoffGraceMsOf with the frozen recovery window. */
 async function settleIfPastGrace(deps: ExecutionDriverDeps, run: DriverRun, request: HandoffRequestBody): Promise<boolean> {
   if (request.state === "outcome-unknown") return false;
-  if (nowMs(deps) <= Date.parse(request.deadlineAt) + (deps.handoffGraceMs ?? handoffGraceMsOf({ killGraceMs: run.killGraceMs }))) return false;
+  // ccloop consolidation step 1 (spec §11): no start envelope yet means ccloop never started, so there is no window to wait.
+  const window = run.drive?.envelopeHash == null ? 0 : recoveryWindowOf(readStartEnvelope(deps.store, run));
+  if (nowMs(deps) <= Date.parse(request.deadlineAt) + (deps.handoffGraceMs ?? handoffGraceMsOf({ killGraceMs: run.killGraceMs }, window))) return false;
   return write(deps, () => {
     const current = readHandoffRequest(deps.store, run.groupId, request.requestId).request;
     if (current.state === "outcome-unknown" || !ADOPTABLE_STATES.includes(current.state)) return false;

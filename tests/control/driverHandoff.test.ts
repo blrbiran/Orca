@@ -260,10 +260,12 @@ describe("nothing arrives (spec §3 grace, §11 I3)", { timeout: 60_000 }, () =>
       const deadline = Date.parse(readHandoffRequest(t.h.store, "g", requestId!).request.deadlineAt);
       const killGraceMs = t.body(runId).killGraceMs as number;
       expect(killGraceMs).toBeGreaterThan(0);
-      now = deadline + killGraceMs + HANDOFF_EXTRA_GRACE_MS;
+      // Rewritten (ccloop consolidation step 1, controller ruling under the human's standing instruction of 2026-10-01, Orca session be653b22): the grace now waits the frozen recovery window + PARTIAL_FLUSH_MARGIN_MS when that is longer than killGraceMs.
+      // This harness freezes a recovery window of 30_000, so the grace is max(5_000, 30_000 + 5_000) + 60_000 = 95_000.
+      now = deadline + 95_000;
       await driver.round();
       expect(requestState(t, requestId!)).toBe("collecting");
-      now = deadline + killGraceMs + HANDOFF_EXTRA_GRACE_MS + 1;
+      now = deadline + 95_001;
       await t.until(driver, () => requestState(t, requestId!) === "outcome-unknown");
       expect(t.body(runId).state).toBe("accepted");
       expect(readStopIntent(t.h.store, "g")!.state).toBe("handoff-unresolved");
@@ -290,10 +292,12 @@ describe("the grace is the run's own agent killGraceMs plus the fixed minute (sp
       now = deadline + HANDOFF_EXTRA_GRACE_MS + 1;
       await driver.round();
       expect(requestState(t, requestId!)).toBe("collecting");
-      now = deadline + HANDOFF_EXTRA_GRACE_MS + 7_000;
+      // Rewritten (ccloop consolidation step 1, controller ruling under the human's standing instruction of 2026-10-01, Orca session be653b22): the grace now waits the frozen recovery window + PARTIAL_FLUSH_MARGIN_MS when that is longer than killGraceMs.
+      // This harness freezes a recovery window of 30_000, so the grace is max(7_000, 30_000 + 5_000) + 60_000 = 95_000.
+      now = deadline + HANDOFF_EXTRA_GRACE_MS + 35_000;
       await driver.round();
       expect(requestState(t, requestId!)).toBe("collecting");
-      now = deadline + HANDOFF_EXTRA_GRACE_MS + 7_001;
+      now = deadline + HANDOFF_EXTRA_GRACE_MS + 35_001;
       await t.until(driver, () => requestState(t, requestId!) === "outcome-unknown");
     } finally { await t.h.dispose(); }
   });

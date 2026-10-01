@@ -350,9 +350,12 @@ describe("plan files and grace (spec §6.2, §6.6)", () => {
 
   // Orca backlog #13(b), rewritten under the human's 2026-09-29 authorization (session 2f65a729): an unusable frozen
   // killGraceMs counts as the frozen slot's 60 s ceiling, so the grace is 120 s, never the bare fixed extra.
+  // Rewritten under ruling R5 (ccloop docs/superpowers/specs/2026-10-01-claude-adapter-consolidation-step1-design.md
+  // §6, §7.5): with a recovery window of 0 every case keeps its value; a window longer than killGraceMs decides instead.
   it("judges a handoff's grace by the run's frozen killGraceMs plus the fixed extra", () => {
-    expect(handoffGraceMsOf({ killGraceMs: 7_000 })).toBe(7_000 + HANDOFF_EXTRA_GRACE_MS);
-    for (const killGraceMs of [undefined, -1, 1.5, "5000", null]) expect(handoffGraceMsOf({ killGraceMs })).toBe(120_000);
+    expect(handoffGraceMsOf({ killGraceMs: 7_000 }, 0)).toBe(7_000 + HANDOFF_EXTRA_GRACE_MS);
+    for (const killGraceMs of [undefined, -1, 1.5, "5000", null]) expect(handoffGraceMsOf({ killGraceMs }, 0)).toBe(120_000);
+    expect(handoffGraceMsOf({ killGraceMs: 7_000 }, 60_000)).toBe(65_000 + HANDOFF_EXTRA_GRACE_MS);
   });
 
   it("keeps the canonical identity of what it froze (the snapshot hash is over canonical bytes)", async () => {

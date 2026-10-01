@@ -68,7 +68,10 @@ export interface ExecutionDriverDeps {
   beforeCas?: () => Promise<void>;
   /** Handoff delivery spec §3: the clock a request's grace is judged by (tests move it). */
   now?: () => Date;
-  /** Test seam only: overrides handoffGraceMsOf(run) (agent selection spec §6.6: the run's frozen killGraceMs + 60 s). */
+  /**
+   * Test seam only: overrides handoffGraceMsOf(run) (agent selection spec §6.6: the run's frozen killGraceMs + 60 s).
+   * *** ERRATUM (ccloop consolidation step 1, 2026-10-01, Orca session be653b22, ruling R5) *** it overrides handoffGraceMsOf(run, window): max(killGraceMs, frozen recovery window + 5 s) + 60 s.
+   */
   handoffGraceMs?: number;
 }
 
