@@ -3,48 +3,49 @@
   "runId": "orca-dev-be653b22",
   "runtime": "claude-code",
   "sessionRef": "be653b22-f5ae-477b-ad75-30410d593893",
-  "writtenAt": "2026-10-01T10:33:23.651Z",
-  "head": "fd7f87589e8cbcc0363a5be7714778a92605a73b",
+  "writtenAt": "2026-10-01T10:57:17.745Z",
+  "head": "8a8076e2b68d1ee1f0f531689bb8022d338cd224",
   "level": {
     "kind": "reading",
-    "level": 346571,
+    "level": 452649,
     "windowTokens": 1000000,
     "t1": 330000,
     "t2": 450000,
-    "band": 1
+    "band": 2
   },
   "next": [
-    "ccloop consolidation step 1: review Task 1, resume Task 4 (Orca handoff grace) with the ruling on two driverHandoff criteria, then Tasks 2, 3, 5",
-    "step 2 (#4): spec written at ccloop docs/superpowers/specs/2026-10-01-agents-resume-sweep-design.md, plan and implement after step 1",
-    "steps 3 and 4: design from the two surveys (Orca legacy path 56 criteria in 28 files; ccloop old entry ~17 CLI criteria)"
+    "step 3 Task 2 (Orca): retire orca run --adapter-config, migrate the round criteria via runRoundForTest + fake codex frames",
+    "step 2 Task 1 in flight (ccloop: freeze + resume --agents), then step 2 Task 2 (sweep --agents), Task 3 (README, mutations)",
+    "step 4 (ccloop: delete --adapter/--adapter-config) after steps 2 and 3",
+    "final mutation pass + one gate on both repos in fresh clones; final whole-branch reviews; handoffs in Orca/ccloop/ccmem"
   ],
   "open": [
-    "Task 4 blocked on two existing driverHandoff criteria not in R5; controller ruling: rewrite them under the human's standing instruction"
+    "context occupancy past T2 (450k): the human said this session should not consider context size and should finish the planned work; overrun surfaced here and in the final report"
   ],
   "awaitingHuman": [
     {
       "kind": "named-authorization",
-      "what": "review the controller's rulings at the end of the session (criteria rewritten outside R5, step 2-4 designs)"
+      "what": "review controller rulings made under the standing instruction: criteria rewritten outside R5 (driverHandoff x2, agentsRun rows), designs of steps 2-4"
     },
     {
       "kind": "irreversible",
-      "what": "push ccloop, then repin Orca, then push Orca"
+      "what": "push ccloop, then the agent repins Orca, then push Orca"
     }
   ],
   "measurements": [
     {
-      "command": "/usr/bin/git -C /Users/biran/code/skills/loop/ccloop log --oneline -5",
+      "command": "/usr/bin/git -C /Users/biran/code/skills/loop/ccloop log --oneline -12",
       "exitCode": 0,
-      "commit": "fd7f87589e8cbcc0363a5be7714778a92605a73b",
-      "observedAt": "2026-10-01T10:33:23.578Z",
-      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-be653b22-AsOeMT/1.txt"
+      "commit": "8a8076e2b68d1ee1f0f531689bb8022d338cd224",
+      "observedAt": "2026-10-01T10:57:17.669Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-be653b22-iILqQe/1.txt"
     },
     {
-      "command": "/usr/bin/git -C /Users/biran/code/skills/loop/Orca status --short",
+      "command": "/usr/bin/git -C /Users/biran/code/skills/loop/Orca log --oneline -8",
       "exitCode": 0,
-      "commit": "fd7f87589e8cbcc0363a5be7714778a92605a73b",
-      "observedAt": "2026-10-01T10:33:23.608Z",
-      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-be653b22-AsOeMT/2.txt"
+      "commit": "8a8076e2b68d1ee1f0f531689bb8022d338cd224",
+      "observedAt": "2026-10-01T10:57:17.697Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-be653b22-iILqQe/2.txt"
     }
   ]
 }
