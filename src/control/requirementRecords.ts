@@ -1,6 +1,7 @@
 import { z } from "zod";
-import { canonicalBytes } from "./canonicalJson.js";
-import { zero } from "./commands.js";
+import { budgetBalance } from "./budget.js";
+import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
+import { dimensions, zero } from "./commands.js";
 import { ControlError } from "./errors.js";
 import { recordProjectionChange } from "./projectionJournal.js";
 import { amountSchema, canonicalTimestampSchema, idSchema, panelPartialSelectionSchema, safeInteger } from "./schema.js";
@@ -38,9 +39,13 @@ export interface RequirementGroup {
 
 const blocked = (detail: string): never => { throw new ControlError("recovery-blocked", detail); };
 
-/** PR-I5: the one place the clarifying ledger mirror is computed (nothing used or committed; the whole limit is unallocated). */
-export function clarifyingLedger(limit: Amount): Ledger {
-  return { groupLimit: limit, used: zero(), committedRemaining: zero(), explicitUnallocatedReserve: limit, budgetDeficit: zero(), usageUnknown: false };
+/**
+ * PR-I5: the one place the clarifying ledger mirror is computed. At insert nothing is used or committed, so the whole
+ * limit is unallocated; set-limit and usage booking (budget.ts syncRequirementLedger) pass what is used and committed.
+ */
+export function clarifyingLedger(limit: Amount, used: Amount = zero(), reserved: Amount = zero(), usageUnknown = false): Ledger {
+  const { reserve, deficit } = budgetBalance(limit, used, reserved);
+  return { groupLimit: limit, used, committedRemaining: reserved, explicitUnallocatedReserve: reserve, budgetDeficit: deficit, usageUnknown };
 }
 
 /** PR-I5: the one predicate for "this group body carries a requirement block" (a clarifying group, or the plan group it became). */
@@ -82,6 +87,24 @@ export function saveRequirementGroup(store: ControlStore, group: RequirementGrou
   requirementBlockSchema.parse(group.requirement);
   store.db.prepare("UPDATE groups SET body=? WHERE id=?").run(JSON.stringify(group), group.groupId);
   recordProjectionChange(store, [group.groupId]);
+}
+
+/**
+ * N1 spec §11.1: set-limit on a clarifying group edits the reduced ledger. A limit below what is spent and in flight is
+ * refused (group-budget-unavailable). A raise re-queues a call that waited with requirement-budget-exhausted (spec §5.2).
+ */
+export function setRequirementLimit(store: ControlStore, groupId: string, limit: Amount): Amount {
+  const group = readRequirementGroup(store, groupId);
+  if (group.status !== "clarifying") throw new ControlError("group-state-invalid");
+  if (canonicalBytes(limit).equals(canonicalBytes(group.limit))) throw new ControlError("no-op-command");
+  const ledger = clarifyingLedger(limit, group.used, group.reserved, group.ledger.usageUnknown);
+  if (dimensions.some((d) => ledger.budgetDeficit[d] > 0)) throw new ControlError("group-budget-unavailable");
+  group.limit = limit;
+  group.ledger = ledger;
+  saveRequirementGroup(store, group);
+  const waiting = latestDraft(store, groupId)?.waiting ?? latestRound(store, groupId)?.waiting ?? null;
+  if (waiting !== null) queueRequirementCall(store, groupId, `limit-${sha256Canonical(limit).slice(0, 16)}`);
+  return limit;
 }
 
 export function isClarifying(store: ControlStore, groupId: string): boolean {

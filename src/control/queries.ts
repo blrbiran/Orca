@@ -4,6 +4,7 @@ import type { AgentSelection, FrozenSlot } from "./agentSelection.js";
 import { ControlError } from "./errors.js";
 import { recordProjectionChange } from "./projectionJournal.js";
 import { readCanonicalRecord } from "./snapshot.js";
+import { refuseClarifying } from "./requirementRecords.js";
 import {
   amountProvenanceSchema,
   budgetEstimateRequestSchema,
@@ -103,7 +104,10 @@ function parseJson(body: unknown): unknown {
 function readGroupAuthority(store: ControlStore, groupId: string): z.infer<typeof groupAuthoritySchema> {
   const row = store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId);
   if (!row) throw new ControlError("group-not-found");
-  const parsed = groupAuthoritySchema.safeParse(parseJson(row.body));
+  const body = parseJson(row.body);
+  // N1 spec §4.1 (DR6): a clarifying group has no plan, proposal or work items; every reader of them refuses by name.
+  if ((body as { status?: unknown } | null)?.status === "clarifying") throw new ControlError("requirement-not-split");
+  const parsed = groupAuthoritySchema.safeParse(body);
   if (!parsed.success || parsed.data.groupId !== groupId || parsed.data.plan.planHash !== parsed.data.planHash
     || parsed.data.proposal.planHash !== parsed.data.planHash) return recoveryBlocked();
   return parsed.data;
@@ -179,7 +183,11 @@ export type BudgetProposalRecord = z.infer<typeof budgetProposalRecordSchema>;
 
 export function readBudgetProposal(store: ControlStore, groupId: string): BudgetProposalRecord {
   const row = store.db.prepare("SELECT proposal_version,body FROM budget_proposals WHERE group_id=?").get(groupId);
-  if (!row) throw new ControlError("recovery-blocked");
+  if (!row) {
+    // N1 spec §4.1 (DR6): a clarifying group has no proposal row; it is refused by name, not as a broken store.
+    refuseClarifying(store, groupId);
+    throw new ControlError("recovery-blocked");
+  }
   const group = readGroupAuthority(store, groupId);
   const archivedPlan = readArchivedPlan(store, groupId);
   const body = String(row.body);

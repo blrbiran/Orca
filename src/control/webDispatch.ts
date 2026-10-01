@@ -108,8 +108,9 @@ export async function scheduleStart(deps: WebDispatchDeps, command: StartCommand
       const observations = await probeFrozen(profileRouter, bindings, frozenTaskSelections(store, groupTarget(command)));
       degraded = observations.some((observation) => probeBlocksDispatch(observation, snapshot.budgetMode));
     } catch (error) {
-      // profile-changed and the remaining precedence codes are decided by the synchronous walk below.
-      if (!(error instanceof ControlError) || error.code !== "profile-changed") throw error;
+      // profile-changed and the remaining precedence codes are decided by the synchronous walk below; so is
+      // requirement-not-split (N1 spec §4.1, survey S7), so that a clarifying group's refusal is ledgered.
+      if (!(error instanceof ControlError) || (error.code !== "profile-changed" && error.code !== "requirement-not-split")) throw error;
     }
     const outcome = applyWebCommand<CommandResult>(store, {
       rawCommand: command,
@@ -117,6 +118,7 @@ export async function scheduleStart(deps: WebDispatchDeps, command: StartCommand
       apply: (context) => {
         const groupId = groupTarget(command);
         const group = readGroup(store, groupId);
+        if ((group as { status: string }).status === "clarifying") throw new ControlError("requirement-not-split");
         if (group.status !== "ready") throw new ControlError("group-state-invalid");
         const snapshot = readFrozenSnapshot(store, groupId);
         if (group.graphVersion !== snapshot.graphVersion) throw new ControlError("plan-version-conflict");

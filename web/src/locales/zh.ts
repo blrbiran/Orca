@@ -367,7 +367,7 @@ export const zh: Translation<typeof en> = {
     decisionVerdict: { ok: "正常", downgraded: "已降级" },
     correctionKind: { wrong: "错了", not_my_taste: "不合我意", stale: "过时" },
     chainStopCategory: { done: "已完成", blocked: "等人处理", limit: "触达上限", anomaly: "异常" },
-    groupState: { draft: "草稿", ready: "就绪", running: "运行中", review: "待评审", done: "已完成", blocked: "已阻塞" },
+    groupState: { clarifying: "需求讨论中", draft: "草稿", ready: "就绪", running: "运行中", review: "待评审", done: "已完成", blocked: "已阻塞" },
     stopMode: { pause: "暂停", shutdown: "关停", handoff: "交接" },
     stopState: { paused: "已暂停", "handoff-pending": "交接待处理", "handoff-partial": "交接部分完成", "handoff-unresolved": "交接未决", "handoff-complete": "交接完成" },
     workStatus: { draft: "草稿", ready: "就绪", starting: "启动中", "start-unknown": "启动情况未知", active: "进行中", held: "已挂起", continuing: "续跑中", completed: "已完成", blocked: "已阻塞" },

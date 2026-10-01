@@ -13,6 +13,7 @@ import { choosePlanByLabels, loopPlanDefinition } from "../control/loopPlans.js"
 import { recipeExpandsTo } from "../control/loopRecipeCheck.js";
 import { estimateIsStale, readArchivedPlan, readBudgetProposal, readEstimateRecord } from "../control/queries.js";
 import { readCanonicalRecord } from "../control/snapshot.js";
+import { hasRequirementBlock, latestDraft, latestRound, readRequirementGroup, refuseClarifying } from "../control/requirementRecords.js";
 import { effectivePlanTask, workBodyOf } from "../control/taskAmendments.js";
 import type { ControlStore } from "../control/store.js";
 import { agentSelectionSchema, amountSchema, artifactSchema, canonicalTimestampSchema, grantSchema, idSchema, runProgressSchema, safeInteger, type RunProgress } from "../control/schema.js";
@@ -40,20 +41,22 @@ import {
   type GroupViewV1,
   type HandoffRequestViewV1,
   type RecoveryViewV1,
+  type RequirementSummaryV1,
   type RunViewV1,
   type WorkItemProgressV1,
   type WorkItemViewV1,
 } from "../control/webProtocol.js";
 
 const hashSchema = z.string().regex(/^[a-f0-9]{64}$/);
-const groupStateSchema = z.enum(["draft", "ready", "running", "review", "done", "blocked"]);
+const groupStateSchema = z.enum(["clarifying", "draft", "ready", "running", "review", "done", "blocked"]);
 const workStatusSchema = z.enum(["draft", "ready", "running", "done", "blocked", "starting", "start-unknown", "active", "held", "continuing", "completed"]);
 const groupBodySchema = z.object({
   groupId: idSchema,
   graphVersion: safeInteger.positive(),
   status: groupStateSchema,
   stopped: z.boolean(),
-  planHash: hashSchema,
+  // N1 spec §4.1: a clarifying group has no plan yet.
+  planHash: hashSchema.optional(),
   ledger: z.object({
     groupLimit: amountSchema,
     used: amountSchema,
@@ -272,10 +275,27 @@ function taskCompletion(store: ControlStore, groupId: string, plan: ReturnType<t
   return { done, total: plan.tasks.length };
 }
 
+/** N1 spec §11.2: a requirement's state in one line (the summary); null round/draft fields before the first of each. */
+export function requirementSummaryOf(store: ControlStore, groupId: string): RequirementSummaryV1 {
+  const group = readRequirementGroup(store, groupId);
+  const round = latestRound(store, groupId), draft = latestDraft(store, groupId);
+  const openQuestions = round !== null && round.state === "awaiting-answers" && round.result !== null ? round.result.questions.length : 0;
+  return {
+    roundNo: round?.roundNo ?? null, roundState: round?.state ?? null, openQuestions,
+    draftNo: draft?.draftNo ?? null, draftState: draft?.state ?? null,
+    waiting: (group.requirement.consensus === null ? round?.waiting : draft?.waiting) ?? null,
+    reasonCode: (group.requirement.consensus === null ? round?.reasonCode : draft?.reasonCode) ?? (group.requirement.export.state === "conflict" ? "requirement-export-conflict" : null),
+    exportState: group.requirement.export.state,
+    used: group.used, reserved: group.reserved, limit: group.limit, usageUnknown: group.ledger.usageUnknown,
+  };
+}
+
 export function readGroupSummary(store: ControlStore, groupId: string): GroupSummaryV1 {
   const body = groupBody(store, groupId);
-  const archived = readArchivedPlan(store, groupId);
-  readBudgetProposal(store, groupId);
+  // N1 spec §4.1, §11.2: a clarifying group is summarised without a plan or a proposal, and without a completion.
+  const clarifying = body.status === "clarifying";
+  const archived = clarifying ? null : readArchivedPlan(store, groupId);
+  if (!clarifying) readBudgetProposal(store, groupId);
   const versions = store.db.prepare("SELECT revision,projection_seq FROM groups WHERE id=?").get(groupId);
   if (!versions) throw new ControlError("group-not-found");
   const stop = stopView(store, groupId, body.stopped);
@@ -289,7 +309,8 @@ export function readGroupSummary(store: ControlStore, groupId: string): GroupSum
     stopState: stop?.state ?? null,
     claimBlocked: blockers.length > 0,
     recoveryBlockerCount: blockers.length,
-    completion: taskCompletion(store, groupId, archived.plan),
+    ...(archived === null ? {} : { completion: taskCompletion(store, groupId, archived.plan) }),
+    ...(hasRequirementBlock(body as { requirement?: unknown }) ? { requirement: requirementSummaryOf(store, groupId) } : {}),
   };
   const parsed = groupSummarySchema.safeParse(summary);
   if (!parsed.success) return blocked(`group-summary:${parsed.error.issues[0]?.message ?? "invalid"}`);
@@ -723,6 +744,8 @@ function handoffViews(store: ControlStore, groupId: string): HandoffRequestViewV
 }
 
 export function readControlGroup(store: ControlStore, epoch: string, groupId: string): GroupViewV1 {
+  // N1 spec §4.1 (DR25): the group view reads a plan; a clarifying group has its own view (requirement view).
+  refuseClarifying(store, groupId);
   const body = groupBody(store, groupId);
   const archived = readArchivedPlan(store, groupId);
   const proposal = readBudgetProposal(store, groupId);

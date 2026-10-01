@@ -10,6 +10,7 @@ import { readGroup, readWork, saveGroup, saveWork, allWork, readBudgetProposal, 
 import { canonicalBytes } from "./canonicalJson.js";
 import { recordProjectionChange } from "./projectionJournal.js";
 import { releaseCommitment, setAllocationStates } from "./stopIntent.js";
+import { clarifyingLedger } from "./requirementRecords.js";
 export interface RunRecord extends Claim, RunView {
   remaining:Grant; cumulative:Grant; highWater:number;
   unknown:{work:boolean;handoff:boolean};breaches:number[];
@@ -65,18 +66,29 @@ export function isTerminalRunState(state:string):boolean {
 }
 /** Synchronize Web projections inside the existing usage transaction. */
 export function syncWebBudget(store:ControlStore,group:GroupRecord,currentRun:RunRecord):void {
+  // N1 spec §4.1 (DR18, plan F3): a clarifying group keeps the Web ledger mirror without a proposal.
+  if((group as {status?:string}).status==="clarifying"){syncRequirementLedger(store,group,currentRun);return;}
   if(!("planHash" in group))return;
   const proposal=readBudgetProposal(store,group.groupId),{reserve,deficit}=budgetBalance(group.limit,group.used,group.reserved);
-  let usageUnknown=false;
-  for(const row of store.db.prepare("SELECT id,body FROM runs WHERE group_id=?").all(group.groupId)){
-    const run=String(row.id)===currentRun.runId?currentRun:JSON.parse(String(row.body)) as RunRecord;
-    if(!run.unknown||run.unknown.work||run.unknown.handoff||store.db.prepare("SELECT seq FROM usage_events WHERE run_id=? AND seq>?").get(run.runId,run.highWater))usageUnknown=true;
-  }
+  const usageUnknown=groupUsageUnknown(store,group.groupId,currentRun);
   Object.assign(group,{ledger:{groupLimit:group.limit,used:group.used,committedRemaining:group.reserved,explicitUnallocatedReserve:reserve,budgetDeficit:deficit,usageUnknown}});
   proposal.explicitUnallocatedReserve=reserve;
   const allocation=proposal.allocations.find(a=>a.ownerKind==="reserve");
   if(!allocation)throw new ControlError("recovery-blocked");allocation.amount=reserve;
   store.db.prepare("UPDATE budget_proposals SET body=? WHERE group_id=?").run(canonicalBytes(proposal).toString("utf8"),group.groupId);
+}
+/** Any run of the group with unknown or not-yet-applied usage makes the group's usage unknown. */
+function groupUsageUnknown(store:ControlStore,groupId:string,currentRun:RunRecord):boolean {
+  let usageUnknown=false;
+  for(const row of store.db.prepare("SELECT id,body FROM runs WHERE group_id=?").all(groupId)){
+    const run=String(row.id)===currentRun.runId?currentRun:JSON.parse(String(row.body)) as RunRecord;
+    if(!run.unknown||run.unknown.work||run.unknown.handoff||store.db.prepare("SELECT seq FROM usage_events WHERE run_id=? AND seq>?").get(run.runId,run.highWater))usageUnknown=true;
+  }
+  return usageUnknown;
+}
+/** N1 spec §4.1 (DR18): the clarifying group's ledger mirror after a usage booking (PR-I5: clarifyingLedger computes it). */
+export function syncRequirementLedger(store:ControlStore,group:GroupRecord,currentRun:RunRecord):void {
+  Object.assign(group,{ledger:clarifyingLedger(group.limit,group.used,group.reserved,groupUsageUnknown(store,group.groupId,currentRun))});
 }
 export function componentMin(a:Amount,b:Amount):Amount {
   return {tokens:Math.min(a.tokens,b.tokens),activeMs:Math.min(a.activeMs,b.activeMs),attempts:Math.min(a.attempts,b.attempts),sessions:Math.min(a.sessions,b.sessions)};

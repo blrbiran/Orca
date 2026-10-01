@@ -41,9 +41,25 @@ export type ControlConfigV1 = {
   errorCatalog: Array<{ code: string; status: number }>;
 };
 
+/** N1 spec §11.2: the requirement line of the summary (webProtocol.ts requirementSummarySchema, field for field). */
+export type RequirementSummaryV1 = {
+  roundNo: number | null;
+  roundState: null | "drafting" | "awaiting-answers" | "answered" | "interrupted" | "failed";
+  openQuestions: number;
+  draftNo: number | null;
+  draftState: null | "drafting" | "awaiting-review" | "accepted" | "rejected" | "invalid" | "interrupted" | "failed";
+  waiting: null | "requirement-budget-exhausted";
+  reasonCode: string | null;
+  exportState: "not-due" | "pending" | "done" | "conflict";
+  used: Amount;
+  reserved: Amount;
+  limit: Amount;
+  usageUnknown: boolean;
+};
+
 export type GroupSummaryV1 = {
   groupId: string;
-  state: "draft" | "ready" | "running" | "review" | "done" | "blocked";
+  state: "clarifying" | "draft" | "ready" | "running" | "review" | "done" | "blocked";
   commandRevision: number;
   projectionSeq: number;
   stopMode: null | "pause" | "shutdown" | "handoff";
@@ -52,6 +68,8 @@ export type GroupSummaryV1 = {
   recoveryBlockerCount: number;
   /** Labels and progress spec §4.1: tasks done out of the plan's tasks. Optional so literal fixtures need no edit. */
   completion?: { done: number; total: number };
+  /** N1 spec §11.2: present on a group that carries a requirement block. */
+  requirement?: RequirementSummaryV1;
 };
 
 export type ControlSummaryV1 = {

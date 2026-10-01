@@ -124,7 +124,9 @@ function recordInconsistency(store: ControlStore, groupId: string, shutdownId: s
  * Whether a driver exists at all is the caller's `exemptDriverRuns`.
  */
 function driverOwnedGroup(store: ControlStore, groupId: string): boolean {
-  const group = JSON.parse(String(store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId)!.body)) as { planHash?: string };
+  const group = JSON.parse(String(store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId)!.body)) as { planHash?: string; status?: string };
+  // N1 DR17 (plan F11): a clarifying group is the driver's -- its calls are collected after a restart, never frozen by one.
+  if (group.status === "clarifying") return true;
   return group.planHash !== undefined
     && store.db.prepare("SELECT 1 FROM scheduler_wakes WHERE group_id=? AND kind='start'").get(groupId) !== undefined;
 }

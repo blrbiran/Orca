@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { agentSelectionSchema, amountSchema, canonicalTimestampSchema, commandEnvelopeSchema, contextWindowSchema, idSchema, panelPartialSelectionSchema, partialSelectionSchema, safeInteger } from "./schema.js";
 import { nonEmptyStoredLabelsSchema, storedLabelsSchema } from "./labels.js";
+import { DRAFT_STATES, ROUND_STATES } from "./requirementSchemas.js";
 import { LOOP_PLAN_IDS, loopInputsSchema, loopRecipeSchema } from "./loopPlans.js";
 // Agent selection spec §12 I10 (plan-review P18): the selection/context/partial schemas are T7's, defined once
 // in schema.ts; webProtocol.ts re-exports them so every downstream import can come from one wire module.
@@ -888,10 +889,20 @@ export const controlConfigSchema = z
     requireSortedUnique(value.errorCatalog, (entry) => entry.code, ctx, ["errorCatalog"]);
   });
 
+// N1 spec §11.2: the requirement line of the summary, on the existing 2-second changeSeq pull. Tool-reported numbers only.
+export const requirementSummarySchema = z.object({
+  roundNo: positiveSafeInteger.nullable(), roundState: z.enum(ROUND_STATES).nullable(), openQuestions: safeInteger,
+  draftNo: positiveSafeInteger.nullable(), draftState: z.enum(DRAFT_STATES).nullable(),
+  waiting: z.literal("requirement-budget-exhausted").nullable(), reasonCode: nonemptyString.nullable(),
+  exportState: z.enum(["not-due", "pending", "done", "conflict"]),
+  used: amountSchema, reserved: amountSchema, limit: amountSchema, usageUnknown: z.boolean(),
+}).strict();
+export type RequirementSummaryV1 = z.infer<typeof requirementSummarySchema>;
+
 export const groupSummarySchema = z
   .object({
     groupId: idSchema,
-    state: z.enum(["draft", "ready", "running", "review", "done", "blocked"]),
+    state: z.enum(["clarifying", "draft", "ready", "running", "review", "done", "blocked"]),
     commandRevision: positiveSafeInteger,
     projectionSeq: positiveSafeInteger,
     stopMode: z.enum(["pause", "shutdown", "handoff"]).nullable(),
@@ -901,6 +912,8 @@ export const groupSummarySchema = z
     // Labels and progress spec §4.1 (§8 R14, R19): tasks done out of the plan's tasks. Optional on the wire so older
     // fixtures still parse; the server always gives it. The group view's `summary` is this same object (finding F7).
     completion: z.object({ done: safeInteger, total: safeInteger }).strict().optional(),
+    // N1 spec §11.2: present on every group that carries a requirement block (a clarifying group, or the one it became).
+    requirement: requirementSummarySchema.optional(),
   })
   .strict();
 

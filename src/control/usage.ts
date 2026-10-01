@@ -33,7 +33,8 @@ export function recordUsage(store:ControlStore,event:UsageEvent):{applied:boolea
         run.cumulative[next.bucket]=next.cumulative;run.unknown[next.bucket]=false;
         if(dimensions.some(k=>next.cumulative![k]>run.grant[next.bucket][k])) {
           run.breaches.push(next.eventSeq);
-          if("planHash" in group)group.status="blocked";else group.stopped=true;
+          // N1 DR18: on a clarifying group the claim-time fit is the cap; a breach is recorded on the run only.
+          if((group as {status?:string}).status!=="clarifying"){if("planHash" in group)group.status="blocked";else group.stopped=true;}
         }
       }
       run.highWater=next.eventSeq;

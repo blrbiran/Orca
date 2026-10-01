@@ -12,6 +12,7 @@ import { ControlError } from "./errors.js";
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { applyWebCommand } from "./commandLedger.js";
 import { idSchema, safeInteger } from "./schema.js";
+import { refuseClarifying } from "./requirementRecords.js";
 import {
   commandSuccess,
   groupCommandTarget,
@@ -208,6 +209,8 @@ export function applyResumeFromHandoff(deps: ContinuationDeps, command: ResumeFr
       expand: () => ({ ...command, schema: "orca-authority-command-v1" }),
       apply: context => {
         const groupId = groupCommandTarget(command);
+        // N1 spec §4.1 (survey S11): a clarifying group has no task run to continue.
+        refuseClarifying(store, groupId);
         const intent = readStopIntent(store, groupId);
         if (intent?.mode === "pause") throw new ControlError("stop-mode-conflict");
         if (groupStopState(store, groupId) !== "handoff-complete") throw new ControlError("group-state-invalid");
@@ -236,6 +239,8 @@ export function applyContinueTask(deps: ContinuationDeps, command: ContinueTaskC
       apply: context => {
         if (command.target.kind !== "task") throw new ControlError("control-target-not-allowed");
         const { groupId, taskId } = command.target;
+        // N1 spec §4.1 (survey S12): nor any task.
+        refuseClarifying(store, groupId);
         const group = readGroupBody(store, groupId);
         if (group.stopped || readStopIntent(store, groupId) !== null) throw new ControlError("group-stopped");
         const registered = registerContinuation(store, groupId, { taskId, ...command.payload }, context.nextCommandRevision);

@@ -11,6 +11,7 @@ import { writeCanonicalRecord } from "./snapshot.js";
 import { rearmFailedContinuation } from "./continuation.js";
 import { resumeBlockedDriverRun } from "./driveRecord.js";
 import { singleCallPurposeOf } from "./singleCall.js";
+import { refuseClarifying } from "./requirementRecords.js";
 import { dispatchEnvelopeSchema, type CapabilityViewV1, type CommandErrorBodyV1, type CommandSuccessV1, type RawAuthorityCommandV1 } from "./webProtocol.js";
 import { idSchema, safeInteger, canonicalTimestampSchema } from "./schema.js";
 import type { Amount, HandoffRequest } from "./types.js";
@@ -330,6 +331,8 @@ export function applyPauseDispatch(deps: StopDeps, command: PauseCommand): StopC
       expand: () => ({ ...command, schema: "orca-authority-command-v1" }),
       apply: context => {
         const groupId = groupCommandTarget(command);
+        // N1 spec §4.1 (survey S8): a clarifying group has no dispatch to pause.
+        refuseClarifying(store, groupId);
         const existing = readStopIntent(store, groupId);
         if (existing) throw new ControlError(existing.mode === "pause" ? "stop-already-active" : "stop-mode-conflict");
         const group = readGroupBody(store, groupId);
@@ -386,6 +389,8 @@ export function applyResumeDispatch(deps: StopDeps, command: ResumeDispatchComma
       expand: () => ({ ...command, schema: "orca-authority-command-v1" }),
       apply: context => {
         const groupId = groupCommandTarget(command);
+        // N1 spec §4.1 (survey S10): nor any to resume.
+        refuseClarifying(store, groupId);
         const existing = readStopIntent(store, groupId);
         if (existing?.mode !== "pause") throw new ControlError("stop-mode-conflict");
         const group = readGroupBody(store, groupId);

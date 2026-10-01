@@ -244,6 +244,8 @@ export function importControlPlan(deps: ImportDeps, command: ImportCommand): Imp
     },
     apply: context => {
       const payload = context.effectiveCommand.payload as ImportDefaults & { groupId: string; repoId: string; planId: string };
+      // N1 plan F8: an id that names any group -- a clarifying one included -- is refused by name, not by SQLite.
+      if (deps.store.db.prepare("SELECT id FROM groups WHERE id=?").get(payload.groupId)) throw new ControlError("group-already-exists");
       const target = deps.trustedConfig.resolveTarget({ repoId: payload.repoId, planId: payload.planId });
       const source = readSchedulerControlPlanSource(target);
       const plan = normalizeControlPlan({ ...source, repoId: payload.repoId, planId: payload.planId });

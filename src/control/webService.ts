@@ -30,6 +30,7 @@ import type { ControlStore } from "./store.js";
 import type { BudgetEstimateV1, CommandLookupV1, CommandSuccessV1, EffectiveProposalEditPayload, RawAuthorityCommandV1, ProfileBindingV1 } from "./webProtocol.js";
 import type { AdmissionGate } from "./admissionGate.js";
 import { budgetBalance } from "./budget.js";
+import { refuseClarifying, setRequirementLimit } from "./requirementRecords.js";
 
 export type ProposalEditCommand = Extract<RawAuthorityCommandV1, { verb: "proposal-edit" }>;
 export type ReestimateCommand = Extract<RawAuthorityCommandV1, { verb: "estimate" }>;
@@ -539,7 +540,10 @@ export class WebControlService {
     return this.mutate(() => applyWebCommand(this.store, {
       rawCommand: command, expand: () => ({ ...command, schema: "orca-authority-command-v1" }),
       apply: context => {
-        const id = groupId(command), group = readWebGroup(this.store, id), proposal = readBudgetProposal(this.store, id);
+        const id = groupId(command), group = readWebGroup(this.store, id);
+        // N1 spec §11.1 (survey S6): before any proposal read, which a clarifying group does not have.
+        if (group.status === "clarifying") return success(context, { kind: "limit-set", limit: setRequirementLimit(this.store, id, command.payload.limit) });
+        const proposal = readBudgetProposal(this.store, id);
         if (!["ready", "running", "review"].includes(group.status)) throw new ControlError("group-state-invalid");
         const limit = command.payload.limit;
         if (same(limit, group.limit)) throw new ControlError("no-op-command");
@@ -564,6 +568,8 @@ export class WebControlService {
       rawCommand: command, expand: () => ({ ...command, schema: "orca-authority-command-v1" }),
       apply: context => {
         const id = groupId(command), taskId = command.target.taskId;
+        // N1 spec §4.1 (survey S14): a clarifying group has no work items to label.
+        refuseClarifying(this.store, id);
         readWebGroup(this.store, id);
         const row = this.store.db.prepare("SELECT body FROM work_items WHERE group_id=? AND id=?").get(id, taskId);
         const work = row ? JSON.parse(String(row.body)) as Record<string, unknown> : null;
