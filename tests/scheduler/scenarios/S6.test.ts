@@ -4,7 +4,7 @@ import { runTask } from "../../../src/scheduler/ccloopRunner.js";
 import { buildGraph } from "../../../src/scheduler/graph.js";
 import { disposition, harvest, sameLayerWriteSets } from "../../../src/scheduler/harvest.js";
 import { allocateRunId } from "../../../src/scheduler/runId.js";
-import { headOf, makeSandbox, seedTasks, writeScriptedConfig } from "../sandbox.js";
+import { headOf, makeSandbox, seedTasks, writeScriptedConfig, agentsFor } from "../sandbox.js";
 
 describe("S6 (spec §7.3 direction one, second tier: out of bounds but disjoint)", () => {
   it("S6: out-of-bounds writes that touch nobody else land anyway, with a boundary decision", async () => {
@@ -45,10 +45,7 @@ describe("S6 (spec §7.3 direction one, second tier: out of bounds but disjoint)
 
       const t1 = plan.tasks[0];
       const runId = await allocateRunId(s.runsDir, "T1", await readFile(t1.contract), base);
-      const run = await runTask(plan, t1, base, runId, {
-        adapter: "scripted",
-        adapterConfig: await writeScriptedConfig(s, "T1", [{}]),
-      });
+      const run = await runTask(plan, t1, base, runId, await agentsFor(s, await writeScriptedConfig(s, "T1", [{}])));
       expect(run.outcome).toBe("succeeded");
 
       const r = await harvest(run, base, graph.writeSets.get("T1")!);

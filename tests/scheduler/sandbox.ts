@@ -5,12 +5,19 @@
 // that could pick up state left behind by a previous test run.
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { main } from "../../src/cli.js";
+import type { AgentSelection } from "../../src/control/agentSelection.js";
+import { createCcloopExecutionPort } from "../../src/control/ccloopPort.js";
+import { disposeWorkdir, runTask } from "../../src/scheduler/ccloopRunner.js";
 import type { PlanFile } from "../../src/scheduler/planFile.js";
+import { loadRound, runPreparedRound } from "../../src/scheduler/run.js";
+import type { RoundExecution } from "../../src/scheduler/run.js";
+import { allocateRunId } from "../../src/scheduler/runId.js";
+import { KILL_GRACE_MS, versionOf } from "../control/fixtures/ccloopWorld.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -265,8 +272,119 @@ export async function runChecksOnBranch(repo: string, branch: string, checks: st
 // scheduler scenario pay a process-startup cost for no behavioural gain, since
 // nothing about `plan`'s zero-side-effect claim depends on it being a
 // separate OS process.
+//
+// Consolidation step 3 (2026-10-01, Orca session be653b22, controller ruling C-2): `orca run` no longer exists.
+// `["run", ...]` is routed to runRoundForTest below, so the round criteria keep their call sites exactly as they
+// were -- `runCli(["run", plan, "--adapter-config", frames, ...flags])` -- and what they assert about the round is
+// untouched. The argument parsing is `runRun`'s, moved here; `--adapter-config` now names the frames file
+// writeScriptedConfig writes. Everything else still goes to `main`.
 export async function runCli(argv: string[]): Promise<number> {
-  return main(argv);
+  if (argv[0] !== "run") return main(argv);
+  const args = argv.slice(1);
+  const positional = args.filter((a) => !a.startsWith("--"));
+  const flagValue = (name: string): string | undefined => {
+    const index = args.indexOf(name);
+    return index === -1 ? undefined : args[index + 1];
+  };
+  const consumed = new Set([flagValue("--adapter-config"), flagValue("--adapter")]);
+  const planPath = positional.find((a) => !consumed.has(a));
+  if (!planPath) {
+    process.stderr.write("runCli run: no plan path\n");
+    return 1;
+  }
+  const adapter = flagValue("--adapter");
+  if (adapter !== undefined && adapter !== "scripted") {
+    process.stderr.write(`orca run: unknown adapter ${JSON.stringify(adapter)}\n`);
+    return 1;
+  }
+  return runRoundForTest(planPath, {
+    framesPath: flagValue("--adapter-config"),
+    verbose: args.includes("--verbose"),
+    keepWorkdirs: args.includes("--keep-workdirs"),
+    serial: args.includes("--serial"),
+  });
+}
+
+/** The agents table and the selection runTask's agents form takes (src/scheduler/ccloopRunner.ts). */
+export interface AgentsForTest {
+  agentsTable: string;
+  agentSelection: { selection: AgentSelection; configHash: string };
+}
+
+/**
+ * Consolidation step 3 (C-2): the agents table whose one codex installation is the ccloop checkout's own fake codex
+ * (`tests/fixtures/fake-codex.mjs`, next to the `dist/cli.js` `ccloopBin` names) in its `frames` mode, playing the
+ * frames file writeScriptedConfig wrote -- the per-attempt frames ccloop's ScriptedAdapter used to play. The
+ * installation shape and the version probe are tests/control/fixtures/ccloopWorld.ts's; the configHash is the one
+ * ccloop itself answers for the selection (`ccloop control capabilities --agents <table>`, through the same port
+ * the control path uses), never a local recomputation.
+ *
+ * Written under a canonical runsDir: ccloop and the port both refuse a table path that is not its own realpath, and
+ * macOS's tmpdir is behind a symlink. The fake's call logs (`codex-marker.json.*`) land beside it.
+ */
+export async function agentsFor(s: { runsDir: string; ccloopBin: string }, framesPath: string): Promise<AgentsForTest> {
+  const dir = await realpath(s.runsDir);
+  const fakeCodex = resolve(dirname(s.ccloopBin), "..", "tests", "fixtures", "fake-codex.mjs");
+  const command = [process.execPath, fakeCodex, "frames", join(dir, "codex-marker.json"), framesPath];
+  const agentsTable = join(dir, "agents.json");
+  await writeFile(agentsTable, JSON.stringify({ schema: "ccloop-agents-table-v1", installations: {
+    codex: { kind: "codex", command, version: versionOf(command), configDir: null, timeoutMs: 120_000, killGraceMs: KILL_GRACE_MS, sandbox: "workspace-write", budgetMode: "soft" },
+  } }), { mode: 0o600 });
+  const port = createCcloopExecutionPort({ binary: s.ccloopBin, agentsTablePath: agentsTable, timeoutMs: 60_000 });
+  const { selection, configHash } = await port.resolveAgent({ agent: "codex" });
+  return { agentsTable, agentSelection: { selection, configHash } };
+}
+
+export interface RoundForTestOptions {
+  /** The frames file (writeScriptedConfig); required to execute, as `--adapter-config` was. */
+  framesPath?: string;
+  verbose?: boolean;
+  keepWorkdirs?: boolean;
+  serial?: boolean;
+  log?: (line: string) => void;
+  logError?: (line: string) => void;
+}
+
+/**
+ * Consolidation step 3 (C-2): the deleted `runRound`'s body, kept as a test harness so the criteria that ran the
+ * round engine end to end against a real ccloop keep doing so. It loads the plan and prints its rejections exactly as
+ * `runRound` did, keeps `runRound`'s guard on a missing agent config in the same place (after the load), and hands
+ * `runPreparedRound` -- the function the control path also calls -- the same no-op preflight / reconcileBudget / land
+ * `runRound` had. The one change is `execute`: `runTask` runs in its `--agents` form, against agentsFor's table.
+ *
+ * `mode` is "legacy" (controller ruling C-5, src/scheduler/run.ts RoundExecution): "controlled" requires an approved
+ * reconciliation grant, which `runRound` never had, so it would change every reconciliation criterion's round.
+ *
+ * The table is built once per round, on the first task that executes, so a round refused before any task runs never
+ * spawns ccloop for it -- as `runRound` never did.
+ */
+export async function runRoundForTest(planPath: string, options: RoundForTestOptions): Promise<number> {
+  const logError = options.logError ?? ((line: string) => process.stderr.write(`${line}\n`));
+  const loaded = await loadRound(planPath);
+  if ("rejections" in loaded) {
+    for (const r of loaded.rejections) logError(`rejected: ${r.code}: ${r.message}`);
+    return 1;
+  }
+  const framesPath = options.framesPath;
+  if (framesPath === undefined) {
+    logError("orca run: --adapter-config <path> is required (ccloop requires one for every adapter)");
+    return 1;
+  }
+  let agents: Promise<AgentsForTest> | undefined;
+  const execution: RoundExecution = {
+    mode: "legacy",
+    preflight: async () => {},
+    execute: async ({ plan, task, base }) => {
+      const runId = await allocateRunId(plan.runsDir, task.taskId, await readFile(task.contract), base);
+      agents ??= agentsFor({ runsDir: plan.runsDir, ccloopBin: plan.ccloopBin }, framesPath);
+      return runTask(plan, task, base, runId, await agents);
+    },
+    dispose: disposeWorkdir,
+    reconcileBudget: async () => undefined,
+    land: async (_plan, _runs, _incoming, perform) => perform(),
+  };
+  const { framesPath: _framesPath, ...runOptions } = options;
+  return runPreparedRound(loaded.round, runOptions, execution);
 }
 
 // Fix round 1, finding 2: the first scenario that needs to assert on what a
@@ -426,31 +544,18 @@ export interface ScriptedFrameSpec {
  * consults the adapter under `verifierType: "agent"`. A half-filled frame
  * would work today and break silently the first time a scenario flips that
  * field, so the fixture stays honest instead of minimal.
+ *
+ * *** ERRATUM (consolidation step 3, 2026-10-01, Orca session be653b22, controller ruling C-2) -- ccloop's
+ * ScriptedAdapter and `--adapter-config` are no longer used here. This writes the frames file of ccloop's fake codex
+ * `frames` mode instead, `{ "*": [frame, ...] }` with the frame spec fields as given; the fake plays frame n on
+ * attempt n (read from the attempt worktree's name, so every ccloop spawn starts at frame 1, as a fresh
+ * ScriptedAdapter did) and exits 3 naming the attempt when there is no frame for it. The complete verification
+ * block is the fake's own default filling (approved true, safeToRetry false, stopSignals []). Name and signature
+ * unchanged; text above kept verbatim. ***
  */
 export async function writeScriptedConfig(s: Sandbox, name: string, frames: ScriptedFrameSpec[]): Promise<string> {
-  const config = {
-    frames: frames.map((frame, index) => ({
-      plan: { summary: `scripted frame ${index + 1}`, primaryTargetPaths: [] },
-      execution: {
-        changedFiles: frame.changedFiles ?? [],
-        diffPatch: "",
-        commandOutputs: [],
-        stdoutStderrLog: "",
-      },
-      verification: {
-        approved: frame.approved ?? true,
-        rejectCategory: "",
-        primaryTargetPaths: [],
-        failingCommand: null,
-        safeToRetry: frame.safeToRetry ?? false,
-        evidence: [],
-        pauseSignals: [],
-        stopSignals: frame.stopSignals ?? [],
-      },
-    })),
-  };
-  const path = join(s.runsDir, `adapter-${name}.json`);
-  await writeFile(path, JSON.stringify(config, null, 2));
+  const path = join(s.runsDir, `frames-${name}.json`);
+  await writeFile(path, JSON.stringify({ "*": frames }, null, 2));
   return path;
 }
 
@@ -559,6 +664,11 @@ export interface RunnablePlan {
  * file, so a single one-frame config gives every task exactly one attempt.
  * The plan file (spec §2.3) has no per-task adapter field to hang anything
  * else on.
+ *
+ * *** ERRATUM (consolidation step 3, 2026-10-01, Orca session be653b22, controller ruling C-2) -- `orca run` is
+ * deleted; `runCli(["run", ...])` reaches runRoundForTest, and `adapterConfig` is the frames file of ccloop's fake
+ * codex (writeScriptedConfig), read afresh by every spawn and indexed by attempt, so the one-frame file still gives
+ * every task exactly one attempt. Text above kept verbatim. ***
  */
 export async function seedRunnablePlan(
   s: Sandbox,

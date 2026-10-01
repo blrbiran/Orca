@@ -229,7 +229,8 @@ export function escalationFilePath(runsDir: string, runId: string): string {
 /**
  * spec §5.4, the whole of it: when the round stops at a merge point and a
  * human has to come back, this is the file they are pointed at (`orca run`
- * prints its path, spec §5.4 / §6.3) — both sides' intent, the conflict
+ * prints its path, spec §5.4 / §6.3; *** ERRATUM (consolidation step 3, 2026-10-01, Orca session be653b22, controller ruling C-1) -- `orca run` is
+ * deleted, `runPreparedRound` prints it ***) — both sides' intent, the conflict
  * blocks, and an executable `undo.how`, none of which the ledger itself can
  * carry: this is a plain markdown file, not a `decision` event, because
  * nothing about "a human needs to look at this" is itself a decision, and

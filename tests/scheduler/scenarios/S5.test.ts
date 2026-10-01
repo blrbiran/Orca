@@ -4,7 +4,7 @@ import { runTask } from "../../../src/scheduler/ccloopRunner.js";
 import { buildGraph } from "../../../src/scheduler/graph.js";
 import { disposition, harvest, sameLayerWriteSets } from "../../../src/scheduler/harvest.js";
 import { allocateRunId } from "../../../src/scheduler/runId.js";
-import { headOf, makeSandbox, seedTasks, writeScriptedConfig } from "../sandbox.js";
+import { headOf, makeSandbox, seedTasks, writeScriptedConfig, agentsFor } from "../sandbox.js";
 
 describe("S5 (spec §6.2 / §7.3: succeeded_but_empty)", () => {
   it("S5: a task ccloop calls succeeded but whose tree equals the base does not land", async () => {
@@ -37,10 +37,7 @@ describe("S5 (spec §6.2 / §7.3: succeeded_but_empty)", () => {
 
       const t1 = plan.tasks[0];
       const runId = await allocateRunId(s.runsDir, "T1", await readFile(t1.contract), base);
-      const run = await runTask(plan, t1, base, runId, {
-        adapter: "scripted",
-        adapterConfig: await writeScriptedConfig(s, "T1", [{}]),
-      });
+      const run = await runTask(plan, t1, base, runId, await agentsFor(s, await writeScriptedConfig(s, "T1", [{}])));
       // The premise of the whole scenario: ccloop is happy. If this ever
       // stopped being `succeeded` the scenario would be measuring something
       // else entirely.

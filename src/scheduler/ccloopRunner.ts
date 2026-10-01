@@ -57,25 +57,10 @@ interface RunTaskCommonOptions {
    * with stdout and stderr written to `ccloop.stdout.log` / `ccloop.stderr.log` (created 0600) in this
    * directory instead of pipes, and unref'd -- so it outlives the process that spawned it, which a restarted
    * caller then waits on by pid. Unset (`orca run`): attached and piped, exactly as before.
+   * *** ERRATUM (consolidation step 3, 2026-10-01, Orca session be653b22, controller ruling C-1) -- `orca run` is
+   * deleted; unset is now the test harness's round (tests/scheduler/sandbox.ts runRoundForTest). Text above kept. ***
    */
   detachedLogDir?: string;
-}
-
-/** `orca run` (the legacy scheduler): `ccloop run --adapter <a> --adapter-config <file>`, unchanged by agent selection. */
-export interface AdapterRunTaskOptions extends RunTaskCommonOptions {
-  /**
-   * G13 / spec §1.2 rule 6: v1 runs entirely on `scripted` and spends no model
-   * money. Passed rather than defaulted so the choice is visible at each call
-   * site instead of being a constant buried here.
-   */
-  adapter: "scripted" | "claude" | "codex";
-  /**
-   * ccloop's `--adapter-config`, which it requires for both adapters. The plan
-   * file's shape (spec §2.3) has no field for it and this task does not invent
-   * one, so the caller supplies it; where it comes from in a real `orca run`
-   * is a decision that belongs to the orchestration task, not to this module.
-   */
-  adapterConfig: string;
 }
 
 /**
@@ -88,7 +73,11 @@ export interface AgentsRunTaskOptions extends RunTaskCommonOptions {
   agentSelection: { selection: AgentSelection; configHash: string };
 }
 
-export type RunTaskOptions = AdapterRunTaskOptions | AgentsRunTaskOptions;
+/**
+ * Consolidation step 3 (2026-10-01, Orca session be653b22, controller ruling C-1): the agents form is the only one.
+ * The `--adapter <a> --adapter-config <file>` form `orca run` used is deleted with `orca run`.
+ */
+export type RunTaskOptions = AgentsRunTaskOptions;
 
 /** The selection file's name inside a run's workdir. */
 export const AGENT_SELECTION_FILE = "agent-selection.json";
@@ -324,15 +313,10 @@ export async function runTask(
   await writeFile(contractPath, JSON.stringify(rewritten, null, 2));
 
   await mkdir(loopDir, { recursive: true });
-  let agentArgs: string[];
-  if ("agentsTable" in options) {
-    const selectionPath = join(workdir, AGENT_SELECTION_FILE);
-    // "wx": the workdir is this run's alone, so an existing file is someone else's and is not overwritten.
-    await writeFile(selectionPath, JSON.stringify(options.agentSelection), { mode: 0o600, flag: "wx" });
-    agentArgs = ["--agents", options.agentsTable, "--agent-selection", selectionPath];
-  } else {
-    agentArgs = ["--adapter", options.adapter, "--adapter-config", options.adapterConfig];
-  }
+  const selectionPath = join(workdir, AGENT_SELECTION_FILE);
+  // "wx": the workdir is this run's alone, so an existing file is someone else's and is not overwritten.
+  await writeFile(selectionPath, JSON.stringify(options.agentSelection), { mode: 0o600, flag: "wx" });
+  const agentArgs = ["--agents", options.agentsTable, "--agent-selection", selectionPath];
   const spawned = await spawnCcloop(plan.ccloopBin, [
     "run",
     "--contract",
@@ -342,7 +326,7 @@ export async function runTask(
     ...agentArgs,
   ], options.onSpawn, options.detachedLogDir);
 
-  if ("agentsTable" in options && spawned.code === 1) throw new AgentsRunRefused(agentsRunRefusalCode(spawned.stderr), spawned.stderr);
+  if (spawned.code === 1) throw new AgentsRunRefused(agentsRunRefusalCode(spawned.stderr), spawned.stderr);
   const outcome = await readTerminalStatus(loopDir, spawned);
   const attemptSha = await latestAttemptSha(clone, runId);
   return { runId, workdir, outcome, attemptSha };

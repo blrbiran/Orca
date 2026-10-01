@@ -46,6 +46,12 @@ import { allocateRunId, deriveRunId } from "./runId.js";
 import type { ApprovedReconcileBudget } from "./reconcile.js";
 
 export interface RoundExecution {
+  /**
+   * Consolidation step 3 (2026-10-01, Orca session be653b22, controller ruling C-5): `orca run` and `runRound` are
+   * deleted, but "legacy" stays. Its one reader below (`reconcileConflict`) throws for a "controlled" execution that
+   * has no approved reconciliation grant; the test harness's round (tests/scheduler/sandbox.ts runRoundForTest)
+   * reconciles with no grant exactly as `runRound` did, so "legacy" now names that execution and nothing in src/.
+   */
   mode: "legacy" | "controlled";
   preflight(round: Round): Promise<void>;
   execute(input: {plan: PlanFile; task: PlanTask; base: string; kind: "task" | "reconcile"}): Promise<TaskRun>;
@@ -118,6 +124,10 @@ async function resolveBaseSha(repoPath: string, branch: string): Promise<string 
  * drift, and the direction they drift in is the worst one — the picture a
  * person approved stops being the graph that runs. `plan` and `run` are not
  * two code paths that agree; they are one function, called twice.
+ *
+ * *** ERRATUM (consolidation step 3, 2026-10-01, Orca session be653b22, controller ruling C-1) -- `orca run` is
+ * deleted; the round this describes now runs through `runPreparedRound` from the control path (and, in tests,
+ * tests/scheduler/sandbox.ts runRoundForTest). Text above kept verbatim. ***
  */
 export interface Round {
   plan: PlanFile;
@@ -185,6 +195,8 @@ export async function loadRound(planPath: string): Promise<{ round: Round } | { 
   // input error there is, printed `Error: ENOENT ... at async loadRound` and
   // exited 3. `rejections` is the shape this function already speaks in, so
   // there is nothing new for a caller to handle.
+  // *** ERRATUM (consolidation step 3, 2026-10-01, Orca session be653b22, controller ruling C-1) -- `runRound` is deleted; loadRound is
+  // called by `orca plan`, the control path and the test harness (tests/scheduler/sandbox.ts runRoundForTest). ***
   const contracts = new Map<string, unknown>();
   const contractRejections: PlanRejection[] = [];
   for (const task of plan.tasks) {
@@ -235,10 +247,6 @@ export interface RunOptions {
   verbose?: boolean;
   /** spec §4.5: keep every task copy, including the successful ones. */
   keepWorkdirs?: boolean;
-  /** G13 / spec §1.2 rule 6: v1 runs entirely on `scripted` and spends no model money. */
-  adapter?: "scripted" | "claude";
-  /** ccloop requires an `--adapter-config` for both adapters; there is no plan-file field for it (§2.3). */
-  adapterConfig?: string;
   /**
    * spec §3.5: turn parallelism off entirely, and turn back on a correct
    * result. This is a v1 CRITERION (S10), not a production scheduling
@@ -621,35 +629,6 @@ type LayerResult = { taskId: string; run: TaskRun } | { taskId: string; error: u
  * at a time within it (§4.3 — "归因免费，不需要二分"; the merge is seconds and
  * the task is minutes, so serialising the cheap half is the right trade).
  */
-export async function runRound(planPath: string, options: RunOptions = {}): Promise<number> {
-  const log = options.log ?? ((line: string) => process.stdout.write(`${line}\n`));
-  const logError = options.logError ?? ((line: string) => process.stderr.write(`${line}\n`));
-
-  const loaded = await loadRound(planPath);
-  if ("rejections" in loaded) {
-    for (const r of loaded.rejections) logError(`rejected: ${r.code}: ${r.message}`);
-    return 1;
-  }
-  const { round } = loaded;
-  if (options.adapterConfig === undefined) {
-    logError("orca run: --adapter-config <path> is required (ccloop requires one for every adapter)");
-    return 1;
-  }
-
-  const execution: RoundExecution = {
-    mode: "legacy",
-    preflight: async () => {},
-    execute: async ({plan, task, base}) => {
-      const runId = await allocateRunId(plan.runsDir, task.taskId, await readFile(task.contract), base);
-      return runTask(plan, task, base, runId, {adapter: options.adapter ?? "scripted", adapterConfig: options.adapterConfig!});
-    },
-    dispose: disposeWorkdir,
-    reconcileBudget: async () => undefined,
-    land: async (_plan, _runs, _incoming, perform) => perform(),
-  };
-  return runPreparedRound(round, options, execution);
-}
-
 export async function runPreparedRound(round: Round, options: RunOptions, execution: RoundExecution): Promise<number> {
   await execution.preflight(round);
   const log = options.log ?? ((line: string) => process.stdout.write(`${line}\n`));

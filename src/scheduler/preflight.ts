@@ -99,6 +99,9 @@ async function porcelainOf(targetRepo: string): Promise<{ output: string } | { u
  * green line for a check `orca plan` never runs. It is a `run`-side up-front
  * rejection, in the same position as the guards on `--adapter-config` and
  * `ledgerMode`, and `orca plan`'s report is left exactly as it was.
+ * *** ERRATUM (consolidation step 3, 2026-10-01, Orca session be653b22, controller ruling C-1) -- `orca run` and its
+ * `--adapter-config` guard are deleted; this rejection is printed by `runPreparedRound`, the round the control path
+ * runs. Text above kept verbatim. ***
  *
  * The question asked is narrower than "is this a repository": it is whether
  * `<targetRepo>/.git` is a directory, which is precisely the condition

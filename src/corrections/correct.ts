@@ -129,6 +129,8 @@ export async function correct(argv: string[], opts: { now?: () => Date } = {}): 
     // 闭-6: the store's critical section (its own lock, inside this one —
     // the order is fixed at repo → store, and `orca run` never takes the
     // store lock, so the two cannot deadlock).
+    // *** ERRATUM (consolidation step 3, 2026-10-01, Orca session be653b22, controller ruling C-1) -- `orca run` is deleted; the
+    // round that takes the repo lock is now `runPreparedRound` (control path), which also never takes the store lock. ***
     let row: Correction;
     if (parsed.mode === "close-existing") {
       row = await loadCorrection(dir, parsed.correctionId);

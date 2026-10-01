@@ -506,6 +506,8 @@ export async function writeTree(copy: string): Promise<string> {
  * Orca handoff delivery spec §5.2 N1 (controller decision; human ruling "parallel is not only two"):
  * the N-ary reconciliation plan. Added beside the two-sided function, which `orca run` keeps using
  * unchanged; with two sides it answers exactly what `planReconciliation(a, b)` answers.
+ * *** ERRATUM (consolidation step 3, 2026-10-01, Orca session be653b22, controller ruling C-1) -- `orca run` is deleted; the two-sided
+ * function is used by `runPreparedRound`'s reconciliation. Text above kept verbatim. ***
  */
 export function planReconciliationOf(sides: readonly unknown[]): ReconciliationPlan {
   if (sides.length < 2) throw new Error(`orca: a reconciliation needs at least two sides, got ${sides.length}`);

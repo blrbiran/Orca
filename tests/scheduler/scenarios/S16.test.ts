@@ -4,7 +4,7 @@ import { runTask } from "../../../src/scheduler/ccloopRunner.js";
 import { buildGraph } from "../../../src/scheduler/graph.js";
 import { harvest } from "../../../src/scheduler/harvest.js";
 import { allocateRunId } from "../../../src/scheduler/runId.js";
-import { headOf, makeSandbox, seedTasks, writeScriptedConfig } from "../sandbox.js";
+import { headOf, makeSandbox, seedTasks, writeScriptedConfig, agentsFor } from "../sandbox.js";
 
 describe("S16 (spec §4.4: a change larger than ten megabytes is not a silent success)", () => {
   it("S16: harvest sees the real net change set of an eleven-megabyte write, not an empty one", async () => {
@@ -46,10 +46,7 @@ describe("S16 (spec §4.4: a change larger than ten megabytes is not a silent su
 
       const t1 = plan.tasks[0];
       const runId = await allocateRunId(s.runsDir, "T1", await readFile(t1.contract), base);
-      const run = await runTask(plan, t1, base, runId, {
-        adapter: "scripted",
-        adapterConfig: await writeScriptedConfig(s, "T1", [{}]),
-      });
+      const run = await runTask(plan, t1, base, runId, await agentsFor(s, await writeScriptedConfig(s, "T1", [{}])));
       expect(run.outcome).toBe("succeeded");
       expect(run.attemptSha).not.toBeNull();
 

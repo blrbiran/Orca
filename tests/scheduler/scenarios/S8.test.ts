@@ -12,6 +12,7 @@ import {
   taskWorkdirs,
   writeFileCheck,
   writeScriptedConfig,
+  agentsFor,
 } from "../sandbox.js";
 
 describe("S8 (spec §6.1: a failed task)", () => {
@@ -44,10 +45,7 @@ describe("S8 (spec §6.1: a failed task)", () => {
 
       const t1 = plan.tasks.find((t) => t.taskId === "T1")!;
       const id1 = await allocateRunId(s.runsDir, "T1", await readFile(t1.contract), base);
-      const r1 = await runTask(plan, t1, base, id1, {
-        adapter: "scripted",
-        adapterConfig: await writeScriptedConfig(s, "T1", [{}, {}]),
-      });
+      const r1 = await runTask(plan, t1, base, id1, await agentsFor(s, await writeScriptedConfig(s, "T1", [{}, {}])));
       expect(r1.outcome).toBe("failed");
 
       const route = routeOutcome(graph, "T1", r1.outcome);
@@ -63,10 +61,7 @@ describe("S8 (spec §6.1: a failed task)", () => {
 
       const t3 = plan.tasks.find((t) => t.taskId === "T3")!;
       const id3 = await allocateRunId(s.runsDir, "T3", await readFile(t3.contract), base);
-      const r3 = await runTask(plan, t3, base, id3, {
-        adapter: "scripted",
-        adapterConfig: await writeScriptedConfig(s, "T3", [{}]),
-      });
+      const r3 = await runTask(plan, t3, base, id3, await agentsFor(s, await writeScriptedConfig(s, "T3", [{}])));
       expect(r3.outcome).toBe("succeeded");
 
       // Fix round 1, finding 4: an assertion that T2 has no run directory used

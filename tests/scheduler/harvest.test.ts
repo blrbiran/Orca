@@ -5,7 +5,7 @@ import { disposition, harvest } from "../../src/scheduler/harvest.js";
 import { allocateRunId } from "../../src/scheduler/runId.js";
 import type { ClaimedPath } from "../../src/scheduler/writeSet.js";
 import { writeSetOf } from "../../src/scheduler/writeSet.js";
-import { allRefShas, headOf, makeSandbox, seedTasks, writeScriptedConfig } from "./sandbox.js";
+import { allRefShas, headOf, makeSandbox, seedTasks, writeScriptedConfig, agentsFor } from "./sandbox.js";
 
 const NO_SIBLINGS = new Map<string, ClaimedPath[]>();
 
@@ -46,10 +46,7 @@ describe("harvest (spec §7.2: C measures the change set itself)", () => {
       ]);
       const t1 = plan.tasks[0];
       const runId = await allocateRunId(s.runsDir, "T1", await readFile(t1.contract), base);
-      const run = await runTask(plan, t1, base, runId, {
-        adapter: "scripted",
-        adapterConfig: await writeScriptedConfig(s, "T1", [{ changedFiles: ["ccloop-said-this.txt"] }]),
-      });
+      const run = await runTask(plan, t1, base, runId, await agentsFor(s, await writeScriptedConfig(s, "T1", [{ changedFiles: ["ccloop-said-this.txt"] }])));
       expect(run.outcome).toBe("succeeded");
 
       const r = await harvest(run, base, await declaredOf(t1.contract));
@@ -96,13 +93,10 @@ describe("harvest (spec §7.2: C measures the change set itself)", () => {
       ]);
       const t1 = plan.tasks[0];
       const runId = await allocateRunId(s.runsDir, "T1", await readFile(t1.contract), base);
-      const run = await runTask(plan, t1, base, runId, {
-        adapter: "scripted",
-        adapterConfig: await writeScriptedConfig(s, "T1", [
+      const run = await runTask(plan, t1, base, runId, await agentsFor(s, await writeScriptedConfig(s, "T1", [
           { approved: false, safeToRetry: true },
           { approved: true },
-        ]),
-      });
+        ])));
       expect(run.outcome).toBe("succeeded");
 
       // Guards the fixture, and it is the whole criterion's premise: on a
@@ -156,10 +150,7 @@ describe("harvest (spec §7.2: C measures the change set itself)", () => {
       ]);
       const t1 = plan.tasks[0];
       const runId = await allocateRunId(s.runsDir, "T1", await readFile(t1.contract), base);
-      const run = await runTask(plan, t1, base, runId, {
-        adapter: "scripted",
-        adapterConfig: await writeScriptedConfig(s, "T1", [{ changedFiles: ["forbidden.txt"] }]),
-      });
+      const run = await runTask(plan, t1, base, runId, await agentsFor(s, await writeScriptedConfig(s, "T1", [{ changedFiles: ["forbidden.txt"] }])));
       expect(run.outcome).toBe("blocked_waiting_human");
       expect(run.attemptSha).toBeNull();
 
@@ -195,10 +186,7 @@ describe("harvest (spec §7.2: C measures the change set itself)", () => {
       ]);
       const t1 = plan.tasks[0];
       const runId = await allocateRunId(s.runsDir, "T1", await readFile(t1.contract), base);
-      const run = await runTask(plan, t1, base, runId, {
-        adapter: "scripted",
-        adapterConfig: await writeScriptedConfig(s, "T1", [{}]),
-      });
+      const run = await runTask(plan, t1, base, runId, await agentsFor(s, await writeScriptedConfig(s, "T1", [{}])));
       expect(run.outcome).toBe("succeeded");
 
       const r = await harvest(run, base, await declaredOf(t1.contract));

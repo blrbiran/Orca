@@ -108,6 +108,8 @@ function checkLine(code: string, rejections: PlanRejection[], evaluated: boolean
  * apart into two implementations. Pure by construction: everything it needs
  * is already computed by loadPlan/buildGraph before this is called, so it
  * only ever formats — no filesystem, no git, no spawn.
+ * *** ERRATUM (consolidation step 3, 2026-10-01, Orca session be653b22, controller ruling C-1) -- `orca run` is deleted; the
+ * other caller is `runPreparedRound`, which prints this report before a round executes. Text above kept verbatim. ***
  */
 export function renderPlanReport(
   g: TaskGraph & PlanGraphExtras,

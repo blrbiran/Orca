@@ -17,6 +17,7 @@ import {
   refSha,
   writeContract,
   writeScriptedConfig,
+  agentsFor,
   type ContractSpec,
   type Sandbox,
   type ScriptedFrameSpec,
@@ -33,11 +34,11 @@ async function spawnOne(
   base: string,
 ): Promise<{ run: TaskRun; plan: PlanFile; task: PlanTask; contractPath: string }> {
   const contractPath = await writeContract(s, taskId, contractSpec);
-  const adapterConfig = await writeScriptedConfig(s, taskId, frames);
+  const agents = await agentsFor(s, await writeScriptedConfig(s, taskId, frames));
   const task: PlanTask = { taskId, contract: contractPath, dependsOn: [] };
   const plan = await planThatSpawns(s, [task]);
   const runId = await allocateRunId(s.runsDir, taskId, await readFile(contractPath), base);
-  const run = await runTask(plan, task, base, runId, { adapter: "scripted", adapterConfig });
+  const run = await runTask(plan, task, base, runId, agents);
   return { run, plan, task, contractPath };
 }
 
@@ -143,6 +144,10 @@ describe("ccloopRunner (spec §4.3 steps 2-3, §6.1)", () => {
     // spec §0.1 forbids. The fixture points ccloopBin at a script that exits
     // non-zero having written nothing, which is what a ccloop that died on
     // its own argument parsing looks like from here.
+    // *** ERRATUM (consolidation step 3, 2026-10-01, Orca session be653b22, controller ruling C-6) -- runTask has only
+    // its `--agents` form now, where exit 1 is ccloop's refusal and is reported as AgentsRunRefused without looking
+    // for a loop state. The stub therefore exits 2 -- ccloop's "ran, did not succeed" -- having written nothing,
+    // which is the case this criterion is about; what it asserts is unchanged. Text above kept verbatim. ***
     const s = await makeSandbox();
     try {
       const base = await headOf(s.targetRepo);
@@ -151,13 +156,13 @@ describe("ccloopRunner (spec §4.3 steps 2-3, §6.1)", () => {
         targetPaths: ["a.txt"],
         requiredChecks: ["true"],
       });
-      const adapterConfig = await writeScriptedConfig(s, "T1", [{}]);
+      const agents = await agentsFor(s, await writeScriptedConfig(s, "T1", [{}]));
       const task: PlanTask = { taskId: "T1", contract: contractPath, dependsOn: [] };
       const plan = { ...(await planThatSpawns(s, [task])), ccloopBin: join(s.root, "exploding-ccloop.mjs") };
-      await writeFile(plan.ccloopBin, 'process.stderr.write("boom\\n");\nprocess.exit(1);\n');
+      await writeFile(plan.ccloopBin, 'process.stderr.write("boom\\n");\nprocess.exit(2);\n');
       const runId = await allocateRunId(s.runsDir, "T1", await readFile(contractPath), base);
 
-      await expect(runTask(plan, task, base, runId, { adapter: "scripted", adapterConfig })).rejects.toThrow(
+      await expect(runTask(plan, task, base, runId, agents)).rejects.toThrow(
         /loop-state\.json/,
       );
     } finally {
@@ -183,7 +188,7 @@ describe("ccloopRunner (spec §4.3 steps 2-3, §6.1)", () => {
         targetPaths: ["a.txt"],
         requiredChecks: ["true"],
       });
-      const adapterConfig = await writeScriptedConfig(s, "T1", [{}]);
+      const agents = await agentsFor(s, await writeScriptedConfig(s, "T1", [{}]));
       const task: PlanTask = { taskId: "T1", contract: contractPath, dependsOn: [] };
       const plan = { ...(await planThatSpawns(s, [task])), ccloopBin: join(s.root, "half-finished-ccloop.mjs") };
       await writeFile(
@@ -199,7 +204,7 @@ describe("ccloopRunner (spec §4.3 steps 2-3, §6.1)", () => {
       );
       const runId = await allocateRunId(s.runsDir, "T1", await readFile(contractPath), base);
 
-      await expect(runTask(plan, task, base, runId, { adapter: "scripted", adapterConfig })).rejects.toThrow(
+      await expect(runTask(plan, task, base, runId, agents)).rejects.toThrow(
         /non-terminal status "executing"/,
       );
     } finally {
@@ -220,11 +225,11 @@ describe("ccloopRunner (spec §4.3 steps 2-3, §6.1)", () => {
         targetPaths: ["a.txt"],
         requiredChecks: ["true"],
       });
-      const adapterConfig = await writeScriptedConfig(s, "T1", [{}]);
+      const agents = await agentsFor(s, await writeScriptedConfig(s, "T1", [{}]));
       const task: PlanTask = { taskId: "T1", contract: contractPath, dependsOn: [] };
       const plan = await planThatSpawns(s, [task]);
 
-      await expect(runTask(plan, task, base, "", { adapter: "scripted", adapterConfig })).rejects.toThrow(
+      await expect(runTask(plan, task, base, "", agents)).rejects.toThrow(
         /non-empty run id/,
       );
       expect(existsSync(cloneDirOf(s.runsDir))).toBe(false);

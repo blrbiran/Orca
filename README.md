@@ -7,11 +7,10 @@ plan of tasks over ccloop (a sibling repository), reconciles their results
 against a shared work branch, and records every scheduling and reconciliation
 choice it makes into an append-only decision ledger (`.decisions/*.jsonl`).
 
-## `orca plan` and `orca run`
+## `orca plan`
 
 ```
 orca plan <path> [--verbose]
-orca run <path> --adapter-config <path> [--adapter scripted|claude] [--keep-workdirs] [--serial] [--verbose]
 ```
 
 `orca plan` reads a plan file, computes every task's write set, builds the
@@ -20,16 +19,8 @@ layers, and any up-front rejections. It touches nothing in the target
 repository beyond read-only git calls (`git rev-parse`, `git status
 --porcelain`) — no branch is created, no commit is made, no ref moves.
 
-`orca run` prints that exact same report first (`plan` is not a second
-implementation of `run`'s front half — it *is* that front half, so the two
-can never drift apart), then actually executes: it spawns ccloop once per
-task, harvests and reconciles each result, lands what can be landed onto the
-work branch, and reports the round's outcome. `--serial` turns all
-parallelism off (a v1 correctness criterion, not a performance knob) so a
-serial run's result can be checked against a parallel one on the same plan.
-`--keep-workdirs` keeps every task's copy on disk, including the successful
-ones, instead of deleting only the successful ones once their result has
-landed.
+Rounds run through the panel (`orca panel`) and its control path; `orca plan`
+previews a round.
 
 ### The plan file's shape
 
@@ -97,7 +88,7 @@ task.
 Three more are runtime checks — a read-only `git rev-parse` or `git status
 --porcelain` against the target repository, which does not count as
 "touching" it, so `orca plan` evaluates these for real too, not just
-`orca run`:
+a running round:
 
 | Code | Meaning |
 |---|---|
@@ -109,7 +100,7 @@ A plan file that fails to parse at all (malformed JSON, or the wrong shape)
 is reported as `malformed` and is not one of these — it means there is no
 plan to evaluate them against yet.
 
-Any rejection, plan-level or runtime, makes both `orca plan` and `orca run`
+Any rejection, plan-level or runtime, makes `orca plan` and a round
 exit 1 (spec §9.3). A *warning* — a plan that is legal but fully serial, say
 — does not affect the exit code.
 
@@ -122,7 +113,7 @@ order **3 > 2 > 1 > 0**:
 - **0** — nothing failed and nothing needed a human. The round completed
   cleanly.
 - **1** — the round was refused before it started: an unreadable or
-  malformed plan file, a missing `--adapter-config`, an unimplemented
+  malformed plan file, an unimplemented
   `ledgerMode`, a repository lock that could not be acquired (another `orca`
   process already holds it), or any of the up-front rejections above.
 - **2** — an ordinary failure, or a decision that was still safe to make on
@@ -210,7 +201,7 @@ ledger.
   cherry-pick or on a detached HEAD, or any other named rejection — the
   message says which.
 - **3** — an exception nobody anticipated (the same top-level handler `orca
-  plan`/`orca run` share).
+  plan` uses).
 - **4** — another `orca` process holds the target repository's lock;
   transient, retry later.
 - **5** — the ledger rows landed on disk and were staged, but the commit
@@ -218,8 +209,8 @@ ledger.
   `--close` command to finish just the commit, without writing the rows a
   second time.
 
-This scale is `orca correct`'s own — it does not reuse `orca plan`/`orca
-run`'s 0/1/2/3. `orca validate` has a separate scale of its own too: 0 (all
+This scale is `orca correct`'s own — it does not reuse `orca plan`'s and
+a round's 0/1/2/3. `orca validate` has a separate scale of its own too: 0 (all
 ledger files ok), 1 (a file was rejected or none were found), and 2 (a
 decision was downgraded to tier 0 — legal, but not an agent's to decide).
 

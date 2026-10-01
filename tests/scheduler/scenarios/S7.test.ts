@@ -14,6 +14,7 @@ import {
   seedTasks,
   writeFileCheck,
   writeScriptedConfig,
+  agentsFor,
 } from "../sandbox.js";
 
 describe("S7 (spec §7.3 direction one, first tier: out of bounds and intersecting)", () => {
@@ -57,10 +58,7 @@ describe("S7 (spec §7.3 direction one, first tier: out of bounds and intersecti
 
       const t1 = plan.tasks[0];
       const runId = await allocateRunId(s.runsDir, "T1", await readFile(t1.contract), base);
-      const run = await runTask(plan, t1, base, runId, {
-        adapter: "scripted",
-        adapterConfig: await writeScriptedConfig(s, "T1", [{}]),
-      });
+      const run = await runTask(plan, t1, base, runId, await agentsFor(s, await writeScriptedConfig(s, "T1", [{}])));
       expect(run.outcome).toBe("succeeded");
 
       const r = await harvest(run, base, graph.writeSets.get("T1")!);

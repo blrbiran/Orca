@@ -12,7 +12,7 @@ import { levelHookClaudeCode } from "./level/hook.js";
 import { gateHookClaudeCode } from "./gate/hook.js";
 import { validateFile } from "./ledger/validateFile.js";
 import { preflight } from "./scheduler/preflight.js";
-import { loadRound, renderRound, runRound } from "./scheduler/run.js";
+import { loadRound, renderRound } from "./scheduler/run.js";
 import { applyCompaction, dryRunCompaction, renderCompactionReport } from "./panel/compactReviews.js";
 import { buildLedgerViews, wantedDecisions } from "./panel/ledgerViews.js";
 import { reviewsFile } from "./panel/paths.js";
@@ -28,10 +28,6 @@ const USAGE = `usage:
   orca validate <path...>        validate ledger file(s) or directory (directory scans top-level *.jsonl only)
   orca check-append-only         read a git diff from stdin, reject if it contains any deleted line
   orca plan <path> [--verbose]   print the plan's write sets, conflicts, and layering; execute nothing
-  orca run <path> --adapter-config <path> [--adapter scripted|claude] [--keep-workdirs] [--serial] [--verbose]
-                                 print the same report, then run every task and land it on the work branch
-                                 (--serial: spec §3.5 — turn parallelism off entirely; a v1 criterion, not
-                                 a performance knob)
   orca correct --decision <run-id>/<n> --kind wrong|not_my_taste|stale --because <text>
                [--repo <path>] [--by <who>] [--again]
                [--chose-instead <text> --undo-how <text> [--undo-cost <text>] [--undo-blast-radius <text>]]
@@ -225,6 +221,8 @@ async function runPlan(args: string[]): Promise<number> {
   // → validate → compute write sets → build the graph → layer it" would drift,
   // and the drift's direction is the worst one: the picture a person approved
   // stops being the graph that runs.
+  // *** ERRATUM (consolidation step 3, 2026-10-01, Orca session be653b22, controller ruling C-1) -- `orca run` is
+  // deleted; loadRound and renderRound are now the calls the control path's `runPreparedRound` round makes. ***
   const loaded = await loadRound(planPath);
   if ("rejections" in loaded) {
     for (const r of loaded.rejections) {
@@ -256,37 +254,6 @@ async function runPlan(args: string[]): Promise<number> {
   // still gets the report on stdout.
   if (preflightReport.rejections.length > 0) return 1;
   return 0;
-}
-
-async function runRun(args: string[]): Promise<number> {
-  const positional = args.filter((a) => !a.startsWith("--"));
-  const flagValue = (name: string): string | undefined => {
-    const index = args.indexOf(name);
-    return index === -1 ? undefined : args[index + 1];
-  };
-  // The flag values are positional arguments too, so they have to come off
-  // the positional list before the plan path is picked out of it — otherwise
-  // `orca run --adapter-config cfg.json plan.json` runs cfg.json as the plan.
-  const consumed = new Set([flagValue("--adapter-config"), flagValue("--adapter")]);
-  const planPath = positional.find((a) => !consumed.has(a));
-  if (!planPath) {
-    process.stderr.write(USAGE);
-    return 1;
-  }
-
-  const adapter = flagValue("--adapter");
-  if (adapter !== undefined && adapter !== "scripted" && adapter !== "claude") {
-    process.stderr.write(`orca run: unknown adapter ${JSON.stringify(adapter)}\n`);
-    return 1;
-  }
-
-  return runRound(planPath, {
-    verbose: args.includes("--verbose"),
-    keepWorkdirs: args.includes("--keep-workdirs"),
-    adapter,
-    adapterConfig: flagValue("--adapter-config"),
-    serial: args.includes("--serial"),
-  });
 }
 
 async function runCorrect(args: string[]): Promise<number> {
@@ -523,10 +490,6 @@ export async function main(argv: string[], stdinText?: string): Promise<number> 
 
   if (command === "plan") {
     return runPlan(rest);
-  }
-
-  if (command === "run") {
-    return runRun(rest);
   }
 
   if (command === "correct") {
