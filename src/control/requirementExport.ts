@@ -1,8 +1,5 @@
 import { createHash } from "node:crypto";
-import { rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import { ControlError } from "./errors.js";
-import { privateDirectory } from "./paths.js";
 import { documentPathOf } from "./requirementDocument.js";
 import { readRequirementGroup, saveRequirementGroup, type RequirementBlock } from "./requirementRecords.js";
 import { readCanonicalRecord } from "./snapshot.js";
@@ -28,8 +25,8 @@ function record(deps: ExportDeps, groupId: string, exported: RequirementBlock["e
 
 /**
  * Every child runs QUIET_GIT (no hook -- reference-transaction included -- and no fsmonitor of the target runs) and is
- * bounded. None of the commands below checks anything out, so no smudge filter can run; hash-object, the one that reads
- * a file, is given --no-filters.
+ * bounded. None of the commands below checks anything out, so no smudge filter can run; hash-object, the one that
+ * converts content, is given --no-filters.
  */
 function exportGit(deps: ExportDeps, repo: string) {
   const timeoutMs = deps.gitTimeoutMs ?? GIT_EXPORT_TIMEOUT_MS;
@@ -38,9 +35,28 @@ function exportGit(deps: ExportDeps, repo: string) {
 type ExportGit = ReturnType<typeof exportGit>;
 const revParse = async (run: ExportGit, rev: string): Promise<string> => (await run(["rev-parse", "--verify", `${rev}^{commit}`])).trim();
 const tipOf = async (run: ExportGit, ref: string): Promise<string | null> => revParse(run, ref).catch(() => null);
-const exists = async (run: ExportGit, commit: string, path: string): Promise<boolean> => {
-  try { await run(["cat-file", "-e", `${commit}:${path}`]); return true; } catch { return false; }
-};
+
+/** One `ls-tree -z` entry, kept as git printed it so that mktree writes it back byte for byte. */
+interface TreeEntry { mode: string; type: string; oid: string; name: string }
+async function listTree(run: ExportGit, tree: string): Promise<TreeEntry[]> {
+  return (await run(["ls-tree", "-z", tree])).split("\0").filter((line) => line.length > 0).map((line) => {
+    const tab = line.indexOf("\t");
+    const [mode, type, oid] = line.slice(0, tab).split(" ") as [string, string, string];
+    return { mode, type, oid, name: line.slice(tab + 1) };
+  });
+}
+/** The entries of directory `name` in `entries`: none when it is absent; a non-directory there is refused, never replaced. */
+async function subtree(run: ExportGit, entries: TreeEntry[], name: string, path: string): Promise<TreeEntry[]> {
+  const entry = entries.find((candidate) => candidate.name === name);
+  if (entry === undefined) return [];
+  if (entry.type !== "tree") throw new Error(`requirement export: ${path} in HEAD is not a directory`);
+  return listTree(run, entry.oid);
+}
+/** `entries` with `entry` put in place of any entry by its name; mktree sorts them as git does. */
+async function makeTree(run: ExportGit, entries: TreeEntry[], entry: TreeEntry): Promise<string> {
+  const all = [...entries.filter((candidate) => candidate.name !== entry.name), entry];
+  return (await run(["mktree", "-z"], { input: all.map((e) => `${e.mode} ${e.type} ${e.oid}\t${e.name}\0`).join("") })).trim();
+}
 
 /** DR21: a commit is this document's when its message carries the hash and it adds exactly one requirement file with these bytes. */
 async function documentCommitPath(run: ExportGit, commit: string, requirement: RequirementBlock): Promise<string | null> {
@@ -53,8 +69,8 @@ async function documentCommitPath(run: ExportGit, commit: string, requirement: R
 }
 
 /**
- * N1 spec §9.2: git plumbing only -- hash-object, a temporary index under Orca's state directory, write-tree,
- * commit-tree on HEAD, and a create-only update-ref of orca/<groupId>. The person's working tree and index are never read
+ * N1 spec §9.2 (as corrected by the controller's ruling on the Task 11 review): git plumbing only -- hash-object and
+ * mktree on stdin, commit-tree on HEAD, and a create-only update-ref of orca/<groupId>. The person's working tree and index are never read
  * or written. A branch that already exists with anything else blocks (requirement-export-conflict) and is never moved.
  */
 export async function exportRequirementDocument(deps: ExportDeps, groupId: string): Promise<"done" | "conflict" | "nothing"> {
@@ -77,40 +93,35 @@ export async function exportRequirementDocument(deps: ExportDeps, groupId: strin
     return "done";
   }
   const head = await revParse(run, "HEAD");
+  // Controller ruling (Task 11 review): no temporary index and nothing written outside the repository. HEAD's three
+  // levels are read with ls-tree, and each changed level is written bottom-up with mktree, every child under the
+  // target's own umask, so the objects get the modes git gives them there.
+  const root = await listTree(run, `${head}^{tree}`);
+  const orca = await subtree(run, root, ".orca", ".orca");
+  const requirements = await subtree(run, orca, "requirements", ".orca/requirements");
+  const names = new Set(requirements.map((entry) => entry.name));
   let suffix = 1;
-  while (await exists(run, head, documentPathOf(requirement.createdOn, requirement.slug, suffix))) suffix += 1;
+  while (names.has(documentPathOf(requirement.createdOn, requirement.slug, suffix).slice(".orca/requirements/".length))) suffix += 1;
   const path = documentPathOf(requirement.createdOn, requirement.slug, suffix);
-  // Spec §13 and §15 item 5: the temporary index and the two scratch files live beside each other under the control
-  // state directory, 0700 / 0600 (PR-I6); a crash leaves them, and the next attempt removes them first.
-  const scratch = privateDirectory(`${deps.store.stateDir}.overview`);
-  const indexFile = join(scratch, `index-${groupId}`), documentFile = join(scratch, `document-${groupId}.md`), messageFile = join(scratch, `message-${groupId}.txt`);
-  const scratchFiles = [indexFile, documentFile, messageFile];
-  try {
-    for (const file of scratchFiles) await rm(file, { force: true });
-    await writeFile(documentFile, text, { mode: 0o600, flag: "wx" });
-    await writeFile(messageFile, `docs(requirements): ${requirement.slug}\n\n${TRAILER}: ${requirement.document.sha256}\n`, { mode: 0o600, flag: "wx" });
-    const blob = (await run(["hash-object", "-w", "--no-filters", "--", documentFile])).trim();
-    const index = { env: { GIT_INDEX_FILE: indexFile }, privateFiles: true };
-    await run(["read-tree", `${head}^{tree}`], index);
-    await run(["update-index", "--add", "--cacheinfo", `100644,${blob},${path}`], index);
-    const tree = (await run(["write-tree"], index)).trim();
-    // DR21: dated at the freeze, so a re-run builds the same commit. commit-tree signs only with -S: a target's
-    // commit.gpgSign is not read (measured on git 2.50.1; the criterion pins that no signing program runs).
-    const at = requirement.document.frozenAt;
-    const commit = (await run(["commit-tree", tree, "-p", head, "-F", messageFile], { env: {
-      GIT_AUTHOR_NAME: "Orca", GIT_AUTHOR_EMAIL: "orca@localhost", GIT_COMMITTER_NAME: "Orca", GIT_COMMITTER_EMAIL: "orca@localhost", GIT_AUTHOR_DATE: at, GIT_COMMITTER_DATE: at,
-    } })).trim();
-    try { await run(["update-ref", ref, commit, ""]); }
-    catch (error) {
-      // Created concurrently: whatever is there now is judged like any existing branch. Any other failure is thrown.
-      if ((await tipOf(run, ref)) === null) throw error;
-      return exportRequirementDocument(deps, groupId);
-    }
-    record(deps, groupId, { state: "done", path, commit, parent: head, detail: null });
-    return "done";
-  } finally {
-    for (const file of scratchFiles) await rm(file, { force: true });
+  const blob = (await run(["hash-object", "-w", "--stdin", "--no-filters"], { input: text })).trim();
+  const requirementsTree = await makeTree(run, requirements, { mode: "100644", type: "blob", oid: blob, name: path.slice(".orca/requirements/".length) });
+  const orcaTree = await makeTree(run, orca, { mode: "040000", type: "tree", oid: requirementsTree, name: "requirements" });
+  const tree = await makeTree(run, root, { mode: "040000", type: "tree", oid: orcaTree, name: ".orca" });
+  // DR21: dated at the freeze, so a re-run builds the same commit. commit-tree signs only with -S: a target's
+  // commit.gpgSign is not read (measured on git 2.50.1; the criterion pins that no signing program runs).
+  const at = requirement.document.frozenAt;
+  const commit = (await run(["commit-tree", tree, "-p", head], {
+    input: `docs(requirements): ${requirement.slug}\n\n${TRAILER}: ${requirement.document.sha256}\n`,
+    env: { GIT_AUTHOR_NAME: "Orca", GIT_AUTHOR_EMAIL: "orca@localhost", GIT_COMMITTER_NAME: "Orca", GIT_COMMITTER_EMAIL: "orca@localhost", GIT_AUTHOR_DATE: at, GIT_COMMITTER_DATE: at },
+  })).trim();
+  try { await run(["update-ref", ref, commit, ""]); }
+  catch (error) {
+    // Created concurrently: whatever is there now is judged like any existing branch. Any other failure is thrown.
+    if ((await tipOf(run, ref)) === null) throw error;
+    return exportRequirementDocument(deps, groupId);
   }
+  record(deps, groupId, { state: "done", path, commit, parent: head, detail: null });
+  return "done";
 }
 
 /** DR14: the driver's pass over undelivered export wakes; the pump has no handler for them, so they wait for the driver. */

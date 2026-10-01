@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { chmodSync, existsSync, lstatSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { chmodSync, existsSync, lstatSync, readFileSync, readdirSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -41,9 +41,8 @@ const human = (x: Harness) => ({ status: x.git("--no-optional-locks", "status", 
   index: createHash("sha256").update(readFileSync(join(x.repo, ".git", "index"))).digest("hex"), tree: tree(x.repo) });
 
 /**
- * A `git` first on PATH that runs the real one and then, for the criterion, records what Orca's scratch files look like
- * after every git child (ORCA_T11_LOG), or plays a concurrent creator of the branch at `update-ref` (ORCA_T11_UPDATE_REF:
- * "race" creates the ref with the same arguments first, "fail" refuses without creating it).
+ * A `git` first on PATH that runs the real one, and plays a concurrent creator of the branch at `update-ref`
+ * (ORCA_T11_UPDATE_REF: "race" creates the ref with the same arguments first, "fail" refuses without creating it).
  */
 async function withGitShim<T>(dir: string, env: Record<string, string>, body: () => Promise<T>): Promise<T> {
   const real = execFileSync("/bin/sh", ["-c", "command -v git"], { encoding: "utf8" }).trim();
@@ -53,15 +52,36 @@ is_update_ref=no
 for a in "$@"; do [ "$a" = update-ref ] && is_update_ref=yes; done
 if [ "$is_update_ref" = yes ] && [ "$ORCA_T11_UPDATE_REF" = race ]; then "${real}" "$@"; fi
 if [ "$is_update_ref" = yes ] && [ "$ORCA_T11_UPDATE_REF" = fail ]; then exit 1; fi
-"${real}" "$@"; rc=$?
-if [ -n "$ORCA_T11_LOG" ]; then for f in "$ORCA_T11_SCRATCH"/index-* "$ORCA_T11_SCRATCH"/document-* "$ORCA_T11_SCRATCH"/message-*; do
-  [ -e "$f" ] && ls -ln "$f" >> "$ORCA_T11_LOG"; done; fi
-exit $rc
+exec "${real}" "$@"
 `);
   chmodSync(join(dir, "git"), 0o755);
   const saved = { ...process.env };
   Object.assign(process.env, env, { PATH: `${dir}:${process.env.PATH ?? ""}` });
   try { return await body(); } finally { for (const key of Object.keys(process.env)) if (!(key in saved)) delete process.env[key]; Object.assign(process.env, saved); }
+}
+
+/**
+ * The tree git's own index builds from the exported commit's parent plus the exported blob at its path -- what the
+ * export built through a temporary index before the controller's ruling. The mktree path must give the same tree id.
+ */
+function indexTree(x: Harness): { built: string; expected: string } {
+  const tip = x.git("rev-parse", "refs/heads/orca/r"), path = readRequirementGroup(x.store, "r").requirement.export.path!;
+  const env = { ...process.env, GIT_INDEX_FILE: join(x.root, "expected-index") };
+  const g = (...args: string[]) => execFileSync("git", ["-c", "core.hooksPath=/dev/null", ...args], { cwd: x.repo, env, encoding: "utf8" }).trim();
+  g("read-tree", `${tip}^^{tree}`);
+  g("update-index", "--add", "--cacheinfo", `100644,${x.git("rev-parse", `${tip}:${path}`)},${path}`);
+  return { built: x.git("rev-parse", `${tip}^{tree}`), expected: g("write-tree") };
+}
+const commitIn = async (x: Harness, files: Record<string, string>) => {
+  for (const [path, content] of Object.entries(files)) { await mkdir(join(x.repo, path, ".."), { recursive: true }); await writeFile(join(x.repo, path), content); }
+  x.git("add", "-A"); x.git("commit", "-qm", "earlier .orca content");
+};
+/** Every entry under `root` with its full st_mode, keyed by its path relative to `root`. */
+function modes(root: string, at = "", into = new Map<string, number>()): Map<string, number> {
+  const stat = lstatSync(join(root, at));
+  if (at !== "") into.set(at, stat.mode);
+  if (stat.isDirectory()) for (const name of readdirSync(join(root, at))) modes(root, at === "" ? name : join(at, name), into);
+  return into;
 }
 
 describe("exporting the requirement document (N1 spec §9.2)", () => {
@@ -79,6 +99,9 @@ describe("exporting the requirement document (N1 spec §9.2)", () => {
       expect(x.git("log", "-1", "--format=%an <%ae>|%cn <%ce>|%s", tip)).toBe("Orca <orca@localhost>|Orca <orca@localhost>|docs(requirements): markdown-export");
       expect(x.git("log", "-1", "--format=%(trailers:key=Orca-Document-Sha256,valueonly)", tip)).toBe(sha);
       expect(readRequirementGroup(x.store, "r").requirement.export).toMatchObject({ state: "done", commit: tip, parent: head });
+      // No .orca in HEAD: both levels are created, and the tree is the one git's index builds.
+      const trees = indexTree(x);
+      expect(trees.built).toBe(trees.expected);
     } finally { await x.dispose(); }
   });
 
@@ -114,6 +137,52 @@ describe("exporting the requirement document (N1 spec §9.2)", () => {
       x.git("add", ".orca"); x.git("commit", "-qm", "an earlier requirement");
       expect(await exportRequirementDocument(exportDeps(x), "r")).toBe("done");
       expect(readRequirementGroup(x.store, "r").requirement.export.path).toBe(`.orca/requirements/${createdOn}-markdown-export-2.md`);
+      const trees = indexTree(x);
+      expect(trees.built).toBe(trees.expected);
+    } finally { await x.dispose(); }
+  });
+});
+
+describe("the tree the export builds, level by level (controller ruling on the Task 11 review)", () => {
+  it("keeps every other entry of a .orca that has no requirements directory", async () => {
+    const { x } = await accepted();
+    try {
+      await commitIn(x, { ".orca/notes.txt": "notes\n", ".orca/deep/x.txt": "x\n" });
+      expect(await exportRequirementDocument(exportDeps(x), "r")).toBe("done");
+      const trees = indexTree(x);
+      expect(trees.built).toBe(trees.expected);
+      expect(x.git("show", "refs/heads/orca/r:.orca/deep/x.txt")).toBe("x");
+    } finally { await x.dispose(); }
+  });
+
+  it("keeps the other documents of an existing requirements directory, and needs no suffix for a new name", async () => {
+    const { x } = await accepted();
+    try {
+      await commitIn(x, { ".orca/requirements/2020-01-01-other.md": "other\n", ".orca/notes.txt": "notes\n" });
+      expect(await exportRequirementDocument(exportDeps(x), "r")).toBe("done");
+      expect(readRequirementGroup(x.store, "r").requirement.export.path).toBe(`.orca/requirements/${readRequirementGroup(x.store, "r").requirement.createdOn}-markdown-export.md`);
+      const trees = indexTree(x);
+      expect(trees.built).toBe(trees.expected);
+      expect(x.git("show", "refs/heads/orca/r:.orca/requirements/2020-01-01-other.md")).toBe("other");
+    } finally { await x.dispose(); }
+  });
+
+  it("refuses a .orca in HEAD that is not a directory, never replacing it, and creates no branch", async () => {
+    const { x } = await accepted();
+    try {
+      await commitIn(x, { ".orca": "a file\n" });
+      await expect(exportRequirementDocument(exportDeps(x), "r")).rejects.toThrow("requirement export: .orca in HEAD is not a directory");
+      expect(() => x.git("rev-parse", "--verify", "-q", "refs/heads/orca/r")).toThrow();
+      expect(readRequirementGroup(x.store, "r").requirement.export.state).toBe("pending");
+    } finally { await x.dispose(); }
+  });
+
+  it("refuses a .orca/requirements in HEAD that is not a directory, and creates no branch", async () => {
+    const { x } = await accepted();
+    try {
+      await commitIn(x, { ".orca/requirements": "a file\n" });
+      await expect(exportRequirementDocument(exportDeps(x), "r")).rejects.toThrow("requirement export: .orca/requirements in HEAD is not a directory");
+      expect(() => x.git("rev-parse", "--verify", "-q", "refs/heads/orca/r")).toThrow();
     } finally { await x.dispose(); }
   });
 });
@@ -143,40 +212,27 @@ describe("the export runs nothing the target configures (N1 spec §15 item 10)",
   it("bounds every git child: past the time cap the export fails, creates no branch and stays pending", async () => {
     const { x } = await accepted();
     try {
-      await expect(exportRequirementDocument({ ...exportDeps(x), gitTimeoutMs: 1 }, "r")).rejects.toThrow();
+      await expect(exportRequirementDocument({ ...exportDeps(x), gitTimeoutMs: 1 }, "r")).rejects.toMatchObject({ killed: true, signal: "SIGKILL" });
       expect(() => x.git("rev-parse", "--verify", "-q", "refs/heads/orca/r")).toThrow();
       expect(readRequirementGroup(x.store, "r").requirement.export.state).toBe("pending");
     } finally { await x.dispose(); }
   });
 });
 
-describe("the export's files outside the repository (controller ruling PR-I6, spec §13)", () => {
-  it("keeps the temporary index and both scratch files 0600 in a 0700 directory after every git child, and removes them", async () => {
+describe("what the export writes (Rule 17; controller ruling on the Task 11 review)", () => {
+  it("writes its objects into the target with the modes git gives them under the target's umask, and nothing outside the repository", async () => {
     const { x } = await accepted();
     const umask = process.umask(0o022);
     try {
-      const scratch = `${x.store.stateDir}.overview`, log = join(x.root, "modes.log");
-      const outcome = await withGitShim(join(x.root, "shim"), { ORCA_T11_LOG: log, ORCA_T11_SCRATCH: scratch }, () => exportRequirementDocument(exportDeps(x), "r"));
-      expect(outcome).toBe("done");
-      const lines = readFileSync(log, "utf8").trim().split("\n");
-      for (const name of ["index-r", "document-r.md", "message-r.txt"]) expect(lines.some((line) => line.endsWith(`/${name}`))).toBe(true);
-      // `ls -l` may follow the permission bits with an extended-attribute or ACL mark (macOS `@`, `+`; SELinux `.`).
-      expect(lines.filter((line) => !/^-rw-------[@+.]? /.test(line))).toEqual([]);
-      expect(statSync(scratch).mode & 0o777).toBe(0o700);
-      expect(readdirSync(scratch).filter((name) => /^(index|document|message)-r/.test(name))).toEqual([]);
-    } finally { process.umask(umask); await x.dispose(); }
-  });
-
-  it("replaces what a crashed attempt left beside the index, and exports", async () => {
-    const { x, text } = await accepted();
-    try {
-      const scratch = `${x.store.stateDir}.overview`;
-      await mkdir(scratch, { recursive: true, mode: 0o700 });
-      for (const name of ["index-r", "document-r.md", "message-r.txt"]) await writeFile(join(scratch, name), "left by a crash\n");
+      const objects = join(x.repo, ".git", "objects");
+      const outside = () => [...modes(x.root).keys()].filter((path) => path !== "repo" && !path.startsWith("repo/")).sort();
+      const before = modes(objects), outsideBefore = outside();
       expect(await exportRequirementDocument(exportDeps(x), "r")).toBe("done");
-      const tip = x.git("rev-parse", "refs/heads/orca/r");
-      expect(x.git("show", `${tip}:${readRequirementGroup(x.store, "r").requirement.export.path}`)).toBe(text.trimEnd());
-    } finally { await x.dispose(); }
+      const created = [...modes(objects)].filter(([path]) => !before.has(path));
+      expect(created.filter(([, mode]) => (mode & 0o170000) === 0o100000).length).toBeGreaterThanOrEqual(4);
+      expect(created.filter(([, mode]) => mode !== ((mode & 0o170000) === 0o040000 ? 0o040755 : 0o100444)).map(([path, mode]) => `${path} ${mode.toString(8)}`)).toEqual([]);
+      expect(outside()).toEqual(outsideBefore);
+    } finally { process.umask(umask); await x.dispose(); }
   });
 });
 
