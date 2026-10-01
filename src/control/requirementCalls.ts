@@ -106,14 +106,19 @@ export async function claimRequirementCall(deps: { store: ControlStore; admissio
 }
 
 /**
- * A2 (spec §6): the overview of HEAD's commit, stored with the group and named on the run, before the prompt is built.
+ * A2 (spec §6): the overview of HEAD's commit, built from the target repository. Only this half is caught by the
+ * handler as `repository-path`: a resolveRepository refusal, or any failure of the build (git, export, cache).
  * Task 5: overview builds are safe only one at a time (the builder sweeps every tmp-* directory). This runs only from
  * the driver's A2 (executionDriver.ts stepA2SingleCall), and the driver's pass visits its runs one after another and a
  * re-entrant round joins the pass in flight (createExecutionDriver), so no two builds overlap.
  */
-async function overviewFor(deps: SingleCallPrepareDeps, run: SingleCallRunRow, group: RequirementGroup) {
+async function buildOverviewFor(deps: SingleCallPrepareDeps, run: SingleCallRunRow, group: RequirementGroup) {
   const repo = deps.resolveRepository(group.requirement.repoId);
-  const built = await buildRepositoryOverview({ repo, repoId: group.requirement.repoId, stateDir: deps.store.stateDir, runId: run.runId, astGrepBin: deps.astGrepBin ?? null });
+  return buildRepositoryOverview({ repo, repoId: group.requirement.repoId, stateDir: deps.store.stateDir, runId: run.runId, astGrepBin: deps.astGrepBin ?? null });
+}
+
+/** The overview stored with the group and named on the run, before the prompt is built. A store fault here is not the repository's. */
+function storeOverview(deps: SingleCallPrepareDeps, run: SingleCallRunRow, built: Awaited<ReturnType<typeof buildOverviewFor>>): void {
   const release = deps.admissionGate?.enter();
   try {
     deps.store.transaction(() => {
@@ -125,7 +130,6 @@ async function overviewFor(deps: SingleCallPrepareDeps, run: SingleCallRunRow, g
       deps.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify(body), run.runId);
     });
   } finally { release?.(); }
-  return built;
 }
 
 /**
@@ -207,14 +211,11 @@ export const CLARIFY_HANDLER: SingleCallHandler = {
     const target = targetOf(run.workItemId);
     const round = readRound(deps.store, run.groupId, target.no);
     if (group.status !== "clarifying" || round.state !== "drafting") return { blocked: "requirement-call-target-moved" };
-    // A resolveRepository refusal or a git failure is repository-shaped and named on the run; recovery-retry re-runs A2.
-    let built: Awaited<ReturnType<typeof overviewFor>>;
-    try { built = await overviewFor(deps, run, group); }
-    catch (error) {
-      // A draining panel ends the round as every other step does; it is no fault of the repository.
-      if (error instanceof ControlError && error.code === "panel-draining") throw error;
-      return { blocked: "repository-path" };
-    }
+    // A resolveRepository refusal or a failed build is repository-shaped and named on the run; recovery-retry re-runs A2.
+    let built: Awaited<ReturnType<typeof buildOverviewFor>>;
+    try { built = await buildOverviewFor(deps, run, group); } catch { return { blocked: "repository-path" }; }
+    // Outside the catch: a draining panel or a store fault ends the round as any other step's does.
+    storeOverview(deps, run, built);
     return {
       prompt: buildClarifyPrompt({ idea: group.requirement.idea, contentLanguage: group.requirement.contentLanguage, overview: built,
         earlier: readRounds(deps.store, run.groupId).filter((r) => r.roundNo < target.no), retryReason: round.lastInvalidReason }),

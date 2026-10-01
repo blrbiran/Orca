@@ -128,6 +128,8 @@ export async function requirementHarness(options: { answers: QueuedAnswer[]; sto
     ({ schema: "orca-raw-command-v1", commandId: `c-${++sequence}`, actorId: "human", expectedRevision: revision(), verb, target, payload }) as never;
   return {
     store: h.store, root: h.root, repo, service, deps, driver, fake, until, runs, command, profile,
+    /** One pump pass over the durable wakes, with the real handlers (no driver round). */
+    deliver: () => deliverSchedulerWakes(h.store, handlers),
     round: (n: number) => readRound(h.store, "r", n), group: () => readWebGroup(h.store, "r"), head: () => g("rev-parse", "HEAD"), git: g,
     dispose: async () => { await driver.stop(); await h.dispose(); },
   };

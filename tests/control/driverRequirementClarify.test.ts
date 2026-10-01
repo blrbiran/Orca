@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { applyPanelShutdown } from "../../src/panel/controlLifecycle.js";
 import { CLARIFY_JSON_SCHEMA } from "../../src/control/requirementClarify.js";
-import { readRequirementGroup } from "../../src/control/requirementRecords.js";
+import { readRequirementGroup, writeRound } from "../../src/control/requirementRecords.js";
 import { groupStopState } from "../../src/control/stopIntent.js";
+import { ControlError } from "../../src/control/errors.js";
 import { requirementHarness } from "./fixtures/requirementHarness.js";
 import { ROUND_ONE } from "./fixtures/requirementOutputs.js";
 
@@ -70,6 +71,43 @@ describe("the clarify purpose on the single-call chain (N1 spec §7)", () => {
       const shut = await applyPanelShutdown({ store: x.store, profileRouter: x.deps.router, epoch: "epoch-1", shutdownGraceMs: 1_000, exemptDriverRuns: true });
       expect((shut.result as { groups: Array<{ groupId: string; disposition: string }> }).groups).toEqual([expect.objectContaining({ groupId: "r", disposition: "skipped-driver-owned" })]);
       expect(x.store.db.prepare("SELECT COUNT(*) AS n FROM stop_intents").get()!.n).toBe(0);
+    } finally { await x.dispose(); }
+  });
+  // Review fix round 1 (Rule 9): the three guards that keep a call from being spent where it must not be.
+  it("a stopped group claims nothing: its requirement-call wake stays pending, no run, nothing reserved", async () => {
+    const x = await requirementHarness({ answers: [{ purpose: "clarify", output: ROUND_ONE }] });
+    try {
+      // Stopped before the open wake is delivered: nothing is in flight, so the stop completes at once.
+      expect(await x.service.handoffStop(x.command("handoff-stop", {}))).toMatchObject({ result: { kind: "handoff-stopped" } });
+      expect(x.group().stopped).toBe(true);
+      for (let i = 0; i < 3; i += 1) { await x.deliver(); await x.driver.round(); }
+      expect(x.runs()).toEqual([]);
+      expect(x.group()).toMatchObject({ reserved: { tokens: 0 }, used: { tokens: 0 } });
+      expect(x.store.db.prepare("SELECT delivered FROM scheduler_wakes WHERE id='scheduler-wake:r:requirement-call:open'").get()).toEqual({ delivered: 0 });
+      expect(x.round(1)).toMatchObject({ state: "drafting", calls: [] });
+      expect(x.fake.calls.accept).toHaveLength(0);
+    } finally { await x.dispose(); }
+  });
+
+  it("a run whose round left drafting after its claim is blocked at A2 as requirement-call-target-moved, and never sent", async () => {
+    const x = await requirementHarness({ answers: [{ purpose: "clarify", output: ROUND_ONE }] });
+    try {
+      await x.deliver();
+      expect(x.runs()).toEqual([expect.objectContaining({ state: "starting", workItemId: "round-1" })]);
+      writeRound(x.store, "r", { ...x.round(1), state: "interrupted" });
+      await x.until(() => x.runs()[0]!.state === "blocked");
+      expect(x.runs()[0]).toMatchObject({ drive: { blockedAt: "A2", blockedReason: "requirement-call-target-moved" } });
+      expect(x.fake.calls.accept).toHaveLength(0);
+    } finally { await x.dispose(); }
+  });
+
+  it("a repository the run cannot resolve blocks it at A2 as repository-path, and it is never sent", async () => {
+    const x = await requirementHarness({ answers: [{ purpose: "clarify", output: ROUND_ONE }] });
+    try {
+      x.deps.resolveRepository = () => { throw new ControlError("recovery-blocked", "repository-gone"); };
+      await x.until(() => x.runs()[0]?.state === "blocked");
+      expect(x.runs()[0]).toMatchObject({ drive: { blockedAt: "A2", blockedReason: "repository-path" } });
+      expect(x.fake.calls.accept).toHaveLength(0);
     } finally { await x.dispose(); }
   });
 });
