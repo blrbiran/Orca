@@ -161,9 +161,11 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
    ③**Orca 旧 `orca run <plan> --adapter-config` 路径退役**（人选方案二；约 76 条判据、29 个文件靠 `--adapter scripted`，迁走或删）；
    ④最后删 ccloop 整个老入口（`--adapter`／`--adapter-config`）。
    人原话：「先将这些问题解决，再删老入口」「同意按你建议的顺序走」「选方案二：把 Orca 旧的 orca run --adapter-config 路径一起退役」。只读盘点的事实在 ccloop handoff「Orca 那条线」。
-2. **推送归人**（以 `/usr/bin/git ls-remote` 现测为准）。本会话收尾时 Orca 领先远端：重钉一笔 ＋ 本文；ccloop 领先：handoff／台账两笔。
+2. **推送归人**：三个仓是否领先远端，一律现跑 `/usr/bin/git ls-remote origin refs/heads/main` 与本地比（本文不写哈希、不写笔数）。Orca 已钉住带 `rejectOn` 修正的 ccloop，不需要再重钉。
 3. **人之后要审的**：`zh-review.tsv`（`.superpowers/sdd/2026-10-01-panel-i18n/zh-review.tsv`，人已「先认可、之后再审」；末尾已追加评审员原文）；本轮 `zh.ts` 新增的两行 v2 说明。
 4. **合并做完以后由人选**：N5 memory tab（先核 ccmem Q6）或 N1 需求 → 拆分（先 brainstorm）。
+
+**建议用的 skills**：`superpowers:brainstorming`（每一步先出 spec；架构级，人审后才写计划）→ `superpowers:writing-plans`（写完跑它的自查）→ 按人选的执行方式用 `superpowers:executing-plans` 或 `superpowers:subagent-driven-development`；补判据用 `superpowers:test-driven-development`；说「绿了／做完了」之前用 `superpowers:verification-before-completion`；出现红先用 `superpowers:systematic-debugging`。⚠️ 与 CLAUDE.md 冲突时 CLAUDE.md 优先（改既有判据要人点名、变异只在 clone、push 归人）。
 
 **本会话做完了什么**（全在本地，零 push）：
 - **人审完上一轮**：两本台账其余 `Ruling:` 行「都认可」；zh-review.tsv 先认可。
