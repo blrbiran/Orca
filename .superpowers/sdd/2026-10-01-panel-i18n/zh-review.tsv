@@ -692,3 +692,41 @@ errors.worktree-dirty		工作区有未提交的修改：{{message}}
 # Q10 (Task 9)	agents.from + enums.selectionSource.*, agents.ignorePlan vs agents.setGroup, agents.settings.defaultAgent	Spacing around "agent" is mixed: unspaced 来自agent 描述符, 忽略计划里的agent（codex）; spaced 设置组 执行 的 agent, 默认 agent.
 # Q11 (Task 9)	enums.agentSlot.worker vs enums.progressStep.execute	Both render 执行: a worker slot and the execute step read the same.
 # Q12 (Task 10)	every errors.* entry ending in {{message}}	When the server message is empty the Chinese text ends in a bare 「：」 (deferred minor). Also recorded: errors.http-status was changed by ruling to keep {{message}}; reviews-store-busy / reviews-store-is-symlink interpolate {{message}} (ruling, progress.md line 60).
+
+# ---- Reviewers' original words for Q1-Q12 (appended by Orca session ceca1c47, 2026-10-01, human ruling: "(a) 指文件末尾 Q1–Q12 这一段", i.e. agent-written review text is quoted, not rewritten).
+# Q1-Q12 above are the Task 11 controller's condensation and stay as written; where they differ, the quotes below are the source. Each quote: file and line range, then the lines verbatim, each prefixed "# | ".
+# Q1-Q3: task-5-review.md lines 55-63
+# | #### Minor (Nice to Have)
+# |
+# | These are wording points for the human's zh review, which spec §5 schedules. Each value is exactly as the brief mandates, so none of them is an implementer defect.
+# |
+# | 1. **仓库 means two things side by side** (`zh.ts`, diff 646 and 693).
+# |    - The Scope filter's option for `repo` renders 仓库. The next filter's label, Repository, is also 仓库. So the filter row reads 「范围 [仓库]」「仓库 [github.com/…]」.
+# |    - English has the same pairing (repo / Repository), so this is not a regression. If the human wants the two told apart, `decisionScope.repo` → 单仓库 would pair with 跨仓库.
+# | 2. **The option text says "wrong" twice** (diff 662, 695). `correctionKind.wrong` 错了 plus `kindHelp.wrong` 选错了 renders 「错了 —— 选错了」. It follows the English pattern "wrong — the choice was wrong", so this is a wording choice for the human.
+# | 3. **The 选择了 heading** (diff 654). As an `h3` heading, 选择了 reads as a sentence fragment. Headings like 所选 / 选择 would read more naturally beside 理由 / 被否决的备选. This is optional polish for the human's zh review.
+# Q4-Q5: task-6-review.md lines 41-44
+# | #### Minor (Nice to Have)
+# |
+# | 1. **Start: 启动 vs the glossary's 开跑** (`zh.ts`, diff 422-423: `start: "启动链"`, `started: "链 {{chainId}} 已启动。"`). Spec §5 maps Start → 开跑. That row groups Start with Confirm / Pause / Handoff (task-control buttons), so it may not be meant to cover the chain's start, but the panel will then say 开跑 in one area and 启动 in another for the same English verb. The value is exactly as the brief mandates (plan-mandated), so this is not an implementer defect; list it for the human's zh review (spec §5), which should pick one reading (Rule 7).
+# | 2. **`USD` stays English in Chinese** (`zh.ts` diff 430: `cost: "USD {{amount}}"`) while the form label beside it says 美元 (`formMaxCost: "费用上限（美元，软限制） "`). Plan-mandated; a wording point for the zh review. It is also why MT6-28 is unobservable.
+# Q6-Q9: task-7-review.md lines 70-74
+# | 4. **zh wording for the human's review** (not blocking; spec §5 hands wording to the human):
+# |    - `runsTh.profile` is 配置 while `estimateLine` and `import.noEstimator` keep `profile` in Latin — two renderings of one term on one screen.
+# |    - `th.pending` 待定 reads as "undecided"; the column holds a pending run id (e.g. 待启动的运行 / 挂起的运行).
+# |    - `group.stop` renders "停止 暂停 已暂停 · …" — faithful to English `stop pause paused`, but reads as three verbs; e.g. 「停止方式 暂停 · 状态 已暂停」 would parse.
+# |    - `group.heading` 版本 {{revision}} and `task.labelsFrom` 版本 {{version}} use one word for command revision and labels version; acceptable, noted for consistency.
+# Q10-Q11: task-9-review.md lines 77-85
+# | ### Minor (4)
+# |
+# | 1. `zh.ts:613,608` (`from`, `ignorePlan`): Chinese and Latin text are joined with no space in some keys but spaced in others.
+# |    - Unspaced: 来自agent 描述符, 忽略计划里的agent（codex）.
+# |    - Spaced: 设置组 执行 的 agent, 默认 agent.
+# |
+# |    The brief mandates the text, so this is not an implementer defect. Flag it for the human's `zh.ts` review (spec §5, first line).
+# | 2. `zh.ts:668` `agentSlot.worker` 执行 is the same word as `enums.runPhase.execute` 执行 (`zh.ts:374`). A worker slot and an
+# |    execute phase read the same in Chinese. The brief mandates it; flag it for the same review.
+# Q12: task-10-review.md lines 200-202
+# | None. The only `http-<n>` builders are `api.ts:47` and `controlApi.ts:52`. The message is always either the server's own
+# | string or the web's own fallback, so `{{message}}` always has content. Minor, not blocking: if a server sent `message: ""`
+# | with no code, zh would end in a bare `：`.
