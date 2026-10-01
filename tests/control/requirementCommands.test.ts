@@ -303,3 +303,44 @@ describe("requirement-draft-feedback and recovery-retry (N1 spec §11.1 item 4, 
     } finally { await x.dispose(); }
   });
 });
+
+// Final review fix wave (session b5e8d368, 2026-10-02), finding 5: a stop holds every call, so nothing that queues one
+// is taken while the group is stopped (group-stopped, as accept refuses it); recovery-retry lifts the stop.
+describe("requirement commands on a stopped group (final review finding 5)", () => {
+  it("refuses answer and consensus while the stop stands, changing nothing, and takes them once recovery-retry lifts it", async () => {
+    const x = await requirementHarness({ answers: [{ purpose: "clarify", output: ROUND_ONE }] });
+    try {
+      await x.until(() => x.round(1).state === "awaiting-answers");
+      expect(await x.service.handoffStop(x.command("handoff-stop", {}))).toMatchObject({ result: { kind: "handoff-stopped", frozenRunIds: [] } });
+      const before = x.round(1);
+      expect(x.service.answerRequirement(x.command("requirement-answer", recommendedAll(1, x)))).toMatchObject({ error: { code: "group-stopped" } });
+      expect(x.service.requirementConsensus(x.command("requirement-consensus", { roundNo: 1 }))).toMatchObject({ error: { code: "group-stopped" } });
+      expect(x.round(1)).toEqual(before);
+      expect(readRequirementGroup(x.store, "r").requirement.consensus).toBeNull();
+      expect(await x.service.recoveryRetry(x.command("recovery-retry", { scope: "group", groupId: "r" }))).toMatchObject({ result: { resolved: true } });
+      expect(x.service.answerRequirement(x.command("requirement-answer", recommendedAll(1, x)))).toMatchObject({ result: { kind: "requirement-answered", nextRoundNo: 2 } });
+    } finally { await x.dispose(); }
+  });
+
+  it("refuses draft feedback while the stop stands, changing nothing", async () => {
+    const x = await requirementHarness({ answers: [{ purpose: "split", output: VALID_SPLIT }], startAt: "split" });
+    try {
+      await x.until(() => readDraft(x.store, "r", 1).state === "awaiting-review");
+      expect(await x.service.handoffStop(x.command("handoff-stop", {}))).toMatchObject({ result: { kind: "handoff-stopped" } });
+      expect(x.service.requirementDraftFeedback(x.command("requirement-draft-feedback", { draftNo: 1, feedback: "Fold the two into one." }))).toMatchObject({ error: { code: "group-stopped" } });
+      expect(readDraft(x.store, "r", 1)).toMatchObject({ state: "awaiting-review", feedback: null });
+    } finally { await x.dispose(); }
+  });
+
+  it("a stop before any call leaves the round drafting, and recovery-retry lets its held wake be claimed", async () => {
+    const x = await requirementHarness({ answers: [{ purpose: "clarify", output: ROUND_ONE }] });
+    try {
+      expect(await x.service.handoffStop(x.command("handoff-stop", {}))).toMatchObject({ result: { kind: "handoff-stopped", frozenRunIds: [] } });
+      for (let i = 0; i < 3; i += 1) { await x.deliver(); await x.driver.round(); }
+      expect(x.runs()).toEqual([]);
+      expect(await x.service.recoveryRetry(x.command("recovery-retry", { scope: "group", groupId: "r" }))).toMatchObject({ result: { resolved: true } });
+      await x.until(() => x.round(1).state === "awaiting-answers");
+      expect(x.fake.calls.accept).toHaveLength(1);
+    } finally { await x.dispose(); }
+  });
+});

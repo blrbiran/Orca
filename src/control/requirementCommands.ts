@@ -47,6 +47,13 @@ function clarifying(store: ControlStore, groupId: string) {
   if (group.status !== "clarifying") invalid("not-clarifying");
   return group;
 }
+/**
+ * Final review finding 5: a stopped group, or one with a stop still open, takes no answer, consensus or feedback -- each
+ * would queue a call the stop holds -- as accept refuses it (controller ruling (b) below). recovery-retry lifts the stop.
+ */
+function notStopped(store: ControlStore, group: { groupId: string; stopped: boolean }): void {
+  if (group.stopped || readStopIntent(store, group.groupId) !== null) throw new ControlError("group-stopped");
+}
 
 /** Spec §11.1 item 1 (DR7, DR13, DR24): the agent is resolved outside the transaction and frozen inside it. */
 export async function applyRequirementOpen(deps: RequirementCommandDeps, command: RequirementOpenCommand): Promise<Result> {
@@ -97,7 +104,7 @@ export function applyRequirementAnswer(deps: RequirementCommandDeps, command: Re
     rawCommand: command, expand: () => ({ ...command, schema: "orca-authority-command-v1" }),
     apply: (context) => {
       const id = command.target.groupId, payload = command.payload;
-      clarifying(deps.store, id);
+      notStopped(deps.store, clarifying(deps.store, id));
       // After consensus the latest round is never awaiting answers (consensus closes it), so this check also refuses that.
       const round = latestRound(deps.store, id);
       if (round === null || round.roundNo !== payload.roundNo || round.state !== "awaiting-answers" || round.result === null) return invalid("round-not-awaiting-answers");
@@ -127,9 +134,14 @@ export function applyRequirementConsensus(deps: RequirementCommandDeps, command:
     rawCommand: command, expand: () => ({ ...command, schema: "orca-authority-command-v1" }),
     apply: (context) => {
       const id = command.target.groupId, group = clarifying(deps.store, id);
+      notStopped(deps.store, group);
       if (group.requirement.consensus !== null) invalid("consensus-reached");
       const round = latestRound(deps.store, id);
       if (round === null || round.roundNo !== command.payload.roundNo || !CONSENSUS_ROUND_STATES.includes(round.state)) return invalid("round-state");
+      // Invariant guarded (unreachable by design, kept as a guard): a round in CONSENSUS_ROUND_STATES has no active run --
+      // a round's call is claimed only while it is drafting (pendingRequirementCall), and every way out of drafting
+      // (settlement, interruption) closes the run in the same transaction. Should that ever stop holding, consensus must not start a draft
+      // beside a call still in flight, so this refuses rather than trusting the round state.
       if (deps.store.db.prepare("SELECT id FROM runs WHERE group_id=? AND active=1").get(id)) invalid("call-in-flight");
       const understood = readRounds(deps.store, id).filter((r) => r.result !== null);
       if (understood.length === 0) invalid("no-understanding-yet");
@@ -154,7 +166,7 @@ export function applyRequirementDraftFeedback(deps: RequirementCommandDeps, comm
     rawCommand: command, expand: () => ({ ...command, schema: "orca-authority-command-v1" }),
     apply: (context) => {
       const id = command.target.groupId;
-      clarifying(deps.store, id);
+      notStopped(deps.store, clarifying(deps.store, id));
       const draft = latestDraft(deps.store, id);
       if (draft === null || draft.draftNo !== command.payload.draftNo || draft.state !== "awaiting-review") return invalid("draft-not-awaiting-review");
       writeDraft(deps.store, id, { ...draft, state: "rejected", feedback: command.payload.feedback });
