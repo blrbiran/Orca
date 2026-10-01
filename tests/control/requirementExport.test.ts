@@ -166,6 +166,18 @@ describe("the export's files outside the repository (controller ruling PR-I6, sp
       expect(readdirSync(scratch).filter((name) => /^(index|document|message)-r/.test(name))).toEqual([]);
     } finally { process.umask(umask); await x.dispose(); }
   });
+
+  it("replaces what a crashed attempt left beside the index, and exports", async () => {
+    const { x, text } = await accepted();
+    try {
+      const scratch = `${x.store.stateDir}.overview`;
+      await mkdir(scratch, { recursive: true, mode: 0o700 });
+      for (const name of ["index-r", "document-r.md", "message-r.txt"]) await writeFile(join(scratch, name), "left by a crash\n");
+      expect(await exportRequirementDocument(exportDeps(x), "r")).toBe("done");
+      const tip = x.git("rev-parse", "refs/heads/orca/r");
+      expect(x.git("show", `${tip}:${readRequirementGroup(x.store, "r").requirement.export.path}`)).toBe(text.trimEnd());
+    } finally { await x.dispose(); }
+  });
 });
 
 describe("a branch created while the export ran (N1 spec §9.2, create-only)", () => {
