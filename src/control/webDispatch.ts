@@ -373,14 +373,13 @@ export function readWorkClaimEnvelope(store: ControlStore, groupId: string, runI
   return dispatchEnvelopeSchema.parse(JSON.parse(readCanonicalRecord(store, envelopeHash)));
 }
 
-/** Single-call estimate spec §6.1: the dispatch envelope claimEstimate froze for this estimate run (webService.ts claimEstimate). */
+/**
+ * Single-call estimate spec §6.1: the dispatch envelope claimEstimate froze for this estimate run (webService.ts claimEstimate).
+ * DR2: kept by name; an estimate run only, read through the single-call reader (N1 spec §5.1).
+ */
 export function readEstimateClaimEnvelope(store: ControlStore, groupId: string, runId: string): DispatchEnvelopeV1 {
-  const run = readDispatchRun(store, runId);
-  const row = store.db.prepare("SELECT body FROM outbox WHERE id=? AND kind='estimate-claim'").get(`estimate:${groupId}:${run.workItemId}`);
-  if (!row) throw new ControlError("start-intent-missing");
-  const { runId: claimed, envelopeHash } = JSON.parse(String(row.body)) as { runId: string; envelopeHash: string };
-  if (claimed !== runId) throw new ControlError("start-intent-missing");
-  return dispatchEnvelopeSchema.parse(JSON.parse(readCanonicalRecord(store, envelopeHash)));
+  if (readDispatchRun(store, runId).phase !== "estimate") throw new ControlError("start-intent-missing");
+  return readSingleCallClaimEnvelope(store, groupId, runId);
 }
 
 /** N1 spec §5.1: the dispatch envelope the claim froze for this single-call run, whatever its purpose (DR4). */
@@ -396,8 +395,10 @@ export function readSingleCallClaimEnvelope(store: ControlStore, groupId: string
 }
 
 /**
- * N1 spec §5.1: a run a single-call claim made, whatever its purpose -- its claim row names this very run. The purpose is
- * not validated here: a listing must not hide a run whose purpose is unknown; `advance` refuses it by name (DR3).
+ * N1 spec §5.1: a run a single-call claim made, whatever its purpose -- its claim row (singleCallClaimRowOf) names this
+ * very run. The purpose is not validated here, only the claim row: a `phase: "single-call"` run is listed exactly when a
+ * `single-call:<group>:<item>` row of kind `single-call-claim` names it, and nothing writes that row in phase 1, so today
+ * such a run is absent from the driver's run list. A listed run whose purpose is unknown is refused by name in `advance` (DR3).
  */
 export function isSingleCallRun(store: ControlStore, runId: string): boolean {
   const row = store.db.prepare("SELECT group_id,work_item_id,body FROM runs WHERE id=?").get(runId);
@@ -526,8 +527,6 @@ export function isWebWorkRun(store: ControlStore, runId: string): boolean {
  * `estimate:<group>:<estimate>` claim row names this very run (a re-claim after a failure names another).
  */
 export function isEstimateRun(store: ControlStore, runId: string): boolean {
-  const row = store.db.prepare("SELECT group_id,work_item_id,body FROM runs WHERE id=?").get(runId);
-  if (!row || (JSON.parse(String(row.body)) as { phase?: string }).phase !== "estimate") return false;
-  const claim = store.db.prepare("SELECT body FROM outbox WHERE id=? AND kind='estimate-claim'").get(`estimate:${String(row.group_id)}:${String(row.work_item_id)}`);
-  return claim !== undefined && (JSON.parse(String(claim.body)) as { runId?: string }).runId === runId;
+  // DR2: kept by name; the single-call check restricted to phase `estimate` (N1 spec §5.1).
+  return isSingleCallRun(store, runId) && readDispatchRun(store, runId).phase === "estimate";
 }
