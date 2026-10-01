@@ -50,11 +50,15 @@ describe("the expansion is pure and pinned (criterion 1)", () => {
       escalationAndExit: { escalationTargets: [], pauseOn: [], stopOn: [], terminalStates: TERMINAL },
     });
     expect(v1.hash).toBe(sha256Canonical(JSON.parse(v1.canonicalJson)));
-    // The v2 twin (human rulings H2/H3): the same input, now with no file cap and a phase timeout of MAX_TIMER_MS.
+    // Rewritten under the human's 2026-10-01 rulings on C4 and on a three-hour phase timeout (v2 edited in place).
+    // The v2 twin: the same input, now with no file cap, a three-hour phase timeout, the red-first requirement in the
+    // success condition the verifier reads, and no rule-bearing rejectOn token (C4: an approving verifier quotes it).
     const result = expanded("bugfix");
     const v2 = JSON.parse(v1.canonicalJson);
-    v2.executionPolicy.perAttemptTimeoutMs = 2_147_483_647;
+    v2.executionPolicy.perAttemptTimeoutMs = 10_800_000;
     v2.safetyPolicy.maxFilesTouched = Number.MAX_SAFE_INTEGER;
+    v2.objective.successCondition = "the login test passes\nAlso: a test that reproduces the bug was added, and it failed before the fix.";
+    v2.verification.rejectOn = ["REJECT:unused"];
     expect(JSON.parse(result.canonicalJson)).toEqual(v2);
     expect(result.hash).toBe(sha256Canonical(JSON.parse(result.canonicalJson)));
     expect(result.recipe).toEqual({
@@ -98,10 +102,11 @@ describe("the expansion is pure and pinned (criterion 1)", () => {
 });
 
 describe("loop plans v2 (human rulings H2/H3, 2026-10-01)", () => {
-  it.each([...LOOP_PLAN_IDS])("%s v2: no file cap unless the inputs set one (investigate stays 1), and a phase timeout of MAX_TIMER_MS", (plan) => {
+  it.each([...LOOP_PLAN_IDS])("%s v2: no file cap unless the inputs set one (investigate stays 1), and a phase timeout of three hours", (plan) => {
+    // Rewritten under the human's 2026-10-01 ruling: v2's phase timeout is three hours, not MAX_TIMER_MS.
     const contract = contractOf(plan);
     expect(contract.safetyPolicy.maxFilesTouched).toBe(plan === "investigate" ? 1 : Number.MAX_SAFE_INTEGER);
-    expect(contract.executionPolicy.perAttemptTimeoutMs).toBe(2_147_483_647);
+    expect(contract.executionPolicy.perAttemptTimeoutMs).toBe(10_800_000);
   });
 
   it.each([...LOOP_PLAN_IDS])("%s: a v1 recipe still expands with v1's defaults, so its stored bytes stay reproducible", (plan) => {
@@ -115,16 +120,23 @@ describe("loop plans v2 (human rulings H2/H3, 2026-10-01)", () => {
 });
 
 describe("each plan's rules land in the contract (criterion 2)", () => {
+  // Rewritten under the human's 2026-10-01 ruling on C4: bugfix carries no rule-bearing token; design and investigate
+  // are command-verified, with a check per target document ahead of the task's own checks.
   // investigate refuses a file cap other than 1 (R-F15, rulings P2), so its input carries none and still expands to 1.
   const givenFor = (plan: string): Partial<LoopPlanFileInput> =>
     plan === "investigate" ? { protectedPaths: ["tests/fixtures/**"] } : { protectedPaths: ["tests/fixtures/**"], maxFilesTouched: 7 };
   const WRITE_SET = ["src/auth/**", "tests/auth/**"];
-  const rows: Array<[string, { allow: string[]; max: number; verifier: string; rejectOn: string[]; constraints: string[] }]> = [
-    ["standard", { allow: WRITE_SET, max: 7, verifier: "command", rejectOn: ["REJECT:unused"], constraints: [] }],
-    ["bugfix", { allow: WRITE_SET, max: 7, verifier: "agent", rejectOn: ["REJECT:no-red-first"], constraints: BUGFIX_CONSTRAINTS }],
-    ["refactor", { allow: WRITE_SET, max: 7, verifier: "command", rejectOn: ["REJECT:unused"], constraints: ["Change no observable behavior; every existing check must pass unchanged."] }],
-    ["design", { allow: WRITE_SET, max: 7, verifier: "agent", rejectOn: ["REJECT:empty-document"], constraints: ["The deliverable is a document; change no code."] }],
-    ["investigate", { allow: ["docs/report.md"], max: 1, verifier: "agent", rejectOn: ["REJECT:empty-report"], constraints: ["Investigate only; write the findings to the report file and change nothing else."] }],
+  const DESIGN_CHECKS = [
+    `test -n "$(find './src/auth' -type f -size +0c 2>/dev/null | head -n 1)"`,
+    `test -n "$(find './tests/auth' -type f -size +0c 2>/dev/null | head -n 1)"`,
+  ];
+  const REPORT_CHECK = "test -f './docs/report.md' && test -s './docs/report.md'";
+  const rows: Array<[string, { allow: string[]; max: number; verifier: string; rejectOn: string[]; constraints: string[]; required: string[] }]> = [
+    ["standard", { allow: WRITE_SET, max: 7, verifier: "command", rejectOn: ["REJECT:unused"], constraints: [], required: ["npm test"] }],
+    ["bugfix", { allow: WRITE_SET, max: 7, verifier: "agent", rejectOn: ["REJECT:unused"], constraints: BUGFIX_CONSTRAINTS, required: ["npm test"] }],
+    ["refactor", { allow: WRITE_SET, max: 7, verifier: "command", rejectOn: ["REJECT:unused"], constraints: ["Change no observable behavior; every existing check must pass unchanged."], required: ["npm test"] }],
+    ["design", { allow: WRITE_SET, max: 7, verifier: "command", rejectOn: ["REJECT:unused"], constraints: ["The deliverable is a document; change no code."], required: [...DESIGN_CHECKS, "npm test"] }],
+    ["investigate", { allow: ["docs/report.md"], max: 1, verifier: "command", rejectOn: ["REJECT:unused"], constraints: ["Investigate only; write the findings to the report file and change nothing else."], required: [REPORT_CHECK, "npm test"] }],
   ];
   describe.each(rows)("%s", (plan, want) => {
     it("allowlist = targetPaths (the git-backed write set)", () => {
@@ -138,7 +150,7 @@ describe("each plan's rules land in the contract (criterion 2)", () => {
     it("constraints", () => expect(contractOf(plan, givenFor(plan)).context.constraints).toEqual(want.constraints));
     it("checks are both the build/test commands and the required checks", () => {
       const contract = contractOf(plan, givenFor(plan));
-      expect([contract.context.buildTestCommands, contract.verification.requiredChecks]).toEqual([["npm test"], ["npm test"]]);
+      expect([contract.context.buildTestCommands, contract.verification.requiredChecks]).toEqual([["npm test"], want.required]);
     });
   });
 });

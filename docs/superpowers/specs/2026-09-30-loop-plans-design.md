@@ -447,3 +447,24 @@ The text above stays as written; where it differs from this section, this sectio
   `grant-amendment-unsupported` once any task left draft/ready. The group-state column still never leaves `ready`.
 - **C7 and R-F5 superseded** by `docs/superpowers/specs/2026-10-01-panel-i18n-design.md`: the panel speaks English or
   Chinese; the server sends loop-plan fields, not sentences.
+
+## 13. C4 change and a three-hour phase timeout (2026-10-01, session `ceca1c47`)
+
+The text above stays as written; where it differs from this section, this section wins. Rulings are quoted in
+`.superpowers/sdd/2026-10-01-c4-and-phase-timeout/progress.md`.
+
+- **v2 edited in place** (human ruling, a one-off exception to §2.2's "no version is ever edited"): v2 had been pushed
+  but no task used it. v1 is unchanged.
+- **Phase timeout**: v2's `executionPolicy.perAttemptTimeoutMs` is three hours (10 800 000 ms), not `MAX_TIMER_MS`
+  (§12 first bullet). On the Web path the derived contract still clamps it to the task's active time and to
+  `MAX_TIMER_MS`. H3's "each phase may use the task's whole active time" no longer holds for a task granted more than
+  three hours.
+- **C4 (no rule-bearing rejectOn token in v2)**: design and investigate are command-verified; ahead of the task's own
+  checks, the contract carries one required check per target path: an exact path must be a non-empty regular file,
+  `<prefix>/**` must hold at least one non-empty regular file (`documentCheck`, loopPlans.ts). Their `rejectOn` is the
+  dead placeholder `REJECT:unused`. "No code change" stays an instruction to the agent, with Orca's write set
+  (`targetPaths`) as the enforced part. bugfix keeps the agent verifier; its red-first requirement is appended to the
+  contract's success condition, and its `rejectOn` is `REJECT:unused`. Not measured: whether a verifier echoes the
+  placeholder (needs a paid call).
+- The panel card's "Acceptance: N check commands" still counts the task's own checks only; the document checks are
+  named in the plan's discipline line.

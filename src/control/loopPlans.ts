@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
-import { MAX_TIMER_MS, safeInteger } from "./schema.js";
+import { safeInteger } from "./schema.js";
 
 /**
  * Loop plans (docs/superpowers/specs/2026-09-30-loop-plans-design.md §2, §3.2; goal.md §3.3): Orca's built-in recipes
@@ -32,20 +32,43 @@ export interface LoopPlanDefinition {
   defaultMaxFilesTouched: number;
   /** Spec §2.3: executionPolicy.perAttemptTimeoutMs; the Web path clamps it to the task's active time (executionSnapshot.ts). */
   perAttemptTimeoutMs: number;
+  /** Appended to the task's success condition, which the verifier reads (C4: a requirement, not a rejectOn token); null for none. */
+  successConditionSuffix: string | null;
+  /** C4: required checks, run before the task's own, that every target document exists and is not empty. */
+  documentChecks: boolean;
 }
 
 /**
  * Spec §2.2 last bullet: a change to a plan's text or rules adds a version; no version is ever edited or removed, so an
  * old recipe still renders and still re-expands to its stored bytes (the projection checks it, controlViews.ts).
  */
-const V1_DEFAULTS = { defaultMaxFilesTouched: 25, perAttemptTimeoutMs: 3_600_000 } as const;
+const V1_DEFAULTS = { defaultMaxFilesTouched: 25, perAttemptTimeoutMs: 3_600_000, successConditionSuffix: null, documentChecks: false } as const;
 /**
  * v2 (human rulings H2/H3, 2026-10-01): no file cap unless the inputs set one (ccloop's schema needs a positive integer
- * and only compares it, so "none" is the largest safe integer), and no phase timeout of the plan's own beyond what a
- * Node timer holds (MAX_TIMER_MS, schema.ts). On the Web path the derived contract clamps the phase timeout to the
- * task's active time (executionSnapshot.ts derivedPhaseTimeoutMs), so each phase may use the whole of it.
+ * and only compares it, so "none" is the largest safe integer). Phase timeout: three hours (human ruling, 2026-10-01,
+ * replacing H3's "no phase timeout of the plan's own"; v2 was edited in place by the same ruling, as no task used it
+ * yet). On the Web path the derived contract still clamps it to the task's active time and to what a Node timer holds
+ * (executionSnapshot.ts derivedPhaseTimeoutMs, MAX_TIMER_MS in schema.ts).
  */
-const V2_DEFAULTS = { defaultMaxFilesTouched: Number.MAX_SAFE_INTEGER, perAttemptTimeoutMs: MAX_TIMER_MS } as const;
+const V2_DEFAULTS = { defaultMaxFilesTouched: Number.MAX_SAFE_INTEGER, perAttemptTimeoutMs: 10_800_000, successConditionSuffix: null, documentChecks: false } as const;
+/**
+ * C4 (measured 2026-10-01 with real claude, ledger "## C4"): an approving verifier may quote a rule's rejectOn token
+ * ("... so REJECT:empty-document does not apply"), and ccloop's substring match then fails good work with no retry. So
+ * no v2 plan relies on a token: design and investigate are checked by a command (each target document exists and is
+ * not empty), and bugfix's red-first requirement is part of the success condition its verifier reads. The human ruled
+ * (2026-10-01) that this edits v2 in place, a one-off exception to spec §2.2 above: v2 was pushed but no task used it.
+ */
+const V2_CHANGES: Partial<Record<LoopPlanId, Partial<LoopPlanDefinition>>> = {
+  bugfix: { rejectOn: "REJECT:unused", successConditionSuffix: "Also: a test that reproduces the bug was added, and it failed before the fix." },
+  design: {
+    verifierType: "command", rejectOn: "REJECT:unused", documentChecks: true,
+    discipline: "The deliverable is a document: a command checks that it exists and is not empty; \"no code changes\" is an instruction to the agent",
+  },
+  investigate: {
+    verifierType: "command", rejectOn: "REJECT:unused", documentChecks: true,
+    discipline: "Investigate only; findings go to the report file: a command checks that it exists and is not empty",
+  },
+};
 const V1_PLANS: ReadonlyArray<Omit<LoopPlanDefinition, "version" | keyof typeof V1_DEFAULTS>> = [
   { planId: "standard", name: "Standard", constraints: [], verifierType: "command", rejectOn: "REJECT:unused", discipline: null },
   {
@@ -75,7 +98,7 @@ const V1_PLANS: ReadonlyArray<Omit<LoopPlanDefinition, "version" | keyof typeof 
 ];
 const REGISTRY: readonly LoopPlanDefinition[] = [
   ...V1_PLANS.map((plan) => ({ ...plan, version: 1, ...V1_DEFAULTS })),
-  ...V1_PLANS.map((plan) => ({ ...plan, version: 2, ...V2_DEFAULTS })),
+  ...V1_PLANS.map((plan) => ({ ...plan, version: 2, ...V2_DEFAULTS, ...V2_CHANGES[plan.planId] })),
 ];
 
 /** Spec §2.3: shared by every plan and version. The budget numbers equal TASK_WORK (estimator.ts); loopPlans.test.ts pins that. */
@@ -170,6 +193,18 @@ function maxFilesOf(plan: LoopPlanDefinition, inputs: LoopInputs): number {
   return plan.planId === "investigate" ? 1 : inputs.maxFilesTouched ?? plan.defaultMaxFilesTouched;
 }
 
+/** A POSIX shell word for a relative path; `./` keeps a path starting with `-` from reading as an option. */
+const shellPath = (path: string): string => `'./${path.replace(/'/g, "'\\''")}'`;
+
+/**
+ * C4: a check ccloop runs (`sh -lc`, in the attempt's worktree) that the target document exists and is not empty. An
+ * exact path must be a non-empty regular file; `<prefix>/**` must hold at least one non-empty regular file.
+ */
+export function documentCheck(target: string): string {
+  if (target.endsWith("/**")) return `test -n "$(find ${shellPath(target.slice(0, -"/**".length))} -type f -size +0c 2>/dev/null | head -n 1)"`;
+  return `test -f ${shellPath(target)} && test -s ${shellPath(target)}`;
+}
+
 /** Spec §3.2: the recipe's contract, for the recipe's own plan version; the re-expansion the projection checks. */
 export function expandRecipe(taskId: string, repoPath: string, recipe: LoopRecipe): LoopExpansion {
   const plan = loopPlanDefinition(recipe.planId, recipe.planVersion);
@@ -185,7 +220,10 @@ export function expandRecipe(taskId: string, repoPath: string, recipe: LoopRecip
   }
   if (plan.planId === "design" && inputs.targetPaths.includes("**")) return { ok: false, reason: "design-target" };
   const contract = {
-    objective: { taskId, goal: inputs.goal, successCondition: inputs.successCondition, nonGoals: [...inputs.nonGoals] },
+    objective: {
+      taskId, goal: inputs.goal, nonGoals: [...inputs.nonGoals],
+      successCondition: plan.successConditionSuffix === null ? inputs.successCondition : `${inputs.successCondition}\n${plan.successConditionSuffix}`,
+    },
     context: {
       repoPath, targetPaths: [...inputs.targetPaths], relevantDocs: [...inputs.relevantDocs],
       buildTestCommands: [...inputs.checks], constraints: [...plan.constraints],
@@ -195,7 +233,10 @@ export function expandRecipe(taskId: string, repoPath: string, recipe: LoopRecip
       allowlistPaths: [...inputs.targetPaths], denylistPaths: [...inputs.protectedPaths],
       maxFilesTouched: maxFilesOf(plan, inputs), humanGateConditions: [],
     },
-    verification: { verifierType: plan.verifierType, requiredChecks: [...inputs.checks], rejectOn: [plan.rejectOn], evidenceRequired: [] },
+    verification: {
+      verifierType: plan.verifierType, rejectOn: [plan.rejectOn], evidenceRequired: [],
+      requiredChecks: [...(plan.documentChecks ? inputs.targetPaths.map(documentCheck) : []), ...inputs.checks],
+    },
     escalationAndExit: { escalationTargets: [], pauseOn: [], stopOn: [], terminalStates: [...TERMINAL_STATES] },
   };
   return { ok: true, contract, canonicalJson: canonicalBytes(contract).toString("utf8"), hash: sha256Canonical(contract) };

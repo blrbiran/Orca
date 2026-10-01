@@ -228,11 +228,11 @@ export const zh: Translation<typeof en> = {
       },
       design: {
         v1: { name: "先写设计／文档", discipline: "交付物是文档，不改代码（由模型核对，不是机械证明）" },
-        v2: { name: "先写设计／文档", discipline: "交付物是文档，不改代码（由模型核对，不是机械证明）" },
+        v2: { name: "先写设计／文档", discipline: "交付物是文档：由命令检查它存在且非空；「不改代码」是写给 agent 的约束" },
       },
       investigate: {
         v1: { name: "只调研不改代码", discipline: "只调研，结论写进报告文件，别的都不改（由模型核对，不是机械证明）" },
-        v2: { name: "只调研不改代码", discipline: "只调研，结论写进报告文件，别的都不改（由模型核对，不是机械证明）" },
+        v2: { name: "只调研不改代码", discipline: "只调研，结论写进报告文件：由命令检查它存在且非空" },
       },
     },
     title: { line: "{{name}} · v{{version}} · {{how}}", byHand: "人指定", noLabel: "无标签，按默认", byLabel: "按标签 `{{label}}` 选择", changed: " · 已修改" },

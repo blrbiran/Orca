@@ -319,11 +319,11 @@ export const en = {
       },
       design: {
         v1: { name: "Design / docs first", discipline: "The deliverable is a document, no code changes (checked by a model, not proven mechanically)" },
-        v2: { name: "Design / docs first", discipline: "The deliverable is a document, no code changes (checked by a model, not proven mechanically)" },
+        v2: { name: "Design / docs first", discipline: "The deliverable is a document: a command checks that it exists and is not empty; \"no code changes\" is an instruction to the agent" },
       },
       investigate: {
         v1: { name: "Investigate only", discipline: "Investigate only; findings go to the report file, nothing else changes (checked by a model, not proven mechanically)" },
-        v2: { name: "Investigate only", discipline: "Investigate only; findings go to the report file, nothing else changes (checked by a model, not proven mechanically)" },
+        v2: { name: "Investigate only", discipline: "Investigate only; findings go to the report file: a command checks that it exists and is not empty" },
       },
     },
     title: { line: "{{name}} · v{{version}} · {{how}}", byHand: "chosen by hand", noLabel: "no label, default", byLabel: "chosen by label `{{label}}`", changed: " · changed" },
