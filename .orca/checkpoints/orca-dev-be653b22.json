@@ -1,0 +1,50 @@
+{
+  "v": 1,
+  "runId": "orca-dev-be653b22",
+  "runtime": "claude-code",
+  "sessionRef": "be653b22-f5ae-477b-ad75-30410d593893",
+  "writtenAt": "2026-10-01T10:33:23.651Z",
+  "head": "fd7f87589e8cbcc0363a5be7714778a92605a73b",
+  "level": {
+    "kind": "reading",
+    "level": 346571,
+    "windowTokens": 1000000,
+    "t1": 330000,
+    "t2": 450000,
+    "band": 1
+  },
+  "next": [
+    "ccloop consolidation step 1: review Task 1, resume Task 4 (Orca handoff grace) with the ruling on two driverHandoff criteria, then Tasks 2, 3, 5",
+    "step 2 (#4): spec written at ccloop docs/superpowers/specs/2026-10-01-agents-resume-sweep-design.md, plan and implement after step 1",
+    "steps 3 and 4: design from the two surveys (Orca legacy path 56 criteria in 28 files; ccloop old entry ~17 CLI criteria)"
+  ],
+  "open": [
+    "Task 4 blocked on two existing driverHandoff criteria not in R5; controller ruling: rewrite them under the human's standing instruction"
+  ],
+  "awaitingHuman": [
+    {
+      "kind": "named-authorization",
+      "what": "review the controller's rulings at the end of the session (criteria rewritten outside R5, step 2-4 designs)"
+    },
+    {
+      "kind": "irreversible",
+      "what": "push ccloop, then repin Orca, then push Orca"
+    }
+  ],
+  "measurements": [
+    {
+      "command": "/usr/bin/git -C /Users/biran/code/skills/loop/ccloop log --oneline -5",
+      "exitCode": 0,
+      "commit": "fd7f87589e8cbcc0363a5be7714778a92605a73b",
+      "observedAt": "2026-10-01T10:33:23.578Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-be653b22-AsOeMT/1.txt"
+    },
+    {
+      "command": "/usr/bin/git -C /Users/biran/code/skills/loop/Orca status --short",
+      "exitCode": 0,
+      "commit": "fd7f87589e8cbcc0363a5be7714778a92605a73b",
+      "observedAt": "2026-10-01T10:33:23.608Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-be653b22-AsOeMT/2.txt"
+    }
+  ]
+}
