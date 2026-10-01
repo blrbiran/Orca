@@ -260,6 +260,26 @@ export type ContinuationSelectionV1 = { taskId: string; predecessorRunId: string
 export type ResumeFromHandoffPayloadV1 = { selections: ContinuationSelectionV1[] };
 export type ContinueTaskPayloadV1 = { predecessorRunId: string; checkpointId: string };
 export type RecoveryRetryPayloadV1 = { scope: "run"; runId: string } | { scope: "group"; groupId: string };
+/** N1 spec §11.1: the five requirement commands (src/control/webProtocol.ts, field for field). */
+export type RequirementOpenPayloadV1 = {
+  groupId: string;
+  repoId: string;
+  idea: string;
+  limit?: Amount;
+  agent?: PanelPartialSelectionV1;
+  contentLanguage?: "en" | "zh";
+};
+export type RequirementAnswerInputV1 = { id: string; kind: "recommended" } | { id: string; kind: "text"; text: string };
+export type RequirementDecisionInputV1 = { id: string; accept: boolean };
+export type RequirementAnswerPayloadV1 = {
+  roundNo: number;
+  answers: RequirementAnswerInputV1[];
+  glossaryDecisions: RequirementDecisionInputV1[];
+  adrDecisions: RequirementDecisionInputV1[];
+};
+export type RequirementConsensusPayloadV1 = { roundNo: number };
+export type RequirementDraftFeedbackPayloadV1 = { draftNo: number; feedback: string };
+export type RequirementDraftAcceptPayloadV1 = { draftNo: number; draftHash: string };
 /** Agent selection spec §3: model and context window are opaque here; ccloop's descriptor judges them. */
 export type ContextWindowV1 = "agent-default" | number;
 /** Spec §6.3: where a resolved selection field came from. */
@@ -281,7 +301,8 @@ export type CommandSuccessV1 = {
   schema: "orca-command-success-v1";
   commandId: string;
   actorId: string;
-  verb: "import-plan" | "proposal-edit" | "estimate" | "confirm" | "start" | "pause-dispatch" | "handoff-stop" | "resume-dispatch" | "resume-from-handoff" | "set-limit" | "continue-task" | "recovery-retry" | "shutdown" | "set-workspace-mode" | "set-agent-preferences" | "proposal-set-agent" | "set-task-labels" | "set-task-loop";
+  verb: "import-plan" | "proposal-edit" | "estimate" | "confirm" | "start" | "pause-dispatch" | "handoff-stop" | "resume-dispatch" | "resume-from-handoff" | "set-limit" | "continue-task" | "recovery-retry" | "shutdown" | "set-workspace-mode" | "set-agent-preferences" | "proposal-set-agent" | "set-task-labels" | "set-task-loop"
+    | "requirement-open" | "requirement-answer" | "requirement-consensus" | "requirement-draft-feedback" | "requirement-draft-accept";
   target: CommandTargetV1;
   commandRevision: number | null;
   projectionSeq: number | null;
@@ -303,6 +324,11 @@ export type CommandSuccessV1 = {
     | { kind: "task-loop-set"; taskId: string; loopVersion: number; proposalVersion: number }
     | { kind: "task-continuing"; continuationIntentId: string; pendingRunId: string; claimOrdinal: number; wakeId: string }
     | { kind: "recovery-observed"; resolved: boolean; blockerCodes: string[]; evidenceIds: string[]; wakeIds: string[] }
+    | { kind: "requirement-opened"; groupId: string; requirementId: string; roundNo: 1; wakeId: string }
+    | { kind: "requirement-answered"; roundNo: number; nextRoundNo: number | null; wakeId: string | null }
+    | { kind: "requirement-consensus"; roundNo: number; draftNo: number; wakeId: string }
+    | { kind: "requirement-draft-rejected"; draftNo: number; nextDraftNo: number; wakeId: string }
+    | { kind: "requirement-draft-accepted"; draftNo: number; estimateId: string; estimateState: "queued" | "blocked-capability" | "input-too-large"; documentSha256: string; exportWakeId: string }
     | { kind: "shutdown"; groups: Array<{ groupId: string; disposition: "created" | "strengthened-pause" | "preserved-pause" | "preserved-handoff" | "preserved-shutdown" | "blocked-inconsistent" | "skipped-driver-owned"; changed: boolean; commandRevision: number; projectionSeq: number; frozenRunIds: string[]; requestIds: string[]; blockerCode: string | null }> };
 };
 export type CommandLookupV1 = { schema: "orca-command-lookup-v1"; originalStatus: number; body: CommandSuccessV1 | { error: CommandErrorV1 } };

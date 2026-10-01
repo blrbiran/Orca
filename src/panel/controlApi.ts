@@ -293,6 +293,11 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
       target: () => ({ groupId: `@operator:${actorId}`, target: { kind: "operator", operatorId: actorId } }),
     },
     { path: "/api/control/groups/:groupId/proposal/agent", verb: "proposal-set-agent", target: fromParams },
+    // N1 spec §11.1: the requirement commands; open names its group in the payload, as import-plan does.
+    { path: "/api/control/requirements", verb: "requirement-open", target: (_params, payload) => scoped(idSchema.parse(payloadFields(payload).groupId)) },
+    { path: "/api/control/groups/:groupId/requirement/answer", verb: "requirement-answer", target: fromParams },
+    { path: "/api/control/groups/:groupId/requirement/consensus", verb: "requirement-consensus", target: fromParams },
+    { path: "/api/control/groups/:groupId/requirement/feedback", verb: "requirement-draft-feedback", target: fromParams },
     // Labels and progress spec §8 R9: the one new route; the ledger key is the group's, as for continue-task.
     {
       path: "/api/control/groups/:groupId/tasks/:taskId/labels",
@@ -337,6 +342,10 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
         case "proposal-set-agent": await service.proposalSetAgent(command); break;
         case "set-task-labels": service.setTaskLabels(command); break;
         case "set-task-loop": service.setTaskLoop(command); break;
+        case "requirement-open": await service.openRequirement(command); break;
+        case "requirement-answer": service.answerRequirement(command); break;
+        case "requirement-consensus": service.requirementConsensus(command); break;
+        case "requirement-draft-feedback": service.requirementDraftFeedback(command); break;
         default: throw new ControlError("route-not-found");
       }
       const result = lookupCommandResult(store, id, command.commandId);

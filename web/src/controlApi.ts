@@ -33,6 +33,11 @@ import type {
   RecoveryRetryPayloadV1,
   RecoveryViewV1,
   RepositoryWorkspaceV1,
+  RequirementAnswerPayloadV1,
+  RequirementConsensusPayloadV1,
+  RequirementDraftAcceptPayloadV1,
+  RequirementDraftFeedbackPayloadV1,
+  RequirementOpenPayloadV1,
   ResumeFromHandoffPayloadV1,
   SetLimitPayloadV1,
   SetTaskLabelsPayloadV1,
@@ -218,7 +223,13 @@ export type ControlAction =
   | { verb: "continue-task"; groupId: string; taskId: string; expectedRevision: number; payload: ContinueTaskPayloadV1 }
   | { verb: "recovery-retry"; groupId: string; expectedRevision: number; payload: RecoveryRetryPayloadV1 }
   | { verb: "set-task-labels"; groupId: string; taskId: string; expectedRevision: number; payload: SetTaskLabelsPayloadV1 }
-  | { verb: "set-task-loop"; groupId: string; taskId: string; expectedRevision: number; payload: SetTaskLoopPayloadV1 };
+  | { verb: "set-task-loop"; groupId: string; taskId: string; expectedRevision: number; payload: SetTaskLoopPayloadV1 }
+  // N1 spec §11.1: the requirement commands (accept's server route is Task 10's).
+  | { verb: "requirement-open"; groupId: string; expectedRevision: number; payload: RequirementOpenPayloadV1 }
+  | { verb: "requirement-answer"; groupId: string; expectedRevision: number; payload: RequirementAnswerPayloadV1 }
+  | { verb: "requirement-consensus"; groupId: string; expectedRevision: number; payload: RequirementConsensusPayloadV1 }
+  | { verb: "requirement-draft-feedback"; groupId: string; expectedRevision: number; payload: RequirementDraftFeedbackPayloadV1 }
+  | { verb: "requirement-draft-accept"; groupId: string; expectedRevision: number; payload: RequirementDraftAcceptPayloadV1 };
 
 /** The route a verb is served on -- src/panel/controlApi.ts's mutation table. */
 export function controlCommandPath(action: ControlAction): string {
@@ -254,6 +265,16 @@ export function controlCommandPath(action: ControlAction): string {
       return `${group}/tasks/${segment(action.taskId)}/loop`;
     case "recovery-retry":
       return "/api/control/recovery/retry";
+    case "requirement-open":
+      return "/api/control/requirements";
+    case "requirement-answer":
+      return `${group}/requirement/answer`;
+    case "requirement-consensus":
+      return `${group}/requirement/consensus`;
+    case "requirement-draft-feedback":
+      return `${group}/requirement/feedback`;
+    case "requirement-draft-accept":
+      return `${group}/requirement/accept`;
   }
 }
 

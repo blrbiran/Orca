@@ -11,7 +11,7 @@ import { writeCanonicalRecord } from "./snapshot.js";
 import { rearmFailedContinuation } from "./continuation.js";
 import { resumeBlockedDriverRun } from "./driveRecord.js";
 import { singleCallPurposeOf } from "./singleCall.js";
-import { refuseClarifying } from "./requirementRecords.js";
+import { hasRequirementBlock, latestDraft, latestRound, newDraft, queueRequirementCall, readRequirementGroup, refuseClarifying, saveRequirementGroup, writeDraft, writeRound } from "./requirementRecords.js";
 import { interruptRequirementCall } from "./requirementCalls.js";
 import { dispatchEnvelopeSchema, type CapabilityViewV1, type CommandErrorBodyV1, type CommandSuccessV1, type RawAuthorityCommandV1 } from "./webProtocol.js";
 import { idSchema, safeInteger, canonicalTimestampSchema } from "./schema.js";
@@ -481,9 +481,57 @@ function retryRun(store: ControlStore, groupId: string, runId: string, context: 
 }
 
 function retryGroup(store: ControlStore, groupId: string, context: WebCommandContext): ObservedRecovery {
-  void context;
   const blockers = clearedBlockers(store, groupId, null);
-  return { resolved: blockers.resolved, blockerCodes: blockers.codes, evidenceIds: blockers.evidenceIds, wakeIds: [] };
+  // N1 DR15: a requirement's own recovery -- a completed stop lifted, a failed or interrupted call re-queued, a conflicted export retried.
+  const row = store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId);
+  const requirement = row !== undefined && hasRequirementBlock(JSON.parse(String(row.body)) as { requirement?: unknown })
+    ? retryRequirementInTransaction(store, groupId, context.nextCommandRevision) : { resolved: false, wakeIds: [] };
+  return { resolved: blockers.resolved || requirement.resolved, blockerCodes: blockers.codes, evidenceIds: blockers.evidenceIds, wakeIds: requirement.wakeIds };
+}
+
+/**
+ * N1 DR15 (spec §11.1 "recovery-retry: a failed or interrupted round or draft"). On a clarifying group: a handoff or
+ * shutdown stop that has completed is lifted (a pause cannot exist there, and a stop still settling stays); then the
+ * latest failed or interrupted round is drafted again in place with a fresh retry count, or, after consensus, the next
+ * draft is drafted with a fresh retry count (the failed or interrupted draft stays as it ended). A conflicted export is
+ * set pending again with its wake undelivered.
+ */
+function retryRequirementInTransaction(store: ControlStore, groupId: string, revision: number): { resolved: boolean; wakeIds: string[] } {
+  const group = readRequirementGroup(store, groupId);
+  const wakeIds: string[] = [];
+  let resolved = false;
+  if (group.requirement.export.state === "conflict") {
+    const wakeId = `scheduler-wake:${groupId}:requirement-export`;
+    group.requirement.export = { state: "pending", path: null, commit: null, parent: null, detail: null };
+    store.db.prepare("INSERT INTO scheduler_wakes(id,group_id,kind,body,delivered) VALUES (?,?,'requirement-export',?,0) ON CONFLICT(id) DO UPDATE SET delivered=0")
+      .run(wakeId, groupId, canonicalBytes({ groupId }).toString("utf8"));
+    wakeIds.push(wakeId);
+    resolved = true;
+  }
+  if (group.status === "clarifying") {
+    if (groupStopState(store, groupId) === "handoff-complete") {
+      store.db.prepare("DELETE FROM stop_intents WHERE group_id=?").run(groupId);
+      group.stopped = false;
+      resolved = true;
+    }
+    let requeue = false;
+    if (group.requirement.consensus === null) {
+      const round = latestRound(store, groupId);
+      if (round !== null && (round.state === "failed" || round.state === "interrupted")) {
+        writeRound(store, groupId, { ...round, state: "drafting", retries: 0, lastInvalidReason: null, reasonCode: null, waiting: null });
+        requeue = true;
+      }
+    } else {
+      const draft = latestDraft(store, groupId);
+      if (draft !== null && (draft.state === "failed" || draft.state === "interrupted")) {
+        writeDraft(store, groupId, newDraft(draft.draftNo + 1, 0));
+        requeue = true;
+      }
+    }
+    if (requeue) { wakeIds.push(queueRequirementCall(store, groupId, `recovery-${revision}`)); resolved = true; }
+  }
+  if (resolved) saveRequirementGroup(store, group);
+  return { resolved, wakeIds };
 }
 
 export function deliverHandoffStop(deps: StopDeps, groupId: string): HandoffDelivery {

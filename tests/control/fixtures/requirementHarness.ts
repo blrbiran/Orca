@@ -100,10 +100,10 @@ function seedConsensus(store: Awaited<ReturnType<typeof openTestStore>>["store"]
 
 /**
  * A clarifying group "r" on target repository `repo` (README.md, src/a.ts), round 1 queued as requirement-open leaves it
- * (or, with `startAt: "split"`, draft 1 queued after consensus), a driver over the queued single-call port, the pump's
- * real wake handlers, and the service for commands.
+ * (or, with `startAt: "split"`, draft 1 queued after consensus; with `startAt: "none"`, no group), a driver over the
+ * queued single-call port, the pump's real wake handlers, and the service for commands.
  */
-export async function requirementHarness(options: { answers: QueuedAnswer[]; stoppable?: boolean; limit?: Amount; startAt?: "split" } = { answers: [] }) {
+export async function requirementHarness(options: { answers: QueuedAnswer[]; stoppable?: boolean; limit?: Amount; startAt?: "round" | "split" | "none" } = { answers: [] }) {
   const h = await openTestStore();
   const repo = join(h.root, "repo");
   await mkdir(join(repo, "src"), { recursive: true });
@@ -123,7 +123,8 @@ export async function requirementHarness(options: { answers: QueuedAnswer[]; sto
   const frozenSlot = slot.outcome.slot;
   // Controller ruling PR-B1: what requirement-open leaves behind -- the group at revision 1 and projection_seq 1, round 1
   // drafting and its call queued -- in one transaction.
-  h.store.transaction(() => {
+  // Task 9 (`startAt: "none"`): no group at all, for criteria that make one through requirement-open.
+  if (options.startAt !== "none") h.store.transaction(() => {
     insertClarifyingGroup(h.store, clarifyingInput("r", { limit: options.limit ?? { ...REQUIREMENT_LIMIT_DEFAULT }, profile: { profileId: "all", profileHash: profile.profileHash }, agentSlot: frozenSlot, maxOutputTokens: 64_000 }));
     updateRevision(h.store, "r", 1);
     h.store.db.prepare("UPDATE groups SET projection_seq=1 WHERE id='r'").run();

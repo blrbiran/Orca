@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { agentSelectionSchema, amountSchema, canonicalTimestampSchema, commandEnvelopeSchema, contextWindowSchema, idSchema, panelPartialSelectionSchema, partialSelectionSchema, safeInteger } from "./schema.js";
 import { nonEmptyStoredLabelsSchema, storedLabelsSchema } from "./labels.js";
-import { DRAFT_STATES, ROUND_STATES } from "./requirementSchemas.js";
+import { DRAFT_STATES, IDEA_MAX_BYTES, ROUND_STATES, questionIdSchema } from "./requirementSchemas.js";
 import { LOOP_PLAN_IDS, loopInputsSchema, loopRecipeSchema } from "./loopPlans.js";
 // Agent selection spec §12 I10 (plan-review P18): the selection/context/partial schemas are T7's, defined once
 // in schema.ts; webProtocol.ts re-exports them so every downstream import can come from one wire module.
@@ -598,6 +598,11 @@ export const commandVerbSchema = z.enum([
   "proposal-set-agent",
   "set-task-labels",
   "set-task-loop",
+  "requirement-open",
+  "requirement-answer",
+  "requirement-consensus",
+  "requirement-draft-feedback",
+  "requirement-draft-accept",
 ]);
 
 const repositoryCommandTargetSchema = z.object({ kind: z.literal("repository"), repoId: idSchema }).strict();
@@ -755,6 +760,28 @@ export const setTaskLoopPayloadSchema = z
   })
   .strict();
 
+// N1 spec §11.1: the five requirement commands. Shape only; every transition is decided in apply and ledgered.
+const answerInputSchema = z.discriminatedUnion("kind", [
+  z.object({ id: questionIdSchema, kind: z.literal("recommended") }).strict(),
+  z.object({ id: questionIdSchema, kind: z.literal("text"), text: nonemptyString.max(8 * 1024) }).strict(),
+]);
+const decisionInputSchema = z.object({ id: nonemptyString, accept: z.boolean() }).strict();
+const ideaSchema = nonemptyString.refine((idea) => Buffer.byteLength(idea, "utf8") <= IDEA_MAX_BYTES, "idea-too-large");
+export const requirementOpenPayloadSchema = z.object({
+  groupId: idSchema, repoId: idSchema, idea: ideaSchema, limit: amountSchema.optional(), agent: panelPartialSelectionSchema.optional(), contentLanguage: z.enum(["en", "zh"]).optional(),
+}).strict();
+const effectiveRequirementOpenPayloadSchema = z.object({
+  groupId: idSchema, repoId: idSchema, idea: ideaSchema, limit: amountSchema, agent: panelPartialSelectionSchema.nullable(), contentLanguage: z.enum(["en", "zh"]),
+}).strict();
+export const requirementAnswerPayloadSchema = z.object({
+  roundNo: positiveSafeInteger, answers: z.array(answerInputSchema), glossaryDecisions: z.array(decisionInputSchema), adrDecisions: z.array(decisionInputSchema),
+}).strict();
+export const requirementConsensusPayloadSchema = z.object({ roundNo: positiveSafeInteger }).strict();
+export const requirementDraftFeedbackPayloadSchema = z.object({
+  draftNo: positiveSafeInteger, feedback: nonemptyString.refine((text) => Buffer.byteLength(text, "utf8") <= IDEA_MAX_BYTES, "feedback-too-large"),
+}).strict();
+export const requirementDraftAcceptPayloadSchema = z.object({ draftNo: positiveSafeInteger, draftHash: hashSchema }).strict();
+
 const groupCommandTargetSchema = z.object({ kind: z.literal("group"), groupId: idSchema }).strict();
 const taskCommandTargetSchema = z.object({ kind: z.literal("task"), groupId: idSchema, taskId: idSchema }).strict();
 const globalCommandTargetSchema = z.object({ kind: z.literal("global"), epoch: nonemptyString }).strict();
@@ -792,6 +819,11 @@ const rawAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...rawCommandFields, verb: z.literal("set-agent-preferences"), target: operatorCommandTargetSchema, payload: setAgentPreferencesPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-task-labels"), target: taskCommandTargetSchema, payload: setTaskLabelsPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-task-loop"), target: taskCommandTargetSchema, payload: setTaskLoopPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("requirement-open"), target: groupCommandTargetSchema, payload: requirementOpenPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("requirement-answer"), target: groupCommandTargetSchema, payload: requirementAnswerPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("requirement-consensus"), target: groupCommandTargetSchema, payload: requirementConsensusPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("requirement-draft-feedback"), target: groupCommandTargetSchema, payload: requirementDraftFeedbackPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("requirement-draft-accept"), target: groupCommandTargetSchema, payload: requirementDraftAcceptPayloadSchema }).strict(),
 ]);
 
 const effectiveAuthorityCommandVariants = z.discriminatedUnion("verb", [
@@ -830,6 +862,11 @@ const effectiveAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...effectiveCommandFields, verb: z.literal("set-agent-preferences"), target: operatorCommandTargetSchema, payload: setAgentPreferencesPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-task-labels"), target: taskCommandTargetSchema, payload: setTaskLabelsPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-task-loop"), target: taskCommandTargetSchema, payload: setTaskLoopPayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("requirement-open"), target: groupCommandTargetSchema, payload: effectiveRequirementOpenPayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("requirement-answer"), target: groupCommandTargetSchema, payload: requirementAnswerPayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("requirement-consensus"), target: groupCommandTargetSchema, payload: requirementConsensusPayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("requirement-draft-feedback"), target: groupCommandTargetSchema, payload: requirementDraftFeedbackPayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("requirement-draft-accept"), target: groupCommandTargetSchema, payload: requirementDraftAcceptPayloadSchema }).strict(),
 ]);
 
 function refineCommandIdentity(
@@ -837,6 +874,9 @@ function refineCommandIdentity(
   ctx: z.RefinementCtx,
 ): void {
   if (value.verb === "import-plan" && value.target.groupId !== value.payload.groupId) {
+    issue(ctx, ["target", "groupId"], "command-target-payload-mismatch");
+  }
+  if (value.verb === "requirement-open" && value.target.groupId !== value.payload.groupId) {
     issue(ctx, ["target", "groupId"], "command-target-payload-mismatch");
   }
   if (value.verb === "recovery-retry") {
@@ -1296,6 +1336,21 @@ const commandResultSchema = z.discriminatedUnion("kind", [
       wakeIds: z.array(nonemptyString).superRefine((values, ctx) => requireSortedUnique(values, String, ctx, [])),
     })
     .strict(),
+  // N1 spec §11.1: the requirement commands' results.
+  z.object({ kind: z.literal("requirement-opened"), groupId: idSchema, requirementId: z.string().regex(/^[a-f0-9]{32}$/), roundNo: z.literal(1), wakeId: nonemptyString }).strict(),
+  z.object({ kind: z.literal("requirement-answered"), roundNo: positiveSafeInteger, nextRoundNo: positiveSafeInteger.nullable(), wakeId: nonemptyString.nullable() }).strict(),
+  z.object({ kind: z.literal("requirement-consensus"), roundNo: positiveSafeInteger, draftNo: positiveSafeInteger, wakeId: nonemptyString }).strict(),
+  z.object({ kind: z.literal("requirement-draft-rejected"), draftNo: positiveSafeInteger, nextDraftNo: positiveSafeInteger, wakeId: nonemptyString }).strict(),
+  z
+    .object({
+      kind: z.literal("requirement-draft-accepted"),
+      draftNo: positiveSafeInteger,
+      estimateId: idSchema,
+      estimateState: z.enum(["queued", "blocked-capability", "input-too-large"]),
+      documentSha256: hashSchema,
+      exportWakeId: nonemptyString,
+    })
+    .strict(),
   z
     .object({
       kind: z.literal("shutdown"),
@@ -1415,6 +1470,11 @@ export type SetAgentPreferencesPayload = z.infer<typeof setAgentPreferencesPaylo
 export type ProposalSetAgentPayload = z.infer<typeof proposalSetAgentPayloadSchema>;
 export type SetTaskLabelsPayload = z.infer<typeof setTaskLabelsPayloadSchema>;
 export type SetTaskLoopPayload = z.infer<typeof setTaskLoopPayloadSchema>;
+export type RequirementOpenPayload = z.infer<typeof requirementOpenPayloadSchema>;
+export type RequirementAnswerPayload = z.infer<typeof requirementAnswerPayloadSchema>;
+export type RequirementConsensusPayload = z.infer<typeof requirementConsensusPayloadSchema>;
+export type RequirementDraftFeedbackPayload = z.infer<typeof requirementDraftFeedbackPayloadSchema>;
+export type RequirementDraftAcceptPayload = z.infer<typeof requirementDraftAcceptPayloadSchema>;
 
 // Agent selection spec §6.8 (plan T14): the three reads the panel's agent UI is built on. The component schemas
 // (contextWindowSchema, partialSelectionSchema, operatorPreferencesSchema, groupAgentOverridesSchema,

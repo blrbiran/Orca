@@ -32,6 +32,10 @@ import type { AdmissionGate } from "./admissionGate.js";
 import { budgetBalance } from "./budget.js";
 import { refuseClarifying, setRequirementLimit } from "./requirementRecords.js";
 import { assertCallUsageBooked, closeSingleCall, insertSingleCallRun, verifyStoppedSingleCall } from "./singleCallLedger.js";
+import {
+  applyRequirementAnswer, applyRequirementConsensus, applyRequirementDraftFeedback, applyRequirementOpen,
+  type RequirementAnswerCommand, type RequirementConsensusCommand, type RequirementDraftFeedbackCommand, type RequirementOpenCommand,
+} from "./requirementCommands.js";
 
 export type ProposalEditCommand = Extract<RawAuthorityCommandV1, { verb: "proposal-edit" }>;
 export type ReestimateCommand = Extract<RawAuthorityCommandV1, { verb: "estimate" }>;
@@ -433,6 +437,11 @@ export class WebControlService {
   async recoveryRetry(command: RecoveryRetryCommand): Promise<WebCommandResult> {
     return applyRecoveryRetry(this.stopDeps(), command) as WebCommandResult;
   }
+  /** N1 spec §11.1. */
+  openRequirement(command: RequirementOpenCommand): Promise<WebCommandResult> { return applyRequirementOpen(this.deps, command); }
+  answerRequirement(command: RequirementAnswerCommand): WebCommandResult { return applyRequirementAnswer(this.deps, command); }
+  requirementConsensus(command: RequirementConsensusCommand): WebCommandResult { return applyRequirementConsensus(this.deps, command); }
+  requirementDraftFeedback(command: RequirementDraftFeedbackCommand): WebCommandResult { return applyRequirementDraftFeedback(this.deps, command); }
   /** Execution driver spec §3.2. A panel started without the repository refuses it by name. */
   async setWorkspaceMode(command: SetWorkspaceModeCommand): Promise<WebCommandResult> {
     return applySetWorkspaceMode({ store: this.store, admissionGate: this.deps.admissionGate, knownRepository: this.deps.knownRepository ?? (() => false) }, command) as WebCommandResult;

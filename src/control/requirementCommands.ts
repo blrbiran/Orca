@@ -1,0 +1,158 @@
+import { applyWebCommand, preflightWebCommand } from "./commandLedger.js";
+import { sha256Canonical } from "./canonicalJson.js";
+import { ControlError } from "./errors.js";
+import { estimatorSlotFor, type ImportDefaults, type PreparedEstimatorSlot } from "./planImport.js";
+import type { ExecutionProfileRouter, FrozenProfile } from "./profiles.js";
+import {
+  insertClarifyingGroup, latestDraft, latestRound, newDraft, newRound, queueRequirementCall, readRequirementGroup, readRounds, saveRequirementGroup,
+  writeDraft, writeRound,
+} from "./requirementRecords.js";
+import { REQUIREMENT_LIMIT_DEFAULT } from "./requirementSchemas.js";
+import { commandSuccess } from "./stopIntent.js";
+import type { ControlStore } from "./store.js";
+import type { AdmissionGate } from "./admissionGate.js";
+import type { Amount } from "./types.js";
+import type { CommandLookupV1, RawAuthorityCommandV1 } from "./webProtocol.js";
+
+export type RequirementOpenCommand = Extract<RawAuthorityCommandV1, { verb: "requirement-open" }>;
+export type RequirementAnswerCommand = Extract<RawAuthorityCommandV1, { verb: "requirement-answer" }>;
+export type RequirementConsensusCommand = Extract<RawAuthorityCommandV1, { verb: "requirement-consensus" }>;
+export type RequirementDraftFeedbackCommand = Extract<RawAuthorityCommandV1, { verb: "requirement-draft-feedback" }>;
+export type RequirementDraftAcceptCommand = Extract<RawAuthorityCommandV1, { verb: "requirement-draft-accept" }>;
+type Result = CommandLookupV1["body"];
+export interface RequirementCommandDeps {
+  store: ControlStore; admissionGate?: AdmissionGate; profileRouter: ExecutionProfileRouter; defaults: () => ImportDefaults;
+  knownRepository?: (repoId: string) => boolean; now?: () => Date;
+}
+type EffectiveOpenPayload = { groupId: string; repoId: string; idea: string; limit: Amount; agent: Record<string, unknown> | null; contentLanguage: "en" | "zh" };
+
+const nowOf = (deps: { now?: () => Date }) => (deps.now ?? (() => new Date()))();
+const invalid = (detail: string): never => { throw new ControlError("group-state-invalid", detail); };
+const sameIds = (given: readonly string[], expected: readonly string[]) =>
+  given.length === expected.length && new Set(given).size === given.length && expected.every((id) => given.includes(id));
+function admitted<T>(deps: { admissionGate?: AdmissionGate }, action: () => T): T {
+  const release = deps.admissionGate?.enter();
+  try { return action(); } finally { release?.(); }
+}
+function clarifying(store: ControlStore, groupId: string) {
+  const group = readRequirementGroup(store, groupId);
+  if (group.status !== "clarifying") invalid("not-clarifying");
+  return group;
+}
+
+/** Spec §11.1 item 1 (DR7, DR13, DR24): the agent is resolved outside the transaction and frozen inside it. */
+export async function applyRequirementOpen(deps: RequirementCommandDeps, command: RequirementOpenCommand): Promise<Result> {
+  // The admission gate is held across the probe's await, as createEstimate holds it (webService.ts).
+  const release = deps.admissionGate?.enter();
+  try {
+    const replay = preflightWebCommand<Result>(deps.store, command);
+    if (replay) return replay.body;
+    let profile: FrozenProfile, slot: PreparedEstimatorSlot;
+    try {
+      const defaults = deps.defaults();
+      profile = deps.profileRouter.resolve("budget-estimate", defaults.estimatorProfileId, defaults.estimatorProfileHash);
+      slot = await estimatorSlotFor({ store: deps.store, profileRouter: deps.profileRouter }, command.actorId, command.payload.agent === undefined ? {} : { estimator: command.payload.agent }, profile);
+    } catch (error) {
+      return applyWebCommand<Result>(deps.store, { rawCommand: command, expand: () => { throw error; }, apply: () => { throw error; } }).body;
+    }
+    const now = nowOf(deps);
+    return applyWebCommand<Result>(deps.store, {
+      rawCommand: command,
+      expand: () => ({ ...command, schema: "orca-authority-command-v1", payload: {
+        groupId: command.payload.groupId, repoId: command.payload.repoId, idea: command.payload.idea,
+        limit: command.payload.limit ?? { ...REQUIREMENT_LIMIT_DEFAULT }, agent: command.payload.agent ?? null, contentLanguage: command.payload.contentLanguage ?? "en",
+      } }),
+      apply: (context) => {
+        const payload = context.effectiveCommand.payload as EffectiveOpenPayload;
+        if (!(deps.knownRepository?.(payload.repoId) ?? false)) throw new ControlError("group-project-binding-required");
+        if (deps.store.db.prepare("SELECT id FROM groups WHERE id=?").get(payload.groupId)) throw new ControlError("group-already-exists");
+        if (slot.outcome.kind !== "frozen") throw new ControlError("agent-selection-rejected", `estimator:${slot.outcome.code}`);
+        const preflight = profile.snapshot.profile.estimatorPreflight;
+        if (!preflight) throw new ControlError("control-estimator-unconfigured");
+        const requirementId = sha256Canonical({ groupId: payload.groupId, commandId: command.commandId }).slice(0, 32);
+        insertClarifyingGroup(deps.store, {
+          groupId: payload.groupId, repoId: payload.repoId, idea: payload.idea, limit: payload.limit, contentLanguage: payload.contentLanguage,
+          createdOn: now.toISOString().slice(0, 10), requirementId, profile: { profileId: profile.snapshot.profile.profileId, profileHash: profile.profileHash },
+          agentSlot: slot.outcome.slot, agentOverrides: payload.agent === null ? {} : { estimator: payload.agent }, maxOutputTokens: preflight.maxOutputTokens,
+        });
+        writeRound(deps.store, payload.groupId, newRound(1));
+        const wakeId = queueRequirementCall(deps.store, payload.groupId, `open-${context.nextCommandRevision}`);
+        return commandSuccess(context, { kind: "requirement-opened", groupId: payload.groupId, requirementId, roundNo: 1, wakeId }, 201);
+      },
+    }).body;
+  } finally { release?.(); }
+}
+
+/** Spec §11.1 item 2 (DR10, DR11): every question answered, every proposal decided; the next round only while the frontier is open. */
+export function applyRequirementAnswer(deps: RequirementCommandDeps, command: RequirementAnswerCommand): Result {
+  return admitted(deps, () => applyWebCommand<Result>(deps.store, {
+    rawCommand: command, expand: () => ({ ...command, schema: "orca-authority-command-v1" }),
+    apply: (context) => {
+      const id = command.target.groupId, payload = command.payload;
+      clarifying(deps.store, id);
+      // After consensus the latest round is never awaiting answers (consensus closes it), so this check also refuses that.
+      const round = latestRound(deps.store, id);
+      if (round === null || round.roundNo !== payload.roundNo || round.state !== "awaiting-answers" || round.result === null) return invalid("round-not-awaiting-answers");
+      const result = round.result;
+      if (!sameIds(payload.answers.map((a) => a.id), result.questions.map((q) => q.id))) invalid("answers");
+      if (!sameIds(payload.glossaryDecisions.map((d) => d.id), result.glossary.map((e) => e.id))) invalid("glossary-decisions");
+      if (!sameIds(payload.adrDecisions.map((d) => d.id), result.adrs.map((a) => a.id))) invalid("adr-decisions");
+      const given = new Map(payload.answers.map((a) => [a.id, a]));
+      const answers = result.questions.map((q) => {
+        const a = given.get(q.id)!;
+        return { id: q.id, kind: a.kind, text: a.kind === "text" ? a.text : q.recommendedAnswer };
+      });
+      writeRound(deps.store, id, { ...round, state: "answered", answers, glossaryDecisions: payload.glossaryDecisions, adrDecisions: payload.adrDecisions, answeredAt: nowOf(deps).toISOString() });
+      if (result.frontierEmpty) return commandSuccess(context, { kind: "requirement-answered", roundNo: round.roundNo, nextRoundNo: null, wakeId: null });
+      writeRound(deps.store, id, newRound(round.roundNo + 1));
+      const wakeId = queueRequirementCall(deps.store, id, `answer-${context.nextCommandRevision}`);
+      return commandSuccess(context, { kind: "requirement-answered", roundNo: round.roundNo, nextRoundNo: round.roundNo + 1, wakeId });
+    },
+  }).body);
+}
+
+const CONSENSUS_ROUND_STATES: readonly string[] = ["answered", "awaiting-answers", "failed", "interrupted"];
+
+/** Spec §11.1 item 3 (DR10): the person agrees; open branches and unanswered questions go into the document. Draft 1 is queued. */
+export function applyRequirementConsensus(deps: RequirementCommandDeps, command: RequirementConsensusCommand): Result {
+  return admitted(deps, () => applyWebCommand<Result>(deps.store, {
+    rawCommand: command, expand: () => ({ ...command, schema: "orca-authority-command-v1" }),
+    apply: (context) => {
+      const id = command.target.groupId, group = clarifying(deps.store, id);
+      if (group.requirement.consensus !== null) invalid("consensus-reached");
+      const round = latestRound(deps.store, id);
+      if (round === null || round.roundNo !== command.payload.roundNo || !CONSENSUS_ROUND_STATES.includes(round.state)) return invalid("round-state");
+      if (deps.store.db.prepare("SELECT id FROM runs WHERE group_id=? AND active=1").get(id)) invalid("call-in-flight");
+      const understood = readRounds(deps.store, id).filter((r) => r.result !== null);
+      if (understood.length === 0) invalid("no-understanding-yet");
+      const now = nowOf(deps).toISOString();
+      let openQuestions: string[] = [];
+      if (round.state === "awaiting-answers") {
+        openQuestions = round.result!.questions.map((q) => q.id);
+        writeRound(deps.store, id, { ...round, state: "answered", closedByConsensus: true, answers: [], glossaryDecisions: [], adrDecisions: [], answeredAt: now });
+      }
+      group.requirement.consensus = { roundNo: round.roundNo, at: now, openBranches: understood.at(-1)!.result!.openBranches, openQuestions };
+      saveRequirementGroup(deps.store, group);
+      writeDraft(deps.store, id, newDraft(1, 0));
+      const wakeId = queueRequirementCall(deps.store, id, `consensus-${context.nextCommandRevision}`);
+      return commandSuccess(context, { kind: "requirement-consensus", roundNo: round.roundNo, draftNo: 1, wakeId });
+    },
+  }).body);
+}
+
+/** Spec §11.1 item 4 (DR9): the person sends a draft back in their own words; the next draft starts a fresh retry count. */
+export function applyRequirementDraftFeedback(deps: RequirementCommandDeps, command: RequirementDraftFeedbackCommand): Result {
+  return admitted(deps, () => applyWebCommand<Result>(deps.store, {
+    rawCommand: command, expand: () => ({ ...command, schema: "orca-authority-command-v1" }),
+    apply: (context) => {
+      const id = command.target.groupId;
+      clarifying(deps.store, id);
+      const draft = latestDraft(deps.store, id);
+      if (draft === null || draft.draftNo !== command.payload.draftNo || draft.state !== "awaiting-review") return invalid("draft-not-awaiting-review");
+      writeDraft(deps.store, id, { ...draft, state: "rejected", feedback: command.payload.feedback });
+      writeDraft(deps.store, id, newDraft(draft.draftNo + 1, 0));
+      const wakeId = queueRequirementCall(deps.store, id, `feedback-${context.nextCommandRevision}`);
+      return commandSuccess(context, { kind: "requirement-draft-rejected", draftNo: draft.draftNo, nextDraftNo: draft.draftNo + 1, wakeId });
+    },
+  }).body);
+}
