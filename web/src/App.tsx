@@ -303,9 +303,7 @@ export function App(): JSX.Element {
     }
     dispatchControl({ type: "command-resolved", value: command });
     if (result.kind === "absent") dispatchControl({ type: "refusal", groupId: command.groupId, value: result.refusal });
-    // N1 spec §11.2 (DR25): a clarifying group is read through its requirement view.
-    if (controlNow.current.groups[command.groupId]?.state === "clarifying") await readRequirement(command.groupId);
-    else await readControlGroup(command.groupId);
+    await readControlGroup(command.groupId);
   };
 
   /**

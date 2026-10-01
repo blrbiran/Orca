@@ -172,7 +172,7 @@ function Detail(props: { view: View; onCommand: (a: ControlAction) => void }): J
   const drafting = step?.state === "drafting";
   // Spec §11.1: recovery-retry re-queues a failed or interrupted round or draft -- one the person stopped carries no reason code.
   const stalled = step?.state === "failed" || step?.state === "interrupted";
-  const retryable = reason !== BUDGET_EXHAUSTED && ((reason !== null && RETRYABLE.includes(reason)) || stalled);
+  const retryable = (reason !== null && RETRYABLE.includes(reason)) || stalled;
   const exportState = view.requirement.export.state;
   return (
     <article aria-label={view.requirement.slug ?? groupId}>

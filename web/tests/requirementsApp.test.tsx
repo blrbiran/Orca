@@ -18,10 +18,12 @@ const json = (body: unknown, status = 200): Response => new Response(JSON.string
 /** Every request the page made, as "METHOD url", in order. */
 let requests: string[];
 let openAnswer: { status: number; body: unknown };
+let shownView: ReturnType<typeof requirementView>;
 
 beforeEach(() => {
   requests = [];
   openAnswer = { status: 201, body: { schema: "orca-command-success-v1" } };
+  shownView = requirementView("awaiting-answers");
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const url = String(input);
     const method = init?.method ?? "GET";
@@ -35,9 +37,9 @@ beforeEach(() => {
     if (url === "/api/control/agents") return json({ schema: "orca-agents-view-v1", installations: [] });
     if (url === "/api/control/operator/agent-preferences") return json({ schema: "orca-agent-preferences-v1", operatorId: "op", revision: 0, preferences: { perAgent: {} } });
     if (url === "/api/control/repositories/repo/workspace") return json({ schema: "orca-repository-workspace-v1", repoId: "repo", workspaceMode: "worktree", revision: 0 });
-    if (/^\/api\/control\/groups\/[^/]+\/requirement$/.test(url)) return json(requirementView("awaiting-answers"));
+    if (/^\/api\/control\/groups\/[^/]+\/requirement$/.test(url)) return json(shownView);
     if (method === "POST" && url === "/api/control/requirements") return json(openAnswer.body, openAnswer.status);
-    if (method === "POST" && url === "/api/control/groups/r/requirement/answer") return json({ schema: "orca-command-success-v1", commandRevision: 4 });
+    if (method === "POST" && /^\/api\/control\/groups\/r\/requirement\/(answer|accept)$/.test(url)) return json({ schema: "orca-command-success-v1", commandRevision: 4 });
     return json({ error: { code: "group-not-found", message: url } }, 404);
   }) as typeof fetch;
 });
@@ -80,5 +82,23 @@ describe("App and the Requirements section (N1 spec §11.2, DR25)", () => {
     const section = within(screen.getByRole("region", { name: "Requirements" }));
     expect((await section.findByRole("alert")).textContent).toMatch(/^idea-too-large · /);
     expect(requests.filter((request) => /^GET \/api\/control\/groups\/requirement-/.test(request))).toEqual([]);
+  });
+
+  it("reads Task control's group view once a split is accepted, for the group is operated from there on", async () => {
+    shownView = requirementView("awaiting-review");
+    render(<App />);
+    fireEvent.click(await (await requirementList()).findByRole("button", { name: /^r · clarifying/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Accept this split" }));
+    await waitFor(() => expect(requests.slice(requests.indexOf("POST /api/control/groups/r/requirement/accept") + 1)).toContain("GET /api/control/groups/r"));
+    expect(requests).toContain("POST /api/control/groups/r/requirement/accept");
+  });
+
+  it("re-reads the open requirement on the summary poll that lists it", async () => {
+    render(<App />);
+    fireEvent.click(await (await requirementList()).findByRole("button", { name: /^r · clarifying/ }));
+    await waitFor(() => expect(requests).toContain("GET /api/control/groups/r/requirement"));
+    const before = requests.filter((request) => request === "GET /api/control/groups/r/requirement").length;
+    // The next 2 s poll answers a summary that lists r again.
+    await waitFor(() => expect(requests.filter((request) => request === "GET /api/control/groups/r/requirement").length).toBeGreaterThan(before), { timeout: 4_000 });
   });
 });
