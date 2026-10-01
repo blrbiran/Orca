@@ -5,7 +5,7 @@ import { readRequirementGroup, saveRequirementGroup, type RequirementBlock } fro
 import { readCanonicalRecord } from "./snapshot.js";
 import type { AdmissionGate } from "./admissionGate.js";
 import type { ControlStore } from "./store.js";
-import { QUIET_GIT, workBranchRef } from "./workspace.js";
+import { QUIET_GIT, unsetInheritedGitEnv, workBranchRef } from "./workspace.js";
 import { git, gitBytes, type GitOptions } from "../scheduler/gitExec.js";
 
 const TRAILER = "Orca-Document-Sha256";
@@ -31,15 +31,16 @@ function record(deps: ExportDeps, groupId: string, exported: RequirementBlock["e
 }
 
 /**
- * Every child runs QUIET_GIT (no hook -- reference-transaction included -- and no fsmonitor of the target runs) and is
- * bounded. None of the commands below checks anything out, so no smudge filter can run; hash-object, the one that
- * converts content, is given --no-filters.
+ * Every child runs QUIET_GIT (no hook -- reference-transaction included -- and no fsmonitor of the target runs), without
+ * any GIT_* variable of Orca's own environment (final review triage), and is bounded. None of the commands below checks
+ * anything out, so no smudge filter can run; hash-object, the one that converts content, is given --no-filters.
  */
 function exportGit(deps: ExportDeps, repo: string) {
   const timeoutMs = deps.gitTimeoutMs ?? GIT_EXPORT_TIMEOUT_MS;
-  const run = async (args: string[], options: Omit<GitOptions, "timeoutMs"> = {}): Promise<string> => git(repo, [...QUIET_GIT, ...args], { ...options, timeoutMs });
+  const env = (options: Omit<GitOptions, "timeoutMs">): NodeJS.ProcessEnv => ({ ...unsetInheritedGitEnv(), ...options.env });
+  const run = async (args: string[], options: Omit<GitOptions, "timeoutMs"> = {}): Promise<string> => git(repo, [...QUIET_GIT, ...args], { ...options, env: env(options), timeoutMs });
   return Object.assign(run, {
-    bytes: async (args: string[], options: Omit<GitOptions, "timeoutMs"> = {}): Promise<Buffer> => gitBytes(repo, [...QUIET_GIT, ...args], { ...options, timeoutMs }),
+    bytes: async (args: string[], options: Omit<GitOptions, "timeoutMs"> = {}): Promise<Buffer> => gitBytes(repo, [...QUIET_GIT, ...args], { ...options, env: env(options), timeoutMs }),
   });
 }
 type ExportGit = ReturnType<typeof exportGit>;

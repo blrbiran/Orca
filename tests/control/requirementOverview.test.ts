@@ -266,3 +266,20 @@ describe("a hostile tree in the structure export (final review finding 2)", () =
     expect(await fake.calls()).toEqual([]);
   });
 });
+
+// Final review fix wave, triage (deferred T11): a GIT_* variable in Orca's own environment -- as a git hook running the
+// panel would set -- must not redirect what the overview reads.
+describe("the overview's git children and Orca's environment (final review triage)", () => {
+  it("reads the target repository even when Orca's environment carries GIT_DIR and GIT_INDEX_FILE for another", async () => {
+    const w = await world({ "README.md": "# Target\n", "src/a.ts": "export const a = 1\n" });
+    const decoy = await world({ "DECOY.md": "# Decoy\n" });
+    const saved = { GIT_DIR: process.env.GIT_DIR, GIT_INDEX_FILE: process.env.GIT_INDEX_FILE };
+    process.env.GIT_DIR = join(decoy.repo, ".git"); process.env.GIT_INDEX_FILE = join(decoy.repo, ".git", "index");
+    let built;
+    try { built = await buildRepositoryOverview({ repo: w.repo, repoId: "repo", stateDir: w.stateDir, runId: "run-1", astGrepBin: null }); }
+    finally { for (const [key, value] of Object.entries(saved)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; } }
+    expect(built.overview.commit).toBe(g(w.repo, "rev-parse", "HEAD"));
+    expect(built.overview.files.listed).toEqual(["README.md", "src/a.ts"]);
+    expect(built.overview.docs.entries).toEqual([{ path: "README.md", text: "# Target\n", cut: false }]);
+  });
+});

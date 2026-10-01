@@ -6,7 +6,7 @@ import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { promisify } from "node:util";
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { privateDirectory } from "./paths.js";
-import { QUIET_GIT } from "./workspace.js";
+import { QUIET_GIT, unsetInheritedGitEnv } from "./workspace.js";
 
 const execFileAsync = promisify(execFile);
 const MAX_BUFFER = 256 * 1024 * 1024;
@@ -39,7 +39,7 @@ export interface RepositoryOverview {
 interface TreeEntry { path: string; mode: string; oid: string; size: number }
 
 const run = async (repo: string, args: string[]): Promise<string> =>
-  (await execFileAsync("git", [...QUIET_GIT, ...args], { cwd: repo, maxBuffer: MAX_BUFFER, timeout: GIT_READ_TIMEOUT_MS, killSignal: "SIGKILL" })).stdout;
+  (await execFileAsync("git", [...QUIET_GIT, ...args], { cwd: repo, env: { ...process.env, ...unsetInheritedGitEnv() }, maxBuffer: MAX_BUFFER, timeout: GIT_READ_TIMEOUT_MS, killSignal: "SIGKILL" })).stdout;
 
 class ChildTimeout extends Error {}
 
@@ -50,7 +50,7 @@ class ChildTimeout extends Error {}
  */
 function readBlobs(repo: string, oids: string[], keep: number, timeoutMs: number): Promise<Buffer[]> {
   return new Promise((resolve, reject) => {
-    const child = spawn("git", [...QUIET_GIT, "cat-file", "--batch"], { cwd: repo, stdio: ["pipe", "pipe", "pipe"] });
+    const child = spawn("git", [...QUIET_GIT, "cat-file", "--batch"], { cwd: repo, env: { ...process.env, ...unsetInheritedGitEnv() }, stdio: ["pipe", "pipe", "pipe"] });
     const blobs: Buffer[] = [];
     let settled = false;
     const settle = (error: Error | null) => {

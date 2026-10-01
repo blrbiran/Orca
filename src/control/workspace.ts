@@ -13,6 +13,16 @@ import type { WorkspaceMode } from "./workspaceSettings.js";
  */
 export const QUIET_GIT = ["-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false"];
 
+/**
+ * Final review triage (deferred T11): a `GIT_*` variable in Orca's own environment (GIT_DIR, GIT_INDEX_FILE,
+ * GIT_OBJECT_DIRECTORY, or what a git hook running Orca sets) would redirect what a git child of the requirement
+ * overview or export reads and writes. Merged over process.env, this removes every one of them: Node leaves a variable
+ * whose value is `undefined` out of the child's environment.
+ */
+export function unsetInheritedGitEnv(): NodeJS.ProcessEnv {
+  return Object.fromEntries(Object.keys(process.env).filter((key) => key.startsWith("GIT_")).map((key) => [key, undefined]));
+}
+
 export interface WorkspaceRoots { runsRoot: string; workspacesRoot: string }
 
 /**

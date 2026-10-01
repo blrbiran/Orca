@@ -345,3 +345,25 @@ describe("the start gate (N1 spec §9.3)", () => {
     } finally { await x.dispose(); }
   });
 });
+
+// Final review fix wave, triage (deferred T11): a GIT_* variable in Orca's own environment must not redirect the
+// export's objects and ref into another repository.
+describe("the export's git children and Orca's environment (final review triage)", () => {
+  it("exports into the target even when Orca's environment carries GIT_DIR for another repository", async () => {
+    const { x } = await accepted();
+    try {
+      const decoy = join(x.root, "decoy");
+      await mkdir(decoy);
+      const d = (...args: string[]) => execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "core.hooksPath=/dev/null", ...args], { cwd: decoy, encoding: "utf8" }).trim();
+      d("init", "-q", "-b", "main"); d("commit", "-q", "--allow-empty", "-m", "decoy");
+      const saved = process.env.GIT_DIR;
+      process.env.GIT_DIR = join(decoy, ".git");
+      let outcome;
+      try { outcome = await exportRequirementDocument(exportDeps(x), "r"); }
+      finally { if (saved === undefined) delete process.env.GIT_DIR; else process.env.GIT_DIR = saved; }
+      expect(outcome).toBe("done");
+      expect(x.git("rev-parse", "refs/heads/orca/r^")).toBe(x.head());
+      expect(d("for-each-ref", "refs/heads/orca")).toBe("");
+    } finally { await x.dispose(); }
+  });
+});
