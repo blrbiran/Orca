@@ -220,3 +220,49 @@ describe("the repository overview (N1 spec §6)", () => {
     expect(await exists("missing/new.ts")).toBe(false);
   });
 });
+
+// Final review fix wave (session b5e8d368, 2026-10-02), finding 2: a tree path is data. git stores entries named `..`
+// (mktree takes them, and a clone brings them in with fetch.fsckObjects off, git's default), so ls-tree -r can print a
+// path that leads out of the export directory.
+describe("a hostile tree in the structure export (final review finding 2)", () => {
+  /** A repository whose HEAD tree wraps `name` in `levels` directories each named `dir`, built with plumbing. */
+  async function craftedWorld(dir: string, levels: number, name: string) {
+    const root = await realpath(await mkdtemp(join(tmpdir(), "orca-overview-")));
+    roots.push(root);
+    const repo = join(root, "repo");
+    await mkdir(repo);
+    g(repo, "init", "-q", "-b", "main");
+    const blob = execFileSync("git", ["hash-object", "-w", "--stdin"], { cwd: repo, input: "export const escaped = 1;\n", encoding: "utf8" }).trim();
+    let tree = execFileSync("git", ["mktree"], { cwd: repo, input: `100644 blob ${blob}\t${name}\n`, encoding: "utf8" }).trim();
+    for (let i = 0; i < levels; i += 1) tree = execFileSync("git", ["mktree"], { cwd: repo, input: `040000 tree ${tree}\t${dir}\n`, encoding: "utf8" }).trim();
+    const commit = g(repo, "commit-tree", tree, "-m", "crafted");
+    g(repo, "update-ref", "refs/heads/main", commit);
+    return { root, repo, stateDir: join(root, "control", "repo") };
+  }
+  /** Every file named `name` anywhere under `dir`. */
+  const found = (dir: string, name: string): string[] => {
+    const out: string[] = [];
+    const walk = (path: string) => { for (const entry of readdirSync(path, { withFileTypes: true })) { const at = join(path, entry.name); if (entry.isDirectory()) walk(at); else if (entry.name === name) out.push(at); } };
+    walk(dir);
+    return out;
+  };
+
+  it("writes nothing outside the export for `..` entries: the structure fails by name and ast-grep never runs", async () => {
+    const w = await craftedWorld("..", 4, "ESCAPED.js");
+    const fake = await fakeBin(w.root, "ok");
+    const { overview } = await buildRepositoryOverview({ repo: w.repo, repoId: "repo", stateDir: w.stateDir, runId: "run-1", astGrepBin: fake.bin });
+    expect(overview.files.listed).toEqual(["../../../../ESCAPED.js"]);
+    expect(overview.structure).toEqual({ status: "failed", detail: 'unsafe-path:"../../../../ESCAPED.js"', files: [], cut: false });
+    // Four levels up from <stateDir>.overview/tmp-run-1/tree is the temporary root itself; nothing anywhere under it.
+    expect(found(w.root, "ESCAPED.js")).toEqual([]);
+    expect(await fake.calls()).toEqual([]);
+  });
+
+  it("refuses a `.` entry too, though it would land inside the export", async () => {
+    const w = await craftedWorld(".", 1, "inner.js");
+    const fake = await fakeBin(w.root, "ok");
+    const { overview } = await buildRepositoryOverview({ repo: w.repo, repoId: "repo", stateDir: w.stateDir, runId: "run-1", astGrepBin: fake.bin });
+    expect(overview.structure).toEqual({ status: "failed", detail: 'unsafe-path:"./inner.js"', files: [], cut: false });
+    expect(await fake.calls()).toEqual([]);
+  });
+});

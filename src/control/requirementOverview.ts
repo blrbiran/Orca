@@ -2,7 +2,7 @@ import { execFile, spawn } from "node:child_process";
 import { existsSync, readdirSync, writeFileSync } from "node:fs";
 import { readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { promisify } from "node:util";
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { privateDirectory } from "./paths.js";
@@ -168,6 +168,17 @@ async function docsPart(repo: string, tree: TreeEntry[], limits: OverviewLimits)
   return { status: "ok", entries, skipped };
 }
 
+/**
+ * Final review finding 2: a tree path is data, and git stores (and a clone brings in) entries named `..`, so `ls-tree -r`
+ * can print `../../x.js`. A path is written into the export only when none of its components is empty, `.` or `..`
+ * and it resolves to a place under the export root.
+ */
+function insideExport(exported: string, path: string): boolean {
+  if (path.split("/").some((part) => part === "" || part === "." || part === "..")) return false;
+  const rel = relative(exported, resolve(exported, path));
+  return rel !== "" && !rel.startsWith("..") && !isAbsolute(rel);
+}
+
 /** The supported regular files (symlinks and submodules are not exported) whose outline the structure part lists. */
 function outlineInput(tree: TreeEntry[]): TreeEntry[] {
   const outlined = new Set<string>(OUTLINE_EXTENSIONS);
@@ -194,6 +205,9 @@ async function structurePart(input: { repo: string; tree: TreeEntry[]; root: str
     let blobs: Buffer[];
     try { blobs = await readBlobs(input.repo, wanted.map((entry) => entry.oid), Number.POSITIVE_INFINITY, input.limits.structureTimeoutMs); }
     catch (error) { if (error instanceof ChildTimeout) return none("timeout", null); throw error; }
+    // A tree with any path that is not safely inside the export is not exported at all: structure `failed`, named.
+    const unsafe = wanted.find((entry) => !insideExport(exported, entry.path));
+    if (unsafe !== undefined) return none("failed", `unsafe-path:${JSON.stringify(unsafe.path).slice(0, 180)}`);
     const made = new Set<string>();
     wanted.forEach((entry, index) => {
       const parent = dirname(join(exported, entry.path));
