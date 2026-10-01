@@ -94,10 +94,10 @@ export async function exportRequirementDocument(deps: ExportDeps, groupId: strin
     await run(["read-tree", `${head}^{tree}`], index);
     await run(["update-index", "--add", "--cacheinfo", `100644,${blob},${path}`], index);
     const tree = (await run(["write-tree"], index)).trim();
-    // DR21: dated at the freeze and never signed (a target's commit.gpgSign would run its gpg.program and change the
-    // id), so a re-run builds the same commit.
+    // DR21: dated at the freeze, so a re-run builds the same commit. commit-tree signs only with -S: a target's
+    // commit.gpgSign is not read (measured on git 2.50.1; the criterion pins that no signing program runs).
     const at = requirement.document.frozenAt;
-    const commit = (await run(["commit-tree", "--no-gpg-sign", tree, "-p", head, "-F", messageFile], { env: {
+    const commit = (await run(["commit-tree", tree, "-p", head, "-F", messageFile], { env: {
       GIT_AUTHOR_NAME: "Orca", GIT_AUTHOR_EMAIL: "orca@localhost", GIT_COMMITTER_NAME: "Orca", GIT_COMMITTER_EMAIL: "orca@localhost", GIT_AUTHOR_DATE: at, GIT_COMMITTER_DATE: at,
     } })).trim();
     try { await run(["update-ref", ref, commit, ""]); }
