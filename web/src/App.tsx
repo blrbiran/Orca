@@ -51,6 +51,7 @@ import {
   fetchControlGroup,
   fetchControlRecovery,
   fetchControlSummary,
+  fetchRequirement,
   fetchAgentPreferences,
   fetchAgentPreview,
   fetchAgentsView,
@@ -66,9 +67,9 @@ import {
 import type { ControlAction } from "./controlApi.js";
 import { ControlPanel } from "./ControlPanel.js";
 import { initialControlState, reduceControlState, summaryView } from "./controlState.js";
-import type { UncertainCommand } from "./controlState.js";
+import type { ControlRefusal, UncertainCommand } from "./controlState.js";
 import type {
-  AgentPreferencesViewV1, AgentSelectionPreviewV1, AgentsViewV1, CommandSuccessV1, ControlConfigV1, ControlSummaryV1, OperatorPreferencesV1, RepositoryWorkspaceV1,
+  AgentPreferencesViewV1, AgentSelectionPreviewV1, AgentsViewV1, CommandSuccessV1, ControlConfigV1, ControlSummaryV1, OperatorPreferencesV1, RepositoryWorkspaceV1, RequirementViewV1,
 } from "./controlTypes.js";
 import { DecisionDetail } from "./DecisionDetail.js";
 import type { Decision } from "./DecisionDetail.js";
@@ -78,6 +79,7 @@ import { DecisionsView, NO_FILTER } from "./DecisionsView.js";
 import type { DecisionFilter } from "./DecisionsView.js";
 import { MetricsView } from "./MetricsView.js";
 import { Refusal } from "./Refusal.js";
+import { RequirementsPanel } from "./RequirementsPanel.js";
 import { labelsDraftKey } from "./TaskDetail.js";
 import { loopDraftKey } from "./LoopPlanCard.js";
 import { DEFAULT_SECTION, sectionFromHash } from "./sections.js";
@@ -206,6 +208,14 @@ export function App(): JSX.Element {
     ...initialControlState(), uncertainCommandIds: readUncertainCommands(browserSession()),
   }));
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
+  /** N1 spec §11.2: each requirement's view as last read, and the one open in Requirements. */
+  const [requirementViews, setRequirementViews] = useState<Record<string, RequirementViewV1>>({});
+  const [selectedRequirement, setSelectedRequirement] = useState<string | null>(null);
+  /** The last refusal of a command sent from Requirements, shown there (Task control keeps showing every refusal). */
+  const [requirementRefusal, setRequirementRefusal] = useState<ControlRefusal | null>(null);
+  /** The open requirement, for the poll tick, which outlives the render it was built in. */
+  const requirementNow = useRef<string | null>(null);
+  requirementNow.current = selectedRequirement;
   /** The reducer's latest value, for callbacks that outlive the render they were built in. */
   const controlNow = useRef(control);
   controlNow.current = control;
@@ -248,6 +258,9 @@ export function App(): JSX.Element {
       const summary = await fetchControlSummary(since);
       dispatchControl({ type: "summary", value: summary, partial: since !== undefined });
       dispatchControl({ type: "recovery", value: await fetchControlRecovery() });
+      // N1 spec §11.2: the open requirement's details move with the summary's changeSeq pull -- re-read when it is listed.
+      const open = requirementNow.current;
+      if (open !== null && summary.groups.some((group) => group.groupId === open)) void readRequirement(open);
     } catch (err) {
       dispatchControl({ type: "refusal", groupId: null, value: controlFailureFrom(err) });
     }
@@ -257,6 +270,15 @@ export function App(): JSX.Element {
   const readControlGroup = async (groupId: string): Promise<void> => {
     try {
       dispatchControl({ type: "group", value: await fetchControlGroup(groupId) });
+    } catch (err) {
+      dispatchControl({ type: "refusal", groupId, value: controlFailureFrom(err) });
+    }
+  };
+
+  const readRequirement = async (groupId: string): Promise<void> => {
+    try {
+      const value = await fetchRequirement(groupId);
+      setRequirementViews((all) => ({ ...all, [groupId]: value }));
     } catch (err) {
       dispatchControl({ type: "refusal", groupId, value: controlFailureFrom(err) });
     }
@@ -281,7 +303,9 @@ export function App(): JSX.Element {
     }
     dispatchControl({ type: "command-resolved", value: command });
     if (result.kind === "absent") dispatchControl({ type: "refusal", groupId: command.groupId, value: result.refusal });
-    await readControlGroup(command.groupId);
+    // N1 spec §11.2 (DR25): a clarifying group is read through its requirement view.
+    if (controlNow.current.groups[command.groupId]?.state === "clarifying") await readRequirement(command.groupId);
+    else await readControlGroup(command.groupId);
   };
 
   /**
@@ -289,6 +313,9 @@ export function App(): JSX.Element {
    * success carries, or null when the command did not succeed (refused, or its outcome unknown).
    */
   const sendControl = async (action: ControlAction): Promise<number | null> => {
+    // N1 spec §11.2: a requirement's details come from its own view; a clarifying group has no group view (DR25).
+    const requirementVerb = action.verb.startsWith("requirement-") || ((action.verb === "recovery-retry" || action.verb === "handoff-stop" || action.verb === "set-limit")
+      && controlNow.current.groups[action.groupId]?.state === "clarifying");
     const commandId = nextCommandId();
     const command = { groupId: action.groupId, commandId };
     dispatchControl({ type: "command-uncertain", value: command });
@@ -297,6 +324,7 @@ export function App(): JSX.Element {
       // The id stays where it is: sessionStorage keeps it across a reload, and the
       // next tick looks it up. The page shows that the outcome is unknown.
       dispatchControl({ type: "refusal", groupId: action.groupId, value: answer.refusal });
+      if (requirementVerb) setRequirementRefusal(answer.refusal);
       return null;
     }
     dispatchControl({ type: "command-resolved", value: command });
@@ -314,7 +342,14 @@ export function App(): JSX.Element {
       // (rejected, wave 4 M-1): either way the preview on screen is void and must not be sent again.
       if (refusal.code === "agent-selection-changed" || refusal.code === "agent-selection-rejected") rereadPreview(action.groupId, 0);
     }
-    await readControlGroup(action.groupId);
+    if (requirementVerb) setRequirementRefusal(answer.status >= 400 ? refusalFromAnswer(answer) : null);
+    // A refused open made no group: reading it would only replace the refusal on screen with group-not-found.
+    if (requirementVerb && (action.verb !== "requirement-open" || answer.status < 400)) {
+      if (action.verb === "requirement-open") setSelectedRequirement(action.groupId);
+      await readRequirement(action.groupId);
+    }
+    // Accept turns the group into a plan group: Task control reads it from here on.
+    if (!requirementVerb || (action.verb === "requirement-draft-accept" && answer.status < 400)) await readControlGroup(action.groupId);
     return answer.status < 400 ? (answer.body as CommandSuccessV1).commandRevision : null;
   };
 
@@ -699,6 +734,13 @@ export function App(): JSX.Element {
           agentsFailure={agentsFailure}
         />
       )}
+      </SectionPane>
+      <SectionPane section="requirements" active={section}>
+        {controlConfig !== null && control.recovery !== null && (
+          <RequirementsPanel config={controlConfig} summary={summaryView(control)} views={requirementViews} selected={selectedRequirement} agents={agents}
+            language={currentLanguage()} refusal={requirementRefusal}
+            onSelect={(groupId) => { setSelectedRequirement(groupId); void readRequirement(groupId); }} onCommand={(action) => { void sendControl(action); }} />
+        )}
       </SectionPane>
       <SectionPane section="decisions" active={section}>
         <DecisionsView rows={home.todo} filter={filter} onFilter={setFilter} selected={selected} onOpen={setSelected} detail={detail} />

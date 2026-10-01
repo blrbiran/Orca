@@ -6,7 +6,7 @@
 import type { ThemePref } from "../theme.js";
 import type { ChainStopCategory, CorrectionKind, DecisionKind, DecisionObservation, DecisionScope, MetricsNoteCode } from "../types.js";
 import type {
-  AgentSlotV1, AllocationViewV1, AmountDimensionV1, BudgetEstimateV1, CapabilityViewV1, EstimateViewV1, FieldProvenanceV1, GroupSummaryV1, GroupViewV1, HandoffRequestViewV1, ProvenanceSourceV1, RecoveryViewV1, RunViewV1, WorkItemProgressV1, WorkItemViewV1,
+  AgentSlotV1, AllocationViewV1, AmountDimensionV1, BudgetEstimateV1, CapabilityViewV1, EstimateViewV1, FieldProvenanceV1, GroupSummaryV1, GroupViewV1, HandoffRequestViewV1, ProvenanceSourceV1, RecoveryViewV1, RequirementViewV1, RunViewV1, WorkItemProgressV1, WorkItemViewV1,
 } from "../controlTypes.js";
 
 /** The Chinese resource's type: the same key set, every value widened to string (spec §2). */
@@ -42,6 +42,10 @@ const chainBanner = {
 } as const satisfies Record<ChainStopCategory, string>;
 
 const groupState = { clarifying: "clarifying", draft: "draft", ready: "ready", running: "running", review: "review", done: "done", blocked: "blocked" } as const satisfies Record<GroupSummaryV1["state"], string>;
+// N1 spec §11.2: a requirement's rounds, drafts and export.
+const roundState = { drafting: "drafting", "awaiting-answers": "awaiting answers", answered: "answered", interrupted: "interrupted", failed: "failed" } as const satisfies Record<RequirementViewV1["rounds"][number]["state"], string>;
+const draftState = { drafting: "drafting", "awaiting-review": "awaiting review", accepted: "accepted", rejected: "rejected", invalid: "handed back", interrupted: "interrupted", failed: "failed" } as const satisfies Record<RequirementViewV1["drafts"][number]["state"], string>;
+const exportState = { "not-due": "not due", pending: "pending", done: "done", conflict: "blocked" } as const satisfies Record<RequirementViewV1["requirement"]["export"]["state"], string>;
 const stopMode = { pause: "pause", shutdown: "shutdown", handoff: "handoff" } as const satisfies Record<NonNullable<GroupSummaryV1["stopMode"]>, string>;
 const stopState = {
   paused: "paused", "handoff-pending": "handoff-pending", "handoff-partial": "handoff-partial", "handoff-unresolved": "handoff-unresolved", "handoff-complete": "handoff-complete",
@@ -96,7 +100,7 @@ const selectionSource = {
 } as const satisfies Record<ProvenanceSourceV1, string>;
 
 export const en = {
-  nav: { sections: "Sections", decisions: "Decisions", chains: "Chains", tasks: "Task control", metrics: "Metrics" },
+  nav: { sections: "Sections", decisions: "Decisions", chains: "Chains", tasks: "Task control", requirements: "Requirements", metrics: "Metrics" },
   shell: {
     brandTitle: "Leave it to Orca — every idea, made real.",
     chainRunning: "a chain is running",
@@ -176,6 +180,7 @@ export const en = {
     groupBlockers: " · {{n}} blocker(s)",
     reading: "Reading {{groupId}}…",
     outcomeUnknown: "Command outcome unknown, being looked up: {{commands}}",
+    requirementBadge: "requirement — open in Requirements",
     import: {
       region: "Import plan",
       title: "Import a plan",
@@ -420,6 +425,70 @@ export const en = {
       save: "Save agent preferences",
     },
   },
+  // N1 spec §11.2: the Requirements section.
+  requirements: {
+    title: "Requirements",
+    list: "Requirement list",
+    none: "No requirements yet.",
+    newTitle: "New requirement",
+    repository: "Repository",
+    idea: "Idea",
+    limit: "Token limit",
+    contentLanguage: "Content language",
+    agent: "Agent",
+    agentDefault: "Your default",
+    open: "Start clarifying",
+    noRepository: "No repository is registered with this panel.",
+    understanding: "Current understanding",
+    statement: "Statement",
+    criteria: "Acceptance criteria",
+    glossary: "Glossary",
+    decisions: "Decisions",
+    openBranches: "Open branches",
+    nothingYet: "Nothing yet.",
+    budget: "{{used}} of {{limit}} tokens used, {{reserved}} in flight",
+    usageUnknown: "Usage is not known yet.",
+    rounds: "Rounds",
+    round: "Round {{n}}",
+    drafting: "The model is drafting.",
+    stop: "Stop",
+    useRecommended: "Use recommended",
+    ownAnswer: "Own answer",
+    recommended: "Recommended: {{answer}}",
+    why: "Why: {{why}}",
+    acceptAll: "Accept all recommended",
+    sendAnswers: "Send answers",
+    accept: "Accept",
+    reject: "Reject",
+    noQuestions: "The model has no more questions.",
+    consensus: "We agree",
+    consensusTitle: "The model still lists open branches",
+    consensusConfirm: "Agree anyway",
+    consensusCancel: "Keep discussing",
+    draft: "Split draft {{n}}",
+    columns: { id: "Task", title: "Title", labels: "Labels", loopPlan: "Loop plan", targetPaths: "Target paths", checks: "Checks", dependsOn: "Depends on", traces: "Traces" },
+    layer: "Layer {{n}}: {{tasks}}",
+    implicitEdge: "{{from}} before {{to}}: {{paths}}",
+    handedBack: "Handed back for:",
+    feedback: "Feedback",
+    sendBack: "Send back",
+    acceptSplit: "Accept this split",
+    document: "Requirement document",
+    export: "Export: {{state}}",
+    exportCommit: "Commit {{commit}}",
+    retry: "Retry",
+    raiseLimit: "Raise the limit",
+    reason: {
+      "clarify-output-invalid": "The model's answers for this round were invalid three times.",
+      "split-output-invalid": "The model's split was not valid JSON for a split three times.",
+      "split-validation-exhausted": "The split failed code's checks three times; the last reasons are shown.",
+      "requirement-budget-exhausted": "The next call does not fit the limit; raise the limit to go on.",
+      "requirement-export-conflict": "orca/{{groupId}} already exists with other commits; it was not touched.",
+      "requirement-export-path-blocked": "A file named .orca or .orca/requirements in HEAD blocks the document's export; nothing was written.",
+      "requirement-export-pending": "The requirement document is not on orca/{{groupId}} yet; the group starts once it is.",
+      "requirement-not-split": "This group's requirement has not been split yet; it is handled in Requirements.",
+    },
+  },
   panelErrors: {
     title: "orca panel could not load",
     noAnswerFromPanel: "no answer from the panel",
@@ -448,7 +517,7 @@ export const en = {
   },
   enums: {
     theme, decisionKind, decisionScope, decisionVerdict, correctionKind, chainStopCategory,
-    groupState, stopMode, stopState, workStatus, runPhase, runState, requestState, estimateState, budgetMode, blockerScope, progressStep,
+    groupState, roundState, draftState, exportState, stopMode, stopState, workStatus, runPhase, runState, requestState, estimateState, budgetMode, blockerScope, progressStep,
     proposalState, ownerKind, bucket, allocationState, dimension, complexity, confidence, handoffControl, handoffExecution, budgetEnforcement, fieldProvenance,
     agentSlot, selectionSource,
   },

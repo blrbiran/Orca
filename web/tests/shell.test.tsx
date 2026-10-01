@@ -67,3 +67,18 @@ describe("Shell and SectionPane", () => {
     expect(on).toContain('data-testid="nav-dot-tasks"');
   });
 });
+
+// N1 spec §11.2 (Task 13): a fifth section, Requirements, between Task control and Metrics, mounted like the others.
+describe("the Requirements section in the shell (N1 spec §11.2)", () => {
+  it("lists Requirements in the nav after Task control and keeps its pane mounted while another is active", () => {
+    expect(SECTIONS).toEqual(["decisions", "chains", "tasks", "requirements", "metrics"]);
+    const html = renderToStaticMarkup(
+      <Shell active="tasks" badges={{ unreviewed: 0, chainRunning: false, controlAlert: false }} footer={[]} theme="system">
+        <SectionPane section="requirements" active="tasks"><p>pane-r</p></SectionPane>
+      </Shell>,
+    );
+    expect(html).toMatch(/href="#requirements"[^>]*><span>Requirements<\/span>/);
+    expect(html).toContain('data-section="requirements" data-active="false"');
+    expect(html).toContain("pane-r");
+  });
+});

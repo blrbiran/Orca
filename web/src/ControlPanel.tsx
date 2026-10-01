@@ -16,6 +16,7 @@ import { ControlGroupView } from "./ControlGroupView.js";
 import { RecoveryView } from "./RecoveryView.js";
 import { WorkspaceModeSelector } from "./WorkspaceModeSelector.js";
 import { enumText, refusalText } from "./i18n.js";
+import { hashFor } from "./sections.js";
 import type {
   AgentPreferencesViewV1, AgentSelectionPreviewV1, AgentsViewV1, ControlConfigV1, ControlSummaryV1, GroupViewV1, OperatorPreferencesV1,
   RecoveryViewV1, RepositoryWorkspaceV1,
@@ -131,7 +132,10 @@ export function ControlPanel(props: ControlPanelProps): JSX.Element {
       )}
       <nav aria-label={t("control.groupsNav")}>
         {summary.groups.length === 0 && <p>{t("control.noGroups")}</p>}
-        {summary.groups.map((group) => (
+        {summary.groups.map((group) => group.state === "clarifying" ? (
+          // N1 spec §11.2: a clarifying group has no group view (DR25); it is operated in Requirements until accept.
+          <a key={group.groupId} href={hashFor("requirements")}>{group.groupId} · {enumText("groupState", group.state)} · {t("control.requirementBadge")}</a>
+        ) : (
           <button key={group.groupId} type="button" aria-current={group.groupId === selected} onClick={() => props.onSelect(group.groupId)}>
             {group.groupId} · {enumText("groupState", group.state)}
             {group.completion !== undefined ? t("control.groupDone", { done: group.completion.done, total: group.completion.total }) : ""}
