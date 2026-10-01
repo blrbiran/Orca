@@ -114,16 +114,57 @@ describe("the repository overview (N1 spec §6)", () => {
     expect(overview.structure).toEqual({ status: "ok", detail: null, files: [{ path: "src/a.ts", symbols: [{ name: "alpha", kind: "function" }] }], cut: false });
   });
 
-  it("creates every file outside the repository 0600 and every directory 0700: export, extraction, config and cache (PR-I6)", async () => {
+  it("creates every file outside the repository 0600 and every directory 0700: exported files, config and cache (PR-I6)", async () => {
     const w = await world({ "src/deep/a.ts": "export const a = 1\n", "b.ts": "export const b = 2\n" });
     const fake = await fakeBin(w.root, "ok");
     const { overview } = await buildRepositoryOverview({ repo: w.repo, repoId: "repo", stateDir: w.stateDir, runId: "run-1", astGrepBin: fake.bin });
     const [call] = await fake.calls();
-    expect(call!.work.map((entry) => entry.path)).toEqual(["config", "config/sgconfig.yml", "export.tar", "tree", "tree/b.ts", "tree/src", "tree/src/deep", "tree/src/deep/a.ts"]);
+    expect(call!.work.map((entry) => entry.path)).toEqual(["config", "config/sgconfig.yml", "tree", "tree/b.ts", "tree/src", "tree/src/deep", "tree/src/deep/a.ts"]);
     for (const entry of call!.work) expect({ path: entry.path, mode: entry.mode }).toEqual({ path: entry.path, mode: entry.dir ? 0o700 : 0o600 });
     const cache = modes(`${w.stateDir}.overview`);
     expect(cache.map((entry) => entry.path)).toEqual([`${w.stateDir}.overview`, join(`${w.stateDir}.overview`, "repo"), join(`${w.stateDir}.overview`, "repo", overview.commit), join(`${w.stateDir}.overview`, "repo", overview.commit, "overview.json")]);
     for (const entry of cache) expect({ path: entry.path, mode: entry.mode }).toEqual({ path: entry.path, mode: entry.dir ? 0o700 : 0o600 });
+  });
+
+  it("cuts a document inside a multi-byte character at the last whole character, holding only its capped prefix", async () => {
+    const w = await world({ "README.md": `abcde\u00e9${"x".repeat(100)}` });
+    const { overview } = await buildRepositoryOverview({ repo: w.repo, repoId: "repo", stateDir: w.stateDir, runId: "run-1", astGrepBin: null, limits: { maxDocBytes: 3 } });
+    expect(overview.docs).toEqual({ status: "ok", entries: [{ path: "README.md", text: "abc", cut: true }], skipped: [] });
+  });
+
+  it("runs none of the target's filters: a committed smudge driver never fires (review fix 1)", async () => {
+    const w = await world({ ".gitattributes": "* filter=marker\n", "README.md": "r\n", "src/a.ts": "export const a = 1\n" });
+    const marker = join(w.root, "smudge-ran");
+    g(w.repo, "config", "filter.marker.smudge", `touch '${marker}'; cat`);
+    const fake = await fakeBin(w.root, "ok");
+    const before = snapshot(w.repo);
+    const { overview } = await buildRepositoryOverview({ repo: w.repo, repoId: "repo", stateDir: w.stateDir, runId: "run-1", astGrepBin: fake.bin });
+    expect(existsSync(marker)).toBe(false);
+    expect(snapshot(w.repo)).toEqual(before);
+    expect(overview.structure.status).toBe("ok");
+    expect(overview.structure.files).toEqual([{ path: "src/a.ts", symbols: [{ name: "exported_a_ts", kind: "function" }] }]);
+  });
+
+  it("counts the export against the structure time cap: an export that outlives it is a timeout", async () => {
+    const w = await world({ "src/a.ts": "export const a = 1\n" });
+    const fake = await fakeBin(w.root, "ok");
+    const { overview } = await buildRepositoryOverview({ repo: w.repo, repoId: "repo", stateDir: w.stateDir, runId: "run-1", astGrepBin: fake.bin, limits: { structureTimeoutMs: 1 } });
+    expect(overview.structure.status).toBe("timeout");
+    expect(await fake.calls()).toEqual([]);
+  });
+
+  it("reuses only an ok structure from the cache; any other status is built again on the next call", async () => {
+    const w = await world({ "README.md": "r\n", "src/a.ts": "export const a = 1\n" });
+    const fake = await fakeBin(w.root, "ok");
+    const first = await buildRepositoryOverview({ repo: w.repo, repoId: "repo", stateDir: w.stateDir, runId: "run-1", astGrepBin: null });
+    expect(first.overview.structure.status).toBe("unavailable");
+    const second = await buildRepositoryOverview({ repo: w.repo, repoId: "repo", stateDir: w.stateDir, runId: "run-2", astGrepBin: fake.bin });
+    expect(second.overview.structure.status).toBe("ok");
+    expect({ files: second.overview.files, docs: second.overview.docs }).toEqual({ files: first.overview.files, docs: first.overview.docs });
+    expect(await fake.calls()).toHaveLength(1);
+    const third = await buildRepositoryOverview({ repo: w.repo, repoId: "repo", stateDir: w.stateDir, runId: "run-3", astGrepBin: fake.bin });
+    expect(third.hash).toBe(second.hash);
+    expect(await fake.calls()).toHaveLength(1);
   });
 
   it("writes nothing into the target repository: working tree, index and .git, mtimes included", async () => {
