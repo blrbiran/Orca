@@ -1,5 +1,5 @@
 # zh.ts ready for the human review (spec §5). Task 11 implementer, session e604b1ba, 2026-10-01, at ee57fc9 (zh.ts unchanged by Task 11).
-# Made by the Task 11 brief Step 5 command (tsx over web/src/locales/en.ts + zh.ts) into $SCRATCH/zh-review.tsv: 677 rows = 505 keys + 172 zhErrors entries; every row 3 tab-separated fields (awk NF!=3 -> empty).
+# Made by the Task 11 brief Step 6 command (tsx over web/src/locales/en.ts + zh.ts) into $SCRATCH/zh-review.tsv: 677 rows = 505 keys + 172 zhErrors entries; every row 3 tab-separated fields (awk NF!=3 -> empty).
 # Lines starting with # are notes. Columns: key<TAB>English<TAB>Chinese. zhErrors rows are errors.<code> with an empty English column (the English is the server message as sent).
 key	English	Chinese
 nav.sections	Sections	分区
@@ -56,11 +56,11 @@ chains.progress	Progress	进度
 chains.state	State	状态
 chains.stop	Stop chain	停止链
 chains.stopsAfter	 Stops after the current session ends.	 当前会话结束后停止。
-chains.formRepository	Repository 	仓库 
-chains.formGoal	Goal 	目标 
-chains.formMaxSessions	Max sessions 	最多会话数 
-chains.formMaxCost	Max cost in USD (a soft limit) 	费用上限（美元，软限制） 
-chains.formTimeout	Session timeout in minutes 	会话超时（分钟） 
+chains.formRepository	Repository 	仓库
+chains.formGoal	Goal 	目标
+chains.formMaxSessions	Max sessions 	最多会话数
+chains.formMaxCost	Max cost in USD (a soft limit) 	费用上限（美元，软限制）
+chains.formTimeout	Session timeout in minutes 	会话超时（分钟）
 chains.start	Start chain	启动链
 chains.started	Chain {{chainId}} started.	链 {{chainId}} 已启动。
 chains.stopRequested	Chain {{chainId}} will stop after the current session ends.	链 {{chainId}} 将在当前会话结束后停止。
