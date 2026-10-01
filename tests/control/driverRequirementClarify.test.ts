@@ -6,6 +6,7 @@ import { groupStopState } from "../../src/control/stopIntent.js";
 import { ControlError } from "../../src/control/errors.js";
 import { recoverControl } from "../../src/control/recovery.js";
 import { isSingleCallRun } from "../../src/control/webDispatch.js";
+import { requirementSummaryOf } from "../../src/panel/controlViews.js";
 import { requirementHarness } from "./fixtures/requirementHarness.js";
 import { ROUND_ONE } from "./fixtures/requirementOutputs.js";
 
@@ -129,6 +130,29 @@ describe("a panel restart after a retried round (final review finding 1)", () =>
       const recovered = await recoverControl(x.store, x.fake.port, undefined, { driverOwnsWebRuns: true });
       expect(recovered.blockedRunIds).toEqual([]);
       expect(x.store.dispatchBlocked).toBe(false);
+    } finally { await x.dispose(); }
+  });
+});
+
+// Final review fix wave, finding 3: a requirement call is never claimed -- and so never paid for -- while the clarifying
+// ledger's usage is unknown. As on a plan group (webDispatch.ts "usage-unknown"), nothing in version 1 clears unknown
+// usage: recovery-retry re-queues the round, and the round waits with the reason named.
+describe("a call while the requirement's usage is unknown (final review finding 3)", () => {
+  it("is not claimed after recovery-retry: the round waits with requirement-usage-unknown and only the first call was sent", async () => {
+    const x = await requirementHarness({ answers: [{ purpose: "clarify", output: ROUND_ONE, tokens: null }, { purpose: "clarify", output: ROUND_ONE }] });
+    try {
+      await x.until(() => x.runs()[0]?.state === "blocked");
+      expect(x.runs()[0]).toMatchObject({ drive: { blockedReason: "requirement-usage-unknown" } });
+      expect(x.group().ledger.usageUnknown).toBe(true);
+      expect(await x.service.handoffStop(x.command("handoff-stop", {}))).toMatchObject({ result: { kind: "handoff-stopped" } });
+      await x.until(() => x.round(1).state === "interrupted");
+      expect(await x.service.recoveryRetry(x.command("recovery-retry", { scope: "group", groupId: "r" }))).toMatchObject({ result: { kind: "recovery-observed", resolved: true } });
+      await x.until(() => x.round(1).waiting !== null);
+      expect(x.round(1)).toMatchObject({ state: "drafting", waiting: "requirement-usage-unknown" });
+      expect(requirementSummaryOf(x.store, "r")).toMatchObject({ roundState: "drafting", waiting: "requirement-usage-unknown" });
+      expect(x.fake.calls.accept).toHaveLength(1);
+      expect(x.runs()).toHaveLength(1);
+      expect(x.group().reserved).toEqual({ tokens: 0, activeMs: 0, attempts: 0, sessions: 0 });
     } finally { await x.dispose(); }
   });
 });

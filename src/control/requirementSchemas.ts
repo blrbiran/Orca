@@ -11,6 +11,9 @@ export const SLUG_PATTERN = /^[a-z0-9]+(-[a-z0-9]+){0,7}$/;
 export const IDEA_MAX_BYTES = 32 * 1024;
 export const REQUIREMENT_LIMIT_DEFAULT: Amount = Object.freeze({ tokens: 10_000_000, activeMs: 14_400_000, attempts: 40, sessions: 40 });
 export const REQUIREMENT_CALL_GRANT: Amount = Object.freeze({ tokens: 1_000_000, activeMs: 1_200_000, attempts: 1, sessions: 1 });
+/** Why a drafting round or draft has no call claimed (spec §5.2; final review finding 3: unknown usage claims nothing). */
+export const REQUIREMENT_WAITING = ["requirement-budget-exhausted", "requirement-usage-unknown"] as const;
+export type RequirementWaiting = (typeof REQUIREMENT_WAITING)[number];
 
 const nonempty = z.string().min(1);
 const hash = z.string().regex(/^[a-f0-9]{64}$/);
@@ -38,7 +41,7 @@ export const answerSchema = z.object({ id: questionIdSchema, kind: z.enum(["reco
 export const decisionSchema = z.object({ id: nonempty, accept: z.boolean() }).strict();
 export const roundBodySchema = z.object({
   roundNo: positive, state: z.enum(ROUND_STATES), retries, lastInvalidReason: z.string().nullable(),
-  waiting: z.literal("requirement-budget-exhausted").nullable(), result: clarifyResultSchema.nullable(),
+  waiting: z.enum(REQUIREMENT_WAITING).nullable(), result: clarifyResultSchema.nullable(),
   answers: z.array(answerSchema).nullable(), glossaryDecisions: z.array(decisionSchema).nullable(), adrDecisions: z.array(decisionSchema).nullable(),
   answeredAt: canonicalTimestampSchema.nullable(), closedByConsensus: z.boolean(),
   reasonCode: z.literal("clarify-output-invalid").nullable(), calls: z.array(callRecordSchema),
@@ -53,7 +56,7 @@ export const splitOutputSchema = z.object({ tasks: z.array(splitTaskSchema).min(
 /** Spec §8.4: an implicit edge, with the write-set conflict behind it (graph.ts buildGraph). */
 export const implicitEdgeSchema = z.object({ from: nonempty, to: nonempty, conflicts: z.array(z.object({ a: nonempty, b: nonempty }).strict()).min(1) }).strict();
 export const draftBodySchema = z.object({
-  draftNo: positive, state: z.enum(DRAFT_STATES), autoRetry: retries, waiting: z.literal("requirement-budget-exhausted").nullable(),
+  draftNo: positive, state: z.enum(DRAFT_STATES), autoRetry: retries, waiting: z.enum(REQUIREMENT_WAITING).nullable(),
   feedback: z.string().nullable(), output: splitOutputSchema.nullable(), plan: z.record(z.unknown()).nullable(), draftHash: hash.nullable(),
   reasons: z.array(nonempty), layers: z.array(z.array(nonempty)).nullable(), implicitEdges: z.array(implicitEdgeSchema).nullable(),
   reasonCode: z.enum(["split-output-invalid", "split-validation-exhausted"]).nullable(), calls: z.array(callRecordSchema),

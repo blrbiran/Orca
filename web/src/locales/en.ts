@@ -483,6 +483,7 @@ export const en = {
       "split-output-invalid": "The model's split was not valid JSON for a split three times.",
       "split-validation-exhausted": "The split failed code's checks three times; the last reasons are shown.",
       "requirement-budget-exhausted": "The next call does not fit the limit; raise the limit to go on.",
+      "requirement-usage-unknown": "Some of this requirement's usage is unknown, so no further call is made; as for a plan group, this version cannot clear it.",
       "requirement-export-conflict": "orca/{{groupId}} already exists with other commits; it was not touched.",
       "requirement-export-path-blocked": "A file named .orca or .orca/requirements in HEAD blocks the document's export; nothing was written.",
       "requirement-export-pending": "The requirement document is not on orca/{{groupId}} yet; the group starts once it is.",

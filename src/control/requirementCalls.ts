@@ -10,7 +10,7 @@ import {
   clarifyingLedger, latestDraft, latestRound, newDraft, queueRequirementCall, readDraft, readDrafts, readRequirementGroup, readRound, readRounds,
   saveRequirementGroup, writeDraft, writeRound, type RequirementGroup,
 } from "./requirementRecords.js";
-import { MAX_AUTO_RETRIES, REQUIREMENT_CALL_GRANT, splitOutputSchema, type CallRecord, type DraftBody } from "./requirementSchemas.js";
+import { MAX_AUTO_RETRIES, REQUIREMENT_CALL_GRANT, splitOutputSchema, type CallRecord, type DraftBody, type RequirementWaiting } from "./requirementSchemas.js";
 import { buildSplitPrompt, expandSplitDraft, SPLIT_JSON_SCHEMA, validateSplitDraft, type SplitPlanFile } from "./requirementSplit.js";
 import { assertCallUsageBooked, closeSingleCall, insertSingleCallRun, verifyStoppedSingleCall, type StoppedSingleCallRun } from "./singleCallLedger.js";
 import { singleCallClaimRowOf } from "./singleCall.js";
@@ -54,7 +54,7 @@ function syncLedger(group: RequirementGroup): void {
   group.ledger = clarifyingLedger(group.limit, group.used, group.reserved, group.ledger.usageUnknown);
 }
 
-function setWaiting(store: ControlStore, groupId: string, target: RequirementTarget, waiting: "requirement-budget-exhausted" | null): void {
+function setWaiting(store: ControlStore, groupId: string, target: RequirementTarget, waiting: RequirementWaiting | null): void {
   if (target.kind === "round") { const round = readRound(store, groupId, target.no); if (round.waiting !== waiting) writeRound(store, groupId, { ...round, waiting }); }
   else { const draft = readDraft(store, groupId, target.no); if (draft.waiting !== waiting) writeDraft(store, groupId, { ...draft, waiting }); }
 }
@@ -70,7 +70,10 @@ function upsertOutbox(store: ControlStore, id: string, kind: string, body: unkno
 
 /**
  * N1 spec §5.2 and DR14: claim the call the group is waiting for, in the wake handler's transaction. A grant that no
- * longer fits the remaining limit is not claimed: the round or draft waits with requirement-budget-exhausted.
+ * longer fits the remaining limit is not claimed: the round or draft waits with requirement-budget-exhausted. Nor is
+ * any call claimed while the ledger's usage is unknown (final review finding 3): its settlement could never book, so
+ * the call would be paid for and lost; the round or draft waits with requirement-usage-unknown. As on a plan group
+ * (webDispatch.ts "usage-unknown"), version 1 has no command that clears unknown usage, so that wait is final.
  */
 export function claimRequirementCallInTransaction(store: ControlStore, groupId: string): "claimed" | "nothing" | "waiting" | "held" {
   const group = readRequirementGroup(store, groupId);
@@ -79,6 +82,7 @@ export function claimRequirementCallInTransaction(store: ControlStore, groupId: 
   const target = pendingRequirementCall(store, groupId);
   if (target === null) return "nothing";
   if (store.db.prepare("SELECT id FROM runs WHERE group_id=? AND work_item_id=? AND active=1").get(groupId, target.workItemId)) return "nothing";
+  if (group.ledger.usageUnknown) { setWaiting(store, groupId, target, "requirement-usage-unknown"); return "waiting"; }
   const reserved = add(group.reserved, REQUIREMENT_CALL_GRANT);
   if (!fits(group.used, reserved, group.limit)) { setWaiting(store, groupId, target, "requirement-budget-exhausted"); return "waiting"; }
   setWaiting(store, groupId, target, null);

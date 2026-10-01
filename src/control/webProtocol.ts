@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { agentSelectionSchema, amountSchema, canonicalTimestampSchema, commandEnvelopeSchema, contextWindowSchema, idSchema, panelPartialSelectionSchema, partialSelectionSchema, safeInteger } from "./schema.js";
 import { nonEmptyStoredLabelsSchema, storedLabelsSchema } from "./labels.js";
-import { DRAFT_STATES, IDEA_MAX_BYTES, ROUND_STATES, draftBodySchema, questionIdSchema, requirementExportSchema, roundBodySchema } from "./requirementSchemas.js";
+import { DRAFT_STATES, IDEA_MAX_BYTES, REQUIREMENT_WAITING, ROUND_STATES, draftBodySchema, questionIdSchema, requirementExportSchema, roundBodySchema } from "./requirementSchemas.js";
 import { LOOP_PLAN_IDS, loopInputsSchema, loopRecipeSchema } from "./loopPlans.js";
 // Agent selection spec §12 I10 (plan-review P18): the selection/context/partial schemas are T7's, defined once
 // in schema.ts; webProtocol.ts re-exports them so every downstream import can come from one wire module.
@@ -939,7 +939,7 @@ export const controlConfigSchema = z
 export const requirementSummarySchema = z.object({
   roundNo: positiveSafeInteger.nullable(), roundState: z.enum(ROUND_STATES).nullable(), openQuestions: safeInteger,
   draftNo: positiveSafeInteger.nullable(), draftState: z.enum(DRAFT_STATES).nullable(),
-  waiting: z.literal("requirement-budget-exhausted").nullable(), reasonCode: nonemptyString.nullable(),
+  waiting: z.enum(REQUIREMENT_WAITING).nullable(), reasonCode: nonemptyString.nullable(),
   exportState: z.enum(["not-due", "pending", "done", "conflict"]),
   used: amountSchema, reserved: amountSchema, limit: amountSchema, usageUnknown: z.boolean(),
 }).strict();

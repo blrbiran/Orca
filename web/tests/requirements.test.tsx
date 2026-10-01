@@ -171,3 +171,16 @@ describe("a clarifying group in Task control (N1 spec §11.2)", () => {
     expect(link.textContent).toBe("r · clarifying · requirement — open in Requirements");
   });
 });
+
+// Final review fix wave (session b5e8d368, 2026-10-02), finding 3: a round that waits because usage is unknown says so,
+// and offers neither a retry nor a raise (neither clears unknown usage in version 1).
+describe("a requirement whose usage is unknown (final review finding 3)", () => {
+  it("names requirement-usage-unknown in one line, with no retry and no raise", () => {
+    const view = requirementView("answered");
+    mount(withSummary({ ...view, rounds: [...view.rounds, { ...view.rounds[0]!, roundNo: 2, state: "drafting", result: null, answers: null, waiting: "requirement-usage-unknown" }] },
+      { roundNo: 2, roundState: "drafting", waiting: "requirement-usage-unknown", usageUnknown: true }));
+    expect(screen.getByRole("alert").textContent).toMatch(/^requirement-usage-unknown · .*usage is unknown/);
+    expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+    expect(screen.queryByRole("form", { name: "Raise the limit" })).toBeNull();
+  });
+});

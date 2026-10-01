@@ -387,6 +387,7 @@ export const zh: Translation<typeof en> = {
       "split-output-invalid": "模型的拆分连续三次不是合格的结构。",
       "split-validation-exhausted": "拆分连续三次没通过代码校验；下面是最后一次的原因。",
       "requirement-budget-exhausted": "下一次调用超出上限；调高上限才能继续。",
+      "requirement-usage-unknown": "这个需求有一部分用量未知，因此不再发起调用；与计划组一样，本版本无法清除。",
       "requirement-export-conflict": "orca/{{groupId}} 已存在且有别的提交；没有动它。",
       "requirement-export-path-blocked": "HEAD 里的 .orca 或 .orca/requirements 是文件，挡住了需求文档的导出；什么都没写。",
       "requirement-export-pending": "需求文档还没导出到 orca/{{groupId}}；导出之后这个组才能开始。",

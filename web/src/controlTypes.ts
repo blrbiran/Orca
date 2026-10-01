@@ -48,7 +48,7 @@ export type RequirementSummaryV1 = {
   openQuestions: number;
   draftNo: number | null;
   draftState: null | "drafting" | "awaiting-review" | "accepted" | "rejected" | "invalid" | "interrupted" | "failed";
-  waiting: null | "requirement-budget-exhausted";
+  waiting: null | "requirement-budget-exhausted" | "requirement-usage-unknown";
   reasonCode: string | null;
   exportState: "not-due" | "pending" | "done" | "conflict";
   used: Amount;
@@ -96,7 +96,7 @@ export type RoundBodyV1 = {
   state: "drafting" | "awaiting-answers" | "answered" | "interrupted" | "failed";
   retries: number;
   lastInvalidReason: string | null;
-  waiting: null | "requirement-budget-exhausted";
+  waiting: null | "requirement-budget-exhausted" | "requirement-usage-unknown";
   result: ClarifyResultV1 | null;
   answers: Array<{ id: string; kind: "recommended" | "text"; text: string }> | null;
   glossaryDecisions: RequirementDecisionInputV1[] | null;
@@ -123,7 +123,7 @@ export type DraftViewV1 = {
   draftNo: number;
   state: "drafting" | "awaiting-review" | "accepted" | "rejected" | "invalid" | "interrupted" | "failed";
   autoRetry: number;
-  waiting: null | "requirement-budget-exhausted";
+  waiting: null | "requirement-budget-exhausted" | "requirement-usage-unknown";
   feedback: string | null;
   output: { tasks: SplitTaskV1[]; notes: string } | null;
   draftHash: string | null;

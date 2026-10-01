@@ -17,7 +17,7 @@ type Round = View["rounds"][number];
 type Draft = View["drafts"][number];
 /** Every reason code this section can show, each with its one-line explanation (requirements.reason.*). */
 const REASONS = [
-  "clarify-output-invalid", "split-output-invalid", "split-validation-exhausted", "requirement-budget-exhausted",
+  "clarify-output-invalid", "split-output-invalid", "split-validation-exhausted", "requirement-budget-exhausted", "requirement-usage-unknown",
   "requirement-export-conflict", "requirement-export-path-blocked", "requirement-export-pending", "requirement-not-split",
 ] as const;
 type Reason = (typeof REASONS)[number];
