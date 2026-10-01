@@ -59,7 +59,6 @@ describe("validating a split (N1 spec §8.3)", () => {
     ["an unknown loop plan (expandLoopTask)", task({ loopPlan: "nope" }), "expand:exporter:unknown-plan"],
     ["an investigate plan with two targets (expandLoopTask)", task({ loopPlan: "investigate" }), "expand:exporter:investigate-target"],
     ["a dangling dependency (Web import)", task({ dependsOn: ["ghost"] }), "import:dangling-dependency:exporter:ghost"],
-    ["a repeated dependency (Web import)", task({ dependsOn: ["exporter", "exporter"] }, 1), "import:duplicate-dependency:images"],
     ["a target under a directory the commit lacks", task({ targetPaths: ["missing/dir/x.ts"] }), "path:exporter:missing/dir/x.ts"],
     ["a trace naming nothing", task({ traces: ["AC9"] }), "trace:exporter:AC9"],
     ["a criterion no task traces", task({ traces: ["R1.ADR1"] }), "untraced:AC1"],
@@ -75,10 +74,13 @@ describe("validating a split (N1 spec §8.3)", () => {
     expect(out.reasons).toEqual(expect.arrayContaining(["path:exporter:missing/x.ts", "trace:exporter:AC9", "untraced:AC1"]));
   });
 
-  // The Web import refuses two equal success conditions; a requirement whose criteria repeat a text is handed back by name.
-  it("hands back acceptance criteria whose texts repeat (Web import)", async () => {
-    const out = await validate(VALID_SPLIT, ["AC1", "AC2"], [{ id: "AC1", text: "Same." }, { id: "AC2", text: "Same." }]);
-    expect(out).toMatchObject({ ok: false, reasons: ["import:duplicate-success-condition"], layers: null, implicitEdges: null });
+  // The Web import stops at its first refusal; a repeated dependency and repeated criterion texts are named beside every
+  // other reason (here a missing target), not only when they are the draft's one fault.
+  it("hands back a repeated dependency and repeated criterion texts (Web import) beside every other reason", async () => {
+    const output = { ...VALID_SPLIT, tasks: [{ ...VALID_SPLIT.tasks[0]!, targetPaths: ["missing/x.ts"] }, { ...VALID_SPLIT.tasks[1]!, dependsOn: ["exporter", "exporter"] }] };
+    const out = await validate(output, ["AC1", "AC2"], [{ id: "AC1", text: "Same." }, { id: "AC2", text: "Same." }]);
+    expect(out).toMatchObject({ ok: false, layers: null, implicitEdges: null });
+    expect(out.reasons).toEqual(["import:duplicate-dependency:images", "import:duplicate-success-condition", "path:exporter:missing/x.ts"]);
   });
 
   // What only the Web import itself decides (here: a plan with no success condition) still reaches the person by name.
