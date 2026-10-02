@@ -108,6 +108,8 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 
 ✅ *** **N1「提想法 → 澄清需求 → 拆分 → 确认」第一版做完（2026-10-02，会话 `b5e8d368`）**：需求就是一个 `clarifying` 状态的 group；预估链泛化成按 `purpose` 分派的单次调用；面板第五个分区「需求」。人已审完裁定。**付费真 claude 跑了两次：澄清→拆分→确认→导出跑通，落地两次都被挡住（R-A／R-B）**。细节见 §4.0／§4.0.g。 ***
 
+✅ *** **ccloop「被杀的 run 能续跑＋孤儿 runner 收＋R-A＋R-B」一轮做完（2026-10-02，会话 `ece96b67`，只改 ccloop 仓）**：门绿，付费真 claude 跑通「杀掉 ccloop → runner 自退 → resume 续跑到成功」一次。Orca 尚未重钉、未用上。细节见 §4.0.h。 ***
+
 **现行基线（会话 `b5e8d368`，2026-10-02，N1 需求→拆分做完、终审修复波之后；原始报数在台账 `.superpowers/sdd/2026-10-02-requirement-to-split/progress.md` 的 Task 15 行，输出在该会话 scratchpad `gate2/`）**：全新 clone，HOME＋四个 XDG 根改道，TMPDIR 短真目录，夹具表 fake codex `integration`，clone 里先 build web；`ORCA_CCLOOP_BIN`＝同一次门里 ccloop clone 的 `dist/cli.js`（该 clone 含本会话 ccloop 的夹具队列模式）。
 - ccloop（内容＝主题行 `test(fixtures): pin that a single-call entry beats a single-call-queue beside it …`）：build／typecheck RC 0；**1047 条、1046 过、1 红（`stopProof`）**；`check-known-reds` RC 0；`check-tmp-leak` RC 0。
 - Orca（内容＝主题行 `docs(plan): N1 corrections after execution …`）：web build／typecheck RC 0；**2539 条、2533 过、3 红、3 pending（`ccloopDefaultE2E`，`verify:ccloop-pin` 里 3/3）**；三条红都在开跑时 1 分钟负载 88 下 5 s 超时、负载 6–15 时单文件 3/3 绿：`driverRecovery`、`controlShutdown`（已登记）与 **新登记的** `driverRequirementSplit` "fails the third consecutive invalid draft …"。`requirementE2E` 1 过 0 跳过；真 ast-grep 判据真跑了；`estimateE2E` 3/3；web check 347 条；`verify:panel` 15 PASS；`check-tmp-leak` RC 0；真 `~/.orca` stat 与 sha 前后相同。
@@ -146,35 +148,28 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 
 ## 四、⛔ 下一件事
 
-### 4.0 ⛔ 现在的下一件事（2026-10-02 会话 `b5e8d368` 第二次收尾整节改写；**本节优先于下面的 4.0.g、4.0.f、4.0.e、4.0.d、4.0.c、4.0.b、4.0.0、4.0.1 与 1–3**）
+### 4.0 ⛔ 现在的下一件事（2026-10-02 会话 `ece96b67` 整节改写；**本节优先于下面的 4.0.h、4.0.g、4.0.f、4.0.e、4.0.d、4.0.c、4.0.b、4.0.0、4.0.1 与 1–3**）
 
-**⛔ 人已定：下一个 agent 做 ccloop「被直接杀掉的 run 能续跑」＋「ccloop 死后留下的 runner 要收」**（人 2026-10-02：「我比较倾向于能续跑以及要清理」，随后点名「下一个 agent 要做的事情是：做 ccloop 的被杀 run 续跑加孤儿 runner 清理」）。
-1. **先核推送**：三个仓各跑 `/usr/bin/git ls-remote origin refs/heads/main` 与本地比（本会话收尾时三个仓都已由人推过；之后只多了 handoff 与本节下面那一笔 `test(live): …`）。
-2. **工作在 ccloop 仓里做**，按 ccloop 自己的规矩（它的 `CLAUDE.md` 与 `docs/handoff/handoff.md`）。动所有权逻辑 ⇒ **走 brainstorming → spec → 计划 → SDD 评审**，不要直接改。
-3. **控制器的建议方向（人没逐条审，是起点不是裁定）**：做成一件事，清理是续跑的前提——
-   - runner 盯父进程：stdin 关闭（父进程死）即先停 claude、再退出；
-   - `resume` 接管前按 `process.json` 的 pid＋启动时间**核身份**，收掉仍活着的进程组；
-   - 租约过期且登记的 owner 按身份核实已死时，由 `resume` 自己写移交记录（今天只认 loop 在 `stale_candidate` 边界写的 `owner-transfer.json`，被杀的 run 报 `cannot read run artifacts: ENOENT … owner-transfer.json`）；
-   - 判不清一律 fail closed。
-   - 证据：ccloop 台账 `.superpowers/sdd/2026-10-01-live-partial-and-resume/progress.md`（R1／R2 两段）。README §3.2「接管一个被中断的 run」现在会误导，一起改。
-4. **Orca 侧要不要跟**：Orca 的驱动今天走自己的恢复路径，不调 `ccloop resume`；这一轮**不要求** Orca 改。若 ccloop 新增了 Orca 要用的行为，按 §8 的重钉规矩（人先推 ccloop，再 `node scripts/pin-ccloop.mjs <SHA>`）。
-5. 之后由人选：下面「付费跑登记的两条」（R-A／R-B）、N5 memory tab（先核 ccmem Q6）、N1 第二版。
+**下一件事归人选**（本会话已把人点名的那件做完，见 4.0.h）：
+1. **先核推送**：三个仓各跑 `/usr/bin/git ls-remote origin refs/heads/main` 与本地比。本会话在 ccloop 落了一整轮本地提交（spec／计划／实现／台账／handoff），Orca 只多了 checkpoint 与 handoff 提交，ccmem 只多了 handoff 提交；**一次都没推**。推送顺序：ccloop 先于 Orca。
+2. **人审 ccloop 那一轮的 pending 裁定**：ccloop 台账 `.superpowers/sdd/2026-10-02-crash-resume-and-orphan-reaping/progress.md` 里标着 `pending human ratification` 的 `Ruling:` 行（R1、R2、sweep 第二行横幅措辞、一处夹具补字段、一条本轮判据收紧、codex partial 进 verify）。
+3. 之后由人选：
+   - **Orca「同时启动任务数上限」**（新登记，见 4.0.h 容量一条）；
+   - 重钉 ccloop 让 Orca 用上本轮行为（runner 随 worker 死、never-started 记 0 让 group 不再永久卡在未知用量——付费跑 R-A 的那条挂账因此可解，但要先重钉，并在 Orca 侧验证 usage 0 能清掉 group 的 `usageUnknown`）；
+   - 收进程／R-A／R-B 的付费真 claude 验证；
+   - N5 memory tab（先核 ccmem Q6）；N1 第二版。
+4. 重钉规矩不变：人先推 ccloop，再 `node scripts/pin-ccloop.mjs <SHA>`，再人推 Orca。
+5. 留在会话 scratchpad、删要人点头的：会话 `b5e8d368` 的 `live-n1/`（N1 两次付费跑的 clone、控制 store、claude 原始流）；会话 `ece96b67` 的 `gate/`、`paid/`（本轮门与付费跑的原始输出，台账引用它们）。
+6. 环境教训（实测，仍有效）：本机 claude 会在任意时刻被重装（同版本也会），那一两秒 `bin/claude` 不存在；付费跑前后记安装目录 mtime。N1 付费跑的 R-A 就是这么来的（ccloop 本轮已加 ENOENT 重试与「没起来记 0」）。
 
-**本会话后半做了什么：N1 的付费真 claude 跑（spec §12.5），人点了头**。驱动脚本 `scripts/live-requirement-acceptance.ts`（主题行 `test(live): a paid requirement-to-landing driver for N1 spec 12.5, …`；用法在文件头）；全部证据在 N1 台账 `.superpowers/sdd/2026-10-02-requirement-to-split/progress.md` 末节「Paid run」。
-- claude 2.1.287、`claude-opus-5-5`、1M 窗口、隔离参数、每次调用 `--max-budget-usd 2`；目标是一个临时小包 `textkit`，想法是「加一个 truncate 函数」；每轮都按推荐答案答。跑了两次（n＝2）。
-- **两次都跑通了的**：clarify 三轮（5／4／0 个问题，第三轮模型自己报 `frontierEmpty` ⇒ 共识）、拆分第一次调用就通过校验、接受、追问花费结转、估算 ready、导出（`orca/g` 的第一笔就是需求文档提交）、`main` 没被动、`~/.orca` 与 `~/.claude/projects` 不变。`clarify` 输出 schema 里的布尔字段在真 claude 下第一次被证明。
-- **两次都没落完**：run 1 的 T2 撞上 claude 安装包正在被重装（`spawn …/bin/claude ENOENT`）；run 2 的 T2 被 `acceptEdits` 拒了 `npm test`，claude 报 `partial`＋`error`，ccloop 剩 2 次尝试也直接判 `failed`。
-- 花费（claude 自报 `total_cost_usd`，每次调用都有）：$1.1215996（9 次）＋ $0.9305036（11 次）＝ **$2.0521032**。
+### 4.0.h ccloop 被杀 run 续跑＋孤儿 runner 收＋R-A＋R-B（会话 `ece96b67`，2026-10-02，**已完成，待人审 pending 裁定**）
 
-**付费跑登记的两条（未修，要人定方向）**：
-- **R-A**：claude 根本没起来的 execute（ENOENT）让 run 的用量变成未知，而 group 上的未知用量清不掉 ⇒ 一次瞬时的二进制替换就让整个 group 永久停住。候选：runner 能证明没起过 claude 进程时 ccloop 报用量 0。
-- **R-B**：`acceptEdits`（`ccloop agents detect` 起草的默认）下执行者跑不了任何命令；任务目标写着「测试要过」时，claude 报 `partial`＋`error`，ccloop 不用剩余尝试就结束 loop——尽管 ccloop 自己的 verify 阶段会跑 requiredChecks。候选（设计题，没定）：execute 提示词说明检查由 verifier 跑、不要因跑不了而报失败；或执行者放行本任务自己的检查命令；或带改动文件的自报 `error` 交给 verify 而不是结束 loop。
-
-**诚实的表述**：「需求→拆分→确认→导出」在真 claude 下跑通（n＝2，一个目标仓）；**「需求→落地」没有跑通过**。
-
-**环境教训（本次实测）**：本机 claude 会在任意时刻被重装（同版本也会），重装那一两秒里 `bin/claude` 不存在。付费跑撞上就是 R-A。跑之前记下安装目录的 mtime，事后对比。
-
-**留在会话 scratchpad 的**：`live-n1/`（两份 clone、`out/`、`out2/` 的控制 store、claude 原始流、目标仓）。没删，删要人点头。
+- 人裁：三件都修（R-A／R-B 一起）；R-B 走「带改动文件的自报 error 交给 verify ＋ 提示词说明检查由 verifier 跑」；R-A 走「证明没起过就记 0 ＋ ENOENT 在 runner 内有界重试」；普通 `resume` 自己接管被杀的 run；sweep 也认被杀的 run；容量实测人已批（时机由 agent 选）；本会话「有问题先按建议执行、最后报审」。
+- 材料全在 ccloop 仓：spec `docs/superpowers/specs/2026-10-02-crash-resume-and-orphan-reaping-design.md`（§11、§12 是更正）、同名计划、台账（见上）。按 brainstorming → spec → 独立评审 → 计划 → SDD（9 个实施 Task 各经一次任务评审，6 个有一轮修复）→ opus 终审 → 一次修复波 → 复审。
+- 门（ccloop 干净 clone）：1124 条、1123 过、只红 `stopProof`；两个检查脚本 RC 0。
+- 付费真 claude（n＝1）：SIGKILL ccloop 后 runner＋claude 约 2.5 秒内退出；租约真过期后 `ccloop resume --agents` 不靠补文件续跑到 `succeeded`；claude 自报 $0.2392012（被杀那次花费拿不到）。
+- **诚实的表述**：「被直接杀掉的 run 能用 `ccloop resume` 续跑、孤儿 runner 会自己退出」在真 claude 下跑通一次；收进程（reaper）、R-A、R-B 只在 fake 下验过。**Orca 还没用上这些行为**（钉的仍是 `99054f2`）。
+- **容量（新登记给 Orca）**：真 claude 执行中途实测 runner 10 fd、claude 18 fd（验收专用的 tee 另 8 fd），每个在飞任务至少 3 个进程（worker、runner、claude）；本机 `kern.maxprocperuid` 5,333、`kern.maxfiles` 245,760（2026-10-02 现测）。由此推算的上限约 1,700 个并发任务，**这是推算**，没算工具子进程。Orca 要做大规模并行时，需要一个由实测（带工具调用的任务）推出、留足余量的「同时启动任务数上限」。
 
 ### 4.0.g N1 第一版（会话 `b5e8d368`，2026-10-02，**已完成、人已审完全部裁定**；过程删了，结论留在这里）
 
