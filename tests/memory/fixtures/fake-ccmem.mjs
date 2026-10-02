@@ -4,7 +4,7 @@
 import { appendFileSync, readFileSync } from "node:fs";
 
 const argv = process.argv.slice(2);
-appendFileSync(process.env.FAKE_CCMEM_LOG, `${JSON.stringify({ argv, cwd: process.cwd(), env: { CCMEM_DATA_ROOT: process.env.CCMEM_DATA_ROOT, HOME: process.env.HOME } })}\n`);
+appendFileSync(process.env.FAKE_CCMEM_LOG, `${JSON.stringify({ argv, cwd: process.cwd(), env: { CCMEM_DATA_ROOT: process.env.CCMEM_DATA_ROOT, HOME: process.env.HOME, ORCA_T4_SENTINEL: process.env.ORCA_T4_SENTINEL ?? null } })}\n`);
 
 const mode = process.env.FAKE_CCMEM_MODE ?? "ok";
 const scopeAt = argv.indexOf("--scope");
@@ -12,12 +12,15 @@ const scope = scopeAt === -1 ? undefined : argv[scopeAt + 1];
 const data = () => JSON.parse(readFileSync(process.env.FAKE_CCMEM_DATA, "utf8"));
 const rowsFor = (d) => (scope === "global" ? d.global : scope === "project" ? d.project : d.all);
 const answer = (memories, over = {}) => JSON.stringify({ version: "0.7", exported_at: Date.now(), memories, ...over }, null, 2);
-// Wait for the write callback: on macOS a pipe write is asynchronous and exiting right after it loses output.
+// Never call process.exit after a write: on macOS a pipe write is asynchronous and exiting right after it loses output, so the script just ends and stdout drains first.
 const say = (text) => process.stdout.write(`${text}\n`);
 
 if (mode.startsWith("exit:")) {
   process.stderr.write(`fake-ccmem: failing on purpose (scope ${scope})\n`);
   process.exitCode = Number(mode.slice(5));
+} else if (mode.startsWith("kill:")) {
+  process.kill(process.pid, mode.slice(5));
+  setTimeout(() => {}, 60_000);
 } else if (mode === "sleep") {
   setTimeout(() => {}, 60_000);
 } else if (mode === "garbage") {

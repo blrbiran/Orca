@@ -72,7 +72,7 @@ export function createCcmemAdapter(options: CcmemAdapterOptions): MemoryAdapter 
   };
 }
 
-/** Same shape as src/control/ccloopPort.ts's mapping. Order matters: a maxBuffer overrun also sets `killed`. */
+/** Same shape as src/control/ccloopPort.ts's mapping. A maxBuffer overrun is recognised by its code (Node does not set `killed` for it, v22.13.1); testing it before `killed` only keeps the mapping explicit. */
 function exportFailure(error: ExecFileException, ctx: { bin: string; scope: CcmemScope; maxBuffer: number; timeout: number; stderr: string }): MemoryError {
   const what = `ccmem export --scope ${ctx.scope}`;
   const code = (error as { code?: unknown }).code;

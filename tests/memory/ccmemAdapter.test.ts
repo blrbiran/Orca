@@ -46,8 +46,10 @@ describe("the ccmem adapter's calls (spec §3.1-§3.3)", () => {
   it("hands ccmem the env it was given, not this process's (M3)", async () => {
     const { fake, scope } = await world();
     expect(process.env.CCMEM_DATA_ROOT).not.toBe(fake.env.CCMEM_DATA_ROOT); // relocateCcmem.ts set a different one
-    await adapterFor(fake).search(scope, { query: "", limit: 50 });
-    for (const call of fake.calls()) expect(call.env).toEqual({ CCMEM_DATA_ROOT: fake.env.CCMEM_DATA_ROOT, HOME: fake.env.HOME });
+    process.env.ORCA_T4_SENTINEL = "leak"; // nothing of this process's env may be added either
+    try { await adapterFor(fake).search(scope, { query: "", limit: 50 }); } finally { delete process.env.ORCA_T4_SENTINEL; }
+    expect(fake.calls()).toHaveLength(2);
+    for (const call of fake.calls()) expect(call.env).toEqual({ CCMEM_DATA_ROOT: fake.env.CCMEM_DATA_ROOT, HOME: fake.env.HOME, ORCA_T4_SENTINEL: null });
   });
 
   it("keeps ccmem's own project key on project rows", async () => {
@@ -75,6 +77,11 @@ describe("failures (spec §3.3)", () => {
     expect(err.message).toContain("--scope global");
     expect(err.message).toContain("failing on purpose");
     expect(fake.calls()).toHaveLength(1); // the first failure ends the request: no half result
+  });
+
+  it("maps a signal death to ccmem-failed:<signal>", async () => {
+    const { fake, scope } = await world("kill:SIGKILL");
+    expect((await refusal(adapterFor(fake).search(scope, { query: "", limit: 50 }))).code).toBe("ccmem-failed:SIGKILL");
   });
 
   it("gives up at the timeout, promptly (M6)", async () => {
@@ -125,6 +132,14 @@ describe("finding ccmem (spec §3.4, §10 D5)", () => {
       expect(await adapterFor(fake, { ccmemBin: bin }).health(), bin).toMatchObject({ status: "unavailable", code: "ccmem-missing" });
     }
     expect(await adapterFor(fake).health()).toEqual({ status: "ok" });
+    expect(fake.calls()).toEqual([]);
+  });
+
+  it("maps a non-executable path to ccmem-missing at spawn time (EACCES)", async () => {
+    const { fake, scope } = await world();
+    const bin = join(fake.dir, "data.json");
+    await chmod(bin, 0o644);
+    expect((await refusal(adapterFor(fake, { ccmemBin: bin }).search(scope, { query: "", limit: 50 }))).code).toBe("ccmem-missing");
     expect(fake.calls()).toEqual([]);
   });
 
