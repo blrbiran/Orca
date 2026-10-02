@@ -153,7 +153,7 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 
 人在会话 `7fe6d61b` 选了三件：「重钉 ccloop ＋ 付费验证 ＋ N5 memory tab」。前两件做完了，第三件只做完了前置核查（Q6）：
 
-1. **先核推送**：三个仓各跑 `/usr/bin/git ls-remote origin refs/heads/main` 与本地比。会话 `7fe6d61b` 在 ccloop 落了四笔（追认、付费验收台账、两笔 handoff）、Orca 三笔（handoff、重钉＋判据、handoff）、ccmem 一笔（§15）；人在会话中途推过一次，哪些已推只看现跑的 `ls-remote`。推送顺序：ccloop 先于 Orca（Orca 钉的 `ae2caa3` 已在 GitHub，不依赖 ccloop 这三笔文档提交）。
+1. **先核推送**：三个仓各跑 `/usr/bin/git ls-remote origin refs/heads/main` 与本地比（`git log origin/main..main` 列出没推的）；不要信本文里的任何笔数。会话 `7fe6d61b` 在三个仓落的都是文档／台账提交，外加 Orca 的重钉＋判据一笔。推送顺序：ccloop 先于 Orca（Orca 钉的 `ae2caa3` 已在 GitHub，不依赖 ccloop 之后的文档提交）。
 2. ✅ **重钉做完**（主题行 `chore(deps): repin ccloop to its crash-resume round, …`）：`99054f2` → `ae2caa3`，`pin-ccloop.mjs` 七项全 ok。新判据 `tests/control/neverStartedUsage.test.ts` 在 fake 世界里复现 N1 付费跑的 R-A（claude 的包装脚本在 plan 调用时删掉自己，execute 撞 ENOENT）：对 `ae2caa3` 绿；对 `99054f2` 红在 run 的 `unknown.work`，删掉那条断言后红在 group 的 `usageUnknown`（两条各自见红）。**也就是说「需求／plan group 的用量一旦未知就清不掉」那条挂账，在「claude 没起来」这个起因上不再会被触发；其他起因（真的拿不到用量）仍然清不掉。**
    - 门（干净 `git clone --local`、HOME 与四个 XDG 根改道、TMPDIR 短、`ORCA_CCLOOP_BIN`＝ccloop `ae2caa3` 的 build）：`npm run verify` 是 `&&` 链，`npm test` 有红就停，所以逐段跑、逐段取 RC。typecheck、台账校验、`CLAUDE.md` 行数、`core.hooksPath`（clone 里要先 `git config core.hooksPath scripts/githooks`）、`verify:control`（120 文件 1219 过 3 skipped）、`verify:scheduler`、web build、`verify:ccloop-pin`、`verify:panel`、`--ws check`（57 文件 347 过）都 RC 0。全量 `npm test`（及 `verify:chain` 里那一遍）红 2–3 条，全是负载型：`controlShutdown`（已登记）、`driverRecovery` "drives a retried run on…"（已登记）、`driverRequirementSplit` "fails the third consecutive invalid draft…"（**新登记**，见 §三 flake 段）；三个文件单跑各 3/3 绿。
    - 门的副本两个坑：clone 里要先 `npm run build --workspace web`，否则 `controlMount` 13 条和 `readyHint` 以 `panel-dist-missing` 假红；`verify:control` 的 `ORCA_AGENTS_TABLE` 里 fake codex 要用 **`integration`** 模式（`[node, <clone>/tests/fixtures/fake-codex.mjs, "integration", <marker>]`），用 `script` 模式 `ccloopProtocol.integration` 会以 `failed` 假红（新旧 ccloop 一样红）。
@@ -161,7 +161,7 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 4. ⏳ **N5 memory tab**：spec `docs/superpowers/specs/2026-09-29-memory-tab-design.md`（§9 人裁 Q1–Q7）。**Q6 已核完**（ccmem `scripts/lib/db.mjs`，会话 `7fe6d61b`）：
    - ① 备份是 `copyFileSync` 直接写到最终名 `global.db.bak.<ts>`。实测把 839 MB 的文件拷到中途 SIGTERM，三次留下 35／40／102 MB 的半截文件；`findReusableMigrationBackup` 按「60 秒内且大小相等」挑可复用备份，对它们返回 `null`（用 ccmem 自己的函数实测）⇒ **不会被当成可复用的备份**。但半截文件会出现在 `listMigrationBackups` 里、计入「只留 5 份」的轮换，可能挤掉一份好的旧备份。另外 WAL 模式下备份只拷主文件、不拷 `-wal`。要不要改成先写临时名再 rename，是 **ccmem 的人裁**（Orca 不改 ccmem）。
    - ② `runVersionedMigration` 不是整体一个事务，而是**每个迁移文件一个 `BEGIN IMMEDIATE` 事务**，版本号的更新在同一事务里（`.sql` 走 `runInTransaction`；`015_v012_repair.cjs` 自己包事务；v06–v09 特殊迁移也走 `runInTransaction`）⇒ 在两步之间被杀，库停在一致的中间版本，下次开库接着迁。**安全。**
-   - 下一步：按 spec 写实施计划（`superpowers:writing-plans`），再执行。
+   - 下一步：按 spec 写实施计划（`superpowers:writing-plans`），计划写完先给人看，再执行（`superpowers:subagent-driven-development`）。会话 `7fe6d61b` 收尾时人尚未点头开工，计划一个字都还没写；开工前先读 spec 全文与 §9，再读 Orca 现有面板 tab 的写法（`web/` 与 `src/panel/`）。
 5. 仍可选的：Orca「同时启动任务数上限」（见 4.0.h 容量一条）；N1 第二版。
 6. 重钉规矩不变：人先推 ccloop，再 `node scripts/pin-ccloop.mjs <SHA>`，再人推 Orca。
 7. 环境教训（实测，仍有效）：本机 claude 会在任意时刻被重装（同版本也会）。会话 `7fe6d61b` 里又见一次（12:15:00Z，装目录 mtime 变、版本仍 2.1.287），恰好落在两次付费场景之间。付费跑前后记装目录 mtime；**ccloop 不留 claude 的结果包，要报花费就得套 `scripts/claude-tee.mjs`**。包装 claude 的脚本要按「任一参数是 `--version`」判探版本：ccloop 探版本时 `--version` 排在全部参数之后。
