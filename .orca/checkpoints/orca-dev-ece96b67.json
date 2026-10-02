@@ -1,0 +1,42 @@
+{
+  "v": 1,
+  "runId": "orca-dev-ece96b67",
+  "runtime": "claude-code",
+  "sessionRef": "ece96b67-2433-4082-9abf-3ed4b0a244dd",
+  "writtenAt": "2026-10-02T07:24:32.001Z",
+  "head": "1757aa64e13aa7d5b5a543c00275c8c2ae1b1eaa",
+  "level": {
+    "kind": "reading",
+    "level": 338245,
+    "windowTokens": 1000000,
+    "t1": 330000,
+    "t2": 450000,
+    "band": 1
+  },
+  "next": [
+    "SDD-execute ccloop plan docs/superpowers/plans/2026-10-02-crash-resume-and-orphan-reaping.md Tasks 1-10; ledger at ccloop .superpowers/sdd/2026-10-02-crash-resume-and-orphan-reaping/progress.md",
+    "then update Orca/ccloop/ccmem handoffs and give the human an executive summary"
+  ],
+  "open": [
+    "spec and plan committed locally in ccloop (subject lines docs(spec)/docs(plan) 2026-10-02 crash resume)"
+  ],
+  "awaitingHuman": [
+    {
+      "kind": "irreversible",
+      "what": "push ccloop (and Orca handoff commit) when the human chooses"
+    },
+    {
+      "kind": "named-authorization",
+      "what": "ratify controller rulings R1/R2, sweep banner wording, and any rewritten existing criteria (ruling 88)"
+    }
+  ],
+  "measurements": [
+    {
+      "command": "/usr/bin/git -C /Users/biran/code/skills/loop/ccloop log --oneline -8",
+      "exitCode": 0,
+      "commit": "1757aa64e13aa7d5b5a543c00275c8c2ae1b1eaa",
+      "observedAt": "2026-10-02T07:24:31.949Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-ece96b67-vNFMsr/1.txt"
+    }
+  ]
+}
