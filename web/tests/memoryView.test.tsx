@@ -5,7 +5,7 @@
  * text, cut at 200 code points in the list, whole in the detail.
  */
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import i18n from "../src/i18n.js";
 import { MemoryView } from "../src/MemoryView.js";
 import type { MemoryRecord } from "../src/memoryTypes.js";
@@ -127,6 +127,12 @@ describe("MemoryView (spec §5.2, W1)", () => {
     expect(box.value).toBe("");
   });
 
+  it("offers no repository choice for a single repository", async () => {
+    render(<MemoryView active />);
+    await screen.findByRole("navigation", { name: "Memory list" });
+    expect(screen.queryByRole("combobox")).toBeNull();
+  });
+
   it("shows the refusal and the hint, and lists nothing, when ccmem is not configured", async () => {
     status = { ...OK_STATUS, health: { status: "unavailable", code: "ccmem-missing", message: "ORCA_CCMEM_BIN is not set" } };
     render(<MemoryView active />);
@@ -151,6 +157,29 @@ describe("MemoryView (spec §5.2, W1)", () => {
     render(<MemoryView active />);
     expect(await screen.findByText("Showing 1 of 7; narrow the search.")).toBeTruthy();
     expect(screen.getByText(/No project memory/)).toBeTruthy();
+  });
+
+  it("says only that nothing matches for an empty list, not that project memory is missing", async () => {
+    records = [];
+    render(<MemoryView active />);
+    expect(await screen.findByText("No memory matches.")).toBeTruthy();
+    expect(screen.queryByText(/No project memory/)).toBeNull();
+  });
+
+  it("shows a tag given twice twice, without React's duplicate-key warning", async () => {
+    records = [rec("1", { tags: ["dup", "dup"] })];
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      render(<MemoryView active />);
+      const list = within(await screen.findByRole("navigation", { name: "Memory list" }));
+      expect(list.getAllByText("dup")).toHaveLength(2);
+      fireEvent.click(list.getByRole("button"));
+      await screen.findByTestId("memory-content");
+      expect(screen.getAllByText("dup")).toHaveLength(4);
+      expect(errors.mock.calls.filter((call) => String(call[0]).includes("same key"))).toEqual([]);
+    } finally {
+      errors.mockRestore();
+    }
   });
 
   it("opens one memory in full, markup as text, and cuts the list at 200 code points (Review Focus 4)", async () => {

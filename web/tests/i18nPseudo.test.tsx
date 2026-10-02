@@ -4,7 +4,7 @@
  * as ⟦…⟧ and leaves each {{placeholder}} and <tag> outside the markers (the zh bundle is swapped for the wrapped English
  * values; drafter finding F15), so a value interpolated into a translated string stays visible once the markers are
  * stripped: an enum passed raw instead of through enumText is seen (Task 11 review I1). Every area -- nav and shell footer,
- * decisions, chains, task control (loop card and budget table included), agents, metrics, recovery, error page -- is
+ * decisions, chains, task control (loop card and budget table included), agents, metrics, memory, recovery, error page -- is
  * rendered with a fixture; after every ⟦…⟧ is stripped from the text and from the text attributes, no English value of at
  * least 4 characters that differs from its Chinese value may remain, and no fixed fragment of at least 4 characters of a
  * templated value that its Chinese value does not contain. The same fixtures in real Chinese show a named Chinese string
@@ -17,7 +17,7 @@
  * backstop (tests/panel/scanPanelText.test.ts) covers, and only against literals; and attributes other than aria-label,
  * title, placeholder and label (none is set through t today).
  */
-import { cleanup, render } from "@testing-library/react";
+import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import type { JSX } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AgentSelectionEditor } from "../src/AgentSelectionEditor.js";
@@ -37,6 +37,8 @@ import i18n, { enumText } from "../src/i18n.js";
 import { en } from "../src/locales/en.js";
 import { zh } from "../src/locales/zh.js";
 import { loopDraftKey } from "../src/LoopPlanCard.js";
+import { MemoryView } from "../src/MemoryView.js";
+import type { MemoryRecord } from "../src/memoryTypes.js";
 import { MetricsView } from "../src/MetricsView.js";
 import { Refusal } from "../src/Refusal.js";
 import { Shell } from "../src/Shell.js";
@@ -165,8 +167,29 @@ const coverage: PanelCoverage = { reviewed_high_tier: 0, high_tier_total: 0, rat
 const loopDraft = JSON.stringify({ base: 0, plan: "bugfix", text: { goal: "g-1", successCondition: "s-1", targetPaths: "src/a/**", checks: "npm test", nonGoals: "", relevantDocs: "", protectedPaths: "", maxFilesTouched: "", tokens: "3000500", activeMs: "14400000", attempts: "3" } });
 const drafts = { [loopDraftKey("g", "a")]: loopDraft, [labelsDraftKey("g", "b")]: JSON.stringify({ base: 0, labels: ["bug", "perf"] }) };
 const noop = vi.fn();
+// MemoryView reads its data itself (plan D8), so its fixture is the panel's answers; `settle` waits for the list and opens
+// the one record, so the list, its caveats and the whole detail are on screen when the area is checked.
+const MEMORY: MemoryRecord = {
+  ref: "41", scope: "global", projectKey: null, kind: "k-1", content: "m-1", tags: ["t-1"], pinned: true, source: "s-4", trust: 0.5,
+  createdAt: "2026-09-01T00:00:00.000Z", updatedAt: "2026-09-02T00:00:00.000Z",
+};
+function stubMemoryFetch(): void {
+  const json = (body: unknown): Response => new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+  globalThis.fetch = (async (input: RequestInfo | URL): Promise<Response> => {
+    const url = String(input);
+    if (url === "/api/memory/status") return json({ adapter: { id: "ccmem", capabilities: { search: true, get: true, recordCorrection: false } }, health: { status: "ok" }, repos: [{ projectKey: "mk-1" }, { projectKey: "mk-2" }] });
+    if (url.startsWith("/api/memory/list")) return json({ projectKey: "mk-1", query: "", page: { records: [MEMORY], total: 9, truncated: true } });
+    if (url.startsWith("/api/memory/item")) return json({ record: MEMORY });
+    throw new Error(`unexpected request ${url}`);
+  }) as typeof fetch;
+}
+async function openMemory(container: HTMLElement): Promise<void> {
+  await waitFor(() => expect(container.querySelector(".memory-row")).not.toBeNull());
+  fireEvent.click(container.querySelector(".memory-row")!);
+  await waitFor(() => expect(container.querySelector("[data-testid='memory-content']")).not.toBeNull());
+}
 
-const AREAS: Array<{ name: string; chinese: string; element: () => JSX.Element }> = [
+const AREAS: Array<{ name: string; chinese: string; element: () => JSX.Element; settle?: (container: HTMLElement) => Promise<void> }> = [
   { name: "nav and shell footer", chinese: "决策", element: () => (
     <Shell active="decisions" badges={{ unreviewed: 1, chainRunning: true, controlAlert: true }} footer={footerLines(summary)} theme="system" language="zh"><p>pane</p></Shell>
   ) },
@@ -200,6 +223,7 @@ const AREAS: Array<{ name: string; chinese: string; element: () => JSX.Element }
     </>
   ) },
   { name: "metrics", chinese: "纠正率", element: () => <MetricsView report={metricsReport} coverage={coverage} /> },
+  { name: "memory", chinese: "项目键", element: () => { stubMemoryFetch(); return <MemoryView active />; }, settle: openMemory },
   { name: "error page and refusal", chinese: "orca 面板加载失败", element: () => (
     <>
       <ErrorPage failure={{ status: 409, code: "corrections-store-busy", message: "m-2" }} />
@@ -214,16 +238,18 @@ describe("everything visible goes through t (spec §6.5)", () => {
     expect(FRAGMENTS.length).toBeGreaterThan(120);
   });
 
-  it.each(AREAS)("$name: no English value is left once the pseudo-locale's ⟦…⟧ are stripped", async ({ element }) => {
+  it.each(AREAS)("$name: no English value is left once the pseudo-locale's ⟦…⟧ are stripped", async ({ element, settle }) => {
     await usePseudo();
     const { container } = render(element());
+    await settle?.(container);
     expect(container.textContent).toContain("⟦");
     expect(leftovers(container)).toEqual([]);
   });
 
-  it.each(AREAS)("$name: the same fixture in Chinese shows $chinese", async ({ element, chinese }) => {
+  it.each(AREAS)("$name: the same fixture in Chinese shows $chinese", async ({ element, chinese, settle }) => {
     await useChinese();
     const { container } = render(element());
+    await settle?.(container);
     expect(container.textContent).toContain(chinese);
   });
 });

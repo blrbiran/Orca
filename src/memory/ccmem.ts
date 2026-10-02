@@ -37,10 +37,19 @@ export function createCcmemAdapter(options: CcmemAdapterOptions): MemoryAdapter 
   };
 
   const runExport = (bin: string, scope: CcmemScope, cwd: string): Promise<string> => new Promise((resolve, reject) => {
-    const child = execFile(bin, ["export", "--json", "--scope", scope], { cwd, env: options.env, encoding: "utf8", timeout, maxBuffer }, (error, stdout, stderr) => {
-      if (error === null) resolve(stdout);
-      else reject(exportFailure(error, { bin, scope, maxBuffer, timeout, stderr: String(stderr) }));
-    });
+    let child: ReturnType<typeof execFile>;
+    try {
+      child = execFile(bin, ["export", "--json", "--scope", scope], { cwd, env: options.env, encoding: "utf8", timeout, maxBuffer }, (error, stdout, stderr) => {
+        if (error === null) resolve(stdout);
+        else reject(exportFailure(error, { bin, scope, maxBuffer, timeout, stderr: String(stderr) }));
+      });
+    } catch (err) {
+      // Node throws, instead of calling back, for most spawn errnos (ENOTDIR for a cwd that is a file, ENOEXEC, EPERM;
+      // v22.13.1). Those are ccmem failing to start; anything else (an invalid option) is not, and stays a throw.
+      if ((err as NodeJS.ErrnoException).syscall !== "spawn") throw err;
+      reject(exportFailure(err as ExecFileException, { bin, scope, maxBuffer, timeout, stderr: "" }));
+      return;
+    }
     child.stdin?.end();
   });
 
@@ -79,6 +88,8 @@ function exportFailure(error: ExecFileException, ctx: { bin: string; scope: Ccme
   if (code === "ENOENT" || code === "EACCES") return new MemoryError("ccmem-missing", `${ctx.bin}: ${code} (${what})`);
   if (code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER") return new MemoryError("ccmem-output-too-large", `${what} wrote more than ${ctx.maxBuffer} bytes`);
   if (error.killed === true) return new MemoryError("ccmem-timeout", `${what} did not finish within ${ctx.timeout} ms`);
-  const status = typeof code === "number" ? String(code) : (error.signal ?? "unknown");
-  return new MemoryError(`ccmem-failed:${status}`, `${what} exited ${status}: ${ctx.stderr.slice(0, STDERR_EXCERPT_BYTES)}`);
+  // A string errno other than the ones above (ENOTDIR, ENOEXEC, EMFILE...) is named, not collapsed to "unknown".
+  const status = typeof code === "number" ? String(code) : typeof code === "string" ? code : (error.signal ?? "unknown");
+  const detail = ctx.stderr === "" ? error.message : ctx.stderr.slice(0, STDERR_EXCERPT_BYTES);
+  return new MemoryError(`ccmem-failed:${status}`, `${what} exited ${status}: ${detail}`);
 }

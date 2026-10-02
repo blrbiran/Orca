@@ -120,6 +120,10 @@ describe("configuration (spec §3.4)", () => {
     expect(opts.memory?.env).toBe(env);
   });
 
+  it("reads an empty ORCA_CCMEM_BIN as not configured", () => {
+    expect(parsePanelArgs(["--by", "amy", "--no-control"], { ...process.env, ORCA_CCMEM_BIN: "" }).memory?.ccmemBin).toBeNull();
+  });
+
   it("with ORCA_CCMEM_BIN unset, says ccmem-missing and starts nothing, even with a ccmem on PATH (M4)", async () => {
     const { fake, json } = await panel({ memory: (f) => parsePanelArgs(["--by", "amy", "--no-control"], { ...f.env, PATH: `${f.dir}:${f.env.PATH ?? ""}`, ORCA_CCMEM_BIN: "" }).memory });
     expect((await json("/api/memory/status")).body.health).toMatchObject({ status: "unavailable", code: "ccmem-missing" });

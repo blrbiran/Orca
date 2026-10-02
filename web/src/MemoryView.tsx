@@ -92,7 +92,7 @@ export function MemoryView({ active }: { active: boolean }): JSX.Element {
 
   const health = status?.health;
   const ready = health?.status === "ok" && repo !== null;
-  const noProject = page !== null && page.query === "" && !page.page.records.some((r) => r.scope === "project");
+  const noProject = page !== null && page.query === "" && page.page.records.length > 0 && !page.page.records.some((r) => r.scope === "project");
 
   return (
     <section className="memory-view">
@@ -136,7 +136,7 @@ export function MemoryView({ active }: { active: boolean }): JSX.Element {
                   <span className="memory-kind">{r.kind}</span>
                   {r.pinned && <span className="memory-pinned">{t("memory.pinned")}</span>}
                   <span className="memory-excerpt" data-testid="memory-excerpt">{excerpt(r.content)}</span>
-                  {r.tags.map((tag) => <span key={tag} className="tag">{tag}</span>)}
+                  {r.tags.map((tag, index) => <span key={`${index}:${tag}`} className="tag">{tag}</span>)}
                   <time dateTime={r.updatedAt}>{r.updatedAt}</time>
                 </button>
               </li>
@@ -156,7 +156,7 @@ export function MemoryView({ active }: { active: boolean }): JSX.Element {
             <dt>{t("memory.field.kind")}</dt><dd>{record.kind}</dd>
             <dt>{t("memory.field.source")}</dt><dd>{record.source}</dd>
             <dt>{t("memory.field.trust")}</dt><dd>{record.trust ?? ""}</dd>
-            <dt>{t("memory.field.tags")}</dt><dd>{record.tags.map((tag) => <span key={tag} className="tag">{tag}</span>)}</dd>
+            <dt>{t("memory.field.tags")}</dt><dd>{record.tags.map((tag, index) => <span key={`${index}:${tag}`} className="tag">{tag}</span>)}</dd>
             <dt>{t("memory.field.pinned")}</dt><dd>{t(record.pinned ? "memory.yes" : "memory.no")}</dd>
             <dt>{t("memory.field.createdAt")}</dt><dd><time dateTime={record.createdAt}>{record.createdAt}</time></dd>
             <dt>{t("memory.field.updatedAt")}</dt><dd><time dateTime={record.updatedAt}>{record.updatedAt}</time></dd>

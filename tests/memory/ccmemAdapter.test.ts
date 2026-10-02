@@ -84,6 +84,18 @@ describe("failures (spec §3.3)", () => {
     expect((await refusal(adapterFor(fake).search(scope, { query: "", limit: 50 }))).code).toBe("ccmem-failed:SIGKILL");
   });
 
+  it("names a spawn errno it has no code of its own for, with Node's message, and starts nothing (C1)", async () => {
+    // A cwd that is a regular file: Node throws ENOTDIR from execFile itself (v22.13.1), deterministically.
+    const { fake, scope } = await world();
+    const file = join(scope.repoPath, "not-a-directory");
+    await writeFile(file, "");
+    const err = await refusal(adapterFor(fake).search({ ...scope, repoPath: file }, { query: "", limit: 50 }));
+    expect(err.code).toBe("ccmem-failed:ENOTDIR");
+    expect(err.message).toContain("--scope global");
+    expect(err.message).toContain("ENOTDIR");
+    expect(fake.calls()).toEqual([]);
+  });
+
   it("gives up at the timeout, promptly (M6)", async () => {
     const { fake, scope } = await world("sleep");
     const started = Date.now();

@@ -20,9 +20,10 @@ describe("searchRecords (spec §3.5)", () => {
   });
 
   it("matches across normalisation forms, both ways", () => {
-    const composed = "café", decomposed = "café";
+    const composed = "caf\u00e9", decomposed = "cafe\u0301";
     expect(searchRecords([rec("1", { content: composed })], { query: decomposed, limit: 50 }).total).toBe(1);
     expect(searchRecords([rec("1", { content: decomposed })], { query: composed, limit: 50 }).total).toBe(1);
+    expect(searchRecords([rec("1", { tags: [decomposed] })], { query: composed, limit: 50 }).total).toBe(1);
   });
 
   it("counts a record whose only match is a tag", () => {

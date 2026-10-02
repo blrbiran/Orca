@@ -37,6 +37,11 @@ describe("the ccmem data-root guard (spec §6.2 layer 3, §10 D2/D3)", () => {
     expect(ccmemRootDiff(null, ["global.db"])).toEqual(["data root created where there was none"]);
   });
 
+  it("flags the whole data root disappearing only when it held the database", () => {
+    expect(ccmemRootDiff(["global.db"], null)).toEqual(["global.db disappeared"]);
+    expect(ccmemRootDiff(["x"], null)).toEqual([]);
+  });
+
   it("ignores what ccmem's own daemon and SQLite add and remove", () => {
     const before = ["daemon.wake", "global.db", "global.db-shm", "global.db-wal", "global.db.bak.1"];
     expect(ccmemRootDiff(before, ["global.db", "global.db.bak.1", "metrics.jsonl"])).toEqual([]);
