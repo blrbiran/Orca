@@ -29,7 +29,7 @@
   },
   "dependencies": {
     "@ast-grep/cli": "0.45.3",
-    "ccloop": "github:blrbiran/ccloop#99054f2db619d45760825f1d4e6903a8dcc17a73",
+    "ccloop": "github:blrbiran/ccloop#ae2caa3b483735c706e9914bb977c3ddbc33432b",
     "express": "^5.1.0",
     "zod": "^3.23.8"
   },
