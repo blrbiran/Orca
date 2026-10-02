@@ -112,7 +112,7 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 
 ✅ *** **N5 记忆区（memory tab）第一版做完（2026-10-03，会话 `184d0372`）**：面板第六个分区「记忆」，只读，经 `ccmem export --json` 读，设了 `ORCA_CCMEM_BIN` 才会起 ccmem，分区第一次被打开前不发任何请求。ccmem 仓零改动。细节见 §4.0、§4.0.j。 ***
 
-**现行基线（会话 `184d0372`，2026-10-03，记忆区做完、终审修复波之后；原始报数在台账 `.superpowers/sdd/2026-10-03-memory-tab/progress.md` 末尾的 Gate 块，输出在该会话 scratchpad `gate/`）**：全新 clone（内容＝主题行 `docs(sdd): ledger line for the memory tab's final fix wave` 那一笔），HOME＋四个 XDG 根改道，TMPDIR 短真目录，夹具表 fake codex `integration`，clone 里先 build web 并设 `core.hooksPath`；`ORCA_CCLOOP_BIN`＝ccloop `ae2caa3` 的 build。
+**现行基线（会话 `184d0372`，2026-10-03，记忆区做完、终审修复波之后；原始报数在台账 `.superpowers/sdd/2026-10-03-memory-tab/progress.md` 末尾的 Gate 块；该会话 scratchpad 里的原始输出已由人授权删除）**：全新 clone（内容＝主题行 `docs(sdd): ledger line for the memory tab's final fix wave` 那一笔），HOME＋四个 XDG 根改道，TMPDIR 短真目录，夹具表 fake codex `integration`，clone 里先 build web 并设 `core.hooksPath`；`ORCA_CCLOOP_BIN`＝ccloop `ae2caa3` 的 build。
 - typecheck RC 0；全量 vitest **287 文件、2611 过、2 红、4 skipped**，两条红都是已登记负载 flake（`gateCheck` K13、`driverRequirementSplit` "third consecutive invalid draft"）；`verify:chain` 里那遍全量另红 `controlShutdown`（已登记）；三个文件单独各重跑 3 次全绿（负载 5.6–9.3，门里约 16）。
 - 台账校验、`CLAUDE.md` 行数（150/200）、hooksPath、`verify:control`（120 文件 1219 过 3 skipped）、`verify:scheduler`（194 过）、web build、`verify:ccloop-pin`（3 过）、`verify:panel`（14 PASS）、`--ws check`（web 366/366）、`check-tmp-leak`（0 残留）都 RC 0。
 - R1（真 ccmem，临时数据根）1 过 0 skipped；真 `~/.claude/ccmem` 条目名前后 `cmp` 相同、`ccmemRootDiff` 为 `[]`；真 `~/.orca` stat＋sha256 前后相同。
@@ -154,7 +154,7 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 
 上一会话（`7fe6d61b`）人选的三件「重钉 ccloop ＋ 付费验证 ＋ N5 memory tab」**全部做完**：前两件见 §4.0.i，记忆区见 §4.0.j。
 
-1. **先核推送**：三个仓各跑 `/usr/bin/git ls-remote origin refs/heads/main` 与本地比（`/usr/bin/git log --oneline origin/main..main`）；不要信本文里的任何笔数。会话 `184d0372` 只在 Orca 落了代码提交（记忆区一轮）＋一笔 Orca 自己的 checkpoint 提交，ccloop 与 ccmem 只有 handoff 文档提交。推送归人，顺序仍是 ccloop 先于 Orca（本轮 Orca 不依赖 ccloop 的新提交，钉的仍是 `ae2caa3`）。
+1. **先核推送**：三个仓各跑 `/usr/bin/git ls-remote origin refs/heads/main` 与本地比（`/usr/bin/git log --oneline origin/main..main`）；不要信本文里的任何笔数。会话 `184d0372` 的记忆区一轮人已推送（2026-10-03 同会话 `ls-remote` 现测三仓远端与本地一致）；之后只多了三份 handoff 的文档提交，推没推以现测为准。推送归人，顺序仍是 ccloop 先于 Orca（Orca 钉的仍是 `ae2caa3`）。
 2. **下一件由人选**（都没开工）：
    - 记忆区的小尾巴（台账 `.superpowers/sdd/2026-10-03-memory-tab/progress.md` 末尾 3 条 `parked` 行）：ENOEXEC 在线上的 code 是 `ccmem-failed:Unknown system error -8`（带空格，建议按 `os.constants.errno` 规范成名字）；spec §3.3 与 `src/memory/adapter.ts` 注释把 `ccmem-failed:` 写成「退出码或信号」，现在还会带 errno 名，要追加 spec 更正节；`web/tests/i18nPseudo.test.tsx` 的 `stubMemoryFetch` 没有还原 `globalThis.fetch`。
    - 记忆区的后续（spec §0.1 明确不做的）：写入、「由哪次 correction 产生」（要 ccmem 先能存外部引用，ccmem 仓的人裁）、分页／缓存。
@@ -163,9 +163,9 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 3. **验证只在 `git clone --local` 副本里做**：HOME 与四个 XDG 根改道、TMPDIR 短真目录；clone 里先 `npm run build --workspace web`、`git config core.hooksPath scripts/githooks`；`verify:control` 的夹具表 fake codex 用 `integration` 模式（命令 `[node, <ccloop clone>/tests/fixtures/fake-codex.mjs, "integration", <marker>]`，表的形状照 `tests/control/fixtures/ccloopWorld.ts`）。`npm run verify` 是 `&&` 链，逐段跑、逐段记 RC。全量里 5 s 超时红先单文件重跑 3 次并记 `uptime`（已登记的见 §三）。
 4. **R1（真 ccmem）**：`ORCA_CCMEM_REAL_BIN=/Users/biran/code/skills/ccmem/bin/ccmem ./node_modules/.bin/vitest run tests/memory/ccmemReal.test.ts`；不设就 skipped。它只在临时 `CCMEM_DATA_ROOT`／`HOME` 里跑，用 `ccmem import` 灌数据（`save` 会同步算嵌入，可能下载模型）。
 5. 重钉规矩不变：人先推 ccloop，再 `node scripts/pin-ccloop.mjs <SHA>`，再人推 Orca。
-6. 会话 `184d0372` 的原始输出（门 `gate/`、各 task 的 `t1`…`t7`、`final/`、`probe/`）在它的 scratchpad，删要人点头。上一会话 `7fe6d61b` 的 scratchpad 已经人授权删除（本会话开头）。
+6. 会话 `184d0372` 与 `7fe6d61b` 的 scratchpad 原始输出都已由人授权删除；记忆区的证据只剩台账里的记录（变异、门的报数都已抄进台账）。
 
-### 4.0.j N5 记忆区第一版（会话 `184d0372`，2026-10-03，**已完成，待人审本轮替人定的裁定**）
+### 4.0.j N5 记忆区第一版（会话 `184d0372`，2026-10-03，**已完成；人 2026-10-03 已审，「需要你特别知道的」与「替你做的裁定」两部分都同意**）
 
 - 材料：spec `docs/superpowers/specs/2026-09-29-memory-tab-design.md`（§9 人裁 Q1–Q7；**§10 是写计划时的更正 D1–D11，优先于正文**）；计划 `docs/superpowers/plans/2026-10-03-memory-tab.md`（开头「Drafter findings」表是每条更正的证据）；台账 `.superpowers/sdd/2026-10-03-memory-tab/progress.md`（已入库，含全部 `Ruling:`、每个 task 的变异、终审、门）。
 - 做成了什么：`src/memory/`（`adapter.ts` 只放类型；`ccmemExport.ts` 严格解析 export；`search.ts` 子串＋NFC＋固定排序＋请求参数解析；`ccmem.ts` 唯一起 ccmem 的地方，argv 恒为 `export --json --scope global|project`、先 global 后 project、cwd＝仓库、env 原样透传）；`src/panel/memoryApi.ts` 四条 GET（`/api/memory/status|list|search|item`），每个应答发出前过 strict schema；`parsePanelArgs` 读 `ORCA_CCMEM_BIN`（不设或空 ⇒ 不配置，不查 PATH；相对路径 ⇒ `ccmem-missing`，不起进程）；`web/` 第六个分区「记忆」（中英），第一次打开才请求，丢弃乱序应答；`tests/setup/relocateCcmem.ts` 让每个测试文件的 `CCMEM_DATA_ROOT` 落临时目录，并按条目名比对真实 `~/.claude/ccmem`。
@@ -1256,10 +1256,10 @@ Orca 要求排序去重的四值枚举 ⇒ 将来非 null 且写错时 Orca 整�
 
 ### 9.0h 记忆区一轮登记、归人的（2026-10-03，会话 `184d0372`）
 
-- 本轮替人定的裁定全在台账 `Ruling:` 行（提交在本地 `main` 而非 worktree 分支；评审 Important 推翻了计划里两处写死的代码；i18nPseudo 夹具改了一个字符串；终审先于门；三条 parked）。人审后不同意的，按台账逐条改。
+- 本轮替人定的裁定全在台账 `Ruling:` 行（提交在本地 `main` 而非 worktree 分支；评审 Important 推翻了计划里两处写死的代码；i18nPseudo 夹具改了一个字符串；终审先于门；三条 parked）。**人 2026-10-03 已逐项看过并同意**（含 i18nPseudo 夹具改动与 Rule 6 越线的知情）。
 - 记忆区三条 parked 小项与后续，见 §4.0 第 2 条。
 - 本轮的提交归属行写的是各实施席自己的模型（Sonnet／Haiku／Opus），与 §九 已登记的做法一致。
-- 会话 `184d0372` 的 scratchpad 原始输出删不删。
+- 会话 `184d0372` 的 scratchpad 原始输出：人授权「判断不再需要就删」，已删（证据已在台账里）。三仓推送：人已推（同会话 `ls-remote` 现测）。
 
 ### 9.1 G1 缝 A 之后归人的（**2026-09-24 替换上一版「执行前必须由人给的」——那些授权都已给出并用完**）
 
