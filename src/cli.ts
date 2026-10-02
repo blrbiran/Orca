@@ -58,6 +58,8 @@ const USAGE = `usage:
                                  package installed with Orca) and the two
                                  estimator flags -- without them the panel still starts and still
                                  shows recovery, and refuses those commands by name.
+                                 ORCA_CCMEM_BIN (an absolute path to ccmem) turns on the read-only
+                                 Memory section; unset, the panel never starts ccmem.
   orca compact-reviews [--apply] [--root <dir>] [--repo <key>=<path>]...
                                  dedupe reviews.jsonl and move rows whose decision was archived into
                                  reviews-archive.jsonl. Without --apply it prints the report and writes

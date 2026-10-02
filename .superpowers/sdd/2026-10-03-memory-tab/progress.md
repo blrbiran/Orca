@@ -70,3 +70,7 @@ Ruling: Task 4 review Important (M3 does not pin "nothing added from process.env
 Ruling: the Task 4 minors in the same files (two misleading comments; no criterion for the EACCES arm and the signal arm of the error mapping) are folded into fix round 1 instead of the final wave — same files, same implementer context — cost if wrong: a slightly larger fix diff.
 Task 4: minor (deferred): STDERR_EXCERPT_BYTES slices UTF-16 units, not bytes (cosmetic name)
 Task 4: fix round 1 (M3 sentinel pins nothing-added, comments made true, EACCES and signal arms covered; each new criterion seen red under its mutation; tests/memory 49/49)
+Task 4: re-review of fix round 1: 4 addressed, 0 open (commits f64e2a7..00df086)
+Task 4: minor (deferred): EACCES/health tests assume chmod is honoured (fail if the suite runs as root)
+Task 4: complete (commits 79b87a0..00df086, review clean after fix round 1)
+Task 5: panel options and the four read-only routes, wire schemas, USAGE, README, seven zh error entries (tests/memory/memoryApi.test.ts 22/22; M4, M11, M12, M13, M-route, M-RF2 each seen red; M-route needed one criterion beyond the brief)

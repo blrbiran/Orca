@@ -10,6 +10,7 @@ import { computeMetrics } from "../metrics/compute.js";
 import { MetricsRejection } from "../metrics/rejection.js";
 import type { DecisionObservation } from "../metrics/types.js";
 import { registerChainRoutes } from "./chains.js";
+import { registerMemoryRoutes } from "./memoryApi.js";
 import { computePanelCoverage, unreviewedHighTier } from "./coverage.js";
 import { loadDecisionRow, loadQuestionsOrEmpty } from "./decisionSource.js";
 import { DECISION_NOT_FOUND, projectForList } from "./listProjection.js";
@@ -412,6 +413,8 @@ export function buildApi(app: Express, deps: ApiDeps): void {
     })().catch(next);
   });
 
+  // Memory tab spec §5.1: GET only, above the error handler like every other route.
+  registerMemoryRoutes(app, deps.opts);
   registerChainRoutes(app, deps.opts, objectBody);
 
   // Errors last. A gate refusal is a first-class error page, never partial

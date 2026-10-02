@@ -2,6 +2,7 @@ import { createServer } from "node:http";
 import type { Server } from "node:http";
 import express from "express";
 import { correctionsDir } from "../corrections/paths.js";
+import type { CcmemAdapterOptions } from "../memory/ccmem.js";
 import { buildApi } from "./api.js";
 import { PANEL_HOST_NOT_ALLOWED, assertBindAllowed, isHostAllowed } from "./bindGuard.js";
 import { controlErrorBody } from "./controlErrors.js";
@@ -52,6 +53,11 @@ export interface PanelOptions {
    * that shipped before this existed.
    */
   control: ControlOptions;
+  /**
+   * Memory tab spec §3.4. Optional so the many criteria that build PanelOptions as a literal stay as they are
+   * (plan D7); absent means not configured, and nothing starts ccmem. `parsePanelArgs` always sets it.
+   */
+  memory?: CcmemAdapterOptions;
 }
 
 /** What survives parsing: a rejection never reaches here, it is thrown. */
@@ -119,6 +125,9 @@ export function parsePanelArgs(args: string[], env: NodeJS.ProcessEnv): PanelOpt
     repos,
     distDir: flag("--dist"),
     control,
+    // Memory tab spec §3.4: read at parse time from the env this panel was given, like correctionsDir. Unset or empty
+    // means not configured; there is no PATH lookup, so a criterion reaches a real ccmem only by naming it.
+    memory: { ccmemBin: env.ORCA_CCMEM_BIN !== undefined && env.ORCA_CCMEM_BIN !== "" ? env.ORCA_CCMEM_BIN : null, env },
   };
 }
 

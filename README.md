@@ -405,3 +405,12 @@ execution port. The real-ccloop criteria under `tests/control` and
 build, because they use fixtures from ccloop's `tests/` tree, which the package does
 not ship. `ORCA_CCLOOP_DEFAULT_E2E=1` (with `ORCA_CCLOOP_BIN` unset) runs
 `tests/control/ccloopDefaultE2E.test.ts` against the installed package.
+
+## Memory section (read-only)
+
+`orca panel` shows a Memory section when `ORCA_CCMEM_BIN` is an absolute path to the ccmem executable. It reads
+with `ccmem export --json --scope global` and then `--scope project`, in the repository's directory, so ccmem
+computes the project key itself. Nothing is written by Orca. Opening the section starts ccmem, and ccmem may migrate
+its own data root when it opens it (backup copy and pruning; spec `docs/superpowers/specs/2026-09-29-memory-tab-design.md` §4).
+Unset, the section says it is not configured and ccmem is never started. A repository without a git remote may show
+no project memory: ccmem keys such a project by the session's directory, which may differ from the repository root.

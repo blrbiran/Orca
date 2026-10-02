@@ -655,4 +655,12 @@ export const zhErrors: Record<string, string> = {
   "repo-lock-held": "仓库锁被占用：{{message}}",
   "tsx-missing": "找不到 tsx：{{message}}",
   "worktree-dirty": "工作区有未提交的修改：{{message}}",
+  // Memory tab spec §5.1 (src/panel/memoryApi.ts MEMORY_FIXED_CODES). ccmem-failed:<status> has no entry: it is an open family, shown as sent.
+  "ccmem-missing": "没有配置 ccmem，或找不到它：{{message}}",
+  "ccmem-timeout": "读取 ccmem 超时：{{message}}",
+  "ccmem-output-too-large": "ccmem 的输出超过上限：{{message}}",
+  "ccmem-output-invalid": "ccmem 的输出不符合预期格式：{{message}}",
+  "memory-repo-unknown": "面板没有发现这个仓库：{{message}}",
+  "memory-not-found": "这个仓库看不到这条记忆：{{message}}",
+  "memory-query-invalid": "查询参数不合法：{{message}}",
 };
