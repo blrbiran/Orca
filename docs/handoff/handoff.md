@@ -106,7 +106,7 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 
 ✅ *** **adapter／CLI 合并四步全部做完（2026-10-01，会话 `be653b22`）**：`orca run` 旧路径已退役（**`orca run` 命令不存在了**，跑一轮只能走面板／控制路径）；ccloop 只剩 `--agents` 入口。细节、人要审的裁定、推送顺序见 §4.0。 ***
 
-✅ *** **N1「提想法 → 澄清需求 → 拆分 → 确认」第一版做完（2026-10-02，会话 `b5e8d368`）**：需求就是一个 `clarifying` 状态的 group；预估链泛化成按 `purpose` 分派的单次调用；面板第五个分区「需求」。只在 fake claude 下验过。细节、替人定的裁定、下一步见 §4.0。 ***
+✅ *** **N1「提想法 → 澄清需求 → 拆分 → 确认」第一版做完（2026-10-02，会话 `b5e8d368`）**：需求就是一个 `clarifying` 状态的 group；预估链泛化成按 `purpose` 分派的单次调用；面板第五个分区「需求」。人已审完裁定。**付费真 claude 跑了两次：澄清→拆分→确认→导出跑通，落地两次都被挡住（R-A／R-B）**。细节见 §4.0／§4.0.g。 ***
 
 **现行基线（会话 `b5e8d368`，2026-10-02，N1 需求→拆分做完、终审修复波之后；原始报数在台账 `.superpowers/sdd/2026-10-02-requirement-to-split/progress.md` 的 Task 15 行，输出在该会话 scratchpad `gate2/`）**：全新 clone，HOME＋四个 XDG 根改道，TMPDIR 短真目录，夹具表 fake codex `integration`，clone 里先 build web；`ORCA_CCLOOP_BIN`＝同一次门里 ccloop clone 的 `dist/cli.js`（该 clone 含本会话 ccloop 的夹具队列模式）。
 - ccloop（内容＝主题行 `test(fixtures): pin that a single-call entry beats a single-call-queue beside it …`）：build／typecheck RC 0；**1047 条、1046 过、1 红（`stopProof`）**；`check-known-reds` RC 0；`check-tmp-leak` RC 0。
@@ -146,25 +146,43 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 
 ## 四、⛔ 下一件事
 
-### 4.0 ⛔ 现在的下一件事（2026-10-02 会话 `b5e8d368` 收尾整节改写；**本节优先于下面的 4.0.f、4.0.e、4.0.d、4.0.c、4.0.b、4.0.0、4.0.1 与 1–3**）
+### 4.0 ⛔ 现在的下一件事（2026-10-02 会话 `b5e8d368` 第二次收尾整节改写；**本节优先于下面的 4.0.g、4.0.f、4.0.e、4.0.d、4.0.c、4.0.b、4.0.0、4.0.1 与 1–3**）
 
-**⛔ 下一会话按这个顺序做：**
-1. **先核推送**（推送归人）：三个仓各跑 `/usr/bin/git ls-remote origin refs/heads/main` 与本地比。🔴 **ccloop 先推**：本会话 ccloop 有两笔测试夹具（主题行 `test(fixtures): the fake claude answers single calls from a queue, …` 与 `test(fixtures): pin that a single-call entry beats a single-call-queue beside it …`），Orca 的 `tests/control/requirementE2E.test.ts` 要一份含它们的 ccloop checkout（`ORCA_CCLOOP_BIN`）。钉住的包供不了测试夹具；**不需要重钉**（Orca 生产代码不依赖它们）。
-2. **人要审的**（控制器按「执行中有问题先按你的建议做」替人定的）：SDD 台账 `.superpowers/sdd/2026-10-02-requirement-to-split/progress.md` 里全部 `Ruling:` 行，以及下面「替人定的要点」。
-3. **付费真 claude 跑一个小需求**（spec §12.5）没跑——每次付费都要人点头。`clarify` 的 schema 里 `"type":"boolean"` 从没发给过真 claude，这次付费跑是它第一次被证明。
-4. **然后由人选**：N5 memory tab（先核 ccmem Q6）；ccloop 崩溃续跑＋孤儿 runner 收（人已定方向「都做」，控制器建议做成一件事、清理是续跑的前提）；或 N1 第二版（「事实自己查」的子代理，可在临时 clone 上用 codegraph）。
+**⛔ 人已定：下一个 agent 做 ccloop「被直接杀掉的 run 能续跑」＋「ccloop 死后留下的 runner 要收」**（人 2026-10-02：「我比较倾向于能续跑以及要清理」，随后点名「下一个 agent 要做的事情是：做 ccloop 的被杀 run 续跑加孤儿 runner 清理」）。
+1. **先核推送**：三个仓各跑 `/usr/bin/git ls-remote origin refs/heads/main` 与本地比（本会话收尾时三个仓都已由人推过；之后只多了 handoff 与本节下面那一笔 `test(live): …`）。
+2. **工作在 ccloop 仓里做**，按 ccloop 自己的规矩（它的 `CLAUDE.md` 与 `docs/handoff/handoff.md`）。动所有权逻辑 ⇒ **走 brainstorming → spec → 计划 → SDD 评审**，不要直接改。
+3. **控制器的建议方向（人没逐条审，是起点不是裁定）**：做成一件事，清理是续跑的前提——
+   - runner 盯父进程：stdin 关闭（父进程死）即先停 claude、再退出；
+   - `resume` 接管前按 `process.json` 的 pid＋启动时间**核身份**，收掉仍活着的进程组；
+   - 租约过期且登记的 owner 按身份核实已死时，由 `resume` 自己写移交记录（今天只认 loop 在 `stale_candidate` 边界写的 `owner-transfer.json`，被杀的 run 报 `cannot read run artifacts: ENOENT … owner-transfer.json`）；
+   - 判不清一律 fail closed。
+   - 证据：ccloop 台账 `.superpowers/sdd/2026-10-01-live-partial-and-resume/progress.md`（R1／R2 两段）。README §3.2「接管一个被中断的 run」现在会误导，一起改。
+4. **Orca 侧要不要跟**：Orca 的驱动今天走自己的恢复路径，不调 `ccloop resume`；这一轮**不要求** Orca 改。若 ccloop 新增了 Orca 要用的行为，按 §8 的重钉规矩（人先推 ccloop，再 `node scripts/pin-ccloop.mjs <SHA>`）。
+5. 之后由人选：下面「付费跑登记的两条」（R-A／R-B）、N5 memory tab（先核 ccmem Q6）、N1 第二版。
 
-**本会话做完了什么**（全在本地；spec `docs/superpowers/specs/2026-10-02-requirement-to-split-design.md`，**§15 是 11 条实施期更正，优先于正文**；计划同名于 `docs/superpowers/plans/`，末尾有预检裁定与执行后更正）：
-- **第一段（纯重构）**：预估链变成按 `purpose` 分派的单次调用（`src/control/singleCall.ts`）；已存的预估 run 仍是 `phase: "estimate"`、一行不改；⑤ 的既有判据一条没改、全绿；中间过了一道全新 clone 的门。
-- **第二段**：控制 store 升到 **schema 6**（两张表 `requirement_rounds`／`requirement_drafts`；⚠️ 旧版 Orca 打开迁移后的真 `~/.orca` 会报 `control-schema-unsupported`）；group 新状态 `clarifying`，所有读 plan 的入口对它拒绝或跳过；仓库概况（`git ls-tree` 清单＋根目录说明文件＋可选 ast-grep `outline`，`@ast-grep/cli` 钉 0.45.3，blob 用 `git cat-file --batch` 原样导出、不跑目标仓库的过滤器）；`clarify`／`split` 两种调用（自动重试至多 2 次）；需求文档由一个纯函数从记录拼出；五条命令 `requirement-open`／`-answer`／`-consensus`／`-draft-feedback`／`-draft-accept` 与需求上的 `recovery-retry`；接受时导入同一个 group、追问花费结转（`limit` 加上已用）；文档以 `git mktree` 等底层命令导出成 `orca/<groupId>` 的第一笔提交（文件 `.orca/requirements/YYYY-MM-DD-<slug>.md`，**仓库外零写入**）；`start` 等导出完成；面板第五个分区「需求」（中英）。
-- 每个 task 都经过实施 → 审查 → 修复 → 复审；整支终审抓到 2 Critical（重试过一轮后重启会让所有 group 永久 `dispatchBlocked`；结构导出的路径穿越）＋5 Important，一次修复波全部关掉并复审。
-- **门**：见 §三 现行基线。
+**本会话后半做了什么：N1 的付费真 claude 跑（spec §12.5），人点了头**。驱动脚本 `scripts/live-requirement-acceptance.ts`（主题行 `test(live): a paid requirement-to-landing driver for N1 spec 12.5, …`；用法在文件头）；全部证据在 N1 台账 `.superpowers/sdd/2026-10-02-requirement-to-split/progress.md` 末节「Paid run」。
+- claude 2.1.287、`claude-opus-5-5`、1M 窗口、隔离参数、每次调用 `--max-budget-usd 2`；目标是一个临时小包 `textkit`，想法是「加一个 truncate 函数」；每轮都按推荐答案答。跑了两次（n＝2）。
+- **两次都跑通了的**：clarify 三轮（5／4／0 个问题，第三轮模型自己报 `frontierEmpty` ⇒ 共识）、拆分第一次调用就通过校验、接受、追问花费结转、估算 ready、导出（`orca/g` 的第一笔就是需求文档提交）、`main` 没被动、`~/.orca` 与 `~/.claude/projects` 不变。`clarify` 输出 schema 里的布尔字段在真 claude 下第一次被证明。
+- **两次都没落完**：run 1 的 T2 撞上 claude 安装包正在被重装（`spawn …/bin/claude ENOENT`）；run 2 的 T2 被 `acceptEdits` 拒了 `npm test`，claude 报 `partial`＋`error`，ccloop 剩 2 次尝试也直接判 `failed`。
+- 花费（claude 自报 `total_cost_usd`，每次调用都有）：$1.1215996（9 次）＋ $0.9305036（11 次）＝ **$2.0521032**。
 
-**替人定的要点（都可逆，台账有全文）**：schema 升 v6 并点名改写两条断言 `"5"`（DR5）；`i18nPseudo` 的枚举计数按新增值逐次点名改（146→147→148→164）；`webParity.test.ts` 点名改写（PR-I7）；导出不用临时索引、改 `mktree`（`umask 077` 会把人仓库 `.git` 里的对象写成 0400，Rule 17）；`.orca` 不是目录时导出落成持久阻塞（状态 `conflict`，原因码 `requirement-export-path-blocked`），`recovery-retry` 可重来；无产出的调用失败算一次自动重试；接受在用量未知或 group 已停止时拒绝；结构摘要只缓存 `ok`；面板加了四处计划外的界面（额度耗尽时就地加额度、无原因码的失败也给重试、命令被拒就地显示、导出等待说明）；导出状态 `conflict` 在界面上叫「受阻」／"blocked"（措辞归人审）。
+**付费跑登记的两条（未修，要人定方向）**：
+- **R-A**：claude 根本没起来的 execute（ENOENT）让 run 的用量变成未知，而 group 上的未知用量清不掉 ⇒ 一次瞬时的二进制替换就让整个 group 永久停住。候选：runner 能证明没起过 claude 进程时 ccloop 报用量 0。
+- **R-B**：`acceptEdits`（`ccloop agents detect` 起草的默认）下执行者跑不了任何命令；任务目标写着「测试要过」时，claude 报 `partial`＋`error`，ccloop 不用剩余尝试就结束 loop——尽管 ccloop 自己的 verify 阶段会跑 requiredChecks。候选（设计题，没定）：execute 提示词说明检查由 verifier 跑、不要因跑不了而报失败；或执行者放行本任务自己的检查命令；或带改动文件的自报 `error` 交给 verify 而不是结束 loop。
 
-**诚实的表述**：全部只在 **fake claude**（＋真 ccloop build＋fake codex）下验过；真 claude 一次都没跑过 N1。「需求→拆分可用」不是事实。
+**诚实的表述**：「需求→拆分→确认→导出」在真 claude 下跑通（n＝2，一个目标仓）；**「需求→落地」没有跑通过**。
 
-**挂账**：需求上的用量一旦未知就清不掉（与 v1 plan group 相同，重试后照样停在 `requirement-usage-unknown`）；概况构建只能串行（临时目录清扫假设没有并发构建）；`hash-object --stdin --no-filters` 的 `--no-filters` 按设计红不了（保留为防线）；终审列的其余 Minor 在台账目录的 `final-review.md`（该目录未入库，只有 `progress.md` 与 `preflight-rulings.md` 入库）。
+**环境教训（本次实测）**：本机 claude 会在任意时刻被重装（同版本也会），重装那一两秒里 `bin/claude` 不存在。付费跑撞上就是 R-A。跑之前记下安装目录的 mtime，事后对比。
+
+**留在会话 scratchpad 的**：`live-n1/`（两份 clone、`out/`、`out2/` 的控制 store、claude 原始流、目标仓）。没删，删要人点头。
+
+### 4.0.g N1 第一版（会话 `b5e8d368`，2026-10-02，**已完成、人已审完全部裁定**；过程删了，结论留在这里）
+
+- spec `docs/superpowers/specs/2026-10-02-requirement-to-split-design.md`（**§15 是 11 条实施期更正，优先于正文**）；计划同名于 `docs/superpowers/plans/`；台账 `.superpowers/sdd/2026-10-02-requirement-to-split/`（`progress.md` 与 `preflight-rulings.md` 入库；`final-review.md` 等未入库）。
+- 预估链泛化成按 `purpose` 分派的单次调用（`src/control/singleCall.ts`）；已存的预估 run 仍是 `phase: "estimate"`。
+- 控制 store **schema 6**（`requirement_rounds`／`requirement_drafts`；⚠️ 旧版 Orca 打开迁移后的真 `~/.orca` 报 `control-schema-unsupported`）；group 新状态 `clarifying`；仓库概况＝`git ls-tree` 清单＋根目录说明文件＋可选 ast-grep `outline`（`@ast-grep/cli` 钉 0.45.3，blob 用 `git cat-file --batch` 原样取）；`clarify`／`split` 自动重试至多 2 次；五条命令 `requirement-open`／`-answer`／`-consensus`／`-draft-feedback`／`-draft-accept` 与需求上的 `recovery-retry`；文档以 `mktree`／`commit-tree` 导出成 `orca/<groupId>` 的第一笔提交（`.orca/requirements/YYYY-MM-DD-<slug>.md`，仓库外零写入）；`start` 等导出完成；面板第五个分区「需求」（中英）。
+- 人已审完：台账全部 `Ruling:` 行与替人定的要点（含导出状态 `conflict` 在界面上叫「受阻」／"blocked"）。
+- 挂账：需求上的用量一旦未知就清不掉（付费跑 R-A 是它的真实触发）；概况构建只能串行；`hash-object --no-filters` 的 `--no-filters` 按设计红不了。
 
 ### 4.0.f 上一会话（`be653b22` 合并四步，`b5e8d368` 前半）留下的结论（**已完成、人已审；过程删了，结论留在这里**）
 
