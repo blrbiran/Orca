@@ -71,7 +71,7 @@ describe("Shell and SectionPane", () => {
 // N1 spec §11.2 (Task 13): a fifth section, Requirements, between Task control and Metrics, mounted like the others.
 describe("the Requirements section in the shell (N1 spec §11.2)", () => {
   it("lists Requirements in the nav after Task control and keeps its pane mounted while another is active", () => {
-    expect(SECTIONS).toEqual(["decisions", "chains", "tasks", "requirements", "metrics"]);
+    expect(SECTIONS).toEqual(["decisions", "chains", "tasks", "requirements", "memory", "metrics"]); // rewritten under the human's 2026-10-03 OK at memory-tab plan review (plan D10)
     const html = renderToStaticMarkup(
       <Shell active="tasks" badges={{ unreviewed: 0, chainRunning: false, controlAlert: false }} footer={[]} theme="system">
         <SectionPane section="requirements" active="tasks"><p>pane-r</p></SectionPane>

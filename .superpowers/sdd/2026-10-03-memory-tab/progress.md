@@ -74,3 +74,11 @@ Task 4: re-review of fix round 1: 4 addressed, 0 open (commits f64e2a7..00df086)
 Task 4: minor (deferred): EACCES/health tests assume chmod is honoured (fail if the suite runs as root)
 Task 4: complete (commits 79b87a0..00df086, review clean after fix round 1)
 Task 5: panel options and the four read-only routes, wire schemas, USAGE, README, seven zh error entries (tests/memory/memoryApi.test.ts 22/22; M4, M11, M12, M13, M-route, M-RF2 each seen red; M-route needed one criterion beyond the brief)
+Ruling: Task 5's added criterion (a non-MemoryError route failure answers 500 JSON panel-internal-error) is kept in place of the plan's M-route mutation — measured: express 5 still matches a route registered after the 4-argument error handler, so the plan's premise was false; the real risk (errors escaping the JSON handler) is what the new criterion pins — cost if wrong: one extra criterion with a fragile lever (Symbol in env makes execFile throw).
+Task 5: minor (deferred): four branches without a seen-red mutation (item 404 arm; MemoryError→refuse catch; opts.memory fallback; env pass-through in parsePanelArgs) — run in the final mutation wave
+Task 5: minor (deferred): no unit assertion that parsePanelArgs maps ORCA_CCMEM_BIN "" to null on its own (M4 pins it together with the adapter guard)
+Task 5: minor (deferred): the 500 criterion's Symbol-in-env lever depends on Node spawn arg handling; note beside the adapter error mapping
+Task 5: minor (deferred): existing comment src/panel/api.ts "never below it, or express stops matching them as ordinary routes" is measured false (mut-Mroute); flag only (Rule 3), the real effect is errors escaping the JSON handler
+Task 5: minor (deferred): inputs parsed twice with `as { ok: true }` casts (brief-verbatim)
+Task 5: complete (commits 00df086..be7663f, review clean)
+Task 6: the web Memory section, read-only, nothing sent until opened (web 357/357, root memory+panel scan files 81/81, full root 2566 passed 46 skipped; W1a, W1b, W1c, W1d, W-par (both parts), W-zh each seen red; one fixture line in web/tests/i18nPseudo.test.tsx changed, see report)

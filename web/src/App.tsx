@@ -77,6 +77,7 @@ import { ErrorPage } from "./ErrorPage.js";
 import i18n, { currentLanguage, writeLanguage } from "./i18n.js";
 import { DecisionsView, NO_FILTER } from "./DecisionsView.js";
 import type { DecisionFilter } from "./DecisionsView.js";
+import { MemoryView } from "./MemoryView.js";
 import { MetricsView } from "./MetricsView.js";
 import { Refusal } from "./Refusal.js";
 import { RequirementsPanel } from "./RequirementsPanel.js";
@@ -742,6 +743,9 @@ export function App(): JSX.Element {
       </SectionPane>
       <SectionPane section="decisions" active={section}>
         <DecisionsView rows={home.todo} filter={filter} onFilter={setFilter} selected={selected} onOpen={setSelected} detail={detail} />
+      </SectionPane>
+      <SectionPane section="memory" active={section}>
+        <MemoryView active={section === "memory"} />
       </SectionPane>
       <SectionPane section="metrics" active={section}>
         <MetricsView report={home.report} coverage={home.coverage} />

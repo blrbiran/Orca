@@ -13,7 +13,7 @@ import type { Section } from "./sections.js";
 import { THEME_PREFS } from "./theme.js";
 import type { ThemePref } from "./theme.js";
 
-const NAV_KEY = { decisions: "nav.decisions", chains: "nav.chains", tasks: "nav.tasks", requirements: "nav.requirements", metrics: "nav.metrics" } as const satisfies Record<Section, string>;
+const NAV_KEY = { decisions: "nav.decisions", chains: "nav.chains", tasks: "nav.tasks", requirements: "nav.requirements", memory: "nav.memory", metrics: "nav.metrics" } as const satisfies Record<Section, string>;
 
 /** The six conditions under which ControlPanel renders a role="alert" line. */
 export interface ControlAlertInput {

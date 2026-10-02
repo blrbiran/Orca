@@ -202,7 +202,7 @@ const AREAS: Array<{ name: string; chinese: string; element: () => JSX.Element }
   { name: "metrics", chinese: "纠正率", element: () => <MetricsView report={metricsReport} coverage={coverage} /> },
   { name: "error page and refusal", chinese: "orca 面板加载失败", element: () => (
     <>
-      <ErrorPage failure={{ status: 409, code: "unresolved-project-keys", message: "m-2" }} />
+      <ErrorPage failure={{ status: 409, code: "corrections-store-busy", message: "m-2" }} />
       <Refusal refusal={{ status: 409, code: "decision-not-found", message: "m-3", retry_field: "again" }} />
     </>
   ) },

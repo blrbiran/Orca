@@ -7,7 +7,7 @@
 import type { Translation, en } from "./en.js";
 
 export const zh: Translation<typeof en> = {
-  nav: { sections: "分区", decisions: "决策", chains: "链", tasks: "任务控制", requirements: "需求", metrics: "指标" },
+  nav: { sections: "分区", decisions: "决策", chains: "链", tasks: "任务控制", requirements: "需求", memory: "记忆", metrics: "指标" },
   shell: {
     brandTitle: "交给 Orca —— 每个想法，都能成真。",
     chainRunning: "有一条链在运行",
@@ -409,6 +409,28 @@ export const zh: Translation<typeof en> = {
     neverAnswered: "一直没有回应",
     mayNotHaveCommitted: "面板可能没有提交这条命令",
     noOutcome: "面板的回答里没有命令结果。",
+  },
+  memory: {
+    title: "记忆",
+    notOpened: "打开这个分区时才读取记忆。",
+    loading: "正在读取记忆…",
+    repo: "仓库",
+    noRepos: "这个面板没有可以读取记忆的仓库。",
+    configureHint: "把 ORCA_CCMEM_BIN 设成 ccmem 可执行文件的路径，然后重启面板，才能读取记忆。",
+    migrationNote: "记忆经 ccmem 读取；ccmem 打开自己的数据目录时可能会迁移它。",
+    searchLabel: "搜索记忆",
+    search: "搜索",
+    list: "记忆列表",
+    empty: "没有匹配的记忆。",
+    noProjectHint: "没有项目记忆。项目键由 ccmem 按仓库目录计算；没有 remote 的仓库可能与会话记下的键对不上。",
+    truncated: "显示 {{shown}} / 共 {{total}} 条，请缩小搜索范围。",
+    scopeGlobal: "全局",
+    scopeProject: "项目",
+    pinned: "置顶",
+    select: "选一条记忆来阅读。",
+    yes: "是",
+    no: "否",
+    field: { ref: "编号", scope: "范围", projectKey: "项目键", kind: "类型", source: "来源", trust: "可信度", tags: "标签", pinned: "置顶", createdAt: "创建时间", updatedAt: "更新时间" },
   },
   metrics: {
     unknownRate: "未知",

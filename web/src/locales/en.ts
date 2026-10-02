@@ -100,7 +100,7 @@ const selectionSource = {
 } as const satisfies Record<ProvenanceSourceV1, string>;
 
 export const en = {
-  nav: { sections: "Sections", decisions: "Decisions", chains: "Chains", tasks: "Task control", requirements: "Requirements", metrics: "Metrics" },
+  nav: { sections: "Sections", decisions: "Decisions", chains: "Chains", tasks: "Task control", requirements: "Requirements", memory: "Memory", metrics: "Metrics" },
   shell: {
     brandTitle: "Leave it to Orca — every idea, made real.",
     chainRunning: "a chain is running",
@@ -505,6 +505,28 @@ export const en = {
     neverAnswered: "never answered",
     mayNotHaveCommitted: "the panel may not have committed this command",
     noOutcome: "The panel answered without a command outcome.",
+  },
+  memory: {
+    title: "Memory",
+    notOpened: "Memory is read when this section is opened.",
+    loading: "Reading memory…",
+    repo: "Repository",
+    noRepos: "This panel has no repository to read memory for.",
+    configureHint: "Set ORCA_CCMEM_BIN to the ccmem executable and restart the panel to read memory.",
+    migrationNote: "Memory is read through ccmem, which may migrate its own data directory when it opens it.",
+    searchLabel: "Search memory",
+    search: "Search",
+    list: "Memory list",
+    empty: "No memory matches.",
+    noProjectHint: "No project memory. ccmem computes the project key from the repository directory; a repository without a remote may not match the key its sessions recorded.",
+    truncated: "Showing {{shown}} of {{total}}; narrow the search.",
+    scopeGlobal: "global",
+    scopeProject: "project",
+    pinned: "pinned",
+    select: "Select a memory to read it.",
+    yes: "yes",
+    no: "no",
+    field: { ref: "Id", scope: "Scope", projectKey: "Project key", kind: "Kind", source: "Source", trust: "Trust", tags: "Tags", pinned: "Pinned", createdAt: "Created", updatedAt: "Updated" },
   },
   metrics: {
     unknownRate: "unknown",

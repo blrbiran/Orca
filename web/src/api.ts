@@ -71,7 +71,7 @@ async function readBody(res: Response): Promise<unknown> {
   }
 }
 
-async function getJson<T>(path: string): Promise<T> {
+export async function getJson<T>(path: string): Promise<T> {
   const res = await fetch(path, { headers: { "x-orca-token": token() } });
   const body = await readBody(res);
   if (!res.ok) throw new PanelRequestError(refusalFrom(`GET ${path}`, res.status, body));

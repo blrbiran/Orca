@@ -193,3 +193,16 @@ nav[aria-label="Control groups"] button[aria-current="true"] { background: var(-
   border: 1px dashed var(--border-strong);
   color: var(--text);
 }
+
+/* Memory tab spec §5.2: a memory is shown as written, line breaks kept, long words wrapped. */
+.memory-content {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.memory-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  text-align: left;
+  width: 100%;
+}
