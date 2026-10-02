@@ -336,3 +336,16 @@ node scripts/check-tmp-leak.mjs                                    # RC 0
 - **Q5**：v1 只在 UI 上说明，不修；要修归 ccmem 仓。
 - **Q6**：**不对真实数据量**；实现前先**读 ccmem 源码**核 §4 的两处「未核」——① 被杀在复制途中的半截 `global.db.bak.<ts>` 会不会被当成可复用备份；② `runVersionedMigration` 是否整体在一个事务里。结论安全就按估值（30 s／64 MiB）做；不安全则先在 ccmem 侧加保护，届时再找人。
 - **Q7**：现在不在 ccmem 仓立项。
+
+## 10. Plan-time corrections (2026-10-03, session `184d0372`; the text above is kept verbatim)
+
+Source: `docs/superpowers/plans/2026-10-03-memory-tab.md`, "Drafter findings". Where this section and the text above disagree, this section wins.
+
+- **§5.1 (D1)** Repository membership is the panel's discovery, `discoverRepos({ root, repos })`, re-run on every request. It is not `currentMetrics`: the corrections integrity gate guards the correction rate's denominator and has no bearing on reading memory. Discovery's own refusals (`repo-path-missing`, `key-matches-multiple-paths`) still answer 409.
+- **§6.2 layer 3 and §6.4 (D2)** The real data root has live writers that create and delete entries of their own (`daemon.wake`; `global.db-wal`/`global.db-shm`, removed by SQLite on the last clean close; listing at Orca `c91d029`). The name comparison flags exactly: the root appearing where there was none; a new `global.db.bak.*` or `global.db-wal.bak.*`; `global.db` disappearing. Other additions and removals are ignored, both in the per-file guard and in the gate.
+- **§6.2 layer 3 (D3)** No `ORCA_TEST_CCMEM_REAL_ROOT`. The comparison functions take the root as an argument; the guard's own criterion passes a temp directory.
+- **§6.3 R1 (D4)** R1 seeds the temp data root with `ccmem import <file>`, not `save`: `save` embeds synchronously (`transformers-local` by default) and may download a model; `import` inserts with `embedSync: false` and resolves a null `project_key` from the cwd (probe in the plan).
+- **§3.4 (D5)** A relative `ORCA_CCMEM_BIN` is refused as `ccmem-missing` without starting a process; `execFile` would otherwise resolve it against the target repository.
+- **§6.1 (D6)** The fake is committed as a plain file and run through a `#!/bin/sh` wrapper written at test time with mode `0o755`, as every fake in this repository is.
+- **§5.2 (D8)** The view requests nothing until its section is first opened (all panes stay mounted; a fetch on mount would start ccmem on every panel load).
+- **§3.6 (D11)** `created_at` and `updated_at` are bounded to `0..8_640_000_000_000_000`; outside that range the export is `ccmem-output-invalid`, naming the row.
