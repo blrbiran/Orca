@@ -121,3 +121,52 @@ Task 15: complete (gate2 at Orca 461fca3 / ccloop 57548c3; controller re-read rc
 - Ruling: the paid real-claude run (spec 12.5) is not run — every paid run needs the human's own nod and this round's instruction was not to ask mid-run; listed for the human — costs if wrong: the human asks for it next session.
 - Ruling: this SDD workspace is kept and progress.md committed with git add -f, not deleted as the skill says — CLAUDE.md Rule 13 makes .superpowers/sdd the evidence chain — costs if wrong: none.
 FINISH: all tasks 0-15 and C1 complete; final review fix wave landed and re-reviewed; gate green except named load flakes.
+
+## Paid run (spec 12.5), 2026-10-02, Orca session b5e8d368 (appended; the lines above are unchanged)
+
+Human (2026-10-02, after pushing all three repositories): "付费用真 claude 跑一个小需求". Run with the new
+`scripts/live-requirement-acceptance.ts` (commit `test(live): a paid requirement-to-landing driver for N1 spec 12.5`)
+from `git clone --local` copies: Orca at `docs(handoff): N1 first version is done under fake claude; …`, ccloop at
+`docs(handoff): …` (the pushed tip, which holds the 8192-byte fix), ccloop built in its clone. claude 2.1.287
+(`~/.nvm/versions/node/v22.13.1/bin/claude`), `--model claude-opus-5-5`, 1M window, isolation arguments as in
+`live-driver-acceptance.ts` (`--permission-mode acceptEdits`, `--max-budget-usd 2` per call), HOME not redirected,
+ORCA_CONTROL_DIR under the scratchpad `live-n1/`. Target: a scratch ES-module package `textkit` (README, package.json,
+`src/slugify.mjs`, `test/slugify.test.mjs`). Idea: "Add a truncate helper to textkit …". Every question answered with
+its recommendation, every glossary entry and ADR accepted; first draft awaiting review accepted; the estimate's own
+proposal confirmed (soft).
+
+- Run 1 (out/, 04:10:59Z-04:15:04Z): round 1 five questions (30 s), round 2 four questions, round 3 none and
+  `frontierEmpty` => consensus on round 3; draft 1 valid at the first call (three tasks, criteria AC1-AC13 traced);
+  accept carried the clarifying spend over unchanged; estimate ready and export done 20 s later; document commit
+  `docs(requirements): add-truncate-helper` is the first commit on orca/g. T1 landed on top of it. T2's execute failed
+  in 0.2 s: `spawn …/bin/claude ENOENT` -- the claude package was being reinstalled at that second (the install dir's
+  mtime 12:15:00-02 local = 04:15:00-02Z; execute spawned 04:15:00.894Z; version still 2.1.287 afterwards). The run
+  went `blocked` with work usage UNKNOWN (no process ever ran), so the group cannot continue (registered below).
+- Run 2 (out2/, 04:16:18Z-04:20:16Z), same inputs: same round shape (5, 4, 0 questions), consensus on round 3, draft 1
+  valid at the first call (three tasks, a different split: T3 edits the README this time); estimate ready, export done,
+  document commit first on orca/g; T1 and T3 landed on top. T2 (write test/truncate.test.mjs) wrote the file, then
+  tried `npm test` / `node --test`, which `--permission-mode acceptEdits` denies ("This command requires approval");
+  claude answered `completionStatus: partial`, `failureType: error` ("tests could not be run"), and ccloop ended the
+  loop `failed` with 2 attempts left -> Orca run `blocked`.
+- Checks (both runs): consensusReached, clarifyWithinRounds, draftAwaitingReview, accepted, spendCarriedOver,
+  estimateReady, exported all true; landed false; ~/.orca unchanged; ~/.claude/projects top level unchanged; main
+  untouched; no runner/tee process left (pgrep RC 1). Script RC 1 both times (landed false).
+- Spend (claude's own total_cost_usd from every kept stream; every call had one): run 1 $1.1215996 over 9 calls,
+  run 2 $0.9305036 over 11 calls, total $2.0521032.
+- What this proves (n = 2, one target): under real claude the clarify output schema (including the boolean
+  `frontierEmpty`), the round loop, consensus, a split that validates on the first call, accept, carry-over, export
+  and the estimate all work. "Requirement to landed work" is NOT proven: every task that needed a command run, or that
+  met the reinstall, stopped the group.
+
+Registered, not fixed (for the human / next rounds):
+- R-A: an execute whose claude never started (spawn ENOENT) leaves the run's work usage unknown, and unknown usage on
+  a group cannot be cleared (same family as the fix wave's registered item) => one transient binary swap stops the
+  whole group for good. Candidate: ccloop reports usage 0 when the runner proves no claude process was spawned.
+- R-B: with `--permission-mode acceptEdits` (the `ccloop agents detect` draft) the executor cannot run any command,
+  so a task whose goal says "tests pass" is answered `partial` + `error` and ccloop fails the loop without using its
+  remaining attempts, although ccloop's own verify phase runs the required checks. Candidates (design call, not
+  made): the execute prompt says checks are run by the verifier and not to fail for being unable to run them; or the
+  executor's allowed tools include the task's own check commands; or a self-reported `error` with changed files goes
+  to verify instead of ending the loop.
+- The split differed between two runs of the same answers (T2 package-entry no-op vs T3 README edit); expected for a
+  model, noted only.
