@@ -20,19 +20,29 @@ let requests: string[];
 let status: unknown;
 let records: MemoryRecord[];
 let truncated: { total: number } | null;
+let holdStatus: Promise<void> | null;
+let holdItem: Promise<void> | null;
+let holdSearch: Record<string, Promise<void>>;
+let statusRepos: Array<{ projectKey: string }> | null;
+let byRepo: Record<string, MemoryRecord[]>;
 
 beforeEach(() => {
-  requests = []; status = OK_STATUS; records = [rec("1"), rec("2", { scope: "project", projectKey: "example.invalid/o/r" })]; truncated = null;
+  requests = []; status = OK_STATUS; records = [rec("1"), rec("2", { scope: "project", projectKey: "example.invalid/o/r" })]; truncated = null; holdStatus = null; holdItem = null; holdSearch = {}; statusRepos = null; byRepo = {};
   globalThis.fetch = (async (input: RequestInfo | URL): Promise<Response> => {
     const url = String(input);
     requests.push(url);
-    if (url === "/api/memory/status") return json(status);
+    if (url === "/api/memory/status") { if (holdStatus) await holdStatus; return json(statusRepos ? { ...(status as object), repos: statusRepos } : status); }
     if (url.startsWith("/api/memory/list") || url.startsWith("/api/memory/search")) {
-      const query = new URL(url, "http://x").searchParams.get("q") ?? "";
-      return json({ projectKey: "mem", query, page: { records, total: truncated?.total ?? records.length, truncated: truncated !== null } });
+      const params = new URL(url, "http://x").searchParams;
+      const query = params.get("q") ?? "";
+      const shown = byRepo[params.get("projectKey") ?? ""] ?? records; // taken at request time: a held answer carries what was current then
+      const held = holdSearch[query];
+      if (held) await held;
+      return json({ projectKey: params.get("projectKey"), query, page: { records: shown, total: truncated?.total ?? shown.length, truncated: truncated !== null } });
     }
     if (url.startsWith("/api/memory/item")) {
       const ref = new URL(url, "http://x").searchParams.get("ref");
+      if (holdItem) await holdItem;
       const found = records.find((r) => r.ref === ref);
       return found ? json({ record: found }) : json({ code: "memory-not-found", message: `memory ${ref} is not visible` }, 404);
     }
@@ -53,6 +63,68 @@ describe("MemoryView (spec §5.2, W1)", () => {
     rerender(<MemoryView active />);
     await new Promise((r) => setTimeout(r, 30));
     expect(requests).toHaveLength(2); // opened again: nothing re-read
+  });
+
+  it("says it is reading, not that nothing was opened, while the status is in flight", async () => {
+    let release!: () => void;
+    holdStatus = new Promise<void>((r) => { release = r; });
+    const { rerender } = render(<MemoryView active={false} />);
+    rerender(<MemoryView active />);
+    expect(await screen.findByText("Reading memory…")).toBeTruthy();
+    expect(screen.queryByText("Memory is read when this section is opened.")).toBeNull();
+    release();
+    await screen.findByRole("navigation", { name: "Memory list" });
+  });
+
+  it("shows the newer search when an older one answers last", async () => {
+    render(<MemoryView active />);
+    await screen.findByRole("navigation", { name: "Memory list" });
+    let release!: () => void;
+    holdSearch = { old: new Promise<void>((r) => { release = r; }) };
+    const box = screen.getByRole("searchbox", { name: "Search memory" });
+    const form = box.closest("form")!;
+    records = [rec("old-1", { content: "memory from the old search" })];
+    fireEvent.change(box, { target: { value: "old" } });
+    fireEvent.submit(form);
+    await waitFor(() => expect(requests.at(-1)).toBe("/api/memory/search?projectKey=mem&q=old"));
+    records = [rec("new-1", { content: "memory from the new search" })];
+    fireEvent.change(box, { target: { value: "new" } });
+    fireEvent.submit(form);
+    expect(await screen.findByText("memory from the new search")).toBeTruthy();
+    release();
+    await new Promise((r) => setTimeout(r, 30));
+    expect(screen.queryByText("memory from the old search")).toBeNull();
+    expect(screen.getByText("memory from the new search")).toBeTruthy();
+    expect(screen.queryByText("Reading memory…")).toBeNull();
+  });
+
+  it("does not let an item answered late reappear after a newer list cleared it", async () => {
+    render(<MemoryView active />);
+    const list = within(await screen.findByRole("navigation", { name: "Memory list" }));
+    let release!: () => void;
+    holdItem = new Promise<void>((r) => { release = r; });
+    fireEvent.click(list.getAllByRole("button")[0]!);
+    await waitFor(() => expect(requests.at(-1)).toBe("/api/memory/item?projectKey=mem&ref=1"));
+    fireEvent.submit(screen.getByRole("searchbox", { name: "Search memory" }).closest("form")!);
+    await waitFor(() => expect(requests.filter((u) => u.startsWith("/api/memory/list"))).toHaveLength(2));
+    release();
+    await new Promise((r) => setTimeout(r, 30));
+    expect(screen.queryByTestId("memory-content")).toBeNull();
+  });
+
+  it("offers a repository choice only for several, and reads the chosen one's list once", async () => {
+    statusRepos = [{ projectKey: "mem" }, { projectKey: "other" }];
+    byRepo = { mem: [rec("m1", { content: "from mem" })], other: [rec("o1", { content: "from other" })] };
+    render(<MemoryView active />);
+    expect(await screen.findByText("from mem")).toBeTruthy();
+    const box = screen.getByRole("searchbox", { name: "Search memory" }) as HTMLInputElement;
+    fireEvent.change(box, { target: { value: "typed" } });
+    const before = requests.length;
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "other" } });
+    expect(await screen.findByText("from other")).toBeTruthy();
+    expect(screen.queryByText("from mem")).toBeNull();
+    expect(requests.slice(before)).toEqual(["/api/memory/list?projectKey=other"]);
+    expect(box.value).toBe("");
   });
 
   it("shows the refusal and the hint, and lists nothing, when ccmem is not configured", async () => {

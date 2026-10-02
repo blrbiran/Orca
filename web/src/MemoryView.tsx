@@ -23,6 +23,9 @@ function excerpt(content: string): string {
 export function MemoryView({ active }: { active: boolean }): JSX.Element {
   const { t } = useTranslation();
   const opened = useRef(false);
+  const latest = useRef(0); // a newer list or search supersedes older ones
+  const latestItem = useRef(0); // a newer item request, or any list or search, supersedes older item answers
+  const [started, setStarted] = useState(false);
   const [status, setStatus] = useState<MemoryStatusResponse | null>(null);
   const [repo, setRepo] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
@@ -32,22 +35,28 @@ export function MemoryView({ active }: { active: boolean }): JSX.Element {
   const [loading, setLoading] = useState(false);
 
   const load = async (projectKey: string, query: string): Promise<void> => {
+    const mine = ++latest.current;
+    latestItem.current++;
     setRefusal(null);
     setRecord(null);
     setLoading(true);
     try {
-      setPage(query === "" ? await fetchMemoryList(projectKey) : await fetchMemorySearch(projectKey, query));
+      const answer = query === "" ? await fetchMemoryList(projectKey) : await fetchMemorySearch(projectKey, query);
+      if (mine === latest.current) setPage(answer);
     } catch (err) {
-      setPage(null);
-      setRefusal(failureFrom(err));
+      if (mine === latest.current) {
+        setPage(null);
+        setRefusal(failureFrom(err));
+      }
     } finally {
-      setLoading(false);
+      if (mine === latest.current) setLoading(false);
     }
   };
 
   useEffect(() => {
     if (!active || opened.current) return;
     opened.current = true;
+    setStarted(true);
     void (async () => {
       try {
         const answer = await fetchMemoryStatus();
@@ -63,12 +72,16 @@ export function MemoryView({ active }: { active: boolean }): JSX.Element {
 
   const open = async (ref: string): Promise<void> => {
     if (repo === null) return;
+    const mine = ++latestItem.current;
     setRefusal(null);
     try {
-      setRecord((await fetchMemoryItem(repo, ref)).record);
+      const answer = (await fetchMemoryItem(repo, ref)).record;
+      if (mine === latestItem.current) setRecord(answer);
     } catch (err) {
-      setRecord(null);
-      setRefusal(failureFrom(err));
+      if (mine === latestItem.current) {
+        setRecord(null);
+        setRefusal(failureFrom(err));
+      }
     }
   };
 
@@ -84,7 +97,7 @@ export function MemoryView({ active }: { active: boolean }): JSX.Element {
   return (
     <section className="memory-view">
       <h2>{t("memory.title")}</h2>
-      {status === null && refusal === null && <p className="empty">{t(opened.current ? "memory.loading" : "memory.notOpened")}</p>}
+      {status === null && refusal === null && <p className="empty">{t(started ? "memory.loading" : "memory.notOpened")}</p>}
       {health !== undefined && health.status === "unavailable" && (
         <>
           <Refusal refusal={{ status: null, code: health.code, message: health.message }} />
