@@ -148,21 +148,21 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 
 ## 四、⛔ 下一件事
 
-### 4.0 ⛔ 现在的下一件事（2026-10-02 会话 `ece96b67` 整节改写；**本节优先于下面的 4.0.h、4.0.g、4.0.f、4.0.e、4.0.d、4.0.c、4.0.b、4.0.0、4.0.1 与 1–3**）
+### 4.0 ⛔ 现在的下一件事（2026-10-02 会话 `ece96b67` 整节改写、会话 `7fe6d61b` 滚动；**本节优先于下面的 4.0.h、4.0.g、4.0.f、4.0.e、4.0.d、4.0.c、4.0.b、4.0.0、4.0.1 与 1–3**）
 
 **下一件事归人选**（本会话已把人点名的那件做完，见 4.0.h）：
-1. **先核推送**：三个仓各跑 `/usr/bin/git ls-remote origin refs/heads/main` 与本地比。本会话在 ccloop 落了一整轮本地提交（spec／计划／实现／台账／handoff），Orca 只多了 checkpoint 与 handoff 提交，ccmem 只多了 handoff 提交；**一次都没推**。推送顺序：ccloop 先于 Orca。
-2. **人审 ccloop 那一轮的 pending 裁定**：ccloop 台账 `.superpowers/sdd/2026-10-02-crash-resume-and-orphan-reaping/progress.md` 里标着 `pending human ratification` 的 `Ruling:` 行（R1、R2、sweep 第二行横幅措辞、一处夹具补字段、一条本轮判据收紧、codex partial 进 verify）。
+1. **先核推送**：三个仓各跑 `/usr/bin/git ls-remote origin refs/heads/main` 与本地比（会话 `7fe6d61b` 开工时三个仓远端＝本地；它之后又在三个仓各落了一笔记账提交，没推）。推送顺序：ccloop 先于 Orca。
+2. ✅ **ccloop 那一轮的 pending 裁定人已全部追认**（会话 `7fe6d61b`，「同意」）：记在 ccloop spec §13 与台账末节。
 3. 之后由人选：
    - **Orca「同时启动任务数上限」**（新登记，见 4.0.h 容量一条）；
    - 重钉 ccloop 让 Orca 用上本轮行为（runner 随 worker 死、never-started 记 0 让 group 不再永久卡在未知用量——付费跑 R-A 的那条挂账因此可解，但要先重钉，并在 Orca 侧验证 usage 0 能清掉 group 的 `usageUnknown`）；
    - 收进程／R-A／R-B 的付费真 claude 验证；
    - N5 memory tab（先核 ccmem Q6）；N1 第二版。
 4. 重钉规矩不变：人先推 ccloop，再 `node scripts/pin-ccloop.mjs <SHA>`，再人推 Orca。
-5. 留在会话 scratchpad、删要人点头的：会话 `b5e8d368` 的 `live-n1/`（N1 两次付费跑的 clone、控制 store、claude 原始流）；会话 `ece96b67` 的 `gate/`、`paid/`（本轮门与付费跑的原始输出，台账引用它们）。
+5. ✅ 会话 `b5e8d368` 的 `live-n1/`、会话 `ece96b67` 的 `gate/`、`paid/` 已经人授权删除（会话 `7fe6d61b`；删前核过：没有进程占用，唯一的非依赖未跟踪文件和已提交的 `scripts/live-requirement-acceptance.ts` 逐字节相同）。两本台账里引用的原始输出路径从此不存在，台账里抄下的数是唯一副本。
 6. 环境教训（实测，仍有效）：本机 claude 会在任意时刻被重装（同版本也会），那一两秒 `bin/claude` 不存在；付费跑前后记安装目录 mtime。N1 付费跑的 R-A 就是这么来的（ccloop 本轮已加 ENOENT 重试与「没起来记 0」）。
 
-### 4.0.h ccloop 被杀 run 续跑＋孤儿 runner 收＋R-A＋R-B（会话 `ece96b67`，2026-10-02，**已完成，待人审 pending 裁定**）
+### 4.0.h ccloop 被杀 run 续跑＋孤儿 runner 收＋R-A＋R-B（会话 `ece96b67`，2026-10-02，**已完成，pending 裁定人已全部追认**）
 
 - 人裁：三件都修（R-A／R-B 一起）；R-B 走「带改动文件的自报 error 交给 verify ＋ 提示词说明检查由 verifier 跑」；R-A 走「证明没起过就记 0 ＋ ENOENT 在 runner 内有界重试」；普通 `resume` 自己接管被杀的 run；sweep 也认被杀的 run；容量实测人已批（时机由 agent 选）；本会话「有问题先按建议执行、最后报审」。
 - 材料全在 ccloop 仓：spec `docs/superpowers/specs/2026-10-02-crash-resume-and-orphan-reaping-design.md`（§11、§12 是更正）、同名计划、台账（见上）。按 brainstorming → spec → 独立评审 → 计划 → SDD（9 个实施 Task 各经一次任务评审，6 个有一轮修复）→ opus 终审 → 一次修复波 → 复审。
