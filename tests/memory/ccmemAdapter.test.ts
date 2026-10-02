@@ -92,7 +92,7 @@ describe("failures (spec §3.3)", () => {
     const err = await refusal(adapterFor(fake).search({ ...scope, repoPath: file }, { query: "", limit: 50 }));
     expect(err.code).toBe("ccmem-failed:ENOTDIR");
     expect(err.message).toContain("--scope global");
-    expect(err.message).toContain("ENOTDIR");
+    expect(err.message).toContain("spawn ENOTDIR"); // Node's own message, since ccmem wrote no stderr
     expect(fake.calls()).toEqual([]);
   });
 
