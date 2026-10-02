@@ -1,0 +1,46 @@
+{
+  "v": 1,
+  "runId": "orca-dev-184d0372",
+  "runtime": "claude-code",
+  "sessionRef": "184d0372-0d1c-4f98-94eb-d50f992cc7d8",
+  "writtenAt": "2026-10-02T17:15:59.575Z",
+  "head": "8eb52a17cf4d33ba137595cc830bea688992b5b7",
+  "level": {
+    "kind": "reading",
+    "level": 347138,
+    "windowTokens": 1000000,
+    "t1": 330000,
+    "t2": 450000,
+    "band": 1
+  },
+  "next": [
+    "Memory tab (N5) plan docs/superpowers/plans/2026-10-03-memory-tab.md executing subagent-driven; ledger .superpowers/sdd/2026-10-03-memory-tab/progress.md has a 'Task N: complete' line per finished task; resume at the first task without one",
+    "Task 1 implementer dispatched (base 941a89f)"
+  ],
+  "open": [
+    "Tasks 1-8 of the memory tab plan",
+    "Final whole-branch review, then three handoffs (Chinese) and an executive summary for the human"
+  ],
+  "awaitingHuman": [
+    {
+      "kind": "irreversible",
+      "what": "push ccloop/Orca/ccmem local commits (human's timing; ccloop before Orca)"
+    }
+  ],
+  "measurements": [
+    {
+      "command": "/usr/bin/git log --oneline -15",
+      "exitCode": 0,
+      "commit": "8eb52a17cf4d33ba137595cc830bea688992b5b7",
+      "observedAt": "2026-10-02T17:15:59.519Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-184d0372-3NS9gY/1.txt"
+    },
+    {
+      "command": "cat .superpowers/sdd/2026-10-03-memory-tab/progress.md",
+      "exitCode": 0,
+      "commit": "8eb52a17cf4d33ba137595cc830bea688992b5b7",
+      "observedAt": "2026-10-02T17:15:59.529Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-184d0372-3NS9gY/2.txt"
+    }
+  ]
+}
