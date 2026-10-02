@@ -44,3 +44,6 @@ Scan: no conflicts beyond the three rulings above.
 | Task | Commit subject | Criteria added | Mutations (edit → expected red → seen) | Notes |
 |---|---|---|---|---|
 | 0 | docs(plan): memory tab (N5) task by task, with the spec's plan-time corrections | none (docs) | none | spec §10 appended |
+Task 0: minor (deferred): task-0-report labels a git blob id as SHA256 (report untracked; check itself holds)
+Task 0: complete (commits c91d029..941a89f, review clean; plan blob verified equal to the controller's file by git rev-parse vs git hash-object)
+| 1 | test(memory): relocate ccmem's data root for every test file and guard the real one by name | ccmemGuard.test.ts (4 tests); setup file relocateCcmem.ts wired in vitest.config.ts | M-G1 body→`return []` → 2 flags tests red → seen red; M-G2 delete disappeared line → "flags the database disappearing" red → seen; M-G3 drop `BACKUP.test(name) &&` → "ignores what ccmem's own daemon…" red → seen; M-G4 REAL_ROOT→temp dir + afterAll writes global.db.bak.9 → file fails in afterAll hook ("changed the real ~/.claude/ccmem") → seen | full root suite 1 failed (driverRequirementSplit 5 s load flake, passes alone) / 2497 passed / 46 skipped; red evidence in task-1-report.md |
