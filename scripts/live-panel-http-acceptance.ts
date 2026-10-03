@@ -320,9 +320,20 @@ summary.claudeReportedUsd = reportedUsd;
 summary.claudeCallsWithoutCost = rawClaude.length - costed.length;
 summary.ccloopReportedTokens = ccloopTotal;
 
-// Informational: the Skill tool calls claude reported (stream-json assistant tool_use blocks naming the plugin skill).
-summary.skillToolUses = rawNames.filter((name) => !name.endsWith(".argv.json")).map((name) =>
-  readFileSync(join(claudeRaw, name), "utf8").split("\n").filter((line) => line.includes('"tool_use"') && line.includes(`orca-run-skills:${SKILL}`)).length);
+// Informational, per call: the distinct Skill tool calls on the plugin skill (stream-json repeats a block across
+// partial messages, so they are counted by tool_use id).
+summary.skillToolUses = rawNames.filter((name) => !name.endsWith(".argv.json")).map((name) => {
+  const ids = new Set<string>();
+  for (const line of readFileSync(join(claudeRaw, name), "utf8").split("\n")) {
+    let event: { type?: string; message?: { content?: Array<{ type?: string; id?: string; name?: string; input?: { skill?: string } }> } };
+    try { event = JSON.parse(line); } catch { continue; }
+    if (event?.type !== "assistant") continue;
+    for (const block of event.message?.content ?? []) {
+      if (block.type === "tool_use" && block.name === "Skill" && block.input?.skill === `orca-run-skills:${SKILL}` && block.id) ids.add(block.id);
+    }
+  }
+  return ids.size;
+});
 const landedOf = (ref: string): string | null => {
   try { return execFileSync("git", ["show", `${ref}:answer.txt`], { cwd: repo, encoding: "utf8" }); } catch { return null; }
 };
