@@ -3,37 +3,40 @@
   "runId": "orca-dev-16ab00f2",
   "runtime": "claude-code",
   "sessionRef": "16ab00f2-5d16-4b50-a621-f7d12e108e01",
-  "writtenAt": "2026-10-03T06:14:46.195Z",
-  "head": "bdf809bea4a1ae816c82275995803f56de5d1b3f",
+  "writtenAt": "2026-10-03T06:55:07.217Z",
+  "head": "f4a2a0f24ebabf648981ab35554314111a452161",
   "level": {
     "kind": "reading",
-    "level": 332995,
+    "level": 455081,
     "windowTokens": 1000000,
     "t1": 330000,
     "t2": 450000,
-    "band": 1
+    "band": 2
   },
   "next": [
-    "syncskill SDD: execute plan docs/superpowers/plans/2026-10-03-profile-inject-version.md Tasks 1-5 on syncskill main; ledger .superpowers/sdd/2026-10-03-profile-inject-version/progress.md",
-    "then mutations in a syncskill clone, final review, then update Orca/ccloop/ccmem handoffs"
+    "human picks the next item (Orca handoff §4.0 item 3); candidates: Orca calling syncskill inject, memory follow-ups, ccloop §5.1/reaper live checks"
   ],
   "open": [
-    "panel HTTP live acceptance done (Orca commit test(live): drive one task ...), goal.md §11 and handoff not yet updated",
-    "goal.md §3.6 claims --sync-dir relocates syncskill; false (only HOME)"
+    "Orca has no code calling syncskill yet",
+    "syncskill registered gaps: relocation flags no-op, normalizeSourceEntry drops fields"
   ],
   "awaitingHuman": [
     {
       "kind": "irreversible",
-      "what": "push Orca (2 local commits), ccmem (1 handoff commit), syncskill (spec/plan + implementation)"
+      "what": "push ccloop, Orca, ccmem, syncskill (all only local this session); ccloop before Orca"
+    },
+    {
+      "kind": "named-authorization",
+      "what": "review §4.0.m rulings and syncskill ledger Ruling: lines"
     }
   ],
   "measurements": [
     {
-      "command": "/usr/bin/git -C /Users/biran/code/skills/syncskill log --oneline -8",
+      "command": "/usr/bin/git -C /Users/biran/code/skills/syncskill log --oneline -12",
       "exitCode": 0,
-      "commit": "bdf809bea4a1ae816c82275995803f56de5d1b3f",
-      "observedAt": "2026-10-03T06:14:46.151Z",
-      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-16ab00f2-6nwSyK/1.txt"
+      "commit": "f4a2a0f24ebabf648981ab35554314111a452161",
+      "observedAt": "2026-10-03T06:55:07.171Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-16ab00f2-Xq9QcF/1.txt"
     }
   ]
 }
