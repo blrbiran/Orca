@@ -61,7 +61,9 @@ export async function webFixture(snapshot = profileSnapshot(), tasks: readonly W
   const asked: PartialSelection[] = [];
   const resolveAgent = fixtureResolveAgent(() => observed, { killGraceMs: options.killGraceMs, ...(options.distinctConfigHash ? { distinctConfigHash: true } : {}) });
   const port = { accept, resolveAgent: async (partial: PartialSelection) => (asked.push(structuredClone(partial)), resolveAgent(partial)),
-    listAgents: async () => ({ installations: [{ id: "codex", kind: "codex", defaults: { model: "fixture-model", contextWindow: "agent-default" as const }, contextOptions: ["agent-default" as const], version: "0.0.0-fixture" }] }),
+    // The table view lists both installations resolveAgent knows (agents.ts), each with its kind: skills need claude.
+    listAgents: async () => ({ installations: [{ id: "codex", kind: "codex", defaults: { model: "fixture-model", contextWindow: "agent-default" as const }, contextOptions: ["agent-default" as const], version: "0.0.0-fixture" },
+      { id: "claude", kind: "claude", defaults: { model: "fixture-claude-model", contextWindow: "agent-default" as const }, contextOptions: ["agent-default" as const], version: "0.0.0-fixture" }] }),
     readEvidence: async () => Buffer.alloc(0), inspect: async () => ({ kind: "unknown" }), requestHandoff: async () => ({ kind: "unknown" }), collect: async () => ({ events: [], candidate: null, terminal: null }) } as unknown as ExecutionPort;
   const supplied = resolveProfile(snapshot, port), router = createExecutionProfileRouter([supplied]);
   const frozen = router.resolve("budget-estimate", "all", supplied.profileHash);

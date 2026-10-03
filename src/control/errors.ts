@@ -152,6 +152,7 @@ export const durableCommandErrorStatuses = {
   // startable, too slow, or answering something unreadable). Each refusal leaves the group unconfirmed.
   "skills-profile-empty": 422,
   "skills-shape": 422,
+  "skills-unsupported-agent": 422,
   "syncskill-failed": 422,
   "syncskill-missing": 422,
   "syncskill-output-invalid": 422,

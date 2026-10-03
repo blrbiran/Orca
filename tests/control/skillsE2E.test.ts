@@ -3,10 +3,12 @@ import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { resolveGroupSelections } from "../../src/control/agentFreeze.js";
+import { readArchivedPlan, readBudgetProposal } from "../../src/control/queries.js";
 import { readCanonicalRecord } from "../../src/control/snapshot.js";
-import { controlWorkspaceRoots, removeSkillsSnapshot, skillsPathOf, sourceDirOf } from "../../src/control/workspace.js";
+import { controlWorkspaceRoots } from "../../src/control/workspace.js";
 import type { ControlRuntime } from "../../src/panel/controlAssembly.js";
-import { ccloopWorlds, g, noBlocked, realBinary, startGroup, until, workRuns } from "./fixtures/ccloopWorld.js";
+import { ccloopWorlds, g, noBlocked, raw, realBinary, startGroup, until, workRuns } from "./fixtures/ccloopWorld.js";
 
 /**
  * Syncskill integration spec §10.8 C9 (plan Task 6), a smoke with no mutation: a loop task with a frozen skill set runs
@@ -75,18 +77,17 @@ describe("a run with skills against real ccloop (syncskill integration spec §10
 });
 
 /**
- * Final review I1, controller ruling (b): with the confirm-time agent check dropped (ruling F1), a task whose frozen agent
- * is a codex installation and which froze skills is accepted by Orca and refused by ccloop at run start. This pins where
- * that path ends against the real ccloop build: a named block at B (`accept-refused:2:skills-unsupported-agent`), not a
- * run without its skills; no codex (or claude) call; nothing persisted by ccloop for the run (acceptStart refuses before
- * writing its accepted record); and the run's `skills-<runId>` still there -- it goes only with the workspace (restartRun
- * or step E), never on a block. Honest claim: fake codex and fake syncskill; the refusal itself is ccloop's.
+ * Final review I1 pinned that a codex task with skills was accepted by Orca and blocked by ccloop at run start
+ * (`accept-refused:2:skills-unsupported-agent`), after which the task could be neither changed nor re-dispatched and only
+ * stopping the group ended it. Human ruling 2026-10-03 (session 9d95e6c8) moves the refusal to confirm, by the kind the
+ * real ccloop build reports for the installation (listAgents); this criterion is rewritten to pin that instead. ccloop's
+ * acceptStart refusal stays, for a table changed after confirm. Honest claim: fake codex and fake syncskill.
  */
-describe("a codex run with skills is blocked by ccloop's accept refusal (final review I1)", { timeout: 300_000 }, () => {
+describe("a codex task with skills is refused at confirm, by the kind real ccloop reports", { timeout: 300_000 }, () => {
   relocateHome("orca-skills-e2e-codex-home-");
   beforeEach((ctx) => { if (!realBinary) ctx.skip(); });
 
-  it("blocks at B as accept-refused:2:skills-unsupported-agent, with no agent call, no accepted record, and the snapshot kept", async () => {
+  it("answers skills-unsupported-agent:a:codex:codex, leaving the group unconfirmed, with no syncskill call, no run and no snapshot", async () => {
     const fakeDir = await realpath(await mkdtemp(join(tmpdir(), "orca-skills-e2e-codex-syncskill-")));
     extra.push(fakeDir);
     const bin = join(fakeDir, "syncskill");
@@ -96,39 +97,28 @@ describe("a codex run with skills is blocked by ccloop's accept refusal (final r
       { a: { files: { "shared.txt": "A\n" } } },
       { env: { ORCA_SYNCSKILL_BIN: bin, FAKE_SYNCSKILL_MODE: "inject-ok", FAKE_SYNCSKILL_LOG: log } });
     const runtime = await w.boot();
-    const roots = controlWorkspaceRoots(runtime.store.stateDir);
-    let runId: string | undefined;
     try {
-      await startGroup(runtime, w.repoId);
-      runtime.startPump(50);
-      // Stops at the first terminal-looking state either way, so a run that is not refused fails here by its state.
-      await until(() => workRuns(runtime).some((run) => run.body.state === "blocked" || workStatus(runtime, "a") === "done"), 240_000, "the run to block");
-      const [run] = workRuns(runtime);
-      runId = run!.runId;
-      const drive = run!.body.drive;
-      expect({ state: run!.body.state, blockedAt: drive.blockedAt, blockedReason: drive.blockedReason })
-        .toEqual({ state: "blocked", blockedAt: "B", blockedReason: "accept-refused:2:skills-unsupported-agent" });
-      // The envelope asked for the skills: A2 injected (one syncskill call) and handed ccloop the snapshot.
-      const envelope = JSON.parse(readCanonicalRecord(runtime.store, drive.envelopeHash));
-      const dir = skillsPathOf(roots, runId);
-      expect(drive.skills.dir).toBe(dir);
-      expect(envelope.work.skillPluginDir).toBe(dir);
-      expect(readFileSync(log, "utf8").split("\n").filter((line) => line !== "")).toHaveLength(1);
-      // No agent ran.
+      // startGroup's steps up to confirm (ccloopWorld.ts), which here must refuse.
+      expect(await runtime.service.importPlan(raw(runtime, "import", "import-plan", { groupId: "g", repoId: w.repoId, planId: "plan" }))).toMatchObject({ result: { kind: "imported" } });
+      const preferences = await runtime.service.setAgentPreferences(raw(runtime, "preferences", "set-agent-preferences", { preferences: { defaultAgent: "codex", perAgent: {} } }, { kind: "operator", operatorId: "human" }));
+      expect("error" in preferences ? preferences.error : "set").toBe("set");
+      const selections = await resolveGroupSelections({ store: runtime.store, port: runtime.port }, "g", "human");
+      const hash = runtime.router.list()[0]!.profileHash;
+      const confirmed = await runtime.service.confirm(raw(runtime, "confirm", "confirm", {
+        planHash: readArchivedPlan(runtime.store, "g").planHash, proposalVersion: readBudgetProposal(runtime.store, "g").proposalVersion, budgetMode: "soft",
+        profileIds: { estimator: "all", worker: "all", handoff: "all", goalReview: "all" }, profileHashes: { estimator: hash, worker: hash, handoff: hash, goalReview: hash },
+        contextPolicy: { handoffAtContextTokens: null }, selectionsHash: selections.selectionsHash,
+      }));
+      expect(confirmed).toMatchObject({ error: { code: "skills-unsupported-agent", message: "skills-unsupported-agent:a:codex:codex" } });
+      expect(readBudgetProposal(runtime.store, "g").state).toBe("editable");
+      // Names need no profile lookup, and nothing was injected or run.
+      expect(existsSync(log)).toBe(false);
+      expect(workRuns(runtime)).toEqual([]);
       expect(w.argv("codex")).toEqual([]);
-      expect(w.argv("claude")).toEqual([]);
       expect(w.calls()).toEqual([]);
-      // ccloop persisted nothing for the run: no accepted record under its sourceDir.
-      expect(envelope.work.sourceDir).toBe(sourceDirOf(roots, runId));
-      expect(existsSync(join(envelope.work.sourceDir, "control", "accepted.json"))).toBe(false);
-      // The snapshot is still there, read-only, beside the run's workspace.
-      expect(existsSync(join(dir, "skills", "alpha", "SKILL.md"))).toBe(true);
-      expect(readdirSync(roots.workspacesRoot)).toContain(`skills-${runId}`);
+      const roots = controlWorkspaceRoots(runtime.store.stateDir);
+      expect(existsSync(roots.workspacesRoot) ? readdirSync(roots.workspacesRoot) : []).toEqual([]);
       expect(await runtime.shutdown()).toBe(true);
-    } finally {
-      await w.teardown();
-      // The read-only snapshot would otherwise defeat removeRoots' recursive rm.
-      if (runId !== undefined) await removeSkillsSnapshot(w.repo, roots, runId);
-    }
+    } finally { await w.teardown(); }
   });
 });

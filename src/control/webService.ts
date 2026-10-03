@@ -12,7 +12,7 @@ import { estimatorSlotFor, importControlPlanAsync, rejectedEstimatorRequest, typ
 import { intersectCapabilities } from "./profiles.js";
 import type { FrozenSlot } from "./agentSelection.js";
 import { effectivePlanCanonicalJson, estimateIsStale, readArchivedPlan, readBudgetProposal, readEstimateRecord, type BudgetProposalRecord } from "./queries.js";
-import { amountSchema } from "./schema.js";
+import { agentSelectionSchema, amountSchema } from "./schema.js";
 import { writeCanonicalRecord, readCanonicalRecord } from "./snapshot.js";
 import { estimateExecutionContractSchema, executionSnapshotSchema } from "./webProtocol.js";
 import { scheduleStart, type StartCommand } from "./webDispatch.js";
@@ -49,7 +49,7 @@ export type WebCommandResult = CommandLookupV1["body"];
 export interface WebServiceDeps extends AsyncImportDeps {
   admissionGate?: AdmissionGate; now?: () => Date; knownRepository?: (repoId: string) => boolean;
   /** Agent selection spec §6.4 (W6-19): the same port the panel's profiles use; confirm resolves selections through it. */
-  port: Pick<ExecutionPort, "resolveAgent">;
+  port: Pick<ExecutionPort, "resolveAgent" | "listAgents">;
   /** Syncskill integration spec §10.5: confirm looks up each declared profile through it. Absent means not configured. */
   syncskill?: SyncskillOptions;
 }
@@ -99,12 +99,16 @@ export function readWebGroup(store: ControlStore, groupId: string): Group {
     return group;
   } catch { throw new ControlError("recovery-blocked"); }
 }
-/** Spec §10.5: what confirm's profile lookups answered, decided inside the transaction like a slot failure. */
-type SkillLookup = { members: Map<string, string[]> } | { failure: unknown };
+/**
+ * Spec §10.5: what confirm's profile lookups answered, decided inside the transaction like a slot failure. `kinds` maps
+ * each agents-table installation id to its kind, asked of ccloop only when the read before the transaction saw a task
+ * that needs it; null when it was not asked.
+ */
+type SkillLookup = { members: Map<string, string[]>; kinds: Map<string, string> | null } | { failure: unknown };
 const UNCONFIGURED_SYNCSKILL: SyncskillOptions = { bin: null, env: {} };
 const SYNCSKILL_REFUSALS = ["skills-profile-empty", "skills-shape", "syncskill-missing", "syncskill-output-invalid", "syncskill-output-too-large", "syncskill-timeout", "syncskill-unconfigured"] as const satisfies readonly KnownControlErrorCode[];
 /** One `profile ls` per distinct profile the tasks' effective recipes declare, in name order, one at a time. */
-async function lookupSkillProfiles(store: ControlStore, groupId: string, syncskill: SyncskillOptions): Promise<SkillLookup> {
+async function lookupSkillProfiles(store: ControlStore, groupId: string, syncskill: SyncskillOptions, port: Pick<ExecutionPort, "listAgents">): Promise<SkillLookup> {
   const profiles = new Set<string>();
   let declared = false;
   try {
@@ -113,14 +117,30 @@ async function lookupSkillProfiles(store: ControlStore, groupId: string, syncski
       if (skills !== undefined) declared = true;
       if (skills !== undefined && "profile" in skills) profiles.add(skills.profile);
     }
-  } catch { return { members: new Map() }; } // the transaction's own checks name what could not be read
+  } catch { return { members: new Map(), kinds: null }; } // the transaction's own checks name what could not be read
   // Spec §4.2 / §10.5: any declared skills, names included, need syncskill at run start, so confirm refuses without it.
   if (declared && syncskill.bin === null) return { failure: new ControlError("syncskill-unconfigured") };
   const members = new Map<string, string[]>();
   for (const profile of [...profiles].sort()) {
     try { members.set(profile, await profileMembers(syncskill, profile)); } catch (error) { return { failure: syncskillRefusal(error) }; }
   }
-  return { members };
+  const kinds = await agentKinds(port, declared);
+  return "failure" in kinds ? kinds : { members, kinds: kinds.kinds };
+}
+/**
+ * Human ruling 2026-10-03 (session 9d95e6c8): a task with skills on an agent other than claude is refused when it is
+ * confirmed or changed, not first at run start, where it could only be ended by stopping its group. The kind comes from
+ * ccloop's own table view (listAgents). ccloop's acceptStart still refuses it at run start, for a table changed since.
+ */
+async function agentKinds(port: Pick<ExecutionPort, "listAgents">, needed: boolean): Promise<{ kinds: Map<string, string> | null } | { failure: unknown }> {
+  if (!needed) return { kinds: null };
+  try { return { kinds: new Map((await port.listAgents()).installations.map(installation => [installation.id, installation.kind])) }; } catch (failure) { return { failure }; }
+}
+function assertSkillsAgent(kinds: Map<string, string> | null, taskId: string, agentId: string): void {
+  // Not asked: the read before the transaction saw no such task (a draft then, or no skills), so the state moved since.
+  if (kinds === null) throw new ControlError("proposal-version-conflict");
+  const kind = kinds.get(agentId);
+  if (kind !== "claude") throw new ControlError("skills-unsupported-agent", `${taskId}:${agentId}:${kind ?? "not-in-table"}`);
 }
 /**
  * Spec §10.5, H3: the profile set-task-loop must look up, or null. Only a confirmed task whose payload declares a profile
@@ -137,10 +157,19 @@ function profileToLookUp(store: ControlStore, groupId: string, taskId: string, s
     return current !== undefined && "profile" in current && current.profile === skills.profile ? null : skills.profile;
   } catch { return null; } // the transaction's own checks name what could not be read
 }
-async function lookupProfile(profile: string | null, syncskill: SyncskillOptions): Promise<SkillLookup> {
-  if (profile === null) return { members: new Map() };
+async function lookupProfile(profile: string | null, syncskill: SyncskillOptions, port: Pick<ExecutionPort, "listAgents">, needKinds: boolean): Promise<SkillLookup> {
+  let members = new Map<string, string[]>();
   // profileMembers refuses an unset ORCA_SYNCSKILL_BIN itself (syncskill-unconfigured).
-  try { return { members: new Map([[profile, await profileMembers(syncskill, profile)]]) }; } catch (error) { return { failure: syncskillRefusal(error) }; }
+  if (profile !== null) {
+    try { members = new Map([[profile, await profileMembers(syncskill, profile)]]); } catch (error) { return { failure: syncskillRefusal(error) }; }
+  }
+  const kinds = await agentKinds(port, needKinds);
+  return "failure" in kinds ? kinds : { members, kinds: kinds.kinds };
+}
+/** A confirmed group's task whose payload declares skills: its frozen agent's kind is checked (a draft task's, at confirm). */
+function confirmedWithSkills(store: ControlStore, groupId: string, skills: LoopSkills | undefined): boolean {
+  if (skills === undefined) return false;
+  try { return readBudgetProposal(store, groupId).state !== "editable"; } catch { return false; } // the transaction's own checks name what could not be read
 }
 function syncskillRefusal(error: unknown): unknown {
   if (!(error instanceof SyncskillError)) return error;
@@ -522,7 +551,7 @@ export class WebControlService {
       const replay = preflightWebCommand<WebCommandResult>(this.store, command); if (replay) return replay.body;
       const prepared: GroupSelectionResolution | { failure: unknown } = await resolveGroupSelections({ store: this.store, port: this.deps.port }, groupId(command), command.actorId, "confirm")
         .catch((failure: unknown) => ({ failure }));
-      const skillLookup = await lookupSkillProfiles(this.store, groupId(command), this.deps.syncskill ?? UNCONFIGURED_SYNCSKILL);
+      const skillLookup = await lookupSkillProfiles(this.store, groupId(command), this.deps.syncskill ?? UNCONFIGURED_SYNCSKILL, this.deps.port);
       return applyWebCommand<WebCommandResult>(this.store, {
         rawCommand: command, expand: () => ({ ...command, schema: "orca-authority-command-v1" }),
         apply: context => {
@@ -579,7 +608,7 @@ export class WebControlService {
           const skills = tasks.flatMap((task): Array<{ taskId: string; profile: string | null; names: string[] }> => {
             const declared = task.loop?.skills;
             if (declared === undefined) return [];
-            // The agent's kind is not known here (selection.agent is an installation id): ccloop's acceptStart refuses a non-claude agent with skills.
+            assertSkillsAgent(skillLookup.kinds, task.taskId, frozenOf(taskSlotKey(task.taskId)).selection.agent);
             if ("names" in declared) return [{ taskId: task.taskId, profile: null, names: [...declared.names] }];
             const names = skillLookup.members.get(declared.profile);
             // Defensive: a recipe changed since the lookup reopens the proposal, refused above as proposal-version-conflict.
@@ -680,7 +709,8 @@ export class WebControlService {
       const replay = preflightWebCommand<WebCommandResult>(this.store, command); if (replay) return replay.body;
       // Syncskill integration spec §10.5: the lookup runs before the transaction, as confirm's does (decided synchronously
       // here, before the first await).
-      const skillLookup = await lookupProfile(profileToLookUp(this.store, groupId(command), command.target.taskId, command.payload.skills), this.deps.syncskill ?? UNCONFIGURED_SYNCSKILL);
+      const skillLookup = await lookupProfile(profileToLookUp(this.store, groupId(command), command.target.taskId, command.payload.skills), this.deps.syncskill ?? UNCONFIGURED_SYNCSKILL,
+        this.deps.port, confirmedWithSkills(this.store, groupId(command), command.payload.skills));
       return applyWebCommand<WebCommandResult>(this.store, {
         rawCommand: command, expand: () => ({ ...command, schema: "orca-authority-command-v1" }),
         apply: context => {
@@ -749,6 +779,12 @@ export class WebControlService {
           // refused unset as confirm refuses it (lookupSkillProfiles). Removing skills or keeping them unchanged needs none.
           if (proposal.state !== "editable" && !skillsUnchanged && expanded.recipe.skills !== undefined
             && (this.deps.syncskill?.bin ?? null) === null) throw new ControlError("syncskill-unconfigured");
+          // Human ruling 2026-10-03 (session 9d95e6c8): skills on a confirmed task need its frozen agent to be claude.
+          if (proposal.state !== "editable" && expanded.recipe.skills !== undefined) {
+            const agent = agentSelectionSchema.safeParse(work.agent);
+            if (!agent.success) throw new ControlError("recovery-blocked", `work-item-agent-invalid:${taskId}`);
+            assertSkillsAgent(skillLookup.kinds, taskId, agent.data.agent);
+          }
           // Step 5.
           const amendmentHash = writeTaskAmendment(this.store, id, {
             schema: TASK_AMENDMENT_SCHEMA, groupId: id, taskId, loopVersion: loopVersion + 1, previousContractHash: current.originalContractHash,

@@ -2,8 +2,9 @@ import { existsSync, readFileSync } from "node:fs";
 import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { canonicalBytes, sha256Canonical } from "../../src/control/canonicalJson.js";
+import { ControlError } from "../../src/control/errors.js";
 import { readConfirmedTaskExecution } from "../../src/control/executionSnapshot.js";
 import { readBudgetProposal } from "../../src/control/queries.js";
 import { readCanonicalRecord, writeCanonicalRecord } from "../../src/control/snapshot.js";
@@ -149,6 +150,50 @@ describe("confirm refuses, and the group stays unconfirmed (C4)", () => {
 });
 
 /**
+ * Human ruling 2026-10-03 (session 9d95e6c8): skills need claude, so confirm refuses a task with skills whose frozen
+ * installation ccloop's table view (listAgents) does not call claude -- before, ccloop refused it only at run start, where
+ * the task could be neither changed nor re-dispatched. The table is asked only when some task declares skills.
+ */
+describe("confirm refuses skills on an installation that is not claude", () => {
+  async function confirmWithPort(tasks: Parameters<typeof webFixture>[1], listAgents?: () => Promise<unknown>) {
+    const fake = await fakeSyncskill("profile-ok");
+    const h = await webFixture(undefined, tasks);
+    cleanups.push(() => h.dispose());
+    const asked = vi.fn(listAgents ?? h.deps.port.listAgents);
+    const service = new WebControlService({ ...h.deps, port: { ...h.deps.port, listAgents: asked } as typeof h.deps.port, syncskill: fake.o });
+    return { h, asked, fake, answer: await service.confirm(h.command("confirm", await h.confirmPayload())) };
+  }
+
+  it("skills-unsupported-agent:<task>:<installation>:<kind> for the fixture's codex installation, spawning no syncskill", async () => {
+    const { h, answer, fake } = await confirmWithPort([{ taskId: "a", loop: withSkills("a", { names: ["x"] }) }]);
+    expect(answer).toMatchObject({ error: { code: "skills-unsupported-agent", message: "skills-unsupported-agent:a:codex:codex" } });
+    expectUnconfirmed(h, ["a"]);
+    expect(fake.calls()).toEqual([]);
+  });
+
+  it("names an installation the table no longer lists as not-in-table", async () => {
+    const { h, answer } = await confirmWithPort([{ taskId: "a", agent: CLAUDE, loop: withSkills("a", { names: ["x"] }) }], async () => ({ installations: [] }));
+    expect(answer).toMatchObject({ error: { code: "skills-unsupported-agent", message: "skills-unsupported-agent:a:claude:not-in-table" } });
+    expectUnconfirmed(h, ["a"]);
+  });
+
+  it("refuses with the table view's own failure, never confirming unchecked", async () => {
+    const { h, answer } = await confirmWithPort([{ taskId: "a", agent: CLAUDE, loop: withSkills("a", { names: ["x"] }) }], async () => { throw new ControlError("control-protocol-unavailable"); });
+    expect(answer).toMatchObject({ error: { code: "control-protocol-unavailable" } });
+    expectUnconfirmed(h, ["a"]);
+  });
+
+  it("asks the table once for a group with skills, and never for a group without", async () => {
+    const withSkillsGroup = await confirmWithPort([{ taskId: "a", agent: CLAUDE, loop: withSkills("a", { names: ["x"] }) }, { taskId: "b", agent: CLAUDE, loop: withSkills("b", { names: ["y"] }) }]);
+    confirmedOrThrow(withSkillsGroup.answer);
+    expect(withSkillsGroup.asked).toHaveBeenCalledTimes(1);
+    const without = await confirmWithPort([{ taskId: "a", loop: loop("a") }]);
+    confirmedOrThrow(without.answer);
+    expect(without.asked).not.toHaveBeenCalled();
+  });
+});
+
+/**
  * A snapshot rewritten whole -- a new canonical record under its own hash, with the proposal and group pointing at it --
  * so readCanonicalRecord's byte and hash checks pass and only the skills comparison can refuse it.
  */
@@ -170,7 +215,8 @@ describe("a tampered skills entry blocks recovery (C16)", () => {
   async function confirmedPair() {
     const fake = await fakeSyncskill("profile-ok");
     const { h, answer } = await confirmWith([
-      { taskId: "a", loop: withSkills("a", { names: ["x"] }) },
+      // Human ruling 2026-10-03 (session 9d95e6c8): skills need a claude installation at confirm, so task a is given one.
+      { taskId: "a", agent: CLAUDE, loop: withSkills("a", { names: ["x"] }) },
       { taskId: "b", loop: loop("b") },
       { taskId: "c", agent: CLAUDE, loop: withSkills("c", { profile: "p" }) },
     ], fake.o);

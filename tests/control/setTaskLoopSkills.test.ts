@@ -12,6 +12,7 @@ import { WebControlService } from "../../src/control/webService.js";
 import { readControlGroup } from "../../src/panel/controlViews.js";
 import type { SyncskillOptions } from "../../src/skills/syncskill.js";
 import { change, errorOf, loop, snapshotOf, workAllocation, workBody, writeWork, type Change, type Fixture } from "./fixtures/taskLoop.js";
+import { FIXTURE_OTHER_AGENT_ID } from "./fixtures/agents.js";
 import { webFixture } from "./fixtures/web.js";
 
 /**
@@ -42,7 +43,9 @@ async function fakeSyncskill(mode: string) {
   return { o, calls };
 }
 async function fixture(tasks: Parameters<typeof webFixture>[1] = [{ taskId: "a", loop: loop("a") }, { taskId: "c" }]): Promise<Fixture> {
-  const h = await webFixture(undefined, tasks);
+  // Human ruling 2026-10-03 (session 9d95e6c8): skills on a confirmed task need a claude installation, so every task here
+  // is frozen with the fixture's claude one unless it names its own.
+  const h = await webFixture(undefined, tasks.map(task => ({ agent: { agent: FIXTURE_OTHER_AGENT_ID }, ...task })));
   cleanups.push(() => h.dispose());
   return h;
 }
@@ -122,6 +125,34 @@ describe("set-task-loop changes a draft task's skill set (C13)", () => {
     expect(await serviceOf(h, missing.o).setTaskLoop(withSkills(h, "a", { base: 2 }, { profile: "q" }))).toMatchObject({ result: { kind: "task-loop-set", loopVersion: 3 } });
     expect(effective(h).loop!.skills).toEqual({ profile: "q" });
     expect(missing.calls()).toEqual([]);
+  });
+});
+
+/**
+ * Human ruling 2026-10-03 (session 9d95e6c8): skills on a confirmed task need its frozen installation to be claude, by
+ * ccloop's table view, so set-task-loop refuses them there rather than leave a run ccloop refuses at start. A draft task
+ * has no frozen installation yet: confirm checks it.
+ */
+describe("set-task-loop refuses skills on an installation that is not claude", () => {
+  const CODEX = { agent: "codex" };
+  it("refuses skills added to a confirmed codex task, leaving the task and its snapshot as they were", async () => {
+    const h = await fixture([{ taskId: "a", agent: CODEX, loop: loop("a") }]);
+    const answer = await serviceOf(h).confirm(h.command("confirm", await h.confirmPayload()));
+    if ("error" in answer) throw new Error(JSON.stringify(answer));
+    const before = readBudgetProposal(h.store, "g").executionSnapshotHash;
+    const ok = await fakeSyncskill("profile-ok");
+    expect(errorOf(await serviceOf(h, ok.o).setTaskLoop(withSkills(h, "a", {}, { names: ["x"] }))))
+      .toMatchObject({ code: "skills-unsupported-agent", message: "skills-unsupported-agent:a:codex:codex" });
+    expect(readBudgetProposal(h.store, "g").executionSnapshotHash).toBe(before);
+    expect(effective(h).loop!.skills).toBeUndefined();
+  });
+
+  it("accepts skills on a draft codex task, which confirm then refuses", async () => {
+    const h = await fixture([{ taskId: "a", agent: CODEX, loop: loop("a") }]);
+    const ok = await fakeSyncskill("profile-ok");
+    expect(await serviceOf(h, ok.o).setTaskLoop(withSkills(h, "a", {}, { names: ["x"] }))).toMatchObject({ result: { kind: "task-loop-set" } });
+    expect(errorOf(await serviceOf(h, ok.o).confirm(h.command("confirm", await h.confirmPayload()))))
+      .toMatchObject({ code: "skills-unsupported-agent", message: "skills-unsupported-agent:a:codex:codex" });
   });
 });
 
