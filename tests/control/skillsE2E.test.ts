@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { readCanonicalRecord } from "../../src/control/snapshot.js";
+import { controlWorkspaceRoots, removeSkillsSnapshot, skillsPathOf, sourceDirOf } from "../../src/control/workspace.js";
 import type { ControlRuntime } from "../../src/panel/controlAssembly.js";
 import { ccloopWorlds, g, noBlocked, realBinary, startGroup, until, workRuns } from "./fixtures/ccloopWorld.js";
 
@@ -70,5 +71,64 @@ describe("a run with skills against real ccloop (syncskill integration spec §10
       expect(readdirSync(`${runtime.store.stateDir}.workspaces`)).toEqual([]);
       expect(await runtime.shutdown()).toBe(true);
     } finally { await w.teardown(); }
+  });
+});
+
+/**
+ * Final review I1, controller ruling (b): with the confirm-time agent check dropped (ruling F1), a task whose frozen agent
+ * is a codex installation and which froze skills is accepted by Orca and refused by ccloop at run start. This pins where
+ * that path ends against the real ccloop build: a named block at B (`accept-refused:2:skills-unsupported-agent`), not a
+ * run without its skills; no codex (or claude) call; nothing persisted by ccloop for the run (acceptStart refuses before
+ * writing its accepted record); and the run's `skills-<runId>` still there -- it goes only with the workspace (restartRun
+ * or step E), never on a block. Honest claim: fake codex and fake syncskill; the refusal itself is ccloop's.
+ */
+describe("a codex run with skills is blocked by ccloop's accept refusal (final review I1)", { timeout: 300_000 }, () => {
+  relocateHome("orca-skills-e2e-codex-home-");
+  beforeEach((ctx) => { if (!realBinary) ctx.skip(); });
+
+  it("blocks at B as accept-refused:2:skills-unsupported-agent, with no agent call, no accepted record, and the snapshot kept", async () => {
+    const fakeDir = await realpath(await mkdtemp(join(tmpdir(), "orca-skills-e2e-codex-syncskill-")));
+    extra.push(fakeDir);
+    const bin = join(fakeDir, "syncskill");
+    await writeFile(bin, `#!/bin/sh\nexec '${process.execPath}' '${FAKE_SYNCSKILL}' "$@"\n`, { mode: 0o755 });
+    const log = join(fakeDir, "calls.jsonl");
+    const w = await world([{ taskId: "a", targetPaths: ["shared.txt", "answer.txt"], agent: { agent: "codex" }, loop: loopWithSkills }],
+      { a: { files: { "shared.txt": "A\n" } } },
+      { env: { ORCA_SYNCSKILL_BIN: bin, FAKE_SYNCSKILL_MODE: "inject-ok", FAKE_SYNCSKILL_LOG: log } });
+    const runtime = await w.boot();
+    const roots = controlWorkspaceRoots(runtime.store.stateDir);
+    let runId: string | undefined;
+    try {
+      await startGroup(runtime, w.repoId);
+      runtime.startPump(50);
+      // Stops at the first terminal-looking state either way, so a run that is not refused fails here by its state.
+      await until(() => workRuns(runtime).some((run) => run.body.state === "blocked" || workStatus(runtime, "a") === "done"), 240_000, "the run to block");
+      const [run] = workRuns(runtime);
+      runId = run!.runId;
+      const drive = run!.body.drive;
+      expect({ state: run!.body.state, blockedAt: drive.blockedAt, blockedReason: drive.blockedReason })
+        .toEqual({ state: "blocked", blockedAt: "B", blockedReason: "accept-refused:2:skills-unsupported-agent" });
+      // The envelope asked for the skills: A2 injected (one syncskill call) and handed ccloop the snapshot.
+      const envelope = JSON.parse(readCanonicalRecord(runtime.store, drive.envelopeHash));
+      const dir = skillsPathOf(roots, runId);
+      expect(drive.skills.dir).toBe(dir);
+      expect(envelope.work.skillPluginDir).toBe(dir);
+      expect(readFileSync(log, "utf8").split("\n").filter((line) => line !== "")).toHaveLength(1);
+      // No agent ran.
+      expect(w.argv("codex")).toEqual([]);
+      expect(w.argv("claude")).toEqual([]);
+      expect(w.calls()).toEqual([]);
+      // ccloop persisted nothing for the run: no accepted record under its sourceDir.
+      expect(envelope.work.sourceDir).toBe(sourceDirOf(roots, runId));
+      expect(existsSync(join(envelope.work.sourceDir, "control", "accepted.json"))).toBe(false);
+      // The snapshot is still there, read-only, beside the run's workspace.
+      expect(existsSync(join(dir, "skills", "alpha", "SKILL.md"))).toBe(true);
+      expect(readdirSync(roots.workspacesRoot)).toContain(`skills-${runId}`);
+      expect(await runtime.shutdown()).toBe(true);
+    } finally {
+      await w.teardown();
+      // The read-only snapshot would otherwise defeat removeRoots' recursive rm.
+      if (runId !== undefined) await removeSkillsSnapshot(w.repo, roots, runId);
+    }
   });
 });
