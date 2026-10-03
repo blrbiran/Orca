@@ -16,6 +16,7 @@ import { BudgetEditor } from "./BudgetEditor.js";
 import { DependencyGraph } from "./DependencyGraph.js";
 import { EvidenceLink } from "./EvidenceLink.js";
 import { GitScheme } from "./GitScheme.js";
+import { SkillsGiven } from "./SkillsGiven.js";
 import type {
   AgentSelectionPreviewV1, AgentsViewV1, ControlConfigV1, ContinuationSelectionV1, GroupViewV1, OperatorPreferencesV1, RepositoryWorkspaceV1,
   RunViewV1,
@@ -205,6 +206,8 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       </table>
 
       <GitScheme view={view} workspace={props.workspace} />
+
+      <SkillsGiven view={view} />
 
       {view.handoffRequests.length > 0 && (
         <>

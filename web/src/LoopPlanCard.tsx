@@ -8,6 +8,7 @@
  * plan version (panel i18n spec §3.1).
  */
 import type { JSX } from "react";
+import type { TFunction } from "i18next";
 import { Trans, useTranslation } from "react-i18next";
 import type { ControlAction } from "./controlApi.js";
 import i18n, { enumText } from "./i18n.js";
@@ -121,6 +122,16 @@ function payloadOf(draft: LoopDraft, skills: LoopPlanViewV1["skills"]): { payloa
   } };
 }
 
+/** Syncskill integration spec §4.6: the declared skill set, and for a profile the names it froze to once the group is confirmed. */
+function skillSetText(plan: LoopPlanViewV1, t: TFunction): string {
+  const skills = plan.skills;
+  if (skills === undefined) return t("loopPlan.skillsNone");
+  if ("names" in skills) return t("loopPlan.skillsNames", { names: skills.names.join(", ") });
+  return plan.frozenSkillNames === undefined
+    ? t("loopPlan.skillsProfile", { profile: skills.profile })
+    : t("loopPlan.skillsProfileFrozen", { profile: skills.profile, names: plan.frozenSkillNames.join(", ") });
+}
+
 /** Spec §4.2: what the submit does to the group's reserve, and the shortfall that disables it (display only). */
 export function consequenceOf(view: GroupViewV1, current: Amount, work: { tokens: number; activeMs: number; attempts: number }): { text: string; shortfall: string | null } {
   const reserve = view.ledger.explicitUnallocatedReserve;
@@ -232,7 +243,7 @@ export function LoopPlanCard(props: LoopPlanCardProps): JSX.Element | null {
       </details>
       {work !== undefined && <p>{t("loopPlan.budgetLine", { tokens: work.amount.tokens, activeMs: work.amount.activeMs, attempts: work.amount.attempts })}</p>}
       <p><Trans i18nKey={gitLineKey(props.workspaceMode)} values={{ groupId: view.summary.groupId }} components={{ code: <code /> }} /></p>
-      <p>{t("loopPlan.skills")}</p>
+      <p>{skillSetText(plan, t)}</p>
       {work !== undefined && <LoopPlanEditor {...props} plan={plan} current={work.amount} />}
     </section>
   );

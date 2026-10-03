@@ -1058,6 +1058,8 @@ export const loopPlanViewSchema = z
     hasDiscipline: z.boolean(),
     // Syncskill integration spec §10.4: the recipe's skill set, absent when it has none; the card sends it back unchanged.
     skills: loopSkillsSchema.optional(),
+    // Syncskill integration spec §4.6: the names the task's skill set froze to at confirm; absent before that.
+    frozenSkillNames: z.array(nonemptyString).min(1).optional(),
   })
   .strict();
 
@@ -1130,6 +1132,19 @@ export const runViewSchema = z
       .object({ workspaceMode: workspaceModeSchema, base: commitShaSchema.nullable(), landedCommit: commitShaSchema.nullable() })
       .strict()
       .nullable()
+      .optional(),
+    // Syncskill integration spec §4.6: the skills the run was given (syncskill's lock; the snapshot's local path is not shown).
+    skills: z
+      .object({
+        profile: nonemptyString.nullable(),
+        lock: z.array(z.object({
+          name: z.string(),
+          source: z.object({ name: z.string(), type: z.string(), url: z.string(), branch: z.string().optional() }).strict().nullable(),
+          resolved_commit: z.string().nullable(),
+          content_md5: z.string(),
+        }).strict()),
+      })
+      .strict()
       .optional(),
   })
   .strict();

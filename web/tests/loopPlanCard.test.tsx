@@ -66,7 +66,7 @@ describe("the loop plan card (spec §4.1)", () => {
     const text = detail([item()]).container.textContent ?? "";
     expect(text).toContain("Budget: 3000000 tokens · active time 14400000 ms · max attempts 3");
     expect(text).toContain("Git workspace: its own worktree, merged back into orca/g; pushing is done by a person");
-    expect(text).toContain("Skill set: not supported yet");
+    expect(text).toContain("Skill set: none");
   });
 
   it("says chosen by hand and changed when they hold", () => {
@@ -90,7 +90,7 @@ describe("the loop plan card (spec §4.1)", () => {
     const noWork = view([item()]);
     const { container } = render(<TaskDetail view={{ ...noWork, allocations: [] }} item={item()} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
     expect(container.textContent).not.toContain("Budget:");
-    expect(container.textContent).toContain("Skill set: not supported yet");
+    expect(container.textContent).toContain("Skill set: none");
     cleanup();
     const { objective: _none, ...bare } = item({ loopPlan: null });
     const text = detail([bare]).container.textContent ?? "";

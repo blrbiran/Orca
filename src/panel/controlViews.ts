@@ -525,6 +525,7 @@ function taskPlanView(
   task: ReturnType<typeof readArchivedPlan>["plan"]["tasks"][number],
   body: { loopVersion?: number; planChanged?: true },
   importedContractHash: string | undefined,
+  frozenSkillNames: string[] | undefined,
 ): { loopPlan: WorkItemViewV1["loopPlan"]; objective: WorkItemViewV1["objective"] } {
   const contract = parseStored(taskContractSchema, task.originalContractCanonicalJson, `original-contract-invalid:${task.taskId}`);
   const objective = { goal: contract.objective.goal, successCondition: contract.objective.successCondition };
@@ -544,6 +545,8 @@ function taskPlanView(
       inputs: task.loop.inputs, maxFiles: contract.safetyPolicy.maxFilesTouched, hasDiscipline: plan.discipline !== null,
       // Syncskill integration spec §10.4: omitted when the recipe has none, so a view without skills keeps its bytes.
       ...(task.loop.skills === undefined ? {} : { skills: task.loop.skills }),
+      // §4.6: once the group is confirmed, the names the task's skill set froze to (a profile's members at that moment).
+      ...(frozenSkillNames === undefined ? {} : { frozenSkillNames }),
     },
   };
 }
@@ -603,7 +606,7 @@ function workViews(
       lineageRunIds: sortedUnique(lineage),
       labels: effective.labels, labelsProvenance: effective.provenance, labelsVersion: labelState.version,
       progress: currentProgress(runs, body.currentRunId ?? null),
-      ...taskPlanView(task, body, imported.tasks.find(entry => entry.taskId === task.taskId)?.originalContractHash),
+      ...taskPlanView(task, body, imported.tasks.find(entry => entry.taskId === task.taskId)?.originalContractHash, snapshot?.skills?.find(entry => entry.taskId === task.taskId)?.names),
     };
   });
 }
@@ -748,6 +751,8 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
       continuable: continuableRun(store, run),
       evidenceIds: artifactIdsForRun(store, runId),
       git: run.drive === undefined ? null : { workspaceMode: run.drive.workspaceMode, base: run.drive.base, landedCommit: run.drive.landedCommit },
+      // §4.6: the lock A2 recorded. `dir` is a local path of this machine and stays out of the view; omitted for a run without skills.
+      ...(run.drive?.skills == null ? {} : { skills: { profile: run.drive.skills.profile, lock: run.drive.skills.lock } }),
     };
   });
 }

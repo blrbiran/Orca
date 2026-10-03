@@ -205,6 +205,9 @@ export type WorkItemViewV1 = {
   loopPlan?: LoopPlanViewV1 | null;
   objective?: { goal: string; successCondition: string };
 };
+export type RunSkillLockV1 = {
+  name: string; source: { name: string; type: string; url: string; branch?: string } | null; resolved_commit: string | null; content_md5: string;
+};
 export type RunViewV1 = {
   runId: string;
   taskId: string | null;
@@ -225,6 +228,8 @@ export type RunViewV1 = {
   evidenceIds: string[];
   /** Board spec 2026-10-03 D4: optional here so literal fixtures need no edit; the server always sends it. */
   git?: { workspaceMode: "worktree" | "clone"; base: string | null; landedCommit: string | null } | null;
+  /** Syncskill integration spec §4.6: the skills the run was given (syncskill's lock); absent for a run without skills. */
+  skills?: { profile: string | null; lock: RunSkillLockV1[] };
 };
 export type BudgetEstimateV1 = {
   schema: "budget-estimate-v1";
@@ -487,6 +492,8 @@ export type LoopPlanViewV1 = {
   amended: boolean; loopVersion: number; inputs: LoopInputsV1; maxFiles: number; hasDiscipline: boolean;
   /** Absent when the recipe has none. */
   skills?: LoopSkillsV1;
+  /** Syncskill integration spec §4.6: the names the skill set froze to at confirm; absent before that. */
+  frozenSkillNames?: string[];
 };
 /** Loop plans spec §5.2: change a loop task's plan, inputs and work budget (sessions is carried over). */
 export type SetTaskLoopPayloadV1 = {

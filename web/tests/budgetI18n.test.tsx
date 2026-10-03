@@ -119,7 +119,7 @@ describe("the budget editor and the loop card in Chinese", () => {
     const invalid = render(<LoopPlanCard view={view} item={a} drafts={{ [loopDraftKey("g", "a")]: draft("x") }} onDraft={vi.fn()} onCommand={vi.fn()} />).container.textContent ?? "";
     for (const expected of [
       "修 bug（先红后绿） · v2 · 按标签 `bug` 选择", "检查命令（1 条）", "预算：3000000 token · 活跃时间 14400000 ms · 最多尝试次数 3",
-      "git 工作区：独立 worktree，合回 orca/g 分支，push 由人做", "skill 集：暂不支持", "你开始这份草稿后做法已变（v0 → v1）",
+      "git 工作区：独立 worktree，合回 orca/g 分支，push 由人做", "skill 集：无", "你开始这份草稿后做法已变（v0 → v1）",
       "做法", "目标", "只改（每行一个路径）", "最多改几个文件（留空按默认）", "token 预算", "预算要填正整数", "丢弃做法草稿",
     ]) expect(invalid, expected).toContain(expected);
     expect(screen.getByRole("region", { name: "做法 a" })).toBeTruthy();
