@@ -3,7 +3,7 @@ import { readFile, mkdtemp, mkdir, realpath, rm, writeFile } from "node:fs/promi
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createCcloopExecutionPort } from "../../src/control/ccloopPort.js";
 import { readArtifact } from "../../src/control/archive.js";
 import { createGroup, hashPayload, putWork } from "../../src/control/commands.js";
@@ -30,9 +30,15 @@ const sleep = (ms:number)=>new Promise(resolve=>setTimeout(resolve,ms));
 
 async function git(repo:string,...args:string[]) {return (await exec("git",["-C",repo,...args],{env:{...process.env,GIT_AUTHOR_NAME:"Control Test",GIT_AUTHOR_EMAIL:"control@example.invalid",GIT_COMMITTER_NAME:"Control Test",GIT_COMMITTER_EMAIL:"control@example.invalid"}})).stdout.trim();}
 
-describe.skipIf(!binary || !agentsTablePath)("real ccloop protocol",()=>{
+// Skipped at run time, not with describe.skipIf: a file whose every test is skipped at collection never runs its
+// file-level hooks, so tests/setup's afterAll never removes the temp root it already created (one directory left per
+// suite run, measured by scripts/check-tmp-leak.mjs; tests/setup/scopeTmpdir.ts erratum).
+const configured = Boolean(binary && agentsTablePath);
+describe("real ccloop protocol",()=>{
+ beforeEach(ctx=>{if(!configured)ctx.skip();});
  let root:string,target:string,runs:string,store:ControlStore,service:ControlService,configHash:string,agent:AgentSelection;
  beforeAll(async()=>{
+  if(!configured)return;
   root=await realpath(await mkdtemp(join(tmpdir(),"orca-real-ccloop-")));target=join(root,"target");runs=join(root,"runs");
   await mkdir(target,{mode:0o700});await mkdir(runs,{mode:0o700});await git(target,"init","-q");
   await writeFile(join(target,"answer.txt"),"0\n");await writeFile(join(target,"check.cjs"),'if(require("fs").readFileSync("answer.txt","utf8")!=="42\\n")process.exit(1);\n');
