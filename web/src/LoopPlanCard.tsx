@@ -139,6 +139,11 @@ export interface LoopPlanCardProps {
   drafts: Record<string, string>;
   onDraft: (key: string, text: string) => void;
   onCommand: (action: ControlAction) => void;
+  /**
+   * Board spec 2026-10-03 D7: the repository's workspace mode, for the git line. null: the page has not read it yet.
+   * Absent: a caller that never reads it (older criteria) -- the line names the repository default, a worktree.
+   */
+  workspaceMode?: "worktree" | "clone" | null;
 }
 
 function LoopPlanEditor(props: LoopPlanCardProps & { plan: LoopPlanViewV1; current: Amount }): JSX.Element {
@@ -185,6 +190,11 @@ function LoopPlanEditor(props: LoopPlanCardProps & { plan: LoopPlanViewV1; curre
   );
 }
 
+function gitLineKey(mode: LoopPlanCardProps["workspaceMode"]): "loopPlan.git" | "loopPlan.gitClone" | "loopPlan.gitModeUnread" {
+  if (mode === null) return "loopPlan.gitModeUnread";
+  return mode === "clone" ? "loopPlan.gitClone" : "loopPlan.git";
+}
+
 export function LoopPlanCard(props: LoopPlanCardProps): JSX.Element | null {
   const { t } = useTranslation();
   const { view, item } = props;
@@ -216,7 +226,7 @@ export function LoopPlanCard(props: LoopPlanCardProps): JSX.Element | null {
         <ul>{plan.inputs.checks.map((check, index) => <li key={index}><code>{check}</code></li>)}</ul>
       </details>
       {work !== undefined && <p>{t("loopPlan.budgetLine", { tokens: work.amount.tokens, activeMs: work.amount.activeMs, attempts: work.amount.attempts })}</p>}
-      <p><Trans i18nKey="loopPlan.git" values={{ groupId: view.summary.groupId }} components={{ code: <code /> }} /></p>
+      <p><Trans i18nKey={gitLineKey(props.workspaceMode)} values={{ groupId: view.summary.groupId }} components={{ code: <code /> }} /></p>
       <p>{t("loopPlan.skills")}</p>
       {work !== undefined && <LoopPlanEditor {...props} plan={plan} current={work.amount} />}
     </section>

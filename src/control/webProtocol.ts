@@ -734,6 +734,8 @@ export const shutdownPayloadSchema = z
   .object({ shutdownAcceptedAt: canonicalTimestampSchema, shutdownDeadlineAt: canonicalTimestampSchema })
   .strict();
 export const workspaceModeSchema = z.enum(["worktree", "clone"]);
+/** A git commit id, SHA-1 or SHA-256 (the drive record's own pattern). */
+export const commitShaSchema = z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/);
 export const setWorkspaceModePayloadSchema = z.object({ workspaceMode: workspaceModeSchema }).strict();
 // Controller ruling W6-8: the envelope's expectedRevision (checked against agent_preferences.revision) is the only one.
 export const setAgentPreferencesPayloadSchema = z.object({ preferences: operatorPreferencesSchema }).strict();
@@ -1109,6 +1111,14 @@ export const runViewSchema = z
     blockedReason: nonemptyString.nullable(),
     continuable: z.boolean(),
     evidenceIds: sortedIdArraySchema,
+    // Board spec 2026-10-03 D4: the git facts the run's drive record holds -- the workspace mode it ran in, the work
+    // branch commit it started from, the commit that landed it. null for a run without a drive record. Optional on the
+    // wire so older fixtures still parse; the server always gives it.
+    git: z
+      .object({ workspaceMode: workspaceModeSchema, base: commitShaSchema.nullable(), landedCommit: commitShaSchema.nullable() })
+      .strict()
+      .nullable()
+      .optional(),
   })
   .strict();
 

@@ -478,3 +478,12 @@ The text above stays as written; where it differs from this section, this sectio
 evidence string no longer hold for any version: an approving verifier is never overridden by a token, and a check's
 output containing one does not reject either. v1's agent plans keep their tokens (versions are not edited), which now
 reach the verifier only as bare conditions in its prompt; no stored task uses v1 (real `~/.orca`: 0 loop recipes).
+
+## 15. The card's git line follows the workspace mode (2026-10-03, session `6a4dd7f3`)
+
+The text above stays as written; where it differs from this section, this section wins. §4's fixed line "git 工作区：独立
+worktree，合回 `orca/<组>` 分支，push 由人做" (D1) was false for a repository set to `clone` (execution driver spec §3.2).
+Board spec `docs/superpowers/specs/2026-10-03-board-graph-and-git-design.md` D7: the card now takes the repository's
+workspace mode the page already reads -- worktree keeps the old line word for word, clone has its own, and a page that
+has not read the mode (or read another repository's) says so. A caller passing no mode keeps the old line (the default
+mode). The skill-set line is unchanged.

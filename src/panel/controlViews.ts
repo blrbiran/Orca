@@ -745,6 +745,7 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
       blockedReason: run.drive?.blockedReason ?? null,
       continuable: continuableRun(store, run),
       evidenceIds: artifactIdsForRun(store, runId),
+      git: run.drive === undefined ? null : { workspaceMode: run.drive.workspaceMode, base: run.drive.base, landedCommit: run.drive.landedCommit },
     };
   });
 }

@@ -13,9 +13,12 @@ import { useTranslation } from "react-i18next";
 import type { ControlAction } from "./controlApi.js";
 import { AgentSelectionEditor, selectionsHashFor } from "./AgentSelectionEditor.js";
 import { BudgetEditor } from "./BudgetEditor.js";
+import { DependencyGraph } from "./DependencyGraph.js";
 import { EvidenceLink } from "./EvidenceLink.js";
+import { GitScheme } from "./GitScheme.js";
 import type {
-  AgentSelectionPreviewV1, AgentsViewV1, ControlConfigV1, ContinuationSelectionV1, GroupViewV1, OperatorPreferencesV1, RunViewV1,
+  AgentSelectionPreviewV1, AgentsViewV1, ControlConfigV1, ContinuationSelectionV1, GroupViewV1, OperatorPreferencesV1, RepositoryWorkspaceV1,
+  RunViewV1,
 } from "./controlTypes.js";
 import type { UncertainCommand } from "./controlState.js";
 import { LabelChips, TaskDetail, progressText } from "./TaskDetail.js";
@@ -57,6 +60,8 @@ export interface ControlGroupViewProps {
   agentsFailure?: string | null;
   /** Ruling review R17: what the page's retry of the agent reads is doing, if anything. */
   retryNotice?: string | null;
+  /** Board spec 2026-10-03 B3, D7: the page's read of the repository's workspace mode; absent on pages that never read it. */
+  workspace?: RepositoryWorkspaceV1 | null;
 }
 
 export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
@@ -81,6 +86,8 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
   const toggleFilter = (label: string): void =>
     setLabelFilter((current) => (current.includes(label) ? current.filter((other) => other !== label) : [...current, label]));
   const openItem = view.workItems.find((item) => item.taskId === openTask);
+  const workspaceMode = props.workspace === undefined ? undefined
+    : props.workspace !== null && props.workspace.repoId === view.plan.repoId ? props.workspace.workspaceMode : null;
 
   return (
     <section aria-label={t("control.group.region", { groupId })}>
@@ -115,6 +122,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       )}
 
       <h3>{t("control.group.workItems")}</h3>
+      <DependencyGraph items={view.workItems} openTask={openTask} onOpen={(taskId) => setOpenTask(openTask === taskId ? null : taskId)} />
       {allLabels.length > 0 && (
         <fieldset aria-label={t("control.group.filterRegion")}>
           <legend>{t("control.group.filterLegend")}</legend>
@@ -152,7 +160,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
           ))}
         </tbody>
       </table>
-      {openItem !== undefined && <TaskDetail key={openItem.taskId} view={view} item={openItem} drafts={drafts} onDraft={onDraft} onCommand={onCommand} />}
+      {openItem !== undefined && <TaskDetail key={openItem.taskId} view={view} item={openItem} drafts={drafts} onDraft={onDraft} onCommand={onCommand} workspaceMode={workspaceMode} />}
 
       <h3>{t("control.group.runs")}</h3>
       <table>
@@ -195,6 +203,8 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
           ))}
         </tbody>
       </table>
+
+      <GitScheme view={view} workspace={props.workspace} />
 
       {view.handoffRequests.length > 0 && (
         <>

@@ -223,6 +223,8 @@ export type RunViewV1 = {
   blockedReason?: string | null;
   continuable?: boolean;
   evidenceIds: string[];
+  /** Board spec 2026-10-03 D4: optional here so literal fixtures need no edit; the server always sends it. */
+  git?: { workspaceMode: "worktree" | "clone"; base: string | null; landedCommit: string | null } | null;
 };
 export type BudgetEstimateV1 = {
   schema: "budget-estimate-v1";

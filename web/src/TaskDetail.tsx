@@ -113,6 +113,8 @@ export interface TaskDetailProps {
   drafts: Record<string, string>;
   onDraft: (key: string, text: string) => void;
   onCommand: (action: ControlAction) => void;
+  /** Board spec 2026-10-03 D7: the repository's workspace mode for the loop plan card's git line. */
+  workspaceMode?: "worktree" | "clone" | null;
 }
 
 export function TaskDetail(props: TaskDetailProps): JSX.Element {
@@ -172,7 +174,7 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
         {t("control.task.progress", { progress: progressText(item.progress) })}
         {item.progress?.lastTransitionAt ? t("control.task.lastTransition", { at: item.progress.lastTransitionAt }) : ""}
       </p>
-      <LoopPlanCard view={view} item={item} drafts={drafts} onDraft={onDraft} onCommand={onCommand} />
+      <LoopPlanCard view={view} item={item} drafts={drafts} onDraft={onDraft} onCommand={onCommand} workspaceMode={props.workspaceMode} />
       <h5>{t("control.task.runsOf", { taskId: item.taskId })}</h5>
       {runs.length === 0 ? <p>{t("common.none")}</p> : (
         <ul>

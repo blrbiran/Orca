@@ -206,3 +206,18 @@ nav[aria-label="Control groups"] button[aria-current="true"] { background: var(-
   text-align: left;
   width: 100%;
 }
+
+/* Board spec 2026-10-03 D2: the dependency graph. The status word is in each node's text; the stroke only repeats it. */
+.dep-scroll { overflow-x: auto; max-width: 100%; }
+.dep-node { cursor: pointer; }
+.dep-node rect { fill: var(--card); stroke: var(--border-strong); stroke-width: 1.5; }
+.dep-node text { fill: var(--text-strong); font-size: var(--text-sm); font-family: var(--mono); }
+.dep-node text.dep-status { fill: var(--muted); font-family: var(--font); font-size: var(--text-xs); }
+.dep-done rect { stroke: var(--ok); }
+.dep-blocked rect { stroke: var(--danger); }
+.dep-active rect { stroke: var(--info); }
+.dep-node[aria-current="true"] rect { fill: var(--accent-subtle); }
+.dep-node:focus-visible { outline: none; }
+.dep-node:focus-visible rect { stroke: var(--accent); stroke-width: 3; }
+.dep-edge { fill: none; stroke: var(--muted); stroke-width: 1.5; }
+.dep-arrow { fill: var(--muted); }

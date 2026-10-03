@@ -160,6 +160,7 @@ export function ControlPanel(props: ControlPanelProps): JSX.Element {
           onRereadPreview={props.onRereadPreview && (() => props.onRereadPreview?.(view.summary.groupId))}
           agentsFailure={props.agentsFailure}
           retryNotice={props.retryNotice}
+          workspace={props.workspace}
         />
       )}
       {view === undefined && selected !== null && <p role="status">{t("control.reading", { groupId: selected })}</p>}
