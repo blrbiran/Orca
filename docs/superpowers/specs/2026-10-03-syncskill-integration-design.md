@@ -373,3 +373,47 @@ session `08b1007d`, 1-minute load 4.1. Result: 214–293 ms per inject (first ru
 `--json --no-refresh profile ls`: 206–210 ms (three runs). The cost is one short-lived `node` process per run at A2 (and
 one per changed profile at confirm / set-task-loop); nothing stays alive while the run executes. Larger skill sets were
 not measured.
+
+## 12. Follow-up corrections (session `9d95e6c8`, 2026-10-03) — §11 kept verbatim above
+
+The human reviewed §11's controller rulings and asked for two of them to be improved, and for the paid run H5 had put
+off. Commits, by subject: `fix(loop-plans): name what is wrong with a skills declaration …`,
+`feat(skills): refuse skills on a non-claude installation at confirm and set-task-loop …`,
+`test(live): add a --skill mode to the panel HTTP acceptance …`, `fix(live): count the Skill tool calls …`. Rulings and
+mutations are in `.superpowers/sdd/2026-10-03-syncskill-integration/progress.md`, section "Follow-up (session 9d95e6c8)".
+
+### 12.1 The agent kind is checked at confirm and set-task-loop — corrects §11.1 and §11.3's last bullet
+
+- ✗ §11.1 "Orca neither reads the table … Orca therefore has no agent-kind check". Orca does not read the table file,
+  but ccloop's table view (`listAgents`, capabilities protocol 3) answers every installation id **with its kind**. Confirm
+  asks it once, only when some task declares skills, beside the profile lookups before the transaction; set-task-loop
+  asks it when a confirmed task's payload declares skills (a draft task has no frozen installation yet; confirm checks
+  it). Inside the transaction a task with skills whose frozen installation is not `claude` is refused
+  `skills-unsupported-agent:<task>:<installation>:<kind|not-in-table>` (durable 422, now an Orca code). A table-view
+  failure refuses with its own error. A kind that was never asked because the read before the transaction saw a draft
+  is the state moving: `proposal-version-conflict`.
+- ccloop's `acceptStart` refusal stays, for a table changed after confirm. §11.1's "real cost" now applies only to that
+  case; H6 (codex skill support) still removes it.
+- `tests/control/skillsE2E.test.ts`'s codex variant is rewritten to pin the refusal at confirm against real ccloop.
+
+### 12.2 A wrong skills shape names its fault — corrects §11.3's C2 bullet
+
+- ✗ "refused by the plan-file schema (`malformed: tasks.N.loop.skills: Invalid input`)". Measured before the change, zod's
+  union gave three different messages, one misleading (both keys ⇒ "Unrecognized key(s) in object: 'names'"). The skills
+  schema now parses through the same union and refuses with one issue, like the plan file's labels:
+  `malformed:tasks.N.loop.skills: skills-shape:<detail>`, detail one of `both-profile-and-names`,
+  `neither-profile-nor-names`, `unknown-key`, `empty-names`, `names-not-strings`, `profile-name`, `not-an-object`.
+  Name-rule violations still answer `loop-plan-invalid:<task>:skills-shape`.
+
+### 12.3 One paid run under real claude (H5 lifted by the human, cap $2)
+
+`scripts/live-panel-http-acceptance.ts --skill`: a standard loop task declaring one skill whose SKILL.md alone holds a
+fresh random marker; the task's check compares only answer.txt's sha256 with the marker's. claude 2.1.288,
+`claude-opus-5-5`, `--max-budget-usd 0.6` per call; ccloop at the pinned `2b380ea`; syncskill at its main; 25/25 checks,
+exit 0, n = 1. claude reported $0.3157524 for the two calls (plan $0.134412, execute $0.1813404); ccloop reported
+106,008 tokens, equal to the group ledger. The execute call invoked the Skill tool on `orca-run-skills:orca-live-marker`
+once and wrote the marker; the plan call did not invoke it. Every call had the run's `--plugin-dir` and no
+`--disable-slash-commands`; the marker was in no call's argv, the plan or the confirmed view; `~/.syncskill`, `~/.orca` and
+`~/.claude/projects` were unchanged.
+Not covered: an agent verifier with skills (standard verifies by command, so there was no verify call); a profile
+declaration (names only); more than one task; a codex installation.
