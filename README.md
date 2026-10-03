@@ -2,415 +2,367 @@
 
 _Leave it to Orca — every idea, made real._
 
-Orca is subsystem C of the A′ decision-ledger design: a scheduler that runs a
-plan of tasks over ccloop (a sibling repository), reconciles their results
-against a shared work branch, and records every scheduling and reconciliation
-choice it makes into an append-only decision ledger (`.decisions/*.jsonl`).
+Orca turns an idea into tasks, runs those tasks with coding agents (Claude Code or Codex), and lands the results
+on a git branch for you to review. You drive it from a local Web panel.
 
-## `orca plan`
+This README is about that panel: what Orca is, how to install and configure it, how to start the panel, what each
+section does, and what is and is not safe. The command-line reference (`orca plan`, `orca correct`, checkpoints, the
+Tier 0 gate, `orca chain`, the control foundation) is in [docs/cli.md](docs/cli.md).
+
+- **People:** read top to bottom.
+- **Coding agents operating Orca:** [Configure](#configure) and [Safety](#safety-what-orca-will-and-will-not-do)
+  are the parts you must not skip.
+- **Agents developing Orca itself:** read [CLAUDE.md](CLAUDE.md) and [docs/handoff/handoff.md](docs/handoff/handoff.md)
+  first; this README does not replace them.
+
+## What Orca is
+
+Orca is the system layer. Some pieces are separate projects:
+
+| Piece | Role | Required? |
+|---|---|---|
+| **Orca** (this repository) | Decides which tasks run, in what order and what in parallel; keeps budgets; records its choices in a decision ledger (`.decisions/`); serves the Web panel. | yes |
+| **ccloop** | Runs **one** task as a loop with an agent CLI (`claude` or `codex`). A separate repository, pinned as a git dependency in `package.json` and installed by `npm install`. | yes |
+| **ccmem** | A memory layer. The panel can show it read-only. | optional |
+| **syncskill** | Supplies skills to tasks. | optional |
+
+The flow: an **idea** becomes a **requirement**, the requirement becomes a **group of tasks**, each task is **one
+ccloop run**, every finished task is merged onto the branch **`orca/<groupId>`**, and **you** decide whether that branch
+goes into `main`.
+
+## Requirements
+
+- macOS or Linux (`package.json` lists only `darwin` and `linux`).
+- Node.js 22.13.1 or newer (the control store uses Node's built-in SQLite).
+- git.
+- At least one agent CLI, installed and logged in: Claude Code (`claude`) and/or Codex (`codex`).
+
+## Install
+
+```sh
+git clone <orca-repository-url> <path-to-orca>
+cd <path-to-orca>
+npm install                       # also installs the pinned ccloop
+npm run build --workspace web     # builds the panel; without it the panel refuses to start (panel-dist-missing)
+```
+
+`package.json` declares no `bin`, so there is no global `orca` command. Run every command from the Orca checkout as
+
+```sh
+node_modules/.bin/tsx src/cli.ts <command> ...
+```
+
+(`npm run ledger -- <command> ...` is the same thing through npm.) Below, `orca <command>` is short for that.
+
+## Configure
+
+All configuration is environment variables and command-line flags. Nothing is read from a config file in the
+repository you work on.
+
+### 1. Agents table (needed to run any work)
+
+```sh
+export ORCA_AGENTS_TABLE="$HOME/.orca/agents.json"
+orca agents init     # asks ccloop which agents are installed and writes the table
+orca agents show     # validates the table and prints each installation's default model; exit 1 if any entry is refused
+```
+
+- `orca agents init` writes to `$ORCA_AGENTS_TABLE` (default `$HOME/.orca/agents.json`). A new directory is created
+  `0700` and a new file `0600`. An existing table is **never overwritten**: the new detection goes to
+  `<table>.draft.json` and the difference is printed.
+- The panel itself does not fall back to the default path: **`ORCA_AGENTS_TABLE` must be set when you start the
+  panel**, or it starts without an execution port (see below).
+
+### 2. ccloop
+
+| `ORCA_CCLOOP_BIN` | Meaning |
+|---|---|
+| unset | use the ccloop package `npm install` put in `node_modules` (the normal case) |
+| an absolute path | use that ccloop build's `dist/cli.js` instead |
+| empty string | no execution port: the panel serves reads only |
+
+The panel can start work only when it has **both** a ccloop and `ORCA_AGENTS_TABLE`. With either missing it still
+starts, still shows recovery and evidence, and refuses to start work with `control-port-unconfigured`.
+
+### 3. Estimator profile (needed to import a plan or open a requirement)
+
+Two flags go together, both or neither:
 
 ```
-orca plan <path> [--verbose]
+--estimator-profile <profileId> --estimate-mode strict|soft
 ```
 
-`orca plan` reads a plan file, computes every task's write set, builds the
-task graph, layers it, and prints a report — write sets, intersecting pairs,
-layers, and any up-front rejections. It touches nothing in the target
-repository beyond read-only git calls (`git rev-parse`, `git status
---porcelain`) — no branch is created, no commit is made, no ref moves.
+plus one or more `--profile <snapshot.json>` files that define that profile. Without them the panel starts, but
+cannot import a plan or turn a requirement into tasks.
 
-Rounds run through the panel (`orca panel`) and its control path; `orca plan`
-previews a round.
+A profile snapshot is a JSON file of schema `orca-execution-profile-snapshot-v2`. **No Orca command generates it
+today**; you write it by hand. A minimal one, the shape the live acceptance script
+`scripts/live-panel-http-acceptance.ts` uses:
 
-### The plan file's shape
-
-```jsonc
+```json
 {
-  "targetRepo": "/absolute/path/to/the/repo/orca/schedules",
-  "ccloopBin": "/absolute/path/to/ccloop/dist/cli.js",
-  "runsDir": "/absolute/path/outside/targetRepo/for/run/copies",
-  "workBranch": "orca/w/some-round",
+  "schema": "orca-execution-profile-snapshot-v2",
+  "profile": {
+    "profileId": "all",
+    "allowedWorkKinds": ["budget-estimate", "goal-review", "handoff", "task"],
+    "contextTokenizer": null,
+    "workMaxOutputTokens": 1000,
+    "capabilities": {
+      "usageObservation": "phase-end",
+      "budgetEnforcement": "soft",
+      "contextObservation": "unavailable",
+      "handoffControl": "durable",
+      "handoffExecution": "mechanical-in-run-v1",
+      "contextWindowTokens": null,
+      "requestBoundProof": null
+    },
+    "estimatorPreflight": {
+      "instructionVersion": "1",
+      "schemaVersion": "budget-estimate-v1",
+      "maxOutputTokens": 64000,
+      "framingTokenOverhead": 17,
+      "tokenizer": { "kind": "utf8-upper-bound", "numerator": 2, "denominator": 3, "proofRef": "proof" }
+    }
+  },
+  "resolved": {
+    "proofDocumentContentHashes": ["cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"],
+    "tokenizerArtifactHashes": [],
+    "secretValueHashes": []
+  }
+}
+```
+
+With `"contextWindowTokens": null` the budget estimate ends in state **`blocked-capability`**: no model is called to
+estimate, and each task starts from default budget allocations that you edit by hand in Task control. Use it with
+`--estimator-profile all --estimate-mode soft`. In `soft` mode an overrun is settled after the fact, not prevented.
+
+### 4. Repositories and where state lives
+
+- `--repo <key>=<path-to-repo>` registers a repository you want Orca to work on. Repeatable. **Projects are fixed at
+  launch**: to add one, restart the panel.
+- Control state (a SQLite store, plus run copies and workspaces beside it) lives under `$ORCA_CONTROL_DIR`
+  (default `$HOME/.orca/control/<repo key>`). With more than one `--repo` there is no single key to name it after,
+  so you must also pass `--control-state-dir <path>`.
+- Decisions and Metrics read the `.decisions/` ledgers of every `--repo`, plus every repository found under
+  `--root <dir>` if you pass it.
+- Reviews and corrections you record in the panel go to `$ORCA_CORRECTIONS_DIR` (default `$HOME/.orca`).
+- `--no-control` starts the panel without the task control plane (decisions, metrics, chains and memory only).
+
+### 5. Plans for Task control (optional)
+
+You can reach tasks two ways:
+
+1. **From an idea**, in the Requirements section. No plan file is needed.
+2. **From a plan file** you wrote, registered at launch with `--plan <planId>=<repoId>=<path-to-plan.json>`. The
+   panel only ever reads plans named on its command line.
+
+`<repoId>` is **not** the `<key>` you gave `--repo`; it is that key encoded as `<key>-<first 8 hex of sha256(key)>`.
+To compute it:
+
+```sh
+K=<key> node -e 'const k=process.env.K,r=k.replace(/[^a-zA-Z0-9._-]+/g,"-").replace(/^[^a-zA-Z0-9]+/,"").slice(0,60),h=require("crypto").createHash("sha256").update(k).digest("hex").slice(0,8);console.log(r?r+"-"+h:"repo-"+h)'
+```
+
+The plan file uses the schema described in [docs/cli.md](docs/cli.md#the-plan-files-shape), plus a top-level `goal`
+and `successConditions`. A task may give a `loop` block instead of a `contract` file:
+
+```json
+{
+  "targetRepo": "<path-to-repo>",
+  "ccloopBin": "<path-to-orca>/node_modules/ccloop/dist/cli.js",
+  "runsDir": "<a directory outside the repo>",
+  "workBranch": "orca/unused",
   "policy": "local-merge",
-  "ledgerMode": "in-repo",
+  "ledgerMode": "out-of-repo",
+  "goal": "What the whole group should achieve",
+  "successConditions": ["How you will know it did"],
   "tasks": [
-    { "taskId": "T1", "contract": "/absolute/path/to/T1-contract.json", "dependsOn": [] },
-    { "taskId": "T2", "contract": "/absolute/path/to/T2-contract.json", "dependsOn": ["T1"] }
+    {
+      "taskId": "a",
+      "dependsOn": [],
+      "loop": {
+        "plan": "standard",
+        "goal": "Create answer.txt containing 42",
+        "successCondition": "answer.txt holds exactly 42 and a newline",
+        "targetPaths": ["answer.txt"],
+        "checks": ["test \"$(cat answer.txt)\" = 42"]
+      }
+    }
   ]
 }
 ```
 
-- `targetRepo` — the repository the round lands work into. Orca checks this
-  repository's own worktree out onto `workBranch` and merges into it; it
-  never touches the base branch it cut `workBranch` from.
-- `ccloopBin` — ccloop's `dist/cli.js`, spawned as a subprocess (ccloop's
-  `package.json` is `private: true` and its `bin` is never an npm
-  dependency).
-- `runsDir` — outside `targetRepo`, where each task's throwaway clone and any
-  escalation files live.
-- `workBranch` — the branch every task's result is merged into (`W`). It is
-  cut from **the branch the target repository currently has checked out** —
-  Orca does not resolve the repository's true default branch, so running it
-  while sitting on `feature/x` cuts `W` from `feature/x`. It must not already
-  exist and must not be that base branch.
-- `ledgerMode` — `"in-repo"` is implemented. `"out-of-repo"` is accepted by
-  the schema (spec §8.5) but rejected at run time with exit 1, the same
-  treatment an unsupported `policy` value gets: recognised but not yet
-  built, refused loudly rather than silently downgraded.
-- `tasks[].contract` — every contract file must live outside `targetRepo`
-  (one of the up-front rejections below); Orca reads it as opaque,
-  unvalidated JSON and derives each task's write set from
-  `context.targetPaths ∪ safetyPolicy.allowlistPaths`.
+The import button uses the **first** `--repo` and the **first** `--plan` only.
 
-### The up-front rejections
+### 6. Optional integrations
 
-Seven are evaluated purely from the plan file's own content, before any git
-call is made against the target repository. (Spec §9.1(4) counts nine
-altogether; `unusable-task-id` was added by the final whole-branch review as
-a seventh plan-level check, so the count is now ten — recorded here as an
-erratum against the spec's number rather than left to be discovered.)
-
-| Code | Meaning |
+| Variable | Effect |
 |---|---|
-| `relative-path` | a path field (`ccloopBin`, `runsDir`, a task's `contract`) is not absolute |
-| `duplicate-task-id` | two tasks in the plan share a `taskId` |
-| `cycle` | the task graph (explicit `dependsOn` plus implicit write-set edges) has a cycle |
-| `contract-inside-target-repo` | a task's contract file lives inside `targetRepo` |
-| `work-branch-is-default` | `workBranch` names the base branch (the one the target repository currently has checked out) |
-| `unsupported-policy` | `policy` is anything other than `"local-merge"` |
-| `unusable-task-id` | a `taskId` cannot become a run id (spec §2.1 derives `orca-<taskId>-<hash8>`, and the ledger requires `/^[A-Za-z0-9][A-Za-z0-9._-]*$/`) |
+| `ORCA_CCMEM_BIN` = absolute path to `ccmem` | turns on the read-only **Memory** section. Opening it starts ccmem, and ccmem may migrate its own data directory when it opens it. Unset: ccmem is never started. |
+| `ORCA_SYNCSKILL_BIN` = absolute path to `syncskill` | lets a loop task declare `"skills": {"profile": "<name>"}` or `"skills": {"names": ["<skill>", ...]}`. Skills work only with **claude** installations; a task with skills on a codex agent is refused at confirm (`skills-unsupported-agent`). Unset: Orca never starts syncskill. |
 
-An eighth plan-level rejection, `unreadable-contract`, is reported the same
-way and at the same point: a task's `contract` path that cannot be read, or
-whose content is not valid JSON. It is not in the table above because it is
-not decidable from the plan file's own bytes — it needs one `readFile` per
-task.
+## Start the panel
 
-Three more are runtime checks — a read-only `git rev-parse` or `git status
---porcelain` against the target repository, which does not count as
-"touching" it, so `orca plan` evaluates these for real too, not just
-a running round:
+An example launch script (every `<...>` is yours to fill in):
 
-| Code | Meaning |
-|---|---|
-| `work-branch-already-exists` | `workBranch` already exists in the target repository |
-| `base-not-a-commit` | the base branch does not resolve to a real commit yet |
-| `dirty-worktree` | the target repository's worktree has uncommitted changes, or its cleanliness cannot be read at all (`targetRepo` is not a git repository) |
-
-A plan file that fails to parse at all (malformed JSON, or the wrong shape)
-is reported as `malformed` and is not one of these — it means there is no
-plan to evaluate them against yet.
-
-Any rejection, plan-level or runtime, makes `orca plan` and a round
-exit 1 (spec §9.3). A *warning* — a plan that is legal but fully serial, say
-— does not affect the exit code.
-
-### Exit codes
-
-Every task and every round-level event contributes one of four values, and
-the round's exit code is whichever contribution is the most severe, in the
-order **3 > 2 > 1 > 0**:
-
-- **0** — nothing failed and nothing needed a human. The round completed
-  cleanly.
-- **1** — the round was refused before it started: an unreadable or
-  malformed plan file, an unimplemented
-  `ledgerMode`, a repository lock that could not be acquired (another `orca`
-  process already holds it), or any of the up-front rejections above.
-- **2** — an ordinary failure, or a decision that was still safe to make on
-  its own: a task's net change set was empty (`succeeded_but_empty`), a task
-  failed or exhausted its attempts, or a task landed despite writing outside
-  its declared write set but touched nobody else's declared claims (a
-  tier-1 `boundary` decision, recorded in the ledger).
-- **3** — an escalation: a human has to come back and look. This covers an
-  out-of-bounds write that collides with a sibling task's declared write set
-  in the same layer, a merge conflict whose reconciliation could not be
-  synthesized or verified, a task ccloop reports `blocked_waiting_human`
-  (which is a terminal, non-resumable state in ccloop — not something Orca
-  retries), or an exception that escaped the round entirely.
-
-### The escalation file
-
-Whenever a round contributes exit code 3 for a reason that has both sides'
-intent and conflict blocks to report — a merge conflict Orca could not
-reconcile automatically, or a task that wrote outside its declared write set
-into a path a sibling task also declared — Orca writes
-`<runsDir>/escalations/<runId>.md` and prints its path. It contains, in this
-order: why a human has to look, what each side's contract declared as its
-goal and success condition, the conflicted paths or blocks, and an
-executable `undo.how`/cost/blast-radius for cleaning up the kept copies. It
-is written under `runsDir`, never onto the work branch — the work branch is
-a code branch, and this is a process file for a human, not a decision to
-bind a commit to.
-
-A round that escalates because a task reported `blocked_waiting_human` gets
-**no** escalation file: the file's mandated content — both sides' intent and
-the conflict blocks — does not exist for a single task that is simply
-waiting on a person, so there is nothing honest to put in one. The round
-still contributes exit code 3, keeps the task's copy, and prints where it
-is.
-
-## `orca correct`
-
-```
-orca correct --decision <run-id>/<n> --kind wrong|not_my_taste|stale --because <text>
-             [--repo <path>] [--by <who>] [--again] [--record-only]
-             [--chose-instead <text> --undo-how <text> [--undo-cost <text>] [--undo-blast-radius <text>]]
-orca correct --close <correctionId> --undo-how <text> [--repo <path>] [--chose-instead <text>]
+```sh
+#!/bin/sh
+cd <path-to-orca>
+export ORCA_AGENTS_TABLE="$HOME/.orca/agents.json"
+# export ORCA_CCMEM_BIN=<absolute-path-to-ccmem>          # optional
+# export ORCA_SYNCSKILL_BIN=<absolute-path-to-syncskill>  # optional
+exec node_modules/.bin/tsx src/cli.ts panel \
+  --by <you> \
+  --port 7777 \
+  --repo <key>=<path-to-repo> \
+  --profile <path-to-profile.json> \
+  --estimator-profile all --estimate-mode soft
+  # --plan <planId>=<repoId>=<path-to-plan.json>          # optional, see "Plans for Task control"
 ```
 
-A correction records a human overturning a past decision. There are two
-modes:
+- `--by <who>` is required: every review and correction is stamped with it.
+- `--port` defaults to `0` (a random free port).
+- On success it prints one line on stdout, `orca-panel ready url=http://127.0.0.1:7777 token=...`, and on stderr
+  tells you to open the URL. Open the bare URL; the page already carries the token.
+- A refusal prints `rejected: <code>: <why>` and exits.
+- If it says `control plane mounted with no execution port`, see [ccloop](#2-ccloop).
+- Stop it with Ctrl-C. It drains before exiting; a second Ctrl-C exits at once, and the next start may then have to
+  recover first.
 
-- **Record-only** — write the correction into the corrections store and stop
-  there. This is what happens when neither `--chose-instead` nor
-  `--undo-how` is given, or when `--record-only` is passed explicitly (which
-  forces record-only even if `--chose-instead` is given alongside it, for
-  the case where the alternative is already known but the undo plan is
-  not). `--decision` names the decision being corrected
-  (`<run-id>/<n>`, the same id a `decision` ledger row carries); `--again`
-  says "yes, record a second correction against the same decision by the
-  same person on purpose" — without it, a repeat is refused rather than
-  silently duplicated. `--by` defaults to `git config user.name`.
-- **Closing the loop** — giving *either* `--chose-instead` or `--undo-how`
-  expresses the intent to close, and then both are required (a typo in one
-  no longer silently falls back to record-only). Closing derives two rows —
-  a new `decision` and an `overturned` referencing the one it replaces —
-  writes them to the target repository's `.decisions/orca-fix-<hash8>.jsonl`
-  in one append, and commits just that one file on the branch the repository
-  currently has checked out, leaving the rest of the person's staging area
-  untouched.
-- **`--close <correctionId>`** re-opens the closing half of a correction that
-  was already recorded (by a prior record-only run, or by a `--close` that
-  landed the ledger rows but failed to commit — see exit 5 below). It cannot
-  be combined with `--decision`, `--kind`, `--because`, or `--again` — those
-  already live on the stored row — and `--chose-instead` may only supply a
-  value the stored row is missing, not override one it already has.
+## The sections
 
-Running the same closing command twice is safe: the second run recognises
-the correction is already recorded (or already committed) and refuses or
-no-ops rather than writing a second `overturned` row into the append-only
-ledger.
+The left-hand navigation has six sections, ordered along the work. **Requirements** opens by default. The active
+section is kept in the URL hash, so a reload stays put. The header also has a language switch (English / Chinese)
+and a theme switch.
 
-### Exit codes
+```
+ idea ──> Requirements ──accept──> Task control ──runs──> branch orca/<groupId> ──> you merge (outside Orca)
+                                        │
+                                        └── choices agents record ──> Decisions ──> Metrics
+ Memory: read-only, across everything        Chains: developing Orca itself, unrelated to groups
+```
 
-- **0** — the correction was recorded, or the loop was closed and committed
-  (including the no-op case: this exact correction was already closed).
-- **1** — the input was refused: bad or missing arguments, an unknown
-  `--decision`, a correction already recorded (without `--again`), a
-  `--close` argument conflict, the target repository mid-merge/rebase/
-  cherry-pick or on a detached HEAD, or any other named rejection — the
-  message says which.
-- **3** — an exception nobody anticipated (the same top-level handler `orca
-  plan` uses).
-- **4** — another `orca` process holds the target repository's lock;
-  transient, retry later.
-- **5** — the ledger rows landed on disk and were staged, but the commit
-  itself was refused (e.g. a hook rejected it); re-run the exact same
-  `--close` command to finish just the commit, without writing the rows a
-  second time.
+| Section | What it is for |
+|---|---|
+| Requirements | From an idea to a set of tasks, with a model. |
+| Task control | Budget, configure, start and watch groups of tasks. |
+| Decisions | Review the decisions agents recorded. |
+| Memory | Read ccmem's memory (read-only). |
+| Metrics | Correction rate, repair rate, review coverage. |
+| Chains | Unattended Claude Code sessions that develop Orca itself. |
 
-This scale is `orca correct`'s own — it does not reuse `orca plan`'s and
-a round's 0/1/2/3. `orca validate` has a separate scale of its own too: 0 (all
-ledger files ok), 1 (a file was rejected or none were found), and 2 (a
-decision was downgraded to tier 0 — legal, but not an agent's to decide).
+### Requirements
 
-### The corrections store
+1. Pick a repository, type the idea, set a token limit, the content language and the agent, and press
+   **Start clarifying**. This creates a group in state `clarifying`.
+2. The model asks questions in rounds; each comes with a recommended answer and why. Accept the recommendation or
+   write your own, and send. The panel shows the current understanding: statement, acceptance criteria, glossary,
+   decisions, open branches.
+3. When you agree (**We agree**), the model drafts a **split** into tasks: titles, loop plans, target paths, checks,
+   dependencies and layers. Send it back with feedback, or **Accept this split**.
+4. Accepting turns the **same group** into a `draft` group with those tasks; it now appears in Task control. The
+   requirement document is committed as `.orca/requirements/<date>-<slug>.md` onto the branch `orca/<groupId>`; the
+   group starts only once that commit exists.
 
-Corrections live outside any git repository, by design — the point of a
-correction is to feed a memory layer that spans repositories, not to be
-another line item in one repository's ledger. By default the store is
-`~/.orca/corrections.jsonl`; set `ORCA_CORRECTIONS_DIR` to redirect it to a
-different directory (its file is always named `corrections.jsonl` inside
-that directory). A directory or file this program creates for the first
-time is created `0700`/`0600` respectively, never inherited from the
-process's umask; a directory or file that already exists keeps whatever
-mode it has — that is a person's data, and this program does not get to
-change it.
+Each model call is counted against the requirement's token limit. When the next call does not fit, it stops and asks
+you to raise the limit.
 
-## Known gaps (spec §10.4)
+### Task control
 
-These are registered, not hidden, straight from the design's own accounting:
+Groups come from an accepted requirement or from an imported plan (**Import plan**). For each group you can:
 
-1. The `scripted` adapter means v1 has not verified how accurate a real
-   agent's declarations are. What v1 verifies is a structural property (the
-   system stays correct even when a write-set criterion is wrong), not
-   whether criteria are accurate.
-2. Layer-by-layer progress means the slowest task in a layer blocks the
-   whole layer (dispatching as soon as a task is ready is a pure
-   optimisation and does not change criteria semantics).
-3. The work branch's base is read once, at round start, from the HEAD of
-   whatever branch the target repository has checked out; a long-running
-   round does not pick up updates to that branch made while it runs.
-   Resolving the repository's *true* default branch (rather than using the
-   checked-out one) is registered as post-v1 work.
-4. Escalation is terminal — there is no incremental resume. A human who
-   resolves an escalation reruns the whole plan, and every task that already
-   finished runs again for nothing. Harmless while v1 spends nothing
-   (`scripted` adapter); the leading candidate for post-v1 work.
-5. Until the corresponding change lands in ccloop (see §4.4), the patch path
-   has three channels that can silently collapse into an empty patch.
-6. As long as that change has not landed, §7's second direction (declared
-   but not produced) degrades to "is the patch empty or not."
-7. There is no "stop just one task" — orca has no way to end one task and
-   let the round continue. (The reason given here used to be that
-   `cancelled` only comes from a signal to the whole process group. That is
-   incomplete, measured 2026-09-05: ccloop also returns `cancelled` when the
-   verification's `stopSignals` meet the contract's `escalationAndExit.stopOn`,
-   which is per-contract and is how `cancelledRound.test.ts` produces a real
-   one. It is still not a handle orca holds — the signal comes from the
-   task's own verification — so the limitation stands and its reason does
-   not.)
-8. `ledgerMode: out-of-repo` inherits the weakness A′ §3.7 already
-   acknowledges about itself: it has no immutable anchor.
-9. The shell does not distinguish between exit codes 1, 2, and 3 — to a
-   shell they are all simply "non-zero."
-10. Squash-commit detection is a heuristic, not a proof.
-11. The reasons worktree-based approaches were rejected are reasoning, not
-   measurement (and do not need to be measured).
-12. The `--serial` consistency criterion (S10) runs the entire plan twice —
-   it is a v1 criterion, not a production switch.
+- **Budget:** see the proposal (per task and a group reserve), apply the estimator's suggestions or set the numbers
+  yourself, set a group limit, then **Confirm budget**.
+- **Agents:** choose the agent and model per group slot (worker, estimator, reconcile) and per task. An agents
+  settings panel holds your defaults. Confirmation freezes the selection.
+- **Change plan** for a task: its loop plan — `standard`, `bugfix` (red test first), `refactor` (no behaviour
+  change), `design` (a document is the deliverable), `investigate` (findings to a report only) — and its inputs: goal,
+  done-when, paths it may change, check commands, non-goals, relevant docs, paths it must not change, a file limit,
+  its budget, and its skills.
+- **Labels** per task, and a filter by label.
+- **Start**, then pause, resume, or hand off; continue selected tasks; retry a run.
+- **Watch:** a dependency graph, each task's status and progress, each run's phase, state, usage and evidence (which
+  you can list and download), handoff requests and estimates.
+- **Git:** each task runs in its own git worktree (default) or a private clone, selectable per repository; each
+  finished task lands on `orca/<groupId>` as one merge commit. Merge into `main` and push are marked as waiting on a
+  person: the panel has no button for either.
+- **Recovery:** after a crash the panel reconciles before it accepts connections; anything it cannot settle is shown
+  as a blocker, and it will not start new runs until recovery is observed.
 
-## Contributing to `.decisions/`
+Each task is one ccloop run, and **runs cost money** (see [Cost](#cost)).
 
-`npm run verify` runs the whole suite — typecheck, unit and scenario tests,
-ledger validation, the CLAUDE.md line-count check, the hooks-path check, and
-the scheduler scenario suite — and is the full gate for a change. The
-pre-commit hook (`scripts/githooks/pre-commit`) is deliberately narrower: it
-only re-checks `.decisions/**` for append-only violations when a commit
-actually touches that directory, which is why it stays fast regardless of
-how large `npm run verify` grows.
+### Decisions
 
-## Checkpoint handoff (subsystem D, v1: Claude Code)
+The unreviewed high-tier decisions agents recorded in the `.decisions/` ledgers of your repositories, filterable by
+kind, scope and repository. Open one to read what was chosen, why, and what was rejected, then:
 
-A development session in this repository learns its own context-window level from a `PostToolUse` hook
-(`.claude/settings.json` runs `orca level --hook claude-code`). At T1 (330,000 tokens by default) it is told to
-write a checkpoint; past T2 (450,000) it is told to hand off; when the level cannot be read it is told so on every call.
+- **Agree** marks it reviewed (it counts toward review coverage).
+- **Correct** records a correction (`wrong`, `not_my_taste`, `stale`). It does **not** edit the ledger; closing a
+  correction is `orca correct --close` ([docs/cli.md](docs/cli.md#orca-correct)).
 
-- `orca checkpoint write --session <id> --transcript <path> --draft <file>` writes and commits
-  `.orca/checkpoints/<run-id>.json`. The agent's draft carries judgment only (next steps, open items, what waits
-  for a human, which commands to measure); the level, HEAD and every measurement's exit code are measured by the command.
-- `orca resume` starts the next session from the latest checkpoint reachable from HEAD and re-measures everything
-  that may have changed, including publish state from `git ls-remote`.
-- Thresholds and model window sizes can be set in `.orca/level.json`; that file lives in the repository and is
-  unrelated to the per-user `~/.orca` store.
+### Memory
 
-Design: `docs/superpowers/specs/2026-09-17-checkpoint-handoff-design.md`.
+A read-only view of ccmem: global and project memory for a chosen repository, with search. Needs `ORCA_CCMEM_BIN`.
+Nothing is read until you open the section.
 
-## Tier 0 gate
+### Metrics
 
-A `PreToolUse` hook (`.claude/settings.json`, `Bash` matcher) runs every Bash
-command in this repository's Claude Code sessions through
-`scripts/gate-prefilter.mjs` and, when that does not resolve it, `orca gate
---hook claude-code`. It blocks four irreversible git/gh moves — `git push`,
-`git branch -d`/`-D`/`--delete`, `git worktree remove`/`prune`, and `gh pr
-merge`/`gh repo sync` — plus any non-`GET` `gh api` call, whether typed
-directly or through `rtk`/`rtk proxy`. It also blocks a merge into `main`:
-on `main` this means `git merge`, `git pull`, `git rebase` and any `git
-reset` that moves HEAD; whatever the current branch, it also means `git
-branch -f`/`-M`/`-m`/`-C`/`-c … main`, `git checkout -B main`, `git switch
--C main`, a `git fetch` refspec ending in `:main`, and `git update-ref
-refs/heads/main`. `permissions.deny` backs only the
-eight literal move patterns above (each also in `rtk `/`rtk proxy ` form) at
-the literal-string layer, ahead of the hook — it has no entry for `gh api`
-(its arbitrary flags can't be enumerated as literal prefixes) and none for a
-merge into main, so those, and any non-literal form of the moves above, rest
-on the hook alone.
+The correction rate, the repair rate and review coverage across your repositories, with notes on how to read them
+(the same numbers as `orca metrics`). Read-only.
 
-A blocked move is not lost: do it in your own terminal, outside the agent
-session. `orca resume` and `orca checkpoint write` refuse to record a
-measurement the gate blocked, exiting with `measurement-gated` rather than
-recording a false pass.
+### Chains
 
-`permissions.deny` matches literal prefixes only. The hook is different: it
-parses the command — quoting, command substitution, heredocs, `sh -c` and
-the like — and errs toward blocking when it cannot decide. What still gets
-through is narrower and more deliberate: a command written into a script
-file, an inline interpreter invocation such as `python3 -c "…"`, or `rm -rf`
-of a worktree directory. See residual risks in
-`docs/superpowers/specs/2026-09-18-tier0-gate-design.md` §7.
+`orca chain` runs unattended Claude Code sessions, one after another, in a clone of an **Orca** checkout, to develop
+Orca itself. It is unrelated to groups and tasks. The section shows each repository's latest chain, starts one (goal,
+maximum sessions, a soft maximum cost in USD, session timeout) and stops one after its current session. Details in
+[docs/cli.md](docs/cli.md#unattended-chains-orca-chain).
 
-## Unattended chains (`orca chain`)
+## Known limitations
 
-`orca chain start --repo <path> --by <you> --goal <text> --max-sessions <n> --max-cost-usd <x>` runs headless Claude
-Code sessions one after another in `<path>` — a dedicated clone or worktree of an Orca checkout, whose Tier 0 gate
-wiring must equal `src/gate/settings.ts`. Each session starts from `orca resume` and ends by writing an exit checkpoint
-(`"chain": {"status": "continue" | "done" | "blocked", "why": "..."}`); code, not the model, decides whether the next
-session starts. Exit codes: 0 done, 1 refused before anything was written, 2 an anomaly (a changed gate or guarded
-path, a dirty worktree, rewritten history, a timeout, no exit checkpoint, an unreadable cost, ...), 3 everything left
-waits for a person, 4 a limit or a stop request.
+- **No global project switcher.** Projects are fixed at launch by `--repo`. Requirements, Chains and Memory each have
+  their own repository selector; **Task control uses the first `--repo` only**, and imports only the first `--plan`.
+- No Orca command writes the profile snapshot; you write it by hand.
+- Paid acceptance runs against real agents so far are **n=1** each: they show the path works, not how reliably.
 
-- The target needs `node_modules/.bin/tsx` (a fresh worktree often has no `node_modules`: link or install it first);
-  otherwise the start is refused with `tsx-missing`.
-- The model and the default session timeout (360 minutes, a backstop) come from `.orca/chain.json`, e.g.
-  `{"model": "claude-opus-5[1m]"}`; `orca level` must know that model's window. The cost limit is soft.
-- The record `.orca/chains/<chain-id>.json` is committed on its own after every session; raw session output is in the
-  ignored `.orca/chain-logs/`. The chain lock and stop requests live in the git dir.
-- `orca chain stop --repo <path>` stops the chain after its current session; `orca chain unlock --repo <path>` clears
-  the lock of a supervisor that is gone and records the chain as stopped.
-- The panel shows each repository's latest chain, starts and stops chains, and shows a banner when one stops
-  (dismissing it is remembered in the browser only). Anyone holding the panel token can start a paid, unattended agent
-  that commits: see the D-launch spec §7.
+## Safety: what Orca will and will not do
 
-Design: `docs/superpowers/specs/2026-09-18-d-launch-design.md`.
+**Access**
 
+- The panel listens on loopback (`127.0.0.1`) only, with a one-time token minted at each start. Requests whose `Host`
+  is not loopback or the bound address are refused.
+- The page at `/` carries the token itself, so **anyone who can reach the port can use the panel**. On loopback that
+  means any user or process on your machine.
+- `--bind <addr>` opens it to other machines and is refused unless you also pass `--i-know-this-is-exposed`. There
+  is **no TLS**, the token travels in the HTML, it cannot be revoked, and one process has one identity: fit for you
+  across your own machines, not for a team.
+- **Anyone with the token can start paid agent work**, including unattended chains that commit.
 
-## Durable task control foundation
+**Git**
 
-`src/control` provides an opt-in, single-host SQLite control service (Node.js
-22.13.1 or newer). It persists group/work identities, idempotent claims,
-work/handoff budget reservations, cumulative usage, dispatch intents, independent
-archives and committed checkpoints. A recovered writer reconciles existing run
-identities before dispatch can resume. Unknown execution or missing evidence keeps
-the run blocked and its remaining budget reserved. Copying a state directory does
-not transfer execution ownership; host and canonical-path checks reject copies.
+- Orca never pushes, never merges into `main`, never deletes branches or worktrees. Finished tasks land on
+  `orca/<groupId>`; merging that into `main` is your job, in your own terminal.
+- Agents change code in their own worktree or clone; what reaches your repository is the `orca/<groupId>` branch
+  (and, in worktree mode, the worktree entries git records).
 
-This slice is a foundation. The production ccloop control protocol is not yet
-implemented: the production factory refuses execution and has no legacy adapter
-fallback. Offline protocol peers exist only under tests. There is no new Web stop
-or resume promise, and this does not upgrade Codex soft budgets to hard limits.
-The existing CLI retains its legacy execution path.
+**What it writes outside your repositories**
 
-`ControlService.run(groupId, planPath, options)` verifies the approved graph and
-uses the shared scheduler. A service is bound to an explicit `targetRepo`; the
-logical `projectKey` is not a filesystem path. Reconciliation requires an explicit
-`reconcileGrant` and uses only the group's remaining approved budget. Agent-specific
-adaptation belongs in ccloop. The prepared start envelope and raw evidence reader
-are the protocol seam for that follow-up.
+| Path | Written by |
+|---|---|
+| `$ORCA_AGENTS_TABLE` (default `$HOME/.orca/agents.json`) | `orca agents init` |
+| `$ORCA_CONTROL_DIR/<repo key>` and its `.runs` / `.workspaces` siblings, or `--control-state-dir` | the panel's control plane |
+| `$ORCA_CORRECTIONS_DIR` (default `$HOME/.orca`) | reviews and corrections from the panel or `orca correct` |
+| ccmem's data directory | ccmem itself, when the Memory section opens it (it may migrate it) |
 
-Evidence consumers use `listGroupArtifacts(store, groupId)` or
-`listTaskArtifacts(store, groupId, taskId)`, then `readArtifact(store, ref)` to read
-and independently verify the archived bytes. Checkpoint authority comes from
-`readCommittedCheckpoint`, never a scanned `latest.json` file. Cleanup requires a
-committed recoverable checkpoint, retained raw evidence, an unchanged source
-directory identity, and confirmed landing for successful work. Recovery retries
-only cleanup that was already durably authorized and never re-executes a merge.
-A claim without a prepared dispatch intent remains blocked for explicit recovery.
+Point these variables at a scratch directory when you are trying Orca out.
 
-Run the offline control gate with `npm run verify:control`; it is included in
-`npm run verify`. Scheduler integration tests require the existing ccloop build
-through `ORCA_CCLOOP_BIN` when the checkout has no sibling ccloop repository.
-The round criteria in `tests/scheduler` need a ccloop checkout (the sibling `../ccloop`, or
-`ORCA_CCLOOP_BIN` pointing at a checkout's `dist/cli.js`) at or after the ccloop commit titled
-`test(fixtures): fake codex plays scripted frames per attempt, for callers leaving --adapter scripted`:
-they run that checkout's `tests/fixtures/fake-codex.mjs`, which the pinned ccloop package does not ship.
+## Cost
 
-`orca panel` and `orca agents` find ccloop through `ORCA_CCLOOP_BIN` when it is set
-(an empty value means "no execution port"), and otherwise through a ccloop package
-installed in Orca's `node_modules` (Orca's `package.json` is meant to pin it to a commit
-by git URL -- see the human step in
-`docs/superpowers/plans/2026-09-29-ccloop-git-dependency.md`, Task 5). With neither,
-`orca agents` stops with `ccloop-not-installed` and the panel starts without an
-execution port. The real-ccloop criteria under `tests/control` and
-`npm run verify:control` still need `ORCA_CCLOOP_BIN` pointing at a ccloop checkout's
-build, because they use fixtures from ccloop's `tests/` tree, which the package does
-not ship. `ORCA_CCLOOP_DEFAULT_E2E=1` (with `ORCA_CCLOOP_BIN` unset) runs
-`tests/control/ccloopDefaultE2E.test.ts` against the installed package.
+Real agent runs spend money on your agent accounts: clarifying a requirement, splitting it, estimating (unless the
+profile's context window is `null`), and every task run. Budgets in `soft` mode are settled after the fact, not
+prevented. Chains have a soft cost limit checked after each session.
 
-## Memory section (read-only)
+## More
 
-`orca panel` shows a Memory section when `ORCA_CCMEM_BIN` is an absolute path to the ccmem executable. It reads
-with `ccmem export --json --scope global` and then `--scope project`, in the repository's directory, so ccmem
-computes the project key itself. Nothing is written by Orca. Opening the section starts ccmem, and ccmem may migrate
-its own data root when it opens it (backup copy and pruning; spec `docs/superpowers/specs/2026-09-29-memory-tab-design.md` §4).
-Unset, the section says it is not configured and ccmem is never started. A repository without a git remote may show
-no project memory: ccmem keys such a project by the session's directory, which may differ from the repository root.
+- [docs/cli.md](docs/cli.md) — the CLI and development reference (the previous README).
+- [CLAUDE.md](CLAUDE.md) — rules for agents developing Orca.
+- [docs/handoff/handoff.md](docs/handoff/handoff.md) — current state and open work, for the next agent.
