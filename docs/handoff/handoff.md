@@ -111,8 +111,11 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 ✅ *** **ccloop「被杀的 run 能续跑＋孤儿 runner 收＋R-A＋R-B」一轮做完（2026-10-02，会话 `ece96b67`，只改 ccloop 仓）**：门绿，付费真 claude 跑通「杀掉 ccloop → runner 自退 → resume 续跑到成功」一次。Orca 已于会话 `7fe6d61b` 重钉到它（`ae2caa3`）。细节见 §4.0.h、§4.0.i。 ***
 
 ✅ *** **N5 记忆区（memory tab）第一版做完（2026-10-03，会话 `184d0372`）**：面板第六个分区「记忆」，只读，经 `ccmem export --json` 读，设了 `ORCA_CCMEM_BIN` 才会起 ccmem，分区第一次被打开前不发任何请求。ccmem 仓零改动。细节见 §4.0、§4.0.j。 ***
+✅ **记忆区三条搁置的小项（2026-10-03，会话 `6a4dd7f3`）做完，等人审**：见 §4.0.k。
 
-**现行基线（会话 `184d0372`，2026-10-03，记忆区做完、终审修复波之后；原始报数在台账 `.superpowers/sdd/2026-10-03-memory-tab/progress.md` 末尾的 Gate 块；该会话 scratchpad 里的原始输出已由人授权删除）**：全新 clone（内容＝主题行 `docs(sdd): ledger line for the memory tab's final fix wave` 那一笔），HOME＋四个 XDG 根改道，TMPDIR 短真目录，夹具表 fake codex `integration`，clone 里先 build web 并设 `core.hooksPath`；`ORCA_CCLOOP_BIN`＝ccloop `ae2caa3` 的 build。
+**现行基线（会话 `6a4dd7f3`，2026-10-03，§4.0.k 那一笔的内容；原始报数在台账 `.superpowers/sdd/2026-10-03-memory-tab/progress.md` 的 `Follow-up gate` 行）**：同样的 clone 做法与改道，`ORCA_CCLOOP_BIN`＝ccloop `ae2caa3` 的 build。typecheck RC 0；全量 vitest **287 文件、2612 过、2 红、4 skipped**（`driverRequirementSplit` 第三次无效草稿、`controlShutdown` 143，都是已登记 flake）；`verify:chain` 的全量另红 `estimateE2E` E2（新登记，见下）；三个文件单独各 3/3 绿（负载 3.8–4.3，`verify:chain` 期间 1 分钟负载到过 27）。台账校验、`CLAUDE.md` 行数、hooksPath、`verify:control`（1219 过 3 skipped）、`verify:scheduler`（194）、web build、`verify:ccloop-pin`（3）、`verify:panel`（14）、`--ws check`（web 367/367）、`check-tmp-leak`（0 残留）、R1 真 ccmem（1 过）都 RC 0；真 `~/.claude/ccmem` 条目名与真 `~/.orca` 的 stat＋sha256 前后相同。
+
+**上一版基线（会话 `184d0372`，2026-10-03，记忆区做完、终审修复波之后；原始报数在台账 `.superpowers/sdd/2026-10-03-memory-tab/progress.md` 末尾的 Gate 块；该会话 scratchpad 里的原始输出已由人授权删除）**：全新 clone（内容＝主题行 `docs(sdd): ledger line for the memory tab's final fix wave` 那一笔），HOME＋四个 XDG 根改道，TMPDIR 短真目录，夹具表 fake codex `integration`，clone 里先 build web 并设 `core.hooksPath`；`ORCA_CCLOOP_BIN`＝ccloop `ae2caa3` 的 build。
 - typecheck RC 0；全量 vitest **287 文件、2611 过、2 红、4 skipped**，两条红都是已登记负载 flake（`gateCheck` K13、`driverRequirementSplit` "third consecutive invalid draft"）；`verify:chain` 里那遍全量另红 `controlShutdown`（已登记）；三个文件单独各重跑 3 次全绿（负载 5.6–9.3，门里约 16）。
 - 台账校验、`CLAUDE.md` 行数（150/200）、hooksPath、`verify:control`（120 文件 1219 过 3 skipped）、`verify:scheduler`（194 过）、web build、`verify:ccloop-pin`（3 过）、`verify:panel`（14 PASS）、`--ws check`（web 366/366）、`check-tmp-leak`（0 残留）都 RC 0。
 - R1（真 ccmem，临时数据根）1 过 0 skipped；真 `~/.claude/ccmem` 条目名前后 `cmp` 相同、`ccmemRootDiff` 为 `[]`；真 `~/.orca` stat＋sha256 前后相同。
@@ -131,6 +134,7 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 ⚠️ *** **④ 轮新增的负载型 flake（同样规则：单文件重跑绿 ＝ 不是回归）**：`tests/control/driverRecovery.test.ts` 的 "drives a retried run on from where it was blocked, to settled"、`tests/control/driverLanding.test.ts` 两条、`tests/control/handoffE2E.test.ts` 的 G（依赖 30 s 实时窗）、`web/tests/controlCommandRecovery.test.tsx` 的 "drops the id when the lookup returns the command's retained result"（单跑 3/3 绿）。 ***
 ⚠️ **（2026-10-01 会话 `e604b1ba` 新登记）`tests/control/ccloopPort.test.ts` 在全量里 5 s 超时一次，单文件 3/3 绿；ccloop 的 `codexWatchdog` 那条在负载 33 下也红过一次（已在已知名单）。web 测试默认超时现为 15 s（`web/vite.config.ts`）。**
 ⚠️ **（2026-09-30 会话 `1d7d9aa0` 新登记）`tests/control/driverLanding.test.ts` 的 "X1: lands while the person has orca/<group> checked out, leaving their files and index alone"**：全量里 5 s 超时（1 分钟负载 43／48），单文件 3/3 绿；同轮 `driverRecovery` "drives a retried run on…" 也在负载 43 时红过一次，单文件 3/3 绿。
+⚠️ **（2026-10-03 会话 `6a4dd7f3` 新登记，形状不是超时）`tests/control/estimateE2E.test.ts` 的 "E2: a handoff-stop while the call runs interrupts the estimate…"**：`verify:chain` 的全量里红一次，`SyntaxError: Unexpected end of JSON input`，位置 `tests/control/fixtures/ccloopWorld.ts:180`；单文件 3/3 绿。机制（读代码得出，没有复现）：`lines()` 只要 `<marker>.argv` 存在就读，fake 刚建好文件、还没写进内容时读到空串，`[""]` 交给 `JSON.parse` 就抛。修法是让 `lines()` 跳过空行，但它是共享夹具，没修，归人。
 ⚠️ **（2026-10-02 会话 `7fe6d61b` 新登记）`tests/control/driverRequirementSplit.test.ts` 的 "fails the third consecutive invalid draft as split-validation-exhausted, and a schema-invalid one as split-output-invalid"**：三次全量里都以 5 s 超时红（1／5 分钟负载约 8–13），单文件 3/3 绿；它走 fake port、不经 ccloop，新旧 ccloop 下单跑该条都约 1.9 s（负载 19 时现测）。
 ⚠️ **（2026-09-29 会话 `2f65a729` 新登记）`tests/control/driverProgress.test.ts` 的 "R2: books exactly the usage of a collect without progress, and nothing twice"**：全量里 5 s 超时一次（5 分钟负载 10.6），单文件 3/3 绿。同一轮 `driverLanding` D 也以 5 s 超时红过一次。
 
@@ -150,20 +154,29 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 
 ## 四、⛔ 下一件事
 
-### 4.0 ⛔ 现在的下一件事（2026-10-03 会话 `184d0372` 整节改写；**本节优先于下面的 4.0.j、4.0.i、4.0.h … 与 1–3**）
+### 4.0 ⛔ 现在的下一件事（2026-10-03 会话 `6a4dd7f3` 改写；**本节优先于下面的 4.0.k、4.0.j、4.0.i … 与 1–3**）
 
-上一会话（`7fe6d61b`）人选的三件「重钉 ccloop ＋ 付费验证 ＋ N5 memory tab」**全部做完**：前两件见 §4.0.i，记忆区见 §4.0.j。
+会话 `6a4dd7f3` 做完了人选的「记忆区三条搁置的小项」，见 §4.0.k。更早：重钉 ccloop、付费验证见 §4.0.i，记忆区第一版见 §4.0.j。
 
-1. **先核推送**：三个仓各跑 `/usr/bin/git ls-remote origin refs/heads/main` 与本地比（`/usr/bin/git log --oneline origin/main..main`）；不要信本文里的任何笔数。会话 `184d0372` 的记忆区一轮人已推送（2026-10-03 同会话 `ls-remote` 现测三仓远端与本地一致）；之后只多了三份 handoff 的文档提交，推没推以现测为准。推送归人，顺序仍是 ccloop 先于 Orca（Orca 钉的仍是 `ae2caa3`）。
+1. **先核推送**：三个仓各跑 `/usr/bin/git ls-remote origin refs/heads/main` 与本地比（`/usr/bin/git log --oneline origin/main..main`）；不要信本文里的任何笔数。会话 `6a4dd7f3` 开工时三仓远端与本地一致；之后 Orca 多了 §4.0.k 那一轮的提交和 handoff 文档提交，ccloop、ccmem 只多了 handoff 文档提交。推没推以现测为准。推送归人，顺序仍是 ccloop 先于 Orca（Orca 钉的仍是 `ae2caa3`）。
 2. **下一件由人选**（都没开工）：
-   - 记忆区的小尾巴（台账 `.superpowers/sdd/2026-10-03-memory-tab/progress.md` 末尾 3 条 `parked` 行）：ENOEXEC 在线上的 code 是 `ccmem-failed:Unknown system error -8`（带空格，建议按 `os.constants.errno` 规范成名字）；spec §3.3 与 `src/memory/adapter.ts` 注释把 `ccmem-failed:` 写成「退出码或信号」，现在还会带 errno 名，要追加 spec 更正节；`web/tests/i18nPseudo.test.tsx` 的 `stubMemoryFetch` 没有还原 `globalThis.fetch`。
    - 记忆区的后续（spec §0.1 明确不做的）：写入、「由哪次 correction 产生」（要 ccmem 先能存外部引用，ccmem 仓的人裁）、分页／缓存。
    - 真 claude 下仍未验的两件：ccloop §5.1「自报 partial＋error 进 verify」、reaper 杀一个仍在跑的 claude（要构造得出来才值得花钱）。
    - Orca「同时启动任务数上限」（4.0.h 容量一条；要真 claude 下带工具调用的任务再量一次）；N1 第二版。
+   - 修 `tests/control/fixtures/ccloopWorld.ts` 的 `lines()` 撕裂读（§三 新登记的 `estimateE2E` flake；共享夹具，要人点头）。
+   - `docs/handoff/goal.md` 里还没开的大件（会话 `6a4dd7f3` 现测，`grep` 全树零命中或只有部分）：N2 给 agent 的入口（CLI `--json` → skill → MCP 薄壳，§3.2／N2，「现在就能开」）；§3.4 看板剩下的依赖关系图（现在只是表里一列）与 git 方案显示；§3.5 litellm 接线；§3.6 syncskill 补三件（G5 选 (i)，跨仓）；远期 N7(a) Orca 作 A2A server、G6 ccloop A2A 只读外壳；§4 近期终点「面板 HTTP 这条路在真 agent 下跑通」仍没跑过。
 3. **验证只在 `git clone --local` 副本里做**：HOME 与四个 XDG 根改道、TMPDIR 短真目录；clone 里先 `npm run build --workspace web`、`git config core.hooksPath scripts/githooks`；`verify:control` 的夹具表 fake codex 用 `integration` 模式（命令 `[node, <ccloop clone>/tests/fixtures/fake-codex.mjs, "integration", <marker>]`，表的形状照 `tests/control/fixtures/ccloopWorld.ts`）。`npm run verify` 是 `&&` 链，逐段跑、逐段记 RC。全量里 5 s 超时红先单文件重跑 3 次并记 `uptime`（已登记的见 §三）。
 4. **R1（真 ccmem）**：`ORCA_CCMEM_REAL_BIN=/Users/biran/code/skills/ccmem/bin/ccmem ./node_modules/.bin/vitest run tests/memory/ccmemReal.test.ts`；不设就 skipped。它只在临时 `CCMEM_DATA_ROOT`／`HOME` 里跑，用 `ccmem import` 灌数据（`save` 会同步算嵌入，可能下载模型）。
 5. 重钉规矩不变：人先推 ccloop，再 `node scripts/pin-ccloop.mjs <SHA>`，再人推 Orca。
 6. 会话 `184d0372` 与 `7fe6d61b` 的 scratchpad 原始输出都已由人授权删除；记忆区的证据只剩台账里的记录（变异、门的报数都已抄进台账）。
+
+### 4.0.k 记忆区三条搁置的小项（会话 `6a4dd7f3`，2026-10-03，**已完成，等人审**）
+
+- 一笔：主题行 `fix(memory): name an errno libuv cannot name, and restore fetch after the memory area`。台账：`.superpowers/sdd/2026-10-03-memory-tab/progress.md` 末尾的 `Follow-up` 行与一条 `Ruling:`。
+- ENOEXEC：Node v22.13.1 在 macOS 上同步抛出，`code` 是 `"Unknown system error -8"`、`errno` -8。现在 `exportFailure` 遇到不是大写名字的 `code`，就按 `errno` 的绝对值去 `os.constants.errno` 里查名字，查不到就答 `unknown`。线上答 `ccmem-failed:ENOEXEC`，Node 的原话留在 message 里。
+- spec 追加 §11（E1：`ccmem-failed:` 还会带 spawn 的 errno 名；E2：status 里不会有空格）；`src/memory/adapter.ts` 原注释不动，下面追加一条 CORRECTION。
+- `web/tests/i18nPseudo.test.tsx`（人 2026-10-03 授权改）：改用 `vi.stubGlobal`，`afterEach` 里 `vi.unstubAllGlobals()`，另加一条判据「记忆区跑完后 fetch 还是原来那个」。
+- 变异三条都单独见红；没见红的两支（`unknown` 兜底、正则直通）理由写在台账。门的报数见 §三 现行基线。
 
 ### 4.0.j N5 记忆区第一版（会话 `184d0372`，2026-10-03，**已完成；人 2026-10-03 已审，「需要你特别知道的」与「替你做的裁定」两部分都同意**）
 
