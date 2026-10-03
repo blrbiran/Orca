@@ -283,6 +283,7 @@ export function buildExecutionSnapshot(input: ConfirmedProposal): ExecutionSnaps
 export function replaceTaskInSnapshot(
   snapshot: ExecutionSnapshotV1, taskId: string, derivedContractHash: string,
   allocations: { work: ExecutionAllocation; handoff: ExecutionAllocation },
+  skills: { profile: string | null; names: string[] } | null,
 ): { snapshot: ExecutionSnapshotV1; canonicalJson: string; snapshotHash: string } {
   const next = structuredClone(snapshot);
   const ref = next.derivedContracts.find(entry => entry.taskId === taskId);
@@ -293,6 +294,11 @@ export function replaceTaskInSnapshot(
     if (index < 0) throw new ControlError("recovery-blocked");
     next.allocations[index] = structuredClone(allocations[bucket]);
   }
+  // Syncskill integration spec §10.5: this task's entry is added, replaced or removed, kept sorted by taskId; the key is
+  // dropped when no task has skills, so the snapshot is byte-identical to one confirmed without them.
+  const entries = [...(next.skills ?? []).filter(entry => entry.taskId !== taskId), ...(skills === null ? [] : [{ taskId, profile: skills.profile, names: [...skills.names] }])]
+    .sort((left, right) => compare(left.taskId, right.taskId));
+  if (entries.length === 0) delete next.skills; else next.skills = entries;
   const parsed = executionSnapshotSchema.parse(next);
   return { snapshot: parsed, canonicalJson: canonicalBytes(parsed).toString("utf8"), snapshotHash: sha256Canonical(parsed) };
 }

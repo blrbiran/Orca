@@ -2,7 +2,7 @@ import { z } from "zod";
 import { agentSelectionSchema, amountSchema, canonicalTimestampSchema, commandEnvelopeSchema, contextWindowSchema, idSchema, panelPartialSelectionSchema, partialSelectionSchema, safeInteger } from "./schema.js";
 import { nonEmptyStoredLabelsSchema, storedLabelsSchema } from "./labels.js";
 import { DRAFT_STATES, IDEA_MAX_BYTES, REQUIREMENT_WAITING, ROUND_STATES, draftBodySchema, questionIdSchema, requirementExportSchema, roundBodySchema } from "./requirementSchemas.js";
-import { LOOP_PLAN_IDS, loopInputsSchema, loopRecipeSchema } from "./loopPlans.js";
+import { LOOP_PLAN_IDS, loopInputsSchema, loopRecipeSchema, loopSkillsSchema } from "./loopPlans.js";
 // Agent selection spec §12 I10 (plan-review P18): the selection/context/partial schemas are T7's, defined once
 // in schema.ts; webProtocol.ts re-exports them so every downstream import can come from one wire module.
 export { agentSelectionSchema, contextWindowSchema, panelPartialSelectionSchema, partialSelectionSchema } from "./schema.js";
@@ -767,6 +767,8 @@ export const setTaskLoopPayloadSchema = z
     // W5: the work dimensions taken from an estimate's suggestion for this task, checked like proposal-edit's model
     // fields; a dimension absent here that changes is the person's own.
     workProvenance: z.object({ tokens: modelProvenanceSchema.optional(), activeMs: modelProvenanceSchema.optional(), attempts: modelProvenanceSchema.optional() }).strict().optional(),
+    // Syncskill integration spec §10.4: the task's skill set, the full desired state like `inputs` -- absent removes it.
+    skills: loopSkillsSchema.optional(),
   })
   .strict();
 
@@ -1054,6 +1056,8 @@ export const loopPlanViewSchema = z
     inputs: loopInputsSchema,
     maxFiles: positiveSafeInteger,
     hasDiscipline: z.boolean(),
+    // Syncskill integration spec §10.4: the recipe's skill set, absent when it has none; the card sends it back unchanged.
+    skills: loopSkillsSchema.optional(),
   })
   .strict();
 

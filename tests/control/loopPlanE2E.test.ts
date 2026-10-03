@@ -47,7 +47,7 @@ describe("a loop task changed after confirmation, against real ccloop (spec §6 
         before = snapshotOf(runtime);
         const plan = readControlGroup(runtime.store, runtime.epoch, "g").workItems.find((entry) => entry.taskId === "a")!.loopPlan!;
         const work = readBudgetProposal(runtime.store, "g").allocations.find((row) => row.ownerKind === "task" && row.ownerId === "a" && row.bucket === "work")!.amount;
-        const changed = runtime.service.setTaskLoop(raw(runtime, "loop-a", "set-task-loop", {
+        const changed = await runtime.service.setTaskLoop(raw(runtime, "loop-a", "set-task-loop", {
           baseLoopVersion: plan.loopVersion, plan: "standard", inputs: { ...plan.inputs, goal: "write shared.txt, changed after confirmation" },
           // Rulings P4: a budget raise, so a full rebuild of the snapshot (reserve row from the live proposal) is caught below.
           work: { tokens: work.tokens + 500_000, activeMs: work.activeMs, attempts: work.attempts },

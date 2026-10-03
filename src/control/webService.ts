@@ -23,7 +23,7 @@ import { applySetAgentPreferences, type SetAgentPreferencesCommand } from "./age
 import { recordProjectionChange } from "./projectionJournal.js";
 import { effectiveTaskLabels, normalizeInputLabels, readTaskLabelState } from "./labels.js";
 import { TASK_AMENDMENT_SCHEMA, effectivePlanTask, workBodyOf, writeTaskAmendment } from "./taskAmendments.js";
-import { expandLoopPlan, expandRecipe, type LoopRecipe, type LoopTaskExpansion } from "./loopPlans.js";
+import { expandLoopPlan, expandRecipe, normalizeLoopSkills, type LoopRecipe, type LoopSkills, type LoopTaskExpansion } from "./loopPlans.js";
 import { taskContractSchema } from "../scheduler/planFile.js";
 import { profileMembers, SyncskillError, type SyncskillOptions } from "../skills/syncskill.js";
 import type { Amount } from "./types.js";
@@ -121,6 +121,16 @@ async function lookupSkillProfiles(store: ControlStore, groupId: string, syncski
     try { members.set(profile, await profileMembers(syncskill, profile)); } catch (error) { return { failure: syncskillRefusal(error) }; }
   }
   return { members };
+}
+/**
+ * Spec §10.5: set-task-loop's lookup, from its payload alone (the full desired state). Declared skills need syncskill
+ * (names included, as at confirm); a profile is resolved now and used only if the task is already confirmed.
+ */
+async function lookupPayloadSkills(skills: LoopSkills | undefined, syncskill: SyncskillOptions): Promise<SkillLookup> {
+  if (skills === undefined) return { members: new Map() };
+  if (syncskill.bin === null) return { failure: new ControlError("syncskill-unconfigured") };
+  if (!("profile" in skills)) return { members: new Map() };
+  try { return { members: new Map([[skills.profile, await profileMembers(syncskill, skills.profile)]]) }; } catch (error) { return { failure: syncskillRefusal(error) }; }
 }
 function syncskillRefusal(error: unknown): unknown {
   if (!(error instanceof SyncskillError)) return error;
@@ -654,8 +664,13 @@ export class WebControlService {
    * effectivePlanTask verifies (taskAmendments.ts). The budget's delta comes out of, or goes back to, the group's
    * reserve; the group limit, `used` and `sessions` never move. Any failure rolls the whole transaction back.
    */
-  setTaskLoop(command: SetTaskLoopCommand): WebCommandResult {
-    return this.mutate(() => applyWebCommand(this.store, {
+  async setTaskLoop(command: SetTaskLoopCommand): Promise<WebCommandResult> {
+    const release = this.deps.admissionGate?.enter();
+    try {
+      const replay = preflightWebCommand<WebCommandResult>(this.store, command); if (replay) return replay.body;
+      // Syncskill integration spec §10.5: the lookup runs before the transaction, as confirm's does.
+      const skillLookup = await lookupPayloadSkills(command.payload.skills, this.deps.syncskill ?? UNCONFIGURED_SYNCSKILL);
+      return applyWebCommand<WebCommandResult>(this.store, {
       rawCommand: command, expand: () => ({ ...command, schema: "orca-authority-command-v1" }),
       apply: context => {
         const id = groupId(command), taskId = command.target.taskId, payload = command.payload;
@@ -686,10 +701,14 @@ export class WebControlService {
         // estimate's suggestion) never silently re-expands an older version's task at the current one; a change of plan
         // or inputs expands at the current version. The kept recipe keeps its chosenBy too (final review C1): the plan is
         // still the one the labels chose, and rewriting it would change the effective plan and make every estimate stale.
+        // Syncskill integration spec §10.4: skills are left out of `kept` (a skills-only change keeps a v1 recipe at v1);
+        // the kept recipe takes the payload's skills, and a payload without them removes them.
         const kept = current.loop !== undefined && current.loop.planId === payload.plan
           && canonicalBytes(current.loop.inputs).equals(canonicalBytes(payload.inputs));
-        const expanded: LoopTaskExpansion = kept ? keptExpansion(taskId, repoPath, { ...current.loop!, inputs: structuredClone(payload.inputs) })
-          : expandLoopPlan(taskId, repoPath, payload.plan, payload.inputs);
+        const skills = payload.skills === undefined ? undefined : normalizeLoopSkills(payload.skills);
+        if (skills === "skills-shape") throw new ControlError("loop-plan-invalid", skills);
+        const expanded: LoopTaskExpansion = kept ? keptExpansion(taskId, repoPath, current.loop!, payload.inputs, skills)
+          : expandLoopPlan(taskId, repoPath, payload.plan, payload.inputs, "explicit", skills);
         if (!expanded.ok) throw new ControlError("loop-plan-invalid", expanded.reason);
         const allocation = proposal.allocations.find(a => a.ownerKind === "task" && a.ownerId === taskId && a.bucket === "work");
         const handoff = proposal.allocations.find(a => a.ownerKind === "task" && a.ownerId === taskId && a.bucket === "handoff");
@@ -698,7 +717,9 @@ export class WebControlService {
         // R10: sessions is not in the payload; it is carried over unchanged.
         const next: Amount = { ...before, tokens: payload.work.tokens, activeMs: payload.work.activeMs, attempts: payload.work.attempts };
         // A plan-version bump with identical bytes is a no-op too; the recipe then keeps its version.
-        if (expanded.canonicalJson === current.originalContractCanonicalJson && same(next, before)) throw new ControlError("no-op-command");
+        // Spec §10.4: a skills-only change is not a no-op.
+        if (expanded.canonicalJson === current.originalContractCanonicalJson && same(next, before)
+          && canonicalBytes(current.loop?.skills ?? null).equals(canonicalBytes(expanded.recipe.skills ?? null))) throw new ControlError("no-op-command");
         // W5: a dimension taken from an estimate is its suggestion for this task's work allocation (proposal-edit's rule).
         const modelDimensions = Object.entries(payload.workProvenance ?? {}).flatMap(([d, source]) => source ? [{ dimension: d as "tokens" | "activeMs" | "attempts", estimateId: source.estimateId }] : []);
         for (const { dimension, estimateId } of modelDimensions) {
@@ -710,6 +731,9 @@ export class WebControlService {
           if (shortfall > 0) throw new ControlError("group-reserve-insufficient", `${d}:${shortfall}`);
         }
         if (loopVersion === Number.MAX_SAFE_INTEGER) throw new ControlError("numeric-overflow");
+        // Syncskill integration spec §10.5: a lookup failure (or syncskill unset while the payload declares skills) refuses
+        // the change, draft or confirmed, decided here after every existing check, as at confirm.
+        if ("failure" in skillLookup) throw skillLookup.failure;
         // Step 5.
         const amendmentHash = writeTaskAmendment(this.store, id, {
           schema: TASK_AMENDMENT_SCHEMA, groupId: id, taskId, loopVersion: loopVersion + 1, previousContractHash: current.originalContractHash,
@@ -744,7 +768,12 @@ export class WebControlService {
           // and point the proposal (and, through saveWebAuthority, the group's mirror) at it. Old snapshots are kept.
           const frozen = executionSnapshotSchema.parse(JSON.parse(readCanonicalRecord(this.store, proposal.executionSnapshotHash!)));
           const bare = ({ state: _state, ...rest }: BudgetProposalRecord["allocations"][number]) => rest;
-          const rebuilt = replaceTaskInSnapshot(frozen, taskId, derived.derivedContractHash, { work: bare(allocation), handoff: bare(handoff) });
+          // Spec §10.5: the task's skill set is frozen as confirm freezes it -- names as declared, a profile as syncskill answered it.
+          const recipeSkills = expanded.recipe.skills;
+          // The lookup above resolved this very profile from this payload, so its members are there.
+          const frozenSkills = recipeSkills === undefined ? null
+            : "names" in recipeSkills ? { profile: null, names: [...recipeSkills.names] } : { profile: recipeSkills.profile, names: skillLookup.members.get(recipeSkills.profile)! };
+          const rebuilt = replaceTaskInSnapshot(frozen, taskId, derived.derivedContractHash, { work: bare(allocation), handoff: bare(handoff) }, frozenSkills);
           writeCanonicalRecord(this.store, id, rebuilt.snapshotHash, rebuilt.canonicalJson);
           proposal.executionSnapshotHash = rebuilt.snapshotHash;
           saveWebAuthority(this.store, group, proposal);
@@ -757,11 +786,15 @@ export class WebControlService {
         for (const { estimateId } of modelDimensions) refuseStaleEstimate(this.store, id, estimateId);
         return success(context, { kind: "task-loop-set", taskId, loopVersion: loopVersion + 1, proposalVersion: proposal.proposalVersion });
       },
-    }).body);
+      }).body;
+    } finally { release?.(); }
   }
 }
 
-function keptExpansion(taskId: string, repoPath: string, recipe: LoopRecipe): LoopTaskExpansion {
+function keptExpansion(taskId: string, repoPath: string, current: LoopRecipe, inputs: LoopRecipe["inputs"], skills: LoopSkills | undefined): LoopTaskExpansion {
+  // An explicit `undefined` would make canonical JSON throw, so absent skills are an omitted key.
+  const { skills: _previous, ...rest } = current;
+  const recipe: LoopRecipe = { ...rest, inputs: structuredClone(inputs), ...(skills === undefined ? {} : { skills }) };
   const expanded = expandRecipe(taskId, repoPath, recipe);
   return expanded.ok ? { ...expanded, recipe } : expanded;
 }

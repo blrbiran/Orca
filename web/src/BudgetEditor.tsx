@@ -164,7 +164,8 @@ export function suggestedLoopActions(view: GroupViewV1, scope: SuggestionScope):
     if (Object.keys(workProvenance).length === 0) continue;
     actions.push({
       verb: "set-task-loop", groupId, taskId: allocation.ownerId, expectedRevision: view.summary.commandRevision,
-      payload: { baseLoopVersion: plan.loopVersion, plan: plan.planId, inputs: plan.inputs, work, workProvenance },
+      // Syncskill integration spec §10.4: the payload is the task's full desired state, so its skill set goes back unchanged.
+      payload: { baseLoopVersion: plan.loopVersion, plan: plan.planId, inputs: plan.inputs, work, workProvenance, ...(plan.skills === undefined ? {} : { skills: plan.skills }) },
     });
   }
   return actions;

@@ -25,7 +25,7 @@ describe("set-task-loop refusals (criterion 8)", () => {
     const h = await draft();
     try {
       writeGroup(h, (body) => { body.status = status; });
-      expect(errorOf(new WebControlService(h.deps).setTaskLoop(change(h, "a", CHANGED)))).toMatchObject({ code: "group-state-invalid" });
+      expect(errorOf(await new WebControlService(h.deps).setTaskLoop(change(h, "a", CHANGED)))).toMatchObject({ code: "group-state-invalid" });
       expectUntouched(h, 1);
     } finally { await h.dispose(); }
   });
@@ -34,7 +34,7 @@ describe("set-task-loop refusals (criterion 8)", () => {
     const h = await draft();
     try {
       writeGroup(h, (body) => { body.stopped = true; });
-      expect(errorOf(new WebControlService(h.deps).setTaskLoop(change(h, "a", CHANGED)))).toMatchObject({ code: "group-state-invalid" });
+      expect(errorOf(await new WebControlService(h.deps).setTaskLoop(change(h, "a", CHANGED)))).toMatchObject({ code: "group-state-invalid" });
       expectUntouched(h, 1);
     } finally { await h.dispose(); }
   });
@@ -43,7 +43,7 @@ describe("set-task-loop refusals (criterion 8)", () => {
     const h = await draft();
     try {
       writeGroup(h, (body) => { body.ledger.usageUnknown = true; });
-      expect(errorOf(new WebControlService(h.deps).setTaskLoop(change(h, "a", CHANGED)))).toMatchObject({ code: "recovery-blocked" });
+      expect(errorOf(await new WebControlService(h.deps).setTaskLoop(change(h, "a", CHANGED)))).toMatchObject({ code: "recovery-blocked" });
       expectUntouched(h, 1);
     } finally { await h.dispose(); }
   });
@@ -54,7 +54,7 @@ describe("set-task-loop refusals (criterion 8)", () => {
     const h = await draft();
     try {
       writeGroup(h, (body) => { body.ledger.usageUnknown = true; body.stopped = true; });
-      expect(errorOf(new WebControlService(h.deps).setTaskLoop(change(h, "a", CHANGED)))).toMatchObject({ code: "recovery-blocked" });
+      expect(errorOf(await new WebControlService(h.deps).setTaskLoop(change(h, "a", CHANGED)))).toMatchObject({ code: "recovery-blocked" });
       expectUntouched(h, 1);
     } finally { await h.dispose(); }
   });
@@ -64,7 +64,7 @@ describe("set-task-loop refusals (criterion 8)", () => {
     try {
       const service = new WebControlService(h.deps);
       expect(await service.claimEstimate("g", h.estimateId)).not.toBeNull();
-      expect(errorOf(service.setTaskLoop(change(h, "a", CHANGED)))).toMatchObject({ code: "estimate-in-flight" });
+      expect(errorOf(await service.setTaskLoop(change(h, "a", CHANGED)))).toMatchObject({ code: "estimate-in-flight" });
       expectUntouched(h, 1);
     } finally { await h.dispose(); }
   });
@@ -73,11 +73,11 @@ describe("set-task-loop refusals (criterion 8)", () => {
     const h = await draft();
     try {
       const service = new WebControlService(h.deps);
-      expect(errorOf(service.setTaskLoop(change(h, "a", { ...CHANGED, base: 1 })))).toMatchObject({ code: "task-loop-version-conflict" });
-      expect(errorOf(service.setTaskLoop(change(h, "c", CHANGED)))).toMatchObject({ code: "task-has-no-loop-plan" });
-      expect(errorOf(service.setTaskLoop(change(h, "a", { plan: "yolo" })))).toMatchObject({ code: "loop-plan-invalid", message: "loop-plan-invalid:unknown-plan" });
-      expect(errorOf(service.setTaskLoop(change(h, "a", { inputs: { targetPaths: ["src/*.ts"] } })))).toMatchObject({ code: "loop-plan-invalid", message: "loop-plan-invalid:path-shape" });
-      expect(errorOf(service.setTaskLoop(h.taskCommand("set-task-loop", "zzz", { baseLoopVersion: 0, plan: "standard", inputs: inputs("zzz"), work: { tokens: 1, activeMs: 1, attempts: 1 } }))))
+      expect(errorOf(await service.setTaskLoop(change(h, "a", { ...CHANGED, base: 1 })))).toMatchObject({ code: "task-loop-version-conflict" });
+      expect(errorOf(await service.setTaskLoop(change(h, "c", CHANGED)))).toMatchObject({ code: "task-has-no-loop-plan" });
+      expect(errorOf(await service.setTaskLoop(change(h, "a", { plan: "yolo" })))).toMatchObject({ code: "loop-plan-invalid", message: "loop-plan-invalid:unknown-plan" });
+      expect(errorOf(await service.setTaskLoop(change(h, "a", { inputs: { targetPaths: ["src/*.ts"] } })))).toMatchObject({ code: "loop-plan-invalid", message: "loop-plan-invalid:path-shape" });
+      expect(errorOf(await service.setTaskLoop(h.taskCommand("set-task-loop", "zzz", { baseLoopVersion: 0, plan: "standard", inputs: inputs("zzz"), work: { tokens: 1, activeMs: 1, attempts: 1 } }))))
         .toMatchObject({ code: "work-not-found" });
       expectUntouched(h, 1);
     } finally { await h.dispose(); }
@@ -88,7 +88,7 @@ describe("set-task-loop refusals (criterion 8)", () => {
     const h = await draft();
     try {
       writeWork(h, "a", { loopVersion: Number.MAX_SAFE_INTEGER });
-      expect(errorOf(new WebControlService(h.deps).setTaskLoop(change(h, "a", { ...CHANGED, base: Number.MAX_SAFE_INTEGER })))).toMatchObject({ code: "numeric-overflow" });
+      expect(errorOf(await new WebControlService(h.deps).setTaskLoop(change(h, "a", { ...CHANGED, base: Number.MAX_SAFE_INTEGER })))).toMatchObject({ code: "numeric-overflow" });
       expectUntouched(h, 1);
     } finally { await h.dispose(); }
   });
@@ -96,7 +96,7 @@ describe("set-task-loop refusals (criterion 8)", () => {
   it("refuses the same contract and the same budget as no-op-command", async () => {
     const h = await draft();
     try {
-      expect(errorOf(new WebControlService(h.deps).setTaskLoop(change(h, "a")))).toMatchObject({ code: "no-op-command" });
+      expect(errorOf(await new WebControlService(h.deps).setTaskLoop(change(h, "a")))).toMatchObject({ code: "no-op-command" });
       expectUntouched(h, 1);
     } finally { await h.dispose(); }
   });
@@ -106,7 +106,7 @@ describe("set-task-loop refusals (criterion 8)", () => {
     try {
       const reserve = readWebGroup(h.store, "g").ledger.explicitUnallocatedReserve.tokens;
       const tokens = workAllocation(h, "a").amount.tokens + reserve + 1;
-      expect(errorOf(new WebControlService(h.deps).setTaskLoop(change(h, "a", { tokens }))))
+      expect(errorOf(await new WebControlService(h.deps).setTaskLoop(change(h, "a", { tokens }))))
         .toMatchObject({ code: "group-reserve-insufficient", message: "group-reserve-insufficient:tokens:1" });
       expectUntouched(h, 1);
     } finally { await h.dispose(); }
@@ -117,8 +117,8 @@ describe("set-task-loop refusals (criterion 8)", () => {
     try {
       const service = new WebControlService(h.deps);
       const stale = change(h, "a", CHANGED);
-      expect(service.setTaskLoop(change(h, "b", { inputs: { goal: "write b, changed" } }))).toMatchObject({ result: { kind: "task-loop-set", taskId: "b" } });
-      expect(errorOf(service.setTaskLoop(stale))).toMatchObject({ code: "revision-conflict" });
+      expect(await service.setTaskLoop(change(h, "b", { inputs: { goal: "write b, changed" } }))).toMatchObject({ result: { kind: "task-loop-set", taskId: "b" } });
+      expect(errorOf(await service.setTaskLoop(stale))).toMatchObject({ code: "revision-conflict" });
     } finally { await h.dispose(); }
   });
 
@@ -126,11 +126,11 @@ describe("set-task-loop refusals (criterion 8)", () => {
     const t = await driverHarness([{ taskId: "a", loop: loop("a") }, { taskId: "b", loop: loop("b") }]);
     try {
       await t.claim(); // nextClaimableTask takes the first ready task by id: a
-      expect(errorOf(t.service.setTaskLoop(change(t.h, "a", CHANGED)))).toMatchObject({ code: "task-already-started" });
+      expect(errorOf(await t.service.setTaskLoop(change(t.h, "a", CHANGED)))).toMatchObject({ code: "task-already-started" });
       // Spec §5.2 step 2: a finished run returns its task to ready. A ready task with an inactive run row is that state.
       t.h.store.db.prepare("INSERT INTO runs(id,group_id,work_item_id,generation,active,body) VALUES ('run-finished','g','b',1,0,?)")
         .run(JSON.stringify({ unknown: { work: false, handoff: false } }));
-      expect(errorOf(t.service.setTaskLoop(change(t.h, "b", { inputs: { goal: "write b, changed" } })))).toMatchObject({ code: "task-already-started" });
+      expect(errorOf(await t.service.setTaskLoop(change(t.h, "b", { inputs: { goal: "write b, changed" } })))).toMatchObject({ code: "task-already-started" });
     } finally { await t.h.dispose(); }
   });
 });
@@ -142,7 +142,7 @@ describe("a change before confirmation (criterion 9; spec §5.2 steps 5-7)", () 
       const service = new WebControlService(h.deps);
       const before = { group: readWebGroup(h.store, "g"), work: workAllocation(h, "a") };
       const stalePayload = await h.confirmPayload();
-      expect(service.setTaskLoop(change(h, "a", { ...CHANGED, tokens: before.work.amount.tokens + 500_000 })))
+      expect(await service.setTaskLoop(change(h, "a", { ...CHANGED, tokens: before.work.amount.tokens + 500_000 })))
         .toMatchObject({ verb: "set-task-loop", result: { kind: "task-loop-set", taskId: "a", loopVersion: 1, proposalVersion: 2 } });
       expectConserved(h);
       const after = readWebGroup(h.store, "g"), work = workAllocation(h, "a");
@@ -165,7 +165,7 @@ describe("a change before confirmation (criterion 9; spec §5.2 steps 5-7)", () 
   it("stores the amended contract where the single-task reader finds it", async () => {
     const h = await draft();
     try {
-      expect(new WebControlService(h.deps).setTaskLoop(change(h, "a", CHANGED))).toMatchObject({ result: { kind: "task-loop-set" } });
+      expect(await new WebControlService(h.deps).setTaskLoop(change(h, "a", CHANGED))).toMatchObject({ result: { kind: "task-loop-set" } });
       expect(readArchivedContract(h.store, "g", "a").contract.objective.goal).toBe("write a, changed");
     } finally { await h.dispose(); }
   });
@@ -174,7 +174,7 @@ describe("a change before confirmation (criterion 9; spec §5.2 steps 5-7)", () 
     const h = await draft();
     try {
       const before = { group: readWebGroup(h.store, "g"), work: workAllocation(h, "a").amount };
-      expect(new WebControlService(h.deps).setTaskLoop(change(h, "a", { tokens: before.work.tokens - 1_000_000, attempts: before.work.attempts - 1 })))
+      expect(await new WebControlService(h.deps).setTaskLoop(change(h, "a", { tokens: before.work.tokens - 1_000_000, attempts: before.work.attempts - 1 })))
         .toMatchObject({ result: { kind: "task-loop-set" } });
       expectConserved(h);
       const after = readWebGroup(h.store, "g");
@@ -190,7 +190,7 @@ describe("a change before confirmation (criterion 9; spec §5.2 steps 5-7)", () 
   it("a budget-only change does not show the plan as changed", async () => {
     const h = await draft();
     try {
-      expect(new WebControlService(h.deps).setTaskLoop(change(h, "a", { tokens: workAllocation(h, "a").amount.tokens - 1_000_000 })))
+      expect(await new WebControlService(h.deps).setTaskLoop(change(h, "a", { tokens: workAllocation(h, "a").amount.tokens - 1_000_000 })))
         .toMatchObject({ result: { kind: "task-loop-set", loopVersion: 1 } });
       expect(readControlGroup(h.store, "epoch", "g").workItems[0]!.loopPlan).toMatchObject({ amended: false, loopVersion: 1 });
     } finally { await h.dispose(); }
@@ -203,13 +203,13 @@ describe("a change before confirmation (criterion 9; spec §5.2 steps 5-7)", () 
     try {
       const service = new WebControlService(h.deps);
       const imported = readControlGroup(h.store, "epoch", "g").workItems[0]!.originalContractHash;
-      expect(service.setTaskLoop(change(h, "a", CHANGED))).toMatchObject({ result: { kind: "task-loop-set", loopVersion: 1 } });
-      expect(service.setTaskLoop(change(h, "a", { base: 1 }))).toMatchObject({ result: { kind: "task-loop-set", loopVersion: 2 } });
+      expect(await service.setTaskLoop(change(h, "a", CHANGED))).toMatchObject({ result: { kind: "task-loop-set", loopVersion: 1 } });
+      expect(await service.setTaskLoop(change(h, "a", { base: 1 }))).toMatchObject({ result: { kind: "task-loop-set", loopVersion: 2 } });
       // The change back is real: the task's contract is the imported one again, byte for byte (same hash).
       const back = readControlGroup(h.store, "epoch", "g").workItems[0]!;
       expect(back.originalContractHash).toBe(imported);
       expect(back.loopPlan).toMatchObject({ amended: true, loopVersion: 2 });
-      expect(service.setTaskLoop(change(h, "a", { base: 2, tokens: workAllocation(h, "a").amount.tokens - 1_000_000 }))).toMatchObject({ result: { kind: "task-loop-set", loopVersion: 3 } });
+      expect(await service.setTaskLoop(change(h, "a", { base: 2, tokens: workAllocation(h, "a").amount.tokens - 1_000_000 }))).toMatchObject({ result: { kind: "task-loop-set", loopVersion: 3 } });
       expect(readControlGroup(h.store, "epoch", "g").workItems[0]!.loopPlan).toMatchObject({ amended: true, loopVersion: 3 });
     } finally { await h.dispose(); }
   });
@@ -225,7 +225,7 @@ describe("the self-check (spec §5.2 step 8)", () => {
       writeWork(h, "a", { configHash: "f".repeat(64) });
       const rows = () => [h.store.db.prepare("SELECT body FROM budget_proposals WHERE group_id='g'").get()!.body, h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!.body];
       const before = rows();
-      expect(errorOf(service.setTaskLoop(change(h, "a", CHANGED)))).toMatchObject({ code: "recovery-blocked" });
+      expect(errorOf(await service.setTaskLoop(change(h, "a", CHANGED)))).toMatchObject({ code: "recovery-blocked" });
       expect(workBody(h, "a").amendmentHash).toBeUndefined();
       expect(rows()).toEqual(before);
     } finally { await h.dispose(); }

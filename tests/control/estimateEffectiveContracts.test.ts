@@ -38,7 +38,7 @@ describe("an estimate sees the tasks' effective contracts (W6)", () => {
     const h = await fixture();
     try {
       const service = new WebControlService(h.deps);
-      expect(service.setTaskLoop(change(h, "a", CHANGED))).toMatchObject({ result: { kind: "task-loop-set" } });
+      expect(await service.setTaskLoop(change(h, "a", CHANGED))).toMatchObject({ result: { kind: "task-loop-set" } });
       const created = await reestimate(h, service) as { result: { estimateId: string } };
       const estimateId = created.result.estimateId;
       const record = readEstimateRecord(h.store, "g", estimateId);
@@ -57,7 +57,7 @@ describe("an estimate sees the tasks' effective contracts (W6)", () => {
       const service = new WebControlService(h.deps);
       await readyEstimate(h, service, h.estimateId);
       expect(viewOf(h, h.estimateId).stale).toBe(false);
-      expect(service.setTaskLoop(change(h, "a", CHANGED))).toMatchObject({ result: { kind: "task-loop-set" } });
+      expect(await service.setTaskLoop(change(h, "a", CHANGED))).toMatchObject({ result: { kind: "task-loop-set" } });
       expect(viewOf(h, h.estimateId).stale).toBe(true);
       const version = readBudgetProposal(h.store, "g").proposalVersion;
       const apply = service.editProposal(h.command("proposal-edit", { baseProposalVersion: version,
@@ -74,7 +74,7 @@ describe("an estimate sees the tasks' effective contracts (W6)", () => {
     const h = await fixture();
     try {
       const service = new WebControlService(h.deps);
-      expect(service.setTaskLoop(change(h, "a", CHANGED))).toMatchObject({ result: { kind: "task-loop-set" } });
+      expect(await service.setTaskLoop(change(h, "a", CHANGED))).toMatchObject({ result: { kind: "task-loop-set" } });
       const estimateId = ((await reestimate(h, service)) as { result: { estimateId: string } }).result.estimateId;
       const original = String(h.store.db.prepare("SELECT body FROM estimates WHERE group_id='g' AND id=?").get(estimateId)!.body);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -113,7 +113,7 @@ describe("an estimate sees the tasks' effective contracts (W6)", () => {
       h.store.db.prepare("UPDATE estimates SET body=? WHERE group_id='g' AND id=?").run(original, estimateId);
       expect(viewOf(h, estimateId).stale).toBe(false);
       // Changing the task back to its imported contract makes the post-change estimate stale and the import-time one current.
-      expect(service.setTaskLoop(change(h, "a", { base: 1 }))).toMatchObject({ result: { kind: "task-loop-set" } });
+      expect(await service.setTaskLoop(change(h, "a", { base: 1 }))).toMatchObject({ result: { kind: "task-loop-set" } });
       expect(viewOf(h, estimateId).stale).toBe(true);
       expect(viewOf(h, h.estimateId).stale).toBe(false);
     } finally { await h.dispose(); }

@@ -98,8 +98,12 @@ const positive = (text: string): number | null => {
   return text.trim() !== "" && Number.isSafeInteger(value) && value > 0 ? value : null;
 };
 
-/** The payload a draft sends, or why it cannot be sent yet (a number that is not a positive safe integer; the server re-checks everything). */
-function payloadOf(draft: LoopDraft): { payload: SetTaskLoopPayloadV1 } | { invalid: string } {
+/**
+ * The payload a draft sends, or why it cannot be sent yet (a number that is not a positive safe integer; the server re-checks everything).
+ * Syncskill integration spec §10.4 (C14): the form does not edit skills, and a payload without them removes them, so the
+ * task's current skill set is carried through unchanged.
+ */
+function payloadOf(draft: LoopDraft, skills: LoopPlanViewV1["skills"]): { payload: SetTaskLoopPayloadV1 } | { invalid: string } {
   const tokens = positive(draft.text.tokens), activeMs = positive(draft.text.activeMs), attempts = positive(draft.text.attempts);
   if (tokens === null || activeMs === null || attempts === null) return { invalid: i18n.t("loopPlan.badBudget") };
   const blankCap = draft.text.maxFilesTouched.trim() === "";
@@ -113,6 +117,7 @@ function payloadOf(draft: LoopDraft): { payload: SetTaskLoopPayloadV1 } | { inva
       protectedPaths: lines(draft.text.protectedPaths), maxFilesTouched: cap,
     },
     work: { tokens, activeMs, attempts },
+    ...(skills === undefined ? {} : { skills }),
   } };
 }
 
@@ -159,7 +164,7 @@ function LoopPlanEditor(props: LoopPlanCardProps & { plan: LoopPlanViewV1; curre
   if (!open) return <p>{t("loopPlan.notOpen")}</p>;
   if (draft === null) return <button type="button" onClick={() => onDraft(key, JSON.stringify(draftOf(plan, current)))}>{t("loopPlan.changePlan")}</button>;
   const set = (patch: Partial<LoopDraft>): void => onDraft(key, JSON.stringify({ ...draft, ...patch }));
-  const checked = payloadOf(draft);
+  const checked = payloadOf(draft, plan.skills);
   const payload = "payload" in checked ? checked.payload : null;
   const consequence = payload === null ? null : consequenceOf(view, current, payload.work);
   const blocked = "invalid" in checked ? checked.invalid : consequence!.shortfall;

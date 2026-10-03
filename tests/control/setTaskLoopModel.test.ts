@@ -38,7 +38,7 @@ describe("set-task-loop applies an estimate's work suggestion (W5)", () => {
       const service = new WebControlService(h.deps);
       await readyEstimate(h, service);
       const before = workAllocation(h, "a");
-      expect(service.setTaskLoop(apply(h, { tokens: SUGGESTED.tokens, activeMs: SUGGESTED.activeMs }, ["tokens", "activeMs"])))
+      expect(await service.setTaskLoop(apply(h, { tokens: SUGGESTED.tokens, activeMs: SUGGESTED.activeMs }, ["tokens", "activeMs"])))
         .toMatchObject({ result: { kind: "task-loop-set", taskId: "a" } });
       const after = workAllocation(h, "a");
       expect(after.amount).toEqual({ ...before.amount, tokens: SUGGESTED.tokens, activeMs: SUGGESTED.activeMs });
@@ -55,10 +55,10 @@ describe("set-task-loop applies an estimate's work suggestion (W5)", () => {
       const service = new WebControlService(h.deps);
       await readyEstimate(h, service);
       const before = workAllocation(h, "a");
-      expect(errorOf(service.setTaskLoop(apply(h, { tokens: SUGGESTED.tokens + 1 }, ["tokens"])))).toMatchObject({ code: "proposal-version-conflict" });
+      expect(errorOf(await service.setTaskLoop(apply(h, { tokens: SUGGESTED.tokens + 1 }, ["tokens"])))).toMatchObject({ code: "proposal-version-conflict" });
       expect(workAllocation(h, "a")).toEqual(before);
       // The same number sent as the person's own is an ordinary change.
-      expect(service.setTaskLoop(change(h, "a", { tokens: SUGGESTED.tokens + 1 }))).toMatchObject({ result: { kind: "task-loop-set" } });
+      expect(await service.setTaskLoop(change(h, "a", { tokens: SUGGESTED.tokens + 1 }))).toMatchObject({ result: { kind: "task-loop-set" } });
       expect(workAllocation(h, "a").fieldProvenance.tokens).toEqual({ provenance: "human", estimateId: null });
     } finally { await h.dispose(); }
   });
@@ -69,11 +69,11 @@ describe("set-task-loop applies an estimate's work suggestion (W5)", () => {
       const service = new WebControlService(h.deps);
       await readyEstimate(h, service);
       const version = readBudgetProposal(h.store, "g").proposalVersion;
-      expect(errorOf(service.setTaskLoop(apply(h, { tokens: SUGGESTED.tokens, inputs: { goal: "write a, changed" } }, ["tokens"]))))
+      expect(errorOf(await service.setTaskLoop(apply(h, { tokens: SUGGESTED.tokens, inputs: { goal: "write a, changed" } }, ["tokens"]))))
         .toMatchObject({ code: "estimate-stale" });
       expect(readBudgetProposal(h.store, "g").proposalVersion).toBe(version);
-      expect(service.setTaskLoop(change(h, "a", { inputs: { goal: "write a, changed" } }))).toMatchObject({ result: { kind: "task-loop-set", loopVersion: 1 } });
-      expect(errorOf(service.setTaskLoop(apply(h, { base: 1, tokens: SUGGESTED.tokens, inputs: { goal: "write a, changed" } }, ["tokens"]))))
+      expect(await service.setTaskLoop(change(h, "a", { inputs: { goal: "write a, changed" } }))).toMatchObject({ result: { kind: "task-loop-set", loopVersion: 1 } });
+      expect(errorOf(await service.setTaskLoop(apply(h, { base: 1, tokens: SUGGESTED.tokens, inputs: { goal: "write a, changed" } }, ["tokens"]))))
         .toMatchObject({ code: "estimate-stale" });
     } finally { await h.dispose(); }
   });

@@ -352,7 +352,7 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
         case "set-agent-preferences": await service.setAgentPreferences(command); break;
         case "proposal-set-agent": await service.proposalSetAgent(command); break;
         case "set-task-labels": service.setTaskLabels(command); break;
-        case "set-task-loop": service.setTaskLoop(command); break;
+        case "set-task-loop": await service.setTaskLoop(command); break;
         case "requirement-open": await service.openRequirement(command); break;
         case "requirement-answer": service.answerRequirement(command); break;
         case "requirement-consensus": service.requirementConsensus(command); break;

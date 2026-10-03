@@ -36,7 +36,7 @@ describe("set-task-loop keeps the task's plan version unless the plan or its inp
     try {
       makeV1(h);
       const before = effective(h);
-      expect(new WebControlService(h.deps).setTaskLoop(change(h, "a", { base: 1, tokens: 2_000_000 }))).toMatchObject({ result: { kind: "task-loop-set", loopVersion: 2 } });
+      expect(await new WebControlService(h.deps).setTaskLoop(change(h, "a", { base: 1, tokens: 2_000_000 }))).toMatchObject({ result: { kind: "task-loop-set", loopVersion: 2 } });
       const after = effective(h);
       expect(after.loop!.planVersion).toBe(1);
       expect(after.originalContractCanonicalJson).toBe(before.originalContractCanonicalJson);
@@ -62,7 +62,7 @@ describe("set-task-loop keeps the task's plan version unless the plan or its inp
       expect(readEstimateRecord(h.store, "g", estimateId).state).toBe("ready");
       const command = change(h, "a", { base: 1, tokens: SUGGESTED.tokens });
       const model = { provenance: "model" as const, estimateId };
-      expect(service.setTaskLoop({ ...command, payload: { ...command.payload, workProvenance: { tokens: model } } }))
+      expect(await service.setTaskLoop({ ...command, payload: { ...command.payload, workProvenance: { tokens: model } } }))
         .toMatchObject({ result: { kind: "task-loop-set", loopVersion: 2 } });
       expect(effective(h).loop!.planVersion).toBe(1);
     } finally { await h.dispose(); }
@@ -72,7 +72,7 @@ describe("set-task-loop keeps the task's plan version unless the plan or its inp
     const h = await fixture();
     try {
       makeV1(h);
-      expect(new WebControlService(h.deps).setTaskLoop(change(h, "a", { base: 1, inputs: { goal: "write a, changed" } }))).toMatchObject({ result: { kind: "task-loop-set" } });
+      expect(await new WebControlService(h.deps).setTaskLoop(change(h, "a", { base: 1, inputs: { goal: "write a, changed" } }))).toMatchObject({ result: { kind: "task-loop-set" } });
       expect(effective(h).loop!.planVersion).toBe(2);
       expect(workBody(h, "a").planChanged).toBe(true);
     } finally { await h.dispose(); }

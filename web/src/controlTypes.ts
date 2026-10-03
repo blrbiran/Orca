@@ -479,16 +479,22 @@ export type SetTaskLabelsPayloadV1 = { labels: string[] | null; baseLabelsVersio
 export type LoopPlanIdV1 = "standard" | "bugfix" | "refactor" | "design" | "investigate";
 /** Loop plans spec §3.2: a recipe's inputs, every optional field filled. */
 export type LoopInputsV1 = { goal: string; successCondition: string; targetPaths: string[]; checks: string[]; nonGoals: string[]; relevantDocs: string[]; protectedPaths: string[]; maxFilesTouched: number | null };
+/** Syncskill integration spec §10.4: a loop task's skill set -- a syncskill profile, or explicit names. */
+export type LoopSkillsV1 = { profile: string } | { names: string[] };
 /** Loop plans spec §4.1, panel i18n spec §3.1: the fields a loop task's card is built from; no English sentence travels. */
 export type LoopPlanViewV1 = {
   planId: LoopPlanIdV1; planVersion: number; chosenBy: "explicit" | "labels"; chosenByLabel: string | null;
   amended: boolean; loopVersion: number; inputs: LoopInputsV1; maxFiles: number; hasDiscipline: boolean;
+  /** Absent when the recipe has none. */
+  skills?: LoopSkillsV1;
 };
 /** Loop plans spec §5.2: change a loop task's plan, inputs and work budget (sessions is carried over). */
 export type SetTaskLoopPayloadV1 = {
   baseLoopVersion: number; plan: string; inputs: LoopInputsV1; work: { tokens: number; activeMs: number; attempts: number };
   /** W5: the work dimensions taken from an estimate's suggestion; the server re-checks each against it. */
   workProvenance?: Partial<Record<"tokens" | "activeMs" | "attempts", { provenance: "model"; estimateId: string }>>;
+  /** Syncskill integration spec §10.4: the full desired skill set, like inputs -- absent removes the task's skills. */
+  skills?: LoopSkillsV1;
 };
 /**
  * Loop plans spec §2.2, panel i18n spec §3.1: the plans a person can pick, at their current registry version (the

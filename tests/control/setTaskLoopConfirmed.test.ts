@@ -38,7 +38,7 @@ describe("a change after confirmation (criteria 9, 10)", () => {
     const { h, service } = await confirmed();
     try {
       const before = { group: readWebGroup(h.store, "g"), version: readBudgetProposal(h.store, "g").proposalVersion, work: workAllocation(h, "a").amount };
-      expect(service.setTaskLoop(change(h, "a", { ...CHANGED, tokens: before.work.tokens + 500_000 })))
+      expect(await service.setTaskLoop(change(h, "a", { ...CHANGED, tokens: before.work.tokens + 500_000 })))
         .toMatchObject({ result: { kind: "task-loop-set", taskId: "a", loopVersion: 1, proposalVersion: before.version } });
       expectConserved(h);
       const after = readWebGroup(h.store, "g");
@@ -61,7 +61,7 @@ describe("a change after confirmation (criteria 9, 10)", () => {
     const { h, service } = await confirmed();
     try {
       const before = { group: readWebGroup(h.store, "g"), work: workAllocation(h, "a").amount };
-      expect(service.setTaskLoop(change(h, "a", { tokens: before.work.tokens - 1_000_000, attempts: before.work.attempts - 1 }))).toMatchObject({ result: { kind: "task-loop-set" } });
+      expect(await service.setTaskLoop(change(h, "a", { tokens: before.work.tokens - 1_000_000, attempts: before.work.attempts - 1 }))).toMatchObject({ result: { kind: "task-loop-set" } });
       expectConserved(h);
       const after = readWebGroup(h.store, "g");
       expect(after.ledger.explicitUnallocatedReserve.tokens).toBe(before.group.ledger.explicitUnallocatedReserve.tokens + 1_000_000);
@@ -76,7 +76,7 @@ describe("a change after confirmation (criteria 9, 10)", () => {
     const { h, service } = await confirmed();
     try {
       const before = snapshotOf(h), b = readConfirmedTaskExecution(h.store, "g", "b");
-      expect(service.setTaskLoop(change(h, "a", { ...CHANGED, tokens: workAllocation(h, "a").amount.tokens + 500_000 }))).toMatchObject({ result: { kind: "task-loop-set" } });
+      expect(await service.setTaskLoop(change(h, "a", { ...CHANGED, tokens: workAllocation(h, "a").amount.tokens + 500_000 }))).toMatchObject({ result: { kind: "task-loop-set" } });
       const after = snapshotOf(h);
       expect(canonicalBytes(without(after, "a")).equals(canonicalBytes(without(before, "a")))).toBe(true);
       expect(after.derivedContracts.find((entry: { taskId: string }) => entry.taskId === "a")).not.toEqual(before.derivedContracts.find((entry: { taskId: string }) => entry.taskId === "a"));
@@ -113,7 +113,7 @@ describe("a change after confirmation leaves a re-amounted task's snapshot entry
       expect(workAllocation(h, held)).toMatchObject({ state: "held" });
       expect(workAllocation(h, held).amount).not.toEqual(before.allocations.find((row: { bucket: string }) => row.bucket === "work").amount);
       // A plan-only change: the budget does not move, so the reserve row cannot be what a rebuild is seen through.
-      expect(service.setTaskLoop(change(h, other, { inputs: { goal: `write ${other}, changed` } }))).toMatchObject({ result: { kind: "task-loop-set", taskId: other } });
+      expect(await service.setTaskLoop(change(h, other, { inputs: { goal: `write ${other}, changed` } }))).toMatchObject({ result: { kind: "task-loop-set", taskId: other } });
       const after = entryOf(snapshotOf(h), held);
       expect(after.derived).toHaveLength(1);
       expect(after.allocations).toHaveLength(2);
@@ -126,7 +126,7 @@ describe("the change and the driver (criteria 11, 12)", () => {
   it("a command before the claim: the claim runs the new contract", async () => {
     const t = await driverHarness([{ taskId: "a", loop: loop("a") }]);
     try {
-      expect(t.service.setTaskLoop(change(t.h, "a", CHANGED))).toMatchObject({ result: { kind: "task-loop-set" } });
+      expect(await t.service.setTaskLoop(change(t.h, "a", CHANGED))).toMatchObject({ result: { kind: "task-loop-set" } });
       const runId = await t.claim();
       const driver = t.driver();
       await t.until(driver, () => t.fake.calls.accept.length > 0);
@@ -140,7 +140,7 @@ describe("the change and the driver (criteria 11, 12)", () => {
     const t = await driverHarness([{ taskId: "a", loop: loop("a") }]);
     try {
       await t.claim();
-      expect(errorOf(t.service.setTaskLoop(change(t.h, "a", CHANGED)))).toMatchObject({ code: "task-already-started" });
+      expect(errorOf(await t.service.setTaskLoop(change(t.h, "a", CHANGED)))).toMatchObject({ code: "task-already-started" });
     } finally { await t.h.dispose(); }
   });
 
@@ -150,7 +150,7 @@ describe("the change and the driver (criteria 11, 12)", () => {
       const runA = await t.claim();
       const driver = t.driver();
       await t.until(driver, () => t.body(runA).state === "accepted");
-      expect(t.service.setTaskLoop(change(t.h, "b", { inputs: { goal: "write b, changed" }, tokens: workAllocation(t.h, "b").amount.tokens + 500_000 })))
+      expect(await t.service.setTaskLoop(change(t.h, "b", { inputs: { goal: "write b, changed" }, tokens: workAllocation(t.h, "b").amount.tokens + 500_000 })))
         .toMatchObject({ result: { kind: "task-loop-set", taskId: "b" } });
       await t.until(driver, () => t.body(runA).state === "settled");
       expect(t.body(runA).drive.blockedReason ?? null).toBeNull();
@@ -170,9 +170,9 @@ describe("replaceTaskInSnapshot refuses a snapshot it cannot copy (Rule 9 P3: it
         handoff: snapshot.allocations.find((row) => row.ownerKind === "task" && row.ownerId === taskId && row.bucket === "handoff")!,
       });
       // Otherwise a missing entry would be skipped and the copy would silently keep the old contract or allocations.
-      expect(thrown(() => replaceTaskInSnapshot(snapshot, "missing", "0".repeat(64), rows("a")))).toMatchObject({ code: "recovery-blocked" });
+      expect(thrown(() => replaceTaskInSnapshot(snapshot, "missing", "0".repeat(64), rows("a"), null))).toMatchObject({ code: "recovery-blocked" });
       const noRows = { ...snapshot, allocations: snapshot.allocations.filter((row) => !(row.ownerKind === "task" && row.ownerId === "a")) };
-      expect(thrown(() => replaceTaskInSnapshot(noRows, "a", "0".repeat(64), rows("a")))).toMatchObject({ code: "recovery-blocked" });
+      expect(thrown(() => replaceTaskInSnapshot(noRows, "a", "0".repeat(64), rows("a"), null))).toMatchObject({ code: "recovery-blocked" });
     } finally { await h.dispose(); }
   });
 });

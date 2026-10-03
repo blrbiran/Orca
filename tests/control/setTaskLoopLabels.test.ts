@@ -46,7 +46,7 @@ describe("set-task-loop on a loop task its labels chose (final review C1)", () =
       const service = new WebControlService(h.deps);
       await readyEstimate(h, service);
       expect(loopPlanOf(h)).toMatchObject({ planId: "bugfix", chosenBy: "labels", chosenByLabel: "bug" });
-      const answer = service.setTaskLoop(setLoop(h, SUGGESTED.tokens, { provenance: true }));
+      const answer = await service.setTaskLoop(setLoop(h, SUGGESTED.tokens, { provenance: true }));
       expect(errorOf(answer)).toBeUndefined();
       expect(answer).toMatchObject({ result: { kind: "task-loop-set", taskId: "a", loopVersion: 1 } });
       expect(workAllocation(h, "a").amount.tokens).toBe(SUGGESTED.tokens);
@@ -61,7 +61,7 @@ describe("set-task-loop on a loop task its labels chose (final review C1)", () =
       const service = new WebControlService(h.deps);
       await readyEstimate(h, service);
       expect(view(h).estimates[0]!.stale).toBe(false);
-      expect(service.setTaskLoop(setLoop(h, workAllocation(h, "a").amount.tokens + 1))).toMatchObject({ result: { kind: "task-loop-set", loopVersion: 1 } });
+      expect(await service.setTaskLoop(setLoop(h, workAllocation(h, "a").amount.tokens + 1))).toMatchObject({ result: { kind: "task-loop-set", loopVersion: 1 } });
       expect(view(h).estimates[0]!.stale).toBe(false);
       expect(loopPlanOf(h)).toMatchObject({ chosenBy: "labels", chosenByLabel: "bug", amended: false });
     } finally { await h.dispose(); }
@@ -72,7 +72,7 @@ describe("set-task-loop on a loop task its labels chose (final review C1)", () =
     try {
       const service = new WebControlService(h.deps);
       await readyEstimate(h, service);
-      expect(service.setTaskLoop(setLoop(h, workAllocation(h, "a").amount.tokens, { goal: "write a, changed" })))
+      expect(await service.setTaskLoop(setLoop(h, workAllocation(h, "a").amount.tokens, { goal: "write a, changed" })))
         .toMatchObject({ result: { kind: "task-loop-set", loopVersion: 1 } });
       expect(loopPlanOf(h)).toMatchObject({ chosenBy: "explicit", chosenByLabel: null, amended: true });
       expect(view(h).estimates[0]!.stale).toBe(true);
