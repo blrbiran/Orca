@@ -15,11 +15,19 @@
 // Rule 17: every Orca write goes under --output (ORCA_CONTROL_DIR, ORCA_CORRECTIONS_DIR); ~/.orca is snapshotted and
 // must not change. HOME is NOT relocated for the panel: real claude reads its login from the keychain under it.
 //
+// --skill --syncskill-bin <abs syncskill dist/index.js> (human ruling 2026-10-03, session 9d95e6c8): the task is a loop
+// task declaring one skill, `orca-live-marker`, which holds a fresh random marker line; the task's check compares only
+// the sha256 of answer.txt with the marker's, so the marker itself is in no prompt and a landed run shows the skill's
+// text reached the model. syncskill runs from a wrapper that points its HOME and SYNCSKILL_DIR under --output (Rule 17;
+// the real ~/.syncskill is snapshotted and must not change). Extra checks: every claude call got --plugin-dir and lost
+// --disable-slash-commands, and no call's argv (where ccloop's runner puts the prompt) carries the marker.
+//
 // usage: tsx scripts/live-panel-http-acceptance.ts --ccloop-bin <abs dist/cli.js> --output <new dir>
 //          (--claude <abs claude binary> --model <name> | --fake-claude)
+//          [--skill --syncskill-bin <abs dist/index.js>]
 //          [--call-usd 0.6] [--cap-usd 2] [--deadline-ms 900000] [--task-tokens 1000000]
 import { execFileSync, spawn } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { mkdir, realpath, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -33,6 +41,7 @@ function parseArgs(argv: string[]): Record<string, string> {
     const key = argv[i]!;
     if (!key.startsWith("--")) throw new Error(`unexpected argument ${key}`);
     if (key === "--fake-claude") { out["fake-claude"] = "1"; continue; }
+    if (key === "--skill") { out.skill = "1"; continue; }
     const value = argv[++i];
     if (value === undefined) throw new Error(`${key} needs a value`);
     out[key.slice(2)] = value;
@@ -49,6 +58,10 @@ if (fakeClaude === (args.claude !== undefined)) throw new Error("give exactly on
 if (!fakeClaude && (!isAbsolute(args.claude!) || !args.model)) throw new Error("--claude must be absolute and --model is required");
 for (const key of Object.keys(process.env)) if (key.startsWith("CLAUDE") && key !== "CLAUDE_CONFIG_DIR") delete process.env[key];
 if (existsSync(output)) throw new Error(`refusing an existing --output ${output}`);
+const withSkill = args.skill === "1";
+if (withSkill !== (args["syncskill-bin"] !== undefined) || (withSkill && !isAbsolute(args["syncskill-bin"]!))) throw new Error("--skill and --syncskill-bin <absolute> go together");
+// The marker is written only into the skill's SKILL.md (and, with --fake-claude, the fake's script); the check holds its hash.
+const marker = withSkill ? `orca-live-${randomBytes(16).toString("hex")}` : null;
 const taskTokens = Number(args["task-tokens"] ?? 1_000_000);
 const deadlineMs = Number(args["deadline-ms"] ?? 900_000);
 const callUsd = String(args["call-usd"] ?? "0.6");
@@ -89,20 +102,34 @@ await writeFile(join(repo, "README.md"), "live acceptance target\n");
 g(repo, "add", "README.md");
 g(repo, "commit", "-qm", "base");
 
-const marker = join(root, "claude-marker.json");
+const answer = marker === null ? "42\n" : `${marker}\n`;
+const fakeMarker = join(root, "claude-marker.json");
 const scriptPath = join(root, "claude-script.json");
-await writeFile(scriptPath, JSON.stringify({ a: { files: { "answer.txt": "42\n" } } }));
+await writeFile(scriptPath, JSON.stringify({ a: { files: { "answer.txt": answer } } }));
+const SKILL = "orca-live-marker";
+const syncskillRoot = join(root, "syncskill");
+const syncskillWrapper = join(syncskillRoot, "bin");
+if (withSkill) {
+  const sync = join(syncskillRoot, "sync");
+  await mkdir(join(sync, "skills", SKILL), { recursive: true, mode: 0o700 });
+  await mkdir(join(syncskillRoot, "home", ".claude", "skills"), { recursive: true, mode: 0o700 });
+  await writeFile(join(sync, "skills", SKILL, "SKILL.md"), `---\nname: ${SKILL}\ndescription: Gives the exact line an Orca live acceptance task must write into answer.txt. Use it whenever a task asks for the Orca live marker.\n---\n\nThe Orca live marker is the line below. Write exactly this line, followed by one newline, as the whole content of answer.txt at the repository root:\n\n${marker}\n`);
+  await writeFile(join(sync, "config.json"), JSON.stringify({ version: 1, conflict_resolution: "manual", agents: { claude: join(syncskillRoot, "home", ".claude", "skills") }, links: {}, servers: {}, sources: {} }));
+  await writeFile(syncskillWrapper, `#!/bin/sh\nHOME='${join(syncskillRoot, "home")}' SYNCSKILL_DIR='${sync}' exec '${process.execPath}' '${args["syncskill-bin"]}' "$@"\n`, { mode: 0o755 });
+}
 const fakeClaudeCli = resolve(dirname(ccloopBin), "..", "tests", "fixtures", "fake-claude-cli.mjs");
 const claudeRaw = join(root, "claude-raw");
 const claudeTee = [process.execPath, resolve(import.meta.dirname, "claude-tee.mjs"), claudeRaw];
 const claudeCommand = fakeClaude
-  ? [...claudeTee, process.execPath, fakeClaudeCli, "script", marker, scriptPath]
+  ? [...claudeTee, process.execPath, fakeClaudeCli, "script", fakeMarker, scriptPath]
   : [...claudeTee, args.claude!, ...CLAUDE_ISOLATION];
 const tablePath = join(root, "agents.json");
 const installation = { kind: "claude", command: claudeCommand, version: versionOf(claudeCommand), configDir: null, timeoutMs: 600_000, killGraceMs: 5_000 };
 await writeFile(tablePath, JSON.stringify({ schema: "ccloop-agents-table-v1", installations: { claude: installation } }), { mode: 0o600 });
 
-const check = 'test "$(cat answer.txt)" = 42';
+const check = marker === null ? 'test "$(cat answer.txt)" = 42'
+  : `test "$(shasum -a 256 answer.txt | cut -d ' ' -f 1)" = ${createHash("sha256").update(answer).digest("hex")}`;
+const skillGoal = `Create a file named answer.txt at the repository root whose entire content is the Orca live marker line followed by one newline. Change no other file. The marker is given only by the skill orca-run-skills:${SKILL}: invoke that skill to read it, and write its line exactly.`;
 const contract = {
   objective: { taskId: "a", goal: "Create a file named answer.txt at the repository root whose entire content is the characters 42 followed by one newline. Change no other file.", successCondition: "answer.txt holds exactly 42 and a newline", nonGoals: ["changing any file other than answer.txt"] },
   context: { repoPath: repo, targetPaths: ["answer.txt"], relevantDocs: [], buildTestCommands: [check], constraints: [] },
@@ -114,7 +141,8 @@ const contract = {
 const contractPath = join(root, "contract-a.json");
 await writeFile(contractPath, canonicalBytes(contract));
 const planPath = join(repo, "plan.json");
-await writeFile(planPath, JSON.stringify({ targetRepo: repo, ccloopBin, runsDir: join(root, "unused-runs"), workBranch: "orca/unused", policy: "local-merge", ledgerMode: "out-of-repo", goal: "live acceptance", successConditions: [contract.objective.successCondition], tasks: [{ taskId: "a", contract: contractPath, dependsOn: [], targetVersion: 1 }] }));
+const skillTask = { taskId: "a", dependsOn: [], targetVersion: 1, loop: { plan: "standard", goal: skillGoal, successCondition: "answer.txt holds exactly the marker line the skill gives", targetPaths: ["answer.txt"], checks: [check], skills: { names: [SKILL] } } };
+await writeFile(planPath, JSON.stringify({ targetRepo: repo, ccloopBin, runsDir: join(root, "unused-runs"), workBranch: "orca/unused", policy: "local-merge", ledgerMode: "out-of-repo", goal: "live acceptance", successConditions: [withSkill ? skillTask.loop.successCondition : contract.objective.successCondition], tasks: [withSkill ? skillTask : { taskId: "a", contract: contractPath, dependsOn: [], targetVersion: 1 }] }));
 // The shipped ccloop's capability answer; a null context window makes the estimate blocked-capability, so no
 // estimator call is made and the three worker calls are the whole spend.
 const profilePath = join(root, "profile.json");
@@ -128,6 +156,8 @@ await writeFile(profilePath, JSON.stringify({
 
 const orcaHome = join(homedir(), ".orca");
 const orcaHomeBefore = snapshot(orcaHome);
+const syncskillHome = join(homedir(), ".syncskill");
+const syncskillHomeBefore = snapshot(syncskillHome);
 const claudeProjects = join(homedir(), ".claude", "projects");
 const claudeProjectsList = (): string[] => existsSync(claudeProjects) ? readdirSync(claudeProjects).sort() : ["<absent>"];
 const claudeProjectsBefore = claudeProjectsList();
@@ -141,7 +171,7 @@ const panel = spawn(join(orcaRoot, "node_modules", ".bin", "tsx"), [join(orcaRoo
   "--repo", `live=${repo}`, "--plan", `plan=${repoId}=${planPath}`, "--profile", profilePath,
   "--estimator-profile", "all", "--estimate-mode", "soft", "--control-wake-ms", "200"], {
   cwd: orcaRoot,
-  env: { ...process.env, ORCA_CONTROL_DIR: controlDir, ORCA_CORRECTIONS_DIR: join(root, "corrections"), ORCA_CCLOOP_BIN: ccloopBin, ORCA_AGENTS_TABLE: tablePath },
+  env: { ...process.env, ORCA_CONTROL_DIR: controlDir, ORCA_CORRECTIONS_DIR: join(root, "corrections"), ORCA_CCLOOP_BIN: ccloopBin, ORCA_AGENTS_TABLE: tablePath, ...(withSkill ? { ORCA_SYNCSKILL_BIN: syncskillWrapper } : {}) },
   stdio: ["ignore", "pipe", "pipe"],
 });
 let panelStdout = "";
@@ -181,7 +211,7 @@ const view = async (): Promise<any> => {
 };
 
 const checks: Record<string, boolean> = {};
-const summary: Record<string, unknown> = { mode: fakeClaude ? "fake" : "live", installationCommand: installation.command, installationVersion: installation.version, callUsd, capUsd, deadlineMs, taskTokens, startedAt: new Date().toISOString(), root, panelUrl: ready.url };
+const summary: Record<string, unknown> = { mode: fakeClaude ? "fake" : "live", skill: withSkill ? SKILL : null, installationCommand: installation.command, installationVersion: installation.version, callUsd, capUsd, deadlineMs, taskTokens, startedAt: new Date().toISOString(), root, panelUrl: ready.url };
 let timedOut = false;
 let last: any = null;
 let failure: string | null = null;
@@ -196,9 +226,18 @@ try {
   let current = await view();
   const dims = (allocation: "work" | "handoff", values: Record<string, number>) =>
     Object.entries(values).map(([dimension, value]) => ({ target: { scope: "task", taskId: "a", allocation, dimension }, value, provenance: "human" }));
+  // A loop task's work budget is its plan's (proposal-edit answers budget-owned-by-loop-plan): it goes in through
+  // set-task-loop, as the loop card's budget editor sends it, with the plan, inputs and skills sent back unchanged.
+  if (withSkill) {
+    const loopPlan = current.workItems[0].loopPlan;
+    await command("/api/control/groups/g/tasks/a/loop", "loop-budget", current.summary.commandRevision, {
+      baseLoopVersion: loopPlan.loopVersion, plan: loopPlan.planId, inputs: loopPlan.inputs, work: { tokens: taskTokens, activeMs, attempts: 1 }, skills: loopPlan.skills,
+    });
+    current = await view();
+  }
   await command("/api/control/groups/g/proposal/edit", "caps", current.summary.commandRevision, {
     baseProposalVersion: current.proposal.proposalVersion,
-    operations: [...dims("work", { tokens: taskTokens, attempts: 1, sessions: 1, activeMs }), ...dims("handoff", { tokens: 0 }),
+    operations: [...(withSkill ? [] : dims("work", { tokens: taskTokens, attempts: 1, sessions: 1, activeMs })), ...dims("handoff", { tokens: 0 }),
       { target: { scope: "goal-review", dimension: "tokens" }, value: 1, provenance: "human" }],
     proposedGroupLimit: { ...current.ledger.groupLimit, tokens: groupTokens },
   });
@@ -215,6 +254,7 @@ try {
     contextPolicy: { handoffAtContextTokens: null }, selectionsHash: preview.selectionsHash,
   });
   current = await view();
+  if (marker !== null) summary.markerInConfirmedView = JSON.stringify(current).includes(marker);
   summary.agent = current.workItems[0]?.agent ?? null;
   await command("/api/control/groups/g/start", "start", current.summary.commandRevision, {});
   const deadline = Date.now() + deadlineMs;
@@ -268,8 +308,8 @@ const rawClaude = rawNames.filter((name) => !name.endsWith(".argv.json")).map((n
   return { name, totalCostUsd: typeof envelope?.total_cost_usd === "number" ? envelope.total_cost_usd : null, isError: envelope?.is_error ?? null, usage: envelope?.usage ?? null, numTurns: envelope?.num_turns ?? null };
 });
 summary.claudeRawCalls = rawClaude;
-const argvModels = rawNames.filter((name) => name.endsWith(".argv.json")).map((name) => {
-  const argv = JSON.parse(readFileSync(join(claudeRaw, name), "utf8")) as string[];
+const argvs = rawNames.filter((name) => name.endsWith(".argv.json")).map((name) => JSON.parse(readFileSync(join(claudeRaw, name), "utf8")) as string[]);
+const argvModels = argvs.map((argv) => {
   const index = argv.indexOf("--model");
   return index < 0 ? null : argv[index + 1] ?? null;
 });
@@ -280,6 +320,9 @@ summary.claudeReportedUsd = reportedUsd;
 summary.claudeCallsWithoutCost = rawClaude.length - costed.length;
 summary.ccloopReportedTokens = ccloopTotal;
 
+// Informational: the Skill tool calls claude reported (stream-json assistant tool_use blocks naming the plugin skill).
+summary.skillToolUses = rawNames.filter((name) => !name.endsWith(".argv.json")).map((name) =>
+  readFileSync(join(claudeRaw, name), "utf8").split("\n").filter((line) => line.includes('"tool_use"') && line.includes(`orca-run-skills:${SKILL}`)).length);
 const landedOf = (ref: string): string | null => {
   try { return execFileSync("git", ["show", `${ref}:answer.txt`], { cwd: repo, encoding: "utf8" }); } catch { return null; }
 };
@@ -290,23 +333,35 @@ checks.taskCompleted = last?.workItems?.[0]?.status === "completed";
 const landedCommit = work[0]?.git?.landedCommit ?? null;
 checks.runLanded = work.length === 1 && work[0]!.state === "settled-recoverable" && landedCommit !== null;
 summary.landedCommit = landedCommit;
-checks.landedCommitHolds42 = landedCommit !== null && landedOf(landedCommit) === "42\n";
-checks.workBranchHolds42 = landedOf("refs/heads/orca/g") === "42\n";
+checks.landedCommitHoldsAnswer = landedCommit !== null && landedOf(landedCommit) === answer;
+checks.workBranchHoldsAnswer = landedOf("refs/heads/orca/g") === answer;
 checks.onlyTargetChanged = (() => { try { return g(repo, "diff", "--name-only", "main", "refs/heads/orca/g") === "answer.txt"; } catch { return false; } })();
 checks.humanUntouched = JSON.stringify(human()) === JSON.stringify(humanBefore);
-checks.providerCalls = JSON.stringify(calls.map((item) => item.phase).sort()) === JSON.stringify(["execute", "plan", "verify"]);
+// The skill task's loop plan, standard, checks with a command verifier: no verify call.
+const expectedPhases = withSkill ? ["execute", "plan"] : ["execute", "plan", "verify"];
+checks.providerCalls = JSON.stringify(calls.map((item) => item.phase).sort()) === JSON.stringify(expectedPhases);
 checks.everyCallHasUsage = calls.length > 0 && calls.every((item) => item.total !== null && item.total > 0);
 checks.ledgerKnown = last?.ledger?.usageUnknown === false;
 checks.ledgerMatchesCcloop = last?.ledger?.used?.tokens === ccloopTotal;
 checks.orcaHomeUntouched = JSON.stringify(snapshot(orcaHome)) === JSON.stringify(orcaHomeBefore);
+if (withSkill) {
+  const pluginDirs = argvs.map((argv) => argv.indexOf("--plugin-dir") < 0 ? null : argv[argv.indexOf("--plugin-dir") + 1] ?? null);
+  summary.pluginDirs = pluginDirs;
+  // The run's snapshot: <controlDir>/<epoch>.workspaces/skills-<runId> (src/control/workspace.ts skillsPathOf).
+  checks.pluginDirOnEveryCall = argvs.length === expectedPhases.length && pluginDirs.every((dir) => dir !== null && dir.startsWith(`${controlDir}/`) && /\.workspaces\/skills-run-[^/]+$/.test(dir));
+  checks.noDisableSlashCommands = argvs.length === expectedPhases.length && argvs.every((argv) => !argv.includes("--disable-slash-commands"));
+  checks.markerInNoArgv = argvs.length === expectedPhases.length && argvs.every((argv) => !argv.some((arg) => arg.includes(marker!)));
+  checks.markerNotInPlanOrConfirmedView = !readFileSync(planPath, "utf8").includes(marker!) && summary.markerInConfirmedView === false;
+  checks.syncskillHomeUntouched = JSON.stringify(snapshot(syncskillHome)) === JSON.stringify(syncskillHomeBefore);
+}
 checks.claudeProjectsUntouched = JSON.stringify(claudeProjectsList()) === JSON.stringify(claudeProjectsBefore);
 checks.panelExitedOnSigterm = typeof summary.panelExit === "object" && (summary.panelExit as { code: number | null }).code === 0;
 checks.noSurvivingProcessGroups = (summary.survivingProcessGroups as number[]).length === 0;
 if (fakeClaude) {
-  checks.fakeCallsExact = existsSync(`${marker}.tasks`) && readFileSync(`${marker}.tasks`, "utf8").trim().split("\n").map((line) => line.split(" ")[0]).join(",") === "plan,execute,verify";
+  checks.fakeCallsExact = existsSync(`${fakeMarker}.tasks`) && readFileSync(`${fakeMarker}.tasks`, "utf8").trim().split("\n").map((line) => line.split(" ")[0]).join(",") === (withSkill ? "plan,execute" : "plan,execute,verify");
 } else {
-  checks.claudeArgvModel = argvModels.length === 3 && argvModels.every((model) => model === args.model);
-  checks.everyCallCosted = rawClaude.length === 3 && costed.length === 3;
+  checks.claudeArgvModel = argvModels.length === expectedPhases.length && argvModels.every((model) => model === args.model);
+  checks.everyCallCosted = rawClaude.length === expectedPhases.length && costed.length === expectedPhases.length;
   checks.usdWithinCap = reportedUsd !== null && reportedUsd <= capUsd;
 }
 
