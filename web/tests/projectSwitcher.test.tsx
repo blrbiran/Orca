@@ -37,16 +37,24 @@ const PROJECTS = { projects: [
 const jsonResponse = (body: unknown, status = 200): Response => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
 let projectsAnswer: { status: number; body: unknown };
+let chainRepos: unknown[];
+let memoryLists: string[];
 let imports: Array<{ repoId: string; planId: string }>;
 let workspaceReads: string[];
 
 beforeEach(() => {
-  projectsAnswer = { status: 200, body: PROJECTS }; imports = []; workspaceReads = [];
+  projectsAnswer = { status: 200, body: PROJECTS }; imports = []; workspaceReads = []; chainRepos = []; memoryLists = [];
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const url = String(input);
     if (url === "/api/todo") return jsonResponse({ rows: [] });
     if (url === "/api/metrics") return jsonResponse(METRICS);
-    if (url === "/api/chains") return jsonResponse({ repos: [] });
+    if (url === "/api/chains") return jsonResponse({ repos: chainRepos });
+    if (url === "/api/memory/status") return jsonResponse({ adapter: { id: "ccmem", capabilities: { search: true, get: true, recordCorrection: false } }, health: { status: "ok" }, repos: PROJECTS.projects.map((entry) => ({ projectKey: entry.projectKey })) });
+    if (url.startsWith("/api/memory/list")) {
+      const projectKey = new URL(url, "http://panel.test").searchParams.get("projectKey")!;
+      memoryLists.push(projectKey);
+      return jsonResponse({ projectKey, query: "", page: { records: [], total: 0, truncated: false } });
+    }
     if (url === "/api/projects") return jsonResponse(projectsAnswer.body, projectsAnswer.status);
     if (url === "/api/control/config") return jsonResponse(config);
     if (url.startsWith("/api/control/summary")) return jsonResponse(summary);
@@ -135,6 +143,41 @@ describe("the project switcher", () => {
     expect(projectSelect().value).toBe("alpha");
     fireEvent.change(projectSelect(), { target: { value: "beta" } });
     expect(projectSelect().value).toBe("beta");
+  });
+
+  it("C: the Requirements, Chains and Memory selects are views of the one selection, both ways", async () => {
+    chainRepos = ["alpha", "beta", "gamma"].map((repoKey) => ({ repoKey, defaultSessionTimeoutMin: null, chain: null, problem: null }));
+    render(<App />);
+    await screen.findByRole("combobox", { name: "Project" });
+    const chainSelect = (): HTMLSelectElement => document.querySelector('select[name="repoKey"]') as HTMLSelectElement;
+    const requirementSelect = (): HTMLSelectElement =>
+      within(screen.getByRole("form", { name: "New requirement" })).getByRole("combobox", { name: "Repository" }) as HTMLSelectElement;
+    await waitFor(() => expect(chainSelect().value).toBe("alpha"));
+    expect(requirementSelect().value).toBe("alpha-11111111");
+
+    // Chains moves the selection: the sidebar and Requirements follow.
+    fireEvent.change(chainSelect(), { target: { value: "beta" } });
+    expect(projectSelect().value).toBe("beta");
+    expect(requirementSelect().value).toBe("beta-22222222");
+    // Requirements moves it back.
+    fireEvent.change(requirementSelect(), { target: { value: "alpha-11111111" } });
+    expect(projectSelect().value).toBe("alpha");
+    expect(chainSelect().value).toBe("alpha");
+    // The sidebar moves it; Memory, opened afterwards, reads that project.
+    fireEvent.change(projectSelect(), { target: { value: "gamma" } });
+    expect(chainSelect().value).toBe("gamma");
+    window.location.hash = "#memory";
+    await waitFor(() => expect(memoryLists).toContain("gamma"));
+    expect(memoryLists[0]).toBe("gamma");
+    // Memory moves it too, and a later sidebar change moves Memory.
+    const memorySelect = (): HTMLSelectElement => document.querySelector('select[name="memory-repo"]') as HTMLSelectElement;
+    await waitFor(() => expect(memorySelect()).not.toBeNull());
+    fireEvent.change(memorySelect(), { target: { value: "beta" } });
+    expect(projectSelect().value).toBe("beta");
+    fireEvent.change(projectSelect(), { target: { value: "alpha" } });
+    await waitFor(() => expect(memoryLists.at(-1)).toBe("alpha"));
+    expect(memorySelect().value).toBe("alpha");
+    window.location.hash = "";
   });
 
   it("E: renders no project select when the panel has one project", async () => {

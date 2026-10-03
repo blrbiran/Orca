@@ -20,7 +20,12 @@ function excerpt(content: string): string {
   return points.length <= EXCERPT_CODE_POINTS ? content : `${points.slice(0, EXCERPT_CODE_POINTS).join("")}…`;
 }
 
-export function MemoryView({ active }: { active: boolean }): JSX.Element {
+export function MemoryView({ active, project, onProject }: {
+  active: boolean;
+  /** Project switcher spec D4: the chosen project, and how choosing a repository here moves the selection. */
+  project?: string | null;
+  onProject?: (projectKey: string) => void;
+}): JSX.Element {
   const { t } = useTranslation();
   const opened = useRef(false);
   const latest = useRef(0); // a newer list or search supersedes older ones
@@ -61,7 +66,7 @@ export function MemoryView({ active }: { active: boolean }): JSX.Element {
       try {
         const answer = await fetchMemoryStatus();
         setStatus(answer);
-        const first = answer.repos[0]?.projectKey ?? null;
+        const first = project != null && answer.repos.some((r) => r.projectKey === project) ? project : answer.repos[0]?.projectKey ?? null;
         setRepo(first);
         if (answer.health.status === "ok" && first !== null) await load(first, "");
       } catch (err) {
@@ -69,6 +74,14 @@ export function MemoryView({ active }: { active: boolean }): JSX.Element {
       }
     })();
   }, [active]);
+
+  // A project chosen elsewhere after this section opened: read it here too, once it is one this section lists.
+  useEffect(() => {
+    if (status === null || project == null || project === repo || !status.repos.some((r) => r.projectKey === project)) return;
+    setRepo(project);
+    setDraft("");
+    if (status.health.status === "ok") void load(project, "");
+  }, [project, status]);
 
   const open = async (ref: string): Promise<void> => {
     if (repo === null) return;
@@ -111,7 +124,7 @@ export function MemoryView({ active }: { active: boolean }): JSX.Element {
           {status!.repos.length > 1 && (
             <label>
               {t("memory.repo")}
-              <select name="memory-repo" value={repo!} onChange={(e) => { const next = e.currentTarget.value; setRepo(next); setDraft(""); void load(next, ""); }}>
+              <select name="memory-repo" value={repo!} onChange={(e) => { const next = e.currentTarget.value; setRepo(next); setDraft(""); void load(next, ""); onProject?.(next); }}>
                 {status!.repos.map((r) => <option key={r.projectKey} value={r.projectKey}>{r.projectKey}</option>)}
               </select>
             </label>

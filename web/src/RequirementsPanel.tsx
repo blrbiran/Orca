@@ -29,9 +29,13 @@ const isReason = (code: string): code is Reason => (REASONS as readonly string[]
 
 function revisionOf(view: View): number { return view.summary.commandRevision; }
 
-function NewRequirement(props: { config: ControlConfigV1; agents: AgentsViewV1 | null; language: PanelLanguage; onCommand: (a: ControlAction) => void }): JSX.Element {
+function NewRequirement(props: { config: ControlConfigV1; agents: AgentsViewV1 | null; language: PanelLanguage; onCommand: (a: ControlAction) => void;
+  repoId?: string | null; onRepo?: (repoId: string) => void }): JSX.Element {
   const { t } = useTranslation();
-  const [repoId, setRepoId] = useState(props.config.repositories[0]?.repoId ?? "");
+  const [localRepoId, setLocalRepoId] = useState(props.config.repositories[0]?.repoId ?? "");
+  // Project switcher spec D4: the chosen project's repository when the control plane holds it, else this form's own.
+  const repoId = props.repoId != null && props.config.repositories.some((repo) => repo.repoId === props.repoId) ? props.repoId : localRepoId;
+  const setRepoId = (next: string): void => { setLocalRepoId(next); props.onRepo?.(next); };
   const [idea, setIdea] = useState("");
   const [tokens, setTokens] = useState(10_000_000);
   // Spec §11.2: the content language defaults to the language the panel is shown in.
@@ -231,7 +235,9 @@ function Detail(props: { view: View; onCommand: (a: ControlAction) => void }): J
 export function RequirementsPanel(props: { config: ControlConfigV1; summary: ControlSummaryV1; views: Record<string, RequirementViewV1>; selected: string | null;
   agents: AgentsViewV1 | null; language: PanelLanguage; onSelect: (groupId: string) => void; onCommand: (action: ControlAction) => void;
   /** The control state's last refusal: a refused requirement command is explained here, where it was pressed. */
-  refusal?: ControlRefusal | null }): JSX.Element {
+  refusal?: ControlRefusal | null;
+  /** Project switcher spec D4: the chosen project's control repository, and how choosing one here moves the selection. */
+  repoId?: string | null; onRepo?: (repoId: string) => void }): JSX.Element {
   const { t } = useTranslation();
   const listed = props.summary.groups.filter((group) => group.requirement !== undefined);
   const view = props.selected === null ? undefined : props.views[props.selected];
@@ -248,7 +254,7 @@ export function RequirementsPanel(props: { config: ControlConfigV1; summary: Con
               {group.groupId} · {enumText("groupState", group.state)}
             </button>
           ))}
-          <NewRequirement config={props.config} agents={props.agents} language={props.language} onCommand={props.onCommand} />
+          <NewRequirement config={props.config} agents={props.agents} language={props.language} onCommand={props.onCommand} repoId={props.repoId} onRepo={props.onRepo} />
         </nav>
         {view !== undefined && <Detail view={view} onCommand={props.onCommand} />}
       </div>

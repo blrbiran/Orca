@@ -71,6 +71,8 @@ export function ChainPanel({
   onDismiss,
   onStart,
   onStop,
+  project,
+  onProject,
 }: {
   repos: readonly ChainRepoView[];
   banners: readonly Banner[];
@@ -78,9 +80,14 @@ export function ChainPanel({
   onDismiss?: (chainId: string) => void;
   onStart?: (form: ChainForm) => void;
   onStop?: (repoKey: string, chainId: string) => void;
+  /** Project switcher spec D4: the chosen project, and how choosing a repository here moves the selection. */
+  project?: string | null;
+  onProject?: (projectKey: string) => void;
 }): JSX.Element {
   const { t } = useTranslation();
-  const [repoKey, setRepoKey] = useState(repos[0]?.repoKey ?? "");
+  const [localRepoKey, setLocalRepoKey] = useState(repos[0]?.repoKey ?? "");
+  const repoKey = project != null && repos.some((r) => r.repoKey === project) ? project : localRepoKey;
+  const setRepoKey = (next: string): void => { setLocalRepoKey(next); onProject?.(next); };
   const selected = repos.find((r) => r.repoKey === repoKey);
   const submit = (e: FormEvent<HTMLFormElement>): void => {
     e.preventDefault();

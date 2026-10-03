@@ -726,6 +726,8 @@ export function App(): JSX.Element {
               return r.ok ? { kind: "started", chainId: r.body.chainId } : { kind: "refused", refusal: r };
             });
           }}
+          project={project}
+          onProject={chooseProject}
           onStop={(repoKey, chainId) => {
             void chainAction(async () => {
               const r = await requestChainStop(repoKey, chainId);
@@ -775,6 +777,7 @@ export function App(): JSX.Element {
         {controlConfig !== null && control.recovery !== null && (
           <RequirementsPanel config={controlConfig} summary={summaryView(control)} views={requirementViews} selected={selectedRequirement} agents={agents}
             language={currentLanguage()} refusal={requirementRefusal}
+            repoId={controlRepoId} onRepo={(repoId) => { const entry = projects?.find((p) => p.controlRepoId === repoId); if (entry) chooseProject(entry.projectKey); }}
             onSelect={(groupId) => { setSelectedRequirement(groupId); void readRequirement(groupId); }} onCommand={(action) => { void sendControl(action); }} />
         )}
       </SectionPane>
@@ -782,7 +785,7 @@ export function App(): JSX.Element {
         <DecisionsView rows={home.todo} filter={filter} onFilter={setFilter} selected={selected} onOpen={setSelected} detail={detail} />
       </SectionPane>
       <SectionPane section="memory" active={section}>
-        <MemoryView active={section === "memory"} />
+        <MemoryView active={section === "memory"} project={project} onProject={chooseProject} />
       </SectionPane>
       <SectionPane section="metrics" active={section}>
         <MetricsView report={home.report} coverage={home.coverage} />
