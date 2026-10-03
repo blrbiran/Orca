@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { canonicalBytes, sha256Canonical } from "../../src/control/canonicalJson.js";
 import { expandLoopTask, expandRecipe, loopPlanFileSchema, loopRecipeSchema, normalizeLoopSkills } from "../../src/control/loopPlans.js";
 import { readArchivedPlan } from "../../src/control/queries.js";
+import { schedulerControlPlanSourceOf } from "../../src/scheduler/planFile.js";
 import { webFixture } from "./fixtures/web.js";
 
 /**
@@ -77,6 +78,27 @@ describe("declaring skills on a loop task", () => {
     ["an unknown key", { names: ["a"], extra: 1 }],
   ])("the plan file schema itself rejects %s", (_label, skills) => {
     expect(loopPlanFileSchema.safeParse({ ...GOLDEN_INPUT, skills }).success).toBe(false);
+  });
+
+  // Human ruling 2026-10-03 (session 9d95e6c8): a wrong skills shape names what to fix as one `skills-shape:<detail>`
+  // issue -- zod's union fallout told a person with both keys to drop `names` ("Unrecognized key(s) ... 'names'").
+  it.each([
+    ["both keys", { profile: "p", names: ["a"] }, "both-profile-and-names"],
+    ["neither key", {}, "neither-profile-nor-names"],
+    ["an unknown key", { names: ["a"], extra: 1 }, "unknown-key"],
+    ["empty names", { names: [] }, "empty-names"],
+    ["a non-string name", { names: [1] }, "names-not-strings"],
+    ["a profile with a space", { profile: "bad name" }, "profile-name"],
+    ["a string", "a", "not-an-object"],
+  ])("the plan file schema names the shape it refuses: %s", (_label, skills, detail) => {
+    const parsed = loopPlanFileSchema.safeParse({ ...GOLDEN_INPUT, skills });
+    expect(parsed.success ? [] : parsed.error.issues.map(issue => [issue.path.join("."), issue.message])).toEqual([["skills", `skills-shape:${detail}`]]);
+  });
+
+  it("the plan file's import refusal carries that detail", () => {
+    const plan = { targetRepo: "/repo", ccloopBin: "/bin/true", runsDir: "/runs", workBranch: "orca/work", policy: "local-merge", ledgerMode: "out-of-repo",
+      goal: "ship", successConditions: ["passes"], tasks: [{ taskId: "a", dependsOn: [], loop: { ...GOLDEN_INPUT, skills: { profile: "p", names: ["a"] } } }] };
+    expect(() => schedulerControlPlanSourceOf(plan, "/repo")).toThrow("control-plan-rejected:malformed:tasks.0.loop.skills: skills-shape:both-profile-and-names");
   });
 
   it("normalizeLoopSkills passes a valid shape and does not mutate its input", () => {

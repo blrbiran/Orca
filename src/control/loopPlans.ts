@@ -133,11 +133,32 @@ export type LoopInputs = z.infer<typeof loopInputsSchema>;
  * Syncskill integration spec §10.4: the skill set a loop task declares -- a syncskill profile, or explicit names. It is
  * never part of the ccloop contract (expandRecipe builds the contract field by field) and never part of loopInputsSchema.
  */
-export const loopSkillsSchema = z.union([
+const loopSkillsShape = z.union([
   z.object({ profile: z.string().regex(PROFILE_NAME_PATTERN) }).strict(),
   z.object({ names: z.array(z.string()).min(1) }).strict(),
 ]);
 export type LoopSkills = { profile: string } | { names: string[] };
+
+/** Which part of a skills value breaks the shape, so a refusal says what to fix instead of zod's union fallout. */
+function skillsShapeDetail(raw: unknown): string {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return "not-an-object";
+  const keys = Object.keys(raw);
+  if (keys.includes("profile") && keys.includes("names")) return "both-profile-and-names";
+  if (!keys.includes("profile") && !keys.includes("names")) return "neither-profile-nor-names";
+  if (keys.length !== 1) return "unknown-key";
+  const value = raw as { profile?: unknown; names?: unknown };
+  if ("profile" in value) return "profile-name";
+  if (!Array.isArray(value.names) || !value.names.every((name) => typeof name === "string")) return "names-not-strings";
+  return "empty-names";
+}
+
+/** Like the plan file's labels: one `skills-shape:<detail>` issue in place of the union's per-branch messages. */
+export const loopSkillsSchema = z.unknown().transform((raw, ctx): LoopSkills => {
+  const parsed = loopSkillsShape.safeParse(raw);
+  if (parsed.success) return parsed.data;
+  ctx.addIssue({ code: z.ZodIssueCode.custom, message: `skills-shape:${skillsShapeDetail(raw)}` });
+  return z.NEVER;
+});
 
 /** Spec §10.4 shape check, for a value that may not have come through loopSkillsSchema: names sorted and unique, or "skills-shape". */
 export function normalizeLoopSkills(skills: LoopSkills): LoopSkills | "skills-shape" {
