@@ -179,9 +179,33 @@ describe("set-task-loop on a confirmed task rewrites its snapshot entry (C15)", 
     }
     expect(snapshotHash(h)).toBe(before.hash);
     expect(workAllocation(h, "a").amount).toEqual(before.work);
-    // Names are taken as declared: no lookup, so no syncskill needed.
-    expect(await serviceOf(h).setTaskLoop(withSkills(h, "a", {}, { names: ["x"] }))).toMatchObject({ result: { kind: "task-loop-set" } });
+    // Names are taken as declared: no lookup, so no spawn -- but syncskill must be configured (final review N1, below).
+    const ok = await fakeSyncskill("profile-ok");
+    expect(await serviceOf(h, ok.o).setTaskLoop(withSkills(h, "a", {}, { names: ["x"] }))).toMatchObject({ result: { kind: "task-loop-set" } });
     expect(snapshotOf(h).skills).toEqual([{ taskId: "a", profile: null, names: ["x"] }]);
+    expect(ok.calls()).toEqual([]);
+  });
+
+  // Final review N1: confirm refuses any declared skills with ORCA_SYNCSKILL_BIN unset (the run would fail at A2 with
+  // skills-inject-failed:syncskill-unconfigured), so set-task-loop on a confirmed task must refuse a changed declaration
+  // the same way -- names included, which need no lookup and so were let through before.
+  it("refuses a changed declaration (names or profile) unset as syncskill-unconfigured and leaves the task as it was", async () => {
+    const h = await confirmed([{ taskId: "a", loop: { ...loop("a"), skills: { names: ["x"] } } }], { bin: "/nonexistent/syncskill", env: {} });
+    const before = { hash: snapshotHash(h), work: workAllocation(h, "a").amount, loopVersion: workBody(h, "a").loopVersion };
+    for (const syncskill of [undefined, { bin: null, env: {} }]) {
+      for (const skills of [{ names: ["y"] }, { names: ["x", "y"] }, { profile: "p" }]) {
+        expect(errorOf(await serviceOf(h, syncskill).setTaskLoop(withSkills(h, "a", {}, skills)))).toMatchObject({ code: "syncskill-unconfigured" });
+      }
+    }
+    expect(snapshotHash(h)).toBe(before.hash);
+    expect(workAllocation(h, "a").amount).toEqual(before.work);
+    expect(workBody(h, "a").loopVersion).toBe(before.loopVersion);
+    expect(effective(h).loop!.skills).toEqual({ names: ["x"] });
+    // Unchanged (a budget-only edit) and removed stay accepted unset.
+    expect(await serviceOf(h).setTaskLoop(withSkills(h, "a", { tokens: before.work.tokens - 1 }, { names: ["x"] }))).toMatchObject({ result: { kind: "task-loop-set", loopVersion: 1 } });
+    expect(snapshotOf(h).skills).toEqual([{ taskId: "a", profile: null, names: ["x"] }]);
+    expect(await serviceOf(h).setTaskLoop(withSkills(h, "a", { base: 1 }, undefined))).toMatchObject({ result: { kind: "task-loop-set", loopVersion: 2 } });
+    expect(Object.keys(snapshotOf(h))).not.toContain("skills");
   });
 
   it("decides a lookup failure after the existing checks: a stale loop version is named first", async () => {

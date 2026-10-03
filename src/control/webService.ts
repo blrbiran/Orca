@@ -745,6 +745,10 @@ export class WebControlService {
           // Syncskill integration spec §10.5: a lookup failure (or syncskill unset when a lookup was needed) refuses the change,
           // decided here after every existing check, as at confirm.
           if ("failure" in skillLookup) throw skillLookup.failure;
+          // Final review N1: a confirmed task's changed declaration, names included, needs syncskill at run start, so it is
+          // refused unset as confirm refuses it (lookupSkillProfiles). Removing skills or keeping them unchanged needs none.
+          if (proposal.state !== "editable" && !skillsUnchanged && expanded.recipe.skills !== undefined
+            && (this.deps.syncskill?.bin ?? null) === null) throw new ControlError("syncskill-unconfigured");
           // Step 5.
           const amendmentHash = writeTaskAmendment(this.store, id, {
             schema: TASK_AMENDMENT_SCHEMA, groupId: id, taskId, loopVersion: loopVersion + 1, previousContractHash: current.originalContractHash,
