@@ -74,3 +74,37 @@ Ruling: an unchanged skills declaration on a confirmed task keeps its frozen sna
 Task 5: minor (deferred): a skills-only change never sets planChanged (H12 is about the contract; skills are not in it).
 Task 5: fix round 1 dispatched (I1, draft lookup, re-indent)
 Task 5: fix round 1/5 implemented (commit dc70658): I1 unchanged declaration keeps frozen entry, drafts never look up, race refused proposal-version-conflict, re-indent; redundant unset-bin check removed (profileMembers already refuses). Scoped re-review next.
+Task 5: fix round 1/5 (3 addressed, 0 open; commits edf59e3..dc70658)
+Task 5: complete (commits 7ab2fa2..dc70658, review clean)
+Task 6: dispatched (Orca base 5f2639c, opus; ccloop af26a22 build in scratchpad/t6)
+Task 6: implemented (commit 01b74bc), DONE; concerns: C5 with fake syncskill only; recorded dir is realpath; fake lock shape guessed; read-only residue possible in TMPDIR on test failure
+Task 6: review — spec ❌ (C5 not run with real syncskill), quality Needs fixes; Important: C5 real; 3 branches without a red mutation (symlink skip in makeReadOnly / restoreOwnerWrite, describeError block reason); 5 Minor.
+Task 6: spec §7 row "skills-inject-failed:E_SKILL_NOT_FOUND" is stale vs the code's `skills-inject-failed:syncskill-failed:E_SKILL_NOT_FOUND` — controller appends a spec correction section at the end.
+Task 6: fix round 1 dispatched (real-syncskill A2 test; symlink-skip and describeError mutations)
+Task 6: fix round 1/5 (2 addressed, 0 open; commits 01b74bc..2ea3271)
+Task 6: minor (deferred): driverSkills.test.ts:35 relies on chmod 0500 producing EACCES (would not fail as root).
+Task 6: complete (commits 5f2639c..2ea3271, review clean)
+Task 7: implemented (commit bacb9d7), DONE_WITH_CONCERNS: 3 existing assertions changed (old 'not supported yet' string); run view profile not rendered; scheduler files red in clone without ccloop bin (env)
+Task 7: review — spec ✅, quality Approved, 0 Critical/Important; 5 Minor (task-7-review.md). Controller resolved the ⚠️: controlViews reads snapshot.skills[].names by taskId, matching the schema `{taskId, profile, names}`.
+Task 7: minor (deferred): run view sends profile/source the UI does not render; commit truncated to 12 chars; no test parses a view through the new webProtocol schemas; SkillsGiven taskId filter has no named mutation.
+Task 7: complete (commit bacb9d7, review clean)
+Final review: ready with fixes (final-review.md). Important I1 (codex task with skills is stuck after accept refusal), I2 (spec §9 points unmeasured; no probe under scripts/). Must-fix Minors: T1, N1, N4, N5, N6.
+Ruling: I1 option (b) — keep ccloop acceptStart as the only agent-kind authority, add a codex-variant E2E pinning the named block, and record the real cost (the task cannot be changed or re-dispatched; only stopping the group ends it) in spec §11 and the handoffs; next round's codex skill support (H6) removes the path — cost if wrong: a person who pairs codex with skills before then must stop the group.
+Ruling: I2 — commit an offline recorder probe (no model call, H5 not engaged) and record what claude 2.1.288 does with the lock file, plugin skill names and a read-only plugin dir in spec §11 — cost if wrong: none.
+Ruling: N1 — on a confirmed task a CHANGED skills declaration (names or profile) with ORCA_SYNCSKILL_BIN unset is refused `syncskill-unconfigured`, matching confirm; unchanged declarations stay accepted — cost if wrong: a names change after confirm needs syncskill configured.
+Final fix wave dispatched (one fixer: T1 ccloop, N1, codex E2E, probe script). N4/N5/N6 are the controller's (gate + spec §11).
+Final fix wave: implemented (ccloop 01d1684; Orca 848055b, d6e56cf, 3e1366d). Probe: claude 2.1.288 sees the skill as orca-run-skills:<name>, lock file absent from requests, read-only plugin dir loads. I1 block reason exactly accept-refused:2:skills-unsupported-agent. One existing C15 assertion changed (it pinned names accepted with bin unset, which N1 forbids).
+Final fix wave: re-review — T1, N1, I1, I2 ADDRESSED; no new breakage (final-rereview.md).
+
+## Controller gate (clones under scratchpad/gate; HOME + 4 XDG roots redirected; TMPDIR mktemp -d /private/tmp/og-XXXX)
+ccloop at `test(control): hash the schema's output in the skillPluginDir envelope-hash golden`: build 0, typecheck 0, vitest 1140 tests only stopProof red, check-known-reds 0, check-tmp-leak 0.
+syncskill clone at its main (`docs(sdd): record the --sync-dir follow-up …`) built for the real tests.
+Orca at `chore(scripts): add the offline claude probe for an A2 skill plugin dir` (ORCA_CCLOOP_BIN = that ccloop build):
+- npm test 2724: 2713 passed, 9 skipped, 2 failed = registered 5 s flakes gateCheck K13, driverRequirementSplit; each alone 3/3 green (load 4–6). `verify` stopped there (&& chain), so the rest ran separately:
+- ledger 0, claude-md 0, hooks-path 0, verify:scheduler 0 (194), verify:ccloop-pin 0 (3), verify:panel 0 (395), web build 0, --ws check 0; verify:control 0 (1294 passed, 4 skipped; ORCA_AGENTS_TABLE = fake codex `integration`); verify:chain's full run 3 red = registered flakes (K13, driverRequirementSplit, controlShutdown 143).
+- real binaries (ORCA_SYNCSKILL_REAL_BIN = syncskill clone dist, ORCA_CCMEM_REAL_BIN = ccmem bin): syncskillReal, driverSkillsReal, ccmemReal 3/3 ran and passed (not skipped).
+- check-tmp-leak: 1 root left in each of two HEAD runs (empty except the two setup dirs); the same check at the pre-round commit d017cb0 left 0 ⇒ treated as a regression of this round, under investigation (instrumented run).
+- real ~/.syncskill entries and ~/.orca mtimes identical before/after the gates (only HOME's own mtime moved).
+Leak investigation (systematic, instrumented clone copy of tests/setup/scopeTmpdir.ts writing `.pid` at load and `.file` in beforeAll): the leaked root had `.pid` and no `.file` ⇒ a file whose hooks never ran. The one fully skipped file is the pre-existing tests/control/ccloopProtocol.integration.test.ts (`describe.skipIf(!binary || !agentsTablePath)`, L33). Alone: without ORCA_AGENTS_TABLE it leaves 1 root, with it 0. The HEAD leak runs had no table; the pre-round comparison ran after gate3 exported one ⇒ NOT a regression of this round; the file violates the scopeTmpdir ERRATUM (collection-time skip). Registered, not fixed (out of scope, Rule 3): fix = gate with ctx.skip() in beforeEach.
+N5 capacity (spec §11.5): inject 214–293 ms, 8 KiB per one-file skill; profile ls 206–210 ms (load 4.1).
+Final: all tasks complete, final review fixes addressed and re-reviewed, gate as above.

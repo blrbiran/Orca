@@ -56,7 +56,7 @@
 | 3.3 | loop 方案层 | 「task ⇒ loop 方案 ⇒ agent session；先给几种常用方案」 | Orca | 🟡 **全新概念，现在零代码** |
 | 3.4 | Web UI 看板 | 「未完成/已完成 task、关系、session 历史、需关注项、耗时与完成度、git 方案」 | Orca | 🟢/🟠（完成度口径待裁 G4） |
 | 3.5 | 模型开箱即用 ＋ litellm | 「搭配 litellm proxy 多模型混用」 | ccloop（执行端）＋ Orca（记账） | 🟢 |
-| 3.6 | skill 管控（syncskill） | 「Orca 用 syncskill 管控各 agent 的 skill」 | syncskill ＋ Orca | 🟡 **缺三件，待裁 G5** |
+| 3.6 | skill 管控（syncskill） | 「Orca 用 syncskill 管控各 agent 的 skill」 | syncskill ＋ Orca | ✅ G5 选 (i)；syncskill 三件（会话 `16ab00f2`）与 Orca 接入（会话 `08b1007d`）都做完，等人审；codex 留下一轮（见 §11 中期 9） |
 | 3.7 | 外部 client 协议接入 | 「参考 openclaw / hermes-agent 的 client 协议」「ccloop 支持 A2A」 | ccloop（A2A）／Orca（client） | 🟠 **A2A 只能做只读，待裁 G6** |
 | 3.8 | 跨机分布式 | 「后期支持跨机器多 agent 协调」 | 全系统 | ⏸ **本轮明确推迟**（人已拍） |
 | 3.9 | 多语言／多仓／submodule | 「不同组件用最适合的语言，可拆仓，可 submodule」 | —— | ⏸ **保持 TS，写触发条件**（人已拍） |
@@ -674,11 +674,11 @@ N0、N2、N5、N6 人没有提异议，按正文的建议执行。§10.1 的先�
 | 近期 1、2（`targetVersion`、capability 字段） | ✅ 早已做完（见 §9.1） | — |
 | 近期 4 终点：「Web 派活到真 ccloop 能开出一个 run」 | ✅ **会话 `16ab00f2`（2026-10-03）补上**：`scripts/live-panel-http-acceptance.ts` 起真 `orca panel`，全程经 HTTP（一次性 token）import→confirm→start，真 claude 下一个任务落地，21/21 检查绿，claude 自报 $0.545137，n＝1；台账 `.superpowers/sdd/2026-10-03-panel-http-live/progress.md` | 没覆盖：真浏览器、真 codex、经 HTTP 的预估与 handoff、多任务 |
 | §3.9「ccloop 走 npm 依赖锁版本」 | ✅ `package.json` 的 `dependencies` 里有 `ccloop: github:blrbiran/ccloop#<SHA>`；重钉由 agent 做（人先推 ccloop） | — |
-| 中期 5：§3.3 loop 方案层 | ✅ 两部分都做完（`src/control/loopPlans.ts`，五种方案，展开是纯代码）。`planFile.ts` 的 `autonomyLevel` 仍是 `z.literal("L2")`，方案层是在它外面套的 | git 方案、skill 集两个维度契约表达不了，卡片上显示固定值（git 一行现在随工作区方式变，见下一行） |
+| 中期 5：§3.3 loop 方案层 | ✅ 两部分都做完（`src/control/loopPlans.ts`，五种方案，展开是纯代码）。`planFile.ts` 的 `autonomyLevel` 仍是 `z.literal("L2")`，方案层是在它外面套的 | git 方案这个维度契约表达不了，卡片上显示固定值（git 一行现在随工作区方式变，见下一行）；skill 集已由会话 `08b1007d` 接上（见中期 9） |
 | 中期 6：§3.4 看板 | ✅ **本会话补完**：G4 完成度（`done/total` ＋ attempt n/max）和「需要处理」红点早已做完；本会话画了依赖关系图（`web/src/DependencyGraph.tsx`），加了 Git 区（工作分支 `orca/<组>`、每个 run 的工作区方式／起点／落地提交，合并进 main 与 push 显示为「等人」），loop 方案卡片的 git 一行改为随仓库的工作区方式变 | 登记未做：图上不画写集冲突；`orca/<组>` 是否已并入 main 或已 push 不显示；每个 run 的耗时（缺开始时间戳）。spec `docs/superpowers/specs/2026-10-03-board-graph-and-git-design.md` §5 |
 | 中期 7：§3.2／N2 给 agent 的接口 | ❌ 零代码。CLI 的 `--json` 只有 `orca metrics` 一处；控制面命令没有 CLI 入口；MCP 0 命中 | 整条没开（顺序仍是 CLI `--json` → skill → MCP 薄壳） |
 | 中期 8：§3.5 litellm | ❌ 零代码（`litellm` 全树 0 命中） | — |
-| 中期 9：§3.6 syncskill（G5 选 (i)） | 🟡 **syncskill 侧做完（会话 `16ab00f2`，2026-10-03）**：`profile set\|ls\|rm`、`inject --profile\|--skills --target`（快照＋`syncskill-lock.json`）、git 源记 `resolved_commit`；spec 在 syncskill 仓 `docs/superpowers/specs/2026-10-03-profile-inject-version-design.md` | **Orca 侧零代码**：谁调 `inject`、target 放哪、锁文件进不进落地提交，都还没设计 |
+| 中期 9：§3.6 syncskill（G5 选 (i)） | 🟡 **syncskill 侧做完（会话 `16ab00f2`，2026-10-03）**：`profile set\|ls\|rm`、`inject --profile\|--skills --target`（快照＋`syncskill-lock.json`）、git 源记 `resolved_commit`；spec 在 syncskill 仓 `docs/superpowers/specs/2026-10-03-profile-inject-version-design.md` | ✅ **Orca 侧接入做完（会话 `08b1007d`，2026-10-03，等人审）**：loop 方案可声明 `skills`（名单或 profile），确认时冻结进执行快照；每个 run 在 A2 调 `syncskill inject` 到 `<workspacesRoot>/skills-<runId>`（git 工作区之外、做成 claude plugin、只读），锁信息记在 drive 记录里、不进落地提交；ccloop 给这种 run 的 claude 加 `--plugin-dir`、去掉 `--disable-slash-commands`。spec `docs/superpowers/specs/2026-10-03-syncskill-integration-design.md`（§10、§11 优先）。只在 fake claude 与离线探针下验过，**没在真 claude 付费跑过**；codex 不支持（下一轮） |
 | 远期 10：§3.7 A2A 只读外壳（G6）／N7(a) Orca 作 A2A server | ❌ 零代码（`a2a` 0 命中） | — |
 | N8 标签 | ✅ `src/control/labels.ts`，闭集词表按 G11 | — |
 | N3 内部进度 | ✅ 需求级 `done/total`、task 级阶段＋attempt＋token 占比、点进去看 evidence；SSE 与 A2A 投影按裁决延后 | — |
@@ -687,4 +687,4 @@ N0、N2、N5、N6 人没有提异议，按正文的建议执行。§10.1 的先�
 
 **一句话**：§10.1 排的前五项里，除第 4 项 N2 以外都做完了（N8＋N3、§3.3、N1、N5），§3.4 看板本会话补完；**剩下的大件是 N2（agent 入口）、
 §3.5 litellm、§3.6 syncskill、A2A，以及「面板 HTTP 这条路在真 agent 下跑一次」这条近期验收**。
-（会话 `16ab00f2` 补记）面板 HTTP 真 agent 验收已跑通一次；syncskill 补三件已在 syncskill 侧做完，Orca 侧接入未开。
+（会话 `16ab00f2` 补记）面板 HTTP 真 agent 验收已跑通一次；syncskill 补三件已在 syncskill 侧做完。（会话 `08b1007d` 补记）Orca 侧接入也做完了，等人审；codex 的 skill 支持留到下一轮。

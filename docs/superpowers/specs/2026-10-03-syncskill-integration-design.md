@@ -303,3 +303,73 @@ repository's own skills; claude runs see none.
 
 A blocked run keeps its `skills-<runId>` until its workspace is cleaned; a killed `inject` may leave
 `<dir>/skills/.syncskill-inject-*` (removed with `<dir>`). Neither is outside `workspacesRoot`.
+
+## 11. Implementation corrections (session `08b1007d`, 2026-10-03, SDD round)
+
+**§1–§10 above stay verbatim; where they disagree with this section, this section wins.** Every item below is a
+controller ruling recorded with its cost in `.superpowers/sdd/2026-10-03-syncskill-integration/progress.md`
+(the human asked for the round to run unattended and to review all rulings at the end).
+
+### 11.1 Agent kind: ccloop is the only authority
+
+- ✗ §4.2 / §10.5 / §10.8 C4 "a task with skills assigned a non-claude agent → `skills-unsupported-agent`" at confirm and
+  at set-task-loop. A frozen selection's `agent` is an agents-table **installation id**, not a kind (ccloop
+  `src/agents/materialize.ts` `resolveAgent`: kind = `table.installations[id].kind`), and Orca neither reads the table nor
+  freezes the kind. Orca therefore has no agent-kind check; `skills-unsupported-agent` exists only in ccloop's
+  `acceptStart`, which refuses before persisting anything. Orca records the run as blocked
+  `accept-refused:2:skills-unsupported-agent` (pinned by the codex variant in `tests/control/skillsE2E.test.ts`).
+- **Real cost (final review I1):** such a task cannot be changed afterwards (set-task-loop answers
+  `task-already-started`), and a recovery retry or a restart sends the same frozen agent again, so only stopping the group
+  ends it. Accepted because next round's codex skill support (H6) removes the path; until then, do not pair codex with
+  skills.
+
+### 11.2 set-task-loop (replaces the set-task-loop parts of §10.4 / §10.5)
+
+- A payload without `skills` removes the task's skills: the payload is the full desired state, like `inputs`. The panel
+  (loop card budget edit and the BudgetEditor estimate suggestion) sends the current `skills` back unchanged.
+- A draft task never spawns syncskill (confirm freezes it later).
+- On a confirmed task, an **unchanged** declaration keeps its frozen snapshot entry and spawns nothing (H3: later
+  profile edits never reach a confirmed task, not even through a budget edit). A **changed** declaration is resolved:
+  a profile is looked up; names are taken as given; with `ORCA_SYNCSKILL_BIN` unset either kind is refused
+  `syncskill-unconfigured` (as confirm does).
+- A task read as a draft before the transaction but confirmed inside it, with a changed declaration, is refused
+  `proposal-version-conflict`.
+- A skills-only change does not set `planChanged` (that flag is about the contract; skills are not in it).
+
+### 11.3 Smaller corrections
+
+- §7 row "skill removed between confirm and run": the block reason is `skills-inject-failed:syncskill-failed:E_SKILL_NOT_FOUND`
+  (`skills-inject-failed:<SyncskillError code>`), not `skills-inject-failed:E_SKILL_NOT_FOUND`. A failure that is not a
+  SyncskillError is `skills-inject-failed:<error text>`.
+- §10.8 C2: both keys, empty `names` and a bad profile name are refused by the plan-file schema
+  (`malformed: tasks.N.loop.skills: Invalid input`); only skill-name-rule violations answer
+  `loop-plan-invalid:<task>:skills-shape`.
+- §4.3 step 6: `skillPluginDir` (and the drive record's `dir`) is the **realpath** of `skills-<runId>`, because ccloop's
+  accept requires a canonical directory. The panel's run view does not expose `dir`.
+- ccloop's worker re-validates `skillPluginDir` as an accept on every (re)start, and a replayed `accept` after the
+  directory is gone answers `control-request-invalid`. Orca keeps `skills-<runId>` until the run's workspace is cleaned.
+- Profile lookups always pass `--no-refresh`. Only the fake-syncskill argv test proves it: on a seeded sync dir with no
+  servers, real `profile ls` writes nothing with or without the flag.
+- Error codes registered in Orca: `syncskill-unconfigured`, `syncskill-missing`, `syncskill-timeout`,
+  `syncskill-output-too-large`, `syncskill-failed` (detail = syncskill's code or exit status), `syncskill-output-invalid`,
+  `skills-profile-empty`, `skills-shape` (all durable 422); `skills-unsupported-agent` is not an Orca code.
+
+### 11.4 §9 answered by measurement
+
+`scripts/probe-claude-skills.mjs` (committed; offline recorder, no model call), run once on claude 2.1.288 with a plugin
+dir laid out as A2 lays it out, read-only:
+- the skill reaches the model **namespaced, as `orca-run-skills:<name>`**, never under its bare name — a prompt that
+  names a skill must use the namespaced form or rely on claude matching it by description;
+- nothing from `skills/syncskill-lock.json` reaches the model, so the lock stays where inject puts it;
+- a read-only plugin dir loads, and claude does not modify it.
+The §5 write question for `profile ls` is answered in §10.3 (it refreshes unless `--no-refresh`); `inject` skips the
+refresh by itself.
+
+### 11.5 §6 capacity, measured
+
+Command: `node <syncskill clone>/dist/index.js --json inject --skills alpha --target <dir>` with `HOME` and `SYNCSKILL_DIR` at
+temp dirs, one one-file skill, five runs; syncskill at its main (`docs(sdd): record the --sync-dir follow-up …`), Orca
+session `08b1007d`, 1-minute load 4.1. Result: 214–293 ms per inject (first run slowest), 8 KiB on disk per run.
+`--json --no-refresh profile ls`: 206–210 ms (three runs). The cost is one short-lived `node` process per run at A2 (and
+one per changed profile at confirm / set-task-loop); nothing stays alive while the run executes. Larger skill sets were
+not measured.
