@@ -22,6 +22,10 @@ Success, as commands (each exits 0/non-0, details in §8):
 - **H3** A profile is resolved to a skill-name list at confirm time and frozen; later profile edits do not reach a confirmed task.
 - **H4** Approved direction: one `syncskill inject` per run, into a directory outside the git workspace, loaded as a
   claude plugin via `--plugin-dir`; the lock goes into the run's drive record, never into a commit.
+- **H5** (review round) No paid real-claude acceptance this round. Agreed as written: a task with skills on a codex agent
+  is refused at confirm; an inject failure blocks the run; ccloop is pushed before Orca is re-pinned.
+- **H6** (review round) Codex skills: "this round or the next". Controller recommendation, pending the human: next round,
+  because no measured codex route keeps the snapshot both out of the commit and away from the auth home (§3.1).
 
 ## 3. Measured facts this design rests on
 
@@ -37,7 +41,22 @@ name appears in the recorded `POST /v1/messages` bodies.
 (`claude --help`: `--disable-slash-commands  Disable all skills`.) The debug log of the run without the flag also
 reports 39 bundled skills; those reach the model too (accepted by H1).
 
-Code facts (read, not run):
+### 3.1 Codex (codex-cli 0.155.1, same recorder method, `CODEX_HOME` and HOME at temp dirs)
+
+| skill location | sent to the model |
+|---|---|
+| `$CODEX_HOME/skills/<name>` | yes |
+| `<cwd>/.codex/skills/<name>` | yes |
+| `<cwd>/.agents/skills/<name>` | yes |
+| outside all of these, named by `-c 'skills.config=[{path=…,enabled=true}]'` | no |
+
+Consequences: codex needs no flag to see skills, but the two cwd locations are inside the git worktree (committed,
+§3 code facts), and `$CODEX_HOME` also holds the auth (`exec --help`: "auth still uses `CODEX_HOME`"), so a per-run
+`CODEX_HOME` would have to carry credentials. The binary also names `SkillsExtraRootsSet` (an app-server call, not an
+`exec` option) and codex plugins; neither was probed. **Existing gap, not introduced here:** today's codex runs already
+see the person's `~/.codex/skills` and the target repository's own skills, whereas claude runs see none.
+
+### 3.2 Code facts (read, not run)
 - Orca makes one workspace per run (`ensureWorkspace`, `src/control/workspace.ts`); ccloop makes one worktree per
   attempt inside it, and plan/execute/verify share it. ccloop's attempt teardown and Orca's `commitAttempt` both run
   `git add -A`; harvest diffs `base..attemptSha` against the task's claimed paths and blocks `out-of-bounds:` otherwise.
@@ -171,7 +190,7 @@ with the workspace. Measured numbers (spawn time, bytes) are to be recorded by t
 | C11 | workspace cleanup removes `skills-<runId>` | leaving it |
 | C12 | real `~/.syncskill` snapshot unchanged around every file that spawns syncskill | — (guard) |
 
-Not in this round: a paid real-claude acceptance (needs its own criterion and cost cap, reported first); codex skills;
+Not in this round: a paid real-claude acceptance (H5); codex skills (H6, facts in §3.1);
 machine-level `link build`; panel editing of skills beyond what `set-task-loop` already offers.
 
 ## 9. Open points the plan must settle by measurement
