@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { safeInteger } from "./schema.js";
+import { isSafeSkillName, PROFILE_NAME_PATTERN } from "../skills/syncskill.js";
 
 /**
  * Loop plans (docs/superpowers/specs/2026-09-30-loop-plans-design.md §2, §3.2; goal.md §3.3): Orca's built-in recipes
@@ -128,6 +129,26 @@ export const loopInputsSchema = z
   .strict();
 export type LoopInputs = z.infer<typeof loopInputsSchema>;
 
+/**
+ * Syncskill integration spec §10.4: the skill set a loop task declares -- a syncskill profile, or explicit names. It is
+ * never part of the ccloop contract (expandRecipe builds the contract field by field) and never part of loopInputsSchema.
+ */
+export const loopSkillsSchema = z.union([
+  z.object({ profile: z.string().regex(PROFILE_NAME_PATTERN) }).strict(),
+  z.object({ names: z.array(z.string()).min(1) }).strict(),
+]);
+export type LoopSkills = { profile: string } | { names: string[] };
+
+/** Spec §10.4 shape check, for a value that may not have come through loopSkillsSchema: names sorted and unique, or "skills-shape". */
+export function normalizeLoopSkills(skills: LoopSkills): LoopSkills | "skills-shape" {
+  const parsed = loopSkillsSchema.safeParse(skills);
+  if (!parsed.success) return "skills-shape";
+  const value = parsed.data;
+  if ("profile" in value) return { profile: value.profile };
+  if (!value.names.every(isSafeSkillName)) return "skills-shape";
+  return { names: [...new Set(value.names)].sort() };
+}
+
 /** Spec §3.1 (D3): the plan file's `loop` object. No budget: Web import never read a contract's budget. */
 export const loopPlanFileSchema = z
   .object({
@@ -140,6 +161,7 @@ export const loopPlanFileSchema = z
     relevantDocs: z.array(z.string()).optional(),
     protectedPaths: z.array(pathEntrySchema).optional(),
     maxFilesTouched: safeInteger.positive().optional(),
+    skills: loopSkillsSchema.optional(),
   })
   .strict();
 export type LoopPlanFileInput = z.infer<typeof loopPlanFileSchema>;
@@ -152,11 +174,13 @@ export const loopRecipeSchema = z
     planVersion: safeInteger.positive(),
     chosenBy: z.enum(["explicit", "labels"]),
     inputs: loopInputsSchema,
+    // Spec §10.4: optional and never defaulted, so a recipe without skills keeps its bytes (names stored sorted and unique).
+    skills: loopSkillsSchema.optional(),
   })
   .strict();
 export type LoopRecipe = z.infer<typeof loopRecipeSchema>;
 
-export type LoopRefusal = "unknown-plan" | "path-shape" | "investigate-target" | "investigate-max-files" | "design-target";
+export type LoopRefusal = "unknown-plan" | "path-shape" | "investigate-target" | "investigate-max-files" | "design-target" | "skills-shape";
 export type LoopExpansion = { ok: true; contract: Record<string, unknown>; canonicalJson: string; hash: string } | { ok: false; reason: LoopRefusal };
 export type LoopTaskExpansion =
   | { ok: true; contract: Record<string, unknown>; canonicalJson: string; hash: string; recipe: LoopRecipe }
@@ -247,10 +271,16 @@ export function expandRecipe(taskId: string, repoPath: string, recipe: LoopRecip
 }
 
 /** A named plan at its current version (the set-task-loop door, spec §5.2 step 4, and the plan file's). */
-export function expandLoopPlan(taskId: string, repoPath: string, planId: string, inputs: LoopInputs, chosenBy: "explicit" | "labels" = "explicit"): LoopTaskExpansion {
+export function expandLoopPlan(taskId: string, repoPath: string, planId: string, inputs: LoopInputs, chosenBy: "explicit" | "labels" = "explicit", skills?: LoopSkills): LoopTaskExpansion {
   const version = currentLoopPlanVersion(planId);
   if (version === null || !isLoopPlanId(planId)) return { ok: false, reason: "unknown-plan" };
-  const recipe: LoopRecipe = { schema: LOOP_RECIPE_SCHEMA, planId, planVersion: version, chosenBy, inputs: structuredClone(inputs) };
+  // An explicit `undefined` would make canonical JSON throw, so an absent skills is an omitted key.
+  const normalized = skills === undefined ? undefined : normalizeLoopSkills(skills);
+  if (normalized === "skills-shape") return { ok: false, reason: "skills-shape" };
+  const recipe: LoopRecipe = {
+    schema: LOOP_RECIPE_SCHEMA, planId, planVersion: version, chosenBy, inputs: structuredClone(inputs),
+    ...(normalized === undefined ? {} : { skills: normalized }),
+  };
   const expanded = expandRecipe(taskId, repoPath, recipe);
   return expanded.ok ? { ...expanded, recipe } : expanded;
 }
@@ -266,7 +296,7 @@ export function normalizeLoopInputs(input: LoopPlanFileInput): LoopInputs {
 /** Spec §2.4, §3.2: a plan-file task -- its named plan, or the one its labels choose. */
 export function expandLoopTask(taskId: string, repoPath: string, input: LoopPlanFileInput, labels: readonly string[]): LoopTaskExpansion {
   const planId = input.plan ?? choosePlanByLabels(labels).planId;
-  return expandLoopPlan(taskId, repoPath, planId, normalizeLoopInputs(input), input.plan === undefined ? "labels" : "explicit");
+  return expandLoopPlan(taskId, repoPath, planId, normalizeLoopInputs(input), input.plan === undefined ? "labels" : "explicit", input.skills);
 }
 
 /** Spec §2.4 (D6), highest priority first. `custom:` labels never match: no vocabulary word starts with the prefix. */
