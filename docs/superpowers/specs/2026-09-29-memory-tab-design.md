@@ -349,3 +349,10 @@ Source: `docs/superpowers/plans/2026-10-03-memory-tab.md`, "Drafter findings". W
 - **§6.1 (D6)** The fake is committed as a plain file and run through a `#!/bin/sh` wrapper written at test time with mode `0o755`, as every fake in this repository is.
 - **§5.2 (D8)** The view requests nothing until its section is first opened (all panes stay mounted; a fetch on mount would start ccmem on every panel load).
 - **§3.6 (D11)** `created_at` and `updated_at` are bounded to `0..8_640_000_000_000_000`; outside that range the export is `ccmem-output-invalid`, naming the row.
+
+## 11. Post-implementation corrections (2026-10-03, session `6a4dd7f3`; the text above, §10 included, is kept verbatim)
+
+Source: the ledger `.superpowers/sdd/2026-10-03-memory-tab/progress.md`, the two `Final: parked` lines on `ccmem-failed:`. Where this section and the text above disagree, this section wins.
+
+- **§2.1 and §3.3 (E1)** `ccmem-failed:<status>` has three kinds of status, not two: the exit code, the signal name, and the errno name of a spawn that never started ccmem (`ENOTDIR` for a repository path that is a file, `ENOEXEC` for an `ORCA_CCMEM_BIN` that is not a program). `ENOENT` and `EACCES` stay `ccmem-missing`. The family stays open and is shown as sent (§5.1).
+- **§3.3 (E2)** A status never contains spaces. When libuv has no name for an errno, Node puts its message in `code` (`Unknown system error -8` for `ENOEXEC`, Node v22.13.1 on macOS); the adapter names it from `os.constants.errno` by the error's `errno` instead, and answers `unknown` if no name matches. Node's message stays in the error message.

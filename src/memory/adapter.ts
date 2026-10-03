@@ -23,6 +23,8 @@ export type MemoryErrorCode =
   | "ccmem-timeout"
   | "ccmem-output-too-large"
   | "ccmem-output-invalid";
+// CORRECTION (memory tab spec §11, 2026-10-03): `ccmem-failed:` also carries the errno name of a spawn that failed to
+// start (ENOTDIR, ENOEXEC...), not only an exit code or a signal name. The comment above is kept as published.
 
 export type MemoryHealth =
   | { readonly status: "ok" }

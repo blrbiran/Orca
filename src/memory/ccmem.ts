@@ -1,5 +1,6 @@
 import { type ExecFileException, execFile } from "node:child_process";
 import { constants } from "node:fs";
+import { constants as osConstants } from "node:os";
 import { access, stat } from "node:fs/promises";
 import { isAbsolute } from "node:path";
 import { MemoryError, type MemoryAdapter, type MemoryHealth, type MemoryRecord, type MemoryScope } from "./adapter.js";
@@ -89,7 +90,17 @@ function exportFailure(error: ExecFileException, ctx: { bin: string; scope: Ccme
   if (code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER") return new MemoryError("ccmem-output-too-large", `${what} wrote more than ${ctx.maxBuffer} bytes`);
   if (error.killed === true) return new MemoryError("ccmem-timeout", `${what} did not finish within ${ctx.timeout} ms`);
   // A string errno other than the ones above (ENOTDIR, ENOEXEC, EMFILE...) is named, not collapsed to "unknown".
-  const status = typeof code === "number" ? String(code) : typeof code === "string" ? code : (error.signal ?? "unknown");
+  const status = typeof code === "number" ? String(code) : typeof code === "string" ? errnoName(code, error.errno) : (error.signal ?? "unknown");
   const detail = ctx.stderr === "" ? error.message : ctx.stderr.slice(0, STDERR_EXCERPT_BYTES);
   return new MemoryError(`ccmem-failed:${status}`, `${what} exited ${status}: ${detail}`);
+}
+
+/**
+ * libuv has no name for some errnos and Node then sets `code` to its message, "Unknown system error -8" for ENOEXEC
+ * (v22.13.1, macOS), which would put spaces in a wire code. The number is still there, so name it from os.constants.
+ */
+function errnoName(code: string, errno: number | undefined): string {
+  if (/^[A-Z][A-Z0-9_]*$/.test(code)) return code;
+  const name = errno === undefined ? undefined : Object.entries(osConstants.errno).find(([, value]) => value === Math.abs(errno))?.[0];
+  return name ?? "unknown";
 }

@@ -96,6 +96,16 @@ describe("failures (spec §3.3)", () => {
     expect(fake.calls()).toEqual([]);
   });
 
+  it("names an errno libuv has no name for by its errno name, so the wire code has no spaces", async () => {
+    // An executable with no #! and no binary format: Node throws code "Unknown system error -8", errno -8 (v22.13.1, macOS).
+    const { fake, scope } = await world();
+    const bin = join(fake.dir, "not-a-program");
+    await writeFile(bin, "not a program\n", { mode: 0o755 });
+    const err = await refusal(adapterFor(fake, { ccmemBin: bin }).search(scope, { query: "", limit: 50 }));
+    expect(err.code).toBe("ccmem-failed:ENOEXEC");
+    expect(err.message).toContain("Unknown system error -8"); // Node's own message is kept
+  });
+
   it("gives up at the timeout, promptly (M6)", async () => {
     const { fake, scope } = await world("sleep");
     const started = Date.now();

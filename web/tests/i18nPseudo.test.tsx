@@ -96,6 +96,7 @@ async function useChinese(): Promise<void> {
 afterEach(() => {
   cleanup();
   setZhBundle(structuredClone(zh) as unknown as Tree);
+  vi.unstubAllGlobals(); // the memory area's fetch stub must not outlive it
 });
 
 // ---- fixtures (data strings chosen to collide with no checked English value) ----
@@ -173,15 +174,16 @@ const MEMORY: MemoryRecord = {
   ref: "41", scope: "global", projectKey: null, kind: "k-1", content: "m-1", tags: ["t-1"], pinned: true, source: "s-4", trust: 0.5,
   createdAt: "2026-09-01T00:00:00.000Z", updatedAt: "2026-09-02T00:00:00.000Z",
 };
+const realFetch = globalThis.fetch;
 function stubMemoryFetch(): void {
   const json = (body: unknown): Response => new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
-  globalThis.fetch = (async (input: RequestInfo | URL): Promise<Response> => {
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL): Promise<Response> => {
     const url = String(input);
     if (url === "/api/memory/status") return json({ adapter: { id: "ccmem", capabilities: { search: true, get: true, recordCorrection: false } }, health: { status: "ok" }, repos: [{ projectKey: "mk-1" }, { projectKey: "mk-2" }] });
     if (url.startsWith("/api/memory/list")) return json({ projectKey: "mk-1", query: "", page: { records: [MEMORY], total: 9, truncated: true } });
     if (url.startsWith("/api/memory/item")) return json({ record: MEMORY });
     throw new Error(`unexpected request ${url}`);
-  }) as typeof fetch;
+  });
 }
 async function openMemory(container: HTMLElement): Promise<void> {
   await waitFor(() => expect(container.querySelector(".memory-row")).not.toBeNull());
@@ -251,6 +253,11 @@ describe("everything visible goes through t (spec §6.5)", () => {
     const { container } = render(element());
     await settle?.(container);
     expect(container.textContent).toContain(chinese);
+  });
+
+  // Runs after both it.each above, so the memory area has stubbed fetch twice by now: a later area must see the real one.
+  it("leaves fetch as it found it once the memory area is done", () => {
+    expect(globalThis.fetch).toBe(realFetch);
   });
 });
 
