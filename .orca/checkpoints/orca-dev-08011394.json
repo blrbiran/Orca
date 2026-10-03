@@ -3,42 +3,43 @@
   "runId": "orca-dev-08011394",
   "runtime": "claude-code",
   "sessionRef": "08011394-9036-41ef-8c6f-7cfed042a51d",
-  "writtenAt": "2026-10-03T16:03:58.033Z",
-  "head": "d2b9abc92b9a9dab559f6cb7945e3564fcae117c",
+  "writtenAt": "2026-10-03T17:06:54.302Z",
+  "head": "9f04f37658bf0a8f2f9a87bf7dc72b49558fb2cb",
   "level": {
     "kind": "reading",
-    "level": 332464,
+    "level": 459602,
     "windowTokens": 1000000,
     "t1": 330000,
     "t2": 450000,
-    "band": 1
+    "band": 2
   },
   "next": [
-    "Write plan docs/superpowers/plans/2026-10-04-panel-project-switcher.md and implement it (spec docs/superpowers/specs/2026-10-04-panel-project-switcher-design.md)",
-    "Re-run the full segmented gate in a fresh clone on the final tree; judge the five registered flakes one file at a time after load drops",
-    "Update Orca handoff §4.0, ccloop and ccmem Orca sections (replace, do not append); write the OS-temp handoff; give the person the executive summary"
+    "Person reviews Orca handoff §4.0.p and spec docs/superpowers/specs/2026-10-04-panel-project-switcher-design.md §7/§8",
+    "Person restarts their panel (~/.orca/panel.sh) to pick up the fixes",
+    "Next item chosen by the person from Orca handoff §4.0 item 3"
   ],
   "open": [
-    "Gate on the refresh fix alone: vitest 2738, 5 red = registered flakes (driverLanding D, driverRecovery retried, driverRequirementSplit, executionDriverE2E, controlShutdown 143), not yet judged singly",
-    "Commit 'fix(panel): sort the control read views by code unit…' says blocker sorts carry no NUL-joined key; they do (recoveryBlockers key is NUL-joined) -- correct in handoff"
+    "Session context passed T2 (about 458k of 450k) while closing the round; recorded here and reported to the person",
+    "Commit 'fix(panel): sort the control read views by code unit…' wrongly says blocker sorts carry no NUL-joined key; corrected in Orca handoff §4.0.p",
+    "Comparator swaps for profileId, error catalog, recovery blockers, evidence have no criterion that can turn red"
   ],
   "awaitingHuman": [
     {
       "kind": "irreversible",
-      "what": "push Orca (3e949c7 refresh fix, 37c8556 sort fix, d2b9abc spec, and what follows), ccloop and ccmem handoff commits"
+      "what": "push Orca (this session's commits), ccloop (Orca section v43), ccmem (Orca section v34); no ordering constraint"
     },
     {
       "kind": "named-authorization",
-      "what": "review the project-switcher rulings R1-R6 in the spec §7"
+      "what": "review project switcher rulings R1-R6 and the refresh/sort rulings in Orca handoff §4.0.p"
     }
   ],
   "measurements": [
     {
-      "command": "cd <fresh clone> && ./node_modules/.bin/vitest run web/tests/controlPollSettles.test.tsx tests/panel/controlViewOrder.test.ts",
-      "exitCode": 2,
-      "commit": "d2b9abc92b9a9dab559f6cb7945e3564fcae117c",
-      "observedAt": "2026-10-03T16:03:57.954Z",
-      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-08011394-yhKOIg/1.txt"
+      "command": "/usr/bin/git -C /Users/biran/code/skills/loop/Orca log --oneline -1",
+      "exitCode": 0,
+      "commit": "9f04f37658bf0a8f2f9a87bf7dc72b49558fb2cb",
+      "observedAt": "2026-10-03T17:06:54.252Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-08011394-3uPWja/1.txt"
     }
   ]
 }
