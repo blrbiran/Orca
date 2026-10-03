@@ -95,13 +95,13 @@ describe("set-task-loop changes a draft task's skill set (C13)", () => {
     expect(Object.keys(viewPlan(h))).not.toContain("skills");
   });
 
-  it("a profile is looked up and stored by name; a profile change is accepted", async () => {
+  it("a profile on a draft task is stored by name and not looked up (confirm freezes it later)", async () => {
     const h = await fixture();
     const fake = await fakeSyncskill("profile-ok");
     expect(await serviceOf(h, fake.o).setTaskLoop(withSkills(h, "a", {}, { profile: "p" }))).toMatchObject({ result: { kind: "task-loop-set" } });
     expect(effective(h).loop!.skills).toEqual({ profile: "p" });
     expect(viewPlan(h).skills).toEqual({ profile: "p" });
-    expect(fake.calls()).toEqual([["--json", "--no-refresh", "profile", "ls", "p"]]);
+    expect(fake.calls()).toEqual([]);
   });
 
   it("refuses names that break the name rule as loop-plan-invalid:skills-shape, whether or not the plan is kept", async () => {
@@ -114,23 +114,14 @@ describe("set-task-loop changes a draft task's skill set (C13)", () => {
     expect(Object.keys(effective(h).loop!)).not.toContain("skills");
   });
 
-  it("refuses syncskill-unconfigured for declared names, and a lookup failure by name, on a draft task", async () => {
+  it("a draft task needs no syncskill and never asks it: names and a profile are accepted unset, a failing syncskill is not spawned", async () => {
     const h = await fixture();
-    for (const syncskill of [undefined, { bin: null, env: {} }]) {
-      expect(errorOf(await serviceOf(h, syncskill).setTaskLoop(withSkills(h, "a", {}, { names: ["x"] })))).toMatchObject({ code: "syncskill-unconfigured" });
-    }
+    expect(await serviceOf(h).setTaskLoop(withSkills(h, "a", {}, { names: ["x"] }))).toMatchObject({ result: { kind: "task-loop-set", loopVersion: 1 } });
+    expect(await serviceOf(h, { bin: null, env: {} }).setTaskLoop(withSkills(h, "a", { base: 1 }, { profile: "p" }))).toMatchObject({ result: { kind: "task-loop-set", loopVersion: 2 } });
     const missing = await fakeSyncskill("profile-missing");
-    expect(errorOf(await serviceOf(h, missing.o).setTaskLoop(withSkills(h, "a", {}, { profile: "p" }))))
-      .toMatchObject({ code: "syncskill-failed", message: "syncskill-failed:E_PROFILE_NOT_FOUND" });
-    expect(workBody(h, "a").loopVersion).toBeUndefined();
-    expect(Object.keys(effective(h).loop!)).not.toContain("skills");
-  });
-
-  it("decides a lookup failure after the existing checks: a stale loop version is named first", async () => {
-    const h = await fixture();
-    const missing = await fakeSyncskill("profile-missing");
-    expect(errorOf(await serviceOf(h, missing.o).setTaskLoop(withSkills(h, "a", { base: 5 }, { profile: "p" })))).toMatchObject({ code: "task-loop-version-conflict" });
-    expect(errorOf(await serviceOf(h).setTaskLoop(withSkills(h, "a", { base: 5 }, { names: ["x"] })))).toMatchObject({ code: "task-loop-version-conflict" });
+    expect(await serviceOf(h, missing.o).setTaskLoop(withSkills(h, "a", { base: 2 }, { profile: "q" }))).toMatchObject({ result: { kind: "task-loop-set", loopVersion: 3 } });
+    expect(effective(h).loop!.skills).toEqual({ profile: "q" });
+    expect(missing.calls()).toEqual([]);
   });
 });
 
@@ -177,14 +168,73 @@ describe("set-task-loop on a confirmed task rewrites its snapshot entry (C15)", 
     expect(readConfirmedTaskExecution(h.store, "g", "b").skills).toEqual({ profile: null, names: ["z"] });
   });
 
-  it("a lookup failure on a confirmed task refuses the change and leaves the snapshot as it was", async () => {
+  it("a lookup failure on a confirmed task refuses the change and leaves the snapshot as it was; names need no lookup", async () => {
     const h = await confirmed([{ taskId: "a", loop: loop("a") }]);
     const before = { hash: snapshotHash(h), work: workAllocation(h, "a").amount };
     const missing = await fakeSyncskill("profile-missing");
     expect(errorOf(await serviceOf(h, missing.o).setTaskLoop(withSkills(h, "a", { tokens: before.work.tokens - 1 }, { profile: "p" }))))
       .toMatchObject({ code: "syncskill-failed", message: "syncskill-failed:E_PROFILE_NOT_FOUND" });
-    expect(errorOf(await serviceOf(h).setTaskLoop(withSkills(h, "a", {}, { names: ["x"] })))).toMatchObject({ code: "syncskill-unconfigured" });
+    for (const syncskill of [undefined, { bin: null, env: {} }]) {
+      expect(errorOf(await serviceOf(h, syncskill).setTaskLoop(withSkills(h, "a", {}, { profile: "p" })))).toMatchObject({ code: "syncskill-unconfigured" });
+    }
     expect(snapshotHash(h)).toBe(before.hash);
     expect(workAllocation(h, "a").amount).toEqual(before.work);
+    // Names are taken as declared: no lookup, so no syncskill needed.
+    expect(await serviceOf(h).setTaskLoop(withSkills(h, "a", {}, { names: ["x"] }))).toMatchObject({ result: { kind: "task-loop-set" } });
+    expect(snapshotOf(h).skills).toEqual([{ taskId: "a", profile: null, names: ["x"] }]);
+  });
+
+  it("decides a lookup failure after the existing checks: a stale loop version is named first", async () => {
+    const h = await confirmed([{ taskId: "a", loop: loop("a") }]);
+    const missing = await fakeSyncskill("profile-missing");
+    expect(errorOf(await serviceOf(h, missing.o).setTaskLoop(withSkills(h, "a", { base: 5 }, { profile: "p" })))).toMatchObject({ code: "task-loop-version-conflict" });
+    expect(errorOf(await serviceOf(h).setTaskLoop(withSkills(h, "a", { base: 5 }, { profile: "p" })))).toMatchObject({ code: "task-loop-version-conflict" });
+  });
+});
+
+describe("an unchanged declaration keeps its frozen entry (H3)", () => {
+  /** Task a confirmed with profile p frozen as ["alpha"] (the fake's waits-for-stdin answer). */
+  async function frozenProfile() {
+    const first = await fakeSyncskill("waits-for-stdin");
+    const h = await fixture([{ taskId: "a", loop: { ...loop("a"), skills: { profile: "p" } } }]);
+    const answer = await serviceOf(h, first.o).confirm(h.command("confirm", await h.confirmPayload()));
+    if ("error" in answer) throw new Error(JSON.stringify(answer));
+    expect(snapshotOf(h).skills).toEqual([{ taskId: "a", profile: "p", names: ["alpha"] }]);
+    return h;
+  }
+
+  it("a budget-only edit sending the same profile keeps the frozen names and spawns nothing, though syncskill now answers otherwise", async () => {
+    const h = await frozenProfile();
+    const now = await fakeSyncskill("profile-ok"); // would answer ["alpha", "beta"]
+    expect(await serviceOf(h, now.o).setTaskLoop(withSkills(h, "a", { tokens: workAllocation(h, "a").amount.tokens - 1 }, { profile: "p" })))
+      .toMatchObject({ result: { kind: "task-loop-set" } });
+    expect(snapshotOf(h).skills).toEqual([{ taskId: "a", profile: "p", names: ["alpha"] }]);
+    expect(readConfirmedTaskExecution(h.store, "g", "a").skills).toEqual({ profile: "p", names: ["alpha"] });
+    expect(now.calls()).toEqual([]);
+  });
+
+  it("the same budget-only edit is accepted with ORCA_SYNCSKILL_BIN unset", async () => {
+    const h = await frozenProfile();
+    for (const [i, syncskill] of [undefined, { bin: null, env: {} }].entries()) {
+      expect(await serviceOf(h, syncskill).setTaskLoop(withSkills(h, "a", { base: i, tokens: workAllocation(h, "a").amount.tokens - 1 }, { profile: "p" })))
+        .toMatchObject({ result: { kind: "task-loop-set", loopVersion: i + 1 } });
+    }
+    expect(snapshotOf(h).skills).toEqual([{ taskId: "a", profile: "p", names: ["alpha"] }]);
+  });
+
+  it("a task read as a draft but confirmed before the transaction refuses a changed profile as proposal-version-conflict", async () => {
+    const h = await fixture([{ taskId: "a", loop: loop("a") }]);
+    const answer = await serviceOf(h).confirm(h.command("confirm", await h.confirmPayload()));
+    if ("error" in answer) throw new Error(JSON.stringify(answer));
+    const row = h.store.db.prepare("SELECT body FROM budget_proposals WHERE group_id='g'").get()!.body;
+    const fake = await fakeSyncskill("profile-ok");
+    const command = withSkills(h, "a", {}, { profile: "p" });
+    // The pre-transaction read happens synchronously in the call: it sees a draft, then the confirmed body is put back.
+    h.store.db.prepare("UPDATE budget_proposals SET body=? WHERE group_id='g'").run(JSON.stringify({ ...JSON.parse(String(row)), state: "editable" }));
+    const pending = serviceOf(h, fake.o).setTaskLoop(command);
+    h.store.db.prepare("UPDATE budget_proposals SET body=? WHERE group_id='g'").run(row);
+    expect(errorOf(await pending)).toMatchObject({ code: "proposal-version-conflict" });
+    expect(fake.calls()).toEqual([]);
+    expect(Object.keys(snapshotOf(h))).not.toContain("skills");
   });
 });

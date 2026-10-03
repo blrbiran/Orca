@@ -123,14 +123,24 @@ async function lookupSkillProfiles(store: ControlStore, groupId: string, syncski
   return { members };
 }
 /**
- * Spec §10.5: set-task-loop's lookup, from its payload alone (the full desired state). Declared skills need syncskill
- * (names included, as at confirm); a profile is resolved now and used only if the task is already confirmed.
+ * Spec §10.5, H3: the profile set-task-loop must look up, or null. Only a confirmed task whose payload declares a profile
+ * other than its recipe's needs one: a draft task is frozen later by confirm, and an unchanged declaration keeps the
+ * frozen entry as it is. Read before the transaction; the transaction re-checks (a confirm in between is refused).
  */
-async function lookupPayloadSkills(skills: LoopSkills | undefined, syncskill: SyncskillOptions): Promise<SkillLookup> {
-  if (skills === undefined) return { members: new Map() };
-  if (syncskill.bin === null) return { failure: new ControlError("syncskill-unconfigured") };
-  if (!("profile" in skills)) return { members: new Map() };
-  try { return { members: new Map([[skills.profile, await profileMembers(syncskill, skills.profile)]]) }; } catch (error) { return { failure: syncskillRefusal(error) }; }
+function profileToLookUp(store: ControlStore, groupId: string, taskId: string, skills: LoopSkills | undefined): string | null {
+  if (skills === undefined || !("profile" in skills)) return null;
+  try {
+    if (readBudgetProposal(store, groupId).state === "editable") return null;
+    const archived = readArchivedPlan(store, groupId).plan.tasks.find(task => task.taskId === taskId);
+    if (archived === undefined) return null;
+    const current = effectivePlanTask(store, groupId, archived, workBodyOf(store, groupId, taskId)).loop?.skills;
+    return current !== undefined && "profile" in current && current.profile === skills.profile ? null : skills.profile;
+  } catch { return null; } // the transaction's own checks name what could not be read
+}
+async function lookupProfile(profile: string | null, syncskill: SyncskillOptions): Promise<SkillLookup> {
+  if (profile === null) return { members: new Map() };
+  // profileMembers refuses an unset ORCA_SYNCSKILL_BIN itself (syncskill-unconfigured).
+  try { return { members: new Map([[profile, await profileMembers(syncskill, profile)]]) }; } catch (error) { return { failure: syncskillRefusal(error) }; }
 }
 function syncskillRefusal(error: unknown): unknown {
   if (!(error instanceof SyncskillError)) return error;
@@ -668,124 +678,130 @@ export class WebControlService {
     const release = this.deps.admissionGate?.enter();
     try {
       const replay = preflightWebCommand<WebCommandResult>(this.store, command); if (replay) return replay.body;
-      // Syncskill integration spec §10.5: the lookup runs before the transaction, as confirm's does.
-      const skillLookup = await lookupPayloadSkills(command.payload.skills, this.deps.syncskill ?? UNCONFIGURED_SYNCSKILL);
+      // Syncskill integration spec §10.5: the lookup runs before the transaction, as confirm's does (decided synchronously
+      // here, before the first await).
+      const skillLookup = await lookupProfile(profileToLookUp(this.store, groupId(command), command.target.taskId, command.payload.skills), this.deps.syncskill ?? UNCONFIGURED_SYNCSKILL);
       return applyWebCommand<WebCommandResult>(this.store, {
-      rawCommand: command, expand: () => ({ ...command, schema: "orca-authority-command-v1" }),
-      apply: context => {
-        const id = groupId(command), taskId = command.target.taskId, payload = command.payload;
-        const group = readWebGroup(this.store, id), proposal = readBudgetProposal(this.store, id), plan = readArchivedPlan(this.store, id);
-        // Step 1. Not prestart: the spec names one code for every state but draft/ready (prestart answers
-        // grant-amendment-unsupported for running/review/done), and a stopped group is refused too.
-        assertKnownConservation(this.store, group, proposal);
-        if ((group.status !== "draft" && group.status !== "ready") || group.stopped) throw new ControlError("group-state-invalid");
-        const body = workBodyOf(this.store, id, taskId);
-        const work = typeof body === "object" && body !== null && !Array.isArray(body) ? body as Record<string, unknown> : null;
-        const archived = plan.plan.tasks.find(task => task.taskId === taskId);
-        if (!work || work.kind !== "task" || !archived) throw new ControlError("work-not-found");
-        // Step 2: any runs row counts -- a finished run returns its task to ready. Decided inside this transaction, so
-        // this command and the driver's claim (webDispatch.ts nextClaimableTask, createStartingRun) cannot both win.
-        if ((work.status !== "draft" && work.status !== "ready")
-          || this.store.db.prepare("SELECT id FROM runs WHERE group_id=? AND work_item_id=?").get(id, taskId)) throw new ControlError("task-already-started");
-        // Step 3. The in-flight predicate is scheduleStart's (webDispatch.ts), Drafter finding F8.
-        for (const estimate of this.store.db.prepare("SELECT state FROM estimates WHERE group_id=?").all(id)) {
-          if (["running", "start-unknown"].includes(String(estimate.state))) throw new ControlError("estimate-in-flight");
-        }
-        const loopVersion = typeof work.loopVersion === "number" ? work.loopVersion : 0;
-        if (payload.baseLoopVersion !== loopVersion) throw new ControlError("task-loop-version-conflict");
-        if (archived.loop === undefined) throw new ControlError("task-has-no-loop-plan");
-        // Step 4. repoPath is the current contract's own (Drafter finding F9).
-        const current = effectivePlanTask(this.store, id, archived, work);
-        const repoPath = taskContractSchema.parse(JSON.parse(current.originalContractCanonicalJson)).context.repoPath;
-        // W7 ruling: the task's own plan with its own inputs keeps the recipe's plan version, so a budget-only change (or an
-        // estimate's suggestion) never silently re-expands an older version's task at the current one; a change of plan
-        // or inputs expands at the current version. The kept recipe keeps its chosenBy too (final review C1): the plan is
-        // still the one the labels chose, and rewriting it would change the effective plan and make every estimate stale.
-        // Syncskill integration spec §10.4: skills are left out of `kept` (a skills-only change keeps a v1 recipe at v1);
-        // the kept recipe takes the payload's skills, and a payload without them removes them.
-        const kept = current.loop !== undefined && current.loop.planId === payload.plan
-          && canonicalBytes(current.loop.inputs).equals(canonicalBytes(payload.inputs));
-        const skills = payload.skills === undefined ? undefined : normalizeLoopSkills(payload.skills);
-        if (skills === "skills-shape") throw new ControlError("loop-plan-invalid", skills);
-        const expanded: LoopTaskExpansion = kept ? keptExpansion(taskId, repoPath, current.loop!, payload.inputs, skills)
-          : expandLoopPlan(taskId, repoPath, payload.plan, payload.inputs, "explicit", skills);
-        if (!expanded.ok) throw new ControlError("loop-plan-invalid", expanded.reason);
-        const allocation = proposal.allocations.find(a => a.ownerKind === "task" && a.ownerId === taskId && a.bucket === "work");
-        const handoff = proposal.allocations.find(a => a.ownerKind === "task" && a.ownerId === taskId && a.bucket === "handoff");
-        if (!allocation || !handoff) throw new ControlError("recovery-blocked");
-        const before = allocation.amount;
-        // R10: sessions is not in the payload; it is carried over unchanged.
-        const next: Amount = { ...before, tokens: payload.work.tokens, activeMs: payload.work.activeMs, attempts: payload.work.attempts };
-        // A plan-version bump with identical bytes is a no-op too; the recipe then keeps its version.
-        // Spec §10.4: a skills-only change is not a no-op.
-        if (expanded.canonicalJson === current.originalContractCanonicalJson && same(next, before)
-          && canonicalBytes(current.loop?.skills ?? null).equals(canonicalBytes(expanded.recipe.skills ?? null))) throw new ControlError("no-op-command");
-        // W5: a dimension taken from an estimate is its suggestion for this task's work allocation (proposal-edit's rule).
-        const modelDimensions = Object.entries(payload.workProvenance ?? {}).flatMap(([d, source]) => source ? [{ dimension: d as "tokens" | "activeMs" | "attempts", estimateId: source.estimateId }] : []);
-        for (const { dimension, estimateId } of modelDimensions) {
-          verifyModelField(this.store, id, proposal, { scope: "task", taskId, allocation: "work", dimension }, next[dimension], estimateId);
-        }
-        // Step 6's refusal, before anything is written: the reserve may not go negative in any dimension.
-        for (const d of dimensions) {
-          const shortfall = next[d] - before[d] - proposal.explicitUnallocatedReserve[d];
-          if (shortfall > 0) throw new ControlError("group-reserve-insufficient", `${d}:${shortfall}`);
-        }
-        if (loopVersion === Number.MAX_SAFE_INTEGER) throw new ControlError("numeric-overflow");
-        // Syncskill integration spec §10.5: a lookup failure (or syncskill unset while the payload declares skills) refuses
-        // the change, draft or confirmed, decided here after every existing check, as at confirm.
-        if ("failure" in skillLookup) throw skillLookup.failure;
-        // Step 5.
-        const amendmentHash = writeTaskAmendment(this.store, id, {
-          schema: TASK_AMENDMENT_SCHEMA, groupId: id, taskId, loopVersion: loopVersion + 1, previousContractHash: current.originalContractHash,
-          recipe: expanded.recipe, originalContractHash: expanded.hash, originalContractCanonicalJson: expanded.canonicalJson,
-        });
-        writeCanonicalRecord(this.store, id, expanded.hash, expanded.canonicalJson);
-        // Drafter finding F10: the projection compares both contract hashes; the claim copies derivedContractHash and grant.
-        Object.assign(work, { amendmentHash, loopVersion: loopVersion + 1, originalContractHash: expanded.hash, contract: { contentAddressedHash: expanded.hash } });
-        // H12 (human, 2026-10-01): once a change writes a contract other than the task's previous one, the card keeps
-        // saying "changed", even after a later change back to the imported contract. Never cleared; a budget-only change
-        // (same contract bytes) does not set it.
-        if (expanded.canonicalJson !== current.originalContractCanonicalJson) work.planChanged = true;
-        // Step 6.
-        for (const d of dimensions) if (next[d] !== before[d]) allocation.fieldProvenance[d] = { provenance: "human", estimateId: null };
-        for (const { dimension, estimateId } of modelDimensions) allocation.fieldProvenance[dimension] = { provenance: "model", estimateId };
-        allocation.amount = next;
-        if (proposal.state === "editable") {
-          // Step 7, draft: the proposal version advances, as every proposal change does, so a stale confirm is refused.
-          this.store.db.prepare("UPDATE work_items SET body=? WHERE group_id=? AND id=?").run(JSON.stringify(work), id, taskId);
-          reopenProposal(this.store, id, group, proposal, resetDraftReserve(this.store, id, group, proposal));
-        } else {
-          // Step 7, confirmed: proposalVersion is inside every derived record and checked at A2 and in the projection,
-          // so it does not move; only this task's contract is re-derived, at the same derivationVersion.
-          for (const d of dimensions) group.ledger.committedRemaining[d] += next[d] - before[d];
-          setReserve(proposal, residual(proposal.groupLimit, group.used, group.ledger.committedRemaining));
-          const derived = deriveContract({ taskId, originalContractHash: expanded.hash, originalContractCanonicalJson: expanded.canonicalJson, work: next, handoff: handoff.amount }, proposal.proposalVersion);
-          writeCanonicalRecord(this.store, id, derived.derivedContractHash, derived.canonicalJson);
-          work.derivedContractHash = derived.derivedContractHash;
-          work.grant = { ...(work.grant as Record<string, unknown>), work: next };
-          this.store.db.prepare("UPDATE work_items SET body=? WHERE group_id=? AND id=?").run(JSON.stringify(work), id, taskId);
-          // Step 7: copy the confirmed snapshot, replacing only this task's derived contract and its two allocations,
-          // and point the proposal (and, through saveWebAuthority, the group's mirror) at it. Old snapshots are kept.
-          const frozen = executionSnapshotSchema.parse(JSON.parse(readCanonicalRecord(this.store, proposal.executionSnapshotHash!)));
-          const bare = ({ state: _state, ...rest }: BudgetProposalRecord["allocations"][number]) => rest;
-          // Spec §10.5: the task's skill set is frozen as confirm freezes it -- names as declared, a profile as syncskill answered it.
-          const recipeSkills = expanded.recipe.skills;
-          // The lookup above resolved this very profile from this payload, so its members are there.
-          const frozenSkills = recipeSkills === undefined ? null
-            : "names" in recipeSkills ? { profile: null, names: [...recipeSkills.names] } : { profile: recipeSkills.profile, names: skillLookup.members.get(recipeSkills.profile)! };
-          const rebuilt = replaceTaskInSnapshot(frozen, taskId, derived.derivedContractHash, { work: bare(allocation), handoff: bare(handoff) }, frozenSkills);
-          writeCanonicalRecord(this.store, id, rebuilt.snapshotHash, rebuilt.canonicalJson);
-          proposal.executionSnapshotHash = rebuilt.snapshotHash;
-          saveWebAuthority(this.store, group, proposal);
-          // Step 8: the changed task passes A2 before this commits.
-          readConfirmedTaskExecution(this.store, id, taskId);
-        }
-        // Step 8: the ledger still conserves.
-        assertKnownConservation(this.store, readWebGroup(this.store, id), readBudgetProposal(this.store, id));
-        // W5/W6: the estimate still describes the contract as this command leaves it (a change in the same command makes it stale).
-        for (const { estimateId } of modelDimensions) refuseStaleEstimate(this.store, id, estimateId);
-        return success(context, { kind: "task-loop-set", taskId, loopVersion: loopVersion + 1, proposalVersion: proposal.proposalVersion });
-      },
+        rawCommand: command, expand: () => ({ ...command, schema: "orca-authority-command-v1" }),
+        apply: context => {
+          const id = groupId(command), taskId = command.target.taskId, payload = command.payload;
+          const group = readWebGroup(this.store, id), proposal = readBudgetProposal(this.store, id), plan = readArchivedPlan(this.store, id);
+          // Step 1. Not prestart: the spec names one code for every state but draft/ready (prestart answers
+          // grant-amendment-unsupported for running/review/done), and a stopped group is refused too.
+          assertKnownConservation(this.store, group, proposal);
+          if ((group.status !== "draft" && group.status !== "ready") || group.stopped) throw new ControlError("group-state-invalid");
+          const body = workBodyOf(this.store, id, taskId);
+          const work = typeof body === "object" && body !== null && !Array.isArray(body) ? body as Record<string, unknown> : null;
+          const archived = plan.plan.tasks.find(task => task.taskId === taskId);
+          if (!work || work.kind !== "task" || !archived) throw new ControlError("work-not-found");
+          // Step 2: any runs row counts -- a finished run returns its task to ready. Decided inside this transaction, so
+          // this command and the driver's claim (webDispatch.ts nextClaimableTask, createStartingRun) cannot both win.
+          if ((work.status !== "draft" && work.status !== "ready")
+            || this.store.db.prepare("SELECT id FROM runs WHERE group_id=? AND work_item_id=?").get(id, taskId)) throw new ControlError("task-already-started");
+          // Step 3. The in-flight predicate is scheduleStart's (webDispatch.ts), Drafter finding F8.
+          for (const estimate of this.store.db.prepare("SELECT state FROM estimates WHERE group_id=?").all(id)) {
+            if (["running", "start-unknown"].includes(String(estimate.state))) throw new ControlError("estimate-in-flight");
+          }
+          const loopVersion = typeof work.loopVersion === "number" ? work.loopVersion : 0;
+          if (payload.baseLoopVersion !== loopVersion) throw new ControlError("task-loop-version-conflict");
+          if (archived.loop === undefined) throw new ControlError("task-has-no-loop-plan");
+          // Step 4. repoPath is the current contract's own (Drafter finding F9).
+          const current = effectivePlanTask(this.store, id, archived, work);
+          const repoPath = taskContractSchema.parse(JSON.parse(current.originalContractCanonicalJson)).context.repoPath;
+          // W7 ruling: the task's own plan with its own inputs keeps the recipe's plan version, so a budget-only change (or an
+          // estimate's suggestion) never silently re-expands an older version's task at the current one; a change of plan
+          // or inputs expands at the current version. The kept recipe keeps its chosenBy too (final review C1): the plan is
+          // still the one the labels chose, and rewriting it would change the effective plan and make every estimate stale.
+          // Syncskill integration spec §10.4: skills are left out of `kept` (a skills-only change keeps a v1 recipe at v1);
+          // the kept recipe takes the payload's skills, and a payload without them removes them.
+          const kept = current.loop !== undefined && current.loop.planId === payload.plan
+            && canonicalBytes(current.loop.inputs).equals(canonicalBytes(payload.inputs));
+          const skills = payload.skills === undefined ? undefined : normalizeLoopSkills(payload.skills);
+          if (skills === "skills-shape") throw new ControlError("loop-plan-invalid", skills);
+          const expanded: LoopTaskExpansion = kept ? keptExpansion(taskId, repoPath, current.loop!, payload.inputs, skills)
+            : expandLoopPlan(taskId, repoPath, payload.plan, payload.inputs, "explicit", skills);
+          if (!expanded.ok) throw new ControlError("loop-plan-invalid", expanded.reason);
+          const allocation = proposal.allocations.find(a => a.ownerKind === "task" && a.ownerId === taskId && a.bucket === "work");
+          const handoff = proposal.allocations.find(a => a.ownerKind === "task" && a.ownerId === taskId && a.bucket === "handoff");
+          if (!allocation || !handoff) throw new ControlError("recovery-blocked");
+          const before = allocation.amount;
+          // R10: sessions is not in the payload; it is carried over unchanged.
+          const next: Amount = { ...before, tokens: payload.work.tokens, activeMs: payload.work.activeMs, attempts: payload.work.attempts };
+          // A plan-version bump with identical bytes is a no-op too; the recipe then keeps its version.
+          // Spec §10.4: a skills-only change is not a no-op.
+          const skillsUnchanged = canonicalBytes(current.loop?.skills ?? null).equals(canonicalBytes(expanded.recipe.skills ?? null));
+          if (expanded.canonicalJson === current.originalContractCanonicalJson && same(next, before) && skillsUnchanged) throw new ControlError("no-op-command");
+          // W5: a dimension taken from an estimate is its suggestion for this task's work allocation (proposal-edit's rule).
+          const modelDimensions = Object.entries(payload.workProvenance ?? {}).flatMap(([d, source]) => source ? [{ dimension: d as "tokens" | "activeMs" | "attempts", estimateId: source.estimateId }] : []);
+          for (const { dimension, estimateId } of modelDimensions) {
+            verifyModelField(this.store, id, proposal, { scope: "task", taskId, allocation: "work", dimension }, next[dimension], estimateId);
+          }
+          // Step 6's refusal, before anything is written: the reserve may not go negative in any dimension.
+          for (const d of dimensions) {
+            const shortfall = next[d] - before[d] - proposal.explicitUnallocatedReserve[d];
+            if (shortfall > 0) throw new ControlError("group-reserve-insufficient", `${d}:${shortfall}`);
+          }
+          if (loopVersion === Number.MAX_SAFE_INTEGER) throw new ControlError("numeric-overflow");
+          // Syncskill integration spec §10.5: a lookup failure (or syncskill unset when a lookup was needed) refuses the change,
+          // decided here after every existing check, as at confirm.
+          if ("failure" in skillLookup) throw skillLookup.failure;
+          // Step 5.
+          const amendmentHash = writeTaskAmendment(this.store, id, {
+            schema: TASK_AMENDMENT_SCHEMA, groupId: id, taskId, loopVersion: loopVersion + 1, previousContractHash: current.originalContractHash,
+            recipe: expanded.recipe, originalContractHash: expanded.hash, originalContractCanonicalJson: expanded.canonicalJson,
+          });
+          writeCanonicalRecord(this.store, id, expanded.hash, expanded.canonicalJson);
+          // Drafter finding F10: the projection compares both contract hashes; the claim copies derivedContractHash and grant.
+          Object.assign(work, { amendmentHash, loopVersion: loopVersion + 1, originalContractHash: expanded.hash, contract: { contentAddressedHash: expanded.hash } });
+          // H12 (human, 2026-10-01): once a change writes a contract other than the task's previous one, the card keeps
+          // saying "changed", even after a later change back to the imported contract. Never cleared; a budget-only change
+          // (same contract bytes) does not set it.
+          if (expanded.canonicalJson !== current.originalContractCanonicalJson) work.planChanged = true;
+          // Step 6.
+          for (const d of dimensions) if (next[d] !== before[d]) allocation.fieldProvenance[d] = { provenance: "human", estimateId: null };
+          for (const { dimension, estimateId } of modelDimensions) allocation.fieldProvenance[dimension] = { provenance: "model", estimateId };
+          allocation.amount = next;
+          if (proposal.state === "editable") {
+            // Step 7, draft: the proposal version advances, as every proposal change does, so a stale confirm is refused.
+            this.store.db.prepare("UPDATE work_items SET body=? WHERE group_id=? AND id=?").run(JSON.stringify(work), id, taskId);
+            reopenProposal(this.store, id, group, proposal, resetDraftReserve(this.store, id, group, proposal));
+          } else {
+            // Step 7, confirmed: proposalVersion is inside every derived record and checked at A2 and in the projection,
+            // so it does not move; only this task's contract is re-derived, at the same derivationVersion.
+            for (const d of dimensions) group.ledger.committedRemaining[d] += next[d] - before[d];
+            setReserve(proposal, residual(proposal.groupLimit, group.used, group.ledger.committedRemaining));
+            const derived = deriveContract({ taskId, originalContractHash: expanded.hash, originalContractCanonicalJson: expanded.canonicalJson, work: next, handoff: handoff.amount }, proposal.proposalVersion);
+            writeCanonicalRecord(this.store, id, derived.derivedContractHash, derived.canonicalJson);
+            work.derivedContractHash = derived.derivedContractHash;
+            work.grant = { ...(work.grant as Record<string, unknown>), work: next };
+            this.store.db.prepare("UPDATE work_items SET body=? WHERE group_id=? AND id=?").run(JSON.stringify(work), id, taskId);
+            // Step 7: copy the confirmed snapshot, replacing only this task's derived contract and its two allocations,
+            // and point the proposal (and, through saveWebAuthority, the group's mirror) at it. Old snapshots are kept.
+            const frozen = executionSnapshotSchema.parse(JSON.parse(readCanonicalRecord(this.store, proposal.executionSnapshotHash!)));
+            const bare = ({ state: _state, ...rest }: BudgetProposalRecord["allocations"][number]) => rest;
+            // Spec §10.5, H3: an unchanged declaration keeps its frozen entry as it is (readConfirmedTaskExecution below checks
+            // it agrees); a changed one is frozen as confirm freezes it -- names as declared, a profile as syncskill answered it.
+            const recipeSkills = expanded.recipe.skills;
+            const frozenEntry = frozen.skills?.find(entry => entry.taskId === taskId);
+            const profileNames = recipeSkills !== undefined && "profile" in recipeSkills ? skillLookup.members.get(recipeSkills.profile) : undefined;
+            // Read as a draft before the transaction, so nothing was looked up, and confirmed since: the state moved under it.
+            if (!skillsUnchanged && recipeSkills !== undefined && "profile" in recipeSkills && profileNames === undefined) throw new ControlError("proposal-version-conflict");
+            const frozenSkills = skillsUnchanged ? (frozenEntry === undefined ? null : { profile: frozenEntry.profile, names: [...frozenEntry.names] })
+              : recipeSkills === undefined ? null
+              : "names" in recipeSkills ? { profile: null, names: [...recipeSkills.names] } : { profile: recipeSkills.profile, names: profileNames! };
+            const rebuilt = replaceTaskInSnapshot(frozen, taskId, derived.derivedContractHash, { work: bare(allocation), handoff: bare(handoff) }, frozenSkills);
+            writeCanonicalRecord(this.store, id, rebuilt.snapshotHash, rebuilt.canonicalJson);
+            proposal.executionSnapshotHash = rebuilt.snapshotHash;
+            saveWebAuthority(this.store, group, proposal);
+            // Step 8: the changed task passes A2 before this commits.
+            readConfirmedTaskExecution(this.store, id, taskId);
+          }
+          // Step 8: the ledger still conserves.
+          assertKnownConservation(this.store, readWebGroup(this.store, id), readBudgetProposal(this.store, id));
+          // W5/W6: the estimate still describes the contract as this command leaves it (a change in the same command makes it stale).
+          for (const { estimateId } of modelDimensions) refuseStaleEstimate(this.store, id, estimateId);
+          return success(context, { kind: "task-loop-set", taskId, loopVersion: loopVersion + 1, proposalVersion: proposal.proposalVersion });
+        },
       }).body;
     } finally { release?.(); }
   }
