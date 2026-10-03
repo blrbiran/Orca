@@ -239,7 +239,7 @@ litellm 的预算在 key/team 级，**不是单次 run 级**。
   幂等（已正确则不动，非 symlink 目标拒绝覆盖）。
 - `install <url|path> --path <dir> -y`、`source update --all`、`status`、`diff`、`doctor`（exit 3 可当门禁）。
 - 全局 `--json`（JSONL）／`--plan`／`--apply`／退出码 0–8 有定义。
-- **`--sync-dir` / `SYNCSKILL_DIR` 可改道** ⇒ **判据能满足 CLAUDE.md Rule 17**（不碰真实用户数据）。
+- ~~**`--sync-dir` / `SYNCSKILL_DIR` 可改道**~~ **更正（会话 `16ab00f2`，2026-10-03，读 syncskill `src/config/config.ts` 的 `getSyncDir` 与 `src/index.ts` 的 `createProgram`）：这两个都只是被解析，没有任何地方读它们；所有路径都由 HOME 算出。** 判据仍能满足 CLAUDE.md Rule 17，但做法是**改 HOME**（syncskill 自己的测试一直这么做）。
 
 **缺的三件（都是"没有"，不是"不好用"）**：
 1. **没有 profile／清单／组** —— 只有「skill → agent 产品」的**全局矩阵**，
@@ -672,13 +672,13 @@ N0、N2、N5、N6 人没有提异议，按正文的建议执行。§10.1 的先�
 | 本文条目 | 现状 | 还差什么 |
 |---|---|---|
 | 近期 1、2（`targetVersion`、capability 字段） | ✅ 早已做完（见 §9.1） | — |
-| 近期 4 终点：「Web 派活到真 ccloop 能开出一个 run」 | 🟡 **部分**：真 codex、真 claude 的主链都跑通过，但都绕过了 HTTP | **面板 HTTP 这条路没在真 agent 下跑过**（人已排到下一个会话） |
+| 近期 4 终点：「Web 派活到真 ccloop 能开出一个 run」 | ✅ **会话 `16ab00f2`（2026-10-03）补上**：`scripts/live-panel-http-acceptance.ts` 起真 `orca panel`，全程经 HTTP（一次性 token）import→confirm→start，真 claude 下一个任务落地，21/21 检查绿，claude 自报 $0.545137，n＝1；台账 `.superpowers/sdd/2026-10-03-panel-http-live/progress.md` | 没覆盖：真浏览器、真 codex、经 HTTP 的预估与 handoff、多任务 |
 | §3.9「ccloop 走 npm 依赖锁版本」 | ✅ `package.json` 的 `dependencies` 里有 `ccloop: github:blrbiran/ccloop#<SHA>`；重钉由 agent 做（人先推 ccloop） | — |
 | 中期 5：§3.3 loop 方案层 | ✅ 两部分都做完（`src/control/loopPlans.ts`，五种方案，展开是纯代码）。`planFile.ts` 的 `autonomyLevel` 仍是 `z.literal("L2")`，方案层是在它外面套的 | git 方案、skill 集两个维度契约表达不了，卡片上显示固定值（git 一行现在随工作区方式变，见下一行） |
 | 中期 6：§3.4 看板 | ✅ **本会话补完**：G4 完成度（`done/total` ＋ attempt n/max）和「需要处理」红点早已做完；本会话画了依赖关系图（`web/src/DependencyGraph.tsx`），加了 Git 区（工作分支 `orca/<组>`、每个 run 的工作区方式／起点／落地提交，合并进 main 与 push 显示为「等人」），loop 方案卡片的 git 一行改为随仓库的工作区方式变 | 登记未做：图上不画写集冲突；`orca/<组>` 是否已并入 main 或已 push 不显示；每个 run 的耗时（缺开始时间戳）。spec `docs/superpowers/specs/2026-10-03-board-graph-and-git-design.md` §5 |
 | 中期 7：§3.2／N2 给 agent 的接口 | ❌ 零代码。CLI 的 `--json` 只有 `orca metrics` 一处；控制面命令没有 CLI 入口；MCP 0 命中 | 整条没开（顺序仍是 CLI `--json` → skill → MCP 薄壳） |
 | 中期 8：§3.5 litellm | ❌ 零代码（`litellm` 全树 0 命中） | — |
-| 中期 9：§3.6 syncskill（G5 选 (i)） | ❌ 零代码（`syncskill` 全树 0 命中），syncskill 那一轮没开 | 人已排到下一个会话 |
+| 中期 9：§3.6 syncskill（G5 选 (i)） | 🟡 **syncskill 侧做完（会话 `16ab00f2`，2026-10-03）**：`profile set\|ls\|rm`、`inject --profile\|--skills --target`（快照＋`syncskill-lock.json`）、git 源记 `resolved_commit`；spec 在 syncskill 仓 `docs/superpowers/specs/2026-10-03-profile-inject-version-design.md` | **Orca 侧零代码**：谁调 `inject`、target 放哪、锁文件进不进落地提交，都还没设计 |
 | 远期 10：§3.7 A2A 只读外壳（G6）／N7(a) Orca 作 A2A server | ❌ 零代码（`a2a` 0 命中） | — |
 | N8 标签 | ✅ `src/control/labels.ts`，闭集词表按 G11 | — |
 | N3 内部进度 | ✅ 需求级 `done/total`、task 级阶段＋attempt＋token 占比、点进去看 evidence；SSE 与 A2A 投影按裁决延后 | — |
@@ -687,4 +687,4 @@ N0、N2、N5、N6 人没有提异议，按正文的建议执行。§10.1 的先�
 
 **一句话**：§10.1 排的前五项里，除第 4 项 N2 以外都做完了（N8＋N3、§3.3、N1、N5），§3.4 看板本会话补完；**剩下的大件是 N2（agent 入口）、
 §3.5 litellm、§3.6 syncskill、A2A，以及「面板 HTTP 这条路在真 agent 下跑一次」这条近期验收**。
-人已定的顺序：下一个会话做 syncskill 补三件，和面板 HTTP 在真 agent 下跑一次。
+（会话 `16ab00f2` 补记）面板 HTTP 真 agent 验收已跑通一次；syncskill 补三件已在 syncskill 侧做完，Orca 侧接入未开。

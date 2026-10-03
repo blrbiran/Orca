@@ -98,7 +98,7 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 
 **还不能说的**：*** **「Web 派活可用」「claude 可用」「分层选择可用」都不是事实。** *** 能说的只有：**真 codex 下单任务主链跑通过一次**（2026-09-25，会话 `af3dc0d3`，
 请求模型 gpt-6-luna，服务层不含 HTTP，n＝1；台账 `.superpowers/sdd/2026-09-25-live-acceptance/progress.md` §5 是唯一可引的表述）；**真 claude 下单任务主链跑通过一次**（2026-09-27，会话 `43e3e1d8`，claude 2.1.283、请求模型 claude-opus-5-5、隔离参数、n＝1；台账 `.superpowers/sdd/2026-09-26-agent-selection/progress.md` §14 是唯一可引的表述）；**真 claude 下 1M 窗口单任务、两任务冲突经 `ccloop run --agents` 解开各跑通过一次**（2026-09-27，会话 `4d2e426e`，各 n＝1；同一台账 §20 是唯一可引的表述）。
-依赖、崩溃恢复、面板 HTTP、strict 组、④ handoff、⑤ 预估链（single-call 估算）、混 kind 都没在真 agent 下验过；冲突／解冲突只在真 claude 下跑过一次（两任务、一处冲突），真 codex 下没跑过。**驱动环只在 port `configured` 时挂；未配置时行为逐字节同前。**
+**面板 HTTP 这条路在真 claude 下单任务跑通过一次**（2026-10-03，会话 `16ab00f2`，claude 2.1.288、claude-opus-5-5、n＝1；台账 `.superpowers/sdd/2026-10-03-panel-http-live/progress.md` 是唯一可引的表述）。依赖、崩溃恢复、strict 组、④ handoff、⑤ 预估链（single-call 估算）、混 kind 都没在真 agent 下验过；冲突／解冲突只在真 claude 下跑过一次（两任务、一处冲突），真 codex 下没跑过。**驱动环只在 port `configured` 时挂；未配置时行为逐字节同前。**
 
 ✅ *** **loop 方案人审后的跟进（W1–W7）与面板中英双语（2026-10-01，会话 `e604b1ba`）做完了**：细节、要人审的点、诚实表述见 §4.0。 ***
 
@@ -113,6 +113,7 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 ✅ *** **N5 记忆区（memory tab）第一版做完（2026-10-03，会话 `184d0372`）**：面板第六个分区「记忆」，只读，经 `ccmem export --json` 读，设了 `ORCA_CCMEM_BIN` 才会起 ccmem，分区第一次被打开前不发任何请求。ccmem 仓零改动。细节见 §4.0、§4.0.j。 ***
 ✅ **记忆区三条搁置的小项（2026-10-03，会话 `6a4dd7f3`）做完，人 2026-10-03 已审（「同意」）**：见 §4.0.k。
 ✅ **看板剩下的部分（goal.md §3.4，2026-10-03，会话 `6a4dd7f3`）做完，人 2026-10-03 已审（「同意」）**：依赖关系图、Git 区、loop 方案卡片的 git 一行随工作区方式变；同会话修了 `estimateE2E` 的夹具撕裂读。见 §4.0.l。
+✅ **面板 HTTP 在真 claude 下跑通一次＋syncskill 补三件（2026-10-03，会话 `16ab00f2`）做完，等人审**：见 §4.0.m。
 
 **现行基线（会话 `6a4dd7f3`，2026-10-03，§4.0.l 那一笔的内容；原始报数在台账 `.superpowers/sdd/2026-10-03-board-graph-and-git/progress.md` 的 Gate 段）**：clone 做法与改道同下，`ORCA_CCLOOP_BIN`＝ccloop `ae2caa3` 的 build。全量 vitest **289 文件、2623 条、2617 过、2 红、4 skipped**；红的是已登记的 `driverRequirementSplit`，和本轮自己的 `scanPanelText`（新图的两词 class 字面量被当成待翻译文字，已在代码里修掉、没动判据）。`verify:chain` 的全量另红 `gateCheck` K13、`controlShutdown` 143（都已登记）。修后重跑：typecheck、web build、`scanPanelText`、`--ws check`（web 383/383）都 RC 0；三个 flake 文件单独各 3/3 绿（1 分钟负载 17→6）。其余各段（台账、`CLAUDE.md` 150/200、hooksPath、`verify:control` 1221 过 3 skipped、`verify:scheduler` 194、`verify:ccloop-pin` 3、`verify:panel`、R1 真 ccmem、`check-tmp-leak` 0 残留）都 RC 0；真 `~/.claude/ccmem` 条目名与真 `~/.orca` 的 stat＋sha256 与本会话早先的快照相同。
 
@@ -152,20 +153,36 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 
 ## 四、⛔ 下一件事
 
-### 4.0 ⛔ 现在的下一件事（2026-10-03 会话 `6a4dd7f3` 第二次改写；**本节优先于下面的 4.0.l、4.0.k、4.0.j … 与 1–3**）
+### 4.0 ⛔ 现在的下一件事（2026-10-03 会话 `16ab00f2` 改写；**本节优先于下面的 4.0.m、4.0.l … 与 1–3**）
 
-会话 `6a4dd7f3` 先做了记忆区三条搁置的小项（§4.0.k，人已审），再按人选做了「看板剩下的部分」并修了 `estimateE2E` 的夹具（§4.0.l，人已审，同意；人已推送）。`docs/handoff/goal.md` 新加了 §11，是 2026-10-03 的完成情况对齐表。
+会话 `16ab00f2` 做完了人排的两件：面板 HTTP 在真 claude 下跑通一次（Orca 仓），syncskill 补三件（syncskill 仓）。结论在 §4.0.m；两件都**等人审**。`docs/handoff/goal.md` §11 已同步（近期 4、中期 9 两行），§3.6 那句「`--sync-dir` 可改道」已更正（是假的）。
 
-1. **先核推送**：三个仓各跑 `/usr/bin/git ls-remote origin refs/heads/main` 与本地比（`/usr/bin/git log --oneline origin/main..main`）；不要信本文里的任何笔数或哈希。会话 `6a4dd7f3` 收尾时人已推过一次；之后三个仓都只可能多出 handoff 文档提交（就是写本文的那几笔）。推送归人，顺序仍是 ccloop 先于 Orca（Orca 钉的仍是 `ae2caa3`）。
-2. **人已定下一个会话做两件**（2026-10-03，人原话「下一个session做 "syncskill 补三件" + "「面板 HTTP 这条路」从没在真 agent 下跑过"」）：
-   - **syncskill 补三件**（goal.md §3.6，G5 选 (i)）：profile／清单、按 run 注入、版本记录。在 `/Users/biran/code/skills/syncskill` 开一轮，跨仓。开工前现读两条事实：源只记 branch 不记 commit（`src/config/types.ts` 的 `SourceConfig`），没有库 API（`package.json` 只有 `bin`）。syncskill 有没有自己的 handoff／规则要先找，Orca 的规则不外溢（Rule 16）。
-   - **面板 HTTP 这条路在真 agent 下跑一次**（goal.md §4 近期第 4 项的终点，§9.1、§11 都记着「真 codex、真 claude 的主链都绕过了 HTTP」）。付费，开跑前按 §4.0.i 的环境教训记 claude 装目录 mtime、用 `scripts/claude-tee.mjs` 拿花费。
-   - 仍挂着、人没排的：记忆区后续（写入、来源、分页）；真 claude 下 ccloop §5.1 与「reaper 杀一个活的 claude」；同时启动任务数上限；N1 第二版；goal.md 的 N2（agent 入口）、§3.5 litellm、A2A。
-3. **验证只在 `git clone --local` 副本里做**：HOME 与四个 XDG 根改道、TMPDIR 短真目录；clone 里先 `npm run build --workspace web`、`git config core.hooksPath scripts/githooks`；`verify:control` 的夹具表 fake codex 用 `integration` 模式（命令 `[node, <ccloop clone>/tests/fixtures/fake-codex.mjs, "integration", <marker>]`，表的形状照 `tests/control/fixtures/ccloopWorld.ts`）。`npm run verify` 是 `&&` 链，逐段跑、逐段记 RC。全量里 5 s 超时红先单文件重跑 3 次并记 `uptime`（已登记的见 §三）。⚠️ clone 里若 `node_modules` 是指向主树的符号链接，`.gitignore` 的 `node_modules/` 不匹配它，`git ls-files --others` 会把它列出来——按这个列表删文件的脚本会把链接删掉（会话 `6a4dd7f3` 踩过一次，只伤了 clone）。⚠️ 门闸在 clone 里也生效：`git pull --ff-only origin main` 被判为「合并进 main」拦下，一条先 `checkout` 再 `reset --hard` 的复合命令也被拦（「判断不了分支」）。clone 要跟上主树，就 `git fetch` 后 `git checkout --detach FETCH_HEAD`。
-4. **R1（真 ccmem）**：`ORCA_CCMEM_REAL_BIN=/Users/biran/code/skills/ccmem/bin/ccmem ./node_modules/.bin/vitest run tests/memory/ccmemReal.test.ts`；不设就 skipped。它只在临时 `CCMEM_DATA_ROOT`／`HOME` 里跑，用 `ccmem import` 灌数据（`save` 会同步算嵌入，可能下载模型）。
-5. 重钉规矩不变：人先推 ccloop，再 `node scripts/pin-ccloop.mjs <SHA>`，再人推 Orca。
-6. 会话 `184d0372` 与 `7fe6d61b` 的 scratchpad 原始输出都已由人授权删除；会话 `6a4dd7f3` 的 scratchpad 与临时目录也已由人授权删除；它的证据只剩两份台账里的记录。
-7. **建议用的 skill**：开工先 `superpowers:using-superpowers`；syncskill 那一件是新设计，走 `superpowers:brainstorming` → `superpowers:writing-plans` → `superpowers:subagent-driven-development`（或 `superpowers:executing-plans`），实现中用 `superpowers:test-driven-development`；任何红先 `superpowers:systematic-debugging`；收尾前 `superpowers:verification-before-completion`；交接用 `mattpocock-skills:handoff`。面板 HTTP 真 agent 那一件是付费验收，不是新功能：先写清判据（一条能跑出 0／非 0 的命令）和花费上限，报人后再跑。
+1. **先核推送**：四个仓（ccloop、Orca、ccmem、syncskill）各跑 `/usr/bin/git ls-remote origin refs/heads/main` 与本地比；不要信本文里的任何笔数或哈希。推送归人；本会话四个仓都只在本地提交。ccloop 与 ccmem 这一轮只多了 handoff 文档提交；Orca 仍钉 ccloop `ae2caa3`，不需要重钉。
+2. **人要审的**：§4.0.m 末尾「替人做的裁定」与 syncskill 台账 `.superpowers/sdd/2026-10-03-profile-inject-version/progress.md` 里全部 `Ruling:` 行。
+3. **下一件由人选**。候选：Orca 接 syncskill（spawn `syncskill inject --json`，target 放哪、锁文件进不进落地提交，都还没设计）；记忆区后续（写入、来源、分页）；真 claude 下 ccloop §5.1 与「reaper 杀一个活的 claude」；同时启动任务数上限；N1 第二版；goal.md 的 N2（agent 入口）、§3.5 litellm、A2A。
+4. **验证只在 `git clone --local` 副本里做**（本节未变的环境规矩）：HOME 与四个 XDG 根改道、TMPDIR 短真目录；Orca clone 里先 `npm run build --workspace web`、`git config core.hooksPath scripts/githooks`；`verify:control` 的夹具表 fake codex 用 `integration` 模式。全量里 5 s 超时红先单文件重跑 3 次并记 `uptime`（已登记的见 §三）。clone 里 `node_modules` 若是指向主树的符号链接，别按 `git ls-files --others` 删文件。门闸在 clone 里也拦 `pull`／`reset --hard main`；clone 要跟上主树就 `git fetch <主树> main` 后 `git checkout --detach FETCH_HEAD`。
+5. **付费跑**：先定判据（一条退出码 0／非 0 的命令）和花费上限，报人后再跑；跑前后记 claude 装目录 mtime（本会话两小时内见到它被重装两次），花费用 `scripts/claude-tee.mjs`。面板 HTTP 的现成脚本：`scripts/live-panel-http-acceptance.ts`（`--fake-claude` 免费，`--claude <abs> --model <m> --call-usd --cap-usd` 付费）。
+6. **R1（真 ccmem）**：`ORCA_CCMEM_REAL_BIN=/Users/biran/code/skills/ccmem/bin/ccmem ./node_modules/.bin/vitest run tests/memory/ccmemReal.test.ts`；不设就 skipped。
+7. **建议用的 skill**：开工 `superpowers:using-superpowers`；新设计走 `superpowers:brainstorming` → `superpowers:writing-plans` → `superpowers:subagent-driven-development`；红先 `superpowers:systematic-debugging`；收尾前 `superpowers:verification-before-completion`；交接 `mattpocock-skills:handoff`。⚠️ 用 SDD 时**一次只让一个实施席动同一个仓的工作树** —— 本会话并发了两个，一个的 `git add tests` 把另一个未提交的测试卷进了自己的提交（只伤了提交归属，见 syncskill 台账）。
+
+### 4.0.m 面板 HTTP 真 agent 验收＋syncskill 补三件（会话 `16ab00f2`，2026-10-03，**已完成，等人审**）
+
+**面板 HTTP（Orca 仓，一笔：主题行 `test(live): drive one task from import to landing through the panel's HTTP API under real claude`）**
+- `scripts/live-panel-http-acceptance.ts`：起真 `orca panel`，用它打印的一次性 token 全程走 HTTP（偏好 → import-plan → proposal-edit → confirm，字段照 `web/src/BudgetEditor.tsx` → start），之后只读页面读的 group 视图；SIGTERM 收面板，核无残留进程组。判据＝退出码 0（fake 18 条、付费 21 条检查）。
+- fake：rc 0；变异「去掉 token 头」⇒ 401 `token-required` 红，「fake 写 41」⇒ run `blocked` 红。付费（人批：上限 $2、单次 `--max-budget-usd 0.6`）：rc 0，21/21，claude 自报 $0.545137，ccloop 报 165,610 token＝视图账本，n＝1。台账 `.superpowers/sdd/2026-10-03-panel-http-live/progress.md`。
+- 读到的事实：驱动正常落地的 run 在视图里显示为 `settled-recoverable`（`landed` 只是中间态）；落地看 `RunViewV1.git.landedCommit`。
+- 没覆盖：真浏览器、真 codex、经 HTTP 的预估与 handoff、多任务。
+
+**syncskill 补三件（syncskill 仓 `main`，人定「直接在 main 上做」；spec／plan／台账都在 syncskill 仓）**
+- spec `docs/superpowers/specs/2026-10-03-profile-inject-version-design.md`（中文；§9 是实施期更正）、plan `docs/superpowers/plans/2026-10-03-profile-inject-version.md`、台账 `.superpowers/sdd/2026-10-03-profile-inject-version/progress.md`（已入库，含 17 条 `Ruling:`、14 条变异、门）＋同目录 `mutations.py`。
+- 做成了什么：`config.json` 顶层 `profiles`；`profile set|ls|rm`；`inject (--profile <名> | --skills a,b) --target <目录>`：先全部解析再动手，复制成解开符号链接的快照，target 里已有同名 skill 或锁文件 ⇒ 退 7，写 `<target>/syncskill-lock.json`（`syncskill-lock-v1`：每个 skill 的 `source`／`resolved_commit`／`content_md5`），不碰 `config.links`、agent 目录、manifest；git 源物化后把 `rev-parse HEAD` 记进 `.sources/<名>/state.json` 的 `resolved_commit`。人裁：快照（不用符号链接）、只记录不重放、profile 进 `config.json`。
+- 过程：5 个 task 各经一次任务评审；Task 3（skill 名路径穿越）、Task 4（`profile set` 收了 inject 会拒的名字）各一轮修复；控制器变异发现 spec §7 第 3 条（锁里 git 源的 commit）没写成判据 ⇒ 补；opus 终审 2 条 Important（原型链键名 `__proto__`／`constructor`；回滚会删一个不是本次建的 staging 目录）＋1 条 Minor（inject 前 preflight 会重写 manifest）一波修完、复审通过。
+- 门（控制器在 syncskill clone 上现跑，修复波那一笔）：build 0；unit 526/526；integration 280/280；0 skipped。`install-cli` 一条帮助判据在负载 13 下 5 s 超时过一次，单跑 3/3 绿。
+- Orca 调用方要知道的（syncskill 现行约定，没改）：未预期的错误退 1 且不一定有 JSON `error` 事件；commander 的用法错误（如缺 `--target`）退 1 不是 2。
+- **诚实的表述**：只在 syncskill 自己的单元与集成测试（临时 HOME）下验过；**Orca 还没有任何代码调用 syncskill**，也没对真实 `~/.syncskill` 跑过。
+- 登记未修（syncskill 台账与 spec §8）：`--sync-dir` 等四个改道开关不生效；`normalizeSourceEntry` 丢 `skill_subdir`／`ignore`／`archive_path`（子代理报告，未复核）；`tsc --noEmit` 对 syncskill 测试本来就有约 176 个类型错（与本轮无关）。
+
+**替人做的裁定（都在台账，摘最要紧的）**：`inject` 的 skill 名守卫只拒空、`.`/`..`、以 `.` 开头、含 `/` `\` NUL（不用 `^[a-zA-Z0-9_-]+$`，本地 skill 目录名可能带点）；空清单 ⇒ `E_USAGE_INJECT_SELECTION`；`profile set`／`rm` 的 change 事件沿用 `entity: 'skill'`（spec 不许新事件类型）；`inject` 跳过 manifest 自动刷新、保留配置诊断；staging 改用 `mkdtemp`（spec §5 原文不动，§9 记更正）；接受实施席给既有判据补 `profiles: {}`／`resolved_commit` 字段（形状断言，没有放宽）。
 
 ### 4.0.l 看板剩下的部分＋`estimateE2E` 夹具（会话 `6a4dd7f3`，2026-10-03，**已完成；人 2026-10-03 已审，同意**）
 
