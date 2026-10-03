@@ -8,6 +8,7 @@
  * so nothing here decides whether a group may start, how much budget is free, or
  * whether an unknown run is finished.
  */
+import { useState } from "react";
 import type { JSX } from "react";
 import { useTranslation } from "react-i18next";
 import { AgentSettings } from "./AgentSettings.js";
@@ -33,6 +34,11 @@ export interface ControlPanelProps {
   uncertain: UncertainCommand[];
   refusal: ControlRefusal | null;
   refetchRequired: boolean;
+  /**
+   * Project switcher spec D4: the chosen project's control repository. Undefined when no project is chosen (the first
+   * repository, as before); null when the control plane does not hold the chosen project.
+   */
+  repoId?: string | null;
   onSelect: (groupId: string) => void;
   onDraft: (key: string, text: string) => void;
   onCommand: (action: ControlAction) => void;
@@ -55,15 +61,21 @@ export interface ControlPanelProps {
   retryNotice?: string | null;
 }
 
-function ImportForm(props: { config: ControlConfigV1; onCommand: (action: ControlAction) => void }): JSX.Element {
+function ImportForm(props: { config: ControlConfigV1; repoId?: string | null; onCommand: (action: ControlAction) => void }): JSX.Element {
   const { t } = useTranslation();
-  const repository = props.config.repositories[0];
-  const plan = props.config.plans[0];
+  const repository = props.repoId === undefined
+    ? props.config.repositories[0]
+    : props.config.repositories.find((entry) => entry.repoId === props.repoId);
+  const plans = repository === undefined ? [] : props.config.plans.filter((entry) => entry.repoId === repository.repoId);
+  const [planId, setPlanId] = useState<string | null>(null);
+  const plan = plans.find((entry) => entry.planId === planId) ?? plans[0];
   return (
     <section aria-label={t("control.import.region")}>
       <h3>{t("control.import.title")}</h3>
       {props.config.defaults === null ? (
         <p role="note">{t("control.import.noEstimator")}</p>
+      ) : props.repoId === null ? (
+        <p role="note">{t("control.import.notUnderControl")}</p>
       ) : repository === undefined || plan === undefined ? (
         <p role="note">{t("control.import.noRepository")}</p>
       ) : (
@@ -75,6 +87,14 @@ function ImportForm(props: { config: ControlConfigV1; onCommand: (action: Contro
               mode: props.config.defaults === null ? t("control.import.notConfigured") : enumText("budgetMode", props.config.defaults.estimateMode),
             })}
           </p>
+          {plans.length > 1 && (
+            <label>
+              {t("control.import.plan")}
+              <select value={plan.planId} onChange={(e) => setPlanId(e.currentTarget.value)}>
+                {plans.map((entry) => <option key={entry.planId} value={entry.planId}>{entry.displayName}</option>)}
+              </select>
+            </label>
+          )}
           <button
             type="button"
             onClick={() => {
@@ -125,7 +145,8 @@ export function ControlPanel(props: ControlPanelProps): JSX.Element {
       {summary.resetRequired && <p role="alert">{t("control.resetRequired")}</p>}
       {refetchRequired && <p role="alert">{t("control.refetchRequired")}</p>}
       {recovery.dispatchBlocked && <p role="alert">{t("control.dispatchBlockedRecovery")}</p>}
-      <ImportForm config={config} onCommand={props.onCommand} />
+      {/* Keyed by repository, so another project starts on its own first plan. */}
+      <ImportForm key={props.repoId ?? ""} config={config} repoId={props.repoId} onCommand={props.onCommand} />
       {props.workspace && props.onWorkspaceMode && <WorkspaceModeSelector workspace={props.workspace} onChange={props.onWorkspaceMode} />}
       {props.agents && props.preferences && props.onAgentPreferences && (
         <AgentSettings agents={props.agents} preferences={props.preferences} drafts={drafts} onDraft={props.onDraft} onSave={props.onAgentPreferences} />

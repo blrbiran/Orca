@@ -31,6 +31,7 @@ import {
   fetchChains,
   fetchDecision,
   fetchMetrics,
+  fetchProjects,
   fetchTodo,
   recordCorrection,
   recordReview,
@@ -78,6 +79,8 @@ import i18n, { currentLanguage, writeLanguage } from "./i18n.js";
 import { DecisionsView, NO_FILTER } from "./DecisionsView.js";
 import type { DecisionFilter } from "./DecisionsView.js";
 import { MemoryView } from "./MemoryView.js";
+import { pickProject, readProject, writeProject } from "./project.js";
+import type { ProjectV1 } from "./project.js";
 import { MetricsView } from "./MetricsView.js";
 import { Refusal } from "./Refusal.js";
 import { RequirementsPanel } from "./RequirementsPanel.js";
@@ -170,7 +173,10 @@ export function App(): JSX.Element {
 
   /** Null while the control plane is not mounted on this panel; then the page shows no control section at all. */
   const [controlConfig, setControlConfig] = useState<ControlConfigV1 | null>(null);
-  /** Execution driver spec §3.2: the first trusted repository's workspace mode, null until read. */
+  /** Project switcher spec D2: the projects this panel has (null until read, or when the read failed) and the chosen one. */
+  const [projects, setProjects] = useState<ProjectV1[] | null>(null);
+  const [project, setProject] = useState<string | null>(null);
+  /** Execution driver spec §3.2: the chosen project's (else the first trusted repository's) workspace mode, null until read. */
   const [workspace, setWorkspace] = useState<RepositoryWorkspaceV1 | null>(null);
   /** Agent selection spec §6.8: the installation table and this operator's defaults; null until read, or when the port refuses. */
   const [agents, setAgents] = useState<AgentsViewV1 | null>(null);
@@ -477,12 +483,33 @@ export function App(): JSX.Element {
     if (controlConfig === null) return;
     // A command id that survived the reload is resolved before anything else reads.
     for (const command of controlNow.current.uncertainCommandIds) void resolveUncertain(command);
-    const repoId = controlConfig.repositories[0]?.repoId;
-    if (repoId !== undefined) void fetchRepositoryWorkspace(repoId).then(setWorkspace, () => setWorkspace(null));
     void readControlTick();
     const timer = setInterval(() => void readControlTick(), CONTROL_POLL_MS);
     return () => clearInterval(timer);
   }, [controlConfig]);
+
+  // Project switcher spec D2: the stored choice while it is still listed, else the first project. A failed read leaves
+  // no choice, and every section then acts on the first repository as it always has (spec §5).
+  useEffect(() => {
+    void fetchProjects().then(
+      (answer) => { setProjects(answer.projects); setProject(pickProject(answer.projects, readProject(browserStorage()))); },
+      () => { setProjects(null); setProject(null); },
+    );
+  }, []);
+  const chooseProject = (projectKey: string): void => {
+    setProject(projectKey);
+    writeProject(browserStorage(), projectKey);
+  };
+  // The chosen project's control repository: undefined while no project is chosen (the first repository, as before),
+  // null when the control plane does not hold the chosen project.
+  const chosen = projects?.find((entry) => entry.projectKey === project);
+  const controlRepoId = chosen === undefined ? undefined : chosen.controlRepoId;
+  const workspaceRepoId = controlRepoId === undefined ? controlConfig?.repositories[0]?.repoId : controlRepoId;
+  useEffect(() => {
+    if (controlConfig === null) return;
+    if (workspaceRepoId === undefined || workspaceRepoId === null) { setWorkspace(null); return; }
+    void fetchRepositoryWorkspace(workspaceRepoId).then(setWorkspace, () => setWorkspace(null));
+  }, [controlConfig, workspaceRepoId]);
 
   useEffect(() => {
     writeUncertainCommands(browserSession(), control.uncertainCommandIds);
@@ -669,6 +696,9 @@ export function App(): JSX.Element {
         ),
       }}
       footer={footerLines(summary)}
+      projects={projects ?? []}
+      project={project}
+      onProject={chooseProject}
       theme={theme}
       language={currentLanguage()}
       onLanguage={(lang) => {
@@ -720,6 +750,7 @@ export function App(): JSX.Element {
           uncertain={control.uncertainCommandIds}
           refusal={control.refusal}
           refetchRequired={control.refetchRequired}
+          repoId={controlRepoId}
           onSelect={setSelectedGroup}
           onDraft={(key, text) => dispatchControl({ type: "draft", key, text })}
           onCommand={(action) => {

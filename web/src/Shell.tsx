@@ -10,6 +10,7 @@ import { LANGUAGE_NAMES, PANEL_LANGUAGES, enumText } from "./i18n.js";
 import type { PanelLanguage } from "./i18n.js";
 import { SECTIONS, hashFor } from "./sections.js";
 import type { Section } from "./sections.js";
+import type { ProjectV1 } from "./project.js";
 import { THEME_PREFS } from "./theme.js";
 import type { ThemePref } from "./theme.js";
 
@@ -60,6 +61,10 @@ export function Shell(props: {
   /** Panel i18n spec §4: the language on screen and the switch; absent in criteria that render the shell alone. */
   language?: PanelLanguage;
   onLanguage?: (lang: PanelLanguage) => void;
+  /** Project switcher spec D3: shown only with two or more projects. */
+  projects?: readonly ProjectV1[];
+  project?: string | null;
+  onProject?: (projectKey: string) => void;
   banners?: ReactNode;
   children: ReactNode;
 }): JSX.Element {
@@ -80,6 +85,14 @@ export function Shell(props: {
         </ul>
         <div className="sidebar-foot">
           {props.footer.map((line) => <p key={line}>{line}</p>)}
+          {(props.projects?.length ?? 0) >= 2 && (
+            <label className="theme-pick">
+              {t("shell.project")}
+              <select name="project" value={props.project ?? ""} onChange={(e) => props.onProject?.(e.currentTarget.value)}>
+                {props.projects!.map((entry) => <option key={entry.projectKey} value={entry.projectKey}>{entry.projectKey}</option>)}
+              </select>
+            </label>
+          )}
           <label className="theme-pick">
             {t("shell.theme")}
             <select name="theme" value={props.theme} onChange={(e) => props.onTheme?.(e.currentTarget.value as ThemePref)}>

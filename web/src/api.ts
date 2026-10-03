@@ -13,6 +13,7 @@
  * person, not just "answered 409"); a POST resolves to a typed `PostResult`
  * the page must look at, instead of a promise it could `void`.
  */
+import type { ProjectV1 } from "./project.js";
 import i18n from "./i18n.js";
 import type { ChainRepoView, CorrectionKind, DecisionListRow, MetricsReport, PanelCoverage } from "./types.js";
 
@@ -155,6 +156,9 @@ export const recordReview = (projectKey: string, decisionId: string): Promise<Po
 
 /** GET /api/chains -- src/panel/chains.ts. */
 export const fetchChains = (): Promise<{ repos: ChainRepoView[] }> => getJson<{ repos: ChainRepoView[] }>("/api/chains");
+
+/** GET /api/projects -- src/panel/projects.ts (project switcher spec D1). */
+export const fetchProjects = (): Promise<{ projects: ProjectV1[] }> => getJson<{ projects: ProjectV1[] }>("/api/projects");
 
 export interface StartChainInput {
   repoKey: string;
