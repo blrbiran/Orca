@@ -156,7 +156,7 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 
 会话 `6a4dd7f3` 先做了记忆区三条搁置的小项（§4.0.k，人已审），再按人选做了「看板剩下的部分」并修了 `estimateE2E` 的夹具（§4.0.l，人已审，同意；人已推送）。`docs/handoff/goal.md` 新加了 §11，是 2026-10-03 的完成情况对齐表。
 
-1. **先核推送**：三个仓各跑 `/usr/bin/git ls-remote origin refs/heads/main` 与本地比（`/usr/bin/git log --oneline origin/main..main`）；不要信本文里的任何笔数。会话 `6a4dd7f3` 第二段开工时三仓远端与本地一致（人已推）；之后 Orca 多了 §4.0.l 的提交和文档提交，ccloop、ccmem 只多了 handoff 文档提交。推送归人，顺序仍是 ccloop 先于 Orca（Orca 钉的仍是 `ae2caa3`）。
+1. **先核推送**：三个仓各跑 `/usr/bin/git ls-remote origin refs/heads/main` 与本地比（`/usr/bin/git log --oneline origin/main..main`）；不要信本文里的任何笔数或哈希。会话 `6a4dd7f3` 收尾时人已推过一次；之后三个仓都只可能多出 handoff 文档提交（就是写本文的那几笔）。推送归人，顺序仍是 ccloop 先于 Orca（Orca 钉的仍是 `ae2caa3`）。
 2. **人已定下一个会话做两件**（2026-10-03，人原话「下一个session做 "syncskill 补三件" + "「面板 HTTP 这条路」从没在真 agent 下跑过"」）：
    - **syncskill 补三件**（goal.md §3.6，G5 选 (i)）：profile／清单、按 run 注入、版本记录。在 `/Users/biran/code/skills/syncskill` 开一轮，跨仓。开工前现读两条事实：源只记 branch 不记 commit（`src/config/types.ts` 的 `SourceConfig`），没有库 API（`package.json` 只有 `bin`）。syncskill 有没有自己的 handoff／规则要先找，Orca 的规则不外溢（Rule 16）。
    - **面板 HTTP 这条路在真 agent 下跑一次**（goal.md §4 近期第 4 项的终点，§9.1、§11 都记着「真 codex、真 claude 的主链都绕过了 HTTP」）。付费，开跑前按 §4.0.i 的环境教训记 claude 装目录 mtime、用 `scripts/claude-tee.mjs` 拿花费。
@@ -165,6 +165,7 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 4. **R1（真 ccmem）**：`ORCA_CCMEM_REAL_BIN=/Users/biran/code/skills/ccmem/bin/ccmem ./node_modules/.bin/vitest run tests/memory/ccmemReal.test.ts`；不设就 skipped。它只在临时 `CCMEM_DATA_ROOT`／`HOME` 里跑，用 `ccmem import` 灌数据（`save` 会同步算嵌入，可能下载模型）。
 5. 重钉规矩不变：人先推 ccloop，再 `node scripts/pin-ccloop.mjs <SHA>`，再人推 Orca。
 6. 会话 `184d0372` 与 `7fe6d61b` 的 scratchpad 原始输出都已由人授权删除；会话 `6a4dd7f3` 的 scratchpad 与临时目录也已由人授权删除；它的证据只剩两份台账里的记录。
+7. **建议用的 skill**：开工先 `superpowers:using-superpowers`；syncskill 那一件是新设计，走 `superpowers:brainstorming` → `superpowers:writing-plans` → `superpowers:subagent-driven-development`（或 `superpowers:executing-plans`），实现中用 `superpowers:test-driven-development`；任何红先 `superpowers:systematic-debugging`；收尾前 `superpowers:verification-before-completion`；交接用 `mattpocock-skills:handoff`。面板 HTTP 真 agent 那一件是付费验收，不是新功能：先写清判据（一条能跑出 0／非 0 的命令）和花费上限，报人后再跑。
 
 ### 4.0.l 看板剩下的部分＋`estimateE2E` 夹具（会话 `6a4dd7f3`，2026-10-03，**已完成；人 2026-10-03 已审，同意**）
 
