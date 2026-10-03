@@ -89,9 +89,15 @@ function withoutStale(canonical: Record<string, GroupViewV1>, listed: readonly G
 
 function reduceSummary(state: ControlClientState, event: Extract<ControlClientEvent, { type: "summary" }>): ControlClientState {
   const value = event.value;
-  const purge = (state.epoch !== null && state.epoch !== value.epoch) || value.resetRequired;
+  // The server answers every complete read with `resetRequired: true` (web-recoverable-control spec §3.2), so the
+  // complete summary the refetch mark asked for is the reset itself, not a reason for another one: taking it as one
+  // voided the cache on every tick, forever, and unmounted the whole control panel each time.
+  const reread = event.partial !== true && state.refetchRequired;
+  const purge = (state.epoch !== null && state.epoch !== value.epoch) || (value.resetRequired && !reread);
   if (!purge && value.changeSeq < state.changeSeq) return state;
-  const gap = !purge && value.changeSeq > state.changeSeq + 1;
+  // A `sinceChangeSeq` answer lists every group that moved after N however far changeSeq went, and the server
+  // itself says resetRequired when it can no longer tell; a jump past N + 1 there is a busy group, not a gap.
+  const gap = !purge && !reread && event.partial !== true && value.changeSeq > state.changeSeq + 1;
   const base = purge ? purged(state, value.epoch) : { ...state, epoch: value.epoch };
   const canonical = purge || gap ? {} : event.partial ? base.canonical : withoutStale(base.canonical, value.groups);
   return {
