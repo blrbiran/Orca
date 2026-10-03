@@ -17,6 +17,13 @@ import { readControlGroup } from "../../../src/panel/controlViews.js";
 import { profileSnapshot } from "./web.js";
 
 /**
+ * The lines of a log a fake CLI appends to, one per call. A fake's `appendFileSync` creates the file before
+ * it writes the line, so a poll can read it empty; that read is "no line yet", not a line "" (it once turned
+ * estimateE2E E2 red with `JSON.parse("")`, session 6a4dd7f3).
+ */
+export const logLines = (path: string): string[] => existsSync(path) ? readFileSync(path, "utf8").split("\n").filter((line) => line.trim() !== "") : [];
+
+/**
  * The real-ccloop world shared by executionDriverE2E.test.ts (execution driver spec §7.2) and
  * handoffE2E.test.ts (handoff delivery spec §9.2), moved here from the former so the latter imports it
  * rather than copying it (handoff delivery preflight I11). A target repository, a scripted fake codex
@@ -169,7 +176,7 @@ export function ccloopWorlds(options: { rootPrefix: string; epochPrefix: string 
         try { await runtime.shutdown(); } finally { runtime.close(); }
       }
     };
-    const lines = (path: string): string[] => existsSync(path) ? readFileSync(path, "utf8").trim().split("\n") : [];
+    const lines = logLines;
     /** One line per provider call, the phase only (fake codex's own log). */
     const calls = (): string[] => lines(`${marker}.calls`);
     /** One `<phase> <script key>` line per provider call (ccloop C5): which entry answered it. */
