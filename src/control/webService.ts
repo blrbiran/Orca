@@ -106,12 +106,16 @@ const SYNCSKILL_REFUSALS = ["skills-profile-empty", "skills-shape", "syncskill-m
 /** One `profile ls` per distinct profile the tasks' effective recipes declare, in name order, one at a time. */
 async function lookupSkillProfiles(store: ControlStore, groupId: string, syncskill: SyncskillOptions): Promise<SkillLookup> {
   const profiles = new Set<string>();
+  let declared = false;
   try {
     for (const archived of readArchivedPlan(store, groupId).plan.tasks) {
       const skills = effectivePlanTask(store, groupId, archived, workBodyOf(store, groupId, archived.taskId)).loop?.skills;
+      if (skills !== undefined) declared = true;
       if (skills !== undefined && "profile" in skills) profiles.add(skills.profile);
     }
   } catch { return { members: new Map() }; } // the transaction's own checks name what could not be read
+  // Spec §4.2 / §10.5: any declared skills, names included, need syncskill at run start, so confirm refuses without it.
+  if (declared && syncskill.bin === null) return { failure: new ControlError("syncskill-unconfigured") };
   const members = new Map<string, string[]>();
   for (const profile of [...profiles].sort()) {
     try { members.set(profile, await profileMembers(syncskill, profile)); } catch (error) { return { failure: syncskillRefusal(error) }; }
@@ -548,13 +552,14 @@ export class WebControlService {
             if (selected.handoff.snapshot.profile.capabilities.handoffExecution === "model-assisted-v1" && dimensions.some(d => handoff[d] < 1)) throw new ControlError("handoff-grant-insufficient");
             return { ...task, work, handoff };
           });
-          // Syncskill integration spec §10.5: a lookup failure refuses the whole confirmation, decided here as a slot
-          // failure is; then each task's skill set is frozen -- names as declared, a profile as syncskill answered it.
+          // Syncskill integration spec §10.5: a lookup failure (or syncskill unset while any task declares skills) refuses
+          // the whole confirmation, decided here as a slot failure is; then each task's skill set is frozen -- names as
+          // declared, a profile as syncskill answered it.
           if ("failure" in skillLookup) throw skillLookup.failure;
           const skills = tasks.flatMap((task): Array<{ taskId: string; profile: string | null; names: string[] }> => {
             const declared = task.loop?.skills;
             if (declared === undefined) return [];
-            if (agentTasks.find(entry => entry.taskId === task.taskId)!.agent.agent !== "claude") throw new ControlError("skills-unsupported-agent", task.taskId);
+            // The agent's kind is not known here (selection.agent is an installation id): ccloop's acceptStart refuses a non-claude agent with skills.
             if ("names" in declared) return [{ taskId: task.taskId, profile: null, names: [...declared.names] }];
             const names = skillLookup.members.get(declared.profile);
             // Defensive: a recipe changed since the lookup reopens the proposal, refused above as proposal-version-conflict.

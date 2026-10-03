@@ -116,12 +116,13 @@ describe("confirm refuses, and the group stays unconfirmed (C4)", () => {
     }
   });
 
-  it("skills-unsupported-agent: a task with skills frozen on a codex agent, refused without spawning", async () => {
-    const fake = await fakeSyncskill("profile-ok");
-    const { h, answer } = await confirmWith([{ taskId: "a", loop: withSkills("a", { names: ["x"] }) }], fake.o);
-    expect(answer).toMatchObject({ error: { code: "skills-unsupported-agent", message: "skills-unsupported-agent:a" } });
-    expectUnconfirmed(h, ["a"]);
-    expect(fake.calls()).toEqual([]);
+  it("syncskill-unconfigured: a task that only names its skills, with ORCA_SYNCSKILL_BIN unset or no syncskill deps", async () => {
+    // Spec §4.2 / §10.5: names need no lookup, but the run will need syncskill to inject them, so confirm refuses now.
+    for (const syncskill of [{ bin: null, env: {} }, undefined]) {
+      const { h, answer } = await confirmWith([{ taskId: "a", agent: CLAUDE, loop: withSkills("a", { names: ["x"] }) }], syncskill);
+      expect(answer).toMatchObject({ error: { code: "syncskill-unconfigured" } });
+      expectUnconfirmed(h, ["a"]);
+    }
   });
 
   it("syncskill-failed:E_PROFILE_NOT_FOUND: syncskill's own error code is named", async () => {
@@ -169,7 +170,7 @@ describe("a tampered skills entry blocks recovery (C16)", () => {
   async function confirmedPair() {
     const fake = await fakeSyncskill("profile-ok");
     const { h, answer } = await confirmWith([
-      { taskId: "a", agent: CLAUDE, loop: withSkills("a", { names: ["x"] }) },
+      { taskId: "a", loop: withSkills("a", { names: ["x"] }) },
       { taskId: "b", loop: loop("b") },
       { taskId: "c", agent: CLAUDE, loop: withSkills("c", { profile: "p" }) },
     ], fake.o);

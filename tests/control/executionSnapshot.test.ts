@@ -234,11 +234,13 @@ describe("execution snapshot skills", () => {
     expect(prepared.snapshotHash).not.toBe(GOLDEN_SNAPSHOT_HASH);
   });
 
-  it.each([
-    ["an entry for a task with no derived contract", [{ taskId: "b", profile: null, names: ["x"] }]],
-    ["an entry with no names", [{ taskId: "a", profile: null, names: [] }]],
-  ])("refuses %s", (_label, skills) => {
-    expect(() => prepareExecutionSnapshot({ ...input(), skills })).toThrow();
+  it("refuses an entry for a task with no derived contract", () => {
+    expect(() => prepareExecutionSnapshot({ ...input(), skills: [{ taskId: "b", profile: null, names: ["x"] }] })).toThrow("skills-task-unknown");
+  });
+
+  it("refuses an entry with no names", () => {
+    const parsed = executionSnapshotSchema.safeParse({ ...prepareExecutionSnapshot(input()).snapshot, skills: [{ taskId: "a", profile: null, names: [] }] });
+    expect(parsed.success ? [] : parsed.error.issues.map((issue) => issue.path.join("."))).toEqual(["skills.0.names"]);
   });
 
   it("the schema refuses entries out of order or repeated, and an empty list", () => {
