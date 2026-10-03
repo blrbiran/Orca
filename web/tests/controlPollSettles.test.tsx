@@ -8,7 +8,8 @@
  * cache, unmounted the whole control panel and asked for everything again, so the person's open task and scroll
  * position were thrown away every 2 s. This criterion holds the page to the real server's answers: no complete read
  * once the polls are incremental,
- * the open group's nodes and open task kept across polls, and the open group re-read when its projectionSeq moves.
+ * the open group's nodes and open task kept across polls, and the open group re-read when the projection moves
+ * past it.
  * jsdom has no layout, so the scroll jump itself is not measurable here: it follows from the panel being unmounted,
  * which is what this measures.
  */

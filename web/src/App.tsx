@@ -547,16 +547,17 @@ export function App(): JSX.Element {
   // Opening a group, a voided cache and a projection gap all mean: re-read it canonically.
   // Each of those empties the cache entry it voids, so "not cached" is the whole trigger: also reading while the
   // voided mark is still up made every arriving body the cause of the next GET.
-  // Web-recoverable-control spec §3.2: a listed group whose projectionSeq moved past the cached body's is re-read
-  // too, with the cached body left on the page until the new one arrives. Only strictly older counts, so a body
-  // newer than the summary (read after a command) reads nothing.
+  // Web-recoverable-control spec §3.2: the open group is also re-read once the projection has moved past the cached
+  // body (its changeSeq is older than the summary's), with the cached body left on the page until the new one
+  // arrives. This is wider than "its projectionSeq moved" -- another group moving re-reads it too -- and it is what
+  // keeps the open group fresh now that a summary no longer voids the cache. Only strictly older counts, so a body
+  // read after the summary (after a command) reads nothing, and an arriving body settles it.
   useEffect(() => {
     if (controlConfig === null || selectedGroup === null) return;
     const cached = control.canonical[selectedGroup];
-    const listed = control.groups[selectedGroup];
-    if (cached !== undefined && (listed === undefined || cached.summary.projectionSeq >= listed.projectionSeq)) return;
+    if (cached !== undefined && cached.changeSeq >= control.changeSeq) return;
     void readControlGroup(selectedGroup);
-  }, [controlConfig, selectedGroup, control.canonical, control.groups]);
+  }, [controlConfig, selectedGroup, control.canonical, control.changeSeq]);
 
   const loadHome = async (): Promise<void> => {
     try {
