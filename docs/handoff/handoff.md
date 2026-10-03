@@ -117,7 +117,7 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 ✅ **Orca 接 syncskill（2026-10-03，会话 `08b1007d`，Orca ＋ ccloop 两仓，SDD 七个 task＋终审）做完，人已审**：loop 方案可声明 skill 集，每个 run 注入只读快照、作为 claude plugin 加载；见 §4.0.n。
 ✅ **syncskill 跟进（2026-10-03，会话 `9d95e6c8`）做完，等人审**：重钉 ccloop 到 `2b380ea`；codex＋skills 改在 confirm／set-task-loop 就拒；skills 形状错报出具体原因；修了一处临时目录泄漏；**真 claude 下付费跑通一次带 skills 的任务**（n＝1）。见 §4.0、§4.0.o。
 
-**现行基线（会话 `08b1007d`，2026-10-03，Orca 接 syncskill 之后）**：见 §4.0.n 的「门」一段（Orca 全量 2724 条，只红已登记 flake；ccloop 1140 条，只红 `stopProof`）。
+**现行基线（会话 `9d95e6c8`，2026-10-03，syncskill 跟进之后）**：Orca 全量 2738 条，只红已登记 flake（`gateCheck` K13、`driverProgress` R2、`controlShutdown` 143；`verify:chain` 的全量另红 `driverRequirementSplit`），各单跑 3/3 绿；其余各段 RC 0；`check-tmp-leak` 配不配表都 0 残留。原始报数在台账 `.superpowers/sdd/2026-10-03-syncskill-integration/progress.md` 末节。ccloop 本轮零代码改动，基线仍是会话 `08b1007d` 的 1140 条、只红 `stopProof`。
 
 **上一版基线（会话 `6a4dd7f3`，2026-10-03，§4.0.l 那一笔的内容；原始报数在台账 `.superpowers/sdd/2026-10-03-board-graph-and-git/progress.md` 的 Gate 段）**：clone 做法与改道同下，`ORCA_CCLOOP_BIN`＝ccloop `ae2caa3` 的 build。全量 vitest **289 文件、2623 条、2617 过、2 红、4 skipped**；红的是已登记的 `driverRequirementSplit`，和本轮自己的 `scanPanelText`（新图的两词 class 字面量被当成待翻译文字，已在代码里修掉、没动判据）。`verify:chain` 的全量另红 `gateCheck` K13、`controlShutdown` 143（都已登记）。修后重跑：typecheck、web build、`scanPanelText`、`--ws check`（web 383/383）都 RC 0；三个 flake 文件单独各 3/3 绿（1 分钟负载 17→6）。其余各段（台账、`CLAUDE.md` 150/200、hooksPath、`verify:control` 1221 过 3 skipped、`verify:scheduler` 194、`verify:ccloop-pin` 3、`verify:panel`、R1 真 ccmem、`check-tmp-leak` 0 残留）都 RC 0；真 `~/.claude/ccmem` 条目名与真 `~/.orca` 的 stat＋sha256 与本会话早先的快照相同。
 
@@ -153,17 +153,33 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 
 ## 四、⛔ 下一件事
 
-### 4.0 ⛔ 现在的下一件事（2026-10-03 会话 `08b1007d` 改写；**本节优先于下面的 4.0.n、4.0.m … 与 1–3**）
+### 4.0 ⛔ 现在的下一件事（2026-10-03 会话 `9d95e6c8` 改写；**本节优先于下面的 4.0.o、4.0.n … 与 1–3**）
 
-会话 `08b1007d` 做完了人排的三件：修 syncskill 的 `--sync-dir`（syncskill 仓）、杀孤儿进程、**Orca 接 syncskill**（Orca ＋ ccloop 两仓）。结论在 §4.0.n；**全部等人审**，人裁与替人做的裁定都列在那里。
+会话 `9d95e6c8` 做完了人排的四件：重钉 ccloop、修临时目录泄漏、两条裁定的优化（(a) skills 形状报出原因，(b) codex＋skills 提前到 confirm 拒；(c) 留给 H6）、真 claude 付费跑一次带 skills 的任务。结论在 §4.0.o，**等人审**。
 
-1. **先核推送**：四个仓各跑 `/usr/bin/git ls-remote origin refs/heads/main` 与本地比，不信本文的笔数或哈希。推送归人。**ccloop 这一轮有三笔，必须先于 Orca 推**；推完 ccloop 后，由 agent 跑 `node scripts/pin-ccloop.mjs <那一笔的 SHA>` 重钉（Orca 现在仍钉 `ae2caa3`，用钉住的旧 ccloop 跑带 skills 的任务会被拒，这是有意的大声失败），再由人推 Orca。syncskill 与 ccmem 这一轮只多了文档或修复提交。
-2. **人要审的**：§4.0.n 的「替人做的裁定」，与台账 `.superpowers/sdd/2026-10-03-syncskill-integration/progress.md` 里全部 `Ruling:` 行；spec `docs/superpowers/specs/2026-10-03-syncskill-integration-design.md` 的 §10、§11（它们优先于 §1–§9）。
-3. **下一件由人选**。候选：codex 的 skill 支持（人裁 H6 定为下一轮，也顺带消掉「codex 任务带 skills 会卡死」那条路，见 §4.0.n）；真 claude 下跑一次带 skills 的任务（付费，先报判据与上限）；记忆区后续；ccloop §5.1 与「reaper 杀活 claude」的真 claude 验收；同时启动任务数上限；N1 第二版；goal.md 的 N2、§3.5 litellm、A2A。
-4. **验证只在 `git clone --local` 副本里做**：HOME 与四个 XDG 根改道、TMPDIR 短真目录；Orca clone 里先 `npm run build --workspace web`、`git config core.hooksPath scripts/githooks`；`ORCA_CCLOOP_BIN` 指向 ccloop clone 的 `dist/cli.js`（要用含本轮三笔的那份）。真二进制判据：`ORCA_SYNCSKILL_REAL_BIN=<syncskill clone>/dist/index.js`（`tests/skills/syncskillReal.test.ts`、`tests/control/driverSkillsReal.test.ts`）、`ORCA_CCMEM_REAL_BIN=/Users/biran/code/skills/ccmem/bin/ccmem`；不设就 skipped，**门要看到它们真的跑了**。⚠️ `npm run verify` 是 `&&` 串起来的：`npm test` 里一条负载 flake 红了，后面的 verify:control／scheduler／chain／panel／ccloop-pin／web check 就都**没跑**，要单独补跑。clone 要跟上主树就 `git fetch <主树> main` 后 `git checkout --detach FETCH_HEAD`。
-5. **付费跑**：先定判据（一条退出码 0／非 0 的命令）和花费上限，报人后再跑；跑前后记 claude 装目录 mtime（本会话又见到它被重装），花费用 `scripts/claude-tee.mjs`。免费的离线探针：`node scripts/probe-claude-skills.mjs --claude <abs>`（录请求、不调模型）。
-6. **子代理纪律**（本会话实测）：`rm`／`cp` 有 `-i` 别名，子代理用了裸 `rm` 会挂在提示上（本会话一个挂了 51 分钟，进程是本会话起的，已杀）；子代理会在主树跑全量（明令禁止也发生过一次）——派发时写明、收尾时查 `git status` 与 `~/.orca`。实施席交完报告后可能反复重发同一份报告，确认已提交后用 TaskStop 停掉。
-7. **建议用的 skill**：开工 `superpowers:using-superpowers`；新设计走 `superpowers:brainstorming` → `superpowers:writing-plans` → `superpowers:subagent-driven-development`；红先 `superpowers:systematic-debugging`；收尾前 `superpowers:verification-before-completion`。一次只让一个实施席动同一个仓的工作树（不同仓可以并行，本会话 Task 1／Task 2 就是这样）。
+1. **先核推送**：四个仓各跑 `/usr/bin/git ls-remote origin refs/heads/main` 与本地比。推送归人。本轮 Orca 有重钉＋跟进几笔、ccloop 只有一笔 handoff 文档；Orca 已钉 `2b380ea`（ccloop 远端已有），**两仓推送没有先后约束**。
+2. **人要审的**：§4.0.o 的「替人做的裁定」与「改了的既有判据」；台账 `.superpowers/sdd/2026-10-03-syncskill-integration/progress.md` 末节「Follow-up (session 9d95e6c8)」；spec `docs/superpowers/specs/2026-10-03-syncskill-integration-design.md` §12（优先于 §11 与正文）。
+3. **下一件由人选**。首选仍是 codex 的 skill 支持（H6）：它消掉 I1 剩下的那条路（确认后安装表被改）。其他候选：带 skills 的 agent verifier／profile 声明／多任务的真 claude 验收（本轮只跑了 standard 方案、names、单任务）；记忆区后续；ccloop §5.1 与「reaper 杀活 claude」的真 claude 验收；同时启动任务数上限；N1 第二版；goal.md 的 N2、§3.5 litellm、A2A。
+4. **验证只在 `git clone --local` 副本里做**：HOME 与四个 XDG 根改道、TMPDIR 短真目录；Orca clone 里先 `npm run build --workspace web`、`git config core.hooksPath scripts/githooks`；`ORCA_CCLOOP_BIN` 指 ccloop clone（`2b380ea`）的 `dist/cli.js`；`ORCA_AGENTS_TABLE` 只放 fake codex（`integration` 模式，0600，`/private/tmp/…`）；真二进制判据 `ORCA_SYNCSKILL_REAL_BIN=<syncskill clone>/dist/index.js`、`ORCA_CCMEM_REAL_BIN=/Users/biran/code/skills/ccmem/bin/ccmem`。⚠️ `npm run verify` 是 `&&` 串的；本轮改用逐段各跑各的脚本（每段单独记 RC），推荐照做。
+5. **付费跑**：先定判据与上限、报人。现成判据：`scripts/live-panel-http-acceptance.ts`（`--skill --syncskill-bin <abs>` 是带 skills 的变体）。跑前后记 claude 装目录 mtime（本会话 20:45 又见重装，同版本）。
+6. **环境坑**（本会话新见）：rtk 把 `diff` 报成「Files are identical」而 `cmp` 说不同 ⇒ 字节比较一律 `/usr/bin/diff`、`/usr/bin/grep`；人自己常开着一个 `orca panel --port 7777`，它会写真实 `~/.orca/control/…`，比对 `~/.orca` 前后快照时先核它的启动时间；`rm`／`cp` 带 `-i` 别名，子代理要写明 `/bin/rm`。
+7. **建议用的 skill**：开工 `superpowers:using-superpowers`；新设计 `superpowers:brainstorming` → `superpowers:writing-plans` → `superpowers:subagent-driven-development`；红先 `superpowers:systematic-debugging`；收尾前 `superpowers:verification-before-completion`。
+
+### 4.0.o syncskill 跟进（会话 `9d95e6c8`，2026-10-03，**已完成，等人审**）
+
+**几笔**（按主题行找）：`chore(deps): repin ccloop to its syncskill round …`；`test(control): gate the real-protocol file at run time …`；`fix(loop-plans): name what is wrong with a skills declaration …`；`feat(skills): refuse skills on a non-claude installation at confirm and set-task-loop …`；`test(live): add a --skill mode to the panel HTTP acceptance …`；`fix(live): count the Skill tool calls …`；以及 spec §12／台账／本文的文档笔。ccloop 一笔：`docs(handoff): Orca section v41 …`。
+- **重钉**：`ae2caa3` → `2b380ea`，`pin-ccloop.mjs` 七项全 ok。
+- **泄漏**：`ccloopProtocol.integration.test.ts` 改成 `beforeEach` 里 `ctx.skip()`；不配表时全量 0 残留。
+- **(a)**：skills 形状错报 `malformed:tasks.N.loop.skills: skills-shape:<原因>`（`both-profile-and-names`／`neither-profile-nor-names`／`unknown-key`／`empty-names`／`names-not-strings`／`profile-name`／`not-an-object`），沿用 labels 的写法；名字规则违规仍是 `loop-plan-invalid:<task>:skills-shape`。改之前实测：两个 key 都写时报「Unrecognized key 'names'」，会误导人只删 names。
+- **(b)**：ccloop 的 `listAgents` 应答里本来就带每个安装的 kind（上一轮「Orca 拿不到 kind」不对）。confirm 只在有任务声明 skills 时问一次；set-task-loop 在已确认任务的 payload 带 skills 时问；不是 claude ⇒ `skills-unsupported-agent:<task>:<安装id>:<kind|not-in-table>`（Orca 新错误码，422，中文文案已加）；问失败 ⇒ 按它自己的错误拒；事务前没问（那时还是草稿）⇒ `proposal-version-conflict`。ccloop `acceptStart` 继续兜底。6 条变异各自见红。
+- **付费跑**（n＝1）：claude 2.1.288、claude-opus-5-5，standard 方案单任务、`names` 声明一个 skill，skill 里放随机口令、检查只比 sha256。25/25，exit 0。claude 自报 $0.3157524（plan $0.134412、execute $0.1813404），ccloop 报 106,008 token＝账本。execute 调了一次 `Skill orca-run-skills:orca-live-marker`，plan 没调。两次调用都带 `--plugin-dir`、都没有 `--disable-slash-commands`；口令不在任何调用的 argv、计划文件、确认后的视图里。
+- **门**：见台账末节；全量 2738 条只红已登记 flake（各单跑 3/3 绿），各段 RC 0，泄漏 0。
+
+**改了的既有判据**（要人知情）：web 夹具的 `listAgents` 加列 claude 安装（它的 `resolveAgent` 本来就认）；`setTaskLoopSkills` 的夹具与 `confirmSkills` C16 的任务 a 改用 claude 安装（断言一字未改）；`skillsE2E` 的 I1 codex 判据整条改写成「confirm 就拒」。
+
+**替人做的裁定**：(a) 走 labels 写法而不是把形状检查挪到展开阶段（代价：skills 的错仍有两个码）；(b) kind 取自 `listAgents`、只在需要时问（代价：带 skills 的 confirm 多一次 ccloop 调用）；验收脚本里两个检查名 `…Holds42` 改成 `…HoldsAnswer`。
+
+**诚实的表述**：付费只跑了一次，覆盖 standard（命令型 verifier，所以没有 verify 那次调用）、`names` 声明、单任务、claude；**带 skills 的 agent verifier、profile 声明、多任务、codex 都没在真 agent 下跑过**。I1 剩下的那条路（确认后安装表被改）仍在，等 H6。
 
 ### 4.0.n Orca 接 syncskill（会话 `08b1007d`，2026-10-03，**已完成，等人审**）
 
