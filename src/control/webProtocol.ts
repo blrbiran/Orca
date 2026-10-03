@@ -16,7 +16,8 @@ function issue(ctx: z.RefinementCtx, path: PropertyKey[], message: string): void
   ctx.addIssue({ code: z.ZodIssueCode.custom, path: path as (string | number)[], message });
 }
 
-function compareText(left: string, right: string): number {
+/** UTF-16 code unit order: the order every sorted set on the wire is checked in. A producer must not use localeCompare. */
+export function compareText(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
 }
 

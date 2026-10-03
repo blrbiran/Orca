@@ -27,6 +27,7 @@ import {
   controlSummarySchema,
   evidenceManifestSchema,
   executionSnapshotSchema,
+  compareText,
   groupSummarySchema,
   groupViewSchema,
   profileBindingSchema,
@@ -196,7 +197,7 @@ function parseStored<T>(schema: z.ZodType<T>, value: unknown, detail: string): T
 }
 
 function sortedUnique(values: readonly string[]): string[] {
-  return [...new Set(values)].sort((left, right) => left.localeCompare(right));
+  return [...new Set(values)].sort(compareText);
 }
 
 function groupBody(store: ControlStore, groupId: string): z.infer<typeof groupBodySchema> {
@@ -234,7 +235,7 @@ function blockerRows(store: ControlStore, groupId?: string): Array<{
       if (!run || String(run.group_id) !== owner) return blocked("recovery-blocker-run-owner");
     }
     return { scope: scope as "global" | "group" | "run", groupId: owner, runId, code, evidenceIds: sortedUnique(body.evidenceIds) };
-  }).sort((left, right) => `${left.scope}\0${left.groupId}\0${left.runId ?? ""}\0${left.code}`.localeCompare(`${right.scope}\0${right.groupId}\0${right.runId ?? ""}\0${right.code}`));
+  }).sort((left, right) => compareText(`${left.scope}\0${left.groupId}\0${left.runId ?? ""}\0${left.code}`, `${right.scope}\0${right.groupId}\0${right.runId ?? ""}\0${right.code}`));
 }
 
 function stopView(store: ControlStore, groupId: string, legacyStopped: boolean): GroupViewV1["stop"] {
@@ -794,7 +795,7 @@ export function readControlGroup(store: ControlStore, epoch: string, groupId: st
   const blockers = blockerRows(store, groupId).map(({ groupId: _groupId, ...blocker }) => blocker);
   const commandIds = store.db.prepare("SELECT id FROM commands WHERE group_id=? AND original_status IS NOT NULL ORDER BY rowid DESC LIMIT 20").all(groupId).map(row => String(row.id));
   const allocations = [...proposal.allocations, ...estimates.allocations]
-    .sort((left, right) => `${left.ownerKind}\0${left.ownerId}\0${left.bucket}`.localeCompare(`${right.ownerKind}\0${right.ownerId}\0${right.bucket}`));
+    .sort((left, right) => compareText(`${left.ownerKind}\0${left.ownerId}\0${left.bucket}`, `${right.ownerKind}\0${right.ownerId}\0${right.bucket}`));
   const view = {
     schema: "orca-control-group-v1" as const,
     epoch,
@@ -915,7 +916,7 @@ function evidenceRefs(store: ControlStore, runId: string, groupId: string): Evid
       || sortedUnique(body.evidenceIds).join("\0") !== body.evidenceIds.join("\0")) return blocked("recovery-evidence-identity");
     for (const evidenceId of body.evidenceIds) remember(artifactById(store, evidenceId, "recovery-blocker"));
   }
-  return [...refs.values()].sort((left, right) => left.evidenceId.localeCompare(right.evidenceId));
+  return [...refs.values()].sort((left, right) => compareText(left.evidenceId, right.evidenceId));
 }
 
 export async function readRunEvidence(store: ControlStore, runId: string): Promise<EvidenceManifestV1> {

@@ -1,6 +1,6 @@
 import type { Response } from "express";
 import { ControlError, durableCommandErrorStatus, durableCommandErrorStatuses, nonDurableControlErrorClassifications } from "../control/errors.js";
-import { commandErrorBodySchema, type CommandErrorV1 } from "../control/webProtocol.js";
+import { commandErrorBodySchema, compareText, type CommandErrorV1 } from "../control/webProtocol.js";
 import { PANEL_HOST_NOT_ALLOWED } from "./bindGuard.js";
 import { TOKEN_REQUIRED } from "./rejection.js";
 
@@ -31,7 +31,7 @@ export const controlHttpErrorStatuses: Readonly<Record<string, ControlHttpStatus
 export function controlErrorCatalog(): Array<{ code: string; status: number }> {
   return Object.entries(controlHttpErrorStatuses)
     .map(([code, status]) => ({ code, status }))
-    .sort((left, right) => left.code.localeCompare(right.code));
+    .sort((left, right) => compareText(left.code, right.code));
 }
 
 export function controlErrorBody(

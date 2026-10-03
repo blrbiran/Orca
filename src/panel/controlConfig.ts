@@ -6,7 +6,7 @@ import { ControlError } from "../control/errors.js";
 import { agentsTablePath } from "../control/ccloopPort.js";
 import type { ExecutionProfileRouter } from "../control/profiles.js";
 import type { PartialSelection } from "../control/agentSelection.js";
-import { controlConfigSchema, type ControlConfigV1 } from "../control/webProtocol.js";
+import { compareText, controlConfigSchema, type ControlConfigV1 } from "../control/webProtocol.js";
 import { idSchema, safeInteger } from "../control/schema.js";
 import type { TrustedSchedulerPlanTarget } from "../scheduler/planFile.js";
 
@@ -219,10 +219,10 @@ export function createTrustedControlConfig(
         epoch: input.epoch,
         repositories: [...repositories.values()]
           .map(({ repoId, displayName }) => ({ repoId, displayName }))
-          .sort((left, right) => left.repoId.localeCompare(right.repoId)),
+          .sort((left, right) => compareText(left.repoId, right.repoId)),
         plans: [...plans.values()]
           .map(({ planId, repoId, displayName }) => ({ planId, repoId, displayName }))
-          .sort((left, right) => left.planId.localeCompare(right.planId)),
+          .sort((left, right) => compareText(left.planId, right.planId)),
         profiles: observations.map(({ profile, observed, observedAt, probeFailureCode }) => ({
           profileId: profile.snapshot.profile.profileId,
           profileHash: profile.profileHash,
@@ -233,7 +233,7 @@ export function createTrustedControlConfig(
           observed,
           observedAt,
           probeFailureCode,
-        })).sort((left, right) => left.profileId.localeCompare(right.profileId)),
+        })).sort((left, right) => compareText(left.profileId, right.profileId)),
         defaults: defaultProfile === null || input.defaultEstimateMode === null ? null : {
           estimatorProfileId: defaultProfile.snapshot.profile.profileId,
           estimatorProfileHash: defaultProfile.profileHash,
@@ -242,7 +242,7 @@ export function createTrustedControlConfig(
         executionPort: input.executionPort,
         errorCatalog: Object.entries(durableCommandErrorStatuses)
           .map(([code, status]) => ({ code, status }))
-          .sort((left, right) => left.code.localeCompare(right.code)),
+          .sort((left, right) => compareText(left.code, right.code)),
       };
       const parsed = controlConfigSchema.safeParse(view);
       if (!parsed.success) invalid(parsed.error.issues[0]?.message);
