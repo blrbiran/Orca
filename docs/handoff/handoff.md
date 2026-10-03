@@ -112,7 +112,7 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 
 ✅ *** **N5 记忆区（memory tab）第一版做完（2026-10-03，会话 `184d0372`）**：面板第六个分区「记忆」，只读，经 `ccmem export --json` 读，设了 `ORCA_CCMEM_BIN` 才会起 ccmem，分区第一次被打开前不发任何请求。ccmem 仓零改动。细节见 §4.0、§4.0.j。 ***
 ✅ **记忆区三条搁置的小项（2026-10-03，会话 `6a4dd7f3`）做完，人 2026-10-03 已审（「同意」）**：见 §4.0.k。
-✅ **看板剩下的部分（goal.md §3.4，2026-10-03，会话 `6a4dd7f3`）做完，等人审**：依赖关系图、Git 区、loop 方案卡片的 git 一行随工作区方式变；同会话修了 `estimateE2E` 的夹具撕裂读。见 §4.0.l。
+✅ **看板剩下的部分（goal.md §3.4，2026-10-03，会话 `6a4dd7f3`）做完，人 2026-10-03 已审（「同意」）**：依赖关系图、Git 区、loop 方案卡片的 git 一行随工作区方式变；同会话修了 `estimateE2E` 的夹具撕裂读。见 §4.0.l。
 
 **现行基线（会话 `6a4dd7f3`，2026-10-03，§4.0.l 那一笔的内容；原始报数在台账 `.superpowers/sdd/2026-10-03-board-graph-and-git/progress.md` 的 Gate 段）**：clone 做法与改道同下，`ORCA_CCLOOP_BIN`＝ccloop `ae2caa3` 的 build。全量 vitest **289 文件、2623 条、2617 过、2 红、4 skipped**；红的是已登记的 `driverRequirementSplit`，和本轮自己的 `scanPanelText`（新图的两词 class 字面量被当成待翻译文字，已在代码里修掉、没动判据）。`verify:chain` 的全量另红 `gateCheck` K13、`controlShutdown` 143（都已登记）。修后重跑：typecheck、web build、`scanPanelText`、`--ws check`（web 383/383）都 RC 0；三个 flake 文件单独各 3/3 绿（1 分钟负载 17→6）。其余各段（台账、`CLAUDE.md` 150/200、hooksPath、`verify:control` 1221 过 3 skipped、`verify:scheduler` 194、`verify:ccloop-pin` 3、`verify:panel`、R1 真 ccmem、`check-tmp-leak` 0 残留）都 RC 0；真 `~/.claude/ccmem` 条目名与真 `~/.orca` 的 stat＋sha256 与本会话早先的快照相同。
 
@@ -154,7 +154,7 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 
 ### 4.0 ⛔ 现在的下一件事（2026-10-03 会话 `6a4dd7f3` 第二次改写；**本节优先于下面的 4.0.l、4.0.k、4.0.j … 与 1–3**）
 
-会话 `6a4dd7f3` 先做了记忆区三条搁置的小项（§4.0.k，人已审），再按人选做了「看板剩下的部分」并修了 `estimateE2E` 的夹具（§4.0.l，等人审）。`docs/handoff/goal.md` 新加了 §11，是 2026-10-03 的完成情况对齐表。
+会话 `6a4dd7f3` 先做了记忆区三条搁置的小项（§4.0.k，人已审），再按人选做了「看板剩下的部分」并修了 `estimateE2E` 的夹具（§4.0.l，人已审，同意；人已推送）。`docs/handoff/goal.md` 新加了 §11，是 2026-10-03 的完成情况对齐表。
 
 1. **先核推送**：三个仓各跑 `/usr/bin/git ls-remote origin refs/heads/main` 与本地比（`/usr/bin/git log --oneline origin/main..main`）；不要信本文里的任何笔数。会话 `6a4dd7f3` 第二段开工时三仓远端与本地一致（人已推）；之后 Orca 多了 §4.0.l 的提交和文档提交，ccloop、ccmem 只多了 handoff 文档提交。推送归人，顺序仍是 ccloop 先于 Orca（Orca 钉的仍是 `ae2caa3`）。
 2. **人已定下一个会话做两件**（2026-10-03，人原话「下一个session做 "syncskill 补三件" + "「面板 HTTP 这条路」从没在真 agent 下跑过"」）：
@@ -164,9 +164,9 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 3. **验证只在 `git clone --local` 副本里做**：HOME 与四个 XDG 根改道、TMPDIR 短真目录；clone 里先 `npm run build --workspace web`、`git config core.hooksPath scripts/githooks`；`verify:control` 的夹具表 fake codex 用 `integration` 模式（命令 `[node, <ccloop clone>/tests/fixtures/fake-codex.mjs, "integration", <marker>]`，表的形状照 `tests/control/fixtures/ccloopWorld.ts`）。`npm run verify` 是 `&&` 链，逐段跑、逐段记 RC。全量里 5 s 超时红先单文件重跑 3 次并记 `uptime`（已登记的见 §三）。⚠️ clone 里若 `node_modules` 是指向主树的符号链接，`.gitignore` 的 `node_modules/` 不匹配它，`git ls-files --others` 会把它列出来——按这个列表删文件的脚本会把链接删掉（会话 `6a4dd7f3` 踩过一次，只伤了 clone）。⚠️ 门闸在 clone 里也生效：`git pull --ff-only origin main` 被判为「合并进 main」拦下，一条先 `checkout` 再 `reset --hard` 的复合命令也被拦（「判断不了分支」）。clone 要跟上主树，就 `git fetch` 后 `git checkout --detach FETCH_HEAD`。
 4. **R1（真 ccmem）**：`ORCA_CCMEM_REAL_BIN=/Users/biran/code/skills/ccmem/bin/ccmem ./node_modules/.bin/vitest run tests/memory/ccmemReal.test.ts`；不设就 skipped。它只在临时 `CCMEM_DATA_ROOT`／`HOME` 里跑，用 `ccmem import` 灌数据（`save` 会同步算嵌入，可能下载模型）。
 5. 重钉规矩不变：人先推 ccloop，再 `node scripts/pin-ccloop.mjs <SHA>`，再人推 Orca。
-6. 会话 `184d0372` 与 `7fe6d61b` 的 scratchpad 原始输出都已由人授权删除；会话 `6a4dd7f3` 的 scratchpad（两份 clone、门的原始输出）还在，删不删归人。
+6. 会话 `184d0372` 与 `7fe6d61b` 的 scratchpad 原始输出都已由人授权删除；会话 `6a4dd7f3` 的 scratchpad 与临时目录也已由人授权删除；它的证据只剩两份台账里的记录。
 
-### 4.0.l 看板剩下的部分＋`estimateE2E` 夹具（会话 `6a4dd7f3`，2026-10-03，**已完成，等人审**）
+### 4.0.l 看板剩下的部分＋`estimateE2E` 夹具（会话 `6a4dd7f3`，2026-10-03，**已完成；人 2026-10-03 已审，同意**）
 
 - 两笔：`test(fixture): read a fake CLI log created but not yet written as no lines`；`feat(board): draw the dependency graph and show the git scheme from the drive records`。spec `docs/superpowers/specs/2026-10-03-board-graph-and-git-design.md`（D1–D7、判据表、§5 登记未做）；台账 `.superpowers/sdd/2026-10-03-board-graph-and-git/progress.md`（三条 `Ruling:`、24 条变异、门）。没写计划、没派子代理（一小片，spec 的判据表就是计划）。
 - 依赖关系图：`web/src/dependencyLayout.ts` 纯代码排布（层＝到它的最长依赖路径，同层按 taskId），指向本组没有的任务、会构成环的依赖都不画但在图下计数说明；`web/src/DependencyGraph.tsx` 每个任务一个可聚焦按钮，点或回车打开与表格同一个任务详情；不受标签筛选影响；**组里没有任何依赖时不画**（台账 Ruling）。
