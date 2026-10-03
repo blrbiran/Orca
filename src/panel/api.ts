@@ -11,6 +11,8 @@ import { MetricsRejection } from "../metrics/rejection.js";
 import type { DecisionObservation } from "../metrics/types.js";
 import { registerChainRoutes } from "./chains.js";
 import { registerMemoryRoutes } from "./memoryApi.js";
+import { controlRepoKey } from "./controlOptions.js";
+import { registerProjectRoutes } from "./projects.js";
 import { computePanelCoverage, unreviewedHighTier } from "./coverage.js";
 import { loadDecisionRow, loadQuestionsOrEmpty } from "./decisionSource.js";
 import { DECISION_NOT_FOUND, projectForList } from "./listProjection.js";
@@ -416,6 +418,10 @@ export function buildApi(app: Express, deps: ApiDeps): void {
   // Memory tab spec §5.1: GET only, above the error handler like every other route.
   registerMemoryRoutes(app, deps.opts);
   registerChainRoutes(app, deps.opts, objectBody);
+  // Project switcher spec D1 (§8): the control plane holds exactly the --repo entries, each under
+  // controlRepoKey(projectKey) -- the expression src/panel/controlAssembly.ts builds its trusted config with.
+  const controlRepos = new Set(deps.control ? deps.opts.repos.map((repo) => repo.projectKey) : []);
+  registerProjectRoutes(app, { opts: deps.opts, controlRepoId: (key) => (controlRepos.has(key) ? controlRepoKey(key) : null) });
 
   // Errors last. A gate refusal is a first-class error page, never partial
   // data: relaxing here would void E2's gate entirely.
