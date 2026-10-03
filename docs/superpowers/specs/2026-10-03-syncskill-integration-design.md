@@ -22,10 +22,6 @@ Success, as commands (each exits 0/non-0, details in §8):
 - **H3** A profile is resolved to a skill-name list at confirm time and frozen; later profile edits do not reach a confirmed task.
 - **H4** Approved direction: one `syncskill inject` per run, into a directory outside the git workspace, loaded as a
   claude plugin via `--plugin-dir`; the lock goes into the run's drive record, never into a commit.
-- **H5** (review round) No paid real-claude acceptance this round. Agreed as written: a task with skills on a codex agent
-  is refused at confirm; an inject failure blocks the run; ccloop is pushed before Orca is re-pinned.
-- **H6** (review round) Codex skills: "this round or the next". Controller recommendation, pending the human: next round,
-  because no measured codex route keeps the snapshot both out of the commit and away from the auth home (§3.1).
 
 ## 3. Measured facts this design rests on
 
@@ -41,22 +37,7 @@ name appears in the recorded `POST /v1/messages` bodies.
 (`claude --help`: `--disable-slash-commands  Disable all skills`.) The debug log of the run without the flag also
 reports 39 bundled skills; those reach the model too (accepted by H1).
 
-### 3.1 Codex (codex-cli 0.155.1, same recorder method, `CODEX_HOME` and HOME at temp dirs)
-
-| skill location | sent to the model |
-|---|---|
-| `$CODEX_HOME/skills/<name>` | yes |
-| `<cwd>/.codex/skills/<name>` | yes |
-| `<cwd>/.agents/skills/<name>` | yes |
-| outside all of these, named by `-c 'skills.config=[{path=…,enabled=true}]'` | no |
-
-Consequences: codex needs no flag to see skills, but the two cwd locations are inside the git worktree (committed,
-§3 code facts), and `$CODEX_HOME` also holds the auth (`exec --help`: "auth still uses `CODEX_HOME`"), so a per-run
-`CODEX_HOME` would have to carry credentials. The binary also names `SkillsExtraRootsSet` (an app-server call, not an
-`exec` option) and codex plugins; neither was probed. **Existing gap, not introduced here:** today's codex runs already
-see the person's `~/.codex/skills` and the target repository's own skills, whereas claude runs see none.
-
-### 3.2 Code facts (read, not run)
+Code facts (read, not run):
 - Orca makes one workspace per run (`ensureWorkspace`, `src/control/workspace.ts`); ccloop makes one worktree per
   attempt inside it, and plan/execute/verify share it. ccloop's attempt teardown and Orca's `commitAttempt` both run
   `git add -A`; harvest diffs `base..attemptSha` against the task's claimed paths and blocks `out-of-bounds:` otherwise.
@@ -190,7 +171,7 @@ with the workspace. Measured numbers (spawn time, bytes) are to be recorded by t
 | C11 | workspace cleanup removes `skills-<runId>` | leaving it |
 | C12 | real `~/.syncskill` snapshot unchanged around every file that spawns syncskill | — (guard) |
 
-Not in this round: a paid real-claude acceptance (H5); codex skills (H6, facts in §3.1);
+Not in this round: a paid real-claude acceptance (needs its own criterion and cost cap, reported first); codex skills;
 machine-level `link build`; panel editing of skills beyond what `set-task-loop` already offers.
 
 ## 9. Open points the plan must settle by measurement
@@ -200,3 +181,125 @@ machine-level `link build`; panel editing of skills beyond what `set-task-loop` 
 - Whether plugin skills are namespaced (`orca-run-skills:<name>`) in what the model sees, and whether that matters to
   prompts that name a skill.
 - The §5 write question.
+
+## 10. Review round (session `08b1007d`, 2026-10-03) — corrections and additions
+
+**§1–§9 above are the text as published (commit `docs(spec): per-run skill snapshots from syncskill, …`) and are kept
+verbatim. Where they disagree with this section, this section wins.** Sources: an independent review of §1–§9 against
+the code (every load-bearing claim re-read by the controller before being accepted), a codex probe, and the human's
+review answers.
+
+### 10.1 Human rulings
+
+- **H5** No paid real-claude acceptance this round. Agreed as written: a task with skills on a codex agent is refused;
+  an inject failure blocks the run; ccloop is pushed before Orca is re-pinned.
+- **H6** Codex skills go to the next round (human: "codex 放下一轮，同意") — facts in §10.2.
+
+### 10.2 Codex probe (codex-cli 0.155.1, same recorder method as §3, `CODEX_HOME` and HOME at temp dirs)
+
+| skill location | sent to the model |
+|---|---|
+| `$CODEX_HOME/skills/<name>` | yes |
+| `<cwd>/.codex/skills/<name>` | yes |
+| `<cwd>/.agents/skills/<name>` | yes |
+| outside all of these, named by `-c 'skills.config=[{path=…,enabled=true}]'` | no |
+
+The cwd locations are inside the attempt worktree (committed); `$CODEX_HOME` also holds the auth, so a per-run
+`CODEX_HOME` would carry credentials. Not probed: the `SkillsExtraRootsSet` app-server call and codex plugins.
+**Existing gap, not introduced here:** today's codex runs already see the person's `~/.codex/skills` and the target
+repository's own skills; claude runs see none.
+
+### 10.3 Corrections to §3.2 / §3 "Code facts"
+
+- ✗ "anything written into the workspace … would be committed". ccloop creates each attempt worktree with
+  `git worktree add --detach` from the workspace's **HEAD** (`ccloop/src/workspace/worktreeManager.ts`), so uncommitted
+  files in Orca's workspace never reach the attempt, its commit or the landing. The commit risk is real only for the
+  attempt worktree, which Orca never writes into. `copyLiveWorkspace` copies only the attempt worktree.
+- Orca keeps its own strict copy of the envelope schema (`src/control/schema.ts`, `loopWorkSchema`), checked by
+  `toStartEnvelope`; ccloop's copy is `ccloop/src/control/protocol.ts`. Both must gain the field.
+- `syncskill profile ls` runs the manifest auto-refresh (only `inject` skips it), so it writes under the sync dir unless
+  `--no-refresh` is given. This answers the §5 / §9 write question for `profile ls`.
+- `inject --skills` splits on `,` and trims, while `isSafeSkillName` allows `,` and spaces.
+
+### 10.4 Declaration — replaces §4.1
+
+- `skills` lives on the **recipe**, as a sibling of `inputs` (`loopRecipeSchema`), not inside `loopInputsSchema`
+  (whose convention is "every optional field filled"). The plan file's `loop` object and the set-task-loop payload each
+  gain an optional `skills` with the shapes of §4.1.
+- Name rule: syncskill's `isSafeSkillName` **plus** no `,` and no leading/trailing whitespace. Profile rule unchanged.
+- Absent ⇒ the key is omitted (conditional spread; an explicit `undefined` throws `control-non-canonical-json`), so
+  archived plan bytes, `planHash`, recipe and contract hashes are unchanged. `expandRecipe` builds the contract field by
+  field, so `skills` cannot reach the ccloop contract.
+- set-task-loop: `skills` is left out of the `kept` comparison (a skills-only change must not re-expand a v1 recipe at
+  the current plan version) and is part of the no-op test (a skills-only change is not a no-op). The panel's
+  set-task-loop payload (`web/src/LoopPlanCard.tsx`) carries the current `skills` through unchanged.
+
+### 10.5 Freeze — replaces §4.2
+
+- confirm: profile lookups run in the async step before the transaction (next to `resolveGroupSelections`); a lookup
+  failure is thrown inside the transaction after every existing check, as slot failures are.
+- set-task-loop becomes async the same way. On a confirmed task it refuses `skills-unsupported-agent` (the agent is
+  already frozen), and `replaceTaskInSnapshot` adds, rewrites or removes that task's `skills` entry, dropping the
+  top-level key when no task has skills.
+- Profile lookup: `syncskill --json --no-refresh profile ls <name>`. Members are normalised (sorted, de-duplicated) and
+  validated with the §10.4 name rule; an empty profile is refused at confirm (`skills-profile-empty`).
+- Snapshot schema: `skills` sorted and unique by `taskId`, each `taskId` among `derivedContracts`.
+- `readConfirmedTaskExecution` checks it: an entry exists exactly when the task's effective recipe has `skills`; for
+  `names` the lists are equal, for `profile` the profile names are equal; anything else ⇒ `recovery-blocked`.
+- `ORCA_SYNCSKILL_BIN` is plumbed into both `WebControlService` and `ExecutionDriverDeps` (`controlAssembly.ts`).
+
+### 10.6 Injection — replaces §4.3 steps 1–2 and 5, and the cleanup sentence
+
+- `skillsPathOf(roots, runId) = <workspacesRoot>/skills-<runId>` next to `landingPathOf` (runIds are `run-<uuid>`, so no
+  collision with `<runId>`, `landing-`, `conflict-`, `reconcile-`).
+- No reuse branch: A2 writes the drive record only once, together with `prepared: true`, so while A2 runs there is never
+  a recorded `skills`. A2 always `removeOwnPath(skillsPathOf)`, creates `<dir>`, `<dir>/skills` and
+  `<dir>/.claude-plugin` with mode `0700` (inject accepts an existing empty target), injects, and records
+  `skills: { dir, profile, lock: LockSkill[] }` in the same final write as `envelopeHash`.
+- `ORCA_SYNCSKILL_BIN` unset at A2 for a task with skills ⇒ blocked `skills-inject-failed:syncskill-unconfigured`.
+- After inject: `chmod -R a-w <dir>/skills` so the agent cannot edit the snapshot it is given.
+- Cleanup keys on the runId, not on `drive.skills`: `cleanupRunWorkspace` removes `skillsPathOf` unconditionally, which
+  covers step E, a continuation's predecessor cleanup, and `restartRun` (runs whose A2 crashed before its write).
+- `newDrive` adds `skills: null` (the drive record schema is strict).
+- Lock meaning, stated plainly: with `--skills` the lock's `profile` is `null` (Orca records the profile itself);
+  `resolved_commit` is the source's materialised commit, not proof of the copied bytes — `content_md5` is that proof;
+  a continuation run injects afresh, so two runs of one task may differ if syncskill's content changed in between.
+
+### 10.7 ccloop — replaces §4.4 bullets 2 and 3
+
+- `skillPluginDir` is **not** put into `MaterializedAgentConfigV1` (sealed and hash-checked at accept). The worker reads
+  it from `envelope.json` (re-read on relaunch) and passes it to the claude adapter as a separate optional option.
+- `acceptStart` refuses a run with `skillPluginDir` whose agent is not claude (next to `single-call-unsupported`), so
+  nothing is persisted; Orca blocks it as `accept-refused:`. `validateEnvelopePaths` checks `skillPluginDir` like
+  `sourceDir` (absolute, existing, canonical).
+- The plugin dir applies to all three phases (plan, execute, verify). Controller ruling, for the human to review: a
+  skill is a capability, not a constraint, so it is not withheld from the verifier the way loop constraints are.
+
+### 10.8 Criteria — replaces §8 (C1–C12 keep their numbers where unchanged)
+
+| # | Criterion | Mutation that must turn it red |
+|---|---|---|
+| C1 | plan-file `skills` round-trips; a golden fixture without skills keeps its exact archive bytes, `planHash` and contract hash | writing `skills: null` / `undefined` |
+| C2 | bad shapes refused `skills-shape`: both keys, empty names, unsafe name, name with `,` or edge whitespace, bad profile name | each check removed |
+| C3 | confirm freezes a fake syncskill's profile members (normalised); a golden group without skills keeps its exact snapshot hash | freezing the profile name only; no normalisation |
+| C4 | confirm refusals: unconfigured, codex agent, profile not found, empty profile | each refusal removed |
+| C5 | A2 with real syncskill (temp `SYNCSKILL_DIR`): skills present, `plugin.json` present, dirs `0700`, snapshot read-only, drive record `lock` equals the lock file's `skills[]` | skip `plugin.json`; lock from frozen names; skip chmod |
+| C6 | envelope carries `skillPluginDir` only with skills; a golden run without skills keeps its exact envelope hash; Orca's schema accepts it | always set it; Orca schema without the field |
+| C7 | ccloop: fake claude argv has `--plugin-dir <dir>` and no `--disable-slash-commands` in every phase when set; argv byte-identical when unset | flag not removed; removed unconditionally |
+| C8 | ccloop `acceptStart` refuses `skillPluginDir` with a codex agent, persisting nothing; refuses a non-canonical path | each refusal removed |
+| C9 | **smoke, no mutation**: a run with skills lands; the landed tree has no `.claude/` and no `syncskill-lock.json` | — |
+| C10 | inject failure (`E_SKILL_NOT_FOUND`) and unset bin at A2 block with the named reasons | swallowing the error |
+| C11 | `cleanupRunWorkspace` removes `skills-<runId>`, including for a `restartRun` run with no `drive.skills` | keying cleanup on `drive.skills` |
+| C12 | guard: the real `~/.syncskill` is unchanged around every file that spawns syncskill. Its red proof points the "real" path at a decoy HOME, never at the real one (Rule 17) | the spawned syncskill given no `SYNCSKILL_DIR` (decoy only) |
+| C13 | set-task-loop: a skills-only change is accepted (not `no-op-command`) and keeps a v1 recipe at v1 | `skills` in the `kept` comparison; `skills` out of the no-op test |
+| C14 | the panel's budget edit keeps `skills` | payload built without it |
+| C15 | set-task-loop on a confirmed task rewrites, adds and removes the snapshot entry | `replaceTaskInSnapshot` unchanged |
+| C16 | a tampered snapshot `skills` entry ⇒ `recovery-blocked` | the check removed |
+| C17 | a continuation run gets its own `skills-<runId>` and the predecessor's is removed | — (covered by C11's mutation; shown red there) |
+| C18 | `profile ls` is spawned with `--no-refresh`; the temp sync dir is byte-identical after a confirm | flag dropped |
+| C19 | panel: the loop card shows the declared set; the run view shows each lock entry (both locales) | each rendering removed |
+
+### 10.9 Residue left on failure (adds to §5)
+
+A blocked run keeps its `skills-<runId>` until its workspace is cleaned; a killed `inject` may leave
+`<dir>/skills/.syncskill-inject-*` (removed with `<dir>`). Neither is outside `workspacesRoot`.
