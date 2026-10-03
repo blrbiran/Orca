@@ -115,13 +115,14 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 ✅ **看板剩下的部分（goal.md §3.4，2026-10-03，会话 `6a4dd7f3`）做完，人 2026-10-03 已审（「同意」）**：依赖关系图、Git 区、loop 方案卡片的 git 一行随工作区方式变；同会话修了 `estimateE2E` 的夹具撕裂读。见 §4.0.l。
 ✅ **面板 HTTP 在真 claude 下跑通一次＋syncskill 补三件（2026-10-03，会话 `16ab00f2`）做完，等人审**：见 §4.0.m。
 ✅ **Orca 接 syncskill（2026-10-03，会话 `08b1007d`，Orca ＋ ccloop 两仓，SDD 七个 task＋终审）做完，人已审**：loop 方案可声明 skill 集，每个 run 注入只读快照、作为 claude plugin 加载；见 §4.0.n。
+✅ **Task control 刷新循环＋读视图排序＋全局项目切换（2026-10-04，会话 `08011394`）做完，等人审**：见 §4.0.p。
 ✅ **syncskill 跟进（2026-10-03，会话 `9d95e6c8`）做完，等人审**：重钉 ccloop 到 `2b380ea`；codex＋skills 改在 confirm／set-task-loop 就拒；skills 形状错报出具体原因；修了一处临时目录泄漏；**真 claude 下付费跑通一次带 skills 的任务**（n＝1）。见 §4.0、§4.0.o。
 
-**现行基线（会话 `9d95e6c8`，2026-10-03，syncskill 跟进之后）**：Orca 全量 2738 条，只红已登记 flake（`gateCheck` K13、`driverProgress` R2、`controlShutdown` 143；`verify:chain` 的全量另红 `driverRequirementSplit`），各单跑 3/3 绿；其余各段 RC 0；`check-tmp-leak` 配不配表都 0 残留。原始报数在台账 `.superpowers/sdd/2026-10-03-syncskill-integration/progress.md` 末节。ccloop 本轮零代码改动，基线仍是会话 `08b1007d` 的 1140 条、只红 `stopProof`。
+**现行基线（会话 `08011394`，2026-10-04，项目切换之后的最终树）**：干净 clone、HOME 与四个 XDG 根改道、TMPDIR `/private/tmp/claude-501/og/t`、`ORCA_CCLOOP_BIN`＝ccloop `2b380ea` 的 clone build、`ORCA_AGENTS_TABLE`＝fake codex `integration`、真 syncskill／ccmem 二进制，逐段各跑：web build、typecheck、ledger、claude-md、hooks-path、`verify:control`、`verify:scheduler`、`verify:ccloop-pin`、`verify:panel`、`--ws check`（web 65 文件 405 条）、`check-tmp-leak`（0 残留）都 RC 0；全量 vitest **2745 条：2740 过、3 skipped（`ccloopDefaultE2E`，formal only）、2 红**＝已登记 flake `driverRequirementSplit`、`controlShutdown` 143；`verify:chain` 的全量另红 `controlShutdown` 143 与**新登记**的 `agentSelectionE2E` C3（见下）。三个红文件负载约 6 时单跑各 3/3 绿。原始报数在该会话 scratchpad（会话结束即失效），结论只在这里。
 
-**上一版基线（会话 `6a4dd7f3`，2026-10-03，§4.0.l 那一笔的内容；原始报数在台账 `.superpowers/sdd/2026-10-03-board-graph-and-git/progress.md` 的 Gate 段）**：clone 做法与改道同下，`ORCA_CCLOOP_BIN`＝ccloop `ae2caa3` 的 build。全量 vitest **289 文件、2623 条、2617 过、2 红、4 skipped**；红的是已登记的 `driverRequirementSplit`，和本轮自己的 `scanPanelText`（新图的两词 class 字面量被当成待翻译文字，已在代码里修掉、没动判据）。`verify:chain` 的全量另红 `gateCheck` K13、`controlShutdown` 143（都已登记）。修后重跑：typecheck、web build、`scanPanelText`、`--ws check`（web 383/383）都 RC 0；三个 flake 文件单独各 3/3 绿（1 分钟负载 17→6）。其余各段（台账、`CLAUDE.md` 150/200、hooksPath、`verify:control` 1221 过 3 skipped、`verify:scheduler` 194、`verify:ccloop-pin` 3、`verify:panel`、R1 真 ccmem、`check-tmp-leak` 0 残留）都 RC 0；真 `~/.claude/ccmem` 条目名与真 `~/.orca` 的 stat＋sha256 与本会话早先的快照相同。
+**上一版基线（会话 `9d95e6c8`，2026-10-03）**：Orca 全量 2738 条，只红已登记 flake（`gateCheck` K13、`driverProgress` R2、`controlShutdown` 143；`verify:chain` 的全量另红 `driverRequirementSplit`），各单跑 3/3 绿；原始报数在台账 `.superpowers/sdd/2026-10-03-syncskill-integration/progress.md` 末节。
 
-**更早的基线**（会话 `184d0372`、`b5e8d368`（会话 `08b1007d` 压缩本节时删去）、`be653b22`（`gate/gate-report.md`，该会话 scratchpad，已不存在）、`e604b1ba`、`1d7d9aa0`、`2f65a729`、`c85d2c4e`、`94b09282` 各一版；会话 `b5e8d368` 压缩本节时删去，原始报数都在各自台账：`2026-10-03-memory-tab/progress.md`（Gate 块）、`2026-10-02-requirement-to-split/progress.md`（Task 15 行）、`2026-10-01-panel-i18n/task-12-report.md`、`2026-09-30-loop-plans` Task B8 行、`2026-09-29-tmp-leak-skipped-file` §5、`2026-09-27-single-call-estimate` §3.23、`2026-09-26-agent-selection` §16–§18）。它们留下的、仍然成立的结论：
+**更早的基线**（会话 `6a4dd7f3`（台账 `.superpowers/sdd/2026-10-03-board-graph-and-git/progress.md` 的 Gate 段）、会话 `184d0372`、`b5e8d368`（会话 `08b1007d` 压缩本节时删去）、`be653b22`（`gate/gate-report.md`，该会话 scratchpad，已不存在）、`e604b1ba`、`1d7d9aa0`、`2f65a729`、`c85d2c4e`、`94b09282` 各一版；会话 `b5e8d368` 压缩本节时删去，原始报数都在各自台账：`2026-10-03-memory-tab/progress.md`（Gate 块）、`2026-10-02-requirement-to-split/progress.md`（Task 15 行）、`2026-10-01-panel-i18n/task-12-report.md`、`2026-09-30-loop-plans` Task B8 行、`2026-09-29-tmp-leak-skipped-file` §5、`2026-09-27-single-call-estimate` §3.23、`2026-09-26-agent-selection` §16–§18）。它们留下的、仍然成立的结论：
 - 跑门：clone 里先 `npm run build --workspace web`（不 build 有 `panel-dist-missing` 假红）；`ORCA_AGENTS_TABLE` 夹具表的 fake codex 必须是 `integration` 模式（`ok`／`script` 会让 `ccloopProtocol.integration` 红）；改道 HOME 下只会有 `~/.npm/_logs`。
 - 临时目录泄漏已修（每个测试文件一个临时根 `tests/setup/scopeTmpdir.ts`）；护栏 `node scripts/check-tmp-leak.mjs`（两仓都有），TMPDIR 要短、要是真目录（§6.22）。
 - ⚠️ 负载：`driverRecovery` 在 load 约 37 时单文件也能连红 3 次 ⇒ 判 flake 要等负载降下来并记 `uptime`。
@@ -129,6 +130,7 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 ⚠️ *** **新登记的负载型 flake**：`tests/control/executionDriverE2E.test.ts` 在重负载（两份 clone 并跑变异）下出现过 5/9（R1 子场景）；无负载单跑 3/3 全绿。
 `tests/control/driverSettle.test.ts` 的真 git 场景曾在全量＋并发负载下撞默认 5 s 超时，已给 30 s（主题行见上）。 ***
 ⇒ **看到这两个文件红：先单文件重跑，绿了就不是回归。**
+⚠️ **（2026-10-04 会话 `08011394` 新登记）`tests/control/agentSelectionE2E.test.ts` 的 C3 "under fake claude, three parallel runs stopped mid-execute all continue…"**：`verify:chain` 第二次全量里以 `timed out waiting for three continuations to land`（`until` 等待超时，不是断言）红一次，当时 5 分钟负载约 13–15；同一棵树第一次全量里绿，负载约 6 时单文件 3/3 绿。
 ⚠️ *** **（2026-09-27 会话 `5b01dbd9` 新登记）`tests/chain/gateCheck.test.ts` 的 K13 在全量里撞过 5 s 超时，单跑 3/3 绿。另有一个反例要记住：`driverRecovery` 那条在高负载时（load 约 37）单文件也能连红 3 次。** *** ⇒ 所以单跑判别要在负载降下来之后做，并同时记下 `uptime`，不能只看一次单跑。
 ⚠️ *** **④ 轮新增的负载型 flake（同样规则：单文件重跑绿 ＝ 不是回归）**：`tests/control/driverRecovery.test.ts` 的 "drives a retried run on from where it was blocked, to settled"、`tests/control/driverLanding.test.ts` 两条、`tests/control/handoffE2E.test.ts` 的 G（依赖 30 s 实时窗）、`web/tests/controlCommandRecovery.test.tsx` 的 "drops the id when the lookup returns the command's retained result"（单跑 3/3 绿）。 ***
 ⚠️ **（2026-10-01 会话 `e604b1ba` 新登记）`tests/control/ccloopPort.test.ts` 在全量里 5 s 超时一次，单文件 3/3 绿；ccloop 的 `codexWatchdog` 那条在负载 33 下也红过一次（已在已知名单）。web 测试默认超时现为 15 s（`web/vite.config.ts`）。**
@@ -153,23 +155,38 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 
 ## 四、⛔ 下一件事
 
-### 4.0 ⛔ 现在的下一件事（2026-10-03 会话 `9d95e6c8` 改写；**本节优先于下面的 4.0.o、4.0.n … 与 1–3**）
+### 4.0 ⛔ 现在的下一件事（2026-10-04 会话 `08011394` 改写；**本节优先于下面的 4.0.p、4.0.o … 与 1–3**）
 
-会话 `9d95e6c8` 做完了人排的四件：重钉 ccloop、修临时目录泄漏、两条裁定的优化（(a) skills 形状报出原因，(b) codex＋skills 提前到 confirm 拒；(c) 留给 H6）、真 claude 付费跑一次带 skills 的任务。结论在 §4.0.o，**等人审**。
+会话 `08011394` 做完了人排的两件（Task control 不停刷新；全局项目切换），外加一个查刷新时撞到的缺陷（读视图排序）。结论在 §4.0.p，**等人审**。
 
-1. **先核推送**：四个仓各跑 `/usr/bin/git ls-remote origin refs/heads/main` 与本地比。推送归人。本轮 Orca 有重钉＋跟进几笔、ccloop 只有一笔 handoff 文档；Orca 已钉 `2b380ea`（ccloop 远端已有），**两仓推送没有先后约束**。
-2. **人要审的**：§4.0.o 的「替人做的裁定」与「改了的既有判据」；台账 `.superpowers/sdd/2026-10-03-syncskill-integration/progress.md` 末节「Follow-up (session 9d95e6c8)」；spec `docs/superpowers/specs/2026-10-03-syncskill-integration-design.md` §12（优先于 §11 与正文）。
-3. **会话 `9d95e6c8` 后半段（人提的三件，已做）**：tab 顺序改为 需求→任务→决策→记忆→指标→链、默认第一个（主题行 `feat(panel): order the sections along the work …`，两条判据按人的要求改写）；README 改为面向 Web 面板（人与 agent 都读），旧 README 原样移到 `docs/cli.md`；替人配好真实环境：`~/.orca/agents.json`（`orca agents init`）、`~/.orca/profile.json`（v2 快照，`contextWindowTokens: null` ⇒ 预估 blocked-capability）、启动脚本 `~/.orca/panel.sh`（人自己重启面板）。
-   **人在真实面板上跑出的两个问题（未修）**：
-   - 🔴 **Task control 页不停刷新**，人往下翻会被刷回顶部、看不清内容。根因未查；猜测（未验证）：前端反复「projection refetch」（`web/src/controlState.ts` 的 `refetchRequired`，页面上显示 "projection refetch required · re-reading the open groups"）每次重读时整块内容被替换或重挂载，滚动位置随之丢失。⇒ 先 `superpowers:systematic-debugging`：确认刷新的触发源（轮询？SSE 断线重连？`resetRequired`？）、它为什么一直不收敛，再修；判据要能在 jsdom 里量「重读后滚动／DOM 节点保持」。
-   - **Memory 页 `ccmem-failed:1`**：是 ccmem 的缺陷，不是 Orca 的——`/Users/…/orca-web` 这类 origin 为本地路径的仓库，ccmem `normalizeRemoteUrl` 对它 `new URL()` 抛 `ERR_INVALID_URL`。已登记在 ccmem handoff §15「本仓库的新缺陷」，归 ccmem 修（Rule 3：只报诊断与建议补丁）。Orca 如实显示错误，行为正确。
-   面板已按 `~/.orca/panel.sh` 由人重启并在用（安装表、profile、ccmem、syncskill 都配上了；这些是人的数据，判据不许碰）。
-   **人新提的缺口（未做，需先设计；人已定「后续 session 补」）**：Web 面板没有全局的项目切换——项目只能启动时用 `--repo` 给；需求／链／记忆各有自己的仓库下拉框；任务控制只认第一个 `--repo` 与第一个 `--plan`（`web/src/ControlPanel.tsx`、`web/src/App.tsx` 的 `repositories[0]`）；也不能运行时新增项目。下一会话按 brainstorming → spec 来做。
-4. **下一件由人选**。首选仍是 codex 的 skill 支持（H6）：它消掉 I1 剩下的那条路（确认后安装表被改）。其他候选：带 skills 的 agent verifier／profile 声明／多任务的真 claude 验收（本轮只跑了 standard 方案、names、单任务）；记忆区后续；ccloop §5.1 与「reaper 杀活 claude」的真 claude 验收；同时启动任务数上限；N1 第二版；goal.md 的 N2、§3.5 litellm、A2A。
-5. **验证只在 `git clone --local` 副本里做**：HOME 与四个 XDG 根改道、TMPDIR 短真目录；Orca clone 里先 `npm run build --workspace web`、`git config core.hooksPath scripts/githooks`；`ORCA_CCLOOP_BIN` 指 ccloop clone（`2b380ea`）的 `dist/cli.js`；`ORCA_AGENTS_TABLE` 只放 fake codex（`integration` 模式，0600，`/private/tmp/…`）；真二进制判据 `ORCA_SYNCSKILL_REAL_BIN=<syncskill clone>/dist/index.js`、`ORCA_CCMEM_REAL_BIN=/Users/biran/code/skills/ccmem/bin/ccmem`。⚠️ `npm run verify` 是 `&&` 串的；本轮改用逐段各跑各的脚本（每段单独记 RC），推荐照做。
-6. **付费跑**：先定判据与上限、报人。现成判据：`scripts/live-panel-http-acceptance.ts`（`--skill --syncskill-bin <abs>` 是带 skills 的变体）。跑前后记 claude 装目录 mtime（本会话 20:45 又见重装，同版本）。
-7. **环境坑**（本会话新见）：rtk 把 `diff` 报成「Files are identical」而 `cmp` 说不同 ⇒ 字节比较一律 `/usr/bin/diff`、`/usr/bin/grep`；人自己常开着一个 `orca panel --port 7777`，它会写真实 `~/.orca/control/…`，比对 `~/.orca` 前后快照时先核它的启动时间；`rm`／`cp` 带 `-i` 别名，子代理要写明 `/bin/rm`。
-8. **建议用的 skill**：开工 `superpowers:using-superpowers`；新设计 `superpowers:brainstorming` → `superpowers:writing-plans` → `superpowers:subagent-driven-development`；红先 `superpowers:systematic-debugging`；收尾前 `superpowers:verification-before-completion`。
+1. **先核推送**：四个仓各跑 `/usr/bin/git ls-remote origin refs/heads/main` 与本地比。推送归人。本会话 Orca 有十来笔（修复、spec、计划、项目切换三个 task、文档）；ccloop 与 ccmem 各一笔 handoff 文档；syncskill 零改动。Orca 仍钉 `2b380ea`（ccloop 远端已有），**几个仓推送没有先后约束**。
+2. **人要审的**：§4.0.p 的「替人做的裁定」与「没被判据钉住的」；spec `docs/superpowers/specs/2026-10-04-panel-project-switcher-design.md` §7（R1–R6）与 §8（实施期更正）。会话 `9d95e6c8` 留下的审阅项（§4.0.o）仍在等人。
+3. **下一件由人选**。候选：项目切换的后续（spec §6：控制组列表按项目过滤要给 `GroupSummaryV1` 加 `repoId`；Decisions 按项目过滤；运行时增删项目——本轮按设计不做）；codex 的 skill 支持（H6）；带 skills 的 agent verifier／profile 声明／多任务的真 claude 验收；ccloop §5.1 与「reaper 杀活 claude」的真 claude 验收；同时启动任务数上限；N1 第二版；goal.md 的 N2、§3.5 litellm、A2A。
+4. **Memory 页 `ccmem-failed:1`**：ccmem 的缺陷（origin 是本地路径时 `normalizeRemoteUrl` 的 `new URL()` 抛），登记在 ccmem handoff §15，归 ccmem 修，Orca 不改。项目切换让人更容易切到这种仓库上。
+5. **人的真实环境**：`~/.orca/agents.json`、`~/.orca/profile.json`、`~/.orca/panel.sh` 是人的数据，判据不许读写。人用的面板要**重启**才会用上本会话的修复（`~/.orca/panel.sh`，人自己重启）。
+6. **验证只在 `git clone --local` 副本里做**：HOME 与四个 XDG 根改道、TMPDIR 短真目录；Orca clone 里先 `npm run build --workspace web`、`git config core.hooksPath scripts/githooks`；`ORCA_CCLOOP_BIN` 指 ccloop clone（`2b380ea`）的 `dist/cli.js`；`ORCA_AGENTS_TABLE` 只放 fake codex（`integration` 模式，0600，`/private/tmp/…`）；真二进制判据 `ORCA_SYNCSKILL_REAL_BIN=<syncskill clone>/dist/index.js`、`ORCA_CCMEM_REAL_BIN=/Users/biran/code/skills/ccmem/bin/ccmem`。门逐段各跑各的、各记 RC（别用 `npm run verify` 的 `&&` 链）。
+7. **真浏览器验面板**：本机没有 playwright 包，但 `~/.npm/_npx/31e32ef8478fbf80/node_modules/playwright`（1.63 alpha）可用 `createRequire` 引入，浏览器要指 `executablePath` 到 `~/Library/Caches/ms-playwright/chromium_headless_shell-1234/…/chrome-headless-shell`（它默认找的 1237 不存在）。起真 `orca panel` 时 plan 文件必须在目标仓库里（否则 `control-path-escape`），`--profile` 用 v2 快照、`--estimator-profile`/`--estimate-mode` 都给，import-plan 不需要 execution port。
+8. **环境坑**：rtk 把 `diff` 报成「identical」⇒ 字节比较用 `/usr/bin/diff`、`/usr/bin/grep`；`rm`／`cp` 带 `-i` 别名 ⇒ `/bin/rm`；人常开着 `orca panel --port 7777`，它写真实 `~/.orca/control`。⚠️ **Tier 0 闸门会拦 `git reset --hard`（含在自己的 scratch clone 里、`cd $VAR` 解析不了时）**——别重试，换一份新 clone。
+9. **建议用的 skill**：开工 `superpowers:using-superpowers`；新设计 `superpowers:brainstorming` → `superpowers:writing-plans` → `superpowers:subagent-driven-development`；红先 `superpowers:systematic-debugging`；收尾前 `superpowers:verification-before-completion`。
+
+### 4.0.p Task control 刷新循环＋读视图排序＋全局项目切换（会话 `08011394`，2026-10-04，**已完成，等人审**）
+
+**几笔**（按主题行找）：`fix(web): stop the Task control page voiding its cache on every poll`；`fix(panel): sort the control read views by code unit, the order their schema checks`；`docs(spec): design the panel's project switcher …`；`docs(plan): task-by-task plan for the panel's project switcher`；`feat(panel): answer GET /api/projects …`；`fix(web): re-read the open group whenever the projection moved past its body`；`feat(web): pick the project in the sidebar; Task control imports into it`；`feat(web): Requirements, Chains and Memory follow the chosen project`；`docs(spec): record the project switcher's implementation corrections (§8)`；以及 orca 检查点工具自动提交的一笔和本文。
+
+- **刷新根因**（systematic-debugging，读码＋jsdom＋真浏览器都复现）：服务端对不带 `sinceChangeSeq` 的 summary **按规格**（web-recoverable-control spec §3.2）恒回 `resetRequired: true`；前端 reducer 把这次「自己要的完整重读」又当成新的 reset ⇒ 每 2 s purge 一次、`refetchRequired` 永不落、下一 tick 又要完整读。purge 把 `recovery` 置 null ⇒ App 整个卸载 ControlPanel ⇒ 页面高度塌、滚动回顶、打开的任务详情关掉。旧判据 `web/tests/controlRefetch.test.tsx` 的夹具对完整读回 `resetRequired: false`（真服务端从不这样），所以一直绿。
+- **刷新修法**：`refetchRequired` 亮着时到的完整应答就是那次重读，不再 purge；增量应答不再判 gap（服务端列出 N 之后动过的每个组，断档时自己回 resetRequired）；打开的组在缓存 body 的 `changeSeq` 落后于 summary 时重读，旧 body 留在页面上（规格 §3.2 那句以前没实现，之前全靠死循环保鲜）。
+  - 判据 `web/tests/controlPollSettles.test.tsx`（夹具按真服务端语义答）在旧代码上红；真浏览器对真 `orca panel`（clone、改道 HOME、12 任务的组打开、滚到底）：旧代码 8 s 内 `scrollY` 4602→0、节点被换、完整读 4 次；新代码 `scrollY` 不动、节点同一个、完整读 0 次。
+  - ⚠️ 第一版只看 `projectionSeq`，门里把既有判据 `taskLabelsDraftBase` "keeps the draft's base after a poll read someone else's v1…" 打红（它的夹具改了标签却不动 `projectionSeq`，以前靠旧的 gap 重读绿）。**没改那条判据**，改成按 `changeSeq` 重读（更宽：别的组动也会让打开的组每次 poll 多一次 GET，但不卸载）。
+- **读视图排序**（查刷新时在真面板上撞到）：读视图用 `localeCompare` 排，schema 按 code unit 校验；ICU 忽略 NUL、大小写序不同 ⇒ 任务 `t1`/`t10` 的组 423 打不开、`--repo Orca=… --repo ccloop=…` 的 config 500、组 `B`/`a` 的 summary 423。改成 `compareText`（从 `webProtocol` 导出）；会持久化或进哈希的排序（stop intent、handoff、queries、resume bundle）没动。判据 `tests/panel/controlViewOrder.test.ts` 在旧代码上三条全红。
+  - ⚠️ 那笔的提交说明说 blocker 排序「没有 NUL 拼接键」——**不对**，`recoveryBlockers` 的键是 NUL 拼接的；它和 `profileId`、error catalog、evidence 几处换了比较器但**没有会红的判据**（造两个 blocker 才测得到）。
+- **项目切换**：spec／计划见上；`GET /api/projects`（discovery 的 `projectKey` ＋ 控制面 `repoId` 或 null）；侧栏 Project 选择框（≥2 个项目才显示，`localStorage` 的 `orca.project`）；Task control 导入到所选项目的仓库、可选该仓库的 plan、读该仓库的工作区方式；需求／链／记忆的下拉框成为同一选择的双向视图。真浏览器对真 panel（`demo`＋`Zed` 两仓）：选 Zed 导入的组 `plan.repoId` 是 Zed 的、重载后仍选 Zed、config 200。
+- **变异**（都在本地 clone）：刷新 4＋2 条、排序 4 条、projects API 4 条、Task 2 八条、Task 3 七条，**都见红**；例外：「去掉存储读的 try/catch」只以 unhandled rejection 见红（页面照样回落到第一个项目）。原始记录在提交说明里（本轮没开台账目录：一会话内做完、每笔提交说明带变异与判据）。
+
+**替人做的裁定**：刷新修法的三条（不 purge 那次重读／增量不判 gap／按 changeSeq 重读）；排序修法的范围（只动读视图，不动持久化排序）；项目切换 R1–R6（spec §7）；排序缺陷本来打算只登记，按人「问题先按你的建议执行」改成本轮修掉。
+
+**没改的既有判据**：一条都没改。
+
+**诚实的表述**：都只在 fake／jsdom／真 panel（无 execution port）＋真浏览器下验过；没在真 agent 下跑；人的真实面板还没重启、没用上。项目切换没做：控制组列表按项目过滤、Decisions 过滤、运行时增删项目（spec §6）。
 
 ### 4.0.o syncskill 跟进（会话 `9d95e6c8`，2026-10-03，**已完成，等人审**）
 
@@ -186,6 +203,8 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 **替人做的裁定**：(a) 走 labels 写法而不是把形状检查挪到展开阶段（代价：skills 的错仍有两个码）；(b) kind 取自 `listAgents`、只在需要时问（代价：带 skills 的 confirm 多一次 ccloop 调用）；验收脚本里两个检查名 `…Holds42` 改成 `…HoldsAnswer`。
 
 **诚实的表述**：付费只跑了一次，覆盖 standard（命令型 verifier，所以没有 verify 那次调用）、`names` 声明、单任务、claude；**带 skills 的 agent verifier、profile 声明、多任务、codex 都没在真 agent 下跑过**。I1 剩下的那条路（确认后安装表被改）仍在，等 H6。
+
+**同会话后半段（人提的三件，已做）**：tab 顺序改为 需求→任务→决策→记忆→指标→链、默认第一个（主题行 `feat(panel): order the sections along the work …`，两条判据按人的要求改写）；README 改为面向 Web 面板，旧 README 原样移到 `docs/cli.md`；替人配好真实环境 `~/.orca/agents.json`、`~/.orca/profile.json`（v2 快照，`contextWindowTokens: null` ⇒ 预估 blocked-capability）、`~/.orca/panel.sh`。人在真实面板上跑出的两个问题：Task control 不停刷新（⚠️ 已由会话 `08011394` 修，§4.0.p）、Memory 页 `ccmem-failed:1`（ccmem 的缺陷，未修）。
 
 ### 4.0.n Orca 接 syncskill（会话 `08b1007d`，2026-10-03，**已完成，等人审**）
 
@@ -249,7 +268,7 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 - ENOEXEC：Node v22.13.1 在 macOS 上同步抛出，`code` 是 `"Unknown system error -8"`、`errno` -8。现在 `exportFailure` 遇到不是大写名字的 `code`，就按 `errno` 的绝对值去 `os.constants.errno` 里查名字，查不到就答 `unknown`。线上答 `ccmem-failed:ENOEXEC`，Node 的原话留在 message 里。
 - spec 追加 §11（E1：`ccmem-failed:` 还会带 spawn 的 errno 名；E2：status 里不会有空格）；`src/memory/adapter.ts` 原注释不动，下面追加一条 CORRECTION。
 - `web/tests/i18nPseudo.test.tsx`（人 2026-10-03 授权改）：改用 `vi.stubGlobal`，`afterEach` 里 `vi.unstubAllGlobals()`，另加一条判据「记忆区跑完后 fetch 还是原来那个」。
-- 变异三条都单独见红；没见红的两支（`unknown` 兜底、正则直通）理由写在台账。门的报数见 §三 的「上一版基线」与台账。
+- 变异三条都单独见红；没见红的两支（`unknown` 兜底、正则直通）理由写在台账。门的报数见 §三 的「更早的基线」（会话 `6a4dd7f3` 那一版）与台账。
 
 ### 4.0.j N5 记忆区第一版（会话 `184d0372`，2026-10-03，**已完成；人 2026-10-03 已审，「需要你特别知道的」与「替你做的裁定」两部分都同意**）
 
