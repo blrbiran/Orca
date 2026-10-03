@@ -1,0 +1,44 @@
+{
+  "v": 1,
+  "runId": "orca-dev-08011394",
+  "runtime": "claude-code",
+  "sessionRef": "08011394-9036-41ef-8c6f-7cfed042a51d",
+  "writtenAt": "2026-10-03T16:03:58.033Z",
+  "head": "d2b9abc92b9a9dab559f6cb7945e3564fcae117c",
+  "level": {
+    "kind": "reading",
+    "level": 332464,
+    "windowTokens": 1000000,
+    "t1": 330000,
+    "t2": 450000,
+    "band": 1
+  },
+  "next": [
+    "Write plan docs/superpowers/plans/2026-10-04-panel-project-switcher.md and implement it (spec docs/superpowers/specs/2026-10-04-panel-project-switcher-design.md)",
+    "Re-run the full segmented gate in a fresh clone on the final tree; judge the five registered flakes one file at a time after load drops",
+    "Update Orca handoff §4.0, ccloop and ccmem Orca sections (replace, do not append); write the OS-temp handoff; give the person the executive summary"
+  ],
+  "open": [
+    "Gate on the refresh fix alone: vitest 2738, 5 red = registered flakes (driverLanding D, driverRecovery retried, driverRequirementSplit, executionDriverE2E, controlShutdown 143), not yet judged singly",
+    "Commit 'fix(panel): sort the control read views by code unit…' says blocker sorts carry no NUL-joined key; they do (recoveryBlockers key is NUL-joined) -- correct in handoff"
+  ],
+  "awaitingHuman": [
+    {
+      "kind": "irreversible",
+      "what": "push Orca (3e949c7 refresh fix, 37c8556 sort fix, d2b9abc spec, and what follows), ccloop and ccmem handoff commits"
+    },
+    {
+      "kind": "named-authorization",
+      "what": "review the project-switcher rulings R1-R6 in the spec §7"
+    }
+  ],
+  "measurements": [
+    {
+      "command": "cd <fresh clone> && ./node_modules/.bin/vitest run web/tests/controlPollSettles.test.tsx tests/panel/controlViewOrder.test.ts",
+      "exitCode": 2,
+      "commit": "d2b9abc92b9a9dab559f6cb7945e3564fcae117c",
+      "observedAt": "2026-10-03T16:03:57.954Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-08011394-yhKOIg/1.txt"
+    }
+  ]
+}
