@@ -659,3 +659,32 @@ Orca 作为消费方引入；**Orca 自己的 Web 协议留在 Orca**。
 
 N0、N2、N5、N6 人没有提异议，按正文的建议执行。§10.1 的先后照旧。
 
+
+---
+
+## 11. 对齐：做了什么、离本文多远（2026-10-03，会话 `6a4dd7f3`）
+
+> **归属**：会话 `6a4dd7f3`（Claude Code 交互会话）；2026-10-03；观测锚点＝主题行
+> `feat(board): draw the dependency graph and show the git scheme from the drive records` 那一笔。
+> 本节**取代 §9.1 的「现状」列**；§9.1 原文保留。每格都是现测：python 扫 `src/`、`web/src/`、`scripts/` 的关键字命中数，
+> 加 `package.json` 的 `dependencies`。**引用前请再测。**
+
+| 本文条目 | 现状 | 还差什么 |
+|---|---|---|
+| 近期 1、2（`targetVersion`、capability 字段） | ✅ 早已做完（见 §9.1） | — |
+| 近期 4 终点：「Web 派活到真 ccloop 能开出一个 run」 | 🟡 **部分**：真 codex、真 claude 的主链都跑通过，但都绕过了 HTTP | **面板 HTTP 这条路没在真 agent 下跑过**（人已排到下一个会话） |
+| §3.9「ccloop 走 npm 依赖锁版本」 | ✅ `package.json` 的 `dependencies` 里有 `ccloop: github:blrbiran/ccloop#<SHA>`；重钉由 agent 做（人先推 ccloop） | — |
+| 中期 5：§3.3 loop 方案层 | ✅ 两部分都做完（`src/control/loopPlans.ts`，五种方案，展开是纯代码）。`planFile.ts` 的 `autonomyLevel` 仍是 `z.literal("L2")`，方案层是在它外面套的 | git 方案、skill 集两个维度契约表达不了，卡片上显示固定值（git 一行现在随工作区方式变，见下一行） |
+| 中期 6：§3.4 看板 | ✅ **本会话补完**：G4 完成度（`done/total` ＋ attempt n/max）和「需要处理」红点早已做完；本会话画了依赖关系图（`web/src/DependencyGraph.tsx`），加了 Git 区（工作分支 `orca/<组>`、每个 run 的工作区方式／起点／落地提交，合并进 main 与 push 显示为「等人」），loop 方案卡片的 git 一行改为随仓库的工作区方式变 | 登记未做：图上不画写集冲突；`orca/<组>` 是否已并入 main 或已 push 不显示；每个 run 的耗时（缺开始时间戳）。spec `docs/superpowers/specs/2026-10-03-board-graph-and-git-design.md` §5 |
+| 中期 7：§3.2／N2 给 agent 的接口 | ❌ 零代码。CLI 的 `--json` 只有 `orca metrics` 一处；控制面命令没有 CLI 入口；MCP 0 命中 | 整条没开（顺序仍是 CLI `--json` → skill → MCP 薄壳） |
+| 中期 8：§3.5 litellm | ❌ 零代码（`litellm` 全树 0 命中） | — |
+| 中期 9：§3.6 syncskill（G5 选 (i)） | ❌ 零代码（`syncskill` 全树 0 命中），syncskill 那一轮没开 | 人已排到下一个会话 |
+| 远期 10：§3.7 A2A 只读外壳（G6）／N7(a) Orca 作 A2A server | ❌ 零代码（`a2a` 0 命中） | — |
+| N8 标签 | ✅ `src/control/labels.ts`，闭集词表按 G11 | — |
+| N3 内部进度 | ✅ 需求级 `done/total`、task 级阶段＋attempt＋token 占比、点进去看 evidence；SSE 与 A2A 投影按裁决延后 | — |
+| N1 需求 → 拆分 | ✅ 第一版（`src/control/requirement*.ts`，面板「需求」分区） | 第二版（handoff 里挂着） |
+| N5 记忆区 | ✅ 第一版只读，接 ccmem（`src/memory/`，面板「记忆」分区），三条搁置的小项也做完了 | — |
+
+**一句话**：§10.1 排的前五项里，除第 4 项 N2 以外都做完了（N8＋N3、§3.3、N1、N5），§3.4 看板本会话补完；**剩下的大件是 N2（agent 入口）、
+§3.5 litellm、§3.6 syncskill、A2A，以及「面板 HTTP 这条路在真 agent 下跑一次」这条近期验收**。
+人已定的顺序：下一个会话做 syncskill 补三件，和面板 HTTP 在真 agent 下跑一次。
