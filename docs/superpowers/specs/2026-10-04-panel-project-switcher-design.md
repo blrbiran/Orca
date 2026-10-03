@@ -107,3 +107,14 @@ errors. A selected project that disappears from a later answer falls back to the
 - R4: per-section selects stay and become two-way views of the one selection, rather than being removed (D4).
 - R5: group list / Decisions / Metrics not filtered this round (D5).
 - R6: no runtime project add (D6).
+
+## 8. Implementation corrections (same session; the sections above are kept as written)
+
+- D1: the join is not asked of the trusted config. The control read deps (`ControlReadApiDeps.config`) expose
+  `readView` only, so `src/panel/api.ts` joins a project to `controlRepoKey(projectKey)` when the control plane is
+  mounted and the project is one of the `--repo` entries -- the exact expression `src/panel/controlAssembly.ts`
+  builds the trusted config's repositories with. The browser still never derives a `repoId`.
+- §4 criterion D's "drop the try/catch" mutation shows red only as an unhandled rejection: without the catch the
+  page still lands on the first project, which is the fallback anyway.
+- Memory follows the selection only once its section has been opened (it reads nothing before, plan D8 of the
+  memory tab), and a project Memory does not list leaves it where it was.
