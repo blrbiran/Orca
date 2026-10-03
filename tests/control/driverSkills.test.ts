@@ -147,6 +147,18 @@ describe("A2 blocks a run whose skills cannot be injected (C10)", { timeout: 60_
     expect(t.fake.calls.accept).toHaveLength(0);
   });
 
+  // Fix round 1 (review I2c): a failure that is not syncskill's is blocked by its own words, not swallowed or renamed.
+  it("blocks by the error's own text when the snapshot directory cannot be made", async () => {
+    const { t, fake } = await skillsHarness();
+    const runId = await t.claim();
+    const root = `${t.h.store.stateDir}.workspaces`;
+    // The crash seam runs right after the workspace exists: the workspaces root then refuses the snapshot's mkdir.
+    const driver = createExecutionDriver({ ...t.deps, crash: (at) => { if (at === "A2-after-workspace") chmodSync(root, 0o500); } });
+    try { await t.until(driver, () => t.body(runId).state === "blocked"); } finally { chmodSync(root, 0o700); }
+    expect(t.body(runId).drive).toMatchObject({ blockedAt: "A2", blockedReason: `skills-inject-failed:EACCES: permission denied, mkdir '${skillsDirOf(t, runId)}'`, prepared: false, skills: null });
+    expect(fake.calls()).toEqual([]);
+  });
+
   it("blocks as unconfigured when the driver has no ORCA_SYNCSKILL_BIN, never running without the skills", async () => {
     const { t, fake } = await skillsHarness();
     const runId = await t.claim();

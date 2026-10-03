@@ -1,13 +1,13 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   cleanupRunWorkspace, commitAttempt, compareAndSwap, controlWorkspaceRoots, ensureWorkBranch, ensureWorkspace,
-  incomingRefOf, removeOwnPath, skillsPathOf, workspacePathOf,
+  incomingRefOf, makeReadOnly, removeOwnPath, removeSkillsSnapshot, skillsPathOf, workspacePathOf,
 } from "../../src/control/workspace.js";
 import { within } from "../../src/control/archive.js";
 
@@ -180,5 +180,24 @@ describe("compare-and-swap and cleanup (execution driver §5.1, §3.5)", () => {
     await ensureWorkspace(t.repo, "worktree", path, t.head, t.roots);
     await cleanupRunWorkspace(t.repo, t.roots, "run-6", path);
     expect(existsSync(path)).toBe(false);
+  });
+
+  // Fix round 1 (review I2): a link inside the snapshot must not carry a chmod out of it -- chmod follows links.
+  it("leaves a file a link in the snapshot points at alone, when making it read-only and when removing it", async () => {
+    const t = await target();
+    const outside = join(t.root, "outside.txt");
+    writeFileSync(outside, "outside\n");
+    chmodSync(outside, 0o644);
+    const dir = skillsPathOf(t.roots, "run-7");
+    mkdirSync(join(dir, "skills", "alpha"), { recursive: true });
+    symlinkSync(outside, join(dir, "skills", "alpha", "link.md"));
+    await makeReadOnly(join(dir, "skills"));
+    expect(statSync(outside).mode & 0o777).toBe(0o644);
+    expect(statSync(join(dir, "skills", "alpha")).mode & 0o222).toBe(0);
+    chmodSync(outside, 0o400);
+    await removeSkillsSnapshot(t.repo, t.roots, "run-7");
+    expect(existsSync(dir)).toBe(false);
+    expect(statSync(outside).mode & 0o777).toBe(0o400);
+    chmodSync(outside, 0o600);
   });
 });

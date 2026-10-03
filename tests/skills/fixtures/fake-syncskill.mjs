@@ -24,8 +24,8 @@ else if (mode === "inject-ok" || mode === "inject-bad-shape" || mode === "inject
   const names = argv[argv.indexOf("--skills") + 1].split(",");
   for (const name of names) { mkdirSync(join(target, name), { recursive: true }); writeFileSync(join(target, name, "SKILL.md"), `# ${name}\n`); }
   const skills = names.map((n, i) => lockEntry(n, i === 0 && mode === "inject-bad-shape" ? { extra: 1 } : i === 0 && mode === "inject-bad-source" ? { source: { name: "src", type: "git", url: "u", extra: 1 } } : i === 1 ? { source: null, resolved_commit: null } : {}));
-  // As the real inject does (plan Task 6): the lock file beside the injected skills, holding the same entries.
-  writeFileSync(join(target, "syncskill-lock.json"), `${JSON.stringify({ profile: null, skills }, null, 2)}\n`);
+  // As the real inject does (plan Task 6; shape measured against syncskill 3157563): the lock file beside the injected skills.
+  writeFileSync(join(target, "syncskill-lock.json"), `${JSON.stringify({ schema: "syncskill-lock-v1", created_at: new Date().toISOString(), profile: null, skills }, null, 2)}\n`);
   result({ target, lock: join(target, "syncskill-lock.json"), skills });
 } else if (mode === "inject-renamed") { result({ target: argv[argv.indexOf("--target") + 1], skills: argv[argv.indexOf("--skills") + 1].split(",").map((n) => lockEntry(`${n}-other`)) }); }
 else if (mode === "inject-not-found") { say({ type: "error", code: "E_SKILL_NOT_FOUND", message: "skill not found" }); process.exitCode = 2; }
