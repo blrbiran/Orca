@@ -8,6 +8,7 @@ import { controlWorkspaceRoots } from "../../../src/control/workspace.js";
 import { createExecutionDriver, type ExecutionDriver, type ExecutionDriverDeps } from "../../../src/control/executionDriver.js";
 import { fakeCcloopPort, type FakeBehaviour } from "./driverPort.js";
 import type { StartEnvelope } from "../../../src/control/executionPort.js";
+import type { SyncskillOptions } from "../../../src/skills/syncskill.js";
 import { profileSnapshot, webFixture, type WebFixtureOptions, type WebFixtureTask } from "./web.js";
 
 /** A `ccloop run` stand-in for reconciliation criteria (created in Task 6). */
@@ -34,6 +35,8 @@ export interface HarnessOptions {
   distinctConfigHash?: boolean;
   /** Audit 2026-09-26 (seat B): the configHash the synthetic ccloop's `accept` answers, instead of echoing the claim's. */
   acceptedConfigHash?: (envelope: StartEnvelope) => string;
+  /** Syncskill integration plan Task 6: the syncskill both confirm (the freeze) and the driver (A2's injection) are given. */
+  syncskill?: SyncskillOptions;
 }
 
 /**
@@ -48,7 +51,7 @@ export async function driverHarness(tasks: readonly WebFixtureTask[], options: H
   await writeFile(join(repo, "base.txt"), "base\n");
   git(repo, "add", "base.txt");
   git(repo, "commit", "-qm", "base");
-  const service = new WebControlService({ ...h.deps, knownRepository: (repoId: string) => repoId === "repo" });
+  const service = new WebControlService({ ...h.deps, knownRepository: (repoId: string) => repoId === "repo", ...(options.syncskill ? { syncskill: options.syncskill } : {}) });
   const confirmed = await service.confirm(h.command("confirm", { ...(await h.confirmPayload()), budgetMode: options.budgetMode ?? "soft" }));
   if ("error" in confirmed) throw new Error(`confirm refused: ${JSON.stringify(confirmed.error)}`);
   const fake = fakeCcloopPort({
@@ -61,6 +64,7 @@ export async function driverHarness(tasks: readonly WebFixtureTask[], options: H
     store: h.store, router: createExecutionProfileRouter([resolveProfile(snapshot, fake.port)]), admissionGate: h.deps.admissionGate,
     roots: controlWorkspaceRoots(h.store.stateDir), resolveRepository: () => repo,
     ccloopBin: FAKE_CCLOOP_RUN, agentsTablePath: join(h.root, "reconcile-agents.json"),
+    ...(options.syncskill ? { syncskill: options.syncskill } : {}),
   };
   const dispatch = { store: h.store, profileRouter: h.deps.profileRouter, admissionGate: h.deps.admissionGate };
   /** A fresh start command and its delivery: one more claimed run. */

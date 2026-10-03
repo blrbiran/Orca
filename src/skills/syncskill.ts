@@ -55,7 +55,8 @@ export function isSafeSkillName(name: string): boolean {
   return name === name.trim();
 }
 
-const lockSkillSchema = z.object({
+/** One lock entry as syncskill answers it; the execution driver records these on the drive record (spec §10.6). */
+export const lockSkillSchema = z.object({
   name: z.string(),
   source: z.object({ name: z.string(), type: z.string(), url: z.string(), branch: z.string().optional() }).strict().nullable(),
   resolved_commit: z.string().nullable(),

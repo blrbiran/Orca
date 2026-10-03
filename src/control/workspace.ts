@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { rm } from "node:fs/promises";
+import { chmod, lstat, readdir, rm } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { ORCA_IDENTITY, git } from "../scheduler/gitExec.js";
 import { within } from "./archive.js";
@@ -39,6 +39,8 @@ export const workspacePathOf = (roots: WorkspaceRoots, runId: string): string =>
 export const landingPathOf = (roots: WorkspaceRoots, runId: string): string => join(roots.workspacesRoot, `landing-${runId}`);
 export const conflictPathOf = (roots: WorkspaceRoots, runId: string): string => join(roots.workspacesRoot, `conflict-${runId}`);
 export const reconcileRunsDirOf = (roots: WorkspaceRoots, runId: string): string => join(roots.workspacesRoot, `reconcile-${runId}`);
+/** Syncskill integration spec §10.6: the run's skill snapshot, the plugin dir ccloop is handed (runIds are `run-<uuid>`, so no collision). */
+export const skillsPathOf = (roots: WorkspaceRoots, runId: string): string => join(roots.workspacesRoot, `skills-${runId}`);
 export const workBranchRef = (groupId: string): string => `refs/heads/orca/${groupId}`;
 export const incomingRefOf = (runId: string): string => `refs/orca/incoming/${runId}`;
 
@@ -134,9 +136,43 @@ export async function compareAndSwap(repo: string, ref: string, next: string, ol
   }
 }
 
-/** spec §3.5: a settled run's own workspace and its incoming ref. `orca/<groupId>` is never touched. */
+/** Syncskill integration spec §10.6: `chmod -R a-w`, files and directories; a symbolic link is left as it is (chmod would follow it). */
+export async function makeReadOnly(path: string): Promise<void> {
+  const stat = await lstat(path);
+  if (stat.isSymbolicLink()) return;
+  if (stat.isDirectory()) for (const entry of await readdir(path)) await makeReadOnly(join(path, entry));
+  await chmod(path, stat.mode & 0o555);
+}
+
+/** `chmod -R u+w` (and u+x on directories, so they can be entered): undoes makeReadOnly for the owner. A missing path is fine. */
+async function restoreOwnerWrite(path: string): Promise<void> {
+  let stat;
+  try { stat = await lstat(path); } catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return; throw error; }
+  if (stat.isSymbolicLink()) return;
+  await chmod(path, (stat.mode & 0o777) | (stat.isDirectory() ? 0o300 : 0o200));
+  if (stat.isDirectory()) for (const entry of await readdir(path)) await restoreOwnerWrite(join(path, entry));
+}
+
+/**
+ * Syncskill integration spec §10.6 (controller ruling, Task 6): the one way a run's skill snapshot is removed -- by A2
+ * before it injects (a leftover is never reused) and by cleanupRunWorkspace. The snapshot is read-only, which a recursive
+ * rm cannot empty, so the owner's write permission is restored first.
+ */
+export async function removeSkillsSnapshot(targetRepo: string, roots: WorkspaceRoots, runId: string): Promise<void> {
+  const dir = skillsPathOf(roots, runId);
+  assertOwnPath(roots, dir);
+  await restoreOwnerWrite(dir);
+  await removeOwnPath(targetRepo, roots, dir);
+}
+
+/**
+ * spec §3.5: a settled run's own workspace, its skill snapshot and its incoming ref. `orca/<groupId>` is never touched.
+ * Syncskill integration spec §10.6: the snapshot is keyed on the runId, never on the drive record's `skills`, so a run
+ * whose A2 died or was blocked before recording it (restartRun) loses it too.
+ */
 export async function cleanupRunWorkspace(targetRepo: string, roots: WorkspaceRoots, runId: string, workspacePath: string): Promise<void> {
   if (basename(workspacePath) !== runId) throw new Error(`orca: refusing to clean ${workspacePath}, which is not named after ${runId}`);
   await removeOwnPath(targetRepo, roots, workspacePath);
+  await removeSkillsSnapshot(targetRepo, roots, runId);
   await git(targetRepo, [...QUIET_GIT, "update-ref", "-d", incomingRefOf(runId)]).catch(() => undefined);
 }

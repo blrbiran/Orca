@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { idSchema, safeInteger } from "./schema.js";
+import { lockSkillSchema } from "../skills/syncskill.js";
 import { recordProjectionChange } from "./projectionJournal.js";
 import type { ControlStore } from "./store.js";
 
@@ -68,6 +69,10 @@ export const driveRecordSchema = z.object({
   // own field, never conflated with `cleanupError` -- a successful cleanup never clears it, and it is
   // cleared only once publishing itself succeeds. Defaulted for the same reason as `cleanupError`.
   publishError: z.string().min(1).nullable().default(null),
+  // Syncskill integration spec §10.6: the run's injected skill snapshot -- where it is, the profile the task froze (null
+  // for declared names) and syncskill's lock entries. Written once, with `prepared`; null for a run without skills.
+  // Defaulted so a drive record from before this field existed still parses.
+  skills: z.object({ dir: z.string().min(1), profile: z.string().min(1).nullable(), lock: z.array(lockSkillSchema) }).strict().nullable().default(null),
 }).strict();
 export type DriveRecord = z.infer<typeof driveRecordSchema>;
 

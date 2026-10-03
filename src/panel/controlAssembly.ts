@@ -251,6 +251,8 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
       // Handoff grace: the run's frozen killGraceMs + 60 s (driverHandoff.handoffGraceMsOf, agent selection spec §6.6).
       // *** ERRATUM (ccloop consolidation step 1, 2026-10-01, Orca session be653b22, ruling R5) *** the grace is max(killGraceMs, frozen recovery window + 5 s) + 60 s.
       kickPump: () => { void pump(); }, crash: input.driverCrash,
+      // Syncskill integration spec §10.6: A2 injects a run's frozen skills with the same ORCA_SYNCSKILL_BIN confirm froze them with.
+      syncskill: syncskillOptionsFromEnv(env),
     });
   }
 

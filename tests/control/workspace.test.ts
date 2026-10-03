@@ -1,13 +1,13 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   cleanupRunWorkspace, commitAttempt, compareAndSwap, controlWorkspaceRoots, ensureWorkBranch, ensureWorkspace,
-  incomingRefOf, removeOwnPath, workspacePathOf,
+  incomingRefOf, removeOwnPath, skillsPathOf, workspacePathOf,
 } from "../../src/control/workspace.js";
 import { within } from "../../src/control/archive.js";
 
@@ -149,5 +149,36 @@ describe("compare-and-swap and cleanup (execution driver §5.1, §3.5)", () => {
     expect(g(t.repo, "worktree", "list", "--porcelain").split("\n")).not.toContain(`worktree ${path}`);
     expect(g(t.repo, "for-each-ref", "--format=%(refname)", "refs/orca/")).toBe("");
     expect(g(t.repo, "rev-parse", "refs/heads/orca/g")).toBe(t.head);
+  });
+
+  // Syncskill integration spec §10.6 / §10.8 C11 (plan Task 6): the run's skill snapshot is keyed on the runId, so it goes
+  // whatever the drive record says, and A2 leaves it read-only, which a plain recursive rm cannot empty.
+  it("removes the run's read-only skill snapshot beside its workspace, and no other run's", async () => {
+    const t = await target();
+    const path = workspacePathOf(t.roots, "run-4");
+    await ensureWorkspace(t.repo, "worktree", path, t.head, t.roots);
+    const snapshot = (runId: string): string => {
+      const dir = skillsPathOf(t.roots, runId);
+      mkdirSync(join(dir, "skills", "alpha"), { recursive: true });
+      writeFileSync(join(dir, "skills", "alpha", "SKILL.md"), "# alpha\n");
+      for (const sub of [join(dir, "skills", "alpha", "SKILL.md"), join(dir, "skills", "alpha"), join(dir, "skills")]) chmodSync(sub, 0o500);
+      return dir;
+    };
+    const own = snapshot("run-4");
+    const other = snapshot("run-5");
+    expect(own).toBe(join(t.roots.workspacesRoot, "skills-run-4"));
+    await cleanupRunWorkspace(t.repo, t.roots, "run-4", path);
+    expect(existsSync(path)).toBe(false);
+    expect(existsSync(own)).toBe(false);
+    expect(existsSync(join(other, "skills", "alpha", "SKILL.md"))).toBe(true);
+    chmodSync(join(other, "skills"), 0o700); chmodSync(join(other, "skills", "alpha"), 0o700);
+  });
+
+  it("cleans a run that never had a skill snapshot", async () => {
+    const t = await target();
+    const path = workspacePathOf(t.roots, "run-6");
+    await ensureWorkspace(t.repo, "worktree", path, t.head, t.roots);
+    await cleanupRunWorkspace(t.repo, t.roots, "run-6", path);
+    expect(existsSync(path)).toBe(false);
   });
 });

@@ -5,7 +5,8 @@ import { ControlError } from "./errors.js";
 import { createCcloopExecutionPort } from "./ccloopPort.js";
 import type { AgentResolution, ContextWindow, PartialSelection } from "./agentSelection.js";
 /** Single-call estimate spec §4.1: protocol 3's two kinds of work. */
-export interface LoopWork { kind:"loop";contract:unknown;targetRepo:string;base:string;sourceDir:string }
+// Syncskill integration spec §10.6: skillPluginDir only for a run with skills (ccloop protocol 3, additive).
+export interface LoopWork { kind:"loop";contract:unknown;targetRepo:string;base:string;sourceDir:string;skillPluginDir?:string }
 export interface SingleCallWork { kind:"single-call";prompt:string;responseSchema:Record<string,unknown>;maxOutputTokens:number;sourceDir:string }
 export interface StartEnvelope { protocol:3;claim:Claim;contractHash:string;inputCheckpoint:InputCheckpointV1|null; work:LoopWork|SingleCallWork }
 export type ExecutionStatus={kind:"absent"}|{kind:"accepted";executionId:string;configHash:string}|{kind:"unknown"}|{kind:"stopped";proof:StopProof};

@@ -38,6 +38,8 @@ export interface StartEnvelopeWork {
   sourceDir: string;
   targetRepo: string;
   base: string;
+  /** Syncskill integration spec §10.6: the run's skill snapshot; absent for a run without skills (no key on the wire). */
+  skillPluginDir?: string;
 }
 
 /** The checks both translations share (see toStartEnvelope's comment), and the claim built from the run row. */
@@ -97,7 +99,11 @@ export function toStartEnvelope(
     // drifted after the freeze pass as the one the claim was made against.
     contractHash: frozen.derivedContractHash,
     inputCheckpoint,
-    work: { kind: "loop", contract, targetRepo: work.targetRepo, base: work.base, sourceDir: work.sourceDir },
+    work: {
+      kind: "loop", contract, targetRepo: work.targetRepo, base: work.base, sourceDir: work.sourceDir,
+      // Absent stays absent, so a run without skills keeps its exact envelope bytes and hash.
+      ...(work.skillPluginDir !== undefined ? { skillPluginDir: work.skillPluginDir } : {}),
+    },
   };
   // Parsed against the repository's own start-envelope schema rather than merely typed as one, so
   // that a field this function assembles wrongly is refused here instead of at the peer.

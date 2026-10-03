@@ -23,8 +23,13 @@ else if (mode === "inject-ok" || mode === "inject-bad-shape" || mode === "inject
   const target = argv[argv.indexOf("--target") + 1];
   const names = argv[argv.indexOf("--skills") + 1].split(",");
   for (const name of names) { mkdirSync(join(target, name), { recursive: true }); writeFileSync(join(target, name, "SKILL.md"), `# ${name}\n`); }
-  result({ target, lock: join(target, "syncskill-lock.json"), skills: names.map((n, i) => lockEntry(n, i === 0 && mode === "inject-bad-shape" ? { extra: 1 } : i === 0 && mode === "inject-bad-source" ? { source: { name: "src", type: "git", url: "u", extra: 1 } } : i === 1 ? { source: null, resolved_commit: null } : {})) });
-} else if (mode === "crash") { process.stderr.write("fake-syncskill: boom\n"); process.exitCode = 1; }
+  const skills = names.map((n, i) => lockEntry(n, i === 0 && mode === "inject-bad-shape" ? { extra: 1 } : i === 0 && mode === "inject-bad-source" ? { source: { name: "src", type: "git", url: "u", extra: 1 } } : i === 1 ? { source: null, resolved_commit: null } : {}));
+  // As the real inject does (plan Task 6): the lock file beside the injected skills, holding the same entries.
+  writeFileSync(join(target, "syncskill-lock.json"), `${JSON.stringify({ profile: null, skills }, null, 2)}\n`);
+  result({ target, lock: join(target, "syncskill-lock.json"), skills });
+} else if (mode === "inject-renamed") { result({ target: argv[argv.indexOf("--target") + 1], skills: argv[argv.indexOf("--skills") + 1].split(",").map((n) => lockEntry(`${n}-other`)) }); }
+else if (mode === "inject-not-found") { say({ type: "error", code: "E_SKILL_NOT_FOUND", message: "skill not found" }); process.exitCode = 2; }
+else if (mode === "crash") { process.stderr.write("fake-syncskill: boom\n"); process.exitCode = 1; }
 else if (mode === "garbage") { process.stdout.write("not json\n{broken\n"); }
 else if (mode === "big") { process.stdout.write(`${"x".repeat(200000)}\n`); }
 else if (mode === "waits-for-stdin") { process.stdin.resume(); process.stdin.on("end", () => result({ profiles: { [profile]: ["alpha"] } })); }

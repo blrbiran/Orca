@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { mkdir, realpath, writeFile } from "node:fs/promises";
 import { z } from "zod";
 import { join } from "node:path";
 import { archiveRun, readArtifact, writeArtifact } from "./archive.js";
@@ -20,7 +21,8 @@ import { isSingleCallRun, isWebWorkRun, nextClaimableTask, readSingleCallClaimEn
 import { singleCallPurposeOf } from "./singleCall.js";
 import { singleCallHandler } from "./singleCallPurposes.js";
 import { readWorkspaceSetting, type WorkspaceMode } from "./workspaceSettings.js";
-import { cleanupRunWorkspace, commitAttempt, ensureWorkBranch, ensureWorkspace, sourceDirOf, workspacePathOf, type WorkspaceRoots } from "./workspace.js";
+import { cleanupRunWorkspace, commitAttempt, ensureWorkBranch, ensureWorkspace, makeReadOnly, removeSkillsSnapshot, skillsPathOf, sourceDirOf, workspacePathOf, type WorkspaceRoots } from "./workspace.js";
+import { injectSkills, SyncskillError, type SyncskillOptions } from "../skills/syncskill.js";
 import { stepD, stepR } from "./driverLanding.js";
 import { openRequestOf, stepH, visitOrder } from "./driverHandoff.js";
 import { harvest } from "../scheduler/harvest.js";
@@ -75,6 +77,8 @@ export interface ExecutionDriverDeps {
    * *** ERRATUM (ccloop consolidation step 1, 2026-10-01, Orca session be653b22, ruling R5) *** it overrides handoffGraceMsOf(run, window): max(killGraceMs, frozen recovery window + 5 s) + 60 s.
    */
   handoffGraceMs?: number;
+  /** Syncskill integration spec §10.6: the syncskill A2 injects a run's skills with (ORCA_SYNCSKILL_BIN); absent = unconfigured. */
+  syncskill?: SyncskillOptions;
 }
 
 export interface DriverRun {
@@ -179,7 +183,7 @@ function newDrive(roots: WorkspaceRoots, runId: string, workspaceMode: Workspace
   return {
     workspaceMode, sourceDir: sourceDirOf(roots, runId), workspacePath: workspace ? workspacePathOf(roots, runId) : null, targetRepo: null,
     prepared: false, base: null, envelopeHash: null, inspectUnknown: 0, outcome: null, attemptSha: null, landedCommit: null,
-    reconcile: null, blockedAt: null, blockedReason: null, cleanedUp: false, cleanupError: null, publishError: null,
+    reconcile: null, blockedAt: null, blockedReason: null, cleanedUp: false, cleanupError: null, publishError: null, skills: null,
   };
 }
 
@@ -262,22 +266,53 @@ export async function stepA2(deps: ExecutionDriverDeps, runId: string): Promise<
     await cleanupPredecessor(deps, targetRepo, continued.predecessorRunId);
   }
   const confirmed = readConfirmedTaskExecution(store, run.groupId, run.taskId);
+  let skills: DriveRecord["skills"] = null;
+  if (confirmed.skills !== null) {
+    try { skills = await injectRunSkills(deps, targetRepo, runId, confirmed.skills); }
+    catch (error) {
+      blockRun(deps, runId, "A2", `skills-inject-failed:${error instanceof SyncskillError ? error.code : describeError(error)}`);
+      return true;
+    }
+  }
   // ccloop opens its attempt worktrees from repoPath's HEAD, not from `base` (spec §3.2), so the
   // contract points at this run's own workspace. The frozen derivedContractHash is unchanged.
   const contract = {
     ...confirmed.contract, context: { ...confirmed.contract.context, repoPath: workspaceOf(drive) },
     ...(continued !== null ? { executionPolicy: withinGrant(confirmed.contract.executionPolicy, (run.grant as { work: { tokens: number; activeMs: number; attempts: number } }).work) } : {}),
   };
-  const envelope = toStartEnvelope(readWorkClaimEnvelope(store, run.groupId, runId), run, { sourceDir: drive.sourceDir, targetRepo, base }, contract, inputCheckpoint);
+  const envelope = toStartEnvelope(readWorkClaimEnvelope(store, run.groupId, runId), run, {
+    sourceDir: drive.sourceDir, targetRepo, base, ...(skills !== null ? { skillPluginDir: skills.dir } : {}),
+  }, contract, inputCheckpoint);
   const envelopeHash = sha256Canonical(envelope);
   return write(deps, () => {
     writeCanonicalRecord(store, run.groupId, envelopeHash, canonicalBytes(envelope).toString("utf8"));
     const current = readDriverRun(store, runId);
     if (current.state !== "start-pending" || current.drive === undefined || current.drive.prepared) return false;
-    current.drive = { ...current.drive, targetRepo, base, envelopeHash, prepared: true };
+    current.drive = { ...current.drive, targetRepo, base, envelopeHash, prepared: true, skills };
     saveDriverRun(store, current);
     return true;
   });
+}
+
+/**
+ * Syncskill integration spec §10.6 (replaces §4.3 steps 1-2 and 5): the task's frozen skill set, injected afresh into
+ * `skills-<runId>` -- a leftover from an A2 that died is removed, never reused (A2 records `skills` only together with
+ * `prepared`). The snapshot is made read-only so the agent cannot edit what it is given. Answers what A2 records; the
+ * directory is its canonical path, because ccloop's accept requires one. Throws on any failure; A2 blocks by its code.
+ */
+async function injectRunSkills(deps: ExecutionDriverDeps, targetRepo: string, runId: string, frozen: { profile: string | null; names: string[] }): Promise<NonNullable<DriveRecord["skills"]>> {
+  await removeSkillsSnapshot(targetRepo, deps.roots, runId);
+  const created = skillsPathOf(deps.roots, runId);
+  for (const sub of [created, join(created, "skills"), join(created, ".claude-plugin")]) await mkdir(sub, { mode: 0o700 });
+  const dir = await realpath(created);
+  const lock = await injectSkills(deps.syncskill ?? { bin: null, env: {} }, frozen.names, join(dir, "skills"));
+  // Spec §4.3 step 5: the snapshot must hold exactly the frozen list, in its order.
+  if (lock.map((entry) => entry.name).join("\0") !== frozen.names.join("\0")) {
+    throw new SyncskillError("syncskill-output-invalid", `syncskill inject answered ${JSON.stringify(lock.map((entry) => entry.name))} for ${JSON.stringify(frozen.names)}`);
+  }
+  await writeFile(join(dir, ".claude-plugin", "plugin.json"), JSON.stringify({ name: "orca-run-skills", version: "0.0.0" }), { mode: 0o600 });
+  await makeReadOnly(join(dir, "skills"));
+  return { dir, profile: frozen.profile, lock };
 }
 
 /** The registration this continuation run was claimed from, and its predecessor's base (spec §4). */

@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { sha256Canonical } from "../../src/control/canonicalJson.js";
+import { startEnvelopeSchema } from "../../src/control/schema.js";
 import { toStartEnvelope } from "../../src/control/startEnvelope.js";
 import { dispatchEnvelopeSchema, type DispatchEnvelopeV1 } from "../../src/control/webProtocol.js";
 import { ControlError } from "../../src/control/errors.js";
@@ -129,5 +131,24 @@ describe("the translation refuses before anything is dispatched", () => {
     // The strongest form available for a pure function -- it takes no port, so there is no call to
     // count. Named so that a later signature change that hands it one is judged, not assumed.
     expect(toStartEnvelope.length).toBe(4);
+  });
+});
+
+describe("the skill plugin directory on a loop envelope (syncskill integration spec §10.6, §10.8 C6)", () => {
+  // Recorded by running exactly this toStartEnvelope call at commit 5f2639c, before skillPluginDir existed (plan Task 6).
+  const GOLDEN_WITHOUT_SKILLS = "46bdd07561c78f4999041188f9b98f17d0c476ad6858cf4a6649f349cf2ab0bb";
+
+  it("keeps a run without skills byte-identical to before the field existed: no key, the same hash", () => {
+    const built = toStartEnvelope(ledgerEnvelope(), runRow(), work, contract);
+    expect(Object.keys(built.work).sort()).toEqual(["base", "contract", "kind", "sourceDir", "targetRepo"]);
+    expect(sha256Canonical(built)).toBe(GOLDEN_WITHOUT_SKILLS);
+  });
+
+  it("carries skillPluginDir when the run has skills, and Orca's own strict schema accepts it", () => {
+    const built = toStartEnvelope(ledgerEnvelope(), runRow(), { ...work, skillPluginDir: "/tmp/ws/skills-run-1" }, contract);
+    expect(built.work).toEqual({ kind: "loop", contract, targetRepo: "/tmp/repo", base: "v1", sourceDir: "/tmp/src", skillPluginDir: "/tmp/ws/skills-run-1" });
+    expect(startEnvelopeSchema.safeParse(built).success).toBe(true);
+    // An empty directory is not one: the schema refuses it rather than hand ccloop a plugin dir of "".
+    expect(startEnvelopeSchema.safeParse({ ...built, work: { ...built.work, skillPluginDir: "" } }).success).toBe(false);
   });
 });

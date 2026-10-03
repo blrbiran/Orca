@@ -77,7 +77,9 @@ export interface ScriptEntry { files: Record<string, string>; delayMs?: { plan?:
  */
 /** Single-call estimate (F15, ccloop's fake claude): the answer to one single call, optionally after a delay, optionally streaming one closed message first. */
 export interface SingleCallScriptEntry { output: unknown; delayMs?: { "single-call": number }; usageBeforeDelay?: boolean }
-export interface WorldOptions { claudeScript?: Record<string, ScriptEntry | SingleCallScriptEntry>; /** Single-call estimate: the profile's declared context window (null otherwise, so the estimate stays blocked-capability). */ declaredContextWindowTokens?: number }
+export interface WorldOptions { claudeScript?: Record<string, ScriptEntry | SingleCallScriptEntry>; /** Single-call estimate: the profile's declared context window (null otherwise, so the estimate stays blocked-capability). */ declaredContextWindowTokens?: number;
+  /** Syncskill integration plan Task 6: more variables for the assembled runtime's env (ORCA_SYNCSKILL_BIN and what the fake syncskill reads). */
+  env?: NodeJS.ProcessEnv }
 
 /** The codex installation's killGraceMs in every world; handoffE2E's G scenario tells it apart from HANDOFF_EXTRA_GRACE_MS alone. */
 export const KILL_GRACE_MS = 5_000;
@@ -154,7 +156,7 @@ export function ccloopWorlds(options: { rootPrefix: string; epochPrefix: string 
     await writeFile(profilePath, JSON.stringify(snapshot));
     const repoId = controlRepoKey("e2e");
     const repos = [{ projectKey: "e2e", path: repo }];
-    const env: NodeJS.ProcessEnv = { ORCA_CONTROL_DIR: join(root, "control"), ORCA_CCLOOP_BIN: realBinary!, ORCA_AGENTS_TABLE: table };
+    const env: NodeJS.ProcessEnv = { ORCA_CONTROL_DIR: join(root, "control"), ORCA_CCLOOP_BIN: realBinary!, ORCA_AGENTS_TABLE: table, ...worldOptions.env };
     const { rejection, ...control } = resolveControlOptions(["--plan", `plan=${repoId}=${planPath}`, "--profile", profilePath, "--estimator-profile", "all", "--estimate-mode", "soft", "--control-wake-ms", "50"], env, repos);
     if (rejection !== null) throw new Error(rejection);
     let epoch = 0;
