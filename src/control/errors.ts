@@ -145,6 +145,20 @@ export const durableCommandErrorStatuses = {
   "resume-handoff-invalid": 422,
   "resume-source-dir-not-absolute": 422,
   "run-stop-unconfirmed": 422,
+  // Syncskill integration spec §10.5 / §10.8 C4: confirm freezes each task's skill set. A task with skills on an agent other
+  // than claude; a profile with no members, or a member breaking the name rule (§10.4); and the lookup's own failures,
+  // under syncskill-failed:<E_CODE|status>. Durable and 422 like control-port-unconfigured and agent-installation-missing:
+  // the request was understood, and this process cannot carry it out as asked (syncskill unset, not absolute or not
+  // startable, too slow, or answering something unreadable). Each refusal leaves the group unconfirmed.
+  "skills-profile-empty": 422,
+  "skills-shape": 422,
+  "skills-unsupported-agent": 422,
+  "syncskill-failed": 422,
+  "syncskill-missing": 422,
+  "syncskill-output-invalid": 422,
+  "syncskill-output-too-large": 422,
+  "syncskill-timeout": 422,
+  "syncskill-unconfigured": 422,
   "snapshot-partial": 422,
   "snapshot-invalid": 422,
   "snapshot-required": 422,

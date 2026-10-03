@@ -493,10 +493,18 @@ export const executionSnapshotSchema = z
     derivedContracts: z.array(z.object({ taskId: idSchema, derivedContractHash: hashSchema }).strict()),
     // Agent selection spec §6.4 step 4 (§12 I3): each task's frozen selection and the group's reconcile slot.
     agents: z.object({ tasks: z.array(frozenTaskAgentSchema), reconcile: frozenSlotSchema }).strict(),
+    // Syncskill integration spec §10.5: each task's frozen skill set (profile null for a task that named its skills).
+    // Optional and never empty: a group without skills has no key, so its snapshot bytes and hash are unchanged.
+    skills: z.array(z.object({ taskId: idSchema, profile: nonemptyString.nullable(), names: z.array(nonemptyString).min(1) }).strict()).min(1).optional(),
   })
   .strict()
   .superRefine((value, ctx) => {
     requireSortedUnique(value.derivedContracts, (contract) => contract.taskId, ctx, ["derivedContracts"]);
+    if (value.skills !== undefined) {
+      requireSortedUnique(value.skills, (entry) => entry.taskId, ctx, ["skills"]);
+      const contracted = new Set(value.derivedContracts.map((contract) => contract.taskId));
+      value.skills.forEach((entry, index) => { if (!contracted.has(entry.taskId)) issue(ctx, ["skills", index, "taskId"], "skills-task-unknown"); });
+    }
     requireSortedUnique(value.agents.tasks, (task) => task.taskId, ctx, ["agents", "tasks"]);
     if (value.agents.tasks.map((task) => task.taskId).join("\0") !== value.derivedContracts.map((contract) => contract.taskId).join("\0")) {
       issue(ctx, ["agents", "tasks"], "agent-task-set-mismatch");

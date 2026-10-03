@@ -3,7 +3,7 @@ import { randomUUID, createHash } from "node:crypto";
 import { applyWebCommand, preflightWebCommand, type WebCommandContext } from "./commandLedger.js";
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { dimensions, zero } from "./commands.js";
-import { ControlError } from "./errors.js";
+import { ControlError, type KnownControlErrorCode } from "./errors.js";
 import { buildBudgetEstimateRequest, ESTIMATE_GRANT, GOAL_REVIEW, TASK_HANDOFF, TASK_WORK, provenance, residual, safeNumber, sumAmounts, persistEstimateArtifacts, estimateCapabilityDegraded, classifyEstimateOutput } from "./estimator.js";
 import { deriveContract, prepareExecutionSnapshot, readConfirmedTaskExecution, replaceTaskInSnapshot } from "./executionSnapshot.js";
 import { answeredPartials, currentPartials, readGroupAgentOverrides, RECONCILE_SLOT_KEY, resolveGroupSelections, taskSlotKey, type GroupSelectionResolution } from "./agentFreeze.js";
@@ -25,6 +25,7 @@ import { effectiveTaskLabels, normalizeInputLabels, readTaskLabelState } from ".
 import { TASK_AMENDMENT_SCHEMA, effectivePlanTask, workBodyOf, writeTaskAmendment } from "./taskAmendments.js";
 import { expandLoopPlan, expandRecipe, type LoopRecipe, type LoopTaskExpansion } from "./loopPlans.js";
 import { taskContractSchema } from "../scheduler/planFile.js";
+import { profileMembers, SyncskillError, type SyncskillOptions } from "../skills/syncskill.js";
 import type { Amount } from "./types.js";
 import type { ControlStore } from "./store.js";
 import type { BudgetEstimateV1, CommandLookupV1, CommandSuccessV1, EffectiveProposalEditPayload, RawAuthorityCommandV1, ProfileBindingV1 } from "./webProtocol.js";
@@ -49,6 +50,8 @@ export interface WebServiceDeps extends AsyncImportDeps {
   admissionGate?: AdmissionGate; now?: () => Date; knownRepository?: (repoId: string) => boolean;
   /** Agent selection spec §6.4 (W6-19): the same port the panel's profiles use; confirm resolves selections through it. */
   port: Pick<ExecutionPort, "resolveAgent">;
+  /** Syncskill integration spec §10.5: confirm looks up each declared profile through it. Absent means not configured. */
+  syncskill?: SyncskillOptions;
 }
 interface EstimateRun { runId: string; groupId: string; workItemId: string; phase: string; state: string; claimOrdinal: null; providerAttemptOrdinal: number; remaining: { work: Amount; handoff: Amount }; cumulative: { work: Amount; handoff: Amount }; unknown: { work: boolean; handoff: boolean }; [key: string]: unknown }
 
@@ -95,6 +98,31 @@ export function readWebGroup(store: ControlStore, groupId: string): Group {
     if (group.groupId !== groupId || !same(group.used, group.ledger.used) || !same(group.reserved, group.ledger.committedRemaining) || !same(group.limit, group.ledger.groupLimit)) throw new Error("ledger-mismatch");
     return group;
   } catch { throw new ControlError("recovery-blocked"); }
+}
+/** Spec §10.5: what confirm's profile lookups answered, decided inside the transaction like a slot failure. */
+type SkillLookup = { members: Map<string, string[]> } | { failure: unknown };
+const UNCONFIGURED_SYNCSKILL: SyncskillOptions = { bin: null, env: {} };
+const SYNCSKILL_REFUSALS = ["skills-profile-empty", "skills-shape", "syncskill-missing", "syncskill-output-invalid", "syncskill-output-too-large", "syncskill-timeout", "syncskill-unconfigured"] as const satisfies readonly KnownControlErrorCode[];
+/** One `profile ls` per distinct profile the tasks' effective recipes declare, in name order, one at a time. */
+async function lookupSkillProfiles(store: ControlStore, groupId: string, syncskill: SyncskillOptions): Promise<SkillLookup> {
+  const profiles = new Set<string>();
+  try {
+    for (const archived of readArchivedPlan(store, groupId).plan.tasks) {
+      const skills = effectivePlanTask(store, groupId, archived, workBodyOf(store, groupId, archived.taskId)).loop?.skills;
+      if (skills !== undefined && "profile" in skills) profiles.add(skills.profile);
+    }
+  } catch { return { members: new Map() }; } // the transaction's own checks name what could not be read
+  const members = new Map<string, string[]>();
+  for (const profile of [...profiles].sort()) {
+    try { members.set(profile, await profileMembers(syncskill, profile)); } catch (error) { return { failure: syncskillRefusal(error) }; }
+  }
+  return { members };
+}
+function syncskillRefusal(error: unknown): unknown {
+  if (!(error instanceof SyncskillError)) return error;
+  if (error.code.startsWith("syncskill-failed:")) return new ControlError("syncskill-failed", error.code.slice("syncskill-failed:".length));
+  const known = SYNCSKILL_REFUSALS.find(code => code === error.code);
+  return known === undefined ? error : new ControlError(known);
 }
 function prestart(group: Group): void {
   if (group.status === "running" || group.status === "review" || group.status === "done") throw new ControlError("grant-amendment-unsupported");
@@ -470,6 +498,7 @@ export class WebControlService {
       const replay = preflightWebCommand<WebCommandResult>(this.store, command); if (replay) return replay.body;
       const prepared: GroupSelectionResolution | { failure: unknown } = await resolveGroupSelections({ store: this.store, port: this.deps.port }, groupId(command), command.actorId, "confirm")
         .catch((failure: unknown) => ({ failure }));
+      const skillLookup = await lookupSkillProfiles(this.store, groupId(command), this.deps.syncskill ?? UNCONFIGURED_SYNCSKILL);
       return applyWebCommand<WebCommandResult>(this.store, {
         rawCommand: command, expand: () => ({ ...command, schema: "orca-authority-command-v1" }),
         apply: context => {
@@ -519,9 +548,22 @@ export class WebControlService {
             if (selected.handoff.snapshot.profile.capabilities.handoffExecution === "model-assisted-v1" && dimensions.some(d => handoff[d] < 1)) throw new ControlError("handoff-grant-insufficient");
             return { ...task, work, handoff };
           });
+          // Syncskill integration spec §10.5: a lookup failure refuses the whole confirmation, decided here as a slot
+          // failure is; then each task's skill set is frozen -- names as declared, a profile as syncskill answered it.
+          if ("failure" in skillLookup) throw skillLookup.failure;
+          const skills = tasks.flatMap((task): Array<{ taskId: string; profile: string | null; names: string[] }> => {
+            const declared = task.loop?.skills;
+            if (declared === undefined) return [];
+            if (agentTasks.find(entry => entry.taskId === task.taskId)!.agent.agent !== "claude") throw new ControlError("skills-unsupported-agent", task.taskId);
+            if ("names" in declared) return [{ taskId: task.taskId, profile: null, names: [...declared.names] }];
+            const names = skillLookup.members.get(declared.profile);
+            // Defensive: a recipe changed since the lookup reopens the proposal, refused above as proposal-version-conflict.
+            if (names === undefined) throw new ControlError("recovery-blocked", `skills-lookup-missing:${task.taskId}`);
+            return [{ taskId: task.taskId, profile: declared.profile, names }];
+          });
           const built = prepareExecutionSnapshot({ store: this.store, groupId: id, planHash: plan.planHash, graphVersion: plan.graphVersion, proposalVersion: proposal.proposalVersion,
             proposalIdentity: { groupId: id, planHash: plan.planHash, proposalVersion: proposal.proposalVersion }, groupLimit: proposal.groupLimit, budgetMode: payload.budgetMode, contextPolicy: payload.contextPolicy, profiles,
-            allocations: [...proposal.allocations.map(({ state: _state, ...a }) => a), ...estimateCommitments(this.store, id)], tasks, agents: { tasks: agentTasks, reconcile: reconcileSlot } });
+            allocations: [...proposal.allocations.map(({ state: _state, ...a }) => a), ...estimateCommitments(this.store, id)], tasks, agents: { tasks: agentTasks, reconcile: reconcileSlot }, skills });
           for (const derived of built.derivedContracts) {
             writeCanonicalRecord(this.store, id, derived.derivedContractHash, derived.canonicalJson);
             const workRow = this.store.db.prepare("SELECT body FROM work_items WHERE group_id=? AND id=?").get(id, derived.taskId);

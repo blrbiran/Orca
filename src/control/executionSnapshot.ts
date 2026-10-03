@@ -49,6 +49,8 @@ export interface ConfirmedProposal {
   }>;
   /** Agent selection spec §6.4 step 4: each task's frozen selection and the group's reconcile slot. */
   agents: ExecutionSnapshotV1["agents"];
+  /** Syncskill integration spec §10.5: each task's frozen skill set; absent or empty when no task declares skills. */
+  skills?: NonNullable<ExecutionSnapshotV1["skills"]>;
 }
 
 export interface PreparedExecutionSnapshot {
@@ -261,6 +263,8 @@ export function prepareExecutionSnapshot(input: ConfirmedProposal): PreparedExec
     allocations,
     derivedContracts: derivedContracts.map(({ taskId, derivedContractHash }) => ({ taskId, derivedContractHash })),
     agents: { tasks: agentTasks, reconcile: input.agents.reconcile },
+    // Omitted rather than empty (spec §10.5), so a group without skills keeps its snapshot bytes.
+    ...(input.skills === undefined || input.skills.length === 0 ? {} : { skills: [...input.skills].sort((left, right) => compare(left.taskId, right.taskId)) }),
   });
   const canonicalJson = canonicalBytes(snapshot).toString("utf8");
   return { snapshot, canonicalJson, snapshotHash: sha256Canonical(snapshot), derivedContracts };
@@ -336,8 +340,14 @@ export function readConfirmedTaskExecution(store: ControlStore, groupId: string,
     const { taskId: _taskId, ...agent } = entry;
     if (sha256Canonical(frozenWorkAgent(readWork(store, groupId, taskId))) !== sha256Canonical(agent)) throw new ControlError("recovery-blocked");
     const frozen: FrozenWorkAgent = agent;
+    // Syncskill integration spec §10.5: an entry exists exactly when the effective recipe declares skills, and it agrees with it.
+    const skillEntry = snapshot.skills?.find(t => t.taskId === taskId), declared = task.loop?.skills;
+    if ((skillEntry === undefined) !== (declared === undefined)) throw new ControlError("recovery-blocked");
+    if (skillEntry !== undefined && declared !== undefined
+      && ("names" in declared ? skillEntry.profile !== null || sha256Canonical(skillEntry.names) !== sha256Canonical(declared.names) : skillEntry.profile !== declared.profile)) throw new ControlError("recovery-blocked");
+    const skills = skillEntry === undefined ? null : { profile: skillEntry.profile, names: [...skillEntry.names] };
     return { derivedContractHash: ref.derivedContractHash, contractCanonicalJson: expected.contractCanonicalJson,
-      contract: taskContractSchema.parse(JSON.parse(expected.contractCanonicalJson)), grant: { work: work.amount, handoff: handoff.amount }, agent: frozen };
+      contract: taskContractSchema.parse(JSON.parse(expected.contractCanonicalJson)), grant: { work: work.amount, handoff: handoff.amount }, agent: frozen, skills };
   } catch (error) {
     if (error instanceof ControlError) throw error;
     throw new ControlError("recovery-blocked");

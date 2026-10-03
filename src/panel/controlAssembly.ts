@@ -14,6 +14,7 @@ import { resolveAstGrepBin } from "../control/requirementOverview.js";
 import { createExecutionProfileRouter, resolveProfile, type ExecutionProfileRouter, type FrozenProfile } from "../control/profiles.js";
 import { openControlStore, type ControlStore } from "../control/store.js";
 import { WebControlService } from "../control/webService.js";
+import { syncskillOptionsFromEnv } from "../skills/syncskill.js";
 import { executionProfileSnapshotSchema } from "../control/webProtocol.js";
 import { createTrustedControlConfig, type TrustedControlConfig } from "./controlConfig.js";
 import { applyPanelShutdown, withAdmission } from "./controlLifecycle.js";
@@ -202,6 +203,8 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
     store,
     // Agent selection W6-19: confirm resolves selections through the very port the profiles probe.
     port,
+    // Syncskill integration spec §10.5: confirm looks up each declared skills profile (ORCA_SYNCSKILL_BIN, unset = none).
+    syncskill: syncskillOptionsFromEnv(env),
     admissionGate,
     profileRouter: router,
     trustedConfig: config,

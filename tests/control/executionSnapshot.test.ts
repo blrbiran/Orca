@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { buildExecutionSnapshot, prepareExecutionSnapshot, type ConfirmedProposal } from "../../src/control/executionSnapshot.js";
 import { canonicalBytes, sha256Canonical } from "../../src/control/canonicalJson.js";
-import { controlPlanSchema } from "../../src/control/webProtocol.js";
+import { controlPlanSchema, executionSnapshotSchema } from "../../src/control/webProtocol.js";
 import { openTestStore } from "./fixtures/store.js";
 import { writeCanonicalRecord } from "../../src/control/snapshot.js";
 
@@ -211,5 +211,46 @@ describe("execution snapshot preparation", () => {
     const candidate = input();
     mutate(candidate);
     expect(() => buildExecutionSnapshot(candidate)).toThrow(code);
+  });
+});
+
+/**
+ * Syncskill integration spec §10.5 / §10.8 C3 (plan Task 4). GOLDEN_SNAPSHOT_HASH was captured at HEAD 60a0eb0, before any
+ * skills code existed: prepareExecutionSnapshot(input()).snapshotHash. A group without skills must keep it exactly.
+ */
+const GOLDEN_SNAPSHOT_HASH = "ca87b1d91a714999ebec5b3bbd5344f841d8cac8bc7d94ffa83f0819d36297a2";
+
+describe("execution snapshot skills", () => {
+  it("a group without skills keeps its golden snapshot hash, with or without an empty skills input", () => {
+    expect(prepareExecutionSnapshot(input()).snapshotHash).toBe(GOLDEN_SNAPSHOT_HASH);
+    const empty = prepareExecutionSnapshot({ ...input(), skills: [] });
+    expect(empty.snapshotHash).toBe(GOLDEN_SNAPSHOT_HASH);
+    expect(Object.keys(empty.snapshot)).not.toContain("skills");
+  });
+
+  it("freezes the entries into the snapshot, and so into its hash", () => {
+    const prepared = prepareExecutionSnapshot({ ...input(), skills: [{ taskId: "a", profile: "p", names: ["alpha", "beta"] }] });
+    expect(prepared.snapshot.skills).toEqual([{ taskId: "a", profile: "p", names: ["alpha", "beta"] }]);
+    expect(prepared.snapshotHash).not.toBe(GOLDEN_SNAPSHOT_HASH);
+  });
+
+  it.each([
+    ["an entry for a task with no derived contract", [{ taskId: "b", profile: null, names: ["x"] }]],
+    ["an entry with no names", [{ taskId: "a", profile: null, names: [] }]],
+  ])("refuses %s", (_label, skills) => {
+    expect(() => prepareExecutionSnapshot({ ...input(), skills })).toThrow();
+  });
+
+  it("the schema refuses entries out of order or repeated, and an empty list", () => {
+    const base = prepareExecutionSnapshot(input()).snapshot;
+    const twoTasks = { ...base, derivedContracts: [...base.derivedContracts, { taskId: "b", derivedContractHash: hash("f") }] };
+    const entry = (taskId: string) => ({ taskId, profile: null, names: ["x"] });
+    // The control: the same two-task snapshot with entries in order would pass the skills checks.
+    const ok = executionSnapshotSchema.safeParse({ ...twoTasks, skills: [entry("a"), entry("b")] });
+    expect(ok.success ? [] : ok.error.issues.map((issue) => issue.path[0])).not.toContain("skills");
+    for (const skills of [[entry("b"), entry("a")], [entry("a"), entry("a")], []]) {
+      const parsed = executionSnapshotSchema.safeParse({ ...twoTasks, skills });
+      expect(parsed.success ? [] : parsed.error.issues.map((issue) => issue.path[0])).toContain("skills");
+    }
   });
 });

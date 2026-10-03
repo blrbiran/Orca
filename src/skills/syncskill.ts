@@ -28,6 +28,15 @@ export interface LockSkill {
   content_md5: string;
 }
 
+/**
+ * Spec §10.5: ORCA_SYNCSKILL_BIN, read in this one place for every caller (the web service's confirm, the execution
+ * driver's injection). Unset or empty means not configured; there is no PATH lookup, as for ORCA_CCMEM_BIN.
+ */
+export function syncskillOptionsFromEnv(env: NodeJS.ProcessEnv): SyncskillOptions {
+  const bin = env.ORCA_SYNCSKILL_BIN;
+  return { bin: bin === undefined || bin === "" ? null : bin, env };
+}
+
 export class SyncskillError extends Error {
   constructor(readonly code: string, message: string) {
     super(message);
