@@ -1,22 +1,19 @@
 import { chmod, copyFile, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ExecutionPort } from "../../src/control/executionPort.js";
 import { createExecutionProfileRouter, resolveProfile } from "../../src/control/profiles.js";
 import { createTrustedControlConfig, type TrustedControlConfigInput } from "../../src/panel/controlConfig.js";
-import { createUnconfiguredControlPort } from "../../src/control/unconfiguredPort.js";
-import { controlConfigSchema, type ExecutionProfileSnapshotV1 } from "../../src/control/webProtocol.js";
+import type { ExecutionProfileSnapshotV1 } from "../../src/control/webProtocol.js";
 import { assembleControlRuntime } from "../../src/panel/controlAssembly.js";
 import { controlRepoKey, resolveControlOptions } from "../../src/panel/controlOptions.js";
-import { resolve } from "node:path";
-
 import { ControlError } from "../../src/control/errors.js";
 
 /**
- * Assembly plan Task 4b (rulings R6 and R7). Two facts a shipped panel must be able to serve without
- * being able to do the work: no execution port is configured, and no estimator was chosen. Both are
- * states, not boot failures, and both are read from their own field rather than inferred.
+ * Project registry spec section 5: the trusted config learns repositories at runtime (hasRepository, checkRepository,
+ * addRepository, renameRepository), and the assembly's known-repository question asks it, so a project added while the
+ * panel runs is known to set-workspace-mode with no restart.
  */
 
 const roots: string[] = [];
@@ -106,6 +103,11 @@ describe("repositories added and renamed at runtime (project registry spec §5)"
     expect(config.resolveRepository("repo")).toBe(h.repo);
     expect((await config.readView({ agent: "codex" })).repositories).toEqual([{ repoId: "repo", displayName: "Repo" }]);
     expect(config.hasRepository("gone")).toBe(false);
+    // checkRepository validates and adds nothing.
+    const fine = join(h.root, "fine");
+    await mkdir(fine);
+    config.checkRepository({ repoId: "fine-1", displayName: "Fine", path: fine });
+    expect(config.hasRepository("fine-1")).toBe(false);
     expect(config.hasRepository("link")).toBe(false);
   });
   it("T3: a rename changes the display name only", async () => {
@@ -115,6 +117,10 @@ describe("repositories added and renamed at runtime (project registry spec §5)"
     expect((await config.readView({ agent: "codex" })).repositories).toEqual([{ repoId: "repo", displayName: "Renamed" }]);
     expect(config.resolveRepository("repo")).toBe(h.repo);
     expect(() => config.renameRepository("absent", "X")).toThrowError(ControlError);
+    let blank = "none";
+    try { config.renameRepository("repo", ""); } catch (error) { blank = (error as ControlError).code; }
+    expect(blank).toBe("control-trusted-config-invalid");
+    expect((await config.readView({ agent: "codex" })).repositories).toEqual([{ repoId: "repo", displayName: "Renamed" }]);
   });
 });
 

@@ -99,6 +99,11 @@ export function createProjectRegistry(input: {
     return real;
   };
 
+  const realOf = (p: string): string => { try { return realpathSync(p); } catch { return p; } };
+  /** The project already running or filed under this directory, by canonical path, or undefined. */
+  const holderOf = (real: string): string | undefined =>
+    [...running, ...lastGood.projects].find((p) => realOf(p.path) === real)?.id;
+
   const controlEntry = (p: ProjectEntryV1): TrustedRepositoryConfig => ({ repoId: controlRepoKey(p.id), displayName: p.name, path: p.path });
 
   const precheck = (p: ProjectEntryV1): void => {
@@ -107,9 +112,9 @@ export function createProjectRegistry(input: {
   };
 
   const join = (p: ProjectEntryV1): void => {
+    control?.add(controlEntry(p));
     running.push({ ...p });
     repos.push({ projectKey: p.id, path: p.path });
-    control?.add(controlEntry(p));
   };
 
   /** Diff a valid file against the running list and apply what may apply (spec §5). */
@@ -120,13 +125,15 @@ export function createProjectRegistry(input: {
     for (const r of running) {
       const f = config.projects.find((p) => p.id === r.id);
       if (f === undefined) { pending.push(`removed:${r.id}`); continue; }
-      if (f.path !== r.path) pending.push(`path:${r.id}`);
+      if (realOf(f.path) !== realOf(r.path)) pending.push(`path:${r.id}`);
       if (f.name !== r.name) { r.name = f.name; control?.rename(controlRepoKey(r.id), f.name); }
     }
     for (const f of config.projects) {
       if (running.some((r) => r.id === f.id)) continue;
       try {
         const real = checkedPath(f.path);
+        const holder = running.find((r) => realOf(r.path) === real);
+        if (holder !== undefined) fail("project-path-taken", 409, `${real} is already project ${holder.id}`);
         const entry = { id: f.id, name: f.name, path: real };
         precheck(entry);
         join(entry);
@@ -183,9 +190,8 @@ export function createProjectRegistry(input: {
       if (trimmed.length === 0) fail("project-name-invalid", 422, "a project needs a name");
       if (lastGood.projects.some((p) => p.name === trimmed)) fail("project-name-taken", 409, `a project is already called ${JSON.stringify(trimmed)}`);
       const real = checkedPath(path);
-      const realOf = (p: string): string => { try { return realpathSync(p); } catch { return p; } };
-      if (lastGood.projects.some((p) => realOf(p.path) === real)) fail("project-path-taken", 409, `${real} is already a project`);
-      const entry: ProjectEntryV1 = { id: deriveProjectId(trimmed, real, new Set(lastGood.projects.map((p) => p.id))), name: trimmed, path: real };
+      if (holderOf(real) !== undefined) fail("project-path-taken", 409, `${real} is already a project`);
+      const entry: ProjectEntryV1 = { id: deriveProjectId(trimmed, real, new Set([...lastGood.projects, ...running].map((p) => p.id))), name: trimmed, path: real };
       precheck(entry);
       write({ ...lastGood, projects: [...lastGood.projects, entry] });
       join(entry);

@@ -184,4 +184,57 @@ describe("the project registry", () => {
     handEdit(w.file, { version: 1, projects: [{ id: "repo", name: "Repo", path: join(w.root, "via-link") }] });
     expect(w.code(() => reg.add("Again", repo))).toBe("409:project-path-taken");
   });
+
+  it("R13: a project removed by hand but still running keeps its id and its directory taken", () => {
+    const w = world();
+    const a = w.gitRepo("a"); const other = w.gitRepo("other");
+    const reg = w.boot({ version: 1, projects: [{ id: "a", name: "A", path: a }] });
+    handEdit(w.file, { version: 1, projects: [] });
+    expect(reg.list().pendingRestart).toEqual(["removed:a"]);
+    expect(w.code(() => reg.add("Again", a))).toBe("409:project-path-taken");
+    const added = reg.add("A", other);
+    expect(added.id).not.toBe("a");
+    expect(w.repos.filter((r) => r.projectKey === "a")).toHaveLength(1);
+    expect(new Set(w.repos.map((r) => r.projectKey)).size).toBe(w.repos.length);
+  });
+
+  it("R14: a hand-added project through a symlinked path does not make a later name-only edit report a path change", () => {
+    const w = world();
+    const a = w.gitRepo("a"); const b = w.gitRepo("b");
+    const link = join(w.root, "b-link");
+    symlinkSync(b, link);
+    const reg = w.boot({ version: 1, projects: [{ id: "a", name: "A", path: a }] });
+    handEdit(w.file, { version: 1, projects: [{ id: "a", name: "A", path: a }, { id: "b", name: "B", path: link }] });
+    expect(reg.list().projects.map((p) => p.id)).toEqual(["a", "b"]);
+    handEdit(w.file, { version: 1, projects: [{ id: "a", name: "A", path: a }, { id: "b", name: "B2", path: link }] });
+    const view = reg.list();
+    expect(view.pendingRestart).toEqual([]);
+    expect(view.projects.find((p) => p.id === "b")?.name).toBe("B2");
+  });
+
+  it("R15: a hand-added project pointing at a directory already a project is named, not added", () => {
+    const w = world();
+    const a = w.gitRepo("a");
+    const link = join(w.root, "a-link");
+    symlinkSync(a, link);
+    const reg = w.boot({ version: 1, projects: [{ id: "a", name: "A", path: a }] });
+    handEdit(w.file, { version: 1, projects: [{ id: "a", name: "A", path: a }, { id: "dup", name: "Dup", path: link }] });
+    const view = reg.list();
+    expect(view.fileError).toMatch(/^project dup: .*already project a/);
+    expect(view.projects.map((p) => p.id)).toEqual(["a"]);
+    expect(w.repos).toEqual([{ projectKey: "a", path: a }]);
+  });
+
+  it("R16: when the control plane refuses the add, nothing is half-applied", () => {
+    const w = world();
+    const reg = w.boot(null);
+    const bad = w.gitRepo("bad");
+    const control: RegistryControl = { check: () => {}, add: () => { throw new Error("boom"); }, rename: () => {} };
+    const repos: Array<{ projectKey: string; path: string }> = [];
+    const reg2 = createProjectRegistry({ file: w.file, boot: readProjectsFile(w.file), repos, control });
+    void reg;
+    expect(w.code(() => reg2.add("Bad", bad))).toBe("other:boom");
+    expect(repos).toEqual([]);
+    expect(reg2.list().projects).toEqual([]);
+  });
 });
