@@ -43,6 +43,13 @@ export const TARGET_HAS_NO_REMOTE = "target-has-no-remote";
  * way), so this is deliberately a refusal, not an invented key: "you have no
  * remote" (TARGET_HAS_NO_REMOTE) would be a different and misleading
  * diagnosis for "your remote is not URL-shaped".
+ *
+ * *** ERRATUM (2026-10-04, Orca session 3d68f934, spec 2026-10-04-panel-project-registry-design.md §12 C7) ***
+ * "ccmem has no normalisation for these shapes either (it throws the same way)" is no longer true: ccmem
+ * (fix(project-key): follow a local-path origin instead of crashing on it) now follows a local-path origin to
+ * that repository's own origin. This port deliberately still refuses: it also keys --root discovery, where a
+ * `git clone --local` copy under the root would otherwise take its upstream's key and refuse the whole panel
+ * with key-matches-multiple-paths. A refusal never splits a key silently. Text above kept verbatim.
  */
 export const TARGET_REMOTE_NOT_KEYABLE = "target-remote-not-keyable";
 
