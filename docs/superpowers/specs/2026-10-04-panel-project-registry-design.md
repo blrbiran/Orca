@@ -28,7 +28,8 @@ A project has two fields (P4):
 - `name` — display only, renamable at any time from the panel.
 
 `id` is derived once from the name given at add time: lowercased, every run of characters outside `[a-z0-9._-]`
-replaced by `-`, leading/trailing `-` and `.` trimmed; empty becomes `project`; on collision with an existing id
+replaced by `-`, leading/trailing `-` and `.` trimmed; if that is empty the same derivation is applied to the
+path's last segment, and if that is empty too the id is `project`; on collision with an existing id
 the suffix `-2`, `-3`, … is appended. Because `repoId` stays `controlRepoKey(id)`, the person's migrated project
 `id: "orca"` keeps the existing store directory `orca-e0c92460`.
 
@@ -50,6 +51,9 @@ the suffix `-2`, `-3`, … is appended. Because `repoId` stays `controlRepoKey(i
 - Writes are atomic: temp file in the same directory, then `rename`. Writer of record: the panel process, on
   `POST`/`PATCH /api/projects` only. Residue on failure: at most one `projects.json.tmp-*` beside the file.
   (This registers the writer per Rule 17.)
+- Concurrency limit, accepted: the write queue serialises writes inside one panel process. Two panel processes
+  sharing the file, or a hand edit landing between the hash check and the `rename`, are last-writer-wins, as in
+  hermes-agent. No lock file (openclaw's lock + CAS is not worth it for one small file).
 
 ## 4. Where projects come from at boot (P1)
 
@@ -93,6 +97,11 @@ metrics / decisions discovery (`src/panel/api.ts`), Chains (`src/panel/chains.ts
 (`src/panel/api.ts`). In command-line mode that function returns `opts.repos`, so behaviour is byte-for-byte
 today's.
 
+Consequence of a restart after a hand removal or a `path` change: groups and runs in the store whose `repoId` is
+no longer configured are refused by `resolveRepository` (`control-target-not-allowed`) and cannot continue. This
+is the same as dropping a `--repo` today, but editing a file makes it easier to reach, so the web control shows a
+warning next to every `removed:<id>` / `path:<id>` entry. Nothing is repaired automatically.
+
 ## 6. API
 
 All behind the same token check as every `/api` route.
@@ -108,6 +117,14 @@ All behind the same token check as every `/api` route.
 - `PATCH /api/projects/:id` `{ name }` → `200 { project }`; refusals: `project-unknown`, `project-name-invalid`,
   `project-name-taken`, `projects-from-command-line`, `projects-file-invalid`.
 - The control config view's `repositories[].displayName` is the project's `name`; `repoId` never changes.
+- Plans stay command-line only (`--plan <planId>=<repoId>=<path>`, the import allow-list); a `--plan` may name a
+  file-mode project's `repoId`. A project added at runtime has no plan, so its Task control import shows the
+  existing "no repository / plan" note; work enters it through Requirements (create-requirement checks
+  `knownRepository`, the split resolves through `resolveRepository`).
+- Trust boundary: adding a project makes the panel run `git` in a directory named by a browser request, and later
+  run work there. That is the same trust as the person typing `--repo`, guarded by the token and the loopback
+  bind. It deliberately overrides the switcher spec's "no filesystem path built from the request" (D6) as a
+  consequence of P3 / P4.
 
 ## 7. Web
 
@@ -131,10 +148,10 @@ Every new branch gets a mutation that deletes it, seen red. All file I/O goes th
 | area | criterion |
 |---|---|
 | registry | add writes the file; new file `0600`, new dir `0700`, an existing file's mode kept; each refusal code; a hand-added project shows up on the next `list()`; a hand-removed one gives `pendingRestart` and stays running; a broken file gives `fileError` and keeps last good; a hand edit made before an add is not overwritten; two concurrent adds both land |
-| control | after an add, a plan imports into the new project with no restart and `readView` lists it; after a rename `displayName` changes and `repoId` does not |
+| control | after an add, with no restart: `readView` lists it, a requirement can be created in it, and `set-workspace-mode` accepts it; after a rename `displayName` changes and `repoId` does not |
 | command-line mode | `--repo` ⇒ `source: "command-line"`, `POST` refused; every existing criterion unchanged and green |
 | boot | no flags ⇒ file read; missing file ⇒ empty list with the control plane mounted; invalid file ⇒ refuses to start |
-| web | one project ⇒ control shown; zero ⇒ "No project yet" + Add; add selects the new project; rename shows the new name; focus re-reads; Decisions rows show `name` |
+| web | one project ⇒ control shown; zero ⇒ "No project yet" + Add; add selects the new project; rename shows the new name; focus re-reads; Decisions rows show `name`; a `removed:<id>` entry shows the warning |
 
 Existing criteria that contradict this design and are rewritten, by the person's authorisation (P6):
 `web/tests/projectSwitcher.test.tsx` E ("one project: no select rendered"). The plan lists every other existing
