@@ -22,6 +22,9 @@ import { afterAll, expect } from "vitest";
  */
 const relocated = mkdtempSync(join(tmpdir(), "orca-test-control-"));
 process.env.ORCA_CONTROL_DIR = relocated;
+// Project registry spec §12 C1: the real `orca panel` reads ~/.orca/projects.json unless told otherwise. A criterion
+// that boots the CLI with no --repo gets a file inside the relocated root instead (which does not exist: no projects).
+process.env.ORCA_PROJECTS_FILE = join(relocated, "projects.json");
 
 /**
  * ⚠️ The relocation above is NOT a guard on its own, and saying it was is how this got missed once.

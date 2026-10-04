@@ -22,6 +22,9 @@ const BY_HAND = [
   "chain-record-invalid", "chain-running", "claude-not-found", "detached-head", "gate-check-failed", "level-config-invalid",
   "model-window-unknown", "nested-chain", "no-chain-lock", "no-running-chain", "not-a-repository", "not-repository-top-level",
   "record-commit-refused", "repo-lock-held", "tsx-missing", "worktree-dirty",
+  // src/panel/projects.ts, src/panel/projectRegistry.ts (project registry spec §6)
+  "projects-from-command-line", "project-path-missing", "project-path-not-repository-root", "project-path-taken", "project-path-refused",
+  "project-name-invalid", "project-name-taken", "project-unknown", "projects-file-invalid", "projects-file-changed",
 ];
 const has = (code: string): boolean => Object.prototype.hasOwnProperty.call(zhErrors, code);
 

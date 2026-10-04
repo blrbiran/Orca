@@ -12,6 +12,8 @@ import { assembleControlRuntime, type ControlRuntime } from "./controlAssembly.j
 import { runControlPanelStartup } from "./controlLifecycle.js";
 import { resolveControlOptions, type ControlOptionsResolution } from "./controlOptions.js";
 import { withDefaultCcloopBin } from "../control/ccloopBin.js";
+import { createProjectRegistry } from "./projectRegistry.js";
+import { projectsFilePath, readProjectsFile, type ProjectsFileRead } from "./projectsFile.js";
 import { NO_VIEWER_IDENTITY, PanelRejection } from "./rejection.js";
 import { ReviewsWriter } from "./reviewsStore.js";
 import { loadStaticFiles } from "./staticFiles.js";
@@ -58,6 +60,8 @@ export interface PanelOptions {
    * (plan D7); absent means not configured, and nothing starts ccmem. `parsePanelArgs` always sets it.
    */
   memory?: CcmemAdapterOptions;
+  /** Project registry spec §4: present in file mode only. */
+  projectsFile?: { file: string; boot: ProjectsFileRead };
 }
 
 /** What survives parsing: a rejection never reaches here, it is thrown. */
@@ -102,6 +106,22 @@ export function parsePanelArgs(args: string[], env: NodeJS.ProcessEnv): PanelOpt
     repos.push({ projectKey: pair.slice(0, split), path: pair.slice(split + 1) });
   }
 
+  // Project registry spec §4 / §12 C1: file mode is asked for by name. The real `orca panel` asks for it by
+  // default (panelArgsWithDefaultProjects); a criterion calling this with no --repo stays in command-line mode.
+  let projectsFile: PanelOptions["projectsFile"];
+  const projectsFlag = args.indexOf("--projects-file");
+  if (projectsFlag !== -1) {
+    const file = args[projectsFlag + 1] ?? "";
+    if (file.length === 0 || file.startsWith("--")) throw new PanelRejection("malformed-projects-file-argument", "--projects-file wants a path");
+    if (args.includes("--repo") || args.includes("--root")) {
+      throw new PanelRejection("projects-file-with-repo", "--projects-file and --repo/--root are two sources of projects; give one");
+    }
+    const boot = readProjectsFile(file);
+    if (boot.kind === "invalid") throw new PanelRejection("projects-file-invalid", `${file}: ${boot.reason}. Fix the file; the panel never rewrites it.`);
+    for (const project of boot.kind === "valid" ? boot.config.projects : []) repos.push({ projectKey: project.id, path: project.path });
+    projectsFile = { file, boot };
+  }
+
   const portText = flag("--port") ?? "0";
   const port = Number(portText);
   if (!Number.isInteger(port) || port < 0 || port > 65535) {
@@ -110,7 +130,9 @@ export function parsePanelArgs(args: string[], env: NodeJS.ProcessEnv): PanelOpt
 
   // Resolved after --repo and before the return, because it is a function of the repo list.
   // A rejection is raised here rather than carried, so no caller can hold a half-resolved plane.
-  const { rejection, ...control } = resolveControlOptions(args, env, repos);
+  const { rejection, ...control } = resolveControlOptions(args, env, repos, projectsFile === undefined ? undefined : {
+    controlStateDir: projectsFile.boot.kind === "valid" ? projectsFile.boot.config.controlStateDir ?? null : null,
+  });
   if (rejection !== null) throw new PanelRejection(rejection, controlRejectionMessage(rejection));
 
   return {
@@ -128,6 +150,7 @@ export function parsePanelArgs(args: string[], env: NodeJS.ProcessEnv): PanelOpt
     // Memory tab spec §3.4: read at parse time from the env this panel was given, like correctionsDir. Unset or empty
     // means not configured; there is no PATH lookup, so a criterion reaches a real ccmem only by naming it.
     memory: { ccmemBin: env.ORCA_CCMEM_BIN !== undefined && env.ORCA_CCMEM_BIN !== "" ? env.ORCA_CCMEM_BIN : null, env },
+    ...(projectsFile === undefined ? {} : { projectsFile }),
   };
 }
 
@@ -188,8 +211,19 @@ export async function createPanelServer(opts: PanelOptions, env: NodeJS.ProcessE
   const epoch = randomUUID();
   let control: ControlRuntime | null = null;
   if (opts.control.enabled) control = await assembleControlRuntime({ control: opts.control, repos: opts.repos, epoch, env });
+  // Project registry spec §5: built after the control plane, which it tells about every project it adds or renames.
+  const projects = opts.projectsFile === undefined ? null : createProjectRegistry({
+    file: opts.projectsFile.file,
+    boot: opts.projectsFile.boot,
+    repos: opts.repos,
+    control: control === null ? null : {
+      check: (entry) => control!.config.checkRepository(entry),
+      add: (entry) => control!.config.addRepository(entry),
+      rename: (repoId, name) => control!.config.renameRepository(repoId, name),
+    },
+  });
   buildApi(app, {
-    opts, token, reviews, statics,
+    opts, token, reviews, statics, projects,
     // Disabled means no `control` key at all -- byte-for-byte the shape that shipped before this
     // existed, so `controlApi.ts` registers nothing and every /api/control path is a 404.
     ...(control === null ? {} : { control: { store: control.store, epoch, config: control.config, service: control.service, port: control.port } }),
@@ -257,10 +291,16 @@ export async function createPanelServer(opts: PanelOptions, env: NodeJS.ProcessE
   };
 }
 
+/** Project registry spec §12 C1: the real `orca panel` reads the projects file unless told where its projects are. */
+export function panelArgsWithDefaultProjects(args: string[], env: NodeJS.ProcessEnv): string[] {
+  if (args.includes("--repo") || args.includes("--root") || args.includes("--projects-file")) return args;
+  return [...args, "--projects-file", projectsFilePath(env)];
+}
+
 export async function startPanelFromArgs(args: string[]): Promise<StartedPanel> {
   // ccloop dependency plan (2026-09-29): ORCA_CCLOOP_BIN unset ⇒ the installed ccloop package. Filled here, at the
   // process boundary, so resolveControlOptions and its criteria keep reading only the environment. A missing package
   // leaves the variable unset and the panel boots without an execution port, as ruling R5 requires.
   const { env } = withDefaultCcloopBin(process.env);
-  return createPanelServer(parsePanelArgs(args, env), env);
+  return createPanelServer(parsePanelArgs(panelArgsWithDefaultProjects(args, env), env), env);
 }

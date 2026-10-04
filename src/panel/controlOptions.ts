@@ -96,6 +96,8 @@ export function resolveControlOptions(
   args: string[],
   env: NodeJS.ProcessEnv,
   repos: Array<{ projectKey: string; path: string }>,
+  /** Project registry spec §4/§12 C1: present in file mode. The plane mounts with no repository, under the file's dir. */
+  fileMode?: { controlStateDir: string | null },
 ): ControlOptionsResolution {
   const flag = (name: string): string | undefined => {
     const index = args.indexOf(name);
@@ -123,12 +125,14 @@ export function resolveControlOptions(
   // Ruling R1 mounts by default, but a plane over no repository can dispatch nothing, and 11 of the
   // 40 existing `parsePanelArgs` call sites name no --repo (measured 2026-09-22). Rejecting those
   // would turn boots that are green today red, so the answer for them is "off", not "rejected".
-  if (args.includes("--no-control") || repos.length === 0) return off();
+  if (args.includes("--no-control") || (repos.length === 0 && fileMode === undefined)) return off();
 
   const explicitStateDir = flag("--control-state-dir");
   let stateDir: string | null;
   if (nonEmpty(explicitStateDir)) {
     stateDir = explicitStateDir;
+  } else if (fileMode !== undefined) {
+    stateDir = fileMode.controlStateDir ?? join(controlRoot(env), "panel");
   } else if (repos.length === 1) {
     stateDir = join(controlRoot(env), controlRepoKey(repos[0]!.projectKey));
   } else {

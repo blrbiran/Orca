@@ -52,6 +52,7 @@ async function twoRepos(): Promise<Array<{ projectKey: string; path: string }>> 
   return [{ projectKey: "zeta", path: join(root, "zeta") }, { projectKey: "Alpha", path: join(root, "alpha") }];
 }
 
+// Rewritten for the project registry (spec 2026-10-04-panel-project-registry-design.md §12 C6, human ruling P6): the answer gained source/editable/pendingRestart/fileError and each row name/path; what each criterion encodes (order, join, token) is unchanged.
 describe("GET /api/projects", () => {
   it("lists every project in code unit order, joined to the control repository only where the control plane holds it", async () => {
     const repos = await twoRepos();
@@ -59,7 +60,10 @@ describe("GET /api/projects", () => {
     registerProjectRoutes(app, { opts: { repos }, controlRepoId: (key) => (key === "zeta" ? "zeta-0123abcd" : null) });
     const res = await fetch(`${await listen(app)}/api/projects`);
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ projects: [{ projectKey: "Alpha", controlRepoId: null }, { projectKey: "zeta", controlRepoId: "zeta-0123abcd" }] });
+    expect(await res.json()).toEqual({ source: "command-line", editable: false, pendingRestart: [], fileError: null, projects: [
+      { projectKey: "Alpha", name: "Alpha", path: repos[1]!.path, controlRepoId: null },
+      { projectKey: "zeta", name: "zeta", path: repos[0]!.path, controlRepoId: "zeta-0123abcd" },
+    ] });
   });
 
   it("orders by code unit where ICU would not", async () => {
@@ -69,26 +73,34 @@ describe("GET /api/projects", () => {
     const app = express();
     registerProjectRoutes(app, { opts: { repos: [{ projectKey: "ccloop", path: join(root, "a") }, { projectKey: "Orca", path: join(root, "b") }] }, controlRepoId: () => null });
     const body = await (await fetch(`${await listen(app)}/api/projects`)).json() as { projects: Array<{ projectKey: string }> };
-    expect(body.projects.map((p) => p.projectKey)).toEqual(["Orca", "ccloop"]);
+    expect(body).toEqual({ source: "command-line", editable: false, pendingRestart: [], fileError: null, projects: [
+      { projectKey: "Orca", name: "Orca", path: join(root, "b"), controlRepoId: null },
+      { projectKey: "ccloop", name: "ccloop", path: join(root, "a"), controlRepoId: null },
+    ] });
   });
 
   it("is served by the panel behind its token, and with no control plane no project has a control repository", async () => {
-    const url = await panelApp(await twoRepos(), undefined);
+    const repos = await twoRepos();
+    const url = await panelApp(repos, undefined);
     expect((await fetch(`${url}/api/projects`)).status).toBe(401);
     const res = await fetch(`${url}/api/projects`, { headers: { "x-orca-token": token } });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ projects: [{ projectKey: "Alpha", controlRepoId: null }, { projectKey: "zeta", controlRepoId: null }] });
+    expect(await res.json()).toEqual({ source: "command-line", editable: false, pendingRestart: [], fileError: null, projects: [
+      { projectKey: "Alpha", name: "Alpha", path: repos[1]!.path, controlRepoId: null },
+      { projectKey: "zeta", name: "zeta", path: repos[0]!.path, controlRepoId: null },
+    ] });
   });
 
   it("with the control plane mounted, joins every --repo project to the repoId its trusted config holds it under", async () => {
     // The control read routes only register handlers here; nothing in this criterion reaches the store.
     const control = { store: {}, epoch: "epoch-test", config: { readView: async () => ({}) } };
-    const url = await panelApp(await twoRepos(), control);
+    const repos = await twoRepos();
+    const url = await panelApp(repos, control);
     const res = await fetch(`${url}/api/projects`, { headers: { "x-orca-token": token } });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ projects: [
-      { projectKey: "Alpha", controlRepoId: controlRepoKey("Alpha") },
-      { projectKey: "zeta", controlRepoId: controlRepoKey("zeta") },
+    expect(await res.json()).toEqual({ source: "command-line", editable: false, pendingRestart: [], fileError: null, projects: [
+      { projectKey: "Alpha", name: "Alpha", path: repos[1]!.path, controlRepoId: controlRepoKey("Alpha") },
+      { projectKey: "zeta", name: "zeta", path: repos[0]!.path, controlRepoId: controlRepoKey("zeta") },
     ] });
   });
 });
