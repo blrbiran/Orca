@@ -48,6 +48,14 @@ export interface TrustedControlConfigInput {
 export interface TrustedControlConfig {
   resolveTarget(input: unknown): TrustedSchedulerPlanTarget;
   resolveRepository(repoId: string): string;
+  /** Project registry spec §5: whether `repoId` is held (the panel's `knownRepository`). */
+  hasRepository(repoId: string): boolean;
+  /** The validation `addRepository` runs, without adding: the registry's pre-check before it writes its file. */
+  checkRepository(entry: TrustedRepositoryConfig): void;
+  /** A repository added at runtime, through the same `checkedPath` witness the constructor uses. */
+  addRepository(entry: TrustedRepositoryConfig): void;
+  /** The display name only; `repoId` and the path witness never change. */
+  renameRepository(repoId: string, displayName: string): void;
   /** Agent selection spec §6.4 last paragraph (W5-M14): the profiles as observed for `selection`, the operator's default. */
   readView(selection: PartialSelection): Promise<ControlConfigV1>;
   readonly shutdownGraceMs: number;
@@ -165,6 +173,11 @@ export function createTrustedControlConfig(
     if (!idSchema.safeParse(entry.repoId).success || !entry.displayName) invalid("repository");
     repositories.set(entry.repoId, { ...entry, witness: checkedPath(entry.path, "directory") });
   }
+  const checkNewRepository = (entry: TrustedRepositoryConfig): PathWitness => {
+    if (!idSchema.safeParse(entry.repoId).success || !entry.displayName) invalid("repository");
+    if (repositories.has(entry.repoId)) invalid("duplicate-id");
+    return checkedPath(entry.path, "directory");
+  };
   const plans = new Map<string, TrustedPlanConfig & { witness: PathWitness }>();
   for (const entry of input.plans) {
     if (!idSchema.safeParse(entry.planId).success || !idSchema.safeParse(entry.repoId).success || !entry.displayName) invalid("plan");
@@ -205,6 +218,18 @@ export function createTrustedControlConfig(
         },
       });
       return Object.freeze(resolvedTarget);
+    },
+    hasRepository: (repoId: string) => repositories.has(repoId),
+    checkRepository(entry: TrustedRepositoryConfig) { checkNewRepository(entry); },
+    addRepository(entry: TrustedRepositoryConfig) {
+      const witness = checkNewRepository(entry);
+      repositories.set(entry.repoId, { ...entry, witness });
+    },
+    renameRepository(repoId: string, displayName: string) {
+      const repository = repositories.get(repoId);
+      if (!repository) throw new ControlError("control-target-not-allowed");
+      if (!displayName) invalid("repository");
+      repositories.set(repoId, { ...repository, displayName });
     },
     /** Execution driver spec §3.1: the trusted path by repoId, its witness re-validated on every use. */
     resolveRepository(repoId: string): string {
