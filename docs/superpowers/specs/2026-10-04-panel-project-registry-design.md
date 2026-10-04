@@ -187,3 +187,38 @@ Shown to the person as a diff before writing:
 - Adding projects in `--root` mode.
 - ccmem's local-path origin fix is a separate piece of work in the ccmem repository (its own rules); Orca's
   `src/corrections/projectKey.ts` port follows it afterwards.
+
+## 12. Plan-time corrections (session `3d68f934`, found while reading the code for the plan; §1–§11 kept as written)
+
+- C1 (§4, P1): file mode is chosen at the process boundary, not in `parsePanelArgs`. More than a dozen existing
+  criteria call `parsePanelArgs(["--by", …], { ...process.env })` with no `--repo`; reading the default file there
+  would hand them the person's real `~/.orca/projects.json`, whose absolute `controlStateDir` would put recovery on
+  the real store. So `parsePanelArgs` only learns an explicit `--projects-file <path>` (rejected together with
+  `--repo` / `--root`), and `startPanelFromArgs` -- the real `orca panel` -- appends
+  `--projects-file <ORCA_PROJECTS_FILE or ~/.orca/projects.json>` when none of the three is given, the same way
+  `withDefaultCcloopBin` fills `ORCA_CCLOOP_BIN` there. The person's behaviour is P1's; the criteria's is unchanged.
+  `tests/setup/relocateUserData.ts` also sets `ORCA_PROJECTS_FILE` to a temp path.
+- C2 (§5): no `() => repos` function. The registry appends to the very `opts.repos` array every consumer already
+  reads per request (metrics/decisions discovery, Chains, Memory, `/api/projects`), and nothing is ever removed
+  from it at runtime (P5), so the consumers are live without changing them. `knownRepository` asks the trusted
+  config (`hasRepository`) instead of the array, and `api.ts` computes its control join per request.
+- C3 (§5): no write queue. Every registry step (stat, read, `git rev-parse`, write, rename) is synchronous, so two
+  requests can never interleave inside one process; the event loop is the queue.
+- C4 (§5): if the file's hash moved between the read the registry diffed and the write it is about to make, the
+  write is refused as `projects-file-changed` (409, re-read and retry) -- openclaw's base-hash check. A hand-added
+  project the panel cannot accept (path missing, not a repository root, refused by the control plane) is skipped
+  and named in `fileError`.
+- C5 (§7): "top navigation" is the top of the sidebar navigation, under the brand -- the panel has no top bar,
+  and the person's words were "navi bar 区域". The control stays a native `<select name="project">` labelled
+  Project, so the switcher criteria A–D, D2, C and F keep working; E is rewritten (one project ⇒ the select is
+  shown). Project names are shown through one React context in Decisions (row and filter), Chains and Memory;
+  Metrics has no per-row project.
+- C6 (§6): the existing `tests/panel/projectsApi.test.ts` criteria deep-equal the old `{ projects }` answer; they
+  are rewritten to the new shape under P6 (named in the plan). The web reads a missing `name` as the key and a
+  missing `editable` as false, so the web fixtures that answer the old shape keep working.
+- C7 (§11): Orca's `src/corrections/projectKey.ts` is NOT changed to follow local origins this round. It also keys
+  `--root` discovery (`src/metrics/discover.ts`), where a `git clone --local` copy under the root is today skipped
+  as unkeyable; following its origin would give it the upstream's key and refuse the whole panel with
+  `key-matches-multiple-paths`. Refusing (`target-remote-not-keyable`) never splits a key silently, so the two
+  implementations may differ on this shape. The port's comment saying ccmem throws on it too is now false and
+  gets a named ERRATUM.
