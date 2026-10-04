@@ -98,6 +98,13 @@ describe("repositories added and renamed at runtime (project registry spec §5)"
     expect(code(() => config.addRepository({ repoId: "gone", displayName: "Gone", path: join(h.root, "nope") }))).toBe("control-trusted-config-invalid");
     await symlink(h.repo, join(h.root, "link"));
     expect(code(() => config.addRepository({ repoId: "link", displayName: "Link", path: join(h.root, "link") }))).toBe("control-path-symlink");
+    // addRepository itself re-runs the check: a duplicate id must not replace the held repository.
+    const other = join(h.root, "other");
+    await mkdir(other);
+    expect(code(() => config.addRepository({ repoId: "repo", displayName: "Hijack", path: other }))).toBe("control-trusted-config-invalid");
+    expect(code(() => config.addRepository({ repoId: "Bad Id!", displayName: "Bad", path: other }))).toBe("control-trusted-config-invalid");
+    expect(config.resolveRepository("repo")).toBe(h.repo);
+    expect((await config.readView({ agent: "codex" })).repositories).toEqual([{ repoId: "repo", displayName: "Repo" }]);
     expect(config.hasRepository("gone")).toBe(false);
     expect(config.hasRepository("link")).toBe(false);
   });

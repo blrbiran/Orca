@@ -175,4 +175,13 @@ describe("the project registry", () => {
     expect(w.code(() => reg.rename("a", "B"))).toBe("409:project-name-taken");
     expect(reg.rename("a", "A")).toEqual({ id: "a", name: "A", path: a });
   });
+
+  it("R12: a stored path that is itself a symlink to a directory already named is still taken", () => {
+    const w = world();
+    const repo = w.gitRepo("repo");
+    symlinkSync(repo, join(w.root, "via-link"));
+    const reg = w.boot({ version: 1, projects: [{ id: "repo", name: "Repo", path: repo }] });
+    handEdit(w.file, { version: 1, projects: [{ id: "repo", name: "Repo", path: join(w.root, "via-link") }] });
+    expect(w.code(() => reg.add("Again", repo))).toBe("409:project-path-taken");
+  });
 });
