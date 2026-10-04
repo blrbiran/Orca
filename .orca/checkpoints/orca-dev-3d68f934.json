@@ -1,0 +1,39 @@
+{
+  "v": 1,
+  "runId": "orca-dev-3d68f934",
+  "runtime": "claude-code",
+  "sessionRef": "3d68f934-8b2f-41f5-a278-3c73f9b1791c",
+  "writtenAt": "2026-10-04T15:48:47.548Z",
+  "head": "0eaf5340159eb44e215d6a022e1672e06fbc6665",
+  "level": {
+    "kind": "reading",
+    "level": 344321,
+    "windowTokens": 1000000,
+    "t1": 330000,
+    "t2": 450000,
+    "band": 1
+  },
+  "next": [
+    "Execute docs/superpowers/plans/2026-10-04-panel-project-registry.md Tasks 1-5 subagent-driven, then Task 6 (gate in clone, real browser, migrate ~/.orca)",
+    "Update the three handoffs (Orca §4.0, ccloop and ccmem Orca sections, single rolling section)"
+  ],
+  "open": [
+    "Spec docs/superpowers/specs/2026-10-04-panel-project-registry-design.md (with §12 plan-time corrections) is unreviewed by the person in its final form",
+    "ccmem fix committed locally (fix(project-key): follow a local-path origin...), not pushed"
+  ],
+  "awaitingHuman": [
+    {
+      "kind": "irreversible",
+      "what": "push Orca and ccmem local commits"
+    }
+  ],
+  "measurements": [
+    {
+      "command": "/usr/bin/git ls-remote origin refs/heads/main in Orca, ccloop, ccmem, syncskill",
+      "exitCode": 0,
+      "commit": "0eaf5340159eb44e215d6a022e1672e06fbc6665",
+      "observedAt": "2026-10-04T15:48:47.506Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-3d68f934-H0cjeo/1.txt"
+    }
+  ]
+}
