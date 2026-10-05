@@ -10,6 +10,7 @@ import { DecisionList } from "./DecisionList.js";
 import { enumText } from "./i18n.js";
 import { kindLabel, sortKinds } from "./kindRank.js";
 import { en } from "./locales/en.js";
+import { useProjectName } from "./projectNames.js";
 import type { DecisionListRow } from "./types.js";
 
 export interface DecisionFilter {
@@ -74,6 +75,7 @@ export function DecisionsView(props: {
   detail?: ReactNode;
 }): JSX.Element {
   const { t } = useTranslation();
+  const name = useProjectName();
   const shown = filterRows(props.rows, props.filter);
   // A detail stays open after its row leaves the list (filtered away, or reviewed); say which.
   const same = (r: DecisionListRow): boolean => r.projectKey === props.selected?.projectKey && r.id === props.selected?.id;
@@ -93,7 +95,7 @@ export function DecisionsView(props: {
       <div className="filters">
         <FilterSelect label={t("decisions.filterKind")} name="kind" values={distinct(props.rows, (r) => String(r.kind))} filter={props.filter} onFilter={props.onFilter} order={sortKinds} optionText={kindLabel} />
         <FilterSelect label={t("decisions.filterScope")} name="scope" values={distinct(props.rows, (r) => String(r.scope))} filter={props.filter} onFilter={props.onFilter} optionText={(value) => enumText("decisionScope", value)} />
-        <FilterSelect label={t("decisions.filterRepository")} name="projectKey" values={distinct(props.rows, (r) => r.projectKey)} filter={props.filter} onFilter={props.onFilter} />
+        <FilterSelect label={t("decisions.filterRepository")} name="projectKey" values={distinct(props.rows, (r) => r.projectKey)} filter={props.filter} onFilter={props.onFilter} optionText={name} />
       </div>
       <div className="split">
         <div className="split-list">

@@ -13,7 +13,7 @@
  * person, not just "answered 409"); a POST resolves to a typed `PostResult`
  * the page must look at, instead of a promise it could `void`.
  */
-import type { ProjectV1 } from "./project.js";
+import type { ProjectV1, ProjectsAnswerV1 } from "./project.js";
 import i18n from "./i18n.js";
 import type { ChainRepoView, CorrectionKind, DecisionListRow, MetricsReport, PanelCoverage } from "./types.js";
 
@@ -79,14 +79,14 @@ export async function getJson<T>(path: string): Promise<T> {
   return body as T;
 }
 
-async function postJson<T>(path: string, payload: unknown): Promise<PostResult<T>> {
+async function postJson<T>(path: string, payload: unknown, method: "POST" | "PATCH" = "POST"): Promise<PostResult<T>> {
   const res = await fetch(path, {
-    method: "POST",
+    method,
     headers: { "x-orca-token": token(), "content-type": "application/json" },
     body: JSON.stringify(payload),
   });
   const body = await readBody(res);
-  if (!res.ok) return { ok: false, ...refusalFrom(`POST ${path}`, res.status, body) };
+  if (!res.ok) return { ok: false, ...refusalFrom(`${method} ${path}`, res.status, body) };
   return { ok: true, body: body as T };
 }
 
@@ -157,8 +157,13 @@ export const recordReview = (projectKey: string, decisionId: string): Promise<Po
 /** GET /api/chains -- src/panel/chains.ts. */
 export const fetchChains = (): Promise<{ repos: ChainRepoView[] }> => getJson<{ repos: ChainRepoView[] }>("/api/chains");
 
-/** GET /api/projects -- src/panel/projects.ts (project switcher spec D1). */
-export const fetchProjects = (): Promise<{ projects: ProjectV1[] }> => getJson<{ projects: ProjectV1[] }>("/api/projects");
+/** GET /api/projects -- src/panel/projects.ts (project switcher spec D1, project registry spec §6). */
+export const fetchProjects = (): Promise<ProjectsAnswerV1> => getJson<ProjectsAnswerV1>("/api/projects");
+/** POST /api/projects -- project registry spec §6. */
+export const addProject = (input: { name: string; path: string }): Promise<PostResult<{ project: ProjectV1 }>> => postJson("/api/projects", input);
+/** PATCH /api/projects/:id -- project registry spec §6. */
+export const renameProject = (id: string, name: string): Promise<PostResult<{ project: ProjectV1 }>> =>
+  postJson(`/api/projects/${encodeURIComponent(id)}`, { name }, "PATCH");
 
 export interface StartChainInput {
   repoKey: string;

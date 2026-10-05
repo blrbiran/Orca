@@ -17,6 +17,7 @@ import { useTranslation } from "react-i18next";
 import { enumText } from "./i18n.js";
 import { kindLevel } from "./kindRank.js";
 import { en } from "./locales/en.js";
+import { useProjectName } from "./projectNames.js";
 import type { DecisionListRow } from "./types.js";
 
 /**
@@ -63,6 +64,7 @@ export function DecisionList({
   onOpen?: (row: DecisionListRow) => void;
 }): JSX.Element {
   const { t } = useTranslation();
+  const name = useProjectName();
   const selectedKey = selected ? rowKey(selected) : null;
   return (
     <ul className="decision-list">
@@ -75,7 +77,7 @@ export function DecisionList({
                 <span className="pill field-kind" data-level={kindLevel(String(row.kind))}>{enumText("decisionKind", String(row.kind))}</span>
                 <span className="pill field-scope">{enumText("decisionScope", String(row.scope))}</span>
                 {row.verdict !== "ok" && <span className="pill pill-warn field-verdict">{enumText("decisionVerdict", String(row.verdict))}</span>}
-                <span className="row-project field-projectKey">{String(row.projectKey)}</span>
+                <span className="row-project field-projectKey">{name(String(row.projectKey))}</span>
                 <time className="row-at field-at" dateTime={String(row.at)}>{localDay(String(row.at))}</time>
               </span>
               <span className="row-question">{row.question ?? t("decisions.noQuestion")}</span>

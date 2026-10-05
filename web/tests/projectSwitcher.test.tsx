@@ -180,12 +180,15 @@ describe("the project switcher", () => {
     window.location.hash = "";
   });
 
-  it("E: renders no project select when the panel has one project", async () => {
+  // Rewritten for the project registry (spec 2026-10-04-panel-project-registry-design.md §12 C5, human ruling P6): with
+  // one project the control is shown -- it is where the person sees which project the panel works on.
+  it("E: shows the project select with its one project when the panel has one project", async () => {
     projectsAnswer = { status: 200, body: { projects: [PROJECTS.projects[0]] } };
     render(<App />);
     await importRegion();
     await waitFor(() => expect(workspaceReads).toContain("alpha-11111111"));
-    expect(screen.queryByRole("combobox", { name: "Project" })).toBeNull();
+    expect(projectSelect().value).toBe("alpha");
+    expect(projectSelect().options).toHaveLength(1);
   });
 
   it("F: behaves as before when the project list cannot be read", async () => {

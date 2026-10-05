@@ -22,11 +22,12 @@
  * Every pane stays mounted and only styles.css hides the inactive ones (panel UI redesign
  * spec §5.1): App-level criteria find Task control's buttons by role from the default pane.
  */
-import { useEffect, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import type { JSX } from "react";
 import { useTranslation } from "react-i18next";
 import {
   correctionBody,
+  addProject,
   failureFrom,
   fetchChains,
   fetchDecision,
@@ -35,6 +36,7 @@ import {
   fetchTodo,
   recordCorrection,
   recordReview,
+  renameProject,
   requestChainStart,
   requestChainStop,
   startChainBody,
@@ -79,8 +81,10 @@ import i18n, { currentLanguage, writeLanguage } from "./i18n.js";
 import { DecisionsView, NO_FILTER } from "./DecisionsView.js";
 import type { DecisionFilter } from "./DecisionsView.js";
 import { MemoryView } from "./MemoryView.js";
-import { pickProject, readProject, writeProject } from "./project.js";
-import type { ProjectV1 } from "./project.js";
+import { pickProject, projectName, readProject, writeProject } from "./project.js";
+import type { ProjectsAnswerV1 } from "./project.js";
+import { ProjectControl } from "./ProjectControl.js";
+import { ProjectNames } from "./projectNames.js";
 import { MetricsView } from "./MetricsView.js";
 import { Refusal } from "./Refusal.js";
 import { RequirementsPanel } from "./RequirementsPanel.js";
@@ -173,8 +177,9 @@ export function App(): JSX.Element {
 
   /** Null while the control plane is not mounted on this panel; then the page shows no control section at all. */
   const [controlConfig, setControlConfig] = useState<ControlConfigV1 | null>(null);
-  /** Project switcher spec D2: the projects this panel has (null until read, or when the read failed) and the chosen one. */
-  const [projects, setProjects] = useState<ProjectV1[] | null>(null);
+  /** Project registry spec §7: the whole answer, including file errors, editability and restart warnings. */
+  const [projectsAnswer, setProjectsAnswer] = useState<ProjectsAnswerV1 | null>(null);
+  const projects = projectsAnswer?.projects ?? null;
   const [project, setProject] = useState<string | null>(null);
   /** Execution driver spec §3.2: the chosen project's (else the first trusted repository's) workspace mode, null until read. */
   const [workspace, setWorkspace] = useState<RepositoryWorkspaceV1 | null>(null);
@@ -488,14 +493,26 @@ export function App(): JSX.Element {
     return () => clearInterval(timer);
   }, [controlConfig]);
 
-  // Project switcher spec D2: the stored choice while it is still listed, else the first project. A failed read leaves
-  // no choice, and every section then acts on the first repository as it always has (spec §5).
+  // Project switcher spec D2, project registry spec §7: the stored (or current) choice while it is still listed, else
+  // the first project. Re-read after an add or rename and whenever the window regains focus (another tab may have
+  // added one). A failed read leaves no choice: every section acts on the first repository as before.
+  const readProjects = useCallback((): Promise<void> => fetchProjects().then(
+    (answer) => {
+      setProjectsAnswer(answer);
+      setProject((current) => pickProject(answer.projects, current ?? readProject(browserStorage())));
+    },
+    () => { setProjectsAnswer(null); setProject(null); },
+  ), []);
+  useEffect(() => { void readProjects(); }, [readProjects]);
   useEffect(() => {
-    void fetchProjects().then(
-      (answer) => { setProjects(answer.projects); setProject(pickProject(answer.projects, readProject(browserStorage()))); },
-      () => { setProjects(null); setProject(null); },
-    );
-  }, []);
+    const onFocus = (): void => { void readProjects(); };
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [readProjects]);
+  const rereadAfterProjectChange = async (): Promise<void> => {
+    await readProjects();
+    try { setControlConfig(await fetchControlConfig()); } catch { /* keep the config already on screen */ }
+  };
   const chooseProject = (projectKey: string): void => {
     setProject(projectKey);
     writeProject(browserStorage(), projectKey);
@@ -503,6 +520,10 @@ export function App(): JSX.Element {
   // The chosen project's control repository: undefined while no project is chosen (the first repository, as before),
   // null when the control plane does not hold the chosen project.
   const chosen = projects?.find((entry) => entry.projectKey === project);
+  const nameOf = useCallback((key: string) => {
+    const entry = projects?.find((candidate) => candidate.projectKey === key);
+    return entry ? projectName(entry) : key;
+  }, [projects]);
   const controlRepoId = chosen === undefined ? undefined : chosen.controlRepoId;
   const workspaceRepoId = controlRepoId === undefined ? controlConfig?.repositories[0]?.repoId : controlRepoId;
   useEffect(() => {
@@ -677,6 +698,7 @@ export function App(): JSX.Element {
     ) : null;
 
   return (
+    <ProjectNames.Provider value={nameOf}>
     <Shell
       active={section}
       badges={{
@@ -696,9 +718,23 @@ export function App(): JSX.Element {
         ),
       }}
       footer={footerLines(summary)}
-      projects={projects ?? []}
-      project={project}
-      onProject={chooseProject}
+      projectControl={projectsAnswer === null ? null : (
+        <ProjectControl
+          answer={projectsAnswer}
+          project={project}
+          onProject={chooseProject}
+          onAdd={async (input) => {
+            const result = await addProject(input);
+            if (result.ok) { await rereadAfterProjectChange(); chooseProject(result.body.project.projectKey); }
+            return result;
+          }}
+          onRename={async (id, name) => {
+            const result = await renameProject(id, name);
+            if (result.ok) await rereadAfterProjectChange();
+            return result;
+          }}
+        />
+      )}
       theme={theme}
       language={currentLanguage()}
       onLanguage={(lang) => {
@@ -791,5 +827,6 @@ export function App(): JSX.Element {
         <MetricsView report={home.report} coverage={home.coverage} />
       </SectionPane>
     </Shell>
+    </ProjectNames.Provider>
   );
 }

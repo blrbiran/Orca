@@ -6,6 +6,7 @@
 import { useState } from "react";
 import type { FormEvent, JSX } from "react";
 import { useTranslation } from "react-i18next";
+import { useProjectName } from "./projectNames.js";
 import type { PanelRefusal } from "./api.js";
 import type { Banner } from "./chainBanner.js";
 import i18n, { enumText } from "./i18n.js";
@@ -85,6 +86,7 @@ export function ChainPanel({
   onProject?: (projectKey: string) => void;
 }): JSX.Element {
   const { t } = useTranslation();
+  const name = useProjectName();
   const [localRepoKey, setLocalRepoKey] = useState(repos[0]?.repoKey ?? "");
   const repoKey = project != null && repos.some((r) => r.repoKey === project) ? project : localRepoKey;
   const setRepoKey = (next: string): void => { setLocalRepoKey(next); onProject?.(next); };
@@ -101,7 +103,7 @@ export function ChainPanel({
       <ChainBanners banners={banners} onDismiss={onDismiss} />
       {repos.map((r) => (
         <div key={r.repoKey} className="chain-repo" data-repo-key={r.repoKey}>
-          <h3>{r.repoKey}</h3>
+          <h3>{name(r.repoKey)}</h3>
           {r.problem !== null && <p className="chain-problem">{r.problem}</p>}
           {r.chain === null ? (
             <p>{t("chains.noChain")}</p>
@@ -133,7 +135,7 @@ export function ChainPanel({
           <select name="repoKey" value={repoKey} onChange={(e) => setRepoKey(e.target.value)}>
             {repos.map((r) => (
               <option key={r.repoKey} value={r.repoKey}>
-                {r.repoKey}
+                {name(r.repoKey)}
               </option>
             ))}
           </select>

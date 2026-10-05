@@ -8,9 +8,22 @@ export const PROJECT_KEY = "orca.project";
 /** GET /api/projects -- src/panel/projects.ts. */
 export interface ProjectV1 {
   projectKey: string;
+  /** Project registry spec §6: display name; older answers omit it and use the key. */
+  name?: string;
+  path?: string;
   /** The control plane's repoId for this project, or null when the control plane does not hold it. */
   controlRepoId: string | null;
 }
+
+export interface ProjectsAnswerV1 {
+  source?: "file" | "command-line";
+  editable?: boolean;
+  projects: ProjectV1[];
+  pendingRestart?: string[];
+  fileError?: string | null;
+}
+
+export const projectName = (project: ProjectV1): string => project.name ?? project.projectKey;
 
 export function readProject(storage: Pick<Storage, "getItem"> | undefined): string | null {
   try {
