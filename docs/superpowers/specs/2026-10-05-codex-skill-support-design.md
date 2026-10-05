@@ -14,9 +14,10 @@ Success means:
 
 - Orca accepts skills for installations whose ccloop-reported kind is
   `claude` or `codex`; unsupported kinds still fail before dispatch.
-- The task's frozen skills are discoverable in all three Codex phases, and the
-  injected root contains only that frozen set. Existing user-global and
-  repository skills retain today's visibility.
+- The task's frozen skills are discoverable in all three Codex phases. The
+  temporary injection adds only links for that frozen set; any pre-existing
+  entries under `.agents/skills` remain present and unchanged. Existing
+  user-global and repository skills retain today's visibility.
 - Codex sees the skills through its native `.agents/skills` discovery path,
   while the backing snapshot remains outside the attempt worktree and
   read-only.
@@ -134,8 +135,14 @@ recursively removed; normal attempt cleanup removes that worktree.
   `skills-unsupported-agent:<task>:<installation>:<kind>` refusal.
 - Existing selected-name paths produce `codex-skills-path-conflict:<name>`;
   the original content is untouched.
-- Invalid snapshot roots, source skill paths, or failed cleanup block the
-  ccloop phase with a specific error and do not silently run without skills.
+- Invalid snapshot roots or skill sources fail with
+  `codex-skills-source-invalid:<reason>`; a name collision fails with
+  `codex-skills-path-conflict:<name>`; filesystem setup and cleanup failures
+  fail with `codex-skills-setup-failed:<errno>` and
+  `codex-skills-cleanup-failed:<errno>`. These stable prefixes and details
+  are retained in ccloop's phase evidence and Orca's blocked-run reason.
+  Setup failures do not start Codex; cleanup failures prevent attempt
+  publication. A task never falls back to running without its requested skills.
 - Runs without skills do not create `.agents/skills`, do not spawn additional
   processes, and omit `codexSkillsDir`; existing Claude argv and Codex argv
   remain unchanged.
@@ -156,6 +163,18 @@ Required focused evidence:
 - The symlink discovery probe is reproducible without a model request and
   asserts that the skill appears under `.agents/skills` with temporary
   `HOME`/`CODEX_HOME`.
+- A second probe runs the actual `codex exec` CLI in a temporary attempt
+  worktree with a local recording model endpoint and temporary
+  `HOME`/`CODEX_HOME`. The prompt requests the selected probe skill; the
+  recorder returns the deterministic response needed for Codex to activate
+  and read it. Assert that the recorded model-visible request contains a
+  unique marker from the linked `SKILL.md`, that a pre-existing unrelated
+  skill remains unchanged, and that all model traffic stays on the local
+  endpoint. This proves the symlink is usable by `exec`, not only listed by
+  `debug prompt-input`; it makes no paid or external model call. If the
+  installed Codex version cannot exercise this path deterministically without
+  a remote model, stop and revise the design rather than treating catalog
+  discovery as sufficient acceptance.
 - Unit tests cover: a pre-existing `.agents/skills/legacy/SKILL.md` survives
   byte-for-byte; unrelated children remain; a selected-name collision
   refuses before Codex starts and preserves the original; parent symlinks
@@ -174,10 +193,10 @@ Required focused evidence:
 
 ## 5. Risks and limits
 
-- The Codex symlink discovery result is measured on 0.160.0 only. The isolated
-  probe must run against the supported Codex version used for acceptance; if
-  symlink discovery changes, pause and revise the design before relying on
-  copy-based fallback behavior.
+- The Codex symlink discovery result is measured on 0.160.0 only. Both probes
+  must run against the supported Codex version used for acceptance. If skill
+  activation through a symlink cannot be shown with the local recorder, pause
+  and revise the design; do not silently switch to copy-based fallback.
 - Name collisions with repository-provided skills are intentionally refused
   rather than shadowed. A later design may add an explicit precedence rule,
   but this feature will not infer one.
