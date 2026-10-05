@@ -155,19 +155,19 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 
 ## 四、⛔ 下一件事
 
-### 4.0 ⛔ 现在的下一件事（2026-10-04 会话 `08011394` 改写；**本节优先于下面的 4.0.p、4.0.o … 与 1–3**）
+### 4.0 ⛔ 现在的下一件事（2026-10-05 项目注册表续作；**本节优先于下面的 4.0.p、4.0.o … 与 1–3**）
 
-会话 `08011394` 做完了人排的两件（Task control 不停刷新；全局项目切换），外加一个查刷新时撞到的缺陷（读视图排序）。结论在 §4.0.p，**等人审**。
+项目注册表计划 `docs/superpowers/plans/2026-10-04-panel-project-registry.md` 的实现已完成；设计见 `docs/superpowers/specs/2026-10-04-panel-project-registry-design.md`。当前代码与验证记录在 `.superpowers/sdd/2026-10-04-panel-project-registry/progress.md`。
 
-1. **先核推送**：四个仓各跑 `/usr/bin/git ls-remote origin refs/heads/main` 与本地比。推送归人。本会话 Orca 有十来笔（修复、spec、计划、项目切换三个 task、文档）；ccloop 与 ccmem 各一笔 handoff 文档；syncskill 零改动。Orca 仍钉 `2b380ea`（ccloop 远端已有），**几个仓推送没有先后约束**。
-2. **人要审的**：§4.0.p 的「替人做的裁定」与「没被判据钉住的」；spec `docs/superpowers/specs/2026-10-04-panel-project-switcher-design.md` §7（R1–R6）与 §8（实施期更正）。会话 `9d95e6c8` 留下的审阅项（§4.0.o）仍在等人。
-3. **下一件由人选**。候选：项目切换的后续（spec §6：控制组列表按项目过滤要给 `GroupSummaryV1` 加 `repoId`；Decisions 按项目过滤；运行时增删项目——本轮按设计不做）；codex 的 skill 支持（H6）；带 skills 的 agent verifier／profile 声明／多任务的真 claude 验收；ccloop §5.1 与「reaper 杀活 claude」的真 claude 验收；同时启动任务数上限；N1 第二版；goal.md 的 N2、§3.5 litellm、A2A。
-4. **Memory 页 `ccmem-failed:1`**：ccmem 的缺陷（origin 是本地路径时 `normalizeRemoteUrl` 的 `new URL()` 抛），登记在 ccmem handoff §15，归 ccmem 修，Orca 不改。项目切换让人更容易切到这种仓库上。
-5. **人的真实环境**：`~/.orca/agents.json`、`~/.orca/profile.json`、`~/.orca/panel.sh` 是人的数据，判据不许读写。人用的面板要**重启**才会用上本会话的修复（`~/.orca/panel.sh`，人自己重启）。
-6. **验证只在 `git clone --local` 副本里做**：HOME 与四个 XDG 根改道、TMPDIR 短真目录；Orca clone 里先 `npm run build --workspace web`、`git config core.hooksPath scripts/githooks`；`ORCA_CCLOOP_BIN` 指 ccloop clone（`2b380ea`）的 `dist/cli.js`；`ORCA_AGENTS_TABLE` 只放 fake codex（`integration` 模式，0600，`/private/tmp/…`）；真二进制判据 `ORCA_SYNCSKILL_REAL_BIN=<syncskill clone>/dist/index.js`、`ORCA_CCMEM_REAL_BIN=/Users/biran/code/skills/ccmem/bin/ccmem`。门逐段各跑各的、各记 RC（别用 `npm run verify` 的 `&&` 链）。
-7. **真浏览器验面板**：本机没有 playwright 包，但 `~/.npm/_npx/31e32ef8478fbf80/node_modules/playwright`（1.63 alpha）可用 `createRequire` 引入，浏览器要指 `executablePath` 到 `~/Library/Caches/ms-playwright/chromium_headless_shell-1234/…/chrome-headless-shell`（它默认找的 1237 不存在）。起真 `orca panel` 时 plan 文件必须在目标仓库里（否则 `control-path-escape`），`--profile` 用 v2 快照、`--estimator-profile`/`--estimate-mode` 都给，import-plan 不需要 execution port。
-8. **环境坑**：rtk 把 `diff` 报成「identical」⇒ 字节比较用 `/usr/bin/diff`、`/usr/bin/grep`；`rm`／`cp` 带 `-i` 别名 ⇒ `/bin/rm`；人常开着 `orca panel --port 7777`，它写真实 `~/.orca/control`。⚠️ **Tier 0 闸门会拦 `git reset --hard`（含在自己的 scratch clone 里、`cd $VAR` 解析不了时）**——别重试，换一份新 clone。
-9. **建议用的 skill**：开工 `superpowers:using-superpowers`；新设计 `superpowers:brainstorming` → `superpowers:writing-plans` → `superpowers:subagent-driven-development`；红先 `superpowers:systematic-debugging`；收尾前 `superpowers:verification-before-completion`。
+1. **推送状态未知，推送归人**：收尾对 Orca、ccloop、ccmem、syncskill 跑 `/usr/bin/git ls-remote origin refs/heads/main` 都因 DNS 无法解析 `github.com` 失败；没有任何 push。网络恢复后由人核对再决定。
+2. **仍待人审**：上轮项目切换的 spec §7（R1–R6）与 §8（实施期更正）、本轮项目注册表 spec §12 的设计／实施裁定，以及 `.superpowers/sdd/2026-10-04-panel-project-registry/progress.md` 的完整结论。
+3. **本轮实现**：默认 registry 是 `~/.orca/projects.json`（可用 `--projects-file` 显式改道）；面板侧栏支持新增／改名和持久选择，Requirements、Chains、Memory 跟随所选项目。新增路径会加入当前面板的 control config，不需重启才可见。ccloop、ccmem 本轮没有代码改动。收尾修复主题行：`fix(web): preserve the POST refusal text inventory`。
+4. **隔离验证**：所有验证在 `git clone --local` 副本，HOME、四个 XDG 根、TMPDIR 均改道，安装表仅 fake codex `integration`。build、typecheck、workspace check（66 files／414 tests）、verify:control（127 files／1308 passed／4 skipped）、verify:scheduler（55 files／194 passed）、verify:ccloop-pin（3 passed）、verify:panel（15 项）均通过。真浏览器在空 registry 上完成新增 Alpha、改名、再加 Beta、切回、刷新；改名在 Requirements 同步，刷新后选择保留。详见上述 progress ledger。
+5. **全量套件仍有红，不能报全绿**：全量 Vitest 首次 RC 1（2785 passed、6 skipped、4 failed）；其中 `scanPanelText` 已修复，单文件和 workspace 全部通过；`driverRecovery` 在并发全量中超时，单文件重跑 8/8 通过。另有 `chain/gateCheck` 的 K13 Claude 配置测试超时，以及 `memory/ccmemAdapter` 对 `Unknown system error -8` 的断言在本机收到 `ENOEXEC`；后者是 Orca adapter 判据／行为待核，不要与 ccmem 的本地 origin 缺陷混为一谈。`check-tmp-leak` 外层 RC 0，短 TMPDIR 残留 0，但其内层 Vitest RC 1。没有运行付费／live Claude 验收；本轮不再重跑 Claude 测试，额度限制来自人。
+6. **人的真实数据没有碰**：没有读写或迁移真实 `~/.orca/*`，也没有重启／检查人的面板。需要在人自己的环境核准后再决定如何迁移并重启；不要把隔离 clone 的空 registry 覆盖到用户文件。
+7. **ccmem 原有本地路径问题已由 ccmem 修复**：主题行 `fix(project-key): follow a local-path origin instead of crashing on it`；ccmem handoff §15 已更新。Orca 若再见 `ccmem-failed:1`，先看当前错误与 origin，不要重复旧 `ERR_INVALID_URL` 诊断。此前 Orca 留下的其他审阅项（§4.0.o）仍待人审。
+8. **下一件由人选**：项目切换后续（control 组和 Decisions 按项目过滤）；codex skill 支持（H6）；带 skills 的 agent verifier／profile 声明／多任务真 Claude 验收；ccloop §5.1 与 reaper 杀活 claude 验收；同时启动任务数上限；N1 第二版；goal.md 的 N2、§3.5 litellm、A2A。
+9. **开发／验证纪律仍有效**：人类负责 push；新验证只在隔离 clone 做，HOME＋四个 XDG 根改道、TMPDIR 用短真目录；不得读写真实 `~/.orca`；真 Claude 测试须等人明确恢复额度限制后再做。
 
 ### 4.0.p Task control 刷新循环＋读视图排序＋全局项目切换（会话 `08011394`，2026-10-04，**已完成，等人审**）
 
