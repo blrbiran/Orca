@@ -86,7 +86,12 @@ async function postJson<T>(path: string, payload: unknown, method: "POST" | "PAT
     body: JSON.stringify(payload),
   });
   const body = await readBody(res);
-  if (!res.ok) return { ok: false, ...refusalFrom(`${method} ${path}`, res.status, body) };
+  if (!res.ok) {
+    const refusal = method === "POST"
+      ? refusalFrom(`POST ${path}`, res.status, body)
+      : refusalFrom("PATCH " + path, res.status, body);
+    return { ok: false, ...refusal };
+  }
   return { ok: true, body: body as T };
 }
 
