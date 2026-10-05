@@ -7,7 +7,7 @@ import { deliverScheduledStart } from "../../../src/control/webDispatch.js";
 import { controlWorkspaceRoots } from "../../../src/control/workspace.js";
 import { createExecutionDriver, type ExecutionDriver, type ExecutionDriverDeps } from "../../../src/control/executionDriver.js";
 import { fakeCcloopPort, type FakeBehaviour } from "./driverPort.js";
-import type { StartEnvelope } from "../../../src/control/executionPort.js";
+import type { AgentsView, StartEnvelope } from "../../../src/control/executionPort.js";
 import type { SyncskillOptions } from "../../../src/skills/syncskill.js";
 import { profileSnapshot, webFixture, type WebFixtureOptions, type WebFixtureTask } from "./web.js";
 
@@ -37,6 +37,7 @@ export interface HarnessOptions {
   acceptedConfigHash?: (envelope: StartEnvelope) => string;
   /** Syncskill integration plan Task 6: the syncskill both confirm (the freeze) and the driver (A2's injection) are given. */
   syncskill?: SyncskillOptions;
+  agentKinds?: AgentsView;
 }
 
 /**
@@ -60,6 +61,7 @@ export async function driverHarness(tasks: readonly WebFixtureTask[], options: H
     workTokens: options.workTokens, duringCollect: options.duringCollect,
     ...(options.acceptedConfigHash ? { acceptedConfigHash: options.acceptedConfigHash } : {}),
   });
+  fake.port.listAgents = options.agentKinds === undefined ? h.deps.port.listAgents : async () => options.agentKinds!;
   const deps: ExecutionDriverDeps = {
     store: h.store, router: createExecutionProfileRouter([resolveProfile(snapshot, fake.port)]), admissionGate: h.deps.admissionGate,
     roots: controlWorkspaceRoots(h.store.stateDir), resolveRepository: () => repo,

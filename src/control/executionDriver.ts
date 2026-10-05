@@ -267,8 +267,16 @@ export async function stepA2(deps: ExecutionDriverDeps, runId: string): Promise<
   }
   const confirmed = readConfirmedTaskExecution(store, run.groupId, run.taskId);
   let skills: DriveRecord["skills"] = null;
+  let skillsKind: string | undefined;
   if (confirmed.skills !== null) {
-    try { skills = await injectRunSkills(deps, targetRepo, runId, confirmed.skills); }
+    try {
+      skillsKind = (await portFor(deps,run).listAgents()).installations.find(installation=>installation.id===frozenAgent.agent.agent)?.kind;
+      if (skillsKind !== "claude" && skillsKind !== "codex") {
+        blockRun(deps,runId,"A2",`skills-unsupported-agent:${run.taskId}:${frozenAgent.agent.agent}:${skillsKind ?? "not-in-table"}`);
+        return true;
+      }
+      skills = await injectRunSkills(deps, targetRepo, runId, confirmed.skills);
+    }
     catch (error) {
       blockRun(deps, runId, "A2", `skills-inject-failed:${error instanceof SyncskillError ? error.code : describeError(error)}`);
       return true;
@@ -281,7 +289,7 @@ export async function stepA2(deps: ExecutionDriverDeps, runId: string): Promise<
     ...(continued !== null ? { executionPolicy: withinGrant(confirmed.contract.executionPolicy, (run.grant as { work: { tokens: number; activeMs: number; attempts: number } }).work) } : {}),
   };
   const envelope = toStartEnvelope(readWorkClaimEnvelope(store, run.groupId, runId), run, {
-    sourceDir: drive.sourceDir, targetRepo, base, ...(skills !== null ? { skillPluginDir: skills.dir } : {}),
+    sourceDir: drive.sourceDir, targetRepo, base, ...(skills !== null ? skillsKind === "codex" ? { codexSkillsDir: join(skills.dir,"skills") } : { skillPluginDir: skills.dir } : {}),
   }, contract, inputCheckpoint);
   const envelopeHash = sha256Canonical(envelope);
   return write(deps, () => {
@@ -509,7 +517,7 @@ export async function stepC(deps: ExecutionDriverDeps, runId: string): Promise<b
   deps.crash?.("C-after-terminal");
   const outcome = report.terminal.outcome;
   if (outcome !== "succeeded") {
-    blockRun(deps, runId, "C", `terminal:${outcome}`, { outcome });
+    blockRun(deps, runId, "C", report.terminal.stopReason?.includes("codex-skills-") ? report.terminal.stopReason : `terminal:${outcome}`, { outcome });
     return true;
   }
   const attemptSha = await commitAttempt(join(drive.sourceDir, "repo"));

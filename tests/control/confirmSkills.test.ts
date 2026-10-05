@@ -154,7 +154,7 @@ describe("confirm refuses, and the group stays unconfirmed (C4)", () => {
  * installation ccloop's table view (listAgents) does not call claude -- before, ccloop refused it only at run start, where
  * the task could be neither changed nor re-dispatched. The table is asked only when some task declares skills.
  */
-describe("confirm refuses skills on an installation that is not claude", () => {
+describe("confirm checks the supported installation kind for skills", () => {
   async function confirmWithPort(tasks: Parameters<typeof webFixture>[1], listAgents?: () => Promise<unknown>) {
     const fake = await fakeSyncskill("profile-ok");
     const h = await webFixture(undefined, tasks);
@@ -164,11 +164,16 @@ describe("confirm refuses skills on an installation that is not claude", () => {
     return { h, asked, fake, answer: await service.confirm(h.command("confirm", await h.confirmPayload())) };
   }
 
-  it("skills-unsupported-agent:<task>:<installation>:<kind> for the fixture's codex installation, spawning no syncskill", async () => {
+  // Approved H6 design (2026-10-05): Codex supports frozen skills; replaces the former Codex refusal criterion whole.
+  it("confirms Codex skills by the installation kind and freezes names without a syncskill call", async () => {
     const { h, answer, fake } = await confirmWithPort([{ taskId: "a", loop: withSkills("a", { names: ["x"] }) }]);
-    expect(answer).toMatchObject({ error: { code: "skills-unsupported-agent", message: "skills-unsupported-agent:a:codex:codex" } });
-    expectUnconfirmed(h, ["a"]);
+    confirmedOrThrow(answer);
+    expect(snapshotOf(h).skills).toEqual([{taskId:"a",profile:null,names:["x"]}]);
     expect(fake.calls()).toEqual([]);
+  });
+  it("refuses an unsupported table kind before confirmation",async()=>{
+    const {h,answer}=await confirmWithPort([{taskId:"a",loop:withSkills("a",{names:["x"]})}],async()=>({installations:[{id:"codex",kind:"other"}]}));
+    expect(answer).toMatchObject({error:{code:"skills-unsupported-agent",message:"skills-unsupported-agent:a:codex:other"}});expectUnconfirmed(h,["a"]);
   });
 
   it("names an installation the table no longer lists as not-in-table", async () => {
@@ -278,4 +283,8 @@ describe("ORCA_SYNCSKILL_BIN reaches the web service (spec §10.5)", () => {
       expect(runtime!.service.deps.syncskill).toEqual({ bin: expected, env });
     } finally { runtime!.close(); }
   });
+});
+
+it("confirms Codex skills and freezes the declared names without invoking syncskill",async()=>{
+ const fake=await fakeSyncskill("profile-ok");const {h,answer}=await confirmWith([{taskId:"a",loop:withSkills("a",{names:["x"]})}],fake.o);confirmedOrThrow(answer);expect(snapshotOf(h).skills).toEqual([{taskId:"a",profile:null,names:["x"]}]);expect(fake.calls()).toEqual([]);
 });

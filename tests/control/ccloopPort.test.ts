@@ -210,3 +210,8 @@ describe("collect's progress through the real port (labels and progress spec §3
     await expect(missingField.port.collect(missingField.envelope,0)).rejects.toThrow("control-response-invalid");
   });
 });
+
+it("preserves a Codex skills failure reason from ccloop terminal state",async()=>{
+ const h=await fixture("ok",{terminal:{status:"failed",currentAttempt:1,attemptsUsed:1,lastTransitionAt:"2026-10-05T00:00:00Z",waitingOnHuman:false,stopReason:"Error: codex-skills-cleanup-failed:EACCES: evidence",budgetSnapshot:{attemptsRemaining:0,timeRemainingMs:100,tokenBudgetRemaining:100},recentFailures:[]}});
+ expect((await h.port.collect(h.envelope,0)).terminal).toMatchObject({outcome:"failed",stopReason:"Error: codex-skills-cleanup-failed:EACCES: evidence"});
+});

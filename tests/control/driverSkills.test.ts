@@ -225,3 +225,12 @@ describe("the snapshot goes with the run's workspace, by runId (C11, C17)", { ti
     expect(fake.calls().filter((argv) => argv.includes("inject"))).toHaveLength(2);
   });
 });
+
+it("selects Codex skills path from the table kind of the frozen installation and retains lock",async()=>{
+ const fake=await fakeSyncskill("inject-ok");
+ const t=await driverHarness([{taskId:"a",agent:CLAUDE,loop:withSkills("a",{names:["alpha"]})}],{syncskill:fake.o,agentKinds:{installations:[{id:FIXTURE_OTHER_AGENT_ID,kind:"codex",defaults:{model:"fixture",contextWindow:"agent-default"},contextOptions:["agent-default"],version:"fixture"}]}});disposeWithSnapshots(t);
+ // Installation id is deliberately claude; the authoritative table now reports Codex.
+ const runId=await t.claim();expect(stepA1(t.deps,runId)).toBe(true);expect(await stepA2(t.deps,runId)).toBe(true);
+ const dir=realpathSync(skillsDirOf(t,runId));expect(envelopeOf(t,runId).work.codexSkillsDir).toBe(realpathSync(join(dir,"skills")));expect(envelopeOf(t,runId).work).not.toHaveProperty("skillPluginDir");
+ const lock=JSON.parse(readFileSync(join(dir,"skills/syncskill-lock.json"),"utf8"));expect(t.body(runId).drive.skills).toEqual({dir,profile:null,lock:lock.skills});
+});

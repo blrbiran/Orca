@@ -6,13 +6,13 @@ import { createCcloopExecutionPort } from "./ccloopPort.js";
 import type { AgentResolution, ContextWindow, PartialSelection } from "./agentSelection.js";
 /** Single-call estimate spec §4.1: protocol 3's two kinds of work. */
 // Syncskill integration spec §10.6: skillPluginDir only for a run with skills (ccloop protocol 3, additive).
-export interface LoopWork { kind:"loop";contract:unknown;targetRepo:string;base:string;sourceDir:string;skillPluginDir?:string }
+export interface LoopWork { kind:"loop";contract:unknown;targetRepo:string;base:string;sourceDir:string;skillPluginDir?:string;codexSkillsDir?:string }
 export interface SingleCallWork { kind:"single-call";prompt:string;responseSchema:Record<string,unknown>;maxOutputTokens:number;sourceDir:string }
 export interface StartEnvelope { protocol:3;claim:Claim;contractHash:string;inputCheckpoint:InputCheckpointV1|null; work:LoopWork|SingleCallWork }
 export type ExecutionStatus={kind:"absent"}|{kind:"accepted";executionId:string;configHash:string}|{kind:"unknown"}|{kind:"stopped";proof:StopProof};
 export interface ExecutionReport {
  events:UsageEvent[];candidate:Candidate|null;
- terminal:{outcome:"succeeded"|"blocked_waiting_human"|"exhausted"|"cancelled"|"failed";attemptSha:string|null;sourceDir:string;repoDir:string}|null;
+ terminal:{outcome:"succeeded"|"blocked_waiting_human"|"exhausted"|"cancelled"|"failed";attemptSha:string|null;sourceDir:string;repoDir:string;stopReason?:string|null}|null;
  /** Labels and progress spec §3.2 (§8 R5): optional so the synthetic ports need no edit; absent reads as null. */
  progress?:RunProgress|null;
 }

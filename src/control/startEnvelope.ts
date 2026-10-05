@@ -40,6 +40,7 @@ export interface StartEnvelopeWork {
   base: string;
   /** Syncskill integration spec §10.6: the run's skill snapshot; absent for a run without skills (no key on the wire). */
   skillPluginDir?: string;
+  codexSkillsDir?: string;
 }
 
 /** The checks both translations share (see toStartEnvelope's comment), and the claim built from the run row. */
@@ -103,6 +104,7 @@ export function toStartEnvelope(
       kind: "loop", contract, targetRepo: work.targetRepo, base: work.base, sourceDir: work.sourceDir,
       // Absent stays absent, so a run without skills keeps its exact envelope bytes and hash.
       ...(work.skillPluginDir !== undefined ? { skillPluginDir: work.skillPluginDir } : {}),
+      ...(work.codexSkillsDir !== undefined ? { codexSkillsDir: work.codexSkillsDir } : {}),
     },
   };
   // Parsed against the repository's own start-envelope schema rather than merely typed as one, so

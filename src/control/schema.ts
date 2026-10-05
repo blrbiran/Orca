@@ -48,9 +48,10 @@ export const handoffRequestSchema=z.object({protocol:z.literal(1),requestId:idSc
 // Single-call estimate spec §4.1 (human ruling S7): start envelope protocol 3 only. `work` is a loop -- the four fields
 // protocol 2 carried, now tagged -- or one single call whose prompt and response schema Orca assembled (spec §4.2).
 // Syncskill integration spec §10.3 / §10.6: the run's skill snapshot directory, present only for a run with skills.
-const loopWorkSchema=z.object({kind:z.literal("loop"),contract:z.unknown(),targetRepo:z.string().min(1),base:z.string().min(1),sourceDir:z.string().min(1),skillPluginDir:z.string().min(1).optional()}).strict();
+const loopWorkSchema=z.object({kind:z.literal("loop"),contract:z.unknown(),targetRepo:z.string().min(1),base:z.string().min(1),sourceDir:z.string().min(1),skillPluginDir:z.string().min(1).optional(),codexSkillsDir:z.string().min(1).optional()}).strict();
 const singleCallWorkSchema=z.object({kind:z.literal("single-call"),prompt:z.string().min(1),responseSchema:z.record(z.unknown()).refine(schema=>schema.type==="object",{message:"response-schema-not-object"}),maxOutputTokens:safeInteger.positive(),sourceDir:z.string().min(1)}).strict();
 export const startEnvelopeSchema=z.object({protocol:z.literal(3),claim:z.object({groupId:idSchema,workItemId:idSchema,taskId:idSchema.nullable(),runId:idSchema,generation:safeInteger.positive(),graphVersion:safeInteger,targetVersion:safeInteger,commandId:idSchema,configHash:z.string().min(1),agent:agentSelectionSchema,grant:grantSchema,ownerToken:idSchema}).strict(),contractHash:z.string().regex(/^[a-f0-9]{64}$/),inputCheckpoint:inputCheckpointSchema.nullable(),work:z.discriminatedUnion("kind",[loopWorkSchema,singleCallWorkSchema])}).strict().superRefine((value,ctx)=>{
+  if(value.work.kind==="loop"&&value.work.skillPluginDir!==undefined&&value.work.codexSkillsDir!==undefined)ctx.addIssue({code:"custom",path:["work","codexSkillsDir"],message:"skills-directories-mutually-exclusive"});
   // A single call is never resumed (spec §6.5): an interrupted estimate is re-estimated, not continued.
   if(value.work.kind==="single-call"&&value.inputCheckpoint!==null)ctx.addIssue({code:"custom",path:["inputCheckpoint"],message:"single-call-input-checkpoint"});
 });

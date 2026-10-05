@@ -132,6 +132,7 @@ async function lookupSkillProfiles(store: ControlStore, groupId: string, syncski
  * confirmed or changed, not first at run start, where it could only be ended by stopping its group. The kind comes from
  * ccloop's own table view (listAgents). ccloop's acceptStart still refuses it at run start, for a table changed since.
  */
+/** H6 approved design (2026-10-05): Claude and Codex support frozen skills; ccloop's table supplies the kind. */
 async function agentKinds(port: Pick<ExecutionPort, "listAgents">, needed: boolean): Promise<{ kinds: Map<string, string> | null } | { failure: unknown }> {
   if (!needed) return { kinds: null };
   try { return { kinds: new Map((await port.listAgents()).installations.map(installation => [installation.id, installation.kind])) }; } catch (failure) { return { failure }; }
@@ -140,7 +141,7 @@ function assertSkillsAgent(kinds: Map<string, string> | null, taskId: string, ag
   // Not asked: the read before the transaction saw no such task (a draft then, or no skills), so the state moved since.
   if (kinds === null) throw new ControlError("proposal-version-conflict");
   const kind = kinds.get(agentId);
-  if (kind !== "claude") throw new ControlError("skills-unsupported-agent", `${taskId}:${agentId}:${kind ?? "not-in-table"}`);
+  if (kind !== "claude" && kind !== "codex") throw new ControlError("skills-unsupported-agent", `${taskId}:${agentId}:${kind ?? "not-in-table"}`);
 }
 /**
  * Spec §10.5, H3: the profile set-task-loop must look up, or null. Only a confirmed task whose payload declares a profile

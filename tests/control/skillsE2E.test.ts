@@ -1,5 +1,5 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { existsSync, readdirSync, readFileSync, chmodSync, lstatSync } from "node:fs";
+import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
@@ -21,7 +21,10 @@ import { ccloopWorlds, g, noBlocked, raw, realBinary, startGroup, until, workRun
 const { world, removeRoots, relocateHome } = ccloopWorlds({ rootPrefix: "orca-skills-e2e-", epochPrefix: "epoch-skills-e2e-" });
 const FAKE_SYNCSKILL = resolve("tests/skills/fixtures/fake-syncskill.mjs");
 const extra: string[] = [];
+function restoreTestPermissions(path:string):void {let stat;try{stat=lstatSync(path);}catch{return;}if(stat.isSymbolicLink())return;chmodSync(path,(stat.mode&0o777)|0o700);if(stat.isDirectory())for(const name of readdirSync(path))restoreTestPermissions(join(path,name));}
+const ownedWorldRoots:string[]=[];
 afterAll(async () => {
+  for(const root of ownedWorldRoots)restoreTestPermissions(root);
   await removeRoots();
   for (const dir of extra) await rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
 });
@@ -83,42 +86,50 @@ describe("a run with skills against real ccloop (syncskill integration spec §10
  * real ccloop build reports for the installation (listAgents); this criterion is rewritten to pin that instead. ccloop's
  * acceptStart refusal stays, for a table changed after confirm. Honest claim: fake codex and fake syncskill.
  */
-describe("a codex task with skills is refused at confirm, by the kind real ccloop reports", { timeout: 300_000 }, () => {
-  relocateHome("orca-skills-e2e-codex-home-");
-  beforeEach((ctx) => { if (!realBinary) ctx.skip(); });
-
-  it("answers skills-unsupported-agent:a:codex:codex, leaving the group unconfirmed, with no syncskill call, no run and no snapshot", async () => {
-    const fakeDir = await realpath(await mkdtemp(join(tmpdir(), "orca-skills-e2e-codex-syncskill-")));
-    extra.push(fakeDir);
-    const bin = join(fakeDir, "syncskill");
-    await writeFile(bin, `#!/bin/sh\nexec '${process.execPath}' '${FAKE_SYNCSKILL}' "$@"\n`, { mode: 0o755 });
-    const log = join(fakeDir, "calls.jsonl");
-    const w = await world([{ taskId: "a", targetPaths: ["shared.txt", "answer.txt"], agent: { agent: "codex" }, loop: loopWithSkills }],
-      { a: { files: { "shared.txt": "A\n" } } },
-      { env: { ORCA_SYNCSKILL_BIN: bin, FAKE_SYNCSKILL_MODE: "inject-ok", FAKE_SYNCSKILL_LOG: log } });
-    const runtime = await w.boot();
-    try {
-      // startGroup's steps up to confirm (ccloopWorld.ts), which here must refuse.
-      expect(await runtime.service.importPlan(raw(runtime, "import", "import-plan", { groupId: "g", repoId: w.repoId, planId: "plan" }))).toMatchObject({ result: { kind: "imported" } });
-      const preferences = await runtime.service.setAgentPreferences(raw(runtime, "preferences", "set-agent-preferences", { preferences: { defaultAgent: "codex", perAgent: {} } }, { kind: "operator", operatorId: "human" }));
-      expect("error" in preferences ? preferences.error : "set").toBe("set");
-      const selections = await resolveGroupSelections({ store: runtime.store, port: runtime.port }, "g", "human");
-      const hash = runtime.router.list()[0]!.profileHash;
-      const confirmed = await runtime.service.confirm(raw(runtime, "confirm", "confirm", {
-        planHash: readArchivedPlan(runtime.store, "g").planHash, proposalVersion: readBudgetProposal(runtime.store, "g").proposalVersion, budgetMode: "soft",
-        profileIds: { estimator: "all", worker: "all", handoff: "all", goalReview: "all" }, profileHashes: { estimator: hash, worker: hash, handoff: hash, goalReview: hash },
-        contextPolicy: { handoffAtContextTokens: null }, selectionsHash: selections.selectionsHash,
-      }));
-      expect(confirmed).toMatchObject({ error: { code: "skills-unsupported-agent", message: "skills-unsupported-agent:a:codex:codex" } });
-      expect(readBudgetProposal(runtime.store, "g").state).toBe("editable");
-      // Names need no profile lookup, and nothing was injected or run.
-      expect(existsSync(log)).toBe(false);
-      expect(workRuns(runtime)).toEqual([]);
-      expect(w.argv("codex")).toEqual([]);
-      expect(w.calls()).toEqual([]);
-      const roots = controlWorkspaceRoots(runtime.store.stateDir);
-      expect(existsSync(roots.workspacesRoot) ? readdirSync(roots.workspacesRoot) : []).toEqual([]);
-      expect(await runtime.shutdown()).toBe(true);
-    } finally { await w.teardown(); }
-  });
+// Approved H6 design (2026-10-05): replaces the old Codex refusal E2E criterion whole.
+describe("Codex frozen skills through real ccloop",{timeout:300000},()=>{
+ relocateHome("orca-skills-codex-home-");beforeEach(ctx=>{if(!realBinary)ctx.skip();});
+ async function scenario(mode:string) {
+  const fakeDir=await realpath(await mkdtemp(join(tmpdir(),"h6-codex-e2e-")));extra.push(fakeDir);
+  const bin=join(fakeDir,"syncskill");await writeFile(bin,`#!/bin/sh\nexec '${process.execPath}' '${FAKE_SYNCSKILL}' "$@"\n`,{mode:0o755});
+  const w=await world([{taskId:"a",targetPaths:["shared.txt","answer.txt"],agent:{agent:"codex"},loop:{...loopWithSkills,plan:"bugfix"}}],{a:{files:{"shared.txt":"A\n"}}},{env:{ORCA_SYNCSKILL_BIN:bin,FAKE_SYNCSKILL_MODE:"inject-ok",FAKE_SYNCSKILL_LOG:join(fakeDir,"syncskill.jsonl")}});
+  ownedWorldRoots.push(w.root);
+  await mkdir(join(w.repo,".agents/skills/legacy"),{recursive:true});await writeFile(join(w.repo,".agents/skills/legacy/SKILL.md"),"legacy bytes");
+  if(mode==="conflict")await writeFile(join(w.repo,".agents/skills/alpha"),"existing selected name");
+  g(w.repo,"add",".agents");g(w.repo,"commit","-qm","existing skills");
+  const command=w.agentsTable.installations.codex!.command as string[];
+  const wrapper=join(fakeDir,"codex-wrapper.mjs");
+  await writeFile(wrapper,`import {appendFileSync,readFileSync,chmodSync} from "node:fs";
+import {pathToFileURL} from "node:url";
+const mode=process.argv[2],fake=process.argv[3],marker=process.argv[5];
+if(!process.argv.includes("--version")) {
+ const args=process.argv;const schema=JSON.parse(readFileSync(args[args.indexOf("--output-schema")+1],"utf8"));const business=schema.properties?.result??schema;
+ const phase=business.anyOf?"execute":business.properties?.approved?"verify":"plan";
+ appendFileSync(marker+".skills",JSON.stringify({phase,skill:readFileSync(".agents/skills/alpha/SKILL.md","utf8"),legacy:readFileSync(".agents/skills/legacy/SKILL.md","utf8")})+"\\n");
+ if(mode==="cleanup")chmodSync(".agents/skills",0o500);
+}
+process.argv.splice(1,2);await import(pathToFileURL(fake).href);`);
+  w.agentsTable.installations.codex!.command=[process.execPath,wrapper,mode,...command.slice(1)];await writeFile(w.table,JSON.stringify(w.agentsTable),{mode:0o600});
+  return w;
+ }
+ it("reads frozen skills in every phase, preserves legacy bytes and lands no temporary links",async()=>{
+  const w=await scenario("success"),runtime=await w.boot();try {
+   await startGroup(runtime,w.repoId);runtime.startPump(50);await until(()=>{noBlocked(runtime);return workStatus(runtime,"a")==="done"&&workRuns(runtime).every(r=>r.body.drive?.cleanedUp);},240000,"Codex skills to settle");
+   const [run]=workRuns(runtime),drive=run!.body.drive;
+   const envelope=JSON.parse(readCanonicalRecord(runtime.store,drive.envelopeHash));expect(envelope.work.codexSkillsDir).toBe(join(drive.skills.dir,"skills"));expect(envelope.work).not.toHaveProperty("skillPluginDir");
+   const marker=(w.agentsTable.installations.codex!.command as string[])[5]!;
+   const calls=readFileSync(marker+".skills","utf8").trim().split("\n").map(line=>JSON.parse(line));expect(calls).toEqual(["plan","execute","verify"].map(phase=>({phase,skill:"# alpha\n",legacy:"legacy bytes"})));
+   const tree=g(w.repo,"ls-tree","-r","--name-only",drive.landedCommit).split("\n");expect(tree).not.toContain(".agents/skills/alpha");expect(tree).not.toContain(".agents/skills/syncskill-lock.json");expect(g(w.repo,"show",drive.landedCommit+":.agents/skills/legacy/SKILL.md")).toBe("legacy bytes");expect(existsSync(drive.skills.dir)).toBe(false);expect(await runtime.shutdown()).toBe(true);
+  }finally{await w.teardown();}
+ });
+ it.each(["conflict","cleanup"])("blocks %s with the stable reason and publishes no Orca link",async(mode)=>{
+  const w=await scenario(mode),runtime=await w.boot();try {
+   await startGroup(runtime,w.repoId);runtime.startPump(50);await until(()=>workRuns(runtime).some(r=>r.body.state==="blocked"),120000,"Codex skills refusal");const [run]=workRuns(runtime),drive=run!.body.drive;
+   expect(drive.blockedReason).toContain(mode==="conflict"?"codex-skills-path-conflict:alpha":"codex-skills-cleanup-failed:EACCES");expect(drive.landedCommit).toBeNull();
+   const marker=(w.agentsTable.installations.codex!.command as string[])[5]!;
+   if(mode==="conflict"){expect(existsSync(marker+".skills")).toBe(false);expect(g(w.repo,"show","HEAD:.agents/skills/alpha")).toBe("existing selected name");}
+   else {const attempt=join(drive.sourceDir,"run/worktrees/attempt-1");expect(existsSync(attempt+".codex-skills-pending")).toBe(true);expect(g(JSON.parse(readCanonicalRecord(runtime.store,drive.envelopeHash)).work.contract.context.repoPath,"for-each-ref","--format=%(refname)","refs/ccloop/" )).toBe("");if(existsSync(join(attempt,".agents/skills")))chmodSync(join(attempt,".agents/skills"),0o700);}
+   expect(g(w.repo,"show","HEAD:.agents/skills/legacy/SKILL.md")).toBe("legacy bytes");expect(await runtime.shutdown()).toBe(true);
+  }finally{await w.teardown();}
+ });
 });

@@ -152,3 +152,10 @@ describe("the skill plugin directory on a loop envelope (syncskill integration s
     expect(startEnvelopeSchema.safeParse({ ...built, work: { ...built.work, skillPluginDir: "" } }).success).toBe(false);
   });
 });
+
+it("carries only codexSkillsDir for a Codex skill run and rejects both directory fields",()=>{
+ const built=toStartEnvelope(ledgerEnvelope(),runRow(),{...work,codexSkillsDir:"/tmp/ws/skills-run-1/skills"},contract);
+ expect(built.work).toEqual({kind:"loop",contract,targetRepo:"/tmp/repo",base:"v1",sourceDir:"/tmp/src",codexSkillsDir:"/tmp/ws/skills-run-1/skills"});
+ expect(startEnvelopeSchema.safeParse(built).success).toBe(true);
+ expect(()=>toStartEnvelope(ledgerEnvelope(),runRow(),{...work,skillPluginDir:"/tmp/plugin",codexSkillsDir:"/tmp/skills"},contract)).toThrow("start-envelope-conflict");
+});

@@ -133,27 +133,20 @@ describe("set-task-loop changes a draft task's skill set (C13)", () => {
  * ccloop's table view, so set-task-loop refuses them there rather than leave a run ccloop refuses at start. A draft task
  * has no frozen installation yet: confirm checks it.
  */
-describe("set-task-loop refuses skills on an installation that is not claude", () => {
-  const CODEX = { agent: "codex" };
-  it("refuses skills added to a confirmed codex task, leaving the task and its snapshot as they were", async () => {
-    const h = await fixture([{ taskId: "a", agent: CODEX, loop: loop("a") }]);
-    const answer = await serviceOf(h).confirm(h.command("confirm", await h.confirmPayload()));
-    if ("error" in answer) throw new Error(JSON.stringify(answer));
-    const before = readBudgetProposal(h.store, "g").executionSnapshotHash;
-    const ok = await fakeSyncskill("profile-ok");
-    expect(errorOf(await serviceOf(h, ok.o).setTaskLoop(withSkills(h, "a", {}, { names: ["x"] }))))
-      .toMatchObject({ code: "skills-unsupported-agent", message: "skills-unsupported-agent:a:codex:codex" });
-    expect(readBudgetProposal(h.store, "g").executionSnapshotHash).toBe(before);
-    expect(effective(h).loop!.skills).toBeUndefined();
-  });
-
-  it("accepts skills on a draft codex task, which confirm then refuses", async () => {
-    const h = await fixture([{ taskId: "a", agent: CODEX, loop: loop("a") }]);
-    const ok = await fakeSyncskill("profile-ok");
-    expect(await serviceOf(h, ok.o).setTaskLoop(withSkills(h, "a", {}, { names: ["x"] }))).toMatchObject({ result: { kind: "task-loop-set" } });
-    expect(errorOf(await serviceOf(h, ok.o).confirm(h.command("confirm", await h.confirmPayload()))))
-      .toMatchObject({ code: "skills-unsupported-agent", message: "skills-unsupported-agent:a:codex:codex" });
-  });
+// Approved H6 design (2026-10-05): replaces both former Codex refusal criteria whole.
+describe("set-task-loop supports Codex skills", () => {
+ const CODEX={agent:"codex"};
+ it("adds skills to a confirmed Codex task and rewrites its frozen snapshot",async()=>{
+  const h=await fixture([{taskId:"a",agent:CODEX,loop:loop("a")}]);const answer=await serviceOf(h).confirm(h.command("confirm",await h.confirmPayload()));if("error" in answer)throw new Error(JSON.stringify(answer));
+  const before=readBudgetProposal(h.store,"g").executionSnapshotHash;const ok=await fakeSyncskill("profile-ok");
+  expect(await serviceOf(h,ok.o).setTaskLoop(withSkills(h,"a",{},{names:["x"]}))).toMatchObject({result:{kind:"task-loop-set"}});
+  expect(readBudgetProposal(h.store,"g").executionSnapshotHash).not.toBe(before);expect(effective(h).loop!.skills).toEqual({names:["x"]});expect(readConfirmedTaskExecution(h.store,"g","a").skills).toEqual({profile:null,names:["x"]});expect(ok.calls()).toEqual([]);
+ });
+ it("confirms a draft Codex task after adding skills",async()=>{
+  const h=await fixture([{taskId:"a",agent:CODEX,loop:loop("a")}]);const ok=await fakeSyncskill("profile-ok");
+  expect(await serviceOf(h,ok.o).setTaskLoop(withSkills(h,"a",{},{names:["x"]}))).toMatchObject({result:{kind:"task-loop-set"}});
+  expect(await serviceOf(h,ok.o).confirm(h.command("confirm",await h.confirmPayload()))).toMatchObject({result:{kind:"confirmed"}});expect(readConfirmedTaskExecution(h.store,"g","a").skills).toEqual({profile:null,names:["x"]});
+ });
 });
 
 describe("set-task-loop on a confirmed task rewrites its snapshot entry (C15)", () => {
