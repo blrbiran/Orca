@@ -173,6 +173,9 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 
 ### 4.0.q H6 Codex skills（会话 `01a10a08`，2026-10-05，本地实现完成；全量有红／skip，未启用）
 
+**后续状态更正（2026-10-05，会话 `01a10aca`，人授权默认 main 合并与重钉）**：ccloop H6 已合并到默认目录 main（主题行 `Merge Codex frozen skill support into main`），保留默认仓最新 handoff；本轮 `ls-remote` 已核到该实现发布。Orca 精确 pin 更新为 `github:blrbiran/ccloop#c3af4d6bdfbe8e9f57e9d2a953cdc610098e781b`，默认安装已刷新。隔离重钉脚本 RC0：默认包 12/12、typecheck、web build、npm ci 可复现；merged ccloop build/typecheck 和 focused 169/169；Orca 追加控制 81/81、补同提交 fake 夹具后的 skills E2E 4/4。发布包不含测试夹具，初次 E2E 4 红为夹具缺失，原始输出保留；不把它混成真模型验收。真实 ccmem／syncskill 仍未验，ccloop 既有全量两红未重跑／未关闭。证据 `.superpowers/sdd/2026-10-05-codex-skill-repin/progress.md`。以下原轮的「clone-only／未重钉」是历史落点，已由本段取代；无 executor push、无面板重启。
+
+
 - 材料：`docs/superpowers/specs/2026-10-05-codex-skill-support-design.md`、同名 plan、`.superpowers/sdd/2026-10-05-codex-skill-support/progress.md`。本节结论归会话 `01a10a08`；完整命令、观测提交、RED→GREEN 和裁定在 ledger。
 - Orca 按 ccloop 安装表 kind 接受 Claude／Codex skills；Codex 信封用 protocol 3 `work.codexSkillsDir`，Claude 保留 `skillPluginDir`，两者互斥。冻结 names、快照与 lock 不变。
 - ccloop 每个 Codex phase 在 `.agents/skills/<name>` 临时链接到外部只读快照。原有父目录／legacy skill／无关文件保留；同名目录、文件或外来链接拒绝。仅清理本次创建／同 run 快照的精确残留链接，只删本次创建且空的父目录。等待子进程 close 后才清理；清理失败保留 sibling pending 标记，发布助手在 git add 前拒绝，失败结果只物化安全 base，Orca 保留 `codex-skills-*` 原因。
