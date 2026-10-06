@@ -157,9 +157,10 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
   app.get("/api/control/groups/:groupId/commands/:commandId", (req, res, next) => {
     try {
       const groupId = String(req.params.groupId), commandId = String(req.params.commandId);
-      const versions = readVersions(deps.store, groupId);
+      // A repository-scope result (`@repository:<id>`) has no group row, so versions are read only on a miss.
       const result = lookupCommandResult(deps.store, groupId, commandId);
       if (!result) {
+        const versions = readVersions(deps.store, groupId);
         sendControlError(res, 404, "command-result-not-found", "No retained command result was found.", { commandRevision: versions.commandRevision });
         return;
       }

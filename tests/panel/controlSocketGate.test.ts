@@ -1,7 +1,6 @@
 // Agent entry spec §4.2, §5, §6: the socket gate (client header, human-only surface) and per-row attribution.
-import { chmod, copyFile, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { controlRepoKey } from "../../src/panel/controlOptions.js";
 import type { StartedPanel } from "../../src/panel/server.js";
@@ -19,16 +18,6 @@ const ledger = async (state: string) => {
   const db = new DatabaseSync(join(state, "control.sqlite"), { readOnly: true });
   try { return db.prepare("SELECT id, client FROM commands ORDER BY id").all() as Array<{ id: string; client: string | null }>; } finally { db.close(); }
 };
-// set-workspace-mode is accepted only for a repository a configured execution port knows (spec: driver §2.1); nothing is spawned.
-async function configured(w: Awaited<ReturnType<typeof workspace>>) {
-  const binary = join(w.root, "ccloop");
-  await copyFile(resolve("tests/control/fixtures/fake-ccloop-control.mjs"), binary);
-  await chmod(binary, 0o700);
-  const table = join(w.root, "agents.json");
-  await writeFile(table, "{}", { mode: 0o600 });
-  Object.assign(w.env, { ORCA_CCLOOP_BIN: binary, ORCA_AGENTS_TABLE: table });
-  return w;
-}
 const amount = { tokens: 1, activeMs: 1, attempts: 1, sessions: 1 };
 
 describe("the socket gate (spec §4.2, §5, §6)", () => {
@@ -77,7 +66,7 @@ describe("the socket gate (spec §4.2, §5, §6)", () => {
   });
 
   it("C12: rows carry the client; a Web command retried over the socket replays and keeps 'web'", async () => {
-    const w = await configured(await workspace()); const panel = await boot(w);
+    const w = await workspace(); const panel = await boot(w, [], { port: true });
     const repo = controlRepoKey("proj");
     const first = await send(panel, `repositories/${repo}/workspace-mode`, { commandId: "ws-socket", expectedRevision: 0, payload: { workspaceMode: "clone" } }, "cli:claude");
     expect(first.status).toBe(200);

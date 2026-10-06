@@ -13,4 +13,11 @@ describe("orca panel usage text (spec §3.3)", () => {
     expect(stderr).toContain("does not suit a team");
     expect(stderr).toContain("--i-know-this-is-exposed");
   });
+
+  it("documents orca control and its exit codes (agent entry spec §4)", async () => {
+    const { stderr } = await captureStreams(() => main([]));
+    expect(stderr).toContain("orca control get <path>");
+    expect(stderr).toContain("orca control send <route>");
+    expect(stderr).toContain("Never starts a panel");
+  });
 });

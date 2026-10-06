@@ -105,6 +105,16 @@ const USAGE = `usage:
                                  table is never overwritten: the detection goes to <table>.draft.json and the diff is printed
   orca agents show               validate the installation table (ccloop agents validate) and print what each installation
                                  resolves to with no layer overriding it; exit 1 if any entry is refused
+  orca control get <path> [--control-state-dir <dir>] [--client-name <name>]
+  orca control send <route> --expected-revision <n> (--payload <json> | --payload-file <file>)
+                    [--command-id <id>] [--control-state-dir <dir>] [--client-name <name>]
+                                 talk to a running panel over its control socket (<state dir>/control.sock,
+                                 found from --control-state-dir, the projects file's controlStateDir,
+                                 $ORCA_CONTROL_DIR/panel or ~/.orca/control/panel). stdout is one JSON line,
+                                 {"schema":"orca-cli-response-v1",status,commandId?,body}. Never starts a panel.
+                                 set-limit and a budget limit field are refused: a person sets those in the
+                                 Web UI. Exit 0 answered 2xx, 1 refused here (panel-not-running included),
+                                 2 the panel answered an error
 `;
 
 async function collectLedgerFiles(paths: string[]): Promise<{ files: string[]; errors: string[] }> {
@@ -542,6 +552,11 @@ export async function main(argv: string[], stdinText?: string): Promise<number> 
       return 1;
     }
     return runAgentsCommand(rest, env, { stdout: (text) => process.stdout.write(text), stderr: (text) => process.stderr.write(text) });
+  }
+
+  if (command === "control") {
+    const { runControlCommand } = await import("./entry/controlCommand.js");
+    return runControlCommand(rest, process.env);
   }
 
   if (command === "checkpoint") {
