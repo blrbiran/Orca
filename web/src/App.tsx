@@ -22,7 +22,7 @@
  * Every pane stays mounted and only styles.css hides the inactive ones (panel UI redesign
  * spec §5.1): App-level criteria find Task control's buttons by role from the default pane.
  */
-import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import type { JSX } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -333,6 +333,8 @@ export function App(): JSX.Element {
     const commandId = nextCommandId();
     const command = { groupId: action.groupId, commandId };
     dispatchControl({ type: "command-uncertain", value: command });
+    // Spec §5: an answer that arrives after the scope changed may fill the cache, but must not reopen a detail.
+    const scopeAtSend = scopeKeyNow.current;
     const answer = await sendControlCommand(controlCommandPath(action), commandEnvelope(commandId, action));
     if (answer.kind === "uncertain") {
       // The id stays where it is: sessionStorage keeps it across a reload, and the
@@ -359,7 +361,7 @@ export function App(): JSX.Element {
     if (requirementVerb) setRequirementRefusal(answer.status >= 400 ? refusalFromAnswer(answer) : null);
     // A refused open made no group: reading it would only replace the refusal on screen with group-not-found.
     if (requirementVerb && (action.verb !== "requirement-open" || answer.status < 400)) {
-      if (action.verb === "requirement-open") setSelectedRequirement(action.groupId);
+      if (action.verb === "requirement-open" && scopeKeyNow.current === scopeAtSend) setSelectedRequirement(action.groupId);
       await readRequirement(action.groupId);
     }
     // Accept turns the group into a plan group: Task control reads it from here on.
@@ -534,12 +536,15 @@ export function App(): JSX.Element {
     setProjectView("project");
     writeProjectView(browserStorage(), "project");
   }, [projectCount, projectView]);
-  // The scope the lists are filtered by (spec §3). Task 3 only uses it to know when the scope changed.
+  // The scope the lists are filtered by (spec §3, §5).
   const scope = groupScope(projectsAnswer, project, projectView);
   // Spec §5: the open group, requirement and decision close when the scope changes. The first resolved scope (nothing
   // was chosen before it) closes nothing, and a failed project list (no project) neither closes nor counts as a
   // change. Drafts are the person's own data and are never touched.
   const scopeKey = JSON.stringify([scope.kind === "all", project]);
+  /** The scope key now, for a command whose answer outlives the render it was sent from. */
+  const scopeKeyNow = useRef(scopeKey);
+  scopeKeyNow.current = scopeKey;
   const lastScopeKey = useRef<string | null>(null);
   useEffect(() => {
     if (project === null) return;
@@ -558,6 +563,15 @@ export function App(): JSX.Element {
     return entry ? projectName(entry) : key;
   }, [projects]);
   const controlRepoId = chosen === undefined ? undefined : chosen.controlRepoId;
+  // Plan decision P5: a repository's name is its project's, else the config's display name, else the repoId itself --
+  // never the selected project's name.
+  const repoLabel = useMemo(() => (repoId: string): string => {
+    const owner = projects?.find((entry) => entry.controlRepoId === repoId);
+    if (owner !== undefined) return projectName(owner);
+    return controlConfig?.repositories.find((entry) => entry.repoId === repoId)?.displayName ?? repoId;
+  }, [projects, controlConfig]);
+  // Spec §6: what an All-projects import or new requirement may target -- a registered project's control repository.
+  const targets = useMemo(() => (projects ?? []).flatMap((entry) => (entry.controlRepoId === null ? [] : [entry.controlRepoId])), [projects]);
   const workspaceRepoId = controlRepoId === undefined ? controlConfig?.repositories[0]?.repoId : controlRepoId;
   useEffect(() => {
     if (controlConfig === null) return;
@@ -824,6 +838,9 @@ export function App(): JSX.Element {
           refusal={control.refusal}
           refetchRequired={control.refetchRequired}
           repoId={controlRepoId}
+          scope={scope}
+          repoLabel={repoLabel}
+          targets={targets}
           onSelect={setSelectedGroup}
           onDraft={(key, text) => dispatchControl({ type: "draft", key, text })}
           onCommand={(action) => {
@@ -848,6 +865,7 @@ export function App(): JSX.Element {
         {controlConfig !== null && control.recovery !== null && (
           <RequirementsPanel config={controlConfig} summary={summaryView(control)} views={requirementViews} selected={selectedRequirement} agents={agents}
             language={currentLanguage()} refusal={requirementRefusal}
+            scope={scope} repoLabel={repoLabel} targets={targets}
             repoId={controlRepoId} onRepo={(repoId) => { const entry = projects?.find((p) => p.controlRepoId === repoId); if (entry) chooseProject(entry.projectKey); }}
             onSelect={(groupId) => { setSelectedRequirement(groupId); void readRequirement(groupId); }} onCommand={(action) => { void sendControl(action); }} />
         )}

@@ -3,7 +3,7 @@
  * the browser originates only intents. Model-written text is shown as written (human ruling H8); the panel's own words
  * go through t.
  */
-import { useState, type JSX } from "react";
+import { useEffect, useState, type JSX } from "react";
 import { useTranslation } from "react-i18next";
 import { LANGUAGE_NAMES, PANEL_LANGUAGES, enumText, refusalText } from "./i18n.js";
 import type { PanelLanguage } from "./i18n.js";
@@ -11,6 +11,8 @@ import type { ControlAction } from "./controlApi.js";
 import { nextCommandId } from "./controlApi.js";
 import type { ControlRefusal } from "./controlState.js";
 import type { AgentsViewV1, ControlConfigV1, ControlSummaryV1, RequirementViewV1 } from "./controlTypes.js";
+import { inScope } from "./projectScope.js";
+import type { GroupScope } from "./projectScope.js";
 
 type View = RequirementViewV1;
 type Round = View["rounds"][number];
@@ -30,18 +32,33 @@ const isReason = (code: string): code is Reason => (REASONS as readonly string[]
 function revisionOf(view: View): number { return view.summary.commandRevision; }
 
 function NewRequirement(props: { config: ControlConfigV1; agents: AgentsViewV1 | null; language: PanelLanguage; onCommand: (a: ControlAction) => void;
-  repoId?: string | null; onRepo?: (repoId: string) => void }): JSX.Element {
+  repoId?: string | null; onRepo?: (repoId: string) => void;
+  scope?: GroupScope; targets?: readonly string[]; repoLabel?: (repoId: string) => string }): JSX.Element | null {
   const { t } = useTranslation();
+  const scope = props.scope;
+  const all = scope?.kind === "all";
+  const chosenRepoId = scope?.kind === "project" ? scope.repoId : props.repoId;
   const [localRepoId, setLocalRepoId] = useState(props.config.repositories[0]?.repoId ?? "");
+  // Spec §6: in All projects the target is this form's own, empty until chosen, and choosing it does not leave All.
+  const [target, setTarget] = useState("");
+  useEffect(() => { setTarget(""); }, [scope?.kind]);
   // Project switcher spec D4: the chosen project's repository when the control plane holds it, else this form's own.
-  const repoId = props.repoId != null && props.config.repositories.some((repo) => repo.repoId === props.repoId) ? props.repoId : localRepoId;
-  const setRepoId = (next: string): void => { setLocalRepoId(next); props.onRepo?.(next); };
+  const repoId = all ? target
+    : chosenRepoId != null && props.config.repositories.some((repo) => repo.repoId === chosenRepoId) ? chosenRepoId : localRepoId;
+  const setRepoId = (next: string): void => {
+    if (all) { setTarget(next); return; }
+    setLocalRepoId(next); props.onRepo?.(next);
+  };
   const [idea, setIdea] = useState("");
   const [tokens, setTokens] = useState(10_000_000);
   // Spec §11.2: the content language defaults to the language the panel is shown in.
   const [language, setLanguage] = useState<PanelLanguage>(props.language);
   const [agent, setAgent] = useState("");
   if (props.config.repositories.length === 0) return <p role="note">{t("requirements.noRepository")}</p>;
+  // Plan decision P1: no target is safe without a project list; the list's own note above says why.
+  if (scope?.kind === "unresolved") return null;
+  if (scope?.kind === "project" && scope.repoId === null) return <p role="note">{t("requirements.notUnderControl")}</p>;
+  const choices = all ? props.config.repositories.filter((repo) => (props.targets ?? []).includes(repo.repoId)) : props.config.repositories;
   return (
     <form aria-label={t("requirements.newTitle")} onSubmit={(event) => {
       event.preventDefault();
@@ -51,7 +68,8 @@ function NewRequirement(props: { config: ControlConfigV1; agents: AgentsViewV1 |
     }}>
       <h3>{t("requirements.newTitle")}</h3>
       <label>{t("requirements.repository")}<select value={repoId} onChange={(e) => setRepoId(e.currentTarget.value)}>
-        {props.config.repositories.map((repo) => <option key={repo.repoId} value={repo.repoId}>{repo.displayName}</option>)}</select></label>
+        {all && <option value="" disabled>{t("project.chooseTarget")}</option>}
+        {choices.map((repo) => <option key={repo.repoId} value={repo.repoId}>{all ? props.repoLabel?.(repo.repoId) ?? repo.displayName : repo.displayName}</option>)}</select></label>
       <label>{t("requirements.idea")}<textarea value={idea} onChange={(e) => setIdea(e.currentTarget.value)} required /></label>
       <label>{t("requirements.limit")}<input type="number" min={1} value={tokens} onChange={(e) => setTokens(Number(e.currentTarget.value))} /></label>
       <label>{t("requirements.contentLanguage")}<select value={language} onChange={(e) => setLanguage(e.currentTarget.value as PanelLanguage)}>
@@ -59,7 +77,7 @@ function NewRequirement(props: { config: ControlConfigV1; agents: AgentsViewV1 |
       <label>{t("requirements.agent")}<select value={agent} onChange={(e) => setAgent(e.currentTarget.value)}>
         <option value="">{t("requirements.agentDefault")}</option>
         {(props.agents?.installations ?? []).map((installation) => <option key={installation.id} value={installation.id}>{installation.id}</option>)}</select></label>
-      <button type="submit" disabled={idea.trim() === ""}>{t("requirements.open")}</button>
+      <button type="submit" disabled={idea.trim() === "" || repoId === ""}>{t("requirements.open")}</button>
     </form>
   );
 }
@@ -237,9 +255,14 @@ export function RequirementsPanel(props: { config: ControlConfigV1; summary: Con
   /** The control state's last refusal: a refused requirement command is explained here, where it was pressed. */
   refusal?: ControlRefusal | null;
   /** Project switcher spec D4: the chosen project's control repository, and how choosing one here moves the selection. */
-  repoId?: string | null; onRepo?: (repoId: string) => void }): JSX.Element {
+  repoId?: string | null; onRepo?: (repoId: string) => void;
+  /** Project filtering spec §5: which requirements are listed, as in Task control (undefined: all, as before). */
+  scope?: GroupScope; repoLabel?: (repoId: string) => string;
+  /** Spec §6: the repositories a new requirement may target in All projects. */
+  targets?: readonly string[] }): JSX.Element {
   const { t } = useTranslation();
-  const listed = props.summary.groups.filter((group) => group.requirement !== undefined);
+  const scope = props.scope;
+  const listed = props.summary.groups.filter((group) => group.requirement !== undefined && (scope === undefined || inScope(scope, group.repoId)));
   const view = props.selected === null ? undefined : props.views[props.selected];
   const refusal = props.refusal ?? null;
   return (
@@ -248,13 +271,15 @@ export function RequirementsPanel(props: { config: ControlConfigV1; summary: Con
       {refusal !== null && <p role="alert">{refusal.code} · {isReason(refusal.code) ? t(`requirements.reason.${refusal.code}`, { groupId: props.selected ?? "" }) : refusalText(refusal)}</p>}
       <div className="split">
         <nav aria-label={t("requirements.list")}>
-          {listed.length === 0 && <p>{t("requirements.none")}</p>}
+          {scope?.kind === "unresolved" ? <p role="note">{t("project.listUnavailable")}</p> : listed.length === 0 && <p>{t("requirements.none")}</p>}
           {listed.map((group) => (
             <button key={group.groupId} type="button" aria-current={group.groupId === props.selected} onClick={() => props.onSelect(group.groupId)}>
               {group.groupId} · {enumText("groupState", group.state)}
+              {scope?.kind === "all" ? ` · ${props.repoLabel?.(group.repoId) ?? group.repoId}` : ""}
             </button>
           ))}
-          <NewRequirement config={props.config} agents={props.agents} language={props.language} onCommand={props.onCommand} repoId={props.repoId} onRepo={props.onRepo} />
+          <NewRequirement config={props.config} agents={props.agents} language={props.language} onCommand={props.onCommand} repoId={props.repoId} onRepo={props.onRepo}
+            scope={scope} targets={props.targets} repoLabel={props.repoLabel} />
         </nav>
         {view !== undefined && <Detail view={view} onCommand={props.onCommand} />}
       </div>

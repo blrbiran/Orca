@@ -191,12 +191,17 @@ describe("the project switcher", () => {
     expect(projectSelect().options).toHaveLength(1);
   });
 
-  it("F: behaves as before when the project list cannot be read", async () => {
+  // Replaces the switcher spec D2 fallback ("behaves as before": import into the first repository) per
+  // docs/superpowers/specs/2026-10-06-panel-project-filtering-design.md §3/§8 (plan decision P1): with no project list a
+  // target would be a guess. Controller ruling in .superpowers/sdd/2026-10-06-panel-project-filtering/progress.md,
+  // Orca session 32306496.
+  it("F: offers no import while the project list cannot be read", async () => {
     projectsAnswer = { status: 500, body: { code: "boom", message: "boom" } };
     render(<App />);
-    fireEvent.click(within(await importRegion()).getByRole("button", { name: "Import plan" }));
-    await waitFor(() => expect(imports).toHaveLength(1));
-    expect(imports[0]).toEqual({ repoId: "alpha-11111111", planId: "pa" });
+    const region = await importRegion();
+    await waitFor(() => expect(within(region).getByRole("note").textContent).toBe("The project list is unavailable; groups are not shown until it is read."));
+    expect(within(region).queryByRole("button", { name: "Import plan" })).toBeNull();
+    expect(imports).toEqual([]);
     expect(screen.queryByRole("combobox", { name: "Project" })).toBeNull();
   });
 });

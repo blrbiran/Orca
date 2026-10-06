@@ -71,6 +71,7 @@ beforeEach(() => {
   globalThis.fetch = (async (input: RequestInfo | URL): Promise<Response> => {
     const url = String(input);
     if (url === "/api/todo") return jsonResponse({ rows: [] });
+    if (url === "/api/projects") return jsonResponse({ projects: [{ projectKey: "orca", controlRepoId: "orca" }] });
     if (url === "/api/metrics") return jsonResponse(METRICS);
     if (url === "/api/chains") return jsonResponse({ repos: [] });
     if (url === "/api/control/config") return jsonResponse(config);

@@ -29,6 +29,7 @@ beforeEach(() => {
     const method = init?.method ?? "GET";
     requests.push(`${method} ${url}`);
     if (url === "/api/todo") return json({ rows: [] });
+    if (url === "/api/projects") return json({ projects: [{ projectKey: "repo", controlRepoId: "repo" }] });
     if (url === "/api/metrics") return json(metrics);
     if (url === "/api/chains") return json({ repos: [] });
     if (url === "/api/control/config") return json(config);
