@@ -117,6 +117,8 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 ✅ **Orca 接 syncskill（2026-10-03，会话 `08b1007d`，Orca ＋ ccloop 两仓，SDD 七个 task＋终审）做完，人已审**：loop 方案可声明 skill 集，每个 run 注入只读快照、作为 claude plugin 加载；见 §4.0.n。
 ✅ **Task control 刷新循环＋读视图排序＋全局项目切换（2026-10-04，会话 `08011394`）做完，等人审**：见 §4.0.p。
 ✅ **syncskill 跟进（2026-10-03，会话 `9d95e6c8`）做完，等人审**：重钉 ccloop 到 `2b380ea`；codex＋skills 改在 confirm／set-task-loop 就拒；skills 形状错报出具体原因；修了一处临时目录泄漏；**真 claude 下付费跑通一次带 skills 的任务**（n＝1）。见 §4.0、§4.0.o。
+✅ **面板项目过滤＋全部项目视图（2026-10-06，会话 `32306496`）做完，等人审**：见 §4.0.r。
+✅ *** **N2 agent 入口（2026-10-07，会话 `6cc0c1e9`）做完，等人审**：面板多开一个 0600 的 unix socket `control.sock`；`orca control get|send` 每次只输出一行 JSON；`skills/orca-control`；`orca mcp serve`。agent 唯一不能做的是设预算额度，而且这只是护栏、不是边界（spec §13）。运行中的面板要重启后才有 socket。见 §4.0。 ***
 
 **现行基线（会话 `08011394`，2026-10-04，项目切换之后的最终树）**：干净 clone、HOME 与四个 XDG 根改道、TMPDIR `/private/tmp/claude-501/og/t`、`ORCA_CCLOOP_BIN`＝ccloop `2b380ea` 的 clone build、`ORCA_AGENTS_TABLE`＝fake codex `integration`、真 syncskill／ccmem 二进制，逐段各跑：web build、typecheck、ledger、claude-md、hooks-path、`verify:control`、`verify:scheduler`、`verify:ccloop-pin`、`verify:panel`、`--ws check`（web 65 文件 405 条）、`check-tmp-leak`（0 残留）都 RC 0；全量 vitest **2745 条：2740 过、3 skipped（`ccloopDefaultE2E`，formal only）、2 红**＝已登记 flake `driverRequirementSplit`、`controlShutdown` 143；`verify:chain` 的全量另红 `controlShutdown` 143 与**新登记**的 `agentSelectionE2E` C3（见下）。三个红文件负载约 6 时单跑各 3/3 绿。原始报数在该会话 scratchpad（会话结束即失效），结论只在这里。
 
@@ -155,41 +157,81 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 
 ## 四、⛔ 下一件事
 
-### 4.0 ⛔ 现在的下一件事（2026-10-06，会话 `32306496`；本节优先于旧条目）
+### 4.0 ⛔ 现在的下一件事（2026-10-07，会话 `6cc0c1e9`；本节优先于旧条目）
 
-本节整节替换了会话 `01a10aca` 写的旧 §4.0（随主题行 `update handoff` 由人提交）。旧文「设计审核阶段、人尚未批准 spec、没有 plan、没有产品／判据改动」**已不成立**：人 2026-10-06 批准 spec，主题行 `docs(plan): implement project filtering and the all-projects view` 起按 SDD 在 main 上实施完。旧文仍成立的结论（人定的顺序、既有项目能力、隔离纪律）留在下面。
+本节整节替换会话 `32306496` 写的 §4.0。旧文所说「②N2 未开始」已不成立：spec 在主题行 `docs(spec): design the N2 agent entry (control socket, CLI, skill, MCP bridge)` 提交，之后按 SDD 在 main 上实施完。旧 §4.0 留下的结论压缩到 §4.0.r。
 
-**人已同意的顺序**：①项目过滤＋「全部项目」视图（**本轮，已做完，等人审**）→②N2 agent 入口（CLI `--json`→skill→MCP 薄壳）→③隔离根的真实 ccmem／syncskill 验收及 ccloop 既有红项诊断。②③未开始；litellm／A2A 延后。下一个 agent 接 ②。
+**人已同意的顺序**：①项目过滤＋全部项目视图（已做完，等人审，§4.0.r）→②N2 agent 入口（**本轮已做完，等人审**）→③隔离根的真实 ccmem／syncskill 验收，以及 ccloop 既有红项 `stopProof`／`codexWatchdog` 的诊断。**下一个 agent 接 ③。**③ 的纪律：临时 `CCMEM_DATA_ROOT`／HOME，不碰真实数据根；诊断先复现，分清是权限原因还是负载原因；改既有判据要人点名。litellm／A2A 仍延后。
 
-**接手先读**：spec `docs/superpowers/specs/2026-10-06-panel-project-filtering-design.md`（§11 R1–R3 取代 §§5／7／9 的不完整约束；**§12 是计划与实施裁定的汇总**，末尾有一条具名更正）；plan `docs/superpowers/plans/2026-10-06-panel-project-filtering.md`；台账 `.superpowers/sdd/2026-10-06-panel-project-filtering/progress.md`（每条 `Ruling:`、Final gates、Task 1 server mutations、Final fix wave）。
+**接手先读**：
+- spec `docs/superpowers/specs/2026-10-07-agent-entry-design.md`：§1 是人的裁定 H1–H4；§12 是计划期决定 D1–D5；§13 是终审后的更正：人工专属闸门只是护栏，不是安全边界；变更路由是 22 条，不是 23 条。
+- plan `docs/superpowers/plans/2026-10-07-agent-entry.md`。
+- 台账 `.superpowers/sdd/2026-10-07-agent-entry/progress.md`：每条 `Ruling:`、每个 task 的 minor、Final review、Task 9 gates。各 task 报告在同一目录。
 
-- **做了什么**（按主题行找，从 `feat(control): name each group summary's repository` 到 `docs(sdd): record the final fix wave`）：
-  - 服务端 `GroupSummaryV1` 带可信 `repoId`（clarifying 组取需求的仓库；plan 与需求不一致时拒绝猜）；web 类型同步。
-  - 侧栏选「全部项目」或单个项目，存 `localStorage` 的 `orca.projectView`；Task control、需求、Decisions 按所选范围过滤，全部项目下行标明归属仓库（P5 `repoLabel`）。
-  - 全部项目下导入／新建需求必须显式选具体目标；目标不再被持有时重置、提交禁用到选出有效目标为止。
-  - 打开的组读它自己 `plan.repoId` 的工作区（按仓库存）；面板级工作区选择器只在项目模式显示（P3）。
-  - R1：recovery retry 用 blocker **目标组**自己的 revision；epoch 变化时 blocker 仍可见、不可操作，直到完整重读落地。
-  - R2：需求回答／纠正等草稿按 owner 键保存，不随详情卸载；迟到成功不删新编辑。
-  - R3：决策 POST 结果与重试绑定原请求记录；非当前详情的结果进全局具名提示。
-  - 终审修复轮：全部项目下导入显示摘要与无 plan 提示；项目模式新建需求不再回落到第一个仓库，改为 `requirements.repositoryNotConfigured`；新增「切项目保留未保存的 task 草稿」判据。
-- **验证**（全部在 `git clone --local` 隔离副本，HOME＋四 XDG 改道，短真 TMPDIR；数字与原始输出路径以台账 Final gates／Final fix wave 两节为准）：
-  - Task 10 终树：typecheck、`--ws check`（web 70 文件／486 条）、web build、focused 根 3 文件／20 条与 web 9 文件／103 条、`verify:panel`、`verify:control`（127 文件／1315 过／4 skipped）都 RC 0。全量 `npm test` RC 1：2807 条＝2798 过、6 skipped、3 红＝已登记负载 flake `driverRecovery`、`driverRequirementSplit`、`controlShutdown`，负载降下后单文件各自全绿；**flake 未关闭**。6 个 skip 是真二进制文件（`ccloopDefaultE2E` 3、`driverSkillsReal`、`syncskillReal`、`ccmemReal` 各 1），不声称绿。
-  - 门第一、二遍的红是环境（TMPDIR 过长、缺 `ORCA_CCLOOP_BIN`／`ORCA_AGENTS_TABLE`、bin 指向不带 tests 的安装包），台账里已具名记下并被第三遍取代。
-  - 删除变异：每个 task 在 clone 里跑自己的并见红（恢复 diff／cached 0 字节）；Task 10 补跑评审延后的两条；Task 1 的五条服务端变异事后补跑全红；终审修复轮 14 条，13 条当即红，1 条绿（切项目清掉 task 草稿）⇒ 补了判据后见红。
-  - 终审修复轮门只跑了 web check（70 文件／490 条）、根 typecheck、focused 5 文件／71 条；**没重跑全量、`verify:control`、`verify:panel`**（src/ 下 web 以外无改动）。终审修复轮的复审结果见 ledger。
-- **要人审的裁定**（原文在台账 `Ruling:` 行，汇总在 spec §12）：
-  - **改写了既有判据** `web/tests/projectSwitcher.test.tsx` 的 F（原 switcher spec D2：项目列表读不到时导入第一个仓库）⇒ 整条改写为：无 Import 按钮、Import 区显示项目列表不可用、零导入 POST、无 Project 选择框。依据：更新且已批准的 spec §3／§8 取代 D2。人不同意就回滚这一条判据并重议 P1。
-  - **P1**：项目列表未答或失败时，组与需求不列出、导入／新建需求禁用；recovery、uncertain 命令、告警仍可见。**P2**：此时 Decisions 显示所有行并保持原仓库过滤。**P3**：见上。**P4**：「结果未知」一行列出所有项目的未决命令。**P5**：仓库标签取注册项目名→config `displayName`→原始 `repoId`，绝不用所选项目名。
-  - **R1 reducer**：epoch 变化时仍 purge，但保留新 epoch 的 recovery 视图。
-  - **R2 无主文字**：全部项目下没选目标也能输入；只在所选目标没有自己草稿时收进去，否则丢弃，不覆盖、之后不再冒出来（spec §12 末尾更正）。
-  - **R3 提示**：全局提示只排除详情里正显示的那条记录，不排除整个 owner；淘汰从不丢 pending，已结束的按 dismissed→recorded→refused 先后、各自最旧先淘汰。
-  - **搁置**：Import 区「项目列表不可用」提示措辞（终审 Minor 5）没改 —— 改它要再动一次 F 的断言；只是措辞。
-- **还开着的**：
-  - 终审保留的延后小项：late-reply 判据里固定 450 ms sleep（flake 风险）；旧 epoch 的 recovery 读在较新 summary 之后到达时会被存下（`refetchRequired` 仍禁 Retry，无判据）；`DecisionOperations` 未进 `i18nPseudo`（会改既有判据，未做）；ControlPanel／App 的 props 膨胀待后续收拢（控制器转述的终审意见，台账未逐条记）。
-  - 没做：真实 ccmem／syncskill 验收；ccloop 已知红 `stopProof`／`codexWatchdog` 诊断；人的面板没重启，不能说运行中的面板已有本轮功能。
-- **检查点缺口**：本轮中途 `orca checkpoint write` 被拒（dirty-worktree：会话 `01a10aca` 未提交的本文改动；单独提交它被权限分类器拒绝），没写成检查点；那份改动随后由人以 `update handoff` 提交。
-- **既有项目能力**（旧 §4.0 留下，仍成立）：registry 默认 `~/.orca/projects.json`，侧栏新增／改名和持久选择已完成，新增仓库进入 control config 不需重启。项目切换原 spec §7 R1–R6／§8、registry spec §12 与旧 ledger 的审阅项仍有效。旧全量红项（driverRecovery／K13 超时、ccmemAdapter ENOEXEC 断言等）历史证据仍保留；本轮未复现 K13／ENOEXEC 不等于关闭。ccmem 本地 origin 缺陷已修，不能与 adapter errno 混为一谈。H6 见 §4.0.q。
-- **隔离纪律**：验证只在 `git clone --local` 副本；HOME＋四 XDG 根改道；TMPDIR 短且为真目录（长路径会让 tsx IPC 套接字报 EADDRINUSE）；不碰真实 `~/.orca`／ccmem 数据，不重启人的面板；不跑付费真模型（需人明确授权，当前没有）。输出重定向到文件再完整读回；shell 走 `rtk proxy`，git 用 `/usr/bin/git`。远端状态接手／收尾时只读 `ls-remote` 核，不靠本文。
+**做了什么**（按主题行找，从 `feat(control): record which client delivered each command` 到 `docs(sdd): close the N2 agent entry round in its ledger`）：
+- **面板侧 socket**：
+  - 控制面装配成功，且 recovery 跑完之后，面板在 `<stateDir>/control.sock` 再开一个 0600 的 unix socket。默认路径是 `~/.orca/control/panel/control.sock`，由 `ORCA_CONTROL_DIR`／`--control-state-dir` 改道；目录 0700。
+  - 这个 socket 只挂 `/api/control/*`，没有 token、Host 检查和静态页。
+  - 启动时遇到残留的 socket 会先删掉；路径上是别的文件、路径太长或 listen 失败时，面板照常起，只在 stderr 打一行 `orca-panel: control socket unavailable: <code>`。
+  - 退出顺序：两个 server 都关完、socket 上在途的请求排空之后，才执行 `control.close()` 释放 store。
+  - stdout 的 ready 行不变（D1）；socket 路径打在 stderr 的 `orca-panel: control socket <path>`，也存在 `StartedPanel.socketPath`。
+- **客户端归属**：
+  - socket 请求必须带 `x-orca-client: cli|mcp[:<name>]`，否则答 400 `control-client-invalid`，不进台账。
+  - 迁移 6→7 给 `commands` 表加了 `client` 列：Web 记 `web`；非路由写入（recovery、pump）记 null。
+  - 值经 AsyncLocalStorage 传递，按 commandId 匹配，不进两个哈希；同一命令跨通道重放，保留最初那次的 client。
+- **人工专属**（H3）：只在 socket 上生效。`set-limit` 答 403 `control-verb-human-only`；`requirement-open` 带自有字段 `limit`、或 `proposal-edit` 带 `proposedGroupLimit`，答 403 `control-field-human-only`。拒绝都不进台账。名单是 `src/panel/humanOnly.ts` 里的常量；判据 C19 遍历全部命令 payload 里的金额字段，有漏网就红。
+- **CLI**：`orca control get <path>` 与 `orca control send <route> --expected-revision N --payload …`，代码在 `src/entry/`。
+  - 是泛化透传，只由服务端校验。
+  - stdout 永远只有一行 `{"schema":"orca-cli-response-v1",status,commandId?,body}`；`send` 失败时也带 commandId，没给就生成 `cli-<uuid>`。
+  - 退出码：0 表示服务端 2xx；1 表示本地拒绝（含 `panel-not-running`、`control-socket-error`、超时）；2 表示服务端答了错误；3 只留给崩溃。
+  - 找 socket 的顺序：`--control-state-dir` → projects 文件里的 `controlStateDir` → `$ORCA_CONTROL_DIR/panel` → `~/.orca/control/panel`。projects 文件坏了就具名拒绝。从不自动拉起面板。
+- **skill**：`skills/orca-control/SKILL.md`，教 agent 读→写、重试、轮询，并给出 revision 和各类 id 从哪里读，以及 22 条路由表。payload 例子都对 schema 跑过 safeParse，有判据防止它和代码漂移。本轮没有装进任何真实 skill 目录。
+- **MCP**：`orca mcp serve`，走 stdio，只有 `orca_read`、`orca_send` 两个工具，是 socket 的薄客户端；生成的 commandId 是 `mcp-<uuid>`。新依赖 `@modelcontextprotocol/sdk` 1.32.1，根目录的 zod 3.25.76 没变。
+- **顺带修了一个旧 bug**：`GET /api/control/groups/:scope/commands/:id` 改为先查结果。以前 `@repository:`／`@operator:` 这两类 scope 的结果在两个通道上都查不到（报 group-not-found）。
+
+**验证**：在隔离 clone 里跑，HOME 和四个 XDG 根都改了道，TMPDIR 短且是真目录。数字与命令以台账 Task 9 为准。
+- **终树**：web build、typecheck、`--ws check`（web 70 文件／490 条）、`verify:control`（129 文件／1321 过／4 skipped）、`verify:panel`（0–14）、`check-tmp-leak`（0 残留）都是 RC 0。
+- **全量 `npm test`**：RC 1，共 2860 条：2852 过，6 skipped，2 红。红的是已登记的负载 flake：gateCheck 的 K13、driverRequirementSplit。负载约 5 时单跑 3/3 绿；**flake 未关闭**。
+- **评审与变异**：每个 task 都有删除变异并见红，恢复后 diff 为 0 字节。等价变异记了三条。每个 task 一审；终审（opus）提出 6 项，一个修复轮全部修掉，复审干净。
+
+**要人审的**（原文是台账里的 `Ruling:` 行）：
+- **P1**：直接在 main 上实施，没开 worktree 分支。
+- **P7**：变更路由实为 22 条，spec §2 写的 23 条有误。
+- **Task 3 的退出顺序**：spec 优先于 brief 写的同步 close 形状。
+- **Task 6**：接受 brief 之外对 command-result GET 的修正。
+- **F1／F2**：终审修复轮修了哪些、延后了哪些。
+- **⚠️ §13**：人工专属闸门只约束合作的 agent。任何同一 OS 用户的进程都能 `GET /` 拿到 Web token，绕过闸门调 `set-limit`。要把它做成真边界（例如换 OS 用户、token 不再随页面下发）是人的决定，本轮没做。
+- **未判的一条**：`import-plan`／接受草稿时，group 上限按 plan 的 task 数算出来，而 task 数由 agent 决定。spec 没把它列为人工专属，请人看一眼。
+
+**还开着的**：
+- **延后小项**（台账 `minor (deferred)` 与 F2）：
+  - 客户端不校验 socket 文件的属主 uid。
+  - 状态目录本身对 group／other 可写时不告警。
+  - listen 之后残留的 `once("error")` 监听器没摘。
+  - `@repository`／`@operator` scope 查不到结果时仍答 group-not-found（skill 已教 agent 用同一个 `--command-id` 重发）。
+  - mcp 在 stdin 结束时没有调 `server.close()`。
+  - 没有判据断言 `mcp:<name>` 真的送到了面板。
+- **没做**：真实 ccmem／syncskill 验收；ccloop 两红的诊断；没有全局花费上限（spec §10）；client 归属存了，但没在任何地方显示。
+- **没碰**：人的面板没重启，**运行中的面板没有 socket**，重启之后才有。没跑付费模型，没碰真实 `~/.orca`，没有 push。
+- **npm audit**：8 个漏洞（vitest／vite／esbuild／tinypool／proxy-addr／source-map-js）在本轮之前就有，不是新依赖带进来的。
+
+### 4.0.r 面板项目过滤＋全部项目视图（会话 `32306496`，2026-10-06，**已完成，等人审**；过程删了，结论留在这里）
+
+本节由会话 `6cc0c1e9` 压缩。依据：本条原为 §4.0，N2 已经接上（主题行 `docs(sdd): close the N2 agent entry round in its ledger`）。原文在 git 历史里（主题行 `docs(handoff): project filtering and All projects are done; next is the N2 agent entry`），完整证据在 spec `docs/superpowers/specs/2026-10-06-panel-project-filtering-design.md` §11–§12、台账 `.superpowers/sdd/2026-10-06-panel-project-filtering/progress.md`。
+
+- **做了什么**：
+  - `GroupSummaryV1` 带上可信的 `repoId`。
+  - 侧栏可以选「全部项目」或单个项目（存在 `orca.projectView`），Task control、需求、Decisions 按所选范围过滤；全部项目下导入或新建需求，必须显式选具体目标。
+  - R1：recovery 重试用目标组自己的 revision。R2：草稿按 owner 保存。R3：决策结果绑定到原请求。
+- **门**：
+  - 修复轮之后的门由会话 `6cc0c1e9` 补跑（台账 `## Post-fix-wave gate`）。全量 2807 条只红 `driverRequirementSplit` 一条，单跑 3/3 绿；`verify:control`／`verify:panel`／tmp-leak 都是 RC 0。
+  - 本轮（N2）之后的全量见 §4.0。
+- **要人审的**：
+  - **改写了既有判据**：`web/tests/projectSwitcher.test.tsx` 的 F。原 switcher spec D2 说项目列表读不到时导入第一个仓库；改写为没有 Import 按钮、零导入 POST。人不同意就回滚这一条，并重议 P1。
+  - P1–P5、R1–R3 的 reducer／无主文字／提示裁定，原文见 spec §12。
+  - 搁置：Import 区「项目列表不可用」的提示措辞。
+- **延后小项**：late-reply 判据里固定的 450 ms sleep；旧 epoch 的 recovery 读迟于较新 summary 到达时仍会被存下；`DecisionOperations` 没进 `i18nPseudo`；ControlPanel／App 的 props 膨胀。
+- **既有项目能力（仍成立）**：registry 默认 `~/.orca/projects.json`；侧栏可新增、改名，选择会持久保存；新增仓库进入 control config 不需重启。
 
 ### 4.0.q H6 Codex skills（2026-10-05实现；会话 `01a10aca` 完成默认 main 合并与重钉）
 
@@ -1135,7 +1177,7 @@ ccloop 的 I-2 里，spec 第一版把「渲染成 `JSON.stringify`」贴在那�
 
 ### 8.1 代码在哪
 
-`src/{chain,checkpoint,control,corrections,gate,ledger,level,metrics,panel,scheduler}/` ＋ `src/cli.ts`；
+`src/{chain,checkpoint,control,corrections,entry,gate,ledger,level,metrics,panel,scheduler}/` ＋ `src/cli.ts`（`entry/` 是 N2 的 socket 客户端、`orca control`、`orca mcp serve`；skill 在仓库根 `skills/orca-control/`）；
 前端在 `web/`（进根 `workspaces`）。`npm run verify` 串起 typecheck、全量测试、台账校验、
 `CLAUDE.md` 行数、`core.hooksPath`、`verify:control`、`verify:scheduler`、`verify:chain`、
 web build、`verify:panel`、`--ws check`。**CLI 退出码 0/1/2**，另有 exit 3（plan 级）、
@@ -1237,6 +1279,11 @@ Orca 要求排序去重的四值枚举 ⇒ 将来非 null 且写错时 Orca 整�
   远端从早上直接跳到深夜的某一笔，且**停在中间**而不是最新一笔。更像某一刻的**批量推送**。
   ⇒ **控制器没有动任何钩子**（那是人的配置）。**要人自己查 `post-commit`／`post-checkout` 并决定。**
   ⇒ ⚠️ **不论是谁推的：那些提交现在是【已发布文本】，后续更正只能追加具名 ERRATUM。**
+- 🆕 **N2（2026-10-07，会话 `6cc0c1e9`）归人的三件**：
+  - 审台账 `.superpowers/sdd/2026-10-07-agent-entry/progress.md` 里的 `Ruling:` 行。
+  - 决定要不要把人工专属闸门做成真边界：现状是同一 OS 用户的进程能 `GET /` 拿到 token，绕过闸门（spec §13）。
+  - 何时重启自己的面板，让 socket 生效。
+  `import-plan` 的上限按 agent 定的 task 数算出来，这一点也请人看一眼。
 - **`orca chain` 的真钱活体验收** —— 要人提交 `.orca/chain.json` 选 model 并点头
   （Orca 内尚不存在该文件 ⇒ 开链被 `chain-config-missing` 拒绝）。**先测 F，副本 T1 > F。**
 - **「第二个 panel 不挂控制面」** —— 是**控制器自己做的决定，不是人裁**，可逆，要不要维持仍未决。
