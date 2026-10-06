@@ -258,6 +258,50 @@ describe("detail drafts outlive the detail, keyed by owner (spec §11 R2)", () =
   });
 });
 
+describe("text typed in All before a target is chosen (fix round 1, I1 and ruling M2)", () => {
+  it("4b: the next explicit choice takes it only into a draft-less target and drops it either way; it never resurfaces", async () => {
+    const GAMMA = "gamma-33333333";
+    panel.config = { ...panel.config, repositories: [...panel.config.repositories, { repoId: GAMMA, displayName: "gamma" }] };
+    panel.projects = { status: 200, body: { projects: [...TWO_PROJECTS, { projectKey: "gamma", name: "Gamma", controlRepoId: GAMMA, editable: true }] } };
+    window.localStorage.setItem(PROJECT_VIEW_KEY, "all");
+    render(<App />);
+    await ready();
+    await waitFor(() => expect(selectedText()).toBe("All projects"));
+    const form = (): HTMLElement => screen.getByRole("form", { name: "New requirement" });
+    const target = (): HTMLSelectElement => within(form()).getByRole("combobox", { name: "Repository" }) as HTMLSelectElement;
+    const idea = (): HTMLTextAreaElement => within(form()).getByRole("textbox", { name: "Idea" }) as HTMLTextAreaElement;
+    await waitFor(() => expect(Array.from(target().options).map((option) => option.value)).toEqual(["", ALPHA, BETA, GAMMA]));
+    expect(target().value).toBe("");
+
+    fireEvent.change(idea(), { target: { value: "loose" } });
+    fireEvent.change(target(), { target: { value: ALPHA } });
+    expect(idea().value).toBe("loose");
+    fireEvent.change(idea(), { target: { value: "alpha idea" } });
+    // Alpha took the loose text; it is gone, so Beta starts empty.
+    fireEvent.change(target(), { target: { value: BETA } });
+    expect(idea().value).toBe("");
+    fireEvent.change(idea(), { target: { value: "beta idea" } });
+
+    await switchTo("alpha", "Alpha");
+    await chooseAll();
+    await waitFor(() => expect(target().value).toBe(""));
+    expect(idea().value).toBe("");
+    // Beta has its own draft: the loose text does not overwrite it, and is dropped.
+    fireEvent.change(idea(), { target: { value: "loose2" } });
+    fireEvent.change(target(), { target: { value: BETA } });
+    expect(idea().value).toBe("beta idea");
+    // A fresh target shows neither loose text nor another target's draft.
+    fireEvent.change(target(), { target: { value: GAMMA } });
+    expect(idea().value).toBe("");
+    fireEvent.change(target(), { target: { value: ALPHA } });
+    expect(idea().value).toBe("alpha idea");
+    await switchTo("alpha", "Alpha");
+    await chooseAll();
+    await waitFor(() => expect(target().value).toBe(""));
+    expect(idea().value).toBe("");
+  });
+});
+
 describe("an All-projects target that is no longer held is unchosen (Task 4 review M1, spec §8)", () => {
   it("5: Beta chosen in both forms, then the project re-read drops beta: neither form can submit, and nothing is posted", async () => {
     const gamma = { projectKey: "gamma", name: "Gamma", controlRepoId: null, editable: true };
@@ -282,6 +326,21 @@ describe("an All-projects target that is no longer held is unchosen (Task 4 revi
     await act(async () => { window.dispatchEvent(new Event("focus")); });
     await waitFor(() => expect(Array.from(targetIn(form()).options).map((option) => option.value)).toEqual(["", ALPHA]));
     expect(selectedText()).toBe("All projects");
+    expect(targetIn(importRegion()).value).toBe("");
+    expect(targetIn(form()).value).toBe("");
+    expect(importButton().disabled).toBe(true);
+    expect(startButton().disabled).toBe(true);
+    fireEvent.click(importButton());
+    fireEvent.click(startButton());
+    fireEvent.submit(form());
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
+    expect(panel.posts.map((post) => post.url)).toEqual([]);
+
+    // Fix round 1, ruling M1: a target seen unheld is forgotten -- beta listed again is not chosen again without a choice.
+    panel.projects = { status: 200, body: { projects: [...TWO_PROJECTS, gamma] } };
+    await act(async () => { window.dispatchEvent(new Event("focus")); });
+    await waitFor(() => expect(Array.from(targetIn(form()).options).map((option) => option.value)).toEqual(["", ALPHA, BETA]));
+    await waitFor(() => expect(Array.from(targetIn(importRegion()).options).map((option) => option.value)).toEqual(["", ALPHA, BETA]));
     expect(targetIn(importRegion()).value).toBe("");
     expect(targetIn(form()).value).toBe("");
     expect(importButton().disabled).toBe(true);

@@ -8,7 +8,7 @@
  * so nothing here decides whether a group may start, how much budget is free, or
  * whether an unknown run is finished.
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { JSX } from "react";
 import { useTranslation } from "react-i18next";
 import { AgentSettings } from "./AgentSettings.js";
@@ -110,6 +110,8 @@ function ImportForm(props: ImportFormProps): JSX.Element {
   const plans = repository === undefined ? [] : props.config.plans.filter((entry) => entry.repoId === repository.repoId);
   const [planId, setPlanId] = useState<string | null>(null);
   const plan = plans.find((entry) => entry.planId === planId) ?? plans[0];
+  // Fix round 1 (ruling M1): a target seen unheld is forgotten with its plan, so a re-listing needs a new choice.
+  useEffect(() => { if (all && target !== "" && repository === undefined) { setTarget(""); setPlanId(null); } }, [all, target, repository]);
   return (
     <section aria-label={t("control.import.region")}>
       <h3>{t("control.import.title")}</h3>

@@ -51,11 +51,15 @@ function NewRequirement(props: { config: ControlConfigV1; agents: AgentsViewV1 |
   // Spec §6 and §8 (Task 4 review M1): only a held target -- a registered project's control repository -- counts as
   // chosen; one that dropped out of the project list is unchosen again, whatever this form still remembers.
   const choices = all ? props.config.repositories.filter((repo) => (props.targets ?? []).includes(repo.repoId)) : props.config.repositories;
+  const held = choices.some((repo) => repo.repoId === target);
+  // Fix round 1 (ruling M1): a target seen unheld is forgotten, so a later re-listing needs a new choice.
+  useEffect(() => { if (all && target !== "" && !held) setTarget(""); }, [all, target, held]);
   // Project switcher spec D4: the chosen project's repository when the control plane holds it, else this form's own.
-  const repoId = all ? (choices.some((repo) => repo.repoId === target) ? target : "")
+  const repoId = all ? (held ? target : "")
     : chosenRepoId != null && props.config.repositories.some((repo) => repo.repoId === chosenRepoId) ? chosenRepoId : localRepoId;
   // Spec §11 R2: the content belongs to its concrete target. Text typed in All before a target is chosen belongs to
-  // no project; it goes to the first target chosen that has no draft of its own, never over another target's draft.
+  // no project; the next explicit choice takes it when that target has no draft of its own, and drops it either way
+  // (ruling M2), so it never resurfaces under a later target or over another target's draft.
   const defaults: NewRequirementDraft = { idea: "", tokens: 10_000_000, language: props.language, agent: "" };
   const [unowned, setUnowned] = useState<NewRequirementDraft | null>(null);
   const draft = repoId === "" ? unowned ?? defaults : props.drafts.newRequirement[repoId] ?? defaults;
@@ -65,7 +69,10 @@ function NewRequirement(props: { config: ControlConfigV1; agents: AgentsViewV1 |
   };
   const setRepoId = (next: string): void => {
     if (all) {
-      if (unowned !== null && props.drafts.newRequirement[next] === undefined) { props.onDraft("newRequirement", next, unowned); setUnowned(null); }
+      if (unowned !== null) {
+        if (props.drafts.newRequirement[next] === undefined) props.onDraft("newRequirement", next, unowned);
+        setUnowned(null);
+      }
       setTarget(next);
       return;
     }
