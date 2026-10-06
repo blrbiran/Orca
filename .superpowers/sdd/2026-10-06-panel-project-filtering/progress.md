@@ -286,3 +286,20 @@ Gates (clone at 4298767, raw output under `$SCRATCH/fw/`): `cd web && npm run ch
 Ruling: final-review Minor 5 (Import unresolved note wording) parked — fixing it requires editing the ruled rewrite of projectSwitcher F again; wording is cosmetic — cost if wrong: one slightly off note sentence remains.
 Final fix wave: re-review — A, B, C, E ADDRESSED; no existing assertion edited; no new breakage; D parked by ruling (commits 82b5d76..aee8bb2).
 Round status: all 10 tasks complete; final review findings fixed or parked with rulings. Workspace kept (project convention). Gates not re-run after the fix wave for root `npm test`/verify:control/verify:panel (fix wave ran web check 490/490, typecheck, focused) — next agent may re-run the full isolated gate once.
+
+## Post-fix-wave gate (Orca session 6cc0c1e9, 2026-10-06)
+
+Closes the gap noted in the handoff: after the final fix wave only web check and typecheck had run. Tree tested: `git clone --local` of main at 0d0d9ff `chore(checkpoint): orca-dev-32306496, level 429360 of 1000000 (T1 330000, T2 450000, band 1)` (no product change after aee8bb2). `npm ci` RC 0. HOME and the four XDG roots under the session scratchpad `home/`; TMPDIR=`/private/tmp/claude-501/og6/t` (short, real); `ECC_GATEGUARD=off DISABLE_OMC=1`; ORCA_CCLOOP_BIN = a fresh clone of ccloop checked out at the pinned c3af4d6, `npm ci` + `npm run build` (RC 0, has tests/fixtures); ORCA_AGENTS_TABLE = one codex installation, node + that clone's fake-codex.mjs `integration`, file 0600 in a 0700 dir. Raw output: `/private/tmp/claude-501/-Users-biran-code-skills-loop-Orca/6cc0c1e9-7313-4a5e-942a-f02129bf4027/scratchpad/g/` (session scratchpad; gone when the session ends — the conclusions are here).
+
+| Gate | Command | RC | Counts | Load (1/5/15 at start → end) |
+|---|---|---|---|---|
+| web build | `npm run build --workspace web` | 0 | | 2.02 2.38 2.93 |
+| typecheck | `npm run typecheck` | 0 | clean | 2.02 → 2.42 |
+| full test | `npm test` | 1 | 305 files: 304 passed, 1 failed; 2807 tests: 2800 passed, 1 failed, 6 skipped | 2.42 2.46 2.96 → 4.09 6.54 5.31 |
+| verify:control | `npm run verify:control` | 0 | 127 files, 1315 passed, 4 skipped | 4.09 → 8.15 7.18 6.01 |
+| verify:panel | `npm run verify:panel` | 0 | PASS 0-14, no FAIL | 8.15 → 7.21 |
+| tmp leak | `node scripts/check-tmp-leak.mjs` | 0 | its own suite run: vitest exit 1, 2807 tests, 0 entries left | 7.21 → 5.35 8.28 7.07 |
+
+Full-run failure (1), registered load flake: `tests/control/driverRequirementSplit.test.ts` "fails the third consecutive invalid draft as split-validation-exhausted, and a schema-invalid one as split-output-invalid" — `Test timed out in 5000ms`. Single-file re-run three times right after (load 4.24 → 3.89): 8/8 each, RC 0 (`g/rerun.txt`). driverRecovery and controlShutdown did not go red this time; that does not close them.
+
+Not known: which test failed inside the tmp-leak script's second suite run — the script discards its JSON report and only counts leftovers; it is the leak guard, not a test gate. Skips (6) are the same real-binary files as the Final gates section; not claimed green.
