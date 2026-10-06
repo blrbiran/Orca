@@ -19,7 +19,7 @@ const config: ControlConfigV1 = {
   profiles: [{ profileId: "all", profileHash: "b".repeat(64), allowedWorkKinds: ["task", "budget-estimate", "handoff", "goal-review"], contextTokenizer: null, workMaxOutputTokens: 1000, declared: capability, observed: capability, observedAt: "2026-09-29T00:00:00.000Z", probeFailureCode: null }],
   defaults: { estimatorProfileId: "all", estimatorProfileHash: "b".repeat(64), estimateMode: "soft" }, executionPort: "configured", errorCatalog: [],
 };
-const groupSummary = { groupId: "g", state: "running", commandRevision: 6, projectionSeq: 4, stopMode: null, stopState: null, claimBlocked: false, recoveryBlockerCount: 0 } as const;
+const groupSummary = { groupId: "g", repoId: "orca", state: "running", commandRevision: 6, projectionSeq: 4, stopMode: null, stopState: null, claimBlocked: false, recoveryBlockerCount: 0 } as const;
 const summaryAt = (changeSeq: number): ControlSummaryV1 => ({
   schema: "orca-control-summary-v1", epoch: "epoch-a", changeSeq, resetRequired: false, dispatchBlocked: false, groups: [groupSummary],
 });

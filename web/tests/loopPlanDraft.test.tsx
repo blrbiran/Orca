@@ -20,7 +20,7 @@ const summary: ControlSummaryV1 = {
   schema: "orca-control-summary-v1", epoch: "epoch-a", changeSeq: 4, resetRequired: false, dispatchBlocked: false,
   // Confirmed and not started: "ready". A running group is one the server refuses set-task-loop in, and the card offers
   // no change there (final review, B6).
-  groups: [{ groupId: "g", state: "ready", commandRevision: 6, projectionSeq: 4, stopMode: null, stopState: null, claimBlocked: false, recoveryBlockerCount: 0 }],
+  groups: [{ groupId: "g", repoId: "orca", state: "ready", commandRevision: 6, projectionSeq: 4, stopMode: null, stopState: null, claimBlocked: false, recoveryBlockerCount: 0 }],
 };
 const recovery: RecoveryViewV1 = { schema: "orca-control-recovery-v1", epoch: "epoch-a", dispatchBlocked: false, blockers: [] };
 // Rewritten under human ruling H18 (2026-10-01) for panel i18n.

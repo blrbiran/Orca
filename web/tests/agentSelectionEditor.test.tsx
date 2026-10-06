@@ -60,7 +60,7 @@ const workItem = (taskId: string, over: Partial<GroupViewV1["workItems"][number]
 });
 const view = (over: Partial<GroupViewV1> = {}): GroupViewV1 => ({
   schema: "orca-control-group-v1", epoch: "epoch-a", changeSeq: 4,
-  summary: { groupId: "g", state: "draft", commandRevision: 6, projectionSeq: 4, stopMode: null, stopState: null, claimBlocked: false, recoveryBlockerCount: 0 },
+  summary: { groupId: "g", repoId: "orca", state: "draft", commandRevision: 6, projectionSeq: 4, stopMode: null, stopState: null, claimBlocked: false, recoveryBlockerCount: 0 },
   graphVersion: 1, plan: { repoId: "orca", planId: "plan-demo", planHash: "a".repeat(64), goal: "Ship", successConditions: ["done"] },
   proposal: { state: "editable", proposalVersion: 3, planHash: "a".repeat(64), budgetMode: null, contextPolicy: { handoffAtContextTokens: null }, profiles: null, executionSnapshotHash: null },
   ledger: { groupLimit: amount(9_000_000), used: amount(0), committedRemaining: amount(0), explicitUnallocatedReserve: amount(9_000_000), budgetDeficit: amount(0), usageUnknown: false },
@@ -174,7 +174,7 @@ describe("agent selection in the proposal view (agent selection spec §6.8)", ()
     const { container } = renderView({
       preview: resolvedPreview({ proposalVersion: 2 }),
       view: view({
-        summary: { groupId: "g", state: "ready", commandRevision: 7, projectionSeq: 5, stopMode: null, stopState: null, claimBlocked: false, recoveryBlockerCount: 0 },
+        summary: { groupId: "g", repoId: "orca", state: "ready", commandRevision: 7, projectionSeq: 5, stopMode: null, stopState: null, claimBlocked: false, recoveryBlockerCount: 0 },
         proposal: { state: "confirmed", proposalVersion: 3, planHash: "a".repeat(64), budgetMode: "soft", contextPolicy: { handoffAtContextTokens: null }, profiles: {
           estimator: { profileId: "all", profileHash: "b".repeat(64) }, worker: { profileId: "all", profileHash: "b".repeat(64) },
           handoff: { profileId: "all", profileHash: "b".repeat(64) }, goalReview: { profileId: "all", profileHash: "b".repeat(64) } }, executionSnapshotHash: "c".repeat(64) },

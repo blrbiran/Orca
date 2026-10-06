@@ -65,7 +65,7 @@ export function requirementView(state: RequirementFixtureState): RequirementView
   };
   return {
     schema: "orca-requirement-view-v1", epoch: "e-1", changeSeq: 7,
-    summary: { groupId: "r", state: "clarifying", commandRevision: 3, projectionSeq: 7, stopMode: null, stopState: null, claimBlocked: false, recoveryBlockerCount: 0, requirement },
+    summary: { groupId: "r", repoId: "repo", state: "clarifying", commandRevision: 3, projectionSeq: 7, stopMode: null, stopState: null, claimBlocked: false, recoveryBlockerCount: 0, requirement },
     requirement: {
       requirementId: "req-1", repoId: "repo", slug: state === "failed" ? null : "markdown-export", contentLanguage: "en", createdOn: "2026-10-02",
       idea: "Let people take a note out as Markdown.",

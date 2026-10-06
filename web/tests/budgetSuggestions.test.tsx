@@ -34,7 +34,7 @@ const estimate = (over: Partial<EstimateViewV1> = {}): EstimateViewV1 => ({
 });
 const view = (over: Partial<GroupViewV1> = {}): GroupViewV1 => ({
   schema: "orca-control-group-v1", epoch: "epoch-a", changeSeq: 1,
-  summary: { groupId: "g", state: "draft", commandRevision: 3, projectionSeq: 1, stopMode: null, stopState: null, claimBlocked: false, recoveryBlockerCount: 0 },
+  summary: { groupId: "g", repoId: "orca", state: "draft", commandRevision: 3, projectionSeq: 1, stopMode: null, stopState: null, claimBlocked: false, recoveryBlockerCount: 0 },
   graphVersion: 1,
   plan: { repoId: "orca", planId: "plan-demo", planHash: PLAN, goal: "Ship", successConditions: ["passes"] },
   proposal: { state: "editable", proposalVersion: 2, planHash: PLAN, budgetMode: null, contextPolicy: { handoffAtContextTokens: null }, profiles: null, executionSnapshotHash: null },

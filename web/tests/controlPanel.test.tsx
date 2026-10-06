@@ -31,7 +31,7 @@ const config: ControlConfigV1 = {
 function groupView(over: Partial<GroupViewV1> = {}): GroupViewV1 {
   return {
     schema: "orca-control-group-v1", epoch: "epoch-a", changeSeq: 4,
-    summary: { groupId: "g", state: "running", commandRevision: 6, projectionSeq: 4, stopMode: null, stopState: null, claimBlocked: false, recoveryBlockerCount: 0 },
+    summary: { groupId: "g", repoId: "orca", state: "running", commandRevision: 6, projectionSeq: 4, stopMode: null, stopState: null, claimBlocked: false, recoveryBlockerCount: 0 },
     graphVersion: 1,
     plan: { repoId: "orca", planId: "plan-demo", planHash: "a".repeat(64), goal: "Ship web control", successConditions: ["panel serves"] },
     proposal: { state: "confirmed", proposalVersion: 2, planHash: "a".repeat(64), budgetMode: "soft", contextPolicy: { handoffAtContextTokens: null }, profiles: {
@@ -58,7 +58,7 @@ function groupView(over: Partial<GroupViewV1> = {}): GroupViewV1 {
 
 const summary: ControlSummaryV1 = {
   schema: "orca-control-summary-v1", epoch: "epoch-a", changeSeq: 4, resetRequired: false, dispatchBlocked: false,
-  groups: [{ groupId: "g", state: "running", commandRevision: 6, projectionSeq: 4, stopMode: null, stopState: null, claimBlocked: false, recoveryBlockerCount: 0 }],
+  groups: [{ groupId: "g", repoId: "orca", state: "running", commandRevision: 6, projectionSeq: 4, stopMode: null, stopState: null, claimBlocked: false, recoveryBlockerCount: 0 }],
 };
 
 const emptyRecovery: RecoveryViewV1 = { schema: "orca-control-recovery-v1", epoch: "epoch-a", dispatchBlocked: false, blockers: [] };

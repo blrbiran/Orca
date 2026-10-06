@@ -3,7 +3,7 @@ import { initialControlState, reduceControlState } from "../src/controlState.js"
 import type { ControlClientEvent, ControlClientState, UncertainCommand } from "../src/controlState.js";
 import type { ControlSummaryV1, GroupViewV1, RecoveryViewV1 } from "../src/controlTypes.js";
 
-const groupSummary = { groupId: "g", state: "ready", commandRevision: 3, projectionSeq: 1, stopMode: null, stopState: null, claimBlocked: false, recoveryBlockerCount: 0 } as const;
+const groupSummary = { groupId: "g", repoId: "r", state: "ready", commandRevision: 3, projectionSeq: 1, stopMode: null, stopState: null, claimBlocked: false, recoveryBlockerCount: 0 } as const;
 
 const summary = (over: Partial<ControlSummaryV1> = {}): ControlSummaryV1 => ({
   schema: "orca-control-summary-v1",

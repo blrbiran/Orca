@@ -61,6 +61,8 @@ export type RequirementSummaryV1 = {
 
 export type GroupSummaryV1 = {
   groupId: string;
+  /** Project filtering spec §4: the group's repository, from its plan or its requirement. */
+  repoId: string;
   state: "clarifying" | "draft" | "ready" | "running" | "review" | "done" | "blocked";
   commandRevision: number;
   projectionSeq: number;

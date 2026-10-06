@@ -28,7 +28,7 @@ const config: ControlConfigV1 = {
   defaults: { estimatorProfileId: "all", estimatorProfileHash: "b".repeat(64), estimateMode: "soft" }, executionPort: "configured", errorCatalog: [],
 };
 const recovery: RecoveryViewV1 = { schema: "orca-control-recovery-v1", epoch: "epoch-a", dispatchBlocked: false, blockers: [] };
-const groupSummary = (projectionSeq: number): GroupSummaryV1 => ({ groupId: "g", state: "running", commandRevision: 6, projectionSeq, stopMode: null, stopState: null, claimBlocked: false, recoveryBlockerCount: 0 });
+const groupSummary = (projectionSeq: number): GroupSummaryV1 => ({ groupId: "g", repoId: "orca", state: "running", commandRevision: 6, projectionSeq, stopMode: null, stopState: null, claimBlocked: false, recoveryBlockerCount: 0 });
 const groupView = (seq: number): GroupViewV1 => ({
   schema: "orca-control-group-v1", epoch: "epoch-a", changeSeq: seq, summary: groupSummary(seq), graphVersion: 1,
   plan: { repoId: "orca", planId: "plan-demo", planHash: "a".repeat(64), goal: "Ship", successConditions: ["done"] },

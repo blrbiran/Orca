@@ -123,7 +123,7 @@ const itemA: WorkItemViewV1 = { ...base("a"), status: "draft", loopPlan: LOOP, o
 const itemB: WorkItemViewV1 = { ...base("b"), loopPlan: null, objective: { goal: "g-2", successCondition: "s-2" } };
 const view: GroupViewV1 = {
   schema: "orca-control-group-v1", epoch: "e-1", changeSeq: 4,
-  summary: { groupId: "g", state: "ready", commandRevision: 6, projectionSeq: 4, stopMode: null, stopState: null, claimBlocked: true, recoveryBlockerCount: 1 },
+  summary: { groupId: "g", repoId: "orca", state: "ready", commandRevision: 6, projectionSeq: 4, stopMode: null, stopState: null, claimBlocked: true, recoveryBlockerCount: 1 },
   graphVersion: 1, plan: { repoId: "orca", planId: "p-demo", planHash: "a".repeat(64), goal: "goal-x", successConditions: ["s-3"] },
   proposal: { state: "editable", proposalVersion: 2, planHash: "a".repeat(64), budgetMode: "soft", contextPolicy: { handoffAtContextTokens: null }, profiles: null, executionSnapshotHash: null },
   ledger: { groupLimit: amount(9_000_000), used: amount(0), committedRemaining: amount(3_000_000), explicitUnallocatedReserve: amount(6_000_000), budgetDeficit: amount(5), usageUnknown: true },
