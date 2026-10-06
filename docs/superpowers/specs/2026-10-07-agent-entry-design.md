@@ -197,3 +197,11 @@ Regression gates: `npm test`, `verify:control`, `verify:panel`, typecheck, web c
 ## 11. Rulings needed from the human
 
 None open. H1–H4 are recorded in §1. The new dependency (`@modelcontextprotocol/sdk`) is listed again in the plan for explicit approval before it is installed.
+
+## 12. Plan-time decisions (2026-10-07, session 6cc0c1e9)
+
+- D1. §3.3's ready-line field is not added. `scripts/verify-panel.ts` parses the stdout line with `^orca-panel ready url=(\S+) token=(\S+)\s*$`, and the line is a contract with one reader per field. The socket path goes to stderr as `orca-panel: control socket <path>` and to `StartedPanel.socketPath`; C1 checks those instead.
+- D2. The socket-only codes (`control-client-invalid`, `control-verb-human-only`, `control-field-human-only`) are not added to `controlErrorCatalog`: the catalog is served to the Web UI and every entry needs Chinese copy (`tests/panel/refusalCoverage.test.ts`), and these codes never reach the Web UI.
+- D3. The client library times out a socket request after 120 s with local error `control-socket-timeout` (retryable), so a wedged panel cannot hang an agent forever.
+- D4. The MCP bridge uses the SDK's low-level `Server` with plain JSON Schema tool inputs (no zod coupling to the SDK's zod version); a commandId it generates is `mcp-<uuid>`.
+- D5. `tests/control/requirementRecords.test.ts` asserts `schemaVersion` "6"; the migration makes it "7", so that expectation changes with Task 1.
