@@ -100,15 +100,16 @@ function ImportForm(props: ImportFormProps): JSX.Element {
   // Spec §6: in All projects the target is this form's own choice, empty until the person makes one -- never the first.
   const [target, setTarget] = useState("");
   const fixed = scope === undefined ? props.repoId : scope.kind === "project" ? scope.repoId : undefined;
+  const choices = props.config.repositories.filter((entry) => (props.targets ?? []).includes(entry.repoId));
+  // Spec §8 (Task 4 review M1): a target that is no longer held is unchosen -- resolved from the allowed choices only.
   const repository = all
-    ? props.config.repositories.find((entry) => entry.repoId === target)
+    ? choices.find((entry) => entry.repoId === target)
     : fixed === undefined
       ? props.config.repositories[0]
       : props.config.repositories.find((entry) => entry.repoId === fixed);
   const plans = repository === undefined ? [] : props.config.plans.filter((entry) => entry.repoId === repository.repoId);
   const [planId, setPlanId] = useState<string | null>(null);
   const plan = plans.find((entry) => entry.planId === planId) ?? plans[0];
-  const choices = props.config.repositories.filter((entry) => (props.targets ?? []).includes(entry.repoId));
   return (
     <section aria-label={t("control.import.region")}>
       <h3>{t("control.import.title")}</h3>
@@ -122,7 +123,7 @@ function ImportForm(props: ImportFormProps): JSX.Element {
         <>
           <label>
             {t("control.import.repository")}
-            <select value={target} onChange={(e) => { setTarget(e.currentTarget.value); setPlanId(null); }}>
+            <select value={repository?.repoId ?? ""} onChange={(e) => { setTarget(e.currentTarget.value); setPlanId(null); }}>
               <option value="" disabled>{t("project.chooseTarget")}</option>
               {choices.map((entry) => <option key={entry.repoId} value={entry.repoId}>{props.repoLabel?.(entry.repoId) ?? entry.displayName}</option>)}
             </select>

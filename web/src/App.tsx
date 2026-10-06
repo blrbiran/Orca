@@ -75,6 +75,8 @@ import type {
   AgentPreferencesViewV1, AgentSelectionPreviewV1, AgentsViewV1, CommandSuccessV1, ControlConfigV1, ControlSummaryV1, OperatorPreferencesV1, RepositoryWorkspaceV1, RequirementViewV1,
 } from "./controlTypes.js";
 import { DecisionDetail } from "./DecisionDetail.js";
+import { EMPTY_DRAFTS, clearIfUnchanged, correctionKey, setDraft } from "./detailDrafts.js";
+import type { DetailDrafts, DraftSlot } from "./detailDrafts.js";
 import type { Decision } from "./DecisionDetail.js";
 import { ErrorPage } from "./ErrorPage.js";
 import i18n, { currentLanguage, writeLanguage } from "./i18n.js";
@@ -232,6 +234,15 @@ export function App(): JSX.Element {
   /** N1 spec §11.2: each requirement's view as last read, and the one open in Requirements. */
   const [requirementViews, setRequirementViews] = useState<Record<string, RequirementViewV1>>({});
   const [selectedRequirement, setSelectedRequirement] = useState<string | null>(null);
+  /**
+   * Project filtering spec §11 R2: unsent detail inputs (requirement answers, split feedback, a raised limit, a new
+   * requirement per target, a decision correction), keyed by owner. Held here so closing a detail or switching scope
+   * never loses them; never persisted.
+   */
+  const [detailDrafts, setDetailDrafts] = useState<DetailDrafts>(EMPTY_DRAFTS);
+  const onDetailDraft = useCallback(<S extends DraftSlot>(slot: S, key: string, value: DetailDrafts[S][string]): void => {
+    setDetailDrafts((all) => setDraft(all, slot, key, value));
+  }, []);
   /** The last refusal of a command sent from Requirements, shown there (Task control keeps showing every refusal). */
   const [requirementRefusal, setRequirementRefusal] = useState<ControlRefusal | null>(null);
   /** The open requirement, for the poll tick, which outlives the render it was built in. */
@@ -745,6 +756,8 @@ export function App(): JSX.Element {
       <>
       <DecisionDetail
         decision={decision}
+        draft={detailDrafts.correction[correctionKey(selected.projectKey, selected.id)]}
+        onDraft={(form) => onDetailDraft("correction", correctionKey(selected.projectKey, selected.id), form)}
         onAgree={() => {
           void send(() => recordReview(selected.projectKey, selected.id), "decisions.recordedReviewed");
         }}
@@ -896,9 +909,16 @@ export function App(): JSX.Element {
         {controlConfig !== null && control.recovery !== null && (
           <RequirementsPanel config={controlConfig} summary={summaryView(control)} views={requirementViews} selected={selectedRequirement} agents={agents}
             language={currentLanguage()} refusal={requirementRefusal}
-            scope={scope} repoLabel={repoLabel} targets={targets}
+            scope={scope} repoLabel={repoLabel} targets={targets} drafts={detailDrafts} onDraft={onDetailDraft}
             repoId={controlRepoId} onRepo={(repoId) => { const entry = projects?.find((p) => p.controlRepoId === repoId); if (entry) chooseProject(entry.projectKey); }}
-            onSelect={(groupId) => { setSelectedRequirement(groupId); void readRequirement(groupId); }} onCommand={(action) => { void sendControl(action); }} />
+            onSelect={(groupId) => { setSelectedRequirement(groupId); void readRequirement(groupId); }}
+            onCommand={(action, submitted) => {
+              void (async () => {
+                const revision = await sendControl(action);
+                // Spec §11 R2: a success clears the submitted draft only if it is unchanged since; a failure keeps it.
+                if (revision !== null && submitted) setDetailDrafts((all) => clearIfUnchanged(all, submitted.slot, submitted.key, submitted.value as DetailDrafts[DraftSlot][string]));
+              })();
+            }} />
         )}
       </SectionPane>
       <SectionPane section="decisions" active={section}>

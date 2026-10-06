@@ -21,6 +21,7 @@
  * (panel UI redesign spec §2). `chose`, `because` and the alternatives are still
  * withheld from the list and appear only here. Text above kept verbatim.
  */
+import { useState } from "react";
 import type { JSX } from "react";
 import { useTranslation } from "react-i18next";
 import type { CorrectionForm } from "./api.js";
@@ -52,16 +53,30 @@ export const AGREE_HELP = en.decisions.agreeHelp;
 export const CORRECT_NOTE = en.decisions.correctNote;
 export const KIND_HELP: Record<CorrectionKind, string> = en.decisions.kindHelp;
 
+/** An untouched correction form. */
+const EMPTY_CORRECTION: CorrectionForm = { kind: WEB_CORRECTION_KINDS[0], because: "", chose_instead: "" };
+
+/**
+ * Project filtering spec §11 R2: the correction form is controlled. With `onDraft` its content is the caller's
+ * (`draft`, kept by App under the decision's owner so it outlives this detail); without it, this component's own.
+ */
 export function DecisionDetail({
   decision,
   onAgree,
   onCorrect,
+  draft,
+  onDraft,
 }: {
   decision: Decision;
   onAgree?: () => void;
   onCorrect?: (form: CorrectionForm) => void;
+  draft?: CorrectionForm;
+  onDraft?: (form: CorrectionForm) => void;
 }): JSX.Element {
   const { t } = useTranslation();
+  const [own, setOwn] = useState<CorrectionForm>(EMPTY_CORRECTION);
+  const form = onDraft === undefined ? own : draft ?? EMPTY_CORRECTION;
+  const edit = (change: Partial<CorrectionForm>): void => (onDraft ?? setOwn)({ ...form, ...change });
   return (
     <article className="decision-detail">
       <p className="row-id">{decision.id}</p>
@@ -104,17 +119,12 @@ export function DecisionDetail({
           className="correction-form"
           onSubmit={(event) => {
             event.preventDefault();
-            const data = new FormData(event.currentTarget);
-            onCorrect?.({
-              kind: String(data.get("kind")) as CorrectionKind,
-              because: String(data.get("because") ?? ""),
-              chose_instead: String(data.get("chose_instead") ?? ""),
-            });
+            onCorrect?.(form);
           }}
         >
           <label>
             {t("decisions.kind")}
-            <select name="kind" defaultValue={WEB_CORRECTION_KINDS[0]}>
+            <select name="kind" value={form.kind} onChange={(e) => edit({ kind: e.currentTarget.value as CorrectionKind })}>
               {WEB_CORRECTION_KINDS.map((kind) => (
                 <option key={kind} value={kind}>
                   {t("decisions.kindOption", { kind: enumText("correctionKind", kind), help: t(`decisions.kindHelp.${kind}`) })}
@@ -124,11 +134,11 @@ export function DecisionDetail({
           </label>
           <label>
             {t("decisions.because")}
-            <textarea name="because" required />
+            <textarea name="because" required value={form.because} onChange={(e) => edit({ because: e.currentTarget.value })} />
           </label>
           <label>
             {t("decisions.choseInstead")}
-            <input name="chose_instead" type="text" />
+            <input name="chose_instead" type="text" value={form.chose_instead} onChange={(e) => edit({ chose_instead: e.currentTarget.value })} />
           </label>
           <button type="submit">{t("decisions.correct")}</button>
           <p className="detail-help">{t("decisions.correctNote")}</p>
