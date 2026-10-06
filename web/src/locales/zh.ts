@@ -231,6 +231,7 @@ export const zh: Translation<typeof en> = {
     run: " · 运行 {{runId}}",
     evidence: " · 证据 {{ids}}",
     runEvidence: "运行证据",
+    reread: "重新读取",
   },
   budget: {
     region: "预算提案",

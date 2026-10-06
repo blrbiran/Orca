@@ -324,6 +324,7 @@ export const en = {
     run: " · run {{runId}}",
     evidence: " · evidence {{ids}}",
     runEvidence: "run evidence",
+    reread: "Re-read",
   },
   budget: {
     region: "Budget proposal",

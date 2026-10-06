@@ -98,6 +98,7 @@ import { SectionPane, Shell, controlAlert } from "./Shell.js";
 import { applyTheme, readTheme, writeTheme } from "./theme.js";
 import type { ThemePref } from "./theme.js";
 import { acceptArrival } from "./selection.js";
+import { recoveryRetryAction } from "./recoveryTarget.js";
 import type { ChainRepoView, DecisionListRow, MetricsReport, PanelCoverage } from "./types.js";
 
 /** localStorage, or undefined where touching it throws. */
@@ -871,6 +872,13 @@ export function App(): JSX.Element {
           onCommands={(actions) => {
             void sendControlSequence(actions);
           }}
+          controlState={control}
+          onRecoveryRetry={(target) => {
+            // Spec §11 R1: built now, from the target's own current summary; nothing is sent when it may not be.
+            const action = recoveryRetryAction(controlNow.current, target);
+            if (action !== null) void sendControl(action);
+          }}
+          onRecoveryReread={() => void readControlTick()}
           workspace={panelRepoId === null ? null : workspaces[panelRepoId] ?? null}
           workspaceFor={(repoId) => workspaces[repoId] ?? null}
           onWorkspaceMode={(mode, revision) => { if (panelRepoId !== null) void sendWorkspaceMode(panelRepoId, mode, revision); }}

@@ -24,7 +24,9 @@ import type {
   AgentPreferencesViewV1, AgentSelectionPreviewV1, AgentsViewV1, ControlConfigV1, ControlSummaryV1, GroupViewV1, OperatorPreferencesV1,
   RecoveryViewV1, RepositoryWorkspaceV1,
 } from "./controlTypes.js";
-import type { ControlRefusal, UncertainCommand } from "./controlState.js";
+import { initialControlState } from "./controlState.js";
+import type { ControlClientState, ControlRefusal, UncertainCommand } from "./controlState.js";
+import type { RecoveryTarget } from "./recoveryTarget.js";
 
 export interface ControlPanelProps {
   config: ControlConfigV1;
@@ -72,6 +74,14 @@ export interface ControlPanelProps {
   repoLabel?: (repoId: string) => string;
   /** Spec §6: the repositories an import may target in All projects -- the registered projects' control repositories. */
   targets?: readonly string[];
+  /**
+   * Spec §11 R1: the client state a recovery Retry is judged against, and the App's click-time sender and re-reader.
+   * Absent (a component rendered on its own), the state is assembled from this panel's own props and the command goes
+   * through onCommand.
+   */
+  controlState?: ControlClientState;
+  onRecoveryRetry?: (target: RecoveryTarget) => void;
+  onRecoveryReread?: () => void;
 }
 
 interface ImportFormProps {
@@ -256,7 +266,19 @@ export function ControlPanel(props: ControlPanelProps): JSX.Element {
         />
       )}
       {view === undefined && selected !== null && <p role="status">{t("control.reading", { groupId: selected })}</p>}
-      <RecoveryView recovery={recovery} group={view ?? null} onCommand={props.onCommand} />
+      <RecoveryView
+        recovery={recovery}
+        group={view ?? null}
+        state={props.controlState ?? {
+          ...initialControlState(),
+          epoch: summary.epoch, refetchRequired, recovery, canonical: groups,
+          groups: Object.fromEntries(summary.groups.map((group) => [group.groupId, group])),
+        }}
+        onRetry={props.onRecoveryRetry}
+        onReread={props.onRecoveryReread}
+        onCommand={props.onCommand}
+        repoLabel={props.repoLabel}
+      />
       {uncertain.length > 0 && (
         <p role="status">
           {t("control.outcomeUnknown", { commands: uncertain.map((command) => `${command.commandId} (${command.groupId}${ownerLabel(command.groupId)})`).join(", ") })}
