@@ -63,6 +63,9 @@ describe("App: a recovery Retry carries its own group's revision", () => {
     const row = await blockerRow("b1");
     const retry = within(row).getByRole("button", { name: "Retry recovery" }) as HTMLButtonElement;
     await waitFor(() => expect(retry.disabled).toBe(false));
+    // The row names b1's own repository (Beta), not the open group's project; an actionable row offers no Re-read.
+    expect(row.textContent).toContain("b1 · Beta");
+    expect(within(row).queryByRole("button", { name: "Re-read" })).toBeNull();
     fireEvent.click(retry);
     await waitFor(() => expect(retryPosts()).toHaveLength(1));
     expect(retryPosts()[0]!.body).toMatchObject({ expectedRevision: 9, payload: { scope: "group", groupId: "b1" } });
@@ -101,7 +104,8 @@ describe("App: a recovery Retry carries its own group's revision", () => {
     render(<App />);
     await openA1();
     const row = await blockerRow("zz");
-    expect(row.textContent).toContain("cleanup-pending");
+    // No summary, so no known repository: the explicit group id alone, never the open group's or another's label.
+    expect(row.textContent).toContain("zz · cleanup-pending");
     expect((within(row).getByRole("button", { name: "Retry recovery" }) as HTMLButtonElement).disabled).toBe(true);
     const summaryReads = (): number => panel.requests.filter((request) => request.startsWith("GET /api/control/summary")).length;
     const before = summaryReads();
@@ -140,6 +144,43 @@ describe("App: a recovery Retry carries its own group's revision", () => {
     await waitFor(() => expect(within(region).queryAllByRole("listitem").some((item) => item.textContent?.includes(" · b1"))).toBe(false), { timeout: 5_000 });
     expect(within(region).queryAllByRole("button", { name: "Retry recovery" })).toEqual([]);
   }, 10_000);
+});
+
+describe("recovery blockers across an epoch change, and a Retry with no App sender", () => {
+  it("7: a recovery read of a new epoch before its summary keeps the blocker listed but not retryable, until the complete summary lands", async () => {
+    seed(groupSummary("b1", BETA, { commandRevision: 9, recoveryBlockerCount: 1 }), [{ scope: "group", groupId: "b1", runId: null, code: "cleanup-pending", evidenceIds: [] }]);
+    render(<App />);
+    const retryOf = async (): Promise<HTMLButtonElement> => within(await blockerRow("b1")).getByRole("button", { name: "Retry recovery" }) as HTMLButtonElement;
+    await waitFor(async () => expect((await retryOf()).disabled).toBe(false));
+    // The server restarted: its recovery view answers in epoch-b while the summary the next tick reads is still epoch-a.
+    panel.recovery = { ...panel.recovery, epoch: "epoch-b" };
+    await waitFor(() => expect(screen.getByText(/projection refetch required/)).toBeTruthy(), { timeout: 5_000 });
+    const stale = await retryOf();
+    expect(stale.disabled).toBe(true);
+    fireEvent.click(stale);
+    expect(retryPosts()).toEqual([]);
+    // The complete summary of epoch-b lands: the blocker's own summary is valid again and Retry is offered.
+    panel.summary = { ...panel.summary, epoch: "epoch-b", changeSeq: 1 };
+    await waitFor(async () => expect((await retryOf()).disabled).toBe(false), { timeout: 5_000 });
+    fireEvent.click(await retryOf());
+    await waitFor(() => expect(retryPosts()).toHaveLength(1));
+    expect(retryPosts()[0]!.body).toMatchObject({ expectedRevision: 9, payload: { scope: "group", groupId: "b1" } });
+  }, 15_000);
+
+  it("8: ControlPanel without an App sender builds the target's own action and hands it to onCommand", () => {
+    const a1 = groupSummary("a1", ALPHA, { commandRevision: 3 });
+    const b1 = groupSummary("b1", BETA, { commandRevision: 9, recoveryBlockerCount: 1 });
+    const onCommand = vi.fn();
+    render(
+      <ControlPanel config={twoConfig} summary={{ ...panel.summary, groups: [a1, b1] }} groups={{ a1: planGroupView(a1) }} selected="a1" drafts={{}} uncertain={[]} refusal={null}
+        refetchRequired={false} onSelect={vi.fn()} onDraft={vi.fn()} onCommand={onCommand}
+        recovery={{ ...panel.recovery, blockers: [{ scope: "group", groupId: "b1", runId: null, code: "cleanup-pending", evidenceIds: [] }] }} />,
+    );
+    const row = within(screen.getByRole("region", { name: "Recovery" })).getAllByRole("listitem").find((item) => item.textContent?.includes(" · b1"))!;
+    fireEvent.click(within(row).getByRole("button", { name: "Retry recovery" }));
+    expect(onCommand).toHaveBeenCalledTimes(1);
+    expect(onCommand).toHaveBeenCalledWith({ verb: "recovery-retry", groupId: "b1", expectedRevision: 9, payload: { scope: "group", groupId: "b1" } });
+  });
 });
 
 describe("recoveryRetryAction: built now, from the target's own summary, or not at all", () => {

@@ -123,7 +123,9 @@ function reduceGroup(state: ControlClientState, value: GroupViewV1): ControlClie
 }
 
 function reduceRecovery(state: ControlClientState, value: RecoveryViewV1): ControlClientState {
-  if (state.epoch !== null && state.epoch !== value.epoch) return purged(state, value.epoch);
+  // Project filtering spec §11 R1: a recovery view of a new epoch voids the caches like any epoch change, but it is
+  // itself the new epoch's truth, so it is kept: its blockers stay visible, non-actionable until the complete re-read.
+  if (state.epoch !== null && state.epoch !== value.epoch) return { ...purged(state, value.epoch), recovery: value, dispatchBlocked: value.dispatchBlocked };
   return { ...state, recovery: value, dispatchBlocked: value.dispatchBlocked };
 }
 
