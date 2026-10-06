@@ -14,6 +14,7 @@ import { HIDDEN_BY_FILTER } from "../src/DecisionsView.js";
 import { rowKey } from "../src/DecisionList.js";
 import { UNCERTAIN_COMMANDS_KEY } from "../src/controlApi.js";
 import type { GroupSummaryV1, RequirementViewV1 } from "../src/controlTypes.js";
+import { view as boardView, workItem } from "./fixtures/board.js";
 import { requirementView } from "./fixtures/requirement.js";
 import { ALPHA, BETA, TWO_PROJECTS, decisionRow, groupSummary, installFakePanel, planGroupView, twoConfig } from "./fixtures/twoProjects.js";
 import type { FakePanel } from "./fixtures/twoProjects.js";
@@ -160,6 +161,29 @@ describe("selection lifecycle", () => {
     await ready();
     await waitFor(() => expect(selectedText()).toBe("Alpha"));
     expect(screen.getByRole("region", { name: "Control group ga" })).toBeTruthy();
+  });
+
+  // Final fix wave (spec §9 "clear drafts on switch"): a task draft is the person's own data; a scope change closes the
+  // detail, never the draft, and reopening the group shows it again.
+  it("9: an unsaved task label draft survives a switch to Beta and back", async () => {
+    const ga = groupSummary("ga", ALPHA);
+    panel.summary = { ...panel.summary, groups: [ga] };
+    const base = boardView([workItem({ taskId: "t" })]);
+    panel.groupViews["ga"] = { ...base, summary: ga, plan: { ...base.plan, repoId: ALPHA } };
+    render(<App />);
+    await ready();
+    await openGroup("ga");
+    fireEvent.click(await screen.findByRole("button", { name: "t" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Add system label" }));
+    expect(screen.getByText(/unsaved draft/)).toBeTruthy();
+    fireEvent.change(projectSelect(), { target: { value: "beta" } });
+    await waitFor(() => expect(selectedText()).toBe("Beta"));
+    await waitFor(() => expect(screen.queryByRole("region", { name: "Control group ga" })).toBeNull());
+    fireEvent.change(projectSelect(), { target: { value: "alpha" } });
+    await waitFor(() => expect(selectedText()).toBe("Alpha"));
+    await openGroup("ga");
+    fireEvent.click(await screen.findByRole("button", { name: "t" }));
+    expect(await screen.findByText(/unsaved draft/)).toBeTruthy();
   });
 
   it("6: changing the scope closes the open group, requirement and decision; the initial resolution closes nothing", async () => {
