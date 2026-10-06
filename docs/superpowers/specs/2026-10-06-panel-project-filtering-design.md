@@ -168,3 +168,36 @@ All three findings are addressed by the normative constraints R1–R3; this is a
 The implementation creates these criteria, observes each named mutation fail in an independent clone after a green baseline, restores raw diff/cached diff to zero bytes, and includes them in the existing full web/control/Orca gates. They use controllable fake responses only; no real user roots or paid model calls. The implementation plan must include the draft owner store, target-summary recovery wiring, request-result ownership and global notice placement explicitly rather than treating selection clearing alone as completion.
 
 Status after correction: written spec ready for human review; implementation planning still waits for written-spec approval. No product code, tests, cross-repository interface or server command wire field changed in this correction.
+
+## 12. Plan and implementation decisions — 2026-10-06, session 32306496
+
+Plan-time decisions (verbatim from the plan's global constraints; ledger `.superpowers/sdd/2026-10-06-panel-project-filtering/progress.md`):
+
+- **P1 — unresolved scope.** Before `/api/projects` has answered, or after it failed, control groups and
+  requirements are not listed; a note says the project list is unavailable; import/new-requirement are disabled;
+  recovery, uncertain commands and alerts stay visible (spec §3, §8). Existing App-rendering tests that list
+  groups or requirements never served `/api/projects`; they get a one-project route (allowed edit (b)) whose
+  `controlRepoId` is the file's own first configured repository. Assertions unchanged.
+- **P2 — Decisions under unresolved scope.** Decision rows name their own project and Agree/Correct act on the
+  row's own `projectKey`, so they are not ambiguous: with no project list the Decisions pane shows every row
+  and keeps today's repository filter. With a project list it uses the global scope (spec §3/§5).
+  This keeps `appSelection`/`decisionsI18n` (rows of unregistered keys) untouched.
+- **P3 — workspace in All projects.** The panel-level workspace-mode selector is shown only in project mode, for
+  the selected project's repository. In all mode it is hidden; an open group's detail always gets the workspace of
+  its own `plan.repoId` (spec §5), read into a per-repository map.
+- **P4 — uncertain commands.** The panel's "outcome unknown" line lists every unresolved command (all groups, all
+  projects) with its repository label; the open group's detail still receives only its own (spec §7).
+- **P5 — repository label.** `repoLabel(repoId)` = the registered project whose `controlRepoId` equals it
+  (its display name), else the config repository's `displayName`, else the raw `repoId`. Never the selected
+  project's name.
+
+Implementation-time rulings that changed product behaviour or an existing criterion (ledger `Ruling:` lines):
+
+- **Criterion F rewritten (Task 4).** `web/tests/projectSwitcher.test.tsx` "F" (switcher spec D2: import into the first repository when `/api/projects` fails) is rewritten as a whole, not weakened: with `/api/projects` failing there is no Import button, the project-list-unavailable note is shown in the Import region, no import is POSTed and there is no Project combobox. This follows §3/§8 and P1; the newer approved spec supersedes D2's fallback for scoped actions.
+- **R1 epoch-change reducer (Task 7).** `reduceRecovery` on an epoch change keeps the purge (groups and canonical voided, `refetchRequired` true) but stores the arriving recovery view, so blockers stay visible and non-actionable until the complete refetch lands (§11 R1).
+- **R2 unowned adoption and target reset (Task 8).** Inputs are enabled with no all-mode target; unowned text is adopted on an explicit target choice and dropped on any explicit target choice, never resurfacing later; a target no longer held is reset (form-local) and submission stays disabled until a valid target is chosen (§6, §8).
+- **R3 notice excludes only the inline record (Task 9).** The global notice excludes only the record shown inline, not the whole owner, so an open owner's older non-active refusal stays visible (§8 visibility); eviction never drops a pending record; settled records go oldest first within the order dismissed, recorded, refused (an unseen refusal is the last to lose).
+- **Decisions under unresolved scope (P2).** With no project list the Decisions pane keeps every row and today's repository filter; with a list it uses the global scope.
+- **Workspace P3 hiding.** The panel-level workspace selector is shown only in project mode; an open group's detail reads the workspace of its own `plan.repoId`.
+
+Sections 1–11 are unchanged by this appendix (checked with `git diff`: appended lines only).

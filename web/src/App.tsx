@@ -21,6 +21,12 @@
  * PanelHome is gone: the default view is the Decisions pane (DecisionsView), inside Shell.
  * Every pane stays mounted and only styles.css hides the inactive ones (panel UI redesign
  * spec §5.1): App-level criteria find Task control's buttons by role from the default pane.
+ *
+ * *** ERRATUM (2026-10-06, Orca session 32306496, project filtering spec §11 R3) ***
+ * The single `outcome` / `lastCorrection` described above no longer exist. Decision POST
+ * results are request records (web/src/decisionRequests.ts): a record is shown inline only
+ * for the selected owner's active request, and every other record is shown in the
+ * owner-labelled notice (DecisionOperations), so a result never lands on another decision.
  */
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import type { JSX } from "react";
