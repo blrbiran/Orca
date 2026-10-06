@@ -129,6 +129,37 @@ describe("selection lifecycle", () => {
     expect(screen.getByText("Select a decision to read it.")).toBeTruthy();
   });
 
+  it("7: a decision opened before the project list answers stays open when the list resolves", async () => {
+    seedOpenables();
+    let release!: () => void;
+    panel.holdProjects = new Promise<void>((resolve) => { release = resolve; });
+    render(<App />);
+    await openDecision("run-a/1");
+    expect(screen.queryByRole("combobox", { name: "Project" })).toBeNull();
+    release();
+    await ready();
+    await waitFor(() => expect(selectedText()).toBe("Alpha"));
+    expect(screen.getByTestId("decision-question").textContent).toBe("question of run-a/1");
+  });
+
+  it("8: a failed project re-read neither closes the open group nor counts as a scope change when the list returns", async () => {
+    seedOpenables();
+    render(<App />);
+    await ready();
+    await openGroup("ga");
+    const focus = async (): Promise<void> => { await act(async () => { window.dispatchEvent(new Event("focus")); }); };
+    const good = panel.projects;
+    panel.projects = { status: 500, body: { code: "boom", message: "boom" } };
+    await focus();
+    await waitFor(() => expect(screen.queryByRole("combobox", { name: "Project" })).toBeNull());
+    expect(screen.getByRole("region", { name: "Control group ga" })).toBeTruthy();
+    panel.projects = good;
+    await focus();
+    await ready();
+    await waitFor(() => expect(selectedText()).toBe("Alpha"));
+    expect(screen.getByRole("region", { name: "Control group ga" })).toBeTruthy();
+  });
+
   it("6: changing the scope closes the open group, requirement and decision; the initial resolution closes nothing", async () => {
     seedOpenables();
     render(<App />);
@@ -137,7 +168,6 @@ describe("selection lifecycle", () => {
     fireEvent.click(await within(await screen.findByRole("navigation", { name: "Requirement list" })).findByRole("button", { name: /^r · clarifying/ }));
     await screen.findByRole("article", { name: "markdown-export" });
     await openDecision("run-a/1");
-    // Nothing the person opened was closed by the project list resolving behind them.
     expect(screen.getByRole("region", { name: "Control group ga" })).toBeTruthy();
 
     chooseAll();

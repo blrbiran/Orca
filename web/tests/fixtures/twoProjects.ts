@@ -59,6 +59,10 @@ const METRICS = { report: { as_of: "2026-09-21T00:00:00.000Z", as_of_mode: "wall
 
 export interface FakePanel {
   projects: { status: number; body: unknown };
+  /** While set, /api/projects does not answer until this promise settles (a test releases it to resolve the list late). */
+  holdProjects: Promise<unknown> | null;
+  /** Served for /api/control/config (tests mutate it; default twoConfig). */
+  config: ControlConfigV1;
   /** Served for every /api/control/summary read (tests mutate it). */
   summary: ControlSummaryV1;
   recovery: RecoveryViewV1;
@@ -82,6 +86,8 @@ const refusal = (status: number, code: string, message: string): Response =>
 export function installFakePanel(init: Partial<FakePanel> = {}): FakePanel {
   const panel: FakePanel = {
     projects: { status: 200, body: { projects: TWO_PROJECTS } },
+    holdProjects: null,
+    config: twoConfig,
     summary: { schema: "orca-control-summary-v1", epoch: "epoch-a", changeSeq: 1, resetRequired: false, dispatchBlocked: false, groups: [] },
     recovery: { schema: "orca-control-recovery-v1", epoch: "epoch-a", dispatchBlocked: false, blockers: [] },
     todo: [], groupViews: {}, requirementViews: {}, workspaces: {}, decisions: {}, requests: [], posts: [],
@@ -93,20 +99,24 @@ export function installFakePanel(init: Partial<FakePanel> = {}): FakePanel {
     const method = request?.method ?? "GET";
     panel.requests.push(`${method} ${url}`);
     if (method === "POST") {
-      const body: unknown = request?.body === undefined ? undefined : JSON.parse(String(request.body));
+      let body: unknown = request?.body === undefined ? undefined : String(request.body);
+      try { if (typeof body === "string") body = JSON.parse(body); } catch { /* a non-JSON body is recorded raw */ }
       panel.posts.push({ url, body });
       return panel.onPost(url, body);
     }
     if (url === "/api/todo") return json({ rows: panel.todo });
     if (url === "/api/metrics") return json(METRICS);
     if (url === "/api/chains") return json({ repos: [] });
-    if (url === "/api/projects") return json(panel.projects.body, panel.projects.status);
-    if (url === "/api/control/config") return json(twoConfig);
+    if (url === "/api/projects") {
+      if (panel.holdProjects !== null) await panel.holdProjects;
+      return json(panel.projects.body, panel.projects.status);
+    }
+    if (url === "/api/control/config") return json(panel.config);
     if (url.startsWith("/api/control/summary")) return json(panel.summary);
     if (url === "/api/control/recovery") return json(panel.recovery);
     if (url === "/api/control/agents") return json({ schema: "orca-agents-view-v1", installations: [] });
     if (url === "/api/control/operator/agent-preferences") return json({ schema: "orca-agent-preferences-v1", operatorId: "op", revision: 0, preferences: { perAgent: {} } });
-    if (url === "/api/memory/status") return json({ adapter: { id: "ccmem", capabilities: { search: true, get: true, recordCorrection: false } }, health: { status: "ok" }, repos: TWO_PROJECTS.map((entry) => ({ projectKey: entry.projectKey })) });
+    if (url === "/api/memory/status") return json({ adapter: { id: "ccmem", capabilities: { search: true, get: true, recordCorrection: false } }, health: { status: "ok" }, repos: ((panel.projects.body as { projects?: Array<{ projectKey: string }> }).projects ?? []).map((entry) => ({ projectKey: entry.projectKey })) });
     if (url.startsWith("/api/memory/list")) {
       const projectKey = new URL(url, "http://panel.test").searchParams.get("projectKey")!;
       return json({ projectKey, query: "", page: { records: [], total: 0, truncated: false } });
