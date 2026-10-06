@@ -130,6 +130,16 @@ function ImportForm(props: ImportFormProps): JSX.Element {
               {choices.map((entry) => <option key={entry.repoId} value={entry.repoId}>{props.repoLabel?.(entry.repoId) ?? entry.displayName}</option>)}
             </select>
           </label>
+          {repository !== undefined && plan === undefined && <p role="note">{t("control.import.noPlan")}</p>}
+          {repository !== undefined && plan !== undefined && (
+            <p>
+              {t("control.import.summary", {
+                repository: repository.displayName,
+                plan: plan.displayName,
+                mode: props.config.defaults === null ? t("control.import.notConfigured") : enumText("budgetMode", props.config.defaults.estimateMode),
+              })}
+            </p>
+          )}
           {plans.length > 1 && plan !== undefined && (
             <label>
               {t("control.import.plan")}

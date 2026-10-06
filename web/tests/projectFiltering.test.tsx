@@ -339,6 +339,46 @@ describe("two-project lists", () => {
     expect(selectedText()).toBe("All projects");
   });
 
+  // Final review I2: All mode shows what will be imported, as project mode does, and a target without a plan imports nothing.
+  it("11: in All projects a chosen target shows the repository, plan and estimate mode before the button enables", async () => {
+    seedLists();
+    render(<App />);
+    await listsReady();
+    chooseAll();
+    await waitFor(() => expect(repositorySelect(importRegion()).value).toBe(""));
+    expect(within(importRegion()).queryByText(/estimate mode/)).toBeNull();
+    fireEvent.change(repositorySelect(importRegion()), { target: { value: BETA } });
+    expect(within(importRegion()).getByText(/^beta · Beta plan · estimate mode /)).toBeTruthy();
+    expect((within(importRegion()).getByRole("button", { name: "Import plan" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("12: in All projects a chosen target without a plan says so and keeps the button disabled", async () => {
+    panel.config = { ...twoConfig, plans: twoConfig.plans.filter((entry) => entry.repoId === ALPHA) };
+    seedLists();
+    render(<App />);
+    await listsReady();
+    chooseAll();
+    await waitFor(() => expect(repositorySelect(importRegion()).value).toBe(""));
+    fireEvent.change(repositorySelect(importRegion()), { target: { value: BETA } });
+    expect(within(importRegion()).getByRole("note").textContent).toBe("No plan is configured for this repository, so nothing can be imported into it.");
+    expect(within(importRegion()).queryByText(/estimate mode/)).toBeNull();
+    const button = within(importRegion()).getByRole("button", { name: "Import plan" }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    fireEvent.click(button);
+    expect(panel.posts.some((post) => post.url === "/api/control/groups/import-plan")).toBe(false);
+  });
+
+  // Final review M1: a project whose repository the config does not list has no target; never the first repository.
+  it("13: in project mode a project repository missing from the config gets a note, not the first repository", async () => {
+    panel.config = { ...twoConfig, repositories: twoConfig.repositories.filter((entry) => entry.repoId === ALPHA) };
+    window.localStorage.setItem(PROJECT_KEY, "beta");
+    seedLists();
+    render(<App />);
+    await ready();
+    await screen.findByText("This project's repository is not configured on this panel, so a requirement cannot be started here.");
+    expect(screen.queryByRole("form", { name: "New requirement" })).toBeNull();
+  });
+
   it("8: a partial summary that moves another project's group reads nothing whole again, and All then shows it moved", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {

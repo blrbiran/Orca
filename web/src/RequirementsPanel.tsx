@@ -82,6 +82,10 @@ function NewRequirement(props: { config: ControlConfigV1; agents: AgentsViewV1 |
   // Plan decision P1: no target is safe without a project list; the list's own note above says why.
   if (scope?.kind === "unresolved") return null;
   if (scope?.kind === "project" && scope.repoId === null) return <p role="note">{t("requirements.notUnderControl")}</p>;
+  // A held-by-the-project repository the control plane's config lacks is no target either: never fall back to the first.
+  if (scope?.kind === "project" && scope.repoId !== null && !props.config.repositories.some((repo) => repo.repoId === scope.repoId)) {
+    return <p role="note">{t("requirements.repositoryNotConfigured")}</p>;
+  }
   const { idea, tokens, language, agent } = draft;
   return (
     <form aria-label={t("requirements.newTitle")} onSubmit={(event) => {
