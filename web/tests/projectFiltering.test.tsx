@@ -525,3 +525,68 @@ describe("decision identity and count", () => {
     expect(listRows()).toHaveLength(1);
   });
 });
+
+describe("group workspace", () => {
+  /** alpha's group a1 and beta's group b1, both listed and openable; ALPHA works in a worktree, BETA in a clone. */
+  function seedWorkspaces(): void {
+    const a1 = groupSummary("a1", ALPHA);
+    const b1 = groupSummary("b1", BETA);
+    panel.summary = { ...panel.summary, groups: [a1, b1] };
+    panel.groupViews["a1"] = planGroupView(a1);
+    panel.groupViews["b1"] = planGroupView(b1);
+    panel.workspaces[ALPHA] = { mode: "worktree" };
+    panel.workspaces[BETA] = { mode: "clone" };
+  }
+  const gitRegion = (): HTMLElement => within(screen.getByRole("region", { name: "Control group b1" })).getByRole("region", { name: "Git" });
+  const workspaceRegion = (): HTMLElement | null => screen.queryByRole("region", { name: "Workspace mode" });
+
+  it("1: an open group of another repository shows its own workspace mode, read from its own repository", async () => {
+    seedWorkspaces();
+    render(<App />);
+    await ready();
+    await waitFor(() => expect(panel.requests).toContain(`GET /api/control/repositories/${ALPHA}/workspace`));
+    chooseAll();
+    await openGroup("b1");
+    await waitFor(() => expect(gitRegion().textContent).toContain("New runs use a private clone"));
+    expect(panel.requests).toContain(`GET /api/control/repositories/${BETA}/workspace`);
+  });
+
+  it("2: a late reply for another repository does not overwrite the open group's workspace mode", async () => {
+    seedWorkspaces();
+    panel.workspaces[ALPHA] = { mode: "worktree", delayMs: 300 };
+    render(<App />);
+    await ready();
+    // Alpha is the chosen project, so its slow read is in flight; All and b1 follow at once.
+    chooseAll();
+    await openGroup("b1");
+    await waitFor(() => expect(gitRegion().textContent).toContain("New runs use a private clone"));
+    // Let alpha's late reply land: it belongs to alpha's entry and must not be shown for b1.
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 450)); });
+    expect(gitRegion().textContent).toContain("New runs use a private clone");
+  });
+
+  it("2b: two reads of one repository: only the newest answer is applied", async () => {
+    seedWorkspaces();
+    panel.workspaces[BETA] = { mode: "worktree", delayMs: 300 };
+    render(<App />);
+    await ready();
+    fireEvent.change(projectSelect(), { target: { value: "beta" } });
+    // The first beta read is in flight (slow, worktree); the setting changes and the next read is quick.
+    await waitFor(() => expect(panel.requests.filter((r) => r === `GET /api/control/repositories/${BETA}/workspace`)).toHaveLength(1));
+    panel.workspaces[BETA] = { mode: "clone" };
+    fireEvent.change(projectSelect(), { target: { value: "alpha" } });
+    fireEvent.change(projectSelect(), { target: { value: "beta" } });
+    await waitFor(() => expect(workspaceRegion()?.textContent).toContain("a private clone"));
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 450)); });
+    expect(workspaceRegion()?.textContent).toContain("a private clone");
+  });
+
+  it("3: the panel-level workspace selector shows in project mode only", async () => {
+    seedWorkspaces();
+    render(<App />);
+    await ready();
+    await waitFor(() => expect(workspaceRegion()?.textContent).toContain("alpha-11111111"));
+    chooseAll();
+    await waitFor(() => expect(workspaceRegion()).toBeNull());
+  });
+});

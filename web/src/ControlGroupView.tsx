@@ -63,6 +63,8 @@ export interface ControlGroupViewProps {
   retryNotice?: string | null;
   /** Board spec 2026-10-03 B3, D7: the page's read of the repository's workspace mode; absent on pages that never read it. */
   workspace?: RepositoryWorkspaceV1 | null;
+/** Project filtering spec §5: the workspace of one repository; preferred over `workspace` for this group's own repository. */
+workspaceFor?: (repoId: string) => RepositoryWorkspaceV1 | null;
 }
 
 export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
@@ -87,8 +89,9 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
   const toggleFilter = (label: string): void =>
     setLabelFilter((current) => (current.includes(label) ? current.filter((other) => other !== label) : [...current, label]));
   const openItem = view.workItems.find((item) => item.taskId === openTask);
-  const workspaceMode = props.workspace === undefined ? undefined
-    : props.workspace !== null && props.workspace.repoId === view.plan.repoId ? props.workspace.workspaceMode : null;
+  const workspace = props.workspaceFor?.(view.plan.repoId) ?? props.workspace;
+  const workspaceMode = workspace === undefined ? undefined
+    : workspace !== null && workspace.repoId === view.plan.repoId ? workspace.workspaceMode : null;
 
   return (
     <section aria-label={t("control.group.region", { groupId })}>
@@ -205,7 +208,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
         </tbody>
       </table>
 
-      <GitScheme view={view} workspace={props.workspace} />
+      <GitScheme view={view} workspace={workspace} />
 
       <SkillsGiven view={view} />
 

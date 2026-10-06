@@ -185,8 +185,12 @@ export function App(): JSX.Element {
   const [project, setProject] = useState<string | null>(null);
   /** Project filtering spec §3: one project, or every project. Kept in this browser beside the chosen project. */
   const [projectView, setProjectView] = useState<ProjectView>(() => readProjectView(browserStorage()));
-  /** Execution driver spec §3.2: the chosen project's (else the first trusted repository's) workspace mode, null until read. */
-  const [workspace, setWorkspace] = useState<RepositoryWorkspaceV1 | null>(null);
+  /**
+   * Execution driver spec §3.2, project filtering spec §5: each repository's workspace mode as last read, by repoId.
+   * `workspaceSeq` numbers the reads of one repository, so a late answer never replaces a newer one.
+   */
+  const [workspaces, setWorkspaces] = useState<Record<string, RepositoryWorkspaceV1>>({});
+  const workspaceSeq = useRef<Record<string, number>>({});
   /** Agent selection spec §6.8: the installation table and this operator's defaults; null until read, or when the port refuses. */
   const [agents, setAgents] = useState<AgentsViewV1 | null>(null);
   const [agentPreferences, setAgentPreferences] = useState<AgentPreferencesViewV1 | null>(null);
@@ -460,13 +464,12 @@ export function App(): JSX.Element {
   };
 
   /** Name the choice under the revision it was read at; whatever the server says is read back, not assumed. */
-  const sendWorkspaceMode = async (mode: "worktree" | "clone", expectedRevision: number): Promise<void> => {
-    if (workspace === null) return;
-    const scope = `@repository:${workspace.repoId}`;
-    const answer = await sendControlCommand(workspaceModePath(workspace.repoId), { commandId: nextCommandId(), expectedRevision, payload: { workspaceMode: mode } });
+  const sendWorkspaceMode = async (repoId: string, mode: "worktree" | "clone", expectedRevision: number): Promise<void> => {
+    const scope = `@repository:${repoId}`;
+    const answer = await sendControlCommand(workspaceModePath(repoId), { commandId: nextCommandId(), expectedRevision, payload: { workspaceMode: mode } });
     if (answer.kind === "uncertain") dispatchControl({ type: "refusal", groupId: scope, value: answer.refusal });
     else if (answer.status >= 400) dispatchControl({ type: "refusal", groupId: scope, value: refusalFromAnswer(answer) });
-    try { setWorkspace(await fetchRepositoryWorkspace(workspace.repoId)); } catch { /* the refusal above already says why */ }
+    await readWorkspace(repoId); // a failed read leaves the refusal above to say why
   };
 
   /** Name the operator's new defaults under the revision they were read at; whatever the server says is read back. */
@@ -572,12 +575,31 @@ export function App(): JSX.Element {
   }, [projects, controlConfig]);
   // Spec §6: what an All-projects import or new requirement may target -- a registered project's control repository.
   const targets = useMemo(() => (projects ?? []).flatMap((entry) => (entry.controlRepoId === null ? [] : [entry.controlRepoId])), [projects]);
-  const workspaceRepoId = controlRepoId === undefined ? controlConfig?.repositories[0]?.repoId : controlRepoId;
+  /** Read one repository's workspace mode; only the newest read of that repository is applied (spec §8). */
+  const readWorkspace = async (repoId: string): Promise<void> => {
+    const seq = (workspaceSeq.current[repoId] ?? 0) + 1;
+    workspaceSeq.current[repoId] = seq;
+    let answer: RepositoryWorkspaceV1 | null = null;
+    try { answer = await fetchRepositoryWorkspace(repoId); } catch { /* an unread repository shows no mode */ }
+    if (workspaceSeq.current[repoId] !== seq) return;
+    setWorkspaces((current) => {
+      if (answer !== null) return { ...current, [repoId]: answer };
+      const { [repoId]: _gone, ...rest } = current;
+      return rest;
+    });
+  };
+  // Plan decision P3: the panel-level selector belongs to the chosen project's repository, in project mode only.
+  const panelRepoId = scope.kind === "project" ? scope.repoId : null;
+  const openRepoId = selectedGroup === null ? null : control.canonical[selectedGroup]?.plan.repoId ?? null;
   useEffect(() => {
-    if (controlConfig === null) return;
-    if (workspaceRepoId === undefined || workspaceRepoId === null) { setWorkspace(null); return; }
-    void fetchRepositoryWorkspace(workspaceRepoId).then(setWorkspace, () => setWorkspace(null));
-  }, [controlConfig, workspaceRepoId]);
+    if (controlConfig === null || panelRepoId === null) return;
+    void readWorkspace(panelRepoId);
+  }, [controlConfig, panelRepoId]);
+  // Spec §5: an open group's detail always uses its own repository's workspace, whatever the scope.
+  useEffect(() => {
+    if (controlConfig === null || openRepoId === null) return;
+    void readWorkspace(openRepoId);
+  }, [controlConfig, openRepoId]);
 
   useEffect(() => {
     writeUncertainCommands(browserSession(), control.uncertainCommandIds);
@@ -849,8 +871,9 @@ export function App(): JSX.Element {
           onCommands={(actions) => {
             void sendControlSequence(actions);
           }}
-          workspace={workspace}
-          onWorkspaceMode={(mode, revision) => { void sendWorkspaceMode(mode, revision); }}
+          workspace={panelRepoId === null ? null : workspaces[panelRepoId] ?? null}
+          workspaceFor={(repoId) => workspaces[repoId] ?? null}
+          onWorkspaceMode={(mode, revision) => { if (panelRepoId !== null) void sendWorkspaceMode(panelRepoId, mode, revision); }}
           agents={agents}
           preferences={agentPreferences}
           previews={previews}

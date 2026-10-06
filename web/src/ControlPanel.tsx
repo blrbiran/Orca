@@ -46,8 +46,10 @@ export interface ControlPanelProps {
   onCommand: (action: ControlAction) => void;
   /** W5: commands one control sends in order (BudgetEditor's onCommands). */
   onCommands?: (actions: ControlAction[]) => void;
-  /** Execution driver spec §3.2: the first trusted repository's workspace mode, once read. */
+  /** Execution driver spec §3.2: the chosen project's repository workspace mode (project mode only), once read. */
   workspace?: RepositoryWorkspaceV1 | null;
+  /** Project filtering spec §5: one repository's workspace, so an open group's detail uses its own, not the panel's. */
+  workspaceFor?: (repoId: string) => RepositoryWorkspaceV1 | null;
   onWorkspaceMode?: (mode: "worktree" | "clone", expectedRevision: number) => void;
   /** Agent selection spec §6.8: the installation table and this operator's defaults, once read. */
   agents?: AgentsViewV1 | null;
@@ -250,6 +252,7 @@ export function ControlPanel(props: ControlPanelProps): JSX.Element {
           agentsFailure={props.agentsFailure}
           retryNotice={props.retryNotice}
           workspace={props.workspace}
+          workspaceFor={props.workspaceFor}
         />
       )}
       {view === undefined && selected !== null && <p role="status">{t("control.reading", { groupId: selected })}</p>}
