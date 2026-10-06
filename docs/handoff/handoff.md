@@ -155,16 +155,41 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 
 ## 四、⛔ 下一件事
 
-### 4.0 ⛔ 现在的下一件事（2026-10-06，会话 `01a10aca`；本节优先于旧条目）
+### 4.0 ⛔ 现在的下一件事（2026-10-06，会话 `32306496`；本节优先于旧条目）
 
-**当前是设计审核阶段，不是实施阶段。** 人已同意顺序：①项目切换后的控制组／Decisions 过滤（含「全部项目」视图）→②N2 agent 入口（CLI `--json`→skill→MCP 薄壳）→③隔离根的真实 ccmem／syncskill 验收及 ccloop 既有红项诊断。后两项未开始；litellm／A2A 延后。
+本节整节替换了会话 `01a10aca` 写的旧 §4.0（随主题行 `update handoff` 由人提交）。旧文「设计审核阶段、人尚未批准 spec、没有 plan、没有产品／判据改动」**已不成立**：人 2026-10-06 批准 spec，主题行 `docs(plan): implement project filtering and the all-projects view` 起按 SDD 在 main 上实施完。旧文仍成立的结论（人定的顺序、既有项目能力、隔离纪律）留在下面。
 
-- **接手先读** `docs/superpowers/specs/2026-10-06-panel-project-filtering-design.md`，尤其 **§11 R1–R3**，它取代 §§5／7／9 的不完整约束。主题行 `docs(spec): design project filtering and all-projects view`、`docs(spec): bind recovery, drafts and decision results to their owners`。spec 已写、独立评审三项 Important 已具名追加修正、自审与提交钩子通过；**人尚未批准修正后的书面 spec，没有实施 plan，没有产品／判据改动**。下一步是人审 written spec；通过后用 `superpowers:writing-plans` 写计划，再按技能进行计划审核与执行方式选择，不能把「同意顺序／全部项目／修复 spec」当成实施授权。
-- **设计范围**：服务端摘要提供可信 repoId，前端完整缓存／增量轮询不变，只过滤展示；任务组、需求列表、Decisions 支持具体项目与全部项目。全部项目行标明归属，新建需求／导入须显式选具体目标。Metrics 仍全局，Chains／Memory 继续具体项目；切范围关闭详情，后台任务不受影响。
-- **三项承重修正**：R1 恢复 retry 用 blocker **目标组**的当前有效摘要 revision，不用所选组的 revision；缺身份／epoch不符／待完整重读时禁用，clarifying 也走摘要。R2 需求回答、术语／ADR选择、split反馈及决策纠正草稿由不随详情卸载的内存 owner 保存，按项目／组／轮次／草案或决策身份分开；迟到成功不删新编辑。R3 决策 POST 结果与重试绑定原请求身份和原始 payload，旧项目结果在全局具名提示，不串到新详情。新增判据和删除变异要求见 spec §11。
-- **既有项目能力**：registry 默认 `~/.orca/projects.json`，侧栏新增／改名和持久选择已完成，新增仓库进入 control config 不需重启。项目切换原 spec §7 R1–R6／§8、registry spec §12 与旧 ledger 的审阅项仍有效，未由这次顺序批准自动关闭。入口 `2026-10-04-panel-project-switcher-design.md`、`2026-10-04-panel-project-registry-design.md` 与 registry progress。旧项目注册表全量红项（driverRecovery／K13超时、ccmemAdapter ENOEXEC断言等）历史证据仍保留；H6 未复现不等于关闭。ccmem 本地 origin 缺陷已修，不能与 adapter errno 混为一谈。
-- **H6 发布／重钉已完成**，见 §4.0.q；三仓 main 先前经 `ls-remote` 核对。后续 spec／handoff 的发布不靠缓存 ref 或这里的当前 HEAD 推断，接手／收尾重新只读核远端；push 归人。本轮 handoff 更新是文档同步，不新增产品测试结果。
-- **隔离纪律**：验证只在独立 clone，HOME＋四 XDG 根和短真 TMPDIR 改道；不碰真实 `~/.orca`／ccmem 数据，不重启人的面板。真 Claude 付费测试须人明确恢复额度授权，当前没有此授权。测试输出重定向并完整读回；shell 走 `rtk proxy`，git 用 `/usr/bin/git`。
+**人已同意的顺序**：①项目过滤＋「全部项目」视图（**本轮，已做完，等人审**）→②N2 agent 入口（CLI `--json`→skill→MCP 薄壳）→③隔离根的真实 ccmem／syncskill 验收及 ccloop 既有红项诊断。②③未开始；litellm／A2A 延后。下一个 agent 接 ②。
+
+**接手先读**：spec `docs/superpowers/specs/2026-10-06-panel-project-filtering-design.md`（§11 R1–R3 取代 §§5／7／9 的不完整约束；**§12 是计划与实施裁定的汇总**，末尾有一条具名更正）；plan `docs/superpowers/plans/2026-10-06-panel-project-filtering.md`；台账 `.superpowers/sdd/2026-10-06-panel-project-filtering/progress.md`（每条 `Ruling:`、Final gates、Task 1 server mutations、Final fix wave）。
+
+- **做了什么**（按主题行找，从 `feat(control): name each group summary's repository` 到 `docs(sdd): record the final fix wave`）：
+  - 服务端 `GroupSummaryV1` 带可信 `repoId`（clarifying 组取需求的仓库；plan 与需求不一致时拒绝猜）；web 类型同步。
+  - 侧栏选「全部项目」或单个项目，存 `localStorage` 的 `orca.projectView`；Task control、需求、Decisions 按所选范围过滤，全部项目下行标明归属仓库（P5 `repoLabel`）。
+  - 全部项目下导入／新建需求必须显式选具体目标；目标不再被持有时重置、提交禁用到选出有效目标为止。
+  - 打开的组读它自己 `plan.repoId` 的工作区（按仓库存）；面板级工作区选择器只在项目模式显示（P3）。
+  - R1：recovery retry 用 blocker **目标组**自己的 revision；epoch 变化时 blocker 仍可见、不可操作，直到完整重读落地。
+  - R2：需求回答／纠正等草稿按 owner 键保存，不随详情卸载；迟到成功不删新编辑。
+  - R3：决策 POST 结果与重试绑定原请求记录；非当前详情的结果进全局具名提示。
+  - 终审修复轮：全部项目下导入显示摘要与无 plan 提示；项目模式新建需求不再回落到第一个仓库，改为 `requirements.repositoryNotConfigured`；新增「切项目保留未保存的 task 草稿」判据。
+- **验证**（全部在 `git clone --local` 隔离副本，HOME＋四 XDG 改道，短真 TMPDIR；数字与原始输出路径以台账 Final gates／Final fix wave 两节为准）：
+  - Task 10 终树：typecheck、`--ws check`（web 70 文件／486 条）、web build、focused 根 3 文件／20 条与 web 9 文件／103 条、`verify:panel`、`verify:control`（127 文件／1315 过／4 skipped）都 RC 0。全量 `npm test` RC 1：2807 条＝2798 过、6 skipped、3 红＝已登记负载 flake `driverRecovery`、`driverRequirementSplit`、`controlShutdown`，负载降下后单文件各自全绿；**flake 未关闭**。6 个 skip 是真二进制文件（`ccloopDefaultE2E` 3、`driverSkillsReal`、`syncskillReal`、`ccmemReal` 各 1），不声称绿。
+  - 门第一、二遍的红是环境（TMPDIR 过长、缺 `ORCA_CCLOOP_BIN`／`ORCA_AGENTS_TABLE`、bin 指向不带 tests 的安装包），台账里已具名记下并被第三遍取代。
+  - 删除变异：每个 task 在 clone 里跑自己的并见红（恢复 diff／cached 0 字节）；Task 10 补跑评审延后的两条；Task 1 的五条服务端变异事后补跑全红；终审修复轮 14 条，13 条当即红，1 条绿（切项目清掉 task 草稿）⇒ 补了判据后见红。
+  - 终审修复轮门只跑了 web check（70 文件／490 条）、根 typecheck、focused 5 文件／71 条；**没重跑全量、`verify:control`、`verify:panel`**（src/ 下 web 以外无改动）。终审修复轮的复审结果见 ledger。
+- **要人审的裁定**（原文在台账 `Ruling:` 行，汇总在 spec §12）：
+  - **改写了既有判据** `web/tests/projectSwitcher.test.tsx` 的 F（原 switcher spec D2：项目列表读不到时导入第一个仓库）⇒ 整条改写为：无 Import 按钮、Import 区显示项目列表不可用、零导入 POST、无 Project 选择框。依据：更新且已批准的 spec §3／§8 取代 D2。人不同意就回滚这一条判据并重议 P1。
+  - **P1**：项目列表未答或失败时，组与需求不列出、导入／新建需求禁用；recovery、uncertain 命令、告警仍可见。**P2**：此时 Decisions 显示所有行并保持原仓库过滤。**P3**：见上。**P4**：「结果未知」一行列出所有项目的未决命令。**P5**：仓库标签取注册项目名→config `displayName`→原始 `repoId`，绝不用所选项目名。
+  - **R1 reducer**：epoch 变化时仍 purge，但保留新 epoch 的 recovery 视图。
+  - **R2 无主文字**：全部项目下没选目标也能输入；只在所选目标没有自己草稿时收进去，否则丢弃，不覆盖、之后不再冒出来（spec §12 末尾更正）。
+  - **R3 提示**：全局提示只排除详情里正显示的那条记录，不排除整个 owner；淘汰从不丢 pending，已结束的按 dismissed→recorded→refused 先后、各自最旧先淘汰。
+  - **搁置**：Import 区「项目列表不可用」提示措辞（终审 Minor 5）没改 —— 改它要再动一次 F 的断言；只是措辞。
+- **还开着的**：
+  - 终审保留的延后小项：late-reply 判据里固定 450 ms sleep（flake 风险）；旧 epoch 的 recovery 读在较新 summary 之后到达时会被存下（`refetchRequired` 仍禁 Retry，无判据）；`DecisionOperations` 未进 `i18nPseudo`（会改既有判据，未做）；ControlPanel／App 的 props 膨胀待后续收拢（控制器转述的终审意见，台账未逐条记）。
+  - 没做：真实 ccmem／syncskill 验收；ccloop 已知红 `stopProof`／`codexWatchdog` 诊断；人的面板没重启，不能说运行中的面板已有本轮功能。
+- **检查点缺口**：本轮中途 `orca checkpoint write` 被拒（dirty-worktree：会话 `01a10aca` 未提交的本文改动；单独提交它被权限分类器拒绝），没写成检查点；那份改动随后由人以 `update handoff` 提交。
+- **既有项目能力**（旧 §4.0 留下，仍成立）：registry 默认 `~/.orca/projects.json`，侧栏新增／改名和持久选择已完成，新增仓库进入 control config 不需重启。项目切换原 spec §7 R1–R6／§8、registry spec §12 与旧 ledger 的审阅项仍有效。旧全量红项（driverRecovery／K13 超时、ccmemAdapter ENOEXEC 断言等）历史证据仍保留；本轮未复现 K13／ENOEXEC 不等于关闭。ccmem 本地 origin 缺陷已修，不能与 adapter errno 混为一谈。H6 见 §4.0.q。
+- **隔离纪律**：验证只在 `git clone --local` 副本；HOME＋四 XDG 根改道；TMPDIR 短且为真目录（长路径会让 tsx IPC 套接字报 EADDRINUSE）；不碰真实 `~/.orca`／ccmem 数据，不重启人的面板；不跑付费真模型（需人明确授权，当前没有）。输出重定向到文件再完整读回；shell 走 `rtk proxy`，git 用 `/usr/bin/git`。远端状态接手／收尾时只读 `ls-remote` 核，不靠本文。
 
 ### 4.0.q H6 Codex skills（2026-10-05实现；会话 `01a10aca` 完成默认 main 合并与重钉）
 
@@ -195,7 +220,7 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 
 **没改的既有判据**：一条都没改。
 
-**诚实的表述**：都只在 fake／jsdom／真 panel（无 execution port）＋真浏览器下验过；没在真 agent 下跑；人的真实面板还没重启、没用上。项目切换没做：控制组列表按项目过滤、Decisions 过滤、运行时增删项目（spec §6）。
+**诚实的表述**：都只在 fake／jsdom／真 panel（无 execution port）＋真浏览器下验过；没在真 agent 下跑；人的真实面板还没重启、没用上。~~项目切换没做：控制组列表按项目过滤、Decisions 过滤、运行时增删项目（spec §6）。~~ 已过期：运行时新增／改名项目由 registry 一轮做完；按项目过滤与 Decisions 过滤由会话 `32306496`（2026-10-06）做完，见 §4.0。
 
 ### 4.0.o syncskill 跟进（会话 `9d95e6c8`，2026-10-03，**已完成，等人审**）
 
