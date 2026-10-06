@@ -10,6 +10,8 @@ const BINARY = /^runs\/[^/?]+\/evidence\/[^/?]+/;
 function checkPath(path: string, allowQuery: boolean): void {
   const [route, query] = path.split("?", 2) as [string, string | undefined];
   if (query !== undefined && !allowQuery) throw new EntryRejection("control-cli-path-invalid", "a command route takes no query string");
+  // Printable ASCII only: a space or a non-ASCII byte cannot travel in a request line unencoded (final review I1).
+  if (query !== undefined && !/^[\x21-\x7e]*$/.test(query)) throw new EntryRejection("control-cli-path-invalid", `the query string must be printable ASCII with no spaces (percent-encode the rest): ${JSON.stringify(path)}`);
   const segments = route.split("/");
   if (route.length === 0 || segments.some((segment) => !SEGMENT.test(segment) || segment === "." || segment === ".."))
     throw new EntryRejection("control-cli-path-invalid", `not a control path: ${JSON.stringify(path)} (no leading /, no .., ASCII segments)`);

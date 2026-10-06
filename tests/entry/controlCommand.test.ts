@@ -31,4 +31,11 @@ describe("orca control argv and output (spec §4.1, §4.4, C16)", () => {
     expect(JSON.parse(out.lines[0]!).body.error.code).toBe("panel-not-running");
     expect(JSON.parse((await run(["get", "summary", "--client-name", "bad name"])).lines[0]!).body.error.code).toBe("control-cli-argument-invalid");
   });
+
+  it("refuses an empty --control-state-dir instead of falling through to the default socket", async () => {
+    const { code, lines } = await run(["get", "summary", "--control-state-dir", ""]);
+    expect(lines.length).toBe(1);
+    expect(JSON.parse(lines[0]!).body.error.code).toBe("control-cli-argument-invalid");
+    expect(code).toBe(1);
+  });
 });

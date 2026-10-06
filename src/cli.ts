@@ -114,7 +114,7 @@ const USAGE = `usage:
                                  {"schema":"orca-cli-response-v1",status,commandId?,body}. Never starts a panel.
                                  set-limit and a budget limit field are refused: a person sets those in the
                                  Web UI. Exit 0 answered 2xx, 1 refused here (panel-not-running included),
-                                 2 the panel answered an error
+                                 2 the panel answered an error; 3 is reserved for crashes (unexpected errors)
   orca mcp serve [--control-state-dir <dir>]
                                  a stdio MCP server with two tools, orca_read and orca_send, that talk to a
                                  running panel over its control socket exactly as orca control does

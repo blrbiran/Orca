@@ -19,6 +19,7 @@ describe("orca panel usage text (spec §3.3)", () => {
     expect(stderr).toContain("orca control get <path>");
     expect(stderr).toContain("orca control send <route>");
     expect(stderr).toContain("Never starts a panel");
+    expect(stderr).toContain("3 is reserved for crashes (unexpected errors)");
     expect(stderr).toContain("orca mcp serve");
     expect(stderr).toContain("orca_read and orca_send");
   });

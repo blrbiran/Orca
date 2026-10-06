@@ -26,4 +26,18 @@ describe("socket discovery (spec §4.3)", () => {
     await writeFile(projects, "{ not json", { mode: 0o600 });
     expect(() => discoverSocketPath({ env: { ORCA_PROJECTS_FILE: projects, ORCA_CONTROL_DIR: join(r, "ctl") } })).toThrow(expect.objectContaining({ code: "control-projects-file-invalid" }));
   });
+
+  it("a projects file path that cannot be stat'ed (its parent is a regular file: ENOTDIR) is refused by name, not thrown raw", async () => {
+    const r = await root();
+    const parent = join(r, "plain");
+    await writeFile(parent, "", { mode: 0o600 });
+    expect(() => discoverSocketPath({ env: { ORCA_PROJECTS_FILE: join(parent, "projects.json"), ORCA_CONTROL_DIR: join(r, "ctl") } }))
+      .toThrow(expect.objectContaining({ code: "control-projects-file-invalid", message: expect.stringContaining("ENOTDIR") }));
+  });
+
+  it("an empty --control-state-dir is an argument error, not a fall-through to the default", async () => {
+    const r = await root();
+    expect(() => discoverSocketPath({ stateDirFlag: "", env: { ORCA_PROJECTS_FILE: join(r, "missing.json"), ORCA_CONTROL_DIR: join(r, "ctl") } }))
+      .toThrow(expect.objectContaining({ code: "control-cli-argument-invalid" }));
+  });
 });
