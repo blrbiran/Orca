@@ -4,6 +4,8 @@ import { amountSchema } from "../../src/control/schema.js";
 import { rawAuthorityCommandSchema } from "../../src/control/webProtocol.js";
 import { AGENT_AMOUNT_FIELDS, HUMAN_ONLY_FIELDS, HUMAN_ONLY_VERBS, humanOnlyRefusal } from "../../src/panel/humanOnly.js";
 
+const LEAF_KINDS = [z.ZodString, z.ZodNumber, z.ZodBoolean, z.ZodLiteral, z.ZodEnum, z.ZodNativeEnum, z.ZodNull, z.ZodUndefined, z.ZodUnknown, z.ZodAny, z.ZodDate, z.ZodBigInt];
+
 /** Every amountSchema field in every raw command payload, as "<verb>:<path>" (spec §5, C19). */
 function amountFields(): string[] {
   const found: string[] = [];
@@ -13,9 +15,13 @@ function amountFields(): string[] {
     if (schema instanceof z.ZodDefault) return walk(schema._def.innerType, verb, path);
     if (schema instanceof z.ZodEffects) return walk(schema.innerType(), verb, path);
     if (schema instanceof z.ZodArray) return walk(schema.element, verb, [...path, "[]"]);
+    if (schema instanceof z.ZodRecord) return walk(schema.valueSchema, verb, [...path, "{}"]);
     if (schema instanceof z.ZodObject) { for (const [key, child] of Object.entries(schema.shape)) walk(child as z.ZodTypeAny, verb, [...path, key]); return; }
     if (schema instanceof z.ZodUnion || schema instanceof z.ZodDiscriminatedUnion) { for (const option of schema.options as z.ZodTypeAny[]) walk(option, verb, path); return; }
-    if (schema instanceof z.ZodIntersection) { walk(schema._def.left, verb, path); walk(schema._def.right, verb, path); }
+    if (schema instanceof z.ZodIntersection) { walk(schema._def.left, verb, path); walk(schema._def.right, verb, path); return; }
+    // A kind this walker does not know could hide an amount; fail rather than skip it silently.
+    if (LEAF_KINDS.some((kind) => schema instanceof kind)) return;
+    throw new Error(`unhandled zod kind ${schema.constructor.name} at ${verb}:${path.join(".")}`);
   };
   const union = (rawAuthorityCommandSchema as unknown as z.ZodEffects<z.ZodDiscriminatedUnion<"verb", z.ZodObject<{ verb: z.ZodTypeAny } & z.ZodRawShape>[]>>).innerType();
   for (const option of union.options) {

@@ -13,7 +13,8 @@ async function connect(w: { root: string; state: string; env: Record<string, str
     command: join(process.cwd(), "node_modules", ".bin", "tsx"),
     args: ["src/cli.ts", "mcp", "serve", "--control-state-dir", w.state],
     cwd: process.cwd(),
-    env: { ...(process.env as Record<string, string>), ...w.env, HOME: w.root, ORCA_PROJECTS_FILE: join(w.root, "none.json") },
+    // ORCA_AGENTS_TABLE / ORCA_CCLOOP_BIN empty unless the fixture configured a port (then w.env carries its values).
+    env: { ...(process.env as Record<string, string>), ORCA_AGENTS_TABLE: "", ORCA_CCLOOP_BIN: "", ...w.env, HOME: w.root, ORCA_PROJECTS_FILE: join(w.root, "none.json") },
   });
   const client = new Client({ name: "orca-test", version: "0.0.0" });
   await client.connect(transport);

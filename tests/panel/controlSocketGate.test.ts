@@ -10,8 +10,8 @@ useSocketPanels();
 
 const send = (panel: StartedPanel, route: string, envelope: unknown, client = "cli:test") =>
   overSocket(panel.socketPath!, "POST", `/api/control/${route}`, { "x-orca-client": client }, envelope);
-const webPost = (panel: StartedPanel, route: string, envelope: unknown) =>
-  fetch(`${panel.url}/api/control/${route}`, { method: "POST", headers: { "x-orca-token": panel.token, "content-type": "application/json" }, body: JSON.stringify(envelope) });
+const webPost = (panel: StartedPanel, route: string, envelope: unknown, extra: Record<string, string> = {}) =>
+  fetch(`${panel.url}/api/control/${route}`, { method: "POST", headers: { "x-orca-token": panel.token, "content-type": "application/json", ...extra }, body: JSON.stringify(envelope) });
 // The panel exposes no store handle, so read the ledger rows with a read-only connection on the sqlite file.
 const ledger = async (state: string) => {
   const { DatabaseSync } = createRequire(import.meta.url)("node:sqlite") as typeof import("node:sqlite");
@@ -71,7 +71,8 @@ describe("the socket gate (spec §4.2, §5, §6)", () => {
     const first = await send(panel, `repositories/${repo}/workspace-mode`, { commandId: "ws-socket", expectedRevision: 0, payload: { workspaceMode: "clone" } }, "cli:claude");
     expect(first.status).toBe(200);
     const webEnvelope = { commandId: "ws-web", expectedRevision: 1, payload: { workspaceMode: "worktree" } };
-    const web = await webPost(panel, `repositories/${repo}/workspace-mode`, webEnvelope);
+    // The Web channel ignores x-orca-client: a header naming a CLI must not change the row's "web" below.
+    const web = await webPost(panel, `repositories/${repo}/workspace-mode`, webEnvelope, { "x-orca-client": "cli:x" });
     expect(web.status).toBe(200);
     const webBody = await web.text();
     // Same commandId and payload on the other channel: the raw command is identical (actorId is the panel operator on both), so a replay.

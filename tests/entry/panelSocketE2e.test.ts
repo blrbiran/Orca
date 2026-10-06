@@ -10,10 +10,13 @@ import { boot, useSocketPanels, workspace } from "../panel/fixtures/socketPanel.
 useSocketPanels();
 
 const tsx = () => join(process.cwd(), "node_modules", ".bin", "tsx");
+// The developer's own execution port must not leak into a child: empty means "no port"; `boot(…, { port: true })` puts
+// the fixture's values in w.env, which is spread after this and wins.
+const childEnv = (env: NodeJS.ProcessEnv): NodeJS.ProcessEnv => ({ ...process.env, ORCA_AGENTS_TABLE: "", ORCA_CCLOOP_BIN: "", ...env });
 
 function cli(args: string[], env: NodeJS.ProcessEnv) {
   return new Promise<{ code: number | null; stdout: string; stderr: string }>((resolve) => {
-    const child = spawn(tsx(), ["src/cli.ts", ...args], { cwd: process.cwd(), env: { ...process.env, ...env } });
+    const child = spawn(tsx(), ["src/cli.ts", ...args], { cwd: process.cwd(), env: childEnv(env) });
     let stdout = "", stderr = "";
     child.stdout.on("data", (c) => (stdout += c)); child.stderr.on("data", (c) => (stderr += c));
     child.on("close", (code) => resolve({ code, stdout, stderr }));
@@ -55,7 +58,7 @@ describe("orca control against a real panel (C6, C7, C14)", () => {
   it("C3: SIGTERM to a spawned panel removes the socket; its stderr names the socket", async () => {
     const w = await workspace();
     const env = { ...w.env, HOME: w.root, ORCA_PROJECTS_FILE: join(w.root, "none.json") };
-    const child = spawn(tsx(), ["src/cli.ts", "panel", "--by", "tester", "--repo", `proj=${w.repo}`, "--control-state-dir", w.state], { cwd: process.cwd(), env: { ...process.env, ...env } });
+    const child = spawn(tsx(), ["src/cli.ts", "panel", "--by", "tester", "--repo", `proj=${w.repo}`, "--control-state-dir", w.state], { cwd: process.cwd(), env: childEnv(env) });
     let stderr = "";
     const closed = new Promise((resolve) => child.on("close", resolve));
     try {
