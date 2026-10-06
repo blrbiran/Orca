@@ -85,6 +85,8 @@ describe("operator agent preferences (spec §6.2 layer 1)", () => {
     try {
       const first = await openControlStore({ stateDir: join(root, "state") });
       first.db.exec("DROP TABLE agent_preferences");
+      // N2 task 1: a pre-v7 store has no commands.client; the downgrade must drop it too, or the 6-to-7 step meets a column already there.
+      first.db.exec("ALTER TABLE commands DROP COLUMN client");
       first.db.prepare("UPDATE meta SET value='4' WHERE key='schemaVersion'").run();
       first.close();
       const second = await openControlStore({ stateDir: join(root, "state") });

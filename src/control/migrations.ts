@@ -1,6 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
 
-export const schemaVersion = "6";
+export const schemaVersion = "7";
 export const legacySchema = `CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;
 CREATE TABLE groups(id TEXT PRIMARY KEY, revision INTEGER NOT NULL, graph_version INTEGER NOT NULL, body TEXT NOT NULL) STRICT;
 CREATE TABLE work_items(group_id TEXT NOT NULL REFERENCES groups(id), id TEXT NOT NULL, target_version INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY(group_id,id)) STRICT;
@@ -72,14 +72,19 @@ export const schema5To6 = `CREATE TABLE IF NOT EXISTS requirement_rounds(group_i
 CREATE TABLE IF NOT EXISTS requirement_drafts(group_id TEXT NOT NULL REFERENCES groups(id), draft_no INTEGER NOT NULL CHECK(draft_no > 0 AND draft_no <= 9007199254740991), state TEXT NOT NULL CHECK(state IN ('drafting','awaiting-review','accepted','rejected','invalid','interrupted','failed')), body TEXT NOT NULL, PRIMARY KEY(group_id,draft_no)) STRICT;
 `;
 
-export const initialSchema = legacySchema + schema1To2 + schema2To3 + schema3To4 + schema4To5 + schema5To6;
+// Agent entry spec §6: which client delivered a command (web, cli[:name], mcp[:name]); null for rows not from a route.
+export const schema6To7 = `ALTER TABLE commands ADD COLUMN client TEXT;
+`;
+
+export const initialSchema = legacySchema + schema1To2 + schema2To3 + schema3To4 + schema4To5 + schema5To6 + schema6To7;
 
 export function migrateSchema(store: DatabaseSync, fromVersion: string): void {
-  if (fromVersion === "1") store.exec(schema1To2 + schema2To3 + schema3To4 + schema4To5 + schema5To6);
-  else if (fromVersion === "2") store.exec(schema2To3 + schema3To4 + schema4To5 + schema5To6);
-  else if (fromVersion === "3") store.exec(schema3To4 + schema4To5 + schema5To6);
-  else if (fromVersion === "4") store.exec(schema4To5 + schema5To6);
-  else if (fromVersion === "5") store.exec(schema5To6);
+  if (fromVersion === "1") store.exec(schema1To2 + schema2To3 + schema3To4 + schema4To5 + schema5To6 + schema6To7);
+  else if (fromVersion === "2") store.exec(schema2To3 + schema3To4 + schema4To5 + schema5To6 + schema6To7);
+  else if (fromVersion === "3") store.exec(schema3To4 + schema4To5 + schema5To6 + schema6To7);
+  else if (fromVersion === "4") store.exec(schema4To5 + schema5To6 + schema6To7);
+  else if (fromVersion === "5") store.exec(schema5To6 + schema6To7);
+  else if (fromVersion === "6") store.exec(schema6To7);
   else throw new Error("control-schema-unsupported");
   store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
 }

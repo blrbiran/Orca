@@ -16,13 +16,15 @@ describe("requirement records (N1 spec §4)", () => {
       h.store.db.prepare("INSERT INTO groups(id,revision,graph_version,projection_seq,body) VALUES ('old',0,1,0,'{\"groupId\":\"old\"}')").run();
       h.store.db.prepare("INSERT INTO runs(id,group_id,work_item_id,generation,active,body) VALUES ('run-old','old','estimate-x',1,0,'{\"phase\":\"estimate\"}')").run();
       h.store.db.exec("DROP TABLE requirement_rounds; DROP TABLE requirement_drafts");
+      // N2 task 1: a pre-v7 store has no commands.client; the downgrade must drop it too, or the 6-to-7 step meets a column already there.
+      h.store.db.exec("ALTER TABLE commands DROP COLUMN client");
       h.store.db.prepare("UPDATE meta SET value='5' WHERE key='schemaVersion'").run();
       const rowsBefore = h.store.db.prepare("SELECT id,body FROM runs ORDER BY id").all();
       h.store.close();
       const reopened = await openControlStore({ stateDir: h.store.stateDir });
       try {
         expect(reopened.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()!.value).toBe(schemaVersion);
-        expect(schemaVersion).toBe("6");
+        expect(schemaVersion).toBe("7");
         expect(reopened.db.prepare("SELECT name FROM sqlite_master WHERE name IN ('requirement_rounds','requirement_drafts') ORDER BY name").all().map(row => row.name)).toEqual(["requirement_drafts", "requirement_rounds"]);
         expect(reopened.db.prepare("SELECT id,body FROM runs ORDER BY id").all()).toEqual(rowsBefore);
       } finally { reopened.close(); }
