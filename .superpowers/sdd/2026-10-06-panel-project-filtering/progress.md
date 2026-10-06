@@ -237,3 +237,20 @@ Named mutations from the Task 10 brief that no task report lists as run: Task 1 
 - `web/src/App.tsx`: named ERRATUM (2026-10-06, session 32306496, spec §11 R3) appended at the end of the header comment; comment only, existing text verbatim (`git diff --numstat`: 6 added, 0 removed).
 - Fixture-edit list for the round: allowed edit (a) Task 1/2 literal group summaries (tests/control/webProtocol.test.ts and the 33 web fixture files per task 2 report); allowed edit (b) Task 4 nine App-rendering fixture files (route /api/projects), listed in the Task 4 commit body; the projectSwitcher criterion F rewrite (Task 4 ruling above). No other existing assertion was edited.
 - handoff.md: not touched or staged by Task 10 (the controller merges the handoff).
+Task 10: complete (commits de90805..528fe8a) — gates per Final gates section; full suite 3 registered load flakes (driverRecovery, driverRequirementSplit, controlShutdown), each green alone.
+Ruling: Task 10's diff (spec §12 append, App.tsx comment ERRATUM, ledger) is reviewed inside the final whole-branch review instead of a separate task review — docs/comment only — cost if wrong: one less review seat on docs.
+Ruling: Task 1's five server mutations (omit repoId; first repository; misroute clarifying; drop required schema; drop mismatch check) were never run — run now by a dedicated subagent before the final review (spec §9 requires them) — cost: one small dispatch.
+
+## Task 1 server mutations (run after Task 10)
+
+Orca session 32306496, clone of main at 528fe8a, command `vitest run tests/panel/projectGroupScope.test.ts tests/control/webProtocol.test.ts`. Baseline green (RC=0, 16 tests): /private/tmp/claude-501/-Users-biran-code-skills-loop-Orca/32306496-f454-4168-9a99-fb0d94a31ff6/scratchpad/t1mut-base.txt. Every mutation was restored with `git checkout -- <file>`; `git diff | wc -c` and `git diff --cached | wc -c` were both 0 after each.
+
+| # | Mutation | Red test(s) (all in projectGroupScope.test.ts) | Raw output |
+|---|----------|------------------------------------------------|------------|
+| M1 | omit `repoId` from the summary object (controlViews.ts) | 4 red: names the archived plan's repository; names the requirement's repository on a clarifying group; same repoId in a sinceChangeSeq summary; refuses to guess when plan and requirement disagree | /private/tmp/claude-501/-Users-biran-code-skills-loop-Orca/32306496-f454-4168-9a99-fb0d94a31ff6/scratchpad/t1mut-M1.txt |
+| M2 | `repoId` replaced by the constant "first-repo" (fixtures are single-repo, so a literal other repo stands in for "first repository") | same 4 red | /private/tmp/claude-501/-Users-biran-code-skills-loop-Orca/32306496-f454-4168-9a99-fb0d94a31ff6/scratchpad/t1mut-M2.txt |
+| M3 | clarifying branch uses "repo-other" instead of the requirement's repoId | 1 red: names the requirement's repository on a clarifying group | /private/tmp/claude-501/-Users-biran-code-skills-loop-Orca/32306496-f454-4168-9a99-fb0d94a31ff6/scratchpad/t1mut-M3.txt |
+| M4 | `groupSummarySchema.repoId` made `.optional()` (webProtocol.ts) | 1 red: rejects a summary without repoId and one with an invalid repoId | /private/tmp/claude-501/-Users-biran-code-skills-loop-Orca/32306496-f454-4168-9a99-fb0d94a31ff6/scratchpad/t1mut-M4.txt |
+| M5 | delete the repository-mismatch check (controlViews.ts) | 1 red: refuses to guess when an accepted requirement group's plan and requirement disagree | /private/tmp/claude-501/-Users-biran-code-skills-loop-Orca/32306496-f454-4168-9a99-fb0d94a31ff6/scratchpad/t1mut-M5.txt |
+
+No mutation stayed green, so no test was added. Restore byte counts: diff=0 cached=0 for M1-M5.
