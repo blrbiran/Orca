@@ -62,6 +62,12 @@ export const zh: Translation<typeof en> = {
     correct: "纠正",
     recordedReviewed: "已记录为已评审。",
     correctionRecorded: "纠正已记录。",
+    operations: "决策操作",
+    operationLine: "{{project}} / {{decision}} · {{verb}}：{{status}}",
+    operationPending: "发送中…",
+    operationRefused: "被拒绝",
+    recordAnotherFor: "为 {{project}} / {{decision}} 再记录一条",
+    dismissOperation: "关闭",
   },
   chains: {
     notLoaded: "链尚未加载。",

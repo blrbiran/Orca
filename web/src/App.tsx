@@ -41,7 +41,7 @@ import {
   requestChainStop,
   startChainBody,
 } from "./api.js";
-import type { PanelRefusal, PostResult, RecordCorrectionInput } from "./api.js";
+import type { CorrectionForm, PanelRefusal, RecordCorrectionInput } from "./api.js";
 import { bannersFor, readDismissed, writeDismissed } from "./chainBanner.js";
 import { ChainBanners, ChainPanel } from "./ChainPanel.js";
 import type { ChainOutcome } from "./ChainPanel.js";
@@ -75,6 +75,9 @@ import type {
   AgentPreferencesViewV1, AgentSelectionPreviewV1, AgentsViewV1, CommandSuccessV1, ControlConfigV1, ControlSummaryV1, OperatorPreferencesV1, RepositoryWorkspaceV1, RequirementViewV1,
 } from "./controlTypes.js";
 import { DecisionDetail } from "./DecisionDetail.js";
+import { DecisionOperations } from "./DecisionOperations.js";
+import { EMPTY_REQUESTS, dismissRequest, inlineRequest, noticeRequests, retryPayload, settleRequest, startRequest } from "./decisionRequests.js";
+import type { DecisionRequest, DecisionRequests } from "./decisionRequests.js";
 import { EMPTY_DRAFTS, clearIfUnchanged, correctionKey, setDraft } from "./detailDrafts.js";
 import type { DetailDrafts, DraftSlot } from "./detailDrafts.js";
 import type { Decision } from "./DecisionDetail.js";
@@ -151,8 +154,8 @@ interface HomeState {
   coverage: PanelCoverage;
 }
 
-type RecordedKey = "decisions.recordedReviewed" | "decisions.correctionRecorded";
-type Outcome = { kind: "recorded"; text: RecordedKey } | { kind: "refused"; refusal: PanelRefusal };
+/** A refusal without its retry field: an Agree has no correction to record again, whatever the server named. */
+const withoutRetry = ({ retry_field: _dropped, ...rest }: PanelRefusal): PanelRefusal => rest;
 
 export function App(): JSX.Element {
   const { t } = useTranslation();
@@ -160,8 +163,11 @@ export function App(): JSX.Element {
   const [error, setError] = useState<PanelRefusal | null>(null);
   const [selected, setSelected] = useState<DecisionListRow | null>(null);
   const [decision, setDecision] = useState<Decision | null>(null);
-  const [outcome, setOutcome] = useState<Outcome | null>(null);
-  const [lastCorrection, setLastCorrection] = useState<RecordCorrectionInput | null>(null);
+  /**
+   * Project filtering spec §11 R3: every Agree / Correct sent, by request, independent of the open detail. Its answer
+   * updates only its own record; the detail shows only its owner's active request, the global notice every other one.
+   */
+  const [decisionRequests, setDecisionRequests] = useState<DecisionRequests>(EMPTY_REQUESTS);
   /** The row whose answer may still be applied; read by `acceptArrival` when one arrives. */
   const wanted = useRef<DecisionListRow | null>(null);
 
@@ -709,8 +715,6 @@ export function App(): JSX.Element {
    * person moved on is dropped instead of repainting the page behind them.
    */
   useEffect(() => {
-    setOutcome(null);
-    setLastCorrection(null);
     setDecision(null);
     wanted.current = selected;
     if (selected === null) return;
@@ -726,19 +730,39 @@ export function App(): JSX.Element {
     })();
   }, [selected]);
 
-  /** Shows what happened; after a success, refetches so the to-do list and coverage reflect it. */
-  const send = async (post: () => Promise<PostResult<unknown>>, recorded: RecordedKey): Promise<void> => {
+  /**
+   * Spec §11 R3: send one Agree or Correct as its own request record (owner, verb, a copy of the exact payload) and
+   * apply its answer to that record only -- whatever is selected by then. After a success, refetch so the to-do list
+   * and coverage reflect it (the scope and the open detail stay as they are). Spec §11 R2: a correction's success
+   * clears its owner's draft only if it still equals `submittedForm`; a refusal or a transport error keeps it.
+   */
+  const submitDecision = async (
+    owner: { projectKey: string; decisionId: string },
+    verb: "agree" | "correct",
+    payload: RecordCorrectionInput | null,
+    submittedForm?: CorrectionForm,
+  ): Promise<void> => {
+    const requestId = nextCommandId();
+    const sent = payload === null ? null : { ...payload };
+    setDecisionRequests((all) => startRequest(all, { requestId, owner, verb, payload: sent }));
     try {
-      const result = await post();
+      const result = sent === null ? await recordReview(owner.projectKey, owner.decisionId) : await recordCorrection(sent);
       if (!result.ok) {
-        setOutcome({ kind: "refused", refusal: result });
+        const { ok: _ok, ...refusal } = result;
+        setDecisionRequests((all) => settleRequest(all, requestId, { kind: "refused", refusal }));
         return;
       }
-      setOutcome({ kind: "recorded", text: recorded });
+      setDecisionRequests((all) => settleRequest(all, requestId, { kind: "recorded", text: verb === "agree" ? "decisions.recordedReviewed" : "decisions.correctionRecorded" }));
+      if (submittedForm !== undefined) setDetailDrafts((all) => clearIfUnchanged(all, "correction", correctionKey(owner.projectKey, owner.decisionId), submittedForm));
       await loadHome();
     } catch (err) {
-      setOutcome({ kind: "refused", refusal: failureFrom(err) });
+      setDecisionRequests((all) => settleRequest(all, requestId, { kind: "refused", refusal: failureFrom(err) }));
     }
+  };
+  /** "Record another" of one refused record: its own stored payload with again:true, under its own owner. */
+  const recordAnother = (record: DecisionRequest): void => {
+    const retry = retryPayload(record);
+    if (retry !== null) void submitDecision(record.owner, "correct", retry);
   };
 
   if (error !== null) return <ErrorPage failure={error} />;
@@ -751,6 +775,7 @@ export function App(): JSX.Element {
     writeDismissed(browserStorage(), next);
   };
   const summary = controlConfig !== null && control.recovery !== null ? summaryView(control) : null;
+  const inline = inlineRequest(decisionRequests, selected);
   const detail =
     selected !== null && decision !== null ? (
       <>
@@ -759,22 +784,18 @@ export function App(): JSX.Element {
         draft={detailDrafts.correction[correctionKey(selected.projectKey, selected.id)]}
         onDraft={(form) => onDetailDraft("correction", correctionKey(selected.projectKey, selected.id), form)}
         onAgree={() => {
-          void send(() => recordReview(selected.projectKey, selected.id), "decisions.recordedReviewed");
+          void submitDecision({ projectKey: selected.projectKey, decisionId: selected.id }, "agree", null);
         }}
         onCorrect={(form) => {
-          const body = correctionBody({ projectKey: selected.projectKey, decisionId: selected.id }, form);
-          setLastCorrection(body);
-          void send(() => recordCorrection(body), "decisions.correctionRecorded");
+          const owner = { projectKey: selected.projectKey, decisionId: selected.id };
+          void submitDecision(owner, "correct", correctionBody(owner, form), form);
         }}
       />
-      {outcome?.kind === "recorded" && <p role="status">{t(outcome.text)}</p>}
-      {outcome?.kind === "refused" && (
+      {inline?.status.kind === "recorded" && <p role="status">{t(inline.status.text)}</p>}
+      {inline?.status.kind === "refused" && (
         <Refusal
-          refusal={outcome.refusal}
-          onRecordAnother={() => {
-            if (lastCorrection === null) return;
-            void send(() => recordCorrection({ ...lastCorrection, again: true }), "decisions.correctionRecorded");
-          }}
+          refusal={inline.payload === null ? withoutRetry(inline.status.refusal) : inline.status.refusal}
+          onRecordAnother={() => recordAnother(inline)}
         />
       )}
       </>
@@ -831,7 +852,17 @@ export function App(): JSX.Element {
         writeTheme(browserStorage(), pref);
         applyTheme(document.documentElement, pref);
       }}
-      banners={chains !== null ? <ChainBanners banners={bannersFor(chains, dismissed)} onDismiss={dismiss} /> : null}
+      banners={
+        <>
+          {chains !== null && <ChainBanners banners={bannersFor(chains, dismissed)} onDismiss={dismiss} />}
+          <DecisionOperations
+            requests={noticeRequests(decisionRequests, selected)}
+            projectName={nameOf}
+            onDismiss={(requestId) => setDecisionRequests((all) => dismissRequest(all, requestId))}
+            onRecordAnother={recordAnother}
+          />
+        </>
+      }
     >
       <SectionPane section="chains" active={section}>
       {chains === null && <p className="empty">{t("chains.notLoaded")}</p>}

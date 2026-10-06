@@ -155,6 +155,12 @@ export const en = {
     correct: "Correct",
     recordedReviewed: "Recorded as reviewed.",
     correctionRecorded: "Correction recorded.",
+    operations: "Decision operations",
+    operationLine: "{{project}} / {{decision}} · {{verb}}: {{status}}",
+    operationPending: "sending…",
+    operationRefused: "refused",
+    recordAnotherFor: "Record another for {{project}} / {{decision}}",
+    dismissOperation: "Dismiss",
   },
   chains: {
     notLoaded: "Chains have not loaded.",
