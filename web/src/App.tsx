@@ -84,7 +84,7 @@ import { MemoryView } from "./MemoryView.js";
 import { pickProject, projectName, readProject, writeProject } from "./project.js";
 import type { ProjectsAnswerV1 } from "./project.js";
 import { ProjectControl } from "./ProjectControl.js";
-import { allowsAll, groupScope, readProjectView, writeProjectView } from "./projectScope.js";
+import { ALL_PROJECTS, allowsAll, groupScope, readProjectView, writeProjectView } from "./projectScope.js";
 import type { ProjectView } from "./projectScope.js";
 import { ProjectNames } from "./projectNames.js";
 import { MetricsView } from "./MetricsView.js";
@@ -871,7 +871,26 @@ export function App(): JSX.Element {
         )}
       </SectionPane>
       <SectionPane section="decisions" active={section}>
-        <DecisionsView rows={home.todo} filter={filter} onFilter={setFilter} selected={selected} onOpen={setSelected} detail={detail} />
+        {projects === null ? (
+          // Plan decision P2: without a project list the rows keep today's repository filter.
+          <DecisionsView rows={home.todo} filter={filter} onFilter={setFilter} selected={selected} onOpen={setSelected} detail={detail} />
+        ) : (
+          // With one, the pane follows the global scope: rows are restricted here, and its repository select is the sidebar's.
+          <DecisionsView
+            rows={scope.kind === "all" ? home.todo : home.todo.filter((row) => row.projectKey === project)}
+            filter={{ ...filter, projectKey: "" }}
+            onFilter={setFilter}
+            selected={selected}
+            onOpen={setSelected}
+            detail={detail}
+            scope={{
+              projects,
+              value: scope.kind === "all" ? ALL_PROJECTS : project ?? "",
+              allowAll: allowsAll(projects.length),
+              onChange: (value) => (value === ALL_PROJECTS ? chooseAll() : chooseProject(value)),
+            }}
+          />
+        )}
       </SectionPane>
       <SectionPane section="memory" active={section}>
         <MemoryView active={section === "memory"} project={project} onProject={chooseProject} />

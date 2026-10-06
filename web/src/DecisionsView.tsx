@@ -11,6 +11,8 @@ import { enumText } from "./i18n.js";
 import { kindLabel, sortKinds } from "./kindRank.js";
 import { en } from "./locales/en.js";
 import { useProjectName } from "./projectNames.js";
+import { ALL_PROJECTS } from "./projectScope.js";
+import type { ProjectV1 } from "./project.js";
 import type { DecisionListRow } from "./types.js";
 
 export interface DecisionFilter {
@@ -66,7 +68,17 @@ function FilterSelect(props: {
   );
 }
 
+/** The global project scope (project filtering spec §3): the same choice the sidebar makes, shown here as the repository select. */
+export interface DecisionsScope {
+  projects: readonly ProjectV1[];
+  /** A projectKey, or ALL_PROJECTS. */
+  value: string;
+  allowAll: boolean;
+  onChange: (value: string) => void;
+}
+
 export function DecisionsView(props: {
+  scope?: DecisionsScope;
   rows: readonly DecisionListRow[];
   filter: DecisionFilter;
   onFilter?: (f: DecisionFilter) => void;
@@ -95,7 +107,17 @@ export function DecisionsView(props: {
       <div className="filters">
         <FilterSelect label={t("decisions.filterKind")} name="kind" values={distinct(props.rows, (r) => String(r.kind))} filter={props.filter} onFilter={props.onFilter} order={sortKinds} optionText={kindLabel} />
         <FilterSelect label={t("decisions.filterScope")} name="scope" values={distinct(props.rows, (r) => String(r.scope))} filter={props.filter} onFilter={props.onFilter} optionText={(value) => enumText("decisionScope", value)} />
-        <FilterSelect label={t("decisions.filterRepository")} name="projectKey" values={distinct(props.rows, (r) => r.projectKey)} filter={props.filter} onFilter={props.onFilter} optionText={name} />
+        {props.scope === undefined ? (
+          <FilterSelect label={t("decisions.filterRepository")} name="projectKey" values={distinct(props.rows, (r) => r.projectKey)} filter={props.filter} onFilter={props.onFilter} optionText={name} />
+        ) : (
+          <label>
+            {t("decisions.filterRepository")}
+            <select name="filter-projectKey" value={props.scope.value} onChange={(e) => props.scope?.onChange(e.currentTarget.value)}>
+              {props.scope.allowAll && <option value={ALL_PROJECTS}>{t("project.all")}</option>}
+              {props.scope.projects.map((entry) => <option key={entry.projectKey} value={entry.projectKey}>{name(entry.projectKey)}</option>)}
+            </select>
+          </label>
+        )}
       </div>
       <div className="split">
         <div className="split-list">

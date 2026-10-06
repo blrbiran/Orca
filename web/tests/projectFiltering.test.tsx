@@ -3,13 +3,14 @@
  * Project filtering spec §3, §5 (selection lifecycle), §8: the sidebar chooses "All projects" or one project; the
  * choice is this browser's (orca.projectView beside orca.project); a panel with fewer than two projects has no "All";
  * and whatever is open (group, requirement, decision) closes when the scope changes -- but not when the first project
- * list merely resolves. Task 3 filters no list yet: these criteria cover the selector, storage and the details.
+ * list merely resolves. the first describes cover the selector, storage and the open details; "two-project lists" covers Task control, Requirements and the outcome-unknown line; "decision identity and count" covers the Decisions pane following the scope.
  */
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/App.js";
 import { PROJECT_KEY } from "../src/project.js";
 import { PROJECT_VIEW_KEY } from "../src/projectScope.js";
+import { HIDDEN_BY_FILTER } from "../src/DecisionsView.js";
 import { rowKey } from "../src/DecisionList.js";
 import { UNCERTAIN_COMMANDS_KEY } from "../src/controlApi.js";
 import type { GroupSummaryV1, RequirementViewV1 } from "../src/controlTypes.js";
@@ -399,5 +400,128 @@ describe("two-project lists", () => {
     await waitFor(() => expect(panel.requests).toContain(`GET /api/control/groups/${groupId}/requirement`));
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
     expect(within(screen.getByRole("region", { name: "Requirements" })).queryByRole("article")).toBeNull();
+  });
+});
+
+describe("decision identity and count", () => {
+  const pane = (): HTMLElement => document.querySelector(".decisions") as HTMLElement;
+  const count = (): string => within(pane()).getByTestId("decision-count").textContent ?? "";
+  const listRows = (): string[] => Array.from(pane().querySelectorAll(".decision-list button")).map((row) => row.textContent ?? "");
+  const kindSelect = (): HTMLSelectElement => pane().querySelector("select[name=filter-kind]") as HTMLSelectElement;
+  const decisionsSelect = (): HTMLSelectElement => within(pane()).getByRole("combobox", { name: "Repository" }) as HTMLSelectElement;
+  const optionsOf = (select: HTMLSelectElement): string[] => Array.from(select.options).map((option) => option.textContent ?? "");
+  /** alpha/d1, beta/d1 (same id) and beta/d2; each readable, answering with its own project as the question. */
+  function seedDecisions(): void {
+    panel.todo = [decisionRow("alpha", "d1"), decisionRow("beta", "d1", { kind: "boundary" }), decisionRow("beta", "d2")];
+    for (const row of panel.todo) {
+      panel.decisions[rowKey(row)] = { id: row.id, question: `question of ${row.projectKey}/${row.id}`, chose: "c", because: "b", alternatives: [] };
+    }
+  }
+  const settled = async (text: string): Promise<void> => { await waitFor(() => expect(count()).toBe(text)); };
+
+  it("1: the pane lists only the chosen project's rows, counted within it; All lists every row of both, d1 twice", async () => {
+    seedDecisions();
+    render(<App />);
+    await ready();
+    await settled("1 of 1");
+    expect(listRows()).toHaveLength(1);
+    fireEvent.change(projectSelect(), { target: { value: "beta" } });
+    await settled("2 of 2");
+    chooseAll();
+    await settled("3 of 3");
+    expect(listRows().filter((text) => text.includes("d1"))).toHaveLength(2);
+  });
+
+  it("2: the kind filter narrows within the project, and an open decision filtered away is still named by the note", async () => {
+    seedDecisions();
+    window.localStorage.setItem(PROJECT_KEY, "beta");
+    render(<App />);
+    await ready();
+    await settled("2 of 2");
+    fireEvent.click(Array.from(pane().querySelectorAll(".decision-list button")).find((row) => row.textContent?.includes("boundary"))!);
+    await screen.findByTestId("decision-question");
+    expect(within(pane()).queryByRole("note")).toBeNull();
+    fireEvent.change(kindSelect(), { target: { value: "interface" } });
+    await settled("1 of 2");
+    expect(within(pane()).getByRole("note").textContent).toBe(HIDDEN_BY_FILTER);
+  });
+
+  it("3: a project with no rows shows Nothing to review and none of the others' rows", async () => {
+    seedDecisions();
+    panel.projects = { status: 200, body: { projects: [...TWO_PROJECTS, { projectKey: "gamma", name: "Gamma", controlRepoId: null, editable: true }] } };
+    render(<App />);
+    await ready();
+    fireEvent.change(projectSelect(), { target: { value: "gamma" } });
+    await settled("0 of 0");
+    expect(within(pane()).getByText(/^Nothing to review/)).toBeTruthy();
+    expect(listRows()).toEqual([]);
+  });
+
+  it("4: the Decisions repository select and the sidebar selector are one state, in both directions", async () => {
+    seedDecisions();
+    render(<App />);
+    await ready();
+    expect(optionsOf(decisionsSelect())).toEqual(optionsOf(projectSelect()));
+    fireEvent.change(decisionsSelect(), { target: { value: decisionsSelect().options[0]!.value } });
+    await waitFor(() => expect(selectedText()).toBe("All projects"));
+    expect(decisionsSelect().selectedOptions[0]?.textContent).toBe("All projects");
+    expect(window.localStorage.getItem(PROJECT_VIEW_KEY)).toBe("all");
+    fireEvent.change(projectSelect(), { target: { value: "beta" } });
+    await waitFor(() => expect(decisionsSelect().selectedOptions[0]?.textContent).toBe("Beta"));
+    fireEvent.change(decisionsSelect(), { target: { value: "alpha" } });
+    await waitFor(() => expect(selectedText()).toBe("Alpha"));
+    expect(window.localStorage.getItem(PROJECT_VIEW_KEY)).toBe("project");
+  });
+
+  it("5: opening alpha/d1 reads alpha's decision, not beta's, though both are d1", async () => {
+    seedDecisions();
+    window.localStorage.setItem(PROJECT_VIEW_KEY, "all");
+    render(<App />);
+    await ready();
+    await settled("3 of 3");
+    const alphaRow = Array.from(pane().querySelectorAll(".decision-list button")).find((row) => row.textContent?.includes("Alpha"))!;
+    fireEvent.click(alphaRow);
+    expect((await screen.findByTestId("decision-question")).textContent).toBe("question of alpha/d1");
+    const reads = panel.requests.filter((request) => request.startsWith("GET /api/decision?"));
+    expect(reads).toHaveLength(1);
+    expect(reads[0]).toContain("projectKey=alpha");
+  });
+
+  it("6: the kind filter survives a project switch, and the pane never keeps a repository filter of its own", async () => {
+    seedDecisions();
+    window.localStorage.setItem(PROJECT_KEY, "beta");
+    render(<App />);
+    await ready();
+    await settled("2 of 2");
+    fireEvent.change(kindSelect(), { target: { value: "boundary" } });
+    await settled("1 of 2");
+    chooseAll();
+    await settled("1 of 3");
+  });
+
+  it("7: without a project list the pane keeps today's behaviour: every row, its own repository filter", async () => {
+    seedDecisions();
+    panel.projects = { status: 500, body: {} };
+    render(<App />);
+    await waitFor(() => expect(count()).toBe("3 of 3"));
+    const select = within(pane()).getByRole("combobox", { name: "Repository" }) as HTMLSelectElement;
+    expect(optionsOf(select)).toEqual(["any", "alpha", "beta"]);
+    fireEvent.change(select, { target: { value: "beta" } });
+    await waitFor(() => expect(count()).toBe("2 of 3"));
+  });
+
+  it("8: a repository filter set before the project list arrived does not hide rows once the scope takes over", async () => {
+    seedDecisions();
+    let release!: () => void;
+    panel.holdProjects = new Promise<void>((resolve) => { release = resolve; });
+    render(<App />);
+    await waitFor(() => expect(count()).toBe("3 of 3"));
+    fireEvent.change(within(pane()).getByRole("combobox", { name: "Repository" }), { target: { value: "beta" } });
+    await waitFor(() => expect(count()).toBe("2 of 3"));
+    await act(async () => { release(); });
+    await ready();
+    // Alpha is the chosen project: its one row shows, though the old filter named beta.
+    await settled("1 of 1");
+    expect(listRows()).toHaveLength(1);
   });
 });
