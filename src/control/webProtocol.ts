@@ -964,6 +964,7 @@ export type RequirementSummaryV1 = z.infer<typeof requirementSummarySchema>;
 export const groupSummarySchema = z
   .object({
     groupId: idSchema,
+    repoId: idSchema,
     state: z.enum(["clarifying", "draft", "ready", "running", "review", "done", "blocked"]),
     commandRevision: positiveSafeInteger,
     projectionSeq: positiveSafeInteger,

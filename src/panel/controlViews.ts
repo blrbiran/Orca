@@ -321,8 +321,17 @@ export function readGroupSummary(store: ControlStore, groupId: string): GroupSum
   if (!versions) throw new ControlError("group-not-found");
   const stop = stopView(store, groupId, body.stopped);
   const blockers = blockerRows(store, groupId);
+  const requirementBlock = hasRequirementBlock(body as { requirement?: unknown });
+  // Project filtering spec §4: the group's repository, from its archived plan, or from its requirement while it
+  // is still clarifying. An accepted requirement group must agree with its plan; a disagreement is never guessed.
+  const requirementRepoId = requirementBlock ? readRequirementGroup(store, groupId).requirement.repoId : null;
+  if (archived !== null && requirementRepoId !== null && requirementRepoId !== archived.plan.repoId) {
+    return blocked("group-summary:repository-mismatch");
+  }
+  const repoId = archived !== null ? archived.plan.repoId : readRequirementGroup(store, groupId).requirement.repoId;
   const summary = {
     groupId,
+    repoId,
     state: body.status,
     commandRevision: Number(versions.revision),
     projectionSeq: Number(versions.projection_seq),
@@ -331,7 +340,7 @@ export function readGroupSummary(store: ControlStore, groupId: string): GroupSum
     claimBlocked: blockers.length > 0,
     recoveryBlockerCount: blockers.length,
     ...(archived === null ? {} : { completion: taskCompletion(store, groupId, archived.plan) }),
-    ...(hasRequirementBlock(body as { requirement?: unknown }) ? { requirement: requirementSummaryOf(store, groupId) } : {}),
+    ...(requirementBlock ? { requirement: requirementSummaryOf(store, groupId) } : {}),
   };
   const parsed = groupSummarySchema.safeParse(summary);
   if (!parsed.success) return blocked(`group-summary:${parsed.error.issues[0]?.message ?? "invalid"}`);

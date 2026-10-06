@@ -304,6 +304,7 @@ describe("Web control protocol", () => {
   it("validates closed, sorted read DTOs", () => {
     const group = {
       groupId: "a",
+      repoId: "repo",
       state: "draft",
       commandRevision: 1,
       projectionSeq: 1,
@@ -339,6 +340,7 @@ describe("Web control protocol", () => {
       changeSeq: 1,
       summary: {
         groupId: "g",
+        repoId: "repo",
         state: "draft",
         commandRevision: 1,
         projectionSeq: 1,
