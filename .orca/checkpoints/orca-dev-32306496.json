@@ -1,0 +1,42 @@
+{
+  "v": 1,
+  "runId": "orca-dev-32306496",
+  "runtime": "claude-code",
+  "sessionRef": "32306496-f454-4168-9a99-fb0d94a31ff6",
+  "writtenAt": "2026-10-06T04:55:56.956Z",
+  "head": "a89c474de75f9ba4815cdd400291e7e90b4d5258",
+  "level": {
+    "kind": "reading",
+    "level": 429360,
+    "windowTokens": 1000000,
+    "t1": 330000,
+    "t2": 450000,
+    "band": 1
+  },
+  "next": [
+    "Next agreed item: N2 agent entry (CLI --json -> skill -> MCP thin shell); then isolated real ccmem/syncskill + known-red diagnosis"
+  ],
+  "open": [
+    "Project filtering round complete; ledger .superpowers/sdd/2026-10-06-panel-project-filtering/progress.md",
+    "Full isolated gate not re-run after final fix wave (web check 490/490 was)"
+  ],
+  "awaitingHuman": [
+    {
+      "kind": "named-authorization",
+      "what": "review rewrite of existing criterion web/tests/projectSwitcher.test.tsx F and plan decisions P1-P5 / rulings in spec section 12"
+    },
+    {
+      "kind": "irreversible",
+      "what": "push of Orca, ccloop, ccmem main (human-timed)"
+    }
+  ],
+  "measurements": [
+    {
+      "command": "cd /Users/biran/code/skills/loop/Orca/web && ../node_modules/.bin/vitest run tests/projectFiltering.test.tsx tests/projectScopeRecovery.test.tsx tests/projectScopeDrafts.test.tsx tests/projectScopeDecisionRequests.test.tsx",
+      "exitCode": 0,
+      "commit": "a89c474de75f9ba4815cdd400291e7e90b4d5258",
+      "observedAt": "2026-10-06T04:55:56.902Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-32306496-aq30v1/1.txt"
+    }
+  ]
+}
