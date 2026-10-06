@@ -13,7 +13,8 @@ const SUN_PATH_BYTES = process.platform === "darwin" ? 104 : 108;
 export const controlSocketPath = (stateDir: string): string => join(stateDir, CONTROL_SOCKET_NAME);
 export const socketPathTooLong = (path: string): boolean => Buffer.byteLength(path) >= SUN_PATH_BYTES;
 
-export interface ControlSocketHandle { path: string; close(): void }
+/** `close()` resolves once the socket server has closed (in-flight requests finished); repeated calls return the same promise. */
+export interface ControlSocketHandle { path: string; close(): Promise<void> }
 export interface ControlSocketFailure { code: "control-socket-path-too-long" | "control-socket-path-occupied" | "control-socket-listen-failed"; detail: string }
 
 /** Spec §3.2: only the control routes; no page, no token, no Host check -- there is no network peer. */
@@ -35,26 +36,30 @@ const isSocketAt = (path: string): boolean | null => {
  */
 export async function bindControlSocket(app: Express, path: string): Promise<ControlSocketHandle | ControlSocketFailure> {
   if (socketPathTooLong(path)) return { code: "control-socket-path-too-long", detail: `${Buffer.byteLength(path)} bytes: ${path}` };
-  const existing = isSocketAt(path);
-  if (existing === false) return { code: "control-socket-path-occupied", detail: path };
-  if (existing === true) unlinkSync(path);
   const server: Server = createServer(app);
   try {
+    const existing = isSocketAt(path);
+    if (existing === false) return { code: "control-socket-path-occupied", detail: path };
+    // Safe only because socket close always completes before control.close() releases the store lock (spec §3.3).
+    if (existing === true) unlinkSync(path);
     await new Promise<void>((resolve, reject) => { server.once("error", reject); server.listen(path, () => resolve()); });
     chmodSync(path, 0o600);
   } catch (error) {
     server.close();
     return { code: "control-socket-listen-failed", detail: error instanceof Error ? error.message : String(error) };
   }
-  let closed = false;
+  let closing: Promise<void> | null = null;
   return {
     path,
     close() {
-      if (closed) return;
-      closed = true;
-      server.close();
-      server.closeIdleConnections();
-      if (isSocketAt(path) === true) unlinkSync(path);
+      closing ??= new Promise<void>((resolve) => {
+        server.close(() => {
+          try { if (isSocketAt(path) === true) unlinkSync(path); } catch { /* the file is already gone or not ours */ }
+          resolve();
+        });
+        server.closeIdleConnections();
+      });
+      return closing;
     },
   };
 }

@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { connect } from "node:net";
 import { lstat, mkdir, realpath, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
@@ -97,5 +98,32 @@ describe("the control socket (spec §3)", () => {
     const panel = trackSocketPanel(await createPanelServer(opts, w.env));
     expect(panel.socketPath).toBe(null);
     expect(lines.join("")).toContain("control-socket-path-too-long");
+    const web = await fetch(`${panel.url}/api/control/config`, { headers: { "x-orca-token": panel.token } });
+    expect(web.status).toBe(200);
+  });
+
+  it("C16: close() waits for a request in flight on the socket, which is answered before the store is released (spec §3.3)", async () => {
+    const w = await workspace();
+    const panel = await boot(w);
+    const body = JSON.stringify({ not: "an envelope" });
+    const half = Math.floor(body.length / 2);
+    const client = connect(panel.socketPath!);
+    await new Promise<void>((resolve, reject) => { client.once("error", reject); client.once("connect", () => resolve()); });
+    let reply = "";
+    client.on("data", (chunk) => { reply += chunk.toString("utf8"); });
+    const ended = new Promise<void>((resolve) => client.once("close", () => resolve()));
+    client.write(`POST /api/control/groups/g1/requirement/answer HTTP/1.1\r\nhost: x\r\ncontent-type: application/json\r\nconnection: close\r\ncontent-length: ${body.length}\r\n\r\n${body.slice(0, half)}`);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    let closedDone = false;
+    const closing = panel.close().then(() => { closedDone = true; });
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(closedDone).toBe(false);
+    client.write(body.slice(half));
+    await ended;
+    await closing;
+    const status = Number(/^HTTP\/1\.1 (\d+)/.exec(reply)?.[1]);
+    expect(status).toBeGreaterThanOrEqual(200);
+    expect(status).toBeLessThan(500);
+    untrackSocketPanel(panel);
   });
 });

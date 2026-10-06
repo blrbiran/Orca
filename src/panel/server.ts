@@ -268,7 +268,11 @@ export async function createPanelServer(opts: PanelOptions, env: NodeJS.ProcessE
   if (address === null || typeof address === "string") {
     throw new PanelRejection("panel-no-address", "the panel started but has no numeric address");
   }
-  const closed = new Promise<void>((resolve) => server.once("close", () => { socket?.close(); control?.close(); resolve(); }));
+  // Spec §3.3: the store is released only after BOTH listeners have closed, so a request in flight on either one
+  // never meets a closed store.
+  const closed = new Promise<void>((resolve) => server.once("close", () => {
+    void (socket?.close() ?? Promise.resolve()).then(() => { control?.close(); resolve(); });
+  }));
 
   // spec §6, and the convention src/chain/run.ts:106-107 already uses. On a signal: the control
   // plane closes its gate and writes its one shutdown identity, then the server stops accepting.
@@ -283,7 +287,7 @@ export async function createPanelServer(opts: PanelOptions, env: NodeJS.ProcessE
     signalled = true;
     void (async () => {
       try { await control?.shutdown(); }
-      finally { socket?.close(); server.close(); }
+      finally { void socket?.close(); server.close(); }
     })();
   };
   process.on("SIGINT", onSignal);
@@ -301,8 +305,8 @@ export async function createPanelServer(opts: PanelOptions, env: NodeJS.ProcessE
     closed,
     close: () =>
       new Promise<void>((resolve, reject) => {
-        socket?.close();
-        server.close((err) => (err ? reject(err) : resolve()));
+        void socket?.close();
+        server.close((err) => (err ? reject(err) : void closed.then(resolve)));
       }),
   };
 }
