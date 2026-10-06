@@ -106,8 +106,11 @@ export function ensurePanelOperatorId(store: ControlStore): string {
   });
 }
 
-export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps): void {
-  if (deps.service) registerControlMutationRoutes(app, deps.store, deps.service);
+/** Agent entry spec §3: which listener a request arrived on. Task 4 gates on it; for now it is only carried. */
+export type ControlChannel = "web" | "socket";
+
+export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps, channel: ControlChannel = "web"): void {
+  if (deps.service) registerControlMutationRoutes(app, deps.store, deps.service, channel);
   app.get("/api/control/config", asyncRoute(async (_req, res) => {
     const base = await deps.config.readView(operatorDefaultSelection(deps.store));
     res.json(controlConfigSchema.parse({ ...base, epoch: deps.epoch, errorCatalog: controlErrorCatalog() }));
@@ -248,7 +251,8 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
   });
 }
 
-export function registerControlMutationRoutes(app: Express, store: ControlStore, service: WebControlService): void {
+export function registerControlMutationRoutes(app: Express, store: ControlStore, service: WebControlService, channel: ControlChannel = "web"): void {
+  void channel; // Task 4 gates on it
   const actorId = ensurePanelOperatorId(store);
   /** Resolve the command target and the ledger scope a route names; `recovery-retry` carries no group in its path. */
   type RouteTarget = (params: Request["params"], payload: unknown, store: ControlStore) => { groupId: string; target: CommandTargetV1 };

@@ -347,6 +347,7 @@ async function runPanel(args: string[]): Promise<number> {
     // For the person at the terminal, on stderr so stdout keeps its one line: `/` needs no
     // token (the server injects it into index.html), so the bare url is all they need.
     process.stderr.write(`orca-panel: open ${started.url} in a browser (the page already carries the token)\n`);
+    if (started.socketPath !== null) process.stderr.write(`orca-panel: control socket ${started.socketPath}\n`);
     await started.closed;
     return 0;
   } catch (err) {

@@ -7,6 +7,7 @@ import { buildApi } from "./api.js";
 import { PANEL_HOST_NOT_ALLOWED, assertBindAllowed, isHostAllowed } from "./bindGuard.js";
 import { controlErrorBody } from "./controlErrors.js";
 import { verifyControlJsonBody } from "./controlApi.js";
+import { bindControlSocket, buildControlSocketApp, controlSocketPath, type ControlSocketHandle } from "./controlSocket.js";
 import { randomUUID } from "node:crypto";
 import { assembleControlRuntime, type ControlRuntime } from "./controlAssembly.js";
 import { runControlPanelStartup } from "./controlLifecycle.js";
@@ -71,6 +72,8 @@ export interface StartedPanel {
   url: string;
   token: string;
   port: number;
+  /** Agent entry spec §3: the control socket this panel bound, or null (no control plane, store held elsewhere, or bind refused). */
+  socketPath: string | null;
   /** Resolves when the server has closed. */
   closed: Promise<void>;
   close(): Promise<void>;
@@ -246,6 +249,17 @@ export async function createPanelServer(opts: PanelOptions, env: NodeJS.ProcessE
       server.listen(opts.port, opts.bind, () => resolve());
     }),
   });
+  // Agent entry spec §3.1: only the store's holder binds, and only after recovery -- the same ordering as the TCP listen.
+  let socket: ControlSocketHandle | null = null;
+  if (control !== null) {
+    const bound = await bindControlSocket(
+      buildControlSocketApp({ store: control.store, epoch, config: control.config, service: control.service, port: control.port }),
+      controlSocketPath(control.store.stateDir),
+    );
+    if ("code" in bound) process.stderr.write(`orca-panel: control socket unavailable: ${bound.code}: ${bound.detail}\n`);
+    else socket = bound;
+  }
+
   // Armed only after recovery and after listen, and fired once immediately: a wake that was armed
   // before the crash is delivered without waiting a whole interval for it.
   if (control !== null) { control.startPump(opts.control.wakeIntervalMs); void control.pump(); }
@@ -254,7 +268,7 @@ export async function createPanelServer(opts: PanelOptions, env: NodeJS.ProcessE
   if (address === null || typeof address === "string") {
     throw new PanelRejection("panel-no-address", "the panel started but has no numeric address");
   }
-  const closed = new Promise<void>((resolve) => server.once("close", () => { control?.close(); resolve(); }));
+  const closed = new Promise<void>((resolve) => server.once("close", () => { socket?.close(); control?.close(); resolve(); }));
 
   // spec §6, and the convention src/chain/run.ts:106-107 already uses. On a signal: the control
   // plane closes its gate and writes its one shutdown identity, then the server stops accepting.
@@ -269,7 +283,7 @@ export async function createPanelServer(opts: PanelOptions, env: NodeJS.ProcessE
     signalled = true;
     void (async () => {
       try { await control?.shutdown(); }
-      finally { server.close(); }
+      finally { socket?.close(); server.close(); }
     })();
   };
   process.on("SIGINT", onSignal);
@@ -283,11 +297,13 @@ export async function createPanelServer(opts: PanelOptions, env: NodeJS.ProcessE
     url: `http://${opts.bind}:${address.port}`,
     token,
     port: address.port,
+    socketPath: socket?.path ?? null,
     closed,
     close: () =>
-      new Promise<void>((resolve, reject) =>
-        server.close((err) => (err ? reject(err) : resolve())),
-      ),
+      new Promise<void>((resolve, reject) => {
+        socket?.close();
+        server.close((err) => (err ? reject(err) : resolve()));
+      }),
   };
 }
 
