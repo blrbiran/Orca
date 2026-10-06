@@ -201,3 +201,5 @@ Implementation-time rulings that changed product behaviour or an existing criter
 - **Workspace P3 hiding.** The panel-level workspace selector is shown only in project mode; an open group's detail reads the workspace of its own `plan.repoId`.
 
 Sections 1–11 are unchanged by this appendix (checked with `git diff`: appended lines only).
+
+Correction (2026-10-06, Orca session 32306496): the R2 bullet above says unowned text is "dropped on any explicit target choice". That is imprecise. Unowned text is adopted only into a chosen target that has no draft of its own, and is discarded otherwise; it never overwrites an existing draft and never resurfaces under a later target. The original bullet is left as written.
