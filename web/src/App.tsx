@@ -84,6 +84,8 @@ import { MemoryView } from "./MemoryView.js";
 import { pickProject, projectName, readProject, writeProject } from "./project.js";
 import type { ProjectsAnswerV1 } from "./project.js";
 import { ProjectControl } from "./ProjectControl.js";
+import { allowsAll, groupScope, readProjectView, writeProjectView } from "./projectScope.js";
+import type { ProjectView } from "./projectScope.js";
 import { ProjectNames } from "./projectNames.js";
 import { MetricsView } from "./MetricsView.js";
 import { Refusal } from "./Refusal.js";
@@ -181,6 +183,8 @@ export function App(): JSX.Element {
   const [projectsAnswer, setProjectsAnswer] = useState<ProjectsAnswerV1 | null>(null);
   const projects = projectsAnswer?.projects ?? null;
   const [project, setProject] = useState<string | null>(null);
+  /** Project filtering spec §3: one project, or every project. Kept in this browser beside the chosen project. */
+  const [projectView, setProjectView] = useState<ProjectView>(() => readProjectView(browserStorage()));
   /** Execution driver spec §3.2: the chosen project's (else the first trusted repository's) workspace mode, null until read. */
   const [workspace, setWorkspace] = useState<RepositoryWorkspaceV1 | null>(null);
   /** Agent selection spec §6.8: the installation table and this operator's defaults; null until read, or when the port refuses. */
@@ -515,8 +519,37 @@ export function App(): JSX.Element {
   };
   const chooseProject = (projectKey: string): void => {
     setProject(projectKey);
+    setProjectView("project");
     writeProject(browserStorage(), projectKey);
+    writeProjectView(browserStorage(), "project");
   };
+  const chooseAll = (): void => {
+    setProjectView("all");
+    writeProjectView(browserStorage(), "all");
+  };
+  // "All projects" needs two or more projects: a stored "all" over a shorter list is normalised to "project".
+  const projectCount = projectsAnswer?.projects.length ?? null;
+  useEffect(() => {
+    if (projectCount === null || allowsAll(projectCount) || projectView !== "all") return;
+    setProjectView("project");
+    writeProjectView(browserStorage(), "project");
+  }, [projectCount, projectView]);
+  // The scope the lists are filtered by (spec §3). Task 3 only uses it to know when the scope changed.
+  const scope = groupScope(projectsAnswer, project, projectView);
+  // Spec §5: the open group, requirement and decision close when the scope changes. The first resolved scope (nothing
+  // was chosen before it) closes nothing, and a failed project list (no project) neither closes nor counts as a
+  // change. Drafts are the person's own data and are never touched.
+  const scopeKey = JSON.stringify([scope.kind === "all", project]);
+  const lastScopeKey = useRef<string | null>(null);
+  useEffect(() => {
+    if (project === null) return;
+    const previous = lastScopeKey.current;
+    lastScopeKey.current = scopeKey;
+    if (previous === null || previous === scopeKey) return;
+    setSelectedGroup(null);
+    setSelectedRequirement(null);
+    setSelected(null);
+  }, [scopeKey]);
   // The chosen project's control repository: undefined while no project is chosen (the first repository, as before),
   // null when the control plane does not hold the chosen project.
   const chosen = projects?.find((entry) => entry.projectKey === project);
@@ -722,6 +755,8 @@ export function App(): JSX.Element {
         <ProjectControl
           answer={projectsAnswer}
           project={project}
+          view={projectView}
+          onAll={chooseAll}
           onProject={chooseProject}
           onAdd={async (input) => {
             const result = await addProject(input);

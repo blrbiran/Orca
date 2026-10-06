@@ -20,6 +20,7 @@ export const zh: Translation<typeof en> = {
   },
   project: {
     none: "还没有项目",
+    all: "全部项目",
     add: "新增项目",
     rename: "改名",
     path: "路径",

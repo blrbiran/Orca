@@ -7,11 +7,15 @@ import { useTranslation } from "react-i18next";
 import type { PanelRefusal, PostResult } from "./api.js";
 import { refusalText } from "./i18n.js";
 import { projectName, type ProjectsAnswerV1 } from "./project.js";
+import { ALL_PROJECTS, allowsAll, type ProjectView } from "./projectScope.js";
 
 export interface ProjectControlProps {
   answer: ProjectsAnswerV1;
   project: string | null;
   onProject: (projectKey: string) => void;
+  /** Project filtering spec §3: with `onAll` and two or more projects the select starts with "All projects". */
+  view?: ProjectView;
+  onAll?: () => void;
   onAdd: (input: { name: string; path: string }) => Promise<PostResult<unknown>>;
   onRename: (id: string, name: string) => Promise<PostResult<unknown>>;
 }
@@ -26,6 +30,7 @@ export function ProjectControl(props: ProjectControlProps): JSX.Element {
   const [refusal, setRefusal] = useState<PanelRefusal | null>(null);
   const editable = props.answer.editable === true;
   const projects = props.answer.projects;
+  const withAll = props.onAll !== undefined && allowsAll(projects.length);
   const current = projects.find((p) => p.projectKey === props.project);
 
   const close = (): void => { setOpen(null); setRefusal(null); setPath(""); setName(""); };
@@ -49,7 +54,9 @@ export function ProjectControl(props: ProjectControlProps): JSX.Element {
       ) : (
         <label>
           {t("shell.project")}
-          <select name="project" value={props.project ?? ""} onChange={(e) => props.onProject(e.currentTarget.value)}>
+          <select name="project" value={withAll && props.view === "all" ? ALL_PROJECTS : props.project ?? ""}
+            onChange={(e) => (e.currentTarget.value === ALL_PROJECTS ? props.onAll?.() : props.onProject(e.currentTarget.value))}>
+            {withAll && <option value={ALL_PROJECTS}>{t("project.all")}</option>}
             {projects.map((p) => <option key={p.projectKey} value={p.projectKey}>{projectName(p)}</option>)}
           </select>
         </label>

@@ -113,6 +113,7 @@ export const en = {
   },
   project: {
     none: "No project yet",
+    all: "All projects",
     add: "Add project",
     rename: "Rename project",
     path: "Path",
