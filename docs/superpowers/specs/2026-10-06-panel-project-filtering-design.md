@@ -111,3 +111,60 @@ Required summary identity causes structural fixture work; strict client/server c
 Review decisions: confirm the separate view/target state; global selector and shared Decisions control; required repoId on summaries; explicit blank-target creation forms in all mode; selection resets with draft preservation; requirement list follows scope; global recovery and Metrics remain visible. These implement the agreed all-projects requirement without adding multi-repository execution.
 
 Next gate: human reviews this written spec, then implementation planning begins. No product code or test criteria have been modified.
+
+
+## 11. Review corrections — 2026-10-06, session 01a10aca
+
+Owner: Codex session `01a10aca`; human requested fixing the three spec review findings. Original §§1–10 are preserved byte-for-byte from subject `docs(spec): design project filtering and all-projects view`. This section takes precedence where §5's selection/draft/arrival text, §7's recovery text, and §9's criteria were incomplete. No product implementation or runtime validation is implied.
+
+### R1 — Recovery revision belongs to the blocker target
+
+Source finding: `web/src/RecoveryView.tsx` currently takes one selected group's commandRevision and reuses it for every global blocker. Keeping this behavior is prohibited by this correction; keeping the existing server command contract does not mean keeping that client wiring.
+
+For every actionable blocker, bind a target tuple `(epoch, groupId, repoId, runId-or-null)` independently of the open detail and viewing scope. Obtain expectedRevision from the validated current global summary entry whose groupId equals that target groupId. This summary covers both ordinary and clarifying groups, so a clarifying blocker never requires the normal group-view endpoint that refuses it. Repository identity is the target summary's repoId, not the concrete project's current repoId. The recovery payload's group/run identity remains the blocker identity from the server's recovery view. An empty/global groupId, missing summary, mismatched epoch, pending complete refetch or unresolved target ownership disables the retry button; display the blocker and a re-read affordance instead. Re-reading only refreshes evidence and cannot issue a recovery command automatically.
+
+Build the action at click time from that target's current summary and the still-listed blocker; do not capture a revision from an unrelated selected detail. If the blocker disappeared or its group identity is no longer resolvable, issue no command. If the server's revision advanced after the read, retain the ordinary revision refusal and re-read; never substitute another group's revision or automatically replay the retry. Changing project/view mode affects neither ownership nor command reconciliation. Unknown or not-listed repository names use the explicit target identity as their label.
+
+Acceptance: select A at revision 3 while a global B blocker has revision 9; retry B sends group B and expectedRevision 9. Repeat with a clarifying B and a run-scoped B blocker. A target lacking a valid summary or an epoch changing during refresh must remain visible but non-actionable. A vanished blocker cannot be retried from its old rendered button. Named mutations: use selected-group revision; fall back to first summary; omit target/epoch/refetch checks; allow a vanished blocker; route a clarifying target through the normal group view. Each must fail a focused criterion.
+
+### R2 — Detail drafts outlive detail selection
+
+Source finding: requirement `RoundForm` answer choices and glossary/ADR decisions, and `DraftReview` feedback, live in component-local useState. Clearing selectedRequirement unmounts the detail; existing control.drafts does not own these fields. Thus preserving only control.drafts is insufficient for §5's unsent-text promise.
+
+Retain editable drafts in App-owned in-memory state (or an equivalent owner that stays mounted across detail closure), with structured identity keys:
+
+- New requirement: concrete repoId; retain idea, token limit, content language and chosen agent together. An unconfirmed all-mode target cannot receive another repository's draft. Choosing the original target restores its draft as §6 requires.
+- Requirement answer: `(repoId, groupId, requirementId, roundNo)`; retain per-question recommended/custom choice and custom text, plus glossary/ADR accept/reject selections keyed by their entry IDs.
+- Split feedback: `(repoId, groupId, requirementId, draftNo)`; retain feedback text.
+- Other editable requirement-detail inputs, including raised token limit, are group-owned; do not reset typed values on detail closure. Confirmation-dialog visibility is transient and is not a draft.
+- Decision correction: `(projectKey, decisionId)`; retain kind, because and chose_instead outside the currently mounted uncontrolled form. This is covered by the same unsent-work promise when decision details close.
+
+Existing task/control drafts retain their current identities. Scope or selection changes never clear these stores. Selecting another owner restores only that owner's draft or its defaults; it never copies the previous owner's values. Reload persistence is not added: draft lifetime is the current App instance.
+
+Retained drafts are not server facts. On reopening, check the current server identity and editable state before offering submission: a changed round/draft number or an already answered/accepted round cannot reuse the old draft as the new round's input. Only current question/entry IDs can appear in a payload. Old drafts may remain dormant in memory; do not silently migrate them. Successful submission may clear only the submitted identity's unchanged draft snapshot; text edited after submission started must not be cleared by its eventual success. Failure preserves the original draft. Scope changes do not cancel the issued request or reset its ownership.
+
+Acceptance: type custom answers and glossary/ADR choices for A, type split feedback and a decision correction, switch A → B → A and verify each value survives with its original owner. B must show its own/default content. Advance A's round/draft while closed and verify the retained old draft is not submitted against the new identity. Resolve A's submission after editing a newer draft and verify newer text survives. Named mutations: leave any affected draft solely in the unmounted detail; key by roundNo/draftNo/id without owner; reuse previous owner's inputs; drop current-editable-state/entry checks; unconditionally clear on delayed success. Each must fail.
+
+### R3 — Decision command outcomes and retries retain request ownership
+
+Source finding: App's wanted-key guard currently protects decision GET arrivals only. Its POST `send` applies success/refusal unconditionally; the retry closure reads current lastCorrection. Neither is sufficient when A's request finishes after B is opened.
+
+Before sending Agree or Correct, capture an immutable request record: client request identity, `(projectKey, decisionId)` owner, verb, and an independent copy of the exact submitted payload. Client request identity is only a browser correlation token; it is not a new server idempotency field or a guarantee about retry execution. Track pending and completed results by that request identity in App-owned memory, independent of selected detail.
+
+Every POST completion updates only its original request record, including success, server refusal or transport error. It may update the current detail's inline outcome only when both the selected decision owner matches and the request is the current active submission for that owner. A later request for the same owner cannot be overwritten by an earlier request completing last. Switching scope clears the visible detail selection/outcome, not the request records. GET arrival checks remain in place and are not used as a substitute for these POST checks.
+
+Show pending/results belonging to a hidden or no-longer-selected owner in a global, owner-labeled decision-operation notice outside the detail slot; it remains visible across section and project changes. It names project and decision plus status, so an old refusal never appears as an error from B. Success can refresh home/todo without changing the selected scope or reopening A. Visible old results may be explicitly dismissed; switching scope does not dismiss them. This is bounded browser state, not a durable operation history or a new server API.
+
+A server-permitted Record another retry is attached to the exact refused request record. Its handler copies that request's stored correction payload, sets `again: true`, and sends a new request record with the same owner; it never reads B's current lastCorrection or current form. Agree/transport errors do not acquire a correction retry affordance merely because another request was a correction. Follow the existing API's refusal rules; no automatic POST replay or invented idempotency is introduced. A retry of a hidden owner's correction must display that owner beside its button, and stale handlers cannot change the target payload.
+
+Acceptance: submit A's correction, switch/open B, then resolve A with success and refusal in separate cases; B's inline outcome stays untouched and the global notice names A. If B also submits a correction, retry A uses A's exact saved payload with again true. Issue two requests for the same owner and complete them in reverse order; the latest inline outcome stays the latest request's. Switching scope with no selected decision still retains attributable pending/results. Named mutations: unconditional setOutcome on POST return; guard owner but not request identity; retry current lastCorrection; remove old-owner global notice; discard records on scope change. Each must fail.
+
+### Review disposition and executable verification additions
+
+All three findings are addressed by the normative constraints R1–R3; this is a design correction, not a claim that the existing code is fixed. Supplement §9 with `web/tests/projectScopeRecovery.test.tsx`, `web/tests/projectScopeDrafts.test.tsx` and `web/tests/projectScopeDecisionRequests.test.tsx`. From the web directory, run:
+
+`rtk proxy ../node_modules/.bin/vitest run tests/projectScopeRecovery.test.tsx tests/projectScopeDrafts.test.tsx tests/projectScopeDecisionRequests.test.tsx`
+
+The implementation creates these criteria, observes each named mutation fail in an independent clone after a green baseline, restores raw diff/cached diff to zero bytes, and includes them in the existing full web/control/Orca gates. They use controllable fake responses only; no real user roots or paid model calls. The implementation plan must include the draft owner store, target-summary recovery wiring, request-result ownership and global notice placement explicitly rather than treating selection clearing alone as completion.
+
+Status after correction: written spec ready for human review; implementation planning still waits for written-spec approval. No product code, tests, cross-repository interface or server command wire field changed in this correction.
