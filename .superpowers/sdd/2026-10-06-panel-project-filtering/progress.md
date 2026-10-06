@@ -254,3 +254,32 @@ Orca session 32306496, clone of main at 528fe8a, command `vitest run tests/panel
 | M5 | delete the repository-mismatch check (controlViews.ts) | 1 red: refuses to guess when an accepted requirement group's plan and requirement disagree | /private/tmp/claude-501/-Users-biran-code-skills-loop-Orca/32306496-f454-4168-9a99-fb0d94a31ff6/scratchpad/t1mut-M5.txt |
 
 No mutation stayed green, so no test was added. Restore byte counts: diff=0 cached=0 for M1-M5.
+Final review: ready with fixes — I1 unrun spec §9 mutations (ledger gap list); I2 all-mode Import hides its plan (Task 4 M3); I3 handoff stale (handled by the controller's handoff step). Minors folded into the single fix wave: M1 project-mode NewRequirement first-repo fallback → note; M3 §12 R2 wording → appended correction line; M5 Import note wording. Other minors triaged "can stay" per final review.
+Final fix wave: dispatched (BASE 82b5d76, sonnet)
+
+## Final fix wave (Orca session 32306496, 2026-10-06)
+
+Fixes: f5a5d6d (B: All-mode Import summary and `control.import.noPlan`; C: project-mode NewRequirement `requirements.repositoryNotConfigured` instead of `repositories[0]`; criteria 11-13 in projectFiltering), 342f48b (E: appended correction line in spec §12), 4298767 (new criterion 9, "selection lifecycle"). D (own key for the Import unresolved note) is NOT done: projectSwitcher F asserts the exact old text "The project list is unavailable; groups are not shown until it is read." with `toBe` in the Import region, and the brief forbids editing its assertions; reported to the controller.
+
+Mutations run in a fresh `git clone --local` (`$SCRATCH/fw/clone`, `npm ci`, HOME + 4 XDG under `$SCRATCH/fwhome`, TMPDIR `/private/tmp/claude-501/pf32/t`), at 342f48b. Baseline green first: 6 files (projectFiltering, projectScopeRecovery, projectScopeDrafts, projectScopeDecisionRequests, projectSwitcher, controlPollSettles), 85 tests, RC 0 (`fw/base2.txt`). One mutation at a time, each restored with `git checkout -- <file>`; `git diff | wc -c` = 0 and `git diff --cached | wc -c` = 0 after every one. Raw output `fw/mut-<name>.txt`.
+
+| Mutation | Red criteria (file > test) | Diff/cached after restore |
+|---|---|---|
+| M1 label joined with the selected project | projectFiltering two-project lists 2, 3, 6, 7, 8, 9; projectScopeRecovery App 1 | 0 / 0 |
+| M2a drop setSelectedGroup(null) | projectFiltering selection lifecycle 5, 6 | 0 / 0 |
+| M2b drop setSelectedRequirement(null) | selection lifecycle 6; projectScopeDrafts 1 | 0 / 0 |
+| M2c drop setSelected(null) (decision) | selection lifecycle 5, 6; projectScopeDecisionRequests 1, 2, 3, 4, 5, 9; projectScopeDrafts 1 | 0 / 0 |
+| M3a clear detail drafts on switch | projectScopeDrafts 1, 4, 4b | 0 / 0 |
+| M3b clear control (task) drafts on switch | none (GREEN, 85/85) -> added criterion; with it: projectFiltering selection lifecycle 9 red (86 tests, 1 failed) | 0 / 0 |
+| M4 import plans unrestricted | projectFiltering two-project lists 6, 11, 12; projectSwitcher A | 0 / 0 |
+| M5a recovery list scoped to the selected project | projectScopeRecovery App 1, 2, 3, 4, 6; epoch-change 7 | 0 / 0 |
+| M5b waiting (uncertain) list scoped to listed groups | projectFiltering two-project lists 5, 9 | 0 / 0 |
+| M6 drop the mode storage read | projectFiltering persistence 2, 3; decision identity 5; projectScopeDrafts 4, 4b, 5 | 0 / 0 |
+| M7 drop its try/catch | projectFiltering persistence 4; projectSwitcher D2 | 0 / 0 |
+| M8 drop one-project normalisation | projectFiltering persistence 3 | 0 / 0 |
+| M9 filter reducer inputs by scope | projectFiltering workspace 1, 2; lifecycle 5; lists 1, 2, 3, 8, 9; projectScopeDrafts 1; projectScopeRecovery App 1, 2, 3, 7 | 0 / 0 |
+| M10 reset/refetch on scope change | projectFiltering (workspace 1, 2, 2b; lifecycle 5; lists 1, 2, 3, 4, 6, 7, 8, 10, 11, 12), projectScopeDrafts 1, 4, 4b, projectSwitcher A, A2, C | 0 / 0 |
+
+13 of 14 mutations were red at once; M3b was green and now has criterion 9 (red on that mutation in the clone, green on main). New criteria 11-13 were shown red in the clone with `git checkout 82b5d76 -- web/src` (3 failed, 30 passed; restored to HEAD, diff/cached 0/0; `fw/newred.txt`).
+
+Gates (clone at 4298767, raw output under `$SCRATCH/fw/`): `cd web && npm run check` RC 0, 70 files / 490 tests (`g-check.txt`); root `npm run typecheck` RC 0 (`g-typecheck.txt`); focused projectFiltering, projectSwitcher, requirements, requirementsApp, i18nKeys RC 0, 5 files / 71 tests (`g-focus.txt`). Not re-run: full root `npm test`, verify:control, verify:panel (no change under src/ outside web).
