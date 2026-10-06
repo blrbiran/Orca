@@ -5,6 +5,8 @@ import { readArtifact } from "../control/archive.js";
 import { ZodError } from "zod";
 import { lookupCommandResult } from "../control/commandLedger.js";
 import { ControlError } from "../control/errors.js";
+import { withCommandClient } from "../control/commandClient.js";
+import { humanOnlyRefusal } from "./humanOnly.js";
 import { readVersions } from "../control/queries.js";
 import { readAgentPreferences } from "../control/agentPreferences.js";
 import { resolveSelection, slotLayers, type PartialSelection } from "../control/agentSelection.js";
@@ -252,7 +254,6 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
 }
 
 export function registerControlMutationRoutes(app: Express, store: ControlStore, service: WebControlService, channel: ControlChannel = "web"): void {
-  void channel; // Task 4 gates on it
   const actorId = ensurePanelOperatorId(store);
   /** Resolve the command target and the ledger scope a route names; `recovery-retry` carries no group in its path. */
   type RouteTarget = (params: Request["params"], payload: unknown, store: ControlStore) => { groupId: string; target: CommandTargetV1 };
@@ -335,35 +336,44 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
   for (const route of routes) app.post(route.path, asyncRoute(async (req, res) => {
     let id: string | null = null;
     try {
+      // Spec §5: the human-only surface is refused by name before anything is parsed further or booked.
+      if (channel === "socket") {
+        const refusal = humanOnlyRefusal(route.verb, (req.body as { payload?: unknown } | undefined)?.payload);
+        if (refusal !== null) { sendControlError(res, 403, refusal.code, refusal.message); return; }
+      }
       const envelope = commandEnvelopeSchema.parse(req.body);
       const resolved = route.target(req.params, envelope.payload, store);
       id = resolved.groupId;
       const command = rawAuthorityCommandSchema.parse({ schema: "orca-raw-command-v1", ...envelope, actorId, verb: route.verb, target: resolved.target }) as RawAuthorityCommandV1;
-      switch (command.verb) {
-        case "import-plan": await service.importPlan(command); break;
-        case "proposal-edit": service.editProposal(command); break;
-        case "estimate": await service.createEstimate(command); break;
-        case "confirm": await service.confirm(command); break;
-        case "set-limit": service.setLimit(command); break;
-        case "start": await service.start(command); break;
-        case "pause-dispatch": await service.pauseDispatch(command); break;
-        case "handoff-stop": await service.handoffStop(command); break;
-        case "resume-dispatch": await service.resumeDispatch(command); break;
-        case "resume-from-handoff": await service.resumeFromHandoff(command); break;
-        case "continue-task": await service.continueTask(command); break;
-        case "recovery-retry": await service.recoveryRetry(command); break;
-        case "set-workspace-mode": await service.setWorkspaceMode(command); break;
-        case "set-agent-preferences": await service.setAgentPreferences(command); break;
-        case "proposal-set-agent": await service.proposalSetAgent(command); break;
-        case "set-task-labels": service.setTaskLabels(command); break;
-        case "set-task-loop": await service.setTaskLoop(command); break;
-        case "requirement-open": await service.openRequirement(command); break;
-        case "requirement-answer": service.answerRequirement(command); break;
-        case "requirement-consensus": service.requirementConsensus(command); break;
-        case "requirement-draft-feedback": service.requirementDraftFeedback(command); break;
-        case "requirement-draft-accept": await service.acceptRequirementDraft(command); break;
-        default: throw new ControlError("route-not-found");
-      }
+      // Spec §6: the client rides beside the command, in neither hash; the Web channel is always "web".
+      const client = channel === "web" ? "web" : String(res.locals.orcaClient);
+      await withCommandClient(command.commandId, client, async () => {
+        switch (command.verb) {
+          case "import-plan": await service.importPlan(command); break;
+          case "proposal-edit": service.editProposal(command); break;
+          case "estimate": await service.createEstimate(command); break;
+          case "confirm": await service.confirm(command); break;
+          case "set-limit": service.setLimit(command); break;
+          case "start": await service.start(command); break;
+          case "pause-dispatch": await service.pauseDispatch(command); break;
+          case "handoff-stop": await service.handoffStop(command); break;
+          case "resume-dispatch": await service.resumeDispatch(command); break;
+          case "resume-from-handoff": await service.resumeFromHandoff(command); break;
+          case "continue-task": await service.continueTask(command); break;
+          case "recovery-retry": await service.recoveryRetry(command); break;
+          case "set-workspace-mode": await service.setWorkspaceMode(command); break;
+          case "set-agent-preferences": await service.setAgentPreferences(command); break;
+          case "proposal-set-agent": await service.proposalSetAgent(command); break;
+          case "set-task-labels": service.setTaskLabels(command); break;
+          case "set-task-loop": await service.setTaskLoop(command); break;
+          case "requirement-open": await service.openRequirement(command); break;
+          case "requirement-answer": service.answerRequirement(command); break;
+          case "requirement-consensus": service.requirementConsensus(command); break;
+          case "requirement-draft-feedback": service.requirementDraftFeedback(command); break;
+          case "requirement-draft-accept": await service.acceptRequirementDraft(command); break;
+          default: throw new ControlError("route-not-found");
+        }
+      });
       const result = lookupCommandResult(store, id, command.commandId);
       if (!result) throw new ControlError("control-command-result-invalid");
       res.status(result.originalStatus).json(result.body);

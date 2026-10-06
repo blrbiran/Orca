@@ -4,6 +4,7 @@ import { createServer, type Server } from "node:http";
 import { join } from "node:path";
 import { registerControlReadRoutes, verifyControlJsonBody, type ControlReadApiDeps } from "./controlApi.js";
 import { sendControlError } from "./controlErrors.js";
+import { CLIENT_HEADER, CLIENT_PATTERN } from "../control/commandClient.js";
 
 /** Agent entry spec §3: the panel's second listener, for agents on this machine. Auth is the file mode. */
 export const CONTROL_SOCKET_NAME = "control.sock";
@@ -20,6 +21,16 @@ export interface ControlSocketFailure { code: "control-socket-path-too-long" | "
 /** Spec §3.2: only the control routes; no page, no token, no Host check -- there is no network peer. */
 export function buildControlSocketApp(deps: ControlReadApiDeps): Express {
   const app = express();
+  // Spec §4.2: before the body is read and for every verb, GET included. Attribution only, never authorization (§6).
+  app.use((req, res, next) => {
+    const client = req.header(CLIENT_HEADER);
+    if (client === undefined || !CLIENT_PATTERN.test(client)) {
+      sendControlError(res, 400, "control-client-invalid", `Socket requests carry ${CLIENT_HEADER}: cli|mcp[:<name>].`);
+      return;
+    }
+    res.locals.orcaClient = client;
+    next();
+  });
   app.use(express.json({ limit: "64kb", verify: verifyControlJsonBody }));
   registerControlReadRoutes(app, deps, "socket");
   app.use((_req, res) => { sendControlError(res, 404, "route-not-found", "The control socket serves only /api/control routes."); });

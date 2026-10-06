@@ -112,7 +112,7 @@ describe("the control socket (spec §3)", () => {
     let reply = "";
     client.on("data", (chunk) => { reply += chunk.toString("utf8"); });
     const ended = new Promise<void>((resolve) => client.once("close", () => resolve()));
-    client.write(`POST /api/control/groups/g1/requirement/answer HTTP/1.1\r\nhost: x\r\ncontent-type: application/json\r\nconnection: close\r\ncontent-length: ${body.length}\r\n\r\n${body.slice(0, half)}`);
+    client.write(`POST /api/control/groups/g1/requirement/answer HTTP/1.1\r\nhost: x\r\nx-orca-client: cli\r\ncontent-type: application/json\r\nconnection: close\r\ncontent-length: ${body.length}\r\n\r\n${body.slice(0, half)}`);
     await new Promise((resolve) => setTimeout(resolve, 100));
     let closedDone = false;
     const closing = panel.close().then(() => { closedDone = true; });
