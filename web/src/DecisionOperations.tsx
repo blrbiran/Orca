@@ -1,6 +1,6 @@
 /**
- * Project filtering spec §11 R3: the global, owner-labelled notice of decision requests whose owner is not the open
- * decision. App renders it in Shell's banners, outside every section pane, so it stays visible across sections and
+ * Project filtering spec §11 R3: the global, owner-labelled notice of every decision request not shown inline under
+ * the open decision. App renders it in Shell's banners, outside every section pane, so it stays visible across sections and
  * scope changes. Each line names its project and decision, so an old refusal never reads as an error of the decision
  * on screen. "Record another" is offered only for a correction the server refused naming `again`, and is labelled with
  * that record's owner. Pure: App hands it everything.
@@ -24,7 +24,7 @@ export function DecisionOperations({
   const { t } = useTranslation();
   if (requests.length === 0) return null;
   return (
-    <section className="callout decision-operations" aria-label={t("decisions.operations")}>
+    <section className="callout decision-operations" aria-label={t("decisions.operations")} aria-live="polite">
       <ul>
         {requests.map((record) => {
           const names = { project: projectName(record.owner.projectKey), decision: record.owner.decisionId };

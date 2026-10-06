@@ -3,14 +3,18 @@
  * Project filtering spec §11 R3 (plan Task 9): an Agree or Correct POST is a request record -- owner, verb, an
  * independent copy of its payload, a browser correlation id -- and its answer updates only that record. The detail's
  * inline outcome shows only the selected owner's ACTIVE request; every other owner's pending/results appear in a global,
- * owner-labelled notice that outlives sections and scope changes. "Record another" re-sends the exact refused request's
+ * notice (every other record, owner-labelled) that outlives sections and scope changes. "Record another" re-sends the exact refused request's
  * payload with again:true, never whatever form is on screen. Also the R2 carry-over: a correction's success clears its
  * draft only when unchanged since it was submitted; a failure keeps it. Fake fetch only (Rule 17); every POST is held
  * until the test answers it.
  *
- * Mutations (spec §11 R3) and the criterion each must redden: unconditional inline outcome on POST return -> 1;
- * guard owner but not request identity -> 3; retry reads the current form -> 2; remove the old-owner notice -> 1, 4;
- * discard records on scope change -> 4; clear the correction draft unconditionally on success -> 6.
+ * Mutations (spec §11 R3) and the criteria measured red (task-9-report.md): unconditional inline outcome on POST
+ * return -> 1; guard owner but not request identity -> 3 and pure startRequest/settleRequest/inlineRequest; retry reads
+ * the current form -> 2; remove the old-owner notice -> 1-5; discard records on scope change -> 1-5; clear the
+ * correction draft unconditionally on success -> 6; an Agree refusal keeps its retry field inline -> 5.
+ * Fix round 1: notice excludes the whole open owner -> 8; evict a pending record -> pure "never a pending one";
+ * Dismiss on a pending line -> 4; dismissed record shown inline again -> 4; Record another without retry_field
+ * "again" -> 9.
  */
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -161,6 +165,8 @@ describe("decision requests keep their owner (spec §11 R3)", () => {
     await switchTo("beta", "Beta");
     expect(screen.queryByTestId("decision-question")).toBeNull();
     expect(noticeLines()).toEqual(["Alpha / d1 · Correct: sending…"]);
+    // A pending request cannot be dismissed: its answer must still be seen.
+    expect(within(notice()!).queryByRole("button", { name: "Dismiss" })).toBeNull();
 
     await answer(0, recorded());
     await waitFor(() => expect(noticeLines()).toEqual(["Alpha / d1 · Correct: Correction recorded."]));
@@ -171,6 +177,51 @@ describe("decision requests keep their owner (spec §11 R3)", () => {
     // Dismissed explicitly, it goes.
     fireEvent.click(within(notice()!).getByRole("button", { name: "Dismiss" }));
     await waitFor(() => expect(notice()).toBeNull());
+    // ...and stays gone when its owner is opened again: not shown inline either.
+    await act(async () => { window.location.hash = "#decisions"; window.dispatchEvent(new HashChangeEvent("hashchange")); });
+    await switchTo("alpha", "Alpha");
+    await openDecision("alpha");
+    expect(within(slot()).queryByRole("status")).toBeNull();
+    expect(within(slot()).queryByRole("alert")).toBeNull();
+    expect(notice()).toBeNull();
+  });
+
+  it("8: the open owner's older request refused while its newer one is pending shows in the notice", async () => {
+    seed();
+    render(<App />);
+    await ready();
+    await openDecision("alpha");
+    correct("first reason");
+    await waitFor(() => expect(held).toHaveLength(1));
+    correct("second reason");
+    await waitFor(() => expect(held).toHaveLength(2));
+    await answer(0, exists());
+    await waitFor(() => expect(noticeLines()).toEqual(["Alpha / d1 · Correct: refused"]));
+    // A is still open and its active request (#2) is pending: nothing inline yet.
+    expect(screen.getByTestId("decision-question").textContent).toBe("question of alpha/d1");
+    expect(within(slot()).queryByRole("alert")).toBeNull();
+    expect(within(slot()).queryByRole("status")).toBeNull();
+    expect(notice()!.getAttribute("aria-live")).toBe("polite");
+  });
+
+  it("9: a correction refused without retry_field again, or lost in transport, offers no Record another in the notice", async () => {
+    seed();
+    render(<App />);
+    await ready();
+    await openDecision("alpha");
+    correct("alpha because");
+    await waitFor(() => expect(held).toHaveLength(1));
+    await switchTo("beta", "Beta");
+    await openDecision("beta");
+    correct("beta because");
+    await waitFor(() => expect(held).toHaveLength(2));
+    await switchTo("alpha", "Alpha");
+    await answer(0, json({ code: "decision-not-found", message: "no such decision" }, 404));
+    await act(async () => { held[1]!.reject(new Error("network down")); });
+    await waitFor(() => expect([...noticeLines()].sort()).toEqual(["Alpha / d1 · Correct: refused", "Beta / d1 · Correct: refused"]));
+    expect(within(notice()!).getByText("decision-not-found")).toBeTruthy();
+    expect(within(notice()!).getByText("panel-unreachable")).toBeTruthy();
+    expect(within(notice()!).queryByRole("button", { name: /^Record another/ })).toBeNull();
   });
 
   it("5: an Agree refusal never offers Record another, even beside a correction refusal", async () => {
@@ -279,7 +330,7 @@ describe("decisionRequests (pure)", () => {
     expect(inlineRequest(all, null)).toBeNull();
   });
 
-  it("noticeRequests: every owner but the selected one, dismissed ones left out", () => {
+  it("noticeRequests: every record but the one shown inline, dismissed ones left out", () => {
     let all = startRequest(EMPTY_REQUESTS, { requestId: "r1", owner: A, verb: "correct", payload: payloadOf(A, "1") });
     all = startRequest(all, { requestId: "r2", owner: B, verb: "agree", payload: null });
     all = startRequest(all, { requestId: "r3", owner: B, verb: "correct", payload: payloadOf(B, "3") });
@@ -287,6 +338,9 @@ describe("decisionRequests (pure)", () => {
     expect(noticeRequests(all, null).map((r) => r.requestId)).toEqual(["r1", "r2", "r3"]);
     all = dismissRequest(all, "r2");
     expect(noticeRequests(all, null).map((r) => r.requestId)).toEqual(["r1", "r3"]);
+    // The open owner's older request is not inline, so the notice keeps it (fix round 1, I1).
+    all = startRequest(all, { requestId: "r4", owner: A, verb: "correct", payload: payloadOf(A, "4") });
+    expect(noticeRequests(all, { projectKey: "alpha", id: "d1" }).map((r) => r.requestId)).toEqual(["r1", "r3"]);
   });
 
   it("retryPayload: this record's payload with again:true; none for an Agree; the record is untouched", () => {
@@ -299,7 +353,7 @@ describe("decisionRequests (pure)", () => {
     expect(retryPayload(all.records[1]!)).toBeNull();
   });
 
-  it(`keeps at most MAX_RECORDS (${MAX_RECORDS}), dropping the oldest settled first and never a pending one`, () => {
+  it(`keeps at most MAX_RECORDS (${MAX_RECORDS}) by dropping the oldest settled record, never a pending one`, () => {
     let all: DecisionRequests = EMPTY_REQUESTS;
     all = startRequest(all, { requestId: "p0", owner: B, verb: "agree", payload: null }); // stays pending
     for (let index = 1; index <= MAX_RECORDS + 4; index += 1) {
@@ -312,5 +366,38 @@ describe("decisionRequests (pure)", () => {
     // A dropped record is no longer anyone's active request.
     expect(inlineRequest(all, { projectKey: "alpha", id: "d1" })).toBeNull();
     expect(Object.values(all.active)).not.toContain("s1");
+  });
+
+  it("evicts dismissed records first, then recorded ones, then refusals", () => {
+    let all: DecisionRequests = EMPTY_REQUESTS;
+    const add = (id: string, status: typeof done | typeof refused, dismiss = false): void => {
+      all = startRequest(all, { requestId: id, owner: { projectKey: "alpha", decisionId: id }, verb: "agree", payload: null });
+      all = settleRequest(all, id, status);
+      if (dismiss) all = dismissRequest(all, id);
+    };
+    add("refused-old", refused);
+    add("recorded-old", done);
+    add("dismissed", refused, true);
+    for (let index = 0; index < MAX_RECORDS - 3; index += 1) add(`f${index}`, refused);
+    expect(all.records).toHaveLength(MAX_RECORDS);
+    add("n1", refused);
+    expect(all.records.map((r) => r.requestId)).not.toContain("dismissed");
+    expect(all.records.map((r) => r.requestId)).toContain("recorded-old");
+    add("n2", refused);
+    expect(all.records.map((r) => r.requestId)).not.toContain("recorded-old");
+    expect(all.records.map((r) => r.requestId)).toContain("refused-old");
+    add("n3", refused);
+    expect(all.records.map((r) => r.requestId)).not.toContain("refused-old");
+  });
+
+  it("never evicts a pending record: 21 pending, the first one's answer still lands", () => {
+    let all: DecisionRequests = EMPTY_REQUESTS;
+    for (let index = 0; index <= MAX_RECORDS; index += 1) {
+      all = startRequest(all, { requestId: `p${index}`, owner: { projectKey: "alpha", decisionId: `d${index}` }, verb: "agree", payload: null });
+    }
+    expect(all.records).toHaveLength(MAX_RECORDS + 1);
+    all = settleRequest(all, "p0", refused);
+    expect(all.records.find((r) => r.requestId === "p0")?.status).toEqual(refused);
+    expect(inlineRequest(all, { projectKey: "alpha", id: "d0" })?.status).toEqual(refused);
   });
 });

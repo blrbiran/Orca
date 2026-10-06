@@ -27,7 +27,11 @@ export const EMPTY_REQUESTS: DecisionRequests = { records: [], active: {} };
 
 const ownerKey = (owner: DecisionRequest["owner"]): string => correctionKey(owner.projectKey, owner.decisionId);
 
-/** A new pending request, now its owner's active one. Over MAX_RECORDS, the oldest settled record goes first. */
+/**
+ * A new pending request, now its owner's active one. Over MAX_RECORDS only settled records are evicted, oldest first
+ * within each class: dismissed ones, then recorded ones, then refusals (an unseen refusal is the last thing to lose).
+ * A pending record is never evicted -- its answer must still land -- so with nothing settled the list may exceed the bound.
+ */
 export function startRequest(all: DecisionRequests, record: Omit<DecisionRequest, "status" | "dismissed">): DecisionRequests {
   const started: DecisionRequest = {
     requestId: record.requestId,
@@ -40,12 +44,27 @@ export function startRequest(all: DecisionRequests, record: Omit<DecisionRequest
   const records = [...all.records, started];
   const active = { ...all.active, [ownerKey(started.owner)]: started.requestId };
   while (records.length > MAX_RECORDS) {
-    const settled = records.findIndex((entry) => entry.status.kind !== "pending");
-    const [dropped] = records.splice(settled === -1 ? 0 : settled, 1);
+    const index = evictable(records);
+    if (index === -1) break;
+    const [dropped] = records.splice(index, 1);
     const key = ownerKey(dropped!.owner);
     if (active[key] === dropped!.requestId) delete active[key];
   }
   return { records, active };
+}
+
+/** The oldest settled record to evict: dismissed first, then recorded, then refused; -1 when every record is pending. */
+function evictable(records: DecisionRequest[]): number {
+  const settled = (entry: DecisionRequest): boolean => entry.status.kind !== "pending";
+  for (const pick of [
+    (entry: DecisionRequest) => settled(entry) && entry.dismissed,
+    (entry: DecisionRequest) => entry.status.kind === "recorded",
+    (entry: DecisionRequest) => entry.status.kind === "refused",
+  ]) {
+    const index = records.findIndex(pick);
+    if (index !== -1) return index;
+  }
+  return -1;
 }
 
 /** The answer to one request: that record only. */
@@ -58,9 +77,6 @@ export function dismissRequest(all: DecisionRequests, requestId: string): Decisi
   return { ...all, records: all.records.map((entry) => (entry.requestId === requestId ? { ...entry, dismissed: true } : entry)) };
 }
 
-const isSelected = (entry: DecisionRequest, selected: { projectKey: string; id: string } | null): boolean =>
-  selected !== null && ownerKey(entry.owner) === correctionKey(selected.projectKey, selected.id);
-
 /** The record shown inline under the selected decision: only that owner's ACTIVE request. */
 export function inlineRequest(all: DecisionRequests, selected: { projectKey: string; id: string } | null): DecisionRequest | null {
   if (selected === null) return null;
@@ -69,9 +85,14 @@ export function inlineRequest(all: DecisionRequests, selected: { projectKey: str
   return found === undefined || found.dismissed ? null : found;
 }
 
-/** Records owned by anything but the selected decision, not dismissed (spec §11 R3 global notice). */
+/**
+ * Every record not dismissed except the one shown inline (spec §11 R3 global notice). Fix round 1 (I1): this departs
+ * from the plan brief's "owned by anything but the selected decision" -- an older, non-active request of the OPEN owner
+ * (e.g. its refusal while a newer request is pending) would otherwise be shown nowhere. Controller ruling: spec §8 wins.
+ */
 export function noticeRequests(all: DecisionRequests, selected: { projectKey: string; id: string } | null): DecisionRequest[] {
-  return all.records.filter((entry) => !entry.dismissed && !isSelected(entry, selected));
+  const shown = inlineRequest(all, selected)?.requestId;
+  return all.records.filter((entry) => !entry.dismissed && entry.requestId !== shown);
 }
 
 /** "Record another": a copy of THIS record's payload with again:true, or null when it has none. */
