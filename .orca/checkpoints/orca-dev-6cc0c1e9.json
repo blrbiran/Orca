@@ -1,0 +1,39 @@
+{
+  "v": 1,
+  "runId": "orca-dev-6cc0c1e9",
+  "runtime": "claude-code",
+  "sessionRef": "6cc0c1e9-7313-4a5e-942a-f02129bf4027",
+  "writtenAt": "2026-10-06T18:14:14.827Z",
+  "head": "05a1e70944cafbdaf905ef6b8ceb37316a9e4a03",
+  "level": {
+    "kind": "reading",
+    "level": 333092,
+    "windowTokens": 1000000,
+    "t1": 330000,
+    "t2": 450000,
+    "band": 1
+  },
+  "next": [
+    "N2 agent entry: final whole-branch review of 97ca3f4..HEAD, one fix wave, then isolated-clone gates (Task 9) per docs/superpowers/plans/2026-10-07-agent-entry.md; ledger .superpowers/sdd/2026-10-07-agent-entry/progress.md",
+    "Then update Orca/ccloop/ccmem handoffs"
+  ],
+  "open": [
+    "Tasks 1-8 complete and task-reviewed; deferred minors listed in the ledger",
+    "Known load flakes driverRecovery/driverRequirementSplit/controlShutdown; ccloop stopProof/codexWatchdog reds still open"
+  ],
+  "awaitingHuman": [
+    {
+      "kind": "irreversible",
+      "what": "push of main (N2 commits are local only)"
+    }
+  ],
+  "measurements": [
+    {
+      "command": "npm run typecheck",
+      "exitCode": 0,
+      "commit": "05a1e70944cafbdaf905ef6b8ceb37316a9e4a03",
+      "observedAt": "2026-10-06T18:14:14.781Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-6cc0c1e9-3iEQYi/1.txt"
+    }
+  ]
+}
