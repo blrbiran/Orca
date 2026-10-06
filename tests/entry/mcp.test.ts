@@ -61,6 +61,10 @@ describe("orca mcp serve (spec §8, C17, C14)", () => {
       const bad = await client.callTool({ name: "orca_send", arguments: { route: "r", expectedRevision: "zero", payload: {} } });
       expect(bad.isError).toBe(true);
       expect(envelope(bad as never).body.error.code).toBe("control-cli-argument-invalid");
+      // A non-object payload would otherwise travel to the panel; the bridge must refuse it first.
+      const badPayload = await client.callTool({ name: "orca_send", arguments: { route: "r", expectedRevision: 0, payload: "nope" } });
+      expect(badPayload.isError).toBe(true);
+      expect(envelope(badPayload as never).body.error.code).toBe("control-cli-argument-invalid");
     } finally {
       await client.close();
     }
