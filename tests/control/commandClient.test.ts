@@ -15,14 +15,20 @@ async function stateDir() { const root = await mkdtemp(join(tmpdir(), "cc-")); r
 
 describe("command client context (spec §6)", () => {
   it("answers the client only for the commandId it was set for", async () => {
+    const seen: Array<string | null> = [];
+    let timer!: Promise<void>;
     await withCommandClient("cmd-a", "cli:claude", async () => {
       expect(commandClientFor("cmd-a")).toBe("cli:claude");
-      // Background work started inside the call inherits the context; it must not stamp another command's row.
       expect(commandClientFor("cmd-b")).toBe(null);
-      await new Promise((resolve) => setTimeout(resolve, 1));
-      expect(commandClientFor("cmd-a")).toBe("cli:claude");
+      // Background work started inside the call, not awaited by it, inherits the context; it must not stamp another command's row.
+      timer = new Promise<void>((resolve) => setTimeout(() => {
+        seen.push(commandClientFor("cmd-a"), commandClientFor("cmd-b"));
+        resolve();
+      }, 1));
     });
     expect(commandClientFor("cmd-a")).toBe(null);
+    await timer;
+    expect(seen).toEqual(["cli:claude", null]);
   });
 
   it("accepts exactly the documented header values", () => {
