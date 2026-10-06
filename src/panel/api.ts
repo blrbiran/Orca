@@ -187,7 +187,7 @@ export function buildApi(app: Express, deps: ApiDeps): void {
     next();
   });
 
-  if (deps.control) registerControlReadRoutes(app, deps.control);
+  if (deps.control) registerControlReadRoutes(app, deps.control, "web");
 
   app.get("/api/metrics", (_req, res, next) => {
     void (async () => {

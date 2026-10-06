@@ -61,7 +61,7 @@ describe("proposal commands", () => {
   });
   it("serves closed mutation envelopes with exact durable statuses and replay lookup", async () => {
     const h = await webFixture(); const app = express(); app.use(express.json({ verify: verifyControlJsonBody }));
-    registerControlReadRoutes(app, { store: h.store, epoch: "epoch", config: { readView: async () => ({}) } as never, service: new WebControlService(h.deps) });
+    registerControlReadRoutes(app, { store: h.store, epoch: "epoch", config: { readView: async () => ({}) } as never, service: new WebControlService(h.deps) }, "web");
     const server = createServer(app); await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
     const address = server.address(); if (!address || typeof address === "string") throw new Error("address");
     const base = `http://127.0.0.1:${address.port}/api/control`;

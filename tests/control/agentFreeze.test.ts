@@ -292,7 +292,7 @@ describe("the panel's profile display probes the operator's default (spec §6.4 
   async function askedByConfigRoute(h: Fixture): Promise<unknown> {
     const asked: unknown[] = [];
     const app = express();
-    registerControlReadRoutes(app, { store: h.store, epoch: "epoch-test", config: { readView: async (selection) => { asked.push(selection); throw new Error("probe recorded"); } } });
+    registerControlReadRoutes(app, { store: h.store, epoch: "epoch-test", config: { readView: async (selection) => { asked.push(selection); throw new Error("probe recorded"); } } }, "web");
     const server = createServer(app); await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
     try {
       const address = server.address(); if (!address || typeof address === "string") throw new Error("address");

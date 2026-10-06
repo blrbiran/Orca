@@ -108,10 +108,10 @@ export function ensurePanelOperatorId(store: ControlStore): string {
   });
 }
 
-/** Agent entry spec §3: which listener a request arrived on. Task 4 gates on it; for now it is only carried. */
+/** Agent entry spec §3, §5, §6: which listener a request arrived on. "socket" applies the human-only gate and records the header's client; "web" records "web". */
 export type ControlChannel = "web" | "socket";
 
-export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps, channel: ControlChannel = "web"): void {
+export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps, channel: ControlChannel): void {
   if (deps.service) registerControlMutationRoutes(app, deps.store, deps.service, channel);
   app.get("/api/control/config", asyncRoute(async (_req, res) => {
     const base = await deps.config.readView(operatorDefaultSelection(deps.store));
@@ -254,7 +254,7 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
   });
 }
 
-export function registerControlMutationRoutes(app: Express, store: ControlStore, service: WebControlService, channel: ControlChannel = "web"): void {
+export function registerControlMutationRoutes(app: Express, store: ControlStore, service: WebControlService, channel: ControlChannel): void {
   const actorId = ensurePanelOperatorId(store);
   /** Resolve the command target and the ledger scope a route names; `recovery-retry` carries no group in its path. */
   type RouteTarget = (params: Request["params"], payload: unknown, store: ControlStore) => { groupId: string; target: CommandTargetV1 };
@@ -337,6 +337,10 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
   for (const route of routes) app.post(route.path, asyncRoute(async (req, res) => {
     let id: string | null = null;
     try {
+      // Spec §6: the client rides beside the command, in neither hash; the Web channel is always "web". The socket's
+      // client is set only by its header gate; mounted without that gate, fail loud rather than book "undefined".
+      const client = channel === "web" ? "web" : res.locals.orcaClient;
+      if (typeof client !== "string") throw new Error("socket channel request carries no gated client (res.locals.orcaClient)");
       // Spec §5: the human-only surface is refused by name before anything is parsed further or booked.
       if (channel === "socket") {
         const refusal = humanOnlyRefusal(route.verb, (req.body as { payload?: unknown } | undefined)?.payload);
@@ -346,8 +350,6 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
       const resolved = route.target(req.params, envelope.payload, store);
       id = resolved.groupId;
       const command = rawAuthorityCommandSchema.parse({ schema: "orca-raw-command-v1", ...envelope, actorId, verb: route.verb, target: resolved.target }) as RawAuthorityCommandV1;
-      // Spec §6: the client rides beside the command, in neither hash; the Web channel is always "web".
-      const client = channel === "web" ? "web" : String(res.locals.orcaClient);
       await withCommandClient(command.commandId, client, async () => {
         switch (command.verb) {
           case "import-plan": await service.importPlan(command); break;

@@ -661,7 +661,7 @@ describe("stop and continuation mutation routes", () => {
     const { h, service } = await stopFixture();
     const app = express();
     app.use(express.json({ verify: verifyControlJsonBody }));
-    registerControlReadRoutes(app, { store: h.store, epoch: "epoch", config: { readView: async () => ({}) } as never, service });
+    registerControlReadRoutes(app, { store: h.store, epoch: "epoch", config: { readView: async () => ({}) } as never, service }, "web");
     const server = createServer(app);
     await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
     const address = server.address();

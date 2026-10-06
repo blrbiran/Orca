@@ -108,7 +108,7 @@ describe("GET /api/control/groups/:groupId/requirement (N1 spec §11.2, DR25)", 
     const x = await requirementHarness({ answers: [{ purpose: "clarify", output: ROUND_ONE }] });
     const app = express();
     app.use(express.json());
-    registerControlReadRoutes(app, { store: x.store, epoch: "epoch", config: { readView: async () => ({}) } as never });
+    registerControlReadRoutes(app, { store: x.store, epoch: "epoch", config: { readView: async () => ({}) } as never }, "web");
     const server = createServer(app);
     try {
       await x.until(() => x.round(1).state === "awaiting-answers");
