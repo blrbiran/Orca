@@ -205,3 +205,12 @@ None open. H1–H4 are recorded in §1. The new dependency (`@modelcontextprotoc
 - D3. The client library times out a socket request after 120 s with local error `control-socket-timeout` (retryable), so a wedged panel cannot hang an agent forever.
 - D4. The MCP bridge uses the SDK's low-level `Server` with plain JSON Schema tool inputs (no zod coupling to the SDK's zod version); a commandId it generates is `mcp-<uuid>`.
 - D5. `tests/control/requirementRecords.test.ts` asserts `schemaVersion` "6"; the migration makes it "7", so that expectation changes with Task 1.
+
+## 13. Correction after the final review (2026-10-07, session 6cc0c1e9)
+
+Earlier sections are kept as written (CLAUDE.md Rule 13); this section corrects them.
+
+- The human-only gate (§5, ruling H3) is a guardrail, not a security boundary. It binds cooperating agents: those that use `orca control`, `orca mcp serve` or the `orca-control` skill, all of which reach the panel through the control socket, where the gate applies. Any process running as the same OS user can reach the Web channel instead, where the gate does not apply: `GET /` on the panel's TCP port needs no token and serves `index.html` with the token injected (`src/panel/api.ts` static route, registered before the token middleware; `src/panel/staticFiles.ts` writes `window.__ORCA_TOKEN__`), after which `POST /api/control/groups/<id>/set-limit` with `x-orca-token` is accepted. Such a process could also stop the panel and write the control store directly. H3's "agents may do everything the Web UI can, except set a budget amount" therefore holds for agents that use the entry this design provides, not for an adversarial process.
+- §2's sentence "agents have no stable way to obtain it" is corrected: the token is served to anyone who can open the panel's URL from this machine, so a same-user agent can obtain it; the design chose the socket so that cooperating agents have no reason to.
+- Making the gate a boundary (for example, running the panel as a separate OS user, or not serving the token without a browser handshake) is a human decision and is not taken here.
+- §2's count is corrected: the mutation table holds 22 routes carrying 23 verbs; `shutdown` is a verb with no route (the panel's own lifecycle). `tests/entry/skill.test.ts` asserts the 22.

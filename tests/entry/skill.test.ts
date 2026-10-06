@@ -58,6 +58,10 @@ describe("the orca-control skill (spec §7, C18)", () => {
     for (const phrase of [
       "--expected-revision", "--command-id", "panel-not-running", "control-verb-human-only", "control-field-human-only", "revision-conflict",
       "control-socket-timeout", "orca-cli-response-v1", "never start a panel", "@repository:", "@operator:",
+      // Final review I1-I3: the transport code, the policy sentence, and where each revision and id comes from.
+      "control-socket-error", "not a security boundary", "Where the expected revision comes from", ".summary.commandRevision",
+      "`.revision` of `get repositories/<repoId>/workspace`", "`.revision` of `get operator/agent-preferences`", "`.repositories[].repoId`",
+      "`.plans[].planId`", "`.operatorId`", "same `--command-id`",
     ]) expect(skill).toContain(phrase);
     for (const code of ["`0`", "`1`", "`2`", "`3`"]) expect(skill).toContain(code);
   });

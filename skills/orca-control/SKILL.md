@@ -27,7 +27,7 @@ orca control send <route> --expected-revision <n> (--payload '<json>' | --payloa
 
 ## 3. Writing
 
-1. Read first (`get groups/<id>` or `get summary`) and take the current revision from the body.
+1. Read first and take the current revision from the body; section 9 says which read and which field, per route.
 2. `orca control send <route> --expected-revision <N> --payload '<json>'`. Payload shapes are in the table (section 8).
 3. `revision-conflict` (409) means state moved since you read. Re-read and decide again; do not blindly resend with a bumped number.
 4. Other 4xx bodies name the panel's reason code; read it, do not retry the same payload.
@@ -37,6 +37,7 @@ orca control send <route> --expected-revision <n> (--payload '<json>' | --payloa
 - Without `--command-id` the CLI generates `cli-<uuid>` and returns it as `commandId` in the output envelope. Keep it.
 - After a timeout (`control-socket-timeout`: the CLI waits 120 s) or any `retryable: true` error, resend the same route and payload with `--command-id <the same id>`. A replay of a known id never executes twice.
 - To check a result, `get` the command under its scope: group commands `groups/<groupId>/commands/<commandId>`; repository verbs (`set-workspace-mode`) `groups/@repository:<repoId>/commands/<commandId>`; operator verbs (`set-agent-preferences`) `groups/@operator:<operatorId>/commands/<commandId>`.
+- A lookup miss does not prove the command never ran: a group-scope miss answers `command-result-not-found`, and an `@repository:` or `@operator:` miss currently answers `group-not-found` (those scopes have no group row). On any miss, resend the original command with the same `--command-id` and the same payload rather than infer absence; the replay either returns the retained result or executes it once.
 
 ## 5. Long work
 
@@ -52,6 +53,8 @@ The socket refuses these before anything runs (nothing is ledgered, the commandI
 
 Do not look for a way around them. Ask the human. To spend less, use `pause-dispatch` or `handoff-stop`.
 
+The refusal is a policy for agents, not a security boundary: do not look for a way around it (not the Web UI's token, not the control store).
+
 ## 7. Output and exit codes
 
 stdout is exactly one JSON line:
@@ -61,7 +64,8 @@ stdout is exactly one JSON line:
 ```
 
 - `status` is the panel's HTTP status, or `0` for a local refusal. `commandId` is present for `send` only. `body` is the panel's body verbatim; a local refusal is `{"error":{"code","message","retryable"}}`.
-- Exit `0`: the panel answered 2xx. `1`: refused locally (bad arguments, `panel-not-running`, `control-socket-timeout`, path problems). `2`: the panel answered non-2xx (the body names the code and `retryable`). `3`: unhandled error.
+- Exit `0`: the panel answered 2xx. `1`: refused locally (bad arguments, `panel-not-running`, `control-socket-timeout`, `control-socket-error`, path problems). `2`: the panel answered non-2xx (the body names the code and `retryable`). `3`: reserved for a crash (an unexpected error; stdout may then be empty).
+- `control-socket-error` is any other transport failure (`<code>: <message>`). It is retryable when the connection dropped (`ECONNRESET`, `EPIPE`): the command may have run, so resend it with the same `--command-id`. `control-cli-response-invalid` (the panel's body was not JSON) is retryable for the same reason.
 - Parse stdout; stderr is free-form diagnostics.
 
 ## 8. Route table
@@ -94,3 +98,22 @@ stdout is exactly one JSON line:
 | `POST operator/agent-preferences` | set-agent-preferences | `{"preferences":{"perAgent":{}}}` |
 
 Notes: `recovery-retry` also takes `{"scope":"group","groupId":"g1"}`. `handoff-stop` takes an optional `handoffDeadlineAt` (UTC, `YYYY-MM-DDTHH:mm:ss.sssZ`). Examples are checked against the raw payload schemas only; the panel also judges live state, so versions, hashes and ids must be real (for example a `set-task-loop` plan must exist, and a `proposal-edit` operation with provenance `model` needs an `estimateId`).
+
+## 9. Where the expected revision comes from
+
+`--expected-revision` is checked against the revision of the command's scope; a stale number answers `revision-conflict` (409) with the current `commandRevision` in the error body.
+
+| Route | `--expected-revision` |
+| --- | --- |
+| every `groups/<groupId>/…` route | `.summary.commandRevision` of `get groups/<groupId>`; for a clarifying group (its group view is refused) `.summary.commandRevision` of `get groups/<groupId>/requirement`; or that group's `.groups[].commandRevision` in `get summary` |
+| `requirements` (requirement-open) and `groups/import-plan` | `0` for a groupId that does not exist yet; otherwise that group's `commandRevision` as above |
+| `recovery/retry` | the `commandRevision` of the group it acts on: with `"scope":"group"` that `groupId`; with `"scope":"run"` the run's group (`get recovery` lists `.blockers[]` with `groupId` and `runId`; a clarifying group's blocked call is `.summary.requirement.blockedRun.runId` of `get groups/<groupId>/requirement`) |
+| `repositories/<repoId>/workspace-mode` | `.revision` of `get repositories/<repoId>/workspace` (`orca-repository-workspace-v1`; `0` before the first change) |
+| `operator/agent-preferences` | `.revision` of `get operator/agent-preferences` (`orca-agent-preferences-v1`; `0` before the first change) |
+
+Where the ids come from:
+
+- `repoId`: `get config` `.repositories[].repoId`.
+- `planId`: `get config` `.plans[].planId` (each entry also names its `repoId`).
+- `operatorId` (for `groups/@operator:<operatorId>/commands/<commandId>`): `get operator/agent-preferences` `.operatorId`.
+- `groupId`: `get summary` `.groups[].groupId`; for `requirements` and `groups/import-plan` you choose a new one.
