@@ -16,10 +16,12 @@ import { claimableContinuations, continuationAlreadyClaimed, continuationWakeBod
 import { singleCallClaimRowOf } from "./singleCall.js";
 import { claimRequirementCall } from "./requirementCalls.js";
 import { hasRequirementBlock, readRequirementGroup } from "./requirementRecords.js";
+import { gateClaim } from "./spendCaps.js";
 
 export type Phase = "estimate" | "work" | "handoff" | "single-call";
 export type StartCommand = Extract<RawAuthorityCommandV1, { verb: "start" }>;
-export interface WebDispatchDeps { store: ControlStore; profileRouter: ExecutionProfileRouter; admissionGate?: AdmissionGate }
+/** `now` dates the spend caps' periods at a claim (accounts spec §6.3.1); the service's clock type, the wall clock unless given. */
+export interface WebDispatchDeps { store: ControlStore; profileRouter: ExecutionProfileRouter; admissionGate?: AdmissionGate; now?: () => Date }
 export interface AttemptTuple { runId: string; generation: number; phase: Phase; providerAttemptOrdinal: number }
 export interface DispatchRun {
   runId: string; groupId: string; workItemId: string; taskId: string | null; generation: number;
@@ -209,6 +211,9 @@ export async function deliverScheduledStart(deps: WebDispatchDeps, groupId: stri
           .run(`claim-blocked:${groupId}:${still.id}`, groupId, canonicalBytes({ evidenceIds: [] }).toString("utf8"));
         return { kind: "blocked" as const, reason: "claim-capability-unavailable" };
       }
+      // Accounts spec §6.3.1, D9: in this transaction, so no other claim lands between the headroom read and this one.
+      // A capped claim answers `blocked`: the handler leaves the wake pending, and the next wake re-checks.
+      if (!gateClaim(store, groupId, claimGrantTokens(store, groupId, still), (deps.now?.() ?? new Date()).getTime())) return { kind: "blocked" as const, reason: "spend-cap-reached" };
       const startRevision = "resumeRevision" in still ? still.resumeRevision : still.body.startRevision;
       if ("resumeRevision" in still) {
         const continuation = deliverContinuationWake(store, groupId, still, snapshot);
@@ -224,6 +229,26 @@ export async function deliverScheduledStart(deps: WebDispatchDeps, groupId: stri
       return { kind: "claimed" as const, runId: run.runId };
     });
   } finally { release?.(); }
+}
+
+/**
+ * The tokens this delivery would promise (D4: work + handoff grant): the actionable continuations of a resume wake when
+ * there are any (deliverContinuationWake claims them all), otherwise the next claimable task; 0 when nothing is claimed
+ * (gateClaim then clears a block nothing waits on any more).
+ */
+function claimGrantTokens(store: ControlStore, groupId: string, wake: ClaimedWake | { continuations: RegisteredContinuation[] }): number {
+  const grantTokens = (workItemId: string): number => {
+    const { grant } = readWork(store, groupId, workItemId) as unknown as { grant: { work: { tokens: number }; handoff: { tokens: number } } };
+    return grant.work.tokens + grant.handoff.tokens;
+  };
+  if ("continuations" in wake && wake.continuations.length > 0) {
+    const actionable = claimableContinuations(store, groupId, wake.continuations);
+    if (actionable.length > 0) return actionable.reduce((sum, registered) => sum + grantTokens(registered.taskId), 0);
+    // An exhausted batch whose runs were claimed answers that claim and claims nothing more.
+    if (wake.continuations.some((registered) => continuationAlreadyClaimed(store, registered))) return 0;
+  }
+  const work = nextClaimableTask(store, groupId);
+  return work === null ? 0 : grantTokens(work.workItemId);
 }
 
 type WakeOutcome = { kind: "claimed"; runId: string } | { kind: "idle" };
@@ -505,6 +530,7 @@ export interface WebWakeDeps extends WebDispatchDeps { service: EstimateClaimAut
 /** Bind each durable wake kind to the control authority that can settle it. */
 export function createWebWakeHandlers(deps: WebWakeDeps): WakeHandlers {
   const { store } = deps;
+  // A `blocked` answer (a capability blocker, unknown usage, a spend cap) leaves the wake pending.
   const start: WakeHandler = async (wake) => (await deliverScheduledStart(deps, wake.groupId)).kind !== "blocked";
   return {
     start,

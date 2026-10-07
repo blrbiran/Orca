@@ -16,6 +16,8 @@ import {
   type RawAuthorityCommandV1,
 } from "./webProtocol.js";
 import { writeCanonicalRecord } from "./snapshot.js";
+import { commandPrincipalFor } from "./commandClient.js";
+import { AgentCeilingRefusal, spendCapBlocking } from "./spendCaps.js";
 import { readSchedulerControlPlanSource, type SchedulerControlPlanSource } from "../scheduler/planFile.js";
 import type { TrustedControlConfig } from "../panel/controlConfig.js";
 import { buildBudgetEstimateRequest, persistEstimateArtifacts, TASK_WORK, TASK_HANDOFF, GOAL_REVIEW, ESTIMATE_GRANT, type FrozenEstimateRequest } from "./estimator.js";
@@ -234,6 +236,8 @@ function success(context: WebCommandContext, groupId: string, estimateId: string
 export interface ImportedPlanWrite {
   groupId: string; repoId: string; planId: string; plan: ControlPlanV1; actorId: string;
   estimatorProfileId: string; estimatorProfileHash: string; estimateMode: "strict" | "soft";
+  /** The command writing it: its principal (commandClient.ts) decides the agent ceiling. `at` (epoch ms) dates the caps' periods. */
+  commandId: string; at?: number;
 }
 /** N1 spec §9.1: what a requirement brings into the plan group it becomes. */
 export interface RequirementCarryOver { existingBody: Record<string, unknown>; used: Amount; usageUnknown: boolean; traces: Readonly<Record<string, readonly string[]>> }
@@ -265,6 +269,13 @@ export function writeImportedPlan(deps: ImportDeps, input: ImportedPlanWrite, ca
   const initialReserve = reserve20(base);
   const explicitUnallocatedReserve = preflight.state === "queued" ? initialReserve : checkedAdd(initialReserve, ESTIMATE_GRANT);
   const groupLimit = checkedAdd(base, initialReserve);
+  // Spec §6.3.2 (H10), D4, D10: an agent's import may not promise more than the caps leave -- its fresh limit (no carried
+  // clarifying spend) against the headroom without this group's own runs. Not a ControlError: the command transaction
+  // rolls back, books nothing, and the route answers 403. A person (any user principal) is not held to it.
+  if (commandPrincipalFor(input.commandId)?.startsWith("agent:")) {
+    const blocking = spendCapBlocking(deps.store, input.repoId, groupLimit.tokens, input.at ?? Date.now(), input.groupId);
+    if (blocking !== null) throw new AgentCeilingRefusal(blocking, groupLimit.tokens);
+  }
   const used = carry === null ? zero() : { ...carry.used };
   const limit = checkedAdd(groupLimit, used);
   let committedRemaining = checkedAdd(GOAL_REVIEW, zero());
@@ -357,7 +368,7 @@ export function importControlPlan(deps: ImportDeps, command: ImportCommand): Imp
       const target = deps.trustedConfig.resolveTarget({ repoId: payload.repoId, planId: payload.planId });
       const source = readSchedulerControlPlanSource(target);
       const plan = normalizeControlPlan({ ...source, repoId: payload.repoId, planId: payload.planId });
-      const { estimateId, preflight } = writeImportedPlan(deps, { groupId: payload.groupId, repoId: payload.repoId, planId: payload.planId, plan, actorId: context.rawCommand.actorId,
+      const { estimateId, preflight } = writeImportedPlan(deps, { groupId: payload.groupId, repoId: payload.repoId, planId: payload.planId, plan, actorId: context.rawCommand.actorId, commandId: context.rawCommand.commandId,
         estimatorProfileId: payload.estimatorProfileId, estimatorProfileHash: payload.estimatorProfileHash, estimateMode: payload.estimateMode }, null);
       deps.beforeCommit?.();
       return success(context, payload.groupId, estimateId, preflight.state, preflight.reasonCode);

@@ -22,6 +22,7 @@ import { applySetWorkspaceMode, type SetWorkspaceModeCommand } from "./workspace
 import { applySpendCommand, type SpendCommand } from "./spendCommands.js";
 import { applySetAgentPreferences, type SetAgentPreferencesCommand } from "./agentPreferences.js";
 import { recordProjectionChange } from "./projectionJournal.js";
+import { gateClaim } from "./spendCaps.js";
 import { effectiveTaskLabels, normalizeInputLabels, readTaskLabelState } from "./labels.js";
 import { TASK_AMENDMENT_SCHEMA, effectivePlanTask, workBodyOf, writeTaskAmendment } from "./taskAmendments.js";
 import { expandLoopPlan, expandRecipe, normalizeLoopSkills, type LoopRecipe, type LoopSkills, type LoopTaskExpansion } from "./loopPlans.js";
@@ -474,6 +475,8 @@ export class WebControlService {
           saveWebAuthority(this.store, group, proposal); recordProjectionChange(this.store, [id]);
           return null;
         }
+        // Accounts spec §6.3.1, D9: an estimate is a claim too; under a cap it stays queued and its wake pending.
+        if (!gateClaim(this.store, id, estimate.grant.tokens, (this.deps.now?.() ?? new Date()).getTime())) return null;
         const bindingRow = this.store.db.prepare("SELECT body FROM outbox WHERE id=? AND kind='estimate-contract'").get(`estimate-contract:${id}:${estimateId}`);
         if (!bindingRow) throw new ControlError("recovery-blocked");
         const binding = z.object({ groupId: z.literal(id), estimateId: z.literal(estimateId), requestHash: z.literal(estimate.requestHash), contractHash: z.string().regex(/^[a-f0-9]{64}$/) }).strict().parse(JSON.parse(String(bindingRow.body)));

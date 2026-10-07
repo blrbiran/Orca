@@ -783,4 +783,7 @@ export const zhErrors: Record<string, string> = {
   // Accounts spec §3.5: the human-only refusals, now also answered to a member in the Web UI (src/panel/humanOnly.ts).
   "control-verb-human-only": "只有登录 Web UI 的 owner 能做这个操作。",
   "control-field-human-only": "这个字段只能由登录 Web UI 的 owner 设置；去掉它再发送。",
+  // Accounts spec §6.3: an agent's import over the spend caps' headroom, and the block shown on a group waiting on a cap.
+  "control-limit-over-cap-headroom": "这次导入的额度超过了花费上限剩余的余量：{{message}}",
+  "spend-cap-reached": "已到花费上限，这个组的下一次认领在等待；提高上限或等到下一个周期后会自动继续。",
 };

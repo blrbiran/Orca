@@ -14,6 +14,7 @@ import { idSchema } from "../control/schema.js";
 import { agentPreferencesViewSchema, agentsViewSchema, recoveryRetryPayloadSchema, usageViewSchema, commandEnvelopeSchema, controlConfigSchema, rawAuthorityCommandSchema, repositoryWorkspaceSchema, type CommandTargetV1, type CommandVerbV1, type RawAuthorityCommandV1 } from "../control/webProtocol.js";
 import { parseUsageScope, readUsageView, type UsageGroupBy, type UsageQuery } from "../control/usageQuery.js";
 import { readWorkspaceSetting } from "../control/workspaceSettings.js";
+import { AgentCeilingRefusal } from "../control/spendCaps.js";
 import type { WebControlService } from "../control/webService.js";
 import type { ExecutionPort } from "../control/executionPort.js";
 import type { ControlStore } from "../control/store.js";
@@ -432,6 +433,11 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
       if (!result) throw new ControlError("control-command-result-invalid");
       res.status(result.originalStatus).json(result.body);
     } catch (error) {
+      // Accounts spec §6.3.2, D10: the agent ceiling rolled the command back and booked nothing, so the id is not burned.
+      if (error instanceof AgentCeilingRefusal) {
+        sendControlError(res, 403, "control-limit-over-cap-headroom", `the import's limit of ${error.limitTokens} tokens exceeds the ${error.cap.scope} ${error.cap.period} cap's headroom of ${error.cap.headroom}; a person can import it from the Web UI or raise the cap`);
+        return;
+      }
       const context = id === null ? undefined : readErrorContext(store, id);
       if (error instanceof ZodError) sendControlError(res, 400, "control-non-json-payload", "The command body does not match the closed V1 schema.", context);
       else sendMappedControlError(res, error, context);

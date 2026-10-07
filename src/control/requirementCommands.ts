@@ -229,7 +229,7 @@ export async function applyRequirementDraftAccept(
         const plan = normalizeControlPlan({ ...schedulerControlPlanSourceOf(stored, stored.targetRepo), repoId: group.requirement.repoId, planId });
         const importDeps: ImportDeps = { ...deps, defaults: () => defaults, estimatorSlot: slot.outcome,
           estimatorObservation: (selected) => { if (selected !== profile) throw new ControlError("profile-changed"); return slot.observation; } };
-        const { estimateId, preflight } = writeImportedPlan(importDeps, { groupId: id, repoId: group.requirement.repoId, planId, plan, actorId: command.actorId,
+        const { estimateId, preflight } = writeImportedPlan(importDeps, { groupId: id, repoId: group.requirement.repoId, planId, plan, actorId: command.actorId, commandId: command.commandId, at: now.getTime(),
           estimatorProfileId: defaults.estimatorProfileId, estimatorProfileHash: defaults.estimatorProfileHash, estimateMode: defaults.estimateMode },
           { existingBody: { ...group }, used: group.used, usageUnknown: group.ledger.usageUnknown, traces: Object.fromEntries(draft.output.tasks.map((task) => [task.taskId, task.traces])) });
         writeDraft(deps.store, id, { ...draft, state: "accepted" });

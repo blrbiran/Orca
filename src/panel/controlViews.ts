@@ -20,6 +20,7 @@ import type { ControlStore } from "../control/store.js";
 import { agentSelectionSchema, amountSchema, artifactSchema, canonicalTimestampSchema, grantSchema, idSchema, runProgressSchema, safeInteger, type RunProgress } from "../control/schema.js";
 import { taskContractSchema } from "../scheduler/planFile.js";
 import { exportReasonOf } from "../control/requirementExport.js";
+import { readSpendCapBlock } from "../control/spendCaps.js";
 import {
   agentSelectionPreviewSchema,
   allocationViewSchema,
@@ -829,6 +830,8 @@ export function readControlGroup(store: ControlStore, epoch: string, groupId: st
     stop: stopView(store, groupId, body.stopped),
     recoveryBlockers: blockers,
     recentCommandIds: sortedUnique(commandIds),
+    // Accounts spec §6.3.1, D9: a claim waiting on a spend cap (schema-checked with the rest of the view).
+    spendCapBlock: readSpendCapBlock(store, groupId),
   };
   const parsed = groupViewSchema.safeParse(view);
   if (!parsed.success) return blocked(`group-view:${parsed.error.issues[0]?.path.join(".")}:${parsed.error.issues[0]?.message}`);
@@ -849,7 +852,7 @@ export function readRequirementView(store: ControlStore, epoch: string, groupId:
       createdOn: requirement.createdOn, idea: requirement.idea, consensus: requirement.consensus, acceptedDraftNo: requirement.acceptedDraftNo,
       document: requirement.document === null ? null : { sha256: requirement.document.sha256, frozenAt: requirement.document.frozenAt }, export: requirement.export },
     ledger: { limit: group.limit, used: group.used, reserved: group.reserved, usageUnknown: group.ledger.usageUnknown },
-    rounds, drafts: drafts.map(({ plan: _plan, ...rest }) => rest), document,
+    rounds, drafts: drafts.map(({ plan: _plan, ...rest }) => rest), document, spendCapBlock: readSpendCapBlock(store, groupId),
   };
   const parsed = requirementViewSchema.safeParse(view);
   if (!parsed.success) return blocked(`requirement-view:${parsed.error.issues[0]?.message ?? "invalid"}`);

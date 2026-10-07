@@ -159,6 +159,26 @@ describe("recoverable handoff settlement and continuation grants", () => {
     } finally { await h.dispose(); }
   });
 
+  it("gates a continuation's claim on the spend caps at the inherited remainder (accounts spec §6.3.1)", async () => {
+    const { h, deps, service } = await handedOff(["a"]);
+    try {
+      const predecessor = settleRecoverable(h.store, deps, activeRunIds(h.store)[0]);
+      const resumed = await service.resumeFromHandoff(h.command("resume-from-handoff", { selections: [predecessor] }));
+      if ("error" in resumed || resumed.result.kind !== "resumed-from-handoff") throw new Error(JSON.stringify(resumed));
+      const pendingRunId = resumed.result.pendingRuns[0].pendingRunId;
+      const grant = inherited.work.tokens + inherited.handoff.tokens;
+      const used = Number((h.store.db.prepare("SELECT sum(tokens) AS n FROM usage_ledger WHERE group_id='g'").get() as { n: number }).n);
+      expect(used).toBe(USED.tokens);
+      const cap = h.store.db.prepare("INSERT INTO spend_caps(scope,period,tokens,updated_at,updated_by) VALUES ('all','total',?,1,'user:u1') ON CONFLICT(scope,period) DO UPDATE SET tokens=excluded.tokens");
+      cap.run(used + grant - 1);
+      expect(await deliverScheduledStart(deps, "g")).toEqual({ kind: "blocked", reason: "spend-cap-reached" });
+      expect(h.store.db.prepare("SELECT id FROM runs WHERE id=?").get(pendingRunId)).toBeUndefined();
+      expect(JSON.parse(String((h.store.db.prepare("SELECT body FROM spend_cap_blocks WHERE group_id='g'").get() as { body: string }).body))).toMatchObject({ grantTokens: grant });
+      cap.run(used + grant);
+      expect(await deliverScheduledStart(deps, "g")).toEqual({ kind: "claimed", runId: pendingRunId });
+    } finally { await h.dispose(); }
+  });
+
   it("releases a commitment exactly once when the adapter settles the same request twice", async () => {
     const { h, deps, service } = await handedOff(["a"]);
     try {

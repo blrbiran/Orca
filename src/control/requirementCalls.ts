@@ -16,6 +16,7 @@ import { assertCallUsageBooked, closeSingleCall, insertSingleCallRun, verifyStop
 import { singleCallClaimRowOf } from "./singleCall.js";
 import type { SingleCallHandler, SingleCallPrepareDeps, SingleCallRequest, SingleCallRunRow } from "./singleCallPurposes.js";
 import { writeCanonicalRecord } from "./snapshot.js";
+import { gateClaim } from "./spendCaps.js";
 import type { AdmissionGate } from "./admissionGate.js";
 import type { ControlStore } from "./store.js";
 
@@ -75,7 +76,7 @@ function upsertOutbox(store: ControlStore, id: string, kind: string, body: unkno
  * the call would be paid for and lost; the round or draft waits with requirement-usage-unknown. As on a plan group
  * (webDispatch.ts "usage-unknown"), version 1 has no command that clears unknown usage, so that wait is final.
  */
-export function claimRequirementCallInTransaction(store: ControlStore, groupId: string): "claimed" | "nothing" | "waiting" | "held" {
+export function claimRequirementCallInTransaction(store: ControlStore, groupId: string, at: number = Date.now()): "claimed" | "nothing" | "waiting" | "held" | "capped" {
   const group = readRequirementGroup(store, groupId);
   if (group.status !== "clarifying") return "nothing";
   if (group.stopped || store.db.prepare("SELECT group_id FROM stop_intents WHERE group_id=?").get(groupId)) return "held";
@@ -85,6 +86,8 @@ export function claimRequirementCallInTransaction(store: ControlStore, groupId: 
   if (group.ledger.usageUnknown) { setWaiting(store, groupId, target, "requirement-usage-unknown"); return "waiting"; }
   const reserved = add(group.reserved, REQUIREMENT_CALL_GRANT);
   if (!fits(group.used, reserved, group.limit)) { setWaiting(store, groupId, target, "requirement-budget-exhausted"); return "waiting"; }
+  // Accounts spec §6.3.1, D9: a call over a spend cap is not claimed; the wake stays pending and the block is on the view.
+  if (!gateClaim(store, groupId, REQUIREMENT_CALL_GRANT.tokens, at)) return "capped";
   setWaiting(store, groupId, target, null);
   const attempt = (target.kind === "round" ? readRound(store, groupId, target.no).calls : readDraft(store, groupId, target.no).calls).length + 1;
   const slot = group.requirement.agentSlot, profile = group.requirement.profile;
@@ -107,10 +110,13 @@ export function claimRequirementCallInTransaction(store: ControlStore, groupId: 
   return "claimed";
 }
 
-/** The pump's `requirement-call` handler: true when the wake's effect is in place; a held group keeps the wake pending. */
+/** The pump's `requirement-call` handler: true when the wake's effect is in place; a held or spend-capped group keeps the wake pending. */
 export async function claimRequirementCall(deps: { store: ControlStore; admissionGate?: AdmissionGate }, groupId: string): Promise<boolean> {
   const release = deps.admissionGate?.enter();
-  try { return deps.store.transaction(() => claimRequirementCallInTransaction(deps.store, groupId)) !== "held"; }
+  try {
+    const outcome = deps.store.transaction(() => claimRequirementCallInTransaction(deps.store, groupId));
+    return outcome !== "held" && outcome !== "capped";
+  }
   finally { release?.(); }
 }
 

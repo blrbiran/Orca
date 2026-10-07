@@ -28,6 +28,8 @@ const BY_HAND = [
   // src/panel/authRoutes.ts, src/panel/accounts/store.ts (accounts spec §3.2-§3.3, §8)
   "login-failed", "login-throttled", "csrf-required", "password-too-short", "user-name-invalid", "user-name-taken", "owner-required",
   "user-role-invalid", "notice-not-found", "user-not-found",
+  // src/control/spendCaps.ts gateClaim (accounts spec §6.3.1): projected on a group view, never a command outcome
+  "spend-cap-reached",
 ];
 const has = (code: string): boolean => Object.prototype.hasOwnProperty.call(zhErrors, code);
 

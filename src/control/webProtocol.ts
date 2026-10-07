@@ -760,6 +760,8 @@ export const setAgentPreferencesPayloadSchema = z.object({ preferences: operator
 export const spendTokensSchema = safeInteger.positive();
 export const spendScopeSchema = z.string().refine((scope) => scope === "all" || (scope.startsWith("repo:") && idSchema.safeParse(scope.slice(5)).success), "spend-scope-invalid");
 export const spendPeriodSchema = z.enum(["total", "week", "month"]);
+/** Accounts spec §6.3.1, D9: why a group's claim waits (spend_cap_blocks); projected on views, never a command outcome. */
+export const spendCapBlockSchema = z.object({ code: z.literal("spend-cap-reached"), scope: spendScopeSchema, period: spendPeriodSchema, capTokens: spendTokensSchema, grantTokens: safeInteger.positive() }).strict();
 export const setSpendCapPayloadSchema = z.object({ scope: spendScopeSchema, period: spendPeriodSchema, tokens: spendTokensSchema }).strict();
 export const clearSpendCapPayloadSchema = z.object({ scope: spendScopeSchema, period: spendPeriodSchema }).strict();
 // Spec §5.2: an IANA zone this runtime's Intl knows, or the setter is refused by name; weekStart 1 = Monday .. 7 = Sunday.
@@ -1018,6 +1020,7 @@ export const requirementViewSchema = z.object({
   rounds: z.array(roundBodySchema),
   drafts: z.array(draftBodySchema.omit({ plan: true })),
   document: z.string(),
+  spendCapBlock: spendCapBlockSchema.nullable().optional(),
 }).strict();
 export type RequirementViewV1 = z.infer<typeof requirementViewSchema>;
 
@@ -1286,6 +1289,7 @@ export const groupViewSchema = z
       .nullable(),
     recoveryBlockers: z.array(recoveryBlockerSchema),
     recentCommandIds: sortedIdArraySchema,
+    spendCapBlock: spendCapBlockSchema.nullable().optional(),
   })
   .strict()
   .superRefine((value, ctx) => {

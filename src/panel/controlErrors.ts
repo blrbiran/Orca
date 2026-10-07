@@ -15,6 +15,8 @@ const panelOnlyErrorStatuses = {
   // Accounts spec §3.5: the human-only refusals now reach the Web UI too (a member), so they are catalogued.
   "control-verb-human-only": 403,
   "control-field-human-only": 403,
+  // Accounts spec §6.3.2: an agent's import-plan or requirement-draft-accept whose limit exceeds the caps' headroom.
+  "control-limit-over-cap-headroom": 403,
   "control-internal-error": 500,
 } as const satisfies Record<string, ControlHttpStatus> & Partial<Record<ExistingControlCode, never>>;
 

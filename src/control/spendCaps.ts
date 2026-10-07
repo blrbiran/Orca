@@ -1,4 +1,5 @@
 import { ControlError } from "./errors.js";
+import { recordProjectionChange } from "./projectionJournal.js";
 import type { ControlStore } from "./store.js";
 import { periodBounds, readUsageCalendar } from "./usageCalendar.js";
 import { groupRepoIdOf } from "./usageLedger.js";
@@ -60,6 +61,37 @@ export function capStatuses(store: ControlStore, repoId: string | null, at: numb
 export function spendCapBlocking(store: ControlStore, repoId: string | null, grantTokens: number, at: number, excludeGroupId: string | null = null): CapStatus | null {
   const binding = capStatuses(store, repoId, at, excludeGroupId)[0];
   return binding !== undefined && grantTokens > binding.headroom ? binding : null;
+}
+
+/**
+ * Spec §6.3.1, D9: called inside the claim's own transaction, so the headroom read and the claim cannot be split by
+ * another writer. False = do not claim: the caller leaves its wake pending, and a block is a deferred wake, re-checked on
+ * every wake (a raised cap or a new period resumes it without a command). The block is written to spend_cap_blocks (the
+ * group's and requirement's `spendCapBlock`), and cleared once a claim fits; a projection change only when the row
+ * changes. A grant of 0 claims nothing and never blocks. D19: the legacy scheduler's claimWork (budget.ts, `orca
+ * scheduler`) does not call this -- a known gap of this round, not a gated path.
+ */
+export function gateClaim(store: ControlStore, groupId: string, grantTokens: number, at: number): boolean {
+  const row = store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId);
+  if (!row) throw new ControlError("group-not-found");
+  const blocking = grantTokens > 0 ? spendCapBlocking(store, groupRepoIdOf(JSON.parse(String(row.body)) as Record<string, unknown>), grantTokens, at) : null;
+  const prior = store.db.prepare("SELECT body FROM spend_cap_blocks WHERE group_id=?").get(groupId);
+  if (blocking === null) {
+    if (prior) { store.db.prepare("DELETE FROM spend_cap_blocks WHERE group_id=?").run(groupId); recordProjectionChange(store, [groupId]); }
+    return true;
+  }
+  const body = JSON.stringify({ code: "spend-cap-reached", scope: blocking.scope, period: blocking.period, capTokens: blocking.tokens, grantTokens });
+  if (!prior || String(prior.body) !== body) {
+    store.db.prepare("INSERT INTO spend_cap_blocks(group_id,body) VALUES (?,?) ON CONFLICT(group_id) DO UPDATE SET body=excluded.body").run(groupId, body);
+    recordProjectionChange(store, [groupId]);
+  }
+  return false;
+}
+
+/** The block gateClaim recorded for a group (its view's `spendCapBlock`), or null. */
+export function readSpendCapBlock(store: ControlStore, groupId: string): unknown {
+  const row = store.db.prepare("SELECT body FROM spend_cap_blocks WHERE group_id=?").get(groupId);
+  return row ? JSON.parse(String(row.body)) : null;
 }
 
 /**
