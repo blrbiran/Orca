@@ -5,6 +5,9 @@ import { join } from "node:path";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { TOKEN_ANCHOR } from "../../src/panel/staticFiles.js";
 import { CAPTURED_ENV, checkDist } from "../../src/service/config.js";
+import { domain } from "../../src/service/launchd.js";
+import { defaultContext } from "../../src/service/manager.js";
+import type { ServicePaths } from "../../src/service/paths.js";
 
 /**
  * Spec §8: one real smoke, opt-in (ORCA_SERVICE_REAL=1), macOS only, under a relocated label and state dir.
@@ -19,6 +22,8 @@ const real = process.env.ORCA_SERVICE_REAL === "1" && process.platform === "darw
 beforeEach((ctx) => { if (!real) ctx.skip(); });
 
 const label = "dev.orca.panel.smoke";
+/** The domain the manager itself picks (gui/<uid> under Aqua, user/<uid> over ssh); only run/env/uid are read. */
+const launchDomain = (): string => domain(defaultContext(process.env, {} as ServicePaths, { stdout() {}, stderr() {} }));
 let root = "";
 let env: NodeJS.ProcessEnv = {};
 const orca = (...args: string[]) => spawnSync(process.execPath, [join(process.cwd(), "dist", "cli.js"), "panel", ...args], { encoding: "utf8", env });
@@ -35,7 +40,7 @@ async function untilStatus(code: number, text: string, ms = 30_000): Promise<str
 }
 afterAll(async () => {
   if (!real || root === "") return;
-  spawnSync("launchctl", ["bootout", `gui/${process.getuid!()}/${label}`]);
+  spawnSync("launchctl", ["bootout", `${launchDomain()}/${label}`]);
   // Bounded wait for the old panel to exit, so it cannot recreate files under root while it is removed.
   let pid = 0;
   try { pid = (JSON.parse(await readFile(join(root, "p", "panel.json"), "utf8")) as { pid?: number }).pid ?? 0; } catch { /* never answered */ }
@@ -75,7 +80,7 @@ describe("real launchd smoke (opt-in)", () => {
     expect(started.status, started.stderr).toBe(0);
     expect(orca("status").status).toBe(0);
     expect(orca("uninstall").status).toBe(0);
-    expect(spawnSync("launchctl", ["print", `gui/${process.getuid!()}/${label}`]).status).not.toBe(0);
+    expect(spawnSync("launchctl", ["print", `${launchDomain()}/${label}`]).status).not.toBe(0);
     expect(existsSync(join(root, "la", `${label}.plist`))).toBe(false);
   }, 180_000);
 });

@@ -9,7 +9,7 @@ export const LAUNCHD_NOT_LOADED = new Set([3, 113, 125]);
 
 const launchctl = (ctx: ServiceContext, args: string[]) => ctx.run("launchctl", args, { env: ctx.env });
 /** Spec §4: gui/<uid> when launchctl managername answers Aqua, else user/<uid>. */
-function domain(ctx: ServiceContext): string {
+export function domain(ctx: ServiceContext): string {
   const answer = launchctl(ctx, ["managername"]);
   return answer.code === 0 && answer.stdout.trim() === "Aqua" ? `gui/${ctx.uid}` : `user/${ctx.uid}`;
 }
