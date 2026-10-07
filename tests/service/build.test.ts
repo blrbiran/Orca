@@ -59,9 +59,10 @@ describe("the service runs a node build, never tsx (spec §3, plan D4)", () => {
     const exited = new Promise<number | null>((resolve) => child.once("exit", (code) => resolve(code)));
     try {
       await new Promise<void>((resolve, reject) => {
-        const timer = setInterval(() => { if (stdout.includes("orca-panel ready url=")) { clearInterval(timer); resolve(); } }, 50);
-        setTimeout(() => { clearInterval(timer); reject(new Error(`no ready line in 30s; stderr: ${stderr}`)); }, 30_000);
-        void exited.then((code) => { clearInterval(timer); reject(new Error(`exited ${code} before ready; stderr: ${stderr}`)); });
+        const stop = (): void => { clearInterval(timer); clearTimeout(deadline); };
+        const timer = setInterval(() => { if (stdout.includes("orca-panel ready url=")) { stop(); resolve(); } }, 50);
+        const deadline = setTimeout(() => { stop(); reject(new Error(`no ready line in 30s; stderr: ${stderr}`)); }, 30_000);
+        void exited.then((code) => { stop(); reject(new Error(`exited ${code} before ready; stderr: ${stderr}`)); });
       });
       child.kill("SIGTERM");
       expect(await exited).toBe(0);
@@ -80,5 +81,19 @@ describe("the service runs a node build, never tsx (spec §3, plan D4)", () => {
       expect(usage.status, entry).toBe(1);
       expect(usage.stderr, entry).toContain("orca panel");
     }
+  }, 120_000);
+
+  it("the main-module guard fails loud: a missing argv[1] is just not-main, any other realpath error surfaces", async () => {
+    const out = await tempRoot();
+    await buildInto(out);
+    const cli = join(out, "dist", "cli.js");
+    const load = (argv1: string) => spawnSync(process.execPath, ["--input-type=module", "-e", `process.argv[1] = ${JSON.stringify(argv1)}; await import(${JSON.stringify(cli)});`], { encoding: "utf8" });
+    const missing = load(join(out, "no-such-entry.js"));
+    expect(missing.status, missing.stderr).toBe(0);
+    expect(missing.stdout + missing.stderr).not.toContain("orca panel");
+    // A NUL byte makes realpath throw ERR_INVALID_ARG_VALUE, not ENOENT.
+    const broken = load("bad\0entry");
+    expect(broken.status).not.toBe(0);
+    expect(broken.stderr).toContain("ERR_INVALID_ARG_VALUE");
   }, 120_000);
 });

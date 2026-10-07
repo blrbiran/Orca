@@ -602,10 +602,14 @@ export async function main(argv: string[], stdinText?: string): Promise<number> 
 function isMainModule(): boolean {
   const entry = process.argv[1];
   if (!entry) return false;
+  const self = realpathSync(fileURLToPath(import.meta.url));
   try {
-    return realpathSync(fileURLToPath(import.meta.url)) === realpathSync(entry);
-  } catch {
-    return false;
+    return self === realpathSync(entry);
+  } catch (err) {
+    // An entry that does not exist cannot be a symlink to this module: compare it as typed.
+    // Anything else (a bad argument, EACCES) must surface; swallowing it would be the silent exit 0 again.
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+    return self === entry;
   }
 }
 
