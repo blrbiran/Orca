@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { runControlCommand } from "../../src/entry/controlCommand.js";
 
-async function run(args: string[], env: NodeJS.ProcessEnv = { ORCA_PROJECTS_FILE: "/nonexistent/p.json", ORCA_CONTROL_DIR: "/nonexistent/ctl" }, files: Record<string, string> = {}) {
+async function run(args: string[], env: NodeJS.ProcessEnv = { ORCA_PANEL_DIR: "/nonexistent/panel", ORCA_PROJECTS_FILE: "/nonexistent/p.json", ORCA_CONTROL_DIR: "/nonexistent/ctl" }, files: Record<string, string> = {}) {
   const lines: string[] = [];
   const code = await runControlCommand(args, env, { write: (line) => lines.push(line), readFile: (path) => { if (!(path in files)) throw Object.assign(new Error("ENOENT"), { code: "ENOENT" }); return files[path]!; } });
   return { code, lines };

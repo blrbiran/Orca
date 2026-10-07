@@ -1,19 +1,37 @@
 import { lstatSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import { controlRoot } from "../panel/controlOptions.js";
 import { CONTROL_SOCKET_NAME } from "../panel/controlSocket.js";
 import { projectsFilePath, readProjectsFile } from "../panel/projectsFile.js";
+import { readPanelJson } from "../service/instance.js";
+import { panelDir } from "../service/paths.js";
 import { EntryRejection } from "./envelope.js";
 
 /**
  * Spec §4.3: the same answer the panel's default file/registry mode gives (controlOptions.ts:135), read-only.
  * Deterministic and never guessed past: a broken projects file is refused, not skipped.
+ * Order: --control-state-dir, the service panel's panel.json (panel service spec §5), the projects file's
+ * controlStateDir, <control root>/panel, else the one socket under the control root.
  */
 export function discoverSocketPath(input: { stateDirFlag?: string; env: NodeJS.ProcessEnv }): string {
   if (input.stateDirFlag !== undefined) {
     // Final review H5: an empty flag is a mistake to name, not a request for the default socket.
     if (input.stateDirFlag.length === 0) throw new EntryRejection("control-cli-argument-invalid", "--control-state-dir wants a directory, not an empty string");
     return join(input.stateDirFlag, CONTROL_SOCKET_NAME);
+  }
+  // Panel service spec §5: the service panel says where its socket is. A panel.json that does not parse is refused by
+  // name (like a broken projects file); one that names no socket, or a path that is no longer a socket, falls through.
+  // panelDir() does not check absoluteness (plan Task 3): a relative ORCA_PANEL_DIR would resolve against the agent's
+  // cwd, so it is read as no service at all.
+  const serviceDir = panelDir(input.env);
+  if (isAbsolute(serviceDir)) {
+    const serviceJson = join(serviceDir, "panel.json");
+    let service: ReturnType<typeof readPanelJson>;
+    // As for the projects file (final review I1): a read that fails other than ENOENT is refused by name, not thrown raw.
+    try { service = readPanelJson(serviceJson); }
+    catch (error) { throw new EntryRejection("control-panel-json-invalid", `${serviceJson}: ${error instanceof Error ? error.message : String(error)}`); }
+    if (service.kind === "invalid") throw new EntryRejection("control-panel-json-invalid", `${serviceJson}: ${service.reason}`);
+    if (service.kind === "valid" && service.body.socketPath !== null && isSocket(service.body.socketPath)) return service.body.socketPath;
   }
   const file = projectsFilePath(input.env);
   let read: ReturnType<typeof readProjectsFile>;
