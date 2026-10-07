@@ -1624,7 +1624,7 @@ export const usageViewSchema = z
       .object({
         tokens: safeInteger,
         byModel: z.array(usageModelEntrySchema),
-        groups: z.array(z.object({ key: nonemptyString, tokens: safeInteger }).strict()),
+        groups: z.array(z.object({ key: nonemptyString.nullable(), tokens: safeInteger }).strict()),
       })
       .strict(),
     counts: z.object({ unattributedRows: safeInteger, breakdownMismatchRows: safeInteger, unknownUsageRuns: safeInteger }).strict(),

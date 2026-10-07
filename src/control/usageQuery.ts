@@ -21,7 +21,8 @@ export function usedTokens(store: ControlStore, scope: UsageScope, from: number 
   const repo = repoOf(scope);
   const where = ["quality<>'breakdown-mismatch'"], args: Array<string | number> = [];
   if (repo !== null) { where.push("repo_id=?"); args.push(repo); }
-  if (from !== null && to !== null) { where.push("applied_at>=? AND applied_at<?"); args.push(from, to); }
+  if (from !== null) { where.push("applied_at>=?"); args.push(from); }
+  if (to !== null) { where.push("applied_at<?"); args.push(to); }
   const row = store.db.prepare(`SELECT COALESCE(SUM(tokens),0) AS n FROM usage_ledger WHERE ${where.join(" AND ")}`).get(...args);
   return Number(row!.n);
 }
@@ -32,7 +33,8 @@ export function readUsageView(store: ControlStore, query: UsageQuery, now: numbe
   const calendar = readUsageCalendar(store);
   const repo = repoOf(query.scope);
   const week = periodBounds("week", now, calendar), month = periodBounds("month", now, calendar);
-  const where = ["1=1"], args: Array<string | number> = [];
+  // Spec §5.1: a pre-ledger row counts in totals and in no period, so it is never part of a range.
+  const where = ["source<>'pre-ledger'"], args: Array<string | number> = [];
   if (repo !== null) { where.push("repo_id=?"); args.push(repo); }
   if (query.from !== null) { where.push("applied_at>=?"); args.push(query.from); }
   if (query.to !== null) { where.push("applied_at<?"); args.push(query.to); }
@@ -40,13 +42,14 @@ export function readUsageView(store: ControlStore, query: UsageQuery, now: numbe
 
   const reported = new Map<string, Entry>();
   const unattributed: Entry = { model: null, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, tokens: 0 };
-  const groups = new Map<string, number>();
+  // The key is null for the unattributed bucket (groupBy=model), never a string: a model may be named "unattributed".
+  const groups = new Map<string | null, number>();
   let tokens = 0, unattributedRows = 0, breakdownMismatchRows = 0;
   for (const row of rows) {
     if (row.quality === "breakdown-mismatch") { breakdownMismatchRows += 1; continue; }
     const n = Number(row.tokens);
     tokens += n;
-    let modelKey: string;
+    let modelKey: string | null;
     if (row.quality === "reported") {
       modelKey = String(row.model);
       const entry = reported.get(modelKey) ?? { model: modelKey, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, tokens: 0 };
@@ -54,7 +57,7 @@ export function readUsageView(store: ControlStore, query: UsageQuery, now: numbe
       reported.set(modelKey, entry);
     } else {
       unattributedRows += 1; unattributed.tokens += n;
-      modelKey = "unattributed";
+      modelKey = null;
     }
     const key = query.groupBy === "model" ? modelKey
       : query.groupBy === "repo" ? (row.repo_id === null ? "unknown" : String(row.repo_id))
@@ -75,7 +78,7 @@ export function readUsageView(store: ControlStore, query: UsageQuery, now: numbe
     schema: "orca-usage-view-v1", scope: query.scope, from: query.from, to: query.to, now, calendar,
     spendRevision: revision ? Number(revision.revision) : 0,
     headline: { total: usedTokens(store, query.scope, null, null), week: usedTokens(store, query.scope, week.from, week.to), month: usedTokens(store, query.scope, month.from, month.to) },
-    range: { tokens, byModel, groups: [...groups].map(([key, n]) => ({ key, tokens: n })).sort((a, b) => compareText(a.key, b.key)) },
+    range: { tokens, byModel, groups: [...groups].map(([key, n]) => ({ key, tokens: n })).sort((a, b) => (a.key === null ? 1 : b.key === null ? -1 : compareText(a.key, b.key))) },
     counts: { unattributedRows, breakdownMismatchRows, unknownUsageRuns },
     caps: [],
   };
