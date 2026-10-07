@@ -9,6 +9,8 @@ Follows the N2 agent entry (`2026-10-07-agent-entry-design.md`, §13 and §14).
 - H2. No separate OS user and no system-level user isolation. The system is cross-platform; macOS and Linux are the targets. No platform-specific mechanism (Touch ID, Keychain).
 - H3. Interface layer only: tampering with the store directly is out of scope (no start-up unlock, no row signatures).
 - H4. Human proof is a user account with a password, JWT-style sessions. The account model must be extensible: multi-user login comes later.
+- H4a. The default user's initial password is a truncated hash; the default user can change it; added users type their own password directly.
+- H4b. A token is valid for 15 days or a month by default and can be refreshed.
 - H5. The whole Web UI requires login. The page no longer carries a token.
 - H6. Requests on the control socket (CLI, MCP, skill) act as a separate `agent` principal: everything except human-only actions.
 - H7. Spend caps are measured in tokens. Usage is tracked per model, because model prices differ; a per-model price table can turn it into dollars later (not in this design).
@@ -22,7 +24,7 @@ The boundary holds against any process that talks to Orca through its interfaces
 
 It does not hold against a process running as the same OS user that:
 - writes the control store directly (adds a user row, edits a cap), or edits Orca's code (H3);
-- reads the panel's process memory (the JWT signing key lives there, §3.3).
+- reads the JWT signing key file or the initial-password file (§3.2, §3.3).
 
 Spend that bypasses Orca entirely (an agent running a model CLI itself) is outside what any Orca limit can bound. The residuals are restated in the UI help text and §12.
 
@@ -35,23 +37,27 @@ Migration 7→8 adds:
 - `users(id TEXT PRIMARY KEY, name TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, roles TEXT NOT NULL, created_at INTEGER NOT NULL, disabled_at INTEGER) STRICT`.
   - `password_hash`: `scrypt$N$r$p$<salt b64>$<hash b64>` from `node:crypto` scrypt (N=2^17, r=8, p=1, 32-byte salt, 64-byte key). No native dependency; identical on macOS and Linux.
   - `roles`: JSON array; v1 knows `owner` and `member`. `owner` may do human-only actions; `member` may do everything else. Roles are checked through one permission table in code (§3.5), so adding a role is a table edit.
-- `sessions(id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id), refresh_hash TEXT NOT NULL, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, revoked_at INTEGER) STRICT`. Only a SHA-256 of the refresh token is stored.
+- `sessions(id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id), created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, revoked_at INTEGER) STRICT` (§3.3).
+- `users` also has `must_change_password INTEGER NOT NULL DEFAULT 0` (§3.2).
 - `security_events(seq INTEGER PRIMARY KEY, at INTEGER NOT NULL, kind TEXT NOT NULL, body TEXT NOT NULL) STRICT` — user created / password changed / user disabled / login failed (rate-limited summary) / cap changed. Append-only from code.
 
-### 3.2 Creating users
+### 3.2 Users: the default owner and added users
 
-- `orca user add <name> [--role owner|member]` reads the password twice from the TTY (refuses when stdin is not a TTY; never from argv or env). It writes the store directly (the panel need not run). The first user defaults to `owner`.
-- `orca user passwd <name>` and `orca user disable <name>`, same TTY rule.
-- With no user in the store, the panel serves only a page that says how to create one (§7); every `/api/*` route answers 401 `no-users`.
-- Every row in `security_events` of kind user-created / password-changed shows in the UI as a persistent notice until acknowledged by an owner, so a user row added by a same-user process (§2 residual) is at least visible the next time an owner logs in.
+- **Default owner.** When a panel starts on a store with no user, it creates one owner named after `--by` (the panel's operator id), with an initial password = the first 16 hex characters of SHA-256 over 32 random bytes. The panel writes the password once to its stderr log line `orca-panel: initial password for <name> written to <path>` (the password itself is not logged) and to `<control root>/initial-password` (mode 0600, created with an explicit mode, Rule 17). The user row carries `must_change_password = 1`.
+- First login with the initial password succeeds only into a "change your password" step; every other route answers 403 `password-change-required` until it is changed. Changing it deletes `initial-password` and records a `security_events` row.
+- **The default owner can change** their password and their display name (`POST /api/auth/password {current,next}`, `POST /api/auth/profile {name}`); so can every user for themselves.
+- **Added users set their own password directly**: an owner adds a user in the UI (name, role, password typed for that user) or with `orca user add <name> [--role owner|member]`, which reads the password twice from a TTY (refuses a non-TTY stdin; never from argv or env). No generated password and no forced change for added users.
+- `orca user passwd <name>` (TTY) is the recovery path when an owner forgets a password; `orca user disable <name>` revokes a user and their sessions.
+- Minimum password length 12 for changed and added passwords (the initial one is 16 hex).
+- Every `security_events` row of kind user-created / password-changed / user-disabled shows in the UI as a notice until an owner acknowledges it, so a user row added by a same-user process (§2 residual) is visible the next time an owner logs in.
 
 ### 3.3 Tokens
 
-- Login: `POST /api/auth/login {name,password}` → sets two cookies:
-  - access token: JWT (HS256), 15 min, claims `{sub,roles,sid,iat,exp}`, cookie `orca_at`, `HttpOnly; SameSite=Strict; Path=/api`.
-  - refresh token: 32 random bytes, 30 days, cookie `orca_rt`, `HttpOnly; SameSite=Strict; Path=/api/auth`.
-- The HS256 key is 32 random bytes generated at panel start and held only in memory. It is never written. A restart invalidates every access token; the browser silently calls `POST /api/auth/refresh`, which checks the refresh token's hash in `sessions` and issues a new access token. So a restart does not log the human out, and nothing on disk can mint an access token.
-- `POST /api/auth/logout` revokes the session. Disabling a user revokes all their sessions.
+- Login: `POST /api/auth/login {name,password}` → a JWT (HS256) in cookie `orca_at` (`HttpOnly; SameSite=Strict; Path=/`), claims `{sub,roles,sid,iat,exp}`.
+- Lifetime: 15 days by default, configurable per panel (`--session-days <n>`, 1..30).
+- Refresh: `POST /api/auth/refresh` with a still-valid token issues a fresh one with a new `exp` (same `sid`). The SPA calls it when less than half the lifetime is left, so an active human is never logged out.
+- Revocation: every request checks that the `sid` row in `sessions` exists and is not revoked, so logout and disabling a user take effect immediately even though the token is a JWT. `sessions` stores `sid`, user, created/expires/revoked times; no secret.
+- Signing key: 32 random bytes in `<control root>/jwt.key`, mode 0600, created on first start (explicit mode; an existing file keeps its mode). It persists so a panel restart (the daemon restarting) does not log anyone out. A same-user process that reads it can mint a token: the same residual class as writing the store (§2, §12). `orca user rotate-key` replaces it and so logs everyone out.
 - Login attempts: per-name exponential delay after 5 failures (in memory), one summary row in `security_events`.
 - `--bind` (external mode) keeps its existing warning; with login it no longer ships a credential in HTML. TLS is still out of scope.
 
@@ -174,7 +180,7 @@ No cap set ⇒ no gate (today's behavior), and the UI says so.
 
 ## 10. Criteria (outline; the plan names each)
 
-- Auth: no cookie → 401 on every `/api/*` route (walker over the route table); expired access + valid refresh → refreshed; restart invalidates access tokens but refresh works; a forged JWT with any key other than the in-memory one → 401; refresh hash only on disk (scan the store file for the raw token → absent); CSRF header missing → 403; disabled user → sessions revoked.
+- Auth: no cookie → 401 on every `/api/*` route (walker over the route table); a token signed with another key → 401; expired → 401; refresh extends `exp` and keeps `sid`; a token survives a panel restart; logout / disable → the same token 401 at once; CSRF header missing → 403; initial password: only the change step until changed, file deleted after, created 0600; added user's own password works without a forced change; minimum length enforced.
 - Human-only: for every human-only verb/field, `member` and `agent` → 403 and no ledger row; `owner` → accepted. Walker C19 extended.
 - `orca user add` refuses a non-TTY stdin; never accepts a password from argv/env.
 - Usage ledger: one row per applied delta with model split; reconciliation mismatch flagged and excluded from caps; pre-ledger rows in totals only.
@@ -190,5 +196,5 @@ Dollar prices and conversion (H7: later, a per-model price table over `usage_led
 ## 12. Residual risks (stated, accepted under H2/H3)
 
 - A same-user process can add a user row or edit `spend_caps` in the store, or edit Orca's code. User creation is surfaced as a notice (§3.2); cap edits are not detected.
-- A same-user process with debugger access to the panel can read the in-memory JWT key.
+- A same-user process can read `jwt.key` and mint a token, or read `initial-password` before the human does (the forced change on first login and the user-created notice make the latter visible).
 - Spend outside Orca is not bounded by Orca.
