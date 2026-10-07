@@ -32,6 +32,14 @@ describe("service paths (spec §2, §3; Rule 17)", () => {
     expect(() => servicePaths({ ORCA_SERVICE_UNIT: "a/b" })).toThrow(expect.objectContaining({ code: "service-name-invalid" }));
   });
 
+  it("refuses a relative directory variable: the service and its manager do not run in this shell's directory", () => {
+    for (const env of [{ ORCA_PANEL_DIR: "p" }, { ORCA_LAUNCH_AGENTS_DIR: "la" }, { ORCA_SYSTEMD_USER_DIR: "./su" }, { XDG_CONFIG_HOME: "cfg" }]) {
+      expect(() => servicePaths(env), JSON.stringify(env)).toThrow(expect.objectContaining({ code: "service-path-not-absolute" }));
+    }
+    // XDG_CONFIG_HOME only matters when ORCA_SYSTEMD_USER_DIR does not override it.
+    expect(servicePaths({ XDG_CONFIG_HOME: "cfg", ORCA_SYSTEMD_USER_DIR: "/t/su" }).unitFile).toBe("/t/su/orca-panel.service");
+  });
+
   it("every test process runs with the service relocated away from the real home (setup file)", () => {
     const p = servicePaths(process.env);
     expect(p.label).not.toBe(DEFAULT_SERVICE_LABEL);

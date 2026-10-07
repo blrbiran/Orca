@@ -1,5 +1,5 @@
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import { ServiceRejection } from "./rejection.js";
 
 export const DEFAULT_SERVICE_LABEL = "dev.orca.panel";
@@ -16,6 +16,12 @@ export interface ServicePaths {
 }
 
 const given = (value: string | undefined): string | undefined => (value !== undefined && value.length > 0 ? value : undefined);
+/** Plan D6: a relative directory would resolve against whatever directory the service or its manager starts in. */
+const givenAbsolute = (env: NodeJS.ProcessEnv, name: string): string | undefined => {
+  const value = given(env[name]);
+  if (value !== undefined && !isAbsolute(value)) throw new ServiceRejection("service-path-not-absolute", `${name}=${value}: give an absolute path`);
+  return value;
+};
 
 /** Spec §3/§5: ~/.orca/panel, relocated by ORCA_PANEL_DIR (Rule 17). Computed per call; never frozen at import. */
 export function panelDir(env: NodeJS.ProcessEnv): string {
@@ -28,10 +34,10 @@ export function servicePaths(env: NodeJS.ProcessEnv): ServicePaths {
   for (const [name, value] of [["ORCA_SERVICE_LABEL", label], ["ORCA_SERVICE_UNIT", unit]] as const) {
     if (!NAME.test(value)) throw new ServiceRejection("service-name-invalid", `${name} ${JSON.stringify(value)} must match ${NAME}`);
   }
-  const dir = panelDir(env);
+  const dir = givenAbsolute(env, "ORCA_PANEL_DIR") ?? panelDir(env);
   const logsDir = join(dir, "logs");
-  const agents = given(env.ORCA_LAUNCH_AGENTS_DIR) ?? join(homedir(), "Library", "LaunchAgents");
-  const units = given(env.ORCA_SYSTEMD_USER_DIR) ?? join(given(env.XDG_CONFIG_HOME) ?? join(homedir(), ".config"), "systemd", "user");
+  const agents = givenAbsolute(env, "ORCA_LAUNCH_AGENTS_DIR") ?? join(homedir(), "Library", "LaunchAgents");
+  const units = givenAbsolute(env, "ORCA_SYSTEMD_USER_DIR") ?? join(givenAbsolute(env, "XDG_CONFIG_HOME") ?? join(homedir(), ".config"), "systemd", "user");
   return {
     label, unit, panelDir: dir, logsDir,
     configFile: join(dir, "service.json"), envFile: join(dir, "service.env"), runScript: join(dir, "run.sh"),
