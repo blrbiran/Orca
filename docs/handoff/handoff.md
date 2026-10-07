@@ -118,7 +118,8 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 ✅ **Task control 刷新循环＋读视图排序＋全局项目切换（2026-10-04，会话 `08011394`）做完，等人审**：见 §4.0.p。
 ✅ **syncskill 跟进（2026-10-03，会话 `9d95e6c8`）做完，等人审**：重钉 ccloop 到 `2b380ea`；codex＋skills 改在 confirm／set-task-loop 就拒；skills 形状错报出具体原因；修了一处临时目录泄漏；**真 claude 下付费跑通一次带 skills 的任务**（n＝1）。见 §4.0、§4.0.o。
 ✅ **面板项目过滤＋全部项目视图（2026-10-06，会话 `32306496`）做完，等人审**：见 §4.0.r。
-✅ *** **N2 agent 入口（2026-10-07，会话 `6cc0c1e9`）做完，等人审**：面板多开一个 0600 的 unix socket `control.sock`；`orca control get|send` 每次只输出一行 JSON；`skills/orca-control`；`orca mcp serve`。agent 唯一不能做的是设预算额度，而且这只是护栏、不是边界（spec §13）。运行中的面板要重启后才有 socket。见 §4.0。 ***
+✅ **N2 agent 入口（2026-10-07，会话 `6cc0c1e9`）做完，人已审**：见 §4.0.s。
+✅ *** **会话 `9a20ac38`（2026-10-07）**：N2 人审收口；discovery 修复、UI 按钮、npm audit 8→0（vitest 5）已进 main；隔离根真 ccmem／syncskill 验收；ccloop 两红诊断（ccloop 人裁 139）；**写好并经人批准两份 spec＋计划（面板服务、账户与花费上限），未开始实施**。见 §4.0。 ***
 
 **现行基线（会话 `08011394`，2026-10-04，项目切换之后的最终树）**：干净 clone、HOME 与四个 XDG 根改道、TMPDIR `/private/tmp/claude-501/og/t`、`ORCA_CCLOOP_BIN`＝ccloop `2b380ea` 的 clone build、`ORCA_AGENTS_TABLE`＝fake codex `integration`、真 syncskill／ccmem 二进制，逐段各跑：web build、typecheck、ledger、claude-md、hooks-path、`verify:control`、`verify:scheduler`、`verify:ccloop-pin`、`verify:panel`、`--ws check`（web 65 文件 405 条）、`check-tmp-leak`（0 残留）都 RC 0；全量 vitest **2745 条：2740 过、3 skipped（`ccloopDefaultE2E`，formal only）、2 红**＝已登记 flake `driverRequirementSplit`、`controlShutdown` 143；`verify:chain` 的全量另红 `controlShutdown` 143 与**新登记**的 `agentSelectionE2E` C3（见下）。三个红文件负载约 6 时单跑各 3/3 绿。原始报数在该会话 scratchpad（会话结束即失效），结论只在这里。
 
@@ -157,63 +158,42 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 
 ## 四、⛔ 下一件事
 
-### 4.0 ⛔ 现在的下一件事（2026-10-07，会话 `6cc0c1e9`；本节优先于旧条目）
+### 4.0 ⛔ 现在的下一件事（2026-10-07，会话 `9a20ac38`；本节优先于旧条目）
 
-本节整节替换会话 `32306496` 写的 §4.0。旧文所说「②N2 未开始」已不成立：spec 在主题行 `docs(spec): design the N2 agent entry (control socket, CLI, skill, MCP bridge)` 提交，之后按 SDD 在 main 上实施完。旧 §4.0 留下的结论压缩到 §4.0.r。
+本节整节替换会话 `6cc0c1e9` 写的 §4.0（N2 做完、等人审）。人已审完 N2，其结论压缩到 §4.0.s。
 
-**人已同意的顺序**：①项目过滤＋全部项目视图（已做完，等人审，§4.0.r）→②N2 agent 入口（**本轮已做完，等人审**）→③隔离根的真实 ccmem／syncskill 验收，以及 ccloop 既有红项 `stopProof`／`codexWatchdog` 的诊断。**下一个 agent 接 ③。**③ 的纪律：临时 `CCMEM_DATA_ROOT`／HOME，不碰真实数据根；诊断先复现，分清是权限原因还是负载原因；改既有判据要人点名。litellm／A2A 仍延后。
+**下一个 agent 做什么**：在**新会话**里用 `superpowers:subagent-driven-development` 执行两份已获人批准的计划，二者互不依赖，先做哪份都行（只在 `src/cli.ts` 有文本冲突）：
+1. `docs/superpowers/plans/2026-10-07-panel-service.md`（台账 `.superpowers/sdd/2026-10-07-panel-service/progress.md`）：把面板做成每用户服务（macOS launchd LaunchAgent／Linux systemd --user，无管理器时 `--detach`），`orca panel install|uninstall|start|stop|restart|status|logs`。计划要在 worktree 分支 `panel-service` 上执行。Task 1 先给 Orca 加 node build（`dist/cli.js`），此前 Orca 没有。
+2. `docs/superpowers/plans/2026-10-07-accounts-and-spend-caps.md`（台账 `.superpowers/sdd/2026-10-07-accounts-and-spend-caps/progress.md`）：账户与登录（整个 Web 要登录；默认 owner 初始密码是截短哈希、首登强制改；新加用户自填密码；JWT 默认 15 天可续期，密钥 0600 落盘）、socket 上的 `agent` 主体、按模型的 token 用量账（`usage_ledger`）、按 token 的花费上限（整体／项目 × 总计／周／月）与派活闸门、agent 通道导入天花板、Metrics 用量面板。Part B 改 ccloop（`byModel`），在 ccloop worktree 分支 `orca/usage-by-model` 上做；T12 要等人推 ccloop 后重钉。
 
-**接手先读**：
-- spec `docs/superpowers/specs/2026-10-07-agent-entry-design.md`：§1 是人的裁定 H1–H4；§12 是计划期决定 D1–D5；§13 是终审后的更正：人工专属闸门只是护栏，不是安全边界；变更路由是 22 条，不是 23 条。
-- plan `docs/superpowers/plans/2026-10-07-agent-entry.md`。
-- 台账 `.superpowers/sdd/2026-10-07-agent-entry/progress.md`：每条 `Ruling:`、每个 task 的 minor、Final review、Task 9 gates。各 task 报告在同一目录。
+**人的授权（本轮给的，执行时适用）**：执行中遇到问题**先按控制器自己的建议做**，在台账记 `Ruling:`，最后统一报人审；不中途停。改既有判据也按此办（账户计划列了 28 条改写清单），**但不覆盖 ccloop**：ccloop 既有判据变红就停 Part B 报人。
 
-**做了什么**（按主题行找，从 `feat(control): record which client delivered each command` 到 `docs(sdd): close the N2 agent entry round in its ledger`）：
-- **面板侧 socket**：
-  - 控制面装配成功，且 recovery 跑完之后，面板在 `<stateDir>/control.sock` 再开一个 0600 的 unix socket。默认路径是 `~/.orca/control/panel/control.sock`，由 `ORCA_CONTROL_DIR`／`--control-state-dir` 改道；目录 0700。
-  - 这个 socket 只挂 `/api/control/*`，没有 token、Host 检查和静态页。
-  - 启动时遇到残留的 socket 会先删掉；路径上是别的文件、路径太长或 listen 失败时，面板照常起，只在 stderr 打一行 `orca-panel: control socket unavailable: <code>`。
-  - 退出顺序：两个 server 都关完、socket 上在途的请求排空之后，才执行 `control.close()` 释放 store。
-  - stdout 的 ready 行不变（D1）；socket 路径打在 stderr 的 `orca-panel: control socket <path>`，也存在 `StartedPanel.socketPath`。
-- **客户端归属**：
-  - socket 请求必须带 `x-orca-client: cli|mcp[:<name>]`，否则答 400 `control-client-invalid`，不进台账。
-  - 迁移 6→7 给 `commands` 表加了 `client` 列：Web 记 `web`；非路由写入（recovery、pump）记 null。
-  - 值经 AsyncLocalStorage 传递，按 commandId 匹配，不进两个哈希；同一命令跨通道重放，保留最初那次的 client。
-- **人工专属**（H3）：只在 socket 上生效。`set-limit` 答 403 `control-verb-human-only`；`requirement-open` 带自有字段 `limit`、或 `proposal-edit` 带 `proposedGroupLimit`，答 403 `control-field-human-only`。拒绝都不进台账。名单是 `src/panel/humanOnly.ts` 里的常量；判据 C19 遍历全部命令 payload 里的金额字段，有漏网就红。
-- **CLI**：`orca control get <path>` 与 `orca control send <route> --expected-revision N --payload …`，代码在 `src/entry/`。
-  - 是泛化透传，只由服务端校验。
-  - stdout 永远只有一行 `{"schema":"orca-cli-response-v1",status,commandId?,body}`；`send` 失败时也带 commandId，没给就生成 `cli-<uuid>`。
-  - 退出码：0 表示服务端 2xx；1 表示本地拒绝（含 `panel-not-running`、`control-socket-error`、超时）；2 表示服务端答了错误；3 只留给崩溃。
-  - 找 socket 的顺序：`--control-state-dir` → projects 文件里的 `controlStateDir` → `$ORCA_CONTROL_DIR/panel` → `~/.orca/control/panel`。projects 文件坏了就具名拒绝。从不自动拉起面板。
-- **skill**：`skills/orca-control/SKILL.md`，教 agent 读→写、重试、轮询，并给出 revision 和各类 id 从哪里读，以及 22 条路由表。payload 例子都对 schema 跑过 safeParse，有判据防止它和代码漂移。本轮没有装进任何真实 skill 目录。
-- **MCP**：`orca mcp serve`，走 stdio，只有 `orca_read`、`orca_send` 两个工具，是 socket 的薄客户端；生成的 commandId 是 `mcp-<uuid>`。新依赖 `@modelcontextprotocol/sdk` 1.32.1，根目录的 zod 3.25.76 没变。
-- **顺带修了一个旧 bug**：`GET /api/control/groups/:scope/commands/:id` 改为先查结果。以前 `@repository:`／`@operator:` 这两类 scope 的结果在两个通道上都查不到（报 group-not-found）。
+**依据**：
+- spec `docs/superpowers/specs/2026-10-07-accounts-and-spend-caps-design.md`（H1–H10 是人的裁定；§12 剩余风险：同 OS 用户直接改库／读 `jwt.key`／改 Orca 代码挡不住，人已接受「只做接口层」）、`docs/superpowers/specs/2026-10-07-panel-service-design.md`（S1–S3；计划 D1 把 spec §4 的 `Restart=always` 改成 `on-failure`，因与 §5 冲突）。
+- 两份计划的 Task 0 都会把计划期决定（D 编号）追加进各自 spec。
+- 调研结论：openclaw／hermes-agent（`sourceget find openclaw|hermes-agent`）都**没有自己的花费上限**（只有服务方的），也都不自己做 daemon，而是生成 launchd／systemd 定义。
 
-**验证**：在隔离 clone 里跑，HOME 和四个 XDG 根都改了道，TMPDIR 短且是真目录。数字与命令以台账 Task 9 为准。
-- **终树**：web build、typecheck、`--ws check`（web 70 文件／490 条）、`verify:control`（129 文件／1321 过／4 skipped）、`verify:panel`（0–14）、`check-tmp-leak`（0 残留）都是 RC 0。
-- **全量 `npm test`**：RC 1，共 2860 条：2852 过，6 skipped，2 红。红的是已登记的负载 flake：gateCheck 的 K13、driverRequirementSplit。负载约 5 时单跑 3/3 绿；**flake 未关闭**。
-- **评审与变异**：每个 task 都有删除变异并见红，恢复后 diff 为 0 字节。等价变异记了三条。每个 task 一审；终审（opus）提出 6 项，一个修复轮全部修掉，复审干净。
-
-**要人审的**（原文是台账里的 `Ruling:` 行）：
-- **P1**：直接在 main 上实施，没开 worktree 分支。
-- **P7**：变更路由实为 22 条，spec §2 写的 23 条有误。
-- **Task 3 的退出顺序**：spec 优先于 brief 写的同步 close 形状。
-- **Task 6**：接受 brief 之外对 command-result GET 的修正。
-- **F1／F2**：终审修复轮修了哪些、延后了哪些。
-- **⚠️ §13**：人工专属闸门只约束合作的 agent。任何同一 OS 用户的进程都能 `GET /` 拿到 Web token，绕过闸门调 `set-limit`。要把它做成真边界（例如换 OS 用户、token 不再随页面下发）是人的决定，本轮没做。
-- **未判的一条**：`import-plan`／接受草稿时，group 上限按 plan 的 task 数算出来，而 task 数由 agent 决定。spec 没把它列为人工专属，请人看一眼。
+**本轮做完的（都在 main，人已推到远端的部分以 `ls-remote` 为准）**：
+- discovery 修复：主题行 `fix(entry): find a legacy --repo panel's socket under the control root`。旧 discovery 找不到 legacy `--repo` 面板的 socket（人的面板就是这种）；现在默认路径无 socket 时扫 `<control root>/*/control.sock`，恰一个就用、多个具名拒绝（spec agent-entry §14）。顺带让一条既有判据在临时 HOME 下跑（台账记了 Ruling，待人审）。
+- UI：`style(panel): set project actions apart from the section tabs`（人已合并）。
+- npm audit 8→0：vitest **2**.1.9→5.0.3、新增 devDependency `vite ^6.4.4`（vitest 5 改为 peer），两处测试只改类型／补 `mockClear`。合并后要 `npm ci`。
+- 隔离根真实验收（无付费）：`ccmemReal` 3/3、`ccloopDefaultE2E` 2/2 绿；面板记忆区读真 ccmem 手工端到端通过。`syncskillReal`／`driverSkillsReal` 对**旧 build 的 syncskill** 红（它无视 `SYNCSKILL_DIR`），已应人要求在 syncskill 仓 `npm run build`，新 build 下 3/3 绿。
+- ccloop 两红诊断＋修复：见 ccloop 仓人裁 139（`stopProof` 是测试里 `exit` 监听挂晚了的确定性竞态；`codexWatchdog` 是负载下 1.5 s 太紧）。
+- 人的面板：本会话停掉了一个孤儿夹具面板（`--by tester`，父进程 1），按 `~/.orca/panel.sh` 起了人的面板（有 `control.sock`）。**它挂在本会话的 shell 下，会话结束可能随之退出**；人裁定不再手工处理，等 panel-service 做完由人 `orca panel install`（计划 Task 14 会打印等价命令）。
 
 **还开着的**：
-- **延后小项**（台账 `minor (deferred)` 与 F2）：
-  - 客户端不校验 socket 文件的属主 uid。
-  - 状态目录本身对 group／other 可写时不告警。
-  - listen 之后残留的 `once("error")` 监听器没摘。
-  - `@repository`／`@operator` scope 查不到结果时仍答 group-not-found（skill 已教 agent 用同一个 `--command-id` 重发）。
-  - mcp 在 stdin 结束时没有调 `server.close()`。
-  - 没有判据断言 `mcp:<name>` 真的送到了面板。
-- **没做**：真实 ccmem／syncskill 验收；ccloop 两红的诊断；没有全局花费上限（spec §10）；client 归属存了，但没在任何地方显示。
-- **没碰**：人的面板没重启，**运行中的面板没有 socket**，重启之后才有。没跑付费模型，没碰真实 `~/.orca`，没有 push。
-- **npm audit**：8 个漏洞（vitest／vite／esbuild／tinypool／proxy-addr／source-map-js）在本轮之前就有，不是新依赖带进来的。
+- §4.0.s 列的 N2 延后小项仍在。
+- 账户计划的已知缺口：D19 旧调度器 `claimWork` 本轮不受上限闸门；B4（ccloop `usageBreakdown` 标志）要人点名 ccloop `singleCallCapability` C1 才能改；真 claude 的 `usage` 总数与 `modelUsage` 之和是否一致没付费验过（不一致会以 `breakdown-mismatch` 计数显示）。
+- panel-service：Linux 没有真机冒烟（D16），只有快照与假工具序列。
+- web 新见负载 flake：`controlCommandRecovery`、`agentPreviewRefresh`（单跑全绿）。root 全量里 `skillsE2E` 4 条在**未用固定 pin 的 ccloop**时 main 上同样红（`accept-refused:2:control-request-invalid`），门里要用 pin 的 clone build。
+- 人的 ccmem daemon 报 OpenAI `429 no credits`，语义检索降级（ccmem 侧，不归 Orca）。
+
+### 4.0.s N2 agent 入口（会话 `6cc0c1e9`，2026-10-07，**已完成；人 2026-10-07 已审、同意全部 Ruling**；过程删了，结论留在这里）
+
+本节由会话 `9a20ac38` 压缩，依据：人审完（台账 `.superpowers/sdd/2026-10-07-agent-entry/progress.md`「Human review」节）。原文在 git 历史（主题行 `docs(handoff): N2 agent entry is done; next is isolated ccmem/syncskill acceptance and the ccloop reds`）。
+- 面板在 `<stateDir>/control.sock`（0600，只挂 `/api/control/*`）；`x-orca-client: cli|mcp[:name]` 必填，`commands.client` 记来源；`orca control get|send` 一行 JSON、退出码 0/1/2/3；`skills/orca-control`（22 条路由）；`orca mcp serve`（`orca_read`／`orca_send`）。
+- 人工专属（`set-limit`、`requirement-open.limit`、`proposal-edit.proposedGroupLimit`）只在 socket 上 403；同 OS 用户能从 `GET /` 拿到 Web token 绕过（spec §13）——人裁定要做成接口层真边界，即上面的账户计划。
+- 延后小项：客户端不校验 socket 属主 uid；状态目录对 group／other 可写不告警；listen 后残留 `once("error")`；`@repository`／`@operator` 查不到结果仍答 group-not-found；mcp 在 stdin 结束不 `server.close()`；无判据断言 `mcp:<name>` 送达面板；client 归属未在任何地方显示；无全局花费上限（由账户计划补）。
 
 ### 4.0.r 面板项目过滤＋全部项目视图（会话 `32306496`，2026-10-06，**已完成，等人审**；过程删了，结论留在这里）
 
@@ -237,7 +217,7 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 
 本节就地收口，依据主题行 `Merge Codex frozen skill support into main`、`build(deps): pin published ccloop Codex skill support`；原过程在 `.superpowers/sdd/2026-10-05-codex-skill-support/progress.md` 与 `.superpowers/sdd/2026-10-05-codex-skill-repin/progress.md`，历史 ledger／已发布 spec 不改。
 
-- **落点**：Orca H6 产品／判据已在默认 main；ccloop 从隔离分支合并到 `/Users/biran/code/skills/loop/ccloop` 默认 main，handoff 冲突保留默认仓最新版本。产品／判据逐字节匹配已验证实现。Orca 固定依赖为 `github:blrbiran/ccloop#c3af4d6bdfbe8e9f57e9d2a953cdc610098e781b`，package／lock／默认安装一致；人通知 push 后三仓 main 已只读核一致。人的面板未重启，不能声称运行中的面板已加载新版。
+- **落点**：Orca H6 产品／判据已在默认 main；ccloop 从隔离分支合并到 `/Users/biran/code/skills/loop/ccloop` 默认 main，handoff 冲突保留默认仓最新版本。产品／判据逐字节匹配已验证实现。Orca 固定依赖为 `github:blrbiran/ccloop#c3af4d6bdfbe8e9f57e9d2a953cdc610098e781b`，package／lock／默认安装一致；人通知 push 后三仓 main 已只读核一致。人的面板当时未重启；会话 `9a20ac38`（2026-10-07）已按 `~/.orca/panel.sh` 在当时的 main 上重起。
 - **行为**：按 ccloop listAgents 的 kind 接受 Claude／Codex；protocol 3 的 `skillPluginDir`／`codexSkillsDir` 互斥。冻结 names／只读快照／lock 不变。每个 Codex phase 临时链接 `.agents/skills/<name>`，保留原有 skill／目录／无关文件；同名／不安全父路径拒绝。只清理精确 owned／same-run 残留，child close 后清理；失败由 sibling pending 标记在 git add 前挡发布，只物化安全 base、保留 raw evidence，skills 错误优先于 timeout／handoff，Orca 保留 `codex-skills-*`。
 - **H6 原轮证据**（命令／观测提交／完整输出在原 ledger）：实际 codex-cli 0.160.0 离线 exec 的 localhost recorder 两次请求，第二次含 skill marker，CLI RC0、legacy字节不变，无真实 home／凭据／外部付费模型。真模型被杀后的 H6续跑未验，resume只覆盖共同助手／durable marker；全局 Codex skill既有可见性未改变。两项 Important 已修，controller 11＋worker 2先RED后GREEN，13/13；27个具名删除变异有绿基线并抓红；临时残留检查 Orca 4条／ccloop 30条均内层RC0、0残留。独立变异副本恢复 diff/cached diff原始0字节。
 - **原轮门**：Orca 全量304 files／2796 passed／0 failed／6 skipped、RC0；全量用修复前ccloop，修复后control 127 files／1315 passed／4 skipped、E2E4/4。typecheck／web build／workspace（66files／414passed）／scheduler（55files／194passed）／panel15项／pin3条RC0。ccloop全量118files／1186passed／2failed／0skipped、RC1；stopProof leader exit/group quiet、codexWatchdog historical double-space两红已登记，known-reds RC0／unexpected0，不能报全绿。
