@@ -1,7 +1,9 @@
 import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { ServiceConfigV1 } from "../../../src/service/config.js";
+import type { ServiceContext } from "../../../src/service/manager.js";
 import { servicePaths, type ServicePaths } from "../../../src/service/paths.js";
+import { runTool } from "../../../src/service/tools.js";
 
 /**
  * A fake launchctl/systemctl/loginctl/journalctl/tail/sudo. Each call appends "<name> <argv>" to argv.log. The
@@ -59,3 +61,22 @@ export const sampleConfig = (paths: ServicePaths): ServiceConfigV1 => ({
   args: ["--by", "ann", "--port", "7777", "--repo", "orca=/src/orca-web"],
   env: { HOME: "/home/ann", NODE_OPTIONS: "", ORCA_PANEL_DIR: paths.panelDir, PATH: "/usr/bin:/bin" },
 });
+
+/**
+ * A context whose clock only moves when the code sleeps: deadlines are tested without waiting for them. Each sleep
+ * still yields one macrotask, so code that lost its deadline fails by the test timeout instead of hanging the worker.
+ */
+export function fakeContext(fake: FakeTools, paths: ServicePaths, over: Partial<ServiceContext> = {}) {
+  const out: string[] = [];
+  const err: string[] = [];
+  let clock = 0;
+  const ctx: ServiceContext = {
+    paths, env: { ...process.env, ...fake.env }, run: runTool, uid: 501, user: "ann",
+    out: (line) => out.push(line), err: (line) => err.push(line),
+    sleep: async (ms) => { clock += ms; await new Promise((resolve) => setImmediate(resolve)); }, now: () => clock,
+    isAlive: () => false, startTimeOf: () => null,
+    bootstrapDeadlineMs: 2_000, exitWaitMs: 30_000, startWaitMs: 30_000,
+    ...over,
+  };
+  return { ctx, out, err };
+}
