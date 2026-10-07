@@ -4,7 +4,7 @@
  * code the CLI answers with, so a mistyped flag never falls through to cli.ts's
  * exit 3 arm and prints a stack trace at someone.
  */
-export type PanelExitCode = 1 | 4 | 5;
+export type PanelExitCode = 1 | 4 | 5 | 78;
 
 export class PanelRejection extends Error {
   constructor(
@@ -39,3 +39,6 @@ export const TOKEN_REQUIRED = "token-required";
  * object. A client mistake, so 400 by this name, never `panel-internal-error`.
  */
 export const PANEL_BAD_REQUEST = "panel-bad-request";
+
+/** Panel service spec §5: in service mode a port or socket bind failure exits 78, which systemd does not restart. */
+export const PANEL_BIND_FAILED = "panel-bind-failed";

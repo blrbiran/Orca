@@ -15,7 +15,7 @@ import { resolveControlOptions, type ControlOptionsResolution } from "./controlO
 import { withDefaultCcloopBin } from "../control/ccloopBin.js";
 import { createProjectRegistry } from "./projectRegistry.js";
 import { projectsFilePath, readProjectsFile, type ProjectsFileRead } from "./projectsFile.js";
-import { NO_VIEWER_IDENTITY, PanelRejection } from "./rejection.js";
+import { NO_VIEWER_IDENTITY, PANEL_BIND_FAILED, PanelRejection } from "./rejection.js";
 import { ReviewsWriter } from "./reviewsStore.js";
 import { loadStaticFiles } from "./staticFiles.js";
 import { mintToken } from "./token.js";
@@ -77,6 +77,20 @@ export interface StartedPanel {
   /** Resolves when the server has closed. */
   closed: Promise<void>;
   close(): Promise<void>;
+}
+
+export interface PanelMode {
+  /** `orca panel run --service` (panel service spec §5, plan D2). */
+  service?: boolean;
+}
+
+/** The panel's announcement, shared by the foreground panel and the service panel: one machine line on stdout. */
+export function panelReadyLines(started: StartedPanel): { stdout: string; stderr: string } {
+  return {
+    stdout: `orca-panel ready url=${started.url} token=${started.token}\n`,
+    stderr: `orca-panel: open ${started.url} in a browser (the page already carries the token)\n` +
+      (started.socketPath !== null ? `orca-panel: control socket ${started.socketPath}\n` : ""),
+  };
 }
 
 export function parsePanelArgs(args: string[], env: NodeJS.ProcessEnv): PanelOptions {
@@ -182,7 +196,7 @@ function controlRejectionMessage(code: string): string {
   }
 }
 
-export async function createPanelServer(opts: PanelOptions, env: NodeJS.ProcessEnv = process.env): Promise<StartedPanel> {
+export async function createPanelServer(opts: PanelOptions, env: NodeJS.ProcessEnv = process.env, mode: PanelMode = {}): Promise<StartedPanel> {
   // Before listen(), never after -- see bindGuard.ts.
   assertBindAllowed(opts.bind, opts.confirmedExternal);
 
@@ -238,6 +252,13 @@ export async function createPanelServer(opts: PanelOptions, env: NodeJS.ProcessE
   }
 
   const server: Server = createServer(app);
+  // Panel service spec §5, plan D13: the one exit-78 path for a service panel that cannot bind its port or its socket.
+  // Everything opened so far is closed here, so a later resource needs one more line in one place.
+  const bindFailed = async (detail: string): Promise<PanelRejection> => {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    control?.close();
+    return new PanelRejection(PANEL_BIND_FAILED, detail, 78);
+  };
   // spec §6, ruling R4: recovery runs to completion before the socket is opened. Not "recovery is
   // started first" -- a connection accepted while reconciliation is still in flight can dispatch
   // against run state this process has not yet reconciled, which is the crash it exists to prevent.
@@ -245,7 +266,10 @@ export async function createPanelServer(opts: PanelOptions, env: NodeJS.ProcessE
   await runControlPanelStartup({
     recover: async () => { await control?.recover(); },
     listen: () => new Promise<void>((resolve, reject) => {
-      server.once("error", reject);
+      server.once("error", (error: NodeJS.ErrnoException) => {
+        if (mode.service !== true) { reject(error); return; }
+        void bindFailed(`${opts.bind}:${opts.port}: ${error.code ?? ""} ${error.message}`).then(reject);
+      });
       server.listen(opts.port, opts.bind, () => resolve());
     }),
   });
@@ -256,8 +280,11 @@ export async function createPanelServer(opts: PanelOptions, env: NodeJS.ProcessE
       buildControlSocketApp({ store: control.store, epoch, config: control.config, service: control.service, port: control.port }),
       controlSocketPath(control.store.stateDir),
     );
-    if ("code" in bound) process.stderr.write(`orca-panel: control socket unavailable: ${bound.code}: ${bound.detail}\n`);
-    else socket = bound;
+    if ("code" in bound) {
+      // Plan D13: a service with no socket would answer `status` as not running forever; exit 78 instead.
+      if (mode.service === true) throw await bindFailed(`control socket: ${bound.code}: ${bound.detail}`);
+      process.stderr.write(`orca-panel: control socket unavailable: ${bound.code}: ${bound.detail}\n`);
+    } else socket = bound;
   }
 
   // Armed only after recovery and after listen, and fired once immediately: a wake that was armed
@@ -317,10 +344,10 @@ export function panelArgsWithDefaultProjects(args: string[], env: NodeJS.Process
   return [...args, "--projects-file", projectsFilePath(env)];
 }
 
-export async function startPanelFromArgs(args: string[]): Promise<StartedPanel> {
+export async function startPanelFromArgs(args: string[], mode: PanelMode = {}): Promise<StartedPanel> {
   // ccloop dependency plan (2026-09-29): ORCA_CCLOOP_BIN unset ⇒ the installed ccloop package. Filled here, at the
   // process boundary, so resolveControlOptions and its criteria keep reading only the environment. A missing package
   // leaves the variable unset and the panel boots without an execution port, as ruling R5 requires.
   const { env } = withDefaultCcloopBin(process.env);
-  return createPanelServer(parsePanelArgs(panelArgsWithDefaultProjects(args, env), env), env);
+  return createPanelServer(parsePanelArgs(panelArgsWithDefaultProjects(args, env), env), env, mode);
 }

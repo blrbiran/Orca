@@ -347,23 +347,28 @@ async function runMetrics(args: string[]): Promise<number> {
 }
 
 async function runPanel(args: string[]): Promise<number> {
+  // Panel service spec §5 / plan D2: only the managed form takes the lock and writes panel.json.
+  if (args.includes("--service")) {
+    const { runServicePanel } = await import("./service/servicePanel.js");
+    return runServicePanel(args.filter((arg) => arg !== "--service"), process.env, { stdout: (t) => process.stdout.write(t), stderr: (t) => process.stderr.write(t) });
+  }
   try {
     // Argument parsing and the machine-readable line live here; everything the
     // panel actually DOES lives behind createPanelServer, which touches
     // neither argv nor stdout. That is the same seam the correction row got in
     // src/corrections/record.ts, for the same reason: a request handler cannot
     // call something that writes stdout and returns an exit code.
-    const { startPanelFromArgs } = await import("./panel/server.js");
+    const { panelReadyLines, startPanelFromArgs } = await import("./panel/server.js");
     const started = await startPanelFromArgs(args);
     // 🔴 spec §7: ONE machine-readable line on stdout. Without it the success
     // criterion cannot read back the port and the token it needs, and a
     // criterion that cannot read its own subject is exactly the "success
     // criterion that never exits 0" E2 §7.1 caught.
-    process.stdout.write(`orca-panel ready url=${started.url} token=${started.token}\n`);
+    const lines = panelReadyLines(started);
+    process.stdout.write(lines.stdout);
     // For the person at the terminal, on stderr so stdout keeps its one line: `/` needs no
     // token (the server injects it into index.html), so the bare url is all they need.
-    process.stderr.write(`orca-panel: open ${started.url} in a browser (the page already carries the token)\n`);
-    if (started.socketPath !== null) process.stderr.write(`orca-panel: control socket ${started.socketPath}\n`);
+    process.stderr.write(lines.stderr);
     await started.closed;
     return 0;
   } catch (err) {
