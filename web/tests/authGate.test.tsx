@@ -6,13 +6,13 @@
  * never left on a panel whose every read is refused. Owners see the security notices; members do not, and the server
  * answers them anyway.
  */
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { JSX } from "react";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { getJson } from "../src/api.js";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { getJson, noteAnswer, recordReview } from "../src/api.js";
 import { AuthGate } from "../src/AuthGate.js";
 import { shouldRefresh } from "../src/auth.js";
-import { fetchControlSummary } from "../src/controlApi.js";
+import { fetchControlSummary, sendControlCommand } from "../src/controlApi.js";
 import type { Me } from "../src/auth.js";
 
 const jsonResponse = (body: unknown, status = 200): Response => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -43,10 +43,11 @@ beforeEach(() => {
     throw new Error(`unexpected request: ${method} ${url}`);
   }) as typeof fetch;
 });
-afterEach(() => { cleanup(); });
+afterEach(() => { cleanup(); vi.useRealTimers(); });
 
-const me = (user: Partial<Me["user"]> = {}): { status: number; body: Me } =>
-  ({ status: 200, body: { user: { ...u, ...user }, expiresAt: 20 * DAY, sessionDays: 15 } });
+// A fresh 15-day session unless a criterion says otherwise, so no refresh is due.
+const me = (user: Partial<Me["user"]> = {}, expiresAt = Date.now() + 14 * DAY): { status: number; body: Me } =>
+  ({ status: 200, body: { user: { ...u, ...user }, expiresAt, sessionDays: 15 } });
 const posts = (url: string): Call[] => calls.filter((call) => call.method === "POST" && call.url === url);
 
 async function logInAs(name: string, password: string): Promise<void> {
@@ -130,6 +131,73 @@ describe("AuthGate (spec §7)", () => {
     expect(screen.getByText("app body")).toBeTruthy();
   });
 
+  it("refreshes on entering the panel when less than half the session is left, with the CSRF header, and uses the new expiry", async () => {
+    const now = Date.now();
+    meAnswers = [me({}, now + 2 * DAY)];
+    routes["POST /api/auth/refresh"] = () => jsonResponse({ expiresAt: now + 15 * DAY });
+    render(<AuthGate><p>app body</p></AuthGate>);
+    await screen.findByText("app body");
+    await waitFor(() => expect(posts("/api/auth/refresh")).toHaveLength(1));
+    expect(posts("/api/auth/refresh")[0]!.headers["x-orca-csrf"]).toBe("t");
+    // The new expiry is the one judged next: becoming visible again asks for nothing more.
+    document.dispatchEvent(new Event("visibilitychange"));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(posts("/api/auth/refresh")).toHaveLength(1);
+  });
+
+  it("does not refresh a fresh session, then refreshes on the 10-minute check and on becoming visible once it is due", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const start = Date.now();
+    meAnswers = [me({}, start + 10 * DAY)];
+    routes["POST /api/auth/refresh"] = () => jsonResponse({ expiresAt: start + 10 * DAY });
+    render(<AuthGate><p>app body</p></AuthGate>);
+    await screen.findByText("app body");
+    expect(posts("/api/auth/refresh")).toEqual([]);
+    // Three days on, 7 days are left of 15: due. Becoming visible checks at once, without waiting for the interval.
+    vi.setSystemTime(start + 3 * DAY);
+    document.dispatchEvent(new Event("visibilitychange"));
+    await waitFor(() => expect(posts("/api/auth/refresh")).toHaveLength(1));
+    // The answer kept an expiry that is still due (a server clock behind this one): no loop, one ask per check period...
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(posts("/api/auth/refresh")).toHaveLength(1);
+    // ...and the 10-minute interval asks again.
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+    await waitFor(() => expect(posts("/api/auth/refresh")).toHaveLength(2));
+  });
+
+  it("returns to the login form when a command POST answers 401 login-required, on either POST path", async () => {
+    meAnswers = [me()];
+    routes["POST /api/control/groups/g/start"] = () => jsonResponse({ error: { code: "login-required", message: "log in to this panel", commandRevision: null, evidenceIds: [], retryable: false } }, 401);
+    routes["POST /api/reviews"] = () => jsonResponse(LOGIN_REQUIRED, 401);
+    function Senders(): JSX.Element {
+      return (
+        <>
+          <button type="button" onClick={() => { void sendControlCommand("/api/control/groups/g/start", { commandId: "c1", expectedRevision: 1, payload: {} }); }}>start</button>
+          <button type="button" onClick={() => { void recordReview("k", "d"); }}>review</button>
+        </>
+      );
+    }
+    render(<AuthGate><p>app body</p><Senders /></AuthGate>);
+    await screen.findByText("app body");
+    fireEvent.click(screen.getByRole("button", { name: "start" }));
+    await screen.findByRole("form", { name: /log in/i });
+    await logInAs("amy", "amy's password");
+    await screen.findByText("app body");
+    fireEvent.click(screen.getByRole("button", { name: "review" }));
+    await screen.findByRole("form", { name: /log in/i });
+  });
+
+  it("does not say the session ended when a 401 lands after a deliberate logout", async () => {
+    meAnswers = [me()];
+    render(<AuthGate><p>app body</p></AuthGate>);
+    await screen.findByText("app body");
+    fireEvent.click(screen.getByRole("button", { name: /log out/i }));
+    await screen.findByRole("form", { name: /log in/i });
+    // A read that was in flight at the logout answers now.
+    act(() => noteAnswer(401, LOGIN_REQUIRED));
+    expect(screen.queryByText(/session ended/i)).toBeNull();
+  });
+
   it("shows only the change-password step while mustChangePassword is set, and sends the CSRF header", async () => {
     meAnswers = [me({ roles: ["owner"], mustChangePassword: true }), me({ roles: ["owner"], mustChangePassword: false })];
     render(<AuthGate><p>app body</p></AuthGate>);
@@ -169,14 +237,23 @@ describe("AuthGate (spec §7)", () => {
   });
 
   it("shows owners the security notices and acknowledges one; members see none", async () => {
-    notices = [{ seq: 3, at: Date.UTC(2026, 9, 7, 12, 0), kind: "user-created", body: { userId: "u2", name: "bob", roles: ["member"], by: "user:u1" } }];
+    notices = [
+      { seq: 3, at: Date.UTC(2026, 9, 7, 12, 0), kind: "user-created", body: { userId: "u2", name: "bob", roles: ["member"], by: "user:u1" } },
+      // password-changed records only the id: the owner's list of users names it.
+      { seq: 5, at: Date.UTC(2026, 9, 7, 13, 0), kind: "password-changed", body: { userId: "u1", by: "user:u1" } },
+      { seq: 6, at: Date.UTC(2026, 9, 7, 14, 0), kind: "user-disabled", body: { userId: "u9", by: "user:u1" } },
+    ];
+    routes["GET /api/auth/users"] = () => jsonResponse({ users: [{ id: "u1", name: "olga" }, { id: "u2", name: "bob" }] });
     meAnswers = [me({ name: "olga", roles: ["owner"] })];
     render(<AuthGate><p>app body</p></AuthGate>);
     const banner = await screen.findByRole("region", { name: /security notices/i });
     expect(banner.textContent).toContain("bob");
     expect(banner.textContent).toMatch(/user created/i);
+    await waitFor(() => expect(banner.textContent).toMatch(/password changed: olga/i));
+    // An id the list does not hold is shown as the id.
+    expect(banner.textContent).toMatch(/user disabled: u9/i);
     notices = [];
-    fireEvent.click(screen.getByRole("button", { name: /dismiss/i }));
+    fireEvent.click(screen.getAllByRole("button", { name: /dismiss/i })[0]!);
     await waitFor(() => expect(screen.queryByRole("region", { name: /security notices/i })).toBeNull());
     expect(posts("/api/auth/notices/3/ack").map((call) => call.headers["x-orca-csrf"])).toEqual(["t"]);
     cleanup();

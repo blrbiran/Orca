@@ -5,12 +5,11 @@
  * in place; those are human-only commands under the `@spend` scope, sent at the view's `spendRevision`, and whatever
  * the server answers is read back. A member sees the same numbers read-only (the server refuses them anyway).
  */
-import { useCallback, useContext, useEffect, useState } from "react";
+import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import type { JSX } from "react";
 import { useTranslation } from "react-i18next";
 import type { PanelRefusal } from "./api.js";
-import { AccountContext } from "./AuthGate.js";
-import { isOwner } from "./auth.js";
+import { AccountContext, mayHumanOnly } from "./AuthGate.js";
 import {
   controlFailureFrom, fetchUsageView, nextCommandId, recoverUncertainCommand, refusalFromAnswer, sendControlCommand,
 } from "./controlApi.js";
@@ -53,22 +52,29 @@ export function usageQueryString(scope: string, period: PeriodChoice, from: stri
 
 export function UsagePanel({ project, active = true }: { project: string | null; active?: boolean }): JSX.Element {
   const { t } = useTranslation();
-  const owner = isOwner(useContext(AccountContext));
+  const owner = mayHumanOnly(useContext(AccountContext));
   const [scopeKind, setScopeKind] = useState<"all" | "project">("all");
   const [period, setPeriod] = useState<PeriodChoice>("all");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [view, setView] = useState<UsageViewV1 | null>(null);
   const [refusal, setRefusal] = useState<PanelRefusal | null>(null);
+  // A spend command whose outcome could not be looked up yet: its id is kept, so the lookup can be asked again.
+  const [unresolved, setUnresolved] = useState<string | null>(null);
+  const readSeq = useRef(0);
   const scope = scopeKind === "project" && project !== null ? `repo:${project}` : "all";
   const query = usageQueryString(scope, period, from, to);
 
+  /** Only the newest read is shown: an older answer arriving late would put numbers under the wrong pickers. */
   const read = useCallback(async (): Promise<void> => {
+    const seq = ++readSeq.current;
     try {
-      setView(await fetchUsageView(query));
+      const answer = await fetchUsageView(query);
+      if (seq !== readSeq.current) return;
+      setView(answer);
       setRefusal(null);
     } catch (err) {
-      setRefusal(controlFailureFrom(err));
+      if (seq === readSeq.current) setRefusal(controlFailureFrom(err));
     }
   }, [query]);
   useEffect(() => { if (active) void read(); }, [active, read]);
@@ -78,17 +84,29 @@ export function UsagePanel({ project, active = true }: { project: string | null;
     if (view === null) return;
     const commandId = nextCommandId();
     const answer = await sendControlCommand(path, { commandId, expectedRevision: view.spendRevision, payload });
-    let failure: PanelRefusal | null = null;
-    if (answer.kind === "uncertain") {
-      const recovery = await recoverUncertainCommand(SPEND_SCOPE, commandId);
-      if (recovery.kind !== "found") failure = recovery.refusal;
-      else if (recovery.lookup.originalStatus >= 400) {
-        const error = (recovery.lookup.body as { error?: CommandErrorV1 }).error;
-        failure = { status: recovery.lookup.originalStatus, code: error?.code ?? "command-result-invalid", message: error?.message ?? t("panelErrors.noOutcome") };
-      }
-    } else if (answer.status >= 400) failure = refusalFromAnswer(answer);
+    const failure = answer.kind === "uncertain" ? await lookUp(commandId) : answer.status >= 400 ? refusalFromAnswer(answer) : null;
     await read();
-    setRefusal(failure);
+    // A refused command's reason stays on screen; a successful one leaves whatever the re-read said.
+    if (failure !== null) setRefusal(failure);
+  };
+
+  /**
+   * The retained outcome of a command whose answer was lost. `absent` (command-result-not-found) means it never landed,
+   * so a new attempt is safe; `unresolved` keeps the id for another lookup, since a new attempt could apply it twice.
+   */
+  const lookUp = async (commandId: string): Promise<PanelRefusal | null> => {
+    const recovery = await recoverUncertainCommand(SPEND_SCOPE, commandId);
+    setUnresolved(recovery.kind === "unresolved" ? commandId : null);
+    if (recovery.kind === "absent") return { ...recovery.refusal, message: t("usage.notApplied") };
+    if (recovery.kind !== "found") return recovery.refusal;
+    if (recovery.lookup.originalStatus < 400) return null;
+    const error = (recovery.lookup.body as { error?: CommandErrorV1 }).error;
+    return { status: recovery.lookup.originalStatus, code: error?.code ?? "command-result-invalid", message: error?.message ?? t("panelErrors.noOutcome") };
+  };
+  const lookUpAgain = async (commandId: string): Promise<void> => {
+    const failure = await lookUp(commandId);
+    await read();
+    if (failure !== null) setRefusal(failure);
   };
 
   return (
@@ -116,6 +134,12 @@ export function UsagePanel({ project, active = true }: { project: string | null;
         )}
       </div>
       {refusal !== null && <Refusal refusal={refusal} />}
+      {unresolved !== null && (
+        <p role="status">
+          {t("usage.unresolved", { id: unresolved })}{" "}
+          <button type="button" onClick={() => void lookUpAgain(unresolved)}>{t("usage.lookUpAgain")}</button>
+        </p>
+      )}
       {view === null ? <p>{t("usage.loading")}</p> : <UsageBody view={view} grouped={period === "day" || period === "week" || period === "month"} owner={owner} project={project} onSend={(path, payload) => void send(path, payload)} />}
     </section>
   );
@@ -168,7 +192,9 @@ function UsageBody(props: { view: UsageViewV1; grouped: boolean; owner: boolean;
       </ul>
 
       <Caps view={view} owner={owner} project={project} onSend={onSend} />
-      <Calendar view={view} owner={owner} onSend={onSend} />
+      {/* Re-seeded from the server's values whenever they (or the spend revision) change, so a refused or overtaken
+          edit never stays on screen as if it were the calendar. */}
+      <Calendar key={`${view.calendar.timeZone}/${view.calendar.weekStart}/${view.spendRevision}`} view={view} owner={owner} onSend={onSend} />
     </>
   );
 }

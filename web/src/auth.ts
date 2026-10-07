@@ -49,6 +49,9 @@ export async function refreshSession(): Promise<{ expiresAt: number } | null> {
 
 export const addUser = (input: { name: string; role: Role; password: string }): Promise<PostResult<unknown>> =>
   postJson("/api/auth/users", input);
+/** GET /api/auth/users (owner only): who has an account, so a notice can name the user its event recorded by id. */
+export const fetchUsers = (): Promise<{ users: Array<{ id: string; name: string }> }> =>
+  getJson<{ users: Array<{ id: string; name: string }> }>("/api/auth/users");
 export const fetchNotices = (): Promise<{ notices: Notice[] }> => getJson<{ notices: Notice[] }>("/api/auth/notices");
 export const ackNotice = (seq: number): Promise<PostResult<unknown>> => postJson(`/api/auth/notices/${seq}/ack`, {});
 

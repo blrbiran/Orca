@@ -336,6 +336,7 @@ export const en = {
     reread: "Re-read",
   },
   budget: {
+    ownerSetsLimit: "Only an owner can change the group limit.",
     region: "Budget proposal",
     heading: "Proposal v{{version}} · {{state}}",
     modeLine: "budget mode {{mode}} · observed enforcement {{enforcement}}",
@@ -489,6 +490,7 @@ export const en = {
   },
   // N1 spec §11.2: the Requirements section.
   requirements: {
+    ownerRaisesLimit: "Only an owner can raise this limit; ask one to.",
     title: "Requirements",
     list: "Requirement list",
     none: "No requirements yet.",
@@ -627,6 +629,9 @@ export const en = {
     weekStart: "Week starts on",
     weekday: { mon: "Monday", tue: "Tuesday", wed: "Wednesday", thu: "Thursday", fri: "Friday", sat: "Saturday", sun: "Sunday" },
     saveCalendar: "Save calendar",
+    unresolved: "The outcome of command {{id}} is not known yet; it may still apply.",
+    notApplied: "The command never reached the ledger, so it was not applied; try again.",
+    lookUpAgain: "Look it up again",
   },
   panelErrors: {
     title: "orca panel could not load",

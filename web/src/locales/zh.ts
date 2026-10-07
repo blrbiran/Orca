@@ -243,6 +243,7 @@ export const zh: Translation<typeof en> = {
     reread: "重新读取",
   },
   budget: {
+    ownerSetsLimit: "只有 owner 能修改组的额度。",
     region: "预算提案",
     heading: "提案 v{{version}} · {{state}}",
     modeLine: "预算模式 {{mode}} · 观测到的约束方式 {{enforcement}}",
@@ -393,6 +394,7 @@ export const zh: Translation<typeof en> = {
     },
   },
   requirements: {
+    ownerRaisesLimit: "只有 owner 能提高这个额度，请找一位 owner。",
     title: "需求",
     list: "需求列表",
     none: "还没有需求。",
@@ -531,6 +533,9 @@ export const zh: Translation<typeof en> = {
     weekStart: "每周开始于",
     weekday: { mon: "周一", tue: "周二", wed: "周三", thu: "周四", fri: "周五", sat: "周六", sun: "周日" },
     saveCalendar: "保存日历",
+    unresolved: "命令 {{id}} 的结果还不知道，它仍可能生效。",
+    notApplied: "命令没有进入账本，所以没有生效；请再试一次。",
+    lookUpAgain: "再查一次",
   },
   panelErrors: {
     title: "orca 面板加载失败",

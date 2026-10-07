@@ -8,13 +8,13 @@
  * page goes back to the login form instead of showing refusals everywhere. Owners also see the security notices and an
  * "Add user" form; the server answers a member's attempt anyway (owner-required), so hiding them is only courtesy.
  */
-import { createContext, useCallback, useEffect, useState } from "react";
+import { createContext, useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent, JSX, ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { PanelRefusal } from "./api.js";
 import { failureFrom, onLoginRequired } from "./api.js";
 import {
-  ackNotice, addUser, changePassword, fetchMe, fetchNotices, isOwner, login, logout, MIN_PASSWORD_LENGTH, refreshSession, shouldRefresh,
+  ackNotice, addUser, changePassword, fetchMe, fetchNotices, fetchUsers, isOwner, login, logout, MIN_PASSWORD_LENGTH, refreshSession, shouldRefresh,
 } from "./auth.js";
 import type { Me, Notice, Role } from "./auth.js";
 import i18n from "./i18n.js";
@@ -23,6 +23,13 @@ import { Refusal } from "./Refusal.js";
 
 /** The logged-in person, for the parts of the page that differ by role (web/src/UsagePanel.tsx). */
 export const AccountContext = createContext<Me | null>(null);
+
+/**
+ * Accounts spec §3.5, §7: whether this page offers human-only actions (group limits, spend caps, the usage calendar).
+ * An owner does; a member does not (the server would answer 403). Outside AuthGate (a component rendered on its own)
+ * there is no account to judge, and the server still decides.
+ */
+export const mayHumanOnly = (me: Me | null): boolean => me === null || isOwner(me);
 
 const REFRESH_CHECK_MS = 10 * 60_000;
 
@@ -52,19 +59,31 @@ export function AuthGate({ children }: { children: ReactNode }): JSX.Element {
 
   useEffect(() => { void readSession(); }, [readSession]);
 
-  // A session that ends mid-page (logout in another tab, a disabled user, a rotated key) returns to the login form.
-  useEffect(() => onLoginRequired(() => setState({ kind: "login", ended: true })), []);
+  // A session that ends mid-page (logout in another tab, a disabled user, a rotated key) returns to the login form. A
+  // 401 that lands once the page is already at the login form (a read still in flight at a deliberate logout) says nothing.
+  useEffect(() => onLoginRequired(() => setState((current) => (current.kind === "login" ? current : { kind: "login", ended: true }))), []);
 
+  // Spec §3.3: refresh once less than half the lifetime is left -- checked on entering the panel, whenever the page
+  // becomes visible again, and every 10 minutes while it stays open, so a short daily visit refreshes too.
+  // At most one refresh per check period, whatever the answer: a server clock ahead of this browser's could answer an
+  // expiry that still looks due here, and each answer re-runs this effect.
   const me = state.kind === "ready" ? state.me : null;
+  const lastRefreshAsk = useRef(Number.NEGATIVE_INFINITY);
   useEffect(() => {
     if (me === null) return;
-    const timer = setInterval(() => {
-      if (!shouldRefresh(me, Date.now())) return;
+    const check = (): void => {
+      const now = Date.now();
+      if (now - lastRefreshAsk.current < REFRESH_CHECK_MS || !shouldRefresh(me, now)) return;
+      lastRefreshAsk.current = now;
       void refreshSession().then((answer) => {
         if (answer !== null) setState((current) => (current.kind === "ready" ? { kind: "ready", me: { ...current.me, expiresAt: answer.expiresAt } } : current));
       });
-    }, REFRESH_CHECK_MS);
-    return () => clearInterval(timer);
+    };
+    const onVisible = (): void => { if (document.visibilityState === "visible") check(); };
+    check();
+    const timer = setInterval(check, REFRESH_CHECK_MS);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => { clearInterval(timer); document.removeEventListener("visibilitychange", onVisible); };
   }, [me]);
 
   if (state.kind === "loading") return <main className="auth-page"><p>{t("auth.loading")}</p></main>;
@@ -214,19 +233,29 @@ function AddUserForm(): JSX.Element {
   );
 }
 
-/** Spec §3.2: a notice's subject -- the user's name when the event recorded one, else its id. */
-function noticeSubject(body: unknown): string {
+/** Spec §3.2: a notice's subject -- the name it recorded, else the name of the user it names, else that user's id. */
+function noticeSubject(body: unknown, names: ReadonlyMap<string, string>): string {
   const fields = typeof body === "object" && body !== null ? (body as Record<string, unknown>) : {};
   if (typeof fields.name === "string") return fields.name;
-  return typeof fields.userId === "string" ? fields.userId : "";
+  if (typeof fields.userId !== "string") return "";
+  return names.get(fields.userId) ?? fields.userId;
 }
 
 function Notices(): JSX.Element | null {
   const { t } = useTranslation();
   const [notices, setNotices] = useState<Notice[]>([]);
+  const [names, setNames] = useState<ReadonlyMap<string, string>>(new Map());
   const [refusal, setRefusal] = useState<PanelRefusal | null>(null);
   const read = useCallback(async (): Promise<void> => {
-    try { setNotices((await fetchNotices()).notices); } catch (err) { setRefusal(failureFrom(err)); }
+    try {
+      const open = (await fetchNotices()).notices;
+      setNotices(open);
+      // Most events record only the user's id; an owner may list the users, so the notice can name them.
+      if (open.length > 0) {
+        const users = await fetchUsers().catch(() => null);
+        if (users !== null) setNames(new Map(users.users.map((user) => [user.id, user.name])));
+      }
+    } catch (err) { setRefusal(failureFrom(err)); }
   }, []);
   useEffect(() => { void read(); }, [read]);
   const dismiss = async (seq: number): Promise<void> => {
@@ -242,7 +271,7 @@ function Notices(): JSX.Element | null {
           <li key={notice.seq}>
             {t("auth.noticeLine", {
               kind: i18nKind(notice.kind),
-              subject: noticeSubject(notice.body),
+              subject: noticeSubject(notice.body, names),
               at: new Date(notice.at).toLocaleString(),
             })}
             <button type="button" onClick={() => void dismiss(notice.seq)}>{t("auth.dismiss")}</button>

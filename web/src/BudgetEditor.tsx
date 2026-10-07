@@ -8,7 +8,9 @@
  * from the model or a complex-1m default says so next to the box, because the
  * person is about to type over it.
  */
+import { useContext } from "react";
 import type { JSX } from "react";
+import { AccountContext, mayHumanOnly } from "./AuthGate.js";
 import { useTranslation } from "react-i18next";
 import type { ControlAction } from "./controlApi.js";
 import i18n, { enumText } from "./i18n.js";
@@ -220,6 +222,8 @@ export interface BudgetEditorProps {
 export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
   const { view, config, drafts, onDraft, onCommand } = props;
   const { t } = useTranslation();
+  // Accounts spec §3.5: set-limit is human-only; a member sees the limit but no control the server would refuse.
+  const mayLimit = mayHumanOnly(useContext(AccountContext));
   const groupId = view.summary.groupId;
   const editable = view.proposal.state === "editable";
   const estimator = view.estimates.at(-1) ?? null;
@@ -410,11 +414,12 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
             <input
               value={valueFor(drafts, groupLimitKey(groupId, dimension), view.ledger.groupLimit[dimension])}
               inputMode="numeric"
+              readOnly={!mayLimit}
               onChange={(event) => onDraft(groupLimitKey(groupId, dimension), event.target.value)}
             />
           </label>
         ))}
-        <button type="button" onClick={submitLimit}>{t("budget.setLimit")}</button>
+        {mayLimit ? <button type="button" onClick={submitLimit}>{t("budget.setLimit")}</button> : <p role="note">{t("budget.ownerSetsLimit")}</p>}
       </fieldset>
       <label>
         {t("budget.handoffAt")}

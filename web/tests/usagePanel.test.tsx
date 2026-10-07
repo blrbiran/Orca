@@ -133,6 +133,97 @@ describe("UsagePanel (spec §5.3, §6, §7)", () => {
     expect(calls.map((call) => call.url)).toContain(`/api/control/groups/%40spend/commands/${commandId}`);
   });
 
+  it("shows only the newest read when an older answer arrives late", async () => {
+    let release: (() => void) | null = null;
+    const answered = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      const url = String(input);
+      // The first (scope=all) read is held until after the project read has answered.
+      if (url.startsWith("/api/control/usage?scope=all") && release === null) {
+        await new Promise<void>((resolve) => { release = resolve; });
+        return jsonResponse({ ...VIEW, headline: { ...VIEW.headline, total: 111 } });
+      }
+      return answered(input, init);
+    }) as typeof fetch;
+    view = { ...VIEW, scope: "repo:alpha-11111111", headline: { ...VIEW.headline, total: 222 } };
+    renderAs(member, "alpha-11111111");
+    await waitFor(() => expect(release).not.toBeNull());
+    fireEvent.change(screen.getByLabelText(/^scope/i), { target: { value: "project" } });
+    await waitFor(() => expect(screen.getByTestId("usage-total").textContent).toBe("222"));
+    release!();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(screen.getByTestId("usage-total").textContent).toBe("222");
+  });
+
+  it("keeps a failed re-read's refusal after a command that succeeded", async () => {
+    renderAs(owner);
+    const row = await screen.findByTestId("cap-all/week");
+    const answered = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      if (String(input).startsWith("/api/control/usage?")) return jsonResponse({ error: { code: "usage-store-busy", message: "the store is busy", commandRevision: null, evidenceIds: [], retryable: true } }, 409);
+      return answered(input, init);
+    }) as typeof fetch;
+    fireEvent.click(within(row).getByRole("button", { name: "Clear" }));
+    expect((await screen.findByTestId("refusal-code")).textContent).toBe("usage-store-busy");
+  });
+
+  it("re-seeds the calendar form from the server after a refused save", async () => {
+    renderAs(owner);
+    await screen.findByTestId("usage-total");
+    const answered = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      if (String(input) === "/api/control/operator/set-usage-calendar") {
+        calls.push({ method: "POST", url: String(input), headers: {}, body: undefined });
+        // Another owner changed the calendar first.
+        view = { ...VIEW, calendar: { timeZone: "America/New_York", weekStart: 7 }, spendRevision: 4 };
+        return jsonResponse({ error: { code: "revision-conflict", message: "the spend settings moved on", commandRevision: 4, evidenceIds: [], retryable: false } }, 409);
+      }
+      return answered(input, init);
+    }) as typeof fetch;
+    fireEvent.change(screen.getByLabelText(/time zone/i), { target: { value: "Asia/Tokyo" } });
+    fireEvent.click(screen.getByRole("button", { name: /save calendar/i }));
+    expect((await screen.findByTestId("refusal-code")).textContent).toBe("revision-conflict");
+    await waitFor(() => expect((screen.getByLabelText(/time zone/i) as HTMLInputElement).value).toBe("America/New_York"));
+    expect((screen.getByLabelText(/week starts on/i) as HTMLSelectElement).value).toBe("7");
+  });
+
+  it("keeps an unresolved command's id and looks it up again on request", async () => {
+    let lookups = 0;
+    const answered = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      const url = String(input);
+      if (url === "/api/control/operator/clear-spend-cap") return jsonResponse({}, 503);
+      if (url.startsWith("/api/control/groups/%40spend/commands/")) {
+        lookups += 1;
+        if (lookups === 1) return jsonResponse({ error: { code: "panel-internal-error", message: "try later", commandRevision: null, evidenceIds: [], retryable: true } }, 500);
+        return jsonResponse({ schema: "orca-command-lookup-v1", originalStatus: 200, body: { schema: "orca-command-success-v1" } });
+      }
+      return answered(input, init);
+    }) as typeof fetch;
+    renderAs(owner);
+    const row = await screen.findByTestId("cap-all/week");
+    fireEvent.click(within(row).getByRole("button", { name: "Clear" }));
+    const again = await screen.findByRole("button", { name: "Look it up again" });
+    fireEvent.click(again);
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Look it up again" })).toBeNull());
+    expect(lookups).toBe(2);
+  });
+
+  it("says a lost cap command that never reached the ledger was not applied", async () => {
+    const answered = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      const url = String(input);
+      if (url === "/api/control/operator/clear-spend-cap") return jsonResponse({}, 503);
+      if (url.startsWith("/api/control/groups/%40spend/commands/")) return jsonResponse({ error: { code: "command-result-not-found", message: "No retained command result was found.", commandRevision: null, evidenceIds: [], retryable: false } }, 404);
+      return answered(input, init);
+    }) as typeof fetch;
+    renderAs(owner);
+    const row = await screen.findByTestId("cap-all/week");
+    fireEvent.click(within(row).getByRole("button", { name: "Clear" }));
+    expect((await screen.findByTestId("refusal-message")).textContent).toMatch(/not applied; try again/);
+    expect(screen.queryByRole("button", { name: "Look it up again" })).toBeNull();
+  });
+
   it("gives a member none of the controls", async () => {
     renderAs(member);
     const row = await screen.findByTestId("cap-all/week");

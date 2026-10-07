@@ -118,6 +118,9 @@ describe("the socket gate (spec §4.2, §5, §6)", () => {
     const session = await sessionFor(panel, w.env);
     const lookup = await session.fetch("/api/control/groups/@spend/commands/cap-o");
     expect([lookup.status, ((await lookup.json()) as { body: { result: unknown } }).body.result]).toEqual([200, { kind: "spend-cap-set", revision: 1 }]);
+    // Accounts Task 11 fix round (add-only): a miss under @spend is the ledger's "no such command", not a missing group.
+    const miss = await session.fetch("/api/control/groups/@spend/commands/never-sent");
+    expect([miss.status, ((await miss.json()) as { error: { code: string; commandRevision: unknown } }).error]).toMatchObject([404, { code: "command-result-not-found", commandRevision: null }]);
     // An unknown zone is a schema refusal (400) and books nothing.
     const mars = await webPost(panel, w, "operator/set-usage-calendar", { commandId: "cal-x", expectedRevision: 3, payload: { timeZone: "Mars/Base", weekStart: 1 } });
     expect([mars.status, ((await mars.json()) as { error: { code: string } }).error.code]).toEqual([400, "control-non-json-payload"]);

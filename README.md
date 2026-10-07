@@ -241,7 +241,8 @@ twice from the TTY. Run `orca user` with the same `ORCA_CONTROL_DIR` as the pane
 shows the service's environment), or it opens a different accounts store; it prints the path it opened. A session
 lasts `--session-days` (1-30, default 15) and is refreshed while you use the page; `orca user passwd <name>` resets a
 forgotten password. Members can do everything except the human-only actions (group limits, spend caps, the usage
-calendar), which only owners see.
+calendar): the page offers those controls to owners only and shows members the values, and a member's new requirement
+gets the default limit.
 
 ## The sections
 

@@ -3,7 +3,8 @@
  * the browser originates only intents. Model-written text is shown as written (human ruling H8); the panel's own words
  * go through t.
  */
-import { useEffect, useState, type JSX } from "react";
+import { useContext, useEffect, useState, type JSX } from "react";
+import { AccountContext, mayHumanOnly } from "./AuthGate.js";
 import { useTranslation } from "react-i18next";
 import { LANGUAGE_NAMES, PANEL_LANGUAGES, enumText, refusalText } from "./i18n.js";
 import type { PanelLanguage } from "./i18n.js";
@@ -41,6 +42,8 @@ function NewRequirement(props: { config: ControlConfigV1; agents: AgentsViewV1 |
   repoId?: string | null; onRepo?: (repoId: string) => void;
   scope?: GroupScope; targets?: readonly string[]; repoLabel?: (repoId: string) => string } & EditableDrafts): JSX.Element | null {
   const { t } = useTranslation();
+  // Accounts spec §3.5: requirement-open.limit is human-only. A member opens with the server's default limit instead.
+  const mayLimit = mayHumanOnly(useContext(AccountContext));
   const scope = props.scope;
   const all = scope?.kind === "all";
   const chosenRepoId = scope?.kind === "project" ? scope.repoId : props.repoId;
@@ -93,7 +96,8 @@ function NewRequirement(props: { config: ControlConfigV1; agents: AgentsViewV1 |
       if (repoId === "") return;
       const groupId = `requirement-${nextCommandId()}`;
       props.onCommand({ verb: "requirement-open", groupId, expectedRevision: 0, payload: {
-        groupId, repoId, idea, contentLanguage: language, limit: { tokens, activeMs: 14_400_000, attempts: 40, sessions: 40 }, ...(agent === "" ? {} : { agent: { agent } }) } },
+        groupId, repoId, idea, contentLanguage: language, ...(mayLimit ? { limit: { tokens, activeMs: 14_400_000, attempts: 40, sessions: 40 } } : {}),
+        ...(agent === "" ? {} : { agent: { agent } }) } },
       { slot: "newRequirement", key: repoId, value: draft });
     }}>
       <h3>{t("requirements.newTitle")}</h3>
@@ -101,7 +105,7 @@ function NewRequirement(props: { config: ControlConfigV1; agents: AgentsViewV1 |
         {all && <option value="" disabled>{t("project.chooseTarget")}</option>}
         {choices.map((repo) => <option key={repo.repoId} value={repo.repoId}>{all ? props.repoLabel?.(repo.repoId) ?? repo.displayName : repo.displayName}</option>)}</select></label>
       <label>{t("requirements.idea")}<textarea value={idea} onChange={(e) => edit({ idea: e.currentTarget.value })} required /></label>
-      <label>{t("requirements.limit")}<input type="number" min={1} value={tokens} onChange={(e) => edit({ tokens: Number(e.currentTarget.value) })} /></label>
+      {mayLimit && <label>{t("requirements.limit")}<input type="number" min={1} value={tokens} onChange={(e) => edit({ tokens: Number(e.currentTarget.value) })} /></label>}
       <label>{t("requirements.contentLanguage")}<select value={language} onChange={(e) => edit({ language: e.currentTarget.value as PanelLanguage })}>
         {PANEL_LANGUAGES.map((lang) => <option key={lang} value={lang}>{LANGUAGE_NAMES[lang]}</option>)}</select></label>
       <label>{t("requirements.agent")}<select value={agent} onChange={(e) => edit({ agent: e.currentTarget.value })}>
@@ -216,10 +220,13 @@ function DraftReview(props: { view: View; draft: Draft; onCommand: OnCommand } &
 /** Spec §11.1: set-limit on a clarifying group edits its reduced ledger; the waiting call goes on once it fits. */
 function RaiseLimit(props: { view: View; onCommand: OnCommand } & EditableDrafts): JSX.Element {
   const { t } = useTranslation();
+  // Accounts spec §3.5: set-limit is human-only; a member is told who can raise it instead of a control that 403s.
+  const mayLimit = mayHumanOnly(useContext(AccountContext));
   // Spec §11 R2: a typed limit is the group's, kept across detail closure; the ledger's limit until one is typed.
   const key = limitKey(props.view.summary.repoId, props.view.summary.groupId);
   const stored = props.drafts.limit[key];
   const tokens = stored ?? props.view.ledger.limit.tokens;
+  if (!mayLimit) return <p role="note">{t("requirements.ownerRaisesLimit")}</p>;
   return (
     <form aria-label={t("requirements.raiseLimit")} onSubmit={(event) => {
       event.preventDefault();

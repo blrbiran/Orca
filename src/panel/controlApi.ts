@@ -198,8 +198,9 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
       // A repository-scope result (`@repository:<id>`) has no group row, so versions are read only on a miss.
       const result = lookupCommandResult(deps.store, groupId, commandId);
       if (!result) {
-        const versions = readVersions(deps.store, groupId);
-        sendControlError(res, 404, "command-result-not-found", "No retained command result was found.", { commandRevision: versions.commandRevision });
+        // A scope key (`@spend`, `@repository:<id>`, `@operator:<id>`) has no group row and no group revision to name.
+        const commandRevision = groupId.startsWith("@") ? null : readVersions(deps.store, groupId).commandRevision;
+        sendControlError(res, 404, "command-result-not-found", "No retained command result was found.", { commandRevision });
         return;
       }
       res.json(result);
