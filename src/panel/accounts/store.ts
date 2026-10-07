@@ -35,12 +35,14 @@ export interface AccountsStore {
   setName(userId: string, name: string): void;
   disableUser(userId: string, now: number, by: string): void;
   createSession(userId: string, now: number, expiresAt: number): string;
-  extendSession(sid: string, expiresAt: number): void;
+  /** Refuses (`login-required`) a session that is revoked, expired at `now`, or whose user is disabled. */
+  extendSession(sid: string, now: number, expiresAt: number): void;
   sessionActive(sid: string, userId: string, now: number): boolean;
   revokeSession(sid: string, now: number): void;
   revokeAllSessions(now: number): void;
   appendSecurityEvent(kind: SecurityEventKind, body: Record<string, unknown>, now: number): number;
   openNotices(): Array<{ seq: number; at: number; kind: SecurityEventKind; body: unknown }>;
+  /** Refuses (`notice-not-found`) a seq that is not an open notice's. */
   acknowledge(seq: number, by: string, now: number): void;
   close(): void;
 }
@@ -68,6 +70,12 @@ function toUser(row: Row): UserRow {
 
 function checkName(name: string): void {
   if (!USER_NAME_PATTERN.test(name)) throw new AccountsRejection("user-name-invalid", 400, "a user name is 1-64 letters, digits, '.', '_' or '-', starting with a letter or digit");
+}
+
+function checkRoles(roles: unknown): void {
+  if (!Array.isArray(roles) || roles.length === 0 || !roles.every((role) => role === "owner" || role === "member")) {
+    throw new AccountsRejection("user-role-invalid", 400, "roles are a non-empty set of owner and member");
+  }
 }
 
 function checkLength(password: string): void {
@@ -116,6 +124,7 @@ export function openAccountsStore(root: string): AccountsStore {
     findById: userById,
     createUser(input) {
       checkName(input.name);
+      checkRoles(input.roles);
       if (!input.allowShort) checkLength(input.password);
       const hash = hashPassword(input.password);
       const id = `user-${randomUUID()}`;
@@ -158,8 +167,11 @@ export function openAccountsStore(root: string): AccountsStore {
       db.prepare("INSERT INTO sessions(id, user_id, created_at, expires_at, revoked_at) VALUES (?, ?, ?, ?, NULL)").run(sid, userId, now, expiresAt);
       return sid;
     },
-    extendSession(sid, expiresAt) {
-      db.prepare("UPDATE sessions SET expires_at = ? WHERE id = ? AND revoked_at IS NULL").run(expiresAt, sid);
+    extendSession(sid, now, expiresAt) {
+      const changed = db.prepare(
+        "UPDATE sessions SET expires_at = ? WHERE id = ? AND revoked_at IS NULL AND expires_at > ? AND user_id IN (SELECT id FROM users WHERE disabled_at IS NULL)",
+      ).run(expiresAt, sid, now).changes;
+      if (Number(changed) !== 1) throw new AccountsRejection("login-required", 401, "the session is not active");
     },
     sessionActive(sid, userId, now) {
       return db.prepare(
@@ -181,7 +193,11 @@ export function openAccountsStore(root: string): AccountsStore {
       return rows.map((row) => ({ seq: Number(row.seq), at: Number(row.at), kind: row.kind as SecurityEventKind, body: JSON.parse(String(row.body)) as unknown }));
     },
     acknowledge(seq, by, now) {
-      db.prepare("INSERT OR IGNORE INTO security_acks(seq, at, by) VALUES (?, ?, ?)").run(seq, now, by);
+      transaction(() => {
+        const kind = (db.prepare("SELECT kind FROM security_events WHERE seq = ?").get(seq) as Row | undefined)?.kind;
+        if (!NOTICE_KINDS.includes(kind as SecurityEventKind)) throw new AccountsRejection("notice-not-found", 404, "no such notice");
+        db.prepare("INSERT OR IGNORE INTO security_acks(seq, at, by) VALUES (?, ?, ?)").run(seq, now, by);
+      });
     },
     close: () => db.close(),
   };

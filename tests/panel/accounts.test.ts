@@ -1,5 +1,5 @@
 import { createHmac, randomBytes } from "node:crypto";
-import { chmod, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -41,6 +41,9 @@ describe("access tokens (spec §3.3)", () => {
     const h512 = b64url(JSON.stringify({ alg: "HS512", typ: "JWT" }));
     const sig = createHmac("sha512", key).update(`${h512}.${payload}`).digest("base64url");
     expect(verifyAccessToken(key, `${h512}.${payload}.${sig}`, 1500)).toBe(null);
+    // One token, one string: the signature segment with an appended "=" or "!", or a character inserted, is no token.
+    const [h0, p0, s0] = token.split(".") as [string, string, string];
+    for (const sig of [`${s0}=`, `${s0}!`, `${s0.slice(0, 10)}*${s0.slice(10)}`]) expect(verifyAccessToken(key, `${h0}.${p0}.${sig}`, 1500)).toBe(null);
     // Only the exact header: a correctly signed token whose header differs (here only in key order) is no token.
     const reordered = b64url(JSON.stringify({ typ: "JWT", alg: "HS256" }));
     expect(verifyAccessToken(key, `${reordered}.${payload}.${createHmac("sha256", key).update(`${reordered}.${payload}`).digest("base64url")}`, 1500)).toBe(null);
@@ -108,5 +111,82 @@ describe("the accounts store and the default owner (spec §3.1, §3.2, D1)", () 
       expect(store.sessionActive(late, amy.id, 50)).toBe(false);
       expect(store.openNotices().map((n) => n.kind)).toEqual(["user-created", "user-disabled"]);
     } finally { store.close(); }
+  });
+});
+
+describe("store refusals, notices and the key file (spec §3.1, §3.3; Task 2 fix round 1)", () => {
+  it("refuses roles outside a non-empty owner/member set, and an unknown user id, by name", async () => {
+    const store = openAccountsStore(await root());
+    try {
+      for (const roles of [["admin"], [], ["owner", "root"]]) {
+        expect(() => store.createUser({ name: "eve", password: "twelve chars!", roles: roles as never, now: 1, by: "t" })).toThrow(expect.objectContaining({ code: "user-role-invalid", status: 400 }));
+      }
+      expect(store.userCount()).toBe(0);
+      expect(() => store.setPassword("user-nobody", "twelve chars!", 1, "t")).toThrow(expect.objectContaining({ code: "user-not-found", status: 404 }));
+      expect(() => store.disableUser("user-nobody", 1, "t")).toThrow(expect.objectContaining({ code: "user-not-found", status: 404 }));
+      expect(store.openNotices()).toEqual([]);
+    } finally { store.close(); }
+  });
+
+  it("extends only an active session: not an expired one, a revoked one, or one whose user is disabled", async () => {
+    const store = openAccountsStore(await root());
+    try {
+      const amy = store.createUser({ name: "amy", password: "twelve chars!", roles: ["member"], now: 1, by: "t" });
+      const live = store.createSession(amy.id, 10, 100);
+      store.extendSession(live, 50, 300);
+      expect(store.sessionActive(live, amy.id, 200)).toBe(true);
+      const expired = store.createSession(amy.id, 10, 100);
+      expect(() => store.extendSession(expired, 150, 300)).toThrow(expect.objectContaining({ code: "login-required", status: 401 }));
+      expect(store.sessionActive(expired, amy.id, 200)).toBe(false);
+      const revoked = store.createSession(amy.id, 10, 100);
+      store.revokeSession(revoked, 20);
+      expect(() => store.extendSession(revoked, 50, 300)).toThrow(expect.objectContaining({ code: "login-required" }));
+      // The disabled-user arm alone: a session row left unrevoked under a disabled user is not extended.
+      const kept = store.createSession(amy.id, 10, 100);
+      store.db.prepare("UPDATE users SET disabled_at = 60 WHERE id = ?").run(amy.id);
+      expect(() => store.extendSession(kept, 70, 300)).toThrow(expect.objectContaining({ code: "login-required" }));
+    } finally { store.close(); }
+  });
+
+  it("disabling twice is one disable; login-failed is never a notice; an acknowledged notice closes; an unknown seq is named", async () => {
+    const store = openAccountsStore(await root());
+    try {
+      const amy = store.createUser({ name: "amy", password: "twelve chars!", roles: ["member"], now: 1, by: "t" });
+      store.disableUser(amy.id, 20, "t");
+      store.disableUser(amy.id, 30, "t");
+      expect(store.findById(amy.id)!.disabledAt).toBe(20);
+      const failed = store.appendSecurityEvent("login-failed", { name: "amy", failures: 5 }, 40);
+      expect(store.openNotices().map((n) => n.kind)).toEqual(["user-created", "user-disabled"]);
+      const [created] = store.openNotices();
+      store.acknowledge(created!.seq, "owner", 50);
+      expect(store.openNotices().map((n) => n.kind)).toEqual(["user-disabled"]);
+      expect(() => store.acknowledge(9999, "owner", 50)).toThrow(expect.objectContaining({ code: "notice-not-found", status: 404 }));
+      expect(() => store.acknowledge(failed, "owner", 50)).toThrow(expect.objectContaining({ code: "notice-not-found" }));
+    } finally { store.close(); }
+  });
+
+  it("refuses a stored row whose roles are not owner/member rather than serving it", async () => {
+    const store = openAccountsStore(await root());
+    try {
+      const amy = store.createUser({ name: "amy", password: "twelve chars!", roles: ["member"], now: 1, by: "t" });
+      store.db.prepare("UPDATE users SET roles = ? WHERE id = ?").run(JSON.stringify(["admin"]), amy.id);
+      expect(() => store.listUsers()).toThrow("accounts-row-invalid");
+      expect(() => store.findById(amy.id)).toThrow("accounts-row-invalid");
+    } finally { store.close(); }
+  });
+
+  it("refuses a jwt.key or accounts.sqlite that is a symlink, even to a well-formed file, and leaves the link alone", async () => {
+    const r = await root();
+    loadOrCreateSigningKey(r);
+    const target = join(r, "..", "elsewhere.key");
+    await writeFile(target, randomBytes(32));
+    await rm(join(r, JWT_KEY_FILE));
+    await symlink(target, join(r, JWT_KEY_FILE));
+    expect(() => loadOrCreateSigningKey(r)).toThrow("jwt-key-invalid");
+    const db = join(r, "..", "elsewhere.sqlite");
+    await writeFile(db, "");
+    await symlink(db, join(r, ACCOUNTS_FILE));
+    expect(() => openAccountsStore(r)).toThrow("accounts-file-invalid");
+    expect((await readFile(db)).length).toBe(0);
   });
 });

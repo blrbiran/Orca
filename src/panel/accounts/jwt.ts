@@ -14,8 +14,10 @@ export function signAccessToken(key: Buffer, claims: AccessClaims): string {
 export function verifyAccessToken(key: Buffer, token: string, nowSec: number): AccessClaims | null {
   const parts = token.split(".");
   if (parts.length !== 3 || parts[0] !== HEADER) return null;
-  const expected = createHmac("sha256", key).update(`${parts[0]}.${parts[1]}`).digest();
-  const given = Buffer.from(parts[2]!, "base64url");
+  // Compare the encoded segment, not its decoded bytes: base64url decoding skips stray characters and padding, so
+  // decoding first would accept many strings as one token.
+  const expected = Buffer.from(createHmac("sha256", key).update(`${parts[0]}.${parts[1]}`).digest("base64url"));
+  const given = Buffer.from(parts[2]!);
   if (given.length !== expected.length || !timingSafeEqual(given, expected)) return null;
   let claims: Record<string, unknown>;
   try { claims = JSON.parse(Buffer.from(parts[1]!, "base64url").toString("utf8")) as Record<string, unknown>; } catch { return null; }
