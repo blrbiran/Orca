@@ -63,6 +63,14 @@ describe("service files on disk (Rule 17 modes)", () => {
     ensurePrivateDir(paths.panelDir);
     writePrivateFile(paths.configFile, "{\"schema\":\"other\"}");
     expect(() => readServiceConfig(paths)).toThrow(expect.objectContaining({ code: "service-config-invalid" }));
+    // Each of these is otherwise a complete config, so only the schema literal / the strict object can refuse it.
+    const good = sampleConfig(paths);
+    writePrivateFile(paths.configFile, JSON.stringify({ ...good, schema: "orca-panel-service-v2" }));
+    expect(() => readServiceConfig(paths)).toThrow(expect.objectContaining({ code: "service-config-invalid" }));
+    writePrivateFile(paths.configFile, JSON.stringify({ ...good, extra: 1 }));
+    expect(() => readServiceConfig(paths)).toThrow(expect.objectContaining({ code: "service-config-invalid" }));
+    writePrivateFile(paths.configFile, "not json");
+    expect(() => readServiceConfig(paths)).toThrow(expect.objectContaining({ code: "service-config-invalid" }));
   });
 
   it("tails the last lines of a log", async () => {
