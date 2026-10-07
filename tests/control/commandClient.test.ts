@@ -41,7 +41,7 @@ describe("schema 6 to 7 (spec §6)", () => {
   it("a fresh store has commands.client and version 7", async () => {
     const store = await openControlStore({ stateDir: await stateDir() });
     try {
-      expect(schemaVersion).toBe("7");
+      expect(schemaVersion).toBe("8");
       const columns = store.db.prepare("PRAGMA table_info(commands)").all().map((row) => String(row.name));
       expect(columns).toContain("client");
     } finally { store.close(); }
@@ -57,7 +57,7 @@ describe("schema 6 to 7 (spec §6)", () => {
     raw.close();
     const store = await openControlStore({ stateDir: dir });
     try {
-      expect(store.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()).toMatchObject({ value: "7" });
+      expect(store.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()).toMatchObject({ value: "8" });
       expect(store.db.prepare("SELECT client FROM commands WHERE id='old'").get()).toMatchObject({ client: null });
     } finally { store.close(); }
   });

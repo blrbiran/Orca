@@ -1,6 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
 
-export const schemaVersion = "7";
+export const schemaVersion = "8";
 export const legacySchema = `CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;
 CREATE TABLE groups(id TEXT PRIMARY KEY, revision INTEGER NOT NULL, graph_version INTEGER NOT NULL, body TEXT NOT NULL) STRICT;
 CREATE TABLE work_items(group_id TEXT NOT NULL REFERENCES groups(id), id TEXT NOT NULL, target_version INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY(group_id,id)) STRICT;
@@ -76,7 +76,40 @@ CREATE TABLE IF NOT EXISTS requirement_drafts(group_id TEXT NOT NULL REFERENCES 
 export const schema6To7 = `ALTER TABLE commands ADD COLUMN client TEXT;
 `;
 
-export const initialSchema = legacySchema + schema1To2 + schema2To3 + schema3To4 + schema4To5 + schema5To6 + schema6To7;
+// Accounts spec §5.1, §5.2, §6.1, D3, D4, D5, D9: the principal that delivered a command, the usage ledger, caps, the
+// calendar, the spend scope's revision and the spend-cap block of a deferred claim. Three parts so the upgrade can take each
+// on its own terms (migrate7To8). IF NOT EXISTS for the reason schema5To6 gives.
+export const schema7To8Principal = `ALTER TABLE commands ADD COLUMN principal TEXT;
+`;
+export const schema7To8Tables = `CREATE TABLE IF NOT EXISTS usage_ledger(id INTEGER PRIMARY KEY, applied_at INTEGER NOT NULL, group_id TEXT NOT NULL, repo_id TEXT, run_id TEXT, source TEXT NOT NULL CHECK(source IN ('run-work','run-handoff','estimate','clarify','split','pre-ledger')), model TEXT, input INTEGER, output INTEGER, cache_read INTEGER, cache_write INTEGER, tokens INTEGER NOT NULL CHECK(tokens >= 0), quality TEXT NOT NULL CHECK(quality IN ('reported','unattributed','breakdown-mismatch'))) STRICT;
+CREATE INDEX IF NOT EXISTS usage_ledger_at ON usage_ledger(applied_at);
+CREATE INDEX IF NOT EXISTS usage_ledger_repo_at ON usage_ledger(repo_id,applied_at);
+CREATE TABLE IF NOT EXISTS spend_caps(scope TEXT NOT NULL, period TEXT NOT NULL CHECK(period IN ('total','week','month')), tokens INTEGER NOT NULL CHECK(tokens > 0), updated_at INTEGER NOT NULL, updated_by TEXT NOT NULL, PRIMARY KEY(scope,period)) STRICT;
+CREATE TABLE IF NOT EXISTS usage_calendar(singleton INTEGER PRIMARY KEY CHECK(singleton=1), time_zone TEXT NOT NULL, week_start INTEGER NOT NULL CHECK(week_start BETWEEN 1 AND 7)) STRICT;
+CREATE TABLE IF NOT EXISTS spend_settings(singleton INTEGER PRIMARY KEY CHECK(singleton=1), revision INTEGER NOT NULL CHECK(revision >= 0)) STRICT;
+CREATE TABLE IF NOT EXISTS spend_cap_blocks(group_id TEXT PRIMARY KEY REFERENCES groups(id), body TEXT NOT NULL) STRICT;
+`;
+// Each group's existing usage as one pre-ledger row, applied_at 0, so it counts in totals and in no week or month.
+export const schema7To8PreLedger = `INSERT INTO usage_ledger(applied_at,group_id,repo_id,run_id,source,model,input,output,cache_read,cache_write,tokens,quality)
+  SELECT 0, id, COALESCE(json_extract(body,'$.plan.repoId'), json_extract(body,'$.requirement.repoId'), json_extract(body,'$.projectKey')), NULL, 'pre-ledger', NULL, NULL, NULL, NULL, NULL, COALESCE(json_extract(body,'$.used.tokens'), 0), 'unattributed' FROM groups;
+`;
+export const schema7To8 = schema7To8Principal + schema7To8Tables + schema7To8PreLedger;
+
+// A fresh store has no groups, so the pre-ledger insert adds nothing.
+export const initialSchema = legacySchema + schema1To2 + schema2To3 + schema3To4 + schema4To5 + schema5To6 + schema6To7 + schema7To8;
+
+/**
+ * Accounts spec §9: idempotent on a store a criterion downgraded by dropping only its own column or table (the 6-to-7 and
+ * version-3/4/5 criteria keep principal and the five tables). The pre-ledger rows are booked only when the ledger is new,
+ * so a repeated step never counts a group's usage twice. Runs inside the store's migration transaction.
+ */
+function migrate7To8(store: DatabaseSync): void {
+  const hasPrincipal = store.prepare("PRAGMA table_info(commands)").all().some((row) => row.name === "principal");
+  const ledgerExisted = store.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='usage_ledger'").get() !== undefined;
+  if (!hasPrincipal) store.exec(schema7To8Principal);
+  store.exec(schema7To8Tables);
+  if (!ledgerExisted) store.exec(schema7To8PreLedger);
+}
 
 export function migrateSchema(store: DatabaseSync, fromVersion: string): void {
   if (fromVersion === "1") store.exec(schema1To2 + schema2To3 + schema3To4 + schema4To5 + schema5To6 + schema6To7);
@@ -85,6 +118,7 @@ export function migrateSchema(store: DatabaseSync, fromVersion: string): void {
   else if (fromVersion === "4") store.exec(schema4To5 + schema5To6 + schema6To7);
   else if (fromVersion === "5") store.exec(schema5To6 + schema6To7);
   else if (fromVersion === "6") store.exec(schema6To7);
-  else throw new Error("control-schema-unsupported");
+  else if (fromVersion !== "7") throw new Error("control-schema-unsupported");
+  migrate7To8(store);
   store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
 }
