@@ -182,8 +182,8 @@ const ready = await new Promise<{ url: string }>((done, fail) => {
   const timer = setTimeout(() => fail(new Error(`the panel did not print ready in 60 s; stderr: ${panelStderr}`)), 60_000);
   panel.stdout.on("data", (chunk: Buffer) => {
     panelStdout += chunk.toString("utf8");
-    // Accounts D11: the ready line is the url and nothing else.
-    const match = /^orca-panel ready url=(\S+)\s*$/m.exec(panelStdout);
+    // Accounts D11: the ready line is the url and nothing else; only a complete line counts (a chunk can end mid-url).
+    const match = /^orca-panel ready url=(\S+)\n/m.exec(panelStdout);
     if (match) { clearTimeout(timer); done({ url: match[1]!.replace(/\/$/, "") }); }
   });
   panel.on("exit", () => fail(new Error(`the panel exited before ready; stderr: ${panelStderr}`)));

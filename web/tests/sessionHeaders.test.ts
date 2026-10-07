@@ -4,7 +4,7 @@
  * non-GET also sends the `orca_csrf` cookie's value back as `x-orca-csrf` (double submit), and a GET sends nothing.
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { addProject, csrfHeader, getJson, recordReview } from "../src/api.js";
+import { csrfHeader, getJson, recordReview, renameProject } from "../src/api.js";
 import { sendControlCommand } from "../src/controlApi.js";
 
 let requests: Array<{ url: string; init: RequestInit | undefined }>;
@@ -34,9 +34,10 @@ describe("what the page puts on a request (accounts spec §3.4)", () => {
   it("sends x-orca-csrf equal to the cookie on every POST and PATCH, and no header on a GET", async () => {
     document.cookie = "orca_csrf=t; path=/";
     await recordReview("p", "d/1");
-    await addProject({ name: "n", path: "/x" });
+    await renameProject("p1", "n");
     await sendControlCommand("/api/control/groups/g/start", { commandId: "c", expectedRevision: 0, payload: {} } as never);
     await getJson("/api/metrics");
+    expect(requests.slice(0, 3).map((request) => request.init?.method)).toEqual(["POST", "PATCH", "POST"]);
     const posts = requests.slice(0, 3).map((request) => request.init?.headers);
     expect(posts).toEqual([0, 1, 2].map(() => ({ "content-type": "application/json", "x-orca-csrf": "t" })));
     expect(requests[3]).toEqual({ url: "/api/metrics", init: undefined });

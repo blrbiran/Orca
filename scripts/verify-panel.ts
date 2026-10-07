@@ -337,12 +337,13 @@ async function snapshotHomeOrca(): Promise<HomeOrcaSnapshot> {
  * ~/.orca/control/<key> unless ORCA_CONTROL_DIR says otherwise. Step 14 asserts ~/.orca is unchanged
  * by the whole run, and it caught this: without relocation, every panel this script spawns writes a
  * control store into a real home directory. Set here rather than at each call site so that a new
- * step cannot forget it -- an explicit value in `env` still wins.
+ * step cannot forget it. It wins over any ORCA_CONTROL_DIR in the ambient env: the panels this script starts create
+ * an owner with a known password (accounts spec §3.2), which must never land in a person's real store.
  */
 const VERIFY_CONTROL_ROOT = mkdtempSync(join(tmpdir(), "orca-panel-verify-control-"));
 
 function spawnOrcaCli(args: string[], env: NodeJS.ProcessEnv): ChildProcess {
-  env = { ORCA_CONTROL_DIR: VERIFY_CONTROL_ROOT, ...env };
+  env = { ...env, ORCA_CONTROL_DIR: VERIFY_CONTROL_ROOT };
   return spawn("./node_modules/.bin/tsx", ["src/cli.ts", ...args], {
     cwd: process.cwd(),
     env,
@@ -659,8 +660,7 @@ async function main(): Promise<number> {
     const parsedUrl = new URL(baseUrl);
     const host = parsedUrl.hostname;
     const port = Number(parsedUrl.port);
-    const controlRoot = env.ORCA_CONTROL_DIR ?? VERIFY_CONTROL_ROOT;
-    const session = await firstLogin(1, baseUrl, controlRoot);
+    const session = await firstLogin(1, baseUrl, VERIFY_CONTROL_ROOT);
     pass(1, `orca panel is up at ${baseUrl}, ready line parsed, logged in with the initial password and changed it`);
 
     const A = fixture.decisionA.id;

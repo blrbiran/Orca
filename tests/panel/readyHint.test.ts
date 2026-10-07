@@ -7,7 +7,7 @@ import { parseReadyLine } from "../../scripts/verify-panel.js";
 
 /**
  * Human ruling (session f8281a60, 2026-09-27): after the ready line, tell a person to open the url
- * in a browser -- `/` needs no token, the server injects it into index.html. The hint goes to
+ * in a browser (and, since accounts D11, log in: the page carries no credential). The hint goes to
  * STDERR: stdout keeps its ONE machine-readable line (spec §7), which verify-panel and
  * controlShutdown read back. So both halves are judged: stdout is exactly the ready line, and
  * stderr names the SAME url.
