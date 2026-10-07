@@ -66,6 +66,8 @@ describe("the orca-control skill (spec §7, C18)", () => {
       "`.plans[].planId`", "`.operatorId`", "same `--command-id`",
       // Accounts spec §8: the usage read, the owner-only cap verbs, and the two cap codes an agent meets.
       "get usage", "owner-only", "control-limit-over-cap-headroom", "spend-cap-reached",
+      // Final review Minor 1: both verbs the agent ceiling can refuse (spec §6.3.2), not only import-plan.
+      "`import-plan` or `requirement-draft-accept` whose group limit would exceed the spend-cap headroom",
     ]) expect(skill).toContain(phrase);
     for (const code of ["`0`", "`1`", "`2`", "`3`"]) expect(skill).toContain(code);
   });

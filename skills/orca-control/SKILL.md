@@ -58,7 +58,7 @@ Do not look for a way around them. Ask the human. To spend less, use `pause-disp
 
 The panel enforces this at every interface: the socket's agent can never do a human-only action, and the Web UI requires a logged-in owner. It is a boundary at the panel's interfaces, not against a process that edits Orca's files (accounts spec §2).
 
-Imports from an agent that would exceed the spend-cap headroom answer 403 `control-limit-over-cap-headroom`; a group waiting on a cap shows `spendCapBlock` (`spend-cap-reached`) and resumes by itself when the cap is raised or a new period starts.
+An agent's `import-plan` or `requirement-draft-accept` whose group limit would exceed the spend-cap headroom answers 403 `control-limit-over-cap-headroom`; a group waiting on a cap shows `spendCapBlock` (`spend-cap-reached`) and resumes by itself when the cap is raised or a new period starts.
 
 ## 7. Output and exit codes
 
