@@ -162,11 +162,10 @@ export function registerAuthRoutes(app: Express, auth: PanelAuth): void {
     const fields = strings(body, "current", "next");
     if (fields === undefined) { badFields(res, "{current, next} strings"); return; }
     answer(res, next, () => {
-      if (auth.changePassword(current, fields[0]!, fields[1]!, auth.nowMs()) === "login-failed") {
-        res.status(401).json({ code: "login-failed", message: "the current password is wrong" });
-        return;
-      }
-      res.json({});
+      const result = auth.changePassword(current, fields[0]!, fields[1]!, auth.nowMs());
+      if (result.ok) res.json({});
+      else if (result.code === "login-throttled") res.status(429).json({ code: result.code, message: "too many wrong passwords for this name; wait and try again", retryAfterSec: result.retryAfterSec });
+      else res.status(401).json({ code: result.code, message: "the current password is wrong" });
     });
   });
 

@@ -40,6 +40,8 @@ export interface AccountsStore {
   sessionActive(sid: string, userId: string, now: number): boolean;
   revokeSession(sid: string, now: number): void;
   revokeAllSessions(now: number): void;
+  /** Every session of the user but `keepSid` (a password change keeps the session that made it). */
+  revokeOtherSessions(userId: string, keepSid: string, now: number): void;
   appendSecurityEvent(kind: SecurityEventKind, body: Record<string, unknown>, now: number): number;
   openNotices(): Array<{ seq: number; at: number; kind: SecurityEventKind; body: unknown }>;
   /** Refuses (`notice-not-found`) a seq that is not an open notice's. */
@@ -180,6 +182,9 @@ export function openAccountsStore(root: string): AccountsStore {
     },
     revokeSession(sid, now) {
       db.prepare("UPDATE sessions SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL").run(now, sid);
+    },
+    revokeOtherSessions(userId, keepSid, now) {
+      db.prepare("UPDATE sessions SET revoked_at = ? WHERE user_id = ? AND id <> ? AND revoked_at IS NULL").run(now, userId, keepSid);
     },
     revokeAllSessions(now) {
       db.prepare("UPDATE sessions SET revoked_at = ? WHERE revoked_at IS NULL").run(now);

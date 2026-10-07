@@ -66,6 +66,12 @@ describe("login and sessions (spec §3.2-§3.4)", () => {
     expect((await fetch(`${panel.url}/api/metrics`, { headers: { cookie: `orca_at=${forged}` } })).status).toBe(401);
     const noCsrf = await fetch(`${panel.url}/api/reviews`, { method: "POST", headers: { cookie: s.cookie, "content-type": "application/json" }, body: "{}" });
     expect(await noCsrf.json()).toMatchObject({ code: "csrf-required" });
+    // Double submit is an equality, not a presence check: a wrong value of the right length, and the right value with no cookie.
+    const wrong = s.csrf.slice(0, -1) + (s.csrf.endsWith("A") ? "B" : "A");
+    const wrongValue = await fetch(`${panel.url}/api/reviews`, { method: "POST", headers: { cookie: s.cookie, "x-orca-csrf": wrong, "content-type": "application/json" }, body: "{}" });
+    expect([wrongValue.status, await wrongValue.json()]).toMatchObject([403, { code: "csrf-required" }]);
+    const noCookie = await fetch(`${panel.url}/api/reviews`, { method: "POST", headers: { cookie: s.cookie.split("; ")[0]!, "x-orca-csrf": s.csrf, "content-type": "application/json" }, body: "{}" });
+    expect([noCookie.status, await noCookie.json()]).toMatchObject([403, { code: "csrf-required" }]);
     expect((await s.fetch("/api/auth/logout", { method: "POST" })).status).toBe(200);
     expect((await s.fetch("/api/metrics")).status).toBe(401);
     seedUser(root, "amy", "member");
@@ -196,9 +202,57 @@ describe("login and sessions (spec §3.2-§3.4)", () => {
     expect((await amy.fetch(`/api/auth/notices/${bobCreated.seq}/ack`, { method: "POST" })).status).toBe(403);
     expect(await (await owner.fetch("/api/auth/notices/999999/ack", { method: "POST" })).json()).toMatchObject({ code: "notice-not-found" });
     expect((await owner.fetch("/api/auth/notices/x/ack", { method: "POST" })).status).toBe(404);
+    // Only the decimal spelling names a notice: Number() would read these as the same seq.
+    for (const spelling of [`${bobCreated.seq}.0`, `0x${bobCreated.seq.toString(16)}`, `${bobCreated.seq}e0`]) {
+      expect(await (await owner.fetch(`/api/auth/notices/${spelling}/ack`, { method: "POST" })).json(), spelling).toMatchObject({ code: "notice-not-found" });
+    }
     expect((await owner.fetch(`/api/auth/notices/${bobCreated.seq}/ack`, { method: "POST" })).status).toBe(200);
     expect((await notices(owner)).map((notice) => notice.seq)).not.toContain(bobCreated.seq);
     expect(await (await post(amy, "/api/auth/profile", { name: "amelia" })).json()).toMatchObject({ user: { name: "amelia", roles: ["member"] } });
     expect(await (await post(amy, "/api/auth/profile", { name: "bob" })).json()).toMatchObject({ code: "user-name-taken" });
   });
+
+  it("bounds the throttle: impossible names never enter it, idle expired entries leave it, and it has a hard size cap", () => {
+    let now = 1_800_000_000_000;
+    const auth = createPanelAuth({ root, by: "tester", sessionDays: 15, log: () => undefined, nowMs: () => now, throttleLimits: { maxEntries: 2, idleMs: 60_000 } });
+    try {
+      const fail = (name: string) => auth.login(name, "wrong wrong wrong", now);
+      for (let i = 0; i < 5; i += 1) fail("amy");
+      expect(fail("amy")).toMatchObject({ code: "login-throttled" });
+      // Two names no user can have: answered like any failure, and amy keeps her place in a map of two.
+      expect([fail("bad name"), fail("x".repeat(65))]).toEqual([{ ok: false, code: "login-failed" }, { ok: false, code: "login-failed" }]);
+      expect(fail("amy")).toMatchObject({ code: "login-throttled" });
+      // Two new failing names fill the map; the least recently failed (amy) is evicted and starts over.
+      fail("bob"); fail("carl");
+      expect(fail("amy")).toEqual({ ok: false, code: "login-failed" });
+    } finally { auth.close(); }
+    const idle = createPanelAuth({ root, by: "tester", sessionDays: 15, log: () => undefined, nowMs: () => now, throttleLimits: { maxEntries: 100, idleMs: 60_000 } });
+    try {
+      const fail = (name: string) => idle.login(name, "wrong wrong wrong", now);
+      for (let i = 0; i < 5; i += 1) fail("amy");
+      now += 60_001;
+      fail("bob"); // sweeps amy: her 1 s is over and she has been idle a minute
+      expect([fail("amy"), fail("amy")]).toEqual([{ ok: false, code: "login-failed" }, { ok: false, code: "login-failed" }]);
+    } finally { idle.close(); }
+  }, 60_000);
+
+  it("a password change logs out the user's other sessions and keeps this one", async () => {
+    const panel = await boot();
+    seedUser(root, "amy", "member");
+    const here = await login(panel.url, "amy"), there = await login(panel.url, "amy");
+    expect((await here.fetch("/api/auth/password", { method: "POST", headers: json, body: JSON.stringify({ current: "orca-test-password", next: "amys new password" }) })).status).toBe(200);
+    expect([(await here.fetch("/api/auth/me")).status, (await there.fetch("/api/auth/me")).status]).toEqual([200, 401]);
+  });
+
+  it("a wrong current password counts against the name's login throttle", async () => {
+    const panel = await boot([], () => new Date(1_800_000_000_000));
+    seedUser(root, "amy", "member");
+    const amy = await login(panel.url, "amy");
+    const change = () => amy.fetch("/api/auth/password", { method: "POST", headers: json, body: JSON.stringify({ current: "wrong wrong wrong", next: "amys new password" }) });
+    for (let i = 0; i < 5; i += 1) expect(await (await change()).json()).toMatchObject({ code: "login-failed" });
+    const sixth = await change();
+    expect([sixth.status, await sixth.json()]).toMatchObject([429, { code: "login-throttled", retryAfterSec: 1 }]);
+    const relogin = await fetch(`${panel.url}/api/auth/login`, { method: "POST", headers: json, body: JSON.stringify({ name: "amy", password: "orca-test-password" }) });
+    expect(relogin.status).toBe(429);
+  }, 30_000);
 });
