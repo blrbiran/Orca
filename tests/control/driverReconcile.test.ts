@@ -174,6 +174,11 @@ describe("reconciling a conflict (spec §5.3)", { timeout: 30_000 }, () => {
       expect(readWebGroup(t.h.store, "g").used.tokens).toBe(27);
       expect(t.h.store.db.prepare("SELECT COUNT(*) AS n FROM outbox WHERE kind='reconcile-usage'").get()!.n).toBe(1);
       expect(() => readControlGroup(t.h.store, "epoch-test", "g")).not.toThrow();
+      // Accounts Task 7 ruling (spec §5.1): the reconciliation's 7 is in the usage ledger too, as its run's work, so the
+      // ledger adds up to what the group used (caps read the ledger).
+      const ledger = t.h.store.db.prepare("SELECT run_id,source,model,tokens,quality FROM usage_ledger WHERE group_id='g' ORDER BY id").all();
+      expect(ledger.reduce((sum, row) => sum + Number(row.tokens), 0)).toBe(27);
+      expect(ledger.filter((row) => row.tokens === 7)).toEqual([{ run_id: expect.any(String), source: "run-work", model: null, tokens: 7, quality: "unattributed" }]);
     } finally { await t.h.dispose(); }
   });
 

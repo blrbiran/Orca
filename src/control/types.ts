@@ -44,10 +44,14 @@ export type HandoffAck =
   | {kind:"latched";requestId:string}
   | {kind:"complete";requestId:string;checkpointId:string}
   | {kind:"unknown";requestId:string};
+/** Accounts spec §4.1 / D7: one model's cumulative usage within a run's bucket; `input` is non-cached input. */
+export interface ModelUsage { model: string; input: number; output: number; cacheRead: number; cacheWrite: number }
 export interface UsageEvent {
   runId: string; generation: number; eventSeq: number;
   bucket: "work" | "handoff";
   cumulative: Amount | null; source: ArtifactRef;
+  /** Absent (or null) when the peer cannot tell; sorted by model, unique, non-empty otherwise. */
+  byModel?: ModelUsage[] | null;
 }
 export interface StopProof {
   executionId: string; generation: number; isolated: true; source: ArtifactRef;

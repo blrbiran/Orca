@@ -6,8 +6,10 @@ import { amountSchema, idSchema, safeInteger } from "./schema.js";
 import { dimensions, hashPayload } from "./commands.js";
 import { add, componentMin, isTerminalRunState, readRun, saveRun, subtract, syncWebBudget } from "./budget.js";
 import { readGroup, saveGroup } from "./queries.js";
-const eventSchema=z.object({runId:idSchema,generation:safeInteger.positive(),eventSeq:safeInteger.positive(),bucket:z.enum(["work","handoff"]),cumulative:amountSchema.nullable(),source:z.object({artifactId:idSchema,hash:z.string().regex(/^[a-f0-9]{64}$/)}).strict()}).strict();
-export function recordUsage(store:ControlStore,event:UsageEvent):{applied:boolean;highWater:number} {
+import { bookUsageDelta, byModelSchema } from "./usageLedger.js";
+const eventSchema=z.object({runId:idSchema,generation:safeInteger.positive(),eventSeq:safeInteger.positive(),bucket:z.enum(["work","handoff"]),cumulative:amountSchema.nullable(),source:z.object({artifactId:idSchema,hash:z.string().regex(/^[a-f0-9]{64}$/)}).strict(),byModel:byModelSchema.nullable().optional()}).strict();
+/** Accounts spec §5.1: `appliedAt` (ms) stamps the usage-ledger rows this call books; callers with a clock pass it. */
+export function recordUsage(store:ControlStore,event:UsageEvent,appliedAt:number=Date.now()):{applied:boolean;highWater:number} {
   eventSchema.parse(event);const hash=hashPayload(event);
   return store.transaction(()=>{
     const run=readRun(store,event.runId);
@@ -27,6 +29,7 @@ export function recordUsage(store:ControlStore,event:UsageEvent):{applied:boolea
       if(next.cumulative===null) run.unknown[next.bucket]=true;
       else {
         const delta=subtract(next.cumulative,run.cumulative[next.bucket]);
+        bookUsageDelta(store,{run:run as typeof run&{phase?:string;purpose?:string},groupBody:group as unknown as Record<string,unknown>,event:next,deltaTokens:delta.tokens,appliedAt});
         const released=componentMin(delta,run.remaining[next.bucket]);
         group.used=add(group.used,delta);group.reserved=subtract(group.reserved,released);
         run.remaining[next.bucket]=subtract(run.remaining[next.bucket],released);

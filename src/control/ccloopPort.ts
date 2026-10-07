@@ -9,6 +9,7 @@ import type { AgentResolution, PartialSelection } from "./agentSelection.js";
 import { ControlError, type NonDurableControlErrorCode } from "./errors.js";
 import { agentSelectionSchema, artifactSchema, candidateSchema, contextWindowSchema, idSchema, runProgressSchema, safeInteger } from "./schema.js";
 import { capabilityViewSchema } from "./webProtocol.js";
+import { byModelSchema } from "./usageLedger.js";
 
 const MAX_OUTPUT=24*1024*1024;
 const executionStatusSchema=z.discriminatedUnion("kind",[
@@ -22,7 +23,9 @@ const handoffAckSchema=z.discriminatedUnion("kind",[
  z.object({kind:z.literal("unknown"),requestId:z.string().min(1)}).strict(),
 ]);
 const amountSchema=z.object({tokens:safeInteger,activeMs:safeInteger,attempts:safeInteger,sessions:safeInteger}).strict();
-const eventSchema=z.object({runId:z.string().min(1),generation:safeInteger.positive(),eventSeq:safeInteger.positive(),bucket:z.enum(["work","handoff"]),cumulative:amountSchema.nullable(),source:artifactSchema}).strict();
+// Accounts spec §14 / D7: `byModel` is optional so this Orca reads a ccloop that emits it and one that does not (the
+// re-pin must not make every collect fail); its entries are strict, sorted and unique, so a malformed one refuses the answer.
+const eventSchema=z.object({runId:z.string().min(1),generation:safeInteger.positive(),eventSeq:safeInteger.positive(),bucket:z.enum(["work","handoff"]),cumulative:amountSchema.nullable(),source:artifactSchema,byModel:byModelSchema.nullable().optional()}).strict();
 const terminalSchema=z.object({status:z.enum(["succeeded","blocked_waiting_human","exhausted","cancelled","failed"]),currentAttempt:safeInteger,attemptsUsed:safeInteger,lastTransitionAt:z.string(),waitingOnHuman:z.boolean(),stopReason:z.string().nullable(),budgetSnapshot:z.object({attemptsRemaining:safeInteger,timeRemainingMs:safeInteger,tokenBudgetRemaining:safeInteger}).strict(),recentFailures:z.array(z.object({rejectCategory:z.string(),primaryTargetPaths:z.array(z.string()),failingCommand:z.string().nullable()}).strict())}).strict();
 // Labels and progress spec §3.2 (§8 R4, R5): progress is optional, so an Orca landed before ccloop emits it still reads
 // every answer (push Orca first); its shape is strict, so a wrong one refuses the whole answer.
@@ -32,7 +35,10 @@ const evidenceSchema=z.object({artifactId:z.string().min(1),hash:z.string().rege
 // table view, a partial selection answers that selection's resolution (its seven-key capability view carries no protocol tag).
 const agentsViewSchema=z.object({protocol:z.literal(3),installations:z.array(z.object({id:idSchema,kind:z.string().min(1),defaults:z.object({model:z.string().min(1),contextWindow:contextWindowSchema}).strict(),contextOptions:z.array(contextWindowSchema).min(1),version:z.string().min(1)}).strict())}).strict();
 // Single-call estimate spec §4.4: a selection's resolution also answers singleCallExecution, beside the view, never in it.
-const agentResolutionSchema=z.object({protocol:z.literal(3),selection:agentSelectionSchema,configHash:z.string().regex(/^[a-f0-9]{64}$/),timeoutMs:safeInteger.positive().max(2_147_483_647),killGraceMs:safeInteger.max(60_000),capabilities:capabilityViewSchema,singleCallExecution:z.enum(["v1"]).nullable()}).strict();
+// Accounts D8: `usageBreakdown` is accepted beside it when ccloop states it; Orca consumes no behavior from it.
+const agentResolutionSchema=z.object({protocol:z.literal(3),selection:agentSelectionSchema,configHash:z.string().regex(/^[a-f0-9]{64}$/),timeoutMs:safeInteger.positive().max(2_147_483_647),killGraceMs:safeInteger.max(60_000),capabilities:capabilityViewSchema,singleCallExecution:z.enum(["v1"]).nullable(),usageBreakdown:z.enum(["per-model","unavailable"]).optional()}).strict();
+export const ccloopCollectionSchema=collectionSchema;
+export const ccloopResolutionSchema=agentResolutionSchema;
 
 /**
  * The ccloop error code inside a `control-peer-exit` (ccloop prints `<code>[:detail]` on stderr and exits non-zero),
@@ -102,7 +108,7 @@ export function createCcloopExecutionPort(options:{binary:string;agentsTablePath
   async resolveAgent(partial:PartialSelection):Promise<AgentResolution>{
    let answer:unknown;
    try{answer=await raw("capabilities",{agent:partial});}catch(error){throw named(error);}
-   const {protocol:_protocol,...resolution}=parse(agentResolutionSchema,answer);
+   const {protocol:_protocol,usageBreakdown:_usageBreakdown,...resolution}=parse(agentResolutionSchema,answer);
    for(const key of ["agent","model","contextWindow"] as const){
     if(partial[key]!==undefined&&resolution.selection[key]!==partial[key])throw new ControlError("control-response-invalid",`selection-not-echoed:${key}`);
    }

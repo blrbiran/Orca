@@ -475,7 +475,7 @@ export async function collectInto(deps: ExecutionDriverDeps, run: DriverRun): Pr
   }
   for (const event of report.events) {
     if (event.runId !== runId || event.generation !== run.generation) throw new ControlError("report-identity-conflict");
-    admitted(deps, () => recordUsage(store, event));
+    admitted(deps, () => recordUsage(store, event, deps.now?.().getTime()));
   }
   // Labels and progress spec §3.4 (§8 R2, R3): the latest progress, stored on a FRESH read after the usage above --
   // `run` here predates recordUsage, and saving it would roll cumulative, remaining and highWater back. saveDriverRun

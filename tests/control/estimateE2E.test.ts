@@ -128,6 +128,9 @@ describe.skipIf(!realBinary)("the estimate chain against real ccloop and fake cl
       expect(run.body).toMatchObject({ state: "settled-restartable", unknown: { work: false }, drive: { workspacePath: null } });
       // F15: fake claude's result usage, 12 input + 3 output, booked as ccloop reported it.
       expect(run.body.cumulative.work.tokens).toBe(15);
+      // Accounts spec §5.1, D15 (Task 7): the pinned ccloop states no byModel, so the estimate's 15 tokens are booked as one
+      // unattributed row named after the run's phase -- the ledger works without a breakdown.
+      expect(runtime.store.db.prepare("SELECT source,model,tokens,quality FROM usage_ledger WHERE run_id=?").all(run.runId)).toEqual([{ source: "estimate", model: null, tokens: 15, quality: "unattributed" }]);
       // What the fake claude CLI received: one call, tools off, the frozen output cap in its environment (F15).
       expect(w.argv("claude")).toHaveLength(1);
       const argv = w.argv("claude")[0]!;

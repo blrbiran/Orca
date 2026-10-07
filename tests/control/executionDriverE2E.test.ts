@@ -66,6 +66,13 @@ describe.skipIf(!realBinary)("the execution driver against real ccloop (spec §7
       expect(phases).toHaveLength(10);
       expect(["plan", "execute", "verify"].map((phase) => phases.filter((call) => call === phase).length)).toEqual([4, 4, 2]);
       expect(w.human()).toEqual(before);
+      // Accounts spec §5.1 (Task 7): the pinned ccloop states no byModel, so every applied delta is one unattributed row,
+      // and the ledger adds up to exactly what the group used.
+      const ledger = runtime.store.db.prepare("SELECT source,model,tokens,quality FROM usage_ledger WHERE group_id='g'").all();
+      expect(ledger.length).toBeGreaterThan(0);
+      expect(ledger.filter((row) => row.model !== null || row.quality !== "unattributed" || !["run-work", "run-handoff"].includes(String(row.source)))).toEqual([]);
+      const usedTokens = Number(runtime.store.db.prepare("SELECT json_extract(body,'$.used.tokens') AS tokens FROM groups WHERE id='g'").get()!.tokens);
+      expect(ledger.reduce((sum, row) => sum + Number(row.tokens), 0)).toBe(usedTokens);
       // Controller ruling (Task 7): a real settle publishes -- each run's projection and task handoff,
       // and every group handoff, reach delivered=1, with no publish failure left on any run.
       const delivered = (id: string): unknown => runtime.store.db.prepare("SELECT delivered FROM outbox WHERE id=?").get(id);
