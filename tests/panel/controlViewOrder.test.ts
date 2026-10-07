@@ -20,12 +20,11 @@ import { buildApi } from "../../src/panel/api.js";
 import { createTrustedControlConfig } from "../../src/panel/controlConfig.js";
 import { ReviewsWriter } from "../../src/panel/reviewsStore.js";
 import type { PanelAuth } from "../../src/panel/auth.js";
-import { quietPanelAuth } from "./fixtures/auth.js";
+import { login, quietPanelAuth, seedUser, type Session } from "./fixtures/auth.js";
 import { openTestStore } from "../control/fixtures/store.js";
 import { FIXTURE_AGENT_ID, seedPreferences } from "../control/fixtures/agents.js";
 
 // Fixtures copied from tests/panel/controlReadApi.test.ts (contract, profile, port, config), with the ids changed.
-const token = "a".repeat(64);
 const hash = (letter: string) => letter.repeat(64);
 const contract = (taskId: string) => ({
   objective: { taskId, goal: `ship ${taskId}`, successCondition: `${taskId} passes`, nonGoals: [] },
@@ -57,6 +56,7 @@ function command(groupId: string, commandId: string): ImportCommand {
 let root: string;
 let server: Server;
 let url: string;
+let session: Session;
 let dispose: () => Promise<void>;
 let auth: PanelAuth;
 
@@ -116,7 +116,7 @@ beforeEach(async () => {
   await reviews.load();
   buildApi(app, {
     opts: { by: "operator", bind: "127.0.0.1", port: 0, confirmedExternal: false, correctionsDir: root, repos: [] },
-    token, reviews, statics: { get: () => undefined, indexHtml: undefined, names: [] },
+    reviews, statics: { get: () => undefined, indexHtml: undefined, names: [] },
     auth: (auth = quietPanelAuth(join(root, "accounts"))),
     control: { store: h.store, epoch: "epoch-test", config: trustedConfig },
   } as never);
@@ -125,6 +125,8 @@ beforeEach(async () => {
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("test server has no port");
   url = `http://127.0.0.1:${address.port}`;
+  seedUser(join(root, "accounts"), "tester");
+  session = await login(url);
 });
 
 afterEach(async () => {
@@ -134,7 +136,7 @@ afterEach(async () => {
 });
 
 const read = async (path: string): Promise<{ status: number; body: any }> => {
-  const res = await fetch(`${url}${path}`, { headers: { "x-orca-token": token } });
+  const res = await session.fetch(path);
   return { status: res.status, body: await res.json() };
 };
 const codeUnitSorted = (values: string[]): string[] => [...values].sort();

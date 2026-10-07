@@ -15,9 +15,8 @@ import { controlRepoKey } from "../../src/panel/controlOptions.js";
 import { registerProjectRoutes } from "../../src/panel/projects.js";
 import { ReviewsWriter } from "../../src/panel/reviewsStore.js";
 import type { PanelAuth } from "../../src/panel/auth.js";
-import { quietPanelAuth } from "./fixtures/auth.js";
+import { login, quietPanelAuth, seedUser, type Session } from "./fixtures/auth.js";
 
-const token = "b".repeat(64);
 let server: Server | undefined;
 let auth: PanelAuth | undefined;
 
@@ -36,18 +35,22 @@ async function listen(app: express.Express): Promise<string> {
   return `http://127.0.0.1:${address.port}`;
 }
 
-async function panelApp(repos: Array<{ projectKey: string; path: string }>, control: unknown): Promise<string> {
+/** The app and a logged-in session on it (accounts spec §3.4). */
+async function panelApp(repos: Array<{ projectKey: string; path: string }>, control: unknown): Promise<{ url: string; session: Session }> {
+  const accounts = await mkdtemp(join(tmpdir(), "projects-accounts-"));
   const app = express();
   app.use(express.json());
   const reviews = new ReviewsWriter(await mkdtemp(join(tmpdir(), "projects-reviews-")));
   await reviews.load();
   buildApi(app, {
     opts: { by: "operator", bind: "127.0.0.1", port: 0, confirmedExternal: false, correctionsDir: await mkdtemp(join(tmpdir(), "projects-corr-")), repos },
-    token, reviews, statics: { get: () => undefined, indexHtml: undefined, names: [] },
-    auth: (auth = quietPanelAuth(await mkdtemp(join(tmpdir(), "projects-accounts-")))),
+    reviews, statics: { get: () => undefined, indexHtml: undefined, names: [] },
+    auth: (auth = quietPanelAuth(accounts)),
     ...(control === undefined ? {} : { control }),
   } as never);
-  return listen(app);
+  seedUser(accounts, "tester");
+  const url = await listen(app);
+  return { url, session: await login(url) };
 }
 
 async function twoRepos(): Promise<Array<{ projectKey: string; path: string }>> {
@@ -85,11 +88,11 @@ describe("GET /api/projects", () => {
     ] });
   });
 
-  it("is served by the panel behind its token, and with no control plane no project has a control repository", async () => {
+  it("is served by the panel behind a login, and with no control plane no project has a control repository", async () => {
     const repos = await twoRepos();
-    const url = await panelApp(repos, undefined);
+    const { url, session } = await panelApp(repos, undefined);
     expect((await fetch(`${url}/api/projects`)).status).toBe(401);
-    const res = await fetch(`${url}/api/projects`, { headers: { "x-orca-token": token } });
+    const res = await session.fetch("/api/projects");
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ source: "command-line", editable: false, pendingRestart: [], fileError: null, projects: [
       { projectKey: "Alpha", name: "Alpha", path: repos[1]!.path, controlRepoId: null },
@@ -101,8 +104,8 @@ describe("GET /api/projects", () => {
     // The control read routes only register handlers here; nothing in this criterion reaches the store.
     const control = { store: {}, epoch: "epoch-test", config: { readView: async () => ({}) } };
     const repos = await twoRepos();
-    const url = await panelApp(repos, control);
-    const res = await fetch(`${url}/api/projects`, { headers: { "x-orca-token": token } });
+    const { session } = await panelApp(repos, control);
+    const res = await session.fetch("/api/projects");
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ source: "command-line", editable: false, pendingRestart: [], fileError: null, projects: [
       { projectKey: "Alpha", name: "Alpha", path: repos[1]!.path, controlRepoId: controlRepoKey("Alpha") },

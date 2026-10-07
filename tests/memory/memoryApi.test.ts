@@ -6,10 +6,10 @@ import { afterEach, describe, expect, it } from "vitest";
 import { controlDisabled } from "../../src/panel/controlOptions.js";
 import { MEMORY_FIXED_CODES, memoryHttpStatus, sendChecked } from "../../src/panel/memoryApi.js";
 import { type PanelOptions, createPanelServer, parsePanelArgs } from "../../src/panel/server.js";
-import { TOKEN_ANCHOR } from "../../src/panel/staticFiles.js";
 import { memoryPageResponseSchema } from "../../src/memory/wire.js";
 import { zhErrors } from "../../web/src/locales/zh.js";
 import { type FakeCcmem, fakeCcmem, memoryRepo } from "./helpers.js";
+import { foreignKeyCookie, sessionFor } from "../panel/fixtures/auth.js";
 
 /**
  * Spec §5.1. The routes choose a repository only from the panel's own discovery (a browser never names a path), check
@@ -25,7 +25,7 @@ async function panel(opts: { mode?: string; memory?: (fake: FakeCcmem) => PanelO
   const repo = await memoryRepo();
   const store = await mkdtemp(join(tmpdir(), "orca-mem-store-"));
   const dist = await mkdtemp(join(tmpdir(), "orca-mem-dist-"));
-  await writeFile(join(dist, "index.html"), `<!doctype html><html><body>${TOKEN_ANCHOR}</body></html>`);
+  await writeFile(join(dist, "index.html"), "<!doctype html><html><body></body></html>");
   cleanups.push(fake.cleanup, () => rm(repo, { recursive: true, force: true }), () => rm(store, { recursive: true, force: true }), () => rm(dist, { recursive: true, force: true }));
   const options: PanelOptions = {
     by: "tester", bind: "127.0.0.1", port: 0, confirmedExternal: false, correctionsDir: store,
@@ -34,7 +34,11 @@ async function panel(opts: { mode?: string; memory?: (fake: FakeCcmem) => PanelO
   };
   const p = await createPanelServer(options);
   cleanups.push(() => p.close());
-  const call = (path: string, init: RequestInit = {}, token = p.token) => fetch(`${p.url}${path}`, { ...init, headers: { "x-orca-token": token, ...(init.headers ?? {}) } });
+  // As the logged-in browser; `wrong`: the same cookie re-signed under another key.
+  const call = async (path: string, init: RequestInit = {}, wrong = false) => {
+    const session = await sessionFor(p);
+    return wrong ? fetch(`${p.url}${path}`, { ...init, headers: { ...(init.headers ?? {}), cookie: foreignKeyCookie(session) } }) : session.fetch(path, init);
+  };
   const json = async (path: string) => { const res = await call(path); return { status: res.status, body: await res.json() as any }; };
   return { fake, repo, call, json };
 }
@@ -103,10 +107,10 @@ describe("the memory routes (spec §5.1)", () => {
     expect(await json("/api/memory/list?projectKey=mem")).toMatchObject({ status: 500, body: { code: "panel-internal-error" } });
   });
 
-  it("has no write route and needs the token (M12, G9)", async () => {
+  it("has no write route and needs a session (M12, G9)", async () => {
     const { call, fake } = await panel();
     for (const method of ["POST", "PUT", "DELETE", "PATCH"]) expect((await call("/api/memory/list?projectKey=mem", { method })).status, method).toBe(404);
-    const anonymous = await call("/api/memory/status", {}, "wrong-token");
+    const anonymous = await call("/api/memory/status", {}, true);
     expect(anonymous.status).toBe(401);
     expect(fake.calls()).toEqual([]);
   });

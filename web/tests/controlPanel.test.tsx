@@ -156,7 +156,7 @@ describe("ControlPanel", () => {
   it("links run evidence and reports a projection refetch is needed", () => {
     const html = renderToStaticMarkup(<ControlPanel {...panelProps({ refetchRequired: true })} />);
     // This used to assert the manifest URL inside an `href`, which pinned the dead link:
-    // `/api/control/*` answers to the `x-orca-token` header, so no href can load it. The
+    // `/api/control/*` then answered only to a header a bare href cannot send, so no href could load it. The
     // evidence control's real behaviour is judged in web/tests/evidenceLink.test.tsx.
     // Ruling (human, 2026-09-22): this rewrite of an existing criterion is ratified -- an
     // implementer may not change a judgement, so it was put up for approval and approved.

@@ -3,9 +3,10 @@
  * K7: click handlers stay thin by calling into this module rather than
  * building requests inline, so App.tsx's event handlers are one line each.
  *
- * The token reaches the page via `window.__ORCA_TOKEN__`, injected into
- * index.html by `TOKEN_ANCHOR` (src/panel/staticFiles.ts). Every `/api` call
- * carries it as `x-orca-token` (src/panel/api.ts's token middleware).
+ * Accounts spec §3.4: the page carries no credential. The browser sends the
+ * session cookie `orca_at` on its own (same origin); every non-GET also sends
+ * the `orca_csrf` cookie's value back as `x-orca-csrf` (double submit,
+ * src/panel/authRoutes.ts's middleware).
  *
  * Final review I-3 / ruling R66: nothing here throws a server's answer away.
  * A GET that is refused throws a `PanelRequestError` carrying the server's
@@ -17,18 +18,16 @@ import type { ProjectV1, ProjectsAnswerV1 } from "./project.js";
 import i18n from "./i18n.js";
 import type { ChainRepoView, CorrectionKind, DecisionListRow, MetricsReport, PanelCoverage } from "./types.js";
 
-declare global {
-  interface Window {
-    __ORCA_TOKEN__?: string;
+/** The CSRF header every non-GET carries (web/src/controlApi.ts too): the `orca_csrf` cookie's value, or none. */
+export function csrfHeader(): Record<string, string> {
+  // Outside a browser (a node-environment criterion) there is no cookie jar, so there is no value to send back.
+  if (typeof document === "undefined") return {};
+  for (const part of document.cookie.split(";")) {
+    const pair = part.trim();
+    if (pair.startsWith("orca_csrf=")) return { "x-orca-csrf": pair.slice("orca_csrf=".length) };
   }
+  return {};
 }
-
-function token(): string {
-  return window.__ORCA_TOKEN__ ?? "";
-}
-
-/** The injected panel token, for any module that carries it as `x-orca-token` (web/src/controlApi.ts). */
-export const panelToken = token;
 
 /** A named refusal as the page shows it. `status` is null when no HTTP answer arrived at all. */
 export interface PanelRefusal {
@@ -73,7 +72,7 @@ async function readBody(res: Response): Promise<unknown> {
 }
 
 export async function getJson<T>(path: string): Promise<T> {
-  const res = await fetch(path, { headers: { "x-orca-token": token() } });
+  const res = await fetch(path);
   const body = await readBody(res);
   if (!res.ok) throw new PanelRequestError(refusalFrom(`GET ${path}`, res.status, body));
   return body as T;
@@ -82,7 +81,7 @@ export async function getJson<T>(path: string): Promise<T> {
 async function postJson<T>(path: string, payload: unknown, method: "POST" | "PATCH" = "POST"): Promise<PostResult<T>> {
   const res = await fetch(path, {
     method,
-    headers: { "x-orca-token": token(), "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...csrfHeader() },
     body: JSON.stringify(payload),
   });
   const body = await readBody(res);

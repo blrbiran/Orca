@@ -1,8 +1,8 @@
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { TOKEN_ANCHOR, loadStaticFiles } from "../../src/panel/staticFiles.js";
+import { loadStaticFiles } from "../../src/panel/staticFiles.js";
 
 describe("static serving (spec section 2.2)", () => {
   let dist: string;
@@ -15,7 +15,7 @@ describe("static serving (spec section 2.2)", () => {
     await mkdir(dist, { recursive: true });
     await mkdir(outside, { recursive: true });
     await writeFile(join(outside, "passwd.txt"), "root:x:0:0\n");
-    await writeFile(join(dist, "index.html"), `<html><body>${TOKEN_ANCHOR}</body></html>`);
+    await writeFile(join(dist, "index.html"), "<html><body><div id=\"root\"></div></body></html>");
     await writeFile(join(dist, "index.js"), "console.log(1)\n");
     await writeFile(join(dist, "index.css"), "body{}\n");
     await symlink(join(outside, "passwd.txt"), join(dist, "linked.txt"));
@@ -25,14 +25,14 @@ describe("static serving (spec section 2.2)", () => {
   });
 
   it("serves a key it has, with a content type derived from the extension", async () => {
-    const files = await loadStaticFiles(dist, "t0ken");
+    const files = await loadStaticFiles(dist);
     expect(files.get("index.js")?.contentType).toBe("text/javascript; charset=utf-8");
     expect(files.get("index.css")?.contentType).toBe("text/css; charset=utf-8");
     expect(files.get("index.js")?.bytes.toString("utf8")).toBe("console.log(1)\n");
   });
 
   it("has no key for any traversal spelling, because there is no path to join", async () => {
-    const files = await loadStaticFiles(dist, "t0ken");
+    const files = await loadStaticFiles(dist);
     // Not "returns 404 for these": the point of the Map is that a traversal is
     // STRUCTURALLY impossible, so what is pinned is the absence of the key.
     // Mutation S-12 replaces the Map with a path join; every one of these then
@@ -52,40 +52,33 @@ describe("static serving (spec section 2.2)", () => {
   });
 
   it("enumerates exactly the flat names it loaded, and no symlinked one", async () => {
-    const files = await loadStaticFiles(dist, "t0ken");
+    const files = await loadStaticFiles(dist);
     // Deep equality on a sorted list, not "contains": a loader that walked into
     // the symlink would still contain all three real names.
     expect([...files.names].sort()).toEqual(["index.css", "index.html", "index.js"]);
     expect(files.get("linked.txt")).toBeUndefined();
   });
 
-  it("injects the token into index.html in memory, and leaves the anchor nowhere in the output", async () => {
-    const files = await loadStaticFiles(dist, "s3cret-token");
-    const html = files.indexHtml?.bytes.toString("utf8") ?? "";
-    expect(html).toContain("s3cret-token");
-    // The anchor has to be consumed. If it survives, a second load would inject
-    // twice and the criterion below could not tell one token from two.
-    expect(html).not.toContain(TOKEN_ANCHOR);
-    expect(html.match(/s3cret-token/g)).toHaveLength(1);
+  it("serves index.html byte-for-byte as the build wrote it: the page carries no credential (accounts spec §3.4)", async () => {
+    const files = await loadStaticFiles(dist);
+    expect(files.indexHtml?.bytes.equals(await readFile(join(dist, "index.html")))).toBe(true);
     expect(files.indexHtml?.contentType).toBe("text/html; charset=utf-8");
   });
 
   it("says so by name when web/dist has not been built, instead of serving nothing quietly", async () => {
-    await expect(loadStaticFiles(join(dist, "does-not-exist"), "t0ken")).rejects.toMatchObject({
+    await expect(loadStaticFiles(join(dist, "does-not-exist"))).rejects.toMatchObject({
       code: "panel-dist-missing",
     });
   });
 
   // --- F3: three more branches, each with a criterion only it can fail. ---
 
-  it("F3.1 rejects by name when index.html exists without the token anchor", async () => {
-    // The brief's loadStaticFiles implements this refusal but the brief pins
-    // nothing on it -- deleting the throw (mutation S-15) would fall through
-    // silently and every request the anchor-less page makes would answer 401.
-    await writeFile(join(dist, "index.html"), "<html><body>no anchor here</body></html>");
-    await expect(loadStaticFiles(dist, "t0ken")).rejects.toMatchObject({
-      code: "panel-token-anchor-missing",
-    });
+  it("F3.1 loads an index.html with no anchor of any kind and serves it verbatim", async () => {
+    // Accounts spec §3.4 / §9: the token anchor, its refusal and its injection are
+    // gone in the same change; the page needs nothing from the server to log in.
+    const page = "<html><body>no anchor here</body></html>";
+    await writeFile(join(dist, "index.html"), page);
+    expect((await loadStaticFiles(dist)).indexHtml?.bytes.toString("utf8")).toBe(page);
   });
 
   it("F3.2 does not relabel a non-ENOENT readdir failure as panel-dist-missing", async () => {
@@ -98,7 +91,7 @@ describe("static serving (spec section 2.2)", () => {
     // build ran, something else is broken.
     const regularFile = join(dist, "not-a-directory");
     await writeFile(regularFile, "just a file\n");
-    const failure: unknown = await loadStaticFiles(regularFile, "t0ken").catch((err: unknown) => err);
+    const failure: unknown = await loadStaticFiles(regularFile).catch((err: unknown) => err);
     expect(failure).toBeInstanceOf(Error);
     expect((failure as { code?: string }).code).not.toBe("panel-dist-missing");
     expect((failure as NodeJS.ErrnoException).code).toBe("ENOTDIR");
@@ -108,7 +101,7 @@ describe("static serving (spec section 2.2)", () => {
     // Scoped to this criterion's own dist (not the shared beforeEach fixture),
     // so the sorted-names and traversal criteria above are untouched by it.
     await writeFile(join(dist, "notes.txt"), "plain text\n");
-    const files = await loadStaticFiles(dist, "t0ken");
+    const files = await loadStaticFiles(dist);
     // Mutation S-18 turns the fallback into text/html; that would let an
     // unknown upload be rendered as a page instead of downloaded as data --
     // the one class of bug contentTypeOf's fallback exists to foreclose.

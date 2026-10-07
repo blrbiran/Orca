@@ -1,10 +1,11 @@
 /**
  * Review finding (Task 10 round): one run's evidence, reachable from the page.
  *
- * `/api/control/*` authenticates by the `x-orca-token` header, which a bare
- * `<a href>` cannot send -- so the links here used to answer 401. The manifest
- * is fetched through the same client as every other control read and handed to
- * the browser as a download; a refusal is named rather than swallowed.
+ * `/api/control/*` used to authenticate by a header a bare `<a href>` cannot
+ * send, so the links here answered 401; it now takes the session cookie
+ * (accounts spec §3.4). The manifest is still fetched through the same client
+ * as every other control read and handed to the browser as a download; a
+ * refusal is named rather than swallowed.
  */
 import { useState } from "react";
 import type { JSX } from "react";

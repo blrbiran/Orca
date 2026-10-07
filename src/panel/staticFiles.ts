@@ -3,8 +3,6 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PanelRejection } from "./rejection.js";
 
-export const TOKEN_ANCHOR = "<!-- orca-panel-token -->";
-
 export interface StaticAsset {
   bytes: Buffer;
   contentType: string;
@@ -43,19 +41,17 @@ const defaultDistDir = (): string =>
  * the exact filename, and requests are answered only by exact key.
  *
  * Why not express.static, now that express is here: it joins paths and follows
- * symbolic links by default, and index.html has to be served from memory
- * anyway because the token is injected into it. Serving statics would then be
- * written in two halves, one of which reintroduces the whole class of
+ * symbolic links by default, which reintroduces the whole class of
  * normalisation, "..", symlink, content-type and SPA-fallback bugs that this
  * Map makes structurally impossible.
+ *
+ * Accounts spec §3.4: index.html is served byte-for-byte as the build wrote it.
+ * The page carries no credential; the browser logs in for a session cookie.
  *
  * withFileTypes + isFile() is what keeps the symlink out: readdir alone would
  * report it as an entry and readFile would follow it straight out of dist.
  */
-export async function loadStaticFiles(
-  distDir: string | undefined,
-  token: string,
-): Promise<StaticFiles> {
+export async function loadStaticFiles(distDir: string | undefined): Promise<StaticFiles> {
   const dir = distDir ?? defaultDistDir();
   let entries;
   try {
@@ -76,25 +72,6 @@ export async function loadStaticFiles(
     if (!entry.isFile()) continue;
     const bytes = await readFile(join(dir, entry.name));
     assets.set(entry.name, { bytes, contentType: contentTypeOf(entry.name) });
-  }
-
-  const index = assets.get("index.html");
-  if (index) {
-    const html = index.bytes.toString("utf8");
-    if (!html.includes(TOKEN_ANCHOR)) {
-      throw new PanelRejection(
-        "panel-token-anchor-missing",
-        `${join(dir, "index.html")} has no ${TOKEN_ANCHOR}. The token is injected there; without ` +
-          `the anchor the page would load and every request it makes would answer 401.`,
-      );
-    }
-    assets.set("index.html", {
-      bytes: Buffer.from(
-        html.replace(TOKEN_ANCHOR, `<script>window.__ORCA_TOKEN__=${JSON.stringify(token)}</script>`),
-        "utf8",
-      ),
-      contentType: "text/html; charset=utf-8",
-    });
   }
 
   return {

@@ -5,7 +5,8 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { assertBindAllowed, EXTERNAL_BIND_NOT_CONFIRMED, isHostAllowed } from "../../src/panel/bindGuard.js";
-import { mintToken, tokenMatches } from "../../src/panel/token.js";
+import { randomBytes } from "node:crypto";
+import { signAccessToken, verifyAccessToken } from "../../src/panel/accounts/jwt.js";
 import { parsePanelArgs } from "../../src/panel/server.js";
 import { NO_VIEWER_IDENTITY } from "../../src/panel/rejection.js";
 import { controlErrorBody } from "../../src/panel/controlErrors.js";
@@ -183,19 +184,18 @@ describe("panel security (spec sections 3.1 and 3.2)", () => {
     expect(isHostAllowed("::ffff:127.0.0.1", "[::FFFF:127.0.0.1]:7777")).toBe(true);
   });
 
-  it("mints a token that is not guessable and compares it in constant time", () => {
-    const a = mintToken();
-    const b = mintToken();
-    expect(a).toMatch(/^[0-9a-f]{64}$/);
-    expect(a).not.toBe(b);
-    expect(tokenMatches(a, a)).toBe(true);
-    expect(tokenMatches(a, b)).toBe(false);
-    expect(tokenMatches(a, undefined)).toBe(false);
-    expect(tokenMatches(a, "")).toBe(false);
-    // A length-mismatched candidate must not throw out of timingSafeEqual.
-    expect(tokenMatches(a, "deadbeef")).toBe(false);
-    expect(controlErrorBody("token-required", "this panel needs its one-time token")).toEqual({
-      error: { code: "token-required", message: "this panel needs its one-time token", commandRevision: null, evidenceIds: [], retryable: false },
+  it("accepts a session cookie only under the panel's own key, and compares it in constant time", () => {
+    // Accounts spec §3.3-§3.4: the cookie replaced the page token as the whole of authentication.
+    const key = randomBytes(32);
+    const claims = { sub: "user-a", roles: ["owner" as const], sid: "sid-a", iat: 100, exp: 200 };
+    const cookie = signAccessToken(key, claims);
+    expect(verifyAccessToken(key, cookie, 150)).toEqual(claims);
+    expect(verifyAccessToken(randomBytes(32), cookie, 150)).toBe(null);
+    expect(verifyAccessToken(key, "", 150)).toBe(null);
+    // A length-mismatched signature must not throw out of timingSafeEqual.
+    expect(verifyAccessToken(key, `${cookie.split(".").slice(0, 2).join(".")}.deadbeef`, 150)).toBe(null);
+    expect(controlErrorBody("login-required", "log in to this panel")).toEqual({
+      error: { code: "login-required", message: "log in to this panel", commandRevision: null, evidenceIds: [], retryable: false },
     });
   });
 });

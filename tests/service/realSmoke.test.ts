@@ -3,7 +3,6 @@ import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { TOKEN_ANCHOR } from "../../src/panel/staticFiles.js";
 import { CAPTURED_ENV, checkDist } from "../../src/service/config.js";
 import { domain } from "../../src/service/launchd.js";
 import { defaultContext } from "../../src/service/manager.js";
@@ -56,7 +55,7 @@ describe("real launchd smoke (opt-in)", () => {
     checkDist(process.cwd());
     root = await mkdtemp(join(await realpath("/tmp"), "r"));
     for (const d of ["repo", "web", "la", "c", "k"]) await mkdir(join(root, d));
-    await writeFile(join(root, "web", "index.html"), `<!doctype html><html><body>${TOKEN_ANCHOR}</body></html>`);
+    await writeFile(join(root, "web", "index.html"), "<!doctype html><html><body></body></html>");
     // Every captured name this test does not relocate is blanked, so nothing ambient from the human's shell reaches the service.
     const blank = Object.fromEntries([...CAPTURED_ENV, "ORCA_SERVICE_CHECKOUT"].map((name) => [name, ""]));
     env = {

@@ -12,7 +12,7 @@ describe("sections (ruling U2)", () => {
     expect(sectionFromHash("")).toBe("requirements");
     expect(sectionFromHash("#")).toBe("requirements");
     expect(sectionFromHash("#nope")).toBe("requirements");
-    // Review Focus 5: a link is a bare hash, so the ?token= query of the page URL survives a click.
+    // Review Focus 5: a link is a bare hash, so the page URL's path and query survive a click.
     for (const s of SECTIONS) expect(hashFor(s)).toMatch(/^#[a-z]+$/);
   });
 });

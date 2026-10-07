@@ -42,13 +42,12 @@ async function listRows(
 
 export interface ApiDeps {
   opts: PanelOptions;
-  token: string;
   reviews: ReviewsWriter;
   statics: StaticFiles;
   control?: ControlReadApiDeps;
   /** Project registry spec §5: null in command-line mode. */
   projects?: ProjectRegistry | null;
-  /** Accounts spec §3.3: sessions; the /api middleware asks it first and the page token second (Task 4 drops the token). */
+  /** Accounts spec §3.3-§3.4: sessions; the /api middleware wants one on every route but POST /api/auth/login. */
   auth: PanelAuth;
 }
 
@@ -153,9 +152,9 @@ function isBodyParserError(err: unknown): err is { message: string; status: numb
 }
 
 export function buildApi(app: Express, deps: ApiDeps): void {
-  // 🔴 The static route. Registered BEFORE the /api token middleware, because
-  // the browser's very first request -- for the HTML that CARRIES the token --
-  // cannot present one.
+  // 🔴 The static route. Registered BEFORE the /api session middleware, because
+  // the browser's very first request -- for the HTML that shows the login form --
+  // cannot present one (accounts spec §3.4: static files are served without auth).
   //
   // This whole block is external review seat 1's Critical 2: the first draft
   // constructed `statics`, passed it into ApiDeps, and then no route ever read
@@ -177,7 +176,7 @@ export function buildApi(app: Express, deps: ApiDeps): void {
     res.status(200).type(asset.contentType).send(asset.bytes);
   });
 
-  app.use("/api", authMiddleware(deps.auth, deps.token));
+  app.use("/api", authMiddleware(deps.auth));
   // Ruling Q8: after the middleware, so every auth route but POST /api/auth/login gets the login, CSRF and
   // password-change checks.
   registerAuthRoutes(app, deps.auth);

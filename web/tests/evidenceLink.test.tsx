@@ -2,14 +2,16 @@
 /**
  * Review finding (Task 10 round): the evidence links could never authenticate.
  *
- * The panel's `/api/control/*` routes take the token from the `x-orca-token`
- * header (src/panel/api.ts's middleware, injected into the page as
- * `window.__ORCA_TOKEN__`). A bare `<a href="/api/control/runs/x/evidence">`
- * sends no header, so every one of these links answered 401 -- an evidence
- * feature unreachable from the only page meant to reach it.
+ * The panel's `/api/control/*` routes then took a page credential from a
+ * header a bare `<a href="/api/control/runs/x/evidence">` cannot send, so every
+ * one of these links answered 401 -- an evidence feature unreachable from the
+ * only page meant to reach it. Accounts spec §3.4 moved authentication to the
+ * session cookie the browser sends on its own; the page still fetches the
+ * manifest itself, so a refusal is named in the page.
  *
  * The criteria drive the two call sites that had the dead link, so they go red
- * the moment the page stops sending the header or stops offering a download.
+ * the moment the page puts a credential of its own on the request or stops
+ * offering a download.
  */
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -17,7 +19,6 @@ import { ControlGroupView } from "../src/ControlGroupView.js";
 import { RecoveryView } from "../src/RecoveryView.js";
 import type { Amount, ControlConfigV1, EvidenceManifestV1, GroupViewV1, RecoveryViewV1 } from "../src/controlTypes.js";
 
-const TOKEN = "token-injected-by-staticFiles";
 const RUN = "run-a";
 
 const amount = (tokens: number): Amount => ({ tokens, activeMs: tokens * 10, attempts: 1, sessions: 1 });
@@ -76,7 +77,6 @@ beforeEach(() => {
   requests = [];
   downloads = [];
   answer = { status: 200, body: manifest };
-  window.__ORCA_TOKEN__ = TOKEN;
   URL.createObjectURL = vi.fn(() => "blob:evidence-manifest");
   URL.revokeObjectURL = vi.fn();
   // jsdom does not navigate, so the download anchor's click is recorded instead.
@@ -98,7 +98,6 @@ afterEach(async () => {
   vi.restoreAllMocks();
   Reflect.deleteProperty(URL, "createObjectURL");
   Reflect.deleteProperty(URL, "revokeObjectURL");
-  Reflect.deleteProperty(window, "__ORCA_TOKEN__");
 });
 
 function groupViewProps(): Parameters<typeof ControlGroupView>[0] {
@@ -112,13 +111,13 @@ async function clickEvidence(name: RegExp): Promise<void> {
 }
 
 describe("evidence links", () => {
-  it("asks for a run's manifest with the panel token and offers the answer as a download", async () => {
+  it("asks for a run's manifest with the session alone and offers the answer as a download", async () => {
     render(<ControlGroupView {...groupViewProps()} />);
     await clickEvidence(/^evidence$/);
 
     expect(requests[0]!.url).toBe(`/api/control/runs/${RUN}/evidence`);
-    // Load-bearing: without the header the panel answers 401, which is the whole defect.
-    expect(requests[0]!.headers["x-orca-token"]).toBe(TOKEN);
+    // Accounts spec §3.4: a GET carries no header of the page's own; the browser sends the session cookie.
+    expect(requests[0]!.headers).toEqual({});
     expect(downloads).toEqual([`evidence-${RUN}.json`]);
   });
 
@@ -135,7 +134,7 @@ describe("evidence links", () => {
   it("asks the same way for a blocked run's evidence", async () => {
     render(<RecoveryView recovery={recovery} group={view} onCommand={vi.fn()} />);
     await clickEvidence(/evidence/i);
-    expect(requests[0]!.headers["x-orca-token"]).toBe(TOKEN);
+    expect(requests[0]!.headers).toEqual({});
     expect(downloads).toEqual([`evidence-${RUN}.json`]);
   });
 });

@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createPanelServer, parsePanelArgs, type StartedPanel } from "../../src/panel/server.js";
 import { controlRepoKey } from "../../src/panel/controlOptions.js";
+import { sessionFor } from "./fixtures/auth.js";
 
 /**
  * Assembly plan Task 5. The first criteria in this repository about the *shipped* panel process
@@ -37,11 +38,15 @@ async function boot(h: Awaited<ReturnType<typeof workspace>>, extra: string[] = 
   const opts = parsePanelArgs(["--by", "tester", "--repo", `proj=${h.repo}`, ...extra], env);
   const panel = await createPanelServer(opts, env);
   panels.push(panel);
+  envs.set(panel, env);
   return panel;
 }
 
-const get = (panel: StartedPanel, path: string) =>
-  fetch(`${panel.url}${path}`, { headers: { "x-orca-token": panel.token } });
+/** Each panel's env, so a request logs in against that panel's own accounts (its ORCA_CONTROL_DIR). */
+const envs = new WeakMap<StartedPanel, NodeJS.ProcessEnv>();
+const session = (panel: StartedPanel) => sessionFor(panel, envs.get(panel));
+
+const get = async (panel: StartedPanel, path: string) => (await session(panel)).fetch(path);
 
 describe("a shipped panel mounts the control plane by default", () => {
   it("boots with no execution port, and serves the config read", async () => {
@@ -131,9 +136,9 @@ describe("what a panel with no port refuses", () => {
     // it now names the route from the table in controlApi.ts and asserts the code itself.
     const h = await workspace();
     const panel = await boot(h);
-    const response = await fetch(`${panel.url}/api/control/groups/import-plan`, {
+    const response = await (await session(panel)).fetch("/api/control/groups/import-plan", {
       method: "POST",
-      headers: { "x-orca-token": panel.token, "content-type": "application/json" },
+      headers: { "content-type": "application/json" },
       // The envelope the route parses is strict and carries only these three: the verb, the actor
       // and the target come from the route and the store, never from the browser.
       body: JSON.stringify({ commandId: "import-1", expectedRevision: 0, payload: { groupId: "g", repoId: "proj", planId: "plan" } }),
@@ -146,9 +151,9 @@ describe("what a panel with no port refuses", () => {
   it("does not answer a real mutation route with route-not-found, which is how the above went vacuous", async () => {
     const h = await workspace();
     const panel = await boot(h);
-    const response = await fetch(`${panel.url}/api/control/groups/g/start`, {
+    const response = await (await session(panel)).fetch("/api/control/groups/g/start", {
       method: "POST",
-      headers: { "x-orca-token": panel.token, "content-type": "application/json" },
+      headers: { "content-type": "application/json" },
       body: JSON.stringify({ commandId: "start-1", expectedRevision: 0, payload: { groupId: "g" } }),
     });
     const body = await response.json() as { error?: { code?: string } };

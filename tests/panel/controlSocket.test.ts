@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createPanelServer, parsePanelArgs } from "../../src/panel/server.js";
 import { controlSocketPath, socketPathTooLong } from "../../src/panel/controlSocket.js";
 import { boot, overSocket, trackSocketPanel, untrackSocketPanel, useSocketPanels, workspace } from "./fixtures/socketPanel.js";
+import { sessionFor } from "./fixtures/auth.js";
 
 useSocketPanels();
 
@@ -53,7 +54,7 @@ describe("the control socket (spec §3)", () => {
     expect(panel.socketPath).toBe(null);
     expect(lines.join("")).toContain("orca-panel: control socket unavailable: control-socket-path-occupied");
     expect((await stat(join(w.state, "control.sock"))).isFile()).toBe(true);
-    const web = await fetch(`${panel.url}/api/control/config`, { headers: { "x-orca-token": panel.token } });
+    const web = await (await sessionFor(panel, w.env)).fetch("/api/control/config");
     expect(web.status).toBe(200);
   });
 
@@ -98,7 +99,7 @@ describe("the control socket (spec §3)", () => {
     const panel = trackSocketPanel(await createPanelServer(opts, w.env));
     expect(panel.socketPath).toBe(null);
     expect(lines.join("")).toContain("control-socket-path-too-long");
-    const web = await fetch(`${panel.url}/api/control/config`, { headers: { "x-orca-token": panel.token } });
+    const web = await (await sessionFor(panel, w.env)).fetch("/api/control/config");
     expect(web.status).toBe(200);
   });
 

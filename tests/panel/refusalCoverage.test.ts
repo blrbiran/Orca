@@ -25,6 +25,9 @@ const BY_HAND = [
   // src/panel/projects.ts, src/panel/projectRegistry.ts (project registry spec §6)
   "projects-from-command-line", "project-path-missing", "project-path-not-repository-root", "project-path-taken", "project-path-refused",
   "project-name-invalid", "project-name-taken", "project-unknown", "projects-file-invalid", "projects-file-changed",
+  // src/panel/authRoutes.ts, src/panel/accounts/store.ts (accounts spec §3.2-§3.3, §8)
+  "login-failed", "login-throttled", "csrf-required", "password-too-short", "user-name-invalid", "user-name-taken", "owner-required",
+  "user-role-invalid", "notice-not-found", "user-not-found",
 ];
 const has = (code: string): boolean => Object.prototype.hasOwnProperty.call(zhErrors, code);
 

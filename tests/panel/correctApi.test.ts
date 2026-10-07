@@ -16,8 +16,8 @@ import { REVIEWS_STORE_BUSY, acquireReviewsLock } from "../../src/panel/reviewsL
 import { readReviews } from "../../src/panel/reviewsStore.js";
 import { createPanelServer, parsePanelArgs } from "../../src/panel/server.js";
 import type { PanelOptions, StartedPanel } from "../../src/panel/server.js";
-import { TOKEN_ANCHOR } from "../../src/panel/staticFiles.js";
 import { ORIGINAL, git, makeTargetRepo, withCorrectionsDir } from "../corrections/harness.js";
+import { sessionFor } from "./fixtures/auth.js";
 
 /**
  * task 7 ruling J2: neither GOLDEN_ID nor its input is exported from
@@ -40,13 +40,12 @@ const GOLDEN_ID = "c_ed266d26d170dd27";
  * File-local HTTP helpers, same shape as tests/panel/decisionsApi.test.ts's
  * (ruling H7 there) -- this file stays isolated from that one.
  */
-const get = async (started: StartedPanel, path: string, token?: string): Promise<Response> =>
-  fetch(`${started.url}${path}`, { headers: { "x-orca-token": token ?? started.token } });
+const get = async (started: StartedPanel, path: string): Promise<Response> => (await sessionFor(started)).fetch(path);
 
-const post = async (started: StartedPanel, path: string, body: unknown, token?: string): Promise<Response> =>
-  fetch(`${started.url}${path}`, {
+const post = async (started: StartedPanel, path: string, body: unknown): Promise<Response> =>
+  (await sessionFor(started)).fetch(path, {
     method: "POST",
-    headers: { "x-orca-token": token ?? started.token, "content-type": "application/json" },
+    headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
   });
 
@@ -55,7 +54,7 @@ const post = async (started: StartedPanel, path: string, body: unknown, token?: 
  * content-type of its own for a string body, and this criterion is about what
  * happens when a client does NOT send one.
  */
-function rawPost(
+async function rawPost(
   started: StartedPanel,
   path: string,
   body: string,
@@ -63,8 +62,10 @@ function rawPost(
   extraHeaders: Record<string, string> = {},
 ): Promise<{ status: number; body: string }> {
   const u = new URL(started.url);
+  const session = await sessionFor(started);
   const headers: Record<string, string> = {
-    "x-orca-token": started.token,
+    cookie: session.cookie,
+    "x-orca-csrf": session.csrf,
     "content-length": String(Buffer.byteLength(body)),
   };
   if (contentType !== undefined) headers["content-type"] = contentType;
@@ -88,7 +89,7 @@ async function makeDistFixture(): Promise<{ dir: string; cleanup: () => Promise<
   await mkdir(dist, { recursive: true });
   await mkdir(outside, { recursive: true });
   await writeFile(join(outside, "passwd.txt"), "root:x:0:0\n");
-  await writeFile(join(dist, "index.html"), `<!doctype html><html><body>${TOKEN_ANCHOR}</body></html>`);
+  await writeFile(join(dist, "index.html"), "<!doctype html><html><body></body></html>");
   await writeFile(join(dist, "index.js"), "console.log(1)\n");
   await symlink(join(outside, "passwd.txt"), join(dist, "linked.txt"));
   return { dir: dist, cleanup: () => rm(root, { recursive: true, force: true }) };

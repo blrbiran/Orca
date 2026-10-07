@@ -7,7 +7,6 @@ import { signAccessToken } from "../../src/panel/accounts/jwt.js";
 import { AccountsRejection, openAccountsStore } from "../../src/panel/accounts/store.js";
 import { createPanelAuth } from "../../src/panel/auth.js";
 import { createPanelServer, parsePanelArgs, type StartedPanel } from "../../src/panel/server.js";
-import { TOKEN_ANCHOR } from "../../src/panel/staticFiles.js";
 import { login, seedUser, sessionFor, type Session } from "./fixtures/auth.js";
 
 let tmp: string, root: string, env: NodeJS.ProcessEnv;
@@ -19,7 +18,7 @@ beforeEach(async () => {
   root = join(tmp, "control");
   env = { ...process.env, ORCA_CONTROL_DIR: root, ORCA_CORRECTIONS_DIR: join(tmp, "corrections") };
   await mkdir(join(tmp, "dist"));
-  await writeFile(join(tmp, "dist", "index.html"), `<!doctype html><html><body>${TOKEN_ANCHOR}</body></html>`);
+  await writeFile(join(tmp, "dist", "index.html"), "<!doctype html><html><body></body></html>");
 });
 
 afterEach(async () => {
@@ -165,16 +164,16 @@ describe("login and sessions (spec §3.2-§3.4)", () => {
     expect(out.headers.getSetCookie()).toEqual(["orca_at=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0", "orca_csrf=; SameSite=Strict; Path=/; Max-Age=0"]);
   });
 
-  it("keeps the forced change to me, password and logout; the page token carries no user for the auth routes", async () => {
+  it("keeps the forced change to me, password and logout; with no session there is no user for the auth routes", async () => {
     const panel = await boot();
     const initial = (await readFile(join(root, "initial-password"), "utf8")).trim();
     const s = await login(panel.url, "tester", initial);
     expect((await s.fetch("/api/auth/me")).status).toBe(200);
     expect(await (await s.fetch("/api/auth/refresh", { method: "POST" })).json()).toMatchObject({ code: "password-change-required" });
     expect(await (await s.fetch("/api/auth/users")).json()).toMatchObject({ code: "password-change-required" });
-    // Until Task 4 the page token still opens the data routes, but it is nobody: the auth routes want a session.
-    expect((await fetch(`${panel.url}/api/metrics`, { headers: { "x-orca-token": panel.token } })).status).toBe(200);
-    expect(await (await fetch(`${panel.url}/api/auth/me`, { headers: { "x-orca-token": panel.token } })).json()).toMatchObject({ code: "login-required" });
+    // Spec §3.4: the session is the only credential; without one neither the data routes nor the auth routes answer.
+    expect(await (await fetch(`${panel.url}/api/metrics`)).json()).toMatchObject({ code: "login-required" });
+    expect(await (await fetch(`${panel.url}/api/auth/me`)).json()).toMatchObject({ code: "login-required" });
     expect((await s.fetch("/api/auth/logout", { method: "POST" })).status).toBe(200);
   });
 

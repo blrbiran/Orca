@@ -1,9 +1,9 @@
 import { DatabaseSync } from "node:sqlite";
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { hashPassword } from "../../../src/panel/accounts/password.js";
 import { ACCOUNTS_FILE, openAccountsStore } from "../../../src/panel/accounts/store.js";
-import type { Role } from "../../../src/panel/accounts/jwt.js";
+import { signAccessToken, type AccessClaims, type Role } from "../../../src/panel/accounts/jwt.js";
 import { createPanelAuth, type PanelAuth } from "../../../src/panel/auth.js";
 import { controlRoot } from "../../../src/panel/controlOptions.js";
 
@@ -47,10 +47,18 @@ export async function login(baseUrl: string, name = "tester", password = TEST_PA
   };
 }
 
+/** The session's cookie with its own claims re-signed under another key: wrong in the key and nothing else. */
+export function foreignKeyCookie(session: Session): string {
+  const jwt = session.cookie.split("; ")[0]!.slice("orca_at=".length);
+  const claims = JSON.parse(Buffer.from(jwt.split(".")[1]!, "base64url").toString("utf8")) as AccessClaims;
+  return `orca_at=${signAccessToken(randomBytes(32), claims)}; orca_csrf=${session.csrf}`;
+}
+
 const sessions = new Map<string, Promise<Session>>();
 /** Seeds `name` into the panel's accounts dir (ORCA_CONTROL_DIR of `env`) and logs in once per panel and name. */
 export function sessionFor(panel: { url: string }, env: NodeJS.ProcessEnv = process.env, name = "tester", role: Role = "owner"): Promise<Session> {
-  const key = `${panel.url}\0${name}`;
+  // The accounts dir is in the key too: a later panel on a reused port with another root has another jwt.key.
+  const key = `${panel.url}\0${controlRoot(env)}\0${name}`;
   let session = sessions.get(key);
   if (session === undefined) {
     seedUser(controlRoot(env), name, role);
@@ -60,7 +68,7 @@ export function sessionFor(panel: { url: string }, env: NodeJS.ProcessEnv = proc
   return session;
 }
 
-/** For a criterion that builds the app with `buildApi` itself and still sends the page token (Task 4 moves it to a session). */
+/** For a criterion that builds the app with `buildApi` itself: its accounts in `root`, with `seedUser(root, …)` + `login` for a session. */
 export function quietPanelAuth(root: string): PanelAuth {
   return createPanelAuth({ root, by: "operator", sessionDays: 15, log: () => undefined, nowMs: Date.now });
 }

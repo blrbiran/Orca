@@ -16,14 +16,14 @@ import { ReviewsWriter } from "../../src/panel/reviewsStore.js";
 import { git } from "../../src/scheduler/gitExec.js";
 import { type PanelOptions, createPanelServer } from "../../src/panel/server.js";
 import { controlDisabled } from "../../src/panel/controlOptions.js";
-import { TOKEN_ANCHOR, loadStaticFiles } from "../../src/panel/staticFiles.js";
+import { loadStaticFiles } from "../../src/panel/staticFiles.js";
 import { WEB_CHAIN_VIEW_FIELDS } from "../../web/src/types.js";
 import { PANEL_COMMIT_RULE, offending, scanTree } from "../../scripts/forbidden-literals.js";
 import { isolateChainEnv } from "../helpers/chainEnv.js";
 import { recordFixture } from "../helpers/chainRecord.js";
 import { ORCA_ROOT, makeChainRepo } from "../helpers/chainRepo.js";
 import { type FakeClaude, fakeClaude } from "../helpers/fakeClaude.js";
-import { quietPanelAuth } from "./fixtures/auth.js";
+import { foreignKeyCookie, login, quietPanelAuth, seedUser, sessionFor, type Session } from "./fixtures/auth.js";
 
 let cleanups: Array<() => Promise<void> | void> = [];
 afterEach(async () => {
@@ -33,7 +33,7 @@ afterEach(async () => {
 
 async function distFixture(): Promise<string> {
   const dist = await mkdtemp(join(tmpdir(), "orca-panel-dist-"));
-  await writeFile(join(dist, "index.html"), `<!doctype html><html><body>${TOKEN_ANCHOR}</body></html>`);
+  await writeFile(join(dist, "index.html"), "<!doctype html><html><body></body></html>");
   cleanups.push(() => rm(dist, { recursive: true, force: true }));
   return dist;
 }
@@ -60,12 +60,22 @@ async function setup(opts: { gate?: boolean; over?: Partial<PanelOptions> } = {}
   cleanups.push(() => panel.close());
   return { repo: target.path, fake, panel, options };
 }
-const post = (p: { url: string; token: string }, path: string, body: unknown, token = p.token) =>
-  fetch(`${p.url}${path}`, { method: "POST", headers: { "x-orca-token": token, "content-type": "application/json" }, body: JSON.stringify(body) });
-const get = (p: { url: string; token: string }, path: string, token = p.token) => fetch(`${p.url}${path}`, { headers: { "x-orca-token": token } });
+type Target = { url: string; session?: Session };
+/** As the logged-in browser; `wrong`: the same cookie re-signed under another key (and its CSRF header), as C7 needs. */
+async function call(p: Target, path: string, init: RequestInit, wrong: boolean): Promise<Response> {
+  const session = p.session ?? (await sessionFor(p));
+  if (!wrong) return session.fetch(path, init);
+  const headers = new Headers(init.headers);
+  headers.set("cookie", foreignKeyCookie(session));
+  headers.set("x-orca-csrf", session.csrf);
+  return fetch(`${p.url}${path}`, { ...init, headers });
+}
+const post = (p: Target, path: string, body: unknown, wrong = false) =>
+  call(p, path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }, wrong);
+const get = (p: Target, path: string, wrong = false) => call(p, path, {}, wrong);
 
 /** Polls GET /api/chains until the repository's latest chain has stopped; then waits for the supervisor to be gone. */
-async function untilStopped(p: { url: string; token: string }, repo: string, chainId: string): Promise<any> {
+async function untilStopped(p: Target, repo: string, chainId: string): Promise<any> {
   const deadline = Date.now() + 60_000;
   for (;;) {
     const view = ((await (await get(p, "/api/chains")).json()) as { repos: Array<{ chain: any }> }).repos[0];
@@ -190,29 +200,31 @@ describe("chains in the panel (D-launch spec §6.2, §6.3, §8.2-8)", () => {
     expect(live.holderGone).toBe(false);
   });
 
-  it("C7 every chain route needs the token", async () => {
+  it("C7 every chain route needs a session (a cookie signed by another key is none)", async () => {
     const s = await setup({ gate: false });
-    expect((await get(s.panel, "/api/chains", "wrong")).status).toBe(401);
-    expect((await post(s.panel, "/api/chains", {}, "wrong")).status).toBe(401);
-    expect((await post(s.panel, "/api/chains/chain-0000000a/stop", {}, "wrong")).status).toBe(401);
+    expect((await get(s.panel, "/api/chains", true)).status).toBe(401);
+    expect((await post(s.panel, "/api/chains", {}, true)).status).toBe(401);
+    expect((await post(s.panel, "/api/chains/chain-0000000a/stop", {}, true)).status).toBe(401);
   });
 
   it("C8 external mode opens the same routes (rulings R11, R13): an app built for a confirmed external bind starts a chain", async () => {
     // Never 0.0.0.0 (tests/panel/security.test.ts:99-108): the options SAY external, the socket stays on loopback.
     const s = await setup();
     await s.fake.scenario(1, DONE_SCENARIO);
-    const token = "a".repeat(64);
     const opts: PanelOptions = { ...s.options, bind: "192.0.2.1", confirmedExternal: true };
     const app = express();
     app.use(express.json({ limit: "64kb" }));
-    const auth = quietPanelAuth(join(s.options.correctionsDir, "accounts"));
+    const accounts = join(s.options.correctionsDir, "accounts");
+    const auth = quietPanelAuth(accounts);
     cleanups.push(() => auth.close());
-    buildApi(app, { opts, token, reviews: new ReviewsWriter(opts.correctionsDir), statics: await loadStaticFiles(opts.distDir, token), auth });
+    seedUser(accounts, "tester");
+    buildApi(app, { opts, reviews: new ReviewsWriter(opts.correctionsDir), statics: await loadStaticFiles(opts.distDir), auth });
     const server = app.listen(0, "127.0.0.1");
     await new Promise<void>((r) => server.once("listening", () => r()));
     cleanups.push(() => new Promise<void>((r) => server.close(() => r())));
     const address = server.address() as { port: number };
-    const p = { url: `http://127.0.0.1:${address.port}`, token };
+    const url = `http://127.0.0.1:${address.port}`;
+    const p = { url, session: await login(url) };
     const res = await post(p, "/api/chains", { repoKey: "chains", goal: "external goal", maxSessions: 1, maxCostUsd: 1 });
     expect(res.status).toBe(200);
     const { chainId } = (await res.json()) as { chainId: string };

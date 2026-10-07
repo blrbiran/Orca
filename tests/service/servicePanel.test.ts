@@ -6,7 +6,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { controlSocketPath } from "../../src/panel/controlSocket.js";
-import { TOKEN_ANCHOR } from "../../src/panel/staticFiles.js";
 import { readPanelJson } from "../../src/service/instance.js";
 import { LOG_MAX_BYTES } from "../../src/service/logRotate.js";
 import { isProcessAlive, processStartTime } from "../../src/service/processInfo.js";
@@ -24,7 +23,7 @@ async function workspace() {
   const r = await realpath(await mkdtemp(join(tmpdir(), "sp-")));
   roots.push(r);
   for (const d of ["repo", "dist", "p", "p/logs", "c", "k"]) await mkdir(join(r, d));
-  writeFileSync(join(r, "dist", "index.html"), `<!doctype html><html><body>${TOKEN_ANCHOR}</body></html>`);
+  writeFileSync(join(r, "dist", "index.html"), "<!doctype html><html><body></body></html>");
   // An explicit short state dir: in service mode a socket path over sun_path's 104 bytes is exit 78 (plan D13), and
   // <scoped TMPDIR>/sp-XXXXXX/c/<repo key>/control.sock measured 108 bytes on macOS.
   return { r, panelDir: join(r, "p"), controlDir: join(r, "c"), state: join(r, "s"), lock: join(r, "p", "panel.lock"), json: join(r, "p", "panel.json"), errLog: join(r, "p", "logs", "panel.err.log") };

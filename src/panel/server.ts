@@ -19,7 +19,6 @@ import { projectsFilePath, readProjectsFile, type ProjectsFileRead } from "./pro
 import { NO_VIEWER_IDENTITY, PANEL_BIND_FAILED, PanelRejection } from "./rejection.js";
 import { ReviewsWriter } from "./reviewsStore.js";
 import { loadStaticFiles } from "./staticFiles.js";
-import { mintToken } from "./token.js";
 
 export interface PanelOptions {
   by: string;
@@ -75,7 +74,6 @@ export type ControlOptions = Omit<ControlOptionsResolution, "rejection">;
 
 export interface StartedPanel {
   url: string;
-  token: string;
   port: number;
   /** Agent entry spec §3: the control socket this panel bound, or null (no control plane, store held elsewhere, or bind refused). */
   socketPath: string | null;
@@ -92,8 +90,9 @@ export interface PanelMode {
 /** The panel's announcement, shared by the foreground panel and the service panel: one machine line on stdout. */
 export function panelReadyLines(started: StartedPanel): { stdout: string; stderr: string } {
   return {
-    stdout: `orca-panel ready url=${started.url} token=${started.token}\n`,
-    stderr: `orca-panel: open ${started.url} in a browser (the page already carries the token)\n` +
+    // Accounts D11: the url and nothing else; the page carries no credential and the browser logs in.
+    stdout: `orca-panel ready url=${started.url}\n`,
+    stderr: `orca-panel: open ${started.url} in a browser and log in\n` +
       (started.socketPath !== null ? `orca-panel: control socket ${started.socketPath}\n` : ""),
   };
 }
@@ -214,14 +213,13 @@ export async function createPanelServer(opts: PanelOptions, env: NodeJS.ProcessE
   // Before listen(), never after -- see bindGuard.ts.
   assertBindAllowed(opts.bind, opts.confirmedExternal);
 
-  const token = mintToken();
   const reviews = new ReviewsWriter(opts.correctionsDir);
   await reviews.load();
-  const statics = await loadStaticFiles(opts.distDir, token);
+  const statics = await loadStaticFiles(opts.distDir);
 
   const app = express();
   // Final review I-4 / ruling R67: FIRST, before the body parser, the static
-  // route that serves the token, and the /api token check -- a request naming
+  // route and the /api session check -- a request naming
   // a foreign Host gets nothing from this process, not even a parse error.
   // See bindGuard.ts's isHostAllowed for why.
   app.use((req, res, next) => {
@@ -244,7 +242,7 @@ export async function createPanelServer(opts: PanelOptions, env: NodeJS.ProcessE
 
   // Assembly plan Task 5. Built before listen so that a process which cannot build its control
   // plane never accepts a connection that would then meet a half-built one. The epoch is its own
-  // per-process value and not the token: it is served in every view, and the token is a credential.
+  // per-process value and never a credential: it is served in every view.
   const epoch = randomUUID();
   let control: ControlRuntime | null = null;
   if (opts.control.enabled) {
@@ -263,7 +261,7 @@ export async function createPanelServer(opts: PanelOptions, env: NodeJS.ProcessE
     },
   });
   buildApi(app, {
-    opts, token, reviews, statics, projects, auth,
+    opts, reviews, statics, projects, auth,
     // Disabled means no `control` key at all -- byte-for-byte the shape that shipped before this
     // existed, so `controlApi.ts` registers nothing and every /api/control path is a 404.
     ...(control === null ? {} : { control: { store: control.store, epoch, config: control.config, service: control.service, port: control.port } }),
@@ -350,7 +348,6 @@ export async function createPanelServer(opts: PanelOptions, env: NodeJS.ProcessE
 
   return {
     url: `http://${opts.bind}:${address.port}`,
-    token,
     port: address.port,
     socketPath: socket?.path ?? null,
     closed,

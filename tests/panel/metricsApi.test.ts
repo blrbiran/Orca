@@ -1,5 +1,5 @@
 import { request as httpRequest } from "node:http";
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -17,11 +17,10 @@ import { LOGIN_REQUIRED } from "../../src/panel/rejection.js";
 import type { ReviewRow } from "../../src/panel/reviewsStore.js";
 import { createPanelServer, parsePanelArgs } from "../../src/panel/server.js";
 import type { PanelOptions, StartedPanel } from "../../src/panel/server.js";
-import { TOKEN_ANCHOR } from "../../src/panel/staticFiles.js";
 import { makeTargetRepo, withCorrectionsDir } from "../corrections/harness.js";
+import { foreignKeyCookie, sessionFor } from "./fixtures/auth.js";
 
-const get = async (started: StartedPanel, path: string, token?: string): Promise<Response> =>
-  fetch(`${started.url}${path}`, { headers: { "x-orca-token": token ?? started.token } });
+const get = async (started: StartedPanel, path: string): Promise<Response> => (await sessionFor(started)).fetch(path);
 
 interface RawResponse {
   status: number;
@@ -66,7 +65,7 @@ async function makeDistFixture(): Promise<{ dir: string; cleanup: () => Promise<
   await mkdir(dist, { recursive: true });
   await mkdir(outside, { recursive: true });
   await writeFile(join(outside, "passwd.txt"), "root:x:0:0\n");
-  await writeFile(join(dist, "index.html"), `<!doctype html><html><body>${TOKEN_ANCHOR}</body></html>`);
+  await writeFile(join(dist, "index.html"), "<!doctype html><html><body></body></html>");
   await writeFile(join(dist, "index.js"), "console.log(1)\n");
   await symlink(join(outside, "passwd.txt"), join(dist, "linked.txt"));
   return { dir: dist, cleanup: () => rm(root, { recursive: true, force: true }) };
@@ -203,7 +202,7 @@ describe("the metrics endpoint (spec sections 4.1 and 5)", () => {
     });
   });
 
-  it("answers 401 without a token, and 401 with a wrong one", async () => {
+  it("answers 401 without a cookie, and 401 with a cookie signed by another key", async () => {
     await withCorrectionsDir(async (dir) => {
       const repo = await makeTargetRepo();
       const dist = await makeDistFixture();
@@ -218,7 +217,7 @@ describe("the metrics endpoint (spec sections 4.1 and 5)", () => {
           expect(noToken.status).toBe(401);
           expect(((await noToken.json()) as { code: string }).code).toBe(LOGIN_REQUIRED);
 
-          const wrongToken = await get(started, "/api/metrics", "0".repeat(64));
+          const wrongToken = await fetch(`${started.url}/api/metrics`, { headers: { cookie: foreignKeyCookie(await sessionFor(started)) } });
           expect(wrongToken.status).toBe(401);
           expect(((await wrongToken.json()) as { code: string }).code).toBe(LOGIN_REQUIRED);
 
@@ -260,7 +259,7 @@ describe("the metrics endpoint (spec sections 4.1 and 5)", () => {
 });
 
 describe("static serving via HTTP (spec section 2.2)", () => {
-  it("serves the token-injected index.html at / with no token header", async () => {
+  it("serves index.html at / with no cookie, byte-for-byte: the page carries no credential", async () => {
     await withCorrectionsDir(async (dir) => {
       const dist = await makeDistFixture();
       try {
@@ -271,10 +270,9 @@ describe("static serving via HTTP (spec section 2.2)", () => {
           const res = await rawGet(started.url, "/");
           expect(res.status).toBe(200);
           expect(res.contentType).toBe("text/html; charset=utf-8");
-          // Exactly once: the anchor has to be consumed, and this is the
-          // browser's very first request -- for the HTML that carries the
-          // token -- which cannot present one.
-          expect(res.body.split(started.token).length - 1).toBe(1);
+          // The browser's very first request cannot present a session, and
+          // what it gets is the build's page as written (accounts spec §3.4).
+          expect(res.body).toBe(await readFile(join(dist.dir, "index.html"), "utf8"));
         } finally {
           await started.close();
         }
@@ -352,7 +350,7 @@ describe("the Host allowlist (final review I-4, DNS rebinding)", () => {
     });
   };
 
-  it("refuses a foreign Host on the token-carrying page with 403 by name, and the body carries no token", async () => {
+  it("refuses a foreign Host on the page with 403 by name, and the body carries none of the page", async () => {
     await withPanel(async (started) => {
       // `evil.localhost` is in the list on purpose, with and without a port: a
       // suffix match on "localhost" (mutation HG-2) would let it through,
@@ -366,26 +364,27 @@ describe("the Host allowlist (final review I-4, DNS rebinding)", () => {
         const res = await rawGet(started.url, "/", { host });
         expect(res.status, host).toBe(403);
         expect((JSON.parse(res.body) as { code: string }).code, host).toBe(PANEL_HOST_NOT_ALLOWED);
-        expect(res.body.includes(started.token), host).toBe(false);
+        expect(res.body.includes("<!doctype html>"), host).toBe(false);
       }
     });
   });
 
-  it("refuses a foreign Host on the API even with a valid token (the guard sits in front of /api too)", async () => {
+  it("refuses a foreign Host on the API even with a valid session (the guard sits in front of /api too)", async () => {
     await withPanel(async (started) => {
+      const session = await sessionFor(started);
       const res = await rawGet(started.url, "/api/metrics", {
         host: `evil.example:${started.port}`,
-        "x-orca-token": started.token,
+        cookie: session.cookie,
       });
       expect(res.status).toBe(403);
       expect((JSON.parse(res.body) as { code: string }).code).toBe(PANEL_HOST_NOT_ALLOWED);
-      expect(res.body.includes(started.token)).toBe(false);
+      expect(res.body.includes(session.csrf)).toBe(false);
     });
   });
 
   it("uses the exact V1 envelope for a foreign Host on control routes while preserving legacy API errors", async () => {
     await withPanel(async (started) => {
-      const headers = { host: `evil.example:${started.port}`, "x-orca-token": started.token };
+      const headers = { host: `evil.example:${started.port}`, cookie: (await sessionFor(started)).cookie };
       const control = await rawGet(started.url, "/api/control/config", headers);
       expect(control.status).toBe(403);
       expect(JSON.parse(control.body)).toEqual({
@@ -412,8 +411,8 @@ describe("the Host allowlist (final review I-4, DNS rebinding)", () => {
       for (const host of [`127.0.0.1:${started.port}`, `localhost:${started.port}`, `[::1]:${started.port}`]) {
         const page = await rawGet(started.url, "/", { host });
         expect(page.status, host).toBe(200);
-        expect(page.body.includes(started.token), host).toBe(true);
-        const api = await rawGet(started.url, "/api/metrics", { host, "x-orca-token": started.token });
+        expect(page.body.includes("<!doctype html>"), host).toBe(true);
+        const api = await rawGet(started.url, "/api/metrics", { host, cookie: (await sessionFor(started)).cookie });
         expect(api.status, host).toBe(200);
       }
     });

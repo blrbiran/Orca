@@ -39,42 +39,37 @@ import { DECISION_KINDS, DECISION_SCOPES } from "../src/ledger/types.js";
 import type { DecisionEvent } from "../src/ledger/schema.js";
 import { appendEvents } from "../src/ledger/writer.js";
 import { detailUrl } from "../src/panel/listProjection.js";
-import { TOKEN_REQUIRED } from "../src/panel/rejection.js";
+import { LOGIN_REQUIRED } from "../src/panel/rejection.js";
 import { EXTERNAL_BIND_NOT_CONFIRMED, PANEL_HOST_NOT_ALLOWED } from "../src/panel/bindGuard.js";
 import { REVIEWS_LOCK_TIMEOUT_MS } from "../src/panel/reviewsLock.js";
 import { readReviews } from "../src/panel/reviewsStore.js";
-import { TOKEN_ANCHOR } from "../src/panel/staticFiles.js";
 
 const execFileAsync = promisify(execFile);
 
 // ---------------------------------------------------------------------------
 // The script's own parser -- pinned by tests/panel/endToEnd.test.ts (ruling
-// L3), so `orca-panel ready url=<url> token=<token>` (src/cli.ts) has exactly
-// one place that reads it back.
+// L3), so `orca-panel ready url=<url>` (src/panel/server.ts's panelReadyLines,
+// accounts D11) has exactly one place that reads it back.
 // ---------------------------------------------------------------------------
 
 export class ReadyLineParseError extends Error {}
 
 export interface ReadyLine {
   url: string;
-  token: string;
 }
 
-const READY_LINE = /^orca-panel ready url=(\S+) token=(\S+)\s*$/;
+const READY_LINE = /^orca-panel ready url=(\S+)\s*$/;
 
 /** Reads the CLI's ONE machine-readable line out of (possibly multi-line) stdout. */
 export function parseReadyLine(stdout: string): ReadyLine {
   for (const line of stdout.split("\n")) {
     const match = READY_LINE.exec(line);
     if (!match) continue;
-    const [, url, token] = match;
+    const url = match[1]!;
     if (!/^http:\/\/127\.0\.0\.1:\d+$/.test(url)) {
       throw new ReadyLineParseError(`ready line's url ${JSON.stringify(url)} is not http://127.0.0.1:<port>`);
     }
-    if (!/^[0-9a-f]{64}$/.test(token)) {
-      throw new ReadyLineParseError(`ready line's token ${JSON.stringify(token)} is not 64 lowercase hex characters`);
-    }
-    return { url, token };
+    return { url };
   }
   throw new ReadyLineParseError("no 'orca-panel ready' line found in stdout");
 }
@@ -541,16 +536,53 @@ function rawGet(
   });
 }
 
-async function apiGet(baseUrl: string, path: string, token?: string): Promise<Response> {
-  return fetch(`${baseUrl}${path}`, token === undefined ? {} : { headers: { "x-orca-token": token } });
+/** Accounts spec §3.3-§3.4: what a logged-in browser holds -- the two cookies, and the CSRF value it sends back. */
+interface Session {
+  cookie: string;
+  csrf: string;
 }
 
-async function apiPost(baseUrl: string, path: string, body: unknown, token: string): Promise<Response> {
+/** The password step 1 changes the initial one to; the later panels share the accounts store and log in with it. */
+const VERIFY_PASSWORD = "verify-panel-password";
+
+async function apiGet(baseUrl: string, path: string, session?: Session): Promise<Response> {
+  return fetch(`${baseUrl}${path}`, session === undefined ? {} : { headers: { cookie: session.cookie } });
+}
+
+async function apiPost(baseUrl: string, path: string, body: unknown, session: Session): Promise<Response> {
   return fetch(`${baseUrl}${path}`, {
     method: "POST",
-    headers: { "x-orca-token": token, "content-type": "application/json" },
+    headers: { cookie: session.cookie, "x-orca-csrf": session.csrf, "content-type": "application/json" },
     body: JSON.stringify(body),
   });
+}
+
+async function logIn(step: number, baseUrl: string, password: string): Promise<Session> {
+  const res = await fetch(`${baseUrl}/api/auth/login`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name: "tester", password }),
+  });
+  if (res.status !== 200) fail(step, "POST /api/auth/login succeeds", 200, `${res.status} ${await res.text()}`);
+  const pairs = res.headers.getSetCookie().map((line) => line.split(";")[0]!);
+  const value = (name: string): string | undefined => pairs.find((pair) => pair.startsWith(`${name}=`))?.slice(name.length + 1);
+  const at = value("orca_at"), csrf = value("orca_csrf");
+  if (at === undefined || csrf === undefined) fail(step, "login sets orca_at and orca_csrf", ["orca_at", "orca_csrf"], pairs);
+  return { cookie: `orca_at=${at}; orca_csrf=${csrf}`, csrf };
+}
+
+/**
+ * Accounts spec §3.2 (D2): a panel on a store with no user creates the owner (`--by`) and writes its initial password
+ * to `<control root>/initial-password`. That password reaches only the change step; the change is made, and the
+ * session used from here on comes from a fresh login with the new password.
+ */
+async function firstLogin(step: number, baseUrl: string, controlRoot: string): Promise<Session> {
+  const initial = (await readFile(join(controlRoot, "initial-password"), "utf8").catch(() => "")).trim();
+  if (initial.length === 0) fail(step, "the first panel writes <control root>/initial-password", "a password", "<missing file>");
+  const first = await logIn(step, baseUrl, initial);
+  const change = await apiPost(baseUrl, "/api/auth/password", { current: initial, next: VERIFY_PASSWORD }, first);
+  if (change.status !== 200) fail(step, "POST /api/auth/password changes the initial password", 200, `${change.status} ${await change.text()}`);
+  return logIn(step, baseUrl, VERIFY_PASSWORD);
 }
 
 // ---------------------------------------------------------------------------
@@ -581,10 +613,10 @@ async function main(): Promise<number> {
       fail(0, "web/dist has no subdirectory (staticFiles.ts reads the top level only)", [], subdirs);
     }
     const indexHtml = await readFile(join(distDir, "index.html"), "utf8").catch(() => "");
-    if (!indexHtml.includes(TOKEN_ANCHOR)) {
-      fail(0, "web/dist/index.html carries the token anchor", TOKEN_ANCHOR, indexHtml.length === 0 ? "<missing file>" : "<anchor absent>");
-    }
-    pass(0, "web/dist exists, is flat, and carries the token anchor");
+    if (indexHtml.length === 0) fail(0, "web/dist/index.html exists", "a page", "<missing file>");
+    // Accounts spec §3.4: the page carries no credential; a build from before the change would still read one.
+    if (indexHtml.includes("__ORCA_TOKEN__")) fail(0, "web/dist/index.html carries no page token", false, true);
+    pass(0, "web/dist exists, is flat, and its index.html carries no credential");
 
     const fixture = await makeFixture();
     cleanups.push({ what: "remove the throwaway target repo", run: fixture.cleanup });
@@ -622,12 +654,14 @@ async function main(): Promise<number> {
       },
     });
 
-    const readyLine = await must(1, "orca panel prints its ready line", "orca-panel ready url=... token=...", ready);
-    const { url: baseUrl, token } = readyLine;
+    const readyLine = await must(1, "orca panel prints its ready line", "orca-panel ready url=...", ready);
+    const { url: baseUrl } = readyLine;
     const parsedUrl = new URL(baseUrl);
     const host = parsedUrl.hostname;
     const port = Number(parsedUrl.port);
-    pass(1, `orca panel is up at ${baseUrl}, ready line parsed`);
+    const controlRoot = env.ORCA_CONTROL_DIR ?? VERIFY_CONTROL_ROOT;
+    const session = await firstLogin(1, baseUrl, controlRoot);
+    pass(1, `orca panel is up at ${baseUrl}, ready line parsed, logged in with the initial password and changed it`);
 
     const A = fixture.decisionA.id;
     const B = fixture.decisionB.id;
@@ -639,8 +673,8 @@ async function main(): Promise<number> {
         .length;
     };
 
-    // Step 2: list, with token -- listing must record nothing (mutation E-1).
-    const listRes = await apiGet(baseUrl, "/api/decisions", token);
+    // Step 2: list, with a session -- listing must record nothing (mutation E-1).
+    const listRes = await apiGet(baseUrl, "/api/decisions", session);
     if (listRes.status !== 200) fail(2, "GET /api/decisions succeeds", 200, listRes.status);
     await assertStaysAt(
       2,
@@ -657,7 +691,7 @@ async function main(): Promise<number> {
 
     // Step 3: open one decision's detail -- `opened` lands (async,
     // fire-and-forget); `reviewed` does not (spec §4.2: paging past != reading).
-    const detailRes = await apiGet(baseUrl, detailUrl(projectKey, A), token);
+    const detailRes = await apiGet(baseUrl, detailUrl(projectKey, A), session);
     if (detailRes.status !== 200) fail(3, "GET decision detail succeeds", 200, detailRes.status);
     await waitForExactly(
       3,
@@ -676,7 +710,7 @@ async function main(): Promise<number> {
     pass(3, "opening a decision's detail records exactly one 'opened' row and no 'reviewed' row");
 
     // Step 4: open the SAME detail again -- dedupe means the count stays at 1.
-    const detailRes2 = await apiGet(baseUrl, detailUrl(projectKey, A), token);
+    const detailRes2 = await apiGet(baseUrl, detailUrl(projectKey, A), session);
     if (detailRes2.status !== 200) fail(4, "GET decision detail (again) succeeds", 200, detailRes2.status);
     await assertStaysAt(
       4,
@@ -689,17 +723,17 @@ async function main(): Promise<number> {
     // Step 5: click "agreed" on the OTHER decision -- reviewed lands
     // (synchronous, awaited by the handler), coverage's numerator becomes 1,
     // and it drops off the to-do list while the merely-opened decision stays.
-    const agreeRes = await apiPost(baseUrl, "/api/reviews", { projectKey, decisionId: B }, token);
+    const agreeRes = await apiPost(baseUrl, "/api/reviews", { projectKey, decisionId: B }, session);
     if (agreeRes.status !== 200) fail(5, "POST /api/reviews (agreed) succeeds", 200, agreeRes.status);
     const reviewedB = await countRows(B, "reviewed");
     if (reviewedB !== 1) fail(5, "agreeing records exactly one 'reviewed' row", 1, reviewedB);
-    const metricsAfterAgree = (await (await apiGet(baseUrl, "/api/metrics", token)).json()) as {
+    const metricsAfterAgree = (await (await apiGet(baseUrl, "/api/metrics", session)).json()) as {
       panel_review_coverage: { reviewed_high_tier: number };
     };
     if (metricsAfterAgree.panel_review_coverage.reviewed_high_tier !== 1) {
       fail(5, "coverage numerator becomes 1", 1, metricsAfterAgree.panel_review_coverage.reviewed_high_tier);
     }
-    const todoAfterAgree = (await (await apiGet(baseUrl, "/api/todo", token)).json()) as { rows: Array<{ id: string }> };
+    const todoAfterAgree = (await (await apiGet(baseUrl, "/api/todo", session)).json()) as { rows: Array<{ id: string }> };
     const todoIds = todoAfterAgree.rows.map((r) => r.id);
     if (todoIds.includes(B)) fail(5, "the agreed decision leaves the to-do list", false, true);
     if (!todoIds.includes(A)) fail(5, "the other high-tier decision stays on the to-do list", true, false);
@@ -714,7 +748,7 @@ async function main(): Promise<number> {
       baseUrl,
       "/api/corrections",
       { projectKey, decisionId: A, kind: "wrong", because: "verify:panel step 6 fixture" },
-      token,
+      session,
     );
     if (correctRes.status !== 200) fail(6, "POST /api/corrections succeeds", 200, correctRes.status);
     const correctionsAfter = await readCorrections(storeDir);
@@ -737,7 +771,7 @@ async function main(): Promise<number> {
       baseUrl,
       "/api/corrections",
       { projectKey, decisionId: A, kind: "stale", because: "verify:panel step 7 fixture" },
-      token,
+      session,
     );
     if (secondRes.status !== 409) fail(7, "a second correction on the same decision is refused", 409, secondRes.status);
     const secondBody = (await secondRes.json()) as { code: string; message: string; retry_field: string };
@@ -766,7 +800,7 @@ async function main(): Promise<number> {
       by: "verify-panel",
     };
     await recordCorrection(storeDir, unresolvableRow, { again: true });
-    const gatedRes = await apiGet(baseUrl, "/api/metrics", token);
+    const gatedRes = await apiGet(baseUrl, "/api/metrics", session);
     if (gatedRes.status !== 409) fail(8, "the next request notices the unresolvable projectKey", 409, gatedRes.status);
     const gatedBody = (await gatedRes.json()) as { code: string };
     if (gatedBody.code !== UNRESOLVED_PROJECT_KEYS) {
@@ -784,13 +818,13 @@ async function main(): Promise<number> {
     const rootRes = await apiGet(baseUrl, "/");
     if (rootRes.status !== 200) fail(9, "GET / (positive control) answers 200", 200, rootRes.status);
     const rootBody = await rootRes.text();
-    if (!rootBody.includes(token)) fail(9, "GET / body carries the injected token", true, false);
+    if (rootBody !== indexHtml) fail(9, "GET / serves web/dist/index.html byte-for-byte", indexHtml.length, rootBody.length);
     // Final review I-4 / ruling R67: the same GET / with a foreign Host (a
     // DNS-rebound page's request, still arriving over loopback) is refused by
-    // name and carries no token; the positive control above is its pair.
+    // name and carries none of the page; the positive control above is its pair.
     const rebound = await rawGet(host, port, "/", { host: `evil.example:${port}` });
     if (rebound.status !== 403) fail(9, "GET / with Host evil.example answers 403", 403, rebound.status);
-    if (rebound.body.includes(token)) fail(9, "the 403 body carries no token", false, true);
+    if (rebound.body.includes(indexHtml)) fail(9, "the 403 body carries none of the page", false, true);
     let reboundCode: unknown;
     try {
       reboundCode = (JSON.parse(rebound.body) as { code?: unknown }).code;
@@ -802,15 +836,15 @@ async function main(): Promise<number> {
     }
     pass(
       9,
-      "a raw traversal path 404s, GET / still serves the token-injected index.html, and a foreign Host is refused 403 by name without the token",
+      "a raw traversal path 404s, GET / still serves index.html as built, and a foreign Host is refused 403 by name without the page",
     );
 
-    // Step 10: no token -- refused by name, never a stack trace.
+    // Step 10: no session -- refused by name, never a stack trace.
     const noTokenRes = await apiGet(baseUrl, "/api/metrics");
-    if (noTokenRes.status !== 401) fail(10, "a request with no token is refused", 401, noTokenRes.status);
+    if (noTokenRes.status !== 401) fail(10, "a request with no session is refused", 401, noTokenRes.status);
     const noTokenBody = (await noTokenRes.json()) as { code: string };
-    if (noTokenBody.code !== TOKEN_REQUIRED) fail(10, "refusal names TOKEN_REQUIRED", TOKEN_REQUIRED, noTokenBody.code);
-    pass(10, "a request with no token is refused by name (401 TOKEN_REQUIRED)");
+    if (noTokenBody.code !== LOGIN_REQUIRED) fail(10, "refusal names LOGIN_REQUIRED", LOGIN_REQUIRED, noTokenBody.code);
+    pass(10, "a request with no session is refused by name (401 LOGIN_REQUIRED)");
 
     // Step 11: a second panel, bound to a non-loopback address with NO
     // external-bind confirmation, must refuse by name and never actually
@@ -884,13 +918,15 @@ async function main(): Promise<number> {
         ).then(() => undefined);
       },
     });
-    const ready13Line = await must(13, "the step 13 panel prints its ready line", "orca-panel ready url=... token=...", ready13);
+    const ready13Line = await must(13, "the step 13 panel prints its ready line", "orca-panel ready url=...", ready13);
+    // The same accounts store as step 1 (VERIFY_CONTROL_ROOT): the owner exists, with the password step 1 set.
+    const session13 = await logIn(13, ready13Line.url, VERIFY_PASSWORD);
     const reviewedRows13 = async (decisionId: string): Promise<number> =>
       (await readReviews(storeDir13)).filter(
         (r) => r.projectKey === projectKey && r.decisionId === decisionId && r.action === "reviewed",
       ).length;
 
-    const agree13 = await apiPost(ready13Line.url, "/api/reviews", { projectKey, decisionId: B }, ready13Line.token);
+    const agree13 = await apiPost(ready13Line.url, "/api/reviews", { projectKey, decisionId: B }, session13);
     if (agree13.status !== 200) fail(13, "the first agree succeeds", 200, agree13.status);
     if ((await reviewedRows13(B)) !== 1) fail(13, "the first agree records one 'reviewed' row", 1, await reviewedRows13(B));
 
@@ -916,14 +952,14 @@ async function main(): Promise<number> {
     }
     await git(fixture.repoPath, ["mv", archivedRel, join(".decisions", ledgerName)]);
 
-    const againRes = await apiPost(ready13Line.url, "/api/reviews", { projectKey, decisionId: B }, ready13Line.token);
+    const againRes = await apiPost(ready13Line.url, "/api/reviews", { projectKey, decisionId: B }, session13);
     if (againRes.status !== 200) fail(13, "agreeing again succeeds", 200, againRes.status);
     const againBody = (await againRes.json()) as { result?: unknown };
     if (againBody.result !== "written") {
       fail(13, "the running panel writes the review again instead of answering duplicate from memory", "written", againBody.result);
     }
     if ((await reviewedRows13(B)) !== 1) fail(13, "exactly one 'reviewed' row is back on disk", 1, await reviewedRows13(B));
-    const todo13 = (await (await apiGet(ready13Line.url, "/api/todo", ready13Line.token)).json()) as {
+    const todo13 = (await (await apiGet(ready13Line.url, "/api/todo", session13)).json()) as {
       rows: Array<{ id: string }>;
     };
     if (todo13.rows.some((r) => r.id === B)) fail(13, "the re-reviewed decision is off the to-do list", false, true);
@@ -957,8 +993,9 @@ async function main(): Promise<number> {
         return withTimeout(panel14Exited, 5_000, `step 14 panel child (pid ${panel14.pid}) did not confirm exit within 5000ms after SIGKILL`).then(() => undefined);
       },
     });
-    const r14 = await must(14, "the step 14 panel prints its ready line", "orca-panel ready url=... token=...", ready14);
-    const startRes = await apiPost(r14.url, "/api/chains", { repoKey: "chains", goal: "verify-panel step 14", maxSessions: 2, maxCostUsd: 1 }, r14.token);
+    const r14 = await must(14, "the step 14 panel prints its ready line", "orca-panel ready url=...", ready14);
+    const session14 = await logIn(14, r14.url, VERIFY_PASSWORD);
+    const startRes = await apiPost(r14.url, "/api/chains", { repoKey: "chains", goal: "verify-panel step 14", maxSessions: 2, maxCostUsd: 1 }, session14);
     if (startRes.status !== 200) fail(14, "POST /api/chains starts a chain", 200, `${startRes.status} ${await startRes.text()}`);
     const { chainId } = (await startRes.json()) as { chainId: string };
     if (!/^chain-[0-9a-f]{8}$/.test(chainId)) fail(14, "the answer names the chain", "chain-<8 hex>", chainId);
@@ -968,7 +1005,7 @@ async function main(): Promise<number> {
     let view: Step14ChainView | null = null;
     const until14 = Date.now() + 60_000;
     while (Date.now() < until14) {
-      const body = (await (await apiGet(r14.url, "/api/chains", r14.token)).json()) as { repos: Array<{ chain: Step14ChainView | null }> };
+      const body = (await (await apiGet(r14.url, "/api/chains", session14)).json()) as { repos: Array<{ chain: Step14ChainView | null }> };
       view = body.repos[0]?.chain ?? null;
       if (view?.state === "stopped") break;
       await sleep(250);
@@ -976,9 +1013,9 @@ async function main(): Promise<number> {
     const seen = { chainId: view?.chainId, state: view?.state, reason: view?.stop?.reason, via: view?.via, by: view?.by };
     const wanted = { chainId, state: "stopped", reason: "done", via: "panel", by: "tester" };
     if (JSON.stringify(seen) !== JSON.stringify(wanted)) fail(14, "the status view shows the chain stopped with done", wanted, seen);
-    const badId = await apiPost(r14.url, "/api/chains/chain-XYZ/stop", { repoKey: "chains" }, r14.token);
+    const badId = await apiPost(r14.url, "/api/chains/chain-XYZ/stop", { repoKey: "chains" }, session14);
     if (badId.status !== 400) fail(14, "a malformed chain id is refused with 400", 400, badId.status);
-    const unknown = await apiPost(r14.url, "/api/chains/chain-00000000/stop", { repoKey: "chains" }, r14.token);
+    const unknown = await apiPost(r14.url, "/api/chains/chain-00000000/stop", { repoKey: "chains" }, session14);
     if (unknown.status !== 404) fail(14, "an unknown chain id is refused with 404", 404, unknown.status);
     const record14 = JSON.parse(await readFile(join(chainTarget.path, ".orca", "chains", `${chainId}.json`), "utf8")) as { supervisorPid: number };
     await must(14, "the chain's supervisor exits by itself", "gone within 10000ms", waitForPidGone(record14.supervisorPid, 10_000));

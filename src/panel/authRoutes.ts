@@ -6,7 +6,6 @@ import { objectBody } from "./api.js";
 import { expiryOf, type AuthenticatedUser, type PanelAuth } from "./auth.js";
 import { controlErrorBody } from "./controlErrors.js";
 import { CSRF_REQUIRED, LOGIN_REQUIRED, PANEL_BAD_REQUEST, PASSWORD_CHANGE_REQUIRED } from "./rejection.js";
-import { tokenMatches } from "./token.js";
 
 export const AUTH_COOKIE = "orca_at";
 export const CSRF_COOKIE = "orca_csrf";
@@ -43,16 +42,15 @@ function refuse(req: Request, res: Response, status: number, code: string, messa
 
 /**
  * Accounts spec §3.3-§3.4, mounted on `/api` after the Host gate and the body parser and before every other `/api`
- * route, the auth routes included (ruling Q8): only `POST /api/auth/login` is exempt. A session first; the page token
- * second (Task 4 deletes that arm); then the forced password change; then CSRF on every non-GET.
+ * route, the auth routes included (ruling Q8): only `POST /api/auth/login` is exempt. A session first (there is no
+ * other credential, §3.4); then the forced password change; then CSRF on every non-GET.
  */
-export function authMiddleware(auth: PanelAuth, legacyToken: string | null): RequestHandler {
+export function authMiddleware(auth: PanelAuth): RequestHandler {
   return (req: Request, res: Response, next: NextFunction) => {
     if (isLogin(req)) { next(); return; }
     const cookies = cookiesOf(req.headers.cookie);
     const current = auth.authenticate(cookies.get(AUTH_COOKIE), auth.nowMs());
     if (current === null) {
-      if (legacyToken !== null && tokenMatches(legacyToken, req.header("x-orca-token") ?? undefined)) { next(); return; }
       refuse(req, res, 401, LOGIN_REQUIRED, "log in to this panel");
       return;
     }
@@ -78,7 +76,7 @@ function sessionCookies(token: string, csrf: string, maxAgeSec: number): string[
   ];
 }
 
-/** The logged-in user, or a 401 for a request the page token let through (it carries no user). */
+/** The logged-in user the middleware set; a 401 if a route is ever reached without it. */
 function currentUser(res: Response): AuthenticatedUser | undefined {
   const current = res.locals.orcaUser as AuthenticatedUser | undefined;
   if (current === undefined) res.status(401).json({ code: LOGIN_REQUIRED, message: "log in to this panel" });

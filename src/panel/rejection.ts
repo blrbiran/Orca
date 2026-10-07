@@ -25,15 +25,7 @@ export class PanelRejection extends Error {
  */
 export const NO_VIEWER_IDENTITY = "no-viewer-identity";
 
-/**
- * spec §3.3: the one-time token is the whole of authorisation. Defined here,
- * beside NO_VIEWER_IDENTITY, so there is exactly one definition — its consumer
- * is Task 5's `src/panel/api.ts`, which checks it on every request and has no
- * reason to redeclare it.
- */
-export const TOKEN_REQUIRED = "token-required";
-
-/** Accounts spec §3.3-§3.4: no valid session (and, until Task 4, no page token either). */
+/** Accounts spec §3.3-§3.4: no valid session; it replaces the page token's refusal (§9). */
 export const LOGIN_REQUIRED = "login-required";
 
 /** Accounts spec §3.2: the initial password reaches only the change step. */

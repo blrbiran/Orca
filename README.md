@@ -222,8 +222,8 @@ exec node_modules/.bin/tsx src/cli.ts panel \
 
 - `--by <who>` is required: every review and correction is stamped with it.
 - `--port` defaults to `0` (a random free port).
-- On success it prints one line on stdout, `orca-panel ready url=http://127.0.0.1:7777 token=...`, and on stderr
-  tells you to open the URL. Open the bare URL; the page already carries the token.
+- On success it prints one line on stdout, `orca-panel ready url=http://127.0.0.1:7777`, and on stderr
+  tells you to open the URL and log in. The page carries no credential.
 - A refusal prints `rejected: <code>: <why>` and exits.
 - If it says `control plane mounted with no execution port`, see [ccloop](#2-ccloop).
 - Stop it with Ctrl-C. It drains before exiting; a second Ctrl-C exits at once, and the next start may then have to
@@ -328,14 +328,14 @@ maximum sessions, a soft maximum cost in USD, session timeout) and stops one aft
 
 **Access**
 
-- The panel listens on loopback (`127.0.0.1`) only, with a one-time token minted at each start. Requests whose `Host`
-  is not loopback or the bound address are refused.
-- The page at `/` carries the token itself, so **anyone who can reach the port can use the panel**. On loopback that
-  means any user or process on your machine.
+- The panel listens on loopback (`127.0.0.1`) only, and every `/api` request needs a logged-in session (a cookie).
+  Requests whose `Host` is not loopback or the bound address are refused.
+- The page at `/` carries no credential. A process running as you can still read the panel's signing key and its
+  stores, and so act as any user.
 - `--bind <addr>` opens it to other machines and is refused unless you also pass `--i-know-this-is-exposed`. There
-  is **no TLS**, the token travels in the HTML, it cannot be revoked, and one process has one identity: fit for you
-  across your own machines, not for a team.
-- **Anyone with the token can start paid agent work**, including unattended chains that commit.
+  is **no TLS**: passwords and the session cookie cross the network in clear text. Fit for you across your own
+  machines, not for a team.
+- **Anyone with a session can start paid agent work**, including unattended chains that commit.
 
 **Git**
 

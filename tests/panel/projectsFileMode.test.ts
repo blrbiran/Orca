@@ -10,6 +10,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { controlRepoKey } from "../../src/panel/controlOptions.js";
 import { createPanelServer, panelArgsWithDefaultProjects, parsePanelArgs, type StartedPanel } from "../../src/panel/server.js";
 import { readProjectsFile } from "../../src/panel/projectsFile.js";
+import { sessionFor } from "./fixtures/auth.js";
 
 const started: StartedPanel[] = [];
 afterEach(async () => { while (started.length) await started.pop()!.close(); });
@@ -30,7 +31,7 @@ async function boot(args: string[], env: NodeJS.ProcessEnv) {
   const panel = await createPanelServer(parsePanelArgs(["--by", "tester", "--port", "0", ...args], env), env);
   started.push(panel);
   const call = async (method: string, path: string, body?: unknown) => {
-    const res = await fetch(`${panel.url}${path}`, { method, headers: { "x-orca-token": panel.token, ...(body === undefined ? {} : { "content-type": "application/json" }) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+    const res = await (await sessionFor(panel, env)).fetch(path, { method, headers: body === undefined ? {} : { "content-type": "application/json" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
     return { status: res.status, body: await res.json() as Record<string, unknown> };
   };
   return { panel, call };

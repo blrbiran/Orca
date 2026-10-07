@@ -80,11 +80,11 @@ const frozenOf = (answer: Preview, key: string) => {
 const resolvedFrozen = (answer: Preview) => Object.fromEntries(answer.slots.map((slot) => [slot.key, frozenOf(answer, slot.key)]));
 
 describe("agent selection over a real panel (agent selection spec §6.8)", () => {
-  it("serves the installation table view from the port, sorted by id, and only with the panel token", async () => {
+  it("serves the installation table view from the port, sorted by id, and only with a session", async () => {
     const panel = await boot("epoch-agents-view", { agents: { installations: [...CLAUDE_CODEX_AGENTS.installations].reverse() } });
     const answer = agentsViewSchema.parse(await json(await get(panel, "/api/control/agents")));
     expect(answer).toEqual({ schema: "orca-agents-view-v1", installations: CLAUDE_CODEX_AGENTS.installations });
-    expect((await get(panel, "/api/control/agents", "")).status).toBe(401);
+    expect((await get(panel, "/api/control/agents", "none")).status).toBe(401);
     await panel.close();
   });
 

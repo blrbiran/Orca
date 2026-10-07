@@ -31,9 +31,8 @@ export function assertBindAllowed(bind: string, confirmedExternal: boolean): voi
     EXTERNAL_BIND_NOT_CONFIRMED,
     `--bind ${bind} would open this panel to other machines. Pass ` +
       `--i-know-this-is-exposed as well if you mean it. What you are agreeing to: there is no ` +
-      `TLS, the token travels in the HTML, it cannot be revoked or expired, and one process has ` +
-      `exactly one identity -- so this suits you reaching your own panel from another of your ` +
-      `machines, and does not suit a team.`,
+      `TLS, so passwords and the session cookie cross the network in clear text -- this suits you ` +
+      `reaching your own panel from another of your machines, and does not suit a team.`,
   );
 }
 

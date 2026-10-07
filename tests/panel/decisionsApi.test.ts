@@ -15,14 +15,13 @@ import { readReviews } from "../../src/panel/reviewsStore.js";
 import type { ReviewRow } from "../../src/panel/reviewsStore.js";
 import { createPanelServer, parsePanelArgs } from "../../src/panel/server.js";
 import type { PanelOptions, StartedPanel } from "../../src/panel/server.js";
-import { TOKEN_ANCHOR } from "../../src/panel/staticFiles.js";
 import { ORIGINAL, git, makeTargetRepo, withCorrectionsDir } from "../corrections/harness.js";
+import { sessionFor } from "./fixtures/auth.js";
 
 // task 6 ruling H7: file-local copies of metricsApi.test.ts's small HTTP
 // helpers, so this file stays isolated from that one -- metricsApi.test.ts is
 // untouched and stays 12/12 under this task's diff.
-const get = async (started: StartedPanel, path: string, token?: string): Promise<Response> =>
-  fetch(`${started.url}${path}`, { headers: { "x-orca-token": token ?? started.token } });
+const get = async (started: StartedPanel, path: string): Promise<Response> => (await sessionFor(started)).fetch(path);
 
 async function makeDistFixture(): Promise<{ dir: string; cleanup: () => Promise<void> }> {
   const root = await mkdtemp(join(tmpdir(), "orca-panel-dist-"));
@@ -31,7 +30,7 @@ async function makeDistFixture(): Promise<{ dir: string; cleanup: () => Promise<
   await mkdir(dist, { recursive: true });
   await mkdir(outside, { recursive: true });
   await writeFile(join(outside, "passwd.txt"), "root:x:0:0\n");
-  await writeFile(join(dist, "index.html"), `<!doctype html><html><body>${TOKEN_ANCHOR}</body></html>`);
+  await writeFile(join(dist, "index.html"), "<!doctype html><html><body></body></html>");
   await writeFile(join(dist, "index.js"), "console.log(1)\n");
   await symlink(join(outside, "passwd.txt"), join(dist, "linked.txt"));
   return { dir: dist, cleanup: () => rm(root, { recursive: true, force: true }) };

@@ -696,7 +696,6 @@ export const zhErrors: Record<string, string> = {
   "task-checkpoint-not-committed": "任务的检查点尚未提交。",
   "task-has-no-loop-plan": "这个任务没有 loop 做法。",
   "task-loop-version-conflict": "你开始草稿后做法已被改过，请重新读取后再提交。",
-  "token-required": "这个面板需要它的一次性 token。",
   "usage-event-conflict": "用量事件冲突。",
   "usage-gap": "用量记录有缺口。",
   "work-already-active": "工作已经在进行。",
@@ -770,4 +769,14 @@ export const zhErrors: Record<string, string> = {
   "project-unknown": "没有这个项目：{{message}}",
   "projects-file-invalid": "项目配置文件无效，请先修好它：{{message}}",
   "projects-file-changed": "项目配置文件刚被改过，请重新读取后再试：{{message}}",
+  // Accounts spec §3.2-§3.3, §8 (src/panel/authRoutes.ts, src/panel/accounts/store.ts).
+  "login-failed": "用户名或密码不对。",
+  "login-throttled": "这个用户名登录失败次数太多，请稍后再试。",
+  "password-too-short": "密码太短，至少 12 个字符。",
+  "user-name-invalid": "用户名不合法：{{message}}",
+  "user-name-taken": "已经有同名用户。",
+  "user-role-invalid": "角色只能是 owner 或 member。",
+  "user-not-found": "找不到这个用户。",
+  "owner-required": "只有 owner 能做这件事。",
+  "notice-not-found": "找不到这条提醒。",
 };

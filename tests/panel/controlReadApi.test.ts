@@ -24,11 +24,10 @@ import type {
 import { buildApi } from "../../src/panel/api.js";
 import { createTrustedControlConfig } from "../../src/panel/controlConfig.js";
 import { ReviewsWriter } from "../../src/panel/reviewsStore.js";
-import { quietPanelAuth } from "./fixtures/auth.js";
+import { login, quietPanelAuth, seedUser, type Session } from "./fixtures/auth.js";
 import { openTestStore } from "../control/fixtures/store.js";
 import { FIXTURE_AGENT_ID, fixtureResolutionFor, seedPreferences } from "../control/fixtures/agents.js";
 
-const token = "a".repeat(64);
 const hash = (letter: string) => letter.repeat(64);
 const amount = (tokens: number, activeMs = 1_000, attempts = 1, sessions = 1) => ({ tokens, activeMs, attempts, sessions });
 
@@ -69,6 +68,8 @@ interface Harness {
   trustedConfig: ReturnType<typeof createTrustedControlConfig>;
   profileHash: string;
   url: string;
+  /** Accounts spec §3.4: a logged-in session on this app. */
+  session: Session;
   server: Server;
   disposeStore(): Promise<void>;
 }
@@ -138,18 +139,20 @@ async function setup(): Promise<Harness> {
   const auth = quietPanelAuth(join(h.root, "accounts"));
   buildApi(app, {
     opts: { by: "operator", bind: "127.0.0.1", port: 0, confirmedExternal: false, correctionsDir: h.root, repos: [] },
-    token, reviews, statics: { get: () => undefined, indexHtml: undefined, names: [] }, auth,
+    reviews, statics: { get: () => undefined, indexHtml: undefined, names: [] }, auth,
     control: { store: h.store, epoch: "epoch-test", config: trustedConfig },
   } as never);
   const server = createServer(app);
   await new Promise<void>((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("test server has no port");
-  return { root: h.root, store: h.store, trustedConfig, profileHash: frozen.profileHash, url: `http://127.0.0.1:${address.port}`, server, disposeStore: async () => { auth.close(); await h.dispose(); } };
+  const url = `http://127.0.0.1:${address.port}`;
+  seedUser(join(h.root, "accounts"), "tester");
+  return { root: h.root, store: h.store, trustedConfig, profileHash: frozen.profileHash, url, session: await login(url), server, disposeStore: async () => { auth.close(); await h.dispose(); } };
 }
 
 async function request(h: Harness, path: string, authenticated = true, init: RequestInit = {}) {
-  return fetch(`${h.url}${path}`, { ...init, headers: { ...(authenticated ? { "x-orca-token": token } : {}), ...init.headers } });
+  return authenticated ? h.session.fetch(path, init) : fetch(`${h.url}${path}`, init);
 }
 
 // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): what a confirmation freezes for the selection this
@@ -710,7 +713,7 @@ describe("canonical control read API", () => {
     const configBody = await config.json() as { errorCatalog: Array<{ code: string; status: number }> };
     expect(configBody.errorCatalog).toEqual([...configBody.errorCatalog].sort((left, right) => left.code.localeCompare(right.code)));
     expect(configBody.errorCatalog).toContainEqual({ code: "query-invalid", status: 400 });
-    expect(configBody.errorCatalog).toContainEqual({ code: "token-required", status: 401 });
+    expect(configBody.errorCatalog).toContainEqual({ code: "login-required", status: 401 });
     expect(readProjectionState(h.store).changeSeq).toBeGreaterThan(0);
   });
 });

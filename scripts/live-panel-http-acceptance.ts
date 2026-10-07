@@ -1,6 +1,6 @@
 // Live acceptance of the panel's HTTP path (goal.md §4 near-term item 4: "Web dispatch to a real ccloop opens a run").
 // scripts/live-driver-acceptance.ts drives the same control runtime in-process, without HTTP; this one starts a real
-// `orca panel` process and does every step a person does in the browser over its HTTP API, with its one-time token:
+// `orca panel` process and does every step a person does in the browser over its HTTP API, logged in as its owner:
 // set the operator's agent preference, import the plan, edit the proposal's caps, confirm, start -- then reads only
 // the group view the page reads, until the one task lands or the watchdog fires. Exit 0 only if every check in
 // `checks` holds; summary.json in --output records each check, every HTTP status, and every usage and dollar number
@@ -178,22 +178,47 @@ let panelStdout = "";
 let panelStderr = "";
 panel.stderr.on("data", (chunk: Buffer) => { panelStderr += chunk.toString("utf8"); });
 const panelExit = new Promise<{ code: number | null; signal: string | null }>((done) => panel.on("exit", (code, signal) => done({ code, signal })));
-const ready = await new Promise<{ url: string; token: string }>((done, fail) => {
+const ready = await new Promise<{ url: string }>((done, fail) => {
   const timer = setTimeout(() => fail(new Error(`the panel did not print ready in 60 s; stderr: ${panelStderr}`)), 60_000);
   panel.stdout.on("data", (chunk: Buffer) => {
     panelStdout += chunk.toString("utf8");
-    const match = /orca-panel ready url=(\S+) token=([0-9a-f]+)/.exec(panelStdout);
-    if (match) { clearTimeout(timer); done({ url: match[1]!.replace(/\/$/, ""), token: match[2]! }); }
+    // Accounts D11: the ready line is the url and nothing else.
+    const match = /^orca-panel ready url=(\S+)\s*$/m.exec(panelStdout);
+    if (match) { clearTimeout(timer); done({ url: match[1]!.replace(/\/$/, "") }); }
   });
   panel.on("exit", () => fail(new Error(`the panel exited before ready; stderr: ${panelStderr}`)));
 });
 
-// Every request the page would make, with the header the page sends (web/src/controlApi.ts).
+// Accounts spec §3.2-§3.4: log in as the owner the panel created (--by) with its initial password, change it, and log
+// in again; every request below carries that session's cookies and, on a POST, its CSRF header -- as the page does.
+async function logIn(password: string): Promise<{ cookie: string; csrf: string }> {
+  const res = await fetch(`${ready.url}/api/auth/login`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: "live-acceptance", password }) });
+  if (res.status !== 200) throw new Error(`login answered ${res.status}: ${await res.text()}`);
+  const pairs = res.headers.getSetCookie().map((line) => line.split(";")[0]!);
+  const value = (name: string): string => {
+    const found = pairs.find((pair) => pair.startsWith(`${name}=`));
+    if (found === undefined) throw new Error(`login set no ${name} cookie`);
+    return found.slice(name.length + 1);
+  };
+  return { cookie: `orca_at=${value("orca_at")}; orca_csrf=${value("orca_csrf")}`, csrf: value("orca_csrf") };
+}
+const initialPassword = readFileSync(join(controlDir, "initial-password"), "utf8").trim();
+const firstSession = await logIn(initialPassword);
+const nextPassword = randomBytes(16).toString("hex");
+const changed = await fetch(`${ready.url}/api/auth/password`, {
+  method: "POST",
+  headers: { cookie: firstSession.cookie, "x-orca-csrf": firstSession.csrf, "content-type": "application/json" },
+  body: JSON.stringify({ current: initialPassword, next: nextPassword }),
+});
+if (changed.status !== 200) throw new Error(`the password change answered ${changed.status}: ${await changed.text()}`);
+const session = await logIn(nextPassword);
+
+// Every request the page would make, with what the page sends (web/src/api.ts, web/src/controlApi.ts).
 const http: Array<{ method: string; path: string; status: number }> = [];
 async function call(method: "GET" | "POST", path: string, body?: unknown): Promise<{ status: number; body: any }> {
   const res = await fetch(`${ready.url}${path}`, {
     method,
-    headers: { "x-orca-token": ready.token, ...(body === undefined ? {} : { "content-type": "application/json" }) },
+    headers: { cookie: session.cookie, ...(body === undefined ? {} : { "x-orca-csrf": session.csrf, "content-type": "application/json" }) },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
   http.push({ method, path, status: res.status });

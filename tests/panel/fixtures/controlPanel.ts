@@ -1,6 +1,6 @@
 /**
  * A real Panel process for the web control acceptance tests: an ephemeral port, a temporary
- * stateDir, an allowlisted repository and plan, and token auth -- everything a browser uses.
+ * stateDir, an allowlisted repository and plan, and a logged-in session (cookie + CSRF) -- everything a browser uses.
  *
  * Two facts are not reachable from the browser and are settled through the same in-process
  * seams the run-time tests use: the estimate result and a run's terminal disposition, both of
@@ -33,9 +33,8 @@ import { ControlError } from "../../../src/control/errors.js";
 import type { AgentsView } from "../../../src/control/executionPort.js";
 import { FIXTURE_AGENT_ID, PANEL_OPERATOR, fixtureResolutionFor, seedPanelOperator } from "../../control/fixtures/agents.js";
 import { resolveGroupSelections } from "../../../src/control/agentFreeze.js";
-import { quietPanelAuth } from "./auth.js";
+import { login, quietPanelAuth, seedUser, type Session } from "./auth.js";
 
-export const PANEL_TOKEN = "b".repeat(64);
 export const GROUP = "grp-1";
 
 export interface Paths {
@@ -49,6 +48,8 @@ export interface Panel {
   url: string;
   epoch: string;
   root: string;
+  /** Accounts spec §3.4: the operator's session on this panel, logged in once at boot; `get`/`command` send it. */
+  session: Session;
   store: ControlStore;
   service: WebControlService;
   /** The same deps the Panel's own handoff delivery holds, so a test settles through production code. */
@@ -169,9 +170,10 @@ export function createHarness(): Harness {
       const reviews = new ReviewsWriter(join(root, "corrections"));
       await reviews.load();
       const auth = quietPanelAuth(join(root, "accounts"));
+      seedUser(join(root, "accounts"), "operator");
       buildApi(app, {
         opts: { by: "operator", bind: "127.0.0.1", port: 0, confirmedExternal: false, correctionsDir: join(root, "corrections"), repos: [] },
-        token: PANEL_TOKEN, reviews, statics: { get: () => undefined, indexHtml: undefined, names: [] }, auth,
+        reviews, statics: { get: () => undefined, indexHtml: undefined, names: [] }, auth,
         // Plan T14 (W6-10/W6-19): the read routes ask the same port object the service confirms through.
         control: { store, epoch, config: trustedConfig, service, port },
       } as never);
@@ -180,8 +182,9 @@ export function createHarness(): Harness {
       await new Promise<void>((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
       const address = server.address();
       if (address === null || typeof address === "string") throw new Error("panel has no port");
+      const url = `http://127.0.0.1:${address.port}`;
       const panel: Panel = {
-        url: `http://127.0.0.1:${address.port}`, epoch, root, store, service, stopDeps: deps,
+        url, epoch, root, session: await login(url, "operator"), store, service, stopDeps: deps,
         selectionsHash: async (groupId = GROUP) => {
           const hash = (await resolveGroupSelections({ store, port }, groupId, PANEL_OPERATOR)).selectionsHash;
           if (hash === null) throw new Error("a selection slot was refused; there is no selectionsHash to confirm with");
@@ -210,15 +213,16 @@ export async function json(response: Response): Promise<Record<string, unknown>>
   return (await response.json()) as Record<string, unknown>;
 }
 
-export async function get(panel: Panel, path: string, token = PANEL_TOKEN): Promise<Response> {
-  return fetch(`${panel.url}${path}`, { headers: token === "" ? {} : { "x-orca-token": token } });
+/** `"none"`: no cookie at all, as a browser that never logged in. */
+export async function get(panel: Panel, path: string, auth: "session" | "none" = "session"): Promise<Response> {
+  return auth === "none" ? fetch(`${panel.url}${path}`) : panel.session.fetch(path);
 }
 
 /** POST one command envelope exactly as `web/src/controlApi.ts` does. */
 export async function command(panel: Panel, path: string, envelope: Record<string, unknown>): Promise<{ status: number; body: Record<string, unknown> }> {
-  const response = await fetch(`${panel.url}${path}`, {
+  const response = await panel.session.fetch(path, {
     method: "POST",
-    headers: { "x-orca-token": PANEL_TOKEN, "content-type": "application/json" },
+    headers: { "content-type": "application/json" },
     body: JSON.stringify(envelope),
   });
   return { status: response.status, body: await json(response) };

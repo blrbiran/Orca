@@ -9,7 +9,7 @@
  * caller that guessed "it failed" and re-issued with a new id would be creating
  * a second execution the ledger never asked for.
  */
-import { failureFrom, panelToken } from "./api.js";
+import { csrfHeader, failureFrom } from "./api.js";
 import i18n from "./i18n.js";
 import type {
   AgentPreferencesViewV1,
@@ -78,7 +78,7 @@ export function controlFailureFrom(err: unknown): ControlRefusal {
 async function controlGet<T>(path: string): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(path, { headers: { "x-orca-token": panelToken() } });
+    res = await fetch(path);
   } catch (err) {
     throw new ControlRequestError(refusalOf(`GET ${path}`, null, undefined, err instanceof Error ? err.message : i18n.t("panelErrors.noAnswer")));
   }
@@ -123,8 +123,8 @@ export const workspaceModePath = (repoId: string): string => `/api/control/repos
 
 /**
  * Offer a manifest the caller already read as a download. The read has to come
- * first: the route answers to the `x-orca-token` header only, so no URL behind
- * it is savable straight from the address bar.
+ * first: the manifest is built in the page from the read's answer, so a refusal
+ * is named in the page rather than shown as a bare error document.
  */
 export function saveEvidenceManifest(manifest: EvidenceManifestV1): void {
   const url = URL.createObjectURL(new Blob([`${JSON.stringify(manifest, null, 2)}\n`], { type: "application/json" }));
@@ -137,13 +137,13 @@ export function saveEvidenceManifest(manifest: EvidenceManifestV1): void {
 }
 
 /**
- * Labels and progress spec §4.2: one piece of a run's evidence, fetched with the panel token (the route answers to the
- * header only, like the manifest) and offered as a download named after its evidence id.
+ * Labels and progress spec §4.2: one piece of a run's evidence, fetched with the session cookie (like the manifest, so
+ * a refusal is named in the page) and offered as a download named after its evidence id.
  */
 export async function downloadEvidenceArtifact(entry: EvidenceManifestV1["entries"][number]): Promise<void> {
   let res: Response;
   try {
-    res = await fetch(entry.downloadUrl, { headers: { "x-orca-token": panelToken() } });
+    res = await fetch(entry.downloadUrl);
   } catch (err) {
     throw new ControlRequestError(refusalOf(`GET ${entry.downloadUrl}`, null, undefined, err instanceof Error ? err.message : i18n.t("panelErrors.noAnswer")));
   }
@@ -168,7 +168,7 @@ export async function sendControlCommand(path: string, envelope: CommandEnvelope
   try {
     res = await fetch(path, {
       method: "POST",
-      headers: { "x-orca-token": panelToken(), "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...csrfHeader() },
       body: JSON.stringify(envelope),
     });
   } catch (err) {
@@ -199,7 +199,7 @@ export type CommandRecovery =
  * GET the retained result of a command the browser lost the answer to. `absent`
  * is spec §4.1's `404 command-result-not-found` and nothing else: the ledger
  * holds no such command, so the person may issue the intent again under a new
- * id. Every other refusal -- an unreachable panel, a 5xx, a rejected token -- is
+ * id. Every other refusal -- an unreachable panel, a 5xx, a missing session -- is
  * `unresolved`, because dropping the id there would turn a re-issue into a
  * second execution rather than a retry of this one.
  */

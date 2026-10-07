@@ -3,7 +3,6 @@ import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { TOKEN_ANCHOR } from "../../src/panel/staticFiles.js";
 
 const roots: string[] = [];
 afterEach(async () => { while (roots.length) await rm(roots.pop()!, { recursive: true, force: true }); });
@@ -46,7 +45,7 @@ describe("the service runs a node build, never tsx (spec §3, plan D4)", () => {
 
     const dist = join(out, "web-dist");
     await mkdir(dist);
-    await writeFile(join(dist, "index.html"), `<!doctype html><html><body>${TOKEN_ANCHOR}</body></html>`);
+    await writeFile(join(dist, "index.html"), "<!doctype html><html><body></body></html>");
     const repo = join(out, "repo");
     await mkdir(repo);
     const child = spawn(process.execPath, [join(out, "dist", "cli.js"), "panel", "--by", "t", "--repo", `p=${repo}`, "--port", "0", "--dist", dist], {

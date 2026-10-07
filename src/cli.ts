@@ -45,13 +45,12 @@ const USAGE = `usage:
                                  lines were malformed.
   orca panel run --by <who> [--port <n>] [--bind <addr>] [--root <dir>] [--repo <key>=<path>]...
              [--no-control] [--control-state-dir <path>] [--control-wake-ms <n>]
-             [--estimator-profile <id> --estimate-mode strict|soft]
-                                 serve the read-only panel on the loopback interface with a
-                                 one-time token. --bind opens it to other machines and needs
-                                 --i-know-this-is-exposed as well: there is no TLS, the token
-                                 travels in the HTML, it cannot be revoked, and one process has
-                                 exactly one identity, so external mode suits you across your
-                                 own machines and does not suit a team.
+             [--estimator-profile <id> --estimate-mode strict|soft] [--session-days <n>]
+                                 serve the panel on the loopback interface. The browser logs in
+                                 with an account; a session lasts --session-days (1-30, default
+                                 15). --bind opens it to other machines and needs
+                                 --i-know-this-is-exposed as well: there is no TLS, so external
+                                 mode suits you across your own machines and does not suit a team.
                                  The task control plane mounts with the panel; --no-control leaves
                                  it off. Its state lives under $ORCA_CONTROL_DIR (default
                                  ~/.orca/control/<repo key>); more than one --repo has no key to
@@ -374,13 +373,13 @@ async function runPanel(args: string[]): Promise<number> {
     const { panelReadyLines, startPanelFromArgs } = await import("./panel/server.js");
     const started = await startPanelFromArgs(args);
     // 🔴 spec §7: ONE machine-readable line on stdout. Without it the success
-    // criterion cannot read back the port and the token it needs, and a
+    // criterion cannot read back the port it needs, and a
     // criterion that cannot read its own subject is exactly the "success
     // criterion that never exits 0" E2 §7.1 caught.
     const lines = panelReadyLines(started);
     process.stdout.write(lines.stdout);
-    // For the person at the terminal, on stderr so stdout keeps its one line: `/` needs no
-    // token (the server injects it into index.html), so the bare url is all they need.
+    // For the person at the terminal, on stderr so stdout keeps its one line: open the url and
+    // log in (accounts spec §3.4, D11).
     process.stderr.write(lines.stderr);
     await started.closed;
     return 0;

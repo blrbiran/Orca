@@ -113,7 +113,6 @@ describe("the task detail panel (spec §4.2)", () => {
   });
 
   describe("a run's evidence, piece by piece", () => {
-    const TOKEN = "token-injected-by-staticFiles";
     const manifest: EvidenceManifestV1 = {
       schema: "orca-run-evidence-v1", runId: "run-a",
       entries: [
@@ -121,11 +120,10 @@ describe("the task detail panel (spec §4.2)", () => {
         { evidenceId: "ev-2", kind: "handoff", sha256: "8".repeat(64), byteLength: 7, downloadUrl: "/api/control/runs/run-a/evidence/ev-2" },
       ],
     };
-    let requests: Array<{ url: string; token: string | undefined }>;
+    let requests: Array<{ url: string; headers: unknown }>;
     let downloads: string[];
     beforeEach(() => {
       requests = []; downloads = [];
-      window.__ORCA_TOKEN__ = TOKEN;
       URL.createObjectURL = vi.fn(() => "blob:evidence");
       URL.revokeObjectURL = vi.fn();
       vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (this: HTMLAnchorElement): void {
@@ -133,7 +131,7 @@ describe("the task detail panel (spec §4.2)", () => {
       });
       globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
         const url = String(input);
-        requests.push({ url, token: (init?.headers as Record<string, string> | undefined)?.["x-orca-token"] });
+        requests.push({ url, headers: init?.headers });
         if (url === "/api/control/runs/run-a/evidence") return new Response(JSON.stringify(manifest), { status: 200, headers: { "content-type": "application/json" } });
         return new Response("bytes", { status: 200, headers: { "content-type": "application/octet-stream" } });
       }) as typeof fetch;
@@ -143,10 +141,9 @@ describe("the task detail panel (spec §4.2)", () => {
       vi.restoreAllMocks();
       Reflect.deleteProperty(URL, "createObjectURL");
       Reflect.deleteProperty(URL, "revokeObjectURL");
-      Reflect.deleteProperty(window, "__ORCA_TOKEN__");
     });
 
-    it("lists the manifest's entries and downloads one through the panel token", async () => {
+    it("lists the manifest's entries and downloads one with the session alone", async () => {
       render(<Stateful view={view([workItem({ currentRunId: "run-a", lineageRunIds: ["run-a"] })], [run({})])} onCommand={vi.fn()} />);
       fireEvent.click(screen.getByRole("button", { name: "a" }));
       fireEvent.click(screen.getByRole("button", { name: "List evidence of run-a" }));
@@ -154,7 +151,8 @@ describe("the task detail panel (spec §4.2)", () => {
       expect(within(list).getAllByRole("listitem").map((entry) => entry.textContent)).toEqual(["ev-1 · usage · 12 bytes Download ev-1", "ev-2 · handoff · 7 bytes Download ev-2"]);
       fireEvent.click(within(list).getByRole("button", { name: "Download ev-2" }));
       await vi.waitFor(() => expect(downloads).toEqual(["ev-2"]));
-      expect(requests).toEqual([{ url: "/api/control/runs/run-a/evidence", token: TOKEN }, { url: "/api/control/runs/run-a/evidence/ev-2", token: TOKEN }]);
+      // Accounts spec §3.4: both GETs carry no header of the page's own; the browser sends the session cookie.
+      expect(requests).toEqual([{ url: "/api/control/runs/run-a/evidence", headers: undefined }, { url: "/api/control/runs/run-a/evidence/ev-2", headers: undefined }]);
     });
   });
 });

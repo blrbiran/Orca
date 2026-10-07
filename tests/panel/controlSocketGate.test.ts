@@ -5,13 +5,15 @@ import { describe, expect, it } from "vitest";
 import { controlRepoKey } from "../../src/panel/controlOptions.js";
 import type { StartedPanel } from "../../src/panel/server.js";
 import { boot, overSocket, useSocketPanels, workspace } from "./fixtures/socketPanel.js";
+import { sessionFor } from "./fixtures/auth.js";
 
 useSocketPanels();
 
 const send = (panel: StartedPanel, route: string, envelope: unknown, client = "cli:test") =>
   overSocket(panel.socketPath!, "POST", `/api/control/${route}`, { "x-orca-client": client }, envelope);
-const webPost = (panel: StartedPanel, route: string, envelope: unknown, extra: Record<string, string> = {}) =>
-  fetch(`${panel.url}/api/control/${route}`, { method: "POST", headers: { "x-orca-token": panel.token, "content-type": "application/json", ...extra }, body: JSON.stringify(envelope) });
+/** As the panel's owner, logged in against the workspace's accounts (accounts spec §3.4). */
+const webPost = async (panel: StartedPanel, w: { env: NodeJS.ProcessEnv }, route: string, envelope: unknown, extra: Record<string, string> = {}) =>
+  (await sessionFor(panel, w.env)).fetch(`/api/control/${route}`, { method: "POST", headers: { "content-type": "application/json", ...extra }, body: JSON.stringify(envelope) });
 // The panel exposes no store handle, so read the ledger rows with a read-only connection on the sqlite file.
 const ledger = async (state: string) => {
   const { DatabaseSync } = createRequire(import.meta.url)("node:sqlite") as typeof import("node:sqlite");
@@ -46,7 +48,7 @@ describe("the socket gate (spec §4.2, §5, §6)", () => {
     expect(res.status).toBe(403);
     expect(JSON.parse(res.text).error).toMatchObject({ code: "control-verb-human-only", retryable: false });
     expect((await ledger(w.state)).map((row) => row.id)).not.toContain("lim-1");
-    const web = await webPost(panel, "groups/g1/set-limit", { commandId: "lim-2", expectedRevision: 0, payload: { limit: amount } });
+    const web = await webPost(panel, w, "groups/g1/set-limit", { commandId: "lim-2", expectedRevision: 0, payload: { limit: amount } });
     expect(((await web.json()) as { error: { code: string } }).error.code).not.toBe("control-verb-human-only");
   });
 
@@ -72,7 +74,7 @@ describe("the socket gate (spec §4.2, §5, §6)", () => {
     expect(first.status).toBe(200);
     const webEnvelope = { commandId: "ws-web", expectedRevision: 1, payload: { workspaceMode: "worktree" } };
     // The Web channel ignores x-orca-client: a header naming a CLI must not change the row's "web" below.
-    const web = await webPost(panel, `repositories/${repo}/workspace-mode`, webEnvelope, { "x-orca-client": "cli:x" });
+    const web = await webPost(panel, w, `repositories/${repo}/workspace-mode`, webEnvelope, { "x-orca-client": "cli:x" });
     expect(web.status).toBe(200);
     const webBody = await web.text();
     // Same commandId and payload on the other channel: the raw command is identical (actorId is the panel operator on both), so a replay.

@@ -14,8 +14,8 @@ import { readReviews } from "../../src/panel/reviewsStore.js";
 import type { ReviewRow } from "../../src/panel/reviewsStore.js";
 import { createPanelServer, parsePanelArgs } from "../../src/panel/server.js";
 import type { StartedPanel } from "../../src/panel/server.js";
-import { TOKEN_ANCHOR } from "../../src/panel/staticFiles.js";
 import { ORIGINAL, git, makeTargetRepo, withCorrectionsDir } from "../corrections/harness.js";
+import { sessionFor } from "./fixtures/auth.js";
 
 /**
  * task 8 ruling K5. `unreviewedHighTier` is the pure classifier
@@ -24,13 +24,12 @@ import { ORIGINAL, git, makeTargetRepo, withCorrectionsDir } from "../correction
  * tests/panel/decisionsApi.test.ts's (ruling H7 there) -- this file stays
  * isolated from that one.
  */
-const get = async (started: StartedPanel, path: string, token?: string): Promise<Response> =>
-  fetch(`${started.url}${path}`, { headers: { "x-orca-token": token ?? started.token } });
+const get = async (started: StartedPanel, path: string): Promise<Response> => (await sessionFor(started)).fetch(path);
 
-const post = async (started: StartedPanel, path: string, body: unknown, token?: string): Promise<Response> =>
-  fetch(`${started.url}${path}`, {
+const post = async (started: StartedPanel, path: string, body: unknown): Promise<Response> =>
+  (await sessionFor(started)).fetch(path, {
     method: "POST",
-    headers: { "x-orca-token": token ?? started.token, "content-type": "application/json" },
+    headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
   });
 
@@ -38,7 +37,7 @@ async function makeDistFixture(): Promise<{ dir: string; cleanup: () => Promise<
   const root = await mkdtemp(join(tmpdir(), "orca-panel-dist-"));
   const dist = join(root, "dist");
   await mkdir(dist, { recursive: true });
-  await writeFile(join(dist, "index.html"), `<!doctype html><html><body>${TOKEN_ANCHOR}</body></html>`);
+  await writeFile(join(dist, "index.html"), "<!doctype html><html><body></body></html>");
   return { dir: dist, cleanup: () => rm(root, { recursive: true, force: true }) };
 }
 
