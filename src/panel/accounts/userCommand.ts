@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { controlRoot } from "../controlOptions.js";
 import type { Role } from "./jwt.js";
 import { rotateSigningKey } from "./signingKey.js";
-import { ACCOUNTS_FILE, AccountsRejection, openAccountsStore, type AccountsStore } from "./store.js";
+import { ACCOUNTS_FILE, AccountsRejection, USER_NAME_PATTERN, openAccountsStore, type AccountsStore } from "./store.js";
 
 export interface UserIo {
   stdinIsTTY: boolean;
@@ -60,15 +60,16 @@ export async function runUserCommand(argv: string[], io: UserIo): Promise<number
     io.err(`orca-user: accounts store ${join(root, ACCOUNTS_FILE)}\n`);
     const now = io.nowMs();
     if (sub === "add") {
+      if (!USER_NAME_PATTERN.test(name!)) throw new AccountsRejection("user-name-invalid", 400, "a user name is 1-64 letters, digits, '.', '_' or '-', starting with a letter or digit");
       const password = await readTwice(io);
       const user = store.createUser({ name: name!, password, roles, now, by: BY });
       io.out(`orca-user: added ${user.name} (${user.roles.join(",")})\n`);
     } else if (sub === "passwd") {
       const user = store.findByName(name!);
       if (!user) throw new AccountsRejection("user-not-found", 1, `no user named ${name}`);
+      if (user.disabledAt !== null) throw new AccountsRejection("user-disabled", 1, `${user.name} is disabled; a password cannot be changed for a disabled user`);
       const password = await readTwice(io);
-      store.setPassword(user.id, password, now, BY);
-      store.revokeOtherSessions(user.id, "", now);
+      store.resetPassword(user.id, password, now, BY);
       io.out(`orca-user: password changed for ${user.name}; their sessions are logged out\n`);
     } else if (sub === "disable") {
       const user = store.findByName(name!);

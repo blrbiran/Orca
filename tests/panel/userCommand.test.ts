@@ -77,6 +77,18 @@ describe("orca user (spec §3.2, §10)", () => {
     expect(h.prompts).toEqual([]);
   });
 
+  it("passwd refuses a disabled user by name and add refuses an invalid name, both before any prompt", async () => {
+    withStore((s) => { const u = s.createUser({ name: "old", password: "olds old password", roles: ["member"], now: 0, by: "t" }); s.disableUser(u.id, 1, "t"); });
+    let h = io({ secrets: ["a long enough password", "a long enough password"] });
+    expect(await runUserCommand(["passwd", "old"], h.io)).toBe(1);
+    expect(h.err.join("")).toContain("user-disabled");
+    expect(h.prompts).toEqual([]);
+    h = io({ secrets: ["a long enough password", "a long enough password"] });
+    expect(await runUserCommand(["add", "bad name!"], h.io)).toBe(1);
+    expect(h.err.join("")).toContain("user-name-invalid");
+    expect(h.prompts).toEqual([]);
+  });
+
   it("disable revokes the user's sessions; unknown name is user-not-found; list shows state", async () => {
     const { amy, sid } = withStore((s) => { const amy = s.createUser({ name: "amy", password: "amys old password", roles: ["member"], now: 0, by: "t" }); return { amy, sid: s.createSession(amy.id, 0, 1e9) }; });
     let h = io();

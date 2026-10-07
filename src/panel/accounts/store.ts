@@ -32,6 +32,8 @@ export interface AccountsStore {
   findById(id: string): UserRow | null;
   createUser(input: { name: string; password: string; roles: Role[]; mustChangePassword?: boolean; now: number; by: string; allowShort?: boolean }): UserRow;
   setPassword(userId: string, password: string, now: number, by: string): void;
+  /** An administrator's reset: the new password and the logout of every session of the user, in one transaction. */
+  resetPassword(userId: string, password: string, now: number, by: string): void;
   setName(userId: string, name: string): void;
   disableUser(userId: string, now: number, by: string): void;
   createSession(userId: string, now: number, expiresAt: number): string;
@@ -144,6 +146,16 @@ export function openAccountsStore(root: string): AccountsStore {
       transaction(() => {
         requireUser(userId);
         db.prepare("UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?").run(hash, userId);
+        appendEvent("password-changed", { userId, by }, now);
+      });
+    },
+    resetPassword(userId, password, now, by) {
+      checkLength(password);
+      const hash = hashPassword(password);
+      transaction(() => {
+        requireUser(userId);
+        db.prepare("UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?").run(hash, userId);
+        db.prepare("UPDATE sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL").run(now, userId);
         appendEvent("password-changed", { userId, by }, now);
       });
     },
