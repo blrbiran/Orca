@@ -33,7 +33,8 @@ export function serviceCommand(config: ServiceConfigV1): string[] {
 /** Plan D8: one format both /bin/sh and systemd EnvironmentFile= read the same way. */
 export function renderServiceEnv(config: ServiceConfigV1): string {
   const out = [HEADER];
-  for (const [key, value] of Object.entries(config.env)) {
+  for (const [key, value] of Object.entries(config.env).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) throw new ServiceRejection("service-config-invalid", `service.env key ${JSON.stringify(key)} is not a shell variable name`);
     if (/["\\$`\r\n\0]/.test(value)) {
       throw new ServiceRejection("service-env-value-unsupported", `${key}: service.env is read by both /bin/sh and systemd, so a value cannot contain " \\ $ \` or a line break`);
     }

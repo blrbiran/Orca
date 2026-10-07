@@ -77,6 +77,21 @@ describe("generated files (spec §3, §4)", () => {
     }
   });
 
+  it("service.env sorts keys itself and refuses a key /bin/sh would run as a command", () => {
+    const out = renderServiceEnv({ ...config, env: { Z: "1", A: "2", M: "3" } });
+    expect(out).toBe(lines(HEADER, 'A="2"', 'M="3"', 'Z="1"'));
+    for (const key of ["X Y", "A;rm", "1A", ""]) {
+      expect(() => renderServiceEnv({ ...config, env: { [key]: "v" } })).toThrow(expect.objectContaining({ code: "service-config-invalid" }));
+    }
+  });
+
+  it("unit escapes % and refuses line breaks in the two path lines (plan D5)", () => {
+    const unit = renderUnit(config, servicePaths({ ORCA_PANEL_DIR: "/h/50%/panel" }));
+    expect(unit).toContain("EnvironmentFile=/h/50%%/panel/service.env\n");
+    expect(unit).toContain("WorkingDirectory=/h/50%%/panel\n");
+    expect(() => renderUnit(config, servicePaths({ ORCA_PANEL_DIR: "/h/a\nExecStartPre=/bin/evil" }))).toThrow(expect.objectContaining({ code: "service-value-newline" }));
+  });
+
   it("/bin/sh reads service.env and run.sh back exactly (spaces, quotes, % and # survive)", async () => {
     const root = await mkdtemp(join(tmpdir(), "rd-"));
     roots.push(root);
