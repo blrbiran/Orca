@@ -540,8 +540,9 @@ export async function main(argv: string[], stdinText?: string): Promise<number> 
   if (command === "panel") {
     const sub = rest[0];
     if (sub === "run") return runPanel(rest.slice(1));
-    const { SERVICE_SUBCOMMANDS, runServiceCommand } = await import("./service/command.js");
+    const { SERVICE_SUBCOMMANDS } = await import("./service/subcommands.js");
     if (sub !== undefined && (SERVICE_SUBCOMMANDS as readonly string[]).includes(sub)) {
+      const { runServiceCommand } = await import("./service/command.js");
       return runServiceCommand(sub, rest.slice(1), process.env, { stdout: (t) => process.stdout.write(t), stderr: (t) => process.stderr.write(t) });
     }
     return runPanel(rest); // spec §2: the old form is kept as an alias of `orca panel run`

@@ -20,13 +20,16 @@ export function systemdEnv(env: NodeJS.ProcessEnv, uid: number, probe: RuntimePr
   return out;
 }
 
-/** Plan D18: before every systemctl --user. Without linger the panel stops at logout. Orca never runs sudo. */
-function preflight(ctx: ServiceContext): NodeJS.ProcessEnv {
+/**
+ * Plan D18: before every systemctl --user. Without linger the panel stops at logout. Orca never runs sudo.
+ * Only the verbs that change the service turn linger on; status and logs read, so they only say it is off.
+ */
+function preflight(ctx: ServiceContext, mayEnableLinger = true): NodeJS.ProcessEnv {
   const env = systemdEnv(ctx.env, ctx.uid, realRuntimeProbe);
   const linger = ctx.run("loginctl", ["show-user", ctx.user, "-p", "Linger"], { env });
   if (linger.code !== 0 || linger.stdout.trim() !== "Linger=yes") {
-    const enabled = ctx.run("loginctl", ["enable-linger", ctx.user], { env });
-    if (enabled.code !== 0) ctx.err(`orca panel: linger is off for ${ctx.user}, so the panel stops at logout. Run: sudo loginctl enable-linger ${ctx.user}`);
+    const enabled = mayEnableLinger ? ctx.run("loginctl", ["enable-linger", ctx.user], { env }).code : 1;
+    if (enabled !== 0) ctx.err(`orca panel: linger is off for ${ctx.user}, so the panel stops at logout. Run: sudo loginctl enable-linger ${ctx.user}`);
   }
   return env;
 }
@@ -51,7 +54,9 @@ export const systemd: ServiceManager = {
     writeUnit(ctx);
     const env = preflight(ctx);
     if (systemctl(ctx, env, ["daemon-reload"]) !== 0) return 1;
-    return systemctl(ctx, env, ["enable", "--now", ctx.paths.unit]);
+    if (systemctl(ctx, env, ["enable", ctx.paths.unit]) !== 0) return 1;
+    // `enable --now` leaves an already-active unit on its old ExecStart; restart starts a stopped one too.
+    return systemctl(ctx, env, ["restart", ctx.paths.unit]);
   },
   async start(ctx) { return systemctl(ctx, preflight(ctx), ["start", ctx.paths.unit]); },
   async stop(ctx) { return systemctl(ctx, preflight(ctx), ["stop", ctx.paths.unit]); },
@@ -63,14 +68,14 @@ export const systemd: ServiceManager = {
     return systemctl(ctx, env, ["restart", ctx.paths.unit]);
   },
   state(ctx): ManagerState {
-    const r = ctx.run("systemctl", ["--user", "show", ctx.paths.unit, "-p", "ActiveState,SubState,MainPID,NRestarts"], { env: preflight(ctx) });
+    const r = ctx.run("systemctl", ["--user", "show", ctx.paths.unit, "-p", "ActiveState,SubState,MainPID,NRestarts"], { env: preflight(ctx, false) });
     if (r.code !== 0) return { loaded: false, state: "not loaded", pid: null };
     const value = (key: string): string => new RegExp(`^${key}=(.*)$`, "m").exec(r.stdout)?.[1]?.trim() ?? "";
     const pid = Number(value("MainPID"));
     return { loaded: true, state: `${value("ActiveState")}/${value("SubState")} restarts=${value("NRestarts")}`, pid: pid > 0 ? pid : null };
   },
   logs(ctx, opts) {
-    return ctx.run("journalctl", ["--user", "-u", ctx.paths.unit, "-n", String(opts.lines), ...(opts.follow ? ["-f"] : [])], { env: preflight(ctx), inherit: true }).code;
+    return ctx.run("journalctl", ["--user", "-u", ctx.paths.unit, "-n", String(opts.lines), ...(opts.follow ? ["-f"] : [])], { env: preflight(ctx, false), inherit: true }).code;
   },
   async uninstall(ctx) {
     const env = preflight(ctx);

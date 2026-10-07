@@ -16,7 +16,7 @@ import { statusLines } from "./status.js";
 import { realRuntimeProbe, systemd, systemdEnv } from "./systemd.js";
 import { runTool, type RunTool } from "./tools.js";
 
-export const SERVICE_SUBCOMMANDS = ["install", "uninstall", "start", "stop", "restart", "status", "logs"] as const;
+export { SERVICE_SUBCOMMANDS } from "./subcommands.js";
 const MANAGERS: Record<string, ServiceManager> = { launchd, systemd, detached };
 
 export function selectManager(input: { env: NodeJS.ProcessEnv; platform: NodeJS.Platform; detach: boolean; run: RunTool; uid: number }): { manager: ServiceManager; auto: boolean } {
@@ -59,7 +59,7 @@ function parseLogs(args: string[]): { follow: boolean; lines: number } {
 
 /**
  * Spec §9: a manager's exit code says the job was submitted, not that the panel runs. Wait for the panel panel.json
- * names to answer a real request; after a restart, the panel from before it does not count.
+ * names to answer a real request; after an install or a restart, the panel from before it does not count.
  */
 async function waitForPanel(ctx: ServiceContext, kind: string, verb: string, before: PanelJsonV1 | null): Promise<number> {
   const deadline = ctx.now() + ctx.startWaitMs;
@@ -68,7 +68,7 @@ async function waitForPanel(ctx: ServiceContext, kind: string, verb: string, bef
     const old = id.answering && before !== null && id.panel.pid === before.pid && id.panel.startTime === before.startTime;
     if (id.answering && !old) { ctx.out(`orca panel: answering at ${id.panel.url} (pid ${id.panel.pid})`); return 0; }
     if (ctx.now() >= deadline) {
-      const why = id.answering ? `only the panel from before the restart (pid ${id.panel.pid}) answered` : id.reason;
+      const why = id.answering ? `only the panel from before the ${verb} (pid ${id.panel.pid}) answered` : id.reason;
       ctx.err(`orca panel: ${kind} accepted ${verb}, but no panel answered through ${ctx.paths.panelJson} within ${ctx.startWaitMs} ms (${why}); see orca panel status and orca panel logs`);
       return 1;
     }
@@ -104,13 +104,14 @@ export async function runServiceCommand(sub: string, args: string[], env: NodeJS
           return 0;
         }
         writeServiceFiles(paths, config);
+        const before = await identifyPanel(paths.panelJson);
         const code = await manager.install(ctx);
         if (code !== 0) {
           // Spec §9: no rollback in v1. Re-running install is idempotent and is the way out.
           ctx.err(`orca panel: install did not finish: the files under ${paths.panelDir} are written but the service may not be loaded. Fix the error above, then re-run orca panel install`);
           return 1;
         }
-        return confirm("install", code);
+        return confirm("install", code, before.answering ? before.panel : null);
       }
       case "start":
         if (startNeedsDetach(manager.kind, auto, detach)) throw new ServiceRejection("service-detach-required", "no service manager here; orca panel start --detach starts a process that neither restarts on crash nor survives a reboot");

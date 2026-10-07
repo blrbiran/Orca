@@ -36,11 +36,30 @@ describe("systemd preflight (spec §4)", () => {
 });
 
 describe("systemd (spec §4, Linux table)", () => {
-  it("install writes the unit, checks linger, daemon-reloads, enable --now", async () => {
+  it("install writes the unit, checks linger, daemon-reloads, enables and restarts (a re-install replaces a running panel)", async () => {
     const s = await setup();
     expect(await systemd.install(s.ctx)).toBe(0);
     expect(readFileSync(s.paths.unitFile, "utf8")).toBe(renderUnit(sampleConfig(s.paths), s.paths));
-    expect(await s.fake.calls()).toEqual(["loginctl show-user ann -p Linger", "systemctl --user daemon-reload", "systemctl --user enable --now orca-panel-test"]);
+    expect(await s.fake.calls()).toEqual(["loginctl show-user ann -p Linger", "systemctl --user daemon-reload", "systemctl --user enable orca-panel-test",
+      "systemctl --user restart orca-panel-test"]);
+  });
+
+  it("a failed enable stops install before the restart", async () => {
+    const s = await setup();
+    await s.fake.codes("systemctl", "enable", [1]);
+    expect(await systemd.install(s.ctx)).toBe(1);
+    expect((await s.fake.calls()).some((c) => c.includes("restart"))).toBe(false);
+    expect(s.err.join("\n")).toContain(`enable orca-panel-test exited 1`);
+  });
+
+  it("status and logs never turn linger on: they say it is off (install, start and restart may)", async () => {
+    const s = await setup("Linger=no\n");
+    systemd.state(s.ctx);
+    systemd.logs(s.ctx, { follow: false, lines: 5 });
+    expect((await s.fake.calls()).some((c) => c.includes("enable-linger"))).toBe(false);
+    expect(s.err).toEqual(Array(2).fill("orca panel: linger is off for ann, so the panel stops at logout. Run: sudo loginctl enable-linger ann"));
+    expect(await systemd.start(s.ctx)).toBe(0);
+    expect(await s.fake.calls()).toContain("loginctl enable-linger ann");
   });
 
   it("turns linger on when it is off, and prints the sudo line (never runs sudo) when it cannot", async () => {

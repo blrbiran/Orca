@@ -2,7 +2,7 @@ import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { mkdir, mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, relative } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { main } from "../../src/cli.js";
 import { runServiceCommand, selectManager, startNeedsDetach, type ServiceSeams } from "../../src/service/command.js";
@@ -142,6 +142,31 @@ describe("orca panel <subcommand> (spec §4)", () => {
     expect(readFileSync("skills/orca-control/SKILL.md", "utf8")).toContain("`orca panel install|uninstall|start|stop|restart` change the human's running service. Never run them; ask the human.");
   });
 
+  it("a re-install does not count the panel that answered before it (a still-running old panel has the old args)", async () => {
+    const s = await setup();
+    const url = await answeringPanel();
+    await mkdir(s.paths.panelDir, { mode: 0o700 });
+    plantPanel(s.paths, url, 4242);
+    const stale = await run("install", install.slice(2), seams());
+    expect(stale.result).toBe(1);
+    expect(stale.stderr).toContain("only the panel from before the install (pid 4242) answered");
+    const fresh = await run("install", install.slice(2), seams(() => plantPanel(s.paths, url, 4343)));
+    expect([fresh.result, fresh.stdout.includes("(pid 4343)")]).toEqual([0, true]);
+  });
+
+  it("on Linux, status and logs leave linger as it is and say it is off (the skill calls status safe)", async () => {
+    const s = await setup();
+    vi.stubEnv("ORCA_SERVICE_MANAGER", "systemd");
+    await s.fake.output("loginctl", "show-user", "Linger=no\n");
+    await mkdir(dirname(s.paths.unitFile), { recursive: true });
+    await writeFile(s.paths.unitFile, "[Unit]\n");
+    const status = await captureStreams(() => main(["panel", "status"]));
+    const logs = await captureStreams(() => main(["panel", "logs"]));
+    expect([status.result, logs.result]).toEqual([1, 0]);
+    for (const { stderr } of [status, logs]) expect(stderr).toContain("orca panel: linger is off for");
+    expect((await s.fake.calls()).filter((c) => c.startsWith("loginctl"))).toEqual(Array(2).fill(expect.stringMatching(/^loginctl show-user .* -p Linger$/)));
+  });
+
   it("a failed enable names the next step: re-run orca panel install", async () => {
     const s = await setup();
     await s.fake.codes("launchctl", "enable", [1]);
@@ -174,6 +199,18 @@ describe("orca panel <subcommand> (spec §4)", () => {
     const systemdStatus = await captureStreams(() => main(["panel", "status"]));
     expect([systemdStatus.result, systemdStatus.stdout]).toEqual([1, ""]);
     expect(systemdStatus.stderr).toContain(`rejected: service-not-installed: ${s.paths.unitFile} does not exist`);
+  });
+
+  it("the detached manager is installed when run.sh exists", async () => {
+    const s = await setup();
+    vi.stubEnv("ORCA_SERVICE_MANAGER", "detached");
+    const missing = await captureStreams(() => main(["panel", "status"]));
+    expect([missing.result, missing.stdout]).toEqual([1, ""]);
+    expect(missing.stderr).toContain(`rejected: service-not-installed: ${s.paths.runScript} does not exist`);
+    await mkdir(s.paths.panelDir, { mode: 0o700 });
+    await writeFile(s.paths.runScript, "exit 0\n");
+    const present = await captureStreams(() => main(["panel", "status"]));
+    expect(present.stdout).toContain("manager: detached not loaded pid=-");
   });
 
   it("logs answers 0 or 1: the tool's own non-zero code (130 on Ctrl-C) is 1 (global exit codes)", async () => {
