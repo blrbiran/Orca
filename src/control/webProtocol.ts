@@ -1605,3 +1605,30 @@ export const agentSelectionPreviewSchema = z
 export type AgentsViewV1 = z.infer<typeof agentsViewSchema>;
 export type AgentPreferencesViewV1 = z.infer<typeof agentPreferencesViewSchema>;
 export type AgentSelectionPreviewV1 = z.infer<typeof agentSelectionPreviewSchema>;
+
+// Accounts spec §5: GET /api/control/usage. `caps` is empty until Task 9 gives it a shape.
+const usageModelEntrySchema = z
+  .object({ model: nonemptyString.nullable(), input: safeInteger, output: safeInteger, cacheRead: safeInteger, cacheWrite: safeInteger, tokens: safeInteger })
+  .strict();
+export const usageViewSchema = z
+  .object({
+    schema: z.literal("orca-usage-view-v1"),
+    scope: z.string().regex(/^(?:all|repo:[a-zA-Z0-9][a-zA-Z0-9_.-]*)$/),
+    from: safeInteger.nullable(),
+    to: safeInteger.nullable(),
+    now: safeInteger,
+    calendar: z.object({ timeZone: nonemptyString, weekStart: z.number().int().min(1).max(7) }).strict(),
+    spendRevision: safeInteger,
+    headline: z.object({ total: safeInteger, week: safeInteger, month: safeInteger }).strict(),
+    range: z
+      .object({
+        tokens: safeInteger,
+        byModel: z.array(usageModelEntrySchema),
+        groups: z.array(z.object({ key: nonemptyString, tokens: safeInteger }).strict()),
+      })
+      .strict(),
+    counts: z.object({ unattributedRows: safeInteger, breakdownMismatchRows: safeInteger, unknownUsageRuns: safeInteger }).strict(),
+    caps: z.array(z.never()),
+  })
+  .strict();
+export type UsageViewV1 = z.infer<typeof usageViewSchema>;

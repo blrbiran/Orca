@@ -230,6 +230,7 @@ export const nonDurableControlErrorClassifications = {
   "snapshot-head-mismatch": "internal",
   "snapshot-index-hash-mismatch": "internal",
   "start-outcome-unknown": "internal",
+  "usage-query-invalid": "internal",
   "usage-regression": "internal",
 
   // V1 background reason codes are projected on runs/groups, not returned as

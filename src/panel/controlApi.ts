@@ -11,7 +11,8 @@ import { readVersions } from "../control/queries.js";
 import { readAgentPreferences } from "../control/agentPreferences.js";
 import { resolveSelection, slotLayers, type PartialSelection } from "../control/agentSelection.js";
 import { idSchema } from "../control/schema.js";
-import { agentPreferencesViewSchema, agentsViewSchema, recoveryRetryPayloadSchema, commandEnvelopeSchema, controlConfigSchema, rawAuthorityCommandSchema, repositoryWorkspaceSchema, type CommandTargetV1, type CommandVerbV1, type RawAuthorityCommandV1 } from "../control/webProtocol.js";
+import { agentPreferencesViewSchema, agentsViewSchema, recoveryRetryPayloadSchema, usageViewSchema, commandEnvelopeSchema, controlConfigSchema, rawAuthorityCommandSchema, repositoryWorkspaceSchema, type CommandTargetV1, type CommandVerbV1, type RawAuthorityCommandV1 } from "../control/webProtocol.js";
+import { parseUsageScope, readUsageView, type UsageGroupBy, type UsageQuery } from "../control/usageQuery.js";
 import { readWorkspaceSetting } from "../control/workspaceSettings.js";
 import type { WebControlService } from "../control/webService.js";
 import type { ExecutionPort } from "../control/executionPort.js";
@@ -63,6 +64,33 @@ function sinceChangeSeq(req: Request): number | null {
   const value = Number(raw);
   if (!Number.isSafeInteger(value)) throw new ControlError("query-invalid");
   return value;
+}
+
+const USAGE_GROUPS: readonly UsageGroupBy[] = ["model", "repo", "day", "week", "month"];
+
+/** Accounts spec §5.3: `scope` is required; `from`/`to` are canonical decimal safe integers with from < to; no other key. */
+function usageQuery(req: Request): UsageQuery {
+  const bad = () => new ControlError("usage-query-invalid");
+  const text = (key: string): string | undefined => {
+    const raw = req.query[key];
+    if (raw === undefined) return undefined;
+    if (typeof raw !== "string") throw bad();
+    return raw;
+  };
+  if (Object.keys(req.query).some((key) => !["scope", "from", "to", "groupBy"].includes(key))) throw bad();
+  const scope = parseUsageScope(text("scope") ?? "");
+  if (scope === null) throw bad();
+  const bound = (key: string): number | null => {
+    const raw = text(key);
+    if (raw === undefined) return null;
+    if (!/^(?:0|[1-9][0-9]*)$/.test(raw) || !Number.isSafeInteger(Number(raw))) throw bad();
+    return Number(raw);
+  };
+  const from = bound("from"), to = bound("to");
+  if (from !== null && to !== null && from >= to) throw bad();
+  const groupBy = text("groupBy") ?? "model";
+  if (!USAGE_GROUPS.includes(groupBy as UsageGroupBy)) throw bad();
+  return { scope, from, to, groupBy: groupBy as UsageGroupBy };
 }
 
 function readErrorContext(store: ControlStore, groupId: string): { commandRevision: number | null; evidenceIds: string[] } {
@@ -127,6 +155,15 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
     }
     res.json(readControlSummary(deps.store, deps.epoch, since));
   }));
+
+  // Accounts spec §5.3: every principal reads usage (the permission table's reading is open to every row).
+  app.get("/api/control/usage", (req, res) => {
+    try { res.json(usageViewSchema.parse(readUsageView(deps.store, usageQuery(req), Date.now()))); }
+    catch (error) {
+      if (error instanceof ControlError && error.code === "usage-query-invalid") { sendControlError(res, 400, error.code, "The usage query is not valid."); return; }
+      sendMappedControlError(res, error);
+    }
+  });
 
   app.get("/api/control/groups", (_req, res) => {
     res.json(readControlSummary(deps.store, deps.epoch, null, true));

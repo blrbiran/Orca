@@ -20,6 +20,7 @@ const panelOnlyErrorStatuses = {
 
 const readErrorStatuses = {
   "query-invalid": 400,
+  "usage-query-invalid": 400,
   "control-operation-in-progress": 503,
   "control-owner-changed": 503,
   "control-recovery-busy": 503,
