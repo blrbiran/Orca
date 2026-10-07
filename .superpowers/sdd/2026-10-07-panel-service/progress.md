@@ -292,3 +292,46 @@ Tally (distinct lettered mutations, a re-run in a later round counted once; Task
 ### Decisions
 
 D1-D20 adopted as in spec §10, execution corrections spec §11 (items 1-14; the Task 12 Rule 17 registration is §11 bullet 11, the final fix wave added 12-14). Every execution-time Ruling is in the Task 1-12 entries above and the corresponding `task-<n>-report.md`.
+
+## Task 14: hand the install to the human
+
+Run: Task 14 agent, session 30bd7e40, 2026-10-07, worktree `Orca-panel-service`, branch `panel-service` at 44e2494 (not merged; checked in the worktree).
+
+- **panel.sh comparison:** `~/.orca/panel.sh` read-only. Flags `--by biran --port 7777 --repo orca=/Users/biran/code/orca/orca-web --profile $HOME/.orca/profile.json --estimator-profile all --estimate-mode soft` and env `ORCA_AGENTS_TABLE`, `ORCA_CCMEM_BIN`, `ORCA_SYNCSKILL_BIN` match Task 3's `PANEL_SH_ARGS`/`PANEL_SH_ENV` in `tests/service/config.test.ts` exactly. No change.
+- **Build:** `npm run build && npm run build --workspace web` rc 0.
+- **Dry run:** `install --dry-run` with `ORCA_SERVICE_MANAGER=launchd` (no probe tool), worktree's `dist/cli.js`, rc 0, output `/private/tmp/claude-501/-Users-biran-code-skills-loop-Orca/30bd7e40-fac6-4b61-90a1-67fd34826feb/scratchpad/ps/t14/t14-dry.txt`, read whole. Conditions: (1) `service.env` holds exactly HOME, NODE_OPTIONS, ORCA_AGENTS_TABLE, ORCA_CCMEM_BIN, ORCA_PANEL_DIR, ORCA_SYNCSKILL_BIN, PATH: yes; (2) `run.sh` exec line is `panel run --service` followed by exactly the panel.sh flags: yes; (3) plist label `dev.orca.panel`: yes. The nvm warning appeared, as expected. (`entry` in the dry run names the worktree's dist because it ran there; the human's command runs from the main checkout.)
+- **No write proven:** `/bin/ls -1A ~/.orca` vs `orca-root-before-t14.txt`: cmp rc 0. `/bin/ls -1A ~/Library/LaunchAgents` vs `la-before-t14.txt`: cmp rc 0. No `install` (only `--dry-run`), no launchctl.
+- **CLI check:** the brief's command still matches today's CLI (`panel install`, `panel status`, same flags); no adjustment. Since Task 11, `install` waits for the panel to answer.
+
+Optional before the real install (needs the human's authorization; launchctl print/managername parsing has only met fakes):
+
+```sh
+cd /Users/biran/code/skills/loop/Orca
+npm run build && ORCA_SERVICE_REAL=1 ./node_modules/.bin/vitest run tests/service/realSmoke.test.ts
+```
+
+The command for the human (run in the main checkout after the merge):
+
+```sh
+# 1. Stop the panel that ~/.orca/panel.sh started (Ctrl-C in its terminal): it holds port 7777 and the control store,
+#    and the service would otherwise exit 78 (port in use).
+cd /Users/biran/code/skills/loop/Orca
+npm run build && npm run build --workspace web
+env -u ORCA_CONTROL_DIR -u ORCA_CCLOOP_BIN -u SYNCSKILL_DIR -u CCMEM_DATA_ROOT -u ORCA_CORRECTIONS_DIR -u ORCA_PROJECTS_FILE -u ORCA_PANEL_DIR \
+  ORCA_AGENTS_TABLE="$HOME/.orca/agents.json" \
+  ORCA_CCMEM_BIN=/usr/local/bin/ccmem \
+  ORCA_SYNCSKILL_BIN=/Users/biran/.nvm/versions/node/v22.13.1/bin/syncskill \
+  node dist/cli.js panel install --by biran --port 7777 \
+    --repo orca=/Users/biran/code/orca/orca-web \
+    --profile "$HOME/.orca/profile.json" --estimator-profile all --estimate-mode soft
+node dist/cli.js panel status
+```
+
+(`env -u ...` makes the service carry exactly what panel.sh sets, even if the human's shell exports other Orca variables.)
+
+awaitingHuman:
+1. `--ff-only` merge `panel-service` into `main`. Main has one extra local commit from `orca checkpoint write` (subject starts `checkpoint`), so the controller rebases this branch onto main first.
+2. Stop the panel.sh panel, then run the command above.
+3. Optionally authorize the real smoke first (the command above); the final review recommends it.
+4. Retire `~/.orca/panel.sh` (the human's file).
+5. A Linux host for a real systemd smoke (D16).
