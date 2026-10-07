@@ -9,7 +9,7 @@
  * caller that guessed "it failed" and re-issued with a new id would be creating
  * a second execution the ledger never asked for.
  */
-import { csrfHeader, failureFrom } from "./api.js";
+import { csrfHeader, failureFrom, noteAnswer } from "./api.js";
 import i18n from "./i18n.js";
 import type {
   AgentPreferencesViewV1,
@@ -43,6 +43,7 @@ import type {
   SetLimitPayloadV1,
   SetTaskLabelsPayloadV1,
   SetTaskLoopPayloadV1,
+  UsageViewV1,
 } from "./controlTypes.js";
 import type { ControlRefusal, UncertainCommand } from "./controlState.js";
 
@@ -83,6 +84,7 @@ async function controlGet<T>(path: string): Promise<T> {
     throw new ControlRequestError(refusalOf(`GET ${path}`, null, undefined, err instanceof Error ? err.message : i18n.t("panelErrors.noAnswer")));
   }
   const body: unknown = await res.json().catch(() => undefined);
+  noteAnswer(res.status, body);
   if (!res.ok) throw new ControlRequestError(refusalOf(`GET ${path}`, res.status, body, i18n.t("panelErrors.answered", { status: res.status })));
   return body as T;
 }
@@ -105,6 +107,9 @@ export const fetchControlRecovery = (): Promise<RecoveryViewV1> => controlGet<Re
 /** GET /api/control/runs/:runId/evidence -- the manifest of raw evidence retained for one run. */
 export const fetchRunEvidence = (runId: string): Promise<EvidenceManifestV1> =>
   controlGet<EvidenceManifestV1>(`/api/control/runs/${segment(runId)}/evidence`);
+
+/** Accounts spec §5.3: GET /api/control/usage with the query the Usage panel's pickers name (web/src/UsagePanel.tsx). */
+export const fetchUsageView = (query: string): Promise<UsageViewV1> => controlGet<UsageViewV1>(`/api/control/usage?${query}`);
 
 /** Agent selection spec §6.8: the installation table, as ccloop answered it through the panel. */
 export const fetchAgentsView = (): Promise<AgentsViewV1> => controlGet<AgentsViewV1>("/api/control/agents");
@@ -147,7 +152,11 @@ export async function downloadEvidenceArtifact(entry: EvidenceManifestV1["entrie
   } catch (err) {
     throw new ControlRequestError(refusalOf(`GET ${entry.downloadUrl}`, null, undefined, err instanceof Error ? err.message : i18n.t("panelErrors.noAnswer")));
   }
-  if (!res.ok) throw new ControlRequestError(refusalOf(`GET ${entry.downloadUrl}`, res.status, await res.json().catch(() => undefined), i18n.t("panelErrors.answered", { status: res.status })));
+  if (!res.ok) {
+    const body: unknown = await res.json().catch(() => undefined);
+    noteAnswer(res.status, body);
+    throw new ControlRequestError(refusalOf(`GET ${entry.downloadUrl}`, res.status, body, i18n.t("panelErrors.answered", { status: res.status })));
+  }
   const url = URL.createObjectURL(await res.blob());
   const anchor = document.createElement("a");
   anchor.href = url;
@@ -175,6 +184,7 @@ export async function sendControlCommand(path: string, envelope: CommandEnvelope
     return { kind: "uncertain", refusal: refusalOf(`POST ${path}`, null, undefined, err instanceof Error ? err.message : i18n.t("panelErrors.neverAnswered")) };
   }
   const body: unknown = await res.json().catch(() => undefined);
+  noteAnswer(res.status, body);
   if (res.status >= 500) return { kind: "uncertain", refusal: refusalOf(`POST ${path}`, res.status, body, i18n.t("panelErrors.mayNotHaveCommitted")) };
   return { kind: "answered", status: res.status, body: body as CommandSuccessV1 | { error: CommandErrorV1 } };
 }

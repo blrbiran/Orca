@@ -229,6 +229,20 @@ exec node_modules/.bin/tsx src/cli.ts panel \
 - Stop it with Ctrl-C. It drains before exiting; a second Ctrl-C exits at once, and the next start may then have to
   recover first.
 
+### Logging in
+
+The first start creates an owner named after `--by` and writes its initial password to
+`$ORCA_CONTROL_DIR/initial-password` (default `$HOME/.orca/control/initial-password`); stderr names the file with
+the line `orca-panel: initial password for <name> written to <path>`. Under `orca panel install`, that line is in
+the service's log (`orca panel logs`). Log in with it and the panel asks you to choose your own password (at least 12
+characters) before anything else; the file is deleted once you have. Add more people from the account menu in the
+page (owners only) or with `orca user add <name> [--role owner|member]` in a terminal, which reads the password
+twice from the TTY. Run `orca user` with the same `ORCA_CONTROL_DIR` as the panel (`orca panel install --dry-run`
+shows the service's environment), or it opens a different accounts store; it prints the path it opened. A session
+lasts `--session-days` (1-30, default 15) and is refreshed while you use the page; `orca user passwd <name>` resets a
+forgotten password. Members can do everything except the human-only actions (group limits, spend caps, the usage
+calendar), which only owners see.
+
 ## The sections
 
 The left-hand navigation has six sections, ordered along the work. **Requirements** opens by default. The active

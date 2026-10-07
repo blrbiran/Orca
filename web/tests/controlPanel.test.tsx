@@ -163,6 +163,15 @@ describe("ControlPanel", () => {
     expect(html).toContain(">evidence</button>");
     expect(html).toContain("projection refetch required");
   });
+
+  // Accounts spec §6.3.1, §7 (Task 11): a group whose claim waits on a spend cap names the cap and links to Usage.
+  it("shows a group's spend-cap block with its scope, period and cap, and a link to the Usage panel", () => {
+    const blocked = groupView({ spendCapBlock: { code: "spend-cap-reached", scope: "repo:orca", period: "month", capTokens: 7_654_321, grantTokens: 2_345_678 } });
+    const html = renderToStaticMarkup(<ControlPanel {...panelProps({ groups: { g: blocked } })} />);
+    expect(html).toContain("the monthly cap for project orca is 7654321 tokens and the next claim needs 2345678");
+    expect(html).toContain(`href="#metrics"`);
+    expect(renderToStaticMarkup(<ControlPanel {...panelProps()} />)).not.toContain(`href="#metrics"`);
+  });
 });
 
 describe("BudgetEditor", () => {

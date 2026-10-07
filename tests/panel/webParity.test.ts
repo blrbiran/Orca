@@ -47,6 +47,7 @@ import type {
   SetLimitPayload as ServerSetLimitPayload,
   SetTaskLabelsPayload as ServerSetTaskLabelsPayload,
   SetTaskLoopPayload as ServerSetTaskLoopPayload,
+  UsageViewV1 as ServerUsageViewV1,
 } from "../../src/control/webProtocol.js";
 import type {
   AgentPreferencesViewV1 as WebAgentPreferencesViewV1,
@@ -80,6 +81,7 @@ import type {
   SetLimitPayloadV1 as WebSetLimitPayloadV1,
   SetTaskLabelsPayloadV1 as WebSetTaskLabelsPayloadV1,
   SetTaskLoopPayloadV1 as WebSetTaskLoopPayloadV1,
+  UsageViewV1 as WebUsageViewV1,
 } from "../../web/src/controlTypes.js";
 
 /**
@@ -188,6 +190,9 @@ function commandLookupServerToWeb(x: ServerCommandLookupV1): WebCommandLookupV1 
 function commandLookupWebToServer(x: WebCommandLookupV1): ServerCommandLookupV1 { return x; }
 function commandErrorServerToWeb(x: ServerCommandErrorV1): WebCommandErrorV1 { return x; }
 function commandErrorWebToServer(x: WebCommandErrorV1): ServerCommandErrorV1 { return x; }
+// Accounts Task 11 (add-only): the Usage panel's read, checked both ways like the other views.
+function usageServerToWeb(x: ServerUsageViewV1): WebUsageViewV1 { return x; }
+function usageWebToServer(x: WebUsageViewV1): ServerUsageViewV1 { return x; }
 
 // Task 9: the commands the browser may send. A payload mirror that drifts from the
 // server's schema is a command the ledger will refuse (or, worse, one it will
@@ -322,4 +327,6 @@ export const __webParityAssignabilityChecks__ = [
   requirementFeedbackWebToServer,
   requirementAcceptServerToWeb,
   requirementAcceptWebToServer,
+  usageServerToWeb,
+  usageWebToServer,
 ] as const;

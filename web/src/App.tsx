@@ -99,6 +99,7 @@ import { ALL_PROJECTS, allowsAll, groupScope, readProjectView, writeProjectView 
 import type { ProjectView } from "./projectScope.js";
 import { ProjectNames } from "./projectNames.js";
 import { MetricsView } from "./MetricsView.js";
+import { UsagePanel } from "./UsagePanel.js";
 import { Refusal } from "./Refusal.js";
 import { RequirementsPanel } from "./RequirementsPanel.js";
 import { labelsDraftKey } from "./TaskDetail.js";
@@ -985,6 +986,8 @@ export function App(): JSX.Element {
       </SectionPane>
       <SectionPane section="metrics" active={section}>
         <MetricsView report={home.report} coverage={home.coverage} />
+        {/* Accounts spec §7: usage is per control repository, so a project the control plane does not hold offers All only. */}
+        <UsagePanel project={controlRepoId ?? null} active={section === "metrics"} />
       </SectionPane>
     </Shell>
     </ProjectNames.Provider>

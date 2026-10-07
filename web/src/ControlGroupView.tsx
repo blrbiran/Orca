@@ -25,6 +25,7 @@ import type { UncertainCommand } from "./controlState.js";
 import { LabelChips, TaskDetail, progressText } from "./TaskDetail.js";
 import { planText } from "./LoopPlanCard.js";
 import { enumText } from "./i18n.js";
+import { capScopeText } from "./UsagePanel.js";
 
 const short = (hash: string): string => hash.slice(0, 12);
 
@@ -99,6 +100,18 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
         {t("control.group.heading", { groupId, state: enumText("groupState", view.summary.state), revision, projection: view.summary.projectionSeq })}
       </h2>
       {view.summary.claimBlocked && <p role="alert">{t("control.group.claimBlocked")}</p>}
+      {/* Accounts spec §6.3.1, §7: a claim waiting on a spend cap names the cap and links to the Usage panel. */}
+      {view.spendCapBlock && (
+        <p role="status" data-testid="spend-cap-block">
+          {t("control.group.spendCapBlock", {
+            scope: capScopeText(view.spendCapBlock.scope),
+            period: t(`usage.capPeriod.${view.spendCapBlock.period}` as const),
+            cap: view.spendCapBlock.capTokens,
+            grant: view.spendCapBlock.grantTokens,
+          })}{" "}
+          <a href="#metrics">{t("control.group.spendCapLink")}</a>
+        </p>
+      )}
       <p>
         {t("control.group.planLine", { goal: view.plan.goal, hash: short(view.plan.planHash), graphVersion: view.graphVersion })}
       </p>

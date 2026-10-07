@@ -299,6 +299,39 @@ export type GroupViewV1 = {
   stop: null | { mode: "pause" | "shutdown" | "handoff"; state: "paused" | "handoff-pending" | "handoff-partial" | "handoff-unresolved" | "handoff-complete"; frozenRunIds: string[]; acceptedAt: string | null; deadlineAt: string | null };
   recoveryBlockers: Array<{ scope: "global" | "group" | "run"; code: string; runId: string | null; evidenceIds: string[] }>;
   recentCommandIds: string[];
+  /** Accounts spec §6.3.1 (D9): why this group's next claim waits on a spend cap; absent from older servers. */
+  spendCapBlock?: SpendCapBlockV1 | null;
+};
+
+export type SpendPeriodV1 = "total" | "week" | "month";
+/** Accounts spec §6.3.1: `scope` is `all` or `repo:<repoId>`; projected on a group view, never a command outcome. */
+export type SpendCapBlockV1 = { code: "spend-cap-reached"; scope: string; period: SpendPeriodV1; capTokens: number; grantTokens: number };
+export type SetSpendCapPayloadV1 = { scope: string; period: SpendPeriodV1; tokens: number };
+export type ClearSpendCapPayloadV1 = { scope: string; period: SpendPeriodV1 };
+/** weekStart 1 = Monday .. 7 = Sunday. */
+export type SetUsageCalendarPayloadV1 = { timeZone: string; weekStart: number };
+/** Accounts spec §6.2: one cap that applies to the view's scope, with what it leaves (headroom is not clamped). */
+export type CapStatusV1 = {
+  scope: string; period: SpendPeriodV1; tokens: number; updatedAt: number; updatedBy: string;
+  used: number; committed: number; headroom: number; from: number | null; to: number | null;
+};
+/** Accounts spec §5.3: GET /api/control/usage. A null model or group key is the unattributed bucket. */
+export type UsageViewV1 = {
+  schema: "orca-usage-view-v1";
+  scope: string;
+  from: number | null;
+  to: number | null;
+  now: number;
+  calendar: { timeZone: string; weekStart: number };
+  spendRevision: number;
+  headline: { total: number; week: number; month: number };
+  range: {
+    tokens: number;
+    byModel: Array<{ model: string | null; input: number; output: number; cacheRead: number; cacheWrite: number; tokens: number }>;
+    groups: Array<{ key: string | null; tokens: number }>;
+  };
+  counts: { unattributedRows: number; breakdownMismatchRows: number; unknownUsageRuns: number };
+  caps: CapStatusV1[];
 };
 
 export type RecoveryViewV1 = {

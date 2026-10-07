@@ -247,3 +247,17 @@ nav[aria-label="Control groups"] button[aria-current="true"] { background: var(-
 .dep-node:focus-visible rect { stroke: var(--accent); stroke-width: 3; }
 .dep-edge { fill: none; stroke: var(--muted); stroke-width: 1.5; }
 .dep-arrow { fill: var(--muted); }
+
+/* Accounts spec §7: the login and change-password pages, the account bar, the owners' notices, the Usage panel. */
+.auth-page { max-width: 420px; margin: 10vh auto; padding: 24px; }
+.auth-form { display: flex; flex-direction: column; gap: 12px; }
+.auth-hint { color: var(--muted); font-size: var(--text-xs); }
+.account-bar { display: flex; align-items: center; justify-content: flex-end; gap: 12px; padding: 8px 24px; border-bottom: 1px solid var(--border); background: var(--bg-elevated); }
+.account-name { font-weight: 600; color: var(--text-strong); }
+.account-role { color: var(--muted); font-size: var(--text-xs); }
+.account-menu { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; padding: 12px 24px; border-bottom: 1px solid var(--border); }
+.notices { padding: 8px 24px; border-bottom: 1px solid var(--border); background: var(--danger-subtle); }
+.notices ul { margin: 0; padding-left: 16px; }
+.usage-pickers, .usage-new-cap, .usage-calendar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; margin: 12px 0; }
+.usage-headline { display: flex; gap: 24px; }
+.usage-headline dd { margin: 0; font-size: var(--text-lg); font-weight: 600; }

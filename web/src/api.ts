@@ -29,6 +29,24 @@ export function csrfHeader(): Record<string, string> {
   return {};
 }
 
+/**
+ * Accounts spec §3.4: a session can end while the page is open (logout elsewhere, a disabled user, a rotated key). Every
+ * request that reads an answer reports a 401 `login-required` here, and AuthGate (web/src/AuthGate.tsx) listens and
+ * goes back to the login form. Both answer shapes are read: `{code}` and the control routes' `{error:{code}}`.
+ */
+const loginRequiredListeners = new Set<() => void>();
+export function onLoginRequired(listener: () => void): () => void {
+  loginRequiredListeners.add(listener);
+  return () => { loginRequiredListeners.delete(listener); };
+}
+export function noteAnswer(status: number, body: unknown): void {
+  if (status !== 401) return;
+  const fields = typeof body === "object" && body !== null ? (body as Record<string, unknown>) : {};
+  const error = typeof fields.error === "object" && fields.error !== null ? (fields.error as Record<string, unknown>) : {};
+  if (fields.code !== "login-required" && error.code !== "login-required") return;
+  for (const listener of [...loginRequiredListeners]) listener();
+}
+
 /** A named refusal as the page shows it. `status` is null when no HTTP answer arrived at all. */
 export interface PanelRefusal {
   status: number | null;
@@ -74,17 +92,19 @@ async function readBody(res: Response): Promise<unknown> {
 export async function getJson<T>(path: string): Promise<T> {
   const res = await fetch(path);
   const body = await readBody(res);
+  noteAnswer(res.status, body);
   if (!res.ok) throw new PanelRequestError(refusalFrom(`GET ${path}`, res.status, body));
   return body as T;
 }
 
-async function postJson<T>(path: string, payload: unknown, method: "POST" | "PATCH" = "POST"): Promise<PostResult<T>> {
+export async function postJson<T>(path: string, payload: unknown, method: "POST" | "PATCH" = "POST"): Promise<PostResult<T>> {
   const res = await fetch(path, {
     method,
     headers: { "content-type": "application/json", ...csrfHeader() },
     body: JSON.stringify(payload),
   });
   const body = await readBody(res);
+  noteAnswer(res.status, body);
   if (!res.ok) {
     const refusal = method === "POST"
       ? refusalFrom(`POST ${path}`, res.status, body)
