@@ -1,5 +1,7 @@
 import { readFile, readdir, stat } from "node:fs/promises";
+import { realpathSync } from "node:fs";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { correct } from "./corrections/correct.js";
 import { correctionsDir } from "./corrections/paths.js";
 import { collect } from "./metrics/collect.js";
@@ -593,8 +595,22 @@ export async function main(argv: string[], stdinText?: string): Promise<number> 
   return 1;
 }
 
-// Only runs when invoked directly as `tsx src/cli.ts`. Not executed on import.
-if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
+// True when this module is the process entry point. Both sides are resolved to real
+// paths: node realpaths the main module but leaves argv[1] as typed, so an install
+// reached through a symlink (or a /var -> /private/var tmpdir) would otherwise match
+// nothing and exit 0 silently.
+function isMainModule(): boolean {
+  const entry = process.argv[1];
+  if (!entry) return false;
+  try {
+    return realpathSync(fileURLToPath(import.meta.url)) === realpathSync(entry);
+  } catch {
+    return false;
+  }
+}
+
+// Only runs when invoked directly (`tsx src/cli.ts` or `node dist/cli.js`). Not executed on import.
+if (isMainModule()) {
   void main(process.argv.slice(2)).then(
     (code) => {
       process.exitCode = code;
