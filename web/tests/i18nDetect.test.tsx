@@ -32,6 +32,9 @@ async function detect(c: Case): Promise<{ resolved: string | undefined; htmlLang
   override(window.navigator, "languages", () => c.languages);
   override(window.navigator, "language", () => c.language ?? c.languages[0] ?? "");
   const setItem = vi.spyOn(Storage.prototype, "setItem");
+  // Since Vitest 3, spyOn on an already-spied method returns the existing spy, which still holds this case's own
+  // setItem above (and any earlier detect() in the same test); count only what detection writes.
+  setItem.mockClear();
   if (c.storage === "read-throws") vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => { throw new Error("SecurityError"); });
   if (c.storage === "access-throws") override(window, "localStorage", () => { throw new Error("SecurityError"); });
   const { default: i18n, initI18n } = await import("../src/i18n.js");

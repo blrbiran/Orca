@@ -6,7 +6,7 @@
  * was made for.
  */
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, type Mock, vi } from "vitest";
 import { ControlGroupView } from "../src/ControlGroupView.js";
 import { controlCommandPath } from "../src/controlApi.js";
 import type {
@@ -67,7 +67,7 @@ const view = (over: Partial<GroupViewV1> = {}): GroupViewV1 => ({
   allocations: [], workItems: [workItem("a"), workItem("b")], estimates: [], runs: [], checkpoints: [], handoffRequests: [], stop: null, recoveryBlockers: [], recentCommandIds: [],
   ...over,
 });
-const renderView = (props: { view?: GroupViewV1; preview?: AgentSelectionPreviewV1 | null; drafts?: Record<string, string>; onCommand?: ReturnType<typeof vi.fn>; preferences?: OperatorPreferencesV1 }) =>
+const renderView = (props: { view?: GroupViewV1; preview?: AgentSelectionPreviewV1 | null; drafts?: Record<string, string>; onCommand?: Mock<(...args: any[]) => any>; preferences?: OperatorPreferencesV1 }) =>
   render(<ControlGroupView view={props.view ?? view()} config={config} uncertain={[]} drafts={props.drafts ?? {}} onDraft={vi.fn()} onCommand={props.onCommand ?? vi.fn()} agents={agents} preview={props.preview === undefined ? resolvedPreview() : props.preview} agentPreferences={props.preferences} />);
 const row = (container: HTMLElement, key: string): HTMLElement => container.querySelector(`tr[data-slot="${key}"]`) as HTMLElement;
 const options = (container: HTMLElement, name: string): string[] =>
