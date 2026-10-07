@@ -59,6 +59,10 @@ describe("orca user (spec §3.2, §10)", () => {
     expect(await runUserCommand(["add", "eve", "--password", "from argv password"], h.io)).toBe(1);
     expect(h.err.join("")).toContain("user-argument-invalid");
     expect(h.prompts).toEqual([]);
+    h = io({ secrets: ["a long enough password", "a long enough password"] });
+    expect(await runUserCommand(["add", "eve", "--password=from argv password"], h.io)).toBe(1); // one token: only the flag check can refuse it
+    expect(h.err.join("")).toContain("user-argument-invalid");
+    expect(h.prompts).toEqual([]);
     expect(withStore((s) => s.findByName("eve"))).toBe(null);
   });
 
