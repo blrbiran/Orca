@@ -6,6 +6,7 @@ import {
   proposalSetAgentPayloadSchema, recoveryRetryPayloadSchema, reestimatePayloadSchema, requirementAnswerPayloadSchema, requirementConsensusPayloadSchema,
   requirementDraftAcceptPayloadSchema, requirementDraftFeedbackPayloadSchema, requirementOpenPayloadSchema, resumeFromHandoffPayloadSchema,
   setAgentPreferencesPayloadSchema, setLimitPayloadSchema, setTaskLabelsPayloadSchema, setTaskLoopPayloadSchema, setWorkspaceModePayloadSchema,
+  setSpendCapPayloadSchema, clearSpendCapPayloadSchema, setUsageCalendarPayloadSchema,
 } from "../../src/control/webProtocol.js";
 
 const skill = readFileSync("skills/orca-control/SKILL.md", "utf8");
@@ -22,6 +23,7 @@ const schemaByVerb: Record<string, ZodTypeAny> = {
   "proposal-set-agent": proposalSetAgentPayloadSchema, "requirement-open": requirementOpenPayloadSchema, "requirement-answer": requirementAnswerPayloadSchema,
   "requirement-consensus": requirementConsensusPayloadSchema, "requirement-draft-feedback": requirementDraftFeedbackPayloadSchema,
   "requirement-draft-accept": requirementDraftAcceptPayloadSchema, "set-task-labels": setTaskLabelsPayloadSchema, "set-task-loop": setTaskLoopPayloadSchema,
+  "set-spend-cap": setSpendCapPayloadSchema, "clear-spend-cap": clearSpendCapPayloadSchema, "set-usage-calendar": setUsageCalendarPayloadSchema,
 };
 
 describe("the orca-control skill (spec §7, C18)", () => {
@@ -33,19 +35,19 @@ describe("the orca-control skill (spec §7, C18)", () => {
 
   it("lists exactly the panel's mutation routes, so the table cannot drift", () => {
     const routes = new Set([...api.matchAll(/path: "\/api\/control\/([^"]+)"/g)].map((m) => m[1]!.replace(/:([A-Za-z]+)/g, "<$1>")));
-    // 22 routes carry the 23 verbs: `shutdown` has no route (the panel's own lifecycle).
-    expect(routes.size).toBe(22);
+    // 25 routes carry the 26 verbs: `shutdown` has no route (the panel's own lifecycle).
+    expect(routes.size).toBe(25);
     expect(rows.map((row) => row.route).sort()).toEqual([...routes].sort());
   });
 
   it("names the verb of every route as the panel does", () => {
     const verbs = new Map([...api.matchAll(/path: "\/api\/control\/([^"]+)",?\s+verb: "([^"]+)"/g)].map((m) => [m[1]!.replace(/:([A-Za-z]+)/g, "<$1>"), m[2]!]));
-    expect(verbs.size).toBe(22);
+    expect(verbs.size).toBe(25);
     expect(new Map(rows.map((row) => [row.route, row.verb]))).toEqual(verbs);
   });
 
   it("gives every route a payload example that its raw payload schema accepts", () => {
-    expect(rows.length).toBe(22);
+    expect(rows.length).toBe(25);
     for (const row of rows) {
       const schema = schemaByVerb[row.verb];
       expect(schema, `no schema mapped for ${row.verb}`).toBeDefined();
@@ -59,9 +61,11 @@ describe("the orca-control skill (spec §7, C18)", () => {
       "--expected-revision", "--command-id", "panel-not-running", "control-verb-human-only", "control-field-human-only", "revision-conflict",
       "control-socket-timeout", "orca-cli-response-v1", "never start a panel", "@repository:", "@operator:",
       // Final review I1-I3: the transport code, the policy sentence, and where each revision and id comes from.
-      "control-socket-error", "not a security boundary", "Where the expected revision comes from", ".summary.commandRevision",
+      "control-socket-error", "is a boundary at the panel's interfaces", "Where the expected revision comes from", ".summary.commandRevision",
       "`.revision` of `get repositories/<repoId>/workspace`", "`.revision` of `get operator/agent-preferences`", "`.repositories[].repoId`",
       "`.plans[].planId`", "`.operatorId`", "same `--command-id`",
+      // Accounts spec §8: the usage read, the owner-only cap verbs, and the two cap codes an agent meets.
+      "get usage", "owner-only", "control-limit-over-cap-headroom", "spend-cap-reached",
     ]) expect(skill).toContain(phrase);
     for (const code of ["`0`", "`1`", "`2`", "`3`"]) expect(skill).toContain(code);
   });

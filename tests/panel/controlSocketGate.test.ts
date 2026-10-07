@@ -77,10 +77,51 @@ describe("the socket gate (spec §4.2, §5, §6)", () => {
     const field = await post("requirements", { commandId: "ro-m", expectedRevision: 0, payload: { groupId: "g2", repoId: controlRepoKey("proj"), idea: "x", limit: amount } });
     expect(field.status).toBe(403);
     expect(((await field.json()) as { error: { code: string } }).error.code).toBe("control-field-human-only");
+    // Accounts spec §3.5: the third human-only field, refused to a member by the same check.
+    const edit = await post("groups/g2/proposal/edit", { commandId: "pe-m", expectedRevision: 0, payload: { baseProposalVersion: 1, operations: [], proposedGroupLimit: amount } });
+    expect(edit.status).toBe(403);
+    expect(((await edit.json()) as { error: { code: string } }).error.code).toBe("control-field-human-only");
     expect((await ledger(w.state)).map((row) => row.id)).not.toContain("lim-m");
     expect((await ledger(w.state)).map((row) => row.id)).not.toContain("ro-m");
+    expect((await ledger(w.state)).map((row) => row.id)).not.toContain("pe-m");
     const web = await webPost(panel, w, "groups/g1/set-limit", { commandId: "lim-o", expectedRevision: 0, payload: { limit: amount } });
-    expect(((await web.json()) as { error: { code: string } }).error.code).not.toBe("control-verb-human-only");
+    // A body without `error` (accepted) must read as "not refused", not throw.
+    expect(((await web.json()) as { error?: { code: string } }).error?.code ?? "accepted").not.toBe("control-verb-human-only");
+    const ownerEdit = await webPost(panel, w, "groups/g2/proposal/edit", { commandId: "pe-o", expectedRevision: 0, payload: { baseProposalVersion: 1, operations: [], proposedGroupLimit: amount } });
+    expect(((await ownerEdit.json()) as { error?: { code: string } }).error?.code ?? "accepted").not.toBe("control-field-human-only");
+  });
+
+  it("C9-spend: the cap verbs are refused to the socket's agent and to a member, book nothing, and an owner's are applied under @spend", async () => {
+    const w = await workspace(); const panel = await boot(w);
+    seedUser(controlRoot(w.env), "amy", "member");
+    const amy = await login(panel.url, "amy");
+    const cases = [
+      ["operator/set-spend-cap", "set-spend-cap", { scope: "all", period: "week", tokens: 5000 }],
+      ["operator/clear-spend-cap", "clear-spend-cap", { scope: "all", period: "week" }],
+      ["operator/set-usage-calendar", "set-usage-calendar", { timeZone: "UTC", weekStart: 1 }],
+    ] as const;
+    for (const [route, verb, payload] of cases) {
+      const socket = await send(panel, route, { commandId: `${verb}-a`, expectedRevision: 0, payload });
+      expect([socket.status, JSON.parse(socket.text).error.code]).toEqual([403, "control-verb-human-only"]);
+      const member = await amy.fetch(`/api/control/${route}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ commandId: `${verb}-m`, expectedRevision: 0, payload }) });
+      expect([member.status, ((await member.json()) as { error: { code: string } }).error.code]).toEqual([403, "control-verb-human-only"]);
+    }
+    const ids = (await ledger(w.state)).map((row) => row.id);
+    for (const [, verb] of cases) expect(ids.filter((id) => id.startsWith(verb))).toEqual([]);
+    // The owner: set (revision 1), calendar (2), clear (3); each result retained under @spend.
+    const set = await webPost(panel, w, "operator/set-spend-cap", { commandId: "cap-o", expectedRevision: 0, payload: cases[0][2] });
+    expect([set.status, ((await set.json()) as { result: unknown }).result]).toEqual([200, { kind: "spend-cap-set", revision: 1 }]);
+    const calendar = await webPost(panel, w, "operator/set-usage-calendar", { commandId: "cal-o", expectedRevision: 1, payload: cases[2][2] });
+    expect([calendar.status, ((await calendar.json()) as { result: unknown }).result]).toEqual([200, { kind: "usage-calendar-set", revision: 2 }]);
+    const clear = await webPost(panel, w, "operator/clear-spend-cap", { commandId: "clr-o", expectedRevision: 2, payload: cases[1][2] });
+    expect([clear.status, ((await clear.json()) as { result: unknown }).result]).toEqual([200, { kind: "spend-cap-cleared", revision: 3 }]);
+    const session = await sessionFor(panel, w.env);
+    const lookup = await session.fetch("/api/control/groups/@spend/commands/cap-o");
+    expect([lookup.status, ((await lookup.json()) as { body: { result: unknown } }).body.result]).toEqual([200, { kind: "spend-cap-set", revision: 1 }]);
+    // An unknown zone is a schema refusal (400) and books nothing.
+    const mars = await webPost(panel, w, "operator/set-usage-calendar", { commandId: "cal-x", expectedRevision: 3, payload: { timeZone: "Mars/Base", weekStart: 1 } });
+    expect([mars.status, ((await mars.json()) as { error: { code: string } }).error.code]).toEqual([400, "control-non-json-payload"]);
+    expect((await ledger(w.state)).map((row) => row.id)).not.toContain("cal-x");
   });
 
   it("C10: requirement-open with limit and proposal-edit with proposedGroupLimit are refused; without the field they are not", async () => {

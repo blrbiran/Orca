@@ -39,7 +39,7 @@ type CommandRow = { raw_request_hash: unknown; original_status: unknown; body_js
 type CommandBody = CommandLookupV1["body"];
 
 type CommandScope = {
-  key: string; kind: "group" | "global" | "repository" | "operator"; id: string;
+  key: string; kind: "group" | "global" | "repository" | "operator" | "spend"; id: string;
   groupId: string | null; repoId: string | null; operatorId: string | null;
 };
 
@@ -48,6 +48,7 @@ function scope(command: RawAuthorityCommandV1): CommandScope {
   if (command.target.kind === "repository") {
     return { key: `@repository:${command.target.repoId}`, kind: "repository", id: command.target.repoId, groupId: null, repoId: command.target.repoId, operatorId: null };
   }
+  if (command.target.kind === "spend") return { key: "@spend", kind: "spend", id: "spend", groupId: null, repoId: null, operatorId: null };
   if (command.target.kind === "operator") {
     return { key: `@operator:${command.target.operatorId}`, kind: "operator", id: command.target.operatorId, groupId: null, repoId: null, operatorId: command.target.operatorId };
   }
@@ -75,8 +76,15 @@ function operatorRevision(store: ControlStore, operatorId: string): number {
   return revision;
 }
 
+/** Accounts spec §6.1, D5: the spend scope (caps and the usage calendar) is checked against spend_settings.revision (0 with no row). */
+export function spendRevision(store: ControlStore): number {
+  const row = store.db.prepare("SELECT revision FROM spend_settings WHERE singleton=1").get();
+  return row ? Number(row.revision) : 0;
+}
+
 /** A settings scope carries its own revision; null means the scope is a group or global one. */
 function settingRevision(store: ControlStore, commandScope: CommandScope): number | null {
+  if (commandScope.kind === "spend") return spendRevision(store);
   if (commandScope.repoId !== null) return repositoryRevision(store, commandScope.repoId);
   if (commandScope.operatorId !== null) return operatorRevision(store, commandScope.operatorId);
   return null;

@@ -297,6 +297,7 @@ const payloadFields = (payload: unknown): Record<string, unknown> =>
   typeof payload === "object" && payload !== null && !Array.isArray(payload) ? payload as Record<string, unknown> : {};
 const scoped = (groupId: string) => ({ groupId, target: { kind: "group" as const, groupId } });
 const fromParams: RouteTarget = (params) => scoped(idSchema.parse(params.groupId));
+const spendScoped: RouteTarget = () => ({ groupId: "@spend", target: { kind: "spend" } });
 
 /** Every command route and its verb; exported so the permission criterion can walk them against VERB_ACCESS (accounts spec §3.5). */
 export function controlCommandRoutes(actorId: string): Array<{ path: string; verb: CommandVerbV1; target: RouteTarget }> {
@@ -346,6 +347,10 @@ export function controlCommandRoutes(actorId: string): Array<{ path: string; ver
       // W6-4: the ledger key is the operator scope's, so the retained result is looked up under it.
       target: () => ({ groupId: `@operator:${actorId}`, target: { kind: "operator", operatorId: actorId } }),
     },
+    // Accounts spec §6.1, D5: the spend scope's verbs; the ledger key is `@spend`, so the retained result is looked up under it.
+    { path: "/api/control/operator/set-spend-cap", verb: "set-spend-cap", target: spendScoped },
+    { path: "/api/control/operator/clear-spend-cap", verb: "clear-spend-cap", target: spendScoped },
+    { path: "/api/control/operator/set-usage-calendar", verb: "set-usage-calendar", target: spendScoped },
     { path: "/api/control/groups/:groupId/proposal/agent", verb: "proposal-set-agent", target: fromParams },
     // N1 spec §11.1: the requirement commands; open names its group in the payload, as import-plan does.
     { path: "/api/control/requirements", verb: "requirement-open", target: (_params, payload) => scoped(idSchema.parse(payloadFields(payload).groupId)) },
@@ -417,6 +422,9 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
           case "requirement-consensus": service.requirementConsensus(command); break;
           case "requirement-draft-feedback": service.requirementDraftFeedback(command); break;
           case "requirement-draft-accept": await service.acceptRequirementDraft(command); break;
+          case "set-spend-cap": service.setSpendCap(command); break;
+          case "clear-spend-cap": service.clearSpendCap(command); break;
+          case "set-usage-calendar": service.setUsageCalendar(command); break;
           default: throw new ControlError("route-not-found");
         }
       });

@@ -30,6 +30,10 @@ export const VERB_ACCESS: Readonly<Record<CommandVerbV1, "any" | "human-only" | 
   "requirement-consensus": "any",
   "requirement-draft-feedback": "any",
   "requirement-draft-accept": "any",
+  // Accounts spec §3.5, §6.1: the spend caps bound every group, and the calendar moves their period boundaries.
+  "set-spend-cap": "human-only",
+  "clear-spend-cap": "human-only",
+  "set-usage-calendar": "human-only",
 };
 export const HUMAN_ONLY_VERBS: readonly CommandVerbV1[] =
   (Object.keys(VERB_ACCESS) as CommandVerbV1[]).filter((verb) => VERB_ACCESS[verb] === "human-only");

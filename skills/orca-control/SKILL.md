@@ -24,6 +24,7 @@ orca control send <route> --expected-revision <n> (--payload '<json>' | --payloa
 
 - `summary` (or `summary?sinceChangeSeq=<n>`), `groups`, `groups/<id>`, `groups/<id>/requirement`, `groups/<id>/agent-preview`
 - `recovery`, `config`, `agents`, `operator/agent-preferences`, `repositories/<id>/workspace`, `runs/<id>/evidence` (manifest only; artifact downloads are refused with `control-cli-binary-route`)
+- `usage?scope=all|repo:<id>[&from=<ms>&to=<ms>][&groupBy=model|repo|day|week|month]`: `get usage?scope=all` reads tokens used per model and the caps (`orca-usage-view-v1`: `.headline` total/week/month, `.range.byModel`, `.caps[]` with `used`, `committed`, `headroom`, and `.spendRevision`)
 - a past command's retained result: see section 4
 
 ## 3. Writing
@@ -37,8 +38,8 @@ orca control send <route> --expected-revision <n> (--payload '<json>' | --payloa
 
 - Without `--command-id` the CLI generates `cli-<uuid>` and returns it as `commandId` in the output envelope. Keep it.
 - After a timeout (`control-socket-timeout`: the CLI waits 120 s) or any `retryable: true` error, resend the same route and payload with `--command-id <the same id>`. A replay of a known id never executes twice.
-- To check a result, `get` the command under its scope: group commands `groups/<groupId>/commands/<commandId>`; repository verbs (`set-workspace-mode`) `groups/@repository:<repoId>/commands/<commandId>`; operator verbs (`set-agent-preferences`) `groups/@operator:<operatorId>/commands/<commandId>`.
-- A lookup miss does not prove the command never ran: a group-scope miss answers `command-result-not-found`, and an `@repository:` or `@operator:` miss currently answers `group-not-found` (those scopes have no group row). On any miss, resend the original command with the same `--command-id` and the same payload rather than infer absence; the replay either returns the retained result or executes it once.
+- To check a result, `get` the command under its scope: group commands `groups/<groupId>/commands/<commandId>`; repository verbs (`set-workspace-mode`) `groups/@repository:<repoId>/commands/<commandId>`; operator verbs (`set-agent-preferences`) `groups/@operator:<operatorId>/commands/<commandId>`; spend verbs (`set-spend-cap`, `clear-spend-cap`, `set-usage-calendar`) `groups/@spend/commands/<commandId>`.
+- A lookup miss does not prove the command never ran: a group-scope miss answers `command-result-not-found`, and an `@repository:`, `@operator:` or `@spend` miss currently answers `group-not-found` (those scopes have no group row). On any miss, resend the original command with the same `--command-id` and the same payload rather than infer absence; the replay either returns the retained result or executes it once.
 
 ## 5. Long work
 
@@ -51,10 +52,13 @@ The socket refuses these before anything runs (nothing is ledgered, the commandI
 - verb `set-limit` → 403 `control-verb-human-only`
 - `requirement-open` with a `limit` field → 403 `control-field-human-only` (omit `limit`; the default applies)
 - `proposal-edit` with a `proposedGroupLimit` field → 403 `control-field-human-only`
+- the spend-cap verbs are owner-only: `set-spend-cap`, `clear-spend-cap`, `set-usage-calendar` → 403 `control-verb-human-only`
 
 Do not look for a way around them. Ask the human. To spend less, use `pause-dispatch` or `handoff-stop`.
 
-The refusal is a policy for agents, not a security boundary: do not look for a way around it (not the Web UI's token, not the control store).
+The panel enforces this at every interface: the socket's agent can never do a human-only action, and the Web UI requires a logged-in owner. It is a boundary at the panel's interfaces, not against a process that edits Orca's files (accounts spec §2).
+
+Imports from an agent that would exceed the spend-cap headroom answer 403 `control-limit-over-cap-headroom`; a group waiting on a cap shows `spendCapBlock` (`spend-cap-reached`) and resumes by itself when the cap is raised or a new period starts.
 
 ## 7. Output and exit codes
 
@@ -71,7 +75,7 @@ stdout is exactly one JSON line:
 
 ## 8. Route table
 
-`<param>` segments are filled with real ids. Payloads are minimal valid examples; ids, hashes and versions are placeholders (take real values from `get groups/<id>`; each `aaaa…` hash is 64 lowercase hex). `set-limit` is listed for completeness and is human-only.
+`<param>` segments are filled with real ids. Payloads are minimal valid examples; ids, hashes and versions are placeholders (take real values from `get groups/<id>`; each `aaaa…` hash is 64 lowercase hex). `set-limit` and the three `operator/set-spend-cap`, `operator/clear-spend-cap`, `operator/set-usage-calendar` rows are listed for completeness and are owner-only (section 6).
 
 | Route | Verb | Payload example |
 | --- | --- | --- |
@@ -97,8 +101,11 @@ stdout is exactly one JSON line:
 | `POST recovery/retry` | recovery-retry | `{"scope":"run","runId":"run1"}` |
 | `POST repositories/<repoId>/workspace-mode` | set-workspace-mode | `{"workspaceMode":"worktree"}` |
 | `POST operator/agent-preferences` | set-agent-preferences | `{"preferences":{"perAgent":{}}}` |
+| `POST operator/set-spend-cap` | set-spend-cap | `{"scope":"all","period":"week","tokens":5000000}` |
+| `POST operator/clear-spend-cap` | clear-spend-cap | `{"scope":"all","period":"week"}` |
+| `POST operator/set-usage-calendar` | set-usage-calendar | `{"timeZone":"UTC","weekStart":1}` |
 
-Notes: `recovery-retry` also takes `{"scope":"group","groupId":"g1"}`. `handoff-stop` takes an optional `handoffDeadlineAt` (UTC, `YYYY-MM-DDTHH:mm:ss.sssZ`). Examples are checked against the raw payload schemas only; the panel also judges live state, so versions, hashes and ids must be real (for example a `set-task-loop` plan must exist, and a `proposal-edit` operation with provenance `model` needs an `estimateId`).
+Notes: `recovery-retry` also takes `{"scope":"group","groupId":"g1"}`. `handoff-stop` takes an optional `handoffDeadlineAt` (UTC, `YYYY-MM-DDTHH:mm:ss.sssZ`). A spend cap's `scope` is `all` or `repo:<repoId>` and its `period` is `total`, `week` or `month` (weeks and months in the usage calendar's time zone). Examples are checked against the raw payload schemas only; the panel also judges live state, so versions, hashes and ids must be real (for example a `set-task-loop` plan must exist, and a `proposal-edit` operation with provenance `model` needs an `estimateId`).
 
 ## 9. Where the expected revision comes from
 
@@ -111,6 +118,7 @@ Notes: `recovery-retry` also takes `{"scope":"group","groupId":"g1"}`. `handoff-
 | `recovery/retry` | the `commandRevision` of the group it acts on: with `"scope":"group"` that `groupId`; with `"scope":"run"` the run's group (`get recovery` lists `.blockers[]` with `groupId` and `runId`; a clarifying group's blocked call is `.summary.requirement.blockedRun.runId` of `get groups/<groupId>/requirement`) |
 | `repositories/<repoId>/workspace-mode` | `.revision` of `get repositories/<repoId>/workspace` (`orca-repository-workspace-v1`; `0` before the first change) |
 | `operator/agent-preferences` | `.revision` of `get operator/agent-preferences` (`orca-agent-preferences-v1`; `0` before the first change) |
+| `operator/set-spend-cap`, `operator/clear-spend-cap`, `operator/set-usage-calendar` | `.spendRevision` of `get usage?scope=all` (one revision for all three; `0` before the first change) |
 
 Where the ids come from:
 

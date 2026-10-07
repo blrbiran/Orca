@@ -19,6 +19,7 @@ import { scheduleStart, type StartCommand } from "./webDispatch.js";
 import { applyHandoffStop, applyPauseDispatch, applyRecoveryRetry, applyResumeDispatch, type HandoffStopCommand, type PauseCommand, type RecoveryRetryCommand, type ResumeDispatchCommand, type StopDeps } from "./stopIntent.js";
 import { applyContinueTask, applyResumeFromHandoff, type ContinueTaskCommand, type ResumeFromHandoffCommand } from "./continuation.js";
 import { applySetWorkspaceMode, type SetWorkspaceModeCommand } from "./workspaceSettings.js";
+import { applySpendCommand, type SpendCommand } from "./spendCommands.js";
 import { applySetAgentPreferences, type SetAgentPreferencesCommand } from "./agentPreferences.js";
 import { recordProjectionChange } from "./projectionJournal.js";
 import { effectiveTaskLabels, normalizeInputLabels, readTaskLabelState } from "./labels.js";
@@ -534,6 +535,13 @@ export class WebControlService {
   /** Agent selection spec §6.2 layer 1: the operator's defaults, under their own revision. */
   async setAgentPreferences(command: SetAgentPreferencesCommand): Promise<WebCommandResult> {
     return applySetAgentPreferences({ store: this.store, admissionGate: this.deps.admissionGate }, command) as WebCommandResult;
+  }
+  /** Accounts spec §6.1: the spend caps and the usage calendar, under the spend scope's revision (D5). */
+  setSpendCap(command: Extract<SpendCommand, { verb: "set-spend-cap" }>): WebCommandResult { return this.applySpend(command); }
+  clearSpendCap(command: Extract<SpendCommand, { verb: "clear-spend-cap" }>): WebCommandResult { return this.applySpend(command); }
+  setUsageCalendar(command: Extract<SpendCommand, { verb: "set-usage-calendar" }>): WebCommandResult { return this.applySpend(command); }
+  private applySpend(command: SpendCommand): WebCommandResult {
+    return applySpendCommand({ store: this.store, admissionGate: this.deps.admissionGate, now: this.deps.now }, command) as WebCommandResult;
   }
   async resumeFromHandoff(command: ResumeFromHandoffCommand): Promise<WebCommandResult> {
     return applyResumeFromHandoff(this.stopDeps(), command) as WebCommandResult;

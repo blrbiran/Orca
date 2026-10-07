@@ -1,4 +1,6 @@
 import { idSchema } from "./schema.js";
+import { spendRevision } from "./commandLedger.js";
+import { capStatuses } from "./spendCaps.js";
 import type { ControlStore } from "./store.js";
 import { groupRepoIdOf } from "./usageLedger.js";
 import { periodBounds, readUsageCalendar } from "./usageCalendar.js";
@@ -73,13 +75,13 @@ export function readUsageView(store: ControlStore, query: UsageQuery, now: numbe
     const unknown = (JSON.parse(String(run.run)) as { unknown?: { work?: boolean; handoff?: boolean } }).unknown;
     if (unknown?.work || unknown?.handoff) unknownUsageRuns += 1;
   }
-  const revision = store.db.prepare("SELECT revision FROM spend_settings WHERE singleton=1").get();
   return {
     schema: "orca-usage-view-v1", scope: query.scope, from: query.from, to: query.to, now, calendar,
-    spendRevision: revision ? Number(revision.revision) : 0,
+    spendRevision: spendRevision(store),
     headline: { total: usedTokens(store, query.scope, null, null), week: usedTokens(store, query.scope, week.from, week.to), month: usedTokens(store, query.scope, month.from, month.to) },
     range: { tokens, byModel, groups: [...groups].map(([key, n]) => ({ key, tokens: n })).sort((a, b) => (a.key === null ? 1 : b.key === null ? -1 : compareText(a.key, b.key))) },
     counts: { unattributedRows, breakdownMismatchRows, unknownUsageRuns },
-    caps: [],
+    // Spec §6.2: the caps that apply to this scope -- `all` reads the overall caps, a repository also its own.
+    caps: capStatuses(store, repo, now),
   };
 }

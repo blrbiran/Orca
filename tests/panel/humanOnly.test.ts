@@ -1,16 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { amountSchema } from "../../src/control/schema.js";
-import { rawAuthorityCommandSchema } from "../../src/control/webProtocol.js";
+import { rawAuthorityCommandSchema, spendTokensSchema } from "../../src/control/webProtocol.js";
 import { AGENT_AMOUNT_FIELDS, HUMAN_ONLY_FIELDS, HUMAN_ONLY_VERBS, humanOnlyRefusal } from "../../src/panel/humanOnly.js";
 
 const LEAF_KINDS = [z.ZodString, z.ZodNumber, z.ZodBoolean, z.ZodLiteral, z.ZodEnum, z.ZodNativeEnum, z.ZodNull, z.ZodUndefined, z.ZodUnknown, z.ZodAny, z.ZodDate, z.ZodBigInt];
 
-/** Every amountSchema field in every raw command payload, as "<verb>:<path>" (spec §5, C19). */
+/** Every amountSchema or spend-cap amount field in every raw command payload, as "<verb>:<path>" (spec §5, C19; accounts spec §3.5). */
 function amountFields(): string[] {
   const found: string[] = [];
   const walk = (schema: z.ZodTypeAny, verb: string, path: string[]): void => {
-    if (schema === amountSchema) { found.push(`${verb}:${path.join(".")}`); return; }
+    if (schema === amountSchema || schema === spendTokensSchema) { found.push(`${verb}:${path.join(".")}`); return; }
     if (schema instanceof z.ZodOptional || schema instanceof z.ZodNullable) return walk(schema.unwrap(), verb, path);
     if (schema instanceof z.ZodDefault) return walk(schema._def.innerType, verb, path);
     if (schema instanceof z.ZodEffects) return walk(schema.innerType(), verb, path);
@@ -34,8 +34,10 @@ function amountFields(): string[] {
 describe("the human-only surface (spec §5)", () => {
   it("covers every amount a raw command can carry, or lists it with a reason (C19)", () => {
     const fields = amountFields();
-    // Non-vacuous: the walk must see the three inputs the spec names.
-    expect(fields).toEqual(expect.arrayContaining(["set-limit:limit", "requirement-open:limit", "proposal-edit:proposedGroupLimit"]));
+    // Non-vacuous: the walk must see the inputs the specs name, the spend cap's amount among them.
+    expect(fields).toEqual(expect.arrayContaining(["set-limit:limit", "requirement-open:limit", "proposal-edit:proposedGroupLimit", "set-spend-cap:tokens"]));
+    // Accounts spec §3.5: the cap verbs, and the calendar that moves their boundaries, are human-only.
+    expect(HUMAN_ONLY_VERBS).toEqual(expect.arrayContaining(["set-limit", "set-spend-cap", "clear-spend-cap", "set-usage-calendar"]));
     const covered = (entry: string): boolean => {
       const [verb, path] = entry.split(":") as [string, string];
       return (HUMAN_ONLY_VERBS as readonly string[]).includes(verb)

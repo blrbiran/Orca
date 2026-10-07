@@ -320,7 +320,8 @@ export type CommandTargetV1 =
   | { kind: "run"; groupId: string; runId: string }
   | { kind: "global"; epoch: string }
   | { kind: "repository"; repoId: string }
-  | { kind: "operator"; operatorId: string };
+  | { kind: "operator"; operatorId: string }
+  | { kind: "spend" };
 
 /** What a mutation POST carries: an id the ledger dedupes on, the revision it expects, and the verb's payload. */
 export type CommandEnvelopeV1 = { commandId: string; expectedRevision: number; payload?: unknown };
@@ -402,7 +403,8 @@ export type CommandSuccessV1 = {
   commandId: string;
   actorId: string;
   verb: "import-plan" | "proposal-edit" | "estimate" | "confirm" | "start" | "pause-dispatch" | "handoff-stop" | "resume-dispatch" | "resume-from-handoff" | "set-limit" | "continue-task" | "recovery-retry" | "shutdown" | "set-workspace-mode" | "set-agent-preferences" | "proposal-set-agent" | "set-task-labels" | "set-task-loop"
-    | "requirement-open" | "requirement-answer" | "requirement-consensus" | "requirement-draft-feedback" | "requirement-draft-accept";
+    | "requirement-open" | "requirement-answer" | "requirement-consensus" | "requirement-draft-feedback" | "requirement-draft-accept"
+    | "set-spend-cap" | "clear-spend-cap" | "set-usage-calendar";
   target: CommandTargetV1;
   commandRevision: number | null;
   projectionSeq: number | null;
@@ -420,6 +422,9 @@ export type CommandSuccessV1 = {
     | { kind: "limit-set"; limit: Amount }
     | { kind: "workspace-mode-set"; repoId: string; workspaceMode: "worktree" | "clone" }
     | { kind: "agent-preferences-set"; operatorId: string; revision: number }
+    | { kind: "spend-cap-set"; revision: number }
+    | { kind: "spend-cap-cleared"; revision: number }
+    | { kind: "usage-calendar-set"; revision: number }
     | { kind: "task-labels-set"; taskId: string; labelsVersion: number }
     | { kind: "task-loop-set"; taskId: string; loopVersion: number; proposalVersion: number }
     | { kind: "task-continuing"; continuationIntentId: string; pendingRunId: string; claimOrdinal: number; wakeId: string }

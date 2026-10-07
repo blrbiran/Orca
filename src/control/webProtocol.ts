@@ -3,6 +3,7 @@ import { agentSelectionSchema, amountSchema, canonicalTimestampSchema, commandEn
 import { nonEmptyStoredLabelsSchema, storedLabelsSchema } from "./labels.js";
 import { DRAFT_STATES, IDEA_MAX_BYTES, REQUIREMENT_WAITING, ROUND_STATES, draftBodySchema, questionIdSchema, requirementExportSchema, roundBodySchema } from "./requirementSchemas.js";
 import { LOOP_PLAN_IDS, loopInputsSchema, loopRecipeSchema, loopSkillsSchema } from "./loopPlans.js";
+import { isTimeZone } from "./usageCalendar.js";
 // Agent selection spec §12 I10 (plan-review P18): the selection/context/partial schemas are T7's, defined once
 // in schema.ts; webProtocol.ts re-exports them so every downstream import can come from one wire module.
 export { agentSelectionSchema, contextWindowSchema, panelPartialSelectionSchema, partialSelectionSchema } from "./schema.js";
@@ -612,11 +613,16 @@ export const commandVerbSchema = z.enum([
   "requirement-consensus",
   "requirement-draft-feedback",
   "requirement-draft-accept",
+  "set-spend-cap",
+  "clear-spend-cap",
+  "set-usage-calendar",
 ]);
 
 const repositoryCommandTargetSchema = z.object({ kind: z.literal("repository"), repoId: idSchema }).strict();
 // Agent selection spec §6.2 / §12 I10: an operator-scoped setting, keyed like the actor that sets it.
 const operatorCommandTargetSchema = z.object({ kind: z.literal("operator"), operatorId: nonemptyString }).strict();
+// Accounts spec §6.1, D5: the spend settings (caps and the usage calendar) are one scope with one revision.
+const spendCommandTargetSchema = z.object({ kind: z.literal("spend") }).strict();
 
 export const commandTargetSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("group"), groupId: idSchema }).strict(),
@@ -625,6 +631,7 @@ export const commandTargetSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("global"), epoch: nonemptyString }).strict(),
   repositoryCommandTargetSchema,
   operatorCommandTargetSchema,
+  spendCommandTargetSchema,
 ]);
 
 export const emptyPayloadSchema = z.object({}).strict();
@@ -748,6 +755,17 @@ export const commitShaSchema = z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$
 export const setWorkspaceModePayloadSchema = z.object({ workspaceMode: workspaceModeSchema }).strict();
 // Controller ruling W6-8: the envelope's expectedRevision (checked against agent_preferences.revision) is the only one.
 export const setAgentPreferencesPayloadSchema = z.object({ preferences: operatorPreferencesSchema }).strict();
+// Accounts spec §6.1: a cap's amount. Its own instance (not the shared positiveSafeInteger), so the human-only criterion
+// (C19) can find every field that carries it.
+export const spendTokensSchema = safeInteger.positive();
+export const spendScopeSchema = z.string().refine((scope) => scope === "all" || (scope.startsWith("repo:") && idSchema.safeParse(scope.slice(5)).success), "spend-scope-invalid");
+export const spendPeriodSchema = z.enum(["total", "week", "month"]);
+export const setSpendCapPayloadSchema = z.object({ scope: spendScopeSchema, period: spendPeriodSchema, tokens: spendTokensSchema }).strict();
+export const clearSpendCapPayloadSchema = z.object({ scope: spendScopeSchema, period: spendPeriodSchema }).strict();
+// Spec §5.2: an IANA zone this runtime's Intl knows, or the setter is refused by name; weekStart 1 = Monday .. 7 = Sunday.
+export const setUsageCalendarPayloadSchema = z
+  .object({ timeZone: nonemptyString.refine(isTimeZone, "time-zone-invalid"), weekStart: z.number().int().min(1).max(7) })
+  .strict();
 // Labels and progress spec §3.1 (§8 R8, R16): shape only -- a list of strings, or null to drop the operator layer. The
 // vocabulary, prefix, NFC and the 16-label cap are checked in apply, so a refusal is ledgered and names the label. The
 // raw cap (64) only bounds the request: 16 is counted after deduplication (R15; plan finding F2).
@@ -837,6 +855,9 @@ const rawAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...rawCommandFields, verb: z.literal("requirement-consensus"), target: groupCommandTargetSchema, payload: requirementConsensusPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("requirement-draft-feedback"), target: groupCommandTargetSchema, payload: requirementDraftFeedbackPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("requirement-draft-accept"), target: groupCommandTargetSchema, payload: requirementDraftAcceptPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("set-spend-cap"), target: spendCommandTargetSchema, payload: setSpendCapPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("clear-spend-cap"), target: spendCommandTargetSchema, payload: clearSpendCapPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("set-usage-calendar"), target: spendCommandTargetSchema, payload: setUsageCalendarPayloadSchema }).strict(),
 ]);
 
 const effectiveAuthorityCommandVariants = z.discriminatedUnion("verb", [
@@ -880,6 +901,9 @@ const effectiveAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...effectiveCommandFields, verb: z.literal("requirement-consensus"), target: groupCommandTargetSchema, payload: requirementConsensusPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("requirement-draft-feedback"), target: groupCommandTargetSchema, payload: requirementDraftFeedbackPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("requirement-draft-accept"), target: groupCommandTargetSchema, payload: requirementDraftAcceptPayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("set-spend-cap"), target: spendCommandTargetSchema, payload: setSpendCapPayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("clear-spend-cap"), target: spendCommandTargetSchema, payload: clearSpendCapPayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("set-usage-calendar"), target: spendCommandTargetSchema, payload: setUsageCalendarPayloadSchema }).strict(),
 ]);
 
 function refineCommandIdentity(
@@ -1377,6 +1401,9 @@ const commandResultSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("limit-set"), limit: amountSchema }).strict(),
   z.object({ kind: z.literal("workspace-mode-set"), repoId: idSchema, workspaceMode: workspaceModeSchema }).strict(),
   z.object({ kind: z.literal("agent-preferences-set"), operatorId: nonemptyString, revision: positiveSafeInteger }).strict(),
+  z.object({ kind: z.literal("spend-cap-set"), revision: positiveSafeInteger }).strict(),
+  z.object({ kind: z.literal("spend-cap-cleared"), revision: positiveSafeInteger }).strict(),
+  z.object({ kind: z.literal("usage-calendar-set"), revision: positiveSafeInteger }).strict(),
   z.object({ kind: z.literal("task-labels-set"), taskId: idSchema, labelsVersion: positiveSafeInteger }).strict(),
   z.object({ kind: z.literal("task-loop-set"), taskId: idSchema, loopVersion: positiveSafeInteger, proposalVersion: positiveSafeInteger }).strict(),
   z
@@ -1459,7 +1486,8 @@ export const commandSuccessSchema = z
     const isShutdown = value.verb === "shutdown";
     // Execution driver spec §3.2: a repository-scoped command has its setting's revision and no group
     // projection.
-    const projectionless = isShutdown || value.verb === "set-workspace-mode" || value.verb === "set-agent-preferences";
+    const projectionless = isShutdown || value.verb === "set-workspace-mode" || value.verb === "set-agent-preferences"
+      || value.verb === "set-spend-cap" || value.verb === "clear-spend-cap" || value.verb === "set-usage-calendar";
     if (isShutdown ? value.commandRevision !== null : value.commandRevision === null) {
       issue(ctx, ["commandRevision"], "command-revision-nullability-mismatch");
     }
@@ -1606,7 +1634,16 @@ export type AgentsViewV1 = z.infer<typeof agentsViewSchema>;
 export type AgentPreferencesViewV1 = z.infer<typeof agentPreferencesViewSchema>;
 export type AgentSelectionPreviewV1 = z.infer<typeof agentSelectionPreviewSchema>;
 
-// Accounts spec §5: GET /api/control/usage. `caps` is empty until Task 9 gives it a shape.
+// Accounts spec §5: GET /api/control/usage. Spec §6.2: each cap that applies to the view's scope, with what it leaves.
+const capStatusSchema = z
+  .object({
+    scope: z.string().regex(/^(?:all|repo:[a-zA-Z0-9][a-zA-Z0-9_.-]*)$/), period: spendPeriodSchema, tokens: spendTokensSchema,
+    updatedAt: safeInteger, updatedBy: nonemptyString, used: safeInteger, committed: safeInteger,
+    // Not clamped: a cap lowered below what was used or promised shows how far over it is.
+    headroom: z.number().int().min(-Number.MAX_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
+    from: safeInteger.nullable(), to: safeInteger.nullable(),
+  })
+  .strict();
 const usageModelEntrySchema = z
   .object({ model: nonemptyString.nullable(), input: safeInteger, output: safeInteger, cacheRead: safeInteger, cacheWrite: safeInteger, tokens: safeInteger })
   .strict();
@@ -1628,7 +1665,7 @@ export const usageViewSchema = z
       })
       .strict(),
     counts: z.object({ unattributedRows: safeInteger, breakdownMismatchRows: safeInteger, unknownUsageRuns: safeInteger }).strict(),
-    caps: z.array(z.never()),
+    caps: z.array(capStatusSchema),
   })
   .strict();
 export type UsageViewV1 = z.infer<typeof usageViewSchema>;
