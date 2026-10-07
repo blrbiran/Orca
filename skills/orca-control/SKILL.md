@@ -15,6 +15,7 @@ orca control send <route> --expected-revision <n> (--payload '<json>' | --payloa
 ## 1. Prerequisites
 
 - A panel must already be running. You must never start a panel: no `orca panel`, no background process.
+- `orca panel install|uninstall|start|stop|restart` change the human's running service. Never run them; ask the human. `orca panel status` is read-only and safe to run.
 - `panel-not-running` (exit 1, retryable) means no panel answered on the socket. Ask the human to start it, then retry. Pass `--control-state-dir` only if the human says the panel uses a custom directory.
 
 ## 2. Reading

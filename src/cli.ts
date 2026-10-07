@@ -43,7 +43,7 @@ const USAGE = `usage:
                                  what existed at that instant; without it, a row dated in the future
                                  is refused by name. Exit 6 means the report printed in full and some
                                  lines were malformed.
-  orca panel --by <who> [--port <n>] [--bind <addr>] [--root <dir>] [--repo <key>=<path>]...
+  orca panel run --by <who> [--port <n>] [--bind <addr>] [--root <dir>] [--repo <key>=<path>]...
              [--no-control] [--control-state-dir <path>] [--control-wake-ms <n>]
              [--estimator-profile <id> --estimate-mode strict|soft]
                                  serve the read-only panel on the loopback interface with a
@@ -62,6 +62,19 @@ const USAGE = `usage:
                                  shows recovery, and refuses those commands by name.
                                  ORCA_CCMEM_BIN (an absolute path to ccmem) turns on the read-only
                                  Memory section; unset, the panel never starts ccmem.
+                                 \`orca panel <args>\` is the same command (kept as an alias).
+  orca panel install [--dry-run] <orca panel run args>
+                                 record the args and the named ORCA_* variables in ~/.orca/panel/service.json
+                                 and install a per-user service: a launchd LaunchAgent on macOS, a systemd user
+                                 unit on Linux. Runs node dist/cli.js (npm run build first). --dry-run prints the
+                                 files and runs nothing
+  orca panel start [--detach] | stop | restart | uninstall
+                                 drive that service. Without a service manager, start --detach starts a process
+                                 that neither restarts on crash nor survives a reboot. These touch the person's
+                                 running system: an agent does not run them, it should ask the person
+  orca panel status              the manager's view and a real request to the panel; exit 0 only if it answered
+  orca panel logs [-f] [-n <lines>]
+                                 the panel's log files (macOS, detached) or its journal (Linux)
   orca compact-reviews [--apply] [--root <dir>] [--repo <key>=<path>]...
                                  dedupe reviews.jsonl and move rows whose decision was archived into
                                  reviews-archive.jsonl. Without --apply it prints the report and writes
@@ -525,7 +538,13 @@ export async function main(argv: string[], stdinText?: string): Promise<number> 
   }
 
   if (command === "panel") {
-    return runPanel(rest);
+    const sub = rest[0];
+    if (sub === "run") return runPanel(rest.slice(1));
+    const { SERVICE_SUBCOMMANDS, runServiceCommand } = await import("./service/command.js");
+    if (sub !== undefined && (SERVICE_SUBCOMMANDS as readonly string[]).includes(sub)) {
+      return runServiceCommand(sub, rest.slice(1), process.env, { stdout: (t) => process.stdout.write(t), stderr: (t) => process.stderr.write(t) });
+    }
+    return runPanel(rest); // spec §2: the old form is kept as an alias of `orca panel run`
   }
 
   if (command === "compact-reviews") {

@@ -23,4 +23,10 @@ describe("orca panel usage text (spec §3.3)", () => {
     expect(stderr).toContain("orca mcp serve");
     expect(stderr).toContain("orca_read and orca_send");
   });
+
+  it("documents the panel service commands (panel service spec §2, §4)", async () => {
+    const { stderr } = await captureStreams(() => main([]));
+    for (const text of ["orca panel run --by <who>", "orca panel install", "orca panel status", "orca panel logs [-f] [-n <lines>]",
+      "orca panel start [--detach]", "neither restarts on crash nor survives a reboot", "ask the person"]) expect(stderr).toContain(text);
+  });
 });
