@@ -214,3 +214,10 @@ Earlier sections are kept as written (CLAUDE.md Rule 13); this section corrects 
 - §2's sentence "agents have no stable way to obtain it" is corrected: the token is served to anyone who can open the panel's URL from this machine, so a same-user agent can obtain it; the design chose the socket so that cooperating agents have no reason to.
 - Making the gate a boundary (for example, running the panel as a separate OS user, or not serving the token without a browser handshake) is a human decision and is not taken here.
 - §2's count is corrected: the mutation table holds 22 routes carrying 23 verbs; `shutdown` is a verb with no route (the panel's own lifecycle). `tests/entry/skill.test.ts` asserts the 22.
+
+## 14. Correction after the human review (2026-10-07, session 9a20ac38)
+
+Earlier sections are kept as written; this section corrects §4.3.
+
+- §4.3 said a panel started in legacy `--repo` mode "needs the same directory passed to the CLI". The human's own panel runs in that mode (one `--repo`, state dir `~/.orca/control/<repo key>`), so `orca control` with no flag answered `panel-not-running` against a running panel (measured after the restart). Step 4 is extended: when no socket exists at `<control root>/panel/control.sock`, discovery lists `<control root>/*/control.sock` (sockets only, by `lstat`); exactly one is used; more than one is refused as `control-socket-ambiguous`, naming each path and asking for `--control-state-dir`; none leaves the old answer (`panel-not-running` at the default path). It is still read-only and still never guesses between candidates. Criterion: `tests/entry/discovery.test.ts`, "with nothing at the default path, finds the one socket…"; deletion mutations of each branch were seen red.
+- The existing criterion "prefers the flag, then the projects file's controlStateDir, …" now stubs `HOME` for its `~/.orca` assertion: with listing in discovery, the real home would resolve to whatever panel the person has running.

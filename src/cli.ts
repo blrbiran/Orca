@@ -110,7 +110,8 @@ const USAGE = `usage:
                     [--command-id <id>] [--control-state-dir <dir>] [--client-name <name>]
                                  talk to a running panel over its control socket (<state dir>/control.sock,
                                  found from --control-state-dir, the projects file's controlStateDir,
-                                 $ORCA_CONTROL_DIR/panel or ~/.orca/control/panel). stdout is one JSON line,
+                                 $ORCA_CONTROL_DIR/panel or ~/.orca/control/panel, else the one socket
+                                 under that control root; several are named, not chosen). stdout is one JSON line,
                                  {"schema":"orca-cli-response-v1",status,commandId?,body}. Never starts a panel.
                                  set-limit and a budget limit field are refused: a person sets those in the
                                  Web UI. Exit 0 answered 2xx, 1 refused here (panel-not-running included),

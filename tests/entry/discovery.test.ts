@@ -1,11 +1,22 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { createServer, type Server } from "node:net";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { discoverSocketPath } from "../../src/entry/discovery.js";
 
 const roots: string[] = [];
-afterEach(async () => { while (roots.length) await rm(roots.pop()!, { recursive: true, force: true }); });
+const servers: Server[] = [];
+afterEach(async () => {
+  while (servers.length) await new Promise<void>((done) => servers.pop()!.close(() => done()));
+  while (roots.length) await rm(roots.pop()!, { recursive: true, force: true });
+});
+async function listenAt(dir: string) {
+  await mkdir(dir, { recursive: true });
+  const server = createServer();
+  await new Promise<void>((done) => server.listen(join(dir, "control.sock"), done));
+  servers.push(server);
+}
 async function root() { const r = await mkdtemp(join(tmpdir(), "od-")); roots.push(r); return r; }
 
 describe("socket discovery (spec §4.3)", () => {
@@ -17,7 +28,12 @@ describe("socket discovery (spec §4.3)", () => {
     expect(discoverSocketPath({ stateDirFlag: join(r, "flag"), env })).toBe(join(r, "flag", "control.sock"));
     expect(discoverSocketPath({ env })).toBe(join(r, "fromfile", "control.sock"));
     expect(discoverSocketPath({ env: { ORCA_PROJECTS_FILE: join(r, "missing.json"), ORCA_CONTROL_DIR: join(r, "ctl") } })).toBe(join(r, "ctl", "panel", "control.sock"));
+    // Human review 2026-10-07: discovery now lists the control root, so the ~/.orca default is read under a stubbed
+    // HOME -- against the real home it would find whatever panel the person has running (Rule 17).
+    vi.stubEnv("HOME", r);
+    expect(homedir()).toBe(r);
     expect(discoverSocketPath({ env: { ORCA_PROJECTS_FILE: join(r, "missing.json") } })).toBe(join(homedir(), ".orca", "control", "panel", "control.sock"));
+    vi.unstubAllEnvs();
   });
 
   it("C20: a projects file that exists but does not parse is refused by name, not guessed past", async () => {
@@ -39,5 +55,24 @@ describe("socket discovery (spec §4.3)", () => {
     const r = await root();
     expect(() => discoverSocketPath({ stateDirFlag: "", env: { ORCA_PROJECTS_FILE: join(r, "missing.json"), ORCA_CONTROL_DIR: join(r, "ctl") } }))
       .toThrow(expect.objectContaining({ code: "control-cli-argument-invalid" }));
+  });
+
+  // Human review 2026-10-07: a panel started in legacy --repo mode keeps its socket under <control root>/<repo key>,
+  // which none of the four steps named, so `orca control` could not find the human's own panel.
+  it("with nothing at the default path, finds the one socket under the control root and names every one when there are several", async () => {
+    const r = await root();
+    const ctl = join(r, "ctl");
+    const env = { ORCA_PROJECTS_FILE: join(r, "missing.json"), ORCA_CONTROL_DIR: ctl };
+    await mkdir(join(ctl, "no-socket-here"), { recursive: true });
+    expect(discoverSocketPath({ env })).toBe(join(ctl, "panel", "control.sock"));
+    await listenAt(join(ctl, "orca-aaaa"));
+    expect(discoverSocketPath({ env })).toBe(join(ctl, "orca-aaaa", "control.sock"));
+    await listenAt(join(ctl, "orca-bbbb"));
+    expect(() => discoverSocketPath({ env })).toThrow(expect.objectContaining({
+      code: "control-socket-ambiguous",
+      message: expect.stringMatching(/orca-aaaa[\s\S]*orca-bbbb/),
+    }));
+    await listenAt(join(ctl, "panel"));
+    expect(discoverSocketPath({ env })).toBe(join(ctl, "panel", "control.sock"));
   });
 });
