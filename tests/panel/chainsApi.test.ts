@@ -221,10 +221,13 @@ describe("chains in the panel (D-launch spec §6.2, §6.3, §8.2-8)", () => {
     expect(offending('await git(repo, [...ORCA_IDENTITY, "commit", "-q", "-m", m]);', PANEL_COMMIT_RULE)).toEqual(["commit"]);
     expect(offending('"the correction was recorded, but the reviewed mark could not be written"', PANEL_COMMIT_RULE)).toEqual([]);
     expect(await scanTree(ORCA_ROOT, "src/panel", PANEL_COMMIT_RULE)).toEqual([]);
-    const importsCommitting = /from\s+["']\.\.\/chain\/(record|run|command|launch\/claudeCode)\.js["']/;
+    // src/panel has subdirectories (accounts/): walk it whole, and match the chain modules from any depth.
+    const importsCommitting = /from\s+["'](?:\.\.\/)+chain\/(record|run|command|launch\/claudeCode)\.js["']/;
     expect(importsCommitting.test('import { startChain } from "../chain/run.js";')).toBe(true);
+    expect(importsCommitting.test('import { startChain } from "../../chain/run.js";')).toBe(true);
     const offenders: string[] = [];
-    for (const name of await readdir(join(ORCA_ROOT, "src", "panel"))) {
+    for (const name of await readdir(join(ORCA_ROOT, "src", "panel"), { recursive: true })) {
+      if (!name.endsWith(".ts")) continue;
       if (importsCommitting.test(await readFile(join(ORCA_ROOT, "src", "panel", name), "utf8"))) offenders.push(name);
     }
     expect(offenders).toEqual([]);
