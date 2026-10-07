@@ -1,15 +1,25 @@
 // Dependency-free on purpose (node built-ins only): discovery and the accounts code load this without the panel server.
 import { randomBytes } from "node:crypto";
-import { chmodSync, closeSync, mkdirSync, openSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { chmodSync, closeSync, mkdirSync, openSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
-/** Rule 17: new levels 0700 with an explicit chmod (umask may be anything); an existing directory is not ours to change. */
+const isDirectory = (path: string): boolean => { try { return statSync(path).isDirectory(); } catch { return false; } };
+
+/**
+ * Rule 17: new levels 0700 with an explicit chmod (umask may be anything); an existing directory is not ours to change.
+ * Created one level at a time, top down, each chmod'ed before the next is made: a umask that strips owner bits would
+ * otherwise leave a parent we cannot create the next level in.
+ */
 export function ensurePrivateDir(dir: string): void {
-  const first = mkdirSync(dir, { recursive: true, mode: 0o700 });
-  if (first === undefined) return;
-  for (let path = dir; ; path = dirname(path)) {
+  const missing: string[] = [];
+  for (let path = dir; !isDirectory(path); path = dirname(path)) {
+    missing.push(path);
+    if (dirname(path) === path) break;
+  }
+  for (const path of missing.reverse()) {
+    try { mkdirSync(path, { mode: 0o700 }); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code === "EEXIST" && isDirectory(path)) continue; throw error; }
     chmodSync(path, 0o700);
-    if (path === first) break;
   }
 }
 

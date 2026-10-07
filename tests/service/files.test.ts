@@ -22,11 +22,21 @@ describe("service files on disk (Rule 17 modes)", () => {
     expect([mode(join(r, "keep")), mode(join(r, "keep", "a")), mode(join(r, "keep", "a", "b"))]).toEqual([0o755, 0o700, 0o700]);
   });
 
-  it("gives a new directory 0700 even when the umask would strip the owner's bits", async () => {
+  it("gives every new directory level 0700 even when the umask strips the owner's bits", async () => {
     const r = await root();
     const old = process.umask(0o200);
-    try { ensurePrivateDir(join(r, "one")); } finally { process.umask(old); }
-    expect(mode(join(r, "one"))).toBe(0o700);
+    try { ensurePrivateDir(join(r, "one", "two")); } finally { process.umask(old); }
+    expect([mode(join(r, "one")), mode(join(r, "one", "two"))]).toEqual([0o700, 0o700]);
+  });
+
+  it("gives new files 0600 under a umask that strips the owner's bits (create, replace, empty log)", async () => {
+    const r = await root();
+    const old = process.umask(0o277);
+    try {
+      writePrivateFile(join(r, "f"), "x");
+      ensurePrivateFile(join(r, "log"));
+    } finally { process.umask(old); }
+    expect([mode(join(r, "f")), mode(join(r, "log"))]).toEqual([0o600, 0o600]);
   });
 
   it("writes files 0600 by replacing them atomically, and creates empty log files 0600 once", async () => {
@@ -83,7 +93,7 @@ describe("service files on disk (Rule 17 modes)", () => {
 
   it("keeps the private-file helpers free of imports beyond node built-ins (P20: discovery must not load the panel server)", () => {
     const source = readFileSync(join(__dirname, "../../src/service/privateFiles.ts"), "utf8");
-    const specs = [...source.matchAll(/^(?:import|export)\b[^;]*?from\s+"([^"]+)"/gm)].map((m) => m[1]);
+    const specs = [...source.matchAll(/^(?:import|export)\b[^;]*?from\s+"([^"]+)"|^import\s+"([^"]+)"|\bimport\(\s*"([^"]+)"\s*\)/gm)].map((m) => m[1] ?? m[2] ?? m[3]);
     expect(specs.length).toBeGreaterThan(0);
     expect(specs.filter((s) => !s.startsWith("node:"))).toEqual([]);
   });
