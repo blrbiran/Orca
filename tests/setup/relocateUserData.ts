@@ -25,6 +25,12 @@ process.env.ORCA_CONTROL_DIR = relocated;
 // Project registry spec §12 C1: the real `orca panel` reads ~/.orca/projects.json unless told otherwise. A criterion
 // that boots the CLI with no --repo gets a file inside the relocated root instead (which does not exist: no projects).
 process.env.ORCA_PROJECTS_FILE = join(relocated, "projects.json");
+// Panel service plan Task 2: the service's own paths, for the same reason. A criterion that forgets lands here.
+process.env.ORCA_PANEL_DIR = join(relocated, "panel");
+process.env.ORCA_LAUNCH_AGENTS_DIR = join(relocated, "LaunchAgents");
+process.env.ORCA_SYSTEMD_USER_DIR = join(relocated, "systemd-user");
+process.env.ORCA_SERVICE_LABEL = "dev.orca.panel.test";
+process.env.ORCA_SERVICE_UNIT = "orca-panel-test";
 
 /**
  * ⚠️ The relocation above is NOT a guard on its own, and saying it was is how this got missed once.
@@ -47,7 +53,15 @@ function userDataSnapshot(): string[] {
 
 const userDataBefore = userDataSnapshot();
 
+/** The real plist and unit, by stat: their absence or bytes must not change during a test file. */
+function realServiceDefinitions(): string[] {
+  return [join(homedir(), "Library", "LaunchAgents", "dev.orca.panel.plist"), join(homedir(), ".config", "systemd", "user", "orca-panel.service")]
+    .map((path) => { try { const s = statSync(path); return `${path}:${s.size}:${s.mtimeMs}`; } catch { return `${path}:absent`; } });
+}
+const definitionsBefore = realServiceDefinitions();
+
 afterAll(() => {
   rmSync(relocated, { recursive: true, force: true });
   expect(userDataSnapshot(), "this test file wrote into the real ~/.orca (CLAUDE.md Rule 17)").toEqual(userDataBefore);
+  expect(realServiceDefinitions(), "this test file touched the real service definition (CLAUDE.md Rule 17)").toEqual(definitionsBefore);
 });
