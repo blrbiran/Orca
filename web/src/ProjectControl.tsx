@@ -62,10 +62,10 @@ export function ProjectControl(props: ProjectControlProps): JSX.Element {
         </label>
       )}
       <div className="project-actions">
-        <button type="button" disabled={!editable} title={editable ? undefined : t("project.fromCommandLine")} onClick={() => { setRefusal(null); setOpen("add"); }}>
+        <button type="button" className="project-action" data-icon="add" disabled={!editable} title={editable ? undefined : t("project.fromCommandLine")} onClick={() => { setRefusal(null); setOpen("add"); }}>
           {t("project.add")}
         </button>
-        <button type="button" disabled={!editable || current === undefined} title={editable ? undefined : t("project.fromCommandLine")}
+        <button type="button" className="project-action" data-icon="rename" disabled={!editable || current === undefined} title={editable ? undefined : t("project.fromCommandLine")}
           onClick={() => { setRefusal(null); setName(current ? projectName(current) : ""); setOpen("rename"); }}>
           {t("project.rename")}
         </button>

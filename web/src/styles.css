@@ -82,10 +82,29 @@ a { color: var(--accent); }
 .dot-danger { background: var(--danger); box-shadow: 0 0 8px var(--danger); }
 .sidebar-foot { margin-top: auto; font-size: var(--text-xs); color: var(--muted); padding: 0 8px; overflow-wrap: anywhere; }
 .theme-pick { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
-.project-control { display: flex; flex-direction: column; gap: 6px; padding: 8px; font-size: var(--text-xs); }
+/* Section tabs are navigation (a selected row with an accent bar); the project control is a grouped
+   card whose Add/Rename are compact secondary buttons, so the two never read as the same kind of control. */
+.nav-item[aria-current="page"] { box-shadow: inset 3px 0 0 var(--accent); }
+.nav-item:focus-visible, .project-action:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.project-control {
+  display: flex; flex-direction: column; gap: 8px; padding: 10px; font-size: var(--text-xs);
+  background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+}
+.project-control > label { margin-bottom: 0; }
 .project-control select { width: 100%; }
 .project-actions { display: flex; gap: 6px; flex-wrap: wrap; }
-.project-control form { display: flex; flex-direction: column; gap: 6px; }
+.project-action {
+  display: inline-flex; align-items: center; gap: 4px; flex: 1 1 auto; justify-content: center;
+  padding: 3px 8px; font-size: var(--text-xs); line-height: 1.5; color: var(--text);
+  background: transparent; border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+}
+.project-action:hover:not(:disabled) { background: var(--bg-hover); color: var(--text-strong); border-color: var(--muted); }
+/* Glyph only, with empty alt text so the button's accessible name stays its label. */
+.project-action::before { color: var(--muted); font-size: var(--text-sm); line-height: 1; }
+.project-action[data-icon="add"]::before { content: "+" / ""; }
+.project-action[data-icon="rename"]::before { content: "\270E" / ""; }
+.project-control form { display: flex; flex-direction: column; gap: 6px; margin: 0; }
+.project-control p { margin: 0; }
 .content { padding: 24px; min-width: 0; }
 .section-pane:not([data-active="true"]) { display: none; }
 .chain-banners:empty { display: none; }
@@ -180,7 +199,10 @@ nav[aria-label="Control groups"] button[aria-current="true"] { background: var(-
 @media (max-width: 760px) {
   .shell { grid-template-columns: 1fr; }
   .sidebar { position: static; height: auto; flex-direction: row; flex-wrap: wrap; align-items: center; }
-  .nav { flex-direction: row; flex-wrap: wrap; }
+  .nav { flex-direction: row; flex-wrap: wrap; width: 100%; border-bottom: 1px solid var(--border); }
+  .nav-item { border-radius: var(--radius-sm) var(--radius-sm) 0 0; }
+  .nav-item[aria-current="page"] { box-shadow: inset 0 -2px 0 var(--accent); }
+  .project-control { width: 100%; }
   .sidebar-foot { margin-top: 0; width: 100%; }
   .split { grid-template-columns: 1fr; }
   .split-detail { position: static; max-height: none; }
