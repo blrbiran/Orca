@@ -29,7 +29,7 @@ describe("service files on disk (Rule 17 modes)", () => {
     expect([mode(join(r, "one")), mode(join(r, "one", "two"))]).toEqual([0o700, 0o700]);
   });
 
-  it("gives new files 0600 under a umask that strips the owner's bits (create, replace, empty log)", async () => {
+  it("gives new files 0600 under a umask that strips the owner's bits", async () => {
     const r = await root();
     const old = process.umask(0o277);
     try {
