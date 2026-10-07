@@ -779,4 +779,7 @@ export const zhErrors: Record<string, string> = {
   "user-not-found": "找不到这个用户。",
   "owner-required": "只有 owner 能做这件事。",
   "notice-not-found": "找不到这条提醒。",
+  // Accounts spec §3.5: the human-only refusals, now also answered to a member in the Web UI (src/panel/humanOnly.ts).
+  "control-verb-human-only": "只有登录 Web UI 的 owner 能做这个操作。",
+  "control-field-human-only": "这个字段只能由登录 Web UI 的 owner 设置；去掉它再发送。",
 };

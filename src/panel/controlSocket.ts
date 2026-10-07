@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { registerControlReadRoutes, verifyControlJsonBody, type ControlReadApiDeps } from "./controlApi.js";
 import { sendControlError } from "./controlErrors.js";
 import { CLIENT_HEADER, CLIENT_PATTERN } from "../control/commandClient.js";
+import type { Principal } from "./permissions.js";
 
 /** Agent entry spec §3: the panel's second listener, for agents on this machine. Auth is the file mode. */
 export const CONTROL_SOCKET_NAME = "control.sock";
@@ -28,7 +29,8 @@ export function buildControlSocketApp(deps: ControlReadApiDeps): Express {
       sendControlError(res, 400, "control-client-invalid", `Socket requests carry ${CLIENT_HEADER}: cli|mcp[:<name>].`);
       return;
     }
-    res.locals.orcaClient = client;
+    // Accounts spec §3.5: every socket request acts as the agent principal; the header names it, never authorizes it.
+    res.locals.orcaPrincipal = { kind: "agent", client } satisfies Principal;
     next();
   });
   app.use(express.json({ limit: "64kb", verify: verifyControlJsonBody }));

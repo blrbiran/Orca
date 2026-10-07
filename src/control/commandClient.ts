@@ -11,7 +11,7 @@ export function withCommandContext<T>(commandId: string, context: { client: stri
   return current.run({ commandId, ...context }, fn);
 }
 
-/** Kept for its callers until Task 5 passes a principal: the Web is "web", a socket client is its agent. */
+/** Kept for the criteria that call it (accounts ruling Q1); the panel passes its principal to withCommandContext. */
 export function withCommandClient<T>(commandId: string, client: string, fn: () => T): T {
   return withCommandContext(commandId, { client, principal: client === "web" ? "web" : `agent:${client}` }, fn);
 }

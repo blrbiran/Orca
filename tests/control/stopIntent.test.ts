@@ -661,6 +661,8 @@ describe("stop and continuation mutation routes", () => {
     const { h, service } = await stopFixture();
     const app = express();
     app.use(express.json({ verify: verifyControlJsonBody }));
+    // The Web channel's login middleware sets the principal (accounts spec §3.5); here, a logged-in owner.
+    app.use((_req, res, next) => { res.locals.orcaPrincipal = { kind: "user", userId: "u-owner", name: "owner", roles: ["owner"] }; next(); });
     registerControlReadRoutes(app, { store: h.store, epoch: "epoch", config: { readView: async () => ({}) } as never, service }, "web");
     const server = createServer(app);
     await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));

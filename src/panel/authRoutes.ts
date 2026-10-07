@@ -5,6 +5,7 @@ import { AccountsRejection, type UserRow } from "./accounts/store.js";
 import { objectBody } from "./api.js";
 import { expiryOf, type AuthenticatedUser, type PanelAuth } from "./auth.js";
 import { controlErrorBody } from "./controlErrors.js";
+import { may, type Principal } from "./permissions.js";
 import { CSRF_REQUIRED, LOGIN_REQUIRED, PANEL_BAD_REQUEST, PASSWORD_CHANGE_REQUIRED } from "./rejection.js";
 
 export const AUTH_COOKIE = "orca_at";
@@ -32,6 +33,10 @@ const sameSecret = (left: string | undefined, right: string | undefined): boolea
   const a = Buffer.from(left, "utf8"), b = Buffer.from(right, "utf8");
   return a.length === b.length && timingSafeEqual(a, b);
 };
+
+/** Accounts spec §3.5: the logged-in user as a principal, with the roles the store holds now (not the token's). */
+const userPrincipal = (current: AuthenticatedUser): Principal =>
+  ({ kind: "user", userId: current.user.id, name: current.user.name, roles: current.user.roles });
 
 const isLogin = (req: Request): boolean => req.method === "POST" && req.path === "/auth/login";
 
@@ -63,6 +68,7 @@ export function authMiddleware(auth: PanelAuth): RequestHandler {
       return;
     }
     res.locals.orcaUser = current;
+    res.locals.orcaPrincipal = userPrincipal(current);
     next();
   };
 }
@@ -86,7 +92,7 @@ function currentUser(res: Response): AuthenticatedUser | undefined {
 function ownerOnly(res: Response): AuthenticatedUser | undefined {
   const current = currentUser(res);
   if (current === undefined) return undefined;
-  if (current.user.roles.includes("owner")) return current;
+  if (may(userPrincipal(current), "accounts")) return current;
   res.status(403).json({ code: "owner-required", message: "only an owner may do this" });
   return undefined;
 }
@@ -204,7 +210,7 @@ export function registerAuthRoutes(app: Express, auth: PanelAuth): void {
   app.get("/api/auth/notices", (_req, res) => {
     const current = currentUser(res);
     if (current === undefined) return;
-    res.json({ notices: current.user.roles.includes("owner") ? auth.store.openNotices() : [] });
+    res.json({ notices: may(userPrincipal(current), "accounts") ? auth.store.openNotices() : [] });
   });
 
   app.post("/api/auth/notices/:seq/ack", (req, res, next) => {

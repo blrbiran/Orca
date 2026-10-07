@@ -5,8 +5,8 @@ import { readArtifact } from "../control/archive.js";
 import { ZodError } from "zod";
 import { lookupCommandResult } from "../control/commandLedger.js";
 import { ControlError } from "../control/errors.js";
-import { withCommandClient } from "../control/commandClient.js";
-import { humanOnlyRefusal } from "./humanOnly.js";
+import { withCommandContext } from "../control/commandClient.js";
+import { permissionRefusal, principalLabel, type Principal } from "./permissions.js";
 import { readVersions } from "../control/queries.js";
 import { readAgentPreferences } from "../control/agentPreferences.js";
 import { resolveSelection, slotLayers, type PartialSelection } from "../control/agentSelection.js";
@@ -108,7 +108,7 @@ export function ensurePanelOperatorId(store: ControlStore): string {
   });
 }
 
-/** Agent entry spec §3, §5, §6: which listener a request arrived on. "socket" applies the human-only gate and records the header's client; "web" records "web". */
+/** Agent entry spec §3, §6: which listener a request arrived on. "socket" records its agent's client; "web" records "web". */
 export type ControlChannel = "web" | "socket";
 
 export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps, channel: ControlChannel): void {
@@ -254,15 +254,16 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
   });
 }
 
-export function registerControlMutationRoutes(app: Express, store: ControlStore, service: WebControlService, channel: ControlChannel): void {
-  const actorId = ensurePanelOperatorId(store);
-  /** Resolve the command target and the ledger scope a route names; `recovery-retry` carries no group in its path. */
-  type RouteTarget = (params: Request["params"], payload: unknown, store: ControlStore) => { groupId: string; target: CommandTargetV1 };
-  const payloadFields = (payload: unknown): Record<string, unknown> =>
-    typeof payload === "object" && payload !== null && !Array.isArray(payload) ? payload as Record<string, unknown> : {};
-  const scoped = (groupId: string) => ({ groupId, target: { kind: "group" as const, groupId } });
-  const fromParams: RouteTarget = (params) => scoped(idSchema.parse(params.groupId));
-  const routes: Array<{ path: string; verb: CommandVerbV1; target: RouteTarget }> = [
+/** Resolve the command target and the ledger scope a route names; `recovery-retry` carries no group in its path. */
+type RouteTarget = (params: Request["params"], payload: unknown, store: ControlStore) => { groupId: string; target: CommandTargetV1 };
+const payloadFields = (payload: unknown): Record<string, unknown> =>
+  typeof payload === "object" && payload !== null && !Array.isArray(payload) ? payload as Record<string, unknown> : {};
+const scoped = (groupId: string) => ({ groupId, target: { kind: "group" as const, groupId } });
+const fromParams: RouteTarget = (params) => scoped(idSchema.parse(params.groupId));
+
+/** Every command route and its verb; exported so the permission criterion can walk them against VERB_ACCESS (accounts spec §3.5). */
+export function controlCommandRoutes(actorId: string): Array<{ path: string; verb: CommandVerbV1; target: RouteTarget }> {
+  return [
     { path: "/api/control/groups/import-plan", verb: "import-plan", target: (_params, payload) => scoped(idSchema.parse(payloadFields(payload).groupId)) },
     { path: "/api/control/groups/:groupId/proposal/edit", verb: "proposal-edit", target: fromParams },
     { path: "/api/control/groups/:groupId/estimates", verb: "estimate", target: fromParams },
@@ -334,23 +335,28 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
       },
     },
   ];
-  for (const route of routes) app.post(route.path, asyncRoute(async (req, res) => {
+}
+
+export function registerControlMutationRoutes(app: Express, store: ControlStore, service: WebControlService, channel: ControlChannel): void {
+  const actorId = ensurePanelOperatorId(store);
+  for (const route of controlCommandRoutes(actorId)) app.post(route.path, asyncRoute(async (req, res) => {
     let id: string | null = null;
     try {
-      // Spec §6: the client rides beside the command, in neither hash; the Web channel is always "web". The socket's
-      // client is set only by its header gate; mounted without that gate, fail loud rather than book "undefined".
-      const client = channel === "web" ? "web" : res.locals.orcaClient;
-      if (typeof client !== "string") throw new Error("socket channel request carries no gated client (res.locals.orcaClient)");
-      // Spec §5: the human-only surface is refused by name before anything is parsed further or booked.
-      if (channel === "socket") {
-        const refusal = humanOnlyRefusal(route.verb, (req.body as { payload?: unknown } | undefined)?.payload);
-        if (refusal !== null) { sendControlError(res, 403, refusal.code, refusal.message); return; }
-      }
+      // Accounts spec §3.5: who sent it, set only by the listener's gate (the login middleware, the socket's header
+      // gate). Mounted without that gate, fail loud rather than book a command nobody can be named for.
+      const principal = res.locals.orcaPrincipal as Principal | undefined;
+      if (principal === undefined) throw new Error("control request carries no principal (res.locals.orcaPrincipal)");
+      // Agent entry spec §6: the client rides beside the command, in neither hash; the Web channel is always "web".
+      const client = channel === "web" ? "web" : principal.kind === "agent" ? principal.client : undefined;
+      if (client === undefined) throw new Error("socket channel request carries no agent principal");
+      // The human-only surface is refused by name before anything is parsed further or booked: an agent or a member.
+      const refusal = permissionRefusal(principal, route.verb, (req.body as { payload?: unknown } | undefined)?.payload);
+      if (refusal !== null) { sendControlError(res, 403, refusal.code, refusal.message); return; }
       const envelope = commandEnvelopeSchema.parse(req.body);
       const resolved = route.target(req.params, envelope.payload, store);
       id = resolved.groupId;
       const command = rawAuthorityCommandSchema.parse({ schema: "orca-raw-command-v1", ...envelope, actorId, verb: route.verb, target: resolved.target }) as RawAuthorityCommandV1;
-      await withCommandClient(command.commandId, client, async () => {
+      await withCommandContext(command.commandId, { client, principal: principalLabel(principal) }, async () => {
         switch (command.verb) {
           case "import-plan": await service.importPlan(command); break;
           case "proposal-edit": service.editProposal(command); break;
