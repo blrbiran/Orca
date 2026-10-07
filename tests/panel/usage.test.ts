@@ -29,4 +29,10 @@ describe("orca panel usage text (spec §3.3)", () => {
     for (const text of ["orca panel run --by <who>", "orca panel install", "orca panel status", "orca panel logs [-f] [-n <lines>]",
       "orca panel start [--detach]", "neither restarts on crash nor survives a reboot", "ask the person"]) expect(stderr).toContain(text);
   });
+
+  it("documents orca user and that passwords are never arguments (accounts spec §10)", async () => {
+    const { stderr } = await captureStreams(() => main([]));
+    for (const text of ["orca user add <name> [--role owner|member] | passwd <name> | disable <name> | list | rotate-key",
+      "passwords are typed at a terminal, never passed as arguments"]) expect(stderr).toContain(text);
+  });
 });

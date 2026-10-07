@@ -74,6 +74,11 @@ const USAGE = `usage:
   orca panel status              the manager's view and a real request to the panel; exit 0 only if it answered
   orca panel logs [-f] [-n <lines>]
                                  the panel's log files (macOS, detached) or its journal (Linux)
+  orca user add <name> [--role owner|member] | passwd <name> | disable <name> | list | rotate-key
+                                 (passwords are typed at a terminal, never passed as arguments)
+                                 manage panel accounts in the control root's accounts store: the same
+                                 ORCA_CONTROL_DIR as the service panel, or it refuses (user-store-missing).
+                                 rotate-key logs every session out; restart the panel afterwards. Exit 1 = refused
   orca compact-reviews [--apply] [--root <dir>] [--repo <key>=<path>]...
                                  dedupe reviews.jsonl and move rows whose decision was archived into
                                  reviews-archive.jsonl. Without --apply it prints the report and writes
@@ -545,6 +550,15 @@ export async function main(argv: string[], stdinText?: string): Promise<number> 
       return runServiceCommand(sub, rest.slice(1), process.env, { stdout: (t) => process.stdout.write(t), stderr: (t) => process.stderr.write(t) });
     }
     return runPanel(rest); // spec §2: the old form is kept as an alias of `orca panel run`
+  }
+
+  if (command === "user") {
+    const { runUserCommand } = await import("./panel/accounts/userCommand.js");
+    const { readSecretFromTty } = await import("./panel/accounts/ttySecret.js");
+    return runUserCommand(rest, {
+      stdinIsTTY: process.stdin.isTTY === true, readSecret: readSecretFromTty,
+      out: (line) => process.stdout.write(line), err: (line) => process.stderr.write(line), env: process.env, nowMs: Date.now,
+    });
   }
 
   if (command === "compact-reviews") {
