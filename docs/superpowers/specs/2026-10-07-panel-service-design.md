@@ -113,3 +113,19 @@ Both write per-user launchd/systemd definitions and run a foreground server unde
 - D18. The systemd preflight (XDG_RUNTIME_DIR, DBus, linger) runs before every `systemctl --user` command (§4 "before any").
 - D19. `uninstall` removes exactly what §4 lists (plist or unit, and `run.sh` on macOS); `service.json`, `service.env` and logs stay.
 - D20. Restart re-renders `service.env` and `run.sh` from `service.json` before asking the manager, so an Orca upgrade that changes the renderer takes effect on restart.
+
+## 11. Execution-time corrections (2026-10-07, session 30bd7e40)
+
+These record where the implementation departs from or sharpens §1–§10. Each was decided during execution and recorded as a `Ruling:` in `.superpowers/sdd/2026-10-07-panel-service/progress.md`; §1–§10 are left verbatim.
+
+- **Relative path overrides.** The spec did not say what a relative override means. `servicePaths` now refuses a relative `ORCA_PANEL_DIR`, `ORCA_LAUNCH_AGENTS_DIR`, `ORCA_SYSTEMD_USER_DIR` or `XDG_CONFIG_HOME` (when used) with `service-path-not-absolute`; discovery ignores a relative `ORCA_PANEL_DIR` and never writes through it. A relative path would resolve against whatever cwd the caller happens to have, so service files could land anywhere.
+- **Main-module guard.** The built CLI's main-module guard compares real paths. An install reached through a symlink (for example macOS `/var` → `/private/var`) otherwise failed the string comparison and exited 0 silently without doing anything.
+- **`ensurePrivateDir`.** The spec's 0700 rule is implemented by creating each missing level itself (mkdir plus chmod 0700 per level), because a recursive mkdir fails with EACCES under a restrictive umask. Existing directories are never chmod'ed (Rule 17: not the human's data to re-mode).
+- **service.env keys.** Keys are validated against `^[A-Za-z_][A-Za-z0-9_]*$` (otherwise `service-config-invalid`) and sorted by the renderer. This keeps the rendered plist/unit/run.sh injection-safe and its bytes deterministic.
+- **§4 Linux restart and install.** `restart` always runs `daemon-reload` first, since a rewritten unit whose reload failed would otherwise be restarted stale. `install` is `enable` + `restart`, not `enable --now`, because `enable --now` leaves an already-active old panel running.
+- **D18 linger.** `status` and `logs` use a read-only preflight: they report "linger is off" and never run `loginctl enable-linger`. Only install/start/restart enable linger, so a read-only command never changes the user's system.
+- **§9 launchctl exit codes.** Following "never trust a launchctl exit code", install/start/restart wait (bounded) for the panel to answer identify, ignoring a panel that was already answering beforehand. `status` decides "installed" from the plist/unit/run.sh file, never from systemd `loaded`, which can be true for a unit that is not installed.
+- **§5 `run --service` ordering.** The version is computed before bind, and a failure after bind closes the server before the lock is released, so a failed start never leaves a bound socket without a lock holder. Only the lock holder rotates logs.
+- **§5 discovery liveness.** panel.json's socket is used only while its pid is alive (kill 0; EPERM counts as alive); a dead pid falls through to the agent-entry §14 legacy scan. Known limitation: a reused pid still wins and then fails loudly with `panel-not-running`.
+- **Detached manager `stop`.** `stop` refuses an unparseable panel.json by name (exit 1) instead of reporting "nothing to stop", which would hide a possibly running panel. ESRCH between the check and the kill counts as stopped.
+- **Repo-external write registration (Rule 17).** The opt-in real smoke (`ORCA_SERVICE_REAL=1`, human-authorized only) uses the fixed label `dev.orca.panel.smoke`. `launchctl enable` leaves one persistent override entry for that label in the user's launchd database, removed only by the OS; its temp root under /tmp is removed in `afterAll`.
