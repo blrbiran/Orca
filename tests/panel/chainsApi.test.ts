@@ -23,6 +23,7 @@ import { isolateChainEnv } from "../helpers/chainEnv.js";
 import { recordFixture } from "../helpers/chainRecord.js";
 import { ORCA_ROOT, makeChainRepo } from "../helpers/chainRepo.js";
 import { type FakeClaude, fakeClaude } from "../helpers/fakeClaude.js";
+import { quietPanelAuth } from "./fixtures/auth.js";
 
 let cleanups: Array<() => Promise<void> | void> = [];
 afterEach(async () => {
@@ -204,7 +205,9 @@ describe("chains in the panel (D-launch spec §6.2, §6.3, §8.2-8)", () => {
     const opts: PanelOptions = { ...s.options, bind: "192.0.2.1", confirmedExternal: true };
     const app = express();
     app.use(express.json({ limit: "64kb" }));
-    buildApi(app, { opts, token, reviews: new ReviewsWriter(opts.correctionsDir), statics: await loadStaticFiles(opts.distDir, token) });
+    const auth = quietPanelAuth(join(s.options.correctionsDir, "accounts"));
+    cleanups.push(() => auth.close());
+    buildApi(app, { opts, token, reviews: new ReviewsWriter(opts.correctionsDir), statics: await loadStaticFiles(opts.distDir, token), auth });
     const server = app.listen(0, "127.0.0.1");
     await new Promise<void>((r) => server.once("listening", () => r()));
     cleanups.push(() => new Promise<void>((r) => server.close(() => r())));

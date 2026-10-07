@@ -14,13 +14,18 @@ import { buildApi } from "../../src/panel/api.js";
 import { controlRepoKey } from "../../src/panel/controlOptions.js";
 import { registerProjectRoutes } from "../../src/panel/projects.js";
 import { ReviewsWriter } from "../../src/panel/reviewsStore.js";
+import type { PanelAuth } from "../../src/panel/auth.js";
+import { quietPanelAuth } from "./fixtures/auth.js";
 
 const token = "b".repeat(64);
 let server: Server | undefined;
+let auth: PanelAuth | undefined;
 
 afterEach(async () => {
   if (server) await new Promise<void>((resolve) => server!.close(() => resolve()));
   server = undefined;
+  auth?.close();
+  auth = undefined;
 });
 
 async function listen(app: express.Express): Promise<string> {
@@ -39,6 +44,7 @@ async function panelApp(repos: Array<{ projectKey: string; path: string }>, cont
   buildApi(app, {
     opts: { by: "operator", bind: "127.0.0.1", port: 0, confirmedExternal: false, correctionsDir: await mkdtemp(join(tmpdir(), "projects-corr-")), repos },
     token, reviews, statics: { get: () => undefined, indexHtml: undefined, names: [] },
+    auth: (auth = quietPanelAuth(await mkdtemp(join(tmpdir(), "projects-accounts-")))),
     ...(control === undefined ? {} : { control }),
   } as never);
   return listen(app);

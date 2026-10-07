@@ -19,6 +19,8 @@ import type { ExecutionProfileSnapshotV1 } from "../../src/control/webProtocol.j
 import { buildApi } from "../../src/panel/api.js";
 import { createTrustedControlConfig } from "../../src/panel/controlConfig.js";
 import { ReviewsWriter } from "../../src/panel/reviewsStore.js";
+import type { PanelAuth } from "../../src/panel/auth.js";
+import { quietPanelAuth } from "./fixtures/auth.js";
 import { openTestStore } from "../control/fixtures/store.js";
 import { FIXTURE_AGENT_ID, seedPreferences } from "../control/fixtures/agents.js";
 
@@ -56,6 +58,7 @@ let root: string;
 let server: Server;
 let url: string;
 let dispose: () => Promise<void>;
+let auth: PanelAuth;
 
 beforeEach(async () => {
   const h = await openTestStore();
@@ -114,6 +117,7 @@ beforeEach(async () => {
   buildApi(app, {
     opts: { by: "operator", bind: "127.0.0.1", port: 0, confirmedExternal: false, correctionsDir: root, repos: [] },
     token, reviews, statics: { get: () => undefined, indexHtml: undefined, names: [] },
+    auth: (auth = quietPanelAuth(join(root, "accounts"))),
     control: { store: h.store, epoch: "epoch-test", config: trustedConfig },
   } as never);
   server = createServer(app);
@@ -125,6 +129,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await new Promise<void>((resolve) => server.close(() => resolve()));
+  auth.close();
   await dispose();
 });
 

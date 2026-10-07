@@ -2,13 +2,16 @@ import type { Response } from "express";
 import { ControlError, durableCommandErrorStatus, durableCommandErrorStatuses, nonDurableControlErrorClassifications } from "../control/errors.js";
 import { commandErrorBodySchema, compareText, type CommandErrorV1 } from "../control/webProtocol.js";
 import { PANEL_HOST_NOT_ALLOWED } from "./bindGuard.js";
-import { TOKEN_REQUIRED } from "./rejection.js";
+import { CSRF_REQUIRED, LOGIN_REQUIRED, PASSWORD_CHANGE_REQUIRED, TOKEN_REQUIRED } from "./rejection.js";
 
 type ControlHttpStatus = 400 | 401 | 403 | 404 | 409 | 422 | 423 | 500 | 503;
 type ExistingControlCode = keyof typeof durableCommandErrorStatuses | keyof typeof nonDurableControlErrorClassifications;
 
 const panelOnlyErrorStatuses = {
   [TOKEN_REQUIRED]: 401,
+  [LOGIN_REQUIRED]: 401,
+  [PASSWORD_CHANGE_REQUIRED]: 403,
+  [CSRF_REQUIRED]: 403,
   [PANEL_HOST_NOT_ALLOWED]: 403,
   "control-internal-error": 500,
 } as const satisfies Record<string, ControlHttpStatus> & Partial<Record<ExistingControlCode, never>>;

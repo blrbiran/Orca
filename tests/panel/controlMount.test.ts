@@ -1,4 +1,4 @@
-import { chmod, mkdir, mkdtemp, realpath, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readdir, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -92,10 +92,12 @@ describe("--no-control leaves the process exactly as it shipped before", () => {
     expect((await get(await boot(h, ["--no-control"]), "/api/control/config")).status).toBe(404);
   });
 
-  it("writes nothing at all under the control root", async () => {
+  // Rewritten for accounts D1 (accounts plan Task 3): the accounts live in the control root and a --no-control panel
+  // still logs people in, so the root holds exactly the three accounts files and nothing of the control plane.
+  it("writes nothing of the control plane under the control root", async () => {
     const h = await workspace();
     await boot(h, ["--no-control"]);
-    await expect(stat(h.controlRoot)).rejects.toMatchObject({ code: "ENOENT" });
+    expect((await readdir(h.controlRoot)).sort()).toEqual(["accounts.sqlite", "initial-password", "jwt.key"]);
   });
 });
 

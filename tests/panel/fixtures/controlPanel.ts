@@ -33,6 +33,7 @@ import { ControlError } from "../../../src/control/errors.js";
 import type { AgentsView } from "../../../src/control/executionPort.js";
 import { FIXTURE_AGENT_ID, PANEL_OPERATOR, fixtureResolutionFor, seedPanelOperator } from "../../control/fixtures/agents.js";
 import { resolveGroupSelections } from "../../../src/control/agentFreeze.js";
+import { quietPanelAuth } from "./auth.js";
 
 export const PANEL_TOKEN = "b".repeat(64);
 export const GROUP = "grp-1";
@@ -167,9 +168,10 @@ export function createHarness(): Harness {
       app.use(express.json({ limit: "64kb", verify: verifyControlJsonBody }));
       const reviews = new ReviewsWriter(join(root, "corrections"));
       await reviews.load();
+      const auth = quietPanelAuth(join(root, "accounts"));
       buildApi(app, {
         opts: { by: "operator", bind: "127.0.0.1", port: 0, confirmedExternal: false, correctionsDir: join(root, "corrections"), repos: [] },
-        token: PANEL_TOKEN, reviews, statics: { get: () => undefined, indexHtml: undefined, names: [] },
+        token: PANEL_TOKEN, reviews, statics: { get: () => undefined, indexHtml: undefined, names: [] }, auth,
         // Plan T14 (W6-10/W6-19): the read routes ask the same port object the service confirms through.
         control: { store, epoch, config: trustedConfig, service, port },
       } as never);
@@ -191,6 +193,7 @@ export function createHarness(): Harness {
         close: async () => {
           await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
           store.close();
+          auth.close();
         },
       };
       booted.push(panel);

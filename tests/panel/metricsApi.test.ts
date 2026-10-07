@@ -13,7 +13,7 @@ import { isHighTier } from "../../src/metrics/highTier.js";
 import type { DecisionObservation } from "../../src/metrics/types.js";
 import { computePanelCoverage } from "../../src/panel/coverage.js";
 import { PANEL_HOST_NOT_ALLOWED } from "../../src/panel/bindGuard.js";
-import { TOKEN_REQUIRED } from "../../src/panel/rejection.js";
+import { LOGIN_REQUIRED } from "../../src/panel/rejection.js";
 import type { ReviewRow } from "../../src/panel/reviewsStore.js";
 import { createPanelServer, parsePanelArgs } from "../../src/panel/server.js";
 import type { PanelOptions, StartedPanel } from "../../src/panel/server.js";
@@ -216,11 +216,11 @@ describe("the metrics endpoint (spec sections 4.1 and 5)", () => {
         try {
           const noToken = await fetch(`${started.url}/api/metrics`);
           expect(noToken.status).toBe(401);
-          expect(((await noToken.json()) as { code: string }).code).toBe(TOKEN_REQUIRED);
+          expect(((await noToken.json()) as { code: string }).code).toBe(LOGIN_REQUIRED);
 
           const wrongToken = await get(started, "/api/metrics", "0".repeat(64));
           expect(wrongToken.status).toBe(401);
-          expect(((await wrongToken.json()) as { code: string }).code).toBe(TOKEN_REQUIRED);
+          expect(((await wrongToken.json()) as { code: string }).code).toBe(LOGIN_REQUIRED);
 
           // Positive control, in the same criterion: without it, a middleware
           // that refuses EVERY request would pass the two assertions above

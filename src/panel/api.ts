@@ -18,14 +18,14 @@ import { computePanelCoverage, unreviewedHighTier } from "./coverage.js";
 import { loadDecisionRow, loadQuestionsOrEmpty } from "./decisionSource.js";
 import { DECISION_NOT_FOUND, projectForList } from "./listProjection.js";
 import type { DecisionListRow } from "./listProjection.js";
-import { PANEL_BAD_REQUEST, PanelRejection, TOKEN_REQUIRED } from "./rejection.js";
+import { PANEL_BAD_REQUEST, PanelRejection } from "./rejection.js";
 import { readReviews } from "./reviewsStore.js";
 import type { ReviewsWriter } from "./reviewsStore.js";
 import type { PanelOptions } from "./server.js";
 import type { StaticFiles } from "./staticFiles.js";
-import { tokenMatches } from "./token.js";
+import type { PanelAuth } from "./auth.js";
+import { authMiddleware, registerAuthRoutes } from "./authRoutes.js";
 import { registerControlReadRoutes, type ControlReadApiDeps } from "./controlApi.js";
-import { controlErrorBody } from "./controlErrors.js";
 
 /**
  * Panel UI redesign spec §4 (ruling U1): one ledger read per repository per request; a
@@ -48,6 +48,8 @@ export interface ApiDeps {
   control?: ControlReadApiDeps;
   /** Project registry spec §5: null in command-line mode. */
   projects?: ProjectRegistry | null;
+  /** Accounts spec §3.3: sessions; the /api middleware asks it first and the page token second (Task 4 drops the token). */
+  auth: PanelAuth;
 }
 
 /**
@@ -175,17 +177,10 @@ export function buildApi(app: Express, deps: ApiDeps): void {
     res.status(200).type(asset.contentType).send(asset.bytes);
   });
 
-  app.use("/api", (req: Request, res: Response, next: NextFunction) => {
-    const given = req.header("x-orca-token") ?? undefined;
-    if (!tokenMatches(deps.token, given)) {
-      const message = "this panel needs its one-time token";
-      res.status(401).json(req.path === "/control" || req.path.startsWith("/control/")
-        ? controlErrorBody(TOKEN_REQUIRED, message)
-        : { code: TOKEN_REQUIRED, message });
-      return;
-    }
-    next();
-  });
+  app.use("/api", authMiddleware(deps.auth, deps.token));
+  // Ruling Q8: after the middleware, so every auth route but POST /api/auth/login gets the login, CSRF and
+  // password-change checks.
+  registerAuthRoutes(app, deps.auth);
 
   if (deps.control) registerControlReadRoutes(app, deps.control, "web");
 

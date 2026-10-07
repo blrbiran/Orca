@@ -33,6 +33,15 @@ export const NO_VIEWER_IDENTITY = "no-viewer-identity";
  */
 export const TOKEN_REQUIRED = "token-required";
 
+/** Accounts spec §3.3-§3.4: no valid session (and, until Task 4, no page token either). */
+export const LOGIN_REQUIRED = "login-required";
+
+/** Accounts spec §3.2: the initial password reaches only the change step. */
+export const PASSWORD_CHANGE_REQUIRED = "password-change-required";
+
+/** Accounts spec §3.4: a non-GET without an `x-orca-csrf` header equal to the `orca_csrf` cookie. */
+export const CSRF_REQUIRED = "csrf-required";
+
 /**
  * Final review I-2 / ruling R65: a request whose body the panel cannot read as
  * a JSON object -- no JSON content-type, malformed JSON, or JSON that is not an

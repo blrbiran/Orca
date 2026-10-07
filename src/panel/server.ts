@@ -4,6 +4,7 @@ import express from "express";
 import { correctionsDir } from "../corrections/paths.js";
 import type { CcmemAdapterOptions } from "../memory/ccmem.js";
 import { buildApi } from "./api.js";
+import { createPanelAuth } from "./auth.js";
 import { PANEL_HOST_NOT_ALLOWED, assertBindAllowed, isHostAllowed } from "./bindGuard.js";
 import { controlErrorBody } from "./controlErrors.js";
 import { verifyControlJsonBody } from "./controlApi.js";
@@ -11,7 +12,7 @@ import { bindControlSocket, buildControlSocketApp, controlSocketPath, type Contr
 import { randomUUID } from "node:crypto";
 import { assembleControlRuntime, type ControlRuntime } from "./controlAssembly.js";
 import { runControlPanelStartup } from "./controlLifecycle.js";
-import { resolveControlOptions, type ControlOptionsResolution } from "./controlOptions.js";
+import { controlRoot, resolveControlOptions, type ControlOptionsResolution } from "./controlOptions.js";
 import { withDefaultCcloopBin } from "../control/ccloopBin.js";
 import { createProjectRegistry } from "./projectRegistry.js";
 import { projectsFilePath, readProjectsFile, type ProjectsFileRead } from "./projectsFile.js";
@@ -63,6 +64,10 @@ export interface PanelOptions {
   memory?: CcmemAdapterOptions;
   /** Project registry spec §4: present in file mode only. */
   projectsFile?: { file: string; boot: ProjectsFileRead };
+  /** Accounts spec §3.3: `--session-days`, 1..30, default 15. Optional for literal options; `parsePanelArgs` always sets it. */
+  sessionDays?: number;
+  /** Accounts D1: the control root (`accounts.sqlite`, `jwt.key`, `initial-password`); `parsePanelArgs` sets it from the env. */
+  accountsDir?: string;
 }
 
 /** What survives parsing: a rejection never reaches here, it is thrown. */
@@ -145,6 +150,12 @@ export function parsePanelArgs(args: string[], env: NodeJS.ProcessEnv): PanelOpt
     throw new PanelRejection("malformed-port", `--port wants an integer 0-65535, got ${JSON.stringify(portText)}`);
   }
 
+  const daysText = args.includes("--session-days") ? flag("--session-days") ?? "" : "15";
+  const sessionDays = Number(daysText);
+  if (!/^[0-9]+$/.test(daysText) || sessionDays < 1 || sessionDays > 30) {
+    throw new PanelRejection("malformed-session-days", `--session-days wants an integer 1-30, got ${JSON.stringify(daysText)}`);
+  }
+
   // Resolved after --repo and before the return, because it is a function of the repo list.
   // A rejection is raised here rather than carried, so no caller can hold a half-resolved plane.
   const { rejection, ...control } = resolveControlOptions(args, env, repos, projectsFile === undefined ? undefined : {
@@ -168,6 +179,9 @@ export function parsePanelArgs(args: string[], env: NodeJS.ProcessEnv): PanelOpt
     // means not configured; there is no PATH lookup, so a criterion reaches a real ccmem only by naming it.
     memory: { ccmemBin: env.ORCA_CCMEM_BIN !== undefined && env.ORCA_CCMEM_BIN !== "" ? env.ORCA_CCMEM_BIN : null, env },
     ...(projectsFile === undefined ? {} : { projectsFile }),
+    sessionDays,
+    // Read at parse time from the env this panel was given, like correctionsDir (Rule 17).
+    accountsDir: controlRoot(env),
   };
 }
 
@@ -221,13 +235,22 @@ export async function createPanelServer(opts: PanelOptions, env: NodeJS.ProcessE
       : { code: PANEL_HOST_NOT_ALLOWED, message });
   });
   app.use(express.json({ limit: "64kb", verify: verifyControlJsonBody }));
+  // Accounts spec §3.2-§3.3: opened before the control plane, so a refused accounts store takes no lock with it.
+  const clock = opts.now ?? (() => new Date());
+  const auth = createPanelAuth({
+    root: opts.accountsDir ?? controlRoot(env), by: opts.by, sessionDays: opts.sessionDays ?? 15,
+    log: (line) => process.stderr.write(line), nowMs: () => clock().getTime(),
+  });
 
   // Assembly plan Task 5. Built before listen so that a process which cannot build its control
   // plane never accepts a connection that would then meet a half-built one. The epoch is its own
   // per-process value and not the token: it is served in every view, and the token is a credential.
   const epoch = randomUUID();
   let control: ControlRuntime | null = null;
-  if (opts.control.enabled) control = await assembleControlRuntime({ control: opts.control, repos: opts.repos, epoch, env });
+  if (opts.control.enabled) {
+    try { control = await assembleControlRuntime({ control: opts.control, repos: opts.repos, epoch, env }); }
+    catch (error) { auth.close(); throw error; }
+  }
   // Project registry spec §5: built after the control plane, which it tells about every project it adds or renames.
   const projects = opts.projectsFile === undefined ? null : createProjectRegistry({
     file: opts.projectsFile.file,
@@ -240,7 +263,7 @@ export async function createPanelServer(opts: PanelOptions, env: NodeJS.ProcessE
     },
   });
   buildApi(app, {
-    opts, token, reviews, statics, projects,
+    opts, token, reviews, statics, projects, auth,
     // Disabled means no `control` key at all -- byte-for-byte the shape that shipped before this
     // existed, so `controlApi.ts` registers nothing and every /api/control path is a 404.
     ...(control === null ? {} : { control: { store: control.store, epoch, config: control.config, service: control.service, port: control.port } }),
@@ -257,6 +280,7 @@ export async function createPanelServer(opts: PanelOptions, env: NodeJS.ProcessE
   const bindFailed = async (detail: string): Promise<PanelRejection> => {
     await new Promise<void>((resolve) => server.close(() => resolve()));
     control?.close();
+    auth.close();
     return new PanelRejection(PANEL_BIND_FAILED, detail, 78);
   };
   // spec §6, ruling R4: recovery runs to completion before the socket is opened. Not "recovery is
@@ -298,7 +322,7 @@ export async function createPanelServer(opts: PanelOptions, env: NodeJS.ProcessE
   // Spec §3.3: the store is released only after BOTH listeners have closed, so a request in flight on either one
   // never meets a closed store.
   const closed = new Promise<void>((resolve) => server.once("close", () => {
-    void (socket?.close() ?? Promise.resolve()).then(() => { control?.close(); resolve(); });
+    void (socket?.close() ?? Promise.resolve()).then(() => { control?.close(); auth.close(); resolve(); });
   }));
 
   // spec §6, and the convention src/chain/run.ts:106-107 already uses. On a signal: the control

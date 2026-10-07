@@ -24,6 +24,7 @@ import type {
 import { buildApi } from "../../src/panel/api.js";
 import { createTrustedControlConfig } from "../../src/panel/controlConfig.js";
 import { ReviewsWriter } from "../../src/panel/reviewsStore.js";
+import { quietPanelAuth } from "./fixtures/auth.js";
 import { openTestStore } from "../control/fixtures/store.js";
 import { FIXTURE_AGENT_ID, fixtureResolutionFor, seedPreferences } from "../control/fixtures/agents.js";
 
@@ -134,16 +135,17 @@ async function setup(): Promise<Harness> {
   app.use(express.json());
   const reviews = new ReviewsWriter(h.root);
   await reviews.load();
+  const auth = quietPanelAuth(join(h.root, "accounts"));
   buildApi(app, {
     opts: { by: "operator", bind: "127.0.0.1", port: 0, confirmedExternal: false, correctionsDir: h.root, repos: [] },
-    token, reviews, statics: { get: () => undefined, indexHtml: undefined, names: [] },
+    token, reviews, statics: { get: () => undefined, indexHtml: undefined, names: [] }, auth,
     control: { store: h.store, epoch: "epoch-test", config: trustedConfig },
   } as never);
   const server = createServer(app);
   await new Promise<void>((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("test server has no port");
-  return { root: h.root, store: h.store, trustedConfig, profileHash: frozen.profileHash, url: `http://127.0.0.1:${address.port}`, server, disposeStore: h.dispose };
+  return { root: h.root, store: h.store, trustedConfig, profileHash: frozen.profileHash, url: `http://127.0.0.1:${address.port}`, server, disposeStore: async () => { auth.close(); await h.dispose(); } };
 }
 
 async function request(h: Harness, path: string, authenticated = true, init: RequestInit = {}) {
@@ -292,7 +294,7 @@ describe("canonical control read API", () => {
   it("authenticates reads, enforces canonical sinceChangeSeq spelling, and keeps immediate kill absent", async () => {
     const unauthenticated = await request(h, "/api/control/config", false);
     expect(unauthenticated.status).toBe(401);
-    expect(await unauthenticated.json()).toEqual({ error: { code: "token-required", message: "this panel needs its one-time token", commandRevision: null, evidenceIds: [], retryable: false } });
+    expect(await unauthenticated.json()).toEqual({ error: { code: "login-required", message: "log in to this panel", commandRevision: null, evidenceIds: [], retryable: false } });
 
     for (const query of ["", "00", "-1", "+1", "1.0", "1e2", "%201", "9007199254740992", "1&sinceChangeSeq=2"]) {
       const response = await request(h, `/api/control/summary?sinceChangeSeq=${query}`);

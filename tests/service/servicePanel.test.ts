@@ -67,10 +67,10 @@ describe("orca panel run --service (spec §5)", () => {
     expect(JSON.parse(readFileSync(w.lock, "utf8"))).toEqual({ pid: json.body.pid, startTime: json.body.startTime });
     expect(json.body.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
     expect(json.body.socketPath).toBe(controlSocketPath(w.state));
-    // Accounts plan dependency: the initial-password line names a file, never the password. Vacuous until that plan
-    // lands (no such file); whichever plan lands second makes this unconditional and sees it red (mutation M-acc).
+    // Accounts spec §3.2: the initial-password line names a file, never the password. Unconditional since the accounts
+    // plan landed (its Task 3 creates the file; readFileSync throws if it is missing); mutation M-acc saw it red.
     const initial = join(w.controlDir, "initial-password");
-    if (existsSync(initial)) expect(p.out() + p.err()).not.toContain(readFileSync(initial, "utf8").trim());
+    expect(p.out() + p.err()).not.toContain(readFileSync(initial, "utf8").trim());
     p.child.kill("SIGTERM");
     expect(await p.exited).toBe(0);
     expect([existsSync(w.json), existsSync(w.lock)]).toEqual([false, false]);
