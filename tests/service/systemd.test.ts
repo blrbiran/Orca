@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -59,16 +59,58 @@ describe("systemd (spec §4, Linux table)", () => {
     expect((await s.fake.calls()).at(-1)).toBe(`systemctl --user ${verb} orca-panel-test`);
   });
 
-  it("restart daemon-reloads first only when the unit changed", async () => {
+
+  it("restart always daemon-reloads before restarting, and rewrites the unit only when it changed", async () => {
     const s = await setup();
     ensurePrivateDir(dirname(s.paths.unitFile)); // the unit directory does not exist until install or restart creates it
     writeFileSync(s.paths.unitFile, renderUnit(sampleConfig(s.paths), s.paths));
+    const mtime = (): number => statSync(s.paths.unitFile).mtimeMs;
+    const before = mtime();
     expect(await systemd.restart(s.ctx)).toBe(0);
-    expect((await s.fake.calls()).slice(1)).toEqual(["systemctl --user restart orca-panel-test"]);
+    expect((await s.fake.calls()).slice(1)).toEqual(["systemctl --user daemon-reload", "systemctl --user restart orca-panel-test"]);
+    expect(mtime()).toBe(before);
     writeFileSync(s.paths.unitFile, "[Unit]\n");
     expect(await systemd.restart(s.ctx)).toBe(0);
-    expect((await s.fake.calls()).slice(3)).toEqual(["systemctl --user daemon-reload", "systemctl --user restart orca-panel-test"]);
+    expect((await s.fake.calls()).slice(4)).toEqual(["systemctl --user daemon-reload", "systemctl --user restart orca-panel-test"]);
     expect(readFileSync(s.paths.unitFile, "utf8")).toBe(renderUnit(sampleConfig(s.paths), s.paths));
+  });
+
+  it("a failed daemon-reload stops install before enable and restart before restart, with the error shown", async () => {
+    const s = await setup();
+    await s.fake.codes("systemctl", "daemon-reload", [1]);
+    expect(await systemd.install(s.ctx)).toBe(1);
+    expect((await s.fake.calls()).some((c) => c.includes("enable"))).toBe(false);
+    expect(s.err.join("\n")).toContain("systemctl --user daemon-reload exited 1");
+    await s.fake.codes("systemctl", "daemon-reload", [1]);
+    expect(await systemd.restart(s.ctx)).toBe(1);
+    expect((await s.fake.calls()).some((c) => c.includes("restart"))).toBe(false);
+  });
+
+  it("any non-zero systemctl exit is 1, whatever the code", async () => {
+    const s = await setup();
+    await s.fake.codes("systemctl", "start", [5]);
+    expect(await systemd.start(s.ctx)).toBe(1);
+    expect(s.err.join("\n")).toContain("exited 5");
+  });
+
+  it("uninstall carries on after a failed disable: removes the unit, reloads, reports the error", async () => {
+    const s = await setup();
+    await systemd.install(s.ctx);
+    await s.fake.codes("systemctl", "disable", [1]);
+    expect(await systemd.uninstall(s.ctx)).toBe(0);
+    expect(existsSync(s.paths.unitFile)).toBe(false);
+    expect((await s.fake.calls()).at(-1)).toBe("systemctl --user daemon-reload");
+    expect(s.err.join("\n")).toContain("disable --now orca-panel-test exited 1");
+  });
+
+  it("state is not loaded on a failing show and has no pid for MainPID=0; logs -f passes through", async () => {
+    const s = await setup();
+    await s.fake.codes("systemctl", "show", [1]);
+    expect(systemd.state(s.ctx)).toEqual({ loaded: false, state: "not loaded", pid: null });
+    await s.fake.output("systemctl", "show", "ActiveState=inactive\nSubState=dead\nMainPID=0\nNRestarts=0\n");
+    expect(systemd.state(s.ctx).pid).toBeNull();
+    expect(systemd.logs(s.ctx, { follow: true, lines: 5 })).toBe(0);
+    expect(await s.fake.calls()).toContain("journalctl --user -u orca-panel-test -n 5 -f");
   });
 
   it("state reads ActiveState/SubState/MainPID/NRestarts; logs is journalctl; uninstall disables, removes, reloads", async () => {

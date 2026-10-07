@@ -56,9 +56,10 @@ export const systemd: ServiceManager = {
   async start(ctx) { return systemctl(ctx, preflight(ctx), ["start", ctx.paths.unit]); },
   async stop(ctx) { return systemctl(ctx, preflight(ctx), ["stop", ctx.paths.unit]); },
   async restart(ctx) {
-    const changed = writeUnit(ctx);
+    writeUnit(ctx);
     const env = preflight(ctx);
-    if (changed && systemctl(ctx, env, ["daemon-reload"]) !== 0) return 1;
+    // Always reload: a rewrite whose reload failed must not leave the next restart on the old unit (cheap and idempotent).
+    if (systemctl(ctx, env, ["daemon-reload"]) !== 0) return 1;
     return systemctl(ctx, env, ["restart", ctx.paths.unit]);
   },
   state(ctx): ManagerState {
