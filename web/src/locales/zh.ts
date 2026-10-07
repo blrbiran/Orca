@@ -506,6 +506,7 @@ export const zh: Translation<typeof en> = {
     to: "止",
     headline: { total: "总 token", week: "本周", month: "本月" },
     rangeTokens: "这个区间的 token：{{n}}",
+    preLedger: "总量和全期上限里有 {{n}} 个 token 用在按模型统计开始之前；它们不属于任何区间。",
     byModel: "各模型的 token",
     unattributed: "未归属",
     th: {

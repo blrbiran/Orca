@@ -602,6 +602,7 @@ export const en = {
     to: "To",
     headline: { total: "Total tokens", week: "This week", month: "This month" },
     rangeTokens: "Tokens in this range: {{n}}",
+    preLedger: "Total and all-time caps include {{n}} tokens used before per-model tracking began; they are in no range.",
     byModel: "Tokens per model",
     unattributed: "unattributed",
     th: {

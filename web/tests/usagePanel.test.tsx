@@ -12,6 +12,7 @@ import { AccountContext } from "../src/AuthGate.js";
 import type { Me } from "../src/auth.js";
 import type { UsageViewV1 } from "../src/controlTypes.js";
 import { UsagePanel } from "../src/UsagePanel.js";
+import i18n from "../src/i18n.js";
 
 const jsonResponse = (body: unknown, status = 200): Response => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
@@ -74,6 +75,32 @@ describe("UsagePanel (spec §5.3, §6, §7)", () => {
     expect(screen.getByTestId("usage-mismatch").textContent).toMatch(/2$/);
     expect(screen.getByTestId("usage-unknown").textContent).toMatch(/0$/);
     expect(rows).toContainEqual(["all projects", "weekly", "1000", "400", "100", "500"]);
+  });
+
+  // Spec §14 / final review Important 2: the total and the all-time caps count pre-ledger tokens that no range holds, so
+  // with no range bounds the page names the difference (total - range) on one line, in each language; with bounds, or
+  // with nothing before the ledger, it says nothing.
+  it("names the tokens that predate per-model tracking when the total exceeds the all-time range, in English and Chinese", async () => {
+    renderAs(member);
+    expect((await screen.findByTestId("usage-pre-ledger")).textContent).toBe(
+      "Total and all-time caps include 90988 tokens used before per-model tracking began; they are in no range.",
+    );
+    cleanup();
+    await i18n.changeLanguage("zh");
+    try {
+      renderAs(member);
+      expect((await screen.findByTestId("usage-pre-ledger")).textContent).toBe("总量和全期上限里有 90988 个 token 用在按模型统计开始之前；它们不属于任何区间。");
+    } finally { await i18n.changeLanguage("en"); }
+    cleanup();
+    view = { ...VIEW, headline: { ...VIEW.headline, total: VIEW.range.tokens } };
+    renderAs(member);
+    await screen.findByTestId("usage-total");
+    expect(screen.queryByTestId("usage-pre-ledger")).toBe(null);
+    cleanup();
+    view = { ...VIEW, from: 1, to: 2 };
+    renderAs(member);
+    await screen.findByTestId("usage-total");
+    expect(screen.queryByTestId("usage-pre-ledger")).toBe(null);
   });
 
   it("gives an owner Set, Clear and the calendar form; Set POSTs set-spend-cap at the spend revision with the CSRF header", async () => {

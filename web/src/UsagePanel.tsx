@@ -159,6 +159,11 @@ function UsageBody(props: { view: UsageViewV1; grouped: boolean; owner: boolean;
         <div><dt>{t("usage.headline.month")}</dt><dd data-testid="usage-month">{view.headline.month}</dd></div>
       </dl>
       <p data-testid="usage-range">{t("usage.rangeTokens", { n: view.range.tokens })}</p>
+      {/* Spec §14: pre-ledger rows count in the total and in all-time caps but in no range, so with no range bounds the
+          difference between the two is exactly them; named here so the page does not look as if tokens were lost. */}
+      {view.from === null && view.to === null && view.headline.total - view.range.tokens > 0 && (
+        <p data-testid="usage-pre-ledger">{t("usage.preLedger", { n: view.headline.total - view.range.tokens })}</p>
+      )}
 
       <h3>{t("usage.byModel")}</h3>
       <table>
