@@ -22,7 +22,7 @@ import { applySetWorkspaceMode, type SetWorkspaceModeCommand } from "./workspace
 import { applySpendCommand, type SpendCommand } from "./spendCommands.js";
 import { applySetAgentPreferences, type SetAgentPreferencesCommand } from "./agentPreferences.js";
 import { recordProjectionChange } from "./projectionJournal.js";
-import { gateClaim } from "./spendCaps.js";
+import { claimCapBlocking, clearSpendCapBlock, gateClaim } from "./spendCaps.js";
 import { effectiveTaskLabels, normalizeInputLabels, readTaskLabelState } from "./labels.js";
 import { TASK_AMENDMENT_SCHEMA, effectivePlanTask, workBodyOf, writeTaskAmendment } from "./taskAmendments.js";
 import { expandLoopPlan, expandRecipe, normalizeLoopSkills, type LoopRecipe, type LoopSkills, type LoopTaskExpansion } from "./loopPlans.js";
@@ -453,20 +453,27 @@ export class WebControlService {
     const release = this.deps.admissionGate?.enter();
     try {
       const initial = readEstimateRecord(this.store, id, estimateId);
-      if (!["queued", "running", "start-unknown"].includes(initial.state)) return null;
+      // Accounts spec §6.3.1: an estimate that left the queue another way no longer waits on a cap.
+      const leftQueue = (): null => { this.store.transaction(() => clearSpendCapBlock(this.store, id, "estimate")); return null; };
+      if (!["queued", "running", "start-unknown"].includes(initial.state)) return leftQueue();
       const profile = this.deps.profileRouter.resolve("budget-estimate", initial.profile.profileId, initial.profile.profileHash);
+      const at = (this.deps.now?.() ?? new Date()).getTime();
+      // A capped estimate is not probed (read-only check; the gate in the transaction decides, and records the block).
+      const precapped = initial.state === "queued" && claimCapBlocking(this.store, id, initial.grant.tokens, at) !== null;
       // Spec §6.4 last paragraph: the claim probes the estimate's frozen estimator selection. An estimate without one is
       // never queued; asking `{}` lets the port refuse it, which degrades the estimate below.
-      const observation = await this.deps.profileRouter.probe(profile, initial.estimatorSlot?.selection ?? {});
+      const observation = precapped ? null : await this.deps.profileRouter.probe(profile, initial.estimatorSlot?.selection ?? {});
       return this.store.transaction(() => {
         const estimate = readEstimateRecord(this.store, id, estimateId), group = readWebGroup(this.store, id), proposal = readBudgetProposal(this.store, id);
-        if (!["queued", "running", "start-unknown"].includes(estimate.state)) return null;
+        if (!["queued", "running", "start-unknown"].includes(estimate.state)) { clearSpendCapBlock(this.store, id, "estimate"); return null; }
         const existing = this.store.db.prepare("SELECT body FROM runs WHERE group_id=? AND work_item_id=?").get(id, estimateId);
         if (existing) return JSON.parse(String(existing.body)) as EstimateRun;
         if (estimate.state !== "queued" || !estimate.request) throw new ControlError("recovery-blocked");
         prestart(group); assertKnownConservation(this.store, group, proposal);
         if (group.stopped) throw new ControlError("group-stopped");
         this.deps.profileRouter.resolve("budget-estimate", estimate.profile.profileId, estimate.profile.profileHash);
+        // Found capped before the probe: re-checked here (the block recorded or cleared), never claimed unprobed.
+        if (observation === null) { gateClaim(this.store, id, estimate.grant.tokens, at, "estimate"); return null; }
         if (estimateCapabilityDegraded(estimate.request, observation, estimate.mode)) {
           estimate.state = "blocked-capability"; estimate.reasonCode = "estimate-capability-degraded";
           group.ledger.committedRemaining = residual(group.reserved, zero(), estimate.grant);
@@ -476,7 +483,7 @@ export class WebControlService {
           return null;
         }
         // Accounts spec §6.3.1, D9: an estimate is a claim too; under a cap it stays queued and its wake pending.
-        if (!gateClaim(this.store, id, estimate.grant.tokens, (this.deps.now?.() ?? new Date()).getTime())) return null;
+        if (!gateClaim(this.store, id, estimate.grant.tokens, at, "estimate")) return null;
         const bindingRow = this.store.db.prepare("SELECT body FROM outbox WHERE id=? AND kind='estimate-contract'").get(`estimate-contract:${id}:${estimateId}`);
         if (!bindingRow) throw new ControlError("recovery-blocked");
         const binding = z.object({ groupId: z.literal(id), estimateId: z.literal(estimateId), requestHash: z.literal(estimate.requestHash), contractHash: z.string().regex(/^[a-f0-9]{64}$/) }).strict().parse(JSON.parse(String(bindingRow.body)));

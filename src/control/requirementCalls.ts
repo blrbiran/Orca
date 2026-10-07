@@ -16,7 +16,7 @@ import { assertCallUsageBooked, closeSingleCall, insertSingleCallRun, verifyStop
 import { singleCallClaimRowOf } from "./singleCall.js";
 import type { SingleCallHandler, SingleCallPrepareDeps, SingleCallRequest, SingleCallRunRow } from "./singleCallPurposes.js";
 import { writeCanonicalRecord } from "./snapshot.js";
-import { gateClaim } from "./spendCaps.js";
+import { clearSpendCapBlock, gateClaim } from "./spendCaps.js";
 import type { AdmissionGate } from "./admissionGate.js";
 import type { ControlStore } from "./store.js";
 
@@ -77,6 +77,13 @@ function upsertOutbox(store: ControlStore, id: string, kind: string, body: unkno
  * (webDispatch.ts "usage-unknown"), version 1 has no command that clears unknown usage, so that wait is final.
  */
 export function claimRequirementCallInTransaction(store: ControlStore, groupId: string, at: number = Date.now()): "claimed" | "nothing" | "waiting" | "held" | "capped" {
+  const outcome = claimOrWait(store, groupId, at);
+  // Accounts spec §6.3.1: a call that is not claimed for another reason (held, nothing due, a limit wait) no longer waits on a cap.
+  if (outcome !== "claimed" && outcome !== "capped") clearSpendCapBlock(store, groupId, "requirement-call");
+  return outcome;
+}
+
+function claimOrWait(store: ControlStore, groupId: string, at: number): "claimed" | "nothing" | "waiting" | "held" | "capped" {
   const group = readRequirementGroup(store, groupId);
   if (group.status !== "clarifying") return "nothing";
   if (group.stopped || store.db.prepare("SELECT group_id FROM stop_intents WHERE group_id=?").get(groupId)) return "held";
@@ -87,7 +94,7 @@ export function claimRequirementCallInTransaction(store: ControlStore, groupId: 
   const reserved = add(group.reserved, REQUIREMENT_CALL_GRANT);
   if (!fits(group.used, reserved, group.limit)) { setWaiting(store, groupId, target, "requirement-budget-exhausted"); return "waiting"; }
   // Accounts spec §6.3.1, D9: a call over a spend cap is not claimed; the wake stays pending and the block is on the view.
-  if (!gateClaim(store, groupId, REQUIREMENT_CALL_GRANT.tokens, at)) return "capped";
+  if (!gateClaim(store, groupId, REQUIREMENT_CALL_GRANT.tokens, at, "requirement-call")) return "capped";
   setWaiting(store, groupId, target, null);
   const attempt = (target.kind === "round" ? readRound(store, groupId, target.no).calls : readDraft(store, groupId, target.no).calls).length + 1;
   const slot = group.requirement.agentSlot, profile = group.requirement.profile;

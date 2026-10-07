@@ -63,24 +63,29 @@ export function spendCapBlocking(store: ControlStore, repoId: string | null, gra
   return binding !== undefined && grantTokens > binding.headroom ? binding : null;
 }
 
+/** Which claim a block belongs to: one group can wait on an estimate claim and on a start claim at different times. */
+export type SpendClaim = "start" | "estimate" | "requirement-call";
+
+/** Spec §6.3: the binding cap a group's claim of `grantTokens` does not fit into, or null. Read-only; 0 always fits. */
+export function claimCapBlocking(store: ControlStore, groupId: string, grantTokens: number, at: number): CapStatus | null {
+  const row = store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId);
+  if (!row) throw new ControlError("group-not-found");
+  return grantTokens > 0 ? spendCapBlocking(store, groupRepoIdOf(JSON.parse(String(row.body)) as Record<string, unknown>), grantTokens, at) : null;
+}
+
 /**
  * Spec §6.3.1, D9: called inside the claim's own transaction, so the headroom read and the claim cannot be split by
  * another writer. False = do not claim: the caller leaves its wake pending, and a block is a deferred wake, re-checked on
  * every wake (a raised cap or a new period resumes it without a command). The block is written to spend_cap_blocks (the
- * group's and requirement's `spendCapBlock`), and cleared once a claim fits; a projection change only when the row
- * changes. A grant of 0 claims nothing and never blocks. D19: the legacy scheduler's claimWork (budget.ts, `orca
- * scheduler`) does not call this -- a known gap of this round, not a gated path.
+ * group's and requirement's `spendCapBlock`), tagged with its claim kind, and cleared once a claim of that kind fits (or
+ * clearSpendCapBlock); a projection change only when the row changes. A grant of 0 claims nothing and never blocks.
+ * D19: the legacy scheduler's claimWork (budget.ts) does not call this -- a known gap of this round, not a gated path.
  */
-export function gateClaim(store: ControlStore, groupId: string, grantTokens: number, at: number): boolean {
-  const row = store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId);
-  if (!row) throw new ControlError("group-not-found");
-  const blocking = grantTokens > 0 ? spendCapBlocking(store, groupRepoIdOf(JSON.parse(String(row.body)) as Record<string, unknown>), grantTokens, at) : null;
+export function gateClaim(store: ControlStore, groupId: string, grantTokens: number, at: number, claim: SpendClaim): boolean {
+  const blocking = claimCapBlocking(store, groupId, grantTokens, at);
+  if (blocking === null) { clearSpendCapBlock(store, groupId, claim); return true; }
   const prior = store.db.prepare("SELECT body FROM spend_cap_blocks WHERE group_id=?").get(groupId);
-  if (blocking === null) {
-    if (prior) { store.db.prepare("DELETE FROM spend_cap_blocks WHERE group_id=?").run(groupId); recordProjectionChange(store, [groupId]); }
-    return true;
-  }
-  const body = JSON.stringify({ code: "spend-cap-reached", scope: blocking.scope, period: blocking.period, capTokens: blocking.tokens, grantTokens });
+  const body = JSON.stringify({ code: "spend-cap-reached", scope: blocking.scope, period: blocking.period, capTokens: blocking.tokens, grantTokens, claim });
   if (!prior || String(prior.body) !== body) {
     store.db.prepare("INSERT INTO spend_cap_blocks(group_id,body) VALUES (?,?) ON CONFLICT(group_id) DO UPDATE SET body=excluded.body").run(groupId, body);
     recordProjectionChange(store, [groupId]);
@@ -88,10 +93,23 @@ export function gateClaim(store: ControlStore, groupId: string, grantTokens: num
   return false;
 }
 
-/** The block gateClaim recorded for a group (its view's `spendCapBlock`), or null. */
+/**
+ * Drop a group's block: of one claim kind (that claim fits, or left the queue another way), or of any kind (`null`: the
+ * group was stopped). Another kind's block stays -- an idle start delivery says nothing about a waiting estimate.
+ */
+export function clearSpendCapBlock(store: ControlStore, groupId: string, claim: SpendClaim | null): void {
+  const prior = store.db.prepare("SELECT body FROM spend_cap_blocks WHERE group_id=?").get(groupId);
+  if (!prior || (claim !== null && (JSON.parse(String(prior.body)) as { claim?: unknown }).claim !== claim)) return;
+  store.db.prepare("DELETE FROM spend_cap_blocks WHERE group_id=?").run(groupId);
+  recordProjectionChange(store, [groupId]);
+}
+
+/** The block gateClaim recorded for a group, as its view's `spendCapBlock` (without the claim kind), or null. */
 export function readSpendCapBlock(store: ControlStore, groupId: string): unknown {
   const row = store.db.prepare("SELECT body FROM spend_cap_blocks WHERE group_id=?").get(groupId);
-  return row ? JSON.parse(String(row.body)) : null;
+  if (!row) return null;
+  const { claim: _claim, ...block } = JSON.parse(String(row.body)) as Record<string, unknown>;
+  return block;
 }
 
 /**

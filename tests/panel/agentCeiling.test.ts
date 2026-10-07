@@ -13,8 +13,8 @@ import { requirementHarness } from "../control/fixtures/requirementHarness.js";
 import { VALID_SPLIT } from "../control/fixtures/requirementOutputs.js";
 import { openTestStore } from "../control/fixtures/store.js";
 
-const setCap = (store: ControlStore, tokens: number) =>
-  store.db.prepare("INSERT INTO spend_caps(scope,period,tokens,updated_at,updated_by) VALUES ('all','total',?,1,'user:u1') ON CONFLICT(scope,period) DO UPDATE SET tokens=excluded.tokens").run(tokens);
+const setCap = (store: ControlStore, tokens: number, scope = "all") =>
+  store.db.prepare("INSERT INTO spend_caps(scope,period,tokens,updated_at,updated_by) VALUES (?,'total',?,1,'user:u1') ON CONFLICT(scope,period) DO UPDATE SET tokens=excluded.tokens").run(scope, tokens);
 const AGENT = { client: "cli", principal: "agent:cli" };
 
 /** webFixture's import call (tests/control/fixtures/web.ts), for another group of the same plan. */
@@ -48,6 +48,17 @@ describe("the agent ceiling (spec §6.3.2, D4, D10)", () => {
       // D10: the refused commandId was not burned, and under enough headroom an agent's import is accepted.
       setCap(h.store, limit);
       expect(withCommandContext("agent-import", AGENT, await prepare("agent-import", "g3"))).toMatchObject({ result: { kind: "imported", groupId: "g3" } });
+    } finally { await h.dispose(); }
+  });
+
+  it("an agent's import is held to its repository's cap too", async () => {
+    const h = await webFixture(); try {
+      const prepare = await importer(h);
+      setCap(h.store, 1, "repo:repo");
+      let refusal: unknown = null;
+      try { withCommandContext("agent-import", AGENT, await prepare("agent-import", "g2")); } catch (error) { refusal = error; }
+      expect(refusal).toMatchObject({ cap: { scope: "repo:repo", period: "total", tokens: 1 } });
+      expect(h.store.db.prepare("SELECT id FROM groups WHERE id='g2'").get()).toBe(undefined);
     } finally { await h.dispose(); }
   });
 

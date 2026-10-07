@@ -16,7 +16,7 @@ import { claimableContinuations, continuationAlreadyClaimed, continuationWakeBod
 import { singleCallClaimRowOf } from "./singleCall.js";
 import { claimRequirementCall } from "./requirementCalls.js";
 import { hasRequirementBlock, readRequirementGroup } from "./requirementRecords.js";
-import { gateClaim } from "./spendCaps.js";
+import { claimCapBlocking, gateClaim } from "./spendCaps.js";
 
 export type Phase = "estimate" | "work" | "handoff" | "single-call";
 export type StartCommand = Extract<RawAuthorityCommandV1, { verb: "start" }>;
@@ -190,8 +190,12 @@ export async function deliverScheduledStart(deps: WebDispatchDeps, groupId: stri
     if (!wake) return activeWorkRun(store, groupId) ?? { kind: "idle" };
     if (stopIsPending(store, groupId)) return { kind: "blocked", reason: "group-stopped" };
     const snapshot = readFrozenSnapshot(store, groupId);
+    const at = (deps.now?.() ?? new Date()).getTime();
+    // A capped claim is not probed (the agent is asked nothing while the group only waits on a cap). Read-only: the gate
+    // in the transaction below decides; with no probe there is no await in between, so it reads what this read did.
+    const precapped = claimCapBlocking(store, groupId, claimGrantTokens(store, groupId, wake), at) !== null;
     let blocked = false;
-    try {
+    if (!precapped) try {
       const bindings = resolveBindings(profileRouter, snapshot);
       const observations = await probeFrozen(profileRouter, bindings, frozenTaskSelections(store, groupId));
       blocked = observations.some((observation) => probeBlocksDispatch(observation, snapshot.budgetMode));
@@ -213,7 +217,7 @@ export async function deliverScheduledStart(deps: WebDispatchDeps, groupId: stri
       }
       // Accounts spec §6.3.1, D9: in this transaction, so no other claim lands between the headroom read and this one.
       // A capped claim answers `blocked`: the handler leaves the wake pending, and the next wake re-checks.
-      if (!gateClaim(store, groupId, claimGrantTokens(store, groupId, still), (deps.now?.() ?? new Date()).getTime())) return { kind: "blocked" as const, reason: "spend-cap-reached" };
+      if (!gateClaim(store, groupId, claimGrantTokens(store, groupId, still), at, "start")) return { kind: "blocked" as const, reason: "spend-cap-reached" };
       const startRevision = "resumeRevision" in still ? still.resumeRevision : still.body.startRevision;
       if ("resumeRevision" in still) {
         const continuation = deliverContinuationWake(store, groupId, still, snapshot);

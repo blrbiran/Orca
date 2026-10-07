@@ -5,6 +5,7 @@ import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { dimensions } from "./commands.js";
 import { add, budgetBalance, subtract } from "./budget.js";
 import { ControlError } from "./errors.js";
+import { clearSpendCapBlock } from "./spendCaps.js";
 import { recordProjectionChange } from "./projectionJournal.js";
 import { readBudgetProposal, readWork, saveWork, type BudgetProposalRecord } from "./queries.js";
 import { writeCanonicalRecord } from "./snapshot.js";
@@ -220,6 +221,8 @@ export function saveStopIntent(store: ControlStore, groupId: string, mode: StopM
   store.db.prepare(`INSERT INTO stop_intents(group_id,mode,revision,body) VALUES (?,?,?,?)
     ON CONFLICT(group_id) DO UPDATE SET mode=excluded.mode,revision=excluded.revision,body=excluded.body`)
     .run(groupId, mode, revision, canonicalBytes(intent).toString("utf8"));
+  // Accounts spec §6.3.1: a stopped group claims nothing, so nothing of it waits on a spend cap any more.
+  clearSpendCapBlock(store, groupId, null);
 }
 
 function rewriteStopIntentState(store: ControlStore, groupId: string, intent: StopIntentV1, state: StopState): void {
