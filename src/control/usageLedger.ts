@@ -19,7 +19,7 @@ export function usageSource(run: { phase?: string; purpose?: string }, bucket: "
   return bucket === "work" ? "run-work" as const : "run-handoff" as const;
 }
 
-/** The pre-ledger migration's COALESCE (plan.repoId, then requirement.repoId, then projectKey), skipping non-strings and "". */
+/** A group's repository: the first of plan.repoId, requirement.repoId, projectKey that is a non-empty string; schema7To8PreLedger picks the same. */
 export function groupRepoIdOf(body: Record<string, unknown>): string | null {
   const pick = (value: unknown) => (typeof value === "string" && value !== "" ? value : null);
   return pick((body.plan as { repoId?: unknown } | undefined)?.repoId) ?? pick((body.requirement as { repoId?: unknown } | undefined)?.repoId) ?? pick(body.projectKey);

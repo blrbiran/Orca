@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { ZodError } from "zod";
 import { claimWork } from "../../src/control/budget.js";
 import { withCommandContext } from "../../src/control/commandClient.js";
-import { lookupCommandResult } from "../../src/control/commandLedger.js";
+import { lookupCommandResult, spendRevision } from "../../src/control/commandLedger.js";
 import { readProjectionState } from "../../src/control/projectionJournal.js";
 import { AgentCeilingRefusal, capStatuses, committedTokens, readCaps, spendCapBlocking } from "../../src/control/spendCaps.js";
 import { applySpendCommand, type SpendCommand } from "../../src/control/spendCommands.js";
@@ -89,8 +89,9 @@ describe("headroom (spec §6.2, D4)", () => {
 
 const spend = (commandId: string, expectedRevision: number, verb: SpendCommand["verb"], payload: unknown) =>
   ({ schema: "orca-raw-command-v1", commandId, expectedRevision, actorId: "operator-1", verb, target: { kind: "spend" }, payload }) as SpendCommand;
+// The panel holds one repository, r1 (a repo:<id> cap must name a held one, as set-workspace-mode's target must).
 const asUser = (command: SpendCommand, now = 5_000) =>
-  withCommandContext(command.commandId, { client: "web", principal: "user:u1" }, () => applySpendCommand({ store: h!.store, now: () => new Date(now) }, command));
+  withCommandContext(command.commandId, { client: "web", principal: "user:u1" }, () => applySpendCommand({ store: h!.store, now: () => new Date(now), knownRepository: (id) => id === "r1" }, command));
 let h: Awaited<ReturnType<typeof openTestStore>> | undefined;
 
 describe("the cap verbs (spec §6.1, D5)", () => {
@@ -139,6 +140,41 @@ describe("the cap verbs (spec §6.1, D5)", () => {
       expect(rawAuthorityCommandSchema.safeParse(spend("cap-8", 5, "set-spend-cap", { scope: "repo:", period: "month", tokens: 1 })).success).toBe(false);
       expect(rawAuthorityCommandSchema.safeParse(spend("cap-8", 5, "set-spend-cap", { scope: "all", period: "day", tokens: 1 })).success).toBe(false);
       expect(rawAuthorityCommandSchema.safeParse(spend("cap-8", 5, "set-spend-cap", { scope: "all", period: "week", tokens: 0 })).success).toBe(false);
+    } finally { await h.dispose(); h = undefined; }
+  });
+});
+
+describe("the cap verbs' inputs (final review: unknown repository, canonical zone, corrupt revision)", () => {
+  it("refuses a repo:<id> cap for a repository the panel does not hold, by name, and still clears one left behind", async () => {
+    h = await openTestStore(); try {
+      const refused = asUser(spend("cap-u1", 0, "set-spend-cap", { scope: "repo:gone", period: "week", tokens: 10 }));
+      expect(refused).toMatchObject({ error: { code: "spend-cap-repository-unknown", message: 'spend-cap-repository-unknown:this panel holds no repository "gone" to cap' } });
+      expect(readCaps(h.store)).toEqual([]);
+      // A cap whose repository has since left the panel can still be cleared (nothing would otherwise remove it).
+      h.store.db.prepare("INSERT INTO spend_caps(scope,period,tokens,updated_at,updated_by) VALUES ('repo:gone','week',10,1,'user:u1')").run();
+      const revision = spendRevision(h.store);
+      expect(asUser(spend("cap-u2", revision, "clear-spend-cap", { scope: "repo:gone", period: "week" }))).toMatchObject({ result: { kind: "spend-cap-cleared" } });
+      expect(readCaps(h.store)).toEqual([]);
+    } finally { await h.dispose(); h = undefined; }
+  });
+
+  it("stores a zone under its canonical name, so a case variant of the stored zone is a no-op", async () => {
+    h = await openTestStore(); try {
+      expect(asUser(spend("cal-c1", 0, "set-usage-calendar", { timeZone: "asia/tokyo", weekStart: 2 }))).toMatchObject({ result: { kind: "usage-calendar-set" } });
+      expect(readUsageCalendar(h.store)).toEqual({ timeZone: "Asia/Tokyo", weekStart: 2 });
+      expect(asUser(spend("cal-c2", 1, "set-usage-calendar", { timeZone: "ASIA/TOKYO", weekStart: 2 }))).toMatchObject({ error: { code: "no-op-command" } });
+    } finally { await h.dispose(); h = undefined; }
+  });
+
+  it("a stored spend revision that is not a positive safe integer blocks by name instead of reading as NaN or 0", async () => {
+    h = await openTestStore(); try {
+      h.store.db.exec("PRAGMA ignore_check_constraints=ON");
+      for (const bad of [0n, -1n, 2n ** 53n + 1n]) {
+        h.store.db.prepare("INSERT INTO spend_settings(singleton,revision) VALUES (1,?) ON CONFLICT(singleton) DO UPDATE SET revision=excluded.revision").run(bad);
+        let thrown: unknown;
+        try { spendRevision(h.store); } catch (error) { thrown = error; }
+        expect([String(bad), thrown]).toEqual([String(bad), expect.objectContaining({ code: "recovery-blocked", detail: "spend-settings-invalid" })]);
+      }
     } finally { await h.dispose(); h = undefined; }
   });
 });

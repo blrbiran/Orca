@@ -866,4 +866,6 @@ export const zhErrors: Record<string, string> = {
   // web/src/AuthGate.tsx's own check before a new password is sent (accounts spec §3.2).
   "password-mismatch": "两次输入的密码不一致。",
   "spend-cap-reached": "已到花费上限，这个组的下一次认领在等待；提高上限或等到下一个周期后会自动继续。",
+  // Accounts final review: a project spend cap is accepted only for a repository this panel holds.
+  "spend-cap-repository-unknown": "这个面板没有这个仓库，不能给它设花费上限。",
 };

@@ -3,6 +3,8 @@ import type { ControlStore } from "./store.js";
 export interface UsageCalendar { timeZone: string; weekStart: number }
 export const hostTimeZone = (): string => Intl.DateTimeFormat().resolvedOptions().timeZone;
 export function isTimeZone(name: string): boolean { try { new Intl.DateTimeFormat("en-US", { timeZone: name }); return true; } catch { return false; } }
+/** The zone's canonical name ("asia/tokyo" → "Asia/Tokyo"), so one zone is stored, compared and shown one way. */
+export const canonicalTimeZone = (name: string): string => new Intl.DateTimeFormat("en-US", { timeZone: name }).resolvedOptions().timeZone;
 
 export function readUsageCalendar(store: ControlStore): UsageCalendar {
   const row = store.db.prepare("SELECT time_zone,week_start FROM usage_calendar WHERE singleton=1").get();

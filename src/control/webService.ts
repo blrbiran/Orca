@@ -551,7 +551,7 @@ export class WebControlService {
   clearSpendCap(command: Extract<SpendCommand, { verb: "clear-spend-cap" }>): WebCommandResult { return this.applySpend(command); }
   setUsageCalendar(command: Extract<SpendCommand, { verb: "set-usage-calendar" }>): WebCommandResult { return this.applySpend(command); }
   private applySpend(command: SpendCommand): WebCommandResult {
-    return applySpendCommand({ store: this.store, admissionGate: this.deps.admissionGate, now: this.deps.now }, command) as WebCommandResult;
+    return applySpendCommand({ store: this.store, admissionGate: this.deps.admissionGate, now: this.deps.now, knownRepository: this.deps.knownRepository ?? (() => false) }, command) as WebCommandResult;
   }
   async resumeFromHandoff(command: ResumeFromHandoffCommand): Promise<WebCommandResult> {
     return applyResumeFromHandoff(this.stopDeps(), command) as WebCommandResult;

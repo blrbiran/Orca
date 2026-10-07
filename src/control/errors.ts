@@ -25,6 +25,8 @@ export const durableCommandErrorStatuses = {
   "command-result-not-found": 404,
   "control-target-not-allowed": 404,
   "route-not-found": 404,
+  // Accounts final review: a `repo:<id>` spend cap for a repository the panel does not hold; the detail names the id.
+  "spend-cap-repository-unknown": 404,
 
   // Optimistic concurrency, immutable identity, and ownership conflicts.
   // Agent selection spec §6.4 step 3 (W6-12): the selections a confirmation resolves are no longer the ones the

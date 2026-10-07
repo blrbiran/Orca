@@ -2,6 +2,7 @@ import { applyWebCommand } from "./commandLedger.js";
 import { commandPrincipalFor } from "./commandClient.js";
 import { ControlError } from "./errors.js";
 import type { AdmissionGate } from "./admissionGate.js";
+import { canonicalTimeZone } from "./usageCalendar.js";
 import type { ControlStore } from "./store.js";
 import type { CommandErrorBodyV1, CommandSuccessV1, RawAuthorityCommandV1 } from "./webProtocol.js";
 
@@ -10,10 +11,11 @@ export type SpendCommand = Extract<RawAuthorityCommandV1, { verb: "set-spend-cap
 /**
  * Accounts spec §6.1, D5, D6: set or clear a spend cap, or set the usage calendar, under the spend scope's own revision
  * (spend_settings). It moves no group revision and no projection; the command ledger records the verb, payload and
- * principal, and the cap row names who set it.
+ * principal, and the cap row names who set it. A repository cap must name a repository the panel holds (as
+ * set-workspace-mode does); clearing one is always allowed, so a cap left by a repository since removed can be cleared.
  */
 export function applySpendCommand(
-  deps: { store: ControlStore; admissionGate?: AdmissionGate; now?: () => Date },
+  deps: { store: ControlStore; admissionGate?: AdmissionGate; now?: () => Date; knownRepository(repoId: string): boolean },
   command: SpendCommand,
 ): CommandSuccessV1 | CommandErrorBodyV1 {
   const release = deps.admissionGate?.enter();
@@ -30,6 +32,7 @@ export function applySpendCommand(
         let kind: "spend-cap-set" | "spend-cap-cleared" | "usage-calendar-set";
         if (raw.verb === "set-spend-cap") {
           const { scope, period, tokens } = raw.payload;
+          if (scope.startsWith("repo:") && !deps.knownRepository(scope.slice(5))) throw new ControlError("spend-cap-repository-unknown", `this panel holds no repository "${scope.slice(5)}" to cap`);
           const prior = db.prepare("SELECT tokens FROM spend_caps WHERE scope=? AND period=?").get(scope, period);
           if (prior && Number(prior.tokens) === tokens) throw new ControlError("no-op-command");
           db.prepare("INSERT INTO spend_caps(scope,period,tokens,updated_at,updated_by) VALUES (?,?,?,?,?) ON CONFLICT(scope,period) DO UPDATE SET tokens=excluded.tokens,updated_at=excluded.updated_at,updated_by=excluded.updated_by")
@@ -39,11 +42,13 @@ export function applySpendCommand(
           if (Number(db.prepare("DELETE FROM spend_caps WHERE scope=? AND period=?").run(raw.payload.scope, raw.payload.period).changes) === 0) throw new ControlError("no-op-command");
           kind = "spend-cap-cleared";
         } else if (raw.verb === "set-usage-calendar") {
-          // Compared with the stored row, not the host default: setting the default explicitly pins it.
+          // Compared with the stored row, not the host default: setting the default explicitly pins it. The zone is stored
+          // under its canonical name, so "asia/tokyo" after "Asia/Tokyo" is the same calendar (a no-op).
+          const timeZone = canonicalTimeZone(raw.payload.timeZone);
           const prior = db.prepare("SELECT time_zone,week_start FROM usage_calendar WHERE singleton=1").get();
-          if (prior && String(prior.time_zone) === raw.payload.timeZone && Number(prior.week_start) === raw.payload.weekStart) throw new ControlError("no-op-command");
+          if (prior && String(prior.time_zone) === timeZone && Number(prior.week_start) === raw.payload.weekStart) throw new ControlError("no-op-command");
           db.prepare("INSERT INTO usage_calendar(singleton,time_zone,week_start) VALUES (1,?,?) ON CONFLICT(singleton) DO UPDATE SET time_zone=excluded.time_zone,week_start=excluded.week_start")
-            .run(raw.payload.timeZone, raw.payload.weekStart);
+            .run(timeZone, raw.payload.weekStart);
           kind = "usage-calendar-set";
         } else throw new ControlError("control-target-not-allowed");
         db.prepare("INSERT INTO spend_settings(singleton,revision) VALUES (1,?) ON CONFLICT(singleton) DO UPDATE SET revision=excluded.revision")

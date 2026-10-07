@@ -78,8 +78,12 @@ function operatorRevision(store: ControlStore, operatorId: string): number {
 
 /** Accounts spec §6.1, D5: the spend scope (caps and the usage calendar) is checked against spend_settings.revision (0 with no row). */
 export function spendRevision(store: ControlStore): number {
-  const row = store.db.prepare("SELECT revision FROM spend_settings WHERE singleton=1").get();
-  return row ? Number(row.revision) : 0;
+  // Read as text: node:sqlite throws a RangeError for an integer past 2^53 instead of returning it.
+  const row = store.db.prepare("SELECT CAST(revision AS TEXT) AS revision FROM spend_settings WHERE singleton=1").get();
+  if (!row) return 0;
+  const revision = Number(row.revision);
+  if (!Number.isSafeInteger(revision) || revision <= 0) throw new ControlError("recovery-blocked", "spend-settings-invalid");
+  return revision;
 }
 
 /** A settings scope carries its own revision; null means the scope is a group or global one. */

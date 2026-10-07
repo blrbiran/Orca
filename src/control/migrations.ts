@@ -89,9 +89,12 @@ CREATE TABLE IF NOT EXISTS usage_calendar(singleton INTEGER PRIMARY KEY CHECK(si
 CREATE TABLE IF NOT EXISTS spend_settings(singleton INTEGER PRIMARY KEY CHECK(singleton=1), revision INTEGER NOT NULL CHECK(revision >= 0)) STRICT;
 CREATE TABLE IF NOT EXISTS spend_cap_blocks(group_id TEXT PRIMARY KEY REFERENCES groups(id), body TEXT NOT NULL) STRICT;
 `;
-// Each group's existing usage as one pre-ledger row, applied_at 0, so it counts in totals and in no week or month.
+// Each group's existing usage as one pre-ledger row, applied_at 0, so it counts in totals and in no week or month. The
+// repository is groupRepoIdOf's (usageLedger.ts): the first of plan.repoId, requirement.repoId, projectKey that is a
+// non-empty string, so a pre-ledger row and a later row of the same group never name two repositories.
+const repoPath = (path: string) => `NULLIF(CASE json_type(body,'${path}') WHEN 'text' THEN json_extract(body,'${path}') END, '')`;
 export const schema7To8PreLedger = `INSERT INTO usage_ledger(applied_at,group_id,repo_id,run_id,source,model,input,output,cache_read,cache_write,tokens,quality)
-  SELECT 0, id, COALESCE(json_extract(body,'$.plan.repoId'), json_extract(body,'$.requirement.repoId'), json_extract(body,'$.projectKey')), NULL, 'pre-ledger', NULL, NULL, NULL, NULL, NULL, COALESCE(json_extract(body,'$.used.tokens'), 0), 'unattributed' FROM groups;
+  SELECT 0, id, COALESCE(${repoPath("$.plan.repoId")}, ${repoPath("$.requirement.repoId")}, ${repoPath("$.projectKey")}), NULL, 'pre-ledger', NULL, NULL, NULL, NULL, NULL, COALESCE(json_extract(body,'$.used.tokens'), 0), 'unattributed' FROM groups;
 `;
 export const schema7To8 = schema7To8Principal + schema7To8Tables + schema7To8PreLedger;
 

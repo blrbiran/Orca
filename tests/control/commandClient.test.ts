@@ -38,7 +38,7 @@ describe("command client context (spec §6)", () => {
 });
 
 describe("schema 6 to 7 (spec §6)", () => {
-  it("a fresh store has commands.client and version 7", async () => {
+  it("a fresh store has commands.client and is at the current version (8)", async () => {
     const store = await openControlStore({ stateDir: await stateDir() });
     try {
       expect(schemaVersion).toBe("8");

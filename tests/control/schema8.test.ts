@@ -10,6 +10,7 @@ import { createGroup } from "../../src/control/commands.js";
 import type { EffectiveAuthorityCommandV1, RawAuthorityCommandV1 } from "../../src/control/webProtocol.js";
 import { migrateSchema, schemaVersion } from "../../src/control/migrations.js";
 import { openControlStore } from "../../src/control/store.js";
+import { groupRepoIdOf } from "../../src/control/usageLedger.js";
 import { openTestStore } from "./fixtures/store.js";
 
 // Vite cannot resolve the bare node:sqlite specifier; load it the way the store and commandClient.test.ts do.
@@ -60,6 +61,28 @@ describe("schema 7 to 8 (accounts spec §5, §6, D3)", () => {
         { applied_at: 0, group_id: "g1", repo_id: "r1", source: "pre-ledger", model: null, tokens: 1234, quality: "unattributed" },
         { applied_at: 0, group_id: "g2", repo_id: "r2", source: "pre-ledger", model: null, tokens: 5, quality: "unattributed" },
       ]);
+    } finally { store.close(); }
+  });
+
+  // Final review Minor 2: the pre-ledger row names the repository groupRepoIdOf names for the same body, so caps and
+  // usage scoped to a repository count a group's pre-ledger usage and its later usage under one id. An empty string
+  // or a non-string at an earlier path is skipped, never booked as the repository.
+  it("the pre-ledger repository is groupRepoIdOf's for every body shape, skipping \"\" and non-strings", async () => {
+    const bodies: Record<string, Record<string, unknown>> = {
+      a: { plan: { repoId: "" }, requirement: { repoId: "ra" } },
+      b: { plan: { repoId: 5 }, projectKey: "pb" },
+      c: { requirement: { repoId: { x: 1 } }, projectKey: "pc" },
+      d: { plan: { repoId: true }, requirement: { repoId: "" }, projectKey: "" },
+      e: { plan: { repoId: "re" }, projectKey: "pe" },
+    };
+    const dir = await version7Store((raw) => {
+      for (const [id, body] of Object.entries(bodies)) raw.prepare("INSERT INTO groups(id,revision,graph_version,body) VALUES (?,0,1,?)").run(id, groupBody(body, 1));
+    });
+    const store = await openControlStore({ stateDir: dir });
+    try {
+      const booked = Object.fromEntries(store.db.prepare("SELECT group_id,repo_id FROM usage_ledger").all().map((row) => [String(row.group_id), row.repo_id]));
+      expect(booked).toEqual({ a: "ra", b: "pb", c: "pc", d: null, e: "re" });
+      expect(booked).toEqual(Object.fromEntries(Object.entries(bodies).map(([id, body]) => [id, groupRepoIdOf(body)])));
     } finally { store.close(); }
   });
 
