@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import { createServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { controlSocketPath } from "../../src/panel/controlSocket.js";
 import { TOKEN_ANCHOR } from "../../src/panel/staticFiles.js";
 import { readPanelJson } from "../../src/service/instance.js";
+import { LOG_MAX_BYTES } from "../../src/service/logRotate.js";
 import { isProcessAlive, processStartTime } from "../../src/service/processInfo.js";
 
 const roots: string[] = [];
@@ -22,12 +23,15 @@ async function workspace() {
   // realpath: the panel names its socket by the resolved path, and macOS's tmpdir is under the /var symlink.
   const r = await realpath(await mkdtemp(join(tmpdir(), "sp-")));
   roots.push(r);
-  for (const d of ["repo", "dist", "p", "c", "k"]) await mkdir(join(r, d));
+  for (const d of ["repo", "dist", "p", "p/logs", "c", "k"]) await mkdir(join(r, d));
   writeFileSync(join(r, "dist", "index.html"), `<!doctype html><html><body>${TOKEN_ANCHOR}</body></html>`);
   // An explicit short state dir: in service mode a socket path over sun_path's 104 bytes is exit 78 (plan D13), and
   // <scoped TMPDIR>/sp-XXXXXX/c/<repo key>/control.sock measured 108 bytes on macOS.
-  return { r, panelDir: join(r, "p"), controlDir: join(r, "c"), state: join(r, "s"), lock: join(r, "p", "panel.lock"), json: join(r, "p", "panel.json") };
+  return { r, panelDir: join(r, "p"), controlDir: join(r, "c"), state: join(r, "s"), lock: join(r, "p", "panel.lock"), json: join(r, "p", "panel.json"), errLog: join(r, "p", "logs", "panel.err.log") };
 }
+
+/** A log one byte over the rotation limit (spec §6): rotated only by the instance that holds the lock. */
+const oversizeLog = (file: string): void => writeFileSync(file, Buffer.alloc(LOG_MAX_BYTES + 1, 0x61), { mode: 0o600 });
 
 function servicePanel(w: Awaited<ReturnType<typeof workspace>>, extra: string[] = [], service = true) {
   const args = ["src/cli.ts", "panel", "run", ...(service ? ["--service"] : []), "--by", "t", "--repo", `p=${join(w.r, "repo")}`, "--dist", join(w.r, "dist"), "--control-state-dir", w.state, ...extra];
@@ -53,8 +57,10 @@ function servicePanel(w: Awaited<ReturnType<typeof workspace>>, extra: string[] 
 describe("orca panel run --service (spec §5)", () => {
   it("takes the lock, writes panel.json naming its socket, and removes both on SIGTERM", async () => {
     const w = await workspace();
+    oversizeLog(w.errLog);
     const p = servicePanel(w, ["--port", "0"]);
     await p.ready();
+    expect([statSync(w.errLog).size, statSync(`${w.errLog}.1`).size]).toEqual([0, LOG_MAX_BYTES + 1]);
     const json = readPanelJson(w.json);
     expect(json.kind).toBe("valid");
     if (json.kind !== "valid") return;
@@ -94,11 +100,26 @@ describe("orca panel run --service (spec §5)", () => {
 
   it("exits 0 without binding when a live panel holds the lock", async () => {
     const w = await workspace();
-    writeFileSync(w.lock, JSON.stringify({ pid: process.pid, startTime: processStartTime(process.pid) }));
+    const held = JSON.stringify({ pid: process.pid, startTime: processStartTime(process.pid) });
+    writeFileSync(w.lock, held);
+    oversizeLog(w.errLog);
     const p = servicePanel(w, ["--port", "0"]);
     expect(await p.exited).toBe(0);
     expect(p.err()).toContain(`pid ${process.pid}`);
     expect([p.out().includes("orca-panel ready"), existsSync(w.json)]).toEqual([false, false]);
+    // The loser leaves the holder's lock byte for byte, and never copy-truncates the live panel's logs.
+    expect(readFileSync(w.lock, "utf8")).toBe(held);
+    expect([statSync(w.errLog).size, existsSync(`${w.errLog}.1`)]).toEqual([LOG_MAX_BYTES + 1, false]);
+  }, 60_000);
+
+  it("closes the bound panel and exits when panel.json cannot be written, leaving no lock", async () => {
+    const w = await workspace();
+    // A directory where panel.json goes: the temp-file rename over it fails after the panel has bound.
+    await mkdir(join(w.json, "occupied"), { recursive: true });
+    const p = servicePanel(w, ["--port", "0"]);
+    const gone = await Promise.race([p.exited, new Promise<string>((resolve) => setTimeout(() => resolve("still running"), 20_000))]);
+    expect(gone).toBe(3);
+    expect(existsSync(w.lock)).toBe(false);
   }, 60_000);
 
   it("takes over a lock whose pid was reused (start time differs)", async () => {

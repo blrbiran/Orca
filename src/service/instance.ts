@@ -16,8 +16,10 @@ const unlinkQuiet = (file: string): void => { try { unlinkSync(file); } catch (e
 
 /**
  * Spec §5 and plan D10. link() from a complete temp file is the O_EXCL create: no reader sees a half-written lock.
- * A holder is live only if its pid still has the start time it recorded; anything else is stale and is removed --
- * but only if its bytes are still the ones judged, so a lock a racing panel just took is not removed in its place.
+ * A holder is live only if its pid still has the start time it recorded; anything else is stale and is removed if
+ * its bytes are still the ones judged. That re-read narrows the window but is check-then-unlink, not atomic: two
+ * instances taking over the same stale lock at once could both acquire. Only the service manager starts `--service`,
+ * one instance at a time, and the loser would then exit 78 on the shared port.
  */
 export function acquirePanelLock(file: string, self: LockBody, probe: { startTimeOf(pid: number): string | null }): LockOutcome {
   const body = JSON.stringify(self);

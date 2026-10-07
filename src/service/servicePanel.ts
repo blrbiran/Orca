@@ -13,12 +13,11 @@ import { ServiceRejection } from "./rejection.js";
 const orcaVersion = (): string =>
   (JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "..", "package.json"), "utf8")) as { version: string }).version;
 
-/** Spec §5/§6: what the service manager runs. Lock → panel → panel.json → (closed) → remove panel.json → release. */
+/** Spec §5/§6: what the service manager runs. Lock → rotate logs → panel → panel.json → (closed) → remove panel.json → release. */
 export async function runServicePanel(args: string[], env: NodeJS.ProcessEnv, io: ServiceIo): Promise<number> {
   try {
     const paths = servicePaths(env);
     ensurePrivateDir(paths.panelDir);
-    rotateLogs([paths.outLog, paths.errLog], { maxBytes: LOG_MAX_BYTES, keep: LOG_KEEP });
     const startTime = processStartTime(process.pid);
     if (startTime === null) { io.stderr("orca-panel: cannot read this process's start time (ps -o lstart=); not taking the lock\n"); return 1; }
     const self = { pid: process.pid, startTime };
@@ -29,12 +28,21 @@ export async function runServicePanel(args: string[], env: NodeJS.ProcessEnv, io
       return 0;
     }
     try {
+      // Only the holder rotates: a losing instance must not copy-truncate the live panel's logs.
+      rotateLogs([paths.outLog, paths.errLog], { maxBytes: LOG_MAX_BYTES, keep: LOG_KEEP });
+      const version = orcaVersion();
       const { panelReadyLines, startPanelFromArgs } = await import("../panel/server.js");
       const started = await startPanelFromArgs(args, { service: true });
-      writePanelJson(paths.panelJson, { ...self, url: started.url, socketPath: started.socketPath, version: orcaVersion() });
-      const lines = panelReadyLines(started);
-      io.stdout(lines.stdout);
-      io.stderr(lines.stderr);
+      try {
+        writePanelJson(paths.panelJson, { ...self, url: started.url, socketPath: started.socketPath, version });
+        const lines = panelReadyLines(started);
+        io.stdout(lines.stdout);
+        io.stderr(lines.stderr);
+      } catch (error) {
+        // Spec §5: the lock is released below, so a bound panel must not outlive it -- it would hold the port unseen.
+        await started.close();
+        throw error;
+      }
       await started.closed;
       removePanelJsonIfOurs(paths.panelJson, process.pid);
       return 0;
