@@ -35,7 +35,7 @@ describe("orca panel's human hint", () => {
       await new Promise<void>((resolve, reject) => {
         const timer = setTimeout(() => reject(new Error(`no hint within 30s; stdout: ${stdout} stderr: ${stderr}`)), 30_000);
         const check = (): void => {
-          if (stdout.includes("\n") && stderr.includes("in a browser")) { clearTimeout(timer); resolve(); }
+          if (stdout.includes("\n") && /in a browser[^\n]*\n/.test(stderr)) { clearTimeout(timer); resolve(); }
         };
         child.stdout.on("data", (chunk: Buffer) => { stdout += chunk.toString(); check(); });
         child.stderr.on("data", (chunk: Buffer) => { stderr += chunk.toString(); check(); });
@@ -50,6 +50,7 @@ describe("orca panel's human hint", () => {
     const { url } = parseReadyLine(stdout);
     // Exactly one line on stdout: a hint that drifted onto stdout would add a second one.
     expect(stdout.split("\n").filter((l) => l !== "")).toHaveLength(1);
-    expect(stderr).toContain(`open ${url} in a browser`);
+    // The whole line is pinned (accounts D11): the hint must also say to log in, since the page carries no credential.
+    expect(stderr).toContain(`orca-panel: open ${url} in a browser and log in\n`);
   }, 60_000);
 });
