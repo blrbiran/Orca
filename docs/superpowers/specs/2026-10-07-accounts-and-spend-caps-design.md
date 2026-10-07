@@ -198,3 +198,35 @@ Dollar prices and conversion (H7: later, a per-model price table over `usage_led
 - A same-user process can add a user row or edit `spend_caps` in the store, or edit Orca's code. User creation is surfaced as a notice (§3.2); cap edits are not detected.
 - A same-user process can read `jwt.key` and mint a token, or read `initial-password` before the human does (the forced change on first login and the user-created notice make the latter visible).
 - Spend outside Orca is not bounded by Orca.
+
+## 13. Plan-time decisions (2026-10-07, session 9a20ac38)
+
+Earlier sections are kept as written; this section records decisions taken while planning.
+
+- D1. Accounts (`users`, `sessions`, `security_events`, plus `security_acks`) live in `<control root>/accounts.sqlite`, not in the control store's migration 7→8. A panel serves `/api/*` with no control store at all (`--no-control`, no `--repo`, or the store held elsewhere — `resolveControlOptions` turns 11 of 40 boots off), and legacy `--repo` mode has one store per repository, which would split users; the control root is where §3.2/§3.3 already put `jwt.key` and `initial-password`. Usage, caps and calendar stay in the control store (7→8).
+- D2. §3.2's default owner (the revision after review) supersedes §7's first-run page and §9's "a panel with no users". A panel creates the owner at start, so it always has a user; `orca user add` remains for added users.
+- D3. A command's `actorId` stays the panel operator id: it is inside the raw command hash (cross-channel replay, N2 C12) and scopes agent preferences. The principal is a new column `commands.principal` (`user:<id>` / `agent:<client>`), written beside N2's `client`.
+- D4. `committed(scope)` is the sum of the remaining grant tokens (work + handoff) of active runs (`runs.active=1`) whose group is in scope — "tokens already promised to claimed runs". A group's `committedRemaining` also holds unclaimed allocations, including the grant being claimed, which would count it twice. The agent ceiling compares the import's fresh group limit (without carried clarifying spend) with headroom computed without the importing group's own runs.
+- D5. The three cap verbs use a new command scope `spend` (key `@spend`, revision in `spend_settings`), not `operator`, whose revision is `agent_preferences.revision`.
+- D6. Cap and calendar changes are recorded by the command ledger (verb, payload, principal), not `security_events`, which lives in the accounts store (no cross-database transaction).
+- D7. `byModel` entries reconcile as `Σ(input + output + cacheRead + cacheWrite) = cumulative.tokens`, with `input` = non-cached input (claude: `input_tokens`; codex: `input_tokens − cached_input_tokens`). This is each adapter's own normalization (claude counts cache reads and writes, codex's input already holds its cached part). ccloop omits the field when it cannot tell (absent, so earlier events hash identically); Orca accepts absent or `null`.
+- D8. ccloop's `usageBreakdown` flag is a sibling of `singleCallExecution` in the capabilities answer, outside the frozen seven-key view. Orca accepts it optionally and consumes no behavior from it. Its ccloop task waits for the human to name `tests/control/singleCallCapability.test.ts` C1 (ccloop Rule 15), or to drop the flag.
+- D9. A spend-capped claim defers its wake (the handler answers "not delivered") instead of writing a recovery blocker, so a raised cap or a new period resumes the group without a command. The block is visible in `spend_cap_blocks` and as `spendCapBlock` on the group and requirement views.
+- D10. The agent-ceiling refusal is thrown inside the command transaction as a non-`ControlError` (`AgentCeilingRefusal`): the transaction rolls back, no ledger row is written, the route answers 403 — the human-only gate's behavior (the commandId is not burned).
+- D11. The ready line drops `token=`: `orca-panel ready url=<url>`.
+- D12. `orca user rotate-key` replaces `jwt.key` and revokes every session; the running panel keeps its loaded key until it restarts, and revocation logs everyone out at once.
+- D13. Login throttling: after 5 consecutive failures for a name, attempts for that name answer 429 `login-throttled` for `min(2^(n−5), 300)` seconds (n = consecutive failures); nothing sleeps; one `login-failed` summary row per streak.
+- D14. Corrections and reviews keep `by = --by` (§3.4 changes only the command ledger's actor).
+- D15. Single-call usage (estimate, clarify, split) reaches `usage_ledger` through the same collect events and `recordUsage`; `singleCallLedger.ts` needs no change; `source` is derived from the run's phase and purpose.
+- D16. A usage event whose token delta is 0 writes no ledger row (mechanical handoff events would otherwise add a row per run).
+- D17. scrypt needs `maxmem` 256 MiB (N=2^17, r=8 takes 128 MiB; Node's default limit is 32 MiB).
+- D18. A mismatched breakdown writes one authoritative row (`model NULL`, quality `unattributed`, the event's token delta) plus the reported per-model rows with quality `breakdown-mismatch`; caps and totals read only the former.
+- D19. The legacy scheduler's `claimWork` (`src/control/budget.ts`, used by `orca scheduler`) is not gated in this round; the Web driver, estimate, clarify and split claims are. Recorded as a known gap, not silently skipped.
+
+## 14. Corrections recorded at execution (2026-10-07, session 30bd7e40)
+
+Earlier sections are kept as written; this section records corrections found while executing.
+
+- §4.1 says the per-model breakdown reconciles as `sum(input+output)`; D7 and ccloop (branch `orca/usage-by-model`) use the four-field entry total `input + output + cacheRead + cacheWrite` (input = non-cached input). The four-field sum is authoritative.
+- Breakdown semantics as ccloop emits them: `byModel` is absent (never `null`, never `[]`) when unknown; once a run's breakdown is unknown (a phase spent tokens without one, or a phase's entries do not add up to its own tokens) it stays absent for the rest of that run — Orca never falls back to an earlier event's breakdown; handoff events never carry `byModel`; codex's single entry is named after the configured model; entries are sorted by `model` in JS code-unit order (Orca compares the same way, never `localeCompare`).
+- Orca's usage event schemas are strict; Orca must accept the optional `byModel` before any re-pin to a ccloop that emits it (codex emits it on every successful phase).
