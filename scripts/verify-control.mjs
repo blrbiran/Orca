@@ -18,7 +18,7 @@ try {
 }
 const result = spawnSync(
   process.execPath,
-  [vitest, "run", "tests/control", "--minWorkers=1", "--maxWorkers=4"],
+  [vitest, "run", "tests/control", "--maxWorkers=4"],
   { cwd: root, stdio: "inherit", env: { ...process.env, ORCA_CONTROL_VERIFY: "1" } },
 );
 if (result.error) console.error(result.error);
