@@ -1,5 +1,6 @@
 import { createServer as createHttp, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { createServer as createNet, type AddressInfo } from "node:net";
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -51,7 +52,7 @@ describe("identify (spec §5: liveness is a request, never the pid alone)", () =
   it("does not answer for a dead socket, a missing file or a broken file", async () => {
     const r = await root();
     writePanelJson(join(r, "panel.json"), body(join(r, "gone.sock")));
-    expect(await identifyPanel(join(r, "panel.json"))).toMatchObject({ answering: false });
+    expect(await identifyPanel(join(r, "panel.json"))).toMatchObject({ answering: false, reason: expect.stringContaining("panel-not-running") });
     expect(await identifyPanel(join(r, "none.json"))).toMatchObject({ answering: false, panel: null, reason: expect.stringContaining("no panel.json") });
     await writeFile(join(r, "bad.json"), "{");
     expect(await identifyPanel(join(r, "bad.json"))).toMatchObject({ answering: false, reason: expect.stringContaining("invalid") });
@@ -132,6 +133,23 @@ describe("discovery reads panel.json first after the flag (spec §5)", () => {
     // ORCA_PANEL_DIR names a regular file: ENOTDIR is refused by name, like the projects file (final review I1).
     expect(() => discoverSocketPath({ env: { ...env, ORCA_PANEL_DIR: join(r, "p", "panel.json") } }))
       .toThrow(expect.objectContaining({ code: "control-panel-json-invalid", message: expect.stringContaining("ENOTDIR") }));
+  });
+
+  // Task 9 review: a SIGKILLed or rebooted service panel leaves panel.json and its socket file behind. Its dead pid must
+  // not shadow the live legacy --repo panel that the control-root scan (agent-entry spec §14) would find.
+  it("a panel.json whose pid is dead falls through to the legacy socket under the control root", async () => {
+    const r = await root();
+    const stale = await listenSocket(join(r, "svc"));
+    const child = spawnSync(process.execPath, ["-e", ""]);
+    expect(child.status).toBe(0);
+    await mkdir(join(r, "p"));
+    writePanelJson(join(r, "p", "panel.json"), { ...body(stale), pid: child.pid! });
+    const legacy = await listenSocket(join(r, "ctl", "orca-aaaa"));
+    const env = { ORCA_PANEL_DIR: join(r, "p"), ORCA_PROJECTS_FILE: join(r, "missing.json"), ORCA_CONTROL_DIR: join(r, "ctl") };
+    expect(discoverSocketPath({ env })).toBe(legacy);
+    // The same file with a live pid wins: the fall-through above is the pid, not the fixture.
+    writePanelJson(join(r, "p", "panel.json"), { ...body(stale), pid: process.pid });
+    expect(discoverSocketPath({ env })).toBe(stale);
   });
 
   // Plan Task 3 ruling carried here: panelDir() does not check absoluteness, so discovery must not resolve a relative

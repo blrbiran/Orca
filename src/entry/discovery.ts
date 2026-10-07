@@ -5,6 +5,7 @@ import { CONTROL_SOCKET_NAME } from "../panel/controlSocket.js";
 import { projectsFilePath, readProjectsFile } from "../panel/projectsFile.js";
 import { readPanelJson } from "../service/instance.js";
 import { panelDir } from "../service/paths.js";
+import { isProcessAlive } from "../service/processInfo.js";
 import { EntryRejection } from "./envelope.js";
 
 /**
@@ -20,7 +21,7 @@ export function discoverSocketPath(input: { stateDirFlag?: string; env: NodeJS.P
     return join(input.stateDirFlag, CONTROL_SOCKET_NAME);
   }
   // Panel service spec §5: the service panel says where its socket is. A panel.json that does not parse is refused by
-  // name (like a broken projects file); one that names no socket, or a path that is no longer a socket, falls through.
+  // name (like a broken projects file); one that names no socket, a dead pid, or a path that is not a socket falls through.
   // panelDir() does not check absoluteness (plan Task 3): a relative ORCA_PANEL_DIR would resolve against the agent's
   // cwd, so it is read as no service at all.
   const serviceDir = panelDir(input.env);
@@ -31,7 +32,10 @@ export function discoverSocketPath(input: { stateDirFlag?: string; env: NodeJS.P
     try { service = readPanelJson(serviceJson); }
     catch (error) { throw new EntryRejection("control-panel-json-invalid", `${serviceJson}: ${error instanceof Error ? error.message : String(error)}`); }
     if (service.kind === "invalid") throw new EntryRejection("control-panel-json-invalid", `${serviceJson}: ${service.reason}`);
-    if (service.kind === "valid" && service.body.socketPath !== null && isSocket(service.body.socketPath)) return service.body.socketPath;
+    // Task 9 review: a crash leaves both panel.json and the socket file behind, so a dead pid falls through -- else the
+    // stale path would shadow a live legacy --repo panel (agent-entry spec §14). A reused pid still lets it win; the
+    // connect then fails loudly with panel-not-running.
+    if (service.kind === "valid" && service.body.socketPath !== null && isProcessAlive(service.body.pid) && isSocket(service.body.socketPath)) return service.body.socketPath;
   }
   const file = projectsFilePath(input.env);
   let read: ReturnType<typeof readProjectsFile>;
