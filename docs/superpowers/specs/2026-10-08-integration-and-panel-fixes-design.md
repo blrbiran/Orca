@@ -342,3 +342,43 @@ closed/merged check; deleting remote branches; running the person's pre-push hoo
 - R7 (M7): a budget-blocked group still integrates; a person-paused or stopped group does not.
 - R8 (M11): trigger `group` opens a ready PR directly; `local` has no `remote`.
 - All other findings (I3, I5, I7–I13, M1, M3–M6, M8–M10, M12–M15) are adopted as written above.
+
+## 13. Corrections recorded at execution (2026-10-08, session eaee0f2c)
+
+The text above is kept as approved; where execution departed from it, the binding behaviour is this section's (rulings
+in `.superpowers/sdd/2026-10-08-integration-and-panel-fixes/progress.md`).
+
+- §3.3, §6.4: a remote's existence and its GitHub identity are read from the raw `git config --get remote.<r>.url`
+  (before `insteadOf`), not from `git remote get-url`. A remote defined only through `url.*.insteadOf` without
+  `remote.<r>.url` is reported missing.
+- §8: `git check-ref-format --branch <name>` runs without `--` (git 2.50.1 exits 129 on it; the pattern already refuses
+  a leading `-`), and the `@{` clause is dropped (the pattern admits neither `@` nor `{`, so it is unreachable).
+- §3: there are no server-side `target` or `remote` defaults; a setter's payload names both. The UI pre-fills `origin`
+  and the `suggestedTarget` that `GET /api/control/repositories/:id/integration` returns (the branch
+  `refs/remotes/origin/HEAD` points at, else the current branch, else none).
+- §6.5: a configured remote that fails with anything but a network error (authentication, permission, a path that is
+  no repository) blocks `integration-push-refused:<git's words>`; `integration-remote-missing` is only a remote whose
+  URL is not configured. HTTP 401/403 are permanent (blocked), not transient. A remote whose git child timed out is
+  skipped by the rest of that round's groups.
+- §3.3: confirm's preflight asks the remote for the target with `git ls-remote --exit-code <remote>
+  refs/heads/<target>` (exit 2: target missing; other non-zero: remote), not `git fetch` -- the person's FETCH_HEAD and
+  remote-tracking refs are never written.
+- §4, §7: the record keeps a monotonic `attempts` counter (0 when absent), never reset by a success or a scheme change.
+  An attempt is numbered above the counter, the conflict the record holds and every attempt whose spend was booked
+  (outbox `integration-usage:integrate-<g>-<n>`), so no attempt reuses another's key, copy, runs directory or outbox
+  entry. An approval nothing was spawned for yet removes its runs directory before reading any loop state.
+- §3.1: a change of `delivery`, `target` or `remote` by `set-group-integration` resets `lastIntegrated`,
+  `integratedCommit` and `pr` (a trigger change keeps them); the new destination starts from scratch.
+- §8: a `target` starting with `orca/` (Orca's work-branch namespace) is refused `integration-invalid:target-name`, for
+  every delivery.
+- §6: `GIT_SSH_COMMAND="ssh -o BatchMode=yes"` is set only for a git child that talks to a remote (fetch, push,
+  ls-remote) and only when neither the environment's `GIT_SSH_COMMAND` (which is then passed on) nor git's
+  `core.sshCommand` is set.
+- §5: a `github-pr` group with no PR recorded and landed work is due even when `tip == lastIntegrated` (a group switched
+  to `github-pr` opens its PR at once).
+- §5, §7: the resolving step ignores `retryAfter` and a person's pause or stop, as the landing reconciliation's step
+  does; a stop never kills a running resolution.
+- §6.4: a PR URL is stored and linked only as `https://<host>/<owner>/<name>/pull/<n>` naming the remote's repository
+  (case-insensitively) with the PR's own number; anything else gh answers blocks `integration-pr-refused`.
+- §7: a conflict copy is removed when a new attempt's conflict is materialised (the group's older copies), as well as
+  when the integration that owned it succeeds or the scheme changes.
