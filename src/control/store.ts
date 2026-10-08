@@ -37,12 +37,14 @@ export interface ControlStore {
   readonly stateDir:string;
   readonly db:DatabaseSync;
   dispatchBlocked:boolean;
+  /** Issue-fixes spec §5.2: the store's clock, ms since the epoch; injected at open (tests), Date.now otherwise. */
+  now():number;
   transaction<T>(fn:()=>T):T;
   assertOwner():void;
   beginOperation():()=>void;
   close():void;
 }
-export async function openControlStore(options:{stateDir:string;recovery?:boolean}):Promise<ControlStore> {
+export async function openControlStore(options:{stateDir:string;recovery?:boolean;now?:()=>number}):Promise<ControlStore> {
   const [major,minor,patch] = process.versions.node.split(".").map(Number);
   if (major < 22 || (major === 22 && (minor < 13 || (minor === 13 && patch < 1)))) throw new ControlError("control-node-unsupported");
   const { DatabaseSync } = createRequire(import.meta.url)("node:sqlite") as typeof import("node:sqlite");
@@ -117,6 +119,7 @@ export async function openControlStore(options:{stateDir:string;recovery?:boolea
     const assertOwner=()=>{if(closed || readOwner(ownerFile).nonce!==owner.nonce) throw new ControlError("control-owner-changed");};
     const store:ControlStore = {
       stateDir, db:connection, dispatchBlocked:recovered || !!connection.prepare("SELECT id FROM runs WHERE active=1 LIMIT 1").get(),
+      now:options.now ?? Date.now,
       assertOwner,
       beginOperation() {
         assertOwner();if(operationActive) throw new ControlError("control-operation-in-progress");

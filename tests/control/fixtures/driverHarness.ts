@@ -38,6 +38,8 @@ export interface HarnessOptions {
   /** Syncskill integration plan Task 6: the syncskill both confirm (the freeze) and the driver (A2's injection) are given. */
   syncskill?: SyncskillOptions;
   agentKinds?: AgentsView;
+  /** Issue-fixes spec §5.2: the control store's clock (ms); absent, Date.now. */
+  storeNow?: () => number;
 }
 
 /**
@@ -46,7 +48,7 @@ export interface HarnessOptions {
  */
 export async function driverHarness(tasks: readonly WebFixtureTask[], options: HarnessOptions = {}) {
   const snapshot = profileSnapshot();
-  const h = await webFixture(snapshot, tasks, { killGraceMs: options.killGraceMs, planAgents: options.planAgents, ...(options.distinctConfigHash ? { distinctConfigHash: true } : {}) });
+  const h = await webFixture(snapshot, tasks, { killGraceMs: options.killGraceMs, planAgents: options.planAgents, ...(options.distinctConfigHash ? { distinctConfigHash: true } : {}), ...(options.storeNow ? { storeNow: options.storeNow } : {}) });
   const repo = await realpath(join(h.root, "repo"));
   git(repo, "init", "-q", "-b", "main");
   await writeFile(join(repo, "base.txt"), "base\n");

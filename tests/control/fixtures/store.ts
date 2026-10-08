@@ -2,9 +2,10 @@ import { mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openControlStore } from "../../../src/control/store.js";
-export async function openTestStore() {
+/** Issue-fixes spec §5.2: `now` is the store's clock (ms); absent, the store reads Date.now. */
+export async function openTestStore(options: { now?: () => number } = {}) {
   const root = await realpath(await mkdtemp(join(tmpdir(), "orca-control-")));
-  const store = await openControlStore({ stateDir: join(root, "state") });
+  const store = await openControlStore({ stateDir: join(root, "state"), ...(options.now ? { now: options.now } : {}) });
   return { root, store, async dispose() { store.close(); await rm(root, { recursive: true, force: true }); } };
 }
 

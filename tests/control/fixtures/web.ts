@@ -47,13 +47,15 @@ export interface WebFixtureOptions {
   integration?: IntegrationScheme;
   /** Integration spec §7: every hand-written contract's verification.requiredChecks (["true"] unless said otherwise). */
   requiredChecks?: string[];
+  /** Issue-fixes spec §5.2: the control store's clock (ms); absent, Date.now. */
+  storeNow?: () => number;
 }
 
 /** Agent selection spec §3: the complete selection this fixture's task work items are frozen with. */
 export const FIXTURE_AGENT: AgentSelection = { agent: FIXTURE_AGENT_ID, model: "fixture-model", contextWindow: "agent-default" };
 
 export async function webFixture(snapshot = profileSnapshot(), tasks: readonly WebFixtureTask[] = [{ taskId: "a" }], options: WebFixtureOptions = {}) {
-  const h = await openTestStore();
+  const h = await openTestStore(options.storeNow ? { now: options.storeNow } : {});
   let observed: CapabilityViewV1 = structuredClone(snapshot.profile.capabilities);
   const accept = vi.fn(async () => ({ kind: "unknown" as const }));
   // Human authorization 2026-09-24, G1 seam A Task 6 (capability vocabulary sync): the mock now
