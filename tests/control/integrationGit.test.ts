@@ -8,7 +8,7 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createExecutionDriver, DriverCrash } from "../../src/control/executionDriver.js";
-import { __setRunChildForTests, spawnRunChild } from "../../src/control/integrationGit.js";
+import { __setRunChildForTests, remoteTip, spawnRunChild } from "../../src/control/integrationGit.js";
 import { integratePendingGroups, type IntegrationDeps } from "../../src/control/integrationPass.js";
 import { newGroupIntegration, readGroupIntegration, schemeHash, type GroupIntegration, type IntegrationScheme } from "../../src/control/integrationScheme.js";
 import type { ControlStore } from "../../src/control/store.js";
@@ -212,6 +212,46 @@ describe("local (integration spec §6.2, §6.3)", { timeout: 60_000 }, () => {
       expect(snapshot(w.repo)).toEqual(before);
       expect(g(w.repo, ["rev-parse", "main"])).toBe(main);
     } finally { await w.dispose(); }
+  });
+});
+
+describe("ssh (final review Minor 6)", { timeout: 60_000 }, () => {
+  /** The environment the runner was handed for each git child that talks to a remote. */
+  function spyNetworkEnv(): (Record<string, string> | undefined)[] {
+    const seen: (Record<string, string> | undefined)[] = [];
+    __setRunChildForTests((bin, args, opts) => {
+      if (bin === "git" && args.includes("ls-remote")) seen.push(opts.env);
+      return spawnRunChild(bin, args, opts);
+    });
+    return seen;
+  }
+
+  it("a remote's git child never prompts over ssh unless the person set their own ssh command, which is then left alone", async () => {
+    const w = await world(PB); try {
+      vi.stubEnv("GIT_SSH_COMMAND", "");
+      let seen = spyNetworkEnv();
+      expect(await remoteTip(w.repo, "origin", "main")).not.toBeNull();
+      expect(seen.map((env) => env?.GIT_SSH_COMMAND)).toEqual(["ssh -o BatchMode=yes"]);
+      // The repository's own core.sshCommand: GIT_SSH_COMMAND would override it, so none is set.
+      g(w.repo, ["config", "core.sshCommand", "ssh -i /the/persons/key"]);
+      seen = spyNetworkEnv();
+      await remoteTip(w.repo, "origin", "main");
+      expect(seen).toHaveLength(1);
+      expect(seen[0]?.GIT_SSH_COMMAND).toBeUndefined();
+      // The person's GIT_SSH_COMMAND reaches the child (the runner drops every other inherited GIT_* variable).
+      g(w.repo, ["config", "--unset", "core.sshCommand"]);
+      vi.stubEnv("GIT_SSH_COMMAND", "ssh -F /the/persons/config");
+      seen = spyNetworkEnv();
+      await remoteTip(w.repo, "origin", "main");
+      expect(seen.map((env) => env?.GIT_SSH_COMMAND)).toEqual(["ssh -F /the/persons/config"]);
+    } finally { await w.dispose(); }
+  });
+
+  it("the runner sets exactly the variables it is handed over its own environment, and no GIT_SSH_COMMAND of its own", async () => {
+    vi.stubEnv("GIT_SSH_COMMAND", "inherited");
+    const echo = ["-c", 'printf %s "${GIT_SSH_COMMAND-unset}"'];
+    expect((await spawnRunChild("sh", echo, { cwd: "/" })).stdout).toBe("unset");
+    expect((await spawnRunChild("sh", echo, { cwd: "/", env: { GIT_SSH_COMMAND: "ssh -o BatchMode=yes" } })).stdout).toBe("ssh -o BatchMode=yes");
   });
 });
 

@@ -3,8 +3,8 @@ import { QUIET_GIT, unsetInheritedGitEnv } from "./workspace.js";
 
 /**
  * Integration spec §6: the one runner every integration git and gh child goes through -- the pass, the setters' checks
- * and confirm's preflight. Argument arrays only (no shell), no GIT_* variable inherited from Orca's environment, never
- * a prompt, and a deadline (ORCA_INTEGRATION_TIMEOUT_MS, 60 s unless set).
+ * and confirm's preflight. Argument arrays only (no shell), no GIT_* variable inherited from Orca's environment (but the
+ * person's own ssh command, sshEnv), never a prompt, and a deadline (ORCA_INTEGRATION_TIMEOUT_MS, 60 s unless set).
  */
 export interface ChildResult { code: number; stdout: string; stderr: string }
 export type ChildFailure = { kind: "transient" | "permanent"; code: string; message: string };
@@ -14,6 +14,8 @@ export interface ChildOptions {
   input?: string;
   /** A git child run with QUIET_GIT: no hook and no fsmonitor of the repository runs on Orca's behalf. */
   quiet?: boolean;
+  /** Variables set for this child over the runner's own environment (childEnv). */
+  env?: Record<string, string>;
 }
 export type RunChild = (bin: string, args: string[], opts: ChildOptions) => Promise<ChildResult>;
 
@@ -41,8 +43,33 @@ export function integrationTimeoutMs(): number {
 export function childEnv(): NodeJS.ProcessEnv {
   return {
     ...process.env, ...unsetInheritedGitEnv(),
-    GIT_TERMINAL_PROMPT: "0", GIT_SSH_COMMAND: "ssh -o BatchMode=yes", GH_PROMPT_DISABLED: "1", GH_NO_UPDATE_NOTIFIER: "1",
+    GIT_TERMINAL_PROMPT: "0", GH_PROMPT_DISABLED: "1", GH_NO_UPDATE_NOTIFIER: "1",
   };
+}
+
+/** The git subcommands that talk to a remote (and so may run ssh). */
+const NETWORK_SUBCOMMANDS: ReadonlySet<string> = new Set(["fetch", "push", "ls-remote"]);
+function gitSubcommand(args: string[]): string | null {
+  for (let i = 0; i < args.length; i += 1) {
+    if (args[i] === "-c") { i += 1; continue; }
+    if (!args[i]!.startsWith("-")) return args[i]!;
+  }
+  return null;
+}
+
+/**
+ * Final review Minor 6: a git child that talks to a remote never prompts over ssh (BatchMode) -- unless the person chose
+ * their own ssh command: in the environment (passed on, since childEnv drops every inherited GIT_* variable) or in
+ * git's config (`core.sshCommand`, which a GIT_SSH_COMMAND would override). The config is read with the plain runner,
+ * so the test seam counts only the children the integration itself starts.
+ */
+async function sshEnv(bin: string, args: string[], cwd: string): Promise<Record<string, string>> {
+  if (bin !== "git" || !NETWORK_SUBCOMMANDS.has(gitSubcommand(args) ?? "")) return {};
+  const own = process.env.GIT_SSH_COMMAND;
+  if (own !== undefined && own !== "") return { GIT_SSH_COMMAND: own };
+  const configured = await spawnRunChild("git", ["config", "--get", "core.sshCommand"], { cwd, quiet: true })
+    .then((answer) => answer.code === 0 && answer.stdout.trim() !== "", () => false);
+  return configured ? {} : { GIT_SSH_COMMAND: "ssh -o BatchMode=yes" };
 }
 
 /**
@@ -55,7 +82,7 @@ export const spawnRunChild: RunChild = (bin, args, opts) => new Promise((resolve
   const ms = integrationTimeoutMs();
   let child;
   try {
-    child = spawn(bin, argv, { cwd: opts.cwd, env: childEnv(), detached: true, stdio: ["pipe", "pipe", "pipe"] });
+    child = spawn(bin, argv, { cwd: opts.cwd, env: { ...childEnv(), ...opts.env }, detached: true, stdio: ["pipe", "pipe", "pipe"] });
   } catch (error) { reject(new ChildSpawnFailed(bin, error)); return; }
   const stdout: Buffer[] = [], stderr: Buffer[] = [];
   let settled = false;
@@ -86,8 +113,9 @@ let override: RunChild | null = null;
 /** Test seam: replaces (or, with null, restores) the runner, so a criterion can count every child started. */
 export function __setRunChildForTests(runner: RunChild | null): void { override = runner; }
 
-export function runChild(bin: string, args: string[], opts: ChildOptions): Promise<ChildResult> {
-  return (override ?? spawnRunChild)(bin, args, opts);
+export async function runChild(bin: string, args: string[], opts: ChildOptions): Promise<ChildResult> {
+  const env = { ...(await sshEnv(bin, args, opts.cwd)), ...opts.env };
+  return (override ?? spawnRunChild)(bin, args, Object.keys(env).length === 0 ? opts : { ...opts, env });
 }
 
 /** A quiet git child in `repo`. */
