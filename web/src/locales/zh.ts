@@ -712,6 +712,13 @@ export const zhErrors: Record<string, string> = {
   "handoff-request-conflict": "交接请求冲突。",
   "handoff-work-not-found": "找不到要交接的工作。",
   "identity-space-exhausted": "身份编号已用尽。",
+  // Integration spec §3.2-§3.4, §8: the integration refusals.
+  "integration-busy": "这个组的集成冲突正在由 agent 解决，现在不能改它的集成方式。",
+  "integration-invalid": "集成方式没通过检查（分支名、远端名、远端是否存在、是否 GitHub 仓库）：{{message}}",
+  "integration-no-checks": "这个任务没有可跑的检查，不能交给 agent 解决集成冲突。",
+  "integration-not-blocked": "这个组的集成没有卡住，不需要处理。",
+  "integration-preflight-failed": "确认前的集成检查没通过：{{message}}",
+  "integration-unapproved": "这个组的集成方式和确认时看到的不一致，请重新读取后再确认。",
   "labels-invalid": "标签不合法：{{message}}",
   "labels-version-conflict": "你开始草稿后标签已被改过，请重新读取后再保存。",
   "landing-branch-conflict": "合入分支冲突。",
