@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { applyWebCommand, updateRevision } from "../control/commandLedger.js";
 import { canonicalBytes } from "../control/canonicalJson.js";
 import { ControlError } from "../control/errors.js";
+import { recordActivity } from "../control/activity.js";
 import { recordProjectionChange } from "../control/projectionJournal.js";
 import {
   deriveStopState,
@@ -191,6 +192,11 @@ export async function applyPanelShutdown(deps: PanelShutdownDeps): Promise<Comma
       if (context.rawCommand.target.kind !== "global") throw new ControlError("control-target-not-allowed");
       const groupIds = store.db.prepare("SELECT id FROM groups ORDER BY id").all().map((row) => String(row.id));
       const groups = groupIds.map(groupId => shutdownGroup(store, groupId, window, command.commandId, deps.exemptDriverRuns === true));
+      // Issue-fixes spec §5.2: a group stop intent the shutdown created or strengthened (shutdownGroup itself stays
+      // row-free: criteria call it outside a transaction).
+      for (const entry of groups) {
+        if (entry.disposition === "created" || entry.disposition === "strengthened-pause") recordActivity(store, { groupId: entry.groupId, kind: "stop", body: { mode: "shutdown" } });
+      }
       deps.beforeCommit?.();
       return { status: 200, body: {
         schema: "orca-command-success-v1", commandId: context.rawCommand.commandId, actorId: context.rawCommand.actorId,

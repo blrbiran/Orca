@@ -346,6 +346,8 @@ export function applyPauseDispatch(deps: StopDeps, command: PauseCommand): StopC
         saveStopIntent(store, groupId, "pause", context.nextCommandRevision, {
           mode: "pause", state: "paused", frozenRunIds: [], acceptedAt: null, deadlineAt: null,
         });
+        // Issue-fixes spec §5.2: a group stop intent created.
+        recordActivity(store, { groupId, kind: "stop", body: { mode: "pause" } });
         group.stopped = true;
         saveGroupBody(store, group);
         deps.beforeCommit?.();
@@ -376,6 +378,8 @@ export function applyHandoffStop(deps: StopDeps, command: HandoffStopCommand): S
         saveStopIntent(store, groupId, "handoff", context.nextCommandRevision, {
           mode: "handoff", state, frozenRunIds: frozen, acceptedAt, deadlineAt,
         });
+        // Issue-fixes spec §5.2: a group stop intent created (or a pause strengthened to a handoff-stop).
+        recordActivity(store, { groupId, kind: "stop", body: { mode: "handoff" } });
         group.stopped = true;
         saveGroupBody(store, group);
         deps.beforeCommit?.();

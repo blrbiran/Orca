@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { readRunActivity } from "../../src/control/activity.js";
+import { readGroupActivity, readRunActivity } from "../../src/control/activity.js";
 import { settleProviderAttempt, deliverScheduledStart, beginProviderAttempt } from "../../src/control/webDispatch.js";
 import { settleHandoffRequest } from "../../src/control/stopIntent.js";
+import { applyPanelShutdown } from "../../src/panel/controlLifecycle.js";
 import { WebControlService } from "../../src/control/webService.js";
 import { blockRun, collectInto, LATER_ERROR, readDriverRun } from "../../src/control/executionDriver.js";
 import type { RunProgress } from "../../src/control/schema.js";
@@ -192,6 +193,38 @@ describe("run-resumed (issue-fixes spec §5.2)", () => {
       clock = 8_000;
       await t.service.recoveryRetry(t.h.runCommand("recovery-retry", runId, { scope: "run", runId }));
       expect(rowsOf(t.h.store, runId, "run-resumed")).toEqual([]);
+    } finally { await t.h.dispose(); }
+  });
+});
+
+describe("stop (issue-fixes spec §5.2)", () => {
+  const stops = (store: ControlStore) =>
+    readGroupActivity(store, "g", 1_000).filter((entry) => entry.kind === "stop").reverse().map((entry) => [entry.at, entry.body]);
+
+  it("pause and its strengthening to a handoff-stop each write a row; a refused or replayed stop writes none", async () => {
+    let clock = 1_000;
+    const t = await driverHarness([{ taskId: "a" }], { storeNow: () => clock }); try {
+      clock = 2_000;
+      const pause = t.h.command("pause-dispatch", {});
+      await t.service.pauseDispatch(pause);
+      clock = 3_000;
+      await t.service.handoffStop(t.h.command("handoff-stop", {}));
+      clock = 4_000;
+      expect(await t.service.pauseDispatch(t.h.command("pause-dispatch", {}))).toMatchObject({ error: { code: "stop-mode-conflict" } });
+      await t.service.pauseDispatch(pause);
+      expect(stops(t.h.store)).toEqual([[2_000, { mode: "pause" }], [3_000, { mode: "handoff" }]]);
+    } finally { await t.h.dispose(); }
+  });
+
+  it("a shutdown that creates a group's intent writes a shutdown row; one that preserves it writes none", async () => {
+    let clock = 1_000;
+    const t = await driverHarness([{ taskId: "a" }], { storeNow: () => clock }); try {
+      await t.claim();
+      const shutdown = (epoch: string) => applyPanelShutdown({ store: t.h.store, profileRouter: t.h.deps.profileRouter, epoch, now: () => new Date("2026-10-08T00:00:00.000Z"), shutdownGraceMs: 1_000 });
+      clock = 9_000;
+      await shutdown("epoch-one");
+      await shutdown("epoch-two");
+      expect(stops(t.h.store)).toEqual([[9_000, { mode: "shutdown" }]]);
     } finally { await t.h.dispose(); }
   });
 });
