@@ -45,7 +45,7 @@ describe("login and sessions (spec §3.2-§3.4)", () => {
     expect((await s.fetch("/api/metrics")).status).toBe(200);
   });
 
-  it("the initial password reaches only the change step; the change deletes the file and lifts the gate", async () => {
+  it("the initial password reaches only the change step; the change deletes the file, ends the session, and the new password lifts the gate", async () => {
     const panel = await boot();
     const initial = (await readFile(join(root, "initial-password"), "utf8")).trim();
     const s = await login(panel.url, "tester", initial);
@@ -55,7 +55,10 @@ describe("login and sessions (spec §3.2-§3.4)", () => {
     expect((await s.fetch("/api/auth/password", { method: "POST", headers: json, body: JSON.stringify({ current: initial, next: "short" }) })).status).toBe(400);
     expect((await s.fetch("/api/auth/password", { method: "POST", headers: json, body: JSON.stringify({ current: initial, next: "a long enough one" }) })).status).toBe(200);
     await expect(stat(join(root, "initial-password"))).rejects.toMatchObject({ code: "ENOENT" });
-    expect((await s.fetch("/api/metrics")).status).toBe(200);
+    // Human ruling 2026-10-08: the change ends this session too; only a login with the new password reaches the panel.
+    expect(await (await s.fetch("/api/metrics")).json()).toMatchObject({ code: "login-required" });
+    const again = await login(panel.url, "tester", "a long enough one");
+    expect((await again.fetch("/api/metrics")).status).toBe(200);
   });
 
   it("refuses a token signed with another key, a POST without the CSRF header, and a logged-out or disabled session at once", async () => {
@@ -235,12 +238,31 @@ describe("login and sessions (spec §3.2-§3.4)", () => {
     } finally { idle.close(); }
   }, 60_000);
 
-  it("a password change logs out the user's other sessions and keeps this one", async () => {
+  // Human ruling 2026-10-08 (replacing the Task 3 controller ruling "keeps this one"): a successful change ends every
+  // session of the user, the one that made it too, and clears its cookies; a wrong password ends none (throttle below).
+  it("a password change logs out every session of the user, this one too, and only the new password logs in", async () => {
     const panel = await boot();
     seedUser(root, "amy", "member");
-    const here = await login(panel.url, "amy"), there = await login(panel.url, "amy");
-    expect((await here.fetch("/api/auth/password", { method: "POST", headers: json, body: JSON.stringify({ current: "orca-test-password", next: "amys new password" }) })).status).toBe(200);
-    expect([(await here.fetch("/api/auth/me")).status, (await there.fetch("/api/auth/me")).status]).toEqual([200, 401]);
+    seedUser(root, "bob", "member");
+    const here = await login(panel.url, "amy"), there = await login(panel.url, "amy"), bob = await login(panel.url, "bob");
+    const changed = await here.fetch("/api/auth/password", { method: "POST", headers: json, body: JSON.stringify({ current: "orca-test-password", next: "amys new password" }) });
+    expect(changed.status).toBe(200);
+    expect(changed.headers.getSetCookie().filter((cookie) => /Max-Age=0/.test(cookie))).toHaveLength(2);
+    expect([(await here.fetch("/api/auth/me")).status, (await there.fetch("/api/auth/me")).status, (await bob.fetch("/api/auth/me")).status]).toEqual([401, 401, 200]);
+    const old = await fetch(`${panel.url}/api/auth/login`, { method: "POST", headers: json, body: JSON.stringify({ name: "amy", password: "orca-test-password" }) });
+    expect(old.status).toBe(401);
+    const fresh = await login(panel.url, "amy", "amys new password");
+    expect((await fresh.fetch("/api/auth/me")).status).toBe(200);
+  });
+
+  it("a wrong current password ends no session", async () => {
+    const panel = await boot();
+    seedUser(root, "amy", "member");
+    const amy = await login(panel.url, "amy");
+    const wrong = await amy.fetch("/api/auth/password", { method: "POST", headers: json, body: JSON.stringify({ current: "wrong wrong wrong", next: "amys new password" }) });
+    expect(wrong.status).toBe(401);
+    expect(wrong.headers.getSetCookie()).toEqual([]);
+    expect((await amy.fetch("/api/auth/me")).status).toBe(200);
   });
 
   it("a wrong current password counts against the name's login throttle", async () => {

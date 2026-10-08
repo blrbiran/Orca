@@ -238,3 +238,8 @@ Recorded in the final fix wave (2026-10-08, session 30bd7e40, on top of 33cc5cf)
 - Pre-ledger rows (`source = 'pre-ledger'`, `applied_at` 0) count in the headline total and in every `total` (all-time) cap, but in no range (including the Usage panel's "All time" range) and in no week or month. The panel names the difference (headline total − all-time range) on one line rather than itemising it.
 - Task 3 rulings (spec silent): a successful password change revokes the user's other sessions and keeps the current one; a wrong current password on the password change counts against the same per-name login throttle (429 `login-throttled`).
 - `POST /api/chains` and a chain's `maxCostUsd` are outside the spend caps and open to members. The spec (§3.5, §6.3) is silent; this is an open question for the human, not a decision.
+
+Recorded at the human review (2026-10-08, session eaee0f2c, on top of `chore(deps): repin ccloop to report usage per model`):
+
+- Human ruling, replacing half of the Task 3 password rulings above: a successful password change ends **every** session of the user, the one that made the change too, and its answer clears the session cookies; the page then shows the login form with "Password changed. Log in with the new password." A wrong password — at login or on the change — ends no session; it only counts against the per-name login throttle (429 `login-throttled` after 5 consecutive failures, `min(2^(n−5), 300)` seconds), which the human kept. Logout still ends only its own session.
+- The re-pin to ccloop `c82b212` (Part B) makes every applied run delta a `reported` row naming its model; the reconciliation's own `ccloop run` stays one `unattributed` row (Ruling R2 above), now pinned by name in `executionDriverE2E` E1.

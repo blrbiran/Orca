@@ -198,7 +198,7 @@ describe("AuthGate (spec §7)", () => {
     expect(screen.queryByText(/session ended/i)).toBeNull();
   });
 
-  it("shows only the change-password step while mustChangePassword is set, and sends the CSRF header", async () => {
+  it("shows only the change-password step while mustChangePassword is set, sends the CSRF header, then asks for a login with the new password", async () => {
     meAnswers = [me({ roles: ["owner"], mustChangePassword: true }), me({ roles: ["owner"], mustChangePassword: false })];
     render(<AuthGate><p>app body</p></AuthGate>);
     await screen.findByRole("form", { name: /change your password/i });
@@ -207,7 +207,11 @@ describe("AuthGate (spec §7)", () => {
     fireEvent.change(screen.getByLabelText(/^new password$/i), { target: { value: "a long new password" } });
     fireEvent.change(screen.getByLabelText(/new password again/i), { target: { value: "a long new password" } });
     fireEvent.click(screen.getByRole("button", { name: /change password/i }));
-    await screen.findByText("app body");
+    // Human ruling 2026-10-08: the server ended this session with the change, so the page goes to the login form and
+    // says why, rather than asking /api/auth/me again (the second answer above is never read).
+    await screen.findByRole("form", { name: /log in/i });
+    expect(screen.getByRole("status").textContent).toMatch(/password changed/i);
+    expect(screen.queryByText("app body")).toBeNull();
     const sent = posts("/api/auth/password");
     expect(sent.map((call) => call.body)).toEqual([{ current: "0123456789abcdef", next: "a long new password" }]);
     expect(sent[0]!.headers["x-orca-csrf"]).toBe("t");

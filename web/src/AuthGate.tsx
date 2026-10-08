@@ -36,7 +36,7 @@ const REFRESH_CHECK_MS = 10 * 60_000;
 type GateState =
   | { kind: "loading" }
   | { kind: "failed"; refusal: PanelRefusal }
-  | { kind: "login"; ended: boolean }
+  | { kind: "login"; ended: boolean; changed?: boolean }
   | { kind: "change"; me: Me }
   | { kind: "ready"; me: Me };
 
@@ -95,8 +95,9 @@ export function AuthGate({ children }: { children: ReactNode }): JSX.Element {
       </main>
     );
   }
-  if (state.kind === "login") return <LoginForm ended={state.ended} onLoggedIn={() => void readSession()} />;
-  if (state.kind === "change") return <ChangePasswordForm me={state.me} onChanged={() => void readSession()} />;
+  if (state.kind === "login") return <LoginForm ended={state.ended} changed={state.changed === true} onLoggedIn={() => void readSession()} />;
+  // Human ruling 2026-10-08: the server ends every session of the user on a password change, this one too.
+  if (state.kind === "change") return <ChangePasswordForm me={state.me} onChanged={() => setState({ kind: "login", ended: false, changed: true })} />;
   return (
     <AccountContext.Provider value={state.me}>
       <AccountBar me={state.me} onLoggedOut={() => setState({ kind: "login", ended: false })} />
@@ -105,7 +106,7 @@ export function AuthGate({ children }: { children: ReactNode }): JSX.Element {
   );
 }
 
-function LoginForm({ ended, onLoggedIn }: { ended: boolean; onLoggedIn: () => void }): JSX.Element {
+function LoginForm({ ended, changed, onLoggedIn }: { ended: boolean; changed: boolean; onLoggedIn: () => void }): JSX.Element {
   const { t } = useTranslation();
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
@@ -121,6 +122,7 @@ function LoginForm({ ended, onLoggedIn }: { ended: boolean; onLoggedIn: () => vo
       <form className="auth-form" aria-label={t("auth.loginTitle")} onSubmit={(event) => void submit(event)}>
         <h1>{t("auth.loginTitle")}</h1>
         {ended && <p role="status">{t("auth.sessionEnded")}</p>}
+        {changed && <p role="status">{t("auth.passwordChanged")}</p>}
         <label>{t("auth.name")}<input name="name" autoComplete="username" value={name} onChange={(e) => setName(e.currentTarget.value)} /></label>
         <label>{t("auth.password")}<input name="password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.currentTarget.value)} /></label>
         <button type="submit">{t("auth.logIn")}</button>

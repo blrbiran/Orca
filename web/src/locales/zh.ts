@@ -471,6 +471,7 @@ export const zh: Translation<typeof en> = {
     password: "密码",
     logIn: "登录",
     sessionEnded: "登录已失效，请重新登录后继续。",
+    passwordChanged: "密码已修改，请用新密码重新登录。",
     loginHint: "第一个 owner 的初始密码在面板启动时提示的文件里（<control root>/initial-password）；用 orca user add 添加更多人。",
     changeTitle: "修改密码",
     changeLede: "{{name}}，你用初始密码登录了。使用面板前，请设一个自己的密码（至少 {{n}} 个字符）。",

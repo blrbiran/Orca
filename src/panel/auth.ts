@@ -131,7 +131,9 @@ export function createPanelAuth(input: {
       if (found === null || found.id !== current.user.id || !verifyPassword(currentPassword, found.passwordHash)) return failed(name, nowMs);
       throttle.delete(name);
       store.setPassword(current.user.id, next, nowMs, `user:${current.user.id}`);
-      store.revokeOtherSessions(current.user.id, current.claims.sid, nowMs);
+      // Human ruling 2026-10-08 (over the Task 3 controller ruling that kept this session): a changed password ends every
+      // session of the user, this one too, so the change is always followed by a login with the new password.
+      store.revokeUserSessions(current.user.id, nowMs);
       // Spec §3.2: the forced change consumes the initial password; its file goes with it.
       if (found.mustChangePassword) rmSync(join(input.root, INITIAL_PASSWORD_FILE), { force: true });
       return { ok: true };

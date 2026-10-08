@@ -567,6 +567,7 @@ export const en = {
     password: "Password",
     logIn: "Log in",
     sessionEnded: "Your session ended. Log in again to go on.",
+    passwordChanged: "Password changed. Log in with the new password.",
     loginHint: "The first owner's initial password is in the file the panel named when it started (<control root>/initial-password); add more people with orca user add.",
     changeTitle: "Change your password",
     changeLede: "{{name}}, you logged in with the initial password. Choose your own (at least {{n}} characters) before using the panel.",
