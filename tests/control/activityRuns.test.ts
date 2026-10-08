@@ -161,3 +161,37 @@ describe("phase (issue-fixes spec §5.2)", () => {
     } finally { await t.h.dispose(); }
   });
 });
+
+describe("run-resumed (issue-fixes spec §5.2)", () => {
+  it("a run-scope recovery-retry of a blocked run writes run-resumed and its run-targeted command row; its replay writes none", async () => {
+    let clock = 1_000;
+    const t = await driverHarness([{ taskId: "a" }], { behaviour: () => "exhausted", storeNow: () => clock }); try {
+      const runId = await t.claim();
+      await t.until(t.driver(), () => t.body(runId).state === "blocked");
+      clock = 8_000;
+      const command = t.h.runCommand("recovery-retry", runId, { scope: "run", runId });
+      const retried = await t.service.recoveryRetry(command);
+      expect("error" in retried ? retried.error : retried.result).toMatchObject({ kind: "recovery-observed", resolved: true });
+      expect(t.body(runId).state).toBe("accepted");
+      const newest = () => readRunActivity(t.h.store, runId, 2).map((entry) => [entry.kind, entry.at, entry.runId, entry.body]);
+      expect(newest()).toEqual([
+        ["command", 8_000, runId, { verb: "recovery-retry", actor: "human" }],
+        ["run-resumed", 8_000, runId, {}],
+      ]);
+      const count = readRunActivity(t.h.store, runId, 1_000).length;
+      await t.service.recoveryRetry(command);
+      expect(readRunActivity(t.h.store, runId, 1_000)).toHaveLength(count);
+    } finally { await t.h.dispose(); }
+  });
+
+  it("a run-scope recovery-retry of a run that is not blocked resumes nothing and writes no run-resumed row", async () => {
+    let clock = 1_000;
+    const t = await driverHarness([{ taskId: "a" }], { storeNow: () => clock }); try {
+      const runId = await t.claim();
+      expect(t.body(runId).state).not.toBe("blocked");
+      clock = 8_000;
+      await t.service.recoveryRetry(t.h.runCommand("recovery-retry", runId, { scope: "run", runId }));
+      expect(rowsOf(t.h.store, runId, "run-resumed")).toEqual([]);
+    } finally { await t.h.dispose(); }
+  });
+});

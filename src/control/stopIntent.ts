@@ -7,7 +7,7 @@ import { add, budgetBalance, subtract } from "./budget.js";
 import { ControlError } from "./errors.js";
 import { clearSpendCapBlock } from "./spendCaps.js";
 import { recordProjectionChange } from "./projectionJournal.js";
-import { noteRunWrite } from "./activity.js";
+import { noteRunWrite, recordActivity } from "./activity.js";
 import { readBudgetProposal, readWork, saveWork, type BudgetProposalRecord } from "./queries.js";
 import { writeCanonicalRecord } from "./snapshot.js";
 import { rearmFailedContinuation } from "./continuation.js";
@@ -474,6 +474,8 @@ function retryRun(store: ControlStore, groupId: string, runId: string, context: 
   const rearm = rearmFailedContinuation(store, groupId, run);
   if (rearm !== null) wakeIds.push(rearm);
   const resumedDriverRun = resumeBlockedDriverRun(store, runId);
+  // Issue-fixes spec §5.2: a blocked run resumed by recovery-retry (here, in the command's transaction).
+  if (resumedDriverRun) recordActivity(store, { groupId, taskId: run.taskId, runId, kind: "run-resumed", body: {} });
   const resolved = blockers.resolved || rearm !== null || resumedDriverRun;
   const requestId = store.db.prepare("SELECT id FROM handoff_requests WHERE group_id=? AND run_id=? ORDER BY rowid DESC LIMIT 1").get(groupId, runId);
   if (!requestId) return { resolved, blockerCodes: blockers.codes, evidenceIds: blockers.evidenceIds, wakeIds };
