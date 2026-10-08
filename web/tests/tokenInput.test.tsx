@@ -163,7 +163,7 @@ describe("BudgetEditor token fields", () => {
   });
   function Editor(props: { onCommand: (a: ControlAction) => void }): JSX.Element {
     const [drafts, setDrafts] = useState<Record<string, string>>({});
-    return <AccountContext.Provider value={owner}><BudgetEditor view={editable()} config={boardConfig} drafts={drafts} onCommand={props.onCommand}
+    return <AccountContext.Provider value={owner}><BudgetEditor view={editable()} config={boardConfig} selectionsHash={"9".repeat(64)} drafts={drafts} onCommand={props.onCommand}
       onDraft={(key, text) => setDrafts((d) => { const n = { ...d }; if (text === "") delete n[key]; else n[key] = text; return n; })} /></AccountContext.Provider>;
   }
   it("groups the allocation, group limit and handoff fields", () => {
@@ -184,6 +184,23 @@ describe("BudgetEditor token fields", () => {
     expect((screen.getByRole("button", { name: "Save proposal" }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "Set limit" }));
     expect(onCommand).toHaveBeenCalledTimes(1);
+  });
+  it("confirms with the typed grouped handoff amount as an integer, and not while that text is not an amount", () => {
+    const onCommand = vi.fn();
+    render(<Editor onCommand={onCommand} />);
+    const handoff = screen.getByRole("textbox", { name: /^Hand off at context tokens/ });
+    fireEvent.change(handoff, { target: { value: "150,000" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirm budget" }));
+    expect((onCommand.mock.calls[0]![0] as ControlAction).payload).toMatchObject({ contextPolicy: { handoffAtContextTokens: 150_000 } });
+    fireEvent.change(handoff, { target: { value: "150k" } });
+    expect((screen.getByRole("button", { name: "Confirm budget" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Confirm budget" }));
+    expect(onCommand).toHaveBeenCalledTimes(1);
+  });
+  it("keeps activeMs, attempts and sessions as plain numeric text", () => {
+    render(<Editor onCommand={vi.fn()} />);
+    const [, activeMs] = within(screen.getByRole("group", { name: "Group limit" })).getAllByRole("textbox") as HTMLInputElement[];
+    expect(activeMs!.value).toBe("90000000");
   });
   it("sends a typed grouped group limit", () => {
     const onCommand = vi.fn();
