@@ -10,6 +10,7 @@ import { ControlError, type NonDurableControlErrorCode } from "./errors.js";
 import { agentSelectionSchema, artifactSchema, candidateSchema, contextWindowSchema, idSchema, runProgressSchema, safeInteger } from "./schema.js";
 import { capabilityViewSchema } from "./webProtocol.js";
 import { byModelSchema } from "./usageLedger.js";
+import { boundStopReason } from "./driveRecord.js";
 
 const MAX_OUTPUT=24*1024*1024;
 const executionStatusSchema=z.discriminatedUnion("kind",[
@@ -122,7 +123,7 @@ export function createCcloopExecutionPort(options:{binary:string;agentsTablePath
   async accept(input){return parse(executionStatusSchema,await raw("accept",input)) as ExecutionStatus;},
   async inspect(input){return parse(executionStatusSchema,await raw("inspect",input)) as ExecutionStatus;},
   async requestHandoff(input,request){return parse(handoffAckSchema,await raw("handoff",{input,request})) as HandoffAck;},
-  async collect(input,afterSeq){const response=parse(collectionSchema,await raw("collect",{input,afterSeq}));for(const ref of [...response.events.map(event=>event.source),...(response.candidate?.artifacts??[]),...(response.candidate?[response.candidate.handoff]:[]),...(response.candidate?.stopProof?[response.candidate.stopProof.source]:[])])evidenceContext.set(key(ref),input);return {events:response.events,candidate:response.candidate,terminal:response.terminal?{outcome:response.terminal.status,attemptSha:null,sourceDir:input.work.sourceDir,repoDir:join(input.work.sourceDir,"repo"),...(response.terminal.stopReason?.includes("codex-skills-")?{stopReason:response.terminal.stopReason}:{})}:null,progress:response.progress??null} as ExecutionReport;},
+  async collect(input,afterSeq){const response=parse(collectionSchema,await raw("collect",{input,afterSeq}));for(const ref of [...response.events.map(event=>event.source),...(response.candidate?.artifacts??[]),...(response.candidate?[response.candidate.handoff]:[]),...(response.candidate?.stopProof?[response.candidate.stopProof.source]:[])])evidenceContext.set(key(ref),input);return {events:response.events,candidate:response.candidate,terminal:response.terminal?{outcome:response.terminal.status,attemptSha:null,sourceDir:input.work.sourceDir,repoDir:join(input.work.sourceDir,"repo"),...(response.terminal.stopReason?{stopReason:boundStopReason(response.terminal.stopReason)}:{})}:null,progress:response.progress??null} as ExecutionReport;},
   async readEvidence(ref:ArtifactRef){
    const input=evidenceContext.get(key(ref));if(!input)throw new ControlError("control-evidence-context-missing");const value=parse(evidenceSchema,await raw("read-evidence",{input,ref}));
    if(value.artifactId!==ref.artifactId||value.hash!==ref.hash)throw new ControlError("artifact-hash-mismatch");

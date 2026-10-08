@@ -15,6 +15,15 @@ export const DRIVER_RUN_STATES = ["start-pending", "collected", "landed", "recon
 export const driveStepSchema = z.enum(["A1", "A2", "B", "B'", "C", "D", "R", "E"]);
 export type DriveStep = z.infer<typeof driveStepSchema>;
 
+/**
+ * Issue fixes spec §4.2(1): the most of ccloop's terminal `stopReason` Orca keeps, in UTF-16 code units. ccloop states
+ * the reason first and the evidence path after it, so the cut keeps what the panel explains.
+ */
+export const STOP_REASON_MAX = 500;
+export function boundStopReason(reason: string): string {
+  return reason.length > STOP_REASON_MAX ? reason.slice(0, STOP_REASON_MAX) : reason;
+}
+
 const commitSchema = z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/);
 
 /** spec §5.3: one conflict's reconciliation, recorded before and while it runs so a restart can find it. */

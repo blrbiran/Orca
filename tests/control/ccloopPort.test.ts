@@ -215,3 +215,21 @@ it("preserves a Codex skills failure reason from ccloop terminal state",async()=
  const h=await fixture("ok",{terminal:{status:"failed",currentAttempt:1,attemptsUsed:1,lastTransitionAt:"2026-10-05T00:00:00Z",waitingOnHuman:false,stopReason:"Error: codex-skills-cleanup-failed:EACCES: evidence",budgetSnapshot:{attemptsRemaining:0,timeRemainingMs:100,tokenBudgetRemaining:100},recentFailures:[]}});
  expect((await h.port.collect(h.envelope,0)).terminal).toMatchObject({outcome:"failed",stopReason:"Error: codex-skills-cleanup-failed:EACCES: evidence"});
 });
+
+// Issue fixes spec §4.2(1) (issue 15): the port kept ccloop's reason only for a codex-skills failure, so
+// codex-result-invalid never reached the store. Every terminal's reason is kept now, its first 500 UTF-16 units.
+const FAILED_TERMINAL = { status: "failed", currentAttempt: 1, attemptsUsed: 1, lastTransitionAt: "2026-10-08T00:00:00Z", waitingOnHuman: false, stopReason: null as string | null,
+  budgetSnapshot: { attemptsRemaining: 0, timeRemainingMs: 100, tokenBudgetRemaining: 100 }, recentFailures: [] };
+it("keeps ccloop's stop reason for any terminal, not only a skills failure", async () => {
+  const reason = "Error: codex-result-invalid: /runs/r/attempt-1/execute-result.json";
+  const h = await fixture("ok", { terminal: { ...FAILED_TERMINAL, stopReason: reason } });
+  expect((await h.port.collect(h.envelope, 0)).terminal).toMatchObject({ outcome: "failed", stopReason: reason });
+});
+it("keeps only the first 500 UTF-16 units of a longer stop reason", async () => {
+  const h = await fixture("ok", { terminal: { ...FAILED_TERMINAL, stopReason: `${"x".repeat(499)}中文 and the rest` } });
+  expect((await h.port.collect(h.envelope, 0)).terminal!.stopReason).toBe(`${"x".repeat(499)}中`);
+});
+it("states no stop reason when ccloop gave none", async () => {
+  const h = await fixture("ok", { terminal: { ...FAILED_TERMINAL, stopReason: null } });
+  expect("stopReason" in (await h.port.collect(h.envelope, 0)).terminal!).toBe(false);
+});
