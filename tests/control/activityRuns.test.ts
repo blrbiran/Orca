@@ -169,6 +169,12 @@ describe("run-resumed (issue-fixes spec §5.2)", () => {
     const t = await driverHarness([{ taskId: "a" }], { behaviour: () => "exhausted", storeNow: () => clock }); try {
       const runId = await t.claim();
       await t.until(t.driver(), () => t.body(runId).state === "blocked");
+      // D5 (spec §4.2(3)) refuses recovery-retry on a run ccloop ended failed, which "exhausted" is; make the block transient.
+      t.h.store.transaction(() => {
+        const run = t.body(runId);
+        run.drive.outcome = null; run.drive.blockedReason = "control-peer-timeout";
+        t.h.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify(run), runId);
+      });
       clock = 8_000;
       const command = t.h.runCommand("recovery-retry", runId, { scope: "run", runId });
       const retried = await t.service.recoveryRetry(command);

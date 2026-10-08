@@ -926,6 +926,7 @@ export const enErrors: Record<string, string> = {
   "run-grant-conflict": "The run's grant conflicts with the recorded one.",
   "run-not-found": "The run was not found.",
   "run-owner-conflict": "Another owner holds this run.",
+"run-terminal-failed": "This run ended in a ccloop failure; retrying the run would only read the same result again. Use Retry task to start a new run of the task.",
   "run-stop-unconfirmed": "The run's stop has not been confirmed.",
   // Syncskill integration spec §10.5 / §10.8 C4 (plan Task 4): confirm's skill-set refusals.
   "skills-profile-empty": "This skill profile has no skills, so it cannot be confirmed.",

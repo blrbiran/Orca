@@ -86,6 +86,8 @@ describe("the orca-control skill (spec §7, C18)", () => {
       "`.revision` of `get repositories/<repoId>/integration`",
       // Task 7: the integration read is listed with the other reads.
       "`repositories/<id>/workspace`, `repositories/<id>/integration`",
+      // Issue fixes spec §4.2(2)-(3): which retry a failed run takes.
+      "run-terminal-failed", "task-not-retryable",
     ]) expect(skill).toContain(phrase);
     for (const code of ["`0`", "`1`", "`2`", "`3`"]) expect(skill).toContain(code);
   });

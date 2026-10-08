@@ -865,6 +865,7 @@ export const zhErrors: Record<string, string> = {
   "run-generation-conflict": "运行代次冲突。",
   "run-grant-conflict": "运行额度冲突。",
   "run-not-found": "找不到这个运行。",
+"run-terminal-failed": "这个运行已经以 ccloop 失败结束，重试运行只会再读到同样的结果。请用「重试任务」为这个任务开一次新的运行。",
   "run-owner-conflict": "运行持有者冲突。",
   "run-stop-unconfirmed": "运行的停止尚未确认。",
   // Syncskill integration spec §10.5 / §10.8 C4 (plan Task 4): confirm's skill-set refusals.

@@ -95,6 +95,15 @@ export const RESUME_STATE: Record<DriveStep, string> = {
 };
 
 /**
+ * Issue fixes spec §4.2(3): a run the driver blocked at C because its ccloop run ended with an outcome other than
+ * `succeeded`. Sending it back to C would only collect the same terminal again, so recovery-retry refuses it; retry-task
+ * (retryTask.ts, which names each failed condition in its refusal) is its way out.
+ */
+export function isTerminallyFailedRun(run: { state: string; drive?: DriveRecord }): boolean {
+  return run.state === "blocked" && run.drive !== undefined && run.drive.blockedAt === "C" && run.drive.outcome !== null && run.drive.outcome !== "succeeded";
+}
+
+/**
  * `recovery-retry` on a blocked driver run: back to the step it was blocked at, reason cleared.
  * Blocked at A2 means the workspace was never recorded as prepared, so A2 runs again; blocked at R
  * forgets the dead reconciliation process so the next round decides afresh. Answers whether it

@@ -75,6 +75,8 @@ export const durableCommandErrorStatuses = {
   "run-generation-conflict": 409,
   "run-grant-conflict": 409,
   "run-owner-conflict": 409,
+  // Issue fixes spec §4.2(3): recovery-retry on a run ccloop ended failed; only retry-task moves it.
+  "run-terminal-failed": 409,
   "start-contract-conflict": 409,
   "start-envelope-conflict": 409,
   "start-state-conflict": 409,

@@ -220,3 +220,21 @@ describe("retry-task refusals (spec §4.2(2), §4.4)", () => {
     } finally { await t.h.dispose(); }
   });
 });
+
+describe("recovery-retry on a terminally failed run (spec §4.2(3))", () => {
+  it("refuses it with run-terminal-failed and leaves it blocked at C; a transiently blocked run still resumes", async () => {
+    const { t } = await failingHarness(); try {
+      const { runId } = await failedRun(t);
+      t.h.store.db.prepare("INSERT INTO recovery_blockers(id,group_id,run_id,scope,code,body) VALUES ('blk-d5','g',?,'run','handoff-request-already-settled',?)")
+        .run(runId, JSON.stringify({ evidenceIds: [] }));
+      const refused = await t.service.recoveryRetry(t.h.runCommand("recovery-retry", runId, { scope: "run", runId }));
+      expect("error" in refused ? refused.error.code : "resumed").toBe("run-terminal-failed");
+      expect(t.h.store.db.prepare("SELECT id FROM recovery_blockers WHERE id='blk-d5'").get()).toBeDefined();
+      expect(t.body(runId)).toMatchObject({ state: "blocked", drive: { blockedAt: "C", outcome: "failed", blockedReason: "terminal:failed" } });
+      poke(t, runId, (run) => { run.drive.outcome = null; run.drive.blockedReason = "control-peer-timeout"; });
+      const resumed = await t.service.recoveryRetry(t.h.runCommand("recovery-retry", runId, { scope: "run", runId }));
+      expect("error" in resumed ? resumed.error : resumed.result).toMatchObject({ kind: "recovery-observed", resolved: true });
+      expect(t.body(runId)).toMatchObject({ state: "accepted", drive: { blockedAt: null, blockedReason: null } });
+    } finally { await t.h.dispose(); }
+  });
+});

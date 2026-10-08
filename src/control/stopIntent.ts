@@ -11,7 +11,7 @@ import { noteRunWrite, recordActivity } from "./activity.js";
 import { readBudgetProposal, readWork, saveWork, type BudgetProposalRecord } from "./queries.js";
 import { writeCanonicalRecord } from "./snapshot.js";
 import { rearmFailedContinuation } from "./continuation.js";
-import { resumeBlockedDriverRun } from "./driveRecord.js";
+import { isTerminallyFailedRun, resumeBlockedDriverRun, type DriveRecord } from "./driveRecord.js";
 import { singleCallPurposeOf } from "./singleCall.js";
 import { hasRequirementBlock, latestDraft, latestRound, newDraft, queueRequirementCall, readRequirementGroup, refuseClarifying, saveRequirementGroup, writeDraft, writeRound } from "./requirementRecords.js";
 import { interruptRequirementCall } from "./requirementCalls.js";
@@ -471,6 +471,9 @@ function clearedBlockers(store: ControlStore, groupId: string, runId: string | n
 }
 
 function retryRun(store: ControlStore, groupId: string, runId: string, context: WebCommandContext): ObservedRecovery {
+  // Issue fixes spec §4.2(3): checked before anything is cleared, so the refusal leaves the run and its blockers as they were.
+  const target = readRunBody(store, runId);
+  if (target.groupId === groupId && isTerminallyFailedRun(target as { state: string; drive?: DriveRecord })) throw new ControlError("run-terminal-failed");
   const blockers = clearedBlockers(store, groupId, runId);
   const wakeIds: string[] = [];
   const run = readRunBody(store, runId);
