@@ -17,6 +17,7 @@ import { toSingleCallEnvelope, toStartEnvelope } from "./startEnvelope.js";
 import { exportResumeBundle, readExistingResumeBundle, type InputCheckpointV1 } from "./resumeBundle.js";
 import { recordUsage } from "./usage.js";
 import { exportPendingRequirements } from "./requirementExport.js";
+import { integratePendingGroups, type IntegrationCrashPoint, type IntegrationDeps } from "./integrationPass.js";
 import { isSingleCallRun, isWebWorkRun, nextClaimableTask, readSingleCallClaimEnvelope, readWorkClaimEnvelope, reserveProviderAttemptInTransaction } from "./webDispatch.js";
 import { singleCallPurposeOf } from "./singleCall.js";
 import { singleCallHandler } from "./singleCallPurposes.js";
@@ -44,7 +45,9 @@ import type { AgentSelection } from "./agentSelection.js";
 
 export type CrashPoint = "A2-after-workspace" | "B-after-accept" | "C-after-terminal" | "D-after-cas" | "E-after-acceptance"
   // Handoff delivery spec §9.2 R-H, §11 I5, §13.2 I-1.
-  | "H-after-deliver" | "H-after-candidate" | "H-between-commit-and-settle" | "A2-after-bundle";
+  | "H-after-deliver" | "H-after-candidate" | "H-between-commit-and-settle" | "A2-after-bundle"
+  // Integration spec §6.1: the integration pass's outward actions (integrationPass.ts).
+  | IntegrationCrashPoint;
 
 /** Test-only fault injection (spec §7.2 R1): thrown from `crash`, it ends the driver as a process death would. */
 export class DriverCrash extends Error {
@@ -147,6 +150,15 @@ export function blockRun(deps: Pick<ExecutionDriverDeps, "store" | "admissionGat
     run.drive = { ...run.drive, ...patch, blockedAt: step, blockedReason: reason };
     saveDriverRun(deps.store, run);
   });
+}
+
+/** Integration spec §5: what the integration pass needs, from the driver's own deps and state. */
+export function integrationDepsOf(deps: ExecutionDriverDeps, context: DriverContext): IntegrationDeps {
+  return {
+    store: deps.store, roots: deps.roots, admissionGate: deps.admissionGate, repoPathOf: (repoId) => deps.resolveRepository(repoId),
+    now: () => (deps.now?.() ?? new Date()).getTime(), ghBin: process.env.ORCA_GH_BIN || "gh", stopped: () => context.stopped,
+    ...(deps.crash === undefined ? {} : { crash: deps.crash }),
+  };
 }
 
 export function groupRepoId(store: ControlStore, groupId: string): string {
@@ -913,6 +925,9 @@ export function createExecutionDriver(deps: ExecutionDriverDeps): ExecutionDrive
     // N1 spec §9.2 (DR14): a requirement's export has git side effects, so it is the driver's, once per round. It runs
     // after the runs: an await before them would let a stop() issued with the round land before the round's first step.
     try { if (await exportPendingRequirements(deps)) progressed = true; }
+    catch (error) { if (error instanceof ControlError && error.code === "panel-draining") return progressed; throw error; }
+    // Integration spec §5: the integration pass, once per round after the exports (its git side effects are the driver's).
+    try { if (await integratePendingGroups(integrationDepsOf(deps, context))) progressed = true; }
     catch (error) { if (error instanceof ControlError && error.code === "panel-draining") return progressed; throw error; }
     return progressed;
   };

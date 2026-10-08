@@ -1,7 +1,7 @@
 import { applyWebCommand } from "./commandLedger.js";
 import { canonicalBytes } from "./canonicalJson.js";
 import { ControlError } from "./errors.js";
-import { newGroupIntegration, readGroupIntegration, readIntegrationDefault, schemeHash, type IntegrationScheme } from "./integrationScheme.js";
+import { ENVIRONMENT_CHECKS, newGroupIntegration, readGroupIntegration, readIntegrationDefault, schemeHash, type IntegrationScheme } from "./integrationScheme.js";
 import { readRepositorySettingsBody, writeRepositorySettingsBody, type RepositorySettingsBody } from "./workspaceSettings.js";
 import type { AdmissionGate } from "./admissionGate.js";
 import type { ControlStore } from "./store.js";
@@ -10,6 +10,15 @@ import type { CommandErrorBodyV1, CommandSuccessV1, RawAuthorityCommandV1 } from
 /** Integration spec §3.4: the integration verbs' apply functions, each run inside applyWebCommand's transaction. */
 export type SetIntegrationSchemeCommand = Extract<RawAuthorityCommandV1, { verb: "set-integration-scheme" }>;
 export type SetGroupIntegrationCommand = Extract<RawAuthorityCommandV1, { verb: "set-group-integration" }>;
+export type RetryIntegrationCommand = Extract<RawAuthorityCommandV1, { verb: "retry-integration" }>;
+
+/**
+ * What a setter's pre-transaction check found, refused by name: a bad name or remote is the scheme's own fault
+ * (integration-invalid); git not answering or the repository's path not resolving is not (integration-preflight-failed).
+ */
+function refuseFailedCheck(failedCheck: string | null): void {
+  if (failedCheck !== null) throw new ControlError(ENVIRONMENT_CHECKS.has(failedCheck) ? "integration-preflight-failed" : "integration-invalid", failedCheck);
+}
 
 /**
  * Integration spec §3.1, §3.3: sets the repository's default scheme under the settings body's revision, keeping the
@@ -32,7 +41,7 @@ export function applySetIntegrationScheme(
       apply: (context) => {
         const target = context.rawCommand.target;
         if (target.kind !== "repository" || !deps.knownRepository(target.repoId)) throw new ControlError("control-target-not-allowed");
-        if (failedCheck !== null) throw new ControlError("integration-invalid", failedCheck);
+        refuseFailedCheck(failedCheck);
         const integration = (context.effectiveCommand.payload as { integration: IntegrationScheme }).integration;
         if (canonicalBytes(readIntegrationDefault(deps.store, target.repoId).scheme).equals(canonicalBytes(integration))) throw new ControlError("no-op-command");
         // The body's other field (the workspace mode; no row is worktree, execution driver spec §3.2) is kept.
@@ -72,7 +81,7 @@ export function applySetGroupIntegration(
       const group = JSON.parse(String(row.body)) as Record<string, unknown>;
       // A clarifying group has no plan yet; it gets its copy when its split is accepted.
       if (group.status === "clarifying") throw new ControlError("group-state-invalid");
-      if (failedCheck !== null) throw new ControlError("integration-invalid", failedCheck);
+      refuseFailedCheck(failedCheck);
       const current = readGroupIntegration(group);
       if (current?.state === "resolving") throw new ControlError("integration-busy");
       const scheme = (context.effectiveCommand.payload as { integration: IntegrationScheme }).integration;
@@ -87,6 +96,33 @@ export function applySetGroupIntegration(
         verb: context.rawCommand.verb, target: context.rawCommand.target, commandRevision: context.nextCommandRevision, projectionSeq: context.nextProjectionSeq,
         effectivePayloadHash: context.effectivePayloadHash, authorityCommandHash: context.authorityCommandHash,
         result: { kind: "group-integration-set", groupId, integration: scheme },
+      } };
+    },
+  }).body;
+}
+
+/**
+ * Integration spec §6.5: a blocked or conflicted integration goes back to idle and is tried again at the next round
+ * (refused integration-not-blocked otherwise). The conflict record is kept: it numbers the next attempt (§7).
+ */
+export function applyRetryIntegration(deps: { store: ControlStore }, command: RetryIntegrationCommand): CommandSuccessV1 | CommandErrorBodyV1 {
+  return applyWebCommand<CommandSuccessV1 | CommandErrorBodyV1>(deps.store, {
+    rawCommand: command,
+    expand: () => ({ ...command, schema: "orca-authority-command-v1" }),
+    apply: (context) => {
+      const groupId = command.target.groupId;
+      const row = deps.store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId);
+      if (!row) throw new ControlError("group-not-found");
+      const group = JSON.parse(String(row.body)) as Record<string, unknown>;
+      const current = readGroupIntegration(group);
+      if (current === null || (current.state !== "blocked" && current.state !== "conflict")) throw new ControlError("integration-not-blocked");
+      group.integration = { ...current, state: "idle", reason: null, retryAfter: null, transient: 0 };
+      deps.store.db.prepare("UPDATE groups SET body=? WHERE id=?").run(JSON.stringify(group), groupId);
+      return { status: 200, body: {
+        schema: "orca-command-success-v1", commandId: context.rawCommand.commandId, actorId: context.rawCommand.actorId,
+        verb: context.rawCommand.verb, target: context.rawCommand.target, commandRevision: context.nextCommandRevision, projectionSeq: context.nextProjectionSeq,
+        effectivePayloadHash: context.effectivePayloadHash, authorityCommandHash: context.authorityCommandHash,
+        result: { kind: "integration-retried", groupId },
       } };
     },
   }).body;

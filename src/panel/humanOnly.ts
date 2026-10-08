@@ -37,6 +37,7 @@ export const VERB_ACCESS: Readonly<Record<CommandVerbV1, "any" | "human-only" | 
   // Integration spec §3.1, §8: only an owner chooses where a group's work is carried (a push, a PR).
   "set-integration-scheme": "human-only",
   "set-group-integration": "human-only",
+  "retry-integration": "human-only",
 };
 export const HUMAN_ONLY_VERBS: readonly CommandVerbV1[] =
   (Object.keys(VERB_ACCESS) as CommandVerbV1[]).filter((verb) => VERB_ACCESS[verb] === "human-only");

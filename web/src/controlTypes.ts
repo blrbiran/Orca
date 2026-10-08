@@ -441,7 +441,7 @@ export type CommandSuccessV1 = {
   actorId: string;
   verb: "import-plan" | "proposal-edit" | "estimate" | "confirm" | "start" | "pause-dispatch" | "handoff-stop" | "resume-dispatch" | "resume-from-handoff" | "set-limit" | "continue-task" | "recovery-retry" | "shutdown" | "set-workspace-mode" | "set-agent-preferences" | "proposal-set-agent" | "set-task-labels" | "set-task-loop"
     | "requirement-open" | "requirement-answer" | "requirement-consensus" | "requirement-draft-feedback" | "requirement-draft-accept"
-    | "set-spend-cap" | "clear-spend-cap" | "set-usage-calendar" | "set-integration-scheme" | "set-group-integration";
+    | "set-spend-cap" | "clear-spend-cap" | "set-usage-calendar" | "set-integration-scheme" | "set-group-integration" | "retry-integration";
   target: CommandTargetV1;
   commandRevision: number | null;
   projectionSeq: number | null;
@@ -460,6 +460,7 @@ export type CommandSuccessV1 = {
     | { kind: "workspace-mode-set"; repoId: string; workspaceMode: "worktree" | "clone" }
     | { kind: "integration-scheme-set"; repoId: string; integration: IntegrationSchemeV1 }
     | { kind: "group-integration-set"; groupId: string; integration: IntegrationSchemeV1 }
+    | { kind: "integration-retried"; groupId: string }
     | { kind: "agent-preferences-set"; operatorId: string; revision: number }
     | { kind: "spend-cap-set"; revision: number }
     | { kind: "spend-cap-cleared"; revision: number }

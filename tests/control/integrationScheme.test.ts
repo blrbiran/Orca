@@ -160,6 +160,21 @@ describe("checkScheme (integration spec §3.3)", () => {
     expect(await checkScheme(repo, { ...PB, remote: "nowhere" })).toBe("remote-missing");
     expect(await checkScheme(repo, { ...PB, delivery: "github-pr", remote: "lab" })).toBe("remote-not-github");
   });
+  it("names git itself when git cannot be started or does not answer in time, not the check it was serving", async () => {
+    const empty = join(root, "no-git"), hang = join(root, "hang");
+    await mkdir(empty); await mkdir(hang);
+    await writeFile(join(hang, "git"), "#!/bin/sh\nsleep 5\n", { mode: 0o755 });
+    try {
+      vi.stubEnv("PATH", empty);
+      expect(await checkScheme(repo, PB)).toBe("git");
+      expect(await preflightScheme(repo, PB, "/nonexistent/gh")).toBe("git");
+      vi.stubEnv("PATH", `${hang}:/bin:/usr/bin`);
+      vi.stubEnv("ORCA_INTEGRATION_TIMEOUT_MS", "300");
+      const started = Date.now();
+      expect(await checkScheme(repo, LOCAL)).toBe("git");
+      expect(Date.now() - started).toBeLessThan(3000);
+    } finally { vi.unstubAllEnvs(); }
+  });
   it("checkBranchName adds git's own check-ref-format to the pattern", async () => {
     expect(await checkBranchName(repo, "feat/x")).toBe(true);
     expect(await checkBranchName(repo, "a..b")).toBe(false);
@@ -278,11 +293,27 @@ describe("set-group-integration (integration spec §3.1, §3.3)", () => {
     } finally { await h.dispose(); }
   });
 
-  it("an unfrozen group's keep -> scheme stays unfrozen; a confirmed keep group's new scheme is frozen at once", async () => {
+  it("a confirmed keep group's new scheme is frozen at once", async () => {
     const h = await groupOver(); try {
       expect(errorCode(await h.service.confirm(h.command("confirm", await h.confirmPayload())))).toBe("applied");
       expect(errorCode(await h.setGroup(PB))).toBe("applied");
       expect(groupBody(h.store).integration).toEqual({ ...newGroupIntegration(PB), frozen: true });
+    } finally { await h.dispose(); }
+  });
+
+  it("refuses integration-preflight-failed naming git or the repository when either cannot answer, booked like any refusal", async () => {
+    const h = await groupOver(); try {
+      vi.stubEnv("PATH", join(h.root, "no-such-dir"));
+      try {
+        expect(await h.setGroup(PB)).toMatchObject({ error: { code: "integration-preflight-failed", message: "integration-preflight-failed:git" } });
+      } finally { vi.unstubAllEnvs(); }
+      const unresolved = new WebControlService({ ...h.deps, resolveRepository: () => { throw new Error("control-path-changed"); } });
+      const command = h.command("set-group-integration", { integration: PB }, "unresolved");
+      expect(await unresolved.setGroupIntegration(command)).toMatchObject({ error: { code: "integration-preflight-failed", message: "integration-preflight-failed:repository" } });
+      expect(h.store.db.prepare("SELECT id FROM commands WHERE id='unresolved'").get()).toBeDefined();
+      expect(Object.hasOwn(groupBody(h.store), "integration")).toBe(false);
+      const noResolver = new WebControlService({ ...h.deps, knownRepository: () => true });
+      expect(await noResolver.setIntegrationScheme(cmd(PB, 0, "int-nr"))).toMatchObject({ error: { code: "integration-preflight-failed", message: "integration-preflight-failed:repository" } });
     } finally { await h.dispose(); }
   });
 
@@ -336,6 +367,16 @@ describe("confirm binds the approval to the scheme the owner saw (integration sp
       expect((result as { authorityCommandHash: string }).authorityCommandHash).toBe(sha256Canonical({ ...command, schema: "orca-authority-command-v1" }));
       expect((result as { effectivePayloadHash: string }).effectivePayloadHash).toBe(sha256Canonical(payload));
       expect(Object.hasOwn(groupBody(h.store), "integration")).toBe(false);
+    } finally { await h.dispose(); }
+  });
+
+  it("refuses integration-preflight-failed naming the repository when its path does not resolve", async () => {
+    const h = await groupOver(PB); try {
+      const unresolved = new WebControlService({ ...h.deps, resolveRepository: () => { throw new Error("control-path-changed"); } });
+      const seen = readControlGroup(h.store, "epoch", "g").integration!.schemeHash;
+      expect(await unresolved.confirm(h.command("confirm", { ...(await h.confirmPayload()), integrationHash: seen })))
+        .toMatchObject({ error: { code: "integration-preflight-failed", message: "integration-preflight-failed:repository" } });
+      expect((groupBody(h.store).integration as GroupIntegration).frozen).toBe(false);
     } finally { await h.dispose(); }
   });
 

@@ -19,8 +19,8 @@ import { scheduleStart, type StartCommand } from "./webDispatch.js";
 import { applyHandoffStop, applyPauseDispatch, applyRecoveryRetry, applyResumeDispatch, type HandoffStopCommand, type PauseCommand, type RecoveryRetryCommand, type ResumeDispatchCommand, type StopDeps } from "./stopIntent.js";
 import { applyContinueTask, applyResumeFromHandoff, type ContinueTaskCommand, type ResumeFromHandoffCommand } from "./continuation.js";
 import { applySetWorkspaceMode, type SetWorkspaceModeCommand } from "./workspaceSettings.js";
-import { applySetGroupIntegration, applySetIntegrationScheme, type SetGroupIntegrationCommand, type SetIntegrationSchemeCommand } from "./integrationCommands.js";
-import { checkScheme, preflightScheme, readGroupIntegration, type GroupIntegration } from "./integrationScheme.js";
+import { applyRetryIntegration, applySetGroupIntegration, applySetIntegrationScheme, type RetryIntegrationCommand, type SetGroupIntegrationCommand, type SetIntegrationSchemeCommand } from "./integrationCommands.js";
+import { checkScheme, preflightScheme, readGroupIntegration, REPOSITORY_CHECK, type GroupIntegration, type IntegrationScheme } from "./integrationScheme.js";
 import { applySpendCommand, type SpendCommand } from "./spendCommands.js";
 import { applySetAgentPreferences, type SetAgentPreferencesCommand } from "./agentPreferences.js";
 import { recordProjectionChange } from "./projectionJournal.js";
@@ -554,15 +554,12 @@ export class WebControlService {
    * refuses from what they found. An unknown repository is not checked; the transaction refuses it by name.
    */
   async setIntegrationScheme(command: SetIntegrationSchemeCommand): Promise<WebCommandResult> {
+    const knownRepository = this.deps.knownRepository ?? (() => false);
+    // The git checks run before the admission gate is entered: a drain never waits on a git child.
+    const failedCheck = knownRepository(command.target.repoId) ? await this.schemeCheck(command.target.repoId, command.payload.integration) : null;
     const release = this.deps.admissionGate?.enter();
     try {
       const replay = preflightWebCommand<WebCommandResult>(this.store, command); if (replay) return replay.body;
-      const knownRepository = this.deps.knownRepository ?? (() => false);
-      let failedCheck: string | null = null;
-      if (knownRepository(command.target.repoId)) {
-        if (this.deps.resolveRepository === undefined) throw new Error("set-integration-scheme: a known repository needs resolveRepository");
-        failedCheck = await checkScheme(this.deps.resolveRepository(command.target.repoId), command.payload.integration);
-      }
       return applySetIntegrationScheme({ store: this.store, knownRepository }, command, failedCheck) as WebCommandResult;
     } finally { release?.(); }
   }
@@ -572,13 +569,23 @@ export class WebControlService {
    * checked, and the transaction refuses it by name.
    */
   async setGroupIntegration(command: SetGroupIntegrationCommand): Promise<WebCommandResult> {
+    const repoId = this.planRepository(command.target.groupId);
+    const failedCheck = repoId === null ? null : await this.schemeCheck(repoId, command.payload.integration);
     const release = this.deps.admissionGate?.enter();
     try {
       const replay = preflightWebCommand<WebCommandResult>(this.store, command); if (replay) return replay.body;
-      const repoId = this.planRepository(command.target.groupId);
-      const failedCheck = repoId === null ? null : await checkScheme(this.repositoryPath(repoId), command.payload.integration);
       return applySetGroupIntegration({ store: this.store }, command, failedCheck) as WebCommandResult;
     } finally { release?.(); }
+  }
+  /** Integration spec §6.5: a blocked or conflicted integration back to idle (no git child; the next round retries it). */
+  retryIntegration(command: RetryIntegrationCommand): WebCommandResult {
+    return this.mutate(() => applyRetryIntegration({ store: this.store }, command)) as WebCommandResult;
+  }
+  /** The setters' check against a repository's trusted path; a path that does not resolve is its own named check. */
+  private async schemeCheck(repoId: string, scheme: IntegrationScheme): Promise<string | null> {
+    let path: string;
+    try { path = this.repositoryPath(repoId); } catch { return REPOSITORY_CHECK; }
+    return checkScheme(path, scheme);
   }
   /** The repository a group's plan names, read before a transaction; null when the group has none (yet). */
   private planRepository(id: string): string | null {
@@ -620,7 +627,8 @@ export class WebControlService {
         .catch((failure: unknown) => ({ failure }));
       const skillLookup = await lookupSkillProfiles(this.store, groupId(command), this.deps.syncskill ?? UNCONFIGURED_SYNCSKILL, this.deps.port);
       // Integration spec §3.3: a non-keep scheme's preflight, decided inside the transaction. The group revision the
-      // command is checked against there covers any set-group-integration since this read.
+      // command is checked against there covers any set-group-integration since this read. It stays after the selection
+      // resolution, which must start before anything awaits (agentFreeze: a layer change during it is refused).
       const preflight = await this.integrationPreflight(groupId(command));
       return applyWebCommand<WebCommandResult>(this.store, {
         rawCommand: command, expand: () => ({ ...command, schema: "orca-authority-command-v1" }),
@@ -725,7 +733,9 @@ export class WebControlService {
     } catch { return null; }
     const repoId = this.planRepository(id);
     if (integration === null || repoId === null) return null;
-    return preflightScheme(this.repositoryPath(repoId), integration.scheme, process.env.ORCA_GH_BIN || "gh");
+    let path: string;
+    try { path = this.repositoryPath(repoId); } catch { return REPOSITORY_CHECK; }
+    return preflightScheme(path, integration.scheme, process.env.ORCA_GH_BIN || "gh");
   }
   setLimit(command: SetLimitCommand): WebCommandResult {
     return this.mutate(() => applyWebCommand(this.store, {
