@@ -11,7 +11,7 @@ import { refusalFrom } from "../src/api.js";
 import { ControlRequestError, downloadEvidenceArtifact, fetchControlConfig, refusalFromAnswer, sendControlCommand } from "../src/controlApi.js";
 import { ControlPanel } from "../src/ControlPanel.js";
 import { ErrorPage } from "../src/ErrorPage.js";
-import i18n, { refusalText } from "../src/i18n.js";
+import i18n, { fillEntry, refusalText } from "../src/i18n.js";
 import { enErrors } from "../src/locales/en.js";
 import { Refusal } from "../src/Refusal.js";
 import type { CommandEnvelopeV1, ControlConfigV1, ControlSummaryV1, EvidenceManifestV1, RecoveryViewV1 } from "../src/controlTypes.js";
@@ -74,9 +74,22 @@ describe("refusals in the reader's language (spec §3.2, §6.4)", () => {
   it("fills {{detail}} with the message after `<code>:`, the whole message when it has no such prefix, and nothing when it is the code", () => {
     expect(refusalText({ code: "labels-invalid", message: "labels-invalid:count:17", status: 422 })).toBe("The labels are not valid: count:17");
     expect(refusalText({ code: "labels-invalid", message: "17 labels are too many", status: 422 })).toBe("The labels are not valid: 17 labels are too many");
-    expect(refusalText({ code: "labels-invalid", message: "labels-invalid", status: 422 })).toBe("The labels are not valid: ");
+    // A3 review finding 4: a bare code drops the colon before its empty detail and ends the sentence.
+    expect(refusalText({ code: "labels-invalid", message: "labels-invalid", status: 422 })).toBe("The labels are not valid.");
     expect(refusalText({ code: "http-502", message: "POST /x: the panel may not have committed this command", status: 502 }))
       .toBe("The panel answered HTTP 502 without an error code: POST /x: the panel may not have committed this command");
+  });
+
+  // A3 review finding 4: recovery-blocked is thrown bare (src/panel/controlApi.ts ensurePanelOperatorId); an empty value
+  // takes its separator with it -- a parenthesis around it, a colon before it mid-sentence or at the end, in both scripts.
+  it("drops the separator around an empty detail instead of leaving a dangling colon or empty parentheses", () => {
+    expect(refusalText({ code: "recovery-blocked", message: "recovery-blocked", status: 423 })).toBe("Recovery is blocked. Clear what the Recovery section names, then retry.");
+    expect(refusalText({ code: "control-internal-error", message: "control-internal-error", status: 500 })).toBe("The control plane failed internally. Retry; if it repeats, read the panel's log.");
+    expect(refusalText({ code: "control-internal-error", message: "control-internal-error:disk full.", status: 500 })).toBe("The control plane failed internally (disk full.). Retry; if it repeats, read the panel's log.");
+    const empty = { message: "", status: "", detail: "" };
+    expect(fillEntry("ccloop finished this run without success (outcome {{detail}}).", empty)).toBe("ccloop finished this run without success.");
+    expect(fillEntry("给运行注入技能失败（{{detail}}）；修好 syncskill 后重试运行。", empty)).toBe("给运行注入技能失败；修好 syncskill 后重试运行。");
+    expect(fillEntry("标签不合法：{{message}}", empty)).toBe("标签不合法。");
   });
 
   it("shows the Chinese entry for a known code, with the server's detail where the entry carries it, and keeps the code", async () => {

@@ -61,7 +61,8 @@ describe("explaining a refused plan (spec §2.2(b))", () => {
     expect(explainRefusal({ status: 422, code: "group-reserve-insufficient", message: "group-reserve-insufficient:tokens:1", commandRevision: 3 }))
       .toEqual({ text: enErrors["group-reserve-insufficient"]!.replace("{{detail}}", "tokens:1"), items: [] });
     expect(explainRefusal({ status: 422, code: "control-plan-rejected", message: "control-plan-rejected", commandRevision: null }))
-      .toEqual({ text: "The plan was not imported: ", items: [] });
+      // Rewritten for A3 review finding 4 (controller-approved): a bare code drops the dangling colon and ends the sentence.
+      .toEqual({ text: "The plan was not imported.", items: [] });
   });
 });
 

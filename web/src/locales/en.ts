@@ -794,7 +794,7 @@ export const en = {
  * the `en` key set, like zhErrors.
  */
 export const enErrors: Record<string, string> = {
-  // Spec §3.2, §6.4: every code of controlErrorCatalog() (src/panel/controlErrors.ts), 124 at ac969bb.
+  // Spec §3.2, §6.4: every code of controlErrorCatalog() (src/panel/controlErrors.ts); refusalCoverage.test.ts pins the count.
   "agent-context-unsupported": "The agent does not support this context window: {{detail}}",
   "agent-installation-missing": "The agents table has no installation of this agent: {{detail}}",
   "agent-selection-changed": "The agent selections changed before the confirmation. Read the group again, then confirm.",
@@ -811,7 +811,7 @@ export const enErrors: Record<string, string> = {
   "checkpoint-identity-conflict": "The checkpoint's identity conflicts with the recorded one.",
   "checkpoint-not-committed": "The checkpoint has not been committed yet.",
   "checkpoint-run-settled": "This run has settled, so it can take no more checkpoints.",
-  "checkpoint-usage-high-water": "The checkpoint reports less usage than was already recorded.",
+  "checkpoint-usage-high-water": "The checkpoint's usage high-water mark differs from the run's recorded one.",
   "cleanup-not-recoverable": "This run is not in a state that can be cleaned up for recovery.",
   "command-result-not-found": "The ledger has no result for this command: {{detail}}",
   "continuation-budget-unavailable": "There is not enough budget for the continuation.",
@@ -820,7 +820,7 @@ export const enErrors: Record<string, string> = {
   "control-capability-unsupported": "A required capability is not supported: {{detail}}",
   "control-estimator-unconfigured": "The panel has no estimator profile configured. Restart it with an estimator profile to run estimates.",
   "control-evidence-unavailable": "Evidence is not available.",
-  "control-internal-error": "The control plane failed internally: {{detail}}. Retry; if it repeats, read the panel's log.",
+  "control-internal-error": "The control plane failed internally ({{detail}}). Retry; if it repeats, read the panel's log.",
   "control-invalid-stop": "The stop request is not valid.",
   "control-non-canonical-json": "The request body is not canonical JSON: {{detail}}",
   "control-non-json-payload": "The request payload is not valid JSON: {{detail}}",
@@ -864,7 +864,7 @@ export const enErrors: Record<string, string> = {
   "handoff-parent-invalid": "The run being handed off is not valid for this handoff.",
   "handoff-request-conflict": "The handoff request conflicts with one already recorded.",
   "handoff-work-not-found": "The work to hand off was not found.",
-  "identity-space-exhausted": "No identity numbers are left.",
+  "identity-space-exhausted": "No identity numbers are left: {{detail}}",
   // Integration spec §3.2-§3.4, §8: the integration refusals.
   "integration-busy": "An agent is resolving this group's integration conflict, so its integration settings cannot change now. Wait for it to finish.",
   "integration-invalid": "The integration settings failed a check (branch name, remote name, whether the remote exists, whether it is a GitHub repository): {{detail}}",
@@ -916,7 +916,7 @@ export const enErrors: Record<string, string> = {
   // Syncskill integration spec §10.5 / §10.8 C4 (plan Task 4): confirm's skill-set refusals.
   "skills-profile-empty": "This skill profile has no skills, so it cannot be confirmed.",
   "skills-shape": "A skill name or profile name is not valid.",
-  "skills-unsupported-agent": "Only claude can load skills, and the agent chosen for this task is not claude: {{detail}}",
+  "skills-unsupported-agent": "Skills load only on a claude or codex agent, and the agent chosen for this task is neither: {{detail}}",
   "syncskill-failed": "syncskill failed: {{detail}}",
   "syncskill-missing": "syncskill was not found. ORCA_SYNCSKILL_BIN must be an absolute path to a program that runs.",
   "syncskill-output-invalid": "syncskill's output could not be read.",
@@ -940,7 +940,7 @@ export const enErrors: Record<string, string> = {
   "usage-event-conflict": "A usage event conflicts with the recorded one.",
   "usage-gap": "The usage record has a gap.",
   "usage-query-invalid": "The usage query parameters are not valid: {{detail}}",
-  "work-already-active": "This task already has an active run. Wait for it to settle.",
+  "work-already-active": "This task already has a run in progress, or is not paused waiting to be continued ({{detail}}). Wait for its run to settle, then read the group again.",
   "work-already-done": "The work is already done.",
   "work-not-found": "The work was not found.",
   // Spec §3.2: the codes the web itself makes (api.ts, controlApi.ts); http-<n> is one entry.
@@ -1030,7 +1030,7 @@ export const enErrors: Record<string, string> = {
   "password-mismatch": "The two passwords do not match.",
   "spend-cap-reached": "A spend cap is reached, so this group's next claim is waiting. It continues on its own once the cap is raised or the next period starts.",
   // Accounts final review: a project spend cap is accepted only for a repository this panel holds.
-  "spend-cap-repository-unknown": "This panel has no such repository, so it cannot get a spend cap.",
+  "spend-cap-repository-unknown": "This panel has no such repository, so it cannot get a spend cap: {{detail}}",
   // Spec 2026-10-08 §2.2(a): the reasons a group view shows on a blocked run, by prefix up to the first ':'
   // (web/src/refusalExplain.ts explainRunReason; tests/panel/refusalCoverage.test.ts VIEW_REASONS).
   "agent-unfrozen": "The run's agent differs from the one frozen at confirmation, so the run did not start.",

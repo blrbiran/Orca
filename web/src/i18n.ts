@@ -102,9 +102,23 @@ export function errorEntry(code: string): string | undefined {
   return Object.prototype.hasOwnProperty.call(table, code) ? table[code] : undefined;
 }
 
-/** An entry with its {{message}}, {{status}} and {{detail}} filled. */
+/**
+ * An entry with its {{message}}, {{status}} and {{detail}} filled. An empty value takes its separator with it (A3 review
+ * finding 4): a parenthesis holding only it and its lead-in words is dropped, and a ": " before it is dropped -- at the
+ * end of the entry it becomes the sentence's full stop -- so a bare code never reads "...: " or "( )".
+ */
 export function fillEntry(entry: string, values: { message: string; status: string; detail: string }): string {
-  return entry.replace(/\{\{(message|status|detail)\}\}/g, (_match: string, name: "message" | "status" | "detail") => values[name]);
+  let text = entry;
+  for (const name of ["message", "status", "detail"] as const) {
+    if (values[name] !== "") continue;
+    const slot = `\\{\\{${name}\\}\\}`;
+    text = text
+      .replace(new RegExp(` ?[(（][^()（）{}]*${slot}[)）]`, "g"), "")
+      .replace(new RegExp(`: ?${slot}$`), ".")
+      .replace(new RegExp(`：${slot}$`), "。")
+      .replace(new RegExp(`[:：] ?${slot}`, "g"), "");
+  }
+  return text.replace(/\{\{(message|status|detail)\}\}/g, (_match: string, name: "message" | "status" | "detail") => values[name]);
 }
 
 /** Spec 2026-10-08 §2.2(a): the server's words after `<code>:` -- nothing when the message is the code, all of it when it has no such prefix. */

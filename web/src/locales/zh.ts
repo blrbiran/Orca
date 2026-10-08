@@ -751,7 +751,7 @@ export const zhErrors: Record<string, string> = {
   "checkpoint-identity-conflict": "检查点身份冲突。",
   "checkpoint-not-committed": "检查点尚未提交。",
   "checkpoint-run-settled": "这个运行已结算，不能再写检查点。",
-  "checkpoint-usage-high-water": "检查点用量低于已记录的高水位。",
+  "checkpoint-usage-high-water": "检查点的用量高水位与已记录的不一致。",
   "cleanup-not-recoverable": "清理无法恢复。",
   "command-result-not-found": "台账里没有这条命令的结果：{{detail}}",
   "continuation-budget-unavailable": "续跑所需的预算不够。",
@@ -804,7 +804,7 @@ export const zhErrors: Record<string, string> = {
   "handoff-parent-invalid": "交接的父运行不合法。",
   "handoff-request-conflict": "交接请求冲突。",
   "handoff-work-not-found": "找不到要交接的工作。",
-  "identity-space-exhausted": "身份编号已用尽。",
+  "identity-space-exhausted": "身份编号已用尽：{{message}}",
   // Integration spec §3.2-§3.4, §8: the integration refusals.
   "integration-busy": "这个组的集成冲突正在由 agent 解决，现在不能改它的集成方式。",
   "integration-invalid": "集成方式没通过检查（分支名、远端名、远端是否存在、是否 GitHub 仓库）：{{message}}",
@@ -856,7 +856,7 @@ export const zhErrors: Record<string, string> = {
   // Syncskill integration spec §10.5 / §10.8 C4 (plan Task 4): confirm's skill-set refusals.
   "skills-profile-empty": "这个技能 profile 里没有技能，不能确认。",
   "skills-shape": "技能名或 profile 名不合法。",
-  "skills-unsupported-agent": "只有 claude 能加载技能，这个任务选的 agent 不是 claude：{{message}}",
+  "skills-unsupported-agent": "只有 claude 或 codex 能加载技能，这个任务选的 agent 两者都不是：{{message}}",
   "syncskill-failed": "syncskill 执行失败：{{message}}",
   "syncskill-missing": "找不到 syncskill：ORCA_SYNCSKILL_BIN 必须是一个能运行的绝对路径。",
   "syncskill-output-invalid": "syncskill 的输出读不懂。",
@@ -880,7 +880,7 @@ export const zhErrors: Record<string, string> = {
   "usage-event-conflict": "用量事件冲突。",
   "usage-gap": "用量记录有缺口。",
   "usage-query-invalid": "用量查询参数不合法：{{message}}",
-  "work-already-active": "工作已经在进行。",
+  "work-already-active": "这个任务已有在进行的运行，或者没有暂停等待续跑（{{message}}）。等它的运行结算后，重新读取这个组。",
   "work-already-done": "工作已经完成。",
   "work-not-found": "找不到这项工作。",
   // Spec §3.2: the codes the web itself makes (api.ts, controlApi.ts); http-<n> is one entry.
@@ -970,7 +970,7 @@ export const zhErrors: Record<string, string> = {
   "password-mismatch": "两次输入的密码不一致。",
   "spend-cap-reached": "已到花费上限，这个组的下一次认领在等待；提高上限或等到下一个周期后会自动继续。",
   // Accounts final review: a project spend cap is accepted only for a repository this panel holds.
-  "spend-cap-repository-unknown": "这个面板没有这个仓库，不能给它设花费上限。",
+  "spend-cap-repository-unknown": "这个面板没有这个仓库，不能给它设花费上限：{{message}}",
   // Spec 2026-10-08 §2.2(a): the reasons a group view shows on a blocked run, by prefix up to the first ':'
   // (web/src/refusalExplain.ts explainRunReason; tests/panel/refusalCoverage.test.ts VIEW_REASONS).
   "agent-unfrozen": "运行的 agent 与确认时冻结的不一致，所以没有启动。",
