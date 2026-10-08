@@ -6,7 +6,7 @@
  * `local` and `push-target` have a method. A repository with no scheme yet starts from remote `origin` and the
  * repository's suggested target (the server's read of origin's HEAD branch, else the current branch).
  */
-import { useContext, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import type { JSX } from "react";
 import { useTranslation } from "react-i18next";
 import { AccountContext, mayHumanOnly } from "./AuthGate.js";
@@ -74,6 +74,13 @@ function SchemeForm(props: { scheme: IntegrationSchemeV1; suggestedTarget: strin
   const { t } = useTranslation();
   const [fields, setFields] = useState<Fields>(() => fieldsOf(props.scheme, props.suggestedTarget));
   const set = (change: Partial<Fields>): void => setFields((current) => ({ ...current, ...change }));
+  // Fix round 1 F2: a suggestion read after the form opened fills the target only while it is empty and the person has
+  // not typed in it; what they typed (even an emptied field) is theirs.
+  const targetTouched = useRef(false);
+  useEffect(() => {
+    if (props.suggestedTarget === null || targetTouched.current) return;
+    setFields((current) => (current.target === "" ? { ...current, target: props.suggestedTarget! } : current));
+  }, [props.suggestedTarget]);
   const { delivery } = fields;
   const missingTarget = delivery !== "keep" && fields.target.trim() === "";
   return (
@@ -102,7 +109,7 @@ function SchemeForm(props: { scheme: IntegrationSchemeV1; suggestedTarget: strin
           )}
           <label>
             {t("control.integration.target")}
-            <input value={fields.target} onChange={(event) => set({ target: event.currentTarget.value })} />
+            <input value={fields.target} onChange={(event) => { targetTouched.current = true; set({ target: event.currentTarget.value }); }} />
           </label>
           {delivery !== "local" && (
             <label>
@@ -138,10 +145,13 @@ export function RepositoryIntegration(props: { integration: RepositoryIntegratio
 }
 
 /**
- * Spec §3.2, §9.1, the confirm step: the group's scheme in words, changeable by an owner until the proposal is confirmed
- * (set-group-integration under the group's revision). A member is told why a non-keep group is not theirs to confirm.
+ * Spec §3.2, §9.1, the confirm step: the group's scheme in words, changeable by an owner (set-group-integration under the
+ * group's revision). A member is told why a non-keep group is not theirs to confirm. Fix round 1 F1 (controller ruling,
+ * spec §3.1 H3, §6.5): after confirm the same editor sits in the group detail, outside the Git section, and its change is
+ * itself the owner's approval.
  */
 export function GroupIntegrationConfirm(props: { view: GroupViewV1; suggestedTarget: string | null; onCommand: (action: ControlAction) => void }): JSX.Element {
+  const started = props.view.proposal.state === "confirmed";
   const { t } = useTranslation();
   const mayChange = mayHumanOnly(useContext(AccountContext));
   const { view } = props;
@@ -156,7 +166,10 @@ export function GroupIntegrationConfirm(props: { view: GroupViewV1; suggestedTar
           <SchemeForm key={`${groupId}:${view.integration?.schemeHash ?? "keep"}`} scheme={scheme} suggestedTarget={props.suggestedTarget}
             onSave={(integration) => props.onCommand({ verb: "set-group-integration", groupId, expectedRevision: view.summary.commandRevision, payload: { integration } })} />
         )
-        : view.integration !== undefined && <p role="note">{t("control.integration.ownerConfirms")}</p>}
+        // Fix round 1 F1: after confirm a member reads the scheme; before it, a non-keep group is not theirs to confirm.
+        : started
+          ? <p role="note">{t("control.integration.ownerOnly")}</p>
+          : view.integration !== undefined && <p role="note">{t("control.integration.ownerConfirms")}</p>}
     </section>
   );
 }

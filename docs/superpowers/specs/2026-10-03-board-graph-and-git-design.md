@@ -83,3 +83,6 @@ Every new branch gets a named mutation seen red in the clone (Rule 9); recorded 
   docs/superpowers/specs/2026-10-08-integration-and-panel-fixes-design.md; CLAUDE.md Rule 15 governs agents developing
   Orca, not Orca at runtime. For a keep group, D5 stands as written above. (Added by the Task 7 implementer of the
   integration-schemes plan, branch feat/integration-schemes, on top of fab1764.)
+- C4 (the Git section shows merge and push as waiting on a person, with no button) now holds for keep groups only; a
+  non-keep group's Git section shows its integration and an owner's Retry / Resolve. (Task 7 fix round 1, same branch,
+  on top of 2516fad.)

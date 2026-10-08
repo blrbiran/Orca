@@ -16,6 +16,7 @@ import { BudgetEditor } from "./BudgetEditor.js";
 import { DependencyGraph } from "./DependencyGraph.js";
 import { EvidenceLink } from "./EvidenceLink.js";
 import { GitScheme } from "./GitScheme.js";
+import { GroupIntegrationConfirm } from "./IntegrationScheme.js";
 import { SkillsGiven } from "./SkillsGiven.js";
 import type {
   AgentSelectionPreviewV1, AgentsViewV1, ControlConfigV1, ContinuationSelectionV1, GroupViewV1, OperatorPreferencesV1, RepositoryIntegrationV1, RepositoryWorkspaceV1,
@@ -225,6 +226,10 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       </table>
 
       <GitScheme view={view} workspace={workspace} onCommand={onCommand} />
+      {/* Fix round 1 F1: a started group's scheme stays an owner's to change, outside the (button-free for keep) Git section. */}
+      {view.proposal.state === "confirmed" && (
+        <GroupIntegrationConfirm view={view} suggestedTarget={props.integrationFor?.(view.plan.repoId)?.suggestedTarget ?? null} onCommand={onCommand} />
+      )}
 
       <SkillsGiven view={view} />
 

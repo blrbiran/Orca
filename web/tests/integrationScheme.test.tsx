@@ -228,6 +228,65 @@ describe("the page around the integration UI (spec §9.1)", () => {
   });
 });
 
+// Fix round 1 F1 (controller ruling): after confirm an owner may still change the scheme (spec §3.1 H3; §6.5's "change
+// scheme"), outside the Git section, which stays button-free for a keep group (board spec C4).
+describe("the group's scheme after confirm (fix round 1, F1)", () => {
+  const detail = (groupView: GroupViewV1, me: Me = owner) => {
+    const onCommand = vi.fn();
+    render(as(me, <ControlGroupView view={groupView} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={onCommand} />));
+    return { onCommand, region: screen.getByRole("region", { name: "Integration of this group" }) };
+  };
+
+  it("lets an owner switch a started keep group to a scheme, under the group's revision, outside the Git section", () => {
+    const { onCommand, region } = detail(confirmedGroup());
+    expect(within(screen.getByRole("region", { name: "Git" })).queryAllByRole("button")).toEqual([]);
+    choose(region, "Delivery", "push-branch");
+    fireEvent.change(field(region, "Target branch"), { target: { value: "main" } });
+    fireEvent.click(within(region).getByRole("button", { name: "Save integration" }));
+    expect(onCommand.mock.calls).toEqual([[{ verb: "set-group-integration", groupId: "g", expectedRevision: 6, payload: { integration: { delivery: "push-branch", trigger: "task", target: "main", remote: "origin" } } }]]);
+  });
+
+  it("lets an owner change a blocked non-keep group's scheme", () => {
+    const { onCommand, region } = detail(confirmedGroup(record({ frozen: true, state: "blocked", reason: "integration-pr-refused:x" })));
+    choose(region, "When", "group");
+    fireEvent.click(within(region).getByRole("button", { name: "Save integration" }));
+    expect(onCommand.mock.calls).toEqual([[{ verb: "set-group-integration", groupId: "g", expectedRevision: 6, payload: { integration: { ...PR_TASK, trigger: "group" } } }]]);
+  });
+
+  it("shows a member the scheme read-only, with no Save and no confirm note", () => {
+    const { region } = detail(confirmedGroup(record({ frozen: true })), member);
+    expect(region.textContent).toContain("After each task: push orca/g to origin");
+    expect(region.textContent).toContain("Only an owner can change the integration.");
+    expect(within(region).queryAllByRole("button")).toEqual([]);
+  });
+});
+
+// Fix round 1 F2 (review Minor 1): a suggestion that arrives after the form opened fills an empty, untouched target.
+describe("a late suggested target (fix round 1, F2)", () => {
+  const repoView = (suggestedTarget: string | null) => <RepositoryIntegration integration={repository({ delivery: "keep" }, suggestedTarget)} onSave={vi.fn()} />;
+
+  it("fills the target once the suggestion arrives while the field is empty and untouched", () => {
+    const { rerender } = render(repoView(null));
+    const region = screen.getByRole("region", { name: "Integration" });
+    choose(region, "Delivery", "local");
+    expect(field(region, "Target branch").value).toBe("");
+    rerender(repoView("late"));
+    expect(field(region, "Target branch").value).toBe("late");
+  });
+
+  it("never overwrites what the person typed, even after they emptied it", () => {
+    const { rerender } = render(repoView(null));
+    const region = screen.getByRole("region", { name: "Integration" });
+    choose(region, "Delivery", "local");
+    fireEvent.change(field(region, "Target branch"), { target: { value: "mine" } });
+    rerender(repoView("late"));
+    expect(field(region, "Target branch").value).toBe("mine");
+    fireEvent.change(field(region, "Target branch"), { target: { value: "" } });
+    rerender(repoView("later"));
+    expect(field(region, "Target branch").value).toBe("");
+  });
+});
+
 describe("the group's Git area (spec §6.5, §9.1)", () => {
   const show = (groupView: GroupViewV1, me: Me = owner) => {
     const onCommand = vi.fn();
