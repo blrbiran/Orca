@@ -418,7 +418,7 @@ export async function finishResolvedIntegration(deps: IntegrationDeps, repo: str
       outcome = published === "moved" ? { kind: "discarded" } : published;
     }
   } catch (error) {
-    if (error instanceof Crashed) throw error;
+    // A crash (Crashed) is rethrown by failureOutcome like anything else it does not name.
     outcome = failureOutcome(error, scheme, null, new Set());
   }
   return settle(deps, groupId, integration.schemeHash, outcome);
@@ -453,7 +453,7 @@ function settle(deps: IntegrationDeps, groupId: string, hash: string, outcome: O
           conflict: null, resolution: null, ...(outcome.pr === undefined ? {} : { pr: outcome.pr }) };
         break;
       case "blocked":
-        next = { ...current, state: "blocked", reason: outcome.reason, pending: null, retryAfter: null, transient: 0, resolution: null };
+        next = { ...current, state: "blocked", reason: outcome.reason, pending: null, retryAfter: null, transient: 0 };
         break;
       case "conflict": {
         // spec §7: recorded with its materialised copy, and nothing is dispatched until an owner approves.

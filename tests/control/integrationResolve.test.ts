@@ -7,7 +7,8 @@ import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { recordIntegrationUsage } from "../../src/control/integrationResolve.js";
+import { applyResolveIntegrationConflict } from "../../src/control/integrationCommands.js";
+import { prepareResolution, recordIntegrationUsage } from "../../src/control/integrationResolve.js";
 import { integratePendingGroups, type IntegrationDeps } from "../../src/control/integrationPass.js";
 import { newGroupIntegration, readGroupIntegration, type GroupIntegration, type IntegrationScheme } from "../../src/control/integrationScheme.js";
 import { readConfirmedTaskExecution } from "../../src/control/executionSnapshot.js";
@@ -79,9 +80,9 @@ async function world(scheme: IntegrationScheme, options: { requiredChecks?: stri
     return new Promise<never>(() => undefined);
   };
   const reconciling = new Map<string, Promise<void>>();
-  const deps = (): IntegrationDeps => ({
+  const deps = (extra: Partial<IntegrationDeps> = {}): IntegrationDeps => ({
     store: h.store, roots, admissionGate: h.deps.admissionGate, repoPathOf: () => repo, now: () => 1_000_000, ghBin: "/nonexistent/gh", stopped: () => false,
-    resolution: { ccloopBin: "/nonexistent/ccloop", agentsTablePath: "/nonexistent/agents.json", reconciling, runTask: (...args) => runTask(...args) },
+    resolution: { ccloopBin: "/nonexistent/ccloop", agentsTablePath: "/nonexistent/agents.json", reconciling, runTask: (...args) => runTask(...args) }, ...extra,
   });
   const land = (files: Record<string, string>) => commitOn(repo, "refs/heads/orca/g", files, "land");
   const person = (files: Record<string, string>) => commitOn(repo, "refs/heads/main", files, "person");
@@ -91,11 +92,27 @@ async function world(scheme: IntegrationScheme, options: { requiredChecks?: stri
   };
   return {
     ...h, repo, roots, service, calls, reconciling, land, person, raise,
-    pass: () => integratePendingGroups(deps()),
+    pass: (extra: Partial<IntegrationDeps> = {}) => integratePendingGroups(deps(extra)),
     record: () => record(h.store),
     resolve: () => service.resolveIntegrationConflict(h.command("resolve-integration-conflict", {})),
     copyOf: (attempt: number) => join(roots.workspacesRoot, `integration-conflict-g-${attempt}`),
     setRunTask: (next: typeof runTask) => { runTask = next; },
+    /** The spawned resolution's terminal loop state, as ccloop writes it (the stand-in run never does). */
+    loopState: async (state: Record<string, unknown>) => {
+      const resolution = record(h.store).resolution!;
+      const loopDir = loopDirOf(join(resolution.runsDir, resolution.reconcileRunId), resolution.reconcileRunId);
+      await mkdir(loopDir, { recursive: true });
+      await writeFile(join(loopDir, "loop-state.json"), JSON.stringify(state));
+      reconciling.clear();
+    },
+    /** What ccloop leaves for a finished attempt: its clone of the copy with `refs/ccloop/<key>/attempts/1` on the result. */
+    attempt: (files: Record<string, string>): string => {
+      const resolution = record(h.store).resolution!, key = resolution.reconcileRunId;
+      const clone = join(resolution.runsDir, key, "repo");
+      g(h.root, ["clone", "-q", "--no-checkout", resolution.copyPath, clone]);
+      g(clone, ["update-ref", `refs/ccloop/${key}/attempts/1`, resolution.conflictCommit]);
+      return commitOn(clone, `refs/ccloop/${key}/attempts/1`, files, "attempt");
+    },
   };
 }
 
@@ -138,6 +155,21 @@ describe("an integration conflict, materialised and approved (integration spec Â
       expect(parents(w.repo, pinned)).toEqual([main, tip]);
       expect(g(w.repo, ["show", `${pinned}:f.txt`])).toMatch(/^<<<<<<< [^\n]*\nB\n=======\nA\n>>>>>>> /m);
       expect(w.calls).toEqual([]);
+    } finally { await w.dispose(); }
+  });
+
+  it("squash: the conflict takes lastIntegrated as merge base, so a person's revert of integrated work survives in it", async () => {
+    const w = await world(LOCAL_SQUASH); try {
+      w.land({ "f.txt": "one\ntwo\nTHREE\n" });
+      expect(await w.pass()).toBe(true);
+      expect(w.record()).toMatchObject({ state: "idle", conflict: null });
+      // The person reverts what the first integration carried and rewrites line 1; the next landing rewrites line 1 too.
+      w.person({ "f.txt": "PERSON\ntwo\nthree\n" });
+      w.land({ "f.txt": "ONE\ntwo\nTHREE\n" });
+      expect(await w.pass()).toBe(true);
+      expect(w.record()).toMatchObject({ state: "conflict", reason: "integration-conflict" });
+      const text = g(w.repo, ["show", "refs/orca/integration-conflict/g/1:f.txt"]);
+      expect(text).toMatch(/^<<<<<<< [^\n]*\nPERSON\n=======\nONE\n>>>>>>> [^\n]*\ntwo\nthree$/);
     } finally { await w.dispose(); }
   });
 
@@ -188,6 +220,21 @@ describe("an integration conflict, materialised and approved (integration spec Â
     } finally { await w.dispose(); }
   });
 
+  it("the approval is judged again inside its transaction: a conflict retried, or replaced by the next attempt, since it was read", async () => {
+    const w = await world(LOCAL_MERGE); try {
+      await conflicted(w);
+      w.raise(10_000_000);
+      const stale = await prepareResolution(w.store, w.roots, "g", () => w.repo);
+      expect(stale).toMatchObject({ attempt: 1, copyPath: w.copyOf(1) });
+      expect(code(w.service.retryIntegration(w.command("retry-integration", {})))).toBe("applied");
+      expect(code(applyResolveIntegrationConflict({ store: w.store }, w.command("resolve-integration-conflict", {}), stale))).toBe("integration-not-blocked");
+      expect(await w.pass()).toBe(true);
+      expect(w.record()).toMatchObject({ state: "conflict", conflict: { attempt: 2 } });
+      expect(code(applyResolveIntegrationConflict({ store: w.store }, w.command("resolve-integration-conflict", {}), stale))).toBe("integration-not-blocked");
+      expect(code(await w.resolve())).toBe("applied");
+    } finally { await w.dispose(); }
+  });
+
   it("refuses integration-no-checks when the group's contracts carry no check to run", async () => {
     const w = await world(LOCAL_MERGE, { requiredChecks: ["  "] }); try {
       await conflicted(w);
@@ -203,6 +250,9 @@ describe("an integration conflict, materialised and approved (integration spec Â
       w.raise(10_000_000);
       expect(code(await w.resolve())).toBe("applied");
       const resolution = w.record().resolution!;
+      // A stopped driver advances nothing.
+      expect(await w.pass({ stopped: () => true })).toBe(false);
+      expect(w.calls).toEqual([]);
       expect(await w.pass()).toBe(true);
       expect(w.calls).toHaveLength(1);
       const call = w.calls[0]!;
@@ -282,6 +332,65 @@ describe("an integration conflict, materialised and approved (integration spec Â
         .toEqual([{ run_id: null, source: "run-work", model: null, tokens: 1_000, quality: "unattributed" }]);
       expect(Number((groupBody(w.store).used as { tokens: number }).tokens)).toBe(usedBefore + 1_000);
       expect(w.store.db.prepare("SELECT kind,delivered FROM outbox WHERE id='integration-usage:integrate-g-1'").get()).toEqual({ kind: "integration-usage", delivered: 1 });
+    } finally { await w.dispose(); }
+  });
+
+  it("a terminal loop state with no budget snapshot books the whole budget", async () => {
+    const w = await world(LOCAL_MERGE); try {
+      await conflicted(w);
+      w.raise(10_000_000);
+      expect(code(await w.resolve())).toBe("applied");
+      expect(await w.pass()).toBe(true);
+      await w.loopState({ status: "cancelled" });
+      expect(await w.pass()).toBe(true);
+      expect(w.record()).toMatchObject({ state: "conflict", reason: "integration-resolution-terminal:cancelled" });
+      expect(w.store.db.prepare("SELECT tokens FROM usage_ledger").all()).toEqual([{ tokens: policyOf(w.store).tokenBudget }]);
+    } finally { await w.dispose(); }
+  });
+
+  it("a resolution whose collection fails is left resolving, logged, and collected again (its spend booked once)", async () => {
+    const w = await world(LOCAL_MERGE); try {
+      await conflicted(w);
+      w.raise(10_000_000);
+      expect(code(await w.resolve())).toBe("applied");
+      expect(await w.pass()).toBe(true);
+      // Succeeded, but ccloop's clone is missing: reading its attempt fails.
+      await w.loopState({ status: "succeeded", budgetSnapshot: { tokenBudgetRemaining: 0 } });
+      expect(await w.pass()).toBe(false);
+      expect(w.record()).toMatchObject({ state: "resolving", resolution: { reconcileRunId: "integrate-g-1" } });
+      expect(await w.pass()).toBe(false);
+      expect(w.store.db.prepare("SELECT COUNT(*) AS n FROM usage_ledger").get()).toEqual({ n: 1 });
+    } finally { await w.dispose(); }
+  });
+
+  it("a crash after the resolved integration's write-ahead record ends the pass with that record kept", async () => {
+    const w = await world(LOCAL_MERGE); try {
+      const { tip, main } = await conflicted(w);
+      w.raise(10_000_000);
+      expect(code(await w.resolve())).toBe("applied");
+      expect(await w.pass()).toBe(true);
+      w.attempt({ "f.txt": "B\nA\ntwo\nthree\n" });
+      await w.loopState({ status: "succeeded", budgetSnapshot: { tokenBudgetRemaining: 0 } });
+      await expect(w.pass({ crash: (point) => { if (point === "after-pending") throw new Error("crash at after-pending"); } })).rejects.toThrow("crash at after-pending");
+      const pending = w.record().pending!;
+      expect(w.record().state).toBe("resolving");
+      expect(parents(w.repo, pending.new)).toEqual([main, tip]);
+      expect(g(w.repo, ["show", `${pending.new}:f.txt`])).toBe("B\nA\ntwo\nthree");
+      expect(g(w.repo, ["rev-parse", "main"])).toBe(main);
+    } finally { await w.dispose(); }
+  });
+
+  it("a resolved integration whose target branch is gone blocks by name", async () => {
+    const w = await world(LOCAL_MERGE); try {
+      await conflicted(w);
+      w.raise(10_000_000);
+      expect(code(await w.resolve())).toBe("applied");
+      expect(await w.pass()).toBe(true);
+      w.attempt({ "f.txt": "B\nA\ntwo\nthree\n" });
+      await w.loopState({ status: "succeeded", budgetSnapshot: { tokenBudgetRemaining: 0 } });
+      g(w.repo, ["update-ref", "-d", "refs/heads/main"]);
+      expect(await w.pass()).toBe(true);
+      expect(w.record()).toMatchObject({ state: "blocked", reason: "integration-target-missing" });
     } finally { await w.dispose(); }
   });
 

@@ -171,7 +171,8 @@ export function approveResolution(store: ControlStore, groupId: string, group: R
 export async function prepareResolution(store: ControlStore, roots: WorkspaceRoots, groupId: string, repoPath: (repoId: string) => string): Promise<ResolutionPrepared | null> {
   try {
     const integration = readGroupIntegration(readGroup(store, groupId));
-    if (integration?.state !== "conflict" || integration.conflict === null) return null;
+    // Only the conflict's attempt is read here; whether it still waits is judged inside the transaction.
+    if (integration === null || integration.conflict === null) return null;
     const { attempt, key } = integration.conflict;
     const copyPath = conflictCopyOf(roots.workspacesRoot, groupId, attempt);
     if (!existsSync(copyPath)) return null;
@@ -220,7 +221,6 @@ export async function advanceIntegrationResolution(deps: IntegrationDeps, groupI
   const action = reconcileNextAction({ loopStatus: loop.status, spawning: record.spawning, pid: record.pid, alive: record.pid !== null && processAlive(record.pid), collected: record.outcome !== null });
   if (action === "wait") return false;
   if (action === "collect") return collect(resolving, groupId, integration, loop);
-  if (deps.stopped() || deps.admissionGate?.draining === true) return false;
   if (!reconcileAffordable(deps.store, groupId, record.tokenBudget)) return failResolution(resolving, groupId, key, "reconcile-budget");
   let slot;
   try { slot = readConfirmedReconcileSlot(deps.store, groupId); }
@@ -248,7 +248,7 @@ export async function advanceIntegrationResolution(deps: IntegrationDeps, groupI
     },
   }).then(
     () => undefined,
-    async (error: unknown) => { if (!deps.stopped()) await failResolution(resolving, groupId, key, `integration-resolution-spawn:${describeError(error)}`); },
+    async (error: unknown) => { await failResolution(resolving, groupId, key, `integration-resolution-spawn:${describeError(error)}`); },
   ).catch((error: unknown) => { process.stderr.write(`orca-driver: integration ${groupId}: ${describeError(error)}\n`); })
     .finally(() => { resolving.resolution.reconciling.delete(key); });
   resolving.resolution.reconciling.set(key, running);
