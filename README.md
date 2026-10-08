@@ -143,8 +143,9 @@ estimate, and each task starts from default budget allocations that you edit by 
 - Control state (a SQLite store, plus run copies and workspaces beside it) lives under `$ORCA_CONTROL_DIR`
   (default `$HOME/.orca/control/<repo key>`). With more than one `--repo` there is no single key to name it after,
   so you must also pass `--control-state-dir <path>`.
-  This build upgrades that store (`control.sqlite`) from schema version 7 to 8 on its first start, and the upgrade
-  is one-way (an older build refuses a version-8 store), so back up `control.sqlite` before you first start it.
+  This build upgrades that store (`control.sqlite`) to schema version 9 on its first start (from 7 or 8; version 9 adds
+  the activity record), and the upgrade is one-way (an older build refuses a version-9 store with
+  `control-schema-unsupported`), so back up `control.sqlite` before you first start it.
 - Decisions and Metrics read the `.decisions/` ledgers of every `--repo`, plus every repository found under
   `--root <dir>` if you pass it.
 - Reviews and corrections you record in the panel go to `$ORCA_CORRECTIONS_DIR` (default `$HOME/.orca`).

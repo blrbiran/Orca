@@ -38,10 +38,11 @@ async function version7Store(seed: (raw: Db) => void): Promise<string> {
 const groupBody = (extra: Record<string, unknown>, tokens: unknown) => JSON.stringify({ ...extra, used: { tokens, activeMs: 0, attempts: 0, sessions: 0 } });
 
 describe("schema 7 to 8 (accounts spec §5, §6, D3)", () => {
-  it("a fresh store is version 8 with the usage, cap and principal surfaces", async () => {
+  it("a fresh store is at the current version (9) with the usage, cap and principal surfaces", async () => {
     const store = await openControlStore({ stateDir: await stateDir() });
     try {
-      expect(schemaVersion).toBe("8");
+      // Rewritten for issue-fixes spec §5.2 (ruling H5, 2026-10-08): the store is now at schema version 9.
+      expect(schemaVersion).toBe("9");
       expect(tables(store.db)).toEqual(expect.arrayContaining(NEW_TABLES));
       expect(columns(store.db, "commands")).toContain("principal");
       expect(store.db.prepare("SELECT COUNT(*) AS n FROM usage_ledger").get()).toMatchObject({ n: 0 });
@@ -55,7 +56,8 @@ describe("schema 7 to 8 (accounts spec §5, §6, D3)", () => {
     });
     const store = await openControlStore({ stateDir: dir });
     try {
-      expect(version(store.db)).toBe("8");
+      // Rewritten for issue-fixes spec §5.2 (ruling H5, 2026-10-08): the store is now at schema version 9.
+      expect(version(store.db)).toBe("9");
       const rows = store.db.prepare("SELECT applied_at,group_id,repo_id,source,model,tokens,quality FROM usage_ledger ORDER BY group_id").all();
       expect(rows).toEqual([
         { applied_at: 0, group_id: "g1", repo_id: "r1", source: "pre-ledger", model: null, tokens: 1234, quality: "unattributed" },
@@ -105,7 +107,8 @@ describe("schema 7 to 8 (accounts spec §5, §6, D3)", () => {
       expect(store.db.prepare("SELECT group_id,repo_id,tokens FROM usage_ledger").all()).toEqual([{ group_id: "g1", repo_id: "p1", tokens: 40 }]);
       store.db.exec("BEGIN IMMEDIATE"); migrateSchema(store.db, "7"); store.db.exec("COMMIT");
       expect(store.db.prepare("SELECT COUNT(*) AS n FROM usage_ledger").get()).toMatchObject({ n: 1 });
-      expect(version(store.db)).toBe("8");
+      // Rewritten for issue-fixes spec §5.2 (ruling H5, 2026-10-08): the store is now at schema version 9.
+      expect(version(store.db)).toBe("9");
     } finally { store.close(); }
   });
 

@@ -1,6 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
 
-export const schemaVersion = "8";
+export const schemaVersion = "9";
 export const legacySchema = `CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;
 CREATE TABLE groups(id TEXT PRIMARY KEY, revision INTEGER NOT NULL, graph_version INTEGER NOT NULL, body TEXT NOT NULL) STRICT;
 CREATE TABLE work_items(group_id TEXT NOT NULL REFERENCES groups(id), id TEXT NOT NULL, target_version INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY(group_id,id)) STRICT;
@@ -98,8 +98,16 @@ export const schema7To8PreLedger = `INSERT INTO usage_ledger(applied_at,group_id
 `;
 export const schema7To8 = schema7To8Principal + schema7To8Tables + schema7To8PreLedger;
 
+// Issue-fixes spec §5.2 (ruling H5): Orca's own wall-clock record of what happened in a group (activity.ts writes it).
+// The spec's table, in the repo's style (STRICT, REFERENCES). IF NOT EXISTS for the reason schema5To6 gives: the older
+// steps' downgrade criteria drop only their own tables, so a re-run chain meets this one already there.
+export const schema8To9 = `CREATE TABLE IF NOT EXISTS activity(seq INTEGER PRIMARY KEY AUTOINCREMENT, group_id TEXT NOT NULL REFERENCES groups(id), task_id TEXT, run_id TEXT, at INTEGER NOT NULL, kind TEXT NOT NULL, body TEXT NOT NULL) STRICT;
+CREATE INDEX IF NOT EXISTS activity_group_seq ON activity(group_id,seq);
+CREATE INDEX IF NOT EXISTS activity_run_seq ON activity(run_id,seq);
+`;
+
 // A fresh store has no groups, so the pre-ledger insert adds nothing.
-export const initialSchema = legacySchema + schema1To2 + schema2To3 + schema3To4 + schema4To5 + schema5To6 + schema6To7 + schema7To8;
+export const initialSchema = legacySchema + schema1To2 + schema2To3 + schema3To4 + schema4To5 + schema5To6 + schema6To7 + schema7To8 + schema8To9;
 
 /**
  * Accounts spec §9: idempotent on a store a criterion downgraded by dropping only its own column or table (the 6-to-7 and
@@ -121,7 +129,9 @@ export function migrateSchema(store: DatabaseSync, fromVersion: string): void {
   else if (fromVersion === "4") store.exec(schema4To5 + schema5To6 + schema6To7);
   else if (fromVersion === "5") store.exec(schema5To6 + schema6To7);
   else if (fromVersion === "6") store.exec(schema6To7);
-  else if (fromVersion !== "7") throw new Error("control-schema-unsupported");
-  migrate7To8(store);
+  else if (fromVersion !== "7" && fromVersion !== "8") throw new Error("control-schema-unsupported");
+  // Every version before 8 goes through 7 to 8 first; 8 itself only gains the activity table (spec §5.2).
+  if (fromVersion !== "8") migrate7To8(store);
+  store.exec(schema8To9);
   store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
 }

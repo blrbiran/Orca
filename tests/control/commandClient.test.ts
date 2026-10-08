@@ -38,10 +38,11 @@ describe("command client context (spec §6)", () => {
 });
 
 describe("schema 6 to 7 (spec §6)", () => {
-  it("a fresh store has commands.client and is at the current version (8)", async () => {
+  it("a fresh store has commands.client and is at the current version (9)", async () => {
     const store = await openControlStore({ stateDir: await stateDir() });
     try {
-      expect(schemaVersion).toBe("8");
+      // Rewritten for issue-fixes spec §5.2 (ruling H5, 2026-10-08): the store is now at schema version 9.
+      expect(schemaVersion).toBe("9");
       const columns = store.db.prepare("PRAGMA table_info(commands)").all().map((row) => String(row.name));
       expect(columns).toContain("client");
     } finally { store.close(); }
@@ -57,7 +58,8 @@ describe("schema 6 to 7 (spec §6)", () => {
     raw.close();
     const store = await openControlStore({ stateDir: dir });
     try {
-      expect(store.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()).toMatchObject({ value: "8" });
+      // Rewritten for issue-fixes spec §5.2 (ruling H5, 2026-10-08): the store is now at schema version 9.
+      expect(store.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()).toMatchObject({ value: "9" });
       expect(store.db.prepare("SELECT client FROM commands WHERE id='old'").get()).toMatchObject({ client: null });
     } finally { store.close(); }
   });
