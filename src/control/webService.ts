@@ -19,6 +19,8 @@ import { scheduleStart, type StartCommand } from "./webDispatch.js";
 import { applyHandoffStop, applyPauseDispatch, applyRecoveryRetry, applyResumeDispatch, type HandoffStopCommand, type PauseCommand, type RecoveryRetryCommand, type ResumeDispatchCommand, type StopDeps } from "./stopIntent.js";
 import { applyContinueTask, applyResumeFromHandoff, type ContinueTaskCommand, type ResumeFromHandoffCommand } from "./continuation.js";
 import { applySetWorkspaceMode, type SetWorkspaceModeCommand } from "./workspaceSettings.js";
+import { applySetIntegrationScheme, type SetIntegrationSchemeCommand } from "./integrationCommands.js";
+import { checkScheme } from "./integrationScheme.js";
 import { applySpendCommand, type SpendCommand } from "./spendCommands.js";
 import { applySetAgentPreferences, type SetAgentPreferencesCommand } from "./agentPreferences.js";
 import { recordProjectionChange } from "./projectionJournal.js";
@@ -50,6 +52,8 @@ export type SetTaskLoopCommand = Extract<RawAuthorityCommandV1, { verb: "set-tas
 export type WebCommandResult = CommandLookupV1["body"];
 export interface WebServiceDeps extends AsyncImportDeps {
   admissionGate?: AdmissionGate; now?: () => Date; knownRepository?: (repoId: string) => boolean;
+  /** Integration spec §3.3: a known repository's path, for the git checks that run before a setter's transaction. */
+  resolveRepository?: (repoId: string) => string;
   /** Agent selection spec §6.4 (W6-19): the same port the panel's profiles use; confirm resolves selections through it. */
   port: Pick<ExecutionPort, "resolveAgent" | "listAgents">;
   /** Syncskill integration spec §10.5: confirm looks up each declared profile through it. Absent means not configured. */
@@ -542,6 +546,23 @@ export class WebControlService {
     return applySetWorkspaceMode({ store: this.store, admissionGate: this.deps.admissionGate, knownRepository: this.deps.knownRepository ?? (() => false) }, command) as WebCommandResult;
   }
   repositoryKnown(repoId: string): boolean { return this.deps.knownRepository?.(repoId) ?? false; }
+  /**
+   * Integration spec §3.3: the repository's git checks run after the replay check and before the transaction, which
+   * refuses from what they found. An unknown repository is not checked; the transaction refuses it by name.
+   */
+  async setIntegrationScheme(command: SetIntegrationSchemeCommand): Promise<WebCommandResult> {
+    const release = this.deps.admissionGate?.enter();
+    try {
+      const replay = preflightWebCommand<WebCommandResult>(this.store, command); if (replay) return replay.body;
+      const knownRepository = this.deps.knownRepository ?? (() => false);
+      let failedCheck: string | null = null;
+      if (knownRepository(command.target.repoId)) {
+        if (this.deps.resolveRepository === undefined) throw new Error("set-integration-scheme: a known repository needs resolveRepository");
+        failedCheck = await checkScheme(this.deps.resolveRepository(command.target.repoId), command.payload.integration);
+      }
+      return applySetIntegrationScheme({ store: this.store, knownRepository }, command, failedCheck) as WebCommandResult;
+    } finally { release?.(); }
+  }
   /** Agent selection spec §6.2 layer 1: the operator's defaults, under their own revision. */
   async setAgentPreferences(command: SetAgentPreferencesCommand): Promise<WebCommandResult> {
     return applySetAgentPreferences({ store: this.store, admissionGate: this.deps.admissionGate }, command) as WebCommandResult;

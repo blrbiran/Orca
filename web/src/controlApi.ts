@@ -32,6 +32,7 @@ import type {
   ProposalSetAgentPayloadV1,
   RecoveryRetryPayloadV1,
   RecoveryViewV1,
+  RepositoryIntegrationV1,
   RepositoryWorkspaceV1,
   RequirementAnswerPayloadV1,
   RequirementConsensusPayloadV1,
@@ -125,6 +126,12 @@ export const fetchRepositoryWorkspace = (repoId: string): Promise<RepositoryWork
   controlGet<RepositoryWorkspaceV1>(`/api/control/repositories/${segment(repoId)}/workspace`);
 
 export const workspaceModePath = (repoId: string): string => `/api/control/repositories/${segment(repoId)}/workspace-mode`;
+
+/** Integration spec §3.4: a trusted repository's integration default and the settings revision it is at. */
+export const fetchRepositoryIntegration = (repoId: string): Promise<RepositoryIntegrationV1> =>
+  controlGet<RepositoryIntegrationV1>(`/api/control/repositories/${segment(repoId)}/integration`);
+
+export const integrationSchemePath = (repoId: string): string => `/api/control/repositories/${segment(repoId)}/integration`;
 
 /**
  * Offer a manifest the caller already read as a download. The read has to come

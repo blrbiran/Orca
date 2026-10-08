@@ -12,6 +12,9 @@ export const durableCommandErrorStatuses = {
   "control-invalid-stop": 400,
   "control-non-canonical-json": 400,
   "control-non-json-payload": 400,
+  // Integration spec §8: a branch or remote name, the remote's existence or its GitHub identity failed the setter's check;
+  // the detail names the check.
+  "integration-invalid": 400,
 
   // Resource lookup.
   "artifact-not-found": 404,
@@ -47,6 +50,12 @@ export const durableCommandErrorStatuses = {
   "group-project-conflict": 409,
   "handoff-identity-conflict": 409,
   "handoff-request-conflict": 409,
+  // Integration spec §3.2-§3.4, §6.5, §7: the integration refusals (none retryable).
+  "integration-busy": 409,
+  "integration-no-checks": 409,
+  "integration-not-blocked": 409,
+  "integration-preflight-failed": 409,
+  "integration-unapproved": 409,
   // Labels and progress spec §3.1 (§8 R7): the task's labels moved since the person read them (plan finding F17).
   "labels-version-conflict": 409,
   "landing-branch-conflict": 409,

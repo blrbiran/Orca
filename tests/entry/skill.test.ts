@@ -6,7 +6,7 @@ import {
   proposalSetAgentPayloadSchema, recoveryRetryPayloadSchema, reestimatePayloadSchema, requirementAnswerPayloadSchema, requirementConsensusPayloadSchema,
   requirementDraftAcceptPayloadSchema, requirementDraftFeedbackPayloadSchema, requirementOpenPayloadSchema, resumeFromHandoffPayloadSchema,
   setAgentPreferencesPayloadSchema, setLimitPayloadSchema, setTaskLabelsPayloadSchema, setTaskLoopPayloadSchema, setWorkspaceModePayloadSchema,
-  setSpendCapPayloadSchema, clearSpendCapPayloadSchema, setUsageCalendarPayloadSchema,
+  setSpendCapPayloadSchema, clearSpendCapPayloadSchema, setUsageCalendarPayloadSchema, setIntegrationSchemePayloadSchema,
 } from "../../src/control/webProtocol.js";
 
 const skill = readFileSync("skills/orca-control/SKILL.md", "utf8");
@@ -24,6 +24,7 @@ const schemaByVerb: Record<string, ZodTypeAny> = {
   "requirement-consensus": requirementConsensusPayloadSchema, "requirement-draft-feedback": requirementDraftFeedbackPayloadSchema,
   "requirement-draft-accept": requirementDraftAcceptPayloadSchema, "set-task-labels": setTaskLabelsPayloadSchema, "set-task-loop": setTaskLoopPayloadSchema,
   "set-spend-cap": setSpendCapPayloadSchema, "clear-spend-cap": clearSpendCapPayloadSchema, "set-usage-calendar": setUsageCalendarPayloadSchema,
+  "set-integration-scheme": setIntegrationSchemePayloadSchema,
 };
 
 describe("the orca-control skill (spec §7, C18)", () => {
@@ -35,19 +36,20 @@ describe("the orca-control skill (spec §7, C18)", () => {
 
   it("lists exactly the panel's mutation routes, so the table cannot drift", () => {
     const routes = new Set([...api.matchAll(/path: "\/api\/control\/([^"]+)"/g)].map((m) => m[1]!.replace(/:([A-Za-z]+)/g, "<$1>")));
-    // 25 routes carry the 26 verbs: `shutdown` has no route (the panel's own lifecycle).
-    expect(routes.size).toBe(25);
+    // 26 routes carry the 27 verbs: `shutdown` has no route (the panel's own lifecycle). Integration spec §3.4 added
+    // `repositories/<repoId>/integration` (set-integration-scheme).
+    expect(routes.size).toBe(26);
     expect(rows.map((row) => row.route).sort()).toEqual([...routes].sort());
   });
 
   it("names the verb of every route as the panel does", () => {
     const verbs = new Map([...api.matchAll(/path: "\/api\/control\/([^"]+)",?\s+verb: "([^"]+)"/g)].map((m) => [m[1]!.replace(/:([A-Za-z]+)/g, "<$1>"), m[2]!]));
-    expect(verbs.size).toBe(25);
+    expect(verbs.size).toBe(26);
     expect(new Map(rows.map((row) => [row.route, row.verb]))).toEqual(verbs);
   });
 
   it("gives every route a payload example that its raw payload schema accepts", () => {
-    expect(rows.length).toBe(25);
+    expect(rows.length).toBe(26);
     for (const row of rows) {
       const schema = schemaByVerb[row.verb];
       expect(schema, `no schema mapped for ${row.verb}`).toBeDefined();
@@ -68,6 +70,9 @@ describe("the orca-control skill (spec §7, C18)", () => {
       "get usage", "owner-only", "control-limit-over-cap-headroom", "spend-cap-reached",
       // Final review Minor 1: both verbs the agent ceiling can refuse (spec §6.3.2), not only import-plan.
       "`import-plan` or `requirement-draft-accept` whose group limit would exceed the spend-cap headroom",
+      // Integration spec §3.4: the owner-only confirm of a non-keep group, and where the setter's revision comes from.
+      "Confirming a group whose integration is not `keep` is owner-only (the `integrationHash` field is human-only).",
+      "`.revision` of `get repositories/<repoId>/integration`",
     ]) expect(skill).toContain(phrase);
     for (const code of ["`0`", "`1`", "`2`", "`3`"]) expect(skill).toContain(code);
   });

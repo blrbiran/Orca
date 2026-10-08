@@ -616,6 +616,7 @@ export const commandVerbSchema = z.enum([
   "set-spend-cap",
   "clear-spend-cap",
   "set-usage-calendar",
+  "set-integration-scheme",
 ]);
 
 const repositoryCommandTargetSchema = z.object({ kind: z.literal("repository"), repoId: idSchema }).strict();
@@ -753,6 +754,17 @@ export const workspaceModeSchema = z.enum(["worktree", "clone"]);
 /** A git commit id, SHA-1 or SHA-256 (the drive record's own pattern). */
 export const commitShaSchema = z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/);
 export const setWorkspaceModePayloadSchema = z.object({ workspaceMode: workspaceModeSchema }).strict();
+// Integration spec §3 (ruling R1: no `rebase`). Names are checked outside the transaction (§3.3), so an invalid one is
+// refused as integration-invalid naming the check rather than as a payload that does not parse.
+const integrationTriggerSchema = z.enum(["task", "group"]);
+const integrationMethodSchema = z.enum(["merge", "squash"]);
+export const integrationSchemeSchema = z.discriminatedUnion("delivery", [
+  z.object({ delivery: z.literal("keep") }).strict(),
+  z.object({ delivery: z.literal("local"), trigger: integrationTriggerSchema, method: integrationMethodSchema, target: z.string() }).strict(),
+  z.object({ delivery: z.literal("push-target"), trigger: integrationTriggerSchema, method: integrationMethodSchema, target: z.string(), remote: z.string() }).strict(),
+  z.object({ delivery: z.enum(["push-branch", "github-pr"]), trigger: integrationTriggerSchema, target: z.string(), remote: z.string() }).strict(),
+]);
+export const setIntegrationSchemePayloadSchema = z.object({ integration: integrationSchemeSchema }).strict();
 // Controller ruling W6-8: the envelope's expectedRevision (checked against agent_preferences.revision) is the only one.
 export const setAgentPreferencesPayloadSchema = z.object({ preferences: operatorPreferencesSchema }).strict();
 // Accounts spec §6.1: a cap's amount. Its own instance (not the shared positiveSafeInteger), so the human-only criterion
@@ -849,6 +861,7 @@ const rawAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...rawCommandFields, verb: z.literal("recovery-retry"), target: commandTargetSchema, payload: recoveryRetryPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("shutdown"), target: globalCommandTargetSchema, payload: shutdownPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-workspace-mode"), target: repositoryCommandTargetSchema, payload: setWorkspaceModePayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("set-integration-scheme"), target: repositoryCommandTargetSchema, payload: setIntegrationSchemePayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-agent-preferences"), target: operatorCommandTargetSchema, payload: setAgentPreferencesPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-task-labels"), target: taskCommandTargetSchema, payload: setTaskLabelsPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-task-loop"), target: taskCommandTargetSchema, payload: setTaskLoopPayloadSchema }).strict(),
@@ -895,6 +908,7 @@ const effectiveAuthorityCommandVariants = z.discriminatedUnion("verb", [
     .strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("shutdown"), target: globalCommandTargetSchema, payload: shutdownPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-workspace-mode"), target: repositoryCommandTargetSchema, payload: setWorkspaceModePayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("set-integration-scheme"), target: repositoryCommandTargetSchema, payload: setIntegrationSchemePayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-agent-preferences"), target: operatorCommandTargetSchema, payload: setAgentPreferencesPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-task-labels"), target: taskCommandTargetSchema, payload: setTaskLabelsPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-task-loop"), target: taskCommandTargetSchema, payload: setTaskLoopPayloadSchema }).strict(),
@@ -1404,6 +1418,7 @@ const commandResultSchema = z.discriminatedUnion("kind", [
     .strict(),
   z.object({ kind: z.literal("limit-set"), limit: amountSchema }).strict(),
   z.object({ kind: z.literal("workspace-mode-set"), repoId: idSchema, workspaceMode: workspaceModeSchema }).strict(),
+  z.object({ kind: z.literal("integration-scheme-set"), repoId: idSchema, integration: integrationSchemeSchema }).strict(),
   z.object({ kind: z.literal("agent-preferences-set"), operatorId: nonemptyString, revision: positiveSafeInteger }).strict(),
   z.object({ kind: z.literal("spend-cap-set"), revision: positiveSafeInteger }).strict(),
   z.object({ kind: z.literal("spend-cap-cleared"), revision: positiveSafeInteger }).strict(),
@@ -1490,7 +1505,7 @@ export const commandSuccessSchema = z
     const isShutdown = value.verb === "shutdown";
     // Execution driver spec §3.2: a repository-scoped command has its setting's revision and no group
     // projection.
-    const projectionless = isShutdown || value.verb === "set-workspace-mode" || value.verb === "set-agent-preferences"
+    const projectionless = isShutdown || value.verb === "set-workspace-mode" || value.verb === "set-integration-scheme" || value.verb === "set-agent-preferences"
       || value.verb === "set-spend-cap" || value.verb === "clear-spend-cap" || value.verb === "set-usage-calendar";
     if (isShutdown ? value.commandRevision !== null : value.commandRevision === null) {
       issue(ctx, ["commandRevision"], "command-revision-nullability-mismatch");
@@ -1558,6 +1573,12 @@ export const repositoryWorkspaceSchema = z
   .object({ schema: z.literal("orca-repository-workspace-v1"), repoId: idSchema, workspaceMode: workspaceModeSchema, revision: safeInteger })
   .strict();
 export type RepositoryWorkspaceV1 = z.infer<typeof repositoryWorkspaceSchema>;
+// Integration spec §3.4: the repository default's own read; the workspace read above keeps its shape.
+export const repositoryIntegrationSchema = z
+  .object({ schema: z.literal("orca-repository-integration-v1"), repoId: idSchema, integration: integrationSchemeSchema, revision: safeInteger })
+  .strict();
+export type RepositoryIntegrationV1 = z.infer<typeof repositoryIntegrationSchema>;
+export type SetIntegrationSchemePayload = z.infer<typeof setIntegrationSchemePayloadSchema>;
 export type SetWorkspaceModePayload = z.infer<typeof setWorkspaceModePayloadSchema>;
 export type SetAgentPreferencesPayload = z.infer<typeof setAgentPreferencesPayloadSchema>;
 export type ProposalSetAgentPayload = z.infer<typeof proposalSetAgentPayloadSchema>;

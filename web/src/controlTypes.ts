@@ -437,7 +437,7 @@ export type CommandSuccessV1 = {
   actorId: string;
   verb: "import-plan" | "proposal-edit" | "estimate" | "confirm" | "start" | "pause-dispatch" | "handoff-stop" | "resume-dispatch" | "resume-from-handoff" | "set-limit" | "continue-task" | "recovery-retry" | "shutdown" | "set-workspace-mode" | "set-agent-preferences" | "proposal-set-agent" | "set-task-labels" | "set-task-loop"
     | "requirement-open" | "requirement-answer" | "requirement-consensus" | "requirement-draft-feedback" | "requirement-draft-accept"
-    | "set-spend-cap" | "clear-spend-cap" | "set-usage-calendar";
+    | "set-spend-cap" | "clear-spend-cap" | "set-usage-calendar" | "set-integration-scheme";
   target: CommandTargetV1;
   commandRevision: number | null;
   projectionSeq: number | null;
@@ -454,6 +454,7 @@ export type CommandSuccessV1 = {
     | { kind: "resumed-from-handoff"; wakeId: string; pendingRuns: Array<{ taskId: string; continuationIntentId: string; pendingRunId: string; claimOrdinal: number }> }
     | { kind: "limit-set"; limit: Amount }
     | { kind: "workspace-mode-set"; repoId: string; workspaceMode: "worktree" | "clone" }
+    | { kind: "integration-scheme-set"; repoId: string; integration: IntegrationSchemeV1 }
     | { kind: "agent-preferences-set"; operatorId: string; revision: number }
     | { kind: "spend-cap-set"; revision: number }
     | { kind: "spend-cap-cleared"; revision: number }
@@ -471,6 +472,13 @@ export type CommandSuccessV1 = {
 };
 export type CommandLookupV1 = { schema: "orca-command-lookup-v1"; originalStatus: number; body: CommandSuccessV1 | { error: CommandErrorV1 } };
 export type RepositoryWorkspaceV1 = { schema: "orca-repository-workspace-v1"; repoId: string; workspaceMode: "worktree" | "clone"; revision: number };
+// Integration spec §3: mirrors of src/control/webProtocol.ts integrationSchemeSchema and repositoryIntegrationSchema.
+export type IntegrationSchemeV1 =
+  | { delivery: "keep" }
+  | { delivery: "local"; trigger: "task" | "group"; method: "merge" | "squash"; target: string }
+  | { delivery: "push-target"; trigger: "task" | "group"; method: "merge" | "squash"; target: string; remote: string }
+  | { delivery: "push-branch" | "github-pr"; trigger: "task" | "group"; target: string; remote: string };
+export type RepositoryIntegrationV1 = { schema: "orca-repository-integration-v1"; repoId: string; integration: IntegrationSchemeV1; revision: number };
 
 // Agent selection spec §6.8 (plan T14): the agent UI's reads and its preferences command, mirrors of
 // src/control/webProtocol.ts checked both ways in tests/panel/webParity.test.ts.

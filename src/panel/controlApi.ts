@@ -11,9 +11,10 @@ import { readVersions } from "../control/queries.js";
 import { readAgentPreferences } from "../control/agentPreferences.js";
 import { resolveSelection, slotLayers, type PartialSelection } from "../control/agentSelection.js";
 import { idSchema } from "../control/schema.js";
-import { agentPreferencesViewSchema, agentsViewSchema, recoveryRetryPayloadSchema, usageViewSchema, commandEnvelopeSchema, controlConfigSchema, rawAuthorityCommandSchema, repositoryWorkspaceSchema, type CommandTargetV1, type CommandVerbV1, type RawAuthorityCommandV1 } from "../control/webProtocol.js";
+import { agentPreferencesViewSchema, agentsViewSchema, recoveryRetryPayloadSchema, usageViewSchema, commandEnvelopeSchema, controlConfigSchema, rawAuthorityCommandSchema, repositoryIntegrationSchema, repositoryWorkspaceSchema, type CommandTargetV1, type CommandVerbV1, type RawAuthorityCommandV1 } from "../control/webProtocol.js";
 import { parseUsageScope, readUsageView, type UsageGroupBy, type UsageQuery } from "../control/usageQuery.js";
 import { readWorkspaceSetting } from "../control/workspaceSettings.js";
+import { readIntegrationDefault } from "../control/integrationScheme.js";
 import { AgentCeilingRefusal } from "../control/spendCaps.js";
 import type { WebControlService } from "../control/webService.js";
 import type { ExecutionPort } from "../control/executionPort.js";
@@ -217,7 +218,22 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
       sendControlError(res, 404, "control-target-not-allowed", "No trusted repository has this id.");
       return;
     }
-    res.json(repositoryWorkspaceSchema.parse({ schema: "orca-repository-workspace-v1", repoId, ...readWorkspaceSetting(deps.store, repoId) }));
+    // Integration spec §3.1: the body also carries the integration default, so the fields are picked, not spread.
+    const { workspaceMode, revision } = readWorkspaceSetting(deps.store, repoId);
+    res.json(repositoryWorkspaceSchema.parse({ schema: "orca-repository-workspace-v1", repoId, workspaceMode, revision }));
+  });
+
+  // Integration spec §3.4: the repository's integration default and the settings revision it is at.
+  app.get("/api/control/repositories/:repoId/integration", (req, res) => {
+    const repoId = String(req.params.repoId);
+    if (!idSchema.safeParse(repoId).success || !deps.service?.repositoryKnown(repoId)) {
+      sendControlError(res, 404, "control-target-not-allowed", "No trusted repository has this id.");
+      return;
+    }
+    try {
+      const { scheme, revision } = readIntegrationDefault(deps.store, repoId);
+      res.json(repositoryIntegrationSchema.parse({ schema: "orca-repository-integration-v1", repoId, integration: scheme, revision }));
+    } catch (error) { sendMappedControlError(res, error); }
   });
 
   // Agent selection spec §6.8 (plan T14). The operator is the one the mutation routes act as, so only a panel that
@@ -344,6 +360,15 @@ export function controlCommandRoutes(actorId: string): Array<{ path: string; ver
       },
     },
     {
+      path: "/api/control/repositories/:repoId/integration",
+      verb: "set-integration-scheme",
+      // Integration spec §3.4: the repository scope's ledger key, as for set-workspace-mode.
+      target: (params) => {
+        const repoId = idSchema.parse(params.repoId);
+        return { groupId: `@repository:${repoId}`, target: { kind: "repository", repoId } };
+      },
+    },
+    {
       path: "/api/control/operator/agent-preferences",
       verb: "set-agent-preferences",
       // W6-4: the ledger key is the operator scope's, so the retained result is looked up under it.
@@ -415,6 +440,7 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
           case "continue-task": await service.continueTask(command); break;
           case "recovery-retry": await service.recoveryRetry(command); break;
           case "set-workspace-mode": await service.setWorkspaceMode(command); break;
+          case "set-integration-scheme": await service.setIntegrationScheme(command); break;
           case "set-agent-preferences": await service.setAgentPreferences(command); break;
           case "proposal-set-agent": await service.proposalSetAgent(command); break;
           case "set-task-labels": service.setTaskLabels(command); break;

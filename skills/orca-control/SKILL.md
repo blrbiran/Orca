@@ -38,7 +38,7 @@ orca control send <route> --expected-revision <n> (--payload '<json>' | --payloa
 
 - Without `--command-id` the CLI generates `cli-<uuid>` and returns it as `commandId` in the output envelope. Keep it.
 - After a timeout (`control-socket-timeout`: the CLI waits 120 s) or any `retryable: true` error, resend the same route and payload with `--command-id <the same id>`. A replay of a known id never executes twice.
-- To check a result, `get` the command under its scope: group commands `groups/<groupId>/commands/<commandId>`; repository verbs (`set-workspace-mode`) `groups/@repository:<repoId>/commands/<commandId>`; operator verbs (`set-agent-preferences`) `groups/@operator:<operatorId>/commands/<commandId>`; spend verbs (`set-spend-cap`, `clear-spend-cap`, `set-usage-calendar`) `groups/@spend/commands/<commandId>`.
+- To check a result, `get` the command under its scope: group commands `groups/<groupId>/commands/<commandId>`; repository verbs (`set-workspace-mode`, `set-integration-scheme`) `groups/@repository:<repoId>/commands/<commandId>`; operator verbs (`set-agent-preferences`) `groups/@operator:<operatorId>/commands/<commandId>`; spend verbs (`set-spend-cap`, `clear-spend-cap`, `set-usage-calendar`) `groups/@spend/commands/<commandId>`.
 - A lookup miss does not prove the command never ran: a group-scope miss answers `command-result-not-found`, and an `@repository:`, `@operator:` or `@spend` miss currently answers `group-not-found` (those scopes have no group row). On any miss, resend the original command with the same `--command-id` and the same payload rather than infer absence; the replay either returns the retained result or executes it once.
 
 ## 5. Long work
@@ -53,6 +53,7 @@ The socket refuses these before anything runs (nothing is ledgered, the commandI
 - `requirement-open` with a `limit` field → 403 `control-field-human-only` (omit `limit`; the default applies)
 - `proposal-edit` with a `proposedGroupLimit` field → 403 `control-field-human-only`
 - the spend-cap verbs are owner-only: `set-spend-cap`, `clear-spend-cap`, `set-usage-calendar` → 403 `control-verb-human-only`
+- `set-integration-scheme` (where a repository's finished work is carried: a local branch, a push, a GitHub PR) is owner-only → 403 `control-verb-human-only`. Confirming a group whose integration is not `keep` is owner-only (the `integrationHash` field is human-only).
 
 Do not look for a way around them. Ask the human. To spend less, use `pause-dispatch` or `handoff-stop`.
 
@@ -75,7 +76,7 @@ stdout is exactly one JSON line:
 
 ## 8. Route table
 
-`<param>` segments are filled with real ids. Payloads are minimal valid examples; ids, hashes and versions are placeholders (take real values from `get groups/<id>`; each `aaaa…` hash is 64 lowercase hex). `set-limit` and the three `operator/set-spend-cap`, `operator/clear-spend-cap`, `operator/set-usage-calendar` rows are listed for completeness and are owner-only (section 6).
+`<param>` segments are filled with real ids. Payloads are minimal valid examples; ids, hashes and versions are placeholders (take real values from `get groups/<id>`; each `aaaa…` hash is 64 lowercase hex). `set-limit`, `repositories/<repoId>/integration` and the three `operator/set-spend-cap`, `operator/clear-spend-cap`, `operator/set-usage-calendar` rows are listed for completeness and are owner-only (section 6).
 
 | Route | Verb | Payload example |
 | --- | --- | --- |
@@ -100,6 +101,7 @@ stdout is exactly one JSON line:
 | `POST groups/<groupId>/requirement/accept` | requirement-draft-accept | `{"draftNo":1,"draftHash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}` |
 | `POST recovery/retry` | recovery-retry | `{"scope":"run","runId":"run1"}` |
 | `POST repositories/<repoId>/workspace-mode` | set-workspace-mode | `{"workspaceMode":"worktree"}` |
+| `POST repositories/<repoId>/integration` | set-integration-scheme | `{"integration":{"delivery":"keep"}}` |
 | `POST operator/agent-preferences` | set-agent-preferences | `{"preferences":{"perAgent":{}}}` |
 | `POST operator/set-spend-cap` | set-spend-cap | `{"scope":"all","period":"week","tokens":5000000}` |
 | `POST operator/clear-spend-cap` | clear-spend-cap | `{"scope":"all","period":"week"}` |
@@ -117,6 +119,7 @@ Notes: `recovery-retry` also takes `{"scope":"group","groupId":"g1"}`. `handoff-
 | `requirements` (requirement-open) and `groups/import-plan` | `0` for a groupId that does not exist yet; otherwise that group's `commandRevision` as above |
 | `recovery/retry` | the `commandRevision` of the group it acts on: with `"scope":"group"` that `groupId`; with `"scope":"run"` the run's group (`get recovery` lists `.blockers[]` with `groupId` and `runId`; a clarifying group's blocked call is `.summary.requirement.blockedRun.runId` of `get groups/<groupId>/requirement`) |
 | `repositories/<repoId>/workspace-mode` | `.revision` of `get repositories/<repoId>/workspace` (`orca-repository-workspace-v1`; `0` before the first change) |
+| `repositories/<repoId>/integration` | `.revision` of `get repositories/<repoId>/integration` (`orca-repository-integration-v1`; the same revision as the workspace read: both settings share it) |
 | `operator/agent-preferences` | `.revision` of `get operator/agent-preferences` (`orca-agent-preferences-v1`; `0` before the first change) |
 | `operator/set-spend-cap`, `operator/clear-spend-cap`, `operator/set-usage-calendar` | `.spendRevision` of `get usage?scope=all` (one revision for all three; `0` before the first change) |
 
