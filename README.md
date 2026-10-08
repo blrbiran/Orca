@@ -165,8 +165,17 @@ To compute it:
 K=<key> node -e 'const k=process.env.K,r=k.replace(/[^a-zA-Z0-9._-]+/g,"-").replace(/^[^a-zA-Z0-9]+/,"").slice(0,60),h=require("crypto").createHash("sha256").update(k).digest("hex").slice(0,8);console.log(r?r+"-"+h:"repo-"+h)'
 ```
 
-The plan file uses the schema described in [docs/cli.md](docs/cli.md#the-plan-files-shape), plus a top-level `goal`
-and `successConditions`. A task may give a `loop` block instead of a `contract` file:
+The plan file uses the schema described in [docs/cli.md](docs/cli.md#the-plan-files-shape). **Import plan** accepts it
+only when all of these hold; otherwise it refuses with every problem it can see, one per line, in the import form:
+
+- `targetRepo` is the repository the plan is registered for;
+- the plan has a `goal`;
+- the plan has at least one `successConditions` entry, and no two are identical;
+- every task has a `targetVersion` that is a positive integer (write `1` unless you mean otherwise);
+- no task lists a dependency twice or depends on a task that is not in the plan;
+- every task's `contract` file is valid JSON in ccloop's contract format, or its `loop` block is valid.
+
+A task may give a `loop` block instead of a `contract` file:
 
 ```json
 {
@@ -182,6 +191,7 @@ and `successConditions`. A task may give a `loop` block instead of a `contract` 
     {
       "taskId": "a",
       "dependsOn": [],
+      "targetVersion": 1,
       "loop": {
         "plan": "standard",
         "goal": "Create answer.txt containing 42",

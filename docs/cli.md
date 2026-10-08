@@ -108,6 +108,24 @@ Any rejection, plan-level or runtime, makes `orca plan` and a round
 exit 1 (spec §9.3). A *warning* — a plan that is legal but fully serial, say
 — does not affect the exit code.
 
+### What Web import also requires
+
+The panel's **Import plan** (Task control) reads the same file and adds its own checks. It accepts a plan only when:
+
+- `targetRepo` is the repository the plan is registered for (`--plan <planId>=<repoId>=<path>`);
+- the plan has a `goal`;
+- the plan has at least one `successConditions` entry, and no two are identical;
+- every task has a `targetVersion` that is a positive integer (write `1` unless you mean otherwise);
+- no task lists a dependency twice or depends on a task that is not in the plan;
+- every task's `contract` file is valid JSON in ccloop's contract format (or its `loop` block is valid).
+
+A plan that fails is refused with `control-plan-rejected`, listing every problem it can see at once, one per line:
+`target-repo-mismatch`, `missing-goal`, `missing-success-conditions`, `duplicate-success-condition`, then per task
+`duplicate-dependency:<task>`, `dangling-dependency:<task>`, `missing-target-version:<task>` and the task's contract
+problem (`contract-json:<task>`, `contract-shape:<task>`, `contract-canonical:<task>`, `loop-plan-invalid:<task>:<reason>`).
+A file that does not match the schema at all is refused with its `malformed:<path>: <message>` lines alone. The panel
+explains each line in English or Chinese.
+
 ### Exit codes
 
 Every task and every round-level event contributes one of four values, and
