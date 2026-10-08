@@ -123,6 +123,8 @@ describe("retry-task (spec §4.2(2))", () => {
         ["task-retried", { fromRunId: runId }],
         ["run-settled", { state: "settled-failed", outcome: "failed", stopReason: FAILED_REASON }],
       ]);
+      // Part D amendment: the settle row comes once, from saveRunBody's noteRunWrite -- retry-task writes no second one.
+      expect(readRunActivity(t.h.store, runId, 50).filter((entry) => entry.kind === "run-settled")).toHaveLength(1);
     } finally { await t.h.dispose(); }
   });
 });
