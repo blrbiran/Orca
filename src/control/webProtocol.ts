@@ -1607,7 +1607,8 @@ export const repositoryWorkspaceSchema = z
 export type RepositoryWorkspaceV1 = z.infer<typeof repositoryWorkspaceSchema>;
 // Integration spec §3.4: the repository default's own read; the workspace read above keeps its shape.
 export const repositoryIntegrationSchema = z
-  .object({ schema: z.literal("orca-repository-integration-v1"), repoId: idSchema, integration: integrationSchemeSchema, revision: safeInteger })
+  // suggestedTarget (controller ruling, Task 7): the target the panel pre-fills for a repository with no scheme yet.
+  .object({ schema: z.literal("orca-repository-integration-v1"), repoId: idSchema, integration: integrationSchemeSchema, revision: safeInteger, suggestedTarget: z.string().nullable() })
   .strict();
 export type RepositoryIntegrationV1 = z.infer<typeof repositoryIntegrationSchema>;
 export type SetIntegrationSchemePayload = z.infer<typeof setIntegrationSchemePayloadSchema>;

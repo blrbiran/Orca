@@ -224,17 +224,19 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
   });
 
   // Integration spec §3.4: the repository's integration default and the settings revision it is at.
-  app.get("/api/control/repositories/:repoId/integration", (req, res) => {
+  // The suggested target is read with git (local refs only) before the settings are read; it is never stored.
+  app.get("/api/control/repositories/:repoId/integration", asyncRoute(async (req, res) => {
     const repoId = String(req.params.repoId);
     if (!idSchema.safeParse(repoId).success || !deps.service?.repositoryKnown(repoId)) {
       sendControlError(res, 404, "control-target-not-allowed", "No trusted repository has this id.");
       return;
     }
     try {
+      const suggestedTarget = await deps.service.suggestedTarget(repoId);
       const { scheme, revision } = readIntegrationDefault(deps.store, repoId);
-      res.json(repositoryIntegrationSchema.parse({ schema: "orca-repository-integration-v1", repoId, integration: scheme, revision }));
+      res.json(repositoryIntegrationSchema.parse({ schema: "orca-repository-integration-v1", repoId, integration: scheme, revision, suggestedTarget }));
     } catch (error) { sendMappedControlError(res, error); }
-  });
+  }));
 
   // Agent selection spec §6.8 (plan T14). The operator is the one the mutation routes act as, so only a panel that
   // can command has one; the agents view and the preview also ask ccloop, so they need the port as well.

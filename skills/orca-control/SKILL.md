@@ -23,7 +23,7 @@ orca control send <route> --expected-revision <n> (--payload '<json>' | --payloa
 `get` takes a path without the `/api/control/` prefix; a query string is passed through.
 
 - `summary` (or `summary?sinceChangeSeq=<n>`), `groups`, `groups/<id>`, `groups/<id>/requirement`, `groups/<id>/agent-preview`
-- `recovery`, `config`, `agents`, `operator/agent-preferences`, `repositories/<id>/workspace`, `runs/<id>/evidence` (manifest only; artifact downloads are refused with `control-cli-binary-route`)
+- `recovery`, `config`, `agents`, `operator/agent-preferences`, `repositories/<id>/workspace`, `repositories/<id>/integration`, `runs/<id>/evidence` (manifest only; artifact downloads are refused with `control-cli-binary-route`)
 - `usage?scope=all|repo:<id>[&from=<ms>&to=<ms>][&groupBy=model|repo|day|week|month]`: `get usage?scope=all` reads tokens used per model and the caps (`orca-usage-view-v1`: `.headline` total/week/month, `.range.byModel`, `.caps[]` with `used`, `committed`, `headroom`, and `.spendRevision`)
 - a past command's retained result: see section 4
 
@@ -98,10 +98,10 @@ stdout is exactly one JSON line:
 | `POST groups/<groupId>/requirement/answer` | requirement-answer | `{"roundNo":1,"answers":[{"id":"R1.Q1","kind":"recommended"},{"id":"R1.Q2","kind":"text","text":"my answer"}],"glossaryDecisions":[],"adrDecisions":[]}` |
 | `POST groups/<groupId>/requirement/consensus` | requirement-consensus | `{"roundNo":1}` |
 | `POST groups/<groupId>/requirement/feedback` | requirement-draft-feedback | `{"draftNo":1,"feedback":"what to change"}` |
+| `POST groups/<groupId>/requirement/accept` | requirement-draft-accept | `{"draftNo":1,"draftHash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}` |
 | `POST groups/<groupId>/integration` | set-group-integration | `{"integration":{"delivery":"keep"}}` |
 | `POST groups/<groupId>/integration/retry` | retry-integration | `{}` |
 | `POST groups/<groupId>/integration/resolve` | resolve-integration-conflict | `{}` |
-| `POST groups/<groupId>/requirement/accept` | requirement-draft-accept | `{"draftNo":1,"draftHash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}` |
 | `POST recovery/retry` | recovery-retry | `{"scope":"run","runId":"run1"}` |
 | `POST repositories/<repoId>/workspace-mode` | set-workspace-mode | `{"workspaceMode":"worktree"}` |
 | `POST repositories/<repoId>/integration` | set-integration-scheme | `{"integration":{"delivery":"keep"}}` |

@@ -22,7 +22,7 @@ import { applySetWorkspaceMode, type SetWorkspaceModeCommand } from "./workspace
 import { prepareResolution } from "./integrationResolve.js";
 import { controlWorkspaceRoots } from "./workspace.js";
 import { applyResolveIntegrationConflict, applyRetryIntegration, applySetGroupIntegration, applySetIntegrationScheme, type ResolveIntegrationConflictCommand, type RetryIntegrationCommand, type SetGroupIntegrationCommand, type SetIntegrationSchemeCommand } from "./integrationCommands.js";
-import { checkScheme, preflightScheme, readGroupIntegration, REPOSITORY_CHECK, type GroupIntegration, type IntegrationScheme } from "./integrationScheme.js";
+import { checkScheme, preflightScheme, readGroupIntegration, REPOSITORY_CHECK, suggestedTarget, type GroupIntegration, type IntegrationScheme } from "./integrationScheme.js";
 import { applySpendCommand, type SpendCommand } from "./spendCommands.js";
 import { applySetAgentPreferences, type SetAgentPreferencesCommand } from "./agentPreferences.js";
 import { recordProjectionChange } from "./projectionJournal.js";
@@ -594,6 +594,12 @@ export class WebControlService {
       const replay = preflightWebCommand<WebCommandResult>(this.store, command); if (replay) return replay.body;
       return applyResolveIntegrationConflict({ store: this.store }, command, prepared) as WebCommandResult;
     } finally { release?.(); }
+  }
+  /** Controller ruling (Task 7): the target the panel offers for this repository; null when its path does not resolve. */
+  async suggestedTarget(repoId: string): Promise<string | null> {
+    let path: string;
+    try { path = this.repositoryPath(repoId); } catch { return null; }
+    return suggestedTarget(path);
   }
   /** The setters' check against a repository's trusted path; a path that does not resolve is its own named check. */
   private async schemeCheck(repoId: string, scheme: IntegrationScheme): Promise<string | null> {

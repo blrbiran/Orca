@@ -17,12 +17,15 @@ const ids = (state: string): string[] => {
   const db = new DatabaseSync(join(state, "control.sqlite"), { readOnly: true });
   try { return (db.prepare("SELECT id FROM commands ORDER BY id").all() as Array<{ id: string }>).map((row) => row.id); } finally { db.close(); }
 };
+// The test's own git children never see a GIT_* variable of the shell that started vitest (the Task 3 incident class).
+const gitEnv = (): NodeJS.ProcessEnv => ({ ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_"))), GIT_CONFIG_NOSYSTEM: "1" });
+const git = (repo: string, ...args: string[]): string => execFileSync("git", ["-C", repo, ...args], { env: gitEnv(), encoding: "utf8" });
 const LOCAL = { delivery: "local", trigger: "task", method: "merge", target: "main" };
 const PUSH = { delivery: "push-branch", trigger: "task", target: "main", remote: "origin" };
 
 async function setUp() {
   const w = await workspace();
-  execFileSync("git", ["init", "-q", w.repo]);
+  execFileSync("git", ["init", "-q", "-b", "trunk", w.repo], { env: gitEnv() });
   const panel = await boot(w, [], { port: true });
   const repo = controlRepoKey("proj");
   const owner = await sessionFor(panel, w.env);
@@ -47,11 +50,11 @@ describe("the repository integration default over HTTP (integration spec §3.4)"
   it("reads keep at revision 0, sets an owner's scheme, reads it back, and leaves the workspace read's shape alone", async () => {
     const { repo, owner, post } = await setUp();
     expect(await (await owner.fetch(`/api/control/repositories/${repo}/integration`)).json())
-      .toEqual({ schema: "orca-repository-integration-v1", repoId: repo, integration: { delivery: "keep" }, revision: 0 });
+      .toEqual({ schema: "orca-repository-integration-v1", repoId: repo, integration: { delivery: "keep" }, revision: 0, suggestedTarget: "trunk" });
     const set = await post(`repositories/${repo}/integration`, { commandId: "int-o", expectedRevision: 0, payload: { integration: LOCAL } });
     expect([set.status, ((await set.json()) as { result: unknown }).result]).toEqual([200, { kind: "integration-scheme-set", repoId: repo, integration: LOCAL }]);
     expect(await (await owner.fetch(`/api/control/repositories/${repo}/integration`)).json())
-      .toEqual({ schema: "orca-repository-integration-v1", repoId: repo, integration: LOCAL, revision: 1 });
+      .toEqual({ schema: "orca-repository-integration-v1", repoId: repo, integration: LOCAL, revision: 1, suggestedTarget: "trunk" });
     expect(await (await owner.fetch(`/api/control/repositories/${repo}/workspace`)).json())
       .toEqual({ schema: "orca-repository-workspace-v1", repoId: repo, workspaceMode: "worktree", revision: 1 });
   });
@@ -61,6 +64,20 @@ describe("the repository integration default over HTTP (integration spec §3.4)"
     const set = await post(`repositories/${repo}/integration`, { commandId: "int-x", expectedRevision: 0, payload: { integration: PUSH } });
     expect([set.status, ((await set.json()) as { error: unknown }).error]).toEqual([400, { code: "integration-invalid", message: "integration-invalid:remote-missing", commandRevision: 0, evidenceIds: [], retryable: false }]);
     expect(await (await owner.fetch(`/api/control/repositories/${repo}/integration`)).json()).toMatchObject({ integration: { delivery: "keep" }, revision: 0 });
+  });
+
+  // Controller ruling (Task 7): the read names the branch the person most likely integrates into, so the panel can offer
+  // it for a repository with no scheme yet: what refs/remotes/origin/HEAD points at, else the current branch, else none.
+  it("suggests origin's HEAD branch first, then the current branch, and nothing for a detached HEAD", async () => {
+    const { w, repo, owner } = await setUp();
+    const suggested = async (): Promise<unknown> => ((await (await owner.fetch(`/api/control/repositories/${repo}/integration`)).json()) as { suggestedTarget: unknown }).suggestedTarget;
+    expect(await suggested()).toBe("trunk");
+    git(w.repo, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/develop");
+    expect(await suggested()).toBe("develop");
+    git(w.repo, "symbolic-ref", "--delete", "refs/remotes/origin/HEAD");
+    git(w.repo, "-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "core.hooksPath=/dev/null", "commit", "-q", "--allow-empty", "-m", "c");
+    git(w.repo, "checkout", "-q", "--detach");
+    expect(await suggested()).toBeNull();
   });
 
   it("answers an unknown repository 404 on read", async () => {

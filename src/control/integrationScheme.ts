@@ -82,6 +82,25 @@ export async function remoteUrl(repo: string, remote: string): Promise<string | 
   return answer.ok ? answer.stdout.trim() : null;
 }
 
+/**
+ * Controller ruling (Task 7): the target a repository with no scheme yet is offered, as spec §3 names the default for
+ * remote `origin` -- the branch refs/remotes/origin/HEAD points at, else the current branch, else none (a detached HEAD,
+ * or git did not answer). Only local refs are read: no network.
+ */
+export async function suggestedTarget(repo: string): Promise<string | null> {
+  const prefix = "refs/remotes/origin/";
+  try {
+    const remoteHead = await runGit(repo, ["symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"]);
+    const pointed = remoteHead.stdout.trim();
+    if (remoteHead.ok && pointed.startsWith(prefix)) return pointed.slice(prefix.length);
+    const head = await runGit(repo, ["symbolic-ref", "--quiet", "--short", "HEAD"]);
+    return head.ok ? head.stdout.trim() : null;
+  } catch (error) {
+    if (error instanceof GitUnanswered) return null;
+    throw error;
+  }
+}
+
 /** §3.3, the setters' check: null when the scheme may be stored, else the name of the check it failed. */
 export function checkScheme(repo: string, scheme: IntegrationScheme): Promise<string | null> {
   return orGitCheck(() => schemeCheck(repo, scheme));

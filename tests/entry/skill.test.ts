@@ -52,6 +52,13 @@ describe("the orca-control skill (spec §7, C18)", () => {
     expect(new Map(rows.map((row) => [row.route, row.verb]))).toEqual(verbs);
   });
 
+  // Task 7 (deferred Task 2 minor): the requirement rows read as one run, not split by an integration row.
+  it("keeps the requirement rows together", () => {
+    const at = rows.flatMap((row, index) => (row.route.includes("requirement") ? [index] : []));
+    expect(at.length).toBe(5);
+    expect(at.at(-1)! - at[0]!).toBe(at.length - 1);
+  });
+
   it("gives every route a payload example that its raw payload schema accepts", () => {
     expect(rows.length).toBe(29);
     for (const row of rows) {
@@ -77,6 +84,8 @@ describe("the orca-control skill (spec §7, C18)", () => {
       // Integration spec §3.4: the owner-only confirm of a non-keep group, and where the setter's revision comes from.
       "Confirming a group whose integration is not `keep` is owner-only (the `integrationHash` field is human-only).",
       "`.revision` of `get repositories/<repoId>/integration`",
+      // Task 7: the integration read is listed with the other reads.
+      "`repositories/<id>/workspace`, `repositories/<id>/integration`",
     ]) expect(skill).toContain(phrase);
     for (const code of ["`0`", "`1`", "`2`", "`3`"]) expect(skill).toContain(code);
   });
