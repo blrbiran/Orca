@@ -204,6 +204,25 @@ describe("retry-task refusals (spec §4.2(2), §4.4)", () => {
     } finally { await clarifying.t.h.dispose(); }
   });
 
+  it("refuses on either half of the stop guard alone: stopped without an intent, an intent without stopped", async () => {
+    const stoppedOnly = await failingHarness(); try {
+      const { runId } = await failedRun(stoppedOnly.t);
+      stoppedOnly.t.h.store.transaction(() => stoppedOnly.t.h.store.db.prepare("UPDATE groups SET body=json_set(body,'$.stopped',json('true')) WHERE id='g'").run());
+      expect(Number(stoppedOnly.t.h.store.db.prepare("SELECT count(*) AS n FROM stop_intents WHERE group_id='g'").get()!.n)).toBe(0);
+      expect(refusal(retry(stoppedOnly.t)).code).toBe("stop-mode-conflict");
+      unchanged(stoppedOnly.t, runId);
+    } finally { await stoppedOnly.t.h.dispose(); }
+    const intentOnly = await failingHarness(); try {
+      const { runId } = await failedRun(intentOnly.t);
+      const paused = await intentOnly.t.service.pauseDispatch(intentOnly.t.h.command("pause-dispatch", {}));
+      expect("error" in paused ? paused.error : "paused").toBe("paused");
+      intentOnly.t.h.store.transaction(() => intentOnly.t.h.store.db.prepare("UPDATE groups SET body=json_set(body,'$.stopped',json('false')) WHERE id='g'").run());
+      expect(Number(intentOnly.t.h.store.db.prepare("SELECT count(*) AS n FROM stop_intents WHERE group_id='g'").get()!.n)).toBe(1);
+      expect(refusal(retry(intentOnly.t)).code).toBe("stop-mode-conflict");
+      unchanged(intentOnly.t, runId);
+    } finally { await intentOnly.t.h.dispose(); }
+  });
+
   it("refuses when the reserve cannot cover the new run, naming the dimension and the shortfall, and changes nothing", async () => {
     const { t } = await failingHarness(); try {
       const { runId } = await failedRun(t);
@@ -215,6 +234,26 @@ describe("retry-task refusals (spec §4.2(2), §4.4)", () => {
       expect(before.explicitUnallocatedReserve.tokens).toBe(0);
       expect(netOf(t.body(runId)).tokens).toBe(10);
       expect(refusal(retry(t))).toEqual({ code: "group-reserve-insufficient", message: "group-reserve-insufficient:tokens:10" });
+      expect(readWebGroup(t.h.store, "g").ledger).toEqual(before);
+      unchanged(t, runId);
+    } finally { await t.h.dispose(); }
+  });
+
+  it("counts the handoff bucket in the net reservation: the work part fits, the handoff part makes it short", async () => {
+    const { t } = await failingHarness(); try {
+      const { runId } = await failedRun(t);
+      const workNet = t.body(runId).grant.work.tokens - t.body(runId).remaining.work.tokens;
+      expect(workNet).toBe(10);
+      const ledger = readWebGroup(t.h.store, "g").ledger;
+      // Exactly the work part's net is left unallocated (set before the poke below, which the ledger audit would refuse).
+      const lowered = t.service.setLimit(t.h.command("set-limit", { limit: { ...ledger.groupLimit, tokens: ledger.used.tokens + ledger.committedRemaining.tokens + workNet } }));
+      expect("error" in lowered ? lowered.error : "lowered").toBe("lowered");
+      // The failed run spent 5 handoff tokens too (no fake handoff produces this on a failed run, so it is written directly).
+      poke(t, runId, (run) => { run.remaining.handoff.tokens -= 5; run.cumulative.handoff = { ...run.cumulative.handoff, tokens: run.cumulative.handoff.tokens + 5 }; });
+      expect(netOf(t.body(runId)).tokens).toBe(15);
+      const before = readWebGroup(t.h.store, "g").ledger;
+      expect(before.explicitUnallocatedReserve.tokens).toBe(workNet);
+      expect(refusal(retry(t))).toEqual({ code: "group-reserve-insufficient", message: "group-reserve-insufficient:tokens:5" });
       expect(readWebGroup(t.h.store, "g").ledger).toEqual(before);
       unchanged(t, runId);
     } finally { await t.h.dispose(); }

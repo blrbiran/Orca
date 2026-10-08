@@ -808,7 +808,7 @@ export const zhErrors: Record<string, string> = {
   "group-not-found": "找不到这个组。",
   "group-project-binding-required": "组必须绑定到一个项目。",
   "group-project-conflict": "组与项目的绑定冲突。",
-  "group-reserve-insufficient": "组余量不够：{{message}}",
+  "group-reserve-insufficient": "组余量不够：{{message}}。请在「预算提案」里调高「组上限」或调低别的分配，然后再试。",
   "group-review-budget-unavailable": "组的评审预算不够。",
   "group-state-invalid": "组当前的状态不允许这个操作。",
   "group-stopped": "组已停止。",
