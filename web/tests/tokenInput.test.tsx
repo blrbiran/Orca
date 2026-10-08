@@ -102,6 +102,16 @@ describe("TokenInput", () => {
     rerender(<TokenInput aria-label="amount" value={77000} onChange={vi.fn()} />);
     expect(box().value).toBe("77,000");
   });
+  it("with allowEmpty a blank field is an answer (onClear), not an error; without it the blank field errors", () => {
+    const onClear = vi.fn(), onChange = vi.fn();
+    const { rerender } = render(<TokenInput aria-label="amount" value={5} allowEmpty onClear={onClear} onChange={onChange} />);
+    fireEvent.change(box(), { target: { value: "" } });
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(onClear).toHaveBeenCalledTimes(1);
+    expect(onChange).not.toHaveBeenCalled();
+    rerender(<TokenInput aria-label="amount" value={5} onChange={onChange} />);
+    expect(screen.getByRole("alert")).toBeTruthy();
+  });
   it("shows an empty field without an error when the value is null", () => {
     render(<Harness start={null} onChange={vi.fn()} />);
     expect(box().value).toBe("");
