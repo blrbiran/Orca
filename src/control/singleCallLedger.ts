@@ -63,7 +63,7 @@ export interface StoppedSingleCallRun {
   unknown: { work: boolean; handoff: boolean }; [key: string]: unknown;
 }
 
-const STOPPED_STATES = ["failed-before-provider", "settled-recoverable", "settled-restartable", "settled-unrecoverable"];
+const STOPPED_STATES = ["failed-before-provider", "settled-recoverable", "settled-restartable", "settled-unrecoverable", "settled-failed"];
 
 /**
  * The settlement's shared check (single-call estimate spec §6.3, N1 spec §5.1 Ce): the run row is still active, its

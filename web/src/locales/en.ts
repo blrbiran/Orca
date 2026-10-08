@@ -70,7 +70,7 @@ const runPhase = { estimate: "estimate", work: "work", handoff: "handoff", "sing
 const runState = {
   starting: "starting", unknown: "unknown", "attempt-unknown": "attempt-unknown", "attempt-proof-invalid": "attempt-proof-invalid", running: "running",
   "failed-before-provider": "failed-before-provider", "settled-recoverable": "settled-recoverable", "settled-restartable": "settled-restartable",
-  "settled-unrecoverable": "settled-unrecoverable", collected: "collected", landed: "landed", reconciling: "reconciling", blocked: "blocked",
+  "settled-unrecoverable": "settled-unrecoverable", "settled-failed": "settled-failed", collected: "collected", landed: "landed", reconciling: "reconciling", blocked: "blocked",
 } as const satisfies Record<RunViewV1["state"], string>;
 const requestState = {
   "request-pending": "request-pending", latched: "latched", collecting: "collecting", "settled-recoverable": "settled-recoverable",

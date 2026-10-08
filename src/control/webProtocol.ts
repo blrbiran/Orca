@@ -1176,6 +1176,7 @@ export const runViewSchema = z
       "settled-recoverable",
       "settled-restartable",
       "settled-unrecoverable",
+      "settled-failed",
       "collected",
       "landed",
       "reconciling",
@@ -1191,6 +1192,10 @@ export const runViewSchema = z
     remaining: amountSchema,
     failureCode: nonemptyString.nullable(),
     blockedReason: nonemptyString.nullable(),
+    // Issue fixes spec §4.2(1), (5): ccloop's own reason for the terminal it reported, and the drive record's outcome (the
+    // Retry-task button keys on it). Optional on the wire like `git`; the server always gives both, null when absent.
+    stopReason: nonemptyString.nullable().optional(),
+    outcome: nonemptyString.nullable().optional(),
     continuable: z.boolean(),
     evidenceIds: sortedIdArraySchema,
     // Board spec 2026-10-03 D4: the git facts the run's drive record holds -- the workspace mode it ran in, the work

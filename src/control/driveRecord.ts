@@ -82,6 +82,10 @@ export const driveRecordSchema = z.object({
   // for declared names) and syncskill's lock entries. Written once, with `prepared`; null for a run without skills.
   // Defaulted so a drive record from before this field existed still parses.
   skills: z.object({ dir: z.string().min(1), profile: z.string().min(1).nullable(), lock: z.array(lockSkillSchema) }).strict().nullable().default(null),
+  // Issue fixes spec §4.2(1): ccloop's own reason for the terminal it reported (the port keeps the first STOP_REASON_MAX
+  // units), stored when the run blocks on a terminal other than `succeeded`. Optional: absent when ccloop stated none and
+  // in every drive record written before it existed; the v9 store keeps an older Orca from reading one.
+  stopReason: z.string().min(1).optional(),
 }).strict();
 export type DriveRecord = z.infer<typeof driveRecordSchema>;
 

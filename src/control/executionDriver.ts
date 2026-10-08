@@ -539,7 +539,10 @@ export async function stepC(deps: ExecutionDriverDeps, runId: string): Promise<b
   deps.crash?.("C-after-terminal");
   const outcome = report.terminal.outcome;
   if (outcome !== "succeeded") {
-    blockRun(deps, runId, "C", report.terminal.stopReason?.includes("codex-skills-") ? report.terminal.stopReason : `terminal:${outcome}`, { outcome });
+    // Issue fixes spec §4.2(1): ccloop's reason is kept beside the outcome (the run view and the panel explain it); the
+    // blocked reason is unchanged.
+    const stopReason = report.terminal.stopReason ? { stopReason: report.terminal.stopReason } : {};
+    blockRun(deps, runId, "C", report.terminal.stopReason?.includes("codex-skills-") ? report.terminal.stopReason : `terminal:${outcome}`, { outcome, ...stopReason });
     return true;
   }
   const attemptSha = await commitAttempt(join(drive.sourceDir, "repo"));

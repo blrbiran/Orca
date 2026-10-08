@@ -68,7 +68,7 @@ export function budgetBalance(limit:Amount,used:Amount,committed:Amount):{reserv
   return {reserve,deficit};
 }
 export function isTerminalRunState(state:string):boolean {
-  return state==="settled" || ["failed-before-provider","settled-recoverable","settled-restartable","settled-unrecoverable"].includes(state);
+  return state==="settled" || ["failed-before-provider","settled-recoverable","settled-restartable","settled-unrecoverable","settled-failed"].includes(state);
 }
 /** Synchronize Web projections inside the existing usage transaction. */
 /** `currentRun` is the run whose usage is being booked, null for run-less usage (integration spec §7). */

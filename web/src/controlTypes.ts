@@ -215,7 +215,7 @@ export type RunViewV1 = {
   taskId: string | null;
   estimateId: string | null;
   generation: number;
-  state: "starting" | "unknown" | "attempt-unknown" | "attempt-proof-invalid" | "running" | "failed-before-provider" | "settled-recoverable" | "settled-restartable" | "settled-unrecoverable" | "collected" | "landed" | "reconciling" | "blocked";
+  state: "starting" | "unknown" | "attempt-unknown" | "attempt-proof-invalid" | "running" | "failed-before-provider" | "settled-recoverable" | "settled-restartable" | "settled-unrecoverable" | "settled-failed" | "collected" | "landed" | "reconciling" | "blocked";
   phase: "estimate" | "work" | "handoff" | "single-call";
   /** N1 DR26: what a `single-call` run of a requirement was for; absent on every other phase. */
   purpose?: "clarify" | "split";
@@ -226,6 +226,9 @@ export type RunViewV1 = {
   remaining: Amount;
   failureCode: string | null;
   blockedReason?: string | null;
+  /** Issue fixes spec §4.2(1), (5): ccloop's reason and the drive record's outcome; optional here so literal fixtures need no edit. */
+  stopReason?: string | null;
+  outcome?: string | null;
   continuable?: boolean;
   evidenceIds: string[];
   /** Board spec 2026-10-03 D4: optional here so literal fixtures need no edit; the server always sends it. */

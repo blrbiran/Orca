@@ -717,7 +717,7 @@ export const zh: Translation<typeof en> = {
     runState: {
       starting: "启动中", unknown: "未知", "attempt-unknown": "尝试情况未知", "attempt-proof-invalid": "尝试证明无效", running: "运行中",
       "failed-before-provider": "未到提供方即失败", "settled-recoverable": "已结算（可恢复）", "settled-restartable": "已结算（可重启）",
-      "settled-unrecoverable": "已结算（不可恢复）", collected: "已收集", landed: "已合入", reconciling: "协调中", blocked: "已阻塞",
+      "settled-unrecoverable": "已结算（不可恢复）", "settled-failed": "已结算（失败）", collected: "已收集", landed: "已合入", reconciling: "协调中", blocked: "已阻塞",
     },
     requestState: {
       "request-pending": "请求待处理", latched: "已锁定", collecting: "收集中", "settled-recoverable": "已结算（可恢复）",

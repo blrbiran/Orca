@@ -160,7 +160,8 @@ const persistedRunSchema = z.object({
   state: z.enum([
     "claimed", "starting", "accepted", "unknown", "settled",
     "attempt-unknown", "attempt-proof-invalid", "failed-before-provider",
-    "settled-recoverable", "settled-restartable", "settled-unrecoverable",
+    // Issue fixes spec §4.2(2): a run ccloop ended failed, settled by retry-task (inactive, its task back to ready).
+    "settled-recoverable", "settled-restartable", "settled-unrecoverable", "settled-failed",
     "start-pending", "collected", "landed", "reconciling", "blocked",
   ]),
   checkpointId: idSchema.nullable(),
@@ -657,7 +658,7 @@ function displayRunState(run: z.infer<typeof persistedRunSchema>): RunViewV1["st
     case "claimed": case "starting": return "starting";
     case "accepted": return "running";
     case "unknown": case "attempt-unknown": case "attempt-proof-invalid": case "failed-before-provider":
-    case "settled-recoverable": case "settled-restartable": case "settled-unrecoverable": return run.state;
+    case "settled-recoverable": case "settled-restartable": case "settled-unrecoverable": case "settled-failed": return run.state;
     case "settled": return run.recoverable ? "settled-recoverable" : "settled-unrecoverable";
     case "start-pending": return "starting";
     case "collected": case "landed": case "reconciling": case "blocked": return run.state;
@@ -702,7 +703,7 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
       || !validAccounting(run)) return blocked(`run-identity:${runId}`);
 
     const state = displayRunState(run);
-    const terminal = ["failed-before-provider", "settled-recoverable", "settled-restartable", "settled-unrecoverable"].includes(state);
+    const terminal = ["failed-before-provider", "settled-recoverable", "settled-restartable", "settled-unrecoverable", "settled-failed"].includes(state);
     if ((Number(row.active) === 1) === terminal
       || (Number(row.active) === 1 && run.graphVersion !== graphVersion)
       || ((run.state === "accepted" || run.state === "settled") && run.providerAttemptOrdinal === 0)) {
@@ -766,6 +767,9 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
       claimOrdinal: run.claimOrdinal, providerAttemptOrdinal: run.providerAttemptOrdinal, profile,
       used: run.cumulative[bucket], remaining: run.remaining[bucket], failureCode: run.failureCode,
       blockedReason: run.drive?.blockedReason ?? null,
+      // Issue fixes spec §4.2(1), (5): ccloop's reason, and the outcome the Retry-task button keys on.
+      stopReason: run.drive?.stopReason ?? null,
+      outcome: run.drive?.outcome ?? null,
       continuable: continuableRun(store, run),
       evidenceIds: artifactIdsForRun(store, runId),
       git: run.drive === undefined ? null : { workspaceMode: run.drive.workspaceMode, base: run.drive.base, landedCommit: run.drive.landedCommit },
