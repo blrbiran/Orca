@@ -21,6 +21,7 @@ import { agentSelectionSchema, amountSchema, artifactSchema, canonicalTimestampS
 import { taskContractSchema } from "../scheduler/planFile.js";
 import { exportReasonOf } from "../control/requirementExport.js";
 import { readSpendCapBlock } from "../control/spendCaps.js";
+import { readGroupIntegration } from "../control/integrationScheme.js";
 import {
   agentSelectionPreviewSchema,
   allocationViewSchema,
@@ -791,6 +792,13 @@ function handoffViews(store: ControlStore, groupId: string): HandoffRequestViewV
   });
 }
 
+function integrationView(body: unknown): { integration?: NonNullable<GroupViewV1["integration"]> } {
+  const integration = readGroupIntegration(body);
+  if (integration === null) return {};
+  const { scheme, schemeHash, frozen, state, reason, lastIntegrated, integratedCommit, pr } = integration;
+  return { integration: { scheme, schemeHash, frozen, state, reason, lastIntegrated, integratedCommit, pr } };
+}
+
 export function readControlGroup(store: ControlStore, epoch: string, groupId: string): GroupViewV1 {
   // N1 spec §4.1 (DR25): the group view reads a plan; a clarifying group has its own view (requirement view).
   refuseClarifying(store, groupId);
@@ -832,6 +840,8 @@ export function readControlGroup(store: ControlStore, epoch: string, groupId: st
     recentCommandIds: sortedUnique(commandIds),
     // Accounts spec §6.3.1, D9: a claim waiting on a spend cap (schema-checked with the rest of the view).
     spendCapBlock: readSpendCapBlock(store, groupId),
+    // Integration spec §4: only for a non-keep scheme, so a keep group's view is what it was.
+    ...integrationView(body),
   };
   const parsed = groupViewSchema.safeParse(view);
   if (!parsed.success) return blocked(`group-view:${parsed.error.issues[0]?.path.join(".")}:${parsed.error.issues[0]?.message}`);

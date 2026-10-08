@@ -16,6 +16,7 @@ import {
   type RawAuthorityCommandV1,
 } from "./webProtocol.js";
 import { writeCanonicalRecord } from "./snapshot.js";
+import { newGroupIntegration, readIntegrationDefault } from "./integrationScheme.js";
 import { commandPrincipalFor } from "./commandClient.js";
 import { AgentCeilingRefusal, spendCapBlocking } from "./spendCaps.js";
 import { readSchedulerControlPlanSource, type SchedulerControlPlanSource } from "../scheduler/planFile.js";
@@ -303,6 +304,10 @@ export function writeImportedPlan(deps: ImportDeps, input: ImportedPlanWrite, ca
     // N1 spec §9.1: an accepted requirement keeps the layers its clarifying group was opened with.
     agentOverrides: carry === null ? {} : (carry.existingBody.agentOverrides ?? {}), estimatorSlot, reconcileSlot: null,
   };
+  // Integration spec §3.1: the group gets its copy of the repository's default where it gets its plan -- here, for
+  // import-plan and a requirement's split acceptance alike. Keep is no field, so a keep group's body is unchanged.
+  const integration = newGroupIntegration(readIntegrationDefault(deps.store, input.repoId).scheme);
+  if (integration !== null) Object.assign(group, { integration });
   if (carry === null) {
     deps.store.db.prepare("INSERT INTO groups(id,revision,graph_version,projection_seq,body) VALUES (?,?,?,0,?)")
       .run(input.groupId, 0, 1, JSON.stringify(group));

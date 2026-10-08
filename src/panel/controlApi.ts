@@ -368,6 +368,8 @@ export function controlCommandRoutes(actorId: string): Array<{ path: string; ver
         return { groupId: `@repository:${repoId}`, target: { kind: "repository", repoId } };
       },
     },
+    // Integration spec §3.1: the group's copy of the scheme; the ledger key is the group's.
+    { path: "/api/control/groups/:groupId/integration", verb: "set-group-integration", target: fromParams },
     {
       path: "/api/control/operator/agent-preferences",
       verb: "set-agent-preferences",
@@ -441,6 +443,7 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
           case "recovery-retry": await service.recoveryRetry(command); break;
           case "set-workspace-mode": await service.setWorkspaceMode(command); break;
           case "set-integration-scheme": await service.setIntegrationScheme(command); break;
+          case "set-group-integration": await service.setGroupIntegration(command); break;
           case "set-agent-preferences": await service.setAgentPreferences(command); break;
           case "proposal-set-agent": await service.proposalSetAgent(command); break;
           case "set-task-labels": service.setTaskLabels(command); break;

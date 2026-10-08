@@ -19,8 +19,8 @@ import { scheduleStart, type StartCommand } from "./webDispatch.js";
 import { applyHandoffStop, applyPauseDispatch, applyRecoveryRetry, applyResumeDispatch, type HandoffStopCommand, type PauseCommand, type RecoveryRetryCommand, type ResumeDispatchCommand, type StopDeps } from "./stopIntent.js";
 import { applyContinueTask, applyResumeFromHandoff, type ContinueTaskCommand, type ResumeFromHandoffCommand } from "./continuation.js";
 import { applySetWorkspaceMode, type SetWorkspaceModeCommand } from "./workspaceSettings.js";
-import { applySetIntegrationScheme, type SetIntegrationSchemeCommand } from "./integrationCommands.js";
-import { checkScheme } from "./integrationScheme.js";
+import { applySetGroupIntegration, applySetIntegrationScheme, type SetGroupIntegrationCommand, type SetIntegrationSchemeCommand } from "./integrationCommands.js";
+import { checkScheme, preflightScheme, readGroupIntegration, type GroupIntegration } from "./integrationScheme.js";
 import { applySpendCommand, type SpendCommand } from "./spendCommands.js";
 import { applySetAgentPreferences, type SetAgentPreferencesCommand } from "./agentPreferences.js";
 import { recordProjectionChange } from "./projectionJournal.js";
@@ -320,6 +320,9 @@ function reopenProposal(store: ControlStore, id: string, group: Group, proposal:
     store.db.prepare("UPDATE work_items SET body=? WHERE group_id=? AND id=?").run(JSON.stringify(work), id, row.id);
   }
   (group as Record<string, unknown>).reconcileSlot = null;
+  // Integration spec §3.2: the approval was the confirmation; the next one approves the scheme again.
+  const integration = readGroupIntegration(group);
+  if (integration !== null) (group as Record<string, unknown>).integration = { ...integration, frozen: false };
   saveWebAuthority(store, group, proposal);
 }
 
@@ -563,6 +566,30 @@ export class WebControlService {
       return applySetIntegrationScheme({ store: this.store, knownRepository }, command, failedCheck) as WebCommandResult;
     } finally { release?.(); }
   }
+  /**
+   * Integration spec §3.1, §3.3: the group's copy of the scheme. The setter's git checks run against the plan's
+   * repository after the replay check and before the transaction; a group without a plan (missing, clarifying) is not
+   * checked, and the transaction refuses it by name.
+   */
+  async setGroupIntegration(command: SetGroupIntegrationCommand): Promise<WebCommandResult> {
+    const release = this.deps.admissionGate?.enter();
+    try {
+      const replay = preflightWebCommand<WebCommandResult>(this.store, command); if (replay) return replay.body;
+      const repoId = this.planRepository(command.target.groupId);
+      const failedCheck = repoId === null ? null : await checkScheme(this.repositoryPath(repoId), command.payload.integration);
+      return applySetGroupIntegration({ store: this.store }, command, failedCheck) as WebCommandResult;
+    } finally { release?.(); }
+  }
+  /** The repository a group's plan names, read before a transaction; null when the group has none (yet). */
+  private planRepository(id: string): string | null {
+    const row = this.store.db.prepare("SELECT body FROM groups WHERE id=?").get(id);
+    const repoId = row ? (JSON.parse(String(row.body)) as { plan?: { repoId?: unknown } }).plan?.repoId : undefined;
+    return typeof repoId === "string" ? repoId : null;
+  }
+  private repositoryPath(repoId: string): string {
+    if (this.deps.resolveRepository === undefined) throw new Error("integration checks need resolveRepository");
+    return this.deps.resolveRepository(repoId);
+  }
   /** Agent selection spec §6.2 layer 1: the operator's defaults, under their own revision. */
   async setAgentPreferences(command: SetAgentPreferencesCommand): Promise<WebCommandResult> {
     return applySetAgentPreferences({ store: this.store, admissionGate: this.deps.admissionGate }, command) as WebCommandResult;
@@ -592,6 +619,9 @@ export class WebControlService {
       const prepared: GroupSelectionResolution | { failure: unknown } = await resolveGroupSelections({ store: this.store, port: this.deps.port }, groupId(command), command.actorId, "confirm")
         .catch((failure: unknown) => ({ failure }));
       const skillLookup = await lookupSkillProfiles(this.store, groupId(command), this.deps.syncskill ?? UNCONFIGURED_SYNCSKILL, this.deps.port);
+      // Integration spec §3.3: a non-keep scheme's preflight, decided inside the transaction. The group revision the
+      // command is checked against there covers any set-group-integration since this read.
+      const preflight = await this.integrationPreflight(groupId(command));
       return applyWebCommand<WebCommandResult>(this.store, {
         rawCommand: command, expand: () => ({ ...command, schema: "orca-authority-command-v1" }),
         apply: context => {
@@ -645,6 +675,11 @@ export class WebControlService {
           // the whole confirmation, decided here as a slot failure is; then each task's skill set is frozen -- names as
           // declared, a profile as syncskill answered it.
           if ("failure" in skillLookup) throw skillLookup.failure;
+          // Integration spec §3.2 (ruling R2): a non-keep scheme is approved by the hash of the scheme the owner saw; a keep
+          // group carries none. Then the preflight's finding refuses by name.
+          const integration = readGroupIntegration(group);
+          if (integration === null ? payload.integrationHash !== undefined : payload.integrationHash !== integration.schemeHash) throw new ControlError("integration-unapproved");
+          if (integration !== null && preflight !== null) throw new ControlError("integration-preflight-failed", preflight);
           const skills = tasks.flatMap((task): Array<{ taskId: string; profile: string | null; names: string[] }> => {
             const declared = task.loop?.skills;
             if (declared === undefined) return [];
@@ -671,6 +706,7 @@ export class WebControlService {
           }
           writeCanonicalRecord(this.store, id, built.snapshotHash, built.canonicalJson);
           (group as Record<string, unknown>).reconcileSlot = reconcileSlot;
+          if (integration !== null) (group as Record<string, unknown>).integration = { ...integration, frozen: true } satisfies GroupIntegration;
           proposal.state = "confirmed"; proposal.budgetMode = payload.budgetMode; proposal.contextPolicy = payload.contextPolicy; proposal.profiles = profiles; proposal.executionSnapshotHash = built.snapshotHash;
           proposal.allocations.forEach(a => { a.state = "confirmed"; }); group.status = "ready"; group.budgetMode = payload.budgetMode;
           saveWebAuthority(this.store, group, proposal);
@@ -679,6 +715,17 @@ export class WebControlService {
         },
       }).body;
     } finally { release?.(); }
+  }
+  /** The failed check of the group's non-keep scheme, null when it passed, is keep, or cannot be read here (the transaction refuses that). */
+  private async integrationPreflight(id: string): Promise<string | null> {
+    let integration: GroupIntegration | null;
+    try {
+      const row = this.store.db.prepare("SELECT body FROM groups WHERE id=?").get(id);
+      integration = row ? readGroupIntegration(JSON.parse(String(row.body))) : null;
+    } catch { return null; }
+    const repoId = this.planRepository(id);
+    if (integration === null || repoId === null) return null;
+    return preflightScheme(this.repositoryPath(repoId), integration.scheme, process.env.ORCA_GH_BIN || "gh");
   }
   setLimit(command: SetLimitCommand): WebCommandResult {
     return this.mutate(() => applyWebCommand(this.store, {

@@ -617,6 +617,7 @@ export const commandVerbSchema = z.enum([
   "clear-spend-cap",
   "set-usage-calendar",
   "set-integration-scheme",
+  "set-group-integration",
 ]);
 
 const repositoryCommandTargetSchema = z.object({ kind: z.literal("repository"), repoId: idSchema }).strict();
@@ -714,6 +715,9 @@ export const confirmPayloadSchema = z
     // Agent selection spec §6.4 step 3 (§12 C4): the hash of the selections the operator saw; refused as
     // agent-selection-changed when what confirmation resolves is not that.
     selectionsHash: hashSchema,
+    // Integration spec §3.2 (ruling R2): the group's integration.schemeHash the owner saw; present exactly when the
+    // group's scheme is not keep. Absent adds no bytes, so a keep group's confirm hashes as before.
+    integrationHash: hashSchema.optional(),
   })
   .strict();
 export const setLimitPayloadSchema = z.object({ limit: amountSchema }).strict();
@@ -765,6 +769,8 @@ export const integrationSchemeSchema = z.discriminatedUnion("delivery", [
   z.object({ delivery: z.enum(["push-branch", "github-pr"]), trigger: integrationTriggerSchema, target: z.string(), remote: z.string() }).strict(),
 ]);
 export const setIntegrationSchemePayloadSchema = z.object({ integration: integrationSchemeSchema }).strict();
+// Integration spec §3.1: the group's copy, the same body shape as the repository default's.
+export const setGroupIntegrationPayloadSchema = z.object({ integration: integrationSchemeSchema }).strict();
 // Controller ruling W6-8: the envelope's expectedRevision (checked against agent_preferences.revision) is the only one.
 export const setAgentPreferencesPayloadSchema = z.object({ preferences: operatorPreferencesSchema }).strict();
 // Accounts spec §6.1: a cap's amount. Its own instance (not the shared positiveSafeInteger), so the human-only criterion
@@ -862,6 +868,7 @@ const rawAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...rawCommandFields, verb: z.literal("shutdown"), target: globalCommandTargetSchema, payload: shutdownPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-workspace-mode"), target: repositoryCommandTargetSchema, payload: setWorkspaceModePayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-integration-scheme"), target: repositoryCommandTargetSchema, payload: setIntegrationSchemePayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("set-group-integration"), target: groupCommandTargetSchema, payload: setGroupIntegrationPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-agent-preferences"), target: operatorCommandTargetSchema, payload: setAgentPreferencesPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-task-labels"), target: taskCommandTargetSchema, payload: setTaskLabelsPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-task-loop"), target: taskCommandTargetSchema, payload: setTaskLoopPayloadSchema }).strict(),
@@ -909,6 +916,7 @@ const effectiveAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...effectiveCommandFields, verb: z.literal("shutdown"), target: globalCommandTargetSchema, payload: shutdownPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-workspace-mode"), target: repositoryCommandTargetSchema, payload: setWorkspaceModePayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-integration-scheme"), target: repositoryCommandTargetSchema, payload: setIntegrationSchemePayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("set-group-integration"), target: groupCommandTargetSchema, payload: setGroupIntegrationPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-agent-preferences"), target: operatorCommandTargetSchema, payload: setAgentPreferencesPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-task-labels"), target: taskCommandTargetSchema, payload: setTaskLabelsPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-task-loop"), target: taskCommandTargetSchema, payload: setTaskLoopPayloadSchema }).strict(),
@@ -1248,6 +1256,19 @@ const recoveryBlockerSchema = z
   .object({ scope: z.enum(["global", "group", "run"]), code: nonemptyString, runId: idSchema.nullable(), evidenceIds: sortedIdArraySchema })
   .strict();
 
+const groupIntegrationViewSchema = z
+  .object({
+    scheme: integrationSchemeSchema,
+    schemeHash: hashSchema,
+    frozen: z.boolean(),
+    state: z.enum(["idle", "blocked", "conflict", "resolving"]),
+    reason: z.string().nullable(),
+    lastIntegrated: commitShaSchema.nullable(),
+    integratedCommit: commitShaSchema.nullable(),
+    pr: z.object({ url: z.string(), number: safeInteger, ready: z.boolean() }).strict().nullable(),
+  })
+  .strict();
+
 export const groupViewSchema = z
   .object({
     schema: z.literal("orca-control-group-v1"),
@@ -1304,6 +1325,8 @@ export const groupViewSchema = z
     recoveryBlockers: z.array(recoveryBlockerSchema),
     recentCommandIds: sortedIdArraySchema,
     spendCapBlock: spendCapBlockSchema.nullable().optional(),
+    // Integration spec §4: the group's integration as an owner sees it; absent for keep (ruling R5).
+    integration: groupIntegrationViewSchema.optional(),
   })
   .strict()
   .superRefine((value, ctx) => {
@@ -1419,6 +1442,7 @@ const commandResultSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("limit-set"), limit: amountSchema }).strict(),
   z.object({ kind: z.literal("workspace-mode-set"), repoId: idSchema, workspaceMode: workspaceModeSchema }).strict(),
   z.object({ kind: z.literal("integration-scheme-set"), repoId: idSchema, integration: integrationSchemeSchema }).strict(),
+  z.object({ kind: z.literal("group-integration-set"), groupId: idSchema, integration: integrationSchemeSchema }).strict(),
   z.object({ kind: z.literal("agent-preferences-set"), operatorId: nonemptyString, revision: positiveSafeInteger }).strict(),
   z.object({ kind: z.literal("spend-cap-set"), revision: positiveSafeInteger }).strict(),
   z.object({ kind: z.literal("spend-cap-cleared"), revision: positiveSafeInteger }).strict(),
@@ -1579,6 +1603,7 @@ export const repositoryIntegrationSchema = z
   .strict();
 export type RepositoryIntegrationV1 = z.infer<typeof repositoryIntegrationSchema>;
 export type SetIntegrationSchemePayload = z.infer<typeof setIntegrationSchemePayloadSchema>;
+export type SetGroupIntegrationPayload = z.infer<typeof setGroupIntegrationPayloadSchema>;
 export type SetWorkspaceModePayload = z.infer<typeof setWorkspaceModePayloadSchema>;
 export type SetAgentPreferencesPayload = z.infer<typeof setAgentPreferencesPayloadSchema>;
 export type ProposalSetAgentPayload = z.infer<typeof proposalSetAgentPayloadSchema>;

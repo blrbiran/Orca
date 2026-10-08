@@ -9,6 +9,8 @@ import { canonicalBytes } from "../../../src/control/canonicalJson.js";
 import { resolveGroupSelections } from "../../../src/control/agentFreeze.js";
 import { readArchivedPlan, readBudgetProposal } from "../../../src/control/queries.js";
 import type { ExecutionPort } from "../../../src/control/executionPort.js";
+import type { IntegrationScheme } from "../../../src/control/integrationScheme.js";
+import { writeRepositorySettingsBody } from "../../../src/control/workspaceSettings.js";
 import type { AgentSelection, OperatorPreferences, PartialSelection } from "../../../src/control/agentSelection.js";
 import { FIXTURE_AGENT_ID, fixtureResolveAgent, seedPanelOperator, seedPreferences } from "./agents.js";
 import type { CapabilityViewV1, ExecutionProfileSnapshotV1, RawAuthorityCommandV1, ConfirmPayload } from "../../../src/control/webProtocol.js";
@@ -41,6 +43,8 @@ export interface WebFixtureOptions {
   killGraceMs?: number;
   /** Audit 2026-09-26 (seat B): the fixture's ccloop answers each selection its own configHash (agents.ts `fixtureConfigHashOf`). */
   distinctConfigHash?: boolean;
+  /** Integration spec §3.1: the repository's integration default before the import (absent: none, i.e. keep). */
+  integration?: IntegrationScheme;
 }
 
 /** Agent selection spec §3: the complete selection this fixture's task work items are frozen with. */
@@ -93,6 +97,7 @@ export async function webFixture(snapshot = profileSnapshot(), tasks: readonly W
   const preferences = options.preferences === undefined ? { defaultAgent: FIXTURE_AGENT_ID, perAgent: {} } : options.preferences;
   // The panel's operator (a criterion that mounts the mutation routes acts as it) is given the same preferences.
   if (preferences !== null) { seedPreferences(h.store, "human", preferences); seedPanelOperator(h.store, preferences); }
+  if (options.integration !== undefined) writeRepositorySettingsBody(h.store, "repo", { workspaceMode: "worktree", revision: 1, integration: options.integration });
   const importCommand: ImportCommand = { schema: "orca-raw-command-v1", commandId: "import", expectedRevision: 0, actorId: "human", verb: "import-plan", target: { kind: "group", groupId: "g" }, payload: { groupId: "g", repoId: "repo", planId: "plan" } };
   const prepared = await prepareEstimatorSlot({ store: h.store, profileRouter: router }, importCommand, frozen);
   const deps = { store: h.store, port, admissionGate: createAdmissionGate(), profileRouter: router, trustedConfig: { resolveTarget: () => ({ repositoryPath: repo, planPath, validatePlanDescriptor() {} }) },

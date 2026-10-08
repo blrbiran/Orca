@@ -53,7 +53,7 @@ The socket refuses these before anything runs (nothing is ledgered, the commandI
 - `requirement-open` with a `limit` field → 403 `control-field-human-only` (omit `limit`; the default applies)
 - `proposal-edit` with a `proposedGroupLimit` field → 403 `control-field-human-only`
 - the spend-cap verbs are owner-only: `set-spend-cap`, `clear-spend-cap`, `set-usage-calendar` → 403 `control-verb-human-only`
-- `set-integration-scheme` (where a repository's finished work is carried: a local branch, a push, a GitHub PR) is owner-only → 403 `control-verb-human-only`. Confirming a group whose integration is not `keep` is owner-only (the `integrationHash` field is human-only).
+- `set-integration-scheme` and `set-group-integration` (where a repository's or a group's finished work is carried: a local branch, a push, a GitHub PR) are owner-only → 403 `control-verb-human-only`. Confirming a group whose integration is not `keep` is owner-only (the `integrationHash` field is human-only).
 
 Do not look for a way around them. Ask the human. To spend less, use `pause-dispatch` or `handoff-stop`.
 
@@ -76,7 +76,7 @@ stdout is exactly one JSON line:
 
 ## 8. Route table
 
-`<param>` segments are filled with real ids. Payloads are minimal valid examples; ids, hashes and versions are placeholders (take real values from `get groups/<id>`; each `aaaa…` hash is 64 lowercase hex). `set-limit`, `repositories/<repoId>/integration` and the three `operator/set-spend-cap`, `operator/clear-spend-cap`, `operator/set-usage-calendar` rows are listed for completeness and are owner-only (section 6).
+`<param>` segments are filled with real ids. Payloads are minimal valid examples; ids, hashes and versions are placeholders (take real values from `get groups/<id>`; each `aaaa…` hash is 64 lowercase hex). `set-limit`, `repositories/<repoId>/integration`, `groups/<groupId>/integration` and the three `operator/set-spend-cap`, `operator/clear-spend-cap`, `operator/set-usage-calendar` rows are listed for completeness and are owner-only (section 6).
 
 | Route | Verb | Payload example |
 | --- | --- | --- |
@@ -98,6 +98,7 @@ stdout is exactly one JSON line:
 | `POST groups/<groupId>/requirement/answer` | requirement-answer | `{"roundNo":1,"answers":[{"id":"R1.Q1","kind":"recommended"},{"id":"R1.Q2","kind":"text","text":"my answer"}],"glossaryDecisions":[],"adrDecisions":[]}` |
 | `POST groups/<groupId>/requirement/consensus` | requirement-consensus | `{"roundNo":1}` |
 | `POST groups/<groupId>/requirement/feedback` | requirement-draft-feedback | `{"draftNo":1,"feedback":"what to change"}` |
+| `POST groups/<groupId>/integration` | set-group-integration | `{"integration":{"delivery":"keep"}}` |
 | `POST groups/<groupId>/requirement/accept` | requirement-draft-accept | `{"draftNo":1,"draftHash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}` |
 | `POST recovery/retry` | recovery-retry | `{"scope":"run","runId":"run1"}` |
 | `POST repositories/<repoId>/workspace-mode` | set-workspace-mode | `{"workspaceMode":"worktree"}` |

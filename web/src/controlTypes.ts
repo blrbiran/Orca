@@ -301,6 +301,8 @@ export type GroupViewV1 = {
   recentCommandIds: string[];
   /** Accounts spec §6.3.1 (D9): why this group's next claim waits on a spend cap; absent from older servers. */
   spendCapBlock?: SpendCapBlockV1 | null;
+  /** Integration spec §4: the group's integration; absent for keep. */
+  integration?: GroupIntegrationViewV1;
 };
 
 export type SpendPeriodV1 = "total" | "week" | "month";
@@ -379,6 +381,8 @@ export type ConfirmPayloadV1 = {
   contextPolicy: { handoffAtContextTokens: number | null };
   /** Agent selection spec §6.4 step 3: the hash of the selections the operator saw. */
   selectionsHash: string;
+  /** Integration spec §3.2: the group's integration.schemeHash the owner saw; only for a non-keep scheme. */
+  integrationHash?: string;
 };
 export type SetLimitPayloadV1 = { limit: Amount };
 export type ImportPlanPayloadV1 = {
@@ -437,7 +441,7 @@ export type CommandSuccessV1 = {
   actorId: string;
   verb: "import-plan" | "proposal-edit" | "estimate" | "confirm" | "start" | "pause-dispatch" | "handoff-stop" | "resume-dispatch" | "resume-from-handoff" | "set-limit" | "continue-task" | "recovery-retry" | "shutdown" | "set-workspace-mode" | "set-agent-preferences" | "proposal-set-agent" | "set-task-labels" | "set-task-loop"
     | "requirement-open" | "requirement-answer" | "requirement-consensus" | "requirement-draft-feedback" | "requirement-draft-accept"
-    | "set-spend-cap" | "clear-spend-cap" | "set-usage-calendar" | "set-integration-scheme";
+    | "set-spend-cap" | "clear-spend-cap" | "set-usage-calendar" | "set-integration-scheme" | "set-group-integration";
   target: CommandTargetV1;
   commandRevision: number | null;
   projectionSeq: number | null;
@@ -455,6 +459,7 @@ export type CommandSuccessV1 = {
     | { kind: "limit-set"; limit: Amount }
     | { kind: "workspace-mode-set"; repoId: string; workspaceMode: "worktree" | "clone" }
     | { kind: "integration-scheme-set"; repoId: string; integration: IntegrationSchemeV1 }
+    | { kind: "group-integration-set"; groupId: string; integration: IntegrationSchemeV1 }
     | { kind: "agent-preferences-set"; operatorId: string; revision: number }
     | { kind: "spend-cap-set"; revision: number }
     | { kind: "spend-cap-cleared"; revision: number }
@@ -478,6 +483,10 @@ export type IntegrationSchemeV1 =
   | { delivery: "local"; trigger: "task" | "group"; method: "merge" | "squash"; target: string }
   | { delivery: "push-target"; trigger: "task" | "group"; method: "merge" | "squash"; target: string; remote: string }
   | { delivery: "push-branch" | "github-pr"; trigger: "task" | "group"; target: string; remote: string };
+export type GroupIntegrationViewV1 = {
+  scheme: IntegrationSchemeV1; schemeHash: string; frozen: boolean; state: "idle" | "blocked" | "conflict" | "resolving"; reason: string | null;
+  lastIntegrated: string | null; integratedCommit: string | null; pr: { url: string; number: number; ready: boolean } | null;
+};
 export type RepositoryIntegrationV1 = { schema: "orca-repository-integration-v1"; repoId: string; integration: IntegrationSchemeV1; revision: number };
 
 // Agent selection spec §6.8 (plan T14): the agent UI's reads and its preferences command, mirrors of

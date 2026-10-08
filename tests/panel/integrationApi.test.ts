@@ -69,3 +69,41 @@ describe("the repository integration default over HTTP (integration spec §3.4)"
     expect([read.status, ((await read.json()) as { error: { code: string } }).error.code]).toEqual([404, "control-target-not-allowed"]);
   });
 });
+
+describe("the group's integration and confirm's approval over HTTP (integration spec §3.1, §3.2, ruling R2)", () => {
+  it("refuses set-group-integration from an agent on the socket and a member over the Web by name, booking nothing", async () => {
+    const { w, panel } = await setUp();
+    seedUser(controlRoot(w.env), "amy", "member");
+    const amy = await login(panel.url, "amy");
+    const route = "/api/control/groups/g/integration";
+    const socket = await overSocket((panel as StartedPanel).socketPath!, "POST", route, { "x-orca-client": "cli:test" }, { commandId: "gi-a", expectedRevision: 0, payload: { integration: LOCAL } });
+    expect([socket.status, JSON.parse(socket.text).error.code]).toEqual([403, "control-verb-human-only"]);
+    const member = await amy.fetch(route, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ commandId: "gi-m", expectedRevision: 0, payload: { integration: LOCAL } }) });
+    expect([member.status, ((await member.json()) as { error: { code: string } }).error.code]).toEqual([403, "control-verb-human-only"]);
+    expect(ids(w.state).filter((id) => id.startsWith("gi-"))).toEqual([]);
+  });
+
+  it("routes an owner's set-group-integration to the service (an unknown group is refused by name and booked)", async () => {
+    const { w, post } = await setUp();
+    const set = await post("groups/nogroup/integration", { commandId: "gi-o", expectedRevision: 0, payload: { integration: LOCAL } });
+    expect([set.status, ((await set.json()) as { error: { code: string } }).error.code]).toEqual([404, "group-not-found"]);
+    expect(ids(w.state)).toContain("gi-o");
+  });
+
+  it("refuses a confirm carrying integrationHash from an agent on the socket: the approval is an owner's", async () => {
+    const { w, panel } = await setUp();
+    const payload = { planHash: "a".repeat(64), proposalVersion: 1, budgetMode: "strict", profileIds: { estimator: "all", worker: "all", handoff: "all", goalReview: "all" },
+      profileHashes: { estimator: "b".repeat(64), worker: "b".repeat(64), handoff: "b".repeat(64), goalReview: "b".repeat(64) }, contextPolicy: { handoffAtContextTokens: null },
+      selectionsHash: "c".repeat(64), integrationHash: "d".repeat(64) };
+    const socket = await overSocket((panel as StartedPanel).socketPath!, "POST", "/api/control/groups/g/confirm", { "x-orca-client": "cli:test" }, { commandId: "cf-a", expectedRevision: 0, payload });
+    expect([socket.status, JSON.parse(socket.text).error.code]).toEqual([403, "control-field-human-only"]);
+    expect(ids(w.state).filter((id) => id.startsWith("cf-"))).toEqual([]);
+  });
+
+  it("books the refusal of an unknown repository's integration default (it is not checked against any path first)", async () => {
+    const { w, post } = await setUp();
+    const set = await post("repositories/elsewhere/integration", { commandId: "int-u", expectedRevision: 0, payload: { integration: PUSH } });
+    expect([set.status, ((await set.json()) as { error: { code: string } }).error.code]).toEqual([404, "control-target-not-allowed"]);
+    expect(ids(w.state)).toContain("int-u");
+  });
+});

@@ -6,7 +6,7 @@ import {
   proposalSetAgentPayloadSchema, recoveryRetryPayloadSchema, reestimatePayloadSchema, requirementAnswerPayloadSchema, requirementConsensusPayloadSchema,
   requirementDraftAcceptPayloadSchema, requirementDraftFeedbackPayloadSchema, requirementOpenPayloadSchema, resumeFromHandoffPayloadSchema,
   setAgentPreferencesPayloadSchema, setLimitPayloadSchema, setTaskLabelsPayloadSchema, setTaskLoopPayloadSchema, setWorkspaceModePayloadSchema,
-  setSpendCapPayloadSchema, clearSpendCapPayloadSchema, setUsageCalendarPayloadSchema, setIntegrationSchemePayloadSchema,
+  setSpendCapPayloadSchema, clearSpendCapPayloadSchema, setUsageCalendarPayloadSchema, setIntegrationSchemePayloadSchema, setGroupIntegrationPayloadSchema,
 } from "../../src/control/webProtocol.js";
 
 const skill = readFileSync("skills/orca-control/SKILL.md", "utf8");
@@ -24,7 +24,7 @@ const schemaByVerb: Record<string, ZodTypeAny> = {
   "requirement-consensus": requirementConsensusPayloadSchema, "requirement-draft-feedback": requirementDraftFeedbackPayloadSchema,
   "requirement-draft-accept": requirementDraftAcceptPayloadSchema, "set-task-labels": setTaskLabelsPayloadSchema, "set-task-loop": setTaskLoopPayloadSchema,
   "set-spend-cap": setSpendCapPayloadSchema, "clear-spend-cap": clearSpendCapPayloadSchema, "set-usage-calendar": setUsageCalendarPayloadSchema,
-  "set-integration-scheme": setIntegrationSchemePayloadSchema,
+  "set-integration-scheme": setIntegrationSchemePayloadSchema, "set-group-integration": setGroupIntegrationPayloadSchema,
 };
 
 describe("the orca-control skill (spec §7, C18)", () => {
@@ -36,20 +36,20 @@ describe("the orca-control skill (spec §7, C18)", () => {
 
   it("lists exactly the panel's mutation routes, so the table cannot drift", () => {
     const routes = new Set([...api.matchAll(/path: "\/api\/control\/([^"]+)"/g)].map((m) => m[1]!.replace(/:([A-Za-z]+)/g, "<$1>")));
-    // 26 routes carry the 27 verbs: `shutdown` has no route (the panel's own lifecycle). Integration spec §3.4 added
-    // `repositories/<repoId>/integration` (set-integration-scheme).
-    expect(routes.size).toBe(26);
+    // 27 routes carry the 28 verbs: `shutdown` has no route (the panel's own lifecycle). Integration spec §3.4 added
+    // `repositories/<repoId>/integration` (set-integration-scheme) and `groups/<groupId>/integration` (set-group-integration).
+    expect(routes.size).toBe(27);
     expect(rows.map((row) => row.route).sort()).toEqual([...routes].sort());
   });
 
   it("names the verb of every route as the panel does", () => {
     const verbs = new Map([...api.matchAll(/path: "\/api\/control\/([^"]+)",?\s+verb: "([^"]+)"/g)].map((m) => [m[1]!.replace(/:([A-Za-z]+)/g, "<$1>"), m[2]!]));
-    expect(verbs.size).toBe(26);
+    expect(verbs.size).toBe(27);
     expect(new Map(rows.map((row) => [row.route, row.verb]))).toEqual(verbs);
   });
 
   it("gives every route a payload example that its raw payload schema accepts", () => {
-    expect(rows.length).toBe(26);
+    expect(rows.length).toBe(27);
     for (const row of rows) {
       const schema = schemaByVerb[row.verb];
       expect(schema, `no schema mapped for ${row.verb}`).toBeDefined();
