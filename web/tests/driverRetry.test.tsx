@@ -8,7 +8,9 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ControlGroupView } from "../src/ControlGroupView.js";
-import type { Amount, ControlConfigV1, GroupViewV1, RunViewV1 } from "../src/controlTypes.js";
+import { TaskDetail } from "../src/TaskDetail.js";
+import { controlCommandPath } from "../src/controlApi.js";
+import type { Amount, ControlConfigV1, GroupViewV1, RunViewV1, WorkItemViewV1 } from "../src/controlTypes.js";
 
 const amount = (tokens: number): Amount => ({ tokens, activeMs: tokens * 10, attempts: 1, sessions: 1 });
 const capability = { usageObservation: "phase-end", budgetEnforcement: "soft", contextObservation: "unavailable", handoffControl: "durable", handoffExecution: "mechanical-in-run-v1", contextWindowTokens: null, requestBoundProof: null } as const;
@@ -49,5 +51,43 @@ describe("retrying a run the execution driver blocked (final review I5)", () => 
   it("offers no Retry for a run with no driver block, blocked or not", () => {
     render(<ControlGroupView view={view([run({}), run({ runId: "run-c", taskId: "c", state: "blocked", blockedReason: null })])} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
     expect(screen.queryAllByRole("button", { name: /^Retry run/ })).toHaveLength(0);
+  });
+});
+
+// Issue fixes spec §4.2(5): a run ccloop ended failed is retried as a task; a settled-failed run explains itself and offers nothing.
+const FAILED = { state: "blocked" as const, blockedReason: "terminal:failed", outcome: "failed", stopReason: "Error: codex-result-invalid: /runs/r/attempt-1" };
+describe("retrying a task whose run ccloop ended failed (issue fixes spec §4.2(5))", () => {
+  it("offers Retry task, not Retry run, and explains ccloop's reason beside the raw reason", () => {
+    const onCommand = vi.fn();
+    render(<ControlGroupView view={view([run(FAILED)])} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={onCommand} />);
+    expect(screen.queryAllByRole("button", { name: /^Retry run/ })).toHaveLength(0);
+    expect(screen.getByText(/did not answer in the required JSON format/)).toBeTruthy();
+    expect(screen.getByText("Error: codex-result-invalid: /runs/r/attempt-1")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Retry task a" }));
+    expect(onCommand).toHaveBeenCalledWith({ verb: "retry-task", groupId: "g", expectedRevision: 6, payload: { taskId: "a" } });
+    expect(controlCommandPath({ verb: "retry-task", groupId: "g", expectedRevision: 6, payload: { taskId: "a" } })).toBe("/api/control/groups/g/retry-task");
+  });
+
+  it("keeps Retry run for a blocked run whose ccloop run succeeded (out of bounds)", () => {
+    render(<ControlGroupView view={view([run({ state: "blocked", blockedReason: "out-of-bounds:x", outcome: "succeeded", stopReason: null })])} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
+    expect(screen.getAllByRole("button", { name: /^Retry run/ })).toHaveLength(1);
+    expect(screen.queryAllByRole("button", { name: /^Retry task/ })).toHaveLength(0);
+  });
+
+  it("explains a settled-failed run's reason and offers no button", () => {
+    render(<ControlGroupView view={view([run({ ...FAILED, state: "settled-failed", stopReason: "Error: codex-event-error" })])} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
+    expect(screen.getByText(/reported an error/)).toBeTruthy();
+    expect(screen.queryAllByRole("button", { name: /^Retry (run|task)/ })).toHaveLength(0);
+  });
+
+  it("shows the task's run number and Retry task in the task detail", () => {
+    const onCommand = vi.fn();
+    const item: WorkItemViewV1 = { taskId: "a", status: "active", dependencyTaskIds: [], targetVersion: 1, configHash: "d".repeat(64), originalContractHash: "e".repeat(64),
+      derivedContractHash: "f".repeat(64), currentRunId: "run-2", pendingRunId: null, lineageRunIds: ["run-1", "run-2"] };
+    const runs = [run({ runId: "run-1", state: "settled-failed", outcome: "failed", blockedReason: "terminal:failed" }), run({ runId: "run-2", ...FAILED })];
+    render(<TaskDetail view={{ ...view(runs), workItems: [item] }} item={item} drafts={{}} onDraft={vi.fn()} onCommand={onCommand} />);
+    expect(screen.getByText("Run 2 of this task")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Retry task a" }));
+    expect(onCommand).toHaveBeenCalledWith({ verb: "retry-task", groupId: "g", expectedRevision: 6, payload: { taskId: "a" } });
   });
 });

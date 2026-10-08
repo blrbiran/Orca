@@ -18,6 +18,8 @@ import { EvidenceLink } from "./EvidenceLink.js";
 import { GitScheme } from "./GitScheme.js";
 import { GroupIntegrationConfirm } from "./IntegrationScheme.js";
 import { RefusalNotice } from "./RefusalNotice.js";
+import { RunReason } from "./RunReason.js";
+import { isTerminalFailure } from "./runFacts.js";
 import { SkillsGiven } from "./SkillsGiven.js";
 import type {
   AgentSelectionPreviewV1, AgentsViewV1, ControlConfigV1, ContinuationSelectionV1, GroupViewV1, OperatorPreferencesV1, RepositoryIntegrationV1, RepositoryWorkspaceV1,
@@ -212,12 +214,21 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
               <td>{enumText("runPhase", run.phase)}</td>
               <td>
                 {enumText("runState", run.state)}
-                {run.blockedReason ? ` — ${run.blockedReason}` : ""}
+                <RunReason run={run} />
                 {run.failureCode !== null ? ` (${run.failureCode})` : ""}
                 {t("control.group.attempt", { attempt: run.providerAttemptOrdinal, claim: run.claimOrdinal ?? t("common.na") })}
                 {/* Execution driver final review I5: a run the driver blocked carries its reason on the run, not as a
                     recovery blocker, so its one remedy (spec §2.3, the run-scope recovery-retry) is offered here. */}
-                {run.state === "blocked" && run.blockedReason ? (
+                {/* Issue fixes spec §4.2(5): a run ccloop ended failed is retried as a task (a new run); any other blocked
+                    run keeps the run-scope recovery-retry, which refuses a terminal failure (run-terminal-failed). */}
+                {isTerminalFailure(run) && run.taskId !== null ? (
+                  <button
+                    type="button"
+                    onClick={() => onCommand({ verb: "retry-task", groupId, expectedRevision: revision, payload: { taskId: String(run.taskId) } })}
+                  >
+                    {t("control.group.retryTask", { taskId: String(run.taskId) })}
+                  </button>
+                ) : run.state === "blocked" && run.blockedReason ? (
                   <button
                     type="button"
                     onClick={() => onCommand({ verb: "recovery-retry", groupId, expectedRevision: revision, payload: { scope: "run", runId: run.runId } })}

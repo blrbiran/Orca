@@ -15,6 +15,8 @@ import { controlFailureFrom, downloadEvidenceArtifact, fetchRunEvidence, type Co
 import { CUSTOM_LABEL_PREFIX, WEB_SYSTEM_LABELS } from "./controlTypes.js";
 import type { EvidenceManifestV1, GroupViewV1, WorkItemProgressV1, WorkItemViewV1 } from "./controlTypes.js";
 import { LoopPlanCard } from "./LoopPlanCard.js";
+import { RunReason } from "./RunReason.js";
+import { isTerminalFailure, taskRunNumber } from "./runFacts.js";
 import i18n, { enumText } from "./i18n.js";
 
 export const labelsDraftKey = (groupId: string, taskId: string): string => `labels:${groupId}:${taskId}`;
@@ -141,6 +143,7 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
     setCustom("");
   };
   const runs = view.runs.filter((run) => run.taskId === item.taskId);
+  const runNumber = taskRunNumber(view, item.taskId);
   return (
     <section aria-label={t("control.task.region", { taskId: item.taskId })}>
       <h4>{t("control.task.region", { taskId: item.taskId })}</h4>
@@ -176,11 +179,18 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
       </p>
       <LoopPlanCard view={view} item={item} drafts={drafts} onDraft={onDraft} onCommand={onCommand} workspaceMode={props.workspaceMode} />
       <h5>{t("control.task.runsOf", { taskId: item.taskId })}</h5>
+      {/* Issue fixes spec §4.2(2): the run number counts the runs that reached the provider. */}
+      {runNumber > 0 && <p>{t("control.task.runNumber", { n: runNumber })}</p>}
       {runs.length === 0 ? <p>{t("common.none")}</p> : (
         <ul>
           {runs.map((run) => (
             <li key={run.runId}>
-              {run.runId} · {enumText("runPhase", run.phase)} · {enumText("runState", run.state)} <EvidenceList runId={run.runId} />
+              {run.runId} · {enumText("runPhase", run.phase)} · {enumText("runState", run.state)}<RunReason run={run} /> <EvidenceList runId={run.runId} />
+              {isTerminalFailure(run) && (
+                <button type="button" onClick={() => onCommand({ verb: "retry-task", groupId, expectedRevision: view.summary.commandRevision, payload: { taskId: item.taskId } })}>
+                  {t("control.group.retryTask", { taskId: item.taskId })}
+                </button>
+              )}
             </li>
           ))}
         </ul>

@@ -32,6 +32,7 @@ import type {
   ProposalEditPayloadV1,
   ProposalSetAgentPayloadV1,
   RecoveryRetryPayloadV1,
+  RetryTaskPayloadV1,
   RecoveryViewV1,
   RepositoryIntegrationV1,
   RepositoryWorkspaceV1,
@@ -254,6 +255,8 @@ export type ControlAction =
   | { verb: "resume-from-handoff"; groupId: string; expectedRevision: number; payload: ResumeFromHandoffPayloadV1 }
   | { verb: "continue-task"; groupId: string; taskId: string; expectedRevision: number; payload: ContinueTaskPayloadV1 }
   | { verb: "recovery-retry"; groupId: string; expectedRevision: number; payload: RecoveryRetryPayloadV1 }
+  // Issue fixes spec §4.2(2): retry a task whose run ccloop ended failed, as a new run.
+  | { verb: "retry-task"; groupId: string; expectedRevision: number; payload: RetryTaskPayloadV1 }
   // Integration spec §3.1, §6.5, §7: the group's scheme, Retry, and an owner's approval of an agent's resolution.
   | { verb: "set-group-integration"; groupId: string; expectedRevision: number; payload: SetGroupIntegrationPayloadV1 }
   | { verb: "retry-integration" | "resolve-integration-conflict"; groupId: string; expectedRevision: number; payload: Record<string, never> }
@@ -300,6 +303,8 @@ export function controlCommandPath(action: ControlAction): string {
       return `${group}/tasks/${segment(action.taskId)}/loop`;
     case "recovery-retry":
       return "/api/control/recovery/retry";
+    case "retry-task":
+      return `${group}/retry-task`;
     case "set-group-integration":
       return `${group}/integration`;
     case "retry-integration":
