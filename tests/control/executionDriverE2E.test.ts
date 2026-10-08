@@ -1,9 +1,12 @@
 import { existsSync, readdirSync, statSync } from "node:fs";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { DriverCrash } from "../../src/control/executionDriver.js";
 import type { ControlRuntime } from "../../src/panel/controlAssembly.js";
 import { readControlGroup } from "../../src/panel/controlViews.js";
+import { taskRunNumber } from "../../web/src/runFacts.js";
 import { ccloopWorlds, g, noBlocked, raw, realBinary, startGroup, until, workRuns } from "./fixtures/ccloopWorld.js";
 
 /**
@@ -140,6 +143,42 @@ describe.skipIf(!realBinary)("the execution driver against real ccloop (spec §7
       expect(g(w.repo, "rev-parse", "refs/heads/orca/g")).toBe(g(w.repo, "rev-parse", "main"));
       expect(await runtime.shutdown()).toBe(true);
     } finally { await w.teardown(); }
+  });
+
+  // Issue fixes spec §4.4 (issue 16): a run ccloop ended failed keeps ccloop's reason; retry-task settles it, the group
+  // view reads at once, and the pump and driver run the task again from the group branch. Part D ruling 8: against the
+  // real binary only "not succeeded" and "a reason string" are asserted; the exact codex-result-invalid reason is pinned
+  // on the synthetic port.
+  // Deviation from the D9 brief (measured, D9 report): the brief failed run 1 by giving fake codex no script entry, so it
+  // exits 3 at execute. Real ccloop then books that phase's usage as null, the run carries unknown work usage, and
+  // retry-task refuses it (task-not-retryable:usage-unknown, spec §4.2(2)); the group's usageUnknown also stops dispatch
+  // (webDispatch.ts), so run 2 could never be claimed. Run 1 here fails in a way whose usage is known instead: the task's
+  // command check passes only once a flag file outside the workspace exists, and the test creates it before retrying.
+  it("R-F: retry-task after a ccloop failure settles the run as settled-failed, and run 2 lands", async () => {
+    const flagDir = await mkdtemp(join(tmpdir(), "orca-retry-flag-"));
+    const flag = join(flagDir, "pass");
+    const w = await world([{ taskId: "a", targetPaths: ["a.txt"], requiredChecks: [`test -e ${flag}`], verifierType: "command" }], { a: { files: { "a.txt": "A\n" } } });
+    const runtime = await w.boot(); try {
+      await startGroup(runtime, w.repoId, 1_000_000);
+      runtime.startPump(50);
+      await until(() => workRuns(runtime)[0]?.body.state === "blocked", 240_000, "the first run to fail");
+      const first = workRuns(runtime)[0]!;
+      expect(first.body.drive.blockedAt).toBe("C");
+      expect(first.body.drive.outcome).not.toBe("succeeded");
+      expect(typeof first.body.drive.stopReason).toBe("string");
+      expect(readControlGroup(runtime.store, runtime.epoch, "g").runs[0]).toMatchObject({ state: "blocked", stopReason: first.body.drive.stopReason, outcome: first.body.drive.outcome });
+      await writeFile(flag, "");
+      const retried = runtime.service.retryTask(raw(runtime, "retry", "retry-task", { taskId: "a" }));
+      expect("error" in retried ? retried.error : retried.result).toEqual({ kind: "task-retried", taskId: "a", fromRunId: first.runId });
+      expect(readControlGroup(runtime.store, runtime.epoch, "g").runs.map((run) => run.state)).toEqual(["settled-failed"]);
+      await until(() => workStatus(runtime, "a") === "done" && workRuns(runtime).every((run) => run.body.drive?.cleanedUp === true), 240_000, "run 2 to land and both runs to be cleaned");
+      const second = workRuns(runtime).find((run) => run.runId !== first.runId)!;
+      expect(new Map(workRuns(runtime).map((run) => [run.runId, run.body.state]))).toEqual(new Map([[first.runId, "settled-failed"], [second.runId, "settled"]]));
+      expect(taskRunNumber(readControlGroup(runtime.store, runtime.epoch, "g"), "a")).toBe(2);
+      expect(w.show("a.txt")).toBe("A");
+      expect(readdirSync(`${runtime.store.stateDir}.workspaces`)).toEqual([]);
+      expect(await runtime.shutdown()).toBe(true);
+    } finally { await w.teardown(); await rm(flagDir, { recursive: true, force: true }); }
   });
 
   it.each(["A2-after-workspace", "B-after-accept", "C-after-terminal", "D-after-cas", "E-after-acceptance"] as const)(
