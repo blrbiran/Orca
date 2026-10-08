@@ -951,6 +951,7 @@ export const enErrors: Record<string, string> = {
   "task-checkpoint-not-committed": "The task's checkpoint has not been committed yet.",
   "task-has-no-loop-plan": "This task has no loop plan.",
   "task-loop-version-conflict": "The loop plan changed after you started your draft. Read it again, then submit.",
+  "task-not-retryable": "This task cannot be retried now ({{detail}}). Retry task is for a task whose run ended in a ccloop failure; a run blocked for another reason has Retry run.",
   "usage-event-conflict": "A usage event conflicts with the recorded one.",
   "usage-gap": "The usage record has a gap.",
   "usage-query-invalid": "The usage query parameters are not valid: {{detail}}",

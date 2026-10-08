@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readRunActivity } from "../../src/control/activity.js";
 import { readBudgetProposal } from "../../src/control/queries.js";
+import { writeHandoffRequest } from "../../src/control/stopIntent.js";
 import { recordUsage } from "../../src/control/usage.js";
 import { readWebGroup } from "../../src/control/webService.js";
 import { readControlGroup } from "../../src/panel/controlViews.js";
@@ -51,6 +52,19 @@ const active = (t: Harness, runId: string): number => Number(t.h.store.db.prepar
 const netOf = (run: Record<string, any>): Record<Dimension, number> =>
   Object.fromEntries(DIMENSIONS.map((d) => [d, run.grant.work[d] + run.grant.handoff[d] - run.remaining.work[d] - run.remaining.handoff[d]])) as Record<Dimension, number>;
 const retry = (t: Harness, taskId = "a") => t.service.retryTask(t.h.command("retry-task", { taskId }));
+/** A direct edit of one run body, for a state no fake produces on its own. */
+const poke = (t: Harness, runId: string, change: (run: Record<string, any>) => void): void => t.h.store.transaction(() => {
+  const run = t.body(runId);
+  change(run);
+  t.h.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify(run), runId);
+});
+const refusal = (result: ReturnType<typeof retry>) => ("error" in result ? { code: result.error.code, message: result.error.message } : { code: "accepted", message: "" });
+/** Nothing moved: the run is still blocked and active, and no task-retried row was written. */
+const unchanged = (t: Harness, runId: string): void => {
+  expect(t.body(runId).state).toBe("blocked");
+  expect(active(t, runId)).toBe(1);
+  expect(readRunActivity(t.h.store, runId, 50).some((entry) => entry.kind === "task-retried")).toBe(false);
+};
 
 describe("keeping ccloop's failure reason (spec §4.2(1))", () => {
   it("stores ccloop's stop reason on the drive record and gives it, with the outcome, to the run view", async () => {
@@ -125,6 +139,84 @@ describe("retry-task (spec §4.2(2))", () => {
       ]);
       // Part D amendment: the settle row comes once, from saveRunBody's noteRunWrite -- retry-task writes no second one.
       expect(readRunActivity(t.h.store, runId, 50).filter((entry) => entry.kind === "run-settled")).toHaveLength(1);
+    } finally { await t.h.dispose(); }
+  });
+});
+
+describe("retry-task refusals (spec §4.2(2), §4.4)", () => {
+  it("refuses a task with no run, and a task whose run is still healthy", async () => {
+    const t = await driverHarness([{ taskId: "a" }], { behaviour: () => "stoppable" }); try {
+      expect(refusal(retry(t))).toEqual({ code: "task-not-retryable", message: "task-not-retryable:no-run" });
+      const runId = await t.claim();
+      await t.until(t.driver(), () => t.body(runId).state === "accepted");
+      expect(refusal(retry(t))).toEqual({ code: "task-not-retryable", message: "task-not-retryable:run-state:accepted" });
+      expect(active(t, runId)).toBe(1);
+    } finally { await t.h.dispose(); }
+  });
+
+  it("refuses a run blocked for any other reason: a succeeded run out of bounds, a transient failure, another step", async () => {
+    const outOfBounds = await failingHarness([{ taskId: "a" }], () => ({ "elsewhere.txt": "x\n" })); try {
+      outOfBounds.succeedNext();
+      const { runId } = await failedRun(outOfBounds.t);
+      expect(outOfBounds.t.body(runId).drive).toMatchObject({ blockedAt: "C", outcome: "succeeded" });
+      expect(refusal(retry(outOfBounds.t))).toEqual({ code: "task-not-retryable", message: "task-not-retryable:outcome:succeeded" });
+      unchanged(outOfBounds.t, runId);
+    } finally { await outOfBounds.t.h.dispose(); }
+    const { t } = await failingHarness(); try {
+      const { runId } = await failedRun(t);
+      // A collect that failed transiently blocks at C with no outcome (blockedStaysPut.test.ts).
+      poke(t, runId, (run) => { run.drive.outcome = null; run.drive.blockedReason = "control-peer-timeout"; });
+      expect(refusal(retry(t))).toEqual({ code: "task-not-retryable", message: "task-not-retryable:outcome:none" });
+      poke(t, runId, (run) => { run.drive.outcome = "failed"; run.drive.blockedAt = "E"; });
+      expect(refusal(retry(t))).toEqual({ code: "task-not-retryable", message: "task-not-retryable:blocked-at:E" });
+      unchanged(t, runId);
+    } finally { await t.h.dispose(); }
+  });
+
+  it("refuses while a handoff request is open, usage is unknown, or a usage event is pending (releaseRunReserve's conditions)", async () => {
+    const { t } = await failingHarness(); try {
+      const { runId } = await failedRun(t);
+      t.h.store.transaction(() => writeHandoffRequest(t.h.store, { requestId: "handoff-open", runId, state: "request-pending", deadlineAt: "2099-01-01T00:00:00.000Z", phaseAttemptOrdinal: 2, failureCode: null, evidenceIds: [] }, "g"));
+      expect(refusal(retry(t))).toEqual({ code: "task-not-retryable", message: "task-not-retryable:handoff-request-open:handoff-open" });
+      t.h.store.transaction(() => t.h.store.db.prepare("DELETE FROM handoff_requests WHERE id='handoff-open'").run());
+      poke(t, runId, (run) => { run.unknown.work = true; });
+      expect(refusal(retry(t))).toEqual({ code: "task-not-retryable", message: "task-not-retryable:usage-unknown" });
+      poke(t, runId, (run) => { run.unknown.work = false; });
+      t.h.store.transaction(() => t.h.store.db.prepare("INSERT INTO usage_events VALUES (?,?,?,?)").run(runId, t.body(runId).highWater + 1, "0".repeat(64), "{}"));
+      expect(refusal(retry(t))).toEqual({ code: "task-not-retryable", message: "task-not-retryable:usage-pending" });
+      unchanged(t, runId);
+    } finally { await t.h.dispose(); }
+  });
+
+  it("refuses a stopped group with stop-mode-conflict and a clarifying group with group-state-invalid", async () => {
+    const { t } = await failingHarness(); try {
+      const { runId } = await failedRun(t);
+      const paused = await t.service.pauseDispatch(t.h.command("pause-dispatch", {}));
+      expect("error" in paused ? paused.error : "paused").toBe("paused");
+      expect(refusal(retry(t)).code).toBe("stop-mode-conflict");
+      unchanged(t, runId);
+    } finally { await t.h.dispose(); }
+    const clarifying = await failingHarness(); try {
+      const { runId } = await failedRun(clarifying.t);
+      clarifying.t.h.store.transaction(() => clarifying.t.h.store.db.prepare("UPDATE groups SET body=json_set(body,'$.status','clarifying') WHERE id='g'").run());
+      expect(refusal(retry(clarifying.t))).toEqual({ code: "group-state-invalid", message: "group-state-invalid:clarifying" });
+      unchanged(clarifying.t, runId);
+    } finally { await clarifying.t.h.dispose(); }
+  });
+
+  it("refuses when the reserve cannot cover the new run, naming the dimension and the shortfall, and changes nothing", async () => {
+    const { t } = await failingHarness(); try {
+      const { runId } = await failedRun(t);
+      const ledger = readWebGroup(t.h.store, "g").ledger;
+      // No token left unallocated: the limit is what is used plus what is committed.
+      const lowered = t.service.setLimit(t.h.command("set-limit", { limit: { ...ledger.groupLimit, tokens: ledger.used.tokens + ledger.committedRemaining.tokens } }));
+      expect("error" in lowered ? lowered.error : "lowered").toBe("lowered");
+      const before = readWebGroup(t.h.store, "g").ledger;
+      expect(before.explicitUnallocatedReserve.tokens).toBe(0);
+      expect(netOf(t.body(runId)).tokens).toBe(10);
+      expect(refusal(retry(t))).toEqual({ code: "group-reserve-insufficient", message: "group-reserve-insufficient:tokens:10" });
+      expect(readWebGroup(t.h.store, "g").ledger).toEqual(before);
+      unchanged(t, runId);
     } finally { await t.h.dispose(); }
   });
 });

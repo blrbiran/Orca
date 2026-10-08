@@ -83,6 +83,8 @@ export const durableCommandErrorStatuses = {
   "target-version-conflict": 409,
   // Loop plans spec §5.2 step 3: the task's plan moved since the person read it.
   "task-loop-version-conflict": 409,
+  // Issue fixes spec §4.2(2): retry-task on a task whose current run is not one ccloop ended failed (the detail names why).
+  "task-not-retryable": 409,
   "usage-event-conflict": 409,
   "work-already-active": 409,
   "work-already-done": 409,

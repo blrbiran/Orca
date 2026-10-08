@@ -6,8 +6,13 @@ import type { CommandErrorBodyV1, CommandSuccessV1, RawAuthorityCommandV1 } from
 import { recordActivity } from "./activity.js";
 import { add } from "./budget.js";
 import { applyWebCommand } from "./commandLedger.js";
-import { readWork, saveWork } from "./queries.js";
-import { commandSuccess, groupCommandTarget, readRunBody, releaseCommitment, reserveCommitment, saveRunBody } from "./stopIntent.js";
+import { dimensions } from "./commands.js";
+import { ControlError } from "./errors.js";
+import { readBudgetProposal, readWork, saveWork } from "./queries.js";
+import {
+  ADOPTABLE_STATES, commandSuccess, groupCommandTarget, latestRequestForRun, readGroupBody, readRunBody, readStopIntent, releaseCommitment,
+  reserveCommitment, saveRunBody,
+} from "./stopIntent.js";
 
 /**
  * Issue fixes spec §4.2(2) (human ruling H2): a task whose current run ccloop ended failed is started again. In one
@@ -37,11 +42,33 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
       apply: context => {
         const groupId = groupCommandTarget(command);
         const taskId = command.payload.taskId;
+        // Spec §4.2(2), in the spec's order. Archived groups are refused by Part E (group-archived).
+        const group = readGroupBody(store, groupId);
+        if (group.status === "clarifying") throw new ControlError("group-state-invalid", "clarifying");
+        if (group.stopped || readStopIntent(store, groupId) !== null) throw new ControlError("stop-mode-conflict");
         const work = readWork(store, groupId, taskId) as unknown as RetriedWork;
-        const runId = work.currentRunId as string;
+        if (typeof work.currentRunId !== "string") throw new ControlError("task-not-retryable", "no-run");
+        const runId = work.currentRunId;
         const run = readRunBody(store, runId);
-        const drive = run.drive as DriveRecord;
+        const live = Number(store.db.prepare("SELECT active FROM runs WHERE id=?").get(runId)?.active ?? 0) === 1;
+        if (!live || run.state !== "blocked") throw new ControlError("task-not-retryable", `run-state:${run.state}`);
+        const drive = run.drive as DriveRecord | undefined;
+        if (drive === undefined || drive.blockedAt !== "C") throw new ControlError("task-not-retryable", `blocked-at:${drive?.blockedAt ?? "none"}`);
+        // A codex-skills-* failure sets an outcome too (review C3), so it is retryable like any other ccloop failure.
+        if (drive.outcome === null || drive.outcome === "succeeded") throw new ControlError("task-not-retryable", `outcome:${drive.outcome ?? "none"}`);
+        // releaseRunReserve's conditions (budget.ts): no request still owns the run, and its usage is known and complete.
+        const request = latestRequestForRun(store, groupId, runId);
+        if (request !== null && ADOPTABLE_STATES.includes(request.state)) throw new ControlError("task-not-retryable", `handoff-request-open:${request.requestId}`);
+        if (run.unknown.work || run.unknown.handoff) throw new ControlError("task-not-retryable", "usage-unknown");
+        if (store.db.prepare("SELECT seq FROM usage_events WHERE run_id=? AND seq>?").get(runId, Number(run.highWater))) throw new ControlError("task-not-retryable", "usage-pending");
+        // The new run is claimed at the task's current grant (after a continuation, the continuation's), so the net new
+        // reservation is grant - remainder in each dimension; it must fit the group's unallocated reserve.
         const grant = both(work.grant), remaining = both(run.remaining);
+        const reserve = readBudgetProposal(store, groupId).explicitUnallocatedReserve;
+        for (const d of dimensions) {
+          const shortfall = grant[d] - remaining[d] - reserve[d];
+          if (shortfall > 0) throw new ControlError("group-reserve-insufficient", `${d}:${shortfall}`);
+        }
         // Effect 1: the run alone moves; `remaining` stays on it (the view checks remaining == max(grant - cumulative, 0)).
         saveRunBody(store, { ...run, state: "settled-failed", drive: { ...drive, cleanedUp: false } }, false);
         releaseCommitment(store, groupId, remaining);
