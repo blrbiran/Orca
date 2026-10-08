@@ -83,6 +83,27 @@ Fixed before the parts were written; every part uses these names. Copied from th
 - Verbs `"archive-group"`, `"unarchive-group"`; `src/control/workItemCategory.ts`: `WorkItemCategory`,
   `workItemCategory({ status, currentRunBlocked, dependenciesDone })`.
 
+## Pre-flight amendments (controller, 2026-10-08; binding over the part texts)
+
+From the pre-flight scan (`.superpowers/sdd/2026-10-08-issue-fixes/preflight-scan.md`):
+
+1. **B9 × C1:** B9's shutdown test in `tests/control/activityRuns.test.ts` claims a run (`await t.claim()`) before the
+   first shutdown, so the group is not idle; C1's Step 4 run list includes `tests/control/activityRuns.test.ts`.
+2. **D3:** D3 edits `src/control/activity.ts` to add `"settled-failed"` to `RUN_ENDED_STATES`, lists the file under Files,
+   and `git add`s it; the `endedAt` and `run-settled` statements in D3's `applyRetryTask` code block are not written (see
+   the amendment at the top of Part D).
+3. **No duplicates across parts:** E11 uses Part B's `fetchRunActivity` (does not add another); E9 uses D6's
+   `taskRunNumber`; E11 explains run reasons through D6's `reasonCode` (strips a leading `Error: `).
+4. **E11 test data** uses ccloop's raw status words for `phase` rows (`executing`, not `execute`), as Part B stores them.
+5. **Amendments already ruled are part of the task text:** B8 and B10 add pinning tests for their guards; E5 makes the
+   estimate claim and the requirement-export wake skip archived groups; C3 rewrites the web tests its amendment names.
+6. **Every task commit leaves the full affected suites green.** Where a part's text knowingly commits a test that stays
+   red until a later task (A1, E3), the implementer moves that test change into the task that makes it pass and says so
+   in the report.
+7. **E10:** the archived banner renders with the other alerts (before the graph), as spec §6.5 orders.
+8. **Assertions** that check a precondition must be placed before the call only when they read state the code under test
+   did not write; reviewers flag any assertion that reads back the test's own input.
+
 ## Parts
 
 - [Part A — Refusals](2026-10-08-issue-fixes/part-A.md)
