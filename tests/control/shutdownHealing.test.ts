@@ -11,7 +11,7 @@ import { recoverControl } from "../../src/control/recovery.js";
 import { readGroupActivity } from "../../src/control/activity.js";
 import { canonicalBytes } from "../../src/control/canonicalJson.js";
 import { WebControlService } from "../../src/control/webService.js";
-import { deliverScheduledStart, settleProviderAttempt } from "../../src/control/webDispatch.js";
+import { createWebWakeHandlers, deliverScheduledStart, settleProviderAttempt } from "../../src/control/webDispatch.js";
 import { openControlStore, type ControlStore } from "../../src/control/store.js";
 import { readControlGroup } from "../../src/panel/controlViews.js";
 import { webFixture } from "./fixtures/web.js";
@@ -81,6 +81,24 @@ describe("startup recovery heals empty-frozen-set shutdown intents (issue-fixes 
       expect(revisionOf(h.store)).toBe(before.revision);
       expect(projectionOf(h.store)).toBe(before.projection);
       expect(cleared(h.store)).toEqual([]);
+    } finally { await h.dispose(); }
+  });
+
+  // Review finding (C2 fix round 1): the heal must precede wake delivery, or a pending start wake meets the stale intent and
+  // is refused (webDispatch: a pending stop blocks the claim). recoverControl is given the panel's real wake handlers.
+  it("heals before the scheduler wakes are delivered, so a pending start wake is delivered rather than refused", async () => {
+    const { h, service } = await confirmedGroup(); try {
+      const started = await service.start(h.command("start", {}));
+      expect("error" in started ? started.error.code : started.result.kind).toBe("scheduled");
+      const wakeId = String(h.store.db.prepare("SELECT id FROM scheduler_wakes WHERE group_id='g' AND kind='start' AND delivered=0").get()!.id);
+      seedShutdownIntent(h.store, []);
+      const runsBefore = Number(h.store.db.prepare("SELECT COUNT(*) AS n FROM runs WHERE group_id='g'").get()!.n);
+      const handlers = createWebWakeHandlers({ store: h.store, profileRouter: h.deps.profileRouter, admissionGate: h.deps.admissionGate, service });
+      const result = await recoverControl(h.store, h.deps.port, { handlers }, { driverOwnsWebRuns: true });
+      expect(result.pendingWakeIds).toEqual([]);
+      expect(h.store.db.prepare("SELECT delivered FROM scheduler_wakes WHERE id=?").get(wakeId)).toMatchObject({ delivered: 1 });
+      expect(Number(h.store.db.prepare("SELECT COUNT(*) AS n FROM runs WHERE group_id='g'").get()!.n)).toBeGreaterThan(runsBefore);
+      expect(stopRow(h.store)).toBeUndefined();
     } finally { await h.dispose(); }
   });
 
