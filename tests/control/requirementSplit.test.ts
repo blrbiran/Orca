@@ -74,8 +74,8 @@ describe("validating a split (N1 spec §8.3)", () => {
     expect(out.reasons).toEqual(expect.arrayContaining(["path:exporter:missing/x.ts", "trace:exporter:AC9", "untraced:AC1"]));
   });
 
-  // The Web import stops at its first refusal; a repeated dependency and repeated criterion texts are named beside every
-  // other reason (here a missing target), not only when they are the draft's one fault.
+  // The Web import is only asked once every other check passed, so the split validator names a repeated dependency and
+  // repeated criterion texts itself, beside every other reason (here a missing target), not only as the draft's one fault.
   it("hands back a repeated dependency and repeated criterion texts (Web import) beside every other reason", async () => {
     const output = { ...VALID_SPLIT, tasks: [{ ...VALID_SPLIT.tasks[0]!, targetPaths: ["missing/x.ts"] }, { ...VALID_SPLIT.tasks[1]!, dependsOn: ["exporter", "exporter"] }] };
     const out = await validate(output, ["AC1", "AC2"], [{ id: "AC1", text: "Same." }, { id: "AC2", text: "Same." }]);
@@ -84,9 +84,11 @@ describe("validating a split (N1 spec §8.3)", () => {
   });
 
   // What only the Web import itself decides (here: a plan with no success condition) still reaches the person by name.
+  // Rewritten for spec 2026-10-08 §2.2(c): the import names the missing piece (missing-success-conditions) instead of
+  // the old catch-all control-metadata.
   it("hands back what the Web import refuses beyond the checks above, by its detail", async () => {
     const traced = { ...VALID_SPLIT, tasks: VALID_SPLIT.tasks.map((t) => ({ ...t, traces: ["R1.ADR1"] })) };
     const out = await validate(traced, [], []);
-    expect(out).toMatchObject({ ok: false, reasons: ["import:control-metadata"], layers: null, implicitEdges: null });
+    expect(out).toMatchObject({ ok: false, reasons: ["import:missing-success-conditions"], layers: null, implicitEdges: null });
   });
 });

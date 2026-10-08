@@ -255,6 +255,26 @@ function sourceRejected(detail: string): never {
   throw new ControlError("control-plan-rejected", detail);
 }
 
+/**
+ * Spec 2026-10-08 §2.2(b): one refusal carries every item, one per line. A JSON key or a contract path can hold a line
+ * break, so one inside an item is written as the two characters `\n` (`\r` likewise) and the separator stays unambiguous.
+ */
+function rejectItems(items: readonly string[]): never {
+  return sourceRejected(items.map(item => item.replace(/\r/g, "\\r").replace(/\n/g, "\\n")).join("\n"));
+}
+
+type TaskOriginal = { value: unknown; canonicalJson: string; hash: string; recipe?: LoopRecipe };
+
+/** A task's contract (or loop expansion), or the item naming why it cannot be read -- so stage 2 sees every task's. */
+function originalOrItem(task: PlanTask | LoopPlanTask, targetRepo: string): TaskOriginal | string {
+  try {
+    return isLoopPlanTask(task) ? expandPlanFileLoop(task, targetRepo) : { ...parseContract(task.contract, task.taskId), recipe: undefined };
+  } catch (error) {
+    if (error instanceof ControlError && error.code === "control-plan-rejected") return error.detail ?? error.code;
+    throw error;
+  }
+}
+
 function parseContract(path: string, taskId: string): { value: unknown; canonicalJson: string; hash: string } {
   let raw: unknown;
   try { raw = JSON.parse(readRegularUtf8(path)); }
@@ -288,29 +308,41 @@ export function readSchedulerControlPlanSource(target: TrustedSchedulerPlanTarge
   return schedulerControlPlanSourceOf(raw, repositoryPath);
 }
 
-/** N1 spec §8.3.1: the Web import's checks over a plan object, with no file read (the split validator calls it too). */
+/**
+ * N1 spec §8.3.1: the Web import's checks over a plan object, with no file read (the split validator calls it too).
+ * Spec 2026-10-08 §2.2(c): stage 1 is loadPlan's schema check -- its issues are the whole list, there is no plan to check
+ * further; otherwise stage 2 collects the plan-level items, then each task's in plan order, and only a plan with none is
+ * imported. A plan with one problem is refused exactly as before: one item, the same code and status.
+ */
 export function schedulerControlPlanSourceOf(raw: unknown, repositoryPath: string): SchedulerControlPlanSource {
   const loaded = loadPlan(raw, "");
-  // Labels and progress spec §8 R12: a malformed plan's message -- which names a refused label -- travels in the detail.
-  if ("rejections" in loaded) return sourceRejected(loaded.rejections.map(item => item.code === "malformed" ? `malformed:${item.message}` : item.code).join(","));
+  // Labels and progress spec §8 R12: a malformed plan's message -- which names a refused label -- travels in its item.
+  if ("rejections" in loaded) return rejectItems(loaded.rejections.map(item => item.code === "malformed" ? `malformed:${item.message}` : item.code));
   const plan = loaded.plan;
-  if (plan.targetRepo !== repositoryPath || plan.goal === undefined || plan.successConditions === undefined || plan.successConditions.length === 0) {
-    return sourceRejected("control-metadata");
-  }
-  if (new Set(plan.successConditions).size !== plan.successConditions.length) return sourceRejected("duplicate-success-condition");
+  const items: string[] = [];
+  if (plan.targetRepo !== repositoryPath) items.push("target-repo-mismatch");
+  if (plan.goal === undefined) items.push("missing-goal");
+  if (plan.successConditions === undefined || plan.successConditions.length === 0) items.push("missing-success-conditions");
+  else if (new Set(plan.successConditions).size !== plan.successConditions.length) items.push("duplicate-success-condition");
   const taskIds = new Set(plan.tasks.map(task => task.taskId));
+  const originals = new Map<string, TaskOriginal>();
   for (const task of plan.tasks) {
-    if (new Set(task.dependsOn).size !== task.dependsOn.length) return sourceRejected(`duplicate-dependency:${task.taskId}`);
-    if (task.dependsOn.some(dependency => !taskIds.has(dependency))) return sourceRejected(`dangling-dependency:${task.taskId}`);
-    if (task.targetVersion === undefined) return sourceRejected(`task-control-metadata:${task.taskId}`);
+    if (new Set(task.dependsOn).size !== task.dependsOn.length) items.push(`duplicate-dependency:${task.taskId}`);
+    if (task.dependsOn.some(dependency => !taskIds.has(dependency))) items.push(`dangling-dependency:${task.taskId}`);
+    if (task.targetVersion === undefined) items.push(`missing-target-version:${task.taskId}`);
+    const original = originalOrItem(task, plan.targetRepo);
+    if (typeof original === "string") items.push(original);
+    else originals.set(task.taskId, original);
   }
+  if (items.length > 0) return rejectItems(items);
   return {
-    goal: plan.goal,
-    successConditions: [...plan.successConditions],
+    // No item above means goal, a non-empty successConditions and every targetVersion are present.
+    goal: plan.goal!,
+    successConditions: [...plan.successConditions!],
     ...(plan.agent ? { agent: plan.agent } : {}),
     ...(plan.reconcileAgent ? { reconcileAgent: plan.reconcileAgent } : {}),
     tasks: plan.tasks.map(task => {
-      const original = isLoopPlanTask(task) ? expandPlanFileLoop(task, plan.targetRepo) : { ...parseContract(task.contract, task.taskId), recipe: undefined };
+      const original = originals.get(task.taskId)!;
       return {
         taskId: task.taskId,
         dependencyTaskIds: [...task.dependsOn],
