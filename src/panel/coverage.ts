@@ -75,10 +75,27 @@ export function unreviewedHighTier(
   decisions: readonly DecisionObservation[],
   reviews: readonly ReviewRow[],
 ): DecisionObservation[] {
+  const reviewed = reviewedKeys(reviews);
+  return decisions.filter((d) => isHighTier(d.scope, d.kind) && !reviewed.has(keyOf(d.projectKey, d.id)));
+}
+
+/**
+ * Integration-and-panel-fixes spec §9.2(1): the set of decisions carrying a `reviewed` row, by the same
+ * `keyOf` key `unreviewedHighTier` uses, and the per-decision answer built on it -- so the full list can say
+ * `reviewed` / `highTier` without a second definition of either.
+ */
+export function reviewedKeys(reviews: readonly ReviewRow[]): Set<string> {
   const reviewed = new Set<string>();
   for (const r of reviews) {
     if (r.action !== "reviewed") continue;
     reviewed.add(keyOf(r.projectKey, r.decisionId));
   }
-  return decisions.filter((d) => isHighTier(d.scope, d.kind) && !reviewed.has(keyOf(d.projectKey, d.id)));
+  return reviewed;
+}
+
+export function reviewFlags(
+  d: DecisionObservation,
+  reviewed: ReadonlySet<string>,
+): { reviewed: boolean; highTier: boolean } {
+  return { reviewed: reviewed.has(keyOf(d.projectKey, d.id)), highTier: isHighTier(d.scope, d.kind) };
 }

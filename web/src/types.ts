@@ -190,6 +190,9 @@ export interface PanelCoverage {
 /** Mirrors src/panel/listProjection.ts's DecisionListRow (question: panel UI redesign spec §4, ruling U1). */
 export type DecisionListRow = Pick<DecisionObservation, "projectKey" | "id" | "at" | "kind" | "scope" | "verdict"> & { question: string | null };
 
+/** GET /api/decisions rows (integration-and-panel-fixes spec §9.2(1)): the list row plus the two flags the status filter reads. */
+export type DecisionStatusRow = DecisionListRow & { reviewed: boolean; highTier: boolean };
+
 /** Mirrors src/panel/listProjection.ts's LIST_FIELDS -- same SET, order not load-bearing here. */
 export const WEB_LIST_FIELDS = [
   "projectKey",

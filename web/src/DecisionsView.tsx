@@ -13,7 +13,7 @@ import { en } from "./locales/en.js";
 import { useProjectName } from "./projectNames.js";
 import { ALL_PROJECTS } from "./projectScope.js";
 import type { ProjectV1 } from "./project.js";
-import type { DecisionListRow } from "./types.js";
+import type { DecisionListRow, DecisionStatusRow } from "./types.js";
 
 export interface DecisionFilter {
   kind: string;
@@ -25,6 +25,14 @@ export const NO_FILTER: DecisionFilter = { kind: "", scope: "", projectKey: "" }
 /** In English (criteria read them); the render uses the reader's language (panel i18n spec §3.3). */
 export const HIDDEN_BY_FILTER = en.decisions.hiddenByFilter;
 export const NOT_IN_LIST = en.decisions.notInList;
+
+/** Spec §9.2(1). Unreviewed is the default and today's list; Reviewed is reviewed at any tier; All is every row. */
+export type DecisionStatus = "unreviewed" | "reviewed" | "all";
+export const DECISION_STATUSES: readonly DecisionStatus[] = ["unreviewed", "reviewed", "all"];
+
+export function rowsForStatus<R extends DecisionStatusRow>(rows: readonly R[], status: DecisionStatus): R[] {
+  return rows.filter((r) => status === "all" || (status === "reviewed" ? r.reviewed : r.highTier && !r.reviewed));
+}
 
 export function filterRows(rows: readonly DecisionListRow[], filter: DecisionFilter): DecisionListRow[] {
   return rows.filter(
@@ -82,6 +90,9 @@ export function DecisionsView(props: {
   rows: readonly DecisionListRow[];
   filter: DecisionFilter;
   onFilter?: (f: DecisionFilter) => void;
+  /** Absent: no status select (the rows are whatever the caller chose to pass). */
+  status?: DecisionStatus;
+  onStatus?: (s: DecisionStatus) => void;
   selected?: Pick<DecisionListRow, "projectKey" | "id"> | null;
   onOpen?: (row: DecisionListRow) => void;
   detail?: ReactNode;
@@ -105,6 +116,14 @@ export function DecisionsView(props: {
         {t("decisions.lede")}
       </p>
       <div className="filters">
+        {props.status !== undefined && (
+          <label>
+            {t("decisions.filterStatus")}
+            <select name="filter-status" value={props.status} onChange={(e) => props.onStatus?.(e.currentTarget.value as DecisionStatus)}>
+              {DECISION_STATUSES.map((s) => <option key={s} value={s}>{t(`decisions.status.${s}`)}</option>)}
+            </select>
+          </label>
+        )}
         <FilterSelect label={t("decisions.filterKind")} name="kind" values={distinct(props.rows, (r) => String(r.kind))} filter={props.filter} onFilter={props.onFilter} order={sortKinds} optionText={kindLabel} />
         <FilterSelect label={t("decisions.filterScope")} name="scope" values={distinct(props.rows, (r) => String(r.scope))} filter={props.filter} onFilter={props.onFilter} optionText={(value) => enumText("decisionScope", value)} />
         {props.scope === undefined ? (
@@ -122,7 +141,7 @@ export function DecisionsView(props: {
       <div className="split">
         <div className="split-list">
           {props.rows.length === 0 ? (
-            <p className="empty">{t("decisions.nothingToReview")}</p>
+            <p className="empty">{t(props.status === undefined || props.status === "unreviewed" ? "decisions.nothingToReview" : "decisions.nothingInStatus")}</p>
           ) : shown.length === 0 ? (
             <p className="empty">{t("decisions.noMatch")}</p>
           ) : (

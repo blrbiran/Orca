@@ -16,7 +16,7 @@
  */
 import type { ProjectV1, ProjectsAnswerV1 } from "./project.js";
 import i18n from "./i18n.js";
-import type { ChainRepoView, CorrectionKind, DecisionListRow, MetricsReport, PanelCoverage } from "./types.js";
+import type { ChainRepoView, CorrectionKind, DecisionListRow, DecisionStatusRow, MetricsReport, PanelCoverage } from "./types.js";
 
 /** The CSRF header every non-GET carries (web/src/controlApi.ts too): the `orca_csrf` cookie's value, or none. */
 export function csrfHeader(): Record<string, string> {
@@ -125,6 +125,10 @@ export const fetchMetrics = (): Promise<MetricsResponse> => getJson<MetricsRespo
 /** GET /api/todo -- src/panel/api.ts, task 8 ruling K5. */
 export const fetchTodo = (): Promise<{ rows: DecisionListRow[] }> =>
   getJson<{ rows: DecisionListRow[] }>("/api/todo");
+
+/** GET /api/decisions -- src/panel/api.ts; every listed decision with `reviewed` and `highTier` (spec §9.2(1)). */
+export const fetchDecisions = (): Promise<{ rows: DecisionStatusRow[] }> =>
+  getJson<{ rows: DecisionStatusRow[] }>("/api/decisions");
 
 /**
  * GET /api/decision -- same URL spelling as src/panel/listProjection.ts's

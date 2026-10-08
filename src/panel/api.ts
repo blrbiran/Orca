@@ -14,7 +14,7 @@ import { registerMemoryRoutes } from "./memoryApi.js";
 import { controlRepoKey } from "./controlOptions.js";
 import { registerProjectRoutes } from "./projects.js";
 import type { ProjectRegistry } from "./projectRegistry.js";
-import { computePanelCoverage, unreviewedHighTier } from "./coverage.js";
+import { computePanelCoverage, reviewFlags, reviewedKeys, unreviewedHighTier } from "./coverage.js";
 import { loadDecisionRow, loadQuestionsOrEmpty } from "./decisionSource.js";
 import { DECISION_NOT_FOUND, projectForList } from "./listProjection.js";
 import type { DecisionListRow } from "./listProjection.js";
@@ -38,6 +38,17 @@ async function listRows(
   const byRepo = new Map<string, Map<string, string>>();
   for (const repo of repos) byRepo.set(repo.projectKey, await loadQuestionsOrEmpty(repo.path));
   return decisions.map((d) => projectForList(d, byRepo.get(d.projectKey)?.get(d.id) ?? null));
+}
+
+/** Integration-and-panel-fixes spec §9.2(1): the full list's rows, each with `reviewed` and `highTier`. */
+async function listRowsWithStatus(
+  repos: ReadonlyArray<{ projectKey: string; path: string }>,
+  decisions: readonly DecisionObservation[],
+  reviews: Parameters<typeof reviewedKeys>[0],
+): Promise<Array<DecisionListRow & { reviewed: boolean; highTier: boolean }>> {
+  const rows = await listRows(repos, decisions);
+  const reviewed = reviewedKeys(reviews);
+  return rows.map((row, i) => ({ ...row, ...reviewFlags(decisions[i]!, reviewed) }));
 }
 
 export interface ApiDeps {
@@ -216,7 +227,8 @@ export function buildApi(app: Express, deps: ApiDeps): void {
       // mutation L-3): a browsed list must not itself count as review
       // coverage, or the coverage number would move just because someone
       // opened the panel.
-      res.json({ rows: await listRows(observations.repos, observations.decisions) });
+      const reviews = await readReviews(deps.opts.correctionsDir);
+      res.json({ rows: await listRowsWithStatus(observations.repos, observations.decisions, reviews) });
     })().catch(next);
   });
 

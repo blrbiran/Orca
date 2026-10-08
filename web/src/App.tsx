@@ -39,6 +39,7 @@ import {
   fetchDecision,
   fetchMetrics,
   fetchProjects,
+  fetchDecisions,
   fetchTodo,
   recordCorrection,
   recordReview,
@@ -92,8 +93,8 @@ import type { DetailDrafts, DraftSlot } from "./detailDrafts.js";
 import type { Decision } from "./DecisionDetail.js";
 import { ErrorPage } from "./ErrorPage.js";
 import i18n, { currentLanguage, writeLanguage } from "./i18n.js";
-import { DecisionsView, NO_FILTER } from "./DecisionsView.js";
-import type { DecisionFilter } from "./DecisionsView.js";
+import { DecisionsView, NO_FILTER, rowsForStatus } from "./DecisionsView.js";
+import type { DecisionFilter, DecisionStatus } from "./DecisionsView.js";
 import { MemoryView } from "./MemoryView.js";
 import { pickProject, projectName, readProject, writeProject } from "./project.js";
 import type { ProjectsAnswerV1 } from "./project.js";
@@ -114,7 +115,7 @@ import { applyTheme, readTheme, writeTheme } from "./theme.js";
 import type { ThemePref } from "./theme.js";
 import { acceptArrival } from "./selection.js";
 import { recoveryRetryAction } from "./recoveryTarget.js";
-import type { ChainRepoView, DecisionListRow, MetricsReport, PanelCoverage } from "./types.js";
+import type { ChainRepoView, DecisionListRow, DecisionStatusRow, MetricsReport, PanelCoverage } from "./types.js";
 
 /** localStorage, or undefined where touching it throws. */
 function browserStorage(): Storage | undefined {
@@ -189,6 +190,9 @@ export function App(): JSX.Element {
     typeof window === "undefined" ? DEFAULT_SECTION : sectionFromHash(window.location.hash),
   );
   const [filter, setFilter] = useState<DecisionFilter>(NO_FILTER);
+  // Spec §9.2(1): Unreviewed reads /api/todo (home.todo, also the sidebar badge); the other two read /api/decisions.
+  const [status, setStatus] = useState<DecisionStatus>("unreviewed");
+  const [allRows, setAllRows] = useState<DecisionStatusRow[] | null>(null);
   const [theme, setTheme] = useState<ThemePref>(() => readTheme(browserStorage()));
   useEffect(() => {
     const onHash = (): void => setSection(sectionFromHash(window.location.hash));
@@ -744,6 +748,20 @@ export function App(): JSX.Element {
     void loadHome();
   }, []);
 
+  // Reviewed / All: read the full list when chosen, and again whenever the home state is re-read (a recorded review).
+  useEffect(() => {
+    if (status === "unreviewed" || home === null) return;
+    let live = true;
+    void fetchDecisions().then(
+      (body) => { if (live) setAllRows(body.rows); },
+      (err) => { if (live) setError(failureFrom(err)); },
+    );
+    return () => { live = false; };
+  }, [status, home]);
+
+  const statusRows: readonly DecisionListRow[] =
+    status === "unreviewed" ? home?.todo ?? [] : rowsForStatus(allRows ?? [], status);
+
   /**
    * Parked finding N-1 / ruling R71. Opening another row takes the previous
    * decision off the screen FIRST, so the buttons and the text under them can
@@ -995,11 +1013,13 @@ export function App(): JSX.Element {
       <SectionPane section="decisions" active={section}>
         {projects === null ? (
           // Plan decision P2: without a project list the rows keep today's repository filter.
-          <DecisionsView rows={home.todo} filter={filter} onFilter={setFilter} selected={selected} onOpen={setSelected} detail={detail} />
+          <DecisionsView rows={statusRows} status={status} onStatus={setStatus} filter={filter} onFilter={setFilter} selected={selected} onOpen={setSelected} detail={detail} />
         ) : (
           // With one, the pane follows the global scope: rows are restricted here, and its repository select is the sidebar's.
           <DecisionsView
-            rows={scope.kind === "all" ? home.todo : home.todo.filter((row) => row.projectKey === project)}
+            rows={scope.kind === "all" ? statusRows : statusRows.filter((row) => row.projectKey === project)}
+            status={status}
+            onStatus={setStatus}
             filter={{ ...filter, projectKey: "" }}
             onFilter={setFilter}
             selected={selected}

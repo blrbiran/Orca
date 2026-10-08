@@ -102,12 +102,79 @@ describe("the decisions endpoints (spec sections 4.2 and 4.3.1)", () => {
           // by hand -- not by projectForList or loadQuestions -- so the equality cannot move
           // together with the implementation. Both decisions in this ledger were written
           // from ORIGINAL, whose question is a literal the fixture owns.
+          //
+          // REWRITTEN AGAIN (integration-and-panel-fixes spec §9.2(1) adds two fields): rows now
+          // also carry `reviewed` and `highTier`. Still exact -- both fixture decisions are
+          // unreviewed (no review row exists) and high tier (scope repo / kind interface).
           const expected = observations.decisions.map((d) => ({
             ...Object.fromEntries(LIST_FIELDS.map((f) => [f, d[f]])),
             question: ORIGINAL.question,
+            reviewed: false,
+            highTier: true,
           }));
           expect(body.rows).toStrictEqual(expected);
           expect(body.rows.length).toBeGreaterThan(1);
+        } finally {
+          await started.close();
+        }
+      } finally {
+        await dist.cleanup();
+        await repo.cleanup();
+      }
+    });
+  });
+
+  it("marks each row reviewed / highTier by the todo's own key and tier rule, and leaves /api/todo byte-identical", async () => {
+    await withCorrectionsDir(async (dir) => {
+      const repo = await makeTargetRepo();
+      const dist = await makeDistFixture();
+      try {
+        // Three decisions: [1] high tier + reviewed, [2] LOW tier + reviewed, [3] high tier, unreviewed.
+        const lowTier: DecisionEvent = { ...ORIGINAL, id: "orca-dev-1/2", at: "2026-09-01T00:01:00.000Z", scope: "file" };
+        const open: DecisionEvent = { ...ORIGINAL, id: "orca-dev-1/3", at: "2026-09-01T00:02:00.000Z" };
+        await appendEvent(repo.decisionsDir, "orca-dev-1", lowTier);
+        await appendEvent(repo.decisionsDir, "orca-dev-1", open);
+        await git(repo.path, ["add", "-A"]);
+        await git(repo.path, ["commit", "-m", "seed a low-tier and a second high-tier decision"]);
+
+        const started = await createPanelServer(
+          parsePanelArgs(["--by", "tester", "--repo", `proj=${repo.path}`, "--dist", dist.dir], { ...process.env, ORCA_CORRECTIONS_DIR: dir }),
+        );
+        try {
+          const session = await sessionFor(started);
+          for (const id of [ORIGINAL.id, lowTier.id]) {
+            const r = await session.fetch("/api/reviews", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ projectKey: "proj", decisionId: id }),
+            });
+            expect(r.status).toBe(200);
+          }
+          const decisions = (await (await session.fetch("/api/decisions")).json()) as { rows: Array<Record<string, unknown>> };
+          const flags = Object.fromEntries(decisions.rows.map((r) => [r.id, [r.reviewed, r.highTier]]));
+          expect(flags).toStrictEqual({
+            [ORIGINAL.id]: [true, true],
+            [lowTier.id]: [true, false],
+            [open.id]: [false, true],
+          });
+
+          // /api/todo: the exact bytes of the pre-change shape (the five fields plus question; no new keys).
+          const todo = await session.fetch("/api/todo");
+          expect(todo.status).toBe(200);
+          const expectedTodo = JSON.stringify({
+            rows: [
+              {
+                projectKey: "proj",
+                id: open.id,
+                at: open.at,
+                kind: open.kind,
+                scope: open.scope,
+                verdict: "ok",
+                question: open.question,
+              },
+            ],
+          });
+          expect(await todo.text()).toBe(expectedTodo);
         } finally {
           await started.close();
         }
