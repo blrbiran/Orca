@@ -9,6 +9,30 @@ import { cleanupCommittedRun } from "./cleanup.js";
 import { ControlService } from "./service.js";
 import { collectControlled,disposeControlled,confirmLanding } from "./schedulerBridge.js";
 import { acquireRepoLock } from "../scheduler/repoLock.js";
+import { readGroupBody, saveGroupBody } from "./stopIntent.js";
+import { recordProjectionChange } from "./projectionJournal.js";
+import { recordActivity } from "./activity.js";
+
+/**
+ * Issue-fixes spec §3.2 (2), invariant S1: a `shutdown` stop intent whose frozen set is empty froze nothing; it is the dead
+ * end an older Orca left on idle groups. Each is deleted and its group un-stopped, in one transaction of its own. The
+ * command revision is not advanced (recovery changes projection state, not command revision); the projection advances
+ * once per healed group and one `stop-cleared` activity row records why. An empty frozen set has no requests or
+ * outboxes, so crash-after-commit redelivery of a real shutdown is unaffected.
+ */
+function healEmptyShutdownIntents(store:ControlStore):void {
+ store.transaction(()=>{
+  for(const row of store.db.prepare("SELECT group_id,body FROM stop_intents WHERE mode='shutdown' ORDER BY group_id").all()) {
+   const frozen=(JSON.parse(String(row.body)) as {frozenRunIds?:unknown[]}).frozenRunIds;
+   if(!Array.isArray(frozen)||frozen.length!==0)continue;
+   const groupId=String(row.group_id);
+   store.db.prepare("DELETE FROM stop_intents WHERE group_id=?").run(groupId);
+   const group=readGroupBody(store,groupId);group.stopped=false;saveGroupBody(store,group);
+   recordProjectionChange(store,[groupId]);
+   recordActivity(store,{groupId,kind:"stop-cleared",body:{reason:"empty-shutdown-intent"}});
+  }
+ });
+}
 
 /** Recovery never creates a replacement run or executes a Git merge. */
 export async function recoverControl(store:ControlStore,port:ExecutionPort,wakes?:{handlers:WakeHandlers},options:{driverOwnsWebRuns?:boolean}={}):Promise<{blockedRunIds:string[];replayedProjectionIds:string[];pendingWakeIds:string[]}> {
@@ -52,6 +76,8 @@ export async function recoverControl(store:ControlStore,port:ExecutionPort,wakes
   try{await cleanupCommittedRun(store,input.runId,input.sourceDir);}catch{blocked.add(input.runId);}
  }
  store.dispatchBlocked=blocked.size>0;
+ // Healed before any wake is delivered, so a pending start wake never meets a stale shutdown intent.
+ healEmptyShutdownIntents(store);
  // Pending wakes are the durable record of an intent the crashed scheduler never
  // carried out; they are drained only after this process owns the store and the
  // run walk has decided whether dispatch is safe.
