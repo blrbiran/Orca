@@ -42,6 +42,7 @@ import type {
   RequirementDraftFeedbackPayload as ServerRequirementDraftFeedbackPayload,
   RequirementOpenPayload as ServerRequirementOpenPayload,
   RequirementViewV1 as ServerRequirementViewV1,
+  RunActivityV1 as ServerRunActivityV1,
   ResumeFromHandoffPayload as ServerResumeFromHandoffPayload,
   SetAgentPreferencesPayload as ServerSetAgentPreferencesPayload,
   SetLimitPayload as ServerSetLimitPayload,
@@ -76,6 +77,7 @@ import type {
   RequirementDraftFeedbackPayloadV1 as WebRequirementDraftFeedbackPayloadV1,
   RequirementOpenPayloadV1 as WebRequirementOpenPayloadV1,
   RequirementViewV1 as WebRequirementViewV1,
+  RunActivityV1 as WebRunActivityV1,
   ResumeFromHandoffPayloadV1 as WebResumeFromHandoffPayloadV1,
   SetAgentPreferencesPayloadV1 as WebSetAgentPreferencesPayloadV1,
   SetLimitPayloadV1 as WebSetLimitPayloadV1,
@@ -186,6 +188,9 @@ function recoveryServerToWeb(x: ServerRecoveryViewV1): WebRecoveryViewV1 { retur
 function recoveryWebToServer(x: WebRecoveryViewV1): ServerRecoveryViewV1 { return x; }
 function evidenceServerToWeb(x: ServerEvidenceManifestV1): WebEvidenceManifestV1 { return x; }
 function evidenceWebToServer(x: WebEvidenceManifestV1): ServerEvidenceManifestV1 { return x; }
+// Issue-fixes spec §5.2: the run-activity read, checked both ways like the evidence manifest.
+function runActivityServerToWeb(x: ServerRunActivityV1): WebRunActivityV1 { return x; }
+function runActivityWebToServer(x: WebRunActivityV1): ServerRunActivityV1 { return x; }
 function commandLookupServerToWeb(x: ServerCommandLookupV1): WebCommandLookupV1 { return x; }
 function commandLookupWebToServer(x: WebCommandLookupV1): ServerCommandLookupV1 { return x; }
 function commandErrorServerToWeb(x: ServerCommandErrorV1): WebCommandErrorV1 { return x; }
@@ -275,6 +280,8 @@ export const __webParityAssignabilityChecks__ = [
   recoveryWebToServer,
   evidenceServerToWeb,
   evidenceWebToServer,
+  runActivityServerToWeb,
+  runActivityWebToServer,
   commandLookupServerToWeb,
   commandLookupWebToServer,
   commandErrorServerToWeb,

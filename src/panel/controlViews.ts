@@ -21,6 +21,7 @@ import { agentSelectionSchema, amountSchema, artifactSchema, canonicalTimestampS
 import { taskContractSchema } from "../scheduler/planFile.js";
 import { exportReasonOf } from "../control/requirementExport.js";
 import { readSpendCapBlock } from "../control/spendCaps.js";
+import { readGroupActivity, readRunActivity } from "../control/activity.js";
 import { readGroupIntegration } from "../control/integrationScheme.js";
 import {
   agentSelectionPreviewSchema,
@@ -35,6 +36,7 @@ import {
   profileBindingSchema,
   recoveryViewSchema,
   requirementViewSchema,
+  runActivitySchema,
   selectionProvenanceSchema,
   type AgentSelectionPreviewV1,
   type AllocationViewV1,
@@ -49,6 +51,7 @@ import {
   type RecoveryViewV1,
   type RequirementSummaryV1,
   type RequirementViewV1,
+  type RunActivityV1,
   type RunViewV1,
   type WorkItemProgressV1,
   type WorkItemViewV1,
@@ -768,6 +771,10 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
       git: run.drive === undefined ? null : { workspaceMode: run.drive.workspaceMode, base: run.drive.base, landedCommit: run.drive.landedCommit },
       // §4.6: the lock A2 recorded. `dir` is a local path of this machine and stays out of the view; omitted for a run without skills.
       ...(run.drive?.skills == null ? {} : { skills: { profile: run.drive.skills.profile, lock: run.drive.skills.lock } }),
+      // Issue-fixes spec §5.2: the run's times; null for a run written before schema 9.
+      startedAt: run.startedAt ?? null,
+      endedAt: run.endedAt ?? null,
+      lastActivityAt: readRunActivity(store, runId, 1)[0]?.at ?? null,
     };
   });
 }
@@ -843,6 +850,8 @@ export function readControlGroup(store: ControlStore, epoch: string, groupId: st
     recentCommandIds: sortedUnique(commandIds),
     // Accounts spec §6.3.1, D9: a claim waiting on a spend cap (schema-checked with the rest of the view).
     spendCapBlock: readSpendCapBlock(store, groupId),
+    // Issue-fixes spec §5.2 Reads: the newest 50 rows of the group.
+    activity: readGroupActivity(store, groupId, 50),
     // Integration spec §4: only for a non-keep scheme, so a keep group's view is what it was.
     ...integrationView(body),
   };
@@ -964,6 +973,18 @@ export async function readRunEvidence(store: ControlStore, runId: string): Promi
   }));
   const parsed = evidenceManifestSchema.safeParse({ schema: "orca-run-evidence-v1", runId, entries });
   if (!parsed.success) return blocked(`evidence-manifest:${parsed.error.issues[0]?.message ?? "invalid"}`);
+  return parsed.data;
+}
+
+/**
+ * Issue-fixes spec §5.2 Reads: GET /api/control/runs/:runId/activity. The evidence route's scope checks: an id that is
+ * not an id, or a run this store does not hold (another project's), is run-not-found.
+ */
+export function readRunActivityView(store: ControlStore, runId: string): RunActivityV1 {
+  const row = idSchema.safeParse(runId).success ? store.db.prepare("SELECT group_id FROM runs WHERE id=?").get(runId) : undefined;
+  if (!row) throw new ControlError("run-not-found");
+  const parsed = runActivitySchema.safeParse({ schema: "orca-run-activity-v1", runId, entries: readRunActivity(store, runId, 200) });
+  if (!parsed.success) return blocked(`run-activity:${parsed.error.issues[0]?.message ?? "invalid"}`);
   return parsed.data;
 }
 

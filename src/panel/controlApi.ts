@@ -21,7 +21,7 @@ import type { ExecutionPort } from "../control/executionPort.js";
 import type { ControlStore } from "../control/store.js";
 import type { TrustedControlConfig } from "./controlConfig.js";
 import { controlErrorCatalog, sendControlError, sendMappedControlError } from "./controlErrors.js";
-import { readControlGroup, readControlRecovery, readControlSummary, readRequirementView, readRunEvidence, readSelectionPreview } from "./controlViews.js";
+import { readControlGroup, readControlRecovery, readControlSummary, readRequirementView, readRunActivityView, readRunEvidence, readSelectionPreview } from "./controlViews.js";
 
 export interface ControlReadApiDeps {
   store: ControlStore;
@@ -299,6 +299,17 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
       sendMappedControlError(res, error, run ? readErrorContext(deps.store, String(run.group_id)) : undefined);
     }
   }));
+
+  // Issue-fixes spec §5.2: a run's newest 200 activity rows, under the evidence route's checks (the panel's login, and a
+  // run of this store -- another project's is run-not-found).
+  app.get("/api/control/runs/:runId/activity", (req, res) => {
+    const runId = String(req.params.runId);
+    try { res.json(readRunActivityView(deps.store, runId)); }
+    catch (error) {
+      const run = deps.store.db.prepare("SELECT group_id FROM runs WHERE id=?").get(runId);
+      sendMappedControlError(res, error, run ? readErrorContext(deps.store, String(run.group_id)) : undefined);
+    }
+  });
 
   app.use("/api/control", (_req, res) => {
     sendControlError(res, 404, "route-not-found", "No control route matches this request.");

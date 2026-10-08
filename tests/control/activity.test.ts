@@ -2,13 +2,13 @@ import { describe, expect, it } from "vitest";
 import { openTestStore } from "./fixtures/store.js";
 import { webFixture } from "./fixtures/web.js";
 import { driverHarness } from "./fixtures/driverHarness.js";
-import { ACTIVITY_RETENTION, latestGroupActivityAt, readGroupActivity, readRunActivity, recordActivity, type ActivityRow } from "../../src/control/activity.js";
+import { ACTIVITY_KINDS, ACTIVITY_RETENTION, latestGroupActivityAt, readGroupActivity, readRunActivity, recordActivity, type ActivityRow } from "../../src/control/activity.js";
 import { createGroup } from "../../src/control/commands.js";
 import { readProjectionState, recordProjectionChange } from "../../src/control/projectionJournal.js";
 import type { ControlStore } from "../../src/control/store.js";
 import { applyWebCommand, type WebCommandContext } from "../../src/control/commandLedger.js";
 import { ControlError } from "../../src/control/errors.js";
-import type { EffectiveAuthorityCommandV1, RawAuthorityCommandV1 } from "../../src/control/webProtocol.js";
+import { activityKindSchema, type EffectiveAuthorityCommandV1, type RawAuthorityCommandV1 } from "../../src/control/webProtocol.js";
 
 // Issue-fixes spec §5 (ruling H5): Orca's own wall-clock record. Every time it writes comes from the store's clock,
 // which tests inject so a criterion can name the exact instant a row or a run time must carry.
@@ -157,5 +157,11 @@ describe("command rows (issue-fixes spec §5.2)", () => {
       expect(handoffStop(h.store, "c-refused", 2, true).status).toBe(409);
       expect(rows()).toHaveLength(1);
     } finally { await h.dispose(); }
+  });
+});
+
+describe("the wire's activity kinds (issue-fixes spec §5.2)", () => {
+  it("are exactly the kinds the writer knows", () => {
+    expect([...activityKindSchema.options].sort()).toEqual([...ACTIVITY_KINDS].sort());
   });
 });

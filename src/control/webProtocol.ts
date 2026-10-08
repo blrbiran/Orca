@@ -1149,6 +1149,17 @@ export const workItemViewSchema = z
   })
   .strict();
 
+// Issue-fixes spec §5.2 (ruling H5): one row of Orca's activity record as the views show it (src/control/activity.ts).
+export const activityKindSchema = z.enum([
+  "command", "run-claimed", "run-started", "phase", "run-blocked", "run-resumed", "run-settled", "task-retried", "integration", "stop", "stop-cleared", "archived", "unarchived",
+]);
+export const activityEntrySchema = z
+  .object({
+    seq: positiveSafeInteger, groupId: idSchema, taskId: idSchema.nullable(), runId: idSchema.nullable(), at: safeInteger,
+    kind: activityKindSchema, body: z.record(z.unknown()),
+  })
+  .strict();
+
 export const runViewSchema = z
   .object({
     runId: idSchema,
@@ -1203,6 +1214,12 @@ export const runViewSchema = z
       })
       .strict()
       .optional(),
+    // Issue-fixes spec §5.2: wall-clock times (ms) -- started when A1 reserved the first attempt, ended when it first
+    // landed or settled, and the time of its newest activity row. null for a run written before schema 9. Optional on
+    // the wire so older fixtures still parse; the server always gives them.
+    startedAt: safeInteger.nullable().optional(),
+    endedAt: safeInteger.nullable().optional(),
+    lastActivityAt: safeInteger.nullable().optional(),
   })
   .strict();
 
@@ -1333,6 +1350,9 @@ export const groupViewSchema = z
     spendCapBlock: spendCapBlockSchema.nullable().optional(),
     // Integration spec §4: the group's integration as an owner sees it; absent for keep (ruling R5).
     integration: groupIntegrationViewSchema.optional(),
+    // Issue-fixes spec §5.2 Reads: the group's newest 50 activity rows, newest first. Optional on the wire so older
+    // fixtures still parse; the server always gives it.
+    activity: z.array(activityEntrySchema).optional(),
   })
   .strict()
   .superRefine((value, ctx) => {
@@ -1396,6 +1416,11 @@ export const evidenceManifestSchema = z
   })
   .strict()
   .superRefine((value, ctx) => requireSortedUnique(value.entries, (entry) => entry.evidenceId, ctx, ["entries"]));
+
+// Issue-fixes spec §5.2 Reads: GET /api/control/runs/:runId/activity -- the run's newest 200 rows, newest first.
+export const runActivitySchema = z
+  .object({ schema: z.literal("orca-run-activity-v1"), runId: idSchema, entries: z.array(activityEntrySchema) })
+  .strict();
 
 export const commandErrorSchema = z
   .object({ code: nonemptyString, message: nonemptyString, commandRevision: safeInteger.nullable(), evidenceIds: sortedIdArraySchema, retryable: z.boolean() })
@@ -1596,6 +1621,8 @@ export type HandoffRequestViewV1 = z.infer<typeof handoffRequestViewSchema>;
 export type GroupViewV1 = z.infer<typeof groupViewSchema>;
 export type RecoveryViewV1 = z.infer<typeof recoveryViewSchema>;
 export type EvidenceManifestV1 = z.infer<typeof evidenceManifestSchema>;
+export type ActivityEntryV1 = z.infer<typeof activityEntrySchema>;
+export type RunActivityV1 = z.infer<typeof runActivitySchema>;
 export type CommandErrorV1 = z.infer<typeof commandErrorSchema>;
 export type CommandErrorBodyV1 = z.infer<typeof commandErrorBodySchema>;
 export type CommandSuccessV1 = z.infer<typeof commandSuccessSchema>;

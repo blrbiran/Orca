@@ -5,7 +5,9 @@ import express from "express";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { writeArtifact } from "../../src/control/archive.js";
 import { canonicalBytes, sha256Canonical } from "../../src/control/canonicalJson.js";
+import { recordActivity } from "../../src/control/activity.js";
 import { lookupCommandResult } from "../../src/control/commandLedger.js";
+import { createGroup } from "../../src/control/commands.js";
 import { prepareExecutionSnapshot, type PreparedExecutionSnapshot } from "../../src/control/executionSnapshot.js";
 import { importControlPlan, prepareEstimatorSlot, type ImportCommand } from "../../src/control/planImport.js";
 import { createExecutionProfileRouter, resolveProfile } from "../../src/control/profiles.js";
@@ -20,6 +22,7 @@ import type {
   ExecutionProfileSnapshotV1,
   GroupViewV1,
   RecoveryViewV1,
+  RunActivityV1,
 } from "../../src/control/webProtocol.js";
 import { buildApi } from "../../src/panel/api.js";
 import { createTrustedControlConfig } from "../../src/panel/controlConfig.js";
@@ -715,5 +718,49 @@ describe("canonical control read API", () => {
     expect(configBody.errorCatalog).toContainEqual({ code: "query-invalid", status: 400 });
     expect(configBody.errorCatalog).toContainEqual({ code: "login-required", status: 401 });
     expect(readProjectionState(h.store).changeSeq).toBeGreaterThan(0);
+  });
+
+  // Issue-fixes spec §5.2 Reads, §5.3: the group view's newest 50 rows, the run view's times (null for a run written
+  // before schema 9), and the run-activity route under the evidence route's checks: logged in, and a run of this store.
+  it("shows a group's newest activity, a run's times, and a run's activity only for a run of this store", async () => {
+    await confirmGroup(h, "group-a");
+    insertValidTaskRun(h, "group-a");
+    h.store.transaction(() => {
+      for (let i = 1; i <= 201; i += 1) recordActivity(h.store, { groupId: "group-a", taskId: "a", runId: "run-one", kind: "phase", body: { step: "executing", attempt: i } });
+      recordActivity(h.store, { groupId: "group-a", kind: "stop", body: { mode: "pause" } });
+    });
+    const newestGroupSeq = Number(h.store.db.prepare("SELECT MAX(seq) AS seq FROM activity WHERE group_id='group-a'").get()!.seq);
+    const newestRun = h.store.db.prepare("SELECT seq,at FROM activity WHERE run_id='run-one' ORDER BY seq DESC LIMIT 1").get()!;
+
+    const groupResponse = await request(h, "/api/control/groups/group-a");
+    expect(groupResponse.status).toBe(200);
+    const view = await groupResponse.json() as GroupViewV1;
+    expect(view.activity).toHaveLength(50);
+    expect(view.activity![0]).toMatchObject({ seq: newestGroupSeq, kind: "stop", taskId: null, runId: null, body: { mode: "pause" } });
+    expect(view.activity!.map((entry) => entry.seq)).toEqual([...view.activity!.map((entry) => entry.seq)].sort((a, b) => b - a));
+    expect(view.runs.find((run) => run.runId === "run-one")).toMatchObject({ startedAt: null, endedAt: null, lastActivityAt: Number(newestRun.at) });
+
+    const response = await request(h, "/api/control/runs/run-one/activity");
+    expect(response.status).toBe(200);
+    const activity = await response.json() as RunActivityV1;
+    expect(activity).toMatchObject({ schema: "orca-run-activity-v1", runId: "run-one" });
+    expect(activity.entries).toHaveLength(200);
+    expect(activity.entries[0]).toMatchObject({ seq: Number(newestRun.seq), kind: "phase", body: { attempt: 201 } });
+    expect(activity.entries.every((entry) => entry.runId === "run-one")).toBe(true);
+
+    expect((await request(h, "/api/control/runs/run-one/activity", false)).status).toBe(401);
+
+    // Another project's run lives in another control store; this panel does not know it.
+    const other = await openTestStore();
+    try {
+      createGroup(other.store, { groupId: "elsewhere", projectKey: "other/repo", goal: "Other", successConditions: ["ok"], limit: amount(100), reviewReserve: amount(10), deadlineAt: null },
+        { commandId: "create", expectedRevision: 0, by: "human" });
+      other.store.db.prepare("INSERT INTO runs(id,group_id,work_item_id,generation,active,body) VALUES ('run-other-project','elsewhere','w',1,0,'{}')").run();
+      const foreign = await request(h, "/api/control/runs/run-other-project/activity");
+      expect(foreign.status).toBe(404);
+      expect(await foreign.json()).toMatchObject({ error: { code: "run-not-found" } });
+    } finally { await other.dispose(); }
+    const malformed = await request(h, "/api/control/runs/%20bad/activity");
+    expect(malformed.status).toBe(404);
   });
 });

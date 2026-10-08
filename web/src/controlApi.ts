@@ -42,6 +42,7 @@ import type {
   RequirementOpenPayloadV1,
   RequirementViewV1,
   ResumeFromHandoffPayloadV1,
+  RunActivityV1,
   SetGroupIntegrationPayloadV1,
   SetLimitPayloadV1,
   SetTaskLabelsPayloadV1,
@@ -110,6 +111,10 @@ export const fetchControlRecovery = (): Promise<RecoveryViewV1> => controlGet<Re
 /** GET /api/control/runs/:runId/evidence -- the manifest of raw evidence retained for one run. */
 export const fetchRunEvidence = (runId: string): Promise<EvidenceManifestV1> =>
   controlGet<EvidenceManifestV1>(`/api/control/runs/${segment(runId)}/evidence`);
+
+/** GET /api/control/runs/:runId/activity -- issue-fixes spec §5.2: the run's newest 200 activity rows. */
+export const fetchRunActivity = (runId: string): Promise<RunActivityV1> =>
+  controlGet<RunActivityV1>(`/api/control/runs/${segment(runId)}/activity`);
 
 /** Accounts spec §5.3: GET /api/control/usage with the query the Usage panel's pickers name (web/src/UsagePanel.tsx). */
 export const fetchUsageView = (query: string): Promise<UsageViewV1> => controlGet<UsageViewV1>(`/api/control/usage?${query}`);

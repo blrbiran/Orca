@@ -232,6 +232,10 @@ export type RunViewV1 = {
   git?: { workspaceMode: "worktree" | "clone"; base: string | null; landedCommit: string | null } | null;
   /** Syncskill integration spec §4.6: the skills the run was given (syncskill's lock); absent for a run without skills. */
   skills?: { profile: string | null; lock: RunSkillLockV1[] };
+  /** Issue-fixes spec §5.2: wall-clock times (ms); null for a run written before schema 9. Optional so literal fixtures need no edit; the server always sends them. */
+  startedAt?: number | null;
+  endedAt?: number | null;
+  lastActivityAt?: number | null;
 };
 export type BudgetEstimateV1 = {
   schema: "budget-estimate-v1";
@@ -303,6 +307,8 @@ export type GroupViewV1 = {
   spendCapBlock?: SpendCapBlockV1 | null;
   /** Integration spec §4: the group's integration; absent for keep. */
   integration?: GroupIntegrationViewV1;
+  /** Issue-fixes spec §5.2: the group's newest 50 activity rows, newest first. Optional so literal fixtures need no edit. */
+  activity?: ActivityEntryV1[];
 };
 
 export type SpendPeriodV1 = "total" | "week" | "month";
@@ -347,6 +353,11 @@ export type EvidenceManifestV1 = {
   runId: string;
   entries: Array<{ evidenceId: string; kind: string; sha256: string; byteLength: number; downloadUrl: string }>;
 };
+/** Issue-fixes spec §5.2: one row of Orca's activity record. */
+export type ActivityKindV1 = "command" | "run-claimed" | "run-started" | "phase" | "run-blocked" | "run-resumed" | "run-settled" | "task-retried" | "integration" | "stop" | "stop-cleared" | "archived" | "unarchived";
+export type ActivityEntryV1 = { seq: number; groupId: string; taskId: string | null; runId: string | null; at: number; kind: ActivityKindV1; body: Record<string, unknown> };
+/** GET /api/control/runs/:runId/activity -- the run's newest 200 rows, newest first. */
+export type RunActivityV1 = { schema: "orca-run-activity-v1"; runId: string; entries: ActivityEntryV1[] };
 
 export type CommandErrorV1 = { code: string; message: string; commandRevision: number | null; evidenceIds: string[]; retryable: boolean };
 export type CommandTargetV1 =
