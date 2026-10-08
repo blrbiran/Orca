@@ -97,7 +97,9 @@ export function gitChild(repo: string, args: string[], input?: string): Promise<
 
 /** A failure a later attempt may not see: the network, not the repository. */
 export function classifyNetwork(stderr: string): "transient" | null {
-  return /Could not resolve host|Connection refused|timed out|unable to access/i.test(stderr) ? "transient" : null;
+  // "unable to access" alone also prefixes an HTTP 401/403 (a revoked token), which no retry fixes: only its network
+  // causes are transient (fix round 1, I3).
+  return /Could not resolve host|Connection refused|timed out|unable to access .*(?:Could not resolve|Failed to connect|timed out|Connection refused)/i.test(stderr) ? "transient" : null;
 }
 
 export type PushOutcome = "ok" | "moved" | { refused: string } | { failed: string; transient: boolean };

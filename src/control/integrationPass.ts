@@ -1,13 +1,12 @@
-import { rm } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { ControlError } from "./errors.js";
 import { groupRepoId, groupStopped, write } from "./executionDriver.js";
 import {
-  BranchMissing, RemoteFailure, fetchInto, gitChild, gitOk, isAncestor, oneLine, pushPorcelain, refTip, remoteHas, revParse,
+  BranchMissing, ChildTimeout, RemoteFailure, fetchInto, gitChild, gitOk, isAncestor, oneLine, pushPorcelain, refTip, remoteHas, revParse,
 } from "./integrationGit.js";
-import { readGroupIntegration, type GroupIntegration, type IntegrationScheme } from "./integrationScheme.js";
+import { readGroupIntegration, remoteUrl, type GroupIntegration, type IntegrationScheme } from "./integrationScheme.js";
 import { readGroup, saveGroup } from "./queries.js";
-import { workBranchRef, type WorkspaceRoots } from "./workspace.js";
+import { removeOwnPath, workBranchRef, type WorkspaceRoots } from "./workspace.js";
 import { ORCA_IDENTITY } from "../scheduler/gitExec.js";
 import type { AdmissionGate } from "./admissionGate.js";
 import type { ControlStore } from "./store.js";
@@ -53,6 +52,9 @@ const fetchedRefOf = (groupId: string, what: "target" | "work"): string => `refs
 /** spec §5: answers whether any group's integration record moved to a new state (a transient failure does not count). */
 export async function integratePendingGroups(deps: IntegrationDeps): Promise<boolean> {
   let moved = false;
+  // Fix round 1 (M1): a remote (repository path + remote name) that timed out in this round is not tried again by a
+  // later group of the same round, so a hung remote costs one timeout per round, not one per group.
+  const unreachable = new Set<string>();
   for (const row of deps.store.db.prepare("SELECT id, body FROM groups ORDER BY id").all()) {
     // A stopped driver or a draining panel ends the pass before the next group (a draining panel refuses every write).
     if (deps.stopped() || deps.admissionGate?.draining === true) break;
@@ -66,7 +68,7 @@ export async function integratePendingGroups(deps: IntegrationDeps): Promise<boo
     // Ruling R7: a stopped or person-paused group waits; a budget-blocked one still integrates what it landed.
     if (groupStopped(deps.store, groupId)) continue;
     let outcome: Outcome | null;
-    try { outcome = await integrateGroup(deps, groupId, integration); }
+    try { outcome = await integrateGroup(deps, groupId, integration, unreachable); }
     catch (error) {
       if (error instanceof Crashed) throw error.error;
       // Anything else is this group's alone (a panel that began draining refuses the settle write below, which ends the
@@ -106,9 +108,11 @@ async function nothingLanded(repo: string, scheme: Scheme, tip: string): Promise
 }
 
 /** One group's integration; null when it is not due. */
-async function integrateGroup(deps: IntegrationDeps, groupId: string, integration: GroupIntegration): Promise<Outcome | null> {
+async function integrateGroup(deps: IntegrationDeps, groupId: string, integration: GroupIntegration, unreachable: Set<string>): Promise<Outcome | null> {
   const scheme = integration.scheme as Scheme;
   const repo = deps.repoPathOf(groupRepoId(deps.store, groupId));
+  const remoteKey = "remote" in scheme ? `${repo}\0${scheme.remote}` : null;
+  if (remoteKey !== null && unreachable.has(remoteKey)) return null;
   const tip = await refTip(repo, workBranchRef(groupId));
   if (tip === null || tip === integration.lastIntegrated) return null;
   if (scheme.trigger === "group" && !groupComplete(deps.store, groupId)) return null;
@@ -118,15 +122,19 @@ async function integrateGroup(deps: IntegrationDeps, groupId: string, integratio
     if (scheme.delivery === "push-target") return await integratePushTarget(deps, repo, groupId, integration, scheme, tip);
     return await integrateWorkBranch(deps, repo, groupId, integration, scheme, tip);
   } catch (error) {
-    // A child that timed out (ChildTimeout) is left to the pass's own handler, which backs it off like any transient.
-    if (error instanceof RemoteFailure) return error.transient ? { kind: "transient", message: error.message } : { kind: "blocked", reason: "integration-remote-missing" };
+    // A child that timed out is left to the pass's own handler, which backs it off like any transient; one that was
+    // talking to the remote marks the remote unreachable for the rest of this round.
+    if (error instanceof ChildTimeout && remoteKey !== null && "remote" in scheme && error.args.includes(scheme.remote)) unreachable.add(remoteKey);
+    // Fix round 1 (I2): a configured remote that answers with anything but the network refuses like a push, with git's
+    // words; integration-remote-missing is only a remote that is not configured.
+    if (error instanceof RemoteFailure) return error.transient ? { kind: "transient", message: error.message } : { kind: "blocked", reason: `integration-push-refused:${error.message}` };
     if (error instanceof BranchMissing) return { kind: "blocked", reason: "integration-target-missing" };
     throw error;
   }
 }
 
 async function remoteConfigured(repo: string, remote: string): Promise<boolean> {
-  return (await gitChild(repo, ["config", "--get", `remote.${remote}.url`])).code === 0;
+  return (await remoteUrl(repo, remote)) !== null;
 }
 
 /** spec §6.1 step 2: a write-ahead record of this scheme whose `new` the target already holds is finished, not redone. */
@@ -187,7 +195,7 @@ async function computeNew(deps: IntegrationDeps, repo: string, groupId: string, 
     return { kind: "new", commit };
   }
   const workspace = integrationPathOf(deps.roots, groupId);
-  await removeWorkspace(repo, deps.roots, workspace);
+  await removeOwnPath(repo, deps.roots, workspace);
   try {
     await gitOk(repo, ["worktree", "add", "--detach", workspace, base]);
     const merged = await gitChild(workspace, [...ORCA_IDENTITY, "merge", "--no-ff", "-m", `orca: integrate ${groupId}`, tip]);
@@ -198,7 +206,7 @@ async function computeNew(deps: IntegrationDeps, repo: string, groupId: string, 
       return { kind: "conflict", paths: unmerged };
     }
     return { kind: "new", commit: await revParse(workspace, "HEAD") };
-  } finally { await removeWorkspace(repo, deps.roots, workspace); }
+  } finally { await removeOwnPath(repo, deps.roots, workspace); }
 }
 
 /** `merge-tree --name-only` on a conflict: the tree, the conflicted names, a blank line, then git's messages. */
@@ -206,15 +214,6 @@ function conflictedNames(stdout: string): string[] {
   const lines = stdout.split("\n");
   const end = lines.indexOf("", 1);
   return [...new Set(lines.slice(1, end === -1 ? lines.length : end).filter((line) => line.length > 0))];
-}
-
-/** The integration workspace is removed by its own name only (a direct child of the workspaces root). */
-async function removeWorkspace(repo: string, roots: WorkspaceRoots, path: string): Promise<void> {
-  if (dirname(path) !== roots.workspacesRoot) throw new Error(`orca: refusing to touch ${path}, which is not a workspace this driver named`);
-  const listed = await gitOk(repo, ["worktree", "list", "--porcelain"]);
-  if (listed.split("\n").includes(`worktree ${path}`)) await gitOk(repo, ["worktree", "remove", "--force", path]);
-  await rm(path, { recursive: true, force: true });
-  await gitChild(repo, ["worktree", "prune"]);
 }
 
 type Published = "ok" | "moved" | Outcome;
@@ -283,7 +282,7 @@ async function worktreeOf(repo: string, ref: string): Promise<string | null> {
 
 /** `push-target`: `new` computed on the freshly fetched `<remote>/<target>` and pushed there, never forced. */
 async function integratePushTarget(deps: IntegrationDeps, repo: string, groupId: string, integration: GroupIntegration, scheme: Extract<Scheme, { delivery: "push-target" }>, tip: string): Promise<Outcome> {
-  // A remote that is not configured fails the fetch below as a remote that does not answer: integration-remote-missing.
+  if (!(await remoteConfigured(repo, scheme.remote))) return { kind: "blocked", reason: "integration-remote-missing" };
   const fetched = fetchedRefOf(groupId, "target");
   const pending = reentry(integration);
   if (pending !== null && await remoteHas(repo, scheme.remote, scheme.target, pending.new, fetched)) return { kind: "done", tip: pending.tip, integrated: pending.new };

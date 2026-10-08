@@ -3,7 +3,7 @@
 // Real git children (and the driver harness) take seconds under load, so every describe allows a minute.
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -13,12 +13,14 @@ import { integratePendingGroups, type IntegrationDeps } from "../../src/control/
 import { newGroupIntegration, readGroupIntegration, schemeHash, type GroupIntegration, type IntegrationScheme } from "../../src/control/integrationScheme.js";
 import type { ControlStore } from "../../src/control/store.js";
 import { WebControlService } from "../../src/control/webService.js";
-import { controlWorkspaceRoots } from "../../src/control/workspace.js";
+import { controlWorkspaceRoots, unsetInheritedGitEnv } from "../../src/control/workspace.js";
 import { driverHarness } from "./fixtures/driverHarness.js";
 import { webFixture } from "./fixtures/web.js";
 
+// As driverHarness's `git`: no GIT_* of the test process's own, and no hook of the test repositories runs for the setup.
 const g = (cwd: string, args: string[], options: { input?: string; env?: NodeJS.ProcessEnv } = {}): string =>
-  execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...args], { cwd, encoding: "utf8", stdio: "pipe", input: options.input, env: { ...process.env, ...options.env } }).trim();
+  execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "core.hooksPath=/dev/null", ...args],
+    { cwd, encoding: "utf8", stdio: "pipe", input: options.input, env: { ...process.env, ...unsetInheritedGitEnv(), ...options.env } }).trim();
 
 const groupBody = (store: ControlStore): Record<string, unknown> =>
   JSON.parse(String(store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!.body)) as Record<string, unknown>;
@@ -529,6 +531,85 @@ describe("more of the failure table and the due rule (integration spec §5, §6.
       g(w.repo, ["branch", "-D", "main"]);
       expect(await w.pass()).toBe(false);
       expect(w.remote("orca/g")).toBeNull();
+    } finally { await w.dispose(); }
+  });
+});
+
+/** An `ext::` remote that writes git's words for a failure to stderr and exits 128 (nothing leaves the machine). */
+const failingRemote = (words: string): string => `ext::sh -c echo% ${words.replace(/ /g, "% ")}% 1>&2;% exit% 128`;
+
+describe("fix round 1: remote failures, the person's worktrees, one timeout per remote per round", { timeout: 60_000 }, () => {
+  const AUTH = "fatal: Authentication failed for https://example.invalid/r.git/";
+  const HTTP_403 = "fatal: unable to access https://example.invalid/r.git/: The requested URL returned error: 403";
+
+  it("I2: an auth failure refuses by name on the push-branch push, the push-target fetch and the re-entry ls-remote", async () => {
+    const pb = await world(PB); try {
+      g(pb.repo, ["config", "protocol.ext.allow", "always"]);
+      g(pb.repo, ["config", "remote.origin.url", failingRemote(AUTH)]);
+      const tip = pb.land({ "a.txt": "a\n" });
+      expect(await pb.pass()).toBe(true);
+      expect(pb.record()).toMatchObject({ state: "blocked", pending: null });
+      expect(pb.record().reason).toMatch(/^integration-push-refused:.*Authentication failed/);
+      // Re-entry: a write-ahead record of this scheme makes the pass ask the remote with ls-remote first.
+      setRecord(pb.store, { ...pb.record(), state: "idle", reason: null, pending: { schemeHash: pb.record().schemeHash, tip, base: tip, new: tip } });
+      const calls = spyChildren();
+      expect(await pb.pass()).toBe(true);
+      expect(calls.find((call) => call[1] === "push")).toBeUndefined();
+      expect(calls.some((call) => call[1] === "ls-remote")).toBe(true);
+      expect(pb.record().reason).toMatch(/^integration-push-refused:.*Authentication failed/);
+    } finally { await pb.dispose(); }
+    const pt = await world(PT_MERGE); try {
+      g(pt.repo, ["config", "protocol.ext.allow", "always"]);
+      g(pt.repo, ["config", "remote.origin.url", failingRemote(AUTH)]);
+      pt.land({ "a.txt": "a\n" });
+      expect(await pt.pass()).toBe(true);
+      expect(pt.record()).toMatchObject({ state: "blocked", pending: null });
+      expect(pt.record().reason).toMatch(/^integration-push-refused:.*Authentication failed/);
+    } finally { await pt.dispose(); }
+  });
+
+  it("I3: an HTTP 403 (a revoked token) blocks instead of backing off forever", async () => {
+    const w = await world(PB); try {
+      g(w.repo, ["config", "protocol.ext.allow", "always"]);
+      g(w.repo, ["config", "remote.origin.url", failingRemote(HTTP_403)]);
+      w.land({ "a.txt": "a\n" });
+      expect(await w.pass()).toBe(true);
+      expect(w.record()).toMatchObject({ state: "blocked", retryAfter: null, transient: 0 });
+      expect(w.record().reason).toMatch(/^integration-push-refused:.*error: 403/);
+    } finally { await w.dispose(); }
+  });
+
+  it("I1: a person's worktree whose directory is gone is still registered after an integration that used a workspace", async () => {
+    const w = await world(LOCAL_MERGE, { checkedOutOther: true }); try {
+      const theirs = join(w.root, "person-wt");
+      g(w.repo, ["worktree", "add", "-q", "-b", "pw", theirs]);
+      rmSync(theirs, { recursive: true, force: true });
+      w.land({ "a.txt": "a\n" });
+      expect(await w.pass()).toBe(true);
+      expect(w.record().state).toBe("idle");
+      expect(g(w.repo, ["worktree", "list", "--porcelain"])).toContain("person-wt");
+    } finally { await w.dispose(); }
+  });
+
+  it("M1: two due groups on one hanging remote cost one timeout in a round; the second group is left for the next round", async () => {
+    vi.stubEnv("ORCA_INTEGRATION_TIMEOUT_MS", "500");
+    const w = await world(PB); try {
+      const body = groupBody(w.store);
+      w.store.db.prepare("INSERT INTO groups(id,revision,graph_version,body) VALUES ('h',?,?,?)")
+        .run(Number(body.revision ?? 1), Number(body.graphVersion ?? 1), JSON.stringify({ ...body, groupId: "h" }));
+      g(w.repo, ["update-ref", "refs/heads/orca/h", "HEAD"]);
+      w.land({ "a.txt": "a\n" });
+      commitOn(w.repo, "refs/heads/orca/h", { "h.txt": "h\n" }, "land h");
+      const count = join(w.root, "remote-hits");
+      g(w.repo, ["config", "protocol.ext.allow", "always"]);
+      g(w.repo, ["config", "remote.origin.url", `ext::sh -c echo% hit>>${count};% sleep% 5`]);
+      const started = Date.now();
+      expect(await w.pass()).toBe(false);
+      expect(Date.now() - started).toBeLessThan(1500);
+      expect(readFileSync(count, "utf8")).toBe("hit\n");
+      expect(w.record()).toMatchObject({ transient: 1 });
+      const h = readGroupIntegration(JSON.parse(String(w.store.db.prepare("SELECT body FROM groups WHERE id='h'").get()!.body)))!;
+      expect(h).toMatchObject({ transient: 0, retryAfter: null, state: "idle", lastIntegrated: null });
     } finally { await w.dispose(); }
   });
 });

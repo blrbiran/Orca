@@ -77,7 +77,7 @@ export async function checkBranchName(repo: string, name: string): Promise<boole
 }
 
 /** The raw configured URL (not `git remote get-url`, which applies insteadOf); null when the remote is not configured. */
-async function remoteUrl(repo: string, remote: string): Promise<string | null> {
+export async function remoteUrl(repo: string, remote: string): Promise<string | null> {
   const answer = await runGit(repo, ["config", "--get", `remote.${remote}.url`]);
   return answer.ok ? answer.stdout.trim() : null;
 }
