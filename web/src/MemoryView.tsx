@@ -40,6 +40,7 @@ export function MemoryView({ active, project, onProject }: {
   const [record, setRecord] = useState<MemoryRecord | null>(null);
   const [refusal, setRefusal] = useState<PanelRefusal | null>(null);
   const [loading, setLoading] = useState(false);
+  const detailPane = useRef<HTMLDivElement>(null);
 
   const load = async (projectKey: string, query: string): Promise<void> => {
     const mine = ++latest.current;
@@ -100,6 +101,11 @@ export function MemoryView({ active, project, onProject }: {
     }
   };
 
+  // Narrow layouts stack the detail under the list, so opening a memory brings the detail into view.
+  useEffect(() => {
+    if (record !== null) detailPane.current?.scrollIntoView?.({ block: "nearest" });
+  }, [record]);
+
   const submit = (event: FormEvent): void => {
     event.preventDefault();
     if (repo !== null) void load(repo, draft.trim());
@@ -140,6 +146,8 @@ export function MemoryView({ active, project, onProject }: {
       {refusal !== null && <Refusal refusal={refusal} />}
       {loading && <p className="empty">{t("memory.loading")}</p>}
       {page !== null && (
+        <div className="split">
+        <div className="split-list">
         <nav aria-label={t("memory.list")}>
           {page.page.records.length === 0 && <p className="empty">{t("memory.empty")}</p>}
           {noProject && <p className="caveat">{t("memory.noProjectHint")}</p>}
@@ -159,8 +167,9 @@ export function MemoryView({ active, project, onProject }: {
           </ul>
           {page.page.truncated && <p className="caveat">{t("memory.truncated", { shown: page.page.records.length, total: page.page.total })}</p>}
         </nav>
-      )}
-      {page !== null && record === null && refusal === null && <p className="empty">{t("memory.select")}</p>}
+        </div>
+        <div className="split-detail" ref={detailPane}>
+      {record === null && refusal === null && <p className="empty">{t("memory.select")}</p>}
       {record !== null && (
         <article className="memory-detail">
           <pre className="memory-content" data-testid="memory-content">{record.content}</pre>
@@ -177,6 +186,9 @@ export function MemoryView({ active, project, onProject }: {
             <dt>{t("memory.field.updatedAt")}</dt><dd><time dateTime={record.updatedAt}>{record.updatedAt}</time></dd>
           </dl>
         </article>
+      )}
+        </div>
+        </div>
       )}
     </section>
   );
