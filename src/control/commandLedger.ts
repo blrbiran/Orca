@@ -1,6 +1,7 @@
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { commandClientFor, commandPrincipalFor } from "./commandClient.js";
 import { ControlError, durableCommandErrorStatus } from "./errors.js";
+import { appendActivity } from "./activity.js";
 import { recordProjectionChange } from "./projectionJournal.js";
 import type { ControlStore } from "./store.js";
 import {
@@ -357,6 +358,16 @@ export function applyWebCommand<T>(store: ControlStore, input: WebCommandInput<T
       ? input.projectionGroupIds(typedOutcome)
       : input.projectionGroupIds ?? (authorityChanged && commandScope.groupId !== null ? [commandScope.groupId] : []);
     if (projectionGroups.length > 0) recordProjectionChange(store, projectionGroups);
+    // Issue-fixes spec §5.2: a group-targeted command first accepted writes its `command` row (a replay returned above,
+    // a refusal is not `succeeded`). appendActivity, not recordActivity: the success body already names its
+    // projectionSeq (assertFinalVersions below), and every group-scoped command recorded that change just above.
+    if (succeeded && commandScope.groupId !== null) {
+      const target = rawCommand.target;
+      appendActivity(store, {
+        groupId: commandScope.groupId, taskId: target.kind === "task" ? target.taskId : null, runId: target.kind === "run" ? target.runId : null,
+        kind: "command", body: { verb: rawCommand.verb, actor: rawCommand.actorId },
+      });
+    }
 
     const finalGroup = commandScope.groupId === null ? undefined : store.db.prepare("SELECT revision,projection_seq FROM groups WHERE id=?").get(commandScope.groupId);
     const commandRevision = settingRevision(store, commandScope)

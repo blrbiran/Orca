@@ -6,6 +6,9 @@ import { ACTIVITY_RETENTION, latestGroupActivityAt, readGroupActivity, readRunAc
 import { createGroup } from "../../src/control/commands.js";
 import { readProjectionState, recordProjectionChange } from "../../src/control/projectionJournal.js";
 import type { ControlStore } from "../../src/control/store.js";
+import { applyWebCommand, type WebCommandContext } from "../../src/control/commandLedger.js";
+import { ControlError } from "../../src/control/errors.js";
+import type { EffectiveAuthorityCommandV1, RawAuthorityCommandV1 } from "../../src/control/webProtocol.js";
 
 // Issue-fixes spec §5 (ruling H5): Orca's own wall-clock record. Every time it writes comes from the store's clock,
 // which tests inject so a criterion can name the exact instant a row or a run time must carry.
@@ -115,6 +118,44 @@ describe("recordActivity (issue-fixes spec §5.2)", () => {
       expect(latestGroupActivityAt(h.store, "g1")).toBe(30);
       expect(latestGroupActivityAt(h.store, "g2")).toBeNull();
       expect(() => readGroupActivity(h.store, "g1", 0)).toThrow("query-invalid");
+    } finally { await h.dispose(); }
+  });
+});
+
+/** As schema8.test.ts: a handoff-stop on g1 whose apply only answers (or refuses with a durable domain error). */
+function handoffStop(store: ControlStore, commandId: string, expectedRevision: number, refuse = false) {
+  const command: RawAuthorityCommandV1 = { schema: "orca-raw-command-v1", commandId, expectedRevision, actorId: "panel-operator", verb: "handoff-stop", target: { kind: "group", groupId: "g1" }, payload: {} };
+  return applyWebCommand(store, {
+    rawCommand: command,
+    expand: () => ({ ...command, schema: "orca-authority-command-v1", payload: { handoffDeadlineAt: "2026-09-20T10:00:00.000Z" } }) as EffectiveAuthorityCommandV1,
+    apply: (context: WebCommandContext) => {
+      if (refuse) throw new ControlError("stop-already-active");
+      return { status: 202, body: {
+        schema: "orca-command-success-v1", commandId, actorId: command.actorId, verb: command.verb, target: command.target,
+        commandRevision: context.nextCommandRevision, projectionSeq: context.nextProjectionSeq,
+        effectivePayloadHash: context.effectivePayloadHash, authorityCommandHash: context.authorityCommandHash,
+        result: { kind: "handoff-stopped", stopRevision: context.nextCommandRevision, acceptedAt: "2026-09-20T10:00:00.000Z", handoffDeadlineAt: "2026-09-20T10:00:00.000Z", frozenRunIds: [], requestIds: [] },
+      } } as never;
+    },
+  });
+}
+
+describe("command rows (issue-fixes spec §5.2)", () => {
+  it("an accepted group command writes one row; its replay, a stale one and a refused one write none", async () => {
+    let clock = 100;
+    const h = await openTestStore({ now: () => clock }); try {
+      seedGroup(h.store, "g1");
+      clock = 200;
+      const first = handoffStop(h.store, "c1", 1);
+      const rows = () => readGroupActivity(h.store, "g1", 10).map((entry) => [entry.kind, entry.at, entry.taskId, entry.runId, entry.body]);
+      expect(rows()).toEqual([["command", 200, null, null, { verb: "handoff-stop", actor: "panel-operator" }]]);
+      // The row did not move the group past the projectionSeq the success body promised (assertFinalVersions).
+      expect(projectionSeq(h.store, "g1")).toBe((first.body as { projectionSeq: number }).projectionSeq);
+      clock = 300;
+      expect(handoffStop(h.store, "c1", 1)).toEqual(first);
+      expect(handoffStop(h.store, "c-stale", 1).status).toBe(409);
+      expect(handoffStop(h.store, "c-refused", 2, true).status).toBe(409);
+      expect(rows()).toHaveLength(1);
     } finally { await h.dispose(); }
   });
 });
