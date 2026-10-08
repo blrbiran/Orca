@@ -6,6 +6,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { __setRunChildForTests, spawnRunChild } from "../../src/control/integrationGit.js";
 import { integratePendingGroups, type IntegrationCrashPoint, type IntegrationDeps } from "../../src/control/integrationPass.js";
 import { newGroupIntegration, readGroupIntegration, type GroupIntegration, type IntegrationScheme } from "../../src/control/integrationScheme.js";
 import type { ControlStore } from "../../src/control/store.js";
@@ -94,7 +95,13 @@ async function world(scheme: IntegrationScheme, options: { goal?: string; state?
   };
 }
 
-afterEach(() => { vi.unstubAllEnvs(); });
+/** Every git and gh child the pass starts, by argv, still run for real. */
+function spyChildren(): string[][] {
+  const children: string[][] = [];
+  __setRunChildForTests((bin, args, opts) => { children.push([bin, ...args]); return spawnRunChild(bin, args, opts); });
+  return children;
+}
+afterEach(() => { __setRunChildForTests(null); vi.unstubAllEnvs(); });
 
 const sub = (call: GhCall): string => call.argv.slice(0, 2).join(" ");
 const subs = (calls: GhCall[]): string[] => calls.map(sub);
@@ -130,10 +137,15 @@ describe("github-pr, trigger task (integration spec §6.4)", { timeout: 60_000 }
       expect(subs(w.calls()).slice(3)).toEqual(["auth status", "pr view"]);
       expect(w.calls()[4]!.argv).toEqual(["pr", "view", "--repo", REPO, "1", "--json", "state,isDraft"]);
       expect(w.record()).toMatchObject({ lastIntegrated: second, pr: { number: 1, ready: false } });
+      // Integrated and the group still incomplete: nothing is due.
+      expect(await w.pass()).toBe(false);
+      expect(w.calls()).toHaveLength(5);
 
-      // spec §5: the group completes with nothing new landed -- the pass only marks the PR ready.
+      // spec §5: the group completes with nothing new landed -- the pass only marks the PR ready, pushing nothing.
       w.complete();
+      const children = spyChildren();
       expect(await w.pass()).toBe(true);
+      expect(children.filter((argv) => argv[0] === "git" && argv.includes("push"))).toEqual([]);
       expect(subs(w.calls()).slice(5)).toEqual(["auth status", "pr view", "pr ready"]);
       expect(w.calls()[7]!.argv).toEqual(["pr", "ready", "--repo", REPO, "1"]);
       expect(w.record()).toMatchObject({ state: "idle", lastIntegrated: second, pr: { number: 1, ready: true } });
@@ -281,12 +293,19 @@ describe("gh failures (integration spec §6.5)", { timeout: 60_000 }, () => {
     }
   });
 
-  it("any other gh failure blocks integration-pr-refused with gh's words", async () => {
-    const w = await world(HUB_TASK, { state: { fail: { "pr list": "HTTP 404: Not Found (https://api.github.com/graphql)" } } }); try {
-      w.land({ "a.txt": "a\n" });
-      expect(await w.pass()).toBe(true);
-      expect(w.record()).toMatchObject({ state: "blocked", reason: "integration-pr-refused:HTTP 404: Not Found (https://api.github.com/graphql)" });
-    } finally { await w.dispose(); }
+  it("any other gh failure -- of pr list, create, view or ready -- blocks integration-pr-refused with gh's words", async () => {
+    const words = "HTTP 404: Not Found (https://api.github.com/graphql)";
+    for (const failing of ["pr list", "pr create", "pr view", "pr ready"]) {
+      const w = await world(HUB_TASK); try {
+        w.land({ "a.txt": "a\n" });
+        // pr view and pr ready need a recorded PR first.
+        if (failing === "pr view" || failing === "pr ready") { expect(await w.pass()).toBe(true); w.land({ "b.txt": "b\n" }); w.complete(); }
+        w.writeState({ ...w.fake(), fail: { [failing]: words } });
+        expect(await w.pass()).toBe(true);
+        expect(w.record(), failing).toMatchObject({ state: "blocked", reason: `integration-pr-refused:${words}` });
+        expect(subs(w.calls()).at(-1), failing).toBe(failing);
+      } finally { await w.dispose(); }
+    }
   });
 
   it("a remote whose URL no longer names GitHub refuses the PR by name and runs no gh", async () => {
