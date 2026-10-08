@@ -432,6 +432,8 @@ describe("preflightScheme (integration spec §3.3)", () => {
     expect(await preflightScheme(repo, { ...LOCAL, target: "dev" }, badGh())).toBe("target");
     expect(await preflightScheme(repo, { ...PB, target: "dev" }, badGh())).toBe("target");
     expect(await preflightScheme(repo, HUB, badGh())).toBe("gh-auth");
+    // A gh that cannot be started at all is as unavailable as one that is not logged in.
+    expect(await preflightScheme(repo, HUB, join(root, "no-such-gh"))).toBe("gh-auth");
     expect(await preflightScheme(repo, { ...LOCAL, target: "a..b" }, badGh())).toBe("target-name");
   });
   it("squash needs git 2.40 (merge-tree --merge-base); merge does not", async () => {

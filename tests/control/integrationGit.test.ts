@@ -238,6 +238,10 @@ describe("trigger group (integration spec §5)", { timeout: 60_000 }, () => {
       const work = JSON.parse(String(w.store.db.prepare("SELECT body FROM work_items WHERE group_id='g' AND id='a'").get()!.body)) as Record<string, unknown>;
       expect(work.kind).toBe("task");
       w.store.db.prepare("UPDATE work_items SET body=? WHERE group_id='g' AND id='a'").run(JSON.stringify({ ...work, status: "done" }));
+      // A run still active (or reconciling) in the group: not complete yet.
+      w.store.db.prepare("INSERT INTO runs VALUES ('r-live','g','a',1,1,'{}')").run();
+      expect(await w.pass()).toBe(false);
+      w.store.db.prepare("UPDATE runs SET active=0 WHERE id='r-live'").run();
       expect(await w.pass()).toBe(true);
       expect(w.remote("orca/g")).toBe(tip);
       expect(w.record().lastIntegrated).toBe(tip);
@@ -324,6 +328,10 @@ describe("a remote that does not answer (integration spec §6.5, review focus 4)
       expect(await w.pass()).toBe(false);
       expect(Date.now() - started).toBeLessThan(3000);
       expect(w.record()).toMatchObject({ state: "idle", retryAfter: w.clock() + 60_000, transient: 2 });
+      // The doubling stops at 10 minutes.
+      setRecord(w.store, { ...w.record(), transient: 10, retryAfter: null });
+      expect(await w.pass()).toBe(false);
+      expect(w.record()).toMatchObject({ retryAfter: w.clock() + 600_000, transient: 11 });
     } finally { await w.dispose(); }
   });
 
@@ -367,6 +375,10 @@ describe("who integrates (integration spec §5, ruling R7) and retry (§6.5)", {
   it("12: a person-paused group is not due; a budget-blocked group still integrates", async () => {
     const w = await world(PB); try {
       const tip = w.land({ "a.txt": "a\n" });
+      // Before an owner's confirm the copy is not frozen: nothing is integrated.
+      setRecord(w.store, { ...w.record(), frozen: false });
+      expect(await w.pass()).toBe(false);
+      setRecord(w.store, { ...w.record(), frozen: true });
       w.store.db.prepare("INSERT INTO stop_intents VALUES ('g','pause',1,'{}')").run();
       expect(await w.pass()).toBe(false);
       expect(w.remote("orca/g")).toBeNull();
@@ -388,6 +400,135 @@ describe("who integrates (integration spec §5, ruling R7) and retry (§6.5)", {
       const { integration: _gone, ...keep } = groupBody(w.store);
       writeGroupBody(w.store, keep);
       expect(code(w.service.retryIntegration(w.command("retry-integration", {})))).toBe("integration-not-blocked");
+    } finally { await w.dispose(); }
+  });
+});
+
+describe("more of the failure table and the due rule (integration spec §5, §6.3, §6.5)", { timeout: 60_000 }, () => {
+  it("push-branch: a remote removed blocks remote-missing; a path that is no repository blocks push-refused; a network error backs off", async () => {
+    const w = await world(PB); try {
+      w.land({ "a.txt": "a\n" });
+      g(w.repo, ["remote", "remove", "origin"]);
+      expect(await w.pass()).toBe(true);
+      expect(w.record()).toMatchObject({ state: "blocked", reason: "integration-remote-missing", pending: null });
+      w.service.retryIntegration(w.command("retry-integration", {}));
+      g(w.repo, ["remote", "add", "origin", join(w.root, "no-such-remote.git")]);
+      expect(await w.pass()).toBe(true);
+      expect(w.record()).toMatchObject({ state: "blocked" });
+      expect(w.record().reason).toMatch(/^integration-push-refused:.*does not appear to be a git repository/);
+      w.service.retryIntegration(w.command("retry-integration", {}));
+      g(w.repo, ["config", "protocol.ext.allow", "always"]);
+      g(w.repo, ["config", "remote.origin.url", "ext::sh -c echo% fatal:% Could% not% resolve% host:% example.invalid% 1>&2"]);
+      expect(await w.pass()).toBe(false);
+      expect(w.record()).toMatchObject({ state: "idle", retryAfter: w.clock() + 30_000, transient: 1 });
+    } finally { await w.dispose(); }
+  });
+
+  it("push-target: a network error on the fetch backs off instead of blocking", async () => {
+    const w = await world(PT_MERGE); try {
+      w.land({ "a.txt": "a\n" });
+      g(w.repo, ["config", "protocol.ext.allow", "always"]);
+      g(w.repo, ["config", "remote.origin.url", "ext::sh -c echo% fatal:% Could% not% resolve% host:% example.invalid% 1>&2"]);
+      expect(await w.pass()).toBe(false);
+      expect(w.record()).toMatchObject({ state: "idle", retryAfter: w.clock() + 30_000, transient: 1, pending: null });
+    } finally { await w.dispose(); }
+  });
+
+  it("local: a missing target blocks target-missing; a target moved under the swap is recomputed once; a locked ref backs off", async () => {
+    const w = await world(LOCAL_MERGE, { checkedOutOther: true }); try {
+      const first = w.land({ "a.txt": "a\n" });
+      let moved = "";
+      expect(await w.pass({ beforePublish: async () => { if (moved === "") moved = commitOn(w.repo, "refs/heads/main", { "p.txt": "p\n" }, "person"); } })).toBe(true);
+      expect(parents(w.repo, g(w.repo, ["rev-parse", "main"]))).toEqual([moved, first]);
+      w.land({ "b.txt": "b\n" });
+      const main = g(w.repo, ["rev-parse", "main"]);
+      const lock = join(w.repo, ".git", "refs", "heads", "main.lock");
+      expect(await w.pass({ beforePublish: async () => { await writeFile(lock, ""); } })).toBe(false);
+      expect(w.record()).toMatchObject({ state: "idle", transient: 1, retryAfter: w.clock() + 30_000 });
+      expect(g(w.repo, ["rev-parse", "main"])).toBe(main);
+      execFileSync("rm", ["-f", lock]);
+      g(w.repo, ["branch", "-D", "main"]);
+      w.setClock(w.clock() + 30_000);
+      expect(await w.pass()).toBe(true);
+      expect(w.record()).toMatchObject({ state: "blocked", reason: "integration-target-missing" });
+    } finally { await w.dispose(); }
+  });
+
+  it("H5: a checked-out target whose HEAD moved past what was computed blocks integration-not-fast-forward, untouched", async () => {
+    const w = await world(LOCAL_MERGE); try {
+      w.land({ "a.txt": "a\n" });
+      let head = "";
+      expect(await w.pass({ beforePublish: async () => {
+        await writeFile(join(w.repo, "p.txt"), "p\n"); g(w.repo, ["add", "p.txt"]); g(w.repo, ["commit", "-qm", "person"]); head = g(w.repo, ["rev-parse", "HEAD"]);
+      } })).toBe(true);
+      expect(w.record()).toMatchObject({ state: "blocked", reason: "integration-not-fast-forward", pending: null });
+      expect(g(w.repo, ["rev-parse", "HEAD"])).toBe(head);
+      expect(g(w.repo, ["status", "--porcelain", "--untracked-files=all"])).toBe("");
+    } finally { await w.dispose(); }
+  });
+
+  it("a target that already contains the tip is recorded as integrated without a new commit", async () => {
+    const w = await world(LOCAL_MERGE, { checkedOutOther: true }); try {
+      w.land({ "a.txt": "a\n" });
+      await w.pass();
+      const integrated = w.record().integratedCommit!;
+      const tip = w.land({ "b.txt": "b\n" });
+      // The person merged the new landing into main themselves.
+      const theirs = g(w.repo, ["commit-tree", `${tip}^{tree}`, "-p", integrated, "-p", tip, "-m", "person merge"]);
+      g(w.repo, ["update-ref", "refs/heads/main", theirs]);
+      expect(await w.pass()).toBe(true);
+      expect(w.record()).toMatchObject({ lastIntegrated: tip, integratedCommit: integrated, state: "idle", pending: null });
+      expect(g(w.repo, ["rev-parse", "main"])).toBe(theirs);
+    } finally { await w.dispose(); }
+  });
+
+  it("squash: a conflict is recorded as for merge, naming the paths", async () => {
+    const w = await world(LOCAL_SQUASH, { checkedOutOther: true }); try {
+      const tip = w.land({ "f.txt": "A\ntwo\nthree\n" });
+      const main = commitOn(w.repo, "refs/heads/main", { "f.txt": "B\ntwo\nthree\n" }, "person");
+      expect(await w.pass()).toBe(true);
+      expect(w.record()).toMatchObject({ state: "conflict", reason: "integration-conflict", conflict: { attempt: 1, base: main, tip, paths: ["f.txt"] } });
+      expect(g(w.repo, ["rev-parse", "main"])).toBe(main);
+    } finally { await w.dispose(); }
+  });
+
+  it("a scheme changed while the target moved ends the integration there, without recomputing for the old scheme", async () => {
+    const w = await world(PT_MERGE); try {
+      w.land({ "a.txt": "a\n" });
+      const next: IntegrationScheme = { ...PT_MERGE, trigger: "group" };
+      let calls = 0;
+      expect(await w.pass({ beforePublish: async () => {
+        calls += 1;
+        if (calls === 1) { setRecord(w.store, { ...w.record(), scheme: next, schemeHash: schemeHash(next) }); w.pushFromOther("main", { "m.txt": "m\n" }); }
+      } })).toBe(false);
+      expect(calls).toBe(1);
+      expect(w.record()).toMatchObject({ scheme: next, lastIntegrated: null });
+      expect(w.record().pending).not.toBeNull();
+    } finally { await w.dispose(); }
+  });
+
+  it("a stopped driver or a draining panel integrates nothing; a record that does not parse is skipped by name", async () => {
+    const w = await world(PB); try {
+      w.land({ "a.txt": "a\n" });
+      const calls = spyChildren();
+      expect(await w.pass({ stopped: () => true })).toBe(false);
+      const gate = { enter: () => () => undefined, beginDrain: () => ({ beforeWriterTransaction: Promise.resolve() }), draining: true };
+      expect(await w.pass({ admissionGate: gate })).toBe(false);
+      expect(calls).toEqual([]);
+      const good = w.record();
+      writeGroupBody(w.store, { ...groupBody(w.store), integration: { ...good, state: "sideways" } });
+      expect(await w.pass()).toBe(false);
+      expect(calls).toEqual([]);
+      setRecord(w.store, good);
+      expect(await w.pass()).toBe(true);
+    } finally { await w.dispose(); }
+  });
+
+  it("before the first integration, a tip the remote-tracking target already contains is no landed work either", async () => {
+    const w = await world(PB, { checkedOutOther: true }); try {
+      g(w.repo, ["branch", "-D", "main"]);
+      expect(await w.pass()).toBe(false);
+      expect(w.remote("orca/g")).toBeNull();
     } finally { await w.dispose(); }
   });
 });

@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 import { ControlError } from "./errors.js";
 import { groupRepoId, groupStopped, write } from "./executionDriver.js";
 import {
-  BranchMissing, ChildTimeout, RemoteFailure, fetchInto, gitChild, gitOk, isAncestor, oneLine, pushPorcelain, refTip, remoteHas, remoteTip, revParse,
+  BranchMissing, ChildTimeout, RemoteFailure, fetchInto, gitChild, gitOk, isAncestor, oneLine, pushPorcelain, refTip, remoteHas, revParse,
 } from "./integrationGit.js";
 import { readGroupIntegration, type GroupIntegration, type IntegrationScheme } from "./integrationScheme.js";
 import { readGroup, saveGroup } from "./queries.js";
@@ -52,11 +52,10 @@ const fetchedRefOf = (groupId: string, what: "target" | "work"): string => `refs
 
 /** spec §5: answers whether any group's integration record moved to a new state (a transient failure does not count). */
 export async function integratePendingGroups(deps: IntegrationDeps): Promise<boolean> {
-  const halted = (): boolean => deps.stopped() || deps.admissionGate?.draining === true;
-  if (halted()) return false;
   let moved = false;
   for (const row of deps.store.db.prepare("SELECT id, body FROM groups ORDER BY id").all()) {
-    if (halted()) break;
+    // A stopped driver or a draining panel ends the pass before the next group (a draining panel refuses every write).
+    if (deps.stopped() || deps.admissionGate?.draining === true) break;
     const groupId = String(row.id);
     let integration: GroupIntegration | null;
     try { integration = readGroupIntegration(JSON.parse(String(row.body))); }
@@ -70,8 +69,8 @@ export async function integratePendingGroups(deps: IntegrationDeps): Promise<boo
     try { outcome = await integrateGroup(deps, groupId, integration); }
     catch (error) {
       if (error instanceof Crashed) throw error.error;
-      if (error instanceof ControlError && error.code === "panel-draining") throw error;
-      // Anything else is this group's alone and is retried after the backoff; the round goes on to the next group.
+      // Anything else is this group's alone (a panel that began draining refuses the settle write below, which ends the
+      // pass) and is retried after the backoff; the round goes on to the next group.
       process.stderr.write(`orca-driver: integration ${groupId}: ${describe(error)}\n`);
       outcome = { kind: "transient", message: describe(error) };
     }
@@ -89,7 +88,7 @@ function describe(error: unknown): string {
 function groupComplete(store: ControlStore, groupId: string): boolean {
   const tasks = store.db.prepare("SELECT body FROM work_items WHERE group_id=?").all(groupId)
     .map((row) => JSON.parse(String(row.body)) as { kind?: string; status?: string }).filter((work) => work.kind === "task");
-  if (tasks.length === 0 || tasks.some((work) => work.status !== "done")) return false;
+  if (tasks.some((work) => work.status !== "done")) return false;
   return store.db.prepare("SELECT id FROM runs WHERE group_id=? AND active=1").get(groupId) === undefined;
 }
 
@@ -145,13 +144,12 @@ async function integrateWorkBranch(deps: IntegrationDeps, repo: string, groupId:
   }
   if (!recordPending(deps, groupId, integration.schemeHash, { schemeHash: integration.schemeHash, tip, base: tip, new: tip })) return { kind: "dropped" };
   crash(deps, "after-pending");
-  if ((await remoteTip(repo, scheme.remote, branch)) !== tip) {
-    await deps.beforePublish?.();
-    const pushed = await pushPorcelain(repo, scheme.remote, `${tip}:refs/heads/${branch}`);
-    if (pushed === "moved") return { kind: "blocked", reason: "integration-work-branch-diverged" };
-    const failed = pushFailure(pushed);
-    if (failed !== null) return failed;
-  }
+  await deps.beforePublish?.();
+  // A remote that already has the tip answers "up to date", which is success like any other accepted push.
+  const pushed = await pushPorcelain(repo, scheme.remote, `${tip}:refs/heads/${branch}`);
+  if (pushed === "moved") return { kind: "blocked", reason: "integration-work-branch-diverged" };
+  const failed = pushFailure(pushed);
+  if (failed !== null) return failed;
   crash(deps, "after-publish");
   return finishWorkBranch(deps, groupId, integration, scheme, tip);
 }
@@ -165,7 +163,7 @@ async function finishWorkBranch(_deps: IntegrationDeps, _groupId: string, _integ
 }
 
 function pushFailure(pushed: Awaited<ReturnType<typeof pushPorcelain>>): Outcome | null {
-  if (pushed === "ok" || pushed === "up-to-date" || pushed === "moved") return null;
+  if (pushed === "ok" || pushed === "moved") return null;
   if ("refused" in pushed) return { kind: "blocked", reason: `integration-push-refused:${pushed.refused}` };
   return pushed.transient ? { kind: "transient", message: pushed.failed } : { kind: "blocked", reason: `integration-push-refused:${pushed.failed}` };
 }
@@ -251,10 +249,11 @@ async function computeAndPublish(deps: IntegrationDeps, repo: string, groupId: s
 /** `local`: `refs/heads/<target>` of the target repository moves to `new` (spec §6.3 when a worktree has it checked out). */
 async function integrateLocal(deps: IntegrationDeps, repo: string, groupId: string, integration: GroupIntegration, scheme: Extract<Scheme, { delivery: "local" }>, tip: string): Promise<Outcome> {
   const ref = `refs/heads/${scheme.target}`;
-  const current = await refTip(repo, ref);
-  if (current === null) return { kind: "blocked", reason: "integration-target-missing" };
   const pending = reentry(integration);
-  if (pending !== null && (current === pending.new || await isAncestor(repo, pending.new, current))) return { kind: "done", tip: pending.tip, integrated: pending.new };
+  if (pending !== null) {
+    const current = await refTip(repo, ref);
+    if (current !== null && (current === pending.new || await isAncestor(repo, pending.new, current))) return { kind: "done", tip: pending.tip, integrated: pending.new };
+  }
   return computeAndPublish(deps, repo, groupId, integration, scheme.method, tip,
     async () => { const at = await refTip(repo, ref); if (at === null) throw new BranchMissing(scheme.target); return at; },
     async (next, base) => {
@@ -284,7 +283,7 @@ async function worktreeOf(repo: string, ref: string): Promise<string | null> {
 
 /** `push-target`: `new` computed on the freshly fetched `<remote>/<target>` and pushed there, never forced. */
 async function integratePushTarget(deps: IntegrationDeps, repo: string, groupId: string, integration: GroupIntegration, scheme: Extract<Scheme, { delivery: "push-target" }>, tip: string): Promise<Outcome> {
-  if (!(await remoteConfigured(repo, scheme.remote))) return { kind: "blocked", reason: "integration-remote-missing" };
+  // A remote that is not configured fails the fetch below as a remote that does not answer: integration-remote-missing.
   const fetched = fetchedRefOf(groupId, "target");
   const pending = reentry(integration);
   if (pending !== null && await remoteHas(repo, scheme.remote, scheme.target, pending.new, fetched)) return { kind: "done", tip: pending.tip, integrated: pending.new };

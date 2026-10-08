@@ -100,7 +100,7 @@ export function classifyNetwork(stderr: string): "transient" | null {
   return /Could not resolve host|Connection refused|timed out|unable to access/i.test(stderr) ? "transient" : null;
 }
 
-export type PushOutcome = "ok" | "up-to-date" | "moved" | { refused: string } | { failed: string; transient: boolean };
+export type PushOutcome = "ok" | "moved" | { refused: string } | { failed: string; transient: boolean };
 
 /**
  * spec §6.1 step 4: `git push --porcelain` (never forced), judged from git's own per-ref line. `moved` is the remote
@@ -116,7 +116,7 @@ export async function pushPorcelain(repo: string, remote: string, refspec: strin
     return { failed: message, transient: classifyNetwork(answer.stderr) !== null };
   }
   const flag = line[0], summary = line.split("\t")[2] ?? "";
-  if (flag === "=") return "up-to-date";
+  // Accepted, or already there ("=", up to date): either way the remote branch now holds the pushed commit.
   if (flag !== "!") return "ok";
   if (/^\[rejected\] \((?:fetch first|non-fast-forward)\)/.test(summary)) return "moved";
   return { refused: oneLine(`${summary} ${answer.stderr}`) };
