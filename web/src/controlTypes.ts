@@ -74,6 +74,12 @@ export type GroupSummaryV1 = {
   completion?: { done: number; total: number };
   /** N1 spec §11.2: present on a group that carries a requirement block. */
   requirement?: RequirementSummaryV1;
+  /** Issue-fixes spec §6.2: optional so literal fixtures need no edit; the server always sends each. */
+  goal?: string;
+  branch?: string;
+  counts?: Record<WorkItemCategoryV1, number>;
+  updatedAt?: number | null;
+  archived?: boolean;
 };
 
 /** N1 spec §4.2 and §7: a round's records (src/control/requirementSchemas.ts roundBodySchema, field for field). */
@@ -206,6 +212,8 @@ export type WorkItemViewV1 = {
   // Loop plans spec §4.1: optional here so literal fixtures need no edit; the server always sends both.
   loopPlan?: LoopPlanViewV1 | null;
   objective?: { goal: string; successCondition: string };
+  /** Issue-fixes spec §6.1: the server's display category; optional so literal fixtures need no edit. */
+  category?: WorkItemCategoryV1;
 };
 export type RunSkillLockV1 = {
   name: string; source: { name: string; type: string; url: string; branch?: string } | null; resolved_commit: string | null; content_md5: string;
@@ -548,6 +556,10 @@ export type SetAgentPreferencesPayloadV1 = { preferences: OperatorPreferencesV1 
 /** Labels and progress spec §2.1: G11's system words -- a mirror of src/control/labels.ts, compared by webParity (finding F1). */
 export const WEB_SYSTEM_LABELS = ["feature", "bug", "refactor", "test", "doc", "design", "investigate", "perf", "security", "chore"] as const;
 export const CUSTOM_LABEL_PREFIX = "custom:";
+
+/** Issue-fixes spec §6.1: the server's categories in its table's order (webParity.test.ts pins the list). */
+export const WEB_WORK_ITEM_CATEGORIES = ["idle", "running", "waiting", "blocked", "done"] as const;
+export type WorkItemCategoryV1 = (typeof WEB_WORK_ITEM_CATEGORIES)[number];
 /** Spec §4.1 (§8 R10, R11, R18): the current run's step, attempt and tokens; null fields are "not reported" or "unknown". */
 export type WorkItemProgressV1 = {
   runId: string;

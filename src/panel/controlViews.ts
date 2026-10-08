@@ -21,8 +21,11 @@ import { agentSelectionSchema, amountSchema, artifactSchema, canonicalTimestampS
 import { taskContractSchema } from "../scheduler/planFile.js";
 import { exportReasonOf } from "../control/requirementExport.js";
 import { readSpendCapBlock } from "../control/spendCaps.js";
-import { readGroupActivity, readRunActivity } from "../control/activity.js";
+import { latestGroupActivityAt, readGroupActivity, readRunActivity } from "../control/activity.js";
 import { readGroupIntegration } from "../control/integrationScheme.js";
+import { archivedMarkOf } from "../control/archivedMark.js";
+import { workItemCategory, type WorkItemCategory } from "../control/workItemCategory.js";
+import { workBranchRef } from "../control/workspace.js";
 import {
   agentSelectionPreviewSchema,
   allocationViewSchema,
@@ -276,20 +279,42 @@ function stopView(store: ControlStore, groupId: string, legacyStopped: boolean):
 }
 
 /**
+ * Issue-fixes spec §6.1: one work item's category -- its stored status, whether its current run (currentRunId) is stored
+ * `blocked`, and whether every dependency's stored status is `done`. The group view and the summary counts both call it.
+ */
+function categoryOf(store: ControlStore, groupId: string, work: { status?: unknown; currentRunId?: unknown; dependsOn?: unknown }): WorkItemCategory {
+  const runRow = typeof work.currentRunId === "string" ? store.db.prepare("SELECT body FROM runs WHERE group_id=? AND id=?").get(groupId, work.currentRunId) : undefined;
+  const currentRunBlocked = runRow !== undefined && (JSON.parse(String(runRow.body)) as { state?: unknown }).state === "blocked";
+  const dependenciesDone = (Array.isArray(work.dependsOn) ? work.dependsOn : []).every((id) => {
+    const row = store.db.prepare("SELECT body FROM work_items WHERE group_id=? AND id=?").get(groupId, String(id));
+    return row !== undefined && (JSON.parse(String(row.body)) as { status?: unknown }).status === "done";
+  });
+  return workItemCategory({ status: String(work.status), currentRunBlocked, dependenciesDone });
+}
+
+/**
  * Labels and progress spec §4.1 (§8 R14): `done` is the plan tasks whose work item the view shows as `completed` (stored
  * `done`, or already `completed`); `total` is the archived plan's task count, never the work_items rows (a handoff has
- * one too). Lenient on purpose (plan finding F5): a work item this cannot read counts as not done, and the group view's
- * workViews names it exactly as before; a summary list must not go dark over one bad row.
+ * one too). Issue-fixes spec §6.2: the same loop counts each task under its §6.1 category. Lenient on purpose (plan
+ * finding F5): a work item this cannot read counts as not done and is in no category, and the group view's workViews
+ * names it exactly as before; a summary list must not go dark over one bad row.
  */
-function taskCompletion(store: ControlStore, groupId: string, plan: ReturnType<typeof readArchivedPlan>["plan"]): { done: number; total: number } {
+function taskCompletion(store: ControlStore, groupId: string, plan: ReturnType<typeof readArchivedPlan>["plan"]): {
+  completion: { done: number; total: number }; counts: Record<WorkItemCategory, number>;
+} {
   let done = 0;
+  const counts: Record<WorkItemCategory, number> = { idle: 0, running: 0, waiting: 0, blocked: 0, done: 0 };
   for (const task of plan.tasks) {
     const row = store.db.prepare("SELECT body FROM work_items WHERE group_id=? AND id=?").get(groupId, task.taskId);
-    let status: unknown = null;
-    try { status = row === undefined ? null : (JSON.parse(String(row.body)) as { status?: unknown }).status; } catch { status = null; }
-    if (status === "done" || status === "completed") done += 1;
+    type StoredWork = { status?: unknown; currentRunId?: unknown; dependsOn?: unknown };
+    let work: StoredWork | null = null;
+    try { work = row === undefined ? null : JSON.parse(String(row.body)) as StoredWork; } catch { work = null; }
+    if (work?.status === "done" || work?.status === "completed") done += 1;
+    if (work !== null) {
+      try { counts[categoryOf(store, groupId, work)] += 1; } catch { /* in no count: the view names it */ }
+    }
   }
-  return { done, total: plan.tasks.length };
+  return { completion: { done, total: plan.tasks.length }, counts };
 }
 
 /**
@@ -338,6 +363,7 @@ export function readGroupSummary(store: ControlStore, groupId: string): GroupSum
     return blocked("group-summary:repository-mismatch");
   }
   const repoId = archived !== null ? archived.plan.repoId : readRequirementGroup(store, groupId).requirement.repoId;
+  const tally = archived === null ? null : taskCompletion(store, groupId, archived.plan);
   const summary = {
     groupId,
     repoId,
@@ -348,7 +374,11 @@ export function readGroupSummary(store: ControlStore, groupId: string): GroupSum
     stopState: stop?.state ?? null,
     claimBlocked: blockers.length > 0,
     recoveryBlockerCount: blockers.length,
-    ...(archived === null ? {} : { completion: taskCompletion(store, groupId, archived.plan) }),
+    ...(tally === null ? {} : { completion: tally.completion, counts: tally.counts }),
+    goal: archived !== null ? archived.plan.goal : readRequirementGroup(store, groupId).requirement.idea,
+    branch: workBranchRef(groupId).slice("refs/heads/".length),
+    updatedAt: latestGroupActivityAt(store, groupId),
+    archived: archivedMarkOf(body) !== null,
     ...(requirementBlock ? { requirement: requirementSummaryOf(store, groupId) } : {}),
   };
   const parsed = groupSummarySchema.safeParse(summary);
@@ -625,6 +655,7 @@ function workViews(
       lineageRunIds: sortedUnique(lineage),
       labels: effective.labels, labelsProvenance: effective.provenance, labelsVersion: labelState.version,
       progress: currentProgress(runs, body.currentRunId ?? null),
+      category: categoryOf(store, groupId, body),
       ...taskPlanView(task, body, imported.tasks.find(entry => entry.taskId === task.taskId)?.originalContractHash, snapshot?.skills?.find(entry => entry.taskId === task.taskId)?.names),
     };
   });

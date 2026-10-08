@@ -14,7 +14,8 @@ import type {
 import { WEB_CORRECTION_KINDS, WEB_LIST_FIELDS, WEB_REPORT_FIELDS } from "../../web/src/types.js";
 import { CORRECTION_KINDS } from "../../src/corrections/schema.js";
 import { CUSTOM_LABEL_PREFIX, SYSTEM_LABELS } from "../../src/control/labels.js";
-import { CUSTOM_LABEL_PREFIX as WEB_CUSTOM_LABEL_PREFIX, WEB_SYSTEM_LABELS } from "../../web/src/controlTypes.js";
+import { CUSTOM_LABEL_PREFIX as WEB_CUSTOM_LABEL_PREFIX, WEB_SYSTEM_LABELS, WEB_WORK_ITEM_CATEGORIES } from "../../web/src/controlTypes.js";
+import { WORK_ITEM_CATEGORIES } from "../../src/control/workItemCategory.js";
 import type {
   AgentPreferencesViewV1 as ServerAgentPreferencesViewV1,
   AgentSelectionPreviewV1 as ServerAgentSelectionPreviewV1,
@@ -123,6 +124,11 @@ describe("web/src/types.ts stays in lockstep with the server shapes (task 8 ruli
   it("WEB_SYSTEM_LABELS is the same list as SYSTEM_LABELS, and the custom prefix is the same", () => {
     expect([...WEB_SYSTEM_LABELS]).toEqual([...SYSTEM_LABELS]);
     expect(WEB_CUSTOM_LABEL_PREFIX).toBe(CUSTOM_LABEL_PREFIX);
+  });
+
+  // Issue-fixes spec §6.1: the web's category list is the server's table, in order (the graph legend draws it).
+  it("WEB_WORK_ITEM_CATEGORIES is the same list as WORK_ITEM_CATEGORIES", () => {
+    expect([...WEB_WORK_ITEM_CATEGORIES]).toEqual([...WORK_ITEM_CATEGORIES]);
   });
 });
 

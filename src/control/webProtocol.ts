@@ -4,6 +4,7 @@ import { nonEmptyStoredLabelsSchema, storedLabelsSchema } from "./labels.js";
 import { DRAFT_STATES, IDEA_MAX_BYTES, REQUIREMENT_WAITING, ROUND_STATES, draftBodySchema, questionIdSchema, requirementExportSchema, roundBodySchema } from "./requirementSchemas.js";
 import { LOOP_PLAN_IDS, loopInputsSchema, loopRecipeSchema, loopSkillsSchema } from "./loopPlans.js";
 import { isTimeZone } from "./usageCalendar.js";
+import { WORK_ITEM_CATEGORIES } from "./workItemCategory.js";
 // Agent selection spec §12 I10 (plan-review P18): the selection/context/partial schemas are T7's, defined once
 // in schema.ts; webProtocol.ts re-exports them so every downstream import can come from one wire module.
 export { agentSelectionSchema, contextWindowSchema, panelPartialSelectionSchema, partialSelectionSchema } from "./schema.js";
@@ -1036,6 +1037,15 @@ export const groupSummarySchema = z
     completion: z.object({ done: safeInteger, total: safeInteger }).strict().optional(),
     // N1 spec §11.2: present on every group that carries a requirement block (a clarifying group, or the one it became).
     requirement: requirementSummarySchema.optional(),
+    // Issue-fixes spec §6.2: optional on the wire so older fixtures parse; the server always gives every one. `goal` is the
+    // plan's goal, or a clarifying group's idea; `branch` is orca/<groupId>; `counts` are §6.1's categories over the plan's
+    // tasks (a work item that cannot be read is in no count); `updatedAt` is the `at` of the group's newest activity row,
+    // null before the first; `archived` says whether the body carries an archive mark (§6.3).
+    goal: nonemptyString.optional(),
+    branch: nonemptyString.optional(),
+    counts: z.object({ idle: safeInteger, running: safeInteger, waiting: safeInteger, blocked: safeInteger, done: safeInteger }).strict().optional(),
+    updatedAt: safeInteger.nullable().optional(),
+    archived: z.boolean().optional(),
   })
   .strict();
 
@@ -1151,6 +1161,9 @@ export const workItemViewSchema = z
     loopPlan: loopPlanViewSchema.nullable().optional(),
     // Loop plans spec §4.1 (Drafter finding F4): the effective contract's goal and success condition.
     objective: z.object({ goal: nonemptyString, successCondition: nonemptyString }).strict().optional(),
+    // Issue-fixes spec §6.1: the item's display category, computed once on the server. Optional on the wire like labels;
+    // the server always gives it.
+    category: z.enum(WORK_ITEM_CATEGORIES).optional(),
   })
   .strict();
 
