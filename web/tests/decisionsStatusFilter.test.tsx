@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { App } from "../src/App.js";
 import { rowsForStatus } from "../src/DecisionsView.js";
 import i18n from "../src/i18n.js";
+import { enErrors } from "../src/locales/en.js";
 import type { DecisionListRow, MetricsReport, PanelCoverage } from "../src/types.js";
 
 type StatusRow = DecisionListRow & { reviewed: boolean; highTier: boolean };
@@ -168,7 +169,8 @@ describe("the Decisions status filter in the page", () => {
     await waitFor(() => expect(posted).toHaveLength(1));
     expect(posted[0]).toMatchObject({ projectKey: "proj", decisionId: "run/2" });
     // The owner's own request is shown inline under the open decision (spec §11 R3), through Refusal.
-    expect((await screen.findByTestId("refusal-message")).textContent).toBe(ALREADY.message);
+    // Rewritten for spec 2026-10-08 §2.2(a) (human-approved): English shows the code's own entry, as Chinese always did.
+    expect((await screen.findByTestId("refusal-message")).textContent).toBe(enErrors["correction-already-recorded"]);
     expect(document.body.textContent).toContain("correction-already-recorded");
     expect(screen.getByRole("button", { name: /record another/i })).not.toBeNull();
   });

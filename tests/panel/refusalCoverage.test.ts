@@ -1,12 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { controlErrorCatalog } from "../../src/panel/controlErrors.js";
+import { enErrors } from "../../web/src/locales/en.js";
 import { zhErrors } from "../../web/src/locales/zh.js";
 
 /**
- * Panel i18n spec §3.2, §6.4: every refusal code with a machine-readable source has a Chinese entry -- every code of the
- * control error catalog and every code the web itself makes (http-<n> is the one entry http-status); the inline server
- * codes without a catalog are listed here by hand (plan Task 10). A code with no entry falls back to the message as sent
- * (web/tests/refusalText.test.tsx), so a missing entry is visible, but it is a gap this criterion names.
+ * Panel i18n spec §3.2, §6.4; spec 2026-10-08 §2.2(a): every refusal code with a machine-readable source has an entry in
+ * BOTH languages -- every code of the control error catalog, every code the web itself makes (http-<n> is the one entry
+ * http-status), the inline server codes without a catalog (listed here by hand, plan Task 10), and the reasons a group
+ * view shows on a blocked run. A code with no entry falls back to the message as sent (web/tests/refusalText.test.tsx), so
+ * a missing entry is visible, but it is a gap this criterion names. Internal codes that never reach the browser (they are
+ * sent as control-internal-error) have no entry.
+ * Rewritten for spec 2026-10-08 §2.3 (human-approved): English added, view-shown reasons added, `detail` allowed.
  */
 const WEB_MADE = ["http-status", "http-unreachable", "panel-unreachable", "command-result-invalid"];
 const BY_HAND = [
@@ -31,19 +35,50 @@ const BY_HAND = [
   // src/control/spendCaps.ts gateClaim (accounts spec §6.3.1): projected on a group view, never a command outcome
   "spend-cap-reached",
 ];
-const has = (code: string): boolean => Object.prototype.hasOwnProperty.call(zhErrors, code);
+/**
+ * Spec 2026-10-08 §2.2(a): a blocked run's reason (drive.blockedReason), matched by its prefix up to the first ':'
+ * (web/src/refusalExplain.ts explainRunReason). The literal reasons of src/control/executionDriver.ts's blockRun calls and
+ * of the single-call purposes' prepare/usageUnknownReason, at b04e2cb; a reason that is free text (describeError) has no
+ * entry and is shown as sent. Part D adds ccloop's stop reasons here.
+ */
+const VIEW_REASONS = [
+  // src/control/executionDriver.ts blockRun(...)
+  "agent-unfrozen", "repository-path", "continuation-registration", "skills-unsupported-agent", "skills-inject-failed",
+  "config-hash-mismatch", "stop-proof-generation", "inspect-unknown", "accept-refused", "candidate-without-terminal", "terminal",
+  "out-of-bounds", "single-call-record-invalid", "single-call-prompt-mismatch", "settle-incomplete",
+  // src/control/requirementCalls.ts, src/control/singleCallPurposes.ts (prepare's `blocked`, `usageUnknownReason`)
+  "requirement-call-target-moved", "estimate-request-missing", "requirement-usage-unknown", "estimate-usage-unknown",
+];
+const TABLES = { zh: zhErrors, en: enErrors } as const;
+const has = (table: Record<string, string>, code: string): boolean => Object.prototype.hasOwnProperty.call(table, code);
+const required = (): string[] => [...controlErrorCatalog().map((entry) => entry.code), ...WEB_MADE, ...BY_HAND, ...VIEW_REASONS];
 
-describe("Chinese refusal coverage (spec §6.4)", () => {
-  it("has a Chinese entry for every catalog code, every web-made code and every hand-listed code", () => {
-    const catalog = controlErrorCatalog().map((entry) => entry.code);
-    expect(catalog.length).toBeGreaterThanOrEqual(124);
-    expect([...catalog, ...WEB_MADE, ...BY_HAND].filter((code) => !has(code))).toEqual([]);
+describe("refusal coverage in both languages (panel i18n spec §6.4; spec 2026-10-08 §2.2(a))", () => {
+  it.each(Object.keys(TABLES) as Array<keyof typeof TABLES>)("has a %s entry for every catalog code, web-made code, hand-listed code and view-shown reason", (lang) => {
+    // 149 catalog codes at b04e2cb (./node_modules/.bin/tsx -e 'import("./src/panel/controlErrors.ts").then(m=>console.log(m.controlErrorCatalog().length))').
+    expect(controlErrorCatalog().length).toBeGreaterThanOrEqual(149);
+    expect(required().filter((code) => !has(TABLES[lang], code))).toEqual([]);
   });
 
-  it("interpolates nothing but the refusal's message and status, and has no empty entry", () => {
-    for (const [code, text] of Object.entries(zhErrors)) {
-      expect(text.trim(), code).not.toBe("");
-      expect([...text.matchAll(/\{\{(\w+)\}\}/g)].map((match) => match[1]).filter((name) => name !== "message" && name !== "status"), code).toEqual([]);
+  it("keeps the two tables over the same codes", () => {
+    expect(Object.keys(enErrors).sort()).toEqual(Object.keys(zhErrors).sort());
+  });
+
+  it("interpolates nothing but the refusal's message, status and detail, and has no empty entry", () => {
+    for (const [lang, table] of Object.entries(TABLES)) {
+      for (const [code, text] of Object.entries(table)) {
+        expect(text.trim(), `${lang} ${code}`).not.toBe("");
+        expect([...text.matchAll(/\{\{(\w+)\}\}/g)].map((match) => match[1]).filter((name) => !["message", "status", "detail"].includes(name!)), `${lang} ${code}`).toEqual([]);
+      }
+    }
+  });
+
+  // The code is on screen beside the explanation (spec §2.2(a)); the English text never repeats it, so it interpolates
+  // the detail (the message after `<code>:`), not the whole message. http-status's message carries no code.
+  it("never repeats the code in English", () => {
+    for (const [code, text] of Object.entries(enErrors)) {
+      expect(text.includes(code), code).toBe(false);
+      if (code !== "http-status") expect(text.includes("{{message}}"), code).toBe(false);
     }
   });
 });

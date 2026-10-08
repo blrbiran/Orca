@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 /**
- * Panel i18n spec §3.2, §3.3, §6.4: an English refusal shows the server's message byte for byte (the refusal, the error
- * page, the control line); Chinese shows the entry for its code, with the server's detail where the entry carries it, and
- * the message as sent for a code with no entry (Review Focus 4) -- the code stays on screen either way. The web's own
- * messages are built in the reader's language.
+ * Panel i18n spec §3.2, §3.3, §6.4; spec 2026-10-08 §2.2(a): a refusal shows the current language's entry for its code
+ * (English and Chinese alike), with the server's detail where the entry carries it, and the message as sent, byte for
+ * byte, for a code with no entry (Review Focus 4) -- the code stays on screen either way. The web's own messages are
+ * built in the reader's language.
  */
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -12,6 +12,7 @@ import { ControlRequestError, downloadEvidenceArtifact, fetchControlConfig, refu
 import { ControlPanel } from "../src/ControlPanel.js";
 import { ErrorPage } from "../src/ErrorPage.js";
 import i18n, { refusalText } from "../src/i18n.js";
+import { enErrors } from "../src/locales/en.js";
 import { Refusal } from "../src/Refusal.js";
 import type { CommandEnvelopeV1, ControlConfigV1, ControlSummaryV1, EvidenceManifestV1, RecoveryViewV1 } from "../src/controlTypes.js";
 import type { ControlRefusal } from "../src/controlState.js";
@@ -49,15 +50,33 @@ const refusedWith = async (read: () => Promise<unknown>): Promise<unknown> => {
 };
 
 describe("refusals in the reader's language (spec §3.2, §6.4)", () => {
-  it("renders an English refusal's message byte for byte in the refusal, the error page and the control line", () => {
+  // Rewritten for spec 2026-10-08 §2.2(a) (human-approved): English shows its own entry for a known code -- it used to show
+  // the server's message, e.g. `control-plan-rejected:task-control-metadata:a`. The message as sent, byte for byte, is
+  // still the fallback for a code with no entry, in every place a refusal is shown.
+  it("renders an English refusal's entry for a known code, and the message byte for byte for a code with none, in the refusal, the error page and the control line", () => {
     render(<Refusal refusal={{ status: 409, code: "revision-conflict", message: SENT }} />);
+    expect(screen.getByTestId("refusal-message").textContent).toBe(enErrors["revision-conflict"]);
+    cleanup();
+    render(<Refusal refusal={{ status: 409, code: "a-code-nobody-listed", message: SENT }} />);
+    // Review Focus 5 (controller amendment): an English viewer of a code with no entry sees the server's message beside the raw code.
+    expect(screen.getByTestId("refusal-code").textContent).toBe("a-code-nobody-listed");
     expect(screen.getByTestId("refusal-message").textContent).toBe(SENT);
     cleanup();
-    render(<ErrorPage failure={{ status: 409, code: "unresolved-project-keys", message: SENT }} />);
+    render(<ErrorPage failure={{ status: 409, code: "a-code-nobody-listed", message: SENT }} />);
     expect(screen.getByTestId("error-message").textContent).toBe(SENT);
     expect(screen.getByTestId("error-status").textContent).toBe("answered 409");
     cleanup();
-    expect(controlLine({ status: 409, code: "revision-conflict", message: SENT, commandRevision: 7 })).toBe(`revision-conflict · HTTP 409 · server revision 7 · ${SENT}`);
+    expect(controlLine({ status: 409, code: "revision-conflict", message: SENT, commandRevision: 7 })).toBe(`revision-conflict · HTTP 409 · server revision 7 · ${enErrors["revision-conflict"]}`);
+    cleanup();
+    expect(controlLine({ status: 409, code: "a-code-nobody-listed", message: SENT, commandRevision: 7 })).toBe(`a-code-nobody-listed · HTTP 409 · server revision 7 · ${SENT}`);
+  });
+
+  it("fills {{detail}} with the message after `<code>:`, the whole message when it has no such prefix, and nothing when it is the code", () => {
+    expect(refusalText({ code: "labels-invalid", message: "labels-invalid:count:17", status: 422 })).toBe("The labels are not valid: count:17");
+    expect(refusalText({ code: "labels-invalid", message: "17 labels are too many", status: 422 })).toBe("The labels are not valid: 17 labels are too many");
+    expect(refusalText({ code: "labels-invalid", message: "labels-invalid", status: 422 })).toBe("The labels are not valid: ");
+    expect(refusalText({ code: "http-502", message: "POST /x: the panel may not have committed this command", status: 502 }))
+      .toBe("The panel answered HTTP 502 without an error code: POST /x: the panel may not have committed this command");
   });
 
   it("shows the Chinese entry for a known code, with the server's detail where the entry carries it, and keeps the code", async () => {

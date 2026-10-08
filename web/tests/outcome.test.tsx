@@ -4,6 +4,7 @@ import { correctionBody, failureFrom, fetchMetrics, recordCorrection } from "../
 import type { CorrectionForm, PanelRefusal } from "../src/api.js";
 import { ErrorPage } from "../src/ErrorPage.js";
 import { Refusal } from "../src/Refusal.js";
+import { enErrors } from "../src/locales/en.js";
 
 /**
  * Final review I-3 / ruling R66: the page tells the person what happened.
@@ -49,10 +50,13 @@ const alreadyRecorded: PanelRefusal = {
 };
 
 describe("Refusal", () => {
-  it("renders the server's code and message", () => {
+  // Rewritten for spec 2026-10-08 §2.2(a) (human-approved): English shows the code's entry, not the server's message;
+  // the static markup escapes the entry's quotes, so the entry is compared in its escaped form.
+  it("renders the server's code and the English entry for it", () => {
     const html = renderToStaticMarkup(<Refusal refusal={alreadyRecorded} />);
     expect(html).toContain(alreadyRecorded.code);
-    expect(html).toContain(alreadyRecorded.message);
+    expect(html).toContain(enErrors["correction-already-recorded"]!.split('"').join("&quot;"));
+    expect(html).not.toContain(alreadyRecorded.message);
   });
 
   it("offers 'record another' only when the server names `again` as the retry field", () => {

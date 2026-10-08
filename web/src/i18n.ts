@@ -6,7 +6,7 @@
 import { createInstance } from "i18next";
 import LanguageDetector from "i18next-browser-languagedetector";
 import { initReactI18next } from "react-i18next";
-import { en } from "./locales/en.js";
+import { en, enErrors } from "./locales/en.js";
 import { zh, zhErrors } from "./locales/zh.js";
 
 declare module "i18next" {
@@ -91,16 +91,37 @@ export function enumText<F extends keyof typeof en.enums>(family: F, value: stri
   return i18n.exists(key) ? (i18n.t(key as never) as string) : value;
 }
 
+/** The current language's refusal table (spec 2026-10-08 §2.2(a)). */
+function errorTable(): Record<string, string> {
+  return currentLanguage() === "zh" ? zhErrors : enErrors;
+}
+
+/** The current language's entry for a code; hasOwnProperty, so a code such as "toString" never finds an Object.prototype member. */
+export function errorEntry(code: string): string | undefined {
+  const table = errorTable();
+  return Object.prototype.hasOwnProperty.call(table, code) ? table[code] : undefined;
+}
+
+/** An entry with its {{message}}, {{status}} and {{detail}} filled. */
+export function fillEntry(entry: string, values: { message: string; status: string; detail: string }): string {
+  return entry.replace(/\{\{(message|status|detail)\}\}/g, (_match: string, name: "message" | "status" | "detail") => values[name]);
+}
+
+/** Spec 2026-10-08 §2.2(a): the server's words after `<code>:` -- nothing when the message is the code, all of it when it has no such prefix. */
+export function refusalDetail(refusal: { code: string; message: string }): string {
+  if (refusal.message === refusal.code) return "";
+  const prefix = `${refusal.code}:`;
+  return refusal.message.startsWith(prefix) ? refusal.message.slice(prefix.length) : refusal.message;
+}
+
 /**
- * Spec §3.2: what a refusal says. English shows the message as sent, byte for byte. Chinese shows the Chinese-only entry
- * for its code (http-<n> is the one entry http-status), with {{message}} and {{status}} filled from the refusal, else the
- * message as sent -- the code is on screen beside it, so the fallback is visible. hasOwnProperty, so a code such as
- * "toString" never finds an Object.prototype member.
+ * Spec §3.2; spec 2026-10-08 §2.2(a): what a refusal says -- the current language's entry for its code (http-<n> is the
+ * one entry http-status), with {{message}}, {{status}} and {{detail}} filled from the refusal, else the message as sent.
+ * The code is on screen beside it, so the fallback is visible.
  */
 export function refusalText(refusal: { code: string; message: string; status: number | null }): string {
-  if (currentLanguage() !== "zh") return refusal.message;
   const key = /^http-\d+$/.test(refusal.code) ? "http-status" : refusal.code;
-  const entry = Object.prototype.hasOwnProperty.call(zhErrors, key) ? zhErrors[key] : undefined;
+  const entry = errorEntry(key);
   if (entry === undefined) return refusal.message;
-  return entry.replace(/\{\{(message|status)\}\}/g, (_match: string, name: string) => (name === "message" ? refusal.message : String(refusal.status ?? "")));
+  return fillEntry(entry, { message: refusal.message, status: String(refusal.status ?? ""), detail: refusalDetail(refusal) });
 }

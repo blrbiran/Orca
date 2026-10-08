@@ -13,6 +13,7 @@ import { getJson, noteAnswer, recordReview } from "../src/api.js";
 import { AuthGate } from "../src/AuthGate.js";
 import { shouldRefresh } from "../src/auth.js";
 import { fetchControlSummary, sendControlCommand } from "../src/controlApi.js";
+import { enErrors } from "../src/locales/en.js";
 import type { Me } from "../src/auth.js";
 
 const jsonResponse = (body: unknown, status = 200): Response => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -73,7 +74,9 @@ describe("AuthGate (spec §7)", () => {
     routes["POST /api/auth/login"] = () => jsonResponse({ code: "login-failed", message: "the name or the password is wrong" }, 401);
     render(<AuthGate><p>app body</p></AuthGate>);
     await logInAs("amy", "wrong password");
-    await screen.findByText("the name or the password is wrong");
+    // Rewritten for spec 2026-10-08 §2.2(a) (human-approved): English shows the code's entry beside the code, not the server's message.
+    await screen.findByText(enErrors["login-failed"]!);
+    expect(screen.getByTestId("refusal-code").textContent).toBe("login-failed");
     expect(screen.queryByText("app body")).toBeNull();
     expect(screen.getByRole("form", { name: /log in/i })).toBeTruthy();
   });

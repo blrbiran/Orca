@@ -737,7 +737,7 @@ export const zhErrors: Record<string, string> = {
   "checkpoint-run-settled": "这个运行已结算，不能再写检查点。",
   "checkpoint-usage-high-water": "检查点用量低于已记录的高水位。",
   "cleanup-not-recoverable": "清理无法恢复。",
-  "command-result-not-found": "台账里没有这条命令的结果。",
+  "command-result-not-found": "台账里没有这条命令的结果：{{detail}}",
   "continuation-budget-unavailable": "续跑所需的预算不够。",
   "continuation-identity-conflict": "续跑身份冲突。",
   "continuation-predecessor-unrecoverable": "前一个运行无法恢复，不能续跑。",
@@ -955,4 +955,24 @@ export const zhErrors: Record<string, string> = {
   "spend-cap-reached": "已到花费上限，这个组的下一次认领在等待；提高上限或等到下一个周期后会自动继续。",
   // Accounts final review: a project spend cap is accepted only for a repository this panel holds.
   "spend-cap-repository-unknown": "这个面板没有这个仓库，不能给它设花费上限。",
+  // Spec 2026-10-08 §2.2(a): the reasons a group view shows on a blocked run, by prefix up to the first ':'
+  // (web/src/refusalExplain.ts explainRunReason; tests/panel/refusalCoverage.test.ts VIEW_REASONS).
+  "agent-unfrozen": "运行的 agent 与确认时冻结的不一致，所以没有启动。",
+  "continuation-registration": "这个运行要续接的续跑没有登记，所以没有启动。",
+  "skills-inject-failed": "给运行注入技能失败（{{detail}}）；修好 syncskill 后重试运行。",
+  "config-hash-mismatch": "ccloop 接受这个运行时用的配置与冻结的不一致，所以停在这里。",
+  "stop-proof-generation": "ccloop 的停止证明属于这个运行的另一代。",
+  "inspect-unknown": "多次检查后 ccloop 仍说不清这个运行是否还活着；ccloop 能回答后再重试运行。",
+  "accept-refused": "ccloop 拒绝接受这个运行：{{detail}}",
+  "candidate-without-terminal": "ccloop 停止了这个运行，但没有最终报告，所以无法结算。",
+  "terminal": "ccloop 结束了这个运行，但没有成功（结果 {{detail}}）。",
+  "out-of-bounds": "运行改了允许范围之外的文件：{{detail}}",
+  "single-call-record-invalid": "单次调用的记录读不懂。",
+  "single-call-prompt-mismatch": "单次调用回答的不是发出去的那个提示。",
+  "settle-incomplete": "运行没有结算完；请重试运行。",
+  "requirement-call-target-moved": "这次调用开始前需求已经往前走了，所以没有发出。",
+  "estimate-request-missing": "这份估算没有冻结的请求，所以无法运行。",
+  "requirement-usage-unknown": "这次需求调用的用量未知，所以它的预算无法结算。",
+  "estimate-usage-unknown": "这次估算调用的用量未知，所以它的预算无法结算。",
+  "repository-path": "解析不到这个组的仓库路径；确认仓库仍已登记并且存在，然后重试运行。",
 };
