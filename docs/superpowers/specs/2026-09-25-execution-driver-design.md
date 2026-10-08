@@ -236,3 +236,26 @@ Minor 全部就地修进对应段落（M1 行 id、M4 残留清单、M5 `stopped
 
 **(d) 本片收口时仍登记（不修）**：因超额 breach 而 `blocked` 的组在产品内只能 stop／recover 脱困（`setLimit` 拒收 blocked 组），组内停在 A1 的 run 在面板上只显示 `starting`、不显示原因；
 `reconcile-orphan-unknown` 后人发 retry，会在孤儿进程可能仍活着时重起一次解冲突（两次解冲突、删掉活的 loop state）；`spawnSeq` 记账键没有判据钉住（假 ccloop 总会发布 attempt）。
+
+## ERRATUM (issue fixes, 2026-10-08, Orca session e34dc963)
+
+Appended 2026-10-08 by the implementer of Task D10 of the issue-fixes plan, under Orca development session `e34dc963`.
+The text above this section is unchanged.
+
+§2.3's last line ("no new human commands; abandoning a run goes through the existing stop/recover path", written in
+Chinese above) is amended by human ruling H2 of `docs/superpowers/specs/2026-10-08-issue-fixes-design.md` (§4). A run
+blocked at C whose ccloop run ended with an outcome other than `succeeded` is no longer sent back to C by
+`recovery-retry`, which now refuses it with `run-terminal-failed` (409); a transiently blocked run is resumed as before.
+The new group command `retry-task` (payload `{ taskId }`) settles such a run in the new run state `settled-failed`
+(inactive; its booked usage kept, its remainder released and the task's grant re-reserved), returns its task to `ready`
+with `currentRunId` still on that run, and normal dispatch starts a new run from the group branch's current head.
+`retry-task` refuses with `task-not-retryable` (409) when the task's current run is not such a run (not live, not blocked
+at C, no failed outcome, an open handoff request, or usage unknown or still pending), and with
+`group-reserve-insufficient` when the group's unallocated reserve cannot cover the grant net of the released remainder.
+The failed run is left with `cleanedUp` false, so the driver archives a `settled-failed` run's evidence and removes its
+workspace as it does a settled run's (§3.5), recording a failure in `cleanupError`. The drive record also keeps
+ccloop's own `stopReason` (first 500 UTF-16 units). Subjects of the commits that landed this: `feat(control): add
+retry-task, settling a terminally failed run and returning its task to ready`; `feat(control): refuse retry-task unless
+the task's current run ended in a ccloop failure the reserve can retry`; `fix(control): refuse recovery-retry on a run
+ccloop ended failed with run-terminal-failed`; `feat(control): keep ccloop's stop reason on the run and add the
+settled-failed run state to every reader`.
