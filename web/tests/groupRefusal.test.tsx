@@ -127,6 +127,23 @@ describe("an import's refusal stays in the import form (spec §2.2(d))", () => {
     expect(panel.requests.filter((request) => /^GET \/api\/control\/groups\/group-[^/]+$/.test(request))).toEqual([`GET /api/control/groups/${imported}`]);
   });
 
+  it("remembers an import whose answer was lost as an import, so its lookup's answer replaces the notice in the import form", async () => {
+    // Fix round 1: the 5xx leaves the import's outcome unknown; the next poll's lookup says it never reached the ledger.
+    let sent = "";
+    panel.onPost = async (url, body) => {
+      if (url !== "/api/control/groups/import-plan") return success();
+      sent = (body as { payload: { groupId: string } }).payload.groupId;
+      return json({ error: { code: "panel-unavailable", message: "down" } }, 503);
+    };
+    lookup = async (url) => refused(404, "command-result-not-found", `no command ${url}`);
+    render(<App />);
+    const form = await screen.findByRole("region", { name: "Import plan" });
+    fireEvent.click(await within(form).findByRole("button", { name: "Import plan" }));
+    await within(form).findByTestId("import-refusal");
+    await waitFor(() => expect(within(screen.getByTestId("import-refusal")).getByText("command-result-not-found").tagName).toBe("CODE"), { timeout: 6000 });
+    expect(panel.requests).not.toContain(`GET /api/control/groups/${sent}`);
+  }, 10_000);
+
   it("shows an unknown import the lookup cannot find in the import form, and reads no group for it", async () => {
     // Fix round 1: an import whose answer was lost is remembered as an import; command-result-not-found means it never
     // reached the ledger, so its group does not exist and the import form is where the person acted.
