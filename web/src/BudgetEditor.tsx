@@ -8,7 +8,7 @@
  * from the model or a complex-1m default says so next to the box, because the
  * person is about to type over it.
  */
-import { useContext } from "react";
+import { useContext, useEffect } from "react";
 import type { JSX } from "react";
 import { AccountContext, mayHumanOnly } from "./AuthGate.js";
 import { GroupIntegrationConfirm } from "./IntegrationScheme.js";
@@ -67,10 +67,13 @@ function valueFor(drafts: Record<string, string>, key: string, serverValue: numb
   return draft === undefined ? String(serverValue) : draft;
 }
 
-/** The number a token field shows: the draft (kept as digits by TokenInput) or the server's value. */
+/** Draft text a token field holds while what is typed is not an amount; it holds Save, Set limit and Confirm. */
 const BAD_DRAFT = "invalid";
+/** A blank handoff field (kept as a one-space draft, since an empty draft means "no draft"): the context policy stays unset. */
+const BLANK_DRAFT = " ";
 const hasBadDraft = (drafts: Record<string, string>): boolean => Object.values(drafts).includes(BAD_DRAFT);
 
+/** The number a token field shows: the draft (kept as digits by TokenInput) or the server's value. */
 function tokenValueFor(drafts: Record<string, string>, key: string, serverValue: number): number | null {
   return parseTokens(valueFor(drafts, key, serverValue));
 }
@@ -238,6 +241,12 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
   const mayLimit = mayHumanOnly(useContext(AccountContext));
   const groupId = view.summary.groupId;
   const editable = view.proposal.state === "editable";
+  // Drafts outlive the detail, the field's text does not: a refusal flag kept from text that is gone would hold Save and
+  // Confirm with no error to show, so a fresh editor starts without them.
+  useEffect(() => {
+    for (const [key, text] of Object.entries(drafts)) if (text === BAD_DRAFT) onDraft(key, "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const estimator = view.estimates.at(-1) ?? null;
   const advice = adviceOf(view);
   const allSuggested = suggestionActions(view, { kind: "all" });
@@ -465,6 +474,8 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
           value={tokenValueFor(drafts, CONTEXT_POLICY_KEY(groupId), view.proposal.contextPolicy.handoffAtContextTokens ?? 0)}
           onChange={(n) => onDraft(CONTEXT_POLICY_KEY(groupId), String(n))}
           onInvalid={() => onDraft(CONTEXT_POLICY_KEY(groupId), BAD_DRAFT)}
+          allowEmpty
+          onClear={() => onDraft(CONTEXT_POLICY_KEY(groupId), BLANK_DRAFT)}
         />
       </label>
       <p>

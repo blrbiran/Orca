@@ -37,23 +37,32 @@ export interface TokenInputProps {
   onChange: (n: number) => void;
   /** Called when the text typed is not an acceptable amount, so the caller can refuse to send the amount it still holds. */
   onInvalid?: () => void;
+  /** Called when the text was replaced from outside (the value changed), so a flag kept from the old text is stale. */
+  onReset?: () => void;
+  /** Blank text is a valid answer meaning "unset": no error, and `onClear` is called instead of `onChange`. */
+  allowEmpty?: boolean;
+  onClear?: () => void;
   min?: number;
   readOnly?: boolean;
   "aria-label"?: string;
 }
 
-export function TokenInput({ value, onChange, onInvalid, min = 0, readOnly, "aria-label": ariaLabel }: TokenInputProps): JSX.Element {
+export function TokenInput({ value, onChange, onInvalid, onReset, allowEmpty, onClear, min = 0, readOnly, "aria-label": ariaLabel }: TokenInputProps): JSX.Element {
   const { t } = useTranslation();
   const lang = currentLanguage();
   const [text, setText] = useState(value === null ? "" : formatTokens(value, lang));
   // A value changed from outside (a suggestion applied, a draft restored) replaces the text; typing that parses to the
   // value already held does not, so a half-typed "12," is left alone.
   useEffect(() => {
-    if (value !== null && parseTokens(text) !== value) setText(formatTokens(value, lang));
+    if (value !== null && parseTokens(text) !== value) {
+      setText(formatTokens(value, lang));
+      onReset?.();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, lang]);
   const parsed = parseTokens(text);
-  const invalid = text.trim() !== "" && (parsed === null || parsed < min) || (text.trim() === "" && value !== null);
+  const blank = text.trim() === "";
+  const invalid = blank ? !allowEmpty && value !== null : parsed === null || parsed < min;
   return (
     <>
       <input
@@ -62,7 +71,8 @@ export function TokenInput({ value, onChange, onInvalid, min = 0, readOnly, "ari
           const raw = event.currentTarget.value;
           setText(raw);
           const n = parseTokens(raw);
-          if (n !== null && n >= min) onChange(n);
+          if (allowEmpty && raw.trim() === "") onClear?.();
+          else if (n !== null && n >= min) onChange(n);
           else onInvalid?.();
         }}
         onBlur={() => { if (parsed !== null && parsed >= min) setText(formatTokens(parsed, lang)); }}

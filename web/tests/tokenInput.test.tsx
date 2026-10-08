@@ -10,7 +10,7 @@ import type { JSX } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AccountContext } from "../src/AuthGate.js";
 import type { Me } from "../src/auth.js";
-import { BudgetEditor } from "../src/BudgetEditor.js";
+import { BudgetEditor, CONTEXT_POLICY_KEY, groupLimitKey } from "../src/BudgetEditor.js";
 import { RequirementsPanel } from "../src/RequirementsPanel.js";
 import { TokenInput, formatTokens, parseTokens, shortTokens } from "../src/TokenInput.js";
 import i18n from "../src/i18n.js";
@@ -154,6 +154,40 @@ describe("RequirementsPanel limits", () => {
   });
 });
 
+describe("a refusal flag never outlives the text it was about (review I1)", () => {
+  it("new requirement: the repository switch replaces the limit text and frees the button", () => {
+    const two = { ...config, repositories: [{ repoId: "repo", displayName: "Repo R" }, { repoId: "other", displayName: "Repo O" }] };
+    render(<AccountContext.Provider value={owner}><RequirementsPanel config={two} summary={summaryWith(requirementView("answered"))} views={{}} selected={null} agents={null} language="en" onSelect={() => {}} onCommand={vi.fn()} /></AccountContext.Provider>);
+    const form = screen.getByRole("form", { name: "New requirement" });
+    const limit = (): HTMLInputElement => within(form).getByRole("textbox", { name: "Token limit" }) as HTMLInputElement;
+    const start = (): HTMLButtonElement => within(form).getByRole("button", { name: "Start clarifying" }) as HTMLButtonElement;
+    fireEvent.change(within(form).getByRole("textbox", { name: "Idea" }), { target: { value: "Print a page." } });
+    fireEvent.change(limit(), { target: { value: "5,000,000" } });
+    fireEvent.change(within(form).getByRole("combobox", { name: "Repository" }), { target: { value: "other" } });
+    fireEvent.change(limit(), { target: { value: "12x" } });
+    expect(start().disabled).toBe(true);
+    fireEvent.change(within(form).getByRole("combobox", { name: "Repository" }), { target: { value: "repo" } });
+    expect(limit().value).toBe("5,000,000");
+    expect(within(form).queryByRole("alert")).toBeNull();
+    expect(start().disabled).toBe(false);
+  });
+  it("raise limit: selecting another requirement replaces the text and frees the button", () => {
+    const base = requirementView("answered");
+    const waiting = { ...base.summary.requirement!, waiting: "requirement-budget-exhausted" as const };
+    const one = { ...base, summary: { ...base.summary, requirement: waiting } };
+    const two = { ...one, summary: { ...one.summary, groupId: "g2" }, ledger: { ...one.ledger, limit: { ...one.ledger.limit, tokens: 20_000_000 } } };
+    const panel = (selected: string): JSX.Element => <AccountContext.Provider value={owner}><RequirementsPanel config={config} summary={summaryWith(one)} views={{ r: one, r2: two }} selected={selected} agents={null} language="en" onSelect={() => {}} onCommand={vi.fn()} /></AccountContext.Provider>;
+    const { rerender } = render(panel("r"));
+    const raise = (): HTMLElement => screen.getByRole("form", { name: "Raise the limit" });
+    fireEvent.change(within(raise()).getByRole("textbox", { name: "Token limit" }), { target: { value: "12x" } });
+    expect((within(raise()).getByRole("button", { name: "Raise the limit" }) as HTMLButtonElement).disabled).toBe(true);
+    rerender(panel("r2"));
+    expect((within(raise()).getByRole("textbox", { name: "Token limit" }) as HTMLInputElement).value).toBe("20,000,000");
+    expect(within(raise()).queryByRole("alert")).toBeNull();
+    expect((within(raise()).getByRole("button", { name: "Raise the limit" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+});
+
 describe("BudgetEditor token fields", () => {
   const editable = (): GroupViewV1 => ({
     ...boardView([workItem({ taskId: "a" })]),
@@ -161,9 +195,10 @@ describe("BudgetEditor token fields", () => {
     allocations: [{ ownerKind: "task", ownerId: "a", bucket: "work", state: "draft-encumbered", amount: amount(3_000_000),
       fieldProvenance: { tokens: { provenance: "human", estimateId: null }, activeMs: { provenance: "human", estimateId: null }, attempts: { provenance: "human", estimateId: null }, sessions: { provenance: "human", estimateId: null } } }],
   });
-  function Editor(props: { onCommand: (a: ControlAction) => void }): JSX.Element {
-    const [drafts, setDrafts] = useState<Record<string, string>>({});
-    return <AccountContext.Provider value={owner}><BudgetEditor view={editable()} config={boardConfig} selectionsHash={"9".repeat(64)} drafts={drafts} onCommand={props.onCommand}
+  const Editor = (props: { onCommand: (a: ControlAction) => void }): JSX.Element => <EditorWith initial={{}} onCommand={props.onCommand} />;
+  function EditorWith(props: { view?: GroupViewV1; initial: Record<string, string>; onCommand: (a: ControlAction) => void }): JSX.Element {
+    const [drafts, setDrafts] = useState<Record<string, string>>(props.initial);
+    return <AccountContext.Provider value={owner}><BudgetEditor view={props.view ?? editable()} config={boardConfig} selectionsHash={"9".repeat(64)} drafts={drafts} onCommand={props.onCommand}
       onDraft={(key, text) => setDrafts((d) => { const n = { ...d }; if (text === "") delete n[key]; else n[key] = text; return n; })} /></AccountContext.Provider>;
   }
   it("groups the allocation, group limit and handoff fields", () => {
@@ -204,6 +239,24 @@ describe("BudgetEditor token fields", () => {
     render(<Editor onCommand={vi.fn()} />);
     const [, activeMs] = within(screen.getByRole("group", { name: "Group limit" })).getAllByRole("textbox") as HTMLInputElement[];
     expect(activeMs!.value).toBe("90000000");
+  });
+  it("starts without a refusal flag kept from text that is gone, so Save and Confirm are not held without an error (review I1)", () => {
+    const stored = { [CONTEXT_POLICY_KEY("g")]: "invalid", [groupLimitKey("g", "tokens")]: "invalid" };
+    render(<AccountContext.Provider value={owner}><EditorWith initial={stored} onCommand={vi.fn()} /></AccountContext.Provider>);
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect((screen.getByRole("button", { name: "Confirm budget" }) as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByRole("textbox", { name: /^Hand off at context tokens/ }) as HTMLInputElement).value).toBe("0");
+  });
+  it("accepts a blank handoff field as unset: no error, and Confirm sends null (review I2)", () => {
+    const onCommand = vi.fn();
+    render(<Editor onCommand={onCommand} />);
+    const handoff = screen.getByRole("textbox", { name: /^Hand off at context tokens/ });
+    fireEvent.change(handoff, { target: { value: "150,000" } });
+    fireEvent.change(handoff, { target: { value: "" } });
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect((screen.getByRole("button", { name: "Confirm budget" }) as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Confirm budget" }));
+    expect((onCommand.mock.calls[0]![0] as ControlAction).payload).toMatchObject({ contextPolicy: { handoffAtContextTokens: null } });
   });
   it("sends a typed grouped group limit", () => {
     const onCommand = vi.fn();
