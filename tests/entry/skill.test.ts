@@ -90,6 +90,8 @@ describe("the orca-control skill (spec §7, C18)", () => {
       "`repositories/<id>/workspace`, `repositories/<id>/integration`",
       // Issue fixes spec §4.2(2)-(3): which retry a failed run takes.
       "run-terminal-failed", "task-not-retryable",
+      // Issue-fixes spec §6.3: what archiving does to every other command, and the guards an agent meets.
+      "refuses every command but `unarchive-group` with `group-archived`", "archive-run-active", "archive-call-in-flight",
     ]) expect(skill).toContain(phrase);
     for (const code of ["`0`", "`1`", "`2`", "`3`"]) expect(skill).toContain(code);
   });
