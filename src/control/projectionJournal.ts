@@ -66,6 +66,11 @@ export function recordProjectionChange(store: ControlStore, groupIds: readonly s
   return store.transaction(() => recordInTransaction(store, groupIds));
 }
 
+/** Issue-fixes spec §5.2: whether `store` has a transaction open -- an activity row is written only inside one. */
+export function inProjectionTransaction(store: ControlStore): boolean {
+  return transactions.has(store);
+}
+
 export function readProjectionState(store: ControlStore): { changeSeq: number; oldestRetainedSeq: number } {
   return currentState(store);
 }
