@@ -17,6 +17,7 @@ import { singleCallClaimRowOf } from "./singleCall.js";
 import { claimRequirementCall } from "./requirementCalls.js";
 import { hasRequirementBlock, readRequirementGroup } from "./requirementRecords.js";
 import { claimCapBlocking, gateClaim } from "./spendCaps.js";
+import { noteRunWrite } from "./activity.js";
 
 export type Phase = "estimate" | "work" | "handoff" | "single-call";
 export type StartCommand = Extract<RawAuthorityCommandV1, { verb: "start" }>;
@@ -46,6 +47,8 @@ function readDispatchRun(store: ControlStore, runId: string): DispatchRun {
 }
 
 function saveDispatchRun(store: ControlStore, run: DispatchRun): void {
+  // Issue-fixes spec §5.2: a state change writes its activity row (and endedAt) in this same transaction.
+  noteRunWrite(store, run);
   store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify(run), run.runId);
 }
 

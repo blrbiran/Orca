@@ -75,3 +75,36 @@ export function latestGroupActivityAt(store: ControlStore, groupId: string): num
   const row = store.db.prepare("SELECT at FROM activity WHERE group_id=? ORDER BY seq DESC LIMIT 1").get(groupId);
   return row === undefined ? null : Number(row.at);
 }
+
+/**
+ * §5.2 Run times: the states a run has ended in. endedAt is stamped the first time a run enters one, and every entry
+ * writes `run-settled`. Part D adds "settled-failed" here and needs nothing else for its time and row.
+ */
+export const RUN_ENDED_STATES: ReadonlySet<string> = new Set([
+  "landed", "settled", "settled-recoverable", "settled-restartable", "settled-unrecoverable", "failed-before-provider",
+]);
+
+/** What noteRunWrite reads off a run body; loose so every run body type (RunRecord, RunBody, DispatchRun, DriverRun) fits. */
+export interface RunTransitionSubject { runId: string; groupId: string; taskId?: unknown; state: string; endedAt?: unknown; drive?: unknown }
+
+/**
+ * §5.2: every writer of a run body (budget.ts saveRun -- and so saveDriverRun --, stopIntent.ts saveRunBody,
+ * webDispatch.ts saveDispatchRun) calls this before it writes, inside its transaction. A move into `blocked` writes
+ * `run-blocked`; a move into an ended state stamps endedAt on the body about to be written (first time only) and writes
+ * `run-settled`. A write that keeps the stored state writes nothing.
+ */
+export function noteRunWrite(store: ControlStore, run: RunTransitionSubject): void {
+  const prior = store.db.prepare("SELECT json_extract(body,'$.state') AS state FROM runs WHERE id=?").get(run.runId);
+  if (prior === undefined || prior.state === run.state) return;
+  const taskId = typeof run.taskId === "string" ? run.taskId : null;
+  const drive = (typeof run.drive === "object" && run.drive !== null ? run.drive : {}) as { blockedAt?: unknown; blockedReason?: unknown; outcome?: unknown; stopReason?: unknown };
+  if (run.state === "blocked") {
+    recordActivity(store, { groupId: run.groupId, taskId, runId: run.runId, kind: "run-blocked", body: { blockedAt: drive.blockedAt ?? null, reason: drive.blockedReason ?? null } });
+  } else if (RUN_ENDED_STATES.has(run.state)) {
+    if (run.endedAt === undefined) run.endedAt = store.now();
+    recordActivity(store, {
+      groupId: run.groupId, taskId, runId: run.runId, kind: "run-settled",
+      body: { state: run.state, outcome: drive.outcome ?? null, ...(typeof drive.stopReason === "string" ? { stopReason: drive.stopReason } : {}) },
+    });
+  }
+}

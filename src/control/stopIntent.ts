@@ -7,6 +7,7 @@ import { add, budgetBalance, subtract } from "./budget.js";
 import { ControlError } from "./errors.js";
 import { clearSpendCapBlock } from "./spendCaps.js";
 import { recordProjectionChange } from "./projectionJournal.js";
+import { noteRunWrite } from "./activity.js";
 import { readBudgetProposal, readWork, saveWork, type BudgetProposalRecord } from "./queries.js";
 import { writeCanonicalRecord } from "./snapshot.js";
 import { rearmFailedContinuation } from "./continuation.js";
@@ -171,6 +172,8 @@ export function readRunBody(store: ControlStore, runId: string): RunBody {
 }
 
 export function saveRunBody(store: ControlStore, run: RunBody, active: boolean | null = null): void {
+  // Issue-fixes spec §5.2: a state change writes its activity row (and endedAt) in this same transaction.
+  noteRunWrite(store, run);
   store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify(run), run.runId);
   if (active !== null) store.db.prepare("UPDATE runs SET active=? WHERE id=?").run(active ? 1 : 0, run.runId);
 }

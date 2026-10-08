@@ -9,6 +9,7 @@ import { applyCommand, dimensions, fits, zero } from "./commands.js";
 import { readGroup, readWork, saveGroup, saveWork, allWork, readBudgetProposal, type GroupRecord } from "./queries.js";
 import { canonicalBytes } from "./canonicalJson.js";
 import { recordProjectionChange } from "./projectionJournal.js";
+import { noteRunWrite } from "./activity.js";
 import { releaseCommitment, setAllocationStates } from "./stopIntent.js";
 import { clarifyingLedger } from "./requirementRecords.js";
 export interface RunRecord extends Claim, RunView {
@@ -18,12 +19,17 @@ export interface RunRecord extends Claim, RunView {
   predecessorRunId?:string;
   executionProfile?:ExecutionProfileBinding;
   handoffProfile?:ExecutionProfileBinding;
+  /** Issue-fixes spec §5.2: ms; set when A1 reserves the first provider attempt / when the run first ends. Absent before schema 9. */
+  startedAt?:number;
+  endedAt?:number;
 }
 export function readRun(store:ControlStore,id:string):RunRecord {
   const row=store.db.prepare("SELECT body FROM runs WHERE id=?").get(id);
   if(!row) throw new ControlError("run-not-found");return JSON.parse(String(row.body));
 }
 export function saveRun(store:ControlStore,run:RunRecord):void {
+  // Issue-fixes spec §5.2: a state change writes its activity row (and endedAt) in this same transaction.
+  noteRunWrite(store,run);
   const body=JSON.stringify(run);
   const changed=store.db.prepare("UPDATE runs SET body=? WHERE id=? AND body<>?").run(body,run.runId,body).changes;
   if(changed===0) {

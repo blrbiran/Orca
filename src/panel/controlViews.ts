@@ -180,6 +180,9 @@ const persistedRunSchema = z.object({
   // Labels and progress spec §2.6 (§8 R1): ccloop's latest progress; a run written before it existed has no key and
   // reads as null. Never back-filled.
   progress: runProgressSchema.nullable().optional(),
+  // Issue-fixes spec §5.2: wall-clock run times (ms); a run written before schema 9 has neither. Never back-filled.
+  startedAt: safeInteger.optional(),
+  endedAt: safeInteger.optional(),
   drive: driveRecordSchema.optional(),
 }).strict();
 
