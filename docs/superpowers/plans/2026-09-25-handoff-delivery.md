@@ -5574,3 +5574,22 @@ Claude-Session: https://claude.ai/code/session_018mArcQDZBWMymL3MHT6WzR
 
 **3. 类型／名字一致性**：逐名对过 brief（`scratchpad/planner/brief.md` 的 Interfaces 一节）与各 Task 的使用处：`settleCompletedRunRequestInTransaction`、`handoffRequestFromOutbox`、`persistCanonicalCheckpoint`、`readExistingResumeBundle`（T3 定义，T4／T5 使用）；`openRequestOf`、`handoffRunIds`、`visitOrder`、`stepH`、`restartRun`、`settleHandoffCheckpoint`、`collectInto`、`savedReport`、`HANDOFF_EXTRA_GRACE_MS`（T4 定义，T9 的装配用 `handoffGraceMsOf`）；`CrashPoint` 新四值（T4 定义，T5 用 `A2-after-bundle`，T9 的 R-H 五个崩溃点都在其中或是上一片的 `B-after-accept`）；`withinGrant`、`toStartEnvelope` 第五参数（T5）；`frozenAllocationShape`（T4 定义并在 `executionSnapshot.ts` 与 `controlViews.ts` 两处用）；`planReconciliationOf`／`synthesizeReconcileContractOf`／`otherTaskIds`（T6）；`skipped-driver-owned`（T7 在 `controlLifecycle.ts`、`webProtocol.ts`、`web/src/controlTypes.ts` 三处一致）；`continuable`（T8 服务端必填、web 可选，`webParity` 归一化补 `?? false`）；ccloop 侧 `enteredPhaseFiles`（T1）、`usageBeforeDelay`／`CodexPhaseAborted`／`observedTurnUsage`（T2）、`${marker}.tasks`（T1 产、T9 数）。判定器 `EXPECTED_*` 的条数与各 Task 写明的条数一致：Orca 7/14/5/5/4/8/4/1/12(＋1)、web 3、ccloop 5/6/(3/1)。**已知的不一致，交控制器**：T2 的两份判据文件名（`abortedUsage`、`handoffDeadlineUsage`）不在 brief 的清单里（门控 Task，判定器用 `--no-t2` 处理）；T6 的 `spawnSeq` 初值按 spec 写「行数」，写作席建议 MAX（§0.1 D-SPAWNKEY）。
 
+
+## ERRATUM (issue fixes, 2026-10-08) — gap D-RESUME-SHUTDOWN is closed
+
+Appended 2026-10-08 by the implementer of Task C4 of the issue-fixes plan
+(`docs/superpowers/plans/2026-10-08-issue-fixes/part-C.md`), under Orca development session `e34dc963`, in the commit
+whose subject is `docs: errata for the shutdown stop-intent lifecycle`. The text above is kept verbatim.
+
+§0.1 row `D-RESUME-SHUTDOWN` recorded as a known gap that the panel renders no continuation or resume button for a group
+with `stopMode === "shutdown"`, so a non-driver group frozen by a panel shutdown had no exit in the panel. The gap is
+closed by `docs/superpowers/specs/2026-10-08-issue-fixes-design.md` §3.2 (3): `ControlGroupView`'s `handoffActive` now
+covers both `handoff` and `shutdown`, so a `shutdown` group in stop state `handoff-complete` gets the same resume dialog
+(`Continue selected tasks (n)` or `Resume (no continuation)`) as a human handoff-stop. The idle groups that most often hit
+the gap no longer get a shutdown intent at all (same spec, §3.2 (1), disposition `unchanged-idle`), and stores written
+before that change are healed at startup (§3.2 (2)). Implemented in the commits whose subjects are
+`fix(control): shutdown writes no stop intent for an idle group`,
+`fix(control): recovery heals empty-frozen-set shutdown intents` and
+`feat(web): stop banner and the resume dialog for a completed panel shutdown`; pinned by
+`web/tests/stopBanner.test.tsx`, `tests/control/shutdownHealing.test.ts` and the rewritten criteria in
+`tests/panel/controlLifecycle.test.ts`, `tests/panel/shutdownDriverGroup.test.ts` and `tests/control/webFaults.test.ts`.

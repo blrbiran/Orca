@@ -1733,3 +1733,37 @@ original text above is kept verbatim.
   refuses at confirm refuses the whole confirm (`agent-selection-rejected:<taskId|slot>:<code>`).
 - Everything else in section 3.1 stands: the browser still may not send an executable, an adapter or installation
   definition, a filesystem root, a repository path, a plan path or an evidence path.
+
+## ERRATUM (issue fixes, 2026-10-08) — idle groups at panel shutdown
+
+Appended 2026-10-08 by the implementer of Task C4 of the issue-fixes plan
+(`docs/superpowers/plans/2026-10-08-issue-fixes/part-C.md`), under Orca development session `e34dc963`, in the commit
+whose subject is `docs: errata for the shutdown stop-intent lifecycle`. The statements below are superseded by
+`docs/superpowers/specs/2026-10-08-issue-fixes-design.md` §3 (invariant S1 and §3.2). The original text above, and the
+earlier `ERRATUM (handoff delivery, 2026-09-25)` that quotes it, are kept verbatim.
+
+1. **Invariant S1.** A persisted `shutdown` stop intent exists only when the shutdown froze at least one active run
+   (including strengthening a pause because a run was active). The idle-group clause of §6.4 step 3 (line 1274: "for a
+   dispatch-enabled group with no active run, persists a shutdown stop intent so no claim can begin during drain") no
+   longer holds. During drain no claim can begin anyway: step 1's in-memory admission gate refuses every mutation and
+   every scheduler claim, so the durable row protected nothing and its only lasting effect was a dead end after restart.
+2. **The sentence at line 1282** — "A ready group with no active run receives a shutdown intent with an empty frozen set,
+   reaches `handoff-complete`, and after restart uses an empty `resume-from-handoff` followed by an explicit `start`." —
+   is superseded. A group with no active run (ready, never started, or all done) that has no earlier stop intent and is
+   not driver-owned is listed in the shutdown result with the disposition `unchanged-idle` (`changed: false`): no stop
+   intent, `stopped` unchanged, command revision and projection unchanged. After a restart it is started like any ready
+   group, with no resume step. Driver-owned groups (`skipped-driver-owned`), paused groups with no active run
+   (`preserved-pause`) and groups under an existing handoff or shutdown intent are unchanged; `skipped-driver-owned` is
+   decided before `unchanged-idle`. Implemented in `src/panel/controlLifecycle.ts` (`shutdownGroup`), the strict result
+   enum in `src/control/webProtocol.ts` and its mirror in `web/src/controlTypes.ts`, in the commit whose subject is
+   `fix(control): shutdown writes no stop intent for an idle group`.
+3. **Stores written before this change are healed at startup.** Panel startup recovery (`recoverControl`,
+   `src/control/recovery.ts`), in its own transaction before scheduler wakes are delivered, deletes every `shutdown`
+   intent whose `frozenRunIds` is empty, sets that group's `stopped` to `false`, records one projection change per healed
+   group without advancing the command revision, and writes one `stop-cleared` activity row with
+   `{reason: "empty-shutdown-intent"}`. An empty frozen set has no requests or outboxes, so crash-after-commit
+   redelivery of a real shutdown is unaffected. Commit subject: `fix(control): recovery heals empty-frozen-set shutdown intents`.
+4. **A real shutdown is left through the resume dialog.** A group whose stop mode is `shutdown` and whose stop state is
+   `handoff-complete` is offered the same resume dialog as a human handoff-stop (`resume-from-handoff`, with or without
+   selections), and every stopped group shows one banner naming how it stopped, its stop state and the way out. Commit
+   subject: `feat(web): stop banner and the resume dialog for a completed panel shutdown`.
