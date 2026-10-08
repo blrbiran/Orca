@@ -50,11 +50,22 @@ describe("continuing after a handoff-stop (handoff delivery C-4, I-4)", () => {
     // Issue-fixes ruling (Part C flag 2): continue-task is refused under any stop intent, so no single-task
     // continuation is offered while the handoff-stop is still in place -- only the batch resume.
     expect(screen.queryByRole("button", { name: /^Continue task/ })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Resume (no continuation)" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Continue selected tasks (1)" }));
     expect(onCommand).toHaveBeenCalledTimes(1);
     expect(onCommand).toHaveBeenCalledWith({ verb: "resume-from-handoff", groupId: "g", expectedRevision: 6,
       payload: { selections: [{ taskId: "b", predecessorRunId: "run-b", checkpointId: "cp-b" }] } });
+  });
+
+  // Issue-fixes ruling (C3 follow-up): a plain resume is offered beside the batch continuation, so a person can leave
+  // the stop without continuing every held task and then continue them one by one once no stop intent remains.
+  it("offers a resume with no selections beside the batch continuation when tasks are continuable", () => {
+    const onCommand = vi.fn();
+    render(<ControlGroupView view={view("handoff-complete", [completed, handedOff], [checkpoint("run-a", "a", "complete"), checkpoint("run-b", "b", "partial")])}
+      config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={onCommand} />);
+    expect(screen.getByRole("button", { name: "Continue selected tasks (1)" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Resume (no continuation)" }));
+    expect(onCommand).toHaveBeenCalledTimes(1);
+    expect(onCommand).toHaveBeenCalledWith({ verb: "resume-from-handoff", groupId: "g", expectedRevision: 6, payload: { selections: [] } });
   });
 
   it("offers a single task's continuation only once the group has no stop intent, and only for the handed-off task", () => {

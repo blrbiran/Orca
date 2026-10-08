@@ -326,8 +326,9 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
         </button>
       ))}
       {/* Handoff delivery spec §13.1 I-4: when every frozen run finished or restarted, nothing is continuable,
-          and the group's only way out of handoff-complete is a resume with no selections. */}
-      {handoffActive && view.summary.stopState === "handoff-complete" && continuable.length === 0 && (
+          and the group's only way out of handoff-complete is a resume with no selections. Issue-fixes ruling (C3
+          follow-up): it is offered beside the batch continuation too, so held tasks can then be continued one by one. */}
+      {handoffActive && view.summary.stopState === "handoff-complete" && (
         <button
           type="button"
           onClick={() => onCommand({ verb: "resume-from-handoff", groupId, expectedRevision: revision, payload: { selections: [] } })}
