@@ -740,6 +740,12 @@ describe("canonical control read API", () => {
     expect(view.activity!.map((entry) => entry.seq)).toEqual([...view.activity!.map((entry) => entry.seq)].sort((a, b) => b - a));
     expect(view.runs.find((run) => run.runId === "run-one")).toMatchObject({ startedAt: null, endedAt: null, lastActivityAt: Number(newestRun.at) });
 
+    // A run written at schema 9 carries its own times; the view shows the body's, not a time read off its rows.
+    const timedBody = JSON.parse(String(h.store.db.prepare("SELECT body FROM runs WHERE id='run-one'").get()!.body));
+    h.store.db.prepare("UPDATE runs SET body=? WHERE id='run-one'").run(canonicalBytes({ ...timedBody, startedAt: 1_000, endedAt: 2_000 }).toString("utf8"));
+    const timedView = await (await request(h, "/api/control/groups/group-a")).json() as GroupViewV1;
+    expect(timedView.runs.find((run) => run.runId === "run-one")).toMatchObject({ startedAt: 1_000, endedAt: 2_000, lastActivityAt: Number(newestRun.at) });
+
     const response = await request(h, "/api/control/runs/run-one/activity");
     expect(response.status).toBe(200);
     const activity = await response.json() as RunActivityV1;
