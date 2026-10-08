@@ -422,6 +422,8 @@ export function controlCommandRoutes(actorId: string): Array<{ path: string; ver
         return { groupId, target: { kind: "task", groupId, taskId: idSchema.parse(params.taskId) } };
       },
     },
+    // Issue fixes spec §4.2(2): the task is named in the payload; the ledger key is the group's.
+    { path: "/api/control/groups/:groupId/retry-task", verb: "retry-task", target: fromParams },
   ];
 }
 
@@ -458,6 +460,7 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
           case "resume-from-handoff": await service.resumeFromHandoff(command); break;
           case "continue-task": await service.continueTask(command); break;
           case "recovery-retry": await service.recoveryRetry(command); break;
+          case "retry-task": service.retryTask(command); break;
           case "set-workspace-mode": await service.setWorkspaceMode(command); break;
           case "set-integration-scheme": await service.setIntegrationScheme(command); break;
           case "set-group-integration": await service.setGroupIntegration(command); break;

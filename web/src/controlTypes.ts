@@ -412,6 +412,7 @@ export type ContinuationSelectionV1 = { taskId: string; predecessorRunId: string
 export type ResumeFromHandoffPayloadV1 = { selections: ContinuationSelectionV1[] };
 export type ContinueTaskPayloadV1 = { predecessorRunId: string; checkpointId: string };
 export type RecoveryRetryPayloadV1 = { scope: "run"; runId: string } | { scope: "group"; groupId: string };
+export type RetryTaskPayloadV1 = { taskId: string };
 /** N1 spec §11.1: the five requirement commands (src/control/webProtocol.ts, field for field). */
 export type RequirementOpenPayloadV1 = {
   groupId: string;
@@ -453,7 +454,7 @@ export type CommandSuccessV1 = {
   schema: "orca-command-success-v1";
   commandId: string;
   actorId: string;
-  verb: "import-plan" | "proposal-edit" | "estimate" | "confirm" | "start" | "pause-dispatch" | "handoff-stop" | "resume-dispatch" | "resume-from-handoff" | "set-limit" | "continue-task" | "recovery-retry" | "shutdown" | "set-workspace-mode" | "set-agent-preferences" | "proposal-set-agent" | "set-task-labels" | "set-task-loop"
+  verb: "import-plan" | "proposal-edit" | "estimate" | "confirm" | "start" | "pause-dispatch" | "handoff-stop" | "resume-dispatch" | "resume-from-handoff" | "set-limit" | "continue-task" | "recovery-retry" | "retry-task" | "shutdown" | "set-workspace-mode" | "set-agent-preferences" | "proposal-set-agent" | "set-task-labels" | "set-task-loop"
     | "requirement-open" | "requirement-answer" | "requirement-consensus" | "requirement-draft-feedback" | "requirement-draft-accept"
     | "set-spend-cap" | "clear-spend-cap" | "set-usage-calendar" | "set-integration-scheme" | "set-group-integration" | "retry-integration" | "resolve-integration-conflict";
   target: CommandTargetV1;
@@ -483,6 +484,7 @@ export type CommandSuccessV1 = {
     | { kind: "task-labels-set"; taskId: string; labelsVersion: number }
     | { kind: "task-loop-set"; taskId: string; loopVersion: number; proposalVersion: number }
     | { kind: "task-continuing"; continuationIntentId: string; pendingRunId: string; claimOrdinal: number; wakeId: string }
+    | { kind: "task-retried"; taskId: string; fromRunId: string }
     | { kind: "recovery-observed"; resolved: boolean; blockerCodes: string[]; evidenceIds: string[]; wakeIds: string[] }
     | { kind: "requirement-opened"; groupId: string; requirementId: string; roundNo: 1; wakeId: string }
     | { kind: "requirement-answered"; roundNo: number; nextRoundNo: number | null; wakeId: string | null }

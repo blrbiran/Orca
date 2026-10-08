@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { ZodTypeAny } from "zod";
 import {
   confirmPayloadSchema, continueTaskPayloadSchema, emptyPayloadSchema, handoffStopPayloadSchema, importPlanPayloadSchema, proposalEditPayloadSchema,
-  proposalSetAgentPayloadSchema, recoveryRetryPayloadSchema, reestimatePayloadSchema, requirementAnswerPayloadSchema, requirementConsensusPayloadSchema,
+  proposalSetAgentPayloadSchema, recoveryRetryPayloadSchema, retryTaskPayloadSchema, reestimatePayloadSchema, requirementAnswerPayloadSchema, requirementConsensusPayloadSchema,
   requirementDraftAcceptPayloadSchema, requirementDraftFeedbackPayloadSchema, requirementOpenPayloadSchema, resumeFromHandoffPayloadSchema,
   setAgentPreferencesPayloadSchema, setLimitPayloadSchema, setTaskLabelsPayloadSchema, setTaskLoopPayloadSchema, setWorkspaceModePayloadSchema,
   setSpendCapPayloadSchema, clearSpendCapPayloadSchema, setUsageCalendarPayloadSchema, setIntegrationSchemePayloadSchema, setGroupIntegrationPayloadSchema,
@@ -19,7 +19,7 @@ const schemaByVerb: Record<string, ZodTypeAny> = {
   "import-plan": importPlanPayloadSchema, "proposal-edit": proposalEditPayloadSchema, estimate: reestimatePayloadSchema, confirm: confirmPayloadSchema,
   "set-limit": setLimitPayloadSchema, start: emptyPayloadSchema, "pause-dispatch": emptyPayloadSchema, "handoff-stop": handoffStopPayloadSchema,
   "resume-dispatch": emptyPayloadSchema, "resume-from-handoff": resumeFromHandoffPayloadSchema, "continue-task": continueTaskPayloadSchema,
-  "recovery-retry": recoveryRetryPayloadSchema, "set-workspace-mode": setWorkspaceModePayloadSchema, "set-agent-preferences": setAgentPreferencesPayloadSchema,
+  "recovery-retry": recoveryRetryPayloadSchema, "retry-task": retryTaskPayloadSchema, "set-workspace-mode": setWorkspaceModePayloadSchema, "set-agent-preferences": setAgentPreferencesPayloadSchema,
   "proposal-set-agent": proposalSetAgentPayloadSchema, "requirement-open": requirementOpenPayloadSchema, "requirement-answer": requirementAnswerPayloadSchema,
   "requirement-consensus": requirementConsensusPayloadSchema, "requirement-draft-feedback": requirementDraftFeedbackPayloadSchema,
   "requirement-draft-accept": requirementDraftAcceptPayloadSchema, "set-task-labels": setTaskLabelsPayloadSchema, "set-task-loop": setTaskLoopPayloadSchema,
@@ -38,17 +38,17 @@ describe("the orca-control skill (spec §7, C18)", () => {
 
   it("lists exactly the panel's mutation routes, so the table cannot drift", () => {
     const routes = new Set([...api.matchAll(/path: "\/api\/control\/([^"]+)"/g)].map((m) => m[1]!.replace(/:([A-Za-z]+)/g, "<$1>")));
-    // 29 routes carry the 30 verbs: `shutdown` has no route (the panel's own lifecycle). Integration spec §3.4 added
+    // 30 routes carry the 31 verbs: `shutdown` has no route (the panel's own lifecycle). Integration spec §3.4 added
     // `repositories/<repoId>/integration` (set-integration-scheme), `groups/<groupId>/integration` (set-group-integration)
     // and `groups/<groupId>/integration/retry` (retry-integration); §7 added `groups/<groupId>/integration/resolve`
-    // (resolve-integration-conflict).
-    expect(routes.size).toBe(29);
+    // (resolve-integration-conflict). Issue fixes spec §4.2(2) added `groups/<groupId>/retry-task` (retry-task).
+    expect(routes.size).toBe(30);
     expect(rows.map((row) => row.route).sort()).toEqual([...routes].sort());
   });
 
   it("names the verb of every route as the panel does", () => {
     const verbs = new Map([...api.matchAll(/path: "\/api\/control\/([^"]+)",?\s+verb: "([^"]+)"/g)].map((m) => [m[1]!.replace(/:([A-Za-z]+)/g, "<$1>"), m[2]!]));
-    expect(verbs.size).toBe(29);
+    expect(verbs.size).toBe(30);
     expect(new Map(rows.map((row) => [row.route, row.verb]))).toEqual(verbs);
   });
 
@@ -60,7 +60,7 @@ describe("the orca-control skill (spec §7, C18)", () => {
   });
 
   it("gives every route a payload example that its raw payload schema accepts", () => {
-    expect(rows.length).toBe(29);
+    expect(rows.length).toBe(30);
     for (const row of rows) {
       const schema = schemaByVerb[row.verb];
       expect(schema, `no schema mapped for ${row.verb}`).toBeDefined();

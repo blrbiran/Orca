@@ -94,6 +94,7 @@ stdout is exactly one JSON line:
 | `POST groups/<groupId>/tasks/<taskId>/continue` | continue-task | `{"predecessorRunId":"run1","checkpointId":"cp1"}` |
 | `POST groups/<groupId>/tasks/<taskId>/labels` | set-task-labels | `{"labels":["area:cli"],"baseLabelsVersion":0}` |
 | `POST groups/<groupId>/tasks/<taskId>/loop` | set-task-loop | `{"baseLoopVersion":0,"plan":"standard","inputs":{"goal":"g","successCondition":"s","targetPaths":["src"],"checks":["npm test"],"nonGoals":[],"relevantDocs":[],"protectedPaths":[],"maxFilesTouched":null},"work":{"tokens":500000,"activeMs":600000,"attempts":3}}` |
+| `POST groups/<groupId>/retry-task` | retry-task | `{"taskId":"t1"}` |
 | `POST requirements` | requirement-open | `{"groupId":"g1","repoId":"r1","idea":"what to build"}` |
 | `POST groups/<groupId>/requirement/answer` | requirement-answer | `{"roundNo":1,"answers":[{"id":"R1.Q1","kind":"recommended"},{"id":"R1.Q2","kind":"text","text":"my answer"}],"glossaryDecisions":[],"adrDecisions":[]}` |
 | `POST groups/<groupId>/requirement/consensus` | requirement-consensus | `{"roundNo":1}` |

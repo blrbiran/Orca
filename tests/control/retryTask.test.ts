@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { readRunActivity } from "../../src/control/activity.js";
+import { readBudgetProposal } from "../../src/control/queries.js";
 import { recordUsage } from "../../src/control/usage.js";
 import { readWebGroup } from "../../src/control/webService.js";
 import { readControlGroup } from "../../src/panel/controlViews.js";
@@ -41,6 +43,15 @@ async function failedRun(t: Harness): Promise<{ runId: string; driver: ReturnTyp
   return { runId, driver };
 }
 
+const DIMENSIONS = ["tokens", "activeMs", "attempts", "sessions"] as const;
+type Dimension = typeof DIMENSIONS[number];
+const work = (t: Harness, taskId: string) => JSON.parse(String(t.h.store.db.prepare("SELECT body FROM work_items WHERE group_id='g' AND id=?").get(taskId)!.body));
+const active = (t: Harness, runId: string): number => Number(t.h.store.db.prepare("SELECT active FROM runs WHERE id=?").get(runId)!.active);
+/** Spec §4.2(2): the failed run's net new reservation per dimension -- its grant minus its remainder, work + handoff. */
+const netOf = (run: Record<string, any>): Record<Dimension, number> =>
+  Object.fromEntries(DIMENSIONS.map((d) => [d, run.grant.work[d] + run.grant.handoff[d] - run.remaining.work[d] - run.remaining.handoff[d]])) as Record<Dimension, number>;
+const retry = (t: Harness, taskId = "a") => t.service.retryTask(t.h.command("retry-task", { taskId }));
+
 describe("keeping ccloop's failure reason (spec §4.2(1))", () => {
   it("stores ccloop's stop reason on the drive record and gives it, with the outcome, to the run view", async () => {
     const { t } = await failingHarness(); try {
@@ -72,6 +83,46 @@ describe("settled-failed in every reader (spec §4.2(4), review C2)", () => {
       expect(view(t).runs.map((run) => [run.runId, run.state])).toEqual([[runId, "settled-failed"]]);
       expect(() => recordUsage(t.h.store, { runId, generation: 1, eventSeq: 3, bucket: "work", cumulative: { tokens: 11, activeMs: 5, attempts: 1, sessions: 1 }, source: { artifactId: "late-usage", hash: "0".repeat(64) } }))
         .toThrow("run-already-settled");
+    } finally { await t.h.dispose(); }
+  });
+});
+
+describe("retry-task (spec §4.2(2))", () => {
+  it("settles the failed run, returns the task to ready under the same grant, and the group view reads at once (review C1)", async () => {
+    const { t } = await failingHarness(); try {
+      const { runId } = await failedRun(t);
+      const failed = t.body(runId);
+      const before = readWebGroup(t.h.store, "g").ledger;
+      const revision = view(t).summary.commandRevision;
+      const net = netOf(failed);
+      expect(net.tokens).toBe(10);
+      const at = Date.now();
+      const result = retry(t);
+      expect("error" in result ? result.error : result.result).toEqual({ kind: "task-retried", taskId: "a", fromRunId: runId });
+      // Effect 1: the run alone moves -- usage booked stays, remainder stays on the run (remaining == grant - cumulative).
+      const settled = t.body(runId);
+      expect(settled).toMatchObject({ state: "settled-failed", remaining: failed.remaining, cumulative: failed.cumulative, drive: { ...failed.drive, cleanedUp: false } });
+      expect(settled.endedAt).toBeGreaterThanOrEqual(at);
+      expect(active(t, runId)).toBe(0);
+      // Effect 1: remainder released, grant re-reserved -- net change grant - remaining, allocations still confirmed.
+      const after = readWebGroup(t.h.store, "g").ledger;
+      for (const d of DIMENSIONS) {
+        expect(after.committedRemaining[d], d).toBe(before.committedRemaining[d] + net[d]);
+        expect(after.explicitUnallocatedReserve[d], d).toBe(before.explicitUnallocatedReserve[d] - net[d]);
+      }
+      expect(readBudgetProposal(t.h.store, "g").allocations.filter((row) => row.ownerId === "a").map((row) => row.state)).toEqual(["confirmed", "confirmed"]);
+      // Effect 2: ready, currentRunId kept on the settled-failed run, grant unchanged.
+      expect(work(t, "a")).toMatchObject({ status: "ready", currentRunId: runId, lineageRunIds: [runId], grant: failed.grant });
+      // C1: the group view reads immediately, with the run settled-failed and its reason.
+      const read = view(t);
+      expect(read.summary.commandRevision).toBe(revision + 1);
+      expect(read.runs.map((run) => [run.runId, run.state, run.stopReason])).toEqual([[runId, "settled-failed", FAILED_REASON]]);
+      expect(read.workItems.find((item) => item.taskId === "a")!.status).toBe("ready");
+      // Effect 4: two activity rows, newest first.
+      expect(readRunActivity(t.h.store, runId, 10).slice(0, 2).map((entry) => [entry.kind, entry.body])).toEqual([
+        ["task-retried", { fromRunId: runId }],
+        ["run-settled", { state: "settled-failed", outcome: "failed", stopReason: FAILED_REASON }],
+      ]);
     } finally { await t.h.dispose(); }
   });
 });

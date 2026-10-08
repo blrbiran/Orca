@@ -81,7 +81,7 @@ export function latestGroupActivityAt(store: ControlStore, groupId: string): num
  * writes `run-settled`. Part D adds "settled-failed" here and needs nothing else for its time and row.
  */
 export const RUN_ENDED_STATES: ReadonlySet<string> = new Set([
-  "landed", "settled", "settled-recoverable", "settled-restartable", "settled-unrecoverable", "failed-before-provider",
+  "landed", "settled", "settled-recoverable", "settled-restartable", "settled-unrecoverable", "failed-before-provider", "settled-failed",
 ]);
 
 /** What noteRunWrite reads off a run body; loose so every run body type (RunRecord, RunBody, DispatchRun, DriverRun) fits. */

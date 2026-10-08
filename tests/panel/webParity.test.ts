@@ -35,6 +35,7 @@ import type {
   ProposalSetAgentPayload as ServerProposalSetAgentPayload,
   RecoveryRetryPayload as ServerRecoveryRetryPayload,
   RecoveryViewV1 as ServerRecoveryViewV1,
+  RetryTaskPayload as ServerRetryTaskPayload,
   ReestimatePayload as ServerReestimatePayload,
   RequirementAnswerPayload as ServerRequirementAnswerPayload,
   RequirementConsensusPayload as ServerRequirementConsensusPayload,
@@ -71,6 +72,7 @@ import type {
   ProposalSetAgentPayloadV1 as WebProposalSetAgentPayloadV1,
   RecoveryRetryPayloadV1 as WebRecoveryRetryPayloadV1,
   RecoveryViewV1 as WebRecoveryViewV1,
+  RetryTaskPayloadV1 as WebRetryTaskPayloadV1,
   RequirementAnswerPayloadV1 as WebRequirementAnswerPayloadV1,
   RequirementConsensusPayloadV1 as WebRequirementConsensusPayloadV1,
   RequirementDraftAcceptPayloadV1 as WebRequirementDraftAcceptPayloadV1,
@@ -224,6 +226,9 @@ function continueTaskServerToWeb(x: ServerContinueTaskPayload): WebContinueTaskP
 function continueTaskWebToServer(x: WebContinueTaskPayloadV1): ServerContinueTaskPayload { return x; }
 function recoveryRetryServerToWeb(x: ServerRecoveryRetryPayload): WebRecoveryRetryPayloadV1 { return x; }
 function recoveryRetryWebToServer(x: WebRecoveryRetryPayloadV1): ServerRecoveryRetryPayload { return x; }
+// Issue fixes spec §4.2(2): the retry-task command's payload.
+function retryTaskServerToWeb(x: ServerRetryTaskPayload): WebRetryTaskPayloadV1 { return x; }
+function retryTaskWebToServer(x: WebRetryTaskPayloadV1): ServerRetryTaskPayload { return x; }
 // Agent selection plan T10: the proposal's selection layer command (spec §6.2).
 function proposalSetAgentServerToWeb(x: ServerProposalSetAgentPayload): WebProposalSetAgentPayloadV1 { return x; }
 function proposalSetAgentWebToServer(x: WebProposalSetAgentPayloadV1): ServerProposalSetAgentPayload { return x; }
@@ -308,6 +313,7 @@ export const __webParityAssignabilityChecks__ = [
   continueTaskWebToServer,
   recoveryRetryServerToWeb,
   recoveryRetryWebToServer,
+  retryTaskServerToWeb, retryTaskWebToServer,
   proposalSetAgentServerToWeb,
   proposalSetAgentWebToServer,
   agentsViewServerToWeb,

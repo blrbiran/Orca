@@ -824,9 +824,22 @@ export function setAllocationStates(
 
 /** Give the group reserve back for a commitment that has ended, keeping every ledger mirror in sync. */
 export function releaseCommitment(store: ControlStore, groupId: string, released: Amount): void {
+  moveCommitment(store, groupId, (reserved) => subtract(reserved, released));
+}
+
+/**
+ * Issue fixes spec §4.2(2): commit part of the group reserve again -- retry-task re-reserves the task's grant after
+ * releasing its failed run's remainder -- keeping every ledger mirror in sync. The caller has checked the reserve covers it.
+ */
+export function reserveCommitment(store: ControlStore, groupId: string, reserved: Amount): void {
+  moveCommitment(store, groupId, (current) => add(current, reserved));
+}
+
+/** The one ledger write both directions share: the group's committed amount, then every mirror recomputed from it. */
+function moveCommitment(store: ControlStore, groupId: string, next: (reserved: Amount) => Amount): void {
   const group = readGroupBody(store, groupId);
   const proposal = readBudgetProposal(store, groupId);
-  group.reserved = subtract(group.reserved, released);
+  group.reserved = next(group.reserved);
   const balance = budgetBalance(group.limit, group.used, group.reserved);
   group.ledger = {
     ...group.ledger, used: group.used, committedRemaining: group.reserved,

@@ -602,6 +602,7 @@ export const commandVerbSchema = z.enum([
   "set-limit",
   "continue-task",
   "recovery-retry",
+  "retry-task",
   "shutdown",
   "set-workspace-mode",
   "set-agent-preferences",
@@ -666,6 +667,8 @@ export const recoveryRetryPayloadSchema = z.discriminatedUnion("scope", [
   z.object({ scope: z.literal("run"), runId: idSchema }).strict(),
   z.object({ scope: z.literal("group"), groupId: idSchema }).strict(),
 ]);
+// Issue fixes spec §4.2(2): start a task again whose current run ccloop ended failed. Group target; the task is named here.
+export const retryTaskPayloadSchema = z.object({ taskId: idSchema }).strict();
 
 const proposalTargetSchema = z.discriminatedUnion("scope", [
   z
@@ -867,6 +870,7 @@ const rawAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...rawCommandFields, verb: z.literal("set-limit"), target: groupCommandTargetSchema, payload: setLimitPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("continue-task"), target: taskCommandTargetSchema, payload: continueTaskPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("recovery-retry"), target: commandTargetSchema, payload: recoveryRetryPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("retry-task"), target: groupCommandTargetSchema, payload: retryTaskPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("shutdown"), target: globalCommandTargetSchema, payload: shutdownPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-workspace-mode"), target: repositoryCommandTargetSchema, payload: setWorkspaceModePayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-integration-scheme"), target: repositoryCommandTargetSchema, payload: setIntegrationSchemePayloadSchema }).strict(),
@@ -917,6 +921,7 @@ const effectiveAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z
     .object({ ...effectiveCommandFields, verb: z.literal("recovery-retry"), target: commandTargetSchema, payload: recoveryRetryPayloadSchema })
     .strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("retry-task"), target: groupCommandTargetSchema, payload: retryTaskPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("shutdown"), target: globalCommandTargetSchema, payload: shutdownPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-workspace-mode"), target: repositoryCommandTargetSchema, payload: setWorkspaceModePayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-integration-scheme"), target: repositoryCommandTargetSchema, payload: setIntegrationSchemePayloadSchema }).strict(),
@@ -1496,6 +1501,7 @@ const commandResultSchema = z.discriminatedUnion("kind", [
       wakeId: nonemptyString,
     })
     .strict(),
+  z.object({ kind: z.literal("task-retried"), taskId: idSchema, fromRunId: idSchema }).strict(),
   z
     .object({
       kind: z.literal("recovery-observed"),
@@ -1606,6 +1612,7 @@ export type HandoffStopPayload = z.infer<typeof handoffStopPayloadSchema>;
 export type ResumeFromHandoffPayload = z.infer<typeof resumeFromHandoffPayloadSchema>;
 export type ContinueTaskPayload = z.infer<typeof continueTaskPayloadSchema>;
 export type RecoveryRetryPayload = z.infer<typeof recoveryRetryPayloadSchema>;
+export type RetryTaskPayload = z.infer<typeof retryTaskPayloadSchema>;
 export type ProposalEditPayload = z.infer<typeof proposalEditPayloadSchema>;
 export type EffectiveProposalEditPayload = z.infer<typeof effectiveProposalEditPayloadSchema>;
 export type ReestimatePayload = z.infer<typeof reestimatePayloadSchema>;

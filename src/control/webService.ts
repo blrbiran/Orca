@@ -18,6 +18,7 @@ import { estimateExecutionContractSchema, executionSnapshotSchema } from "./webP
 import { scheduleStart, type StartCommand } from "./webDispatch.js";
 import { applyHandoffStop, applyPauseDispatch, applyRecoveryRetry, applyResumeDispatch, type HandoffStopCommand, type PauseCommand, type RecoveryRetryCommand, type ResumeDispatchCommand, type StopDeps } from "./stopIntent.js";
 import { applyContinueTask, applyResumeFromHandoff, type ContinueTaskCommand, type ResumeFromHandoffCommand } from "./continuation.js";
+import { applyRetryTask, type RetryTaskCommand } from "./retryTask.js";
 import { applySetWorkspaceMode, type SetWorkspaceModeCommand } from "./workspaceSettings.js";
 import { prepareResolution } from "./integrationResolve.js";
 import { controlWorkspaceRoots } from "./workspace.js";
@@ -633,6 +634,10 @@ export class WebControlService {
   }
   async continueTask(command: ContinueTaskCommand): Promise<WebCommandResult> {
     return applyContinueTask(this.stopDeps(), command) as WebCommandResult;
+  }
+  /** Issue fixes spec §4.2(2): a task whose run ccloop ended failed back to ready (retryTask.ts). */
+  retryTask(command: RetryTaskCommand): WebCommandResult {
+    return applyRetryTask(this.stopDeps(), command) as WebCommandResult;
   }
   /**
    * Agent selection spec §6.4 (§12 C4): resolve every slot through ccloop outside the transaction, then freeze only
