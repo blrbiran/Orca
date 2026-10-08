@@ -371,6 +371,23 @@ describe("fix round 1: PR records across scheme changes, gh timeouts, forks, bla
     } finally { await w.dispose(); }
   });
 
+  it("R1: a switched group whose integrated work the target already holds is not due -- no push, no gh", async () => {
+    const w = await world({ ...HUB_TASK, delivery: "push-branch" }); try {
+      await w.confirm();
+      const tip = w.land({ "a.txt": "a\n" });
+      expect(await w.pass()).toBe(true);
+      // The person fast-forwarded main to the group's work themselves.
+      g(w.repo, ["update-ref", "refs/heads/main", tip]);
+      await w.setScheme(HUB_TASK);
+      const before = w.calls().length;
+      const children = spyChildren();
+      expect(await w.pass()).toBe(false);
+      expect(w.calls().length).toBe(before);
+      expect(children.filter((argv) => argv.includes("push"))).toEqual([]);
+      expect(w.record()).toMatchObject({ lastIntegrated: tip, pr: null, pending: null });
+    } finally { await w.dispose(); }
+  });
+
   it("R2: a target change forgets the recorded PR (the next pass lists for the new base); a trigger change keeps it", async () => {
     const w = await world(HUB_TASK); try {
       await w.confirm();
