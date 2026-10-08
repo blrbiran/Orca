@@ -121,6 +121,7 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 ✅ **N2 agent 入口（2026-10-07，会话 `6cc0c1e9`）做完，人已审**：见 §4.0.s。
 ✅ *** **会话 `9a20ac38`（2026-10-07）**：N2 人审收口；discovery 修复、UI 按钮、npm audit 8→0（vitest 5）已进 main；隔离根真 ccmem／syncskill 验收；ccloop 两红诊断（ccloop 人裁 139）；**写好并经人批准两份 spec＋计划（面板服务、账户与花费上限），未开始实施**。见 §4.0。 ***
 ✅ *** **会话 `30bd7e40`（2026-10-07～08）**：两份已批计划（面板服务；账户＋按模型 token 账＋花费上限，含 ccloop Part B）**全部执行完、终审过，在三个 worktree 分支上等人合并**；未推、未合、未装服务。见 §4.0。 ***
+✅ *** **会话 `eaee0f2c`（2026-10-08）**：账户 Task 12 重钉 ccloop＋改密码全退登（人裁）；「合入方案」＋四个面板修复，SDD 12 个 task＋终审＋修复波，门绿；**两条叠放的 worktree 分支等人合并**；主工作树有一次子 agent 事故待人修。见 §4.0。 ***
 
 **现行基线（会话 `08011394`，2026-10-04，项目切换之后的最终树）**：干净 clone、HOME 与四个 XDG 根改道、TMPDIR `/private/tmp/claude-501/og/t`、`ORCA_CCLOOP_BIN`＝ccloop `2b380ea` 的 clone build、`ORCA_AGENTS_TABLE`＝fake codex `integration`、真 syncskill／ccmem 二进制，逐段各跑：web build、typecheck、ledger、claude-md、hooks-path、`verify:control`、`verify:scheduler`、`verify:ccloop-pin`、`verify:panel`、`--ws check`（web 65 文件 405 条）、`check-tmp-leak`（0 残留）都 RC 0；全量 vitest **2745 条：2740 过、3 skipped（`ccloopDefaultE2E`，formal only）、2 红**＝已登记 flake `driverRequirementSplit`、`controlShutdown` 143；`verify:chain` 的全量另红 `controlShutdown` 143 与**新登记**的 `agentSelectionE2E` C3（见下）。三个红文件负载约 6 时单跑各 3/3 绿。原始报数在该会话 scratchpad（会话结束即失效），结论只在这里。
 
@@ -159,51 +160,45 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 
 ## 四、⛔ 下一件事
 
-### 4.0 ⛔ 现在的下一件事（2026-10-08，会话 `30bd7e40`；本节优先于旧条目）
+### 4.0 ⛔ 现在的下一件事（2026-10-08，会话 `eaee0f2c`；本节优先于旧条目）
 
-本节整节替换会话 `9a20ac38` 写的 §4.0（两份计划已批、未开始）。那一版「本轮做完的」压缩进 §4.0.t。
+本节整节替换会话 `30bd7e40` 写的 §4.0；那一版的结论压缩进 §4.0.u。
 
-**状态一句话**：两份已批计划都做完了，在三个 worktree 分支上，**一笔都没合进 main、一笔都没推**，等人审、等人合。
+**状态一句话**：上一轮两份计划已由人合进 main 并推送。本轮在两条叠起来的 worktree 分支上做完、门绿，**都没合进 main、都没推**：
 
-| 分支 | worktree | 内容 | 唯一进度源（台账） |
+| 分支（叠放顺序） | worktree | 内容 | 唯一进度源 |
 |---|---|---|---|
-| Orca `panel-service` | `/Users/biran/code/skills/loop/Orca-panel-service` | 面板做成每用户服务（launchd／systemd／detached），`orca panel install|uninstall|start|stop|restart|status|logs`，`run --service`（单实例锁、`panel.json`、exit 78、日志轮转），经 `panel.json` 发现面板，`dist/cli.js` node build，可选真 launchd 冒烟 | `.superpowers/sdd/2026-10-07-panel-service/progress.md` |
-| Orca `accounts-spend-caps`（**叠在 `panel-service` 上**） | `/Users/biran/code/skills/loop/Orca-accounts` | 整个 Web 要登录（scrypt＋HS256 cookie 会话＋CSRF）、socket 上的 `agent` 主体、一张权限表、`orca user`、控制库 v7→v8、按模型 token 账（收 ccloop 的可选 `byModel`）、用量日历与读路由、token 花费上限（整体／项目 × 总计／周／月）＋派活闸门＋agent 导入天花板、Web UI | `.superpowers/sdd/2026-10-07-accounts-and-spend-caps/progress.md`（含 Part B） |
-| ccloop `orca/usage-by-model` | `/Users/biran/code/skills/loop/ccloop-usage-by-model` | Part B：用量事件加可选 `byModel`（只加不改判据） | 同上台账「Part B」节；ccloop handoff 文末「Orca 那条线」 |
+| `deps/usage-by-model-pin` | `/Users/biran/code/skills/loop/Orca-usage-pin` | 账户计划 Task 12：重钉 ccloop `c82b21261cf45c8a615a75ef2e724c1173176920`＋`usageByModelE2E`（旧 pin 红、新 pin 绿）；人裁：改密码成功作废该用户**全部**会话（含当前）并清 cookie，输错密码不作废任何会话、只计入节流 | `.superpowers/sdd/2026-10-07-accounts-and-spend-caps/progress.md` 末节「Task 12 and the human review follow-up」 |
+| `feat/integration-schemes`（叠在上一条上） | `/Users/biran/code/skills/loop/Orca-integration` | 「合入方案」：仓库默认方案＋组拷贝＋确认即批准（`integrationHash`，owner 专属）；任务／组完成后 `local`（含人检出分支的严格 ff）／`push-target`／`push-branch`／`github-pr`（一组一个 PR）；方法只有 `merge`／`squash`（`rebase` 砍掉）；冲突经 owner 批准后派 agent 解；四个面板修复（Decisions 状态筛选、记忆区左右分栏、token 千分位输入、Agents 默认折叠） | `.superpowers/sdd/2026-10-08-integration-and-panel-fixes/progress.md`；spec `docs/superpowers/specs/2026-10-08-integration-and-panel-fixes-design.md`（§12 裁定、§13 实施期更正） |
 
-**下一个 agent 做什么**：先读两份台账末尾（`Task 13: gate`、`Final whole-branch review`、所有 `Ruling:` 行），然后只剩等人的事：
-1. 人合并、推送之后：账户计划 **Task 12**（`node scripts/pin-ccloop.mjs <ccloop 推上去的 40 位提交>` 重钉，加 `tests/control/usageByModelE2E.test.ts`，先对旧 pin 见红）。计划原文在 `docs/superpowers/plans/2026-10-07-accounts-and-spend-caps.md` Task 12。
-2. 人点名后：ccloop B4（`usageBreakdown` 标志）。
-3. 其它全部归人，见下面 awaitingHuman。
+**门（隔离 clone、HOME＋四 XDG 改道、`ORCA_CCLOOP_BIN`＝`c82b212` 的 clone build 绝对路径、fake codex `integration`）**：
+- 重钉分支：web build／typecheck／`--ws check`／`verify:control`（1366 过）／`verify:panel`／tmp-leak 都 RC 0；`npm test` 3087 条 5 红，全是已登记负载 flake，单跑各 3/3。变异 7 条全红。
+- 合入分支：上述各项 RC 0；`npm test` 3267 条：3260 过、7 skipped、0 红；`verify:control` 1533 过。tmp-leak 的复跑里 `driverReconcileN` "lands all three…" 撞一次 deadline，单跑 3/3（**新负载 flake 候选**）。真实 `~/.orca/control` 前后 `cmp` 一致。逐 task 变异表在台账旁的 `task-<N>-report.md` 与 `final-fix-report.md`。
+- 终审抓到并已修：第二次冲突复用 attempt 1、读到上一轮旧结果把错的树发布出去（C1）；改目标后 squash 漏掉旧工作（I1）。
 
-**门（隔离 clone、HOME＋四 XDG 改道、`ORCA_CCLOOP_BIN`＝pin `c3af4d6` 的 clone build、fake codex `integration`）**：
-- `panel-service` 收口门：typecheck／build／web build／`--ws check`／`verify:panel`／`check-tmp-leak` RC 0；`npm test` 2984 条：2974 过、7 skipped、3 红（全是已登记负载 flake，单跑各 3/3 绿）；`verify:control` 原本 RC 1，是 vitest 5 不认 `--minWorkers`（main 上就有，与分支无关），同分支已修（主题行 `fix(scripts): run verify:control under vitest 5's worker flags`），修后 1321 过。
-- `accounts-spend-caps` 收口门：上述各项 RC 0（`verify:control` 1365 过）；`npm test` 3085 条：3073 过、7 skipped、5 红，全是 `Test timed out`、单跑各 3/3 绿——其中 `requirementExport` DR21 与 `schedulerBridge` "success" 不在名单里（控制器判为负载 flake、**提请人决定是否入名单**）。`find ~/.orca -name accounts.sqlite -o -name jwt.key -o -name initial-password` 前后都为空。
-- ccloop 分支门：vitest 1211/1211、`check-known-reds` RC 0、typecheck／build／`verify:control` RC 0。
-- 变异：两轮合计数百条，每条见红＋还原 0/0 字节，表在两份台账的 Task 13 节。
+**下一个 agent 做什么**：等人做完下面 awaitingHuman 1–2 之后，本轮没有遗留代码活。还开着的见下面「不归人」。
 
-**人的授权（本轮给的，已用完）**：执行中按控制器建议自裁、台账记 `Ruling:`、最后统一报；覆盖改既有 Orca 判据，不覆盖 ccloop。⇒ 两份台账共约 70 行 `Ruling:`，**等人审**。最需要人看的几条：
-- 账户：spec §6.1 说花费上限命令写 `security_events`，D6 说只进命令台账——按 D6（更晚、给了理由）。
-- 账户：改密码会作废该用户的其它会话；改密码时输错当前密码也计入登录节流；登录节流表有上限且会清过期条目（spec 未写，控制器定）。
-- 账户：对账花费（`recordReconcileUsage`）记成一行 `run-work`／`unattributed`（v8 没有 `reconcile` 来源）。
-- 账户：`POST /api/chains` 的 `maxCostUsd`／`maxSessions` 成员也能设，chains 启动的付费工作不受上限约束——spec 没写，**是政策问题，没改代码**。
-- 面板服务：Linux 上 `status`／`logs` 不再顺手 `loginctl enable-linger`（偏离 D18）；systemd `install` 是 `enable`＋`restart`，`restart` 每次先 `daemon-reload`（偏离 spec §4）；install/start/restart 等面板真的应答才算成功（spec §9）。这些都记在 spec §11。
-
-**awaitingHuman（Tier 0 与人的决定）**：
-1. ccloop：把 `orca/usage-by-model` 合进 ccloop main（main 没动时 `--ff-only`）并推送，把推上去的 40 位提交告诉 Orca 会话（Task 12 要用）。
-2. ccloop B4：点名 `singleCallCapability` C1，或放弃 `usageBreakdown`。
-3. Orca：按顺序 `--ff-only` 合 `panel-service`、再合 `accounts-spend-caps` 进 main，推送。两条分支在本会话收尾时已把 main 合进来（main 上多了 `orca checkpoint write` 自动提交的两笔 `chore(checkpoint)` 与本文这一笔），**合并前用 `git merge-base --is-ancestor main <分支>` 现核**；若 main 又动了，先把 main 合进分支再 ff。
-4. **账户这一版第一次启动会把人的控制库从 v7 迁到 v8，单向**（旧 build 拒开 v8）。**先备份** `~/.orca/control/orca-e0c92460/control.sqlite`。首次启动会建默认 owner，初始密码写在控制根下的 `initial-password`（0600），面板只打印路径；首次登录强制改密码。
-5. 装服务：停掉 `~/.orca/panel.sh` 起的面板，再按 `panel-service` 台账「Task 14」节的命令 `orca panel install …`（`--dry-run` 已在 worktree 里核过：`service.env` 恰好 7 个变量、run.sh 带 panel.sh 的全部参数、label `dev.orca.panel`）。终审建议**先授权跑一次可选真 launchd 冒烟**（`npm run build && ORCA_SERVICE_REAL=1 ./node_modules/.bin/vitest run tests/service/realSmoke.test.ts`，固定改道 label `dev.orca.panel.smoke`），因为 `launchctl print`／`managername` 的解析只见过假工具。之后可退休 `~/.orca/panel.sh`。
-6. 删三个 worktree（`Orca-panel-service`、`Orca-accounts`、`ccloop-usage-by-model`）与两个 scratchpad 里的旧 prunable worktree。
-7. 政策问题：chains 与花费上限的关系；`requirementExport` DR21、`schedulerBridge` "success"、`requirementCommands` DR10、web `projectSwitcher` C 要不要入负载 flake 名单；ccloop 的 `cli.test.ts` 那条同理。
-8. 知情：`relocateUserData` 的真实 `~/.orca` 快照护栏会因为**人正在用自己的面板**（写 `control.sqlite`、`reviews.jsonl`）而在长测试文件里假红；本轮记为「人在操作」，护栏没改窄。
+**awaitingHuman**：
+1. ⚠️ *** **先修主工作树**：本会话一个子 agent 的 `cd` 失败后用 `;` 串接，把临时 git 实验跑进了 `/Users/biran/code/skills/loop/Orca`：本地 main 多了两笔垃圾提交（主题 `base`、`main`，只动文件 `f`）和分支 `side`；其后控制器的检查点提交叠在上面。**没推送。**修复（Tier 0，人做）：`git rebase --onto 254371c 7ce8db2 main && git branch -D side`（保留检查点提交、丢掉垃圾）。 ***
+2. 按顺序 `--ff-only` 合 `deps/usage-by-model-pin`、再合 `feat/integration-schemes` 进 main（main 动过就先把 main 合进分支），推送。合之前用 `git merge-base --is-ancestor` 现核。
+3. 删 worktree `Orca-usage-pin`、`Orca-integration` 与两个 scratchpad 旧 prunable worktree。
+4. 审两份台账里的 `Ruling:` 行（合入轮约 60 条；最需要看的：R1 砍 `rebase`；R2 非 keep 组只能 owner 确认；`integration-remote-missing` 只在 `remote.<r>.url` 未配置时；HTTP 401/403 永久 blocked；改目标／远端／交付方式会重置 `lastIntegrated` 与 PR 记录；冲突解决不受暂停／停止影响；推送跳过人的 pre-push 钩子；`GIT_SSH_COMMAND` 只在人没设时才加 BatchMode）。
+5. `driverReconcileN` 那条要不要入负载 flake 名单（另有上轮的 DR21、schedulerBridge "success"、DR10、web projectSwitcher C、ccloop `cli.test`）。
+6. 知情：仓库一旦设了合入默认，旧版 Orca 读它的设置 body 会判 `repository-settings-invalid`（单向，spec §3.1）。
+7. ccloop B4（`usageBreakdown`）：点名 `singleCallCapability` C1，或放弃。
 
 **还开着的（不归人）**：
-- D19：旧调度器 `claimWork` 不受上限闸门（实测只有测试走得到）。
-- 真 claude 的 `modelUsage` 之和是否等于 `usage` 没付费验过（对不上会记 `unattributed`／`breakdown-mismatch`）。
-- Linux 没有真机 systemd 冒烟（D16）；`orca user add` 没在真终端跑过。
-- 两份台账里的 deferred minor（各带一行理由），终审已逐条分过「合并前必修／可延后」，必修的都修了。
+- 真 GitHub 上没跑过（PR 流程只在 fake `gh` 下验过）；真 claude 的 `modelUsage` 之和是否等于 `usage` 未付费验。
+- 卡住的远端会让整轮驱动等最多 `ORCA_INTEGRATION_TIMEOUT_MS`（60 s）／回退周期；同一远端一轮只等一次；没有「另一组的 run 仍推进」的判据。
+- 台账里的 parked／deferred minor（各带理由）：如 Decisions 首次拉取失败时一直显示「Reading…」、`nextAttempt` 扫 outbox、旧 `GIT_SSH` 变量被丢、`refs/orca/integration/*` 不清理。
+
+### 4.0.u 会话 `30bd7e40`（2026-10-07～08）留下的结论（**已完成、已由人合并推送；过程删了，结论留在这里**）
+
+本节由会话 `eaee0f2c` 压缩，依据：人已合并推送（主题行 `Merge panel-service into accounts-spend-caps so main can fast-forward`）。原文在 git 历史（主题行 `docs(handoff): both approved plans are done on worktree branches; merge, Task 12 and the install are the human's`）。
+- 面板做成每用户服务（launchd／systemd／detached）：`orca panel install|uninstall|start|stop|restart|status|logs`、`run --service`（单实例锁、`panel.json`、exit 78、日志轮转）；install/start/restart 等面板应答才算成功；Linux 无真机 systemd 冒烟。
+- 账户：整个 Web 要登录（scrypt＋HS256 cookie＋CSRF）、socket 上 `agent` 主体、一张权限表、`orca user`、控制库 v7→v8（**单向**）、按模型 token 账、用量日历、token 花费上限＋派活闸门。首次启动建默认 owner，初始密码在控制根 `initial-password`（0600）。
+- 人裁待审项（上轮列给人的）：花费上限命令只进命令台账（D6 优先于 §6.1）；对账花费记一行 `unattributed`；`POST /api/chains` 不受花费上限约束（政策问题，未改代码）；Linux `status`／`logs` 不顺手 `enable-linger`。
+- 装服务、退休 `~/.orca/panel.sh`、可选真 launchd 冒烟：归人（面板服务台账「Task 14」节）。
 
 ### 4.0.t 会话 `9a20ac38`（2026-10-07）留下的结论（**已完成；过程删了，结论留在这里**）
 
