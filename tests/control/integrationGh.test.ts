@@ -33,7 +33,7 @@ const HUB_TASK: IntegrationScheme = { delivery: "github-pr", trigger: "task", ta
 const HUB_GROUP: IntegrationScheme = { ...HUB_TASK, trigger: "group" };
 
 interface FakePr { number: number; url: string; state: "OPEN" | "CLOSED" | "MERGED"; isDraft: boolean; head: string; base: string; owner?: string }
-interface FakeState { prs?: FakePr[]; authOk?: boolean; refuseDraft?: boolean; fail?: Record<string, string>; hang?: Record<string, number> }
+interface FakeState { prs?: FakePr[]; authOk?: boolean; refuseDraft?: boolean; fail?: Record<string, string>; hang?: Record<string, number>; createUrl?: string }
 interface GhCall { argv: string[]; stdin?: string }
 
 /** A commit on `ref` whose tree is its parent's with `files` written, made with plumbing (no checkout). */
@@ -461,6 +461,34 @@ describe("fix round 1: PR records across scheme changes, gh timeouts, forks, bla
       expect(subs(w.calls())).toEqual(["auth status", "pr list"]);
       expect(w.calls()[1]!.argv).toContain("github.com/O/r");
       expect(w.record()).toMatchObject({ state: "idle", pr: { number: 1, ready: false } });
+    } finally { await w.dispose(); }
+  });
+
+  it.each([
+    ["another host", "https://evil.example/o/r/pull/1"],
+    ["another repository", "https://github.com/someone/r/pull/1"],
+    ["a script", "javascript:alert(1)//github.com/o/r/pull/1"],
+    ["a number that is not the PR's", "https://github.com/o/r/pull/7"],
+  ])("final review Minor 3: a listed PR whose URL names %s is refused, not recorded", async (_name, url) => {
+    const listed: FakePr = { number: 1, url, state: "OPEN", isDraft: true, head: "orca/g", base: "main" };
+    const w = await world(HUB_TASK, { state: { prs: [listed] } }); try {
+      w.land({ "a.txt": "a\n" });
+      expect(await w.pass()).toBe(true);
+      expect(w.record()).toMatchObject({ state: "blocked", pr: null });
+      expect(w.record().reason).toMatch(/^integration-pr-refused:/);
+      expect(subs(w.calls())).toEqual(["auth status", "pr list"]);
+    } finally { await w.dispose(); }
+  });
+
+  it.each([
+    ["another repository", "https://github.com/someone/r/pull/1"],
+    ["no pull request", "Creating pull request for orca/g into main"],
+  ])("final review Minor 3: a created PR whose URL names %s is refused, not recorded", async (_name, createUrl) => {
+    const w = await world(HUB_TASK, { state: { createUrl } }); try {
+      w.land({ "a.txt": "a\n" });
+      expect(await w.pass()).toBe(true);
+      expect(w.record()).toMatchObject({ state: "blocked", pr: null });
+      expect(w.record().reason).toMatch(/^integration-pr-refused:/);
     } finally { await w.dispose(); }
   });
 

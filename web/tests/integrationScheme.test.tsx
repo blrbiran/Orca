@@ -326,6 +326,25 @@ describe("the group's Git area (spec §6.5, §9.1)", () => {
     expect(onCommand.mock.calls).toEqual([[{ verb: "resolve-integration-conflict", groupId: "g", expectedRevision: 6, payload: {} }]]);
   });
 
+  it("final review Minor 4: a conflict the copy could not reproduce offers Retry, not Resolve (the server would refuse it)", () => {
+    const { onCommand, section } = show(confirmedGroup(record({ frozen: true, state: "conflict", reason: "integration-conflict-unreproducible" })));
+    expect(within(section).queryByRole("button", { name: "Resolve with an agent" })).toBeNull();
+    fireEvent.click(within(section).getByRole("button", { name: "Retry integration" }));
+    expect(onCommand.mock.calls).toEqual([[{ verb: "retry-integration", groupId: "g", expectedRevision: 6, payload: {} }]]);
+  });
+
+  it.each([
+    "javascript:alert(1)//github.com/o/r/pull/12",
+    "https://github.com/o/r/pull/12/../../../evil",
+    "http://github.com/o/r/pull/12",
+    "https://github.com/o/r/issues/12",
+  ])("final review Minor 3: a recorded PR URL that is not a pull request URL is shown as text, never as a link (%s)", (url) => {
+    const { section } = show(confirmedGroup(record({ frozen: true, state: "idle", pr: { url, number: 12, ready: false } })));
+    expect(section.textContent).toContain("Pull request #12 (draft)");
+    expect(within(section).queryAllByRole("link")).toEqual([]);
+    expect(section.querySelector("a")).toBeNull();
+  });
+
   it("offers neither button while the integration is idle or an agent is resolving", () => {
     show(confirmedGroup(record({ frozen: true, state: "idle" })));
     expect(within(screen.getByRole("region", { name: "Git" })).queryAllByRole("button")).toEqual([]);

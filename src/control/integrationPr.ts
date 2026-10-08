@@ -31,6 +31,20 @@ function ghNetwork(stderr: string): boolean {
   return /error connecting to|could not resolve|timed out|timeout/i.test(stderr);
 }
 
+/**
+ * Final review Minor 3: the number of a pull request URL of `repo` (`host/owner/name`) -- exactly
+ * `https://<host>/<owner>/<name>/pull/<n>`, the repository compared case-insensitively as GitHub does -- else null.
+ * Nothing else gh prints is stored as the group's PR or shown as a link.
+ */
+export function prNumberOf(repo: string, url: string): number | null {
+  const match = /^https:\/\/([^/]+\/[^/]+\/[^/]+)\/pull\/([1-9][0-9]{0,15})$/.exec(url);
+  if (match === null || match[1]!.toLowerCase() !== repo.toLowerCase()) return null;
+  const number = Number(match[2]);
+  return Number.isSafeInteger(number) ? number : null;
+}
+const refusedUrl = (repo: string, url: string): SyncGroupPrResult =>
+  ({ blocked: `integration-pr-refused:gh answered a pull request URL outside ${repo}: ${oneLine(url).slice(0, 200)}`, message: oneLine(url) });
+
 /** A failed gh call: the network backs off; anything else refuses with gh's words. */
 function failure(answer: ChildResult): SyncGroupPrResult {
   const words = oneLine(answer.stderr || answer.stdout);
@@ -60,17 +74,19 @@ export async function syncGroupPr(input: SyncGroupPrInput): Promise<SyncGroupPrR
       const found = (JSON.parse(listed.stdout) as { url: string; number: number; state: string; isDraft: boolean; headRepositoryOwner?: { login?: string } }[])
         .filter((each) => each.headRepositoryOwner?.login?.toLowerCase() === owner);
       const open = found.find((each) => each.state === "OPEN");
-      if (open !== undefined) pr = { url: open.url, number: open.number, ready: !open.isDraft };
+      if (open !== undefined) {
+        if (prNumberOf(input.repo, open.url) !== open.number) return refusedUrl(input.repo, open.url);
+        pr = { url: open.url, number: open.number, ready: !open.isDraft };
+      }
       else if (found.length > 0) return { blocked: "integration-pr-closed", message: `#${found[0]!.number} is ${found[0]!.state}` };
       else {
         const created = await gh(["pr", "create", "--repo", input.repo, "--base", input.base, "--head", input.head, ...(input.draft ? ["--draft"] : []),
           `--title=${input.title}`, "--body-file", "-"], input.body);
         if (created.code !== 0) return failure(created);
         const url = created.stdout.trim().split("\n").pop()!.trim();
-        const number = /\/pull\/(\d+)$/.exec(url);
-        // The PR exists but its number cannot be read: the next attempt finds it with pr list.
-        if (number === null) throw new Error(`gh pr create answered no pull request URL: ${oneLine(created.stdout)}`);
-        pr = { url, number: Number(number[1]), ready: !input.draft };
+        const number = prNumberOf(input.repo, url);
+        if (number === null) return refusedUrl(input.repo, url);
+        pr = { url, number, ready: !input.draft };
         input.onStep?.("after-pr-create");
       }
     } else {

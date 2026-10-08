@@ -15,6 +15,8 @@ import type { GroupIntegrationViewV1, GroupViewV1, RepositoryWorkspaceV1 } from 
 import { integrationReasonText, integrationSentence } from "./IntegrationScheme.js";
 
 const short = (commit: string): string => commit.slice(0, 12);
+/** Final review Minor 3: only `https://<host>/<owner>/<name>/pull/<n>` is ever a link; anything else is shown as text. */
+const PR_URL = /^https:\/\/[A-Za-z0-9.-]+\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/pull\/[1-9][0-9]*$/;
 
 /** Integration spec §6.5, §9.1: where a non-keep group's integration stands; an owner may Retry a block and approve a resolution. */
 function IntegrationState(props: { groupId: string; revision: number; integration: GroupIntegrationViewV1; onCommand?: (action: ControlAction) => void }): JSX.Element {
@@ -23,6 +25,8 @@ function IntegrationState(props: { groupId: string; revision: number; integratio
   const { integration, groupId, revision } = props;
   const send = (verb: "retry-integration" | "resolve-integration-conflict"): void => props.onCommand?.({ verb, groupId, expectedRevision: revision, payload: {} });
   const commit = (value: string | null): string => (value === null ? t("control.integration.notYet") : short(value));
+  const pr = integration.pr;
+  const prLabel = pr === null ? "" : t("control.integration.pr", { number: pr.number, state: t(pr.ready ? "control.integration.prReady" : "control.integration.prDraft") });
   return (
     <>
       <li>{integrationSentence(integration.scheme, groupId)}</li>
@@ -31,13 +35,12 @@ function IntegrationState(props: { groupId: string; revision: number; integratio
       {integration.reason !== null && <li>{t("control.integration.reasonLine", { reason: integrationReasonText(integration.reason) })}</li>}
       <li>{t("control.integration.lastIntegrated", { commit: commit(integration.lastIntegrated) })}</li>
       <li>{t("control.integration.integratedCommit", { commit: commit(integration.integratedCommit) })}</li>
-      {integration.pr !== null && (
-        <li><a href={integration.pr.url}>{t("control.integration.pr", { number: integration.pr.number, state: t(integration.pr.ready ? "control.integration.prReady" : "control.integration.prDraft") })}</a></li>
-      )}
+      {pr !== null && <li>{PR_URL.test(pr.url) ? <a href={pr.url}>{prLabel}</a> : prLabel}</li>}
       {mayAct && (integration.state === "blocked" || integration.state === "conflict") && (
         <li><button type="button" onClick={() => send("retry-integration")}>{t("control.integration.retry")}</button></li>
       )}
-      {mayAct && integration.state === "conflict" && (
+      {/* Final review Minor 4: a conflict its copy did not reproduce has nothing to approve; Retry recomputes it. */}
+      {mayAct && integration.state === "conflict" && integration.reason !== "integration-conflict-unreproducible" && (
         <li><button type="button" onClick={() => send("resolve-integration-conflict")}>{t("control.integration.resolve")}</button></li>
       )}
     </>

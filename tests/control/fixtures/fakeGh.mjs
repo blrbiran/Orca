@@ -4,7 +4,8 @@
 // - state.json: { prs: [{number,url,state,isDraft,head,base}], authOk: true, refuseDraft: false,
 //   fail: { "<sub command>": "<stderr>" } } -- `fail` makes that sub command ("pr create", "auth status", ...) print
 //   the words to stderr and exit 1, as gh does when its API call fails; `hang: { "<sub command>": ms }` sleeps first.
-//   A PR's optional `owner` is its head repository's owner (default "o"; another one is a fork).
+//   A PR's optional `owner` is its head repository's owner (default "o"; another one is a fork). `createUrl`, when
+//   set, is what `pr create` prints instead of the PR's own URL (a gh that answers something unexpected).
 // Unknown commands exit 2.
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -55,7 +56,7 @@ switch (sub) {
     const url = `https://${flag("repo")}/pull/${number}`;
     state.prs.push({ number, url, state: "OPEN", isDraft: draft, head: flag("head"), base: flag("base") });
     save();
-    process.stdout.write(`${url}\n`);
+    process.stdout.write(`${state.createUrl ?? url}\n`);
     break;
   }
   case "pr ready": {
