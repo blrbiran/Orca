@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { initialControlState, reduceControlState } from "../src/controlState.js";
-import type { ControlClientEvent, ControlClientState, UncertainCommand } from "../src/controlState.js";
+import type { ControlClientEvent, ControlClientState, ControlRefusal, UncertainCommand } from "../src/controlState.js";
 import type { ControlSummaryV1, GroupViewV1, RecoveryViewV1 } from "../src/controlTypes.js";
 
 const groupSummary = { groupId: "g", repoId: "r", state: "ready", commandRevision: 3, projectionSeq: 1, stopMode: null, stopState: null, claimBlocked: false, recoveryBlockerCount: 0 } as const;
@@ -133,18 +133,52 @@ describe("control client state machine", () => {
     expect(next.refetchRequired).toBe(false);
   });
 
+  // Rewritten for spec 2026-10-08 §2.2(d) (human-approved): the refusal is kept under its group, not in one global slot.
   it("clears the conflicted group cache on a revision conflict without touching drafts", () => {
     const populated = populatedState();
     const next = reduceControlState(populated, {
       type: "refusal",
+      place: "group",
       groupId: "g",
       value: { status: 409, code: "revision-conflict", message: "expectedRevision is stale", commandRevision: 8 },
     });
     expect(next.canonical).toEqual({});
     expect(next.refetchRequired).toBe(true);
     expect(next.drafts).toEqual(populated.drafts);
-    expect(next.refusal?.code).toBe("revision-conflict");
-    expect(next.refusal?.commandRevision).toBe(8);
+    expect(next.refusals.g?.code).toBe("revision-conflict");
+    expect(next.refusals.g?.commandRevision).toBe(8);
+    expect(next.panelRefusal).toBeNull();
+  });
+
+  // Spec 2026-10-08 §2.2(d): a refusal is shown where the person acted, until the next success there.
+  const refused = (code: string): ControlRefusal => ({ status: 409, code, message: code, commandRevision: 6 });
+
+  it("keeps one refusal per group, and a success for one group clears only that group's", () => {
+    let state = reduceControlState(initialControlState(), { type: "refusal", place: "group", groupId: "g1", value: refused("stop-mode-conflict") });
+    state = reduceControlState(state, { type: "refusal", place: "group", groupId: "g2", value: refused("group-state-invalid") });
+    expect(state.refusals).toEqual({ g1: refused("stop-mode-conflict"), g2: refused("group-state-invalid") });
+    state = reduceControlState(state, { type: "command-succeeded", place: "group", groupId: "g2" });
+    expect(state.refusals).toEqual({ g1: refused("stop-mode-conflict") });
+    state = reduceControlState(state, { type: "command-succeeded", place: "group", groupId: "g1" });
+    expect(state.refusals).toEqual({});
+  });
+
+  it("keeps an import refusal apart from every group, cleared only by a successful import", () => {
+    let state = reduceControlState(initialControlState(), { type: "refusal", place: "import", groupId: "group-c1", value: refused("control-plan-rejected") });
+    state = reduceControlState(state, { type: "command-succeeded", place: "group", groupId: "group-c1" });
+    expect(state.importRefusal).toEqual(refused("control-plan-rejected"));
+    expect(state.refusals).toEqual({});
+    state = reduceControlState(state, { type: "command-succeeded", place: "import", groupId: "group-c2" });
+    expect(state.importRefusal).toBeNull();
+  });
+
+  it("keeps a refusal of no group and no import on the panel, untouched by any success", () => {
+    let state = reduceControlState(initialControlState(), { type: "refusal", place: "panel", groupId: null, value: refused("http-503") });
+    state = reduceControlState(state, { type: "command-succeeded", place: "group", groupId: "g" });
+    state = reduceControlState(state, { type: "command-succeeded", place: "import", groupId: "group-c1" });
+    expect(state.panelRefusal).toEqual(refused("http-503"));
+    expect(state.refusals).toEqual({});
+    expect(state.importRefusal).toBeNull();
   });
 
   it("retains an uncertain command id through lookup and removes it only when resolved", () => {

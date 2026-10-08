@@ -15,6 +15,7 @@ import { AgentSettings } from "./AgentSettings.js";
 import { nextCommandId, type ControlAction } from "./controlApi.js";
 import { ControlGroupView } from "./ControlGroupView.js";
 import { RecoveryView } from "./RecoveryView.js";
+import { RefusalNotice } from "./RefusalNotice.js";
 import { WorkspaceModeSelector } from "./WorkspaceModeSelector.js";
 import { RepositoryIntegration } from "./IntegrationScheme.js";
 import { enumText, refusalText } from "./i18n.js";
@@ -37,7 +38,12 @@ export interface ControlPanelProps {
   selected: string | null;
   drafts: Record<string, string>;
   uncertain: UncertainCommand[];
+  /** Spec 2026-10-08 §2.2(d): a refusal that belongs to no group and no import, on the panel's own line. */
   refusal: ControlRefusal | null;
+  /** Each group's last refusal, shown at the top of that group's view. */
+  groupRefusals?: Record<string, ControlRefusal>;
+  /** The last import's refusal, shown inside the import form. */
+  importRefusal?: ControlRefusal | null;
   refetchRequired: boolean;
   /**
    * Project switcher spec D4: the chosen project's control repository. Undefined when no project is chosen (the first
@@ -97,6 +103,8 @@ interface ImportFormProps {
   targets?: readonly string[];
   repoLabel?: (repoId: string) => string;
   onCommand: (action: ControlAction) => void;
+  /** Spec 2026-10-08 §2.2(d): the last import's refusal, with the refused plan's problems one per line. */
+  refusal?: ControlRefusal | null;
 }
 
 function ImportForm(props: ImportFormProps): JSX.Element {
@@ -121,6 +129,7 @@ function ImportForm(props: ImportFormProps): JSX.Element {
   return (
     <section aria-label={t("control.import.region")}>
       <h3>{t("control.import.title")}</h3>
+      {props.refusal ? <RefusalNotice refusal={props.refusal} testId="import-refusal" /> : null}
       {props.config.defaults === null ? (
         <p role="note">{t("control.import.noEstimator")}</p>
       ) : scope?.kind === "unresolved" ? (
@@ -241,6 +250,7 @@ export function ControlPanel(props: ControlPanelProps): JSX.Element {
       <ImportForm
         key={scope?.kind === "all" ? ALL_PROJECTS : (scope?.kind === "project" ? scope.repoId : props.repoId) ?? ""}
         config={config} repoId={props.repoId} scope={scope} targets={props.targets} repoLabel={props.repoLabel} onCommand={props.onCommand}
+        refusal={props.importRefusal ?? null}
       />
       {props.workspace && props.onWorkspaceMode && <WorkspaceModeSelector workspace={props.workspace} onChange={props.onWorkspaceMode} />}
       {props.integration && props.onIntegrationScheme && <RepositoryIntegration integration={props.integration} onSave={props.onIntegrationScheme} />}
@@ -284,6 +294,7 @@ export function ControlPanel(props: ControlPanelProps): JSX.Element {
           workspace={props.workspace}
           workspaceFor={props.workspaceFor}
           integrationFor={props.integrationFor}
+          refusal={props.groupRefusals?.[view.summary.groupId] ?? null}
         />
       )}
       {view === undefined && selected !== null && <p role="status">{t("control.reading", { groupId: selected })}</p>}

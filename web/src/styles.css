@@ -65,6 +65,7 @@ h1, h2, h3 { color: var(--text-strong); margin: 0 0 8px; line-height: 1.3; }
 h1 { font-size: 20px; } h2 { font-size: var(--text-lg); } h3 { font-size: var(--text-md); }
 p { margin: 0 0 8px; }
 code, .row-id, .row-at { font-family: var(--mono); }
+.refusal-code { font-size: 0.85em; }
 a { color: var(--accent); }
 
 /* Shell */

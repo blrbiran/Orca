@@ -266,7 +266,7 @@ export function App(): JSX.Element {
   const onDetailDraft = useCallback(<S extends DraftSlot>(slot: S, key: string, value: DetailDrafts[S][string]): void => {
     setDetailDrafts((all) => setDraft(all, slot, key, value));
   }, []);
-  /** The last refusal of a command sent from Requirements, shown there (Task control keeps showing every refusal). */
+  /** The last refusal of a command sent from Requirements, shown there (Task control shows a group's at the top of its view). */
   const [requirementRefusal, setRequirementRefusal] = useState<ControlRefusal | null>(null);
   /** The open requirement, for the poll tick, which outlives the render it was built in. */
   const requirementNow = useRef<string | null>(null);
@@ -317,7 +317,7 @@ export function App(): JSX.Element {
       const open = requirementNow.current;
       if (open !== null && summary.groups.some((group) => group.groupId === open)) void readRequirement(open);
     } catch (err) {
-      dispatchControl({ type: "refusal", groupId: null, value: controlFailureFrom(err) });
+      dispatchControl({ type: "refusal", place: "panel", groupId: null, value: controlFailureFrom(err) });
     }
     for (const command of controlNow.current.uncertainCommandIds) void resolveUncertain(command);
   };
@@ -326,7 +326,7 @@ export function App(): JSX.Element {
     try {
       dispatchControl({ type: "group", value: await fetchControlGroup(groupId) });
     } catch (err) {
-      dispatchControl({ type: "refusal", groupId, value: controlFailureFrom(err) });
+      dispatchControl({ type: "refusal", place: "group", groupId, value: controlFailureFrom(err) });
     }
   };
 
@@ -335,7 +335,7 @@ export function App(): JSX.Element {
       const value = await fetchRequirement(groupId);
       setRequirementViews((all) => ({ ...all, [groupId]: value }));
     } catch (err) {
-      dispatchControl({ type: "refusal", groupId, value: controlFailureFrom(err) });
+      dispatchControl({ type: "refusal", place: "panel", groupId, value: controlFailureFrom(err) });
     }
   };
 
@@ -353,11 +353,11 @@ export function App(): JSX.Element {
     if (result.kind === "unresolved") {
       // The lookup told us nothing, so the command is still unresolved: keep the id
       // for the next tick and show why this round could not conclude.
-      dispatchControl({ type: "refusal", groupId: command.groupId, value: result.refusal });
+      dispatchControl({ type: "refusal", place: "panel", groupId: command.groupId, value: result.refusal });
       return;
     }
     dispatchControl({ type: "command-resolved", value: command });
-    if (result.kind === "absent") dispatchControl({ type: "refusal", groupId: command.groupId, value: result.refusal });
+    if (result.kind === "absent") dispatchControl({ type: "refusal", place: "group", groupId: command.groupId, value: result.refusal });
     await readControlGroup(command.groupId);
   };
 
@@ -371,6 +371,8 @@ export function App(): JSX.Element {
       && controlNow.current.groups[action.groupId]?.state === "clarifying");
     const commandId = nextCommandId();
     const command = { groupId: action.groupId, commandId };
+    // Spec 2026-10-08 §2.2(d): an import's refusal is shown in the import form, every other command's in its group.
+    const place = action.verb === "import-plan" ? ("import" as const) : ("group" as const);
     dispatchControl({ type: "command-uncertain", value: command });
     // Spec §5: an answer that arrives after the scope changed may fill the cache, but must not reopen a detail.
     const scopeAtSend = scopeKeyNow.current;
@@ -378,11 +380,13 @@ export function App(): JSX.Element {
     if (answer.kind === "uncertain") {
       // The id stays where it is: sessionStorage keeps it across a reload, and the
       // next tick looks it up. The page shows that the outcome is unknown.
-      dispatchControl({ type: "refusal", groupId: action.groupId, value: answer.refusal });
+      dispatchControl({ type: "refusal", place, groupId: action.groupId, value: answer.refusal });
       if (requirementVerb) setRequirementRefusal(answer.refusal);
       return null;
     }
     dispatchControl({ type: "command-resolved", value: command });
+    // A success clears the refusal shown where the person acted; another group's stays (spec 2026-10-08 §2.2(d)).
+    if (answer.status < 400) dispatchControl({ type: "command-succeeded", place, groupId: action.groupId });
     // Labels and progress spec §4.2 (plan finding F11): a label draft is the person's own data -- cleared only once this
     // command succeeded; a refusal (and an uncertain answer, above) leaves it for them.
     if (answer.status < 400 && action.verb === "set-task-labels") dispatchControl({ type: "draft", key: labelsDraftKey(action.groupId, action.taskId), text: "" });
@@ -392,7 +396,7 @@ export function App(): JSX.Element {
     if (answer.status < 400 && action.verb === "set-task-loop" && action.payload.workProvenance === undefined) dispatchControl({ type: "draft", key: loopDraftKey(action.groupId, action.taskId), text: "" });
     if (answer.status >= 400) {
       const refusal = refusalFromAnswer(answer);
-      dispatchControl({ type: "refusal", groupId: action.groupId, value: refusal });
+      dispatchControl({ type: "refusal", place, groupId: action.groupId, value: refusal });
       // The server re-resolved at confirm time and got another hash (changed), or found a slot it refuses
       // (rejected, wave 4 M-1): either way the preview on screen is void and must not be sent again.
       if (refusal.code === "agent-selection-changed" || refusal.code === "agent-selection-rejected") rereadPreview(action.groupId, 0);
@@ -435,7 +439,7 @@ export function App(): JSX.Element {
       setAgentsRetry(null);
     } catch (err) {
       const refusal = controlFailureFrom(err);
-      dispatchControl({ type: "refusal", groupId: null, value: refusal });
+      dispatchControl({ type: "refusal", place: "panel", groupId: null, value: refusal });
       setAgentsFailure(refusal.code);
       // An unconfigured port stays so until the panel restarts: nothing to retry.
       if (!retry || controlConfig?.executionPort !== "configured") return;
@@ -502,8 +506,8 @@ export function App(): JSX.Element {
   const sendWorkspaceMode = async (repoId: string, mode: "worktree" | "clone", expectedRevision: number): Promise<void> => {
     const scope = `@repository:${repoId}`;
     const answer = await sendControlCommand(workspaceModePath(repoId), { commandId: nextCommandId(), expectedRevision, payload: { workspaceMode: mode } });
-    if (answer.kind === "uncertain") dispatchControl({ type: "refusal", groupId: scope, value: answer.refusal });
-    else if (answer.status >= 400) dispatchControl({ type: "refusal", groupId: scope, value: refusalFromAnswer(answer) });
+    if (answer.kind === "uncertain") dispatchControl({ type: "refusal", place: "panel", groupId: scope, value: answer.refusal });
+    else if (answer.status >= 400) dispatchControl({ type: "refusal", place: "panel", groupId: scope, value: refusalFromAnswer(answer) });
     await readWorkspace(repoId); // a failed read leaves the refusal above to say why
   };
 
@@ -511,8 +515,8 @@ export function App(): JSX.Element {
   const sendRepositoryIntegration = async (repoId: string, scheme: IntegrationSchemeV1, expectedRevision: number): Promise<void> => {
     const scope = `@repository:${repoId}`;
     const answer = await sendIntegrationScheme(repoId, scheme, expectedRevision);
-    if (answer.kind === "uncertain") dispatchControl({ type: "refusal", groupId: scope, value: answer.refusal });
-    else if (answer.status >= 400) dispatchControl({ type: "refusal", groupId: scope, value: refusalFromAnswer(answer) });
+    if (answer.kind === "uncertain") dispatchControl({ type: "refusal", place: "panel", groupId: scope, value: answer.refusal });
+    else if (answer.status >= 400) dispatchControl({ type: "refusal", place: "panel", groupId: scope, value: refusalFromAnswer(answer) });
     await readIntegration(repoId);
   };
 
@@ -522,8 +526,8 @@ export function App(): JSX.Element {
     const scope = `@operator:${agentPreferences.operatorId}`;
     // Review P5: the payload is { preferences } only; the revision travels in the envelope.
     const answer = await sendControlCommand(AGENT_PREFERENCES_PATH, { commandId: nextCommandId(), expectedRevision, payload: { preferences } });
-    if (answer.kind === "uncertain") dispatchControl({ type: "refusal", groupId: scope, value: answer.refusal });
-    else if (answer.status >= 400) dispatchControl({ type: "refusal", groupId: scope, value: refusalFromAnswer(answer) });
+    if (answer.kind === "uncertain") dispatchControl({ type: "refusal", place: "panel", groupId: scope, value: answer.refusal });
+    else if (answer.status >= 400) dispatchControl({ type: "refusal", place: "panel", groupId: scope, value: refusalFromAnswer(answer) });
     try { setAgentPreferences(await fetchAgentPreferences()); } catch { /* the refusal above already says why */ }
   };
 
@@ -714,7 +718,7 @@ export function App(): JSX.Element {
       },
       (err) => {
         if (seq !== previewSeq.current) return;
-        dispatchControl({ type: "refusal", groupId, value: controlFailureFrom(err) });
+        dispatchControl({ type: "refusal", place: "group", groupId, value: controlFailureFrom(err) });
         schedulePreviewRetry();
       },
     );
@@ -874,7 +878,7 @@ export function App(): JSX.Element {
                 refetchRequired: control.refetchRequired,
                 dispatchBlocked: summary.dispatchBlocked || control.recovery.dispatchBlocked,
                 blockers: control.recovery.blockers.length,
-                refusal: control.refusal !== null,
+                refusal: control.panelRefusal !== null || control.importRefusal !== null || Object.keys(control.refusals).length > 0,
               },
         ),
       }}
@@ -959,7 +963,9 @@ export function App(): JSX.Element {
           selected={selectedGroup}
           drafts={control.drafts}
           uncertain={control.uncertainCommandIds}
-          refusal={control.refusal}
+          refusal={control.panelRefusal}
+          groupRefusals={control.refusals}
+          importRefusal={control.importRefusal}
           refetchRequired={control.refetchRequired}
           repoId={controlRepoId}
           scope={scope}

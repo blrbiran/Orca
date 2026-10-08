@@ -17,12 +17,13 @@ import { DependencyGraph } from "./DependencyGraph.js";
 import { EvidenceLink } from "./EvidenceLink.js";
 import { GitScheme } from "./GitScheme.js";
 import { GroupIntegrationConfirm } from "./IntegrationScheme.js";
+import { RefusalNotice } from "./RefusalNotice.js";
 import { SkillsGiven } from "./SkillsGiven.js";
 import type {
   AgentSelectionPreviewV1, AgentsViewV1, ControlConfigV1, ContinuationSelectionV1, GroupViewV1, OperatorPreferencesV1, RepositoryIntegrationV1, RepositoryWorkspaceV1,
   RunViewV1,
 } from "./controlTypes.js";
-import type { UncertainCommand } from "./controlState.js";
+import type { ControlRefusal, UncertainCommand } from "./controlState.js";
 import { LabelChips, TaskDetail, progressText } from "./TaskDetail.js";
 import { planText } from "./LoopPlanCard.js";
 import { enumText } from "./i18n.js";
@@ -69,6 +70,8 @@ export interface ControlGroupViewProps {
 workspaceFor?: (repoId: string) => RepositoryWorkspaceV1 | null;
   /** Integration spec §9.1: a repository's integration read, for the target its confirm step suggests. */
   integrationFor?: (repoId: string) => RepositoryIntegrationV1 | null;
+  /** Spec 2026-10-08 §2.2(d): this group's last refusal, shown at the top until a later success of this group. */
+  refusal?: ControlRefusal | null;
 }
 
 export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
@@ -103,6 +106,8 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
         {t("control.group.heading", { groupId, state: enumText("groupState", view.summary.state), revision, projection: view.summary.projectionSeq })}
       </h2>
       {view.summary.claimBlocked && <p role="alert">{t("control.group.claimBlocked")}</p>}
+      {/* Spec 2026-10-08 §2.2(d), §6.5: the group's refusal is among the alerts at the top, above every action. */}
+      {props.refusal ? <RefusalNotice refusal={props.refusal} testId="group-refusal" /> : null}
       {/* Accounts spec §6.3.1, §7: a claim waiting on a spend cap names the cap and links to the Usage panel. */}
       {view.spendCapBlock && (
         <p role="status" data-testid="spend-cap-block">

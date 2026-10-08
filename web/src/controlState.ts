@@ -24,6 +24,9 @@ export interface ControlRefusal {
   commandRevision: number | null;
 }
 
+/** Where a refusal is shown (spec 2026-10-08 §2.2(d)). */
+export type RefusalPlace = "group" | "import" | "panel";
+
 export interface ControlClientState {
   epoch: string | null;
   changeSeq: number;
@@ -36,7 +39,12 @@ export interface ControlClientState {
   recovery: RecoveryViewV1 | null;
   drafts: Record<string, string>;
   uncertainCommandIds: UncertainCommand[];
-  refusal: ControlRefusal | null;
+  /** Spec 2026-10-08 §2.2(d): each group's last refusal, shown at the top of its view until a later success of that group. */
+  refusals: Record<string, ControlRefusal>;
+  /** The last import's refusal, shown in the import form until an import succeeds. */
+  importRefusal: ControlRefusal | null;
+  /** A refusal that belongs to no group and no import (a poll, the agents table, a repository's settings): the panel's own line. */
+  panelRefusal: ControlRefusal | null;
 }
 
 export type ControlClientEvent =
@@ -46,12 +54,15 @@ export type ControlClientEvent =
   | { type: "draft"; key: string; text: string }
   | { type: "command-uncertain"; value: UncertainCommand }
   | { type: "command-resolved"; value: UncertainCommand }
-  | { type: "refusal"; groupId: string | null; value: ControlRefusal };
+  // groupId on a panel refusal is the scope a revision conflict voids (e.g. @repository:<id>), never where it is shown.
+  | { type: "refusal"; place: "group"; groupId: string; value: ControlRefusal }
+  | { type: "refusal"; place: "import" | "panel"; groupId: string | null; value: ControlRefusal }
+  | { type: "command-succeeded"; place: "group" | "import"; groupId: string };
 
 export function initialControlState(): ControlClientState {
   return {
     epoch: null, changeSeq: 0, resetRequired: false, refetchRequired: false, dispatchBlocked: false,
-    groups: {}, canonical: {}, recovery: null, drafts: {}, uncertainCommandIds: [], refusal: null,
+    groups: {}, canonical: {}, recovery: null, drafts: {}, uncertainCommandIds: [], refusals: {}, importRefusal: null, panelRefusal: null,
   };
 }
 
@@ -150,13 +161,22 @@ export function reduceControlState(state: ControlClientState, event: ControlClie
     case "command-resolved":
       return { ...state, uncertainCommandIds: state.uncertainCommandIds.filter((command) => keyOf(command) !== keyOf(event.value)) };
     case "refusal": {
-      const next: ControlClientState = { ...state, refusal: event.value };
+      const next: ControlClientState = event.place === "group"
+        ? { ...state, refusals: { ...state.refusals, [event.groupId]: event.value } }
+        : event.place === "import" ? { ...state, importRefusal: event.value } : { ...state, panelRefusal: event.value };
       // Another tab committed first: the cached revision is the server's older self, so
       // the only safe move is to drop it and re-read before offering the command again.
       if (event.value.code !== "revision-conflict" || event.groupId === null) return next;
       const canonical = { ...next.canonical };
       delete canonical[event.groupId];
       return { ...next, canonical, refetchRequired: true };
+    }
+    case "command-succeeded": {
+      if (event.place === "import") return { ...state, importRefusal: null };
+      if (!Object.prototype.hasOwnProperty.call(state.refusals, event.groupId)) return state;
+      const refusals = { ...state.refusals };
+      delete refusals[event.groupId];
+      return { ...state, refusals };
     }
   }
 }
