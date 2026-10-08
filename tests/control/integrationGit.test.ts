@@ -3,7 +3,7 @@
 // Real git children (and the driver harness) take seconds under load, so every describe allows a minute.
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, rmSync, statSync, utimesSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -211,6 +211,23 @@ describe("local (integration spec §6.2, §6.3)", { timeout: 60_000 }, () => {
       expect(w.record()).toMatchObject({ state: "blocked", reason: "integration-worktree-dirty", pending: null });
       expect(snapshot(w.repo)).toEqual(before);
       expect(g(w.repo, ["rev-parse", "main"])).toBe(main);
+    } finally { await w.dispose(); }
+  });
+});
+
+describe("the person's index (final review M-T3)", { timeout: 60_000 }, () => {
+  it("H5's cleanliness check does not rewrite the checked-out worktree's index, even with its stat cache out of date", async () => {
+    const w = await world(LOCAL_MERGE); try {
+      w.land({ "a.txt": "a\n" });
+      // A tracked file whose content is unchanged but whose mtime is not what the index recorded: a plain `git status`
+      // refreshes that entry and writes the index back. The untracked file makes the check block, so nothing else runs.
+      utimesSync(join(w.repo, "f.txt"), new Date("2001-01-01T00:00:00Z"), new Date("2001-01-01T00:00:00Z"));
+      await writeFile(join(w.repo, "notes.txt"), "the person's own notes\n");
+      const index = () => createHash("sha256").update(readFileSync(join(w.repo, ".git", "index"))).digest("hex");
+      const before = index();
+      expect(await w.pass()).toBe(true);
+      expect(w.record()).toMatchObject({ state: "blocked", reason: "integration-worktree-dirty" });
+      expect(index()).toBe(before);
     } finally { await w.dispose(); }
   });
 });

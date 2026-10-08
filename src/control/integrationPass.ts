@@ -355,7 +355,8 @@ function localDelivery(repo: string, scheme: Extract<Scheme, { delivery: "local"
         throw new Error(`update-ref ${ref}: refused while still at ${base}`);
       }
       // H5: only a clean worktree, and only a fast-forward of its HEAD; the person's files are otherwise not touched.
-      if ((await gitOk(checkedOut, ["status", "--porcelain", "--untracked-files=all"])).trim().length > 0) return { kind: "blocked", reason: "integration-worktree-dirty" };
+      // --no-optional-locks: the check never writes the person's index back (a stale stat cache would make it).
+      if ((await gitOk(checkedOut, ["--no-optional-locks", "status", "--porcelain", "--untracked-files=all"])).trim().length > 0) return { kind: "blocked", reason: "integration-worktree-dirty" };
       if (!(await isAncestor(repo, await revParse(checkedOut, "HEAD"), next))) return { kind: "blocked", reason: "integration-not-fast-forward" };
       await gitOk(checkedOut, ["merge", "--ff-only", "--quiet", next]);
       return "ok";
