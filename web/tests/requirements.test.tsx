@@ -105,7 +105,7 @@ describe("the Requirements section, the rest of its branches (N1 spec §11.2)", 
     expect(screen.getByText(/does not fit the limit/)).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
     const form = screen.getByRole("form", { name: "Raise the limit" });
-    fireEvent.change(within(form).getByRole("spinbutton", { name: "Token limit" }), { target: { value: "12000000" } });
+    fireEvent.change(within(form).getByRole("textbox", { name: "Token limit" }), { target: { value: "12000000" } });
     fireEvent.click(within(form).getByRole("button", { name: "Raise the limit" }));
     expect(onCommand).toHaveBeenCalledWith({ verb: "set-limit", groupId: "r", expectedRevision: 3, payload: { limit: { tokens: 12_000_000, activeMs: 0, attempts: 0, sessions: 0 } } });
   });

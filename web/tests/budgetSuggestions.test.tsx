@@ -147,7 +147,7 @@ describe("the budget editor's suggestion controls (single-call estimate spec §7
     const applied = view({ allocations: view().allocations.map((a) => a.ownerKind === "task" && a.bucket === "work" ? { ...a, amount: { ...a.amount, activeMs: 45_000 } } : a) });
     rerender(<BudgetEditor view={applied} config={config} drafts={state.drafts} onDraft={onDraft} onCommand={onCommand} />);
     expect((screen.getByLabelText(/^a work activeMs/) as HTMLInputElement).value).toBe("45000");
-    expect((screen.getByLabelText(/^a work tokens/) as HTMLInputElement).value).toBe("7777");
+    expect((screen.getByLabelText(/^a work tokens/) as HTMLInputElement).value).toBe("7,777");
   });
 
   it("shows the model's reasons read-only under the table", () => {

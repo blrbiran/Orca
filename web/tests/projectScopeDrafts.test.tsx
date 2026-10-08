@@ -78,7 +78,7 @@ const openRequirement = async (groupId: string, shows: "answers" | "review"): Pr
 const questionGroup = (scope: HTMLElement, id: string): HTMLElement => within(scope).getByRole("group", { name: new RegExp(`^${id.replace(/\./g, "\\.")} `) });
 const radio = (scope: HTMLElement, name: string): HTMLInputElement => within(scope).getByRole("radio", { name }) as HTMLInputElement;
 const raiseForm = (scope: HTMLElement): HTMLElement => within(scope).getByRole("form", { name: "Raise the limit" });
-const limitBox = (scope: HTMLElement): HTMLInputElement => within(raiseForm(scope)).getByRole("spinbutton", { name: "Token limit" }) as HTMLInputElement;
+const limitBox = (scope: HTMLElement): HTMLInputElement => within(raiseForm(scope)).getByRole("textbox", { name: "Token limit" }) as HTMLInputElement;
 const feedbackBox = (scope: HTMLElement): HTMLTextAreaElement => within(scope).getByRole("textbox", { name: "Feedback" }) as HTMLTextAreaElement;
 
 const openDecision = async (projectKey: string): Promise<HTMLElement> => {
@@ -119,7 +119,7 @@ describe("detail drafts outlive the detail, keyed by owner (spec §11 R2)", () =
     expect(within(shown).queryByRole("textbox")).toBeNull();
     shown = await openRequirement("rb2", "review");
     expect(feedbackBox(shown).value).toBe("");
-    expect(limitBox(shown).value).toBe("10000000");
+    expect(limitBox(shown).value).toBe("10,000,000");
     detail = await openDecision("beta");
     expect(becauseBox(detail).value).toBe("");
     expect(kindSelect(detail).value).toBe("wrong");
@@ -128,7 +128,7 @@ describe("detail drafts outlive the detail, keyed by owner (spec §11 R2)", () =
     await waitFor(() => expect(screen.queryByTestId("decision-question")).toBeNull());
     shown = await openRequirement("ra2", "review");
     expect(feedbackBox(shown).value).toBe("alpha feedback");
-    expect(limitBox(shown).value).toBe("12000000");
+    expect(limitBox(shown).value).toBe("12,000,000");
     detail = await openDecision("alpha");
     expect(becauseBox(detail).value).toBe("alpha because");
     expect(kindSelect(detail).value).toBe("not_my_taste");

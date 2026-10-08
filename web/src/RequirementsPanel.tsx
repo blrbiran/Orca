@@ -8,6 +8,7 @@ import { AccountContext, mayHumanOnly } from "./AuthGate.js";
 import { useTranslation } from "react-i18next";
 import { LANGUAGE_NAMES, PANEL_LANGUAGES, enumText, refusalText } from "./i18n.js";
 import type { PanelLanguage } from "./i18n.js";
+import { TokenInput } from "./TokenInput.js";
 import type { ControlAction } from "./controlApi.js";
 import { nextCommandId } from "./controlApi.js";
 import type { ControlRefusal } from "./controlState.js";
@@ -65,6 +66,8 @@ function NewRequirement(props: { config: ControlConfigV1; agents: AgentsViewV1 |
   // (ruling M2), so it never resurfaces under a later target or over another target's draft.
   const defaults: NewRequirementDraft = { idea: "", tokens: 10_000_000, language: props.language, agent: "" };
   const [unowned, setUnowned] = useState<NewRequirementDraft | null>(null);
+  // Text in the limit field that is not an amount: the held number is stale, so the form must not send it.
+  const [limitBad, setLimitBad] = useState(false);
   const draft = repoId === "" ? unowned ?? defaults : props.drafts.newRequirement[repoId] ?? defaults;
   const edit = (change: Partial<NewRequirementDraft>): void => {
     if (repoId === "") setUnowned({ ...draft, ...change });
@@ -93,7 +96,7 @@ function NewRequirement(props: { config: ControlConfigV1; agents: AgentsViewV1 |
   return (
     <form aria-label={t("requirements.newTitle")} onSubmit={(event) => {
       event.preventDefault();
-      if (repoId === "") return;
+      if (repoId === "" || limitBad) return;
       const groupId = `requirement-${nextCommandId()}`;
       props.onCommand({ verb: "requirement-open", groupId, expectedRevision: 0, payload: {
         groupId, repoId, idea, contentLanguage: language, ...(mayLimit ? { limit: { tokens, activeMs: 14_400_000, attempts: 40, sessions: 40 } } : {}),
@@ -105,13 +108,13 @@ function NewRequirement(props: { config: ControlConfigV1; agents: AgentsViewV1 |
         {all && <option value="" disabled>{t("project.chooseTarget")}</option>}
         {choices.map((repo) => <option key={repo.repoId} value={repo.repoId}>{all ? props.repoLabel?.(repo.repoId) ?? repo.displayName : repo.displayName}</option>)}</select></label>
       <label>{t("requirements.idea")}<textarea value={idea} onChange={(e) => edit({ idea: e.currentTarget.value })} required /></label>
-      {mayLimit && <label>{t("requirements.limit")}<input type="number" min={1} value={tokens} onChange={(e) => edit({ tokens: Number(e.currentTarget.value) })} /></label>}
+      {mayLimit && <label>{t("requirements.limit")}<TokenInput aria-label={t("requirements.limit")} min={1} value={tokens} onChange={(n) => { setLimitBad(false); edit({ tokens: n }); }} onInvalid={() => setLimitBad(true)} /></label>}
       <label>{t("requirements.contentLanguage")}<select value={language} onChange={(e) => edit({ language: e.currentTarget.value as PanelLanguage })}>
         {PANEL_LANGUAGES.map((lang) => <option key={lang} value={lang}>{LANGUAGE_NAMES[lang]}</option>)}</select></label>
       <label>{t("requirements.agent")}<select value={agent} onChange={(e) => edit({ agent: e.currentTarget.value })}>
         <option value="">{t("requirements.agentDefault")}</option>
         {(props.agents?.installations ?? []).map((installation) => <option key={installation.id} value={installation.id}>{installation.id}</option>)}</select></label>
-      <button type="submit" disabled={idea.trim() === "" || repoId === ""}>{t("requirements.open")}</button>
+      <button type="submit" disabled={idea.trim() === "" || repoId === "" || limitBad}>{t("requirements.open")}</button>
     </form>
   );
 }
@@ -226,15 +229,17 @@ function RaiseLimit(props: { view: View; onCommand: OnCommand } & EditableDrafts
   const key = limitKey(props.view.summary.repoId, props.view.summary.groupId);
   const stored = props.drafts.limit[key];
   const tokens = stored ?? props.view.ledger.limit.tokens;
+  const [limitBad, setLimitBad] = useState(false);
   if (!mayLimit) return <p role="note">{t("requirements.ownerRaisesLimit")}</p>;
   return (
     <form aria-label={t("requirements.raiseLimit")} onSubmit={(event) => {
       event.preventDefault();
+      if (limitBad) return;
       props.onCommand({ verb: "set-limit", groupId: props.view.summary.groupId, expectedRevision: revisionOf(props.view), payload: { limit: { ...props.view.ledger.limit, tokens } } },
         stored === undefined ? undefined : { slot: "limit", key, value: stored });
     }}>
-      <label>{t("requirements.limit")}<input type="number" min={1} value={tokens} onChange={(e) => props.onDraft("limit", key, Number(e.currentTarget.value))} /></label>
-      <button type="submit">{t("requirements.raiseLimit")}</button>
+      <label>{t("requirements.limit")}<TokenInput aria-label={t("requirements.limit")} min={1} value={tokens} onChange={(n) => { setLimitBad(false); props.onDraft("limit", key, n); }} onInvalid={() => setLimitBad(true)} /></label>
+      <button type="submit" disabled={limitBad}>{t("requirements.raiseLimit")}</button>
     </form>
   );
 }

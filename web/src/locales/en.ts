@@ -739,6 +739,10 @@ export const en = {
     no: "no",
     field: { ref: "Id", scope: "Scope", projectKey: "Project key", kind: "Kind", source: "Source", trust: "Trust", tags: "Tags", pinned: "Pinned", createdAt: "Created", updatedAt: "Updated" },
   },
+  tokens: {
+    hint: "≈ {{short}}",
+    invalid: "Enter a whole number of at least {{min}}; group digits with a comma or a space.",
+  },
   metrics: {
     unknownRate: "unknown",
     correctionRate: "Correction rate",

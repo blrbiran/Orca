@@ -39,7 +39,7 @@ describe("human-only controls follow the account (spec §3.5)", () => {
     const fromMember = openRequirement(member);
     expect(fromMember.verb).toBe("requirement-open");
     expect(Object.hasOwn(fromMember.payload, "limit")).toBe(false);
-    expect(screen.queryByRole("spinbutton", { name: "Token limit" })).toBeNull();
+    expect(screen.queryByRole("textbox", { name: "Token limit" })).toBeNull();
     cleanup();
     const fromOwner = openRequirement(owner);
     expect((fromOwner.payload as { limit?: { tokens: number } }).limit?.tokens).toBe(10_000_000);

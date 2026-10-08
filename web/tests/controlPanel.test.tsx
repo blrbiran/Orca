@@ -150,7 +150,7 @@ describe("ControlPanel", () => {
   it("keeps an unsaved draft visible where its field lives", () => {
     const key = budgetFieldKey("g", { scope: "task", taskId: "b", allocation: "work", dimension: "tokens" });
     const html = renderToStaticMarkup(<ControlPanel {...panelProps({ drafts: { [key]: "2500000" } })} />);
-    expect(html).toContain(`value="2500000"`);
+    expect(html).toContain(`value="2,500,000"`);
   });
 
   it("links run evidence and reports a projection refetch is needed", () => {

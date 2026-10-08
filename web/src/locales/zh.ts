@@ -642,6 +642,10 @@ export const zh: Translation<typeof en> = {
     no: "否",
     field: { ref: "编号", scope: "范围", projectKey: "项目键", kind: "类型", source: "来源", trust: "可信度", tags: "标签", pinned: "置顶", createdAt: "创建时间", updatedAt: "更新时间" },
   },
+  tokens: {
+    hint: "约 {{short}}",
+    invalid: "请输入不小于 {{min}} 的整数；数字可用逗号或空格分组。",
+  },
   metrics: {
     unknownRate: "未知",
     correctionRate: "纠正率",

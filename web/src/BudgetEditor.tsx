@@ -15,6 +15,7 @@ import { GroupIntegrationConfirm } from "./IntegrationScheme.js";
 import { useTranslation } from "react-i18next";
 import type { ControlAction } from "./controlApi.js";
 import i18n, { enumText } from "./i18n.js";
+import { TokenInput, parseTokens } from "./TokenInput.js";
 import type {
   AllocationViewV1,
   Amount,
@@ -64,6 +65,14 @@ function targetOf(view: GroupViewV1, ownerId: string, bucket: string, dimension:
 function valueFor(drafts: Record<string, string>, key: string, serverValue: number): string {
   const draft = drafts[key];
   return draft === undefined ? String(serverValue) : draft;
+}
+
+/** The number a token field shows: the draft (kept as digits by TokenInput) or the server's value. */
+const BAD_DRAFT = "invalid";
+const hasBadDraft = (drafts: Record<string, string>): boolean => Object.values(drafts).includes(BAD_DRAFT);
+
+function tokenValueFor(drafts: Record<string, string>, key: string, serverValue: number): number | null {
+  return parseTokens(valueFor(drafts, key, serverValue));
 }
 
 /** The edits actually typed: a draft that reads as a different safe integer from the server's value. */
@@ -281,10 +290,11 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
     });
   };
   const submitLimit = (): void => {
+    if (hasBadDraft(drafts)) return;
     onCommand({ verb: "set-limit", groupId, expectedRevision: view.summary.commandRevision, payload: { limit: limitAmount(view, drafts) } });
   };
   const submitConfirm = (): void => {
-    if (confirmBlocked || shownSelectionsHash === null || integrationBlocked) return;
+    if (confirmBlocked || shownSelectionsHash === null || integrationBlocked || hasBadDraft(drafts)) return;
     const contextDraft = drafts[CONTEXT_POLICY_KEY(groupId)];
     const tokens = contextDraft === undefined || contextDraft.trim() === "" ? null : Number(contextDraft);
     onCommand({
@@ -372,12 +382,22 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
                   <td key={dimension}>
                     <label>
                       <span className="sr-only">{allocation.ownerId} {enumText("bucket", allocation.bucket)} {enumText("dimension", dimension)}</span>
-                      <input
-                        value={valueFor(drafts, key, allocation.amount[dimension])}
-                        readOnly={!editable}
-                        inputMode="numeric"
-                        onChange={(event) => onDraft(key, event.target.value)}
-                      />
+                      {dimension === "tokens" ? (
+                        <TokenInput
+                          aria-label={`${allocation.ownerId} ${enumText("bucket", allocation.bucket)} ${enumText("dimension", dimension)}`}
+                          value={tokenValueFor(drafts, key, allocation.amount[dimension])}
+                          readOnly={!editable}
+                          onChange={(n) => onDraft(key, String(n))}
+                          onInvalid={() => onDraft(key, BAD_DRAFT)}
+                        />
+                      ) : (
+                        <input
+                          value={valueFor(drafts, key, allocation.amount[dimension])}
+                          readOnly={!editable}
+                          inputMode="numeric"
+                          onChange={(event) => onDraft(key, event.target.value)}
+                        />
+                      )}
                       <small>{provenanceText(allocation.fieldProvenance[dimension])}</small>
                     </label>
                     {fieldOperation !== undefined && (
@@ -418,22 +438,33 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
         {DIMENSIONS.map((dimension) => (
           <label key={dimension}>
             {enumText("dimension", dimension)}
-            <input
-              value={valueFor(drafts, groupLimitKey(groupId, dimension), view.ledger.groupLimit[dimension])}
-              inputMode="numeric"
-              readOnly={!mayLimit}
-              onChange={(event) => onDraft(groupLimitKey(groupId, dimension), event.target.value)}
-            />
+            {dimension === "tokens" ? (
+              <TokenInput
+                aria-label={enumText("dimension", dimension)}
+                value={tokenValueFor(drafts, groupLimitKey(groupId, dimension), view.ledger.groupLimit[dimension])}
+                readOnly={!mayLimit}
+                onChange={(n) => onDraft(groupLimitKey(groupId, dimension), String(n))}
+                onInvalid={() => onDraft(groupLimitKey(groupId, dimension), BAD_DRAFT)}
+              />
+            ) : (
+              <input
+                value={valueFor(drafts, groupLimitKey(groupId, dimension), view.ledger.groupLimit[dimension])}
+                inputMode="numeric"
+                readOnly={!mayLimit}
+                onChange={(event) => onDraft(groupLimitKey(groupId, dimension), event.target.value)}
+              />
+            )}
           </label>
         ))}
         {mayLimit ? <button type="button" onClick={submitLimit}>{t("budget.setLimit")}</button> : <p role="note">{t("budget.ownerSetsLimit")}</p>}
       </fieldset>
       <label>
         {t("budget.handoffAt")}
-        <input
-          value={valueFor(drafts, CONTEXT_POLICY_KEY(groupId), view.proposal.contextPolicy.handoffAtContextTokens ?? 0)}
-          inputMode="numeric"
-          onChange={(event) => onDraft(CONTEXT_POLICY_KEY(groupId), event.target.value)}
+        <TokenInput
+          aria-label={t("budget.handoffAt")}
+          value={tokenValueFor(drafts, CONTEXT_POLICY_KEY(groupId), view.proposal.contextPolicy.handoffAtContextTokens ?? 0)}
+          onChange={(n) => onDraft(CONTEXT_POLICY_KEY(groupId), String(n))}
+          onInvalid={() => onDraft(CONTEXT_POLICY_KEY(groupId), BAD_DRAFT)}
         />
       </label>
       <p>
@@ -441,7 +472,7 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
         {view.ledger.budgetDeficit.tokens > 0 ? t("budget.deficit", { deficit: view.ledger.budgetDeficit.tokens }) : ""}
         {view.ledger.usageUnknown ? t("budget.usageUnknown") : ""}
       </p>
-      <button type="button" disabled={!editable || editedOperations(view, drafts).length === 0} onClick={submitEdit}>{t("budget.save")}</button>
+      <button type="button" disabled={!editable || hasBadDraft(drafts) || editedOperations(view, drafts).length === 0} onClick={submitEdit}>{t("budget.save")}</button>
       {estimator !== null && <button type="button" onClick={submitEstimate}>{t("budget.reestimate")}</button>}
       {editable && <GroupIntegrationConfirm view={view} suggestedTarget={props.suggestedTarget ?? null} onCommand={onCommand} />}
       {editable && shownSelectionsHash === null && <p role="note">{t("budget.confirmWaits")}</p>}

@@ -79,9 +79,9 @@ describe("the budget editor and the loop card in Chinese", () => {
     expect(texts("thead th")).toEqual(["归属", "桶", "状态", "token", "活跃毫秒", "尝试次数", "会话数", "建议"]);
     const rowB = [...document.querySelectorAll("tbody tr")][1]!;
     expect([...rowB.querySelectorAll("td")].slice(0, 3).map((cell) => cell.textContent)).toEqual(["任务 b", "工作", "草稿占用"]);
-    expect(texts("td small")).toEqual([...Array<string>(4).fill(" 在做法卡片里改"), "模型 est-1", "人", "人", "人"]);
+    expect(texts("td small")).toEqual([...Array<string>(4).fill(" 在做法卡片里改"), "约 300 万", "模型 est-1", "人", "人", "人"]);
     expect(texts("span.sr-only")).toEqual(["b 工作 token", "b 工作 活跃毫秒", "b 工作 尝试次数", "b 工作 会话数"]);
-    expect(texts("fieldset label")).toEqual(["token", "活跃毫秒", "尝试次数", "会话数"]);
+    expect(texts("fieldset label")).toEqual(["token约 900 万", "活跃毫秒", "尝试次数", "会话数"]);
     expect(screen.getByRole("region", { name: "预算提案" })).toBeTruthy();
   });
 
@@ -101,7 +101,7 @@ describe("the budget editor and the loop card in Chinese", () => {
       "profile all：交接控制 阶段结束时 · 交接执行 运行内机械交接 v1 · 绑定到它的工作不会被派发（claim-capability-unavailable）",
       "已用 0 · 已承诺 3000000 · 余量 6000000 · 缺口 5 · 用量未知",
     ]) expect(text, expected).toContain(expected);
-    expect(texts("td small").slice(4)).toEqual(["人", "complex-1m 默认值", "系统", "人"]);
+    expect(texts("td small").slice(4)).toEqual(["约 300 万", "人", "complex-1m 默认值", "系统", "人"]);
     cleanup();
     const stale: GroupViewV1 = { ...view, estimates: [{ ...view.estimates[0]!, stale: true }] };
     text = render(<BudgetEditor view={stale} config={{ ...config, profiles: [] }} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />).container.textContent ?? "";

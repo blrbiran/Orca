@@ -121,6 +121,36 @@ describe("UsagePanel (spec §5.3, §6, §7)", () => {
     await waitFor(() => expect(reads().length).toBe(2));
   });
 
+  it("shows a cap grouped, sends a typed grouped amount as an integer, and holds Set while the text is not an amount (spec §9.2 item 3)", async () => {
+    view = { ...VIEW, caps: [{ ...VIEW.caps[0]!, tokens: 1_234_567 }] };
+    renderAs(owner);
+    const row = await screen.findByTestId("cap-all/week");
+    const field = within(row).getByRole("textbox") as HTMLInputElement;
+    expect(field.value).toBe("1,234,567");
+    fireEvent.change(field, { target: { value: "2 500 000" } });
+    fireEvent.change(field, { target: { value: "2.5" } });
+    expect((within(row).getByRole("button", { name: "Set" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(field, { target: { value: "2 500 000" } });
+    fireEvent.click(within(row).getByRole("button", { name: "Set" }));
+    await waitFor(() => expect(calls.filter((call) => call.method === "POST")).toHaveLength(1));
+    expect((calls.find((call) => call.method === "POST")!.body as { payload: unknown }).payload).toEqual({ scope: "all", period: "week", tokens: 2_500_000 });
+  });
+
+  it("adds a cap from a grouped amount and not from invalid text", async () => {
+    renderAs(owner);
+    const form = await screen.findByRole("form", { name: "New spend cap" });
+    const field = within(form).getByRole("textbox", { name: "cap" });
+    const add = within(form).getByRole("button", { name: "Add cap" }) as HTMLButtonElement;
+    expect(add.disabled).toBe(true);
+    fireEvent.change(field, { target: { value: "1e6" } });
+    expect(add.disabled).toBe(true);
+    fireEvent.change(field, { target: { value: "3,000,000" } });
+    expect(add.disabled).toBe(false);
+    fireEvent.click(add);
+    await waitFor(() => expect(calls.filter((call) => call.method === "POST")).toHaveLength(1));
+    expect((calls.find((call) => call.method === "POST")!.body as { payload: { tokens: number } }).payload.tokens).toBe(3_000_000);
+  });
+
   it("sends Clear and the calendar as their own verbs", async () => {
     renderAs(owner);
     const row = await screen.findByTestId("cap-all/week");

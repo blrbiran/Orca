@@ -17,6 +17,7 @@ import type {
   ClearSpendCapPayloadV1, CommandErrorV1, SetSpendCapPayloadV1, SetUsageCalendarPayloadV1, SpendPeriodV1, UsageViewV1,
 } from "./controlTypes.js";
 import i18n from "./i18n.js";
+import { TokenInput } from "./TokenInput.js";
 import { Refusal } from "./Refusal.js";
 
 const SPEND_SCOPE = "@spend";
@@ -211,11 +212,10 @@ export function capScopeText(scope: string): string {
 
 function Caps({ view, owner, project, onSend }: { view: UsageViewV1; owner: boolean; project: string | null; onSend: Send }): JSX.Element {
   const { t } = useTranslation();
-  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [drafts, setDrafts] = useState<Record<string, number | null>>({});
   const [newScope, setNewScope] = useState("all");
   const [newPeriod, setNewPeriod] = useState<SpendPeriodV1>("week");
-  const [newTokens, setNewTokens] = useState("");
-  const tokensOf = (text: string): number | null => (/^[1-9][0-9]*$/.test(text.trim()) ? Number(text.trim()) : null);
+  const [newTokens, setNewTokens] = useState<number | null>(null);
   return (
     <>
       <h3>{t("usage.caps")}</h3>
@@ -233,17 +233,16 @@ function Caps({ view, owner, project, onSend }: { view: UsageViewV1; owner: bool
           <tbody>
             {view.caps.map((cap) => {
               const key = `${cap.scope}/${cap.period}`;
-              const draft = drafts[key] ?? String(cap.tokens);
-              const tokens = tokensOf(draft);
+              const tokens = drafts[key] === undefined ? cap.tokens : drafts[key]!;
               return (
                 <tr key={key} data-testid={`cap-${key}`}>
                   <td>{capScopeText(cap.scope)}</td><td>{t(`usage.capPeriod.${cap.period}` as const)}</td><td>{cap.tokens}</td>
                   <td>{cap.used}</td><td>{cap.committed}</td><td>{cap.headroom}</td>
                   {owner && (
                     <td>
-                      <input
+                      <TokenInput
                         aria-label={t("usage.capTokens", { scope: capScopeText(cap.scope), period: t(`usage.capPeriod.${cap.period}` as const) })}
-                        inputMode="numeric" value={draft} onChange={(e) => setDrafts({ ...drafts, [key]: e.currentTarget.value })}
+                        min={1} value={tokens} onChange={(n) => setDrafts({ ...drafts, [key]: n })} onInvalid={() => setDrafts({ ...drafts, [key]: null })}
                       />
                       <button type="button" disabled={tokens === null} onClick={() => tokens !== null && onSend(SPEND_PATHS.set, { scope: cap.scope, period: cap.period, tokens })}>
                         {t("usage.set")}
@@ -262,8 +261,7 @@ function Caps({ view, owner, project, onSend }: { view: UsageViewV1; owner: bool
           className="usage-new-cap" aria-label={t("usage.newCap")}
           onSubmit={(event) => {
             event.preventDefault();
-            const tokens = tokensOf(newTokens);
-            if (tokens !== null) onSend(SPEND_PATHS.set, { scope: newScope, period: newPeriod, tokens });
+            if (newTokens !== null) onSend(SPEND_PATHS.set, { scope: newScope, period: newPeriod, tokens: newTokens });
           }}
         >
           <label>
@@ -279,8 +277,8 @@ function Caps({ view, owner, project, onSend }: { view: UsageViewV1; owner: bool
               {CAP_PERIODS.map((choice) => <option key={choice} value={choice}>{t(`usage.capPeriod.${choice}` as const)}</option>)}
             </select>
           </label>
-          <label>{t("usage.th.cap")}<input inputMode="numeric" value={newTokens} onChange={(e) => setNewTokens(e.currentTarget.value)} /></label>
-          <button type="submit" disabled={tokensOf(newTokens) === null}>{t("usage.addCap")}</button>
+          <label>{t("usage.th.cap")}<TokenInput aria-label={t("usage.th.cap")} min={1} value={newTokens} onChange={setNewTokens} onInvalid={() => setNewTokens(null)} /></label>
+          <button type="submit" disabled={newTokens === null}>{t("usage.addCap")}</button>
         </form>
       )}
     </>
