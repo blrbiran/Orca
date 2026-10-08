@@ -20,6 +20,8 @@ describe("the permission table (spec §3.5)", () => {
       expect(permissionRefusal(p, "requirement-open", { groupId: "g", limit: {} })?.code).toBe("control-field-human-only");
       expect(permissionRefusal(p, "confirm", {})).toBe(null);
     }
+    // Issue-fixes spec §6.3: archiving and unarchiving are open to every principal (access `any`).
+    for (const p of [owner, member, agent]) for (const verb of ["archive-group", "unarchive-group"] as const) expect(permissionRefusal(p, verb, {})).toBe(null);
     expect([owner, member, agent].map(mayDoHumanOnly)).toEqual([true, false, false]);
     expect([owner, agent].map(principalLabel)).toEqual(["user:u1", "agent:cli:claude"]);
     // A member meets these refusals in the Web UI, so the catalog (and its Chinese copy) carries them.

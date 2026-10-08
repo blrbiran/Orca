@@ -23,6 +23,7 @@ import { applySetWorkspaceMode, type SetWorkspaceModeCommand } from "./workspace
 import { prepareResolution } from "./integrationResolve.js";
 import { controlWorkspaceRoots } from "./workspace.js";
 import { applyResolveIntegrationConflict, applyRetryIntegration, applySetGroupIntegration, applySetIntegrationScheme, type ResolveIntegrationConflictCommand, type RetryIntegrationCommand, type SetGroupIntegrationCommand, type SetIntegrationSchemeCommand } from "./integrationCommands.js";
+import { applyArchiveGroup, applyUnarchiveGroup, type ArchiveGroupCommand, type UnarchiveGroupCommand } from "./archiveGroup.js";
 import { checkScheme, preflightScheme, readGroupIntegration, REPOSITORY_CHECK, suggestedTarget, type GroupIntegration, type IntegrationScheme } from "./integrationScheme.js";
 import { applySpendCommand, type SpendCommand } from "./spendCommands.js";
 import { applySetAgentPreferences, type SetAgentPreferencesCommand } from "./agentPreferences.js";
@@ -583,6 +584,13 @@ export class WebControlService {
   /** Integration spec §6.5: a blocked or conflicted integration back to idle (no git child; the next round retries it). */
   retryIntegration(command: RetryIntegrationCommand): WebCommandResult {
     return this.mutate(() => applyRetryIntegration({ store: this.store }, command)) as WebCommandResult;
+  }
+  /** Issue-fixes spec §6.3: archive a group (it keeps every record and takes no new work) / take it back. */
+  archiveGroup(command: ArchiveGroupCommand): WebCommandResult {
+    return this.mutate(() => applyArchiveGroup({ store: this.store }, command)) as WebCommandResult;
+  }
+  unarchiveGroup(command: UnarchiveGroupCommand): WebCommandResult {
+    return this.mutate(() => applyUnarchiveGroup({ store: this.store }, command)) as WebCommandResult;
   }
   /**
    * Integration spec §7: an owner approves an agent's resolution of the conflict. The conflict's copy and pinned commit

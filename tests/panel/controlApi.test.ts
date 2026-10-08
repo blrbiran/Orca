@@ -167,6 +167,21 @@ describe("web control acceptance over a real panel (task 10 step 1)", () => {
     expect(recoveryViewSchema.parse(await json(await get(panel, "/api/control/recovery"))).blockers).toEqual([]);
     await panel.close();
   }, 30_000);
+
+  it("archives and unarchives a group over HTTP, and the summary follows (issue-fixes spec §6.3)", async () => {
+    const paths = await h.workspace();
+    const panel = await h.boot("epoch-archive", paths);
+    const imported = await command(panel, "/api/control/groups/import-plan", { commandId: "archive-import", expectedRevision: 0, payload: { groupId: GROUP, repoId: "repo", planId: "plan" } });
+    expect(imported.status).toBe(201);
+    const archived = await command(panel, `/api/control/groups/${GROUP}/archive`, { commandId: "archive-1", expectedRevision: await revision(panel), payload: {} });
+    expect(archived.status).toBe(200);
+    expect(commandSuccessSchema.parse(archived.body)).toMatchObject({ verb: "archive-group", result: { kind: "archived", groupId: GROUP } });
+    const summary = controlSummarySchema.parse(await json(await get(panel, "/api/control/summary")));
+    expect(summary.groups.find((group) => group.groupId === GROUP)?.archived).toBe(true);
+    const unarchived = await command(panel, `/api/control/groups/${GROUP}/unarchive`, { commandId: "unarchive-1", expectedRevision: await revision(panel), payload: {} });
+    expect(commandSuccessSchema.parse(unarchived.body)).toMatchObject({ verb: "unarchive-group", result: { kind: "unarchived" } });
+    await panel.close();
+  }, 30_000);
 });
 
 describe("lost answers, restart and a second tab (task 10 step 2)", () => {

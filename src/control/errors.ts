@@ -35,6 +35,12 @@ export const durableCommandErrorStatuses = {
   // Agent selection spec §6.4 step 3 (W6-12): the selections a confirmation resolves are no longer the ones the
   // operator saw (the previewed selectionsHash, or a layer that moved while ccloop answered).
   "agent-selection-changed": 409,
+  // Issue-fixes spec §6.3: archive is refused while the group still has work in motion; each guard has its own code. The
+  // detail of archive-stop-pending is `<mode>:<state>`, of archive-call-in-flight `estimate` or `requirement`.
+  "archive-call-in-flight": 409,
+  "archive-integration-resolving": 409,
+  "archive-run-active": 409,
+  "archive-stop-pending": 409,
   "artifact-id-conflict": 409,
   "checkpoint-id-conflict": 409,
   "checkpoint-identity-conflict": 409,
@@ -46,6 +52,8 @@ export const durableCommandErrorStatuses = {
   "execution-identity-conflict": 409,
   "graph-version-conflict": 409,
   "group-already-exists": 409,
+  // Issue-fixes spec §6.3: an archived group refuses every group-targeted command but unarchive-group.
+  "group-archived": 409,
   "group-graph-conflict": 409,
   "group-project-conflict": 409,
   "handoff-identity-conflict": 409,

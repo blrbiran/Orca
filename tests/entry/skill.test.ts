@@ -27,6 +27,7 @@ const schemaByVerb: Record<string, ZodTypeAny> = {
   "set-integration-scheme": setIntegrationSchemePayloadSchema, "set-group-integration": setGroupIntegrationPayloadSchema,
   "retry-integration": emptyPayloadSchema,
   "resolve-integration-conflict": emptyPayloadSchema,
+  "archive-group": emptyPayloadSchema, "unarchive-group": emptyPayloadSchema,
 };
 
 describe("the orca-control skill (spec §7, C18)", () => {
@@ -38,17 +39,18 @@ describe("the orca-control skill (spec §7, C18)", () => {
 
   it("lists exactly the panel's mutation routes, so the table cannot drift", () => {
     const routes = new Set([...api.matchAll(/path: "\/api\/control\/([^"]+)"/g)].map((m) => m[1]!.replace(/:([A-Za-z]+)/g, "<$1>")));
-    // 30 routes carry the 31 verbs: `shutdown` has no route (the panel's own lifecycle). Integration spec §3.4 added
+    // 32 routes carry the 33 verbs: `shutdown` has no route (the panel's own lifecycle). Integration spec §3.4 added
     // `repositories/<repoId>/integration` (set-integration-scheme), `groups/<groupId>/integration` (set-group-integration)
     // and `groups/<groupId>/integration/retry` (retry-integration); §7 added `groups/<groupId>/integration/resolve`
     // (resolve-integration-conflict). Issue fixes spec §4.2(2) added `groups/<groupId>/retry-task` (retry-task).
-    expect(routes.size).toBe(30);
+    // Issue-fixes spec §6.3 added groups/<groupId>/archive and groups/<groupId>/unarchive.
+    expect(routes.size).toBe(32);
     expect(rows.map((row) => row.route).sort()).toEqual([...routes].sort());
   });
 
   it("names the verb of every route as the panel does", () => {
     const verbs = new Map([...api.matchAll(/path: "\/api\/control\/([^"]+)",?\s+verb: "([^"]+)"/g)].map((m) => [m[1]!.replace(/:([A-Za-z]+)/g, "<$1>"), m[2]!]));
-    expect(verbs.size).toBe(30);
+    expect(verbs.size).toBe(32);
     expect(new Map(rows.map((row) => [row.route, row.verb]))).toEqual(verbs);
   });
 
@@ -60,7 +62,7 @@ describe("the orca-control skill (spec §7, C18)", () => {
   });
 
   it("gives every route a payload example that its raw payload schema accepts", () => {
-    expect(rows.length).toBe(30);
+    expect(rows.length).toBe(32);
     for (const row of rows) {
       const schema = schemaByVerb[row.verb];
       expect(schema, `no schema mapped for ${row.verb}`).toBeDefined();
