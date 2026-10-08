@@ -109,6 +109,16 @@ describe("the Decisions status filter in the page", () => {
     await waitFor(() => expect(listed()).toHaveLength(4));
   });
 
+  it("says so, in the status' own words, when Reviewed has nothing -- not that every decision has been reviewed", async () => {
+    const real = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> =>
+      String(input).startsWith("/api/decisions") ? json({ rows: [OPEN, UNREVIEWED_LOW] }) : real(input, init)) as typeof fetch;
+    await openHome();
+    fireEvent.change(status(), { target: { value: "reviewed" } });
+    expect((await screen.findByText("No decisions in this status.")).tagName).toBe("P");
+    expect(screen.queryByText(/Every high-tier decision has been reviewed/)).toBeNull();
+  });
+
   it("opens a reviewed decision with the correction form, and a second correction shows the refusal", async () => {
     await openHome();
     fireEvent.change(status(), { target: { value: "reviewed" } });
