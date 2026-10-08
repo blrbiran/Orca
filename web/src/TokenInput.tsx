@@ -45,9 +45,14 @@ export interface TokenInputProps {
   min?: number;
   readOnly?: boolean;
   "aria-label"?: string;
+  /**
+   * A visible label for the field (final review M-T10). The label holds only this text; the magnitude hint and the
+   * field error sit beside the field, never inside the label (a wrapping <label> would read "token约 900 万").
+   */
+  label?: string;
 }
 
-export function TokenInput({ value, onChange, onInvalid, onReset, allowEmpty, onClear, min = 0, readOnly, "aria-label": ariaLabel }: TokenInputProps): JSX.Element {
+export function TokenInput({ value, onChange, onInvalid, onReset, allowEmpty, onClear, min = 0, readOnly, "aria-label": ariaLabel, label }: TokenInputProps): JSX.Element {
   const { t } = useTranslation();
   const lang = currentLanguage();
   const [text, setText] = useState(value === null ? "" : formatTokens(value, lang));
@@ -63,23 +68,23 @@ export function TokenInput({ value, onChange, onInvalid, onReset, allowEmpty, on
   const parsed = parseTokens(text);
   const blank = text.trim() === "";
   const invalid = blank ? !allowEmpty && value !== null : parsed === null || parsed < min;
-  return (
-    <>
-      <input
-        type="text" inputMode="numeric" value={text} readOnly={readOnly} aria-label={ariaLabel} aria-invalid={invalid || undefined}
-        onChange={(event) => {
-          const raw = event.currentTarget.value;
-          setText(raw);
-          const n = parseTokens(raw);
-          if (allowEmpty && raw.trim() === "") onClear?.();
-          else if (n !== null && n >= min) onChange(n);
-          else onInvalid?.();
-        }}
-        onBlur={() => { if (parsed !== null && parsed >= min) setText(formatTokens(parsed, lang)); }}
-      />
-      {invalid
-        ? <small role="alert" style={{ color: "red" }}>{t("tokens.invalid", { min: formatTokens(min, lang) })}</small>
-        : parsed !== null && parsed >= 1000 && <small>{t("tokens.hint", { short: shortTokens(parsed, lang) })}</small>}
-    </>
+  const input = (
+    <input
+      type="text" inputMode="numeric" value={text} readOnly={readOnly} aria-label={ariaLabel} aria-invalid={invalid || undefined}
+      onChange={(event) => {
+        const raw = event.currentTarget.value;
+        setText(raw);
+        const n = parseTokens(raw);
+        if (allowEmpty && raw.trim() === "") onClear?.();
+        else if (n !== null && n >= min) onChange(n);
+        else onInvalid?.();
+      }}
+      onBlur={() => { if (parsed !== null && parsed >= min) setText(formatTokens(parsed, lang)); }}
+    />
   );
+  const note = invalid
+    ? <small role="alert" style={{ color: "red" }}>{t("tokens.invalid", { min: formatTokens(min, lang) })}</small>
+    : parsed !== null && parsed >= 1000 && <small>{t("tokens.hint", { short: shortTokens(parsed, lang) })}</small>;
+  if (label === undefined) return <>{input}{note}</>;
+  return <div className="token-field"><label>{label}{input}</label>{note}</div>;
 }

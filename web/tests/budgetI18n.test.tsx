@@ -81,7 +81,10 @@ describe("the budget editor and the loop card in Chinese", () => {
     expect([...rowB.querySelectorAll("td")].slice(0, 3).map((cell) => cell.textContent)).toEqual(["任务 b", "工作", "草稿占用"]);
     expect(texts("td small")).toEqual([...Array<string>(4).fill(" 在做法卡片里改"), "约 300 万", "模型 est-1", "人", "人", "人"]);
     expect(texts("span.sr-only")).toEqual(["b 工作 token", "b 工作 活跃毫秒", "b 工作 尝试次数", "b 工作 会话数"]);
-    expect(texts("fieldset label")).toEqual(["token约 900 万", "活跃毫秒", "尝试次数", "会话数"]);
+    // Final review M-T10 (rewrite): the magnitude hint used to render inside the token label ("token约 900 万"); it now
+    // sits beside the field, outside the label, so the label is its own text and the hint is pinned on its own.
+    expect(texts("fieldset label")).toEqual(["token", "活跃毫秒", "尝试次数", "会话数"]);
+    expect(texts("fieldset small")).toEqual(["约 900 万"]);
     expect(screen.getByRole("region", { name: "预算提案" })).toBeTruthy();
   });
 

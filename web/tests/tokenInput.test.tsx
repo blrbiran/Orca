@@ -112,6 +112,17 @@ describe("TokenInput", () => {
     rerender(<TokenInput aria-label="amount" value={5} onChange={onChange} />);
     expect(screen.getByRole("alert")).toBeTruthy();
   });
+  it("final review M-T10: with a label, the label holds only its text; the hint and the field error sit beside the field", () => {
+    const { container } = render(<TokenInput label="Token limit" value={9_000_000} onChange={vi.fn()} min={1} />);
+    expect([...container.querySelectorAll("label")].map((node) => node.textContent)).toEqual(["Token limit"]);
+    expect(container.querySelectorAll("label small")).toHaveLength(0);
+    expect(screen.getByRole("textbox", { name: "Token limit" })).toBeTruthy();
+    expect(container.textContent).toContain("≈ 9M");
+    fireEvent.change(screen.getByRole("textbox", { name: "Token limit" }), { target: { value: "0" } });
+    expect(screen.getByRole("alert")).toBeTruthy();
+    expect(container.querySelectorAll("label [role=alert]")).toHaveLength(0);
+  });
+
   it("shows an empty field without an error when the value is null", () => {
     render(<Harness start={null} onChange={vi.fn()} />);
     expect(box().value).toBe("");
@@ -268,6 +279,17 @@ describe("BudgetEditor token fields", () => {
     fireEvent.click(screen.getByRole("button", { name: "Confirm budget" }));
     expect((onCommand.mock.calls[0]![0] as ControlAction).payload).toMatchObject({ contextPolicy: { handoffAtContextTokens: null } });
   });
+  it("final review M-T10: the group limit's magnitude hint sits beside its input, outside the label's text", () => {
+    render(<Editor onCommand={vi.fn()} />);
+    const fieldset = screen.getByRole("group", { name: "Group limit" });
+    const labels = [...fieldset.querySelectorAll("label")];
+    expect(labels[0]!.textContent).toBe("tokens");
+    expect(fieldset.querySelectorAll("label small")).toHaveLength(0);
+    expect([...fieldset.querySelectorAll("small")].map((node) => node.textContent)).toEqual(["≈ 9M"]);
+    // The label still names the field, and the hint is not part of that name.
+    expect((screen.getByLabelText("tokens", { selector: "input" }) as HTMLInputElement).value).toBe("9,000,000");
+  });
+
   it("sends a typed grouped group limit", () => {
     const onCommand = vi.fn();
     render(<Editor onCommand={onCommand} />);

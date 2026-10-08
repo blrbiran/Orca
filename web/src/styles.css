@@ -147,6 +147,9 @@ input, select, textarea {
 textarea { min-height: 72px; width: 100%; resize: vertical; }
 label { display: flex; flex-direction: column; gap: 4px; font-size: var(--text-xs); color: var(--muted); margin-bottom: 10px; }
 label:has(> input[type="radio"]), label:has(> input[type="checkbox"]), .theme-pick { flex-direction: row; align-items: center; gap: 8px; }
+/* A labelled token field: the hint and the field error sit under the label, outside it (final review M-T10). */
+.token-field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; font-size: var(--text-xs); color: var(--muted); }
+.token-field > label { margin-bottom: 0; }
 form { margin: 8px 0; }
 table { border-collapse: collapse; width: 100%; font-size: var(--text-sm); }
 th { text-align: left; color: var(--muted); font-weight: 600; font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.04em; }

@@ -277,7 +277,7 @@ function Caps({ view, owner, project, onSend }: { view: UsageViewV1; owner: bool
               {CAP_PERIODS.map((choice) => <option key={choice} value={choice}>{t(`usage.capPeriod.${choice}` as const)}</option>)}
             </select>
           </label>
-          <label>{t("usage.th.cap")}<TokenInput aria-label={t("usage.th.cap")} min={1} value={newTokens} onChange={setNewTokens} onInvalid={() => setNewTokens(null)} /></label>
+          <TokenInput label={t("usage.th.cap")} aria-label={t("usage.th.cap")} min={1} value={newTokens} onChange={setNewTokens} onInvalid={() => setNewTokens(null)} />
           <button type="submit" disabled={newTokens === null}>{t("usage.addCap")}</button>
         </form>
       )}

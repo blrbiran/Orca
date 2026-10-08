@@ -444,40 +444,38 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
       )}
       <fieldset>
         <legend>{t("budget.groupLimit")}</legend>
-        {DIMENSIONS.map((dimension) => (
+        {DIMENSIONS.map((dimension) => dimension === "tokens" ? (
+          <TokenInput
+            key={dimension}
+            label={enumText("dimension", dimension)}
+            aria-label={enumText("dimension", dimension)}
+            value={tokenValueFor(drafts, groupLimitKey(groupId, dimension), view.ledger.groupLimit[dimension])}
+            readOnly={!mayLimit}
+            onChange={(n) => onDraft(groupLimitKey(groupId, dimension), String(n))}
+            onInvalid={() => onDraft(groupLimitKey(groupId, dimension), BAD_DRAFT)}
+          />
+        ) : (
           <label key={dimension}>
             {enumText("dimension", dimension)}
-            {dimension === "tokens" ? (
-              <TokenInput
-                aria-label={enumText("dimension", dimension)}
-                value={tokenValueFor(drafts, groupLimitKey(groupId, dimension), view.ledger.groupLimit[dimension])}
-                readOnly={!mayLimit}
-                onChange={(n) => onDraft(groupLimitKey(groupId, dimension), String(n))}
-                onInvalid={() => onDraft(groupLimitKey(groupId, dimension), BAD_DRAFT)}
-              />
-            ) : (
-              <input
-                value={valueFor(drafts, groupLimitKey(groupId, dimension), view.ledger.groupLimit[dimension])}
-                inputMode="numeric"
-                readOnly={!mayLimit}
-                onChange={(event) => onDraft(groupLimitKey(groupId, dimension), event.target.value)}
-              />
-            )}
+            <input
+              value={valueFor(drafts, groupLimitKey(groupId, dimension), view.ledger.groupLimit[dimension])}
+              inputMode="numeric"
+              readOnly={!mayLimit}
+              onChange={(event) => onDraft(groupLimitKey(groupId, dimension), event.target.value)}
+            />
           </label>
         ))}
         {mayLimit ? <button type="button" onClick={submitLimit}>{t("budget.setLimit")}</button> : <p role="note">{t("budget.ownerSetsLimit")}</p>}
       </fieldset>
-      <label>
-        {t("budget.handoffAt")}
-        <TokenInput
-          aria-label={t("budget.handoffAt")}
-          value={tokenValueFor(drafts, CONTEXT_POLICY_KEY(groupId), view.proposal.contextPolicy.handoffAtContextTokens ?? 0)}
-          onChange={(n) => onDraft(CONTEXT_POLICY_KEY(groupId), String(n))}
-          onInvalid={() => onDraft(CONTEXT_POLICY_KEY(groupId), BAD_DRAFT)}
-          allowEmpty
-          onClear={() => onDraft(CONTEXT_POLICY_KEY(groupId), BLANK_DRAFT)}
-        />
-      </label>
+      <TokenInput
+        label={t("budget.handoffAt")}
+        aria-label={t("budget.handoffAt")}
+        value={tokenValueFor(drafts, CONTEXT_POLICY_KEY(groupId), view.proposal.contextPolicy.handoffAtContextTokens ?? 0)}
+        onChange={(n) => onDraft(CONTEXT_POLICY_KEY(groupId), String(n))}
+        onInvalid={() => onDraft(CONTEXT_POLICY_KEY(groupId), BAD_DRAFT)}
+        allowEmpty
+        onClear={() => onDraft(CONTEXT_POLICY_KEY(groupId), BLANK_DRAFT)}
+      />
       <p>
         {t("budget.ledger", { used: view.ledger.used.tokens, committed: view.ledger.committedRemaining.tokens, reserve: view.ledger.explicitUnallocatedReserve.tokens })}
         {view.ledger.budgetDeficit.tokens > 0 ? t("budget.deficit", { deficit: view.ledger.budgetDeficit.tokens }) : ""}

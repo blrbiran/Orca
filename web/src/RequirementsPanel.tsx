@@ -108,7 +108,7 @@ function NewRequirement(props: { config: ControlConfigV1; agents: AgentsViewV1 |
         {all && <option value="" disabled>{t("project.chooseTarget")}</option>}
         {choices.map((repo) => <option key={repo.repoId} value={repo.repoId}>{all ? props.repoLabel?.(repo.repoId) ?? repo.displayName : repo.displayName}</option>)}</select></label>
       <label>{t("requirements.idea")}<textarea value={idea} onChange={(e) => edit({ idea: e.currentTarget.value })} required /></label>
-      {mayLimit && <label>{t("requirements.limit")}<TokenInput aria-label={t("requirements.limit")} min={1} value={tokens} onChange={(n) => { setLimitBad(false); edit({ tokens: n }); }} onInvalid={() => setLimitBad(true)} onReset={() => setLimitBad(false)} /></label>}
+      {mayLimit && <TokenInput label={t("requirements.limit")} aria-label={t("requirements.limit")} min={1} value={tokens} onChange={(n) => { setLimitBad(false); edit({ tokens: n }); }} onInvalid={() => setLimitBad(true)} onReset={() => setLimitBad(false)} />}
       <label>{t("requirements.contentLanguage")}<select value={language} onChange={(e) => edit({ language: e.currentTarget.value as PanelLanguage })}>
         {PANEL_LANGUAGES.map((lang) => <option key={lang} value={lang}>{LANGUAGE_NAMES[lang]}</option>)}</select></label>
       <label>{t("requirements.agent")}<select value={agent} onChange={(e) => edit({ agent: e.currentTarget.value })}>
@@ -238,7 +238,7 @@ function RaiseLimit(props: { view: View; onCommand: OnCommand } & EditableDrafts
       props.onCommand({ verb: "set-limit", groupId: props.view.summary.groupId, expectedRevision: revisionOf(props.view), payload: { limit: { ...props.view.ledger.limit, tokens } } },
         stored === undefined ? undefined : { slot: "limit", key, value: stored });
     }}>
-      <label>{t("requirements.limit")}<TokenInput aria-label={t("requirements.limit")} min={1} value={tokens} onChange={(n) => { setLimitBad(false); props.onDraft("limit", key, n); }} onInvalid={() => setLimitBad(true)} onReset={() => setLimitBad(false)} /></label>
+      <TokenInput label={t("requirements.limit")} aria-label={t("requirements.limit")} min={1} value={tokens} onChange={(n) => { setLimitBad(false); props.onDraft("limit", key, n); }} onInvalid={() => setLimitBad(true)} onReset={() => setLimitBad(false)} />
       <button type="submit" disabled={limitBad}>{t("requirements.raiseLimit")}</button>
     </form>
   );
