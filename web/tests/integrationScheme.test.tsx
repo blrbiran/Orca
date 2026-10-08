@@ -7,9 +7,10 @@
  * unchanged). The Git area shows where the integration stands and offers an owner Retry and Resolve; a keep group keeps
  * the "merging into main is the person's" line and gets no button.
  */
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { JSX } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { App } from "../src/App.js";
 import { AccountContext } from "../src/AuthGate.js";
 import type { Me } from "../src/auth.js";
 import { BudgetEditor } from "../src/BudgetEditor.js";
@@ -23,6 +24,7 @@ import type {
 import i18n from "../src/i18n.js";
 import { RepositoryIntegration, integrationReasonText, integrationSentence } from "../src/IntegrationScheme.js";
 import { config, view, workItem } from "./fixtures/board.js";
+import { ALPHA, installFakePanel } from "./fixtures/twoProjects.js";
 
 afterEach(cleanup);
 
@@ -186,6 +188,43 @@ describe("the scheme on the confirm step (spec §3.2, §9.1)", () => {
     expect(screen.queryByText("Only an owner can confirm a group whose work Orca merges or pushes.")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Confirm budget" }));
     expect(sent(onCommand).map((action) => action.verb)).toEqual(["confirm"]);
+  });
+});
+
+describe("the page around the integration UI (spec §9.1)", () => {
+  it("suggests the open group's own repository target on its confirm step", () => {
+    render(<ControlGroupView view={draftGroup()} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()}
+      integrationFor={(repoId) => (repoId === "orca" ? repository({ delivery: "keep" }, "trunk-z") : null)} />);
+    const region = screen.getByRole("region", { name: "Integration of this group" });
+    choose(region, "Delivery", "local");
+    expect(field(region, "Target branch").value).toBe("trunk-z");
+  });
+
+  it("reads the chosen project's default, saves an owner's change under its revision, and reads it back", async () => {
+    const realFetch = globalThis.fetch;
+    const panel = installFakePanel();
+    const fake = globalThis.fetch;
+    const route = `/api/control/repositories/${ALPHA}/integration`;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      if (String(input) === route && (init?.method ?? "GET") === "GET") {
+        panel.requests.push(`GET ${route}`);
+        return new Response(JSON.stringify({ ...repository({ delivery: "keep" }, "trunk-a"), repoId: ALPHA, revision: 2 }), { status: 200 });
+      }
+      return fake(input, init);
+    }) as typeof fetch;
+    try {
+      render(<App />);
+      const region = await screen.findByRole("region", { name: "Integration" });
+      choose(region, "Delivery", "push-branch");
+      fireEvent.click(within(region).getByRole("button", { name: "Save integration" }));
+      await waitFor(() => expect(panel.posts.map((post) => post.url)).toEqual([route]));
+      expect(panel.posts[0]!.body).toEqual({ commandId: expect.any(String), expectedRevision: 2, payload: { integration: { delivery: "push-branch", trigger: "task", target: "trunk-a", remote: "origin" } } });
+      await waitFor(() => expect(panel.requests.filter((request) => request === `GET ${route}`)).toHaveLength(2));
+    } finally {
+      cleanup();
+      window.localStorage.clear();
+      globalThis.fetch = realFetch;
+    }
   });
 });
 
