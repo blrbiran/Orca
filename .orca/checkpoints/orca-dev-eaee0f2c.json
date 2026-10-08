@@ -3,41 +3,41 @@
   "runId": "orca-dev-eaee0f2c",
   "runtime": "claude-code",
   "sessionRef": "eaee0f2c-ea93-4935-a17b-27becfbfbeb4",
-  "writtenAt": "2026-10-08T06:24:36.200Z",
-  "head": "7ce8db2801bd58ac4ea6e0aeb2b2413b25fe4591",
+  "writtenAt": "2026-10-08T06:29:12.491Z",
+  "head": "717306a3798ff1ab867c223d8265183c60651bd2",
   "level": {
     "kind": "reading",
-    "level": 447712,
+    "level": 452375,
     "windowTokens": 1000000,
     "t1": 330000,
     "t2": 450000,
-    "band": 1
+    "band": 2
   },
   "next": [
-    "Continue SDD of docs/superpowers/plans/2026-10-08-integration-and-panel-fixes.md in ../Orca-integration (branch feat/integration-schemes): Task 6 fix round 1 in flight, then Tasks 7-12; ledger .superpowers/sdd/2026-10-08-integration-and-panel-fixes/progress.md is the recovery map",
-    "After the round: final whole-branch review, gate, handoffs in Orca/ccloop/ccmem, executive summary to the human"
+    "Continue SDD of docs/superpowers/plans/2026-10-08-integration-and-panel-fixes.md in ../Orca-integration: Task 6 fix-round re-review, then Tasks 7-12; ledger .superpowers/sdd/2026-10-08-integration-and-panel-fixes/progress.md",
+    "Session past T2 by the human's explicit instruction for this round (do not stop for context size); recorded here"
   ],
   "open": [
-    "Task 6 fix round 1 (stale resolution on settle, stop guard on runTask rejection)",
-    "Tasks 7-12 not started"
+    "Task 6 fix round 1 re-review",
+    "Tasks 7-12"
   ],
   "awaitingHuman": [
     {
       "kind": "irreversible",
-      "what": "main checkout carries two junk commits + branch side from a subagent incident: git reset --keep 254371c && git branch -D side (Tier 0, human)"
+      "what": "repair main: git rebase --onto 254371c 7ce8db2 main && git branch -D side (keeps checkpoint commits, drops the incident's junk)"
     },
     {
       "kind": "irreversible",
-      "what": "ff-merge deps/usage-by-model-pin then feat/integration-schemes into Orca main (merge main into the branch first if main moved), push; delete worktrees Orca-usage-pin, Orca-integration and two prunable scratchpad worktrees"
+      "what": "ff-merge deps/usage-by-model-pin and feat/integration-schemes into main, push; delete worktrees Orca-usage-pin, Orca-integration and two prunable scratchpad worktrees"
     }
   ],
   "measurements": [
     {
       "command": "/usr/bin/git -C /Users/biran/code/skills/loop/Orca-integration log --oneline -3",
       "exitCode": 0,
-      "commit": "7ce8db2801bd58ac4ea6e0aeb2b2413b25fe4591",
-      "observedAt": "2026-10-08T06:24:36.151Z",
-      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-eaee0f2c-znlQTu/1.txt"
+      "commit": "717306a3798ff1ab867c223d8265183c60651bd2",
+      "observedAt": "2026-10-08T06:29:12.445Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-eaee0f2c-f7oW2i/1.txt"
     }
   ]
 }
