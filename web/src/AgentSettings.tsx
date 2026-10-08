@@ -3,12 +3,22 @@
  * server read it from ccloop and edits this operator's defaults -- the default agent, each agent's model and
  * context, and the estimator and reconcile slots -- as one set-agent-preferences under the revision it read.
  */
+import { useState } from "react";
 import type { JSX } from "react";
 import { useTranslation } from "react-i18next";
 import { SelectionFields, contextLabel, draftOf, draftText, installationOf, partialFromFields, textOrUndefined } from "./AgentFields.js";
 import type { AgentPreferencesViewV1, AgentsViewV1, OperatorPreferencesV1 } from "./controlTypes.js";
 
 const DEFAULT_AGENT_KEY = "agents:default-agent";
+export const AGENTS_OPEN_KEY = "orca.panel.agentsOpen";
+
+/** Spec §9.2 item 4: folded unless this browser opened it; storage may be absent or throw, which leaves it folded. */
+function readOpen(): boolean {
+  try { return localStorage.getItem(AGENTS_OPEN_KEY) === "1"; } catch { return false; }
+}
+function writeOpen(open: boolean): void {
+  try { localStorage.setItem(AGENTS_OPEN_KEY, open ? "1" : "0"); } catch { /* not remembered */ }
+}
 
 export function preferencesFromDrafts(agents: AgentsViewV1, view: AgentPreferencesViewV1, drafts: Record<string, string>): OperatorPreferencesV1 {
   const prefs = view.preferences;
@@ -48,9 +58,11 @@ export function AgentSettings(props: AgentSettingsProps): JSX.Element {
   const { t } = useTranslation();
   const defaultText = draftText(drafts, DEFAULT_AGENT_KEY, preferences.preferences.defaultAgent ?? "");
   const defaultAgent = textOrUndefined(defaultText);
+  const [open, setOpen] = useState(readOpen);
   return (
+    <details open={open} onToggle={(event) => { const next = event.currentTarget.open; setOpen(next); writeOpen(next); }}>
+    <summary><h3 style={{ display: "inline" }}>{t("agents.title")}</h3></summary>
     <section aria-label={t("agents.settings.region")}>
-      <h3>{t("agents.title")}</h3>
       <p>
         {t("agents.settings.operatorLine", { operatorId: preferences.operatorId, revision: preferences.revision })}
       </p>
@@ -88,5 +100,6 @@ export function AgentSettings(props: AgentSettingsProps): JSX.Element {
       <SelectionFields agents={agents} prefix="agents:reconcile" label={t("agents.settings.reconcileSlot")} current={preferences.preferences.reconcile} inheritedAgent={defaultAgent} drafts={drafts} onDraft={onDraft} />
       <button type="button" onClick={() => props.onSave(preferencesFromDrafts(agents, preferences, drafts), preferences.revision)}>{t("agents.settings.save")}</button>
     </section>
+    </details>
   );
 }
