@@ -109,7 +109,8 @@ export function checkScheme(repo: string, scheme: IntegrationScheme): Promise<st
 async function schemeCheck(repo: string, scheme: IntegrationScheme): Promise<string | null> {
   if (scheme.delivery === "keep") return null;
   if ("remote" in scheme && !validRemoteName(scheme.remote)) return "remote-name";
-  if (!(await checkBranchName(repo, scheme.target))) return "target-name";
+  // Final review Minor 5: `orca/` is Orca's own namespace (every group's work branch); a target there is refused.
+  if (scheme.target.startsWith("orca/") || !(await checkBranchName(repo, scheme.target))) return "target-name";
   if (!("remote" in scheme)) return null;
   const url = await remoteUrl(repo, scheme.remote);
   if (url === null) return "remote-missing";

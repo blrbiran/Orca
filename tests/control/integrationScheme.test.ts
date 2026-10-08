@@ -161,6 +161,14 @@ describe("checkScheme (integration spec §3.3)", () => {
     expect(await checkScheme(repo, { ...PB, remote: "nowhere" })).toBe("remote-missing");
     expect(await checkScheme(repo, { ...PB, delivery: "github-pr", remote: "lab" })).toBe("remote-not-github");
   });
+  it("final review Minor 5: refuses a target in Orca's own orca/ namespace, for every delivery", async () => {
+    // A valid branch name to git; as a target it would be another group's work branch.
+    expect(await checkBranchName(repo, "orca/g")).toBe(true);
+    expect(await checkScheme(repo, { ...LOCAL, target: "orca/g" })).toBe("target-name");
+    expect(await checkScheme(repo, { delivery: "push-target", trigger: "task", method: "merge", target: "orca/g", remote: "origin" })).toBe("target-name");
+    expect(await checkScheme(repo, { ...PB, target: "orca/x/y" })).toBe("target-name");
+    expect(await checkScheme(repo, { ...PB, target: "orcax" })).toBeNull();
+  });
   it("names git itself when git cannot be started or does not answer in time, not the check it was serving", async () => {
     const empty = join(root, "no-git"), hang = join(root, "hang");
     await mkdir(empty); await mkdir(hang);
@@ -315,6 +323,13 @@ describe("set-group-integration (integration spec §3.1, §3.3)", () => {
       expect(Object.hasOwn(groupBody(h.store), "integration")).toBe(false);
       const noResolver = new WebControlService({ ...h.deps, knownRepository: () => true });
       expect(await noResolver.setIntegrationScheme(cmd(PB, 0, "int-nr"))).toMatchObject({ error: { code: "integration-preflight-failed", message: "integration-preflight-failed:repository" } });
+    } finally { await h.dispose(); }
+  });
+
+  it("final review Minor 5: an orca/ target is refused integration-invalid naming the target", async () => {
+    const h = await groupOver(); try {
+      expect(await h.setGroup({ ...LOCAL, target: "orca/g" })).toMatchObject({ error: { code: "integration-invalid", message: "integration-invalid:target-name" } });
+      expect(Object.hasOwn(groupBody(h.store), "integration")).toBe(false);
     } finally { await h.dispose(); }
   });
 
