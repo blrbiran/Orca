@@ -735,6 +735,7 @@ export const zhErrors: Record<string, string> = {
   "profile-changed": "profile 已变化。",
   "proposal-version-conflict": "提案版本冲突：提案在你看过之后被改过。",
   "query-invalid": "查询参数不合法：{{message}}",
+  "reconcile-budget": "这个组的余量不够让 agent 解决这次集成冲突。",
   "reconcile-budget-unapproved": "协调预算尚未批准。",
   "reconcile-registration-invalid": "协调登记不合法。",
   "reconcile-version-conflict": "协调版本冲突。",

@@ -45,6 +45,8 @@ export interface WebFixtureOptions {
   distinctConfigHash?: boolean;
   /** Integration spec §3.1: the repository's integration default before the import (absent: none, i.e. keep). */
   integration?: IntegrationScheme;
+  /** Integration spec §7: every hand-written contract's verification.requiredChecks (["true"] unless said otherwise). */
+  requiredChecks?: string[];
 }
 
 /** Agent selection spec §3: the complete selection this fixture's task work items are frozen with. */
@@ -84,7 +86,7 @@ export async function webFixture(snapshot = profileSnapshot(), tasks: readonly W
       context: { repoPath: repo, targetPaths: task.targetPaths ?? [task.taskId], relevantDocs: [], buildTestCommands: ["true"], constraints: [] },
       executionPolicy: { autonomyLevel: "L2", maxAttempts: 9, perAttemptTimeoutMs: task.perAttemptTimeoutMs ?? 60_000, totalRuntimeBudgetMs: 90_000, tokenBudget: 99_000, worktreeRequired: true, partialOutcomeRecoveryWindowMs: 30_000 },
       safetyPolicy: { allowlistPaths: [], denylistPaths: [], maxFilesTouched: 1, humanGateConditions: [] },
-      verification: { verifierType: "command", requiredChecks: ["true"], rejectOn: ["failure"], evidenceRequired: [] },
+      verification: { verifierType: "command", requiredChecks: options.requiredChecks ?? ["true"], rejectOn: ["failure"], evidenceRequired: [] },
       escalationAndExit: { escalationTargets: [], pauseOn: [], stopOn: [], terminalStates: ["succeeded", "blocked_waiting_human", "exhausted", "cancelled", "failed"] } };
     const contractPath = join(h.root, `contract-${task.taskId}.json`);
     await writeFile(contractPath, canonicalBytes(contract));

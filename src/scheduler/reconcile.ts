@@ -436,8 +436,8 @@ export function conflictRefOf(runId: string): string {
   return `refs/orca/conflict/${runId}`;
 }
 
-export async function pinConflictCommit(copy: string, runId: string, conflictCommit: string): Promise<string> {
-  const ref = conflictRefOf(runId);
+/** Integration spec §7: an integration conflict passes its own ref (`refs/orca/integration-conflict/<g>/<attempt>`). */
+export async function pinConflictCommit(copy: string, runId: string, conflictCommit: string, ref = conflictRefOf(runId)): Promise<string> {
   await git(copy, ["update-ref", ref, conflictCommit]);
   return ref;
 }

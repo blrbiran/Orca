@@ -41,7 +41,7 @@ function baseline(store: ControlStore, runId: string, bucket: "work" | "handoff"
 }
 
 type Quality = "reported" | "unattributed" | "breakdown-mismatch";
-function insertRow(store: ControlStore, row: { appliedAt: number; groupId: string; repoId: string | null; runId: string; source: ReturnType<typeof usageSource>; model: string | null; entry: Omit<ModelUsage, "model"> | null; tokens: number; quality: Quality }): void {
+function insertRow(store: ControlStore, row: { appliedAt: number; groupId: string; repoId: string | null; runId: string | null; source: ReturnType<typeof usageSource>; model: string | null; entry: Omit<ModelUsage, "model"> | null; tokens: number; quality: Quality }): void {
   const e = row.entry;
   store.db.prepare("INSERT INTO usage_ledger(applied_at,group_id,repo_id,run_id,source,model,input,output,cache_read,cache_write,tokens,quality) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")
     .run(row.appliedAt, row.groupId, row.repoId, row.runId, row.source, row.model, e?.input ?? null, e?.output ?? null, e?.cacheRead ?? null, e?.cacheWrite ?? null, row.tokens, row.quality);
@@ -51,8 +51,10 @@ function insertRow(store: ControlStore, row: { appliedAt: number; groupId: strin
  * Task 7 ruling: a reconciliation's `ccloop run` reports no usage events, so its spend reaches group.used outside
  * recordUsage (driverLanding.ts recordReconcileUsage). Spec §5.1 books every delta added to group.used, so it is booked
  * here, in that write's transaction, as the reconciled run's work: one unattributed row; nothing for 0 (D16).
+ * Integration spec §7: an integration conflict's resolution belongs to no run, so its row is booked with `runId` null
+ * (the column is nullable).
  */
-export function bookReconcileUsage(store: ControlStore, input: { runId: string; groupId: string; groupBody: Record<string, unknown>; tokens: number; appliedAt: number }): void {
+export function bookReconcileUsage(store: ControlStore, input: { runId: string | null; groupId: string; groupBody: Record<string, unknown>; tokens: number; appliedAt: number }): void {
   if (input.tokens === 0) return;
   insertRow(store, { appliedAt: input.appliedAt, groupId: input.groupId, repoId: groupRepoIdOf(input.groupBody), runId: input.runId, source: "run-work", model: null, entry: null, tokens: input.tokens, quality: "unattributed" });
 }

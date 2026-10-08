@@ -217,12 +217,12 @@ export function reconcileNextAction(input: { loopStatus: string | null; spawning
   return "spawn";
 }
 
-function processAlive(pid: number): boolean {
+export function processAlive(pid: number): boolean {
   try { process.kill(pid, 0); return true; }
   catch (error) { return (error as NodeJS.ErrnoException).code === "EPERM"; }
 }
 
-function readLoopState(loopDir: string): { status: string | null; tokenBudgetRemaining: number | null } {
+export function readLoopState(loopDir: string): { status: string | null; tokenBudgetRemaining: number | null } {
   const path = join(loopDir, "loop-state.json");
   if (!existsSync(path)) return { status: null, tokenBudgetRemaining: null };
   try {

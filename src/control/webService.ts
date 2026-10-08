@@ -19,7 +19,9 @@ import { scheduleStart, type StartCommand } from "./webDispatch.js";
 import { applyHandoffStop, applyPauseDispatch, applyRecoveryRetry, applyResumeDispatch, type HandoffStopCommand, type PauseCommand, type RecoveryRetryCommand, type ResumeDispatchCommand, type StopDeps } from "./stopIntent.js";
 import { applyContinueTask, applyResumeFromHandoff, type ContinueTaskCommand, type ResumeFromHandoffCommand } from "./continuation.js";
 import { applySetWorkspaceMode, type SetWorkspaceModeCommand } from "./workspaceSettings.js";
-import { applyRetryIntegration, applySetGroupIntegration, applySetIntegrationScheme, type RetryIntegrationCommand, type SetGroupIntegrationCommand, type SetIntegrationSchemeCommand } from "./integrationCommands.js";
+import { prepareResolution } from "./integrationResolve.js";
+import { controlWorkspaceRoots } from "./workspace.js";
+import { applyResolveIntegrationConflict, applyRetryIntegration, applySetGroupIntegration, applySetIntegrationScheme, type ResolveIntegrationConflictCommand, type RetryIntegrationCommand, type SetGroupIntegrationCommand, type SetIntegrationSchemeCommand } from "./integrationCommands.js";
 import { checkScheme, preflightScheme, readGroupIntegration, REPOSITORY_CHECK, type GroupIntegration, type IntegrationScheme } from "./integrationScheme.js";
 import { applySpendCommand, type SpendCommand } from "./spendCommands.js";
 import { applySetAgentPreferences, type SetAgentPreferencesCommand } from "./agentPreferences.js";
@@ -580,6 +582,18 @@ export class WebControlService {
   /** Integration spec §6.5: a blocked or conflicted integration back to idle (no git child; the next round retries it). */
   retryIntegration(command: RetryIntegrationCommand): WebCommandResult {
     return this.mutate(() => applyRetryIntegration({ store: this.store }, command)) as WebCommandResult;
+  }
+  /**
+   * Integration spec §7: an owner approves an agent's resolution of the conflict. The conflict's copy and pinned commit
+   * are read before the gate (git, as the setters' checks); the transaction re-checks the record they belong to.
+   */
+  async resolveIntegrationConflict(command: ResolveIntegrationConflictCommand): Promise<WebCommandResult> {
+    const prepared = await prepareResolution(this.store, controlWorkspaceRoots(this.store.stateDir), command.target.groupId, (repoId) => this.repositoryPath(repoId));
+    const release = this.deps.admissionGate?.enter();
+    try {
+      const replay = preflightWebCommand<WebCommandResult>(this.store, command); if (replay) return replay.body;
+      return applyResolveIntegrationConflict({ store: this.store }, command, prepared) as WebCommandResult;
+    } finally { release?.(); }
   }
   /** The setters' check against a repository's trusted path; a path that does not resolve is its own named check. */
   private async schemeCheck(repoId: string, scheme: IntegrationScheme): Promise<string | null> {

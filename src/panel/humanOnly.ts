@@ -38,6 +38,7 @@ export const VERB_ACCESS: Readonly<Record<CommandVerbV1, "any" | "human-only" | 
   "set-integration-scheme": "human-only",
   "set-group-integration": "human-only",
   "retry-integration": "human-only",
+  "resolve-integration-conflict": "human-only",
 };
 export const HUMAN_ONLY_VERBS: readonly CommandVerbV1[] =
   (Object.keys(VERB_ACCESS) as CommandVerbV1[]).filter((verb) => VERB_ACCESS[verb] === "human-only");

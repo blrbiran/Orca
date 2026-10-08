@@ -62,6 +62,8 @@ export const durableCommandErrorStatuses = {
   "plan-version-conflict": 409,
   "profile-changed": 409,
   "proposal-version-conflict": 409,
+  // Integration spec §7: resolve-integration-conflict when the group cannot afford the resolution's token budget.
+  "reconcile-budget": 409,
   "reconcile-version-conflict": 409,
   "report-commit-invalid": 409,
   "report-identity-conflict": 409,

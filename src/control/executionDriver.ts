@@ -17,6 +17,7 @@ import { toSingleCallEnvelope, toStartEnvelope } from "./startEnvelope.js";
 import { exportResumeBundle, readExistingResumeBundle, type InputCheckpointV1 } from "./resumeBundle.js";
 import { recordUsage } from "./usage.js";
 import { exportPendingRequirements } from "./requirementExport.js";
+import { runTask } from "../scheduler/ccloopRunner.js";
 import { integratePendingGroups, type IntegrationCrashPoint, type IntegrationDeps } from "./integrationPass.js";
 import { isSingleCallRun, isWebWorkRun, nextClaimableTask, readSingleCallClaimEnvelope, readWorkClaimEnvelope, reserveProviderAttemptInTransaction } from "./webDispatch.js";
 import { singleCallPurposeOf } from "./singleCall.js";
@@ -157,6 +158,8 @@ export function integrationDepsOf(deps: ExecutionDriverDeps, context: DriverCont
   return {
     store: deps.store, roots: deps.roots, admissionGate: deps.admissionGate, repoPathOf: (repoId) => deps.resolveRepository(repoId),
     now: () => (deps.now?.() ?? new Date()).getTime(), ghBin: process.env.ORCA_GH_BIN || "gh", stopped: () => context.stopped,
+    // spec §7: a conflict's resolution run, spawned as the landing reconciliations are and tracked in the same map.
+    resolution: { ccloopBin: deps.ccloopBin, agentsTablePath: deps.agentsTablePath, reconciling: context.reconciling, runTask },
     ...(deps.crash === undefined ? {} : { crash: deps.crash }),
   };
 }

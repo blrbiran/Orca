@@ -1,10 +1,12 @@
+import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
 import { ControlError } from "./errors.js";
 import { groupRepoId, groupStopped, write } from "./executionDriver.js";
 import {
-  BranchMissing, ChildTimeout, RemoteFailure, fetchInto, gitChild, gitOk, isAncestor, oneLine, pushPorcelain, refTip, remoteHas, revParse,
+  BranchMissing, ChildTimeout, RemoteFailure, conflictedNames, fetchInto, gitChild, gitOk, isAncestor, oneLine, pushPorcelain, refTip, remoteHas, revParse,
 } from "./integrationGit.js";
+import { advanceIntegrationResolution, copyOwner, materialiseIntegrationConflict } from "./integrationResolve.js";
 import { syncGroupPr } from "./integrationPr.js";
 import { githubRepoOf, readGroupIntegration, remoteUrl, type GroupIntegration, type IntegrationScheme } from "./integrationScheme.js";
 import { readGroup, saveGroup } from "./queries.js";
@@ -12,6 +14,7 @@ import { removeOwnPath, workBranchRef, type WorkspaceRoots } from "./workspace.j
 import { ORCA_IDENTITY } from "../scheduler/gitExec.js";
 import type { AdmissionGate } from "./admissionGate.js";
 import type { ControlStore } from "./store.js";
+import type { runTask } from "../scheduler/ccloopRunner.js";
 
 /**
  * Integration spec §5-§6: once per driver round, after the runs and the requirement exports, each due group's landed
@@ -29,6 +32,11 @@ export interface IntegrationDeps {
   stopped(): boolean;
   /** Test seam: runs between computing `new` and publishing it (a remote that moves in between). */
   beforePublish?: () => Promise<void>;
+  /**
+   * spec §7: what a conflict's resolution run is spawned with (the driver's ccloop, agents table and its map of
+   * background runs, shared with the landing reconciliations). Absent: `resolving` groups are not advanced.
+   */
+  resolution?: { ccloopBin: string; agentsTablePath: string; reconciling: Map<string, Promise<void>>; runTask: typeof runTask };
 }
 
 type Scheme = Exclude<IntegrationScheme, { delivery: "keep" }>;
@@ -36,7 +44,10 @@ type Outcome =
   /** `pr` is the `github-pr` delivery's PR record, written with the rest (§6.1 step 6). */
   | { kind: "done"; tip: string; integrated: string | null; pr?: GroupIntegration["pr"] }
   | { kind: "blocked"; reason: string }
-  | { kind: "conflict"; base: string; tip: string; paths: string[] }
+  /** `materialised` is the conflict re-created in its copy (spec §7), null when the copy did not reproduce it. */
+  | { kind: "conflict"; base: string; tip: string; paths: string[]; materialised?: GroupIntegration["conflict"] }
+  /** spec §7: a resolution finished on a base that has moved since; it is dropped and the integration starts over. */
+  | { kind: "discarded" }
   | { kind: "transient"; message: string }
   /** The scheme changed while this integration ran: nothing is recorded (spec §6.1 step 6). */
   | { kind: "dropped" };
@@ -55,6 +66,17 @@ const fetchedRefOf = (groupId: string, what: "target" | "work"): string => `refs
 /** spec §5: answers whether any group's integration record moved to a new state (a transient failure does not count). */
 export async function integratePendingGroups(deps: IntegrationDeps): Promise<boolean> {
   let moved = false;
+  // spec §5: every group whose conflict an agent is resolving is advanced first (spec §7).
+  for (const row of deps.store.db.prepare("SELECT id FROM groups WHERE json_extract(body,'$.integration.state')='resolving' ORDER BY id").all()) {
+    if (deps.stopped() || deps.admissionGate?.draining === true) return moved;
+    try { if (await advanceIntegrationResolution(deps, String(row.id))) moved = true; }
+    catch (error) {
+      if (error instanceof Crashed) throw error.error;
+      // Left as it is and tried again next round (a resolution's own failures are recorded by it as a conflict).
+      process.stderr.write(`orca-driver: integration ${String(row.id)}: ${describe(error)}\n`);
+    }
+  }
+  const copies = conflictCopies(deps.roots);
   // Fix round 1 (M1): a remote (repository path + remote name) that timed out in this round is not tried again by a
   // later group of the same round, so a hung remote costs one timeout per round, not one per group.
   const unreachable = new Set<string>();
@@ -65,6 +87,11 @@ export async function integratePendingGroups(deps: IntegrationDeps): Promise<boo
     let integration: GroupIntegration | null;
     try { integration = readGroupIntegration(JSON.parse(String(row.body))); }
     catch (error) { process.stderr.write(`orca-driver: integration ${groupId}: ${describe(error)}\n`); continue; }
+    // spec §7: a group with no conflict on record (its integration succeeded, or its scheme changed) owns no copy.
+    if (copies.has(groupId) && (integration === null || integration.conflict === null)) {
+      try { for (const copy of copies.get(groupId)!) await removeOwnPath(deps.repoPathOf(groupRepoId(deps.store, groupId)), deps.roots, copy); }
+      catch (error) { process.stderr.write(`orca-driver: integration ${groupId}: ${describe(error)}\n`); }
+    }
     // A keep group (no record) is never looked at further: no git child runs for it (review focus 1).
     if (integration === null || !integration.frozen || integration.state !== "idle") continue;
     if (integration.retryAfter !== null && integration.retryAfter > deps.now()) continue;
@@ -82,6 +109,16 @@ export async function integratePendingGroups(deps: IntegrationDeps): Promise<boo
     if (outcome !== null && settle(deps, groupId, integration.schemeHash, outcome)) moved = true;
   }
   return moved;
+}
+
+/** spec §7: the conflict copies in the workspaces root, by the group that owns them. */
+function conflictCopies(roots: WorkspaceRoots): Map<string, string[]> {
+  const byGroup = new Map<string, string[]>();
+  for (const name of readdirSync(roots.workspacesRoot)) {
+    const owner = copyOwner(name);
+    if (owner !== null) byGroup.set(owner, [...(byGroup.get(owner) ?? []), join(roots.workspacesRoot, name)]);
+  }
+  return byGroup;
 }
 
 function describe(error: unknown): string {
@@ -136,20 +173,30 @@ async function integrateGroup(deps: IntegrationDeps, groupId: string, integratio
   if (reentry(integration) === null && (integration.lastIntegrated === null || (caughtUp && !readyOnly)) && await nothingLanded(repo, scheme, tip)) return null;
   try {
     if (readyOnly) return await finishWorkBranch(deps, repo, groupId, integration, scheme as Extract<Scheme, { delivery: "github-pr" }>, tip);
-    if (scheme.delivery === "local") return await integrateLocal(deps, repo, groupId, integration, scheme, tip);
-    if (scheme.delivery === "push-target") return await integratePushTarget(deps, repo, groupId, integration, scheme, tip);
+    if (scheme.delivery === "local" || scheme.delivery === "push-target") {
+      const outcome = scheme.delivery === "local" ? await integrateLocal(deps, repo, groupId, integration, scheme, tip) : await integratePushTarget(deps, repo, groupId, integration, scheme, tip);
+      if (outcome.kind !== "conflict") return outcome;
+      // spec §7: the conflict is re-created for an agent and pinned; nothing is dispatched until an owner approves.
+      const attempt = (integration.conflict?.attempt ?? 0) + 1;
+      return { ...outcome, materialised: await materialiseIntegrationConflict({ roots: deps.roots, repo }, groupId, outcome.base, outcome.tip, scheme.method, attempt, integration.lastIntegrated) };
+    }
     return await integrateWorkBranch(deps, repo, groupId, integration, scheme, tip);
   } catch (error) {
-    // A child that timed out is left to the pass's own handler, which backs it off like any transient; one that was
-    // talking to the remote marks the remote unreachable for the rest of this round.
-    // Only a git child talks to the remote; a gh timeout says nothing about it (fix round 1, M1).
-    if (error instanceof ChildTimeout && error.bin === "git" && remoteKey !== null && "remote" in scheme && error.args.includes(scheme.remote)) unreachable.add(remoteKey);
-    // Fix round 1 (I2): a configured remote that answers with anything but the network refuses like a push, with git's
-    // words; integration-remote-missing is only a remote that is not configured.
-    if (error instanceof RemoteFailure) return error.transient ? { kind: "transient", message: error.message } : { kind: "blocked", reason: `integration-push-refused:${error.message}` };
-    if (error instanceof BranchMissing) return { kind: "blocked", reason: "integration-target-missing" };
-    throw error;
+    return failureOutcome(error, scheme, remoteKey, unreachable);
   }
+}
+
+/** A failure of a delivery's git children, by name (or rethrown for the pass's handler, which backs it off). */
+function failureOutcome(error: unknown, scheme: Scheme, remoteKey: string | null, unreachable: Set<string>): Outcome {
+  // A child that timed out is left to the pass's own handler, which backs it off like any transient; one that was
+  // talking to the remote marks the remote unreachable for the rest of this round.
+  // Only a git child talks to the remote; a gh timeout says nothing about it (fix round 1, M1).
+  if (error instanceof ChildTimeout && error.bin === "git" && remoteKey !== null && "remote" in scheme && error.args.includes(scheme.remote)) unreachable.add(remoteKey);
+  // Fix round 1 (I2): a configured remote that answers with anything but the network refuses like a push, with git's
+  // words; integration-remote-missing is only a remote that is not configured.
+  if (error instanceof RemoteFailure) return error.transient ? { kind: "transient", message: error.message } : { kind: "blocked", reason: `integration-push-refused:${error.message}` };
+  if (error instanceof BranchMissing) return { kind: "blocked", reason: "integration-target-missing" };
+  throw error;
 }
 
 async function remoteConfigured(repo: string, remote: string): Promise<boolean> {
@@ -217,6 +264,13 @@ function pushFailure(pushed: Awaited<ReturnType<typeof pushPorcelain>>): Outcome
   return pushed.transient ? { kind: "transient", message: pushed.failed } : { kind: "blocked", reason: `integration-push-refused:${pushed.failed}` };
 }
 
+/** The squash commit's subject: how many landings (first-parent commits of the work branch) it carries. */
+async function squashMessage(repo: string, groupId: string, integration: GroupIntegration, base: string, tip: string): Promise<string> {
+  const mergeBase = integration.lastIntegrated ?? (await gitOk(repo, ["merge-base", tip, base])).trim();
+  const landings = (await gitOk(repo, ["rev-list", "--count", "--first-parent", `${mergeBase}..${tip}`])).trim();
+  return `orca: integrate ${groupId} (${landings} landings)`;
+}
+
 type Computed = { kind: "new"; commit: string } | { kind: "conflict"; paths: string[] };
 
 /**
@@ -231,8 +285,7 @@ async function computeNew(deps: IntegrationDeps, repo: string, groupId: string, 
     if (merged.code === 1) return { kind: "conflict", paths: conflictedNames(merged.stdout) };
     if (merged.code !== 0) throw new Error(`git merge-tree: ${oneLine(merged.stderr)}`);
     const tree = merged.stdout.split("\n")[0]!.trim();
-    const landings = (await gitOk(repo, ["rev-list", "--count", "--first-parent", `${mergeBase}..${tip}`])).trim();
-    const commit = (await gitOk(repo, [...ORCA_IDENTITY, "commit-tree", tree, "-p", base, "-m", `orca: integrate ${groupId} (${landings} landings)`])).trim();
+    const commit = (await gitOk(repo, [...ORCA_IDENTITY, "commit-tree", tree, "-p", base, "-m", await squashMessage(repo, groupId, integration, base, tip)])).trim();
     return { kind: "new", commit };
   }
   const workspace = integrationPathOf(deps.roots, groupId);
@@ -250,53 +303,48 @@ async function computeNew(deps: IntegrationDeps, repo: string, groupId: string, 
   } finally { await removeOwnPath(repo, deps.roots, workspace); }
 }
 
-/** `merge-tree --name-only` on a conflict: the tree, the conflicted names, a blank line, then git's messages. */
-function conflictedNames(stdout: string): string[] {
-  const lines = stdout.split("\n");
-  const end = lines.indexOf("", 1);
-  return [...new Set(lines.slice(1, end === -1 ? lines.length : end).filter((line) => line.length > 0))];
-}
-
 type Published = "ok" | "moved" | Outcome;
 
+/** Where a delivery that computes `new` on a base reads that base and publishes `new` (spec §6.1 steps 3-4, §6.3). */
+interface Delivery { readBase(): Promise<string>; publish(next: string, base: string): Promise<Published> }
+
 /**
- * spec §6.1 steps 3-4 for the deliveries that compute `new` on a base: write-ahead, publish, and on a base that moved
- * in between, clear the record, fetch again and recompute once; moved again blocks integration-target-moved.
+ * spec §6.1 steps 3-4: write-ahead, publish; a base that moved in between clears the record and answers "moved".
  */
-async function computeAndPublish(deps: IntegrationDeps, repo: string, groupId: string, integration: GroupIntegration, method: "merge" | "squash", tip: string,
-  readBase: () => Promise<string>, publish: (next: string, base: string) => Promise<Published>): Promise<Outcome> {
+async function writeAheadAndPublish(deps: IntegrationDeps, groupId: string, integration: GroupIntegration, tip: string, base: string, next: string, delivery: Delivery): Promise<Outcome | "moved"> {
+  if (!recordPending(deps, groupId, integration.schemeHash, { schemeHash: integration.schemeHash, tip, base, new: next })) return { kind: "dropped" };
+  crash(deps, "after-pending");
+  await deps.beforePublish?.();
+  const published = await delivery.publish(next, base);
+  if (published === "moved") return recordPending(deps, groupId, integration.schemeHash, null) ? "moved" : { kind: "dropped" };
+  if (published !== "ok") return published;
+  crash(deps, "after-publish");
+  return { kind: "done", tip, integrated: next };
+}
+
+/**
+ * spec §6.1 steps 3-4 for the deliveries that compute `new` on a base: on a base that moved in between, fetch again and
+ * recompute once; moved again blocks integration-target-moved.
+ */
+async function computeAndPublish(deps: IntegrationDeps, repo: string, groupId: string, integration: GroupIntegration, method: "merge" | "squash", tip: string, delivery: Delivery): Promise<Outcome> {
   for (let attempt = 0; ; attempt += 1) {
-    const base = await readBase();
+    const base = await delivery.readBase();
     // The target already contains the tip: nothing to carry, and what was integrated stays as it was.
     if (await isAncestor(repo, tip, base)) return { kind: "done", tip, integrated: integration.integratedCommit };
     const computed = await computeNew(deps, repo, groupId, integration, method, base, tip);
     if (computed.kind === "conflict") return { kind: "conflict", base, tip, paths: computed.paths };
-    if (!recordPending(deps, groupId, integration.schemeHash, { schemeHash: integration.schemeHash, tip, base, new: computed.commit })) return { kind: "dropped" };
-    crash(deps, "after-pending");
-    await deps.beforePublish?.();
-    const published = await publish(computed.commit, base);
-    if (published === "moved") {
-      if (!recordPending(deps, groupId, integration.schemeHash, null)) return { kind: "dropped" };
-      if (attempt === 0) continue;
-      return { kind: "blocked", reason: "integration-target-moved" };
-    }
-    if (published !== "ok") return published;
-    crash(deps, "after-publish");
-    return { kind: "done", tip, integrated: computed.commit };
+    const published = await writeAheadAndPublish(deps, groupId, integration, tip, base, computed.commit, delivery);
+    if (published !== "moved") return published;
+    if (attempt > 0) return { kind: "blocked", reason: "integration-target-moved" };
   }
 }
 
 /** `local`: `refs/heads/<target>` of the target repository moves to `new` (spec §6.3 when a worktree has it checked out). */
-async function integrateLocal(deps: IntegrationDeps, repo: string, groupId: string, integration: GroupIntegration, scheme: Extract<Scheme, { delivery: "local" }>, tip: string): Promise<Outcome> {
+function localDelivery(repo: string, scheme: Extract<Scheme, { delivery: "local" }>): Delivery {
   const ref = `refs/heads/${scheme.target}`;
-  const pending = reentry(integration);
-  if (pending !== null) {
-    const current = await refTip(repo, ref);
-    if (current !== null && (current === pending.new || await isAncestor(repo, pending.new, current))) return { kind: "done", tip: pending.tip, integrated: pending.new };
-  }
-  return computeAndPublish(deps, repo, groupId, integration, scheme.method, tip,
-    async () => { const at = await refTip(repo, ref); if (at === null) throw new BranchMissing(scheme.target); return at; },
-    async (next, base) => {
+  return {
+    readBase: async () => { const at = await refTip(repo, ref); if (at === null) throw new BranchMissing(scheme.target); return at; },
+    publish: async (next, base) => {
       const checkedOut = await worktreeOf(repo, ref);
       if (checkedOut === null) {
         if ((await gitChild(repo, ["update-ref", ref, next, base])).code === 0) return "ok";
@@ -308,7 +356,17 @@ async function integrateLocal(deps: IntegrationDeps, repo: string, groupId: stri
       if (!(await isAncestor(repo, await revParse(checkedOut, "HEAD"), next))) return { kind: "blocked", reason: "integration-not-fast-forward" };
       await gitOk(checkedOut, ["merge", "--ff-only", "--quiet", next]);
       return "ok";
-    });
+    },
+  };
+}
+
+async function integrateLocal(deps: IntegrationDeps, repo: string, groupId: string, integration: GroupIntegration, scheme: Extract<Scheme, { delivery: "local" }>, tip: string): Promise<Outcome> {
+  const pending = reentry(integration);
+  if (pending !== null) {
+    const current = await refTip(repo, `refs/heads/${scheme.target}`);
+    if (current !== null && (current === pending.new || await isAncestor(repo, pending.new, current))) return { kind: "done", tip: pending.tip, integrated: pending.new };
+  }
+  return computeAndPublish(deps, repo, groupId, integration, scheme.method, tip, localDelivery(repo, scheme));
 }
 
 /** The worktree of the target repository that has `ref` checked out, if any. */
@@ -322,18 +380,48 @@ async function worktreeOf(repo: string, ref: string): Promise<string | null> {
 }
 
 /** `push-target`: `new` computed on the freshly fetched `<remote>/<target>` and pushed there, never forced. */
-async function integratePushTarget(deps: IntegrationDeps, repo: string, groupId: string, integration: GroupIntegration, scheme: Extract<Scheme, { delivery: "push-target" }>, tip: string): Promise<Outcome> {
-  if (!(await remoteConfigured(repo, scheme.remote))) return { kind: "blocked", reason: "integration-remote-missing" };
-  const fetched = fetchedRefOf(groupId, "target");
-  const pending = reentry(integration);
-  if (pending !== null && await remoteHas(repo, scheme.remote, scheme.target, pending.new, fetched)) return { kind: "done", tip: pending.tip, integrated: pending.new };
-  return computeAndPublish(deps, repo, groupId, integration, scheme.method, tip,
-    () => fetchInto(repo, scheme.remote, scheme.target, fetched),
-    async (next) => {
+function pushTargetDelivery(repo: string, groupId: string, scheme: Extract<Scheme, { delivery: "push-target" }>): Delivery {
+  return {
+    readBase: () => fetchInto(repo, scheme.remote, scheme.target, fetchedRefOf(groupId, "target")),
+    publish: async (next) => {
       const pushed = await pushPorcelain(repo, scheme.remote, `${next}:refs/heads/${scheme.target}`);
       if (pushed === "moved") return "moved";
       return pushFailure(pushed) ?? "ok";
-    });
+    },
+  };
+}
+
+async function integratePushTarget(deps: IntegrationDeps, repo: string, groupId: string, integration: GroupIntegration, scheme: Extract<Scheme, { delivery: "push-target" }>, tip: string): Promise<Outcome> {
+  if (!(await remoteConfigured(repo, scheme.remote))) return { kind: "blocked", reason: "integration-remote-missing" };
+  const pending = reentry(integration);
+  if (pending !== null && await remoteHas(repo, scheme.remote, scheme.target, pending.new, fetchedRefOf(groupId, "target"))) return { kind: "done", tip: pending.tip, integrated: pending.new };
+  return computeAndPublish(deps, repo, groupId, integration, scheme.method, tip, pushTargetDelivery(repo, groupId, scheme));
+}
+
+/**
+ * spec §7, a resolution that finished with no markers: `new` is the resolved tree as a merge (parents base, tip) or as
+ * one squash commit on base, then §6.1 from step 3. A base that moved since the conflict discards it (the integration
+ * starts over at idle and may conflict again). Answers whether the record moved.
+ */
+export async function finishResolvedIntegration(deps: IntegrationDeps, repo: string, groupId: string, integration: GroupIntegration, tree: string): Promise<boolean> {
+  const scheme = integration.scheme as Extract<Scheme, { delivery: "local" | "push-target" }>, conflict = integration.conflict!;
+  const delivery = scheme.delivery === "local" ? localDelivery(repo, scheme) : pushTargetDelivery(repo, groupId, scheme);
+  let outcome: Outcome;
+  try {
+    const base = await delivery.readBase();
+    if (base !== conflict.base) outcome = { kind: "discarded" };
+    else {
+      const next = scheme.method === "merge"
+        ? (await gitOk(repo, [...ORCA_IDENTITY, "commit-tree", tree, "-p", base, "-p", conflict.tip, "-m", `orca: integrate ${groupId}`])).trim()
+        : (await gitOk(repo, [...ORCA_IDENTITY, "commit-tree", tree, "-p", base, "-m", await squashMessage(repo, groupId, integration, base, conflict.tip)])).trim();
+      const published = await writeAheadAndPublish(deps, groupId, integration, conflict.tip, base, next, delivery);
+      outcome = published === "moved" ? { kind: "discarded" } : published;
+    }
+  } catch (error) {
+    if (error instanceof Crashed) throw error;
+    outcome = failureOutcome(error, scheme, null, new Set());
+  }
+  return settle(deps, groupId, integration.schemeHash, outcome);
 }
 
 /** The write-ahead record (null clears it), only while the group still has this scheme. */
@@ -360,19 +448,25 @@ function settle(deps: IntegrationDeps, groupId: string, hash: string, outcome: O
     let next: GroupIntegration;
     switch (outcome.kind) {
       case "done":
+        // A success ends any conflict: the record and its resolution go (and the pass then removes its copies, spec §7).
         next = { ...current, lastIntegrated: outcome.tip, integratedCommit: outcome.integrated, pending: null, state: "idle", reason: null, retryAfter: null, transient: 0,
-          ...(outcome.pr === undefined ? {} : { pr: outcome.pr }) };
+          conflict: null, resolution: null, ...(outcome.pr === undefined ? {} : { pr: outcome.pr }) };
         break;
       case "blocked":
-        next = { ...current, state: "blocked", reason: outcome.reason, pending: null, retryAfter: null, transient: 0 };
+        next = { ...current, state: "blocked", reason: outcome.reason, pending: null, retryAfter: null, transient: 0, resolution: null };
         break;
       case "conflict": {
-        // Task 6 materialises the conflict for an agent; here it is recorded and nothing is dispatched.
+        // spec §7: recorded with its materialised copy, and nothing is dispatched until an owner approves.
         const attempt = (current.conflict?.attempt ?? 0) + 1;
-        next = { ...current, state: "conflict", reason: "integration-conflict", pending: null, retryAfter: null, transient: 0,
-          conflict: { attempt, key: `integrate-${groupId}-${attempt}`, base: outcome.base, tip: outcome.tip, paths: outcome.paths } };
+        next = { ...current, state: "conflict", reason: outcome.materialised === null ? "integration-conflict-unreproducible" : "integration-conflict", pending: null,
+          retryAfter: null, transient: 0, conflict: outcome.materialised ?? { attempt, key: `integrate-${groupId}-${attempt}`, base: outcome.base, tip: outcome.tip, paths: outcome.paths } };
         break;
       }
+      case "discarded":
+        // spec §7: the base moved while the resolution ran; the next round computes the integration again. A write-ahead
+        // record is kept: a target already holding its `new` is then finished, not redone (§6.1 step 2).
+        next = { ...current, state: "idle", reason: null, resolution: null };
+        break;
       case "transient":
         next = { ...current, retryAfter: deps.now() + Math.min(BACKOFF_START_MS * 2 ** current.transient, BACKOFF_MAX_MS), transient: current.transient + 1 };
         break;

@@ -65,7 +65,8 @@ export function isTerminalRunState(state:string):boolean {
   return state==="settled" || ["failed-before-provider","settled-recoverable","settled-restartable","settled-unrecoverable"].includes(state);
 }
 /** Synchronize Web projections inside the existing usage transaction. */
-export function syncWebBudget(store:ControlStore,group:GroupRecord,currentRun:RunRecord):void {
+/** `currentRun` is the run whose usage is being booked, null for run-less usage (integration spec §7). */
+export function syncWebBudget(store:ControlStore,group:GroupRecord,currentRun:RunRecord|null):void {
   // N1 spec §4.1 (DR18, plan F3): a clarifying group keeps the Web ledger mirror without a proposal.
   if((group as {status?:string}).status==="clarifying"){syncRequirementLedger(store,group,currentRun);return;}
   if(!("planHash" in group))return;
@@ -78,16 +79,16 @@ export function syncWebBudget(store:ControlStore,group:GroupRecord,currentRun:Ru
   store.db.prepare("UPDATE budget_proposals SET body=? WHERE group_id=?").run(canonicalBytes(proposal).toString("utf8"),group.groupId);
 }
 /** Any run of the group with unknown or not-yet-applied usage makes the group's usage unknown. */
-function groupUsageUnknown(store:ControlStore,groupId:string,currentRun:RunRecord):boolean {
+function groupUsageUnknown(store:ControlStore,groupId:string,currentRun:RunRecord|null):boolean {
   let usageUnknown=false;
   for(const row of store.db.prepare("SELECT id,body FROM runs WHERE group_id=?").all(groupId)){
-    const run=String(row.id)===currentRun.runId?currentRun:JSON.parse(String(row.body)) as RunRecord;
+    const run=currentRun!==null&&String(row.id)===currentRun.runId?currentRun:JSON.parse(String(row.body)) as RunRecord;
     if(!run.unknown||run.unknown.work||run.unknown.handoff||store.db.prepare("SELECT seq FROM usage_events WHERE run_id=? AND seq>?").get(run.runId,run.highWater))usageUnknown=true;
   }
   return usageUnknown;
 }
 /** N1 spec §4.1 (DR18): the clarifying group's ledger mirror after a usage booking (PR-I5: clarifyingLedger computes it). */
-export function syncRequirementLedger(store:ControlStore,group:GroupRecord,currentRun:RunRecord):void {
+export function syncRequirementLedger(store:ControlStore,group:GroupRecord,currentRun:RunRecord|null):void {
   Object.assign(group,{ledger:clarifyingLedger(group.limit,group.used,group.reserved,groupUsageUnknown(store,group.groupId,currentRun))});
 }
 export function componentMin(a:Amount,b:Amount):Amount {

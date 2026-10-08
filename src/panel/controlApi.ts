@@ -372,6 +372,8 @@ export function controlCommandRoutes(actorId: string): Array<{ path: string; ver
     { path: "/api/control/groups/:groupId/integration", verb: "set-group-integration", target: fromParams },
     // Integration spec §6.5: a blocked or conflicted integration back to idle.
     { path: "/api/control/groups/:groupId/integration/retry", verb: "retry-integration", target: fromParams },
+    // Integration spec §7: an owner approves an agent's resolution of the group's integration conflict.
+    { path: "/api/control/groups/:groupId/integration/resolve", verb: "resolve-integration-conflict", target: fromParams },
     {
       path: "/api/control/operator/agent-preferences",
       verb: "set-agent-preferences",
@@ -447,6 +449,7 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
           case "set-integration-scheme": await service.setIntegrationScheme(command); break;
           case "set-group-integration": await service.setGroupIntegration(command); break;
           case "retry-integration": service.retryIntegration(command); break;
+          case "resolve-integration-conflict": await service.resolveIntegrationConflict(command); break;
           case "set-agent-preferences": await service.setAgentPreferences(command); break;
           case "proposal-set-agent": await service.proposalSetAgent(command); break;
           case "set-task-labels": service.setTaskLabels(command); break;

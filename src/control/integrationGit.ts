@@ -196,3 +196,10 @@ export async function gitOk(repo: string, args: string[], input?: string): Promi
   if (answer.code !== 0) throw new Error(`git ${args[0]}: ${oneLine(answer.stderr) || `exit ${answer.code}`}`);
   return answer.stdout;
 }
+
+/** `merge-tree --name-only` on a conflict: the tree, the conflicted names, a blank line, then git's messages. */
+export function conflictedNames(stdout: string): string[] {
+  const lines = stdout.split("\n");
+  const end = lines.indexOf("", 1);
+  return [...new Set(lines.slice(1, end === -1 ? lines.length : end).filter((line) => line.length > 0))];
+}

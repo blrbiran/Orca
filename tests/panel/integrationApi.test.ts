@@ -98,6 +98,21 @@ describe("the group's integration and confirm's approval over HTTP (integration 
     expect(ids(w.state)).toContain("ri-o");
   });
 
+  it("refuses resolve-integration-conflict from an agent on the socket and a member over the Web by name; routes an owner's (booked)", async () => {
+    const { w, panel, post } = await setUp();
+    seedUser(controlRoot(w.env), "amy", "member");
+    const amy = await login(panel.url, "amy");
+    const route = "/api/control/groups/g/integration/resolve";
+    const socket = await overSocket((panel as StartedPanel).socketPath!, "POST", route, { "x-orca-client": "cli:test" }, { commandId: "rc-a", expectedRevision: 0, payload: {} });
+    expect([socket.status, JSON.parse(socket.text).error.code]).toEqual([403, "control-verb-human-only"]);
+    const member = await amy.fetch(route, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ commandId: "rc-m", expectedRevision: 0, payload: {} }) });
+    expect([member.status, ((await member.json()) as { error: { code: string } }).error.code]).toEqual([403, "control-verb-human-only"]);
+    expect(ids(w.state).filter((id) => id.startsWith("rc-"))).toEqual([]);
+    const owner = await post("groups/nogroup/integration/resolve", { commandId: "rc-o", expectedRevision: 0, payload: {} });
+    expect([owner.status, ((await owner.json()) as { error: { code: string } }).error.code]).toEqual([404, "group-not-found"]);
+    expect(ids(w.state)).toContain("rc-o");
+  });
+
   it("routes an owner's set-group-integration to the service (an unknown group is refused by name and booked)", async () => {
     const { w, post } = await setUp();
     const set = await post("groups/nogroup/integration", { commandId: "gi-o", expectedRevision: 0, payload: { integration: LOCAL } });

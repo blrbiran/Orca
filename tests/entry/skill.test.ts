@@ -26,6 +26,7 @@ const schemaByVerb: Record<string, ZodTypeAny> = {
   "set-spend-cap": setSpendCapPayloadSchema, "clear-spend-cap": clearSpendCapPayloadSchema, "set-usage-calendar": setUsageCalendarPayloadSchema,
   "set-integration-scheme": setIntegrationSchemePayloadSchema, "set-group-integration": setGroupIntegrationPayloadSchema,
   "retry-integration": emptyPayloadSchema,
+  "resolve-integration-conflict": emptyPayloadSchema,
 };
 
 describe("the orca-control skill (spec §7, C18)", () => {
@@ -37,21 +38,22 @@ describe("the orca-control skill (spec §7, C18)", () => {
 
   it("lists exactly the panel's mutation routes, so the table cannot drift", () => {
     const routes = new Set([...api.matchAll(/path: "\/api\/control\/([^"]+)"/g)].map((m) => m[1]!.replace(/:([A-Za-z]+)/g, "<$1>")));
-    // 28 routes carry the 29 verbs: `shutdown` has no route (the panel's own lifecycle). Integration spec §3.4 added
+    // 29 routes carry the 30 verbs: `shutdown` has no route (the panel's own lifecycle). Integration spec §3.4 added
     // `repositories/<repoId>/integration` (set-integration-scheme), `groups/<groupId>/integration` (set-group-integration)
-    // and `groups/<groupId>/integration/retry` (retry-integration).
-    expect(routes.size).toBe(28);
+    // and `groups/<groupId>/integration/retry` (retry-integration); §7 added `groups/<groupId>/integration/resolve`
+    // (resolve-integration-conflict).
+    expect(routes.size).toBe(29);
     expect(rows.map((row) => row.route).sort()).toEqual([...routes].sort());
   });
 
   it("names the verb of every route as the panel does", () => {
     const verbs = new Map([...api.matchAll(/path: "\/api\/control\/([^"]+)",?\s+verb: "([^"]+)"/g)].map((m) => [m[1]!.replace(/:([A-Za-z]+)/g, "<$1>"), m[2]!]));
-    expect(verbs.size).toBe(28);
+    expect(verbs.size).toBe(29);
     expect(new Map(rows.map((row) => [row.route, row.verb]))).toEqual(verbs);
   });
 
   it("gives every route a payload example that its raw payload schema accepts", () => {
-    expect(rows.length).toBe(28);
+    expect(rows.length).toBe(29);
     for (const row of rows) {
       const schema = schemaByVerb[row.verb];
       expect(schema, `no schema mapped for ${row.verb}`).toBeDefined();

@@ -1,6 +1,7 @@
 import { applyWebCommand } from "./commandLedger.js";
 import { canonicalBytes } from "./canonicalJson.js";
 import { ControlError } from "./errors.js";
+import { approveResolution, type ResolutionPrepared } from "./integrationResolve.js";
 import { ENVIRONMENT_CHECKS, newGroupIntegration, readGroupIntegration, readIntegrationDefault, schemeHash, type IntegrationScheme } from "./integrationScheme.js";
 import { readRepositorySettingsBody, writeRepositorySettingsBody, type RepositorySettingsBody } from "./workspaceSettings.js";
 import type { AdmissionGate } from "./admissionGate.js";
@@ -11,6 +12,7 @@ import type { CommandErrorBodyV1, CommandSuccessV1, RawAuthorityCommandV1 } from
 export type SetIntegrationSchemeCommand = Extract<RawAuthorityCommandV1, { verb: "set-integration-scheme" }>;
 export type SetGroupIntegrationCommand = Extract<RawAuthorityCommandV1, { verb: "set-group-integration" }>;
 export type RetryIntegrationCommand = Extract<RawAuthorityCommandV1, { verb: "retry-integration" }>;
+export type ResolveIntegrationConflictCommand = Extract<RawAuthorityCommandV1, { verb: "resolve-integration-conflict" }>;
 
 /**
  * What a setter's pre-transaction check found, refused by name: a bad name or remote is the scheme's own fault
@@ -130,6 +132,32 @@ export function applyRetryIntegration(deps: { store: ControlStore }, command: Re
         verb: context.rawCommand.verb, target: context.rawCommand.target, commandRevision: context.nextCommandRevision, projectionSeq: context.nextProjectionSeq,
         effectivePayloadHash: context.effectivePayloadHash, authorityCommandHash: context.authorityCommandHash,
         result: { kind: "integration-retried", groupId },
+      } };
+    },
+  }).body;
+}
+
+/**
+ * Integration spec §7: an owner's approval of an agent resolving the group's integration conflict. It records the
+ * resolution and state `resolving` only; the driver's pass spawns it. `prepared` is what was read before the
+ * transaction (the conflict's copy and pinned commit; null: none waits).
+ */
+export function applyResolveIntegrationConflict(deps: { store: ControlStore }, command: ResolveIntegrationConflictCommand, prepared: ResolutionPrepared | null): CommandSuccessV1 | CommandErrorBodyV1 {
+  return applyWebCommand<CommandSuccessV1 | CommandErrorBodyV1>(deps.store, {
+    rawCommand: command,
+    expand: () => ({ ...command, schema: "orca-authority-command-v1" }),
+    apply: (context) => {
+      const groupId = command.target.groupId;
+      const row = deps.store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId);
+      if (!row) throw new ControlError("group-not-found");
+      const group = JSON.parse(String(row.body)) as Record<string, unknown>;
+      group.integration = approveResolution(deps.store, groupId, group, prepared);
+      deps.store.db.prepare("UPDATE groups SET body=? WHERE id=?").run(JSON.stringify(group), groupId);
+      return { status: 200, body: {
+        schema: "orca-command-success-v1", commandId: context.rawCommand.commandId, actorId: context.rawCommand.actorId,
+        verb: context.rawCommand.verb, target: context.rawCommand.target, commandRevision: context.nextCommandRevision, projectionSeq: context.nextProjectionSeq,
+        effectivePayloadHash: context.effectivePayloadHash, authorityCommandHash: context.authorityCommandHash,
+        result: { kind: "integration-resolution-started", groupId },
       } };
     },
   }).body;
