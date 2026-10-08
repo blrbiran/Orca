@@ -7,6 +7,7 @@ import { existsSync, readdirSync, readFileSync, rmSync, statSync, utimesSync } f
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { readGroupActivity } from "../../src/control/activity.js";
 import { createExecutionDriver, DriverCrash } from "../../src/control/executionDriver.js";
 import { __setRunChildForTests, remoteTip, spawnRunChild } from "../../src/control/integrationGit.js";
 import { integratePendingGroups, type IntegrationDeps } from "../../src/control/integrationPass.js";
@@ -667,6 +668,37 @@ describe("fix round 1: remote failures, the person's worktrees, one timeout per 
       expect(w.record()).toMatchObject({ transient: 1 });
       const h = readGroupIntegration(JSON.parse(String(w.store.db.prepare("SELECT body FROM groups WHERE id='h'").get()!.body)))!;
       expect(h).toMatchObject({ transient: 0, retryAfter: null, state: "idle", lastIntegrated: null });
+    } finally { await w.dispose(); }
+  });
+});
+
+describe("integration activity (issue-fixes spec §5.2)", { timeout: 60_000 }, () => {
+  it("each result the pass records writes one integration row; a pass with nothing to do writes none", async () => {
+    const w = await world(PB); try {
+      const rows = () => readGroupActivity(w.store, "g", 100).filter((entry) => entry.kind === "integration").reverse().map((entry) => entry.body);
+      expect(await w.pass()).toBe(false);
+      expect(rows()).toEqual([]);
+      w.land({ "a.txt": "a\n" });
+      expect(await w.pass()).toBe(true);
+      expect(rows()).toEqual([{ state: "idle", reason: null }]);
+      w.pushFromOther("orca/g", { "theirs.txt": "x\n" });
+      w.land({ "b.txt": "b\n" });
+      expect(await w.pass()).toBe(true);
+      expect(rows()).toEqual([{ state: "idle", reason: null }, { state: "blocked", reason: "integration-work-branch-diverged" }]);
+    } finally { await w.dispose(); }
+  });
+
+  it("a transient failure only backs off and writes no integration row (a backoff is not a result)", async () => {
+    vi.stubEnv("ORCA_INTEGRATION_TIMEOUT_MS", "500");
+    const w = await world(PB); try {
+      g(w.repo, ["config", "protocol.ext.allow", "always"]);
+      g(w.repo, ["config", "remote.origin.url", "ext::sh -c sleep% 5"]);
+      w.land({ "a.txt": "a\n" });
+      expect(await w.pass()).toBe(false);
+      // The pass did take the transient branch (the record backed off) ...
+      expect(w.record()).toMatchObject({ state: "idle", transient: 1 });
+      // ... and that branch recorded nothing.
+      expect(readGroupActivity(w.store, "g", 100).filter((entry) => entry.kind === "integration")).toEqual([]);
     } finally { await w.dispose(); }
   });
 });

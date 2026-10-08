@@ -1,6 +1,7 @@
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
+import { recordActivity } from "./activity.js";
 import { ControlError } from "./errors.js";
 import { groupRepoId, groupStopped, write } from "./executionDriver.js";
 import {
@@ -479,6 +480,8 @@ function settle(deps: IntegrationDeps, groupId: string, hash: string, outcome: O
         break;
     }
     saveGroup(deps.store, { ...group, integration: next } as typeof group);
+    // Issue-fixes spec §5.2: a result the pass records; a transient retry only schedules the next try and is not one.
+    if (outcome.kind !== "transient") recordActivity(deps.store, { groupId, kind: "integration", body: { state: next.state, reason: next.reason } });
     return outcome.kind !== "transient";
   });
 }
