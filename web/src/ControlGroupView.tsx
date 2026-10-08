@@ -79,7 +79,10 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
   const { t } = useTranslation();
   const groupId = view.summary.groupId;
   const revision = view.summary.commandRevision;
-  const handoffActive = view.summary.stopMode === "handoff";
+  const stopMode = view.summary.stopMode;
+  // Issue-fixes spec §3.2 (3): a panel shutdown that froze runs is left the same way as a human handoff-stop, through the
+  // resume dialog once its stop state is handoff-complete.
+  const handoffActive = stopMode === "handoff" || stopMode === "shutdown";
   const continuable = continuableRuns(view);
   const selections = (): ContinuationSelectionV1[] =>
     continuable.map(({ run, checkpointId }) => ({ taskId: String(run.taskId), predecessorRunId: run.runId, checkpointId }));
@@ -108,6 +111,23 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       {view.summary.claimBlocked && <p role="alert">{t("control.group.claimBlocked")}</p>}
       {/* Spec 2026-10-08 §2.2(d), §6.5: the group's refusal is among the alerts at the top, above every action. */}
       {props.refusal ? <RefusalNotice refusal={props.refusal} testId="group-refusal" /> : null}
+      {/* Issue-fixes spec §3.2 (4): one banner for any stop intent -- how it stopped, its state, and the one way out. */}
+      {view.stop !== null && (
+        <div role="status" data-testid="stop-banner">
+          <p>{t(`control.group.stopBanner.how.${view.stop.mode}` as const)}</p>
+          <p>{t(`control.group.stopBanner.exit.${view.stop.state}` as const)}</p>
+          <p>
+            {t("control.group.stop", {
+              mode: enumText("stopMode", view.stop.mode),
+              state: enumText("stopState", view.stop.state),
+              accepted: view.stop.acceptedAt ?? t("common.na"),
+              deadline: view.stop.deadlineAt ?? t("common.none"),
+              n: view.stop.frozenRunIds.length,
+              runs: view.stop.frozenRunIds.join(", ") || t("common.none"),
+            })}
+          </p>
+        </div>
+      )}
       {/* Accounts spec §6.3.1, §7: a claim waiting on a spend cap names the cap and links to the Usage panel. */}
       {view.spendCapBlock && (
         <p role="status" data-testid="spend-cap-block">
@@ -123,18 +143,6 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       <p>
         {t("control.group.planLine", { goal: view.plan.goal, hash: short(view.plan.planHash), graphVersion: view.graphVersion })}
       </p>
-      {view.stop !== null && (
-        <p role="status">
-          {t("control.group.stop", {
-            mode: enumText("stopMode", view.stop.mode),
-            state: enumText("stopState", view.stop.state),
-            accepted: view.stop.acceptedAt ?? t("common.na"),
-            deadline: view.stop.deadlineAt ?? t("common.none"),
-            n: view.stop.frozenRunIds.length,
-            runs: view.stop.frozenRunIds.join(", ") || t("common.none"),
-          })}
-        </p>
-      )}
       <BudgetEditor view={view} config={config} drafts={drafts} onDraft={onDraft} onCommand={onCommand} onCommands={props.onCommands} selectionsHash={selectionsHashFor(view, props.preview)}
         suggestedTarget={props.integrationFor?.(view.plan.repoId)?.suggestedTarget ?? null} />
       {props.agents !== undefined && (
@@ -279,43 +287,44 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       )}
 
       <h3>{t("control.group.dispatch")}</h3>
-      {view.summary.state === "ready" && !handoffActive && (
+      {/* Issue-fixes spec §3.2 (4): start refuses every stop intent (stop-mode-conflict), so it is not offered under one. */}
+      {view.summary.state === "ready" && stopMode === null && (
         <button type="button" onClick={() => onCommand({ verb: "start", groupId, expectedRevision: revision, payload: {} })}>{t("control.group.start")}</button>
       )}
-      {!handoffActive && view.summary.stopMode !== "pause" && (
+      {!handoffActive && stopMode !== "pause" && (
         <>
           <button type="button" onClick={() => onCommand({ verb: "pause-dispatch", groupId, expectedRevision: revision, payload: {} })}>{t("control.group.pause")}</button>
           <button type="button" onClick={() => onCommand({ verb: "handoff-stop", groupId, expectedRevision: revision, payload: {} })}>{t("control.group.handoffStop")}</button>
         </>
       )}
-      {view.summary.stopMode === "pause" && (
+      {stopMode === "pause" && (
         <button type="button" onClick={() => onCommand({ verb: "resume-dispatch", groupId, expectedRevision: revision, payload: {} })}>{t("control.group.resume")}</button>
       )}
       {handoffActive && view.summary.stopState === "handoff-complete" && continuable.length > 0 && (
-        <>
-          <button
-            type="button"
-            onClick={() => onCommand({ verb: "resume-from-handoff", groupId, expectedRevision: revision, payload: { selections: selections() } })}
-          >
-            {t("control.group.continueSelected", { n: continuable.length })}
-          </button>
-          {continuable.map(({ run, checkpointId }) => (
-            <button
-              key={run.runId}
-              type="button"
-              onClick={() => onCommand({
-                verb: "continue-task",
-                groupId,
-                taskId: String(run.taskId),
-                expectedRevision: revision,
-                payload: { predecessorRunId: run.runId, checkpointId },
-              })}
-            >
-              {t("control.group.continueTask", { taskId: String(run.taskId) })}
-            </button>
-          ))}
-        </>
+        <button
+          type="button"
+          onClick={() => onCommand({ verb: "resume-from-handoff", groupId, expectedRevision: revision, payload: { selections: selections() } })}
+        >
+          {t("control.group.continueSelected", { n: continuable.length })}
+        </button>
       )}
+      {/* Issue-fixes ruling (Part C flag 2): continue-task is refused under any stop intent, so a single task's
+          continuation is offered only once the group has none (for example after a resume with no selections). */}
+      {stopMode === null && continuable.map(({ run, checkpointId }) => (
+        <button
+          key={run.runId}
+          type="button"
+          onClick={() => onCommand({
+            verb: "continue-task",
+            groupId,
+            taskId: String(run.taskId),
+            expectedRevision: revision,
+            payload: { predecessorRunId: run.runId, checkpointId },
+          })}
+        >
+          {t("control.group.continueTask", { taskId: String(run.taskId) })}
+        </button>
+      ))}
       {/* Handoff delivery spec §13.1 I-4: when every frozen run finished or restarted, nothing is continuable,
           and the group's only way out of handoff-complete is a resume with no selections. */}
       {handoffActive && view.summary.stopState === "handoff-complete" && continuable.length === 0 && (

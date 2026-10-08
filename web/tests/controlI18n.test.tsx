@@ -152,6 +152,10 @@ describe("the rest of the control area's branches in Chinese", () => {
     const held: RunViewV1 = { ...run, state: "settled-recoverable", blockedReason: null, continuable: true };
     render(<ControlGroupView view={{ ...view, summary: handoff, runs: [held], checkpoints: [{ checkpointId: "cp1", taskId: "a", runId: "r1", state: "complete", snapshotHash: null, evidenceIds: [] }] }} {...props} />);
     expect(screen.getByRole("button", { name: "继续选中的任务（1）" })).toBeTruthy();
+    cleanup();
+
+    // Issue-fixes ruling (Part C flag 2): a single task's continuation is offered only once the group has no stop intent.
+    render(<ControlGroupView view={{ ...view, summary: { ...view.summary, stopMode: null, stopState: null }, stop: null, runs: [held], checkpoints: [{ checkpointId: "cp1", taskId: "a", runId: "r1", state: "complete", snapshotHash: null, evidenceIds: [] }] }} {...props} />);
     expect(screen.getByRole("button", { name: "继续任务 a" })).toBeTruthy();
     cleanup();
 

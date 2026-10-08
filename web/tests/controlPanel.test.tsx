@@ -118,8 +118,13 @@ describe("ControlPanel", () => {
       runs: [{ ...view.runs[0], state: "settled-recoverable", continuable: true }], handoffRequests: [], recoveryBlockers: [] });
     const settledHtml = renderToStaticMarkup(<ControlPanel {...panelProps({ groups: { g: settled }, summary: { ...summary, groups: [settled.summary] } })} />);
     expect(settledHtml).toContain("Continue selected tasks (1)");
-    expect(settledHtml).toContain("Continue task a");
+    // Issue-fixes ruling (Part C flag 2): continue-task is refused under any stop intent, so the single-task button
+    // appears only once the group has none.
+    expect(settledHtml).not.toContain("Continue task a");
     expect(settledHtml).toContain("settled-recoverable");
+    const resumed = groupView({ ...settled, stop: null, summary: { ...settled.summary, stopMode: null, stopState: null } });
+    const resumedHtml = renderToStaticMarkup(<ControlPanel {...panelProps({ groups: { g: resumed }, summary: { ...summary, groups: [resumed.summary] } })} />);
+    expect(resumedHtml).toContain("Continue task a");
     // The same settled run finished normally: it still displays settled-recoverable, but it is not continuable.
     const completed = groupView({ ...settled, workItems: [{ ...view.workItems[0], status: "completed", currentRunId: "run-a" }],
       checkpoints: [{ ...settled.checkpoints[0], state: "complete" }], runs: [{ ...settled.runs[0], continuable: false }] });

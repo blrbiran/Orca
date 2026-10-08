@@ -140,6 +140,20 @@ export const zh: Translation<typeof en> = {
       spendCapLink: "查看用量与上限",
       planLine: "{{goal}} · 计划 {{hash}} · 图 v{{graphVersion}}",
       stop: "停止 {{mode}} {{state}} · 受理于 {{accepted}} · 截止 {{deadline}} · {{n}} 个冻结的运行：{{runs}}",
+      stopBanner: {
+        how: {
+          pause: "已停止：有人暂停了派发，不会再认领新的运行。",
+          handoff: "已停止：有人发起了交接停止。当时在跑的运行已冻结，正在交接各自的工作。",
+          shutdown: "已停止：面板关闭时有运行在跑。这些运行已冻结，正在交接各自的工作。",
+        },
+        exit: {
+          paused: "出路：点「派发」下的「恢复派发」。",
+          "handoff-pending": "正在停止：冻结的运行还在收尾。现在不用操作，收尾完成后出路会显示在这里。",
+          "handoff-partial": "有冻结的运行没能完成交接。组保持停止；「派发」下出现「重试恢复」时点它。",
+          "handoff-unresolved": "有冻结的运行结果还不清楚。组保持停止；「派发」下出现「重试恢复」时点它。",
+          "handoff-complete": "可以恢复了：用「派发」下的恢复按钮。",
+        },
+      },
       workItems: "工作项",
       filterRegion: "按标签筛选工作项",
       filterLegend: "标签（任一）",

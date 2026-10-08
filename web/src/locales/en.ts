@@ -50,6 +50,19 @@ const stopMode = { pause: "pause", shutdown: "shutdown", handoff: "handoff" } as
 const stopState = {
   paused: "paused", "handoff-pending": "handoff-pending", "handoff-partial": "handoff-partial", "handoff-unresolved": "handoff-unresolved", "handoff-complete": "handoff-complete",
 } as const satisfies Record<NonNullable<GroupSummaryV1["stopState"]>, string>;
+// Issue-fixes spec §3.2 (4): the stop banner says how the group stopped and the one way out of each stop state.
+const stopBannerHow = {
+  pause: "Stopped: a person paused dispatch. No new run is claimed.",
+  handoff: "Stopped: a person asked for a handoff-stop. The runs that were active are frozen and hand off their work.",
+  shutdown: "Stopped: the panel shut down while runs were active. Those runs were frozen and hand off their work.",
+} as const satisfies Record<NonNullable<GroupSummaryV1["stopMode"]>, string>;
+const stopBannerExit = {
+  paused: "Way out: press Resume dispatch under Dispatch.",
+  "handoff-pending": "Stopping: the frozen runs are still settling. Nothing to press yet; the way out appears here when they finish.",
+  "handoff-partial": "A frozen run could not hand off. The group stays stopped; press Retry recovery under Dispatch when it is offered.",
+  "handoff-unresolved": "A frozen run's outcome is not known yet. The group stays stopped; press Retry recovery under Dispatch when it is offered.",
+  "handoff-complete": "Ready to resume: use the resume button under Dispatch.",
+} as const satisfies Record<NonNullable<GroupSummaryV1["stopState"]>, string>;
 const workStatus = {
   draft: "draft", ready: "ready", starting: "starting", "start-unknown": "start-unknown", active: "active", held: "held", continuing: "continuing", completed: "completed", blocked: "blocked",
 } as const satisfies Record<WorkItemViewV1["status"], string>;
@@ -233,6 +246,7 @@ export const en = {
       spendCapLink: "See usage and caps",
       planLine: "{{goal}} · plan {{hash}} · graph v{{graphVersion}}",
       stop: "stop {{mode}} {{state}} · accepted {{accepted}} · deadline {{deadline}} · {{n}} frozen run(s): {{runs}}",
+      stopBanner: { how: stopBannerHow, exit: stopBannerExit },
       workItems: "Work items",
       filterRegion: "Filter work items by label",
       filterLegend: "labels (any of)",

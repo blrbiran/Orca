@@ -47,13 +47,27 @@ describe("continuing after a handoff-stop (handoff delivery C-4, I-4)", () => {
     const onCommand = vi.fn();
     render(<ControlGroupView view={view("handoff-complete", [completed, handedOff], [checkpoint("run-a", "a", "complete"), checkpoint("run-b", "b", "partial")])}
       config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={onCommand} />);
-    expect(screen.queryByRole("button", { name: "Continue task a" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Continue task b" })).toBeTruthy();
+    // Issue-fixes ruling (Part C flag 2): continue-task is refused under any stop intent, so no single-task
+    // continuation is offered while the handoff-stop is still in place -- only the batch resume.
+    expect(screen.queryByRole("button", { name: /^Continue task/ })).toBeNull();
     expect(screen.queryByRole("button", { name: "Resume (no continuation)" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Continue selected tasks (1)" }));
     expect(onCommand).toHaveBeenCalledTimes(1);
     expect(onCommand).toHaveBeenCalledWith({ verb: "resume-from-handoff", groupId: "g", expectedRevision: 6,
       payload: { selections: [{ taskId: "b", predecessorRunId: "run-b", checkpointId: "cp-b" }] } });
+  });
+
+  it("offers a single task's continuation only once the group has no stop intent, and only for the handed-off task", () => {
+    const onCommand = vi.fn();
+    const stopped = view("handoff-complete", [completed, handedOff], [checkpoint("run-a", "a", "complete"), checkpoint("run-b", "b", "partial")]);
+    const resumed: GroupViewV1 = { ...stopped, summary: { ...stopped.summary, stopMode: null, stopState: null }, stop: null };
+    render(<ControlGroupView view={resumed} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={onCommand} />);
+    expect(screen.queryByRole("button", { name: "Continue task a" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Continue selected/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Continue task b" }));
+    expect(onCommand).toHaveBeenCalledTimes(1);
+    expect(onCommand).toHaveBeenCalledWith({ verb: "continue-task", groupId: "g", taskId: "b", expectedRevision: 6,
+      payload: { predecessorRunId: "run-b", checkpointId: "cp-b" } });
   });
 
   it("offers a resume with no selections when the handoff completed and nothing is continuable", () => {
