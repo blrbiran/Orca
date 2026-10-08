@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readRunActivity } from "../../src/control/activity.js";
-import { settleProviderAttempt, deliverScheduledStart } from "../../src/control/webDispatch.js";
+import { settleProviderAttempt, deliverScheduledStart, beginProviderAttempt } from "../../src/control/webDispatch.js";
 import { settleHandoffRequest } from "../../src/control/stopIntent.js";
 import { WebControlService } from "../../src/control/webService.js";
 import { blockRun, LATER_ERROR } from "../../src/control/executionDriver.js";
@@ -82,6 +82,40 @@ describe("run-blocked (issue-fixes spec §5.2)", () => {
       blockRun(t.deps, runId, "C", `terminal:exhausted${LATER_ERROR}later`);
       expect(t.body(runId).drive.blockedReason).toBe(`terminal:exhausted${LATER_ERROR}later`);
       expect(rowsOf(t.h.store, runId, "run-blocked")).toHaveLength(1);
+    } finally { await t.h.dispose(); }
+  });
+});
+
+describe("run-claimed, run-started and startedAt (issue-fixes spec §5.2)", () => {
+  it("a claim writes run-claimed with its claim ordinal; the run has no startedAt yet", async () => {
+    const clock = { value: 1_000 };
+    const { h, runId } = await claimedSoft(clock); try {
+      expect(readRunActivity(h.store, runId, 10).map((entry) => [entry.kind, entry.at, entry.taskId, entry.body])).toEqual([["run-claimed", 1_000, "a", { claimOrdinal: 1 }]]);
+      expect(runBody(h.store, runId).startedAt).toBeUndefined();
+    } finally { await h.dispose(); }
+  });
+
+  it("each reserved attempt writes run-started; startedAt is the first reservation's time and never moves", async () => {
+    const clock = { value: 1_000 };
+    const { h, runId } = await claimedSoft(clock); try {
+      const deps = { store: h.store, profileRouter: h.deps.profileRouter, admissionGate: h.deps.admissionGate };
+      clock.value = 2_000;
+      beginProviderAttempt(deps, runId, "work");
+      clock.value = 3_000;
+      beginProviderAttempt(deps, runId, "work");
+      expect(runBody(h.store, runId).startedAt).toBe(2_000);
+      expect(rowsOf(h.store, runId, "run-started")).toEqual([[2_000, { providerAttemptOrdinal: 1 }], [3_000, { providerAttemptOrdinal: 2 }]]);
+    } finally { await h.dispose(); }
+  });
+
+  it("the driver's A1 sets startedAt with the store clock", async () => {
+    let clock = 1_000;
+    const t = await driverHarness([{ taskId: "a" }], { storeNow: () => clock }); try {
+      const runId = await t.claim();
+      clock = 7_000;
+      await t.until(t.driver(), () => t.body(runId).state !== "starting");
+      expect(t.body(runId).startedAt).toBe(7_000);
+      expect(rowsOf(t.h.store, runId, "run-started")).toEqual([[7_000, { providerAttemptOrdinal: 1 }]]);
     } finally { await t.h.dispose(); }
   });
 });

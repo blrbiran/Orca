@@ -17,7 +17,7 @@ import { singleCallClaimRowOf } from "./singleCall.js";
 import { claimRequirementCall } from "./requirementCalls.js";
 import { hasRequirementBlock, readRequirementGroup } from "./requirementRecords.js";
 import { claimCapBlocking, gateClaim } from "./spendCaps.js";
-import { noteRunWrite } from "./activity.js";
+import { noteRunWrite, recordActivity } from "./activity.js";
 
 export type Phase = "estimate" | "work" | "handoff" | "single-call";
 export type StartCommand = Extract<RawAuthorityCommandV1, { verb: "start" }>;
@@ -358,6 +358,8 @@ function createStartingRun(
   record.status = "running"; record.currentRunId = runId; record.pendingRunId = null; record.claimOrdinal = claimOrdinal;
   record.lineageRunIds = [...new Set([...(record.lineageRunIds ?? []), runId])].sort();
   saveWork(store, groupId, record as never);
+  // Issue-fixes spec §5.2: a claim that creates a run.
+  recordActivity(store, { groupId, taskId: work.taskId, runId, kind: "run-claimed", body: { claimOrdinal } });
   return run;
 }
 
@@ -468,7 +470,10 @@ export function reserveProviderAttemptInTransaction(store: ControlStore, runId: 
     if (held) return { kind: "suppressed", requestId: String(held.id) };
   }
   run.providerAttemptOrdinal += 1;
+  // Issue-fixes spec §5.2: the run started when its first provider attempt was reserved; later attempts keep that time.
+  if (run.startedAt === undefined) run.startedAt = store.now();
   saveDispatchRun(store, run);
+  recordActivity(store, { groupId: run.groupId, taskId: run.taskId, runId, kind: "run-started", body: { providerAttemptOrdinal: run.providerAttemptOrdinal } });
   return { kind: "reserved", providerAttemptOrdinal: run.providerAttemptOrdinal, envelope: phase === "estimate" || phase === "single-call" ? readSingleCallClaimEnvelope(store, run.groupId, runId) : readWorkClaimEnvelope(store, run.groupId, runId) };
 }
 
