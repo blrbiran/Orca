@@ -50,7 +50,7 @@ export interface PanelStartupOrder {
   listen: () => Promise<void>;
 }
 
-type Disposition = "created" | "strengthened-pause" | "preserved-pause" | "preserved-handoff" | "preserved-shutdown" | "blocked-inconsistent" | "skipped-driver-owned";
+type Disposition = "created" | "strengthened-pause" | "preserved-pause" | "preserved-handoff" | "preserved-shutdown" | "blocked-inconsistent" | "skipped-driver-owned" | "unchanged-idle";
 
 interface ShutdownGroupEntry {
   groupId: string;
@@ -158,6 +158,12 @@ export function shutdownGroup(store: ControlStore, groupId: string, window: Shut
   // (the branches above answer those first) and every active run is one the driver collects.
   if (exemptDriverRuns && intent === null && active.length === 0 && driverOwnedGroup(store, groupId)) {
     return { groupId, disposition: "skipped-driver-owned", changed: false, ...versions(store, groupId), frozenRunIds: [], requestIds: [], blockerCode: null };
+  }
+  // Issue-fixes spec §3.2 (1), invariant S1: a shutdown intent exists only when the shutdown froze at least one active run.
+  // An idle group (ready, never started, or all done) gets no intent, no `stopped`, no revision and no projection change.
+  // The branches above have already answered every existing intent except a pause with an active run.
+  if (active.length === 0) {
+    return { groupId, disposition: "unchanged-idle", changed: false, ...versions(store, groupId), frozenRunIds: [], requestIds: [], blockerCode: null };
   }
   const stopRevision = revisionOf(store, groupId) + 1;
   updateRevision(store, groupId, stopRevision);

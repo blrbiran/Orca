@@ -10,7 +10,7 @@ import { canonicalBytes } from "../../src/control/canonicalJson.js";
 import { ControlError } from "../../src/control/errors.js";
 import { profileSnapshot, webFixture } from "../control/fixtures/web.js";
 import { fixtureResolutionFor } from "../control/fixtures/agents.js";
-import type { CommandSuccessV1, RawAuthorityCommandV1 } from "../../src/control/webProtocol.js";
+import { commandSuccessSchema, type CommandSuccessV1, type RawAuthorityCommandV1 } from "../../src/control/webProtocol.js";
 import type { ControlStore } from "../../src/control/store.js";
 
 const ACCEPTED_AT = "2026-09-20T10:00:00.000Z";
@@ -89,8 +89,10 @@ describe("shutdown window", () => {
 });
 
 describe("panel shutdown transaction", () => {
+  // Rewritten for issue-fixes spec §3.4 (invariant S1, human-approved criteria rewrite 2026-10-08): an idle group no longer
+  // gets a stop intent, so both groups hold an active run here and the stop rows still prove the single commit.
   it("waits for a writer admitted before the gate and then commits every group at once", async () => {
-    const ctx = await shutdownHarness(); const { h, gate, shutdown } = ctx; try {
+    const ctx = await shutdownHarness(["g", "h"]); const { h, gate, shutdown } = ctx; try {
       const admittedBeforeGate = gate.enter();
       const pending = shutdown();
       expect(stopRow(h.store, "g")).toBeUndefined();
@@ -117,8 +119,10 @@ describe("panel shutdown transaction", () => {
     } finally { await h.dispose(); }
   });
 
+  // Rewritten for issue-fixes spec §3.4 (invariant S1): `g` holds an active run so it is still frozen ("created"); an idle
+  // group is pinned by "lists an idle ready group as unchanged-idle ..." below.
   it("commits one global command and leaves unchanged groups out of the command ledger and projection", async () => {
-    const ctx = await shutdownHarness(); const { h, shutdown } = ctx; try {
+    const ctx = await shutdownHarness(["g"]); const { h, shutdown } = ctx; try {
       const paused = await ctx.service.pauseDispatch(ctx.groupCommand("h", revisionOf(h.store, "h"), "pause-dispatch", {}) as never);
       expect(paused).toMatchObject({ result: { kind: "paused" } });
       const before = { g: { revision: revisionOf(h.store, "g"), projection: projectionOf(h.store, "g") }, h: { revision: revisionOf(h.store, "h"), projection: projectionOf(h.store, "h") } };
@@ -142,13 +146,37 @@ describe("panel shutdown transaction", () => {
     } finally { await h.dispose(); }
   });
 
-  it("gives a ready group an empty frozen set that completes, so restart can resume and start", async () => {
+  // Rewritten for issue-fixes spec §3.2 (1) and §3.4 (invariant S1): replaces "gives a ready group an empty frozen set that
+  // completes, so restart can resume and start". A ready group with no active run gets no intent at all, so after a restart
+  // it starts like any ready group, with no resume step first.
+  it("lists an idle ready group as unchanged-idle: no stop intent, not stopped, revision and projection unchanged", async () => {
     const ctx = await shutdownHarness(); const { h, shutdown } = ctx; try {
-      await shutdown();
-      const intent = readStopIntent(h.store, "g")!;
-      expect(intent).toMatchObject({ mode: "shutdown", state: "handoff-complete", frozenRunIds: [], acceptedAt: ACCEPTED_AT });
-      expect(groupStopState(h.store, "g")).toBe("handoff-complete");
-      expect(intent.deadlineAt).toBe(new Date(Date.parse(ACCEPTED_AT) + GRACE_MS).toISOString());
+      const before = { revision: revisionOf(h.store, "g"), projection: projectionOf(h.store, "g") };
+      const result = await shutdown();
+      const entry = result.result.groups.find((group) => group.groupId === "g")!;
+      expect(entry).toEqual({ groupId: "g", disposition: "unchanged-idle", changed: false, commandRevision: before.revision,
+        projectionSeq: before.projection, frozenRunIds: [], requestIds: [], blockerCode: null });
+      expect(stopRow(h.store, "g")).toBeUndefined();
+      expect(groupStopState(h.store, "g")).toBe("none");
+      expect((JSON.parse(String(h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!.body)) as { stopped: boolean }).stopped).toBe(false);
+      expect(revisionOf(h.store, "g")).toBe(before.revision);
+      expect(projectionOf(h.store, "g")).toBe(before.projection);
+      expect(commandRows(h.store, "g")).not.toContain(shutdownCommandId(EPOCH));
+      // The strict result enum (webProtocol.ts) accepts the new disposition, so the ledger replay validates.
+      expect(commandSuccessSchema.safeParse(result).success).toBe(true);
+    } finally { await h.dispose(); }
+  });
+
+  it("lists an all-done group as unchanged-idle", async () => {
+    const ctx = await shutdownHarness(); const { h, shutdown } = ctx; try {
+      // Every work item of `g` completed: no active run is left, so shutdown has nothing to freeze.
+      for (const row of h.store.db.prepare("SELECT id,body FROM work_items WHERE group_id='g'").all()) {
+        h.store.db.prepare("UPDATE work_items SET body=? WHERE group_id='g' AND id=?").run(JSON.stringify({ ...JSON.parse(String(row.body)), status: "completed" }), String(row.id));
+      }
+      const before = revisionOf(h.store, "g");
+      const result = await shutdown();
+      expect(result.result.groups.find((group) => group.groupId === "g")).toMatchObject({ disposition: "unchanged-idle", changed: false, commandRevision: before });
+      expect(stopRow(h.store, "g")).toBeUndefined();
     } finally { await h.dispose(); }
   });
 
@@ -201,8 +229,9 @@ describe("panel shutdown transaction", () => {
     } finally { await h.dispose(); }
   });
 
+  // Rewritten for issue-fixes spec §3.4 (invariant S1): `h` holds an active run so "the other groups" are still committed.
   it("records an inconsistent frozen set as a blocker while still committing the other groups", async () => {
-    const ctx = await shutdownHarness(["g"]); const { h, shutdown } = ctx; try {
+    const ctx = await shutdownHarness(["g", "h"]); const { h, shutdown } = ctx; try {
       const active = String(h.store.db.prepare("SELECT id FROM runs WHERE group_id='g' AND active=1").get()!.id);
       seedIntent(h.store, "g", { mode: "shutdown", state: "handoff-pending", frozenRunIds: ["run-not-in-set"], acceptedAt: ACCEPTED_AT, deadlineAt: MAX_INSTANT });
       const before = { intent: stopRow(h.store, "g")!, revision: revisionOf(h.store, "g"), projection: projectionOf(h.store, "g") };
@@ -219,8 +248,9 @@ describe("panel shutdown transaction", () => {
     } finally { await h.dispose(); }
   });
 
+  // Rewritten for issue-fixes spec §3.4 (invariant S1): both groups hold an active run, so the lost commit has intents to lose.
   it("leaves nothing behind when the commit is lost and replays the closed result once it succeeds", async () => {
-    const ctx = await shutdownHarness(); const { h, shutdown, deps } = ctx; try {
+    const ctx = await shutdownHarness(["g", "h"]); const { h, shutdown, deps } = ctx; try {
       const before = { g: revisionOf(h.store, "g"), h: revisionOf(h.store, "h") };
       await expect(shutdown({ beforeCommit: () => { throw new Error("lost"); } })).rejects.toThrow("lost");
       expect(h.store.db.prepare("SELECT COUNT(*) AS n FROM stop_intents").get()!.n).toBe(0);

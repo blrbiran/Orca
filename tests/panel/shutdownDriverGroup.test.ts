@@ -70,6 +70,9 @@ describe("graceful shutdown and driver-owned groups (handoff delivery m5)", () =
     } finally { await h.dispose(); }
   });
 
+  // Rewritten for issue-fixes spec §3.4 (invariant S1, human-approved criteria rewrite 2026-10-08): the running half is
+  // unchanged; the idle half now gets `unchanged-idle` (no intent, not stopped) -- with no driver it is still not
+  // `skipped-driver-owned`, which is what tells the two apart.
   it("freezes a started group exactly as before when no driver exists, idle or running", async () => {
     const running = await group({ start: true, claim: true }); try {
       const { h, runId } = running;
@@ -83,30 +86,38 @@ describe("graceful shutdown and driver-owned groups (handoff delivery m5)", () =
     } finally { await running.h.dispose(); }
     // Idle is the case where only the driver switch tells the two apart: no run is left to exempt.
     const idle = await group({ start: true, claim: false }); try {
+      const before = revisionOf(idle.h.store);
       const entry = shutdownGroup(idle.h.store, "g", window, shutdownCommandId(EPOCH), false);
-      expect(entry).toMatchObject({ disposition: "created", changed: true, frozenRunIds: [] });
-      expect(readStopIntent(idle.h.store, "g")).toMatchObject({ mode: "shutdown", state: "handoff-complete" });
-      expect(stopped(idle.h.store)).toBe(true);
+      expect(entry).toMatchObject({ disposition: "unchanged-idle", changed: false, commandRevision: before, frozenRunIds: [], requestIds: [] });
+      expect(readStopIntent(idle.h.store, "g")).toBeNull();
+      expect(stopped(idle.h.store)).toBe(false);
+      expect(revisionOf(idle.h.store)).toBe(before);
     } finally { await idle.h.dispose(); }
   });
 
-  it("freezes a group that was never started even when a driver exists: it is not the driver's yet", async () => {
+  // Rewritten for issue-fixes spec §3.4 (invariant S1): the never-started group is still not the driver's (not
+  // `skipped-driver-owned`), and being idle it now gets `unchanged-idle` instead of an empty-frozen-set intent.
+  it("lists a group that was never started as unchanged-idle even when a driver exists: it is not the driver's yet", async () => {
     const { h } = await group({ start: false, claim: false }); try {
+      const before = { revision: revisionOf(h.store), projection: projectionOf(h.store) };
       const entry = shutdownGroup(h.store, "g", window, shutdownCommandId(EPOCH), true);
-      expect(entry).toMatchObject({ disposition: "created", changed: true, frozenRunIds: [] });
-      expect(readStopIntent(h.store, "g")).toMatchObject({ mode: "shutdown", state: "handoff-complete" });
-      expect(stopped(h.store)).toBe(true);
+      expect(entry).toEqual({ groupId: "g", disposition: "unchanged-idle", changed: false, commandRevision: before.revision,
+        projectionSeq: before.projection, frozenRunIds: [], requestIds: [], blockerCode: null });
+      expect(readStopIntent(h.store, "g")).toBeNull();
+      expect(stopped(h.store)).toBe(false);
     } finally { await h.dispose(); }
   });
 
-  it("freezes a started group whose body carries no planHash: the planHash is part of the definition", async () => {
+  // Rewritten for issue-fixes spec §3.4 (invariant S1): without a planHash the idle group is not the driver's, so it is
+  // `unchanged-idle` rather than `skipped-driver-owned`; deleting the planHash test in driverOwnedGroup turns this red.
+  it("does not skip a started group whose body carries no planHash as driver-owned: the planHash is part of the definition", async () => {
     const { h } = await group({ start: true, claim: false }); try {
       const row = h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!;
       const { planHash: _dropped, ...rest } = JSON.parse(String(row.body)) as Record<string, unknown>;
       h.store.db.prepare("UPDATE groups SET body=? WHERE id='g'").run(JSON.stringify(rest));
       const entry = shutdownGroup(h.store, "g", window, shutdownCommandId(EPOCH), true);
-      expect(entry).toMatchObject({ disposition: "created", changed: true });
-      expect(stopped(h.store)).toBe(true);
+      expect(entry).toMatchObject({ disposition: "unchanged-idle", changed: false });
+      expect(stopped(h.store)).toBe(false);
     } finally { await h.dispose(); }
   });
 

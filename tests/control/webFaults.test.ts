@@ -245,6 +245,10 @@ describe("commit boundaries (task 10 step 3)", () => {
     } finally { await h.dispose(); }
   });
 
+  // Rewritten for issue-fixes spec §3.4 (invariant S1, human-approved criteria rewrite 2026-10-08): `g2` is imported but
+  // never started, so it is idle and gets no intent (`unchanged-idle`); only `g`, which holds the claimed run, is frozen.
+  // The two-frozen-groups half of "every group or none" is pinned by tests/panel/controlLifecycle.test.ts "leaves nothing
+  // behind when the commit is lost and replays the closed result once it succeeds".
   it("applies a cross-group shutdown to every group or to none, and an epoch replays it once", async () => {
     const { h, deps } = await claimed();
     try {
@@ -261,11 +265,13 @@ describe("commit boundaries (task 10 step 3)", () => {
       fault.clear();
       const applied = await applyPanelShutdown({ ...deps, epoch, now: () => new Date(ACCEPTED_AT), shutdownGraceMs: 1_000 });
       expect(applied.commandId).toBe(shutdownCommandId(epoch));
-      expect(h.store.db.prepare("SELECT group_id FROM stop_intents ORDER BY group_id").all().map((row) => String(row.group_id))).toEqual(["g", "g2"]);
+      expect(h.store.db.prepare("SELECT group_id FROM stop_intents ORDER BY group_id").all().map((row) => String(row.group_id))).toEqual(["g"]);
+      expect((applied.result as { groups: Array<{ groupId: string; disposition: string }> }).groups.map((entry) => [entry.groupId, entry.disposition]))
+        .toEqual([["g", "created"], ["g2", "unchanged-idle"]]);
       // The same epoch reboots with the same command id, so the second call is a replay of the
       // recorded answer rather than a second shutdown with a fresh window.
       await expect(applyPanelShutdown({ ...deps, epoch, now: () => new Date(ACCEPTED_AT), shutdownGraceMs: 1_000 })).resolves.toMatchObject({ commandId: shutdownCommandId(epoch) });
-      expect(count(h.store, "stop_intents")).toBe(2);
+      expect(count(h.store, "stop_intents")).toBe(1);
     } finally { await h.dispose(); }
   });
 
