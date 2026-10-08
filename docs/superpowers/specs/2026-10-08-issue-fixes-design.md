@@ -7,7 +7,8 @@
 - Source: the human's issue list from a local deployment (kept outside git by the human's instruction), issues 1, 3, 7,
   8, 10, 15 and 16. Issue 15's root fix is in ccloop: `ccloop/docs/superpowers/specs/2026-10-08-codex-phase-output-hardening-design.md`.
 - Human direction (2026-10-08, conversation): fix root causes, choose the globally best design rather than the minimal
-  patch. Rulings H1–H7 below were proposed by the controller and approved by the human in the conversation.
+  patch. Rulings H1–H7 were proposed by the controller and approved by the human in the conversation.
+- Review: one independent subagent review of the first version; its findings and their dispositions are in §10.
 
 ## 0. Human rulings
 
@@ -18,17 +19,19 @@
 | H3 | A new run made by `retry-task` starts from the group branch's current head, not from the failed run's workspace. |
 | H4 | Groups are **archived**, never hard-deleted. Archived groups keep every record, refuse new work, and are hidden by default. |
 | H5 | Wall-clock activity is recorded by Orca itself in a new `activity` table (approach A). This bumps the control store schema from 8 to 9, one-way. |
-| H6 | ccloop may be changed (prompt + tolerant final-object extraction, no automatic retry); Orca re-pins after the human pushes. |
-| H7 | The five parts below plus the ccloop spec are the scope; the order is §9. |
+| H6 | ccloop may be changed (prompt + schema-aware final-object extraction, no automatic retry); Orca re-pins after the human pushes. |
+| H7 | The parts below plus the ccloop spec are the scope; the order is §9. |
 
 ## 1. Scope and non-goals
 
 In scope: §2 refusal explanations and plan-import issue lists (issues 1, 10, and the "nothing happened" half of 3);
-§3 the shutdown stop-intent lifecycle (issue 3); §4 `retry-task` (issue 16); §5 the activity record (issue 8, feeds §6);
-§6 group list, archive, and status display (issues 7, 8); §7 Orca's side of issue 15.
+§3 the shutdown stop-intent lifecycle (issue 3); §4 `retry-task` and keeping ccloop's failure reason (issue 16, and
+Orca's side of 15); §5 the activity record and run times (issue 8, feeds §6); §6 group list, archive, and status display
+(issues 7, 8); §7 the ccloop re-pin.
 
-Non-goals: issues 2, 4, 5, 6, 9, 11–14 of the list (medium/low priority, not requested now); a server-side "stuck"
-judgement; a live log stream of the model's own output; hard deletion of groups; automatic retry of failed tasks.
+Non-goals: issues 2, 4, 5, 6, 9, 11–14 of the list; a server-side "stuck" judgement; a live stream of the model's own
+output; hard deletion of groups; automatic retry; activity rows for repository-wide or global commands (spend caps,
+calendar, workspace mode, agent preferences, integration scheme, shutdown) — they have no group.
 
 ## 2. Refusals that explain themselves (issues 1, 10, part of 3)
 
@@ -36,31 +39,34 @@ judgement; a live log stream of the model's own output; hard deletion of groups;
 
 1. **English shows machine text.** `refusalText` (`web/src/i18n.ts`) returns the server message verbatim when the
    language is not Chinese, so an English user reads `control-plan-rejected:task-control-metadata:a`.
-2. **Chinese coverage has holes.** About 62 control error codes (of roughly 200 in `src/control/errors.ts`) have no
-   entry in `zhErrors` (`web/src/locales/zh.ts`), so they fall back to the same machine text. Nothing stops a new code
-   from being added without text.
-3. **The refusal is far from the button.** The control panel renders the group's refusal as one `role="alert"` line at
-   the bottom of the ControlPanel section (`web/src/ControlPanel.tsx`), below the group view the person was using.
-4. **Plan import stops at the first problem.** `schedulerControlPlanSourceOf` (`src/scheduler/planFile.ts`) collects
-   every schema issue from `loadPlan`, but its own Web-import checks return on the first failure, and `control-metadata`
-   lumps three different problems (repository mismatch, missing goal, missing success conditions).
+2. **Chinese coverage has holes for codes that reach the browser via views.** `tests/panel/refusalCoverage.test.ts`
+   already checks durable, web-made and hand-listed codes against `zhErrors`; the 62 codes without zh text are all
+   non-durable (most never reach the browser: `sendMappedControlError` maps them to `control-internal-error`). There is no
+   English text at all, and run failure reasons and blocked reasons shown in views have no explanation.
+3. **The refusal is global and far from the button.** `web/src/controlState.ts` keeps one global `refusal`
+   (its `groupId` is used only for `revision-conflict`), rendered at the bottom of the ControlPanel section; nothing clears
+   it after a later command succeeds (`App.tsx`).
+4. **Plan import stops at the first problem** and joins items with commas, although `malformed:` items are zod messages
+   that can contain commas. `control-metadata` lumps three problems.
 5. **Docs omit a required field.** README §5's example and `docs/cli.md` never mention `targetVersion`.
 
 ### 2.2 Design
 
-**(a) Every control error code has an explanation in both languages.** Each locale gets an `errors` table keyed by
-code. An entry has a sentence that says what happened and, where there is one, what the person can do next. The raw code
-stays on screen next to it (small, monospace), so support can still quote it. `{{detail}}` is the part of the server
-message after `<code>:`; `{{status}}` stays as today.
+**(a) Explanations in both languages for every code the browser can show.** Each locale gets an `errors` table keyed
+by code (zh: today's `zhErrors` extended; en: new). An entry says what happened and, where there is one, what to do next.
+Placeholders: `{{message}}`, `{{status}}`, and new `{{detail}}` (the server message after `<code>:`). The raw code stays
+on screen beside it (small, monospace).
 
-`refusalText` becomes: look up the entry for the code in the current language; else fall back to the server message
-(unchanged fallback). The English path no longer returns the raw message when an entry exists.
+`refusalText` looks up the current language's entry, else falls back to the server message (unchanged fallback).
 
-**Completeness criterion:** a test enumerates every member of `KnownControlErrorCode` (and the panel's own error codes
-that reach the browser) and asserts both locales have a non-empty entry. A new code without text turns this red.
+The set of codes that must have text in **both** languages is the existing coverage set of
+`tests/panel/refusalCoverage.test.ts` (durable catalogue, `WEB_MADE`, `BY_HAND`), plus run failure reasons and blocked
+reasons that views display (§4.2(5)). That test is extended: both locales, and its placeholder allowlist gains `detail`.
+Internal non-durable codes that never reach the browser get no text (they display as `control-internal-error`).
 
-**(b) Detail decoding for the plan refusal.** `control-plan-rejected`'s detail is a comma-separated list of items. The
-web decodes each item to one line of a bulleted list under the explanation:
+**(b) Plan-rejection details are a list.** `control-plan-rejected`'s detail becomes items separated by `\n` (a
+character a zod message, task id or path in these items cannot contain; task ids are already restricted by the plan
+schema — the plan verifies). The web decodes each item:
 
 | Item | Line (English; Chinese mirrors it) |
 |---|---|
@@ -74,335 +80,406 @@ web decodes each item to one line of a bulleted list under the explanation:
 | `malformed:<path>: <msg>` | `<path>`: `<msg>` |
 | anything else | the item verbatim |
 
-**(c) Plan import reports every problem.** `schedulerControlPlanSourceOf` gathers all Web-import problems into one
-list before throwing a single `control-plan-rejected` whose detail joins them. `control-metadata` is split into
-`target-repo-mismatch`, `missing-goal`, `missing-success-conditions`; `task-control-metadata:<task>` is renamed
-`missing-target-version:<task>`. Order: schema issues (as today), then plan-level items, then per-task items in plan
-order. A plan with one problem produces exactly one item, so the error code and HTTP status are unchanged. The
-`schedulerControlPlanSourceOf` callers (Web import and the requirement split validator, N1 spec §8.3.1) see only the
-detail text change.
+**(c) Plan import reports every problem it can see in one pass.** Stage 1 is `loadPlan`'s schema check; if it rejects,
+its issues are the whole list (there is no plan object to check further). Otherwise stage 2 collects, in this order,
+plan-level items (`target-repo-mismatch`, `missing-goal`, `missing-success-conditions`, `duplicate-success-condition`),
+then per task in plan order (`duplicate-dependency`, `dangling-dependency`, `missing-target-version`, then the task's
+contract items from `parseContract`). Only if stage 2 found nothing does import continue. `normalizeControlPlan`'s
+later refusals (`planImport.ts`) and the codes-only refusals in `service.ts` are unchanged and remain single items. A plan
+with one problem produces exactly one item: error code and HTTP status are unchanged.
 
-**(d) The refusal is shown where the person acted.** The per-group refusal (already kept per group in
-`web/src/controlState.ts`) is rendered at the top of the group view, above the action buttons, as an alert with the
-explanation, the decoded list, and the raw code. The bottom-of-panel line stays only for refusals that are not tied to a
-group (import form, settings). A new refusal for the same group replaces the old one; a successful command for that
-group clears it (today's reducer behaviour, kept).
+The requirement split validator (`requirementSplit.ts`), which wraps the detail as `import:${detail}`, pushes one
+reason per item (`import:<item>`), so the model's feedback stays one problem per line.
+
+**(d) Refusals are shown where the person acted.**
+- Web state keeps `refusals: Record<groupId, ControlRefusal>` plus one `importRefusal` and one `panelRefusal` (non-group,
+  non-import). A command's refusal is stored under its group; a later **successful** command for that group clears it;
+  switching groups does not clear another group's refusal.
+- The group view renders its refusal at the top, above the action buttons: explanation, decoded list, raw code.
+- Import refusals (including `control-plan-rejected`) render inside the import form, with the decoded list.
+- The bottom-of-panel line remains only for `panelRefusal`.
 
 **(e) Documentation.** README §5's example gains `"targetVersion": 1`; README and `docs/cli.md` list the Web-import
-requirements in one place: `targetRepo` equals the repository, `goal`, at least one `successConditions`, every task
-has a positive-integer `targetVersion`, no duplicate or dangling dependencies.
+requirements in one place: `targetRepo` equals the repository, `goal`, at least one `successConditions`, every task has a
+positive-integer `targetVersion`, no duplicate or dangling dependencies, contract files valid.
 
 ### 2.3 Criteria
 
-- Completeness test over all codes, both locales (red if any code lacks text; mutation: delete one zh entry).
-- Plan with all five metadata problems at once ⇒ one refusal listing five items in the specified order (mutation:
-  restore early return ⇒ one item).
-- Web: a `control-plan-rejected` refusal renders the decoded list inside the group view, English and Chinese.
-- Existing criteria that pin the old detail strings (`task-control-metadata`, `control-metadata`) are rewritten to the
-  new names; they are listed in the plan by test name for the human's awareness.
+- Extended coverage test: both locales cover the coverage set; mutation: delete one en entry ⇒ red; delete one zh entry ⇒ red.
+- A plan with `target-repo-mismatch`, `missing-goal`, `missing-success-conditions`, `missing-target-version:a` and
+  `dangling-dependency:b` ⇒ one refusal with exactly those five items in that order (mutation: early return restored ⇒
+  one item ⇒ red). A `malformed:` item whose zod message contains a comma survives intact.
+- Split validator: a two-problem detail ⇒ two `import:` reasons.
+- Web: the import form shows the decoded list (en and zh); a group refusal renders in that group's view and is cleared by a
+  later successful command for the same group but not by one for another group.
+- Existing criteria rewritten (named in the plan): those pinning `task-control-metadata`/`control-metadata`
+  (including `tests/control/requirementSplit.test.ts`'s `import:control-metadata`), and the refusal-reducer criteria that
+  assume one global refusal.
 
 ## 3. Shutdown stop-intent lifecycle (issue 3)
 
 ### 3.1 Root cause
 
 Web spec `2026-09-19-web-recoverable-control-design.md` §6.4 step 3 requires that "for a dispatch-enabled group with
-no active run, [shutdown] persists a shutdown stop intent so no claim can begin during drain", and the same section says
-such a group "after restart uses an empty `resume-from-handoff` followed by an explicit `start`". The panel has never
-rendered that exit for `stopMode === "shutdown"` (handoff delivery plan, gap `D-RESUME-SHUTDOWN`), so after any
-restart every idle group refuses `start` with `stop-mode-conflict` and the person has no button that helps.
+no active run, [shutdown] persists a shutdown stop intent so no claim can begin during drain", and says such a group
+"after restart uses an empty `resume-from-handoff` followed by an explicit `start`". The panel never rendered that exit
+for `stopMode === "shutdown"` (handoff delivery plan, gap `D-RESUME-SHUTDOWN`), so after a restart every idle,
+non-driver-owned group refuses `start` with `stop-mode-conflict` and no button helps.
 
-The durable row protects nothing: §6.4 step 1 already closes an in-memory admission gate that refuses every mutation
-(`503 panel-draining`) and every scheduler claim during drain. The row's only lasting effect is the dead end.
-
-The scan also covers groups whose work is all done (`SELECT id FROM groups`, no filter), contrary to §6.4 step 2's
+The durable row protects nothing: §6.4 step 1 closes an in-memory admission gate that refuses every mutation and every
+scheduler claim during drain, and `replenishStartWakes`/`deliverScheduledStart` are already blocked while draining. The
+row's only lasting effect is the dead end. The scan also covers groups whose work is all done, contrary to §6.4 step 2's
 "every nonterminal group".
 
 ### 3.2 Design
 
 **Invariant S1:** a persisted `shutdown` stop intent exists only when the shutdown froze at least one active run
-(including the case where it strengthens a pause because a run was active). An idle group is never given one.
+(including strengthening a pause because a run was active).
 
-1. **Shutdown writes no intent for idle groups.** In `shutdownGroup` (`src/panel/controlLifecycle.ts`), a group with no
-   active run and no existing intent gets the new disposition `unchanged-idle`: no stop intent, no `stopped` flag, no
-   command-revision or projection change. It is still listed in the global shutdown result (§6.4 step 4 requires every
-   scanned group to be listed). A group whose work items are all done is listed the same way.
-   Unchanged dispositions: existing pause, handoff and shutdown intents are preserved exactly as today; a paused group
-   with an active run is still strengthened.
-2. **Recovery heals stale rows.** Panel startup recovery (`recoverControl`, `src/control/recovery.ts`, before scheduler
-   wakes are delivered) deletes every `shutdown` intent whose `frozenRunIds` is empty, and sets that group's
-   `stopped = false`, in one transaction that records a projection change and does **not** advance the command
-   revision (web spec: recovery changes projection state, not command revision). Each healed group gets an activity
-   row (§5) of kind `stop-cleared` with detail `empty-shutdown-intent`. This repairs stores written by older Orca
-   versions on their first start after upgrade, with no manual SQL.
-3. **The exit from a real shutdown is rendered.** For a group whose stop mode is `shutdown` and whose stop state is
-   `handoff-complete`, the group view shows the same resume dialog as for a human handoff-stop (continue selected tasks,
-   or resume with no continuation). `ControlGroupView`'s `handoffActive` covers both modes.
-4. **A stop banner explains the state.** When a group has any stop intent, the top of the group view shows one banner:
-   how it stopped (pause / handoff-stop / panel shutdown), the current stop state, and the one action that leaves it
-   (Resume / Resume from handoff / wait for frozen runs). Buttons that the current stop mode refuses are not rendered.
+1. **Shutdown writes no intent for idle groups.** In `shutdownGroup` (`src/panel/controlLifecycle.ts`), dispositions are
+   decided in this order: existing handoff/shutdown intent ⇒ preserved (unchanged); pause with no active run ⇒
+   preserved pause (unchanged); driver-owned ⇒ `skipped-driver-owned` (unchanged, existing wire value); **no active run ⇒
+   new disposition `unchanged-idle`** (no stop intent, no `stopped` change, no revision or projection change, still listed
+   in the global result); otherwise frozen as today. A group whose work is all done has no active run and so is
+   `unchanged-idle`.
+   `unchanged-idle` is added to the shutdown result enum (`webProtocol.ts`), `web/src/controlTypes.ts`, and the parity test.
+   Consequence, stated plainly: after a restart, an idle non-driver group is not stopped; the person presses Start as for
+   any ready group, with no resume step first. Driver-owned groups behave exactly as today.
+2. **Recovery heals stale rows.** In panel startup recovery (`recoverControl`, `src/control/recovery.ts`), in its own
+   transaction **before** `deliverSchedulerWakes`: delete every `shutdown` intent whose `frozenRunIds` is empty, set that
+   group's `stopped = false`, record one projection change per healed group, do **not** advance the command revision
+   (recovery changes projection state, not command revision), and write an activity row `stop-cleared` with
+   `{reason: "empty-shutdown-intent"}` (§5; so §5 lands before this step). An empty frozen set has no requests or
+   outboxes, so crash-after-commit redelivery of a real shutdown is unaffected. This repairs stores written by older Orca
+   versions on their first start after upgrade.
+3. **The exit from a real shutdown is rendered.** A group whose stop mode is `shutdown` and stop state
+   `handoff-complete` gets the same resume dialog as a human handoff-stop; `ControlGroupView`'s `handoffActive` covers
+   both modes.
+4. **A stop banner explains the state.** With any stop intent, the top of the group view shows one banner: how it
+   stopped (pause / handoff-stop / panel shutdown), the stop state (`stopping` = frozen runs still settling,
+   `handoff-complete` = ready to resume), and the one action that leaves it. Buttons the current stop mode refuses are not
+   rendered.
 
 ### 3.3 Published-text corrections
 
 Appended (original text untouched) as named ERRATUM sections:
-- web spec, after its last ERRATUM: §6.4 step 3's idle-group clause and §6.4's "ready group with no active run …
-  empty `resume-from-handoff` followed by an explicit `start`" sentence are superseded by S1 and §3.2; cite this spec.
-- handoff delivery plan `docs/superpowers/plans/2026-09-25-handoff-delivery.md`: gap `D-RESUME-SHUTDOWN` is closed by
-  §3.2 (3).
+- web spec, after its last ERRATUM: §6.4 step 3's idle-group clause and the "ready group with no active run … empty
+  `resume-from-handoff` followed by an explicit `start`" sentence are superseded by S1 and §3.2 of this spec.
+- `docs/superpowers/plans/2026-09-25-handoff-delivery.md`: gap `D-RESUME-SHUTDOWN` is closed by §3.2 (3).
 
 ### 3.4 Criteria
 
 - An idle ready group, a never-started group with a driver, and an all-done group each get `unchanged-idle`: no
-  `stop_intents` row, `stopped` unchanged, revision unchanged, still listed in the shutdown result.
+  `stop_intents` row, `stopped` unchanged, revision unchanged, listed in the shutdown result.
 - A running group is frozen exactly as today; a paused idle group stays paused; a paused group with an active run is
-  strengthened (unchanged criteria survive).
+  strengthened; a driver-owned group is `skipped-driver-owned` (unchanged criteria survive).
 - Recovery on a store holding an empty-frozen-set shutdown intent deletes it, clears `stopped`, keeps the revision,
-  advances the projection once, and a following `start` succeeds. A non-empty one is untouched.
+  advances the projection once, writes one `stop-cleared` row; a following `start` succeeds. A non-empty one is untouched.
 - Web: a `shutdown`/`handoff-complete` group renders the resume dialog and no Start/Pause/Handoff-stop buttons.
-- Existing criteria pinning the old idle behaviour are rewritten (names in the plan): `tests/panel/controlLifecycle.test.ts`
-  "gives a ready group an empty frozen set that completes, so restart can resume and start" and "commits one global
-  command and leaves unchanged groups out of the command ledger and projection" (idle half);
-  `tests/panel/shutdownDriverGroup.test.ts` "freezes a started group exactly as before when no driver exists, idle or
-  running" (idle half) and "freezes a group that was never started even when a driver exists: it is not the driver's
-  yet"; `tests/control/webFaults.test.ts` "applies a cross-group shutdown to every group or to none, and an epoch
-  replays it once" if its groups are idle (the plan verifies).
+- Existing criteria rewritten (names in the plan): `tests/panel/controlLifecycle.test.ts` "gives a ready group an empty
+  frozen set that completes, so restart can resume and start" and the idle half of "commits one global command and leaves
+  unchanged groups out of the command ledger and projection"; `tests/panel/shutdownDriverGroup.test.ts` the idle half of
+  "freezes a started group exactly as before when no driver exists, idle or running" and "freezes a group that was never
+  started even when a driver exists: it is not the driver's yet"; `tests/control/webFaults.test.ts` "applies a
+  cross-group shutdown to every group or to none, and an epoch replays it once" if its groups are idle (the plan
+  verifies).
 
-## 4. Retrying a failed task (issue 16)
+## 4. Retrying a failed task, and keeping the failure reason (issue 16, Orca side of 15)
 
-### 4.1 Root cause
+### 4.1 Root causes
 
-A run whose ccloop run ended with an outcome other than `succeeded` is blocked at driver step C with reason
-`terminal:<outcome>`. It keeps `active = 1`, its work item stays `running`, and its budget remainder is never
-released. `recovery-retry` sends it back to step C (`resumeBlockedDriverRun`), which collects the same terminal report
-and blocks again, so the button looks dead and the attempt count never moves. Execution driver spec §2.3 states "no new
-human commands", so no path exists to try the task again. The UI shows the dead button for every blocked run.
+1. A run whose ccloop run ended with an outcome other than `succeeded` is blocked at driver step C with reason
+   `terminal:<outcome>`. It keeps `active = 1`, its work item stays `running` (displayed `active`), its budget remainder is
+   never released. `recovery-retry` sends it back to step C, which collects the same terminal report and blocks again.
+   Execution driver spec §2.3 says "no new human commands", so there is no way to try the task again.
+2. Orca drops ccloop's reason: `src/control/ccloopPort.ts` keeps `terminal.stopReason` only when it contains
+   `codex-skills-`, so `codex-result-invalid` (issue 15) never reaches the store or the UI.
 
 ### 4.2 Design
 
-**New command `retry-task`** (Web verb, access `any`, same class as `continue-task` and `recovery-retry`; group target,
+**(1) Keep the reason.** The port keeps `terminal.stopReason` for every terminal report (bounded: first 500 UTF-16
+units, stored as-is otherwise). The drive record gains optional `stopReason` (the drive schema is `.strict()`, so the
+field is added to it; the v9 bump means an older Orca never reads it). The run view exposes it; §2.2(a)'s tables explain
+the common ccloop reasons: `codex-result-invalid` ("the model did not answer in the required JSON format"),
+`codex-events-invalid`, `codex-no-completion`, `codex-usage-invalid`, `codex-usage-unavailable`, `codex-event-error`,
+`codex-timeout`, the `codex-skills-*` family, and exhaustion/cancellation outcomes. The reason is matched by its prefix
+up to the first `:` (the rest is an evidence path).
+
+**(2) New command `retry-task`** (Web verb, access `any` like `continue-task` and `recovery-retry`; group target,
 payload `{ taskId }`).
 
-Preconditions (each refusal has its own code and explanation, §2):
-- the group is not clarifying, not archived (§6.3), has no stop intent and is not `stopped`
-  (`stop-mode-conflict` / `group-archived` / `group-state-invalid`);
-- the task's current run (`work.currentRunId`) is `active`, in state `blocked` with `drive.blockedAt === "C"` and
-  `drive.outcome` set and not `succeeded`; otherwise `task-not-retryable` (409) with detail naming the run state;
-- the run has no open handoff request, no unknown usage and no pending usage events
-  (`releaseRunReserve`'s preconditions); otherwise `task-not-retryable` with the detail;
-- after releasing the failed run's remainder, the group's unallocated reserve covers the task's full `work.grant` in
-  every dimension; otherwise `group-reserve-insufficient` (existing code) with `<dimension>:<shortfall>` detail, and the
-  explanation points at the budget editor.
+Preconditions (each refusal has a code and an explanation):
+- group not clarifying, not archived, no stop intent, not `stopped` (`group-state-invalid` / `group-archived` /
+  `stop-mode-conflict`);
+- the task's current run (`work.currentRunId`) is `active`, state `blocked`, `drive.blockedAt === "C"`, and
+  `drive.outcome` set and not `succeeded` — this includes `codex-skills-*` failures, which also set an outcome;
+  otherwise `task-not-retryable` (409) with a detail naming the run state;
+- no open handoff request on the run, no unknown usage, no pending usage events (the `releaseRunReserve` preconditions);
+  otherwise `task-not-retryable` with the detail;
+- the reserve covers the new run: the task's current grant (`work.grant`, work + handoff dimensions; after a
+  continuation this is the continuation's grant, unchanged by retry) must be available after releasing the failed run's
+  remainder. The net new reservation per dimension is `grant − failedRun.remaining`; if the group's unallocated reserve
+  is short, `group-reserve-insufficient` (existing code) with `<dimension>:<shortfall>`, and the explanation points at the
+  budget editor.
 
 Effect, in one store transaction:
-1. The failed run moves to the new run state **`settled-failed`**, `active = 0`. Its usage is already booked; its
-   remainder is released to the group (`releaseCommitment`).
-2. The work item returns to `ready`, `currentRunId` cleared; the allocation is re-reserved at the task's full original
-   `work.grant` and stays `confirmed` (snapshot identity unchanged).
-3. The group's command revision advances (an ordinary command); an activity row `task-retried` is written (§5).
-4. The run's `drive` gains `cleanupPending: true`.
+1. The failed run moves to new run state **`settled-failed`**, `active = 0`; its booked usage stays; its remainder is
+   released (`releaseCommitment`) and the net amount above re-reserved, so the allocation stays `confirmed` at its
+   grant (snapshot identity unchanged).
+2. The work item returns to `ready`. **`currentRunId` stays on the settled-failed run** until the next claim replaces it
+   (the pattern of `settleProviderAttempt` and `settled-restartable`; the view requires `currentRunId` to be the last run
+   row).
+3. The run's `drive.cleanedUp` is set `false` (existing field) so the driver cleans it up.
+4. The group's command revision advances; activity rows `run-settled` and `task-retried` are written.
 
-Asynchronous follow-up, in the execution driver: `driverRunIds` also visits `settled-failed` runs with
-`cleanupPending`. For each, the driver archives the run's evidence (`archiveRun`, using the saved terminal report as
-the stop proof) and removes its workspace (`cleanupRunWorkspace`), then clears `cleanupPending`. Failure to clean is
-recorded as `cleanupError` and retried next round; it never blocks the new run, whose workspace path is per-run.
+The execution driver's `driverRunIds` also visits `settled-failed` runs with `cleanedUp === false`: it archives the
+run's evidence (`archiveRun`, the saved terminal report is the stop proof) and removes its workspace
+(`cleanupRunWorkspace`), then sets `cleanedUp = true`; a failure is recorded in the existing `drive.cleanupError` and
+retried next round. It never blocks the new run (workspaces are per run).
 
-Normal dispatch then claims the `ready` task as for any task (`nextClaimableTask`), creating a new run from the group
-branch's current head (H3). The task's run count — the length of its run lineage — is the attempt number the UI shows
-("run 2 of this task").
+Normal dispatch claims the `ready` task (`nextClaimableTask`), creating a new run from the group branch's current head.
+The task's run number shown in the UI is the count of its runs that reached the provider (lineage runs whose state is
+not `failed-before-provider`).
 
-**`recovery-retry` on a terminally failed run is refused** with the new code `run-terminal-failed` (409), whose
-explanation says to use "Retry task". It no longer silently re-blocks.
+**(3) `recovery-retry` on a terminally failed run is refused** with the new code `run-terminal-failed` (409), whose
+explanation says to use "Retry task". A transiently blocked run behaves as today.
 
-**Run-state vocabulary:** `settled-failed` is added to the stored run state and to `runViewSchema`'s state enum.
-Readers that assume the old set are found by search in the plan. The schema bump in §5 means an older Orca never reads
-a store that contains it.
+**(4) `settled-failed` in every reader.** Added to: the stored run state and `persistedRunSchema`
+(`src/panel/controlViews.ts`), `displayRunState` (exhaustive switch), the view's terminal-state list used by the
+`active ⇔ non-terminal` check, `isTerminalRunState` (`src/control/budget.ts`), `STOPPED_STATES`
+(`src/control/singleCallLedger.ts`), `runViewSchema` and the run-state enums in `src/control/webProtocol.ts`,
+`web/src/controlTypes.ts`, and the en/zh `runState` labels. The plan re-greps for any reader not listed here.
 
-**UI:** in the runs table and task detail,
-- a run blocked with a transient reason shows "Retry run" (`recovery-retry`), as today;
-- a run blocked with `terminal:<outcome>` shows "Retry task" (`retry-task`) with the failure explanation (§7) and
-  never the "Retry run" button;
-- other blocked runs show no retry button.
+**(5) UI.** In the runs table and task detail:
+- a blocked run whose `drive.outcome` is set and not `succeeded` shows its explained failure reason and **"Retry task"**;
+- any other blocked run shows its explained blocked reason and "Retry run" (`recovery-retry`);
+- `settled-failed` runs show their failure reason and no button.
 
 ### 4.3 Published-text correction
 
 Appended ERRATUM in `docs/superpowers/specs/2026-09-25-execution-driver-design.md`: §2.3's "no new human commands" is
-amended by H2: `retry-task` settles a terminally failed run as `settled-failed` and returns its task to `ready`.
+amended by H2 (`retry-task`, run state `settled-failed`).
 
 ### 4.4 Criteria
 
-- A task whose run ended `failed` (fake ccloop) and is blocked at C: `retry-task` ⇒ run `settled-failed`, `active=0`,
-  remainder released, work `ready`, the driver starts a new run, the new run's lineage length is 2, and it can succeed.
-- The old workspace is removed and evidence archived by the driver; a cleanup failure does not stop the new run.
-- Refusals: transient-blocked run, active healthy run, stopped group, archived group, insufficient reserve (exact
+- Fake ccloop run ending `failed` with stop reason `codex-result-invalid: <dir>`: the drive record and the run view carry
+  the reason; the web explains it.
+- `retry-task` ⇒ run `settled-failed`, `active = 0`, remainder released and net re-reserved, work `ready`,
+  `currentRunId` unchanged, **the group view reads without error immediately after**; the driver then claims a new run;
+  the UI run number is 2; the new run can succeed.
+- Driver cleanup archives and removes the old workspace; a cleanup failure is recorded and does not stop the new run.
+- Refusals: transiently blocked run, healthy active run, stopped group, archived group, insufficient reserve (exact
   dimension and shortfall). Each red when its guard is deleted.
 - `recovery-retry` on a terminally failed run ⇒ `run-terminal-failed`; on a transiently blocked run, unchanged.
-- Web: the right button per blocked reason.
+- A view containing a `settled-failed` run renders (no `run-state:` failure).
+- Web: the right button per blocked run.
 
-## 5. Activity record (issue 8; feeds §6)
+## 5. Activity record and run times (issue 8; feeds §6)
 
 ### 5.1 Root cause
 
-The control store records almost no wall-clock time: runs have no created/started/ended time, the command ledger has
-no timestamps, groups have no last-activity time. ccloop's own `events.jsonl` is per run and is removed with the run
-directory after cleanup. So the UI cannot say when a run started, how long it has been running, what happened
-recently, or whether it has stalled.
+The control store records almost no wall-clock time: runs have no started/ended time, the command ledger has no
+timestamps, groups have no last-activity time, and the store has no clock. ccloop's own `events.jsonl` is removed with
+the run directory after cleanup.
 
 ### 5.2 Design
 
-**Schema v9** (`src/control/migrations.ts`): one new table.
+**Clock:** the control store takes an injectable `now: () => number` (ms since epoch), default `Date.now`; tests pass a
+fixed clock.
+
+**Run times on the run body:** runs gain optional `startedAt` (set when A1 reserves the first provider attempt) and
+`endedAt` (set when the run reaches a settled or landed state, or `settled-failed`), both ms. They are part of the run
+body, so retention below never loses them. Runs written before v9 have neither; the UI shows "—".
+
+**Schema v9** (`src/control/migrations.ts`): one new table, in the repo's table style.
 
 ```sql
 CREATE TABLE activity (
   seq INTEGER PRIMARY KEY AUTOINCREMENT,
-  group_id TEXT NOT NULL,
+  group_id TEXT NOT NULL REFERENCES groups(id),
   task_id TEXT,
   run_id TEXT,
-  at INTEGER NOT NULL,          -- wall clock, ms since epoch, from the store's clock
+  at INTEGER NOT NULL,
   kind TEXT NOT NULL,
-  body TEXT NOT NULL            -- JSON, kind-specific, small
-);
+  body TEXT NOT NULL
+) STRICT;
 CREATE INDEX activity_group_seq ON activity(group_id, seq);
 CREATE INDEX activity_run_seq ON activity(run_id, seq);
 ```
 
-`schemaVersion` becomes `"9"`; store open accepts `9`; the migration from 8 only creates the table and indexes. An
-older Orca refuses the v9 store with `control-schema-unsupported` (one-way, as v7→v8 was). The panel service install
-docs and README note this.
+`schemaVersion` becomes `"9"`; the store's open allowlist accepts `"8"` (migrates) and `"9"`; `migrateSchema` chains
+every older version through 8 to 9. An older Orca refuses a v9 store with `control-schema-unsupported` (one-way, as
+v7→v8 was); README notes it.
 
-**Writer:** one function `recordActivity(store, row)` called **inside the transaction that makes the change**, so an
-activity row exists if and only if its change committed. Kinds and where they are written:
+**Writer:** `recordActivity(store, row)` called inside the transaction that makes the change, so a row exists if and
+only if its change committed. A replayed (idempotent) command writes nothing. Group-scoped kinds only:
 
 | Kind | Written when | Body |
 |---|---|---|
-| `command` | a Web or agent command is accepted (`applyWebCommand` success) | `{verb, actor}` |
-| `run-claimed` | a run is created by a claim | `{claimOrdinal}` |
+| `command` | a group-targeted Web or agent command is first accepted | `{verb, actor}` |
+| `run-claimed` | a claim creates a run | `{claimOrdinal}` |
 | `run-started` | A1 reserves a provider attempt | `{providerAttemptOrdinal}` |
-| `phase` | a collect stores progress whose `step` or `attempt` differs from the previous | `{step, attempt}` |
+| `phase` | a collect stores progress whose `step` or `attempt` differs from the stored one | `{step, attempt}` |
 | `run-blocked` | a driver run enters `blocked` | `{blockedAt, reason}` |
-| `run-resumed` | a blocked run is resumed (recovery-retry) | `{}` |
-| `run-settled` | a run reaches a settled state, landed, or `settled-failed` | `{state, outcome}` |
+| `run-resumed` | a blocked run is resumed by `recovery-retry` | `{}` |
+| `run-settled` | a run reaches a settled/landed state or `settled-failed` | `{state, outcome, stopReason?}` |
 | `task-retried` | `retry-task` | `{fromRunId}` |
 | `integration` | the integration pass records a result | `{state, reason}` |
-| `stop` / `stop-cleared` | a stop intent is created / removed (including §3.2 healing) | `{mode}` / `{reason}` |
+| `stop` / `stop-cleared` | a group stop intent is created / removed (including §3.2 healing) | `{mode}` / `{reason}` |
 | `archived` / `unarchived` | §6.3 | `{}` |
 
-**Retention:** after each insert, rows of that group beyond the newest 500 are deleted in the same transaction.
+One change may write more than one row (`retry-task` writes `run-settled` and `task-retried`).
+
+**Retention:** after each insert, rows of that group beyond the newest 500 are deleted in the same transaction. Run
+times live on the run body, so retention only shortens the feed.
 
 **Reads:**
-- group view: `activity`, the newest 50 rows of the group (newest first);
-- run view: `startedAt` (the `at` of the run's `run-started`, else `run-claimed`, else null) and `endedAt` (its
-  `run-settled`, else null), and `lastActivityAt`;
-- group summary: `updatedAt` (max `at` of the group), via the `(group_id, seq)` index;
-- a new read route `GET /api/control/runs/:runId/activity` returns the run's rows (newest 200) for the task detail.
+- group view: `activity`, newest 50 rows of the group (newest first);
+- run view: `startedAt`, `endedAt`, `lastActivityAt` (newest row of the run);
+- group summary: `updatedAt` = `at` of the group's newest row (by `seq`);
+- new route `GET /api/control/runs/:runId/activity`: the run's newest 200 rows, with the same project-scope and
+  authentication checks as `GET /api/control/runs/:runId/evidence`, and a parity entry.
 
-Rows written before v9 do not exist, so older runs show `startedAt: null` and the UI shows "—". No back-fill.
-
-**Change notification:** an activity insert always happens in a transaction that already records a projection change
-for the group (every listed kind changes group, run or work state), so the existing 2-second summary poll refreshes the
-group view; no new push channel.
+**Change notification:** the plan verifies, kind by kind, that each writing site's transaction records a projection
+change for the group (so the 2-second summary poll refreshes the open group view); where one does not (e.g. a
+`saveRun` whose body did not change), the activity insert itself records the projection change.
 
 ### 5.3 Criteria
 
-- Migration 8→9 on a populated v8 store keeps every row and adds the table; a v10 store is refused.
-- For each kind: the change that commits writes exactly one row; a change that rolls back writes none (mutation: write
-  activity outside the transaction ⇒ rolled-back test red).
-- Retention keeps exactly the newest 500 for a group and never touches another group's rows.
-- View: `startedAt`/`endedAt`/`updatedAt` come from the rows; null when absent.
+- Migration 8→9 on a populated v8 store keeps every row and adds the table; an unknown version is refused.
+- Per kind: the committing change writes its row(s); a rolled-back change writes none (mutation: write outside the
+  transaction ⇒ the rollback criterion red); a replayed command writes none.
+- Retention keeps exactly the newest 500 of a group and never touches another group's rows.
+- `startedAt`/`endedAt` set on the run body at the specified moments with the injected clock; null for pre-v9 runs.
+- The run-activity route refuses another project's run.
 
 ## 6. Group list, archive and status display (issues 7, 8)
 
-### 6.1 Group summary additions
+### 6.1 Work-item display categories
 
-`groupSummarySchema` (`src/control/webProtocol.ts`) gains optional fields (optional so the wire stays compatible with
-clients that ignore them; `webParity` updated):
+One server-side function maps a work item to a display category, used by the summary counts and sent in the view so the
+web never re-derives it:
 
-- `goal` — the plan goal, or the requirement idea for a clarifying group;
-- `branch` — `orca/<groupId>`;
-- `counts` — work items by view category: `{ idle, running, waiting, blocked, done }`, computed in the same loop as
-  today's `completion` (`taskCompletion`, `src/panel/controlViews.ts`), using the view's status mapping;
-- `updatedAt` — §5;
-- `archived` — boolean.
+| Category | When |
+|---|---|
+| `blocked` | the item is `blocked`, or its current run is `blocked` (this includes terminal failures, which today display as `active`), or the item is `held` waiting for a human to continue |
+| `running` | the item is `running`/`continuing`/`starting`/`start-unknown` and its current run is not blocked |
+| `waiting` | the item is `ready` and some dependency is not done |
+| `idle` | `draft`, or `ready` with all dependencies done |
+| `done` | `done` |
 
-### 6.2 Group list (web)
+### 6.2 Group summary additions
 
-- Each group is a card (whole card is the button: border, hover and focus styles, cursor): group id and goal; a
-  progress bar `done/total`; a status chip; an issue badge when `counts.blocked > 0`, `recoveryBlockerCount > 0`,
-  `claimBlocked`, or a stop intent is not settled; the branch; "updated N minutes ago".
-- Filter chips: All (excludes archived) / Not started / Running / Needs attention / Done / Archived. The category of a
-  group is computed by one exported function `groupCategory(summary)` with its own unit tests:
-  archived ⇒ Archived; issue badge ⇒ Needs attention; `total > 0 && done === total` ⇒ Done; any running or waiting
-  item, or state `running` ⇒ Running; else Not started. The chosen filter is kept per viewer in `localStorage`
-  (wrapped in try/catch).
+`groupSummarySchema` (`src/control/webProtocol.ts`, `.strict()`) gains optional `goal` (plan goal, or the requirement
+idea for a clarifying group), `branch` (`orca/<groupId>`), `counts` (`{idle, running, waiting, blocked, done}` per §6.1,
+computed in today's `taskCompletion` loop), `updatedAt` (§5), `archived` (boolean). `web/src/controlTypes.ts` and the
+parity test follow.
 
 ### 6.3 Archive
 
 New Web verbs `archive-group` and `unarchive-group` (access `any`, group target, empty payload).
 
-- Archive is refused (each with its own code and explanation) while the group has an active run, a stop intent that
-  is not `handoff-complete`, an integration state of `resolving` or a pending push, or an estimate or requirement call
-  in flight.
-- Effect: group body gains `archived: { at, actor }`; `unarchive-group` removes it. The status enum is **not**
-  extended (old readers parse group bodies with strict status enums).
-- An archived group refuses every new-work command (`start`, `continue-task`, `retry-task`, `estimate`,
-  `recovery-retry`, `resume-*`, `set-task-loop`, `pause-dispatch`, `handoff-stop`, `retry-integration`) with `group-archived`, and the claim gates
-  (`replenishStartWakes`, `nextClaimableTask`, claim delivery) skip it. Read views are unchanged.
-- The group list hides archived groups unless the Archived filter is chosen. The group view shows an "Archived" banner
+- Archive is refused, each with its own code and explanation, while: the group has an active run; it has a `handoff` or
+  `shutdown` stop intent that is not `handoff-complete`; its integration state is `resolving`; or an estimate or
+  requirement call is in flight. A `pause` intent with no active run does **not** block archiving.
+- Effect: the group body gains `archived: { at, actor }` (bodies are passthrough; the status enum is not extended);
+  `unarchive-group` removes it.
+- An archived group refuses **every group-targeted command except `unarchive-group`** with `group-archived`; reads are
+  unchanged. The claim and wake paths skip it: `replenishStartWakes`, `deliverScheduledStart`,
+  `deliverContinuationWake`, `nextClaimableTask`, and the automatic integration pass's group selection.
+- The group list hides archived groups unless the Archived filter is chosen; the group view shows an Archived banner
   with an Unarchive button.
 
-### 6.4 Group detail order and the work-items graph
+### 6.4 Group list (web)
 
-- Order: heading and alerts (claim-blocked, refusal §2.2(d), stop banner §3.2(4), archived banner), then the
-  **work-items graph**, then the work-items table and task detail, then runs, then budget, agents, integration,
-  skills, estimates, actions. (Graph first by the person's request.)
-- The graph always renders when the group has work items, including when there are no dependency edges (today it
-  returns nothing).
-- Node colour is a filled background by category, with a legend; colours are tokens defined for light and dark themes:
-  - running (`starting`, `active`, `continuing`) — green, with a slow pulse (disabled under `prefers-reduced-motion`);
-  - waiting (`ready` with unfinished dependencies, `held`, `start-unknown`) — amber;
-  - blocked or failed — red;
-  - not started (`draft`, `ready` with dependencies done) — grey;
-  - done — blue.
-- Each node shows: task id; a status word; for a running task, the current step and ccloop attempt
-  (`execute · attempt 2`), the task's run number when > 1 (`run 2`), and elapsed time since `startedAt`; for a running
-  task whose `lastActivityAt` is older than 10 minutes, "no progress for N min" in amber.
-- Selecting a node selects that task (same as the table): the task detail shows the task's recent activity (from the
-  run activity route) above the existing evidence list.
+- Each group is a card; the whole card is the button (border, hover and focus styles): group id and goal; a progress
+  bar `done/total`; a status chip; an attention badge; the branch; "updated N minutes ago".
+- `groupCategory(summary)` (exported, unit-tested), first match wins:
+  1. `archived` ⇒ Archived;
+  2. attention ⇒ Needs attention, where attention is `counts.blocked > 0`, `recoveryBlockerCount > 0`, `claimBlocked`,
+     state `blocked`, or a stop intent whose state is not `handoff-complete`;
+  3. `total > 0 && done === total` ⇒ Done;
+  4. `counts.running + counts.waiting > 0`, or state `running`/`review` ⇒ Running;
+  5. otherwise ⇒ Not started.
+- Filter chips: All (excludes archived) / Not started / Running / Needs attention / Done / Archived. The chosen filter is
+  kept per viewer in `localStorage` (reads and writes in try/catch; the page works without it).
 
-### 6.5 Criteria
+### 6.5 Group detail order and the work-items graph
 
-- `groupCategory`: one test per category plus precedence (archived over issue over done over running).
+- Order: heading; alerts (claim-blocked, the group's refusal §2.2(d), stop banner §3.2(4), archived banner); **the
+  work-items graph**; the work-items table and task detail; runs; budget; agents; integration; skills; estimates;
+  actions.
+- The graph renders whenever the group has work items, with or without dependency edges.
+- Nodes have a filled background by §6.1 category, with a legend; colours are tokens for light and dark themes:
+  running green with a slow pulse (none under `prefers-reduced-motion`), waiting amber, blocked red, idle grey, done blue.
+- Each node shows the task id and a status word; for a running task, the step and ccloop attempt (`execute · attempt
+  2`), the run number when > 1 (`run 2`), and elapsed time since the current run's `startedAt`; when the current run's
+  `lastActivityAt` is older than 10 minutes, "no progress for N min" in amber.
+- Selecting a node selects the task: the task detail shows the current run's recent activity (run activity route) above
+  the existing evidence list.
+
+### 6.6 Criteria
+
+- §6.1 category function: one test per row, including "item `running` with a blocked current run ⇒ `blocked`".
+- `groupCategory`: one test per category plus precedence.
 - Summary: `counts`, `goal`, `branch`, `updatedAt`, `archived` for a fixture store with mixed tasks.
-- Archive: refusals for each guard (red when the guard is deleted); archived group refuses `start` with
-  `group-archived` and is never claimed; unarchive restores; activity rows written.
-- Web: list hides archived by default; filters; graph renders with zero edges; node classes per category; reduced
-  motion disables the pulse; graph precedes the budget editor in the DOM.
+- Archive: each refusal (red when its guard is deleted); pause-without-run allows it; an archived group refuses `start`
+  and `confirm` with `group-archived` and is never claimed or integrated; unarchive restores; activity rows written.
+- Web: archived hidden by default; filters; graph with zero edges renders; node classes per category; reduced motion
+  disables the pulse; the graph precedes the budget editor in the DOM.
 
-## 7. Orca's side of issue 15
+## 7. ccloop re-pin
 
-- A failed run's `failureCode` / `terminal:<outcome>` reason is explained in both locales using the same `errors`
-  tables (§2.2(a)), with entries for the ccloop failure reasons Orca surfaces most: `codex-result-invalid` ("the model
-  did not answer in the required JSON format"), `codex-events-invalid`, `codex-no-completion`, `codex-usage-*`,
-  timeouts and exhaustion. The explanation for a terminal failure offers "Retry task" (§4).
-- After the human pushes the ccloop change, Orca re-pins ccloop (`package.json`, `pin-ccloop.mjs` checks) and the
-  gate's `ORCA_CCLOOP_BIN` moves to a clone build of the new pin.
+After the human pushes the ccloop change, Orca re-pins ccloop (`package.json`, `pin-ccloop.mjs` checks) and the gate's
+`ORCA_CCLOOP_BIN` moves to a clone build of the new pin. Until then Orca's criteria use the current pin; §4.2(1) does not
+depend on the ccloop change (ccloop already reports `stopReason`).
 
 ## 8. Cross-cutting
 
-- **Attribution:** every new durable write path already carries the actor (commands) or is internal (driver, recovery).
+- **Attribution:** commands carry their actor; driver and recovery writes are internal.
 - **Languages:** code, comments, spec and ledger in English; Chinese only in `zh.ts` and the handoff.
-- **Rule 17:** no test writes to the real `~/.orca`; all criteria use the existing temporary control roots.
-- **Mutations** run only in a `git clone --local` copy under the session scratchpad; the plan names, per task, the
-  mutation that deletes each new branch and must be seen red.
+- **Rule 17:** no criterion writes to the real `~/.orca`; all use temporary control roots.
+- **Mutations** only in a `git clone --local` copy under the session scratchpad; the plan names, per task, the mutation
+  that deletes each new branch and must be seen red.
+- **Existing criteria** rewritten by this work are listed by name in the plan and in the ledger for the human.
 
-## 9. Delivery order
+## 9. Delivery order (linear)
 
-1. ccloop spec (separate repo, human pushes).
-2. §2 refusals and plan issues; §3 shutdown lifecycle. Independent of each other.
-3. §5 activity table and schema v9 (needed by §4's `task-retried`, §3's `stop-cleared`, §6's times). If §3 lands
-   first, its healing writes its activity row once §5 exists (the plan orders §5 before §3's healing step).
-4. §4 `retry-task`.
-5. §6 summary, archive, list, graph.
-6. §7 explanations and the ccloop re-pin.
+1. ccloop spec (separate repo; the human pushes).
+2. §2 refusals and plan issue lists.
+3. §5 clock, run times, activity table, schema v9.
+4. §3 shutdown lifecycle (its healing step writes `stop-cleared`).
+5. §4 failure reason, `retry-task`, `settled-failed`.
+6. §6 categories, summary, archive, list, graph.
+7. §7 ccloop re-pin (after the human pushes ccloop).
 
-Gate per the handoff: isolated clone, HOME and the four XDG roots redirected, `ORCA_CCLOOP_BIN` a clone build of the
-pin by absolute path, fake codex `integration`; web build, typecheck, `--ws check`, `verify:control`, `verify:panel`,
-full `npm test` with only registered load flakes, `check-tmp-leak`.
+Gate per the handoff: isolated clone, HOME and the four XDG roots redirected, `ORCA_CCLOOP_BIN` a clone build of the pin
+by absolute path, fake codex `integration`; web build, typecheck, `--ws check`, `verify:control`, `verify:panel`, full
+`npm test` with only registered load flakes, `check-tmp-leak`.
+
+## 10. Review record
+
+Independent review (subagent, 2026-10-08, same session) of the first version (commit subject
+`docs(spec): design root-cause fixes for the 2026-10-08 deployment issues`). The spec was unpublished, so it was revised
+in place; dispositions:
+
+- C1 accepted: `currentRunId` is kept on the settled-failed run (§4.2(2) step 2) and a view-after-retry criterion added.
+- C2 accepted: every reader of the run-state vocabulary listed (§4.2(4)) and a render criterion added.
+- C3 accepted: the port keeps ccloop's `stopReason` and the drive record stores it (§4.2(1)); the Retry-task button keys on
+  `drive.outcome`, so `codex-skills-*` failures get it too.
+- I1 accepted: per-group refusal state with clear-on-success; import refusals in the import form (§2.2(d)).
+- I2 accepted: the existing `refusalCoverage` test is extended to English and to view-shown reasons; `{{detail}}` allowed;
+  no text for internal-only codes.
+- I3 accepted: `\n` separator; staged collection stated; contract items included; split validator splits reasons; the
+  five-problem criterion names compatible problems.
+- I4 accepted: `unchanged-idle` added to the strict result enum; ordering with `skipped-driver-owned` stated; healing in
+  its own transaction before scheduler wakes; behaviour change stated.
+- I5 accepted: net reservation formula over work + handoff; grant is the current `work.grant`; existing `cleanedUp` /
+  `cleanupError` reused; run number excludes `failed-before-provider`.
+- I6 accepted: §6.1 categories make a task with a blocked current run `blocked` (red, attention).
+- I7 accepted: group-scoped kinds only; replay writes nothing; run times on the run body; injectable clock; migration
+  chain; `STRICT` and `REFERENCES`.
+- I8 accepted: guards match durable integration states; integration pass skips archived; pause without a run allows
+  archive; archived refuses every group command except `unarchive-group`; wake paths named.
+- Minors accepted: multi-row changes stated; attention defined; `held` is attention; `updatedAt` from the newest row; the
+  run-activity route's scope checks; linear delivery order.
