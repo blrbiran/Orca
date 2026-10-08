@@ -79,9 +79,17 @@ export function expandSplitDraft(output: SplitOutput, context: { targetRepo: str
 }
 
 /**
+ * Spec 2026-10-08 §2.2(c): the Web import's refusal as split reasons, one per item of its detail, so the model's
+ * feedback stays one problem per line. A refusal with no detail is handed back by its code.
+ */
+export function importReasons(error: ControlError): string[] {
+  return (error.detail ?? error.code).split("\n").map((item) => `import:${item}`);
+}
+
+/**
  * N1 spec §8.3-§8.4 (Rule 5: code decides): every reason, in check order -- loadPlan's, the Web import's own dependency
- * and success-condition checks (which the import stops at the first of), each task's expansion, each target path
- * against the overview's commit, each trace -- and only for a draft with none, the import itself and the layers.
+ * and success-condition checks, each task's expansion, each target path against the overview's commit, each trace --
+ * and only for a draft with none, the import itself (one reason per item it names) and the layers.
  */
 export async function validateSplitDraft(input: { output: SplitOutput; plan: SplitPlanFile; repo: string; commit: string; criterionIds: readonly string[]; adrIds: readonly string[] }): Promise<SplitValidation> {
   const reasons: string[] = [];
@@ -110,7 +118,7 @@ export async function validateSplitDraft(input: { output: SplitOutput; plan: Spl
     normalizeControlPlan({ ...schedulerControlPlanSourceOf(plan, plan.targetRepo), repoId: "requirement", planId: "requirement-draft" });
   } catch (error) {
     if (!(error instanceof ControlError)) throw error;
-    return { ok: false, reasons: [`import:${error.detail ?? error.code}`], layers: null, implicitEdges: null };
+    return { ok: false, reasons: importReasons(error), layers: null, implicitEdges: null };
   }
   const graph = buildGraph({ ...plan, tasks: output.tasks.map((task) => ({ taskId: task.taskId, contract: task.taskId, dependsOn: task.dependsOn })) } as PlanFile, contracts);
   return { ok: true, reasons, layers: graph.layers, implicitEdges: graph.implicit.map((edge) => ({ from: edge.from, to: edge.to, conflicts: edge.conflicts.map((c) => ({ a: c.a.declared, b: c.b.declared })) })) };
