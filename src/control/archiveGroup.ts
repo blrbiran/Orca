@@ -29,7 +29,9 @@ function groupBody(store: ControlStore, groupId: string): Record<string, unknown
 /**
  * Spec §6.3: archive is refused while work is in motion, each case by its own code. Order matters for reachability: a
  * running estimate or a pending requirement call also has (or will have) an active run, and a settling handoff always
- * has one, so those are named before the plain active-run guard. A `pause` intent with no active run does not refuse.
+ * has one, so those are named before the plain active-run guard. A `pause` intent with no active run does not refuse,
+ * nor does a handoff stop that has settled -- complete, or partial (a frozen run was settled unrecoverable: terminal,
+ * nothing in motion, and no exit leads from it to handoff-complete).
  * The stop state is derived the way groupStopState derives it (the stored body's state can lag the requests it summarises).
  */
 function refuseArchive(store: ControlStore, groupId: string, group: Record<string, unknown>): void {
@@ -40,7 +42,7 @@ function refuseArchive(store: ControlStore, groupId: string, group: Record<strin
   const intent = readStopIntent(store, groupId);
   if (intent !== null && intent.mode !== "pause") {
     const state = deriveStopState(store, groupId, intent.frozenRunIds);
-    if (state !== "handoff-complete") throw new ControlError("archive-stop-pending", `${intent.mode}:${state}`);
+    if (state !== "handoff-complete" && state !== "handoff-partial") throw new ControlError("archive-stop-pending", `${intent.mode}:${state}`);
   }
   if (readGroupIntegration(group)?.state === "resolving") throw new ControlError("archive-integration-resolving");
   if (store.db.prepare("SELECT id FROM runs WHERE group_id=? AND active=1").get(groupId)) throw new ControlError("archive-run-active");

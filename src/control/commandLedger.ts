@@ -2,6 +2,7 @@ import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { commandClientFor, commandPrincipalFor } from "./commandClient.js";
 import { ControlError, durableCommandErrorStatus } from "./errors.js";
 import { appendActivity } from "./activity.js";
+import { isGroupArchived } from "./archivedMark.js";
 import { recordProjectionChange } from "./projectionJournal.js";
 import type { ControlStore } from "./store.js";
 import {
@@ -308,6 +309,11 @@ export function applyWebCommand<T>(store: ControlStore, input: WebCommandInput<T
     let unvalidated: StoredCommandOutcome<T | CommandBody>;
     if (rawCommand.expectedRevision !== currentCommandRevision) {
       unvalidated = revisionConflict(currentCommandRevision);
+    } else if (commandScope.groupId !== null && rawCommand.verb !== "unarchive-group" && isGroupArchived(store, commandScope.groupId)) {
+      // Issue-fixes spec §6.3: an archived group refuses every group-targeted command but unarchive-group. Every group
+      // command books its outcome here (persistCommandOutcome's only other caller books revision conflicts), so this one
+      // gate, ahead of expand and apply, covers every verb -- retry-task included -- and any verb added later.
+      unvalidated = domainErrorOutcome(new ControlError("group-archived"), resultCommandRevision)!;
     } else {
       const expansion = invokeWithSavepoint(store, "web_command_expand", () => {
         const effectiveCommand = effectiveAuthorityCommandSchema.parse(input.expand()) as EffectiveAuthorityCommandV1;
