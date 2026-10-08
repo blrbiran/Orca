@@ -5,7 +5,7 @@
  * decision with a `reviewed` row, any tier; All is every listed decision. Both come from /api/decisions. A decision
  * opened from any filter shows the correction form, and a second correction meets the server's refusal.
  */
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { App } from "../src/App.js";
 import { rowsForStatus } from "../src/DecisionsView.js";
@@ -117,6 +117,42 @@ describe("the Decisions status filter in the page", () => {
     fireEvent.change(status(), { target: { value: "reviewed" } });
     expect((await screen.findByText("No decisions in this status.")).tagName).toBe("P");
     expect(screen.queryByText(/Every high-tier decision has been reviewed/)).toBeNull();
+  });
+
+  it("final review M-T8: the title and lede say which decisions are listed, in each status and language", async () => {
+    const heading = () => document.querySelector(".decisions h1")?.textContent;
+    const lede = () => document.querySelector(".decisions .section-lede")?.textContent;
+    await openHome();
+    expect(heading()).toBe("Unreviewed high-tier decisions");
+    expect(lede()).toBe("High-tier decisions an agent recorded that nobody has reviewed yet. Open one, read it, then Agree or Correct.");
+    fireEvent.change(status(), { target: { value: "reviewed" } });
+    await waitFor(() => expect(listed()).toHaveLength(2));
+    expect(heading()).toBe("Reviewed decisions");
+    expect(lede()).toBe("Decisions someone has already reviewed, at any tier. Open one to read it again or record a correction.");
+    fireEvent.change(status(), { target: { value: "all" } });
+    await waitFor(() => expect(listed()).toHaveLength(4));
+    expect(heading()).toBe("All decisions");
+    expect(lede()).toBe("Every decision an agent recorded, reviewed or not, at any tier. Open one to read it, then Agree or Correct.");
+    await act(async () => { await i18n.changeLanguage("zh"); });
+    expect(heading()).toBe("全部决策");
+    expect(lede()).toBe("agent 记录下的每一条决策，不论是否评审过、层级高低。打开一条，读完，然后点「同意」或「纠正」。");
+    fireEvent.change(status(), { target: { value: "reviewed" } });
+    expect(heading()).toBe("已评审的决策");
+    expect(lede()).toBe("已经有人评审过的决策，不论层级。打开一条可以重读，或记录一条纠正。");
+  });
+
+  it("final review M-T8: until the Reviewed rows arrive the list says it is reading them, not that there are none", async () => {
+    const real = globalThis.fetch;
+    let answer: (response: Response) => void = () => undefined;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> =>
+      String(input).startsWith("/api/decisions") ? new Promise<Response>((resolve) => { answer = resolve; }) : real(input, init)) as typeof fetch;
+    await openHome();
+    fireEvent.change(status(), { target: { value: "reviewed" } });
+    expect(screen.getByText("Reading decisions…").tagName).toBe("P");
+    expect(screen.queryByText("No decisions in this status.")).toBeNull();
+    await act(async () => { answer(json({ rows: FULL })); });
+    await waitFor(() => expect(listed()).toHaveLength(2));
+    expect(screen.queryByText("Reading decisions…")).toBeNull();
   });
 
   it("opens a reviewed decision with the correction form, and a second correction shows the refusal", async () => {

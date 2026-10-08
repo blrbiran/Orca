@@ -93,6 +93,8 @@ export function DecisionsView(props: {
   /** Absent: no status select (the rows are whatever the caller chose to pass). */
   status?: DecisionStatus;
   onStatus?: (s: DecisionStatus) => void;
+  /** The rows of the chosen status have not arrived yet (Reviewed / All are read on demand). */
+  loading?: boolean;
   selected?: Pick<DecisionListRow, "projectKey" | "id"> | null;
   onOpen?: (row: DecisionListRow) => void;
   detail?: ReactNode;
@@ -100,6 +102,10 @@ export function DecisionsView(props: {
   const { t } = useTranslation();
   const name = useProjectName();
   const shown = filterRows(props.rows, props.filter);
+  // Final review M-T8: the heading says which decisions are listed; Unreviewed (and no status select) keeps today's.
+  const heading = props.status === "reviewed" ? { title: "decisions.titleReviewed", lede: "decisions.ledeReviewed" } as const
+    : props.status === "all" ? { title: "decisions.titleAll", lede: "decisions.ledeAll" } as const
+    : { title: "decisions.title", lede: "decisions.lede" } as const;
   // A detail stays open after its row leaves the list (filtered away, or reviewed); say which.
   const same = (r: DecisionListRow): boolean => r.projectKey === props.selected?.projectKey && r.id === props.selected?.id;
   const note = !props.selected || props.detail == null ? null
@@ -109,11 +115,11 @@ export function DecisionsView(props: {
   return (
     <div className="decisions">
       <div className="section-head">
-        <h1>{t("decisions.title")}</h1>
+        <h1>{t(heading.title)}</h1>
         <span className="count" data-testid="decision-count">{t("decisions.count", { shown: shown.length, total: props.rows.length })}</span>
       </div>
       <p className="section-lede">
-        {t("decisions.lede")}
+        {t(heading.lede)}
       </p>
       <div className="filters">
         {props.status !== undefined && (
@@ -140,7 +146,9 @@ export function DecisionsView(props: {
       </div>
       <div className="split">
         <div className="split-list">
-          {props.rows.length === 0 ? (
+          {props.loading === true ? (
+            <p className="empty">{t("decisions.loading")}</p>
+          ) : props.rows.length === 0 ? (
             <p className="empty">{t(props.status === undefined || props.status === "unreviewed" ? "decisions.nothingToReview" : "decisions.nothingInStatus")}</p>
           ) : shown.length === 0 ? (
             <p className="empty">{t("decisions.noMatch")}</p>

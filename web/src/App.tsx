@@ -761,6 +761,8 @@ export function App(): JSX.Element {
 
   const statusRows: readonly DecisionListRow[] =
     status === "unreviewed" ? home?.todo ?? [] : rowsForStatus(allRows ?? [], status);
+  // Final review M-T8: Reviewed / All before their first read are loading, not empty.
+  const statusLoading = status !== "unreviewed" && allRows === null;
 
   /**
    * Parked finding N-1 / ruling R71. Opening another row takes the previous
@@ -1013,13 +1015,14 @@ export function App(): JSX.Element {
       <SectionPane section="decisions" active={section}>
         {projects === null ? (
           // Plan decision P2: without a project list the rows keep today's repository filter.
-          <DecisionsView rows={statusRows} status={status} onStatus={setStatus} filter={filter} onFilter={setFilter} selected={selected} onOpen={setSelected} detail={detail} />
+          <DecisionsView rows={statusRows} status={status} onStatus={setStatus} loading={statusLoading} filter={filter} onFilter={setFilter} selected={selected} onOpen={setSelected} detail={detail} />
         ) : (
           // With one, the pane follows the global scope: rows are restricted here, and its repository select is the sidebar's.
           <DecisionsView
             rows={scope.kind === "all" ? statusRows : statusRows.filter((row) => row.projectKey === project)}
             status={status}
             onStatus={setStatus}
+            loading={statusLoading}
             filter={{ ...filter, projectKey: "" }}
             onFilter={setFilter}
             selected={selected}
