@@ -28,6 +28,7 @@ import type {
   GroupViewV1,
   HandoffStopPayloadV1,
   ImportPlanPayloadV1,
+  IntegrationSchemeV1,
   ProposalEditPayloadV1,
   ProposalSetAgentPayloadV1,
   RecoveryRetryPayloadV1,
@@ -41,6 +42,7 @@ import type {
   RequirementOpenPayloadV1,
   RequirementViewV1,
   ResumeFromHandoffPayloadV1,
+  SetGroupIntegrationPayloadV1,
   SetLimitPayloadV1,
   SetTaskLabelsPayloadV1,
   SetTaskLoopPayloadV1,
@@ -132,6 +134,10 @@ export const fetchRepositoryIntegration = (repoId: string): Promise<RepositoryIn
   controlGet<RepositoryIntegrationV1>(`/api/control/repositories/${segment(repoId)}/integration`);
 
 export const integrationSchemePath = (repoId: string): string => `/api/control/repositories/${segment(repoId)}/integration`;
+
+/** Integration spec §3.1: set-integration-scheme, naming the whole scheme under the settings revision it was read at. */
+export const sendIntegrationScheme = (repoId: string, integration: IntegrationSchemeV1, expectedRevision: number, commandId: string = nextCommandId()): Promise<ControlAnswer> =>
+  sendControlCommand(integrationSchemePath(repoId), { commandId, expectedRevision, payload: { integration } });
 
 /**
  * Offer a manifest the caller already read as a download. The read has to come
@@ -243,6 +249,9 @@ export type ControlAction =
   | { verb: "resume-from-handoff"; groupId: string; expectedRevision: number; payload: ResumeFromHandoffPayloadV1 }
   | { verb: "continue-task"; groupId: string; taskId: string; expectedRevision: number; payload: ContinueTaskPayloadV1 }
   | { verb: "recovery-retry"; groupId: string; expectedRevision: number; payload: RecoveryRetryPayloadV1 }
+  // Integration spec §3.1, §6.5, §7: the group's scheme, Retry, and an owner's approval of an agent's resolution.
+  | { verb: "set-group-integration"; groupId: string; expectedRevision: number; payload: SetGroupIntegrationPayloadV1 }
+  | { verb: "retry-integration" | "resolve-integration-conflict"; groupId: string; expectedRevision: number; payload: Record<string, never> }
   | { verb: "set-task-labels"; groupId: string; taskId: string; expectedRevision: number; payload: SetTaskLabelsPayloadV1 }
   | { verb: "set-task-loop"; groupId: string; taskId: string; expectedRevision: number; payload: SetTaskLoopPayloadV1 }
   // N1 spec §11.1: the requirement commands (accept's server route is Task 10's).
@@ -286,6 +295,12 @@ export function controlCommandPath(action: ControlAction): string {
       return `${group}/tasks/${segment(action.taskId)}/loop`;
     case "recovery-retry":
       return "/api/control/recovery/retry";
+    case "set-group-integration":
+      return `${group}/integration`;
+    case "retry-integration":
+      return `${group}/integration/retry`;
+    case "resolve-integration-conflict":
+      return `${group}/integration/resolve`;
     case "requirement-open":
       return "/api/control/requirements";
     case "requirement-answer":

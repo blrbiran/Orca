@@ -76,3 +76,10 @@ Every new branch gets a named mutation seen red in the clone (Rule 9); recorded 
   endpoint; today the panel only says it waits on a person.
 - Elapsed time per run (goal.md §3.4 "耗时"): `progress.lastTransitionAt` is shown in the task detail; a duration needs a
   start timestamp the run view does not carry.
+
+## Corrections (2026-10-08, session eaee0f2c)
+
+- D5 and B3: for groups whose integration is not keep, merging and pushing are Orca's per
+  docs/superpowers/specs/2026-10-08-integration-and-panel-fixes-design.md; CLAUDE.md Rule 15 governs agents developing
+  Orca, not Orca at runtime. For a keep group, D5 stands as written above. (Added by the Task 7 implementer of the
+  integration-schemes plan, branch feat/integration-schemes, on top of fab1764.)

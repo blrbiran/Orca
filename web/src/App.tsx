@@ -64,12 +64,14 @@ import {
   fetchAgentPreferences,
   fetchAgentPreview,
   fetchAgentsView,
+  fetchRepositoryIntegration,
   fetchRepositoryWorkspace,
   nextCommandId,
   readUncertainCommands,
   recoverUncertainCommand,
   refusalFromAnswer,
   sendControlCommand,
+  sendIntegrationScheme,
   workspaceModePath,
   writeUncertainCommands,
 } from "./controlApi.js";
@@ -78,7 +80,8 @@ import { ControlPanel } from "./ControlPanel.js";
 import { initialControlState, reduceControlState, summaryView } from "./controlState.js";
 import type { ControlRefusal, UncertainCommand } from "./controlState.js";
 import type {
-  AgentPreferencesViewV1, AgentSelectionPreviewV1, AgentsViewV1, CommandSuccessV1, ControlConfigV1, ControlSummaryV1, OperatorPreferencesV1, RepositoryWorkspaceV1, RequirementViewV1,
+  AgentPreferencesViewV1, AgentSelectionPreviewV1, AgentsViewV1, CommandSuccessV1, ControlConfigV1, ControlSummaryV1, IntegrationSchemeV1, OperatorPreferencesV1, RepositoryIntegrationV1,
+  RepositoryWorkspaceV1, RequirementViewV1,
 } from "./controlTypes.js";
 import { DecisionDetail } from "./DecisionDetail.js";
 import { DecisionOperations } from "./DecisionOperations.js";
@@ -207,6 +210,9 @@ export function App(): JSX.Element {
    */
   const [workspaces, setWorkspaces] = useState<Record<string, RepositoryWorkspaceV1>>({});
   const workspaceSeq = useRef<Record<string, number>>({});
+  /** Integration spec §9.1: each repository's integration default as last read, by repoId; numbered like the workspace reads. */
+  const [integrations, setIntegrations] = useState<Record<string, RepositoryIntegrationV1>>({});
+  const integrationSeq = useRef<Record<string, number>>({});
   /** Agent selection spec §6.8: the installation table and this operator's defaults; null until read, or when the port refuses. */
   const [agents, setAgents] = useState<AgentsViewV1 | null>(null);
   const [agentPreferences, setAgentPreferences] = useState<AgentPreferencesViewV1 | null>(null);
@@ -497,6 +503,15 @@ export function App(): JSX.Element {
     await readWorkspace(repoId); // a failed read leaves the refusal above to say why
   };
 
+  /** Integration spec §3.1: name the repository's scheme under the revision it was read at; the answer is read back. */
+  const sendRepositoryIntegration = async (repoId: string, scheme: IntegrationSchemeV1, expectedRevision: number): Promise<void> => {
+    const scope = `@repository:${repoId}`;
+    const answer = await sendIntegrationScheme(repoId, scheme, expectedRevision);
+    if (answer.kind === "uncertain") dispatchControl({ type: "refusal", groupId: scope, value: answer.refusal });
+    else if (answer.status >= 400) dispatchControl({ type: "refusal", groupId: scope, value: refusalFromAnswer(answer) });
+    await readIntegration(repoId);
+  };
+
   /** Name the operator's new defaults under the revision they were read at; whatever the server says is read back. */
   const sendAgentPreferences = async (preferences: OperatorPreferencesV1, expectedRevision: number): Promise<void> => {
     if (agentPreferences === null) return;
@@ -613,17 +628,32 @@ export function App(): JSX.Element {
       return rest;
     });
   };
+  /** Read one repository's integration default; only the newest read of that repository is applied. */
+  const readIntegration = async (repoId: string): Promise<void> => {
+    const seq = (integrationSeq.current[repoId] ?? 0) + 1;
+    integrationSeq.current[repoId] = seq;
+    let answer: RepositoryIntegrationV1 | null = null;
+    try { answer = await fetchRepositoryIntegration(repoId); } catch { /* an unread repository shows no integration section */ }
+    if (integrationSeq.current[repoId] !== seq) return;
+    setIntegrations((current) => {
+      if (answer !== null) return { ...current, [repoId]: answer };
+      const { [repoId]: _gone, ...rest } = current;
+      return rest;
+    });
+  };
   // Plan decision P3: the panel-level selector belongs to the chosen project's repository, in project mode only.
   const panelRepoId = scope.kind === "project" ? scope.repoId : null;
   const openRepoId = selectedGroup === null ? null : control.canonical[selectedGroup]?.plan.repoId ?? null;
   useEffect(() => {
     if (controlConfig === null || panelRepoId === null) return;
     void readWorkspace(panelRepoId);
+    void readIntegration(panelRepoId);
   }, [controlConfig, panelRepoId]);
   // Spec §5: an open group's detail always uses its own repository's workspace, whatever the scope.
   useEffect(() => {
     if (controlConfig === null || openRepoId === null) return;
     void readWorkspace(openRepoId);
+    void readIntegration(openRepoId);
   }, [controlConfig, openRepoId]);
 
   useEffect(() => {
@@ -933,6 +963,9 @@ export function App(): JSX.Element {
           workspace={panelRepoId === null ? null : workspaces[panelRepoId] ?? null}
           workspaceFor={(repoId) => workspaces[repoId] ?? null}
           onWorkspaceMode={(mode, revision) => { if (panelRepoId !== null) void sendWorkspaceMode(panelRepoId, mode, revision); }}
+          integration={panelRepoId === null ? null : integrations[panelRepoId] ?? null}
+          integrationFor={(repoId) => integrations[repoId] ?? null}
+          onIntegrationScheme={(scheme, revision) => { if (panelRepoId !== null) void sendRepositoryIntegration(panelRepoId, scheme, revision); }}
           agents={agents}
           preferences={agentPreferences}
           previews={previews}

@@ -489,7 +489,10 @@ export type GroupIntegrationViewV1 = {
   scheme: IntegrationSchemeV1; schemeHash: string; frozen: boolean; state: "idle" | "blocked" | "conflict" | "resolving"; reason: string | null;
   lastIntegrated: string | null; integratedCommit: string | null; pr: { url: string; number: number; ready: boolean } | null;
 };
-export type RepositoryIntegrationV1 = { schema: "orca-repository-integration-v1"; repoId: string; integration: IntegrationSchemeV1; revision: number };
+/** `suggestedTarget` (controller ruling, Task 7): origin's HEAD branch, else the current branch, else null; never stored. */
+export type RepositoryIntegrationV1 = { schema: "orca-repository-integration-v1"; repoId: string; integration: IntegrationSchemeV1; revision: number; suggestedTarget: string | null };
+/** Integration spec §3.1: set-group-integration's payload, the same body shape as the repository default's. */
+export type SetGroupIntegrationPayloadV1 = { integration: IntegrationSchemeV1 };
 
 // Agent selection spec §6.8 (plan T14): the agent UI's reads and its preferences command, mirrors of
 // src/control/webProtocol.ts checked both ways in tests/panel/webParity.test.ts.

@@ -27,13 +27,15 @@ import { bannersFor } from "../src/chainBanner.js";
 import { ChainBanners, ChainPanel } from "../src/ChainPanel.js";
 import { ControlPanel } from "../src/ControlPanel.js";
 import type {
-  AgentPreferencesViewV1, AgentSelectionPreviewV1, AgentsViewV1, Amount, ControlConfigV1, ControlSummaryV1, FrozenSlotV1, GroupViewV1,
+  AgentPreferencesViewV1, AgentSelectionPreviewV1, AgentsViewV1, Amount, ControlConfigV1, ControlSummaryV1, FrozenSlotV1, GroupIntegrationViewV1, GroupViewV1,
   LoopPlanViewV1, RecoveryViewV1, RepositoryWorkspaceV1, WorkItemViewV1,
 } from "../src/controlTypes.js";
 import { DecisionDetail } from "../src/DecisionDetail.js";
 import { DecisionsView, NO_FILTER } from "../src/DecisionsView.js";
 import { ErrorPage } from "../src/ErrorPage.js";
+import { GitScheme } from "../src/GitScheme.js";
 import i18n, { enumText } from "../src/i18n.js";
+import { GroupIntegrationConfirm, RepositoryIntegration } from "../src/IntegrationScheme.js";
 import { en } from "../src/locales/en.js";
 import { zh } from "../src/locales/zh.js";
 import { loopDraftKey } from "../src/LoopPlanCard.js";
@@ -168,6 +170,10 @@ const coverage: PanelCoverage = { reviewed_high_tier: 0, high_tier_total: 0, rat
 const loopDraft = JSON.stringify({ base: 0, plan: "bugfix", text: { goal: "g-1", successCondition: "s-1", targetPaths: "src/a/**", checks: "npm test", nonGoals: "", relevantDocs: "", protectedPaths: "", maxFilesTouched: "", tokens: "3000500", activeMs: "14400000", attempts: "3" } });
 const drafts = { [loopDraftKey("g", "a")]: loopDraft, [labelsDraftKey("g", "b")]: JSON.stringify({ base: 0, labels: ["bug", "perf"] }) };
 const noop = vi.fn();
+const INTEGRATION: GroupIntegrationViewV1 = {
+  scheme: { delivery: "github-pr", trigger: "task", target: "trunk-x", remote: "up-x" }, schemeHash: "9".repeat(64), frozen: false, state: "idle", reason: null,
+  lastIntegrated: null, integratedCommit: null, pr: null,
+};
 // MemoryView reads its data itself (plan D8), so its fixture is the panel's answers; `settle` waits for the list and opens
 // the one record, so the list, its caveats and the whole detail are on screen when the area is checked.
 const MEMORY: MemoryRecord = {
@@ -222,6 +228,17 @@ const AREAS: Array<{ name: string; chinese: string; element: () => JSX.Element; 
       <AgentSelectionEditor view={view} agents={agents} preview={preview} preferences={preferences.preferences} drafts={{}} onDraft={noop} onCommand={noop}
         onReread={noop} retryNotice={retryNotice({ state: "stopped" })} />
       <AgentSelectionEditor view={{ ...view, proposal: { ...view.proposal, state: "confirmed" } }} agents={agents} preview={null} drafts={{}} onDraft={noop} onCommand={noop} />
+    </>
+  ) },
+  // Integration spec §9.1 (Task 7): the repository's section with every field showing, the confirm step's scheme, and a
+  // Git area with a reason that carries git's words, a PR, and both owner buttons.
+  { name: "integration", chinese: "交给 agent 解决", element: () => (
+    <>
+      <RepositoryIntegration integration={{ schema: "orca-repository-integration-v1", repoId: "orca", revision: 2, suggestedTarget: null,
+        integration: { delivery: "push-target", trigger: "group", method: "squash", target: "trunk-x", remote: "up-x" } }} onSave={noop} />
+      <GroupIntegrationConfirm view={{ ...view, integration: INTEGRATION }} suggestedTarget={null} onCommand={noop} />
+      <GitScheme view={{ ...view, integration: { ...INTEGRATION, frozen: true, state: "conflict", reason: "integration-push-refused:x-1", lastIntegrated: "1".repeat(40),
+        pr: { url: "https://example.invalid/pull/3", number: 3, ready: true } } }} onCommand={noop} />
     </>
   ) },
   { name: "metrics", chinese: "纠正率", element: () => <MetricsView report={metricsReport} coverage={coverage} /> },

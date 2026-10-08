@@ -11,6 +11,7 @@
 import { useContext } from "react";
 import type { JSX } from "react";
 import { AccountContext, mayHumanOnly } from "./AuthGate.js";
+import { GroupIntegrationConfirm } from "./IntegrationScheme.js";
 import { useTranslation } from "react-i18next";
 import type { ControlAction } from "./controlApi.js";
 import i18n, { enumText } from "./i18n.js";
@@ -217,6 +218,8 @@ export interface BudgetEditorProps {
    * Without one, confirm is not offered: a confirmation is never sent unbound to the selections the operator saw.
    */
   selectionsHash?: string | null;
+  /** Integration spec §9.1: the target the group's repository suggests, for a keep group an owner switches on. */
+  suggestedTarget?: string | null;
 }
 
 export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
@@ -262,6 +265,8 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
   const defaults = config.defaults;
   const confirmBlocked = defaults === null && (view.proposal.profiles === null || view.proposal.budgetMode === null);
   const shownSelectionsHash = props.selectionsHash ?? null;
+  // Integration spec §3.2, ruling R2: confirming a group Orca merges or pushes is an owner's approval of its scheme.
+  const integrationBlocked = view.integration !== undefined && !mayLimit;
   const confirmProfile = (kind: "estimator" | "worker" | "handoff" | "goalReview") =>
     view.proposal.profiles?.[kind] ?? { profileId: defaults?.estimatorProfileId ?? "", profileHash: defaults?.estimatorProfileHash ?? "" };
 
@@ -279,7 +284,7 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
     onCommand({ verb: "set-limit", groupId, expectedRevision: view.summary.commandRevision, payload: { limit: limitAmount(view, drafts) } });
   };
   const submitConfirm = (): void => {
-    if (confirmBlocked || shownSelectionsHash === null) return;
+    if (confirmBlocked || shownSelectionsHash === null || integrationBlocked) return;
     const contextDraft = drafts[CONTEXT_POLICY_KEY(groupId)];
     const tokens = contextDraft === undefined || contextDraft.trim() === "" ? null : Number(contextDraft);
     onCommand({
@@ -300,6 +305,8 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
         },
         contextPolicy: { handoffAtContextTokens: tokens === null || !Number.isSafeInteger(tokens) ? null : tokens },
         selectionsHash: shownSelectionsHash,
+        // The hash of the scheme on screen binds the approval to it; a keep group adds no key, so its hash is unchanged.
+        ...(view.integration === undefined ? {} : { integrationHash: view.integration.schemeHash }),
       },
     });
   };
@@ -436,8 +443,9 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
       </p>
       <button type="button" disabled={!editable || editedOperations(view, drafts).length === 0} onClick={submitEdit}>{t("budget.save")}</button>
       {estimator !== null && <button type="button" onClick={submitEstimate}>{t("budget.reestimate")}</button>}
+      {editable && <GroupIntegrationConfirm view={view} suggestedTarget={props.suggestedTarget ?? null} onCommand={onCommand} />}
       {editable && shownSelectionsHash === null && <p role="note">{t("budget.confirmWaits")}</p>}
-      <button type="button" disabled={shownSelectionsHash === null} onClick={submitConfirm}>{t("budget.confirm")}</button>
+      <button type="button" disabled={shownSelectionsHash === null || integrationBlocked} onClick={submitConfirm}>{t("budget.confirm")}</button>
     </section>
   );
 }

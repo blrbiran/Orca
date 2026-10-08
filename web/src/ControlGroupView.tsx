@@ -18,7 +18,7 @@ import { EvidenceLink } from "./EvidenceLink.js";
 import { GitScheme } from "./GitScheme.js";
 import { SkillsGiven } from "./SkillsGiven.js";
 import type {
-  AgentSelectionPreviewV1, AgentsViewV1, ControlConfigV1, ContinuationSelectionV1, GroupViewV1, OperatorPreferencesV1, RepositoryWorkspaceV1,
+  AgentSelectionPreviewV1, AgentsViewV1, ControlConfigV1, ContinuationSelectionV1, GroupViewV1, OperatorPreferencesV1, RepositoryIntegrationV1, RepositoryWorkspaceV1,
   RunViewV1,
 } from "./controlTypes.js";
 import type { UncertainCommand } from "./controlState.js";
@@ -66,6 +66,8 @@ export interface ControlGroupViewProps {
   workspace?: RepositoryWorkspaceV1 | null;
 /** Project filtering spec §5: the workspace of one repository; preferred over `workspace` for this group's own repository. */
 workspaceFor?: (repoId: string) => RepositoryWorkspaceV1 | null;
+  /** Integration spec §9.1: a repository's integration read, for the target its confirm step suggests. */
+  integrationFor?: (repoId: string) => RepositoryIntegrationV1 | null;
 }
 
 export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
@@ -127,7 +129,8 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
           })}
         </p>
       )}
-      <BudgetEditor view={view} config={config} drafts={drafts} onDraft={onDraft} onCommand={onCommand} onCommands={props.onCommands} selectionsHash={selectionsHashFor(view, props.preview)} />
+      <BudgetEditor view={view} config={config} drafts={drafts} onDraft={onDraft} onCommand={onCommand} onCommands={props.onCommands} selectionsHash={selectionsHashFor(view, props.preview)}
+        suggestedTarget={props.integrationFor?.(view.plan.repoId)?.suggestedTarget ?? null} />
       {props.agents !== undefined && (
         <AgentSelectionEditor
           view={view} agents={props.agents} preview={props.preview ?? null} preferences={props.agentPreferences}
@@ -221,7 +224,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
         </tbody>
       </table>
 
-      <GitScheme view={view} workspace={workspace} />
+      <GitScheme view={view} workspace={workspace} onCommand={onCommand} />
 
       <SkillsGiven view={view} />
 
