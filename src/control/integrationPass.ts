@@ -1,10 +1,12 @@
 import { join } from "node:path";
+import { z } from "zod";
 import { ControlError } from "./errors.js";
 import { groupRepoId, groupStopped, write } from "./executionDriver.js";
 import {
   BranchMissing, ChildTimeout, RemoteFailure, fetchInto, gitChild, gitOk, isAncestor, oneLine, pushPorcelain, refTip, remoteHas, revParse,
 } from "./integrationGit.js";
-import { readGroupIntegration, remoteUrl, type GroupIntegration, type IntegrationScheme } from "./integrationScheme.js";
+import { syncGroupPr } from "./integrationPr.js";
+import { githubRepoOf, readGroupIntegration, remoteUrl, type GroupIntegration, type IntegrationScheme } from "./integrationScheme.js";
 import { readGroup, saveGroup } from "./queries.js";
 import { removeOwnPath, workBranchRef, type WorkspaceRoots } from "./workspace.js";
 import { ORCA_IDENTITY } from "../scheduler/gitExec.js";
@@ -31,7 +33,8 @@ export interface IntegrationDeps {
 
 type Scheme = Exclude<IntegrationScheme, { delivery: "keep" }>;
 type Outcome =
-  | { kind: "done"; tip: string; integrated: string | null }
+  /** `pr` is the `github-pr` delivery's PR record, written with the rest (§6.1 step 6). */
+  | { kind: "done"; tip: string; integrated: string | null; pr?: GroupIntegration["pr"] }
   | { kind: "blocked"; reason: string }
   | { kind: "conflict"; base: string; tip: string; paths: string[] }
   | { kind: "transient"; message: string }
@@ -114,10 +117,14 @@ async function integrateGroup(deps: IntegrationDeps, groupId: string, integratio
   const remoteKey = "remote" in scheme ? `${repo}\0${scheme.remote}` : null;
   if (remoteKey !== null && unreachable.has(remoteKey)) return null;
   const tip = await refTip(repo, workBranchRef(groupId));
-  if (tip === null || tip === integration.lastIntegrated) return null;
+  if (tip === null) return null;
+  // spec §5: `github-pr`, trigger `task`, nothing new landed -- due only to mark the group's PR ready once it completes.
+  const readyOnly = tip === integration.lastIntegrated;
+  if (readyOnly && !(scheme.delivery === "github-pr" && integration.pr !== null && !integration.pr.ready && groupComplete(deps.store, groupId))) return null;
   if (scheme.trigger === "group" && !groupComplete(deps.store, groupId)) return null;
   if (integration.lastIntegrated === null && await nothingLanded(repo, scheme, tip)) return null;
   try {
+    if (readyOnly) return await finishWorkBranch(deps, repo, groupId, integration, scheme as Extract<Scheme, { delivery: "github-pr" }>, tip);
     if (scheme.delivery === "local") return await integrateLocal(deps, repo, groupId, integration, scheme, tip);
     if (scheme.delivery === "push-target") return await integratePushTarget(deps, repo, groupId, integration, scheme, tip);
     return await integrateWorkBranch(deps, repo, groupId, integration, scheme, tip);
@@ -148,7 +155,7 @@ async function integrateWorkBranch(deps: IntegrationDeps, repo: string, groupId:
   const branch = `orca/${groupId}`;
   const pending = reentry(integration);
   if (pending !== null && await remoteHas(repo, scheme.remote, branch, pending.new, fetchedRefOf(groupId, "work"))) {
-    return finishWorkBranch(deps, groupId, integration, scheme, pending.tip);
+    return finishWorkBranch(deps, repo, groupId, integration, scheme, pending.tip);
   }
   if (!recordPending(deps, groupId, integration.schemeHash, { schemeHash: integration.schemeHash, tip, base: tip, new: tip })) return { kind: "dropped" };
   crash(deps, "after-pending");
@@ -159,15 +166,36 @@ async function integrateWorkBranch(deps: IntegrationDeps, repo: string, groupId:
   const failed = pushFailure(pushed);
   if (failed !== null) return failed;
   crash(deps, "after-publish");
-  return finishWorkBranch(deps, groupId, integration, scheme, tip);
+  return finishWorkBranch(deps, repo, groupId, integration, scheme, tip);
 }
 
-/**
- * spec §6.1 step 5, the `github-pr` delivery's PR (§6.4). Task 4 fills it with `syncGroupPr`; until then the delivery
- * carries the work branch only, as `push-branch` does.
- */
-async function finishWorkBranch(_deps: IntegrationDeps, _groupId: string, _integration: GroupIntegration, _scheme: Extract<Scheme, { delivery: "push-branch" | "github-pr" }>, tip: string): Promise<Outcome> {
-  return { kind: "done", tip, integrated: tip };
+/** spec §6.1 step 5: for `github-pr`, the group's PR (§6.4); `push-branch` is done once its branch is pushed. */
+async function finishWorkBranch(deps: IntegrationDeps, repo: string, groupId: string, integration: GroupIntegration, scheme: Extract<Scheme, { delivery: "push-branch" | "github-pr" }>, tip: string): Promise<Outcome> {
+  if (scheme.delivery !== "github-pr") return { kind: "done", tip, integrated: tip };
+  // The raw configured URL names the repository (not `remote get-url`, which applies insteadOf); confirm checked it,
+  // and a remote re-pointed since is refused by name rather than letting gh guess.
+  const github = githubRepoOf((await remoteUrl(repo, scheme.remote)) ?? "");
+  if (github === null) return { kind: "blocked", reason: `integration-pr-refused:remote ${scheme.remote} no longer names a GitHub repository` };
+  const goal = groupGoalSchema.parse(readGroup(deps.store, groupId)).plan.goal;
+  const synced = await syncGroupPr({
+    ghBin: deps.ghBin, repo: `${github.host}/${github.slug}`, head: `orca/${groupId}`, base: scheme.target, cwd: repo,
+    title: goal.split(/\r?\n/)[0]!.slice(0, 256), body: prBody(deps.store, groupId, scheme.target),
+    draft: scheme.trigger === "task", complete: groupComplete(deps.store, groupId), pr: integration.pr,
+    onStep: (step) => crash(deps, step),
+  });
+  if ("pr" in synced) return { kind: "done", tip, integrated: tip, pr: synced.pr };
+  if ("blocked" in synced) return { kind: "blocked", reason: synced.blocked };
+  return { kind: "transient", message: synced.transient };
+}
+
+const groupGoalSchema = z.object({ plan: z.object({ goal: z.string().min(1) }).passthrough() }).passthrough();
+
+/** The PR body: what Orca knows about the group, nothing secret (no paths, no tokens). */
+function prBody(store: ControlStore, groupId: string, target: string): string {
+  const tasks = store.db.prepare("SELECT body FROM work_items WHERE group_id=?").all(groupId)
+    .map((row) => JSON.parse(String(row.body)) as { kind?: string; status?: string }).filter((work) => work.kind === "task");
+  return `Opened by Orca for group \`${groupId}\`: its landed work on \`orca/${groupId}\`, into \`${target}\`.\n\n`
+    + `Tasks landed: ${tasks.filter((work) => work.status === "done").length} of ${tasks.length}.\n`;
 }
 
 function pushFailure(pushed: Awaited<ReturnType<typeof pushPorcelain>>): Outcome | null {
@@ -319,7 +347,8 @@ function settle(deps: IntegrationDeps, groupId: string, hash: string, outcome: O
     let next: GroupIntegration;
     switch (outcome.kind) {
       case "done":
-        next = { ...current, lastIntegrated: outcome.tip, integratedCommit: outcome.integrated, pending: null, state: "idle", reason: null, retryAfter: null, transient: 0 };
+        next = { ...current, lastIntegrated: outcome.tip, integratedCommit: outcome.integrated, pending: null, state: "idle", reason: null, retryAfter: null, transient: 0,
+          ...(outcome.pr === undefined ? {} : { pr: outcome.pr }) };
         break;
       case "blocked":
         next = { ...current, state: "blocked", reason: outcome.reason, pending: null, retryAfter: null, transient: 0 };
