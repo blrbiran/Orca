@@ -433,6 +433,38 @@ describe("an integration conflict, materialised and approved (integration spec Â
     } finally { await w.dispose(); }
   });
 
+  it("final review I1: a new target starts from scratch -- the next squash into it carries the earlier landings too", async () => {
+    const w = await world(LOCAL_SQUASH); try {
+      g(w.repo, ["branch", "rel", "main"]);
+      const first = w.land({ "a.txt": "a\n" });
+      expect(await w.pass()).toBe(true);
+      expect(w.record()).toMatchObject({ state: "idle", lastIntegrated: first });
+      expect(g(w.repo, ["show", "main:a.txt"])).toBe("a");
+      expect(code(await w.service.setGroupIntegration(w.command("set-group-integration", { integration: { ...LOCAL_SQUASH, target: "rel" } })))).toBe("applied");
+      const second = w.land({ "b.txt": "b\n" });
+      expect(await w.pass()).toBe(true);
+      expect(g(w.repo, ["show", "rel:a.txt"])).toBe("a");
+      expect(g(w.repo, ["show", "rel:b.txt"])).toBe("b");
+      expect(w.record()).toMatchObject({ state: "idle", lastIntegrated: second, integratedCommit: g(w.repo, ["rev-parse", "rel"]) });
+    } finally { await w.dispose(); }
+  });
+
+  it("final review I1: a finished group switched to a new target is due at once", async () => {
+    const w = await world({ ...LOCAL_SQUASH, trigger: "group" }); try {
+      g(w.repo, ["branch", "rel", "main"]);
+      const tip = w.land({ "a.txt": "a\n" });
+      const work = JSON.parse(String(w.store.db.prepare("SELECT body FROM work_items WHERE group_id='g' AND id='a'").get()!.body)) as Record<string, unknown>;
+      w.store.db.prepare("UPDATE work_items SET body=? WHERE group_id='g' AND id='a'").run(JSON.stringify({ ...work, status: "done" }));
+      expect(await w.pass()).toBe(true);
+      expect(w.record()).toMatchObject({ state: "idle", lastIntegrated: tip });
+      expect(code(await w.service.setGroupIntegration(w.command("set-group-integration", { integration: { ...LOCAL_SQUASH, trigger: "group", target: "rel" } })))).toBe("applied");
+      // No new landing: the work is still not in rel.
+      expect(await w.pass()).toBe(true);
+      expect(g(w.repo, ["show", "rel:a.txt"])).toBe("a");
+      expect(w.record()).toMatchObject({ state: "idle", lastIntegrated: tip, integratedCommit: g(w.repo, ["rev-parse", "rel"]) });
+    } finally { await w.dispose(); }
+  });
+
   it("final review Minor 7: a new attempt's conflict removes the group's older copies (and only its own)", async () => {
     const w = await world(LOCAL_MERGE); try {
       await conflicted(w);

@@ -362,7 +362,8 @@ describe("fix round 1: PR records across scheme changes, gh timeouts, forks, bla
       expect(await w.pass()).toBe(true);
       expect(w.record()).toMatchObject({ lastIntegrated: tip, pr: null });
       await w.setScheme(HUB_TASK);
-      expect(w.record()).toMatchObject({ frozen: true, lastIntegrated: tip, pr: null });
+      // Final review I1: another delivery is another destination; what was integrated is forgotten with the PR.
+      expect(w.record()).toMatchObject({ frozen: true, lastIntegrated: null, integratedCommit: null, pr: null });
       const before = w.calls().length;
       expect(await w.pass()).toBe(true);
       expect(subs(w.calls().slice(before))).toEqual(["auth status", "pr list", "pr create"]);
@@ -384,7 +385,8 @@ describe("fix round 1: PR records across scheme changes, gh timeouts, forks, bla
       expect(await w.pass()).toBe(false);
       expect(w.calls().length).toBe(before);
       expect(children.filter((argv) => argv.includes("push"))).toEqual([]);
-      expect(w.record()).toMatchObject({ lastIntegrated: tip, pr: null, pending: null });
+      // Final review I1: the delivery change forgot lastIntegrated; the target holding the tip is what makes it not due.
+      expect(w.record()).toMatchObject({ lastIntegrated: null, pr: null, pending: null });
     } finally { await w.dispose(); }
   });
 
