@@ -15,6 +15,8 @@ import { readBudgetProposal, readGroup, readWork } from "./queries.js";
 import { readCanonicalRecord, writeCanonicalRecord } from "./snapshot.js";
 import { toSingleCallEnvelope, toStartEnvelope } from "./startEnvelope.js";
 import { exportResumeBundle, readExistingResumeBundle, type InputCheckpointV1 } from "./resumeBundle.js";
+import { recordActivity } from "./activity.js";
+import type { RunProgress } from "./schema.js";
 import { recordUsage } from "./usage.js";
 import { exportPendingRequirements } from "./requirementExport.js";
 import { runTask } from "../scheduler/ccloopRunner.js";
@@ -501,8 +503,13 @@ export async function collectInto(deps: ExecutionDriverDeps, run: DriverRun): Pr
     write(deps, () => {
       const current = readDriverRun(store, runId);
       if (current.progress === undefined && progress === null) return;
+      const before = (current.progress ?? null) as RunProgress | null;
       current.progress = progress;
       saveDriverRun(store, current);
+      // Issue-fixes spec §5.2: a collect whose step or attempt differs from the stored one (a null answer is no phase).
+      if (progress !== null && (before === null || before.status !== progress.status || before.currentAttempt !== progress.currentAttempt)) {
+        recordActivity(store, { groupId: current.groupId, taskId: current.taskId, runId, kind: "phase", body: { step: progress.status, attempt: progress.currentAttempt } });
+      }
     });
   }
   const candidate = report.candidate;

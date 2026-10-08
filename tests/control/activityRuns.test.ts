@@ -3,7 +3,8 @@ import { readRunActivity } from "../../src/control/activity.js";
 import { settleProviderAttempt, deliverScheduledStart, beginProviderAttempt } from "../../src/control/webDispatch.js";
 import { settleHandoffRequest } from "../../src/control/stopIntent.js";
 import { WebControlService } from "../../src/control/webService.js";
-import { blockRun, LATER_ERROR } from "../../src/control/executionDriver.js";
+import { blockRun, collectInto, LATER_ERROR, readDriverRun } from "../../src/control/executionDriver.js";
+import type { RunProgress } from "../../src/control/schema.js";
 import type { ControlStore } from "../../src/control/store.js";
 import { driverHarness } from "./fixtures/driverHarness.js";
 import { webFixture } from "./fixtures/web.js";
@@ -116,6 +117,47 @@ describe("run-claimed, run-started and startedAt (issue-fixes spec §5.2)", () =
       await t.until(t.driver(), () => t.body(runId).state !== "starting");
       expect(t.body(runId).startedAt).toBe(7_000);
       expect(rowsOf(t.h.store, runId, "run-started")).toEqual([[7_000, { providerAttemptOrdinal: 1 }]]);
+    } finally { await t.h.dispose(); }
+  });
+});
+
+type Harness = Awaited<ReturnType<typeof driverHarness>>;
+const progress = (status: RunProgress["status"], over: Partial<RunProgress> = {}): RunProgress => ({
+  status, currentAttempt: 1, attemptsUsed: 1, attemptsRemaining: 2, lastTransitionAt: "2026-10-08T00:00:00.000Z", ...over,
+});
+/** As driverProgress.test.ts: wraps the router (it binds the port's methods when built) to add a progress answer. */
+function answerProgress(t: Harness, next: () => RunProgress | null): void {
+  const router = t.deps.router;
+  t.deps.router = {
+    ...router,
+    resolve(workKind, profileId, expectedHash) {
+      const profile = router.resolve(workKind, profileId, expectedHash);
+      const collect = profile.port.collect.bind(profile.port);
+      return { ...profile, port: { ...profile.port, async collect(envelope, afterSeq) { return { ...(await collect(envelope, afterSeq)), progress: next() }; } } };
+    },
+  };
+}
+
+describe("phase (issue-fixes spec §5.2)", () => {
+  it("writes a row only when the step or the attempt differs from the stored progress", async () => {
+    let clock = 1_000;
+    const t = await driverHarness([{ taskId: "a" }], { storeNow: () => clock }); try {
+      let answer: RunProgress | null = progress("planning");
+      answerProgress(t, () => answer);
+      const runId = await t.claim();
+      await t.until(t.driver(), () => t.body(runId).state === "accepted");
+      const collect = () => collectInto(t.deps, readDriverRun(t.h.store, runId));
+      clock = 2_000; await collect();
+      clock = 3_000; await collect();
+      answer = progress("planning", { lastTransitionAt: "2026-10-08T00:01:00.000Z" }); clock = 4_000; await collect();
+      answer = progress("executing"); clock = 5_000; await collect();
+      answer = progress("executing", { currentAttempt: 2 }); clock = 6_000; await collect();
+      answer = null; clock = 7_000; await collect();
+      expect(rowsOf(t.h.store, runId, "phase")).toEqual([
+        [2_000, { step: "planning", attempt: 1 }],
+        [5_000, { step: "executing", attempt: 1 }],
+        [6_000, { step: "executing", attempt: 2 }],
+      ]);
     } finally { await t.h.dispose(); }
   });
 });
