@@ -51,10 +51,10 @@ export const ENVIRONMENT_CHECKS: ReadonlySet<string> = new Set([GIT_CHECK, REPOS
 class GitUnanswered extends Error {}
 
 /** One quiet git child in the target repository on the shared integration runner (integrationGit.ts). */
-async function runGit(repo: string, args: string[]): Promise<{ ok: boolean; stdout: string }> {
+async function runGit(repo: string, args: string[]): Promise<{ ok: boolean; code: number; stdout: string }> {
   try {
     const answer = await runChild("git", args, { cwd: repo, quiet: true });
-    return { ok: answer.code === 0, stdout: answer.stdout };
+    return { ok: answer.code === 0, code: answer.code, stdout: answer.stdout };
   } catch (error) {
     if (error instanceof ChildTimeout || error instanceof ChildSpawnFailed) throw new GitUnanswered(error.message);
     throw error;
@@ -124,8 +124,8 @@ export function githubRepoOf(remoteUrl: string): { host: string; slug: string } 
 }
 
 /**
- * §3.3, confirm's preflight: the setters' check, then the target branch exists (the local ref for `local`; otherwise a
- * fetch of it from the remote, and when that fails, whether the remote answers at all), `squash` needs git 2.40
+ * §3.3, confirm's preflight: the setters' check, then the target branch exists (the local ref for `local`; otherwise
+ * `ls-remote` of it, which also tells a remote that does not answer), `squash` needs git 2.40
  * (`merge-tree --merge-base`), `github-pr` needs `gh auth status` for the remote's host. Null when every check passed,
  * else the name of the first that failed.
  */
@@ -138,8 +138,11 @@ async function preflight(repo: string, scheme: IntegrationScheme, ghBin: string)
   if (failed !== null || scheme.delivery === "keep") return failed;
   if (scheme.delivery === "local") {
     if (!(await runGit(repo, ["rev-parse", "--verify", "--quiet", `refs/heads/${scheme.target}`])).ok) return "target";
-  } else if (!(await runGit(repo, ["fetch", "--quiet", scheme.remote, `refs/heads/${scheme.target}`])).ok) {
-    return (await runGit(repo, ["ls-remote", "--quiet", scheme.remote])).ok ? "target" : "remote";
+  } else {
+    // Final review Minor 2: ls-remote, not fetch -- nothing of the person's (FETCH_HEAD, refs/remotes/*) is written. It
+    // exits 2 when the remote answers without the branch, anything else non-zero when the remote does not answer.
+    const listed = await runGit(repo, ["ls-remote", "--quiet", "--exit-code", scheme.remote, `refs/heads/${scheme.target}`]);
+    if (!listed.ok) return listed.code === 2 ? "target" : "remote";
   }
   if ("method" in scheme && scheme.method === "squash" && !gitAtLeast((await runGit(repo, ["--version"])).stdout, 2, 40)) return "git-version";
   if (scheme.delivery === "github-pr") {

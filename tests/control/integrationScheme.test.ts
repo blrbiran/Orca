@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -435,6 +436,22 @@ describe("preflightScheme (integration spec §3.3)", () => {
     // A gh that cannot be started at all is as unavailable as one that is not logged in.
     expect(await preflightScheme(repo, HUB, join(root, "no-such-gh"))).toBe("gh-auth");
     expect(await preflightScheme(repo, { ...LOCAL, target: "a..b" }, badGh())).toBe("target-name");
+  });
+  it("final review Minor 2: asks the remote for the target without writing the person's FETCH_HEAD or remote-tracking refs", async () => {
+    const fresh = join(root, "fresh"), other = join(root, "other-clone");
+    gitIn(root, "clone", "-q", "--no-checkout", bare, fresh);
+    gitIn(root, "clone", "-q", "--no-checkout", bare, other);
+    // The remote's main moves on, so a fetch of it would move refs/remotes/origin/main too.
+    gitIn(other, "checkout", "-q", "-b", "w", "origin/main");
+    gitIn(other, "commit", "-q", "--allow-empty", "-m", "moved");
+    gitIn(other, "push", "-q", "origin", "HEAD:main");
+    await rm(join(fresh, ".git", "FETCH_HEAD"), { force: true });
+    const tracking = gitIn(fresh, "rev-parse", "refs/remotes/origin/main");
+    expect(await preflightScheme(fresh, PB, badGh())).toBeNull();
+    expect(await preflightScheme(fresh, { delivery: "push-target", trigger: "task", method: "merge", target: "main", remote: "origin" }, badGh())).toBeNull();
+    expect(await preflightScheme(fresh, { ...PB, target: "dev" }, badGh())).toBe("target");
+    expect(existsSync(join(fresh, ".git", "FETCH_HEAD"))).toBe(false);
+    expect(gitIn(fresh, "rev-parse", "refs/remotes/origin/main")).toBe(tracking);
   });
   it("squash needs git 2.40 (merge-tree --merge-base); merge does not", async () => {
     vi.stubEnv("PATH", `${join(bin, "old")}:${process.env.PATH ?? ""}`);
