@@ -3,6 +3,7 @@ import { readRunActivity } from "../../src/control/activity.js";
 import { settleProviderAttempt, deliverScheduledStart } from "../../src/control/webDispatch.js";
 import { settleHandoffRequest } from "../../src/control/stopIntent.js";
 import { WebControlService } from "../../src/control/webService.js";
+import { blockRun, LATER_ERROR } from "../../src/control/executionDriver.js";
 import type { ControlStore } from "../../src/control/store.js";
 import { driverHarness } from "./fixtures/driverHarness.js";
 import { webFixture } from "./fixtures/web.js";
@@ -76,8 +77,10 @@ describe("run-blocked (issue-fixes spec §5.2)", () => {
       await t.until(driver, () => t.body(runId).state === "blocked");
       expect(rowsOf(t.h.store, runId, "run-blocked")).toEqual([[6_000, { blockedAt: "C", reason: "terminal:exhausted" }]]);
       expect(t.body(runId).endedAt).toBeUndefined();
-      await driver.round();
-      await driver.round();
+      // A later error on a blocked run re-blocks it where it was (the driver's catch path, executionDriver.ts): the body
+      // changes, the state does not, so no second row. Driver rounds alone never touch a blocked run.
+      blockRun(t.deps, runId, "C", `terminal:exhausted${LATER_ERROR}later`);
+      expect(t.body(runId).drive.blockedReason).toBe(`terminal:exhausted${LATER_ERROR}later`);
       expect(rowsOf(t.h.store, runId, "run-blocked")).toHaveLength(1);
     } finally { await t.h.dispose(); }
   });
