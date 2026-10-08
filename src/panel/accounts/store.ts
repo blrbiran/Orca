@@ -42,7 +42,7 @@ export interface AccountsStore {
   sessionActive(sid: string, userId: string, now: number): boolean;
   revokeSession(sid: string, now: number): void;
   revokeAllSessions(now: number): void;
-  /** Every session of the user but `keepSid` (a password change keeps the session that made it). */
+  /** Every session of the user, the one that made the change too (human ruling 2026-10-08: a changed password ends them all). */
   revokeUserSessions(userId: string, now: number): void;
   appendSecurityEvent(kind: SecurityEventKind, body: Record<string, unknown>, now: number): number;
   openNotices(): Array<{ seq: number; at: number; kind: SecurityEventKind; body: unknown }>;
