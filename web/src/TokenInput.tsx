@@ -8,7 +8,7 @@ import type { JSX } from "react";
 import { useTranslation } from "react-i18next";
 import { currentLanguage } from "./i18n.js";
 
-const SEPARATORS = /[,   ]/g;
+const SEPARATORS = /[,\u0020\u00A0\u202F]/g;
 
 /** "10,000,000" -> 10000000; null for anything but digits and the four separators, or above MAX_SAFE_INTEGER. */
 export function parseTokens(text: string): number | null {

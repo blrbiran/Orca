@@ -294,7 +294,7 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
     onCommand({ verb: "set-limit", groupId, expectedRevision: view.summary.commandRevision, payload: { limit: limitAmount(view, drafts) } });
   };
   const submitConfirm = (): void => {
-    if (confirmBlocked || shownSelectionsHash === null || integrationBlocked || hasBadDraft(drafts)) return;
+    if (confirmBlocked || shownSelectionsHash === null || integrationBlocked) return;
     const contextDraft = drafts[CONTEXT_POLICY_KEY(groupId)];
     const tokens = contextDraft === undefined || contextDraft.trim() === "" ? null : Number(contextDraft);
     onCommand({

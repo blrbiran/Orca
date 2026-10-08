@@ -146,6 +146,9 @@ describe("UsagePanel (spec §5.3, §6, §7)", () => {
     expect(add.disabled).toBe(true);
     fireEvent.change(field, { target: { value: "3,000,000" } });
     expect(add.disabled).toBe(false);
+    fireEvent.change(field, { target: { value: "3x" } });
+    expect(add.disabled).toBe(true);
+    fireEvent.change(field, { target: { value: "3,000,000" } });
     fireEvent.click(add);
     await waitFor(() => expect(calls.filter((call) => call.method === "POST")).toHaveLength(1));
     expect((calls.find((call) => call.method === "POST")!.body as { payload: { tokens: number } }).payload.tokens).toBe(3_000_000);

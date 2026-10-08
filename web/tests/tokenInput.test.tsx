@@ -24,7 +24,7 @@ afterEach(async () => { cleanup(); await i18n.changeLanguage("en"); });
 
 describe("parseTokens", () => {
   it.each([
-    ["10,000,000"], ["10 000 000"], ["10 000 000"], ["10 000 000"], ["10000000"], ["  10,000,000  "],
+    ["10,000,000"], ["10 000 000"], ["10\u00A0000\u00A0000"], ["10\u202F000\u202F000"], ["10000000"], ["  10,000,000  "],
   ])("reads %j as 10000000", (text) => { expect(parseTokens(text)).toBe(10_000_000); });
   it.each([["10.000.000"], ["1e7"], ["-5"], ["abc"], ["1.5"], [""], ["10_000"], ["9007199254740992"]])("refuses %j", (text) => {
     expect(parseTokens(text)).toBeNull();
@@ -180,6 +180,9 @@ describe("BudgetEditor token fields", () => {
     fireEvent.change(field, { target: { value: "4,000,000" } });
     fireEvent.click(screen.getByRole("button", { name: "Save proposal" }));
     expect(JSON.stringify((onCommand.mock.calls[0]![0] as ControlAction).payload)).toContain("4000000");
+    // A valid edit of another field must not carry the refused one along unseen.
+    fireEvent.change(screen.getByRole("textbox", { name: /^a work activeMs/ }), { target: { value: "50" } });
+    expect((screen.getByRole("button", { name: "Save proposal" }) as HTMLButtonElement).disabled).toBe(false);
     fireEvent.change(field, { target: { value: "4.000.000" } });
     expect((screen.getByRole("button", { name: "Save proposal" }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "Set limit" }));
