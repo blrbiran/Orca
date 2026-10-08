@@ -1,12 +1,15 @@
+import { existsSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { readRunActivity } from "../../src/control/activity.js";
 import { readBudgetProposal } from "../../src/control/queries.js";
 import { writeHandoffRequest } from "../../src/control/stopIntent.js";
 import { recordUsage } from "../../src/control/usage.js";
+import { deliverScheduledStart } from "../../src/control/webDispatch.js";
 import { readWebGroup } from "../../src/control/webService.js";
 import { readControlGroup } from "../../src/panel/controlViews.js";
-import { driverHarness } from "./fixtures/driverHarness.js";
+import { driverHarness, git } from "./fixtures/driverHarness.js";
 import type { WebFixtureTask } from "./fixtures/web.js";
+import { taskRunNumber } from "../../web/src/runFacts.js";
 
 /**
  * Issue fixes spec §4 (issue 16, Orca's side of issue 15): ccloop's failure reason is kept, `retry-task` settles a run
@@ -65,6 +68,16 @@ const unchanged = (t: Harness, runId: string): void => {
   expect(active(t, runId)).toBe(1);
   expect(readRunActivity(t.h.store, runId, 50).some((entry) => entry.kind === "task-retried")).toBe(false);
 };
+
+/** The driver's next round arms a start wake for the ready task (replenishStartWakes); delivering it claims a run. */
+async function claimAgain(t: Harness, driver: ReturnType<Harness["driver"]>): Promise<string> {
+  await driver.round();
+  const delivered = await deliverScheduledStart(t.dispatch, "g");
+  if (delivered.kind !== "claimed") throw new Error(`no claim: ${JSON.stringify(delivered)}`);
+  return delivered.runId;
+}
+const archived = (t: Harness, runId: string): number =>
+  Number(t.h.store.db.prepare("SELECT COUNT(*) AS n FROM outbox WHERE kind='archive' AND json_extract(body,'$.runId')=?").get(runId)!.n);
 
 describe("keeping ccloop's failure reason (spec §4.2(1))", () => {
   it("stores ccloop's stop reason on the drive record and gives it, with the outcome, to the run view", async () => {
@@ -276,4 +289,76 @@ describe("recovery-retry on a terminally failed run (spec §4.2(3))", () => {
       expect(t.body(runId)).toMatchObject({ state: "accepted", drive: { blockedAt: null, blockedReason: null } });
     } finally { await t.h.dispose(); }
   });
+});
+
+describe("after retry-task: cleanup, a new run, success (spec §4.2(2), §4.4)", () => {
+  // Several runs through the synthetic ccloop each; 30 s like driverSettle.test.ts, so a loaded full suite does not time them out.
+  it("archives and removes the failed run's workspace, claims run 2 from the group branch through normal dispatch, and lands it", async () => {
+    const { t, succeedNext } = await failingHarness(); try {
+      const { runId, driver } = await failedRun(t);
+      const failedDrive = t.body(runId).drive;
+      expect(existsSync(failedDrive.workspacePath)).toBe(true);
+      expect("error" in retry(t)).toBe(false);
+      const head = git(t.repo, "rev-parse", "refs/heads/orca/g");
+      succeedNext();
+      const second = await claimAgain(t, driver);
+      // That same round visited the settled-failed run: archived, its workspace gone, its source directory kept.
+      expect(t.body(runId)).toMatchObject({ state: "settled-failed", drive: { cleanedUp: true, cleanupError: null } });
+      expect(existsSync(failedDrive.workspacePath)).toBe(false);
+      expect(existsSync(failedDrive.sourceDir)).toBe(true);
+      expect(archived(t, runId)).toBeGreaterThan(0);
+      expect(second).not.toBe(runId);
+      expect(work(t, "a")).toMatchObject({ status: "running", currentRunId: second, lineageRunIds: [runId, second].sort() });
+      expect(taskRunNumber(view(t), "a")).toBe(2);
+      await t.until(driver, () => t.body(second).state === "settled" && t.body(second).drive?.cleanedUp === true);
+      expect(t.body(second).drive.base).toBe(head);
+      expect(t.body(second).drive.workspacePath).not.toBe(failedDrive.workspacePath);
+      expect(work(t, "a")).toMatchObject({ status: "done", currentRunId: second });
+      expect(git(t.repo, "show", "refs/heads/orca/g:a")).toBe("a");
+      expect(new Map(view(t).runs.map((run) => [run.runId, run.state]))).toEqual(new Map([[runId, "settled-failed"], [second, "settled-recoverable"]]));
+    } finally { await t.h.dispose(); }
+  }, 30000);
+
+  it("records a cleanup failure on the failed run, keeps it settled-failed, and still runs the new one", async () => {
+    const { t, succeedNext } = await failingHarness(); try {
+      const { runId, driver } = await failedRun(t);
+      expect("error" in retry(t)).toBe(false);
+      let repositoryGone = true;
+      t.deps.resolveRepository = () => { if (repositoryGone) throw new Error("repository-unavailable"); return t.repo; };
+      await driver.round();
+      expect(t.body(runId)).toMatchObject({ state: "settled-failed", drive: { cleanedUp: false, cleanupError: "repository-unavailable" } });
+      repositoryGone = false;
+      succeedNext();
+      const second = await claimAgain(t, driver);
+      await t.until(driver, () => t.body(second).state === "settled" && t.body(second).drive?.cleanedUp === true && t.body(runId).drive.cleanedUp === true);
+      expect(t.body(runId).drive.cleanupError).toBeNull();
+      expect(work(t, "a").status).toBe("done");
+    } finally { await t.h.dispose(); }
+  }, 30000);
+
+  it("retries twice: a short reserve on the second retry is refused by dimension and shortfall, and run 3 lands (review focus 2)", async () => {
+    const { t, succeedNext } = await failingHarness(); try {
+      const { runId: first, driver } = await failedRun(t);
+      expect("error" in retry(t)).toBe(false);
+      const second = await claimAgain(t, driver);
+      await t.until(driver, () => t.body(second).state === "blocked");
+      expect(t.body(second).drive).toMatchObject({ blockedAt: "C", outcome: "failed", stopReason: FAILED_REASON });
+      expect(taskRunNumber(view(t), "a")).toBe(2);
+      const limit = readWebGroup(t.h.store, "g").ledger.groupLimit;
+      const ledger = readWebGroup(t.h.store, "g").ledger;
+      const lowered = t.service.setLimit(t.h.command("set-limit", { limit: { ...limit, tokens: ledger.used.tokens + ledger.committedRemaining.tokens } }));
+      expect("error" in lowered ? lowered.error : "lowered").toBe("lowered");
+      expect(netOf(t.body(second)).tokens).toBe(10);
+      expect(refusal(retry(t))).toEqual({ code: "group-reserve-insufficient", message: "group-reserve-insufficient:tokens:10" });
+      const restored = t.service.setLimit(t.h.command("set-limit", { limit }));
+      expect("error" in restored ? restored.error : "restored").toBe("restored");
+      expect("error" in retry(t)).toBe(false);
+      succeedNext();
+      const third = await claimAgain(t, driver);
+      expect(taskRunNumber(view(t), "a")).toBe(3);
+      await t.until(driver, () => t.body(third).state === "settled" && [first, second, third].every((id) => t.body(id).drive?.cleanedUp === true));
+      expect(new Map(view(t).runs.map((run) => [run.runId, run.state]))).toEqual(new Map([[first, "settled-failed"], [second, "settled-failed"], [third, "settled-recoverable"]]));
+      expect(work(t, "a")).toMatchObject({ status: "done", currentRunId: third });
+    } finally { await t.h.dispose(); }
+  }, 30000);
 });

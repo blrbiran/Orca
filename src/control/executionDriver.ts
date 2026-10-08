@@ -750,6 +750,28 @@ export async function stepE(deps: ExecutionDriverDeps, runId: string): Promise<b
   return true;
 }
 
+/**
+ * Issue fixes spec §4.2(2): a run retry-task settled as failed keeps its evidence and loses its workspace. Its saved
+ * terminal report is the stop proof (stepC wrote it before blocking). Like stepE's cleanup it never blocks: a failure is
+ * recorded in `cleanupError` by the round and retried next round, and the task's new run has its own workspace.
+ */
+export async function stepCleanupFailed(deps: ExecutionDriverDeps, runId: string): Promise<boolean> {
+  const { store } = deps;
+  const run = readDriverRun(store, runId);
+  if (run.state !== "settled-failed" || run.drive === undefined || run.drive.cleanedUp) return false;
+  const drive = run.drive;
+  const report = await savedReport(store, runId);
+  await archiveRun(store, { runId, sourceDir: drive.sourceDir, repoDir: join(drive.sourceDir, "repo"), stopProof: report.candidate?.stopProof ?? null }, archiveAdmission(deps));
+  await cleanupRunWorkspace(deps.resolveRepository(groupRepoId(store, run.groupId)), deps.roots, runId, workspaceOf(drive));
+  write(deps, () => {
+    const current = readDriverRun(store, runId);
+    if (current.state !== "settled-failed" || current.drive === undefined) return;
+    current.drive = { ...current.drive, cleanedUp: true, cleanupError: null };
+    saveDriverRun(store, current);
+  });
+  return true;
+}
+
 /** Group states the driver re-arms dispatch for; `commitCandidate` moves a group to `review` (checkpoints.ts). */
 export const DISPATCHABLE_GROUP_STATES = new Set(["ready", "running", "review"]);
 
@@ -820,7 +842,9 @@ export function driverRunIds(store: ControlStore): string[] {
     // Single-call estimate spec §6.1, N1 spec §5.1: a single-call run the Web ledger claimed is the driver's too.
     const ours = (run.phase === "work" && isWebWorkRun(store, runId)) || isSingleCallRun(store, runId);
     if (!ours) continue;
-    if (DRIVEN.has(run.state) || (run.state === "settled" && run.drive !== undefined && (!run.drive.cleanedUp || run.drive.publishError !== null))) ids.push(runId);
+    if (DRIVEN.has(run.state) || (run.state === "settled" && run.drive !== undefined && (!run.drive.cleanedUp || run.drive.publishError !== null))
+      // Issue fixes spec §4.2(2): a settled-failed run until its evidence is archived and its workspace removed.
+      || (run.state === "settled-failed" && run.drive !== undefined && !run.drive.cleanedUp)) ids.push(runId);
   }
   return ids;
 }
@@ -866,6 +890,7 @@ export async function advance(deps: ExecutionDriverDeps, runId: string, context:
     case "collected": return stepD(deps, runId);
     case "reconciling": return stepR(deps, runId, context);
     case "landed": case "settled": return stepE(deps, runId);
+    case "settled-failed": return stepCleanupFailed(deps, runId);
     default: return false;
   }
 }
@@ -900,16 +925,17 @@ export function createExecutionDriver(deps: ExecutionDriverDeps): ExecutionDrive
         // and the round goes on to the next run instead of ending for every group.
         try {
           const run = readDriverRun(deps.store, runId);
-          // A settled run stays settled: whatever failed here is the settle step's own cleanup work,
+          // A settled (or settled-failed) run stays where it is: whatever failed here is the settle step's own cleanup work,
           // never a reason to reopen it as blocked at an earlier step (controller ruling P7,
           // 2026-09-25). Record the failure on the run and leave it for the next round to retry --
           // re-checked inside the write since another write may have landed while this step was
           // in flight (the deferred note from Task 4's review: never write after an await without
           // re-reading state first).
-          if (run.state === "settled") {
+          // Issue fixes spec §4.2(2): a settled-failed run's cleanup failure is recorded the same way.
+          if (run.state === "settled" || run.state === "settled-failed") {
             write(deps, () => {
               const current = readDriverRun(deps.store, runId);
-              if (current.state === "settled" && current.drive !== undefined && !current.drive.cleanedUp) {
+              if ((current.state === "settled" || current.state === "settled-failed") && current.drive !== undefined && !current.drive.cleanedUp) {
                 current.drive = { ...current.drive, cleanupError: describeError(error) };
                 saveDriverRun(deps.store, current);
               }
