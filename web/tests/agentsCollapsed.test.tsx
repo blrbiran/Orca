@@ -52,7 +52,15 @@ describe("Agents section folded by default (spec §9.2 item 4)", () => {
     vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("denied"); });
     const { container } = render(ui);
     expect(details(container).open).toBe(false);
+    // jsdom reports a throwing listener to window "error" instead of rethrowing, so observe that channel.
+    const errors: unknown[] = [];
+    const onError = (e: ErrorEvent): void => { errors.push(e.error ?? e.message); e.preventDefault(); };
+    window.addEventListener("error", onError);
+    vi.spyOn(console, "error").mockImplementation((...args) => { errors.push(args); });
     details(container).open = true;
-    expect(() => details(container).dispatchEvent(new Event("toggle"))).not.toThrow();
+    details(container).dispatchEvent(new Event("toggle"));
+    window.removeEventListener("error", onError);
+    expect(errors).toEqual([]);
+    expect(details(container).open).toBe(true);
   });
 });

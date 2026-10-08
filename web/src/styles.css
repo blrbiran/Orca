@@ -261,3 +261,4 @@ nav[aria-label="Control groups"] button[aria-current="true"] { background: var(-
 .usage-pickers, .usage-new-cap, .usage-calendar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; margin: 12px 0; }
 .usage-headline { display: flex; gap: 24px; }
 .usage-headline dd { margin: 0; font-size: var(--text-lg); font-weight: 600; }
+.agents-summary { display: inline; }
