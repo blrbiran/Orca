@@ -55,9 +55,10 @@ export async function syncGroupPr(input: SyncGroupPrInput): Promise<SyncGroupPrR
       const listed = await gh(["pr", "list", "--repo", input.repo, "--head", input.head, "--base", input.base, "--state", "all", "--json", "url,number,state,isDraft,headRepositoryOwner"]);
       if (listed.code !== 0) return failure(listed);
       // `--head` matches a branch name in any fork; only a PR from the repository's own owner is the group's (fix round 1, M2).
-      const owner = input.repo.split("/")[1];
+      // GitHub logins are case-insensitive, and the remote URL need not spell the owner as gh answers it.
+      const owner = input.repo.split("/")[1]!.toLowerCase();
       const found = (JSON.parse(listed.stdout) as { url: string; number: number; state: string; isDraft: boolean; headRepositoryOwner?: { login?: string } }[])
-        .filter((each) => each.headRepositoryOwner?.login === owner);
+        .filter((each) => each.headRepositoryOwner?.login?.toLowerCase() === owner);
       const open = found.find((each) => each.state === "OPEN");
       if (open !== undefined) pr = { url: open.url, number: open.number, ready: !open.isDraft };
       else if (found.length > 0) return { blocked: "integration-pr-closed", message: `#${found[0]!.number} is ${found[0]!.state}` };

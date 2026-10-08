@@ -439,6 +439,17 @@ describe("fix round 1: PR records across scheme changes, gh timeouts, forks, bla
     } finally { await w.dispose(); }
   });
 
+  it("an open PR whose head owner differs from the remote's only in case is the group's own: recorded, none created", async () => {
+    // GitHub logins are case-insensitive; gh answers the canonical spelling, the remote URL may spell it otherwise.
+    const own: FakePr = { number: 1, url: `https://${REPO}/pull/1`, state: "OPEN", isDraft: true, head: "orca/g", base: "main", owner: "O" };
+    const w = await world(HUB_TASK, { state: { prs: [own] } }); try {
+      w.land({ "a.txt": "a\n" });
+      expect(await w.pass()).toBe(true);
+      expect(subs(w.calls())).toEqual(["auth status", "pr list"]);
+      expect(w.record()).toMatchObject({ state: "idle", pr: { number: 1, ready: false } });
+    } finally { await w.dispose(); }
+  });
+
   it("M3: a goal whose first line is blank titles the PR orca/<g>", async () => {
     const w = await world(HUB_TASK, { goal: "   \nthe real goal" }); try {
       w.land({ "a.txt": "a\n" });
