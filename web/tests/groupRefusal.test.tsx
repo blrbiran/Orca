@@ -8,6 +8,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/App.js";
+import { UNCERTAIN_COMMANDS_KEY } from "../src/controlApi.js";
 import i18n from "../src/i18n.js";
 import { enErrors } from "../src/locales/en.js";
 import { ALPHA, groupSummary, installFakePanel, planGroupView } from "./fixtures/twoProjects.js";
@@ -19,8 +20,21 @@ const refused = (status: number, code: string, message: string): Response =>
   json({ error: { code, message, commandRevision: 6, evidenceIds: [], retryable: false } }, status);
 const success = (): Response => json({ schema: "orca-command-success-v1", commandRevision: 7 });
 
+/** Fix round 1: the fake panel has no command lookup route; a test that needs one sets this. */
+let lookup: ((url: string) => Promise<Response>) | null = null;
+
 beforeEach(() => {
+  lookup = null;
   panel = installFakePanel();
+  const fake = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL, request?: RequestInit): Promise<Response> => {
+    const url = String(input);
+    if (lookup !== null && /^\/api\/control\/groups\/[^/]+\/commands\/[^/]+$/.test(url)) {
+      panel.requests.push(`GET ${url}`);
+      return lookup(url);
+    }
+    return fake(input, request);
+  }) as typeof fetch;
   const g1 = groupSummary("g1", ALPHA), g2 = groupSummary("g2", ALPHA);
   panel.summary = { ...panel.summary, groups: [g1, g2] };
   panel.groupViews = { g1: planGroupView(g1), g2: planGroupView(g2) };
@@ -64,15 +78,68 @@ describe("a group's refusal stays with its group (spec §2.2(d))", () => {
     fireEvent.click(within(g2).getByRole("button", { name: "Pause dispatch" }));
     // The success is recorded before the group is read again, so this read means g2's success was handled.
     await waitFor(() => expect(groupReads("g2")).toBeGreaterThan(before));
+    // Fix round 1: g1's refusal, though not on screen while g2 is open, keeps Task control's badge lit.
+    expect(screen.queryByTestId("nav-dot-tasks")).not.toBeNull();
 
     g1 = await openGroup("g1");
     expect(within(g1).getByTestId("group-refusal").textContent).toContain(enErrors["stop-mode-conflict"]);
     fireEvent.click(within(g1).getByRole("button", { name: "Pause dispatch" }));
     await waitFor(() => expect(within(screen.getByRole("region", { name: "Control group g1" })).queryByTestId("group-refusal")).toBeNull());
+    expect(screen.queryByTestId("nav-dot-tasks")).toBeNull();
   });
+
+  it("clears a group's unknown outcome once the lookup finds the command succeeded", async () => {
+    // Fix round 1: a 5xx leaves the outcome unknown; the next poll's lookup finds it committed, which is a success.
+    panel.onPost = async (url) => (url === "/api/control/groups/g1/pause-dispatch" ? json({ error: { code: "panel-unavailable", message: "down" } }, 503) : success());
+    lookup = async () => json({ schema: "orca-command-lookup-v1", originalStatus: 200, body: { schema: "orca-command-success-v1", commandRevision: 7 } });
+    render(<App />);
+    const g1 = await openGroup("g1");
+    fireEvent.click(within(g1).getByRole("button", { name: "Pause dispatch" }));
+    await within(g1).findByTestId("group-refusal");
+    await waitFor(() => expect(within(screen.getByRole("region", { name: "Control group g1" })).queryByTestId("group-refusal")).toBeNull(), { timeout: 6000 });
+    expect(screen.queryByTestId("nav-dot-tasks")).toBeNull();
+  }, 10_000);
 });
 
 describe("an import's refusal stays in the import form (spec §2.2(d))", () => {
+  it("leaves no hidden refusal behind a refused import: a later successful import puts the badge out", async () => {
+    // Fix round 1: a refused import made no group, so reading that group (404 group-not-found) stored a refusal no view
+    // shows and nothing clears, which kept Task control's badge lit until a reload.
+    let refuse = true;
+    let imported = "";
+    panel.onPost = async (url, body) => {
+      if (url !== "/api/control/groups/import-plan") return success();
+      if (refuse) { refuse = false; return refused(422, "control-plan-rejected", "control-plan-rejected:dangling-dependency:b"); }
+      imported = (body as { payload: { groupId: string } }).payload.groupId;
+      panel.groupViews[imported] = planGroupView(groupSummary(imported, ALPHA));
+      return success();
+    };
+    render(<App />);
+    const form = await screen.findByRole("region", { name: "Import plan" });
+    fireEvent.click(await within(form).findByRole("button", { name: "Import plan" }));
+    await within(form).findByTestId("import-refusal");
+    fireEvent.click(within(form).getByRole("button", { name: "Import plan" }));
+    await waitFor(() => expect(within(screen.getByRole("region", { name: "Import plan" })).queryByTestId("import-refusal")).toBeNull());
+    // The successful import's own group read is the last thing its command does.
+    await waitFor(() => expect(panel.requests).toContain(`GET /api/control/groups/${imported}`));
+    expect(screen.queryByTestId("nav-dot-tasks")).toBeNull();
+    // Only the imported group was read; the refused import's never-made group was not.
+    expect(panel.requests.filter((request) => /^GET \/api\/control\/groups\/group-[^/]+$/.test(request))).toEqual([`GET /api/control/groups/${imported}`]);
+  });
+
+  it("shows an unknown import the lookup cannot find in the import form, and reads no group for it", async () => {
+    // Fix round 1: an import whose answer was lost is remembered as an import; command-result-not-found means it never
+    // reached the ledger, so its group does not exist and the import form is where the person acted.
+    window.sessionStorage.setItem(UNCERTAIN_COMMANDS_KEY, JSON.stringify([{ groupId: "group-lost", commandId: "cmd-lost", importPlan: true }]));
+    lookup = async (url) => refused(404, "command-result-not-found", `no command ${url}`);
+    render(<App />);
+    const form = await screen.findByRole("region", { name: "Import plan" });
+    const notice = await within(form).findByTestId("import-refusal");
+    expect(within(notice).getByText("command-result-not-found").tagName).toBe("CODE");
+    expect(panel.requests).toContain("GET /api/control/groups/group-lost/commands/cmd-lost");
+    expect(panel.requests).not.toContain("GET /api/control/groups/group-lost");
+  });
+
   it("lists the plan's problems one per line, in English and in Chinese", async () => {
     panel.onPost = async (url) => (url === "/api/control/groups/import-plan"
       ? refused(422, "control-plan-rejected", "control-plan-rejected:missing-target-version:a\ndangling-dependency:b")

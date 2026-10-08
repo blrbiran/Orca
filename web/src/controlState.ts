@@ -14,6 +14,11 @@ import type { ControlSummaryV1, GroupSummaryV1, GroupViewV1, RecoveryViewV1 } fr
 export interface UncertainCommand {
   groupId: string;
   commandId: string;
+  /**
+   * Spec 2026-10-08 §2.2(d): an import's group exists only if the import succeeded, so its lookup's answer belongs to the
+   * import form and its group is read only after a success. Kept across a reload with the rest of the entry.
+   */
+  importPlan?: true;
 }
 
 /** A refusal as the server answered it. `status` is null when no answer arrived at all. */

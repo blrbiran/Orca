@@ -357,7 +357,13 @@ export function App(): JSX.Element {
       return;
     }
     dispatchControl({ type: "command-resolved", value: command });
-    if (result.kind === "absent") dispatchControl({ type: "refusal", place: "group", groupId: command.groupId, value: result.refusal });
+    const place = command.importPlan === true ? ("import" as const) : ("group" as const);
+    if (result.kind === "absent") dispatchControl({ type: "refusal", place, groupId: command.groupId, value: result.refusal });
+    // The command did reach the ledger and succeeded: the unknown outcome shown where the person acted is answered.
+    const succeeded = result.kind === "found" && result.lookup.originalStatus < 400;
+    if (succeeded) dispatchControl({ type: "command-succeeded", place, groupId: command.groupId });
+    // An import that did not succeed made no group: reading it would only store a group-not-found no view shows.
+    if (command.importPlan === true && !succeeded) return;
     await readControlGroup(command.groupId);
   };
 
@@ -370,9 +376,9 @@ export function App(): JSX.Element {
     const requirementVerb = action.verb.startsWith("requirement-") || ((action.verb === "recovery-retry" || action.verb === "handoff-stop" || action.verb === "set-limit")
       && controlNow.current.groups[action.groupId]?.state === "clarifying");
     const commandId = nextCommandId();
-    const command = { groupId: action.groupId, commandId };
     // Spec 2026-10-08 §2.2(d): an import's refusal is shown in the import form, every other command's in its group.
     const place = action.verb === "import-plan" ? ("import" as const) : ("group" as const);
+    const command: UncertainCommand = place === "import" ? { groupId: action.groupId, commandId, importPlan: true } : { groupId: action.groupId, commandId };
     dispatchControl({ type: "command-uncertain", value: command });
     // Spec §5: an answer that arrives after the scope changed may fill the cache, but must not reopen a detail.
     const scopeAtSend = scopeKeyNow.current;
@@ -408,6 +414,8 @@ export function App(): JSX.Element {
       await readRequirement(action.groupId);
     }
     // Accept turns the group into a plan group: Task control reads it from here on.
+    // A refused import made no group either (mirrors the requirement-open guard above).
+    if (place === "import" && answer.status >= 400) return null;
     if (!requirementVerb || (action.verb === "requirement-draft-accept" && answer.status < 400)) await readControlGroup(action.groupId);
     return answer.status < 400 ? (answer.body as CommandSuccessV1).commandRevision : null;
   };
