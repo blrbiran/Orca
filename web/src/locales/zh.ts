@@ -762,7 +762,7 @@ export const zhErrors: Record<string, string> = {
   "archive-call-in-flight": "这个组还有一次模型调用在进行（{{detail}}）。等调用结束后再归档。",
   "archive-integration-resolving": "agent 正在解决这个组的集成冲突。等它结束后再归档。",
   "archive-run-active": "这个组还有正在进行的运行。等它结束，或先用“交接停止”停下，再归档。",
-  "archive-stop-pending": "停止还没有完成（{{detail}}）。等它到达交接完成后再归档。",
+  "archive-stop-pending": "停止还没有完成（{{detail}}）。等交接结束（全部完成或部分完成）后再归档。",
   "artifact-id-conflict": "产物 id 冲突。",
   "artifact-not-found": "找不到这个产物。",
   "budget-overflow": "预算数值溢出：{{message}}",

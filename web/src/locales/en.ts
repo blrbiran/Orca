@@ -822,7 +822,7 @@ export const enErrors: Record<string, string> = {
   "archive-call-in-flight": "A model call for this group is still running ({{detail}}). Archive it once the call has finished.",
   "archive-integration-resolving": "An agent is resolving this group's integration conflict. Archive it once that has finished.",
   "archive-run-active": "This group still has an active run. Wait for it to finish, or stop it with Handoff stop, then archive.",
-  "archive-stop-pending": "A stop is still settling ({{detail}}). Archive the group once it reaches handoff-complete.",
+  "archive-stop-pending": "A stop is still settling ({{detail}}). Archive the group once its handoff has finished, completely or partially.",
   "artifact-id-conflict": "The artifact id conflicts with an existing one.",
   "artifact-not-found": "The artifact was not found.",
   "budget-overflow": "A budget value is too large: {{detail}}",
