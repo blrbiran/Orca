@@ -432,6 +432,99 @@ describe("an integration conflict, materialised and approved (integration spec Â
       expect(existsSync(stranger)).toBe(true);
     } finally { await w.dispose(); }
   });
+
+  it("final review Minor 7: a new attempt's conflict removes the group's older copies (and only its own)", async () => {
+    const w = await world(LOCAL_MERGE); try {
+      await conflicted(w);
+      const stranger = join(w.roots.workspacesRoot, "integration-conflict-g-x-1");
+      await mkdir(stranger);
+      expect(existsSync(join(w.copyOf(1), ".git"))).toBe(true);
+      expect(code(w.service.retryIntegration(w.command("retry-integration", {})))).toBe("applied");
+      expect(await w.pass()).toBe(true);
+      expect(w.record().conflict).toMatchObject({ attempt: 2 });
+      expect(existsSync(join(w.copyOf(2), ".git"))).toBe(true);
+      expect(existsSync(w.copyOf(1))).toBe(false);
+      expect(existsSync(stranger)).toBe(true);
+    } finally { await w.dispose(); }
+  });
+
+  /** A resolution of the current conflict carried to the end: spawned, its attempt left as ccloop leaves it, collected. */
+  async function resolveWith(w: Awaited<ReturnType<typeof world>>, files: Record<string, string>, spent: number): Promise<void> {
+    expect(code(await w.resolve())).toBe("applied");
+    expect(await w.pass()).toBe(true);
+    w.attempt(files);
+    await w.loopState({ status: "succeeded", budgetSnapshot: { tokenBudgetRemaining: policyOf(w.store).tokenBudget - spent } });
+    expect(await w.pass()).toBe(true);
+  }
+  const usageTokens = (store: ControlStore) => store.db.prepare("SELECT tokens FROM usage_ledger WHERE group_id='g' ORDER BY rowid").all().map((row) => Number(row.tokens));
+
+  it("final review C1: a conflict after a resolved one is a new attempt -- a new spawn, a new usage row, never the first resolution's tree", async () => {
+    const w = await world(LOCAL_MERGE); try {
+      const { tip } = await conflicted(w);
+      w.raise(10_000_000);
+      await resolveWith(w, { "f.txt": "B\nA\ntwo\nthree\n" }, 1_000);
+      const first = g(w.repo, ["rev-parse", "main"]);
+      expect(w.record()).toMatchObject({ state: "idle", lastIntegrated: tip, integratedCommit: first, conflict: null, resolution: null });
+      // A new landing and the person's own commit conflict on line 1 again.
+      const tip2 = w.land({ "f.txt": "A2\ntwo\nthree\n" });
+      const main2 = w.person({ "f.txt": "C\ntwo\nthree\n" });
+      expect(await w.pass()).toBe(true);
+      expect(w.record()).toMatchObject({ state: "conflict", conflict: { attempt: 2, key: "integrate-g-2", base: main2, tip: tip2 } });
+      expect(code(await w.resolve())).toBe("applied");
+      expect(await w.pass()).toBe(true);
+      // A new run for the new attempt; nothing of the first resolution was collected or published.
+      expect(w.calls.map((call) => call.runId)).toEqual(["integrate-g-1", "integrate-g-2"]);
+      expect(g(w.repo, ["rev-parse", "main"])).toBe(main2);
+      expect(w.record()).toMatchObject({ state: "resolving", resolution: { reconcileRunId: "integrate-g-2", spawnSeq: 1 } });
+      w.attempt({ "f.txt": "C\nA2\ntwo\nthree\n" });
+      await w.loopState({ status: "succeeded", budgetSnapshot: { tokenBudgetRemaining: policyOf(w.store).tokenBudget - 2_000 } });
+      expect(await w.pass()).toBe(true);
+      const second = g(w.repo, ["rev-parse", "main"]);
+      expect(parents(w.repo, second)).toEqual([main2, tip2]);
+      expect(g(w.repo, ["show", `${second}:f.txt`])).toBe("C\nA2\ntwo\nthree");
+      expect(w.record()).toMatchObject({ state: "idle", lastIntegrated: tip2, integratedCommit: second });
+      // The second resolution's spend is booked as its own row.
+      expect(usageTokens(w.store)).toEqual([1_000, 2_000]);
+    } finally { await w.dispose(); }
+  });
+
+  it("final review C1: a scheme set to keep and back does not number attempts from 1 again (the booked spend counts)", async () => {
+    const w = await world(LOCAL_MERGE); try {
+      await conflicted(w);
+      w.raise(10_000_000);
+      await resolveWith(w, { "f.txt": "B\nA\ntwo\nthree\n" }, 1_000);
+      expect(code(await w.service.setGroupIntegration(w.command("set-group-integration", { integration: { delivery: "keep" } })))).toBe("applied");
+      expect(code(await w.service.setGroupIntegration(w.command("set-group-integration", { integration: LOCAL_MERGE })))).toBe("applied");
+      w.land({ "f.txt": "A2\ntwo\nthree\n" });
+      w.person({ "f.txt": "C\ntwo\nthree\n" });
+      expect(await w.pass()).toBe(true);
+      expect(w.record()).toMatchObject({ state: "conflict", conflict: { attempt: 2, key: "integrate-g-2" } });
+      await resolveWith(w, { "f.txt": "C\nA2\ntwo\nthree\n" }, 2_000);
+      expect(w.record()).toMatchObject({ state: "idle", conflict: null });
+      expect(usageTokens(w.store)).toEqual([1_000, 2_000]);
+    } finally { await w.dispose(); }
+  });
+
+  it("final review C1: a resolution never collects a finished run left in its runs directory before it was approved", async () => {
+    const w = await world(LOCAL_MERGE); try {
+      const { main } = await conflicted(w);
+      w.raise(10_000_000);
+      // A finished run with a clean tree already sits under the key this attempt uses (an earlier record's leftovers).
+      const key = "integrate-g-1", workdir = join(w.roots.workspacesRoot, `reconcile-${key}`, key);
+      await mkdir(loopDirOf(workdir, key), { recursive: true });
+      await writeFile(join(loopDirOf(workdir, key), "loop-state.json"), JSON.stringify({ status: "succeeded", budgetSnapshot: { tokenBudgetRemaining: 0 } }));
+      g(w.root, ["clone", "-q", "--no-checkout", w.copyOf(1), join(workdir, "repo")]);
+      g(join(workdir, "repo"), ["update-ref", `refs/ccloop/${key}/attempts/1`, g(w.repo, ["rev-parse", "refs/orca/integration-conflict/g/1"])]);
+      commitOn(join(workdir, "repo"), `refs/ccloop/${key}/attempts/1`, { "f.txt": "STALE\ntwo\nthree\n" }, "stale attempt");
+      expect(code(await w.resolve())).toBe("applied");
+      expect(await w.pass()).toBe(true);
+      // Spawned, not collected: no spend booked, main untouched.
+      expect(w.calls.map((call) => call.runId)).toEqual([key]);
+      expect(usageTokens(w.store)).toEqual([]);
+      expect(g(w.repo, ["rev-parse", "main"])).toBe(main);
+      expect(w.record()).toMatchObject({ state: "resolving", resolution: { reconcileRunId: key, spawnSeq: 1 } });
+    } finally { await w.dispose(); }
+  });
 });
 
 // ---------------------------------------------------------------------------------------------------------------------

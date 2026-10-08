@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { z } from "zod";
@@ -57,7 +57,10 @@ export async function materialiseIntegrationConflict(
 ): Promise<GroupIntegration["conflict"]> {
   const { roots, repo } = deps;
   const copy = conflictCopyOf(roots.workspacesRoot, groupId, attempt), key = integrationKeyOf(groupId, attempt);
-  await removeOwnPath(repo, roots, copy);
+  // Final review Minor 7: an older attempt's copy is no longer the conflict an owner can approve; only this group's go.
+  for (const name of readdirSync(roots.workspacesRoot)) {
+    if (copyOwner(name) === groupId) await removeOwnPath(repo, roots, join(roots.workspacesRoot, name));
+  }
   await gitOk(repo, ["update-ref", workRefOf(groupId), tip]);
   await gitOk(roots.workspacesRoot, ["clone", "--quiet", "--local", "--no-checkout", repo, copy]);
   let conflictCommit: string, paths: string[];
@@ -83,6 +86,19 @@ export async function materialiseIntegrationConflict(
   await pinConflictCommit(copy, key, conflictCommit, ref);
   await gitOk(repo, ["fetch", "--quiet", "--no-tags", "--no-write-fetch-head", copy, `+${ref}:${ref}`]);
   return { attempt, key, base, tip, paths };
+}
+
+/**
+ * Final review C1: the number of the group's next conflict attempt -- above every attempt the record has numbered, the
+ * conflict it holds (a record stored before the counter), and every attempt whose spend was booked (a scheme set to
+ * keep removes the record and its counter, not its bookings). So no attempt reuses another's key, and with it the
+ * runs directory a finished run left or the outbox entry that books its spend.
+ */
+export function nextAttempt(store: ControlStore, groupId: string, integration: GroupIntegration): number {
+  const prefix = `integration-usage:integrate-${groupId}-`;
+  const booked = store.db.prepare("SELECT id FROM outbox WHERE kind='integration-usage' AND substr(id, 1, ?)=?").all(prefix.length, prefix)
+    .map((row) => String(row.id).slice(prefix.length)).filter((rest) => /^\d+$/.test(rest)).map(Number);
+  return Math.max(integration.attempts, integration.conflict?.attempt ?? 0, ...booked) + 1;
 }
 
 /** The group's task contracts, as confirmed (sorted by task id). */
@@ -217,6 +233,9 @@ export async function advanceIntegrationResolution(deps: IntegrationDeps, groupI
   const record = integration.resolution, key = record.reconcileRunId;
   if (resolving.resolution.reconciling.has(key)) return false;
   const workdir = join(record.runsDir, key);
+  // Final review C1, as driverLanding's beginReconcile: an approval nothing was spawned for yet owns no loop state, so
+  // whatever its runs directory holds was left before it (and would otherwise be collected as this run's result).
+  if ((record.spawnSeq ?? 0) === 0) await rm(record.runsDir, { recursive: true, force: true });
   const loop = readLoopState(loopDirOf(workdir, key));
   const action = reconcileNextAction({ loopStatus: loop.status, spawning: record.spawning, pid: record.pid, alive: record.pid !== null && processAlive(record.pid), collected: record.outcome !== null });
   if (action === "wait") return false;
@@ -291,7 +310,7 @@ async function collect(deps: ResolvingDeps, groupId: string, integration: GroupI
 async function failResolution(deps: ResolvingDeps, groupId: string, key: string, reason: string): Promise<boolean> {
   const integration = readGroupIntegration(readGroup(deps.store, groupId));
   if (integration?.state !== "resolving" || integration.resolution?.reconcileRunId !== key || integration.conflict === null) return false;
-  const { base, tip, paths } = integration.conflict, attempt = integration.conflict.attempt + 1;
+  const { base, tip, paths } = integration.conflict, attempt = nextAttempt(deps.store, groupId, integration);
   let next: GroupIntegration["conflict"] = null;
   try {
     next = await materialiseIntegrationConflict({ roots: deps.roots, repo: deps.repoPathOf(groupRepoId(deps.store, groupId)) }, groupId, base, tip,
@@ -301,7 +320,7 @@ async function failResolution(deps: ResolvingDeps, groupId: string, key: string,
     const group = readGroup(deps.store, groupId);
     const current = readGroupIntegration(group);
     if (current?.state !== "resolving" || current.resolution?.reconcileRunId !== key) return false;
-    saveGroup(deps.store, { ...group, integration: { ...current, state: "conflict", reason, resolution: null,
+    saveGroup(deps.store, { ...group, integration: { ...current, state: "conflict", reason, resolution: null, attempts: Math.max(current.attempts, attempt),
       conflict: next ?? { attempt, key: integrationKeyOf(groupId, attempt), base, tip, paths } } } as typeof group);
     return true;
   });

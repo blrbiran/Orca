@@ -6,7 +6,7 @@ import { groupRepoId, groupStopped, write } from "./executionDriver.js";
 import {
   BranchMissing, ChildTimeout, RemoteFailure, conflictedNames, fetchInto, gitChild, gitOk, isAncestor, oneLine, pushPorcelain, refTip, remoteHas, revParse,
 } from "./integrationGit.js";
-import { advanceIntegrationResolution, copyOwner, materialiseIntegrationConflict } from "./integrationResolve.js";
+import { advanceIntegrationResolution, copyOwner, materialiseIntegrationConflict, nextAttempt } from "./integrationResolve.js";
 import { syncGroupPr } from "./integrationPr.js";
 import { githubRepoOf, readGroupIntegration, remoteUrl, type GroupIntegration, type IntegrationScheme } from "./integrationScheme.js";
 import { readGroup, saveGroup } from "./queries.js";
@@ -44,8 +44,11 @@ type Outcome =
   /** `pr` is the `github-pr` delivery's PR record, written with the rest (§6.1 step 6). */
   | { kind: "done"; tip: string; integrated: string | null; pr?: GroupIntegration["pr"] }
   | { kind: "blocked"; reason: string }
-  /** `materialised` is the conflict re-created in its copy (spec §7), null when the copy did not reproduce it. */
-  | { kind: "conflict"; base: string; tip: string; paths: string[]; materialised?: GroupIntegration["conflict"] }
+  /**
+   * `materialised` is the conflict re-created in its copy (spec §7), null when the copy did not reproduce it; `attempt`
+   * is the number it was given (nextAttempt).
+   */
+  | { kind: "conflict"; base: string; tip: string; paths: string[]; attempt?: number; materialised?: GroupIntegration["conflict"] }
   /** spec §7: a resolution finished on a base that has moved since; it is dropped and the integration starts over. */
   | { kind: "discarded" }
   | { kind: "transient"; message: string }
@@ -177,8 +180,8 @@ async function integrateGroup(deps: IntegrationDeps, groupId: string, integratio
       const outcome = scheme.delivery === "local" ? await integrateLocal(deps, repo, groupId, integration, scheme, tip) : await integratePushTarget(deps, repo, groupId, integration, scheme, tip);
       if (outcome.kind !== "conflict") return outcome;
       // spec §7: the conflict is re-created for an agent and pinned; nothing is dispatched until an owner approves.
-      const attempt = (integration.conflict?.attempt ?? 0) + 1;
-      return { ...outcome, materialised: await materialiseIntegrationConflict({ roots: deps.roots, repo }, groupId, outcome.base, outcome.tip, scheme.method, attempt, integration.lastIntegrated) };
+      const attempt = nextAttempt(deps.store, groupId, integration);
+      return { ...outcome, attempt, materialised: await materialiseIntegrationConflict({ roots: deps.roots, repo }, groupId, outcome.base, outcome.tip, scheme.method, attempt, integration.lastIntegrated) };
     }
     return await integrateWorkBranch(deps, repo, groupId, integration, scheme, tip);
   } catch (error) {
@@ -458,9 +461,10 @@ function settle(deps: IntegrationDeps, groupId: string, hash: string, outcome: O
         break;
       case "conflict": {
         // spec §7: recorded with its materialised copy, and nothing is dispatched until an owner approves.
-        const attempt = (current.conflict?.attempt ?? 0) + 1;
+        const attempt = outcome.attempt ?? nextAttempt(deps.store, groupId, current);
         next = { ...current, state: "conflict", reason: outcome.materialised === null ? "integration-conflict-unreproducible" : "integration-conflict", pending: null,
-          retryAfter: null, transient: 0, conflict: outcome.materialised ?? { attempt, key: `integrate-${groupId}-${attempt}`, base: outcome.base, tip: outcome.tip, paths: outcome.paths } };
+          retryAfter: null, transient: 0, attempts: Math.max(current.attempts, attempt),
+          conflict: outcome.materialised ?? { attempt, key: `integrate-${groupId}-${attempt}`, base: outcome.base, tip: outcome.tip, paths: outcome.paths } };
         break;
       }
       case "discarded":

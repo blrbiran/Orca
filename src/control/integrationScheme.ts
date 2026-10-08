@@ -170,6 +170,12 @@ const groupIntegrationSchema = z.object({
   retryAfter: safeInteger.nullable(),
   /** Consecutive transient failures; drives the backoff, 0 after any success. */
   transient: safeInteger,
+  /**
+   * Final review C1: the conflict attempts this record has numbered so far. Never reset (a success or a scheme change
+   * clears `conflict`, not this), so an attempt's key, copy, runs directory and outbox entry are never reused. A record
+   * stored before the counter existed reads 0.
+   */
+  attempts: safeInteger.default(0),
 }).strict();
 export type GroupIntegration = z.infer<typeof groupIntegrationSchema>;
 
@@ -186,6 +192,6 @@ export function newGroupIntegration(scheme: IntegrationScheme): GroupIntegration
   if (scheme.delivery === "keep") return null;
   return {
     scheme, schemeHash: schemeHash(scheme), frozen: false, lastIntegrated: null, integratedCommit: null, state: "idle", reason: null,
-    pending: null, conflict: null, resolution: null, pr: null, retryAfter: null, transient: 0,
+    pending: null, conflict: null, resolution: null, pr: null, retryAfter: null, transient: 0, attempts: 0,
   };
 }
