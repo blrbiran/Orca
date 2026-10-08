@@ -454,13 +454,14 @@ describe("fix round 1: PR records across scheme changes, gh timeouts, forks, bla
   });
 
   it("final review M-T5: a remote that spells the owner in capitals finds the PR gh answers in lower case", async () => {
-    const own: FakePr = { number: 1, url: "https://github.com/O/r/pull/1", state: "OPEN", isDraft: true, head: "orca/g", base: "main", owner: "o" };
+    // gh answers the canonical spelling in the login and the URL alike.
+    const own: FakePr = { number: 1, url: "https://github.com/o/r/pull/1", state: "OPEN", isDraft: true, head: "orca/g", base: "main", owner: "o" };
     const w = await world(HUB_TASK, { url: "https://github.com/O/r.git", state: { prs: [own] } }); try {
       w.land({ "a.txt": "a\n" });
       expect(await w.pass()).toBe(true);
       expect(subs(w.calls())).toEqual(["auth status", "pr list"]);
       expect(w.calls()[1]!.argv).toContain("github.com/O/r");
-      expect(w.record()).toMatchObject({ state: "idle", pr: { number: 1, ready: false } });
+      expect(w.record()).toMatchObject({ state: "idle", pr: { url: "https://github.com/o/r/pull/1", number: 1, ready: false } });
     } finally { await w.dispose(); }
   });
 

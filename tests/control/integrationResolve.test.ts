@@ -537,6 +537,31 @@ describe("an integration conflict, materialised and approved (integration spec Â
     } finally { await w.dispose(); }
   });
 
+  it("final review C1: a scheme change clears the conflict but not the count -- the next conflict is attempt 2", async () => {
+    const w = await world(LOCAL_MERGE); try {
+      await conflicted(w);
+      expect(code(await w.service.setGroupIntegration(w.command("set-group-integration", { integration: LOCAL_SQUASH })))).toBe("applied");
+      expect(w.record()).toMatchObject({ state: "idle", conflict: null });
+      expect(await w.pass()).toBe(true);
+      expect(w.record()).toMatchObject({ state: "conflict", conflict: { attempt: 2, key: "integrate-g-2" } });
+    } finally { await w.dispose(); }
+  });
+
+  it("final review C1: an attempt a failed resolution opened is counted too -- after a scheme change the next is attempt 3", async () => {
+    const w = await world(LOCAL_MERGE); try {
+      await conflicted(w);
+      w.raise(10_000_000);
+      expect(code(await w.resolve())).toBe("applied");
+      w.setRunTask(async () => { throw new Error("no ccloop here"); });
+      expect(await w.pass()).toBe(true);
+      await w.reconciling.get("integrate-g-1");
+      expect(w.record()).toMatchObject({ state: "conflict", conflict: { attempt: 2 } });
+      expect(code(await w.service.setGroupIntegration(w.command("set-group-integration", { integration: LOCAL_SQUASH })))).toBe("applied");
+      expect(await w.pass()).toBe(true);
+      expect(w.record()).toMatchObject({ state: "conflict", conflict: { attempt: 3, key: "integrate-g-3" } });
+    } finally { await w.dispose(); }
+  });
+
   it("final review C1: a resolution never collects a finished run left in its runs directory before it was approved", async () => {
     const w = await world(LOCAL_MERGE); try {
       const { main } = await conflicted(w);
