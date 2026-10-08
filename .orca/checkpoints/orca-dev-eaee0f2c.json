@@ -1,0 +1,43 @@
+{
+  "v": 1,
+  "runId": "orca-dev-eaee0f2c",
+  "runtime": "claude-code",
+  "sessionRef": "eaee0f2c-ea93-4935-a17b-27becfbfbeb4",
+  "writtenAt": "2026-10-08T06:29:12.491Z",
+  "head": "717306a3798ff1ab867c223d8265183c60651bd2",
+  "level": {
+    "kind": "reading",
+    "level": 452375,
+    "windowTokens": 1000000,
+    "t1": 330000,
+    "t2": 450000,
+    "band": 2
+  },
+  "next": [
+    "Continue SDD of docs/superpowers/plans/2026-10-08-integration-and-panel-fixes.md in ../Orca-integration: Task 6 fix-round re-review, then Tasks 7-12; ledger .superpowers/sdd/2026-10-08-integration-and-panel-fixes/progress.md",
+    "Session past T2 by the human's explicit instruction for this round (do not stop for context size); recorded here"
+  ],
+  "open": [
+    "Task 6 fix round 1 re-review",
+    "Tasks 7-12"
+  ],
+  "awaitingHuman": [
+    {
+      "kind": "irreversible",
+      "what": "repair main: git rebase --onto 254371c 7ce8db2 main && git branch -D side (keeps checkpoint commits, drops the incident's junk)"
+    },
+    {
+      "kind": "irreversible",
+      "what": "ff-merge deps/usage-by-model-pin and feat/integration-schemes into main, push; delete worktrees Orca-usage-pin, Orca-integration and two prunable scratchpad worktrees"
+    }
+  ],
+  "measurements": [
+    {
+      "command": "/usr/bin/git -C /Users/biran/code/skills/loop/Orca-integration log --oneline -3",
+      "exitCode": 0,
+      "commit": "717306a3798ff1ab867c223d8265183c60651bd2",
+      "observedAt": "2026-10-08T06:29:12.445Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-eaee0f2c-f7oW2i/1.txt"
+    }
+  ]
+}
