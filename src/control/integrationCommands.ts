@@ -89,7 +89,14 @@ export function applySetGroupIntegration(
       const frozen = (group.proposal as { state?: unknown } | undefined)?.state === "confirmed";
       if (scheme.delivery === "keep") delete group.integration;
       else if (current === null) group.integration = { ...newGroupIntegration(scheme)!, frozen };
-      else group.integration = { ...current, scheme, schemeHash: schemeHash(scheme), frozen, state: "idle", reason: null, pending: null, conflict: null, retryAfter: null, transient: 0 };
+      else {
+        // A PR is a branch of one remote into one target: another delivery, target or remote is another PR (fix round 1,
+        // R2). A trigger change keeps it.
+        const samePr = current.scheme.delivery === scheme.delivery && current.scheme.target === scheme.target
+          && ("remote" in current.scheme ? current.scheme.remote : null) === ("remote" in scheme ? scheme.remote : null);
+        group.integration = { ...current, scheme, schemeHash: schemeHash(scheme), frozen, state: "idle", reason: null, pending: null, conflict: null, retryAfter: null, transient: 0,
+          pr: samePr ? current.pr : null };
+      }
       deps.store.db.prepare("UPDATE groups SET body=? WHERE id=?").run(JSON.stringify(group), groupId);
       return { status: 200, body: {
         schema: "orca-command-success-v1", commandId: context.rawCommand.commandId, actorId: context.rawCommand.actorId,

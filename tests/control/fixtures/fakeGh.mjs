@@ -3,7 +3,8 @@
 // - calls.jsonl: one line per invocation, {"argv": [...], "stdin": "..."} (stdin only when the caller wrote any);
 // - state.json: { prs: [{number,url,state,isDraft,head,base}], authOk: true, refuseDraft: false,
 //   fail: { "<sub command>": "<stderr>" } } -- `fail` makes that sub command ("pr create", "auth status", ...) print
-//   the words to stderr and exit 1, as gh does when its API call fails.
+//   the words to stderr and exit 1, as gh does when its API call fails; `hang: { "<sub command>": ms }` sleeps first.
+//   A PR's optional `owner` is its head repository's owner (default "o"; another one is a fork).
 // Unknown commands exit 2.
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -32,6 +33,8 @@ const save = () => writeFileSync(statePath, JSON.stringify(state));
 const die = (words, code = 1) => { process.stderr.write(`${words}\n`); process.exit(code); };
 
 if (typeof state.fail[sub] === "string") die(state.fail[sub]);
+// `hang: {"<sub command>": ms}` makes that sub command sleep first (a gh that never answers).
+if (typeof state.hang?.[sub] === "number") await new Promise((resolve) => setTimeout(resolve, state.hang[sub]));
 const find = (number) => state.prs.find((pr) => pr.number === Number(number));
 
 switch (sub) {
@@ -42,7 +45,7 @@ switch (sub) {
   case "pr list": {
     const wanted = (flag("state") ?? "open").toUpperCase();
     const matching = state.prs.filter((pr) => pr.head === flag("head") && pr.base === flag("base") && (wanted === "ALL" || pr.state === wanted));
-    process.stdout.write(`${JSON.stringify(matching.map(({ number, url, state: s, isDraft }) => ({ number, url, state: s, isDraft })))}\n`);
+    process.stdout.write(`${JSON.stringify(matching.map(({ number, url, state: s, isDraft, owner }) => ({ number, url, state: s, isDraft, headRepositoryOwner: { login: owner ?? "o" } })))}\n`);
     break;
   }
   case "pr create": {

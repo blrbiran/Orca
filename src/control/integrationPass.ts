@@ -118,11 +118,20 @@ async function integrateGroup(deps: IntegrationDeps, groupId: string, integratio
   if (remoteKey !== null && unreachable.has(remoteKey)) return null;
   const tip = await refTip(repo, workBranchRef(groupId));
   if (tip === null) return null;
-  // spec §5: `github-pr`, trigger `task`, nothing new landed -- due only to mark the group's PR ready once it completes.
-  const readyOnly = tip === integration.lastIntegrated;
-  if (readyOnly && !(scheme.delivery === "github-pr" && integration.pr !== null && !integration.pr.ready && groupComplete(deps.store, groupId))) return null;
+  // Nothing new landed: only a `github-pr` group can still be due. With no PR recorded (a group switched to `github-pr`
+  // after integrating under another scheme, or whose PR target changed) it pushes and opens one (ruling, fix round 1
+  // R1); with a draft PR and the group complete it only marks it ready (spec §5).
+  const caughtUp = tip === integration.lastIntegrated;
+  let readyOnly = false;
+  if (caughtUp) {
+    if (scheme.delivery !== "github-pr") return null;
+    if (integration.pr !== null) {
+      if (integration.pr.ready || !groupComplete(deps.store, groupId)) return null;
+      readyOnly = true;
+    }
+  }
   if (scheme.trigger === "group" && !groupComplete(deps.store, groupId)) return null;
-  if (integration.lastIntegrated === null && await nothingLanded(repo, scheme, tip)) return null;
+  if ((integration.lastIntegrated === null || (caughtUp && !readyOnly)) && await nothingLanded(repo, scheme, tip)) return null;
   try {
     if (readyOnly) return await finishWorkBranch(deps, repo, groupId, integration, scheme as Extract<Scheme, { delivery: "github-pr" }>, tip);
     if (scheme.delivery === "local") return await integrateLocal(deps, repo, groupId, integration, scheme, tip);
@@ -131,7 +140,8 @@ async function integrateGroup(deps: IntegrationDeps, groupId: string, integratio
   } catch (error) {
     // A child that timed out is left to the pass's own handler, which backs it off like any transient; one that was
     // talking to the remote marks the remote unreachable for the rest of this round.
-    if (error instanceof ChildTimeout && remoteKey !== null && "remote" in scheme && error.args.includes(scheme.remote)) unreachable.add(remoteKey);
+    // Only a git child talks to the remote; a gh timeout says nothing about it (fix round 1, M1).
+    if (error instanceof ChildTimeout && error.bin === "git" && remoteKey !== null && "remote" in scheme && error.args.includes(scheme.remote)) unreachable.add(remoteKey);
     // Fix round 1 (I2): a configured remote that answers with anything but the network refuses like a push, with git's
     // words; integration-remote-missing is only a remote that is not configured.
     if (error instanceof RemoteFailure) return error.transient ? { kind: "transient", message: error.message } : { kind: "blocked", reason: `integration-push-refused:${error.message}` };
@@ -176,10 +186,11 @@ async function finishWorkBranch(deps: IntegrationDeps, repo: string, groupId: st
   // and a remote re-pointed since is refused by name rather than letting gh guess.
   const github = githubRepoOf((await remoteUrl(repo, scheme.remote)) ?? "");
   if (github === null) return { kind: "blocked", reason: `integration-pr-refused:remote ${scheme.remote} no longer names a GitHub repository` };
-  const goal = groupGoalSchema.parse(readGroup(deps.store, groupId)).plan.goal;
+  const firstLine = groupGoalSchema.parse(readGroup(deps.store, groupId)).plan.goal.split(/\r?\n/)[0]!;
   const synced = await syncGroupPr({
     ghBin: deps.ghBin, repo: `${github.host}/${github.slug}`, head: `orca/${groupId}`, base: scheme.target, cwd: repo,
-    title: goal.split(/\r?\n/)[0]!.slice(0, 256), body: prBody(deps.store, groupId, scheme.target),
+    // A goal whose first line is blank still gives the PR a title (fix round 1, M3).
+    title: firstLine.trim() === "" ? `orca/${groupId}` : firstLine.slice(0, 256), body: prBody(deps.store, groupId, scheme.target),
     draft: scheme.trigger === "task", complete: groupComplete(deps.store, groupId), pr: integration.pr,
     onStep: (step) => crash(deps, step),
   });

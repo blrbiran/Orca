@@ -32,8 +32,8 @@ const setRecord = (store: ControlStore, integration: GroupIntegration) => writeG
 const HUB_TASK: IntegrationScheme = { delivery: "github-pr", trigger: "task", target: "main", remote: "origin" };
 const HUB_GROUP: IntegrationScheme = { ...HUB_TASK, trigger: "group" };
 
-interface FakePr { number: number; url: string; state: "OPEN" | "CLOSED" | "MERGED"; isDraft: boolean; head: string; base: string }
-interface FakeState { prs?: FakePr[]; authOk?: boolean; refuseDraft?: boolean; fail?: Record<string, string> }
+interface FakePr { number: number; url: string; state: "OPEN" | "CLOSED" | "MERGED"; isDraft: boolean; head: string; base: string; owner?: string }
+interface FakeState { prs?: FakePr[]; authOk?: boolean; refuseDraft?: boolean; fail?: Record<string, string>; hang?: Record<string, number> }
 interface GhCall { argv: string[]; stdin?: string }
 
 /** A commit on `ref` whose tree is its parent's with `files` written, made with plumbing (no checkout). */
@@ -85,8 +85,16 @@ async function world(scheme: IntegrationScheme, options: { goal?: string; state?
     expect(work.kind).toBe("task");
     h.store.db.prepare("UPDATE work_items SET body=? WHERE group_id='g' AND id='a'").run(JSON.stringify({ ...work, status: "done" }));
   };
+  const service = new WebControlService({ ...h.deps, resolveRepository: () => repo });
+  /** The owner's confirm of the group's current scheme (the proposal becomes confirmed; later scheme changes freeze at once). */
+  const confirm = async () => {
+    vi.stubEnv("ORCA_GH_BIN", FAKE_GH);
+    expect(await service.confirm(h.command("confirm", { ...(await h.confirmPayload()), integrationHash: record(h.store).schemeHash }))).toMatchObject({ result: { kind: "confirmed" } });
+  };
+  const setScheme = async (scheme: IntegrationScheme) =>
+    expect(await service.setGroupIntegration(h.command("set-group-integration", { integration: scheme }))).toMatchObject({ result: { kind: "group-integration-set" } });
   return {
-    ...h, bare, repo, deps, calls, fake, writeState, complete,
+    ...h, bare, repo, deps, calls, fake, writeState, complete, confirm, setScheme,
     land: (files: Record<string, string>, message = "land") => commitOn(repo, "refs/heads/orca/g", files, message),
     pass: (extra: Partial<IntegrationDeps> = {}) => integratePendingGroups(deps(extra)),
     remote: (branch: string): string | null => { try { return g(bare, ["rev-parse", "--verify", "--quiet", `refs/heads/${branch}`]); } catch { return null; } },
@@ -123,7 +131,7 @@ describe("github-pr, trigger task (integration spec §6.4)", { timeout: 60_000 }
       const calls = w.calls();
       expect(subs(calls)).toEqual(["auth status", "pr list", "pr create"]);
       expect(calls[0]!.argv).toEqual(["auth", "status", "--hostname", "github.com"]);
-      expect(calls[1]!.argv).toEqual(["pr", "list", "--repo", REPO, "--head", "orca/g", "--base", "main", "--state", "all", "--json", "url,number,state,isDraft"]);
+      expect(calls[1]!.argv).toEqual(["pr", "list", "--repo", REPO, "--head", "orca/g", "--base", "main", "--state", "all", "--json", "url,number,state,isDraft,headRepositoryOwner"]);
       expect(calls[2]!.argv).toEqual(["pr", "create", "--repo", REPO, "--base", "main", "--head", "orca/g", "--draft", "--title=ship", "--body-file", "-"]);
       expect(calls[2]!.stdin).toContain("orca/g");
       expect(w.record()).toMatchObject({ state: "idle", lastIntegrated: first, integratedCommit: first, pending: null,
@@ -343,5 +351,83 @@ describe("confirm's preflight (integration spec §3.3)", { timeout: 60_000 }, ()
       writeFileSync(join(ghDir, "state.json"), JSON.stringify({ authOk: true }));
       expect(await service.confirm(h.command("confirm", { ...(await h.confirmPayload()), integrationHash: seen }))).toMatchObject({ result: { kind: "confirmed" } });
     } finally { await h.dispose(); }
+  });
+});
+
+describe("fix round 1: PR records across scheme changes, gh timeouts, forks, blank titles", { timeout: 60_000 }, () => {
+  it("R1: a group integrated under push-branch and switched to github-pr opens its PR at the next pass, with nothing new landed", async () => {
+    const w = await world({ ...HUB_TASK, delivery: "push-branch" }); try {
+      await w.confirm();
+      const tip = w.land({ "a.txt": "a\n" });
+      expect(await w.pass()).toBe(true);
+      expect(w.record()).toMatchObject({ lastIntegrated: tip, pr: null });
+      await w.setScheme(HUB_TASK);
+      expect(w.record()).toMatchObject({ frozen: true, lastIntegrated: tip, pr: null });
+      const before = w.calls().length;
+      expect(await w.pass()).toBe(true);
+      expect(subs(w.calls().slice(before))).toEqual(["auth status", "pr list", "pr create"]);
+      expect(w.record()).toMatchObject({ state: "idle", lastIntegrated: tip, pr: { number: 1, ready: false } });
+      expect(await w.pass()).toBe(false);
+    } finally { await w.dispose(); }
+  });
+
+  it("R2: a target change forgets the recorded PR (the next pass lists for the new base); a trigger change keeps it", async () => {
+    const w = await world(HUB_TASK); try {
+      await w.confirm();
+      w.land({ "a.txt": "a\n" });
+      expect(await w.pass()).toBe(true);
+      const pr = w.record().pr!;
+      expect(pr).toMatchObject({ number: 1 });
+      await w.setScheme({ ...HUB_TASK, trigger: "group" });
+      expect(w.record().pr).toEqual(pr);
+      await w.setScheme({ ...HUB_TASK, target: "dev" });
+      expect(w.record().pr).toBeNull();
+      const before = w.calls().length;
+      expect(await w.pass()).toBe(true);
+      const after = w.calls().slice(before);
+      expect(subs(after)).toEqual(["auth status", "pr list", "pr create"]);
+      expect(after[1]!.argv).toContain("dev");
+      expect(w.record().pr).toMatchObject({ number: 2 });
+    } finally { await w.dispose(); }
+  });
+
+  it("M1: a gh timeout on one group does not skip another group on the same remote in that round", async () => {
+    vi.stubEnv("ORCA_INTEGRATION_TIMEOUT_MS", "3000");
+    // The remote is named like the host, so gh's own argv (auth status --hostname github.com) names it too.
+    const scheme: IntegrationScheme = { ...HUB_TASK, remote: "github.com" };
+    const w = await world(scheme, { state: { hang: { "auth status": 20_000 } } }); try {
+      g(w.repo, ["remote", "add", "github.com", GITHUB_URL]);
+      const body = groupBody(w.store);
+      w.store.db.prepare("INSERT INTO groups(id,revision,graph_version,body) VALUES ('h',?,?,?)")
+        .run(Number(body.revision ?? 1), Number(body.graphVersion ?? 1), JSON.stringify({ ...body, groupId: "h" }));
+      g(w.repo, ["update-ref", "refs/heads/orca/h", "HEAD"]);
+      w.land({ "a.txt": "a\n" });
+      const hTip = commitOn(w.repo, "refs/heads/orca/h", { "h.txt": "h\n" }, "land h");
+      expect(await w.pass()).toBe(false);
+      expect(w.record()).toMatchObject({ state: "idle", transient: 1 });
+      // h was tried in the same round: its branch was pushed and its own gh timed out too.
+      expect(w.remote("orca/h")).toBe(hTip);
+      const h = readGroupIntegration(JSON.parse(String(w.store.db.prepare("SELECT body FROM groups WHERE id='h'").get()!.body)))!;
+      expect(h).toMatchObject({ state: "idle", transient: 1 });
+    } finally { await w.dispose(); }
+  });
+
+  it("M2: an open PR from a fork's same-named branch is not the group's; the group's own PR is created", async () => {
+    const fork: FakePr = { number: 1, url: `https://${REPO}/pull/1`, state: "OPEN", isDraft: false, head: "orca/g", base: "main", owner: "someone-else" };
+    const w = await world(HUB_TASK, { state: { prs: [fork] } }); try {
+      w.land({ "a.txt": "a\n" });
+      expect(await w.pass()).toBe(true);
+      expect(subs(w.calls())).toEqual(["auth status", "pr list", "pr create"]);
+      expect(w.record()).toMatchObject({ state: "idle", pr: { number: 2, ready: false } });
+    } finally { await w.dispose(); }
+  });
+
+  it("M3: a goal whose first line is blank titles the PR orca/<g>", async () => {
+    const w = await world(HUB_TASK, { goal: "   \nthe real goal" }); try {
+      w.land({ "a.txt": "a\n" });
+      expect(await w.pass()).toBe(true);
+      const create = w.calls().find((call) => sub(call) === "pr create")!;
+      expect(create.argv.filter((arg) => arg.startsWith("--title"))).toEqual(["--title=orca/g"]);
+    } finally { await w.dispose(); }
   });
 });
