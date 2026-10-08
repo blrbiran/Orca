@@ -171,8 +171,9 @@ async function integrateGroup(deps: IntegrationDeps, groupId: string, integratio
     }
   }
   if (scheme.trigger === "group" && !groupComplete(deps.store, groupId)) return null;
-  // A write-ahead record of this scheme is always finished (§6.1 step 2): a `merge` published before a crash leaves the
-  // tip in the target, which is not "nothing landed" but an integration whose record was never settled (Task 5).
+  // A write-ahead record of this scheme always gets its re-entry (§6.1 step 2) -- settled when the target holds its
+  // `new`, recomputed on what the target holds otherwise: a `merge` published before a crash leaves the tip in the
+  // target, which is not "nothing landed" but an integration whose record was never settled (Task 5).
   if (reentry(integration) === null && (integration.lastIntegrated === null || (caughtUp && !readyOnly)) && await nothingLanded(repo, scheme, tip)) return null;
   try {
     if (readyOnly) return await finishWorkBranch(deps, repo, groupId, integration, scheme as Extract<Scheme, { delivery: "github-pr" }>, tip);

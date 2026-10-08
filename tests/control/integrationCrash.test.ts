@@ -176,6 +176,9 @@ describe("a crash after each outward action, then a restart (integration spec §
   it.each([
     ["local squash", { delivery: "local", trigger: "task", method: "squash", target: "main" }],
     ["push-target squash", { delivery: "push-target", trigger: "task", method: "squash", target: "main", remote: "origin" }],
+    // Final review M-T5: the same "contains" for the deliveries that push the work branch itself.
+    ["push-branch", { delivery: "push-branch", trigger: "task", target: "main", remote: "origin" }],
+    ["github-pr", { delivery: "github-pr", trigger: "task", target: "main", remote: "origin" }],
   ] as [string, IntegrationScheme][])("%s, crash after-publish, then someone commits on the target: the restart adds no second commit", async (_name, scheme) => {
     const w = await world(scheme); try {
       const tip = w.land(LANDING);
@@ -190,6 +193,42 @@ describe("a crash after each outward action, then a restart (integration spec §
       expect(updates(where.repo, where.ref)).toBe(before);
       expect(children.filter((child) => child.includes("push"))).toEqual([]);
       expect(w.record()).toMatchObject({ state: "idle", lastIntegrated: tip, integratedCommit: published, pending: null });
+    } finally { await w.dispose(); }
+  });
+
+  // Final review M-T5: a write-ahead record whose target holds neither its `new` nor the tip is recomputed on what the
+  // target holds now and settled in that one pass.
+  it.each([
+    ["local merge", { delivery: "local", trigger: "task", method: "merge", target: "main" }],
+    ["push-target merge", { delivery: "push-target", trigger: "task", method: "merge", target: "main", remote: "origin" }],
+  ] as [string, IntegrationScheme][])("%s, crash after-pending, then someone commits on the target: one pass integrates on top of it", async (_name, scheme) => {
+    const w = await world(scheme); try {
+      const tip = w.land(LANDING);
+      await expect(w.pass([], { crash: crashAt("after-pending") })).rejects.toThrow("crash after-pending");
+      const stale = w.record().pending!.new;
+      const where = publishedRef(w, scheme);
+      const person = commitOn(where.repo, where.ref, { "person.txt": "p\n" }, "person");
+      expect(await w.pass([])).toBe(true);
+      const integrated = g(where.repo, ["rev-parse", where.ref]);
+      expect(integrated).not.toBe(stale);
+      expect(g(where.repo, ["rev-list", "--parents", "-n", "1", integrated]).split(" ").slice(1)).toEqual([person, tip]);
+      expect(w.record()).toMatchObject({ state: "idle", lastIntegrated: tip, integratedCommit: integrated, pending: null });
+    } finally { await w.dispose(); }
+  });
+
+  it("a person-paused group with a write-ahead record waits: nothing published, the record kept", async () => {
+    const scheme: IntegrationScheme = { delivery: "push-target", trigger: "task", method: "merge", target: "main", remote: "origin" };
+    const w = await world(scheme); try {
+      w.land(LANDING);
+      await expect(w.pass([], { crash: crashAt("after-pending") })).rejects.toThrow("crash after-pending");
+      const pending = w.record().pending;
+      const where = publishedRef(w, scheme), before = g(where.repo, ["rev-parse", where.ref]);
+      w.store.db.prepare("INSERT INTO stop_intents VALUES ('g','pause',1,'{}')").run();
+      const children: string[][] = [];
+      expect(await w.pass(children)).toBe(false);
+      expect(children).toEqual([]);
+      expect(g(where.repo, ["rev-parse", where.ref])).toBe(before);
+      expect(w.record()).toMatchObject({ state: "idle", pending, lastIntegrated: null });
     } finally { await w.dispose(); }
   });
 });

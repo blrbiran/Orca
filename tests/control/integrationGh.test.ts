@@ -52,14 +52,15 @@ function commitOn(repo: string, ref: string, files: Record<string, string>, mess
 }
 
 /** The fixture's group "g" with a frozen `github-pr` record; its repository's `origin` names GitHub, its transport a local bare. */
-async function world(scheme: IntegrationScheme, options: { goal?: string; state?: FakeState } = {}) {
+async function world(scheme: IntegrationScheme, options: { goal?: string; state?: FakeState; url?: string } = {}) {
+  const url = options.url ?? GITHUB_URL;
   const h = await webFixture();
   const bare = join(h.root, "remote.git"), repo = join(h.root, "target"), ghDir = join(h.root, "gh");
   g(h.root, ["init", "-q", "--bare", "-b", "main", bare]);
   g(h.root, ["init", "-q", "-b", "main", repo]);
   g(repo, ["commit", "-q", "--allow-empty", "-m", "base"]);
-  g(repo, ["remote", "add", "origin", GITHUB_URL]);
-  g(repo, ["config", `url.${bare}.insteadOf`, GITHUB_URL]);
+  g(repo, ["remote", "add", "origin", url]);
+  g(repo, ["config", `url.${bare}.insteadOf`, url]);
   g(repo, ["push", "-q", "origin", "main"]);
   g(repo, ["fetch", "-q", "origin"]);
   g(repo, ["update-ref", "refs/heads/orca/g", "HEAD"]);
@@ -448,6 +449,17 @@ describe("fix round 1: PR records across scheme changes, gh timeouts, forks, bla
       w.land({ "a.txt": "a\n" });
       expect(await w.pass()).toBe(true);
       expect(subs(w.calls())).toEqual(["auth status", "pr list"]);
+      expect(w.record()).toMatchObject({ state: "idle", pr: { number: 1, ready: false } });
+    } finally { await w.dispose(); }
+  });
+
+  it("final review M-T5: a remote that spells the owner in capitals finds the PR gh answers in lower case", async () => {
+    const own: FakePr = { number: 1, url: "https://github.com/O/r/pull/1", state: "OPEN", isDraft: true, head: "orca/g", base: "main", owner: "o" };
+    const w = await world(HUB_TASK, { url: "https://github.com/O/r.git", state: { prs: [own] } }); try {
+      w.land({ "a.txt": "a\n" });
+      expect(await w.pass()).toBe(true);
+      expect(subs(w.calls())).toEqual(["auth status", "pr list"]);
+      expect(w.calls()[1]!.argv).toContain("github.com/O/r");
       expect(w.record()).toMatchObject({ state: "idle", pr: { number: 1, ready: false } });
     } finally { await w.dispose(); }
   });
