@@ -722,6 +722,23 @@ export const en = {
     mayNotHaveCommitted: "the panel may not have committed this command",
     noOutcome: "The panel answered without a command outcome.",
   },
+  // Spec 2026-10-08 §2.2(b): a refused plan's items, one line each (web/src/refusalExplain.ts).
+  refusal: {
+    planRejected: "The plan was not imported. Fix each problem below in the plan file, then import it again.",
+    planItem: {
+      "missing-target-version": "Task {{task}} has no targetVersion. Add a positive integer, usually 1.",
+      "target-repo-mismatch": "The plan's targetRepo is not this repository.",
+      "missing-goal": "The plan has no goal.",
+      "missing-success-conditions": "The plan has no successConditions (at least one).",
+      "duplicate-success-condition": "Two success conditions are identical.",
+      "duplicate-dependency": "Task {{task}} lists a dependency twice.",
+      "dangling-dependency": "Task {{task}} depends on a task that is not in the plan.",
+      "contract-json": "Task {{task}}'s contract file is not JSON.",
+      "contract-shape": "Task {{task}}'s contract file does not match the contract format.",
+      "contract-canonical": "Task {{task}}'s contract file cannot be canonicalised.",
+      malformed: "{{path}}: {{msg}}",
+    },
+  },
   memory: {
     title: "Memory",
     notOpened: "Memory is read when this section is opened.",

@@ -625,6 +625,22 @@ export const zh: Translation<typeof en> = {
     mayNotHaveCommitted: "面板可能没有提交这条命令",
     noOutcome: "面板的回答里没有命令结果。",
   },
+  refusal: {
+    planRejected: "计划没有导入。请在计划文件里改掉下面每一个问题，然后重新导入。",
+    planItem: {
+      "missing-target-version": "任务 {{task}} 没有 targetVersion。请填一个正整数，通常是 1。",
+      "target-repo-mismatch": "计划的 targetRepo 不是这个仓库。",
+      "missing-goal": "计划没有 goal。",
+      "missing-success-conditions": "计划没有 successConditions（至少要一条）。",
+      "duplicate-success-condition": "有两条成功条件完全相同。",
+      "duplicate-dependency": "任务 {{task}} 把同一个依赖列了两次。",
+      "dangling-dependency": "任务 {{task}} 依赖了一个计划里没有的任务。",
+      "contract-json": "任务 {{task}} 的契约文件不是 JSON。",
+      "contract-shape": "任务 {{task}} 的契约文件不符合契约格式。",
+      "contract-canonical": "任务 {{task}} 的契约文件无法规范化。",
+      malformed: "{{path}}：{{msg}}",
+    },
+  },
   memory: {
     title: "记忆",
     notOpened: "打开这个分区时才读取记忆。",
