@@ -453,7 +453,8 @@ function settle(deps: IntegrationDeps, groupId: string, hash: string, outcome: O
           conflict: null, resolution: null, ...(outcome.pr === undefined ? {} : { pr: outcome.pr }) };
         break;
       case "blocked":
-        next = { ...current, state: "blocked", reason: outcome.reason, pending: null, retryAfter: null, transient: 0 };
+        // A finished resolution's record goes with it (fix round 1, F1): it must not outlive a retry or the next conflict.
+        next = { ...current, state: "blocked", reason: outcome.reason, pending: null, retryAfter: null, transient: 0, resolution: null };
         break;
       case "conflict": {
         // spec §7: recorded with its materialised copy, and nothing is dispatched until an owner approves.

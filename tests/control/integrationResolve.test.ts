@@ -314,6 +314,20 @@ describe("an integration conflict, materialised and approved (integration spec Â
     } finally { await w.dispose(); }
   });
 
+  it("a resolution run that ends while the driver stops is left resolving, for after the restart", async () => {
+    const w = await world(LOCAL_MERGE); try {
+      await conflicted(w);
+      w.raise(10_000_000);
+      expect(code(await w.resolve())).toBe("applied");
+      let stopping = false;
+      w.setRunTask(async () => { stopping = true; throw new Error("killed by the shutdown"); });
+      expect(await w.pass({ stopped: () => stopping })).toBe(true);
+      await w.reconciling.get("integrate-g-1");
+      expect(w.record()).toMatchObject({ state: "resolving", reason: null, conflict: { attempt: 1 }, resolution: { reconcileRunId: "integrate-g-1" } });
+      expect(existsSync(w.copyOf(2))).toBe(false);
+    } finally { await w.dispose(); }
+  });
+
   it("a resolution that ended other than succeeded books its spend run-less and goes back to conflict", async () => {
     const w = await world(LOCAL_MERGE); try {
       await conflicted(w);
@@ -390,7 +404,7 @@ describe("an integration conflict, materialised and approved (integration spec Â
       await w.loopState({ status: "succeeded", budgetSnapshot: { tokenBudgetRemaining: 0 } });
       g(w.repo, ["update-ref", "-d", "refs/heads/main"]);
       expect(await w.pass()).toBe(true);
-      expect(w.record()).toMatchObject({ state: "blocked", reason: "integration-target-missing" });
+      expect(w.record()).toMatchObject({ state: "blocked", reason: "integration-target-missing", resolution: null });
     } finally { await w.dispose(); }
   });
 
@@ -465,6 +479,7 @@ describe.skipIf(!realBinary)("an integration conflict resolved by a real ccloop 
       // A few more rounds: nothing is dispatched for the conflict without an owner's approval.
       await new Promise((resolve) => setTimeout(resolve, 1_000));
       expect(scriptedKeys(w).filter((key) => key.startsWith("integrate-"))).toEqual([]);
+      expect(integrationOf(runtime)).toMatchObject({ state: "conflict", resolution: null });
       expect(code(await runtime.service.resolveIntegrationConflict(raw(runtime, "resolve-1", "resolve-integration-conflict", {})))).toBe("applied");
       await until(() => integrationOf(runtime).state === "conflict" && integrationOf(runtime).conflict?.attempt === 2, 300_000, "the first resolution to be refused");
       expect(integrationOf(runtime)).toMatchObject({ reason: "integration-markers-remaining:shared.txt", resolution: null, conflict: { key: "integrate-g-2", base: main, tip } });

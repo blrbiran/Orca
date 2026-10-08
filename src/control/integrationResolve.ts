@@ -248,7 +248,8 @@ export async function advanceIntegrationResolution(deps: IntegrationDeps, groupI
     },
   }).then(
     () => undefined,
-    async (error: unknown) => { await failResolution(resolving, groupId, key, `integration-resolution-spawn:${describeError(error)}`); },
+    // As stepR (fix round 1, F2): a run that ends while the driver stops is left resolving, collected or re-spawned after restart.
+    async (error: unknown) => { if (!deps.stopped()) await failResolution(resolving, groupId, key, `integration-resolution-spawn:${describeError(error)}`); },
   ).catch((error: unknown) => { process.stderr.write(`orca-driver: integration ${groupId}: ${describeError(error)}\n`); })
     .finally(() => { resolving.resolution.reconciling.delete(key); });
   resolving.resolution.reconciling.set(key, running);
