@@ -25,6 +25,14 @@ export function runReasonText(run: RunViewV1): string | null {
   return run.state === "blocked" ? run.blockedReason ?? null : null;
 }
 
+/**
+ * Spec §4.2(2): retry-task is refused on a clarifying group (group-state-invalid) and under any stop intent
+ * (stop-mode-conflict), so the panel offers it only outside both (no button the server always refuses).
+ */
+export function retryTaskOpen(view: GroupViewV1): boolean {
+  return view.stop === null && view.summary.state !== "clarifying";
+}
+
 /** Spec §4.2(2): a task's run number is the count of its lineage runs that reached the provider. */
 export function taskRunNumber(view: GroupViewV1, taskId: string): number {
   const lineage = new Set(view.workItems.find((item) => item.taskId === taskId)?.lineageRunIds ?? []);

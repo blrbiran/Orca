@@ -16,7 +16,7 @@ import { CUSTOM_LABEL_PREFIX, WEB_SYSTEM_LABELS } from "./controlTypes.js";
 import type { EvidenceManifestV1, GroupViewV1, WorkItemProgressV1, WorkItemViewV1 } from "./controlTypes.js";
 import { LoopPlanCard } from "./LoopPlanCard.js";
 import { RunReason } from "./RunReason.js";
-import { isTerminalFailure, taskRunNumber } from "./runFacts.js";
+import { isTerminalFailure, retryTaskOpen, taskRunNumber } from "./runFacts.js";
 import i18n, { enumText } from "./i18n.js";
 
 export const labelsDraftKey = (groupId: string, taskId: string): string => `labels:${groupId}:${taskId}`;
@@ -186,7 +186,7 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
           {runs.map((run) => (
             <li key={run.runId}>
               {run.runId} · {enumText("runPhase", run.phase)} · {enumText("runState", run.state)}<RunReason run={run} /> <EvidenceList runId={run.runId} />
-              {isTerminalFailure(run) && (
+              {isTerminalFailure(run) && retryTaskOpen(view) && (
                 <button type="button" onClick={() => onCommand({ verb: "retry-task", groupId, expectedRevision: view.summary.commandRevision, payload: { taskId: item.taskId } })}>
                   {t("control.group.retryTask", { taskId: item.taskId })}
                 </button>

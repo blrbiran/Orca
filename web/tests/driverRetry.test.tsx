@@ -91,3 +91,34 @@ describe("retrying a task whose run ccloop ended failed (issue fixes spec §4.2(
     expect(onCommand).toHaveBeenCalledWith({ verb: "retry-task", groupId: "g", expectedRevision: 6, payload: { taskId: "a" } });
   });
 });
+
+// D8 review fix round 1: retry-task is refused under a stop intent (stop-mode-conflict) and on a clarifying group
+// (group-state-invalid), and recovery-retry is refused on a terminal failure (run-terminal-failed) -- so in those states a
+// terminally failed run shows its reason and no button at all, never a fallback to Retry run.
+const STOPPED: GroupViewV1["stop"] = { mode: "handoff", state: "handoff-complete", frozenRunIds: [], acceptedAt: "2026-10-08T00:00:00.000Z", deadlineAt: null };
+describe("no Retry task where the server refuses it (D8 review fix round 1)", () => {
+  it("offers no button for a terminally failed run while the group has a stop intent, and still explains the reason", () => {
+    render(<ControlGroupView view={{ ...view([run(FAILED)]), stop: STOPPED }} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
+    expect(screen.getByText(/did not answer in the required JSON format/)).toBeTruthy();
+    expect(screen.queryAllByRole("button", { name: /^Retry (run|task)/ })).toHaveLength(0);
+  });
+
+  it("offers no button for a terminally failed run on a clarifying group", () => {
+    const base = view([run(FAILED)]);
+    render(<ControlGroupView view={{ ...base, summary: { ...base.summary, state: "clarifying" } }} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
+    expect(screen.queryAllByRole("button", { name: /^Retry (run|task)/ })).toHaveLength(0);
+  });
+
+  it("offers no Retry run for a terminally failed run that belongs to no task", () => {
+    render(<ControlGroupView view={view([run({ ...FAILED, taskId: null, estimateId: "est-1" })])} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
+    expect(screen.queryAllByRole("button", { name: /^Retry (run|task)/ })).toHaveLength(0);
+  });
+
+  it("offers no Retry task in the task detail while the group has a stop intent", () => {
+    const item: WorkItemViewV1 = { taskId: "a", status: "active", dependencyTaskIds: [], targetVersion: 1, configHash: "d".repeat(64), originalContractHash: "e".repeat(64),
+      derivedContractHash: "f".repeat(64), currentRunId: "run-2", pendingRunId: null, lineageRunIds: ["run-2"] };
+    render(<TaskDetail view={{ ...view([run({ runId: "run-2", ...FAILED })]), workItems: [item], stop: STOPPED }} item={item} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
+    expect(screen.getByText("Run 1 of this task")).toBeTruthy();
+    expect(screen.queryAllByRole("button", { name: /^Retry (run|task)/ })).toHaveLength(0);
+  });
+});
