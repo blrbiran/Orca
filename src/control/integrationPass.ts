@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 import { ControlError } from "./errors.js";
 import { groupRepoId, groupStopped, write } from "./executionDriver.js";
 import {
-  BranchMissing, ChildTimeout, RemoteFailure, fetchInto, gitChild, gitOk, isAncestor, oneLine, pushPorcelain, refTip, remoteHas, revParse,
+  BranchMissing, RemoteFailure, fetchInto, gitChild, gitOk, isAncestor, oneLine, pushPorcelain, refTip, remoteHas, revParse,
 } from "./integrationGit.js";
 import { readGroupIntegration, type GroupIntegration, type IntegrationScheme } from "./integrationScheme.js";
 import { readGroup, saveGroup } from "./queries.js";
@@ -118,7 +118,7 @@ async function integrateGroup(deps: IntegrationDeps, groupId: string, integratio
     if (scheme.delivery === "push-target") return await integratePushTarget(deps, repo, groupId, integration, scheme, tip);
     return await integrateWorkBranch(deps, repo, groupId, integration, scheme, tip);
   } catch (error) {
-    if (error instanceof ChildTimeout) return { kind: "transient", message: error.message };
+    // A child that timed out (ChildTimeout) is left to the pass's own handler, which backs it off like any transient.
     if (error instanceof RemoteFailure) return error.transient ? { kind: "transient", message: error.message } : { kind: "blocked", reason: "integration-remote-missing" };
     if (error instanceof BranchMissing) return { kind: "blocked", reason: "integration-target-missing" };
     throw error;

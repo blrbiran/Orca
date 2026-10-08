@@ -167,8 +167,8 @@ export class BranchMissing extends Error { constructor(branch: string) { super(`
 export async function fetchInto(repo: string, remote: string, branch: string, ref: string): Promise<string> {
   const answer = await gitChild(repo, ["fetch", "--quiet", "--no-tags", "--no-write-fetch-head", remote, `+refs/heads/${branch}:${ref}`]);
   if (answer.code !== 0) {
-    if (classifyNetwork(answer.stderr) !== null) throw new RemoteFailure(true, oneLine(answer.stderr));
-    // The remote answering at all tells a missing branch from a missing remote (as confirm's preflight does).
+    // The remote answering at all tells a missing branch from a missing remote (as confirm's preflight does); one that
+    // does not answer is transient when that reads like the network.
     const listed = await gitChild(repo, ["ls-remote", "--quiet", remote]);
     if (listed.code === 0) throw new BranchMissing(branch);
     throw new RemoteFailure(classifyNetwork(listed.stderr) !== null, oneLine(answer.stderr));
