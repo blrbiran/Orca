@@ -59,7 +59,7 @@ const stopBannerHow = {
 const stopBannerExit = {
   paused: "Way out: press Resume dispatch under Dispatch.",
   "handoff-pending": "Stopping: the frozen runs are still settling. Nothing to press yet; the way out appears here when they finish.",
-  "handoff-partial": "A frozen run could not hand off. The group stays stopped; press Retry recovery under Dispatch when it is offered.",
+  "handoff-partial": "A frozen run could not hand off, so the group cannot resume from this stop. Way out: press Archive group under Dispatch.",
   "handoff-unresolved": "A frozen run's outcome is not known yet. The group stays stopped; press Retry recovery under Dispatch when it is offered.",
   "handoff-complete": "Ready to resume: use the resume button under Dispatch.",
 } as const satisfies Record<NonNullable<GroupSummaryV1["stopState"]>, string>;
@@ -853,8 +853,8 @@ export const enErrors: Record<string, string> = {
   "agents-table-invalid": "The agents table is not valid: {{detail}}",
   "archive-call-in-flight": "A model call for this group is still running ({{detail}}). Archive it once the call has finished.",
   "archive-integration-resolving": "An agent is resolving this group's integration conflict. Archive it once that has finished.",
-  "archive-run-active": "This group still has an active run. Wait for it to finish, or stop it with Handoff stop, then archive.",
-  "archive-stop-pending": "A stop is still settling ({{detail}}). Archive the group once its handoff has finished, completely or partially. If it is unresolved, retry recovery first.",
+  "archive-run-active": "This group still has an active run. Wait for it to finish, or stop it with Handoff stop, then archive. If the group is paused, press Resume dispatch first: Handoff stop is not offered under a pause.",
+  "archive-stop-pending": "A stop is still settling. Archive the group once its handoff has finished, completely or partially. If it is unresolved, retry recovery first.",
   "artifact-id-conflict": "The artifact id conflicts with an existing one.",
   "artifact-not-found": "The artifact was not found.",
   "budget-overflow": "A budget value is too large: {{detail}}",

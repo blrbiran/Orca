@@ -87,6 +87,27 @@ describe("the stop banner (issue-fixes spec §3.2 (4))", () => {
     expect(screen.getByRole("button", { name: "Start" })).toBeTruthy();
   });
 
+  // Final review M2: a handoff-partial stop has no recovery blocker, so Retry recovery never appears there; archive is
+  // accepted at handoff-partial (archiveGroup.ts), so Archive group is the way out the banner names, and it is offered.
+  it("names Archive group as the way out of handoff-partial, offers it, and no longer points at Retry recovery", async () => {
+    mount(view("running", shutdownStop("handoff-partial")));
+    const text = screen.getByTestId("stop-banner").textContent ?? "";
+    expect(text).toContain("Way out: press Archive group under Dispatch.");
+    expect(text).not.toContain("Retry recovery");
+    expect(screen.getByRole("button", { name: "Archive group" })).toBeTruthy();
+    cleanup();
+    await i18n.changeLanguage("zh");
+    try {
+      mount(view("running", shutdownStop("handoff-partial")));
+      const zh = screen.getByTestId("stop-banner").textContent ?? "";
+      expect(zh).toContain("出路：点「派发」下的「归档这个组」。");
+      expect(zh).not.toContain("重试恢复");
+      expect(screen.getByRole("button", { name: "归档这个组" })).toBeTruthy();
+    } finally {
+      await i18n.changeLanguage("en");
+    }
+  });
+
   it("shows the banner in Chinese", async () => {
     await i18n.changeLanguage("zh");
     mount(view("ready", shutdownStop("handoff-complete")));
