@@ -17,7 +17,7 @@ import { claimableContinuations, continuationAlreadyClaimed, continuationWakeBod
 import { singleCallClaimRowOf } from "./singleCall.js";
 import { claimRequirementCall } from "./requirementCalls.js";
 import { hasRequirementBlock, readRequirementGroup } from "./requirementRecords.js";
-import { isGroupArchived } from "./archivedMark.js";
+import { archivedMarkOf, isGroupArchived } from "./archivedMark.js";
 import { claimCapBlocking, gateClaim } from "./spendCaps.js";
 import { noteRunWrite, recordActivity } from "./activity.js";
 
@@ -302,10 +302,11 @@ function deliverContinuationWake(
 
 interface ClaimableTask { workItemId: string }
 
-export function nextClaimableTask(store: ControlStore, groupId: string): ClaimableTask | null {
+/** groupBody, when supplied, is this group's raw body from the caller's current synchronous read. */
+export function nextClaimableTask(store: ControlStore, groupId: string, groupBody?: unknown): ClaimableTask | null {
   // Issue-fixes spec §6.3: nothing in an archived group is claimable; replenishStartWakes arms a wake only for a group
   // this answers a task for.
-  if (isGroupArchived(store, groupId)) return null;
+  if (groupBody === undefined ? isGroupArchived(store, groupId) : archivedMarkOf(groupBody) !== null) return null;
   const rows = store.db.prepare("SELECT id,body FROM work_items WHERE group_id=? ORDER BY id").all(groupId);
   for (const row of rows) {
     const work = JSON.parse(String(row.body)) as { workItemId: string; kind: string; status: string; dependsOn?: string[] };

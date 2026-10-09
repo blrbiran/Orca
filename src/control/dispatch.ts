@@ -1,4 +1,6 @@
 import type { ControlStore } from "./store.js";
+import type { StatementSync } from "node:sqlite";
+import { archivedMarkOf } from "./archivedMark.js";
 import type { ExecutionPort, ExecutionStatus, StartEnvelope } from "./executionPort.js";
 import type { RunView } from "./types.js";
 import { assertCapabilities, readRun, saveRun } from "./budget.js";
@@ -92,6 +94,8 @@ function groupClaimBlocked(store:ControlStore,groupId:string):boolean {
  return store.db.prepare("SELECT id FROM recovery_blockers WHERE group_id=? AND scope='group'").get(groupId)!==undefined;
 }
 
+const wakeGroupStatements = new WeakMap<ControlStore, StatementSync>();
+
 /**
  * Drain `scheduler_wakes` oldest-first through kind handlers. A wake is acknowledged
  * exactly once and only by a delivery that succeeded: a global blocker, a group
@@ -100,12 +104,30 @@ function groupClaimBlocked(store:ControlStore,groupId:string):boolean {
 export async function deliverSchedulerWakes(store:ControlStore,handlers:WakeHandlers):Promise<{delivered:string[];deferred:string[]}> {
  const pending=store.db.prepare("SELECT id,group_id,kind,body FROM scheduler_wakes WHERE delivered=0 ORDER BY rowid").all();
  const delivered:string[]=[],deferred:string[]=[];
+ // Business state lives only until the next handler await, and never crosses pump calls.
+ const archiveStates=new Map<string,boolean|"unknown">();
  for (const row of pending) {
   const id=String(row.id),groupId=String(row.group_id),kind=String(row.kind) as SchedulerWakeKind;
   const handler=handlers[kind];
   if(store.dispatchBlocked||handler===undefined||groupClaimBlocked(store,groupId)){deferred.push(id);continue;}
-  let done=false;
-  try{done=await handler({id,groupId,kind,body:JSON.parse(String(row.body))});}catch{done=false;}
+  if(kind==="start"||kind==="no-start"||kind==="resume") {
+   if(!archiveStates.has(groupId)) {
+    try {
+     let statement=wakeGroupStatements.get(store);
+     if(statement===undefined){statement=store.db.prepare("SELECT body FROM groups WHERE id=?");wakeGroupStatements.set(store,statement);}
+     const group=statement.get(groupId);
+     archiveStates.set(groupId,group!==undefined&&archivedMarkOf(JSON.parse(String(group.body)))!==null);
+    } catch {archiveStates.set(groupId,"unknown");}
+   }
+   // Malformed rows stay visible to the original strict authority and its refusal path.
+   if(archiveStates.get(groupId)===true){deferred.push(id);continue;}
+  }
+  let done=false,enteredHandler=false;
+  try {
+   const body=JSON.parse(String(row.body));
+   enteredHandler=true;
+   done=await handler({id,groupId,kind,body});
+  } catch {done=false;} finally {if(enteredHandler)archiveStates.clear();}
   if(!done){deferred.push(id);continue;}
   store.db.prepare("UPDATE scheduler_wakes SET delivered=1 WHERE id=? AND delivered=0").run(id);
   delivered.push(id);

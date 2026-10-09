@@ -20,6 +20,10 @@ export function installControlReadCounters(store: ControlStore) {
   const restores: (() => void)[] = [];
   const collectBodies = () => {
     bodies = new Map();
+    for (const row of prepare.call(db, "SELECT id,body FROM groups").all()) {
+      const body = String(row.body), key = `groups:${row.id}`, prior = bodies.get(body);
+      bodies.set(body, prior === undefined ? key : `${prior}|${key}`);
+    }
     for (const table of ["work_items", "runs"] as const) {
       for (const row of prepare.call(db, `SELECT id,group_id,body FROM ${table}`).all()) {
         const body = String(row.body), key = `${table}:${row.group_id}:${row.id}`;

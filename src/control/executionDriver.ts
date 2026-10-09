@@ -805,7 +805,7 @@ export function replenishStartWakes(deps: Pick<ExecutionDriverDeps, "store" | "a
         if (store.db.prepare("SELECT id FROM recovery_blockers WHERE group_id=? AND scope='group'").get(groupId)) continue;
         if (store.db.prepare("SELECT id FROM scheduler_wakes WHERE group_id=? AND kind IN ('start','no-start','resume') AND delivered=0").get(groupId)) continue;
         const last = store.db.prepare("SELECT body FROM scheduler_wakes WHERE group_id=? AND kind='start' ORDER BY rowid DESC LIMIT 1").get(groupId);
-        if (!last || nextClaimableTask(store, groupId) === null) continue;
+        if (!last || nextClaimableTask(store, groupId, group) === null) continue;
         const body = JSON.parse(String(last.body)) as { startRevision: number; executionSnapshotHash?: string };
         const ordinal = Number(store.db.prepare("SELECT COUNT(*) AS n FROM scheduler_wakes WHERE group_id=? AND id LIKE ?").get(groupId, `drive:${groupId}:%`)!.n) + 1;
         const wakeId = `drive:${groupId}:${ordinal}`;
