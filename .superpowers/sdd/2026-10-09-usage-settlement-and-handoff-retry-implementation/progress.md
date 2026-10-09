@@ -109,3 +109,39 @@ First fullweb run had enum/fixture/oldisTerminalFailure semantics/unchanged reta
 Task3: complete (commitsc2e81f2..f9849b2, freshtaskreview clean). Spec compliant/qualityApproved,0Critical/0Important. Reviewer verified actualrolechain, consentreset, two-bucket amounts, strictpayload/recovery, held/released currenteligibility, preservedfailurehistory, manualContinueexclusion and truecompleteemptyresume;12mutants/729fullweb/84committed evidence. MinorVite>500kB warning retained. No serverproof completion inferred fromUI tests.
 
 Task4 starts with the named directactive-continuation coverage, then isolated integratedgates and freshwholeD9/M3review. Siblinghandoff updates and finalexecutivesummary remain controller-owned AFTER performance implementation and allfinalreviews, perhumanrequest. This does not pauseD9/M3gate/close.
+
+## Task 4 named schema migration correction — controller, 2026-10-09
+
+Control wrapper on e7df5df found four genuine assertion failures (not timeout): finalschema10 vs historical9 expectations. Ruling: migrate only finalversion9→10/titlecurrent9→10 in exact tests: shutdownHealing.test.ts `a stranded v8 store migrates, heals, renders a run with startedAt null, and then accepts start`; requirementRecords.test.ts `migrates a version-5 store by adding the two tables, leaving every existing row byte-identical`; commandClient.test.ts `a fresh store has commands.client and is at the current version (9)` and `a version-6 store upgrades, and a row written before keeps client null`. Preserve every other business assertion, oldpublishedcomments and appenddatedD9correction. Cost if wrong: migrationproof could be weakened; exactdiff/finalreview must verify oldrows, nullclient/times, healing/start retained. New schema10 requires allolderversions target10; not reopening any oldissuefix task.
+
+Ruling: The originally failing verify:control wrapper needs samefinaltreeRC0 after those corrections; this is justified failure-fix verification, not needless broadrepeat. Otheralreadygreen gates need no repeat withoutnewcode. Fullroot npmtest runs once on finalcorrectedtree. Originalfailurelog remains and cannot be relabelledRC0. Cost if wrong: additional suite runtime; finalgate result is reviewable and unequivocal.
+
+LedgerCLI RC2 diagnostics seven missingtaskId/runId tier0downgrades are recorded as legacydata, package.verify allows2; baselineblob comparison requested, no repair of .decisions. Directcontinuingcoverage commit e7df5df,19/19green plus exactarm cloneRED/restored19green/main+clone diff+cached0, no productfix.
+
+## Optional real-CLI verification boundary — controller, 2026-10-09
+
+Ruling: Use actual local syncskill built /Users/biran/code/skills/syncskill/dist/index.js and ccmem /Users/biran/code/skills/ccmem/bin/ccmem only through threeexisting isolatedfixture tests (driverSkillsReal, skills/syncskillReal, memory/ccmemReal). Their operations use own HOME/SYNCSKILL_DIR/CCMEM_DATA_ROOT, localprofile/inject/import/export, no model/daemon invocation; runner drops realCCMEM_CONFIG_PATH/APIkeys. Cost if wrong: an unexpected localCLI sideeffect would violate isolation, so stop/report rather than expand scope; never claim actualuserHOME process attribution from the outerisolatedHOME guard.
+
+Finalformalcontrol oncc50570 was alreadyinflight withoutREAL_BIN vars; don't repeat it solely to removeconditionalskip. Its真实RC/skips remain, subsequent named/fullroot tests with percommandREAL_BIN vars prove actualoptionalCLI behavior; defaultccloop3cases executed byspecificpin gate. No liveenvfile or installedCLI product change.
+
+## Formal-control timeout adjudication — controller, 2026-10-09
+
+Finaloriginalwrapper oncc50570 RC1:1704pass/1timeout/4conditional skip. Schema migrations allgreen; unchangedrequirementOverview `reaches structure status failed and still gives an overview` hit5005ms/5000ms, noassertionfailure. Name notknown-load list, notregistered/exempted. Unmodifiedwholefile maxWorkers1 passed22/22 in10.00s at19:26load8.90/8.78/7.33, not low-loadproof. Systematic-debugging skill applied: rawerror/source+change review, unchangedfixture singlefile diagnosis; no timeout/code edit based on guesses.
+
+Ruling: Completefinalroot with ORCA_CONTROL_VERIFY=1, bothREAL_BIN vars andmaxWorkers2, retaining everyformalcontrol criterion while limiting schedulingparallelism. Originalwrapper onlyaddsformalflag/selectscontrol/fixes4workers; fullroot contains those samecontrolfiles. Useactualresult for equivalentformalcoverage, not claim original4workerwrapperRC0. Iffullroot still fails investigateprecisely; no blanketflakeexemption. Cost if wrong: high-concurrency wrapper's stability remains unproven; originalfailure and differential evidence remain explicit for finalhumanreview. Pin's3defaultcases and actualoptionalCLI executions reportedseparately.
+
+## Formal-flag ruling refinement — controller, 2026-10-09
+
+Fullroot had started19:28 before the priorformalflagmessage arrived, withmaxWorkers2/bothREAL_BIN but noORCA_CONTROL_VERIFY. Read-onlyexactrg acrosssrc/tests/scripts found onlyccloopProtocol.integration:25–26 consumer: flagonlythrows ifbinary/tablemissing; actualconfigured variable/criterioneligibility depend onbinary&&table directly. Bothinheritedvars valid. Fixedcloneflagconsumersearch requested too.
+
+Ruling: Preserveinflightfullroot; useactualthreeccloopProtocolcriteriaexecution to prove identicalformalbusinesscoverage, without falsely statingflagset orwrapperRC0. Noabort/restart/secondfullrun solelyforsemanticallyinactiveflag. This refinespreviousruling on verifiedconsumersemantics. Cost if wrong: missingformal-only assertions could be hidden; exactconsumersearch andactualcasecounts are required beforecompleteclaim. Original4workerwrappertimeout remains and isnotdeclaredknownflake.
+
+## Task 4 delivered; whole branch review in flight — controller, 2026-10-09
+
+Verifier DONE_WITH_CONCERNS, coveragee7df5df/migrationcc50570/reports ea7ce0d+3a433c2. Fullreport task-4-verification-report.md and compactproofjson persist actualcounts/environment/restore. Task4scopequality and wholeD9/M3quality assigned together to freshmostcapable final_usage_retry_review on c29676d..3a433c2 (separateTask4diff ace2209..3a433c2). Nofinalreviewpassclaim yet.
+
+FullrootRC0 atcc50570:368files3462tests,3458pass/0fail/4skip (defaultccloop3 verified bypin3/3, unapprovedreallaunchd1 notrun). All153controlfiles1709cases included,1706pass/3defaultskip; actualprotocol3 andrealSyncskilldriver/CLI/ccmem3 passed. Scheduler202passed/pin3/15panelsteps allRC0; scopedleak outer0,inner0,58cases/0entries. Web729samecode reused. Formal4workerwrapperRC1 unregisteredoverview5s timeout persists; lowconcurrencyfullroot exactcase730.233ms, notlabelledknownflake. Ledger2 isallowed historical7downgrades with baseline11172bytehashmatch. Noactualuserservice/data/model invocation.
+
+Durableevidence at evidence/2026-10-09-gates-and-mutations.tar.gz +manifest.json:310selectedlog/RC/proof/scriptfiles,457030archivebytes,SHA256 d7dcbcf5293207afc15f55e5c6b6f7d633391b41927eac0bfbdba0b98d773b1e. Measurementcommand rtk proxy python3 (tarfile/hashlib with everymember SHA verification), observed HEAD3a433c2. This archive preserves diagnostics aswellasfinalsuccess; noDB/Gitobjects/userdata included. Fullmember checks allvalid; executionreports retain originalobservedcommits.
+
+Ruling: Keep this plan's trackedSDDhistory/evidence afterfinalreview rather than skillworkspace-deletion guidance, because repositoryRule13 forbids changing historicalSDD and userrequires reliablehandoff. Cost ifwrong: extra repositoryevidence size; no irreversibleloss of audit trail. Performance implementation still waits for D9/M3finalreview/close and realbeforecommit.
