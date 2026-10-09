@@ -33,6 +33,7 @@
   --cat-waiting: rgba(245, 158, 11, 0.28);
   --cat-blocked: rgba(248, 113, 113, 0.30);
   --cat-done: rgba(96, 165, 250, 0.28);
+  --stall: #fbbf24;
   --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --text-xs: 12px;
@@ -53,6 +54,7 @@
   --kind-1: #dc2626; --kind-2: #ea580c; --kind-3: #ca8a04; --on-accent: #ffffff;
   --cat-idle: rgba(110, 105, 96, 0.12); --cat-running: rgba(21, 128, 61, 0.16); --cat-waiting: rgba(180, 83, 9, 0.16);
   --cat-blocked: rgba(185, 28, 28, 0.16); --cat-done: rgba(37, 99, 235, 0.14);
+  --stall: #92400e;
   --ok-subtle: rgba(21, 128, 61, 0.08); --warn-subtle: rgba(180, 83, 9, 0.08); --danger-subtle: rgba(185, 28, 28, 0.08); --info-subtle: rgba(37, 99, 235, 0.08);
   --shadow: 0 1px 2px rgba(28, 26, 23, 0.08);
 }
@@ -66,6 +68,7 @@
     --kind-1: #dc2626; --kind-2: #ea580c; --kind-3: #ca8a04; --on-accent: #ffffff;
     --cat-idle: rgba(110, 105, 96, 0.12); --cat-running: rgba(21, 128, 61, 0.16); --cat-waiting: rgba(180, 83, 9, 0.16);
     --cat-blocked: rgba(185, 28, 28, 0.16); --cat-done: rgba(37, 99, 235, 0.14);
+    --stall: #92400e;
     --ok-subtle: rgba(21, 128, 61, 0.08); --warn-subtle: rgba(180, 83, 9, 0.08); --danger-subtle: rgba(185, 28, 28, 0.08); --info-subtle: rgba(37, 99, 235, 0.08);
     --shadow: 0 1px 2px rgba(28, 26, 23, 0.08);
   }
@@ -276,7 +279,7 @@ nav[aria-label="Control groups"] button[aria-current="true"] { background: var(-
 .dep-node rect { fill: var(--card); stroke: var(--border-strong); stroke-width: 1.5; }
 .dep-node text { fill: var(--text-strong); font-size: var(--text-sm); font-family: var(--mono); }
 .dep-node text.dep-status, .dep-node text.dep-detail { fill: var(--text); font-family: var(--font); font-size: var(--text-xs); }
-.dep-node text.dep-stall { fill: var(--warn); font-family: var(--font); font-size: var(--text-xs); }
+.dep-node text.dep-stall { fill: var(--stall); font-family: var(--font); font-size: var(--text-xs); }
 /* Issue-fixes spec §6.5: the fill is the §6.1 category; the stroke repeats it. */
 .dep-idle rect { fill: var(--cat-idle); stroke: var(--border-strong); }
 .dep-running rect { fill: var(--cat-running); stroke: var(--ok); }
