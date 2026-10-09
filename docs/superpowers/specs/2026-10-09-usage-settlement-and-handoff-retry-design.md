@@ -102,3 +102,70 @@ inactive 分支采用失败 run 自己的 claim grant 作为新运行 grant。�
 ## 8. 审阅与实施边界
 
 先 subagent 审设计，再由人审阅本文件；批准后才写 implementation plan，并按人指定 subagent-driven 执行。性能轮另开 spec/plan，不挤入本轮。不得推送、合入 main 或再删除未点名分支；已经获授权的旧 worktree 清理在独立记录中结清。
+
+## 9. 独立审查后的更正（2026-10-09，controller，观测提交 59f6c8e）
+
+本节优先于 §3–§8 中与其冲突的文字。原稿保留为历史；依据 `independent-spec-review-3.md` 的 I1–I3 与 controller 源码核对。人随后明确授权：修复设计问题、进行 plan 并以 subagent-driven 完成这一轮，执行中的问题先按 controller 建议处理，最后统一审核。因此本轮在设计/计划 subagent 审查通过后按该授权执行，不另停在中间人审门；功能范围仍是 D9/M3，M5/M6 留作下一独立性能轮。
+
+### 9.1 I1：实际执行策略受当前 claim grant 限制
+
+`executionDriver.ts` step A2 构造真正送给 port.accept 的 task start envelope 时，统一使用 `withinGrant(confirmed.contract.executionPolicy, run.grant.work)`，适用于 normal/continuation claim、active retry、M3 reduced-grant retry 和 no-start 重派。三个上界分别为 min(冻结策略, claim grant)：tokenBudget/tokens、maxAttempts/attempts、totalRuntimeBudgetMs/activeMs。grant 与冻结策略均不改写，derivedContractHash 保持冻结值；普通重做从组 head 起且 inputCheckpoint=null。原额度不小于策略时结果相同。sessions 仍沿用 claim/attempt admission，不能从这里虚构 ccloop policy 字段。
+
+判据必须捕获实际 port.accept envelope，而不止检查 reader/claim：造 reduced-grant 的真实 continuation 失败，经 retry 后正常派发；分别断言上述三个维度已缩小、frozen hash 不变、null checkpoint、base 为组 head。继续覆盖一次 active retry 与一次 invalid-first-attempt 后的重新 claim；删除 A2 的统一 clamp，相关断言必须红。
+
+### 9.2 I2：已交接失败的未知账也有结清出口
+
+保留 active blocked-at-C 的 D9 分支，并增加 **released** 分支：当前 Web task run 为 inactive settled-unrecoverable，work 为 blocked、allocation 两桶均 terminal、work.grant 与 run.grant 相等；非成功 drive.outcome、可验证的终止 report 与隔离证明满足原命令要求；该 run 的 latest handoff request 为 settled-unrecoverable，唯一失败原因为 usage-unsettled。允许组已有 handoff/shutdown stop（不允许 pause）；自己的 request 已结，不是 ADOPTABLE，其他 run 的 open request 不阻止对本 run 结账。归档、pending usage、过时 run、证据不符仍拒绝。
+
+除 report 外，released 分支还验证该 request 关联 checkpoint 的内容地址、group/task/run/generation/highWater、非成功 terminalOutcome、stopProof、所有 artifact、snapshot，以及 missing=[]、unresolvedRequestIds=[]。重新计算原 handoff 的拒绝原因，仅有 usage-unsettled 才接受；不凭 failureCode 字符串认为其它证据成立。缺 snapshot/artifact/隔离证明或未知执行仍拒绝，不能以人工扣款掩盖它们。
+
+两分支共用 charged=旧 run.remaining（两桶四维）的累计用量、unattributed usage ledger、marker、activity 和事件迟到守卫。marker 增加 `reservationDisposition: committed | released`；released 还带 handoffResolution={requestId, previousState, previousFailureCode, checkpointId, checkpointHash}。两种 group 账变化明确不同：
+
+| 结清前的承诺 | group.used | group.reserved | allocation/work.grant |
+|---|---|---|---|
+| active blocked，remaining 仍占用 | 增加 charged 合计 | 减去 charged 合计 | 保留 |
+| 已 settled-unrecoverable，remaining 已释放 | 增加 charged 合计 | 完全不变 | 保留 terminal 和原 grant |
+
+结清必须能如实记入即便组/账户额度已经不足；重新计算 reserve/deficit，不从其它任务 commitment 借扣，不拒绝记账以隐藏超额。其它 run 仍未知时 groupUsageUnknown 仍真；下一次派发仍受 cap。历史 breaches 保留，不伪造 usage eventSeq。
+
+增加 handoff request 的 terminal state **settled-failed**，仅人工 D9 的上述 released 分支能从 settled-unrecoverable 转入。request 保留原 failureCode/evidenceIds/identity，run 同事务变 settled-failed、active=false、recoverable=false，保留原失败理由/checkpoint/endedAt，task 仍 blocked，allocation 仍 terminal，不自动 retry/arm wake。marker 给出这次显式人工处理的证据，不标为 settled-recoverable 或 settled-restartable。
+
+该 request 状态的含义为“已隔离的失败运行，未知账由人保守结清；本次停止已收口，可另行重试任务”，不表示 checkpoint 可续。request reader、wire types、视图和双语文案接受它，并核对与 run.usageSettlement.handoffResolution 的关联；不能凭任意填入该状态解除停止。它是 SETTLED 而非 ADOPTABLE。复用 deriveStopState 的完整 frozen run 集重算：其它 run 未决/不可恢复时仍保持原 blocker；全收口后才 handoff-complete。不直接清 stop、不更改 resume-from-handoff 仅接受 complete 的条件。没有 stop intent 时仅保存结清结果；重放不会重复改 request 或 charge。
+
+这个转换须由 D9 的专用事务完成，**不得再次调用 terminaliseRun/releaseCommitment**。provider-driven HandoffDisposition 不增加这一人工结果，避免普通 settle 接口绕过 owner/marker 或重复释放。已有 handoff report/checkpoint/未知事件和 request outbox 原字节保留；request 最新 body 的人工修正可由 marker 回溯。既有清理机制允许处理新 settled-failed run，但不得补写第二笔用量或重新派发。
+
+UI 对此路径的 owner 显示结清入口和金额；成功后显示“保守结清，失败任务可在恢复派发后重试”，failure 原因持续可见。继续入口不选择该 settled-failed run；组 complete 时可 selections=[] 清 stop，随后 retry-task。若其它 run 挡住 complete，展示其具体 blocker，不声称整组已解锁。
+
+M3 增加第三种来源：当前 inactive settled-failed、work blocked、terminal allocation，且带上述有效 released D9 marker 与 settled-failed request，尚未重试。清 stop 后从 reserve **全额**预留 run.grant（此前已释放且手动记用；held remainder=0），不再释放 remaining；不足逐维拒绝。成功将 work.grant 设 run.grant、allocation 设 retrying/grant、work ready、source=current run，并记录 task-retried；第二次同命令重放幂等、新 commandId 在 ready 状态拒绝。普通 retry 已产生的 settled-failed/ready run 没有这一 admission，不会被重试两次。
+
+### 9.3 I3：retrying/source 覆盖无 provider 的完整生命周期
+
+§5 的“ready 时 currentRunId 指 source”只描述 retry transaction 刚结束的状态，不是所有 ready 的不变量。currentRunId 始终指按现有 run row 顺序确定的最近运行，lineage 保留全部身份；不能改回旧 source。
+
+共享的 live retry reader 校验 source 属于同 group/task/workItem、在 lineage 且按 run row 顺序不晚于 current、已 inactive settled-failed 且 outcome 非成功，work.grant/两个 retrying allocation.amount/source.grant 逐维相等，冻结身份/provenance/hash 原样。若 current 不是 source，它和 source 之后的每次重派均须是同一 task 的 normal claim（continuationIntentId=null）、grant=source.grant，保留现有 agent/target/hash/claim 身份校验。历史中间 run 必须是 inactive failed-before-provider 或 settled-restartable、cumulative 四维皆零、remaining=grant、unknown=false 且无 pending usage；current 则按下表校验。claimOrdinal 可升，不要求 providerAttemptOrdinal=0（invalid proof 本身会增加它）。不能以合法状态名容纳身份/额度漂移。
+
+| task/allocation | current run 与来源 | 承诺与下步 |
+|---|---|---|
+| ready/retrying，刚 retry | current=source，inactive settled-failed | 已预留 grant；下一次 claim 不再扣 commitment |
+| running 或 blocked/retrying | 最新 normal claim，active，状态沿用生产 driver；grant=source.grant | 继续本 run；未知账仍挡后续派发 |
+| ready/retrying，invalid first proof 后 | 最新 inactive failed-before-provider、明确未调用 provider、零 cumulative/完整 remaining | 保留 source/grant；既有 no-start wake 重派，不再预留 |
+| ready/retrying，provider 前交接后 | 最新 inactive settled-restartable、有效已结 request、零 cumulative/完整 remaining | 保留 source/grant；先 complete→清 stop，再正常 claim，不再预留 |
+
+active retry 再失败时，retry-task 可将 source 更新到该失败 run，预算仅按本次 grant−remaining 预留差额。这些 no-provider 转移不清 source、不改 confirmed、不另发 task-retried 活动。正常转入 held/continuing/terminal 时原预算/快照规则恢复，并在同一事务移除 live work.retryGrantSourceRunId；run/history 不删除。下一次 M3 可以重新绑定新 source。所有 work writer 与 shared reader 都须覆盖这些转移，不能只改 applyRetryTask。
+
+### 9.4 新增落点与验收补充
+
+§6 增加 executionDriver 的 A2 clamp、stopIntent 的人工失败 request 读取/deriveStopState/专用收口事务、controlViews 的 handoff marker 校验、continuation 的 Continue 排除与 live source 清理，以及 webDispatch 的 no-start/read source 校验。新增字段仍受 schema 10 单向版本门保护。§7 的测试文件可复用，下面用新增具名场景补齐，不改原测试来豁免失败：
+
+| 新场景 | 观测与删除变异 |
+|---|---|
+| reduced retry / active retry / no-start retry 的真实 accept envelope | 三个策略维度均受 claim grant 限制，null checkpoint、组 head、冻结 hash；删除 clamp 见红 |
+| failure+unknown→真实 handoff-partial→D9→complete→空选 resume→retry→claim | 没有永久未知账 blocker；released 结账不扣其它任务承诺；旧 checkpoint 不可 Continue；删除 released admission、人工收口或 retry 分支分别见红 |
+| 另一 run 仍未知/请求未结 | 本 run 结清成功但组仍被正确阻塞；删除完整 frozen 集重算或 unknown 扫描见红 |
+| snapshot 缺失、artifact 不符、未知执行、pending events、伪造人工 request state | 拒绝且业务写入零变化；逐个删除证据/marker 校验见红 |
+| released 结清超过 reserve | used 增加、reserved 不变、deficit 如实出现；不给免费的新 retry；删除 reservationDisposition 分支见红 |
+| M3→claim→invalid proof→view/重启/再 claim | source 未误判、current 是最新 run、grant 正确、reserved 不再增加；删除 no-start reader 支持见红 |
+| M3→claim→pre-provider handoff-stop→complete→空选 resume→view/重启/再 claim | settled-restartable/retrying 保持可达且不重复预留；删除 restartable reader 支持见红 |
+| total/week/month cap 与周期边界 | D9 unattributed 计入结清时的日历周期；下一次 retry claim 受各 cap，已超额结账仍可成功；删除 ledger 写入或 claim cap 守卫见红 |
+
+Self-review 责任：确认人工状态只能由 owner 结清事务产生；所有 reader/closed enum 与持久 writer 成对覆盖；未知账从 reserved 已释放的事实由合法 handoff 历史、terminal allocation、request/checkpoint/marker 共同约束。静态审查不等于这些验收已通过；实施后逐条记录实测与变异证据。

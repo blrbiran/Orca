@@ -40,3 +40,11 @@ Controller verified the three findings against production code: I1 normal retrie
 Next: append a dated design correction or prepare a new revision covering actual port.accept policy limits, post-handoff conservative accounting and a valid stop exit, and the full retrying/source no-provider lifecycle; add the corresponding executable acceptance and deletion-mutation proposals, then obtain another independent review. Human feature approval remains valid; written-spec review, plan and implementation remain pending. No request for human acceptance of an unresolved blocker is made at this checkpoint.
 
 Review scope: static source inspection only, no test suite or real provider/control-store operation. Product files, tests and the old issue-fixes ledger were not changed. Review evidence and exact source locations are retained in the independent report.
+
+## Execution authorization and design correction — controller, 2026-10-09, base 59f6c8e
+
+Ruling: The human's latest `/handoff` message explicitly authorizes fixing the design, writing the plan and subagent-driven implementation, with controller decisions during execution and final human review. This overrides intermediate artifact approval waits in skills; it does not authorize pushing, merging or unrelated deletion. Wrong design decisions remain reviewable/reversible on the feature branch.
+
+Appended spec §9 addresses I1–I3 without changing historical text: actual A2 policy clamp; committed vs released manual settlement; a marker-validated manual settled-failed request that completes a usage-only failed handoff without claiming checkpoint recoverability; exact retry reservation distinctions; valid no-provider/restartable source lifecycles. Fresh isolated subagent review is in flight before plan execution.
+
+Prepared a separate no-hardlinks local ccloop clone in `/private/tmp/orca-d9-ccloop-ab824d1`, detached at the pinned ab824d1. Existing ccloop dependency directory is linked read-only for build use; clone's `npm run build` exited 0. Verification binary: `/private/tmp/orca-d9-ccloop-ab824d1/dist/cli.js`. Logs: `/private/tmp/orca-d9-ccloop-{clone,checkout,build}.log`; observations belong to this checkpoint, not a new upstream change.
