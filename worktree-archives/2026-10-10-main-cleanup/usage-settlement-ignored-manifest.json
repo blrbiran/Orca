@@ -1,0 +1,98 @@
+{
+  ".superpowers/sdd/.gitignore": {
+    "bytes": 2,
+    "sha256": "cdbcae15105d6b781e620813c79c7e868740d4e9cc53ce6f5fcbbc12387adf4b"
+  },
+  ".superpowers/sdd/2026-10-09-control-poll-performance/plan-path": {
+    "bytes": 62,
+    "sha256": "0dd48a3d4adf520749bd8267d3d3fac86b084a9c99588e9232a10b87347b8908"
+  },
+  ".superpowers/sdd/2026-10-09-control-poll-performance/review-1fd19a3..2a4f322.diff": {
+    "bytes": 1439906,
+    "sha256": "f7124c6efedd97779807d44335ee1d9f6289b2c29ecc579e35d99e33a49bc2bb"
+  },
+  ".superpowers/sdd/2026-10-09-control-poll-performance/review-1fd19a3..deaae38.diff": {
+    "bytes": 113531,
+    "sha256": "8af57fd728d77d38c3dc4d43fb4e872ff49cb54348b7f074f21aa162c66d93ba"
+  },
+  ".superpowers/sdd/2026-10-09-control-poll-performance/review-1fd19a3..f76df58.diff": {
+    "bytes": 1452505,
+    "sha256": "686b4ab46acf77bc15b3423a9c7e0c5737ba47fed455fa6a0bd73e351ed2a177"
+  },
+  ".superpowers/sdd/2026-10-09-control-poll-performance/review-4fd2b26..146bcbb.diff": {
+    "bytes": 1197394,
+    "sha256": "7532cdefd3bf30b40966c249de40696ad5c2366b1664bf4bc13ecf10fc143e61"
+  },
+  ".superpowers/sdd/2026-10-09-control-poll-performance/review-63d9e9b..5f0f5ee.diff": {
+    "bytes": 40373,
+    "sha256": "d71e055695dccda697a9a2df079d6fb9c1c89e0074ab0a43b26e623a0ddebbd0"
+  },
+  ".superpowers/sdd/2026-10-09-control-poll-performance/review-f76df58..f87e8b2.diff": {
+    "bytes": 223931,
+    "sha256": "151ddf16a9a4c89c2efe1e1c507e7e4294234baf285f7a9be9d573ae1d3d908f"
+  },
+  ".superpowers/sdd/2026-10-09-control-poll-performance/review-source-1fd19a3..2a4f322.diff": {
+    "bytes": 176274,
+    "sha256": "b900a0355203bff336ac14f2050a4262271050ae56556c4cc5c7aafa8af000c4"
+  },
+  ".superpowers/sdd/2026-10-09-control-poll-performance/review-source-4fd2b26..146bcbb.diff": {
+    "bytes": 73436,
+    "sha256": "56049e568fa9c4bb77dd6479001c4751988989400b620b094fb83bbccbfa4464"
+  },
+  ".superpowers/sdd/2026-10-09-control-poll-performance/task-1-brief.md": {
+    "bytes": 5963,
+    "sha256": "cc9510d770afef8aad8c7ebf0f9f902ff078a3eedef66d0bd6d03e4aebe26f90"
+  },
+  ".superpowers/sdd/2026-10-09-control-poll-performance/task-2-brief.md": {
+    "bytes": 3890,
+    "sha256": "86f63071df509781fe3b750650dd5a55cae403e8c863a3affefab83bb35378f3"
+  },
+  ".superpowers/sdd/2026-10-09-control-poll-performance/task-3-brief.md": {
+    "bytes": 5166,
+    "sha256": "835cceaf1b9bc9060db9b604f4fba16483f53597f645bc50995c95ee0ca06307"
+  },
+  ".superpowers/sdd/2026-10-09-usage-settlement-and-handoff-retry-implementation/global-constraints.md": {
+    "bytes": 1337,
+    "sha256": "ed3efbafa6564f22420bf56ff44c4ebcae8a8faaaa417c7967f7b4afd06cd5b3"
+  },
+  ".superpowers/sdd/2026-10-09-usage-settlement-and-handoff-retry-implementation/plan-path": {
+    "bytes": 87,
+    "sha256": "655cdd30bb2bfda678f6dbb0d9b81306d2e356bb7ad45940384070b0792972ea"
+  },
+  ".superpowers/sdd/2026-10-09-usage-settlement-and-handoff-retry-implementation/review-2c14e73..405f6b6.diff": {
+    "bytes": 174148,
+    "sha256": "13ca3e5505a186a7489cee31820b0794ecb87b343bc59fd208d77b79563ed05c"
+  },
+  ".superpowers/sdd/2026-10-09-usage-settlement-and-handoff-retry-implementation/review-ace2209..3a433c2.diff": {
+    "bytes": 42723,
+    "sha256": "23a8195bf937deee6b36bfa307e3590cd99005a85211680ca6edc43dfd48695f"
+  },
+  ".superpowers/sdd/2026-10-09-usage-settlement-and-handoff-retry-implementation/review-c29676d..3a433c2.diff": {
+    "bytes": 608861,
+    "sha256": "f386c3a7bc22e6a626908f6805c1d0378e8b56817bd27e0ab059e67be4bc5fa1"
+  },
+  ".superpowers/sdd/2026-10-09-usage-settlement-and-handoff-retry-implementation/review-c2e81f2..f9849b2.diff": {
+    "bytes": 75761,
+    "sha256": "c40c2960612486adac8f6b7fdec0eea06d667b067edf3d7c38199f62d2bb6a8b"
+  },
+  ".superpowers/sdd/2026-10-09-usage-settlement-and-handoff-retry-implementation/review-d3b9d6a..2c7a531.diff": {
+    "bytes": 86302,
+    "sha256": "e41f95b204a54aee10c632b9da4f401dae5a1c052d8118722a44344e4948c041"
+  },
+  ".superpowers/sdd/2026-10-09-usage-settlement-and-handoff-retry-implementation/task-1-brief.md": {
+    "bytes": 5022,
+    "sha256": "da9f0b3a8eed81502ca2fabb6f56854f83f050d446ad6076817243bdb1fda932"
+  },
+  ".superpowers/sdd/2026-10-09-usage-settlement-and-handoff-retry-implementation/task-2-brief.md": {
+    "bytes": 2638,
+    "sha256": "98df46a31f4f26fbf9a0290145d46a1d02f6c3157c5bca857983098039d8f33d"
+  },
+  ".superpowers/sdd/2026-10-09-usage-settlement-and-handoff-retry-implementation/task-3-brief.md": {
+    "bytes": 1743,
+    "sha256": "8ebd7f18146e572ef9b4ceb91f7e74496abbe9b5d4bcb788d01c0e51511b2517"
+  },
+  ".superpowers/sdd/2026-10-09-usage-settlement-and-handoff-retry-implementation/task-4-brief.md": {
+    "bytes": 1626,
+    "sha256": "0129e72fadde5fa83f02e301cdf0c6d0217471f8a2de20a57cd4cbf4871add26"
+  }
+}

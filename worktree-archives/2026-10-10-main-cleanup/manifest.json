@@ -1,0 +1,14 @@
+{
+  "control-foundation-handoff.patch": {
+    "bytes": 5933,
+    "sha256": "4dc02f05f4f9e42cb5cc5234fc2b3bc984b029f9a43afc7229a6ce704f01b229"
+  },
+  "README.md": {
+    "bytes": 462,
+    "sha256": "1adaec7fb955aa62d4928ec6b62fea16cc1b03160e56853b2f8b26feb903466a"
+  },
+  "control-foundation-handoff.tar.gz": {
+    "bytes": 152599,
+    "sha256": "29b4690faea4dedf39661a76b904af5d84f51408cdc9bd6d7cd9537ddf2a77f9"
+  }
+}
