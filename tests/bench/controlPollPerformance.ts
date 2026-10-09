@@ -97,9 +97,36 @@ async function main() {
  try {for(const w of workloads){restoreDatabase(f.store,initial);w.prepare();counter.reset();h.reset();const value=await w.run(h.handlers);w.validate(value);const counts=counter.snapshot(),callCounts=h.snapshot();if(args.includes("--expect-optimized")){assertOptimizedBounds(counts,w.name,f);if(w.name==="archived-only-pump")assert.deepEqual(callCounts,{handler:0,probe:0,accept:0});if(w.name==="mixed-pump")assert.equal(callCounts.handler,99);}
  observations.push({name:w.name,scope:w.scope,counters:summarizeCounters(counts),calls:callCounts,output:normalizeOutput(value,f.canonicalRunIds),outputDigest:sha(normalizeOutput(value,f.canonicalRunIds)),effect:{pending:storePending(f.store),runs:f.manifest().runs}});}}
  finally{counter.restore();h.restore();}
+ let replayEvidence:unknown=null;
+ const replayPath=arg("--replay","");
+ if(replayPath){
+  const previous=JSON.parse(await readFile(replayPath,"utf8"));
+  const traceBytes=await readFile(arg("--trace-log",""));
+  const sourceBytes=await readFile(arg("--source-manifest",""));
+  const source=JSON.parse(sourceBytes.toString("utf8")),side=arg("--side","");
+  assert.ok(side==="before"||side==="after");assert.equal(previous.initialDigest,initialDigest);
+  const clone=source.clones[side];assert.equal(execFileSync("/usr/bin/git",["rev-parse","HEAD"],{encoding:"utf8"}).trim(),clone.commit);
+  assert.equal(execFileSync("/usr/bin/git",["diff","--","src"],{encoding:"utf8"}),"");
+  for(const [path,hash] of Object.entries(clone.productionSHA256))assert.equal(createHash("sha256").update(await readFile(path)).digest("hex"),hash);
+  const originalHarness=await readFile(arg("--original-harness",""));assert.equal(createHash("sha256").update(originalHarness).digest("hex"),source.tools["tests/bench/controlPollPerformance.ts"]);
+  for(const path of ["tests/control/fixtures/controlPollPerformance.ts","tests/control/fixtures/controlReadCounters.ts"])assert.equal(createHash("sha256").update(await readFile(path)).digest("hex"),source.tools[path]);
+  const trace:any[]=[];for(const line of traceBytes.toString("utf8").split("\n")){try{const value=JSON.parse(line);if(value.phase||value.timing)trace.push(value);}catch{/* Native warnings/assertion text is retained in the SHA-bound full log. */}}
+  assert.deepEqual([...new Set(trace.filter(row=>row.phase).map(row=>row.name))],workloads.map(w=>w.name));
+  assert.equal(previous.observations.length,observations.length);
+  for(const row of observations){
+   const old=previous.observations.find((o:any)=>o.name===row.name);assert.ok(old);assert.deepEqual(row.scope,old.scope);assert.equal(row.outputDigest,old.outputDigest);assert.deepEqual(row.effect,old.effect);assert.deepEqual(row.counters,old.counters);assert.deepEqual(row.calls,old.calls);
+   const warm=trace.filter(value=>value.name===row.name&&value.phase==="warmup"),sample=trace.filter(value=>value.name===row.name&&value.phase==="sample"),summary=trace.filter(value=>value.name===row.name&&value.timing);
+   assert.deepEqual(warm.map(value=>value.index),Array.from({length:10},(_,i)=>i+1));assert.deepEqual(sample.map(value=>value.index),Array.from({length:30},(_,i)=>i+1));assert.equal(summary.length,1);
+   assert.equal(old.timing.warmup,10);assert.equal(old.timing.samples,30);assert.deepEqual(sample.map(value=>value.ms),old.timing.rawMs);assert.deepEqual(summary[0].timing,old.timing);assert.equal(summary[0].outputDigest,row.outputDigest);assert.deepEqual(summary[0].calls,row.calls);
+   const sorted=[...old.timing.rawMs].sort((a:number,b:number)=>a-b);assert.equal(old.timing.min,sorted[0]);assert.equal(old.timing.max,sorted.at(-1));assert.equal(old.timing.p50,sorted[14]);assert.equal(old.timing.p95,sorted[28]);row.timing=old.timing;
+  }
+  replayEvidence={mode:"fresh-untimed-replay-of-historical-timings",historicalCLIrc:side==="before"?0:1,side,progressPath:replayPath,progressSHA256:createHash("sha256").update(await readFile(replayPath)).digest("hex"),traceLog:arg("--trace-log",""),traceSHA256:createHash("sha256").update(traceBytes).digest("hex"),sourceManifestSHA256:createHash("sha256").update(sourceBytes).digest("hex"),originalProductCommit:clone.commit,originalToolSHA256:source.tools,initialDigest};
+  console.log(JSON.stringify({replayVerified:true,replayEvidence,workloads:observations.map(row=>({name:row.name,outputDigest:row.outputDigest,scope:row.scope,calls:row.calls}))}));
+ }else{
  const actualHandlers=createWebWakeHandlers(f.wakeDeps);
  for(const w of workloads){const raw:number[]=[],expected=observations.find(o=>o.name===w.name);for(let i=0;i<warmup+samples;i++){restoreDatabase(f.store,initial);assert.equal(sha(captureDatabase(f.store)),initialDigest);w.prepare();const begin=performance.now();const value=await w.run(actualHandlers);const ms=performance.now()-begin;w.validate(value);assert.equal(sha(normalizeOutput(value,f.canonicalRunIds)),expected.outputDigest);assert.deepEqual({pending:storePending(f.store),runs:f.manifest().runs},expected.effect);if(i>=warmup)raw.push(ms);console.log(JSON.stringify({phase:i<warmup?"warmup":"sample",name:w.name,index:i<warmup?i+1:i-warmup+1,ms}));}
  const sorted=[...raw].sort((a,b)=>a-b),q=(p:number)=>sorted[Math.ceil(p*sorted.length)-1];expected.timing={warmup,samples,rawMs:raw,min:sorted[0],max:sorted.at(-1),p50:q(.5),p95:q(.95)};console.log(JSON.stringify({name:w.name,timing:expected.timing,outputDigest:expected.outputDigest,calls:expected.calls}));await writeFile(join(output,"timing-progress.json"),JSON.stringify({complete:false,initialDigest,observations:observations.map(({output,...row})=>row)},null,2),{mode:0o600});}
+ }
  restoreDatabase(f.store,initial);
  const refusals:any[]=[];for(const groupId of f.archivedGroupIds)refusals.push({case:"archived-blocked",groupId,result:await deliverScheduledStart(f.wakeDeps,groupId)});
  for(const kind of ["invalid-work-and-run","invalid-run","invalid-archive-mark"]) {
@@ -111,7 +138,7 @@ async function main() {
  }
  restoreDatabase(f.store,initial);
  const git=(...a:string[])=>execFileSync("/usr/bin/git",a,{encoding:"utf8"});
- const report={command:[process.execPath,...process.argv.slice(1)],commit:git("rev-parse","HEAD").trim(),dirtyDiff:git("diff","--binary"),untracked:git("ls-files","--others","--exclude-standard"),runtime:{node:process.version,sqlite:f.store.db.prepare("SELECT sqlite_version() AS version").get()!.version,platform:platform(),release:release(),cpu:cpus()[0].model,cores:cpus().length,orcaCcloopBin:process.env.ORCA_CCLOOP_BIN,agentsTable:process.env.ORCA_AGENTS_TABLE,HOME:process.env.HOME,TMPDIR:process.env.TMPDIR,XDG_CONFIG_HOME:process.env.XDG_CONFIG_HOME,XDG_CACHE_HOME:process.env.XDG_CACHE_HOME,XDG_DATA_HOME:process.env.XDG_DATA_HOME,XDG_STATE_HOME:process.env.XDG_STATE_HOME,CCMEM_DATA_ROOT:process.env.CCMEM_DATA_ROOT,ORCA_CORRECTIONS_DIR:process.env.ORCA_CORRECTIONS_DIR},paths:{root:performanceRoot(),repo:join(performanceRoot(),"repo"),snapshot:snapshotPath},manifest,archivedTasks:Number(f.store.db.prepare("SELECT COUNT(*) AS n FROM work_items WHERE group_id LIKE 'archive-%'").get()!.n),initialDigest,refusals,refusalDigest:sha(normalizeOutput(refusals,f.canonicalRunIds)),observations};
+ const report={replayEvidence,command:[process.execPath,...process.argv.slice(1)],commit:git("rev-parse","HEAD").trim(),dirtyDiff:git("diff","--binary"),untracked:git("ls-files","--others","--exclude-standard"),runtime:{node:process.version,sqlite:f.store.db.prepare("SELECT sqlite_version() AS version").get()!.version,platform:platform(),release:release(),cpu:cpus()[0].model,cores:cpus().length,orcaCcloopBin:process.env.ORCA_CCLOOP_BIN,agentsTable:process.env.ORCA_AGENTS_TABLE,HOME:process.env.HOME,TMPDIR:process.env.TMPDIR,XDG_CONFIG_HOME:process.env.XDG_CONFIG_HOME,XDG_CACHE_HOME:process.env.XDG_CACHE_HOME,XDG_DATA_HOME:process.env.XDG_DATA_HOME,XDG_STATE_HOME:process.env.XDG_STATE_HOME,CCMEM_DATA_ROOT:process.env.CCMEM_DATA_ROOT,ORCA_CORRECTIONS_DIR:process.env.ORCA_CORRECTIONS_DIR},paths:{root:performanceRoot(),repo:join(performanceRoot(),"repo"),snapshot:snapshotPath},manifest,archivedTasks:Number(f.store.db.prepare("SELECT COUNT(*) AS n FROM work_items WHERE group_id LIKE 'archive-%'").get()!.n),initialDigest,refusals,refusalDigest:sha(normalizeOutput(refusals,f.canonicalRunIds)),observations};
  if(args.includes("--compare")){const before=JSON.parse(await readFile(arg("--compare",""),"utf8"));assert.deepEqual(report.manifest,before.manifest);assert.equal(report.initialDigest,before.initialDigest);assert.deepEqual(report.paths,before.paths);assert.equal(report.refusalDigest,before.refusalDigest);for(const row of observations){const b=before.observations.find((o:any)=>o.name===row.name);assert.ok(b);assert.deepEqual(row.scope,b.scope);assert.equal(row.outputDigest,b.outputDigest);assert.deepEqual(row.effect,b.effect);}}
  const canonicalOutputs=report.observations.map(row=>({name:row.name,output:row.output}));
  await writeFile(join(output,"canonical-outputs.json.gz"),gzipSync(JSON.stringify({observations:canonicalOutputs,refusals:report.refusals})),{mode:0o600});
@@ -119,5 +146,5 @@ async function main() {
  await writeFile(join(output,"result.json"),JSON.stringify(report,null,2),{mode:0o600});console.log(JSON.stringify({result:join(output,"result.json"),manifest,initialDigest,refusalDigest:report.refusalDigest,equivalent:args.includes("--compare")}));
  }finally{await f.dispose();}
 }
-function storePending(store:ControlStore){return store.db.prepare("SELECT id,group_id,kind,body,delivered FROM scheduler_wakes ORDER BY rowid").all();}
+export function storePending(store:ControlStore){return store.db.prepare("SELECT id,group_id,kind,body,delivered FROM scheduler_wakes ORDER BY rowid").all().map(row=>({...row}));}
 if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href)main().catch(error=>{console.error(error);process.exitCode=1;});

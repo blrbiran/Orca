@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdir, writeFile, rm } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { mkdir, writeFile, lstat, readdir } from "node:fs/promises";
+import { join, resolve, isAbsolute } from "node:path";
 import { openControlStore, type ControlStore } from "../../../src/control/store.js";
 import { createAdmissionGate } from "../../../src/control/admissionGate.js";
 import { createExecutionProfileRouter, resolveProfile } from "../../../src/control/profiles.js";
@@ -50,7 +50,11 @@ function command(store: ControlStore, groupId: string, verb: RawAuthorityCommand
 }
 export async function buildControlPollFixture(options: {liveGroups:number;archivedGroups:number;tasksPerGroup:number;now:number}): Promise<ControlPollFixture> {
  const root=performanceRoot(), repo=join(root,"repo");
- await rm(root,{recursive:true,force:true}); await mkdir(root,{recursive:true,mode:0o700}); await mkdir(repo,{mode:0o700});
+ // Setup never resets an existing dataset or deletes an env-selected path.
+ if(!isAbsolute(root))throw new Error("control-poll-fixture-root-must-be-absolute");
+ const existingRoot=await lstat(root).catch((error:NodeJS.ErrnoException)=>{if(error.code==="ENOENT")return null;throw error;});
+ if(existingRoot && (!existingRoot.isDirectory() || (await readdir(root)).length > 0)) throw new Error("control-poll-fixture-root-not-empty");
+ await mkdir(root,{recursive:true,mode:0o700}); await mkdir(repo,{mode:0o700});
  let fixtureClock=options.now; const store=await openControlStore({stateDir:join(root,"state"),now:()=>fixtureClock});
  const snapshot=profileSnapshot();
  const port=createFixturePort(snapshot);
