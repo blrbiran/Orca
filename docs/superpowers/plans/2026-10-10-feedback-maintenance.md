@@ -41,10 +41,10 @@ Files: web/src/locales/zh.ts, README.md, skills/orca-control/SKILL.md.
 - [x] Use skill-creator for skill editing, preserve all route/authority rules; verify documentation examples against actual schemas and full locale tests.
 
 ### Task 5: Review, verification and handoff
-- [ ] Build root/web, typecheck, web suite, root suite, pin/panel/control and scoped leak checks. Preserve every raw failure and honest limitations.
-- [ ] Independent final branch review; address important findings, prove guard deletions RED in a separate local clone; record no changed dependency pin.
-- [ ] Update Orca current entry and replace sibling Orca rolling sections in place. Record explicit ccmem integration authorization without inferring runtime migration.
-- [ ] Commit exact files on feature branch; no main merge or push. Supply <=10-line executive summary in chat only.
+- [x] Build root/web, typecheck, web suite, root suite, pin/panel/control and scoped leak checks. Preserve every raw failure and honest limitations.
+- [x] Independent final branch review; address important findings, prove guard deletions RED in a separate local clone; record no changed dependency pin.
+- [x] Update Orca current entry and replace sibling Orca rolling sections in place. Record explicit ccmem integration authorization without inferring runtime migration.
+- [x] Commit exact files on feature branch; no main merge or push. Supply <=10-line executive summary in chat only.
 
 ## Deferred
 19/30 overview restructure; 24 new result-summary/report mechanism; 6/27–29 settings aggregation; 18 context menu; 26 cross-group autonomy/Chains redesign; 31 broader state layouts; 32 new notifications; 34 wizard; 35 visual redesign; automatic drift probing. Existing 1/3/7/8/10/16 and D9/M3/M5/M6 are closed.
