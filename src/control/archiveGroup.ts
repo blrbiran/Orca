@@ -38,6 +38,8 @@ function refuseArchive(store: ControlStore, groupId: string, group: Record<strin
   for (const row of store.db.prepare("SELECT state FROM estimates WHERE group_id=?").all(groupId)) {
     if (["running", "start-unknown"].includes(String(row.state))) throw new ControlError("archive-call-in-flight", "estimate");
   }
+  // Spec §6.3: this guard is what keeps requirement calls off an archived group -- no call is pending when it is archived,
+  // and the ledger gate refuses every requirement command that would queue another.
   if (group.status === "clarifying" && pendingRequirementCall(store, groupId) !== null) throw new ControlError("archive-call-in-flight", "requirement");
   const intent = readStopIntent(store, groupId);
   if (intent !== null && intent.mode !== "pause") {

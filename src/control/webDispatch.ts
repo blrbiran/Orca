@@ -193,6 +193,9 @@ export async function deliverScheduledStart(deps: WebDispatchDeps, groupId: stri
     const wake = pendingResumeWake(store, groupId) ?? pendingStartWake(store, groupId);
     if (!wake) return activeWorkRun(store, groupId) ?? { kind: "idle" };
     if (stopIsPending(store, groupId)) return { kind: "blocked", reason: "group-stopped" };
+    // Issue-fixes spec §6.3: an archived group is not probed (no agent child per pump pass for a group that takes no claim);
+    // the check in the transaction below stays for a group archived while the probe ran.
+    if (isGroupArchived(store, groupId)) return { kind: "blocked", reason: "group-archived" };
     const snapshot = readFrozenSnapshot(store, groupId);
     const at = (deps.now?.() ?? new Date()).getTime();
     // A capped claim is not probed (the agent is asked nothing while the group only waits on a cap). Read-only: the gate

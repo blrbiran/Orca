@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { WebControlService } from "../../src/control/webService.js";
 import { continuationIdentity, continuationWakeBody } from "../../src/control/continuation.js";
 import { groupStopState, readStopIntent } from "../../src/control/stopIntent.js";
-import { deliverScheduledStart, settleProviderAttempt } from "../../src/control/webDispatch.js";
+import { createWebWakeHandlers, deliverScheduledStart, settleProviderAttempt } from "../../src/control/webDispatch.js";
+import { deliverSchedulerWakes } from "../../src/control/dispatch.js";
 import { canonicalBytes, sha256Canonical } from "../../src/control/canonicalJson.js";
 import { readCanonicalRecord } from "../../src/control/snapshot.js";
 import { add, subtract } from "../../src/control/budget.js";
@@ -606,17 +607,23 @@ describe("an archived group with a queued continuation and a queued start (issue
       await stoppedAfterHandoff(ctx);
       const resumed = await service.resumeFromHandoff(h.command("resume-from-handoff", { selections: [selection(a.predecessor)] }));
       if ("error" in resumed || resumed.result.kind !== "resumed-from-handoff") throw new Error(JSON.stringify(resumed));
-      armOrdinaryClaim(h.store);
+      // Queued before archiving: the resume wake carrying a's continuation, and the ordinary start wake recoverablePredecessor armed.
       const archived = service.archiveGroup(h.command("archive-group", {}));
       if ("error" in archived) throw new Error(JSON.stringify(archived));
-      const wakes = pendingWakes(h.store).filter((id) => !id.includes(":estimate:")).sort();
-      expect(wakes.length).toBeGreaterThanOrEqual(2);
-      expect(await deliverScheduledStart(ctx.deps, "g")).toEqual({ kind: "blocked", reason: "group-archived" });
+      const queued = () => wakeRows(h.store).filter((row) => row.delivered === 0 && (row.kind === "start" || row.kind === "resume"));
+      const wakes = queued().map((row) => row.id).sort();
+      expect(queued().map((row) => row.kind).sort()).toEqual(["resume", "start"]);
+      // The pump's own handlers, as the driver delivers them: neither wake is acknowledged and nothing is claimed.
+      const handlers = createWebWakeHandlers({ ...ctx.deps, service });
+      const pass = await deliverSchedulerWakes(h.store, handlers);
+      for (const id of wakes) expect(pass.delivered).not.toContain(id);
       expect(await deliverScheduledStart(ctx.deps, "g")).toEqual({ kind: "blocked", reason: "group-archived" });
       expect(activeRunIds(h.store)).toEqual([]);
-      expect(pendingWakes(h.store).filter((id) => !id.includes(":estimate:")).sort()).toEqual(wakes);
+      expect(queued().map((row) => row.id).sort()).toEqual(wakes);
       service.unarchiveGroup(h.command("unarchive-group", {}));
-      expect((await deliverScheduledStart(ctx.deps, "g")).kind).toBe("claimed");
+      const after = await deliverSchedulerWakes(h.store, handlers);
+      for (const id of wakes) expect(after.delivered).toContain(id);
+      expect(activeRunIds(h.store).length).toBeGreaterThan(0);
     } finally { await h.dispose(); }
   });
 });

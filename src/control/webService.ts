@@ -468,6 +468,9 @@ export class WebControlService {
       // Accounts spec §6.3.1: an estimate that left the queue another way no longer waits on a cap.
       const leftQueue = (): null => { this.store.transaction(() => clearSpendCapBlock(this.store, id, "estimate")); return null; };
       if (!["queued", "running", "start-unknown"].includes(initial.state)) return leftQueue();
+      // Issue-fixes spec §6.3: a queued estimate of an archived group is not probed; the check in the transaction below
+      // stays for a group archived while the probe ran.
+      if (initial.state === "queued" && isGroupArchived(this.store, id)) return null;
       const profile = this.deps.profileRouter.resolve("budget-estimate", initial.profile.profileId, initial.profile.profileHash);
       const at = (this.deps.now?.() ?? new Date()).getTime();
       // A capped estimate is not probed (read-only check; the gate in the transaction decides, and records the block).

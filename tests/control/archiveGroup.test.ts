@@ -272,3 +272,62 @@ describe("no claim and no wake for an archived group (spec §6.3)", () => {
     } finally { await h.dispose(); }
   });
 });
+
+describe("an archived group costs no agent probe per pump pass (spec §6.3, E5 review fix round 1)", () => {
+  const pendingStart = (h: H) => h.store.db.prepare("SELECT id FROM scheduler_wakes WHERE group_id='g' AND kind='start' AND delivered=0").all().map((row) => String(row.id));
+  const estimateState = (h: H) => String(h.store.db.prepare("SELECT state FROM estimates WHERE group_id='g' AND id=?").get(h.estimateId)!.state);
+  /** The fixture's router with probe counted; `during` runs inside the first probe (a group archived while it ran). */
+  const countingRouter = (h: H, during?: () => void) => {
+    const router = h.deps.profileRouter;
+    let calls = 0;
+    const probe: typeof router.probe = async (profile, selection) => { calls += 1; if (calls === 1) during?.(); return router.probe(profile, selection); };
+    return { router: { ...router, probe }, calls: () => calls };
+  };
+
+  it("delivers a start wake of an archived group without probing the agent", async () => {
+    const { h, service } = await confirmed();
+    try {
+      await service.start(h.command("start", {}));
+      service.archiveGroup(h.command("archive-group", {}));
+      const counted = countingRouter(h);
+      expect(await deliverScheduledStart({ ...dispatch(h), profileRouter: counted.router }, "g")).toEqual({ kind: "blocked", reason: "group-archived" });
+      expect(counted.calls()).toBe(0);
+    } finally { await h.dispose(); }
+  });
+
+  it("refuses the claim of a group archived while its start probe ran, and leaves the wake pending", async () => {
+    const { h, service } = await confirmed();
+    try {
+      await service.start(h.command("start", {}));
+      const wakes = pendingStart(h);
+      const counted = countingRouter(h, () => service.archiveGroup(h.command("archive-group", {})));
+      expect(await deliverScheduledStart({ ...dispatch(h), profileRouter: counted.router }, "g")).toEqual({ kind: "blocked", reason: "group-archived" });
+      expect(counted.calls()).toBeGreaterThan(0);
+      expect(pendingStart(h)).toEqual(wakes);
+      expect(Number(h.store.db.prepare("SELECT COUNT(*) AS n FROM runs WHERE group_id='g' AND active=1").get()!.n)).toBe(0);
+    } finally { await h.dispose(); }
+  });
+
+  it("delivers a queued estimate's wake of an archived group without probing the estimator", async () => {
+    const { h, service } = await confirmed();
+    try {
+      service.archiveGroup(h.command("archive-group", {}));
+      const counted = countingRouter(h);
+      const deps = { ...h.deps, profileRouter: counted.router };
+      await deliverSchedulerWakes(h.store, createWebWakeHandlers({ ...deps, service: new WebControlService(deps) }));
+      expect(counted.calls()).toBe(0);
+      expect(estimateState(h)).toBe("queued");
+    } finally { await h.dispose(); }
+  });
+
+  it("leaves a queued estimate queued when its group is archived while the estimator probe ran", async () => {
+    const { h, service } = await confirmed();
+    try {
+      const counted = countingRouter(h, () => service.archiveGroup(h.command("archive-group", {})));
+      expect(await new WebControlService({ ...h.deps, profileRouter: counted.router }).claimEstimate("g", h.estimateId)).toBeNull();
+      expect(counted.calls()).toBe(1);
+      expect(estimateState(h)).toBe("queued");
+      expect(h.store.db.prepare("SELECT id FROM runs WHERE group_id='g' AND work_item_id=?").get(h.estimateId)).toBeUndefined();
+    } finally { await h.dispose(); }
+  });
+});
