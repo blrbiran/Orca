@@ -122,7 +122,7 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 ✅ *** **会话 `9a20ac38`（2026-10-07）**：N2 人审收口；discovery 修复、UI 按钮、npm audit 8→0（vitest 5）已进 main；隔离根真 ccmem／syncskill 验收；ccloop 两红诊断（ccloop 人裁 139）；**写好并经人批准两份 spec＋计划（面板服务、账户与花费上限），未开始实施**。见 §4.0。 ***
 ✅ *** **会话 `30bd7e40`（2026-10-07～08）**：两份已批计划（面板服务；账户＋按模型 token 账＋花费上限，含 ccloop Part B）**全部执行完、终审过，在三个 worktree 分支上等人合并**；未推、未合、未装服务。见 §4.0。 ***
 ✅ *** **会话 `eaee0f2c`（2026-10-08）**：账户 Task 12 重钉 ccloop＋改密码全退登（人裁）；「合入方案」＋四个面板修复，SDD 12 个 task＋终审＋修复波，门绿；**两条叠放的 worktree 分支等人合并**；主工作树有一次子 agent 事故待人修。见 §4.0。 ***
-⏳ *** **会话 `e34dc963`（2026-10-08～09）**：本地部署问题清单的根因修复。ccloop 分支已完成；Orca 分支 Part A–D 与 E1–E8 完成，E9–E12／终修波／Part F 未做。见 §4.0。 ***
+✅ *** **会话 `e34dc963`（2026-10-08～09）＋ `3156185d`（2026-10-09）**：本地部署问题清单的根因修复一轮全部做完。ccloop 分支与 Orca 前半人已合并推送；后半（E9–E12、终修波、F1 重钉、F2 终门、F3 终审）在 `fix/issues-20261009` 等人 ff 合并。见 §4.0。 ***
 
 **现行基线（会话 `08011394`，2026-10-04，项目切换之后的最终树）**：干净 clone、HOME 与四个 XDG 根改道、TMPDIR `/private/tmp/claude-501/og/t`、`ORCA_CCLOOP_BIN`＝ccloop `2b380ea` 的 clone build、`ORCA_AGENTS_TABLE`＝fake codex `integration`、真 syncskill／ccmem 二进制，逐段各跑：web build、typecheck、ledger、claude-md、hooks-path、`verify:control`、`verify:scheduler`、`verify:ccloop-pin`、`verify:panel`、`--ws check`（web 65 文件 405 条）、`check-tmp-leak`（0 残留）都 RC 0；全量 vitest **2745 条：2740 过、3 skipped（`ccloopDefaultE2E`，formal only）、2 红**＝已登记 flake `driverRequirementSplit`、`controlShutdown` 143；`verify:chain` 的全量另红 `controlShutdown` 143 与**新登记**的 `agentSelectionE2E` C3（见下）。三个红文件负载约 6 时单跑各 3/3 绿。原始报数在该会话 scratchpad（会话结束即失效），结论只在这里。
 
@@ -161,47 +161,86 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 
 ## 四、⛔ 下一件事
 
-### 4.0 ⛔ 现在的下一件事（2026-10-09，会话 `e34dc963`；本节优先于旧条目）
+### 4.0 ⛔ 现在的下一件事（2026-10-09，会话 `3156185d`；本节优先于旧条目）
 
-本节整节替换会话 `eaee0f2c` 写的 §4.0；那一版的结论压缩进 §4.0.v。
+本节整节替换会话 `e34dc963` 写的 §4.0；那一版的结论压缩进 §4.0.w。
 
-**状态一句话**：上一轮两条分支人已合进 main 并推送。本轮是「2026-10-08 本地部署问题的根因修复」（人给的问题清单 1/3/7/8/10/15/16，清单本身按人要求不入库），**在两个 worktree 分支上进行中，未合、未推**：
+**状态一句话**：「2026-10-08 本地部署问题根因修复」这一轮**全部做完**。
+- 前半（Part A–D、E1–E8）已由人 `--ff-only` 合进 main 并推送。
+- ccloop `fix/codex-planner-output` 已由人合并推送。
+- 后半在 worktree `/Users/biran/code/skills/loop/Orca-issues2`、分支 `fix/issues-20261009`（从 main 拉出）：E9–E12、两次终修波、F1 重钉、F2 终门、F3 终审＋修复波，**全部完成，等人 ff 合并**。
 
-| 仓库 / 分支 | worktree | 状态 | 唯一进度源 |
-|---|---|---|---|
-| ccloop `fix/codex-planner-output` | `/Users/biran/code/skills/loop/ccloop-planner` | **完成**：K1–K4＋终审＋修复波＋一次跟进，门绿（1298/1299，唯一红是已登记名单内且本分支未碰的文件） | `.superpowers/sdd/2026-10-08-codex-phase-output-hardening/progress.md`；spec `docs/superpowers/specs/2026-10-08-codex-phase-output-hardening-design.md`（§6／§7 是评审后的更正，以它为准） |
-| Orca `fix/issues-20261008` | `/Users/biran/code/skills/loop/Orca-issues` | **进行中**：Part A／B／C／D 全部完成（每个 task 都经实现＋独立审查）；E1–E8 完成；**E9–E12、终修波、Part F 未做** | `.superpowers/sdd/2026-10-08-issue-fixes/progress.md`（**从末尾读**）；spec `docs/superpowers/specs/2026-10-08-issue-fixes-design.md`；计划 `docs/superpowers/plans/2026-10-08-issue-fixes.md`（索引里的「Pre-flight amendments」有约束力）＋ `docs/superpowers/plans/2026-10-08-issue-fixes/part-{A..F}.md` |
+**唯一进度源**：台账 `.superpowers/sdd/2026-10-08-issue-fixes/progress.md`，读末尾「Round close」段与其上的「Session 2」「F3」两段。路径改道说明见同目录 `session2-overrides.md`。
 
-**本轮做出来的东西（按 spec 章节；细节、裁定都在台账）**：
-- §2 拒绝说人话：中英文错误说明全覆盖（`refusalCoverage` 判据防漏）；计划导入一次报全部问题（`\n` 分隔）；拒绝提示按组存、显示在组详情顶部，导入错误在导入表单里；README／`docs/cli.md` 补 `targetVersion` 与 Web 导入要求。
-- §5 活动记录：控制库 **schema 9（单向）**，新表 `activity`；运行带 `startedAt`／`endedAt`；组视图有活动、`GET /api/control/runs/:runId/activity`。
-- §3 停止标记：关面板时空闲组不再写停止标记（`unchanged-idle`）；面板启动恢复时自愈「冻结集合为空」的旧标记；关闭停下的组有恢复对话框与停止横幅；有停止标记时不显示各任务的「继续」按钮，「不续跑地恢复」总是提供。
-- §4 重试：新命令 `retry-task`（失败运行→`settled-failed`、任务回 ready、驱动清理旧工作区、新运行从组分支重来）；`recovery-retry` 对已失败运行拒绝 `run-terminal-failed`；ccloop 失败原因保留并解释；界面只在服务端会接受时显示「重试任务」。
-- §6（部分）：任务分类、组摘要（目标/分支/计数/更新时间/归档）、归档／取消归档（总闸在 `applyWebCommand`）、认领／唤醒／合入／估算／需求导出都跳过已归档组、组列表卡片＋筛选。
-- ccloop：规划／验证提示词写明阶段边界；codex 最终输出只接受「恰好一个像答案的对象」，验证阶段只放宽「拒绝」（不会把修饰后的批准读成批准）。
+**本会话做出来的东西**（细节、裁定都在台账）：
+- **E9 依赖图**：
+  - 常显，按任务类别填色，节点文字随运行实时更新。
+  - 每个主题块都有 `--cat-*`／`--stall` 色，对比度判据覆盖暗色与两种浅色块。
+- **E10 详情页**：
+  - 依赖图排第一，归档横幅和告警放在图之前。
+  - **归档组上只剩「取消归档」**：预算、agent 选择、合入、标签、loop 编辑器、重试全部隐藏。
+  - 「归档」按钮只在服务端会接受时显示。
+- **E11 任务详情的活动记录**：
+  - 按 run id 重挂载，换 run 不会闪出旧行。
+  - 原始的 ccloop 阶段词会映射成面板用语。
+- **终修波（服务端）**：
+  - 归档拒绝前移到 `preflightWebCommand`，`group-archived` 先于任何探针。重放仍先于闸门，有判据钉住。
+  - 合入解冲突在批准时、失败时各记一行 `integration` 活动。
+- **终修波（前端）**：
+  - `codex-exit-error` 有中英文说明。
+  - 归档相关文案说出真正的出路。
+  - 丢了响应、查回来是拒绝的命令，现在显示真实拒绝；导入时是问题清单。
+  - 组卡片的时间按小时、天显示。
+  - D10、C4 两条 erratum 各追加了具名更正，原文未动。
+- **F1**：ccloop pin 改为 `ab824d16004de2d3c1613a76ec0431520aa16cc9`。`pin-ccloop.mjs` 的 7 项检查在干净 clone 里全 ok，产物与提交逐字节相同。
+- **F2 终门**（隔离 clone，`ORCA_CCLOOP_BIN`＝ab824d1 的 clone build）：
+  - 6 段 RC 0；`npm test` 3400 条里 4 条在负载下 5 s 超时，单跑 3/3 绿。
+  - 真 ccloop 的 `executionDriverE2E` 10/10。
+  - 终修波之后另跑了 `tests/panel`：500/500。
+- **F3**：终审结论「修完即可合」，0 Critical、0 Important；修复波后范围复审 7 条全 ADDRESSED。
 
-**下一个 agent 做什么（按顺序）**：
-1. 读台账末尾的「Handoff」段（E1–E8 都已 complete，包括 E5 的修复轮）。
-2. Part E 剩下 E9（依赖图）、E10（详情页顺序＋归档横幅，**归档组要隐藏「重试任务」等所有操作**）、E11（任务详情的活动）、E12（收尾检查）。任务说明已抽好：台账目录下 `task-E9-brief.md` 等，配 `common-implementer.md`／`common-reviewer.md`。
-3. 终修波：台账里所有「Queued for the final fix wave」行（E4 的四条、B10 的 resolving 行、D9 的 `codex-exit-error` 说明等）。
-4. Part F：F2 终门（隔离 clone，`ORCA_CCLOOP_BIN`＝ccloop `c82b212` 的 clone build 绝对路径）、F3 整分支终审＋台账收尾＋交接；F1 重钉要等人推送 ccloop。
-- 执行方式：subagent-driven，每个 task 一个实现者＋一个审查者；多个实现者并行时**只按路径提交**（`git commit -- <paths>`），核对用 `/usr/bin/git`。
+**下一个 agent 做什么**：
+1. 先确认人合没合：`/usr/bin/git -C /Users/biran/code/skills/loop/Orca ls-remote origin refs/heads/main`，再用 `merge-base --is-ancestor` 对 `fix/issues-20261009`。
+   - 合了的话，核主检出 `node_modules/ccloop` 的 `resolved` 是不是 ab824d1。合并会改 pin，**必须在主检出跑一次 `npm install`**。
+2. 人对下面两个设计决定拍板后，再开新一轮（brainstorming → spec → spec 审 → plan → subagent-driven）。
+3. 性能轮（终审 M5／M6）：组摘要每次轮询约 2T+E 次查找；驱动每轮重解析所有组的 body；已归档组的待投递 wake 每轮重新提供。按 100 组 × 50 任务外推，每次轮询约 0.13 s。Orca 的目标是大规模并行，这一轮迟早要做。
 
-**本轮踩到的坑（新）**：
-- worktree 里 `node_modules`、`web/node_modules` 是软链，`git status` 显示未跟踪——**永远不要 `git add -A`**。
-- 跑 `tests/panel` 前要先 `npm run build --workspace web`，否则 50 条 `panel-dist-missing` 假红。
-- 一个子 agent 退出时留了后台进程，把重复行写进了工作树（已还原，证据在台账）。**并行时收工前看一眼 `git status`。**
-- 主工作树有人那份未入库的问题清单，`orca checkpoint write` 因「工作树不干净」拒绝；本会话没写检查点，以台账为准。
-- 网络断开会让子 agent 中途退出；它们的未提交改动还在工作树里，用 SendMessage 续跑即可。
+**本会话踩到的坑（新）**：
+- `scripts/pin-ccloop.mjs` 在「已钉到同一 SHA」或「树不干净」时都拒绝。要补跑它的检查，就在 `git clone --local` 里 checkout 到重钉前一笔再跑。
+- F1 之后 `Orca-issues2` 的 `node_modules` 是**真目录**，不再是软链；没有 `web/node_modules`，web 从根解析。
+- `check-tmp-leak` 的内层 vitest 退 1 时不保留 JSON，无从知道红在哪。
+- 子 agent 的 `rm -rf` 被拒时，会把变异 clone 留在 scratchpad（仓库外，无害）。子 agent 的 commit trailer 会写错模型，不 amend。
+- 合并或推送都要人来做，Tier 0 闸门照拦。
 
 **awaitingHuman**：
-1. ccloop：把 `fix/codex-planner-output` 合进 ccloop main 并推送（之后由 agent 做 Orca F1 重钉）。
-2. Orca：本轮做完后 `--ff-only` 合 `fix/issues-20261008` 进 main 并推送。⚠️ 控制库会变成 schema 9，旧版 Orca 打不开。
-3. 删 worktree：`Orca-usage-pin`、`Orca-integration`（已合）、两个 scratchpad 旧 prunable worktree；本轮合并后再删 `Orca-issues`、`ccloop-planner`。
-4. 审两份台账里的 `Ruling:` 行。最需要看的：codex 抽取「只放宽拒绝」；面板关闭不再给空闲组写标记；重试先退余量再按完整额度预留；有停止标记时隐藏各任务「继续」；`handoff-partial` 允许归档；会话上下文越过 Rule 6 上限（人已授权不计）。
-5. **设计决定**：codex 崩溃且没报用量时，该运行用量「未知」，`retry-task` 按 spec 拒绝、且整组派发被挡，没有任何命令能清掉。建议：加一个人专属的「结清未知用量」命令，把该运行剩余额度全记为已用（保守）。本轮未做。
-6. 负载 flake 名单要不要加：`activityRuns` "endedAt…"、`agentPreviewRefresh` "re-reads a preview…"、`driverRequirementSplit`、`driverProgress`、上轮的 `driverReconcileN`；ccloop 侧见其台账 K4 段与终修段。
-7. 上一轮遗留：ccloop B4（`usageBreakdown`）点名或放弃；真 GitHub 未跑过。
+1. 合并：
+   ```
+   cd /Users/biran/code/skills/loop/Orca
+   /usr/bin/git merge --ff-only fix/issues-20261009
+   npm install
+   git push origin main
+   ```
+   ⚠️ 控制库已是 schema 9，旧版 Orca 打不开。
+2. **设计决定 ①**（D9）：codex 崩溃又没报用量的运行，用量「未知」，`retry-task` 拒绝，整组派发被挡，没有命令能清。建议：加一个人专属的「结清未知用量」，按剩余额度全记已用。
+3. **设计决定 ②**（终审 M3）：失败的运行经「交接停止」后会变成 `settled-recoverable`，失败原因从视图消失，`retry-task` 也不再适用。要不要让 `retry-task` 也接受这种情况？
+4. 负载 flake 名单要不要加：
+   - `retryTask` ×3、`requirementCommands` "re-queues a failed draft…"（F2）；
+   - `activityRuns` "endedAt…"（已给 30 s）、`agentPreviewRefresh`、`driverRecovery` "drives a retried run…"、`driverRequirementSplit`、`driverProgress`、`driverReconcileN`。
+5. 删 worktree：`Orca-issues`、合并后的 `Orca-issues2`、`ccloop-planner`、`Orca-usage-pin`、`Orca-integration`，以及两个 scratchpad 下的 prunable。
+6. 审台账里的 `Ruling:` 行，本会话新增的在「Session 2」段之后。
+7. 上一轮遗留：ccloop B4（`usageBreakdown`）点名或放弃；真 GitHub 没跑过。
+
+### 4.0.w 会话 `e34dc963`（2026-10-08～09）留下的结论（**前半已由人合并推送；过程删了，结论留在这里**）
+
+本节由会话 `3156185d` 压缩，依据：人已 `--ff-only` 合并推送（主题行 `docs(handoff): the issue-fixes round stops after E8 for a handoff; record its ledger, briefs and reports`）。原文在 git 历史里。
+- 问题清单 1/3/7/8/10/15/16 的根因修复，spec 在 `docs/superpowers/specs/2026-10-08-issue-fixes-design.md`，计划在 `docs/superpowers/plans/2026-10-08-issue-fixes.md`（索引里的「Pre-flight amendments」有约束力）。问题清单本身按人的要求不入库。
+- §2 拒绝说人话（中英文全覆盖，`refusalCoverage` 防漏）。§5 活动记录（控制库 **schema 9，单向**）。§3 空闲组不写停止标记，启动时自愈。§4 `retry-task`。§6 分类、摘要、归档、卡片。
+- ccloop：阶段提示词写明边界；codex 最终输出只接受恰好一个像答案的对象，验证阶段只放宽「拒绝」。
+- 坑：
+  - worktree 的软链 `node_modules` 永远不要 `git add -A`。
+  - 跑 `tests/panel` 前要先 `npm run build --workspace web`。
+  - 并行时收工前看一眼 `git status`，子 agent 留下的后台进程曾往工作树里写重复行。
+  - 断网后子 agent 的未提交改动还在，用 SendMessage 续跑。
 
 ### 4.0.v 会话 `eaee0f2c`（2026-10-08）留下的结论（**已完成、已由人合并推送；过程删了，结论留在这里**）
 
