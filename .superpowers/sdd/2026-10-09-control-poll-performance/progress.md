@@ -119,3 +119,15 @@ Read-onlybranchinventory: Orca designa08 isancestoroffeature (RC0); oldercontrol
 Ruling: Interpret human latest all-development-branch localintegration toinclude ccmem config-value-parity test-onlycommit, afterisolatedcandidate2/2 RC0 andstaticsourceinspection; source/config/realdata/daemonunchanged. ccmem ownrulesdo notrequireff-only, so a localordinarymerge preservingbothparents isallowed ifnotff; Orca feature/design remainsfast-forward, ccloopdevelopmenthistoryalreadycontained. Retainhistoricalbackupbranches, neverforce/reset/delete/push. This refinesearlier本轮-onlyassumption basedconcreteinventory. Cost if wrong: anoldtest-onlybranch maynotbe intendedscope; exactcommit/fileSHA andlocalmerge are auditable/recoverable, no productionsemanticchange.
 
 Candidateclone/private/tmp/od9/ccmem-config-parity-merge-check basedccmemmain, onlyexacttest bytescopied (SHA7ecc0a8b2a863cbc2565500178ef4e8371525bd2243fa2c02e761fe9408916cc); isolatedHOME/CCMEM_DATA_ROOT/no realconfig keys, node --test path RC0/2passed/no skips; fullnative log ccmem-config-parity-merge-check.log read. Userpushremains reserved.
+
+## Task3 gate complete — controller, 2026-10-10, reviewed146bcbb
+
+Task 3: complete (commits4fd2b26..146bcbb, freshSpecPASS/QualityApproved,0Critical/0Important). Freshreviewindependentlyvalidated188artifactSHA entries, both400phase/300sampletraces/statistics, identical8909162-bytefullcanonicaloutputs (10workloads/103refusals), full3operationaleffects1/0/99 andcurrentfixtureguards. InitialaftertimedRC1, a241fullrootrevisionlimit, old4workerRC1, nonqualifyingmanaged-sandboxwrites preserved. Minors: denseharnessformat/anytypes andexpecteddiagnosticnoise deferredtohumanmaintenance, no extra scope.
+
+CannotverifyfromTask3diff items resolvedby cross-task evidence: D9M3closed/finalreviewatbefore1fd; M5/M6taskreviews/guardproofs andsamefinalproduct5f0 untouchedbyTask3; currentformalcontrol155files1733pass/3defaultpin skips androot371files3503pass/0fail/4skip atA241. Defaultwriter contexts remainDBtransactionpaths; wholeperformancefinalreviewstillrequired beforeintegration.
+
+## Protected ccmem branch correction — controller, 2026-10-10
+
+Latermandatoryhandoffinspection foundmanyindependenthuman prohibitions config-value-parity不合并, unrelatedtoinspectionwindow, includingline4903. No mainmergeexecuted; candidateclone2/2 isonlytechnicalproof. OptionalhumanclarificationpendingwhileOrcaexecutioncontinues.
+
+Ruling: Supersede preceding ccmmtest-branch merge assumption: retain the specificallyprotectedunrelated config-value-parity branch unlesshuman explicitlyclarifiesnewgeneralmergeauthorization liftsthatban. 本轮Orca feature/designintegrationcontinues; ccloopassociateddevhistoryalreadycontained; ccmem本轮handoffcancommitmain. Cost ifwrong: extraoldtest remainsunmergeddespitegeneralrequest; concretecommit/testproof andexplicitquestionleavethechoicevisible, no protectedhistorysilentlychanged.
