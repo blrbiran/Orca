@@ -195,12 +195,12 @@ describe("an archived group refuses every group-targeted command but unarchive-g
     expect(Object.keys(CALLS).sort()).toEqual(expected);
   });
 
-  it("keeps only verbs in NOT_GROUP whose target is neither a group nor a task, so a group verb cannot hide there", () => {
+  it("keeps only verbs in NOT_GROUP whose target is neither a group, task nor run (all three are group-scoped), so a group verb cannot hide there", () => {
     // The walk below is only as good as NOT_GROUP. A verb that accepts a group or task target would be skipped by the
     // walk yet gated by applyWebCommand, so the exemption would be a silent hole: its raw schema must reject both kinds.
     for (const verb of NOT_GROUP) {
       expect(commandVerbSchema.options, verb).toContain(verb);
-      for (const target of [{ kind: "group", groupId: "g" }, { kind: "task", groupId: "g", taskId: "a" }]) {
+      for (const target of [{ kind: "group", groupId: "g" }, { kind: "task", groupId: "g", taskId: "a" }, { kind: "run", groupId: "g", runId: "r" }]) {
         const parsed = rawAuthorityCommandSchema.safeParse({ schema: "orca-raw-command-v1", commandId: "c", expectedRevision: 0, actorId: "human", verb, target, payload: {} });
         expect(parsed.success, `${verb} must not take a ${target.kind} target`).toBe(false);
         expect(parsed.success ? [] : parsed.error.issues.map((issue) => issue.path[0]), `${verb} ${target.kind}`).toContain("target");
@@ -308,6 +308,24 @@ describe("the archive gate also sits ahead of command preparation (spec §6.3, E
       const counted = countProbes(h);
       expect(await new WebControlService({ ...h.deps, profileRouter: counted.router }).start(startOf(h, "start-archived"))).toMatchObject({ error: { code: "group-archived" } });
       expect(lookupCommandResult(h.store, "g", "start-archived")!.body).toMatchObject({ error: { code: "group-archived" } });
+      expect(counted.calls()).toBe(0);
+    } finally { await h.dispose(); }
+  });
+
+  it("replays a start accepted before the archive through preflight, probing nothing and booking nothing new", async () => {
+    // start goes through preflightWebCommand, so this is the case that pins replay ahead of the archive gate there.
+    const { h, service } = await confirmed();
+    try {
+      const command = startOf(h, "start-before");
+      const first = await service.start(command);
+      expect(first).toMatchObject({ result: { kind: "scheduled", operation: "start" } });
+      service.archiveGroup(h.command("archive-group", {}));
+      const commandRows = () => Number(h.store.db.prepare("SELECT COUNT(*) AS n FROM commands WHERE group_id='g'").get()!.n);
+      const rows = commandRows(), seq = lastSeq(h);
+      const counted = countProbes(h);
+      expect(await new WebControlService({ ...h.deps, profileRouter: counted.router }).start(command)).toEqual(first);
+      expect(commandRows()).toBe(rows);
+      expect(lastSeq(h)).toBe(seq);
       expect(counted.calls()).toBe(0);
     } finally { await h.dispose(); }
   });
