@@ -1,0 +1,38 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.3 [39m[90m/Users/biran/.codex/worktrees/usage-settlement-handoff-retry/Orca[39m
+
+(node:48740) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+/private/tmp/od9/t/orca-tmp-nAXWms/orca-snapshot-verify-Vzk32T/input.bundle is okay
+ [31m❯[39m tests/control/controlPollBenchmark.test.ts [2m([22m[2m2 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[33m 2625[2mms[22m[39m
+   [31m❯[39m real-path benchmark integrity [2m(2)[22m
+     [32m✓[39m normalizes only run identity and keeps all business hashes and refusal detail[32m 1[2mms[22m[39m
+[31m     [31m×[31m builds one legal store with DAG, current runs, activities and a real replenishment[39m[33m 2616[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/control/controlPollBenchmark.test.ts[2m > [22mreal-path benchmark integrity[2m > [22mbuilds one legal store with DAG, current runs, activities and a real replenishment
+[31m[1mAssertionError[22m: expected 23 to be 22 // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 22[39m
+[31m+ 23[39m
+
+[36m [2m❯[22m tests/control/controlPollBenchmark.test.ts:[2m23:16[22m[39m
+    [90m 21|[39m    const seq=Number(f.store.db.prepare("SELECT MAX(seq) AS n FROM acti…
+    [90m 22|[39m    const originalSeq=Number(initial.find(t=>t.name==="activity")!.rows…
+    [90m 23|[39m    expect(seq).toBe(originalSeq+1);
+    [90m   |[39m                [31m^[39m
+    [90m 24|[39m    restoreDatabase(f.store,initial); expect(captureDatabase(f.store)).…
+    [90m 25|[39m    expect(replenishStartWakes(f.driverDeps)).toEqual(["drive:live-000:…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m1 passed[39m[22m[90m (2)[39m
+[2m   Start at [22m 21:40:28
+[2m   Duration [22m 4.16s[2m (tests 65%, transform 31%, import 4%)[22m
+

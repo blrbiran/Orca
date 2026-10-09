@@ -1,0 +1,46 @@
+[
+  {
+    "name": "build-entry",
+    "commit": "19605fb685be4402680a3c38ab0e30b661be1f5a",
+    "test": "refuses a nontemporary sandbox",
+    "command": [
+      "npx",
+      "vitest",
+      "run",
+      "tests/control/controlPollBenchmark.test.ts",
+      "-t",
+      "refuses a nontemporary sandbox",
+      "--reporter=dot"
+    ],
+    "rc": 1,
+    "diffBytes": 921,
+    "restored": {
+      "diffBytes": 0,
+      "stagedDiffBytes": 0
+    },
+    "qualifies": false,
+    "reason": "Clone cwd is temporary; negative sandbox wrongly fell inside allowed namespace, so baseline assertion failed."
+  },
+  {
+    "name": "open-entry",
+    "commit": "19605fb685be4402680a3c38ab0e30b661be1f5a",
+    "test": "refuses a nontemporary sandbox",
+    "command": [
+      "npx",
+      "vitest",
+      "run",
+      "tests/control/controlPollBenchmark.test.ts",
+      "-t",
+      "refuses a nontemporary sandbox",
+      "--reporter=dot"
+    ],
+    "rc": 1,
+    "diffBytes": 952,
+    "restored": {
+      "diffBytes": 0,
+      "stagedDiffBytes": 0
+    },
+    "qualifies": false,
+    "reason": "Clone cwd is temporary; negative sandbox wrongly fell inside allowed namespace, so baseline assertion failed."
+  }
+]

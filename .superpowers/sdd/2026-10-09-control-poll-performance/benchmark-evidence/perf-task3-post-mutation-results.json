@@ -1,0 +1,62 @@
+[
+  {
+    "name": "nonempty-root",
+    "commit": "b1956cdae12c3c2824390585421df6b850e54543",
+    "test": "refuses a nonempty temporary root",
+    "command": [
+      "npx",
+      "vitest",
+      "run",
+      "tests/control/controlPollBenchmark.test.ts",
+      "-t",
+      "refuses a nonempty temporary root",
+      "--reporter=dot"
+    ],
+    "rc": 1,
+    "diffBytes": 1047,
+    "restored": {
+      "diffBytes": 0,
+      "stagedDiffBytes": 0
+    }
+  },
+  {
+    "name": "cached-restore",
+    "commit": "b1956cdae12c3c2824390585421df6b850e54543",
+    "test": "builds one legal store",
+    "command": [
+      "npx",
+      "vitest",
+      "run",
+      "tests/control/controlPollBenchmark.test.ts",
+      "-t",
+      "builds one legal store",
+      "--reporter=dot"
+    ],
+    "rc": 1,
+    "diffBytes": 831,
+    "restored": {
+      "diffBytes": 0,
+      "stagedDiffBytes": 0
+    }
+  },
+  {
+    "name": "sqlite-wire",
+    "commit": "b1956cdae12c3c2824390585421df6b850e54543",
+    "test": "builds one legal store",
+    "command": [
+      "npx",
+      "vitest",
+      "run",
+      "tests/control/controlPollBenchmark.test.ts",
+      "-t",
+      "builds one legal store",
+      "--reporter=dot"
+    ],
+    "rc": 1,
+    "diffBytes": 1028,
+    "restored": {
+      "diffBytes": 0,
+      "stagedDiffBytes": 0
+    }
+  }
+]

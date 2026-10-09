@@ -1,0 +1,184 @@
+[
+  {
+    "name": "decode-refresh",
+    "commit": "73ac720c92b1488c00b9127fae1c7675444aa966",
+    "test": "reuses statements while refreshing",
+    "command": [
+      "npx",
+      "vitest",
+      "run",
+      "tests/panel/controlPollPerformance.test.ts",
+      "-t",
+      "reuses statements while refreshing",
+      "--reporter=dot"
+    ],
+    "rc": 1,
+    "diffBytes": 742,
+    "restored": {
+      "diffBytes": 0,
+      "stagedDiffBytes": 0
+    }
+  },
+  {
+    "name": "decode-once",
+    "commit": "73ac720c92b1488c00b9127fae1c7675444aa966",
+    "test": "batches real summary and group reads for 10",
+    "command": [
+      "npx",
+      "vitest",
+      "run",
+      "tests/panel/controlPollPerformance.test.ts",
+      "-t",
+      "batches real summary and group reads for 10",
+      "--reporter=dot"
+    ],
+    "rc": 1,
+    "diffBytes": 562,
+    "restored": {
+      "diffBytes": 0,
+      "stagedDiffBytes": 0
+    }
+  },
+  {
+    "name": "point-reads",
+    "commit": "73ac720c92b1488c00b9127fae1c7675444aa966",
+    "test": "batches real summary and group reads for 10",
+    "command": [
+      "npx",
+      "vitest",
+      "run",
+      "tests/panel/controlPollPerformance.test.ts",
+      "-t",
+      "batches real summary and group reads for 10",
+      "--reporter=dot"
+    ],
+    "rc": 1,
+    "diffBytes": 2167,
+    "restored": {
+      "diffBytes": 0,
+      "stagedDiffBytes": 0
+    }
+  },
+  {
+    "name": "work-statement-reuse",
+    "commit": "73ac720c92b1488c00b9127fae1c7675444aa966",
+    "test": "reuses statements while refreshing",
+    "command": [
+      "npx",
+      "vitest",
+      "run",
+      "tests/panel/controlPollPerformance.test.ts",
+      "-t",
+      "reuses statements while refreshing",
+      "--reporter=dot"
+    ],
+    "rc": 1,
+    "diffBytes": 782,
+    "restored": {
+      "diffBytes": 0,
+      "stagedDiffBytes": 0
+    }
+  },
+  {
+    "name": "counter-alias",
+    "commit": "73ac720c92b1488c00b9127fae1c7675444aa966",
+    "test": "counts identical fixture raw bytes",
+    "command": [
+      "npx",
+      "vitest",
+      "run",
+      "tests/panel/controlPollPerformance.test.ts",
+      "-t",
+      "counts identical fixture raw bytes",
+      "--reporter=dot"
+    ],
+    "rc": 1,
+    "diffBytes": 765,
+    "restored": {
+      "diffBytes": 0,
+      "stagedDiffBytes": 0
+    }
+  },
+  {
+    "name": "cached-restore-invalid-syntax",
+    "commit": "73ac720c92b1488c00b9127fae1c7675444aa966",
+    "test": "builds one legal store",
+    "command": [
+      "npx",
+      "vitest",
+      "run",
+      "tests/control/controlPollBenchmark.test.ts",
+      "-t",
+      "builds one legal store",
+      "--reporter=dot"
+    ],
+    "rc": 1,
+    "diffBytes": 868,
+    "restored": {
+      "diffBytes": 0,
+      "stagedDiffBytes": 0
+    },
+    "qualifies": false
+  },
+  {
+    "name": "group-category",
+    "commit": "73ac720c92b1488c00b9127fae1c7675444aa966",
+    "test": "defers 100 archived groups",
+    "command": [
+      "npx",
+      "vitest",
+      "run",
+      "tests/control/archivedWakePerformance.test.ts",
+      "-t",
+      "defers 100 archived groups",
+      "--reporter=dot"
+    ],
+    "rc": 1,
+    "diffBytes": 705,
+    "restored": {
+      "diffBytes": 0,
+      "stagedDiffBytes": 0
+    }
+  },
+  {
+    "name": "cached-restore-late-hook-survived",
+    "commit": "73ac720c92b1488c00b9127fae1c7675444aa966",
+    "test": "builds one legal store",
+    "command": [
+      "npx",
+      "vitest",
+      "run",
+      "tests/control/controlPollBenchmark.test.ts",
+      "-t",
+      "builds one legal store",
+      "--reporter=dot"
+    ],
+    "rc": 0,
+    "diffBytes": 831,
+    "restored": {
+      "diffBytes": 0,
+      "stagedDiffBytes": 0
+    },
+    "qualifies": false
+  },
+  {
+    "name": "cached-restore",
+    "commit": "4ebe3abf8e69d73a004e04cd0afcab29eddcea01",
+    "test": "builds one legal store",
+    "command": [
+      "npx",
+      "vitest",
+      "run",
+      "tests/control/controlPollBenchmark.test.ts",
+      "-t",
+      "builds one legal store",
+      "--reporter=dot"
+    ],
+    "rc": 1,
+    "diffBytes": 831,
+    "restored": {
+      "diffBytes": 0,
+      "stagedDiffBytes": 0
+    }
+  }
+]

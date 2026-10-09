@@ -1,0 +1,14 @@
+diff --git a/src/panel/groupReadSnapshot.ts b/src/panel/groupReadSnapshot.ts
+index f07e629..f8820f7 100644
+--- a/src/panel/groupReadSnapshot.ts
++++ b/src/panel/groupReadSnapshot.ts
+@@ -15,8 +15,8 @@ export interface GroupReadSnapshot {
+ 
+ // Connection-bound statements only. Rows and decoded objects live in one request's snapshot.
+ const statements = new WeakMap<ControlStore, { work: StatementSync; runs: StatementSync }>();
++const decoded = new Map<string, StoredJsonResult>();
+ function lazyDecoder(rows: ReadonlyMap<string, { body: string }>) {
+-  const decoded = new Map<string, StoredJsonResult>();
+   return (id: string): StoredJsonResult | undefined => {
+     const row = rows.get(id);
+     if (row === undefined) return undefined;

@@ -1,0 +1,18 @@
+(node:50139) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+/private/tmp/od9/t/orca-snapshot-verify-wqJgwe/input.bundle is okay
+AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
++ actual - expected
+
++ 'settled'
+- 'settled-succeeded'
+          ^
+
+    at buildControlPollFixture (/Users/biran/.codex/worktrees/usage-settlement-handoff-retry/Orca/tests/control/fixtures/controlPollPerformance.ts:101:10)
+    at async main (/private/tmp/od9/fixture-smoke.ts:4:29) {
+  generatedMessage: true,
+  code: 'ERR_ASSERTION',
+  actual: 'settled',
+  expected: 'settled-succeeded',
+  operator: 'strictEqual'
+}

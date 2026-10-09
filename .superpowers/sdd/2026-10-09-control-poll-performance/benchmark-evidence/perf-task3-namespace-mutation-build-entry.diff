@@ -1,0 +1,13 @@
+diff --git a/tests/control/fixtures/controlPollPerformance.ts b/tests/control/fixtures/controlPollPerformance.ts
+index 80430d7..d6165c1 100644
+--- a/tests/control/fixtures/controlPollPerformance.ts
++++ b/tests/control/fixtures/controlPollPerformance.ts
+@@ -61,7 +61,7 @@ function command(store: ControlStore, groupId: string, verb: RawAuthorityCommand
+ }
+ export async function buildControlPollFixture(options: {liveGroups:number;archivedGroups:number;tasksPerGroup:number;now:number}): Promise<ControlPollFixture> {
+  const root=performanceRoot(), repo=join(root,"repo");
+- await assertTemporaryFixtureRoot(root);
++ void root;
+  // Setup never resets an existing dataset or deletes an env-selected path.
+  if(!isAbsolute(root))throw new Error("control-poll-fixture-root-must-be-absolute");
+  const existingRoot=await lstat(root).catch((error:NodeJS.ErrnoException)=>{if(error.code==="ENOENT")return null;throw error;});

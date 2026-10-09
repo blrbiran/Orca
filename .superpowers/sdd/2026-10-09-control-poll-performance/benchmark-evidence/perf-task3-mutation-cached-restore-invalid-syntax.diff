@@ -1,0 +1,13 @@
+diff --git a/tests/control/fixtures/controlReadCounters.ts b/tests/control/fixtures/controlReadCounters.ts
+index 1715496..004a0e8 100644
+--- a/tests/control/fixtures/controlReadCounters.ts
++++ b/tests/control/fixtures/controlReadCounters.ts
+@@ -50,7 +50,7 @@ export function installControlReadCounters(store: ControlStore) {
+       // Large real-path benchmarks prepare many ephemeral canonical/proposal statements.
+       // Keep cached live statements observable without retaining every transient native statement.
+       const reference = new WeakRef(statement);
+-      restores.push(() => { const live = reference.deref(); if (live) Object.defineProperty(live, method, { configurable: true, value: original }); });
++      restores.push(() => { const live = reference.deref(); // mutation: omit restoration of cached methods });
+     }
+     return statement;
+   };

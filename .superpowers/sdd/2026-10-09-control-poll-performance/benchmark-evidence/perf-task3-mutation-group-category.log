@@ -1,0 +1,34 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.3 [39m[90m/private/tmp/od9/performance-task3-mutation[39m
+
+(node:84475) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+[33m[39m[2m[90m-[39m[22m[33m[39m[31mx[39m[33m[39m[2m[90m-[39m[22m[33m[39m[2m[90m-[39m[22m[33m[39m[2m[90m-[39m[22m[33m[39m[2m[90m-[39m[22m[33m[39m[2m[90m-[39m[22m[33m[39m[2m[90m-[39m[22m[33m[39m[2m[90m-[39m[22m[33m[39m[2m[90m-[39m[22m[33m[39m[2m[90m-[39m[22m[33m[39m[2m[90m-[39m[22m[33m[39m[2m[90m-[39m[22m[33m[39m[2m[90m-[39m[22m[33m[39m[2m[90m-[39m[22m[33m[39m[2m[90m-[39m[22m[33m[39m[2m[90m-[39m[22m[33m[39m[2m[90m-[39m[22m[33m[39m[2m[90m-[39m[22m[33m[39m[2m[90m-[39m[22m[33m[39m[2m[90m-[39m[22m[33m[39m[2m[90m-[39m[22m[33m[39m[2m[90m-[39m[22m[33m[39m[2m[90m-[39m[22m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/control/archivedWakePerformance.test.ts[2m > [22marchived wake performance at actual entry points[2m > [22mdefers 100 archived groups with three wakes for three pumps, one lookup and parse per group
+[31m[1mAssertionError[22m: expected undefined to be 1 // Object.is equality[39m
+
+[32m- Expected:[39m
+1
+
+[31m+ Received:[39m
+undefined
+
+[36m [2m❯[22m tests/control/archivedWakePerformance.test.ts:[2m85:116[22m[39m
+    [90m 83|[39m           expect(h.accept).not.toHaveBeenCalled();
+    [90m 84|[39m           expect(groupGets(counts)).toBe(100);
+    [90m 85|[39m           for (let n = 0; n < 100; n++) expect(counts.groupParses.get(…
+    [90m   |[39m                                                                                                                    [31m^[39m
+    [90m 86|[39m           expect(pending(h)).toEqual(ids);
+    [90m 87|[39m           expect(counts.prepares.filter(p => p.sql === "SELECT body FR…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[33m23 skipped[39m[90m (24)[39m
+[2m   Start at [22m 21:53:01
+[2m   Duration [22m 1.18s[2m (transform 52%, tests 38%, import 9%, setup 1%)[22m
+

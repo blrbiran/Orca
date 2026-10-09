@@ -1,0 +1,28 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.3 [39m[90m/private/tmp/od9/performance-task3-mutation[39m
+
+(node:41323) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+[33m[39m[2m[90m-[39m[22m[33m[39m[2m[90m-[39m[22m[33m[39m[31mx[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/control/controlPollBenchmark.test.ts[2m > [22mreal-path benchmark integrity[2m > [22mrefuses a nonempty temporary root before removing a sentinel or initializing data
+[31m[1mAssertionError[22m: expected undefined to be an instance of Error[39m
+[36m [2m❯[22m tests/control/controlPollBenchmark.test.ts:[2m55:17[22m[39m
+    [90m 53|[39m   let error:unknown,f:Awaited<ReturnType<typeof buildControlPollFixtur…
+    [90m 54|[39m   try {f=await buildControlPollFixture({liveGroups:0,archivedGroups:0,…
+    [90m 55|[39m   expect(error).toBeInstanceOf(Error);expect((error as Error).message)…
+    [90m   |[39m                 [31m^[39m
+    [90m 56|[39m   expect(await readFile(sentinel,"utf8")).toBe("preserve me");expect(a…
+    [90m 57|[39m  }));
+[90m [2m❯[22m withFreshRoot tests/control/controlPollBenchmark.test.ts:[2m16:7[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[33m2 skipped[39m[90m (3)[39m
+[2m   Start at [22m 23:46:57
+[2m   Duration [22m 836ms[2m (transform 75%, import 13%, tests 10%, setup 1%)[22m
+

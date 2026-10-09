@@ -1,0 +1,69 @@
+{
+  "initialDigest": "849f0db18d6d00f2e1024d1c71c74219486aa88e4cb33f7a4380a9646ec5d21e",
+  "products": {
+    "before": "1fd19a3d49778d0809f96af49a7ef51647a6c0fe",
+    "after": "4fd2b266006c90fd5084b750a4e63c587451f69d"
+  },
+  "cases": [
+    {
+      "name": "replenish",
+      "completeStateDigest": "b51492d20bbb9c2258266bd75f1fb732b9ef6bc1425c8e3fac42b7b0a977c09f",
+      "scope": {
+        "scannedGroups": 200,
+        "armedGroups": 1,
+        "armedTask": "t01"
+      },
+      "changedRowCount": 1
+    },
+    {
+      "name": "archived-only-pump",
+      "completeStateDigest": "849f0db18d6d00f2e1024d1c71c74219486aa88e4cb33f7a4380a9646ec5d21e",
+      "scope": {
+        "pendingWakes": 300,
+        "archivedGroups": 100,
+        "kinds": [
+          "start",
+          "no-start",
+          "resume"
+        ]
+      },
+      "changedRowCount": 0
+    },
+    {
+      "name": "mixed-pump",
+      "completeStateDigest": "15d392696a78d6d8646ccff970db691816efb671021efb71b04a31a4f19bf7d3",
+      "scope": {
+        "pendingWakes": 399,
+        "archivedGroups": 100,
+        "liveGroups": 99,
+        "existingCurrentRuns": 99
+      },
+      "changedRowCount": 99
+    }
+  ],
+  "commands": [
+    {
+      "side": "before",
+      "command": [
+        "npx",
+        "tsx",
+        "/private/tmp/od9/performance-operation-effects.ts",
+        "/private/tmp/od9/performance-before",
+        "/private/tmp/od9/logs/perf-task3-before-complete-db-effects.json"
+      ],
+      "rc": 0
+    },
+    {
+      "side": "after",
+      "command": [
+        "npx",
+        "tsx",
+        "/private/tmp/od9/performance-operation-effects.ts",
+        "/private/tmp/od9/performance-after",
+        "/private/tmp/od9/logs/perf-task3-after-complete-db-effects.json"
+      ],
+      "rc": 0
+    }
+  ],
+  "everyFullDatabaseRowAndRowidAndSqliteSequenceEffectEqual": true
+}

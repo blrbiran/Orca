@@ -1,0 +1,46 @@
+[
+  {
+    "name": "build-entry",
+    "commit": "32216a771f189432691e29ef17b63d7e940859eb",
+    "test": "refuses a nontemporary sandbox",
+    "command": [
+      "npx",
+      "vitest",
+      "run",
+      "tests/control/controlPollBenchmark.test.ts",
+      "-t",
+      "refuses a nontemporary sandbox",
+      "--reporter=dot"
+    ],
+    "rc": 1,
+    "diffBytes": 921,
+    "restored": {
+      "diffBytes": 0,
+      "stagedDiffBytes": 0
+    },
+    "qualifies": false,
+    "reason": "Mutation fixture writes were directed to a managed-main owned sandbox; violates clone-only fault-injection data boundary."
+  },
+  {
+    "name": "open-entry",
+    "commit": "32216a771f189432691e29ef17b63d7e940859eb",
+    "test": "refuses a nontemporary sandbox",
+    "command": [
+      "npx",
+      "vitest",
+      "run",
+      "tests/control/controlPollBenchmark.test.ts",
+      "-t",
+      "refuses a nontemporary sandbox",
+      "--reporter=dot"
+    ],
+    "rc": 1,
+    "diffBytes": 952,
+    "restored": {
+      "diffBytes": 0,
+      "stagedDiffBytes": 0
+    },
+    "qualifies": false,
+    "reason": "Mutation fixture writes were directed to a managed-main owned sandbox; violates clone-only fault-injection data boundary."
+  }
+]

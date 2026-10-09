@@ -1,0 +1,227 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.3 [39m[90m/Users/biran/.codex/worktrees/usage-settlement-handoff-retry/Orca[39m
+
+(node:13361) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:13352) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:13339) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+/private/tmp/od9/t/orca-tmp-b2nYn5/orca-snapshot-verify-LIICbW/input.bundle is okay
+ [31m❯[39m tests/control/controlPollBenchmark.test.ts [2m([22m[2m2 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[33m 2988[2mms[22m[39m
+   [31m❯[39m real-path benchmark integrity [2m(2)[22m
+     [32m✓[39m normalizes only run identity and keeps all business hashes and refusal detail[32m 1[2mms[22m[39m
+[31m     [31m×[31m builds one legal store with DAG, current runs, activities and a real replenishment[39m[33m 2978[2mms[22m[39m
+ [32m✓[39m tests/control/archivedWakePerformance.test.ts [2m([22m[2m24 tests[22m[2m)[22m[33m 5190[2mms[22m[39m
+   [32m✓[39m archived wake performance at actual entry points [2m(24)[22m
+     [33m[2m✓[22m[39m defers 100 archived groups with three wakes for three pumps, one lookup and parse per group[33m 810[2mms[22m[39m
+     [33m[2m✓[22m[39m sees same-pump unarchive after an awaited handler returns true[33m 351[2mms[22m[39m
+     [33m[2m✓[22m[39m sees same-pump unarchive after an awaited handler returns false[33m 323[2mms[22m[39m
+     [33m[2m✓[22m[39m does not share prepared archive lookups between stores[33m 336[2mms[22m[39m
+ [31m❯[39m tests/panel/controlPollPerformance.test.ts [2m([22m[2m18 tests[22m[2m | [22m[31m14 failed[39m[2m)[22m[33m 8191[2mms[22m[39m
+   [31m❯[39m control poll request snapshots [2m(18)[22m
+[31m     [31m×[31m batches real summary and group reads for 10 tasks with multiple dependencies[39m[33m 335[2mms[22m[39m
+[31m     [31m×[31m batches real summary and group reads for 50 tasks with multiple dependencies[39m[33m 796[2mms[22m[39m
+[31m     [31m×[31m reuses statements while refreshing body and projection state between real requests[39m[32m 182[2mms[22m[39m
+     [32m✓[39m keeps legacy missing and corrupt work lenient but strict detail rejects its own schema and authority[32m 197[2mms[22m[39m
+[31m     [31m×[31m does not borrow same-id dependency or current run bodies from another group[39m[32m 195[2mms[22m[39m
+[31m     [31m×[31m keeps missing work and bad referenced runs out of summary counts without parsing unused rows[39m[33m 340[2mms[22m[39m
+[31m     [31m×[31m isolates prepared statements across two stores and reconstructs them after close and reopen[39m[33m 442[2mms[22m[39m
+[31m     [31m×[31m uses rowid for current lineage and progress while displaying historical runs in id order[39m[32m 186[2mms[22m[39m
+     [32m✓[39m pins strict schema, authority, amendment and frozen agent refusals through the real group reader[32m 237[2mms[22m[39m
+[31m     [31m×[31m refreshes latest seq despite clock rollback and preserves null and retention results[39m[32m 231[2mms[22m[39m
+     [32m✓[39m checks the full latest activity kind lazily after run identity, using run-id membership[32m 158[2mms[22m[39m
+     [32m✓[39m checks the full latest activity body lazily after run identity, using run-id membership[32m 236[2mms[22m[39m
+[31m     [31m×[31m batches run evidence validation through the same strict run and work snapshots[39m[32m 193[2mms[22m[39m
+[31m     [31m×[31m shares lazy decoding with live M3 retry authority and still rejects corrupt source and missing marker[39m[33m 1700[2mms[22m[39m
+[31m     [31m×[31m preserves D9 settlement markers and strict rejection while decoding each work and run once[39m[33m 1604[2mms[22m[39m
+[31m     [31m×[31m does not decode an unreferenced legacy run during summary and names it in strict detail[39m[32m 117[2mms[22m[39m
+[31m     [31m×[31m counts identical fixture raw bytes once per actual JSON parse rather than multiplying row aliases[39m[32m 65[2mms[22m[39m
+[31m     [31m×[31m shares the snapshot with a converted requirement's active work summary and preserves malformed active-run refusal[39m[33m 972[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 15 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/control/controlPollBenchmark.test.ts[2m > [22mreal-path benchmark integrity[2m > [22mbuilds one legal store with DAG, current runs, activities and a real replenishment
+[31m[1mError[22m: UNIQUE constraint failed: sqlite_sequence.rowid[39m
+[36m [2m❯[22m restoreDatabase tests/bench/controlPollPerformance.ts:[2m37:36[22m[39m
+
+[90m [2m❯[22m tests/control/controlPollBenchmark.test.ts:[2m19:4[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/15]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/panel/controlPollPerformance.test.ts[2m > [22mcontrol poll request snapshots[2m > [22mbatches real summary and group reads for 10 tasks with multiple dependencies
+[41m[1m FAIL [22m[49m tests/panel/controlPollPerformance.test.ts[2m > [22mcontrol poll request snapshots[2m > [22mbatches real summary and group reads for 50 tasks with multiple dependencies
+[31m[1mAssertionError[22m: groups:g: expected 4 to be less than or equal to 1[39m
+[36m [2m❯[22m bounds tests/panel/controlPollPerformance.test.ts:[2m46:57[22m[39m
+    [90m 44|[39m   expect(c.executions.filter(e => /FROM activity.*JOIN runs/.test(e.sq…
+    [90m 45|[39m   expect(c.executions.filter(e => /FROM activity WHERE run_id=/.test(e…
+    [90m 46|[39m   for (const [id, count] of c.parses) expect(count, id).toBeLessThanOr…
+    [90m   |[39m                                                         [31m^[39m
+    [90m 47|[39m }
+    [90m 48|[39m const refusal = (fn: () => unknown) => {
+[90m [2m❯[22m tests/panel/controlPollPerformance.test.ts:[2m78:97[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/15]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/panel/controlPollPerformance.test.ts[2m > [22mcontrol poll request snapshots[2m > [22mreuses statements while refreshing body and projection state between real requests
+[31m[1mAssertionError[22m: groups:g: expected 4 to be less than or equal to 1[39m
+[36m [2m❯[22m bounds tests/panel/controlPollPerformance.test.ts:[2m46:57[22m[39m
+    [90m 44|[39m   expect(c.executions.filter(e => /FROM activity.*JOIN runs/.test(e.sq…
+    [90m 45|[39m   expect(c.executions.filter(e => /FROM activity WHERE run_id=/.test(e…
+    [90m 46|[39m   for (const [id, count] of c.parses) expect(count, id).toBeLessThanOr…
+    [90m   |[39m                                                         [31m^[39m
+    [90m 47|[39m }
+    [90m 48|[39m const refusal = (fn: () => unknown) => {
+[90m [2m❯[22m tests/panel/controlPollPerformance.test.ts:[2m88:86[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/15]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/panel/controlPollPerformance.test.ts[2m > [22mcontrol poll request snapshots[2m > [22mdoes not borrow same-id dependency or current run bodies from another group
+[31m[1mAssertionError[22m: groups:g: expected 4 to be less than or equal to 1[39m
+[36m [2m❯[22m bounds tests/panel/controlPollPerformance.test.ts:[2m46:57[22m[39m
+    [90m 44|[39m   expect(c.executions.filter(e => /FROM activity.*JOIN runs/.test(e.sq…
+    [90m 45|[39m   expect(c.executions.filter(e => /FROM activity WHERE run_id=/.test(e…
+    [90m 46|[39m   for (const [id, count] of c.parses) expect(count, id).toBeLessThanOr…
+    [90m   |[39m                                                         [31m^[39m
+    [90m 47|[39m }
+    [90m 48|[39m const refusal = (fn: () => unknown) => {
+[90m [2m❯[22m tests/panel/controlPollPerformance.test.ts:[2m124:9[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/15]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/panel/controlPollPerformance.test.ts[2m > [22mcontrol poll request snapshots[2m > [22mkeeps missing work and bad referenced runs out of summary counts without parsing unused rows
+[31m[1mAssertionError[22m: groups:g: expected 4 to be less than or equal to 1[39m
+[36m [2m❯[22m bounds tests/panel/controlPollPerformance.test.ts:[2m46:57[22m[39m
+    [90m 44|[39m   expect(c.executions.filter(e => /FROM activity.*JOIN runs/.test(e.sq…
+    [90m 45|[39m   expect(c.executions.filter(e => /FROM activity WHERE run_id=/.test(e…
+    [90m 46|[39m   for (const [id, count] of c.parses) expect(count, id).toBeLessThanOr…
+    [90m   |[39m                                                         [31m^[39m
+    [90m 47|[39m }
+    [90m 48|[39m const refusal = (fn: () => unknown) => {
+[90m [2m❯[22m tests/panel/controlPollPerformance.test.ts:[2m137:191[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/15]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/panel/controlPollPerformance.test.ts[2m > [22mcontrol poll request snapshots[2m > [22misolates prepared statements across two stores and reconstructs them after close and reopen
+[31m[1mAssertionError[22m: groups:g: expected 4 to be less than or equal to 1[39m
+[36m [2m❯[22m bounds tests/panel/controlPollPerformance.test.ts:[2m46:57[22m[39m
+    [90m 44|[39m   expect(c.executions.filter(e => /FROM activity.*JOIN runs/.test(e.sq…
+    [90m 45|[39m   expect(c.executions.filter(e => /FROM activity WHERE run_id=/.test(e…
+    [90m 46|[39m   for (const [id, count] of c.parses) expect(count, id).toBeLessThanOr…
+    [90m   |[39m                                                         [31m^[39m
+    [90m 47|[39m }
+    [90m 48|[39m const refusal = (fn: () => unknown) => {
+[90m [2m❯[22m tests/panel/controlPollPerformance.test.ts:[2m163:97[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/15]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/panel/controlPollPerformance.test.ts[2m > [22mcontrol poll request snapshots[2m > [22muses rowid for current lineage and progress while displaying historical runs in id order
+[31m[1mAssertionError[22m: groups:g: expected 18 to be less than or equal to 1[39m
+[36m [2m❯[22m bounds tests/panel/controlPollPerformance.test.ts:[2m46:57[22m[39m
+    [90m 44|[39m   expect(c.executions.filter(e => /FROM activity.*JOIN runs/.test(e.sq…
+    [90m 45|[39m   expect(c.executions.filter(e => /FROM activity WHERE run_id=/.test(e…
+    [90m 46|[39m   for (const [id, count] of c.parses) expect(count, id).toBeLessThanOr…
+    [90m   |[39m                                                         [31m^[39m
+    [90m 47|[39m }
+    [90m 48|[39m const refusal = (fn: () => unknown) => {
+[90m [2m❯[22m tests/panel/controlPollPerformance.test.ts:[2m180:82[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/15]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/panel/controlPollPerformance.test.ts[2m > [22mcontrol poll request snapshots[2m > [22mrefreshes latest seq despite clock rollback and preserves null and retention results
+[31m[1mAssertionError[22m: groups:g: expected 18 to be less than or equal to 1[39m
+[36m [2m❯[22m bounds tests/panel/controlPollPerformance.test.ts:[2m46:57[22m[39m
+    [90m 44|[39m   expect(c.executions.filter(e => /FROM activity.*JOIN runs/.test(e.sq…
+    [90m 45|[39m   expect(c.executions.filter(e => /FROM activity WHERE run_id=/.test(e…
+    [90m 46|[39m   for (const [id, count] of c.parses) expect(count, id).toBeLessThanOr…
+    [90m   |[39m                                                         [31m^[39m
+    [90m 47|[39m }
+    [90m 48|[39m const refusal = (fn: () => unknown) => {
+[90m [2m❯[22m tests/panel/controlPollPerformance.test.ts:[2m210:111[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/15]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/panel/controlPollPerformance.test.ts[2m > [22mcontrol poll request snapshots[2m > [22mbatches run evidence validation through the same strict run and work snapshots
+[31m[1mAssertionError[22m: groups:g: expected 3 to be less than or equal to 1[39m
+[36m [2m❯[22m bounds tests/panel/controlPollPerformance.test.ts:[2m46:57[22m[39m
+    [90m 44|[39m   expect(c.executions.filter(e => /FROM activity.*JOIN runs/.test(e.sq…
+    [90m 45|[39m   expect(c.executions.filter(e => /FROM activity WHERE run_id=/.test(e…
+    [90m 46|[39m   for (const [id, count] of c.parses) expect(count, id).toBeLessThanOr…
+    [90m   |[39m                                                         [31m^[39m
+    [90m 47|[39m }
+    [90m 48|[39m const refusal = (fn: () => unknown) => {
+[90m [2m❯[22m tests/panel/controlPollPerformance.test.ts:[2m242:141[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/15]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/panel/controlPollPerformance.test.ts[2m > [22mcontrol poll request snapshots[2m > [22mshares lazy decoding with live M3 retry authority and still rejects corrupt source and missing marker
+[31m[1mAssertionError[22m: groups:g: expected 15 to be less than or equal to 1[39m
+[36m [2m❯[22m bounds tests/panel/controlPollPerformance.test.ts:[2m46:57[22m[39m
+    [90m 44|[39m   expect(c.executions.filter(e => /FROM activity.*JOIN runs/.test(e.sq…
+    [90m 45|[39m   expect(c.executions.filter(e => /FROM activity WHERE run_id=/.test(e…
+    [90m 46|[39m   for (const [id, count] of c.parses) expect(count, id).toBeLessThanOr…
+    [90m   |[39m                                                         [31m^[39m
+    [90m 47|[39m }
+    [90m 48|[39m const refusal = (fn: () => unknown) => {
+[90m [2m❯[22m tests/panel/controlPollPerformance.test.ts:[2m266:82[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/15]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/panel/controlPollPerformance.test.ts[2m > [22mcontrol poll request snapshots[2m > [22mpreserves D9 settlement markers and strict rejection while decoding each work and run once
+[31m[1mAssertionError[22m: groups:g: expected 16 to be less than or equal to 1[39m
+[36m [2m❯[22m bounds tests/panel/controlPollPerformance.test.ts:[2m46:57[22m[39m
+    [90m 44|[39m   expect(c.executions.filter(e => /FROM activity.*JOIN runs/.test(e.sq…
+    [90m 45|[39m   expect(c.executions.filter(e => /FROM activity WHERE run_id=/.test(e…
+    [90m 46|[39m   for (const [id, count] of c.parses) expect(count, id).toBeLessThanOr…
+    [90m   |[39m                                                         [31m^[39m
+    [90m 47|[39m }
+    [90m 48|[39m const refusal = (fn: () => unknown) => {
+[90m [2m❯[22m tests/panel/controlPollPerformance.test.ts:[2m290:82[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/15]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/panel/controlPollPerformance.test.ts[2m > [22mcontrol poll request snapshots[2m > [22mdoes not decode an unreferenced legacy run during summary and names it in strict detail
+[31m[1mAssertionError[22m: groups:g: expected 4 to be less than or equal to 1[39m
+[36m [2m❯[22m bounds tests/panel/controlPollPerformance.test.ts:[2m46:57[22m[39m
+    [90m 44|[39m   expect(c.executions.filter(e => /FROM activity.*JOIN runs/.test(e.sq…
+    [90m 45|[39m   expect(c.executions.filter(e => /FROM activity WHERE run_id=/.test(e…
+    [90m 46|[39m   for (const [id, count] of c.parses) expect(count, id).toBeLessThanOr…
+    [90m   |[39m                                                         [31m^[39m
+    [90m 47|[39m }
+    [90m 48|[39m const refusal = (fn: () => unknown) => {
+[90m [2m❯[22m tests/panel/controlPollPerformance.test.ts:[2m304:191[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/15]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/panel/controlPollPerformance.test.ts[2m > [22mcontrol poll request snapshots[2m > [22mcounts identical fixture raw bytes once per actual JSON parse rather than multiplying row aliases
+[31m[1mAssertionError[22m: groups:g: expected 4 to be less than or equal to 1[39m
+[36m [2m❯[22m bounds tests/panel/controlPollPerformance.test.ts:[2m46:57[22m[39m
+    [90m 44|[39m   expect(c.executions.filter(e => /FROM activity.*JOIN runs/.test(e.sq…
+    [90m 45|[39m   expect(c.executions.filter(e => /FROM activity WHERE run_id=/.test(e…
+    [90m 46|[39m   for (const [id, count] of c.parses) expect(count, id).toBeLessThanOr…
+    [90m   |[39m                                                         [31m^[39m
+    [90m 47|[39m }
+    [90m 48|[39m const refusal = (fn: () => unknown) => {
+[90m [2m❯[22m tests/panel/controlPollPerformance.test.ts:[2m318:114[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/15]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/panel/controlPollPerformance.test.ts[2m > [22mcontrol poll request snapshots[2m > [22mshares the snapshot with a converted requirement's active work summary and preserves malformed active-run refusal
+[31m[1mAssertionError[22m: groups:r: expected 6 to be less than or equal to 1[39m
+[36m [2m❯[22m bounds tests/panel/controlPollPerformance.test.ts:[2m46:57[22m[39m
+    [90m 44|[39m   expect(c.executions.filter(e => /FROM activity.*JOIN runs/.test(e.sq…
+    [90m 45|[39m   expect(c.executions.filter(e => /FROM activity WHERE run_id=/.test(e…
+    [90m 46|[39m   for (const [id, count] of c.parses) expect(count, id).toBeLessThanOr…
+    [90m   |[39m                                                         [31m^[39m
+    [90m 47|[39m }
+    [90m 48|[39m const refusal = (fn: () => unknown) => {
+[90m [2m❯[22m tests/panel/controlPollPerformance.test.ts:[2m345:161[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/15]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m2 failed[39m[22m[2m | [22m[1m[32m1 passed[39m[22m[90m (3)[39m
+[2m      Tests [22m [1m[31m15 failed[39m[22m[2m | [22m[1m[32m29 passed[39m[22m[90m (44)[39m
+[2m   Start at [22m 21:42:06
+[2m   Duration [22m 9.09s[2m (tests 88%, transform 10%, import 2%)[22m
+

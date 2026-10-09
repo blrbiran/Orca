@@ -1,0 +1,41 @@
+[
+  {
+    "name": "before",
+    "command": [
+      "npx",
+      "tsx",
+      "tests/bench/controlPollPerformance.ts",
+      "--output",
+      "/private/tmp/od9/performance-before-final",
+      "--warmup",
+      "10",
+      "--samples",
+      "30"
+    ],
+    "cwd": "/private/tmp/od9/performance-before",
+    "log": "/private/tmp/od9/logs/perf-task3-before-final.log",
+    "rc": 0,
+    "elapsedSeconds": 2704.220640708
+  },
+  {
+    "name": "after",
+    "command": [
+      "npx",
+      "tsx",
+      "tests/bench/controlPollPerformance.ts",
+      "--output",
+      "/private/tmp/od9/performance-after-final",
+      "--warmup",
+      "10",
+      "--samples",
+      "30",
+      "--expect-optimized",
+      "--compare",
+      "/private/tmp/od9/performance-before-final/result.json"
+    ],
+    "cwd": "/private/tmp/od9/performance-after",
+    "log": "/private/tmp/od9/logs/perf-task3-after-final.log",
+    "rc": 1,
+    "elapsedSeconds": 2553.054755875
+  }
+]

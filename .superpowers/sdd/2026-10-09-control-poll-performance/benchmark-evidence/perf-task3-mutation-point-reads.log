@@ -1,0 +1,35 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.3 [39m[90m/private/tmp/od9/performance-task3-mutation[39m
+
+(node:84062) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+[33m[39m[31mx[39m[33m[39m[2m[90m-[39m[22m[33m[39m[2m[90m-[39m[22m[33m[39m[2m[90m-[39m[22m[33m[39m[2m[90m-[39m[22m[33m[39m[2m[90m-[39m[22m[33m[39m[2m[90m-[39m[22m[33m[39m[2m[90m-[39m[22m[33m[39m[2m[90m-[39m[22m[33m[39m[2m[90m-[39m[22m[33m[39m[2m[90m-[39m[22m[33m[39m[2m[90m-[39m[22m[33m[39m[2m[90m-[39m[22m[33m[39m[2m[90m-[39m[22m[33m[39m[2m[90m-[39m[22m[33m[39m[2m[90m-[39m[22m[33m[39m[2m[90m-[39m[22m[33m[39m[2m[90m-[39m[22m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/panel/controlPollPerformance.test.ts[2m > [22mcontrol poll request snapshots[2m > [22mbatches real summary and group reads for 10 tasks with multiple dependencies
+[31m[1mAssertionError[22m: expected [ { …(3) }, { …(3) }, { …(3) }, …(7) ] to have a length of +0 but got 10[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 0[39m
+[31m+ 10[39m
+
+[36m [2m❯[22m bounds tests/panel/controlPollPerformance.test.ts:[2m41:55[22m[39m
+    [90m 39|[39m   for (const table of ["work_items", "runs"]) {
+    [90m 40|[39m     const bodyReads = c.executions.filter(e => new RegExp(`FROM ${tabl…
+    [90m 41|[39m     expect(bodyReads.filter(e => e.method === "get")).toHaveLength(0);
+    [90m   |[39m                                                       [31m^[39m
+    [90m 42|[39m     expect(bodyReads.filter(e => e.method === "all" && /WHERE group_id…
+    [90m 43|[39m   }
+[90m [2m❯[22m tests/panel/controlPollPerformance.test.ts:[2m78:97[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[33m17 skipped[39m[90m (18)[39m
+[2m   Start at [22m 21:52:55
+[2m   Duration [22m 1.06s[2m (transform 64%, tests 24%, import 11%, setup 1%)[22m
+

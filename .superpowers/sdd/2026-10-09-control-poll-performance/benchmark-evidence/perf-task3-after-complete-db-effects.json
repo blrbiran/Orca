@@ -1,0 +1,1963 @@
+{
+  "command": [
+    "/Users/biran/.nvm/versions/node/v22.13.1/bin/node",
+    "/private/tmp/od9/performance-operation-effects.ts",
+    "/private/tmp/od9/performance-after",
+    "/private/tmp/od9/logs/perf-task3-after-complete-db-effects.json"
+  ],
+  "clone": "/private/tmp/od9/performance-after",
+  "commit": "4fd2b266006c90fd5084b750a4e63c587451f69d",
+  "initialDigest": "849f0db18d6d00f2e1024d1c71c74219486aa88e4cb33f7a4380a9646ec5d21e",
+  "cases": [
+    {
+      "name": "replenish",
+      "scope": {
+        "scannedGroups": 200,
+        "armedGroups": 1,
+        "armedTask": "t01"
+      },
+      "output": [
+        "drive:live-000:1"
+      ],
+      "completeStateDigest": "b51492d20bbb9c2258266bd75f1fb732b9ef6bc1425c8e3fac42b7b0a977c09f",
+      "changedRows": [
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 601,
+            "id": "drive:live-000:1",
+            "group_id": "live-000",
+            "kind": "start",
+            "body": "{\"executionSnapshotHash\":\"b7fbc580ec10369c54ccb85992a9453c4185f0e8abe428596c037e2304f64f36\",\"groupId\":\"live-000\",\"startRevision\":3}",
+            "delivered": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "archived-only-pump",
+      "scope": {
+        "pendingWakes": 300,
+        "archivedGroups": 100,
+        "kinds": [
+          "start",
+          "no-start",
+          "resume"
+        ]
+      },
+      "output": {
+        "delivered": [],
+        "deferred": [
+          "archive-000:start",
+          "archive-000:no-start",
+          "archive-000:resume",
+          "archive-001:start",
+          "archive-001:no-start",
+          "archive-001:resume",
+          "archive-002:start",
+          "archive-002:no-start",
+          "archive-002:resume",
+          "archive-003:start",
+          "archive-003:no-start",
+          "archive-003:resume",
+          "archive-004:start",
+          "archive-004:no-start",
+          "archive-004:resume",
+          "archive-005:start",
+          "archive-005:no-start",
+          "archive-005:resume",
+          "archive-006:start",
+          "archive-006:no-start",
+          "archive-006:resume",
+          "archive-007:start",
+          "archive-007:no-start",
+          "archive-007:resume",
+          "archive-008:start",
+          "archive-008:no-start",
+          "archive-008:resume",
+          "archive-009:start",
+          "archive-009:no-start",
+          "archive-009:resume",
+          "archive-010:start",
+          "archive-010:no-start",
+          "archive-010:resume",
+          "archive-011:start",
+          "archive-011:no-start",
+          "archive-011:resume",
+          "archive-012:start",
+          "archive-012:no-start",
+          "archive-012:resume",
+          "archive-013:start",
+          "archive-013:no-start",
+          "archive-013:resume",
+          "archive-014:start",
+          "archive-014:no-start",
+          "archive-014:resume",
+          "archive-015:start",
+          "archive-015:no-start",
+          "archive-015:resume",
+          "archive-016:start",
+          "archive-016:no-start",
+          "archive-016:resume",
+          "archive-017:start",
+          "archive-017:no-start",
+          "archive-017:resume",
+          "archive-018:start",
+          "archive-018:no-start",
+          "archive-018:resume",
+          "archive-019:start",
+          "archive-019:no-start",
+          "archive-019:resume",
+          "archive-020:start",
+          "archive-020:no-start",
+          "archive-020:resume",
+          "archive-021:start",
+          "archive-021:no-start",
+          "archive-021:resume",
+          "archive-022:start",
+          "archive-022:no-start",
+          "archive-022:resume",
+          "archive-023:start",
+          "archive-023:no-start",
+          "archive-023:resume",
+          "archive-024:start",
+          "archive-024:no-start",
+          "archive-024:resume",
+          "archive-025:start",
+          "archive-025:no-start",
+          "archive-025:resume",
+          "archive-026:start",
+          "archive-026:no-start",
+          "archive-026:resume",
+          "archive-027:start",
+          "archive-027:no-start",
+          "archive-027:resume",
+          "archive-028:start",
+          "archive-028:no-start",
+          "archive-028:resume",
+          "archive-029:start",
+          "archive-029:no-start",
+          "archive-029:resume",
+          "archive-030:start",
+          "archive-030:no-start",
+          "archive-030:resume",
+          "archive-031:start",
+          "archive-031:no-start",
+          "archive-031:resume",
+          "archive-032:start",
+          "archive-032:no-start",
+          "archive-032:resume",
+          "archive-033:start",
+          "archive-033:no-start",
+          "archive-033:resume",
+          "archive-034:start",
+          "archive-034:no-start",
+          "archive-034:resume",
+          "archive-035:start",
+          "archive-035:no-start",
+          "archive-035:resume",
+          "archive-036:start",
+          "archive-036:no-start",
+          "archive-036:resume",
+          "archive-037:start",
+          "archive-037:no-start",
+          "archive-037:resume",
+          "archive-038:start",
+          "archive-038:no-start",
+          "archive-038:resume",
+          "archive-039:start",
+          "archive-039:no-start",
+          "archive-039:resume",
+          "archive-040:start",
+          "archive-040:no-start",
+          "archive-040:resume",
+          "archive-041:start",
+          "archive-041:no-start",
+          "archive-041:resume",
+          "archive-042:start",
+          "archive-042:no-start",
+          "archive-042:resume",
+          "archive-043:start",
+          "archive-043:no-start",
+          "archive-043:resume",
+          "archive-044:start",
+          "archive-044:no-start",
+          "archive-044:resume",
+          "archive-045:start",
+          "archive-045:no-start",
+          "archive-045:resume",
+          "archive-046:start",
+          "archive-046:no-start",
+          "archive-046:resume",
+          "archive-047:start",
+          "archive-047:no-start",
+          "archive-047:resume",
+          "archive-048:start",
+          "archive-048:no-start",
+          "archive-048:resume",
+          "archive-049:start",
+          "archive-049:no-start",
+          "archive-049:resume",
+          "archive-050:start",
+          "archive-050:no-start",
+          "archive-050:resume",
+          "archive-051:start",
+          "archive-051:no-start",
+          "archive-051:resume",
+          "archive-052:start",
+          "archive-052:no-start",
+          "archive-052:resume",
+          "archive-053:start",
+          "archive-053:no-start",
+          "archive-053:resume",
+          "archive-054:start",
+          "archive-054:no-start",
+          "archive-054:resume",
+          "archive-055:start",
+          "archive-055:no-start",
+          "archive-055:resume",
+          "archive-056:start",
+          "archive-056:no-start",
+          "archive-056:resume",
+          "archive-057:start",
+          "archive-057:no-start",
+          "archive-057:resume",
+          "archive-058:start",
+          "archive-058:no-start",
+          "archive-058:resume",
+          "archive-059:start",
+          "archive-059:no-start",
+          "archive-059:resume",
+          "archive-060:start",
+          "archive-060:no-start",
+          "archive-060:resume",
+          "archive-061:start",
+          "archive-061:no-start",
+          "archive-061:resume",
+          "archive-062:start",
+          "archive-062:no-start",
+          "archive-062:resume",
+          "archive-063:start",
+          "archive-063:no-start",
+          "archive-063:resume",
+          "archive-064:start",
+          "archive-064:no-start",
+          "archive-064:resume",
+          "archive-065:start",
+          "archive-065:no-start",
+          "archive-065:resume",
+          "archive-066:start",
+          "archive-066:no-start",
+          "archive-066:resume",
+          "archive-067:start",
+          "archive-067:no-start",
+          "archive-067:resume",
+          "archive-068:start",
+          "archive-068:no-start",
+          "archive-068:resume",
+          "archive-069:start",
+          "archive-069:no-start",
+          "archive-069:resume",
+          "archive-070:start",
+          "archive-070:no-start",
+          "archive-070:resume",
+          "archive-071:start",
+          "archive-071:no-start",
+          "archive-071:resume",
+          "archive-072:start",
+          "archive-072:no-start",
+          "archive-072:resume",
+          "archive-073:start",
+          "archive-073:no-start",
+          "archive-073:resume",
+          "archive-074:start",
+          "archive-074:no-start",
+          "archive-074:resume",
+          "archive-075:start",
+          "archive-075:no-start",
+          "archive-075:resume",
+          "archive-076:start",
+          "archive-076:no-start",
+          "archive-076:resume",
+          "archive-077:start",
+          "archive-077:no-start",
+          "archive-077:resume",
+          "archive-078:start",
+          "archive-078:no-start",
+          "archive-078:resume",
+          "archive-079:start",
+          "archive-079:no-start",
+          "archive-079:resume",
+          "archive-080:start",
+          "archive-080:no-start",
+          "archive-080:resume",
+          "archive-081:start",
+          "archive-081:no-start",
+          "archive-081:resume",
+          "archive-082:start",
+          "archive-082:no-start",
+          "archive-082:resume",
+          "archive-083:start",
+          "archive-083:no-start",
+          "archive-083:resume",
+          "archive-084:start",
+          "archive-084:no-start",
+          "archive-084:resume",
+          "archive-085:start",
+          "archive-085:no-start",
+          "archive-085:resume",
+          "archive-086:start",
+          "archive-086:no-start",
+          "archive-086:resume",
+          "archive-087:start",
+          "archive-087:no-start",
+          "archive-087:resume",
+          "archive-088:start",
+          "archive-088:no-start",
+          "archive-088:resume",
+          "archive-089:start",
+          "archive-089:no-start",
+          "archive-089:resume",
+          "archive-090:start",
+          "archive-090:no-start",
+          "archive-090:resume",
+          "archive-091:start",
+          "archive-091:no-start",
+          "archive-091:resume",
+          "archive-092:start",
+          "archive-092:no-start",
+          "archive-092:resume",
+          "archive-093:start",
+          "archive-093:no-start",
+          "archive-093:resume",
+          "archive-094:start",
+          "archive-094:no-start",
+          "archive-094:resume",
+          "archive-095:start",
+          "archive-095:no-start",
+          "archive-095:resume",
+          "archive-096:start",
+          "archive-096:no-start",
+          "archive-096:resume",
+          "archive-097:start",
+          "archive-097:no-start",
+          "archive-097:resume",
+          "archive-098:start",
+          "archive-098:no-start",
+          "archive-098:resume",
+          "archive-099:start",
+          "archive-099:no-start",
+          "archive-099:resume"
+        ]
+      },
+      "completeStateDigest": "849f0db18d6d00f2e1024d1c71c74219486aa88e4cb33f7a4380a9646ec5d21e",
+      "changedRows": []
+    },
+    {
+      "name": "mixed-pump",
+      "scope": {
+        "pendingWakes": 399,
+        "archivedGroups": 100,
+        "liveGroups": 99,
+        "existingCurrentRuns": 99
+      },
+      "output": {
+        "delivered": [
+          "mixed:live-001",
+          "mixed:live-002",
+          "mixed:live-003",
+          "mixed:live-004",
+          "mixed:live-005",
+          "mixed:live-006",
+          "mixed:live-007",
+          "mixed:live-008",
+          "mixed:live-009",
+          "mixed:live-010",
+          "mixed:live-011",
+          "mixed:live-012",
+          "mixed:live-013",
+          "mixed:live-014",
+          "mixed:live-015",
+          "mixed:live-016",
+          "mixed:live-017",
+          "mixed:live-018",
+          "mixed:live-019",
+          "mixed:live-020",
+          "mixed:live-021",
+          "mixed:live-022",
+          "mixed:live-023",
+          "mixed:live-024",
+          "mixed:live-025",
+          "mixed:live-026",
+          "mixed:live-027",
+          "mixed:live-028",
+          "mixed:live-029",
+          "mixed:live-030",
+          "mixed:live-031",
+          "mixed:live-032",
+          "mixed:live-033",
+          "mixed:live-034",
+          "mixed:live-035",
+          "mixed:live-036",
+          "mixed:live-037",
+          "mixed:live-038",
+          "mixed:live-039",
+          "mixed:live-040",
+          "mixed:live-041",
+          "mixed:live-042",
+          "mixed:live-043",
+          "mixed:live-044",
+          "mixed:live-045",
+          "mixed:live-046",
+          "mixed:live-047",
+          "mixed:live-048",
+          "mixed:live-049",
+          "mixed:live-050",
+          "mixed:live-051",
+          "mixed:live-052",
+          "mixed:live-053",
+          "mixed:live-054",
+          "mixed:live-055",
+          "mixed:live-056",
+          "mixed:live-057",
+          "mixed:live-058",
+          "mixed:live-059",
+          "mixed:live-060",
+          "mixed:live-061",
+          "mixed:live-062",
+          "mixed:live-063",
+          "mixed:live-064",
+          "mixed:live-065",
+          "mixed:live-066",
+          "mixed:live-067",
+          "mixed:live-068",
+          "mixed:live-069",
+          "mixed:live-070",
+          "mixed:live-071",
+          "mixed:live-072",
+          "mixed:live-073",
+          "mixed:live-074",
+          "mixed:live-075",
+          "mixed:live-076",
+          "mixed:live-077",
+          "mixed:live-078",
+          "mixed:live-079",
+          "mixed:live-080",
+          "mixed:live-081",
+          "mixed:live-082",
+          "mixed:live-083",
+          "mixed:live-084",
+          "mixed:live-085",
+          "mixed:live-086",
+          "mixed:live-087",
+          "mixed:live-088",
+          "mixed:live-089",
+          "mixed:live-090",
+          "mixed:live-091",
+          "mixed:live-092",
+          "mixed:live-093",
+          "mixed:live-094",
+          "mixed:live-095",
+          "mixed:live-096",
+          "mixed:live-097",
+          "mixed:live-098",
+          "mixed:live-099"
+        ],
+        "deferred": [
+          "archive-000:start",
+          "archive-000:no-start",
+          "archive-000:resume",
+          "archive-001:start",
+          "archive-001:no-start",
+          "archive-001:resume",
+          "archive-002:start",
+          "archive-002:no-start",
+          "archive-002:resume",
+          "archive-003:start",
+          "archive-003:no-start",
+          "archive-003:resume",
+          "archive-004:start",
+          "archive-004:no-start",
+          "archive-004:resume",
+          "archive-005:start",
+          "archive-005:no-start",
+          "archive-005:resume",
+          "archive-006:start",
+          "archive-006:no-start",
+          "archive-006:resume",
+          "archive-007:start",
+          "archive-007:no-start",
+          "archive-007:resume",
+          "archive-008:start",
+          "archive-008:no-start",
+          "archive-008:resume",
+          "archive-009:start",
+          "archive-009:no-start",
+          "archive-009:resume",
+          "archive-010:start",
+          "archive-010:no-start",
+          "archive-010:resume",
+          "archive-011:start",
+          "archive-011:no-start",
+          "archive-011:resume",
+          "archive-012:start",
+          "archive-012:no-start",
+          "archive-012:resume",
+          "archive-013:start",
+          "archive-013:no-start",
+          "archive-013:resume",
+          "archive-014:start",
+          "archive-014:no-start",
+          "archive-014:resume",
+          "archive-015:start",
+          "archive-015:no-start",
+          "archive-015:resume",
+          "archive-016:start",
+          "archive-016:no-start",
+          "archive-016:resume",
+          "archive-017:start",
+          "archive-017:no-start",
+          "archive-017:resume",
+          "archive-018:start",
+          "archive-018:no-start",
+          "archive-018:resume",
+          "archive-019:start",
+          "archive-019:no-start",
+          "archive-019:resume",
+          "archive-020:start",
+          "archive-020:no-start",
+          "archive-020:resume",
+          "archive-021:start",
+          "archive-021:no-start",
+          "archive-021:resume",
+          "archive-022:start",
+          "archive-022:no-start",
+          "archive-022:resume",
+          "archive-023:start",
+          "archive-023:no-start",
+          "archive-023:resume",
+          "archive-024:start",
+          "archive-024:no-start",
+          "archive-024:resume",
+          "archive-025:start",
+          "archive-025:no-start",
+          "archive-025:resume",
+          "archive-026:start",
+          "archive-026:no-start",
+          "archive-026:resume",
+          "archive-027:start",
+          "archive-027:no-start",
+          "archive-027:resume",
+          "archive-028:start",
+          "archive-028:no-start",
+          "archive-028:resume",
+          "archive-029:start",
+          "archive-029:no-start",
+          "archive-029:resume",
+          "archive-030:start",
+          "archive-030:no-start",
+          "archive-030:resume",
+          "archive-031:start",
+          "archive-031:no-start",
+          "archive-031:resume",
+          "archive-032:start",
+          "archive-032:no-start",
+          "archive-032:resume",
+          "archive-033:start",
+          "archive-033:no-start",
+          "archive-033:resume",
+          "archive-034:start",
+          "archive-034:no-start",
+          "archive-034:resume",
+          "archive-035:start",
+          "archive-035:no-start",
+          "archive-035:resume",
+          "archive-036:start",
+          "archive-036:no-start",
+          "archive-036:resume",
+          "archive-037:start",
+          "archive-037:no-start",
+          "archive-037:resume",
+          "archive-038:start",
+          "archive-038:no-start",
+          "archive-038:resume",
+          "archive-039:start",
+          "archive-039:no-start",
+          "archive-039:resume",
+          "archive-040:start",
+          "archive-040:no-start",
+          "archive-040:resume",
+          "archive-041:start",
+          "archive-041:no-start",
+          "archive-041:resume",
+          "archive-042:start",
+          "archive-042:no-start",
+          "archive-042:resume",
+          "archive-043:start",
+          "archive-043:no-start",
+          "archive-043:resume",
+          "archive-044:start",
+          "archive-044:no-start",
+          "archive-044:resume",
+          "archive-045:start",
+          "archive-045:no-start",
+          "archive-045:resume",
+          "archive-046:start",
+          "archive-046:no-start",
+          "archive-046:resume",
+          "archive-047:start",
+          "archive-047:no-start",
+          "archive-047:resume",
+          "archive-048:start",
+          "archive-048:no-start",
+          "archive-048:resume",
+          "archive-049:start",
+          "archive-049:no-start",
+          "archive-049:resume",
+          "archive-050:start",
+          "archive-050:no-start",
+          "archive-050:resume",
+          "archive-051:start",
+          "archive-051:no-start",
+          "archive-051:resume",
+          "archive-052:start",
+          "archive-052:no-start",
+          "archive-052:resume",
+          "archive-053:start",
+          "archive-053:no-start",
+          "archive-053:resume",
+          "archive-054:start",
+          "archive-054:no-start",
+          "archive-054:resume",
+          "archive-055:start",
+          "archive-055:no-start",
+          "archive-055:resume",
+          "archive-056:start",
+          "archive-056:no-start",
+          "archive-056:resume",
+          "archive-057:start",
+          "archive-057:no-start",
+          "archive-057:resume",
+          "archive-058:start",
+          "archive-058:no-start",
+          "archive-058:resume",
+          "archive-059:start",
+          "archive-059:no-start",
+          "archive-059:resume",
+          "archive-060:start",
+          "archive-060:no-start",
+          "archive-060:resume",
+          "archive-061:start",
+          "archive-061:no-start",
+          "archive-061:resume",
+          "archive-062:start",
+          "archive-062:no-start",
+          "archive-062:resume",
+          "archive-063:start",
+          "archive-063:no-start",
+          "archive-063:resume",
+          "archive-064:start",
+          "archive-064:no-start",
+          "archive-064:resume",
+          "archive-065:start",
+          "archive-065:no-start",
+          "archive-065:resume",
+          "archive-066:start",
+          "archive-066:no-start",
+          "archive-066:resume",
+          "archive-067:start",
+          "archive-067:no-start",
+          "archive-067:resume",
+          "archive-068:start",
+          "archive-068:no-start",
+          "archive-068:resume",
+          "archive-069:start",
+          "archive-069:no-start",
+          "archive-069:resume",
+          "archive-070:start",
+          "archive-070:no-start",
+          "archive-070:resume",
+          "archive-071:start",
+          "archive-071:no-start",
+          "archive-071:resume",
+          "archive-072:start",
+          "archive-072:no-start",
+          "archive-072:resume",
+          "archive-073:start",
+          "archive-073:no-start",
+          "archive-073:resume",
+          "archive-074:start",
+          "archive-074:no-start",
+          "archive-074:resume",
+          "archive-075:start",
+          "archive-075:no-start",
+          "archive-075:resume",
+          "archive-076:start",
+          "archive-076:no-start",
+          "archive-076:resume",
+          "archive-077:start",
+          "archive-077:no-start",
+          "archive-077:resume",
+          "archive-078:start",
+          "archive-078:no-start",
+          "archive-078:resume",
+          "archive-079:start",
+          "archive-079:no-start",
+          "archive-079:resume",
+          "archive-080:start",
+          "archive-080:no-start",
+          "archive-080:resume",
+          "archive-081:start",
+          "archive-081:no-start",
+          "archive-081:resume",
+          "archive-082:start",
+          "archive-082:no-start",
+          "archive-082:resume",
+          "archive-083:start",
+          "archive-083:no-start",
+          "archive-083:resume",
+          "archive-084:start",
+          "archive-084:no-start",
+          "archive-084:resume",
+          "archive-085:start",
+          "archive-085:no-start",
+          "archive-085:resume",
+          "archive-086:start",
+          "archive-086:no-start",
+          "archive-086:resume",
+          "archive-087:start",
+          "archive-087:no-start",
+          "archive-087:resume",
+          "archive-088:start",
+          "archive-088:no-start",
+          "archive-088:resume",
+          "archive-089:start",
+          "archive-089:no-start",
+          "archive-089:resume",
+          "archive-090:start",
+          "archive-090:no-start",
+          "archive-090:resume",
+          "archive-091:start",
+          "archive-091:no-start",
+          "archive-091:resume",
+          "archive-092:start",
+          "archive-092:no-start",
+          "archive-092:resume",
+          "archive-093:start",
+          "archive-093:no-start",
+          "archive-093:resume",
+          "archive-094:start",
+          "archive-094:no-start",
+          "archive-094:resume",
+          "archive-095:start",
+          "archive-095:no-start",
+          "archive-095:resume",
+          "archive-096:start",
+          "archive-096:no-start",
+          "archive-096:resume",
+          "archive-097:start",
+          "archive-097:no-start",
+          "archive-097:resume",
+          "archive-098:start",
+          "archive-098:no-start",
+          "archive-098:resume",
+          "archive-099:start",
+          "archive-099:no-start",
+          "archive-099:resume"
+        ]
+      },
+      "completeStateDigest": "15d392696a78d6d8646ccff970db691816efb671021efb71b04a31a4f19bf7d3",
+      "changedRows": [
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 601,
+            "id": "mixed:live-001",
+            "group_id": "live-001",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-001\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 602,
+            "id": "mixed:live-002",
+            "group_id": "live-002",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-002\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 603,
+            "id": "mixed:live-003",
+            "group_id": "live-003",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-003\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 604,
+            "id": "mixed:live-004",
+            "group_id": "live-004",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-004\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 605,
+            "id": "mixed:live-005",
+            "group_id": "live-005",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-005\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 606,
+            "id": "mixed:live-006",
+            "group_id": "live-006",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-006\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 607,
+            "id": "mixed:live-007",
+            "group_id": "live-007",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-007\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 608,
+            "id": "mixed:live-008",
+            "group_id": "live-008",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-008\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 609,
+            "id": "mixed:live-009",
+            "group_id": "live-009",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-009\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 610,
+            "id": "mixed:live-010",
+            "group_id": "live-010",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-010\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 611,
+            "id": "mixed:live-011",
+            "group_id": "live-011",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-011\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 612,
+            "id": "mixed:live-012",
+            "group_id": "live-012",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-012\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 613,
+            "id": "mixed:live-013",
+            "group_id": "live-013",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-013\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 614,
+            "id": "mixed:live-014",
+            "group_id": "live-014",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-014\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 615,
+            "id": "mixed:live-015",
+            "group_id": "live-015",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-015\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 616,
+            "id": "mixed:live-016",
+            "group_id": "live-016",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-016\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 617,
+            "id": "mixed:live-017",
+            "group_id": "live-017",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-017\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 618,
+            "id": "mixed:live-018",
+            "group_id": "live-018",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-018\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 619,
+            "id": "mixed:live-019",
+            "group_id": "live-019",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-019\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 620,
+            "id": "mixed:live-020",
+            "group_id": "live-020",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-020\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 621,
+            "id": "mixed:live-021",
+            "group_id": "live-021",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-021\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 622,
+            "id": "mixed:live-022",
+            "group_id": "live-022",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-022\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 623,
+            "id": "mixed:live-023",
+            "group_id": "live-023",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-023\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 624,
+            "id": "mixed:live-024",
+            "group_id": "live-024",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-024\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 625,
+            "id": "mixed:live-025",
+            "group_id": "live-025",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-025\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 626,
+            "id": "mixed:live-026",
+            "group_id": "live-026",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-026\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 627,
+            "id": "mixed:live-027",
+            "group_id": "live-027",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-027\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 628,
+            "id": "mixed:live-028",
+            "group_id": "live-028",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-028\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 629,
+            "id": "mixed:live-029",
+            "group_id": "live-029",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-029\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 630,
+            "id": "mixed:live-030",
+            "group_id": "live-030",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-030\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 631,
+            "id": "mixed:live-031",
+            "group_id": "live-031",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-031\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 632,
+            "id": "mixed:live-032",
+            "group_id": "live-032",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-032\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 633,
+            "id": "mixed:live-033",
+            "group_id": "live-033",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-033\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 634,
+            "id": "mixed:live-034",
+            "group_id": "live-034",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-034\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 635,
+            "id": "mixed:live-035",
+            "group_id": "live-035",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-035\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 636,
+            "id": "mixed:live-036",
+            "group_id": "live-036",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-036\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 637,
+            "id": "mixed:live-037",
+            "group_id": "live-037",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-037\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 638,
+            "id": "mixed:live-038",
+            "group_id": "live-038",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-038\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 639,
+            "id": "mixed:live-039",
+            "group_id": "live-039",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-039\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 640,
+            "id": "mixed:live-040",
+            "group_id": "live-040",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-040\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 641,
+            "id": "mixed:live-041",
+            "group_id": "live-041",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-041\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 642,
+            "id": "mixed:live-042",
+            "group_id": "live-042",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-042\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 643,
+            "id": "mixed:live-043",
+            "group_id": "live-043",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-043\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 644,
+            "id": "mixed:live-044",
+            "group_id": "live-044",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-044\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 645,
+            "id": "mixed:live-045",
+            "group_id": "live-045",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-045\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 646,
+            "id": "mixed:live-046",
+            "group_id": "live-046",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-046\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 647,
+            "id": "mixed:live-047",
+            "group_id": "live-047",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-047\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 648,
+            "id": "mixed:live-048",
+            "group_id": "live-048",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-048\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 649,
+            "id": "mixed:live-049",
+            "group_id": "live-049",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-049\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 650,
+            "id": "mixed:live-050",
+            "group_id": "live-050",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-050\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 651,
+            "id": "mixed:live-051",
+            "group_id": "live-051",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-051\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 652,
+            "id": "mixed:live-052",
+            "group_id": "live-052",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-052\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 653,
+            "id": "mixed:live-053",
+            "group_id": "live-053",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-053\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 654,
+            "id": "mixed:live-054",
+            "group_id": "live-054",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-054\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 655,
+            "id": "mixed:live-055",
+            "group_id": "live-055",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-055\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 656,
+            "id": "mixed:live-056",
+            "group_id": "live-056",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-056\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 657,
+            "id": "mixed:live-057",
+            "group_id": "live-057",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-057\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 658,
+            "id": "mixed:live-058",
+            "group_id": "live-058",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-058\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 659,
+            "id": "mixed:live-059",
+            "group_id": "live-059",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-059\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 660,
+            "id": "mixed:live-060",
+            "group_id": "live-060",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-060\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 661,
+            "id": "mixed:live-061",
+            "group_id": "live-061",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-061\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 662,
+            "id": "mixed:live-062",
+            "group_id": "live-062",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-062\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 663,
+            "id": "mixed:live-063",
+            "group_id": "live-063",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-063\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 664,
+            "id": "mixed:live-064",
+            "group_id": "live-064",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-064\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 665,
+            "id": "mixed:live-065",
+            "group_id": "live-065",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-065\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 666,
+            "id": "mixed:live-066",
+            "group_id": "live-066",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-066\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 667,
+            "id": "mixed:live-067",
+            "group_id": "live-067",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-067\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 668,
+            "id": "mixed:live-068",
+            "group_id": "live-068",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-068\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 669,
+            "id": "mixed:live-069",
+            "group_id": "live-069",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-069\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 670,
+            "id": "mixed:live-070",
+            "group_id": "live-070",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-070\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 671,
+            "id": "mixed:live-071",
+            "group_id": "live-071",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-071\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 672,
+            "id": "mixed:live-072",
+            "group_id": "live-072",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-072\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 673,
+            "id": "mixed:live-073",
+            "group_id": "live-073",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-073\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 674,
+            "id": "mixed:live-074",
+            "group_id": "live-074",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-074\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 675,
+            "id": "mixed:live-075",
+            "group_id": "live-075",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-075\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 676,
+            "id": "mixed:live-076",
+            "group_id": "live-076",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-076\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 677,
+            "id": "mixed:live-077",
+            "group_id": "live-077",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-077\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 678,
+            "id": "mixed:live-078",
+            "group_id": "live-078",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-078\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 679,
+            "id": "mixed:live-079",
+            "group_id": "live-079",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-079\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 680,
+            "id": "mixed:live-080",
+            "group_id": "live-080",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-080\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 681,
+            "id": "mixed:live-081",
+            "group_id": "live-081",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-081\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 682,
+            "id": "mixed:live-082",
+            "group_id": "live-082",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-082\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 683,
+            "id": "mixed:live-083",
+            "group_id": "live-083",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-083\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 684,
+            "id": "mixed:live-084",
+            "group_id": "live-084",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-084\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 685,
+            "id": "mixed:live-085",
+            "group_id": "live-085",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-085\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 686,
+            "id": "mixed:live-086",
+            "group_id": "live-086",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-086\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 687,
+            "id": "mixed:live-087",
+            "group_id": "live-087",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-087\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 688,
+            "id": "mixed:live-088",
+            "group_id": "live-088",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-088\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 689,
+            "id": "mixed:live-089",
+            "group_id": "live-089",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-089\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 690,
+            "id": "mixed:live-090",
+            "group_id": "live-090",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-090\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 691,
+            "id": "mixed:live-091",
+            "group_id": "live-091",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-091\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 692,
+            "id": "mixed:live-092",
+            "group_id": "live-092",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-092\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 693,
+            "id": "mixed:live-093",
+            "group_id": "live-093",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-093\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 694,
+            "id": "mixed:live-094",
+            "group_id": "live-094",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-094\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 695,
+            "id": "mixed:live-095",
+            "group_id": "live-095",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-095\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 696,
+            "id": "mixed:live-096",
+            "group_id": "live-096",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-096\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 697,
+            "id": "mixed:live-097",
+            "group_id": "live-097",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-097\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 698,
+            "id": "mixed:live-098",
+            "group_id": "live-098",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-098\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        },
+        {
+          "table": "scheduler_wakes",
+          "before": null,
+          "after": {
+            "__rowid": 699,
+            "id": "mixed:live-099",
+            "group_id": "live-099",
+            "kind": "start",
+            "body": "{\"groupId\":\"live-099\",\"startRevision\":3}",
+            "delivered": 1
+          }
+        }
+      ]
+    }
+  ]
+}

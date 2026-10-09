@@ -1,0 +1,39 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.3 [39m[90m/Users/biran/.codex/worktrees/usage-settlement-handoff-retry/Orca[39m
+
+ [31m❯[39m tests/control/controlPollBenchmark.test.ts [2m([22m[2m2 tests[22m[2m | [22m[31m1 failed[39m[2m | [22m[33m1 skipped[39m[2m)[22m[32m 7[2mms[22m[39m
+   [31m❯[39m real-path benchmark integrity [2m(2)[22m
+[31m     [31m×[31m normalizes only run identity and keeps all business hashes and refusal detail[39m[32m 5[2mms[22m[39m
+     [2m[90m↓[39m[22m builds one legal store with DAG, current runs, activities and a real replenishment
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/control/controlPollBenchmark.test.ts[2m > [22mreal-path benchmark integrity[2m > [22mnormalizes only run identity and keeps all business hashes and refusal detail
+[31m[1mAssertionError[22m: expected { runId: 'run-random', …(3) } to deeply equal { runId: 'live-000/t00/1', …(3) }[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[2m  {[22m
+[32m-   "detail": "run-invalid:live-000/t00/1",[39m
+[31m+   "detail": "run-invalid:run-random",[39m
+[2m    "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",[22m
+[2m    "nested": [[22m
+[32m-     "live-000/t00/1",[39m
+[31m+     "run-random",[39m
+[2m    ],[22m
+[32m-   "runId": "live-000/t00/1",[39m
+[31m+   "runId": "run-random",[39m
+[2m  }[22m
+
+[36m [2m❯[22m tests/control/controlPollBenchmark.test.ts:[2m8:166[22m[39m
+
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[33m1 skipped[39m[90m (2)[39m
+[2m   Start at [22m 21:35:09
+[2m   Duration [22m 949ms[2m (transform 85%, import 12%, setup 2%, tests 1%)[22m
+

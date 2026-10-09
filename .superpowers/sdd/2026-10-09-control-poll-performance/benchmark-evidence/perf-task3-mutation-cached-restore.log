@@ -1,0 +1,35 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.3 [39m[90m/private/tmp/od9/performance-task3-mutation[39m
+
+(node:97645) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+[33m[39m[2m[90m-[39m[22m/private/tmp/od9/t/orca-tmp-MetSJJ/orca-snapshot-verify-9OS50K/input.bundle is okay
+[33m[39m[31mx[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/control/controlPollBenchmark.test.ts[2m > [22mreal-path benchmark integrity[2m > [22mbuilds one legal store with DAG, current runs, activities and a real replenishment
+[31m[1mAssertionError[22m: expected 193 to be 191 // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 191[39m
+[31m+ 193[39m
+
+[36m [2m❯[22m tests/control/controlPollBenchmark.test.ts:[2m20:111[22m[39m
+    [90m 18|[39m    for(const id of f.liveGroupIds) expect(readControlGroup(f.store,"be…
+    [90m 19|[39m    readGroupSummary(f.store,f.liveGroupIds[0]);const counted=counter.s…
+    [90m 20|[39m    counter.restore();readGroupSummary(f.store,f.liveGroupIds[0]);expec…
+    [90m   |[39m                                                                                                               [31m^[39m
+    [90m 21|[39m    const initial=captureDatabase(f.store);
+    [90m 22|[39m    f.store.transaction(()=>recordActivity(f.store,{groupId:f.liveGroup…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[33m1 skipped[39m[90m (2)[39m
+[2m   Start at [22m 21:58:34
+[2m   Duration [22m 2.47s[2m (tests 73%, transform 23%, import 4%)[22m
+

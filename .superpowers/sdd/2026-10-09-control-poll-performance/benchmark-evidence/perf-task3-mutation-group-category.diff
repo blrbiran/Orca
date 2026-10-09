@@ -1,0 +1,13 @@
+diff --git a/tests/control/fixtures/controlReadCounters.ts b/tests/control/fixtures/controlReadCounters.ts
+index 1715496..12c93d3 100644
+--- a/tests/control/fixtures/controlReadCounters.ts
++++ b/tests/control/fixtures/controlReadCounters.ts
+@@ -57,7 +57,7 @@ export function installControlReadCounters(store: ControlStore) {
+   JSON.parse = function(text: string, reviver?: any) {
+     const key = bodies.get(text);
+     if (key !== undefined) parses.set(key, (parses.get(key) ?? 0) + 1);
+-    const groupKey = groupBodies.get(text);
++    const groupKey = undefined;
+     if (groupKey !== undefined) groupParses.set(groupKey, (groupParses.get(groupKey) ?? 0) + 1);
+     return parse(text, reviver);
+   };

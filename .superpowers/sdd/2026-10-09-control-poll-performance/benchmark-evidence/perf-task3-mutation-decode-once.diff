@@ -1,0 +1,13 @@
+diff --git a/src/panel/groupReadSnapshot.ts b/src/panel/groupReadSnapshot.ts
+index f07e629..371e815 100644
+--- a/src/panel/groupReadSnapshot.ts
++++ b/src/panel/groupReadSnapshot.ts
+@@ -24,7 +24,7 @@ function lazyDecoder(rows: ReadonlyMap<string, { body: string }>) {
+     if (result === undefined) {
+       try { result = { ok: true, value: JSON.parse(row.body) }; }
+       catch (error) { result = { ok: false, error: error as SyntaxError }; }
+-      decoded.set(id, result);
++      // mutation: do not remember the decoded row
+     }
+     return result;
+   };

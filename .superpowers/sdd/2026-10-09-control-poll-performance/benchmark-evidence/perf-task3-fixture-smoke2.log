@@ -1,0 +1,37 @@
+(node:47396) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ZodError: [
+  {
+    "validation": "regex",
+    "code": "invalid_string",
+    "message": "Invalid",
+    "path": [
+      "commandId"
+    ]
+  }
+]
+    at get error (/Users/biran/code/skills/loop/Orca/node_modules/zod/v3/types.cjs:45:31)
+    at ZodEffects.parse (/Users/biran/code/skills/loop/Orca/node_modules/zod/v3/types.cjs:120:22)
+    at applyWebCommand (/Users/biran/.codex/worktrees/usage-settlement-handoff-retry/Orca/src/control/commandLedger.ts:285:48)
+    at importControlPlan (/Users/biran/.codex/worktrees/usage-settlement-handoff-retry/Orca/src/control/planImport.ts:358:19)
+    at buildControlPollFixture (/Users/biran/.codex/worktrees/usage-settlement-handoff-retry/Orca/tests/control/fixtures/controlPollPerformance.ts:84:11)
+    at async main (/private/tmp/od9/fixture-smoke.ts:4:29) {
+  issues: [
+    {
+      validation: 'regex',
+      code: 'invalid_string',
+      message: 'Invalid',
+      path: [Array]
+    }
+  ],
+  addIssue: [Function (anonymous)],
+  addIssues: [Function (anonymous)],
+  errors: [
+    {
+      validation: 'regex',
+      code: 'invalid_string',
+      message: 'Invalid',
+      path: [Array]
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+cached-restore RC 0
+Traceback (most recent call last):
+  File "/private/tmp/od9/task3-cached-restore-mutation.py", line 10, in <module>
+    run('cached-restore','builds one legal store',[('tests/control/fixtures/controlReadCounters.ts','if (live) Object.defineProperty(live, method, { configurable: true, value: original });','void live;')])
+  File "<string>", line 32, in run
+Exception: Mutation survived: cached-restore

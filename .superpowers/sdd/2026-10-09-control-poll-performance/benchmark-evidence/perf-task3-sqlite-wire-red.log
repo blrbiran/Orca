@@ -1,0 +1,40 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.3 [39m[90m/Users/biran/.codex/worktrees/usage-settlement-handoff-retry/Orca[39m
+
+(node:9900) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+/private/tmp/od9/t/orca-tmp-D6hsdU/orca-snapshot-verify-cF9JCG/input.bundle is okay
+ [31m❯[39m tests/control/controlPollBenchmark.test.ts [2m([22m[2m3 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[33m 1749[2mms[22m[39m
+   [31m❯[39m real-path benchmark integrity [2m(3)[22m
+     [32m✓[39m normalizes only run identity and keeps all business hashes and refusal detail[32m 1[2mms[22m[39m
+[31m     [31m×[31m builds one legal store with DAG, current runs, activities and a real replenishment[39m[33m 1744[2mms[22m[39m
+     [32m✓[39m refuses a nonempty temporary root before removing a sentinel or initializing data[32m 1[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/control/controlPollBenchmark.test.ts[2m > [22mreal-path benchmark integrity[2m > [22mbuilds one legal store with DAG, current runs, activities and a real replenishment
+[31m[1mAssertionError[22m: expected null to be { …(12) } // Object.is equality[39m
+
+[32m- Expected:[39m
+{}
+
+[31m+ Received:[39m
+null
+
+[36m [2m❯[22m tests/control/controlPollBenchmark.test.ts:[2m38:46[22m[39m
+    [90m 36|[39m    const nativePending=f.store.db.prepare("SELECT id,group_id,kind,bod…
+    [90m 37|[39m    const pending=storePending(f.store);
+    [90m 38|[39m    expect(Object.getPrototypeOf(pending[0])).toBe(Object.prototype);
+    [90m   |[39m                                              [31m^[39m
+    [90m 39|[39m    expect(pending).toStrictEqual(JSON.parse(JSON.stringify(nativePendi…
+    [90m 40|[39m    const initial=captureDatabase(f.store);
+[90m [2m❯[22m withFreshRoot tests/control/controlPollBenchmark.test.ts:[2m16:7[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m2 passed[39m[22m[90m (3)[39m
+[2m   Start at [22m 23:34:21
+[2m   Duration [22m 2.51s[2m (tests 72%, transform 23%, import 4%)[22m
+

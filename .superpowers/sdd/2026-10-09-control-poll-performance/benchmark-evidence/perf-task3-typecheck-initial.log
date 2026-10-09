@@ -1,0 +1,14 @@
+
+> orca@0.1.0 typecheck
+> tsc --noEmit -p tsconfig.json
+
+tests/bench/controlPollPerformance.ts(12,31): error TS2724: '"../../src/control/projectionJournal.js"' has no exported member named 'PROJECTION_JOURNAL_RETENTION'. Did you mean 'projectionJournalRetention'?
+tests/bench/controlPollPerformance.ts(70,47): error TS2339: Property 'accept' does not exist on type 'Pick<ExecutionPort, "resolveAgent" | "listAgents">'.
+tests/bench/controlPollPerformance.ts(70,59): error TS2339: Property 'accept' does not exist on type 'Pick<ExecutionPort, "resolveAgent" | "listAgents">'.
+tests/bench/controlPollPerformance.ts(70,72): error TS7019: Rest parameter 'args' implicitly has an 'any[]' type.
+tests/bench/controlPollPerformance.ts(71,109): error TS2339: Property 'accept' does not exist on type 'Pick<ExecutionPort, "resolveAgent" | "listAgents">'.
+tests/control/fixtures/controlPollPerformance.ts(131,198): error TS2322: Type 'Promise<{ kind: "unknown"; }>' is not assignable to type 'Promise<HandoffAck>'.
+  Type '{ kind: "unknown"; }' is not assignable to type 'HandoffAck'.
+    Property 'requestId' is missing in type '{ kind: "unknown"; }' but required in type '{ kind: "unknown"; requestId: string; }'.
+tests/control/fixtures/controlPollPerformance.ts(141,38): error TS2345: Argument of type '{ store: ControlStore; port: ExecutionPort; profileRouter: ExecutionProfileRouter; admissionGate: AdmissionGate; now: () => Date; }' is not assignable to parameter of type 'WebServiceDeps'.
+  Type '{ store: ControlStore; port: ExecutionPort; profileRouter: ExecutionProfileRouter; admissionGate: AdmissionGate; now: () => Date; }' is missing the following properties from type 'WebServiceDeps': defaults, trustedConfig

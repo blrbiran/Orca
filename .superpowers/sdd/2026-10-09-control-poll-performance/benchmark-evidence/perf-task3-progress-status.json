@@ -1,0 +1,19 @@
+[
+  {
+    "side": "before",
+    "started": true,
+    "latestObservedPhase": {
+      "phase": "warmup",
+      "name": "all-live-detail",
+      "index": 1,
+      "ms": 49763.46462500002
+    },
+    "observedWarmups": 61,
+    "observedSamples": 180,
+    "rawLogBytes": 24514
+  },
+  {
+    "side": "after",
+    "started": false
+  }
+]

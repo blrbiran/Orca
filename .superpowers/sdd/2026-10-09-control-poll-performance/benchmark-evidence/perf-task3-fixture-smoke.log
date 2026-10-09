@@ -1,0 +1,9 @@
+ControlError: profile-changed
+    at Object.resolve (/Users/biran/.codex/worktrees/usage-settlement-handoff-retry/Orca/src/control/profiles.ts:156:15)
+    at buildControlPollFixture (/Users/biran/.codex/worktrees/usage-settlement-handoff-retry/Orca/tests/control/fixtures/controlPollPerformance.ts:61:92)
+    at async main (/private/tmp/od9/fixture-smoke.ts:4:29) {
+  code: 'profile-changed',
+  detail: undefined
+}
+(node:44035) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)

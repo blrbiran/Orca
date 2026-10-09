@@ -1,0 +1,31 @@
+diff --git a/src/panel/controlViews.ts b/src/panel/controlViews.ts
+index 6ad5b63..307ef44 100644
+--- a/src/panel/controlViews.ts
++++ b/src/panel/controlViews.ts
+@@ -318,7 +318,7 @@ function categoryOf(snapshot: GroupReadSnapshot, work: { status?: unknown; curre
+  * finding F5): a work item this cannot read counts as not done and is in no category, and the group view's workViews
+  * names it exactly as before; a summary list must not go dark over one bad row.
+  */
+-function taskCompletion(snapshot: GroupReadSnapshot, plan: ReturnType<typeof readArchivedPlan>["plan"]): {
++function taskCompletion(store: ControlStore, snapshot: GroupReadSnapshot, plan: ReturnType<typeof readArchivedPlan>["plan"]): {
+   completion: { done: number; total: number }; counts: Record<WorkItemCategory, number>;
+ } {
+   let done = 0;
+@@ -326,7 +326,7 @@ function taskCompletion(snapshot: GroupReadSnapshot, plan: ReturnType<typeof rea
+   for (const task of plan.tasks) {
+     type StoredWork = { status?: unknown; currentRunId?: unknown; dependsOn?: unknown };
+     let work: StoredWork | null = null;
+-    try { work = decodedValue(snapshot.decodeWork(task.taskId)) as StoredWork ?? null; } catch { work = null; }
++    try { work = JSON.parse(String(store.db.prepare("SELECT body FROM work_items WHERE group_id=? AND id=?").get(snapshot.groupId, task.taskId)?.body)) as StoredWork ?? null; } catch { work = null; }
+     if (work?.status === "done" || work?.status === "completed") done += 1;
+     if (work !== null) {
+       try { counts[categoryOf(snapshot, work)] += 1; } catch { /* in no count: the view names it */ }
+@@ -393,7 +393,7 @@ function readGroupSummaryFromSnapshot(store: ControlStore, groupId: string, snap
+   }
+   const repoId = archived !== null ? archived.plan.repoId : readRequirementGroup(store, groupId).requirement.repoId;
+   const readSnapshot = archived === null ? undefined : snapshot ?? readGroupSnapshot(store, groupId);
+-  const tally = archived === null ? null : taskCompletion(readSnapshot!, archived.plan);
++  const tally = archived === null ? null : taskCompletion(store, readSnapshot!, archived.plan);
+   const summary = {
+     groupId,
+     repoId,

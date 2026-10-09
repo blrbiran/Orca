@@ -1,0 +1,15 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.3 [39m[90m/Users/biran/.codex/visualizations/2026/10/09/01a11eeb-8e72-7e43-aa92-c90f72786fe3/guard-mutation-clone[39m
+
+(node:65722) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+/private/tmp/od9/t/orca-tmp-8blJ1h/orca-snapshot-verify-DYwiOt/input.bundle is okay
+ [32m✓[39m tests/control/controlPollBenchmark.test.ts [2m([22m[2m4 tests[22m[2m)[22m[33m 1822[2mms[22m[39m
+   [32m✓[39m real-path benchmark integrity [2m(4)[22m
+     [33m[2m✓[22m[39m builds one legal store with DAG, current runs, activities and a real replenishment[33m 1816[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m4 passed[39m[22m[90m (4)[39m
+[2m   Start at [22m 00:26:08
+[2m   Duration [22m 2.64s[2m (tests 72%, transform 24%, import 4%)[22m
+

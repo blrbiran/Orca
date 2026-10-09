@@ -1,0 +1,89 @@
+{
+  "beforeCommit": "1fd19a3d49778d0809f96af49a7ef51647a6c0fe",
+  "afterCommit": "4fd2b266006c90fd5084b750a4e63c587451f69d",
+  "initialDigest": "849f0db18d6d00f2e1024d1c71c74219486aa88e4cb33f7a4380a9646ec5d21e",
+  "checks": [
+    {
+      "name": "full-reset",
+      "scopeEqual": true,
+      "completeOutputDigestEqual": true,
+      "everyPersistedEffectFieldEqual": true,
+      "warmup": 10,
+      "samples": 30
+    },
+    {
+      "name": "forced-reset",
+      "scopeEqual": true,
+      "completeOutputDigestEqual": true,
+      "everyPersistedEffectFieldEqual": true,
+      "warmup": 10,
+      "samples": 30
+    },
+    {
+      "name": "retention-reset",
+      "scopeEqual": true,
+      "completeOutputDigestEqual": true,
+      "everyPersistedEffectFieldEqual": true,
+      "warmup": 10,
+      "samples": 30
+    },
+    {
+      "name": "all-live-changed-incremental",
+      "scopeEqual": true,
+      "completeOutputDigestEqual": true,
+      "everyPersistedEffectFieldEqual": true,
+      "warmup": 10,
+      "samples": 30
+    },
+    {
+      "name": "empty-incremental",
+      "scopeEqual": true,
+      "completeOutputDigestEqual": true,
+      "everyPersistedEffectFieldEqual": true,
+      "warmup": 10,
+      "samples": 30
+    },
+    {
+      "name": "one-group-detail",
+      "scopeEqual": true,
+      "completeOutputDigestEqual": true,
+      "everyPersistedEffectFieldEqual": true,
+      "warmup": 10,
+      "samples": 30
+    },
+    {
+      "name": "all-live-detail",
+      "scopeEqual": true,
+      "completeOutputDigestEqual": true,
+      "everyPersistedEffectFieldEqual": true,
+      "warmup": 10,
+      "samples": 30
+    },
+    {
+      "name": "replenish",
+      "scopeEqual": true,
+      "completeOutputDigestEqual": true,
+      "everyPersistedEffectFieldEqual": true,
+      "warmup": 10,
+      "samples": 30
+    },
+    {
+      "name": "archived-only-pump",
+      "scopeEqual": true,
+      "completeOutputDigestEqual": true,
+      "everyPersistedEffectFieldEqual": true,
+      "warmup": 10,
+      "samples": 30
+    },
+    {
+      "name": "mixed-pump",
+      "scopeEqual": true,
+      "completeOutputDigestEqual": true,
+      "everyPersistedEffectFieldEqual": true,
+      "warmup": 10,
+      "samples": 30
+    }
+  ],
+  "beforeJSONSHA256": "42339621072c5a5bb0a7adc1852ca79d31b97104ceb510a78fd263afd973288f",
+  "afterProgressSHA256": "b70fc8d07bd77491ba807627152f480cc6bc3a65a1c5434254b00f807feb439b"
+}

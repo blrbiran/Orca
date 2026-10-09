@@ -1,0 +1,35 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.3 [39m[90m/private/tmp/od9/performance-task3-mutation[39m
+
+
+
+[31m⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Suites 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/control/controlPollBenchmark.test.ts[2m [ tests/control/controlPollBenchmark.test.ts ][22m
+[31m[1mError[22m: Transform failed with 1 error:
+/private/tmp/od9/performance-task3-mutation/tests/control/fixtures/controlReadCounters.ts:55:4: ERROR: Expected ")" but found "return"[39m
+  Plugin: [35mvite:esbuild[39m
+  File: [36m/private/tmp/od9/performance-task3-mutation/tests/control/fixtures/controlReadCounters.ts[39m:55:4
+[33m  
+  Expected ")" but found "return"
+  53 |        restores.push(() => { const live = reference.deref(); // mutation: omit restoration of cached methods });
+  54 |      }
+  55 |      return statement;
+     |      ^
+  56 |    };
+  57 |    JSON.parse = function(text: string, reviver?: any) {
+  [39m
+[90m [2m❯[22m failureErrorWithLog ../../../../Users/biran/code/skills/loop/Orca/node_modules/vite/node_modules/esbuild/lib/main.js:[2m1467:15[22m[39m
+[90m [2m❯[22m ../../../../Users/biran/code/skills/loop/Orca/node_modules/vite/node_modules/esbuild/lib/main.js:[2m736:50[22m[39m
+[90m [2m❯[22m responseCallbacks.<computed> ../../../../Users/biran/code/skills/loop/Orca/node_modules/vite/node_modules/esbuild/lib/main.js:[2m603:9[22m[39m
+[90m [2m❯[22m handleIncomingPacket ../../../../Users/biran/code/skills/loop/Orca/node_modules/vite/node_modules/esbuild/lib/main.js:[2m658:12[22m[39m
+[90m [2m❯[22m Socket.readFromStdout ../../../../Users/biran/code/skills/loop/Orca/node_modules/vite/node_modules/esbuild/lib/main.js:[2m581:7[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [2mno tests[22m
+[2m   Start at [22m 21:52:59
+[2m   Duration [22m 847ms[2m (transform 73%, setup 22%, worker 5%)[22m
+

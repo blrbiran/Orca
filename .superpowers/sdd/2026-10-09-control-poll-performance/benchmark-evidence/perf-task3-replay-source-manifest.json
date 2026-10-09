@@ -1,0 +1,16 @@
+{
+  "before": {
+    "originalHarness": "/private/tmp/od9/logs/perf-task3-before-timed-harness.ts",
+    "originalSHA256": "880ae993e77d553a65358118dbadb246683be95a1b74065249654be41a2868e5",
+    "correctedHarnessSHA256": "7ebe22e0a0d470b560ead069a09a45466b5f26eaf30a5350ad2414fbbcc0ea83",
+    "fixtureSHA256": "6e78d87dfb82796cecf8b4341f016f7d106756973adb5ef0c8389658cf4f218b",
+    "counterSHA256": "6a9a8ae7ef01ab942db5abc355e46bdadf2345dba1f226f4af928860510d1067"
+  },
+  "after": {
+    "originalHarness": "/private/tmp/od9/logs/perf-task3-after-timed-harness.ts",
+    "originalSHA256": "880ae993e77d553a65358118dbadb246683be95a1b74065249654be41a2868e5",
+    "correctedHarnessSHA256": "7ebe22e0a0d470b560ead069a09a45466b5f26eaf30a5350ad2414fbbcc0ea83",
+    "fixtureSHA256": "6e78d87dfb82796cecf8b4341f016f7d106756973adb5ef0c8389658cf4f218b",
+    "counterSHA256": "6a9a8ae7ef01ab942db5abc355e46bdadf2345dba1f226f4af928860510d1067"
+  }
+}

@@ -1,0 +1,59 @@
+[
+  {
+    "side": "before",
+    "command": [
+      "npx",
+      "tsx",
+      "tests/bench/controlPollPerformance.ts",
+      "--output",
+      "/private/tmp/od9/performance-before-validated",
+      "--warmup",
+      "10",
+      "--samples",
+      "30",
+      "--replay",
+      "/private/tmp/od9/performance-before-final/timing-progress.json",
+      "--trace-log",
+      "/private/tmp/od9/logs/perf-task3-before-final.log",
+      "--source-manifest",
+      "/private/tmp/od9/logs/perf-task3-source-manifest.json",
+      "--side",
+      "before",
+      "--original-harness",
+      "/private/tmp/od9/logs/perf-task3-before-timed-harness.ts"
+    ],
+    "cwd": "/private/tmp/od9/performance-before",
+    "rc": 0,
+    "elapsedSeconds": 68.634106
+  },
+  {
+    "side": "after",
+    "command": [
+      "npx",
+      "tsx",
+      "tests/bench/controlPollPerformance.ts",
+      "--output",
+      "/private/tmp/od9/performance-after-validated",
+      "--warmup",
+      "10",
+      "--samples",
+      "30",
+      "--replay",
+      "/private/tmp/od9/performance-after-final/timing-progress.json",
+      "--trace-log",
+      "/private/tmp/od9/logs/perf-task3-after-final.log",
+      "--source-manifest",
+      "/private/tmp/od9/logs/perf-task3-source-manifest.json",
+      "--side",
+      "after",
+      "--original-harness",
+      "/private/tmp/od9/logs/perf-task3-after-timed-harness.ts",
+      "--expect-optimized",
+      "--compare",
+      "/private/tmp/od9/performance-before-validated/result.json"
+    ],
+    "cwd": "/private/tmp/od9/performance-after",
+    "rc": 0,
+    "elapsedSeconds": 64.89289416700001
+  }
+]

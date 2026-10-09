@@ -1,0 +1,3 @@
+(node:46627) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+{"commit":"1fd19a3d49778d0809f96af49a7ef51647a6c0fe","initialDigest":"849f0db18d6d00f2e1024d1c71c74219486aa88e4cb33f7a4380a9646ec5d21e","cases":[{"name":"replenish","completeStateDigest":"b51492d20bbb9c2258266bd75f1fb732b9ef6bc1425c8e3fac42b7b0a977c09f","changedRows":1},{"name":"archived-only-pump","completeStateDigest":"849f0db18d6d00f2e1024d1c71c74219486aa88e4cb33f7a4380a9646ec5d21e","changedRows":0},{"name":"mixed-pump","completeStateDigest":"15d392696a78d6d8646ccff970db691816efb671021efb71b04a31a4f19bf7d3","changedRows":99}]}

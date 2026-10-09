@@ -1,0 +1,28 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.3 [39m[90m/private/tmp/od9/performance-task3-mutation[39m
+
+(node:83985) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+[33m[39m[31mx[39m[33m[39m[2m[90m-[39m[22m[33m[39m[2m[90m-[39m[22m[33m[39m[2m[90m-[39m[22m[33m[39m[2m[90m-[39m[22m[33m[39m[2m[90m-[39m[22m[33m[39m[2m[90m-[39m[22m[33m[39m[2m[90m-[39m[22m[33m[39m[2m[90m-[39m[22m[33m[39m[2m[90m-[39m[22m[33m[39m[2m[90m-[39m[22m[33m[39m[2m[90m-[39m[22m[33m[39m[2m[90m-[39m[22m[33m[39m[2m[90m-[39m[22m[33m[39m[2m[90m-[39m[22m[33m[39m[2m[90m-[39m[22m[33m[39m[2m[90m-[39m[22m[33m[39m[2m[90m-[39m[22m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/panel/controlPollPerformance.test.ts[2m > [22mcontrol poll request snapshots[2m > [22mbatches real summary and group reads for 10 tasks with multiple dependencies
+[31m[1mAssertionError[22m: work_items:g:t00: expected 3 to be less than or equal to 1[39m
+[36m [2m❯[22m bounds tests/panel/controlPollPerformance.test.ts:[2m46:57[22m[39m
+    [90m 44|[39m   expect(c.executions.filter(e => /FROM activity.*JOIN runs/.test(e.sq…
+    [90m 45|[39m   expect(c.executions.filter(e => /FROM activity WHERE run_id=/.test(e…
+    [90m 46|[39m   for (const [id, count] of c.parses) expect(count, id).toBeLessThanOr…
+    [90m   |[39m                                                         [31m^[39m
+    [90m 47|[39m }
+    [90m 48|[39m const refusal = (fn: () => unknown) => {
+[90m [2m❯[22m tests/panel/controlPollPerformance.test.ts:[2m78:97[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[33m17 skipped[39m[90m (18)[39m
+[2m   Start at [22m 21:52:53
+[2m   Duration [22m 989ms[2m (transform 64%, tests 24%, import 12%, setup 1%)[22m
+

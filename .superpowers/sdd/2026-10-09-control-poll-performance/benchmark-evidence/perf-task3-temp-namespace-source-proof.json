@@ -1,0 +1,16 @@
+{
+  "base": "a241c919c6c609e69b3c7a54796785130627001d",
+  "productionDiffBytes": 0,
+  "performanceRootGetterIdentical": true,
+  "benchmarkMeasuredEntryAndAllCallbacksByteIdentical": true,
+  "benchmarkSHA256": "7ebe22e0a0d470b560ead069a09a45466b5f26eaf30a5350ad2414fbbcc0ea83",
+  "ownedChangedFiles": [
+    "tests/control/fixtures/controlPollPerformance.ts",
+    "tests/control/controlPollBenchmark.test.ts"
+  ],
+  "guardCallSites": [
+    "await assertTemporaryFixtureRoot(root);",
+    "await assertTemporaryFixtureRoot(performanceRoot());"
+  ],
+  "changes": "canonical temporary namespace checked once before writable build/open; no reader, callback, getter, production or counter change"
+}

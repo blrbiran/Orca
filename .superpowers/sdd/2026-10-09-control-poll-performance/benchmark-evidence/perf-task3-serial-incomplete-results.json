@@ -1,0 +1,20 @@
+[
+  {
+    "name": "before",
+    "command": [
+      "npx",
+      "tsx",
+      "tests/bench/controlPollPerformance.ts",
+      "--output",
+      "/private/tmp/od9/performance-before-final",
+      "--warmup",
+      "10",
+      "--samples",
+      "30"
+    ],
+    "cwd": "/private/tmp/od9/performance-before",
+    "log": "/private/tmp/od9/logs/perf-task3-before-final.log",
+    "rc": 130,
+    "elapsedSeconds": 162.87981683299998
+  }
+]

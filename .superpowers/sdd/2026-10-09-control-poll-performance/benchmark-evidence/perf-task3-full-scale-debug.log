@@ -1,0 +1,17 @@
+(node:11245) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+/private/tmp/od9/t/orca-snapshot-verify-glipLe/input.bundle is okay
+ControlError: recovery-blocked:group-body-invalid:Required
+    at blocked (/Users/biran/.codex/worktrees/usage-settlement-handoff-retry/Orca/src/panel/controlViews.ts:203:9)
+    at parseStored (/Users/biran/.codex/worktrees/usage-settlement-handoff-retry/Orca/src/panel/controlViews.ts:213:31)
+    at groupBody (/Users/biran/.codex/worktrees/usage-settlement-handoff-retry/Orca/src/panel/controlViews.ts:237:16)
+    at readGroupSummaryFromSnapshot (/Users/biran/.codex/worktrees/usage-settlement-handoff-retry/Orca/src/panel/controlViews.ts:378:16)
+    at readGroupSummary (/Users/biran/.codex/worktrees/usage-settlement-handoff-retry/Orca/src/panel/controlViews.ts:374:10)
+    at <anonymous> (/Users/biran/.codex/worktrees/usage-settlement-handoff-retry/Orca/src/panel/controlViews.ts:446:51)
+    at Array.map (<anonymous>)
+    at readControlSummary (/Users/biran/.codex/worktrees/usage-settlement-handoff-retry/Orca/src/panel/controlViews.ts:446:36)
+    at Object.run (/Users/biran/.codex/worktrees/usage-settlement-handoff-retry/Orca/tests/bench/controlPollPerformance.ts:53:41)
+    at main (/Users/biran/.codex/worktrees/usage-settlement-handoff-retry/Orca/tests/bench/controlPollPerformance.ts:94:124) {
+  code: 'recovery-blocked',
+  detail: 'group-body-invalid:Required'
+}
