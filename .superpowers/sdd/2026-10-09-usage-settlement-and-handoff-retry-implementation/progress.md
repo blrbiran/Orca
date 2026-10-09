@@ -83,3 +83,29 @@ Task2: complete (commitsd3b9d6a..2c7a531, fresh task review clean). task-2-revie
 Ruling: Fold the direct active-continuation coverage Minor into Task4's already planned final test/verification deliverable, adding `directly retries an active failed continuation from head` to the new handoffFailedRetry test file without weakening existing cases; exercise actual retry/claim/accept/source/consumed removal/reservation and a matching clone deletion if a distinct branch is measured. This is not an extra Task2 fix-loop or parallel writer. Cost if wrong: a coverage addition could miss its target; require business assertions against the actual port/reader and fresh final review.
 
 Task3 next: server RunView.unknownUsageSettlement preview/result plus qualification table in task-2-report.md; owner-only confirmation, member contact, persistent failure outcome, empty-selection stop resume, inactive/released Retry UI and groupunknown guard.
+
+## Task 3 decomposition — controller, 2026-10-09, base c2e81f2
+
+Ruling: Add web/src/UsageSettlement.tsx as a focused server-preview/refusal + local-confirmation component instead of expanding the existing GroupView. GroupView retains actual command submission/recovery callback; AccountContext→App→ControlPanel→GroupView passes real roles, absent roles grant no new owner action. Cost if wrong: an extra component boundary; no new authority or permission fallback. Reuse any already-existing empty-selection resume entry after proving it works for failed held/manualsettled states rather than duplicating the button.
+
+Task3 sole writer, TDD/typed UI/locales and clone mutations in progress. Performance product remains unstarted; final Task4 covers integrated gates and direct activecontinuation criterion.
+
+## Task 3 named existing-criterion rulings — controller, 2026-10-09
+
+Ruling: web/tests/i18nPseudo.test.tsx — describe `every enum value has its words in both languages (spec §3.5)` / test `reads every family`: ENUM_VALUES length178→181 names the three new protocol values (usage-settled activity, settled-failed request, retrying allocation), keeps everyfamily/bothlanguage assertions and historical comment plus dated correction. Cost if wrong: hardcount could miss an actual enum; exhaustivefamily equality/locale coverage and review remain.
+
+Ruling: web/tests/archiveGroup.test.tsx — describe `archiving from the group view (spec §6.3)` / test `offers no retry on an archived group, because the server refuses every command but Unarchive (group-archived)`: add currentRunId=failed.runId and lineageRunIds=[failed.runId] to the testedwork fixture; preserve old unarchived2Retry/archived0 assertions byte-for-byte. Cost if wrong: another fixture identity inconsistency could mask the intended archive test; freshreview must inspect it. No old commandRecovery assertion/timeout relaxation authorized.
+
+Worker reports fullweb90files729tests RC0, targeted6files66green/typecheck/webbuildgreen; twelve UI deletion mutants businessRED, restored3files21green, main/clone15path hashes equal and main unstaged diff byte-identical before/after mutation. Exact productcommit/report pending.
+
+## Task 3 implementation checkpoint — controller, 2026-10-09
+
+Worker implement_settlement_ui DONE, productaa03c91/reportf9849b2; task3freshreview in flight on c2e81f2..f9849b2, complete2commitpackage review-c2e81f2..f9849b2.diff. Finalfullweb90files729tests RC0 on identical product bytes; committed8files84/typecheck/webbuild RC0. TwelveUIguard/confirmation/identity/amount/recovery/role/Continue/activity mutants businessRED; restored21tests green and named15paths main/clone hashes equal. No whole root suite claim yet.
+
+First fullweb run had enum/fixture/oldisTerminalFailure semantics/unchanged retained-result timing failures; exactly the two named migrations above were authorized, oldisTerminalFailure preserved via newhasFailureOutcome and originalrecoveryassertion/timeout unchanged. Completefinalweb and committedtarget both passed; original failure log retained without inventing a newflake.
+
+## Task 3 gate complete — controller, 2026-10-09
+
+Task3: complete (commitsc2e81f2..f9849b2, freshtaskreview clean). Spec compliant/qualityApproved,0Critical/0Important. Reviewer verified actualrolechain, consentreset, two-bucket amounts, strictpayload/recovery, held/released currenteligibility, preservedfailurehistory, manualContinueexclusion and truecompleteemptyresume;12mutants/729fullweb/84committed evidence. MinorVite>500kB warning retained. No serverproof completion inferred fromUI tests.
+
+Task4 starts with the named directactive-continuation coverage, then isolated integratedgates and freshwholeD9/M3review. Siblinghandoff updates and finalexecutivesummary remain controller-owned AFTER performance implementation and allfinalreviews, perhumanrequest. This does not pauseD9/M3gate/close.
