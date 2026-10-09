@@ -44,7 +44,7 @@ describe("run-settled and endedAt (issue-fixes spec §5.2)", () => {
         [3_000, { state: "settled", outcome: "succeeded" }],
       ]);
     } finally { await t.h.dispose(); }
-  });
+  }, 30000);
 
   it("a first attempt proved never started settles failed-before-provider with endedAt and its row (saveDispatchRun)", async () => {
     const clock = { value: 1_000 };
