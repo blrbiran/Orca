@@ -30,7 +30,7 @@ describe("archive-stop-pending names the recovery step (final fix wave W1)", () 
     expect(enErrors["archive-stop-pending"]).toContain("If it is unresolved, retry recovery first");
     expect(enErrors["archive-stop-pending"]).toContain("{{detail}}");
     expect(enErrors["archive-stop-pending"]).not.toContain("archive-stop-pending");
-    expect(zhErrors["archive-stop-pending"]).toContain("恢复");
+    expect(zhErrors["archive-stop-pending"]).toContain("如果停止状态未解决，请先重试恢复。");
     expect(zhErrors["archive-stop-pending"]).toContain("{{detail}}");
   });
 });

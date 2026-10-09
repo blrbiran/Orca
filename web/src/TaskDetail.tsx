@@ -133,14 +133,13 @@ function activityText(entry: ActivityEntryV1): string {
  * Issue-fixes spec §6.5: the current run's recent activity, read when the detail opens and again whenever the group's
  * projection moves (changeSeq). A refusal is named in place; the rest of the detail does not wait on it. Read-only
  * information, so it stays on an archived group.
+ * The caller keys it by run id, so a new run mounts empty (never a frame of the previous run's rows); a projection move
+ * (changeSeq) keeps the rows on screen until the fresh answer replaces them.
  */
 export function RunActivity(props: { runId: string; changeSeq: number }): JSX.Element {
   const { t } = useTranslation();
   const [entries, setEntries] = useState<ActivityEntryV1[] | null>(null);
   const [refusal, setRefusal] = useState<string | null>(null);
-  // A new run starts empty: the previous run's rows must not show under this run's label while its answer is pending.
-  // Only the run id resets; a projection move (changeSeq) keeps the rows on screen until the fresh answer replaces them.
-  useEffect(() => { setEntries(null); setRefusal(null); }, [props.runId]);
   useEffect(() => {
     let live = true;
     fetchRunActivity(props.runId).then(
@@ -238,7 +237,7 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
         {item.progress?.lastTransitionAt ? t("control.task.lastTransition", { at: item.progress.lastTransitionAt }) : ""}
       </p>
       <LoopPlanCard view={view} item={item} drafts={drafts} onDraft={onDraft} onCommand={onCommand} workspaceMode={props.workspaceMode} archived={archived} />
-      {item.currentRunId !== null && <RunActivity runId={item.currentRunId} changeSeq={view.changeSeq} />}
+      {item.currentRunId !== null && <RunActivity key={item.currentRunId} runId={item.currentRunId} changeSeq={view.changeSeq} />}
       <h5>{t("control.task.runsOf", { taskId: item.taskId })}</h5>
       {/* Issue fixes spec §4.2(2): the run number counts the runs that reached the provider. */}
       {runNumber > 0 && <p>{t("control.task.runNumber", { n: runNumber })}</p>}
