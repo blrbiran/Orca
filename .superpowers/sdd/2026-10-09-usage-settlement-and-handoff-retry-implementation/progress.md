@@ -55,3 +55,31 @@ Ruling: Over-limit settlement test uses a real provider overage followed by unkn
 Task1: complete (commits2c14e73..405f6b6, fresh task review clean). Review task-1-review.md: Spec compliant, quality Approved,0Critical/0Important. Reviewer cross-checked all21mutations against final delivered code and business assertion logs; restored clone differs only fixture trailing whitespace. Minor validation noise: Node22 SQLite experimental warnings and existing Vite bundle size hint, not hidden/skipped tests.
 
 Task2 next: consume hasValidUsageSettlement(store,run), RunViewV1.unknownUsageSettlement and marker reservationDisposition/handoffResolution; completed released D9 leaves work blocked/terminal and current source inactive settled-failed, no automatic retry. Controller performance docs committed independently; performance still not implemented.
+
+## Task 2 in progress — controller, 2026-10-09, base d3b9d6a
+
+Initial fixture missed await on asyncsettle, producing invalid D9→resume diagnostics; worker corrected this without Task1 product change. Only corrected business RED counts as TDD evidence. First9new real-flow/identity criteria green; task remains in progress.
+
+Ruling: New inactive held/released M3 admissions check all group historical unknown/pending usage inside retry transaction before releasing/reserving. Reuse budget groupUsageUnknown semantics via narrow helper if needed, not a stale UI predicate. Existing ordinary active admission and claim/start guards retain old semantics. Cost if wrong: M3 cannot pre-arm ready while another historical unknown remains; this implements the explicitly named new-admission refusal criterion and preserves actual claim safety. Task3 must present that eligibility honestly.
+
+## Gate runner scope clarification — controller, 2026-10-09
+
+Ruling: Task4 full npm test runs once on its integrated tree; the separate check-tmp-leak guard may take the three new backend/panel runtime test paths as its documented extra vitest args, so it verifies their temporary roots without repeating the entire unchanged suite. The raw inner vitest exit must be checked (outer0 alone does not prove test success). Cost if wrong: leak evidence narrower than fullsuite; fullsuite still runs all cases, and new D9/M3 runtime cleanup receives explicit zero-entry guard. Later performance changes justify their own new-code gate.
+
+Ruling: Sibling handoff documentation commits will use one-off /private/tmp/od9/{ccloop,ccmem}-handoff-hooks preserving any plain validation hooks, omitting their existing Qoder external tracker hooks. Repository hook config/files unchanged; no push/third-party tracker invocation is authorized by this task. Current inspection found only post-checkout/post-commit tracker hooks. Cost if wrong: this local doc commit lacks tracker telemetry; Git audit history and exact path verification remain.
+
+## Task 2 implementation checkpoint — controller, 2026-10-09
+
+Worker implement_handoff_retry DONE, ce4de4b + a78d5eb product and2c7a531report; fresh task review in flight on d3b9d6a..2c7a531, package review-d3b9d6a..2c7a531.diff. Shared retryGrant source validation/clearing, three admissions, actual A2 policy clamp and both D9 orders implemented. Not yet a passed task gate.
+
+Commit-level directed15files202tests/typecheck RC0 at a78d5eb; actual raw files task2-final-directed-limited.log/task2-final-type-a78.log full-read. Worker reports16final independent deletion mutations red, restore18/18green and source byte hashes/main+clone diff/staged zeros. Initial default-worker run had one unchanged retryTask5s timeout while clone tests concurrent; no assertion/timeout changed, final complete15files with maxWorkers2 all202passed. Failure remains in task-2-report.md.
+
+Task3 consume qualification table in task-2-report.md, including common exact lineage/claim identity and newheld/released group-unknown guard. Full UI and integrated suite remain pending.
+
+## Task 2 gate complete — controller, 2026-10-09
+
+Task2: complete (commitsd3b9d6a..2c7a531, fresh task review clean). task-2-review.md: Spec compliant, quality Approved,0Critical/0Important,16mutations verified with final202/202/typecheck and exact15file restore hashes. First active continuing→retrying is interpreted as initial source binding, whereas §5 subsequent-active state preservation applies after M3retrying exists; ordinary confirmed protected. Reviewer Minor: direct initial active-continuation path lacks its own criterion; logs contain located fixture/SQLite noise, not undisclosed failed/skipped cases.
+
+Ruling: Fold the direct active-continuation coverage Minor into Task4's already planned final test/verification deliverable, adding `directly retries an active failed continuation from head` to the new handoffFailedRetry test file without weakening existing cases; exercise actual retry/claim/accept/source/consumed removal/reservation and a matching clone deletion if a distinct branch is measured. This is not an extra Task2 fix-loop or parallel writer. Cost if wrong: a coverage addition could miss its target; require business assertions against the actual port/reader and fresh final review.
+
+Task3 next: server RunView.unknownUsageSettlement preview/result plus qualification table in task-2-report.md; owner-only confirmation, member contact, persistent failure outcome, empty-selection stop resume, inactive/released Retry UI and groupunknown guard.
