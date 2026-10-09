@@ -91,6 +91,49 @@ async function reduced() {
 }
 
 describe("M3 handoff failure retry lifecycle", { timeout: 60_000 }, () => {
+  // Task4 coverage owner verify_usage_retry_round, 2026-10-09, product base ace22093.
+  it("directly retries an active failed continuation from head", async () => {
+    let behaviour: FakeBehaviour = "stoppable";
+    const t = await driverHarness([{ taskId: "a" }], { behaviour: () => behaviour, stopReason: () => "provider crashed" });
+    try {
+      const limit = ledger(t).groupLimit;
+      expect(t.service.setLimit(t.h.command("set-limit", { limit: Object.fromEntries(ds.map(d => [d, limit[d] * 5])) } as any))).not.toHaveProperty("error");
+      const first = await t.claim(), driver = t.driver();
+      await t.until(driver, () => t.body(first).state === "accepted");
+      await handoff(t, first, driver);
+      expect(await t.service.resumeFromHandoff(t.h.command("resume-from-handoff", { selections: [{ taskId: "a", predecessorRunId: first, checkpointId: t.body(first).checkpointId }] }))).not.toHaveProperty("error");
+      behaviour = "failed";
+      const id = await claim(t);
+      await t.until(driver, () => t.body(id).state === "blocked");
+      const failed = t.body(id), before = ledger(t), frozen = readConfirmedTaskExecution(t.h.store, "g", "a");
+      const consumed = work(t, "a").continuation;
+      expect(active(t, id)).toBe(1);
+      expect(allocation(t, "a").state).toBe("continuing");
+      expect(consumed).toMatchObject({ pendingRunId: id, continuationIntentId: failed.continuationIntentId, claimOrdinal: failed.claimOrdinal });
+      expect(latestRequestForRun(t.h.store, "g", id)).toBeNull();
+      for (const d of ["tokens", "activeMs", "attempts"] as const) expect(failed.grant.work[d]).toBeLessThan(frozen.grant.work[d]);
+
+      // No second handoff: the actual active failure is admitted directly.
+      expect(retry(t)).not.toHaveProperty("error");
+      expect(work(t, "a")).toMatchObject({ status: "ready", grant: failed.grant, currentRunId: id, pendingRunId: null, retryGrantSourceRunId: id });
+      expect(work(t, "a").continuation).toBeUndefined();
+      expect(active(t, id)).toBe(0);
+      expect(t.body(id)).toMatchObject({ state: "settled-failed", checkpointId: failed.checkpointId, continuationIntentId: consumed.continuationIntentId, drive: { outcome: failed.drive.outcome, stopReason: failed.drive.stopReason } });
+      const allocations = readBudgetProposal(t.h.store, "g").allocations.filter(a => a.ownerKind === "task" && a.ownerId === "a");
+      expect(allocations).toHaveLength(2);
+      for (const bucket of ["work", "handoff"] as const) expect(allocations.find(a => a.bucket === bucket)).toMatchObject({ state: "retrying", amount: failed.grant[bucket] });
+      for (const d of ds) expect(ledger(t).committedRemaining[d]).toBe(before.committedRemaining[d] + sum(failed.grant)[d] - sum(failed.remaining)[d]);
+      expect(ledger(t).used).toEqual(before.used);
+      expect(() => view(t)).not.toThrow();
+      advanceHead(t);
+      const reserved = ledger(t).committedRemaining;
+      const next = await t.claim();
+      expect(t.body(next)).toMatchObject({ grant: failed.grant, continuationIntentId: null });
+      expect(ledger(t).committedRemaining).toEqual(reserved);
+      expect(work(t, "a").retryGrantSourceRunId).toBe(id);
+      await accepted(t, next);
+    } finally { await t.h.dispose(); }
+  });
   it("retries a handoff-settled failed continuation at its claim grant", async () => {
     const { t, id } = await reduced(); try {
       const failed = t.body(id), before = ledger(t), frozen = readConfirmedTaskExecution(t.h.store, "g", "a");
