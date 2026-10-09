@@ -1,3 +1,4 @@
+import { recordActivity } from "./activity.js";
 import { applyWebCommand } from "./commandLedger.js";
 import { canonicalBytes } from "./canonicalJson.js";
 import { ControlError } from "./errors.js";
@@ -154,6 +155,8 @@ export function applyResolveIntegrationConflict(deps: { store: ControlStore }, c
       const group = JSON.parse(String(row.body)) as Record<string, unknown>;
       group.integration = approveResolution(deps.store, groupId, group, prepared);
       deps.store.db.prepare("UPDATE groups SET body=? WHERE id=?").run(JSON.stringify(group), groupId);
+      // Issue-fixes spec §5.2: the owner's approval is the group entering `resolving`; the settle rows follow in the pass.
+      recordActivity(deps.store, { groupId, kind: "integration", body: { state: "resolving", reason: null } });
       return { status: 200, body: {
         schema: "orca-command-success-v1", commandId: context.rawCommand.commandId, actorId: context.rawCommand.actorId,
         verb: context.rawCommand.verb, target: context.rawCommand.target, commandRevision: context.nextCommandRevision, projectionSeq: context.nextProjectionSeq,

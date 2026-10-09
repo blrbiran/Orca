@@ -7,6 +7,7 @@ import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
+import { readGroupActivity } from "../../src/control/activity.js";
 import { applyResolveIntegrationConflict } from "../../src/control/integrationCommands.js";
 import { prepareResolution, recordIntegrationUsage } from "../../src/control/integrationResolve.js";
 import { integratePendingGroups, type IntegrationDeps } from "../../src/control/integrationPass.js";
@@ -311,6 +312,25 @@ describe("an integration conflict, materialised and approved (integration spec ย
       expect(await w.pass()).toBe(true);
       await w.reconciling.get("integrate-g-1");
       expect(w.record()).toMatchObject({ state: "conflict", reason: "integration-resolution-spawn:no ccloop here", resolution: null, conflict: { attempt: 2 } });
+    } finally { await w.dispose(); }
+  });
+
+  it("the approval and a failed resolution each write one integration activity row (issue-fixes spec ยง5.2)", async () => {
+    const w = await world(LOCAL_MERGE); try {
+      const rows = () => readGroupActivity(w.store, "g", 100).filter((entry) => entry.kind === "integration").reverse().map((entry) => entry.body);
+      await conflicted(w);
+      expect(rows()).toEqual([{ state: "conflict", reason: "integration-conflict" }]);
+      w.raise(10_000_000);
+      expect(code(await w.resolve())).toBe("applied");
+      expect(rows()).toEqual([{ state: "conflict", reason: "integration-conflict" }, { state: "resolving", reason: null }]);
+      w.setRunTask(async () => { throw new Error("no ccloop here"); });
+      expect(await w.pass()).toBe(true);
+      await w.reconciling.get("integrate-g-1");
+      expect(w.record().state).toBe("conflict");
+      expect(rows()).toEqual([
+        { state: "conflict", reason: "integration-conflict" }, { state: "resolving", reason: null },
+        { state: "conflict", reason: "integration-resolution-spawn:no ccloop here" },
+      ]);
     } finally { await w.dispose(); }
   });
 

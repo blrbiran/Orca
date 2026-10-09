@@ -2,6 +2,7 @@ import { existsSync, readdirSync } from "node:fs";
 import { rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { z } from "zod";
+import { recordActivity } from "./activity.js";
 import { add, syncWebBudget } from "./budget.js";
 import { canonicalBytes } from "./canonicalJson.js";
 import { reconcileAffordable, reconcileNextAction, processAlive, readLoopState } from "./driverLanding.js";
@@ -322,6 +323,8 @@ async function failResolution(deps: ResolvingDeps, groupId: string, key: string,
     if (current?.state !== "resolving" || current.resolution?.reconcileRunId !== key) return false;
     saveGroup(deps.store, { ...group, integration: { ...current, state: "conflict", reason, resolution: null, attempts: Math.max(current.attempts, attempt),
       conflict: next ?? { attempt, key: integrationKeyOf(groupId, attempt), base, tip, paths } } } as typeof group);
+    // Issue-fixes spec §5.2: the pass records its results (integrationPass.ts); this save is one the pass cannot see.
+    recordActivity(deps.store, { groupId, kind: "integration", body: { state: "conflict", reason } });
     return true;
   });
 }
