@@ -74,6 +74,17 @@ describe("the task detail's run activity (spec §6.5)", () => {
     expect(await screen.findByText("no activity recorded yet")).toBeTruthy();
   });
 
+  it("reads again when the group's projection moves, so a running task's feed follows it", async () => {
+    const item = workItem({ taskId: "a", currentRunId: "run-a", lineageRunIds: ["run-a"] });
+    const first = view([item], [run({})]);
+    const props = { item, drafts: {}, onDraft: vi.fn(), onCommand: vi.fn() };
+    const { rerender } = render(<TaskDetail view={first} {...props} />);
+    await screen.findByRole("region", { name: "Recent activity of run-a" });
+    expect(urls).toHaveLength(1);
+    rerender(<TaskDetail view={{ ...first, changeSeq: first.changeSeq + 1 }} {...props} />);
+    await vi.waitFor(() => expect(urls).toHaveLength(2));
+  });
+
   it("reads nothing for a task with no current run", () => {
     const item = workItem({ taskId: "a" });
     render(<TaskDetail view={view([item])} item={item} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
