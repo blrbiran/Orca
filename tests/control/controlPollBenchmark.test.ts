@@ -14,8 +14,8 @@ describe("real-path benchmark integrity",()=>{
   const f=await buildControlPollFixture({liveGroups:2,archivedGroups:2,tasksPerGroup:3,now:1791518400000});
   try {expect(f.manifest()).toEqual({liveGroups:2,archivedGroups:2,tasks:6,dependencies:6,runs:2,pendingTargetWakes:6});
    expect(dagTasks(3).map(t=>t.dependsOn)).toEqual([[],["t00"],["t01","t00"]]);
-   for(const id of f.liveGroupIds) expect(readControlGroup(f.store,"benchmark",id).runs).toHaveLength(1);
    const counter=installControlReadCounters(f.store);
+   for(const id of f.liveGroupIds) expect(readControlGroup(f.store,"benchmark",id).runs).toHaveLength(1);
    readGroupSummary(f.store,f.liveGroupIds[0]);const counted=counter.snapshot().executions.length;
    counter.restore();readGroupSummary(f.store,f.liveGroupIds[0]);expect(counter.snapshot().executions.length).toBe(counted);
    const initial=captureDatabase(f.store);
