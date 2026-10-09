@@ -15,8 +15,16 @@ import type { RawAuthorityCommandV1, CommandSuccessV1, CommandErrorBodyV1 } from
 export type SettleUnknownUsageCommand = Extract<RawAuthorityCommandV1, { verb: "settle-unknown-usage" }>;
 export interface SettleUnknownUsageDeps { store: ControlStore; admissionGate?: AdmissionGate; now?: () => Date; beforeCommit?: () => void; afterEvidence?: () => Promise<void> }
 
-export function settlementAdmission(store: ControlStore, run: SettlementRun): "committed" | "released" {
-  const group = readGroup(store, run.groupId), work = readWork(store, run.groupId, run.workItemId) as unknown as { taskId: string; currentRunId?: string; status: string; grant: unknown; pendingRunId?: string | null };
+/** Optional request-local raw work reader; writers omit it and retain their transaction's database reads. */
+export interface SettlementAdmissionReadContext {
+  readonly store: ControlStore;
+  readonly groupId: string;
+  readWork(id: string): unknown;
+}
+
+export function settlementAdmission(store: ControlStore, run: SettlementRun, context?: SettlementAdmissionReadContext): "committed" | "released" {
+  const group = readGroup(store, run.groupId), work = (context?.store === store && context.groupId === run.groupId
+    ? context.readWork(run.workItemId) : readWork(store, run.groupId, run.workItemId)) as unknown as { taskId: string; currentRunId?: string; status: string; grant: unknown; pendingRunId?: string | null };
   if (isGroupArchived(store, run.groupId)) throw new ControlError("group-archived");
   if (run.usageSettlement !== undefined) throw new ControlError("run-usage-settled");
   if ((group as { status?: string }).status === "clarifying") throw new ControlError("group-state-invalid", "clarifying");

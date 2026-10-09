@@ -10,8 +10,16 @@ import type { ControlStore } from "./store.js";
 import { hasValidUsageSettlement, settlementSame } from "./usageSettlement.js";
 import { dispatchEnvelopeSchema } from "./webProtocol.js";
 
+/** Optional synchronous read context; the caller owns rows/decoding for this store and group only. */
+export interface RetryGrantReadContext {
+  readonly store: ControlStore;
+  readonly groupId: string;
+  readonly runsByRowid: readonly { id: string; group_id: string; work_item_id: string; generation: number; active: number; body: string }[];
+  decodeRun(id: string): unknown;
+}
+
 /** Live retry commitment authority, shared by dispatch, contract readers and the panel. */
-export function validateRetryGrantSource(store: ControlStore, groupId: string, subject: unknown): void {
+export function validateRetryGrantSource(store: ControlStore, groupId: string, subject: unknown, context?: RetryGrantReadContext): void {
   const work = subject as Record<string, any>;
   const proposal = readBudgetProposal(store, groupId);
   const allocations = proposal.allocations.filter(a => a.ownerKind === "task" && a.ownerId === work.workItemId);
@@ -25,11 +33,15 @@ export function validateRetryGrantSource(store: ControlStore, groupId: string, s
     if (!idSchema.safeParse(sourceId).success || allocations.length !== 2 || allocations.some(a => a.state !== "retrying")
       || work.pendingRunId !== null || work.continuation != null || !["ready", "running", "blocked"].includes(work.status)) bad("work-state");
     const graphVersion = readArchivedPlan(store, groupId).graphVersion;
-    const rows = store.db.prepare("SELECT id,group_id,work_item_id,generation,active,body FROM runs WHERE group_id=? AND work_item_id=? ORDER BY rowid").all(groupId, work.workItemId);
+    const local = context?.store === store && context.groupId === groupId ? context : undefined;
+    const rows = local === undefined
+      ? store.db.prepare("SELECT id,group_id,work_item_id,generation,active,body FROM runs WHERE group_id=? AND work_item_id=? ORDER BY rowid").all(groupId, work.workItemId)
+      : local.runsByRowid.filter(row => row.group_id === groupId && row.work_item_id === work.workItemId);
+    const decode = (row: Record<string, unknown>): any => local === undefined ? JSON.parse(String(row.body)) : local.decodeRun(String(row.id));
     const index = rows.findIndex(row => row.id === sourceId);
     if (index < 0 || rows.at(-1)?.id !== work.currentRunId || !Array.isArray(work.lineageRunIds)
       || work.lineageRunIds.length !== rows.length || new Set(work.lineageRunIds).size !== rows.length || rows.some(row => !work.lineageRunIds.includes(row.id))) bad("lineage");
-    const source = JSON.parse(String(rows[index]!.body));
+    const source = decode(rows[index]!);
     if (Number(rows[index]!.active) !== 0 || source.state !== "settled-failed" || source.drive?.outcome == null || source.drive.outcome === "succeeded"
       || source.unknown.work || source.unknown.handoff || !settlementSame(work.grant, source.grant)) bad("source-state");
     if (source.usageSettlement !== undefined && !hasValidUsageSettlement(store, source)) bad("settlement");
@@ -38,7 +50,7 @@ export function validateRetryGrantSource(store: ControlStore, groupId: string, s
       if (!allocation || !settlementSame(allocation.amount, source.grant[bucket])) bad("amount");
     }
     for (let i = index; i < rows.length; i++) {
-      const row = rows[i]!, run = JSON.parse(String(row.body));
+      const row = rows[i]!, run = decode(row);
       if (run.runId !== row.id || run.groupId !== groupId || run.workItemId !== work.workItemId || run.taskId !== work.taskId
         || run.generation !== Number(row.generation) || run.graphVersion !== graphVersion || run.targetVersion !== work.targetVersion
         || !settlementSame(frozenWorkAgent(run), frozenWorkAgent(work)) || !settlementSame(run.grant, source.grant)) bad("identity");

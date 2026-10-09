@@ -1,3 +1,4 @@
+import type { StatementSync } from "node:sqlite";
 import { ControlError } from "./errors.js";
 import { inProjectionTransaction, recordProjectionChange } from "./projectionJournal.js";
 import type { ControlStore } from "./store.js";
@@ -68,6 +69,28 @@ export function readGroupActivity(store: ControlStore, groupId: string, limit: n
 /** §5.2 Reads: a run's newest rows, newest first (by seq). */
 export function readRunActivity(store: ControlStore, runId: string, limit: number): ActivityEntry[] {
   return store.db.prepare(`SELECT ${COLUMNS} FROM activity WHERE run_id=? ORDER BY seq DESC LIMIT ?`).all(runId, checkedLimit(limit)).map(entryOf);
+}
+
+export interface LatestRunActivitySnapshot { get(runId: string): ActivityEntry | null }
+const latestRunStatements = new WeakMap<ControlStore, StatementSync>();
+
+/** The original run feed's newest seq, scoped by runs membership rather than activity ownership. */
+export function readLatestRunActivityByGroup(store: ControlStore, groupId: string): LatestRunActivitySnapshot {
+  let statement = latestRunStatements.get(store);
+  if (statement === undefined) {
+    statement = store.db.prepare(`SELECT ${COLUMNS.split(",").map(column => `activity.${column}`).join(",")} FROM activity JOIN runs ON runs.id=activity.run_id
+      WHERE runs.group_id=? AND activity.seq=(SELECT MAX(latest.seq) FROM activity AS latest WHERE latest.run_id=runs.id)`);
+    latestRunStatements.set(store, statement);
+  }
+  const rows = new Map(statement.all(groupId).map(row => [String(row.run_id), row]));
+  const entries = new Map<string, ActivityEntry>();
+  return { get(runId) {
+    const row = rows.get(runId);
+    if (row === undefined) return null;
+    let entry = entries.get(runId);
+    if (entry === undefined) { entry = entryOf(row); entries.set(runId, entry); }
+    return entry;
+  } };
 }
 
 /** §5.2: the `at` of the group's newest row by seq (the group summary's updatedAt, Part E); null with no row. */

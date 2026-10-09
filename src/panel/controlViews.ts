@@ -1,3 +1,4 @@
+import { readGroupSnapshot, type GroupReadSnapshot, type StoredJsonResult } from "./groupReadSnapshot.js";
 import { validateRetryGrantSource } from "../control/retryGrant.js";
 import { derivedPhaseTimeoutMs, frozenAllocationShape } from "../control/executionSnapshot.js";
 import { frozenWorkAgent, resolveGroupSelections } from "../control/agentFreeze.js";
@@ -18,13 +19,13 @@ import { estimateIsStale, readArchivedPlan, readBudgetProposal, readEstimateReco
 import { readCanonicalRecord } from "../control/snapshot.js";
 import { hasRequirementBlock, latestDraft, latestRound, readDrafts, readRequirementGroup, readRounds, refuseClarifying } from "../control/requirementRecords.js";
 import { renderRequirementDocument } from "../control/requirementDocument.js";
-import { effectivePlanTask, workBodyOf } from "../control/taskAmendments.js";
+import { effectivePlanTask } from "../control/taskAmendments.js";
 import type { ControlStore } from "../control/store.js";
 import { agentSelectionSchema, amountSchema, artifactSchema, canonicalTimestampSchema, grantSchema, idSchema, runProgressSchema, safeInteger, type RunProgress } from "../control/schema.js";
 import { taskContractSchema } from "../scheduler/planFile.js";
 import { exportReasonOf } from "../control/requirementExport.js";
 import { readSpendCapBlock } from "../control/spendCaps.js";
-import { latestGroupActivityAt, readGroupActivity, readRunActivity } from "../control/activity.js";
+import { latestGroupActivityAt, readGroupActivity, readRunActivity, readLatestRunActivityByGroup } from "../control/activity.js";
 import { readGroupIntegration } from "../control/integrationScheme.js";
 import { archivedMarkOf } from "../control/archivedMark.js";
 import { workItemCategory, type WorkItemCategory } from "../control/workItemCategory.js";
@@ -213,6 +214,19 @@ function parseStored<T>(schema: z.ZodType<T>, value: unknown, detail: string): T
   return parsed.data;
 }
 
+function decodedValue(result: StoredJsonResult | undefined): unknown {
+  if (result === undefined) return undefined;
+  if (!result.ok) throw result.error;
+  return result.value;
+}
+
+function parseSnapshot<S extends z.ZodTypeAny>(schema: S, result: StoredJsonResult | undefined, detail: string): z.output<S> {
+  if (result === undefined || !result.ok) return blocked(detail);
+  const parsed = schema.safeParse(result.value);
+  if (!parsed.success) return blocked(`${detail}:${parsed.error.issues[0]?.message ?? "invalid"}`);
+  return parsed.data;
+}
+
 function sortedUnique(values: readonly string[]): string[] {
   return [...new Set(values)].sort(compareText);
 }
@@ -287,12 +301,12 @@ function stopView(store: ControlStore, groupId: string, legacyStopped: boolean):
  * Issue-fixes spec §6.1: one work item's category -- its stored status, whether its current run (currentRunId) is stored
  * `blocked`, and whether every dependency's stored status is `done`. The group view and the summary counts both call it.
  */
-function categoryOf(store: ControlStore, groupId: string, work: { status?: unknown; currentRunId?: unknown; dependsOn?: unknown }): WorkItemCategory {
-  const runRow = typeof work.currentRunId === "string" ? store.db.prepare("SELECT body FROM runs WHERE group_id=? AND id=?").get(groupId, work.currentRunId) : undefined;
-  const currentRunBlocked = runRow !== undefined && (JSON.parse(String(runRow.body)) as { state?: unknown }).state === "blocked";
+function categoryOf(snapshot: GroupReadSnapshot, work: { status?: unknown; currentRunId?: unknown; dependsOn?: unknown }): WorkItemCategory {
+  const run = typeof work.currentRunId === "string" ? decodedValue(snapshot.decodeRun(work.currentRunId)) : undefined;
+  const currentRunBlocked = run !== undefined && (run as { state?: unknown }).state === "blocked";
   const dependenciesDone = (Array.isArray(work.dependsOn) ? work.dependsOn : []).every((id) => {
-    const row = store.db.prepare("SELECT body FROM work_items WHERE group_id=? AND id=?").get(groupId, String(id));
-    return row !== undefined && (JSON.parse(String(row.body)) as { status?: unknown }).status === "done";
+    const work = decodedValue(snapshot.decodeWork(String(id)));
+    return work !== undefined && (work as { status?: unknown }).status === "done";
   });
   return workItemCategory({ status: String(work.status), currentRunBlocked, dependenciesDone });
 }
@@ -304,19 +318,18 @@ function categoryOf(store: ControlStore, groupId: string, work: { status?: unkno
  * finding F5): a work item this cannot read counts as not done and is in no category, and the group view's workViews
  * names it exactly as before; a summary list must not go dark over one bad row.
  */
-function taskCompletion(store: ControlStore, groupId: string, plan: ReturnType<typeof readArchivedPlan>["plan"]): {
+function taskCompletion(snapshot: GroupReadSnapshot, plan: ReturnType<typeof readArchivedPlan>["plan"]): {
   completion: { done: number; total: number }; counts: Record<WorkItemCategory, number>;
 } {
   let done = 0;
   const counts: Record<WorkItemCategory, number> = { idle: 0, running: 0, waiting: 0, blocked: 0, done: 0 };
   for (const task of plan.tasks) {
-    const row = store.db.prepare("SELECT body FROM work_items WHERE group_id=? AND id=?").get(groupId, task.taskId);
     type StoredWork = { status?: unknown; currentRunId?: unknown; dependsOn?: unknown };
     let work: StoredWork | null = null;
-    try { work = row === undefined ? null : JSON.parse(String(row.body)) as StoredWork; } catch { work = null; }
+    try { work = decodedValue(snapshot.decodeWork(task.taskId)) as StoredWork ?? null; } catch { work = null; }
     if (work?.status === "done" || work?.status === "completed") done += 1;
     if (work !== null) {
-      try { counts[categoryOf(store, groupId, work)] += 1; } catch { /* in no count: the view names it */ }
+      try { counts[categoryOf(snapshot, work)] += 1; } catch { /* in no count: the view names it */ }
     }
   }
   return { completion: { done, total: plan.tasks.length }, counts };
@@ -351,6 +364,10 @@ export function requirementSummaryOf(store: ControlStore, groupId: string): Requ
 }
 
 export function readGroupSummary(store: ControlStore, groupId: string): GroupSummaryV1 {
+  return readGroupSummaryFromSnapshot(store, groupId);
+}
+
+function readGroupSummaryFromSnapshot(store: ControlStore, groupId: string, snapshot?: GroupReadSnapshot): GroupSummaryV1 {
   const body = groupBody(store, groupId);
   // N1 spec §4.1, §11.2: a clarifying group is summarised without a plan or a proposal, and without a completion.
   const clarifying = body.status === "clarifying";
@@ -368,7 +385,7 @@ export function readGroupSummary(store: ControlStore, groupId: string): GroupSum
     return blocked("group-summary:repository-mismatch");
   }
   const repoId = archived !== null ? archived.plan.repoId : readRequirementGroup(store, groupId).requirement.repoId;
-  const tally = archived === null ? null : taskCompletion(store, groupId, archived.plan);
+  const tally = archived === null ? null : taskCompletion(snapshot ?? readGroupSnapshot(store, groupId), archived.plan);
   const summary = {
     groupId,
     repoId,
@@ -561,12 +578,12 @@ export function progressOfRun(
  * §8 R10: the current run is the work item's currentRunId -- the view has already proved it is the task's newest run by
  * rowid -- or none. No "last of lineageRunIds" fallback: lineage is sorted by id, not by age.
  */
-function currentProgress(runs: ReadonlyArray<Record<string, unknown>>, currentRunId: string | null): WorkItemProgressV1 | null {
+function currentProgress(snapshot: GroupReadSnapshot, currentRunId: string | null): WorkItemProgressV1 | null {
   if (currentRunId === null) return null;
-  const row = runs.find((run) => String(run.id) === currentRunId);
+  const row = snapshot.runById.get(currentRunId);
   if (!row) return blocked(`work-item-current-run:${currentRunId}`);
   // Same detail as runViews' own parse, so a bad run body is reported exactly as before.
-  return progressOfRun(parseStored(persistedRunSchema, row.body, `run-invalid:${currentRunId}`));
+  return progressOfRun(parseSnapshot(persistedRunSchema, snapshot.decodeRun(currentRunId), `run-invalid:${currentRunId}`));
 }
 
 /**
@@ -611,17 +628,18 @@ function workViews(
   plan: ReturnType<typeof readArchivedPlan>["plan"],
   snapshot: ExecutionSnapshotV1 | null,
   imported: ReturnType<typeof readArchivedPlan>["plan"],
+  readSnapshot: GroupReadSnapshot,
 ): WorkItemViewV1[] {
-  const runs = store.db.prepare("SELECT id,work_item_id,active,body FROM runs WHERE group_id=? ORDER BY rowid").all(groupId);
+  const runs = readSnapshot.runsByRowid;
   const derivedByTask = new Map(snapshot?.derivedContracts.map(contract => [contract.taskId, contract.derivedContractHash]) ?? []);
   if (snapshot && (derivedByTask.size !== plan.tasks.length || plan.tasks.some(task => !derivedByTask.has(task.taskId)))) {
     return blocked("execution-snapshot-task-set");
   }
   return plan.tasks.map(task => {
-    const row = store.db.prepare("SELECT body FROM work_items WHERE group_id=? AND id=?").get(groupId, task.taskId);
+    const row = readSnapshot.workById.get(task.taskId);
     if (!row) return blocked(`work-item-missing:${task.taskId}`);
-    const body = parseStored(workBodySchema, row.body, `work-item-invalid:${task.taskId}`);
-    validateRetryGrantSource(store, groupId, body);
+    const body = parseSnapshot(workBodySchema, readSnapshot.decodeWork(task.taskId), `work-item-invalid:${task.taskId}`);
+    validateRetryGrantSource(store, groupId, body, { store, groupId, runsByRowid: readSnapshot.runsByRowid, decodeRun: id => decodedValue(readSnapshot.decodeRun(id)) });
     const contract = body.contract as { contentAddressedHash?: unknown };
     // Agent selection spec §6.4 step 4 (§12 I3): a draft has no configHash; a confirmed work item carries exactly the snapshot's selection.
     const frozenEntry = snapshot?.agents.tasks.find(entry => entry.taskId === task.taskId) ?? null;
@@ -660,8 +678,8 @@ function workViews(
       currentRunId: body.currentRunId ?? null, pendingRunId: body.pendingRunId ?? null,
       lineageRunIds: sortedUnique(lineage),
       labels: effective.labels, labelsProvenance: effective.provenance, labelsVersion: labelState.version,
-      progress: currentProgress(runs, body.currentRunId ?? null),
-      category: categoryOf(store, groupId, body),
+      progress: currentProgress(readSnapshot, body.currentRunId ?? null),
+      category: categoryOf(readSnapshot, body),
       ...taskPlanView(task, body, imported.tasks.find(entry => entry.taskId === task.taskId)?.originalContractHash, snapshot?.skills?.find(entry => entry.taskId === task.taskId)?.names),
     };
   });
@@ -718,23 +736,22 @@ function displayRunState(run: z.infer<typeof persistedRunSchema>): RunViewV1["st
  * `settled-recoverable` and `partial` checkpoint forever, so without these it would be offered again
  * after any later handoff-stop, and the panel's batch would be refused whole.
  */
-function continuableRun(store: ControlStore, run: z.infer<typeof persistedRunSchema>): boolean {
+function continuableRun(store: ControlStore, run: z.infer<typeof persistedRunSchema>, snapshot: GroupReadSnapshot): boolean {
   if (run.state !== "settled-recoverable") return false;
-  const workRow = store.db.prepare("SELECT body FROM work_items WHERE group_id=? AND id=?").get(run.groupId, run.workItemId);
+  const workRow = snapshot.workById.get(run.workItemId);
   if (workRow === undefined) return false;
-  const work = parseStored(workBodySchema, workRow.body, `run-work-invalid:${run.runId}`);
+  const work = parseSnapshot(workBodySchema, snapshot.decodeWork(run.workItemId), `run-work-invalid:${run.runId}`);
   if (work.currentRunId !== run.runId || work.status !== "held") return false;
   if (dimensions.some((dimension) => run.remaining.work[dimension] <= 0)) return false;
   const row = store.db.prepare("SELECT body FROM checkpoints WHERE id=? AND run_id=?").get(run.checkpointId, run.runId);
   return row !== undefined && (parseJson(row.body, `checkpoint-invalid:${run.checkpointId}`) as { result?: unknown }).result === "partial";
 }
 
-function runViews(store: ControlStore, groupId: string, graphVersion: number, proposal: ReturnType<typeof readBudgetProposal>): RunViewV1[] {
-  return store.db.prepare("SELECT id,group_id,work_item_id,generation,active,body FROM runs WHERE group_id=? ORDER BY id").all(groupId).map(row => {
+function runViews(store: ControlStore, groupId: string, graphVersion: number, proposal: ReturnType<typeof readBudgetProposal>, snapshot: GroupReadSnapshot): RunViewV1[] {
+  const activity = readLatestRunActivityByGroup(store, groupId);
+  return [...snapshot.runsByRowid].sort((left, right) => compareText(left.id, right.id)).map(row => {
     const runId = String(row.id);
-    const parsed = persistedRunSchema.safeParse(parseJson(row.body, `run-invalid:${runId}`));
-    if (!parsed.success) return blocked(`run-invalid:${runId}:${parsed.error.issues[0]?.message ?? "invalid"}`);
-    const run = parsed.data;
+    const run = parseSnapshot(persistedRunSchema, snapshot.decodeRun(runId), `run-invalid:${runId}`);
     if (run.runId !== runId || run.groupId !== groupId || String(row.group_id) !== groupId
       || run.workItemId !== String(row.work_item_id) || run.generation !== Number(row.generation)
       || !validAccounting(run)) return blocked(`run-identity:${runId}`);
@@ -772,9 +789,9 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
     } else {
       if (!proposal.profiles) return blocked(`run-profile-missing:${runId}`);
       if (run.taskId === null || run.estimateId !== null || run.claimOrdinal === null || run.handoffProfile === null) return blocked(`run-task-identity:${runId}`);
-      const workRow = store.db.prepare("SELECT body FROM work_items WHERE group_id=? AND id=?").get(groupId, run.workItemId);
+      const workRow = snapshot.workById.get(run.workItemId);
       if (!workRow) return blocked(`run-work-missing:${runId}`);
-      const work = parseStored(workBodySchema, workRow.body, `run-work-invalid:${runId}`);
+      const work = parseSnapshot(workBodySchema, snapshot.decodeWork(run.workItemId), `run-work-invalid:${runId}`);
       // Handoff delivery plan deviation D-VIEW (2026-09-25): Web spec §5.1.1 parks a recoverable predecessor's
       // remainder as the task's grant, the grant its continuation is claimed with. So the task's grant is its
       // current run's claim grant -- or, while that run is the parked predecessor, its remaining -- and an older
@@ -808,8 +825,8 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
       // Issue fixes spec §4.2(1), (5): ccloop's reason, and the outcome the Retry-task button keys on.
       stopReason: run.drive?.stopReason ?? null,
       outcome: run.drive?.outcome ?? null,
-      ...settlementPreview(store, run),
-      continuable: continuableRun(store, run),
+      ...settlementPreview(store, run, snapshot),
+      continuable: continuableRun(store, run, snapshot),
       evidenceIds: artifactIdsForRun(store, runId),
       git: run.drive === undefined ? null : { workspaceMode: run.drive.workspaceMode, base: run.drive.base, landedCommit: run.drive.landedCommit },
       // §4.6: the lock A2 recorded. `dir` is a local path of this machine and stays out of the view; omitted for a run without skills.
@@ -817,7 +834,7 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
       // Issue-fixes spec §5.2: the run's times; null for a run written before schema 9.
       startedAt: run.startedAt ?? null,
       endedAt: run.endedAt ?? null,
-      lastActivityAt: readRunActivity(store, runId, 1)[0]?.at ?? null,
+      lastActivityAt: activity.get(runId)?.at ?? null,
     };
   });
 }
@@ -833,7 +850,7 @@ function checkpointViews(store: ControlStore, groupId: string): CheckpointViewV1
   });
 }
 
-function handoffViews(store: ControlStore, groupId: string): HandoffRequestViewV1[] {
+function handoffViews(store: ControlStore, groupId: string, snapshot: GroupReadSnapshot): HandoffRequestViewV1[] {
   return store.db.prepare("SELECT id,run_id,state,body FROM handoff_requests WHERE group_id=? ORDER BY id").all(groupId).map(row => {
     const bodyJson = String(row.body);
     const body = parseStored(handoffBodySchema, bodyJson, `handoff-request-invalid:${String(row.id)}`);
@@ -842,8 +859,8 @@ function handoffViews(store: ControlStore, groupId: string): HandoffRequestViewV
       || canonicalBytes(body).toString("utf8") !== bodyJson || !run || String(run.group_id) !== groupId
       || sortedUnique(body.evidenceIds).join("\0") !== body.evidenceIds.join("\0")) return blocked("handoff-request-identity");
     if (body.state === "settled-failed") {
-      const row = store.db.prepare("SELECT body FROM runs WHERE id=?").get(body.runId);
-      const run = row ? JSON.parse(String(row.body)) : null;
+      const row = snapshot.runById.get(body.runId);
+      const run = row ? decodedValue(snapshot.decodeRun(body.runId)) as Record<string, any> : null;
       if (!run || run.usageSettlement?.reservationDisposition !== "released" || run.usageSettlement?.handoffResolution?.requestId !== body.requestId || !hasValidUsageSettlement(store, run)) return blocked("handoff-manual-settlement-invalid");
     }
     return body;
@@ -864,10 +881,14 @@ export function readControlGroup(store: ControlStore, epoch: string, groupId: st
   const archived = readArchivedPlan(store, groupId);
   const proposal = readBudgetProposal(store, groupId);
   // Loop plans spec §5.1 (C5): the projection's identity checks and task view read every task as amended.
-  const plan = { ...archived.plan, tasks: archived.plan.tasks.map(task => effectivePlanTask(store, groupId, task, workBodyOf(store, groupId, task.taskId))) };
+  const readSnapshot = readGroupSnapshot(store, groupId);
+  const plan = { ...archived.plan, tasks: archived.plan.tasks.map(task => {
+    const result = readSnapshot.decodeWork(task.taskId);
+    return effectivePlanTask(store, groupId, task, result?.ok ? result.value : null);
+  }) };
   const snapshot = validateExecutionSnapshot(store, groupId, archived.graphVersion, proposal, plan);
   const estimates = estimateViews(store, groupId, canonicalBytes(plan).toString("utf8"));
-  const summary = readGroupSummary(store, groupId);
+  const summary = readGroupSummaryFromSnapshot(store, groupId, readSnapshot);
   const blockers = blockerRows(store, groupId).map(({ groupId: _groupId, ...blocker }) => blocker);
   const commandIds = store.db.prepare("SELECT id FROM commands WHERE group_id=? AND original_status IS NOT NULL ORDER BY rowid DESC LIMIT 20").all(groupId).map(row => String(row.id));
   const allocations = [...proposal.allocations, ...estimates.allocations]
@@ -886,13 +907,13 @@ export function readControlGroup(store: ControlStore, epoch: string, groupId: st
     },
     ledger: body.ledger,
     allocations,
-    workItems: workViews(store, groupId, plan, snapshot, archived.plan),
+    workItems: workViews(store, groupId, plan, snapshot, archived.plan, readSnapshot),
     // validateExecutionSnapshot has already proved the group record's reconcile slot equals the snapshot's.
     agents: { reconcile: snapshot?.agents.reconcile ?? null },
     estimates: estimates.views,
-    runs: runViews(store, groupId, archived.graphVersion, proposal),
+    runs: runViews(store, groupId, archived.graphVersion, proposal, readSnapshot),
     checkpoints: checkpointViews(store, groupId),
-    handoffRequests: handoffViews(store, groupId),
+    handoffRequests: handoffViews(store, groupId, readSnapshot),
     stop: stopView(store, groupId, body.stopped),
     recoveryBlockers: blockers,
     recentCommandIds: sortedUnique(commandIds),
@@ -1009,7 +1030,7 @@ export async function readRunEvidence(store: ControlStore, runId: string): Promi
   const groupId = String(row.group_id);
   const proposal = readBudgetProposal(store, groupId);
   const archived = readArchivedPlan(store, groupId);
-  runViews(store, groupId, archived.graphVersion, proposal);
+  runViews(store, groupId, archived.graphVersion, proposal, readGroupSnapshot(store, groupId));
   const entries = await Promise.all(evidenceRefs(store, runId, groupId).map(async ref => {
     let bytes: Buffer;
     try { bytes = await readArtifact(store, { artifactId: ref.evidenceId, hash: ref.sha256 }); }
@@ -1053,10 +1074,14 @@ export async function readSelectionPreview(
   return parsed.data;
 }
 
-function settlementPreview(store: ControlStore, run: z.infer<typeof persistedRunSchema>): Pick<RunViewV1, "unknownUsageSettlement"> {
+function settlementPreview(store: ControlStore, run: z.infer<typeof persistedRunSchema>, snapshot: GroupReadSnapshot): Pick<RunViewV1, "unknownUsageSettlement"> {
   if (run.usageSettlement === undefined && !run.unknown.work && !run.unknown.handoff) return {};
   let refusalReason: string | null = null;
-  try { const disposition = settlementAdmission(store, run); settlementProof(store, run); if (disposition === "released") releasedSettlementCheckpoint(store, run); } catch (error) { refusalReason = error instanceof ControlError ? error.code : "run-usage-not-settleable"; }
+  try { const disposition = settlementAdmission(store, run, { store, groupId: snapshot.groupId, readWork: id => {
+    const result = snapshot.decodeWork(id);
+    if (result === undefined) throw new ControlError("work-not-found");
+    return decodedValue(result);
+  } }); settlementProof(store, run); if (disposition === "released") releasedSettlementCheckpoint(store, run); } catch (error) { refusalReason = error instanceof ControlError ? error.code : "run-usage-not-settleable"; }
   return { unknownUsageSettlement: { generation: run.generation, highWater: run.highWater, remaining: run.remaining, allowed: refusalReason === null, refusalReason,
     ...(run.usageSettlement === undefined ? {} : { settlement: run.usageSettlement }) } };
 }
