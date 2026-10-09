@@ -1,0 +1,287 @@
+{
+  "owner": "Codex /root/fix_performance_portability",
+  "date": "2026-10-10 Asia/Shanghai",
+  "base": "91a0f725bd255998834d91ebfe0668a4a09d7bc0",
+  "files": [
+    {
+      "name": "perf-finalfix-callers.log",
+      "bytes": 2326,
+      "sha256": "83c5fc7377cf17bc5ca36c205388c04cb06564c2c78cba5cac27154b2675e9c6"
+    },
+    {
+      "name": "perf-finalfix-clone-restored-green.log",
+      "bytes": 906,
+      "sha256": "6e4cf6dc63417288047665383adf6500a6acfbaa04178a7f8f6e0f7c57e0b9df"
+    },
+    {
+      "name": "perf-finalfix-clone-restored-green.rc",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "name": "perf-finalfix-clone-restored.py",
+      "bytes": 523,
+      "sha256": "d27d9639dc9fef8512b226b9b9cefa49b1ed725ad328389435ac7286a0398906"
+    },
+    {
+      "name": "perf-finalfix-clone.log",
+      "bytes": 398,
+      "sha256": "cbf4897b29bdfc1d9dc2cec5c5951ad21792b015db94f1c63a3e0e6dd0a94d47"
+    },
+    {
+      "name": "perf-finalfix-clone.rc",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "name": "perf-finalfix-commands.json",
+      "bytes": 15985,
+      "sha256": "59f40dc257127ec554578e7eec387d3d01030008ee3405a3c5447d7eeefdc79a"
+    },
+    {
+      "name": "perf-finalfix-fixture-edit.py",
+      "bytes": 1738,
+      "sha256": "9e979d4aeec58132e7e7c7275336732245d464a5f8b37a77da9a82d96fadaad0"
+    },
+    {
+      "name": "perf-finalfix-formal-tmp-leak.log",
+      "bytes": 340,
+      "sha256": "05ead0c027b1779fb8358b8d1fe53c834f4f3ccd5336d1b45503807fbd4670cb"
+    },
+    {
+      "name": "perf-finalfix-formal-tmp-leak.rc",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "name": "perf-finalfix-leak.py",
+      "bytes": 343,
+      "sha256": "e74276ef5a29e04ff38ad757200d79fc64d09f536394985406bb90e3323ab441"
+    },
+    {
+      "name": "perf-finalfix-mutation-build-entry.diff",
+      "bytes": 1008,
+      "sha256": "ee444f9dc355189d8a51a3bc0e3bd1e4c8faa1d776baf2b8ecfb5007c853fe03"
+    },
+    {
+      "name": "perf-finalfix-mutation-build-entry.log",
+      "bytes": 2606,
+      "sha256": "19aafcd13a06e738ed7b25b315188c0b06128ed0571f35aec3e367865df660ea"
+    },
+    {
+      "name": "perf-finalfix-mutation-build-entry.rc",
+      "bytes": 2,
+      "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
+    },
+    {
+      "name": "perf-finalfix-mutation-open-entry.diff",
+      "bytes": 1027,
+      "sha256": "5da9139b6cae7c57878d06fc4fae9ff1d85d8a75c4cfb7f6c14c4437a9bb41b9"
+    },
+    {
+      "name": "perf-finalfix-mutation-open-entry.log",
+      "bytes": 2178,
+      "sha256": "9c71755377efc2d7e83f2defa4eb92fb5d4013c602f9ee9e6260e8d985103aae"
+    },
+    {
+      "name": "perf-finalfix-mutation-open-entry.rc",
+      "bytes": 2,
+      "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
+    },
+    {
+      "name": "perf-finalfix-mutation-restriction.diff",
+      "bytes": 951,
+      "sha256": "41cb76934a056224581f98555a4854d4934932e2bd126768b243d0332cf37818"
+    },
+    {
+      "name": "perf-finalfix-mutation-restriction.log",
+      "bytes": 2399,
+      "sha256": "b0f9f5ebce08dd2fdfc0e04107923e5106156bf08b956a52ff4489e102e0383b"
+    },
+    {
+      "name": "perf-finalfix-mutation-restriction.rc",
+      "bytes": 2,
+      "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
+    },
+    {
+      "name": "perf-finalfix-mutation-results.json",
+      "bytes": 2398,
+      "sha256": "fe6d09fb3d00cb0bbc6099532ce53fdef9a3c338249dc81de94f693ab4a5eb55"
+    },
+    {
+      "name": "perf-finalfix-mutations.py",
+      "bytes": 2520,
+      "sha256": "a3aa3e51055ef6dd4792957f47ae268ef3d31d7f859f5e4ac94647712d05cd05"
+    },
+    {
+      "name": "perf-finalfix-narrowed-normal-red.log",
+      "bytes": 3501,
+      "sha256": "6cc50e75dd052442bf766150d9e8dfe605c37a6a92d4c5adcb27e5756d90ba30"
+    },
+    {
+      "name": "perf-finalfix-narrowed-normal-red.rc",
+      "bytes": 2,
+      "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
+    },
+    {
+      "name": "perf-finalfix-normal-green.log",
+      "bytes": 940,
+      "sha256": "37993356bd5ea914207246885fab195074d375163789960a5dbffb6db8e03462"
+    },
+    {
+      "name": "perf-finalfix-normal-green.rc",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "name": "perf-finalfix-old-red.py",
+      "bytes": 571,
+      "sha256": "e47035db9f2c767dff228c12d6f1a64a3366b4ed7b1591a1e12e24dfe8c6bb6b"
+    },
+    {
+      "name": "perf-finalfix-old-temp-qualified-red.log",
+      "bytes": 2142,
+      "sha256": "0f0c79a91c64fa9ff01c1b2b665e7e71f96ac7d90a2abfaa19a4e68d887cc9ae"
+    },
+    {
+      "name": "perf-finalfix-old-temp-qualified-red.rc",
+      "bytes": 2,
+      "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
+    },
+    {
+      "name": "perf-finalfix-old-temp-red.log",
+      "bytes": 3200,
+      "sha256": "4bf03e005795c997609afe9560e4b70008b54daf69976870ec9720cc017cedbe"
+    },
+    {
+      "name": "perf-finalfix-old-temp-red.rc",
+      "bytes": 2,
+      "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
+    },
+    {
+      "name": "perf-finalfix-package.py",
+      "bytes": 12584,
+      "sha256": "7b1de92072273abe3c8d572003d66ee54210ab427973094e66c617bc2f00d449"
+    },
+    {
+      "name": "perf-finalfix-source-proof.json",
+      "bytes": 41445,
+      "sha256": "593e3ecf5bded062b2df293dac0e503f439e5e047fb098430ed27e93b1c7ff15"
+    },
+    {
+      "name": "perf-finalfix-source-proof.log",
+      "bytes": 2609,
+      "sha256": "e4ade77a33c8d6e82fde9e7fd0e01afc5b27a201307f90390a907dc43c91c391"
+    },
+    {
+      "name": "perf-finalfix-source-proof.py",
+      "bytes": 3925,
+      "sha256": "d4d3e4fd8ff5e9ac4b4e1e9756682a2ef0a97af32526ad4a6a7917c5035bb170"
+    },
+    {
+      "name": "perf-finalfix-source-proof.rc",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "name": "perf-finalfix-source.diff",
+      "bytes": 7483,
+      "sha256": "280f2a9010122983258390aeb671d81a86c7433b7c6f2c4a1e00dbbf63238a0a"
+    },
+    {
+      "name": "perf-finalfix-staged-code-check.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "perf-finalfix-staged-code-check.rc",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "name": "perf-finalfix-staged-whitespace.log",
+      "bytes": 2163,
+      "sha256": "a757c222dc47fd68c57d34acc7897fdc69085889958b340d94ab04e3ed156e7b"
+    },
+    {
+      "name": "perf-finalfix-staged-whitespace.rc",
+      "bytes": 2,
+      "sha256": "53c234e5e8472b6ac51c1ae1cab3fe06fad053beb8ebfd8977b010655bfdd3c3"
+    },
+    {
+      "name": "perf-finalfix-staging-checks.json",
+      "bytes": 776,
+      "sha256": "5563764691219281964b307bc373203ebf568fae285f08542d3962565ca5641d"
+    },
+    {
+      "name": "perf-finalfix-temp-green.log",
+      "bytes": 910,
+      "sha256": "835b5fd31ecf9e28ac667d2b02c5269c1f75927d7a92d4cdc95a013dd1f7b87d"
+    },
+    {
+      "name": "perf-finalfix-temp-green.rc",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "name": "perf-finalfix-test-edit.py",
+      "bytes": 2059,
+      "sha256": "455cf1160421e8b54e0c496851974d2421acabe11a1a7ca23d55a1e34619f133"
+    },
+    {
+      "name": "perf-finalfix-test-first-normal-qualified-red.log",
+      "bytes": 2432,
+      "sha256": "9171cfe8bf48abdb8b653f70d31f6b53afdd51069e54daeb82d8a6374be0badb"
+    },
+    {
+      "name": "perf-finalfix-test-first-normal-qualified-red.rc",
+      "bytes": 2,
+      "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
+    },
+    {
+      "name": "perf-finalfix-test-first-normal-red.log",
+      "bytes": 4611,
+      "sha256": "e3eff1b71c51b9f6aec58f7691d809f101ef3683248c37d22c1f612c43a7e985"
+    },
+    {
+      "name": "perf-finalfix-test-first-normal-red.rc",
+      "bytes": 2,
+      "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
+    },
+    {
+      "name": "perf-finalfix-test-first-temp-qualified-red.log",
+      "bytes": 2392,
+      "sha256": "3edfac9da0800c5a1365e3702718a319f7a529f7e390904748044bde1e1d43e3"
+    },
+    {
+      "name": "perf-finalfix-test-first-temp-qualified-red.rc",
+      "bytes": 2,
+      "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
+    },
+    {
+      "name": "perf-finalfix-test-first-temp-red.log",
+      "bytes": 4571,
+      "sha256": "e3042f91e68337ef0ad6fe8de6a26cd9ace6f7af770a5c917397df10b06423ba"
+    },
+    {
+      "name": "perf-finalfix-test-first-temp-red.rc",
+      "bytes": 2,
+      "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
+    },
+    {
+      "name": "perf-finalfix-typecheck.log",
+      "bytes": 57,
+      "sha256": "95e3139b92d7a7c68a78bf799a9e66e72c3ed1f70e2391990dd69e37294e15c9"
+    },
+    {
+      "name": "perf-finalfix-typecheck.rc",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "name": "perf-finalfix-wave.py",
+      "bytes": 2060,
+      "sha256": "b287f4705708bd72d469da70cfb37fff568fd272bb04c896d77ee43015faa28a"
+    }
+  ]
+}

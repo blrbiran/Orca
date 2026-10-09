@@ -22,14 +22,17 @@ import type { ExecutionPort } from "../../../src/control/executionPort.js";
 import type { ExecutionProfileSnapshotV1, RawAuthorityCommandV1 } from "../../../src/control/webProtocol.js";
 export const performanceRoot = () => process.env.ORCA_PERFORMANCE_ROOT ?? "/private/tmp/od9/performance-fixture";
 /** Writable fixture setup is confined to temporary namespaces, including canonical symlink targets. */
-async function assertTemporaryFixtureRoot(root:string):Promise<void> {
+async function assertTemporaryFixtureRoot(root:string,temporaryNamespace?:string):Promise<void> {
  if(!isAbsolute(root))throw new Error("control-poll-fixture-root-must-be-absolute");
  const canonical=async(path:string):Promise<string>=>{
   const suffix:string[]=[];let parent=resolve(path);
   for(;;){try{return join(await realpath(parent),...suffix.reverse());}catch(error){if((error as NodeJS.ErrnoException).code!=="ENOENT")throw error;const next=dirname(parent);if(next===parent)throw error;suffix.push(basename(parent));parent=next;}}
  };
  const candidate=await canonical(root),temporaryRoots=await Promise.all([tmpdir(),"/tmp","/private/tmp"].map(canonical));
- if(!temporaryRoots.some(parent=>{const path=relative(parent,candidate);return path!==""&&path!==".."&&!path.startsWith("../")&&!isAbsolute(path);}))throw new Error("control-poll-fixture-root-not-temporary");
+ const within=(parent:string)=>{const path=relative(parent,candidate);return path!==""&&path!==".."&&!path.startsWith("../")&&!isAbsolute(path);};
+ if(!temporaryRoots.some(within))throw new Error("control-poll-fixture-root-not-temporary");
+ // Per-call setup restrictions intersect the OS temporary bounds; they cannot broaden them.
+ if(temporaryNamespace!==undefined && !within(await canonical(temporaryNamespace)))throw new Error("control-poll-fixture-root-not-temporary");
 }
 export interface ControlPollFixture {
  store: ControlStore;
@@ -59,9 +62,9 @@ function checked(value: any) { if (value && "error" in value) throw new Error(JS
 function command(store: ControlStore, groupId: string, verb: RawAuthorityCommandV1["verb"], payload: unknown): any {
  return {schema:"orca-raw-command-v1",commandId:`${groupId}-${verb}`,expectedRevision:Number(store.db.prepare("SELECT revision FROM groups WHERE id=?").get(groupId)?.revision ?? 0),actorId:"human",verb,target:{kind:"group",groupId},payload};
 }
-export async function buildControlPollFixture(options: {liveGroups:number;archivedGroups:number;tasksPerGroup:number;now:number}): Promise<ControlPollFixture> {
+export async function buildControlPollFixture(options: {liveGroups:number;archivedGroups:number;tasksPerGroup:number;now:number},temporaryNamespace?:string): Promise<ControlPollFixture> {
  const root=performanceRoot(), repo=join(root,"repo");
- await assertTemporaryFixtureRoot(root);
+ await assertTemporaryFixtureRoot(root,temporaryNamespace);
  // Setup never resets an existing dataset or deletes an env-selected path.
  if(!isAbsolute(root))throw new Error("control-poll-fixture-root-must-be-absolute");
  const existingRoot=await lstat(root).catch((error:NodeJS.ErrnoException)=>{if(error.code==="ENOENT")return null;throw error;});
@@ -152,8 +155,8 @@ function createFixturePort(snapshot:ExecutionProfileSnapshotV1):ExecutionPort {
 }
 
 /** Reopen the exact same initial database/evidence namespace; no fixture contracts are regenerated. */
-export async function openExistingControlPollFixture(now:number):Promise<ControlPollFixture> {
- await assertTemporaryFixtureRoot(performanceRoot());
+export async function openExistingControlPollFixture(now:number,temporaryNamespace?:string):Promise<ControlPollFixture> {
+ await assertTemporaryFixtureRoot(performanceRoot(),temporaryNamespace);
  const store=await openControlStore({stateDir:join(performanceRoot(),"state"),now:()=>now});
  store.dispatchBlocked=false;
  const port=createFixturePort(profileSnapshot()), supplied=resolveProfile(profileSnapshot(),port), profileRouter=createExecutionProfileRouter([supplied]),admissionGate=createAdmissionGate();

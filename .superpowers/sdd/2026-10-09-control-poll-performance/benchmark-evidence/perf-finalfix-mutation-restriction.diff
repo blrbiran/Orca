@@ -1,0 +1,13 @@
+diff --git a/tests/control/fixtures/controlPollPerformance.ts b/tests/control/fixtures/controlPollPerformance.ts
+index 6ed4abd..5e3b34a 100644
+--- a/tests/control/fixtures/controlPollPerformance.ts
++++ b/tests/control/fixtures/controlPollPerformance.ts
+@@ -32,7 +32,7 @@ async function assertTemporaryFixtureRoot(root:string,temporaryNamespace?:string
+  const within=(parent:string)=>{const path=relative(parent,candidate);return path!==""&&path!==".."&&!path.startsWith("../")&&!isAbsolute(path);};
+  if(!temporaryRoots.some(within))throw new Error("control-poll-fixture-root-not-temporary");
+  // Per-call setup restrictions intersect the OS temporary bounds; they cannot broaden them.
+- if(temporaryNamespace!==undefined && !within(await canonical(temporaryNamespace)))throw new Error("control-poll-fixture-root-not-temporary");
++ // finalfix independent guard deletion: restriction
+ }
+ export interface ControlPollFixture {
+  store: ControlStore;

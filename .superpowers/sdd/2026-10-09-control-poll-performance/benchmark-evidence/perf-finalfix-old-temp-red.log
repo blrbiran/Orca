@@ -1,0 +1,46 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.3 [39m[90m/private/tmp/od9/ff/clone[39m
+
+(node:55895) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ [31m❯[39m tests/control/controlPollBenchmark.test.ts [2m([22m[2m4 tests[22m[2m | [22m[31m2 failed[39m[2m)[22m[32m 39[2mms[22m[39m
+   [31m❯[39m real-path benchmark integrity [2m(4)[22m
+     [32m✓[39m normalizes only run identity and keeps all business hashes and refusal detail[32m 2[2mms[22m[39m
+[31m     [31m×[31m builds one legal store with DAG, current runs, activities and a real replenishment[39m[32m 28[2mms[22m[39m
+[31m     [31m×[31m refuses a nontemporary sandbox before either writable fixture entry initializes data[39m[32m 5[2mms[22m[39m
+     [32m✓[39m refuses a nonempty temporary root before removing a sentinel or initializing data[32m 2[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 2 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/control/controlPollBenchmark.test.ts[2m > [22mreal-path benchmark integrity[2m > [22mbuilds one legal store with DAG, current runs, activities and a real replenishment
+[31m[1mError[22m: spawnSync ps EPERM[39m
+[36m [2m❯[22m openControlStore src/control/store.ts:[2m55:67[22m[39m
+    [90m 53|[39m   const lock = join(stateDir,"service-lock");
+    [90m 54|[39m   const ownerFile = join(lock,"owner.json");
+    [90m 55|[39m   const owner:Owner = {nonce:randomUUID(),pid:process.pid,started:exec…
+    [90m   |[39m                                                                   [31m^[39m
+    [90m 56|[39m   let recovered = false;
+    [90m 57|[39m   try { mkdirSync(lock,{mode:0o700}); }
+[90m [2m❯[22m buildControlPollFixture tests/control/fixtures/controlPollPerformance.ts:[2m70:50[22m[39m
+[90m [2m❯[22m tests/control/controlPollBenchmark.test.ts:[2m26:11[22m[39m
+[90m [2m❯[22m withFreshRoot tests/control/controlPollBenchmark.test.ts:[2m16:7[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/control/controlPollBenchmark.test.ts[2m > [22mreal-path benchmark integrity[2m > [22mrefuses a nontemporary sandbox before either writable fixture entry initializes data
+[31m[1mAssertionError[22m: expected 'control-poll-fixture-root-not-empty' to be 'control-poll-fixture-root-not-tempora…' // Object.is equality[39m
+
+Expected: [32m"control-poll-fixture-root-not-[7mt[27memp[7morar[27my"[39m
+Received: [31m"control-poll-fixture-root-not-emp[7mt[27my"[39m
+
+[36m [2m❯[22m tests/control/controlPollBenchmark.test.ts:[2m59:74[22m[39m
+
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m2 failed[39m[22m[2m | [22m[1m[32m2 passed[39m[22m[90m (4)[39m
+[2m   Start at [22m 01:06:47
+[2m   Duration [22m 951ms[2m (transform 79%, import 15%, tests 5%, setup 1%)[22m
+

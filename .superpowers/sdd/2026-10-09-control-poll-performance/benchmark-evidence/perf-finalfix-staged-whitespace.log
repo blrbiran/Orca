@@ -1,0 +1,18 @@
+.superpowers/sdd/2026-10-09-control-poll-performance/benchmark-evidence/perf-finalfix-clone-restored-green.log:15: new blank line at EOF.
+.superpowers/sdd/2026-10-09-control-poll-performance/benchmark-evidence/perf-finalfix-mutation-open-entry.diff:6: trailing whitespace.
++ 
+.superpowers/sdd/2026-10-09-control-poll-performance/benchmark-evidence/perf-finalfix-mutation-open-entry.log:30: new blank line at EOF.
+.superpowers/sdd/2026-10-09-control-poll-performance/benchmark-evidence/perf-finalfix-mutation-restriction.log:34: new blank line at EOF.
+.superpowers/sdd/2026-10-09-control-poll-performance/benchmark-evidence/perf-finalfix-narrowed-normal-red.log:47: new blank line at EOF.
+.superpowers/sdd/2026-10-09-control-poll-performance/benchmark-evidence/perf-finalfix-normal-green.log:15: new blank line at EOF.
+.superpowers/sdd/2026-10-09-control-poll-performance/benchmark-evidence/perf-finalfix-old-red.py:9: new blank line at EOF.
+.superpowers/sdd/2026-10-09-control-poll-performance/benchmark-evidence/perf-finalfix-old-temp-qualified-red.log:32: new blank line at EOF.
+.superpowers/sdd/2026-10-09-control-poll-performance/benchmark-evidence/perf-finalfix-old-temp-red.log:46: new blank line at EOF.
+.superpowers/sdd/2026-10-09-control-poll-performance/benchmark-evidence/perf-finalfix-source.diff:80: trailing whitespace.
++ 
+.superpowers/sdd/2026-10-09-control-poll-performance/benchmark-evidence/perf-finalfix-temp-green.log:15: new blank line at EOF.
+.superpowers/sdd/2026-10-09-control-poll-performance/benchmark-evidence/perf-finalfix-test-first-normal-qualified-red.log:34: new blank line at EOF.
+.superpowers/sdd/2026-10-09-control-poll-performance/benchmark-evidence/perf-finalfix-test-first-normal-red.log:63: new blank line at EOF.
+.superpowers/sdd/2026-10-09-control-poll-performance/benchmark-evidence/perf-finalfix-test-first-temp-qualified-red.log:34: new blank line at EOF.
+.superpowers/sdd/2026-10-09-control-poll-performance/benchmark-evidence/perf-finalfix-test-first-temp-red.log:63: new blank line at EOF.
+.superpowers/sdd/2026-10-09-control-poll-performance/benchmark-evidence/perf-finalfix-typecheck.log:4: new blank line at EOF.

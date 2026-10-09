@@ -1,0 +1,30 @@
+{
+  "owner": "Codex /root/fix_performance_portability",
+  "date": "2026-10-10 Asia/Shanghai",
+  "base": "91a0f725bd255998834d91ebfe0668a4a09d7bc0",
+  "checks": [
+    {
+      "command": [
+        "/usr/bin/git",
+        "diff",
+        "--cached",
+        "--check"
+      ],
+      "rc": 2,
+      "reason": "unmodified raw native log EOF blank lines and raw diff context whitespace; not accepted as code whitespace pass"
+    },
+    {
+      "command": [
+        "/usr/bin/git",
+        "diff",
+        "--cached",
+        "--check",
+        "--",
+        "tests/control/controlPollBenchmark.test.ts",
+        "tests/control/fixtures/controlPollPerformance.ts",
+        ".superpowers/sdd/2026-10-09-control-poll-performance/final-fix-report.md"
+      ],
+      "rc": 0
+    }
+  ]
+}

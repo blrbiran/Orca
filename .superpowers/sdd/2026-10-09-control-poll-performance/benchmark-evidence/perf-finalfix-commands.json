@@ -1,0 +1,443 @@
+[
+  {
+    "name": "clone",
+    "command": [
+      "/usr/bin/git",
+      "clone",
+      "--local",
+      "--no-hardlinks",
+      "/Users/biran/.codex/worktrees/usage-settlement-handoff-retry/Orca",
+      "/private/tmp/od9/ff/clone"
+    ],
+    "cwd": "/Users/biran/.codex/worktrees/usage-settlement-handoff-retry/Orca",
+    "base": "91a0f725bd255998834d91ebfe0668a4a09d7bc0",
+    "rc": 0,
+    "log": "perf-finalfix-clone.log",
+    "bytes": 398,
+    "sha256": "cbf4897b29bdfc1d9dc2cec5c5951ad21792b015db94f1c63a3e0e6dd0a94d47",
+    "environment": {
+      "HOME": "/private/tmp/od9/ff/h",
+      "TMPDIR": "/private/tmp/od9/ff/t",
+      "XDG_CONFIG_HOME": "/private/tmp/od9/ff/c",
+      "XDG_CACHE_HOME": "/private/tmp/od9/ff/k",
+      "XDG_DATA_HOME": "/private/tmp/od9/ff/d",
+      "XDG_STATE_HOME": "/private/tmp/od9/ff/s",
+      "CCMEM_DATA_ROOT": "/private/tmp/od9/ff/ccm",
+      "ORCA_CORRECTIONS_DIR": "/private/tmp/od9/ff/cor",
+      "ORCA_CCLOOP_BIN": "/private/tmp/orca-d9-ccloop-ab824d1/dist/cli.js"
+    }
+  },
+  {
+    "name": "old-temp-red",
+    "command": [
+      "npx",
+      "vitest",
+      "run",
+      "tests/control/controlPollBenchmark.test.ts"
+    ],
+    "cwd": "/private/tmp/od9/ff/clone",
+    "base": "91a0f725bd255998834d91ebfe0668a4a09d7bc0",
+    "rc": 1,
+    "log": "perf-finalfix-old-temp-red.log",
+    "bytes": 3200,
+    "sha256": "4bf03e005795c997609afe9560e4b70008b54daf69976870ec9720cc017cedbe",
+    "environment": {
+      "HOME": "/private/tmp/od9/ff/h",
+      "TMPDIR": "/private/tmp/od9/ff/t",
+      "XDG_CONFIG_HOME": "/private/tmp/od9/ff/c",
+      "XDG_CACHE_HOME": "/private/tmp/od9/ff/k",
+      "XDG_DATA_HOME": "/private/tmp/od9/ff/d",
+      "XDG_STATE_HOME": "/private/tmp/od9/ff/s",
+      "CCMEM_DATA_ROOT": "/private/tmp/od9/ff/ccm",
+      "ORCA_CORRECTIONS_DIR": "/private/tmp/od9/ff/cor",
+      "ORCA_CCLOOP_BIN": "/private/tmp/orca-d9-ccloop-ab824d1/dist/cli.js"
+    }
+  },
+  {
+    "name": "narrowed-normal-red",
+    "command": [
+      "npx",
+      "vitest",
+      "run",
+      "tests/control/controlPollBenchmark.test.ts"
+    ],
+    "cwd": "/Users/biran/.codex/worktrees/usage-settlement-handoff-retry/Orca",
+    "base": "91a0f725bd255998834d91ebfe0668a4a09d7bc0",
+    "rc": 1,
+    "log": "perf-finalfix-narrowed-normal-red.log",
+    "bytes": 3501,
+    "sha256": "6cc50e75dd052442bf766150d9e8dfe605c37a6a92d4c5adcb27e5756d90ba30",
+    "environment": {
+      "HOME": "/private/tmp/od9/ff/h",
+      "TMPDIR": "/private/tmp/od9/ff/t",
+      "XDG_CONFIG_HOME": "/private/tmp/od9/ff/c",
+      "XDG_CACHE_HOME": "/private/tmp/od9/ff/k",
+      "XDG_DATA_HOME": "/private/tmp/od9/ff/d",
+      "XDG_STATE_HOME": "/private/tmp/od9/ff/s",
+      "CCMEM_DATA_ROOT": "/private/tmp/od9/ff/ccm",
+      "ORCA_CORRECTIONS_DIR": "/private/tmp/od9/ff/cor",
+      "ORCA_CCLOOP_BIN": "/private/tmp/orca-d9-ccloop-ab824d1/dist/cli.js"
+    }
+  },
+  {
+    "name": "test-first-normal-red",
+    "command": [
+      "npx",
+      "vitest",
+      "run",
+      "tests/control/controlPollBenchmark.test.ts"
+    ],
+    "cwd": "/Users/biran/.codex/worktrees/usage-settlement-handoff-retry/Orca",
+    "base": "91a0f725bd255998834d91ebfe0668a4a09d7bc0",
+    "rc": 1,
+    "log": "perf-finalfix-test-first-normal-red.log",
+    "bytes": 4611,
+    "sha256": "e3eff1b71c51b9f6aec58f7691d809f101ef3683248c37d22c1f612c43a7e985",
+    "environment": {
+      "HOME": "/private/tmp/od9/ff/h",
+      "TMPDIR": "/private/tmp/od9/ff/t",
+      "XDG_CONFIG_HOME": "/private/tmp/od9/ff/c",
+      "XDG_CACHE_HOME": "/private/tmp/od9/ff/k",
+      "XDG_DATA_HOME": "/private/tmp/od9/ff/d",
+      "XDG_STATE_HOME": "/private/tmp/od9/ff/s",
+      "CCMEM_DATA_ROOT": "/private/tmp/od9/ff/ccm",
+      "ORCA_CORRECTIONS_DIR": "/private/tmp/od9/ff/cor",
+      "ORCA_CCLOOP_BIN": "/private/tmp/orca-d9-ccloop-ab824d1/dist/cli.js"
+    }
+  },
+  {
+    "name": "test-first-temp-red",
+    "command": [
+      "npx",
+      "vitest",
+      "run",
+      "tests/control/controlPollBenchmark.test.ts"
+    ],
+    "cwd": "/private/tmp/od9/ff/clone",
+    "base": "91a0f725bd255998834d91ebfe0668a4a09d7bc0",
+    "rc": 1,
+    "log": "perf-finalfix-test-first-temp-red.log",
+    "bytes": 4571,
+    "sha256": "e3042f91e68337ef0ad6fe8de6a26cd9ace6f7af770a5c917397df10b06423ba",
+    "environment": {
+      "HOME": "/private/tmp/od9/ff/h",
+      "TMPDIR": "/private/tmp/od9/ff/t",
+      "XDG_CONFIG_HOME": "/private/tmp/od9/ff/c",
+      "XDG_CACHE_HOME": "/private/tmp/od9/ff/k",
+      "XDG_DATA_HOME": "/private/tmp/od9/ff/d",
+      "XDG_STATE_HOME": "/private/tmp/od9/ff/s",
+      "CCMEM_DATA_ROOT": "/private/tmp/od9/ff/ccm",
+      "ORCA_CORRECTIONS_DIR": "/private/tmp/od9/ff/cor",
+      "ORCA_CCLOOP_BIN": "/private/tmp/orca-d9-ccloop-ab824d1/dist/cli.js"
+    }
+  },
+  {
+    "name": "old-temp-qualified-red",
+    "command": [
+      "npx",
+      "vitest",
+      "run",
+      "tests/control/controlPollBenchmark.test.ts"
+    ],
+    "cwd": "/private/tmp/od9/ff/clone",
+    "base": "91a0f725bd255998834d91ebfe0668a4a09d7bc0",
+    "rc": 1,
+    "log": "perf-finalfix-old-temp-qualified-red.log",
+    "bytes": 2142,
+    "sha256": "0f0c79a91c64fa9ff01c1b2b665e7e71f96ac7d90a2abfaa19a4e68d887cc9ae",
+    "environment": {
+      "HOME": "/private/tmp/od9/ff/h",
+      "TMPDIR": "/private/tmp/od9/ff/t",
+      "XDG_CONFIG_HOME": "/private/tmp/od9/ff/c",
+      "XDG_CACHE_HOME": "/private/tmp/od9/ff/k",
+      "XDG_DATA_HOME": "/private/tmp/od9/ff/d",
+      "XDG_STATE_HOME": "/private/tmp/od9/ff/s",
+      "CCMEM_DATA_ROOT": "/private/tmp/od9/ff/ccm",
+      "ORCA_CORRECTIONS_DIR": "/private/tmp/od9/ff/cor",
+      "ORCA_CCLOOP_BIN": "/private/tmp/orca-d9-ccloop-ab824d1/dist/cli.js"
+    }
+  },
+  {
+    "name": "test-first-normal-qualified-red",
+    "command": [
+      "npx",
+      "vitest",
+      "run",
+      "tests/control/controlPollBenchmark.test.ts"
+    ],
+    "cwd": "/Users/biran/.codex/worktrees/usage-settlement-handoff-retry/Orca",
+    "base": "91a0f725bd255998834d91ebfe0668a4a09d7bc0",
+    "rc": 1,
+    "log": "perf-finalfix-test-first-normal-qualified-red.log",
+    "bytes": 2432,
+    "sha256": "9171cfe8bf48abdb8b653f70d31f6b53afdd51069e54daeb82d8a6374be0badb",
+    "environment": {
+      "HOME": "/private/tmp/od9/ff/h",
+      "TMPDIR": "/private/tmp/od9/ff/t",
+      "XDG_CONFIG_HOME": "/private/tmp/od9/ff/c",
+      "XDG_CACHE_HOME": "/private/tmp/od9/ff/k",
+      "XDG_DATA_HOME": "/private/tmp/od9/ff/d",
+      "XDG_STATE_HOME": "/private/tmp/od9/ff/s",
+      "CCMEM_DATA_ROOT": "/private/tmp/od9/ff/ccm",
+      "ORCA_CORRECTIONS_DIR": "/private/tmp/od9/ff/cor",
+      "ORCA_CCLOOP_BIN": "/private/tmp/orca-d9-ccloop-ab824d1/dist/cli.js"
+    }
+  },
+  {
+    "name": "test-first-temp-qualified-red",
+    "command": [
+      "npx",
+      "vitest",
+      "run",
+      "tests/control/controlPollBenchmark.test.ts"
+    ],
+    "cwd": "/private/tmp/od9/ff/clone",
+    "base": "91a0f725bd255998834d91ebfe0668a4a09d7bc0",
+    "rc": 1,
+    "log": "perf-finalfix-test-first-temp-qualified-red.log",
+    "bytes": 2392,
+    "sha256": "3edfac9da0800c5a1365e3702718a319f7a529f7e390904748044bde1e1d43e3",
+    "environment": {
+      "HOME": "/private/tmp/od9/ff/h",
+      "TMPDIR": "/private/tmp/od9/ff/t",
+      "XDG_CONFIG_HOME": "/private/tmp/od9/ff/c",
+      "XDG_CACHE_HOME": "/private/tmp/od9/ff/k",
+      "XDG_DATA_HOME": "/private/tmp/od9/ff/d",
+      "XDG_STATE_HOME": "/private/tmp/od9/ff/s",
+      "CCMEM_DATA_ROOT": "/private/tmp/od9/ff/ccm",
+      "ORCA_CORRECTIONS_DIR": "/private/tmp/od9/ff/cor",
+      "ORCA_CCLOOP_BIN": "/private/tmp/orca-d9-ccloop-ab824d1/dist/cli.js"
+    }
+  },
+  {
+    "name": "normal-green",
+    "command": [
+      "npx",
+      "vitest",
+      "run",
+      "tests/control/controlPollBenchmark.test.ts"
+    ],
+    "cwd": "/Users/biran/.codex/worktrees/usage-settlement-handoff-retry/Orca",
+    "base": "91a0f725bd255998834d91ebfe0668a4a09d7bc0",
+    "rc": 0,
+    "log": "perf-finalfix-normal-green.log",
+    "bytes": 940,
+    "sha256": "37993356bd5ea914207246885fab195074d375163789960a5dbffb6db8e03462",
+    "environment": {
+      "HOME": "/private/tmp/od9/ff/h",
+      "TMPDIR": "/private/tmp/od9/ff/t",
+      "XDG_CONFIG_HOME": "/private/tmp/od9/ff/c",
+      "XDG_CACHE_HOME": "/private/tmp/od9/ff/k",
+      "XDG_DATA_HOME": "/private/tmp/od9/ff/d",
+      "XDG_STATE_HOME": "/private/tmp/od9/ff/s",
+      "CCMEM_DATA_ROOT": "/private/tmp/od9/ff/ccm",
+      "ORCA_CORRECTIONS_DIR": "/private/tmp/od9/ff/cor",
+      "ORCA_CCLOOP_BIN": "/private/tmp/orca-d9-ccloop-ab824d1/dist/cli.js"
+    }
+  },
+  {
+    "name": "temp-green",
+    "command": [
+      "npx",
+      "vitest",
+      "run",
+      "tests/control/controlPollBenchmark.test.ts"
+    ],
+    "cwd": "/private/tmp/od9/ff/clone",
+    "base": "91a0f725bd255998834d91ebfe0668a4a09d7bc0",
+    "rc": 0,
+    "log": "perf-finalfix-temp-green.log",
+    "bytes": 910,
+    "sha256": "835b5fd31ecf9e28ac667d2b02c5269c1f75927d7a92d4cdc95a013dd1f7b87d",
+    "environment": {
+      "HOME": "/private/tmp/od9/ff/h",
+      "TMPDIR": "/private/tmp/od9/ff/t",
+      "XDG_CONFIG_HOME": "/private/tmp/od9/ff/c",
+      "XDG_CACHE_HOME": "/private/tmp/od9/ff/k",
+      "XDG_DATA_HOME": "/private/tmp/od9/ff/d",
+      "XDG_STATE_HOME": "/private/tmp/od9/ff/s",
+      "CCMEM_DATA_ROOT": "/private/tmp/od9/ff/ccm",
+      "ORCA_CORRECTIONS_DIR": "/private/tmp/od9/ff/cor",
+      "ORCA_CCLOOP_BIN": "/private/tmp/orca-d9-ccloop-ab824d1/dist/cli.js"
+    }
+  },
+  {
+    "name": "typecheck",
+    "command": [
+      "npm",
+      "run",
+      "typecheck"
+    ],
+    "cwd": "/Users/biran/.codex/worktrees/usage-settlement-handoff-retry/Orca",
+    "base": "91a0f725bd255998834d91ebfe0668a4a09d7bc0",
+    "rc": 0,
+    "log": "perf-finalfix-typecheck.log",
+    "bytes": 57,
+    "sha256": "95e3139b92d7a7c68a78bf799a9e66e72c3ed1f70e2391990dd69e37294e15c9",
+    "environment": {
+      "HOME": "/private/tmp/od9/ff/h",
+      "TMPDIR": "/private/tmp/od9/ff/t",
+      "XDG_CONFIG_HOME": "/private/tmp/od9/ff/c",
+      "XDG_CACHE_HOME": "/private/tmp/od9/ff/k",
+      "XDG_DATA_HOME": "/private/tmp/od9/ff/d",
+      "XDG_STATE_HOME": "/private/tmp/od9/ff/s",
+      "CCMEM_DATA_ROOT": "/private/tmp/od9/ff/ccm",
+      "ORCA_CORRECTIONS_DIR": "/private/tmp/od9/ff/cor",
+      "ORCA_CCLOOP_BIN": "/private/tmp/orca-d9-ccloop-ab824d1/dist/cli.js"
+    }
+  },
+  {
+    "name": "mutation-build-entry",
+    "command": [
+      "npx",
+      "vitest",
+      "run",
+      "tests/control/controlPollBenchmark.test.ts"
+    ],
+    "cwd": "/private/tmp/od9/ff/clone",
+    "base": "32395a96f133c8680e6f77900970a787b9fe75af",
+    "rc": 1,
+    "log": "perf-finalfix-mutation-build-entry.log",
+    "bytes": 2606,
+    "sha256": "19aafcd13a06e738ed7b25b315188c0b06128ed0571f35aec3e367865df660ea",
+    "environment": {
+      "HOME": "/private/tmp/od9/ff/clone/h",
+      "TMPDIR": "/private/tmp/od9/ff/clone/t",
+      "XDG_CONFIG_HOME": "/private/tmp/od9/ff/clone/c",
+      "XDG_CACHE_HOME": "/private/tmp/od9/ff/clone/k",
+      "XDG_DATA_HOME": "/private/tmp/od9/ff/clone/d",
+      "XDG_STATE_HOME": "/private/tmp/od9/ff/clone/s",
+      "CCMEM_DATA_ROOT": "/private/tmp/od9/ff/clone/ccm",
+      "ORCA_CORRECTIONS_DIR": "/private/tmp/od9/ff/clone/cor",
+      "ORCA_CCLOOP_BIN": "/private/tmp/orca-d9-ccloop-ab824d1/dist/cli.js"
+    }
+  },
+  {
+    "name": "formal-tmp-leak",
+    "command": [
+      "node",
+      "scripts/check-tmp-leak.mjs",
+      "tests/control/controlPollBenchmark.test.ts"
+    ],
+    "cwd": "/Users/biran/.codex/worktrees/usage-settlement-handoff-retry/Orca",
+    "base": "91a0f725bd255998834d91ebfe0668a4a09d7bc0",
+    "rc": 0,
+    "log": "perf-finalfix-formal-tmp-leak.log",
+    "bytes": 340,
+    "sha256": "05ead0c027b1779fb8358b8d1fe53c834f4f3ccd5336d1b45503807fbd4670cb",
+    "environment": {
+      "HOME": "/private/tmp/od9/ff/h",
+      "TMPDIR": "/private/tmp/od9/ff/t",
+      "XDG_CONFIG_HOME": "/private/tmp/od9/ff/c",
+      "XDG_CACHE_HOME": "/private/tmp/od9/ff/k",
+      "XDG_DATA_HOME": "/private/tmp/od9/ff/d",
+      "XDG_STATE_HOME": "/private/tmp/od9/ff/s",
+      "CCMEM_DATA_ROOT": "/private/tmp/od9/ff/ccm",
+      "ORCA_CORRECTIONS_DIR": "/private/tmp/od9/ff/cor",
+      "ORCA_CCLOOP_BIN": "/private/tmp/orca-d9-ccloop-ab824d1/dist/cli.js",
+      "ORCA_OUTER_LEAK_CHECK": "1"
+    }
+  },
+  {
+    "name": "mutation-open-entry",
+    "command": [
+      "npx",
+      "vitest",
+      "run",
+      "tests/control/controlPollBenchmark.test.ts"
+    ],
+    "cwd": "/private/tmp/od9/ff/clone",
+    "base": "32395a96f133c8680e6f77900970a787b9fe75af",
+    "rc": 1,
+    "log": "perf-finalfix-mutation-open-entry.log",
+    "bytes": 2178,
+    "sha256": "9c71755377efc2d7e83f2defa4eb92fb5d4013c602f9ee9e6260e8d985103aae",
+    "environment": {
+      "HOME": "/private/tmp/od9/ff/clone/h",
+      "TMPDIR": "/private/tmp/od9/ff/clone/t",
+      "XDG_CONFIG_HOME": "/private/tmp/od9/ff/clone/c",
+      "XDG_CACHE_HOME": "/private/tmp/od9/ff/clone/k",
+      "XDG_DATA_HOME": "/private/tmp/od9/ff/clone/d",
+      "XDG_STATE_HOME": "/private/tmp/od9/ff/clone/s",
+      "CCMEM_DATA_ROOT": "/private/tmp/od9/ff/clone/ccm",
+      "ORCA_CORRECTIONS_DIR": "/private/tmp/od9/ff/clone/cor",
+      "ORCA_CCLOOP_BIN": "/private/tmp/orca-d9-ccloop-ab824d1/dist/cli.js"
+    }
+  },
+  {
+    "name": "mutation-restriction",
+    "command": [
+      "npx",
+      "vitest",
+      "run",
+      "tests/control/controlPollBenchmark.test.ts"
+    ],
+    "cwd": "/private/tmp/od9/ff/clone",
+    "base": "32395a96f133c8680e6f77900970a787b9fe75af",
+    "rc": 1,
+    "log": "perf-finalfix-mutation-restriction.log",
+    "bytes": 2399,
+    "sha256": "b0f9f5ebce08dd2fdfc0e04107923e5106156bf08b956a52ff4489e102e0383b",
+    "environment": {
+      "HOME": "/private/tmp/od9/ff/clone/h",
+      "TMPDIR": "/private/tmp/od9/ff/clone/t",
+      "XDG_CONFIG_HOME": "/private/tmp/od9/ff/clone/c",
+      "XDG_CACHE_HOME": "/private/tmp/od9/ff/clone/k",
+      "XDG_DATA_HOME": "/private/tmp/od9/ff/clone/d",
+      "XDG_STATE_HOME": "/private/tmp/od9/ff/clone/s",
+      "CCMEM_DATA_ROOT": "/private/tmp/od9/ff/clone/ccm",
+      "ORCA_CORRECTIONS_DIR": "/private/tmp/od9/ff/clone/cor",
+      "ORCA_CCLOOP_BIN": "/private/tmp/orca-d9-ccloop-ab824d1/dist/cli.js"
+    }
+  },
+  {
+    "name": "clone-restored-green",
+    "command": [
+      "npx",
+      "vitest",
+      "run",
+      "tests/control/controlPollBenchmark.test.ts"
+    ],
+    "cwd": "/private/tmp/od9/ff/clone",
+    "base": "32395a96f133c8680e6f77900970a787b9fe75af",
+    "rc": 0,
+    "log": "perf-finalfix-clone-restored-green.log",
+    "bytes": 906,
+    "sha256": "6e4cf6dc63417288047665383adf6500a6acfbaa04178a7f8f6e0f7c57e0b9df",
+    "environment": {
+      "HOME": "/private/tmp/od9/ff/clone/h",
+      "TMPDIR": "/private/tmp/od9/ff/clone/t",
+      "XDG_CONFIG_HOME": "/private/tmp/od9/ff/clone/c",
+      "XDG_CACHE_HOME": "/private/tmp/od9/ff/clone/k",
+      "XDG_DATA_HOME": "/private/tmp/od9/ff/clone/d",
+      "XDG_STATE_HOME": "/private/tmp/od9/ff/clone/s",
+      "CCMEM_DATA_ROOT": "/private/tmp/od9/ff/clone/ccm",
+      "ORCA_CORRECTIONS_DIR": "/private/tmp/od9/ff/clone/cor",
+      "ORCA_CCLOOP_BIN": "/private/tmp/orca-d9-ccloop-ab824d1/dist/cli.js"
+    }
+  },
+  {
+    "name": "source-proof",
+    "command": [
+      "python3",
+      "/private/tmp/od9/finalfix-source-proof.py"
+    ],
+    "cwd": "/Users/biran/.codex/worktrees/usage-settlement-handoff-retry/Orca",
+    "base": "91a0f725bd255998834d91ebfe0668a4a09d7bc0",
+    "rc": 0,
+    "log": "perf-finalfix-source-proof.log",
+    "bytes": 2609,
+    "sha256": "e4ade77a33c8d6e82fde9e7fd0e01afc5b27a201307f90390a907dc43c91c391",
+    "environment": {
+      "HOME": "/private/tmp/od9/ff/h",
+      "TMPDIR": "/private/tmp/od9/ff/t",
+      "XDG_CONFIG_HOME": "/private/tmp/od9/ff/c",
+      "XDG_CACHE_HOME": "/private/tmp/od9/ff/k",
+      "XDG_DATA_HOME": "/private/tmp/od9/ff/d",
+      "XDG_STATE_HOME": "/private/tmp/od9/ff/s",
+      "CCMEM_DATA_ROOT": "/private/tmp/od9/ff/ccm",
+      "ORCA_CORRECTIONS_DIR": "/private/tmp/od9/ff/cor",
+      "ORCA_CCLOOP_BIN": "/private/tmp/orca-d9-ccloop-ab824d1/dist/cli.js"
+    }
+  }
+]

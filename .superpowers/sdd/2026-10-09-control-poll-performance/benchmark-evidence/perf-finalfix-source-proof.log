@@ -1,0 +1,64 @@
+{
+  "owner": "Codex /root/fix_performance_portability",
+  "date": "2026-10-10 Asia/Shanghai",
+  "base": "91a0f725bd255998834d91ebfe0668a4a09d7bc0",
+  "observedHEAD": "91a0f725bd255998834d91ebfe0668a4a09d7bc0",
+  "srcDiffBytes": 0,
+  "cloneRestoredDiffBytes": 0,
+  "cloneRestoredCachedDiffBytes": 0,
+  "unchangedFiles": [
+    {
+      "path": "tests/bench/controlPollPerformance.ts",
+      "sha256": "7ebe22e0a0d470b560ead069a09a45466b5f26eaf30a5350ad2414fbbcc0ea83",
+      "bytes": 21691
+    },
+    {
+      "path": "tests/control/fixtures/controlReadCounters.ts",
+      "sha256": "6a9a8ae7ef01ab942db5abc355e46bdadf2345dba1f226f4af928860510d1067",
+      "bytes": 3652
+    },
+    {
+      "path": "tests/panel/controlPollPerformance.test.ts",
+      "sha256": "57346432b566a6ae1b1fa063b4685f69c1834fbc9756a732655e0709869d4328",
+      "bytes": 29337
+    },
+    {
+      "path": "tests/control/archivedWakePerformance.test.ts",
+      "sha256": "74c2ac0700a280bc5e50645e2c23d1f1e9fa0d18e20f57728b502aca1701224d",
+      "bytes": 17943
+    }
+  ],
+  "fixtureOutsideSetupDeltaIdentical": true,
+  "getterSha256": "6f80d17253f37106c62d9cf6d1acbe55280c30f88805650cac3e870a90795d69",
+  "ownedFiles": [
+    {
+      "path": "tests/control/fixtures/controlPollPerformance.ts",
+      "baseSha256": "a084f640f5356fe0ba9ebd17f9ec44846e1c752ee3310a98e26d88e745603f30",
+      "currentSha256": "c6fb813e67f794d8c729a04666bcd1b712fd1b51a4c6637172de7a2737fd7ea6",
+      "cloneSha256": "c6fb813e67f794d8c729a04666bcd1b712fd1b51a4c6637172de7a2737fd7ea6"
+    },
+    {
+      "path": "tests/control/controlPollBenchmark.test.ts",
+      "baseSha256": "eb6c0b9d20d720b584683812248d1d79ba357e9c1b07fcd4576771ea8107fc43",
+      "currentSha256": "c98579e48317cafe2b8ed764332a341d8519eab30a81a8f1868c77e6ab949b69",
+      "cloneSha256": "c98579e48317cafe2b8ed764332a341d8519eab30a81a8f1868c77e6ab949b69"
+    }
+  ],
+  "callerInventorySha256": "83c5fc7377cf17bc5ca36c205388c04cb06564c2c78cba5cac27154b2675e9c6",
+  "ownedDiffSha256": "280f2a9010122983258390aeb671d81a86c7433b7c6f2c4a1e00dbbf63238a0a",
+  "cloneCommand": [
+    "/usr/bin/git",
+    "clone",
+    "--local",
+    "--no-hardlinks",
+    "/Users/biran/.codex/worktrees/usage-settlement-handoff-retry/Orca",
+    "/private/tmp/od9/ff/clone"
+  ],
+  "cloneGitDir": "/private/tmp/od9/ff/clone/.git",
+  "sourceGitCommonDir": "/Users/biran/code/skills/loop/Orca/.git",
+  "pinnedCcloop": {
+    "path": "/private/tmp/orca-d9-ccloop-ab824d1/dist/cli.js",
+    "sha256": "b85bad30ecfd202e0e726e9926fbbc31fd9230e67048bd3d52061d3b4f5e5aaa",
+    "cloneHEAD": "ab824d16004de2d3c1613a76ec0431520aa16cc9"
+  }
+}

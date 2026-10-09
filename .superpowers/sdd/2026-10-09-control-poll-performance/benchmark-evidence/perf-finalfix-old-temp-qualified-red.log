@@ -1,0 +1,32 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.3 [39m[90m/private/tmp/od9/ff/clone[39m
+
+(node:58863) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+/private/tmp/od9/ff/t/orca-tmp-siL7Om/orca-snapshot-verify-cINjrr/input.bundle is okay
+ [31m❯[39m tests/control/controlPollBenchmark.test.ts [2m([22m[2m4 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[33m 1973[2mms[22m[39m
+   [31m❯[39m real-path benchmark integrity [2m(4)[22m
+     [32m✓[39m normalizes only run identity and keeps all business hashes and refusal detail[32m 1[2mms[22m[39m
+     [33m[2m✓[22m[39m builds one legal store with DAG, current runs, activities and a real replenishment[33m 1964[2mms[22m[39m
+[31m     [31m×[31m refuses a nontemporary sandbox before either writable fixture entry initializes data[39m[32m 4[2mms[22m[39m
+     [32m✓[39m refuses a nonempty temporary root before removing a sentinel or initializing data[32m 1[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/control/controlPollBenchmark.test.ts[2m > [22mreal-path benchmark integrity[2m > [22mrefuses a nontemporary sandbox before either writable fixture entry initializes data
+[31m[1mAssertionError[22m: expected 'control-poll-fixture-root-not-empty' to be 'control-poll-fixture-root-not-tempora…' // Object.is equality[39m
+
+Expected: [32m"control-poll-fixture-root-not-[7mt[27memp[7morar[27my"[39m
+Received: [31m"control-poll-fixture-root-not-emp[7mt[27my"[39m
+
+[36m [2m❯[22m tests/control/controlPollBenchmark.test.ts:[2m59:74[22m[39m
+
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m3 passed[39m[22m[90m (4)[39m
+[2m   Start at [22m 01:08:05
+[2m   Duration [22m 2.77s[2m (tests 74%, transform 22%, import 4%)[22m
+

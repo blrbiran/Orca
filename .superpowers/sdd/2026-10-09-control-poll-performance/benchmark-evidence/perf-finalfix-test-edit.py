@@ -1,0 +1,10 @@
+from pathlib import Path
+root=Path('/Users/biran/.codex/worktrees/usage-settlement-handoff-retry/Orca')
+p=root/'tests/control/controlPollBenchmark.test.ts';s=p.read_text()
+old=' it("refuses a nontemporary sandbox before either writable fixture entry initializes data",async()=>{\n  const root=await realpath(await mkdtemp(join(process.cwd(),".orca-control-poll-sandbox-")));\n  const previousRoot=process.env.ORCA_PERFORMANCE_ROOT;process.env.ORCA_PERFORMANCE_ROOT=root;\n'
+new=' it("accepts a fixture inside a narrower temporary namespace",async()=>withFreshRoot(async namespace=>{\n  process.env.ORCA_PERFORMANCE_ROOT=join(namespace,"fixture");\n  const f=await buildControlPollFixture({liveGroups:0,archivedGroups:0,tasksPerGroup:1,now:1791518400000},namespace);\n  await f.dispose();\n  const reopened=await openExistingControlPollFixture(1791518400000,namespace);\n  try {expect(reopened.manifest()).toEqual({liveGroups:0,archivedGroups:0,tasks:0,dependencies:0,runs:0,pendingTargetWakes:0});}finally{await reopened.dispose();}\n }));\n it("refuses a sandbox outside the narrower temporary namespace before either writable fixture entry initializes data",async()=>withFreshRoot(async namespace=>{\n  const allowed=join(namespace,"allowed");\n  const root=await realpath(await mkdtemp(join(namespace,"rejected-")));\n  process.env.ORCA_PERFORMANCE_ROOT=root;\n'
+assert s.count(old)==1;s=s.replace(old,new)
+s=s.replace('buildControlPollFixture({liveGroups:0,archivedGroups:0,tasksPerGroup:1,now:1791518400000}):await openExistingControlPollFixture(1791518400000);','buildControlPollFixture({liveGroups:0,archivedGroups:0,tasksPerGroup:1,now:1791518400000},allowed):await openExistingControlPollFixture(1791518400000,allowed);')
+old='  } finally {\n   if(previousRoot===undefined)delete process.env.ORCA_PERFORMANCE_ROOT;else process.env.ORCA_PERFORMANCE_ROOT=previousRoot;\n   await rm(root,{recursive:true,force:true});\n  }\n });'
+assert s.count(old)==1;s=s.replace(old,'  } finally {await rm(root,{recursive:true,force:true});}\n }));')
+p.write_text(s)

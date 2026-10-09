@@ -1,0 +1,12 @@
+tests/bench/controlPollPerformance.ts:10:import { buildControlPollFixture, openExistingControlPollFixture, assertMeasurementCoverage, performanceRoot, type ControlPollFixture } from "../control/fixtures/controlPollPerformance.js";
+tests/bench/controlPollPerformance.ts:89: if(args.includes("--seed")){f=await buildControlPollFixture({liveGroups:100,archivedGroups:100,tasksPerGroup:50,now});await writeFile(snapshotPath,JSON.stringify(captureDatabase(f.store)),{mode:0o600});}else f=await openExistingControlPollFixture(now);
+tests/control/controlPollBenchmark.test.ts:7:import { buildControlPollFixture, openExistingControlPollFixture, dagTasks } from "./fixtures/controlPollPerformance.js";
+tests/control/controlPollBenchmark.test.ts:26:  const f=await buildControlPollFixture({liveGroups:2,archivedGroups:2,tasksPerGroup:3,now:1791518400000});
+tests/control/controlPollBenchmark.test.ts:53:  const f=await buildControlPollFixture({liveGroups:0,archivedGroups:0,tasksPerGroup:1,now:1791518400000},namespace);
+tests/control/controlPollBenchmark.test.ts:55:  const reopened=await openExistingControlPollFixture(1791518400000,namespace);
+tests/control/controlPollBenchmark.test.ts:65:    let error:unknown,f:Awaited<ReturnType<typeof buildControlPollFixture>>|undefined;
+tests/control/controlPollBenchmark.test.ts:66:    try {f=entry==="build"?await buildControlPollFixture({liveGroups:0,archivedGroups:0,tasksPerGroup:1,now:1791518400000},allowed):await openExistingControlPollFixture(1791518400000,allowed);}catch(failure){error=failure;}finally{await f?.dispose();}
+tests/control/controlPollBenchmark.test.ts:74:  let error:unknown,f:Awaited<ReturnType<typeof buildControlPollFixture>>|undefined;
+tests/control/controlPollBenchmark.test.ts:75:  try {f=await buildControlPollFixture({liveGroups:0,archivedGroups:0,tasksPerGroup:1,now:1791518400000});}catch(failure){error=failure;}finally{await f?.dispose();}
+tests/control/fixtures/controlPollPerformance.ts:65:export async function buildControlPollFixture(options: {liveGroups:number;archivedGroups:number;tasksPerGroup:number;now:number},temporaryNamespace?:string): Promise<ControlPollFixture> {
+tests/control/fixtures/controlPollPerformance.ts:158:export async function openExistingControlPollFixture(now:number,temporaryNamespace?:string):Promise<ControlPollFixture> {

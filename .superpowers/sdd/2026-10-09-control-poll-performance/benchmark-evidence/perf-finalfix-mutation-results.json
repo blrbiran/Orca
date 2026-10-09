@@ -1,0 +1,65 @@
+[
+  {
+    "name": "build-entry",
+    "baseline": "32395a96f133c8680e6f77900970a787b9fe75af",
+    "rc": 1,
+    "restored": {
+      "diffBytes": 0,
+      "cachedDiffBytes": 0
+    },
+    "originalGuard": " await assertTemporaryFixtureRoot(root,temporaryNamespace);",
+    "clone": "/private/tmp/od9/ff/clone",
+    "dataRoots": {
+      "HOME": "/private/tmp/od9/ff/clone/h",
+      "TMPDIR": "/private/tmp/od9/ff/clone/t",
+      "XDG_CONFIG_HOME": "/private/tmp/od9/ff/clone/c",
+      "XDG_CACHE_HOME": "/private/tmp/od9/ff/clone/k",
+      "XDG_DATA_HOME": "/private/tmp/od9/ff/clone/d",
+      "XDG_STATE_HOME": "/private/tmp/od9/ff/clone/s",
+      "CCMEM_DATA_ROOT": "/private/tmp/od9/ff/clone/ccm",
+      "ORCA_CORRECTIONS_DIR": "/private/tmp/od9/ff/clone/cor"
+    }
+  },
+  {
+    "name": "open-entry",
+    "baseline": "32395a96f133c8680e6f77900970a787b9fe75af",
+    "rc": 1,
+    "restored": {
+      "diffBytes": 0,
+      "cachedDiffBytes": 0
+    },
+    "originalGuard": " await assertTemporaryFixtureRoot(performanceRoot(),temporaryNamespace);",
+    "clone": "/private/tmp/od9/ff/clone",
+    "dataRoots": {
+      "HOME": "/private/tmp/od9/ff/clone/h",
+      "TMPDIR": "/private/tmp/od9/ff/clone/t",
+      "XDG_CONFIG_HOME": "/private/tmp/od9/ff/clone/c",
+      "XDG_CACHE_HOME": "/private/tmp/od9/ff/clone/k",
+      "XDG_DATA_HOME": "/private/tmp/od9/ff/clone/d",
+      "XDG_STATE_HOME": "/private/tmp/od9/ff/clone/s",
+      "CCMEM_DATA_ROOT": "/private/tmp/od9/ff/clone/ccm",
+      "ORCA_CORRECTIONS_DIR": "/private/tmp/od9/ff/clone/cor"
+    }
+  },
+  {
+    "name": "restriction",
+    "baseline": "32395a96f133c8680e6f77900970a787b9fe75af",
+    "rc": 1,
+    "restored": {
+      "diffBytes": 0,
+      "cachedDiffBytes": 0
+    },
+    "originalGuard": " if(temporaryNamespace!==undefined && !within(await canonical(temporaryNamespace)))throw new Error(\"control-poll-fixture-root-not-temporary\");",
+    "clone": "/private/tmp/od9/ff/clone",
+    "dataRoots": {
+      "HOME": "/private/tmp/od9/ff/clone/h",
+      "TMPDIR": "/private/tmp/od9/ff/clone/t",
+      "XDG_CONFIG_HOME": "/private/tmp/od9/ff/clone/c",
+      "XDG_CACHE_HOME": "/private/tmp/od9/ff/clone/k",
+      "XDG_DATA_HOME": "/private/tmp/od9/ff/clone/d",
+      "XDG_STATE_HOME": "/private/tmp/od9/ff/clone/s",
+      "CCMEM_DATA_ROOT": "/private/tmp/od9/ff/clone/ccm",
+      "ORCA_CORRECTIONS_DIR": "/private/tmp/od9/ff/clone/cor"
+    }
+  }
+]

@@ -1,0 +1,4 @@
+(node:68481) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+/private/tmp/od9/ff/t/cl-Fj5RIb/orca-tmp-tMHlTW/orca-snapshot-verify-2XCQGK/input.bundle is okay
+vitest exit 0, 5 tests, 0 entries left in /private/tmp/od9/ff/t/cl-Fj5RIb
