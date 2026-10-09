@@ -169,3 +169,9 @@ active retry 再失败时，retry-task 可将 source 更新到该失败 run，�
 | total/week/month cap 与周期边界 | D9 unattributed 计入结清时的日历周期；下一次 retry claim 受各 cap，已超额结账仍可成功；删除 ledger 写入或 claim cap 守卫见红 |
 
 Self-review 责任：确认人工状态只能由 owner 结清事务产生；所有 reader/closed enum 与持久 writer 成对覆盖；未知账从 reserved 已释放的事实由合法 handoff 历史、terminal allocation、request/checkpoint/marker 共同约束。静态审查不等于这些验收已通过；实施后逐条记录实测与变异证据。
+
+### 9.5 复审补充：结清后再交接（controller，2026-10-09，产品基线 c29676d）
+
+有效的人工 usageSettlement 必须在 hasObservedUsage 的所有调用者中被视为“账已结清”，即便 provider 没有为两桶各报一条 non-null usage event。共享校验须严格核对 marker 的 run/generation/highWater/charged/证据身份、unknown=false、remaining 两桶四维为零；pending seq>highWater 仍拒绝，stopProof 与 checkpoint/artifact 守卫照常独立生效。不写伪造 provider event，不推进 highWater，也不再次记用量。
+
+新增判据 active failure+unknown→D9→handoff-stop→handoff-complete→empty resume→retry→claim；结清后已有 report 的 usage 事件重放保持幂等，迟到新事件拒绝。handoff 可按现有完整 checkpoint 规则结为 settled-recoverable（此时 held remainder=0），M3 恢复原 run.grant、从 reserve 全额预留。缺 snapshot/artifact 或未知执行仍不得因此恢复。删除 hasObservedUsage 的有效人工 marker 分支，该顺序判据必须红。
