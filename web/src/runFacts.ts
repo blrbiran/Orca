@@ -44,10 +44,9 @@ const INACTIVE_RUN_STATES: ReadonlySet<RunViewV1["state"]> = new Set([
 /**
  * Final review M1: the server's archive guards (src/control/archiveGroup.ts refuseArchive), in its order, so Archive is
  * offered only where archive-group is accepted. Its requirement-call guard has no counterpart here: a clarifying group
- * has no group view.
+ * has no group view. An archived group is refused by the ledger gate instead; its view renders no Archive at all.
  */
 export function archiveOpen(view: GroupViewV1): boolean {
-  if (view.summary.archived === true) return false;
   if (view.estimates.some((estimate) => estimate.state === "running" || estimate.state === "start-unknown")) return false;
   if (view.stop !== null && view.stop.mode !== "pause" && view.stop.state !== "handoff-complete" && view.stop.state !== "handoff-partial") return false;
   if (view.integration?.state === "resolving") return false;
