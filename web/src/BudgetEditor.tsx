@@ -232,6 +232,8 @@ export interface BudgetEditorProps {
   selectionsHash?: string | null;
   /** Integration spec §9.1: the target the group's repository suggests, for a keep group an owner switches on. */
   suggestedTarget?: string | null;
+  /** Issue-fixes spec §6.3: an archived group refuses every command but the unarchive, so no action is offered (read-only). */
+  archived?: boolean;
 }
 
 export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
@@ -240,7 +242,8 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
   // Accounts spec §3.5: set-limit is human-only; a member sees the limit but no control the server would refuse.
   const mayLimit = mayHumanOnly(useContext(AccountContext));
   const groupId = view.summary.groupId;
-  const editable = view.proposal.state === "editable";
+  const archived = props.archived === true;
+  const editable = view.proposal.state === "editable" && !archived;
   // Drafts outlive the detail, the field's text does not: a refusal flag kept from text that is gone would hold Save and
   // Confirm with no error to show, so a fresh editor starts without them.
   useEffect(() => {
@@ -378,7 +381,7 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
                   return (
                     <td key={dimension}>
                       {allocation.amount[dimension]}{owned ? <small>{t("budget.changeInCard")}</small> : null}
-                      {loopValue !== null && (
+                      {loopValue !== null && !archived && (
                         <button type="button" aria-label={t("budget.useFor", { value: loopValue, owner: allocation.ownerId, bucket: enumText("bucket", allocation.bucket), dimension: enumText("dimension", dimension) })}
                           onClick={() => applySuggestions([loopAction!])}>{t("budget.use", { value: loopValue })}</button>
                       )}
@@ -409,7 +412,7 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
                       )}
                       <small>{provenanceText(allocation.fieldProvenance[dimension])}</small>
                     </label>
-                    {fieldOperation !== undefined && (
+                    {fieldOperation !== undefined && !archived && (
                       <button type="button" aria-label={t("budget.useFor", { value: fieldOperation.value, owner: allocation.ownerId, bucket: enumText("bucket", allocation.bucket), dimension: enumText("dimension", dimension) })}
                         onClick={() => applySuggestions(suggestionActions(view, { kind: "field", target }))}>{t("budget.use", { value: fieldOperation.value })}</button>
                     )}
@@ -420,14 +423,14 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
                 const row = allocation.ownerKind === "task" || allocation.ownerKind === "goal-review"
                   ? suggestionActions(view, { kind: "row", ownerKind: allocation.ownerKind, ownerId: allocation.ownerId, bucket: allocation.bucket as "work" | "handoff" | "review" })
                   : [];
-                return <td>{row.length > 0 && <button type="button" aria-label={t("budget.applyRowFor", { owner: allocation.ownerId, bucket: enumText("bucket", allocation.bucket) })} onClick={() => applySuggestions(row)}>{t("budget.applyRow")}</button>}</td>;
+                return <td>{row.length > 0 && !archived && <button type="button" aria-label={t("budget.applyRowFor", { owner: allocation.ownerId, bucket: enumText("bucket", allocation.bucket) })} onClick={() => applySuggestions(row)}>{t("budget.applyRow")}</button>}</td>;
               })()}
             </tr>
           ))}
         </tbody>
       </table>
       {advice?.stale === true && <p role="note">{t("budget.staleEstimate")}</p>}
-      {allSuggested.length > 0 && <button type="button" onClick={() => applySuggestions(allSuggested)}>{t("budget.applyAll")}</button>}
+      {allSuggested.length > 0 && !archived && <button type="button" onClick={() => applySuggestions(allSuggested)}>{t("budget.applyAll")}</button>}
       {advice !== null && (
         <details>
           <summary>{t("budget.rationale", { estimateId: advice.estimateId })}</summary>
@@ -450,7 +453,7 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
             label={enumText("dimension", dimension)}
             aria-label={enumText("dimension", dimension)}
             value={tokenValueFor(drafts, groupLimitKey(groupId, dimension), view.ledger.groupLimit[dimension])}
-            readOnly={!mayLimit}
+            readOnly={!mayLimit || archived}
             onChange={(n) => onDraft(groupLimitKey(groupId, dimension), String(n))}
             onInvalid={() => onDraft(groupLimitKey(groupId, dimension), BAD_DRAFT)}
           />
@@ -460,17 +463,18 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
             <input
               value={valueFor(drafts, groupLimitKey(groupId, dimension), view.ledger.groupLimit[dimension])}
               inputMode="numeric"
-              readOnly={!mayLimit}
+              readOnly={!mayLimit || archived}
               onChange={(event) => onDraft(groupLimitKey(groupId, dimension), event.target.value)}
             />
           </label>
         ))}
-        {mayLimit ? <button type="button" onClick={submitLimit}>{t("budget.setLimit")}</button> : <p role="note">{t("budget.ownerSetsLimit")}</p>}
+        {archived ? null : mayLimit ? <button type="button" onClick={submitLimit}>{t("budget.setLimit")}</button> : <p role="note">{t("budget.ownerSetsLimit")}</p>}
       </fieldset>
       <TokenInput
         label={t("budget.handoffAt")}
         aria-label={t("budget.handoffAt")}
         value={tokenValueFor(drafts, CONTEXT_POLICY_KEY(groupId), view.proposal.contextPolicy.handoffAtContextTokens ?? 0)}
+        readOnly={archived}
         onChange={(n) => onDraft(CONTEXT_POLICY_KEY(groupId), String(n))}
         onInvalid={() => onDraft(CONTEXT_POLICY_KEY(groupId), BAD_DRAFT)}
         allowEmpty
@@ -481,11 +485,11 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
         {view.ledger.budgetDeficit.tokens > 0 ? t("budget.deficit", { deficit: view.ledger.budgetDeficit.tokens }) : ""}
         {view.ledger.usageUnknown ? t("budget.usageUnknown") : ""}
       </p>
-      <button type="button" disabled={!editable || hasBadDraft(drafts) || editedOperations(view, drafts).length === 0} onClick={submitEdit}>{t("budget.save")}</button>
-      {estimator !== null && <button type="button" onClick={submitEstimate}>{t("budget.reestimate")}</button>}
+      {!archived && <button type="button" disabled={!editable || hasBadDraft(drafts) || editedOperations(view, drafts).length === 0} onClick={submitEdit}>{t("budget.save")}</button>}
+      {estimator !== null && !archived && <button type="button" onClick={submitEstimate}>{t("budget.reestimate")}</button>}
       {editable && <GroupIntegrationConfirm view={view} suggestedTarget={props.suggestedTarget ?? null} onCommand={onCommand} />}
       {editable && shownSelectionsHash === null && <p role="note">{t("budget.confirmWaits")}</p>}
-      <button type="button" disabled={shownSelectionsHash === null || integrationBlocked || hasBadDraft(drafts)} onClick={submitConfirm}>{t("budget.confirm")}</button>
+      {!archived && <button type="button" disabled={shownSelectionsHash === null || integrationBlocked || hasBadDraft(drafts)} onClick={submitConfirm}>{t("budget.confirm")}</button>}
     </section>
   );
 }

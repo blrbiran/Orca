@@ -95,10 +95,13 @@ export interface AgentSelectionEditorProps {
   agentsFailure?: string | null;
   /** Ruling review R17: the page's backoff retry, shown so the operator knows it is retrying and when it stopped. */
   retryNotice?: string | null;
+  /** Issue-fixes spec §6.3: an archived group refuses every command but the unarchive, so no action is offered (read-only). */
+  archived?: boolean;
 }
 
 export function AgentSelectionEditor(props: AgentSelectionEditorProps): JSX.Element {
   const { view, agents, preview, drafts, onDraft, onCommand } = props;
+  const archived = props.archived === true;
   const groupId = view.summary.groupId;
   const { t } = useTranslation();
 
@@ -128,7 +131,7 @@ export function AgentSelectionEditor(props: AgentSelectionEditorProps): JSX.Elem
 
   const reread = (
     <>
-      {props.onReread && <button type="button" onClick={props.onReread}>{t("agents.reread")}</button>}
+      {props.onReread && !archived && <button type="button" onClick={props.onReread}>{t("agents.reread")}</button>}
       {props.retryNotice ? <p role="status" data-retry="">{props.retryNotice}</p> : null}
     </>
   );
@@ -164,7 +167,7 @@ export function AgentSelectionEditor(props: AgentSelectionEditorProps): JSX.Elem
       {stale && <p role="status">{t("agents.staleResolution", { version: preview.proposalVersion })}</p>}
       {preview.selectionsHash === null && <p role="alert">{t("agents.unresolved")}</p>}
       {reread}
-      {(["worker", "estimator", "reconcile"] as const).map((slot) => {
+      {!archived && (["worker", "estimator", "reconcile"] as const).map((slot) => {
         const scope: Scope = { kind: "group", slot };
         const prefix = agentDraftPrefix(groupId, scope);
         const partial = panelPartialFromFields(agents, prefix, preview.groupOverrides[slot], plannedFor(scope), drafts, inherited(scope));
@@ -196,7 +199,7 @@ export function AgentSelectionEditor(props: AgentSelectionEditorProps): JSX.Elem
                   ? <SelectionCells selection={entry.outcome.frozen.selection} provenance={entry.outcome.frozen.provenance} />
                   : <FailedCell outcome={entry.outcome} />}
                 <td>
-                  {scope !== null && (
+                  {scope !== null && !archived && (
                     <>
                       <SelectionFields agents={agents} prefix={prefix} label={t("agents.taskLayer", { taskId: String(taskId) })} current={own} planned={plannedFor(scope)} inheritedAgent={inherited(scope)} drafts={drafts} onDraft={onDraft} />
                       <button type="button" disabled={Object.keys(partial).length === 0} onClick={() => send(scope, partial)}>{t("agents.setTask", { taskId: String(taskId) })}</button>

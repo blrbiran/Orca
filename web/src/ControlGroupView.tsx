@@ -196,7 +196,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
           ))}
         </tbody>
       </table>
-      {openItem !== undefined && <TaskDetail key={openItem.taskId} view={view} item={openItem} drafts={drafts} onDraft={onDraft} onCommand={onCommand} workspaceMode={workspaceMode} />}
+      {openItem !== undefined && <TaskDetail key={openItem.taskId} view={view} item={openItem} drafts={drafts} onDraft={onDraft} onCommand={onCommand} workspaceMode={workspaceMode} archived={archived} />}
 
       <h3>{t("control.group.runs")}</h3>
       <table>
@@ -250,7 +250,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
         </tbody>
       </table>
 
-      <BudgetEditor view={view} config={config} drafts={drafts} onDraft={onDraft} onCommand={onCommand} onCommands={props.onCommands} selectionsHash={selectionsHashFor(view, props.preview)}
+      <BudgetEditor view={view} config={config} drafts={drafts} onDraft={onDraft} onCommand={onCommand} onCommands={props.onCommands} archived={archived} selectionsHash={selectionsHashFor(view, props.preview)}
         suggestedTarget={props.integrationFor?.(view.plan.repoId)?.suggestedTarget ?? null} />
       {props.agents !== undefined && (
         <AgentSelectionEditor
@@ -258,14 +258,15 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
           onReread={props.onRereadPreview}
           agentsFailure={props.agentsFailure}
           retryNotice={props.retryNotice}
+          archived={archived}
           drafts={drafts} onDraft={onDraft} onCommand={onCommand}
         />
       )}
 
-      <GitScheme view={view} workspace={workspace} onCommand={onCommand} />
+      <GitScheme view={view} workspace={workspace} onCommand={onCommand} archived={archived} />
       {/* Fix round 1 F1: a started group's scheme stays an owner's to change, outside the (button-free for keep) Git section. */}
       {view.proposal.state === "confirmed" && (
-        <GroupIntegrationConfirm view={view} suggestedTarget={props.integrationFor?.(view.plan.repoId)?.suggestedTarget ?? null} onCommand={onCommand} />
+        <GroupIntegrationConfirm view={view} suggestedTarget={props.integrationFor?.(view.plan.repoId)?.suggestedTarget ?? null} onCommand={onCommand} archived={archived} />
       )}
 
       <SkillsGiven view={view} />
@@ -313,66 +314,66 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       <h3>{t("control.group.dispatch")}</h3>
       {!archived && (
         <>
-      {/* Issue-fixes spec §3.2 (4): start refuses every stop intent (stop-mode-conflict), so it is not offered under one. */}
-      {view.summary.state === "ready" && stopMode === null && (
-        <button type="button" onClick={() => onCommand({ verb: "start", groupId, expectedRevision: revision, payload: {} })}>{t("control.group.start")}</button>
-      )}
-      {!handoffActive && stopMode !== "pause" && (
-        <>
-          <button type="button" onClick={() => onCommand({ verb: "pause-dispatch", groupId, expectedRevision: revision, payload: {} })}>{t("control.group.pause")}</button>
-          <button type="button" onClick={() => onCommand({ verb: "handoff-stop", groupId, expectedRevision: revision, payload: {} })}>{t("control.group.handoffStop")}</button>
-        </>
-      )}
-      {stopMode === "pause" && (
-        <button type="button" onClick={() => onCommand({ verb: "resume-dispatch", groupId, expectedRevision: revision, payload: {} })}>{t("control.group.resume")}</button>
-      )}
-      {handoffActive && view.summary.stopState === "handoff-complete" && continuable.length > 0 && (
-        <button
-          type="button"
-          onClick={() => onCommand({ verb: "resume-from-handoff", groupId, expectedRevision: revision, payload: { selections: selections() } })}
-        >
-          {t("control.group.continueSelected", { n: continuable.length })}
-        </button>
-      )}
-      {/* Issue-fixes ruling (Part C flag 2): continue-task is refused under any stop intent, so a single task's
-          continuation is offered only once the group has none (for example after a resume with no selections). */}
-      {stopMode === null && continuable.map(({ run, checkpointId }) => (
-        <button
-          key={run.runId}
-          type="button"
-          onClick={() => onCommand({
-            verb: "continue-task",
-            groupId,
-            taskId: String(run.taskId),
-            expectedRevision: revision,
-            payload: { predecessorRunId: run.runId, checkpointId },
-          })}
-        >
-          {t("control.group.continueTask", { taskId: String(run.taskId) })}
-        </button>
-      ))}
-      {/* Handoff delivery spec §13.1 I-4: when every frozen run finished or restarted, nothing is continuable,
-          and the group's only way out of handoff-complete is a resume with no selections. Issue-fixes ruling (C3
-          follow-up): it is offered beside the batch continuation too, so held tasks can then be continued one by one. */}
-      {handoffActive && view.summary.stopState === "handoff-complete" && (
-        <button
-          type="button"
-          onClick={() => onCommand({ verb: "resume-from-handoff", groupId, expectedRevision: revision, payload: { selections: [] } })}
-        >
-          {t("control.group.resumeNoContinuation")}
-        </button>
-      )}
-      {view.recoveryBlockers.length > 0 && (
-        <button
-          type="button"
-          onClick={() => onCommand({ verb: "recovery-retry", groupId, expectedRevision: revision, payload: { scope: "group", groupId } })}
-        >
-          {t("control.group.retryRecovery", { groupId })}
-        </button>
-      )}
-        <button type="button" onClick={() => onCommand({ verb: "archive-group", groupId, expectedRevision: revision, payload: {} })}>
-          {t("control.group.archive")}
-        </button>
+          {/* Issue-fixes spec §3.2 (4): start refuses every stop intent (stop-mode-conflict), so it is not offered under one. */}
+          {view.summary.state === "ready" && stopMode === null && (
+            <button type="button" onClick={() => onCommand({ verb: "start", groupId, expectedRevision: revision, payload: {} })}>{t("control.group.start")}</button>
+          )}
+          {!handoffActive && stopMode !== "pause" && (
+            <>
+              <button type="button" onClick={() => onCommand({ verb: "pause-dispatch", groupId, expectedRevision: revision, payload: {} })}>{t("control.group.pause")}</button>
+              <button type="button" onClick={() => onCommand({ verb: "handoff-stop", groupId, expectedRevision: revision, payload: {} })}>{t("control.group.handoffStop")}</button>
+            </>
+          )}
+          {stopMode === "pause" && (
+            <button type="button" onClick={() => onCommand({ verb: "resume-dispatch", groupId, expectedRevision: revision, payload: {} })}>{t("control.group.resume")}</button>
+          )}
+          {handoffActive && view.summary.stopState === "handoff-complete" && continuable.length > 0 && (
+            <button
+              type="button"
+              onClick={() => onCommand({ verb: "resume-from-handoff", groupId, expectedRevision: revision, payload: { selections: selections() } })}
+            >
+              {t("control.group.continueSelected", { n: continuable.length })}
+            </button>
+          )}
+          {/* Issue-fixes ruling (Part C flag 2): continue-task is refused under any stop intent, so a single task's
+              continuation is offered only once the group has none (for example after a resume with no selections). */}
+          {stopMode === null && continuable.map(({ run, checkpointId }) => (
+            <button
+              key={run.runId}
+              type="button"
+              onClick={() => onCommand({
+                verb: "continue-task",
+                groupId,
+                taskId: String(run.taskId),
+                expectedRevision: revision,
+                payload: { predecessorRunId: run.runId, checkpointId },
+              })}
+            >
+              {t("control.group.continueTask", { taskId: String(run.taskId) })}
+            </button>
+          ))}
+          {/* Handoff delivery spec §13.1 I-4: when every frozen run finished or restarted, nothing is continuable,
+              and the group's only way out of handoff-complete is a resume with no selections. Issue-fixes ruling (C3
+              follow-up): it is offered beside the batch continuation too, so held tasks can then be continued one by one. */}
+          {handoffActive && view.summary.stopState === "handoff-complete" && (
+            <button
+              type="button"
+              onClick={() => onCommand({ verb: "resume-from-handoff", groupId, expectedRevision: revision, payload: { selections: [] } })}
+            >
+              {t("control.group.resumeNoContinuation")}
+            </button>
+          )}
+          {view.recoveryBlockers.length > 0 && (
+            <button
+              type="button"
+              onClick={() => onCommand({ verb: "recovery-retry", groupId, expectedRevision: revision, payload: { scope: "group", groupId } })}
+            >
+              {t("control.group.retryRecovery", { groupId })}
+            </button>
+          )}
+          <button type="button" onClick={() => onCommand({ verb: "archive-group", groupId, expectedRevision: revision, payload: {} })}>
+            {t("control.group.archive")}
+          </button>
         </>
       )}
       <p>{t("control.group.recent", { commands: view.recentCommandIds.join(", ") || t("common.none") })}</p>

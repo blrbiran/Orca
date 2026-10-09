@@ -160,12 +160,15 @@ export interface LoopPlanCardProps {
    * Absent: a caller that never reads it (older criteria) -- the line names the repository default, a worktree.
    */
   workspaceMode?: "worktree" | "clone" | null;
+  /** Issue-fixes spec §6.3: an archived group refuses every command but the unarchive, so the change form is not offered. */
+  archived?: boolean;
 }
 
 function LoopPlanEditor(props: LoopPlanCardProps & { plan: LoopPlanViewV1; current: Amount }): JSX.Element {
   const { t } = useTranslation();
   const { view, item, drafts, onDraft, onCommand, plan, current } = props;
   const groupId = view.summary.groupId, key = loopDraftKey(groupId, item.taskId), draft = readLoopDraft(drafts, key);
+  if (props.archived === true) return <></>;
   // Spec §4.2 (D4): only a task that has not started may change; a finished run counts (spec §5.2 step 2).
   const started = (item.status !== "draft" && item.status !== "ready") || item.lineageRunIds.length > 0;
   if (started) return <p>{t("loopPlan.started")}</p>;

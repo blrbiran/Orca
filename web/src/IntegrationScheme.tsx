@@ -150,7 +150,7 @@ export function RepositoryIntegration(props: { integration: RepositoryIntegratio
  * spec §3.1 H3, §6.5): after confirm the same editor sits in the group detail, outside the Git section, and its change is
  * itself the owner's approval.
  */
-export function GroupIntegrationConfirm(props: { view: GroupViewV1; suggestedTarget: string | null; onCommand: (action: ControlAction) => void }): JSX.Element {
+export function GroupIntegrationConfirm(props: { view: GroupViewV1; suggestedTarget: string | null; onCommand: (action: ControlAction) => void; archived?: boolean }): JSX.Element {
   const started = props.view.proposal.state === "confirmed";
   const { t } = useTranslation();
   const mayChange = mayHumanOnly(useContext(AccountContext));
@@ -161,7 +161,9 @@ export function GroupIntegrationConfirm(props: { view: GroupViewV1; suggestedTar
     <section aria-label={t("control.integration.groupRegion")}>
       <h4>{t("control.integration.groupRegion")}</h4>
       <p>{integrationSentence(scheme, groupId)}</p>
-      {mayChange
+      {props.archived === true
+        ? null
+        : mayChange
         ? (
           <SchemeForm key={`${groupId}:${view.integration?.schemeHash ?? "keep"}`} scheme={scheme} suggestedTarget={props.suggestedTarget}
             onSave={(integration) => props.onCommand({ verb: "set-group-integration", groupId, expectedRevision: view.summary.commandRevision, payload: { integration } })} />

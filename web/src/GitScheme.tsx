@@ -19,9 +19,9 @@ const short = (commit: string): string => commit.slice(0, 12);
 const PR_URL = /^https:\/\/[A-Za-z0-9.-]+\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/pull\/[1-9][0-9]*$/;
 
 /** Integration spec §6.5, §9.1: where a non-keep group's integration stands; an owner may Retry a block and approve a resolution. */
-function IntegrationState(props: { groupId: string; revision: number; integration: GroupIntegrationViewV1; onCommand?: (action: ControlAction) => void }): JSX.Element {
+function IntegrationState(props: { groupId: string; revision: number; integration: GroupIntegrationViewV1; onCommand?: (action: ControlAction) => void; archived?: boolean }): JSX.Element {
   const { t } = useTranslation();
-  const mayAct = mayHumanOnly(useContext(AccountContext)) && props.onCommand !== undefined;
+  const mayAct = mayHumanOnly(useContext(AccountContext)) && props.onCommand !== undefined && props.archived !== true;
   const { integration, groupId, revision } = props;
   const send = (verb: "retry-integration" | "resolve-integration-conflict"): void => props.onCommand?.({ verb, groupId, expectedRevision: revision, payload: {} });
   const commit = (value: string | null): string => (value === null ? t("control.integration.notYet") : short(value));
@@ -47,7 +47,7 @@ function IntegrationState(props: { groupId: string; revision: number; integratio
   );
 }
 
-export function GitScheme(props: { view: GroupViewV1; workspace?: RepositoryWorkspaceV1 | null; onCommand?: (action: ControlAction) => void }): JSX.Element {
+export function GitScheme(props: { view: GroupViewV1; workspace?: RepositoryWorkspaceV1 | null; onCommand?: (action: ControlAction) => void; archived?: boolean }): JSX.Element {
   const { t } = useTranslation();
   const { view } = props;
   const groupId = view.summary.groupId;
@@ -70,7 +70,7 @@ export function GitScheme(props: { view: GroupViewV1; workspace?: RepositoryWork
               <li>{t("control.git.push")}</li>
             </>
           )
-          : <IntegrationState groupId={groupId} revision={view.summary.commandRevision} integration={view.integration} onCommand={props.onCommand} />}
+          : <IntegrationState groupId={groupId} revision={view.summary.commandRevision} integration={view.integration} onCommand={props.onCommand} archived={props.archived} />}
       </ul>
       {runs.length === 0
         ? <p>{t("control.git.noRuns")}</p>

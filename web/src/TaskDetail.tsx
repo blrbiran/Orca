@@ -117,10 +117,13 @@ export interface TaskDetailProps {
   onCommand: (action: ControlAction) => void;
   /** Board spec 2026-10-03 D7: the repository's workspace mode for the loop plan card's git line. */
   workspaceMode?: "worktree" | "clone" | null;
+  /** Issue-fixes spec §6.3: an archived group refuses every command but the unarchive, so no editor is offered (read-only). */
+  archived?: boolean;
 }
 
 export function TaskDetail(props: TaskDetailProps): JSX.Element {
   const { view, item, drafts, onDraft, onCommand } = props;
+  const archived = props.archived === true;
   const { t } = useTranslation();
   const groupId = view.summary.groupId;
   const key = labelsDraftKey(groupId, item.taskId);
@@ -160,10 +163,12 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
         {labels.map((label) => (
           <li key={label}>
             <LabelChips labels={[label]} />{" "}
-            <button type="button" onClick={() => setDraft(labels.filter((other) => other !== label))}>{t("control.task.remove", { label })}</button>
+            {!archived && <button type="button" onClick={() => setDraft(labels.filter((other) => other !== label))}>{t("control.task.remove", { label })}</button>}
           </li>
         ))}
       </ul>
+      {!archived && (
+        <>
       <select aria-label={t("control.task.systemLabel")} value={system} onChange={(event) => setSystem(event.target.value)}>
         {WEB_SYSTEM_LABELS.map((word) => <option key={word} value={word}>{word}</option>)}
       </select>
@@ -173,11 +178,13 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
       <button type="button" disabled={draft === null} onClick={() => draft !== null && send(draft.labels, draft.base)}>{t("control.task.save")}</button>
       <button type="button" disabled={draft === null} onClick={() => onDraft(key, "")}>{t("control.task.discard")}</button>
       <button type="button" onClick={() => send(null, current)}>{t("control.task.restore")}</button>
+        </>
+      )}
       <p>
         {t("control.task.progress", { progress: progressText(item.progress) })}
         {item.progress?.lastTransitionAt ? t("control.task.lastTransition", { at: item.progress.lastTransitionAt }) : ""}
       </p>
-      <LoopPlanCard view={view} item={item} drafts={drafts} onDraft={onDraft} onCommand={onCommand} workspaceMode={props.workspaceMode} />
+      <LoopPlanCard view={view} item={item} drafts={drafts} onDraft={onDraft} onCommand={onCommand} workspaceMode={props.workspaceMode} archived={archived} />
       <h5>{t("control.task.runsOf", { taskId: item.taskId })}</h5>
       {/* Issue fixes spec §4.2(2): the run number counts the runs that reached the provider. */}
       {runNumber > 0 && <p>{t("control.task.runNumber", { n: runNumber })}</p>}
@@ -186,7 +193,7 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
           {runs.map((run) => (
             <li key={run.runId}>
               {run.runId} · {enumText("runPhase", run.phase)} · {enumText("runState", run.state)}<RunReason run={run} /> <EvidenceList runId={run.runId} />
-              {isTerminalFailure(run) && retryTaskOpen(view) && (
+              {isTerminalFailure(run) && retryTaskOpen(view) && !archived && (
                 <button type="button" onClick={() => onCommand({ verb: "retry-task", groupId, expectedRevision: view.summary.commandRevision, payload: { taskId: item.taskId } })}>
                   {t("control.group.retryTask", { taskId: item.taskId })}
                 </button>

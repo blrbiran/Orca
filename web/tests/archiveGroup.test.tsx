@@ -4,10 +4,17 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { controlCommandPath } from "../src/controlApi.js";
 import { ControlGroupView } from "../src/ControlGroupView.js";
-import type { GroupViewV1 } from "../src/controlTypes.js";
-import { config, run, view, workItem } from "./fixtures/board.js";
+import { TaskDetail } from "../src/TaskDetail.js";
+import { budgetFieldKey } from "../src/BudgetEditor.js";
+import type { AgentSelectionPreviewV1, AgentsViewV1, GroupViewV1 } from "../src/controlTypes.js";
+import { PLAN, amount, config, run, view, workItem } from "./fixtures/board.js";
 
 afterEach(cleanup);
+
+/** Every enabled button that is not navigation (a graph node, a work-item row toggle) nor a read (the evidence list). */
+const actionButtons = (): HTMLElement[] =>
+  screen.queryAllByRole("button").filter((button) => !(button as HTMLButtonElement).disabled && button.closest("figure") === null
+    && !button.hasAttribute("aria-expanded") && !/evidence/i.test(button.textContent ?? ""));
 
 const archived = (base: GroupViewV1): GroupViewV1 => ({ ...base, summary: { ...base.summary, state: "ready", archived: true } });
 
@@ -18,7 +25,7 @@ describe("archiving from the group view (spec §6.3)", () => {
     expect(screen.getByRole("status", { name: "Archived" }).textContent).toContain("This group is archived");
     fireEvent.click(screen.getByRole("button", { name: "Unarchive" }));
     expect(onCommand).toHaveBeenCalledWith({ verb: "unarchive-group", groupId: "g", expectedRevision: 6, payload: {} });
-    for (const name of ["Start", "Pause dispatch", "Handoff stop", "Archive group"]) expect(screen.queryByRole("button", { name })).toBeNull();
+    expect(actionButtons().map((button) => button.textContent)).toEqual(["Unarchive"]);
   });
 
   it("offers no retry on an archived group, because the server refuses every command but Unarchive (group-archived)", () => {
@@ -30,6 +37,37 @@ describe("archiving from the group view (spec §6.3)", () => {
     open.unmount();
     render(<ControlGroupView view={archived(base)} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
     expect(screen.queryAllByRole("button", { name: /^Retry/ })).toHaveLength(0);
+  });
+
+  it("offers no editor or action anywhere on an archived group, task detail included, only Unarchive", () => {
+    const failed = run({ state: "blocked", blockedReason: "terminal:failed", outcome: "failed", stopReason: "Error: x" });
+    const item = workItem({ taskId: "a", labels: ["x"], currentRunId: "run-a", lineageRunIds: ["run-a"] });
+    const onCommand = vi.fn();
+    const props = { config, uncertain: [], drafts: {}, onDraft: vi.fn(), onCommand, agents: null, integrationFor: () => null };
+    const open = render(<ControlGroupView view={view([item], [failed])} {...props} />);
+    fireEvent.click(screen.getAllByRole("button", { name: "a" })[0]!);
+    const before = actionButtons().length;
+    expect(before).toBeGreaterThan(10);
+    open.unmount();
+    render(<ControlGroupView view={archived(view([item], [failed]))} {...props} />);
+    fireEvent.click(screen.getAllByRole("button", { name: "a" })[0]!);
+    expect(screen.getByRole("region", { name: /^Task a/ })).toBeTruthy();
+    expect(actionButtons().map((button) => button.textContent)).toEqual(["Unarchive"]);
+    // Fields may be shown, but none can be typed into: a draft of an edit the server will refuse is never started.
+    expect(screen.queryAllByRole("textbox").filter((field) => !(field as HTMLInputElement).readOnly)).toHaveLength(0);
+  });
+
+  it("shows TaskDetail of an archived group without Retry task or the label and loop editors", () => {
+    const failed = run({ state: "blocked", blockedReason: "terminal:failed", outcome: "failed", stopReason: "Error: x" });
+    const item = workItem({ taskId: "a", labels: ["x"], currentRunId: "run-a", lineageRunIds: ["run-a"] });
+    const base = view([item], [failed]);
+    const open = render(<TaskDetail view={base} item={item} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
+    expect(screen.getAllByRole("button", { name: /^Retry task/ })).toHaveLength(1);
+    open.unmount();
+    const a = archived(base);
+    render(<TaskDetail view={a} item={item} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} archived />);
+    expect(screen.queryAllByRole("button", { name: /^Retry task/ })).toHaveLength(0);
+    expect(actionButtons()).toHaveLength(0);
   });
 
   it("offers Archive group on a group that is not archived, and sends it under the view's revision", () => {
@@ -59,5 +97,66 @@ describe("the group detail's order (spec §6.5)", () => {
     expect(follows(graph, items)).toBe(true);
     expect(follows(items, runs)).toBe(true);
     expect(follows(runs, budget)).toBe(true);
+  });
+});
+
+// A group that is still being set up carries every editor the page has: the budget (with a model's suggestions and an edit
+// in hand), the agent selection, the loop plan, labels, and an integration in conflict. Archived, none of them acts.
+const human = { provenance: "human", estimateId: null } as const;
+const provenance = { tokens: human, activeMs: human, attempts: human, sessions: human };
+const SUGGESTION = {
+  schema: "budget-estimate-v1" as const, planHash: "a".repeat(64), goalReviewReserve: amount(15), groupRationale: "small",
+  tasks: [{ taskId: "a", complexity: "M" as const, confidence: "high" as const, work: { tokens: 3_000, activeMs: 45_000, attempts: 2, sessions: 1 }, handoff: amount(30), rationale: "r", assumptions: [] }],
+};
+const AGENTS: AgentsViewV1 = { schema: "orca-agents-view-v1", installations: [{ id: "claude", kind: "claude", defaults: { model: "m", contextWindow: "agent-default" }, contextOptions: ["agent-default"], version: "1" }] };
+const claude = { agent: "claude", model: "m", contextWindow: "agent-default" } as const;
+const PREVIEW: AgentSelectionPreviewV1 = {
+  schema: "orca-agent-selection-preview-v1", groupId: "g", proposalVersion: 2, groupOverrides: { worker: { agent: "claude" } }, taskOverrides: { a: { agent: "claude" } },
+  planLayers: { group: {}, tasks: { a: null } },
+  slots: [{ key: "task:a", slot: "worker", taskId: "a", outcome: { kind: "resolved", frozen: { selection: claude, configHash: "e".repeat(64), timeoutMs: 1, killGraceMs: 1,
+    capabilities: config.profiles[0]!.declared, partial: { agent: "claude" }, provenance: { agent: "operator", model: "descriptor", contextWindow: "descriptor" } } } }],
+  selectionsHash: "f".repeat(64),
+};
+const setup = (): GroupViewV1 => {
+  const base = view([workItem({ taskId: "a", status: "ready", labels: ["x"], loopPlan: PLAN, objective: { goal: "g", successCondition: "s" } })]);
+  return {
+    ...base,
+    summary: { ...base.summary, state: "ready" },
+    proposal: { ...base.proposal, state: "editable", executionSnapshotHash: null, profiles: null },
+    allocations: [
+      { ownerKind: "task", ownerId: "a", bucket: "work", state: "draft-encumbered", amount: amount(2_000), fieldProvenance: provenance },
+      { ownerKind: "task", ownerId: "a", bucket: "handoff", state: "draft-encumbered", amount: amount(20), fieldProvenance: provenance },
+    ],
+    estimates: [{ estimateId: "est-1", estimateVersion: 1, state: "ready", profile: { profileId: "all", profileHash: "b".repeat(64) }, mode: "soft", requestHash: "c".repeat(64), outputHash: "d".repeat(64), output: SUGGESTION, reasonCode: null }],
+    integration: { scheme: { delivery: "push-branch", trigger: "task", target: "main", remote: "origin" }, schemeHash: "h", frozen: true, state: "conflict", reason: null, lastIntegrated: null, integratedCommit: null, pr: null },
+  };
+};
+const editDraft = { [budgetFieldKey("g", { scope: "task", taskId: "a", allocation: "handoff", dimension: "tokens" })]: "25" };
+const showSetup = (groupView: GroupViewV1, onCommand = vi.fn()) => render(
+  <ControlGroupView view={groupView} config={config} uncertain={[]} drafts={editDraft} onDraft={vi.fn()} onCommand={onCommand}
+    agents={AGENTS} preview={PREVIEW} onRereadPreview={vi.fn()} integrationFor={() => null} />,
+);
+
+describe("an archived group takes no edit anywhere on the page (spec §6.3)", () => {
+  it("offers every editor while the group is not archived, so the next test is not an empty page", () => {
+    showSetup(setup());
+    fireEvent.click(screen.getAllByRole("button", { name: "a" })[0]!);
+    const names = actionButtons().map((button) => button.getAttribute("aria-label") ?? button.textContent ?? "");
+    for (const expected of [
+      /^use \d+ for/, /^Apply row/, /^Apply all/, /^Set limit/, /^Save proposal/, /^Re-estimate/, /^Confirm budget/, /^Save integration/, /^Retry integration/, /^Resolve with an agent/,
+      /^Re-read agent/, /^Set group worker agent/, /^Set agent for task a/, /^Change plan/, /^Remove x/, /^Add system label/, /^Restore plan labels/,
+    ]) {
+      expect(names.some((name) => expected.test(name)), String(expected)).toBe(true);
+    }
+  });
+
+  it("leaves only Unarchive when archived, with the task detail open", () => {
+    const onCommand = vi.fn();
+    showSetup(archived(setup()), onCommand);
+    fireEvent.click(screen.getAllByRole("button", { name: "a" })[0]!);
+    expect(screen.getByRole("region", { name: /^Task a/ })).toBeTruthy();
+    expect(actionButtons().map((button) => button.textContent)).toEqual(["Unarchive"]);
+    expect(screen.queryAllByRole("textbox").filter((field) => !(field as HTMLInputElement).readOnly)).toHaveLength(0);
+    expect(screen.queryAllByRole("combobox")).toHaveLength(0);
   });
 });
