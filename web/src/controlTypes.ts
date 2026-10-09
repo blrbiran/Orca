@@ -184,7 +184,7 @@ export type AllocationViewV1 = {
   ownerKind: "estimate" | "task" | "goal-review" | "reserve";
   ownerId: string;
   bucket: "work" | "handoff" | "review" | "reserve";
-  state: "draft-encumbered" | "confirmed" | "active" | "held" | "continuing" | "terminal" | "unknown";
+  state: "draft-encumbered" | "confirmed" | "active" | "held" | "continuing" | "retrying" | "terminal" | "unknown";
   amount: Amount;
   fieldProvenance: AmountProvenanceV1;
 };

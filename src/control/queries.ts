@@ -23,7 +23,7 @@ import { taskContractSchema } from "../scheduler/planFile.js";
 import { effectivePlan, effectivePlanTask, isAmendedCopyOf, workBodyOf } from "./taskAmendments.js";
 import { z } from "zod";
 export type GroupRecord = GroupView & GroupInput & {budgetVersion:number;reviewRemaining:Amount;proposal?:{work:WorkInput;commandId:string}};
-export type WorkRecord = WorkInput & {targetVersion:number;status:"ready"|"running"|"done"|"blocked"};
+export type WorkRecord = WorkInput & {retryGrantSourceRunId?:string;targetVersion:number;status:"ready"|"running"|"done"|"blocked"};
 export function readGroup(store:ControlStore,id:string):GroupRecord {
   const row = store.db.prepare("SELECT body FROM groups WHERE id=?").get(id);
   if (!row) throw new ControlError("group-not-found");
@@ -47,6 +47,9 @@ export function readWork(store:ControlStore,groupId:string,id:string):WorkRecord
   if(!row) throw new ControlError("work-not-found");return JSON.parse(String(row.body));
 }
 export function saveWork(store:ControlStore,groupId:string,work:WorkRecord):void {
+  // A live retry source belongs only to its retrying commitment. All parked/terminal writers clear it atomically.
+  if (["held", "continuing", "done", "completed"].includes(work.status)
+    || (work.retryGrantSourceRunId !== undefined && work.status === "blocked" && readBudgetProposal(store, groupId).allocations.some(a => a.ownerId === work.workItemId && a.state === "terminal"))) delete (work as WorkRecord & { retryGrantSourceRunId?: string }).retryGrantSourceRunId;
   const body=JSON.stringify(work);
   const changed=store.db.prepare("UPDATE work_items SET body=? WHERE group_id=? AND id=? AND body<>?").run(body,groupId,work.workItemId,body).changes;
   if(changed===0) {
@@ -161,7 +164,7 @@ export function readArchivedContract(store: ControlStore, groupId: string, taskI
 const proposalAllocationSchema = z.object({
   ownerKind: z.enum(["task", "goal-review", "reserve"]), ownerId: z.string().min(1),
   bucket: z.enum(["work", "handoff", "review", "reserve"]),
-  state: z.enum(["draft-encumbered", "confirmed", "active", "held", "continuing", "terminal", "unknown"]),
+  state: z.enum(["draft-encumbered", "confirmed", "active", "held", "continuing", "retrying", "terminal", "unknown"]),
   amount: amountSchema, fieldProvenance: amountProvenanceSchema,
 }).strict();
 const budgetProposalRecordSchema = z.object({

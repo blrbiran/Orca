@@ -1,3 +1,4 @@
+import { validateRetryGrantSource } from "./retryGrant.js";
 import { frozenWorkAgent, type FrozenWorkAgent } from "./agentFreeze.js";
 import type { FrozenSlot } from "./agentSelection.js";
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
@@ -311,7 +312,7 @@ export function replaceTaskInSnapshot(
  * allocation, is still compared. Shared by the driver's contract read and the panel's read model.
  */
 export function frozenAllocationShape(allocations: ReadonlyArray<{ ownerKind: string; ownerId: string; bucket: string; state: string }>) {
-  const settled = new Set(allocations.filter(a => a.ownerKind === "task" && ["held", "continuing", "terminal"].includes(a.state)).map(a => `${a.ownerId}\0${a.bucket}`));
+  const settled = new Set(allocations.filter(a => a.ownerKind === "task" && ["held", "continuing", "retrying", "terminal"].includes(a.state)).map(a => `${a.ownerId}\0${a.bucket}`));
   return <A extends { ownerKind: string; ownerId: string; bucket: string }>(allocation: A): A | Omit<A, "amount"> => {
     if (allocation.ownerKind !== "task" || !settled.has(`${allocation.ownerId}\0${allocation.bucket}`)) return allocation;
     const { amount: _amount, ...rest } = allocation as A & { amount: unknown };
@@ -322,6 +323,7 @@ export function frozenAllocationShape(allocations: ReadonlyArray<{ ownerKind: st
 /** Scheduler consumption verifies the archived wrapper, then returns its exact contract bytes. */
 export function readConfirmedTaskExecution(store: ControlStore, groupId: string, taskId: string) {
   const proposal = readBudgetProposal(store, groupId), plan = readArchivedPlan(store, groupId);
+  for (const row of store.db.prepare("SELECT body FROM work_items WHERE group_id=?").all(groupId)) validateRetryGrantSource(store, groupId, JSON.parse(String(row.body)));
   if (proposal.state !== "confirmed" || !proposal.executionSnapshotHash) throw new ControlError("group-state-invalid");
   const settledShape = frozenAllocationShape(proposal.allocations);
   try {

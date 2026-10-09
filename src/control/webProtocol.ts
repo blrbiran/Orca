@@ -1097,7 +1097,7 @@ export const allocationViewSchema = z
     ownerKind: z.enum(["estimate", "task", "goal-review", "reserve"]),
     ownerId: nonemptyString,
     bucket: z.enum(["work", "handoff", "review", "reserve"]),
-    state: z.enum(["draft-encumbered", "confirmed", "active", "held", "continuing", "terminal", "unknown"]),
+    state: z.enum(["draft-encumbered", "confirmed", "active", "held", "continuing", "retrying", "terminal", "unknown"]),
     amount: amountSchema,
     fieldProvenance: amountProvenanceSchema,
   })

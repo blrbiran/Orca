@@ -86,7 +86,7 @@ export function syncWebBudget(store:ControlStore,group:GroupRecord,currentRun:Ru
   store.db.prepare("UPDATE budget_proposals SET body=? WHERE group_id=?").run(canonicalBytes(proposal).toString("utf8"),group.groupId);
 }
 /** Any run of the group with unknown or not-yet-applied usage makes the group's usage unknown. */
-function groupUsageUnknown(store:ControlStore,groupId:string,currentRun:RunRecord|null):boolean {
+export function groupUsageUnknown(store:ControlStore,groupId:string,currentRun:RunRecord|null = null):boolean {
   let usageUnknown=false;
   for(const row of store.db.prepare("SELECT id,body FROM runs WHERE group_id=?").all(groupId)){
     const run=currentRun!==null&&String(row.id)===currentRun.runId?currentRun:JSON.parse(String(row.body)) as RunRecord;

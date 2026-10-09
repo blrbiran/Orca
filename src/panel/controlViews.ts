@@ -1,3 +1,4 @@
+import { validateRetryGrantSource } from "../control/retryGrant.js";
 import { derivedPhaseTimeoutMs, frozenAllocationShape } from "../control/executionSnapshot.js";
 import { frozenWorkAgent, resolveGroupSelections } from "../control/agentFreeze.js";
 import type { ExecutionPort } from "../control/executionPort.js";
@@ -95,6 +96,7 @@ const workBodySchema = z.object({
   status: workStatusSchema,
   originalContractHash: hashSchema,
   derivedContractHash: hashSchema.nullable(),
+  retryGrantSourceRunId: idSchema.optional(),
   currentRunId: idSchema.nullable().optional(),
   pendingRunId: idSchema.nullable().optional(),
   lineageRunIds: z.array(idSchema).optional(),
@@ -619,6 +621,7 @@ function workViews(
     const row = store.db.prepare("SELECT body FROM work_items WHERE group_id=? AND id=?").get(groupId, task.taskId);
     if (!row) return blocked(`work-item-missing:${task.taskId}`);
     const body = parseStored(workBodySchema, row.body, `work-item-invalid:${task.taskId}`);
+    validateRetryGrantSource(store, groupId, body);
     const contract = body.contract as { contentAddressedHash?: unknown };
     // Agent selection spec §6.4 step 4 (§12 I3): a draft has no configHash; a confirmed work item carries exactly the snapshot's selection.
     const frozenEntry = snapshot?.agents.tasks.find(entry => entry.taskId === task.taskId) ?? null;

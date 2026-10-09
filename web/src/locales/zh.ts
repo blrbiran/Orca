@@ -765,7 +765,7 @@ export const zh: Translation<typeof en> = {
     proposalState: { editable: "可编辑", confirmed: "已确认" },
     ownerKind: { estimate: "估算", task: "任务", "goal-review": "目标评审", reserve: "余量" },
     bucket: { work: "工作", handoff: "交接", review: "评审", reserve: "余量" },
-    allocationState: { "draft-encumbered": "草稿占用", confirmed: "已确认", active: "进行中", held: "已挂起", continuing: "续跑中", terminal: "已终结", unknown: "未知" },
+    allocationState: { "draft-encumbered": "草稿占用", confirmed: "已确认", active: "进行中", held: "已挂起", continuing: "续跑中", retrying: "重试待执行", terminal: "已终结", unknown: "未知" },
     dimension: { tokens: "token", activeMs: "活跃毫秒", attempts: "尝试次数", sessions: "会话数" },
     complexity: { S: "S", M: "M", L: "L", XL: "XL" },
     confidence: { low: "低", medium: "中", high: "高" },

@@ -97,7 +97,7 @@ const registeredContinuationSchema = z
   .strict();
 
 /** One continuation registration inside a wake body. */
-function registrationOf(value: unknown): RegisteredContinuation | null {
+export function registrationOf(value: unknown): RegisteredContinuation | null {
   const parsed = registeredContinuationSchema.safeParse(value);
   return parsed.success ? parsed.data : null;
 }

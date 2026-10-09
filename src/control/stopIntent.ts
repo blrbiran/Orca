@@ -789,6 +789,7 @@ function terminaliseRun(store: ControlStore, groupId: string, run: RunBody, outc
   if (outcome === "settled-unrecoverable") {
     setAllocationStates(store, groupId, run.workItemId, "terminal");
     work.status = "blocked";
+    delete (work as { retryGrantSourceRunId?: string }).retryGrantSourceRunId;
     saveWork(store, groupId, work as never);
     releaseCommitment(store, groupId, released);
     return;
@@ -821,6 +822,11 @@ export function setAllocationStates(
   state: BudgetProposalRecord["allocations"][number]["state"],
   amounts?: { work: Amount; handoff: Amount },
 ): void {
+  if (["held", "continuing", "terminal"].includes(state)) {
+    const row = store.db.prepare("SELECT body FROM work_items WHERE group_id=? AND id=?").get(groupId, ownerId);
+    const work = row && JSON.parse(String(row.body)) as (ReturnType<typeof readWork> & { retryGrantSourceRunId?: string }) | undefined;
+    if (work?.retryGrantSourceRunId !== undefined) { delete work.retryGrantSourceRunId; saveWork(store, groupId, work); }
+  }
   const proposal = readBudgetProposal(store, groupId);
   let changed = false;
   for (const allocation of proposal.allocations) {

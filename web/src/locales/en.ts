@@ -99,7 +99,7 @@ const proposalState = { editable: "editable", confirmed: "confirmed" } as const 
 const ownerKind = { estimate: "estimate", task: "task", "goal-review": "goal-review", reserve: "reserve" } as const satisfies Record<AllocationViewV1["ownerKind"], string>;
 const bucket = { work: "work", handoff: "handoff", review: "review", reserve: "reserve" } as const satisfies Record<AllocationViewV1["bucket"], string>;
 const allocationState = {
-  "draft-encumbered": "draft-encumbered", confirmed: "confirmed", active: "active", held: "held", continuing: "continuing", terminal: "terminal", unknown: "unknown",
+  "draft-encumbered": "draft-encumbered", confirmed: "confirmed", active: "active", held: "held", continuing: "continuing", retrying: "retrying", terminal: "terminal", unknown: "unknown",
 } as const satisfies Record<AllocationViewV1["state"], string>;
 const dimension = { tokens: "tokens", activeMs: "activeMs", attempts: "attempts", sessions: "sessions" } as const satisfies Record<AmountDimensionV1, string>;
 type EstimatedTask = BudgetEstimateV1["tasks"][number];

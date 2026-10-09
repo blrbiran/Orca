@@ -1,3 +1,4 @@
+import { validateRetryGrantSource } from "./retryGrant.js";
 import { createHash, randomUUID } from "node:crypto";
 import { applyWebCommand, preflightWebCommand, type WebCommandContext } from "./commandLedger.js";
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
@@ -329,6 +330,7 @@ function createStartingRun(
   continuation?: RegisteredContinuation,
 ): DispatchRun {
   const work = readWork(store, groupId, target.workItemId);
+  validateRetryGrantSource(store, groupId, work);
   const frozen = frozenWorkAgent(work);
   const claimOrdinal = continuation ? continuation.claimOrdinal : ((work as unknown as { claimOrdinal?: number }).claimOrdinal ?? 0) + 1;
   const claimIdentity = continuation
@@ -381,6 +383,7 @@ export function settleProviderAttempt(deps: WebDispatchDeps, input: { runId: str
   const { store } = deps;
   return store.transaction(() => {
     const run = readDispatchRun(store, input.runId);
+    validateRetryGrantSource(store, run.groupId, readWork(store, run.groupId, run.workItemId));
     const ordinal = run.providerAttemptOrdinal + 1;
     run.providerAttemptOrdinal = ordinal;
     run.state = "failed-before-provider";

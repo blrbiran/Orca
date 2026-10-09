@@ -303,7 +303,7 @@ export async function stepA2(deps: ExecutionDriverDeps, runId: string): Promise<
   // contract points at this run's own workspace. The frozen derivedContractHash is unchanged.
   const contract = {
     ...confirmed.contract, context: { ...confirmed.contract.context, repoPath: workspaceOf(drive) },
-    ...(continued !== null ? { executionPolicy: withinGrant(confirmed.contract.executionPolicy, (run.grant as { work: { tokens: number; activeMs: number; attempts: number } }).work) } : {}),
+    executionPolicy: withinGrant(confirmed.contract.executionPolicy, (run.grant as { work: { tokens: number; activeMs: number; attempts: number } }).work),
   };
   const envelope = toStartEnvelope(readWorkClaimEnvelope(store, run.groupId, runId), run, {
     sourceDir: drive.sourceDir, targetRepo, base, ...(skills !== null ? skillsKind === "codex" ? { codexSkillsDir: join(skills.dir,"skills") } : { skillPluginDir: skills.dir } : {}),
