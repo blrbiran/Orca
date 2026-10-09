@@ -76,3 +76,7 @@ Final wrapper skips: driverSkillsReal 1 (real CLI env absent when it started), d
 No product changes were needed. Coverage explicitly separates initial active continuing binding from subsequent already-retrying source refresh, tests both buckets/all four commitment dimensions, and measures actual port.accept rather than only a reader. Only the four controller-authorized migration expectations moved; no timeout/old business assertion relaxed. Raw wrapper output and actual rc files are read whole or by contiguous complete chunks; `/private/tmp/od9/task4-log-read-proof.json` records byte/SHA/chunk coverage. `check-tmp-leak` must show inner vitest 0 and 0 entries, not merely outer 0. Final report preserves all failures/skips/warnings and excludes a new flake declaration. Cost/token totals unavailable; no estimates.
 
 Whole-branch fresh review, performance implementation, final ledger/three compact handoffs and human summary are controller-owned. No spawn-agent, push, merge, branch/worktree deletion, dependency stage or other-repository product write.
+
+## Persisted proof supplement
+
+Owner verify_usage_retry_round, 2026-10-09; observed product cc50570, report commit ea7ce0d. `task-4-verification-proof.json` preserves compact gate counts, exact actual protocol/real-CLI outcomes, skip names, wrapper concerns, clone/migration/source restoration, pin and complete raw-read hashes. Root owns subsequent raw-log packaging; this supplement introduces no new test run.

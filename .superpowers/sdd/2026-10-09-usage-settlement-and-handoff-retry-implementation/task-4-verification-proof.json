@@ -1,0 +1,369 @@
+{
+  "owner": "/root/verify_usage_retry_round",
+  "when": "2026-10-09 Asia/Shanghai",
+  "product_observed_commit": "cc50570477ee20052cc8c39975112981aaa277dd",
+  "report_commit": "ea7ce0d655fdf6e42cb4e76db62c0cd44cf535ea",
+  "base": "ace22093d498eb155dda0b783ad43b3cdcf114f5",
+  "root": {
+    "command": [
+      "env",
+      "NO_COLOR=1",
+      "ORCA_SYNCSKILL_REAL_BIN=/Users/biran/code/skills/syncskill/dist/index.js",
+      "ORCA_CCMEM_REAL_BIN=/Users/biran/code/skills/ccmem/bin/ccmem",
+      "npm",
+      "test",
+      "--",
+      "--maxWorkers=2",
+      "--reporter=dot",
+      "--reporter=json",
+      "--outputFile.json=/private/tmp/od9/task4-root-results.json"
+    ],
+    "RC": 0,
+    "files": 368,
+    "total": 3462,
+    "passed": 3458,
+    "failed": 0,
+    "pending": 4,
+    "todo": 0,
+    "success": true,
+    "formal_flag_set": false,
+    "equivalence_ruling": "Only formal consumer fails fast if binary/table missing; both present; fixed clone has no consumer; protocol3 actual passed. Preserve wrapperRC1 separately.",
+    "control_files": 153,
+    "control_tests": 1709,
+    "control_passed": 1706,
+    "raw_json_sha256": "7dfe9b40dfd4df6ace077720bae432ae2a884c3f355c2ef4af882f63a6ad13f2",
+    "actual_targets": [
+      {
+        "file": "/Users/biran/.codex/worktrees/usage-settlement-handoff-retry/Orca/tests/control/ccloopProtocol.integration.test.ts",
+        "status": "passed",
+        "tests": 3,
+        "cases": [
+          {
+            "name": "real ccloop protocol accepts, accounts, commits a handoff, resumes a dirty snapshot, and collects a fresh execution",
+            "status": "passed",
+            "duration_ms": 24779.251375
+          },
+          {
+            "name": "real ccloop protocol recovers the Orca SIGKILL boundary without duplicating checkpoint or D3 Markdown: after-archive",
+            "status": "passed",
+            "duration_ms": 3525.550458999998
+          },
+          {
+            "name": "real ccloop protocol recovers the Orca SIGKILL boundary without duplicating checkpoint or D3 Markdown: before-projection",
+            "status": "passed",
+            "duration_ms": 2933.5835419999967
+          }
+        ]
+      },
+      {
+        "file": "/Users/biran/.codex/worktrees/usage-settlement-handoff-retry/Orca/tests/control/driverSkillsReal.test.ts",
+        "status": "passed",
+        "tests": 1,
+        "cases": [
+          {
+            "name": "A2 with a real syncskill (spec §10.8 C5) injects the frozen skill, private and read-only, and records exactly the lock file's entries",
+            "status": "passed",
+            "duration_ms": 790.426792
+          }
+        ]
+      },
+      {
+        "file": "/Users/biran/.codex/worktrees/usage-settlement-handoff-retry/Orca/tests/control/requirementOverview.test.ts",
+        "status": "passed",
+        "tests": 22,
+        "cases": [
+          {
+            "name": "the repository overview (N1 spec §6) reaches structure status failed and still gives an overview",
+            "status": "passed",
+            "duration_ms": 730.2330829999999
+          }
+        ]
+      },
+      {
+        "file": "/Users/biran/.codex/worktrees/usage-settlement-handoff-retry/Orca/tests/memory/ccmemReal.test.ts",
+        "status": "passed",
+        "tests": 1,
+        "cases": [
+          {
+            "name": "a real ccmem (spec §6.3 R1) reads back one global and one project memory through the adapter",
+            "status": "passed",
+            "duration_ms": 519.663292
+          }
+        ]
+      },
+      {
+        "file": "/Users/biran/.codex/worktrees/usage-settlement-handoff-retry/Orca/tests/skills/syncskillReal.test.ts",
+        "status": "passed",
+        "tests": 1,
+        "cases": [
+          {
+            "name": "a real syncskill (spec §10.8 C12, C18) profile ls leaves the sync dir byte-identical; inject's lock entries equal the lock file; ~/.syncskill is untouched",
+            "status": "passed",
+            "duration_ms": 1083.673167
+          }
+        ]
+      }
+    ],
+    "skips": [
+      {
+        "file": "/Users/biran/.codex/worktrees/usage-settlement-handoff-retry/Orca/tests/control/ccloopDefaultE2E.test.ts",
+        "name": "Orca with ccloop installed as its dependency and ORCA_CCLOOP_BIN unset resolves the package in this checkout, whose runtime finds the scripts the package ships",
+        "status": "skipped"
+      },
+      {
+        "file": "/Users/biran/.codex/worktrees/usage-settlement-handoff-retry/Orca/tests/control/ccloopDefaultE2E.test.ts",
+        "name": "Orca with ccloop installed as its dependency and ORCA_CCLOOP_BIN unset runs orca agents init and show through the installed ccloop",
+        "status": "skipped"
+      },
+      {
+        "file": "/Users/biran/.codex/worktrees/usage-settlement-handoff-retry/Orca/tests/control/ccloopDefaultE2E.test.ts",
+        "name": "Orca with ccloop installed as its dependency and ORCA_CCLOOP_BIN unset boots the panel with an execution port, while an explicit empty ORCA_CCLOOP_BIN still turns it off",
+        "status": "skipped"
+      },
+      {
+        "file": "/Users/biran/.codex/worktrees/usage-settlement-handoff-retry/Orca/tests/service/realSmoke.test.ts",
+        "name": "real launchd smoke (opt-in) install → answering → restart → stop → start → uninstall, under a relocated label",
+        "status": "skipped"
+      }
+    ]
+  },
+  "original_wrapper": {
+    "RC": 1,
+    "files": 153,
+    "tests": 1709,
+    "passed": 1701,
+    "failed": 4,
+    "skipped": 4,
+    "reason": "four exact approved schema9→10 expectation migrations"
+  },
+  "final_wrapper": {
+    "RC": 1,
+    "files": 153,
+    "tests": 1709,
+    "passed": 1704,
+    "failed": 1,
+    "skipped": 4,
+    "test": "requirementOverview / reaches structure status failed and still gives an overview",
+    "failure": "Test timed out in 5000ms",
+    "unregistered": true,
+    "no_test_or_timeout_edit": true
+  },
+  "directed_diagnostic": {
+    "RC": 0,
+    "passed": 22,
+    "load": [
+      8.9,
+      8.78,
+      7.33
+    ],
+    "low_load_proof": false
+  },
+  "mutation": {
+    "main_commit": "e7df5df89826e152590831fa8f86a894bf5c3d92",
+    "clone_commit": "e7df5df89826e152590831fa8f86a894bf5c3d92",
+    "mutation": "delete only || allocations.some(a => a.state === \"continuing\") from retrying admission",
+    "runs": [
+      {
+        "command": [
+          "node_modules/.bin/vitest",
+          "run",
+          "tests/control/handoffFailedRetry.test.ts",
+          "-t",
+          "directly retries an active failed continuation from head",
+          "--maxWorkers=2"
+        ],
+        "cwd": "/private/tmp/od9/task4-mutation",
+        "name": "task4-mut-direct-continuing-red",
+        "RC": 1
+      },
+      {
+        "command": [
+          "node_modules/.bin/vitest",
+          "run",
+          "tests/control/handoffFailedRetry.test.ts",
+          "--maxWorkers=2"
+        ],
+        "cwd": "/private/tmp/od9/task4-mutation",
+        "name": "task4-mut-restored-green",
+        "RC": 0
+      }
+    ],
+    "main_diff_bytes": 0,
+    "main_cached_bytes": 0,
+    "clone_diff_bytes": 0,
+    "clone_cached_bytes": 0,
+    "main_clone_source_equal": true,
+    "main_clone_test_equal": true
+  },
+  "migration_other_assertion_bytes": [
+    {
+      "path": "tests/control/commandClient.test.ts",
+      "all_other_bytes_equal": true
+    },
+    {
+      "path": "tests/control/requirementRecords.test.ts",
+      "all_other_bytes_equal": true
+    },
+    {
+      "path": "tests/control/shutdownHealing.test.ts",
+      "all_other_bytes_equal": true
+    }
+  ],
+  "final_byte_audit": {
+    "owner": "verify_usage_retry_round",
+    "date": "2026-10-09",
+    "command": "rtk proxy /usr/bin/git diff [--cached] <named paths>; SHA256 tracked preflight vs final",
+    "commit": "cc50570477ee20052cc8c39975112981aaa277dd",
+    "source_diff_base_bytes": 0,
+    "owned_test_unstaged_bytes": 0,
+    "index_bytes": 0,
+    "old_issue_paths": 123,
+    "old_issue_diff_base_bytes": 0,
+    "old_issue_progress_sha256": "8dd6e35cc489153c7d33726798c3fd65ead5f362d0c51fc7f3453bf29dbbd045",
+    "tracked_changed_since_coverage_preflight": [
+      ".superpowers/sdd/2026-10-09-usage-settlement-and-handoff-retry-implementation/progress.md",
+      "tests/control/commandClient.test.ts",
+      "tests/control/requirementRecords.test.ts",
+      "tests/control/shutdownHealing.test.ts"
+    ],
+    "clone_diff_bytes": 0,
+    "clone_cached_bytes": 0,
+    "clone_main_retry_source_equal": true,
+    "clone_main_retry_test_equal": true,
+    "web_diff_aa03_bytes": 0,
+    "installed_ccloop_hidden_lock": {
+      "version": "0.1.0",
+      "resolved": "git+ssh://git@github.com/blrbiran/ccloop.git#ab824d16004de2d3c1613a76ec0431520aa16cc9",
+      "integrity": "sha512-nJChrS1qBFaQva0j82FcB/OsvrpIXpSpwoNZH82DbzFGz85R9M3NeiYqgMPJRP3pNUKZcMwB0cfu2nHp83STvw==",
+      "os": [
+        "darwin",
+        "linux"
+      ],
+      "dependencies": {
+        "zod": "^3.23.8"
+      },
+      "bin": {
+        "ccloop": "dist/cli.js"
+      }
+    },
+    "pinned_clone_commit": "ab824d16004de2d3c1613a76ec0431520aa16cc9"
+  },
+  "complete_raw_reads": {
+    "task4-control": {
+      "read_chunks": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9
+      ],
+      "chunk_hashes": {
+        "0": "b835592069eeb59a339ee985e14717e373e652b145be49c98f2b8cde586f34f3",
+        "1": "72c774a4b5c605d8cb6c198bdf3346af7c4500b80766fcbf2605e37b4caf7e3e",
+        "2": "8f02673f3d503247e9d4915186bc070c13e6afe23bbbfb85667def3ae831d1fd",
+        "3": "335d372da93165e29c92fecbcd39f6f0f4085d4df2ce6335ba71375de65dc47a",
+        "4": "d393672d39ee76878c3531523df513fc69a750be82aba8209fa8d8076e27aa76",
+        "5": "6de236383b679bfeeafb9ead1a476b0ff352f404b063587c717552e5e6079449",
+        "6": "cc443ef406aedab83889271b6096c6bb77fca62f86ab4b8e1f023be0182963e6",
+        "7": "f5ac3ab62cb9a5687d1b6bb35423e6d3f4ace77d363fd1e5478c302e285397c1",
+        "8": "1f50e0d9e363da7e060b3254808a8c0ac169725f30be211b51f47f4ccd416db7",
+        "9": "71a4cf57fc0225241daf006fcfe8f28db00bdfbe07116cfaf22957160dceec07"
+      },
+      "bytes": 178736,
+      "sha256": "2e89679b248077335909f4240565d02a1cd4450b773868720e534ceac0b080a3",
+      "chunk_count": 10,
+      "all_read_chunks_still_match": true
+    },
+    "task4-control-final": {
+      "read_chunks": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9
+      ],
+      "chunk_hashes": {
+        "0": "af7d978472363cb4d8c2c7513aa0beb12db178ae2e6381c1bf040409d9557644",
+        "1": "7128d0256c5d4e0ca1af5c6b89f21d9fec44adda19b95fc4df9630aa45a239b3",
+        "2": "fa481ac3381295e2b407f06891052db5c8e75e55f63beaae42079aa83e70d71c",
+        "3": "411b1dd7b8ed102a02223fea9e4cd6664a1be74da83cbcd548fe97287374e2e2",
+        "4": "47560caa2672e1477b28e554e721cbe24049ba373d563ed28da3fda03557e49c",
+        "5": "501e650c39e8d66b33343c136cd2ec30a774fc133cd5f19b684faec1a8182342",
+        "6": "cbf337263924fa317ccd2c5ba3e599e11f116c8905cb5d7f070783a1a74a3741",
+        "7": "dca3853f1af1be09dbbd445e09e63f4931fddd75d080de851c8a88ed0c33af62",
+        "8": "db460e3df8b5d12792cb2b17fe5a9442f6a08251627eaddf0ec197fa5199e05b",
+        "9": "81365fc7726303e84bc0b3f1f8a5a65d4f300c0413d113d7ee2b254f202431a7"
+      },
+      "bytes": 171823,
+      "sha256": "56298f2304fe662eb8cb3f351d1041894a937cb7b6edbb4a9fc3533b189d6ec8",
+      "chunk_count": 10,
+      "all_read_chunks_still_match": true
+    },
+    "task4-scheduler": {
+      "read_chunks": [
+        0,
+        1
+      ],
+      "chunk_hashes": {
+        "0": "858e8c972de9a5f293083371e88febd5a66d23b8de4a74a9890f0d3c05545bcb",
+        "1": "4c88bb0434593d3485b72fafe888d8ea78e72a139032f1c22af3b2986905092d"
+      },
+      "bytes": 32184,
+      "sha256": "cbfacef961b058334f09050e2ac9befee5bf7bd94158a0dd00d667504e5fe950",
+      "chunk_count": 2,
+      "all_read_chunks_still_match": true
+    },
+    "task4-root-test": {
+      "read_chunks": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "chunk_hashes": {
+        "0": "bde764c590d806889efe8f73e89a4b4a105af26e54730c4e80137578240e6a06",
+        "1": "c18a183dce0afbec9550d070e9254da440e3e751dcaa7f52c33fc9d5c54bbfd2",
+        "2": "5ca9d172a3de2ff25fd335b09039667263bd0980659a0b301738a388eaf690a0",
+        "3": "87286dd4cbfd3e5b9f1a9697138668004678dfa444af204c7865cefba34f5a01",
+        "4": "36fac2f3f45279ef952a99fabaea44119f1d127df623ac1cc7297c810ed96ff3",
+        "5": "5c1ee1b9ed5aa613f289ce65aba4efa6feb34e456b5b9891b3dae2d900a00f30",
+        "6": "8009297e8b96eb6fcdfed8c8ab292b8f37ad6499cd49a2a312ef4f320ae9196c"
+      },
+      "bytes": 108390,
+      "sha256": "58b8c1a043ca9f1e57d3a20135674b8fe41757fe136474f7370d2ac529f61dfb",
+      "chunk_count": 7,
+      "all_read_chunks_still_match": true
+    }
+  },
+  "leak": {
+    "command": [
+      "env",
+      "NO_COLOR=1",
+      "node",
+      "scripts/check-tmp-leak.mjs",
+      "tests/control/settleUnknownUsage.test.ts",
+      "tests/control/handoffFailedRetry.test.ts",
+      "tests/panel/settleUnknownUsage.test.ts",
+      "--maxWorkers=2"
+    ],
+    "outer_RC": 0,
+    "inner_vitest_RC": 0,
+    "tests": 58,
+    "entries": 0
+  },
+  "raw_logs_root": "/private/tmp/od9/logs",
+  "remaining_boundary": "whole branch review, performance implementation and all handoffs controller-owned; no paid-model or real-daemon acceptance"
+}
