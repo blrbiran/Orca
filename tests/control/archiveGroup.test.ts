@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readGroupActivity } from "../../src/control/activity.js";
 import { isGroupArchived } from "../../src/control/archivedMark.js";
-import { lookupCommandResult, updateRevision } from "../../src/control/commandLedger.js";
+import { lookupCommandResult, preflightWebCommand, updateRevision } from "../../src/control/commandLedger.js";
 import { ControlError } from "../../src/control/errors.js";
 import { newGroupIntegration } from "../../src/control/integrationScheme.js";
 import { insertClarifyingGroup, newRound, writeRound } from "../../src/control/requirementRecords.js";
@@ -9,7 +9,7 @@ import { groupStopState, settleHandoffRequest } from "../../src/control/stopInte
 import { deliverSchedulerWakes } from "../../src/control/dispatch.js";
 import { replenishStartWakes } from "../../src/control/executionDriver.js";
 import { createWebWakeHandlers, deliverScheduledStart, nextClaimableTask } from "../../src/control/webDispatch.js";
-import { commandVerbSchema } from "../../src/control/webProtocol.js";
+import { commandVerbSchema, rawAuthorityCommandSchema } from "../../src/control/webProtocol.js";
 import { WebControlService } from "../../src/control/webService.js";
 import { readGroupSummary } from "../../src/panel/controlViews.js";
 import { clarifyingInput } from "./fixtures/requirement.js";
@@ -195,6 +195,19 @@ describe("an archived group refuses every group-targeted command but unarchive-g
     expect(Object.keys(CALLS).sort()).toEqual(expected);
   });
 
+  it("keeps only verbs in NOT_GROUP whose target is neither a group nor a task, so a group verb cannot hide there", () => {
+    // The walk below is only as good as NOT_GROUP. A verb that accepts a group or task target would be skipped by the
+    // walk yet gated by applyWebCommand, so the exemption would be a silent hole: its raw schema must reject both kinds.
+    for (const verb of NOT_GROUP) {
+      expect(commandVerbSchema.options, verb).toContain(verb);
+      for (const target of [{ kind: "group", groupId: "g" }, { kind: "task", groupId: "g", taskId: "a" }]) {
+        const parsed = rawAuthorityCommandSchema.safeParse({ schema: "orca-raw-command-v1", commandId: "c", expectedRevision: 0, actorId: "human", verb, target, payload: {} });
+        expect(parsed.success, `${verb} must not take a ${target.kind} target`).toBe(false);
+        expect(parsed.success ? [] : parsed.error.issues.map((issue) => issue.path[0]), `${verb} ${target.kind}`).toContain("target");
+      }
+    }
+  });
+
   it.each(Object.keys(CALLS))("refuses %s with group-archived, durably, and changes nothing", async (verb) => {
     const { h, service } = await confirmed();
     try {
@@ -269,6 +282,60 @@ describe("no claim and no wake for an archived group (spec §6.3)", () => {
       expect((await deliverSchedulerWakes(h.store, handlers)).delivered).toContain(wakeId);
       expect(estimateState()).toBe("running");
       expect(estimateRun()).toBeDefined();
+    } finally { await h.dispose(); }
+  });
+});
+
+describe("the archive gate also sits ahead of command preparation (spec §6.3, E4 review minors 1 and 3)", () => {
+  const countProbes = (h: H) => {
+    const router = h.deps.profileRouter;
+    let calls = 0;
+    const probe: typeof router.probe = async (profile, selection) => { calls += 1; return router.probe(profile, selection); };
+    return { router: { ...router, probe }, calls: () => calls };
+  };
+  const startOf = (h: H, id: string) => h.rawCommand(id, revisionOf(h), "start", { kind: "group", groupId: "g" }, {}) as never;
+
+  it("books group-archived for a start before the frozen profiles are probed, and probes nothing", async () => {
+    const live = await confirmed();
+    try {
+      const control = countProbes(live.h);
+      await new WebControlService({ ...live.h.deps, profileRouter: control.router }).start(startOf(live.h, "start-control"));
+      expect(control.calls(), "the start path probes when the group is not archived").toBeGreaterThan(0);
+    } finally { await live.h.dispose(); }
+    const { h, service } = await confirmed();
+    try {
+      service.archiveGroup(h.command("archive-group", {}));
+      const counted = countProbes(h);
+      expect(await new WebControlService({ ...h.deps, profileRouter: counted.router }).start(startOf(h, "start-archived"))).toMatchObject({ error: { code: "group-archived" } });
+      expect(lookupCommandResult(h.store, "g", "start-archived")!.body).toMatchObject({ error: { code: "group-archived" } });
+      expect(counted.calls()).toBe(0);
+    } finally { await h.dispose(); }
+  });
+
+  it("lets unarchive-group and a stale command through preflight: a stale command books revision-conflict, not group-archived", async () => {
+    const { h, service } = await confirmed();
+    try {
+      service.archiveGroup(h.command("archive-group", {}));
+      const unarchive = h.command("unarchive-group", {}) as never;
+      expect(preflightWebCommand(h.store, unarchive)).toBeNull();
+      const stale = h.rawCommand("stale", revisionOf(h) + 5, "pause-dispatch", { kind: "group", groupId: "g" }, {}) as never;
+      expect(preflightWebCommand(h.store, stale)).toMatchObject({ status: 409, body: { error: { code: "revision-conflict" } } });
+    } finally { await h.dispose(); }
+  });
+
+  it("replays a command accepted before the archive with its stored result, and books nothing new", async () => {
+    const { h, service } = await confirmed();
+    try {
+      const command = h.command("pause-dispatch", {}) as never;
+      const first = await service.pauseDispatch(command);
+      expect(first).toMatchObject({ result: { kind: "paused" } });
+      service.archiveGroup(h.command("archive-group", {}));
+      const commandRows = () => Number(h.store.db.prepare("SELECT COUNT(*) AS n FROM commands WHERE group_id='g'").get()!.n);
+      const rows = commandRows(), seq = lastSeq(h), revision = revisionOf(h);
+      expect(await service.pauseDispatch(command)).toEqual(first);
+      expect(commandRows()).toBe(rows);
+      expect(lastSeq(h)).toBe(seq);
+      expect(revisionOf(h)).toBe(revision);
     } finally { await h.dispose(); }
   });
 });

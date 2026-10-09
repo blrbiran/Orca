@@ -150,12 +150,16 @@ export function preflightWebCommand<T = CommandBody>(store: ControlStore, input:
     const setting = settingRevision(store, commandScope);
     const currentCommandRevision = setting !== null ? setting
       : commandScope.groupId === null ? 0 : Number(groupRow?.revision ?? 0);
-    if (rawCommand.expectedRevision === currentCommandRevision) return null;
+    const stale = rawCommand.expectedRevision !== currentCommandRevision;
+    // Same order as applyWebCommand's in-transaction backstop: a stale revision wins, then the archive gate. Booking
+    // group-archived here, before any pre-transaction probe, keeps an archived group from costing an agent probe.
+    const archived = !stale && commandScope.groupId !== null && rawCommand.verb !== "unarchive-group" && isGroupArchived(store, commandScope.groupId);
+    if (!stale && !archived) return null;
 
     const commandRevision = setting !== null ? currentCommandRevision : commandScope.groupId === null ? null : currentCommandRevision;
     const projectionSeq = commandScope.groupId === null || !groupRow ? null : Number(groupRow.projection_seq);
-    const conflict = revisionConflict(currentCommandRevision);
-    const outcome = validatedOutcome(conflict.status, conflict.body);
+    const refused = stale ? revisionConflict(currentCommandRevision) : domainErrorOutcome(new ControlError("group-archived"), commandRevision)!;
+    const outcome = validatedOutcome(refused.status, refused.body);
     assertFinalVersions(outcome.body, commandRevision, projectionSeq);
     persistCommandOutcome(store, rawCommand, outcome, commandRevision, projectionSeq);
     return outcome as StoredCommandOutcome<T>;
