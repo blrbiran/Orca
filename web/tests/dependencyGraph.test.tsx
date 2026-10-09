@@ -7,7 +7,8 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ControlGroupView } from "../src/ControlGroupView.js";
 import { layoutDependencies } from "../src/dependencyLayout.js";
-import { config, view, workItem } from "./fixtures/board.js";
+import { nodeLines, runNumber } from "../src/DependencyGraph.js";
+import { config, run, view, workItem } from "./fixtures/board.js";
 
 afterEach(cleanup);
 
@@ -44,7 +45,7 @@ describe("the drawn graph (spec B1, D2)", () => {
     render(<ControlGroupView view={view(items)} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
 
   it("draws one button per task with its status, and an arrow per dependency", () => {
-    render2([workItem({ taskId: "a", status: "completed" }), workItem({ taskId: "b", status: "blocked", dependencyTaskIds: ["a"] })]);
+    render2([workItem({ taskId: "a", status: "completed", category: "done" }), workItem({ taskId: "b", status: "blocked", category: "blocked", dependencyTaskIds: ["a"] })]);
     const graph = screen.getByRole("figure", { name: "Dependency graph" });
     expect(screen.getByRole("button", { name: "a · completed" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "b · blocked" })).toBeTruthy();
@@ -74,8 +75,47 @@ describe("the drawn graph (spec B1, D2)", () => {
     expect(within(screen.getByRole("figure", { name: "Dependency graph" })).getByRole("note").textContent).toBe("1 dependency names a task this group does not have; it is not drawn");
   });
 
-  it("draws nothing for a group without dependencies, where the table already says all there is", () => {
+  it("draws every task even when no task depends on another (issue-fixes spec §6.5)", () => {
     render2([workItem({ taskId: "a" }), workItem({ taskId: "b" })]);
-    expect(screen.queryByRole("figure", { name: "Dependency graph" })).toBeNull();
+    const graph = screen.getByRole("figure", { name: "Dependency graph" });
+    expect(within(graph).getAllByRole("button").map((node) => node.getAttribute("aria-label"))).toEqual(["a · active", "b · active"]);
+    expect(graph.querySelectorAll("path[data-edge]")).toHaveLength(0);
+  });
+});
+
+describe("category fill, legend and live node text (issue-fixes spec §6.5)", () => {
+  const NOW = Date.UTC(2026, 9, 8, 12, 0, 0);
+  const minutes = (n: number) => NOW - n * 60_000;
+  const progress = { runId: "run-a", step: "execute" as const, attempt: { current: 2, max: 3 }, tokens: null, lastTransitionAt: null };
+  const runningItem = workItem({ taskId: "a", category: "running", currentRunId: "run-a", lineageRunIds: ["run-0", "run-a"], progress });
+  const runs = (lastActivityAt: number) => [run({ runId: "run-0", state: "settled-restartable" }), run({ runId: "run-a", startedAt: minutes(12), lastActivityAt })];
+
+  it("classes each node by the server's category and draws a legend of all five", () => {
+    render(<ControlGroupView view={view([workItem({ taskId: "i", category: "idle" }), workItem({ taskId: "w", category: "waiting" }), workItem({ taskId: "r", category: "running" }),
+      workItem({ taskId: "b", category: "blocked" }), workItem({ taskId: "d", category: "done" })])} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} now={NOW} />);
+    for (const [taskId, category] of [["i", "idle"], ["w", "waiting"], ["r", "running"], ["b", "blocked"], ["d", "done"]] as const) {
+      expect(screen.getByRole("button", { name: `${taskId} · active` }).getAttribute("class")).toBe(`dep-node dep-${category}`);
+    }
+    expect(within(screen.getByRole("list", { name: "Legend" })).getAllByRole("listitem").map((entry) => entry.textContent)).toEqual(["idle", "running", "waiting", "blocked", "done"]);
+  });
+
+  it("shows a running task's step and attempt, its run number past 1 and the time since its run started", () => {
+    expect(nodeLines(runningItem, runs(minutes(2)), NOW)).toEqual({ progress: "execute · attempt 2", run: "run 2 · 12 min", stalled: null });
+    expect(runNumber(runningItem, [run({ runId: "run-0", state: "failed-before-provider" }), run({ runId: "run-a" })])).toBe(1);
+    expect(nodeLines(workItem({ taskId: "z", category: "idle" }), runs(minutes(2)), NOW)).toEqual({ progress: null, run: null, stalled: null });
+  });
+
+  it("says 'no progress for N min' only once the current run has been quiet for more than 10 minutes", () => {
+    expect(nodeLines(runningItem, runs(minutes(10)), NOW).stalled).toBeNull();
+    expect(nodeLines(runningItem, runs(minutes(11)), NOW).stalled).toBe("no progress for 11 min");
+    render(<ControlGroupView view={view([runningItem], runs(minutes(11)))} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} now={NOW} />);
+    const node = screen.getByRole("button", { name: "a · active" });
+    expect(node.querySelector("text.dep-stall")?.textContent).toBe("no progress for 11 min");
+  });
+
+  it("opens the task detail from a node, the same task the table opens", () => {
+    render(<ControlGroupView view={view([runningItem], runs(minutes(2)))} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} now={NOW} />);
+    fireEvent.click(screen.getByRole("button", { name: "a · active" }));
+    expect(screen.getByRole("region", { name: "Task a" })).toBeTruthy();
   });
 });

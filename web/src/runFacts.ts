@@ -35,6 +35,11 @@ export function retryTaskOpen(view: GroupViewV1): boolean {
 
 /** Spec §4.2(2): a task's run number is the count of its lineage runs that reached the provider. */
 export function taskRunNumber(view: GroupViewV1, taskId: string): number {
-  const lineage = new Set(view.workItems.find((item) => item.taskId === taskId)?.lineageRunIds ?? []);
-  return view.runs.filter((run) => lineage.has(run.runId) && run.state !== "failed-before-provider").length;
+  return lineageRunNumber(view.workItems.find((item) => item.taskId === taskId)?.lineageRunIds ?? [], view.runs);
+}
+
+/** The count behind `taskRunNumber`, for a caller that holds the task's lineage and the runs but not a whole group view. */
+export function lineageRunNumber(lineageRunIds: readonly string[], runs: readonly RunViewV1[]): number {
+  const lineage = new Set(lineageRunIds);
+  return runs.filter((run) => lineage.has(run.runId) && run.state !== "failed-before-provider").length;
 }

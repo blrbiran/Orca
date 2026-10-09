@@ -47,4 +47,26 @@ describe("styles.css", () => {
     expect(rule(".group-card:hover")).toContain("background: var(--bg-hover)");
     expect(rule(".group-card:focus-visible")).toContain("outline: 2px solid var(--accent)");
   });
+
+  // Issue-fixes spec §6.5, plan Review Focus 5: every category colour exists in the dark theme and in both light blocks.
+  it("defines every work-item category colour for the dark theme and both light-theme blocks, and fills each node with its own", () => {
+    const blockOf = (opener: string): string => {
+      const at = css.indexOf(opener);
+      if (at === -1) throw new Error(`no block ${opener}`);
+      return css.slice(at, css.indexOf("}", at));
+    };
+    const blocks = [":root {", ':root[data-theme="light"] {', ':root:not([data-theme="dark"]) {'].map(blockOf);
+    for (const category of ["idle", "running", "waiting", "blocked", "done"]) {
+      for (const block of blocks) expect(block, category).toMatch(new RegExp(`--cat-${category}:\\s*[^;]+;`));
+      expect(rule(`.dep-${category} rect`)).toContain(`fill: var(--cat-${category})`);
+    }
+  });
+
+  it("pulses a running node slowly, and not at all under prefers-reduced-motion", () => {
+    expect(rule(".dep-node.dep-running rect")).toContain("animation: dep-pulse");
+    const at = css.indexOf("@media (prefers-reduced-motion: reduce)");
+    expect(at).toBeGreaterThan(-1);
+    const media = css.slice(at, css.indexOf("}", at));
+    expect(media).toContain(".dep-node.dep-running rect { animation: none;");
+  });
 });

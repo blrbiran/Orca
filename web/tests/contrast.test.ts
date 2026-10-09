@@ -72,4 +72,13 @@ describe("dark theme contrast (human visual review, session f8281a60)", () => {
     expect(ratio(hex(token("border")), bg)).toBeGreaterThanOrEqual(1.4);
     expect(ratio(selected, card)).toBeGreaterThanOrEqual(1.4);
   });
+
+  // Issue-fixes spec §6.5: a node's words stay readable on its category fill (painted over the card it sits on).
+  it("keeps node text readable on every work-item category fill", () => {
+    for (const category of ["idle", "running", "waiting", "blocked", "done"]) {
+      const fill = paint(token(`cat-${category}`), card);
+      expect(ratio(hex(token("text")), fill), category).toBeGreaterThanOrEqual(4.5);
+      expect(ratio(hex(token("text-strong")), fill), category).toBeGreaterThanOrEqual(4.5);
+    }
+  });
 });

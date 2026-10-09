@@ -402,6 +402,12 @@ export const en = {
       missing_other: "{{count}} dependencies name a task this group does not have; they are not drawn",
       cycle_one: "{{count}} dependency would close a cycle; it is not drawn",
       cycle_other: "{{count}} dependencies would close a cycle; they are not drawn",
+      legend: "Legend",
+      category: { idle: "idle", running: "running", waiting: "waiting", blocked: "blocked", done: "done" },
+      stepAttempt: "{{step}} · attempt {{attempt}}",
+      runNumber: "run {{n}}",
+      elapsed: "{{minutes}} min",
+      stalled: "no progress for {{minutes}} min",
     },
     git: {
       region: "Git",

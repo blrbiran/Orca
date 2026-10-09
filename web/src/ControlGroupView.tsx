@@ -52,6 +52,8 @@ export interface ControlGroupViewProps {
   drafts: Record<string, string>;
   onDraft: (key: string, text: string) => void;
   onCommand: (action: ControlAction) => void;
+  /** Issue-fixes spec §6.5: the clock the graph's elapsed and no-progress text is read against; the graph reads it itself when absent. */
+  now?: number;
   /** W5: commands one control sends in order (BudgetEditor's onCommands). */
   onCommands?: (actions: ControlAction[]) => void;
   /** Agent selection spec §6.8: absent on a page that never reads the installation table (and in older criteria). */
@@ -158,7 +160,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       )}
 
       <h3>{t("control.group.workItems")}</h3>
-      <DependencyGraph items={view.workItems} openTask={openTask} onOpen={(taskId) => setOpenTask(openTask === taskId ? null : taskId)} />
+      <DependencyGraph items={view.workItems} runs={view.runs} now={props.now} openTask={openTask} onOpen={(taskId) => setOpenTask(openTask === taskId ? null : taskId)} />
       {allLabels.length > 0 && (
         <fieldset aria-label={t("control.group.filterRegion")}>
           <legend>{t("control.group.filterLegend")}</legend>

@@ -308,6 +308,12 @@ export const zh: Translation<typeof en> = {
       missing_other: "有 {{count}} 条依赖指向本组没有的任务，没有画出",
       cycle_one: "有 {{count}} 条依赖会构成环，没有画出",
       cycle_other: "有 {{count}} 条依赖会构成环，没有画出",
+      legend: "图例",
+      category: { idle: "空闲", running: "进行中", waiting: "等待依赖", blocked: "受阻", done: "已完成" },
+      stepAttempt: "{{step}} · 第 {{attempt}} 次尝试",
+      runNumber: "第 {{n}} 次运行",
+      elapsed: "{{minutes}} 分钟",
+      stalled: "已 {{minutes}} 分钟没有进展",
     },
     git: {
       region: "Git",

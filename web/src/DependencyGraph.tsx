@@ -2,26 +2,62 @@
  * Board spec 2026-10-03 B1, D1, D2: the group's tasks drawn by dependency, left to right. Layout is `layoutDependencies`
  * (code, not taste); a node is a button that opens the same task detail as the table. Every task is drawn whatever the
  * table's label filter, and the status word is in the node's text so color never carries it alone.
+ * Issue-fixes spec §6.5: drawn whenever the group has work items, edges or not; each node is filled by the server's
+ * §6.1 category (with a legend), and a running node says its step and attempt, its run number past 1, how long its run has
+ * run, and -- after 10 quiet minutes -- how long it has made no progress.
  */
 import type { JSX, KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
-import type { WorkItemViewV1 } from "./controlTypes.js";
+import { useClock } from "./clock.js";
+import { WEB_WORK_ITEM_CATEGORIES } from "./controlTypes.js";
+import type { RunViewV1, WorkItemViewV1 } from "./controlTypes.js";
 import { layoutDependencies } from "./dependencyLayout.js";
-import { enumText } from "./i18n.js";
+import i18n, { enumText } from "./i18n.js";
+import { lineageRunNumber } from "./runFacts.js";
 
-const NODE_W = 150, NODE_H = 40, GAP_X = 56, GAP_Y = 16, PAD = 8;
+const NODE_W = 180, NODE_H = 88, GAP_X = 56, GAP_Y = 16, PAD = 8;
+/** Spec §6.5: a current run quiet for longer than this is shown as making no progress. */
+const STALL_MS = 10 * 60_000;
 
 // Single-word literals joined, so the panel text scan (scripts/scan-panel-text.mjs) does not read a class list as words.
-function statusClass(status: WorkItemViewV1["status"]): string {
-  const kind = status === "completed" ? "dep-done" : status === "blocked" ? "dep-blocked" : status === "draft" || status === "ready" ? "dep-idle" : "dep-active";
-  return ["dep-node", kind].join(" ");
+function nodeClass(category: WorkItemViewV1["category"]): string {
+  return (category === undefined ? ["dep-node"] : ["dep-node", `dep-${category}`]).join(" ");
 }
 
-export function DependencyGraph(props: { items: WorkItemViewV1[]; openTask: string | null; onOpen: (taskId: string) => void }): JSX.Element | null {
+/** Issue-fixes spec §4.2: the task's runs that reached the provider (its lineage, less failed-before-provider). */
+export function runNumber(item: WorkItemViewV1, runs: readonly RunViewV1[]): number {
+  return lineageRunNumber(item.lineageRunIds, runs);
+}
+
+/** Spec §6.5: the lines under a running node's status word; null lines are not drawn. */
+export function nodeLines(item: WorkItemViewV1, runs: readonly RunViewV1[], now: number): { progress: string | null; run: string | null; stalled: string | null } {
+  if (item.category !== "running") return { progress: null, run: null, stalled: null };
+  const step = item.progress?.step ?? null;
+  const attempt = item.progress?.attempt?.current ?? null;
+  const progress = step === null ? null : attempt === null
+    ? enumText("progressStep", step)
+    : i18n.t("control.graph.stepAttempt", { step: enumText("progressStep", step), attempt });
+  const current = runs.find((run) => run.runId === item.currentRunId);
+  const n = runNumber(item, runs);
+  const parts = [
+    ...(n > 1 ? [i18n.t("control.graph.runNumber", { n })] : []),
+    ...(current?.startedAt != null ? [i18n.t("control.graph.elapsed", { minutes: Math.floor((now - current.startedAt) / 60_000) })] : []),
+  ];
+  const quiet = current?.lastActivityAt != null ? now - current.lastActivityAt : null;
+  return {
+    progress,
+    run: parts.length === 0 ? null : parts.join(" · "),
+    stalled: quiet !== null && quiet > STALL_MS ? i18n.t("control.graph.stalled", { minutes: Math.floor(quiet / 60_000) }) : null,
+  };
+}
+
+export function DependencyGraph(props: { items: WorkItemViewV1[]; runs: readonly RunViewV1[]; openTask: string | null; onOpen: (taskId: string) => void; now?: number }): JSX.Element | null {
   const { t } = useTranslation();
+  const ticking = useClock(30_000);
+  const now = props.now ?? ticking;
+  if (props.items.length === 0) return null;
   const layout = layoutDependencies(props.items);
-  if (layout.edges.length === 0 && layout.missing === 0 && layout.cycleEdges === 0) return null;
-  const status = new Map(props.items.map((item) => [item.taskId, item.status]));
+  const byId = new Map(props.items.map((item) => [item.taskId, item]));
   const place = new Map(layout.nodes.map((node) => [node.taskId, { x: PAD + node.layer * (NODE_W + GAP_X), y: PAD + node.index * (NODE_H + GAP_Y) }]));
   const rows = Math.max(...layout.nodes.map((node) => node.index + 1));
   const width = PAD * 2 + layout.layers * NODE_W + (layout.layers - 1) * GAP_X;
@@ -32,6 +68,11 @@ export function DependencyGraph(props: { items: WorkItemViewV1[]; openTask: stri
   return (
     <figure className="dep-graph" aria-label={t("control.graph.region")}>
       <figcaption>{t("control.graph.caption")}</figcaption>
+      <ul className="dep-legend" aria-label={t("control.graph.legend")}>
+        {WEB_WORK_ITEM_CATEGORIES.map((category) => (
+          <li key={category}><span className={["dep-swatch", `dep-${category}`].join(" ")} aria-hidden="true" />{t(`control.graph.category.${category}` as const)}</li>
+        ))}
+      </ul>
       <div className="dep-scroll">
         <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
           <defs>
@@ -47,8 +88,9 @@ export function DependencyGraph(props: { items: WorkItemViewV1[]; openTask: stri
           })}
           {layout.nodes.map((node) => {
             const at = place.get(node.taskId)!;
-            const state = status.get(node.taskId)!;
-            const word = enumText("workStatus", state);
+            const item = byId.get(node.taskId)!;
+            const word = enumText("workStatus", item.status);
+            const lines = nodeLines(item, props.runs, now);
             return (
               <g
                 key={node.taskId}
@@ -56,7 +98,7 @@ export function DependencyGraph(props: { items: WorkItemViewV1[]; openTask: stri
                 tabIndex={0}
                 aria-label={t("control.graph.node", { taskId: node.taskId, status: word })}
                 aria-current={props.openTask === node.taskId ? "true" : undefined}
-                className={statusClass(state)}
+                className={nodeClass(item.category)}
                 transform={`translate(${at.x},${at.y})`}
                 onClick={() => props.onOpen(node.taskId)}
                 onKeyDown={key(node.taskId)}
@@ -64,6 +106,9 @@ export function DependencyGraph(props: { items: WorkItemViewV1[]; openTask: stri
                 <rect width={NODE_W} height={NODE_H} rx={6} />
                 <text x={8} y={16}>{node.taskId}</text>
                 <text x={8} y={32} className="dep-status">{word}</text>
+                {lines.progress !== null && <text x={8} y={48} className="dep-detail">{lines.progress}</text>}
+                {lines.run !== null && <text x={8} y={64} className="dep-detail">{lines.run}</text>}
+                {lines.stalled !== null && <text x={8} y={80} className="dep-stall">{lines.stalled}</text>}
               </g>
             );
           })}
