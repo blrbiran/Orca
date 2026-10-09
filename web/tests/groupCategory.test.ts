@@ -29,6 +29,11 @@ describe("groupCategory (spec §6.4)", () => {
     expect(groupCategory(g())).toBe("not-started");
     expect(groupCategory(g({ completion: { done: 0, total: 0 }, counts: zero }))).toBe("not-started");
   });
+  it("an older server's summary without counts, completion or stopState is not started, and does not throw", () => {
+    const old = g();
+    delete old.counts; delete old.completion; delete (old as { stopState?: unknown }).stopState;
+    expect(groupCategory(old)).toBe("not-started");
+  });
   it("takes the first match: archived beats attention, attention beats done, done beats running", () => {
     expect(groupCategory(g({ archived: true, claimBlocked: true }))).toBe("archived");
     expect(groupCategory(g({ claimBlocked: true, completion: { done: 2, total: 2 } }))).toBe("attention");

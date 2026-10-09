@@ -14,7 +14,7 @@ export const GROUP_FILTER_KEY = "orca.panel.groupFilter";
 /** Spec §6.4 rule 2: a blocked task, a recovery blocker, a blocked claim, a blocked group, or a stop still settling. */
 export function needsAttention(summary: GroupSummaryV1): boolean {
   return (summary.counts?.blocked ?? 0) > 0 || summary.recoveryBlockerCount > 0 || summary.claimBlocked || summary.state === "blocked"
-    || (summary.stopState !== null && summary.stopState !== "handoff-complete");
+    || (summary.stopState != null && summary.stopState !== "handoff-complete");
 }
 
 export function groupCategory(summary: GroupSummaryV1): GroupCategory {
