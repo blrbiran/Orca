@@ -169,6 +169,8 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 
 **产品、两轮台账及本轮设计/清理历史已按人 2026-10-10 授权本地 fast-forward 合入 main。** 当前入口与源码是 `/Users/biran/code/skills/loop/Orca` 的 main；审查 worktree `/Users/biran/.codex/worktrees/usage-settlement-handoff-retry/Orca`、分支 `codex/d9-m3-implementation` 保留。旧 `codex/usage-settlement-handoff-retry` 设计分支历史已经包含，别再从旧草案判进度。本次未 push，人的面板未重启、真实控制库未迁移。当前 HEAD 请现查，提交本文会移动它。
 
+补充（2026-10-10，Codex controller）：人已明确解除 ccmem config-value-parity 旧合并限制，该测试分支已本地合 ccmem main；前后隔离配置测试各25/25通过，无产品/配置值变化。具体证据 `docs/handoff/2026-10-10-ccmem-local-integration.md`；旧报告的pending说明仅是历史，push仍归人。
+
 **进度只读两本新台账末尾 Round close**：下列新 spec、plan、台账路径均相对 main；设计草案开头及历史未勾 checklist 不代表仍未实施。
 - D9/M3：`.superpowers/sdd/2026-10-09-usage-settlement-and-handoff-retry-implementation/progress.md`；设计 `docs/superpowers/specs/2026-10-09-usage-settlement-and-handoff-retry-design.md`（§9/§9.5 更正优先）；实施计划同主题、后缀 `-implementation.md`；独立终审同台账目录 `final-review.md`。
 - 性能：`.superpowers/sdd/2026-10-09-control-poll-performance/progress.md`；设计 `docs/superpowers/specs/2026-10-09-control-poll-performance-design.md`（§7 更正优先）；计划 `docs/superpowers/plans/2026-10-09-control-poll-performance.md`；该台账目录 `benchmark-report.md`、`final-review.md`，最终 I1 处理看 `final-fix-review.md`，合 main 后最新全量看 `main-integration-verification.md`。完整原始门/变异日志与 SHA manifest 已入各自 evidence 归档。原设计台账不是执行进度。
