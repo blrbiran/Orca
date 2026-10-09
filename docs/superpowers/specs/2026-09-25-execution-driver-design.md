@@ -259,3 +259,16 @@ retry-task, settling a terminally failed run and returning its task to ready`; `
 the task's current run ended in a ccloop failure the reserve can retry`; `fix(control): refuse recovery-retry on a run
 ccloop ended failed with run-terminal-failed`; `feat(control): keep ccloop's stop reason on the run and add the
 settled-failed run state to every reader`.
+
+## CORRECTION to the ERRATUM (issue fixes, 2026-10-08) above (2026-10-09)
+
+Appended 2026-10-09 by the final fixer of the issue-fixes round (final whole-branch review finding M7), under Orca
+development session `3156185d`. The erratum above is kept verbatim.
+
+What is inaccurate: the erratum's last sentence lists the subjects of the commits that landed the change, and the list
+is incomplete. It was written before Task D7 landed, so it omits the commit that makes the driver archive a
+`settled-failed` run's evidence and remove its workspace, the behaviour the erratum's own sentence about `cleanedUp`
+describes.
+
+What is true: that behaviour landed in the commit whose subject is `feat(control): archive and clean a settled-failed
+run's workspace in the driver loop` (585fb72). The erratum's commit list is the four subjects it names plus this one.

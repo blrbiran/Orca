@@ -5593,3 +5593,16 @@ before that change are healed at startup (§3.2 (2)). Implemented in the commits
 `feat(web): stop banner and the resume dialog for a completed panel shutdown`; pinned by
 `web/tests/stopBanner.test.tsx`, `tests/control/shutdownHealing.test.ts` and the rewritten criteria in
 `tests/panel/controlLifecycle.test.ts`, `tests/panel/shutdownDriverGroup.test.ts` and `tests/control/webFaults.test.ts`.
+
+## CORRECTION to the ERRATUM (issue fixes, 2026-10-08) above (2026-10-09)
+
+Appended 2026-10-09 by the final fixer of the issue-fixes round (final whole-branch review finding M7), under Orca
+development session `3156185d`. The erratum above is kept verbatim.
+
+What is inaccurate: the erratum says a `shutdown` group in stop state `handoff-complete` gets the resume dialog
+"(`Continue selected tasks (n)` or `Resume (no continuation)`)", which reads as one button or the other.
+
+What is true: both can show together. When some tasks are continuable, `Resume (no continuation)` is offered beside
+`Continue selected tasks (n)`, so a person can leave the stop and then continue held tasks one by one; when none is
+continuable, only `Resume (no continuation)` shows. This landed in the commit whose subject is `fix(web): offer a plain
+resume beside the batch continuation at handoff-complete` (6a88636).
