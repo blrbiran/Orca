@@ -30,7 +30,7 @@ export function runReasonText(run: RunViewV1): string | null {
  * (stop-mode-conflict), so the panel offers it only outside both (no button the server always refuses).
  */
 export function retryTaskOpen(view: GroupViewV1): boolean {
-  return view.stop === null && view.summary.state !== "clarifying";
+  return view.stop === null && view.summary.state !== "clarifying" && view.summary.archived !== true;
 }
 
 /** Spec §4.2(2): a task's run number is the count of its lineage runs that reached the provider. */

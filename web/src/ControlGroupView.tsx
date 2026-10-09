@@ -87,6 +87,8 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
   // Issue-fixes spec §3.2 (3): a panel shutdown that froze runs is left the same way as a human handoff-stop, through the
   // resume dialog once its stop state is handoff-complete.
   const handoffActive = stopMode === "handoff" || stopMode === "shutdown";
+  // Issue-fixes spec §6.3: the server refuses every command of an archived group but the unarchive (group-archived).
+  const archived = view.summary.archived === true;
   const continuable = continuableRuns(view);
   const selections = (): ContinuationSelectionV1[] =>
     continuable.map(({ run, checkpointId }) => ({ taskId: String(run.taskId), predecessorRunId: run.runId, checkpointId }));
@@ -147,20 +149,16 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       <p>
         {t("control.group.planLine", { goal: view.plan.goal, hash: short(view.plan.planHash), graphVersion: view.graphVersion })}
       </p>
-      <BudgetEditor view={view} config={config} drafts={drafts} onDraft={onDraft} onCommand={onCommand} onCommands={props.onCommands} selectionsHash={selectionsHashFor(view, props.preview)}
-        suggestedTarget={props.integrationFor?.(view.plan.repoId)?.suggestedTarget ?? null} />
-      {props.agents !== undefined && (
-        <AgentSelectionEditor
-          view={view} agents={props.agents} preview={props.preview ?? null} preferences={props.agentPreferences}
-          onReread={props.onRereadPreview}
-          agentsFailure={props.agentsFailure}
-          retryNotice={props.retryNotice}
-          drafts={drafts} onDraft={onDraft} onCommand={onCommand}
-        />
+      {archived && (
+        <p role="status" aria-label={t("control.group.archivedRegion")}>
+          {t("control.group.archivedBanner")}{" "}
+          <button type="button" onClick={() => onCommand({ verb: "unarchive-group", groupId, expectedRevision: revision, payload: {} })}>
+            {t("control.group.unarchive")}
+          </button>
+        </p>
       )}
-
-      <h3>{t("control.group.workItems")}</h3>
       <DependencyGraph items={view.workItems} runs={view.runs} now={props.now} openTask={openTask} onOpen={(taskId) => setOpenTask(openTask === taskId ? null : taskId)} />
+      <h3>{t("control.group.workItems")}</h3>
       {allLabels.length > 0 && (
         <fieldset aria-label={t("control.group.filterRegion")}>
           <legend>{t("control.group.filterLegend")}</legend>
@@ -224,7 +222,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
                 {/* Issue fixes spec §4.2(5): a run ccloop ended failed is retried as a task (a new run), and only where the
                     server accepts retry-task; it never falls back to the run-scope recovery-retry, which refuses a terminal
                     failure (run-terminal-failed). Any other blocked run keeps recovery-retry. */}
-                {isTerminalFailure(run) ? (retryTaskOpen(view) && run.taskId !== null ? (
+                {archived ? null : isTerminalFailure(run) ? (retryTaskOpen(view) && run.taskId !== null ? (
                   <button
                     type="button"
                     onClick={() => onCommand({ verb: "retry-task", groupId, expectedRevision: revision, payload: { taskId: String(run.taskId) } })}
@@ -251,6 +249,18 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
           ))}
         </tbody>
       </table>
+
+      <BudgetEditor view={view} config={config} drafts={drafts} onDraft={onDraft} onCommand={onCommand} onCommands={props.onCommands} selectionsHash={selectionsHashFor(view, props.preview)}
+        suggestedTarget={props.integrationFor?.(view.plan.repoId)?.suggestedTarget ?? null} />
+      {props.agents !== undefined && (
+        <AgentSelectionEditor
+          view={view} agents={props.agents} preview={props.preview ?? null} preferences={props.agentPreferences}
+          onReread={props.onRereadPreview}
+          agentsFailure={props.agentsFailure}
+          retryNotice={props.retryNotice}
+          drafts={drafts} onDraft={onDraft} onCommand={onCommand}
+        />
+      )}
 
       <GitScheme view={view} workspace={workspace} onCommand={onCommand} />
       {/* Fix round 1 F1: a started group's scheme stays an owner's to change, outside the (button-free for keep) Git section. */}
@@ -301,6 +311,8 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       )}
 
       <h3>{t("control.group.dispatch")}</h3>
+      {!archived && (
+        <>
       {/* Issue-fixes spec §3.2 (4): start refuses every stop intent (stop-mode-conflict), so it is not offered under one. */}
       {view.summary.state === "ready" && stopMode === null && (
         <button type="button" onClick={() => onCommand({ verb: "start", groupId, expectedRevision: revision, payload: {} })}>{t("control.group.start")}</button>
@@ -357,6 +369,11 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
         >
           {t("control.group.retryRecovery", { groupId })}
         </button>
+      )}
+        <button type="button" onClick={() => onCommand({ verb: "archive-group", groupId, expectedRevision: revision, payload: {} })}>
+          {t("control.group.archive")}
+        </button>
+        </>
       )}
       <p>{t("control.group.recent", { commands: view.recentCommandIds.join(", ") || t("common.none") })}</p>
     </section>

@@ -257,6 +257,8 @@ export type ControlAction =
   | { verb: "recovery-retry"; groupId: string; expectedRevision: number; payload: RecoveryRetryPayloadV1 }
   // Issue fixes spec §4.2(2): retry a task whose run ccloop ended failed, as a new run.
   | { verb: "retry-task"; groupId: string; expectedRevision: number; payload: RetryTaskPayloadV1 }
+  // Issue-fixes spec §6.3: archive and unarchive a group (empty payload).
+  | { verb: "archive-group" | "unarchive-group"; groupId: string; expectedRevision: number; payload: Record<string, never> }
   // Integration spec §3.1, §6.5, §7: the group's scheme, Retry, and an owner's approval of an agent's resolution.
   | { verb: "set-group-integration"; groupId: string; expectedRevision: number; payload: SetGroupIntegrationPayloadV1 }
   | { verb: "retry-integration" | "resolve-integration-conflict"; groupId: string; expectedRevision: number; payload: Record<string, never> }
@@ -311,6 +313,10 @@ export function controlCommandPath(action: ControlAction): string {
       return `${group}/integration/retry`;
     case "resolve-integration-conflict":
       return `${group}/integration/resolve`;
+    case "archive-group":
+      return `${group}/archive`;
+    case "unarchive-group":
+      return `${group}/unarchive`;
     case "requirement-open":
       return "/api/control/requirements";
     case "requirement-answer":

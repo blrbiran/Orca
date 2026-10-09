@@ -280,6 +280,10 @@ export const en = {
       resumeNoContinuation: "Resume (no continuation)",
       retryRecovery: "Retry recovery for {{groupId}}",
       recent: "Recent commands: {{commands}}",
+      archivedRegion: "Archived",
+      archivedBanner: "This group is archived: it keeps every record and takes no new work.",
+      unarchive: "Unarchive",
+      archive: "Archive group",
     },
     task: {
       region: "Task {{taskId}}",

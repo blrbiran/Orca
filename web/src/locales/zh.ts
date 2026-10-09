@@ -187,6 +187,10 @@ export const zh: Translation<typeof en> = {
       resumeNoContinuation: "恢复（不续跑）",
       retryRecovery: "重试 {{groupId}} 的恢复",
       recent: "最近的命令：{{commands}}",
+      archivedRegion: "已归档",
+      archivedBanner: "这个组已归档：记录都保留，不再接新工作。",
+      unarchive: "取消归档",
+      archive: "归档这个组",
     },
     task: {
       region: "任务 {{taskId}}",
