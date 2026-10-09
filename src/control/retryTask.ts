@@ -95,7 +95,7 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
           const pending = store.db.prepare("SELECT 1 FROM usage_events e JOIN runs r ON r.id=e.run_id WHERE r.group_id=? AND e.seq>json_extract(r.body,'$.highWater') LIMIT 1").get(groupId);
           throw new ControlError("task-not-retryable", pending ? "usage-pending" : "usage-unknown");
         }
-        if (work.pendingRunId != null) throw new ControlError("task-not-retryable", "continuation-pending");
+        if ((held || released) ? work.pendingRunId !== null : work.pendingRunId != null) throw new ControlError("task-not-retryable", "continuation-pending");
         if (work.continuation != null) {
           const registration = registrationOf(work.continuation);
           const identity = registration && continuationIdentity(groupId, registration.resumeRevision, taskId, registration.predecessorRunId);

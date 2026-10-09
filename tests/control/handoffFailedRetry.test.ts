@@ -187,7 +187,7 @@ describe("M3 handoff failure retry lifecycle", { timeout: 60_000 }, () => {
       const next = await t.claim();
       settleProviderAttempt(t.dispatch, { runId: next, phase: "work", firstAttemptProof: "invalid" });
       const original = work(t, "a"), originalRun = t.body(next);
-      for (const mode of ["missing", "old-source", "grant", "agent", "hash", "lineage", "pending", "cumulative", "execution", "run-grant", "run-agent", "run-hash", "run-graph", "unknown"] as const) {
+      for (const mode of ["missing", "old-source", "grant", "agent", "hash", "lineage", "pending", "missing-pending", "cumulative", "execution", "run-grant", "run-agent", "run-hash", "run-graph", "unknown"] as const) {
         const w = structuredClone(original), r = structuredClone(originalRun);
         if (mode === "missing") delete w.retryGrantSourceRunId;
         if (mode === "old-source") w.retryGrantSourceRunId = w.lineageRunIds.find((v: string) => v !== id && v !== next);
@@ -196,6 +196,7 @@ describe("M3 handoff failure retry lifecycle", { timeout: 60_000 }, () => {
         if (mode === "hash") w.derivedContractHash = "0".repeat(64);
         if (mode === "lineage") w.lineageRunIds = [next];
         if (mode === "pending") w.pendingRunId = "other-pending";
+        if (mode === "missing-pending") delete w.pendingRunId;
         if (mode === "cumulative") r.cumulative.work.tokens = 1;
         if (mode === "execution") r.executionId = "provider-did-start";
         if (mode === "run-grant") r.grant.work.attempts++;
@@ -303,6 +304,10 @@ describe("M3 handoff failure retry lifecycle", { timeout: 60_000 }, () => {
       expect(work(t, "a")).toEqual(unchanged);
       expect(t.body(id).state).toBe("settled-recoverable");
       expect(t.service.setLimit(t.h.command("set-limit", { limit: before.groupLimit }))).not.toHaveProperty("error");
+      const restored = work(t, "a");
+      t.h.store.db.prepare("UPDATE work_items SET body=json_remove(body,'$.pendingRunId') WHERE id='a'").run();
+      expect(retry(t)).toHaveProperty("error.message", "task-not-retryable:continuation-pending");
+      t.h.store.db.prepare("UPDATE work_items SET body=? WHERE id='a'").run(JSON.stringify(restored));
       t.h.store.db.prepare("UPDATE work_items SET body=json_set(body,'$.continuation',json(?)) WHERE id='a'").run(JSON.stringify({ continuationIntentId: "foreign", pendingRunId: id }));
       expect(retry(t)).toHaveProperty("error.code", "task-not-retryable");
     } finally { await t.h.dispose(); }

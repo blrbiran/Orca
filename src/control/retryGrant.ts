@@ -23,7 +23,7 @@ export function validateRetryGrantSource(store: ControlStore, groupId: string, s
   }
   try {
     if (!idSchema.safeParse(sourceId).success || allocations.length !== 2 || allocations.some(a => a.state !== "retrying")
-      || work.pendingRunId != null || work.continuation != null || !["ready", "running", "blocked"].includes(work.status)) bad("work-state");
+      || work.pendingRunId !== null || work.continuation != null || !["ready", "running", "blocked"].includes(work.status)) bad("work-state");
     const graphVersion = readArchivedPlan(store, groupId).graphVersion;
     const rows = store.db.prepare("SELECT id,group_id,work_item_id,generation,active,body FROM runs WHERE group_id=? AND work_item_id=? ORDER BY rowid").all(groupId, work.workItemId);
     const index = rows.findIndex(row => row.id === sourceId);
