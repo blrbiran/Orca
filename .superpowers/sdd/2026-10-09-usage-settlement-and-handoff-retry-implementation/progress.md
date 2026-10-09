@@ -33,3 +33,19 @@ Spec review4 found one Important (D9→handoff observed predicate); appended9.5 
 Independent preflight review: Spec PASS, Plan PASS, Ready to execute Yes, no Critical or unresolved Important. Initial missing route/entry/archive全集 finding fixed in unpublished plan; report retains finding and correction. Adopted both Minor suggestions: Task2 full D9→handoff→resume→retry→claim criterion and actual old-reader-v9 rejects10 vs new-reader-v10 rejects11 evidence.
 
 Baseline at a08c763 in managed worktree: `npm run build --workspace web`, `npm run typecheck`, `env ORCA_CCLOOP_BIN=/private/tmp/orca-d9-ccloop-ab824d1/dist/cli.js node_modules/.bin/vitest run tests/control/schema9.test.ts tests/panel/permissions.test.ts` all RC0; focused2files/6tests passed. Full raw logs `/private/tmp/orca-d9-baseline-{web-build,typecheck,tests}.log`. Not a rerun of old issue-fixes gates.
+
+## Scope sequencing — controller, 2026-10-09, implementation base 2c14e73
+
+Ruling: The human approved M5/M6 and requested completing the tasks this session. Prepare its independent spec/plan while D9/M3 executes, but never run parallel product writers; start performance implementation only after D9/M3 task gates/close. Cost if wrong: additional review time; separation keeps reversible scopes auditable. Performance draft uses fixed c29676d code, and must consume completed D9/M3 interfaces at execution time.
+
+Task1 initial RED observed: `/private/tmp/orca-task1-red4.log` full output read, RC1; schema10 fresh-store assertion sees9, four real driver/handoff settlement criteria fail because WebControlService.settleUnknownUsage is absent. These are expected product failures, not a passing implementation claim. Worker is implementing shared marker/proof/accounting paths; no subsequent product task dispatched.
+
+Whole-round gate environment prepared at `/private/tmp/od9/env.json`, runner `/private/tmp/od9/run.py`; fake codex installation uses pinned clone fixture in integration mode. HOME/fourXDG/TMPDIR/CCMEM_DATA_ROOT/corrections all temporary, inherited real CCMEM_CONFIG_PATH absent. No suite run against this environment yet.
+
+## Task 1 implementation checkpoint — controller, 2026-10-09
+
+Worker implement_settlement DONE, product43b0f16 + report405f6b6. Task-specific fresh reviewer is in flight; task not yet marked complete. Report task-1-report.md and diff package review-2c14e73..405f6b6.diff cover full2commit range, BASE2c14e73.
+
+Observed final isolated logs task1-target-final/typecheck-final: RC0, 9files122tests, no skipped; webbuild/actual oldv9 reader rejects10 proof in report. Worker records21 independent valid guard deletions red and clone restored42tests/zero unstaged+staged bytes; first wrong-target zero-token mutation excluded then exact branch independently red. Whole round integrated gate remains Task4.
+
+Ruling: Over-limit settlement test uses a real provider overage followed by unknown, rather than lowering group limit after unknown (existing set-limit correctly refuses then). No product set-limit guard relaxation. Cost if wrong: fixture would miss a real overage path; actual post-command used/reserved/deficit assertions and mutation remain required.
