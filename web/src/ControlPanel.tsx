@@ -19,8 +19,8 @@ import { RefusalNotice } from "./RefusalNotice.js";
 import { WorkspaceModeSelector } from "./WorkspaceModeSelector.js";
 import { RepositoryIntegration } from "./IntegrationScheme.js";
 import { enumText, refusalText } from "./i18n.js";
-import { hashFor } from "./sections.js";
-import { ALL_PROJECTS, inScope } from "./projectScope.js";
+import { GroupList } from "./GroupList.js";
+import { ALL_PROJECTS } from "./projectScope.js";
 import type { GroupScope } from "./projectScope.js";
 import type {
   AgentPreferencesViewV1, AgentSelectionPreviewV1, AgentsViewV1, ControlConfigV1, ControlSummaryV1, GroupViewV1, OperatorPreferencesV1,
@@ -94,6 +94,8 @@ export interface ControlPanelProps {
   controlState?: ControlClientState;
   onRecoveryRetry?: (target: RecoveryTarget) => void;
   onRecoveryReread?: () => void;
+  /** Issue-fixes spec §6.4: the clock "updated N minutes ago" is read against; the list reads it itself when absent. */
+  now?: number;
 }
 
 interface ImportFormProps {
@@ -219,9 +221,6 @@ export function ControlPanel(props: ControlPanelProps): JSX.Element {
   const { config, summary, recovery, groups, selected, drafts, uncertain, refusal, refetchRequired } = props;
   const view = selected === null ? undefined : groups[selected];
   const scope = props.scope;
-  const listed = scope === undefined ? summary.groups : summary.groups.filter((group) => inScope(scope, group.repoId));
-  // In All projects a row names its repository, after today's text (spec §5).
-  const label = (repoId: string): string => (scope?.kind === "all" ? ` · ${props.repoLabel?.(repoId) ?? repoId}` : "");
   // The open group's detail gets its own uncertain commands; the panel line lists every one, in every project (P4, spec §7).
   const waiting = uncertain.filter((command) => command.groupId === (selected ?? command.groupId));
   const ownerLabel = (groupId: string): string => {
@@ -257,24 +256,7 @@ export function ControlPanel(props: ControlPanelProps): JSX.Element {
       {props.agents && props.preferences && props.onAgentPreferences && (
         <AgentSettings agents={props.agents} preferences={props.preferences} drafts={drafts} onDraft={props.onDraft} onSave={props.onAgentPreferences} />
       )}
-      <nav aria-label={t("control.groupsNav")}>
-        {scope?.kind === "unresolved" ? (
-          // Plan decision P1: with no project list a row could belong to any project, so none is shown.
-          <p role="note">{t("project.listUnavailable")}</p>
-        ) : listed.length === 0 && <p>{t("control.noGroups")}</p>}
-        {listed.map((group) => group.state === "clarifying" ? (
-          // N1 spec §11.2: a clarifying group has no group view (DR25); it is operated in Requirements until accept.
-          <a key={group.groupId} href={hashFor("requirements")}>{group.groupId} · {enumText("groupState", group.state)} · {t("control.requirementBadge")}{label(group.repoId)}</a>
-        ) : (
-          <button key={group.groupId} type="button" aria-current={group.groupId === selected} onClick={() => props.onSelect(group.groupId)}>
-            {group.groupId} · {enumText("groupState", group.state)}
-            {group.completion !== undefined ? t("control.groupDone", { done: group.completion.done, total: group.completion.total }) : ""}
-            {group.stopState !== null ? ` · ${enumText("stopState", group.stopState)}` : ""}
-            {group.recoveryBlockerCount > 0 ? t("control.groupBlockers", { n: group.recoveryBlockerCount }) : ""}
-            {label(group.repoId)}
-          </button>
-        ))}
-      </nav>
+      <GroupList groups={summary.groups} selected={selected} scope={scope} repoLabel={props.repoLabel} onSelect={props.onSelect} now={props.now} />
       {view !== undefined && (
         <ControlGroupView
           key={view.summary.groupId}

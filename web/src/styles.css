@@ -195,6 +195,27 @@ th, td { padding: 6px 8px; border-bottom: 1px solid var(--border); }
 
 /* Task control */
 nav[aria-label="Control groups"] button[aria-current="true"] { background: var(--accent-subtle); border-color: var(--accent); }
+/* Issue-fixes spec §6.4: the group list as cards; the whole card is the button. */
+.group-filter { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.group-filter button[aria-pressed="true"] { background: var(--accent-subtle); border-color: var(--accent); color: var(--text-strong); }
+.group-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; margin: 8px 0 16px; }
+.group-list > p { grid-column: 1 / -1; }
+.group-card {
+  display: flex; flex-direction: column; align-items: stretch; gap: 6px; text-align: left; text-decoration: none;
+  padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); color: var(--text); cursor: pointer;
+}
+.group-card:hover { background: var(--bg-hover); border-color: var(--border-strong); }
+.group-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.group-card[aria-current="true"] { background: var(--accent-subtle); border-color: var(--accent); }
+.group-card-name { color: var(--text-strong); font-weight: 600; overflow-wrap: anywhere; }
+.group-card-detail { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: var(--text-xs); color: var(--muted); }
+.group-card-goal { flex-basis: 100%; color: var(--text); font-size: var(--text-sm); overflow-wrap: anywhere; }
+.group-card progress { flex-basis: 100%; height: 6px; accent-color: var(--ok); }
+.group-chip { padding: 0 8px; border-radius: 999px; background: var(--bg-hover); color: var(--text-strong); }
+.group-chip[data-category="attention"] { background: var(--danger-subtle); color: var(--danger); }
+.group-chip[data-category="running"] { background: var(--ok-subtle); color: var(--ok); }
+.group-chip[data-category="done"] { background: var(--info-subtle); color: var(--info); }
+.group-badge { padding: 0 6px; border-radius: 999px; background: var(--danger); color: var(--on-accent); font-weight: 600; }
 
 /* Metrics (existing MetricsView markup) */
 .section-pane [data-testid$="-rate"], .section-pane [data-testid="panel-coverage-rate"] { font-size: 24px; font-weight: 700; color: var(--text-strong); letter-spacing: -0.03em; }

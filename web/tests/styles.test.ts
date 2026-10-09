@@ -40,4 +40,11 @@ describe("styles.css", () => {
       expect(rule(`.field-kind[data-level="${level}"]::before`)).toContain(`background: var(--kind-${level})`);
     }
   });
+
+  // Issue-fixes spec §6.4: the whole card is the button, with a border, a hover and a focus style of its own.
+  it("gives a group card a border, a hover and a visible focus", () => {
+    expect(rule(".group-card")).toContain("border: 1px solid var(--border)");
+    expect(rule(".group-card:hover")).toContain("background: var(--bg-hover)");
+    expect(rule(".group-card:focus-visible")).toContain("outline: 2px solid var(--accent)");
+  });
 });
