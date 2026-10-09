@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { recordActivity } from "../../src/control/activity.js";
 import { normalizeOutput, captureDatabase, restoreDatabase, storePending } from "../bench/controlPollPerformance.js";
-import { buildControlPollFixture, dagTasks } from "./fixtures/controlPollPerformance.js";
+import { buildControlPollFixture, openExistingControlPollFixture, dagTasks } from "./fixtures/controlPollPerformance.js";
 import { installControlReadCounters } from "./fixtures/controlReadCounters.js";
 import { readGroupSummary, readControlGroup } from "../../src/panel/controlViews.js";
 import { replenishStartWakes } from "../../src/control/executionDriver.js";
@@ -48,6 +48,22 @@ describe("real-path benchmark integrity",()=>{
    expect(replenishStartWakes(f.driverDeps)).toEqual(["drive:live-000:1"]);
   } finally {await f.dispose();}
  }),30000);
+ it("refuses a nontemporary sandbox before either writable fixture entry initializes data",async()=>{
+  const root=await realpath(await mkdtemp(join(process.cwd(),".orca-control-poll-sandbox-")));
+  const previousRoot=process.env.ORCA_PERFORMANCE_ROOT;process.env.ORCA_PERFORMANCE_ROOT=root;
+  try {
+   await writeFile(join(root,"sandbox-sentinel"),"preserve me",{mode:0o600});
+   for(const entry of ["build","open"]){
+    let error:unknown,f:Awaited<ReturnType<typeof buildControlPollFixture>>|undefined;
+    try {f=entry==="build"?await buildControlPollFixture({liveGroups:0,archivedGroups:0,tasksPerGroup:1,now:1791518400000}):await openExistingControlPollFixture(1791518400000);}catch(failure){error=failure;}finally{await f?.dispose();}
+    expect(error).toBeInstanceOf(Error);expect((error as Error).message).toBe("control-poll-fixture-root-not-temporary");
+    expect(await readFile(join(root,"sandbox-sentinel"),"utf8")).toBe("preserve me");expect(await readdir(root)).toEqual(["sandbox-sentinel"]);
+   }
+  } finally {
+   if(previousRoot===undefined)delete process.env.ORCA_PERFORMANCE_ROOT;else process.env.ORCA_PERFORMANCE_ROOT=previousRoot;
+   await rm(root,{recursive:true,force:true});
+  }
+ });
  it("refuses a nonempty temporary root before removing a sentinel or initializing data",async()=>withFreshRoot(async root=>{
   const sentinel=join(root,"unowned-sentinel");await writeFile(sentinel,"preserve me",{mode:0o600});
   let error:unknown,f:Awaited<ReturnType<typeof buildControlPollFixture>>|undefined;
