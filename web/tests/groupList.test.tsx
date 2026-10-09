@@ -6,6 +6,7 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { GROUP_FILTER_KEY } from "../src/groupCategory.js";
+import i18n from "../src/i18n.js";
 import { GroupList } from "../src/GroupList.js";
 import type { GroupSummaryV1 } from "../src/controlTypes.js";
 
@@ -74,6 +75,29 @@ describe("the group list (spec §6.4)", () => {
     expect(card.textContent).toContain("updated 5 min ago");
     fireEvent.click(within(card).getByText("Ship the export"));
     expect(onSelect).toHaveBeenCalledWith("g");
+  });
+
+  // Final review (E8 deferred minor): "4320 min ago" is unreadable; past 120 minutes the card counts hours, past 48 hours days.
+  it("says how long ago a group changed in minutes, then hours past 120 minutes, then days past 48 hours, in both languages", async () => {
+    const updated = (minutesAgo: number): string => {
+      const shown = render(<GroupList groups={[g("g", { updatedAt: NOW - minutesAgo * 60_000 })]} selected={null} onSelect={vi.fn()} now={NOW} />);
+      const text = shown.container.querySelector(".group-card-detail")?.textContent ?? "";
+      shown.unmount();
+      return text;
+    };
+    expect(updated(119)).toContain("updated 119 min ago");
+    expect(updated(120)).toContain("updated 2 h ago");
+    expect(updated(47 * 60 + 59)).toContain("updated 47 h ago");
+    expect(updated(48 * 60)).toContain("updated 2 days ago");
+    expect(updated(4320)).toContain("updated 3 days ago");
+    try {
+      await i18n.changeLanguage("zh");
+      expect(updated(119)).toContain("119 分钟前更新");
+      expect(updated(180)).toContain("3 小时前更新");
+      expect(updated(4320)).toContain("3 天前更新");
+    } finally {
+      await i18n.changeLanguage("en");
+    }
   });
 
   it("says when no group matches the chosen chip", () => {

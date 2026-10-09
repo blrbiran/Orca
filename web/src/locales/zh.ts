@@ -123,6 +123,8 @@ export const zh: Translation<typeof en> = {
       attention: "需要你处理",
       updated: "{{minutes}} 分钟前更新",
       updatedNow: "刚刚更新",
+      updatedHours: "{{hours}} 小时前更新",
+      updatedDays: "{{days}} 天前更新",
     },
     reading: "正在读取 {{groupId}}…",
     outcomeUnknown: "命令结果未知，正在查询：{{commands}}",

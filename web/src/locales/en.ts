@@ -236,6 +236,8 @@ export const en = {
       attention: "needs you",
       updated: "updated {{minutes}} min ago",
       updatedNow: "updated just now",
+      updatedHours: "updated {{hours}} h ago",
+      updatedDays: "updated {{days}} days ago",
     },
     reading: "Reading {{groupId}}…",
     outcomeUnknown: "Command outcome unknown, being looked up: {{commands}}",

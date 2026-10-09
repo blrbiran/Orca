@@ -5,6 +5,7 @@
  */
 import { useId, useState } from "react";
 import type { JSX } from "react";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { useClock } from "./clock.js";
 import type { GroupSummaryV1 } from "./controlTypes.js";
@@ -23,6 +24,14 @@ export interface GroupListProps {
   onSelect: (groupId: string) => void;
   /** Tests pin the clock; the page reads it every 30 s. */
   now?: number;
+}
+
+/** Final review (E8 deferred minor): minutes up to 119, then whole hours up to 47, then whole days. */
+function updatedText(t: TFunction, minutes: number): string {
+  if (minutes === 0) return t("control.groupCard.updatedNow");
+  if (minutes < 120) return t("control.groupCard.updated", { minutes });
+  const hours = Math.floor(minutes / 60);
+  return hours < 48 ? t("control.groupCard.updatedHours", { hours }) : t("control.groupCard.updatedDays", { days: Math.floor(hours / 24) });
 }
 
 function GroupCard(props: { group: GroupSummaryV1; selected: boolean; repoText: string; now: number; onSelect: () => void }): JSX.Element {
@@ -56,7 +65,7 @@ function GroupCard(props: { group: GroupSummaryV1; selected: boolean; repoText: 
         <span className="group-chip" data-category={category}>{t(`control.groupCategory.${category}` as const)}</span>
         {needsAttention(group) && <span className="group-badge">{t("control.groupCard.attention")}</span>}
         {group.branch !== undefined && <code>{group.branch}</code>}
-        {updated !== null && <span>{updated === 0 ? t("control.groupCard.updatedNow") : t("control.groupCard.updated", { minutes: updated })}</span>}
+        {updated !== null && <span>{updatedText(t, updated)}</span>}
       </span>
       {props.repoText !== "" && <span id={`${base}-repo`}>{props.repoText}</span>}
     </button>
