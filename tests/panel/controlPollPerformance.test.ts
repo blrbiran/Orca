@@ -1,3 +1,9 @@
+import { resolveGroupSelections } from "../../src/control/agentFreeze.js";
+import { readArchivedPlan, readBudgetProposal } from "../../src/control/queries.js";
+import { exportRequirementDocument } from "../../src/control/requirementExport.js";
+import { readDraft } from "../../src/control/requirementRecords.js";
+import { requirementHarness } from "../control/fixtures/requirementHarness.js";
+import { VALID_SPLIT } from "../control/fixtures/requirementOutputs.js";
 import { join } from "node:path";
 import { validateRetryGrantSource } from "../../src/control/retryGrant.js";
 import { settlementAdmission } from "../../src/control/settleUnknownUsage.js";
@@ -315,5 +321,48 @@ describe("control poll request snapshots", () => {
       } finally { counter.restore(); }
     } finally { await h.dispose(); }
   });
+
+  it("shares the snapshot with a converted requirement's active work summary and preserves malformed active-run refusal", async () => {
+    const x = await requirementHarness({ answers: [{ purpose: "split", output: VALID_SPLIT }], startAt: "split" });
+    try {
+      await x.until(() => readDraft(x.store, "r", 1).state === "awaiting-review");
+      expect(await x.service.acceptRequirementDraft(x.command("requirement-draft-accept", { draftNo: 1, draftHash: readDraft(x.store, "r", 1).draftHash! }))).not.toHaveProperty("error");
+      const hash = x.profile.profileHash;
+      const selections = await resolveGroupSelections({ store: x.store, port: x.fake.port }, "r", "human");
+      expect(await x.service.confirm(x.command("confirm", {
+        planHash: readArchivedPlan(x.store, "r").planHash, proposalVersion: readBudgetProposal(x.store, "r").proposalVersion,
+        budgetMode: "soft", profileIds: { estimator: "all", worker: "all", handoff: "all", goalReview: "all" },
+        profileHashes: { estimator: hash, worker: hash, handoff: hash, goalReview: hash },
+        contextPolicy: { handoffAtContextTokens: 800_000 }, selectionsHash: selections.selectionsHash!,
+      }))).not.toHaveProperty("error");
+      await exportRequirementDocument({ store: x.store, resolveRepository: () => x.repo }, "r");
+      expect(await x.service.start(x.command("start", {}))).not.toHaveProperty("error");
+      const claim = await deliverScheduledStart({ store: x.store, profileRouter: x.deps.router, admissionGate: x.deps.admissionGate }, "r");
+      if (claim.kind !== "claimed") throw new Error(JSON.stringify(claim));
+      const counter = installControlReadCounters(x.store);
+      try {
+        counter.reset(); const summary = readGroupSummary(counter.store, "r");
+        expect(summary).toMatchObject({ requirement: { blockedRun: null, draftState: "accepted" }, completion: { done: 0, total: VALID_SPLIT.tasks.length } }); bounds(counter.snapshot(), false);
+        counter.reset(); const view = readControlGroup(counter.store, "e", "r");
+        expect(view.summary).toEqual(summary); expect(view.runs.find(run => run.runId === claim.runId)?.phase).toBe("work");
+        expect(view.runs.some(run => run.phase === "single-call" && run.purpose === "split")).toBe(true); bounds(counter.snapshot(), true);
+        const activeBody = String(x.store.db.prepare("SELECT body FROM runs WHERE id=?").get(claim.runId)!.body);
+        const historyId = view.runs.find(run => run.phase === "single-call")!.runId;
+        x.store.db.prepare("UPDATE runs SET body='broken converted active run' WHERE id=?").run(claim.runId);
+        let expectedError: SyntaxError;
+        try { JSON.parse("broken converted active run"); throw new Error("invalid fixture"); } catch (error) { expectedError = error as SyntaxError; }
+        for (const read of [() => readGroupSummary(counter.store, "r"), () => readControlGroup(counter.store, "e", "r")]) {
+          counter.reset(); let error: unknown;
+          try { read(); } catch (failure) { error = failure; }
+          expect(error).toBeInstanceOf(SyntaxError); expect((error as SyntaxError).message).toBe(expectedError.message); bounds(counter.snapshot(), false);
+        }
+        x.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(activeBody, claim.runId);
+        x.store.db.prepare("UPDATE runs SET body='broken converted inactive run' WHERE id=?").run(historyId);
+        counter.reset(); expect(readGroupSummary(counter.store, "r")).toEqual(summary); bounds(counter.snapshot(), false);
+        expect(counter.snapshot().parses.has(`runs:r:${historyId}`)).toBe(false);
+        counter.reset(); expect(refusal(() => readControlGroup(counter.store, "e", "r"))).toEqual({ code: "recovery-blocked", detail: `run-invalid:${historyId}` });
+      } finally { counter.restore(); }
+    } finally { await x.dispose(); }
+  }, 30_000);
 
 });

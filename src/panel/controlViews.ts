@@ -339,9 +339,12 @@ function taskCompletion(snapshot: GroupReadSnapshot, plan: ReturnType<typeof rea
  * Final review finding 4: the requirement's own call (a clarify or split run, never a work run of the group it became)
  * that the driver blocked, with its reason; null when there is none.
  */
-function blockedRequirementRun(store: ControlStore, groupId: string): RequirementSummaryV1["blockedRun"] {
-  for (const row of store.db.prepare("SELECT id,body FROM runs WHERE group_id=? AND active=1 ORDER BY rowid").all(groupId)) {
-    const run = JSON.parse(String(row.body)) as { phase?: string; state?: string; drive?: { blockedReason?: string | null } };
+function blockedRequirementRun(store: ControlStore, groupId: string, snapshot?: GroupReadSnapshot): RequirementSummaryV1["blockedRun"] {
+  const rows = snapshot === undefined
+    ? store.db.prepare("SELECT id,body FROM runs WHERE group_id=? AND active=1 ORDER BY rowid").all(groupId)
+    : snapshot.runsByRowid.filter(row => row.active === 1);
+  for (const row of rows) {
+    const run = (snapshot === undefined ? JSON.parse(String(row.body)) : decodedValue(snapshot.decodeRun(String(row.id)))) as { phase?: string; state?: string; drive?: { blockedReason?: string | null } };
     if (run.phase === "single-call" && run.state === "blocked") return { runId: String(row.id), reason: run.drive?.blockedReason ?? null };
   }
   return null;
@@ -349,6 +352,10 @@ function blockedRequirementRun(store: ControlStore, groupId: string): Requiremen
 
 /** N1 spec §11.2: a requirement's state in one line (the summary); null round/draft fields before the first of each. */
 export function requirementSummaryOf(store: ControlStore, groupId: string): RequirementSummaryV1 {
+  return requirementSummaryFromSnapshot(store, groupId);
+}
+
+function requirementSummaryFromSnapshot(store: ControlStore, groupId: string, snapshot?: GroupReadSnapshot): RequirementSummaryV1 {
   const group = readRequirementGroup(store, groupId);
   const round = latestRound(store, groupId), draft = latestDraft(store, groupId);
   const openQuestions = round !== null && round.state === "awaiting-answers" && round.result !== null ? round.result.questions.length : 0;
@@ -359,7 +366,7 @@ export function requirementSummaryOf(store: ControlStore, groupId: string): Requ
     reasonCode: (group.requirement.consensus === null ? round?.reasonCode : draft?.reasonCode) ?? (group.requirement.export.state === "conflict" ? exportReasonOf(group.requirement.export.detail) : null),
     exportState: group.requirement.export.state,
     used: group.used, reserved: group.reserved, limit: group.limit, usageUnknown: group.ledger.usageUnknown,
-    blockedRun: blockedRequirementRun(store, groupId),
+    blockedRun: blockedRequirementRun(store, groupId, snapshot),
   };
 }
 
@@ -385,7 +392,8 @@ function readGroupSummaryFromSnapshot(store: ControlStore, groupId: string, snap
     return blocked("group-summary:repository-mismatch");
   }
   const repoId = archived !== null ? archived.plan.repoId : readRequirementGroup(store, groupId).requirement.repoId;
-  const tally = archived === null ? null : taskCompletion(snapshot ?? readGroupSnapshot(store, groupId), archived.plan);
+  const readSnapshot = archived === null ? undefined : snapshot ?? readGroupSnapshot(store, groupId);
+  const tally = archived === null ? null : taskCompletion(readSnapshot!, archived.plan);
   const summary = {
     groupId,
     repoId,
@@ -401,7 +409,7 @@ function readGroupSummaryFromSnapshot(store: ControlStore, groupId: string, snap
     branch: workBranchRef(groupId).slice("refs/heads/".length),
     updatedAt: latestGroupActivityAt(store, groupId),
     archived: archivedMarkOf(body) !== null,
-    ...(requirementBlock ? { requirement: requirementSummaryOf(store, groupId) } : {}),
+    ...(requirementBlock ? { requirement: requirementSummaryFromSnapshot(store, groupId, readSnapshot) } : {}),
   };
   const parsed = groupSummarySchema.safeParse(summary);
   if (!parsed.success) return blocked(`group-summary:${parsed.error.issues[0]?.message ?? "invalid"}`);
