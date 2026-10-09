@@ -70,10 +70,10 @@ describe("control poll request snapshots", () => {
     it(`batches real summary and group reads for ${n} tasks with multiple dependencies`, async () => {
       const { h, runId } = await claimed(n);
       const counter = installControlReadCounters(h.store);
-      const expectedSummary = readGroupSummary(h.store, "g"), expected = readControlGroup(h.store, "e", "g");
-      expect(expectedSummary).toMatchObject({ completion: { done: 0, total: n }, counts: { running: 1, waiting: n - 1, idle: 0, blocked: 0, done: 0 } });
-      expect(expected.workItems.map(w => w.category)).toEqual(["running", ...Array(n - 1).fill("waiting")]);
       try {
+        const expectedSummary = readGroupSummary(h.store, "g"), expected = readControlGroup(h.store, "e", "g");
+        expect(expectedSummary).toMatchObject({ completion: { done: 0, total: n }, counts: { running: 1, waiting: n - 1, idle: 0, blocked: 0, done: 0 } });
+        expect(expected.workItems.map(w => w.category)).toEqual(["running", ...Array(n - 1).fill("waiting")]);
         expect(counter.store).toBe(h.store);
         counter.reset(); expect(readGroupSummary(counter.store, "g")).toEqual(expectedSummary); bounds(counter.snapshot(), false); observed(counter.snapshot(), n, "summary");
         counter.reset(); const actual = readControlGroup(counter.store, "e", "g"); expect(actual).toEqual(expected); bounds(counter.snapshot(), true); observed(counter.snapshot(), n, "group");

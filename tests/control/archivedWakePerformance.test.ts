@@ -45,17 +45,17 @@ describe("archived wake performance at actual entry points", () => {
     const counter = installControlReadCounters(h.store);
     try {
       expect(replenishStartWakes(h.deps)).toEqual(["drive:g:1"]);
-      expect(counter.snapshot().parses.get("groups:g")).toBe(1);
+      expect(counter.snapshot().groupParses.get("groups:g")).toBe(1);
       expect(groupGets(counter.snapshot())).toBe(0);
       counter.reset();
       expect(replenishStartWakes(h.deps)).toEqual([]);
-      expect(counter.snapshot().parses.get("groups:g")).toBe(1);
+      expect(counter.snapshot().groupParses.get("groups:g")).toBe(1);
       expect(groupGets(counter.snapshot())).toBe(0);
       service.archiveGroup(h.command("archive-group", {}));
       h.store.db.prepare("UPDATE scheduler_wakes SET delivered=1").run();
       counter.reset();
       expect(replenishStartWakes(h.deps)).toEqual([]);
-      expect(counter.snapshot().parses.get("groups:g")).toBe(1);
+      expect(counter.snapshot().groupParses.get("groups:g")).toBe(1);
       expect(groupGets(counter.snapshot())).toBe(0);
     } finally { counter.restore(); await h.dispose(); }
   });
@@ -82,7 +82,7 @@ describe("archived wake performance at actual entry points", () => {
           expect(target.probes()).toBe(0);
           expect(h.accept).not.toHaveBeenCalled();
           expect(groupGets(counts)).toBe(100);
-          for (let n = 0; n < 100; n++) expect(counts.parses.get(`groups:${n === 0 ? "g" : `archive-${n}`}`)).toBe(1);
+          for (let n = 0; n < 100; n++) expect(counts.groupParses.get(`groups:${n === 0 ? "g" : `archive-${n}`}`)).toBe(1);
           expect(pending(h)).toEqual(ids);
           expect(counts.prepares.filter(p => p.sql === "SELECT body FROM groups WHERE id=?")).toHaveLength(pump === 0 ? 1 : 0);
         }
@@ -124,7 +124,7 @@ describe("archived wake performance at actual entry points", () => {
       try {
         expect(await deliverSchedulerWakes(h.store, target.handlers)).toEqual({ delivered: [], deferred: ids });
         expect(target.calls()).toBe(0); expect(groupGets(counter.snapshot())).toBe(1);
-        expect(counter.snapshot().parses.get("groups:g")).toBe(1);
+        expect(counter.snapshot().groupParses.get("groups:g")).toBe(1);
       } finally { counter.restore(); }
     } finally { await h.dispose(); }
   });
@@ -144,7 +144,7 @@ describe("archived wake performance at actual entry points", () => {
         const counts = counter.snapshot();
         expect(target.calls()).toBe(1); expect(target.probes()).toBe(0);
         // The estimate authority independently reads its group and archive mark (two additional reads).
-        expect(groupGets(counts)).toBe(4); expect(counts.parses.get("groups:g")).toBe(4);
+        expect(groupGets(counts)).toBe(4); expect(counts.groupParses.get("groups:g")).toBe(4);
         expect(counts.prepares.filter(p => p.sql === "SELECT body FROM groups WHERE id=?")).toHaveLength(3);
       } finally { counter.restore(); }
     } finally { await h.dispose(); }
@@ -263,7 +263,7 @@ describe("archived wake performance at actual entry points", () => {
       const counter = installControlReadCounters(h.store);
       try {
         expect(await deliverSchedulerWakes(h.store, blocker === "missing-handler" ? {} : target.handlers)).toEqual({ delivered: [], deferred: ids });
-        expect(groupGets(counter.snapshot())).toBe(0); expect(counter.snapshot().parses.size).toBe(0); expect(target.calls()).toBe(0);
+        expect(groupGets(counter.snapshot())).toBe(0); expect(counter.snapshot().parses.size).toBe(0); expect(counter.snapshot().groupParses.size).toBe(0); expect(target.calls()).toBe(0);
       } finally { counter.restore(); }
     } finally { await h.dispose(); }
   });
