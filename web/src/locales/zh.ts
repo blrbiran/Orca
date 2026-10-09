@@ -231,6 +231,13 @@ export const zh: Translation<typeof en> = {
       entry: "{{id}} · {{kind}} · {{bytes}} 字节",
       download: "下载 {{id}}",
     },
+    activity: {
+      region: "{{runId}} 的近期活动",
+      heading: "近期活动",
+      none: "还没有活动记录",
+      refused: "活动读取被拒绝 · {{code}}",
+      phase: "{{step}} · 第 {{attempt}} 次尝试",
+    },
     workspace: {
       region: "工作区模式",
       line: "{{repoId}} 里新的运行使用{{mode}}（设置版本 {{revision}}）。已开始的运行保持原样。",
@@ -746,6 +753,11 @@ export const zh: Translation<typeof en> = {
     estimateState: { queued: "排队中", running: "运行中", "start-unknown": "启动情况未知", ready: "就绪", failed: "失败", interrupted: "已中断", "blocked-capability": "能力不足、已阻塞", "input-too-large": "输入过大" },
     budgetMode: { strict: "严格", soft: "宽松" },
     blockerScope: { global: "全局", group: "组", run: "运行" },
+    activityKind: {
+      command: "命令", "run-claimed": "已认领", "run-started": "已开始", phase: "阶段", "run-blocked": "受阻", "run-resumed": "已恢复",
+      "run-settled": "已结束", "task-retried": "任务重试", integration: "集成", stop: "已停止", "stop-cleared": "停止已解除",
+      archived: "已归档", unarchived: "已取消归档",
+    },
     progressStep: { queued: "排队中", plan: "计划", execute: "执行", verify: "验证", succeeded: "已成功", blocked_waiting_human: "等人处理", exhausted: "已耗尽", cancelled: "已取消", failed: "失败" },
     proposalState: { editable: "可编辑", confirmed: "已确认" },
     ownerKind: { estimate: "估算", task: "任务", "goal-review": "目标评审", reserve: "余量" },

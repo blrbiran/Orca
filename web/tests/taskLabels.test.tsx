@@ -132,6 +132,7 @@ describe("the task detail panel (spec §4.2)", () => {
       globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
         const url = String(input);
         requests.push({ url, headers: init?.headers });
+        if (url === "/api/control/runs/run-a/activity") return new Response(JSON.stringify({ schema: "orca-run-activity-v1", runId: "run-a", entries: [] }), { status: 200, headers: { "content-type": "application/json" } });
         if (url === "/api/control/runs/run-a/evidence") return new Response(JSON.stringify(manifest), { status: 200, headers: { "content-type": "application/json" } });
         return new Response("bytes", { status: 200, headers: { "content-type": "application/octet-stream" } });
       }) as typeof fetch;
@@ -152,7 +153,7 @@ describe("the task detail panel (spec §4.2)", () => {
       fireEvent.click(within(list).getByRole("button", { name: "Download ev-2" }));
       await vi.waitFor(() => expect(downloads).toEqual(["ev-2"]));
       // Accounts spec §3.4: both GETs carry no header of the page's own; the browser sends the session cookie.
-      expect(requests).toEqual([{ url: "/api/control/runs/run-a/evidence", headers: undefined }, { url: "/api/control/runs/run-a/evidence/ev-2", headers: undefined }]);
+      expect(requests).toEqual([{ url: "/api/control/runs/run-a/activity", headers: undefined }, { url: "/api/control/runs/run-a/evidence", headers: undefined }, { url: "/api/control/runs/run-a/evidence/ev-2", headers: undefined }]);
     });
   });
 });

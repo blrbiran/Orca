@@ -333,13 +333,14 @@ const SAME_IN_CHINESE = ["complexity.S", "complexity.M", "complexity.L", "comple
 
 describe("every enum value has its words in both languages (spec §3.5)", () => {
   it("reads every family", () => {
-    // 33 with roundState, draftState and exportState (N1 Task 13, the same named rewrite: the Requirements section).
-    expect(FAMILIES.length).toBe(33);
+    // 33 (34 with activityKind, Task E11) with roundState, draftState and exportState (N1 Task 13, the same named rewrite: the Requirements section).
+    expect(FAMILIES.length).toBe(34);
     // Now counts groupState.clarifying (N1 Task 4, controller ruling: a named rewrite; the count follows the catalogue).
     // And runPhase.single-call (N1 Task 12, the same named rewrite: a requirement's runs in the group view, DR26).
     // And roundState (5), draftState (7) and exportState (4): 148 + 16 (N1 Task 13, the same named rewrite).
     // And runState.settled-failed (issue fixes spec §4.2(4), Task D2, the same named rewrite: 164 + 1).
-    expect(ENUM_VALUES.length).toBe(165);
+    // And the activityKind family (13): issue fixes spec §6.5, Task E11, the same named rewrite: 165 + 13 (34 families).
+    expect(ENUM_VALUES.length).toBe(178);
   });
 
   it("in Chinese shows zh.ts's words for every value, words that differ from the English ones", async () => {

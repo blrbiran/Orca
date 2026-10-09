@@ -6,7 +6,7 @@
 import type { ThemePref } from "../theme.js";
 import type { ChainStopCategory, CorrectionKind, DecisionKind, DecisionObservation, DecisionScope, MetricsNoteCode } from "../types.js";
 import type {
-  AgentSlotV1, AllocationViewV1, AmountDimensionV1, BudgetEstimateV1, CapabilityViewV1, EstimateViewV1, FieldProvenanceV1, GroupSummaryV1, GroupViewV1, HandoffRequestViewV1, ProvenanceSourceV1, RecoveryViewV1, RequirementViewV1, RunViewV1, WorkItemProgressV1, WorkItemViewV1,
+  ActivityKindV1, AgentSlotV1, AllocationViewV1, AmountDimensionV1, BudgetEstimateV1, CapabilityViewV1, EstimateViewV1, FieldProvenanceV1, GroupSummaryV1, GroupViewV1, HandoffRequestViewV1, ProvenanceSourceV1, RecoveryViewV1, RequirementViewV1, RunViewV1, WorkItemProgressV1, WorkItemViewV1,
 } from "../controlTypes.js";
 
 /** The Chinese resource's type: the same key set, every value widened to string (spec §2). */
@@ -86,6 +86,13 @@ const progressStep = {
   queued: "queued", plan: "plan", execute: "execute", verify: "verify", succeeded: "succeeded", blocked_waiting_human: "blocked_waiting_human",
   exhausted: "exhausted", cancelled: "cancelled", failed: "failed",
 } as const satisfies Record<NonNullable<WorkItemProgressV1["step"]>, string>;
+
+// Issue-fixes spec §5.2: the activity kinds a run's feed shows.
+const activityKind = {
+  command: "command", "run-claimed": "claimed", "run-started": "started", phase: "phase", "run-blocked": "blocked", "run-resumed": "resumed",
+  "run-settled": "settled", "task-retried": "task retried", integration: "integration", stop: "stopped", "stop-cleared": "stop cleared",
+  archived: "archived", unarchived: "unarchived",
+} as const satisfies Record<ActivityKindV1, string>;
 
 const proposalState = { editable: "editable", confirmed: "confirmed" } as const satisfies Record<GroupViewV1["proposal"]["state"], string>;
 const ownerKind = { estimate: "estimate", task: "task", "goal-review": "goal-review", reserve: "reserve" } as const satisfies Record<AllocationViewV1["ownerKind"], string>;
@@ -323,6 +330,13 @@ export const en = {
       region: "Evidence of {{runId}}",
       entry: "{{id}} · {{kind}} · {{bytes}} bytes",
       download: "Download {{id}}",
+    },
+    activity: {
+      region: "Recent activity of {{runId}}",
+      heading: "Recent activity",
+      none: "no activity recorded yet",
+      refused: "activity refused · {{code}}",
+      phase: "{{step}} · attempt {{attempt}}",
     },
     workspace: {
       region: "Workspace mode",
@@ -814,7 +828,7 @@ export const en = {
   },
   enums: {
     theme, decisionKind, decisionScope, decisionVerdict, correctionKind, chainStopCategory,
-    groupState, roundState, draftState, exportState, stopMode, stopState, workStatus, runPhase, runState, requestState, estimateState, budgetMode, blockerScope, progressStep,
+    groupState, roundState, draftState, exportState, stopMode, stopState, workStatus, runPhase, runState, requestState, estimateState, budgetMode, blockerScope, progressStep, activityKind,
     proposalState, ownerKind, bucket, allocationState, dimension, complexity, confidence, handoffControl, handoffExecution, budgetEnforcement, fieldProvenance,
     agentSlot, selectionSource,
   },

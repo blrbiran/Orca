@@ -8,15 +8,16 @@
  * finding 1). The draft is the person's own data: the page clears it only when the command succeeded (App.tsx, plan
  * finding F11) or when the person discards it, so a refusal -- shown by its code like every other refusal -- leaves it.
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { JSX } from "react";
 import { useTranslation } from "react-i18next";
-import { controlFailureFrom, downloadEvidenceArtifact, fetchRunEvidence, type ControlAction } from "./controlApi.js";
+import { controlFailureFrom, downloadEvidenceArtifact, fetchRunActivity, fetchRunEvidence, type ControlAction } from "./controlApi.js";
 import { CUSTOM_LABEL_PREFIX, WEB_SYSTEM_LABELS } from "./controlTypes.js";
-import type { EvidenceManifestV1, GroupViewV1, WorkItemProgressV1, WorkItemViewV1 } from "./controlTypes.js";
+import type { ActivityEntryV1, EvidenceManifestV1, GroupViewV1, WorkItemProgressV1, WorkItemViewV1 } from "./controlTypes.js";
 import { LoopPlanCard } from "./LoopPlanCard.js";
 import { RunReason } from "./RunReason.js";
-import { isTerminalFailure, retryTaskOpen, taskRunNumber } from "./runFacts.js";
+import { explainRunReason } from "./refusalExplain.js";
+import { isTerminalFailure, reasonCode, retryTaskOpen, taskRunNumber } from "./runFacts.js";
 import i18n, { enumText } from "./i18n.js";
 
 export const labelsDraftKey = (groupId: string, taskId: string): string => `labels:${groupId}:${taskId}`;
@@ -109,6 +110,55 @@ export function EvidenceList(props: { runId: string }): JSX.Element {
   );
 }
 
+/** ccloop's own step words (a phase row keeps them raw) onto the panel's step words; a word with no entry shows as sent. */
+const CCLOOP_STEP: Record<string, string> = { planning: "plan", executing: "execute", verifying: "verify" };
+
+/** One activity row in words: its kind, and for a phase, a block or a settle what it said. */
+function activityText(entry: ActivityEntryV1): string {
+  const kind = enumText("activityKind", entry.kind);
+  const body = entry.body;
+  if (entry.kind === "phase" && typeof body.step === "string") {
+    const step = enumText("progressStep", CCLOOP_STEP[body.step] ?? body.step);
+    return `${kind} · ${typeof body.attempt === "number" ? i18n.t("control.activity.phase", { step, attempt: body.attempt }) : step}`;
+  }
+  if (entry.kind === "run-blocked" && typeof body.reason === "string") {
+    const code = reasonCode(body.reason);
+    return `${kind} · ${explainRunReason(code) ?? body.reason}`;
+  }
+  if (entry.kind === "run-settled" && typeof body.state === "string") return `${kind} · ${enumText("runState", body.state)}`;
+  return kind;
+}
+
+/**
+ * Issue-fixes spec §6.5: the current run's recent activity, read when the detail opens and again whenever the group's
+ * projection moves (changeSeq). A refusal is named in place; the rest of the detail does not wait on it. Read-only
+ * information, so it stays on an archived group.
+ */
+export function RunActivity(props: { runId: string; changeSeq: number }): JSX.Element {
+  const { t } = useTranslation();
+  const [entries, setEntries] = useState<ActivityEntryV1[] | null>(null);
+  const [refusal, setRefusal] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    fetchRunActivity(props.runId).then(
+      (answer) => { if (live) { setEntries(Array.isArray(answer?.entries) ? answer.entries : []); setRefusal(null); } },
+      (err: unknown) => { if (live) setRefusal(controlFailureFrom(err).code); },
+    );
+    return () => { live = false; };
+  }, [props.runId, props.changeSeq]);
+  return (
+    <section aria-label={t("control.activity.region", { runId: props.runId })}>
+      <h5>{t("control.activity.heading")}</h5>
+      {refusal !== null && <p className="detail-note">{t("control.activity.refused", { code: refusal })}</p>}
+      {entries !== null && (entries.length === 0 ? <p>{t("control.activity.none")}</p> : (
+        <ol>
+          {entries.map((entry) => <li key={entry.seq}>{new Date(entry.at).toISOString()} · {activityText(entry)}</li>)}
+        </ol>
+      ))}
+    </section>
+  );
+}
+
 export interface TaskDetailProps {
   view: GroupViewV1;
   item: WorkItemViewV1;
@@ -185,6 +235,7 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
         {item.progress?.lastTransitionAt ? t("control.task.lastTransition", { at: item.progress.lastTransitionAt }) : ""}
       </p>
       <LoopPlanCard view={view} item={item} drafts={drafts} onDraft={onDraft} onCommand={onCommand} workspaceMode={props.workspaceMode} archived={archived} />
+      {item.currentRunId !== null && <RunActivity runId={item.currentRunId} changeSeq={view.changeSeq} />}
       <h5>{t("control.task.runsOf", { taskId: item.taskId })}</h5>
       {/* Issue fixes spec §4.2(2): the run number counts the runs that reached the provider. */}
       {runNumber > 0 && <p>{t("control.task.runNumber", { n: runNumber })}</p>}

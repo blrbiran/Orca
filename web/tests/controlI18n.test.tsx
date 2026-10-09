@@ -174,7 +174,7 @@ describe("the rest of the control area's branches in Chinese", () => {
     expect(screen.getByRole("list", { name: "a 的标签" })).toBeTruthy();
     expect(screen.getByRole("combobox", { name: "系统标签" })).toBeTruthy();
     expect(screen.getByRole("textbox", { name: "自定义标签" })).toBeTruthy();
-    expect(screen.getByRole("heading", { level: 5 }).nextElementSibling!.textContent).toBe("无");
+    expect(screen.getByRole("heading", { level: 5, name: "a 的运行" }).nextElementSibling!.textContent).toBe("无");
 
     expect(progressText({ runId: "r1", step: null, attempt: { current: 2, max: 5 }, tokens: null, lastTransitionAt: null })).toBe("尚未上报 · 尝试 2/5 · token 未知");
     expect(progressText({ runId: "r1", step: "verify", attempt: null, tokens: { used: 5, grant: 20 }, lastTransitionAt: null })).toBe("验证 · 尝试次数未知 · token 25%（阶段结束时上报）");
