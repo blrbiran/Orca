@@ -5,9 +5,11 @@
  * requirement; an open that was refused made no group, so nothing is read for it and its refusal stays on screen.
  */
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { UNCERTAIN_COMMANDS_KEY } from "../src/controlApi.js";
 import { App } from "../src/App.js";
 import type { ControlSummaryV1, RecoveryViewV1 } from "../src/controlTypes.js";
+import { view as taskView } from "./fixtures/board.js";
 import { config, requirementView, summaryWith } from "./fixtures/requirement.js";
 
 const metrics = { report: { as_of: "2026-09-21T00:00:00.000Z", as_of_mode: "wall_clock", repos: [], correction_rate: { numerator_corrections_excluding_stale: 0, denominator_decisions: 0, rate_excluding_stale: null, corrections_total_including_stale: 0, by_decision_kind: [], buckets: [], caveats: [] }, repair_rate: { numerator_overturned: 0, denominator_corrections_including_stale: 0, rate: null, stale_only: { numerator_overturned: 0, denominator_corrections: 0, rate: null, known_bias: "" }, buckets: [], caveats: [] }, backlog: { open_corrections: 0, oldest_age_ms: null, oldest_correction_id: null, by_correction_kind: [] }, breakdown_by_correction_kind_including_stale: [], review_coverage: { available: false, reason: "none" }, unresolved_decisions: [], unkeyable_repos: [], malformed_lines: [] }, panel_review_coverage: { reviewed_high_tier: 0, high_tier_total: 0, rate: 0, caveat: "" } };
@@ -115,3 +117,73 @@ describe("App and the Requirements section (N1 spec §11.2, DR25)", () => {
   });
 });
 
+
+// Feedback archive uses the requirement read/refusal channel, even though its verb is shared with task groups.
+describe("App requirement archive routing", () => {
+  it.each([200, 409])("routes archive response %s to the requirement view", async (status) => {
+    shownView = requirementView("failed");
+    const original = globalThis.fetch;
+    globalThis.fetch = async (input, init) => {
+      const url = String(input);
+      if (init?.method === "POST" && url === "/api/control/groups/r/archive") {
+        requests.push(`POST ${url}`);
+        if (status === 200) { shownView = { ...shownView, summary: { ...shownView.summary, archived: true } }; return json({ schema: "orca-command-success-v1", commandRevision: 4 }); }
+        return json({ error: { code: "archive-call-in-flight", message: "requirement", commandRevision: 3 } }, 409);
+      }
+      return original(input, init);
+    };
+    render(<App />); fireEvent.click(await (await requirementList()).findByRole("button", { name: /^r · clarifying/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Archive group" }));
+    if (status === 200) expect(await screen.findByRole("button", { name: "Unarchive" })).toBeTruthy();
+    else expect(await within(await screen.findByRole("region", { name: "Requirements" })).findByText(/^archive-call-in-flight ·/)).toBeTruthy();
+    expect(requests).not.toContain("GET /api/control/groups/r");
+  });
+});
+
+it.each(["clarifying", "draft"] as const)("recovers a lost %s requirement archive response through the requirement channel without resending", async (state) => {
+  shownView = requirementView("failed"); shownView.summary.state = state;
+  window.sessionStorage.setItem(UNCERTAIN_COMMANDS_KEY, JSON.stringify([{ groupId: "r", commandId: "lost-archive" }]));
+  const original = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    const url = String(input);
+    if (url.startsWith("/api/control/summary")) { requests.push(`GET ${url}`); return json(summaryWith(shownView)); }
+    if (url === "/api/control/groups/r") { requests.push(`GET ${url}`); return json({ ...taskView([]), epoch: shownView.epoch, changeSeq: shownView.changeSeq, plan: { ...taskView([]).plan, repoId: "repo" }, summary: shownView.summary }); }
+    if (url === "/api/control/groups/r/commands/lost-archive") {
+      requests.push(`GET ${url}`);
+      return json({ schema: "orca-command-lookup-v1", originalStatus: 409, body: {
+        error: { code: "archive-call-in-flight", message: "requirement", commandRevision: 3, evidenceIds: [], retryable: false },
+      } });
+    }
+    return original(input, init);
+  };
+  render(<App />);
+  expect(await within(await screen.findByRole("region", { name: "Requirements" })).findByText(/^archive-call-in-flight ·/)).toBeTruthy();
+  expect(requests).toContain("GET /api/control/groups/r/commands/lost-archive");
+  if (state === "clarifying") expect(requests).not.toContain("GET /api/control/groups/r");
+  else await waitFor(() => expect(requests).toContain("GET /api/control/groups/r"));
+  expect(requests.some((request) => request.startsWith("POST "))).toBe(false);
+  expect(JSON.parse(window.sessionStorage.getItem(UNCERTAIN_COMMANDS_KEY) ?? "[]")).toEqual([]);
+});
+
+it.each(["clarifying", "draft"] as const)("unarchives an archived %s requirement through its actual read channel", async (state) => {
+  shownView = requirementView("answered"); shownView.summary = { ...shownView.summary, state, archived: true };
+  const original = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    const url = String(input);
+    if (url.startsWith("/api/control/summary")) { requests.push(`GET ${url}`); return json(summaryWith(shownView)); }
+    if (init?.method === "POST" && url === "/api/control/groups/r/unarchive") {
+      requests.push(`POST ${url}`); shownView = { ...shownView, summary: { ...shownView.summary, archived: false, commandRevision: 4 } };
+      return json({ schema: "orca-command-success-v1", commandRevision: 4 });
+    }
+    if (url === "/api/control/groups/r") { requests.push(`GET ${url}`); return json({ ...taskView([]), epoch: shownView.epoch, changeSeq: shownView.changeSeq, plan: { ...taskView([]).plan, repoId: "repo" }, summary: shownView.summary }); }
+    return original(input, init);
+  };
+  render(<App />);
+  fireEvent.click(await screen.findByRole("checkbox", { name: "Show archived requirements" }));
+  fireEvent.click(await (await requirementList()).findByRole("button", { name: `r · ${state}` }));
+  fireEvent.click(await screen.findByRole("button", { name: "Unarchive" }));
+  await waitFor(() => expect(screen.queryByRole("button", { name: "Unarchive" })).toBeNull());
+  expect(requests.filter(request => request === "GET /api/control/groups/r/requirement")).toHaveLength(2);
+  if (state === "clarifying") expect(requests).not.toContain("GET /api/control/groups/r");
+  else expect(requests).toContain("GET /api/control/groups/r");
+});

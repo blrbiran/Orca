@@ -32,14 +32,14 @@ const detail = (archived = false): void => {
 };
 
 describe("the task detail's run activity (spec §6.5)", () => {
-  it("reads the current run's activity from its route and lists it, newest first, above the runs and their evidence", async () => {
+  it("reads the current run's activity from its route and lists the newest window chronologically, above the runs and their evidence", async () => {
     detail();
     const region = await screen.findByRole("region", { name: "Recent activity of run-a" });
     const lines = await within(region).findAllByRole("listitem");
     const text = lines.map((line) => line.textContent ?? "");
-    expect(text[2]).toBe(`${new Date(AT).toISOString()} · phase · execute · attempt 2`);
-    expect(text[3]).toBe(`${new Date(AT - 60_000).toISOString()} · started`);
-    expect(text[0]).toBe(`${new Date(AT + 1000).toISOString()} · settled · settled`);
+    expect(text[1]).toBe(`${new Date(AT).toISOString()} · phase · execute · attempt 2`);
+    expect(text[0]).toBe(`${new Date(AT - 60_000).toISOString()} · started`);
+    expect(text[3]).toBe(`${new Date(AT + 1000).toISOString()} · settled · settled`);
     expect(text).toHaveLength(4);
     expect(urls).toEqual(["/api/control/runs/run-a/activity"]);
     const runsHeading = screen.getByRole("heading", { name: "Runs of a" });
@@ -50,7 +50,7 @@ describe("the task detail's run activity (spec §6.5)", () => {
     detail();
     const region = await screen.findByRole("region", { name: "Recent activity of run-a" });
     const lines = await within(region).findAllByRole("listitem");
-    const blocked = lines[1]?.textContent ?? "";
+    const blocked = lines[2]?.textContent ?? "";
     expect(blocked.startsWith(`${new Date(AT + 500).toISOString()} · blocked · `)).toBe(true);
     expect(blocked).not.toContain("Error: ");
   });

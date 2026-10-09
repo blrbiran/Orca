@@ -50,7 +50,9 @@ describe("a blocked run in the group view (execution driver §2.3)", () => {
   it("shows the reason next to the blocked state", () => {
     const html = renderGroup([run({ state: "blocked", blockedReason: "inspect-unknown" })]);
     // Issue fixes spec §2.2(a), §4.2(5): the reason is explained in the reader's language, the raw reason beside it.
-    expect(html).toMatch(/blocked — After several checks ccloop still cannot tell whether this run is alive\.[^<]* <code>inspect-unknown<\/code>/);
+    expect(html).toContain("blocked</div>");
+    expect(html).toContain("After several checks ccloop still cannot tell whether this run is alive.");
+    expect(html).toContain("<code>inspect-unknown</code>");
   });
 
   it("shows no reason for a run that is not blocked, even from a view that omits the field", () => {

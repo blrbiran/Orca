@@ -11,6 +11,14 @@ const rule = (selector: string): string => {
 
 /** jsdom never applies this sheet, so the two visual promises the spec makes are pinned on the sheet itself. */
 describe("styles.css", () => {
+  it("shares the viewport with variable-height account content and scrolls inside each pane", () => {
+    expect(rule(".authenticated-shell")).toContain("height: 100dvh");
+    expect(rule(".authenticated-shell > .shell")).toContain("min-height: 0");
+    expect(rule(".authenticated-shell .sidebar")).toContain("height: 100%");
+    expect(rule(".authenticated-shell .sidebar")).toContain("overflow-y: auto");
+    expect(rule(".authenticated-shell .content")).toContain("overflow-y: auto");
+  });
+
   it("wraps a question with no break opportunity and clamps it to two lines (Review Focus 1)", () => {
     const q = rule(".row-question");
     expect(q).toContain("overflow-wrap: anywhere");

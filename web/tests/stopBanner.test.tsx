@@ -100,7 +100,7 @@ describe("the stop banner (issue-fixes spec §3.2 (4))", () => {
     try {
       mount(view("running", shutdownStop("handoff-partial")));
       const zh = screen.getByTestId("stop-banner").textContent ?? "";
-      expect(zh).toContain("出路：点「派发」下的「归档这个组」。");
+      expect(zh).toContain("出路：点「调度」下的「归档这个组」。");
       expect(zh).not.toContain("重试恢复");
       expect(screen.getByRole("button", { name: "归档这个组" })).toBeTruthy();
     } finally {
@@ -113,7 +113,7 @@ describe("the stop banner (issue-fixes spec §3.2 (4))", () => {
     mount(view("ready", shutdownStop("handoff-complete")));
     const text = screen.getByTestId("stop-banner").textContent ?? "";
     expect(text).toContain("已停止：面板关闭时有运行在跑。");
-    expect(text).toContain("可以恢复了：用「派发」下的恢复按钮。");
+    expect(text).toContain("可以恢复了：用「调度」下的恢复按钮。");
     expect(screen.getByRole("button", { name: "恢复（不续跑）" })).toBeTruthy();
   });
 });

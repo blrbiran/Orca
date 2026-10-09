@@ -64,15 +64,15 @@ describe("the agents area in Chinese", () => {
     const { container } = render(<AgentSettings agents={agents} preferences={preferences} drafts={{}} onDraft={vi.fn()} onSave={vi.fn()} />);
     const text = container.textContent ?? "";
     for (const expected of [
-      "操作者 op-1 · 偏好版本 3。修改只影响之后确认的组；已确认的组保留它冻结的选择。", "安装", "默认模型", "默认上下文", "agent 默认",
-      "默认 agent", "无（每个组都得自己选一个）", "codex 的默认值", "估算槽", "协调槽", "模型", "上下文", "继承", "保存 agent 偏好",
+      "操作者 op-1 · 偏好版本 3。修改只影响之后确认的组；已确认的组保留它冻结的选择。", "安装", "默认模型", "默认上下文窗口", "agent 默认",
+      "默认 agent", "无（每个组都得自己选一个）", "codex 的默认值", "估算槽", "协调槽", "模型", "上下文窗口", "继承", "保存 agent 偏好",
     ]) expect(text, expected).toContain(expected);
     // Each site by its own element.
     const section = container.querySelector("section")!;
     expect(section.getAttribute("aria-label")).toBe("agent 设置");
     expect(texts(container, "h3")).toEqual(["agent"]);
     expect(texts(container, "section > p")).toEqual(["操作者 op-1 · 偏好版本 3。修改只影响之后确认的组；已确认的组保留它冻结的选择。"]);
-    expect(texts(container, "thead th")).toEqual(["安装", "类型", "版本", "默认模型", "默认上下文"]);
+    expect(texts(container, "thead th")).toEqual(["安装", "类型", "版本", "默认模型", "默认上下文窗口"]);
     expect(texts(container, "tbody td")).toEqual(["codex", "codex", "1.0", "gpt-x", "agent 默认"]);
     const defaultLabel = container.querySelector(`select[name="agents:default-agent"]`)!.closest("label")!;
     expect(ownText(defaultLabel)).toBe("默认 agent");
@@ -80,7 +80,7 @@ describe("the agents area in Chinese", () => {
     expect(texts(container, "legend")).toEqual(["codex 的默认值", "估算槽", "协调槽"]);
     const estimator = fieldset(container, "估算槽");
     expect(estimator.getAttribute("aria-label")).toBe("估算槽");
-    expect([...estimator.querySelectorAll("label")].map(ownText)).toEqual(["agent", "模型", "上下文"]);
+    expect([...estimator.querySelectorAll("label")].map(ownText)).toEqual(["agent", "模型", "上下文窗口"]);
     expect(firstOption(estimator, "agent")).toBe("继承");
     expect(firstOption(estimator, "context")).toBe("继承");
     expect(texts(estimator, `select[name$=":context"] option`)).toEqual(["继承", "agent 默认", "1000000 token"]);
@@ -116,11 +116,11 @@ describe("the agents area in Chinese", () => {
     ]);
     expect(texts(container, "small")).toContain(" 从下次重新估算起使用；和任何提案修改一样，它会推进提案版本。");
     const worker = fieldset(container, "组 执行");
-    expect([...worker.querySelectorAll("label")].map(ownText)).toEqual(["agent", "忽略计划里的agent（codex）", "模型", "忽略计划里的模型（gpt-5x）", "上下文", "忽略计划里的上下文窗口（1000000 token）"]);
+    expect([...worker.querySelectorAll("label")].map(ownText)).toEqual(["agent", "忽略计划里的agent（codex）", "模型", "忽略计划里的模型（gpt-5x）", "上下文窗口", "忽略计划里的上下文窗口（1000000 token）"]);
     expect(firstOption(worker, "agent")).toBe("继承（计划：codex）");
     expect(firstOption(worker, "context")).toBe("继承");
     expect(firstOption(fieldset(container, "组 估算"), "agent")).toBe("继承");
-    expect(texts(container, "thead th")).toEqual(["槽位", "agent", "模型", "上下文", "这个任务自己的一层"]);
+    expect(texts(container, "thead th")).toEqual(["槽位", "agent", "模型", "窗口", "这个任务自己的一层"]);
     expect(firstCell(container, "task:a").slice(0, 4)).toEqual(["a", "codex 来自操作者", "gpt-x 来自agent 描述符", "1000000 token 来自计划（组）"]);
     expect(firstCell(container, "task:b").slice(0, 2)).toEqual(["b", "暂时不可用，点「重新读取」再问一次 · ccloop-timeout"]);
     expect(firstCell(container, "reconcile")).toEqual(["协调", "被拒 · agent-installation-missing", ""]);
@@ -135,7 +135,7 @@ describe("the agents area in Chinese", () => {
     for (const expected of ["agent（确认时已冻结）", "槽位", "未记录", "协调"]) expect(confirmed, expected).toContain(expected);
     expect(confirmedRoot.querySelector("section")!.getAttribute("aria-label")).toBe("agent 选择");
     expect(texts(confirmedRoot, "h3")).toEqual(["agent（确认时已冻结）"]);
-    expect(texts(confirmedRoot, "thead th")).toEqual(["槽位", "agent", "模型", "上下文"]);
+    expect(texts(confirmedRoot, "thead th")).toEqual(["槽位", "agent", "模型", "窗口"]);
     expect(firstCell(confirmedRoot, "task:a")).toEqual(["a", "未记录"]);
     expect(firstCell(confirmedRoot, "reconcile")).toEqual(["协调", "未记录"]);
     cleanup();

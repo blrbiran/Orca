@@ -73,6 +73,14 @@ orca agents show     # validates the table and prints each installation's defaul
 - The panel itself does not fall back to the default path: **`ORCA_AGENTS_TABLE` must be set when you start the
   panel**, or it starts without an execution port (see below).
 
+#### After upgrading an agent CLI
+
+The installation table records the CLI version. Upgrading the binary does not update that record; resolution refuses
+version drift with `agent-version-drift`. Run `orca agents show`, then `orca agents init` to detect the current
+installations. With an existing table, inspect `<table>.draft.json` and the printed differences. Preserve your existing
+custom commands, configuration directories and defaults; back up the old table before deliberately replacing it with
+reviewed values. Restart the panel to load the new table. Do not delete the only copy of your configuration.
+
 ### 2. ccloop
 
 | `ORCA_CCLOOP_BIN` | Meaning |
@@ -205,14 +213,14 @@ A task may give a `loop` block instead of a `contract` file:
 }
 ```
 
-The import button uses the **first** `--repo` and the **first** `--plan` only.
+The import form uses registered plans for the selected project; if several exist, choose one. In **All projects**, explicitly choose the target repository before importing.
 
 ### 6. Optional integrations
 
 | Variable | Effect |
 |---|---|
 | `ORCA_CCMEM_BIN` = absolute path to `ccmem` | turns on the read-only **Memory** section. Opening it starts ccmem, and ccmem may migrate its own data directory when it opens it. Unset: ccmem is never started. |
-| `ORCA_SYNCSKILL_BIN` = absolute path to `syncskill` | lets a loop task declare `"skills": {"profile": "<name>"}` or `"skills": {"names": ["<skill>", ...]}`. Skills work only with **claude** installations; a task with skills on a codex agent is refused at confirm (`skills-unsupported-agent`). Unset: Orca never starts syncskill. |
+| `ORCA_SYNCSKILL_BIN` = absolute path to `syncskill` | lets a loop task declare `"skills": {"profile": "<name>"}` or `"skills": {"names": ["<skill>", ...]}`. Frozen task skills work with **Claude and Codex** installations. Other agent kinds are refused (`skills-unsupported-agent`); this does not give Codex single-call clarification/estimation capability. Unset: Orca never starts syncskill. |
 
 ## Start the panel
 
@@ -260,7 +268,7 @@ gets the default limit.
 ## The sections
 
 The left-hand navigation has six sections, ordered along the work. **Requirements** opens by default. The active
-section is kept in the URL hash, so a reload stays put. The header also has a language switch (English / Chinese)
+section is kept in the URL hash, so a reload stays put. The sidebar also has a language switch (English / Chinese)
 and a theme switch.
 
 ```
@@ -281,6 +289,11 @@ and a theme switch.
 
 ### Requirements
 
+Clarification and splitting need a bounded **single call**. The pinned Codex adapter does not provide that capability;
+use Claude for this section. With only Codex installed, write a plan using the [Plans for Task control](#5-plans-for-task-control-optional) example and import it in
+**Task control**, then review/set task budgets manually if no capable estimator is available. An explicitly selected Codex installation is explained and blocked in the form; a default selection
+is still resolved by the server, so ensure your default supports single calls.
+
 1. Pick a repository, type the idea, set a token limit, the content language and the agent, and press
    **Start clarifying**. This creates a group in state `clarifying`.
 2. The model asks questions in rounds; each comes with a recommended answer and why. Accept the recommendation or
@@ -296,6 +309,11 @@ Each model call is counted against the requirement's token limit. When the next 
 you to raise the limit.
 
 ### Task control
+
+Quick start: select the target project, import a registered plan (or accept a requirement split), review the task goals
+and budgets, choose the agents/models, **Confirm budget**, then **Start**. Confirmation freezes the selection; choose
+agents before confirming. The driver schedules eligible tasks and their dependencies automatically within the group.
+You do not need to start each task separately. Watch the dependency graph and open a task for activity and evidence.
 
 Groups come from an accepted requirement or from an imported plan (**Import plan**). For each group you can:
 
@@ -394,3 +412,21 @@ prevented. Chains have a soft cost limit checked after each session.
 - [docs/cli.md](docs/cli.md) — the CLI and development reference (the previous README).
 - [CLAUDE.md](CLAUDE.md) — rules for agents developing Orca.
 - [docs/handoff/handoff.md](docs/handoff/handoff.md) — current state and open work, for the next agent.
+
+## Troubleshooting the panel
+
+| Symptom | Check and next action |
+|---|---|
+| No task control plane | Check whether the panel was started with `--no-control`. A missing execution port is different: reads work, but work cannot start. Check `ORCA_AGENTS_TABLE` and ccloop configuration in the panel process. An expired login requires logging in; it does not mean the control plane is missing. |
+| `agent-version-drift` | Review a newly detected agents draft after upgrading the CLI, preserve custom configuration and restart the panel; see the agents-table instructions above. |
+| Codex cannot clarify or estimate | Single-call capability is unavailable on the pinned Codex adapter. Use a capable agent for clarification/estimation; a task worker may still use Codex. |
+| Start is missing or `stop-mode-conflict` | Read the stop banner. Resume a pause with **Resume dispatch**. After a completed handoff, use the resume dialog; select no continuations when you only want to clear the completed stop before retrying a failed task. Pending/unresolved handoffs need recovery first; a partial handoff can be archived. Do not edit `stop_intents` or group JSON in SQLite. |
+| A task ended failed | Inspect its failure reason, recent activity and evidence. **Retry task** creates a new task attempt when allowed; **Retry recovery** is for recoverable blocked runs, not terminal task failures. Unknown usage or insufficient budget can still prevent a retry. |
+| Unknown usage blocks admission | An owner can inspect and explicitly conservatively settle the remaining work and handoff grants in the Web UI. This charges remaining allowances as used; it is not a measured provider report and does not itself retry or clear a stop. |
+| `recovery-blocked` | Read the named blocker and inspect evidence. If a database was manually edited, preserve a backup and diagnose the damaged record separately; refreshing cookies does not repair store data. |
+| Started, but no task runs | Check the group stop banner, global recovery/admission blockers, budget/caps, dependencies, agent preview and execution-port configuration. Open the task activity and evidence before retrying. |
+
+A requirement waiting for answers/review or a failed idle requirement can be archived from its detail. A drafting call
+or unresolved stop must finish/recover first. Archiving keeps its records; the archived detail is read-only and offers
+**Unarchive**. Recent task activity displays the latest returned window in chronological order; it is not the full run
+history. Runs use K/M/B token units with exact counts in the tooltip, and keep raw identifiers in expandable details.

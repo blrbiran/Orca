@@ -29,7 +29,8 @@ import type {
 import type { ControlRefusal, UncertainCommand } from "./controlState.js";
 import { LabelChips, TaskDetail, progressText } from "./TaskDetail.js";
 import { planText } from "./LoopPlanCard.js";
-import { enumText } from "./i18n.js";
+import { currentLanguage, enumText } from "./i18n.js";
+import { formatTokens, shortTokens } from "./TokenInput.js";
 import { capScopeText } from "./UsagePanel.js";
 
 const short = (hash: string): string => hash.slice(0, 12);
@@ -210,17 +211,17 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
           </tr>
         </thead>
         <tbody>
-          {view.runs.map((run) => (
+          {view.runs.map((run, index) => (
             <tr key={run.runId}>
-              <td>{run.taskId ?? run.estimateId ?? run.runId}</td>
+              <td>{run.taskId ?? run.estimateId ?? <details><summary>{t("control.group.runLabel", { n: index + 1 })}</summary><code>{run.runId}</code></details>}</td>
               <td>{enumText("runPhase", run.phase)}</td>
-              <td>
-                {enumText("runState", run.state)}
-                <RunReason run={run} />
+              <td className="run-state">
+                <div>{enumText("runState", run.state)}</div>
+                <div><RunReason run={run} /></div>
                 {retryRunOpen(view, run) && <p>{t("control.group.retryFromHead")}</p>}
                 <UsageSettlement key={JSON.stringify([revision, run.unknownUsageSettlement, props.roles])} run={run} roles={props.roles} archived={archived} groupId={groupId} revision={revision} onCommand={onCommand} />
-                {run.failureCode !== null ? ` (${run.failureCode})` : ""}
-                {t("control.group.attempt", { attempt: run.providerAttemptOrdinal, claim: run.claimOrdinal ?? t("common.na") })}
+                {run.failureCode !== null && <div><code>{run.failureCode}</code></div>}
+                <div>{t("control.group.attempt", { attempt: run.providerAttemptOrdinal, claim: run.claimOrdinal ?? t("common.na") })}</div>
                 {/* Execution driver final review I5: a run the driver blocked carries its reason on the run, not as a
                     recovery blocker, so its one remedy (spec §2.3, the run-scope recovery-retry) is offered here. */}
                 {/* Issue fixes spec §4.2(5): a run ccloop ended failed is retried as a task (a new run), and only where the
@@ -242,12 +243,12 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
                   </button>
                 ) : null}
               </td>
-              <td>{run.profile.profileId} {short(run.profile.profileHash)}</td>
-              <td>{run.used.tokens}</td>
-              <td>{run.remaining.tokens}</td>
+              <td><details><summary>{run.profile.profileId}</summary><code>{run.profile.profileHash}</code></details></td>
+              <td><span title={formatTokens(run.used.tokens, currentLanguage())}>{shortTokens(run.used.tokens, "en")}</span></td>
+              <td><span title={formatTokens(run.remaining.tokens, currentLanguage())}>{shortTokens(run.remaining.tokens, "en")}</span></td>
               <td>
                 <EvidenceLink runId={run.runId} />
-                {run.evidenceIds.length > 0 ? ` ${run.evidenceIds.join(", ")}` : ""}
+                {run.evidenceIds.length > 0 && <details><summary>{t("control.group.evidenceCount", { n: run.evidenceIds.length })}</summary><ul>{run.evidenceIds.map((id) => <li key={id}><code>{id}</code></li>)}</ul></details>}
               </td>
             </tr>
           ))}

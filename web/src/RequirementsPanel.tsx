@@ -93,10 +93,12 @@ function NewRequirement(props: { config: ControlConfigV1; agents: AgentsViewV1 |
     return <p role="note">{t("requirements.repositoryNotConfigured")}</p>;
   }
   const { idea, tokens, language, agent } = draft;
+  // Codex cannot bound a single call; defaults and unknown kinds remain server-resolved.
+  const unsupported = props.agents?.installations.find((entry) => entry.id === agent)?.kind === "codex";
   return (
     <form aria-label={t("requirements.newTitle")} onSubmit={(event) => {
       event.preventDefault();
-      if (repoId === "" || limitBad) return;
+      if (repoId === "" || limitBad || unsupported) return;
       const groupId = `requirement-${nextCommandId()}`;
       props.onCommand({ verb: "requirement-open", groupId, expectedRevision: 0, payload: {
         groupId, repoId, idea, contentLanguage: language, ...(mayLimit ? { limit: { tokens, activeMs: 14_400_000, attempts: 40, sessions: 40 } } : {}),
@@ -114,7 +116,9 @@ function NewRequirement(props: { config: ControlConfigV1; agents: AgentsViewV1 |
       <label>{t("requirements.agent")}<select value={agent} onChange={(e) => edit({ agent: e.currentTarget.value })}>
         <option value="">{t("requirements.agentDefault")}</option>
         {(props.agents?.installations ?? []).map((installation) => <option key={installation.id} value={installation.id}>{installation.id}</option>)}</select></label>
-      <button type="submit" disabled={idea.trim() === "" || repoId === "" || limitBad}>{t("requirements.open")}</button>
+      <p role="note">{t("requirements.capabilityNote")}</p>
+      {unsupported && <p role="note">{t("requirements.codexUnsupported")}</p>}
+      <button type="submit" disabled={idea.trim() === "" || repoId === "" || limitBad || unsupported}>{t("requirements.open")}</button>
     </form>
   );
 }
@@ -190,7 +194,7 @@ function Consensus(props: { view: View; round: Round; onCommand: (a: ControlActi
   );
 }
 
-function DraftReview(props: { view: View; draft: Draft; onCommand: OnCommand } & EditableDrafts): JSX.Element {
+function DraftReview(props: { view: View; draft: Draft; onCommand: OnCommand; archived?: boolean } & EditableDrafts): JSX.Element {
   const { t } = useTranslation();
   const { draft } = props, groupId = props.view.summary.groupId;
   const owner = ownerOf(props.view);
@@ -208,7 +212,7 @@ function DraftReview(props: { view: View; draft: Draft; onCommand: OnCommand } &
       {draft.layers?.map((layer, index) => <p key={index}>{t("requirements.layer", { n: index + 1, tasks: layer.join(", ") })}</p>)}
       {draft.implicitEdges?.map((edge) => <p key={`${edge.from}>${edge.to}`}>{t("requirements.implicitEdge", { from: edge.from, to: edge.to, paths: [...new Set(edge.conflicts.map((c) => `${c.a} ∩ ${c.b}`))].join(", ") })}</p>)}
       {draft.reasons.length > 0 && <><p>{t("requirements.handedBack")}</p><ul>{draft.reasons.map((reason) => <li key={reason}>{reason}</li>)}</ul></>}
-      {draft.state === "awaiting-review" && (
+      {!props.archived && draft.state === "awaiting-review" && (
         <>
           <label>{t("requirements.feedback")}<textarea value={feedback} onChange={(e) => props.onDraft("feedback", key, e.currentTarget.value)} /></label>
           <button type="button" disabled={feedback.trim() === ""} onClick={() => props.onCommand({ verb: "requirement-draft-feedback", groupId, expectedRevision: revisionOf(props.view), payload: { draftNo: draft.draftNo, feedback } },
@@ -263,9 +267,17 @@ function Detail(props: { view: View; onCommand: OnCommand } & EditableDrafts): J
   // Final review finding 4: the step's call blocked by the driver, retried on its run.
   const blockedRun = view.summary.requirement?.blockedRun ?? null;
   const exportState = view.requirement.export.state;
+  const archived = view.summary.archived === true;
+  const archiveAllowed = view.summary.state === "clarifying" && !drafting && blockedRun === null
+    && (view.summary.stopMode === null || view.summary.stopMode === "pause"
+      || view.summary.stopState === "handoff-complete" || view.summary.stopState === "handoff-partial");
   return (
     <article aria-label={view.requirement.slug ?? groupId}>
       <h3>{view.requirement.slug ?? groupId} · {enumText("groupState", view.summary.state)}</h3>
+      {archived ? <section aria-label={t("control.group.archivedRegion")}>
+        <p>{t("control.group.archivedBanner")}</p>
+        <button type="button" onClick={() => props.onCommand({ verb: "unarchive-group", groupId, expectedRevision: revisionOf(view), payload: {} })}>{t("control.group.unarchive")}</button>
+      </section> : archiveAllowed && <button type="button" onClick={() => props.onCommand({ verb: "archive-group", groupId, expectedRevision: revisionOf(view), payload: {} })}>{t("control.group.archive")}</button>}
       <section aria-label={t("requirements.understanding")}>
         <h4>{t("requirements.understanding")}</h4>
         <p>{latest?.statement ?? t("requirements.nothingYet")}</p>
@@ -277,31 +289,31 @@ function Detail(props: { view: View; onCommand: OnCommand } & EditableDrafts): J
         <progress max={view.ledger.limit.tokens} value={view.ledger.used.tokens} />
         {view.ledger.usageUnknown && <p role="status">{t("requirements.usageUnknown")}</p>}
       </section>
-      {(reason !== null || retryable) && (
+      {!archived && (reason !== null || retryable) && (
         <p role="alert">{reason !== null && <>{reason}{isReason(reason) ? ` · ${t(`requirements.reason.${reason}`, { groupId })}` : ""} </>}
           {stopped && <>{t("requirements.stopped")} </>}
           {retryable && <button type="button" onClick={() => props.onCommand({ verb: "recovery-retry", groupId, expectedRevision: revisionOf(view), payload: { scope: "group", groupId } })}>{t("requirements.retry")}</button>}
         </p>
       )}
-      {blockedRun !== null && (
+      {!archived && blockedRun !== null && (
         <p role="alert">{blockedRun.reason !== null && <>{blockedRun.reason} · </>}{t("requirements.blockedRun")}{" "}
           <button type="button" onClick={() => props.onCommand({ verb: "recovery-retry", groupId, expectedRevision: revisionOf(view), payload: { scope: "run", runId: blockedRun.runId } })}>{t("requirements.retryRun")}</button>
         </p>
       )}
-      {reason === BUDGET_EXHAUSTED && <RaiseLimit view={view} onCommand={props.onCommand} {...editable} />}
+      {!archived && reason === BUDGET_EXHAUSTED && <RaiseLimit view={view} onCommand={props.onCommand} {...editable} />}
       <section aria-label={t("requirements.rounds")}>
         <h4>{t("requirements.rounds")}</h4>
         {view.rounds.map((r) => (
           <details key={r.roundNo} open={r === round}>
             <summary>{t("requirements.round", { n: r.roundNo })} · {enumText("roundState", r.state)}</summary>
-            {r.state === "awaiting-answers" && r.result !== null && view.requirement.consensus === null && <RoundForm view={view} round={r} onCommand={props.onCommand} {...editable} />}
+            {!archived && r.state === "awaiting-answers" && r.result !== null && view.requirement.consensus === null && <RoundForm view={view} round={r} onCommand={props.onCommand} {...editable} />}
             {r.answers?.map((a) => <p key={a.id}>{a.id}: {a.text}</p>)}
           </details>
         ))}
-        {drafting && view.summary.stopState === null && <p role="status">{t("requirements.drafting")} <button type="button" onClick={() => props.onCommand({ verb: "handoff-stop", groupId, expectedRevision: revisionOf(view), payload: {} })}>{t("requirements.stop")}</button></p>}
-        {view.requirement.consensus === null && round !== null && ["answered", "awaiting-answers", "failed", "interrupted"].includes(round.state) && valid.length > 0 && <Consensus view={view} round={round} onCommand={props.onCommand} />}
+        {!archived && drafting && view.summary.stopState === null && <p role="status">{t("requirements.drafting")} <button type="button" onClick={() => props.onCommand({ verb: "handoff-stop", groupId, expectedRevision: revisionOf(view), payload: {} })}>{t("requirements.stop")}</button></p>}
+        {!archived && view.requirement.consensus === null && round !== null && ["answered", "awaiting-answers", "failed", "interrupted"].includes(round.state) && valid.length > 0 && <Consensus view={view} round={round} onCommand={props.onCommand} />}
       </section>
-      {view.drafts.map((d) => <DraftReview key={d.draftNo} view={view} draft={d} onCommand={props.onCommand} {...editable} />)}
+      {view.drafts.map((d) => <DraftReview key={d.draftNo} view={view} draft={d} onCommand={props.onCommand} archived={archived} {...editable} />)}
       <section aria-label={t("requirements.document")}>
         <h4>{t("requirements.document")}</h4>
         <pre>{view.document}</pre>
@@ -336,7 +348,9 @@ export function RequirementsPanel(props: { config: ControlConfigV1; summary: Con
     : { drafts: ownDrafts, onDraft: <S extends DraftSlot>(slot: S, key: string, value: DetailDrafts[S][string]) => setOwnDrafts((all) => setDraft(all, slot, key, value)) };
   // Only the store's owner can clear a submitted draft, so only it is told which one was submitted.
   const onCommand: OnCommand = owned ? props.onCommand : (action) => props.onCommand(action);
-  const listed = props.summary.groups.filter((group) => group.requirement !== undefined && (scope === undefined || inScope(scope, group.repoId)));
+  const [showArchived, setShowArchived] = useState(false);
+  const listed = props.summary.groups.filter((group) => group.requirement !== undefined && (showArchived || group.archived !== true)
+    && (scope === undefined || inScope(scope, group.repoId)));
   const view = props.selected === null ? undefined : props.views[props.selected];
   const refusal = props.refusal ?? null;
   return (
@@ -345,6 +359,7 @@ export function RequirementsPanel(props: { config: ControlConfigV1; summary: Con
       {refusal !== null && <p role="alert">{refusal.code} · {isReason(refusal.code) ? t(`requirements.reason.${refusal.code}`, { groupId: props.selected ?? "" }) : refusalText(refusal)}</p>}
       <div className="split">
         <nav aria-label={t("requirements.list")}>
+          <label><input type="checkbox" checked={showArchived} onChange={(event) => setShowArchived(event.currentTarget.checked)} />{t("requirements.showArchived")}</label>
           {scope?.kind === "unresolved" ? <p role="note">{t("project.listUnavailable")}</p> : listed.length === 0 && <p>{t("requirements.none")}</p>}
           {listed.map((group) => (
             <button key={group.groupId} type="button" aria-current={group.groupId === props.selected} onClick={() => props.onSelect(group.groupId)}>

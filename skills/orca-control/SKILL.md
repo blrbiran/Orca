@@ -12,6 +12,50 @@ orca control get <path> [--control-state-dir <dir>] [--client-name <name>]
 orca control send <route> --expected-revision <n> (--payload '<json>' | --payload-file <file>) [--command-id <id>] [--control-state-dir <dir>] [--client-name <name>]
 ```
 
+## Quick start: read, decide, send, read again
+
+A **group** is a task plan plus its budget and execution history. A **task** is one planned work unit; a **run** is one
+execution attempt. A **requirement** is the same group while an idea is clarified and split; accepting the split turns
+it into a draft task group. Read the returned state rather than infer success from a command being accepted.
+
+1. Read `config`, `summary` and `recovery`. Choose a concrete registered repository; never guess a filesystem path.
+2. Open a requirement only with a single-call capable agent (the pinned Codex adapter lacks that capability), or import
+   a registered plan. Read the group/requirement before each edit; use its current `commandRevision`.
+3. Review the task goals, limits and allocations. Choose agents before confirmation. Confirm the budget with real
+   profile/selection hashes from the reads, then send `groups/<id>/start` at the new revision.
+4. Poll `groups/<id>` every 30–60 seconds. The driver schedules dependencies within a started group automatically.
+5. On failure, read `runs/<id>/activity` and `runs/<id>/evidence`. Report the reason and preserved evidence before
+   selecting a recovery action. A successful command response is not proof that provider work has completed.
+
+Example diagnosis (replace ids with those returned by your reads):
+
+```sh
+orca control get summary
+orca control get groups/<groupId>
+orca control get runs/<runId>/activity
+orca control get runs/<runId>/evidence
+```
+
+### Recovery decisions
+
+- `revision-conflict`: read again and reconsider the action; never automatically bump a revision.
+- `agent-version-drift`: ask the human to review `orca agents init`'s draft and reload the panel. Preserve their custom
+  configuration; never remove the live table or restart the service yourself.
+- A terminal failed task uses `groups/<groupId>/retry-task` with `{"taskId":"<taskId>"}` at the current group revision.
+  A completed handoff-stopped failure may also become retryable after the stop is explicitly resumed. Unknown usage,
+  pending events or insufficient budget still block it. `recovery-retry` does not substitute for failed-task retry.
+- A completed handoff can be resumed with an explicit empty continuation selection when no run should continue;
+  first read the current stop revision and epoch and use the payload table below. Never delete stop records in SQL.
+- Unknown-usage settlement is **owner Web only**; socket/MCP operators must ask the human. Do not claim missing usage
+  is zero or retry past an unresolved charge. The conservative charge is not provider-reported usage.
+- `group-archived`: reads/evidence remain available. Unarchive deliberately before edits or new work. Never delete
+  history or promise archive while a requirement call or stop remains in flight.
+- A missing control plane, missing execution port, expired login and damaged recovery store are different problems;
+  inspect the code/config and report the matching condition instead of recommending cookie resets for all of them.
+
+The route and payload reference below is authoritative for this checkout. It includes access restrictions and schema
+fields; a package version alone does not establish that another running panel supports the same commands.
+
 ## 1. Prerequisites
 
 - A panel must already be running. You must never start a panel: no `orca panel`, no background process.
@@ -114,7 +158,7 @@ stdout is exactly one JSON line:
 | `POST operator/clear-spend-cap` | clear-spend-cap | `{"scope":"all","period":"week"}` |
 | `POST operator/set-usage-calendar` | set-usage-calendar | `{"timeZone":"UTC","weekStart":1}` |
 
-Notes: `recovery-retry` also takes `{"scope":"group","groupId":"g1"}`. `handoff-stop` takes an optional `handoffDeadlineAt` (UTC, `YYYY-MM-DDTHH:mm:ss.sssZ`). A spend cap's `scope` is `all` or `repo:<repoId>` and its `period` is `total`, `week` or `month` (weeks and months in the usage calendar's time zone). Examples are checked against the raw payload schemas only; the panel also judges live state, so versions, hashes and ids must be real (for example a `set-task-loop` plan must exist, and a `proposal-edit` operation with provenance `model` needs an `estimateId`). `retry-task` starts again a task whose current run ccloop ended failed (in `get groups/<groupId>`, the run is `blocked` with `outcome` set and not `succeeded`): the run becomes `settled-failed` and a new run starts from the group branch's current head; any other task is refused with `task-not-retryable` (409). `recovery-retry` refuses such a run with `run-terminal-failed` (409) and still resumes a run blocked for any other reason. An archived group keeps every record and refuses every command but `unarchive-group` with `group-archived` (409); reads are unchanged and it is never claimed or integrated. `archive-group` is refused while the group still has work in motion: `archive-run-active`, `archive-stop-pending` (a handoff or shutdown stop still `handoff-pending` or `handoff-unresolved`; `handoff-complete` and `handoff-partial` allow archive; a pause never blocks), `archive-integration-resolving`, `archive-call-in-flight` (an estimate or requirement call).
+Notes: `recovery-retry` also takes `{"scope":"group","groupId":"g1"}`. `handoff-stop` takes an optional `handoffDeadlineAt` (UTC, `YYYY-MM-DDTHH:mm:ss.sssZ`). A spend cap's `scope` is `all` or `repo:<repoId>` and its `period` is `total`, `week` or `month` (weeks and months in the usage calendar's time zone). Examples are checked against the raw payload schemas only; the panel also judges live state, so versions, hashes and ids must be real (for example a `set-task-loop` plan must exist, and a `proposal-edit` operation with provenance `model` needs an `estimateId`). `retry-task` starts again a task whose current run ccloop ended failed (in `get groups/<groupId>`, the current run has a non-succeeded `outcome` and is either terminally `blocked`, an eligible held `settled-recoverable` failure after handoff, or an eligible released `settled-failed` failure with a valid usage settlement): the run becomes `settled-failed` and a new run starts from the group branch's current head; any other task is refused with `task-not-retryable` (409). `recovery-retry` refuses such a run with `run-terminal-failed` (409) and still resumes a run blocked for any other reason. An archived group keeps every record and refuses every command but `unarchive-group` with `group-archived` (409); reads are unchanged and it is never claimed or integrated. `archive-group` is refused while the group still has work in motion: `archive-run-active`, `archive-stop-pending` (a handoff or shutdown stop still `handoff-pending` or `handoff-unresolved`; `handoff-complete` and `handoff-partial` allow archive; a pause never blocks), `archive-integration-resolving`, `archive-call-in-flight` (an estimate or requirement call).
 
 ## 9. Where the expected revision comes from
 

@@ -56,6 +56,6 @@ describe("archive-stop-pending names the recovery step (final fix wave W1)", () 
 describe("archive-run-active names a way out a paused group has (final review M4)", () => {
   it("tells a paused group to resume dispatch before Handoff stop, in both languages", () => {
     expect(enErrors["archive-run-active"]).toContain("If the group is paused, press Resume dispatch first: Handoff stop is not offered under a pause.");
-    expect(zhErrors["archive-run-active"]).toContain("如果组已暂停，先点「恢复派发」：暂停时不提供「交接停止」。");
+    expect(zhErrors["archive-run-active"]).toContain("如果组已暂停，先点「恢复调度」：暂停时不提供「交接停止」。");
   });
 });

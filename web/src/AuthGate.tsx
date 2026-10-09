@@ -100,8 +100,10 @@ export function AuthGate({ children }: { children: ReactNode }): JSX.Element {
   if (state.kind === "change") return <ChangePasswordForm me={state.me} onChanged={() => setState({ kind: "login", ended: false, changed: true })} />;
   return (
     <AccountContext.Provider value={state.me}>
-      <AccountBar me={state.me} onLoggedOut={() => setState({ kind: "login", ended: false })} />
-      {children}
+      <div className="authenticated-shell">
+        <AccountBar me={state.me} onLoggedOut={() => setState({ kind: "login", ended: false })} />
+        {children}
+      </div>
     </AccountContext.Provider>
   );
 }

@@ -358,6 +358,15 @@ export function App(): JSX.Element {
       dispatchControl({ type: "refusal", place: "panel", groupId: command.groupId, value: result.refusal });
       return;
     }
+    // Reloaded results may arrive before the first summary is committed into React's cache.
+    let group: ControlSummaryV1["groups"][number] | undefined = controlNow.current.groups[command.groupId];
+    if (command.importPlan !== true && group === undefined) {
+      try { group = (await fetchControlSummary()).groups.find((candidate) => candidate.groupId === command.groupId); }
+      catch (err) {
+        dispatchControl({ type: "refusal", place: "panel", groupId: command.groupId, value: controlFailureFrom(err) });
+        return; // Keep the original id until its owner can be read safely.
+      }
+    }
     dispatchControl({ type: "command-resolved", value: command });
     const place = command.importPlan === true ? ("import" as const) : ("group" as const);
     if (result.kind === "absent") dispatchControl({ type: "refusal", place, groupId: command.groupId, value: result.refusal });
@@ -372,7 +381,13 @@ export function App(): JSX.Element {
     }
     // An import that did not succeed made no group: reading it would only store a group-not-found no view shows.
     if (command.importPlan === true && !succeeded) return;
-    await readControlGroup(command.groupId);
+    if (group?.state === "clarifying" || group?.requirement !== undefined) {
+      const refusal = result.kind === "absent" ? result.refusal : succeeded ? null
+        : refusalFromAnswer({ kind: "answered", status: result.lookup.originalStatus, body: result.lookup.body });
+      setRequirementRefusal(refusal);
+      await readRequirement(command.groupId);
+      if (group.state !== "clarifying") await readControlGroup(command.groupId);
+    } else await readControlGroup(command.groupId);
   };
 
   /**
@@ -381,8 +396,10 @@ export function App(): JSX.Element {
    */
   const sendControl = async (action: ControlAction): Promise<number | null> => {
     // N1 spec §11.2: a requirement's details come from its own view; a clarifying group has no group view (DR25).
-    const requirementVerb = action.verb.startsWith("requirement-") || ((action.verb === "recovery-retry" || action.verb === "handoff-stop" || action.verb === "set-limit")
-      && controlNow.current.groups[action.groupId]?.state === "clarifying");
+    const owner = controlNow.current.groups[action.groupId];
+    const requirementArchive = (action.verb === "archive-group" || action.verb === "unarchive-group") && owner?.requirement !== undefined;
+    const requirementVerb = action.verb.startsWith("requirement-") || requirementArchive
+      || ((action.verb === "recovery-retry" || action.verb === "handoff-stop" || action.verb === "set-limit") && owner?.state === "clarifying");
     const commandId = nextCommandId();
     // Spec 2026-10-08 §2.2(d): an import's refusal is shown in the import form, every other command's in its group.
     const place = action.verb === "import-plan" ? ("import" as const) : ("group" as const);
@@ -424,7 +441,7 @@ export function App(): JSX.Element {
     // Accept turns the group into a plan group: Task control reads it from here on.
     // A refused import made no group either (mirrors the requirement-open guard above).
     if (place === "import" && answer.status >= 400) return null;
-    if (!requirementVerb || (action.verb === "requirement-draft-accept" && answer.status < 400)) await readControlGroup(action.groupId);
+    if (!requirementVerb || (requirementArchive && owner?.state !== "clarifying") || (action.verb === "requirement-draft-accept" && answer.status < 400)) await readControlGroup(action.groupId);
     return answer.status < 400 ? (answer.body as CommandSuccessV1).commandRevision : null;
   };
 

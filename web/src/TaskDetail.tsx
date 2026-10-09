@@ -165,7 +165,7 @@ export function RunActivity(props: { runId: string; changeSeq: number }): JSX.El
       {refusal !== null && <p className="detail-note">{t("control.activity.refused", { code: refusal })}</p>}
       {entries !== null && (entries.length === 0 ? <p>{t("control.activity.none")}</p> : (
         <ol>
-          {entries.map((entry) => <li key={entry.seq}>{new Date(entry.at).toISOString()} · {activityText(entry)}</li>)}
+          {[...entries].reverse().map((entry) => <li key={entry.seq}>{new Date(entry.at).toISOString()} · {activityText(entry)}</li>)}
         </ol>
       ))}
     </section>

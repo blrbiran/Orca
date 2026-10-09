@@ -294,3 +294,13 @@ describe("AuthGate (spec §7)", () => {
     expect(sent[0]!.headers["x-orca-csrf"]).toBe("t");
   });
 });
+
+it("keeps the account bar and panel in the same viewport frame", async () => {
+  meAnswers = [me()];
+  render(<AuthGate><div className="shell"><main>Panel content</main></div></AuthGate>);
+  const panel = await screen.findByText("Panel content");
+  const frame = panel.closest(".authenticated-shell");
+  expect(frame).not.toBeNull();
+  expect(frame!.querySelector(":scope > .account-bar")).not.toBeNull();
+  expect(frame!.querySelector(":scope > .shell")).not.toBeNull();
+});
