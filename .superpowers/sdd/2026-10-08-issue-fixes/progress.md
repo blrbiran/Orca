@@ -183,3 +183,44 @@ Task E5: complete (commits f66998b, 04d2876)
 
 ## Handoff (2026-10-09, session e34dc963)
 Stopped here by the human's request to hand off. Done: Parts A–D; E1–E8. Next: E9, E10 (also hide actions incl. Retry task on an archived group), E11, E12; then the final fix wave (every "Queued for the final fix wave" line above, plus D9's codex-exit-error explanation); then Part F (F2 gate, F3 final whole-branch review + ledger close + handoff; F1 re-pin after the human pushes ccloop). Briefs for E9–E12/F1–F3 are already extracted in this directory.
+
+## Session 2 (2026-10-09, controller session 3156185d)
+Human merged fix/issues-20261008 (--ff-only) into Orca main and ccloop fix/codex-planner-output into ccloop main and pushed
+both (ls-remote: Orca main 92da0e6, ccloop main ab824d1). Continuing on worktree /Users/biran/code/skills/loop/Orca-issues2,
+branch fix/issues-20261009 from main. Path substitutions: session2-overrides.md beside this ledger.
+Ruling: E9, E10, E11 run serially (all three edit web locales; E10/E11 both edit controlApi.ts and E9/E10 ControlGroupView.tsx) — cost if wrong: wall-clock only.
+Ruling: D9 concern 1 ("settle unknown usage" command) stays out of this round; the human's go-ahead covered the plan, not that design — cost if wrong: the pre-existing gap stays until the human asks.
+Task E9: implemented f7e61b4 (base 92da0e6). Deviations accepted by review: runNumber delegates to shared runFacts.lineageRunNumber (amendment 3); *-subtle tokens added to the light blocks (closes E8 minor).
+Task E9: review 1 — Needs fixes: stall text contrast unpinned (light 4.05:1 < 4.5). Minor: contrast test reads only the dark block (taken into the fix round); reduced-motion test anchors on the first @media match; selected style equals focus style; all nodes 88px tall. Fix round 1 dispatched.
+Task E9: minor (deferred): reduced-motion test anchor; selected == focus style; uniform 88px node height.
+Task E9: fix round 1/5 (2 addressed, 0 open; commit bc2db85 — per-theme --stall token, contrast test loops over all three token blocks; mutations red per report).
+Queued for the final fix wave (E9 re-review): a styles test pins that `.dep-node text.dep-stall` uses `var(--stall)` (reverting it to `--warn` stays green today).
+Task E9: complete (commits f7e61b4, bc2db85)
+Task E10: implemented a089391 (base bc2db85); retryTaskOpen in runFacts.ts also checks summary.archived.
+Ruling (E10): on an archived group every action control the server gate refuses with group-archived is hidden (budget, agent selection, git scheme actions, integration confirm, task label/loop editors), only Unarchive remains — spec §6.3 "refuses new work" plus the issue-16 rule against dead buttons; the brief only named dispatch and retry — cost if wrong: a person must unarchive before editing an archived group's settings.
+Task E10: review 1 — Needs fixes: editors still shown on an archived group (ruling above). Minor: unindented fragment; TaskDetail retry hiding untested on its own; "no action" test names four buttons. Fix round 1 dispatched (Important + minors 2-3).
+Task E10: minor (deferred): JSX inside the archived fragment left unindented.
+Task E10: fix round 1/5 (3 addressed, 0 open; commit 58825bc — one archived flag threaded from ControlGroupView; 22 mutations red per report).
+Task E10: minor (deferred): the TaskDetail-on-archived test passes `archived` as a prop too, so runFacts retryTaskOpen's archived check is not pinned alone (both layers hide the button); the action filter's /evidence/i exclusion is text-based.
+Task E10: complete (commits a089391, 58825bc)
+Task E11: implemented 2d3e401, 5bc96ab (base 58825bc); reuses Part B's fetchRunActivity/RunActivityV1/ActivityEntryV1; phase rows map raw ccloop statuses to plan/execute/verify words.
+Ruling (E11): two unnamed existing tests rewritten instead of stopping BLOCKED — web/tests/i18nPseudo.test.tsx enum-family count 33/165 → 34/178 (the deliberate add-a-value tripwire, same shape as the D2 ruling) and web/tests/controlI18n.test.tsx heading query narrowed to "a 的运行" (a second h5 now exists; the asserted text is unchanged) — neither weakens what it pins — cost if wrong: two tests to re-review.
+Task E11: complete (commits 2d3e401, 5bc96ab, review clean)
+Task E11: minor (deferred): blocked-row test does not pin the explained wording; activityText branches (phase without attempt, unmapped step word, kind-only fallback) untested.
+Queued for the final fix wave (E11 review minor 1): RunActivity keeps the previous run's entries when runId changes (a retried task briefly shows the old run's rows under the new run's label) — reset on runId change, with a test.
+Task E12: evidence at HEAD 5bc96ab (full text in task-E12-report.md; outputs in controller scratchpad orca/E12/): typecheck rc=0; web build rc=0; --ws check rc=0; vitest tests/control+panel+entry rc=1 = 1 failed / 2120 passed / 55 skipped (load 8.7) — the red is activityRuns "a driver run gets endedAt when it lands…" 5 s timeout (the B8/B9 load-flake candidate), alone 3/3 green at load 6.3-7.0. Correction to Part E's rewritten-tests table: skill.test.ts route count went 29→32 across D3 (6a90702) and E3 (bcf5584), not 30→32.
+Ruling: the activityRuns "endedAt" test gets a 30 s timeout in the final fix wave (driverSettle precedent; green alone in 0.5–2 s) — cost if wrong: a hang in it is reported 25 s later.
+Task E12: complete (evidence only)
+Part E: complete.
+Task FW-W: implemented b6c943c (W1–W4; 6 mutations red per report). Review 1 — Approved; minors: RunActivity reset in useEffect leaves a one-frame flash (W4's own goal — taken as a small follow-up), zh archive-stop-pending pin checks only "恢复" (taken), codex-exit-error out of alphabetical order (deferred).
+Task FW-W: minor (deferred): codex-exit-error entries out of alphabetical order in en.ts/zh.ts.
+Task FW-W: follow-up 6b90629 (RunActivity keyed by run id, reset effect removed — key removal seen RED in a clone; zh pin = full clause). Controller read the 4 KB fix diff in full as the scoped re-review: both addressed, no new breakage. Web check after it not re-run by the implementer (agentPreviewRefresh 15 s timeout at load 13-14, green alone) — F2 gate covers it.
+Task FW-W: complete (commits b6c943c, 6b90629)
+Task FW-S: implemented d2c950a (S1–S3), e428e99 (S4; the approval row lives in integrationCommands.ts where the only save is — reviewer agrees), 587193b (S5). S1 test uses `start` (a confirmed group's estimate never probes).
+Task FW-S: review 1 (opus) — Needs fixes: S2 replay test uses pause-dispatch (no preflight), so reordering the gate before replay inside preflightWebCommand stays green (reviewer Mutation B, 86/86 green). Minor: no test archives between preflight and apply; S3 does not exclude run targets (taken); set-group-integration schemeCheck and resolve-integration-conflict prepareResolution still run read-only git checks before preflight on an archived group. Fix round 1 dispatched.
+Task FW-S: minor (deferred): in-transaction backstop not exercised for a preflight verb archived mid-command; two read-only git checks precede the archive refusal.
+Task FW-S: fix round 1/5 (2 addressed, 0 open; commit 0750df7 — preflight replay case with `start`; run target excluded from NOT_GROUP). Controller read the fix diff and the Mutation B output (scratchpad orca/FW-S/mB.txt): gate-before-replay in preflight → new test RED with UNIQUE constraint failed, as the reviewer predicted for production.
+Task FW-S: complete (commits d2c950a, e428e99, 587193b, 0750df7). Note: FW-S commits carry a Sonnet co-author trailer instead of the one common-implementer.md names (history, not amended).
+Final fix wave: complete.
+Task F1: implemented 739993a (ccloop pin c82b212 → ab824d16004de2d3c1613a76ec0431520aa16cc9; ls-remote re-checked; ancestry rc=0; verify:ccloop-pin rc=0 3/3). Worktree node_modules and web/node_modules symlinks removed and a real tree installed in the worktree (main checkout's node_modules/ccloop unchanged, before/after listing identical). Gate binary: ORCA_CCLOOP_BIN=/private/tmp/claude-501/-Users-biran-code-skills-loop-Orca/3156185d-8cf1-4260-9808-1f8a45883555/scratchpad/orca/F1/ccloop-ab824d1/dist/cli.js (clone build, never mutated). Controller read the 8-line diff: pin line + lock resolved/integrity only.
+Note: scripts/pin-ccloop.mjs refused the dirty tree (this ledger's own uncommitted files); the controller commits the ledger files and re-runs it on the clean tree.

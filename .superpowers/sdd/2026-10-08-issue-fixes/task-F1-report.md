@@ -1,0 +1,8 @@
+# Task F1 report
+Status: DONE_WITH_CONCERNS. Commit 739993a "deps: pin ccloop to the codex phase output hardening" (package.json, package-lock.json only).
+- Step 1: ls-remote origin/main = ab824d16004de2d3c1613a76ec0431520aa16cc9 (rc=0); fetch ok; merge-base --is-ancestor ab824d1 <sha> rc=0.
+- Step 2: confirmed node_modules and web/node_modules were symlinks (ls -la); removed both symlinks (plain /bin/rm); npm install github:blrbiran/ccloop#<sha> rc=0, 250 packages, no ssh hang. Worktree now has real node_modules and a real (npm-created) web/node_modules path state: web/node_modules did not exist after install (root hoisting), so web tests resolve from root. I removed the web symlink too so npm could not write through it into the main checkout.
+- Step 3: verify:ccloop-pin rc=0 (3/3 tests). scripts/pin-ccloop.mjs: brief's no-arg call fails ("expected a full 40-hex commit"); with the SHA it refuses because the tree is not clean (controller's untracked/modified .superpowers ledger files), rc=1. It is an editor tool, not a checker; the pin edit it would make is what npm already produced (diff: 4 lines, ccloop spec + resolved + integrity).
+- Step 4: gate clone /private/tmp/claude-501/-Users-biran-code-skills-loop-Orca/3156185d-8cf1-4260-9808-1f8a45883555/scratchpad/orca/F1/ccloop-ab824d1 at HEAD ab824d16..., npm install + npm run build rc=0; npm install dirtied its package-lock.json, restored with git checkout (status clean).
+- Main checkout unchanged: ls -la node_modules/ccloop and package.json version (0.1.0) identical before/after; web/node_modules listing identical; main git status only the pre-existing docs/handoff/issue-20261008.md.
+Evidence files: same scratchpad dir.
