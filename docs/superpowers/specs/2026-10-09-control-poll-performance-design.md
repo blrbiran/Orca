@@ -78,3 +78,15 @@ before 是 D9/M3 完整最新树、性能改动之前；after 是本轮实现提
 ## 6. 执行与交接
 
 两到三个可独立验收任务；controller 用已指定 fresh 审/执行方法统一记录。实现完整后跑本轮命名回归、typecheck 和必要完整 gate；任何 suite/service/provider 运行由执行阶段授权范围及当前树决定，本起草席不跑。before/after 或 refusal 等价不成立即不能宣布性能轮完成。终审记录收益、仍存 N+1、D9/M3 合并后偏差、三仓当前 commit/pin及 awaitingHuman；Orca 专属性能轮不自行改 ccloop/ccmem 产品。
+
+## 7. 已收口 D9/M3 接口适配（controller，2026-10-09，真实 before 1fd19a3）
+
+本节补充 §3 的最新源码接线。D9/M3 完成后，panel 的严格 work/contract reader 调用 validateRetryGrantSource，它原本自行查询并重复解析 source/current/intermediate run。允许为该 helper 增加可选的 core 定义 request-local read context（默认数据库调用不变），panel 提供同 store/group 的 rowid-order 原始 run 行及共享 decode 回调。control 不反向导入 panel，源身份/claim/proof/lineage/pending/frozen 校验与拒绝顺序完整保留，不能用预读数据放松权威检查。需新增 retrying/current/history 场景的真实 group view 计数与错误 source/marker 拒绝判据，删除 context 接线及对应严格守卫要见红。proof/receipt/artifact 等未纳入这次 batch 的查询仍单列成本。
+
+### 7.1 已结清 D9 预览的 work 复用（controller，2026-10-09，before 1fd19a3）
+
+settlementPreview 调 settlementAdmission 原本再次 readWork，真实 released marker 的 group view 因而重复解析已有 work 行。允许该 admission 采用兼容可选的 core request-local raw work reader context，仅 panel 传同 store/group 快照。写命令依旧默认直接读库并做事务复验，不接受客户端 context；不使用 schema-stripped/修改过的 work 对象，不改读错/marker/refusal/archive顺序与任何 proof 守卫。增加真实 settled-preview 计数、坏 marker 拒绝及对应删除变异；其它 proof/receipt/artifact 读取继续单列。
+
+### 7.2 已转换 requirement 的非 clarifying 摘要（controller，2026-10-09）
+
+已转换为任务组仍有 requirement summary，原 blockedRequirementRun 会再次读取并解析 active run。仅该非 clarifying readGroupSummaryFromSnapshot 调用可传 request snapshot，active=1 筛选保留原 rowid 次序，raw decode 在原读取位置复用。公开 requirementSummaryOf 两参/default、clarifying 路径完全不变；坏 active body 的原拒绝类型/detail/顺序不变。增加真实转换/activework 入口计数与拒绝、clarifying 回归及删除接线变异，不扩大 requirement writer/状态规则。
