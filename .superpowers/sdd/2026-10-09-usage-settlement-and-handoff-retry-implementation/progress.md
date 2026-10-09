@@ -49,3 +49,9 @@ Worker implement_settlement DONE, product43b0f16 + report405f6b6. Task-specific 
 Observed final isolated logs task1-target-final/typecheck-final: RC0, 9files122tests, no skipped; webbuild/actual oldv9 reader rejects10 proof in report. Worker records21 independent valid guard deletions red and clone restored42tests/zero unstaged+staged bytes; first wrong-target zero-token mutation excluded then exact branch independently red. Whole round integrated gate remains Task4.
 
 Ruling: Over-limit settlement test uses a real provider overage followed by unknown, rather than lowering group limit after unknown (existing set-limit correctly refuses then). No product set-limit guard relaxation. Cost if wrong: fixture would miss a real overage path; actual post-command used/reserved/deficit assertions and mutation remain required.
+
+## Task 1 gate complete — controller, 2026-10-09
+
+Task1: complete (commits2c14e73..405f6b6, fresh task review clean). Review task-1-review.md: Spec compliant, quality Approved,0Critical/0Important. Reviewer cross-checked all21mutations against final delivered code and business assertion logs; restored clone differs only fixture trailing whitespace. Minor validation noise: Node22 SQLite experimental warnings and existing Vite bundle size hint, not hidden/skipped tests.
+
+Task2 next: consume hasValidUsageSettlement(store,run), RunViewV1.unknownUsageSettlement and marker reservationDisposition/handoffResolution; completed released D9 leaves work blocked/terminal and current source inactive settled-failed, no automatic retry. Controller performance docs committed independently; performance still not implemented.
