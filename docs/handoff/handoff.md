@@ -178,7 +178,8 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 
 **新轮进度**：`.superpowers/sdd/2026-10-09-usage-settlement-and-handoff-retry/progress.md`。先做 D9/M3 的独立轮，再开 M5/M6 性能轮；两轮各自 brainstorming → spec → subagent 审 → 人审 → plan → subagent-driven。
 
-- 当前设计：`docs/superpowers/specs/2026-10-09-usage-settlement-and-handoff-retry-design.md`，草案，独立 spec 审与修订复审已通过（0 Critical/Important），**待人审；产品和测试未实施**。
+- 当前设计：`docs/superpowers/specs/2026-10-09-usage-settlement-and-handoff-retry-design.md`，草案。人另要求独立审，fresh subagent 于 2026-10-09 审提交 `79b7495`，发现 **0 Critical／3 Important，需先修订再复审**；此结论取代前轮可交人审结论。报告：新轮台账目录 `independent-spec-review-3.md`。产品和测试未实施。
+- 修订点：reduced-grant 普通重试须限制实际派发 executionPolicy；交接后 settled-unrecoverable 的未知账须有正确结清与停止出口（remaining 已释放，不能照扣 reserved）；retrying/source 须兼容未启动 provider 的 rearm／settled-restartable。先补设计与判据提案，再独立复审、人审、plan。
 - 设计提案：结清是单独的 owner Web 命令，不隐含重试；保守记账明确标识并挡迟到事件。M3 保留停止边界，清除已完成停止后重试，恢复失败 run 原 claim grant，避免沿用 held remainder 导致账与视图不一致。具体命令、schema 10 和额度选择仍须人审 written spec。
 - 性能轮：摘要/group view 用每次请求的批量快照；driver 避免同组 body 重解析，归档 wake 在查询入口过滤；用结果等价、查询/解析次数和隔离规模实测验收，不把旧终审的约 0.13 s 外推当实测。
 - 性能 brainstorming 提案与三种方案的取舍：`docs/handoff/2026-10-09-performance-next-round.md`，尚非 approved spec/plan。
