@@ -163,34 +163,32 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 
 ## 四、⛔ 下一件事
 
-### 4.0 现在的下一件事（2026-10-09，Codex controller；本节优先于旧条目）
+### 4.0 现在的接手入口（2026-10-10，Codex controller；本节优先于旧条目）
 
-**issue-fixes 整轮已完成、人已合并并推送。不要重开任何旧任务。** 本节替换上一版，依据人本日通知与三个仓各自的 `ls-remote`、Orca 合并祖先检查（退出 0）；原轮唯一进度结论仍是 `.superpowers/sdd/2026-10-08-issue-fixes/progress.md` 末尾 **Round close**。原终门与终审结果保留在该台账；本次没有重复跑它们。
+**issue-fixes、D9/M3、M5/M6 三轮任务均已完成，不要重做。** issue-fixes 已由人合并推送，唯一旧进度结论仍是 `.superpowers/sdd/2026-10-08-issue-fixes/progress.md` 末尾 Round close。本节整节替换本会话的设计待审入口；依据新两轮收口台账、独立任务审与终审，不改旧历史。
 
-**开工核实已做完**：三个 main 主检出与远端一致；主检出安装的 ccloop `resolved` 已为固定 pin `ab824d16004de2d3c1613a76ec0431520aa16cc9`，无需重复安装。命令、观测提交、清理结果见 `docs/handoff/2026-10-09-post-merge-cleanup.md`，这里不写会移动的当前哈希。
+**产品、两轮台账及本轮设计/清理历史已按人 2026-10-10 授权本地 fast-forward 合入 main。** 当前入口与源码是 `/Users/biran/code/skills/loop/Orca` 的 main；审查 worktree `/Users/biran/.codex/worktrees/usage-settlement-handoff-retry/Orca`、分支 `codex/d9-m3-implementation` 保留。旧 `codex/usage-settlement-handoff-retry` 设计分支历史已经包含，别再从旧草案判进度。本次未 push，人的面板未重启、真实控制库未迁移。当前 HEAD 请现查，提交本文会移动它。
 
-**人本日已拍板**：
-- D9：人专属「结清未知用量」，按剩余额度全记已用。
-- M3：失败后经交接停止结清的运行也可 `retry-task`，失败原因继续显示。
-- F2 的四条 5 s timeout 登记为负载 flake，具名与历史证据见 `docs/handoff/known-load-flakes.md`。只豁免已验证的 timeout 类别，不豁免断言失败。
-- M5/M6 性能轮同意做，技术依据仍是旧轮 `final-review.md`。
-- 点名的五个旧 worktree 和对应本地分支已授权并清理；未跟踪审查 diff 已归档，失效 scratchpad 登记已 prune；其它 Codex worktree 保留。
+**进度只读两本新台账末尾 Round close**：下列新 spec、plan、台账路径均相对 main；设计草案开头及历史未勾 checklist 不代表仍未实施。
+- D9/M3：`.superpowers/sdd/2026-10-09-usage-settlement-and-handoff-retry-implementation/progress.md`；设计 `docs/superpowers/specs/2026-10-09-usage-settlement-and-handoff-retry-design.md`（§9/§9.5 更正优先）；实施计划同主题、后缀 `-implementation.md`；独立终审同台账目录 `final-review.md`。
+- 性能：`.superpowers/sdd/2026-10-09-control-poll-performance/progress.md`；设计 `docs/superpowers/specs/2026-10-09-control-poll-performance-design.md`（§7 更正优先）；计划 `docs/superpowers/plans/2026-10-09-control-poll-performance.md`；该台账目录 `benchmark-report.md`、`final-review.md`，最终 I1 处理看 `final-fix-review.md`，合 main 后最新全量看 `main-integration-verification.md`。完整原始门/变异日志与 SHA manifest 已入各自 evidence 归档。原设计台账不是执行进度。
 
-**新轮进度**：`.superpowers/sdd/2026-10-09-usage-settlement-and-handoff-retry/progress.md`。先做 D9/M3 的独立轮，再开 M5/M6 性能轮；两轮各自 brainstorming → spec → subagent 审 → 人审 → plan → subagent-driven。
+**本轮实际行为**：
+- D9：只有登录 owner 的 Web 命令 `settle-unknown-usage` 能结清未知用量，work/handoff 剩余四维全部记已用，预览和保守记账标识可见；已释放额度只加 used，不再扣 reserved。事务内复核身份/代际/账/证据，迟到的新用量拒绝，原事件重放仍幂等。结清不隐含重试或清除停止。
+- M3：失败原因持续显示；完成交接停止后，符合条件的 held/manual-settled 失败 run 也可 retry-task。恢复原失败 claim grant，严格绑定 source/current/claim/lineage；未启动 provider 的 rearm 不重复预留，所有历史未知/pending 用量仍挡新 admission。完整停止须先明确空选择 resume，再重试。
+- **控制库 schema 10 单向**，9→10 无新表，旧 reader 拒绝10、新 reader拒绝未来版本；只在临时副本测了迁移。升级真实库前由人备份并决定切换。
+- M5：每次请求共享 work/run 原始批读与懒解码；latest activity 按最大 seq 完整行，严格拒绝与 summary 容错/排序保持。缓存 statement 归 store，业务对象不跨请求。
+- M6：driver 复用同步段已解析组 body；合法归档 start/no-start/resume wake 入口延后，handler/probe/accept 不进入；每次进入异步 handler 后清局部判断，事务最终归档守卫保留。坏 JSON/mark 回原权威拒绝，不解释为合法归档。
 
-- 当前设计：`docs/superpowers/specs/2026-10-09-usage-settlement-and-handoff-retry-design.md`，草案。人另要求独立审，fresh subagent 于 2026-10-09 审提交 `79b7495`，发现 **0 Critical／3 Important，需先修订再复审**；此结论取代前轮可交人审结论。报告：新轮台账目录 `independent-spec-review-3.md`。产品和测试未实施。
-- 修订点：reduced-grant 普通重试须限制实际派发 executionPolicy；交接后 settled-unrecoverable 的未知账须有正确结清与停止出口（remaining 已释放，不能照扣 reserved）；retrying/source 须兼容未启动 provider 的 rearm／settled-restartable。先补设计与判据提案，再独立复审、人审、plan。
-- 设计提案：结清是单独的 owner Web 命令，不隐含重试；保守记账明确标识并挡迟到事件。M3 保留停止边界，清除已完成停止后重试，恢复失败 run 原 claim grant，避免沿用 held remainder 导致账与视图不一致。具体命令、schema 10 和额度选择仍须人审 written spec。
-- 性能轮：摘要/group view 用每次请求的批量快照；driver 避免同组 body 重解析，归档 wake 在查询入口过滤；用结果等价、查询/解析次数和隔离规模实测验收，不把旧终审的约 0.13 s 外推当实测。
-- 性能 brainstorming 提案与三种方案的取舍：`docs/handoff/2026-10-09-performance-next-round.md`，尚非 approved spec/plan。
+**验收与边界**：本地合 main 后最新全量 RC0：371文件、3505通过、0失败、4跳过；正式控制子集155文件/1735通过/0失败/3默认pin跳过。默认pin另有3/3实际通过；真实launchd那1条仍未测。主检出根build与web build RC0；此前scheduler56文件/202、panel0–14、web90文件/729等门及其观测树见各执行台账。终审I1已修复并范围复审Ready Yes；最终命名5/5在普通检出和临时clone均通过、type与内层5条tmp-leak RC0/零残留、三项独立删除变异RED/复原0字节。原始四worker控制门RC1的requirementOverview 5s timeout、首次整合systemd timeout和计数器失败均保留，不登记或豁免新flake；最新main全量无失败。ledger仍RC2：七条历史tier0降级，原始字节未变。性能原始timed before RC0/after RC1（计时后SQLite对象原型比较误报）未改写，另行SHA绑定的两侧不计时复验RC0，完整DTO/拒绝/数据库效果相等。SQLite实验警告与Vite589.71kB包体警告仍如实保留。
 
-**原轮已完成的结论（不变）**：控制库 schema 9 单向；activity 与失败原因、retry-task、空闲停止自愈、分类/摘要/归档、依赖图和详情页已落地；F1 pin 检查通过；F2 隔离门含四条已登记 timeout，其余 RC 和真实 ccloop E2E 见 Round close 引用的 F2；F3 修复后 0 Critical/Important，范围复审全 addressed。这些不是新轮待办。
+性能规模是真实同一个 store 的100 live×50任务加100 archived/300三类 wake；依赖边由代码求和，同一合法初态库/证据和固定路径串行 before/after，真实入口输出/拒绝 digest 等价。原始 p50/p95、SQL/JSON/handler/probe/accept、业务 hash 和机器环境见 benchmark-report，不能拿旧0.13s外推当实测。**仍有 canonical/proposal/proof 等逐任务读取；driver仍扫所有组、归档 pump仍扫 pending行且每同步段每组读/解析一次**，不宣称整页2/3条SQL或全部N+1消失。
 
-**纪律**：git 核对 `/usr/bin/git`，按路径提交；tests/panel 前先 web build；`ORCA_CCLOOP_BIN` 用固定 pin 的 clone build 绝对路径；门与变异副本分开；推送/合并/远端分支删除归人，本次清理授权不延伸到其它 worktree/branch。
+**已授权的清理已做完**：Orca-issues、Orca-issues2、Orca-usage-pin、Orca-integration、ccloop-planner 及对应无用本地分支；审查 diff 先归档并校 SHA，其它 worktree 保留。见 `docs/handoff/2026-10-09-post-merge-cleanup.md`。四条 F2 timeout 已具名登记 `docs/handoff/known-load-flakes.md`，只覆盖已验证 timeout，不豁免断言或新名字。
 
-**仍有效的工具坑**：pin-ccloop 在同 SHA 或脏树上拒绝，补其检查要在重钉前提交的干净 clone 跑；npm 发布包不含 tests/fixtures，门仍用 clone build；check-tmp-leak 的内层 vitest 失败可能不保留 JSON，不能由外层 RC 0 推定内层全绿。子 agent 被拒删除的实验 clone 可能留在 scratchpad，不能拿来当干净门。原五个 worktree 的 node_modules 形状已随清理成为历史，审查 diff 和软链目标保留在清理归档。
+**固定依赖与纪律**：主检出安装 package/lock/hidden lock 的 ccloop pin 已为 `ab824d16004de2d3c1613a76ec0431520aa16cc9`；本轮无需重装。门用 `ORCA_CCLOOP_BIN=/private/tmp/orca-d9-ccloop-ab824d1/dist/cli.js`（该 pin clone build；临时路径失效就重建，npm发布包缺 tests/fixtures）。shell 用 rtk，git核对 `/usr/bin/git`、精确路径提交；worktree 的 node_modules 是未跟踪依赖软链，绝不能 add-A；tests/panel前先web build。门与变异clone分开；check-tmp-leak须核内层RC，外层0不代表业务绿。所有runtime HOME/XDG/CCMEM_DATA_ROOT隔离且清掉真实CCMEM_CONFIG_PATH，未跑付费模型/真实服务。
 
-**仍挂账**：ccloop B4（usageBreakdown）点名或放弃；真 GitHub 集成未验。ccmem 自己的 T13/临时目录/daemon 挂账不因本轮关闭。
+**现在归人审核**：两本执行台账的全部 Ruling、独立终审/性能观测及保留的门限制；本次本地合 main 已获人授权并完成，push 由人做。删除本次新分支或worktree仍须单独授权，初始五项清理授权不外延。性能余热点若另开轮仍走brainstorming→spec→独立审→plan→subagent-driven。ccloop B4（usageBreakdown）点名或放弃、真实GitHub集成、ccmem T13/临时目录/daemon/备份语义等原挂账均未关闭。
 
 ### 4.0.w 会话 `e34dc963`（2026-10-08～09）留下的结论（**前半已由人合并推送；过程删了，结论留在这里**）
 
