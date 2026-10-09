@@ -598,3 +598,25 @@ describe("dependency eligibility", () => {
 function idSchemaFree(value: string): boolean {
   return /^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/.test(value);
 }
+
+describe("an archived group with a queued continuation and a queued start (issue-fixes spec §6.3, plan Review Focus 4)", () => {
+  it("delivers neither wake: no claim is made and both wakes stay pending until it is unarchived", async () => {
+    const ctx = await continuationFixture(); const { h, service } = ctx; try {
+      const a = await recoverablePredecessor(ctx, "a");
+      await stoppedAfterHandoff(ctx);
+      const resumed = await service.resumeFromHandoff(h.command("resume-from-handoff", { selections: [selection(a.predecessor)] }));
+      if ("error" in resumed || resumed.result.kind !== "resumed-from-handoff") throw new Error(JSON.stringify(resumed));
+      armOrdinaryClaim(h.store);
+      const archived = service.archiveGroup(h.command("archive-group", {}));
+      if ("error" in archived) throw new Error(JSON.stringify(archived));
+      const wakes = pendingWakes(h.store).filter((id) => !id.includes(":estimate:")).sort();
+      expect(wakes.length).toBeGreaterThanOrEqual(2);
+      expect(await deliverScheduledStart(ctx.deps, "g")).toEqual({ kind: "blocked", reason: "group-archived" });
+      expect(await deliverScheduledStart(ctx.deps, "g")).toEqual({ kind: "blocked", reason: "group-archived" });
+      expect(activeRunIds(h.store)).toEqual([]);
+      expect(pendingWakes(h.store).filter((id) => !id.includes(":estimate:")).sort()).toEqual(wakes);
+      service.unarchiveGroup(h.command("unarchive-group", {}));
+      expect((await deliverScheduledStart(ctx.deps, "g")).kind).toBe("claimed");
+    } finally { await h.dispose(); }
+  });
+});

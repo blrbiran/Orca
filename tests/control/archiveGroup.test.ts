@@ -6,7 +6,9 @@ import { ControlError } from "../../src/control/errors.js";
 import { newGroupIntegration } from "../../src/control/integrationScheme.js";
 import { insertClarifyingGroup, newRound, writeRound } from "../../src/control/requirementRecords.js";
 import { groupStopState, settleHandoffRequest } from "../../src/control/stopIntent.js";
-import { deliverScheduledStart } from "../../src/control/webDispatch.js";
+import { deliverSchedulerWakes } from "../../src/control/dispatch.js";
+import { replenishStartWakes } from "../../src/control/executionDriver.js";
+import { createWebWakeHandlers, deliverScheduledStart, nextClaimableTask } from "../../src/control/webDispatch.js";
 import { commandVerbSchema } from "../../src/control/webProtocol.js";
 import { WebControlService } from "../../src/control/webService.js";
 import { readGroupSummary } from "../../src/panel/controlViews.js";
@@ -213,6 +215,60 @@ describe("an archived group refuses every group-targeted command but unarchive-g
       service.archiveGroup(h.command("archive-group", {}));
       expect(service.unarchiveGroup(h.command("unarchive-group", {}))).toMatchObject({ result: { kind: "unarchived" } });
       expect(await service.start(h.command("start", {}))).toMatchObject({ result: { kind: "scheduled", operation: "start" } });
+    } finally { await h.dispose(); }
+  });
+});
+
+describe("no claim and no wake for an archived group (spec §6.3)", () => {
+  const pending = (h: H) => h.store.db.prepare("SELECT id FROM scheduler_wakes WHERE group_id='g' AND kind='start' AND delivered=0").all().map((row) => String(row.id));
+  const activeRuns = (h: H) => Number(h.store.db.prepare("SELECT COUNT(*) AS n FROM runs WHERE group_id='g' AND active=1").get()!.n);
+
+  it("leaves a pending start wake pending and claims nothing", async () => {
+    const { h, service } = await confirmed();
+    try {
+      await service.start(h.command("start", {}));
+      const wakes = pending(h);
+      expect(wakes).toHaveLength(1);
+      service.archiveGroup(h.command("archive-group", {}));
+      expect(await deliverScheduledStart(dispatch(h), "g")).toEqual({ kind: "blocked", reason: "group-archived" });
+      expect(pending(h)).toEqual(wakes);
+      expect(activeRuns(h)).toBe(0);
+      service.unarchiveGroup(h.command("unarchive-group", {}));
+      expect((await deliverScheduledStart(dispatch(h), "g")).kind).toBe("claimed");
+    } finally { await h.dispose(); }
+  });
+
+  it("offers no claimable task, so the driver arms no new start wake, until it is unarchived", async () => {
+    const { h, service } = await confirmed();
+    try {
+      await service.start(h.command("start", {}));
+      h.store.db.prepare("UPDATE scheduler_wakes SET delivered=1 WHERE group_id='g' AND kind='start'").run();
+      service.archiveGroup(h.command("archive-group", {}));
+      expect(nextClaimableTask(h.store, "g")).toBeNull();
+      expect(replenishStartWakes({ store: h.store, admissionGate: h.deps.admissionGate })).toEqual([]);
+      service.unarchiveGroup(h.command("unarchive-group", {}));
+      expect(nextClaimableTask(h.store, "g")).toEqual({ workItemId: "a" });
+      expect(replenishStartWakes({ store: h.store, admissionGate: h.deps.admissionGate })).toEqual(["drive:g:1"]);
+    } finally { await h.dispose(); }
+  });
+
+  it("leaves a queued estimate queued and its wake pending: no estimate run is claimed until it is unarchived", async () => {
+    const { h, service } = await confirmed();
+    try {
+      const wakeId = `scheduler-wake:g:estimate:${h.estimateId}`;
+      const wake = () => h.store.db.prepare("SELECT delivered FROM scheduler_wakes WHERE id=?").get(wakeId);
+      const estimateState = () => String(h.store.db.prepare("SELECT state FROM estimates WHERE group_id='g' AND id=?").get(h.estimateId)!.state);
+      const estimateRun = () => h.store.db.prepare("SELECT id FROM runs WHERE group_id='g' AND work_item_id=?").get(h.estimateId);
+      service.archiveGroup(h.command("archive-group", {}));
+      const handlers = createWebWakeHandlers({ ...h.deps, service });
+      expect((await deliverSchedulerWakes(h.store, handlers)).delivered).not.toContain(wakeId);
+      expect(wake()).toEqual({ delivered: 0 });
+      expect(estimateState()).toBe("queued");
+      expect(estimateRun()).toBeUndefined();
+      service.unarchiveGroup(h.command("unarchive-group", {}));
+      expect((await deliverSchedulerWakes(h.store, handlers)).delivered).toContain(wakeId);
+      expect(estimateState()).toBe("running");
+      expect(estimateRun()).toBeDefined();
     } finally { await h.dispose(); }
   });
 });

@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { isGroupArchived } from "./archivedMark.js";
 import { ControlError } from "./errors.js";
 import { documentPathOf } from "./requirementDocument.js";
 import { readRequirementGroup, saveRequirementGroup, type RequirementBlock } from "./requirementRecords.js";
@@ -167,6 +168,8 @@ export async function exportPendingRequirements(deps: ExportDeps): Promise<boole
   let moved = false;
   for (const row of deps.store.db.prepare("SELECT id,group_id FROM scheduler_wakes WHERE kind='requirement-export' AND delivered=0 ORDER BY rowid").all()) {
     try {
+      // Issue-fixes spec §6.3 (Part E ruling 2): an archived group's export waits, its wake undelivered, until unarchived.
+      if (isGroupArchived(deps.store, String(row.group_id))) continue;
       const outcome = await exportRequirementDocument(deps, String(row.group_id));
       write(deps, () => deps.store.db.prepare("UPDATE scheduler_wakes SET delivered=1 WHERE id=? AND delivered=0").run(String(row.id)));
       moved = moved || outcome !== "nothing";

@@ -9,6 +9,7 @@ import {
 } from "./integrationGit.js";
 import { advanceIntegrationResolution, copyOwner, materialiseIntegrationConflict, nextAttempt } from "./integrationResolve.js";
 import { syncGroupPr } from "./integrationPr.js";
+import { archivedMarkOf } from "./archivedMark.js";
 import { githubRepoOf, readGroupIntegration, remoteUrl, type GroupIntegration, type IntegrationScheme } from "./integrationScheme.js";
 import { readGroup, saveGroup } from "./queries.js";
 import { removeOwnPath, workBranchRef, type WorkspaceRoots } from "./workspace.js";
@@ -89,8 +90,14 @@ export async function integratePendingGroups(deps: IntegrationDeps): Promise<boo
     if (deps.stopped() || deps.admissionGate?.draining === true) break;
     const groupId = String(row.id);
     let integration: GroupIntegration | null;
-    try { integration = readGroupIntegration(JSON.parse(String(row.body))); }
-    catch (error) { process.stderr.write(`orca-driver: integration ${groupId}: ${describe(error)}\n`); continue; }
+    let archived: boolean;
+    try {
+      const parsed: unknown = JSON.parse(String(row.body));
+      integration = readGroupIntegration(parsed);
+      archived = archivedMarkOf(parsed) !== null;
+    } catch (error) { process.stderr.write(`orca-driver: integration ${groupId}: ${describe(error)}\n`); continue; }
+    // Issue-fixes spec §6.3: an archived group's landed work is not carried anywhere until it is unarchived.
+    if (archived) continue;
     // spec §7: a group with no conflict on record (its integration succeeded, or its scheme changed) owns no copy.
     if (copies.has(groupId) && (integration === null || integration.conflict === null)) {
       try { for (const copy of copies.get(groupId)!) await removeOwnPath(deps.repoPathOf(groupRepoId(deps.store, groupId)), deps.roots, copy); }

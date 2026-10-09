@@ -702,3 +702,18 @@ describe("integration activity (issue-fixes spec §5.2)", { timeout: 60_000 }, (
     } finally { await w.dispose(); }
   });
 });
+
+describe("an archived group is not integrated (issue-fixes spec §6.3)", { timeout: 60_000 }, () => {
+  it("skips its landed work while archived, and integrates it once unarchived", async () => {
+    const w = await world(PB); try {
+      const tip = w.land({ "a.txt": "a\n" });
+      const archived = w.service.archiveGroup(w.command("archive-group", {}));
+      if ("error" in archived) throw new Error(JSON.stringify(archived));
+      expect(await w.pass()).toBe(false);
+      expect(w.remote("orca/g")).toBeNull();
+      w.service.unarchiveGroup(w.command("unarchive-group", {}));
+      expect(await w.pass()).toBe(true);
+      expect(w.remote("orca/g")).toBe(tip);
+    } finally { await w.dispose(); }
+  });
+});

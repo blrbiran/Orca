@@ -390,3 +390,22 @@ describe("an existing branch whose tip is not the export's shape (final review t
     } finally { await x.dispose(); }
   });
 });
+
+describe("an archived group's requirement is not exported (issue-fixes spec §6.3)", () => {
+  it("leaves the export pending and its wake undelivered while archived, and exports once unarchived", async () => {
+    const { x, text } = await accepted();
+    try {
+      const wake = () => x.store.db.prepare("SELECT delivered FROM scheduler_wakes WHERE id='scheduler-wake:r:requirement-export'").get();
+      const archived = await x.service.archiveGroup(x.command("archive-group", {}));
+      if ("error" in archived) throw new Error(JSON.stringify(archived));
+      expect(await exportPendingRequirements(exportDeps(x))).toBe(false);
+      expect(wake()).toEqual({ delivered: 0 });
+      expect(readRequirementGroup(x.store, "r").requirement.export.state).toBe("pending");
+      expect(() => x.git("rev-parse", "--verify", "-q", "refs/heads/orca/r")).toThrow();
+      await x.service.unarchiveGroup(x.command("unarchive-group", {}));
+      expect(await exportPendingRequirements(exportDeps(x))).toBe(true);
+      expect(wake()).toEqual({ delivered: 1 });
+      expect(x.git("show", `refs/heads/orca/r:${readRequirementGroup(x.store, "r").requirement.export.path}`)).toBe(text.trimEnd());
+    } finally { await x.dispose(); }
+  });
+});

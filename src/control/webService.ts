@@ -24,6 +24,7 @@ import { prepareResolution } from "./integrationResolve.js";
 import { controlWorkspaceRoots } from "./workspace.js";
 import { applyResolveIntegrationConflict, applyRetryIntegration, applySetGroupIntegration, applySetIntegrationScheme, type ResolveIntegrationConflictCommand, type RetryIntegrationCommand, type SetGroupIntegrationCommand, type SetIntegrationSchemeCommand } from "./integrationCommands.js";
 import { applyArchiveGroup, applyUnarchiveGroup, type ArchiveGroupCommand, type UnarchiveGroupCommand } from "./archiveGroup.js";
+import { isGroupArchived } from "./archivedMark.js";
 import { checkScheme, preflightScheme, readGroupIntegration, REPOSITORY_CHECK, suggestedTarget, type GroupIntegration, type IntegrationScheme } from "./integrationScheme.js";
 import { applySpendCommand, type SpendCommand } from "./spendCommands.js";
 import { applySetAgentPreferences, type SetAgentPreferencesCommand } from "./agentPreferences.js";
@@ -479,6 +480,9 @@ export class WebControlService {
         if (!["queued", "running", "start-unknown"].includes(estimate.state)) { clearSpendCapBlock(this.store, id, "estimate"); return null; }
         const existing = this.store.db.prepare("SELECT body FROM runs WHERE group_id=? AND work_item_id=?").get(id, estimateId);
         if (existing) return JSON.parse(String(existing.body)) as EstimateRun;
+        // Issue-fixes spec §6.3 (Part E ruling 2): an archived group claims no estimate; it stays queued and its wake
+        // pending until the group is unarchived.
+        if (isGroupArchived(this.store, id)) return null;
         if (estimate.state !== "queued" || !estimate.request) throw new ControlError("recovery-blocked");
         prestart(group); assertKnownConservation(this.store, group, proposal);
         if (group.stopped) throw new ControlError("group-stopped");
