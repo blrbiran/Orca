@@ -19,7 +19,7 @@ import { GitScheme } from "./GitScheme.js";
 import { GroupIntegrationConfirm } from "./IntegrationScheme.js";
 import { RefusalNotice } from "./RefusalNotice.js";
 import { RunReason } from "./RunReason.js";
-import { isTerminalFailure, retryTaskOpen } from "./runFacts.js";
+import { archiveOpen, isTerminalFailure, retryTaskOpen } from "./runFacts.js";
 import { SkillsGiven } from "./SkillsGiven.js";
 import type {
   AgentSelectionPreviewV1, AgentsViewV1, ControlConfigV1, ContinuationSelectionV1, GroupViewV1, OperatorPreferencesV1, RepositoryIntegrationV1, RepositoryWorkspaceV1,
@@ -371,9 +371,12 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
               {t("control.group.retryRecovery", { groupId })}
             </button>
           )}
-          <button type="button" onClick={() => onCommand({ verb: "archive-group", groupId, expectedRevision: revision, payload: {} })}>
-            {t("control.group.archive")}
-          </button>
+          {/* Final review M1: offered only where archive-group is accepted (no button the server always refuses). */}
+          {archiveOpen(view) && (
+            <button type="button" onClick={() => onCommand({ verb: "archive-group", groupId, expectedRevision: revision, payload: {} })}>
+              {t("control.group.archive")}
+            </button>
+          )}
         </>
       )}
       <p>{t("control.group.recent", { commands: view.recentCommandIds.join(", ") || t("common.none") })}</p>

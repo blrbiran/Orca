@@ -33,6 +33,27 @@ export function retryTaskOpen(view: GroupViewV1): boolean {
   return view.stop === null && view.summary.state !== "clarifying" && view.summary.archived !== true;
 }
 
+/**
+ * The run states the group view shows only for an inactive run: controlViews.ts runViews refuses a view in which a run's
+ * `active` flag disagrees with this set, so every other state is an active run.
+ */
+const INACTIVE_RUN_STATES: ReadonlySet<RunViewV1["state"]> = new Set([
+  "failed-before-provider", "settled-recoverable", "settled-restartable", "settled-unrecoverable", "settled-failed",
+]);
+
+/**
+ * Final review M1: the server's archive guards (src/control/archiveGroup.ts refuseArchive), in its order, so Archive is
+ * offered only where archive-group is accepted. Its requirement-call guard has no counterpart here: a clarifying group
+ * has no group view.
+ */
+export function archiveOpen(view: GroupViewV1): boolean {
+  if (view.summary.archived === true) return false;
+  if (view.estimates.some((estimate) => estimate.state === "running" || estimate.state === "start-unknown")) return false;
+  if (view.stop !== null && view.stop.mode !== "pause" && view.stop.state !== "handoff-complete" && view.stop.state !== "handoff-partial") return false;
+  if (view.integration?.state === "resolving") return false;
+  return view.runs.every((run) => INACTIVE_RUN_STATES.has(run.state));
+}
+
 /** Spec §4.2(2): a task's run number is the count of its lineage runs that reached the provider. */
 export function taskRunNumber(view: GroupViewV1, taskId: string): number {
   return lineageRunNumber(view.workItems.find((item) => item.taskId === taskId)?.lineageRunIds ?? [], view.runs);

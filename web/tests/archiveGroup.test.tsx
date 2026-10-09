@@ -47,7 +47,8 @@ describe("archiving from the group view (spec §6.3)", () => {
     const open = render(<ControlGroupView view={view([item], [failed])} {...props} />);
     fireEvent.click(screen.getAllByRole("button", { name: "a" })[0]!);
     const before = actionButtons().length;
-    expect(before).toBeGreaterThan(10);
+    // Final review M1: the failed run is still active, so Archive group is not among them (archive-run-active).
+    expect(before).toBeGreaterThanOrEqual(10);
     open.unmount();
     render(<ControlGroupView view={archived(view([item], [failed]))} {...props} />);
     fireEvent.click(screen.getAllByRole("button", { name: "a" })[0]!);
@@ -81,6 +82,55 @@ describe("archiving from the group view (spec §6.3)", () => {
   it("serves both verbs on the group's own routes", () => {
     expect(controlCommandPath({ verb: "archive-group", groupId: "g 1", expectedRevision: 1, payload: {} })).toBe("/api/control/groups/g%201/archive");
     expect(controlCommandPath({ verb: "unarchive-group", groupId: "g", expectedRevision: 1, payload: {} })).toBe("/api/control/groups/g/unarchive");
+  });
+});
+
+// Final review M1: archive-group refuses (archiveGroup.ts refuseArchive) while an estimate call runs, while a stop other
+// than a pause has not settled into handoff-complete or handoff-partial, while an integration conflict is being resolved,
+// and while any run is active. Each case below is one of those guards; the button is offered only where none applies.
+describe("Archive group is offered only where the server accepts archive-group (final review M1)", () => {
+  const offered = (shown: GroupViewV1): boolean => {
+    const mounted = render(<ControlGroupView view={shown} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
+    const found = screen.queryByRole("button", { name: "Archive group" }) !== null;
+    mounted.unmount();
+    return found;
+  };
+  const stopped = (mode: "pause" | "shutdown" | "handoff", state: NonNullable<GroupViewV1["stop"]>["state"]): GroupViewV1 => {
+    const base = view([]);
+    return { ...base, stop: { mode, state, frozenRunIds: [], acceptedAt: null, deadlineAt: null }, summary: { ...base.summary, stopMode: mode, stopState: state } };
+  };
+  const estimate = (state: GroupViewV1["estimates"][number]["state"]): GroupViewV1["estimates"][number] =>
+    ({ estimateId: "est-1", estimateVersion: 1, state, profile: { profileId: "all", profileHash: "b".repeat(64) }, mode: "soft", requestHash: null, outputHash: null, output: null, reasonCode: null });
+  const integration = (state: NonNullable<GroupViewV1["integration"]>["state"]): NonNullable<GroupViewV1["integration"]> =>
+    ({ scheme: { delivery: "push-branch", trigger: "task", target: "main", remote: "origin" }, schemeHash: "h", frozen: true, state, reason: null, lastIntegrated: null, integratedCommit: null, pr: null });
+
+  it("hides it while a run is active, a terminally failed blocked run included, and offers it once every run has settled", () => {
+    expect(offered(view([], [run({ state: "running" })]))).toBe(false);
+    expect(offered(view([], [run({ state: "landed" })]))).toBe(false);
+    expect(offered(view([], [run({ state: "blocked", blockedReason: "terminal:failed", outcome: "failed", stopReason: "Error: x" })]))).toBe(false);
+    expect(offered(view([], [run({ state: "settled-unrecoverable" }), run({ runId: "run-b", state: "settled-failed" }), run({ runId: "run-c", state: "failed-before-provider" })]))).toBe(true);
+  });
+
+  it("hides it while an estimate call is running or its start is unknown", () => {
+    expect(offered({ ...view([]), estimates: [estimate("running")] })).toBe(false);
+    expect(offered({ ...view([]), estimates: [estimate("start-unknown")] })).toBe(false);
+    expect(offered({ ...view([]), estimates: [estimate("ready")] })).toBe(true);
+  });
+
+  it("hides it while a handoff or shutdown stop is still settling or unresolved, and offers it once it settled completely or partially", () => {
+    expect(offered(stopped("handoff", "handoff-pending"))).toBe(false);
+    expect(offered(stopped("shutdown", "handoff-unresolved"))).toBe(false);
+    expect(offered(stopped("handoff", "handoff-complete"))).toBe(true);
+    expect(offered(stopped("shutdown", "handoff-partial"))).toBe(true);
+  });
+
+  it("offers it under a pause with no active run, because a pause intent does not refuse archive", () => {
+    expect(offered(stopped("pause", "paused"))).toBe(true);
+  });
+
+  it("hides it while an agent resolves the group's integration conflict", () => {
+    expect(offered({ ...view([]), integration: integration("resolving") })).toBe(false);
+    expect(offered({ ...view([]), integration: integration("conflict") })).toBe(true);
   });
 });
 
