@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { usageSettlementSchema } from "./usageSettlement.js";
 import { agentSelectionSchema, amountSchema, canonicalTimestampSchema, commandEnvelopeSchema, contextWindowSchema, idSchema, panelPartialSelectionSchema, partialSelectionSchema, safeInteger } from "./schema.js";
 import { nonEmptyStoredLabelsSchema, storedLabelsSchema } from "./labels.js";
 import { DRAFT_STATES, IDEA_MAX_BYTES, REQUIREMENT_WAITING, ROUND_STATES, draftBodySchema, questionIdSchema, requirementExportSchema, roundBodySchema } from "./requirementSchemas.js";
@@ -604,6 +605,7 @@ export const commandVerbSchema = z.enum([
   "continue-task",
   "recovery-retry",
   "retry-task",
+  "settle-unknown-usage",
   "shutdown",
   "set-workspace-mode",
   "set-agent-preferences",
@@ -672,6 +674,7 @@ export const recoveryRetryPayloadSchema = z.discriminatedUnion("scope", [
 ]);
 // Issue fixes spec §4.2(2): start a task again whose current run ccloop ended failed. Group target; the task is named here.
 export const retryTaskPayloadSchema = z.object({ taskId: idSchema }).strict();
+export const settleUnknownUsagePayloadSchema = z.object({ taskId: idSchema, runId: idSchema, generation: positiveSafeInteger, acknowledge: z.literal("charge-remaining-grant") }).strict();
 
 const proposalTargetSchema = z.discriminatedUnion("scope", [
   z
@@ -874,6 +877,7 @@ const rawAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...rawCommandFields, verb: z.literal("continue-task"), target: taskCommandTargetSchema, payload: continueTaskPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("recovery-retry"), target: commandTargetSchema, payload: recoveryRetryPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("retry-task"), target: groupCommandTargetSchema, payload: retryTaskPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("settle-unknown-usage"), target: groupCommandTargetSchema, payload: settleUnknownUsagePayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("shutdown"), target: globalCommandTargetSchema, payload: shutdownPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-workspace-mode"), target: repositoryCommandTargetSchema, payload: setWorkspaceModePayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-integration-scheme"), target: repositoryCommandTargetSchema, payload: setIntegrationSchemePayloadSchema }).strict(),
@@ -928,6 +932,7 @@ const effectiveAuthorityCommandVariants = z.discriminatedUnion("verb", [
     .object({ ...effectiveCommandFields, verb: z.literal("recovery-retry"), target: commandTargetSchema, payload: recoveryRetryPayloadSchema })
     .strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("retry-task"), target: groupCommandTargetSchema, payload: retryTaskPayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("settle-unknown-usage"), target: groupCommandTargetSchema, payload: settleUnknownUsagePayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("shutdown"), target: globalCommandTargetSchema, payload: shutdownPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-workspace-mode"), target: repositoryCommandTargetSchema, payload: setWorkspaceModePayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-integration-scheme"), target: repositoryCommandTargetSchema, payload: setIntegrationSchemePayloadSchema }).strict(),
@@ -1177,7 +1182,7 @@ export const workItemViewSchema = z
 
 // Issue-fixes spec §5.2 (ruling H5): one row of Orca's activity record as the views show it (src/control/activity.ts).
 export const activityKindSchema = z.enum([
-  "command", "run-claimed", "run-started", "phase", "run-blocked", "run-resumed", "run-settled", "task-retried", "integration", "stop", "stop-cleared", "archived", "unarchived",
+  "usage-settled", "command", "run-claimed", "run-started", "phase", "run-blocked", "run-resumed", "run-settled", "task-retried", "integration", "stop", "stop-cleared", "archived", "unarchived",
 ]);
 export const activityEntrySchema = z
   .object({
@@ -1222,6 +1227,7 @@ export const runViewSchema = z
     // Retry-task button keys on it). Optional on the wire like `git`; the server always gives both, null when absent.
     stopReason: nonemptyString.nullable().optional(),
     outcome: nonemptyString.nullable().optional(),
+    unknownUsageSettlement: z.object({ generation: positiveSafeInteger, highWater: safeInteger, remaining: z.object({ work: amountSchema, handoff: amountSchema }).strict(), allowed: z.boolean(), refusalReason: nonemptyString.nullable(), settlement: usageSettlementSchema.optional() }).strict().optional(),
     continuable: z.boolean(),
     evidenceIds: sortedIdArraySchema,
     // Board spec 2026-10-03 D4: the git facts the run's drive record holds -- the workspace mode it ran in, the work
@@ -1297,6 +1303,7 @@ export const handoffRequestViewSchema = z
       "settled-recoverable",
       "settled-restartable",
       "settled-unrecoverable",
+      "settled-failed",
       "outcome-unknown",
     ]),
     deadlineAt: canonicalTimestampSchema,
@@ -1525,6 +1532,7 @@ const commandResultSchema = z.discriminatedUnion("kind", [
       wakeId: nonemptyString,
     })
     .strict(),
+  z.object({ kind: z.literal("usage-settled"), taskId: idSchema, runId: idSchema, generation: positiveSafeInteger, charged: z.object({ work: amountSchema, handoff: amountSchema }).strict(), at: safeInteger, method: z.literal("remaining-grant") }).strict(),
   z.object({ kind: z.literal("task-retried"), taskId: idSchema, fromRunId: idSchema }).strict(),
   z
     .object({
@@ -1636,6 +1644,7 @@ export type HandoffStopPayload = z.infer<typeof handoffStopPayloadSchema>;
 export type ResumeFromHandoffPayload = z.infer<typeof resumeFromHandoffPayloadSchema>;
 export type ContinueTaskPayload = z.infer<typeof continueTaskPayloadSchema>;
 export type RecoveryRetryPayload = z.infer<typeof recoveryRetryPayloadSchema>;
+export type SettleUnknownUsagePayload = z.infer<typeof settleUnknownUsagePayloadSchema>;
 export type RetryTaskPayload = z.infer<typeof retryTaskPayloadSchema>;
 export type ProposalEditPayload = z.infer<typeof proposalEditPayloadSchema>;
 export type EffectiveProposalEditPayload = z.infer<typeof effectiveProposalEditPayloadSchema>;

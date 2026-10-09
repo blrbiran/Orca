@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { ZodTypeAny } from "zod";
 import {
   confirmPayloadSchema, continueTaskPayloadSchema, emptyPayloadSchema, handoffStopPayloadSchema, importPlanPayloadSchema, proposalEditPayloadSchema,
-  proposalSetAgentPayloadSchema, recoveryRetryPayloadSchema, retryTaskPayloadSchema, reestimatePayloadSchema, requirementAnswerPayloadSchema, requirementConsensusPayloadSchema,
+  proposalSetAgentPayloadSchema, recoveryRetryPayloadSchema, retryTaskPayloadSchema, settleUnknownUsagePayloadSchema, reestimatePayloadSchema, requirementAnswerPayloadSchema, requirementConsensusPayloadSchema,
   requirementDraftAcceptPayloadSchema, requirementDraftFeedbackPayloadSchema, requirementOpenPayloadSchema, resumeFromHandoffPayloadSchema,
   setAgentPreferencesPayloadSchema, setLimitPayloadSchema, setTaskLabelsPayloadSchema, setTaskLoopPayloadSchema, setWorkspaceModePayloadSchema,
   setSpendCapPayloadSchema, clearSpendCapPayloadSchema, setUsageCalendarPayloadSchema, setIntegrationSchemePayloadSchema, setGroupIntegrationPayloadSchema,
@@ -19,7 +19,7 @@ const schemaByVerb: Record<string, ZodTypeAny> = {
   "import-plan": importPlanPayloadSchema, "proposal-edit": proposalEditPayloadSchema, estimate: reestimatePayloadSchema, confirm: confirmPayloadSchema,
   "set-limit": setLimitPayloadSchema, start: emptyPayloadSchema, "pause-dispatch": emptyPayloadSchema, "handoff-stop": handoffStopPayloadSchema,
   "resume-dispatch": emptyPayloadSchema, "resume-from-handoff": resumeFromHandoffPayloadSchema, "continue-task": continueTaskPayloadSchema,
-  "recovery-retry": recoveryRetryPayloadSchema, "retry-task": retryTaskPayloadSchema, "set-workspace-mode": setWorkspaceModePayloadSchema, "set-agent-preferences": setAgentPreferencesPayloadSchema,
+  "recovery-retry": recoveryRetryPayloadSchema, "retry-task": retryTaskPayloadSchema, "settle-unknown-usage": settleUnknownUsagePayloadSchema, "set-workspace-mode": setWorkspaceModePayloadSchema, "set-agent-preferences": setAgentPreferencesPayloadSchema,
   "proposal-set-agent": proposalSetAgentPayloadSchema, "requirement-open": requirementOpenPayloadSchema, "requirement-answer": requirementAnswerPayloadSchema,
   "requirement-consensus": requirementConsensusPayloadSchema, "requirement-draft-feedback": requirementDraftFeedbackPayloadSchema,
   "requirement-draft-accept": requirementDraftAcceptPayloadSchema, "set-task-labels": setTaskLabelsPayloadSchema, "set-task-loop": setTaskLoopPayloadSchema,
@@ -44,13 +44,13 @@ describe("the orca-control skill (spec §7, C18)", () => {
     // and `groups/<groupId>/integration/retry` (retry-integration); §7 added `groups/<groupId>/integration/resolve`
     // (resolve-integration-conflict). Issue fixes spec §4.2(2) added `groups/<groupId>/retry-task` (retry-task).
     // Issue-fixes spec §6.3 added groups/<groupId>/archive and groups/<groupId>/unarchive.
-    expect(routes.size).toBe(32);
+    expect(routes.size).toBe(33);
     expect(rows.map((row) => row.route).sort()).toEqual([...routes].sort());
   });
 
   it("names the verb of every route as the panel does", () => {
     const verbs = new Map([...api.matchAll(/path: "\/api\/control\/([^"]+)",?\s+verb: "([^"]+)"/g)].map((m) => [m[1]!.replace(/:([A-Za-z]+)/g, "<$1>"), m[2]!]));
-    expect(verbs.size).toBe(32);
+    expect(verbs.size).toBe(33);
     expect(new Map(rows.map((row) => [row.route, row.verb]))).toEqual(verbs);
   });
 
@@ -62,7 +62,7 @@ describe("the orca-control skill (spec §7, C18)", () => {
   });
 
   it("gives every route a payload example that its raw payload schema accepts", () => {
-    expect(rows.length).toBe(32);
+    expect(rows.length).toBe(33);
     for (const row of rows) {
       const schema = schemaByVerb[row.verb];
       expect(schema, `no schema mapped for ${row.verb}`).toBeDefined();
@@ -97,3 +97,5 @@ describe("the orca-control skill (spec §7, C18)", () => {
     for (const code of ["`0`", "`1`", "`2`", "`3`"]) expect(skill).toContain(code);
   });
 });
+
+// D9 correction (Codex implement_settlement, 2026-10-09, base 2c14e73): 33 routes/34 verbs; settlement is owner Web only.

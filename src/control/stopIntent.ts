@@ -1,3 +1,4 @@
+import { hasValidUsageSettlement, type UsageSettlement } from "./usageSettlement.js";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { applyWebCommand, type WebCommandContext } from "./commandLedger.js";
@@ -58,7 +59,7 @@ export const HANDOFF_DEADLINE_MS = 30 * 60_000;
 const OPEN_STATES = ["request-pending", "latched", "collecting"];
 /** An outcome-unknown request still owns its run, so a later stop joins it rather than opening a second one. */
 export const ADOPTABLE_STATES = [...OPEN_STATES, "outcome-unknown"];
-const SETTLED_STATES = ["settled-recoverable", "settled-restartable", "settled-unrecoverable"];
+const SETTLED_STATES = ["settled-recoverable", "settled-restartable", "settled-unrecoverable", "settled-failed"];
 
 const stopIntentBodySchema = z
   .object({
@@ -197,6 +198,10 @@ export function readHandoffRequest(store: ControlStore, groupId: string, request
   if (request.requestId !== requestId || request.state !== String(row.state) || canonicalBytes(request).toString("utf8") !== bodyJson) {
     return blocked("handoff-request-identity");
   }
+  if (request.state === "settled-failed") {
+    const run = readRunBody(store, request.runId), marker = run.usageSettlement as UsageSettlement | undefined;
+    if (marker?.reservationDisposition !== "released" || marker.handoffResolution?.requestId !== requestId || !hasValidUsageSettlement(store, run as never)) return blocked("handoff-manual-settlement-invalid");
+  }
   return { request, bodyJson };
 }
 
@@ -245,9 +250,13 @@ export function groupStopState(store: ControlStore, groupId: string): GroupStopS
 }
 
 export function deriveStopState(store: ControlStore, groupId: string, frozenRunIds: readonly string[]): StopState {
+  return deriveFrozenStopState(store, groupId, frozenRunIds);
+}
+
+function deriveFrozenStopState(store: ControlStore, groupId: string, frozenRunIds: readonly string[], closedRunId?: string): StopState {
   let unresolved = false, pending = false, partial = false;
   for (const runId of frozenRunIds) {
-    const state = latestRequestForRun(store, groupId, runId)?.state ?? null;
+    const state = runId === closedRunId ? "settled-failed" : latestRequestForRun(store, groupId, runId)?.state ?? null;
     if (state === null || state === "outcome-unknown") unresolved = true;
     else if (OPEN_STATES.includes(state)) pending = true;
     // Handoff delivery (controller ruling 2026-09-25 on Task 3's open question; Web spec §6.2): a run still active
@@ -892,4 +901,16 @@ export function handoffRequestFromOutbox(store: ControlStore, requestId: string)
   if (!row) return blocked(`handoff-outbox-missing:${requestId}`);
   const body = parseStored(handoffOutboxSchema, String(row.body), "handoff-outbox-invalid");
   return { protocol: 1, requestId: body.requestId, runId: body.runId, generation: body.generation, reason: body.origin === "shutdown" ? "shutdown" : "human", deadlineAt: body.deadlineAt };
+}
+
+/** D9 only: commitments were already released; never terminaliseRun/releaseCommitment a second time. */
+export function settleManuallyFailedRequestInTransaction(store: ControlStore, groupId: string, requestId: string, marker: UsageSettlement): void {
+  const request = readHandoffRequest(store, groupId, requestId).request;
+  if (request.state !== "settled-unrecoverable" || request.failureCode !== "usage-unsettled" || marker.reservationDisposition !== "released" || marker.handoffResolution?.requestId !== requestId) throw new ControlError("run-usage-not-settleable", "handoff-resolution");
+  saveHandoffRequest(store, groupId, { ...request, state: "settled-failed" });
+  // The receipt is written after apply returns. Derive against the full frozen set, substituting only this validated request.
+  const intent = readStopIntent(store, groupId);
+  if (intent && intent.mode !== "pause") {
+    rewriteStopIntentState(store, groupId, intent, deriveFrozenStopState(store, groupId, intent.frozenRunIds, marker.runId));
+  }
 }

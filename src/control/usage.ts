@@ -19,6 +19,7 @@ export function recordUsage(store:ControlStore,event:UsageEvent,appliedAt:number
       if(prior.payload_hash!==hash) throw new ControlError("usage-event-conflict");
       return {applied:false,highWater:run.highWater};
     }
+    if((run as {usageSettlement?:unknown}).usageSettlement!==undefined) throw new ControlError("run-usage-settled");
     if(isTerminalRunState(run.state)) throw new ControlError("run-already-settled");
     store.db.prepare("INSERT INTO usage_events VALUES (?,?,?,?)").run(event.runId,event.eventSeq,hash,JSON.stringify(event));
     const group=readGroup(store,run.groupId);

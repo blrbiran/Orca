@@ -29,6 +29,7 @@ export async function controlGet(input: { socketPath: string; client: string; pa
   }
 }
 
+/** D9: the owner-only settlement route is recognized by the panel; socket/MCP senders receive its 403 permission refusal. */
 export async function controlSend(input: { socketPath: string; client: string; route: string; expectedRevision: number; payload: unknown; commandId?: string; commandIdPrefix?: "cli" | "mcp" }): Promise<CliResponseV1> {
   const commandId = input.commandId ?? `${input.commandIdPrefix ?? "cli"}-${randomUUID()}`;
   try {

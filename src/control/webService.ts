@@ -18,6 +18,7 @@ import { estimateExecutionContractSchema, executionSnapshotSchema } from "./webP
 import { scheduleStart, type StartCommand } from "./webDispatch.js";
 import { applyHandoffStop, applyPauseDispatch, applyRecoveryRetry, applyResumeDispatch, type HandoffStopCommand, type PauseCommand, type RecoveryRetryCommand, type ResumeDispatchCommand, type StopDeps } from "./stopIntent.js";
 import { applyContinueTask, applyResumeFromHandoff, type ContinueTaskCommand, type ResumeFromHandoffCommand } from "./continuation.js";
+import { applySettleUnknownUsage, type SettleUnknownUsageCommand } from "./settleUnknownUsage.js";
 import { applyRetryTask, type RetryTaskCommand } from "./retryTask.js";
 import { applySetWorkspaceMode, type SetWorkspaceModeCommand } from "./workspaceSettings.js";
 import { prepareResolution } from "./integrationResolve.js";
@@ -651,6 +652,9 @@ export class WebControlService {
     return applyContinueTask(this.stopDeps(), command) as WebCommandResult;
   }
   /** Issue fixes spec §4.2(2): a task whose run ccloop ended failed back to ready (retryTask.ts). */
+  async settleUnknownUsage(command: SettleUnknownUsageCommand): Promise<WebCommandResult> {
+    return applySettleUnknownUsage(this.stopDeps(), command);
+  }
   retryTask(command: RetryTaskCommand): WebCommandResult {
     return applyRetryTask(this.stopDeps(), command) as WebCommandResult;
   }

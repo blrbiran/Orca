@@ -1,6 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
 
-export const schemaVersion = "9";
+export const schemaVersion = "10";
 export const legacySchema = `CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;
 CREATE TABLE groups(id TEXT PRIMARY KEY, revision INTEGER NOT NULL, graph_version INTEGER NOT NULL, body TEXT NOT NULL) STRICT;
 CREATE TABLE work_items(group_id TEXT NOT NULL REFERENCES groups(id), id TEXT NOT NULL, target_version INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY(group_id,id)) STRICT;
@@ -129,9 +129,9 @@ export function migrateSchema(store: DatabaseSync, fromVersion: string): void {
   else if (fromVersion === "4") store.exec(schema4To5 + schema5To6 + schema6To7);
   else if (fromVersion === "5") store.exec(schema5To6 + schema6To7);
   else if (fromVersion === "6") store.exec(schema6To7);
-  else if (fromVersion !== "7" && fromVersion !== "8") throw new Error("control-schema-unsupported");
+  else if (fromVersion !== "7" && fromVersion !== "8" && fromVersion !== "9") throw new Error("control-schema-unsupported");
   // Every version before 8 goes through 7 to 8 first; 8 itself only gains the activity table (spec §5.2).
-  if (fromVersion !== "8") migrate7To8(store);
+  if (fromVersion !== "8" && fromVersion !== "9") migrate7To8(store);
   store.exec(schema8To9);
   store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
 }

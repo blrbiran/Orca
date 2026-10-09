@@ -20,6 +20,7 @@ export const VERB_ACCESS: Readonly<Record<CommandVerbV1, "any" | "human-only" | 
   "continue-task": "any",
   "recovery-retry": "any",
   "retry-task": "any",
+  "settle-unknown-usage": "human-only",
   "shutdown": "panel",
   "set-workspace-mode": "any",
   "set-agent-preferences": "any",

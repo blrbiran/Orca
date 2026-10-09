@@ -218,7 +218,10 @@ export type WorkItemViewV1 = {
 export type RunSkillLockV1 = {
   name: string; source: { name: string; type: string; url: string; branch?: string } | null; resolved_commit: string | null; content_md5: string;
 };
+export type SettleUnknownUsagePayloadV1 = { taskId: string; runId: string; generation: number; acknowledge: "charge-remaining-grant" };
+export type UsageSettlementV1 = { method: "remaining-grant"; commandId: string; principal: string; at: number; groupId: string; taskId: string; workItemId: string; runId: string; generation: number; highWater: number; charged: { work: Amount; handoff: Amount }; reservationDisposition: "committed" | "released"; report: { artifactId: string; hash: string }; stopProof: { executionId: string; generation: number; isolated: true; source: { artifactId: string; hash: string } }; handoffResolution?: { requestId: string; previousState: "settled-unrecoverable"; previousFailureCode: "usage-unsettled"; checkpointId: string; checkpointHash: string } };
 export type RunViewV1 = {
+  unknownUsageSettlement?: { generation: number; highWater: number; remaining: { work: Amount; handoff: Amount }; allowed: boolean; refusalReason: string | null; settlement?: UsageSettlementV1 };
   runId: string;
   taskId: string | null;
   estimateId: string | null;
@@ -280,7 +283,7 @@ export type CheckpointViewV1 = { checkpointId: string; taskId: string; runId: st
 export type HandoffRequestViewV1 = {
   requestId: string;
   runId: string;
-  state: "request-pending" | "latched" | "collecting" | "settled-recoverable" | "settled-restartable" | "settled-unrecoverable" | "outcome-unknown";
+  state: "request-pending" | "latched" | "collecting" | "settled-recoverable" | "settled-restartable" | "settled-unrecoverable" | "settled-failed" | "outcome-unknown";
   deadlineAt: string;
   phaseAttemptOrdinal: number;
   failureCode: string | null;
@@ -365,7 +368,7 @@ export type EvidenceManifestV1 = {
   entries: Array<{ evidenceId: string; kind: string; sha256: string; byteLength: number; downloadUrl: string }>;
 };
 /** Issue-fixes spec §5.2: one row of Orca's activity record. */
-export type ActivityKindV1 = "command" | "run-claimed" | "run-started" | "phase" | "run-blocked" | "run-resumed" | "run-settled" | "task-retried" | "integration" | "stop" | "stop-cleared" | "archived" | "unarchived";
+export type ActivityKindV1 = "usage-settled" | "command" | "run-claimed" | "run-started" | "phase" | "run-blocked" | "run-resumed" | "run-settled" | "task-retried" | "integration" | "stop" | "stop-cleared" | "archived" | "unarchived";
 export type ActivityEntryV1 = { seq: number; groupId: string; taskId: string | null; runId: string | null; at: number; kind: ActivityKindV1; body: Record<string, unknown> };
 /** GET /api/control/runs/:runId/activity -- the run's newest 200 rows, newest first. */
 export type RunActivityV1 = { schema: "orca-run-activity-v1"; runId: string; entries: ActivityEntryV1[] };
@@ -462,7 +465,7 @@ export type CommandSuccessV1 = {
   schema: "orca-command-success-v1";
   commandId: string;
   actorId: string;
-  verb: "import-plan" | "proposal-edit" | "estimate" | "confirm" | "start" | "pause-dispatch" | "handoff-stop" | "resume-dispatch" | "resume-from-handoff" | "set-limit" | "continue-task" | "recovery-retry" | "retry-task" | "shutdown" | "set-workspace-mode" | "set-agent-preferences" | "proposal-set-agent" | "set-task-labels" | "set-task-loop"
+  verb: "import-plan" | "proposal-edit" | "estimate" | "confirm" | "start" | "pause-dispatch" | "handoff-stop" | "resume-dispatch" | "resume-from-handoff" | "set-limit" | "continue-task" | "recovery-retry" | "retry-task" | "settle-unknown-usage" | "shutdown" | "set-workspace-mode" | "set-agent-preferences" | "proposal-set-agent" | "set-task-labels" | "set-task-loop"
     | "requirement-open" | "requirement-answer" | "requirement-consensus" | "requirement-draft-feedback" | "requirement-draft-accept"
     | "set-spend-cap" | "clear-spend-cap" | "set-usage-calendar" | "set-integration-scheme" | "set-group-integration" | "retry-integration" | "resolve-integration-conflict"
     | "archive-group" | "unarchive-group";
@@ -472,6 +475,7 @@ export type CommandSuccessV1 = {
   effectivePayloadHash: string;
   authorityCommandHash: string;
   result:
+    | { kind: "usage-settled"; taskId: string; runId: string; generation: number; charged: { work: Amount; handoff: Amount }; at: number; method: "remaining-grant" }
     | { kind: "imported"; groupId: string; estimateId: string; estimateState: "queued" | "blocked-capability" | "input-too-large"; estimateReasonCode: string | null }
     | { kind: "proposal-edited"; proposalVersion: number }
     | { kind: "estimate-created"; estimateId: string; estimateVersion: number; estimateState: "queued" | "blocked-capability" | "input-too-large"; reasonCode: string | null; wakeId: string | null }

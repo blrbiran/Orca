@@ -95,6 +95,7 @@ stdout is exactly one JSON line:
 | `POST groups/<groupId>/tasks/<taskId>/labels` | set-task-labels | `{"labels":["area:cli"],"baseLabelsVersion":0}` |
 | `POST groups/<groupId>/tasks/<taskId>/loop` | set-task-loop | `{"baseLoopVersion":0,"plan":"standard","inputs":{"goal":"g","successCondition":"s","targetPaths":["src"],"checks":["npm test"],"nonGoals":[],"relevantDocs":[],"protectedPaths":[],"maxFilesTouched":null},"work":{"tokens":500000,"activeMs":600000,"attempts":3}}` |
 | `POST groups/<groupId>/retry-task` | retry-task | `{"taskId":"t1"}` |
+| `POST groups/<groupId>/settle-unknown-usage` | settle-unknown-usage | `{"taskId":"a","runId":"run-a","generation":1,"acknowledge":"charge-remaining-grant"}` |
 | `POST requirements` | requirement-open | `{"groupId":"g1","repoId":"r1","idea":"what to build"}` |
 | `POST groups/<groupId>/requirement/answer` | requirement-answer | `{"roundNo":1,"answers":[{"id":"R1.Q1","kind":"recommended"},{"id":"R1.Q2","kind":"text","text":"my answer"}],"glossaryDecisions":[],"adrDecisions":[]}` |
 | `POST groups/<groupId>/requirement/consensus` | requirement-consensus | `{"roundNo":1}` |
@@ -135,3 +136,5 @@ Where the ids come from:
 - `planId`: `get config` `.plans[].planId` (each entry also names its `repoId`).
 - `operatorId` (for `groups/@operator:<operatorId>/commands/<commandId>`): `get operator/agent-preferences` `.operatorId`.
 - `groupId`: `get summary` `.groups[].groupId`; for `requirements` and `groups/import-plan` you choose a new one.
+
+D9 (2026-10-09, Codex implement_settlement, base 2c14e73): `settle-unknown-usage` is owner-only in an authenticated Web session. Member and socket/MCP agent calls receive 403 `control-verb-human-only`. The acknowledgement is not authentication. It conservatively charges both remaining grants and cannot be undone; use the Web read preview to see the amount.

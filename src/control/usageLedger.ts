@@ -79,3 +79,9 @@ export function bookUsageDelta(store: ControlStore, input: { run: { runId: strin
   insert(null, null, deltaTokens, "unattributed"); // D18: the authoritative row
   for (const d of deltas) if (nonNegative(d) && entryTotal(d) > 0) insert(d.model, d, entryTotal(d), "breakdown-mismatch");
 }
+
+/** D9: artificial settlement is unattributed usage at the owner's accounting time, never a provider event. */
+export function bookSettledUsage(store: ControlStore, input: { run: { runId: string; groupId: string; phase?: string; purpose?: string }; groupBody: Record<string, unknown>; bucket: "work" | "handoff"; tokens: number; appliedAt: number }): void {
+  if (input.tokens === 0) return;
+  insertRow(store, { appliedAt: input.appliedAt, groupId: input.run.groupId, repoId: groupRepoIdOf(input.groupBody), runId: input.run.runId, source: usageSource(input.run, input.bucket), model: null, entry: null, tokens: input.tokens, quality: "unattributed" });
+}

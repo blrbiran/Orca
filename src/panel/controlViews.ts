@@ -2,6 +2,8 @@ import { derivedPhaseTimeoutMs, frozenAllocationShape } from "../control/executi
 import { frozenWorkAgent, resolveGroupSelections } from "../control/agentFreeze.js";
 import type { ExecutionPort } from "../control/executionPort.js";
 import { z } from "zod";
+import { hasValidUsageSettlement, usageSettlementSchema, settlementProof, releasedSettlementCheckpoint } from "../control/usageSettlement.js";
+import { settlementAdmission } from "../control/settleUnknownUsage.js";
 import { readArtifact } from "../control/archive.js";
 import { canonicalBytes, sha256Canonical } from "../control/canonicalJson.js";
 import { dimensions } from "../control/commands.js";
@@ -115,7 +117,7 @@ const blockerBodySchema = z.object({ evidenceIds: z.array(idSchema) }).strict();
 const handoffBodySchema = z.object({
   requestId: idSchema,
   runId: idSchema,
-  state: z.enum(["request-pending", "latched", "collecting", "settled-recoverable", "settled-restartable", "settled-unrecoverable", "outcome-unknown"]),
+  state: z.enum(["request-pending", "latched", "collecting", "settled-recoverable", "settled-restartable", "settled-unrecoverable", "settled-failed", "outcome-unknown"]),
   deadlineAt: canonicalTimestampSchema,
   phaseAttemptOrdinal: safeInteger.positive(),
   failureCode: z.string().min(1).nullable(),
@@ -190,6 +192,7 @@ const persistedRunSchema = z.object({
   // Issue-fixes spec §5.2: wall-clock run times (ms); a run written before schema 9 has neither. Never back-filled.
   startedAt: safeInteger.optional(),
   endedAt: safeInteger.optional(),
+  usageSettlement: usageSettlementSchema.optional(),
   drive: driveRecordSchema.optional(),
 }).strict();
 
@@ -733,6 +736,7 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
       || run.workItemId !== String(row.work_item_id) || run.generation !== Number(row.generation)
       || !validAccounting(run)) return blocked(`run-identity:${runId}`);
 
+    if (run.usageSettlement !== undefined && !hasValidUsageSettlement(store, run)) return blocked(`run-usage-settlement:${runId}`);
     const state = displayRunState(run);
     const terminal = ["failed-before-provider", "settled-recoverable", "settled-restartable", "settled-unrecoverable", "settled-failed"].includes(state);
     if ((Number(row.active) === 1) === terminal
@@ -801,6 +805,7 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
       // Issue fixes spec §4.2(1), (5): ccloop's reason, and the outcome the Retry-task button keys on.
       stopReason: run.drive?.stopReason ?? null,
       outcome: run.drive?.outcome ?? null,
+      ...settlementPreview(store, run),
       continuable: continuableRun(store, run),
       evidenceIds: artifactIdsForRun(store, runId),
       git: run.drive === undefined ? null : { workspaceMode: run.drive.workspaceMode, base: run.drive.base, landedCommit: run.drive.landedCommit },
@@ -833,6 +838,11 @@ function handoffViews(store: ControlStore, groupId: string): HandoffRequestViewV
     if (body.requestId !== String(row.id) || body.runId !== String(row.run_id) || body.state !== String(row.state)
       || canonicalBytes(body).toString("utf8") !== bodyJson || !run || String(run.group_id) !== groupId
       || sortedUnique(body.evidenceIds).join("\0") !== body.evidenceIds.join("\0")) return blocked("handoff-request-identity");
+    if (body.state === "settled-failed") {
+      const row = store.db.prepare("SELECT body FROM runs WHERE id=?").get(body.runId);
+      const run = row ? JSON.parse(String(row.body)) : null;
+      if (!run || run.usageSettlement?.reservationDisposition !== "released" || run.usageSettlement?.handoffResolution?.requestId !== body.requestId || !hasValidUsageSettlement(store, run)) return blocked("handoff-manual-settlement-invalid");
+    }
     return body;
   });
 }
@@ -1038,4 +1048,12 @@ export async function readSelectionPreview(
   const parsed = agentSelectionPreviewSchema.safeParse({ schema: "orca-agent-selection-preview-v1", groupId, ...resolved });
   if (!parsed.success) return blocked(`agent-preview:${parsed.error.issues[0]?.path.join(".")}:${parsed.error.issues[0]?.message}`);
   return parsed.data;
+}
+
+function settlementPreview(store: ControlStore, run: z.infer<typeof persistedRunSchema>): Pick<RunViewV1, "unknownUsageSettlement"> {
+  if (run.usageSettlement === undefined && !run.unknown.work && !run.unknown.handoff) return {};
+  let refusalReason: string | null = null;
+  try { const disposition = settlementAdmission(store, run); settlementProof(store, run); if (disposition === "released") releasedSettlementCheckpoint(store, run); } catch (error) { refusalReason = error instanceof ControlError ? error.code : "run-usage-not-settleable"; }
+  return { unknownUsageSettlement: { generation: run.generation, highWater: run.highWater, remaining: run.remaining, allowed: refusalReason === null, refusalReason,
+    ...(run.usageSettlement === undefined ? {} : { settlement: run.usageSettlement }) } };
 }

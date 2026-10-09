@@ -426,6 +426,7 @@ export function controlCommandRoutes(actorId: string): Array<{ path: string; ver
       },
     },
     // Issue fixes spec §4.2(2): the task is named in the payload; the ledger key is the group's.
+    { path: "/api/control/groups/:groupId/settle-unknown-usage", verb: "settle-unknown-usage", target: fromParams },
     { path: "/api/control/groups/:groupId/retry-task", verb: "retry-task", target: fromParams },
   ];
 }
@@ -463,6 +464,7 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
           case "resume-from-handoff": await service.resumeFromHandoff(command); break;
           case "continue-task": await service.continueTask(command); break;
           case "recovery-retry": await service.recoveryRetry(command); break;
+          case "settle-unknown-usage": await service.settleUnknownUsage(command); break;
           case "retry-task": service.retryTask(command); break;
           case "set-workspace-mode": await service.setWorkspaceMode(command); break;
           case "set-integration-scheme": await service.setIntegrationScheme(command); break;

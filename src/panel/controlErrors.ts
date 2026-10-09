@@ -31,6 +31,7 @@ const readErrorStatuses = {
 } as const satisfies Partial<Record<ExistingControlCode, ControlHttpStatus>>;
 
 export const controlHttpErrorStatuses: Readonly<Record<string, ControlHttpStatus>> = Object.freeze({
+  // D9 settlement refusals use the authority catalog so HTTP, lookup and locale coverage agree.
   ...durableCommandErrorStatuses,
   ...readErrorStatuses,
   ...panelOnlyErrorStatuses,

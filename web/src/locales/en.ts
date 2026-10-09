@@ -74,7 +74,7 @@ const runState = {
 } as const satisfies Record<RunViewV1["state"], string>;
 const requestState = {
   "request-pending": "request-pending", latched: "latched", collecting: "collecting", "settled-recoverable": "settled-recoverable",
-  "settled-restartable": "settled-restartable", "settled-unrecoverable": "settled-unrecoverable", "outcome-unknown": "outcome-unknown",
+  "settled-restartable": "settled-restartable", "settled-unrecoverable": "settled-unrecoverable", "settled-failed": "failure conservatively settled", "outcome-unknown": "outcome-unknown",
 } as const satisfies Record<HandoffRequestViewV1["state"], string>;
 const estimateState = {
   queued: "queued", running: "running", "start-unknown": "start-unknown", ready: "ready", failed: "failed", interrupted: "interrupted",
@@ -89,6 +89,7 @@ const progressStep = {
 
 // Issue-fixes spec §5.2: the activity kinds a run's feed shows.
 const activityKind = {
+  "usage-settled": "usage settled",
   command: "command", "run-claimed": "claimed", "run-started": "started", phase: "phase", "run-blocked": "blocked", "run-resumed": "resumed",
   "run-settled": "settled", "task-retried": "task retried", integration: "integration", stop: "stopped", "stop-cleared": "stop cleared",
   archived: "archived", unarchived: "unarchived",
@@ -962,6 +963,11 @@ export const enErrors: Record<string, string> = {
   "resume-source-dir-not-absolute": "The resume source directory is not an absolute path.",
   "revision-conflict": "Another tab or session changed this group first. The group is read again; check it, then try again.",
   "route-not-found": "The panel has no such endpoint: {{detail}}",
+  "run-usage-not-settleable": "This current failed run cannot be settled.",
+  "run-stop-proof-required": "A complete isolated stop proof is required.",
+  "run-usage-pending": "Apply pending usage before settlement.",
+  "run-usage-settled": "This run was already conservatively settled.",
+  "run-usage-not-unknown": "This run has no unknown usage.",
   "run-already-settled": "This run has already settled.",
   "run-generation-conflict": "The run's attempt number conflicts with the recorded one.",
   "run-grant-conflict": "The run's grant conflicts with the recorded one.",
