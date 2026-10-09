@@ -19,7 +19,8 @@ import { GitScheme } from "./GitScheme.js";
 import { GroupIntegrationConfirm } from "./IntegrationScheme.js";
 import { RefusalNotice } from "./RefusalNotice.js";
 import { RunReason } from "./RunReason.js";
-import { archiveOpen, isTerminalFailure, retryTaskOpen } from "./runFacts.js";
+import { archiveOpen, hasFailureOutcome, retryRunOpen } from "./runFacts.js";
+import { UsageSettlement } from "./UsageSettlement.js";
 import { SkillsGiven } from "./SkillsGiven.js";
 import type {
   AgentSelectionPreviewV1, AgentsViewV1, ControlConfigV1, ContinuationSelectionV1, GroupViewV1, OperatorPreferencesV1, RepositoryIntegrationV1, RepositoryWorkspaceV1,
@@ -39,13 +40,14 @@ const short = (hash: string): string => hash.slice(0, 12);
  */
 export function continuableRuns(view: GroupViewV1): Array<{ run: RunViewV1; checkpointId: string }> {
   return view.runs.flatMap((run) => {
-    if (run.taskId === null || run.continuable !== true) return [];
+    if (run.taskId === null || run.continuable !== true || run.state === "settled-failed") return [];
     const checkpoint = view.checkpoints.find((candidate) => candidate.runId === run.runId && candidate.state !== "unknown");
     return checkpoint ? [{ run, checkpointId: checkpoint.checkpointId }] : [];
   });
 }
 
 export interface ControlGroupViewProps {
+  roles?: readonly import("./auth.js").Role[];
   view: GroupViewV1;
   config: ControlConfigV1;
   uncertain: UncertainCommand[];
@@ -215,6 +217,8 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
               <td>
                 {enumText("runState", run.state)}
                 <RunReason run={run} />
+                {retryRunOpen(view, run) && <p>{t("control.group.retryFromHead")}</p>}
+                <UsageSettlement key={JSON.stringify([revision, run.unknownUsageSettlement, props.roles])} run={run} roles={props.roles} archived={archived} groupId={groupId} revision={revision} onCommand={onCommand} />
                 {run.failureCode !== null ? ` (${run.failureCode})` : ""}
                 {t("control.group.attempt", { attempt: run.providerAttemptOrdinal, claim: run.claimOrdinal ?? t("common.na") })}
                 {/* Execution driver final review I5: a run the driver blocked carries its reason on the run, not as a
@@ -222,7 +226,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
                 {/* Issue fixes spec §4.2(5): a run ccloop ended failed is retried as a task (a new run), and only where the
                     server accepts retry-task; it never falls back to the run-scope recovery-retry, which refuses a terminal
                     failure (run-terminal-failed). Any other blocked run keeps recovery-retry. */}
-                {archived ? null : isTerminalFailure(run) ? (retryTaskOpen(view) && run.taskId !== null ? (
+                {archived ? null : hasFailureOutcome(run) ? (retryRunOpen(view, run) ? (
                   <button
                     type="button"
                     onClick={() => onCommand({ verb: "retry-task", groupId, expectedRevision: revision, payload: { taskId: String(run.taskId) } })}
@@ -312,6 +316,8 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       )}
 
       <h3>{t("control.group.dispatch")}</h3>
+      {continuable.length > 0 && <p>{t("control.group.continueFromCheckpoint")}</p>}
+      {handoffActive && view.summary.stopState === "handoff-complete" && <p>{t("control.group.resumeForRetry")}</p>}
       {!archived && (
         <>
           {/* Issue-fixes spec §3.2 (4): start refuses every stop intent (stop-mode-conflict), so it is not offered under one. */}

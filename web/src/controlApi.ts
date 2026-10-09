@@ -33,6 +33,7 @@ import type {
   ProposalSetAgentPayloadV1,
   RecoveryRetryPayloadV1,
   RetryTaskPayloadV1,
+  SettleUnknownUsagePayloadV1,
   RecoveryViewV1,
   RepositoryIntegrationV1,
   RepositoryWorkspaceV1,
@@ -256,6 +257,7 @@ export type ControlAction =
   | { verb: "continue-task"; groupId: string; taskId: string; expectedRevision: number; payload: ContinueTaskPayloadV1 }
   | { verb: "recovery-retry"; groupId: string; expectedRevision: number; payload: RecoveryRetryPayloadV1 }
   // Issue fixes spec §4.2(2): retry a task whose run ccloop ended failed, as a new run.
+  | { verb: "settle-unknown-usage"; groupId: string; expectedRevision: number; payload: SettleUnknownUsagePayloadV1 }
   | { verb: "retry-task"; groupId: string; expectedRevision: number; payload: RetryTaskPayloadV1 }
   // Issue-fixes spec §6.3: archive and unarchive a group (empty payload).
   | { verb: "archive-group" | "unarchive-group"; groupId: string; expectedRevision: number; payload: Record<string, never> }
@@ -305,6 +307,8 @@ export function controlCommandPath(action: ControlAction): string {
       return `${group}/tasks/${segment(action.taskId)}/loop`;
     case "recovery-retry":
       return "/api/control/recovery/retry";
+    case "settle-unknown-usage":
+      return `${group}/settle-unknown-usage`;
     case "retry-task":
       return `${group}/retry-task`;
     case "set-group-integration":

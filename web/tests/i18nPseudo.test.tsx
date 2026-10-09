@@ -340,7 +340,8 @@ describe("every enum value has its words in both languages (spec §3.5)", () => 
     // And roundState (5), draftState (7) and exportState (4): 148 + 16 (N1 Task 13, the same named rewrite).
     // And runState.settled-failed (issue fixes spec §4.2(4), Task D2, the same named rewrite: 164 + 1).
     // And the activityKind family (13): issue fixes spec §6.5, Task E11, the same named rewrite: 165 + 13 (34 families).
-    expect(ENUM_VALUES.length).toBe(178);
+    // D9/M3: usage-settled activity, settled-failed request and retrying allocation add three values.
+    expect(ENUM_VALUES.length).toBe(181);
   });
 
   it("in Chinese shows zh.ts's words for every value, words that differ from the English ones", async () => {

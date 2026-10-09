@@ -31,7 +31,8 @@ describe("archiving from the group view (spec §6.3)", () => {
   it("offers no retry on an archived group, because the server refuses every command but Unarchive (group-archived)", () => {
     const failed = run({ state: "blocked", blockedReason: "terminal:failed", outcome: "failed", stopReason: "Error: x" });
     const held = run({ runId: "run-c", taskId: "c", state: "blocked", blockedReason: "out-of-bounds:x", outcome: "succeeded", stopReason: null });
-    const base = view([workItem({ taskId: "a" })], [failed, held]);
+    // D9/M3: a task Retry is offered only for its current failure.
+    const base = view([workItem({ taskId: "a", currentRunId: failed.runId, lineageRunIds: [failed.runId] })], [failed, held]);
     const open = render(<ControlGroupView view={base} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
     expect(screen.getAllByRole("button", { name: /^Retry (task|run)/ })).toHaveLength(2);
     open.unmount();

@@ -13,8 +13,9 @@
  *
  * Each `it` names the production line whose removal reddens it.
  */
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { AccountContext } from "../src/AuthGate.js";
 import { App } from "../src/App.js";
 import { UNCERTAIN_COMMANDS_KEY } from "../src/controlApi.js";
 import type { Amount, ControlConfigV1, GroupViewV1, ControlSummaryV1, RecoveryViewV1 } from "../src/controlTypes.js";
@@ -170,4 +171,31 @@ describe("App's recovery of an uncertain command", () => {
     await waitFor(() => expect(pendingLine()).toBeNull());
     expect(storedIds()).toEqual([]);
   });
+});
+
+it("D9 uses authenticated App roles and retains the original command id after losing its POST answer", async () => {
+  window.sessionStorage.clear();
+  const fallback = globalThis.fetch;
+  const posted: { commandId: string; expectedRevision: number; payload: unknown }[] = [];
+  const r = { ...groupView.runs[0]!, state: "blocked", outcome: "failed", unknownUsageSettlement: { generation: 1, highWater: 2, remaining: { work: amount(2), handoff: amount(3) }, allowed: true, refusalReason: null } };
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    if (url === "/api/projects") return jsonResponse({ projects: [{ projectKey: "orca", controlRepoId: "orca" }] });
+    if (url === `/api/control/groups/${GROUP}/settle-unknown-usage`) { posted.push(JSON.parse(String(init?.body))); throw new Error("lost answer"); }
+    if (url.startsWith(`/api/control/groups/${GROUP}/commands/`)) return new Response(null, { status: 503 });
+    if (url === `/api/control/groups/${GROUP}`) return jsonResponse({ ...groupView, runs: [r] });
+    return fallback(input, init);
+  });
+  try {
+    render(<AccountContext.Provider value={{ user: { id: "owner", name: "Owner", roles: ["owner"], mustChangePassword: false }, expiresAt: Date.now() + 86400000, sessionDays: 1 }}><App /></AccountContext.Provider>);
+    fireEvent.click(await screen.findByRole("button", { name: "g · running" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Settle unknown usage" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "I understand and approve this charge" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm irreversible settlement" }));
+    await screen.findByText(/lost answer/);
+    expect(posted).toHaveLength(1);
+    expect(posted[0]!.payload).toEqual({ taskId: "a", runId: "run-a", generation: 1, acknowledge: "charge-remaining-grant" });
+    expect(storedIds()).toEqual([posted[0]!.commandId]);
+    expect(pendingLine()).not.toBeNull();
+  } finally { vi.unstubAllGlobals(); }
 });

@@ -28,7 +28,7 @@
  * for the selected owner's active request, and every other record is shown in the
  * owner-labelled notice (DecisionOperations), so a result never lands on another decision.
  */
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import type { JSX } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -77,6 +77,7 @@ import {
   writeUncertainCommands,
 } from "./controlApi.js";
 import type { ControlAction } from "./controlApi.js";
+import { AccountContext } from "./AuthGate.js";
 import { ControlPanel } from "./ControlPanel.js";
 import { initialControlState, reduceControlState, summaryView } from "./controlState.js";
 import type { ControlRefusal, UncertainCommand } from "./controlState.js";
@@ -169,6 +170,7 @@ interface HomeState {
 const withoutRetry = ({ retry_field: _dropped, ...rest }: PanelRefusal): PanelRefusal => rest;
 
 export function App(): JSX.Element {
+  const account = useContext(AccountContext);
   const { t } = useTranslation();
   const [home, setHome] = useState<HomeState | null>(null);
   const [error, setError] = useState<PanelRefusal | null>(null);
@@ -970,6 +972,7 @@ export function App(): JSX.Element {
       )}
       {controlConfig !== null && control.recovery !== null && (
         <ControlPanel
+          roles={account?.user.roles ?? []}
           config={controlConfig}
           summary={summaryView(control)}
           recovery={control.recovery}

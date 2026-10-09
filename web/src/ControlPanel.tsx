@@ -31,6 +31,7 @@ import type { ControlClientState, ControlRefusal, UncertainCommand } from "./con
 import type { RecoveryTarget } from "./recoveryTarget.js";
 
 export interface ControlPanelProps {
+  roles?: readonly import("./auth.js").Role[];
   config: ControlConfigV1;
   summary: ControlSummaryV1;
   recovery: RecoveryViewV1;
@@ -259,6 +260,7 @@ export function ControlPanel(props: ControlPanelProps): JSX.Element {
       <GroupList groups={summary.groups} selected={selected} scope={scope} repoLabel={props.repoLabel} onSelect={props.onSelect} now={props.now} />
       {view !== undefined && (
         <ControlGroupView
+          roles={props.roles}
           key={view.summary.groupId}
           view={view}
           config={config}

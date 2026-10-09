@@ -5,9 +5,14 @@
  */
 import type { GroupViewV1, RunViewV1 } from "./controlTypes.js";
 
-/** A blocked run whose ccloop run ended with an outcome other than `succeeded`: its button is "Retry task". */
+/** Failure is historical evidence: accounting and handoff state changes do not erase its cause. */
+export function hasFailureOutcome(run: RunViewV1): boolean {
+  return run.outcome != null && run.outcome !== "succeeded";
+}
+
+/** Existing active failed-run classification, retained for callers of the original predicate. */
 export function isTerminalFailure(run: RunViewV1): boolean {
-  return run.state === "blocked" && run.outcome != null && run.outcome !== "succeeded";
+  return run.state === "blocked" && hasFailureOutcome(run);
 }
 
 /**
@@ -21,7 +26,7 @@ export function reasonCode(reason: string): string {
 
 /** The reason a run shows: ccloop's own for a failed or settled-failed run when it gave one, else the driver's blocked reason. */
 export function runReasonText(run: RunViewV1): string | null {
-  if (isTerminalFailure(run) || run.state === "settled-failed") return run.stopReason ?? run.blockedReason ?? null;
+  if (hasFailureOutcome(run) || run.state === "settled-failed") return run.stopReason ?? run.blockedReason ?? null;
   return run.state === "blocked" ? run.blockedReason ?? null : null;
 }
 
@@ -31,6 +36,25 @@ export function runReasonText(run: RunViewV1): string | null {
  */
 export function retryTaskOpen(view: GroupViewV1): boolean {
   return view.stop === null && view.summary.state !== "clarifying" && view.summary.archived !== true;
+}
+
+/** UI qualification uses only exposed server facts; immutable proof and pending event validation remain server-side. */
+export function retryRunOpen(view: GroupViewV1, run: RunViewV1): boolean {
+  if (!retryTaskOpen(view) || !hasFailureOutcome(run) || run.taskId === null) return false;
+  const work = view.workItems.find(item => item.taskId === run.taskId);
+  if (work && (work.currentRunId !== run.runId || work.pendingRunId != null)) return false;
+  if (run.unknownUsageSettlement && !run.unknownUsageSettlement.settlement) return false;
+  if (view.handoffRequests.some(request => request.runId === run.runId && ["request-pending", "latched", "collecting", "outcome-unknown"].includes(request.state))) return false;
+  if (run.state === "blocked") return true;
+  if (!work || work.pendingRunId !== null || view.ledger.usageUnknown) return false;
+  const allocations = view.allocations.filter(item => item.ownerKind === "task" && item.ownerId === run.taskId);
+  const allocated = (state: "held" | "terminal"): boolean => ["work", "handoff"].every(bucket => allocations.some(item => item.bucket === bucket && item.state === state));
+  if (run.state === "settled-recoverable") return work.status === "held" && allocated("held")
+    && view.handoffRequests.some(request => request.runId === run.runId && request.state === "settled-recoverable")
+    && view.checkpoints.some(checkpoint => checkpoint.runId === run.runId && checkpoint.state === "complete" && checkpoint.snapshotHash !== null);
+  return run.state === "settled-failed" && work.status === "blocked" && allocated("terminal")
+    && run.unknownUsageSettlement?.settlement?.reservationDisposition === "released"
+    && view.handoffRequests.some(request => request.runId === run.runId && request.state === "settled-failed");
 }
 
 /**

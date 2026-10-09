@@ -17,7 +17,7 @@ import type { ActivityEntryV1, EvidenceManifestV1, GroupViewV1, WorkItemProgress
 import { LoopPlanCard } from "./LoopPlanCard.js";
 import { RunReason } from "./RunReason.js";
 import { explainRunReason } from "./refusalExplain.js";
-import { isTerminalFailure, reasonCode, retryTaskOpen, taskRunNumber } from "./runFacts.js";
+import { reasonCode, retryRunOpen, taskRunNumber } from "./runFacts.js";
 import i18n, { enumText } from "./i18n.js";
 
 export const labelsDraftKey = (groupId: string, taskId: string): string => `labels:${groupId}:${taskId}`;
@@ -117,6 +117,17 @@ const CCLOOP_STEP: Record<string, string> = { planning: "plan", executing: "exec
 function activityText(entry: ActivityEntryV1): string {
   const kind = enumText("activityKind", entry.kind);
   const body = entry.body;
+  if (entry.kind === "usage-settled" && body.method === "remaining-grant" && typeof body.charged === "object" && body.charged !== null) {
+    const charged = body.charged as Record<string, unknown>;
+    const buckets = (["work", "handoff"] as const).flatMap(bucket => {
+      const amount = charged[bucket];
+      if (typeof amount !== "object" || amount === null) return [];
+      const fields = amount as Record<string, unknown>;
+      if (!["tokens", "activeMs", "attempts", "sessions"].every(dimension => typeof fields[dimension] === "number")) return [];
+      return [i18n.t("control.settlement.activityCharge", { bucket: i18n.t(`control.settlement.${bucket}`), tokens: fields.tokens as number, activeMs: fields.activeMs as number, attempts: fields.attempts as number, sessions: fields.sessions as number })];
+    });
+    return `${kind} · ${i18n.t("control.settlement.method")} · ${buckets.join(" · ")}`;
+  }
   if (entry.kind === "phase" && typeof body.step === "string") {
     const step = enumText("progressStep", CCLOOP_STEP[body.step] ?? body.step);
     return `${kind} · ${typeof body.attempt === "number" ? i18n.t("control.activity.phase", { step, attempt: body.attempt }) : step}`;
@@ -246,7 +257,7 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
           {runs.map((run) => (
             <li key={run.runId}>
               {run.runId} · {enumText("runPhase", run.phase)} · {enumText("runState", run.state)}<RunReason run={run} /> <EvidenceList runId={run.runId} />
-              {isTerminalFailure(run) && retryTaskOpen(view) && !archived && (
+              {retryRunOpen(view, run) && !archived && (
                 <button type="button" onClick={() => onCommand({ verb: "retry-task", groupId, expectedRevision: view.summary.commandRevision, payload: { taskId: item.taskId } })}>
                   {t("control.group.retryTask", { taskId: item.taskId })}
                 </button>
