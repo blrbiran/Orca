@@ -53,3 +53,9 @@ Task1: complete (commits1fd19a3..deaae38, freshspeccompliant/qualityApproved,0Cr
 Ruling: Task3counter/benchmark ownership includes test-onlymovingfirstinstrumentedentry/read/expect incontrolPollPerformance.test.ts:73 intoexistingtry/finally afterhookinstall, preservingallassertions; thisclosesreviewMinorrestorationrisk, noTask1productfixloop. Cost ifwrong: failedinitialassert couldleaveglobalhooks; type/focusedtest+finalreview requirefinallycoverage. WarningnoiseMinor remains documented. Cross-versionbefore/afterDTO/refusal equality stillTask3, notsameimplementationrepeat equivalenceproof.
 
 Task2 startsfromnextsavedcheckpoint, consumingcontrolReadCounters originalstore/beforefirstview/rawbytesaliasprotocol. Nootherwriter; Task3realbefore1fd19a3 preservedcloneunchangedproduct.
+
+## Task 2 gate complete — controller, 2026-10-09, reviewed 5f0f5ee
+
+Task 2: complete (commits 63d9e9b..5f0f5ee, fresh Spec compliant / Quality Approved, 0 Critical / 0 Important). task-2-review.md independently checked strict invalid data/refusal order, segment invalidation after true/false/throw, same-store statement identity and final transaction archive guard. 116 named tests/typecheck RC0, 12 isolated deletion mutants RED with zero-byte restored diffs. SQLite/bundle diagnostics Minor retained. Round-wide equivalence/timing remains Task3, not inferred from this task gate.
+
+Controller builds at product5f0f5ee: perf-final-build and perf-final-web-build RC0, raw logs in /private/tmp/od9/logs; web warning589.71kB bundle disclosed. Scheduler/panel commands same product tree have RC0; complete raw read/manifest pending before final evidence claim. Task3 sole writer begins at next saved gate checkpoint, before clone1fd19a3 remains immutable product baseline.
