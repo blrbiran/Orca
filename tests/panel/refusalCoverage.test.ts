@@ -51,7 +51,7 @@ const VIEW_REASONS = [
   // Issue fixes spec §4.2(1): ccloop's stop reasons (the run view's stopReason, after web/src/runFacts.ts reasonCode).
   "codex-result-invalid", "codex-events-invalid", "codex-no-completion", "codex-usage-invalid", "codex-usage-unavailable", "codex-event-error",
   "codex-timeout", "codex-skills-cleanup-failed", "codex-skills-path-conflict", "codex-skills-pending", "codex-skills-setup-failed",
-  "codex-skills-source-invalid",
+  "codex-skills-source-invalid", "codex-exit-error",
 ];
 const TABLES = { zh: zhErrors, en: enErrors } as const;
 const has = (table: Record<string, string>, code: string): boolean => Object.prototype.hasOwnProperty.call(table, code);

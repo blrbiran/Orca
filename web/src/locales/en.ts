@@ -854,7 +854,7 @@ export const enErrors: Record<string, string> = {
   "archive-call-in-flight": "A model call for this group is still running ({{detail}}). Archive it once the call has finished.",
   "archive-integration-resolving": "An agent is resolving this group's integration conflict. Archive it once that has finished.",
   "archive-run-active": "This group still has an active run. Wait for it to finish, or stop it with Handoff stop, then archive.",
-  "archive-stop-pending": "A stop is still settling ({{detail}}). Archive the group once its handoff has finished, completely or partially.",
+  "archive-stop-pending": "A stop is still settling ({{detail}}). Archive the group once its handoff has finished, completely or partially. If it is unresolved, retry recovery first.",
   "artifact-id-conflict": "The artifact id conflicts with an existing one.",
   "artifact-not-found": "The artifact was not found.",
   "budget-overflow": "A budget value is too large: {{detail}}",
@@ -1098,6 +1098,7 @@ export const enErrors: Record<string, string> = {
   "candidate-without-terminal": "ccloop stopped this run without a final report, so it cannot be settled.",
   "terminal": "ccloop finished this run without success (outcome {{detail}}).",
   // Issue fixes spec §4.2(1): ccloop's failure reasons, matched by their prefix up to the first ':' (the rest is evidence).
+  "codex-exit-error": "The model process exited with an error before it gave an answer. Look at the run's evidence, then retry the task.",
   "codex-event-error": "The model reported an error, for example a quota or service failure.",
   "codex-events-invalid": "The model's event stream could not be read.",
   "codex-no-completion": "The model stopped without finishing its turn.",

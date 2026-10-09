@@ -11,7 +11,7 @@ import { reasonCode } from "../src/runFacts.js";
 const REASONS = [
   "codex-result-invalid", "codex-events-invalid", "codex-no-completion", "codex-usage-invalid", "codex-usage-unavailable", "codex-event-error",
   "codex-timeout", "codex-skills-cleanup-failed", "codex-skills-path-conflict", "codex-skills-pending", "codex-skills-setup-failed",
-  "codex-skills-source-invalid", "terminal",
+  "codex-skills-source-invalid", "codex-exit-error", "terminal",
 ];
 
 describe("ccloop failure reasons (spec §4.2(1))", () => {
@@ -22,5 +22,15 @@ describe("ccloop failure reasons (spec §4.2(1))", () => {
   it("explains a reason as ccloop sends it, through its Error: prefix, and an outcome through its detail", () => {
     expect(explainRunReason(reasonCode("Error: codex-result-invalid: /runs/r/attempt-1"))).toBe(enErrors["codex-result-invalid"]);
     expect(explainRunReason(reasonCode("terminal:exhausted"))).toContain("exhausted");
+  });
+});
+
+describe("archive-stop-pending names the recovery step (final fix wave W1)", () => {
+  it("tells the person to retry recovery first when the stop is unresolved, in both languages", () => {
+    expect(enErrors["archive-stop-pending"]).toContain("If it is unresolved, retry recovery first");
+    expect(enErrors["archive-stop-pending"]).toContain("{{detail}}");
+    expect(enErrors["archive-stop-pending"]).not.toContain("archive-stop-pending");
+    expect(zhErrors["archive-stop-pending"]).toContain("恢复");
+    expect(zhErrors["archive-stop-pending"]).toContain("{{detail}}");
   });
 });

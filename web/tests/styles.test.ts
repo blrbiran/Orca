@@ -69,4 +69,9 @@ describe("styles.css", () => {
     const media = css.slice(at, css.indexOf("}", at));
     expect(media).toContain(".dep-node.dep-running rect { animation: none;");
   });
+
+  // Final fix wave W3 (E9 re-review): the stall text takes the per-theme token, whose light value passes contrast; --warn does not.
+  it("paints the dependency graph's stall text with the per-theme --stall token", () => {
+    expect(rule(".dep-node text.dep-stall")).toContain("fill: var(--stall)");
+  });
 });

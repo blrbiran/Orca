@@ -792,7 +792,7 @@ export const zhErrors: Record<string, string> = {
   "archive-call-in-flight": "这个组还有一次模型调用在进行（{{detail}}）。等调用结束后再归档。",
   "archive-integration-resolving": "agent 正在解决这个组的集成冲突。等它结束后再归档。",
   "archive-run-active": "这个组还有正在进行的运行。等它结束，或先用“交接停止”停下，再归档。",
-  "archive-stop-pending": "停止还没有完成（{{detail}}）。等交接结束（全部完成或部分完成）后再归档。",
+  "archive-stop-pending": "停止还没有完成（{{detail}}）。等交接结束（全部完成或部分完成）后再归档。如果停止状态未解决，请先重试恢复。",
   "artifact-id-conflict": "产物 id 冲突。",
   "artifact-not-found": "找不到这个产物。",
   "budget-overflow": "预算数值溢出：{{message}}",
@@ -1036,6 +1036,7 @@ export const zhErrors: Record<string, string> = {
   "candidate-without-terminal": "ccloop 停止了这个运行，但没有最终报告，所以无法结算。",
   "terminal": "ccloop 结束了这个运行，但没有成功（结果 {{detail}}）。",
   // Issue fixes spec §4.2(1): ccloop's failure reasons, matched by their prefix up to the first ':' (the rest is evidence).
+  "codex-exit-error": "模型进程在给出答案之前就出错退出了。先查看这次运行的证据，再重试这个任务。",
   "codex-event-error": "模型报告了错误，例如额度用尽或服务故障。",
   "codex-events-invalid": "读不懂模型的事件流。",
   "codex-no-completion": "模型没有完成这一轮就停了。",

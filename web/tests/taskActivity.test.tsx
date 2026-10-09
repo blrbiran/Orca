@@ -91,4 +91,19 @@ describe("the task detail's run activity (spec §6.5)", () => {
     expect(screen.queryByRole("region", { name: "Recent activity of run-a" })).toBeNull();
     expect(urls).toEqual([]);
   });
+
+  // Final fix wave W4 (E11 review minor 1): a retried task's new run must not show the old run's rows under its own label.
+  it("drops the previous run's rows when the run changes, before the new run's answer arrives", async () => {
+    const itemA = workItem({ taskId: "a", currentRunId: "run-a", lineageRunIds: ["run-a"] });
+    const itemB = workItem({ taskId: "a", currentRunId: "run-b", lineageRunIds: ["run-a", "run-b"] });
+    const props = { drafts: {}, onDraft: vi.fn(), onCommand: vi.fn() };
+    const { rerender } = render(<TaskDetail view={view([itemA], [run({})])} item={itemA} {...props} />);
+    const region = await screen.findByRole("region", { name: "Recent activity of run-a" });
+    expect((await within(region).findAllByRole("listitem")).length).toBe(4);
+    vi.stubGlobal("fetch", () => new Promise<Response>(() => {}));
+    rerender(<TaskDetail view={view([itemB], [run({}), run({ runId: "run-b" })])} item={itemB} {...props} />);
+    const next = await screen.findByRole("region", { name: "Recent activity of run-b" });
+    expect(within(next).queryAllByRole("listitem")).toEqual([]);
+    expect(within(next).queryByText("no activity recorded yet")).toBeNull();
+  });
 });

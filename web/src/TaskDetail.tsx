@@ -138,6 +138,9 @@ export function RunActivity(props: { runId: string; changeSeq: number }): JSX.El
   const { t } = useTranslation();
   const [entries, setEntries] = useState<ActivityEntryV1[] | null>(null);
   const [refusal, setRefusal] = useState<string | null>(null);
+  // A new run starts empty: the previous run's rows must not show under this run's label while its answer is pending.
+  // Only the run id resets; a projection move (changeSeq) keeps the rows on screen until the fresh answer replaces them.
+  useEffect(() => { setEntries(null); setRefusal(null); }, [props.runId]);
   useEffect(() => {
     let live = true;
     fetchRunActivity(props.runId).then(
