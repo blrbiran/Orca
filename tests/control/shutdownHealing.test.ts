@@ -127,7 +127,8 @@ describe("startup recovery heals empty-frozen-set shutdown intents (issue-fixes 
 
       const store = await openControlStore({ stateDir: dir });
       try {
-        expect(store.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()?.value).toBe("9");
+        // D9 correction (controller ruling, 2026-10-09; verify_usage_retry_round at e7df5df): the current migration target is schema 10.
+        expect(store.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()?.value).toBe("10");
         expect(stopRow(store)?.mode).toBe("shutdown");
         // The panel runs recovery with the driver owning web runs, so the stranded run is not walked (it is the driver's).
         await recoverControl(store, h.deps.port, undefined, { driverOwnsWebRuns: true });

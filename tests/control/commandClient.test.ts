@@ -38,11 +38,12 @@ describe("command client context (spec §6)", () => {
 });
 
 describe("schema 6 to 7 (spec §6)", () => {
-  it("a fresh store has commands.client and is at the current version (9)", async () => {
+  it("a fresh store has commands.client and is at the current version (10)", async () => {
     const store = await openControlStore({ stateDir: await stateDir() });
     try {
       // Rewritten for issue-fixes spec §5.2 (ruling H5, 2026-10-08): the store is now at schema version 9.
-      expect(schemaVersion).toBe("9");
+      // D9 correction (controller ruling, 2026-10-09; verify_usage_retry_round at e7df5df): the current migration target is schema 10.
+      expect(schemaVersion).toBe("10");
       const columns = store.db.prepare("PRAGMA table_info(commands)").all().map((row) => String(row.name));
       expect(columns).toContain("client");
     } finally { store.close(); }
@@ -59,7 +60,8 @@ describe("schema 6 to 7 (spec §6)", () => {
     const store = await openControlStore({ stateDir: dir });
     try {
       // Rewritten for issue-fixes spec §5.2 (ruling H5, 2026-10-08): the store is now at schema version 9.
-      expect(store.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()).toMatchObject({ value: "9" });
+      // D9 correction (controller ruling, 2026-10-09; verify_usage_retry_round at e7df5df): the current migration target is schema 10.
+      expect(store.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()).toMatchObject({ value: "10" });
       expect(store.db.prepare("SELECT client FROM commands WHERE id='old'").get()).toMatchObject({ client: null });
     } finally { store.close(); }
   });
