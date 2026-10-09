@@ -1,0 +1,6 @@
+# Task B5 report (implementer B5)
+Status: DONE. Commit 5ec4389 "feat(control): record run-claimed, run-started and the run's startedAt" (pathspec: src/control/webDispatch.ts, tests/control/activityRuns.test.ts).
+Implemented exactly per brief: run-claimed in createStartingRun after saveWork; startedAt (first reservation only) + run-started in reserveProviderAttemptInTransaction; import now `noteRunWrite, recordActivity`.
+TDD: RED (3 new tests fail: rows `[]`, startedAt undefined; B4 tests pass) -> GREEN activityRuns 7/7 rc=0; near suites (webDispatch, contextControl, webContinuation, webFaults, executionDriver) 84/84 rc=0; typecheck rc=0; wide tests/control + tests/panel: 202 files passed, 1993 tests passed, 8 files skipped, rc=0 (load avg ~9.5 at 22:36). Logs: scratchpad/orca/B5/.
+Mutations (clone after commit; worktree diff/--cached 0/0 bytes before and after): (a) delete run-claimed -> claim test red; (b) delete startedAt line -> both startedAt tests red; (c) unconditional startedAt -> "never moves" red; (d) delete run-started -> both row tests red.
+Deviations: none. Note for the ruling (flag 8): run-started's recordActivity provides the projection change in beginProviderAttempt via recordProjectionChange.
