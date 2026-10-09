@@ -15,3 +15,7 @@ Counter wrappers preserve original ControlStore identity. Before/after serially 
 - Task 1: pending until D9/M3 close.
 - Task 2: pending.
 - Task 3: pending.
+
+## D9/M3 prerequisite complete — controller, 2026-10-09
+
+D9/M3 finalwholebranchSpecPASS/QualityApproved/ReadyYes,0Critical/0Important; actuallatestproductcc50570, subsequentdocs/evidenceonly. Performancebeforecommit will be nextsavedclosecheckpoint, not draftc29676d. Current controlViews includes strictusageSettlement preview/historicalmarker and retryGrantSource validation; snapshot wiring must preservethese consumers, with proof/claim queries separatelycounted as agreed. PerformanceTask1 solewriter startsafterthischeckpoint; noD9M3productchange withoutnewreview/ruling.
