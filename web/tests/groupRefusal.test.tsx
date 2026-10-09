@@ -157,6 +157,31 @@ describe("an import's refusal stays in the import form (spec §2.2(d))", () => {
     expect(panel.requests).not.toContain("GET /api/control/groups/group-lost");
   });
 
+  // Final review A5+A6-1: the lookup finds the import reached the ledger and was refused; that refusal, with the plan's
+  // problems one per line, replaces the outcome-unknown notice in the import form, and no group is read for it.
+  it("replaces an unknown import's notice with the refusal its lookup finds, the plan's problems listed", async () => {
+    let sent = "";
+    panel.onPost = async (url, body) => {
+      if (url !== "/api/control/groups/import-plan") return success();
+      sent = (body as { payload: { groupId: string } }).payload.groupId;
+      return json({ error: { code: "panel-unavailable", message: "down" } }, 503);
+    };
+    lookup = async () => json({
+      schema: "orca-command-lookup-v1", originalStatus: 422,
+      body: { error: { code: "control-plan-rejected", message: "control-plan-rejected:dangling-dependency:b", commandRevision: null, evidenceIds: [], retryable: false } },
+    });
+    render(<App />);
+    const form = await screen.findByRole("region", { name: "Import plan" });
+    fireEvent.click(await within(form).findByRole("button", { name: "Import plan" }));
+    expect(within(await within(form).findByTestId("import-refusal")).getByText("panel-unavailable").tagName).toBe("CODE");
+    await waitFor(() => expect(within(screen.getByTestId("import-refusal")).queryByText("control-plan-rejected")).not.toBeNull(), { timeout: 6000 });
+    const notice = screen.getByTestId("import-refusal");
+    expect(within(notice).getAllByRole("listitem").map((item) => item.textContent)).toEqual(["Task b depends on a task that is not in the plan."]);
+    expect(within(notice).getByText("control-plan-rejected").tagName).toBe("CODE");
+    expect(screen.queryAllByText(/panel-unavailable/)).toHaveLength(0);
+    expect(panel.requests).not.toContain(`GET /api/control/groups/${sent}`);
+  }, 10_000);
+
   it("lists the plan's problems one per line, in English and in Chinese", async () => {
     panel.onPost = async (url) => (url === "/api/control/groups/import-plan"
       ? refused(422, "control-plan-rejected", "control-plan-rejected:missing-target-version:a\ndangling-dependency:b")

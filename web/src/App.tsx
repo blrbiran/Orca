@@ -362,6 +362,12 @@ export function App(): JSX.Element {
     // The command did reach the ledger and succeeded: the unknown outcome shown where the person acted is answered.
     const succeeded = result.kind === "found" && result.lookup.originalStatus < 400;
     if (succeeded) dispatchControl({ type: "command-succeeded", place, groupId: command.groupId });
+    // Final review A5+A6-1: it reached the ledger and was refused -- that refusal replaces the unknown outcome, where this
+    // command's refusals are shown (an import's in the import form, with a refused plan's problems).
+    if (result.kind === "found" && !succeeded) {
+      const refusal = refusalFromAnswer({ kind: "answered", status: result.lookup.originalStatus, body: result.lookup.body });
+      dispatchControl({ type: "refusal", place, groupId: command.groupId, value: refusal });
+    }
     // An import that did not succeed made no group: reading it would only store a group-not-found no view shows.
     if (command.importPlan === true && !succeeded) return;
     await readControlGroup(command.groupId);
