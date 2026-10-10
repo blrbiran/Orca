@@ -15,3 +15,7 @@ Ruling: create isolated managed Orca worktree and a ccloop fallback worktree —
 Ruling: retain ab824d1 package/lock and run default regression against that pin; paired result feature uses exact new ccloop source build — publication is outside this final-review development round — cost if wrong is delaying default-package rollout, stated prominently rather than claiming installed support.
 
 Independent review required next. A clean self-review does not substitute for it.
+
+Independent review returned 2 P1/3 P2, no P0. All original findings retained. Controller appended effective §8 rulings to both specs: independent todo refresh; separate live result RPC and private namespaces excluded from core archive; opaque decorated-final metadata; immutable stage/revision observations and per-attempt verifier authority; completed default Results even when missing. Source correction: failed work is archived in stepCleanupFailed, while failed pre-settlement/live saved outputs require the independent result channel. No product implementation started.
+
+Ruling: new results RPC returns optional metadata pages and runs in a bounded fenced job, not an awaited acceptance-critical collect — preserves ordinary execution under unsupported/damaged metadata — cost if wrong is stale/unavailable result display, explicitly visible and independently tested.

@@ -65,3 +65,11 @@ For every added load-bearing branch, demonstrate an independent deletion mutatio
 Implement on `codex/progress-results-20261010` in the managed Orca worktree. Keep main and production runtime intact. Updated handoffs use topics/paths rather than requiring a current HEAD. Sister handoffs replace the existing Orca rolling section; executive summary is chat-only and at most ten lines. Human authorized autonomous design/implementation rulings and final audit; publication/merge/deletion of this new work is a separate final integration decision.
 
 Related spec: `2026-10-10-task-results-design.md`. The results producer may need a new ccloop build, but the Overview feature itself must work on the current pin.
+
+## 8. Independent-review rulings (controller, 2026-10-10)
+
+This section supersedes conflicting earlier freshness/default-region wording. Source review is `.superpowers/sdd/2026-10-10-progress-results-design/independent-spec-review.md`.
+
+P2-1: decision todo has independent freshness. Fetch unfiltered todo independently of metrics while Overview is active, initially and every 5000 ms; control overview retains its control/changeSeq polling. Track loading/available/stale/unavailable separately. Latest-request tokens and auth/epoch/scope identity prevent older replies replacing newer source state. An external decision/review change with unchanged control changeSeq must appear by the next successful todo refresh. Metrics failure must not discard successful todo/control reads; the shell and Overview render with explicit source issues even when metrics are unavailable. Do not display zero owed decisions or a zero badge for an unavailable source. Non-overview metrics views retain explicit metrics failure handling. Active-only timers are cleaned up on auth/unmount/pane change; no decision detail reads or opened/reviewed writes accompany todo refresh.
+
+Shared detail default: completed work opens the Results region even when explanation is missing, so the missing state is visible. A user's current region remains stable through polling; explicit navigation targets override the default.
