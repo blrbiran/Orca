@@ -90,11 +90,19 @@ const missingExplanation = (status: 'missing' | 'unavailable' = 'missing') => ({
 });
 export async function readRunResults(store: ControlStore, runId: string, context: ResultReadContext, knownGroup?: GroupViewV1): Promise<RunResultsV1> {
     const a = resultAuthority(store, runId, context, knownGroup), fact = readTaskResultCurrentAttemptFact(store, runId);
-    const core = runProgressSchema.safeParse(a.body.progress), capturedAttempt = a.state?.currentAttempt ?? 0;
-    const sourceFresh = fact !== null && a.state !== null && (a.state.status === 'available' || fact.currentAttempt > capturedAttempt || fact.revision > a.state.revision);
-    const coreNewer = core.success && core.data.currentAttempt > capturedAttempt;
-    // Failed transport preserves history, but an old hint cannot prove it remains the current attempt.
-    const currentAttempt = sourceFresh || coreNewer ? Math.max(sourceFresh ? fact!.currentAttempt : 0, core.success ? core.data.currentAttempt : 0) : null;
+    const core = runProgressSchema.safeParse(a.body.progress);
+    const bounds = a.state?.identity ? { attempt: a.state.currentAttempt, revision: a.state.revision } : null;
+    const staleHint = fact !== null && bounds !== null && (fact.currentAttempt < bounds.attempt || fact.revision < bounds.revision);
+    const freshEmptyIndex = a.state?.status === 'missing' && a.state.revision === 0 && a.state.observations.length === 0;
+    const sourceFresh = fact !== null && !staleHint && (bounds === null || a.state!.status === 'available' || freshEmptyIndex || fact.currentAttempt > bounds.attempt || fact.revision > bounds.revision);
+    // Only a separately valid same-owner hint rejected for old bounds permits the available capture's ordinal fallback.
+    const sourceAttempt = sourceFresh ? fact!.currentAttempt : staleHint && a.state!.status === 'available' ? bounds!.attempt : null;
+    const coreNewer = core.success && bounds !== null && core.data.currentAttempt > bounds.attempt;
+    // Unknown capture bounds are not zero. Keep independent source authority and never promote damaged saved reports.
+    const knownAttempts = sourceAttempt === null ? [] : [sourceAttempt];
+    if (core.success && (sourceAttempt !== null || coreNewer))
+        knownAttempts.push(core.data.currentAttempt);
+    const currentAttempt = knownAttempts.length > 0 ? Math.max(...knownAttempts) : null;
     const attempts: RunResultsV1['attempts'] = [];
     for (const attempt of [...new Set(a.observations.map(o => o.manifest.attempt))].sort((x, y) => x - y)) {
         const history = a.observations.filter(o => o.manifest.attempt === attempt).sort((x, y) => x.manifest.revision - y.manifest.revision), latest = history.at(-1)!;
@@ -160,7 +168,7 @@ export async function readRunResults(store: ControlStore, runId: string, context
     const current = attempts.find(a => a.current), source = a.state ? { status: a.state.status, reason: a.state.reason } : a.sourceError ? { status: 'unavailable' as const, reason: 'result-store-invalid' } : { status: 'missing' as const, reason: 'result-source-missing' };
     const availability = !attempts.length ? (source.status === 'missing' || source.status === 'unsupported' ? 'missing' : 'unavailable') : !current || source.status !== 'available' || current.explanation.status !== 'available' || current.outputs.some(o => o.status !== 'available') ? 'partial' : 'available';
     return runResultsSchema.parse({
-        schema: 'orca-run-results-v1', epoch: context.epoch, changeSeq: a.group.changeSeq, runId, groupId: a.group.summary.groupId, taskId: a.run.taskId, generation: a.run.generation, executionId: a.body.executionId, run: a.run, currentAttempt, captureRevision: a.state?.revision ?? 0, source, availability, currentExplanation: current?.explanation ?? missingExplanation(currentAttempt === null ? 'unavailable' : 'missing'), attempts
+        schema: 'orca-run-results-v1', epoch: context.epoch, changeSeq: a.group.changeSeq, runId, groupId: a.group.summary.groupId, taskId: a.run.taskId, generation: a.run.generation, executionId: a.body.executionId, run: a.run, currentAttempt, captureRevision: a.state?.revision ?? 0, source, availability, currentExplanation: a.sourceError ? missingExplanation('unavailable') : current?.explanation ?? missingExplanation(currentAttempt === null ? 'unavailable' : 'missing'), attempts
     });
 }
 export async function readGroupResults(store: ControlStore, groupId: string, context: ResultReadContext): Promise<GroupResultsV1> {

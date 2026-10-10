@@ -20,7 +20,9 @@ describe('admitted run and group result facts', { timeout: 30000 }, () => {
             expect((await view(f)).attempts[0].snapshotRevision).toBe(1);
             const started = {
                 ...f.manifest(2), stage: 'verification' as const,
-                verificationRef: f.add({ schema: 'ccloop-task-result-verification-started-v1', attempt: 1, status: 'in-progress' })
+                verificationRef: f.add({
+                    schema: 'ccloop-task-result-verification-started-v1', attempt: 1, status: 'in-progress'
+                })
             };
             await f.capture([started]);
             const running = await view(f);
@@ -273,6 +275,147 @@ describe('admitted run and group result facts', { timeout: 30000 }, () => {
             expect(r.captureRevision).toBe(1);
             expect(r.currentExplanation.status).toBe('missing');
             expect(r.attempts[0].current).toBe(false);
+        }
+        finally {
+            await f.dispose();
+        }
+    });
+    it.each([{ currentAttempt: 1, revision: 4 }, { currentAttempt: 2, revision: 1 }, { currentAttempt: 1, revision: 1 }])('fix1 rejects older same-owner hint %j without rolling back available capture2/revision4', async (hint) => {
+        const f = await resultFixture();
+        try {
+            await f.capture([f.manifest(), {
+                    ...f.manifest(2), stage: 'verification', verificationRef: f.add(approved(false))
+                }, f.manifest(3, 2), {
+                    ...f.manifest(4, 2), stage: 'verification', verificationRef: f.add(approved(true))
+                }]);
+            f.core({ progress: null });
+            mutateState(f, state => { state.currentAttemptFact = { ...state.currentAttemptFact, ...hint }; });
+            const r = await view(f);
+            expect(r.currentAttempt).toBe(2);
+            expect(r.attempts.map(a => a.current)).toEqual([false, true]);
+            expect(r.currentExplanation.status).toBe('available');
+            expect(r.attempts.map(a => a.verification)).toEqual(['failed', 'passed']);
+        }
+        finally {
+            await f.dispose();
+        }
+    });
+    it('fix1 malformed capture bounds preserve independent source2 over old core1 with explanation unavailable', async () => {
+        const f = await resultFixture();
+        try {
+            await f.capture([f.manifest()]);
+            f.port.collectTaskResults = async () => ({
+                schema: 'ccloop-task-results-v1', identity: f.identity, currentAttempt: 2, revision: 1, nextRevision: 1, manifests: []
+            });
+            f.collector.schedule(f.runId);
+            await f.collector.flush(f.runId);
+            f.core({ progress: {
+                    status: 'executing', currentAttempt: 1, attemptsUsed: 1, attemptsRemaining: 2, lastTransitionAt: '2026-10-10T00:00:00Z'
+                } });
+            mutateState(f, state => { state.observations = 'damaged'; });
+            const r = await view(f);
+            expect(r.currentAttempt).toBe(2);
+            expect(r.source.status).toBe('unavailable');
+            expect(r.currentExplanation.status).toBe('unavailable');
+            expect(r.attempts).toEqual([]);
+        }
+        finally {
+            await f.dispose();
+        }
+    });
+    it('fix1 actual admitted handoff not-run evidence reuses snapshot and later started/completed observations supersede it', async () => {
+        const f = await resultFixture();
+        try {
+            const boundary = {
+                ...f.manifest(2), stage: 'verification' as const, verificationRef: f.add({
+                    schema: 'ccloop-task-result-verification-not-run-v1', attempt: 1, status: 'not-run'
+                })
+            };
+            await f.capture([f.manifest(), boundary]);
+            const bypass = await view(f);
+            expect(bypass.attempts[0].verification).toBe('not-run');
+            expect(bypass.attempts[0].snapshotRevision).toBe(1);
+            const started = {
+                ...f.manifest(3), stage: 'verification' as const, verificationRef: f.add({
+                    schema: 'ccloop-task-result-verification-started-v1', attempt: 1, status: 'in-progress'
+                })
+            };
+            await f.capture([started]);
+            expect((await view(f)).attempts[0].verification).toBe('in-progress');
+            await f.capture([{
+                    ...f.manifest(4), stage: 'verification', verificationRef: f.add(approved(false))
+                }]);
+            const completed = await view(f);
+            expect(completed.attempts[0].verification).toBe('failed');
+            expect(completed.attempts[0].snapshotRevision).toBe(1);
+            expect(completed.attempts[0].observations.map(o => o.verification)).toEqual(['unavailable', 'not-run', 'in-progress', 'failed']);
+        }
+        finally {
+            await f.dispose();
+        }
+    });
+    it.each([{
+            schema: 'ccloop-task-result-verification-not-run-v1', attempt: 2, status: 'not-run'
+        }, {
+            schema: 'ccloop-task-result-verification-not-run-v1', attempt: 1, status: 'not-run', ...approved(true)
+        }])('fix1 mismatched or malformed not-run evidence is unavailable %j', async (value) => {
+        const f = await resultFixture();
+        try {
+            await f.capture([f.manifest(), {
+                    ...f.manifest(2), stage: 'verification', verificationRef: f.add(value)
+                }]);
+            expect((await view(f)).attempts[0].verification).toBe('unavailable');
+        }
+        finally {
+            await f.dispose();
+        }
+    });
+    it('fix1 damaged owned not-run evidence is unavailable while original execution snapshot remains historical', async () => {
+        const f = await resultFixture();
+        try {
+            const ref = f.add({
+                schema: 'ccloop-task-result-verification-not-run-v1', attempt: 1, status: 'not-run'
+            });
+            await f.capture([f.manifest(), {
+                    ...f.manifest(2), stage: 'verification', verificationRef: ref
+                }]);
+            expect((await view(f)).attempts[0].verification).toBe('not-run');
+            await writeFile(join(f.store.stateDir, 'artifacts', ref.artifactId, 'data'), 'damaged');
+            const r = await view(f);
+            expect(r.attempts[0].verification).toBe('unavailable');
+            expect(r.attempts[0].snapshotRevision).toBe(1);
+        }
+        finally {
+            await f.dispose();
+        }
+    });
+    it('fix1 validated empty successful index retains independent current1 without producing an observation or borrowing explanation', async () => {
+        const f = await resultFixture();
+        try {
+            f.port.collectTaskResults = async () => ({
+                schema: 'ccloop-task-results-v1', identity: f.identity, currentAttempt: 1, revision: 0, nextRevision: 0, manifests: []
+            });
+            f.collector.schedule(f.runId);
+            await f.collector.flush(f.runId);
+            const empty = await view(f);
+            expect(empty.source.status).toBe('missing');
+            expect(empty.captureRevision).toBe(0);
+            expect(empty.currentAttempt).toBe(1);
+            expect(empty.currentExplanation.status).toBe('missing');
+            expect(empty.attempts).toEqual([]);
+            const original = readTaskResultState(f.store, f.runId)!;
+            mutateState(f, state => { delete state.currentAttemptFact; });
+            expect((await view(f)).currentAttempt).toBeNull();
+            mutateState(f, state => { state.currentAttemptFact = { ...original.currentAttemptFact, identity: { ...f.identity, groupId: 'foreign' } }; });
+            expect((await view(f)).currentAttempt).toBeNull();
+            mutateState(f, state => { state.currentAttemptFact = original.currentAttemptFact; });
+            f.port.collectTaskResults = async () => { throw Error('transport unavailable after empty index'); };
+            f.collector.schedule(f.runId);
+            await f.collector.flush(f.runId);
+            const lost = await view(f);
+            expect(lost.source.status).toBe('unavailable');
+            expect(lost.currentAttempt).toBeNull();
+            expect(lost.attempts).toEqual([]);
         }
         finally {
             await f.dispose();

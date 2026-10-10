@@ -3,7 +3,8 @@ import { readTaskResultState, readOwnedTaskResultEvidence } from '../../src/cont
 import { flushTaskResults } from '../../src/control/taskResultCollector.js';
 import { readStartEnvelope } from '../../src/control/executionDriver.js';
 import { TaskResultUnsupportedError } from '../../src/control/taskResultProtocol.js';
-import { ccloopWorlds, realBinary, startGroup, until, workRuns } from './fixtures/ccloopWorld.js';
+import { readRunResults } from '../../src/panel/taskResults.js';
+import { ccloopWorlds, realBinary, raw, startGroup, until, workRuns } from './fixtures/ccloopWorld.js';
 const feature = '/private/tmp/orca-results-ccloop-20261010/dist/cli.js';
 const fixed = '/private/tmp/orca-d9-ccloop-ab824d1/dist/cli.js';
 const worlds = ccloopWorlds({ rootPrefix: 'orca-task-result-paired-', epochPrefix: 'epoch-result-paired-' });
@@ -59,4 +60,17 @@ describe('result optional transport exact build', { timeout: 120000 }, () => {
             await w.teardown();
         }
     });
+    it('proves actual pre-verifier handoff not-run on feature and explicit unsupported on fixed pin',async()=>{
+        expect([fixed,feature]).toContain(realBinary);const paired=realBinary===feature;
+        const w=await worlds.world([{taskId:'a',targetPaths:['shared.txt']}],{a:{files:{'shared.txt':'A\n'},delayMs:{execute:6000}}});const runtime=await w.boot();
+        try{await startGroup(runtime,w.repoId);runtime.startPump(50);await until(()=>w.calls().includes('execute'),30000,'real execute before handoff');const run=workRuns(runtime)[0];
+            const stopped=await runtime.service.handoffStop(raw(runtime,'result4-handoff','handoff-stop',{}));expect(stopped).toMatchObject({result:{kind:'handoff-stopped'}});
+            await until(()=>workRuns(runtime)[0]?.body.state==='settled-recoverable',60000,'actual post-execute handoff settlement');await flushTaskResults(runtime.store,run.runId);
+            const saved=readTaskResultState(runtime.store,run.runId);const view=await readRunResults(runtime.store,run.runId,{epoch:runtime.epoch});
+            if(paired){expect(saved?.observations.map(o=>o.verification)).toEqual(['unavailable','not-run']);expect(view.attempts[0].verification).toBe('not-run');expect(view.attempts[0].snapshotRevision).toBe(1);const execution=saved!.observations[0],boundary=saved!.observations[1];expect(boundary.manifest.outputs).toEqual(execution.manifest.outputs);expect(boundary.manifest.executionRef).toEqual(execution.manifest.executionRef);expect(JSON.parse((await readOwnedTaskResultEvidence(runtime.store,run.runId,1,boundary.manifestRef,boundary.manifest.verificationRef!)).toString())).toEqual({schema:'ccloop-task-result-verification-not-run-v1',attempt:1,status:'not-run'});const output=boundary.manifest.outputs.find(o=>o.path==='shared.txt')!;expect((await readOwnedTaskResultEvidence(runtime.store,run.runId,1,boundary.manifestRef,output.ref!)).toString()).toBe('A\n');}
+            else{expect(saved).toMatchObject({status:'unsupported',observations:[]});expect(view.source.status).toBe('unsupported');expect(view.attempts).toEqual([]);}
+            expect(w.calls()).toEqual(['plan','execute']);expect(workRuns(runtime)[0].body).toMatchObject({state:'settled-recoverable',recoverable:true});expect(await runtime.shutdown()).toBe(true);
+        }finally{await w.teardown();}
+    });
+
 });

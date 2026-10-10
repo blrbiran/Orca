@@ -17,6 +17,7 @@ export function safeTaskResultPath(path: string): boolean {
 export const TASK_RESULT_MANIFEST_SCHEMA = "ccloop-task-result-manifest-v1";
 export const TASK_RESULT_COLLECTION_SCHEMA = "ccloop-task-results-v1";
 export const TASK_RESULT_VERIFICATION_STARTED_SCHEMA = "ccloop-task-result-verification-started-v1";
+export const TASK_RESULT_VERIFICATION_NOT_RUN_SCHEMA = "ccloop-task-result-verification-not-run-v1";
 const safe = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER), positive = safe.refine(n => n > 0), hash = z.string().regex(/^[a-f0-9]{64}$/);
 export const taskResultIdentitySchema = z.object({
     groupId: idSchema, workItemId: idSchema, taskId: idSchema.nullable(), runId: idSchema, generation: positive, graphVersion: safe, targetVersion: safe, executionId: idSchema, envelopeHash: hash
@@ -26,6 +27,7 @@ export const taskResultVerificationStartedSchema = z.object({
     attempt: positive,
     status: z.literal("in-progress"),
 }).strict();
+export const taskResultVerificationNotRunSchema = z.object({schema:z.literal(TASK_RESULT_VERIFICATION_NOT_RUN_SCHEMA),attempt:positive,status:z.literal('not-run')}).strict();
 export type TaskResultIdentityV1 = z.infer<typeof taskResultIdentitySchema>;
 export const taskResultOutputSchema = z.object({
     id: idSchema, path: z.string().max(1024), label: z.string().max(256), origin: z.enum(["reported", "changed"]), status: z.enum(["available", "missing", "deleted", "symlink", "binary", "too-large", "changed", "unsafe", "unavailable"]), byteLength: safe.max(MAX_TASK_RESULT_FILE_BYTES).nullable(), ref: artifactSchema.nullable()
@@ -52,9 +54,14 @@ export function taskResultVerification(manifest: TaskResultManifestV1, bytes: Bu
         return 'unavailable';
     try {
         const value: unknown = JSON.parse(bytes.toString('utf8'));
+        const marker = typeof value === 'object' && value !== null && 'schema' in value ? value.schema : null;
+        if (marker === TASK_RESULT_VERIFICATION_NOT_RUN_SCHEMA) {
+            const boundary = taskResultVerificationNotRunSchema.safeParse(value);
+            return boundary.success && boundary.data.attempt === manifest.attempt ? 'not-run' : 'unavailable';
+        }
         const started = taskResultVerificationStartedSchema.safeParse(value);
-        if (started.success)
-            return started.data.attempt === manifest.attempt ? 'in-progress' : 'unavailable';
+        if (marker === TASK_RESULT_VERIFICATION_STARTED_SCHEMA)
+            return started.success && started.data.attempt === manifest.attempt ? 'in-progress' : 'unavailable';
         const completed = completedVerificationSchema.safeParse(value);
         return completed.success ? (completed.data.approved ? 'passed' : 'failed') : 'unavailable';
     }
