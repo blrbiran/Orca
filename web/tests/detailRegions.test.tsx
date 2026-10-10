@@ -91,3 +91,16 @@ it("ControlPanel forwards an explicit repeated owner request independently of po
  const props={focus,view:value,config,summary:{schema:"orca-control-summary-v1" as const,epoch:"epoch-a",changeSeq:4,resetRequired:false,dispatchBlocked:false,groups:[value.summary]},recovery:{schema:"orca-control-recovery-v1" as const,epoch:"epoch-a",dispatchBlocked:false,blockers:[]},groups:{g:value},selected:"g",drafts:{},uncertain:[],refusal:null,refetchRequired:false,onSelect:vi.fn(),onDraft:vi.fn(),onCommand:vi.fn()};
  const app=render(<ControlPanel {...props} focusRequest={1}/>);select("Results");app.rerender(<ControlPanel {...props} focusRequest={2}/>);expect(selected()).toBe("Problems");
 });
+
+it("unsaved integration form stays mounted through region changes", () => {
+ mount(view([]));select("Results");const region=screen.getByRole("region",{name:"Integration of this group"});
+ fireEvent.change(within(region).getByRole("combobox",{name:"Delivery"}),{target:{value:"local"}});
+ fireEvent.change(within(region).getByRole("textbox",{name:"Target branch"}),{target:{value:"my unfinished target"}});
+ select("Progress");select("Results");expect((within(screen.getByRole("region",{name:"Integration of this group"})).getByRole("textbox",{name:"Target branch"}) as HTMLInputElement).value).toBe("my unfinished target");
+});
+it("completed Results with missing explanation opens its exact existing evidence run", () => {
+ const value=view([],[run({runId:"result-run",state:"settled-recoverable"})]);value.summary.state="done";mount(value);
+ expect(screen.getByRole("status").textContent).toContain("explanation is missing");
+ fireEvent.click(screen.getByRole("button",{name:"Open run controls and evidence · result-run"}));expect(selected()).toBe("Runs and evidence");expect(document.activeElement?.getAttribute("data-run-id")).toBe("result-run");
+ expect(screen.getByRole("button",{name:"evidence"})).toBeTruthy();
+});
