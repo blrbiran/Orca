@@ -354,3 +354,11 @@ export const __webParityAssignabilityChecks__ = [
 function overviewServerToWeb(x: import("../../src/control/webProtocol.js").OverviewV1): import("../../web/src/controlTypes.js").OverviewV1 { return x; }
 function overviewWebToServer(x: import("../../web/src/controlTypes.js").OverviewV1): import("../../src/control/webProtocol.js").OverviewV1 { return x; }
 export const __overviewParityAssignabilityChecks__ = [overviewServerToWeb, overviewWebToServer];
+
+function resultRunServerToWeb(x: import('../../src/control/webProtocol.js').RunResultsV1): import('../../web/src/controlTypes.js').RunResultsV1 { return x; }
+function resultRunWebToServer(x: import('../../web/src/controlTypes.js').RunResultsV1): import('../../src/control/webProtocol.js').RunResultsV1 { return x; }
+function resultGroupServerToWeb(x: import('../../src/control/webProtocol.js').GroupResultsV1): import('../../web/src/controlTypes.js').GroupResultsV1 { return x; }
+function resultGroupWebToServer(x: import('../../web/src/controlTypes.js').GroupResultsV1): import('../../src/control/webProtocol.js').GroupResultsV1 { return x; }
+function resultOutputServerToWeb(x: import('../../src/control/webProtocol.js').ResultOutputV1): import('../../web/src/controlTypes.js').ResultOutputV1 { return x; }
+function resultOutputWebToServer(x: import('../../web/src/controlTypes.js').ResultOutputV1): import('../../src/control/webProtocol.js').ResultOutputV1 { return x; }
+export const __resultParityChecks__ = [resultRunServerToWeb, resultRunWebToServer, resultGroupServerToWeb, resultGroupWebToServer, resultOutputServerToWeb, resultOutputWebToServer];

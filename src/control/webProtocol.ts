@@ -1825,3 +1825,39 @@ export const usageViewSchema = z
   })
   .strict();
 export type UsageViewV1 = z.infer<typeof usageViewSchema>;
+
+
+// Optional saved results; execution and delivery retain their existing authoritative views.
+export const resultExplanationContentSchema = z.object({
+    schema: z.literal('task-result-v1'), goal: z.string().max(4000).refine(s => s.trim().length > 0), completedWork: z.array(z.string().max(4000)).max(32), conclusions: z.array(z.string().max(4000)).max(32), outputs: z.array(z.object({ path: z.string().max(1024), label: z.string().max(256) }).strict()).max(32), limitations: z.array(z.string().max(4000)).max(32)
+}).strict();
+export const resultExplanationSchema = z.object({
+    status: z.enum(['available', 'missing', 'invalid', 'unavailable']), reason: z.string().max(256).nullable(), content: resultExplanationContentSchema.nullable()
+}).strict();
+export const resultOutputStatusSchema = z.enum(['available', 'missing', 'deleted', 'symlink', 'binary', 'too-large', 'changed', 'unsafe', 'unavailable']);
+export const resultOutputMetadataSchema = z.object({
+    outputId: idSchema, path: z.string().max(1024), label: z.string().max(256), origin: z.enum(['reported', 'changed']), status: resultOutputStatusSchema, byteLength: safeInteger.max(1048576).nullable()
+}).strict();
+export const resultOutputSchema = z.object({
+    schema: z.literal('orca-result-output-v1'), runId: idSchema, groupId: idSchema, attempt: positiveSafeInteger, outputId: idSchema, path: z.string().max(1024), status: resultOutputStatusSchema, byteLength: safeInteger.max(1048576).nullable(), content: z.string().refine(s => Buffer.byteLength(s, 'utf8') <= 131072).nullable(), downloadUrl: z.string().nullable()
+}).strict();
+export const resultVerificationSchema = z.enum(['not-run', 'in-progress', 'passed', 'failed', 'unavailable']);
+export const resultAttemptSchema = z.object({
+    attempt: positiveSafeInteger, current: z.boolean(), revision: positiveSafeInteger,
+    snapshotRevision: positiveSafeInteger.nullable(), execution: z.enum(['complete', 'partial', 'unavailable']), verification: resultVerificationSchema, explanation: resultExplanationSchema, outputs: z.array(resultOutputMetadataSchema).max(64), observations: z.array(z.object({
+        revision: positiveSafeInteger, stage: z.enum(['execution', 'verification']), verification: resultVerificationSchema
+    }).strict())
+}).strict();
+export const runResultsSchema = z.object({
+    schema: z.literal('orca-run-results-v1'), epoch: nonemptyString, changeSeq: safeInteger, runId: idSchema, groupId: idSchema, taskId: idSchema.nullable(), generation: positiveSafeInteger, executionId: idSchema.nullable(), run: runViewSchema, currentAttempt: safeInteger.nullable(), captureRevision: safeInteger, source: z.object({ status: z.enum(['available', 'missing', 'unsupported', 'stale', 'unavailable']), reason: z.string().max(256).nullable() }).strict(), availability: z.enum(['available', 'partial', 'missing', 'unavailable']), currentExplanation: resultExplanationSchema, attempts: z.array(resultAttemptSchema)
+}).strict();
+export const groupResultsSchema = z.object({
+    schema: z.literal('orca-group-results-v1'), epoch: nonemptyString, changeSeq: safeInteger, groupId: idSchema, goal: nonemptyString, successConditions: z.array(nonemptyString), status: groupSummarySchema.shape.state, review: z.object({ runs: z.array(runViewSchema) }).strict(), delivery: groupIntegrationViewSchema.nullable(), tasks: z.array(z.object({
+        taskId: idSchema, status: workItemViewSchema.shape.status, currentRunId: idSchema.nullable(), pendingRunId: idSchema.nullable(), lineageRunIds: z.array(idSchema), availability: z.enum(['available', 'partial', 'missing', 'unavailable', 'not-produced']), runs: z.array(runResultsSchema)
+    }).strict()), coverage: z.object({
+        total: safeInteger, available: safeInteger, partial: safeInteger, missing: safeInteger, unavailable: safeInteger, notProduced: safeInteger
+    }).strict()
+}).strict();
+export type RunResultsV1 = z.infer<typeof runResultsSchema>;
+export type GroupResultsV1 = z.infer<typeof groupResultsSchema>;
+export type ResultOutputV1 = z.infer<typeof resultOutputSchema>;

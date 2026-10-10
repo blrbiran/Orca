@@ -624,3 +624,111 @@ export interface OverviewStepV1 {
 }
 export interface OverviewIssueV1 { groupId: string | null; repoId: string | null; reason: string }
 export interface OverviewV1 { schema: "orca-control-overview-v1"; epoch: string; changeSeq: number; groups: GroupSummaryV1[]; steps: OverviewStepV1[]; issues: OverviewIssueV1[] }
+
+export interface ResultExplanationContentV1 {
+    schema: 'task-result-v1';
+    goal: string;
+    completedWork: string[];
+    conclusions: string[];
+    outputs: Array<{
+        path: string;
+        label: string;
+    }>;
+    limitations: string[];
+}
+export interface ResultExplanationV1 {
+    status: 'available' | 'missing' | 'invalid' | 'unavailable';
+    reason: string | null;
+    content: ResultExplanationContentV1 | null;
+}
+export type ResultVerificationV1 = 'not-run' | 'in-progress' | 'passed' | 'failed' | 'unavailable';
+export type ResultOutputStatusV1 = 'available' | 'missing' | 'deleted' | 'symlink' | 'binary' | 'too-large' | 'changed' | 'unsafe' | 'unavailable';
+export interface ResultOutputMetadataV1 {
+    outputId: string;
+    path: string;
+    label: string;
+    origin: 'reported' | 'changed';
+    status: ResultOutputStatusV1;
+    byteLength: number | null;
+}
+export interface ResultOutputV1 {
+    schema: 'orca-result-output-v1';
+    runId: string;
+    groupId: string;
+    attempt: number;
+    outputId: string;
+    path: string;
+    status: ResultOutputStatusV1;
+    byteLength: number | null;
+    content: string | null;
+    downloadUrl: string | null;
+}
+export interface ResultAttemptV1 {
+    attempt: number;
+    current: boolean;
+    revision: number;
+    snapshotRevision: number | null;
+    execution: 'complete' | 'partial' | 'unavailable';
+    verification: ResultVerificationV1;
+    explanation: ResultExplanationV1;
+    outputs: ResultOutputMetadataV1[];
+    observations: Array<{
+        revision: number;
+        stage: 'execution' | 'verification';
+        verification: ResultVerificationV1;
+    }>;
+}
+export type ResultRunViewV1 = RunViewV1 & {
+    blockedReason: string | null;
+    continuable: boolean;
+};
+export interface RunResultsV1 {
+    schema: 'orca-run-results-v1';
+    epoch: string;
+    changeSeq: number;
+    runId: string;
+    groupId: string;
+    taskId: string | null;
+    generation: number;
+    executionId: string | null;
+    run: ResultRunViewV1;
+    currentAttempt: number | null;
+    captureRevision: number;
+    source: {
+        status: 'available' | 'missing' | 'unsupported' | 'stale' | 'unavailable';
+        reason: string | null;
+    };
+    availability: 'available' | 'partial' | 'missing' | 'unavailable';
+    currentExplanation: ResultExplanationV1;
+    attempts: ResultAttemptV1[];
+}
+export interface GroupResultsV1 {
+    schema: 'orca-group-results-v1';
+    epoch: string;
+    changeSeq: number;
+    groupId: string;
+    goal: string;
+    successConditions: string[];
+    status: GroupSummaryV1['state'];
+    review: {
+        runs: ResultRunViewV1[];
+    };
+    delivery: NonNullable<GroupViewV1['integration']> | null;
+    tasks: Array<{
+        taskId: string;
+        status: WorkItemViewV1['status'];
+        currentRunId: string | null;
+        pendingRunId: string | null;
+        lineageRunIds: string[];
+        availability: 'available' | 'partial' | 'missing' | 'unavailable' | 'not-produced';
+        runs: RunResultsV1[];
+    }>;
+    coverage: {
+        total: number;
+        available: number;
+        partial: number;
+        missing: number;
+        unavailable: number;
+        notProduced: number;
+    };
+}

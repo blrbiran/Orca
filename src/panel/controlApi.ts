@@ -1,3 +1,5 @@
+import { readRunResults, readGroupResults } from './taskResults.js';
+import { readResultOutputBytes } from './taskResultOutputs.js';
 import { readControlOverview } from "./controlOverview.js";
 import type { Express, NextFunction, Request, Response } from "express";
 import { randomUUID } from "node:crypto";
@@ -274,6 +276,18 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
       }));
     }
   }
+
+  app.get('/api/control/groups/:groupId/results', asyncRoute(async(req,res)=>{res.json(await readGroupResults(deps.store,String(req.params.groupId),{epoch:deps.epoch}));}));
+  app.get('/api/control/runs/:runId/results', asyncRoute(async(req,res)=>{res.json(await readRunResults(deps.store,String(req.params.runId),{epoch:deps.epoch}));}));
+  app.get('/api/control/runs/:runId/results/outputs/:outputId', asyncRoute(async(req,res)=>{
+    if(Object.keys(req.query).some(k=>k!=='download')||(req.query.download!==undefined&&req.query.download!=='1'))throw new ControlError('query-invalid');
+    const {view,bytes}=await readResultOutputBytes(deps.store,String(req.params.runId),String(req.params.outputId),{epoch:deps.epoch});
+    res.setHeader('x-content-type-options','nosniff');res.setHeader('content-security-policy',"default-src 'none'");
+    if(req.query.download==='1'){
+      if(!bytes)throw new ControlError('recovery-blocked','task-result-output-unavailable');
+      res.setHeader('content-type','application/octet-stream');res.setHeader('content-disposition',`attachment; filename="${view.outputId}"`);res.send(bytes);
+    }else res.json(view);
+  }));
 
   app.get("/api/control/runs/:runId/evidence", asyncRoute(async (req, res) => {
     const runId = String(req.params.runId);
