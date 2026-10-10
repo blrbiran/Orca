@@ -51,3 +51,7 @@ Protocol4 verify-only envelopes are negotiated via independent `features` comman
 ### 6.1 Interrupted recovery successor
 
 For a new explicit command after an interrupted verifier, the latest task run may be a terminal/settled verify-only recovery with immutable recoveryOf pointing to the same original format-failure capsule; it may qualify only after owned process reaping and known/explicitly settled usage, with unchanged semantic authority and no later ordinary execution. The sourceRunId in payload remains the original capsule owner; admission also binds the latest recovery predecessor/currentRunId and preserves the full lineage. This is the sole exception to “source equals current failed run”; a fresh claim gets a new command/run identity and counts. Verifier rejection, candidate modification and ordinary newer retries do not acquire this exception. No automatic verification restart.
+
+### 6.2 Legacy wire protection
+
+Independent plan review found strict old consumers reject new collection keys even on failed runs. Expose capsule/readreachablebytes through separate `saved-result-evidence` and `read-saved-result-evidence` negotiated RPCs; protocol3 collect/terminal/capabilities/list/resolve stays exact even with new internal capsule/mode/entry metadata. Consumer archives new evidence channel separately. Test actual capsule-present v3 failure through unchanged old consumer and reject metadata-leak mutation.

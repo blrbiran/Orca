@@ -167,3 +167,17 @@ Execution order: Task1 Results5 -> Task2 harness -> Tasks3/4 token producer/cons
 ## Pre-flight amendments — Codex controller, 2026-10-11
 
 Tasks7/10 authorization lives in actual `src/panel/auth.ts` and `src/panel/authRoutes.ts`; the shorthand src/auth/permissions.ts above is not an existing file and must not be created. Update existing shared permission table/auth route callers. Task8 selection preview lives in actual `src/panel/controlViews.ts`; do not create a parallel selection authority. All new type/interfaces are defined by producing task; unresolved source details may be ruled and appended with evidence, not omitted.
+
+## Independent-plan-review amendments — Codex controller, 2026-10-11
+
+Task3/5/6/7: Existing protocol3 core collect/terminal/capabilities/list/resolve shapes stay exact EVEN when capsule/recovery metadata exists internally. New capsule is exposed only through independent feature-negotiated `saved-result-evidence` and `read-saved-result-evidence` RPCs, accepted source/run/attempt and capsule-reachable-ref bound. Task5 adds these unadvertised; Task6 advertises savedResultRecovery only when verifier-only implementation complete; Task7 recursively archives new evidence channel separately from core collection. Explicitly project durable internal recovery state to old v3 shape. Criteria: realfinitev3formatfailure createscapsule but unchangedoldconsumer parses/byte-shape matches; newchannel foreign/nonreachable refs refuse; mutantleakingcapsule/mode fields into v3 fails.
+
+Task4 actual owners include `src/control/spendCaps.ts` and `spendCommands.ts`. Task4/7/10 schema11 is one unreleased final migration; final Task10 validates10→11 plusreopen with policy/allocation/recovery/installoutbox tables together. Intermediate schema11 temporary fixtures are not a released contract; recreate or explicitly ensure all final tables where tests retain them, never silently claim upgrade of a partial released11.
+
+Task8 carry effective planworker primary into realasyncinitialimport/reestimate and postawait authority recheck, notonlyslotLayers. New tests operatorA+planB/B-m/nooverride freezes/probesB; operatorA/model-onlyA-m staysA; planlayer race refuses. Noestimator workflow remains usable, noalternateprobe. Record exactsupersededoperator-only expectation names.
+
+Task9 tablelock uses existing safe ownership primitives or new verifieddead-owner reclamation; never age-only. Actual subprocessdeath before/afterrename then freshprocess replay must reacquire boundedly and reconcile samereceipt, preserve modes/config; live slowprobe lock notstolen. Do not deleteanotheroperation evidence.
+
+### Nullable ceiling is not unknown usage — controller ruling
+
+Tasks3/4: Legacy `tokenBudgetRemaining:null` can mean usage unavailable, not unlimited. Determine unlimited only from explicit nullable authored ceiling/protocol4 policy, preserve finite observed/unknown usage separately. New DTO/state must distinguish known finite remaining, unlimited ceiling and unknown usage (`tokenRemainingStatus:'known'|'unlimited'|'unknown'` where needed), never reinterpret legacy null snapshot as unlimited. Unknown usage continues admission/settlement blocking and no-zero-guessing. Add legacy unknown/null fixture, true-unlimited known usage fixture and true-unlimited unknown usage fixture to producer/consumer tests.
