@@ -1,8 +1,8 @@
 import { login, seedUser } from "./fixtures/auth.js";
 import { afterAll, describe, expect, it, vi } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { command, createHarness, get, json, GROUP, revision, view, claudeCodexResolveAgent } from "./fixtures/controlPanel.js";
+import { command, createHarness, get, json, GROUP, revision, view, claudeCodexResolveAgent, settleRun } from "./fixtures/controlPanel.js";
 import { insertClarifyingGroup, newRound, newDraft, writeRound, writeDraft } from "../../src/control/requirementRecords.js";
 import { clarifyingInput } from "../control/fixtures/requirement.js";
 import { classifyClarifyOutput } from "../../src/control/requirementClarify.js";
@@ -10,8 +10,17 @@ import { ROUND_TWO } from "../control/fixtures/requirementOutputs.js";
 
 const h = createHarness();
 afterAll(() => h.dispose());
-export async function panelFixture() {
+export async function panelFixture(twoIndependentTasks = false) {
   const paths = await h.workspace();
+  if (twoIndependentTasks) {
+    const plan = JSON.parse(readFileSync(paths.planPath, "utf8"));
+    const contract = JSON.parse(readFileSync(plan.tasks[0].contract, "utf8"));
+    contract.objective.taskId = "b"; contract.context.targetPaths = ["b.ts"];
+    const contractPath = join(plan.tasks[0].contract, "..", "b.json");
+    writeFileSync(contractPath, JSON.stringify(contract));
+    plan.tasks.push({taskId:"b",contract:contractPath,dependsOn:[],targetVersion:1});
+    writeFileSync(paths.planPath, JSON.stringify(plan));
+  }
   const probe = vi.fn(claudeCodexResolveAgent);
   const panel = await h.boot("overview-epoch", paths, { resolveAgent: probe });
   await command(panel, "/api/control/groups/import-plan", { commandId: "import", expectedRevision: 0, payload: { groupId: GROUP, repoId: "repo", planId: "plan" } });
@@ -113,6 +122,26 @@ describe("authenticated overview read", () => {
     const body = await overview(panel);
     expect(body.issues.find(i=>i.groupId===GROUP)).toMatchObject({reason:"group-archived-invalid"});
     expect(body.groups.some(g=>g.groupId==="healthy")).toBe(true);
+  });
+
+  it("excludes active-ready independently of estimates or pending wakes while another task is claimable", async () => {
+    const {panel} = await panelFixture(true);
+    await panel.drainWakes();
+    const estimate = (await view(panel)).estimates[0]!;
+    const estimateRun = panel.store.db.prepare("SELECT id FROM runs WHERE group_id=? AND work_item_id=?").get(GROUP,estimate.estimateId)!;
+    settleRun(panel.store,String(estimateRun.id),"settled-restartable");
+    panel.service.completeEstimate(GROUP,estimate.estimateId,null);
+    await confirm(panel);
+    expect((await overview(panel)).steps.some(s=>s.kind==="start-review")).toBe(true);
+    await command(panel,`/api/control/groups/${GROUP}/start`,{commandId:"start",expectedRevision:await revision(panel),payload:{}});
+    await panel.drainWakes();
+    const body = await overview(panel), activeReadyId = GROUP;
+    expect(body.groups.find(g=>g.groupId===GROUP)).toMatchObject({state:"ready",counts:{idle:1,running:1,waiting:0,blocked:0,done:0}});
+    expect(panel.store.db.prepare("SELECT state FROM estimates WHERE group_id=?").all(GROUP)).toEqual([{state:"failed"}]);
+    expect(panel.store.db.prepare("SELECT id FROM scheduler_wakes WHERE group_id=? AND delivered=0").all(GROUP)).toEqual([]);
+    expect(panel.store.db.prepare("SELECT id FROM runs WHERE group_id=? AND active=1").all(GROUP)).toHaveLength(1);
+    expect(panel.store.db.prepare("SELECT active FROM runs WHERE id=?").get(estimateRun.id)?.active).toBe(0);
+    expect(body.steps.some(s => s.kind === 'start-review' && s.groupId === activeReadyId)).toBe(false);
   });
 
 });
