@@ -60,8 +60,10 @@ export async function flushTaskResults(store: ControlStore, runId: string): Prom
         return () => store.assertOwner();
     const identity = registration.assertRun(runId);
     await registration.collector.flush(runId);
-    const assertCurrent = () => { if (collectors.get(store) !== registration || registration.assertRun(runId) !== identity)
-        throw new Error('task-result-owner-changed'); };
+    const assertCurrent = () => {
+        if (collectors.get(store) !== registration || registration.assertRun(runId) !== identity)
+            throw new Error('task-result-owner-changed');
+    };
     assertCurrent();
     return assertCurrent;
 }
@@ -129,16 +131,24 @@ export function createTaskResultCollector(deps: TaskResultCollectorDeps): TaskRe
                 if (sha256Canonical(page.identity) !== sha256Canonical(identity) || (old.identity && sha256Canonical(old.identity) !== sha256Canonical(page.identity)))
                     throw new Error('task-result-identity-invalid');
                 validatePage(page, old);
+                // A later controller attempt remains authoritative even if saved bytes fail below.
+                await admitted(job, owner, async () => deps.store.transaction(() => {
+                    valid(job, owner);
+                    const current = readTaskResultState(deps.store, job.runId) ?? empty();
+                    validatePage(page, current);
+                    saveTaskResultState(deps.store, job.runId, page.identity.groupId, { ...current, currentAttemptFact: { schema: 'orca-task-result-current-attempt-v1', identity: page.identity, revision: page.revision, currentAttempt: page.currentAttempt } });
+                }));
                 const observations: TaskResultObservation[] = [];
-                const evidence = new Map<string, {
-                    ref: ArtifactRef;
-                    bytes: Buffer;
-                }>();
                 const read = async (manifestRef: ArtifactRef, ref: ArtifactRef, limit = MAX_TASK_RESULT_EVIDENCE_BYTES) => {
                     const bytes = await call(() => owner.port.readTaskResultEvidence!(owner.input, manifestRef, ref));
+                    valid(job, owner);
                     if (bytes.length > limit || createHash('sha256').update(bytes).digest('hex') !== ref.hash || ref.artifactId !== 'task-result-' + ref.hash)
                         throw new Error('task-result-evidence-invalid');
-                    evidence.set(ref.artifactId, { ref, bytes });
+                    // Stage one bounded reference; never retain a page-wide collection of file buffers.
+                    const saved = await writeArtifact(deps.store, ref.artifactId, bytes, { assertHeld: () => valid(job, owner), admit: operation => admitted(job, owner, operation) });
+                    valid(job, owner);
+                    if (saved.artifactId !== ref.artifactId || saved.hash !== ref.hash)
+                        throw new Error('task-result-evidence-invalid');
                     return bytes;
                 };
                 for (const observation of page.manifests) {
@@ -154,23 +164,25 @@ export function createTaskResultCollector(deps: TaskResultCollectorDeps): TaskRe
                         if (output.ref && !safeTaskResultPath(output.path))
                             throw new Error('task-result-output-unsafe');
                     }
+                    let verification: TaskResultObservation['verification'] = 'unavailable';
                     for (const ref of taskResultManifestRefs(manifest)) {
                         const output = manifest.outputs.find(o => o.ref?.artifactId === ref.artifactId && o.ref.hash === ref.hash);
                         const bytes = await read(observation.ref, ref, output ? MAX_TASK_RESULT_FILE_BYTES : MAX_TASK_RESULT_EVIDENCE_BYTES);
                         if (output && bytes.length !== output.byteLength)
                             throw new Error('task-result-output-size-invalid');
+                        if (manifest.verificationRef?.artifactId === ref.artifactId && manifest.verificationRef.hash === ref.hash)
+                            verification = taskResultVerification(manifest, bytes);
                     }
-                    observations.push({ manifestRef: observation.ref, manifest, verification: taskResultVerification(manifest, manifest.verificationRef ? evidence.get(manifest.verificationRef.artifactId)!.bytes : null) });
+                    observations.push({ manifestRef: observation.ref, manifest, verification });
                 }
-                // Complete page first. A partial read never publishes a cursor or replaces history.
-                for (const { ref, bytes } of evidence.values())
-                    await writeArtifact(deps.store, ref.artifactId, bytes, { assertHeld: () => valid(job, owner), admit: operation => admitted(job, owner, operation) });
+                // Staged references are private to this job until complete-page membership is admitted.
                 await admitted(job, owner, async () => deps.store.transaction(() => {
                     valid(job, owner);
                     const current = readTaskResultState(deps.store, job.runId) ?? empty();
                     if (current.revision !== old.revision || current.sourceRevision > page.revision)
                         throw new Error('task-result-page-stale');
-                    saveTaskResultState(deps.store, job.runId, page.identity.groupId, { schema: 'orca-task-result-store-v1', identity: page.identity, revision: page.nextRevision, sourceRevision: page.revision, currentAttempt: page.currentAttempt, observations: [...current.observations, ...observations], status: page.revision > 0 ? 'available' : 'missing', reason: null });
+                    validateCurrentFact(page, current);
+                    saveTaskResultState(deps.store, job.runId, page.identity.groupId, { currentAttemptFact: current.currentAttemptFact ?? null, schema: 'orca-task-result-store-v1', identity: page.identity, revision: page.nextRevision, sourceRevision: page.revision, currentAttempt: page.currentAttempt, observations: [...current.observations, ...observations], status: page.revision > 0 ? 'available' : 'missing', reason: null });
                 }));
                 if (page.nextRevision === page.revision)
                     return;
@@ -252,7 +264,13 @@ export function createTaskResultCollector(deps: TaskResultCollectorDeps): TaskRe
         } });
     return collector;
 }
+function validateCurrentFact(page: TaskResultCollectionV1, old: TaskResultState): void {
+    const fact = old.currentAttemptFact;
+    if (fact && (sha256Canonical(fact.identity) !== sha256Canonical(page.identity) || page.revision < fact.revision || page.currentAttempt < fact.currentAttempt))
+        throw new Error('task-result-current-fact-stale');
+}
 function validatePage(page: TaskResultCollectionV1, old: TaskResultState): void {
+    validateCurrentFact(page, old);
     if (page.revision < old.sourceRevision || page.nextRevision < old.revision || page.currentAttempt < old.currentAttempt || page.manifests.some((m, i) => m.revision !== old.revision + i + 1) || page.nextRevision !== (page.manifests.at(-1)?.revision ?? old.revision) || (page.nextRevision < page.revision && page.manifests.length !== 64))
         throw new Error('task-result-page-stale');
 }

@@ -903,7 +903,11 @@ export function createExecutionDriver(options: ExecutionDriverDeps): ExecutionDr
   const run=readDriverRun(options.store,runId);if(!run.drive?.envelopeHash||!run.executionId)return null;
   return {input:readStartEnvelope(options.store,run),executionId:run.executionId,port:portFor(options,run)};
  }});
- const deps={...options,taskResults};
+ // Preserve the caller's live dependency getters and method owner; only retention is overlaid.
+ const deps=new Proxy(options,{get(target,key){
+  if(key==='taskResults')return taskResults;
+  const value=Reflect.get(target,key,target);return typeof value==='function'?value.bind(target):value;
+ }});
   const context: DriverContext = { reconciling: new Map(), stopped: false };
   let inFlight: Promise<boolean> | null = null;
   let timer: NodeJS.Timeout | null = null;

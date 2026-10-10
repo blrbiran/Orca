@@ -1,3 +1,5 @@
+import { readCanonicalRecord } from './snapshot.js';
+import { taskResultCurrentAttemptFactSchema, type TaskResultCurrentAttemptFactV1 } from './taskResultProtocol.js';
 import { sha256Canonical } from './canonicalJson.js';
 import { readArtifact } from './archive.js';
 import { recordProjectionChange } from './projectionJournal.js';
@@ -12,6 +14,8 @@ export interface TaskResultObservation {
 }
 export interface TaskResultState {
     schema: 'orca-task-result-store-v1';
+    /** Strict independent source fact; legacy currentAttempt belongs to the last complete page. */
+    currentAttemptFact?: TaskResultCurrentAttemptFactV1 | null;
     identity: TaskResultIdentityV1 | null;
     revision: number;
     sourceRevision: number;
@@ -45,4 +49,28 @@ export async function readOwnedTaskResultEvidence(store: ControlStore, runId: st
     if (sha256Canonical(JSON.parse(bytes.toString('utf8'))) !== sha256Canonical(observation.manifest))
         throw new Error('task-result-evidence-unavailable');
     return sameTaskResultRef(manifestRef, ref) ? bytes : readArtifact(store, ref);
+}
+/** Read only: no RPC, filesystem discovery or writes; foreign/obsolete accepted owners have no current fact. */
+export function readTaskResultCurrentAttemptFact(store: ControlStore, runId: string): TaskResultCurrentAttemptFactV1 | null {
+    try {
+        const parsed = taskResultCurrentAttemptFactSchema.safeParse(readTaskResultState(store, runId)?.currentAttemptFact);
+        if (!parsed.success)
+            return null;
+        const row = store.db.prepare('SELECT body FROM runs WHERE id=?').get(runId);
+        if (!row)
+            return null;
+        const run = JSON.parse(String(row.body)), envelopeHash = run.drive?.envelopeHash;
+        if (typeof envelopeHash !== 'string')
+            return null;
+        const expected = { groupId: run.groupId, workItemId: run.workItemId, taskId: run.taskId, runId: run.runId, generation: run.generation, graphVersion: run.graphVersion, targetVersion: run.targetVersion, executionId: run.executionId, envelopeHash };
+        if (sha256Canonical(expected) !== sha256Canonical(parsed.data.identity))
+            return null;
+        const envelope = JSON.parse(readCanonicalRecord(store, envelopeHash));
+        if (envelope.claim.ownerToken !== run.ownerToken || envelope.claim.runId !== runId || envelope.claim.generation !== run.generation)
+            return null;
+        return parsed.data;
+    }
+    catch {
+        return null;
+    }
 }

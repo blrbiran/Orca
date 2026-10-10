@@ -62,3 +62,8 @@ export function taskResultVerification(manifest: TaskResultManifestV1, bytes: Bu
         return 'unavailable';
     }
 }
+/** Source-observed attempt freshness is independent of admitted evidence/capture cursor. */
+export const taskResultCurrentAttemptFactSchema = z.object({
+    schema: z.literal('orca-task-result-current-attempt-v1'), identity: taskResultIdentitySchema, revision: safe, currentAttempt: safe,
+}).strict();
+export type TaskResultCurrentAttemptFactV1 = z.infer<typeof taskResultCurrentAttemptFactSchema>;
