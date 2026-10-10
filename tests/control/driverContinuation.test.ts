@@ -72,7 +72,7 @@ describe("a continuation run (spec §4)", { timeout: 60_000 }, () => {
       const confirmed = readConfirmedTaskExecution(t.h.store, "g", "a").contract.executionPolicy;
       expect(policy).toEqual(withinGrant(confirmed, run.grant.work));
       // Not vacuous: the predecessor spent part of the task's grant, so the cut is visible.
-      expect(policy.tokenBudget).toBeLessThan(confirmed.tokenBudget);
+      expect(policy.tokenBudget).toBeLessThan(confirmed.tokenBudget!);
       expect(work(t, "a").status).toBe("done");
       expect(git(t.repo, "rev-parse", `${run.drive.landedCommit}^1`)).not.toBe(base);
       // spec §4: the predecessor's workspace goes once the bundle exists; its checkpoint stays.

@@ -59,10 +59,12 @@ describe("the expansion is pure and pinned (criterion 1)", () => {
     v2.safetyPolicy.maxFilesTouched = Number.MAX_SAFE_INTEGER;
     v2.objective.successCondition = "the login test passes\nAlso: a test that reproduces the bug was added, and it failed before the fix.";
     v2.verification.rejectOn = ["REJECT:unused"];
-    expect(JSON.parse(result.canonicalJson)).toEqual(v2);
+    const historical=expandRecipe("fix-login",REPO,{...result.recipe,planVersion:2});
+    expect(historical.ok&&JSON.parse(historical.canonicalJson)).toEqual(v2);
+    expect(JSON.parse(result.canonicalJson)).toEqual({...v2,executionPolicy:{...v2.executionPolicy,tokenBudget:null}});
     expect(result.hash).toBe(sha256Canonical(JSON.parse(result.canonicalJson)));
     expect(result.recipe).toEqual({
-      schema: "orca-loop-recipe-v1", planId: "bugfix", planVersion: 2, chosenBy: "explicit",
+      schema: "orca-loop-recipe-v1", planId: "bugfix", planVersion: 3, chosenBy: "explicit",
       inputs: { goal: "fix login", successCondition: "the login test passes", targetPaths: ["src/auth/**", "tests/auth/**"], checks: ["npm test"], nonGoals: [], relevantDocs: [], protectedPaths: [], maxFilesTouched: null },
     });
   });
@@ -78,9 +80,9 @@ describe("the expansion is pure and pinned (criterion 1)", () => {
     // v1 stays in the registry; the current version is the highest one (ledger 2026-09-30, MX-20b/c: with one version
     // per plan, "newest" could not be told from "first").
     expect(loopPlanDefinition(plan, 1)).not.toBeNull();
-    expect(currentLoopPlanVersion(plan)).toBe(2);
-    expect(first.recipe.planVersion).toBe(2);
-    expect(loopPlanDefinition(plan, 3)).toBeNull();
+    expect(currentLoopPlanVersion(plan)).toBe(3);
+    expect(first.recipe.planVersion).toBe(3);
+    expect(loopPlanDefinition(plan, 4)).toBeNull();
   });
 
   const changes: Array<[string, Partial<LoopPlanFileInput>]> = [
@@ -93,10 +95,10 @@ describe("the expansion is pure and pinned (criterion 1)", () => {
     expect(expanded("bugfix", over).hash).not.toBe(expanded("bugfix").hash);
   });
 
-  it("gives every plan today's Web default work budget (spec §2.3: TASK_WORK)", () => {
+  it("gives every new plan an unlimited token ceiling and the preserved finite non-token defaults", () => {
     for (const plan of LOOP_PLAN_IDS) {
       const policy = contractOf(plan).executionPolicy;
-      expect([policy.tokenBudget, policy.totalRuntimeBudgetMs, policy.maxAttempts]).toEqual([TASK_WORK.tokens, TASK_WORK.activeMs, TASK_WORK.attempts]);
+      expect([policy.tokenBudget, policy.totalRuntimeBudgetMs, policy.maxAttempts]).toEqual([null, TASK_WORK.activeMs, TASK_WORK.attempts]);
     }
   });
 });
@@ -159,9 +161,9 @@ describe("refusals (criterion 3)", () => {
   it("refuses an unknown plan", () => expect(refusal(input({ plan: "yolo" }))).toBe("unknown-plan"));
   it("refuses a recipe whose plan version the registry does not hold (versions are never invented, spec §2.2)", () => {
     // Rewritten under human ruling H19 (2026-10-01) for loop plans v2.
-    const recipe = { ...expanded("bugfix").recipe, planVersion: 3 };
+    const recipe = { ...expanded("bugfix").recipe, planVersion: 4 };
     expect(expandRecipe("fix-login", REPO, recipe)).toEqual({ ok: false, reason: "unknown-plan" });
-    expect([loopPlanDefinition("bugfix", 3), currentLoopPlanVersion("yolo")]).toEqual([null, null]);
+    expect([loopPlanDefinition("bugfix", 4), currentLoopPlanVersion("yolo")]).toEqual([null, null]);
     expect([isLoopPlanId("bugfix"), isLoopPlanId("yolo")]).toEqual([true, false]);
   });
   it.each([["/etc/passwd"], ["src/../secrets"], ["src/*.ts"], ["src/*"], ["*"], ["**/x.ts"], ["src/**/x.ts"], ["src//a.ts"], ["./src/a.ts"], ["src/"]])(

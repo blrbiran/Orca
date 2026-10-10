@@ -18,7 +18,7 @@ import i18n, { enumText } from "./i18n.js";
 import { TokenInput, parseTokens } from "./TokenInput.js";
 import type {
   AllocationViewV1,
-  Amount,
+  Amount, BudgetAmount,
   AmountDimensionV1,
   BudgetEstimateV1,
   ControlConfigV1,
@@ -62,9 +62,9 @@ function targetOf(view: GroupViewV1, ownerId: string, bucket: string, dimension:
   return task ? { scope: "task", taskId: ownerId, allocation: bucket, dimension } : null;
 }
 
-function valueFor(drafts: Record<string, string>, key: string, serverValue: number): string {
+function valueFor(drafts: Record<string, string>, key: string, serverValue: number|null): string {
   const draft = drafts[key];
-  return draft === undefined ? String(serverValue) : draft;
+  return draft === undefined ? serverValue===null?"":String(serverValue) : draft;
 }
 
 /** Draft text a token field holds while what is typed is not an amount; it holds Save, Set limit and Confirm. */
@@ -74,7 +74,7 @@ const BLANK_DRAFT = " ";
 const hasBadDraft = (drafts: Record<string, string>): boolean => Object.values(drafts).includes(BAD_DRAFT);
 
 /** The number a token field shows: the draft (kept as digits by TokenInput) or the server's value. */
-function tokenValueFor(drafts: Record<string, string>, key: string, serverValue: number): number | null {
+function tokenValueFor(drafts: Record<string, string>, key: string, serverValue: number|null): number | null {
   return parseTokens(valueFor(drafts, key, serverValue));
 }
 
@@ -88,6 +88,7 @@ export function editedOperations(view: GroupViewV1, drafts: Record<string, strin
       const target = targetOf(view, allocation.ownerId, allocation.bucket, dimension);
       if (target === null) continue;
       const draft = drafts[budgetFieldKey(groupId, target)];
+      if(draft===BLANK_DRAFT&&target.scope==="task"&&target.allocation==="work"&&dimension==="tokens"){if(allocation.amount.tokens!==null)operations.push({target,value:null,provenance:"human"});continue;}
       if (draft === undefined || draft.trim() === "") continue;
       const value = Number(draft);
       if (!Number.isSafeInteger(value) || value < 0 || value === allocation.amount[dimension]) continue;
@@ -201,11 +202,12 @@ export function suggestionActions(view: GroupViewV1, scope: SuggestionScope): Co
   return [...edit, ...suggestedLoopActions(view, scope)];
 }
 
-function limitAmount(view: GroupViewV1, drafts: Record<string, string>): Amount {
+function limitAmount(view: GroupViewV1, drafts: Record<string, string>): BudgetAmount {
   const groupId = view.summary.groupId;
   const limit = { ...view.ledger.groupLimit };
   for (const dimension of DIMENSIONS) {
     const draft = drafts[groupLimitKey(groupId, dimension)];
+    if(dimension==="tokens"&&draft===BLANK_DRAFT){limit.tokens=null;continue;}
     if (draft === undefined || draft.trim() === "") continue;
     const value = Number(draft);
     if (Number.isSafeInteger(value) && value >= 0) limit[dimension] = value;
@@ -399,6 +401,9 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
                           aria-label={`${allocation.ownerId} ${enumText("bucket", allocation.bucket)} ${enumText("dimension", dimension)}`}
                           value={tokenValueFor(drafts, key, allocation.amount[dimension])}
                           readOnly={!editable}
+                          allowEmpty={allocation.ownerKind==="task"&&allocation.bucket==="work"}
+                          onClear={()=>onDraft(key,BLANK_DRAFT)}
+                          emptyLabel={t("budget.unlimited")}
                           onChange={(n) => onDraft(key, String(n))}
                           onInvalid={() => onDraft(key, BAD_DRAFT)}
                         />
@@ -413,8 +418,8 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
                       <small>{provenanceText(allocation.fieldProvenance[dimension])}</small>
                     </label>
                     {fieldOperation !== undefined && !archived && (
-                      <button type="button" aria-label={t("budget.useFor", { value: fieldOperation.value, owner: allocation.ownerId, bucket: enumText("bucket", allocation.bucket), dimension: enumText("dimension", dimension) })}
-                        onClick={() => applySuggestions(suggestionActions(view, { kind: "field", target }))}>{t("budget.use", { value: fieldOperation.value })}</button>
+                      <button type="button" aria-label={t("budget.useFor", { value: fieldOperation.value??t("budget.unlimited"), owner: allocation.ownerId, bucket: enumText("bucket", allocation.bucket), dimension: enumText("dimension", dimension) })}
+                        onClick={() => applySuggestions(suggestionActions(view, { kind: "field", target }))}>{t("budget.use", { value: fieldOperation.value??t("budget.unlimited") })}</button>
                     )}
                   </td>
                 );
@@ -454,6 +459,7 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
             aria-label={enumText("dimension", dimension)}
             value={tokenValueFor(drafts, groupLimitKey(groupId, dimension), view.ledger.groupLimit[dimension])}
             readOnly={!mayLimit || archived}
+            allowEmpty onClear={()=>onDraft(groupLimitKey(groupId,dimension),BLANK_DRAFT)} emptyLabel={t("budget.unlimited")}
             onChange={(n) => onDraft(groupLimitKey(groupId, dimension), String(n))}
             onInvalid={() => onDraft(groupLimitKey(groupId, dimension), BAD_DRAFT)}
           />
@@ -481,7 +487,7 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
         onClear={() => onDraft(CONTEXT_POLICY_KEY(groupId), BLANK_DRAFT)}
       />
       <p>
-        {t("budget.ledger", { used: view.ledger.used.tokens, committed: view.ledger.committedRemaining.tokens, reserve: view.ledger.explicitUnallocatedReserve.tokens })}
+        {t("budget.ledger", { used: view.ledger.used.tokens, committed: view.ledger.committedRemaining.tokens, reserve: view.ledger.explicitUnallocatedReserve.tokens===null?t("budget.unlimited"):view.ledger.explicitUnallocatedReserve.tokens })}
         {view.ledger.budgetDeficit.tokens > 0 ? t("budget.deficit", { deficit: view.ledger.budgetDeficit.tokens }) : ""}
         {view.ledger.usageUnknown ? t("budget.usageUnknown") : ""}
       </p>

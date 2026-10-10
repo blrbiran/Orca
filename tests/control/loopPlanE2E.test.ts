@@ -50,7 +50,7 @@ describe("a loop task changed after confirmation, against real ccloop (spec §6 
         const changed = await runtime.service.setTaskLoop(raw(runtime, "loop-a", "set-task-loop", {
           baseLoopVersion: plan.loopVersion, plan: "standard", inputs: { ...plan.inputs, goal: "write shared.txt, changed after confirmation" },
           // Rulings P4: a budget raise, so a full rebuild of the snapshot (reserve row from the live proposal) is caught below.
-          work: { tokens: work.tokens + 500_000, activeMs: work.activeMs, attempts: work.attempts },
+          work: { tokens: work.tokens! + 500_000, activeMs: work.activeMs, attempts: work.attempts },
         }, { kind: "task", groupId: "g", taskId: "a" }));
         expect(changed).toMatchObject({ result: { kind: "task-loop-set", taskId: "a", loopVersion: 1 } });
       });

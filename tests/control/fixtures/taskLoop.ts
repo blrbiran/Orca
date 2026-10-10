@@ -44,7 +44,7 @@ export function expectConserved(h: Fixture): void {
   const group = readWebGroup(h.store, "g");
   const reserveRow = readBudgetProposal(h.store, "g").allocations.find((a) => a.ownerKind === "reserve")!.amount;
   for (const d of DIMENSIONS) {
-    expect(group.reserved[d] + group.ledger.explicitUnallocatedReserve[d]).toBe(group.limit[d] - group.used[d]);
-    expect(reserveRow[d]).toBe(group.ledger.explicitUnallocatedReserve[d]);
+    expect(group.reserved[d] + group.ledger.explicitUnallocatedReserve[d]!).toBe(group.limit[d]! - group.used[d]);
+    expect(reserveRow[d]).toBe(group.ledger.explicitUnallocatedReserve[d]!);
   }
 }

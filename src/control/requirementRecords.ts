@@ -1,3 +1,5 @@
+import { budgetAmountSchema, type BudgetAmount } from "./tokenPolicy.js";
+import { saveTokenPolicy } from "./fundedAllowance.js";
 import { z } from "zod";
 import { budgetBalance } from "./budget.js";
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
@@ -29,14 +31,14 @@ export const requirementBlockSchema = z.object({
 export type RequirementBlock = z.infer<typeof requirementBlockSchema>;
 
 export interface ClarifyingGroupInput {
-  groupId: string; repoId: string; idea: string; limit: Amount; contentLanguage: "en" | "zh"; createdOn: string; requirementId: string;
+  groupId: string; repoId: string; idea: string; limit: BudgetAmount; contentLanguage: "en" | "zh"; createdOn: string; requirementId: string;
   profile: { profileId: string; profileHash: string }; agentSlot: FrozenSlot; agentOverrides: { estimator?: z.infer<typeof panelPartialSelectionSchema> };
   maxOutputTokens: number;
 }
-type Ledger = { groupLimit: Amount; used: Amount; committedRemaining: Amount; explicitUnallocatedReserve: Amount; budgetDeficit: Amount; usageUnknown: boolean };
+type Ledger = { groupLimit: BudgetAmount; used: Amount; committedRemaining: Amount; explicitUnallocatedReserve: BudgetAmount; budgetDeficit: Amount; usageUnknown: boolean };
 /** The fields of a group body this module reads and writes; the rest passes through untouched. */
 export interface RequirementGroup {
-  groupId: string; status: string; stopped: boolean; used: Amount; reserved: Amount; limit: Amount;
+  groupId: string; status: string; stopped: boolean; used: Amount; reserved: Amount; limit: BudgetAmount;
   ledger: Ledger; requirement: RequirementBlock; [key: string]: unknown;
 }
 
@@ -46,7 +48,7 @@ const blocked = (detail: string): never => { throw new ControlError("recovery-bl
  * PR-I5: the one place the clarifying ledger mirror is computed. At insert nothing is used or committed, so the whole
  * limit is unallocated; set-limit and usage booking (budget.ts syncRequirementLedger) pass what is used and committed.
  */
-export function clarifyingLedger(limit: Amount, used: Amount = zero(), reserved: Amount = zero(), usageUnknown = false): Ledger {
+export function clarifyingLedger(limit: BudgetAmount, used: Amount = zero(), reserved: Amount = zero(), usageUnknown = false): Ledger {
   const { reserve, deficit } = budgetBalance(limit, used, reserved);
   return { groupLimit: limit, used, committedRemaining: reserved, explicitUnallocatedReserve: reserve, budgetDeficit: deficit, usageUnknown };
 }
@@ -58,7 +60,7 @@ export function hasRequirementBlock(group: { requirement?: unknown }): boolean {
 
 /** N1 spec §4.1, DR18: a clarifying group carries the Web ledger mirror (readWebGroup, readGroupBody), and no plan, proposal or work items. */
 export function insertClarifyingGroup(store: ControlStore, input: ClarifyingGroupInput): void {
-  amountSchema.parse(input.limit);
+  budgetAmountSchema.parse(input.limit);
   const requirement: RequirementBlock = requirementBlockSchema.parse({
     requirementId: input.requirementId, repoId: input.repoId, slug: null, contentLanguage: input.contentLanguage, createdOn: input.createdOn,
     idea: input.idea, profile: input.profile, agentSlot: input.agentSlot, maxOutputTokens: input.maxOutputTokens, consensus: null, acceptedDraftNo: null, document: null,
@@ -73,6 +75,7 @@ export function insertClarifyingGroup(store: ControlStore, input: ClarifyingGrou
     agentOverrides: input.agentOverrides, estimatorSlot: null, reconcileSlot: null, requirement,
   };
   store.db.prepare("INSERT INTO groups(id,revision,graph_version,projection_seq,body) VALUES (?,?,?,0,?)").run(input.groupId, 0, 1, JSON.stringify(group));
+  saveTokenPolicy(store,input.groupId,"",input.limit.tokens);
 }
 
 /** A group that carries a requirement block, in any status (clarifying, or the plan group it became at accept). */
@@ -98,14 +101,16 @@ export function saveRequirementGroup(store: ControlStore, group: RequirementGrou
  * group's set-limit refuses it (webService.ts setLimit; final review finding 7). A raise re-queues a call that waited
  * with requirement-budget-exhausted (spec §5.2).
  */
-export function setRequirementLimit(store: ControlStore, groupId: string, limit: Amount): Amount {
+export function setRequirementLimit(store: ControlStore, groupId: string, limit: BudgetAmount): BudgetAmount {
   const group = readRequirementGroup(store, groupId);
   if (group.status !== "clarifying") throw new ControlError("group-state-invalid");
   if (canonicalBytes(limit).equals(canonicalBytes(group.limit))) throw new ControlError("no-op-command");
-  if (group.ledger.usageUnknown && dimensions.some((d) => limit[d] < group.limit[d])) throw new ControlError("recovery-blocked", "requirement-usage-unknown");
+  if (group.ledger.usageUnknown && dimensions.some((d) => limit[d]!==null&&(group.limit[d]===null||limit[d]! < group.limit[d]!))) throw new ControlError("recovery-blocked", "requirement-usage-unknown");
   const ledger = clarifyingLedger(limit, group.used, group.reserved, group.ledger.usageUnknown);
   if (dimensions.some((d) => ledger.budgetDeficit[d] > 0)) throw new ControlError("group-budget-unavailable");
+  budgetAmountSchema.parse(limit);
   group.limit = limit;
+  saveTokenPolicy(store,groupId,"",limit.tokens);
   group.ledger = ledger;
   saveRequirementGroup(store, group);
   const waiting = latestDraft(store, groupId)?.waiting ?? latestRound(store, groupId)?.waiting ?? null;

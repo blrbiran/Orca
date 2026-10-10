@@ -65,7 +65,7 @@ async function accepted(t: Harness, id: string) {
   const policy = (sent.work.contract as any).executionPolicy;
   const frozen = readConfirmedTaskExecution(t.h.store, "g", "a");
   const grant = t.body(id).grant.work;
-  expect(policy.tokenBudget).toBe(Math.min(frozen.contract.executionPolicy.tokenBudget, grant.tokens));
+  expect(policy.tokenBudget).toBe(Math.min(frozen.contract.executionPolicy.tokenBudget!, grant.tokens));
   expect(policy.maxAttempts).toBe(Math.min(frozen.contract.executionPolicy.maxAttempts, grant.attempts));
   expect(policy.totalRuntimeBudgetMs).toBe(Math.min(frozen.contract.executionPolicy.totalRuntimeBudgetMs, grant.activeMs));
   expect(sent.contractHash).toBe(frozen.derivedContractHash);
@@ -77,7 +77,7 @@ async function reduced() {
   let behaviour: FakeBehaviour = "stoppable";
   const t = await driverHarness([{ taskId: "a" }], { behaviour: () => behaviour, stopReason: () => "provider crashed" });
   const l = ledger(t).groupLimit;
-  expect(t.service.setLimit(t.h.command("set-limit", { limit: Object.fromEntries(ds.map(d => [d, l[d] * 5])) } as any))).not.toHaveProperty("error");
+  expect(t.service.setLimit(t.h.command("set-limit", { limit: Object.fromEntries(ds.map(d => [d, l[d]! * 5])) } as any))).not.toHaveProperty("error");
   const first = await t.claim(), driver = t.driver();
   await t.until(driver, () => t.body(first).state === "accepted");
   await handoff(t, first, driver);
@@ -97,7 +97,7 @@ describe("M3 handoff failure retry lifecycle", { timeout: 60_000 }, () => {
     const t = await driverHarness([{ taskId: "a" }], { behaviour: () => behaviour, stopReason: () => "provider crashed" });
     try {
       const limit = ledger(t).groupLimit;
-      expect(t.service.setLimit(t.h.command("set-limit", { limit: Object.fromEntries(ds.map(d => [d, limit[d] * 5])) } as any))).not.toHaveProperty("error");
+      expect(t.service.setLimit(t.h.command("set-limit", { limit: Object.fromEntries(ds.map(d => [d, limit[d]! * 5])) } as any))).not.toHaveProperty("error");
       const first = await t.claim(), driver = t.driver();
       await t.until(driver, () => t.body(first).state === "accepted");
       await handoff(t, first, driver);
@@ -111,7 +111,7 @@ describe("M3 handoff failure retry lifecycle", { timeout: 60_000 }, () => {
       expect(allocation(t, "a").state).toBe("continuing");
       expect(consumed).toMatchObject({ pendingRunId: id, continuationIntentId: failed.continuationIntentId, claimOrdinal: failed.claimOrdinal });
       expect(latestRequestForRun(t.h.store, "g", id)).toBeNull();
-      for (const d of ["tokens", "activeMs", "attempts"] as const) expect(failed.grant.work[d]).toBeLessThan(frozen.grant.work[d]);
+      for (const d of ["tokens", "activeMs", "attempts"] as const) expect(failed.grant.work[d]).toBeLessThan(frozen.grant.work[d]!);
 
       // No second handoff: the actual active failure is admitted directly.
       expect(retry(t)).not.toHaveProperty("error");
@@ -137,7 +137,7 @@ describe("M3 handoff failure retry lifecycle", { timeout: 60_000 }, () => {
   it("retries a handoff-settled failed continuation at its claim grant", async () => {
     const { t, id } = await reduced(); try {
       const failed = t.body(id), before = ledger(t), frozen = readConfirmedTaskExecution(t.h.store, "g", "a");
-      expect(failed.grant.work.tokens).toBeLessThan(frozen.grant.work.tokens);
+      expect(failed.grant.work.tokens).toBeLessThan(frozen.grant.work.tokens!);
       expect(failed.grant.work.activeMs).toBeLessThan(frozen.grant.work.activeMs);
       expect(failed.grant.work.attempts).toBeLessThan(frozen.grant.work.attempts);
       expect(retry(t)).not.toHaveProperty("error");

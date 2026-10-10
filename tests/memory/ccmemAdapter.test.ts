@@ -1,3 +1,4 @@
+import { execFile } from "node:child_process";
 import { chmod, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -103,7 +104,10 @@ describe("failures (spec §3.3)", () => {
     await writeFile(bin, "not a program\n", { mode: 0o755 });
     const err = await refusal(adapterFor(fake, { ccmemBin: bin }).search(scope, { query: "", limit: 50 }));
     expect(err.code).toBe("ccmem-failed:ENOEXEC");
-    expect(err.message).toContain("Unknown system error -8"); // Node's own message is kept
+    // Observe the platform message independently: Node24 names ENOEXEC; Node22 used an unknown-error label.
+    const native=await new Promise<Error>((resolve)=>{try{execFile(bin,["export","--scope","global"],{cwd:scope.repoPath},error=>resolve(error!));}catch(error){resolve(error as Error);}});
+    expect(native.message.length).toBeGreaterThan(0);
+    expect(err.message).toContain(native.message);
   });
 
   it("gives up at the timeout, promptly (M6)", async () => {

@@ -1,8 +1,13 @@
+import { groupRepoIdOf } from "./usageLedger.js";
+import { releaseCommitment } from "./stopIntent.js";
+import { allocateFundedAllowance, decideFundedAllowance, hasTokenPolicy, persistFundedAllowance, type FundedAllowance } from "./fundedAllowance.js";
+import { finiteCommitment, tokenProofCovers } from "./tokenPolicy.js";
+import { add, syncWebBudget } from "./budget.js";
 import { validateRetryGrantSource } from "./retryGrant.js";
 import { createHash, randomUUID } from "node:crypto";
 import { applyWebCommand, preflightWebCommand, type WebCommandContext } from "./commandLedger.js";
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
-import { readBudgetProposal, readGroup, readWork, saveWork } from "./queries.js";
+import { readBudgetProposal, readGroup, saveGroup, allWork, readWork, saveWork } from "./queries.js";
 import { readCanonicalRecord, writeCanonicalRecord } from "./snapshot.js";
 import { ControlError } from "./errors.js";
 import { zero } from "./commands.js";
@@ -18,7 +23,7 @@ import { singleCallClaimRowOf } from "./singleCall.js";
 import { claimRequirementCall } from "./requirementCalls.js";
 import { hasRequirementBlock, readRequirementGroup } from "./requirementRecords.js";
 import { archivedMarkOf, isGroupArchived } from "./archivedMark.js";
-import { claimCapBlocking, gateClaim } from "./spendCaps.js";
+import { claimCapBlocking, gateClaim, clearSpendCapBlock, recordCapBlock, capStatuses } from "./spendCaps.js";
 import { noteRunWrite, recordActivity } from "./activity.js";
 
 export type Phase = "estimate" | "work" | "handoff" | "single-call";
@@ -61,14 +66,14 @@ function readFrozenSnapshot(store: ControlStore, groupId: string): ExecutionSnap
 }
 
 /** A degraded required probe blocks dispatch; it is never silently downgraded. */
-function probeBlocksDispatch(observation: ObservedProfile, mode: "strict" | "soft"): boolean {
+function probeBlocksDispatch(observation: ObservedProfile, mode: "strict" | "soft",actualTokens:number|null=0,bucket:"work"|"handoff"="work"): boolean {
   if (observation.probeFailureCode !== null) return true;
   const cap = observation.observed as CapabilityViewV1;
   return cap.usageObservation === "unavailable"
     || cap.budgetEnforcement === "unavailable"
     || cap.handoffControl !== "durable"
     || cap.handoffExecution === null
-    || (mode === "strict" && (cap.budgetEnforcement !== "bounded" || cap.requestBoundProof === null || !cap.requestBoundProof.workDimensions.includes("tokens")));
+    || (mode === "strict" && (cap.budgetEnforcement !== "bounded" || !tokenProofCovers(cap,actualTokens,bucket)));
 }
 
 function resolveBindings(router: ExecutionProfileRouter, snapshot: ExecutionSnapshotV1): { worker: FrozenProfile; handoff: FrozenProfile } {
@@ -91,8 +96,22 @@ function frozenTaskSelections(store: ControlStore, groupId: string): AgentSelect
   return [...seen.values()];
 }
 
-function probeFrozen(router: ExecutionProfileRouter, bindings: { worker: FrozenProfile; handoff: FrozenProfile }, selections: AgentSelection[]): Promise<ObservedProfile[]> {
-  return Promise.all(selections.flatMap((selection) => [router.probe(bindings.worker, selection), router.probe(bindings.handoff, selection)]));
+interface ScopedObservation {observation:ObservedProfile;role:"work"|"handoff"}
+function probeFrozen(router: ExecutionProfileRouter, bindings: { worker: FrozenProfile; handoff: FrozenProfile }, selections: AgentSelection[]): Promise<ScopedObservation[]> {
+ return Promise.all(selections.flatMap(selection=>[
+  router.probe(bindings.worker,selection).then(observation=>({observation,role:"work" as const})),
+  router.probe(bindings.handoff,selection).then(observation=>({observation,role:"handoff" as const})),
+ ]));
+}
+/** Re-read current binders after every asynchronous probe. No extra provider probe is needed. */
+function scopedProbeBlocks(store:ControlStore,groupId:string,entry:ScopedObservation,mode:"strict"|"soft",at:number):boolean {
+ if(!hasTokenPolicy(store,groupId))return probeBlocksDispatch(entry.observation,mode);
+ const {observation,role}=entry;
+ if(role==="handoff")return probeBlocksDispatch(observation,mode,observation.observed.handoffExecution==="mechanical-in-run-v1"?null:0,"handoff");
+ const group=readGroup(store,groupId),selection=observation.resolution?.selection;
+ const finiteBinder=group.limit.tokens!==null||capStatuses(store,groupRepoIdOf(group as unknown as Record<string,unknown>),at).length>0;
+ const finiteDemand=allWork(store,groupId).some(work=>work.kind==="task"&&work.grant.work.tokens!==null&&(selection===undefined||canonicalBytes(work.agent).equals(canonicalBytes(selection))));
+ return probeBlocksDispatch(observation,mode,finiteBinder||finiteDemand?0:null);
 }
 
 function success(context: WebCommandContext, result: CommandSuccessV1["result"], status = 200): { status: number; body: CommandSuccessV1 } {
@@ -110,12 +129,12 @@ export async function scheduleStart(deps: WebDispatchDeps, command: StartCommand
   if (replay) return replay.body;
   const release = admissionGate?.enter();
   try {
-    let degraded = false;
+    let degraded = false;let observations:ScopedObservation[]=[];
     try {
       const snapshot = readFrozenSnapshot(store, groupTarget(command));
       const bindings = resolveBindings(profileRouter, snapshot);
-      const observations = await probeFrozen(profileRouter, bindings, frozenTaskSelections(store, groupTarget(command)));
-      degraded = observations.some((observation) => probeBlocksDispatch(observation, snapshot.budgetMode));
+      observations = await probeFrozen(profileRouter, bindings, frozenTaskSelections(store, groupTarget(command)));
+      degraded = observations.some(entry=>scopedProbeBlocks(store,groupTarget(command),entry,snapshot.budgetMode,(deps.now?.()??new Date()).getTime()));
     } catch (error) {
       // profile-changed and the remaining precedence codes are decided by the synchronous walk below; so is
       // requirement-not-split (N1 spec §4.1, survey S7), so that a clarifying group's refusal is ledgered.
@@ -139,7 +158,7 @@ export async function scheduleStart(deps: WebDispatchDeps, command: StartCommand
           if (["running", "start-unknown"].includes(String(row.state))) throw new ControlError("estimate-in-flight");
         }
         resolveBindings(profileRouter, snapshot);
-        if (degraded) throw new ControlError("control-capability-unsupported");
+        if (degraded||observations.some(entry=>scopedProbeBlocks(store,groupId,entry,snapshot.budgetMode,(deps.now?.()??new Date()).getTime()))) throw new ControlError("control-capability-unsupported");
         const wakeId = `scheduler-wake:${groupId}:${context.nextCommandRevision}`;
         store.db.prepare("INSERT INTO scheduler_wakes(id,group_id,kind,body,delivered) VALUES (?,?,'start',?,0)")
           .run(wakeId, groupId, canonicalBytes({ groupId, startRevision: context.nextCommandRevision, executionSnapshotHash: sha256Canonical(snapshot) }).toString("utf8"));
@@ -201,17 +220,20 @@ export async function deliverScheduledStart(deps: WebDispatchDeps, groupId: stri
     const at = (deps.now?.() ?? new Date()).getTime();
     // A capped claim is not probed (the agent is asked nothing while the group only waits on a cap). Read-only: the gate
     // in the transaction below decides; with no probe there is no await in between, so it reads what this read did.
-    const precapped = claimCapBlocking(store, groupId, claimGrantTokens(store, groupId, wake), at) !== null;
-    let blocked = false;
+    const optionalPolicy=hasTokenPolicy(store,groupId);
+    const precapped = optionalPolicy?decideFundedAllowance(store,groupId,null,at).allowance===null:claimCapBlocking(store, groupId, claimGrantTokens(store, groupId, wake), at) !== null;
+    const features=optionalPolicy&&!precapped?await profileRouter.resolve("task",snapshot.profiles.worker.profileId,snapshot.profiles.worker.profileHash).port.readFeatures?.():undefined;
+    let blocked = false;let observations:ScopedObservation[]=[];
     if (!precapped) try {
       const bindings = resolveBindings(profileRouter, snapshot);
-      const observations = await probeFrozen(profileRouter, bindings, frozenTaskSelections(store, groupId));
-      blocked = observations.some((observation) => probeBlocksDispatch(observation, snapshot.budgetMode));
+      observations = await probeFrozen(profileRouter, bindings, frozenTaskSelections(store, groupId));
+      blocked = observations.some(entry=>scopedProbeBlocks(store,groupId,entry,snapshot.budgetMode,at));
     } catch (error) {
       if (!(error instanceof ControlError) || error.code !== "profile-changed") throw error;
       blocked = true;
     }
     return store.transaction(() => {
+      const claimAt = (deps.now?.() ?? new Date()).getTime();
       const still = pendingResumeWake(store, groupId) ?? pendingStartWake(store, groupId);
       if (!still) return activeWorkRun(store, groupId) ?? { kind: "idle" as const };
       // Issue-fixes spec §6.3: an archived group takes no claim; its start and resume wakes stay pending (blocked keeps them)
@@ -221,17 +243,18 @@ export async function deliverScheduledStart(deps: WebDispatchDeps, groupId: stri
       // check, so delivery re-reads the ledger rather than claiming on an unknowable budget.
       const ledgerGroup = readGroup(store, groupId) as unknown as { ledger?: { usageUnknown?: boolean } };
       if (ledgerGroup.ledger?.usageUnknown) return { kind: "blocked" as const, reason: "usage-unknown" };
-      if (blocked) {
+      const capabilityRefusal=()=>{
         store.db.prepare("INSERT INTO recovery_blockers(id,group_id,run_id,scope,code,body) VALUES (?,?,NULL,'group','claim-capability-unavailable',?) ON CONFLICT(id) DO NOTHING")
           .run(`claim-blocked:${groupId}:${still.id}`, groupId, canonicalBytes({ evidenceIds: [] }).toString("utf8"));
         return { kind: "blocked" as const, reason: "claim-capability-unavailable" };
-      }
+      };
+      if(blocked||observations.some(entry=>scopedProbeBlocks(store,groupId,entry,snapshot.budgetMode,claimAt)))return capabilityRefusal();
       // Accounts spec §6.3.1, D9: in this transaction, so no other claim lands between the headroom read and this one.
       // A capped claim answers `blocked`: the handler leaves the wake pending, and the next wake re-checks.
-      if (!gateClaim(store, groupId, claimGrantTokens(store, groupId, still), at, "start")) return { kind: "blocked" as const, reason: "spend-cap-reached" };
+      if (!optionalPolicy && !gateClaim(store, groupId, claimGrantTokens(store, groupId, still), claimAt, "start")) return { kind: "blocked" as const, reason: "spend-cap-reached" };
       const startRevision = "resumeRevision" in still ? still.resumeRevision : still.body.startRevision;
       if ("resumeRevision" in still) {
-        const continuation = deliverContinuationWake(store, groupId, still, snapshot);
+        const continuation = deliverContinuationWake(store, groupId, still, snapshot,features?.tokenPolicy==="optional-v1",claimAt);
         if (continuation !== null) return continuation;
       }
       const work = nextClaimableTask(store, groupId);
@@ -239,7 +262,20 @@ export async function deliverScheduledStart(deps: WebDispatchDeps, groupId: stri
         store.db.prepare("UPDATE scheduler_wakes SET delivered=1 WHERE id=?").run(still.id);
         return { kind: "idle" as const };
       }
-      const run = createStartingRun(store, groupId, work, snapshot, startRevision);
+      const decision=optionalPolicy?decideFundedAllowance(store,groupId,null,claimAt):undefined;
+      const allowance=decision?.allowance;
+      if(decision&&allowance===null){
+        if(decision.cap)recordCapBlock(store,groupId,decision.cap,decision.minimumTokens!,"start");
+        else clearSpendCapBlock(store,groupId,"start");
+        return {kind:"blocked" as const,reason:decision.reason};
+      }
+      if(decision?.workItemId)work.workItemId=decision.workItemId;
+      if(optionalPolicy)clearSpendCapBlock(store,groupId,"start");
+      if(allowance){const selection=frozenWorkAgent(readWork(store,groupId,work.workItemId)).agent;
+        if(observations.some(({observation,role})=>observation.resolution&&canonicalBytes(observation.resolution.selection).equals(canonicalBytes(selection))&&probeBlocksDispatch(observation,snapshot.budgetMode,role==="work"?allowance.grant.work.tokens:observation.observed.handoffExecution==="mechanical-in-run-v1"?null:allowance.grant.handoff.tokens,role)))return capabilityRefusal();
+      }
+      if(allowance&&needsTokenPolicy(allowance,readWork(store,groupId,work.workItemId))&&features?.tokenPolicy!=="optional-v1")return {kind:"blocked" as const,reason:"control-token-policy-unsupported"};
+      const run = createStartingRun(store, groupId, work, snapshot, startRevision,undefined,allowance??undefined);
       store.db.prepare("UPDATE scheduler_wakes SET delivered=1 WHERE id=?").run(still.id);
       return { kind: "claimed" as const, runId: run.runId };
     });
@@ -266,7 +302,7 @@ function claimGrantTokens(store: ControlStore, groupId: string, wake: ClaimedWak
   return work === null ? 0 : grantTokens(work.workItemId);
 }
 
-type WakeOutcome = { kind: "claimed"; runId: string } | { kind: "idle" };
+type WakeOutcome = { kind: "claimed"; runId: string } | { kind: "idle" } | {kind:"blocked";reason:string};
 
 /**
  * Claim the registered continuations of a resume wake in request order. Returns null once the
@@ -277,6 +313,7 @@ function deliverContinuationWake(
   groupId: string,
   wake: { id: string; resumeRevision: number; continuations: RegisteredContinuation[] },
   snapshot: ExecutionSnapshotV1,
+  optionalSupported:boolean,at:number,
 ): WakeOutcome | null {
   if (wake.continuations.length === 0) {
     store.db.prepare("UPDATE scheduler_wakes SET delivered=1 WHERE id=?").run(wake.id);
@@ -293,7 +330,10 @@ function deliverContinuationWake(
   // claim, so claiming only the first would leave the rest `continuing` with no wake to run them.
   let first: DispatchRun | null = null;
   for (const registered of actionable) {
-    const run = createStartingRun(store, groupId, { workItemId: registered.taskId }, snapshot, wake.resumeRevision, registered);
+    const allowance=hasTokenPolicy(store,groupId)?allocateFundedAllowance(store,groupId,registered.taskId,at):undefined;
+    if(allowance===null)return {kind:"blocked",reason:"funded-allowance-unavailable"};
+    if(allowance&&needsTokenPolicy(allowance,readWork(store,groupId,registered.taskId))&&!optionalSupported)return {kind:"blocked",reason:"control-token-policy-unsupported"};
+    const run = createStartingRun(store, groupId, { workItemId: registered.taskId }, snapshot, wake.resumeRevision, registered,allowance);
     first ??= run;
   }
   store.db.prepare("UPDATE scheduler_wakes SET delivered=1 WHERE id=?").run(wake.id);
@@ -329,6 +369,7 @@ function createStartingRun(
   snapshot: ExecutionSnapshotV1,
   startRevision: number,
   continuation?: RegisteredContinuation,
+  allowance?:FundedAllowance,
 ): DispatchRun {
   const work = readWork(store, groupId, target.workItemId);
   validateRetryGrantSource(store, groupId, work);
@@ -337,7 +378,7 @@ function createStartingRun(
   const claimIdentity = continuation
     ? `${continuation.desiredIntentId}:attempt:${claimOrdinal}`
     : `task:${groupId}:${startRevision}:${work.taskId}:attempt:${claimOrdinal}`;
-  const grant = structuredClone((work as unknown as { grant: { work: unknown; handoff: unknown } }).grant);
+  const grant = structuredClone(allowance?.grant??work.grant);
   const runId = continuation ? continuation.pendingRunId : `run-${randomUUID()}`;
   const ownerToken = randomUUID();
   const binding = (slot: ProfileBindingV1): { profileId: string; profileHash: string } => ({ profileId: slot.profileId, profileHash: slot.profileHash });
@@ -358,6 +399,7 @@ function createStartingRun(
     // Agent selection spec §6.4 / §3 I1: a run (and a continuation of it) carries its work item's frozen selection unchanged.
     configHash: frozen.configHash, agent: frozen.agent, agentProvenance: frozen.agentProvenance, timeoutMs: frozen.timeoutMs,
     killGraceMs: frozen.killGraceMs, agentCapabilities: frozen.agentCapabilities,
+    ...(allowance&&needsTokenPolicy(allowance,work)?{tokenPolicy:{authoredTokenCeiling:allowance.authoredTokenCeiling,bindingCauses:allowance.bindingCauses,inheritedUsage:allowance.inheritedUsage}}:{}),
     grant, ownerToken, executionId: null, state: "starting", checkpointId: null, recoverable: false,
     remaining: structuredClone(grant), cumulative: { work: zero(), handoff: zero() }, unknown: { work: false, handoff: false },
     highWater: 0, breaches: [], handoffWorkItemId: null, phase: "work", claimOrdinal, providerAttemptOrdinal: 0, failureCode: null,
@@ -365,9 +407,16 @@ function createStartingRun(
     executionProfile: { workKind: "task", ...binding(snapshot.profiles.worker) }, handoffProfile: { workKind: "handoff", ...binding(snapshot.profiles.handoff) },
   };
   store.db.prepare("INSERT INTO runs(id,group_id,work_item_id,generation,active,body) VALUES (?,?,?,1,1,?)").run(runId, groupId, work.workItemId, JSON.stringify(run));
+  if(allowance){
+    persistFundedAllowance(store,runId,groupId,work.workItemId,allowance);
+    const group=readGroup(store,groupId);const renewed=(work as {fundingReleased?:boolean}).fundingReleased===true;
+    group.reserved=add(group.reserved,renewed?add(finiteCommitment(grant.work),grant.handoff):{tokens:(grant.work.tokens??0)+grant.handoff.tokens,activeMs:0,attempts:0,sessions:0});
+    syncWebBudget(store,group,null);saveGroup(store,group);
+  }
   store.db.prepare("INSERT INTO outbox(id,kind,body,delivered) VALUES (?,'work-claim',?,0)")
     .run(`work:${groupId}:${runId}`, canonicalBytes({ groupId, workItemId: work.workItemId, runId, envelopeHash, sessionReservation: 1, attemptReservation: 0 }).toString("utf8"));
   const record = readWork(store, groupId, target.workItemId) as unknown as { status: string; currentRunId: string | null; pendingRunId: string | null; claimOrdinal: number; lineageRunIds?: string[] };
+  delete (record as {fundingReleased?:boolean}).fundingReleased;
   record.status = "running"; record.currentRunId = runId; record.pendingRunId = null; record.claimOrdinal = claimOrdinal;
   record.lineageRunIds = [...new Set([...(record.lineageRunIds ?? []), runId])].sort();
   saveWork(store, groupId, record as never);
@@ -397,6 +446,10 @@ export function settleProviderAttempt(deps: WebDispatchDeps, input: { runId: str
     const work = readWork(store, run.groupId, run.workItemId) as unknown as { status: string };
     // `currentRunId` names the most recent run for the work item, not an active one,
     // so the failed run keeps it until a re-armed claim replaces it.
+    if(hasTokenPolicy(store,run.groupId)){
+      const remaining=run.remaining as {work:import("./tokenPolicy.js").BudgetAmount;handoff:import("./types.js").Amount};
+      releaseCommitment(store,run.groupId,add(finiteCommitment(remaining.work),remaining.handoff));Object.assign(work,{fundingReleased:true});
+    }
     work.status = run.continuationIntentId ? "continuing" : "ready";
     saveWork(store, run.groupId, work as never);
     if (run.continuationIntentId) {
@@ -596,4 +649,8 @@ export function isWebWorkRun(store: ControlStore, runId: string): boolean {
 export function isEstimateRun(store: ControlStore, runId: string): boolean {
   // DR2: kept by name; the single-call check restricted to phase `estimate` (N1 spec §5.1).
   return isSingleCallRun(store, runId) && readDispatchRun(store, runId).phase === "estimate";
+}
+
+function needsTokenPolicy(allowance:FundedAllowance,work:object):boolean {
+ return typeof (work as {allowancePredecessorRunId?:unknown}).allowancePredecessorRunId==="string"||allowance.authoredTokenCeiling===null||allowance.grant.work.tokens!==Math.max(0,allowance.authoredTokenCeiling-allowance.inheritedUsage.tokens);
 }

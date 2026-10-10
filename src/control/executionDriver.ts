@@ -1,3 +1,7 @@
+import { readWork as allowanceWork, saveWork as saveAllowanceWork, readGroup as allowanceGroup, saveGroup as saveAllowanceGroup } from "./queries.js";
+import { validateAllowanceCheckpoint } from "./fundedAllowance.js";
+import { verifySnapshot } from "./snapshot.js";
+import { minTokenCeiling } from "./tokenPolicy.js";
 import { createTaskResultCollector,type TaskResultCollector } from './taskResultCollector.js';
 import { createHash } from "node:crypto";
 import { mkdir, realpath, writeFile } from "node:fs/promises";
@@ -268,7 +272,9 @@ export async function stepA2(deps: ExecutionDriverDeps, runId: string): Promise<
   let targetRepo: string;
   try { targetRepo = deps.resolveRepository(groupRepoId(store, run.groupId)); }
   catch { blockRun(deps, runId, "A2", "repository-path"); return true; }
-  const continued = run.continuationIntentId ? continuationOf(store, run) : null;
+  const savedAllowance=(allowanceWork(store,run.groupId,run.workItemId) as {allowancePredecessorRunId?:string}).allowancePredecessorRunId;
+  const allowanceSource=savedAllowance?readDriverRun(store,savedAllowance):null;
+  const continued = run.continuationIntentId ? continuationOf(store, run) : allowanceSource?.drive?.base?{predecessorRunId:allowanceSource.runId,base:allowanceSource.drive.base}:null;
   if (run.continuationIntentId && continued === null) { blockRun(deps, runId, "A2", "continuation-registration"); return true; }
   // Handoff delivery spec §4 (human ruling, plan X): a continuation keeps its predecessor's base and never reads
   // the current tip -- ccloop rebuilds the predecessor's tree on the snapshot HEAD, a descendant of that base
@@ -383,9 +389,9 @@ async function cleanupPredecessor(deps: ExecutionDriverDeps, targetRepo: string,
  * contract is cut to what its task has left. The contract hash stays the frozen derivedContractHash, the same
  * rule as the repoPath rewrite above.
  */
-export function withinGrant<P extends { maxAttempts: number; tokenBudget: number; totalRuntimeBudgetMs: number }>(policy: P, grant: { tokens: number; activeMs: number; attempts: number }): P {
+export function withinGrant<P extends { maxAttempts: number; tokenBudget: number|null; totalRuntimeBudgetMs: number }>(policy: P, grant: { tokens: number|null; activeMs: number; attempts: number }): P {
   return {
-    ...policy, maxAttempts: Math.min(policy.maxAttempts, grant.attempts), tokenBudget: Math.min(policy.tokenBudget, grant.tokens),
+    ...policy, maxAttempts: Math.min(policy.maxAttempts, grant.attempts), tokenBudget: minTokenCeiling(policy.tokenBudget, grant.tokens),
     totalRuntimeBudgetMs: Math.min(policy.totalRuntimeBudgetMs, grant.activeMs),
   };
 }
@@ -541,6 +547,7 @@ export async function stepC(deps: ExecutionDriverDeps, runId: string): Promise<b
   write(deps, () => store.db.prepare("INSERT INTO outbox VALUES (?, 'report', ?, 0) ON CONFLICT(id) DO UPDATE SET body=excluded.body").run(`report:${runId}`, JSON.stringify({ source })));
   deps.crash?.("C-after-terminal");
   const outcome = report.terminal.outcome;
+  if(report.terminal.waitingCause==="token-allowance")return settleTokenAllowance(deps,runId,report);
   if (outcome !== "succeeded") {
     // Issue fixes spec §4.2(1): ccloop's reason is kept beside the outcome (the run view and the panel explain it); the
     // blocked reason is unchanged.
@@ -1019,4 +1026,26 @@ export function createExecutionDriver(options: ExecutionDriverDeps): ExecutionDr
     },
     get crashed() { return crashed; },
   };
+}
+
+/** A renewable boundary is an atomic known settlement plus a saved ready-work registration. */
+async function settleTokenAllowance(deps:ExecutionDriverDeps,runId:string,report:ExecutionReport):Promise<boolean> {
+ const {store}=deps,run=readDriverRun(store,runId),raw=report.candidate!;
+ if(groupHeld(store,run.groupId)||openRequestOf(store,run)!==null)return false;
+ const current=readRun(store,runId);
+ if(current.unknown.work||current.unknown.handoff){blockRun(deps,runId,"C","usage-unknown");return true;}
+ try{await validateAllowanceCheckpoint(store,raw,readStartEnvelope(store,run));}
+ catch(error){blockRun(deps,runId,"C",`allowance-evidence:${describeError(error)}`);return true;}
+ const archive=await archiveRun(store,{runId,sourceDir:run.drive!.sourceDir,repoDir:join(run.drive!.sourceDir,"repo"),stopProof:raw.stopProof},archiveAdmission(deps));
+ if(archive.missing.length||archive.snapshot===null){blockRun(deps,runId,"C","allowance-snapshot-incomplete");return true;}
+ await verifySnapshot(store,archive.snapshot);
+ const candidate:Candidate={...raw,checkpointId:`allowance-${runId}`,artifacts:[...archive.artifacts,...raw.artifacts,raw.handoff],snapshot:archive.snapshot};
+ await commitCandidate(store,candidate,{...archiveAdmission(deps),onSettled:()=>{
+  const settled=readDriverRun(store,runId),work=allowanceWork(store,run.groupId,run.workItemId) as ReturnType<typeof allowanceWork>&{allowancePredecessorRunId?:string;currentRunId?:string|null};
+  if(work.currentRunId!==undefined&&work.currentRunId!==runId)throw new ControlError("work-already-active");
+  settled.state="settled-recoverable";settled.drive={...settled.drive!,outcome:report.terminal!.outcome};saveDriverRun(store,settled);
+  work.status="ready";work.allowancePredecessorRunId=runId;Object.assign(work,{fundingReleased:true});saveAllowanceWork(store,run.groupId,work);
+  const group=allowanceGroup(store,run.groupId);if(!group.stopped)group.status="running";saveAllowanceGroup(store,group);
+ }});
+ return true;
 }

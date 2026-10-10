@@ -81,7 +81,7 @@ it("a focus belonging to another owner does not override this group's stored def
  expect(selected()).toBe("Progress");expect(screen.queryByRole("region",{name:"Task a"})).toBeNull();
 });
 it("all real failure, driver block, unsettled-usage and requested run facts have exact navigation", () => {
- const failed=run({runId:"f",outcome:"failed",state:"settled-recoverable"});const blocked=run({runId:"b",state:"blocked",blockedReason:"driver-block"});const unknown=run({runId:"u",unknownUsageSettlement:{generation:1,highWater:1,remaining:{work:run({}).remaining,handoff:run({}).remaining},allowed:false,refusalReason:"proof-required"}});const requested=run({runId:"r"});const ordinary=run({runId:"o"});
+ const failed=run({runId:"f",outcome:"failed",state:"settled-recoverable"});const blocked=run({runId:"b",state:"blocked",blockedReason:"driver-block"});const unknown=run({runId:"u",unknownUsageSettlement:{generation:1,highWater:1,remaining:{work:run({}).remaining,handoff:{...run({}).remaining,tokens:run({}).remaining.tokens!}},allowed:false,refusalReason:"proof-required"}});const requested=run({runId:"r"});const ordinary=run({runId:"o"});
  mount(view([], [failed,blocked,unknown,requested,ordinary]),{kind:"group",groupId:"g",region:"problem",taskId:null,runId:"r"});
  for(const id of ["f","b","u","r"])expect(screen.getByRole("button",{name:"Open run controls and evidence · "+id})).toBeTruthy();
  expect(screen.queryByRole("button",{name:"Open run controls and evidence · o"})).toBeNull();

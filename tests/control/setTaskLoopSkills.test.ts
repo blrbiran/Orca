@@ -196,7 +196,7 @@ describe("set-task-loop on a confirmed task rewrites its snapshot entry (C15)", 
     const h = await confirmed([{ taskId: "a", loop: loop("a") }]);
     const before = { hash: snapshotHash(h), work: workAllocation(h, "a").amount };
     const missing = await fakeSyncskill("profile-missing");
-    expect(errorOf(await serviceOf(h, missing.o).setTaskLoop(withSkills(h, "a", { tokens: before.work.tokens - 1 }, { profile: "p" }))))
+    expect(errorOf(await serviceOf(h, missing.o).setTaskLoop(withSkills(h, "a", { tokens: before.work.tokens! - 1 }, { profile: "p" }))))
       .toMatchObject({ code: "syncskill-failed", message: "syncskill-failed:E_PROFILE_NOT_FOUND" });
     for (const syncskill of [undefined, { bin: null, env: {} }]) {
       expect(errorOf(await serviceOf(h, syncskill).setTaskLoop(withSkills(h, "a", {}, { profile: "p" })))).toMatchObject({ code: "syncskill-unconfigured" });
@@ -226,7 +226,7 @@ describe("set-task-loop on a confirmed task rewrites its snapshot entry (C15)", 
     expect(workBody(h, "a").loopVersion).toBe(before.loopVersion);
     expect(effective(h).loop!.skills).toEqual({ names: ["x"] });
     // Unchanged (a budget-only edit) and removed stay accepted unset.
-    expect(await serviceOf(h).setTaskLoop(withSkills(h, "a", { tokens: before.work.tokens - 1 }, { names: ["x"] }))).toMatchObject({ result: { kind: "task-loop-set", loopVersion: 1 } });
+    expect(await serviceOf(h).setTaskLoop(withSkills(h, "a", { tokens: before.work.tokens! - 1 }, { names: ["x"] }))).toMatchObject({ result: { kind: "task-loop-set", loopVersion: 1 } });
     expect(snapshotOf(h).skills).toEqual([{ taskId: "a", profile: null, names: ["x"] }]);
     expect(await serviceOf(h).setTaskLoop(withSkills(h, "a", { base: 1 }, undefined))).toMatchObject({ result: { kind: "task-loop-set", loopVersion: 2 } });
     expect(Object.keys(snapshotOf(h))).not.toContain("skills");
@@ -254,7 +254,7 @@ describe("an unchanged declaration keeps its frozen entry (H3)", () => {
   it("a budget-only edit sending the same profile keeps the frozen names and spawns nothing, though syncskill now answers otherwise", async () => {
     const h = await frozenProfile();
     const now = await fakeSyncskill("profile-ok"); // would answer ["alpha", "beta"]
-    expect(await serviceOf(h, now.o).setTaskLoop(withSkills(h, "a", { tokens: workAllocation(h, "a").amount.tokens - 1 }, { profile: "p" })))
+    expect(await serviceOf(h, now.o).setTaskLoop(withSkills(h, "a", { tokens: workAllocation(h, "a").amount.tokens! - 1 }, { profile: "p" })))
       .toMatchObject({ result: { kind: "task-loop-set" } });
     expect(snapshotOf(h).skills).toEqual([{ taskId: "a", profile: "p", names: ["alpha"] }]);
     expect(readConfirmedTaskExecution(h.store, "g", "a").skills).toEqual({ profile: "p", names: ["alpha"] });
@@ -264,7 +264,7 @@ describe("an unchanged declaration keeps its frozen entry (H3)", () => {
   it("the same budget-only edit is accepted with ORCA_SYNCSKILL_BIN unset", async () => {
     const h = await frozenProfile();
     for (const [i, syncskill] of [undefined, { bin: null, env: {} }].entries()) {
-      expect(await serviceOf(h, syncskill).setTaskLoop(withSkills(h, "a", { base: i, tokens: workAllocation(h, "a").amount.tokens - 1 }, { profile: "p" })))
+      expect(await serviceOf(h, syncskill).setTaskLoop(withSkills(h, "a", { base: i, tokens: workAllocation(h, "a").amount.tokens! - 1 }, { profile: "p" })))
         .toMatchObject({ result: { kind: "task-loop-set", loopVersion: i + 1 } });
     }
     expect(snapshotOf(h).skills).toEqual([{ taskId: "a", profile: "p", names: ["alpha"] }]);

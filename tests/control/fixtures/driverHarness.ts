@@ -19,6 +19,7 @@ export const git = (cwd: string, ...args: string[]): string =>
 
 export interface HarnessOptions {
   budgetMode?: "soft" | "strict";
+  tokenPolicy?:WebFixtureOptions["tokenPolicy"];
   behaviour?: (workItemId: string) => FakeBehaviour;
   files?: (workItemId: string) => Record<string, string>;
   delayAccept?: () => Promise<void>;
@@ -50,7 +51,7 @@ export interface HarnessOptions {
  */
 export async function driverHarness(tasks: readonly WebFixtureTask[], options: HarnessOptions = {}) {
   const snapshot = profileSnapshot();
-  const h = await webFixture(snapshot, tasks, { killGraceMs: options.killGraceMs, planAgents: options.planAgents, ...(options.distinctConfigHash ? { distinctConfigHash: true } : {}), ...(options.storeNow ? { storeNow: options.storeNow } : {}) });
+  const h = await webFixture(snapshot, tasks, { tokenPolicy:options.tokenPolicy, killGraceMs: options.killGraceMs, planAgents: options.planAgents, ...(options.distinctConfigHash ? { distinctConfigHash: true } : {}), ...(options.storeNow ? { storeNow: options.storeNow } : {}) });
   const repo = await realpath(join(h.root, "repo"));
   git(repo, "init", "-q", "-b", "main");
   await writeFile(join(repo, "base.txt"), "base\n");

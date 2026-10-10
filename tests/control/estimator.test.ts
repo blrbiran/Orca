@@ -54,7 +54,7 @@ describe("frozen estimator", () => {
       expect(result).toMatchObject({ result: { kind: "estimate-created", estimateState: "queued", estimateVersion: 2 } });
       expect(lookupCommandResult(h.store, "g", command.commandId)?.originalStatus).toBe(202);
       expect(await service.createEstimate(command)).toEqual(result);
-      expect(readBudgetProposal(h.store, "g").explicitUnallocatedReserve.tokens).toBe(before.explicitUnallocatedReserve.tokens - 250000);
+      expect(readBudgetProposal(h.store, "g").explicitUnallocatedReserve.tokens).toBe(before.explicitUnallocatedReserve.tokens! - 250000);
       h.setObserved({ ...h.frozen.snapshot.profile.capabilities, contextWindowTokens: 999999 });
       expect(await service.claimEstimate("g", h.estimateId)).toBeNull();
       expect(readEstimateRecord(h.store, "g", h.estimateId)).toMatchObject({ state: "blocked-capability", reasonCode: "estimate-capability-degraded" });
@@ -73,7 +73,7 @@ describe("frozen estimator", () => {
       h.setObserved({ ...h.frozen.snapshot.profile.capabilities, handoffExecution });
       expect(await service.claimEstimate("g", h.estimateId)).toBeNull();
       expect(readEstimateRecord(h.store, "g", h.estimateId)).toMatchObject({ state: "blocked-capability", reasonCode: "estimate-capability-degraded" });
-      expect(readBudgetProposal(h.store, "g").explicitUnallocatedReserve.tokens).toBe(before.explicitUnallocatedReserve.tokens + 250000);
+      expect(readBudgetProposal(h.store, "g").explicitUnallocatedReserve.tokens).toBe(before.explicitUnallocatedReserve.tokens! + 250000);
       expect(h.store.db.prepare("SELECT count(*) AS n FROM runs").get()!.n).toBe(0);
       expect(h.store.db.prepare("SELECT count(*) AS n FROM outbox WHERE kind='estimate-claim'").get()!.n).toBe(0);
     } finally { await h.dispose(); }
@@ -97,7 +97,7 @@ describe("frozen estimator", () => {
       expect(readEstimateRecord(h.store, "g", h.estimateId)).toMatchObject({ state: invalid ? "failed" : "ready", outputHash: invalid ? null : sha256Canonical(output) });
       const after = readBudgetProposal(h.store, "g");
       expect(after.allocations.filter(a => a.ownerKind !== "reserve")).toEqual(before.allocations.filter(a => a.ownerKind !== "reserve"));
-      expect(after.explicitUnallocatedReserve.tokens).toBe(before.explicitUnallocatedReserve.tokens + 250000);
+      expect(after.explicitUnallocatedReserve.tokens).toBe(before.explicitUnallocatedReserve.tokens! + 250000);
       service.completeEstimate("g", h.estimateId, output);
       expect(readBudgetProposal(h.store, "g")).toEqual(after);
       expect(h.store.db.prepare("SELECT revision FROM groups WHERE id='g'").get()!.revision).toBe(revision);
@@ -180,7 +180,7 @@ describe("frozen estimator", () => {
       expect(readEstimateRecord(h.store, "g", h.estimateId).state).toBe("failed");
       expect(group.summary.state).toBe("blocked");
       expect(group.ledger.explicitUnallocatedReserve.tokens).toBe(0);
-      expect(group.ledger.budgetDeficit.tokens).toBe(group.ledger.used.tokens + group.ledger.committedRemaining.tokens - group.ledger.groupLimit.tokens);
+      expect(group.ledger.budgetDeficit.tokens).toBe(group.ledger.used.tokens + group.ledger.committedRemaining.tokens - group.ledger.groupLimit.tokens!);
       expect(group.ledger.budgetDeficit.tokens).toBeGreaterThan(0);
     } finally { await h.dispose(); }
   });
@@ -213,7 +213,7 @@ describe("frozen estimator", () => {
       row.state = "settled-restartable";
       h.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify(row), run!.runId);
       service.completeEstimate("g", h.estimateId, {});
-      expect(readBudgetProposal(h.store, "g").explicitUnallocatedReserve.tokens).toBe(before.explicitUnallocatedReserve.tokens + 249000);
+      expect(readBudgetProposal(h.store, "g").explicitUnallocatedReserve.tokens).toBe(before.explicitUnallocatedReserve.tokens! + 249000);
       expect(readControlGroup(h.store, "epoch", "g").ledger.used.tokens).toBe(1000);
     } finally { await h.dispose(); }
   });

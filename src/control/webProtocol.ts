@@ -1,3 +1,4 @@
+import { budgetAmountSchema } from "./schema.js";
 import { z } from "zod";
 import { usageSettlementSchema } from "./usageSettlement.js";
 import { agentSelectionSchema, amountSchema, canonicalTimestampSchema, commandEnvelopeSchema, contextWindowSchema, idSchema, panelPartialSelectionSchema, partialSelectionSchema, safeInteger } from "./schema.js";
@@ -367,7 +368,7 @@ export const dispatchEnvelopeSchema = z
     continuationIntentId: idSchema.nullable(),
     claimOrdinal: positiveSafeInteger.nullable(),
     derivedContractHash: hashSchema,
-    grants: z.object({ work: amountSchema, handoff: amountSchema }).strict(),
+    grants: z.object({ work: budgetAmountSchema, handoff: amountSchema }).strict(),
     profiles: z
       .object({ estimator: profileBindingSchema.nullable(), worker: profileBindingSchema.nullable(), handoff: profileBindingSchema.nullable() })
       .strict(),
@@ -475,7 +476,7 @@ const executionAllocationSchema = z
     ownerKind: z.enum(["task", "goal-review", "reserve"]),
     ownerId: nonemptyString,
     bucket: z.enum(["work", "handoff", "review", "reserve"]),
-    amount: amountSchema,
+    amount: budgetAmountSchema,
     fieldProvenance: amountProvenanceSchema,
   })
   .strict();
@@ -487,7 +488,7 @@ export const executionSnapshotSchema = z
     planHash: hashSchema,
     graphVersion: positiveSafeInteger,
     proposalVersion: positiveSafeInteger,
-    groupLimit: amountSchema,
+    groupLimit: budgetAmountSchema,
     budgetMode: z.enum(["strict", "soft"]),
     contextPolicy: z.object({ handoffAtContextTokens: positiveSafeInteger.nullable() }).strict(),
     profiles: z
@@ -686,17 +687,18 @@ const proposalTargetSchema = z.discriminatedUnion("scope", [
 const proposalOperationSchema = z
   .object({
     target: proposalTargetSchema,
-    value: safeInteger,
+    value: safeInteger.nullable(),
     provenance: z.enum(["complex-1m-default", "model", "human"]),
     estimateId: idSchema.optional(),
   })
   .strict()
   .superRefine((value, ctx) => {
+    if(value.value===null&&(value.target.scope!=="task"||value.target.allocation!=="work"||value.target.dimension!=="tokens"||value.provenance==="model"))issue(ctx,["value"],"nullable-task-token-ceiling-only");
     if ((value.provenance === "model") !== (value.estimateId !== undefined)) issue(ctx, ["estimateId"], "estimate-provenance-mismatch");
   });
 
 export const proposalEditPayloadSchema = z
-  .object({ baseProposalVersion: positiveSafeInteger, operations: z.array(proposalOperationSchema), proposedGroupLimit: amountSchema.optional() })
+  .object({ baseProposalVersion: positiveSafeInteger, operations: z.array(proposalOperationSchema), proposedGroupLimit: budgetAmountSchema.optional() })
   .strict();
 
 // Agent selection spec §6.2 (W6-6/W6-20): replace one selection layer of the proposal, or clear it with null.
@@ -731,7 +733,7 @@ export const confirmPayloadSchema = z
     integrationHash: hashSchema.optional(),
   })
   .strict();
-export const setLimitPayloadSchema = z.object({ limit: amountSchema }).strict();
+export const setLimitPayloadSchema = z.object({ limit: budgetAmountSchema }).strict();
 
 const effectiveImportPlanPayloadSchema = z
   .object({
@@ -746,19 +748,20 @@ const effectiveImportPlanPayloadSchema = z
 const effectiveProposalOperationSchema = z
   .object({
     target: proposalTargetSchema,
-    value: safeInteger,
+    value: safeInteger.nullable(),
     provenance: z.enum(["complex-1m-default", "model", "human"]),
     estimateId: idSchema.nullable(),
   })
   .strict()
   .superRefine((value, ctx) => {
+    if(value.value===null&&(value.target.scope!=="task"||value.target.allocation!=="work"||value.target.dimension!=="tokens"||value.provenance==="model"))issue(ctx,["value"],"nullable-task-token-ceiling-only");
     if ((value.provenance === "model") !== (value.estimateId !== null)) issue(ctx, ["estimateId"], "estimate-provenance-mismatch");
   });
 export const effectiveProposalEditPayloadSchema = z
   .object({
     baseProposalVersion: positiveSafeInteger,
     operations: z.array(effectiveProposalOperationSchema),
-    proposedGroupLimit: amountSchema.nullable(),
+    proposedGroupLimit: budgetAmountSchema.nullable(),
   })
   .strict();
 export const effectiveHandoffStopPayloadSchema = z.object({ handoffDeadlineAt: canonicalTimestampSchema }).strict();
@@ -813,7 +816,7 @@ export const setTaskLoopPayloadSchema = z
     baseLoopVersion: safeInteger,
     plan: nonemptyString,
     inputs: loopInputsSchema,
-    work: z.object({ tokens: positiveSafeInteger, activeMs: positiveSafeInteger, attempts: positiveSafeInteger }).strict(),
+    work: z.object({ tokens: safeInteger.nullable(), activeMs: positiveSafeInteger, attempts: positiveSafeInteger }).strict(),
     // W5: the work dimensions taken from an estimate's suggestion for this task, checked like proposal-edit's model
     // fields; a dimension absent here that changes is the person's own.
     workProvenance: z.object({ tokens: modelProvenanceSchema.optional(), activeMs: modelProvenanceSchema.optional(), attempts: modelProvenanceSchema.optional() }).strict().optional(),
@@ -830,10 +833,10 @@ const answerInputSchema = z.discriminatedUnion("kind", [
 const decisionInputSchema = z.object({ id: nonemptyString, accept: z.boolean() }).strict();
 const ideaSchema = nonemptyString.refine((idea) => Buffer.byteLength(idea, "utf8") <= IDEA_MAX_BYTES, "idea-too-large");
 export const requirementOpenPayloadSchema = z.object({
-  groupId: idSchema, repoId: idSchema, idea: ideaSchema, limit: amountSchema.optional(), agent: panelPartialSelectionSchema.optional(), contentLanguage: z.enum(["en", "zh"]).optional(),
+  groupId: idSchema, repoId: idSchema, idea: ideaSchema, limit: budgetAmountSchema.optional(), agent: panelPartialSelectionSchema.optional(), contentLanguage: z.enum(["en", "zh"]).optional(),
 }).strict();
 const effectiveRequirementOpenPayloadSchema = z.object({
-  groupId: idSchema, repoId: idSchema, idea: ideaSchema, limit: amountSchema, agent: panelPartialSelectionSchema.nullable(), contentLanguage: z.enum(["en", "zh"]),
+  groupId: idSchema, repoId: idSchema, idea: ideaSchema, limit: budgetAmountSchema, agent: panelPartialSelectionSchema.nullable(), contentLanguage: z.enum(["en", "zh"]),
 }).strict();
 export const requirementAnswerPayloadSchema = z.object({
   roundNo: positiveSafeInteger, answers: z.array(answerInputSchema), glossaryDecisions: z.array(decisionInputSchema), adrDecisions: z.array(decisionInputSchema),
@@ -1027,7 +1030,7 @@ export const requirementSummarySchema = z.object({
   draftNo: positiveSafeInteger.nullable(), draftState: z.enum(DRAFT_STATES).nullable(),
   waiting: z.enum(REQUIREMENT_WAITING).nullable(), reasonCode: nonemptyString.nullable(),
   exportState: z.enum(["not-due", "pending", "done", "conflict"]),
-  used: amountSchema, reserved: amountSchema, limit: amountSchema, usageUnknown: z.boolean(),
+  used: amountSchema, reserved: amountSchema, limit: budgetAmountSchema, usageUnknown: z.boolean(),
   // Final review finding 4: the requirement's call blocked by the driver, and why; the group view refuses a clarifying
   // group (DR25), so this is where its reason and its run-scoped recovery-retry are shown.
   blockedRun: z.object({ runId: idSchema, reason: nonemptyString.nullable() }).strict().nullable(),
@@ -1096,7 +1099,7 @@ export const requirementViewSchema = z.object({
     acceptedDraftNo: positiveSafeInteger.nullable(), document: z.object({ sha256: hashSchema, frozenAt: canonicalTimestampSchema }).strict().nullable(),
     export: requirementExportSchema,
   }).strict(),
-  ledger: z.object({ limit: amountSchema, used: amountSchema, reserved: amountSchema, usageUnknown: z.boolean() }).strict(),
+  ledger: z.object({ limit: budgetAmountSchema, used: amountSchema, reserved: amountSchema, usageUnknown: z.boolean() }).strict(),
   rounds: z.array(roundBodySchema),
   drafts: z.array(draftBodySchema.omit({ plan: true })),
   document: z.string(),
@@ -1122,7 +1125,7 @@ export const allocationViewSchema = z
     ownerId: nonemptyString,
     bucket: z.enum(["work", "handoff", "review", "reserve"]),
     state: z.enum(["draft-encumbered", "confirmed", "active", "held", "continuing", "retrying", "terminal", "unknown"]),
-    amount: amountSchema,
+    amount: budgetAmountSchema,
     fieldProvenance: amountProvenanceSchema,
   })
   .strict()
@@ -1145,7 +1148,7 @@ export const workItemProgressSchema = z
     runId: idSchema,
     step: z.enum(["queued", "plan", "execute", "verify", "succeeded", "blocked_waiting_human", "exhausted", "cancelled", "failed"]).nullable(),
     attempt: z.object({ current: safeInteger, max: safeInteger }).strict().nullable(),
-    tokens: z.object({ used: safeInteger, grant: safeInteger }).strict().nullable(),
+    tokens: z.object({ used: safeInteger, grant: safeInteger.nullable() }).strict().nullable(),
     lastTransitionAt: nonemptyString.nullable(),
   })
   .strict();
@@ -1244,14 +1247,15 @@ export const runViewSchema = z
     providerAttemptOrdinal: safeInteger,
     profile: profileBindingSchema,
     used: amountSchema,
-    remaining: amountSchema,
+    tokenRemainingStatus:z.enum(["known","unlimited","unknown"]).optional(),
+    remaining: budgetAmountSchema,
     failureCode: nonemptyString.nullable(),
     blockedReason: nonemptyString.nullable(),
     // Issue fixes spec §4.2(1), (5): ccloop's own reason for the terminal it reported, and the drive record's outcome (the
     // Retry-task button keys on it). Optional on the wire like `git`; the server always gives both, null when absent.
     stopReason: nonemptyString.nullable().optional(),
     outcome: nonemptyString.nullable().optional(),
-    unknownUsageSettlement: z.object({ generation: positiveSafeInteger, highWater: safeInteger, remaining: z.object({ work: amountSchema, handoff: amountSchema }).strict(), allowed: z.boolean(), refusalReason: nonemptyString.nullable(), settlement: usageSettlementSchema.optional() }).strict().optional(),
+    unknownUsageSettlement: z.object({ generation: positiveSafeInteger, highWater: safeInteger, remaining: z.object({ work: budgetAmountSchema, handoff: amountSchema }).strict(), allowed: z.boolean(), refusalReason: nonemptyString.nullable(), settlement: usageSettlementSchema.optional() }).strict().optional(),
     continuable: z.boolean(),
     evidenceIds: sortedIdArraySchema,
     // Board spec 2026-10-03 D4: the git facts the run's drive record holds -- the workspace mode it ran in, the work
@@ -1380,10 +1384,10 @@ export const groupViewSchema = z
       .strict(),
     ledger: z
       .object({
-        groupLimit: amountSchema,
+        groupLimit: budgetAmountSchema,
         used: amountSchema,
         committedRemaining: amountSchema,
-        explicitUnallocatedReserve: amountSchema,
+        explicitUnallocatedReserve: budgetAmountSchema,
         budgetDeficit: amountSchema,
         usageUnknown: z.boolean(),
       })
@@ -1532,7 +1536,7 @@ const commandResultSchema = z.discriminatedUnion("kind", [
       ),
     })
     .strict(),
-  z.object({ kind: z.literal("limit-set"), limit: amountSchema }).strict(),
+  z.object({ kind: z.literal("limit-set"), limit: budgetAmountSchema }).strict(),
   z.object({ kind: z.literal("workspace-mode-set"), repoId: idSchema, workspaceMode: workspaceModeSchema }).strict(),
   z.object({ kind: z.literal("integration-scheme-set"), repoId: idSchema, integration: integrationSchemeSchema }).strict(),
   z.object({ kind: z.literal("group-integration-set"), groupId: idSchema, integration: integrationSchemeSchema }).strict(),

@@ -343,7 +343,7 @@ describe("immutable plan import", () => {
       expect(result).toMatchObject({ result: { kind: "imported", estimateState: state } });
       expect(h.store.db.prepare("SELECT id FROM scheduler_wakes WHERE group_id='g'").get()).toBeUndefined();
       const proposal = readBudgetProposal(h.store, "g");
-      expect(proposal.explicitUnallocatedReserve.tokens).toBe(1_820_000);
+      expect(proposal.explicitUnallocatedReserve.tokens).toBeNull();
     } finally { await h.dispose(); }
   });
 

@@ -88,6 +88,13 @@ describe("a requirement from idea to landed work, against real ccloop (N1 spec Â
       expect(readWebGroup(runtime.store, "g").used).toEqual(usedBeforeAccept);
       const estimateId = (accepted as { result: { estimateId: string } }).result.estimateId;
       await until(() => readEstimateRecord(runtime.store, "g", estimateId).state === "ready" && readRequirementGroup(runtime.store, "g").requirement.export.state === "done", 120_000, "the estimate and the export", 50);
+      // The pinned legacy peer is exercised with explicit finite task ceilings through the owner API.
+      if((await runtime.port.readFeatures?.())?.tokenPolicy!=="optional-v1") {
+        for(const task of readArchivedPlan(runtime.store,"g").plan.tasks){
+          const work=readBudgetProposal(runtime.store,"g").allocations.find(a=>a.ownerId===task.taskId&&a.bucket==="work")!.amount;
+          expect(await runtime.service.setTaskLoop(raw(runtime,`finite-${task.taskId}`,"set-task-loop",{baseLoopVersion:0,plan:task.loop!.planId,inputs:task.loop!.inputs,work:{tokens:3_000_000,activeMs:work.activeMs,attempts:work.attempts}},{kind:"task",groupId:"g",taskId:task.taskId}))).not.toHaveProperty("error");
+        }
+      }
       const requirement = readRequirementGroup(runtime.store, "g").requirement;
       const selections = await resolveGroupSelections({ store: runtime.store, port: runtime.port }, "g", "human");
       const profile = runtime.router.list()[0]!, hash = profile.profileHash;

@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { lstatSync, realpathSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import { z } from "zod";
-import type { AgentsView, ExecutionPort, ExecutionReport, ExecutionStatus, StartEnvelope } from "./executionPort.js";
+import type { ControlFeatures, AgentsView, ExecutionPort, ExecutionReport, ExecutionStatus, StartEnvelope } from "./executionPort.js";
 import type { ArtifactRef, HandoffAck, HandoffRequest } from "./types.js";
 import type { AgentResolution, PartialSelection } from "./agentSelection.js";
 import { ControlError, type NonDurableControlErrorCode } from "./errors.js";
@@ -28,10 +28,12 @@ const amountSchema=z.object({tokens:safeInteger,activeMs:safeInteger,attempts:sa
 // Accounts spec §14 / D7: `byModel` is optional so this Orca reads a ccloop that emits it and one that does not (the
 // re-pin must not make every collect fail); its entries are strict, sorted and unique, so a malformed one refuses the answer.
 const eventSchema=z.object({runId:z.string().min(1),generation:safeInteger.positive(),eventSeq:safeInteger.positive(),bucket:z.enum(["work","handoff"]),cumulative:amountSchema.nullable(),source:artifactSchema,byModel:byModelSchema.nullable().optional()}).strict();
-const terminalSchema=z.object({status:z.enum(["succeeded","blocked_waiting_human","exhausted","cancelled","failed"]),currentAttempt:safeInteger,attemptsUsed:safeInteger,lastTransitionAt:z.string(),waitingOnHuman:z.boolean(),stopReason:z.string().nullable(),budgetSnapshot:z.object({attemptsRemaining:safeInteger,timeRemainingMs:safeInteger,tokenBudgetRemaining:safeInteger}).strict(),recentFailures:z.array(z.object({rejectCategory:z.string(),primaryTargetPaths:z.array(z.string()),failingCommand:z.string().nullable()}).strict())}).strict();
+const terminalSchema=z.object({status:z.enum(["succeeded","blocked_waiting_human","exhausted","cancelled","failed"]),currentAttempt:safeInteger,attemptsUsed:safeInteger,lastTransitionAt:z.string(),waitingOnHuman:z.boolean(),stopReason:z.string().nullable(),budgetSnapshot:z.object({attemptsRemaining:safeInteger,timeRemainingMs:safeInteger,tokenBudgetRemaining:safeInteger.nullable()}).strict(),recentFailures:z.array(z.object({rejectCategory:z.string(),primaryTargetPaths:z.array(z.string()),failingCommand:z.string().nullable()}).strict())}).strict();
 // Labels and progress spec §3.2 (§8 R4, R5): progress is optional, so an Orca landed before ccloop emits it still reads
 // every answer (push Orca first); its shape is strict, so a wrong one refuses the whole answer.
 const collectionSchema=z.object({events:z.array(eventSchema),candidate:candidateSchema.nullable(),terminal:terminalSchema.nullable(),progress:runProgressSchema.nullable().optional()}).strict();
+const collectionV4Schema=collectionSchema.extend({terminal:terminalSchema.extend({waitingCause:z.literal("token-allowance").optional(),allowanceNextPhase:z.enum(["plan","execute","verify"]).optional(),budgetSnapshot:z.object({attemptsRemaining:safeInteger,timeRemainingMs:safeInteger,tokenBudgetRemaining:safeInteger.nullable(),tokenRemainingStatus:z.enum(["known","unlimited","unknown"])}).strict()}).nullable()});
+
 const evidenceSchema=z.object({artifactId:z.string().min(1),hash:z.string().regex(/^[a-f0-9]{64}$/),base64:z.string()}).strict();
 // Agent selection spec §4.6: capabilities protocol 3. Two shapes, chosen by the request: `agent: null` answers the
 // table view, a partial selection answers that selection's resolution (its seven-key capability view carries no protocol tag).
@@ -105,7 +107,19 @@ export function createCcloopExecutionPort(options:{binary:string;agentsTablePath
   try{return await raw(method,payload,Math.min(options.timeoutMs,TASK_RESULT_RPC_TIMEOUT_MS));}
   catch(error){if(peerErrorCode(error)==='control-command-invalid'&&optionalIdentity()===identity){unsupportedIdentity=identity;throw new TaskResultUnsupportedError();}throw error;}
  };
+ const featuresSchema=z.object({protocol:z.literal(1),tokenPolicy:z.literal("optional-v1").optional(),savedResultRecovery:z.literal("v1").optional(),agentInstallationUpdate:z.literal("v1").optional()}).strict();
+ let featuresCache:{identity:string;value:ControlFeatures}|null=null;
+ const readFeatures=async():Promise<ControlFeatures>=>{
+  const identity=optionalIdentity();if(featuresCache?.identity===identity)return {...featuresCache.value};
+  let value:ControlFeatures;
+  try{value=parse(featuresSchema,await raw("features",{}));}
+  catch(error){if(peerErrorCode(error)!=="control-command-invalid")throw error;value={protocol:1};}
+  if(optionalIdentity()!==identity)throw new ControlError("control-binary-invalid","changed-during-feature-probe");
+  featuresCache={identity,value};return {...value};
+ };
+ const requireFeatures=async(input:StartEnvelope)=>{if(input.protocol===4&&(await readFeatures()).tokenPolicy!=="optional-v1")throw new ControlError("control-token-policy-unsupported");};
  const port:ExecutionPort={
+  readFeatures,
   async collectTaskResults(input,afterRevision){return parse(taskResultCollectionSchema,await optionalRaw('task-results',{input,afterRevision}));},
   async readTaskResultEvidence(input,manifestRef,ref){
    const value=parse(evidenceSchema,await optionalRaw('read-task-result-evidence',{input,manifestRef,ref}));
@@ -134,10 +148,10 @@ export function createCcloopExecutionPort(options:{binary:string;agentsTablePath
    try{answer=await raw("capabilities",{agent:null});}catch(error){throw named(error);}
    const {protocol:_protocol,...view}=parse(agentsViewSchema,answer);return view;
   },
-  async accept(input){return parse(executionStatusSchema,await raw("accept",input)) as ExecutionStatus;},
-  async inspect(input){return parse(executionStatusSchema,await raw("inspect",input)) as ExecutionStatus;},
-  async requestHandoff(input,request){return parse(handoffAckSchema,await raw("handoff",{input,request})) as HandoffAck;},
-  async collect(input,afterSeq){const response=parse(collectionSchema,await raw("collect",{input,afterSeq}));for(const ref of [...response.events.map(event=>event.source),...(response.candidate?.artifacts??[]),...(response.candidate?[response.candidate.handoff]:[]),...(response.candidate?.stopProof?[response.candidate.stopProof.source]:[])])evidenceContext.set(key(ref),input);return {events:response.events,candidate:response.candidate,terminal:response.terminal?{outcome:response.terminal.status,attemptSha:null,sourceDir:input.work.sourceDir,repoDir:join(input.work.sourceDir,"repo"),...(response.terminal.stopReason?{stopReason:boundStopReason(response.terminal.stopReason)}:{})}:null,progress:response.progress??null} as ExecutionReport;},
+  async accept(input){await requireFeatures(input);return parse(executionStatusSchema,await raw("accept",input)) as ExecutionStatus;},
+  async inspect(input){await requireFeatures(input);return parse(executionStatusSchema,await raw("inspect",input)) as ExecutionStatus;},
+  async requestHandoff(input,request){await requireFeatures(input);return parse(handoffAckSchema,await raw("handoff",{input,request})) as HandoffAck;},
+  async collect(input,afterSeq){await requireFeatures(input);const response=parse(input.protocol===4?collectionV4Schema:collectionSchema,await raw("collect",{input,afterSeq}));for(const ref of [...response.events.map(event=>event.source),...(response.candidate?.artifacts??[]),...(response.candidate?[response.candidate.handoff]:[]),...(response.candidate?.stopProof?[response.candidate.stopProof.source]:[])])evidenceContext.set(key(ref),input);return {events:response.events,candidate:response.candidate,terminal:response.terminal?{outcome:response.terminal.status,...(input.protocol===4?{tokenRemainingStatus:(response.terminal.budgetSnapshot as {tokenRemainingStatus?:string}).tokenRemainingStatus,...("waitingCause" in response.terminal?{waitingCause:response.terminal.waitingCause,allowanceNextPhase:(response.terminal as {allowanceNextPhase?:string}).allowanceNextPhase}:{})}:{}),attemptSha:null,sourceDir:input.work.sourceDir,repoDir:join(input.work.sourceDir,"repo"),...(response.terminal.stopReason?{stopReason:boundStopReason(response.terminal.stopReason)}:{})}:null,progress:response.progress??null} as ExecutionReport;},
   async readEvidence(ref:ArtifactRef){
    const input=evidenceContext.get(key(ref));if(!input)throw new ControlError("control-evidence-context-missing");const value=parse(evidenceSchema,await raw("read-evidence",{input,ref}));
    if(value.artifactId!==ref.artifactId||value.hash!==ref.hash)throw new ControlError("artifact-hash-mismatch");

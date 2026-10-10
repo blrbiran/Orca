@@ -7,13 +7,13 @@ import type { CorrectionForm } from "./api.js";
 import type { PanelLanguage } from "./i18n.js";
 
 export type AnswerChoice = { kind: "recommended" } | { kind: "text"; text: string };
-export interface NewRequirementDraft { idea: string; tokens: number; language: PanelLanguage; agent: string }
+export interface NewRequirementDraft { idea: string; tokens: number|null; language: PanelLanguage; agent: string }
 export interface AnswerDraft { choice: Record<string, AnswerChoice>; decisions: Record<string, boolean> }
 export interface DetailDrafts {
   newRequirement: Record<string, NewRequirementDraft>; // key: repoId
   answer: Record<string, AnswerDraft>; // key: answerKey
   feedback: Record<string, string>; // key: feedbackKey
-  limit: Record<string, number>; // key: limitKey
+  limit: Record<string, number|null>; // key: limitKey
   correction: Record<string, CorrectionForm>; // key: correctionKey
 }
 export type DraftSlot = keyof DetailDrafts;

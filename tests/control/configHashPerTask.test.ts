@@ -116,7 +116,7 @@ describe("per-task configHash, with a distinct configHash per selection (audit 2
       await writeFile(t.deps.agentsTablePath, JSON.stringify({ status: "succeeded", spent: 7, holdMs: 0, files: { "shared.txt": "A\nB\n" } }));
       // As driverReconcile.test.ts: the default reserve is smaller than one task's budget, so the ceiling is raised.
       const limit = readControlGroup(t.h.store, "epoch-test", "g").ledger.groupLimit;
-      const raised = t.service.setLimit(t.h.command("set-limit", { limit: { ...limit, tokens: limit.tokens + 10_000_000 } }));
+      const raised = t.service.setLimit(t.h.command("set-limit", { limit: { ...limit, tokens: limit.tokens! + 10_000_000 } }));
       if ("error" in raised) throw new Error(`set-limit refused: ${JSON.stringify(raised.error)}`);
       const ids = [await t.claim(), await t.claim()];
       const selectionsFile = `${t.deps.agentsTablePath}.selections`;

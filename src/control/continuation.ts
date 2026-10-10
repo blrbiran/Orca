@@ -1,3 +1,6 @@
+import { hasTokenPolicy, inheritedWorkUsage } from "./fundedAllowance.js";
+import type { Grant } from "./types.js";
+import { finiteCommitment, remainingBudget } from "./tokenPolicy.js";
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { ControlStore } from "./store.js";
@@ -35,9 +38,9 @@ export function claimContinuation(store:ControlStore,input:ContinuationClaimInpu
   if(group.graphVersion!==graphVersion||predecessor.graphVersion!==graphVersion)throw new ControlError("graph-version-conflict");
   if(work.targetVersion!==targetVersion||predecessor.targetVersion!==targetVersion||work.configHash!==predecessor.configHash)throw new ControlError("target-version-conflict");
   if(store.db.prepare("SELECT id FROM runs WHERE group_id=? AND work_item_id=? AND active=1").get(groupId,workItemId))throw new ControlError("work-already-active");
-  const grant={work:subtract(predecessor.grant.work,predecessor.cumulative.work),handoff:subtract(predecessor.grant.handoff,predecessor.cumulative.handoff)};
+  const grant={work:remainingBudget(predecessor.grant.work,predecessor.cumulative.work),handoff:subtract(predecessor.grant.handoff,predecessor.cumulative.handoff)};
   if(dimensions.some(key=>grant.work[key]===0))throw new ControlError("continuation-budget-unavailable");
-  const total=add(grant.work,grant.handoff),reserved=add(group.reserved,total);if(!fits(group.used,reserved,group.limit))throw new ControlError("group-budget-unavailable");
+  const total=add(finiteCommitment(grant.work),grant.handoff),reserved=add(group.reserved,total);if(!fits(group.used,reserved,group.limit))throw new ControlError("group-budget-unavailable");
   group.reserved=reserved;group.budgetVersion++;group.status="running";saveGroup(store,group);
   const claim:Claim={groupId,workItemId,taskId,runId:"run-"+randomUUID(),generation:1,graphVersion,targetVersion,commandId:meta.commandId,configHash:work.configHash,agent:work.agent,grant,ownerToken:randomUUID()};
   const run:RunRecord={...claim,...(executionProfile?{executionProfile}:{}),...(handoffProfile?{handoffProfile}:{}),executionId:null,state:"claimed",checkpointId:null,recoverable:false,remaining:structuredClone(grant),cumulative:{work:zero(),handoff:zero()},unknown:{work:true,handoff:true},highWater:0,breaches:[],handoffWorkItemId:null,predecessorRunId};
@@ -79,7 +82,7 @@ interface ContinuationWork {
   pendingRunId: string | null;
   claimOrdinal?: number;
   lineageRunIds?: string[];
-  grant: { work: Record<string, number>; handoff: Record<string, number> };
+  grant: Grant;
   continuation?: RegisteredContinuation;
 }
 
@@ -158,16 +161,19 @@ function registerContinuation(store: ControlStore, groupId: string, selection: {
   }
   const run = assertPredecessor(store, groupId, work, selection.predecessorRunId, selection.checkpointId);
   const proposal = readBudgetProposal(store, groupId);
-  for (const allocation of proposal.allocations) {
+  for (const allocation of hasTokenPolicy(store,groupId)?[]:proposal.allocations) {
     if (allocation.ownerKind !== "task" || allocation.ownerId !== work.workItemId) continue;
     const remaining = run.remaining[allocation.bucket as "work" | "handoff"];
     if (!remaining) continue;
     for (const dimension of dimensions) {
       // A commitment that was already given back cannot be continued; that is corruption, not a refusal.
-      if (allocation.amount[dimension] < remaining[dimension]) throw new ControlError("recovery-blocked", `continuation-commitment:${work.workItemId}:${allocation.bucket}`);
+      if (allocation.amount[dimension]!==null&&allocation.amount[dimension]! < remaining[dimension]!) throw new ControlError("recovery-blocked", `continuation-commitment:${work.workItemId}:${allocation.bucket}`);
     }
   }
-  if (dimensions.some((dimension) => work.grant.work[dimension] <= 0)) throw new ControlError("budget-overrun", work.workItemId);
+  const inherited=hasTokenPolicy(store,groupId)?inheritedWorkUsage(store,groupId,work.workItemId):undefined;
+  if(inherited===null)throw new ControlError("recovery-blocked","usage-unknown");
+  const available=inherited?remainingBudget(work.grant.work,inherited):work.grant.work;
+  if (dimensions.some((dimension) => available[dimension]!==null&&available[dimension]! <= 0)) throw new ControlError("budget-overrun", work.workItemId);
   const { desiredIntentId, continuationIntentId } = continuationIdentity(groupId, resumeRevision, work.workItemId, selection.predecessorRunId);
   const registered: RegisteredContinuation = {
     resumeRevision, taskId: work.workItemId, desiredIntentId, continuationIntentId,

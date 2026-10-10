@@ -1,3 +1,4 @@
+import { DEFAULT_RECONCILE_TOKENS } from "../control/tokenPolicy.js";
 import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -262,7 +263,7 @@ function intentOf(contract: unknown): SideIntent | null {
 
   const perAttemptTimeoutMs = positiveInt(c?.executionPolicy?.perAttemptTimeoutMs);
   const totalRuntimeBudgetMs = positiveInt(c?.executionPolicy?.totalRuntimeBudgetMs);
-  const tokenBudget = positiveInt(c?.executionPolicy?.tokenBudget);
+  const tokenBudget = c?.executionPolicy?.tokenBudget===null?DEFAULT_RECONCILE_TOKENS:positiveInt(c?.executionPolicy?.tokenBudget);
   if (perAttemptTimeoutMs === null || totalRuntimeBudgetMs === null || tokenBudget === null) return null;
 
   // maxAttempts is deliberately NOT read: it is pinned to 1 below, so

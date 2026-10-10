@@ -31,9 +31,13 @@ const refuse = (code) => { process.stderr.write(`${code}\n`); process.exit(2); }
 // Real ccloop refuses any envelope that is not protocol 2 by name, and a protocol-2 one without a selection as invalid.
 // Human ruling S6 (2026-09-27, session f341f05f) ERRATUM: real ccloop now refuses any envelope that is not protocol 3
 // by name, and one without a selection or a known work kind as invalid.
-const envelopeOk = (input) => { if (input?.protocol !== 3) refuse("control-protocol-unsupported"); if (input.work?.kind !== "loop" && input.work?.kind !== "single-call") refuse("control-request-invalid"); if (input.claim?.agent === undefined) refuse("control-request-invalid"); return true; };
+const envelopeOk = (input) => { if (input?.protocol !== 3 && !(input?.protocol === 4 && config.features?.tokenPolicy === "optional-v1")) refuse("control-protocol-unsupported"); if (input.work?.kind !== "loop" && input.work?.kind !== "single-call") refuse("control-request-invalid"); if (input.claim?.agent === undefined) refuse("control-request-invalid"); return true; };
 let value;
-if (method === "capabilities") {
+if (method === "features") {
+ if (config.featuresUnsupported || !config.features) refuse("control-command-invalid");
+ value = config.features;
+}
+else if (method === "capabilities") {
   // Capabilities v3 requires the `agent` key (null for the table view); `{}` is refused as real ccloop refuses it.
   if (!Object.hasOwn(payload, "agent")) refuse("control-request-invalid");
   if (config.mode === "protocol-2") value = { protocol:2,...view };

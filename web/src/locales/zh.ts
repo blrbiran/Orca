@@ -321,6 +321,7 @@ export const zh: Translation<typeof en> = {
       notReported: "尚未上报",
       attemptUnknown: "尝试次数未知",
       attempt: "尝试 {{current}}/{{max}}",
+      tokensUnlimited: "已使用 {{used}} token · 上限不限",
       tokensUnknown: "token 未知",
       tokensOfZero: "token {{used}} / 0",
       tokensPercent: "token {{percent}}%（阶段结束时上报）",
@@ -484,6 +485,7 @@ export const zh: Translation<typeof en> = {
     reread: "重新读取",
   },
   budget: {
+    unlimited: "不限",
     ownerSetsLimit: "只有 owner 能修改组的额度。",
     region: "预算提案",
     heading: "提案 v{{version}} · {{state}}",
@@ -517,22 +519,26 @@ export const zh: Translation<typeof en> = {
   },
   loopPlan: {
     plan: {
-      standard: { v1: { name: "标准" }, v2: { name: "标准" } },
+      standard: { v1: { name: "标准" }, v2: { name: "标准" }, v3: { name: "标准" } },
       bugfix: {
         v1: { name: "修 bug（先红后绿）", discipline: "先写能复现的失败测试再修（由模型核对，不是机械证明）" },
         v2: { name: "修 bug（先红后绿）", discipline: "先写能复现的失败测试再修（由模型核对，不是机械证明）" },
+        v3: { name: "修 bug（先红后绿）", discipline: "先写能复现的失败测试再修（由模型核对，不是机械证明）" },
       },
       refactor: {
         v1: { name: "安全重构", discipline: "不改可观察行为（写给 agent 的约束；只有检查命令是硬的）" },
         v2: { name: "安全重构", discipline: "不改可观察行为（写给 agent 的约束；只有检查命令是硬的）" },
+        v3: { name: "安全重构", discipline: "不改可观察行为（写给 agent 的约束；只有检查命令是硬的）" },
       },
       design: {
         v1: { name: "先写设计／文档", discipline: "交付物是文档，不改代码（由模型核对，不是机械证明）" },
         v2: { name: "先写设计／文档", discipline: "交付物是文档：由命令检查它存在且非空；「不改代码」是写给 agent 的约束" },
+        v3: { name: "先写设计／文档", discipline: "交付物是文档：由命令检查它存在且非空；「不改代码」是写给 agent 的约束" },
       },
       investigate: {
         v1: { name: "只调研不改代码", discipline: "只调研，结论写进报告文件，别的都不改（由模型核对，不是机械证明）" },
         v2: { name: "只调研不改代码", discipline: "只调研，结论写进报告文件：由命令检查它存在且非空" },
+        v3: { name: "只调研不改代码", discipline: "只调研，结论写进报告文件：由命令检查它存在且非空" },
       },
     },
     title: { line: "{{name}} · v{{version}} · {{how}}", byHand: "人指定", noLabel: "无标签，按默认", byLabel: "按标签 `{{label}}` 选择", changed: " · 已修改" },
@@ -947,6 +953,8 @@ export const zhErrors: Record<string, string> = {
   "continuation-budget-unavailable": "续跑所需的预算不够。",
   "continuation-identity-conflict": "续跑身份冲突。",
   "continuation-predecessor-unrecoverable": "前一个运行无法恢复，不能续跑。",
+  "active-unbounded-budget-conflict": "设置有限上限前，请停止并结算正在进行的不限额运行。",
+  "control-token-policy-unsupported": "当前 ccloop 安装不支持不限 token 的策略。",
   "control-capability-unsupported": "所需能力不受支持：{{message}}",
   "control-estimator-unconfigured": "面板没有配置估算 profile。",
   "control-evidence-unavailable": "证据不可用。",

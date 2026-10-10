@@ -1,3 +1,4 @@
+import type { TokenPolicy } from "./tokenPolicy.js";
 import type { Candidate, Claim, StopProof, UsageEvent, ArtifactRef, HandoffRequest, HandoffAck } from "./types.js";
 import type { TaskResultCollectionV1 } from './taskResultProtocol.js';
 import type { RunProgress } from "./schema.js";
@@ -9,17 +10,19 @@ import type { AgentResolution, ContextWindow, PartialSelection } from "./agentSe
 // Syncskill integration spec §10.6: skillPluginDir only for a run with skills (ccloop protocol 3, additive).
 export interface LoopWork { kind:"loop";contract:unknown;targetRepo:string;base:string;sourceDir:string;skillPluginDir?:string;codexSkillsDir?:string }
 export interface SingleCallWork { kind:"single-call";prompt:string;responseSchema:Record<string,unknown>;maxOutputTokens:number;sourceDir:string }
-export interface StartEnvelope { protocol:3;claim:Claim;contractHash:string;inputCheckpoint:InputCheckpointV1|null; work:LoopWork|SingleCallWork }
+export interface StartEnvelope { protocol:3|4;tokenPolicy?:TokenPolicy;claim:Claim;contractHash:string;inputCheckpoint:InputCheckpointV1|null; work:LoopWork|SingleCallWork }
 export type ExecutionStatus={kind:"absent"}|{kind:"accepted";executionId:string;configHash:string}|{kind:"unknown"}|{kind:"stopped";proof:StopProof};
 export interface ExecutionReport {
  events:UsageEvent[];candidate:Candidate|null;
- terminal:{outcome:"succeeded"|"blocked_waiting_human"|"exhausted"|"cancelled"|"failed";attemptSha:string|null;sourceDir:string;repoDir:string;stopReason?:string|null}|null;
+ terminal:{tokenRemainingStatus?:"known"|"unlimited"|"unknown";waitingCause?:"token-allowance";allowanceNextPhase?:"plan"|"execute"|"verify";outcome:"succeeded"|"blocked_waiting_human"|"exhausted"|"cancelled"|"failed";attemptSha:string|null;sourceDir:string;repoDir:string;stopReason?:string|null}|null;
  /** Labels and progress spec §3.2 (§8 R5): optional so the synthetic ports need no edit; absent reads as null. */
  progress?:RunProgress|null;
 }
 /** Agent selection spec §4.6: `control capabilities` with `agent: null` -- the installation table as ccloop reads it. */
 export interface AgentsView { installations: Array<{ id: string; kind: string; defaults: { model: string; contextWindow: ContextWindow }; contextOptions: ContextWindow[]; version: string }> }
+export interface ControlFeatures { protocol:1;tokenPolicy?:"optional-v1";savedResultRecovery?:"v1";agentInstallationUpdate?:"v1" }
 export interface ExecutionPort {
+  readFeatures?():Promise<ControlFeatures>;
   /**
    * Agent selection spec §4.6 (capabilities protocol 3 with a selection). ccloop fills the descriptor's
    * defaults, validates, materializes and answers the configHash: Orca never computes one (spec I3).

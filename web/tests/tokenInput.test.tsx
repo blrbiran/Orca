@@ -138,11 +138,11 @@ describe("RequirementsPanel limits", () => {
   const start = (): void => {
     fireEvent.change(within(form()).getByRole("textbox", { name: "Idea" }), { target: { value: "Print a page." } });
   };
-  it("shows the default limit grouped and sends the typed grouped amount as an integer", () => {
+  it("shows the default unlimited ceiling and sends a typed grouped amount as an integer", () => {
     const onCommand = vi.fn();
     mount(onCommand);
     const limit = within(form()).getByRole("textbox", { name: "Token limit" }) as HTMLInputElement;
-    expect(limit.value).toBe("10,000,000");
+    expect(limit.value).toBe("");
     start();
     fireEvent.change(limit, { target: { value: "12,345" } });
     fireEvent.click(within(form()).getByRole("button", { name: "Start clarifying" }));

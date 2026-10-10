@@ -1,3 +1,4 @@
+import type { BudgetAmount } from "./tokenPolicy.js";
 import type { CapabilityViewV1 } from "./webProtocol.js";
 import type { AgentSelection } from "./agentSelection.js";
 
@@ -6,7 +7,7 @@ export type WebWorkKind = "budget-estimate" | "task" | "handoff" | "goal-review"
 export interface ExecutionProfileBinding { workKind: WebWorkKind; profileId: string; profileHash: string }
 export type BudgetMode = "strict" | "soft";
 export interface Amount { tokens: number; activeMs: number; attempts: number; sessions: number }
-export interface Grant { work: Amount; handoff: Amount }
+export interface Grant { work: BudgetAmount; handoff: Amount }
 export interface CommandMeta { commandId: string; expectedRevision: number; by: string }
 export interface Identity {
   groupId: string; workItemId: string; taskId: string | null; runId: string;
@@ -14,7 +15,7 @@ export interface Identity {
 }
 export interface GroupInput {
   groupId: string; projectKey: string; goal: string; successConditions: string[];
-  budgetMode?: BudgetMode; limit: Amount; reviewReserve: Amount;
+  budgetMode?: BudgetMode; limit: BudgetAmount; reviewReserve: Amount;
   deadlineAt: string | null;
 }
 export interface WorkBase {
@@ -66,7 +67,7 @@ export interface Candidate extends Identity {
 export interface GroupView {
   groupId: string; revision: number; graphVersion: number; stopped: boolean;
   status: "clarifying" | "draft" | "ready" | "running" | "review" | "done" | "blocked";
-  used: Amount; reserved: Amount; limit: Amount;
+  used: Amount; reserved: Amount; limit: BudgetAmount;
 }
 export interface RunView {
   runId: string; generation: number; executionId: string | null;

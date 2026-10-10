@@ -6,7 +6,7 @@ import { amountSchema, artifactSchema, candidateSchema, idSchema, safeInteger } 
 import { canonicalBytes } from "./canonicalJson.js";
 import { ControlError } from "./errors.js";
 import type { ControlStore } from "./store.js";
-import type { ArtifactRef, Candidate, Grant } from "./types.js";
+import type { Amount, ArtifactRef, Candidate, Grant } from "./types.js";
 
 const pair = z.object({ work: amountSchema, handoff: amountSchema }).strict();
 export const usageSettlementSchema = z.object({
@@ -21,7 +21,7 @@ export const usageSettlementSchema = z.object({
 export type UsageSettlement = z.infer<typeof usageSettlementSchema>;
 export interface SettlementRun {
   runId: string; groupId: string; taskId: string | null; workItemId: string; generation: number; highWater: number;
-  graphVersion: number; targetVersion: number; executionId: string | null; grant: Grant; remaining: Grant; cumulative: Grant;
+  graphVersion: number; targetVersion: number; executionId: string | null; grant: Grant; remaining: Grant; cumulative: {work:Amount;handoff:Amount};
   unknown: { work: boolean; handoff: boolean }; usageSettlement?: unknown; checkpointId?: string | null;
   drive?: { outcome: string | null; sourceDir: string; blockedAt?: string | null }; [key: string]: unknown;
 }
@@ -93,14 +93,14 @@ export function hasValidUsageSettlement(store: ControlStore, subject: unknown): 
     if (m.runId !== run.runId || m.groupId !== run.groupId || m.taskId !== run.taskId || m.workItemId !== run.workItemId
       || m.generation !== run.generation || m.highWater !== run.highWater || run.unknown.work || run.unknown.handoff
       || store.db.prepare("SELECT seq FROM usage_events WHERE run_id=? AND seq>?").get(run.runId, run.highWater)) return false;
-    const baseline: Grant = { work: { tokens: 0, activeMs: 0, attempts: 0, sessions: 0 }, handoff: { tokens: 0, activeMs: 0, attempts: 0, sessions: 0 } };
+    const baseline: {work:Amount;handoff:Amount} = { work: { tokens: 0, activeMs: 0, attempts: 0, sessions: 0 }, handoff: { tokens: 0, activeMs: 0, attempts: 0, sessions: 0 } };
     let unknown = false;
     for (const row of store.db.prepare("SELECT body FROM usage_events WHERE run_id=? AND seq<=? ORDER BY seq").all(run.runId, run.highWater)) {
       const e = JSON.parse(String(row.body)); if (e.cumulative === null) unknown = true; else baseline[e.bucket as keyof Grant] = e.cumulative;
     }
     if (!unknown) return false;
     for (const b of ["work", "handoff"] as const) for (const d of ds) {
-      if (run.remaining[b][d] !== 0 || m.charged[b][d] !== Math.max(run.grant[b][d] - baseline[b][d], 0)
+      if (run.grant[b][d]===null || run.remaining[b][d] !== 0 || m.charged[b][d] !== Math.max(run.grant[b][d]! - baseline[b][d], 0)
         || run.cumulative[b][d] !== baseline[b][d] + m.charged[b][d]) return false;
     }
     const proof = settlementProof(store, run);

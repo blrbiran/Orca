@@ -105,7 +105,7 @@ describe("set-task-loop refusals (criterion 8)", () => {
     const h = await draft();
     try {
       const reserve = readWebGroup(h.store, "g").ledger.explicitUnallocatedReserve.tokens;
-      const tokens = workAllocation(h, "a").amount.tokens + reserve + 1;
+      const tokens = workAllocation(h, "a").amount.tokens! + reserve! + 1;
       expect(errorOf(await new WebControlService(h.deps).setTaskLoop(change(h, "a", { tokens }))))
         .toMatchObject({ code: "group-reserve-insufficient", message: "group-reserve-insufficient:tokens:1" });
       expectUntouched(h, 1);
@@ -142,13 +142,13 @@ describe("a change before confirmation (criterion 9; spec §5.2 steps 5-7)", () 
       const service = new WebControlService(h.deps);
       const before = { group: readWebGroup(h.store, "g"), work: workAllocation(h, "a") };
       const stalePayload = await h.confirmPayload();
-      expect(await service.setTaskLoop(change(h, "a", { ...CHANGED, tokens: before.work.amount.tokens + 500_000 })))
+      expect(await service.setTaskLoop(change(h, "a", { ...CHANGED, tokens: before.work.amount.tokens! + 500_000 })))
         .toMatchObject({ verb: "set-task-loop", result: { kind: "task-loop-set", taskId: "a", loopVersion: 1, proposalVersion: 2 } });
       expectConserved(h);
       const after = readWebGroup(h.store, "g"), work = workAllocation(h, "a");
       expect(after.used).toEqual(before.group.used);
-      expect(after.ledger.explicitUnallocatedReserve.tokens).toBe(before.group.ledger.explicitUnallocatedReserve.tokens - 500_000);
-      expect(work.amount).toEqual({ ...before.work.amount, tokens: before.work.amount.tokens + 500_000 });
+      expect(after.ledger.explicitUnallocatedReserve.tokens).toBe(before.group.ledger.explicitUnallocatedReserve.tokens! - 500_000);
+      expect(work.amount).toEqual({ ...before.work.amount, tokens: before.work.amount.tokens! + 500_000 });
       expect(work.fieldProvenance.tokens).toEqual({ provenance: "human", estimateId: null });
       expect(work.fieldProvenance.sessions).toEqual(before.work.fieldProvenance.sessions);
       expect(readControlGroup(h.store, "epoch", "g").workItems[0]!.loopPlan).toMatchObject({ amended: true, loopVersion: 1, inputs: { goal: "write a, changed" } });
@@ -156,7 +156,7 @@ describe("a change before confirmation (criterion 9; spec §5.2 steps 5-7)", () 
       expect(await service.confirm(h.command("confirm", await h.confirmPayload()))).toMatchObject({ result: { kind: "confirmed" } });
       const confirmed = readConfirmedTaskExecution(h.store, "g", "a");
       expect(confirmed.contract.objective.goal).toBe("write a, changed");
-      expect(confirmed.contract.executionPolicy.tokenBudget).toBe(before.work.amount.tokens + 500_000);
+      expect(confirmed.contract.executionPolicy.tokenBudget).toBe(before.work.amount.tokens! + 500_000);
     } finally { await h.dispose(); }
   });
 
@@ -174,11 +174,11 @@ describe("a change before confirmation (criterion 9; spec §5.2 steps 5-7)", () 
     const h = await draft();
     try {
       const before = { group: readWebGroup(h.store, "g"), work: workAllocation(h, "a").amount };
-      expect(await new WebControlService(h.deps).setTaskLoop(change(h, "a", { tokens: before.work.tokens - 1_000_000, attempts: before.work.attempts - 1 })))
+      expect(await new WebControlService(h.deps).setTaskLoop(change(h, "a", { tokens: before.work.tokens! - 1_000_000, attempts: before.work.attempts - 1 })))
         .toMatchObject({ result: { kind: "task-loop-set" } });
       expectConserved(h);
       const after = readWebGroup(h.store, "g");
-      expect(after.ledger.explicitUnallocatedReserve.tokens).toBe(before.group.ledger.explicitUnallocatedReserve.tokens + 1_000_000);
+      expect(after.ledger.explicitUnallocatedReserve.tokens).toBe(before.group.ledger.explicitUnallocatedReserve.tokens! + 1_000_000);
       expect(after.ledger.explicitUnallocatedReserve.attempts).toBe(before.group.ledger.explicitUnallocatedReserve.attempts + 1);
       expect(after.used).toEqual(before.group.used);
       expect(workAllocation(h, "a").amount.sessions).toBe(before.work.sessions);
@@ -190,7 +190,7 @@ describe("a change before confirmation (criterion 9; spec §5.2 steps 5-7)", () 
   it("a budget-only change does not show the plan as changed", async () => {
     const h = await draft();
     try {
-      expect(await new WebControlService(h.deps).setTaskLoop(change(h, "a", { tokens: workAllocation(h, "a").amount.tokens - 1_000_000 })))
+      expect(await new WebControlService(h.deps).setTaskLoop(change(h, "a", { tokens: workAllocation(h, "a").amount.tokens! - 1_000_000 })))
         .toMatchObject({ result: { kind: "task-loop-set", loopVersion: 1 } });
       expect(readControlGroup(h.store, "epoch", "g").workItems[0]!.loopPlan).toMatchObject({ amended: false, loopVersion: 1 });
     } finally { await h.dispose(); }
@@ -209,7 +209,7 @@ describe("a change before confirmation (criterion 9; spec §5.2 steps 5-7)", () 
       const back = readControlGroup(h.store, "epoch", "g").workItems[0]!;
       expect(back.originalContractHash).toBe(imported);
       expect(back.loopPlan).toMatchObject({ amended: true, loopVersion: 2 });
-      expect(await service.setTaskLoop(change(h, "a", { base: 2, tokens: workAllocation(h, "a").amount.tokens - 1_000_000 }))).toMatchObject({ result: { kind: "task-loop-set", loopVersion: 3 } });
+      expect(await service.setTaskLoop(change(h, "a", { base: 2, tokens: workAllocation(h, "a").amount.tokens! - 1_000_000 }))).toMatchObject({ result: { kind: "task-loop-set", loopVersion: 3 } });
       expect(readControlGroup(h.store, "epoch", "g").workItems[0]!.loopPlan).toMatchObject({ amended: true, loopVersion: 3 });
     } finally { await h.dispose(); }
   });

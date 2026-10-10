@@ -29,7 +29,7 @@ describe("requirement-open (N1 spec §11.1 item 1)", () => {
       const answer = await x.service.openRequirement(open("n"));
       expect(answer).toMatchObject({ result: { kind: "requirement-opened", groupId: "n", roundNo: 1, requirementId: sha256Canonical({ groupId: "n", commandId: "open-n" }).slice(0, 32) } });
       const group = readRequirementGroup(x.store, "n");
-      expect(group).toMatchObject({ status: "clarifying", limit: { tokens: 10_000_000, attempts: 40 } });
+      expect(group).toMatchObject({ status: "clarifying", limit: { tokens: null, attempts: 40 } });
       expect(group.requirement).toMatchObject({ repoId: "repo", contentLanguage: "zh", createdOn: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/), maxOutputTokens: 64_000, agentSlot: { selection: { agent: "codex" } } });
       expect(readRound(x.store, "n", 1).state).toBe("drafting");
       expect(x.store.db.prepare("SELECT COUNT(*) AS n FROM scheduler_wakes WHERE group_id='n' AND kind='requirement-call' AND delivered=0").get()!.n).toBe(1);
@@ -343,4 +343,25 @@ describe("requirement commands on a stopped group (final review finding 5)", () 
       expect(x.fake.calls.accept).toHaveLength(1);
     } finally { await x.dispose(); }
   });
+});
+
+it("books finite single-call usage under a new unlimited clarifying ceiling",async()=>{
+ const x=await requirementHarness({startAt:"none",answers:[{purpose:"clarify",output:SETTLED_ROUND_ONE,tokens:777}]});try {
+  expect(await x.service.openRequirement(open("r"))).toHaveProperty("result");
+  await x.until(()=>x.round(1).state==="awaiting-answers");
+  expect(x.group().limit.tokens).toBeNull();expect(x.group().used.tokens).toBe(777);
+  expect(x.fake.calls.accept[0]!.protocol).toBe(3);expect(x.fake.calls.accept[0]!.claim.grant.work.tokens).toBe(1_000_000);
+ }finally{await x.dispose();}
+});
+
+it.each([null,5_000_000])("carries an authored %s token ceiling and booked usage through split acceptance",async tokens=>{
+ const x=await requirementHarness({startAt:"none",answers:[{purpose:"clarify",output:SETTLED_ROUND_ONE,tokens:777},{purpose:"split",output:VALID_SPLIT,tokens:888}]});try {
+  expect(await x.service.openRequirement(open("r",{limit:{tokens,activeMs:14_400_000,attempts:40,sessions:40}}))).toHaveProperty("result");
+  await x.until(()=>x.round(1).state==="awaiting-answers");
+  expect(x.service.requirementConsensus(x.command("requirement-consensus",{roundNo:1}))).toHaveProperty("result");
+  await x.until(()=>readDraft(x.store,"r",1).state==="awaiting-review");
+  const draft=readDraft(x.store,"r",1);
+  const accepted=await x.service.acceptRequirementDraft(x.command("requirement-draft-accept",{draftNo:1,draftHash:draft.draftHash}));
+  expect(accepted).not.toHaveProperty("error");expect(x.group().limit.tokens).toBe(tokens);expect(x.group().used.tokens).toBe(1665);
+ }finally{await x.dispose();}
 });

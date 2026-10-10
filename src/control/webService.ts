@@ -1,3 +1,7 @@
+import { finiteCommitment, budgetFits, type BudgetAmount } from "./tokenPolicy.js";
+import { assertNoActiveUnbounded } from "./spendCaps.js";
+import { hasTokenPolicy, saveTokenPolicy, enableOptionalTokenPolicy } from "./fundedAllowance.js";
+import { budgetAmountSchema, safeInteger } from "./schema.js";
 import { z } from "zod";
 import { randomUUID, createHash } from "node:crypto";
 import { applyWebCommand, preflightWebCommand, type WebCommandContext } from "./commandLedger.js";
@@ -67,8 +71,8 @@ export interface WebServiceDeps extends AsyncImportDeps {
 }
 interface EstimateRun { runId: string; groupId: string; workItemId: string; phase: string; state: string; claimOrdinal: null; providerAttemptOrdinal: number; remaining: { work: Amount; handoff: Amount }; cumulative: { work: Amount; handoff: Amount }; unknown: { work: boolean; handoff: boolean }; [key: string]: unknown }
 
-const ledgerSchema = z.object({ groupLimit: amountSchema, used: amountSchema, committedRemaining: amountSchema, explicitUnallocatedReserve: amountSchema, budgetDeficit: amountSchema, usageUnknown: z.boolean() }).strict();
-const groupSchema = z.object({ groupId: z.string(), status: z.enum(["clarifying", "draft", "ready", "running", "review", "done", "blocked"]), stopped: z.boolean(), used: amountSchema, reserved: amountSchema, limit: amountSchema, ledger: ledgerSchema }).passthrough();
+const ledgerSchema = z.object({ groupLimit: budgetAmountSchema, used: amountSchema, committedRemaining: amountSchema, explicitUnallocatedReserve: budgetAmountSchema, budgetDeficit: amountSchema, usageUnknown: z.boolean() }).strict();
+const groupSchema = z.object({ groupId: z.string(), status: z.enum(["clarifying", "draft", "ready", "running", "review", "done", "blocked"]), stopped: z.boolean(), used: amountSchema, reserved: amountSchema, limit: budgetAmountSchema, ledger: ledgerSchema }).passthrough();
 type Group = z.infer<typeof groupSchema>;
 const same = (a: unknown, b: unknown) => canonicalBytes(a).equals(canonicalBytes(b));
 function identifyRawEstimateOutput(value: unknown): { rawHash: string; rawIdentity: string; canonicalJson: string | null } {
@@ -230,20 +234,25 @@ export function assertKnownConservation(store: ControlStore, group: Group, propo
   const commitments = proposal.allocations.filter(a => a.ownerKind !== "reserve").map(allocation => {
     if (allocation.ownerKind === "goal-review") {
       const remaining = amountSchema.safeParse(group.reviewRemaining);
-      if (!remaining.success || dimensions.some(d => remaining.data[d] > allocation.amount[d])) throw new ControlError("recovery-blocked");
+      if (!remaining.success || !budgetFits(finiteCommitment(remaining.data),allocation.amount)) throw new ControlError("recovery-blocked");
       return remaining.data;
     }
     const row = store.db.prepare("SELECT body FROM work_items WHERE group_id=? AND id=?").get(group.groupId, allocation.ownerId);
     if (!row) throw new ControlError("recovery-blocked");
     const work = JSON.parse(String(row.body));
-    if (["draft", "ready"].includes(work.status)) return allocation.amount;
+    if(hasTokenPolicy(store,group.groupId)&&work.fundingReleased===true){
+      const prior=store.db.prepare("SELECT active,body FROM runs WHERE id=? AND group_id=? AND work_item_id=?").get(work.currentRunId,group.groupId,work.workItemId);
+      if(!prior||prior.active!==0||JSON.parse(String(prior.body)).unknown.work||JSON.parse(String(prior.body)).unknown.handoff)throw new ControlError("recovery-blocked","released-funding-invalid");
+      return zero();
+    }
+    if (["draft", "ready"].includes(work.status)) return hasTokenPolicy(store,group.groupId)?{...allocation.amount,tokens:0}:amountSchema.parse(allocation.amount);
     if (allocation.state === "terminal") return zero();
     const current = typeof work.currentRunId === "string" ? store.db.prepare("SELECT body FROM runs WHERE group_id=? AND id=? AND work_item_id=?").get(group.groupId, work.currentRunId, allocation.ownerId) : undefined;
     if (!current) throw new ControlError("recovery-blocked");
     const run = JSON.parse(String(current.body));
-    const remaining = amountSchema.safeParse(run.remaining?.[allocation.bucket]);
-    if (!remaining.success || dimensions.some(d => remaining.data[d] > allocation.amount[d])) throw new ControlError("recovery-blocked");
-    return remaining.data;
+    const remaining = budgetAmountSchema.safeParse(run.remaining?.[allocation.bucket]);
+    if (!remaining.success || !budgetFits(finiteCommitment(remaining.data),allocation.amount)) throw new ControlError("recovery-blocked");
+    return finiteCommitment(remaining.data);
   });
   const expected = sumAmounts([...commitments, ...estimateCommitments(store, group.groupId).map(a => a.amount)]);
   if (!same(expected, group.reserved)) throw new ControlError("recovery-blocked");
@@ -255,12 +264,15 @@ export function saveWebAuthority(store: ControlStore, group: Group, proposal: Bu
   if (["draft", "ready"].includes(group.status)) group.reviewRemaining = review.amount;
   group.proposal = { state: proposal.state, proposalVersion: proposal.proposalVersion, planHash: proposal.planHash, budgetMode: proposal.budgetMode, contextPolicy: proposal.contextPolicy, profiles: proposal.profiles, executionSnapshotHash: proposal.executionSnapshotHash };
   group.limit = proposal.groupLimit;
+  const optionalPolicy=hasTokenPolicy(store,group.groupId);
+  saveTokenPolicy(store,group.groupId,"",proposal.groupLimit.tokens,optionalPolicy?"optional-v1":"finite-legacy");
+  if(optionalPolicy)for(const a of proposal.allocations)if(a.ownerKind==="task"&&a.bucket==="work")saveTokenPolicy(store,group.groupId,a.ownerId,a.amount.tokens);
   group.reserved = group.ledger.committedRemaining;
   group.ledger = { ...group.ledger, groupLimit: proposal.groupLimit, used: group.used, explicitUnallocatedReserve: proposal.explicitUnallocatedReserve };
   store.db.prepare("UPDATE groups SET body=? WHERE id=?").run(JSON.stringify(group), group.groupId);
   store.db.prepare("UPDATE budget_proposals SET proposal_version=?,body=? WHERE group_id=?").run(proposal.proposalVersion, canonicalBytes(proposal).toString("utf8"), group.groupId);
 }
-export function setReserve(proposal: BudgetProposalRecord, reserve: Amount): void {
+export function setReserve(proposal: BudgetProposalRecord, reserve: BudgetAmount): void {
   proposal.explicitUnallocatedReserve = reserve;
   const row = proposal.allocations.find(a => a.ownerKind === "reserve");
   if (!row) throw new ControlError("recovery-blocked");
@@ -282,7 +294,7 @@ function allocationFor(proposal: BudgetProposalRecord, target: EffectiveProposal
   if (!row) throw new ControlError("work-not-found");
   return row;
 }
-function verifyModelField(store: ControlStore, id: string, proposal: BudgetProposalRecord, target: EffectiveProposalEditPayload["operations"][number]["target"], value: number, estimateId: string): void {
+function verifyModelField(store: ControlStore, id: string, proposal: BudgetProposalRecord, target: EffectiveProposalEditPayload["operations"][number]["target"], value: number|null, estimateId: string): void {
   const estimate = readEstimateRecord(store, id, estimateId);
   if (estimate.state !== "ready" || !estimate.output || estimate.output.planHash !== proposal.planHash) throw new ControlError("proposal-version-conflict");
   const suggestion = target.scope === "goal-review" ? estimate.output.goalReviewReserve : estimate.output.tasks.find(t => t.taskId === target.taskId)?.[target.allocation];
@@ -303,7 +315,7 @@ function refuseStaleEstimate(store: ControlStore, id: string, estimateId: string
  * setTaskLoop; loop plans ruling P5), each of which then reopens the proposal with the returned commitments.
  */
 function resetDraftReserve(store: ControlStore, id: string, group: Group, proposal: BudgetProposalRecord): Amount {
-  const commitments = sumAmounts([...proposal.allocations.filter(a => a.ownerKind !== "reserve").map(a => a.amount), ...estimateCommitments(store, id).map(a => a.amount)]);
+  const commitments = sumAmounts([...proposal.allocations.filter(a => a.ownerKind !== "reserve").map(a => hasTokenPolicy(store,id)&&a.ownerKind==="task"?{...a.amount,tokens:0}:amountSchema.parse(a.amount)), ...estimateCommitments(store, id).map(a => a.amount)]);
   setReserve(proposal, residual(proposal.groupLimit, group.used, commitments));
   return commitments;
 }
@@ -354,21 +366,22 @@ export class WebControlService {
         const loopTasks = new Set(readArchivedPlan(this.store, id).plan.tasks.filter(task => task.loop !== undefined).map(task => task.taskId));
         const seen = new Set<string>();
         const before = canonicalBytes({ allocations: proposal.allocations, limit: proposal.groupLimit });
+        if(payload.operations.some(op=>op.target.scope==="task"&&op.target.allocation==="work"&&op.target.dimension==="tokens"&&op.value===null))enableOptionalTokenPolicy(this.store,id);
         for (const op of payload.operations) {
           const key = canonicalBytes(op.target).toString("utf8");
           if (seen.has(key)) throw new ControlError("duplicate-proposal-target"); seen.add(key);
           if (op.target.scope === "task" && op.target.allocation === "work" && loopTasks.has(op.target.taskId)) throw new ControlError("budget-owned-by-loop-plan");
           const row = allocationFor(proposal, op.target);
-          if (row.bucket === "work" && op.value <= 0) throw new ControlError("execution-policy-unrepresentable");
+          if (row.bucket === "work" && op.value !== null && op.value <= 0 && op.target.dimension!=="tokens") throw new ControlError("execution-policy-unrepresentable");
           if (op.provenance === "model") {
             verifyModelField(this.store, id, proposal, op.target, op.value, op.estimateId!);
             refuseStaleEstimate(this.store, id, op.estimateId!);
           }
           if (op.provenance === "complex-1m-default") {
             const defaults = op.target.scope === "goal-review" ? GOAL_REVIEW : op.target.allocation === "work" ? TASK_WORK : TASK_HANDOFF;
-            if (op.value !== defaults[op.target.dimension]) throw new ControlError("proposal-version-conflict");
+            if (op.value !== (op.target.scope==="task"&&op.target.allocation==="work"&&op.target.dimension==="tokens"&&hasTokenPolicy(this.store,id)?null:defaults[op.target.dimension])) throw new ControlError("proposal-version-conflict");
           }
-          row.amount[op.target.dimension] = op.value;
+          if(op.target.dimension==="tokens")row.amount.tokens=op.value;else row.amount[op.target.dimension]=safeInteger.parse(op.value);
           row.fieldProvenance[op.target.dimension] = { provenance: op.provenance, estimateId: op.estimateId };
         }
         proposal.groupLimit = payload.proposedGroupLimit ?? proposal.groupLimit;
@@ -669,6 +682,12 @@ export class WebControlService {
       const replay = preflightWebCommand<WebCommandResult>(this.store, command); if (replay) return replay.body;
       const prepared: GroupSelectionResolution | { failure: unknown } = await resolveGroupSelections({ store: this.store, port: this.deps.port }, groupId(command), command.actorId, "confirm")
         .catch((failure: unknown) => ({ failure }));
+      let optionalSupported=true,featureError:unknown=null;
+      try {
+        const proposalBefore=readBudgetProposal(this.store,groupId(command));
+        const needsOptional=proposalBefore.allocations.some(a=>a.ownerKind==="task"&&a.bucket==="work"&&a.amount.tokens===null);
+        optionalSupported=!needsOptional||(await this.deps.profileRouter.resolve("task",command.payload.profileIds.worker,command.payload.profileHashes.worker).port.readFeatures?.())?.tokenPolicy==="optional-v1";
+      }catch(error){featureError=error;}
       const skillLookup = await lookupSkillProfiles(this.store, groupId(command), this.deps.syncskill ?? UNCONFIGURED_SYNCSKILL, this.deps.port);
       // Integration spec §3.3: a non-keep scheme's preflight, decided inside the transaction. The group revision the
       // command is checked against there covers any set-group-integration since this read. It stays after the selection
@@ -683,6 +702,8 @@ export class WebControlService {
           prestart(group); refuseAfterTaskStarted(this.store, id);
           if (proposal.state === "confirmed") throw new ControlError("no-op-command");
           assertKnownConservation(this.store, group, proposal);
+          if(featureError)throw featureError;
+          if(!optionalSupported)throw new ControlError("control-token-policy-unsupported");
           const selected = { estimator: this.deps.profileRouter.resolve("budget-estimate", payload.profileIds.estimator, payload.profileHashes.estimator), worker: this.deps.profileRouter.resolve("task", payload.profileIds.worker, payload.profileHashes.worker), handoff: this.deps.profileRouter.resolve("handoff", payload.profileIds.handoff, payload.profileHashes.handoff), goalReview: this.deps.profileRouter.resolve("goal-review", payload.profileIds.goalReview, payload.profileHashes.goalReview) };
           const window = selected.worker.snapshot.profile.capabilities.contextWindowTokens, threshold = payload.contextPolicy.handoffAtContextTokens;
           if (window === null ? threshold !== null : threshold === null || threshold > window) throw new ControlError("execution-policy-unrepresentable");
@@ -719,7 +740,7 @@ export class WebControlService {
           const tasks = plan.plan.tasks.map(archived => {
             const task = effectivePlanTask(this.store, id, archived, workBodyOf(this.store, id, archived.taskId));
             const work = proposal.allocations.find(a => a.ownerId === task.taskId && a.bucket === "work")!.amount;
-            const handoff = proposal.allocations.find(a => a.ownerId === task.taskId && a.bucket === "handoff")!.amount;
+            const handoff = amountSchema.parse(proposal.allocations.find(a => a.ownerId === task.taskId && a.bucket === "handoff")!.amount);
             if (selected.handoff.snapshot.profile.capabilities.handoffExecution === "model-assisted-v1" && dimensions.some(d => handoff[d] < 1)) throw new ControlError("handoff-grant-insufficient");
             return { ...task, work, handoff };
           });
@@ -793,7 +814,8 @@ export class WebControlService {
         const limit = command.payload.limit;
         if (same(limit, group.limit)) throw new ControlError("no-op-command");
         // Unknown usage cannot authorize a decrease or a new allocation.
-        const decreasing = dimensions.some(d => limit[d] < group.limit[d]);
+        if(limit.tokens!==null)assertNoActiveUnbounded(this.store,"all",id);
+        const decreasing = dimensions.some(d => limit[d]!==null&&(group.limit[d]===null||limit[d]! < group.limit[d]!));
         if (decreasing || !group.ledger.usageUnknown) assertKnownConservation(this.store, group, proposal);
         proposal.groupLimit = limit;
         setReserve(proposal, residual(limit, group.used, group.reserved));
@@ -897,7 +919,12 @@ export class WebControlService {
           if (!allocation || !handoff) throw new ControlError("recovery-blocked");
           const before = allocation.amount;
           // R10: sessions is not in the payload; it is carried over unchanged.
-          const next: Amount = { ...before, tokens: payload.work.tokens, activeMs: payload.work.activeMs, attempts: payload.work.attempts };
+          const next: BudgetAmount = { ...before, tokens: payload.work.tokens, activeMs: payload.work.activeMs, attempts: payload.work.attempts };
+          if(next.tokens===null&&!hasTokenPolicy(this.store,id)){
+            enableOptionalTokenPolicy(this.store,id);
+            const draftTokens=sumAmounts(proposal.allocations.filter(a=>a.ownerKind==="task").map(a=>amountSchema.parse(a.amount))).tokens;
+            group.ledger.committedRemaining.tokens-=draftTokens;group.reserved={...group.ledger.committedRemaining};
+          }
           // A plan-version bump with identical bytes is a no-op too; the recipe then keeps its version.
           // Spec §10.4: a skills-only change is not a no-op.
           const skillsUnchanged = canonicalBytes(current.loop?.skills ?? null).equals(canonicalBytes(expanded.recipe.skills ?? null));
@@ -909,7 +936,8 @@ export class WebControlService {
           }
           // Step 6's refusal, before anything is written: the reserve may not go negative in any dimension.
           for (const d of dimensions) {
-            const shortfall = next[d] - before[d] - proposal.explicitUnallocatedReserve[d];
+            if(d==="tokens"&&hasTokenPolicy(this.store,id))continue;
+            const shortfall = next[d]! - before[d]! - proposal.explicitUnallocatedReserve[d]!;
             if (shortfall > 0) throw new ControlError("group-reserve-insufficient", `${d}:${shortfall}`);
           }
           if (loopVersion === Number.MAX_SAFE_INTEGER) throw new ControlError("numeric-overflow");
@@ -949,9 +977,9 @@ export class WebControlService {
           } else {
             // Step 7, confirmed: proposalVersion is inside every derived record and checked at A2 and in the projection,
             // so it does not move; only this task's contract is re-derived, at the same derivationVersion.
-            for (const d of dimensions) group.ledger.committedRemaining[d] += next[d] - before[d];
+            for (const d of dimensions) if(d!=="tokens"||!hasTokenPolicy(this.store,id))group.ledger.committedRemaining[d] += next[d]! - before[d]!;
             setReserve(proposal, residual(proposal.groupLimit, group.used, group.ledger.committedRemaining));
-            const derived = deriveContract({ taskId, originalContractHash: expanded.hash, originalContractCanonicalJson: expanded.canonicalJson, work: next, handoff: handoff.amount }, proposal.proposalVersion);
+            const derived = deriveContract({ taskId, originalContractHash: expanded.hash, originalContractCanonicalJson: expanded.canonicalJson, work: next, handoff: amountSchema.parse(handoff.amount) }, proposal.proposalVersion);
             writeCanonicalRecord(this.store, id, derived.derivedContractHash, derived.canonicalJson);
             work.derivedContractHash = derived.derivedContractHash;
             work.grant = { ...(work.grant as Record<string, unknown>), work: next };

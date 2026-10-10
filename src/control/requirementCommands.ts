@@ -1,3 +1,4 @@
+import type { BudgetAmount } from "./tokenPolicy.js";
 import { createHash } from "node:crypto";
 import { readGroupAgentOverrides } from "./agentFreeze.js";
 import { applyWebCommand, preflightWebCommand } from "./commandLedger.js";
@@ -32,7 +33,7 @@ export interface RequirementCommandDeps {
   store: ControlStore; admissionGate?: AdmissionGate; profileRouter: ExecutionProfileRouter; defaults: () => ImportDefaults;
   knownRepository?: (repoId: string) => boolean; now?: () => Date;
 }
-type EffectiveOpenPayload = { groupId: string; repoId: string; idea: string; limit: Amount; agent: Record<string, unknown> | null; contentLanguage: "en" | "zh" };
+type EffectiveOpenPayload = { groupId: string; repoId: string; idea: string; limit: BudgetAmount; agent: Record<string, unknown> | null; contentLanguage: "en" | "zh" };
 
 const nowOf = (deps: { now?: () => Date }) => (deps.now ?? (() => new Date()))();
 const invalid = (detail: string): never => { throw new ControlError("group-state-invalid", detail); };

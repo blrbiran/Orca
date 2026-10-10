@@ -73,7 +73,7 @@ describe("set-task-loop keeps the task's plan version unless the plan or its inp
     try {
       makeV1(h);
       expect(await new WebControlService(h.deps).setTaskLoop(change(h, "a", { base: 1, inputs: { goal: "write a, changed" } }))).toMatchObject({ result: { kind: "task-loop-set" } });
-      expect(effective(h).loop!.planVersion).toBe(2);
+      expect(effective(h).loop!.planVersion).toBe(3);
       expect(workBody(h, "a").planChanged).toBe(true);
     } finally { await h.dispose(); }
   });

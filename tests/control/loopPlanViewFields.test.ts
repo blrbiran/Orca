@@ -22,15 +22,15 @@ describe("the loop plan view's fields (panel i18n spec §3.1, §6.8)", () => {
     try {
       const [a, b, c] = readControlGroup(h.store, "epoch", "g").workItems.map((item) => item.loopPlan!);
       expect(Object.keys(a!).sort()).toEqual(FIELDS);
-      expect(a).toMatchObject({ planId: "standard", planVersion: 2, maxFiles: Number.MAX_SAFE_INTEGER, hasDiscipline: false });
-      expect(b).toMatchObject({ planId: "bugfix", planVersion: 2, maxFiles: 7, hasDiscipline: true });
-      expect(c).toMatchObject({ planId: "investigate", planVersion: 2, maxFiles: 1, hasDiscipline: true });
+      expect(a).toMatchObject({ planId: "standard", planVersion: 3, maxFiles: Number.MAX_SAFE_INTEGER, hasDiscipline: false });
+      expect(b).toMatchObject({ planId: "bugfix", planVersion: 3, maxFiles: 7, hasDiscipline: true });
+      expect(c).toMatchObject({ planId: "investigate", planVersion: 3, maxFiles: 1, hasDiscipline: true });
     } finally { await h.dispose(); }
   });
 
   it("refuses a view that still carries summary or planName", () => {
     const view = {
-      planId: "standard", planVersion: 2, chosenBy: "explicit", chosenByLabel: null, amended: false, loopVersion: 0,
+      planId: "standard", planVersion: 3, chosenBy: "explicit", chosenByLabel: null, amended: false, loopVersion: 0,
       inputs: { goal: "g", successCondition: "s", targetPaths: ["a"], checks: ["npm test"], nonGoals: [], relevantDocs: [], protectedPaths: [], maxFilesTouched: null },
       maxFiles: 1, hasDiscipline: false,
     };

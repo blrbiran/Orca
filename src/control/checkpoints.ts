@@ -16,6 +16,8 @@ import { canonicalBytes } from "./canonicalJson.js";
 export interface CommitDependencies {
  afterArchive?:()=>Promise<void>;
  afterTransaction?:()=>Promise<void>;
+ /** Optional atomic settlement transition; invoked only after known usage and stop proof. */
+ onSettled?:(store:ControlStore,candidate:Candidate)=>void;
  admit?<T>(operation:()=>Promise<T>):Promise<T>;
 }
 function assertIdentity(store:ControlStore,c:Candidate):void {
@@ -99,6 +101,7 @@ export async function commitCandidate(store:ControlStore,c:Candidate,deps:Commit
   // Final review I1 (controller ruling, 2026-09-25): a Web group blocked by a budget breach (usage.ts) stays
   // blocked through a settle; `review` would re-open it to dispatch, and that block is its only brake.
   const group=readGroup(store,c.groupId);if(!("planHash" in group && group.status==="blocked"))group.status="review";saveGroup(store,group);
+  if(settled)deps.onSettled?.(store,c);
   store.db.prepare("INSERT INTO outbox VALUES (?, 'projection', ?, 0)").run("projection:"+c.checkpointId,JSON.stringify({runId:c.runId,...reference}));
   const taskCheckpointRefs=[] as Array<{taskId:string;checkpointId:string;checkpointHash:string}>;const seen=new Set<string>();
   for(const row of store.db.prepare("SELECT body FROM runs WHERE group_id=? ORDER BY rowid DESC").all(c.groupId)){const value=JSON.parse(String(row.body));if(!value.taskId||!value.checkpointId||seen.has(value.taskId))continue;seen.add(value.taskId);const checkpoint=store.db.prepare("SELECT hash FROM checkpoints WHERE id=? AND run_id=?").get(value.checkpointId,value.runId);if(checkpoint)taskCheckpointRefs.push({taskId:value.taskId,checkpointId:value.checkpointId,checkpointHash:String(checkpoint.hash)});}

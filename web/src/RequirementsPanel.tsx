@@ -66,7 +66,7 @@ function NewRequirement(props: { config: ControlConfigV1; agents: AgentsViewV1 |
   // Spec §11 R2: the content belongs to its concrete target. Text typed in All before a target is chosen belongs to
   // no project; the next explicit choice takes it when that target has no draft of its own, and drops it either way
   // (ruling M2), so it never resurfaces under a later target or over another target's draft.
-  const defaults: NewRequirementDraft = { idea: "", tokens: 10_000_000, language: props.language, agent: "" };
+  const defaults: NewRequirementDraft = { idea: "", tokens: null, language: props.language, agent: "" };
   const [unowned, setUnowned] = useState<NewRequirementDraft | null>(null);
   // Text in the limit field that is not an amount: the held number is stale, so the form must not send it.
   const [limitBad, setLimitBad] = useState(false);
@@ -112,7 +112,7 @@ function NewRequirement(props: { config: ControlConfigV1; agents: AgentsViewV1 |
         {all && <option value="" disabled>{t("project.chooseTarget")}</option>}
         {choices.map((repo) => <option key={repo.repoId} value={repo.repoId}>{all ? props.repoLabel?.(repo.repoId) ?? repo.displayName : repo.displayName}</option>)}</select></label>
       <label>{t("requirements.idea")}<textarea value={idea} onChange={(e) => edit({ idea: e.currentTarget.value })} required /></label>
-      {mayLimit && <TokenInput label={t("requirements.limit")} aria-label={t("requirements.limit")} min={1} value={tokens} onChange={(n) => { setLimitBad(false); edit({ tokens: n }); }} onInvalid={() => setLimitBad(true)} onReset={() => setLimitBad(false)} />}
+      {mayLimit && <TokenInput label={t("requirements.limit")} aria-label={t("requirements.limit")} min={0} value={tokens} allowEmpty emptyLabel={t("budget.unlimited")} onClear={()=>{setLimitBad(false);edit({tokens:null});}} onChange={(n) => { setLimitBad(false); edit({ tokens: n }); }} onInvalid={() => setLimitBad(true)} onReset={() => setLimitBad(false)} />}
       <label>{t("requirements.contentLanguage")}<select value={language} onChange={(e) => edit({ language: e.currentTarget.value as PanelLanguage })}>
         {PANEL_LANGUAGES.map((lang) => <option key={lang} value={lang}>{LANGUAGE_NAMES[lang]}</option>)}</select></label>
       <label>{t("requirements.agent")}<select value={agent} onChange={(e) => edit({ agent: e.currentTarget.value })}>
@@ -234,7 +234,7 @@ function RaiseLimit(props: { view: View; onCommand: OnCommand } & EditableDrafts
   // Spec §11 R2: a typed limit is the group's, kept across detail closure; the ledger's limit until one is typed.
   const key = limitKey(props.view.summary.repoId, props.view.summary.groupId);
   const stored = props.drafts.limit[key];
-  const tokens = stored ?? props.view.ledger.limit.tokens;
+  const tokens = stored===undefined?props.view.ledger.limit.tokens:stored;
   const [limitBad, setLimitBad] = useState(false);
   if (!mayLimit) return <p role="note">{t("requirements.ownerRaisesLimit")}</p>;
   return (
@@ -244,7 +244,7 @@ function RaiseLimit(props: { view: View; onCommand: OnCommand } & EditableDrafts
       props.onCommand({ verb: "set-limit", groupId: props.view.summary.groupId, expectedRevision: revisionOf(props.view), payload: { limit: { ...props.view.ledger.limit, tokens } } },
         stored === undefined ? undefined : { slot: "limit", key, value: stored });
     }}>
-      <TokenInput label={t("requirements.limit")} aria-label={t("requirements.limit")} min={1} value={tokens} onChange={(n) => { setLimitBad(false); props.onDraft("limit", key, n); }} onInvalid={() => setLimitBad(true)} onReset={() => setLimitBad(false)} />
+      <TokenInput label={t("requirements.limit")} aria-label={t("requirements.limit")} min={0} value={tokens} allowEmpty emptyLabel={t("budget.unlimited")} onClear={()=>{setLimitBad(false);props.onDraft("limit",key,null);}} onChange={(n) => { setLimitBad(false); props.onDraft("limit", key, n); }} onInvalid={() => setLimitBad(true)} onReset={() => setLimitBad(false)} />
       <button type="submit" disabled={limitBad}>{t("requirements.raiseLimit")}</button>
     </form>
   );
@@ -287,8 +287,8 @@ function Detail(props: { view: View; onCommand: OnCommand } & EditableDrafts): J
         <h5>{t("requirements.glossary")}</h5><ul>{valid.flatMap((r) => r.result!.glossary.filter((e) => accepted(r.glossaryDecisions).has(e.id))).map((e) => <li key={e.id}>{e.term}: {e.definition}</li>)}</ul>
         <h5>{t("requirements.decisions")}</h5><ul>{valid.flatMap((r) => r.result!.adrs.filter((a) => accepted(r.adrDecisions).has(a.id))).map((a) => <li key={a.id}>{a.id} {a.title}</li>)}</ul>
         <h5>{t("requirements.openBranches")}</h5><ul>{(latest?.openBranches ?? []).map((branch) => <li key={branch}>{branch}</li>)}</ul>
-        <p>{t("requirements.budget", { used: view.ledger.used.tokens, limit: view.ledger.limit.tokens, reserved: view.ledger.reserved.tokens })}</p>
-        <progress max={view.ledger.limit.tokens} value={view.ledger.used.tokens} />
+        <p>{t("requirements.budget", { used: view.ledger.used.tokens, limit: view.ledger.limit.tokens===null?t("budget.unlimited"):view.ledger.limit.tokens, reserved: view.ledger.reserved.tokens })}</p>
+        {view.ledger.limit.tokens!==null&&<progress max={view.ledger.limit.tokens} value={view.ledger.used.tokens} />}
         {view.ledger.usageUnknown && <p role="status">{t("requirements.usageUnknown")}</p>}
       </section>
       <div id={overviewRegionId("requirement", groupId, "problem")} tabIndex={-1} data-overview-region="problem">

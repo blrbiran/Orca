@@ -1,3 +1,4 @@
+import { budgetAmountSchema, type BudgetAmount } from "./tokenPolicy.js";
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { dimensions, zero } from "./commands.js";
 import { ControlError } from "./errors.js";
@@ -24,11 +25,14 @@ export function sumAmounts(values: readonly Amount[]): Amount {
   for (const d of dimensions) result[d] = safeNumber(values.reduce((sum, v) => sum + BigInt(v[d]), 0n));
   return result;
 }
-export function residual(limit: Amount, used: Amount, committed: Amount): Amount {
-  [limit, used, committed].forEach(value => amountSchema.parse(value));
-  const result = zero();
+export function residual(limit: Amount, used: Amount, committed: Amount): Amount;
+export function residual(limit: BudgetAmount, used: Amount, committed: Amount): BudgetAmount;
+export function residual(limit: BudgetAmount, used: Amount, committed: Amount): BudgetAmount {
+  budgetAmountSchema.parse(limit);[used, committed].forEach(value => amountSchema.parse(value));
+  const result:BudgetAmount = zero();
   for (const d of dimensions) {
-    const value = BigInt(limit[d]) - BigInt(used[d]) - BigInt(committed[d]);
+    if(d==="tokens"&&limit.tokens===null){result.tokens=null;continue;}
+    const value = BigInt(limit[d]!) - BigInt(used[d]) - BigInt(committed[d]);
     if (value < 0n) throw new ControlError("group-budget-unavailable");
     result[d] = safeNumber(value);
   }

@@ -13,7 +13,7 @@ export const FIXTURE_SLOT: FrozenSlot = {
 /** N1 spec §4.1: what requirement-open writes, for criteria that start from a clarifying group. */
 export function clarifyingInput(groupId: string, overrides: Partial<ClarifyingGroupInput> = {}): ClarifyingGroupInput {
   return {
-    groupId, repoId: "repo", idea: "Let people export their notes as Markdown.", limit: { ...REQUIREMENT_LIMIT_DEFAULT },
+    groupId, repoId: "repo", idea: "Let people export their notes as Markdown.", limit: { ...REQUIREMENT_LIMIT_DEFAULT, tokens:10_000_000 },
     contentLanguage: "en", createdOn: "2026-10-02", requirementId: "0123456789abcdef0123456789abcdef",
     profile: { profileId: "all", profileHash: "b".repeat(64) }, agentSlot: FIXTURE_SLOT, agentOverrides: {}, maxOutputTokens: 64_000, ...overrides,
   };

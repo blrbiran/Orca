@@ -42,7 +42,7 @@ async function twoConflicting(
     // Deviation D12: by default the group's reserve (20% of base) is smaller than one task's token
     // budget, so a reconciliation is refused until another run settles. Raise the ceiling explicitly.
     const limit = readControlGroup(t.h.store, "epoch-test", "g").ledger.groupLimit;
-    const raised = t.service.setLimit(t.h.command("set-limit", { limit: { ...limit, tokens: limit.tokens + 10_000_000 } }));
+    const raised = t.service.setLimit(t.h.command("set-limit", { limit: { ...limit, tokens: limit.tokens! + 10_000_000 } }));
     if ("error" in raised) throw new Error(`set-limit refused: ${JSON.stringify(raised.error)}`);
   }
   const ids = [await t.claim(), await t.claim()];

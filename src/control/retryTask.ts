@@ -1,3 +1,6 @@
+import { readFundedAllowance, hasTokenPolicy } from "./fundedAllowance.js";
+import { finiteCommitment, remainingBudget } from "./tokenPolicy.js";
+import { readGroup, saveGroup } from "./queries.js";
 import { createHash } from "node:crypto";
 import { readWorkClaimEnvelope } from "./webDispatch.js";
 import type { AdmissionGate } from "./admissionGate.js";
@@ -112,11 +115,25 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
         validateRetryGrantSource(store, groupId, work);
         readConfirmedTaskExecution(store, groupId, taskId);
         if (run.usageSettlement !== undefined && !hasValidUsageSettlement(store, run)) throw new ControlError("recovery-blocked", "retry-settlement");
+        if(hasTokenPolicy(store,groupId)) {
+          const funding=readFundedAllowance(store,run as never);if(!funding)throw new ControlError("recovery-blocked","retry-funding-missing");
+          const inherited=add(funding.inheritedUsage,run.cumulative.work);
+          const left=remainingBudget(work.grant.work,inherited);
+          if(dimensions.some(d=>left[d]===0))throw new ControlError("task-not-retryable","authored-budget-exhausted");
+          if(!released){saveRunBody(store,{...run,state:"settled-failed",recoverable:false,drive:{...drive,cleanedUp:false}},false);releaseCommitment(store,groupId,add(finiteCommitment(run.remaining.work),run.remaining.handoff));}
+          Object.assign(work,{status:"ready",fundingReleased:true,pendingRunId:null});
+          delete work.continuation;delete work.retryGrantSourceRunId;delete (work as {allowancePredecessorRunId?:string}).allowancePredecessorRunId;
+          setAllocationStates(store,groupId,taskId,"confirmed");saveWork(store,groupId,work as never);
+          const resumedGroup=readGroup(store,groupId);resumedGroup.status="running";saveGroup(store,resumedGroup);
+          recordActivity(store,{groupId,taskId,runId,kind:"task-retried",body:{fromRunId:runId}});deps.beforeCommit?.();
+          return commandSuccess(context,{kind:"task-retried",taskId,fromRunId:runId});
+        }
         const retrying = held || released || work.retryGrantSourceRunId !== undefined || allocations.some(a => a.state === "continuing");
         const grant = both(retrying ? run.grant : work.grant), remaining = released ? { tokens: 0, activeMs: 0, attempts: 0, sessions: 0 } : both(run.remaining);
         const reserve = readBudgetProposal(store, groupId).explicitUnallocatedReserve;
         for (const d of dimensions) {
-          const shortfall = grant[d] - remaining[d] - reserve[d];
+          if(reserve[d]===null)continue;
+          const shortfall = grant[d] - remaining[d] - reserve[d]!;
           if (shortfall > 0) throw new ControlError("group-reserve-insufficient", `${d}:${shortfall}`);
         }
         // Effect 1: the run alone moves; `remaining` stays on it (the view checks remaining == max(grant - cumulative, 0)).

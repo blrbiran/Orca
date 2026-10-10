@@ -38,14 +38,14 @@ describe("a change after confirmation (criteria 9, 10)", () => {
     const { h, service } = await confirmed();
     try {
       const before = { group: readWebGroup(h.store, "g"), version: readBudgetProposal(h.store, "g").proposalVersion, work: workAllocation(h, "a").amount };
-      expect(await service.setTaskLoop(change(h, "a", { ...CHANGED, tokens: before.work.tokens + 500_000 })))
+      expect(await service.setTaskLoop(change(h, "a", { ...CHANGED, tokens: before.work.tokens! + 500_000 })))
         .toMatchObject({ result: { kind: "task-loop-set", taskId: "a", loopVersion: 1, proposalVersion: before.version } });
       expectConserved(h);
       const after = readWebGroup(h.store, "g");
       expect(readBudgetProposal(h.store, "g").proposalVersion).toBe(before.version);
       expect(after.used).toEqual(before.group.used);
       expect(after.reserved.tokens).toBe(before.group.reserved.tokens + 500_000);
-      const raised = { ...before.work, tokens: before.work.tokens + 500_000 };
+      const raised = { ...before.work, tokens: before.work.tokens! + 500_000 };
       expect(workAllocation(h, "a").amount).toEqual(raised);
       expect(workBody(h, "a").grant).toMatchObject({ work: raised });
       const a = readConfirmedTaskExecution(h.store, "g", "a");
@@ -61,10 +61,10 @@ describe("a change after confirmation (criteria 9, 10)", () => {
     const { h, service } = await confirmed();
     try {
       const before = { group: readWebGroup(h.store, "g"), work: workAllocation(h, "a").amount };
-      expect(await service.setTaskLoop(change(h, "a", { tokens: before.work.tokens - 1_000_000, attempts: before.work.attempts - 1 }))).toMatchObject({ result: { kind: "task-loop-set" } });
+      expect(await service.setTaskLoop(change(h, "a", { tokens: before.work.tokens! - 1_000_000, attempts: before.work.attempts - 1 }))).toMatchObject({ result: { kind: "task-loop-set" } });
       expectConserved(h);
       const after = readWebGroup(h.store, "g");
-      expect(after.ledger.explicitUnallocatedReserve.tokens).toBe(before.group.ledger.explicitUnallocatedReserve.tokens + 1_000_000);
+      expect(after.ledger.explicitUnallocatedReserve.tokens).toBe(before.group.ledger.explicitUnallocatedReserve.tokens! + 1_000_000);
       expect(after.ledger.explicitUnallocatedReserve.attempts).toBe(before.group.ledger.explicitUnallocatedReserve.attempts + 1);
       expect(after.used).toEqual(before.group.used);
       expect(readConfirmedTaskExecution(h.store, "g", "a").contract.executionPolicy.maxAttempts).toBe(before.work.attempts - 1);
@@ -76,7 +76,7 @@ describe("a change after confirmation (criteria 9, 10)", () => {
     const { h, service } = await confirmed();
     try {
       const before = snapshotOf(h), b = readConfirmedTaskExecution(h.store, "g", "b");
-      expect(await service.setTaskLoop(change(h, "a", { ...CHANGED, tokens: workAllocation(h, "a").amount.tokens + 500_000 }))).toMatchObject({ result: { kind: "task-loop-set" } });
+      expect(await service.setTaskLoop(change(h, "a", { ...CHANGED, tokens: workAllocation(h, "a").amount.tokens! + 500_000 }))).toMatchObject({ result: { kind: "task-loop-set" } });
       const after = snapshotOf(h);
       expect(canonicalBytes(without(after, "a")).equals(canonicalBytes(without(before, "a")))).toBe(true);
       expect(after.derivedContracts.find((entry: { taskId: string }) => entry.taskId === "a")).not.toEqual(before.derivedContracts.find((entry: { taskId: string }) => entry.taskId === "a"));
@@ -150,7 +150,7 @@ describe("the change and the driver (criteria 11, 12)", () => {
       const runA = await t.claim();
       const driver = t.driver();
       await t.until(driver, () => t.body(runA).state === "accepted");
-      expect(await t.service.setTaskLoop(change(t.h, "b", { inputs: { goal: "write b, changed" }, tokens: workAllocation(t.h, "b").amount.tokens + 500_000 })))
+      expect(await t.service.setTaskLoop(change(t.h, "b", { inputs: { goal: "write b, changed" }, tokens: workAllocation(t.h, "b").amount.tokens! + 500_000 })))
         .toMatchObject({ result: { kind: "task-loop-set", taskId: "b" } });
       await t.until(driver, () => t.body(runA).state === "settled");
       expect(t.body(runA).drive.blockedReason ?? null).toBeNull();

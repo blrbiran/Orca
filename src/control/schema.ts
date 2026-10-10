@@ -20,14 +20,17 @@ export const canonicalTimestampSchema = z.string().regex(canonicalTimestampPatte
   }
 });
 export const amountSchema = z.object({tokens:safeInteger,activeMs:safeInteger,attempts:safeInteger,sessions:safeInteger}).strict();
-export const grantSchema = z.object({work:amountSchema,handoff:amountSchema}).strict();
+export const budgetAmountSchema = amountSchema.extend({tokens:safeInteger.nullable()}).strict();
+export const tokenPolicySchema = z.object({authoredTokenCeiling:safeInteger.nullable(),bindingCauses:z.array(z.enum(["task","group","spend-cap"])),inheritedUsage:amountSchema}).strict();
+export const finiteGrantSchema = z.object({work:amountSchema,handoff:amountSchema}).strict();
+export const grantSchema = z.object({work:budgetAmountSchema,handoff:amountSchema}).strict();
 export const commandSchema = z.object({commandId:idSchema,expectedRevision:safeInteger,by:z.string().trim().min(1)}).strict();
 export const commandEnvelopeSchema = z.object({
   commandId:idSchema,
   expectedRevision:safeInteger,
   payload:z.custom<unknown>((value)=>value!==undefined,{message:"payload-required"}),
 }).strict();
-export const groupSchema = z.object({groupId:idSchema,projectKey:z.string().trim().min(1),goal:z.string().trim().min(1),successConditions:z.array(z.string().trim().min(1)).min(1),budgetMode:z.enum(["strict","soft"]).default("strict"),limit:amountSchema,reviewReserve:amountSchema,deadlineAt:z.string().datetime({offset:true}).nullable()}).strict();
+export const groupSchema = z.object({groupId:idSchema,projectKey:z.string().trim().min(1),goal:z.string().trim().min(1),successConditions:z.array(z.string().trim().min(1)).min(1),budgetMode:z.enum(["strict","soft"]).default("strict"),limit:budgetAmountSchema,reviewReserve:amountSchema,deadlineAt:z.string().datetime({offset:true}).nullable()}).strict();
 // Agent selection spec §3 (`agent-selection-v1`): model and contextWindow are opaque to Orca (I2); ccloop's
 // descriptor is the only judge of what a kind can express, so these check shape only.
 export const contextWindowSchema = z.union([z.literal("agent-default"),z.number().int().positive().max(Number.MAX_SAFE_INTEGER)]);
@@ -37,6 +40,7 @@ export const partialSelectionSchema = z.object({agent:idSchema.optional(),model:
 // (as if the plan had not written that field at this level; see agentSelection.ts levelLayers).
 export const panelPartialSelectionSchema = z.object({agent:idSchema.nullable().optional(),model:z.string().min(1).max(200).nullable().optional(),contextWindow:contextWindowSchema.nullable().optional()}).strict();
 export const workSchema = z.object({workItemId:idSchema,taskId:idSchema.nullable(),kind:z.enum(["task","decompose","reconcile","handoff","goal-review","memory"]),dependsOn:z.array(idSchema),contract:z.unknown(),configHash:z.string().min(1),agent:agentSelectionSchema,grant:grantSchema,parentRunId:idSchema.optional()}).strict().superRefine((value,ctx)=>{
+  if(value.kind!=="task"&&value.grant.work.tokens===null)ctx.addIssue({code:"custom",message:"finite-auxiliary-grant-required"});
   if ((value.kind === "handoff") !== (value.parentRunId !== undefined)) ctx.addIssue({code:"custom",message:"handoff-parent-required"});
 });
 
@@ -50,7 +54,9 @@ export const handoffRequestSchema=z.object({protocol:z.literal(1),requestId:idSc
 // Syncskill integration spec §10.3 / §10.6: the run's skill snapshot directory, present only for a run with skills.
 const loopWorkSchema=z.object({kind:z.literal("loop"),contract:z.unknown(),targetRepo:z.string().min(1),base:z.string().min(1),sourceDir:z.string().min(1),skillPluginDir:z.string().min(1).optional(),codexSkillsDir:z.string().min(1).optional()}).strict();
 const singleCallWorkSchema=z.object({kind:z.literal("single-call"),prompt:z.string().min(1),responseSchema:z.record(z.unknown()).refine(schema=>schema.type==="object",{message:"response-schema-not-object"}),maxOutputTokens:safeInteger.positive(),sourceDir:z.string().min(1)}).strict();
-export const startEnvelopeSchema=z.object({protocol:z.literal(3),claim:z.object({groupId:idSchema,workItemId:idSchema,taskId:idSchema.nullable(),runId:idSchema,generation:safeInteger.positive(),graphVersion:safeInteger,targetVersion:safeInteger,commandId:idSchema,configHash:z.string().min(1),agent:agentSelectionSchema,grant:grantSchema,ownerToken:idSchema}).strict(),contractHash:z.string().regex(/^[a-f0-9]{64}$/),inputCheckpoint:inputCheckpointSchema.nullable(),work:z.discriminatedUnion("kind",[loopWorkSchema,singleCallWorkSchema])}).strict().superRefine((value,ctx)=>{
+export const startEnvelopeSchema=z.object({protocol:z.union([z.literal(3),z.literal(4)]),tokenPolicy:tokenPolicySchema.optional(),claim:z.object({groupId:idSchema,workItemId:idSchema,taskId:idSchema.nullable(),runId:idSchema,generation:safeInteger.positive(),graphVersion:safeInteger,targetVersion:safeInteger,commandId:idSchema,configHash:z.string().min(1),agent:agentSelectionSchema,grant:grantSchema,ownerToken:idSchema}).strict(),contractHash:z.string().regex(/^[a-f0-9]{64}$/),inputCheckpoint:inputCheckpointSchema.nullable(),work:z.discriminatedUnion("kind",[loopWorkSchema,singleCallWorkSchema])}).strict().superRefine((value,ctx)=>{
+  if(value.protocol===3&&(value.tokenPolicy!==undefined||value.claim.grant.work.tokens===null))ctx.addIssue({code:"custom",message:"token-policy-requires-protocol4"});
+  if(value.protocol===4&&(value.work.kind!=="loop"||value.claim.grant.work.sessions===0))ctx.addIssue({code:"custom",message:"invalid-token-policy-work"});
   if(value.work.kind==="loop"&&value.work.skillPluginDir!==undefined&&value.work.codexSkillsDir!==undefined)ctx.addIssue({code:"custom",path:["work","codexSkillsDir"],message:"skills-directories-mutually-exclusive"});
   // A single call is never resumed (spec §6.5): an interrupted estimate is re-estimated, not continued.
   if(value.work.kind==="single-call"&&value.inputCheckpoint!==null)ctx.addIssue({code:"custom",path:["inputCheckpoint"],message:"single-call-input-checkpoint"});

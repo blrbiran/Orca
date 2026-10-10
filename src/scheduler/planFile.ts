@@ -207,7 +207,7 @@ export const taskContractSchema = z.object({
   executionPolicy: z.object({
     autonomyLevel: z.literal("L2"), maxAttempts: z.number().int().positive(),
     perAttemptTimeoutMs: z.number().int().positive(), totalRuntimeBudgetMs: z.number().int().positive(),
-    tokenBudget: z.number().int().positive(), worktreeRequired: z.literal(true),
+    tokenBudget: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).nullable().default(null), worktreeRequired: z.literal(true),
     partialOutcomeRecoveryWindowMs: z.number().int().nonnegative(),
   }).strict(),
   safetyPolicy: z.object({

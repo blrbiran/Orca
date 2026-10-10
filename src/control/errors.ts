@@ -117,6 +117,8 @@ export const durableCommandErrorStatuses = {
   "continuation-budget-unavailable": 422,
   "continuation-predecessor-unrecoverable": 422,
   "control-capability-unsupported": 422,
+  "control-token-policy-unsupported": 422,
+  "active-unbounded-budget-conflict": 409,
   "control-evidence-unavailable": 422,
   "control-plan-rejected": 422,
   // Assembly spec §3 / ruling R5: no execution port is configured on this process. Durable, so a

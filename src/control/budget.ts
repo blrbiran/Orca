@@ -1,3 +1,5 @@
+import { allocateFundedAllowance, hasOptionalTaskPolicy, persistFundedAllowance } from "./fundedAllowance.js";
+import { budgetAmountSchema, finiteCommitment, tokenProofCovers, type BudgetAmount } from "./tokenPolicy.js";
 import { controlGraph } from "./graph.js";
 import { randomUUID } from "node:crypto";
 import { hasValidUsageSettlement } from "./usageSettlement.js";
@@ -14,7 +16,7 @@ import { noteRunWrite } from "./activity.js";
 import { releaseCommitment, setAllocationStates } from "./stopIntent.js";
 import { clarifyingLedger } from "./requirementRecords.js";
 export interface RunRecord extends Claim, RunView {
-  remaining:Grant; cumulative:Grant; highWater:number;
+  remaining:Grant; cumulative:{work:Amount;handoff:Amount}; highWater:number;
   unknown:{work:boolean;handoff:boolean};breaches:number[];
   handoffWorkItemId:string|null;
   predecessorRunId?:string;
@@ -57,11 +59,14 @@ export function subtract(a:Amount,b:Amount):Amount {
   }
   return result;
 }
-export function budgetBalance(limit:Amount,used:Amount,committed:Amount):{reserve:Amount;deficit:Amount} {
-  [limit,used,committed].forEach(value=>amountSchema.parse(value));
-  const reserve=zero(),deficit=zero();
+export function budgetBalance(limit:Amount,used:Amount,committed:Amount):{reserve:Amount;deficit:Amount};
+export function budgetBalance(limit:BudgetAmount,used:Amount,committed:Amount):{reserve:BudgetAmount;deficit:Amount};
+export function budgetBalance(limit:BudgetAmount,used:Amount,committed:Amount):{reserve:BudgetAmount;deficit:Amount} {
+  budgetAmountSchema.parse(limit);[used,committed].forEach(value=>amountSchema.parse(value));
+  const reserve:BudgetAmount=zero(),deficit=zero();
   for(const d of dimensions){
-    const occupied=BigInt(used[d])+BigInt(committed[d]),ceiling=BigInt(limit[d]);
+    if(d==="tokens"&&limit.tokens===null){reserve.tokens=null;continue;}
+    const occupied=BigInt(used[d])+BigInt(committed[d]),ceiling=BigInt(limit[d]!);
     const available=ceiling>occupied?ceiling-occupied:0n,breach=occupied>ceiling?occupied-ceiling:0n;
     if(available>BigInt(Number.MAX_SAFE_INTEGER)||breach>BigInt(Number.MAX_SAFE_INTEGER))throw new ControlError("numeric-overflow");
     reserve[d]=Number(available);deficit[d]=Number(breach);
@@ -101,11 +106,11 @@ export function syncRequirementLedger(store:ControlStore,group:GroupRecord,curre
 export function componentMin(a:Amount,b:Amount):Amount {
   return {tokens:Math.min(a.tokens,b.tokens),activeMs:Math.min(a.activeMs,b.activeMs),attempts:Math.min(a.attempts,b.attempts),sessions:Math.min(a.sessions,b.sessions)};
 }
-export function assertCapabilities(mode:BudgetMode,c:CapabilityViewV1):void {
+export function assertCapabilities(mode:BudgetMode,c:CapabilityViewV1,actualWorkTokens:number|null=0):void {
   if(!capabilityViewSchema.safeParse(c).success) throw new ControlError("control-capability-unsupported");
   if(c.usageObservation==="unavailable" || c.budgetEnforcement==="unavailable" || c.handoffControl!=="durable" || c.handoffExecution===null) throw new ControlError("control-capability-unsupported");
   // Backlog #11(a) (Orca handoff §9.1): strict needs the proof to bound tokens, as probeBlocksDispatch, profiledCapabilities and the estimator's gate already require.
-  if(mode==="strict" && (c.budgetEnforcement!=="bounded" || c.requestBoundProof===null || !c.requestBoundProof.workDimensions.includes("tokens"))) throw new ControlError("control-capability-unsupported");
+  if(mode==="strict" && (c.budgetEnforcement!=="bounded" || !tokenProofCovers(c,actualWorkTokens))) throw new ControlError("control-capability-unsupported");
 }
 export function claimWork(store:ControlStore,input:ClaimInput, preparedWork?:WorkInput):Claim {
   const {groupId,workItemId,graphVersion,targetVersion,capabilities,executionProfile,handoffProfile,...meta}=input;
@@ -123,7 +128,8 @@ export function claimWork(store:ControlStore,input:ClaimInput, preparedWork?:Wor
     const work=readWork(store,groupId,workItemId);
     if(group.graphVersion!==graphVersion) throw new ControlError("graph-version-conflict");
     if(work.targetVersion!==targetVersion) throw new ControlError("target-version-conflict");
-    assertCapabilities(group.budgetMode??"strict",capabilities);
+    const allocation=work.kind==="task"&&hasOptionalTaskPolicy(store,groupId,workItemId)?allocateFundedAllowance(store,groupId,workItemId,store.now()):undefined;
+    assertCapabilities(group.budgetMode??"strict",capabilities,allocation?allocation.grant.work.tokens:0);
     if(work.kind==="handoff") {
       const parent=readRun(store,work.parentRunId);
       if(parent.groupId!==groupId || parent.taskId!==work.taskId || parent.state==="settled" || parent.configHash!==work.configHash || parent.handoffWorkItemId) throw new ControlError("handoff-parent-invalid");
@@ -136,7 +142,9 @@ export function claimWork(store:ControlStore,input:ClaimInput, preparedWork?:Wor
     if(work.status==="done") throw new ControlError("work-already-done");
     for(const id of work.dependsOn) if(readWork(store,groupId,id).status!=="done") throw new ControlError("dependency-not-done");
     if(store.db.prepare("SELECT id FROM runs WHERE group_id=? AND work_item_id=? AND active=1").get(groupId,workItemId)) throw new ControlError("work-already-active");
-    const total=add(work.grant.work,work.grant.handoff);
+    if(allocation===null)throw new ControlError("group-budget-unavailable","funded-allowance");
+    const grant=allocation?.grant??work.grant;
+    const total=add(finiteCommitment(grant.work),grant.handoff);
     if(work.kind==="goal-review") {
       if(!fits(group.used,group.reserved,group.limit)) throw new ControlError("group-budget-unavailable");
       if(!fits(total,zero(),group.reviewRemaining)) throw new ControlError("group-review-budget-unavailable");
@@ -146,9 +154,10 @@ export function claimWork(store:ControlStore,input:ClaimInput, preparedWork?:Wor
       if(!fits(group.used,reserved,group.limit)) throw new ControlError("group-budget-unavailable");
       group.reserved=reserved;
     }
-    const claim:Claim={groupId,workItemId,taskId:work.taskId,runId:"run-"+randomUUID(),generation:1,graphVersion,targetVersion,commandId:meta.commandId,configHash:work.configHash,agent:work.agent,grant:work.grant,ownerToken:randomUUID()};
-    const run:RunRecord={...claim,...(executionProfile?{executionProfile}:{}),...(handoffProfile?{handoffProfile}:{}),executionId:null,state:"claimed",checkpointId:null,recoverable:false,remaining:structuredClone(work.grant),cumulative:{work:zero(),handoff:zero()},unknown:{work:true,handoff:true},highWater:0,breaches:[],handoffWorkItemId:null};
+    const claim:Claim={groupId,workItemId,taskId:work.taskId,runId:"run-"+randomUUID(),generation:1,graphVersion,targetVersion,commandId:meta.commandId,configHash:work.configHash,agent:work.agent,grant,ownerToken:randomUUID()};
+    const run:RunRecord={...claim,...(executionProfile?{executionProfile}:{}),...(handoffProfile?{handoffProfile}:{}),executionId:null,state:"claimed",checkpointId:null,recoverable:false,remaining:structuredClone(grant),cumulative:{work:zero(),handoff:zero()},unknown:{work:true,handoff:true},highWater:0,breaches:[],handoffWorkItemId:null};
     store.db.prepare("INSERT INTO runs VALUES (?,?,?,?,1,?)").run(claim.runId,groupId,workItemId,1,JSON.stringify(run));
+    if(allocation)persistFundedAllowance(store,claim.runId,groupId,workItemId,allocation);
     work.status="running";saveWork(store,groupId,work);
     group.status="running";group.budgetVersion++;saveGroup(store,group);return claim;
   });
@@ -176,10 +185,10 @@ export function releaseRunReserve(store:ControlStore,id:string,proof:StopProof):
     // same one `terminaliseRun` (stopIntent.ts) uses.
     run.state="settled";saveRun(store,run);store.db.prepare("UPDATE runs SET active=0 WHERE id=?").run(id);
     setAllocationStates(store,run.groupId,run.workItemId,"terminal");
-    releaseCommitment(store,run.groupId,add(run.remaining.work,run.remaining.handoff));
+    releaseCommitment(store,run.groupId,add(finiteCommitment(run.remaining.work),run.remaining.handoff));
     return;
   }
-  group.reserved=subtract(group.reserved,add(run.remaining.work,run.remaining.handoff));
+  group.reserved=subtract(group.reserved,add(finiteCommitment(run.remaining.work),run.remaining.handoff));
   group.budgetVersion++;run.remaining={work:zero(),handoff:zero()};run.state="settled";
   saveGroup(store,group);saveRun(store,run);store.db.prepare("UPDATE runs SET active=0 WHERE id=?").run(id);
 }

@@ -24,7 +24,7 @@ describe("failed handoff recovery", () => {
     expect(screen.getByRole("button", { name: "Retry task a" })).toBeTruthy();
   });
   it("a released manual failure cannot Continue and can empty-resume before Retry", () => {
-    const r = failed("settled-failed"); r.continuable = true; r.unknownUsageSettlement = { generation: 1, highWater: 1, remaining: { work: r.remaining, handoff: r.remaining }, allowed: false, refusalReason: "run-usage-settled", settlement: { method: "remaining-grant", charged: { work: r.remaining, handoff: r.remaining }, principal: "user:owner", at: 1234, reservationDisposition: "released" } as NonNullable<RunViewV1["unknownUsageSettlement"]>["settlement"] };
+    const r = failed("settled-failed"); r.continuable = true; r.unknownUsageSettlement = { generation: 1, highWater: 1, remaining: { work: r.remaining, handoff: {...r.remaining,tokens:r.remaining.tokens!} }, allowed: false, refusalReason: "run-usage-settled", settlement: { method: "remaining-grant", charged: { work: r.remaining, handoff: {...r.remaining,tokens:r.remaining.tokens!} }, principal: "user:owner", at: 1234, reservationDisposition: "released" } as NonNullable<RunViewV1["unknownUsageSettlement"]>["settlement"] };
     const v = recovery(r); v.summary = { ...v.summary, stopMode: "handoff", stopState: "handoff-complete" }; v.stop = { mode: "handoff", state: "handoff-complete", frozenRunIds: [r.runId], acceptedAt: "now", deadlineAt: null };
     const onCommand = show(v);
     expect(within(screen.getByRole("tabpanel")).getByText(/reported an error/)).toBeTruthy();

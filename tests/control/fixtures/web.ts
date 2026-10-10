@@ -1,3 +1,4 @@
+import { complex1mDefaults, TASK_WORK, ESTIMATE_GRANT } from "../../../src/control/estimator.js";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { vi } from "vitest";
@@ -31,12 +32,14 @@ export interface WebFixtureTask { taskId: string; dependsOn?: string[]; targetVe
   // Loop plans spec §3.1: a task that names a loop plan instead of a contract file.
   loop?: Record<string, unknown>;
   /** The hand-written contract's executionPolicy.perAttemptTimeoutMs (60 000 unless said otherwise). */
-  perAttemptTimeoutMs?: number }
+  perAttemptTimeoutMs?: number; tokenBudget?:number|null }
 /**
  * Agent selection plan T10 (spec §6.2): the importing operator's ("human") preferences -- `null` leaves them unset, absent
  * seeds a default agent so the import-time estimator slot resolves -- and the plan's group layers (R7: no estimatorAgent).
  */
 export interface WebFixtureOptions {
+  /** Existing criteria retain historical finite accounting; nullable policy criteria exercise actual new import. */
+  tokenPolicy?:"finite-legacy"|"optional-v1";
   preferences?: OperatorPreferences | null;
   planAgents?: { agent?: PartialSelection; reconcileAgent?: PartialSelection };
   /** The killGraceMs the fixture's ccloop answers for every selection (5 000 unless said otherwise), frozen at confirmation. */
@@ -68,7 +71,7 @@ export async function webFixture(snapshot = profileSnapshot(), tasks: readonly W
   // installation it does not know as ccloop would.
   const asked: PartialSelection[] = [];
   const resolveAgent = fixtureResolveAgent(() => observed, { killGraceMs: options.killGraceMs, ...(options.distinctConfigHash ? { distinctConfigHash: true } : {}) });
-  const port = { accept, resolveAgent: async (partial: PartialSelection) => (asked.push(structuredClone(partial)), resolveAgent(partial)),
+  const port = { readFeatures:async()=>({protocol:1 as const,tokenPolicy:"optional-v1" as const}), accept, resolveAgent: async (partial: PartialSelection) => (asked.push(structuredClone(partial)), resolveAgent(partial)),
     // The table view lists both installations resolveAgent knows (agents.ts), each with its kind: skills need claude.
     listAgents: async () => ({ installations: [{ id: "codex", kind: "codex", defaults: { model: "fixture-model", contextWindow: "agent-default" as const }, contextOptions: ["agent-default" as const], version: "0.0.0-fixture" },
       { id: "claude", kind: "claude", defaults: { model: "fixture-claude-model", contextWindow: "agent-default" as const }, contextOptions: ["agent-default" as const], version: "0.0.0-fixture" }] }),
@@ -86,7 +89,7 @@ export async function webFixture(snapshot = profileSnapshot(), tasks: readonly W
     }
     const contract = { objective: { taskId: task.taskId, goal: "ship", successCondition: "passes", nonGoals: [] },
       context: { repoPath: repo, targetPaths: task.targetPaths ?? [task.taskId], relevantDocs: [], buildTestCommands: ["true"], constraints: [] },
-      executionPolicy: { autonomyLevel: "L2", maxAttempts: 9, perAttemptTimeoutMs: task.perAttemptTimeoutMs ?? 60_000, totalRuntimeBudgetMs: 90_000, tokenBudget: 99_000, worktreeRequired: true, partialOutcomeRecoveryWindowMs: 30_000 },
+      executionPolicy: { autonomyLevel: "L2", maxAttempts: 9, perAttemptTimeoutMs: task.perAttemptTimeoutMs ?? 60_000, totalRuntimeBudgetMs: 90_000, tokenBudget: task.tokenBudget===undefined?99_000:task.tokenBudget, worktreeRequired: true, partialOutcomeRecoveryWindowMs: 30_000 },
       safetyPolicy: { allowlistPaths: [], denylistPaths: [], maxFilesTouched: 1, humanGateConditions: [] },
       verification: { verifierType: "command", requiredChecks: options.requiredChecks ?? ["true"], rejectOn: ["failure"], evidenceRequired: [] },
       escalationAndExit: { escalationTargets: [], pauseOn: [], stopOn: [], terminalStates: ["succeeded", "blocked_waiting_human", "exhausted", "cancelled", "failed"] } };
@@ -109,6 +112,7 @@ export async function webFixture(snapshot = profileSnapshot(), tasks: readonly W
   // Single-call estimate spec §4.4: the injected observation carries ccloop's resolution, which answers singleCallExecution "v1", so this estimate queues exactly as before the single-call gate.
   const imported = importControlPlan({ ...deps, estimatorObservation: () => ({ profile: frozen, observed, probeFailureCode: null, resolution: prepared.observation.resolution }) }, importCommand);
   if ("error" in imported || imported.result.kind !== "imported") throw new Error(JSON.stringify(imported));
+  if(options.tokenPolicy!=="optional-v1")seedHistoricalFiniteBudget(h.store,"g");
   let sequence = 0;
   const raw = (commandId: string, expectedRevision: number, verb: RawAuthorityCommandV1["verb"], target: RawAuthorityCommandV1["target"], payload: unknown) => ({
     schema: "orca-raw-command-v1", commandId, actorId: "human", expectedRevision, verb, target, payload,
@@ -128,4 +132,20 @@ export async function webFixture(snapshot = profileSnapshot(), tasks: readonly W
     profileIds: { estimator: "all", worker: "all", handoff: "all", goalReview: "all" }, profileHashes: { estimator: frozen.profileHash, worker: frozen.profileHash, handoff: frozen.profileHash, goalReview: frozen.profileHash }, contextPolicy: { handoffAtContextTokens: 800_000 },
     selectionsHash: (await resolveGroupSelections({ store: h.store, port }, "g", "human")).selectionsHash ?? "0".repeat(64) });
   return { ...h, deps, frozen, accept, imported, command, taskCommand, runCommand, rawCommand: raw, confirmPayload, estimateId: imported.result.estimateId, setObserved: (value: typeof observed) => { observed = value; }, asked, resolveAgent };
+}
+
+/** Controller-approved historical mutable rows: old finite ceilings, reservations and policy tags; frozen source bytes stay exact. */
+export function seedHistoricalFiniteBudget(store:import("../../../src/control/store.js").ControlStore,groupId:string):void {
+ const group=JSON.parse(String(store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId)!.body));
+ if(group.status!=="draft"||group.used.tokens!==0||store.db.prepare("SELECT id FROM runs WHERE group_id=?").get(groupId))throw new Error("historical fixture requires a fresh unclaimed import");
+ const tasks=store.db.prepare("SELECT id,body FROM work_items WHERE group_id=?").all(groupId),defaults=complex1mDefaults(tasks.length);
+ const proposal=readBudgetProposal(store,groupId),queued=store.db.prepare("SELECT id FROM estimates WHERE group_id=? AND state='queued'").get(groupId)!==undefined;
+ proposal.groupLimit.tokens=defaults.limit.tokens;proposal.explicitUnallocatedReserve.tokens=defaults.reserve.tokens+(queued?0:ESTIMATE_GRANT.tokens);
+ for(const allocation of proposal.allocations){if(allocation.ownerKind==="task"&&allocation.bucket==="work")allocation.amount.tokens=TASK_WORK.tokens;if(allocation.ownerKind==="reserve")allocation.amount.tokens=proposal.explicitUnallocatedReserve.tokens;}
+ group.limit.tokens=defaults.limit.tokens;group.reserved.tokens=defaults.base.tokens-(queued?0:ESTIMATE_GRANT.tokens);
+ group.ledger.groupLimit=group.limit;group.ledger.committedRemaining=group.reserved;group.ledger.explicitUnallocatedReserve=proposal.explicitUnallocatedReserve;
+ store.db.prepare("UPDATE groups SET body=? WHERE id=?").run(JSON.stringify(group),groupId);
+ store.db.prepare("UPDATE budget_proposals SET body=? WHERE group_id=?").run(canonicalBytes(proposal).toString(),groupId);
+ for(const row of tasks){const work=JSON.parse(String(row.body));work.grant.work.tokens=TASK_WORK.tokens;store.db.prepare("UPDATE work_items SET body=? WHERE group_id=? AND id=?").run(JSON.stringify(work),groupId,String(row.id));}
+ store.db.prepare("UPDATE token_policies SET mode='finite-legacy',tokens=CASE WHEN work_item_id='' THEN ? ELSE ? END WHERE group_id=?").run(defaults.limit.tokens,TASK_WORK.tokens,groupId);
 }

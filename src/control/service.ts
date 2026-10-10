@@ -1,3 +1,5 @@
+import { budgetBalance } from "./budget.js";
+import { amountSchema } from "./schema.js";
 import type { ControlStore } from "./store.js";
 import type { ExecutionPort } from "./executionPort.js";
 import { productionExecutionPort } from "./executionPort.js";
@@ -117,14 +119,16 @@ export class ControlService {
       if(existing){const run=readRun(this.store,String(existing.id));claim=run;if(run.graphVersion!==group.graphVersion)throw new ControlError("reconcile-version-conflict");if(!sameProfile(run.executionProfile,executionProfile)||!sameProfile(run.handoffProfile,handoffProfile))throw new ControlError("profile-changed");}
       else {
         const cap=this.options.reconcileGrant;if(!cap)throw new ControlError("reconcile-budget-unapproved");grantSchema.parse(cap);
-        const free=subtract(group.limit,add(group.used,group.reserved)),handoff=componentMin(cap.handoff,free),work=componentMin(cap.work,subtract(free,handoff));
+        const balance=budgetBalance(group.limit,group.used,group.reserved),bounded=amountSchema.parse(cap.work);
+        if(Object.values(balance.deficit).some(n=>n>0))throw new ControlError("group-budget-unavailable");
+        const free={...balance.reserve,tokens:balance.reserve.tokens===null?add(bounded,cap.handoff).tokens:balance.reserve.tokens},handoff=componentMin(cap.handoff,free),work=componentMin(bounded,subtract(free,handoff));
         if(work.tokens===0||work.activeMs===0||work.attempts===0||work.sessions===0)throw new ControlError("group-budget-unavailable");
         const parent=allWork(this.store,groupId).find(item=>item.taskId===taskId&&item.kind==="task");if(!parent)throw new ControlError("work-not-found");
         const prepared:WorkInput={workItemId,taskId:workItemId,kind:"reconcile",dependsOn:[],contract:{pendingReconciliation:taskId},configHash:parent.configHash,agent:parent.agent,grant:{work,handoff}};
         claim=claimWork(this.store,{groupId,workItemId,capabilities,executionProfile,handoffProfile,graphVersion:group.graphVersion,targetVersion:1,commandId:`reconcile-${taskId}`,expectedRevision:group.revision,by:"control-service"},prepared);
       }
       // The phase timeout reaches ccloop's setTimeout, which cannot hold more than MAX_TIMER_MS (schema.ts).
-      return {maxAttempts:claim.grant.work.attempts,perAttemptTimeoutMs:Math.min(claim.grant.work.activeMs,MAX_TIMER_MS),totalRuntimeBudgetMs:claim.grant.work.activeMs,tokenBudget:claim.grant.work.tokens};
+      return {maxAttempts:claim.grant.work.attempts,perAttemptTimeoutMs:Math.min(claim.grant.work.activeMs,MAX_TIMER_MS),totalRuntimeBudgetMs:claim.grant.work.activeMs,tokenBudget:amountSchema.parse(claim.grant.work).tokens};
     });
   }
   async reconcileBudgetLegacy(groupId:string,taskId:string):Promise<ApprovedReconcileBudget>{return this.reconcileWithCapabilities(groupId,taskId,await this.legacyCapabilities(groupId,this.parentAgent(groupId,taskId)));}

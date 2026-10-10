@@ -1,3 +1,5 @@
+import { finiteCommitment, type BudgetAmount } from "./tokenPolicy.js";
+import { hasTokenPolicy } from "./fundedAllowance.js";
 import { hasValidUsageSettlement, type UsageSettlement } from "./usageSettlement.js";
 import { createHash } from "node:crypto";
 import { z } from "zod";
@@ -90,12 +92,12 @@ export type GroupBody = {
   stopped: boolean;
   used: Amount;
   reserved: Amount;
-  limit: Amount;
+  limit: BudgetAmount;
   ledger: {
-    groupLimit: Amount;
+    groupLimit: BudgetAmount;
     used: Amount;
     committedRemaining: Amount;
-    explicitUnallocatedReserve: Amount;
+    explicitUnallocatedReserve: BudgetAmount;
     budgetDeficit: Amount;
     usageUnknown: boolean;
   };
@@ -755,7 +757,7 @@ export function settleHandoffRequestInTransaction(
 function terminaliseRun(store: ControlStore, groupId: string, run: RunBody, outcome: HandoffDisposition, reasonCode: string | null): void {
   const settled: RunBody = { ...run, state: outcome, failureCode: reasonCode };
   saveRunBody(store, settled, false);
-  const released = add(settled.remaining.work, settled.remaining.handoff);
+  const released = add(finiteCommitment(settled.remaining.work), settled.remaining.handoff);
   // N1 spec §5.1: a single call's stop is settled by its purpose.
   const purpose = singleCallPurposeOf(run);
   if (purpose === "estimate" && run.estimateId !== null) {
@@ -767,6 +769,14 @@ function terminaliseRun(store: ControlStore, groupId: string, run: RunBody, outc
   // ledger (never releaseCommitment, which needs a proposal; survey S28).
   if (purpose !== null && purpose !== "estimate") { interruptRequirementCall(store, groupId, settled as never); return; }
   const work = readWork(store, groupId, run.workItemId) as unknown as { status: string; grant: { work: Amount; handoff: Amount } };
+  if(hasTokenPolicy(store,groupId)&&purpose===null&&outcome!=="settled-restartable") {
+    const unknown=settled.unknown.work||settled.unknown.handoff;
+    if(!unknown)releaseCommitment(store,groupId,released);
+    setAllocationStates(store,groupId,run.workItemId,unknown?"unknown":outcome==="settled-recoverable"?"held":"terminal");
+    work.status=outcome==="settled-recoverable"&&!unknown?"held":"blocked";
+    if(!unknown)Object.assign(work,{fundingReleased:true});
+    saveWork(store,groupId,work as never);return;
+  }
   if (outcome === "settled-restartable") {
     // Handoff delivery spec §11 I9, §13.2 C-6, Minor a (controller decisions, 2026-09-25): a run proved never to
     // have started keeps the task's commitment -- nothing is released. A plain run's task is claimable again and

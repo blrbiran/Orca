@@ -1,3 +1,5 @@
+import { budgetAmountSchema, type BudgetAmount } from "./tokenPolicy.js";
+import { hasTokenPolicy } from "./fundedAllowance.js";
 import { validateRetryGrantSource } from "./retryGrant.js";
 import { frozenWorkAgent, type FrozenWorkAgent } from "./agentFreeze.js";
 import type { FrozenSlot } from "./agentSelection.js";
@@ -36,7 +38,7 @@ export interface ConfirmedProposal {
   graphVersion: number;
   proposalVersion: number;
   proposalIdentity: { groupId: string; planHash: string; proposalVersion: number };
-  groupLimit: Amount;
+  groupLimit: BudgetAmount;
   budgetMode: "strict" | "soft";
   contextPolicy: { handoffAtContextTokens: number | null };
   profiles: { estimator: ProfileBindingV1; worker: ProfileBindingV1; handoff: ProfileBindingV1; goalReview: ProfileBindingV1 };
@@ -45,7 +47,7 @@ export interface ConfirmedProposal {
     taskId: string;
     originalContractHash: string;
     originalContractCanonicalJson: string;
-    work: Amount;
+    work: BudgetAmount;
     handoff: Amount;
   }>;
   /** Agent selection spec §6.4 step 4: each task's frozen selection and the group's reconcile slot. */
@@ -122,12 +124,13 @@ function verifyTaskSet(input: ConfirmedProposal, plan: ControlPlanV1): void {
 }
 
 function verifyConservation(input: ConfirmedProposal): ExecutionAllocation[] {
-  amountSchema.parse(input.groupLimit);
+  budgetAmountSchema.parse(input.groupLimit);
   const total = { tokens: 0n, activeMs: 0n, attempts: 0n, sessions: 0n };
   const seen = new Set<string>();
   const suppliedEstimates = new Map<string, EstimateAllocation>();
   for (const allocation of input.allocations) {
-    amountSchema.parse(allocation.amount);
+    budgetAmountSchema.parse(allocation.amount);
+    if(allocation.bucket!=="work"&&allocation.bucket!=="reserve")amountSchema.parse(allocation.amount);
     const key = `${allocation.ownerKind}\0${allocation.ownerId}\0${allocation.bucket}`;
     if (seen.has(key)) throw new ControlError("execution-policy-unrepresentable");
     seen.add(key);
@@ -140,7 +143,8 @@ function verifyConservation(input: ConfirmedProposal): ExecutionAllocation[] {
       suppliedEstimates.set(allocation.ownerId, allocation);
     }
     for (const dimension of ["tokens", "activeMs", "attempts", "sessions"] as const) {
-      total[dimension] += BigInt(allocation.amount[dimension]);
+      if(dimension==="tokens"&&(allocation.amount.tokens===null||(hasTokenPolicy(input.store,input.groupId)&&allocation.ownerKind==="task")))continue;
+      total[dimension] += BigInt(allocation.amount[dimension]!);
       if (total[dimension] > BigInt(Number.MAX_SAFE_INTEGER)) throw new ControlError("numeric-overflow");
     }
   }
@@ -165,7 +169,8 @@ function verifyConservation(input: ConfirmedProposal): ExecutionAllocation[] {
     }
   }
   for (const dimension of ["tokens", "activeMs", "attempts", "sessions"] as const) {
-    if (total[dimension] > BigInt(input.groupLimit[dimension])) throw new ControlError("group-budget-unavailable");
+    if (dimension==="tokens"&&input.groupLimit.tokens===null)continue;
+    if (total[dimension] > BigInt(input.groupLimit[dimension]!)) throw new ControlError("group-budget-unavailable");
   }
   return input.allocations
     .filter((allocation): allocation is ExecutionAllocation => allocation.ownerKind !== "estimate")
@@ -180,9 +185,9 @@ export function derivedPhaseTimeoutMs(originalMs: number, activeMs: number): num
 export function deriveContract(task: ConfirmedProposal["tasks"][number], proposalVersion: number): {
   canonicalJson: string; contractCanonicalJson: string; derivedContractHash: string;
 } {
-  amountSchema.parse(task.work);
+  budgetAmountSchema.parse(task.work);
   amountSchema.parse(task.handoff);
-  if (task.work.tokens <= 0 || task.work.activeMs <= 0 || task.work.attempts <= 0 || task.work.sessions <= 0) {
+  if (task.work.tokens === 0 || task.work.activeMs <= 0 || task.work.attempts <= 0 || task.work.sessions <= 0) {
     throw new ControlError("execution-policy-unrepresentable");
   }
   let original: Record<string, unknown>;
@@ -339,7 +344,7 @@ export function readConfirmedTaskExecution(store: ControlStore, groupId: string,
     const work = snapshot.allocations.find(a => a.ownerKind === "task" && a.ownerId === taskId && a.bucket === "work");
     const handoff = snapshot.allocations.find(a => a.ownerKind === "task" && a.ownerId === taskId && a.bucket === "handoff");
     if (!task || !ref || !work || !handoff) throw new ControlError("recovery-blocked");
-    const expected = deriveContract({ ...task, work: work.amount, handoff: handoff.amount }, proposal.proposalVersion);
+    const expected = deriveContract({ ...task, work: work.amount, handoff: amountSchema.parse(handoff.amount) }, proposal.proposalVersion);
     const canonicalJson = readCanonicalRecord(store, ref.derivedContractHash);
     if (canonicalJson !== expected.canonicalJson || ref.derivedContractHash !== expected.derivedContractHash) throw new ControlError("recovery-blocked");
     // Agent selection spec §6.4 step 4 (§12 I3): the snapshot is the authority for the frozen selection; the work item must agree.
@@ -355,7 +360,7 @@ export function readConfirmedTaskExecution(store: ControlStore, groupId: string,
       && ("names" in declared ? skillEntry.profile !== null || sha256Canonical(skillEntry.names) !== sha256Canonical(declared.names) : skillEntry.profile !== declared.profile)) throw new ControlError("recovery-blocked");
     const skills = skillEntry === undefined ? null : { profile: skillEntry.profile, names: [...skillEntry.names] };
     return { derivedContractHash: ref.derivedContractHash, contractCanonicalJson: expected.contractCanonicalJson,
-      contract: taskContractSchema.parse(JSON.parse(expected.contractCanonicalJson)), grant: { work: work.amount, handoff: handoff.amount }, agent: frozen, skills };
+      contract: taskContractSchema.parse(JSON.parse(expected.contractCanonicalJson)), grant: { work: work.amount, handoff: amountSchema.parse(handoff.amount) }, agent: frozen, skills };
   } catch (error) {
     if (error instanceof ControlError) throw error;
     throw new ControlError("recovery-blocked");

@@ -1,3 +1,4 @@
+import { finiteReconcileTokens } from "./tokenPolicy.js";
 import { existsSync, readdirSync } from "node:fs";
 import { rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -121,7 +122,7 @@ export function integrationContractOf(input: ContractInput): { contract: Record<
   const checks = [...new Set(taskContracts.flatMap((contract) => contract.verification.requiredChecks).filter((check) => check.trim() !== ""))];
   if (checks.length === 0) return { refused: "integration-no-checks" };
   const max = (pick: (contract: TaskContract) => number): number => Math.max(...taskContracts.map(pick));
-  const tokenBudget = max((contract) => contract.executionPolicy.tokenBudget);
+  const tokenBudget = finiteReconcileTokens(taskContracts.map(contract=>contract.executionPolicy.tokenBudget));
   const paths = conflict.paths.join(", ");
   const contract = {
     objective: {

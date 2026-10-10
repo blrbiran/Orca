@@ -1,3 +1,4 @@
+import { amountSchema } from "./schema.js";
 import { add, readRun, saveRun, subtract, syncWebBudget } from "./budget.js";
 import { isGroupArchived } from "./archivedMark.js";
 import { recordActivity } from "./activity.js";
@@ -25,6 +26,7 @@ export interface SettlementAdmissionReadContext {
 export function settlementAdmission(store: ControlStore, run: SettlementRun, context?: SettlementAdmissionReadContext): "committed" | "released" {
   const group = readGroup(store, run.groupId), work = (context?.store === store && context.groupId === run.groupId
     ? context.readWork(run.workItemId) : readWork(store, run.groupId, run.workItemId)) as unknown as { taskId: string; currentRunId?: string; status: string; grant: unknown; pendingRunId?: string | null };
+  if(run.remaining.work.tokens===null)throw new ControlError("run-usage-not-settleable","unlimited-remainder");
   if (isGroupArchived(store, run.groupId)) throw new ControlError("group-archived");
   if (run.usageSettlement !== undefined) throw new ControlError("run-usage-settled");
   if ((group as { status?: string }).status === "clarifying") throw new ControlError("group-state-invalid", "clarifying");
@@ -69,7 +71,7 @@ export async function applySettleUnknownUsage(deps: SettleUnknownUsageDeps, comm
         if ("error" in evidence) throw evidence.error;
         if (!settlementSame(run, evidence.body) || !settlementSame(settlementProof(store, run), evidence.proof)
           || (disposition === "released" && !settlementSame(releasedSettlementCheckpoint(store, run), evidence.checkpoint))) throw new ControlError("run-usage-not-settleable", "evidence-changed");
-        const charged = structuredClone(run.remaining), at = (deps.now ?? (() => new Date()))().getTime();
+        const charged = {work:amountSchema.parse(run.remaining.work),handoff:amountSchema.parse(run.remaining.handoff)}, at = (deps.now ?? (() => new Date()))().getTime();
         const request = latestRequestForRun(store, groupId, run.runId);
         const marker = usageSettlementSchema.parse({ method: "remaining-grant", commandId: command.commandId, principal, at,
           groupId, taskId: run.taskId, workItemId: run.workItemId, runId: run.runId, generation: run.generation, highWater: run.highWater,

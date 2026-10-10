@@ -14,7 +14,7 @@ export async function unknownFailure(tasks = [{ taskId: "a" }], reportedPartial 
     if (report.candidate && report.terminal && report.events.length) {
       if (options.missing) report.candidate.missing = ["lost-evidence"];
       if (options.spentAllTokens) {
-        for (const event of report.events) if (event.cumulative) event.cumulative.tokens = envelope.claim.grant[event.bucket].tokens;
+        for (const event of report.events) if (event.cumulative) event.cumulative.tokens = envelope.claim.grant[event.bucket].tokens!;
       }
       if (reportedPartial) {
         report.events.push({ ...report.events[0]!, eventSeq: 3, bucket: "work", cumulative: null });
@@ -27,7 +27,7 @@ export async function unknownFailure(tasks = [{ taskId: "a" }], reportedPartial 
   if (options.extraReserve) {
     const { readWebGroup } = await import("../../../src/control/webService.js");
     const limit = readWebGroup(t.h.store, "g").limit;
-    const raised = t.service.setLimit(t.h.command("set-limit", { limit: { tokens: limit.tokens * 4, activeMs: limit.activeMs * 4, attempts: limit.attempts * 4, sessions: limit.sessions * 4 } }));
+    const raised = t.service.setLimit(t.h.command("set-limit", { limit: { tokens: limit.tokens! * 4, activeMs: limit.activeMs * 4, attempts: limit.attempts * 4, sessions: limit.sessions * 4 } }));
     if ("error" in raised) throw new Error(JSON.stringify(raised));
   }
   const runId = await t.claim();

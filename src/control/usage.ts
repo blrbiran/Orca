@@ -1,3 +1,4 @@
+import { finiteCommitment, remainingBudget } from "./tokenPolicy.js";
 import { z } from "zod";
 import type { ControlStore } from "./store.js";
 import type { UsageEvent } from "./types.js";
@@ -31,11 +32,12 @@ export function recordUsage(store:ControlStore,event:UsageEvent,appliedAt:number
       else {
         const delta=subtract(next.cumulative,run.cumulative[next.bucket]);
         bookUsageDelta(store,{run:run as typeof run&{phase?:string;purpose?:string},groupBody:group as unknown as Record<string,unknown>,event:next,deltaTokens:delta.tokens,appliedAt});
-        const released=componentMin(delta,run.remaining[next.bucket]);
+        const released=componentMin(delta,finiteCommitment(run.remaining[next.bucket]));
         group.used=add(group.used,delta);group.reserved=subtract(group.reserved,released);
-        run.remaining[next.bucket]=subtract(run.remaining[next.bucket],released);
+        if(next.bucket==="work")run.remaining.work=remainingBudget(run.grant.work,next.cumulative);
+        else run.remaining.handoff=subtract(run.remaining.handoff,released);
         run.cumulative[next.bucket]=next.cumulative;run.unknown[next.bucket]=false;
-        if(dimensions.some(k=>next.cumulative![k]>run.grant[next.bucket][k])) {
+        if(dimensions.some(k=>run.grant[next.bucket][k]!==null && next.cumulative![k]>run.grant[next.bucket][k]!)) {
           run.breaches.push(next.eventSeq);
           // N1 DR18: on a clarifying group the claim-time fit is the cap; a breach is recorded on the run only.
           if((group as {status?:string}).status!=="clarifying"){if("planHash" in group)group.status="blocked";else group.stopped=true;}

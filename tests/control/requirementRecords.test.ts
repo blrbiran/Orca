@@ -26,7 +26,7 @@ describe("requirement records (N1 spec §4)", () => {
         expect(reopened.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()!.value).toBe(schemaVersion);
         // Rewritten for issue-fixes spec §5.2 (ruling H5, 2026-10-08): the store is now at schema version 9.
         // D9 correction (controller ruling, 2026-10-09; verify_usage_retry_round at e7df5df): the current migration target is schema 10.
-        expect(schemaVersion).toBe("10");
+        expect(schemaVersion).toBe("11");
         expect(reopened.db.prepare("SELECT name FROM sqlite_master WHERE name IN ('requirement_rounds','requirement_drafts') ORDER BY name").all().map(row => row.name)).toEqual(["requirement_drafts", "requirement_rounds"]);
         expect(reopened.db.prepare("SELECT id,body FROM runs ORDER BY id").all()).toEqual(rowsBefore);
       } finally { reopened.close(); }
@@ -38,8 +38,8 @@ describe("requirement records (N1 spec §4)", () => {
     try {
       insertClarifyingGroup(h.store, clarifyingInput("r"));
       const group = readWebGroup(h.store, "r");
-      expect(group).toMatchObject({ status: "clarifying", stopped: false, limit: REQUIREMENT_LIMIT_DEFAULT, used: { tokens: 0 }, reserved: { tokens: 0 } });
-      expect(group.ledger.explicitUnallocatedReserve).toEqual(REQUIREMENT_LIMIT_DEFAULT);
+      expect(group).toMatchObject({ status: "clarifying", stopped: false, limit: { ...REQUIREMENT_LIMIT_DEFAULT,tokens:10_000_000 }, used: { tokens: 0 }, reserved: { tokens: 0 } });
+      expect(group.ledger.explicitUnallocatedReserve).toEqual({...REQUIREMENT_LIMIT_DEFAULT,tokens:10_000_000});
       expect(group).not.toHaveProperty("planHash");
       expect(group).not.toHaveProperty("proposal");
       expect(h.store.db.prepare("SELECT COUNT(*) AS n FROM work_items WHERE group_id='r'").get()!.n).toBe(0);

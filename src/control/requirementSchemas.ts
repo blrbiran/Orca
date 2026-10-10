@@ -1,3 +1,4 @@
+import type { BudgetAmount } from "./tokenPolicy.js";
 import { z } from "zod";
 import { amountSchema, canonicalTimestampSchema, idSchema, safeInteger } from "./schema.js";
 import type { Amount } from "./types.js";
@@ -9,7 +10,7 @@ export const MAX_AUTO_RETRIES = 2;
 export const MAX_QUESTIONS = 5;
 export const SLUG_PATTERN = /^[a-z0-9]+(-[a-z0-9]+){0,7}$/;
 export const IDEA_MAX_BYTES = 32 * 1024;
-export const REQUIREMENT_LIMIT_DEFAULT: Amount = Object.freeze({ tokens: 10_000_000, activeMs: 14_400_000, attempts: 40, sessions: 40 });
+export const REQUIREMENT_LIMIT_DEFAULT: BudgetAmount = Object.freeze({ tokens: null, activeMs: 14_400_000, attempts: 40, sessions: 40 });
 export const REQUIREMENT_CALL_GRANT: Amount = Object.freeze({ tokens: 1_000_000, activeMs: 1_200_000, attempts: 1, sessions: 1 });
 /** Why a drafting round or draft has no call claimed (spec §5.2; final review finding 3: unknown usage claims nothing). */
 export const REQUIREMENT_WAITING = ["requirement-budget-exhausted", "requirement-usage-unknown"] as const;

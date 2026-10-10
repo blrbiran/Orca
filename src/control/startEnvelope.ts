@@ -1,3 +1,4 @@
+import { tokenPolicySchema } from "./tokenPolicy.js";
 import { z } from "zod";
 import { ControlError } from "./errors.js";
 import type { StartEnvelope } from "./executionPort.js";
@@ -93,8 +94,10 @@ export function toStartEnvelope(
   const { frozen, claim } = frozenClaim(envelope, run);
   // Single-call estimate spec §4.1, N1 spec §5.1: an estimate or other single-call claim is one single call, never a loop.
   if (frozen.phase === "estimate" || frozen.phase === "single-call") throw new ControlError("start-envelope-conflict", `phase:${frozen.phase}`);
+  const policy=tokenPolicySchema.optional().parse((run as {tokenPolicy?:unknown}).tokenPolicy);
   const built: StartEnvelope = {
-    protocol: 3,
+    protocol: policy?4:3,
+    ...(policy?{tokenPolicy:policy}:{}),
     claim,
     // The ledger's derived hash, never one recomputed here: recomputing would let a contract that
     // drifted after the freeze pass as the one the claim was made against.

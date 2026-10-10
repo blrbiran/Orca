@@ -7,7 +7,7 @@ import type { ControlAction } from "./controlApi.js";
 import { refusalText } from "./i18n.js";
 
 /** Read-only server amounts: never recompute the authoritative charge in the browser. */
-function ChargeTable({ amounts, settled }: { amounts: { work: Amount; handoff: Amount }; settled: boolean }): JSX.Element {
+function ChargeTable({ amounts, settled }: { amounts: { work: import("./controlTypes.js").BudgetAmount; handoff: Amount }; settled: boolean }): JSX.Element {
   const { t } = useTranslation();
   return <table aria-label={t(settled ? "control.settlement.charged" : "control.settlement.remaining")}>
     <thead><tr>{(["bucket", "tokens", "activeMs", "attempts", "sessions"] as const).map(key => <th key={key}>{t(`control.settlement.${key}`)}</th>)}</tr></thead>

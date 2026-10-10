@@ -81,7 +81,7 @@ describe("the Requirements section, the rest of its branches (N1 spec §11.2)", 
     const action = onCommand.mock.calls[0]![0];
     expect(action).toEqual({ verb: "requirement-open", groupId: action.payload.groupId, expectedRevision: 0, payload: {
       groupId: action.payload.groupId, repoId: "repo", idea: "Let people print a page.", contentLanguage: "zh",
-      limit: { tokens: 10_000_000, activeMs: 14_400_000, attempts: 40, sessions: 40 } } });
+      limit: { tokens: null, activeMs: 14_400_000, attempts: 40, sessions: 40 } } });
     expect(action.payload.groupId).toMatch(/^requirement-/);
   });
 

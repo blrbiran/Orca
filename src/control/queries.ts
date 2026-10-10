@@ -1,3 +1,4 @@
+import { budgetAmountSchema } from "./schema.js";
 import type { ControlStore } from "./store.js";
 import type { ArtifactRef, Amount, GroupInput, GroupView, RunView, WorkInput } from "./types.js";
 import type { AgentSelection, FrozenSlot } from "./agentSelection.js";
@@ -94,7 +95,7 @@ const groupAuthoritySchema = z.object({
     budgetMode: z.enum(["strict", "soft"]).nullable(), contextPolicy: z.object({ handoffAtContextTokens: safeInteger.positive().nullable() }).strict(),
     profiles: profileSetSchema.nullable(), executionSnapshotHash: hashSchema.nullable(),
   }).strict(),
-  ledger: z.object({ groupLimit: amountSchema }).passthrough(),
+  ledger: z.object({ groupLimit: budgetAmountSchema }).passthrough(),
 }).passthrough();
 
 function recoveryBlocked(): never { throw new ControlError("recovery-blocked"); }
@@ -167,11 +168,11 @@ const proposalAllocationSchema = z.object({
   ownerKind: z.enum(["task", "goal-review", "reserve"]), ownerId: z.string().min(1),
   bucket: z.enum(["work", "handoff", "review", "reserve"]),
   state: z.enum(["draft-encumbered", "confirmed", "active", "held", "continuing", "retrying", "terminal", "unknown"]),
-  amount: amountSchema, fieldProvenance: amountProvenanceSchema,
+  amount: budgetAmountSchema, fieldProvenance: amountProvenanceSchema,
 }).strict();
 const budgetProposalRecordSchema = z.object({
   proposalVersion: safeInteger.positive(), state: z.enum(["editable", "confirmed"]), planHash: hashSchema,
-  groupLimit: amountSchema, explicitUnallocatedReserve: amountSchema,
+  groupLimit: budgetAmountSchema, explicitUnallocatedReserve: budgetAmountSchema,
   allocations: z.array(proposalAllocationSchema), budgetMode: z.enum(["strict", "soft"]).nullable(),
   contextPolicy: z.object({ handoffAtContextTokens: safeInteger.positive().nullable() }).strict(),
   profiles: profileSetSchema.nullable(), executionSnapshotHash: hashSchema.nullable(),

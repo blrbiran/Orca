@@ -41,6 +41,7 @@ export interface TokenInputProps {
   onReset?: () => void;
   /** Blank text is a valid answer meaning "unset": no error, and `onClear` is called instead of `onChange`. */
   allowEmpty?: boolean;
+  emptyLabel?:string;
   onClear?: () => void;
   min?: number;
   readOnly?: boolean;
@@ -52,13 +53,14 @@ export interface TokenInputProps {
   label?: string;
 }
 
-export function TokenInput({ value, onChange, onInvalid, onReset, allowEmpty, onClear, min = 0, readOnly, "aria-label": ariaLabel, label }: TokenInputProps): JSX.Element {
+export function TokenInput({ value, onChange, onInvalid, onReset, allowEmpty, onClear, emptyLabel, min = 0, readOnly, "aria-label": ariaLabel, label }: TokenInputProps): JSX.Element {
   const { t } = useTranslation();
   const lang = currentLanguage();
   const [text, setText] = useState(value === null ? "" : formatTokens(value, lang));
   // A value changed from outside (a suggestion applied, a draft restored) replaces the text; typing that parses to the
   // value already held does not, so a half-typed "12," is left alone.
   useEffect(() => {
+    if(value===null&&allowEmpty&&text!==""){setText("");onReset?.();}
     if (value !== null && parseTokens(text) !== value) {
       setText(formatTokens(value, lang));
       onReset?.();
@@ -84,7 +86,7 @@ export function TokenInput({ value, onChange, onInvalid, onReset, allowEmpty, on
   );
   const note = invalid
     ? <small role="alert" style={{ color: "red" }}>{t("tokens.invalid", { min: formatTokens(min, lang) })}</small>
-    : parsed !== null && parsed >= 1000 && <small>{t("tokens.hint", { short: shortTokens(parsed, lang) })}</small>;
+    : blank&&allowEmpty&&emptyLabel?<small>{emptyLabel}</small>: parsed !== null && parsed >= 1000 && <small>{t("tokens.hint", { short: shortTokens(parsed, lang) })}</small>;
   if (label === undefined) return <>{input}{note}</>;
   return <div className="token-field"><label>{label}{input}</label>{note}</div>;
 }

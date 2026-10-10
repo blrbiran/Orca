@@ -4,9 +4,9 @@ import { describe, expect, it } from "vitest";
 import { withCommandContext } from "../../src/control/commandClient.js";
 import { importControlPlan, prepareEstimatorSlot, type ImportCommand } from "../../src/control/planImport.js";
 import { readDraft } from "../../src/control/requirementRecords.js";
-import { AgentCeilingRefusal } from "../../src/control/spendCaps.js";
+import { AgentCeilingRefusal, readSpendCapBlock } from "../../src/control/spendCaps.js";
 import type { ControlStore } from "../../src/control/store.js";
-import type { WebControlService } from "../../src/control/webService.js";
+import { WebControlService } from "../../src/control/webService.js";
 import { registerControlMutationRoutes, verifyControlJsonBody } from "../../src/panel/controlApi.js";
 import { webFixture } from "../control/fixtures/web.js";
 import { requirementHarness } from "../control/fixtures/requirementHarness.js";
@@ -29,37 +29,27 @@ const groupLimitTokens = (store: ControlStore, groupId: string): number =>
   (JSON.parse(String(store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId)!.body)) as { ledger: { groupLimit: { tokens: number } } }).ledger.groupLimit.tokens;
 
 describe("the agent ceiling (spec §6.3.2, D4, D10)", () => {
-  it("an agent's import over headroom is refused, rolled back and books nothing; a user's is accepted", async () => {
-    const h = await webFixture(); try {
-      const prepare = await importer(h);
-      setCap(h.store, 1);
-      const agentImport = await prepare("agent-import", "g2");
-      let refusal: unknown = null;
-      try { withCommandContext("agent-import", AGENT, agentImport); } catch (error) { refusal = error; }
-      expect(refusal).toBeInstanceOf(AgentCeilingRefusal);
-      expect(h.store.db.prepare("SELECT id FROM groups WHERE id='g2'").get()).toBe(undefined);
-      expect(h.store.db.prepare("SELECT id FROM commands WHERE id='agent-import'").get()).toBe(undefined);
-      expect(h.store.db.prepare("SELECT count(*) AS n FROM work_items WHERE group_id='g2'").get()!.n).toBe(0);
-      // A member (any user principal) is not held to the ceiling; the claim gate still applies to what it imports.
-      const userImport = await prepare("user-import", "g2");
-      expect(withCommandContext("user-import", { client: "web", principal: "user:u1" }, userImport)).toMatchObject({ result: { kind: "imported", groupId: "g2" } });
-      const limit = groupLimitTokens(h.store, "g2");
-      expect(refusal).toMatchObject({ limitTokens: limit, cap: { scope: "all", period: "total", tokens: 1, headroom: 1 } });
-      // D10: the refused commandId was not burned, and under enough headroom an agent's import is accepted.
-      setCap(h.store, limit);
-      expect(withCommandContext("agent-import", AGENT, await prepare("agent-import", "g3"))).toMatchObject({ result: { kind: "imported", groupId: "g3" } });
-    } finally { await h.dispose(); }
+  it("an agent's new unlimited import is admitted while its finite estimate claim remains capped",async()=>{
+    const h=await webFixture();try{
+      const prepare=await importer(h);setCap(h.store,1);
+      const receipt=withCommandContext("agent-import",AGENT,await prepare("agent-import","g2"));
+      expect(receipt).toMatchObject({result:{kind:"imported",groupId:"g2"}});expect(groupLimitTokens(h.store,"g2")).toBeNull();
+      const estimateId=(receipt as {result:{estimateId:string}}).result.estimateId;
+      expect(await new WebControlService(h.deps).claimEstimate("g2",estimateId)).toBeNull();
+      expect(readSpendCapBlock(h.store,"g2")).toMatchObject({code:"spend-cap-reached",scope:"all",period:"total",capTokens:1});
+      expect(h.store.db.prepare("SELECT id FROM runs WHERE group_id='g2'").all()).toEqual([]);
+      expect(withCommandContext("user-import",{client:"web",principal:"user:u1"},await prepare("user-import","g3"))).toMatchObject({result:{kind:"imported",groupId:"g3"}});
+    }finally{await h.dispose();}
   });
-
-  it("an agent's import is held to its repository's cap too", async () => {
-    const h = await webFixture(); try {
-      const prepare = await importer(h);
-      setCap(h.store, 1, "repo:repo");
-      let refusal: unknown = null;
-      try { withCommandContext("agent-import", AGENT, await prepare("agent-import", "g2")); } catch (error) { refusal = error; }
-      expect(refusal).toMatchObject({ cap: { scope: "repo:repo", period: "total", tokens: 1 } });
-      expect(h.store.db.prepare("SELECT id FROM groups WHERE id='g2'").get()).toBe(undefined);
-    } finally { await h.dispose(); }
+  it("an agent's new unlimited import still cannot claim beyond its repository cap",async()=>{
+    const h=await webFixture();try{
+      const prepare=await importer(h);setCap(h.store,1,"repo:repo");
+      const receipt=withCommandContext("agent-import",AGENT,await prepare("agent-import","g2"));
+      expect(receipt).toMatchObject({result:{kind:"imported",groupId:"g2"}});
+      expect(await new WebControlService(h.deps).claimEstimate("g2",(receipt as {result:{estimateId:string}}).result.estimateId)).toBeNull();
+      expect(readSpendCapBlock(h.store,"g2")).toMatchObject({code:"spend-cap-reached",scope:"repo:repo",period:"total",capTokens:1});
+      expect(h.store.db.prepare("SELECT id FROM runs WHERE group_id='g2'").all()).toEqual([]);
+    }finally{await h.dispose();}
   });
 
   it("the route answers 403 control-limit-over-cap-headroom", async () => {

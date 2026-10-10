@@ -1,3 +1,6 @@
+import { readFundedAllowance } from "../control/fundedAllowance.js";
+import { tokenPolicySchema, tokenRemainingStatus } from "../control/tokenPolicy.js";
+import { budgetAmountSchema } from "../control/schema.js";
 import { readGroupSnapshot, type GroupReadSnapshot, type StoredJsonResult } from "./groupReadSnapshot.js";
 import { validateRetryGrantSource } from "../control/retryGrant.js";
 import { derivedPhaseTimeoutMs, frozenAllocationShape } from "../control/executionSnapshot.js";
@@ -76,10 +79,10 @@ const groupBodySchema = z.object({
   // N1 spec §4.1: a clarifying group has no plan yet.
   planHash: hashSchema.optional(),
   ledger: z.object({
-    groupLimit: amountSchema,
+    groupLimit: budgetAmountSchema,
     used: amountSchema,
     committedRemaining: amountSchema,
-    explicitUnallocatedReserve: amountSchema,
+    explicitUnallocatedReserve: budgetAmountSchema,
     budgetDeficit: amountSchema,
     usageUnknown: z.boolean(),
   }).strict(),
@@ -93,6 +96,7 @@ const workBodySchema = z.object({
   contract: z.unknown(),
   // Agent selection spec §6.2 / §12 I3: null on a draft; confirmation freezes ccloop's.
   configHash: hashSchema.nullable(),
+  tokenPolicy:tokenPolicySchema.optional(),
   grant: grantSchema,
   targetVersion: safeInteger.positive(),
   status: workStatusSchema,
@@ -161,6 +165,7 @@ const persistedRunSchema = z.object({
   timeoutMs: safeInteger.positive(),
   killGraceMs: safeInteger,
   agentCapabilities: capabilityViewSchema,
+  tokenPolicy:tokenPolicySchema.optional(),
   grant: grantSchema,
   ownerToken: idSchema,
   executionProfile: executionProfileAuthoritySchema,
@@ -176,7 +181,7 @@ const persistedRunSchema = z.object({
   checkpointId: idSchema.nullable(),
   recoverable: z.boolean(),
   remaining: grantSchema,
-  cumulative: grantSchema,
+  cumulative: z.object({work:amountSchema,handoff:amountSchema}).strict(),
   unknown: z.object({ work: z.boolean(), handoff: z.boolean() }).strict(),
   highWater: safeInteger,
   breaches: z.array(safeInteger.positive()),
@@ -532,11 +537,12 @@ function validateExecutionSnapshot(
   const live = groupBody(store, groupId).ledger;
   if (canonicalBytes(live.explicitUnallocatedReserve).compare(canonicalBytes(proposal.explicitUnallocatedReserve)) !== 0) return blocked("live-reserve-identity");
   if (!live.usageUnknown) for (const dimension of ["tokens", "activeMs", "attempts", "sessions"] as const) {
+    if(dimension==="tokens"&&live.groupLimit.tokens===null){if(live.explicitUnallocatedReserve.tokens!==null||live.budgetDeficit.tokens!==0)return blocked("live-ledger-conservation");continue;}
     const occupied = BigInt(live.used[dimension]) + BigInt(live.committedRemaining[dimension]);
-    const ceiling = BigInt(live.groupLimit[dimension]);
+    const ceiling = BigInt(live.groupLimit[dimension]!);
     const reserve = occupied < ceiling ? ceiling - occupied : 0n;
     const deficit = occupied > ceiling ? occupied - ceiling : 0n;
-    if (BigInt(live.explicitUnallocatedReserve[dimension]) !== reserve || BigInt(live.budgetDeficit[dimension]) !== deficit) return blocked("live-ledger-conservation");
+    if (BigInt(live.explicitUnallocatedReserve[dimension]!) !== reserve || BigInt(live.budgetDeficit[dimension]) !== deficit) return blocked("live-ledger-conservation");
   }
   const tasks = new Map(plan.tasks.map(task => [task.taskId, task]));
   for (const ref of parsed.data.derivedContracts) {
@@ -760,7 +766,7 @@ function sameBinding(binding: z.infer<typeof executionProfileAuthoritySchema>, e
 function validAccounting(run: z.infer<typeof persistedRunSchema>): boolean {
   for (const bucket of ["work", "handoff"] as const) {
     for (const dimension of ["tokens", "activeMs", "attempts", "sessions"] as const) {
-      if (run.remaining[bucket][dimension] !== Math.max(run.grant[bucket][dimension] - run.cumulative[bucket][dimension], 0)) return false;
+      if (run.remaining[bucket][dimension] !== (run.grant[bucket][dimension]===null?null:Math.max(run.grant[bucket][dimension]! - run.cumulative[bucket][dimension], 0))) return false;
     }
   }
   return true;
@@ -800,7 +806,7 @@ function continuableRun(store: ControlStore, run: z.infer<typeof persistedRunSch
   if (workRow === undefined) return false;
   const work = parseSnapshot(workBodySchema, snapshot.decodeWork(run.workItemId), `run-work-invalid:${run.runId}`);
   if (work.currentRunId !== run.runId || work.status !== "held") return false;
-  if (dimensions.some((dimension) => run.remaining.work[dimension] <= 0)) return false;
+  if (dimensions.some((dimension) => run.remaining.work[dimension] !== null && run.remaining.work[dimension]! <= 0)) return false;
   const row = store.db.prepare("SELECT body FROM checkpoints WHERE id=? AND run_id=?").get(run.checkpointId, run.runId);
   return row !== undefined && (parseJson(row.body, `checkpoint-invalid:${run.checkpointId}`) as { result?: unknown }).result === "partial";
 }
@@ -855,11 +861,12 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
       // current run's claim grant -- or, while that run is the parked predecessor, its remaining -- and an older
       // run of the task's lineage keeps the grant it was claimed with.
       const current = work.currentRunId === runId;
+      const funded=readFundedAllowance(store,run);
       const claimed = current && run.state === "settled-recoverable" ? run.remaining : run.grant;
       // Agent selection spec §6.4 / §3 I1: the run carries its work item's frozen selection, byte for byte.
       if (work.workItemId !== run.workItemId || work.taskId !== run.taskId || !sameFrozenRecords(run, work)
         || work.targetVersion !== run.targetVersion
-        || (current && canonicalBytes(work.grant).compare(canonicalBytes(claimed)) !== 0)
+        || (current && funded===null && canonicalBytes(work.grant).compare(canonicalBytes(claimed)) !== 0)
         || !sameBinding(run.executionProfile, proposal.profiles.worker, "task")
         || !sameBinding(run.handoffProfile, proposal.profiles.handoff, "handoff")) return blocked(`run-work-identity:${runId}`);
       if (run.phase === "handoff") {
@@ -878,6 +885,7 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
       runId, taskId: run.taskId, estimateId: run.estimateId, generation: run.generation, state, phase: run.phase,
       ...(run.purpose === undefined ? {} : { purpose: run.purpose }),
       claimOrdinal: run.claimOrdinal, providerAttemptOrdinal: run.providerAttemptOrdinal, profile,
+      ...(run.tokenPolicy?{tokenRemainingStatus:tokenRemainingStatus(run.grant[bucket].tokens,run.unknown[bucket])}:{}),
       used: run.cumulative[bucket], remaining: run.remaining[bucket], failureCode: run.failureCode,
       blockedReason: run.drive?.blockedReason ?? null,
       // Issue fixes spec §4.2(1), (5): ccloop's reason, and the outcome the Retry-task button keys on.

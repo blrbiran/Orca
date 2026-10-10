@@ -135,7 +135,7 @@ describe("retry-task (spec §4.2(2))", () => {
       const after = readWebGroup(t.h.store, "g").ledger;
       for (const d of DIMENSIONS) {
         expect(after.committedRemaining[d], d).toBe(before.committedRemaining[d] + net[d]);
-        expect(after.explicitUnallocatedReserve[d], d).toBe(before.explicitUnallocatedReserve[d] - net[d]);
+        expect(after.explicitUnallocatedReserve[d], d).toBe(before.explicitUnallocatedReserve[d]! - net[d]);
       }
       expect(readBudgetProposal(t.h.store, "g").allocations.filter((row) => row.ownerId === "a").map((row) => row.state)).toEqual(["confirmed", "confirmed"]);
       // Effect 2: ready, currentRunId kept on the settled-failed run, grant unchanged.

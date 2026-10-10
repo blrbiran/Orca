@@ -1,3 +1,4 @@
+import { complex1mDefaults } from "../../src/control/estimator.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
@@ -93,7 +94,7 @@ async function confirmAgentGroup(runtime: ControlRuntime, repoId: string, prefer
 async function startConfirmed(runtime: ControlRuntime, raiseTokens = 0): Promise<void> {
   if (raiseTokens > 0) {
     const limit = readControlGroup(runtime.store, runtime.epoch, "g").ledger.groupLimit;
-    const raised = runtime.service.setLimit(raw(runtime, `raise-${++seq}`, "set-limit", { limit: { ...limit, tokens: limit.tokens + raiseTokens } }));
+    const raised = runtime.service.setLimit(raw(runtime, `raise-${++seq}`, "set-limit", { limit: { ...limit, tokens: (limit.tokens??complex1mDefaults(readArchivedPlan(runtime.store,"g").plan.tasks.length).limit.tokens) + raiseTokens } }));
     expect("error" in raised ? raised.error : "raised").toBe("raised");
   }
   const started = await runtime.service.start(raw(runtime, `start-${++seq}`, "start", {}));

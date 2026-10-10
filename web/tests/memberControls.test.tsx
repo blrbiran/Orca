@@ -42,7 +42,7 @@ describe("human-only controls follow the account (spec §3.5)", () => {
     expect(screen.queryByRole("textbox", { name: "Token limit" })).toBeNull();
     cleanup();
     const fromOwner = openRequirement(owner);
-    expect((fromOwner.payload as { limit?: { tokens: number } }).limit?.tokens).toBe(10_000_000);
+    expect((fromOwner.payload as { limit?: { tokens: number } }).limit?.tokens).toBeNull();
   });
 
   it("tells a member who raises an exhausted requirement limit instead of offering the form", () => {

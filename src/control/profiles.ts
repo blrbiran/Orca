@@ -78,9 +78,11 @@ function ownPort(port: ExecutionPort): ExecutionPort {
   const inspect = port.inspect.bind(port);
   const requestHandoff = port.requestHandoff.bind(port);
   const collect = port.collect.bind(port);
+  const readFeatures=port.readFeatures?.bind(port);
   const collectTaskResults=port.collectTaskResults?.bind(port);
   const readTaskResultEvidence=port.readTaskResultEvidence?.bind(port);
   const owned: ExecutionPort = {
+    ...(readFeatures?{readFeatures:()=>readFeatures()}:{}),
     resolveAgent: (partial) => resolveAgent(partial),
     listAgents: () => listAgents(),
     readEvidence: (ref) => readEvidence(ref),

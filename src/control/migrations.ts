@@ -1,6 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
 
-export const schemaVersion = "10";
+export const schemaVersion = "11";
 export const legacySchema = `CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;
 CREATE TABLE groups(id TEXT PRIMARY KEY, revision INTEGER NOT NULL, graph_version INTEGER NOT NULL, body TEXT NOT NULL) STRICT;
 CREATE TABLE work_items(group_id TEXT NOT NULL REFERENCES groups(id), id TEXT NOT NULL, target_version INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY(group_id,id)) STRICT;
@@ -106,8 +106,15 @@ CREATE INDEX IF NOT EXISTS activity_group_seq ON activity(group_id,seq);
 CREATE INDEX IF NOT EXISTS activity_run_seq ON activity(run_id,seq);
 `;
 
+// Token policy spec §4: derived policy rows leave all historical body/hash bytes intact.
+export const schema10To11 = `CREATE TABLE IF NOT EXISTS token_policies(group_id TEXT NOT NULL REFERENCES groups(id), work_item_id TEXT NOT NULL, mode TEXT NOT NULL CHECK(mode IN ('finite-legacy','optional-v1')), tokens INTEGER CHECK(tokens IS NULL OR (tokens >= 0 AND tokens <= 9007199254740991)), PRIMARY KEY(group_id,work_item_id)) STRICT;
+CREATE TABLE IF NOT EXISTS funded_allowances(run_id TEXT PRIMARY KEY REFERENCES runs(id), group_id TEXT NOT NULL REFERENCES groups(id), work_item_id TEXT NOT NULL, body TEXT NOT NULL) STRICT;
+INSERT OR IGNORE INTO token_policies SELECT id,'','finite-legacy',json_extract(body,'$.limit.tokens') FROM groups;
+INSERT OR IGNORE INTO token_policies SELECT group_id,id,'finite-legacy',json_extract(body,'$.grant.work.tokens') FROM work_items;
+`;
+
 // A fresh store has no groups, so the pre-ledger insert adds nothing.
-export const initialSchema = legacySchema + schema1To2 + schema2To3 + schema3To4 + schema4To5 + schema5To6 + schema6To7 + schema7To8 + schema8To9;
+export const initialSchema = legacySchema + schema1To2 + schema2To3 + schema3To4 + schema4To5 + schema5To6 + schema6To7 + schema7To8 + schema8To9 + schema10To11;
 
 /**
  * Accounts spec §9: idempotent on a store a criterion downgraded by dropping only its own column or table (the 6-to-7 and
@@ -129,9 +136,9 @@ export function migrateSchema(store: DatabaseSync, fromVersion: string): void {
   else if (fromVersion === "4") store.exec(schema4To5 + schema5To6 + schema6To7);
   else if (fromVersion === "5") store.exec(schema5To6 + schema6To7);
   else if (fromVersion === "6") store.exec(schema6To7);
-  else if (fromVersion !== "7" && fromVersion !== "8" && fromVersion !== "9") throw new Error("control-schema-unsupported");
+  else if (fromVersion !== "7" && fromVersion !== "8" && fromVersion !== "9" && fromVersion !== "10") throw new Error("control-schema-unsupported");
   // Every version before 8 goes through 7 to 8 first; 8 itself only gains the activity table (spec §5.2).
-  if (fromVersion !== "8" && fromVersion !== "9") migrate7To8(store);
-  store.exec(schema8To9);
+  if (fromVersion !== "8" && fromVersion !== "9" && fromVersion !== "10") migrate7To8(store);
+  store.exec(schema8To9 + schema10To11);
   store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
 }

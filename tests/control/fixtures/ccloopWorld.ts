@@ -1,3 +1,4 @@
+import { complex1mDefaults } from "../../../src/control/estimator.js";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
@@ -14,7 +15,7 @@ import { readArchivedPlan, readBudgetProposal } from "../../../src/control/queri
 import { assembleControlRuntime, type ControlRuntime } from "../../../src/panel/controlAssembly.js";
 import { controlRepoKey, resolveControlOptions } from "../../../src/panel/controlOptions.js";
 import { readControlGroup } from "../../../src/panel/controlViews.js";
-import { profileSnapshot } from "./web.js";
+import { profileSnapshot, seedHistoricalFiniteBudget } from "./web.js";
 
 /**
  * The lines of a log a fake CLI appends to, one per call. A fake's `appendFileSync` creates the file before
@@ -77,7 +78,8 @@ export interface ScriptEntry { files: Record<string, string>; delayMs?: { plan?:
  */
 /** Single-call estimate (F15, ccloop's fake claude): the answer to one single call, optionally after a delay, optionally streaming one closed message first. */
 export interface SingleCallScriptEntry { output: unknown; delayMs?: { "single-call": number }; usageBeforeDelay?: boolean }
-export interface WorldOptions { claudeScript?: Record<string, ScriptEntry | SingleCallScriptEntry>; /** Single-call estimate: the profile's declared context window (null otherwise, so the estimate stays blocked-capability). */ declaredContextWindowTokens?: number;
+const optionalPolicyWorlds=new WeakSet<ControlRuntime>();
+export interface WorldOptions { tokenPolicy?:"optional-v1"; claudeScript?: Record<string, ScriptEntry | SingleCallScriptEntry>; /** Single-call estimate: the profile's declared context window (null otherwise, so the estimate stays blocked-capability). */ declaredContextWindowTokens?: number;
   /** Syncskill integration plan Task 6: more variables for the assembled runtime's env (ORCA_SYNCSKILL_BIN and what the fake syncskill reads). */
   env?: NodeJS.ProcessEnv }
 
@@ -167,6 +169,7 @@ export function ccloopWorlds(options: { rootPrefix: string; epochPrefix: string 
       const runtime = await assembleControlRuntime({ control, repos, epoch: `${options.epochPrefix}${++epoch}`, env, driverCrash, wrapPort });
       if (runtime === null) throw new Error("the control plane did not assemble");
       live.add(runtime);
+      if(worldOptions.tokenPolicy==="optional-v1")optionalPolicyWorlds.add(runtime);
       await runtime.recover();
       return runtime;
     };
@@ -239,6 +242,7 @@ export const raw = (runtime: ControlRuntime, commandId: string, verb: string, pa
 export async function startGroup(runtime: ControlRuntime, repoId: string, raiseTokens = 0, beforeStart?: () => Promise<void>): Promise<void> {
   const imported = await runtime.service.importPlan(raw(runtime, "import", "import-plan", { groupId: "g", repoId, planId: "plan" }));
   expect(imported).toMatchObject({ result: { kind: "imported", estimateState: "blocked-capability" } });
+  if(!optionalPolicyWorlds.has(runtime))seedHistoricalFiniteBudget(runtime.store,"g");
   // Agent selection spec §6.2 layer 1: the operator's default worker is the world's installation (set after the
   // import, so the import's estimator still degrades to blocked-capability, as asserted above).
   const preferences = await runtime.service.setAgentPreferences(raw(runtime, "preferences", "set-agent-preferences", { preferences: { defaultAgent: "codex", perAgent: {} } }, { kind: "operator", operatorId: "human" }));
@@ -253,7 +257,7 @@ export async function startGroup(runtime: ControlRuntime, repoId: string, raiseT
   expect("error" in confirmed ? confirmed.error : "confirmed").toBe("confirmed");
   if (raiseTokens > 0) {
     const limit = readControlGroup(runtime.store, runtime.epoch, "g").ledger.groupLimit;
-    const raised = runtime.service.setLimit(raw(runtime, "raise", "set-limit", { limit: { ...limit, tokens: limit.tokens + raiseTokens } }));
+    const raised = runtime.service.setLimit(raw(runtime, "raise", "set-limit", { limit: { ...limit, tokens: (limit.tokens??complex1mDefaults(readArchivedPlan(runtime.store,"g").plan.tasks.length).limit.tokens)+raiseTokens } }));
     expect("error" in raised ? raised.error : "raised").toBe("raised");
   }
   // Ruling review R3: a criterion may change the world between confirmation and start (a CLI upgrading itself).

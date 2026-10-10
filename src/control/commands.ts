@@ -1,8 +1,11 @@
+import { assertNoActiveUnbounded } from "./spendCaps.js";
+import { hasTokenPolicy, saveTokenPolicy } from "./fundedAllowance.js";
+import { budgetFits, type BudgetAmount } from "./tokenPolicy.js";
 import { createHash } from "node:crypto";
 import type { ControlStore } from "./store.js";
 import type { Amount, CommandMeta, GroupInput, GroupView, WorkInput } from "./types.js";
 import { ControlError } from "./errors.js";
-import { amountSchema, commandSchema, groupSchema, idSchema, workSchema } from "./schema.js";
+import { budgetAmountSchema, amountSchema, commandSchema, groupSchema, idSchema, workSchema } from "./schema.js";
 import { allWork, getGroup, readGroup, saveGroup, type GroupRecord } from "./queries.js";
 import { controlGraph } from "./graph.js";
 import { recordProjectionChange } from "./projectionJournal.js";
@@ -16,8 +19,9 @@ export function canonical(value:unknown):string {
   throw new ControlError("control-non-json-payload");
 }
 export function hashPayload(value:unknown):string {return createHash("sha256").update(canonical(value)).digest("hex");}
-export function fits(used:Amount,reserved:Amount,limit:Amount):boolean {
-  return dimensions.every(k=>Number.isSafeInteger(used[k]+reserved[k]) && used[k]+reserved[k]<=limit[k]);
+export function fits(used:Amount,reserved:Amount,limit:BudgetAmount):boolean {
+  const total={...used};for(const k of dimensions)total[k]+=reserved[k];
+  return budgetFits(total,limit);
 }
 export function applyCommand<T>(store:ControlStore,groupId:string,meta:CommandMeta,payload:unknown,mutate:()=>T):T {
   idSchema.parse(groupId);commandSchema.parse(meta);
@@ -43,6 +47,7 @@ export function createGroup(store:ControlStore,input:GroupInput,meta:CommandMeta
     if(!fits(zero(),data.reviewReserve,data.limit)) throw new ControlError("group-budget-unavailable");
     const group:GroupRecord={...data,revision:1,graphVersion:1,stopped:false,status:"draft",used:zero(),reserved:{...data.reviewReserve},reviewRemaining:{...data.reviewReserve},budgetVersion:1};
     store.db.prepare("INSERT INTO groups(id,revision,graph_version,body) VALUES (?,?,?,?)").run(group.groupId,group.revision,group.graphVersion,JSON.stringify(group));
+    saveTokenPolicy(store,group.groupId,"",data.limit.tokens,data.limit.tokens===null?"optional-v1":"finite-legacy");
     return getGroup(store,group.groupId);
   });
 }
@@ -60,6 +65,8 @@ export function putWork(store:ControlStore,groupId:string,input:WorkInput,meta:C
     }
     const record={...work,targetVersion:(old?.targetVersion??0)+1,status:"ready"};
     store.db.prepare("INSERT INTO work_items VALUES (?,?,?,?) ON CONFLICT(group_id,id) DO UPDATE SET target_version=excluded.target_version,body=excluded.body").run(groupId,work.workItemId,record.targetVersion,JSON.stringify(record));
+    if(work.grant.work.tokens===null)saveTokenPolicy(store,groupId,"",group.limit.tokens);
+    saveTokenPolicy(store,groupId,work.workItemId,work.grant.work.tokens,hasTokenPolicy(store,groupId)?"optional-v1":"finite-legacy");
     group.revision++;if(!active || !auxiliaryAppend) group.graphVersion++;group.status="ready";saveGroup(store,group);
     return {view:getGroup(store,groupId),rejected:false};
   });
@@ -73,11 +80,12 @@ export function setGroupStopped(store:ControlStore,groupId:string,stopped:boolea
     group.stopped=stopped;group.revision++;saveGroup(store,group);store.db.prepare("INSERT INTO outbox VALUES (?, 'group-handoff', ?, 0) ON CONFLICT(id) DO NOTHING").run(`group-handoff:${groupId}:state:${group.revision}:${group.budgetVersion}`,JSON.stringify({groupId,revision:group.revision,budgetVersion:group.budgetVersion}));return getGroup(store,groupId);
   });
 }
-export function setGroupLimit(store:ControlStore,groupId:string,limit:Amount,meta:CommandMeta):GroupView {
-  amountSchema.parse(limit);
+export function setGroupLimit(store:ControlStore,groupId:string,limit:BudgetAmount,meta:CommandMeta):GroupView {
+  budgetAmountSchema.parse(limit);
   return applyCommand(store,groupId,meta,{verb:"limit",body:limit},()=>{
     const group=readGroup(store,groupId);
+    if(limit.tokens!==null)assertNoActiveUnbounded(store,"all",groupId);
     if(!fits(group.used,group.reserved,limit)) throw new ControlError("group-budget-unavailable");
-    group.limit=limit;group.revision++;saveGroup(store,group);store.db.prepare("INSERT INTO outbox VALUES (?, 'group-handoff', ?, 0) ON CONFLICT(id) DO NOTHING").run(`group-handoff:${groupId}:state:${group.revision}:${group.budgetVersion}`,JSON.stringify({groupId,revision:group.revision,budgetVersion:group.budgetVersion}));return getGroup(store,groupId);
+    group.limit=limit;saveTokenPolicy(store,groupId,"",limit.tokens,String(store.db.prepare("SELECT mode FROM token_policies WHERE group_id=? AND work_item_id=''").get(groupId)?.mode)==="optional-v1"?"optional-v1":"finite-legacy");group.revision++;saveGroup(store,group);store.db.prepare("INSERT INTO outbox VALUES (?, 'group-handoff', ?, 0) ON CONFLICT(id) DO NOTHING").run(`group-handoff:${groupId}:state:${group.revision}:${group.budgetVersion}`,JSON.stringify({groupId,revision:group.revision,budgetVersion:group.budgetVersion}));return getGroup(store,groupId);
   });
 }

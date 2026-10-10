@@ -19,7 +19,7 @@ describe("Web import of a loop task (spec §3.3, criterion 6)", () => {
     const h = await webFixture(undefined, [{ taskId: "a", labels: ["bug"], loop: LOOP }]);
     try {
       const task = readArchivedPlan(h.store, "g").plan.tasks[0]!;
-      expect(task.loop).toEqual({ schema: "orca-loop-recipe-v1", planId: "bugfix", planVersion: 2, chosenBy: "labels",
+      expect(task.loop).toEqual({ schema: "orca-loop-recipe-v1", planId: "bugfix", planVersion: 3, chosenBy: "labels",
         inputs: { ...LOOP, nonGoals: [], relevantDocs: [], protectedPaths: [], maxFilesTouched: null } });
       const repoPath = JSON.parse(task.originalContractCanonicalJson).context.repoPath;
       expect(repoPath).toBe(join(h.root, "repo"));

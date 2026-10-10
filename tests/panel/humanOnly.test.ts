@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { amountSchema } from "../../src/control/schema.js";
+import { amountSchema, budgetAmountSchema } from "../../src/control/schema.js";
 import { rawAuthorityCommandSchema, spendTokensSchema } from "../../src/control/webProtocol.js";
 import { AGENT_AMOUNT_FIELDS, HUMAN_ONLY_FIELDS, HUMAN_ONLY_VERBS, humanOnlyRefusal } from "../../src/panel/humanOnly.js";
 
@@ -10,7 +10,7 @@ const LEAF_KINDS = [z.ZodString, z.ZodNumber, z.ZodBoolean, z.ZodLiteral, z.ZodE
 function amountFields(): string[] {
   const found: string[] = [];
   const walk = (schema: z.ZodTypeAny, verb: string, path: string[]): void => {
-    if (schema === amountSchema || schema === spendTokensSchema) { found.push(`${verb}:${path.join(".")}`); return; }
+    if (schema === amountSchema || schema === budgetAmountSchema || schema === spendTokensSchema) { found.push(`${verb}:${path.join(".")}`); return; }
     if (schema instanceof z.ZodOptional || schema instanceof z.ZodNullable) return walk(schema.unwrap(), verb, path);
     if (schema instanceof z.ZodDefault) return walk(schema._def.innerType, verb, path);
     if (schema instanceof z.ZodEffects) return walk(schema.innerType(), verb, path);

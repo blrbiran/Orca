@@ -15,7 +15,7 @@ describe("proposal commands", () => {
       const result = service.editProposal(command);
       expect(result).toMatchObject({ result: { kind: "proposal-edited", proposalVersion: 2 } });
       const after = readBudgetProposal(h.store, "g");
-      expect(after.explicitUnallocatedReserve.tokens).toBe(before.explicitUnallocatedReserve.tokens + 1_000_000);
+      expect(after.explicitUnallocatedReserve.tokens).toBe(before.explicitUnallocatedReserve.tokens! + 1_000_000);
       expect(after.allocations.find(a => a.ownerId === "a" && a.bucket === "work")!.fieldProvenance.tokens).toEqual({ provenance: "human", estimateId: null });
       expect(service.editProposal(command)).toEqual(result);
       expect(service.editProposal(h.command("proposal-edit", { baseProposalVersion: 2, operations: [operation] }))).toMatchObject({ error: { code: "no-op-command" } });
@@ -30,7 +30,7 @@ describe("proposal commands", () => {
       const operation = { target: { scope: "task" as const, taskId: "a", allocation: "work" as const, dimension: "tokens" as const }, value: 9000000, provenance: "human" as const };
       expect(service.editProposal(h.command("proposal-edit", { baseProposalVersion: 1, operations: [operation] }))).toMatchObject({ error: { code: "group-budget-unavailable" } });
       expect(readBudgetProposal(h.store, "g")).toEqual(before);
-      expect(service.editProposal(h.command("proposal-edit", { baseProposalVersion: 1, operations: [operation], proposedGroupLimit: { ...before.groupLimit, tokens: before.groupLimit.tokens + 6000000 } }))).toMatchObject({ result: { proposalVersion: 2 } });
+      expect(service.editProposal(h.command("proposal-edit", { baseProposalVersion: 1, operations: [operation], proposedGroupLimit: { ...before.groupLimit, tokens: before.groupLimit.tokens! + 6000000 } }))).toMatchObject({ result: { proposalVersion: 2 } });
       const group = JSON.parse(String(h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!.body)); group.status = "running";
       h.store.db.prepare("UPDATE groups SET body=? WHERE id='g'").run(JSON.stringify(group));
       expect(service.editProposal(h.command("proposal-edit", { baseProposalVersion: 1, operations: [operation] }))).toMatchObject({ error: { code: "proposal-version-conflict" } });

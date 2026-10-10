@@ -46,11 +46,11 @@ describe("atomic confirmation", () => {
       expect(group.reviewRemaining.tokens).toBe(500000);
       const proposal = readBudgetProposal(h.store, "g");
       group.status = "running"; group.reserved.tokens -= 100; group.ledger.committedRemaining.tokens -= 100;
-      group.ledger.explicitUnallocatedReserve.tokens += 100; proposal.explicitUnallocatedReserve.tokens += 100;
-      proposal.allocations.find(a => a.ownerKind === "reserve")!.amount.tokens += 100;
+      group.ledger.explicitUnallocatedReserve.tokens += 100; proposal.explicitUnallocatedReserve.tokens! += 100;
+      proposal.allocations.find(a => a.ownerKind === "reserve")!.amount.tokens! += 100;
       h.store.db.prepare("UPDATE groups SET body=? WHERE id='g'").run(JSON.stringify(group));
       h.store.db.prepare("UPDATE budget_proposals SET body=? WHERE group_id='g'").run(canonicalBytes(proposal).toString("utf8"));
-      expect(service.setLimit(h.command("set-limit", { limit: { ...proposal.groupLimit, tokens: proposal.groupLimit.tokens + 1000 } }))).toMatchObject({ error: { code: "recovery-blocked" } });
+      expect(service.setLimit(h.command("set-limit", { limit: { ...proposal.groupLimit, tokens: proposal.groupLimit.tokens! + 1000 } }))).toMatchObject({ error: { code: "recovery-blocked" } });
     } finally { await h.dispose(); }
   });
   it("reads only archived derived execution authority after the original source changes", async () => {
@@ -74,7 +74,7 @@ describe("atomic confirmation", () => {
       expect(await service.confirm(h.command("confirm", await h.confirmPayload()))).toMatchObject({ result: { kind: "confirmed" } });
       const view = readControlGroup(h.store, "epoch", "g");
       expect(view.ledger.used.tokens).toBe(1000);
-      expect(view.ledger.used.tokens + view.ledger.committedRemaining.tokens + view.ledger.explicitUnallocatedReserve.tokens).toBe(view.ledger.groupLimit.tokens);
+      expect(view.ledger.used.tokens + view.ledger.committedRemaining.tokens + view.ledger.explicitUnallocatedReserve.tokens!).toBe(view.ledger.groupLimit.tokens);
     } finally { await h.dispose(); }
   });
   it("blocks ordinary claims while a Web proposal is draft", async () => {
@@ -100,11 +100,11 @@ describe("atomic confirmation", () => {
       // is still judged against the frozen authority exactly as before.
       await service.confirm(h.command("confirm", await h.confirmPayload()));
       const before = readBudgetProposal(h.store, "g");
-      const limit = { ...before.groupLimit, tokens: before.groupLimit.tokens + 500000 };
+      const limit = { ...before.groupLimit, tokens: before.groupLimit.tokens! + 500000 };
       expect(service.setLimit(h.command("set-limit", { limit }))).toMatchObject({ result: { kind: "limit-set", limit } });
       const after = readBudgetProposal(h.store, "g");
       expect(after.executionSnapshotHash).toBe(before.executionSnapshotHash);
-      expect(after.explicitUnallocatedReserve.tokens).toBe(before.explicitUnallocatedReserve.tokens + 500000);
+      expect(after.explicitUnallocatedReserve.tokens).toBe(before.explicitUnallocatedReserve.tokens! + 500000);
       expect(readControlGroup(h.store, "epoch", "g").ledger.groupLimit).toEqual(limit);
     } finally { await h.dispose(); }
   });

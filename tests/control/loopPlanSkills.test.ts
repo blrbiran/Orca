@@ -24,7 +24,9 @@ function expandGolden(extra: Record<string, unknown> = {}) {
 
 describe("a loop plan without skills keeps its bytes (golden captured before the change)", () => {
   it("keeps the recipe bytes, plan entry bytes, planHash and contract hash", () => {
-    const e = expandGolden();
+    const recipe=loopRecipeSchema.parse(JSON.parse(golden.recipeCanonical));
+    const historical=expandRecipe("a","/repo",recipe);if(!historical.ok)throw new Error(historical.reason);
+    const e={...historical,recipe};
     const entry = { taskId: "a", dependencyTaskIds: [], targetVersion: 1, loop: e.recipe, originalContractHash: e.hash, originalContractCanonicalJson: e.canonicalJson };
     expect(e.hash).toBe(golden.contractHash);
     expect(canonicalBytes(e.recipe).toString("utf8")).toBe(golden.recipeCanonical);

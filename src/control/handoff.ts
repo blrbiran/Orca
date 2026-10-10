@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { ControlStore } from "./store.js";
-import { artifactSchema } from "./schema.js";
+import { artifactSchema, tokenPolicySchema } from "./schema.js";
 import { readArtifact } from "./archive.js";
 import { readCommittedCheckpoint } from "./checkpoints.js";
 import { allWork, readGroup } from "./queries.js";
@@ -8,7 +8,7 @@ import { hashPayload } from "./commands.js";
 import { ControlError } from "./errors.js";
 
 const identitySchema=z.object({groupId:z.string(),workItemId:z.string(),taskId:z.string().nullable(),runId:z.string(),generation:z.number(),graphVersion:z.number(),targetVersion:z.number()}).strict();
-const packetSchema=z.object({protocol:z.literal(1),identity:identitySchema,request:z.unknown().nullable(),runState:z.unknown(),completed:z.array(z.string()),unfinished:z.array(z.string()),pendingDecisions:z.array(z.string()),awaitingHuman:z.array(z.string()),validationCommands:z.array(z.string()),rawLogs:z.array(artifactSchema),usageHighWater:z.number().int().nonnegative(),unresolvedRequestIds:z.array(z.string()),artifacts:z.array(artifactSchema)}).strict();
+export const packetSchema=z.object({protocol:z.literal(1),identity:identitySchema,request:z.unknown().nullable(),runState:z.unknown(),completed:z.array(z.string()),unfinished:z.array(z.string()),pendingDecisions:z.array(z.string()),awaitingHuman:z.array(z.string()),validationCommands:z.array(z.string()),rawLogs:z.array(artifactSchema),usageHighWater:z.number().int().nonnegative(),unresolvedRequestIds:z.array(z.string()),artifacts:z.array(artifactSchema),contractHash:z.string().regex(/^[a-f0-9]{64}$/).optional(),acceptedContract:artifactSchema.optional(),tokenPolicy:tokenPolicySchema.optional(),allowanceContinuation:z.object({nextPhase:z.enum(["plan","execute","verify"]),plan:artifactSchema.nullable(),execution:artifactSchema.nullable(),verification:artifactSchema.nullable(),state:artifactSchema,usage:artifactSchema}).strict().optional()}).strict();
 function currentRuns(store:ControlStore,groupId:string){const rows=store.db.prepare("SELECT body FROM runs WHERE group_id=? ORDER BY rowid DESC").all(groupId).map(row=>JSON.parse(String(row.body)));const seen=new Set<string>();return rows.filter(run=>run.taskId&&run.checkpointId&&!seen.has(run.taskId)&&(seen.add(run.taskId),true));}
 function markdownTask(data:any):Buffer{return Buffer.from(`# Task ${data.taskId} handoff\n\nCheckpoint: ${data.checkpointId}\nTarget version: ${data.targetVersion}\nResult: ${data.result}\n\n## Completed\n${data.completed.map((x:string)=>`- ${x}`).join("\n")||"- none"}\n\n## Unfinished\n${data.unfinished.map((x:string)=>`- ${x}`).join("\n")||"- none"}\n\n## Pending decisions\n${data.pendingDecisions.map((x:string)=>`- ${x}`).join("\n")||"- none"}\n\n## Awaiting human\n${data.awaitingHuman.map((x:string)=>`- ${x}`).join("\n")||"- none"}\n\n## Validation commands\n${data.validationCommands.map((x:string)=>`- ${x}`).join("\n")||"- none"}\n`);}
 export async function buildTaskHandoff(store:ControlStore,groupId:string,taskId:string):Promise<{json:Buffer;markdown:Buffer}>{

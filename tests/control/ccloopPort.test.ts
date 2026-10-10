@@ -233,3 +233,24 @@ it("states no stop reason when ccloop gave none", async () => {
   const h = await fixture("ok", { terminal: { ...FAILED_TERMINAL, stopReason: null } });
   expect("stopReason" in (await h.port.collect(h.envelope, 0)).terminal!).toBe(false);
 });
+
+it("negotiates optional token policy separately and never sends v4 to an old peer",async()=>{
+ const old=await fixture("ok",{featuresUnsupported:true});
+ expect(await old.port.readFeatures?.()).toEqual({protocol:1});
+ const input={...old.envelope,protocol:4,tokenPolicy:{authoredTokenCeiling:null,bindingCauses:[],inheritedUsage:{tokens:0,activeMs:0,attempts:0,sessions:0}}} as StartEnvelope;
+ await expect(old.port.accept(input)).rejects.toThrow("control-token-policy-unsupported");
+ expect(JSON.parse(await readFile(old.record,"utf8")).argv[1]).toBe("features");
+ expect(await old.port.accept(old.envelope)).toMatchObject({kind:"accepted"});
+ const modern=await fixture("ok",{features:{protocol:1,tokenPolicy:"optional-v1"}});
+ expect(await modern.port.readFeatures?.()).toEqual({protocol:1,tokenPolicy:"optional-v1"});
+ expect(await modern.port.accept({...input,claim:modern.envelope.claim,work:modern.envelope.work})).toMatchObject({kind:"accepted"});
+});
+
+it("distinguishes v4 unlimited and unknown snapshots and preserves allowance waiting",async()=>{
+ for(const status of ["unlimited","unknown"] as const){
+ const h=await fixture("ok",{features:{protocol:1,tokenPolicy:"optional-v1"},terminal:{...FAILED_TERMINAL,status:"blocked_waiting_human",waitingCause:"token-allowance",allowanceNextPhase:"verify",budgetSnapshot:{attemptsRemaining:1,timeRemainingMs:100,tokenBudgetRemaining:null,tokenRemainingStatus:status}}});
+ expect((await h.port.collect({...h.envelope,protocol:4},0)).terminal).toMatchObject({tokenRemainingStatus:status,waitingCause:"token-allowance",allowanceNextPhase:"verify"});
+ }
+ const old=await fixture("ok",{terminal:{...FAILED_TERMINAL,budgetSnapshot:{attemptsRemaining:1,timeRemainingMs:100,tokenBudgetRemaining:null}}});
+ expect((await old.port.collect(old.envelope,0)).terminal?.outcome).toBe("failed");
+});

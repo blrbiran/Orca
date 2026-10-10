@@ -125,7 +125,9 @@ export async function requirementHarness(options: { answers: QueuedAnswer[]; sto
   // drafting and its call queued -- in one transaction.
   // Task 9 (`startAt: "none"`): no group at all, for criteria that make one through requirement-open.
   if (options.startAt !== "none") h.store.transaction(() => {
-    insertClarifyingGroup(h.store, clarifyingInput("r", { limit: options.limit ?? { ...REQUIREMENT_LIMIT_DEFAULT }, profile: { profileId: "all", profileHash: profile.profileHash }, agentSlot: frozenSlot, maxOutputTokens: 64_000 }));
+    insertClarifyingGroup(h.store, clarifyingInput("r", { limit: options.limit ?? { ...REQUIREMENT_LIMIT_DEFAULT, tokens:10_000_000 }, profile: { profileId: "all", profileHash: profile.profileHash }, agentSlot: frozenSlot, maxOutputTokens: 64_000 }));
+    // Pre-seeded criteria reproduce the historical finite clarifying authority; open-from-none uses real new defaults.
+    h.store.db.prepare("UPDATE token_policies SET mode='finite-legacy' WHERE group_id='r'").run();
     updateRevision(h.store, "r", 1);
     h.store.db.prepare("UPDATE groups SET projection_seq=1 WHERE id='r'").run();
     if (options.startAt === "split") seedConsensus(h.store);

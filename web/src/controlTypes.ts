@@ -1,3 +1,4 @@
+export type BudgetAmount = {tokens:number|null;activeMs:number;attempts:number;sessions:number};
 export type Amount = { tokens: number; activeMs: number; attempts: number; sessions: number };
 export type WorkKind = "budget-estimate" | "task" | "handoff" | "goal-review";
 export type ProfileBindingV1 = { profileId: string; profileHash: string };
@@ -53,7 +54,7 @@ export type RequirementSummaryV1 = {
   exportState: "not-due" | "pending" | "done" | "conflict";
   used: Amount;
   reserved: Amount;
-  limit: Amount;
+  limit: BudgetAmount;
   usageUnknown: boolean;
   /** Final review finding 4: the requirement's call the driver blocked, and why (webProtocol.ts). */
   blockedRun: { runId: string; reason: string | null } | null;
@@ -162,7 +163,7 @@ export type RequirementViewV1 = {
     /** Task 11: a blocked export is "conflict"; the summary's reasonCode tells a path block from a branch conflict. */
     export: { state: "not-due" | "pending" | "done" | "conflict"; path: string | null; commit: string | null; parent: string | null; detail: string | null };
   };
-  ledger: { limit: Amount; used: Amount; reserved: Amount; usageUnknown: boolean };
+  ledger: { limit: BudgetAmount; used: Amount; reserved: Amount; usageUnknown: boolean };
   rounds: RoundBodyV1[];
   drafts: DraftViewV1[];
   /** The live document until accept, the frozen text after. */
@@ -185,7 +186,7 @@ export type AllocationViewV1 = {
   ownerId: string;
   bucket: "work" | "handoff" | "review" | "reserve";
   state: "draft-encumbered" | "confirmed" | "active" | "held" | "continuing" | "retrying" | "terminal" | "unknown";
-  amount: Amount;
+  amount: BudgetAmount;
   fieldProvenance: AmountProvenanceV1;
 };
 export type WorkItemViewV1 = {
@@ -221,7 +222,7 @@ export type RunSkillLockV1 = {
 export type SettleUnknownUsagePayloadV1 = { taskId: string; runId: string; generation: number; acknowledge: "charge-remaining-grant" };
 export type UsageSettlementV1 = { method: "remaining-grant"; commandId: string; principal: string; at: number; groupId: string; taskId: string; workItemId: string; runId: string; generation: number; highWater: number; charged: { work: Amount; handoff: Amount }; reservationDisposition: "committed" | "released"; report: { artifactId: string; hash: string }; stopProof: { executionId: string; generation: number; isolated: true; source: { artifactId: string; hash: string } }; handoffResolution?: { requestId: string; previousState: "settled-unrecoverable"; previousFailureCode: "usage-unsettled"; checkpointId: string; checkpointHash: string } };
 export type RunViewV1 = {
-  unknownUsageSettlement?: { generation: number; highWater: number; remaining: { work: Amount; handoff: Amount }; allowed: boolean; refusalReason: string | null; settlement?: UsageSettlementV1 };
+  unknownUsageSettlement?: { generation: number; highWater: number; remaining: { work: BudgetAmount; handoff: Amount }; allowed: boolean; refusalReason: string | null; settlement?: UsageSettlementV1 };
   runId: string;
   taskId: string | null;
   estimateId: string | null;
@@ -234,7 +235,8 @@ export type RunViewV1 = {
   providerAttemptOrdinal: number;
   profile: ProfileBindingV1;
   used: Amount;
-  remaining: Amount;
+  remaining: BudgetAmount;
+  tokenRemainingStatus?:"known"|"unlimited"|"unknown";
   failureCode: string | null;
   blockedReason?: string | null;
   /** Issue fixes spec §4.2(1), (5): ccloop's reason and the drive record's outcome; optional here so literal fixtures need no edit. */
@@ -305,7 +307,7 @@ export type GroupViewV1 = {
     profiles: null | { estimator: ProfileBindingV1; worker: ProfileBindingV1; handoff: ProfileBindingV1; goalReview: ProfileBindingV1 };
     executionSnapshotHash: string | null;
   };
-  ledger: { groupLimit: Amount; used: Amount; committedRemaining: Amount; explicitUnallocatedReserve: Amount; budgetDeficit: Amount; usageUnknown: boolean };
+  ledger: { groupLimit: BudgetAmount; used: Amount; committedRemaining: Amount; explicitUnallocatedReserve: BudgetAmount; budgetDeficit: Amount; usageUnknown: boolean };
   allocations: AllocationViewV1[];
   workItems: WorkItemViewV1[];
   /** Wave 3 M-5: the group's frozen reconcile selection. Optional here only so literal fixtures need no edit; absent reads as null. */
@@ -391,11 +393,11 @@ export type ProposalTargetV1 =
   | { scope: "goal-review"; dimension: AmountDimensionV1 };
 export type ProposalOperationV1 = {
   target: ProposalTargetV1;
-  value: number;
+  value: number|null;
   provenance: "complex-1m-default" | "model" | "human";
   estimateId?: string;
 };
-export type ProposalEditPayloadV1 = { baseProposalVersion: number; operations: ProposalOperationV1[]; proposedGroupLimit?: Amount };
+export type ProposalEditPayloadV1 = { baseProposalVersion: number; operations: ProposalOperationV1[]; proposedGroupLimit?: BudgetAmount };
 export type EstimatePayloadV1 = { proposalVersion: number; estimatorProfileId: string; estimatorProfileHash: string; estimateMode: "strict" | "soft" };
 export type ConfirmPayloadV1 = {
   planHash: string;
@@ -409,7 +411,7 @@ export type ConfirmPayloadV1 = {
   /** Integration spec §3.2: the group's integration.schemeHash the owner saw; only for a non-keep scheme. */
   integrationHash?: string;
 };
-export type SetLimitPayloadV1 = { limit: Amount };
+export type SetLimitPayloadV1 = { limit: BudgetAmount };
 export type ImportPlanPayloadV1 = {
   groupId: string;
   repoId: string;
@@ -429,7 +431,7 @@ export type RequirementOpenPayloadV1 = {
   groupId: string;
   repoId: string;
   idea: string;
-  limit?: Amount;
+  limit?: BudgetAmount;
   agent?: PanelPartialSelectionV1;
   contentLanguage?: "en" | "zh";
 };
@@ -484,7 +486,7 @@ export type CommandSuccessV1 = {
     | { kind: "paused"; stopMode: "pause" }
     | { kind: "handoff-stopped"; stopRevision: number; acceptedAt: string; handoffDeadlineAt: string; frozenRunIds: string[]; requestIds: string[] }
     | { kind: "resumed-from-handoff"; wakeId: string; pendingRuns: Array<{ taskId: string; continuationIntentId: string; pendingRunId: string; claimOrdinal: number }> }
-    | { kind: "limit-set"; limit: Amount }
+    | { kind: "limit-set"; limit: BudgetAmount }
     | { kind: "workspace-mode-set"; repoId: string; workspaceMode: "worktree" | "clone" }
     | { kind: "integration-scheme-set"; repoId: string; integration: IntegrationSchemeV1 }
     | { kind: "group-integration-set"; groupId: string; integration: IntegrationSchemeV1 }
@@ -572,7 +574,7 @@ export type WorkItemProgressV1 = {
   runId: string;
   step: "queued" | "plan" | "execute" | "verify" | "succeeded" | "blocked_waiting_human" | "exhausted" | "cancelled" | "failed" | null;
   attempt: { current: number; max: number } | null;
-  tokens: { used: number; grant: number } | null;
+  tokens: { used: number; grant: number|null } | null;
   lastTransitionAt: string | null;
 };
 /** Spec §3.1 (§8 R16): replace the task's operator labels, or null to go back to the plan's. */
@@ -594,7 +596,7 @@ export type LoopPlanViewV1 = {
 };
 /** Loop plans spec §5.2: change a loop task's plan, inputs and work budget (sessions is carried over). */
 export type SetTaskLoopPayloadV1 = {
-  baseLoopVersion: number; plan: string; inputs: LoopInputsV1; work: { tokens: number; activeMs: number; attempts: number };
+  baseLoopVersion: number; plan: string; inputs: LoopInputsV1; work: { tokens: number|null; activeMs: number; attempts: number };
   /** W5: the work dimensions taken from an estimate's suggestion; the server re-checks each against it. */
   workProvenance?: Partial<Record<"tokens" | "activeMs" | "attempts", { provenance: "model"; estimateId: string }>>;
   /** Syncskill integration spec §10.4: the full desired skill set, like inputs -- absent removes the task's skills. */
@@ -605,11 +607,11 @@ export type SetTaskLoopPayloadV1 = {
  * picker's words are keyed by version) -- a mirror of src/control/loopPlans.ts, compared by tests/panel/taskLoopApi.test.ts.
  */
 export const WEB_LOOP_PLANS: ReadonlyArray<{ planId: LoopPlanIdV1; version: number }> = [
-  { planId: "standard", version: 2 },
-  { planId: "bugfix", version: 2 },
-  { planId: "refactor", version: 2 },
-  { planId: "design", version: 2 },
-  { planId: "investigate", version: 2 },
+  { planId: "standard", version: 3 },
+  { planId: "bugfix", version: 3 },
+  { planId: "refactor", version: 3 },
+  { planId: "design", version: 3 },
+  { planId: "investigate", version: 3 },
 ];
 
 // Read-only overview mirrors the strict server DTO. These destinations carry no command payload.

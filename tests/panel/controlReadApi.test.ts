@@ -1,3 +1,4 @@
+import { amountSchema } from "../../src/control/schema.js";
 import { createServer, type Server } from "node:http";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -212,7 +213,7 @@ async function confirmGroup(h: Harness, groupId: string, stopped = false): Promi
       originalContractHash: task.originalContractHash,
       originalContractCanonicalJson: task.originalContractCanonicalJson,
       work: allocations.find(row => row.ownerKind === "task" && row.ownerId === task.taskId && row.bucket === "work")!.amount,
-      handoff: allocations.find(row => row.ownerKind === "task" && row.ownerId === task.taskId && row.bucket === "handoff")!.amount,
+      handoff: amountSchema.parse(allocations.find(row => row.ownerKind === "task" && row.ownerId === task.taskId && row.bucket === "handoff")!.amount),
     })),
     agents: { tasks: plan.plan.tasks.map(task => ({ taskId: task.taskId, ...frozenAgent() })), reconcile: frozenReconcile() },
   });
@@ -427,7 +428,7 @@ describe("canonical control read API", () => {
     const allocationMismatch = {
       ...prepared.snapshot,
       allocations: prepared.snapshot.allocations.map((row, index) => index === 0
-        ? { ...row, amount: { ...row.amount, tokens: row.amount.tokens + 1 } }
+        ? { ...row, amount: { ...row.amount, tokens: row.amount.tokens! + 1 } }
         : row),
     };
     const mismatchHash = sha256Canonical(allocationMismatch);

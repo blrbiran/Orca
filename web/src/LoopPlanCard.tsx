@@ -1,3 +1,4 @@
+import { parseTokens } from "./TokenInput.js";
 /**
  * Loop plans spec §4.1, §4.2 (D1, D4, D5, D9): a task's loop plan in plain words, and -- until the task starts -- a form
  * to change the plan, its inputs and its work budget (set-task-loop). The form keeps what the person typed as a draft
@@ -13,7 +14,7 @@ import { Trans, useTranslation } from "react-i18next";
 import type { ControlAction } from "./controlApi.js";
 import i18n, { enumText } from "./i18n.js";
 import { WEB_LOOP_PLANS } from "./controlTypes.js";
-import type { Amount, GroupViewV1, LoopPlanIdV1, LoopPlanViewV1, SetTaskLoopPayloadV1, WorkItemViewV1 } from "./controlTypes.js";
+import type { BudgetAmount, Amount, GroupViewV1, LoopPlanIdV1, LoopPlanViewV1, SetTaskLoopPayloadV1, WorkItemViewV1 } from "./controlTypes.js";
 
 export const loopDraftKey = (groupId: string, taskId: string): string => `loop:${groupId}:${taskId}`;
 
@@ -83,13 +84,13 @@ function readLoopDraft(drafts: Record<string, string>, key: string): LoopDraft |
   }
 }
 
-function draftOf(plan: LoopPlanViewV1, work: Amount): LoopDraft {
+function draftOf(plan: LoopPlanViewV1, work: BudgetAmount): LoopDraft {
   const i = plan.inputs;
   return { base: plan.loopVersion, plan: plan.planId, text: {
     goal: i.goal, successCondition: i.successCondition, targetPaths: i.targetPaths.join("\n"), checks: i.checks.join("\n"),
     nonGoals: i.nonGoals.join("\n"), relevantDocs: i.relevantDocs.join("\n"), protectedPaths: i.protectedPaths.join("\n"),
     maxFilesTouched: i.maxFilesTouched === null ? "" : String(i.maxFilesTouched),
-    tokens: String(work.tokens), activeMs: String(work.activeMs), attempts: String(work.attempts),
+    tokens: work.tokens===null?"":String(work.tokens), activeMs: String(work.activeMs), attempts: String(work.attempts),
   } };
 }
 
@@ -105,8 +106,8 @@ const positive = (text: string): number | null => {
  * task's current skill set is carried through unchanged.
  */
 function payloadOf(draft: LoopDraft, skills: LoopPlanViewV1["skills"]): { payload: SetTaskLoopPayloadV1 } | { invalid: string } {
-  const tokens = positive(draft.text.tokens), activeMs = positive(draft.text.activeMs), attempts = positive(draft.text.attempts);
-  if (tokens === null || activeMs === null || attempts === null) return { invalid: i18n.t("loopPlan.badBudget") };
+  const tokens = parseTokens(draft.text.tokens), activeMs = positive(draft.text.activeMs), attempts = positive(draft.text.attempts);
+  if ((tokens === null && draft.text.tokens.trim()!=="") || activeMs === null || attempts === null) return { invalid: i18n.t("loopPlan.badBudget") };
   const blankCap = draft.text.maxFilesTouched.trim() === "";
   const cap = blankCap ? null : positive(draft.text.maxFilesTouched);
   if (!blankCap && cap === null) return { invalid: i18n.t("loopPlan.badFileCap") };
@@ -133,17 +134,18 @@ function skillSetText(plan: LoopPlanViewV1, t: TFunction): string {
 }
 
 /** Spec §4.2: what the submit does to the group's reserve, and the shortfall that disables it (display only). */
-export function consequenceOf(view: GroupViewV1, current: Amount, work: { tokens: number; activeMs: number; attempts: number }): { text: string; shortfall: string | null } {
+export function consequenceOf(view: GroupViewV1, current: BudgetAmount, work: { tokens: number|null; activeMs: number; attempts: number }): { text: string; shortfall: string | null } {
   const reserve = view.ledger.explicitUnallocatedReserve;
   const parts: string[] = [];
   let shortfall: string | null = null;
   for (const dimension of ["tokens", "activeMs", "attempts"] as const) {
-    const delta = work[dimension] - current[dimension];
+    if(dimension==="tokens"&&(work.tokens===null||current.tokens===null||reserve.tokens===null)){if(work.tokens!==current.tokens)parts.push(i18n.t("budget.unlimited"));continue;}
+    const delta = work[dimension]! - current[dimension]!;
     if (delta === 0) continue;
-    const values = { delta: `${delta > 0 ? "+" : ""}${delta}`, unit: i18n.t(`loopPlan.unit.${dimension}`), left: reserve[dimension] - delta };
+    const values = { delta: `${delta > 0 ? "+" : ""}${delta}`, unit: i18n.t(`loopPlan.unit.${dimension}`), left: reserve[dimension]! - delta };
     parts.push(delta > 0 ? i18n.t("loopPlan.budgetTaken", values) : i18n.t("loopPlan.budgetReturned", values));
-    if (delta > reserve[dimension] && shortfall === null) {
-      shortfall = i18n.t("loopPlan.shortfall", { dimension: enumText("dimension", dimension), short: delta - reserve[dimension] });
+    if (delta > reserve[dimension]! && shortfall === null) {
+      shortfall = i18n.t("loopPlan.shortfall", { dimension: enumText("dimension", dimension), short: delta - reserve[dimension]! });
     }
   }
   return { text: parts.length === 0 ? i18n.t("loopPlan.unchanged") : parts.join(i18n.t("loopPlan.partSeparator")), shortfall };
@@ -164,7 +166,7 @@ export interface LoopPlanCardProps {
   archived?: boolean;
 }
 
-function LoopPlanEditor(props: LoopPlanCardProps & { plan: LoopPlanViewV1; current: Amount }): JSX.Element {
+function LoopPlanEditor(props: LoopPlanCardProps & { plan: LoopPlanViewV1; current: BudgetAmount }): JSX.Element {
   const { t } = useTranslation();
   const { view, item, drafts, onDraft, onCommand, plan, current } = props;
   const groupId = view.summary.groupId, key = loopDraftKey(groupId, item.taskId), draft = readLoopDraft(drafts, key);
@@ -244,7 +246,7 @@ export function LoopPlanCard(props: LoopPlanCardProps): JSX.Element | null {
         <summary>{t("loopPlan.checkCommands", { n: plan.inputs.checks.length })}</summary>
         <ul>{plan.inputs.checks.map((check, index) => <li key={index}><code>{check}</code></li>)}</ul>
       </details>
-      {work !== undefined && <p>{t("loopPlan.budgetLine", { tokens: work.amount.tokens, activeMs: work.amount.activeMs, attempts: work.amount.attempts })}</p>}
+      {work !== undefined && <p>{t("loopPlan.budgetLine", { tokens: work.amount.tokens===null?t("budget.unlimited"):work.amount.tokens, activeMs: work.amount.activeMs, attempts: work.amount.attempts })}</p>}
       <p><Trans i18nKey={gitLineKey(props.workspaceMode)} values={{ groupId: view.summary.groupId }} components={{ code: <code /> }} /></p>
       <p>{skillSetText(plan, t)}</p>
       {work !== undefined && <LoopPlanEditor {...props} plan={plan} current={work.amount} />}

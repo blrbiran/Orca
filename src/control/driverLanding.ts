@@ -1,3 +1,4 @@
+import { claimCapBlocking } from "./spendCaps.js";
 import { existsSync, readFileSync } from "node:fs";
 import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -146,7 +147,8 @@ export async function otherSideOfWeb(store: ControlStore, targetRepo: string, ru
 /** spec §5.3(5), deviation D12: a read-only check, not a reservation (registered as a known gap). */
 export function reconcileAffordable(store: ControlStore, groupId: string, tokenBudget: number): boolean {
   const group = readGroup(store, groupId);
-  return budgetBalance(group.limit, group.used, group.reserved).reserve.tokens >= tokenBudget;
+  const available=budgetBalance(group.limit, group.used, group.reserved).reserve.tokens;
+  return (available===null||available>=tokenBudget)&&claimCapBlocking(store,groupId,tokenBudget,store.now())===null;
 }
 
 /**

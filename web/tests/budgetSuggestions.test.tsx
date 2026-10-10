@@ -6,7 +6,7 @@
  */
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { BudgetEditor, DIMENSIONS, adviceOf, budgetFieldKey, suggestedOperations } from "../src/BudgetEditor.js";
+import { BudgetEditor, DIMENSIONS, adviceOf, budgetFieldKey, editedOperations, suggestedOperations } from "../src/BudgetEditor.js";
 import { initialControlState, reduceControlState } from "../src/controlState.js";
 import type { Amount, ControlConfigV1, EstimateViewV1, GroupViewV1 } from "../src/controlTypes.js";
 
@@ -158,4 +158,29 @@ describe("the budget editor's suggestion controls (single-call estimate spec §7
     expect(details.textContent).toContain("the API is stable");
     expect(details.querySelectorAll("input, button")).toHaveLength(0);
   });
+});
+
+it("clears an explicit task ceiling to unlimited and sends null rather than zero",()=>{
+ const initial=view();const target={scope:"task" as const,taskId:"a",allocation:"work" as const,dimension:"tokens" as const};
+ const key=budgetFieldKey("g",target),drafts:Record<string,string>={};
+ render(<BudgetEditor view={initial} config={config} drafts={drafts} onDraft={(k,v)=>{drafts[k]=v;}} onCommand={vi.fn()}/>);
+ fireEvent.change(screen.getByLabelText(/^a work tokens/),{target:{value:""}});
+ expect(editedOperations(initial,drafts)).toEqual([{target,value:null,provenance:"human"}]);
+});
+it("shows unlimited separately from finite used tokens and clears a externally removed ceiling",()=>{
+ const initial=view();initial.ledger.groupLimit.tokens=null;initial.ledger.explicitUnallocatedReserve.tokens=null;initial.allocations[0]!.amount.tokens=null;
+ const {rerender}=render(<BudgetEditor view={initial} config={config} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()}/>);
+ expect((screen.getByLabelText(/^a work tokens/) as HTMLInputElement).value).toBe("");
+ expect(screen.getAllByText(/Unlimited/).length).toBeGreaterThan(0);
+ const finite=structuredClone(initial);finite.allocations[0]!.amount.tokens=500;
+ rerender(<BudgetEditor view={finite} config={config} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()}/>);
+ expect((screen.getByLabelText(/^a work tokens/) as HTMLInputElement).value).toBe("500");
+ rerender(<BudgetEditor view={initial} config={config} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()}/>);
+ expect((screen.getByLabelText(/^a work tokens/) as HTMLInputElement).value).toBe("");
+});
+
+import { progressText } from "../src/TaskDetail.js";
+it("shows finite used tokens for an unlimited ceiling without a percentage",()=>{
+ const text=progressText({runId:"r",step:"execute",attempt:{current:1,max:3},tokens:{used:3_200_000,grant:null},lastTransitionAt:null});
+ expect(text).toContain("3200000");expect(text).toContain("unlimited");expect(text).not.toContain("%");
 });

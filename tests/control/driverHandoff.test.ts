@@ -449,7 +449,7 @@ describe("a landing whose worktree removal failed after the swap (controller rul
       // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
       await writeFile(t.deps.agentsTablePath, JSON.stringify({ status: "succeeded", spent: 7, holdMs: 0, files: { "shared.txt": "A\nB\n" } }));
       const limit = readControlGroup(t.h.store, "epoch-test", "g").ledger.groupLimit;
-      const raised = t.service.setLimit(t.h.command("set-limit", { limit: { ...limit, tokens: limit.tokens + 10_000_000 } }));
+      const raised = t.service.setLimit(t.h.command("set-limit", { limit: { ...limit, tokens: limit.tokens! + 10_000_000 } }));
       if ("error" in raised) throw new Error(`set-limit refused: ${JSON.stringify(raised.error)}`);
       const ids = [await t.claim(), await t.claim()];
       const reconciling = () => ids.filter((id) => t.body(id).state === "reconciling");

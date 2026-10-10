@@ -26,7 +26,7 @@ export function readCaps(store: ControlStore): SpendCap[] {
 export function committedTokens(store: ControlStore, scope: UsageScope, excludeGroupId: string | null): number {
   const repo = scope === "all" ? null : scope.slice(5);
   let total = 0;
-  for (const row of store.db.prepare("SELECT r.group_id AS group_id, r.body AS body, g.body AS gbody FROM runs r JOIN groups g ON g.id=r.group_id WHERE r.active=1").all()) {
+  for (const row of store.db.prepare("SELECT r.group_id AS group_id, r.body AS body, g.body AS gbody FROM runs r JOIN groups g ON g.id=r.group_id WHERE r.active=1 OR (EXISTS(SELECT 1 FROM funded_allowances f WHERE f.run_id=r.id) AND (json_extract(r.body,'$.unknown.work')=1 OR json_extract(r.body,'$.unknown.handoff')=1))").all()) {
     if (excludeGroupId !== null && row.group_id === excludeGroupId) continue;
     if (repo !== null && groupRepoIdOf(JSON.parse(String(row.gbody)) as Record<string, unknown>) !== repo) continue;
     const remaining = (JSON.parse(String(row.body)) as { remaining?: { work?: { tokens?: unknown }; handoff?: { tokens?: unknown } } }).remaining;
@@ -84,13 +84,18 @@ export function claimCapBlocking(store: ControlStore, groupId: string, grantToke
 export function gateClaim(store: ControlStore, groupId: string, grantTokens: number, at: number, claim: SpendClaim): boolean {
   const blocking = claimCapBlocking(store, groupId, grantTokens, at);
   if (blocking === null) { clearSpendCapBlock(store, groupId, claim); return true; }
+  recordCapBlock(store,groupId,blocking,grantTokens,claim);
+  return false;
+}
+
+/** Record the concrete finite binder for either a fixed claim or a joint funded allocation. */
+export function recordCapBlock(store:ControlStore,groupId:string,blocking:CapStatus,grantTokens:number,claim:SpendClaim):void {
   const prior = store.db.prepare("SELECT body FROM spend_cap_blocks WHERE group_id=?").get(groupId);
   const body = JSON.stringify({ code: "spend-cap-reached", scope: blocking.scope, period: blocking.period, capTokens: blocking.tokens, grantTokens, claim });
   if (!prior || String(prior.body) !== body) {
     store.db.prepare("INSERT INTO spend_cap_blocks(group_id,body) VALUES (?,?) ON CONFLICT(group_id) DO UPDATE SET body=excluded.body").run(groupId, body);
     recordProjectionChange(store, [groupId]);
   }
-  return false;
 }
 
 /**
@@ -121,4 +126,14 @@ export class AgentCeilingRefusal extends Error {
     super(`The group limit (${limitTokens} tokens) exceeds the ${cap.scope} ${cap.period} spend cap's headroom (${cap.headroom} tokens).`);
     this.name = "AgentCeilingRefusal";
   }
+}
+
+/** A finite ceiling cannot constrain a provider that already received an unbounded grant. */
+export function assertNoActiveUnbounded(store:ControlStore,scope:string,groupId:string|null=null):void {
+ for(const row of store.db.prepare("SELECT r.group_id,r.body,g.body AS gbody FROM runs r JOIN groups g ON g.id=r.group_id WHERE r.active=1 OR (EXISTS(SELECT 1 FROM funded_allowances f WHERE f.run_id=r.id) AND (json_extract(r.body,'$.unknown.work')=1 OR json_extract(r.body,'$.unknown.handoff')=1))").all()) {
+  if(groupId!==null&&row.group_id!==groupId)continue;
+  if(scope!=="all"&&groupRepoIdOf(JSON.parse(String(row.gbody)))!==scope.slice(5))continue;
+  const run=JSON.parse(String(row.body));
+  if(run.grant?.work?.tokens===null)throw new ControlError("active-unbounded-budget-conflict",`${run.runId}: stop and reconcile before installing a finite limit`);
+ }
 }

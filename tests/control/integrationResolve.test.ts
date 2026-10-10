@@ -89,7 +89,7 @@ async function world(scheme: IntegrationScheme, options: { requiredChecks?: stri
   const person = (files: Record<string, string>) => commitOn(repo, "refs/heads/main", files, "person");
   const raise = (tokens: number) => {
     const limit = readControlGroup(h.store, "epoch-test", "g").ledger.groupLimit;
-    expect(code(service.setLimit(h.command("set-limit", { limit: { ...limit, tokens: limit.tokens + tokens } })))).toBe("applied");
+    expect(code(service.setLimit(h.command("set-limit", { limit: { ...limit, tokens: limit.tokens! + tokens } })))).toBe("applied");
   };
   return {
     ...h, repo, roots, service, calls, reconciling, land, person, raise,
@@ -505,7 +505,7 @@ describe("an integration conflict, materialised and approved (integration spec Â
     expect(code(await w.resolve())).toBe("applied");
     expect(await w.pass()).toBe(true);
     w.attempt(files);
-    await w.loopState({ status: "succeeded", budgetSnapshot: { tokenBudgetRemaining: policyOf(w.store).tokenBudget - spent } });
+    await w.loopState({ status: "succeeded", budgetSnapshot: { tokenBudgetRemaining: policyOf(w.store).tokenBudget! - spent } });
     expect(await w.pass()).toBe(true);
   }
   const usageTokens = (store: ControlStore) => store.db.prepare("SELECT tokens FROM usage_ledger WHERE group_id='g' ORDER BY rowid").all().map((row) => Number(row.tokens));
@@ -529,7 +529,7 @@ describe("an integration conflict, materialised and approved (integration spec Â
       expect(g(w.repo, ["rev-parse", "main"])).toBe(main2);
       expect(w.record()).toMatchObject({ state: "resolving", resolution: { reconcileRunId: "integrate-g-2", spawnSeq: 1 } });
       w.attempt({ "f.txt": "C\nA2\ntwo\nthree\n" });
-      await w.loopState({ status: "succeeded", budgetSnapshot: { tokenBudgetRemaining: policyOf(w.store).tokenBudget - 2_000 } });
+      await w.loopState({ status: "succeeded", budgetSnapshot: { tokenBudgetRemaining: policyOf(w.store).tokenBudget! - 2_000 } });
       expect(await w.pass()).toBe(true);
       const second = g(w.repo, ["rev-parse", "main"]);
       expect(parents(w.repo, second)).toEqual([main2, tip2]);

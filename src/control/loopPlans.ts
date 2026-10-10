@@ -104,6 +104,7 @@ const V1_PLANS: ReadonlyArray<Omit<LoopPlanDefinition, "version" | keyof typeof 
 const REGISTRY: readonly LoopPlanDefinition[] = [
   ...V1_PLANS.map((plan) => ({ ...plan, version: 1, ...V1_DEFAULTS })),
   ...V1_PLANS.map((plan) => ({ ...plan, version: 2, ...V2_DEFAULTS, ...V2_CHANGES[plan.planId] })),
+  ...V1_PLANS.map((plan) => ({ ...plan, version: 3, ...V2_DEFAULTS, ...V2_CHANGES[plan.planId] })),
 ];
 
 /** Spec §2.3: shared by every plan and version. The budget numbers equal TASK_WORK (estimator.ts); loopPlans.test.ts pins that. */
@@ -117,6 +118,7 @@ const pathEntrySchema = z.string().min(1);
 /** A recipe's inputs, every optional field filled, so the same task always has the same recipe bytes. */
 export const loopInputsSchema = z
   .object({
+    tokenBudget: safeInteger.nullable().optional(),
     goal: z.string().min(1),
     successCondition: z.string().min(1),
     targetPaths: z.array(pathEntrySchema).min(1),
@@ -174,6 +176,7 @@ export function normalizeLoopSkills(skills: LoopSkills): LoopSkills | "skills-sh
 export const loopPlanFileSchema = z
   .object({
     plan: z.string().min(1).optional(),
+    tokenBudget: safeInteger.nullable().optional(),
     goal: z.string().min(1),
     successCondition: z.string().min(1),
     targetPaths: z.array(pathEntrySchema).min(1),
@@ -277,7 +280,7 @@ export function expandRecipe(taskId: string, repoPath: string, recipe: LoopRecip
       repoPath, targetPaths: [...inputs.targetPaths], relevantDocs: [...inputs.relevantDocs],
       buildTestCommands: [...inputs.checks], constraints: [...plan.constraints],
     },
-    executionPolicy: { ...EXECUTION_POLICY, perAttemptTimeoutMs: plan.perAttemptTimeoutMs },
+    executionPolicy: { ...EXECUTION_POLICY, ...(recipe.planVersion>=3?{tokenBudget:inputs.tokenBudget??null}:{}), perAttemptTimeoutMs: plan.perAttemptTimeoutMs },
     safetyPolicy: {
       allowlistPaths: [...inputs.targetPaths], denylistPaths: [...inputs.protectedPaths],
       maxFilesTouched: maxFilesOf(plan, inputs), humanGateConditions: [],
@@ -308,6 +311,7 @@ export function expandLoopPlan(taskId: string, repoPath: string, planId: string,
 
 export function normalizeLoopInputs(input: LoopPlanFileInput): LoopInputs {
   return {
+    ...(input.tokenBudget!==undefined?{tokenBudget:input.tokenBudget}:{}),
     goal: input.goal, successCondition: input.successCondition, targetPaths: [...input.targetPaths], checks: [...input.checks],
     nonGoals: [...(input.nonGoals ?? [])], relevantDocs: [...(input.relevantDocs ?? [])], protectedPaths: [...(input.protectedPaths ?? [])],
     maxFilesTouched: input.maxFilesTouched ?? null,

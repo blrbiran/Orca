@@ -1,3 +1,4 @@
+import { assertNoActiveUnbounded } from "./spendCaps.js";
 import { applyWebCommand } from "./commandLedger.js";
 import { commandPrincipalFor } from "./commandClient.js";
 import { ControlError } from "./errors.js";
@@ -33,6 +34,7 @@ export function applySpendCommand(
         if (raw.verb === "set-spend-cap") {
           const { scope, period, tokens } = raw.payload;
           if (scope.startsWith("repo:") && !deps.knownRepository(scope.slice(5))) throw new ControlError("spend-cap-repository-unknown", `this panel holds no repository "${scope.slice(5)}" to cap`);
+          assertNoActiveUnbounded(deps.store,scope);
           const prior = db.prepare("SELECT tokens FROM spend_caps WHERE scope=? AND period=?").get(scope, period);
           if (prior && Number(prior.tokens) === tokens) throw new ControlError("no-op-command");
           db.prepare("INSERT INTO spend_caps(scope,period,tokens,updated_at,updated_by) VALUES (?,?,?,?,?) ON CONFLICT(scope,period) DO UPDATE SET tokens=excluded.tokens,updated_at=excluded.updated_at,updated_by=excluded.updated_by")

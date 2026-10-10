@@ -49,6 +49,7 @@ export function progressText(progress: WorkItemProgressV1 | null | undefined): s
     : i18n.t("control.progress.attempt", { current: progress.attempt.current, max: progress.attempt.max });
   const tokens = progress.tokens === null
     ? i18n.t("control.progress.tokensUnknown")
+    : progress.tokens.grant===null?i18n.t("control.progress.tokensUnlimited",{used:progress.tokens.used})
     : progress.tokens.grant === 0
       ? i18n.t("control.progress.tokensOfZero", { used: progress.tokens.used })
       : i18n.t("control.progress.tokensPercent", { percent: Math.floor((progress.tokens.used * 100) / progress.tokens.grant) });

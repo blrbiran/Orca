@@ -249,7 +249,7 @@ describe("control poll request snapshots", () => {
     const t = await driverHarness([{ taskId: "a" }], { behaviour: () => "failed", stopReason: () => "provider crashed" });
     try {
       const limit = readWebGroup(t.h.store, "g").limit;
-      expect(t.service.setLimit(t.h.command("set-limit", { limit: { tokens: limit.tokens * 4, activeMs: limit.activeMs * 4, attempts: limit.attempts * 4, sessions: limit.sessions * 4 } }))).not.toHaveProperty("error");
+      expect(t.service.setLimit(t.h.command("set-limit", { limit: { tokens: limit.tokens! * 4, activeMs: limit.activeMs * 4, attempts: limit.attempts * 4, sessions: limit.sessions * 4 } }))).not.toHaveProperty("error");
       const runId = await t.claim(), driver = t.driver();
       await t.until(driver, () => t.body(runId).state === "blocked");
       await handoff(t, runId, driver);

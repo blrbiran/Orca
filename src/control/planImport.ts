@@ -1,3 +1,5 @@
+import { saveTokenPolicy, hasTokenPolicy } from "./fundedAllowance.js";
+import type { BudgetAmount } from "./tokenPolicy.js";
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { applyWebCommand, preflightWebCommand, type WebCommandContext } from "./commandLedger.js";
 import { dimensions, zero } from "./commands.js";
@@ -261,27 +263,32 @@ export function writeImportedPlan(deps: ImportDeps, input: ImportedPlanWrite, ca
     ? rejectedEstimatorRequest(deps.estimatorSlot.code)
     : preflightEstimate(deps, planHash, planCanonicalJson, estimatorProfile, input.estimateMode);
   const estimateId = `estimate-${sha256Canonical({ groupId: input.groupId, planHash, version: 1 }).slice(0, 24)}`;
+  const legacyCarry=carry!==null&&!hasTokenPolicy(deps.store,input.groupId);
+  const authoredTokens=(task:ControlPlanV1["tasks"][number]):number|null=>legacyCarry?TASK_WORK.tokens:JSON.parse(task.originalContractCanonicalJson).executionPolicy.tokenBudget;
   const taskAllocations = plan.tasks.flatMap(task => [
-    { ownerKind: "task", ownerId: task.taskId, bucket: "work", state: "draft-encumbered", amount: cloneAmount(TASK_WORK), fieldProvenance: defaultProvenance() },
+    { ownerKind: "task", ownerId: task.taskId, bucket: "work", state: "draft-encumbered", amount: {...TASK_WORK,tokens:authoredTokens(task)}, fieldProvenance: defaultProvenance() },
     { ownerKind: "task", ownerId: task.taskId, bucket: "handoff", state: "draft-encumbered", amount: cloneAmount(TASK_HANDOFF), fieldProvenance: defaultProvenance() },
   ]);
   let base = checkedAdd(ESTIMATE_GRANT, GOAL_REVIEW);
   for (const _task of plan.tasks) base = checkedAdd(base, checkedAdd(TASK_WORK, TASK_HANDOFF));
   const initialReserve = reserve20(base);
-  const explicitUnallocatedReserve = preflight.state === "queued" ? initialReserve : checkedAdd(initialReserve, ESTIMATE_GRANT);
+  const explicitUnallocatedReserve:BudgetAmount = preflight.state === "queued" ? initialReserve : checkedAdd(initialReserve, ESTIMATE_GRANT);
   const groupLimit = checkedAdd(base, initialReserve);
   // Spec §6.3.2 (H10), D4, D10: an agent's import may not promise more than the caps leave -- its fresh limit (no carried
   // clarifying spend) against the headroom without this group's own runs. Not a ControlError: the command transaction
   // rolls back, books nothing, and the route answers 403. A person (any user principal) is not held to it.
-  if (commandPrincipalFor(input.commandId)?.startsWith("agent:")) {
+  if (legacyCarry && commandPrincipalFor(input.commandId)?.startsWith("agent:")) {
     const blocking = spendCapBlocking(deps.store, input.repoId, groupLimit.tokens, input.at ?? Date.now(), input.groupId);
     if (blocking !== null) throw new AgentCeilingRefusal(blocking, groupLimit.tokens);
   }
   const used = carry === null ? zero() : { ...carry.used };
-  const limit = checkedAdd(groupLimit, used);
+  const limit:BudgetAmount = {...checkedAdd(groupLimit, used),tokens:carry===null?null:legacyCarry?checkedAdd(groupLimit,used).tokens:(carry.existingBody.limit as BudgetAmount).tokens};
   let committedRemaining = checkedAdd(GOAL_REVIEW, zero());
   for (const _task of plan.tasks) committedRemaining = checkedAdd(committedRemaining, checkedAdd(TASK_WORK, TASK_HANDOFF));
   if (preflight.state === "queued") committedRemaining = checkedAdd(committedRemaining, ESTIMATE_GRANT);
+  if(!legacyCarry)committedRemaining.tokens=GOAL_REVIEW.tokens+(preflight.state==="queued"?ESTIMATE_GRANT.tokens:0);
+  explicitUnallocatedReserve.tokens=limit.tokens===null?null:limit.tokens-used.tokens-committedRemaining.tokens;
+  if(explicitUnallocatedReserve.tokens!==null&&explicitUnallocatedReserve.tokens<0)throw new ControlError("group-budget-unavailable");
   const allocations = [
     ...taskAllocations,
     { ownerKind: "goal-review", ownerId: `${input.groupId}:goal-review`, bucket: "review", state: "draft-encumbered", amount: cloneAmount(GOAL_REVIEW), fieldProvenance: defaultProvenance() },
@@ -314,6 +321,7 @@ export function writeImportedPlan(deps: ImportDeps, input: ImportedPlanWrite, ca
   } else {
     deps.store.db.prepare("UPDATE groups SET graph_version=1, body=? WHERE id=?").run(JSON.stringify(group), input.groupId);
   }
+  saveTokenPolicy(deps.store,input.groupId,"",limit.tokens,legacyCarry?"finite-legacy":"optional-v1");
   writeCanonicalRecord(deps.store, input.groupId, planHash, planCanonicalJson);
   for (const task of plan.tasks) {
     writeCanonicalRecord(deps.store, input.groupId, task.originalContractHash, task.originalContractCanonicalJson);
@@ -322,7 +330,7 @@ export function writeImportedPlan(deps: ImportDeps, input: ImportedPlanWrite, ca
       contract: { contentAddressedHash: task.originalContractHash },
       // Agent selection spec §6.2 / §12 I3: a draft has no configHash; confirmation freezes ccloop's.
       configHash: null,
-      grant: { work: cloneAmount(TASK_WORK), handoff: cloneAmount(TASK_HANDOFF) }, targetVersion: task.targetVersion,
+      grant: { work: {...TASK_WORK,tokens:authoredTokens(task)}, handoff: cloneAmount(TASK_HANDOFF) }, targetVersion: task.targetVersion,
       status: "draft", originalContractHash: task.originalContractHash, derivedContractHash: null,
       // Ruling review R7: the task's panel layer; the plan's `agent` for this task stays in the archived plan.
       agentOverride: null,
@@ -331,6 +339,7 @@ export function writeImportedPlan(deps: ImportDeps, input: ImportedPlanWrite, ca
     deps.store.db.prepare("INSERT INTO work_items(group_id,id,target_version,body) VALUES (?,?,?,?)")
       .run(input.groupId, task.taskId, task.targetVersion, JSON.stringify(work));
   }
+  for(const task of plan.tasks)saveTokenPolicy(deps.store,input.groupId,task.taskId,authoredTokens(task),legacyCarry?"finite-legacy":"optional-v1");
   const proposal = {
     proposalVersion: 1, state: "editable", planHash, groupLimit: limit, explicitUnallocatedReserve,
     allocations, budgetMode: null, contextPolicy: { handoffAtContextTokens: null }, profiles: null, executionSnapshotHash: null,
