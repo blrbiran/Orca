@@ -15,7 +15,7 @@ import { readProjectionChanges, readProjectionState } from "../control/projectio
 import { effectiveTaskLabels, readTaskLabelState } from "../control/labels.js";
 import { choosePlanByLabels, loopPlanDefinition } from "../control/loopPlans.js";
 import { recipeExpandsTo } from "../control/loopRecipeCheck.js";
-import { estimateIsStale, readArchivedPlan, readBudgetProposal, readEstimateRecord } from "../control/queries.js";
+import { decodeEstimateRecord, estimateIsStale, readArchivedPlan, readBudgetProposal, readEstimateRecord } from "../control/queries.js";
 import { readCanonicalRecord } from "../control/snapshot.js";
 import { hasRequirementBlock, latestDraft, latestRound, readDrafts, readRequirementGroup, readRounds, refuseClarifying } from "../control/requirementRecords.js";
 import { renderRequirementDocument } from "../control/requirementDocument.js";
@@ -240,6 +240,26 @@ function groupBody(store: ControlStore, groupId: string): z.infer<typeof groupBo
   return body;
 }
 
+type RecoveryBlockerRow = Readonly<Record<string,unknown>>;
+type RecoveryBlockerFact<Owner> = {scope:"global"|"group"|"run"; groupId:Owner; runId:string|null; code:string; evidenceIds:string[]};
+/** Owned readers keep their run-owner check; global ownerless rows validate identity without inferring ownership. */
+export function decodeRecoveryBlockerRow(row: RecoveryBlockerRow, mode?: "owned"): RecoveryBlockerFact<string>;
+export function decodeRecoveryBlockerRow(row: RecoveryBlockerRow, mode: "ownerless-global"): RecoveryBlockerFact<null>;
+export function decodeRecoveryBlockerRow(row: RecoveryBlockerRow, mode: "owned"|"ownerless-global" = "owned"): RecoveryBlockerFact<string|null> {
+  const scope = String(row.scope);
+  const owner = row.group_id === null ? "" : String(row.group_id);
+  const runId = row.run_id === null ? null : String(row.run_id);
+  const code = String(row.code);
+  const bodyJson = String(row.body);
+  const body = parseStored(blockerBodySchema, bodyJson, "recovery-blocker-invalid");
+  if (!["global", "group", "run"].includes(scope) || (mode === "owned" ? !idSchema.safeParse(owner).success : scope !== "global" || row.group_id !== null)
+    || (runId !== null && !idSchema.safeParse(runId).success) || code.length === 0
+    || canonicalBytes(body).toString("utf8") !== bodyJson
+    || sortedUnique(body.evidenceIds).join("\0") !== body.evidenceIds.join("\0")
+    || (scope === "run" && runId === null) || (scope === "group" && runId !== null)) return blocked("recovery-blocker-identity");
+  return {scope:scope as "global"|"group"|"run", groupId: mode === "owned" ? owner : null, runId, code, evidenceIds:sortedUnique(body.evidenceIds)};
+}
+
 function blockerRows(store: ControlStore, groupId?: string, snapshot?: GroupReadSnapshot): Array<{
   scope: "global" | "group" | "run";
   groupId: string;
@@ -251,22 +271,13 @@ function blockerRows(store: ControlStore, groupId?: string, snapshot?: GroupRead
     ? store.db.prepare("SELECT group_id,run_id,scope,code,body FROM recovery_blockers").all()
     : store.db.prepare("SELECT group_id,run_id,scope,code,body FROM recovery_blockers WHERE group_id=?").all(groupId);
   return rows.map(row => {
-    const scope = String(row.scope);
-    const owner = row.group_id === null ? "" : String(row.group_id);
-    const runId = row.run_id === null ? null : String(row.run_id);
-    const code = String(row.code);
-    const bodyJson = String(row.body);
-    const body = parseStored(blockerBodySchema, bodyJson, "recovery-blocker-invalid");
-    if (!["global", "group", "run"].includes(scope) || !idSchema.safeParse(owner).success
-      || (runId !== null && !idSchema.safeParse(runId).success) || code.length === 0
-      || canonicalBytes(body).toString("utf8") !== bodyJson
-      || sortedUnique(body.evidenceIds).join("\0") !== body.evidenceIds.join("\0")
-      || (scope === "run" && runId === null) || (scope === "group" && runId !== null)) return blocked("recovery-blocker-identity");
+    const decoded = decodeRecoveryBlockerRow(row);
+    const {runId, groupId:owner} = decoded;
     if (runId !== null) {
       const run = snapshot === undefined ? store.db.prepare("SELECT group_id FROM runs WHERE id=?").get(runId) : snapshot.runById.get(runId);
       if (!run || String(run.group_id) !== owner) return blocked("recovery-blocker-run-owner");
     }
-    return { scope: scope as "global" | "group" | "run", groupId: owner, runId, code, evidenceIds: sortedUnique(body.evidenceIds) };
+    return decoded;
   }).sort((left, right) => compareText(`${left.scope}\0${left.groupId}\0${left.runId ?? ""}\0${left.code}`, `${right.scope}\0${right.groupId}\0${right.runId ?? ""}\0${right.code}`));
 }
 
@@ -431,7 +442,9 @@ export function readOverviewGroupSource(store: ControlStore, groupId: string) {
     canonicalRecords = new Map(store.db.prepare("SELECT hash,body FROM execution_snapshots WHERE hash IN (SELECT value FROM json_each(?))").all(JSON.stringify(hashes)).map(row => [String(row.hash), String(row.body)]));
   }
   const summary = readGroupSummaryFromSnapshot(store, groupId, snapshot, canonicalRecords);
-  const plan = body.status === "clarifying" ? null : readArchivedPlan(store, groupId, canonicalRecords).plan;
+  const archived = body.status === "clarifying" ? null : readArchivedPlan(store, groupId, canonicalRecords);
+  const plan = archived?.plan ?? null;
+  const estimates = archived === null ? [] : store.db.prepare("SELECT id,estimate_version,state,body FROM estimates WHERE group_id=?").all(groupId).map(row => decodeEstimateRecord(String(row.id),row,archived));
   const proposal = plan === null ? null : readBudgetProposal(store, groupId, canonicalRecords);
   const workItems = (plan?.tasks ?? []).map(task => {
     const work = parseSnapshot(workBodySchema, snapshot.decodeWork(task.taskId), `work-item-invalid:${task.taskId}`);
@@ -450,7 +463,7 @@ export function readOverviewGroupSource(store: ControlStore, groupId: string) {
     if (run === undefined) return blocked(`run-missing:${work.currentRunId}`);
     if (run.workItemId !== work.workItemId || run.taskId !== work.taskId || run.phase !== "work") return blocked(`run-work-identity:${run.runId}`);
   }
-  return { body, summary, proposal, workItems, runs, blockers: blockerRows(store, groupId, snapshot) };
+  return { body, summary, proposal, estimates, workItems, runs, blockers: blockerRows(store, groupId, snapshot) };
 }
 
 function allGroupIds(store: ControlStore): string[] {

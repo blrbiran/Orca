@@ -1,50 +1,16 @@
+import {createOverviewFixtures} from "./controlOverviewFixtures.js";
 import { readArchivedPlan } from "../../src/control/queries.js";
-import { afterAll, describe, expect, it, vi } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { command, createHarness, get, json, GROUP, revision, view, claudeCodexResolveAgent } from "./fixtures/controlPanel.js";
-import { insertClarifyingGroup, newRound, newDraft, writeRound, writeDraft } from "../../src/control/requirementRecords.js";
-import { clarifyingInput } from "../control/fixtures/requirement.js";
-import { classifyClarifyOutput } from "../../src/control/requirementClarify.js";
+import { command, createHarness, get, json, GROUP, revision, view } from "./fixtures/controlPanel.js";
+import { newRound, newDraft, writeRound, writeDraft } from "../../src/control/requirementRecords.js";
 import { newGroupIntegration } from "../../src/control/integrationScheme.js";
 import { canonicalBytes } from "../../src/control/canonicalJson.js";
-import { ROUND_TWO } from "../control/fixtures/requirementOutputs.js";
 
 const h = createHarness();
 afterAll(() => h.dispose());
-export async function panelFixture() {
-  const paths = await h.workspace();
-  const probe = vi.fn(claudeCodexResolveAgent);
-  const panel = await h.boot("overview-epoch", paths, { resolveAgent: probe });
-  await command(panel, "/api/control/groups/import-plan", { commandId: "import", expectedRevision: 0, payload: { groupId: GROUP, repoId: "repo", planId: "plan" } });
-  return { panel, probe };
-}
-export async function confirm(panel: Awaited<ReturnType<typeof panelFixture>>["panel"]) {
-  const group = await view(panel);
-  const config = await json(await get(panel, "/api/control/config"));
-  const profile = (config.profiles as {profileHash:string}[])[0]!;
-  const response = await command(panel, `/api/control/groups/${GROUP}/confirm`, { commandId: "confirm", expectedRevision: await revision(panel), payload: {
-    planHash: group.plan.planHash, proposalVersion: group.proposal.proposalVersion, budgetMode: "soft",
-    profileIds: { estimator: "all", worker: "all", handoff: "all", goalReview: "all" },
-    profileHashes: { estimator: profile.profileHash, worker: profile.profileHash, handoff: profile.profileHash, goalReview: profile.profileHash },
-    contextPolicy: { handoffAtContextTokens: 800_000 }, selectionsHash: await panel.selectionsHash(),
-  }});
-  expect(response.status).toBe(200);
-}
-export async function overview(panel: Awaited<ReturnType<typeof panelFixture>>["panel"]) {
-  const response = await get(panel, "/api/control/overview");
-  expect(response.status).toBe(200);
-  return await json(response) as {schema:string; epoch:string; groups:any[]; steps:any[]; issues:any[]};
-}
-export function seedZeroQuestion(panel: Awaited<ReturnType<typeof panelFixture>>["panel"], groupId = "zero-questions") {
-  const classified = classifyClarifyOutput({ ...ROUND_TWO, slug: "markdown-export" }, { roundNo: 1, requirementId: "0123456789abcdef0123456789abcdef", earlierQuestionIds: [] });
-  if (!classified.ok) throw new Error(classified.reason);
-  panel.store.transaction(() => {
-    insertClarifyingGroup(panel.store, clarifyingInput(groupId));
-    panel.store.db.prepare("UPDATE groups SET revision=1 WHERE id=?").run(groupId);
-    writeRound(panel.store, groupId, { ...newRound(1), state: "awaiting-answers", result: classified.result });
-  });
-}
+const {panelFixture,confirm,overview,seedZeroQuestion,finishEstimate} = createOverviewFixtures(h);
 describe("overview human work rules", () => {
   it("keeps queued estimates out of human preparation and preserves current split review identity", async () => {
     const { panel } = await panelFixture(); seedZeroQuestion(panel, "split");
@@ -81,7 +47,7 @@ describe("overview human work rules", () => {
   });
   it("preserves recovery, stop, and integration reasons and sorts exceptions before preparation", async () => {
     const { panel } = await panelFixture();
-    panel.store.db.prepare("UPDATE estimates SET state='ready' WHERE group_id=?").run(GROUP);
+    await finishEstimate(panel);
     let body = await overview(panel);
     expect(body.steps.find(s => s.kind === "budget-review")).toMatchObject({ destination: { kind: "group", region: "preparation" }, ownerRequired: false });
     const integration = newGroupIntegration({delivery:"local", target:"main", method:"merge", trigger:"group"})!;

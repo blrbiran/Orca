@@ -283,6 +283,11 @@ export function readEstimateRecord(store: ControlStore, groupId: string, estimat
   const row = store.db.prepare("SELECT estimate_version,state,body FROM estimates WHERE group_id=? AND id=?").get(groupId, estimateId);
   if (!row) throw new ControlError("recovery-blocked");
   const archivedPlan = readArchivedPlan(store, groupId);
+  return decodeEstimateRecord(estimateId, row, archivedPlan);
+}
+
+/** Request-local rows use precisely the same stored estimate authority as the SQL reader. */
+export function decodeEstimateRecord(estimateId: string, row: Readonly<Record<string,unknown>>, archivedPlan: ArchivedPlanAuthority): EstimateRecord {
   const body = String(row.body);
   const parsed = estimateRecordSchema.safeParse(parseJson(body));
   if (!parsed.success || canonicalBytes(parsed.data).toString("utf8") !== body

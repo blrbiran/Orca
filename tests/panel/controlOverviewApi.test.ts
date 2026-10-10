@@ -1,57 +1,15 @@
+import {canonicalBytes} from "../../src/control/canonicalJson.js";
+import {createOverviewFixtures} from "./controlOverviewFixtures.js";
 import { login, seedUser } from "./fixtures/auth.js";
-import { afterAll, describe, expect, it, vi } from "vitest";
-import { readFileSync, writeFileSync } from "node:fs";
+import { afterAll, describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { command, createHarness, get, json, GROUP, revision, view, claudeCodexResolveAgent, settleRun } from "./fixtures/controlPanel.js";
-import { insertClarifyingGroup, newRound, newDraft, writeRound, writeDraft } from "../../src/control/requirementRecords.js";
-import { clarifyingInput } from "../control/fixtures/requirement.js";
-import { classifyClarifyOutput } from "../../src/control/requirementClarify.js";
-import { ROUND_TWO } from "../control/fixtures/requirementOutputs.js";
+import { command, createHarness, get, json, GROUP, revision, view, settleRun } from "./fixtures/controlPanel.js";
+import { newRound, writeRound } from "../../src/control/requirementRecords.js";
 
 const h = createHarness();
 afterAll(() => h.dispose());
-export async function panelFixture(twoIndependentTasks = false) {
-  const paths = await h.workspace();
-  if (twoIndependentTasks) {
-    const plan = JSON.parse(readFileSync(paths.planPath, "utf8"));
-    const contract = JSON.parse(readFileSync(plan.tasks[0].contract, "utf8"));
-    contract.objective.taskId = "b"; contract.context.targetPaths = ["b.ts"];
-    const contractPath = join(plan.tasks[0].contract, "..", "b.json");
-    writeFileSync(contractPath, JSON.stringify(contract));
-    plan.tasks.push({taskId:"b",contract:contractPath,dependsOn:[],targetVersion:1});
-    writeFileSync(paths.planPath, JSON.stringify(plan));
-  }
-  const probe = vi.fn(claudeCodexResolveAgent);
-  const panel = await h.boot("overview-epoch", paths, { resolveAgent: probe });
-  await command(panel, "/api/control/groups/import-plan", { commandId: "import", expectedRevision: 0, payload: { groupId: GROUP, repoId: "repo", planId: "plan" } });
-  return { panel, probe };
-}
-export async function confirm(panel: Awaited<ReturnType<typeof panelFixture>>["panel"]) {
-  const group = await view(panel);
-  const config = await json(await get(panel, "/api/control/config"));
-  const profile = (config.profiles as {profileHash:string}[])[0]!;
-  const response = await command(panel, `/api/control/groups/${GROUP}/confirm`, { commandId: "confirm", expectedRevision: await revision(panel), payload: {
-    planHash: group.plan.planHash, proposalVersion: group.proposal.proposalVersion, budgetMode: "soft",
-    profileIds: { estimator: "all", worker: "all", handoff: "all", goalReview: "all" },
-    profileHashes: { estimator: profile.profileHash, worker: profile.profileHash, handoff: profile.profileHash, goalReview: profile.profileHash },
-    contextPolicy: { handoffAtContextTokens: 800_000 }, selectionsHash: await panel.selectionsHash(),
-  }});
-  expect(response.status).toBe(200);
-}
-export async function overview(panel: Awaited<ReturnType<typeof panelFixture>>["panel"]) {
-  const response = await get(panel, "/api/control/overview");
-  expect(response.status).toBe(200);
-  return await json(response) as {schema:string; epoch:string; groups:any[]; steps:any[]; issues:any[]};
-}
-export function seedZeroQuestion(panel: Awaited<ReturnType<typeof panelFixture>>["panel"], groupId = "zero-questions") {
-  const classified = classifyClarifyOutput({ ...ROUND_TWO, slug: "markdown-export" }, { roundNo: 1, requirementId: "0123456789abcdef0123456789abcdef", earlierQuestionIds: [] });
-  if (!classified.ok) throw new Error(classified.reason);
-  panel.store.transaction(() => {
-    insertClarifyingGroup(panel.store, clarifyingInput(groupId));
-    panel.store.db.prepare("UPDATE groups SET revision=1 WHERE id=?").run(groupId);
-    writeRound(panel.store, groupId, { ...newRound(1), state: "awaiting-answers", result: classified.result });
-  });
-}
+const {panelFixture,confirm,overview,seedZeroQuestion} = createOverviewFixtures(h);
 describe("authenticated overview read", () => {
   it("serves stored facts without changing any database bytes or probing a model", async () => {
     const { panel, probe } = await panelFixture(); probe.mockClear();
@@ -175,4 +133,50 @@ describe("authenticated overview read", () => {
     expect(matching[0]).toMatchObject({ownerRequired:true});
   });
 
+});
+
+
+describe("overview stored authority review regressions", () => {
+  it("isolates an estimate whose row state disagrees with its canonical body", async () => {
+    const {panel} = await panelFixture(); seedZeroQuestion(panel,"healthy");
+    panel.store.db.prepare("UPDATE estimates SET state='ready' WHERE group_id=?").run(GROUP);
+    const body = await overview(panel);
+    expect(body.issues.find(i=>i.groupId===GROUP)).toMatchObject({reason:"recovery-blocked"});
+    expect(body.groups.some(g=>g.groupId===GROUP)).toBe(false);
+    expect(body.groups.some(g=>g.groupId==="healthy")).toBe(true);
+    expect(body.steps.some(s=>s.groupId===GROUP)).toBe(false);
+  });
+  it.each([
+    ["malformed body", "ledger-corrupt", null, "broken"],
+    ["empty code", "", null, '{"evidenceIds":[]}'],
+    ["invalid run identity", "ledger-corrupt", "../bad", '{"evidenceIds":[]}'],
+    ["noncanonical evidence", "ledger-corrupt", null, '{"evidenceIds":["z","a"]}'],
+  ])("isolates ownerless global recovery with %s", async (_label,code,runId,storedBody) => {
+    const {panel} = await panelFixture();
+    panel.store.db.prepare("INSERT INTO recovery_blockers(id,group_id,run_id,scope,code,body) VALUES ('global-bad',NULL,?,'global',?,?)").run(runId,code,storedBody);
+    panel.store.db.prepare("INSERT INTO recovery_blockers(id,group_id,run_id,scope,code,body) VALUES ('global-good',NULL,'unowned-run','global','global-valid',?)").run('{"evidenceIds":[]}');
+    const body = await overview(panel);
+    expect(body.steps.find(s=>s.reason==="global-valid")).toMatchObject({groupId:null,repoId:null,runId:"unowned-run",destination:{kind:"recovery"}});
+    expect(body.groups.some(g=>g.groupId===GROUP)).toBe(true);
+    expect(body.issues).toContainEqual({groupId:null,repoId:null,reason:"recovery-blocker-invalid"});
+    expect(body.steps.some(s=>s.groupId===null && s.reason===code)).toBe(false);
+  });
+});
+
+
+describe("overview canonical estimate proofs", () => {
+  it.each(["estimateId","estimateVersion","requestHash","canonicalBytes"])("refuses altered %s without hiding another group", async field => {
+    const {panel} = await panelFixture(); seedZeroQuestion(panel,"healthy");
+    const row = panel.store.db.prepare("SELECT id,body FROM estimates WHERE group_id=?").get(GROUP)!;
+    const record = JSON.parse(String(row.body));
+    if (field === "estimateId") record.estimateId = "wrong-estimate";
+    if (field === "estimateVersion") record.estimateVersion++;
+    if (field === "requestHash") record.requestHash = "9".repeat(64);
+    const bodyBytes = field === "canonicalBytes" ? JSON.stringify(record,null,2) : canonicalBytes(record).toString();
+    panel.store.db.prepare("UPDATE estimates SET body=? WHERE group_id=? AND id=?").run(bodyBytes,GROUP,row.id);
+    const body = await overview(panel);
+    expect(body.issues.find(i=>i.groupId===GROUP)).toMatchObject({reason:"recovery-blocked"});
+    expect(body.groups.some(g=>g.groupId==="healthy")).toBe(true);
+    expect(body.groups.some(g=>g.groupId===GROUP)).toBe(false);
+  });
 });

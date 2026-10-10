@@ -5,7 +5,7 @@ import { readGroupIntegration } from "../control/integrationScheme.js";
 import { readSpendCapBlock } from "../control/spendCaps.js";
 import { hasRequirementBlock } from "../control/requirementRecords.js";
 import { compareText, overviewSchema, type OverviewV1, type OverviewStepV1, type OverviewDestinationV1 } from "../control/webProtocol.js";
-import { readOverviewGroupSource } from "./controlViews.js";
+import { decodeRecoveryBlockerRow, readOverviewGroupSource } from "./controlViews.js";
 
 type Source = NonNullable<ReturnType<typeof readOverviewGroupSource>>;
 const BUSY_WORK = new Set(["running", "active", "starting", "start-unknown", "held", "continuing"]);
@@ -26,7 +26,7 @@ export function readControlOverview(store: ControlStore, epoch: string): Overvie
     steps.set(key, { key, kind, groupId, repoId, taskId, runId, reason, ownerRequired: ownerRequired || (steps.get(key)?.ownerRequired ?? false), destination });
   }
   function groupSteps(source: Source) {
-    const { summary, body, proposal, workItems, runs, blockers } = source;
+    const { summary, body, proposal, estimates, workItems, runs, blockers } = source;
     const { groupId, repoId } = summary;
     const workById = new Map(workItems.map(work => [work.workItemId, work]));
     const runById = new Map(runs.map(run => [run.runId, run]));
@@ -86,9 +86,8 @@ export function readControlOverview(store: ControlStore, epoch: string): Overvie
     }
     const integration = readGroupIntegration(body);
     if (integration?.state === "conflict" || integration?.state === "blocked") add("integration-review", groupId, repoId, integration.reason ?? `integration-${integration.state}`, groupDestination("integration"), `integration:${integration.schemeHash}`, null, null, true);
-    const estimates = store.db.prepare("SELECT id,state FROM estimates WHERE group_id=?").all(groupId);
     for (const estimate of estimates) {
-      if (estimate.state === "start-unknown") add("recovery-review", groupId, repoId, "estimate-start-unknown", groupDestination("problem"), `estimate:${estimate.id}:start-unknown`);
+      if (estimate.state === "start-unknown") add("recovery-review", groupId, repoId, "estimate-start-unknown", groupDestination("problem"), `estimate:${estimate.estimateId}:start-unknown`);
     }
     const estimateLaunching = estimates.some(row => ["running", "start-unknown"].includes(String(row.state)));
     const estimateInFlight = estimates.some(row => ["queued", "running", "start-unknown"].includes(String(row.state)));
@@ -121,8 +120,13 @@ export function readControlOverview(store: ControlStore, epoch: string): Overvie
     }
   }
   // Ownerless global recovery stays ownerless. A service safety latch is observable even without a blocker row.
-  for (const row of store.db.prepare("SELECT id,code,run_id FROM recovery_blockers WHERE scope='global' AND group_id IS NULL ORDER BY id").all()) {
-    add("recovery-review", null, null, String(row.code), {kind:"recovery"}, JSON.stringify(["global", null, row.run_id, row.code]), null, row.run_id === null ? null : String(row.run_id));
+  for (const row of store.db.prepare("SELECT group_id,run_id,scope,code,body FROM recovery_blockers WHERE scope='global' AND group_id IS NULL ORDER BY id").all()) {
+    try {
+      const blocker = decodeRecoveryBlockerRow(row,"ownerless-global");
+      add("recovery-review", null, null, blocker.code, {kind:"recovery"}, JSON.stringify(["global", null, blocker.runId, blocker.code]), null, blocker.runId);
+    } catch {
+      issues.push({groupId:null,repoId:null,reason:"recovery-blocker-invalid"});
+    }
   }
   if (store.dispatchBlocked) add("recovery-review", null, null, "dispatch-blocked", {kind:"recovery"}, JSON.stringify(["global", null, null, "dispatch-blocked"]));
   return overviewSchema.parse({ schema:"orca-control-overview-v1", epoch, changeSeq, groups,
