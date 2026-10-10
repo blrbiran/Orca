@@ -1,0 +1,22 @@
+# Task 2 independent spec and quality review
+
+Owner: Codex `/root/timer_review`, 2026-10-11 Asia/Shanghai. Reviewed base `115830d424f87063eb835d1f3f911ba1d3dfb0b2` through HEAD `1ef45ea2c83281c03213db64d0760c6ea971c4dd`. Task-scoped controller delegation; final audit remains human-owned. Only this new review file written; no HEAD/index/product/test edits, subagents or suite reruns.
+
+## Spec: ✅ compliant
+
+- `web/tests/agentPreviewRefresh.test.tsx:138–146`: retry advancement is awaited inside React `act`; the separate settled-horizon helper calls synchronous `advanceTimersByTime` inside async `act`. Timer callbacks remain enabled. No run-all-timers, polling stub, business timeout stub, timeout increase, skip or assertion relaxation appears in the reviewed diff. Raw `/usr/bin/git diff 115830d 1ef45ea -- web/src` measured 0 bytes.
+- Lines 204–217 retain every half-delay no-early-read and after-delay assertion for 10/20/40/80/160 seconds, stopped UI, six total reads, manual recovery, and seven total reads after resolved quiescence. The only long advances changed at lines 212 and 216 occur after stopped/resolved conditions.
+- Lines 228–248 retain failed-read retry boundaries, six-read bound, disabled confirmation, one failure report, manual recovery, and renewed round (async advancement at line 246). Lines 344–358 retain installation-table retry boundaries, no premature preview, stopped confirmation and manual table-plus-preview recovery; only the settled long horizon at line 350 changes.
+- `task-2-report.md:11–17` names both previously timed-out criteria and the consistently changed installation-table criterion, retaining R17/T15 authority and original expectations. Historical timeout evidence remains historical; no legacy expectation is silently superseded.
+
+## Quality: Approved
+
+No actionable findings. The two small helpers make the flush boundary explicit without rewriting product behavior or introducing abstraction beyond the needed test distinction. Product inspection confirms preview effects must flush to schedule the next retry (`web/src/App.tsx:521–532`, `921–933`), so retaining async advancement at retry boundaries is necessary. Synchronous settled horizons batch promise-driven updates after callbacks fire; they still expose an erroneously pending retry via read counts.
+
+Existing complete raw logs and metadata were read with `rtk proxy`; review did not rerun tests. The real-App clone witness red observed 1027 unrelated requests / 776 commits, rejecting the <=3 commit criterion (RC1). The raw green witness observed 1020 requests / 2 commits for each stopped and resolved horizon (RC0). Archived instrumentation counts actual chains/summary/recovery fetches and React Profiler commits, rather than replacing timer callbacks. Dependency excerpt confirms async native yields; exact native-yield counts and relative CPU cost were not measured and are not claimed.
+
+Clone-only deletion evidence is load-bearing: removed retry bound fails at current test line 209 (7 versus 6); actual preview delay 10000→1000 fails line 207 (2 versus 1); deleted manual reread fails line 215 (Confirm remains disabled), all RC1. The initial wrong-scope delay trial passed RC0 and is explicitly not credited (`task-2-report.md:31`). Restoration proof records both clones' tracked and staged diffs at 0 bytes, matching product hashes and unchanged main App.
+
+Acceptance evidence: focused file 13/13 RC0; actual default-worker `npm run --ws check` gives 104 files / 902 tests, no skips, RC0; root `npm run typecheck` RC0. Diagnostic `-t` runs intentionally leave 12 unselected tests and are not substituted for acceptance. The 15000 ms timeout remains in `web/vite.config.ts`. Review recomputed the runner's source/config SHA256 as `58a505c7524e0952cd6a85645e1fc2bc559452ea35d0b070a8d26cd6ef4f90b8`, matching acceptance metadata; the archived corrected test is byte-equal to the reviewed file. These are existing implementer gates on the exact source tree, not newly executed reviewer gates or a guarantee of permanent flake elimination.
+
+Evidence inspected: task brief/global constraints/report/review diff and timeout diagnosis; `task2-mechanism-red`, `task2-mechanism-green-raw`, `task2-focused-green`, `task2-web-default`, `task2-type`, `task2-mutant-bound`, `task2-mutant-preview-delay`, `task2-mutant-manual`, `task2-mutant-delay` output logs; corresponding acceptance/mutation metadata; `task2-restore/proof.json`, dependency excerpt and archived corrected/instrumented test.
