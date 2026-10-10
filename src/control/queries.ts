@@ -118,10 +118,12 @@ function readGroupAuthority(store: ControlStore, groupId: string): z.infer<typeo
 
 export interface ArchivedPlanAuthority { groupId: string; graphVersion: number; planHash: string; canonicalJson: string; plan: ControlPlanV1 }
 
-export function readArchivedPlan(store: ControlStore, groupId: string): ArchivedPlanAuthority {
+export function readArchivedPlan(store: ControlStore, groupId: string, canonicalRecords?: ReadonlyMap<string, string>): ArchivedPlanAuthority {
+  // A supplied request-local batch is complete authority: absence refuses, never falls back to per-task SQL.
+  const record = (hash: string): string => readCanonicalRecord(store, hash, canonicalRecords);
   const group = readGroupAuthority(store, groupId);
   const planHash = group.planHash;
-  const canonicalJson = readCanonicalRecord(store, planHash);
+  const canonicalJson = record(planHash);
   try {
     const plan = controlPlanSchema.parse(JSON.parse(canonicalJson));
     if (canonicalBytes(plan).toString("utf8") !== canonicalJson || sha256Canonical(plan) !== planHash
@@ -132,7 +134,7 @@ export function readArchivedPlan(store: ControlStore, groupId: string): Archived
       if (contract.objective.taskId !== task.taskId
         || canonicalBytes(contract).toString("utf8") !== task.originalContractCanonicalJson
         || sha256Canonical(contract) !== task.originalContractHash) return recoveryBlocked();
-      if (readCanonicalRecord(store, task.originalContractHash) !== task.originalContractCanonicalJson) return recoveryBlocked();
+      if (record(task.originalContractHash) !== task.originalContractCanonicalJson) return recoveryBlocked();
     }
     return { groupId, graphVersion: group.graphVersion, planHash, canonicalJson, plan };
   } catch (error) {
@@ -184,7 +186,7 @@ const budgetProposalRecordSchema = z.object({
 
 export type BudgetProposalRecord = z.infer<typeof budgetProposalRecordSchema>;
 
-export function readBudgetProposal(store: ControlStore, groupId: string): BudgetProposalRecord {
+export function readBudgetProposal(store: ControlStore, groupId: string, canonicalRecords?: ReadonlyMap<string, string>): BudgetProposalRecord {
   const row = store.db.prepare("SELECT proposal_version,body FROM budget_proposals WHERE group_id=?").get(groupId);
   if (!row) {
     // N1 spec §4.1 (DR6): a clarifying group has no proposal row; it is refused by name, not as a broken store.
@@ -192,7 +194,7 @@ export function readBudgetProposal(store: ControlStore, groupId: string): Budget
     throw new ControlError("recovery-blocked");
   }
   const group = readGroupAuthority(store, groupId);
-  const archivedPlan = readArchivedPlan(store, groupId);
+  const archivedPlan = readArchivedPlan(store, groupId, canonicalRecords);
   const body = String(row.body);
   const parsed = budgetProposalRecordSchema.safeParse(parseJson(body));
   if (!parsed.success) throw new ControlError("recovery-blocked", parsed.error.issues[0]?.message);

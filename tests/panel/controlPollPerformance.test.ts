@@ -1,3 +1,4 @@
+import { readControlOverview } from "../../src/panel/controlOverview.js";
 import { resolveGroupSelections } from "../../src/control/agentFreeze.js";
 import { readArchivedPlan, readBudgetProposal } from "../../src/control/queries.js";
 import { exportRequirementDocument } from "../../src/control/requirementExport.js";
@@ -364,5 +365,24 @@ describe("control poll request snapshots", () => {
       } finally { counter.restore(); }
     } finally { await x.dispose(); }
   }, 30_000);
+
+  it("keeps overview SQL reads independent of task and run cardinality and decodes shared bodies once", async () => {
+    const observations: number[] = [];
+    for (const n of [10, 50]) {
+      const { h, runId } = await claimed(n);
+      const original = JSON.parse(String(h.store.db.prepare("SELECT body FROM runs WHERE id=?").get(runId)!.body));
+      for (let i=1;i<n;i++) h.store.db.prepare("INSERT INTO runs(id,group_id,work_item_id,generation,active,body) VALUES (?,'g','t00',?,0,?)").run(`history-${i}`, i+1, JSON.stringify({...original, runId:`history-${i}`, generation:i+1, state:"settled-failed"}));
+      const counter = installControlReadCounters(h.store);
+      try {
+        counter.reset(); const body = readControlOverview(counter.store, "e");
+        expect(body.issues).toEqual([]); expect(body.groups[0]?.completion).toEqual({done:0,total:n});
+        bounds(counter.snapshot(), false);
+        expect(counter.snapshot().executions.some(e => e.method === "run")).toBe(false);
+        observations.push(counter.snapshot().executions.length);
+        console.info(JSON.stringify({observation:"overview", n, reads:counter.snapshot().executions.length, parses:[...counter.snapshot().parses.values()]}));
+      } finally { counter.restore(); await h.dispose(); }
+    }
+    expect(observations[1]).toBe(observations[0]);
+  });
 
 });

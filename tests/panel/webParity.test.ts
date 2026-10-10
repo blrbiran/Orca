@@ -349,3 +349,8 @@ export const __webParityAssignabilityChecks__ = [
   usageServerToWeb,
   usageWebToServer,
 ] as const;
+
+// Overview schema mirrors must remain mutually assignable in the root typecheck.
+function overviewServerToWeb(x: import("../../src/control/webProtocol.js").OverviewV1): import("../../web/src/controlTypes.js").OverviewV1 { return x; }
+function overviewWebToServer(x: import("../../web/src/controlTypes.js").OverviewV1): import("../../src/control/webProtocol.js").OverviewV1 { return x; }
+export const __overviewParityAssignabilityChecks__ = [overviewServerToWeb, overviewWebToServer];

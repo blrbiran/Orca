@@ -95,10 +95,17 @@ export function writeCanonicalRecord(store: ControlStore, groupId: string, hash:
 }
 
 /** Read and re-hash a canonical authority record. Missing or damaged authority fails closed. */
-export function readCanonicalRecord(store: ControlStore, hash: string): string {
-  const row = store.db.prepare("SELECT body FROM execution_snapshots WHERE hash=?").get(hash);
-  if (!row) throw new ControlError("recovery-blocked");
-  const body = String(row.body);
+export function readCanonicalRecord(store: ControlStore, hash: string, canonicalRecords?: ReadonlyMap<string, string>): string {
+  let body: string;
+  if (canonicalRecords === undefined) {
+    const row = store.db.prepare("SELECT body FROM execution_snapshots WHERE hash=?").get(hash);
+    if (!row) throw new ControlError("recovery-blocked");
+    body = String(row.body);
+  } else {
+    const stored = canonicalRecords.get(hash);
+    if (stored === undefined) throw new ControlError("recovery-blocked");
+    body = stored;
+  }
   try {
     const parsed = JSON.parse(body);
     const bytes = canonicalBytes(parsed);

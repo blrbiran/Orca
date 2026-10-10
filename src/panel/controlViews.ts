@@ -35,6 +35,7 @@ import {
   allocationViewSchema,
   capabilityViewSchema,
   controlSummarySchema,
+  controlPlanSchema,
   evidenceManifestSchema,
   executionSnapshotSchema,
   compareText,
@@ -239,7 +240,7 @@ function groupBody(store: ControlStore, groupId: string): z.infer<typeof groupBo
   return body;
 }
 
-function blockerRows(store: ControlStore, groupId?: string): Array<{
+function blockerRows(store: ControlStore, groupId?: string, snapshot?: GroupReadSnapshot): Array<{
   scope: "global" | "group" | "run";
   groupId: string;
   runId: string | null;
@@ -262,14 +263,14 @@ function blockerRows(store: ControlStore, groupId?: string): Array<{
       || sortedUnique(body.evidenceIds).join("\0") !== body.evidenceIds.join("\0")
       || (scope === "run" && runId === null) || (scope === "group" && runId !== null)) return blocked("recovery-blocker-identity");
     if (runId !== null) {
-      const run = store.db.prepare("SELECT group_id FROM runs WHERE id=?").get(runId);
+      const run = snapshot === undefined ? store.db.prepare("SELECT group_id FROM runs WHERE id=?").get(runId) : snapshot.runById.get(runId);
       if (!run || String(run.group_id) !== owner) return blocked("recovery-blocker-run-owner");
     }
     return { scope: scope as "global" | "group" | "run", groupId: owner, runId, code, evidenceIds: sortedUnique(body.evidenceIds) };
   }).sort((left, right) => compareText(`${left.scope}\0${left.groupId}\0${left.runId ?? ""}\0${left.code}`, `${right.scope}\0${right.groupId}\0${right.runId ?? ""}\0${right.code}`));
 }
 
-function stopView(store: ControlStore, groupId: string, legacyStopped: boolean): GroupViewV1["stop"] {
+function stopView(store: ControlStore, groupId: string, legacyStopped: boolean, snapshot?: GroupReadSnapshot): GroupViewV1["stop"] {
   const row = store.db.prepare("SELECT mode,revision,body FROM stop_intents WHERE group_id=?").get(groupId);
   if (!row) {
     if (legacyStopped) return blocked("stop-intent-missing");
@@ -291,7 +292,7 @@ function stopView(store: ControlStore, groupId: string, legacyStopped: boolean):
     return blocked("stop-intent-deadline");
   }
   for (const runId of stop.frozenRunIds) {
-    const run = store.db.prepare("SELECT group_id FROM runs WHERE id=?").get(runId);
+    const run = snapshot === undefined ? store.db.prepare("SELECT group_id FROM runs WHERE id=?").get(runId) : snapshot.runById.get(runId);
     if (!run || String(run.group_id) !== groupId) return blocked("stop-intent-frozen-run");
   }
   return stop;
@@ -374,16 +375,16 @@ export function readGroupSummary(store: ControlStore, groupId: string): GroupSum
   return readGroupSummaryFromSnapshot(store, groupId);
 }
 
-function readGroupSummaryFromSnapshot(store: ControlStore, groupId: string, snapshot?: GroupReadSnapshot): GroupSummaryV1 {
+export function readGroupSummaryFromSnapshot(store: ControlStore, groupId: string, snapshot?: GroupReadSnapshot, canonicalRecords?: ReadonlyMap<string, string>): GroupSummaryV1 {
   const body = groupBody(store, groupId);
   // N1 spec §4.1, §11.2: a clarifying group is summarised without a plan or a proposal, and without a completion.
   const clarifying = body.status === "clarifying";
-  const archived = clarifying ? null : readArchivedPlan(store, groupId);
-  if (!clarifying) readBudgetProposal(store, groupId);
+  const archived = clarifying ? null : readArchivedPlan(store, groupId, canonicalRecords);
+  if (!clarifying) readBudgetProposal(store, groupId, canonicalRecords);
   const versions = store.db.prepare("SELECT revision,projection_seq FROM groups WHERE id=?").get(groupId);
   if (!versions) throw new ControlError("group-not-found");
-  const stop = stopView(store, groupId, body.stopped);
-  const blockers = blockerRows(store, groupId);
+  const stop = stopView(store, groupId, body.stopped, snapshot);
+  const blockers = blockerRows(store, groupId, snapshot);
   const requirementBlock = hasRequirementBlock(body as { requirement?: unknown });
   // Project filtering spec §4: the group's repository, from its archived plan, or from its requirement while it
   // is still clarifying. An accepted requirement group must agree with its plan; a disagreement is never guessed.
@@ -392,7 +393,7 @@ function readGroupSummaryFromSnapshot(store: ControlStore, groupId: string, snap
     return blocked("group-summary:repository-mismatch");
   }
   const repoId = archived !== null ? archived.plan.repoId : readRequirementGroup(store, groupId).requirement.repoId;
-  const readSnapshot = archived === null ? undefined : snapshot ?? readGroupSnapshot(store, groupId);
+  const readSnapshot = snapshot ?? (archived === null ? undefined : readGroupSnapshot(store, groupId));
   const tally = archived === null ? null : taskCompletion(readSnapshot!, archived.plan);
   const summary = {
     groupId,
@@ -414,6 +415,42 @@ function readGroupSummaryFromSnapshot(store: ControlStore, groupId: string, snap
   const parsed = groupSummarySchema.safeParse(summary);
   if (!parsed.success) return blocked(`group-summary:${parsed.error.issues[0]?.message ?? "invalid"}`);
   return parsed.data;
+}
+
+/** Stored overview facts share one lazy row snapshot; detail still owns proof/profile admission. */
+export function readOverviewGroupSource(store: ControlStore, groupId: string) {
+  const body = groupBody(store, groupId);
+  if (archivedMarkOf(body) !== null) return null;
+  const snapshot = readGroupSnapshot(store, groupId);
+  let canonicalRecords: ReadonlyMap<string, string> | undefined;
+  if (body.status !== "clarifying") {
+    if (body.planHash === undefined) return blocked("group-plan-missing");
+    // Validate-shaped references only; the existing authority reader below still checks every canonical byte/hash.
+    const references = controlPlanSchema.parse(JSON.parse(readCanonicalRecord(store, body.planHash)));
+    const hashes = sortedUnique([body.planHash, ...references.tasks.map(task => task.originalContractHash)]);
+    canonicalRecords = new Map(store.db.prepare("SELECT hash,body FROM execution_snapshots WHERE hash IN (SELECT value FROM json_each(?))").all(JSON.stringify(hashes)).map(row => [String(row.hash), String(row.body)]));
+  }
+  const summary = readGroupSummaryFromSnapshot(store, groupId, snapshot, canonicalRecords);
+  const plan = body.status === "clarifying" ? null : readArchivedPlan(store, groupId, canonicalRecords).plan;
+  const proposal = plan === null ? null : readBudgetProposal(store, groupId, canonicalRecords);
+  const workItems = (plan?.tasks ?? []).map(task => {
+    const work = parseSnapshot(workBodySchema, snapshot.decodeWork(task.taskId), `work-item-invalid:${task.taskId}`);
+    if (work.workItemId !== task.taskId || work.taskId !== task.taskId || work.kind !== "task") return blocked(`work-item-authority:${task.taskId}`);
+    return work;
+  });
+  const runs = snapshot.runsByRowid.map(row => {
+    const run = parseSnapshot(persistedRunSchema, snapshot.decodeRun(row.id), `run-invalid:${row.id}`);
+    if (run.runId !== row.id || run.groupId !== groupId || run.workItemId !== row.work_item_id || run.generation !== row.generation) return blocked(`run-identity:${row.id}`);
+    return { ...run, active: row.active === 1 };
+  });
+  const runById = new Map(runs.map(run => [run.runId, run]));
+  for (const work of workItems) {
+    if (work.currentRunId == null) continue;
+    const run = runById.get(work.currentRunId);
+    if (run === undefined) return blocked(`run-missing:${work.currentRunId}`);
+    if (run.workItemId !== work.workItemId || run.taskId !== work.taskId || run.phase !== "work") return blocked(`run-work-identity:${run.runId}`);
+  }
+  return { body, summary, proposal, workItems, runs, blockers: blockerRows(store, groupId, snapshot) };
 }
 
 function allGroupIds(store: ControlStore): string[] {

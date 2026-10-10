@@ -1062,6 +1062,30 @@ export const groupSummarySchema = z
   })
   .strict();
 
+/** Progress and human steps are navigation hints, never executable command authority. */
+export const overviewDestinationSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("requirement"), groupId: idSchema, region: z.enum(["answers", "draft", "problem"]) }).strict(),
+  z.object({ kind: z.literal("group"), groupId: idSchema, region: z.enum(["preparation", "dispatch", "problem", "integration", "results"]), taskId: idSchema.nullable(), runId: idSchema.nullable() }).strict(),
+  z.object({ kind: z.literal("recovery") }).strict(),
+]);
+export const overviewStepSchema = z.object({
+  key: nonemptyString, groupId: idSchema.nullable(), repoId: idSchema.nullable(), taskId: idSchema.nullable(), runId: idSchema.nullable(),
+  kind: z.enum(["requirement-answer", "requirement-review", "requirement-attention", "budget-review", "start-review", "task-attention", "stop-review", "recovery-review", "integration-review"]),
+  reason: nonemptyString, ownerRequired: z.boolean(), destination: overviewDestinationSchema,
+}).strict();
+export const overviewIssueSchema = z.object({ groupId: idSchema.nullable(), repoId: idSchema.nullable(), reason: nonemptyString }).strict();
+export const overviewSchema = z.object({
+  schema: z.literal("orca-control-overview-v1"), epoch: nonemptyString, changeSeq: safeInteger,
+  groups: z.array(groupSummarySchema), steps: z.array(overviewStepSchema), issues: z.array(overviewIssueSchema),
+}).strict().superRefine((value, ctx) => {
+  requireSortedUnique(value.groups, group => group.groupId, ctx, ["groups"]);
+  if (new Set(value.steps.map(step => step.key)).size !== value.steps.length) issue(ctx, ["steps"], "duplicate-overview-step");
+});
+export type OverviewV1 = z.infer<typeof overviewSchema>;
+export type OverviewStepV1 = z.infer<typeof overviewStepSchema>;
+export type OverviewDestinationV1 = z.infer<typeof overviewDestinationSchema>;
+export type OverviewIssueV1 = z.infer<typeof overviewIssueSchema>;
+
 /** N1 spec §11.2: one requirement in full, for the Requirements section. Model content is passed as written. */
 export const requirementViewSchema = z.object({
   schema: z.literal("orca-requirement-view-v1"), epoch: nonemptyString, changeSeq: safeInteger, summary: groupSummarySchema,

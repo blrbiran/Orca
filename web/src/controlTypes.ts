@@ -611,3 +611,16 @@ export const WEB_LOOP_PLANS: ReadonlyArray<{ planId: LoopPlanIdV1; version: numb
   { planId: "design", version: 2 },
   { planId: "investigate", version: 2 },
 ];
+
+// Read-only overview mirrors the strict server DTO. These destinations carry no command payload.
+export type OverviewDestinationV1 =
+  | { kind: "requirement"; groupId: string; region: "answers" | "draft" | "problem" }
+  | { kind: "group"; groupId: string; region: "preparation" | "dispatch" | "problem" | "integration" | "results"; taskId: string | null; runId: string | null }
+  | { kind: "recovery" };
+export interface OverviewStepV1 {
+  key: string; groupId: string | null; repoId: string | null; taskId: string | null; runId: string | null;
+  kind: "requirement-answer" | "requirement-review" | "requirement-attention" | "budget-review" | "start-review" | "task-attention" | "stop-review" | "recovery-review" | "integration-review";
+  reason: string; ownerRequired: boolean; destination: OverviewDestinationV1;
+}
+export interface OverviewIssueV1 { groupId: string | null; repoId: string | null; reason: string }
+export interface OverviewV1 { schema: "orca-control-overview-v1"; epoch: string; changeSeq: number; groups: GroupSummaryV1[]; steps: OverviewStepV1[]; issues: OverviewIssueV1[] }

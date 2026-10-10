@@ -1,3 +1,4 @@
+import { readControlOverview } from "./controlOverview.js";
 import type { Express, NextFunction, Request, Response } from "express";
 import { randomUUID } from "node:crypto";
 import { canonicalBytes } from "../control/canonicalJson.js";
@@ -156,6 +157,10 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
       return;
     }
     res.json(readControlSummary(deps.store, deps.epoch, since));
+  }));
+
+  app.get("/api/control/overview", asyncRoute((_req, res) => {
+    res.json(readControlOverview(deps.store, deps.epoch));
   }));
 
   // Accounts spec §5.3: every principal reads usage (the permission table's reading is open to every row).
