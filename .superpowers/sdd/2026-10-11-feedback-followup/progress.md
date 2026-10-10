@@ -127,3 +127,8 @@ Task3 sourcecommit91c0a75, 21sourcefiles exactmanifestverifiedbycontroller. Repo
 Task3 independent review Needs fixes (task-3-review.md): Important I1 same-work-item authority missing; I2 complete inherited tokens/activeMs source consumption missing. Controller read full review, raw three failing refusal assertions and materialize authority code; accepted findings. Fix round1 resumed original /root/token_producer_impl at91c0a75. Task3 remains incomplete; no Task4 dispatch until scoped re-review. Complete local source work Amount must bind through validated handoff, current inherited >= prior inherited+local across all four dimensions including overshoot; replay remains zero extra usage.
 
 Task3 fixround1 commit5b0adea, sixownedfiles; full1424/0fail/0skip/native670/0fail/0skip/typebuildRC0; controllercheckedallsource/loghashes and fullpertestJSON. Sixmutants killed/restored0/0. Scopedreviewpackage review-task3-r1.diff sent original /root/token_producer_review; verdictpending. Task4 brief prepared but implementationnotstarted.
+
+Task 3: fix round 1/5 (2 addressed, 0 open — workItem identity, complete Amount lineage; commits91c0a75..5b0adea)
+Task 3: complete (commits8ebd163..5b0adea, scoped spec/quality review clean). Source producer protocol4 optionaltokens/phasecontinuation interfaces authoritative; exactusage ref required. Finalcrossrepo gates stillTask14.
+
+Task4 nextfreshimplementer Orca policy/jointfunding/schema11/pair runtime. Source BASE82f795b plus reviewclosure docs; oldfinite/v3 and pinneddefault remain.
