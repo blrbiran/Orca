@@ -1,0 +1,3546 @@
+[
+  {
+    "repo": "/private/tmp/orca-feedback-followup-20261011",
+    "command": [
+      "env",
+      "TMPDIR=/private/tmp/t4r1-root-rh5f1xsn",
+      "node",
+      "/Users/biran/code/skills/loop/Orca/node_modules/vitest/vitest.mjs",
+      "run",
+      "--maxWorkers=4",
+      "--reporter=default",
+      "--reporter=json",
+      "--outputFile=/private/tmp/orca-followup-runs/task4-fix1-final-root/results.json"
+    ],
+    "rc": 1,
+    "elapsedSeconds": 681.3248209953308,
+    "log": "/private/tmp/orca-followup-runs/task4-fix1-final-root/output.log",
+    "source": "8d08b03220faf553e5e4c3a28f084ea85f578aba",
+    "sourceTreeSHA256": "f11d0534000f75afd50d60a8c54677148286cefd7eab04c57291b56d14443b8a",
+    "sourceFiles": 922,
+    "rawBytes": 284153,
+    "rawSHA256": "328b13532895b1f4a8396d7e5284de816ec307ce220932e106f02f9ec3f2289b",
+    "cases": []
+  },
+  {
+    "repo": "/private/tmp/orca-feedback-followup-20261011",
+    "command": [
+      "env",
+      "TMPDIR=/private/tmp/t4r1-types-ic6vmkuu",
+      "node",
+      "/private/tmp/task4-fix1-signal-experiment.mjs"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 16.486770153045654,
+    "log": "/private/tmp/orca-followup-runs/task4-fix1-signal-diagnosis/output.log",
+    "source": "8d08b03220faf553e5e4c3a28f084ea85f578aba",
+    "sourceTreeSHA256": "f11d0534000f75afd50d60a8c54677148286cefd7eab04c57291b56d14443b8a",
+    "sourceFiles": 922,
+    "rawBytes": 36184,
+    "rawSHA256": "d021d42447e8ebf2230ac99ac3929609c87ceef25962f9ac6af6cf27791c2c0b",
+    "cases": [
+      {
+        "i": 0,
+        "double": true,
+        "root": "/private/tmp/t4r1-types-ic6vmkuu/sg-RGNuQU",
+        "stdout": "orca-panel ready url=http://127.0.0.1:64219\n",
+        "stderr": "orca-panel: initial password for tester written to /private/tmp/t4r1-types-ic6vmkuu/sg-RGNuQU/control/initial-password\n(node:68748) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\norca-panel: open http://127.0.0.1:64219 in a browser and log in\norca-panel: control socket /private/tmp/t4r1-types-ic6vmkuu/sg-RGNuQU/control/proj-e73c023a/control.sock\n",
+        "exit": {
+          "code": 0,
+          "signal": null
+        },
+        "commands": [
+          {
+            "id": "shutdown-e590631187ff445728f98005d50794ed56438de82c6a38e8844633ea63c571f0"
+          }
+        ],
+        "trace": [
+          {
+            "at": 1791671287552,
+            "pid": 68747,
+            "ppid": 68702,
+            "op": "boot",
+            "argv": [
+              "/usr/local/bin/node",
+              "/private/tmp/orca-feedback-followup-20261011/node_modules/.bin/tsx",
+              "src/cli.ts",
+              "panel",
+              "--by",
+              "tester",
+              "--repo",
+              "proj=/private/tmp/t4r1-types-ic6vmkuu/sg-RGNuQU/repo",
+              "--port",
+              "0"
+            ]
+          },
+          {
+            "at": 1791671287600,
+            "pid": 68748,
+            "ppid": 68747,
+            "op": "boot",
+            "argv": [
+              "/usr/local/bin/node",
+              "/private/tmp/orca-feedback-followup-20261011/src/cli.ts",
+              "panel",
+              "--by",
+              "tester",
+              "--repo",
+              "proj=/private/tmp/t4r1-types-ic6vmkuu/sg-RGNuQU/repo",
+              "--port",
+              "0"
+            ]
+          },
+          {
+            "at": 1791671287657,
+            "pid": 68748,
+            "ppid": 68747,
+            "op": "boot",
+            "argv": [
+              "/usr/local/bin/node"
+            ]
+          },
+          {
+            "at": 1791671288965,
+            "pid": 68702,
+            "op": "send-first",
+            "child": 68747
+          },
+          {
+            "at": 1791671288966,
+            "pid": 68702,
+            "op": "send-second",
+            "child": 68747
+          },
+          {
+            "at": 1791671288966,
+            "pid": 68747,
+            "ppid": 68702,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671288966,
+            "pid": 68747,
+            "ppid": 68702,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671288997,
+            "pid": 68747,
+            "ppid": 68702,
+            "op": "child.kill",
+            "child": 68748,
+            "signal": "SIGTERM"
+          },
+          {
+            "at": 1791671288998,
+            "pid": 68747,
+            "ppid": 68702,
+            "op": "child.kill",
+            "child": 68748,
+            "signal": "SIGTERM"
+          },
+          {
+            "at": 1791671288998,
+            "pid": 68748,
+            "ppid": 68747,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671289008,
+            "pid": 68748,
+            "ppid": 68747,
+            "op": "off",
+            "event": "SIGINT",
+            "name": "onSignal"
+          },
+          {
+            "at": 1791671289009,
+            "pid": 68748,
+            "ppid": 68747,
+            "op": "off",
+            "event": "SIGTERM",
+            "name": "onSignal"
+          },
+          {
+            "at": 1791671289009,
+            "pid": 68748,
+            "ppid": 68747,
+            "op": "emit",
+            "event": "exit",
+            "args": [
+              0
+            ]
+          },
+          {
+            "at": 1791671289020,
+            "pid": 68747,
+            "ppid": 68702,
+            "op": "process.exit",
+            "code": 0
+          },
+          {
+            "at": 1791671289020,
+            "pid": 68747,
+            "ppid": 68702,
+            "op": "emit",
+            "event": "exit",
+            "args": [
+              0
+            ]
+          }
+        ]
+      },
+      {
+        "i": 1,
+        "double": true,
+        "root": "/private/tmp/t4r1-types-ic6vmkuu/sg-tXaDKn",
+        "stdout": "orca-panel ready url=http://127.0.0.1:64220\n",
+        "stderr": "orca-panel: initial password for tester written to /private/tmp/t4r1-types-ic6vmkuu/sg-tXaDKn/control/initial-password\n(node:68766) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\norca-panel: open http://127.0.0.1:64220 in a browser and log in\norca-panel: control socket /private/tmp/t4r1-types-ic6vmkuu/sg-tXaDKn/control/proj-e73c023a/control.sock\n",
+        "exit": {
+          "code": 0,
+          "signal": null
+        },
+        "commands": [
+          {
+            "id": "shutdown-452e7bc80d013c8ed9ca2046de8e3090c8ddc30f5f1b521709ddef02da0ebe0a"
+          }
+        ],
+        "trace": [
+          {
+            "at": 1791671289059,
+            "pid": 68765,
+            "ppid": 68702,
+            "op": "boot",
+            "argv": [
+              "/usr/local/bin/node",
+              "/private/tmp/orca-feedback-followup-20261011/node_modules/.bin/tsx",
+              "src/cli.ts",
+              "panel",
+              "--by",
+              "tester",
+              "--repo",
+              "proj=/private/tmp/t4r1-types-ic6vmkuu/sg-tXaDKn/repo",
+              "--port",
+              "0"
+            ]
+          },
+          {
+            "at": 1791671289103,
+            "pid": 68766,
+            "ppid": 68765,
+            "op": "boot",
+            "argv": [
+              "/usr/local/bin/node",
+              "/private/tmp/orca-feedback-followup-20261011/src/cli.ts",
+              "panel",
+              "--by",
+              "tester",
+              "--repo",
+              "proj=/private/tmp/t4r1-types-ic6vmkuu/sg-tXaDKn/repo",
+              "--port",
+              "0"
+            ]
+          },
+          {
+            "at": 1791671289981,
+            "pid": 68702,
+            "op": "send-first",
+            "child": 68765
+          },
+          {
+            "at": 1791671289981,
+            "pid": 68702,
+            "op": "send-second",
+            "child": 68765
+          },
+          {
+            "at": 1791671289981,
+            "pid": 68765,
+            "ppid": 68702,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671289982,
+            "pid": 68765,
+            "ppid": 68702,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671290013,
+            "pid": 68765,
+            "ppid": 68702,
+            "op": "child.kill",
+            "child": 68766,
+            "signal": "SIGTERM"
+          },
+          {
+            "at": 1791671290013,
+            "pid": 68765,
+            "ppid": 68702,
+            "op": "child.kill",
+            "child": 68766,
+            "signal": "SIGTERM"
+          },
+          {
+            "at": 1791671290013,
+            "pid": 68766,
+            "ppid": 68765,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671290023,
+            "pid": 68766,
+            "ppid": 68765,
+            "op": "off",
+            "event": "SIGINT",
+            "name": "onSignal"
+          },
+          {
+            "at": 1791671290023,
+            "pid": 68766,
+            "ppid": 68765,
+            "op": "off",
+            "event": "SIGTERM",
+            "name": "onSignal"
+          },
+          {
+            "at": 1791671290024,
+            "pid": 68766,
+            "ppid": 68765,
+            "op": "emit",
+            "event": "exit",
+            "args": [
+              0
+            ]
+          },
+          {
+            "at": 1791671290031,
+            "pid": 68765,
+            "ppid": 68702,
+            "op": "process.exit",
+            "code": 0
+          },
+          {
+            "at": 1791671290031,
+            "pid": 68765,
+            "ppid": 68702,
+            "op": "emit",
+            "event": "exit",
+            "args": [
+              0
+            ]
+          }
+        ]
+      },
+      {
+        "i": 2,
+        "double": true,
+        "root": "/private/tmp/t4r1-types-ic6vmkuu/sg-T8hfRx",
+        "stdout": "orca-panel ready url=http://127.0.0.1:64221\n",
+        "stderr": "orca-panel: initial password for tester written to /private/tmp/t4r1-types-ic6vmkuu/sg-T8hfRx/control/initial-password\n(node:68827) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\norca-panel: open http://127.0.0.1:64221 in a browser and log in\norca-panel: control socket /private/tmp/t4r1-types-ic6vmkuu/sg-T8hfRx/control/proj-e73c023a/control.sock\n",
+        "exit": {
+          "code": 0,
+          "signal": null
+        },
+        "commands": [
+          {
+            "id": "shutdown-49eb5feeacbef194efb835a794bd8fc663e6ac837e88755586eea34608e5f5fb"
+          }
+        ],
+        "trace": [
+          {
+            "at": 1791671290064,
+            "pid": 68826,
+            "ppid": 68702,
+            "op": "boot",
+            "argv": [
+              "/usr/local/bin/node",
+              "/private/tmp/orca-feedback-followup-20261011/node_modules/.bin/tsx",
+              "src/cli.ts",
+              "panel",
+              "--by",
+              "tester",
+              "--repo",
+              "proj=/private/tmp/t4r1-types-ic6vmkuu/sg-T8hfRx/repo",
+              "--port",
+              "0"
+            ]
+          },
+          {
+            "at": 1791671290109,
+            "pid": 68827,
+            "ppid": 68826,
+            "op": "boot",
+            "argv": [
+              "/usr/local/bin/node",
+              "/private/tmp/orca-feedback-followup-20261011/src/cli.ts",
+              "panel",
+              "--by",
+              "tester",
+              "--repo",
+              "proj=/private/tmp/t4r1-types-ic6vmkuu/sg-T8hfRx/repo",
+              "--port",
+              "0"
+            ]
+          },
+          {
+            "at": 1791671290967,
+            "pid": 68702,
+            "op": "send-first",
+            "child": 68826
+          },
+          {
+            "at": 1791671290967,
+            "pid": 68702,
+            "op": "send-second",
+            "child": 68826
+          },
+          {
+            "at": 1791671290967,
+            "pid": 68826,
+            "ppid": 68702,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671290968,
+            "pid": 68826,
+            "ppid": 68702,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671291000,
+            "pid": 68826,
+            "ppid": 68702,
+            "op": "child.kill",
+            "child": 68827,
+            "signal": "SIGTERM"
+          },
+          {
+            "at": 1791671291000,
+            "pid": 68826,
+            "ppid": 68702,
+            "op": "child.kill",
+            "child": 68827,
+            "signal": "SIGTERM"
+          },
+          {
+            "at": 1791671291000,
+            "pid": 68827,
+            "ppid": 68826,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671291011,
+            "pid": 68827,
+            "ppid": 68826,
+            "op": "off",
+            "event": "SIGINT",
+            "name": "onSignal"
+          },
+          {
+            "at": 1791671291011,
+            "pid": 68827,
+            "ppid": 68826,
+            "op": "off",
+            "event": "SIGTERM",
+            "name": "onSignal"
+          },
+          {
+            "at": 1791671291011,
+            "pid": 68827,
+            "ppid": 68826,
+            "op": "emit",
+            "event": "exit",
+            "args": [
+              0
+            ]
+          },
+          {
+            "at": 1791671291017,
+            "pid": 68826,
+            "ppid": 68702,
+            "op": "process.exit",
+            "code": 0
+          },
+          {
+            "at": 1791671291017,
+            "pid": 68826,
+            "ppid": 68702,
+            "op": "emit",
+            "event": "exit",
+            "args": [
+              0
+            ]
+          }
+        ]
+      },
+      {
+        "i": 3,
+        "double": true,
+        "root": "/private/tmp/t4r1-types-ic6vmkuu/sg-KK16Dz",
+        "stdout": "orca-panel ready url=http://127.0.0.1:64222\n",
+        "stderr": "orca-panel: initial password for tester written to /private/tmp/t4r1-types-ic6vmkuu/sg-KK16Dz/control/initial-password\n(node:68844) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\norca-panel: open http://127.0.0.1:64222 in a browser and log in\norca-panel: control socket /private/tmp/t4r1-types-ic6vmkuu/sg-KK16Dz/control/proj-e73c023a/control.sock\n",
+        "exit": {
+          "code": 0,
+          "signal": null
+        },
+        "commands": [
+          {
+            "id": "shutdown-1b4b9eeaf37656c1b6de2577b54cebf749563fa996b58638e76d91cf3a269dbd"
+          }
+        ],
+        "trace": [
+          {
+            "at": 1791671291050,
+            "pid": 68843,
+            "ppid": 68702,
+            "op": "boot",
+            "argv": [
+              "/usr/local/bin/node",
+              "/private/tmp/orca-feedback-followup-20261011/node_modules/.bin/tsx",
+              "src/cli.ts",
+              "panel",
+              "--by",
+              "tester",
+              "--repo",
+              "proj=/private/tmp/t4r1-types-ic6vmkuu/sg-KK16Dz/repo",
+              "--port",
+              "0"
+            ]
+          },
+          {
+            "at": 1791671291093,
+            "pid": 68844,
+            "ppid": 68843,
+            "op": "boot",
+            "argv": [
+              "/usr/local/bin/node",
+              "/private/tmp/orca-feedback-followup-20261011/src/cli.ts",
+              "panel",
+              "--by",
+              "tester",
+              "--repo",
+              "proj=/private/tmp/t4r1-types-ic6vmkuu/sg-KK16Dz/repo",
+              "--port",
+              "0"
+            ]
+          },
+          {
+            "at": 1791671291956,
+            "pid": 68702,
+            "op": "send-first",
+            "child": 68843
+          },
+          {
+            "at": 1791671291956,
+            "pid": 68702,
+            "op": "send-second",
+            "child": 68843
+          },
+          {
+            "at": 1791671291956,
+            "pid": 68843,
+            "ppid": 68702,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671291957,
+            "pid": 68843,
+            "ppid": 68702,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671291987,
+            "pid": 68843,
+            "ppid": 68702,
+            "op": "child.kill",
+            "child": 68844,
+            "signal": "SIGTERM"
+          },
+          {
+            "at": 1791671291987,
+            "pid": 68843,
+            "ppid": 68702,
+            "op": "child.kill",
+            "child": 68844,
+            "signal": "SIGTERM"
+          },
+          {
+            "at": 1791671291987,
+            "pid": 68844,
+            "ppid": 68843,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671291996,
+            "pid": 68844,
+            "ppid": 68843,
+            "op": "off",
+            "event": "SIGINT",
+            "name": "onSignal"
+          },
+          {
+            "at": 1791671291996,
+            "pid": 68844,
+            "ppid": 68843,
+            "op": "off",
+            "event": "SIGTERM",
+            "name": "onSignal"
+          },
+          {
+            "at": 1791671291996,
+            "pid": 68844,
+            "ppid": 68843,
+            "op": "emit",
+            "event": "exit",
+            "args": [
+              0
+            ]
+          },
+          {
+            "at": 1791671292002,
+            "pid": 68843,
+            "ppid": 68702,
+            "op": "process.exit",
+            "code": 0
+          },
+          {
+            "at": 1791671292002,
+            "pid": 68843,
+            "ppid": 68702,
+            "op": "emit",
+            "event": "exit",
+            "args": [
+              0
+            ]
+          }
+        ]
+      },
+      {
+        "i": 4,
+        "double": true,
+        "root": "/private/tmp/t4r1-types-ic6vmkuu/sg-kuuPXL",
+        "stdout": "orca-panel ready url=http://127.0.0.1:64223\n",
+        "stderr": "orca-panel: initial password for tester written to /private/tmp/t4r1-types-ic6vmkuu/sg-kuuPXL/control/initial-password\n(node:68905) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\norca-panel: open http://127.0.0.1:64223 in a browser and log in\norca-panel: control socket /private/tmp/t4r1-types-ic6vmkuu/sg-kuuPXL/control/proj-e73c023a/control.sock\n",
+        "exit": {
+          "code": 0,
+          "signal": null
+        },
+        "commands": [
+          {
+            "id": "shutdown-31339cc9a210d29d3914944fae69d9e26175923c345a389cf1b2b811ba71fe9c"
+          }
+        ],
+        "trace": [
+          {
+            "at": 1791671292038,
+            "pid": 68904,
+            "ppid": 68702,
+            "op": "boot",
+            "argv": [
+              "/usr/local/bin/node",
+              "/private/tmp/orca-feedback-followup-20261011/node_modules/.bin/tsx",
+              "src/cli.ts",
+              "panel",
+              "--by",
+              "tester",
+              "--repo",
+              "proj=/private/tmp/t4r1-types-ic6vmkuu/sg-kuuPXL/repo",
+              "--port",
+              "0"
+            ]
+          },
+          {
+            "at": 1791671292084,
+            "pid": 68905,
+            "ppid": 68904,
+            "op": "boot",
+            "argv": [
+              "/usr/local/bin/node",
+              "/private/tmp/orca-feedback-followup-20261011/src/cli.ts",
+              "panel",
+              "--by",
+              "tester",
+              "--repo",
+              "proj=/private/tmp/t4r1-types-ic6vmkuu/sg-kuuPXL/repo",
+              "--port",
+              "0"
+            ]
+          },
+          {
+            "at": 1791671292941,
+            "pid": 68702,
+            "op": "send-first",
+            "child": 68904
+          },
+          {
+            "at": 1791671292941,
+            "pid": 68702,
+            "op": "send-second",
+            "child": 68904
+          },
+          {
+            "at": 1791671292941,
+            "pid": 68904,
+            "ppid": 68702,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671292941,
+            "pid": 68904,
+            "ppid": 68702,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671292973,
+            "pid": 68904,
+            "ppid": 68702,
+            "op": "child.kill",
+            "child": 68905,
+            "signal": "SIGTERM"
+          },
+          {
+            "at": 1791671292973,
+            "pid": 68904,
+            "ppid": 68702,
+            "op": "child.kill",
+            "child": 68905,
+            "signal": "SIGTERM"
+          },
+          {
+            "at": 1791671292973,
+            "pid": 68905,
+            "ppid": 68904,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671292983,
+            "pid": 68905,
+            "ppid": 68904,
+            "op": "off",
+            "event": "SIGINT",
+            "name": "onSignal"
+          },
+          {
+            "at": 1791671292984,
+            "pid": 68905,
+            "ppid": 68904,
+            "op": "off",
+            "event": "SIGTERM",
+            "name": "onSignal"
+          },
+          {
+            "at": 1791671292984,
+            "pid": 68905,
+            "ppid": 68904,
+            "op": "emit",
+            "event": "exit",
+            "args": [
+              0
+            ]
+          },
+          {
+            "at": 1791671292990,
+            "pid": 68904,
+            "ppid": 68702,
+            "op": "process.exit",
+            "code": 0
+          },
+          {
+            "at": 1791671292990,
+            "pid": 68904,
+            "ppid": 68702,
+            "op": "emit",
+            "event": "exit",
+            "args": [
+              0
+            ]
+          }
+        ]
+      },
+      {
+        "i": 5,
+        "double": true,
+        "root": "/private/tmp/t4r1-types-ic6vmkuu/sg-mUzIoF",
+        "stdout": "orca-panel ready url=http://127.0.0.1:64224\n",
+        "stderr": "orca-panel: initial password for tester written to /private/tmp/t4r1-types-ic6vmkuu/sg-mUzIoF/control/initial-password\n(node:68922) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\norca-panel: open http://127.0.0.1:64224 in a browser and log in\norca-panel: control socket /private/tmp/t4r1-types-ic6vmkuu/sg-mUzIoF/control/proj-e73c023a/control.sock\n",
+        "exit": {
+          "code": 0,
+          "signal": null
+        },
+        "commands": [
+          {
+            "id": "shutdown-d7338eb4ee40c309880acb23e2b503f465e8f88b0a46e5e4367cc7c12693b234"
+          }
+        ],
+        "trace": [
+          {
+            "at": 1791671293024,
+            "pid": 68921,
+            "ppid": 68702,
+            "op": "boot",
+            "argv": [
+              "/usr/local/bin/node",
+              "/private/tmp/orca-feedback-followup-20261011/node_modules/.bin/tsx",
+              "src/cli.ts",
+              "panel",
+              "--by",
+              "tester",
+              "--repo",
+              "proj=/private/tmp/t4r1-types-ic6vmkuu/sg-mUzIoF/repo",
+              "--port",
+              "0"
+            ]
+          },
+          {
+            "at": 1791671293065,
+            "pid": 68922,
+            "ppid": 68921,
+            "op": "boot",
+            "argv": [
+              "/usr/local/bin/node",
+              "/private/tmp/orca-feedback-followup-20261011/src/cli.ts",
+              "panel",
+              "--by",
+              "tester",
+              "--repo",
+              "proj=/private/tmp/t4r1-types-ic6vmkuu/sg-mUzIoF/repo",
+              "--port",
+              "0"
+            ]
+          },
+          {
+            "at": 1791671293931,
+            "pid": 68702,
+            "op": "send-first",
+            "child": 68921
+          },
+          {
+            "at": 1791671293932,
+            "pid": 68702,
+            "op": "send-second",
+            "child": 68921
+          },
+          {
+            "at": 1791671293932,
+            "pid": 68921,
+            "ppid": 68702,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671293932,
+            "pid": 68921,
+            "ppid": 68702,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671293963,
+            "pid": 68921,
+            "ppid": 68702,
+            "op": "child.kill",
+            "child": 68922,
+            "signal": "SIGTERM"
+          },
+          {
+            "at": 1791671293963,
+            "pid": 68921,
+            "ppid": 68702,
+            "op": "child.kill",
+            "child": 68922,
+            "signal": "SIGTERM"
+          },
+          {
+            "at": 1791671293963,
+            "pid": 68922,
+            "ppid": 68921,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671293974,
+            "pid": 68922,
+            "ppid": 68921,
+            "op": "off",
+            "event": "SIGINT",
+            "name": "onSignal"
+          },
+          {
+            "at": 1791671293975,
+            "pid": 68922,
+            "ppid": 68921,
+            "op": "off",
+            "event": "SIGTERM",
+            "name": "onSignal"
+          },
+          {
+            "at": 1791671293975,
+            "pid": 68922,
+            "ppid": 68921,
+            "op": "emit",
+            "event": "exit",
+            "args": [
+              0
+            ]
+          },
+          {
+            "at": 1791671293982,
+            "pid": 68921,
+            "ppid": 68702,
+            "op": "process.exit",
+            "code": 0
+          },
+          {
+            "at": 1791671293982,
+            "pid": 68921,
+            "ppid": 68702,
+            "op": "emit",
+            "event": "exit",
+            "args": [
+              0
+            ]
+          }
+        ]
+      },
+      {
+        "i": 6,
+        "double": true,
+        "root": "/private/tmp/t4r1-types-ic6vmkuu/sg-6i2J5S",
+        "stdout": "orca-panel ready url=http://127.0.0.1:64226\n",
+        "stderr": "orca-panel: initial password for tester written to /private/tmp/t4r1-types-ic6vmkuu/sg-6i2J5S/control/initial-password\n(node:68983) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\norca-panel: open http://127.0.0.1:64226 in a browser and log in\norca-panel: control socket /private/tmp/t4r1-types-ic6vmkuu/sg-6i2J5S/control/proj-e73c023a/control.sock\n",
+        "exit": {
+          "code": 0,
+          "signal": null
+        },
+        "commands": [
+          {
+            "id": "shutdown-5e86da608821b7460f5571c77a0056e2a9d8c785a855cc9322ff43c2434a77c1"
+          }
+        ],
+        "trace": [
+          {
+            "at": 1791671294016,
+            "pid": 68982,
+            "ppid": 68702,
+            "op": "boot",
+            "argv": [
+              "/usr/local/bin/node",
+              "/private/tmp/orca-feedback-followup-20261011/node_modules/.bin/tsx",
+              "src/cli.ts",
+              "panel",
+              "--by",
+              "tester",
+              "--repo",
+              "proj=/private/tmp/t4r1-types-ic6vmkuu/sg-6i2J5S/repo",
+              "--port",
+              "0"
+            ]
+          },
+          {
+            "at": 1791671294058,
+            "pid": 68983,
+            "ppid": 68982,
+            "op": "boot",
+            "argv": [
+              "/usr/local/bin/node",
+              "/private/tmp/orca-feedback-followup-20261011/src/cli.ts",
+              "panel",
+              "--by",
+              "tester",
+              "--repo",
+              "proj=/private/tmp/t4r1-types-ic6vmkuu/sg-6i2J5S/repo",
+              "--port",
+              "0"
+            ]
+          },
+          {
+            "at": 1791671294922,
+            "pid": 68702,
+            "op": "send-first",
+            "child": 68982
+          },
+          {
+            "at": 1791671294922,
+            "pid": 68702,
+            "op": "send-second",
+            "child": 68982
+          },
+          {
+            "at": 1791671294922,
+            "pid": 68982,
+            "ppid": 68702,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671294922,
+            "pid": 68982,
+            "ppid": 68702,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671294954,
+            "pid": 68982,
+            "ppid": 68702,
+            "op": "child.kill",
+            "child": 68983,
+            "signal": "SIGTERM"
+          },
+          {
+            "at": 1791671294954,
+            "pid": 68982,
+            "ppid": 68702,
+            "op": "child.kill",
+            "child": 68983,
+            "signal": "SIGTERM"
+          },
+          {
+            "at": 1791671294954,
+            "pid": 68983,
+            "ppid": 68982,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671294965,
+            "pid": 68983,
+            "ppid": 68982,
+            "op": "off",
+            "event": "SIGINT",
+            "name": "onSignal"
+          },
+          {
+            "at": 1791671294965,
+            "pid": 68983,
+            "ppid": 68982,
+            "op": "off",
+            "event": "SIGTERM",
+            "name": "onSignal"
+          },
+          {
+            "at": 1791671294965,
+            "pid": 68983,
+            "ppid": 68982,
+            "op": "emit",
+            "event": "exit",
+            "args": [
+              0
+            ]
+          },
+          {
+            "at": 1791671294971,
+            "pid": 68982,
+            "ppid": 68702,
+            "op": "process.exit",
+            "code": 0
+          },
+          {
+            "at": 1791671294971,
+            "pid": 68982,
+            "ppid": 68702,
+            "op": "emit",
+            "event": "exit",
+            "args": [
+              0
+            ]
+          }
+        ]
+      },
+      {
+        "i": 7,
+        "double": true,
+        "root": "/private/tmp/t4r1-types-ic6vmkuu/sg-GYJ6TL",
+        "stdout": "orca-panel ready url=http://127.0.0.1:64227\n",
+        "stderr": "orca-panel: initial password for tester written to /private/tmp/t4r1-types-ic6vmkuu/sg-GYJ6TL/control/initial-password\n(node:69000) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\norca-panel: open http://127.0.0.1:64227 in a browser and log in\norca-panel: control socket /private/tmp/t4r1-types-ic6vmkuu/sg-GYJ6TL/control/proj-e73c023a/control.sock\n",
+        "exit": {
+          "code": 0,
+          "signal": null
+        },
+        "commands": [
+          {
+            "id": "shutdown-3e2b4b144ad2196ac2a544c58786520071dd19b2964a15f193b6a9e58802fe03"
+          }
+        ],
+        "trace": [
+          {
+            "at": 1791671295004,
+            "pid": 68999,
+            "ppid": 68702,
+            "op": "boot",
+            "argv": [
+              "/usr/local/bin/node",
+              "/private/tmp/orca-feedback-followup-20261011/node_modules/.bin/tsx",
+              "src/cli.ts",
+              "panel",
+              "--by",
+              "tester",
+              "--repo",
+              "proj=/private/tmp/t4r1-types-ic6vmkuu/sg-GYJ6TL/repo",
+              "--port",
+              "0"
+            ]
+          },
+          {
+            "at": 1791671295047,
+            "pid": 69000,
+            "ppid": 68999,
+            "op": "boot",
+            "argv": [
+              "/usr/local/bin/node",
+              "/private/tmp/orca-feedback-followup-20261011/src/cli.ts",
+              "panel",
+              "--by",
+              "tester",
+              "--repo",
+              "proj=/private/tmp/t4r1-types-ic6vmkuu/sg-GYJ6TL/repo",
+              "--port",
+              "0"
+            ]
+          },
+          {
+            "at": 1791671295924,
+            "pid": 68702,
+            "op": "send-first",
+            "child": 68999
+          },
+          {
+            "at": 1791671295924,
+            "pid": 68702,
+            "op": "send-second",
+            "child": 68999
+          },
+          {
+            "at": 1791671295924,
+            "pid": 68999,
+            "ppid": 68702,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671295925,
+            "pid": 68999,
+            "ppid": 68702,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671295957,
+            "pid": 68999,
+            "ppid": 68702,
+            "op": "child.kill",
+            "child": 69000,
+            "signal": "SIGTERM"
+          },
+          {
+            "at": 1791671295957,
+            "pid": 68999,
+            "ppid": 68702,
+            "op": "child.kill",
+            "child": 69000,
+            "signal": "SIGTERM"
+          },
+          {
+            "at": 1791671295957,
+            "pid": 69000,
+            "ppid": 68999,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671295968,
+            "pid": 69000,
+            "ppid": 68999,
+            "op": "off",
+            "event": "SIGINT",
+            "name": "onSignal"
+          },
+          {
+            "at": 1791671295968,
+            "pid": 69000,
+            "ppid": 68999,
+            "op": "off",
+            "event": "SIGTERM",
+            "name": "onSignal"
+          },
+          {
+            "at": 1791671295968,
+            "pid": 69000,
+            "ppid": 68999,
+            "op": "emit",
+            "event": "exit",
+            "args": [
+              0
+            ]
+          },
+          {
+            "at": 1791671295975,
+            "pid": 68999,
+            "ppid": 68702,
+            "op": "process.exit",
+            "code": 0
+          },
+          {
+            "at": 1791671295975,
+            "pid": 68999,
+            "ppid": 68702,
+            "op": "emit",
+            "event": "exit",
+            "args": [
+              0
+            ]
+          }
+        ]
+      },
+      {
+        "i": 8,
+        "double": true,
+        "root": "/private/tmp/t4r1-types-ic6vmkuu/sg-cJHNgD",
+        "stdout": "orca-panel ready url=http://127.0.0.1:64228\n",
+        "stderr": "orca-panel: initial password for tester written to /private/tmp/t4r1-types-ic6vmkuu/sg-cJHNgD/control/initial-password\n(node:69061) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\norca-panel: open http://127.0.0.1:64228 in a browser and log in\norca-panel: control socket /private/tmp/t4r1-types-ic6vmkuu/sg-cJHNgD/control/proj-e73c023a/control.sock\n",
+        "exit": {
+          "code": 0,
+          "signal": null
+        },
+        "commands": [
+          {
+            "id": "shutdown-29d685180318eba602fa13bb5e55445698670b78ead621873353808c0718aa8e"
+          }
+        ],
+        "trace": [
+          {
+            "at": 1791671296010,
+            "pid": 69060,
+            "ppid": 68702,
+            "op": "boot",
+            "argv": [
+              "/usr/local/bin/node",
+              "/private/tmp/orca-feedback-followup-20261011/node_modules/.bin/tsx",
+              "src/cli.ts",
+              "panel",
+              "--by",
+              "tester",
+              "--repo",
+              "proj=/private/tmp/t4r1-types-ic6vmkuu/sg-cJHNgD/repo",
+              "--port",
+              "0"
+            ]
+          },
+          {
+            "at": 1791671296054,
+            "pid": 69061,
+            "ppid": 69060,
+            "op": "boot",
+            "argv": [
+              "/usr/local/bin/node",
+              "/private/tmp/orca-feedback-followup-20261011/src/cli.ts",
+              "panel",
+              "--by",
+              "tester",
+              "--repo",
+              "proj=/private/tmp/t4r1-types-ic6vmkuu/sg-cJHNgD/repo",
+              "--port",
+              "0"
+            ]
+          },
+          {
+            "at": 1791671296920,
+            "pid": 68702,
+            "op": "send-first",
+            "child": 69060
+          },
+          {
+            "at": 1791671296920,
+            "pid": 68702,
+            "op": "send-second",
+            "child": 69060
+          },
+          {
+            "at": 1791671296920,
+            "pid": 69060,
+            "ppid": 68702,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671296920,
+            "pid": 69060,
+            "ppid": 68702,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671296952,
+            "pid": 69060,
+            "ppid": 68702,
+            "op": "child.kill",
+            "child": 69061,
+            "signal": "SIGTERM"
+          },
+          {
+            "at": 1791671296952,
+            "pid": 69060,
+            "ppid": 68702,
+            "op": "child.kill",
+            "child": 69061,
+            "signal": "SIGTERM"
+          },
+          {
+            "at": 1791671296952,
+            "pid": 69061,
+            "ppid": 69060,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671296963,
+            "pid": 69061,
+            "ppid": 69060,
+            "op": "off",
+            "event": "SIGINT",
+            "name": "onSignal"
+          },
+          {
+            "at": 1791671296963,
+            "pid": 69061,
+            "ppid": 69060,
+            "op": "off",
+            "event": "SIGTERM",
+            "name": "onSignal"
+          },
+          {
+            "at": 1791671296963,
+            "pid": 69061,
+            "ppid": 69060,
+            "op": "emit",
+            "event": "exit",
+            "args": [
+              0
+            ]
+          },
+          {
+            "at": 1791671296969,
+            "pid": 69060,
+            "ppid": 68702,
+            "op": "process.exit",
+            "code": 0
+          },
+          {
+            "at": 1791671296969,
+            "pid": 69060,
+            "ppid": 68702,
+            "op": "emit",
+            "event": "exit",
+            "args": [
+              0
+            ]
+          }
+        ]
+      },
+      {
+        "i": 9,
+        "double": true,
+        "root": "/private/tmp/t4r1-types-ic6vmkuu/sg-hacPN7",
+        "stdout": "orca-panel ready url=http://127.0.0.1:64229\n",
+        "stderr": "orca-panel: initial password for tester written to /private/tmp/t4r1-types-ic6vmkuu/sg-hacPN7/control/initial-password\n(node:69078) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\norca-panel: open http://127.0.0.1:64229 in a browser and log in\norca-panel: control socket /private/tmp/t4r1-types-ic6vmkuu/sg-hacPN7/control/proj-e73c023a/control.sock\n",
+        "exit": {
+          "code": 0,
+          "signal": null
+        },
+        "commands": [
+          {
+            "id": "shutdown-14eb978039c20dc413fb9dabc388e0103c2df18cec9c5aead081509da171363a"
+          }
+        ],
+        "trace": [
+          {
+            "at": 1791671297003,
+            "pid": 69077,
+            "ppid": 68702,
+            "op": "boot",
+            "argv": [
+              "/usr/local/bin/node",
+              "/private/tmp/orca-feedback-followup-20261011/node_modules/.bin/tsx",
+              "src/cli.ts",
+              "panel",
+              "--by",
+              "tester",
+              "--repo",
+              "proj=/private/tmp/t4r1-types-ic6vmkuu/sg-hacPN7/repo",
+              "--port",
+              "0"
+            ]
+          },
+          {
+            "at": 1791671297046,
+            "pid": 69078,
+            "ppid": 69077,
+            "op": "boot",
+            "argv": [
+              "/usr/local/bin/node",
+              "/private/tmp/orca-feedback-followup-20261011/src/cli.ts",
+              "panel",
+              "--by",
+              "tester",
+              "--repo",
+              "proj=/private/tmp/t4r1-types-ic6vmkuu/sg-hacPN7/repo",
+              "--port",
+              "0"
+            ]
+          },
+          {
+            "at": 1791671297923,
+            "pid": 68702,
+            "op": "send-first",
+            "child": 69077
+          },
+          {
+            "at": 1791671297923,
+            "pid": 68702,
+            "op": "send-second",
+            "child": 69077
+          },
+          {
+            "at": 1791671297923,
+            "pid": 69077,
+            "ppid": 68702,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671297923,
+            "pid": 69077,
+            "ppid": 68702,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671297955,
+            "pid": 69077,
+            "ppid": 68702,
+            "op": "child.kill",
+            "child": 69078,
+            "signal": "SIGTERM"
+          },
+          {
+            "at": 1791671297956,
+            "pid": 69077,
+            "ppid": 68702,
+            "op": "child.kill",
+            "child": 69078,
+            "signal": "SIGTERM"
+          },
+          {
+            "at": 1791671297956,
+            "pid": 69078,
+            "ppid": 69077,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671297966,
+            "pid": 69078,
+            "ppid": 69077,
+            "op": "off",
+            "event": "SIGINT",
+            "name": "onSignal"
+          },
+          {
+            "at": 1791671297966,
+            "pid": 69078,
+            "ppid": 69077,
+            "op": "off",
+            "event": "SIGTERM",
+            "name": "onSignal"
+          },
+          {
+            "at": 1791671297966,
+            "pid": 69078,
+            "ppid": 69077,
+            "op": "emit",
+            "event": "exit",
+            "args": [
+              0
+            ]
+          },
+          {
+            "at": 1791671297972,
+            "pid": 69077,
+            "ppid": 68702,
+            "op": "process.exit",
+            "code": 0
+          },
+          {
+            "at": 1791671297972,
+            "pid": 69077,
+            "ppid": 68702,
+            "op": "emit",
+            "event": "exit",
+            "args": [
+              0
+            ]
+          }
+        ]
+      },
+      {
+        "i": 10,
+        "double": true,
+        "root": "/private/tmp/t4r1-types-ic6vmkuu/sg-yyLCDq",
+        "stdout": "orca-panel ready url=http://127.0.0.1:64230\n",
+        "stderr": "orca-panel: initial password for tester written to /private/tmp/t4r1-types-ic6vmkuu/sg-yyLCDq/control/initial-password\n(node:69139) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\norca-panel: open http://127.0.0.1:64230 in a browser and log in\norca-panel: control socket /private/tmp/t4r1-types-ic6vmkuu/sg-yyLCDq/control/proj-e73c023a/control.sock\n",
+        "exit": {
+          "code": 0,
+          "signal": null
+        },
+        "commands": [
+          {
+            "id": "shutdown-fc99f7e6513f1c0104873355b02b2a0fbcfe0fc2e917529538bd24eae6da6739"
+          }
+        ],
+        "trace": [
+          {
+            "at": 1791671298006,
+            "pid": 69138,
+            "ppid": 68702,
+            "op": "boot",
+            "argv": [
+              "/usr/local/bin/node",
+              "/private/tmp/orca-feedback-followup-20261011/node_modules/.bin/tsx",
+              "src/cli.ts",
+              "panel",
+              "--by",
+              "tester",
+              "--repo",
+              "proj=/private/tmp/t4r1-types-ic6vmkuu/sg-yyLCDq/repo",
+              "--port",
+              "0"
+            ]
+          },
+          {
+            "at": 1791671298048,
+            "pid": 69139,
+            "ppid": 69138,
+            "op": "boot",
+            "argv": [
+              "/usr/local/bin/node",
+              "/private/tmp/orca-feedback-followup-20261011/src/cli.ts",
+              "panel",
+              "--by",
+              "tester",
+              "--repo",
+              "proj=/private/tmp/t4r1-types-ic6vmkuu/sg-yyLCDq/repo",
+              "--port",
+              "0"
+            ]
+          },
+          {
+            "at": 1791671298908,
+            "pid": 68702,
+            "op": "send-first",
+            "child": 69138
+          },
+          {
+            "at": 1791671298909,
+            "pid": 68702,
+            "op": "send-second",
+            "child": 69138
+          },
+          {
+            "at": 1791671298909,
+            "pid": 69138,
+            "ppid": 68702,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671298909,
+            "pid": 69138,
+            "ppid": 68702,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671298941,
+            "pid": 69138,
+            "ppid": 68702,
+            "op": "child.kill",
+            "child": 69139,
+            "signal": "SIGTERM"
+          },
+          {
+            "at": 1791671298941,
+            "pid": 69138,
+            "ppid": 68702,
+            "op": "child.kill",
+            "child": 69139,
+            "signal": "SIGTERM"
+          },
+          {
+            "at": 1791671298941,
+            "pid": 69139,
+            "ppid": 69138,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671298952,
+            "pid": 69139,
+            "ppid": 69138,
+            "op": "off",
+            "event": "SIGINT",
+            "name": "onSignal"
+          },
+          {
+            "at": 1791671298952,
+            "pid": 69139,
+            "ppid": 69138,
+            "op": "off",
+            "event": "SIGTERM",
+            "name": "onSignal"
+          },
+          {
+            "at": 1791671298952,
+            "pid": 69139,
+            "ppid": 69138,
+            "op": "emit",
+            "event": "exit",
+            "args": [
+              0
+            ]
+          },
+          {
+            "at": 1791671298959,
+            "pid": 69138,
+            "ppid": 68702,
+            "op": "process.exit",
+            "code": 0
+          },
+          {
+            "at": 1791671298959,
+            "pid": 69138,
+            "ppid": 68702,
+            "op": "emit",
+            "event": "exit",
+            "args": [
+              0
+            ]
+          }
+        ]
+      },
+      {
+        "i": 11,
+        "double": true,
+        "root": "/private/tmp/t4r1-types-ic6vmkuu/sg-pKYlai",
+        "stdout": "orca-panel ready url=http://127.0.0.1:64257\n",
+        "stderr": "orca-panel: initial password for tester written to /private/tmp/t4r1-types-ic6vmkuu/sg-pKYlai/control/initial-password\n(node:69156) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\norca-panel: open http://127.0.0.1:64257 in a browser and log in\norca-panel: control socket /private/tmp/t4r1-types-ic6vmkuu/sg-pKYlai/control/proj-e73c023a/control.sock\n",
+        "exit": {
+          "code": 0,
+          "signal": null
+        },
+        "commands": [
+          {
+            "id": "shutdown-1aa4c90e06de91f7f20519aa55a5ce2ab64f37619033e094abca410e8b8d696e"
+          }
+        ],
+        "trace": [
+          {
+            "at": 1791671298992,
+            "pid": 69155,
+            "ppid": 68702,
+            "op": "boot",
+            "argv": [
+              "/usr/local/bin/node",
+              "/private/tmp/orca-feedback-followup-20261011/node_modules/.bin/tsx",
+              "src/cli.ts",
+              "panel",
+              "--by",
+              "tester",
+              "--repo",
+              "proj=/private/tmp/t4r1-types-ic6vmkuu/sg-pKYlai/repo",
+              "--port",
+              "0"
+            ]
+          },
+          {
+            "at": 1791671299035,
+            "pid": 69156,
+            "ppid": 69155,
+            "op": "boot",
+            "argv": [
+              "/usr/local/bin/node",
+              "/private/tmp/orca-feedback-followup-20261011/src/cli.ts",
+              "panel",
+              "--by",
+              "tester",
+              "--repo",
+              "proj=/private/tmp/t4r1-types-ic6vmkuu/sg-pKYlai/repo",
+              "--port",
+              "0"
+            ]
+          },
+          {
+            "at": 1791671299915,
+            "pid": 68702,
+            "op": "send-first",
+            "child": 69155
+          },
+          {
+            "at": 1791671299915,
+            "pid": 68702,
+            "op": "send-second",
+            "child": 69155
+          },
+          {
+            "at": 1791671299916,
+            "pid": 69155,
+            "ppid": 68702,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671299916,
+            "pid": 69155,
+            "ppid": 68702,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671299948,
+            "pid": 69155,
+            "ppid": 68702,
+            "op": "child.kill",
+            "child": 69156,
+            "signal": "SIGTERM"
+          },
+          {
+            "at": 1791671299948,
+            "pid": 69155,
+            "ppid": 68702,
+            "op": "child.kill",
+            "child": 69156,
+            "signal": "SIGTERM"
+          },
+          {
+            "at": 1791671299948,
+            "pid": 69156,
+            "ppid": 69155,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671299958,
+            "pid": 69156,
+            "ppid": 69155,
+            "op": "off",
+            "event": "SIGINT",
+            "name": "onSignal"
+          },
+          {
+            "at": 1791671299958,
+            "pid": 69156,
+            "ppid": 69155,
+            "op": "off",
+            "event": "SIGTERM",
+            "name": "onSignal"
+          },
+          {
+            "at": 1791671299958,
+            "pid": 69156,
+            "ppid": 69155,
+            "op": "emit",
+            "event": "exit",
+            "args": [
+              0
+            ]
+          },
+          {
+            "at": 1791671299966,
+            "pid": 69155,
+            "ppid": 68702,
+            "op": "process.exit",
+            "code": 0
+          },
+          {
+            "at": 1791671299966,
+            "pid": 69155,
+            "ppid": 68702,
+            "op": "emit",
+            "event": "exit",
+            "args": [
+              0
+            ]
+          }
+        ]
+      },
+      {
+        "i": 12,
+        "double": false,
+        "root": "/private/tmp/t4r1-types-ic6vmkuu/sg-LT2KBU",
+        "stdout": "orca-panel ready url=http://127.0.0.1:64258\n",
+        "stderr": "orca-panel: initial password for tester written to /private/tmp/t4r1-types-ic6vmkuu/sg-LT2KBU/control/initial-password\n(node:69219) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\norca-panel: open http://127.0.0.1:64258 in a browser and log in\norca-panel: control socket /private/tmp/t4r1-types-ic6vmkuu/sg-LT2KBU/control/proj-e73c023a/control.sock\n",
+        "exit": {
+          "code": 0,
+          "signal": null
+        },
+        "commands": [
+          {
+            "id": "shutdown-6bf372412f8946edea589f81ad55fd63724b0400b7801039e930d6c8bd9d1f22"
+          }
+        ],
+        "trace": [
+          {
+            "at": 1791671300000,
+            "pid": 69218,
+            "ppid": 68702,
+            "op": "boot",
+            "argv": [
+              "/usr/local/bin/node",
+              "/private/tmp/orca-feedback-followup-20261011/node_modules/.bin/tsx",
+              "src/cli.ts",
+              "panel",
+              "--by",
+              "tester",
+              "--repo",
+              "proj=/private/tmp/t4r1-types-ic6vmkuu/sg-LT2KBU/repo",
+              "--port",
+              "0"
+            ]
+          },
+          {
+            "at": 1791671300044,
+            "pid": 69219,
+            "ppid": 69218,
+            "op": "boot",
+            "argv": [
+              "/usr/local/bin/node",
+              "/private/tmp/orca-feedback-followup-20261011/src/cli.ts",
+              "panel",
+              "--by",
+              "tester",
+              "--repo",
+              "proj=/private/tmp/t4r1-types-ic6vmkuu/sg-LT2KBU/repo",
+              "--port",
+              "0"
+            ]
+          },
+          {
+            "at": 1791671300914,
+            "pid": 68702,
+            "op": "send-first",
+            "child": 69218
+          },
+          {
+            "at": 1791671300915,
+            "pid": 69218,
+            "ppid": 68702,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671300947,
+            "pid": 69218,
+            "ppid": 68702,
+            "op": "child.kill",
+            "child": 69219,
+            "signal": "SIGTERM"
+          },
+          {
+            "at": 1791671300947,
+            "pid": 69219,
+            "ppid": 69218,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671300958,
+            "pid": 69219,
+            "ppid": 69218,
+            "op": "off",
+            "event": "SIGINT",
+            "name": "onSignal"
+          },
+          {
+            "at": 1791671300958,
+            "pid": 69219,
+            "ppid": 69218,
+            "op": "off",
+            "event": "SIGTERM",
+            "name": "onSignal"
+          },
+          {
+            "at": 1791671300958,
+            "pid": 69219,
+            "ppid": 69218,
+            "op": "emit",
+            "event": "exit",
+            "args": [
+              0
+            ]
+          },
+          {
+            "at": 1791671300964,
+            "pid": 69218,
+            "ppid": 68702,
+            "op": "process.exit",
+            "code": 0
+          },
+          {
+            "at": 1791671300965,
+            "pid": 69218,
+            "ppid": 68702,
+            "op": "emit",
+            "event": "exit",
+            "args": [
+              0
+            ]
+          }
+        ]
+      },
+      {
+        "i": 13,
+        "double": false,
+        "root": "/private/tmp/t4r1-types-ic6vmkuu/sg-cdlvG9",
+        "stdout": "orca-panel ready url=http://127.0.0.1:64259\n",
+        "stderr": "orca-panel: initial password for tester written to /private/tmp/t4r1-types-ic6vmkuu/sg-cdlvG9/control/initial-password\n(node:69236) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\norca-panel: open http://127.0.0.1:64259 in a browser and log in\norca-panel: control socket /private/tmp/t4r1-types-ic6vmkuu/sg-cdlvG9/control/proj-e73c023a/control.sock\n",
+        "exit": {
+          "code": 0,
+          "signal": null
+        },
+        "commands": [
+          {
+            "id": "shutdown-8f7b28b4a978fcb2d74691253a02fc0dd83990b39eda7dc3eab011a144270b6c"
+          }
+        ],
+        "trace": [
+          {
+            "at": 1791671300998,
+            "pid": 69235,
+            "ppid": 68702,
+            "op": "boot",
+            "argv": [
+              "/usr/local/bin/node",
+              "/private/tmp/orca-feedback-followup-20261011/node_modules/.bin/tsx",
+              "src/cli.ts",
+              "panel",
+              "--by",
+              "tester",
+              "--repo",
+              "proj=/private/tmp/t4r1-types-ic6vmkuu/sg-cdlvG9/repo",
+              "--port",
+              "0"
+            ]
+          },
+          {
+            "at": 1791671301040,
+            "pid": 69236,
+            "ppid": 69235,
+            "op": "boot",
+            "argv": [
+              "/usr/local/bin/node",
+              "/private/tmp/orca-feedback-followup-20261011/src/cli.ts",
+              "panel",
+              "--by",
+              "tester",
+              "--repo",
+              "proj=/private/tmp/t4r1-types-ic6vmkuu/sg-cdlvG9/repo",
+              "--port",
+              "0"
+            ]
+          },
+          {
+            "at": 1791671301908,
+            "pid": 68702,
+            "op": "send-first",
+            "child": 69235
+          },
+          {
+            "at": 1791671301908,
+            "pid": 69235,
+            "ppid": 68702,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671301940,
+            "pid": 69235,
+            "ppid": 68702,
+            "op": "child.kill",
+            "child": 69236,
+            "signal": "SIGTERM"
+          },
+          {
+            "at": 1791671301940,
+            "pid": 69236,
+            "ppid": 69235,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671301950,
+            "pid": 69236,
+            "ppid": 69235,
+            "op": "off",
+            "event": "SIGINT",
+            "name": "onSignal"
+          },
+          {
+            "at": 1791671301951,
+            "pid": 69236,
+            "ppid": 69235,
+            "op": "off",
+            "event": "SIGTERM",
+            "name": "onSignal"
+          },
+          {
+            "at": 1791671301951,
+            "pid": 69236,
+            "ppid": 69235,
+            "op": "emit",
+            "event": "exit",
+            "args": [
+              0
+            ]
+          },
+          {
+            "at": 1791671301957,
+            "pid": 69235,
+            "ppid": 68702,
+            "op": "process.exit",
+            "code": 0
+          },
+          {
+            "at": 1791671301958,
+            "pid": 69235,
+            "ppid": 68702,
+            "op": "emit",
+            "event": "exit",
+            "args": [
+              0
+            ]
+          }
+        ]
+      },
+      {
+        "i": 14,
+        "double": false,
+        "root": "/private/tmp/t4r1-types-ic6vmkuu/sg-BhZALI",
+        "stdout": "orca-panel ready url=http://127.0.0.1:64260\n",
+        "stderr": "orca-panel: initial password for tester written to /private/tmp/t4r1-types-ic6vmkuu/sg-BhZALI/control/initial-password\n(node:69297) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\norca-panel: open http://127.0.0.1:64260 in a browser and log in\norca-panel: control socket /private/tmp/t4r1-types-ic6vmkuu/sg-BhZALI/control/proj-e73c023a/control.sock\n",
+        "exit": {
+          "code": 0,
+          "signal": null
+        },
+        "commands": [
+          {
+            "id": "shutdown-8fcb3170d65c6c981007de5260051c2ebcf4faf1574120cb28b9a36e2f31881e"
+          }
+        ],
+        "trace": [
+          {
+            "at": 1791671301991,
+            "pid": 69296,
+            "ppid": 68702,
+            "op": "boot",
+            "argv": [
+              "/usr/local/bin/node",
+              "/private/tmp/orca-feedback-followup-20261011/node_modules/.bin/tsx",
+              "src/cli.ts",
+              "panel",
+              "--by",
+              "tester",
+              "--repo",
+              "proj=/private/tmp/t4r1-types-ic6vmkuu/sg-BhZALI/repo",
+              "--port",
+              "0"
+            ]
+          },
+          {
+            "at": 1791671302034,
+            "pid": 69297,
+            "ppid": 69296,
+            "op": "boot",
+            "argv": [
+              "/usr/local/bin/node",
+              "/private/tmp/orca-feedback-followup-20261011/src/cli.ts",
+              "panel",
+              "--by",
+              "tester",
+              "--repo",
+              "proj=/private/tmp/t4r1-types-ic6vmkuu/sg-BhZALI/repo",
+              "--port",
+              "0"
+            ]
+          },
+          {
+            "at": 1791671302924,
+            "pid": 68702,
+            "op": "send-first",
+            "child": 69296
+          },
+          {
+            "at": 1791671302925,
+            "pid": 69296,
+            "ppid": 68702,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671302957,
+            "pid": 69296,
+            "ppid": 68702,
+            "op": "child.kill",
+            "child": 69297,
+            "signal": "SIGTERM"
+          },
+          {
+            "at": 1791671302957,
+            "pid": 69297,
+            "ppid": 69296,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671302968,
+            "pid": 69297,
+            "ppid": 69296,
+            "op": "off",
+            "event": "SIGINT",
+            "name": "onSignal"
+          },
+          {
+            "at": 1791671302968,
+            "pid": 69297,
+            "ppid": 69296,
+            "op": "off",
+            "event": "SIGTERM",
+            "name": "onSignal"
+          },
+          {
+            "at": 1791671302968,
+            "pid": 69297,
+            "ppid": 69296,
+            "op": "emit",
+            "event": "exit",
+            "args": [
+              0
+            ]
+          },
+          {
+            "at": 1791671302974,
+            "pid": 69296,
+            "ppid": 68702,
+            "op": "process.exit",
+            "code": 0
+          },
+          {
+            "at": 1791671302975,
+            "pid": 69296,
+            "ppid": 68702,
+            "op": "emit",
+            "event": "exit",
+            "args": [
+              0
+            ]
+          }
+        ]
+      },
+      {
+        "i": 15,
+        "double": false,
+        "root": "/private/tmp/t4r1-types-ic6vmkuu/sg-EUzaEF",
+        "stdout": "orca-panel ready url=http://127.0.0.1:64261\n",
+        "stderr": "orca-panel: initial password for tester written to /private/tmp/t4r1-types-ic6vmkuu/sg-EUzaEF/control/initial-password\n(node:69315) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\norca-panel: open http://127.0.0.1:64261 in a browser and log in\norca-panel: control socket /private/tmp/t4r1-types-ic6vmkuu/sg-EUzaEF/control/proj-e73c023a/control.sock\n",
+        "exit": {
+          "code": 0,
+          "signal": null
+        },
+        "commands": [
+          {
+            "id": "shutdown-729ef6f9f0ac99362962d34dd55bbb23c62155351aeb4ba5cf014ec346b0c164"
+          }
+        ],
+        "trace": [
+          {
+            "at": 1791671303007,
+            "pid": 69314,
+            "ppid": 68702,
+            "op": "boot",
+            "argv": [
+              "/usr/local/bin/node",
+              "/private/tmp/orca-feedback-followup-20261011/node_modules/.bin/tsx",
+              "src/cli.ts",
+              "panel",
+              "--by",
+              "tester",
+              "--repo",
+              "proj=/private/tmp/t4r1-types-ic6vmkuu/sg-EUzaEF/repo",
+              "--port",
+              "0"
+            ]
+          },
+          {
+            "at": 1791671303051,
+            "pid": 69315,
+            "ppid": 69314,
+            "op": "boot",
+            "argv": [
+              "/usr/local/bin/node",
+              "/private/tmp/orca-feedback-followup-20261011/src/cli.ts",
+              "panel",
+              "--by",
+              "tester",
+              "--repo",
+              "proj=/private/tmp/t4r1-types-ic6vmkuu/sg-EUzaEF/repo",
+              "--port",
+              "0"
+            ]
+          },
+          {
+            "at": 1791671303916,
+            "pid": 68702,
+            "op": "send-first",
+            "child": 69314
+          },
+          {
+            "at": 1791671303916,
+            "pid": 69314,
+            "ppid": 68702,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671303948,
+            "pid": 69314,
+            "ppid": 68702,
+            "op": "child.kill",
+            "child": 69315,
+            "signal": "SIGTERM"
+          },
+          {
+            "at": 1791671303949,
+            "pid": 69315,
+            "ppid": 69314,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671303959,
+            "pid": 69315,
+            "ppid": 69314,
+            "op": "off",
+            "event": "SIGINT",
+            "name": "onSignal"
+          },
+          {
+            "at": 1791671303959,
+            "pid": 69315,
+            "ppid": 69314,
+            "op": "off",
+            "event": "SIGTERM",
+            "name": "onSignal"
+          },
+          {
+            "at": 1791671303959,
+            "pid": 69315,
+            "ppid": 69314,
+            "op": "emit",
+            "event": "exit",
+            "args": [
+              0
+            ]
+          },
+          {
+            "at": 1791671303966,
+            "pid": 69314,
+            "ppid": 68702,
+            "op": "process.exit",
+            "code": 0
+          },
+          {
+            "at": 1791671303966,
+            "pid": 69314,
+            "ppid": 68702,
+            "op": "emit",
+            "event": "exit",
+            "args": [
+              0
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "repo": "/private/tmp/orca-feedback-followup-20261011",
+    "command": [
+      "env",
+      "TMPDIR=/private/tmp/t4r1-types-ic6vmkuu",
+      "node",
+      "/private/tmp/task4-fix1-signal-staged.mjs"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 6.31482195854187,
+    "log": "/private/tmp/orca-followup-runs/task4-fix1-signal-order/output.log",
+    "source": "8d08b03220faf553e5e4c3a28f084ea85f578aba",
+    "sourceTreeSHA256": "f11d0534000f75afd50d60a8c54677148286cefd7eab04c57291b56d14443b8a",
+    "sourceFiles": 922,
+    "rawBytes": 15850,
+    "rawSHA256": "29b4451c5a78344d1006b7df049d5846832f0388f9527b89a7fc37c88e0ee68a",
+    "cases": [
+      {
+        "i": 0,
+        "double": true,
+        "scenario": "late-second",
+        "root": "/private/tmp/t4r1-types-ic6vmkuu/sg-XBlq1c",
+        "stdout": "orca-panel ready url=http://127.0.0.1:64387\n",
+        "stderr": "orca-panel: initial password for tester written to /private/tmp/t4r1-types-ic6vmkuu/sg-XBlq1c/control/initial-password\n(node:70951) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\norca-panel: open http://127.0.0.1:64387 in a browser and log in\norca-panel: control socket /private/tmp/t4r1-types-ic6vmkuu/sg-XBlq1c/control/proj-e73c023a/control.sock\n",
+        "exit": {
+          "code": 143,
+          "signal": null
+        },
+        "commands": [
+          {
+            "id": "shutdown-d8a1c764998e49d12881fa3f414cd168d05537f71b93b78190332278411b4da3"
+          }
+        ],
+        "trace": [
+          {
+            "at": 1791671353260,
+            "pid": 70950,
+            "ppid": 70949,
+            "op": "boot",
+            "argv": [
+              "/usr/local/bin/node",
+              "/private/tmp/orca-feedback-followup-20261011/node_modules/.bin/tsx",
+              "src/cli.ts",
+              "panel",
+              "--by",
+              "tester",
+              "--repo",
+              "proj=/private/tmp/t4r1-types-ic6vmkuu/sg-XBlq1c/repo",
+              "--port",
+              "0"
+            ]
+          },
+          {
+            "at": 1791671353307,
+            "pid": 70951,
+            "ppid": 70950,
+            "op": "boot",
+            "argv": [
+              "/usr/local/bin/node",
+              "/private/tmp/orca-feedback-followup-20261011/src/cli.ts",
+              "panel",
+              "--by",
+              "tester",
+              "--repo",
+              "proj=/private/tmp/t4r1-types-ic6vmkuu/sg-XBlq1c/repo",
+              "--port",
+              "0"
+            ]
+          },
+          {
+            "at": 1791671354315,
+            "pid": 70949,
+            "op": "send-first",
+            "child": 70950
+          },
+          {
+            "at": 1791671354315,
+            "pid": 70949,
+            "op": "send-second",
+            "child": 70950
+          },
+          {
+            "at": 1791671354315,
+            "pid": 70950,
+            "ppid": 70949,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671354315,
+            "pid": 70950,
+            "ppid": 70949,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671354346,
+            "pid": 70950,
+            "ppid": 70949,
+            "op": "child.kill",
+            "child": 70951,
+            "signal": "SIGTERM"
+          },
+          {
+            "at": 1791671354346,
+            "pid": 70950,
+            "ppid": 70949,
+            "op": "child.kill",
+            "child": 70951,
+            "signal": "SIGTERM"
+          },
+          {
+            "at": 1791671354346,
+            "pid": 70950,
+            "ppid": 70949,
+            "op": "delay-second-forward",
+            "child": 70951
+          },
+          {
+            "at": 1791671354346,
+            "pid": 70951,
+            "ppid": 70950,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671354358,
+            "pid": 70951,
+            "ppid": 70950,
+            "op": "off",
+            "event": "SIGINT",
+            "name": "onSignal"
+          },
+          {
+            "at": 1791671354359,
+            "pid": 70951,
+            "ppid": 70950,
+            "op": "off",
+            "event": "SIGTERM",
+            "name": "onSignal"
+          },
+          {
+            "at": 1791671354359,
+            "pid": 70951,
+            "ppid": 70950,
+            "op": "hold-after-off"
+          },
+          {
+            "at": 1791671354362,
+            "pid": 70950,
+            "ppid": 70949,
+            "op": "forward-delayed",
+            "child": 70951
+          },
+          {
+            "at": 1791671354369,
+            "pid": 70950,
+            "ppid": 70949,
+            "op": "process.exit",
+            "code": 143
+          },
+          {
+            "at": 1791671354369,
+            "pid": 70950,
+            "ppid": 70949,
+            "op": "emit",
+            "event": "exit",
+            "args": [
+              143
+            ]
+          }
+        ]
+      },
+      {
+        "i": 1,
+        "double": true,
+        "scenario": "late-second",
+        "root": "/private/tmp/t4r1-types-ic6vmkuu/sg-jDt20J",
+        "stdout": "orca-panel ready url=http://127.0.0.1:64388\n",
+        "stderr": "orca-panel: initial password for tester written to /private/tmp/t4r1-types-ic6vmkuu/sg-jDt20J/control/initial-password\n(node:70978) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\norca-panel: open http://127.0.0.1:64388 in a browser and log in\norca-panel: control socket /private/tmp/t4r1-types-ic6vmkuu/sg-jDt20J/control/proj-e73c023a/control.sock\n",
+        "exit": {
+          "code": 143,
+          "signal": null
+        },
+        "commands": [
+          {
+            "id": "shutdown-00a071c8bde9c204d6eea9fbf6a24b295d36230195b5dd61b2bed32f1819c7ea"
+          }
+        ],
+        "trace": [
+          {
+            "at": 1791671354404,
+            "pid": 70967,
+            "ppid": 70949,
+            "op": "boot",
+            "argv": [
+              "/usr/local/bin/node",
+              "/private/tmp/orca-feedback-followup-20261011/node_modules/.bin/tsx",
+              "src/cli.ts",
+              "panel",
+              "--by",
+              "tester",
+              "--repo",
+              "proj=/private/tmp/t4r1-types-ic6vmkuu/sg-jDt20J/repo",
+              "--port",
+              "0"
+            ]
+          },
+          {
+            "at": 1791671354449,
+            "pid": 70978,
+            "ppid": 70967,
+            "op": "boot",
+            "argv": [
+              "/usr/local/bin/node",
+              "/private/tmp/orca-feedback-followup-20261011/src/cli.ts",
+              "panel",
+              "--by",
+              "tester",
+              "--repo",
+              "proj=/private/tmp/t4r1-types-ic6vmkuu/sg-jDt20J/repo",
+              "--port",
+              "0"
+            ]
+          },
+          {
+            "at": 1791671355338,
+            "pid": 70949,
+            "op": "send-first",
+            "child": 70967
+          },
+          {
+            "at": 1791671355338,
+            "pid": 70949,
+            "op": "send-second",
+            "child": 70967
+          },
+          {
+            "at": 1791671355338,
+            "pid": 70967,
+            "ppid": 70949,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671355338,
+            "pid": 70967,
+            "ppid": 70949,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671355370,
+            "pid": 70967,
+            "ppid": 70949,
+            "op": "child.kill",
+            "child": 70978,
+            "signal": "SIGTERM"
+          },
+          {
+            "at": 1791671355370,
+            "pid": 70967,
+            "ppid": 70949,
+            "op": "child.kill",
+            "child": 70978,
+            "signal": "SIGTERM"
+          },
+          {
+            "at": 1791671355370,
+            "pid": 70967,
+            "ppid": 70949,
+            "op": "delay-second-forward",
+            "child": 70978
+          },
+          {
+            "at": 1791671355370,
+            "pid": 70978,
+            "ppid": 70967,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671355380,
+            "pid": 70978,
+            "ppid": 70967,
+            "op": "off",
+            "event": "SIGINT",
+            "name": "onSignal"
+          },
+          {
+            "at": 1791671355381,
+            "pid": 70978,
+            "ppid": 70967,
+            "op": "off",
+            "event": "SIGTERM",
+            "name": "onSignal"
+          },
+          {
+            "at": 1791671355381,
+            "pid": 70978,
+            "ppid": 70967,
+            "op": "hold-after-off"
+          },
+          {
+            "at": 1791671355387,
+            "pid": 70967,
+            "ppid": 70949,
+            "op": "forward-delayed",
+            "child": 70978
+          },
+          {
+            "at": 1791671355393,
+            "pid": 70967,
+            "ppid": 70949,
+            "op": "process.exit",
+            "code": 143
+          },
+          {
+            "at": 1791671355393,
+            "pid": 70967,
+            "ppid": 70949,
+            "op": "emit",
+            "event": "exit",
+            "args": [
+              143
+            ]
+          }
+        ]
+      },
+      {
+        "i": 2,
+        "double": true,
+        "scenario": "late-second",
+        "root": "/private/tmp/t4r1-types-ic6vmkuu/sg-zWrPJN",
+        "stdout": "orca-panel ready url=http://127.0.0.1:64389\n",
+        "stderr": "orca-panel: initial password for tester written to /private/tmp/t4r1-types-ic6vmkuu/sg-zWrPJN/control/initial-password\n(node:71040) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\norca-panel: open http://127.0.0.1:64389 in a browser and log in\norca-panel: control socket /private/tmp/t4r1-types-ic6vmkuu/sg-zWrPJN/control/proj-e73c023a/control.sock\n",
+        "exit": {
+          "code": 143,
+          "signal": null
+        },
+        "commands": [
+          {
+            "id": "shutdown-0b4295077f943b625ad3160a09304b165eb151aa6513df230e0f6492e1e3818e"
+          }
+        ],
+        "trace": [
+          {
+            "at": 1791671355430,
+            "pid": 71029,
+            "ppid": 70949,
+            "op": "boot",
+            "argv": [
+              "/usr/local/bin/node",
+              "/private/tmp/orca-feedback-followup-20261011/node_modules/.bin/tsx",
+              "src/cli.ts",
+              "panel",
+              "--by",
+              "tester",
+              "--repo",
+              "proj=/private/tmp/t4r1-types-ic6vmkuu/sg-zWrPJN/repo",
+              "--port",
+              "0"
+            ]
+          },
+          {
+            "at": 1791671355474,
+            "pid": 71040,
+            "ppid": 71029,
+            "op": "boot",
+            "argv": [
+              "/usr/local/bin/node",
+              "/private/tmp/orca-feedback-followup-20261011/src/cli.ts",
+              "panel",
+              "--by",
+              "tester",
+              "--repo",
+              "proj=/private/tmp/t4r1-types-ic6vmkuu/sg-zWrPJN/repo",
+              "--port",
+              "0"
+            ]
+          },
+          {
+            "at": 1791671356353,
+            "pid": 70949,
+            "op": "send-first",
+            "child": 71029
+          },
+          {
+            "at": 1791671356353,
+            "pid": 70949,
+            "op": "send-second",
+            "child": 71029
+          },
+          {
+            "at": 1791671356353,
+            "pid": 71029,
+            "ppid": 70949,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671356354,
+            "pid": 71029,
+            "ppid": 70949,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671356386,
+            "pid": 71029,
+            "ppid": 70949,
+            "op": "child.kill",
+            "child": 71040,
+            "signal": "SIGTERM"
+          },
+          {
+            "at": 1791671356386,
+            "pid": 71029,
+            "ppid": 70949,
+            "op": "child.kill",
+            "child": 71040,
+            "signal": "SIGTERM"
+          },
+          {
+            "at": 1791671356386,
+            "pid": 71029,
+            "ppid": 70949,
+            "op": "delay-second-forward",
+            "child": 71040
+          },
+          {
+            "at": 1791671356386,
+            "pid": 71040,
+            "ppid": 71029,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671356397,
+            "pid": 71040,
+            "ppid": 71029,
+            "op": "off",
+            "event": "SIGINT",
+            "name": "onSignal"
+          },
+          {
+            "at": 1791671356397,
+            "pid": 71040,
+            "ppid": 71029,
+            "op": "off",
+            "event": "SIGTERM",
+            "name": "onSignal"
+          },
+          {
+            "at": 1791671356397,
+            "pid": 71040,
+            "ppid": 71029,
+            "op": "hold-after-off"
+          },
+          {
+            "at": 1791671356403,
+            "pid": 71029,
+            "ppid": 70949,
+            "op": "forward-delayed",
+            "child": 71040
+          },
+          {
+            "at": 1791671356408,
+            "pid": 71029,
+            "ppid": 70949,
+            "op": "process.exit",
+            "code": 143
+          },
+          {
+            "at": 1791671356408,
+            "pid": 71029,
+            "ppid": 70949,
+            "op": "emit",
+            "event": "exit",
+            "args": [
+              143
+            ]
+          }
+        ]
+      },
+      {
+        "i": 3,
+        "double": true,
+        "scenario": "during-drain",
+        "root": "/private/tmp/t4r1-types-ic6vmkuu/sg-t8EiYb",
+        "stdout": "orca-panel ready url=http://127.0.0.1:64390\n",
+        "stderr": "orca-panel: initial password for tester written to /private/tmp/t4r1-types-ic6vmkuu/sg-t8EiYb/control/initial-password\n(node:71059) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\norca-panel: open http://127.0.0.1:64390 in a browser and log in\norca-panel: control socket /private/tmp/t4r1-types-ic6vmkuu/sg-t8EiYb/control/proj-e73c023a/control.sock\norca-panel: second signal; exiting without draining. The next start may be recovery blocked.\n",
+        "exit": {
+          "code": 1,
+          "signal": null
+        },
+        "commands": [
+          {
+            "id": "shutdown-1ac647bcc5f16e11f90d85c43903be74938174ae0fdf61e1269fe3213d957ea7"
+          }
+        ],
+        "trace": [
+          {
+            "at": 1791671356441,
+            "pid": 71048,
+            "ppid": 70949,
+            "op": "boot",
+            "argv": [
+              "/usr/local/bin/node",
+              "/private/tmp/orca-feedback-followup-20261011/node_modules/.bin/tsx",
+              "src/cli.ts",
+              "panel",
+              "--by",
+              "tester",
+              "--repo",
+              "proj=/private/tmp/t4r1-types-ic6vmkuu/sg-t8EiYb/repo",
+              "--port",
+              "0"
+            ]
+          },
+          {
+            "at": 1791671356488,
+            "pid": 71059,
+            "ppid": 71048,
+            "op": "boot",
+            "argv": [
+              "/usr/local/bin/node",
+              "/private/tmp/orca-feedback-followup-20261011/src/cli.ts",
+              "panel",
+              "--by",
+              "tester",
+              "--repo",
+              "proj=/private/tmp/t4r1-types-ic6vmkuu/sg-t8EiYb/repo",
+              "--port",
+              "0"
+            ]
+          },
+          {
+            "at": 1791671357371,
+            "pid": 70949,
+            "op": "send-first",
+            "child": 71048
+          },
+          {
+            "at": 1791671357371,
+            "pid": 70949,
+            "op": "send-second",
+            "child": 71048
+          },
+          {
+            "at": 1791671357371,
+            "pid": 71048,
+            "ppid": 70949,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671357372,
+            "pid": 71048,
+            "ppid": 70949,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671357404,
+            "pid": 71048,
+            "ppid": 70949,
+            "op": "child.kill",
+            "child": 71059,
+            "signal": "SIGTERM"
+          },
+          {
+            "at": 1791671357404,
+            "pid": 71048,
+            "ppid": 70949,
+            "op": "child.kill",
+            "child": 71059,
+            "signal": "SIGTERM"
+          },
+          {
+            "at": 1791671357404,
+            "pid": 71048,
+            "ppid": 70949,
+            "op": "delay-second-forward",
+            "child": 71059
+          },
+          {
+            "at": 1791671357404,
+            "pid": 71059,
+            "ppid": 71048,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671357408,
+            "pid": 71059,
+            "ppid": 71048,
+            "op": "hold-server-close"
+          },
+          {
+            "at": 1791671357409,
+            "pid": 71059,
+            "ppid": 71048,
+            "op": "hold-server-close"
+          },
+          {
+            "at": 1791671357419,
+            "pid": 71048,
+            "ppid": 70949,
+            "op": "forward-delayed",
+            "child": 71059
+          },
+          {
+            "at": 1791671357419,
+            "pid": 71059,
+            "ppid": 71048,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671357420,
+            "pid": 71059,
+            "ppid": 71048,
+            "op": "process.exit",
+            "code": 1
+          },
+          {
+            "at": 1791671357420,
+            "pid": 71059,
+            "ppid": 71048,
+            "op": "emit",
+            "event": "exit",
+            "args": [
+              1
+            ]
+          },
+          {
+            "at": 1791671357426,
+            "pid": 71048,
+            "ppid": 70949,
+            "op": "process.exit",
+            "code": 1
+          },
+          {
+            "at": 1791671357427,
+            "pid": 71048,
+            "ppid": 70949,
+            "op": "emit",
+            "event": "exit",
+            "args": [
+              1
+            ]
+          }
+        ]
+      },
+      {
+        "i": 4,
+        "double": true,
+        "scenario": "during-drain",
+        "root": "/private/tmp/t4r1-types-ic6vmkuu/sg-TbiaeN",
+        "stdout": "orca-panel ready url=http://127.0.0.1:64391\n",
+        "stderr": "orca-panel: initial password for tester written to /private/tmp/t4r1-types-ic6vmkuu/sg-TbiaeN/control/initial-password\n(node:71120) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\norca-panel: open http://127.0.0.1:64391 in a browser and log in\norca-panel: control socket /private/tmp/t4r1-types-ic6vmkuu/sg-TbiaeN/control/proj-e73c023a/control.sock\norca-panel: second signal; exiting without draining. The next start may be recovery blocked.\n",
+        "exit": {
+          "code": 1,
+          "signal": null
+        },
+        "commands": [
+          {
+            "id": "shutdown-7da85f9ac1125e595da11c238f6af4c0fd9abc412a8cfb73b1ee4c334229e003"
+          }
+        ],
+        "trace": [
+          {
+            "at": 1791671357461,
+            "pid": 71109,
+            "ppid": 70949,
+            "op": "boot",
+            "argv": [
+              "/usr/local/bin/node",
+              "/private/tmp/orca-feedback-followup-20261011/node_modules/.bin/tsx",
+              "src/cli.ts",
+              "panel",
+              "--by",
+              "tester",
+              "--repo",
+              "proj=/private/tmp/t4r1-types-ic6vmkuu/sg-TbiaeN/repo",
+              "--port",
+              "0"
+            ]
+          },
+          {
+            "at": 1791671357507,
+            "pid": 71120,
+            "ppid": 71109,
+            "op": "boot",
+            "argv": [
+              "/usr/local/bin/node",
+              "/private/tmp/orca-feedback-followup-20261011/src/cli.ts",
+              "panel",
+              "--by",
+              "tester",
+              "--repo",
+              "proj=/private/tmp/t4r1-types-ic6vmkuu/sg-TbiaeN/repo",
+              "--port",
+              "0"
+            ]
+          },
+          {
+            "at": 1791671358388,
+            "pid": 70949,
+            "op": "send-first",
+            "child": 71109
+          },
+          {
+            "at": 1791671358388,
+            "pid": 70949,
+            "op": "send-second",
+            "child": 71109
+          },
+          {
+            "at": 1791671358388,
+            "pid": 71109,
+            "ppid": 70949,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671358389,
+            "pid": 71109,
+            "ppid": 70949,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671358420,
+            "pid": 71109,
+            "ppid": 70949,
+            "op": "child.kill",
+            "child": 71120,
+            "signal": "SIGTERM"
+          },
+          {
+            "at": 1791671358420,
+            "pid": 71109,
+            "ppid": 70949,
+            "op": "child.kill",
+            "child": 71120,
+            "signal": "SIGTERM"
+          },
+          {
+            "at": 1791671358420,
+            "pid": 71109,
+            "ppid": 70949,
+            "op": "delay-second-forward",
+            "child": 71120
+          },
+          {
+            "at": 1791671358420,
+            "pid": 71120,
+            "ppid": 71109,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671358424,
+            "pid": 71120,
+            "ppid": 71109,
+            "op": "hold-server-close"
+          },
+          {
+            "at": 1791671358425,
+            "pid": 71120,
+            "ppid": 71109,
+            "op": "hold-server-close"
+          },
+          {
+            "at": 1791671358437,
+            "pid": 71109,
+            "ppid": 70949,
+            "op": "forward-delayed",
+            "child": 71120
+          },
+          {
+            "at": 1791671358437,
+            "pid": 71120,
+            "ppid": 71109,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671358437,
+            "pid": 71120,
+            "ppid": 71109,
+            "op": "process.exit",
+            "code": 1
+          },
+          {
+            "at": 1791671358437,
+            "pid": 71120,
+            "ppid": 71109,
+            "op": "emit",
+            "event": "exit",
+            "args": [
+              1
+            ]
+          },
+          {
+            "at": 1791671358443,
+            "pid": 71109,
+            "ppid": 70949,
+            "op": "process.exit",
+            "code": 1
+          },
+          {
+            "at": 1791671358443,
+            "pid": 71109,
+            "ppid": 70949,
+            "op": "emit",
+            "event": "exit",
+            "args": [
+              1
+            ]
+          }
+        ]
+      },
+      {
+        "i": 5,
+        "double": true,
+        "scenario": "during-drain",
+        "root": "/private/tmp/t4r1-types-ic6vmkuu/sg-dF3Ox5",
+        "stdout": "orca-panel ready url=http://127.0.0.1:64394\n",
+        "stderr": "orca-panel: initial password for tester written to /private/tmp/t4r1-types-ic6vmkuu/sg-dF3Ox5/control/initial-password\n(node:71138) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\norca-panel: open http://127.0.0.1:64394 in a browser and log in\norca-panel: control socket /private/tmp/t4r1-types-ic6vmkuu/sg-dF3Ox5/control/proj-e73c023a/control.sock\norca-panel: second signal; exiting without draining. The next start may be recovery blocked.\n",
+        "exit": {
+          "code": 1,
+          "signal": null
+        },
+        "commands": [
+          {
+            "id": "shutdown-95e2beec45350258ceed65ac790e5ac611bea2dce7e26785be27e8c600471680"
+          }
+        ],
+        "trace": [
+          {
+            "at": 1791671358477,
+            "pid": 71126,
+            "ppid": 70949,
+            "op": "boot",
+            "argv": [
+              "/usr/local/bin/node",
+              "/private/tmp/orca-feedback-followup-20261011/node_modules/.bin/tsx",
+              "src/cli.ts",
+              "panel",
+              "--by",
+              "tester",
+              "--repo",
+              "proj=/private/tmp/t4r1-types-ic6vmkuu/sg-dF3Ox5/repo",
+              "--port",
+              "0"
+            ]
+          },
+          {
+            "at": 1791671358522,
+            "pid": 71138,
+            "ppid": 71126,
+            "op": "boot",
+            "argv": [
+              "/usr/local/bin/node",
+              "/private/tmp/orca-feedback-followup-20261011/src/cli.ts",
+              "panel",
+              "--by",
+              "tester",
+              "--repo",
+              "proj=/private/tmp/t4r1-types-ic6vmkuu/sg-dF3Ox5/repo",
+              "--port",
+              "0"
+            ]
+          },
+          {
+            "at": 1791671359443,
+            "pid": 70949,
+            "op": "send-first",
+            "child": 71126
+          },
+          {
+            "at": 1791671359443,
+            "pid": 70949,
+            "op": "send-second",
+            "child": 71126
+          },
+          {
+            "at": 1791671359443,
+            "pid": 71126,
+            "ppid": 70949,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671359444,
+            "pid": 71126,
+            "ppid": 70949,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671359475,
+            "pid": 71126,
+            "ppid": 70949,
+            "op": "child.kill",
+            "child": 71138,
+            "signal": "SIGTERM"
+          },
+          {
+            "at": 1791671359475,
+            "pid": 71126,
+            "ppid": 70949,
+            "op": "child.kill",
+            "child": 71138,
+            "signal": "SIGTERM"
+          },
+          {
+            "at": 1791671359475,
+            "pid": 71126,
+            "ppid": 70949,
+            "op": "delay-second-forward",
+            "child": 71138
+          },
+          {
+            "at": 1791671359475,
+            "pid": 71138,
+            "ppid": 71126,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671359480,
+            "pid": 71138,
+            "ppid": 71126,
+            "op": "hold-server-close"
+          },
+          {
+            "at": 1791671359480,
+            "pid": 71138,
+            "ppid": 71126,
+            "op": "hold-server-close"
+          },
+          {
+            "at": 1791671359492,
+            "pid": 71126,
+            "ppid": 70949,
+            "op": "forward-delayed",
+            "child": 71138
+          },
+          {
+            "at": 1791671359492,
+            "pid": 71138,
+            "ppid": 71126,
+            "op": "emit",
+            "event": "SIGTERM",
+            "args": [
+              "SIGTERM",
+              15
+            ]
+          },
+          {
+            "at": 1791671359493,
+            "pid": 71138,
+            "ppid": 71126,
+            "op": "process.exit",
+            "code": 1
+          },
+          {
+            "at": 1791671359493,
+            "pid": 71138,
+            "ppid": 71126,
+            "op": "emit",
+            "event": "exit",
+            "args": [
+              1
+            ]
+          },
+          {
+            "at": 1791671359500,
+            "pid": 71126,
+            "ppid": 70949,
+            "op": "process.exit",
+            "code": 1
+          },
+          {
+            "at": 1791671359500,
+            "pid": 71126,
+            "ppid": 70949,
+            "op": "emit",
+            "event": "exit",
+            "args": [
+              1
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]

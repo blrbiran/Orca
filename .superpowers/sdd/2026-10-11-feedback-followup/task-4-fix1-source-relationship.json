@@ -1,0 +1,9 @@
+{
+  "priorSourceTreeSHA256": "f11d0534000f75afd50d60a8c54677148286cefd7eab04c57291b56d14443b8a",
+  "currentSourceTreeSHA256": "64d74abc8c14c9c2e00a4ebfabd1562d0d4a2f69725580e0ac736ebd5a6724e8",
+  "sourceFiles": 922,
+  "changedFromPrior": [
+    "tests/panel/controlShutdown.test.ts"
+  ],
+  "priorCloneCommit": "bf2722ab2a69400ba6231ffeca1bf8df3c96f67c"
+}

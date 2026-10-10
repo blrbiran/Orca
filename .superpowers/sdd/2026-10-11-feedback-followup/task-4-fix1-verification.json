@@ -1,0 +1,529 @@
+{
+  "runs": [
+    {
+      "name": "task4-fix1-red-control",
+      "repo": "/private/tmp/orca-feedback-followup-20261011",
+      "command": [
+        "node",
+        "/Users/biran/code/skills/loop/Orca/node_modules/vitest/vitest.mjs",
+        "run",
+        "tests/control/tokenPolicyRestartable.test.ts",
+        "tests/control/tokenPolicyEditor.test.ts",
+        "--maxWorkers=1"
+      ],
+      "rc": 1,
+      "elapsedSeconds": 2.152214765548706,
+      "log": "/private/tmp/orca-followup-runs/task4-fix1-red-control/output.log",
+      "source": "d72f05e781f68ea499345a02b3c2af897b690a23",
+      "sourceTreeSHA256": "f4f54821001e10d8628539c81252a532290842292be7ce169110911bf4bb7b46",
+      "sourceFiles": 922,
+      "rawBytes": 3847,
+      "rawSHA256": "24420c5db9c0c3637d43996d63b026a39710fa0c0cc63e3e9990a46334151d28"
+    },
+    {
+      "name": "task4-fix1-red-web",
+      "repo": "/private/tmp/orca-feedback-followup-20261011",
+      "command": [
+        "node",
+        "/Users/biran/code/skills/loop/Orca/node_modules/vitest/vitest.mjs",
+        "run",
+        "--root",
+        "web",
+        "tests/loopPlanEdit.test.tsx",
+        "--maxWorkers=1"
+      ],
+      "rc": 1,
+      "elapsedSeconds": 1.643691062927246,
+      "log": "/private/tmp/orca-followup-runs/task4-fix1-red-web/output.log",
+      "source": "d72f05e781f68ea499345a02b3c2af897b690a23",
+      "sourceTreeSHA256": "f4f54821001e10d8628539c81252a532290842292be7ce169110911bf4bb7b46",
+      "sourceFiles": 922,
+      "rawBytes": 785,
+      "rawSHA256": "a983ddc5f71ac3dde8d20b1a7e0fb5e97cd3cdb9c0b550be83099f97abac0289"
+    },
+    {
+      "name": "task4-fix1-green-control",
+      "repo": "/private/tmp/orca-feedback-followup-20261011",
+      "command": [
+        "node",
+        "/Users/biran/code/skills/loop/Orca/node_modules/vitest/vitest.mjs",
+        "run",
+        "tests/control/tokenPolicyRestartable.test.ts",
+        "tests/control/tokenPolicyEditor.test.ts",
+        "tests/control/tokenPolicyStop.test.ts",
+        "tests/panel/controlPollPerformance.test.ts",
+        "tests/panel/webParity.test.ts",
+        "--maxWorkers=2"
+      ],
+      "rc": 0,
+      "elapsedSeconds": 8.281874895095825,
+      "log": "/private/tmp/orca-followup-runs/task4-fix1-green-control/output.log",
+      "source": "d72f05e781f68ea499345a02b3c2af897b690a23",
+      "sourceTreeSHA256": "5ad427c3c8ed75f21bea624a5ed855006cab9945af0e2a5daa0397650dd57526",
+      "sourceFiles": 922,
+      "rawBytes": 867,
+      "rawSHA256": "d57973e6078136d99cd82aa454596851c16b6eac3edab9d678fcbcb01da38ba0"
+    },
+    {
+      "name": "task4-fix1-green-web",
+      "repo": "/private/tmp/orca-feedback-followup-20261011",
+      "command": [
+        "node",
+        "/Users/biran/code/skills/loop/Orca/node_modules/vitest/vitest.mjs",
+        "run",
+        "--root",
+        "web",
+        "tests/loopPlanEdit.test.tsx",
+        "tests/loopPlanDraft.test.tsx",
+        "tests/budgetSuggestions.test.tsx",
+        "--maxWorkers=2"
+      ],
+      "rc": 0,
+      "elapsedSeconds": 2.5854828357696533,
+      "log": "/private/tmp/orca-followup-runs/task4-fix1-green-web/output.log",
+      "source": "d72f05e781f68ea499345a02b3c2af897b690a23",
+      "sourceTreeSHA256": "5ad427c3c8ed75f21bea624a5ed855006cab9945af0e2a5daa0397650dd57526",
+      "sourceFiles": 922,
+      "rawBytes": 425,
+      "rawSHA256": "df6cd5b6cb8cfd750f58e52b0dbbf301f754840f3f94a3fa1aa9614c8904ab1e"
+    },
+    {
+      "name": "task4-fix1-continuation",
+      "repo": "/private/tmp/orca-feedback-followup-20261011",
+      "command": [
+        "node",
+        "/Users/biran/code/skills/loop/Orca/node_modules/vitest/vitest.mjs",
+        "run",
+        "tests/control/tokenPolicyRestartable.test.ts",
+        "tests/control/driverContinuation.test.ts",
+        "tests/control/driverHandoff.test.ts",
+        "tests/control/handoffFailedRetry.test.ts",
+        "--maxWorkers=2"
+      ],
+      "rc": 0,
+      "elapsedSeconds": 53.74372410774231,
+      "log": "/private/tmp/orca-followup-runs/task4-fix1-continuation/output.log",
+      "source": "d72f05e781f68ea499345a02b3c2af897b690a23",
+      "sourceTreeSHA256": "1830d315d35a739c697ab57b2728e5212b7493864b58f837ca2576a17f0164ef",
+      "sourceFiles": 922,
+      "rawBytes": 2222,
+      "rawSHA256": "f1e2438bc391592a01acd9c20139eb3364ca201c9c1a4ed0f612c8ca9af89927"
+    },
+    {
+      "name": "task4-fix1-focused",
+      "repo": "/private/tmp/orca-feedback-followup-20261011",
+      "command": [
+        "node",
+        "/Users/biran/code/skills/loop/Orca/node_modules/vitest/vitest.mjs",
+        "run",
+        "tests/control/tokenPolicyRestartable.test.ts",
+        "tests/control/tokenPolicyEditor.test.ts",
+        "tests/control/tokenPolicyStop.test.ts",
+        "tests/control/tokenPolicy.test.ts",
+        "tests/panel/controlReadApi.test.ts",
+        "tests/panel/controlPollPerformance.test.ts",
+        "tests/panel/webParity.test.ts",
+        "--maxWorkers=2"
+      ],
+      "rc": 0,
+      "elapsedSeconds": 15.266999006271362,
+      "log": "/private/tmp/orca-followup-runs/task4-fix1-focused/output.log",
+      "source": "d72f05e781f68ea499345a02b3c2af897b690a23",
+      "sourceTreeSHA256": "f87aa6186d24e212cf3fd73fb568d1ccaf35a244fa4515c7c3901c3b55cf6dbc",
+      "sourceFiles": 922,
+      "rawBytes": 1209,
+      "rawSHA256": "c2bb47405a594732ace2089efbbeba4fa3dd43bb9347a59b5efa802ace29ec91"
+    },
+    {
+      "name": "task4-fix1-final-types",
+      "repo": "/private/tmp/orca-feedback-followup-20261011",
+      "command": [
+        "env",
+        "TMPDIR=/private/tmp/t4r1-types-ic6vmkuu",
+        "npm",
+        "run",
+        "typecheck"
+      ],
+      "rc": 0,
+      "elapsedSeconds": 9.136190176010132,
+      "log": "/private/tmp/orca-followup-runs/task4-fix1-final-types/output.log",
+      "source": "8d08b03220faf553e5e4c3a28f084ea85f578aba",
+      "sourceTreeSHA256": "f11d0534000f75afd50d60a8c54677148286cefd7eab04c57291b56d14443b8a",
+      "sourceFiles": 922,
+      "rawBytes": 268,
+      "rawSHA256": "cf5b4b572aad8c5e786e43ccbef710ff79cb7f59273133ab698114b33010e748"
+    },
+    {
+      "name": "task4-fix1-final-build",
+      "repo": "/private/tmp/orca-feedback-followup-20261011",
+      "command": [
+        "env",
+        "TMPDIR=/private/tmp/t4r1-build-z2v8zpoy",
+        "npm",
+        "run",
+        "build"
+      ],
+      "rc": 0,
+      "elapsedSeconds": 4.693653106689453,
+      "log": "/private/tmp/orca-followup-runs/task4-fix1-final-build/output.log",
+      "source": "8d08b03220faf553e5e4c3a28f084ea85f578aba",
+      "sourceTreeSHA256": "f11d0534000f75afd50d60a8c54677148286cefd7eab04c57291b56d14443b8a",
+      "sourceFiles": 922,
+      "rawBytes": 261,
+      "rawSHA256": "e0b651d93a9f848f288cdb9de6d86c87449bc51b8de5fea2602a63dc22623c85"
+    },
+    {
+      "name": "task4-fix1-final-webbuild",
+      "repo": "/private/tmp/orca-feedback-followup-20261011",
+      "command": [
+        "env",
+        "TMPDIR=/private/tmp/t4r1-webbuild-ynd8agvi",
+        "npm",
+        "run",
+        "build",
+        "--workspace",
+        "web"
+      ],
+      "rc": 0,
+      "elapsedSeconds": 1.3959550857543945,
+      "log": "/private/tmp/orca-followup-runs/task4-fix1-final-webbuild/output.log",
+      "source": "8d08b03220faf553e5e4c3a28f084ea85f578aba",
+      "sourceTreeSHA256": "f11d0534000f75afd50d60a8c54677148286cefd7eab04c57291b56d14443b8a",
+      "sourceFiles": 922,
+      "rawBytes": 658,
+      "rawSHA256": "43b45fdbdd3773ab0c8a60ee8a90b216487d303d920474ce557655b0b1883aea"
+    },
+    {
+      "name": "task4-fix1-final-web",
+      "repo": "/private/tmp/orca-feedback-followup-20261011",
+      "command": [
+        "env",
+        "TMPDIR=/private/tmp/t4r1-web-mbsd3523",
+        "npm",
+        "run",
+        "--workspace",
+        "web",
+        "check"
+      ],
+      "rc": 0,
+      "elapsedSeconds": 30.989221811294556,
+      "log": "/private/tmp/orca-followup-runs/task4-fix1-final-web/output.log",
+      "source": "8d08b03220faf553e5e4c3a28f084ea85f578aba",
+      "sourceTreeSHA256": "f11d0534000f75afd50d60a8c54677148286cefd7eab04c57291b56d14443b8a",
+      "sourceFiles": 922,
+      "rawBytes": 716,
+      "rawSHA256": "d76f5c878904dc464cf65430fc780b9f93728350c5d798345e985246f3f48ed2"
+    },
+    {
+      "name": "task4-fix1-final-root",
+      "repo": "/private/tmp/orca-feedback-followup-20261011",
+      "command": [
+        "env",
+        "TMPDIR=/private/tmp/t4r1-root-rh5f1xsn",
+        "node",
+        "/Users/biran/code/skills/loop/Orca/node_modules/vitest/vitest.mjs",
+        "run",
+        "--maxWorkers=4",
+        "--reporter=default",
+        "--reporter=json",
+        "--outputFile=/private/tmp/orca-followup-runs/task4-fix1-final-root/results.json"
+      ],
+      "rc": 1,
+      "elapsedSeconds": 681.3248209953308,
+      "log": "/private/tmp/orca-followup-runs/task4-fix1-final-root/output.log",
+      "source": "8d08b03220faf553e5e4c3a28f084ea85f578aba",
+      "sourceTreeSHA256": "f11d0534000f75afd50d60a8c54677148286cefd7eab04c57291b56d14443b8a",
+      "sourceFiles": 922,
+      "rawBytes": 284153,
+      "rawSHA256": "328b13532895b1f4a8396d7e5284de816ec307ce220932e106f02f9ec3f2289b"
+    },
+    {
+      "name": "task4-fix1-signal-final-1",
+      "repo": "/private/tmp/orca-feedback-followup-20261011",
+      "command": [
+        "env",
+        "TMPDIR=/private/tmp/t4r1-types-ic6vmkuu",
+        "node",
+        "/Users/biran/code/skills/loop/Orca/node_modules/vitest/vitest.mjs",
+        "run",
+        "tests/panel/controlShutdown.test.ts",
+        "--maxWorkers=1"
+      ],
+      "rc": 0,
+      "elapsedSeconds": 3.9214730262756348,
+      "log": "/private/tmp/orca-followup-runs/task4-fix1-signal-final-1/output.log",
+      "source": "8d08b03220faf553e5e4c3a28f084ea85f578aba",
+      "sourceTreeSHA256": "64d74abc8c14c9c2e00a4ebfabd1562d0d4a2f69725580e0ac736ebd5a6724e8",
+      "sourceFiles": 922,
+      "rawBytes": 362,
+      "rawSHA256": "b9548c5155be389ba279112071cfd0174c60a06268a51c133236d7793e3a1440"
+    },
+    {
+      "name": "task4-fix1-signal-final-2",
+      "repo": "/private/tmp/orca-feedback-followup-20261011",
+      "command": [
+        "env",
+        "TMPDIR=/private/tmp/t4r1-types-ic6vmkuu",
+        "node",
+        "/Users/biran/code/skills/loop/Orca/node_modules/vitest/vitest.mjs",
+        "run",
+        "tests/panel/controlShutdown.test.ts",
+        "--maxWorkers=1"
+      ],
+      "rc": 0,
+      "elapsedSeconds": 3.762747049331665,
+      "log": "/private/tmp/orca-followup-runs/task4-fix1-signal-final-2/output.log",
+      "source": "8d08b03220faf553e5e4c3a28f084ea85f578aba",
+      "sourceTreeSHA256": "64d74abc8c14c9c2e00a4ebfabd1562d0d4a2f69725580e0ac736ebd5a6724e8",
+      "sourceFiles": 922,
+      "rawBytes": 362,
+      "rawSHA256": "2179be24dc568517703028dc267baf6761a891abaf041a421df3127154876229"
+    },
+    {
+      "name": "task4-fix1-corrected-types",
+      "repo": "/private/tmp/orca-feedback-followup-20261011",
+      "command": [
+        "env",
+        "TMPDIR=/private/tmp/t4s-types-ztfcgxjp",
+        "npm",
+        "run",
+        "typecheck"
+      ],
+      "rc": 0,
+      "elapsedSeconds": 8.958163976669312,
+      "log": "/private/tmp/orca-followup-runs/task4-fix1-corrected-types/output.log",
+      "source": "8d08b03220faf553e5e4c3a28f084ea85f578aba",
+      "sourceTreeSHA256": "64d74abc8c14c9c2e00a4ebfabd1562d0d4a2f69725580e0ac736ebd5a6724e8",
+      "sourceFiles": 922,
+      "rawBytes": 268,
+      "rawSHA256": "cf5b4b572aad8c5e786e43ccbef710ff79cb7f59273133ab698114b33010e748"
+    },
+    {
+      "name": "task4-fix1-corrected-root",
+      "repo": "/private/tmp/orca-feedback-followup-20261011",
+      "command": [
+        "env",
+        "TMPDIR=/private/tmp/t4s-root-522vhq_4",
+        "node",
+        "/Users/biran/code/skills/loop/Orca/node_modules/vitest/vitest.mjs",
+        "run",
+        "--maxWorkers=4",
+        "--reporter=default",
+        "--reporter=json",
+        "--outputFile=/private/tmp/orca-followup-runs/task4-fix1-corrected-root/results.json"
+      ],
+      "rc": 0,
+      "elapsedSeconds": 676.1733272075653,
+      "log": "/private/tmp/orca-followup-runs/task4-fix1-corrected-root/output.log",
+      "source": "8d08b03220faf553e5e4c3a28f084ea85f578aba",
+      "sourceTreeSHA256": "64d74abc8c14c9c2e00a4ebfabd1562d0d4a2f69725580e0ac736ebd5a6724e8",
+      "sourceFiles": 922,
+      "rawBytes": 282366,
+      "rawSHA256": "d57ae12c431fd2660245ac7c55daa07d5f7625546d282125202c6880b863753b"
+    },
+    {
+      "name": "task4-fix1-corrected-paired",
+      "repo": "/private/tmp/orca-feedback-followup-20261011",
+      "command": [
+        "env",
+        "TMPDIR=/private/tmp/t4s-paired-zqexv_vh",
+        "env",
+        "ORCA_CCLOOP_BIN=/private/tmp/ccloop-feedback-followup-20261011/dist/cli.js",
+        "node",
+        "/Users/biran/code/skills/loop/Orca/node_modules/vitest/vitest.mjs",
+        "run",
+        "tests/control/tokenPolicyRuntime.test.ts",
+        "tests/control/requirementE2E.test.ts",
+        "--maxWorkers=2",
+        "--reporter=default",
+        "--reporter=json",
+        "--outputFile=/private/tmp/orca-followup-runs/task4-fix1-corrected-paired/results.json"
+      ],
+      "rc": 0,
+      "elapsedSeconds": 39.992958307266235,
+      "log": "/private/tmp/orca-followup-runs/task4-fix1-corrected-paired/output.log",
+      "source": "8d08b03220faf553e5e4c3a28f084ea85f578aba",
+      "sourceTreeSHA256": "64d74abc8c14c9c2e00a4ebfabd1562d0d4a2f69725580e0ac736ebd5a6724e8",
+      "sourceFiles": 922,
+      "rawBytes": 2013,
+      "rawSHA256": "dd51d137290302defdeead3695dc17e28eeabad588eff1fc97a5a635c25f3a20"
+    },
+    {
+      "name": "task4-fix1-clone-webbuild",
+      "repo": "/private/tmp/orca-task4-mutants-20261011",
+      "command": [
+        "npm",
+        "run",
+        "build",
+        "--workspace",
+        "web"
+      ],
+      "rc": 0,
+      "elapsedSeconds": 1.4943161010742188,
+      "log": "/private/tmp/orca-followup-runs/task4-fix1-clone-webbuild/output.log",
+      "source": "830a9dc3bda485fc9dfc478400151289aa287ac7",
+      "sourceTreeSHA256": "64d74abc8c14c9c2e00a4ebfabd1562d0d4a2f69725580e0ac736ebd5a6724e8",
+      "sourceFiles": 922,
+      "rawBytes": 658,
+      "rawSHA256": "1df7085f08afadbe6af712aee51a2e54541eadba19a996ead14aa9ad9f35c4f2"
+    },
+    {
+      "name": "task4-fix1-clone-signal-baseline",
+      "repo": "/private/tmp/orca-task4-mutants-20261011",
+      "command": [
+        "env",
+        "TMPDIR=/private/tmp/t4r1-types-ic6vmkuu",
+        "node",
+        "/Users/biran/code/skills/loop/Orca/node_modules/vitest/vitest.mjs",
+        "run",
+        "tests/panel/controlShutdown.test.ts",
+        "--maxWorkers=1"
+      ],
+      "rc": 1,
+      "elapsedSeconds": 3.7871711254119873,
+      "log": "/private/tmp/orca-followup-runs/task4-fix1-clone-signal-baseline/output.log",
+      "source": "830a9dc3bda485fc9dfc478400151289aa287ac7",
+      "sourceTreeSHA256": "64d74abc8c14c9c2e00a4ebfabd1562d0d4a2f69725580e0ac736ebd5a6724e8",
+      "sourceFiles": 922,
+      "rawBytes": 1407,
+      "rawSHA256": "0f45a4cc484cdcf1d8a316f9c199105657de67a2f54c0e91539eac14e325b3e2"
+    },
+    {
+      "name": "task4-fix1-contention-baseline-1",
+      "repo": "/private/tmp/orca-task4-mutants-20261011",
+      "command": [
+        "env",
+        "TMPDIR=/private/tmp/t4r1-types-ic6vmkuu",
+        "node",
+        "/Users/biran/code/skills/loop/Orca/node_modules/vitest/vitest.mjs",
+        "run",
+        "tests/panel/controlShutdown.test.ts",
+        "--maxWorkers=1"
+      ],
+      "rc": 0,
+      "elapsedSeconds": 3.9433553218841553,
+      "log": "/private/tmp/orca-followup-runs/task4-fix1-contention-baseline-1/output.log",
+      "source": "4f2c79a98b193d361da7893c4320ad52b89f37c7",
+      "sourceTreeSHA256": "a348d070fb403a31cbbee853540ec660a4235c88d38ca9eacbcbdf96ae5e0cfb",
+      "sourceFiles": 922,
+      "rawBytes": 358,
+      "rawSHA256": "298ce95cd0c1a6aac34333ffe9f92315b2c2eaeb82d1f99efc8c66793b6a19aa"
+    },
+    {
+      "name": "task4-fix1-contention-baseline-2",
+      "repo": "/private/tmp/orca-feedback-followup-20261011",
+      "command": [
+        "env",
+        "TMPDIR=/private/tmp/t4last-z1ukcafr",
+        "node",
+        "/Users/biran/code/skills/loop/Orca/node_modules/vitest/vitest.mjs",
+        "run",
+        "tests/panel/controlShutdown.test.ts",
+        "--maxWorkers=1"
+      ],
+      "rc": 0,
+      "elapsedSeconds": 3.9902026653289795,
+      "log": "/private/tmp/orca-followup-runs/task4-fix1-contention-baseline-2/output.log",
+      "source": "8d08b03220faf553e5e4c3a28f084ea85f578aba",
+      "sourceTreeSHA256": "a348d070fb403a31cbbee853540ec660a4235c88d38ca9eacbcbdf96ae5e0cfb",
+      "sourceFiles": 922,
+      "rawBytes": 362,
+      "rawSHA256": "9aa790946672dffd3a0966e831c11fd4d05aa8c23022521e17ac39f33bdf2cfe"
+    },
+    {
+      "name": "task4-fix1-contention-baseline-3",
+      "repo": "/private/tmp/orca-feedback-followup-20261011",
+      "command": [
+        "env",
+        "TMPDIR=/private/tmp/t4last-zwvydw48",
+        "node",
+        "/Users/biran/code/skills/loop/Orca/node_modules/vitest/vitest.mjs",
+        "run",
+        "tests/panel/controlShutdown.test.ts",
+        "--maxWorkers=1"
+      ],
+      "rc": 0,
+      "elapsedSeconds": 3.797528028488159,
+      "log": "/private/tmp/orca-followup-runs/task4-fix1-contention-baseline-3/output.log",
+      "source": "8d08b03220faf553e5e4c3a28f084ea85f578aba",
+      "sourceTreeSHA256": "a348d070fb403a31cbbee853540ec660a4235c88d38ca9eacbcbdf96ae5e0cfb",
+      "sourceFiles": 922,
+      "rawBytes": 362,
+      "rawSHA256": "76ad227eddcdff479ced9fc08aa4c2f2a3f3eeff0c1f254d45700735e458d8eb"
+    },
+    {
+      "name": "task4-fix1-observer-types",
+      "repo": "/private/tmp/orca-feedback-followup-20261011",
+      "command": [
+        "env",
+        "TMPDIR=/private/tmp/t4last-so0v53k7",
+        "npm",
+        "run",
+        "typecheck"
+      ],
+      "rc": 0,
+      "elapsedSeconds": 9.005245923995972,
+      "log": "/private/tmp/orca-followup-runs/task4-fix1-observer-types/output.log",
+      "source": "8d08b03220faf553e5e4c3a28f084ea85f578aba",
+      "sourceTreeSHA256": "a348d070fb403a31cbbee853540ec660a4235c88d38ca9eacbcbdf96ae5e0cfb",
+      "sourceFiles": 922,
+      "rawBytes": 268,
+      "rawSHA256": "cf5b4b572aad8c5e786e43ccbef710ff79cb7f59273133ab698114b33010e748"
+    },
+    {
+      "name": "task4-fix1-contention-restored",
+      "repo": "/private/tmp/orca-task4-mutants-20261011",
+      "command": [
+        "env",
+        "TMPDIR=/private/tmp/t4r1-types-ic6vmkuu",
+        "node",
+        "/Users/biran/code/skills/loop/Orca/node_modules/vitest/vitest.mjs",
+        "run",
+        "tests/panel/controlShutdown.test.ts",
+        "--maxWorkers=1"
+      ],
+      "rc": 0,
+      "elapsedSeconds": 3.9681389331817627,
+      "log": "/private/tmp/orca-followup-runs/task4-fix1-contention-restored/output.log",
+      "source": "4f2c79a98b193d361da7893c4320ad52b89f37c7",
+      "sourceTreeSHA256": "a348d070fb403a31cbbee853540ec660a4235c88d38ca9eacbcbdf96ae5e0cfb",
+      "sourceFiles": 922,
+      "rawBytes": 358,
+      "rawSHA256": "d6ed9573affceab887e143f205473a1698897e4c66e7282aac5b6ea442a2cbb5"
+    }
+  ],
+  "finalSourceTreeSHA256": "a348d070fb403a31cbbee853540ec660a4235c88d38ca9eacbcbdf96ae5e0cfb",
+  "finalRootSkips": [
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/memory/ccmemReal.test.ts",
+      "name": "a real ccmem (spec \u00a76.3 R1) reads back one global and one project memory through the adapter"
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/ccloopDefaultE2E.test.ts",
+      "name": "Orca with ccloop installed as its dependency and ORCA_CCLOOP_BIN unset resolves the package in this checkout, whose runtime finds the scripts the package ships"
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/ccloopDefaultE2E.test.ts",
+      "name": "Orca with ccloop installed as its dependency and ORCA_CCLOOP_BIN unset runs orca agents init and show through the installed ccloop"
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/ccloopDefaultE2E.test.ts",
+      "name": "Orca with ccloop installed as its dependency and ORCA_CCLOOP_BIN unset boots the panel with an execution port, while an explicit empty ORCA_CCLOOP_BIN still turns it off"
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/driverSkillsReal.test.ts",
+      "name": "A2 with a real syncskill (spec \u00a710.8 C5) injects the frozen skill, private and read-only, and records exactly the lock file's entries"
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/service/realSmoke.test.ts",
+      "name": "real launchd smoke (opt-in) install \u2192 answering \u2192 restart \u2192 stop \u2192 start \u2192 uninstall, under a relocated label"
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/skills/syncskillReal.test.ts",
+      "name": "a real syncskill (spec \u00a710.8 C12, C18) profile ls leaves the sync dir byte-identical; inject's lock entries equal the lock file; ~/.syncskill is untouched"
+    }
+  ],
+  "webBuildReuse": "Only tests/panel/controlShutdown.test.ts differs; production and Web inputs byte-identical. See source relationship manifest.",
+  "fullRootSourceTreeSHA256": "64d74abc8c14c9c2e00a4ebfabd1562d0d4a2f69725580e0ac736ebd5a6724e8",
+  "reuseRuling": "Controller approved final test-only observer correction with explicit one-file byte relationship, real contention RED/GREEN, repeated final7/7 and scoped mutants; no further whole-root run. Task14 fresh final wholebranch gate remains pending."
+}

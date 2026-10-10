@@ -1,0 +1,380 @@
+diff --git a/src/control/stopIntent.ts b/src/control/stopIntent.ts
+index e31a687..e6fa2f0 100644
+--- a/src/control/stopIntent.ts
++++ b/src/control/stopIntent.ts
+@@ -1,5 +1,5 @@
+ import { finiteCommitment, type BudgetAmount } from "./tokenPolicy.js";
+-import { hasTokenPolicy } from "./fundedAllowance.js";
++import { hasOptionalTaskPolicy, hasTokenPolicy } from "./fundedAllowance.js";
+ import { hasValidUsageSettlement, type UsageSettlement } from "./usageSettlement.js";
+ import { createHash } from "node:crypto";
+ import { z } from "zod";
+@@ -778,8 +778,13 @@ function terminaliseRun(store: ControlStore, groupId: string, run: RunBody, outc
+     saveWork(store,groupId,work as never);return;
+   }
+   if (outcome === "settled-restartable") {
++    // Optional claims add tokens at claim time, but retain draft non-token promises.
++    // A proved no-start releases only those funded tokens; the next claim adds them once.
++    if (hasOptionalTaskPolicy(store, groupId, run.workItemId) && !settled.unknown.work && !settled.unknown.handoff) {
++      releaseCommitment(store, groupId, { tokens: released.tokens, activeMs: 0, attempts: 0, sessions: 0 });
++    }
+     // Handoff delivery spec §11 I9, §13.2 C-6, Minor a (controller decisions, 2026-09-25): a run proved never to
+-    // have started keeps the task's commitment -- nothing is released. A plain run's task is claimable again and
++    // have started keeps its non-token promises (and all fixed legacy commitments). A plain run's task is claimable again and
+     // its allocation stays `confirmed`; a continuation gives the task back to the predecessor it continued, so
+     // that predecessor's checkpoint can be chosen again (otherwise its half-done work is silently dropped).
+     const record = work as unknown as { status: string; currentRunId: string | null; pendingRunId: string | null; continuation?: { continuationIntentId: string; predecessorRunId: string } | null };
+diff --git a/src/control/webProtocol.ts b/src/control/webProtocol.ts
+index 05494d4..7294d08 100644
+--- a/src/control/webProtocol.ts
++++ b/src/control/webProtocol.ts
+@@ -1178,6 +1178,7 @@ export const loopPlanViewSchema = z
+ export const workItemViewSchema = z
+   .object({
+     taskId: idSchema,
++    tokenAccountingMode: z.enum(["finite-legacy", "optional-v1"]).optional(),
+     status: z.enum(["draft", "ready", "starting", "start-unknown", "active", "held", "continuing", "completed", "blocked"]),
+     dependencyTaskIds: sortedIdArraySchema,
+     targetVersion: positiveSafeInteger,
+diff --git a/src/panel/controlViews.ts b/src/panel/controlViews.ts
+index 175961f..9ca5463 100644
+--- a/src/panel/controlViews.ts
++++ b/src/panel/controlViews.ts
+@@ -1,4 +1,4 @@
+-import { readFundedAllowance } from "../control/fundedAllowance.js";
++import { hasOptionalTaskPolicy, readFundedAllowance } from "../control/fundedAllowance.js";
+ import { tokenPolicySchema, tokenRemainingStatus } from "../control/tokenPolicy.js";
+ import { budgetAmountSchema } from "../control/schema.js";
+ import { readGroupSnapshot, type GroupReadSnapshot, type StoredJsonResult } from "./groupReadSnapshot.js";
+@@ -735,6 +735,7 @@ function workViews(
+     const labelState = readTaskLabelState(body);
+     const effective = effectiveTaskLabels(labelState, task.labels);
+     return {
++      tokenAccountingMode: hasOptionalTaskPolicy(store, groupId, task.taskId) ? "optional-v1" : "finite-legacy",
+       taskId: task.taskId, status, dependencyTaskIds: [...task.dependencyTaskIds], targetVersion: task.targetVersion,
+       configHash: body.configHash, agent: frozenEntry?.agent ?? null, agentProvenance: frozenEntry?.agentProvenance ?? null,
+       originalContractHash: task.originalContractHash,
+diff --git a/tests/control/tokenPolicyEditor.test.ts b/tests/control/tokenPolicyEditor.test.ts
+new file mode 100644
+index 0000000..2bc48ba
+--- /dev/null
++++ b/tests/control/tokenPolicyEditor.test.ts
+@@ -0,0 +1,20 @@
++import {expect,it} from "vitest";
++
++import {webFixture} from "./fixtures/web.js";
++import {readControlGroup} from "../../src/panel/controlViews.js";
++import {WebControlService} from "../../src/control/webService.js";
++it("finite optional task ceiling can exceed free group reserve",async()=>{
++ const h=await webFixture(undefined,[{taskId:"a",loop:{goal:"ship",successCondition:"passes",targetPaths:["a"],checks:["true"],tokenBudget:99000}}],{tokenPolicy:"optional-v1"});
++ try {
++  const service=new WebControlService(h.deps);let view=readControlGroup(h.store,"epoch","g");
++  expect(service.editProposal(h.command("proposal-edit",{baseProposalVersion:view.proposal.proposalVersion,operations:[],proposedGroupLimit:{...view.ledger.groupLimit,tokens:1500000}}))).not.toHaveProperty("error");
++  view=readControlGroup(h.store,"epoch","g");expect(view.workItems[0]).toMatchObject({tokenAccountingMode:"optional-v1"});
++  const current=view.allocations.find(a=>a.ownerId==="a"&&a.bucket==="work")!.amount;
++  const result=await service.setTaskLoop(h.taskCommand("set-task-loop","a",{baseLoopVersion:0,plan:"standard",inputs:view.workItems[0]!.loopPlan!.inputs,work:{tokens:1000000,activeMs:current.activeMs,attempts:current.attempts}}));
++  expect(result).not.toHaveProperty("error");
++  const updated=readControlGroup(h.store,"epoch","g");expect(updated.workItems[0]).toMatchObject({tokenAccountingMode:"optional-v1"});expect(updated.ledger.committedRemaining).toEqual(view.ledger.committedRemaining);expect(updated.ledger.explicitUnallocatedReserve).toEqual(view.ledger.explicitUnallocatedReserve);expect(updated.allocations.find(a=>a.ownerId==="a"&&a.bucket==="work")!.amount.tokens).toBe(1_000_000);
++ }finally{await h.dispose();}
++});
++it("reports legacy task accounting even after the owner clears the group token ceiling",async()=>{
++ const h=await webFixture();try{const service=new WebControlService(h.deps);expect(await service.confirm(h.command("confirm",await h.confirmPayload()))).not.toHaveProperty("error");const before=readControlGroup(h.store,"epoch","g");expect(service.setLimit(h.command("set-limit",{limit:{...before.ledger.groupLimit,tokens:null}}))).not.toHaveProperty("error");const after=readControlGroup(h.store,"epoch","g");expect(after.ledger.groupLimit.tokens).toBeNull();expect(after.workItems[0]).toMatchObject({tokenAccountingMode:"finite-legacy"});}finally{await h.dispose();}
++});
+diff --git a/tests/control/tokenPolicyRestartable.test.ts b/tests/control/tokenPolicyRestartable.test.ts
+new file mode 100644
+index 0000000..ea15de0
+--- /dev/null
++++ b/tests/control/tokenPolicyRestartable.test.ts
+@@ -0,0 +1,61 @@
++import { createGroup, putWork } from "../../src/control/commands.js";
++import { claimWork } from "../../src/control/budget.js";
++import { amount, caps, fixtureAgent } from "./fixtures/store.js";
++import { expect, it } from "vitest";
++import { driverHarness } from "./fixtures/driverHarness.js";
++import { readGroup, readWork } from "../../src/control/queries.js";
++import { deliverScheduledStart } from "../../src/control/webDispatch.js";
++import { committedTokens } from "../../src/control/spendCaps.js";
++import { readControlGroup } from "../../src/panel/controlViews.js";
++
++it.each(["uncapped", "cap", "group", "legacy", "mixed"] as const)("conserves all commitments across repeated pre-provider stops (%s)", async mode => {
++ const t=await driverHarness([{taskId:"a",tokenBudget:null}],{...(mode==="legacy"?{}:{tokenPolicy:"optional-v1" as const}),killGraceMs:0,behaviour:()=>"stoppable"});const driver=t.driver();
++ try {
++  let other=0;
++  if(mode==="mixed"){
++   createGroup(t.h.store,{groupId:"old",projectKey:"old",goal:"old task",successConditions:["done"],budgetMode:"soft",limit:amount(200_000,1_000_000,100,100),reviewReserve:amount(0,0,0,0),deadlineAt:null},{commandId:"old-create",expectedRevision:0,by:"human"});
++   putWork(t.h.store,"old",{workItemId:"old",taskId:"old",kind:"task",dependsOn:[],contract:{},configHash:"config",agent:fixtureAgent,grant:{work:amount(100_000),handoff:amount(10_000,0,0,0)}},{commandId:"old-put",expectedRevision:1,by:"human"});
++   claimWork(t.h.store,{groupId:"old",workItemId:"old",graphVersion:2,targetVersion:1,commandId:"old-claim",expectedRevision:2,by:"service",capabilities:caps});other=110_000;
++  }
++  const legacyHeld=mode==="mixed"?structuredClone(readGroup(t.h.store,"old").reserved):null;
++  if(mode==="cap"||mode==="mixed")t.h.store.db.prepare("INSERT INTO spend_caps VALUES ('all','total',1900000,0,'human')").run();
++  if(mode==="group")expect(t.service.setLimit(t.h.command("set-limit",{limit:{...readGroup(t.h.store,"g").limit,tokens:3_150_000}}))).not.toHaveProperty("error");
++  const idle=structuredClone(readGroup(t.h.store,"g").reserved);let id=await t.claim();const active=structuredClone(readGroup(t.h.store,"g").reserved);
++  for(let cycle=0;cycle<3;cycle++) {
++   const run=t.body(id);if(mode!=="uncapped")expect(committedTokens(t.h.store,"all",null)).toBe(other+run.grant.work.tokens+run.grant.handoff.tokens);
++   expect(t.fake.calls.accept).toHaveLength(0);expect(await t.service.handoffStop(t.h.command("handoff-stop",{}))).not.toHaveProperty("error");
++   await t.until(driver,()=>t.body(id).state==="settled-restartable");
++   expect(t.body(id).unknown).toEqual({work:false,handoff:false});expect(t.body(id).cumulative).toEqual({work:{tokens:0,activeMs:0,attempts:0,sessions:0},handoff:{tokens:0,activeMs:0,attempts:0,sessions:0}});
++   expect(readGroup(t.h.store,"g").reserved).toEqual(mode==="legacy"?active:idle);
++   expect(committedTokens(t.h.store,"all",null)).toBe(other);
++   if(legacyHeld)expect(readGroup(t.h.store,"old").reserved).toEqual(legacyHeld);
++   expect(readControlGroup(t.h.store,"epoch","g").ledger.committedRemaining).toEqual(mode==="legacy"?active:idle);
++   await driver.round();expect(readGroup(t.h.store,"g").reserved).toEqual(mode==="legacy"?active:idle);
++   const resume=t.h.command("resume-from-handoff",{selections:[]});const resumed=await t.service.resumeFromHandoff(resume);expect(resumed).not.toHaveProperty("error");expect(await t.service.resumeFromHandoff(resume)).toEqual(resumed);
++   const next=await deliverScheduledStart(t.dispatch,"g");expect(next.kind).toBe("claimed");if(next.kind!=="claimed")return;id=next.runId;expect(await deliverScheduledStart(t.dispatch,"g")).toEqual(next);
++   expect(readGroup(t.h.store,"g").reserved).toEqual(active);expect(readGroup(t.h.store,"g").used).toEqual({tokens:0,activeMs:0,attempts:0,sessions:0});
++   expect(readControlGroup(t.h.store,"epoch","g").ledger.committedRemaining).toEqual(active);
++   expect(t.h.store.db.prepare("SELECT id FROM runs WHERE active=1 AND group_id='g'").all()).toHaveLength(1);
++  }
++ }finally{await driver.stop();await t.h.dispose();}
++});
++
++
++it("keeps the predecessor and non-token promises when an optional continuation stops before provider start",async()=>{
++ const t=await driverHarness([{taskId:"a",tokenBudget:null}],{tokenPolicy:"optional-v1",killGraceMs:0,behaviour:()=>"stoppable"});const driver=t.driver();try{
++  t.h.store.db.prepare("INSERT INTO spend_caps VALUES ('all','total',1900000,0,'human')").run();
++  const predecessor=await t.claim();await t.until(driver,()=>t.body(predecessor).state==="accepted");await t.service.handoffStop(t.h.command("handoff-stop",{}));await t.until(driver,()=>t.body(predecessor).state==="settled-recoverable");
++  const checkpointId=t.body(predecessor).checkpointId,used=structuredClone(readGroup(t.h.store,"g").used);
++  let active:unknown;
++  for(let cycle=0;cycle<2;cycle++){
++   expect(await t.service.resumeFromHandoff(t.h.command("resume-from-handoff",{selections:[{taskId:"a",predecessorRunId:predecessor,checkpointId}]}))).not.toHaveProperty("error");
++   const claim=await deliverScheduledStart(t.dispatch,"g");expect(claim.kind).toBe("claimed");if(claim.kind!=="claimed")return;
++   const reserved=structuredClone(readGroup(t.h.store,"g").reserved);if(active)expect(reserved).toEqual(active);active=reserved;
++   expect(readControlGroup(t.h.store,"epoch","g").ledger.committedRemaining).toEqual(reserved);
++   await t.service.handoffStop(t.h.command("handoff-stop",{}));await t.until(driver,()=>t.body(claim.runId).state==="settled-restartable");
++   expect(readWork(t.h.store,"g","a")).toMatchObject({status:"held",currentRunId:predecessor,pendingRunId:null,continuation:null});
++   expect(readGroup(t.h.store,"g").reserved).toEqual({...reserved,tokens:reserved.tokens-t.body(claim.runId).grant.work.tokens-t.body(claim.runId).grant.handoff.tokens});
++   expect(readGroup(t.h.store,"g").used).toEqual(used);expect(committedTokens(t.h.store,"all",null)).toBe(0);expect(t.fake.calls.accept).toHaveLength(1);
++  }
++ }finally{await driver.stop();await t.h.dispose();}
++});
+diff --git a/tests/panel/controlShutdown.test.ts b/tests/panel/controlShutdown.test.ts
+index d095747..9337b68 100644
+--- a/tests/panel/controlShutdown.test.ts
++++ b/tests/panel/controlShutdown.test.ts
+@@ -84,6 +84,8 @@ describe("a panel shuts its control plane down once per epoch", () => {
+ });
+ 
+ import { spawn } from "node:child_process";
++import http from "node:http";
++import { DatabaseSync } from "node:sqlite";
+ import { openControlStore } from "../../src/control/store.js";
+ 
+ /**
+@@ -91,48 +93,91 @@ import { openControlStore } from "../../src/control/store.js";
+  * `shutdown()`; this one exercises the handler, which is the part a wrong `process.on` would break
+  * while every one of them stayed green.
+  */
++async function signalPanel() {
++  const root = await realpath(await mkdtemp(join(tmpdir(), "orca-signal-")));
++  roots.push(root);
++  const repo = join(root, "repo"), controlRoot = join(root, "control");
++  await mkdir(repo, { recursive: true });
++  await mkdir(join(root, "corrections"), { recursive: true });
++  // Judge the panel process itself, not tsx's independently timed signal relay.
++  const child = spawn(process.execPath, ["--import", "tsx", "src/cli.ts", "panel", "--by", "tester", "--repo", `proj=${repo}`, "--port", "0"], {
++    cwd: process.cwd(),
++    env: { ...process.env, ORCA_CONTROL_DIR: controlRoot, ORCA_CORRECTIONS_DIR: join(root, "corrections") },
++    stdio: ["ignore", "pipe", "pipe"],
++  });
++  let stderr = "", stdout = "";
++  child.stderr.on("data", (chunk: Buffer) => { stderr += chunk.toString(); });
++  const exited = new Promise<{code:number|null;signal:NodeJS.Signals|null}>(resolve => child.once("exit", (code,signal) => resolve({code,signal})));
++  try {
++    const url = await new Promise<string>((resolve, reject) => {
++      const timer = setTimeout(() => reject(new Error(`no ready line within 30s; stderr: ${stderr}`)), 30_000);
++      child.stdout.on("data", (chunk: Buffer) => {
++        stdout += chunk.toString();const match = /orca-panel ready url=(\S+)/.exec(stdout);
++        if (match) { clearTimeout(timer); resolve(match[1]!); }
++      });
++      child.once("exit", code => { clearTimeout(timer); reject(new Error(`exited ${code} before ready; stderr: ${stderr}`)); });
++    });
++    return {child,exited,url,stateDir:join(controlRoot,controlRepoKey("proj")),stderr:()=>stderr};
++  } catch(error) { child.kill("SIGKILL"); throw error; }
++}
++async function assertOneShutdown(stateDir:string):Promise<void> {
++  const store = await openControlStore({ stateDir, recovery: true });
++  try { expect(store.db.prepare("SELECT id FROM commands WHERE id LIKE 'shutdown-%'").all()).toHaveLength(1); }
++  finally { store.close(); }
++}
++
+ describe("a real SIGTERM to a real panel", () => {
+   it("makes it exit cleanly, having written one shutdown row for its epoch", async () => {
+-    const root = await realpath(await mkdtemp(join(tmpdir(), "orca-signal-")));
+-    roots.push(root);
+-    const repo = join(root, "repo");
+-    const controlRoot = join(root, "control");
+-    await mkdir(repo, { recursive: true });
+-    await mkdir(join(root, "corrections"), { recursive: true });
++    const panel = await signalPanel();
++    try { panel.child.kill("SIGTERM"); expect(await panel.exited).toEqual({code:0,signal:null}); }
++    finally { if (panel.child.exitCode === null) panel.child.kill("SIGKILL"); }
++    await assertOneShutdown(panel.stateDir);
++  }, 60_000);
+ 
+-    const child = spawn("./node_modules/.bin/tsx", ["src/cli.ts", "panel", "--by", "tester", "--repo", `proj=${repo}`, "--port", "0"], {
+-      cwd: process.cwd(),
+-      env: { ...process.env, ORCA_CONTROL_DIR: controlRoot, ORCA_CORRECTIONS_DIR: join(root, "corrections") },
+-      stdio: ["ignore", "pipe", "pipe"],
+-    });
++  it("a second observed signal forces exit 1 during a real HTTP drain without duplicating the shutdown row", async () => {
++    const panel = await signalPanel();
++    const held = http.request(`${panel.url}/api/auth/login`, {method:"POST",headers:{"Content-Type":"application/json","Content-Length":"1024","Expect":"100-continue"}});
++    held.on("error",()=>{}); // Force exit resets this deliberately incomplete, owned request.
++    let contention:DatabaseSync|null=null;
++    let unlock:ReturnType<typeof setTimeout>|null=null;
++    let transactionHeld=false;
++    const releaseContention=()=>{const owner=contention;contention=null;if(owner){try{if(transactionHeld)owner.exec("ROLLBACK");}finally{transactionHeld=false;owner.close();}}};
+     try {
+-      // The child's stderr is carried into the failure message. "exited 1 before ready" names
+-      // nothing, and a criterion whose failure tells the reader nothing costs a debugging round.
+-      let stderr = "";
+-      child.stderr.on("data", (chunk: Buffer) => { stderr += chunk.toString(); });
+-      await new Promise<void>((resolve, reject) => {
+-        const timer = setTimeout(() => reject(new Error(`no ready line within 30s; stderr: ${stderr}`)), 30_000);
+-        child.stdout.on("data", (chunk: Buffer) => {
+-          if (chunk.toString().includes("orca-panel ready")) { clearTimeout(timer); resolve(); }
+-        });
+-        child.once("exit", (code) => { clearTimeout(timer); reject(new Error(`exited ${code} before ready; stderr: ${stderr}`)); });
++      await new Promise<void>((resolve,reject)=>{held.once("continue",resolve);held.once("error",reject);held.flushHeaders();});
++      held.write('{"username":"');
++      // Exercise the observer's real DELETE-journal contention path without changing any stored data.
++      contention=new DatabaseSync(join(panel.stateDir,"control.sqlite"));
++      contention.exec("PRAGMA busy_timeout=1000; BEGIN EXCLUSIVE");
++      transactionHeld=true;
++      unlock=setTimeout(releaseContention,100);
++      panel.child.kill("SIGTERM");
++      // Observe the first durable identity while the real HTTP request keeps server.close pending.
++      const db = new DatabaseSync(join(panel.stateDir,"control.sqlite"),{readOnly:true});
++      try {
++        const deadline=Date.now()+5000;
++        let written=false;
++        while(!written){
++          if(panel.child.exitCode!==null||Date.now()>=deadline)throw new Error(`first shutdown did not drain HTTP; stderr: ${panel.stderr()}`);
++          try {
++            const count=Number(db.prepare("SELECT count(*) AS n FROM commands WHERE id LIKE 'shutdown-%'").get()?.n);
++            expect(count).toBeLessThanOrEqual(1);written=count===1;
++          } catch(error) {
++            // DELETE journaling can briefly exclude a concurrent reader. Busy is pending evidence, not zero rows.
++            const code=(error as {errcode?:number}).errcode;
++            if(code!==5&&code!==6)throw error;
++          }
++          if(!written)await new Promise(resolve=>setTimeout(resolve,10));
++        }
++      } finally { db.close(); }
++      expect(panel.child.exitCode).toBeNull();
++      panel.child.kill("SIGTERM");
++      const forced = await new Promise<Awaited<typeof panel.exited>>((resolve,reject)=>{
++        const timer=setTimeout(()=>reject(new Error("second signal did not force panel exit within 5s")),5000);
++        panel.exited.then(result=>{clearTimeout(timer);resolve(result);});
+       });
+-
+-      const exited = new Promise<number | null>((resolve) => child.once("exit", (code) => resolve(code)));
+-      child.kill("SIGTERM");
+-      // A second signal immediately after, which must not add an identity. The process may already
+-      // be gone by the time it lands; that is fine, the row count is what is being judged.
+-      child.kill("SIGTERM");
+-      expect(await exited).toBe(0);
+-    } finally {
+-      if (child.exitCode === null) child.kill("SIGKILL");
+-    }
+-
+-    // Opened after the child is gone, so this is reading what it left behind rather than racing it.
+-    const store = await openControlStore({ stateDir: join(controlRoot, controlRepoKey("proj")), recovery: true });
+-    try {
+-      const rows = store.db.prepare("SELECT id FROM commands WHERE id LIKE 'shutdown-%'").all();
+-      expect(rows).toHaveLength(1);
+-    } finally { store.close(); }
+-  }, 60_000);
++      expect(forced).toEqual({code:1,signal:null});
++      expect(panel.stderr()).toContain("orca-panel: second signal; exiting without draining. The next start may be recovery blocked.\n");
++    } finally { if(unlock!==null)clearTimeout(unlock);releaseContention();held.destroy();if(panel.child.exitCode===null)panel.child.kill("SIGKILL"); }
++    await assertOneShutdown(panel.stateDir);
++  },60_000);
+ });
+diff --git a/web/src/LoopPlanCard.tsx b/web/src/LoopPlanCard.tsx
+index ef2a5b9..efa98f9 100644
+--- a/web/src/LoopPlanCard.tsx
++++ b/web/src/LoopPlanCard.tsx
+@@ -134,11 +134,15 @@ function skillSetText(plan: LoopPlanViewV1, t: TFunction): string {
+ }
+ 
+ /** Spec §4.2: what the submit does to the group's reserve, and the shortfall that disables it (display only). */
+-export function consequenceOf(view: GroupViewV1, current: BudgetAmount, work: { tokens: number|null; activeMs: number; attempts: number }): { text: string; shortfall: string | null } {
++export function consequenceOf(view: GroupViewV1, current: BudgetAmount, work: { tokens: number|null; activeMs: number; attempts: number }, tokenAccountingMode: WorkItemViewV1["tokenAccountingMode"] = "finite-legacy"): { text: string; shortfall: string | null } {
+   const reserve = view.ledger.explicitUnallocatedReserve;
+   const parts: string[] = [];
+   let shortfall: string | null = null;
+   for (const dimension of ["tokens", "activeMs", "attempts"] as const) {
++    if (dimension === "tokens" && tokenAccountingMode === "optional-v1") {
++      if (work.tokens !== current.tokens) parts.push(i18n.t("loopPlan.tokenCeiling", { tokens: work.tokens === null ? i18n.t("budget.unlimited") : work.tokens }));
++      continue;
++    }
+     if(dimension==="tokens"&&(work.tokens===null||current.tokens===null||reserve.tokens===null)){if(work.tokens!==current.tokens)parts.push(i18n.t("budget.unlimited"));continue;}
+     const delta = work[dimension]! - current[dimension]!;
+     if (delta === 0) continue;
+@@ -182,7 +186,7 @@ function LoopPlanEditor(props: LoopPlanCardProps & { plan: LoopPlanViewV1; curre
+   const set = (patch: Partial<LoopDraft>): void => onDraft(key, JSON.stringify({ ...draft, ...patch }));
+   const checked = payloadOf(draft, plan.skills);
+   const payload = "payload" in checked ? checked.payload : null;
+-  const consequence = payload === null ? null : consequenceOf(view, current, payload.work);
++  const consequence = payload === null ? null : consequenceOf(view, current, payload.work, item.tokenAccountingMode);
+   const blocked = "invalid" in checked ? checked.invalid : consequence!.shortfall;
+   return (
+     <form aria-label={t("loopPlan.changePlanFor", { taskId: item.taskId })} onSubmit={(event) => {
+diff --git a/web/src/controlTypes.ts b/web/src/controlTypes.ts
+index 88bc371..0e7a485 100644
+--- a/web/src/controlTypes.ts
++++ b/web/src/controlTypes.ts
+@@ -190,6 +190,8 @@ export type AllocationViewV1 = {
+   fieldProvenance: AmountProvenanceV1;
+ };
+ export type WorkItemViewV1 = {
++  /** Absent on older servers: preserve finite draft reservation semantics. */
++  tokenAccountingMode?: "finite-legacy" | "optional-v1";
+   taskId: string;
+   status: "draft" | "ready" | "starting" | "start-unknown" | "active" | "held" | "continuing" | "completed" | "blocked";
+   dependencyTaskIds: string[];
+diff --git a/web/src/locales/en.ts b/web/src/locales/en.ts
+index fd700b9..a60c44e 100644
+--- a/web/src/locales/en.ts
++++ b/web/src/locales/en.ts
+@@ -693,6 +693,7 @@ export const en = {
+     badBudget: "Budgets must be positive integers",
+     badFileCap: "Max files changed must be a positive integer",
+     unit: { tokens: "tokens", activeMs: "ms active time", attempts: "attempts" },
++    tokenCeiling: "Task token limit: {{tokens}}",
+     budgetTaken: "Budget {{delta}} {{unit}}, taken from the group reserve; {{left}} left",
+     budgetReturned: "Budget {{delta}} {{unit}}, returned to the group reserve; {{left}} left",
+     partSeparator: "; ",
+diff --git a/web/src/locales/zh.ts b/web/src/locales/zh.ts
+index 19dd7a7..21c5a62 100644
+--- a/web/src/locales/zh.ts
++++ b/web/src/locales/zh.ts
+@@ -589,6 +589,7 @@ export const zh: Translation<typeof en> = {
+     badBudget: "预算要填正整数",
+     badFileCap: "最多改几个文件要填正整数",
+     unit: { tokens: "token", activeMs: "ms 活跃时间", attempts: "次尝试" },
++    tokenCeiling: "任务令牌上限：{{tokens}}",
+     budgetTaken: "预算 {{delta}} {{unit}}，从组余量扣；余量剩 {{left}}",
+     budgetReturned: "预算 {{delta}} {{unit}}，退回组余量；余量剩 {{left}}",
+     partSeparator: "；",
+diff --git a/web/tests/loopPlanEdit.test.tsx b/web/tests/loopPlanEdit.test.tsx
+index 6d99f5c..326388c 100644
+--- a/web/tests/loopPlanEdit.test.tsx
++++ b/web/tests/loopPlanEdit.test.tsx
+@@ -182,3 +182,15 @@ describe("changing a loop task's plan on its card (spec §4.2)", () => {
+       payload: { baseLoopVersion: 0, plan: "bugfix", inputs: PLAN.inputs, work: { tokens: 1, activeMs: 1, attempts: 1 } } })).toBe("/api/control/groups/g/tasks/a/loop");
+   });
+ });
++
++
++it.each(["optional-v1", "finite-legacy", undefined] as const)("uses authoritative accounting for a finite task ceiling edit (%s)", mode => {
++ const onCommand=vi.fn(),shown=view([item({tokenAccountingMode:mode})]);
++ shown.ledger.groupLimit.tokens=1_500_000;shown.ledger.committedRemaining.tokens=1_250_000;shown.ledger.explicitUnallocatedReserve.tokens=250_000;shown.allocations[0]!.amount.tokens=99_000;
++ render(<Stateful view={shown} onCommand={onCommand}/>);fireEvent.click(screen.getByRole("button",{name:"Change plan"}));fireEvent.change(screen.getByRole("textbox",{name:"Token budget"}),{target:{value:"1000000"}});
++ const submit=within(screen.getByRole("form",{name:"Change plan a"})).getAllByRole("button").find(b=>(b as HTMLButtonElement).type==="submit") as HTMLButtonElement;
++ expect(submit.disabled).toBe(mode!=="optional-v1");
++ if(mode==="optional-v1") {expect(screen.queryByRole("alert")).toBeNull();fireEvent.click(submit);expect(onCommand).toHaveBeenCalledWith(expect.objectContaining({verb:"set-task-loop",payload:expect.objectContaining({work:{tokens:1_000_000,activeMs:14_400_000,attempts:3}})}));
++  fireEvent.change(screen.getByRole("textbox",{name:"Active time (ms)"}),{target:{value:"28800001"}});expect(submit.disabled).toBe(true);expect(screen.getByRole("alert").textContent).toContain("activeMs short by 1");
++ }else {expect(screen.getByRole("alert").textContent).toBe("Group reserve too small: tokens short by 651000");fireEvent.click(submit);expect(onCommand).not.toHaveBeenCalled();}
++});

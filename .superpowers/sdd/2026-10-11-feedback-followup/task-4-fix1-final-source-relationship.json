@@ -1,0 +1,9 @@
+{
+  "fromSourceTreeSHA256": "64d74abc8c14c9c2e00a4ebfabd1562d0d4a2f69725580e0ac736ebd5a6724e8",
+  "finalSourceTreeSHA256": "a348d070fb403a31cbbee853540ec660a4235c88d38ca9eacbcbdf96ae5e0cfb",
+  "sourceFiles": 922,
+  "changedFiles": [
+    "tests/panel/controlShutdown.test.ts"
+  ],
+  "reason": "Approved test-only observer handles actual SQLite contention under unchanged5s; product and all other criteria identical."
+}
