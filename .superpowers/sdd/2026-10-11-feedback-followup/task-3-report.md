@@ -39,3 +39,30 @@ Meaningful RED logs cover null execution/parser/feature negotiation, unknown sta
 Earlier failures are retained, not waived. The first sandboxed broad run had 200 failed tests, one setup/build failure, seven consequent skips and 25 unhandled worker/adapter errors, while new RED cases were still being added. [Exact 201 failed-test/setup names and final resolution](/private/tmp/orca-followup-runs/task3-full-initial/classification.json) show every named item subsequently passing on the final OS-enabled tree. Confirmed process-identity/OS refusals are distinguished from assertion failures. The first OS broad run found the existing bounded-renderer zero override plus the two new retry/abort RED cases; those were corrected without relaxing assertions. A later pre-resume-guard full run passed 1,411 tests; final acceptance is the 1,412-test run above. No current failures or skips remain.
 
 Limitations: budget enforcement is still phase-observed/soft; this does not claim a hard token guarantee. Orca claim allocation, settlement, complete-snapshot admission and paired renewal integration remain Task 4 responsibilities. Independent review and final integration are controller-owned.
+
+
+## Fix round 1 — independent review I1/I2, 2026-10-11
+
+Scoped fix commit `5b0adea413b885a1151259d5eb88d21eedcc2ce0` on submitted `91c0a7559b50a35f34a70a33f300e62ee0693dd3`; six files only. The independent review correctly found two omitted producer refusal paths. No existing assertion was relaxed. The saved bundle fixture now carries the newly required usage evidence; worker capture assertions were strengthened and a separate actual overshoot case added.
+
+**I1:** `readAllowanceContinuation` now also requires the saved handoff's workItemId to equal the new claim's workItemId. The foreign-work-item reproduction went from an admitted saved verification phase to `control-allowance-authority-mismatch`.
+
+**I2 / interface correction:** `allowanceContinuation` now additionally requires **`usage:ArtifactRef`**, reachable in the same handoff and validated bundle. `captureKnownWorkUsageLedger` freezes the exact source `control/usage.json` bytes after phase settlement/parking and **before** repository materialization and mechanical handoff recording. `parseKnownWorkUsageLedger` validates schema, source run/generation, contiguous sequence and packet high-water, all work observations known, and final cumulative matching the ledger's finite work totals. The reader requires each current inherited dimension—tokens, activeMs, attempts and sessions—to cover source inherited plus actual local work, rejecting unsafe sums. It also checks the ledger attempt count against saved state. The controller's phase-reuse/usage-observation logic is unchanged; saved plan/execution token fields are not charged again. An actual fake worker records 1,600,000 local tokens under a 1,500,000-token allowance, preserving overshoot.
+
+The controller approved this exact ledger-backed interface refinement within the review fix scope. V3 core shapes and hashes remain covered by the full/native suites. The previous report's allowance descriptor omitted this newly required usage ref; this append supersedes that descriptor for v4 allowance renewal. Root/Task4 must archive the ref already present in the candidate/handoff artifact list.
+
+Final source SHA256 is `0f4a924fd2f9cc08f7761dac5685064b09acfb5b691d7f709a8012441ae415ae`. [Fix evidence manifest](task-3-fix1-evidence.json) contains exact six-file hashes, every command/RC/tree/log hash and clone restoration results.
+
+| Gate | Result | Raw evidence |
+|---|---|---|
+| Review reproductions before fixes | Three intended failures; original nine cases passed | [RED](/private/tmp/orca-followup-runs/task3-fix1-review-red/output.log) |
+| Local lineage/evidence and worker capture RED | Nine intended lineage/evidence failures; two missing capture-ref failures | [lineage RED](/private/tmp/orca-followup-runs/task3-fix1-local-red/output.log), [capture RED](/private/tmp/orca-followup-runs/task3-fix1-capture-red/output.log) |
+| Targeted allowance/controller/v3 boundary | 33 passed | [log](/private/tmp/orca-followup-runs/task3-fix1-targeted/output.log) |
+| Full final suite | 139 files, 1,424 passed; zero failed/skipped | [raw log](/private/tmp/orca-followup-runs/task3-fix1-full/output.log), [per-test JSON](/private/tmp/orca-followup-runs/task3-fix1-full/results.json) |
+| Native control, exact local build/fake table | Build passed; 63 files, 670 passed; zero failed/skipped | [raw log](/private/tmp/orca-followup-runs/task3-fix1-native/output.log) |
+| Typecheck | RC 0 | [log](/private/tmp/orca-followup-runs/task3-fix1-type/output.log) |
+| Scoped deletion mutations | Six killed; tracked/staged restoration **0/0 bytes** after each | [results](/private/tmp/task3-fix1-mutations.json) |
+
+Mutants delete work-item binding, token dimension, active-time dimension, local usage contribution, prior usage contribution, and usage artifact closure membership. They ran only in `/private/tmp/ccloop-task3-fix1-mutants-20261011`, baseline `55f099b23df790b645c8bd5f3a18d6cd4d9ed4d4`; all complete logs were read. The earlier preparatory `task3-fix1-red` run had eleven shape failures because the expanded fixture preceded the usage-field schema. It is retained in the manifest, but is not used as proof of I1/I2: the separate three-case RED above reproduced the actual review omissions. The intermediate work-item run passed I1 while leaving the two expected I2 failures. All final gates passed on the same frozen source. No provider calls, original checkout changes, repin, publication or Orca documentation staging occurred. Ready for scoped independent re-review.
+
+Fix-round wording clarification: no **real** provider calls occurred; runtime gates did invoke the isolated fake-provider fixtures described above.

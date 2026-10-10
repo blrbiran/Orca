@@ -1,0 +1,376 @@
+{
+  "base": "91c0a7559b50a35f34a70a33f300e62ee0693dd3",
+  "commit": "5b0adea413b885a1151259d5eb88d21eedcc2ce0",
+  "scope": [
+    "I1 workItemId",
+    "I2 complete inherited Amount backed by source ledger"
+  ],
+  "fileManifest": {
+    "base": "91c0a7559b50a35f34a70a33f300e62ee0693dd3",
+    "sourceTreeSHA256": "0f4a924fd2f9cc08f7761dac5685064b09acfb5b691d7f709a8012441ae415ae",
+    "files": {
+      "src/control/handoff.ts": "ccbd3f727c9e53c45dc7e16384fa4e115c002fcb260f5c7391e3879432281bfe",
+      "src/control/materialize.ts": "1a8bf7038738ba2bd3e5568e078507cd078b14c3dfea3ee6c41a306c58f21e1a",
+      "src/control/usage.ts": "00bc372d291757c6e74dec66944d8d050bbd8b8baa81d270a8fe0cc9ecf05e7c",
+      "src/control/worker.ts": "0adddacd856b834873f5477c5b41449d94df7af6b573b31008d00d8a3fb773a8",
+      "tests/control/allowanceEvidence.test.ts": "45cbd9168e9ef3d196787f5643f0a074037a629561dabcc850e9fbbaa9b0e669",
+      "tests/control/optionalWorker.test.ts": "16422355be53c1ec52c2cd86a93e561c5fb66ed2c782cd96d684b6b115515e11"
+    },
+    "diffSha256": "376634666b201f13cc2200523b6c673fca23f17e93e350844238df27a3d7f8f3"
+  },
+  "runs": [
+    {
+      "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+      "command": [
+        "npm",
+        "test",
+        "--",
+        "tests/control/optionalWorker.test.ts",
+        "--maxWorkers=1",
+        "--minWorkers=1"
+      ],
+      "rc": 1,
+      "elapsedSeconds": 3.882350206375122,
+      "log": "/private/tmp/orca-followup-runs/task3-fix1-capture-red/output.log",
+      "source": "91c0a7559b50a35f34a70a33f300e62ee0693dd3",
+      "sourceTreeSHA256": "641855e56036d8780cbea108ff6620825ad2fe510e5cb3a80ad32b3790c7ff88",
+      "sourceFiles": 241,
+      "logSha256": "828cab3cff5ef5d6e29365fa367eb03765681c72a22bd781ee424b92a9142db1",
+      "logBytes": 2150
+    },
+    {
+      "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+      "command": [
+        "npm",
+        "test",
+        "--",
+        "--maxWorkers=2",
+        "--minWorkers=1",
+        "--reporter=default",
+        "--reporter=json",
+        "--outputFile.json=/private/tmp/orca-followup-runs/task3-fix1-full/results.json"
+      ],
+      "rc": 0,
+      "elapsedSeconds": 180.41751909255981,
+      "log": "/private/tmp/orca-followup-runs/task3-fix1-full/output.log",
+      "source": "91c0a7559b50a35f34a70a33f300e62ee0693dd3",
+      "sourceTreeSHA256": "0f4a924fd2f9cc08f7761dac5685064b09acfb5b691d7f709a8012441ae415ae",
+      "sourceFiles": 241,
+      "logSha256": "e549cb56d73d1e14f3aa06fecf39e311ee654a7b90ca8bf20b71f7c88152fbd5",
+      "logBytes": 48299
+    },
+    {
+      "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+      "command": [
+        "npm",
+        "test",
+        "--",
+        "tests/control/allowanceEvidence.test.ts",
+        "--maxWorkers=1",
+        "--minWorkers=1"
+      ],
+      "rc": 1,
+      "elapsedSeconds": 10.648149013519287,
+      "log": "/private/tmp/orca-followup-runs/task3-fix1-local-red/output.log",
+      "source": "91c0a7559b50a35f34a70a33f300e62ee0693dd3",
+      "sourceTreeSHA256": "7060877bac24cd48587a36332fdaf4ede1f1c4cd2ad1af4917763c46343afa17",
+      "sourceFiles": 241,
+      "logSha256": "6011865cb0efe3a9c59d00420de7bf8d97868055dc0a6dafc7f373cf3d72c77e",
+      "logBytes": 7643
+    },
+    {
+      "repo": "/private/tmp/ccloop-task3-fix1-mutants-20261011",
+      "command": [
+        "npm",
+        "test",
+        "--",
+        "tests/control/allowanceEvidence.test.ts",
+        "--maxWorkers=1",
+        "--minWorkers=1"
+      ],
+      "rc": 1,
+      "elapsedSeconds": 11.431014776229858,
+      "log": "/private/tmp/orca-followup-runs/task3-fix1-mutant-active-time/output.log",
+      "source": "55f099b23df790b645c8bd5f3a18d6cd4d9ed4d4",
+      "sourceTreeSHA256": "4ec9fa22c49aa105493c677245593100de4aed1a278f191d9354e8ce8747b7ca",
+      "sourceFiles": 241,
+      "logSha256": "f33bcb36e08a7fe2befeea56c80741b0585c803317842fe4cdfd9d9c7a9601be",
+      "logBytes": 4913
+    },
+    {
+      "repo": "/private/tmp/ccloop-task3-fix1-mutants-20261011",
+      "command": [
+        "npm",
+        "test",
+        "--",
+        "tests/control/allowanceEvidence.test.ts",
+        "--maxWorkers=1",
+        "--minWorkers=1"
+      ],
+      "rc": 1,
+      "elapsedSeconds": 10.895620822906494,
+      "log": "/private/tmp/orca-followup-runs/task3-fix1-mutant-local-consumption/output.log",
+      "source": "55f099b23df790b645c8bd5f3a18d6cd4d9ed4d4",
+      "sourceTreeSHA256": "032952e2413e520222e1dee9a6e295a173ea4bdad5a6dc845cf37d72d4676e91",
+      "sourceFiles": 241,
+      "logSha256": "739126ea56fd7ce8f81fc49acd5c403ce4304faa993d322ea2d6536c20d309b6",
+      "logBytes": 5215
+    },
+    {
+      "repo": "/private/tmp/ccloop-task3-fix1-mutants-20261011",
+      "command": [
+        "npm",
+        "test",
+        "--",
+        "tests/control/allowanceEvidence.test.ts",
+        "--maxWorkers=1",
+        "--minWorkers=1"
+      ],
+      "rc": 1,
+      "elapsedSeconds": 10.531063795089722,
+      "log": "/private/tmp/orca-followup-runs/task3-fix1-mutant-prior-consumption/output.log",
+      "source": "55f099b23df790b645c8bd5f3a18d6cd4d9ed4d4",
+      "sourceTreeSHA256": "cc50baba5c23db8c3ff12c5007c2a61b0ca1de8c196649794f5adf94dbb22183",
+      "sourceFiles": 241,
+      "logSha256": "4b57debb6db62fef6cc711e207e9180c9086e4d0f45147324b9de3d07c377d1f",
+      "logBytes": 5146
+    },
+    {
+      "repo": "/private/tmp/ccloop-task3-fix1-mutants-20261011",
+      "command": [
+        "npm",
+        "test",
+        "--",
+        "tests/control/allowanceEvidence.test.ts",
+        "--maxWorkers=1",
+        "--minWorkers=1"
+      ],
+      "rc": 1,
+      "elapsedSeconds": 10.724830865859985,
+      "log": "/private/tmp/orca-followup-runs/task3-fix1-mutant-tokens/output.log",
+      "source": "55f099b23df790b645c8bd5f3a18d6cd4d9ed4d4",
+      "sourceTreeSHA256": "265942ed0e707e7cf39fecf987aedbc84c8e9474cd6e134ec4fe13b9720ba926",
+      "sourceFiles": 241,
+      "logSha256": "9793d408097865e85acb189298a278e6eecb0fbc849bc1d71c165ef4165b1b27",
+      "logBytes": 6190
+    },
+    {
+      "repo": "/private/tmp/ccloop-task3-fix1-mutants-20261011",
+      "command": [
+        "npm",
+        "test",
+        "--",
+        "tests/control/optionalWorker.test.ts",
+        "--maxWorkers=1",
+        "--minWorkers=1"
+      ],
+      "rc": 1,
+      "elapsedSeconds": 4.203620910644531,
+      "log": "/private/tmp/orca-followup-runs/task3-fix1-mutant-usage-closure/output.log",
+      "source": "55f099b23df790b645c8bd5f3a18d6cd4d9ed4d4",
+      "sourceTreeSHA256": "80fb141b4dcfd4fa63f4e2898caec963e01680653064e34006e3ce8c7d909535",
+      "sourceFiles": 241,
+      "logSha256": "847a0ef714f2724368b0ac0d66e88aba65873c340c33bd98057789de13ffc7ef",
+      "logBytes": 4445
+    },
+    {
+      "repo": "/private/tmp/ccloop-task3-fix1-mutants-20261011",
+      "command": [
+        "npm",
+        "test",
+        "--",
+        "tests/control/allowanceEvidence.test.ts",
+        "--maxWorkers=1",
+        "--minWorkers=1"
+      ],
+      "rc": 1,
+      "elapsedSeconds": 10.9026460647583,
+      "log": "/private/tmp/orca-followup-runs/task3-fix1-mutant-work-item/output.log",
+      "source": "55f099b23df790b645c8bd5f3a18d6cd4d9ed4d4",
+      "sourceTreeSHA256": "f6c69a41cc22c08acd02e8fbb0bdaecaa73f87b68894469600a58d524e319c2d",
+      "sourceFiles": 241,
+      "logSha256": "bc38dadecd24652c5cb903df57f7cdfc34125211d85c556ba7db26b35e3f2ccb",
+      "logBytes": 4033
+    },
+    {
+      "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+      "command": [
+        "env",
+        "ORCA_CCLOOP_BIN=/private/tmp/ccloop-feedback-followup-20261011/dist/cli.js",
+        "npm",
+        "run",
+        "verify:control"
+      ],
+      "rc": 0,
+      "elapsedSeconds": 98.39542078971863,
+      "log": "/private/tmp/orca-followup-runs/task3-fix1-native/output.log",
+      "source": "91c0a7559b50a35f34a70a33f300e62ee0693dd3",
+      "sourceTreeSHA256": "0f4a924fd2f9cc08f7761dac5685064b09acfb5b691d7f709a8012441ae415ae",
+      "sourceFiles": 241,
+      "logSha256": "5cc4a0268151bd1514d5363c255068455dfdd933cf6c16a8b967cf0def5180a9",
+      "logBytes": 28735
+    },
+    {
+      "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+      "command": [
+        "npm",
+        "test",
+        "--",
+        "tests/control/allowanceEvidence.test.ts",
+        "--maxWorkers=1",
+        "--minWorkers=1"
+      ],
+      "rc": 1,
+      "elapsedSeconds": 11.492079019546509,
+      "log": "/private/tmp/orca-followup-runs/task3-fix1-red/output.log",
+      "source": "91c0a7559b50a35f34a70a33f300e62ee0693dd3",
+      "sourceTreeSHA256": "ed3f47b643a7772c038391e89d0a42ba7dcfd1b8bfde0fc00739fbe230fa5c93",
+      "sourceFiles": 241,
+      "logSha256": "1a1ac25d0fc42f65aa5ff06aefd695c4ddab6e4fcdbe63196588061b46f82a0d",
+      "logBytes": 10331
+    },
+    {
+      "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+      "command": [
+        "npm",
+        "test",
+        "--",
+        "tests/control/allowanceEvidence.test.ts",
+        "--maxWorkers=1",
+        "--minWorkers=1"
+      ],
+      "rc": 1,
+      "elapsedSeconds": 7.895817995071411,
+      "log": "/private/tmp/orca-followup-runs/task3-fix1-review-red/output.log",
+      "source": "91c0a7559b50a35f34a70a33f300e62ee0693dd3",
+      "sourceTreeSHA256": "4ea780c0b50e3436df660809651a950dfd672d5c1bf1d2c400fbe827b1aeb035",
+      "sourceFiles": 241,
+      "logSha256": "f36014b5ee79498f28094e372472e64501163b9b7073d36570b1ab39fcceb5a4",
+      "logBytes": 4743
+    },
+    {
+      "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+      "command": [
+        "npm",
+        "test",
+        "--",
+        "tests/control/allowanceEvidence.test.ts",
+        "tests/control/optionalWorker.test.ts",
+        "tests/controller/allowanceContinuation.test.ts",
+        "tests/control/protocol4.test.ts",
+        "--maxWorkers=2",
+        "--minWorkers=1"
+      ],
+      "rc": 0,
+      "elapsedSeconds": 10.534038066864014,
+      "log": "/private/tmp/orca-followup-runs/task3-fix1-targeted/output.log",
+      "source": "91c0a7559b50a35f34a70a33f300e62ee0693dd3",
+      "sourceTreeSHA256": "0f4a924fd2f9cc08f7761dac5685064b09acfb5b691d7f709a8012441ae415ae",
+      "sourceFiles": 241,
+      "logSha256": "e9da4f1ca3940dfb4d628722c6e80ff225dc963bdf4f5534ddd9f37cb8eefd21",
+      "logBytes": 3358
+    },
+    {
+      "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+      "command": [
+        "npm",
+        "run",
+        "typecheck"
+      ],
+      "rc": 0,
+      "elapsedSeconds": 3.397416353225708,
+      "log": "/private/tmp/orca-followup-runs/task3-fix1-type/output.log",
+      "source": "91c0a7559b50a35f34a70a33f300e62ee0693dd3",
+      "sourceTreeSHA256": "0f4a924fd2f9cc08f7761dac5685064b09acfb5b691d7f709a8012441ae415ae",
+      "sourceFiles": 241,
+      "logSha256": "443df7778c6055e93ca0f3f4fabce5cbbe7205fa5689a62bd08268806118c185",
+      "logBytes": 59
+    },
+    {
+      "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+      "command": [
+        "npm",
+        "test",
+        "--",
+        "tests/control/allowanceEvidence.test.ts",
+        "--maxWorkers=1",
+        "--minWorkers=1"
+      ],
+      "rc": 1,
+      "elapsedSeconds": 7.192828893661499,
+      "log": "/private/tmp/orca-followup-runs/task3-fix1-workitem-green/output.log",
+      "source": "91c0a7559b50a35f34a70a33f300e62ee0693dd3",
+      "sourceTreeSHA256": "6df9f6c0349e186907cd8cdc9d4c4fb0cb7f2164f6da9c777b235470e61f8204",
+      "sourceFiles": 241,
+      "logSha256": "0426069de9921e6808a55876a90b2d5f215a5d0ab2714d8c17673013a1a0b03b",
+      "logBytes": 3460
+    }
+  ],
+  "mutations": [
+    {
+      "name": "work-item",
+      "file": "src/control/materialize.ts",
+      "rc": 1,
+      "restoreDiffBytes": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "tokens",
+      "file": "src/control/materialize.ts",
+      "rc": 1,
+      "restoreDiffBytes": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "active-time",
+      "file": "src/control/materialize.ts",
+      "rc": 1,
+      "restoreDiffBytes": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "local-consumption",
+      "file": "src/control/materialize.ts",
+      "rc": 1,
+      "restoreDiffBytes": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "prior-consumption",
+      "file": "src/control/materialize.ts",
+      "rc": 1,
+      "restoreDiffBytes": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "usage-closure",
+      "file": "src/control/handoff.ts",
+      "rc": 1,
+      "restoreDiffBytes": [
+        0,
+        0
+      ]
+    }
+  ],
+  "mutationClone": "/private/tmp/ccloop-task3-fix1-mutants-20261011",
+  "mutationBaseline": "55f099b23df790b645c8bd5f3a18d6cd4d9ed4d4",
+  "finalCounts": {
+    "full": 1424,
+    "fullFailures": 0,
+    "fullSkips": 0,
+    "native": 670,
+    "nativeFailures": 0,
+    "nativeSkips": 0
+  },
+  "rawLogsRead": true
+}
