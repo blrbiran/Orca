@@ -166,3 +166,83 @@ Concern/remaining integration boundary: desktop/390px/short-height real HTTP geo
 ## Report packaging note (append-only, same implementer/run)
 
 The report directory is ignored by repository rules. The first exact-path add was refused, so task2-report-commit RC1 committed nothing; its raw log remains. The report is now staged with force for this exact authorized report path only. No ignored node_modules or controller audit path is included.
+
+## Fix round 1 — independent review I1/I2/I3 (append-only)
+
+Owner: `/root/progress_task2`, 2026-10-10. Fix base `60b3500a9187c7373a913cd512449344474d147a`; source/test commit `472a0f483d9d369fb5f695f6184668fcdcd05d44` (`fix(web): bind overview decision reads to current navigation`). CWD: `/Users/biran/.codex/worktrees/progress-results-20261010/Orca`. This named append supersedes the original report's claim that no functional failure remained: independent review reproduced three acceptance-blocking decision-navigation defects that the original tests did not cover. Original report/history remain byte-for-byte unchanged.
+
+### Findings and final behavior
+
+I1 was a real cached-repeat bug: setting the identical retained todo row did not trigger the ordinary selection effect. Overview now creates an explicit read record and makes one fresh exact composite-owner GET on every click, including during a pending todo refresh. The ordinary selected-row reader is suppressed while that explicit record owns the actual selection/context. Ordinary Decisions navigation clears explicit ownership and retains its existing read, draft, command/refusal and request-result ownership behavior. Context/selection changes cancel the explicit intent instead of converting it into an automatic read of the old owner.
+
+I2 was a real focus race: a new navigation could consume focus on A's shared wrapper while B was loading. Accepted decision state now carries composite owner, navigation request and actual auth/scope/epoch source identity. Rendering binds the body to that accepted owner/request/context. Focus is published only after the current owner GET succeeds; the focus consumer checks the accepted request/composite owner and active Decisions pane before marking the request focused. A → Overview → delayed B now focuses B after its own body arrives. Same-owner repeat revalidates instead of using cached detail.
+
+I3 was a real error-routing bug: removed decision GETs used ordinary setError and replaced the shell, and a late refusal could arrive after newer section navigation. Both success and refusal callbacks now reject obsolete navigation/context. A current Overview-owned read failure follows local unavailable plus registry/Overview/todo reread; it clears that failed selection while retaining shell/navigation. A late 404 cannot clear newer accepted B or replace Metrics/Overview. No repeated GET or POST workaround was introduced.
+
+Controller approved the explicit unknown-owner option: in a concrete project an unmapped/different decision project or group repository stays honestly unavailable, keeps the current project and rereads registry/sources; it never guesses or borrows the previous context. All may inspect the exact live group owner and keeps All. Actual group and decision unknown-owner cases now demonstrate those policies, including GET counts, current project/section and zero POST.
+
+Only App and two regression files changed in this fix. No backend/schema/settings/detail hierarchy/default pin/runtime/service/production-data change. No paid provider or subagents. Existing command payloads, integer budgets, frozen selections, role guards, source timers, drafts and decision request results remain intact. Controller audit/node_modules were not staged.
+
+### Reviewer criteria, RED and GREEN
+
+Reviewer-owned criteria were transferred into `web/tests/overviewDecisionNavigation.test.tsx` with only local imports/environment adapted; their assertions were not weakened:
+
+- “reopened decision always does a live owner GET while overview todo refresh is pending” — expected two owner GETs, observed one before the fix.
+- “switching overview decision retains requested focus after the new detail arrives” — B rendered, but active decision focus was null before the fix.
+- “removed decision owner leaves overview available with navigation failure” — before the fix the shell was replaced by decision-not-found ErrorPage.
+
+`task2-fix1-red` RC1 observed those three exact business failures, plus a late refused read replacing the shell after newer section navigation and concrete unknown group context wrongly opening instead of staying unavailable. Five intended failures / eighteen passing. Complete DTO fixtures collected normally; no transform/ReferenceError/schema setup failure. The late-refusal-after-newer-accepted-owner and All unknown-owner controls already passed and were retained as regressions, not falsely claimed as new RED.
+
+Further covering criteria exercise a successful response after newer navigation, pending owner response across auth/scope/epoch changes, ordinary Decisions return after accepted Overview selection, unknown concrete decision project with registry reread, and All exact owner GET/focus. Existing overview/freshness/model, appSelection, projectFiltering, projectScopeDecisionRequests and decisionsI18n assertions all remain unchanged and green.
+
+Focused stable GREEN: eight files / 107 tests, RC0. Frozen full Web: **96 files / 802 tests passed**, native tsc plus Vitest, RC0, no skipped tests or unexpected test warnings. Root and Web builds RC0; retained Vite chunk warning (610.14 kB measured in this fix). One full Web run was performed after the fix froze. No broad gate was repeated after success.
+
+### Exact native commands and raw evidence
+
+All main commands have CWD `/Users/biran/.codex/worktrees/progress-results-20261010/Orca` and run through the existing controller-owned run.py under its fake owned environment. Native argv was saved before execution, full stdout/stderr remains in .log, RC in .rc. Clone .command.json/.cwd also captures exact clone CWD and automatically observed full HEAD before each run. Environment contents were not printed or changed.
+
+| Run | RC | Exact native argv | Full raw output |
+|---|---:|---|---|
+| task2-fix1-extra-mutations | 0 | `["python3", "/private/tmp/orca-progress-results-20261010/task2-fix1-extra-mutations.py"]` | [raw](/private/tmp/orca-progress-results-20261010/task2-fix1-extra-mutations.log) |
+| task2-fix1-extra-restored-green | 0 | `["npm", "exec", "--workspace", "web", "--", "vitest", "run", "tests/overviewDecisionNavigation.test.tsx", "tests/overviewApp.test.tsx", "tests/overviewFreshness.test.tsx", "tests/overviewModel.test.ts", "tests/appSelection.test.tsx", "tests/projectFiltering.test.tsx", "tests/projectScopeDecisionRequests.test.tsx", "tests/decisionsI18n.test.tsx", "--maxWorkers=2", "--no-cache"]` | [raw](/private/tmp/orca-progress-results-20261010/task2-fix1-extra-restored-green.log) |
+| task2-fix1-focused-final | 0 | `["npm", "exec", "--workspace", "web", "--", "vitest", "run", "tests/overviewDecisionNavigation.test.tsx", "tests/overviewApp.test.tsx", "tests/overviewFreshness.test.tsx", "tests/overviewModel.test.ts", "tests/appSelection.test.tsx", "tests/projectFiltering.test.tsx", "tests/projectScopeDecisionRequests.test.tsx", "tests/decisionsI18n.test.tsx", "--maxWorkers=2", "--no-cache"]` | [raw](/private/tmp/orca-progress-results-20261010/task2-fix1-focused-final.log) |
+| task2-fix1-green | 0 | `["npm", "exec", "--workspace", "web", "--", "vitest", "run", "tests/overviewDecisionNavigation.test.tsx", "tests/overviewApp.test.tsx", "tests/overviewFreshness.test.tsx", "tests/overviewModel.test.ts", "tests/appSelection.test.tsx", "tests/projectFiltering.test.tsx", "tests/projectScopeDecisionRequests.test.tsx", "tests/decisionsI18n.test.tsx", "--maxWorkers=2", "--no-cache"]` | [raw](/private/tmp/orca-progress-results-20261010/task2-fix1-green.log) |
+| task2-fix1-mutations | 0 | `["python3", "/private/tmp/orca-progress-results-20261010/task2-fix1-mutations.py"]` | [raw](/private/tmp/orca-progress-results-20261010/task2-fix1-mutations.log) |
+| task2-fix1-red | 1 | `["npm", "exec", "--workspace", "web", "--", "vitest", "run", "tests/overviewDecisionNavigation.test.tsx", "tests/overviewApp.test.tsx", "--maxWorkers=2", "--no-cache"]` | [raw](/private/tmp/orca-progress-results-20261010/task2-fix1-red.log) |
+| task2-fix1-restored-green | 0 | `["npm", "exec", "--workspace", "web", "--", "vitest", "run", "tests/overviewDecisionNavigation.test.tsx", "tests/overviewApp.test.tsx", "tests/overviewFreshness.test.tsx", "tests/overviewModel.test.ts", "tests/appSelection.test.tsx", "tests/projectFiltering.test.tsx", "tests/projectScopeDecisionRequests.test.tsx", "tests/decisionsI18n.test.tsx", "--maxWorkers=2", "--no-cache"]` | [raw](/private/tmp/orca-progress-results-20261010/task2-fix1-restored-green.log) |
+| task2-fix1-root-build | 0 | `["npm", "run", "build"]` | [raw](/private/tmp/orca-progress-results-20261010/task2-fix1-root-build.log) |
+| task2-fix1-source-commit | 0 | `["git", "commit", "-m", "fix(web): bind overview decision reads to current navigation"]` | [raw](/private/tmp/orca-progress-results-20261010/task2-fix1-source-commit.log) |
+| task2-fix1-stable | 0 | `["npm", "exec", "--workspace", "web", "--", "vitest", "run", "tests/overviewDecisionNavigation.test.tsx", "tests/overviewApp.test.tsx", "tests/overviewFreshness.test.tsx", "tests/overviewModel.test.ts", "tests/appSelection.test.tsx", "tests/projectFiltering.test.tsx", "tests/projectScopeDecisionRequests.test.tsx", "tests/decisionsI18n.test.tsx", "--maxWorkers=2", "--no-cache"]` | [raw](/private/tmp/orca-progress-results-20261010/task2-fix1-stable.log) |
+| task2-fix1-type-final | 0 | `["npm", "exec", "--workspace", "web", "--", "tsc", "--noEmit", "-p", "tsconfig.json"]` | [raw](/private/tmp/orca-progress-results-20261010/task2-fix1-type-final.log) |
+| task2-fix1-type | 0 | `["npm", "exec", "--workspace", "web", "--", "tsc", "--noEmit", "-p", "tsconfig.json"]` | [raw](/private/tmp/orca-progress-results-20261010/task2-fix1-type.log) |
+| task2-fix1-web-build | 0 | `["npm", "run", "--workspace", "web", "build"]` | [raw](/private/tmp/orca-progress-results-20261010/task2-fix1-web-build.log) |
+| task2-fix1-web-full | 0 | `["npm", "run", "--workspace", "web", "check", "--", "--maxWorkers=2", "--no-cache"]` | [raw](/private/tmp/orca-progress-results-20261010/task2-fix1-web-full.log) |
+
+### Clone proofs and restoration
+
+All mutations were independent --local --no-hardlinks committed clones. Current full SHA was read automatically and asserted before mutation and after exact restoration. No feature-tree fault was applied. Each effective fault below is RC1 at the intended business assertion; all restored working/cached diff bytes are 0. No transform/ReferenceError/TypeError setup failures occurred in these fix proof runs. No failed setup log was discarded or counted as business evidence.
+
+| Fault | Intended assertion | Observed full SHA | RC / working / cached | Raw output |
+|---|---|---|---|---|
+| fix1-cached-repeat | reopened decision always does a live owner GET | `472a0f483d9d369fb5f695f6184668fcdcd05d44` | 1 / 0 / 0 | [raw](/private/tmp/orca-progress-results-20261010/task2-fix1-mutant-fix1-cached-repeat.log) |
+| fix1-success-arrival | older successful Overview decision read cannot reopen | `472a0f483d9d369fb5f695f6184668fcdcd05d44` | 1 / 0 / 0 | [raw](/private/tmp/orca-progress-results-20261010/task2-fix1-mutant-fix1-success-arrival.log) |
+| fix1-refusal-arrival | late refused Overview decision read cannot replace a newer accepted decision owner | `472a0f483d9d369fb5f695f6184668fcdcd05d44` | 1 / 0 / 0 | [raw](/private/tmp/orca-progress-results-20261010/task2-fix1-mutant-fix1-refusal-arrival.log) |
+| fix1-local-unavailable | removed decision owner leaves overview available | `472a0f483d9d369fb5f695f6184668fcdcd05d44` | 1 / 0 / 0 | [raw](/private/tmp/orca-progress-results-20261010/task2-fix1-mutant-fix1-local-unavailable.log) |
+| fix1-focus-request | switching overview decision retains requested focus | `472a0f483d9d369fb5f695f6184668fcdcd05d44` | 1 / 0 / 0 | [raw](/private/tmp/orca-progress-results-20261010/task2-fix1-mutant-fix1-focus-request.log) |
+| fix1-reader-context | Overview decision owner response is ignored after auth changes | `472a0f483d9d369fb5f695f6184668fcdcd05d44` | 1 / 0 / 0 | [raw](/private/tmp/orca-progress-results-20261010/task2-fix1-mutant-fix1-reader-context.log) |
+| fix1-composite-acceptance | same-name decision queue entries open their exact composite owner | `472a0f483d9d369fb5f695f6184668fcdcd05d44` | 1 / 0 / 0 | [raw](/private/tmp/orca-progress-results-20261010/task2-fix1-mutant-fix1-composite-acceptance.log) |
+| fix1-ordinary-return | ordinary Decisions selection remains independently readable | `472a0f483d9d369fb5f695f6184668fcdcd05d44` | 1 / 0 / 0 | [raw](/private/tmp/orca-progress-results-20261010/task2-fix1-mutant-fix1-ordinary-return.log) |
+| fix1-registry-reread | unknown decision project in concrete scope rereads registry | `472a0f483d9d369fb5f695f6184668fcdcd05d44` | 1 / 0 / 0 | [raw](/private/tmp/orca-progress-results-20261010/task2-fix1-mutant-fix1-registry-reread.log) |
+| fix1-concrete-group | concrete project keeps an unknown registry owner visibly unavailable | `472a0f483d9d369fb5f695f6184668fcdcd05d44` | 1 / 0 / 0 | [raw](/private/tmp/orca-progress-results-20261010/task2-fix1-mutant-fix1-concrete-group.log) |
+| fix1-concrete-decision | unknown decision project in concrete scope rereads registry | `472a0f483d9d369fb5f695f6184668fcdcd05d44` | 1 / 0 / 0 | [raw](/private/tmp/orca-progress-results-20261010/task2-fix1-mutant-fix1-concrete-decision.log) |
+| fix1-duplicate-reader | reopened decision always does a live owner GET | `472a0f483d9d369fb5f695f6184668fcdcd05d44` | 1 / 0 / 0 | [raw](/private/tmp/orca-progress-results-20261010/task2-fix1-mutant-fix1-duplicate-reader.log) |
+
+Both restored clone checks re-ran the eight covering files and passed 107/107, RC0. Final source agreement asserts the three changed source/test files match committed `472a0f483d9d369fb5f695f6184668fcdcd05d44` and owned working/cached diffs are zero. Clones retained; no branch/worktree deletion, main merge or push. Native commit output's automatic identity notice was retained; global Git config was not changed.
+
+### Full output audit, source binding and self-review
+
+Complete fix native logs were read in full by the audit program, preserving byte length/SHA256, all failure headers, all native summaries, setup-error classifications and warnings in `/private/tmp/orca-progress-results-20261010/task2-fix1-full-output-audit.json`. Raw logs remain separate and unfiltered. Proof metadata is `/private/tmp/orca-progress-results-20261010/task2-fix1-effective-mutations.json`; final disk/commit byte agreement is `/private/tmp/orca-progress-results-20261010/task2-fix1-source-agreement.json`. These indexes do not substitute for native raw evidence. No private env dump.
+
+Self-review confirmed one fresh GET per Overview click, no duplicate ordinary-reader GET, accepted composite ownership before display/focus, current-navigation success and refusal guards, context cancellation, local recovery without losing shell, exact All owner inspection, concrete unknown-owner unavailable/reread and unchanged ordinary correction/draft/request ownership. No new test expectation waiver or existing assertion weakening. The code remains App-owned and the pure Overview interface is unchanged.
+
+Concerns/boundary: real desktop/390px/short-height geometry and final broad integration remain controller gates, as the reviewer marked cannot-verify. No jsdom visual acceptance claim. The native Web build still warns about bundle size. No known I1/I2/I3 functional failure remains after this fix; the scoped independent re-review is the controller's next step.
