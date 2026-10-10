@@ -3,12 +3,13 @@ import { useTranslation } from "react-i18next";
 import type { GroupViewV1 } from "./controlTypes.js";
 import { enumText } from "./i18n.js";
 import { fetchGroupResults } from "./resultApi.js";
-import { freshSavedRun, SavedRunResult } from "./TaskResults.js";
+import { useSavedRunAuthority, SavedRunResult } from "./TaskResults.js";
 import { useResultsRead } from "./useResultsRead.js";
 export function GroupResults(props:{view:GroupViewV1;active:boolean;scope:string}):JSX.Element {
  const {t}=useTranslation();const {view}=props;
  const identity=JSON.stringify([props.scope,view.epoch,view.changeSeq,view.summary.groupId]);
- const state=useResultsRead(props.active,identity,signal=>fetchGroupResults(view.summary.groupId,signal),(answer,prior)=>answer?.schema==="orca-group-results-v1" && answer.epoch===view.epoch && answer.groupId===view.summary.groupId && answer.changeSeq>=view.changeSeq && answer.tasks.every(task=>task.runs.every(run=>run.groupId===answer.groupId && run.taskId===task.taskId && run.epoch===answer.epoch && run.changeSeq>=view.changeSeq && run.changeSeq>=answer.changeSeq && run.run.runId===run.runId && run.run.taskId===run.taskId && run.run.generation===run.generation && (view.runs.find(core=>core.runId===run.runId)?.generation ?? run.generation)===run.generation && freshSavedRun(run,prior?.tasks.find(old=>old.taskId===task.taskId)?.runs.find(old=>old.runId===run.runId)))));
+ const authority=useSavedRunAuthority(JSON.stringify([props.scope,view.epoch,view.summary.groupId]));
+ const state=useResultsRead(props.active,identity,signal=>fetchGroupResults(view.summary.groupId,signal),(answer,prior)=>{ const accepted=answer?.schema==="orca-group-results-v1" && answer.epoch===view.epoch && answer.groupId===view.summary.groupId && answer.changeSeq>=view.changeSeq && answer.tasks.every(task=>task.runs.every(run=>run.groupId===answer.groupId && run.taskId===task.taskId && run.epoch===answer.epoch && run.changeSeq>=view.changeSeq && run.changeSeq>=answer.changeSeq && run.run.runId===run.runId && run.run.taskId===run.taskId && run.run.generation===run.generation && (view.runs.find(core=>core.runId===run.runId)?.generation ?? run.generation)===run.generation && authority.admit(run,prior?.tasks.find(old=>old.taskId===task.taskId)?.runs.find(old=>old.runId===run.runId)))); if (accepted) authority.remember(answer.tasks.flatMap(task=>task.runs)); return accepted; });
  const value=state.value;
  return <section aria-label={t("results.groupRegion")} className="group-results">
   {value===null && <p role="status">{t(view.summary.state==="done"?"detail.resultsMissing":"detail.resultsNotProduced")}</p>}
