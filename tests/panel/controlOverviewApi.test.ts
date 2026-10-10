@@ -144,4 +144,35 @@ describe("authenticated overview read", () => {
     expect(body.steps.some(s => s.kind === 'start-review' && s.groupId === activeReadyId)).toBe(false);
   });
 
+  it("keeps an active blocked auxiliary run visible with its own reason and run identity", async () => {
+    const {panel} = await panelFixture(); await panel.drainWakes();
+    const row = panel.store.db.prepare("SELECT id,body FROM runs WHERE group_id=? AND active=1").get(GROUP)!;
+    const run = JSON.parse(String(row.body));
+    expect(run.phase).toBe("estimate");
+    panel.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify({...run,state:"blocked",failureCode:"estimator-interrupted"}),row.id);
+    const body = await overview(panel);
+    expect(body.steps.find(s=>s.runId===row.id)).toMatchObject({kind:"recovery-review",groupId:GROUP,taskId:null,reason:"estimator-interrupted",destination:{kind:"group",groupId:GROUP,region:"problem",runId:row.id,taskId:null}});
+  });
+  it("deduplicates a run blocker and the same unknown-usage fact without losing the stronger owner explanation", async () => {
+    const {panel} = await panelFixture(); await confirm(panel);
+    await command(panel,`/api/control/groups/${GROUP}/start`,{commandId:"start",expectedRevision:await revision(panel),payload:{}}); await panel.drainWakes();
+    const row = panel.store.db.prepare("SELECT id,body FROM runs WHERE group_id=? AND work_item_id='a' AND active=1").get(GROUP)!;
+    const run = JSON.parse(String(row.body));
+    panel.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify({...run,state:"unknown",unknown:{work:true,handoff:false}}),row.id);
+    panel.store.db.prepare("INSERT INTO recovery_blockers(id,group_id,run_id,scope,code,body) VALUES ('usage-blocker',?,?,'run','usage-unknown',?)").run(GROUP,row.id,'{"evidenceIds":[]}');
+    const body = await overview(panel);
+    const matching = body.steps.filter(s=>s.kind==="recovery-review" && s.groupId===GROUP && s.runId===row.id && s.reason==="usage-unknown");
+    expect(matching).toHaveLength(1);
+    expect(matching[0]).toMatchObject({taskId:"a",ownerRequired:true});
+  });
+  it("does not overwrite owner-required usage recovery with a weaker blocked-run observation", async () => {
+    const {panel} = await panelFixture(); await panel.drainWakes();
+    const row = panel.store.db.prepare("SELECT id,body FROM runs WHERE group_id=? AND active=1").get(GROUP)!;
+    const run = JSON.parse(String(row.body));
+    panel.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify({...run,state:"blocked",failureCode:"usage-unknown",unknown:{work:true,handoff:false}}),row.id);
+    const matching = (await overview(panel)).steps.filter(s=>s.kind==="recovery-review" && s.runId===row.id && s.reason==="usage-unknown");
+    expect(matching).toHaveLength(1);
+    expect(matching[0]).toMatchObject({ownerRequired:true});
+  });
+
 });

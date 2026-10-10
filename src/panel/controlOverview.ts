@@ -23,7 +23,7 @@ export function readControlOverview(store: ControlStore, epoch: string): Overvie
   function add(kind: OverviewStepV1["kind"], groupId: string | null, repoId: string | null, reason: string,
     destination: OverviewDestinationV1, identity: string, taskId: string | null = null, runId: string | null = null, ownerRequired = false) {
     const key = JSON.stringify([kind, groupId, identity]);
-    steps.set(key, { key, kind, groupId, repoId, taskId, runId, reason, ownerRequired, destination });
+    steps.set(key, { key, kind, groupId, repoId, taskId, runId, reason, ownerRequired: ownerRequired || (steps.get(key)?.ownerRequired ?? false), destination });
   }
   function groupSteps(source: Source) {
     const { summary, body, proposal, workItems, runs, blockers } = source;
@@ -34,6 +34,7 @@ export function readControlOverview(store: ControlStore, epoch: string): Overvie
       ({ kind: "group", groupId, region, taskId, runId });
     const requirementDestination = (region: Extract<OverviewDestinationV1, {kind:"requirement"}>["region"]): OverviewDestinationV1 => ({kind:"requirement", groupId, region});
     const requirement = summary.requirement;
+    const attendedRuns = new Set<string>();
     if (requirement !== undefined) {
       if (body.status === "clarifying" && requirement.roundState === "awaiting-answers") {
         add("requirement-answer", groupId, repoId, "awaiting-answers", requirementDestination("answers"), `round:${requirement.roundNo}`);
@@ -49,7 +50,10 @@ export function readControlOverview(store: ControlStore, epoch: string): Overvie
       if (requirement.usageUnknown && body.status === "clarifying") reasons.add("requirement-usage-unknown");
       if (requirement.exportState === "conflict") reasons.add("requirement-export-conflict");
       for (const reason of reasons) add("requirement-attention", groupId, repoId, reason, requirementDestination("problem"), `${requirement.draftNo ?? requirement.roundNo}:${reason}`, null, null, reason === "requirement-budget-exhausted");
-      if (requirement.blockedRun !== null) add("requirement-attention", groupId, repoId, requirement.blockedRun.reason ?? "requirement-run-blocked", requirementDestination("problem"), `run:${requirement.blockedRun.runId}`, null, requirement.blockedRun.runId);
+      if (requirement.blockedRun !== null) {
+        attendedRuns.add(requirement.blockedRun.runId);
+        add("requirement-attention", groupId, repoId, requirement.blockedRun.reason ?? "requirement-run-blocked", requirementDestination("problem"), `run:${requirement.blockedRun.runId}`, null, requirement.blockedRun.runId);
+      }
     }
     for (const blocker of blockers) {
       add("recovery-review", groupId, repoId, blocker.code,
@@ -57,12 +61,13 @@ export function readControlOverview(store: ControlStore, epoch: string): Overvie
         JSON.stringify([blocker.scope, groupId, blocker.runId, blocker.code]), null, blocker.runId);
     }
     if (summary.stopState !== null) add("stop-review", groupId, repoId, summary.stopState, groupDestination("problem"), `stop:${summary.stopMode}`);
-    if (body.ledger.usageUnknown && body.status !== "clarifying") add("recovery-review", groupId, repoId, "usage-unknown", groupDestination("problem"), "usage-unknown", null, null, true);
+    if (body.ledger.usageUnknown && body.status !== "clarifying") add("recovery-review", groupId, repoId, "usage-unknown", groupDestination("problem"), JSON.stringify(["group", groupId, null, "usage-unknown"]), null, null, true);
     const capBlock = readSpendCapBlock(store, groupId);
     if (capBlock !== null) add(body.status === "clarifying" ? "requirement-attention" : "task-attention", groupId, repoId, "spend-cap-blocked", body.status === "clarifying" ? requirementDestination("problem") : groupDestination("problem"), "spend-cap-blocked", null, null, true);
     for (const work of workItems) {
       const run = work.currentRunId == null ? undefined : runById.get(work.currentRunId);
       if (work.status === "blocked" || work.status === "held" || run?.state === "blocked") {
+        if (run !== undefined) attendedRuns.add(run.runId);
         const reason = run?.drive?.blockedReason ?? run?.failureCode ?? `task-${work.status === "held" ? "held" : "blocked"}`;
         add("task-attention", groupId, repoId, reason, groupDestination("problem", work.taskId, run?.runId ?? null), `task:${work.taskId}:${run?.runId ?? ""}`, work.taskId, run?.runId ?? null);
       }
@@ -72,7 +77,11 @@ export function readControlOverview(store: ControlStore, epoch: string): Overvie
       if (!run.active) continue;
       if (UNKNOWN_RUN.has(run.state) || run.unknown.work || run.unknown.handoff) {
         const reason = run.unknown.work || run.unknown.handoff ? "usage-unknown" : run.failureCode ?? run.state;
-        add("recovery-review", groupId, repoId, reason, groupDestination("problem", run.taskId, run.runId), `run:${run.runId}:${reason}`, run.taskId, run.runId, run.unknown.work || run.unknown.handoff);
+        add("recovery-review", groupId, repoId, reason, groupDestination("problem", run.taskId, run.runId), JSON.stringify(["run", groupId, run.runId, reason]), run.taskId, run.runId, run.unknown.work || run.unknown.handoff);
+      }
+      if (run.state === "blocked" && !attendedRuns.has(run.runId)) {
+        const reason = run.drive?.blockedReason ?? run.failureCode ?? "run-blocked";
+        add("recovery-review", groupId, repoId, reason, groupDestination("problem", run.taskId, run.runId), JSON.stringify(["run", groupId, run.runId, reason]), run.taskId, run.runId);
       }
     }
     const integration = readGroupIntegration(body);
@@ -115,7 +124,7 @@ export function readControlOverview(store: ControlStore, epoch: string): Overvie
   for (const row of store.db.prepare("SELECT id,code,run_id FROM recovery_blockers WHERE scope='global' AND group_id IS NULL ORDER BY id").all()) {
     add("recovery-review", null, null, String(row.code), {kind:"recovery"}, JSON.stringify(["global", null, row.run_id, row.code]), null, row.run_id === null ? null : String(row.run_id));
   }
-  if (store.dispatchBlocked) add("recovery-review", null, null, "dispatch-blocked", {kind:"recovery"}, "dispatch-blocked");
+  if (store.dispatchBlocked) add("recovery-review", null, null, "dispatch-blocked", {kind:"recovery"}, JSON.stringify(["global", null, null, "dispatch-blocked"]));
   return overviewSchema.parse({ schema:"orca-control-overview-v1", epoch, changeSeq, groups,
     steps:[...steps.values()].sort((a,b) => PRIORITY[a.kind] - PRIORITY[b.kind] || compareText(a.key,b.key)), issues });
 }
