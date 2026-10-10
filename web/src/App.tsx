@@ -190,7 +190,13 @@ export function App(): JSX.Element {
   const [home, setHome] = useState<HomeState | null>(null);
   const [error, setError] = useState<PanelRefusal | null>(null);
   const [selected, setSelected] = useState<DecisionListRow | null>(null);
-  const [decision, setDecision] = useState<Decision | null>(null);
+  /** A body belongs to the read that accepted it, never merely to a reused detail wrapper. */
+  const [acceptedDecision, setAcceptedDecision] = useState<{
+    owner: Pick<DecisionListRow, "projectKey" | "id">; body: Decision; identity: string; request: number | null;
+  } | null>(null);
+  const [overviewDecisionRead, setOverviewDecisionRead] = useState<{
+    owner: DecisionListRow; identity: string; request: number;
+  } | null>(null);
   /**
    * Project filtering spec §11 R3: every Agree / Correct sent, by request, independent of the open detail. Its answer
    * updates only its own record; the detail shows only its owner's active request, the global notice every other one.
@@ -704,6 +710,13 @@ export function App(): JSX.Element {
   }, [sourceIdentity, section === "overview"]);
   useEffect(() => () => { todoSeq.current++; overviewSeq.current++; recoverySeq.current++; navigationSeq.current++; }, []);
 
+  const decision = acceptedDecision !== null && selected !== null
+    && acceptedDecision.identity === sourceIdentity && acceptArrival(selected, acceptedDecision.owner)
+    && (overviewDecisionRead === null || acceptedDecision.request === overviewDecisionRead.request)
+    ? acceptedDecision.body : null;
+  const openDecisionRow = (row: DecisionListRow): void => {
+    navigationSeq.current++; setOverviewFocus(null); setOverviewDecisionRead(null); setSelected(row);
+  };
   const overviewModel = deriveOverview({ projection: overview, todo, recovery: overviewRecovery, uncertain: control.uncertainCommandIds,
     scope, projectKey: project, projects, roles: account?.user.roles ?? [] });
   const overviewModelNow = useRef(overviewModel); overviewModelNow.current = overviewModel;
@@ -712,7 +725,7 @@ export function App(): JSX.Element {
     const request = ++navigationSeq.current, identity = sourceIdentityNow.current;
     setOverviewNavigationFailure(null);
     const current = (): boolean => navigationSeq.current === request && identity === sourceIdentityNow.current;
-    const unavailable = (): void => { if (current()) { setOverviewNavigationFailure(t("overview.navigationUnavailable")); void readOverview(); void readTodo(); } };
+    const unavailable = (): void => { if (current()) { setOverviewNavigationFailure(t("overview.navigationUnavailable")); void readProjects(); void readOverview(); void readTodo(); } };
     const finish = (section: Section): void => {
       setSection(section); window.location.hash = section;
       setOverviewFocus({ target, request });
@@ -721,11 +734,28 @@ export function App(): JSX.Element {
     if (target.kind === "decision") {
       if (todo.status !== "available") { unavailable(); return; }
       const row = todo.data?.find((row) => row.projectKey === target.projectKey && row.id === target.id);
-      if (row === undefined) { unavailable(); return; }
-      setStatus("unreviewed"); setFilter(NO_FILTER); setSelected(row); finish("decisions"); return;
+      if (row === undefined || (scope.kind === "project" && target.projectKey !== project)) { unavailable(); return; }
+      // Every click owns a fresh read, including the same retained todo row during a pending refresh.
+      setOverviewDecisionRead({ owner: row, identity, request }); setSelected(row);
+      wanted.current = row; setAcceptedDecision(null);
+      void fetchDecision(target.projectKey, target.id).then(
+        (body) => {
+          if (!current()) return;
+          setStatus("unreviewed"); setFilter(NO_FILTER); setSelected(row);
+          setAcceptedDecision({ owner: row, body: body.decision as Decision, identity, request });
+          finish("decisions");
+        },
+        () => {
+          if (!current()) return;
+          setSelected(null); setOverviewDecisionRead(null);
+          unavailable();
+        },
+      );
+      return;
     }
     const owner = overview.data?.groups.find((g) => g.groupId === target.groupId && g.archived !== true);
-    if (overview.status !== "available" || owner === undefined) { unavailable(); return; }
+    if (overview.status !== "available" || owner === undefined
+      || (scope.kind === "project" && owner.repoId !== scope.repoId)) { unavailable(); return; }
     void (async () => {
       try {
         if (target.kind === "requirement") {
@@ -750,10 +780,14 @@ export function App(): JSX.Element {
   };
   useEffect(() => {
     if (overviewFocus === null || focusedRequest.current === overviewFocus.request) return;
+    if (overviewFocus.target.kind === "decision" && (
+      section !== "decisions" || decision === null || acceptedDecision?.request !== overviewFocus.request
+      || !acceptArrival(acceptedDecision.owner, overviewFocus.target)
+    )) return;
     const element = document.getElementById(overviewFocusId(overviewFocus.target));
     if (element === null) return;
     element.focus(); element.scrollIntoView?.({ block: "nearest" }); focusedRequest.current = overviewFocus.request;
-  }, [overviewFocus, selected, decision, selectedGroup, control.canonical, selectedRequirement, requirementViews, section]);
+  }, [overviewFocus, selected, decision, acceptedDecision, selectedGroup, control.canonical, selectedRequirement, requirementViews, section]);
 
   // The chosen project's control repository: undefined while no project is chosen (the first repository, as before),
   // null when the control plane does not hold the chosen project.
@@ -922,7 +956,15 @@ export function App(): JSX.Element {
    * person moved on is dropped instead of repainting the page behind them.
    */
   useEffect(() => {
-    setDecision(null);
+    // The explicit Overview request above owns both read and arrival; never issue a second selected-row GET for it.
+    if (overviewDecisionRead !== null) {
+      if (overviewDecisionRead.identity !== sourceIdentity || !acceptArrival(selected, overviewDecisionRead.owner)) {
+        // A context/selection change cancels this intent; it must not become an automatic read of the old owner.
+        setOverviewDecisionRead(null); setSelected(null); setAcceptedDecision(null);
+      }
+      return;
+    }
+    setAcceptedDecision(null);
     wanted.current = selected;
     if (selected === null) return;
     const identity = sourceIdentityNow.current;
@@ -931,14 +973,14 @@ export function App(): JSX.Element {
       try {
         const body = await fetchDecision(selected.projectKey, selected.id);
         if (!live || identity !== sourceIdentityNow.current || !acceptArrival(wanted.current, selected)) return;
-        setDecision(body.decision as Decision);
+        setAcceptedDecision({ owner: selected, body: body.decision as Decision, identity, request: null });
       } catch (err) {
         if (!live || identity !== sourceIdentityNow.current || !acceptArrival(wanted.current, selected)) return;
         setError(failureFrom(err));
       }
     })();
     return () => { live = false; };
-  }, [selected, sourceIdentity]);
+  }, [selected, sourceIdentity, overviewDecisionRead]);
 
   /**
    * Spec §11 R3: send one Agree or Correct as its own request record (owner, verb, a copy of the exact payload) and
@@ -1181,7 +1223,7 @@ export function App(): JSX.Element {
         {todo.status !== "available" && <p role="status">{t("overview.source.decisions")} · {t(`overview.status.${todo.status}`)}{todo.error ? ` · ${todo.error}` : ""}</p>}
         {projects === null ? (
           // Plan decision P2: without a project list the rows keep today's repository filter.
-          <DecisionsView rows={statusRows} status={status} onStatus={setStatus} loading={statusLoading} sourceStatus={status === "unreviewed" ? todo.status : undefined} filter={filter} onFilter={setFilter} selected={selected} onOpen={(row) => { navigationSeq.current++; setOverviewFocus(null); setSelected(row); }} detail={detail} />
+          <DecisionsView rows={statusRows} status={status} onStatus={setStatus} loading={statusLoading} sourceStatus={status === "unreviewed" ? todo.status : undefined} filter={filter} onFilter={setFilter} selected={selected} onOpen={openDecisionRow} detail={detail} />
         ) : (
           // With one, the pane follows the global scope: rows are restricted here, and its repository select is the sidebar's.
           <DecisionsView
@@ -1192,7 +1234,7 @@ export function App(): JSX.Element {
             filter={{ ...filter, projectKey: "" }}
             onFilter={setFilter}
             selected={selected}
-            onOpen={(row) => { navigationSeq.current++; setOverviewFocus(null); setSelected(row); }}
+            onOpen={openDecisionRow}
             detail={detail}
             scope={{
               projects,
