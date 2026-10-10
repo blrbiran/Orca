@@ -15,20 +15,36 @@ describe('admitted run and group result facts', { timeout: 30000 }, () => {
     it('isolates rejected attempt from later approval and exposes exact immutable observation history', async () => {
         const f = await resultFixture();
         try {
-            const first = f.manifest(), rejected = {
-                ...f.manifest(2), stage: 'verification' as const, verificationRef: f.add(approved(false))
+            const first = f.manifest();
+            await f.capture([first]);
+            expect((await view(f)).attempts[0].snapshotRevision).toBe(1);
+            const started = {
+                ...f.manifest(2), stage: 'verification' as const,
+                verificationRef: f.add({ schema: 'ccloop-task-result-verification-started-v1', attempt: 1, status: 'in-progress' })
             };
-            const second = f.manifest(3, 2), accepted = {
-                ...f.manifest(4, 2), stage: 'verification' as const, verificationRef: f.add(approved(true))
+            await f.capture([started]);
+            const running = await view(f);
+            expect(running.attempts[0].snapshotRevision).toBe(1);
+            expect(running.attempts[0].verification).toBe('in-progress');
+            const rejected = {
+                ...f.manifest(3), stage: 'verification' as const, verificationRef: f.add(approved(false))
             };
-            await f.capture([first, rejected, second, accepted]);
+            await f.capture([rejected]);
+            const completed = await view(f);
+            expect(completed.attempts[0].snapshotRevision).toBe(1);
+            expect(completed.attempts[0].verification).toBe('failed');
+            expect(readTaskResultState(f.store, f.runId)!.observations.map(o => o.manifest.outputs)).toEqual([first.outputs, first.outputs, first.outputs]);
+            const second = f.manifest(4, 2), accepted = {
+                ...f.manifest(5, 2), stage: 'verification' as const, verificationRef: f.add(approved(true))
+            };
+            await f.capture([second, accepted]);
             const r = await view(f);
-            expect(r.captureRevision).toBe(4);
+            expect(r.captureRevision).toBe(5);
             expect(r.currentAttempt).toBe(2);
             expect(r.attempts.map(a => a.verification)).toEqual(['failed', 'passed']);
             expect(r.attempts.map(a => a.current)).toEqual([false, true]);
-            expect(r.attempts[0].observations.map(o => o.revision)).toEqual([1, 2]);
-            expect(r.attempts.map(a => a.snapshotRevision)).toEqual([1, 3]);
+            expect(r.attempts[0].observations.map(o => o.revision)).toEqual([1, 2, 3]);
+            expect(r.attempts.map(a => a.snapshotRevision)).toEqual([1, 4]);
             expect(runResultsSchema.safeParse({ ...r, surprise: true }).success).toBe(false);
         }
         finally {
