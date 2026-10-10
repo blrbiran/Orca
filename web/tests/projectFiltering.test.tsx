@@ -610,7 +610,7 @@ describe("group workspace", () => {
     panel.workspaces[ALPHA] = { mode: "worktree" };
     panel.workspaces[BETA] = { mode: "clone" };
   }
-  const gitRegion = (): HTMLElement => within(screen.getByRole("region", { name: "Control group b1" })).getByRole("region", { name: "Git" });
+  const gitRegion = (): HTMLElement => { const detail = screen.getByRole("region", { name: "Control group b1" }); fireEvent.click(within(detail).getByRole("tab", { name: "Results" })); return within(detail).getByRole("region", { name: "Git" }); };
   const workspaceRegion = (): HTMLElement | null => screen.queryByRole("region", { name: "Workspace mode" });
 
   it("1: an open group of another repository shows its own workspace mode, read from its own repository", async () => {

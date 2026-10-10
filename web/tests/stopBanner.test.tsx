@@ -34,7 +34,7 @@ const view = (state: GroupViewV1["summary"]["state"], stop: Stop | null): GroupV
 const shutdownStop = (state: Stop["state"]): Stop =>
   ({ mode: "shutdown", state, frozenRunIds: ["run-a"], acceptedAt: "2026-10-08T00:00:00.000Z", deadlineAt: "2026-10-08T00:02:00.000Z" });
 const mount = (shown: GroupViewV1, onCommand = vi.fn()) => {
-  render(<ControlGroupView view={shown} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={onCommand} />);
+  render(<ControlGroupView focus={{ kind: "group", groupId: "g", region: "dispatch", taskId: null, runId: null }} view={shown} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={onCommand} />);
   return onCommand;
 };
 const refusedButtons = ["Start", "Pause dispatch", "Handoff stop"];
@@ -58,7 +58,7 @@ describe("leaving a panel shutdown (issue-fixes spec §3.2 (3))", () => {
 
 describe("the stop banner (issue-fixes spec §3.2 (4))", () => {
   it("says how the group stopped, its state, and the one way out, at the top of the group view", () => {
-    const { container } = render(<ControlGroupView view={view("ready", shutdownStop("handoff-complete"))} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
+    const { container } = render(<ControlGroupView focus={{ kind: "group", groupId: "g", region: "dispatch", taskId: null, runId: null }} view={view("ready", shutdownStop("handoff-complete"))} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
     const banner = screen.getByTestId("stop-banner");
     expect(banner.textContent).toContain("Stopped: the panel shut down while runs were active.");
     expect(banner.textContent).toContain("Ready to resume: use the resume button under Dispatch.");

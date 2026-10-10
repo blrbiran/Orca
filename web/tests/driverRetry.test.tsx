@@ -5,7 +5,7 @@
  * as a recovery blocker, so the group view itself has to offer the command -- otherwise the person reads
  * "blocked — terminal:failed" with nothing to press.
  */
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ControlGroupView } from "../src/ControlGroupView.js";
 import { TaskDetail } from "../src/TaskDetail.js";
@@ -40,7 +40,7 @@ afterEach(cleanup);
 describe("retrying a run the execution driver blocked (final review I5)", () => {
   it("offers a Retry for the blocked run that sends a run-scope recovery-retry naming that run", () => {
     const onCommand = vi.fn();
-    render(<ControlGroupView view={view([run({ runId: "run-b", taskId: "b", state: "blocked", blockedReason: "reconcile-terminal:failed" }), run({})])} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={onCommand} />);
+    render(<ControlGroupView focus={{ kind: "group", groupId: "g", region: "runs", taskId: null, runId: null }} view={view([run({ runId: "run-b", taskId: "b", state: "blocked", blockedReason: "reconcile-terminal:failed" }), run({})])} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={onCommand} />);
     const buttons = screen.getAllByRole("button", { name: /^Retry run/ });
     expect(buttons).toHaveLength(1);
     fireEvent.click(buttons[0]!);
@@ -49,7 +49,7 @@ describe("retrying a run the execution driver blocked (final review I5)", () => 
   });
 
   it("offers no Retry for a run with no driver block, blocked or not", () => {
-    render(<ControlGroupView view={view([run({}), run({ runId: "run-c", taskId: "c", state: "blocked", blockedReason: null })])} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
+    render(<ControlGroupView focus={{ kind: "group", groupId: "g", region: "runs", taskId: null, runId: null }} view={view([run({}), run({ runId: "run-c", taskId: "c", state: "blocked", blockedReason: null })])} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
     expect(screen.queryAllByRole("button", { name: /^Retry run/ })).toHaveLength(0);
   });
 });
@@ -59,24 +59,24 @@ const FAILED = { state: "blocked" as const, blockedReason: "terminal:failed", ou
 describe("retrying a task whose run ccloop ended failed (issue fixes spec §4.2(5))", () => {
   it("offers Retry task, not Retry run, and explains ccloop's reason beside the raw reason", () => {
     const onCommand = vi.fn();
-    render(<ControlGroupView view={view([run(FAILED)])} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={onCommand} />);
+    render(<ControlGroupView focus={{ kind: "group", groupId: "g", region: "runs", taskId: null, runId: null }} view={view([run(FAILED)])} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={onCommand} />);
     expect(screen.queryAllByRole("button", { name: /^Retry run/ })).toHaveLength(0);
-    expect(screen.getByText(/did not answer in the required JSON format/)).toBeTruthy();
-    expect(screen.getByText("Error: codex-result-invalid: /runs/r/attempt-1")).toBeTruthy();
+    expect(within(screen.getByRole("tabpanel")).getByText(/did not answer in the required JSON format/)).toBeTruthy();
+    expect(within(screen.getByRole("tabpanel")).getByText("Error: codex-result-invalid: /runs/r/attempt-1")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Retry task a" }));
     expect(onCommand).toHaveBeenCalledWith({ verb: "retry-task", groupId: "g", expectedRevision: 6, payload: { taskId: "a" } });
     expect(controlCommandPath({ verb: "retry-task", groupId: "g", expectedRevision: 6, payload: { taskId: "a" } })).toBe("/api/control/groups/g/retry-task");
   });
 
   it("keeps Retry run for a blocked run whose ccloop run succeeded (out of bounds)", () => {
-    render(<ControlGroupView view={view([run({ state: "blocked", blockedReason: "out-of-bounds:x", outcome: "succeeded", stopReason: null })])} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
+    render(<ControlGroupView focus={{ kind: "group", groupId: "g", region: "runs", taskId: null, runId: null }} view={view([run({ state: "blocked", blockedReason: "out-of-bounds:x", outcome: "succeeded", stopReason: null })])} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
     expect(screen.getAllByRole("button", { name: /^Retry run/ })).toHaveLength(1);
     expect(screen.queryAllByRole("button", { name: /^Retry task/ })).toHaveLength(0);
   });
 
   it("explains a settled-failed run's reason and offers no button", () => {
-    render(<ControlGroupView view={view([run({ ...FAILED, state: "settled-failed", stopReason: "Error: codex-event-error" })])} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
-    expect(screen.getByText(/reported an error/)).toBeTruthy();
+    render(<ControlGroupView focus={{ kind: "group", groupId: "g", region: "runs", taskId: null, runId: null }} view={view([run({ ...FAILED, state: "settled-failed", stopReason: "Error: codex-event-error" })])} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
+    expect(within(screen.getByRole("tabpanel")).getByText(/reported an error/)).toBeTruthy();
     expect(screen.queryAllByRole("button", { name: /^Retry (run|task)/ })).toHaveLength(0);
   });
 
@@ -98,19 +98,19 @@ describe("retrying a task whose run ccloop ended failed (issue fixes spec §4.2(
 const STOPPED: GroupViewV1["stop"] = { mode: "handoff", state: "handoff-complete", frozenRunIds: [], acceptedAt: "2026-10-08T00:00:00.000Z", deadlineAt: null };
 describe("no Retry task where the server refuses it (D8 review fix round 1)", () => {
   it("offers no button for a terminally failed run while the group has a stop intent, and still explains the reason", () => {
-    render(<ControlGroupView view={{ ...view([run(FAILED)]), stop: STOPPED }} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
-    expect(screen.getByText(/did not answer in the required JSON format/)).toBeTruthy();
+    render(<ControlGroupView focus={{ kind: "group", groupId: "g", region: "runs", taskId: null, runId: null }} view={{ ...view([run(FAILED)]), stop: STOPPED }} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
+    expect(within(screen.getByRole("tabpanel")).getByText(/did not answer in the required JSON format/)).toBeTruthy();
     expect(screen.queryAllByRole("button", { name: /^Retry (run|task)/ })).toHaveLength(0);
   });
 
   it("offers no button for a terminally failed run on a clarifying group", () => {
     const base = view([run(FAILED)]);
-    render(<ControlGroupView view={{ ...base, summary: { ...base.summary, state: "clarifying" } }} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
+    render(<ControlGroupView focus={{ kind: "group", groupId: "g", region: "runs", taskId: null, runId: null }} view={{ ...base, summary: { ...base.summary, state: "clarifying" } }} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
     expect(screen.queryAllByRole("button", { name: /^Retry (run|task)/ })).toHaveLength(0);
   });
 
   it("offers no Retry run for a terminally failed run that belongs to no task", () => {
-    render(<ControlGroupView view={view([run({ ...FAILED, taskId: null, estimateId: "est-1" })])} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
+    render(<ControlGroupView focus={{ kind: "group", groupId: "g", region: "runs", taskId: null, runId: null }} view={view([run({ ...FAILED, taskId: null, estimateId: "est-1" })])} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
     expect(screen.queryAllByRole("button", { name: /^Retry (run|task)/ })).toHaveLength(0);
   });
 

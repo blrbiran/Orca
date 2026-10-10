@@ -355,3 +355,8 @@ nav[aria-label="Control groups"] button[aria-current="true"] { background: var(-
 .settings .account-menu { padding: 0; }
 .settings .account-menu label { min-width: 0; max-width: 100%; }
 .settings table { display: block; max-width: 100%; overflow-x: auto; }
+
+/* Region composition uses the existing controls and palette. */
+.detail-region-tabs { display: flex; flex-wrap: wrap; gap: .5rem; margin-block: 1rem; }
+.detail-region-tabs [aria-selected="true"] { font-weight: 700; border-bottom: 2px solid currentColor; }
+[role="tabpanel"][hidden] { display: none; }

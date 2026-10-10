@@ -79,6 +79,7 @@ describe("the task control and recovery areas in Chinese", () => {
       "全局 · 所有组 · code-2", "运行 · g · 运行 r1 · code-1", "运行证据", "重试恢复",
       "orca 里新的运行使用git worktree（设置版本 1）。已开始的运行保持原样。", "git worktree（默认）", "私有克隆",
     ]) expect(text, expected).toContain(expected);
+    fireEvent.click(screen.getByRole("tab", { name: "运行与证据" }));
     expect(screen.getAllByRole("button", { name: "证据" }).length).toBeGreaterThan(0);
     expect(screen.getByRole("region", { name: "控制组 g" })).toBeTruthy();
   });
@@ -143,27 +144,35 @@ describe("the rest of the control area's branches in Chinese", () => {
     expect(firstRow(container, "运行|阶段|状态|配置|已用|剩余|证据").slice(0, 3)).toEqual(["a", "工作", "运行中 · 第 2 次尝试（认领序号 不适用）"]);
     const filter = screen.getByRole("group", { name: "按标签筛选工作项" });
     expect(filter.querySelector("legend")!.textContent).toBe("标签（任一）");
+    fireEvent.click(screen.getByRole("tab", { name: "技术详情" }));
     expect(screen.getByRole("heading", { name: "估算" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: "准备" }));
     for (const name of ["开跑", "暂停调度", "交接停止"]) expect(screen.getByRole("button", { name }), name).toBeTruthy();
-    for (const name of ["运行", "调度"]) expect(screen.getByRole("heading", { level: 3, name }), name).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 3, name: "调度" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: "运行与证据" }));
+    expect(screen.getByRole("heading", { level: 3, name: "运行" })).toBeTruthy();
     cleanup();
 
     render(<ControlGroupView view={view} {...props} />);
+    fireEvent.click(screen.getByRole("tab", { name: "问题" }));
     expect(screen.getByRole("button", { name: "恢复调度" })).toBeTruthy();
     cleanup();
 
     const handoff = { ...view.summary, stopMode: "handoff" as const, stopState: "handoff-complete" as const };
     const held: RunViewV1 = { ...run, state: "settled-recoverable", blockedReason: null, continuable: true };
     render(<ControlGroupView view={{ ...view, summary: handoff, runs: [held], checkpoints: [{ checkpointId: "cp1", taskId: "a", runId: "r1", state: "complete", snapshotHash: null, evidenceIds: [] }] }} {...props} />);
+    fireEvent.click(screen.getByRole("tab", { name: "问题" }));
     expect(screen.getByRole("button", { name: "继续选中的任务（1）" })).toBeTruthy();
     cleanup();
 
     // Issue-fixes ruling (Part C flag 2): a single task's continuation is offered only once the group has no stop intent.
     render(<ControlGroupView view={{ ...view, summary: { ...view.summary, stopMode: null, stopState: null }, stop: null, runs: [held], checkpoints: [{ checkpointId: "cp1", taskId: "a", runId: "r1", state: "complete", snapshotHash: null, evidenceIds: [] }] }} {...props} />);
+    fireEvent.click(screen.getByRole("tab", { name: "问题" }));
     expect(screen.getByRole("button", { name: "继续任务 a" })).toBeTruthy();
     cleanup();
 
     render(<ControlGroupView view={{ ...view, summary: handoff, runs: [{ ...held, continuable: false }] }} {...props} />);
+    fireEvent.click(screen.getByRole("tab", { name: "问题" }));
     expect(screen.getByRole("button", { name: "恢复（不续跑）" })).toBeTruthy();
   });
 

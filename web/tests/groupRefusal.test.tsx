@@ -45,7 +45,9 @@ afterEach(() => { cleanup(); window.sessionStorage.clear(); window.localStorage.
 async function openGroup(groupId: string): Promise<HTMLElement> {
   const nav = await screen.findByRole("navigation", { name: "Control groups" });
   fireEvent.click(await within(nav).findByRole("button", { name: new RegExp(`^${groupId} · `) }));
-  return await screen.findByRole("region", { name: `Control group ${groupId}` });
+  const detail = await screen.findByRole("region", { name: `Control group ${groupId}` });
+  fireEvent.click(within(detail).getByRole("tab", { name: "Problems" }));
+  return detail;
 }
 const groupReads = (groupId: string): number => panel.requests.filter((request) => request === `GET /api/control/groups/${groupId}`).length;
 
@@ -68,7 +70,7 @@ describe("a group's refusal stays with its group (spec §2.2(d))", () => {
     // At the top: before the actions and before the budget editor.
     const pause = within(g1).getByRole("button", { name: "Pause dispatch" });
     expect(notice.compareDocumentPosition(pause) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(notice.compareDocumentPosition(within(g1).getByRole("region", { name: "Budget proposal" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(notice.compareDocumentPosition(g1.querySelector('[aria-label="Budget proposal"]')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     // Only there: the code is on screen once (not also on the panel's own line).
     expect(screen.getAllByText(/stop-mode-conflict/)).toHaveLength(1);
 

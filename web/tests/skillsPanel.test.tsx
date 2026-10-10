@@ -22,7 +22,7 @@ const lock = [
   { name: "alpha", source: { name: "src", type: "git", url: "https://example.invalid/s.git", branch: "main" }, resolved_commit: "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678", content_md5: "md5-alpha" },
   { name: "beta", source: null, resolved_commit: null, content_md5: "md5-beta" },
 ];
-const show = (runs: RunViewV1[]) => render(<ControlGroupView view={view([workItem({})], runs) as GroupViewV1} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
+const show = (runs: RunViewV1[]) => render(<ControlGroupView focus={{ kind: "group", groupId: "g", region: "technical", taskId: null, runId: null }} view={view([workItem({})], runs) as GroupViewV1} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
 
 describe("the loop plan card's skill set line (C19)", () => {
   it("says none when the task has no skills, not that they are unsupported", () => {

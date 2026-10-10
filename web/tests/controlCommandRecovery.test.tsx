@@ -189,6 +189,7 @@ it("D9 uses authenticated App roles and retains the original command id after lo
   try {
     render(<AccountContext.Provider value={{ user: { id: "owner", name: "Owner", roles: ["owner"], mustChangePassword: false }, expiresAt: Date.now() + 86400000, sessionDays: 1 }}><App /></AccountContext.Provider>);
     fireEvent.click(await screen.findByRole("button", { name: "g · running" }));
+    fireEvent.click(await screen.findByRole("tab", { name: "Runs and evidence" }));
     fireEvent.click(await screen.findByRole("button", { name: "Settle unknown usage" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "I understand and approve this charge" }));
     fireEvent.click(screen.getByRole("button", { name: "Confirm irreversible settlement" }));

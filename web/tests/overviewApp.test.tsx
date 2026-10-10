@@ -155,7 +155,7 @@ it("a task/run attention destination opens the requested task before focusing it
  render(<App />); const page = await screen.findByRole("region", { name: "Overview" });
  fireEvent.click(await within(page).findByRole("button", { name: "Review task problem · ga" }));
  const detail = await screen.findByRole("region", { name: "Control group ga" });
- await waitFor(() => expect(within(detail).getByRole("button", { name: "target-task" }).getAttribute("aria-expanded")).toBe("true"));
+ await waitFor(() => expect(within(detail).getByRole("region", { name: "Task target-task" })).toBeTruthy());
  await waitFor(() => expect(document.activeElement?.getAttribute("data-overview-region")).toBe("problem"));
  expect(panel.posts).toHaveLength(0);
 });

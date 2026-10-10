@@ -8,7 +8,7 @@
  * execution is still alive.
  */
 import type { JSX } from "react";
-import { useEffect, useState } from "react";
+import { useLayoutEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { ControlAction } from "./controlApi.js";
 import { AgentSelectionEditor, selectionsHashFor } from "./AgentSelectionEditor.js";
@@ -48,9 +48,12 @@ export function continuableRuns(view: GroupViewV1): Array<{ run: RunViewV1; chec
 }
 
 import { overviewRegionId } from "./overviewNavigation.js";
+import { GroupDetailRegions } from "./GroupDetailRegions.js";
+import { defaultDetailRegion, dispatchDetailRegion, focusedDetailRegion, runRegionId, type DetailRegion } from "./detailRegion.js";
 import type { OverviewTarget } from "./overviewNavigation.js";
 
 export interface ControlGroupViewProps {
+  focusRequest?: number;
   focus?: Extract<OverviewTarget, { kind: "group" }> | null;
   roles?: readonly import("./auth.js").Role[];
   view: GroupViewV1;
@@ -101,8 +104,15 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
     continuable.map(({ run, checkpointId }) => ({ taskId: String(run.taskId), predecessorRunId: run.runId, checkpointId }));
   // Labels and progress spec §4.2: the label filter (any of) and the open task live in page memory only.
   const [labelFilter, setLabelFilter] = useState<string[]>([]);
-  const [openTask, setOpenTask] = useState<string | null>(null);
-  useEffect(() => { if (props.focus?.groupId === groupId && props.focus.taskId !== null) setOpenTask(props.focus.taskId); }, [props.focus]);
+  const [openTask, setOpenTask] = useState<string | null>(props.focus?.groupId === groupId ? props.focus.taskId : null);
+  useLayoutEffect(() => { if (props.focus?.groupId === groupId && props.focus.taskId !== null) setOpenTask(props.focus.taskId); }, [props.focus, props.focusRequest]);
+  const [region, setRegion] = useState<DetailRegion>(() => props.focus?.groupId === groupId ? focusedDetailRegion(view, props.focus.region) : defaultDetailRegion(view));
+  // Only explicit navigation selects a region; projection changes keep the person's current choice.
+  useLayoutEffect(() => { if (props.focus?.groupId === groupId) setRegion(focusedDetailRegion(view, props.focus.region)); }, [props.focus, props.focusRequest]);
+  const [requestedRun, setRequestedRun] = useState<string | null>(null);
+  useLayoutEffect(() => { if (region === "runs" && requestedRun !== null) document.getElementById(runRegionId(groupId, requestedRun))?.focus(); }, [region, requestedRun]);
+  const openRun = (runId: string): void => { setRequestedRun(runId); setRegion("runs"); };
+  const dispatchRegion = dispatchDetailRegion(view);
   const allLabels = [...new Set(view.workItems.flatMap((item) => item.labels ?? []))].sort();
   // A checked label no task carries any more (removed in the detail editor, or by another read) has no checkbox left to
   // uncheck, so it must stop filtering -- otherwise the table stays empty with no way out.
@@ -117,216 +127,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
   const workspaceMode = workspace === undefined ? undefined
     : workspace !== null && workspace.repoId === view.plan.repoId ? workspace.workspaceMode : null;
 
-  return (
-    <section aria-label={t("control.group.region", { groupId })} id={overviewRegionId("group", groupId, "results")} tabIndex={-1} data-overview-region="results">
-      <h2>
-        {t("control.group.heading", { groupId, state: enumText("groupState", view.summary.state), revision, projection: view.summary.projectionSeq })}
-      </h2>
-      {view.summary.claimBlocked && <p role="alert">{t("control.group.claimBlocked")}</p>}
-      {/* Spec 2026-10-08 §2.2(d), §6.5: the group's refusal is among the alerts at the top, above every action. */}
-      {props.refusal ? <RefusalNotice refusal={props.refusal} testId="group-refusal" /> : null}
-      {/* Issue-fixes spec §3.2 (4): one banner for any stop intent -- how it stopped, its state, and the one way out. */}
-      {view.stop !== null && (
-        <div role="status" data-testid="stop-banner">
-          <p>{t(`control.group.stopBanner.how.${view.stop.mode}` as const)}</p>
-          <p>{t(`control.group.stopBanner.exit.${view.stop.state}` as const)}</p>
-          <p>
-            {t("control.group.stop", {
-              mode: enumText("stopMode", view.stop.mode),
-              state: enumText("stopState", view.stop.state),
-              accepted: view.stop.acceptedAt ?? t("common.na"),
-              deadline: view.stop.deadlineAt ?? t("common.none"),
-              n: view.stop.frozenRunIds.length,
-              runs: view.stop.frozenRunIds.join(", ") || t("common.none"),
-            })}
-          </p>
-        </div>
-      )}
-      {/* Accounts spec §6.3.1, §7: a claim waiting on a spend cap names the cap and links to the Usage panel. */}
-      {view.spendCapBlock && (
-        <p role="status" data-testid="spend-cap-block">
-          {t("control.group.spendCapBlock", {
-            scope: capScopeText(view.spendCapBlock.scope),
-            period: t(`usage.capPeriod.${view.spendCapBlock.period}` as const),
-            cap: view.spendCapBlock.capTokens,
-            grant: view.spendCapBlock.grantTokens,
-          })}{" "}
-          <a href="#metrics">{t("control.group.spendCapLink")}</a>
-        </p>
-      )}
-      <p>
-        {t("control.group.planLine", { goal: view.plan.goal, hash: short(view.plan.planHash), graphVersion: view.graphVersion })}
-      </p>
-      {archived && (
-        <p role="status" aria-label={t("control.group.archivedRegion")}>
-          {t("control.group.archivedBanner")}{" "}
-          <button type="button" onClick={() => onCommand({ verb: "unarchive-group", groupId, expectedRevision: revision, payload: {} })}>
-            {t("control.group.unarchive")}
-          </button>
-        </p>
-      )}
-      <DependencyGraph items={view.workItems} runs={view.runs} now={props.now} openTask={openTask} onOpen={(taskId) => setOpenTask(openTask === taskId ? null : taskId)} />
-      <h3>{t("control.group.workItems")}</h3>
-      {allLabels.length > 0 && (
-        <fieldset aria-label={t("control.group.filterRegion")}>
-          <legend>{t("control.group.filterLegend")}</legend>
-          {allLabels.map((label) => (
-            <label key={label}>
-              <input type="checkbox" checked={activeFilter.includes(label)} onChange={() => toggleFilter(label)} />
-              {label}
-            </label>
-          ))}
-        </fieldset>
-      )}
-      <table>
-        <thead>
-          <tr>
-            <th>{t("control.group.th.task")}</th><th>{t("control.group.th.status")}</th><th>{t("control.group.th.labels")}</th>
-            <th>{t("control.group.th.progress")}</th><th>{t("control.group.th.run")}</th><th>{t("control.group.th.pending")}</th>
-            <th>{t("control.group.th.dependsOn")}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {shownItems.map((item) => (
-            <tr key={item.taskId}>
-              <td>
-                <button type="button" aria-expanded={openTask === item.taskId} onClick={() => setOpenTask(openTask === item.taskId ? null : item.taskId)}>
-                  {item.taskId}
-                </button>
-              </td>
-              <td>{enumText("workStatus", item.status)}</td>
-              <td><LabelChips labels={item.labels} />{item.loopPlan ? <span className="plan-chip"> {planText(item.loopPlan.planId, item.loopPlan.planVersion, "name")}</span> : null}</td>
-              <td>{progressText(item.progress)}</td>
-              <td>{item.currentRunId ?? t("common.none")}</td>
-              <td>{item.pendingRunId ?? t("common.none")}</td>
-              <td>{item.dependencyTaskIds.join(", ") || t("common.none")}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {openItem !== undefined && <TaskDetail key={openItem.taskId} view={view} item={openItem} drafts={drafts} onDraft={onDraft} onCommand={onCommand} workspaceMode={workspaceMode} archived={archived} />}
-
-      <div id={overviewRegionId("group", groupId, "problem")} tabIndex={-1} data-overview-region="problem">
-      <h3>{t("control.group.runs")}</h3>
-      <table>
-        <thead>
-          <tr>
-            <th>{t("control.group.runsTh.run")}</th><th>{t("control.group.runsTh.phase")}</th><th>{t("control.group.runsTh.state")}</th>
-            <th>{t("control.group.runsTh.profile")}</th><th>{t("control.group.runsTh.used")}</th><th>{t("control.group.runsTh.remaining")}</th>
-            <th>{t("control.group.runsTh.evidence")}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {view.runs.map((run, index) => (
-            <tr key={run.runId}>
-              <td>{run.taskId ?? run.estimateId ?? <details><summary>{t("control.group.runLabel", { n: index + 1 })}</summary><code>{run.runId}</code></details>}</td>
-              <td>{enumText("runPhase", run.phase)}</td>
-              <td className="run-state">
-                <div>{enumText("runState", run.state)}</div>
-                <div><RunReason run={run} /></div>
-                {retryRunOpen(view, run) && <p>{t("control.group.retryFromHead")}</p>}
-                <UsageSettlement key={JSON.stringify([revision, run.unknownUsageSettlement, props.roles])} run={run} roles={props.roles} archived={archived} groupId={groupId} revision={revision} onCommand={onCommand} />
-                {run.failureCode !== null && <div><code>{run.failureCode}</code></div>}
-                <div>{t("control.group.attempt", { attempt: run.providerAttemptOrdinal, claim: run.claimOrdinal ?? t("common.na") })}</div>
-                {/* Execution driver final review I5: a run the driver blocked carries its reason on the run, not as a
-                    recovery blocker, so its one remedy (spec §2.3, the run-scope recovery-retry) is offered here. */}
-                {/* Issue fixes spec §4.2(5): a run ccloop ended failed is retried as a task (a new run), and only where the
-                    server accepts retry-task; it never falls back to the run-scope recovery-retry, which refuses a terminal
-                    failure (run-terminal-failed). Any other blocked run keeps recovery-retry. */}
-                {archived ? null : hasFailureOutcome(run) ? (retryRunOpen(view, run) ? (
-                  <button
-                    type="button"
-                    onClick={() => onCommand({ verb: "retry-task", groupId, expectedRevision: revision, payload: { taskId: String(run.taskId) } })}
-                  >
-                    {t("control.group.retryTask", { taskId: String(run.taskId) })}
-                  </button>
-                ) : null) : run.state === "blocked" && run.blockedReason ? (
-                  <button
-                    type="button"
-                    onClick={() => onCommand({ verb: "recovery-retry", groupId, expectedRevision: revision, payload: { scope: "run", runId: run.runId } })}
-                  >
-                    {t("control.group.retryRun", { id: run.taskId ?? run.runId })}
-                  </button>
-                ) : null}
-              </td>
-              <td><details><summary>{run.profile.profileId}</summary><code>{run.profile.profileHash}</code></details></td>
-              <td><span title={formatTokens(run.used.tokens, currentLanguage())}>{shortTokens(run.used.tokens, "en")}</span></td>
-              <td><span title={formatTokens(run.remaining.tokens, currentLanguage())}>{shortTokens(run.remaining.tokens, "en")}</span></td>
-              <td>
-                <EvidenceLink runId={run.runId} />
-                {run.evidenceIds.length > 0 && <details><summary>{t("control.group.evidenceCount", { n: run.evidenceIds.length })}</summary><ul>{run.evidenceIds.map((id) => <li key={id}><code>{id}</code></li>)}</ul></details>}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-
-      </div>
-      <div id={overviewRegionId("group", groupId, "preparation")} tabIndex={-1} data-overview-region="preparation">
-      <BudgetEditor view={view} config={config} drafts={drafts} onDraft={onDraft} onCommand={onCommand} onCommands={props.onCommands} archived={archived} selectionsHash={selectionsHashFor(view, props.preview)}
-        suggestedTarget={props.integrationFor?.(view.plan.repoId)?.suggestedTarget ?? null} />
-      {props.agents !== undefined && (
-        <AgentSelectionEditor
-          view={view} agents={props.agents} preview={props.preview ?? null} preferences={props.agentPreferences}
-          onReread={props.onRereadPreview}
-          agentsFailure={props.agentsFailure}
-          retryNotice={props.retryNotice}
-          archived={archived}
-          drafts={drafts} onDraft={onDraft} onCommand={onCommand}
-        />
-      )}
-
-      </div>
-      <div id={overviewRegionId("group", groupId, "integration")} tabIndex={-1} data-overview-region="integration">
-      <GitScheme view={view} workspace={workspace} onCommand={onCommand} archived={archived} />
-      {/* Fix round 1 F1: a started group's scheme stays an owner's to change, outside the (button-free for keep) Git section. */}
-      {view.proposal.state === "confirmed" && (
-        <GroupIntegrationConfirm view={view} suggestedTarget={props.integrationFor?.(view.plan.repoId)?.suggestedTarget ?? null} onCommand={onCommand} archived={archived} />
-      )}
-
-      </div>
-      <SkillsGiven view={view} />
-
-      {view.handoffRequests.length > 0 && (
-        <>
-          <h3>{t("control.group.handoffRequests")}</h3>
-          <ul>
-            {view.handoffRequests.map((request) => (
-              <li key={request.requestId}>
-                {t("control.group.handoffLine", { requestId: request.requestId, runId: request.runId, state: enumText("requestState", request.state), deadline: request.deadlineAt })}
-                {request.failureCode !== null ? ` · ${request.failureCode}` : ""}
-                {t("control.group.handoffEvidence", { ids: request.evidenceIds.join(", ") || t("common.none") })}
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
-
-      {view.estimates.length > 0 && (
-        <>
-          <h3>{t("control.group.estimates")}</h3>
-          <ul>
-            {view.estimates.map((estimate) => (
-              <li key={estimate.estimateId}>
-                {t("control.group.estimateLine", {
-                  estimateId: estimate.estimateId,
-                  version: estimate.estimateVersion,
-                  state: enumText("estimateState", estimate.state),
-                  mode: enumText("budgetMode", estimate.mode),
-                  profileId: estimate.profile.profileId,
-                  hash: short(estimate.profile.profileHash),
-                })}
-                {estimate.reasonCode !== null ? ` · ${estimate.reasonCode}` : ""}
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
-
-      {uncertain.length > 0 && (
-        <p role="status">{t("control.group.waiting", { commands: uncertain.map((command) => command.commandId).join(", ") })}</p>
-      )}
-
+  const dispatchControls = (<>
       <div id={overviewRegionId("group", groupId, "dispatch")} tabIndex={-1} data-overview-region="dispatch">
       <h3>{t("control.group.dispatch")}</h3>
       {continuable.length > 0 && <p>{t("control.group.continueFromCheckpoint")}</p>}
@@ -400,6 +201,238 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       )}
       <p>{t("control.group.recent", { commands: view.recentCommandIds.join(", ") || t("common.none") })}</p>
       </div>
+  </>);
+
+  return (
+    <section aria-label={t("control.group.region", { groupId })}>
+      <h2>
+        {t("control.group.heading", { groupId, state: enumText("groupState", view.summary.state), revision, projection: view.summary.projectionSeq })}
+      </h2>
+      {view.summary.claimBlocked && <p role="alert">{t("control.group.claimBlocked")}</p>}
+      {/* Spec 2026-10-08 §2.2(d), §6.5: the group's refusal is among the alerts at the top, above every action. */}
+      {props.refusal ? <RefusalNotice refusal={props.refusal} testId="group-refusal" /> : null}
+      {/* Issue-fixes spec §3.2 (4): one banner for any stop intent -- how it stopped, its state, and the one way out. */}
+      {view.stop !== null && (
+        <div role="status" data-testid="stop-banner">
+          <p>{t(`control.group.stopBanner.how.${view.stop.mode}` as const)}</p>
+          <p>{t(`control.group.stopBanner.exit.${view.stop.state}` as const)}</p>
+          <p>
+            {t("control.group.stop", {
+              mode: enumText("stopMode", view.stop.mode),
+              state: enumText("stopState", view.stop.state),
+              accepted: view.stop.acceptedAt ?? t("common.na"),
+              deadline: view.stop.deadlineAt ?? t("common.none"),
+              n: view.stop.frozenRunIds.length,
+              runs: view.stop.frozenRunIds.join(", ") || t("common.none"),
+            })}
+          </p>
+        </div>
+      )}
+      {/* Accounts spec §6.3.1, §7: a claim waiting on a spend cap names the cap and links to the Usage panel. */}
+      {view.spendCapBlock && (
+        <p role="status" data-testid="spend-cap-block">
+          {t("control.group.spendCapBlock", {
+            scope: capScopeText(view.spendCapBlock.scope),
+            period: t(`usage.capPeriod.${view.spendCapBlock.period}` as const),
+            cap: view.spendCapBlock.capTokens,
+            grant: view.spendCapBlock.grantTokens,
+          })}{" "}
+          <a href="#metrics">{t("control.group.spendCapLink")}</a>
+        </p>
+      )}
+      <p>
+        {t("control.group.planLine", { goal: view.plan.goal, hash: short(view.plan.planHash), graphVersion: view.graphVersion })}
+      </p>
+      {archived && (
+        <p role="status" aria-label={t("control.group.archivedRegion")}>
+          {t("control.group.archivedBanner")}{" "}
+          <button type="button" onClick={() => onCommand({ verb: "unarchive-group", groupId, expectedRevision: revision, payload: {} })}>
+            {t("control.group.unarchive")}
+          </button>
+        </p>
+      )}
+      <p>{t(view.summary.state === "review" ? "detail.goalReview" : "detail.nextAction")}</p>
+      <GroupDetailRegions groupId={groupId} selected={region} onSelect={setRegion} regions={{
+        progress: <>
+      <DependencyGraph items={view.workItems} runs={view.runs} now={props.now} openTask={openTask} onOpen={(taskId) => setOpenTask(openTask === taskId ? null : taskId)} />
+      <h3>{t("control.group.workItems")}</h3>
+      {allLabels.length > 0 && (
+        <fieldset aria-label={t("control.group.filterRegion")}>
+          <legend>{t("control.group.filterLegend")}</legend>
+          {allLabels.map((label) => (
+            <label key={label}>
+              <input type="checkbox" checked={activeFilter.includes(label)} onChange={() => toggleFilter(label)} />
+              {label}
+            </label>
+          ))}
+        </fieldset>
+      )}
+      <table>
+        <thead>
+          <tr>
+            <th>{t("control.group.th.task")}</th><th>{t("control.group.th.status")}</th><th>{t("control.group.th.labels")}</th>
+            <th>{t("control.group.th.progress")}</th><th>{t("control.group.th.run")}</th><th>{t("control.group.th.pending")}</th>
+            <th>{t("control.group.th.dependsOn")}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {shownItems.map((item) => (
+            <tr key={item.taskId}>
+              <td>
+                <button type="button" aria-expanded={openTask === item.taskId} onClick={() => setOpenTask(openTask === item.taskId ? null : item.taskId)}>
+                  {item.taskId}
+                </button>
+              </td>
+              <td>{enumText("workStatus", item.status)}{view.runs.filter(run => run.runId === item.currentRunId).map(run => <RunReason key={run.runId} run={run} />)}</td>
+              <td><LabelChips labels={item.labels} />{item.loopPlan ? <span className="plan-chip"> {planText(item.loopPlan.planId, item.loopPlan.planVersion, "name")}</span> : null}</td>
+              <td>{progressText(item.progress)}</td>
+              <td>{item.currentRunId ?? t("common.none")}</td>
+              <td>{item.pendingRunId ?? t("common.none")}</td>
+              <td>{item.dependencyTaskIds.join(", ") || t("common.none")}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+        </>,
+        preparation: <>
+      <BudgetEditor view={view} config={config} drafts={drafts} onDraft={onDraft} onCommand={onCommand} onCommands={props.onCommands} archived={archived} selectionsHash={selectionsHashFor(view, props.preview)}
+        suggestedTarget={props.integrationFor?.(view.plan.repoId)?.suggestedTarget ?? null} />
+      {props.agents !== undefined && (
+        <AgentSelectionEditor
+          view={view} agents={props.agents} preview={props.preview ?? null} preferences={props.agentPreferences}
+          onReread={props.onRereadPreview}
+          agentsFailure={props.agentsFailure}
+          retryNotice={props.retryNotice}
+          archived={archived}
+          drafts={drafts} onDraft={onDraft} onCommand={onCommand}
+        />
+      )}
+
+{dispatchRegion === "preparation" && dispatchControls}</>,
+        problem: <>
+      <h3>{t("detail.problem")}</h3>
+      {view.recoveryBlockers.map((blocker, index) => <p key={index}>{blocker.code}</p>)}
+      {view.runs.filter(run => hasFailureOutcome(run) || run.state === "blocked" || run.unknownUsageSettlement !== undefined || run.runId === props.focus?.runId).map(run => <div key={run.runId} data-problem-run-id={run.runId} tabIndex={-1}>
+        <p>{run.taskId ?? run.runId} · {enumText("runState", run.state)} <RunReason run={run} /></p>
+        <button type="button" onClick={() => openRun(run.runId)}>{t("detail.openRun", { runId: run.runId })}</button>
+      </div>)}
+{dispatchRegion === "problem" && dispatchControls}</>,
+        results: <>
+      <p role="status">{t(view.summary.state === "done" ? "detail.resultsMissing" : "detail.resultsNotProduced")}</p>
+      <p>{t("detail.resultsEvidence")}</p>
+      {view.runs.map(run => <button key={run.runId} type="button" onClick={() => openRun(run.runId)}>{t("detail.openRun", { runId: run.runId })}</button>)}
+      <div id={overviewRegionId("group", groupId, "integration")} tabIndex={-1} data-overview-region="integration">
+      <GitScheme view={view} workspace={workspace} onCommand={onCommand} archived={archived} />
+      {/* Fix round 1 F1: a started group's scheme stays an owner's to change, outside the (button-free for keep) Git section. */}
+      {view.proposal.state === "confirmed" && (
+        <GroupIntegrationConfirm view={view} suggestedTarget={props.integrationFor?.(view.plan.repoId)?.suggestedTarget ?? null} onCommand={onCommand} archived={archived} />
+      )}
+
+      </div>
+</>,
+        runs: <>
+      <h3>{t("control.group.runs")}</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>{t("control.group.runsTh.run")}</th><th>{t("control.group.runsTh.phase")}</th><th>{t("control.group.runsTh.state")}</th>
+            <th>{t("control.group.runsTh.profile")}</th><th>{t("control.group.runsTh.used")}</th><th>{t("control.group.runsTh.remaining")}</th>
+            <th>{t("control.group.runsTh.evidence")}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {view.runs.map((run, index) => (
+            <tr key={run.runId} id={runRegionId(groupId, run.runId)} tabIndex={-1} data-run-id={run.runId}>
+              <td>{run.taskId ?? run.estimateId ?? <details><summary>{t("control.group.runLabel", { n: index + 1 })}</summary><code>{run.runId}</code></details>}</td>
+              <td>{enumText("runPhase", run.phase)}</td>
+              <td className="run-state">
+                <div>{enumText("runState", run.state)}</div>
+                <div><RunReason run={run} /></div>
+                {retryRunOpen(view, run) && <p>{t("control.group.retryFromHead")}</p>}
+                <UsageSettlement key={JSON.stringify([revision, run.unknownUsageSettlement, props.roles])} run={run} roles={props.roles} archived={archived} groupId={groupId} revision={revision} onCommand={onCommand} />
+                {run.failureCode !== null && <div><code>{run.failureCode}</code></div>}
+                <div>{t("control.group.attempt", { attempt: run.providerAttemptOrdinal, claim: run.claimOrdinal ?? t("common.na") })}</div>
+                {/* Execution driver final review I5: a run the driver blocked carries its reason on the run, not as a
+                    recovery blocker, so its one remedy (spec §2.3, the run-scope recovery-retry) is offered here. */}
+                {/* Issue fixes spec §4.2(5): a run ccloop ended failed is retried as a task (a new run), and only where the
+                    server accepts retry-task; it never falls back to the run-scope recovery-retry, which refuses a terminal
+                    failure (run-terminal-failed). Any other blocked run keeps recovery-retry. */}
+                {archived ? null : hasFailureOutcome(run) ? (retryRunOpen(view, run) ? (
+                  <button
+                    type="button"
+                    onClick={() => onCommand({ verb: "retry-task", groupId, expectedRevision: revision, payload: { taskId: String(run.taskId) } })}
+                  >
+                    {t("control.group.retryTask", { taskId: String(run.taskId) })}
+                  </button>
+                ) : null) : run.state === "blocked" && run.blockedReason ? (
+                  <button
+                    type="button"
+                    onClick={() => onCommand({ verb: "recovery-retry", groupId, expectedRevision: revision, payload: { scope: "run", runId: run.runId } })}
+                  >
+                    {t("control.group.retryRun", { id: run.taskId ?? run.runId })}
+                  </button>
+                ) : null}
+              </td>
+              <td><details><summary>{run.profile.profileId}</summary><code>{run.profile.profileHash}</code></details></td>
+              <td><span title={formatTokens(run.used.tokens, currentLanguage())}>{shortTokens(run.used.tokens, "en")}</span></td>
+              <td><span title={formatTokens(run.remaining.tokens, currentLanguage())}>{shortTokens(run.remaining.tokens, "en")}</span></td>
+              <td>
+                <EvidenceLink runId={run.runId} />
+                {run.evidenceIds.length > 0 && <details><summary>{t("control.group.evidenceCount", { n: run.evidenceIds.length })}</summary><ul>{run.evidenceIds.map((id) => <li key={id}><code>{id}</code></li>)}</ul></details>}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+</>,
+        technical: <>
+      <SkillsGiven view={view} />
+
+      {view.handoffRequests.length > 0 && (
+        <>
+          <h3>{t("control.group.handoffRequests")}</h3>
+          <ul>
+            {view.handoffRequests.map((request) => (
+              <li key={request.requestId}>
+                {t("control.group.handoffLine", { requestId: request.requestId, runId: request.runId, state: enumText("requestState", request.state), deadline: request.deadlineAt })}
+                {request.failureCode !== null ? ` · ${request.failureCode}` : ""}
+                {t("control.group.handoffEvidence", { ids: request.evidenceIds.join(", ") || t("common.none") })}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+
+      {view.estimates.length > 0 && (
+        <>
+          <h3>{t("control.group.estimates")}</h3>
+          <ul>
+            {view.estimates.map((estimate) => (
+              <li key={estimate.estimateId}>
+                {t("control.group.estimateLine", {
+                  estimateId: estimate.estimateId,
+                  version: estimate.estimateVersion,
+                  state: enumText("estimateState", estimate.state),
+                  mode: enumText("budgetMode", estimate.mode),
+                  profileId: estimate.profile.profileId,
+                  hash: short(estimate.profile.profileHash),
+                })}
+                {estimate.reasonCode !== null ? ` · ${estimate.reasonCode}` : ""}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+
+      {uncertain.length > 0 && (
+        <p role="status">{t("control.group.waiting", { commands: uncertain.map((command) => command.commandId).join(", ") })}</p>
+      )}
+
+</>,
+      }} />
+      {openItem !== undefined && <TaskDetail key={openItem.taskId} view={view} item={openItem} drafts={drafts} onDraft={onDraft} onCommand={onCommand} workspaceMode={workspaceMode} archived={archived} />}
     </section>
   );
 }

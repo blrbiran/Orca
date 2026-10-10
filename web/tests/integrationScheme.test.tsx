@@ -191,7 +191,7 @@ describe("the scheme on the confirm step (spec §3.2, §9.1)", () => {
 
 describe("the page around the integration UI (spec §9.1)", () => {
   it("suggests the open group's own repository target on its confirm step", () => {
-    render(<ControlGroupView view={draftGroup()} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()}
+    render(<ControlGroupView focus={{ kind: "group", groupId: "g", region: "preparation", taskId: null, runId: null }} view={draftGroup()} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()}
       integrationFor={(repoId) => (repoId === "orca" ? repository({ delivery: "keep" }, "trunk-z") : null)} />);
     const region = screen.getByRole("region", { name: "Integration of this group" });
     choose(region, "Delivery", "local");
@@ -231,7 +231,7 @@ describe("the page around the integration UI (spec §9.1)", () => {
 describe("the group's scheme after confirm (fix round 1, F1)", () => {
   const detail = (groupView: GroupViewV1, me: Me = owner) => {
     const onCommand = vi.fn();
-    render(as(me, <ControlGroupView view={groupView} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={onCommand} />));
+    render(as(me, <ControlGroupView focus={{ kind: "group", groupId: "g", region: "results", taskId: null, runId: null }} view={groupView} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={onCommand} />));
     return { onCommand, region: screen.getByRole("region", { name: "Integration of this group" }) };
   };
 
@@ -288,7 +288,7 @@ describe("a late suggested target (fix round 1, F2)", () => {
 describe("the group's Git area (spec §6.5, §9.1)", () => {
   const show = (groupView: GroupViewV1, me: Me = owner) => {
     const onCommand = vi.fn();
-    render(as(me, <ControlGroupView view={groupView} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={onCommand} />));
+    render(as(me, <ControlGroupView focus={{ kind: "group", groupId: "g", region: "results", taskId: null, runId: null }} view={groupView} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={onCommand} />));
     return { onCommand, section: screen.getByRole("region", { name: "Git" }) };
   };
 

@@ -1216,6 +1216,7 @@ export function App(): JSX.Element {
           scope={scope}
           repoLabel={repoLabel}
           targets={targets}
+          focusRequest={overviewFocus?.request}
           focus={overviewFocus?.target.kind === "group" ? overviewFocus.target : null}
           onSelect={(id) => { navigationSeq.current++; setOverviewFocus(null); setSelectedGroup(id); }}
           onDraft={(key, text) => dispatchControl({ type: "draft", key, text })}

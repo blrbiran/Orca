@@ -112,7 +112,7 @@ async function clickEvidence(name: RegExp): Promise<void> {
 
 describe("evidence links", () => {
   it("asks for a run's manifest with the session alone and offers the answer as a download", async () => {
-    render(<ControlGroupView {...groupViewProps()} />);
+    render(<ControlGroupView focus={{ kind: "group", groupId: "g", region: "runs", taskId: null, runId: null }} {...groupViewProps()} />);
     await clickEvidence(/^evidence$/);
 
     expect(requests[0]!.url).toBe(`/api/control/runs/${RUN}/evidence`);
@@ -123,7 +123,7 @@ describe("evidence links", () => {
 
   it("names the refusal instead of offering a download when the panel refuses", async () => {
     answer = { status: 401, body: { error: { code: "unauthorized", message: "A valid panel token is required.", commandRevision: null, evidenceIds: [], retryable: false } } };
-    render(<ControlGroupView {...groupViewProps()} />);
+    render(<ControlGroupView focus={{ kind: "group", groupId: "g", region: "runs", taskId: null, runId: null }} {...groupViewProps()} />);
     fireEvent.click(screen.getByRole("button", { name: /^evidence$/ }));
     await vi.waitFor(async () => expect(requests).toHaveLength(1));
 

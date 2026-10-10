@@ -49,7 +49,7 @@ export function deriveOverview(input: OverviewInputs): OverviewModel {
   const scoped = (repoId: string | null) => repoId === null || ownerOf(repoId).ownerUnknown || inScope(input.scope, repoId);
   const progress = groups.filter((g) => scoped(g.repoId)).map((group): OverviewProgress => ({ group, ...ownerOf(group.repoId), target: group.requirement !== undefined && group.state === "clarifying"
     ? { kind: "requirement", groupId: group.groupId, region: "answers" }
-    : { kind: "group", groupId: group.groupId, region: group.state === "done" ? "results" : group.state === "draft" ? "preparation" : "dispatch", taskId: null, runId: null } }));
+    : { kind: "group", groupId: group.groupId, region: group.state === "done" ? "results" : group.state === "draft" ? "preparation" : "progress", taskId: null, runId: null } }));
   const rows = new Map<string, OverviewQueueRow>();
   for (const step of projection?.steps ?? []) {
     if (step.destination.kind !== "recovery" && !scoped(step.repoId)) continue;

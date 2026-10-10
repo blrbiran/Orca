@@ -97,10 +97,12 @@ describe("applying a loop suggestion keeps the plan card's open draft (W7)", () 
     answers = { [LOOP_ROUTE]: [success("set-task-loop", 12, { kind: "task-loop-set", taskId: "a", loopVersion: 3, proposalVersion: 3 })] };
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: /^g · draft/ }));
+    fireEvent.click(await screen.findByRole("tab", { name: "Progress" }));
     fireEvent.click(await screen.findByRole("button", { name: "a" }));
     const card = (): HTMLElement => screen.getByRole("region", { name: "Plan a" });
     fireEvent.click(within(card()).getByRole("button", { name: "Change plan" }));
     fireEvent.change(within(card()).getByRole("textbox", { name: "Goal" }), { target: { value: "fix login, typed" } });
+    fireEvent.click(screen.getByRole("tab", { name: "Preparation" }));
     fireEvent.click(screen.getByRole("button", { name: "use 4000 for a work tokens" }));
     await waitFor(() => expect(within(card()).getByRole("status").textContent).toBe("The plan changed after you started this draft (v2 → v3)"));
     expect(requests.filter((request) => request.method === "POST").map((request) => request.url)).toEqual([LOOP_ROUTE]);

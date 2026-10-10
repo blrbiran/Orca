@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ControlGroupView } from "../src/ControlGroupView.js";
 import { TaskDetail } from "../src/TaskDetail.js";
@@ -8,14 +8,15 @@ import { config, run, view } from "./usageRecoveryFixture.js";
 afterEach(cleanup);
 const failed = (state: RunViewV1["state"] = "settled-recoverable") => run({ state, outcome: "failed", stopReason: "Error: codex-event-error", continuable: state === "settled-recoverable" });
 const recovery = (r = failed()): GroupViewV1 => ({ ...view([r]), workItems: [{ taskId: "a", status: r.state === "settled-failed" ? "blocked" : "held", currentRunId: r.runId, pendingRunId: null, lineageRunIds: [r.runId], dependencyTaskIds: [], targetVersion: 1, configHash: null, originalContractHash: "hash", derivedContractHash: null }], allocations: ["work", "handoff"].map(bucket => ({ ownerKind: "task", ownerId: "a", bucket, state: r.state === "settled-failed" ? "terminal" : "held", amount: r.remaining, fieldProvenance: Object.fromEntries(["tokens", "activeMs", "attempts", "sessions"].map(dimension => [dimension, { provenance: "human" }])) })) as GroupViewV1["allocations"], checkpoints: [{ checkpointId: "checkpoint", runId: r.runId, taskId: "a", state: "complete", snapshotHash: "hash", evidenceIds: [] }], handoffRequests: [{ requestId: "req", runId: r.runId, state: r.state === "settled-failed" ? "settled-failed" : "settled-recoverable", deadlineAt: "then", phaseAttemptOrdinal: 1, failureCode: null, evidenceIds: [] }] as GroupViewV1["handoffRequests"] });
-const show = (v: GroupViewV1) => { const onCommand = vi.fn(); render(<ControlGroupView view={v} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={onCommand} />); return onCommand; };
+const show = (v: GroupViewV1) => { const onCommand = vi.fn(); render(<ControlGroupView focus={{ kind: "group", groupId: "g", region: "runs", taskId: null, runId: null }} view={v} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={onCommand} />); return onCommand; };
 describe("failed handoff recovery", () => {
   it("keeps failure cause after handoff and offers retry from current group head", () => {
     const onCommand = show(recovery());
-    expect(screen.getByText(/reported an error/)).toBeTruthy();
+    expect(within(screen.getByRole("tabpanel")).getByText(/reported an error/)).toBeTruthy();
     expect(screen.getByText(/current group branch head/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Retry task a" }));
     expect(onCommand).toHaveBeenCalledWith({ verb: "retry-task", groupId: "g", expectedRevision: 6, payload: { taskId: "a" } });
+    fireEvent.click(screen.getByRole("tab", { name: "Problems" }));
     expect(screen.getByText(/checkpoint/)).toBeTruthy();
   });
   it("shows Retry in task detail only for the current failure", () => {
@@ -26,10 +27,11 @@ describe("failed handoff recovery", () => {
     const r = failed("settled-failed"); r.continuable = true; r.unknownUsageSettlement = { generation: 1, highWater: 1, remaining: { work: r.remaining, handoff: r.remaining }, allowed: false, refusalReason: "run-usage-settled", settlement: { method: "remaining-grant", charged: { work: r.remaining, handoff: r.remaining }, principal: "user:owner", at: 1234, reservationDisposition: "released" } as NonNullable<RunViewV1["unknownUsageSettlement"]>["settlement"] };
     const v = recovery(r); v.summary = { ...v.summary, stopMode: "handoff", stopState: "handoff-complete" }; v.stop = { mode: "handoff", state: "handoff-complete", frozenRunIds: [r.runId], acceptedAt: "now", deadlineAt: null };
     const onCommand = show(v);
-    expect(screen.getByText(/reported an error/)).toBeTruthy();
+    expect(within(screen.getByRole("tabpanel")).getByText(/reported an error/)).toBeTruthy();
     expect(screen.getByText(/user:owner/)).toBeTruthy();
     expect(screen.queryByRole("button", { name: /^Continue/ })).toBeNull();
     expect(screen.queryByRole("button", { name: /^Retry task/ })).toBeNull();
+    fireEvent.click(screen.getByRole("tab", { name: "Problems" }));
     fireEvent.click(screen.getByRole("button", { name: "Resume (no continuation)" }));
     expect(onCommand).toHaveBeenCalledWith({ verb: "resume-from-handoff", groupId: "g", expectedRevision: 6, payload: { selections: [] } });
     cleanup(); show({ ...v, stop: null, summary: { ...v.summary, stopMode: null, stopState: null } });

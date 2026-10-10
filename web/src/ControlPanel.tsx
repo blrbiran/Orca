@@ -30,6 +30,7 @@ import type { RecoveryTarget } from "./recoveryTarget.js";
 import type { OverviewTarget } from "./overviewNavigation.js";
 
 export interface ControlPanelProps {
+  focusRequest?: number;
   focus?: Extract<OverviewTarget, { kind: "group" }> | null;
   roles?: readonly import("./auth.js").Role[];
   config: ControlConfigV1;
@@ -254,6 +255,7 @@ export function ControlPanel(props: ControlPanelProps): JSX.Element {
       <GroupList groups={summary.groups} selected={selected} scope={scope} repoLabel={props.repoLabel} onSelect={props.onSelect} now={props.now} />
       {view !== undefined && (
         <ControlGroupView
+          focusRequest={props.focusRequest}
           focus={props.focus}
           roles={props.roles}
           key={view.summary.groupId}

@@ -45,7 +45,7 @@ afterEach(cleanup);
 describe("continuing after a handoff-stop (handoff delivery C-4, I-4)", () => {
   it("offers only the handed-off task, and the batch command carries only its selection", () => {
     const onCommand = vi.fn();
-    render(<ControlGroupView view={view("handoff-complete", [completed, handedOff], [checkpoint("run-a", "a", "complete"), checkpoint("run-b", "b", "partial")])}
+    render(<ControlGroupView focus={{ kind: "group", groupId: "g", region: "dispatch", taskId: null, runId: null }} view={view("handoff-complete", [completed, handedOff], [checkpoint("run-a", "a", "complete"), checkpoint("run-b", "b", "partial")])}
       config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={onCommand} />);
     // Issue-fixes ruling (Part C flag 2): continue-task is refused under any stop intent, so no single-task
     // continuation is offered while the handoff-stop is still in place -- only the batch resume.
@@ -60,7 +60,7 @@ describe("continuing after a handoff-stop (handoff delivery C-4, I-4)", () => {
   // the stop without continuing every held task and then continue them one by one once no stop intent remains.
   it("offers a resume with no selections beside the batch continuation when tasks are continuable", () => {
     const onCommand = vi.fn();
-    render(<ControlGroupView view={view("handoff-complete", [completed, handedOff], [checkpoint("run-a", "a", "complete"), checkpoint("run-b", "b", "partial")])}
+    render(<ControlGroupView focus={{ kind: "group", groupId: "g", region: "dispatch", taskId: null, runId: null }} view={view("handoff-complete", [completed, handedOff], [checkpoint("run-a", "a", "complete"), checkpoint("run-b", "b", "partial")])}
       config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={onCommand} />);
     expect(screen.getByRole("button", { name: "Continue selected tasks (1)" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Resume (no continuation)" }));
@@ -72,7 +72,7 @@ describe("continuing after a handoff-stop (handoff delivery C-4, I-4)", () => {
     const onCommand = vi.fn();
     const stopped = view("handoff-complete", [completed, handedOff], [checkpoint("run-a", "a", "complete"), checkpoint("run-b", "b", "partial")]);
     const resumed: GroupViewV1 = { ...stopped, summary: { ...stopped.summary, stopMode: null, stopState: null }, stop: null };
-    render(<ControlGroupView view={resumed} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={onCommand} />);
+    render(<ControlGroupView focus={{ kind: "group", groupId: "g", region: "dispatch", taskId: null, runId: null }} view={resumed} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={onCommand} />);
     expect(screen.queryByRole("button", { name: "Continue task a" })).toBeNull();
     expect(screen.queryByRole("button", { name: /^Continue selected/ })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Continue task b" }));
@@ -83,7 +83,7 @@ describe("continuing after a handoff-stop (handoff delivery C-4, I-4)", () => {
 
   it("offers a resume with no selections when the handoff completed and nothing is continuable", () => {
     const onCommand = vi.fn();
-    render(<ControlGroupView view={view("handoff-complete", [completed, run({ runId: "run-c", taskId: "c", state: "settled-restartable" })], [checkpoint("run-a", "a", "complete")])}
+    render(<ControlGroupView focus={{ kind: "group", groupId: "g", region: "dispatch", taskId: null, runId: null }} view={view("handoff-complete", [completed, run({ runId: "run-c", taskId: "c", state: "settled-restartable" })], [checkpoint("run-a", "a", "complete")])}
       config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={onCommand} />);
     expect(screen.queryByRole("button", { name: /^Continue/ })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Resume (no continuation)" }));
@@ -93,7 +93,7 @@ describe("continuing after a handoff-stop (handoff delivery C-4, I-4)", () => {
 
   it("offers no resume at all while the handoff has not completed", () => {
     for (const stopState of ["handoff-pending", "handoff-partial"] as const) {
-      render(<ControlGroupView view={view(stopState, [completed], [checkpoint("run-a", "a", "complete")])}
+      render(<ControlGroupView focus={{ kind: "group", groupId: "g", region: "dispatch", taskId: null, runId: null }} view={view(stopState, [completed], [checkpoint("run-a", "a", "complete")])}
         config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
       expect(screen.queryByRole("button", { name: "Resume (no continuation)" })).toBeNull();
       expect(screen.queryByRole("button", { name: /^Continue/ })).toBeNull();

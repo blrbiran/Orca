@@ -9,7 +9,7 @@ import { config, run, view } from "./usageRecoveryFixture.js";
 afterEach(cleanup);
 const remaining = { work: { tokens: 91, activeMs: 920, attempts: 3, sessions: 4 }, handoff: { tokens: 51, activeMs: 520, attempts: 5, sessions: 6 } };
 const failed = () => run({ state: "blocked", outcome: "failed", stopReason: "Error: codex-event-error", unknownUsageSettlement: { generation: 7, highWater: 2, remaining, allowed: true, refusalReason: null } });
-const show = (roles: ("owner" | "member")[], r = failed()) => { const onCommand = vi.fn(); const result = render(<ControlGroupView view={view([r])} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={onCommand} roles={roles} />); return { ...result, onCommand }; };
+const show = (roles: ("owner" | "member")[], r = failed()) => { const onCommand = vi.fn(); const result = render(<ControlGroupView focus={{ kind: "group", groupId: "g", region: "runs", taskId: null, runId: null }} view={view([r])} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={onCommand} roles={roles} />); return { ...result, onCommand }; };
 describe("owner conservative usage settlement", () => {
   it("requires explicit confirmation of all dimensions of both buckets and sends identity only", () => {
     const { onCommand } = show(["owner"]);
@@ -37,14 +37,14 @@ describe("owner conservative usage settlement", () => {
     show(["owner"], r);
     expect(screen.queryByRole("button", { name: "Settle unknown usage" })).toBeNull();
     expect(screen.getByText(/complete isolated stop proof/)).toBeTruthy();
-    expect(screen.getByText(/reported an error/)).toBeTruthy();
+    expect(within(screen.getByRole("tabpanel")).getByText(/reported an error/)).toBeTruthy();
   });
   it("drops confirmation when the server preview changes", () => {
     const { rerender, onCommand } = show(["owner"]);
     fireEvent.click(screen.getByRole("button", { name: "Settle unknown usage" }));
     fireEvent.click(screen.getByRole("checkbox"));
     const r = failed(); r.unknownUsageSettlement = { ...r.unknownUsageSettlement!, highWater: 3 };
-    rerender(<ControlGroupView view={view([r])} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={onCommand} roles={["owner"]} />);
+    rerender(<ControlGroupView focus={{ kind: "group", groupId: "g", region: "runs", taskId: null, runId: null }} view={view([r])} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={onCommand} roles={["owner"]} />);
     expect(screen.queryByRole("button", { name: "Confirm irreversible settlement" })).toBeNull();
   });
 });

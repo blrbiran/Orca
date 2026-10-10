@@ -16,6 +16,14 @@ const actionButtons = (): HTMLElement[] =>
   screen.queryAllByRole("button").filter((button) => !(button as HTMLButtonElement).disabled && button.closest("figure") === null
     && !button.hasAttribute("aria-expanded") && !/evidence/i.test(button.textContent ?? ""));
 
+const selectRegion = (name: string): void => { fireEvent.click(screen.getByRole("tab", { name })); };
+const allRegionActions = (): string[] => {
+  const buttons = new Set<HTMLElement>();
+  for (const region of ["Progress", "Preparation", "Problems", "Results", "Runs and evidence", "Technical details"]) {
+    selectRegion(region); for (const button of actionButtons()) buttons.add(button);
+  }
+  return [...buttons].map(button => button.getAttribute("aria-label") ?? button.textContent ?? "");
+};
 const archived = (base: GroupViewV1): GroupViewV1 => ({ ...base, summary: { ...base.summary, state: "ready", archived: true } });
 
 describe("archiving from the group view (spec §6.3)", () => {
@@ -25,7 +33,7 @@ describe("archiving from the group view (spec §6.3)", () => {
     expect(screen.getByRole("status", { name: "Archived" }).textContent).toContain("This group is archived");
     fireEvent.click(screen.getByRole("button", { name: "Unarchive" }));
     expect(onCommand).toHaveBeenCalledWith({ verb: "unarchive-group", groupId: "g", expectedRevision: 6, payload: {} });
-    expect(actionButtons().map((button) => button.textContent)).toEqual(["Unarchive"]);
+    expect(allRegionActions()).toEqual(["Unarchive"]);
   });
 
   it("offers no retry on an archived group, because the server refuses every command but Unarchive (group-archived)", () => {
@@ -34,9 +42,11 @@ describe("archiving from the group view (spec §6.3)", () => {
     // D9/M3: a task Retry is offered only for its current failure.
     const base = view([workItem({ taskId: "a", currentRunId: failed.runId, lineageRunIds: [failed.runId] })], [failed, held]);
     const open = render(<ControlGroupView view={base} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
+    selectRegion("Runs and evidence");
     expect(screen.getAllByRole("button", { name: /^Retry (task|run)/ })).toHaveLength(2);
     open.unmount();
     render(<ControlGroupView view={archived(base)} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
+    selectRegion("Runs and evidence");
     expect(screen.queryAllByRole("button", { name: /^Retry/ })).toHaveLength(0);
   });
 
@@ -47,14 +57,14 @@ describe("archiving from the group view (spec §6.3)", () => {
     const props = { config, uncertain: [], drafts: {}, onDraft: vi.fn(), onCommand, agents: null, integrationFor: () => null };
     const open = render(<ControlGroupView view={view([item], [failed])} {...props} />);
     fireEvent.click(screen.getAllByRole("button", { name: "a" })[0]!);
-    const before = actionButtons().length;
+    const before = allRegionActions().length;
     // Final review M1: the failed run is still active, so Archive group is not among them (archive-run-active).
     expect(before).toBeGreaterThanOrEqual(10);
     open.unmount();
     render(<ControlGroupView view={archived(view([item], [failed]))} {...props} />);
     fireEvent.click(screen.getAllByRole("button", { name: "a" })[0]!);
     expect(screen.getByRole("region", { name: /^Task a/ })).toBeTruthy();
-    expect(actionButtons().map((button) => button.textContent)).toEqual(["Unarchive"]);
+    expect(allRegionActions()).toEqual(["Unarchive"]);
     // Fields may be shown, but none can be typed into: a draft of an edit the server will refuse is never started.
     expect(screen.queryAllByRole("textbox").filter((field) => !(field as HTMLInputElement).readOnly)).toHaveLength(0);
   });
@@ -76,6 +86,7 @@ describe("archiving from the group view (spec §6.3)", () => {
     const onCommand = vi.fn();
     render(<ControlGroupView view={view([workItem({ taskId: "a" })])} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={onCommand} />);
     expect(screen.queryByRole("status", { name: "Archived" })).toBeNull();
+    selectRegion("Problems");
     fireEvent.click(screen.getByRole("button", { name: "Archive group" }));
     expect(onCommand).toHaveBeenCalledWith({ verb: "archive-group", groupId: "g", expectedRevision: 6, payload: {} });
   });
@@ -92,6 +103,7 @@ describe("archiving from the group view (spec §6.3)", () => {
 describe("Archive group is offered only where the server accepts archive-group (final review M1)", () => {
   const offered = (shown: GroupViewV1): boolean => {
     const mounted = render(<ControlGroupView view={shown} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
+    selectRegion("Problems");
     const found = screen.queryByRole("button", { name: "Archive group" }) !== null;
     mounted.unmount();
     return found;
@@ -136,18 +148,21 @@ describe("Archive group is offered only where the server accepts archive-group (
 });
 
 describe("the group detail's order (spec §6.5)", () => {
-  it("puts the archived banner before the graph, the graph before the work-items table, the table before runs, and runs before the budget editor", () => {
+  it("keeps the archived banner before the progress graph and table, with budget and runs in their own regions", () => {
     render(<ControlGroupView view={archived(view([workItem({ taskId: "a" })]))} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
     const banner = screen.getByRole("status", { name: "Archived" });
     const graph = screen.getByRole("figure", { name: "Dependency graph" });
     const items = screen.getByRole("heading", { name: "Work items" });
+    selectRegion("Runs and evidence");
     const runs = screen.getByRole("heading", { name: "Runs" });
+    selectRegion("Preparation");
     const budget = screen.getByRole("region", { name: "Budget proposal" });
     const follows = (a: Element, b: Element) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
     expect(follows(banner, graph)).toBe(true);
     expect(follows(graph, items)).toBe(true);
     expect(follows(items, runs)).toBe(true);
-    expect(follows(runs, budget)).toBe(true);
+    expect(runs.closest('[role="tabpanel"]')?.getAttribute("data-overview-region")).toBe("runs");
+    expect(budget.closest('[role="tabpanel"]')?.getAttribute("data-overview-region")).toBe("preparation");
   });
 });
 
@@ -192,7 +207,7 @@ describe("an archived group takes no edit anywhere on the page (spec §6.3)", ()
   it("offers every editor while the group is not archived, so the next test is not an empty page", () => {
     showSetup(setup());
     fireEvent.click(screen.getAllByRole("button", { name: "a" })[0]!);
-    const names = actionButtons().map((button) => button.getAttribute("aria-label") ?? button.textContent ?? "");
+    const names = allRegionActions();
     for (const expected of [
       /^use \d+ for/, /^Apply row/, /^Apply all/, /^Set limit/, /^Save proposal/, /^Re-estimate/, /^Confirm budget/, /^Save integration/, /^Retry integration/, /^Resolve with an agent/,
       /^Re-read agent/, /^Set group worker agent/, /^Set agent for task a/, /^Change plan/, /^Remove x/, /^Add system label/, /^Restore plan labels/,
@@ -206,8 +221,8 @@ describe("an archived group takes no edit anywhere on the page (spec §6.3)", ()
     showSetup(archived(setup()), onCommand);
     fireEvent.click(screen.getAllByRole("button", { name: "a" })[0]!);
     expect(screen.getByRole("region", { name: /^Task a/ })).toBeTruthy();
-    expect(actionButtons().map((button) => button.textContent)).toEqual(["Unarchive"]);
+    expect(allRegionActions()).toEqual(["Unarchive"]);
     expect(screen.queryAllByRole("textbox").filter((field) => !(field as HTMLInputElement).readOnly)).toHaveLength(0);
-    expect(screen.queryAllByRole("combobox")).toHaveLength(0);
+    for (const region of ["Progress", "Preparation", "Problems", "Results", "Runs and evidence", "Technical details"]) { selectRegion(region); expect(screen.queryAllByRole("combobox")).toHaveLength(0); expect(screen.queryAllByRole("textbox").filter((field) => !(field as HTMLInputElement).readOnly)).toHaveLength(0); }
   });
 });

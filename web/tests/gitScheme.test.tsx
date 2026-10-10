@@ -15,7 +15,7 @@ afterEach(cleanup);
 
 const workspace = (repoId: string, workspaceMode: "worktree" | "clone"): RepositoryWorkspaceV1 => ({ schema: "orca-repository-workspace-v1", repoId, workspaceMode, revision: 3 });
 const show = (groupView: GroupViewV1, ws?: RepositoryWorkspaceV1 | null) =>
-  render(<ControlGroupView view={groupView} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} workspace={ws} />);
+  render(<ControlGroupView focus={{ kind: "group", groupId: "g", region: "results", taskId: null, runId: null }} view={groupView} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} workspace={ws} />);
 const section = () => screen.getByRole("region", { name: "Git" });
 
 describe("the Git section (spec B3)", () => {
@@ -65,7 +65,7 @@ describe("the page's read of the mode reaches the group (spec B3)", () => {
     const groupView = view([workItem({})]);
     const summary: ControlSummaryV1 = { schema: "orca-control-summary-v1", epoch: "epoch-a", changeSeq: 4, resetRequired: false, dispatchBlocked: false, groups: [groupView.summary] };
     const recovery: RecoveryViewV1 = { schema: "orca-control-recovery-v1", epoch: "epoch-a", dispatchBlocked: false, blockers: [] };
-    render(<ControlPanel config={config} summary={summary} recovery={recovery} groups={{ g: groupView }} selected="g" drafts={{}} uncertain={[]} refusal={null}
+    render(<ControlPanel focus={{ kind: "group", groupId: "g", region: "results", taskId: null, runId: null }} config={config} summary={summary} recovery={recovery} groups={{ g: groupView }} selected="g" drafts={{}} uncertain={[]} refusal={null}
       refetchRequired={false} onSelect={vi.fn()} onDraft={vi.fn()} onCommand={vi.fn()} workspace={workspace("orca", "clone")} />);
     expect(section().textContent).toContain("New runs use a private clone");
   });
@@ -74,6 +74,7 @@ describe("the page's read of the mode reaches the group (spec B3)", () => {
 describe("the loop plan card's git line (spec D7)", () => {
   const card = (ws?: RepositoryWorkspaceV1 | null): string => {
     show(view([workItem({ taskId: "a", loopPlan: PLAN })]), ws);
+    fireEvent.click(screen.getByRole("tab", { name: "Progress" }));
     fireEvent.click(screen.getByRole("button", { name: "a", expanded: false }));
     return screen.getByRole("region", { name: "Plan a" }).textContent ?? "";
   };

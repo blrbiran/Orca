@@ -3,7 +3,8 @@
  * byte for byte. Keys are grouped by panel area. Enum families (spec §3.5) are Records over the value unions, so a new
  * value is a compile error here until it has its words. Tasks 3-10 add their areas.
  */
-import type { ThemePref } from "../theme.js";
+import type {
+ ThemePref } from "../theme.js";
 import type { ChainStopCategory, CorrectionKind, DecisionKind, DecisionObservation, DecisionScope, MetricsNoteCode } from "../types.js";
 import type {
   ActivityKindV1, AgentSlotV1, AllocationViewV1, AmountDimensionV1, BudgetEstimateV1, CapabilityViewV1, EstimateViewV1, FieldProvenanceV1, GroupSummaryV1, GroupViewV1, HandoffRequestViewV1, ProvenanceSourceV1, RecoveryViewV1, RequirementViewV1, RunViewV1, WorkItemProgressV1, WorkItemViewV1,
@@ -121,6 +122,7 @@ const selectionSource = {
 } as const satisfies Record<ProvenanceSourceV1, string>;
 
 export const en = {
+  detail: { regions: "Group detail", progress: "Progress", preparation: "Preparation", problem: "Problems", results: "Results", runs: "Runs and evidence", technical: "Technical details", resultsMissing: "Work is completed; its explanation is missing.", resultsNotProduced: "A result explanation has not been produced here yet.", resultsEvidence: "Existing run evidence remains available. Task completion, goal review and Git delivery are separate facts.", openRun: "Open run controls and evidence · {{runId}}", goalReview: "The group is in goal review; task completion does not establish goal acceptance.", nextAction: "Review progress, preparation or problems; each region keeps the actions allowed by the current read." },
   nav: { overview: "Overview", sections: "Sections", decisions: "Decisions", chains: "Chains", tasks: "Task control", requirements: "Requirements", memory: "Memory", metrics: "Metrics", globalSettings: "Global settings", projectSettings: "Project settings" },
   overview: {
     title: "Overview", progress: "Progress", queue: "Needs your attention", newRequirement: "New requirement", import: "Import plan",
