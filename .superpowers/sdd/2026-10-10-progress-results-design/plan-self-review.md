@@ -41,3 +41,13 @@ Ruling: cleanup may flush optional retention only AFTER business settlement, wit
 Baseline evidence: Web92/751/0fail RC0. ccloop125 files/1298pass/1fail, CLI example 5000-ms timeout was UNKNOWN to known-red checker; full result is not green. Same unchanged CLI file three isolated runs37/37 each RC0, with load observations retained. No test edit or new flake waiver. First ccloop full attempt had min/max worker conflict before tests; retained, rerun used Vitest2 minWorkers1/maxWorkers2. Orca root baseline still running on unchanged source when this note was written.
 
 Ruling: proceed from the explicit source baseline and named scoped recovery per user's autonomous recommendation instruction; final full gates must rerun and classify actual failures, never turn this baseline timeout into a new waiver.
+# Follow-through correction: actual verifier-start observation, 2026-10-10
+
+This named append is binding through independently reviewed Results spec8.5; original preflight rows remain historical. Task2 implementation/review showed no existing authorized live started fact, so the following shared-interface rows supplement the original table.
+
+| Producer / consumer | Produced / consumed interface | Finding and resolution |
+| --- | --- | --- |
+| Results2 → Results3 | Same exact manifest/collection fields; verificationRef can own strict ccloop-task-result-verification-started-v1 {attempt,status:in-progress} | Consumer mirrors literal started subtype, binds attempt to manifest, never consumes private index kind; cursor counts immutable observations rather than two-per-attempt assumption. |
+| Results2 → Results4 | Controller actual entry observation followed by actual completed VerificationResult, same saved output refs | Pending active observation is in-progress only with typed actual proof. Started terminal without completed is unavailable; active missing proof is unavailable, stopped-before-verifier not-run needs authorized core lifecycle fact. |
+| Results4 → Results5 | Honest availability/actual verifier state distinct from explanation, execution and Git delivery | Missing/invalid start/result evidence never promotes prior/current results or invents pass/rejection. Existing current-attempt/stale-request guards remain. |
+| Results2 own consistency | One execution + optional started + completed immutable observations; optional start job independent of provider invocation/measurement | Live-paused/history/package expectations update fully; stopped-before-verifier and direct two-observation paging remain. All queued promises observed/fenced and ordered before completion/cleanup; real provider usage/calls/attempts unchanged. |

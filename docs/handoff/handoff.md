@@ -163,36 +163,19 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 
 ## 四、⛔ 下一件事
 
-### 4.0 现在的接手入口（2026-10-10，Codex controller；本节优先于旧条目）
+### 4.0 现在的接手入口（2026-10-11，滚动更新）
 
-**本轮 feedback-maintenance 已按人 2026-10-10 最新授权 fast-forward 合入 Orca main；三仓当前本地 main 整合及无用 worktree/branch 清理已完成，未 push。** 独有历史文档和忽略证据先归档后清理，详情及本轮整合验收见 `docs/handoff/2026-10-10-main-integration-and-cleanup.md`。当前分支/HEAD/三仓远端请现查，提交 handoff 会移动 HEAD；本文不固定当前哈希。
+**先看实际状态**：本轮“看懂进展／下一步”与“看懂任务成果”已完成的提交现已快进到 Orca 本地 `main`；ccloop 成果通道开发分支也已快进到其本地 `main`。ccmem 本轮无待合开发分支，其先前获授权的 `config-value-parity` 已在 `main`。编辑本文期间 Orca 与 ccloop 的 `origin/main` 跟踪引用移动到了已合提交，但网络 DNS 不通，未直接核验远端；交接文档提交后的推送状态仍须现查。每次接手核对 `git status -sb`、`git worktree list`、本地及远端分支，勿把本文提交时的 HEAD 当常量。旧 issue-fixes、D9/M3、M5/M6、feedback-maintenance 均已收口，不重做；旧轮入口和整合证据仍见本节以下及 `docs/handoff/2026-10-10-main-integration-and-cleanup.md`。
 
-**旧 issue-fixes、D9/M3、M5/M6 三轮均已结束，不重做。** issue-fixes 人已合并推送；D9/M3、M5/M6 的源码/设计/清理历史已按此前授权本地合 main。本轮按人最新授权清理已合入的审查 worktree/分支；历史未提交文档及隐藏证据已保全，不重做已完成轮或跑旧性能实验。
+**已完成的 Orca 范围**：进展优先布局、总览与下一步行动、组详情六区域、全局/项目设置及任务/运行定位已实现并经各任务独立复审；方案见 `docs/superpowers/specs/2026-10-10-progress-and-next-actions-design.md`，计划见 `docs/superpowers/plans/2026-10-10-progress-and-next-actions.md`。成果通道的协议、隔离保存、证据解释、后端只读模型/API（Results 1–4）已实现，任务成果＋组成果汇总、保存部分成果、成果说明缺失但保留验收结果等裁决见 `docs/superpowers/specs/2026-10-10-task-results-design.md` §8–8.6，执行计划见 `docs/superpowers/plans/2026-10-10-task-results.md`。没有为总结另开模型调用；旧任务缺成果资料时明确显示缺失/不可用。后端按保存的 owner/attempt/revision/真实验证生命周期给出事实，不能由 Agent 文字推断验收或 Git 交付。
 
-**进度与证据入口**（相对本仓）：
-- 本轮：`.superpowers/sdd/2026-10-10-feedback-maintenance/progress.md` 末尾 Round close；计划 `docs/superpowers/plans/2026-10-10-feedback-maintenance.md`；同目录 `final-review.md` 末尾复审、`verification.md`、`evidence.tar.gz` 与 manifest。详细37条核对：`docs/handoff/2026-10-10-feedback-status.md`。
-- D9/M3：`.superpowers/sdd/2026-10-09-usage-settlement-and-handoff-retry-implementation/progress.md` 末尾 Round close；同目录 `final-review.md`，设计同主题 `docs/superpowers/specs/2026-10-09-usage-settlement-and-handoff-retry-design.md` §9/§9.5 更正优先。
-- 性能：`.superpowers/sdd/2026-10-09-control-poll-performance/progress.md` 末尾 Round close；性能最终裁定 `final-fix-review.md`，观测 `benchmark-report.md`，历史 main 验收 `main-integration-verification.md`。设计 `docs/superpowers/specs/2026-10-09-control-poll-performance-design.md` §7 更正优先。设计草案与历史未勾清单不代表仍未实施。
+**暂停点（先不要误判为已交付）**：Results 5 成果 Web 页尚未完成、未评审、未验收；main 目前仍是占位/旧展示。其未提交改动与新测试保存在 `/Users/biran/.codex/worktrees/progress-results-20261010/Orca` 的 `codex/progress-results-20261010` worktree；该分支的已提交顶点已合 main，但 worktree 内 WIP 没有合入，也不能清理。续做时先 `git status --short`、读该 worktree 的 diff 与 `web/src/{TaskResults,GroupResults,ResultOutput,SafeMarkdown}.tsx`、`web/tests/*Results.test.tsx`；以 `docs/superpowers/plans/2026-10-10-task-results.md` Task 5 和 `.superpowers/sdd/2026-10-10-task-results/` 的 brief/progress 为准，完成独立复审及最终整体验收后才称成果页完成。已提交规范 §8.6 和预检补遗在 main；未提交的成果页源码只在该 worktree。
 
-**本轮实际行为**：
-- account-bar、菜单/通知与 shell 共享 viewport，侧栏和内容内部滚动；没有写死账户栏高度。
-- 显式 Codex installation 按 `kind` 在提交前提示并拒绝不支持的 single-call 澄清；自定义 ID 有覆盖，默认/未知仍由服务端裁。Codex worker/冻结 skills 支持保留，没有添加 single-call 能力。
-- 需求页补 archive/unarchive、默认隐藏已归档/显式显示、归档详情只读。App 直答/拒绝/丢失结果恢复按需求所有权接线；已接受拆分的需求同时刷新任务视图。提交始终带现读 revision，服务端最终守卫保持。
-- 最新返回活动窗口按 seq 正序展示，后端 DESC LIMIT 最新N条不变。Runs 使用 K/M/B、精确 tooltip；UUID/hash/证据标识可展开、状态分行、证据下载保留。整数预算输入与中文数量级提示不改。
-- 中文改服务会话/状态序号/调度/上下文窗口与Git父提交；README/操作skill补核心概念、先选agent再confirm/start、版本draft审后更新、停止/重试/未知用量排障。修正文档旧Codex skills限制。无自动预算确认、SQL修库或强制启动。
+**可复核的门**：Orca Results 4 完成边界在源树上的 root 全量 379 文件／3627 通过／0 失败／4 既有跳过；原始命令、RC、SHA 与 630 个逐件核验附件在 `.superpowers/sdd/2026-10-10-task-results/task-4-evidence/`，审查报告见同级 `task-4-report.md`。ccloop 成果通道 134 文件／1381 通过、`verify:control` 58 文件／627 通过、已知红 0、新包假 worker 生命周期/保存字节冒烟通过；其源码已在本地 main。整轮新的成果 Web UI、真实浏览器桌面/手机几何、真实 launchd/systemd、Linux 文件捕获仍无通过证据，不得沿用前一轮 3505／751 的验收代替新功能验收。Vite 大包及 SQLite 实验提示、Results 3 的 Proxy 不变量疑点、区域 tabs 键盘行为与设置冲突措辞仍待最终复核。
 
-**本轮验收**：root371文件/3505通过/0失败/4跳过；实际control155文件/1735通过/3默认pin跳过，scheduler56文件/202通过；这是完整root里的覆盖，不冒充另跑wrapper。默认pin另跑3/3；真实launchd那1条未跑。Web TypeScript+92文件751通过/0失败；root build/typecheck、web build、panel0–14、skill路由6/6、拒绝覆盖5/5、Web parity5/5、官方skill校验、行数/钩子检查均RC0。最终clone60/60，临时目录检查外层0且内层Vitest0/60/零残留。20项最终独立删除变异均业务RED，逐次工作/暂存diff0字节；独立终审末尾Ready/0Critical/0Important/0Minor。完整原始失败及更正未改写，不新增flake豁免。253个证据成员全量SHA复核见manifest。
+**依赖与真实环境边界**：Orca package/lock/安装内容仍固定 ccloop `ab824d16004de2d3c1613a76ec0431520aa16cc9`；测试用该 pin clone build 的绝对 `ORCA_CCLOOP_BIN=/private/tmp/orca-d9-ccloop-ab824d1/dist/cli.js`，panel 测试前先 web build。ccloop 新源码合 main 不等于 npm 发布、Orca repin 或真实运行时切换。控制库 schema 10 单向；真实库须先备份/按人审流程升级，真实面板/daemon/ccmem 数据根均未切换。测试隔离 HOME/XDG/TMPDIR/CCMEM_DATA_ROOT，勿碰真实配置或付费 provider。
 
-**仍须诚实保留**：浏览器工具因 `file:` 协议策略拒绝几何验收，未绕过；DOM/CSS判据不等于真实桌面/手机/短屏布局已验，留人视觉审核。Vite JS592.97kB包体警告、SQLite实验警告存在。ledger原生CLI仍RC2：七条历史tier0降级，台账原字节未变；早先tsx因sandbox IPC失败的RC1也保留。测试设置/旧文案失败均具名留在新台账，不把它们当新flake。
-
-**已完成轮的行为/边界仍成立**：D9仅owner Web保守结清未知用量，两桶四维剩余额记已用、已释放额度不重复扣reserved；不隐含重试或清停止。M3允许符合身份/claim/lineage/账本/证据条件的held或manual-settled失败run重试，保留原因；完整停止先明确空选择resume，未知/pending用量仍挡admission。schema10单向，只测临时迁移副本；真实库升级仍由人备份/切换。
-M5/M6复用每请求原始批读/懒解码与每同步段组body，归档合法wake早挡但最终事务守卫保持；仍有canonical/proposal/proof逐任务读取、全组/归档pending线性扫，不宣称整页2/3SQL或全部N+1消失。性能真实规模100live×50任务加100archived/300三类wake；原始timed before0/after1的SQLite原型误报保留，另SHA绑定两侧不计时复验0。旧门/性能限制看其原始台账，不重写成新观测。
-
-**固定依赖与隔离**：package/lock/hidden lock pin仍 `ab824d16004de2d3c1613a76ec0431520aa16cc9`，不需重装。测试 `ORCA_CCLOOP_BIN=/private/tmp/orca-d9-ccloop-ab824d1/dist/cli.js`，临时失效就重建该pin clone build；npm包缺tests/fixtures。panel前先web build。HOME/XDG/TMPDIR/CCMEM_DATA_ROOT/用户写入全部改道，去掉真实CCMEM_CONFIG_PATH；本轮无付费provider、真实库/面板/daemon切换。
-
-**ccmem整合现状**：人已明确允许必要ccmem改动合main；config-value-parity已由既有本地整合完成，只增配置值一致性测试。前后隔离配置25/25，非全仓门；证据 `docs/handoff/2026-10-10-ccmem-local-integration.md`。不再重复合，旧pending/禁令段是历史。姊妹仓本轮产品/协议零改，只滚动同步Orca handoff章节；文档提交以一次性空hooksPath避开Qoder tracker，持久hook配置不改。
-
-**下一轮/归人**：本地 main 整合/旧分支与 worktree 清理已按人本轮授权完成；push仍归人，视觉几何仍须人验。接下来用brainstorm定第一批范围。需brainstorm的19/30总览、24成果总结/报告、6/27–29设置聚合、18右键、26跨组演进/Chains定位、31更大详情布局、32新通知、34向导、35视觉换肤、自动版本探测与性能余热点均未做。ccloop B4 usageBreakdown点名或放弃、真实GitHub集成、ccmem T13/临时目录/daemon/备份语义等原挂账未关闭。已授权旧五项清理见 `docs/handoff/2026-10-09-post-merge-cleanup.md`，不外延到其他保留工作。
+**下一步**：按用户本轮指示暂停实现，把三仓本地 main 与 handoff 交人审核；远端推送状态核验、ccloop 发布/Orca repin、真实库与运行时切换仍待后续明确操作。若恢复开发，先接 Results 5 WIP，完成其测试、独立复审、真实浏览器几何和最终整轮门；保留旧任务缺失资料的诚实状态，不清理承载 WIP 的 worktree。ccloop B4/真实 GitHub 集成、ccmem T13/备份/daemon 等既有挂账未被本轮关闭。
 
 ### 4.0.w 会话 `e34dc963`（2026-10-08～09）留下的结论（**前半已由人合并推送；过程删了，结论留在这里**）
 
