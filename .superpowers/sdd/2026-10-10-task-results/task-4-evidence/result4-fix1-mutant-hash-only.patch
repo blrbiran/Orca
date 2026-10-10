@@ -1,0 +1,14 @@
+diff --git a/src/panel/taskResultOutputs.ts b/src/panel/taskResultOutputs.ts
+index c8ef322..396d4cc 100644
+--- a/src/panel/taskResultOutputs.ts
++++ b/src/panel/taskResultOutputs.ts
+@@ -57,8 +57,7 @@ export async function readResultOutputBytes(store: ControlStore, runId: string,
+     bytes: Buffer | null;
+ }> {
+     const authority = resultAuthority(store, runId, context), observation = authority.observations.find(o => o.manifest.outputs.some(output => resultOutputId(runId, o.manifest.attempt, output.id) === outputId));
+-    if (!observation)
+-        throw unavailable();
++    if (!observation) { const registered=store.db.prepare('SELECT id,hash FROM artifacts WHERE id=? OR hash=?').get(outputId,outputId);if(!registered)throw unavailable();const bytes=await readSavedResultArtifact(store,{artifactId:String(registered.id),hash:String(registered.hash)},MAX_TASK_RESULT_FILE_BYTES);return {view:{schema:'orca-result-output-v1',runId,groupId:authority.group.summary.groupId,attempt:1,outputId,path:'saved',status:'available',byteLength:bytes.length,content:bytes.toString('utf8'),downloadUrl:null},bytes};}
+     const manifest = await ownedResultManifest(store, authority, observation), output = manifest.outputs.find(o => resultOutputId(runId, manifest.attempt, o.id) === outputId)!;
+     const base = {
+         schema: 'orca-result-output-v1' as const, runId, groupId: authority.group.summary.groupId, attempt: manifest.attempt, outputId, path: output.path, status: output.status, byteLength: output.byteLength, content: null, downloadUrl: null

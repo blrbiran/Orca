@@ -1,0 +1,17 @@
+{
+  "cwd": "/private/tmp/orca-results-ccloop-20261010",
+  "sourceCommit": "c3643a9fb11a6d0a023e88b384356d3f7fedc58f",
+  "workingSourceDiffBytes": 4070,
+  "cachedSourceDiffBytes": 0,
+  "untrackedSource": [],
+  "argv": [
+    "./node_modules/.bin/vitest",
+    "run",
+    "tests/controller/taskResultCapture.test.ts",
+    "--minWorkers=1",
+    "--maxWorkers=2",
+    "--no-cache",
+    "-t",
+    "handoff after"
+  ]
+}

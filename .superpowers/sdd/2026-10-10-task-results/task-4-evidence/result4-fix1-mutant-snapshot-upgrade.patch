@@ -1,0 +1,13 @@
+diff --git a/src/panel/taskResults.ts b/src/panel/taskResults.ts
+index b3c799b..084386e 100644
+--- a/src/panel/taskResults.ts
++++ b/src/panel/taskResults.ts
+@@ -143,7 +143,7 @@ export async function readRunResults(store: ControlStore, runId: string, context
+             try {
+                 const m = await ownedResultManifest(store, a, observation);
+                 if (snapshotRevision === null && m.stage === 'execution' && m.executionRef !== null)
+-                    snapshotRevision = m.revision;
++                    snapshotRevision = latest.manifest.revision;
+                 if (m.verificationRef)
+                     actual = taskResultVerification(m, await readSavedResultArtifact(store, m.verificationRef));
+             }

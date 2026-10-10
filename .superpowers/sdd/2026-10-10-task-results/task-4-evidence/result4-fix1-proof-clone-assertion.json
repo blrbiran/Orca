@@ -1,0 +1,16 @@
+{
+  "cwd": "/private/tmp/orca-progress-results-20261010/result4-fix1-proof-clone",
+  "source": "/Users/biran/.codex/worktrees/progress-results-20261010/Orca",
+  "sourceCommit": "fef429e76b3eb4b113d4817396de5cc4570fad12",
+  "cloneCommit": "fef429e76b3eb4b113d4817396de5cc4570fad12",
+  "argv": [
+    "/usr/bin/git",
+    "clone",
+    "--local",
+    "--no-hardlinks",
+    "/Users/biran/.codex/worktrees/progress-results-20261010/Orca",
+    "/private/tmp/orca-progress-results-20261010/result4-fix1-proof-clone"
+  ],
+  "workingDiffBytes": 0,
+  "cachedDiffBytes": 0
+}

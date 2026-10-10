@@ -1,0 +1,26 @@
+
+ RUN  v2.1.9 /private/tmp/orca-results-ccloop-20261010
+
+ ✓ tests/control/taskResults.test.ts (6 tests) 5240ms
+   ✓ bounded result snapshots > pages at most 64 immutable observations and reports the independent current attempt 4106ms
+ ✓ tests/controller/taskResultCapture.test.ts (21 tests) 8783ms
+   ✓ immutable live attempt results > reads execution while verify pauses, then retains the same bytes after verify edits and cleanup 617ms
+   ✓ immutable live attempt results > retains partial reports without changing actual verification or usage: undefined 627ms
+   ✓ immutable live attempt results > retains partial reports without changing actual verification or usage: {"bad":"report"} 594ms
+   ✓ immutable live attempt results > retains partial reports without changing actual verification or usage: {"schema":"task-result-v1","goal":"Produce answer","completedWork":["Wrote answer"],"conclusions":["Agent claim"],"limitations":[],"outputs":[{"path":"answer.txt","label":"Answer"}]} 539ms
+   ✓ immutable live attempt results > diagnoses capture I/O failure without changing core success 402ms
+   ✓ immutable live attempt results > shows rejected attempt one as history while attempt two executes, then records its separate pass 942ms
+   ✓ immutable live attempt results > handoff after execute retains only actually executed observations 346ms
+   ✓ immutable live attempt results > real capture refuses outside bytes during an ancestor swap and preserves success 493ms
+   ✓ immutable live attempt results > refuses owner transfer during verification-completed index staging 320ms
+   ✓ immutable live attempt results > settles real verification usage while started metadata publication is blocked 468ms
+   ✓ immutable live attempt results > settles blocked-start provider error before release and preserves failure routing 427ms
+   ✓ immutable live attempt results > settles blocked-start provider error before release and preserves handoff routing 302ms
+   ✓ immutable live attempt results > keeps actual completion and deduplicates a start whose optional evidence write failed 453ms
+ ✓ tests/control/taskResultAuthority.test.ts (8 tests) 1663ms
+
+ Test Files  3 passed (3)
+      Tests  35 passed (35)
+   Start at  22:13:17
+   Duration  11.16s (transform 339ms, setup 36ms, collect 619ms, tests 15.69s, environment 0ms, prepare 134ms)
+

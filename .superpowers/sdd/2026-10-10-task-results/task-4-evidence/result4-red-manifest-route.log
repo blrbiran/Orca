@@ -1,0 +1,33 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.3 [39m[90m/Users/biran/.codex/worktrees/progress-results-20261010/Orca[39m
+
+(node:8765) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ [31m❯[39m tests/panel/taskResultApi.test.ts [2m([22m[2m3 tests[22m[2m | [22m[31m1 failed[39m[2m | [22m[33m2 skipped[39m[2m)[22m[33m 1682[2mms[22m[39m
+   [31m❯[39m saved task result API [2m(3)[22m
+     [2m[90m↓[39m[22m serves actual admitted run and group results under the panel epoch without GET writes
+     [2m[90m↓[39m[22m serves inert HTML, attachment downloads and refuses arbitrary output/hash ids and unauthenticated reads
+[31m     [31m×[31m missing admitted manifest refuses by name while healthy core evidence remains available[39m[33m 1680[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/panel/taskResultApi.test.ts[2m > [22msaved task result API[2m > [22mmissing admitted manifest refuses by name while healthy core evidence remains available
+[31m[1mAssertionError[22m: expected 500 to be 423 // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 423[39m
+[31m+ 500[39m
+
+[36m [2m❯[22m tests/panel/taskResultApi.test.ts:[2m62:606[22m[39m
+
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[33m2 skipped[39m[90m (3)[39m
+[2m   Start at [22m 20:57:47
+[2m   Duration [22m 3.02s[2m (tests 58%, transform 33%, import 9%)[22m
+

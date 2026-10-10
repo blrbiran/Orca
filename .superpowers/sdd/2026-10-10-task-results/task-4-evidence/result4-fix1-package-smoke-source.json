@@ -1,0 +1,104 @@
+{
+  "binary": "/private/tmp/orca-progress-results-20261010/result4-fix1-unpacked-v2/package/dist/cli.js",
+  "packageRoot": "/private/tmp/orca-progress-results-20261010/result4-fix1-unpacked-v2/package",
+  "root": "/private/tmp/results-task2-8FTkmI",
+  "sourceDir": "/private/tmp/results-task2-8FTkmI/source",
+  "input": {
+    "protocol": 3,
+    "claim": {
+      "groupId": "group-1",
+      "workItemId": "work-1",
+      "taskId": "task-1",
+      "runId": "run-1",
+      "generation": 1,
+      "graphVersion": 1,
+      "targetVersion": 1,
+      "commandId": "command-1",
+      "configHash": "4f5f7da431b49be1f14d3c904d59f678a24b3c0a72b08996f899a530e07c26ac",
+      "agent": {
+        "agent": "codex",
+        "model": "fixture",
+        "contextWindow": "agent-default"
+      },
+      "grant": {
+        "work": {
+          "tokens": 1000,
+          "activeMs": 30000,
+          "attempts": 2,
+          "sessions": 1
+        },
+        "handoff": {
+          "tokens": 1000,
+          "activeMs": 30000,
+          "attempts": 2,
+          "sessions": 1
+        }
+      },
+      "ownerToken": "owner-1"
+    },
+    "contractHash": "fe22e896fd03ec09c303e84e47c6d153a291f8779a434258393d968792b5ee8f",
+    "inputCheckpoint": null,
+    "work": {
+      "kind": "loop",
+      "contract": {
+        "objective": {
+          "taskId": "task-1",
+          "goal": "Produce answer",
+          "successCondition": "check",
+          "nonGoals": []
+        },
+        "context": {
+          "repoPath": "/private/tmp/results-task2-8FTkmI/repo",
+          "targetPaths": [
+            "answer.txt"
+          ],
+          "relevantDocs": [],
+          "buildTestCommands": [
+            "true"
+          ],
+          "constraints": []
+        },
+        "executionPolicy": {
+          "autonomyLevel": "L2",
+          "maxAttempts": 2,
+          "perAttemptTimeoutMs": 10000,
+          "totalRuntimeBudgetMs": 30000,
+          "tokenBudget": 1000,
+          "worktreeRequired": true,
+          "partialOutcomeRecoveryWindowMs": 0
+        },
+        "safetyPolicy": {
+          "allowlistPaths": [],
+          "denylistPaths": [],
+          "maxFilesTouched": 64,
+          "humanGateConditions": []
+        },
+        "verification": {
+          "verifierType": "agent",
+          "requiredChecks": [
+            "true"
+          ],
+          "rejectOn": [
+            "check failed"
+          ],
+          "evidenceRequired": []
+        },
+        "escalationAndExit": {
+          "escalationTargets": [],
+          "pauseOn": [],
+          "stopOn": [],
+          "terminalStates": [
+            "succeeded",
+            "failed",
+            "exhausted",
+            "cancelled",
+            "blocked_waiting_human"
+          ]
+        }
+      },
+      "targetRepo": "/private/tmp/results-task2-8FTkmI/repo",
+      "base": "HEAD",
+      "sourceDir": "/private/tmp/results-task2-8FTkmI/source"
+    }
+  }
+}

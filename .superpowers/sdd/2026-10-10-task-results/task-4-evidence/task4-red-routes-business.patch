@@ -1,0 +1,9 @@
+diff --git a/src/control/webProtocol.ts b/src/control/webProtocol.ts
+index 24ef081..6d4da16 100644
+--- a/src/control/webProtocol.ts
++++ b/src/control/webProtocol.ts
+@@ -1825,3 +1825,4 @@ export const usageViewSchema = z
+   })
+   .strict();
+ export type UsageViewV1 = z.infer<typeof usageViewSchema>;
++

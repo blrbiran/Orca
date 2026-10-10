@@ -1,0 +1,66 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.3 [39m[90m/Users/biran/.codex/worktrees/progress-results-20261010/Orca[39m
+
+(node:98122) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ [31m❯[39m tests/panel/taskResults.test.ts [2m([22m[2m16 tests[22m[2m | [22m[31m2 failed[39m[2m | [22m[33m11 skipped[39m[2m)[22m[33m 2433[2mms[22m[39m
+   [31m❯[39m admitted run and group result facts [2m(16)[22m
+     [2m[90m↓[39m[22m isolates rejected attempt from later approval and exposes exact immutable observation history
+     [2m[90m↓[39m[22m uses independently newer source attempt after failed page while core is older, without reusing explanation
+     [2m[90m↓[39m[22m unknown or foreign current facts do not promote saved history to current
+     [2m[90m↓[39m[22m actual started evidence shows in-progress only on current active lifecycle, never core verifying alone
+     [2m[90m↓[39m[22m retained partial core facts prove actual verifier bypass: {"failureType":"timeout"}
+     [2m[90m↓[39m[22m retained partial core facts prove actual verifier bypass: {"failureType":"error","partialOrigin":"runner"}
+     [2m[90m↓[39m[22m retained partial core facts prove actual verifier bypass: {"failureType":"error","changedFiles":[]}
+     [2m[90m↓[39m[22m error partial with changed files may actually verify and must not claim verifier bypass
+     [2m[90m↓[39m[22m damaged completed verifier bytes become unavailable, despite stored passed summary or agent claims
+     [2m[90m↓[39m[22m group follows archived plan order and distinguishes unstarted coverage from missing supported results and independent delivery/review
+     [2m[90m↓[39m[22m optional store damage is unavailable and does not repair original core authority damage
+     [33m[2m✓[22m[39m damaged optional field status remains explicit unavailable[33m 519[2mms[22m[39m
+[31m     [31m×[31m damaged optional field reason remains explicit unavailable[39m[33m 452[2mms[22m[39m
+[31m     [31m×[31m damaged optional field observations remains explicit unavailable[39m[33m 447[2mms[22m[39m
+     [33m[2m✓[22m[39m damaged optional field revision remains explicit unavailable[33m 435[2mms[22m[39m
+     [33m[2m✓[22m[39m actual verifier completion overrides authenticated partial-bypass policy and malformed partial cannot claim not-run[33m 577[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 2 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/panel/taskResults.test.ts[2m > [22madmitted run and group result facts[2m > [22mdamaged optional field reason remains explicit unavailable
+[31m[1mZodError[22m: [
+  {
+    "code": "too_big",
+    "maximum": 256,
+    "type": "string",
+    "inclusive": true,
+    "exact": false,
+    "message": "String must contain at most 256 character(s)",
+    "path": [
+      "source",
+      "reason"
+    ]
+  }
+][39m
+[90m [2m❯[22m Object.get error [as error] ../../../../code/skills/loop/Orca/node_modules/zod/v3/types.js:[2m39:31[22m[39m
+[90m [2m❯[22m ZodObject.parse ../../../../code/skills/loop/Orca/node_modules/zod/v3/types.js:[2m114:22[22m[39m
+[36m [2m❯[22m readRunResults src/panel/taskResults.ts:[2m57:26[22m[39m
+
+[90m [2m❯[22m tests/panel/taskResults.test.ts:[2m48:307[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/panel/taskResults.test.ts[2m > [22madmitted run and group result facts[2m > [22mdamaged optional field observations remains explicit unavailable
+[31m[1mTypeError[22m: Cannot read properties of null (reading 'manifest')[39m
+[36m [2m❯[22m src/panel/taskResults.ts:[2m23:112[22m[39m
+
+[90m [2m❯[22m resultAuthority src/panel/taskResults.ts:[2m23:56[22m[39m
+[90m [2m❯[22m readRunResults src/panel/taskResults.ts:[2m37:10[22m[39m
+[90m [2m❯[22m view tests/panel/taskResults.test.ts:[2m10:59[22m[39m
+[90m [2m❯[22m tests/panel/taskResults.test.ts:[2m48:313[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m2 failed[39m[22m[2m | [22m[1m[32m3 passed[39m[22m[2m | [22m[33m11 skipped[39m[90m (16)[39m
+[2m   Start at [22m 20:55:23
+[2m   Duration [22m 3.80s[2m (tests 66%, transform 27%, import 7%)[22m
+

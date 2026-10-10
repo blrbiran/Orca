@@ -1,0 +1,28 @@
+
+ RUN  v2.1.9 /private/tmp/orca-results-ccloop-20261010
+
+ ❯ tests/controller/taskResultCapture.test.ts (18 tests | 1 failed | 16 skipped) 457ms
+   × immutable live attempt results > handoff after execute retains only actually executed observations 262ms
+     → expected [ { revision: 1, ref: { …(2) } } ] to have a length of 2 but got 1
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/controller/taskResultCapture.test.ts > immutable live attempt results > handoff after execute retains only actually executed observations
+AssertionError: expected [ { revision: 1, ref: { …(2) } } ] to have a length of 2 but got 1
+
+- Expected
++ Received
+
+- 2
++ 1
+
+ ❯ tests/controller/taskResultCapture.test.ts:65:185
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed | 16 skipped (18)
+   Start at  22:08:35
+   Duration  978ms (transform 257ms, setup 16ms, collect 330ms, tests 457ms, environment 0ms, prepare 43ms)
+

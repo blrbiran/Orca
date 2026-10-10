@@ -1,0 +1,135 @@
+diff --git a/src/control/taskResultProtocol.ts b/src/control/taskResultProtocol.ts
+index 59b1ded..3a3de04 100644
+--- a/src/control/taskResultProtocol.ts
++++ b/src/control/taskResultProtocol.ts
+@@ -17,6 +17,7 @@ export function safeTaskResultPath(path: string): boolean {
+ export const TASK_RESULT_MANIFEST_SCHEMA = "ccloop-task-result-manifest-v1";
+ export const TASK_RESULT_COLLECTION_SCHEMA = "ccloop-task-results-v1";
+ export const TASK_RESULT_VERIFICATION_STARTED_SCHEMA = "ccloop-task-result-verification-started-v1";
++export const TASK_RESULT_VERIFICATION_NOT_RUN_SCHEMA = "ccloop-task-result-verification-not-run-v1";
+ const safe = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER), positive = safe.refine(n => n > 0), hash = z.string().regex(/^[a-f0-9]{64}$/);
+ export const taskResultIdentitySchema = z.object({
+     groupId: idSchema, workItemId: idSchema, taskId: idSchema.nullable(), runId: idSchema, generation: positive, graphVersion: safe, targetVersion: safe, executionId: idSchema, envelopeHash: hash
+@@ -26,6 +27,7 @@ export const taskResultVerificationStartedSchema = z.object({
+     attempt: positive,
+     status: z.literal("in-progress"),
+ }).strict();
++export const taskResultVerificationNotRunSchema = z.object({schema:z.literal(TASK_RESULT_VERIFICATION_NOT_RUN_SCHEMA),attempt:positive,status:z.literal('not-run')}).strict();
+ export type TaskResultIdentityV1 = z.infer<typeof taskResultIdentitySchema>;
+ export const taskResultOutputSchema = z.object({
+     id: idSchema, path: z.string().max(1024), label: z.string().max(256), origin: z.enum(["reported", "changed"]), status: z.enum(["available", "missing", "deleted", "symlink", "binary", "too-large", "changed", "unsafe", "unavailable"]), byteLength: safe.max(MAX_TASK_RESULT_FILE_BYTES).nullable(), ref: artifactSchema.nullable()
+@@ -52,9 +54,14 @@ export function taskResultVerification(manifest: TaskResultManifestV1, bytes: Bu
+         return 'unavailable';
+     try {
+         const value: unknown = JSON.parse(bytes.toString('utf8'));
++        const marker = typeof value === 'object' && value !== null && 'schema' in value ? value.schema : null;
++        if (marker === TASK_RESULT_VERIFICATION_NOT_RUN_SCHEMA) {
++            const boundary = taskResultVerificationNotRunSchema.safeParse(value);
++            return boundary.success && boundary.data.attempt === manifest.attempt ? 'not-run' : 'unavailable';
++        }
+         const started = taskResultVerificationStartedSchema.safeParse(value);
+-        if (started.success)
+-            return started.data.attempt === manifest.attempt ? 'in-progress' : 'unavailable';
++        if (marker === TASK_RESULT_VERIFICATION_STARTED_SCHEMA)
++            return started.success && started.data.attempt === manifest.attempt ? 'in-progress' : 'unavailable';
+         const completed = completedVerificationSchema.safeParse(value);
+         return completed.success ? (completed.data.approved ? 'passed' : 'failed') : 'unavailable';
+     }
+diff --git a/src/panel/taskResults.ts b/src/panel/taskResults.ts
+index 1c5eae1..f9faa44 100644
+--- a/src/panel/taskResults.ts
++++ b/src/panel/taskResults.ts
+@@ -90,11 +90,17 @@ const missingExplanation = (status: 'missing' | 'unavailable' = 'missing') => ({
+ });
+ export async function readRunResults(store: ControlStore, runId: string, context: ResultReadContext, knownGroup?: GroupViewV1): Promise<RunResultsV1> {
+     const a = resultAuthority(store, runId, context, knownGroup), fact = readTaskResultCurrentAttemptFact(store, runId);
+-    const core = runProgressSchema.safeParse(a.body.progress), capturedAttempt = a.state?.currentAttempt ?? 0;
+-    const sourceFresh = fact !== null && a.state !== null && (a.state.status === 'available' || fact.currentAttempt > capturedAttempt || fact.revision > a.state.revision);
+-    const coreNewer = core.success && core.data.currentAttempt > capturedAttempt;
+-    // Failed transport preserves history, but an old hint cannot prove it remains the current attempt.
+-    const currentAttempt = sourceFresh || coreNewer ? Math.max(sourceFresh ? fact!.currentAttempt : 0, core.success ? core.data.currentAttempt : 0) : null;
++    const core = runProgressSchema.safeParse(a.body.progress);
++    const bounds = a.state?.identity ? { attempt: a.state.currentAttempt, revision: a.state.revision } : null;
++    const staleHint = fact !== null && bounds !== null && (fact.currentAttempt < bounds.attempt || fact.revision < bounds.revision);
++    const sourceFresh = fact !== null && !staleHint && (bounds === null || a.state!.status === 'available' || fact.currentAttempt > bounds.attempt || fact.revision > bounds.revision);
++    // Only a separately valid same-owner hint rejected for old bounds permits the available capture's ordinal fallback.
++    const sourceAttempt = sourceFresh ? fact!.currentAttempt : staleHint && a.state!.status === 'available' ? bounds!.attempt : null;
++    const coreNewer = core.success && bounds !== null && core.data.currentAttempt > bounds.attempt;
++    // Unknown capture bounds are not zero. Keep independent source authority and never promote damaged saved reports.
++    const knownAttempts = sourceAttempt === null ? [] : [sourceAttempt];
++    if (core.success && (sourceAttempt !== null || coreNewer)) knownAttempts.push(core.data.currentAttempt);
++    const currentAttempt = knownAttempts.length > 0 ? Math.max(...knownAttempts) : null;
+     const attempts: RunResultsV1['attempts'] = [];
+     for (const attempt of [...new Set(a.observations.map(o => o.manifest.attempt))].sort((x, y) => x - y)) {
+         const history = a.observations.filter(o => o.manifest.attempt === attempt).sort((x, y) => x.manifest.revision - y.manifest.revision), latest = history.at(-1)!;
+@@ -160,7 +166,7 @@ export async function readRunResults(store: ControlStore, runId: string, context
+     const current = attempts.find(a => a.current), source = a.state ? { status: a.state.status, reason: a.state.reason } : a.sourceError ? { status: 'unavailable' as const, reason: 'result-store-invalid' } : { status: 'missing' as const, reason: 'result-source-missing' };
+     const availability = !attempts.length ? (source.status === 'missing' || source.status === 'unsupported' ? 'missing' : 'unavailable') : !current || source.status !== 'available' || current.explanation.status !== 'available' || current.outputs.some(o => o.status !== 'available') ? 'partial' : 'available';
+     return runResultsSchema.parse({
+-        schema: 'orca-run-results-v1', epoch: context.epoch, changeSeq: a.group.changeSeq, runId, groupId: a.group.summary.groupId, taskId: a.run.taskId, generation: a.run.generation, executionId: a.body.executionId, run: a.run, currentAttempt, captureRevision: a.state?.revision ?? 0, source, availability, currentExplanation: current?.explanation ?? missingExplanation(currentAttempt === null ? 'unavailable' : 'missing'), attempts
++        schema: 'orca-run-results-v1', epoch: context.epoch, changeSeq: a.group.changeSeq, runId, groupId: a.group.summary.groupId, taskId: a.run.taskId, generation: a.run.generation, executionId: a.body.executionId, run: a.run, currentAttempt, captureRevision: a.state?.revision ?? 0, source, availability, currentExplanation: a.sourceError ? missingExplanation('unavailable') : current?.explanation ?? missingExplanation(currentAttempt === null ? 'unavailable' : 'missing'), attempts
+     });
+ }
+ export async function readGroupResults(store: ControlStore, groupId: string, context: ResultReadContext): Promise<GroupResultsV1> {
+diff --git a/tests/control/taskResultPaired.test.ts b/tests/control/taskResultPaired.test.ts
+index 854e3f0..d4bf3cb 100644
+--- a/tests/control/taskResultPaired.test.ts
++++ b/tests/control/taskResultPaired.test.ts
+@@ -3,7 +3,8 @@ import { readTaskResultState, readOwnedTaskResultEvidence } from '../../src/cont
+ import { flushTaskResults } from '../../src/control/taskResultCollector.js';
+ import { readStartEnvelope } from '../../src/control/executionDriver.js';
+ import { TaskResultUnsupportedError } from '../../src/control/taskResultProtocol.js';
+-import { ccloopWorlds, realBinary, startGroup, until, workRuns } from './fixtures/ccloopWorld.js';
++import { readRunResults } from '../../src/panel/taskResults.js';
++import { ccloopWorlds, realBinary, raw, startGroup, until, workRuns } from './fixtures/ccloopWorld.js';
+ const feature = '/private/tmp/orca-results-ccloop-20261010/dist/cli.js';
+ const fixed = '/private/tmp/orca-d9-ccloop-ab824d1/dist/cli.js';
+ const worlds = ccloopWorlds({ rootPrefix: 'orca-task-result-paired-', epochPrefix: 'epoch-result-paired-' });
+@@ -59,4 +60,17 @@ describe('result optional transport exact build', { timeout: 120000 }, () => {
+             await w.teardown();
+         }
+     });
++    it('proves actual pre-verifier handoff not-run on feature and explicit unsupported on fixed pin',async()=>{
++        expect([fixed,feature]).toContain(realBinary);const paired=realBinary===feature;
++        const w=await worlds.world([{taskId:'a',targetPaths:['shared.txt']}],{a:{files:{'shared.txt':'A\n'},delayMs:{execute:6000}}});const runtime=await w.boot();
++        try{await startGroup(runtime,w.repoId);runtime.startPump(50);await until(()=>w.calls().includes('execute'),30000,'real execute before handoff');const run=workRuns(runtime)[0];
++            const stopped=await runtime.service.handoffStop(raw(runtime,'result4-handoff','handoff-stop',{}));expect(stopped).toMatchObject({result:{kind:'handoff-stopped'}});
++            await until(()=>workRuns(runtime)[0]?.body.state==='settled-recoverable',60000,'actual post-execute handoff settlement');await flushTaskResults(runtime.store,run.runId);
++            const saved=readTaskResultState(runtime.store,run.runId);const view=await readRunResults(runtime.store,run.runId,{epoch:runtime.epoch});
++            if(paired){expect(saved?.observations.map(o=>o.verification)).toEqual(['unavailable','not-run']);expect(view.attempts[0].verification).toBe('not-run');expect(view.attempts[0].snapshotRevision).toBe(1);const execution=saved!.observations[0],boundary=saved!.observations[1];expect(boundary.manifest.outputs).toEqual(execution.manifest.outputs);expect(boundary.manifest.executionRef).toEqual(execution.manifest.executionRef);expect(JSON.parse((await readOwnedTaskResultEvidence(runtime.store,run.runId,1,boundary.manifestRef,boundary.manifest.verificationRef!)).toString())).toEqual({schema:'ccloop-task-result-verification-not-run-v1',attempt:1,status:'not-run'});const output=boundary.manifest.outputs.find(o=>o.path==='shared.txt')!;expect((await readOwnedTaskResultEvidence(runtime.store,run.runId,1,boundary.manifestRef,output.ref!)).toString()).toBe('A\n');}
++            else{expect(saved).toMatchObject({status:'unsupported',observations:[]});expect(view.source.status).toBe('unsupported');expect(view.attempts).toEqual([]);}
++            expect(w.calls()).toEqual(['plan','execute']);expect(workRuns(runtime)[0].body).toMatchObject({state:'settled-recoverable',recoverable:true});expect(await runtime.shutdown()).toBe(true);
++        }finally{await w.teardown();}
++    });
++
+ });
+diff --git a/tests/panel/taskResults.test.ts b/tests/panel/taskResults.test.ts
+index 19ff0c0..f857792 100644
+--- a/tests/panel/taskResults.test.ts
++++ b/tests/panel/taskResults.test.ts
+@@ -278,4 +278,25 @@ describe('admitted run and group result facts', { timeout: 30000 }, () => {
+             await f.dispose();
+         }
+     });
++    it.each([{currentAttempt:1,revision:4},{currentAttempt:2,revision:1},{currentAttempt:1,revision:1}])('fix1 rejects older same-owner hint %j without rolling back available capture2/revision4',async(hint)=>{
++        const f=await resultFixture();try{
++            await f.capture([f.manifest(),{...f.manifest(2),stage:'verification',verificationRef:f.add(approved(false))},f.manifest(3,2),{...f.manifest(4,2),stage:'verification',verificationRef:f.add(approved(true))}]);
++            f.core({progress:null});mutateState(f,state=>{state.currentAttemptFact={...state.currentAttemptFact,...hint};});
++            const r=await view(f);expect(r.currentAttempt).toBe(2);expect(r.attempts.map(a=>a.current)).toEqual([false,true]);expect(r.currentExplanation.status).toBe('available');expect(r.attempts.map(a=>a.verification)).toEqual(['failed','passed']);
++        }finally{await f.dispose();}
++    });
++    it('fix1 malformed capture bounds preserve independent source2 over old core1 with explanation unavailable',async()=>{
++        const f=await resultFixture();try{await f.capture([f.manifest()]);f.port.collectTaskResults=async()=>({schema:'ccloop-task-results-v1',identity:f.identity,currentAttempt:2,revision:1,nextRevision:1,manifests:[]});f.collector.schedule(f.runId);await f.collector.flush(f.runId);
++            f.core({progress:{status:'executing',currentAttempt:1,attemptsUsed:1,attemptsRemaining:2,lastTransitionAt:'2026-10-10T00:00:00Z'}});mutateState(f,state=>{state.observations='damaged';});const r=await view(f);expect(r.currentAttempt).toBe(2);expect(r.source.status).toBe('unavailable');expect(r.currentExplanation.status).toBe('unavailable');expect(r.attempts).toEqual([]);
++        }finally{await f.dispose();}
++    });
++
++    it('fix1 actual admitted handoff not-run evidence reuses snapshot and later started/completed observations supersede it',async()=>{const f=await resultFixture();try{
++        const boundary={...f.manifest(2),stage:'verification' as const,verificationRef:f.add({schema:'ccloop-task-result-verification-not-run-v1',attempt:1,status:'not-run'})};await f.capture([f.manifest(),boundary]);const bypass=await view(f);expect(bypass.attempts[0].verification).toBe('not-run');expect(bypass.attempts[0].snapshotRevision).toBe(1);
++        const started={...f.manifest(3),stage:'verification' as const,verificationRef:f.add({schema:'ccloop-task-result-verification-started-v1',attempt:1,status:'in-progress'})};await f.capture([started]);expect((await view(f)).attempts[0].verification).toBe('in-progress');
++        await f.capture([{...f.manifest(4),stage:'verification',verificationRef:f.add(approved(false))}]);const completed=await view(f);expect(completed.attempts[0].verification).toBe('failed');expect(completed.attempts[0].snapshotRevision).toBe(1);expect(completed.attempts[0].observations.map(o=>o.verification)).toEqual(['unavailable','not-run','in-progress','failed']);
++    }finally{await f.dispose();}});
++    it.each([{schema:'ccloop-task-result-verification-not-run-v1',attempt:2,status:'not-run'},{schema:'ccloop-task-result-verification-not-run-v1',attempt:1,status:'not-run',...approved(true)}])('fix1 mismatched or malformed not-run evidence is unavailable %j',async(value)=>{const f=await resultFixture();try{await f.capture([f.manifest(),{...f.manifest(2),stage:'verification',verificationRef:f.add(value)}]);expect((await view(f)).attempts[0].verification).toBe('unavailable');}finally{await f.dispose();}});
++    it('fix1 damaged owned not-run evidence is unavailable while original execution snapshot remains historical',async()=>{const f=await resultFixture();try{const ref=f.add({schema:'ccloop-task-result-verification-not-run-v1',attempt:1,status:'not-run'});await f.capture([f.manifest(),{...f.manifest(2),stage:'verification',verificationRef:ref}]);expect((await view(f)).attempts[0].verification).toBe('not-run');await writeFile(join(f.store.stateDir,'artifacts',ref.artifactId,'data'),'damaged');const r=await view(f);expect(r.attempts[0].verification).toBe('unavailable');expect(r.attempts[0].snapshotRevision).toBe(1);}finally{await f.dispose();}});
++
+ });

@@ -1,0 +1,19 @@
+{
+  "cwd": "/private/tmp/orca-results-ccloop-20261010",
+  "sourceCommit": "adbc9a9bb8c0587d64c40fb45b7680609a5f0e8f",
+  "featurePath": "/private/tmp/orca-results-ccloop-20261010/dist/cli.js",
+  "modules": {
+    "dist/cli.js": {
+      "bytes": 166,
+      "sha256": "b85bad30ecfd202e0e726e9926fbbc31fd9230e67048bd3d52061d3b4f5e5aaa"
+    },
+    "dist/src/control/taskResults.js": {
+      "bytes": 15161,
+      "sha256": "12f0160fed24696eb470ce064fe50644ed425e5cbe924506b20517d8718b261d"
+    },
+    "dist/src/controller/runLoop.js": {
+      "bytes": 87739,
+      "sha256": "d4468e046216686206d392e4e437774cf944cda79f917fd45daad00a11bd78ed"
+    }
+  }
+}

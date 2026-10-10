@@ -1,0 +1,11 @@
+{
+  "name": "result4-fix1-mutant-core-verifier-guess",
+  "criterion": "actual started evidence",
+  "sourceCommit": "fef429e76b3eb4b113d4817396de5cc4570fad12",
+  "patchBytes": 726,
+  "rc": 1,
+  "nativeBusinessRed": true,
+  "status": "killed",
+  "restoredWorkingDiffBytes": 0,
+  "restoredCachedDiffBytes": 0
+}

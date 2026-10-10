@@ -1,0 +1,283 @@
+{
+  "archive": "/private/tmp/orca-progress-results-20261010/result4-fix1-packaged/ccloop-0.1.0.tgz",
+  "archiveBytes": 216873,
+  "archiveSha256": "fde61fa26d08555299670f5deeab7ea318187e82503d4c5cda6cbd29e51c5d61",
+  "matchedModules": [
+    {
+      "path": "dist/cli.js",
+      "sha256": "b85bad30ecfd202e0e726e9926fbbc31fd9230e67048bd3d52061d3b4f5e5aaa"
+    },
+    {
+      "path": "dist/src/agents/claude.js",
+      "sha256": "d8888d3c1b37b94e21d43f6f504621318891ba6c51f61abd8e15deb4d404d555"
+    },
+    {
+      "path": "dist/src/agents/codex.js",
+      "sha256": "711f71778956c09e028237e5f84955fb19debc02422cf9cbee2200c31b612464"
+    },
+    {
+      "path": "dist/src/agents/command.js",
+      "sha256": "6ca935556260e43a2c161869556a839e8c02fc6b441d5b5679779425f46a7186"
+    },
+    {
+      "path": "dist/src/agents/detect.js",
+      "sha256": "93bf663d2ddf98a6dbbfb73c68431979ec93d49c84efcd442e2b9140664ee09c"
+    },
+    {
+      "path": "dist/src/agents/materialize.js",
+      "sha256": "c7e53c6acc26d66597699bb18c94b1077724d59c69c55b7910a2f589a154ca8d"
+    },
+    {
+      "path": "dist/src/agents/registry.js",
+      "sha256": "a454e141d3a3b878a7c99af6736ff5dae635eaeec58e01f5392b851216248a58"
+    },
+    {
+      "path": "dist/src/agents/table.js",
+      "sha256": "d10f18f33e81821145523241fd5f46eb2d83e8801341c78d9b03843beea32b4e"
+    },
+    {
+      "path": "dist/src/agents/types.js",
+      "sha256": "2f54091e8ac25679cea25943db98fad3e2eb187625f0f6182555101ba9257e9c"
+    },
+    {
+      "path": "dist/src/cli.js",
+      "sha256": "9b73981aa25f3eebd78171c24a731e973bad119d75980e56049a36228a4edbce"
+    },
+    {
+      "path": "dist/src/contract/loadContract.js",
+      "sha256": "5b220a7f9b13042c32f12c8247fe334a8ac07b1d2ab0c727d5fb0b434265fc8d"
+    },
+    {
+      "path": "dist/src/contract/schema.js",
+      "sha256": "7be66dd265c6e06836787a2a8eee3db3e6f08359a0417d96d43b2a268c8a754c"
+    },
+    {
+      "path": "dist/src/control/accept.js",
+      "sha256": "c833dcc6891d98f1840121e39f796705ac6c06b1044f2a2c52444536b9c4d99b"
+    },
+    {
+      "path": "dist/src/control/collect.js",
+      "sha256": "b8c5e9a51acf7dc950ec0472ffafa62b8b88239b3e9237285e7e5e119ebf6beb"
+    },
+    {
+      "path": "dist/src/control/command.js",
+      "sha256": "9759ca0b2495052e361bbc576105950957a2b805efbe539e1da333600646d715"
+    },
+    {
+      "path": "dist/src/control/evidence.js",
+      "sha256": "ed0856a4e67a40166e98551745071cb66d9ae79165a5587db7444ea41decdb42"
+    },
+    {
+      "path": "dist/src/control/handoff.js",
+      "sha256": "7f77fd84d400a09e94ae6c581ffbc53a5ae45671100f29cf43af8faeacae7c01"
+    },
+    {
+      "path": "dist/src/control/materialize.js",
+      "sha256": "2dbd1f05005113549d43e7b84bd8dcf0cd3075777c04fe93e0bf5a7c4afe8371"
+    },
+    {
+      "path": "dist/src/control/paths.js",
+      "sha256": "d41c250c55d521ac8f642dd49420272e1be1e39b4955222b33ef54742b2bb1d5"
+    },
+    {
+      "path": "dist/src/control/protocol.js",
+      "sha256": "41a08cb37f1eae76e11ad351b3ce520ab9d2963049da1ee8b983aae933127a28"
+    },
+    {
+      "path": "dist/src/control/resultRepository.js",
+      "sha256": "e7800dd9ceef1bb845563c2fbccb68ae4fd4d5ed33ff531f4bfe691b81c133ee"
+    },
+    {
+      "path": "dist/src/control/singleCall.js",
+      "sha256": "e1bffa19d0926bf0ba0ddceff99d6eb5a33fcc2a1df1e9237ccdcc6bfb6e77ff"
+    },
+    {
+      "path": "dist/src/control/stopProof.js",
+      "sha256": "4c62ac8ddeadd248689a2962f1a15d71b037e2acf67a530df59fb9e3d9092382"
+    },
+    {
+      "path": "dist/src/control/store.js",
+      "sha256": "d4d58ad1b1ac0a6615cec0eae496f7b480dfb9094459e841c56460c430449a57"
+    },
+    {
+      "path": "dist/src/control/taskResultEvidence.js",
+      "sha256": "6f5ecb227f20c0bc8e57c72997cf7cd043ca0e1b1c74bb9d9a93de687395ed87"
+    },
+    {
+      "path": "dist/src/control/taskResults.js",
+      "sha256": "12f0160fed24696eb470ce064fe50644ed425e5cbe924506b20517d8718b261d"
+    },
+    {
+      "path": "dist/src/control/testCrashPoint.js",
+      "sha256": "456bdacd97dae19c2d091f4e80844b0fb303e9c47be7103354ec903904b4bbd4"
+    },
+    {
+      "path": "dist/src/control/usage.js",
+      "sha256": "d013999bf346e6cd5d792e2bca789017ce7ebb2af17bc216ad9b5f79a9984c5b"
+    },
+    {
+      "path": "dist/src/control/worker.js",
+      "sha256": "0d696db4d85214bc89dc91c38ad546c564e8753426482847b79baefc214d2b21"
+    },
+    {
+      "path": "dist/src/control/workerLauncher.js",
+      "sha256": "9ba034eada589c6962dab1d5dd75ae8f61314300375521afd8729a182f13b443"
+    },
+    {
+      "path": "dist/src/controller/adoptCrashedRun.js",
+      "sha256": "4d7fea250803ca11e1b4a5f47bd48eb29ac4042e8916a81061a75459eb318d43"
+    },
+    {
+      "path": "dist/src/controller/leaseGate.js",
+      "sha256": "849f952b9c2fd7c64ba901fcd79776e784ec32e342d4d477f8d97ad1dd8d2a94"
+    },
+    {
+      "path": "dist/src/controller/leaseHeartbeat.js",
+      "sha256": "282ae5090353f4408a03b3fa5b0869279804a0bd5379014fcab273482a76b51e"
+    },
+    {
+      "path": "dist/src/controller/ownedRunStateWriter.js",
+      "sha256": "bd65df2d8fe0dbd76cc58f046badeee2b5a231f505eb448be2884d43cbd74f7c"
+    },
+    {
+      "path": "dist/src/controller/resumeLoop.js",
+      "sha256": "6500daefe06972e9fe2c96c179bc2889bf0db20b2e4b79e6f1ef67692e3df65a"
+    },
+    {
+      "path": "dist/src/controller/runLoop.js",
+      "sha256": "d4468e046216686206d392e4e437774cf944cda79f917fd45daad00a11bd78ed"
+    },
+    {
+      "path": "dist/src/index.js",
+      "sha256": "a2cafbdc03952346901ca223674495c0e8a8d5485ed2a139da6013ee9c8d43ac"
+    },
+    {
+      "path": "dist/src/ownership/lease.js",
+      "sha256": "7e7b58a6f29be1cf47c53deacc34eb82b281853d7c0014a82aec45f858f91de3"
+    },
+    {
+      "path": "dist/src/ownership/ownerController.js",
+      "sha256": "cda9d338e5eba9dbda88a1528eb6f9a8127b58a6a505215142f1842add413e8f"
+    },
+    {
+      "path": "dist/src/ownership/ownerLiveness.js",
+      "sha256": "f4e44dad9861ec129f01aed62ea8d0af3a78adc0939ab2c288b4a868684b59ea"
+    },
+    {
+      "path": "dist/src/ownership/reapRunProcesses.js",
+      "sha256": "ec0eea4310996c1f0c94289da64195557c1bcf3e03e149a0df0cf16a107cad3b"
+    },
+    {
+      "path": "dist/src/persistence/fileStore.js",
+      "sha256": "d84ae67db1397dc065687f729a9731c57b0f092f6ef3ee7d07e275c38cb9d5cb"
+    },
+    {
+      "path": "dist/src/policy/pathPolicy.js",
+      "sha256": "3e450a306b0c6c0f281efaca7c3d7eb6d05d78eacc2ab9aa8cbd4901123b28b6"
+    },
+    {
+      "path": "dist/src/registry/observeFields.js",
+      "sha256": "f206cb0d6372823b3b0f35815ba77b70df3b0de2cc48ae91df95596a9fb063bf"
+    },
+    {
+      "path": "dist/src/registry/observeRun.js",
+      "sha256": "a98a4e6c3175b07334a5668d974cb47bff7b4aba4a8890f77b55fe73437f0a21"
+    },
+    {
+      "path": "dist/src/registry/readObservedFile.js",
+      "sha256": "4b270bb2d50c6a90ab7d99d022accb141a25751e2c9281aa28355f18f4593945"
+    },
+    {
+      "path": "dist/src/registry/renderRuns.js",
+      "sha256": "77e066acd570d3470bc17cb35151c2065bdb21702ac15d4d215ed798c7b3150e"
+    },
+    {
+      "path": "dist/src/registry/scanRuns.js",
+      "sha256": "ee38f56e2a09c16955612aa6052f2c683511f8f80eeda15157088bb998746f5a"
+    },
+    {
+      "path": "dist/src/registry/types.js",
+      "sha256": "43c1e9fee79f4adf0ee40d224f3d4a5fe8f3521cf4442a02bcc6b247d4526ad7"
+    },
+    {
+      "path": "dist/src/runtime/claude/claudeAgentAdapter.js",
+      "sha256": "fa1d797b8e281368d7632d2e0badd6b96217f5b1e631a2ed89eb40aa5a324832"
+    },
+    {
+      "path": "dist/src/runtime/claude/prompts.js",
+      "sha256": "a0c6028c2398daa1da2c030a281077171f547704d8e61952a761e54629143636"
+    },
+    {
+      "path": "dist/src/runtime/claude/types.js",
+      "sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881"
+    },
+    {
+      "path": "dist/src/runtime/codex/codexAdapter.js",
+      "sha256": "3f4310c140086915d29ace78ad656b87844da845439860db52f57fa3c00944cb"
+    },
+    {
+      "path": "dist/src/runtime/codex/codexSkills.js",
+      "sha256": "016c47c6a75070c1087a68d181d02d68b963226f791e157c2403560fc85caf1e"
+    },
+    {
+      "path": "dist/src/runtime/codex/protocol.js",
+      "sha256": "527d8b67fa0bc817923703f807b11106ce9c53c99ff9c98f3c907ea9ca2c9153"
+    },
+    {
+      "path": "dist/src/runtime/codex/runCodexPhase.js",
+      "sha256": "c9a499b30f4fcef68ccb2792dabeba7133de9c3aef63a840716ce023985dd24d"
+    },
+    {
+      "path": "dist/src/runtime/processIdentity.js",
+      "sha256": "5e37538234edcfc97b4bba07e60bd8cb1584c925e9b2fc78cc1f0a0278bcd46d"
+    },
+    {
+      "path": "dist/src/runtime/scriptedAdapter.js",
+      "sha256": "ba518c6ebe432c1b8795ba3dd2a754d5e7c44657234572146996a00c72f02cb2"
+    },
+    {
+      "path": "dist/src/runtime/taskResult.js",
+      "sha256": "dbaf1226be9cac4a0dcf65bb6af400d2cea4a4a6c141ea6eb1c35f157e58f97e"
+    },
+    {
+      "path": "dist/src/runtime/types.js",
+      "sha256": "842c227e719247f03e0a3e49b69c907fb802ce6070b1246e0f55a584e5d54ed2"
+    },
+    {
+      "path": "dist/src/state/stateMachine.js",
+      "sha256": "fbf106262b9735659850724806e42cd90920913581627480e59f666fc2aeca7f"
+    },
+    {
+      "path": "dist/src/state/types.js",
+      "sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881"
+    },
+    {
+      "path": "dist/src/stop/stopController.js",
+      "sha256": "a264f41fde16824276a9131ca2094037aa1da27739ec6ecd60dde5fd2b69d2c2"
+    },
+    {
+      "path": "dist/src/sweep/lockPresence.js",
+      "sha256": "b121534ad33577eeefb573e0f30c837b124f008f60eb483f4ed465b1107dd4e4"
+    },
+    {
+      "path": "dist/src/sweep/sweepRuns.js",
+      "sha256": "58574864b73eba138152cee91b14bf40aec01269674c8ac2b60bc2c2596c082a"
+    },
+    {
+      "path": "dist/src/unlock/inspectLock.js",
+      "sha256": "0b858eb14ad6431b54c843088bca79ee84801b3f1ebfe9215d868e1b8607b1ab"
+    },
+    {
+      "path": "dist/src/unlock/lockRows.js",
+      "sha256": "8c98799a1c78512a6732de94497473f855180c060ad8adc125a2d345074c4ef4"
+    },
+    {
+      "path": "dist/src/unlock/unlockCommand.js",
+      "sha256": "9f41a119f36ff526e16438ab783ac80f55dcb131dce4d07a07bbde7dad585f4f"
+    },
+    {
+      "path": "dist/src/workspace/worktreeManager.js",
+      "sha256": "3f740adce9fe8e25aff6b65435765214b93902a33df4890bb22cfadca7a54d54"
+    }
+  ]
+}

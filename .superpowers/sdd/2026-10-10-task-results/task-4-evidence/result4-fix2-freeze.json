@@ -1,0 +1,12 @@
+{
+  "sourceCommit": "8b94a08dafb0cfdc8be445d226fd4e9aed9df329",
+  "base": "fef429e76b3eb4b113d4817396de5cc4570fad12",
+  "cwd": "/Users/biran/.codex/worktrees/progress-results-20261010/Orca",
+  "productDiffBytes": 0,
+  "testDiffBytes": 3106,
+  "changedPaths": [
+    "tests/control/taskResultCollector.test.ts"
+  ],
+  "workingSourceDiffBytes": 0,
+  "cachedSourceDiffBytes": 0
+}

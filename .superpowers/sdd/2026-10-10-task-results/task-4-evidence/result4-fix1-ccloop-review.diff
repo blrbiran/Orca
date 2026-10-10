@@ -1,0 +1,279 @@
+COMMAND ["/usr/bin/git", "log", "--oneline", "c3643a9fb11a6d0a023e88b384356d3f7fedc58f..adbc9a9bb8c0587d64c40fb45b7680609a5f0e8f"]
+adbc9a9 fix(results): record actual handoff before verification
+
+COMMAND ["/usr/bin/git", "diff", "--stat", "c3643a9fb11a6d0a023e88b384356d3f7fedc58f", "adbc9a9bb8c0587d64c40fb45b7680609a5f0e8f"]
+ src/control/taskResults.ts                 | 17 ++++++++++----
+ src/controller/runLoop.ts                  |  5 +++-
+ tests/controller/taskResultCapture.test.ts | 37 +++++++++++++++++++++++++++---
+ 3 files changed, 51 insertions(+), 8 deletions(-)
+
+COMMAND ["/usr/bin/git", "diff", "-U10", "c3643a9fb11a6d0a023e88b384356d3f7fedc58f", "adbc9a9bb8c0587d64c40fb45b7680609a5f0e8f"]
+diff --git a/src/control/taskResults.ts b/src/control/taskResults.ts
+index 826ee69..479e921 100644
+--- a/src/control/taskResults.ts
++++ b/src/control/taskResults.ts
+@@ -4,48 +4,52 @@ import { promisify } from "node:util";
+ import { z } from "zod";
+ import { appendEvent } from "../persistence/fileStore.js";
+ import type { ExecutionResult, VerificationResult } from "../runtime/types.js";
+ import { boundedTaskResult, normalizeTaskResult } from "../runtime/taskResult.js";
+ import { artifactRefSchema, canonicalHash, ControlProtocolError, idSchema, type ArtifactRefV1, type StartEnvelopeV3 } from "./protocol.js";
+ import { readAccepted } from "./store.js";
+ import { MAX_TASK_RESULT_EVIDENCE_BYTES, MAX_TASK_RESULT_FILE_BYTES, MAX_TASK_RESULT_FILES, publishTaskResultIndex, readCapturedTaskResultEvidence, readTaskResultFile, safeTaskResultPath, TaskResultFileError, writeTaskResultEvidence } from "./taskResultEvidence.js";
+ export const TASK_RESULT_MANIFEST_SCHEMA = "ccloop-task-result-manifest-v1";
+ export const TASK_RESULT_COLLECTION_SCHEMA = "ccloop-task-results-v1";
+ export const TASK_RESULT_VERIFICATION_STARTED_SCHEMA = "ccloop-task-result-verification-started-v1";
++export const TASK_RESULT_VERIFICATION_NOT_RUN_SCHEMA = "ccloop-task-result-verification-not-run-v1";
+ const safe = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER), positive = safe.refine(n => n > 0), hash = z.string().regex(/^[a-f0-9]{64}$/);
+ export const taskResultIdentitySchema = z.object({
+     groupId: idSchema, workItemId: idSchema, taskId: idSchema.nullable(), runId: idSchema, generation: positive, graphVersion: safe, targetVersion: safe, executionId: idSchema, envelopeHash: hash
+ }).strict();
+ export const taskResultVerificationStartedSchema = z.object({
+     schema: z.literal(TASK_RESULT_VERIFICATION_STARTED_SCHEMA),
+     attempt: positive,
+     status: z.literal("in-progress"),
+ }).strict();
++export const taskResultVerificationNotRunSchema = z.object({
++    schema: z.literal(TASK_RESULT_VERIFICATION_NOT_RUN_SCHEMA), attempt: positive, status: z.literal("not-run"),
++}).strict();
+ export type TaskResultIdentityV1 = z.infer<typeof taskResultIdentitySchema>;
+ export const taskResultOutputSchema = z.object({
+     id: idSchema, path: z.string().max(1024), label: z.string().max(256), origin: z.enum(["reported", "changed"]), status: z.enum(["available", "missing", "deleted", "symlink", "binary", "too-large", "changed", "unsafe", "unavailable"]), byteLength: safe.max(MAX_TASK_RESULT_FILE_BYTES).nullable(), ref: artifactRefSchema.nullable()
+ }).strict().refine(o => (o.status === "available" || o.status === "binary") ? o.ref !== null && o.byteLength !== null : o.ref === null && o.byteLength === null);
+ export type TaskResultOutputV1 = z.infer<typeof taskResultOutputSchema>;
+ export const taskResultManifestSchema = z.object({
+     schema: z.literal(TASK_RESULT_MANIFEST_SCHEMA), identity: taskResultIdentitySchema, attempt: positive, revision: positive, stage: z.enum(["execution", "verification"]), explanation: z.object({
+         status: z.enum(["missing", "invalid", "available"]), reason: z.string().max(256).nullable(), ref: artifactRefSchema.nullable()
+     }).strict(), executionRef: artifactRefSchema.nullable(), verificationRef: artifactRefSchema.nullable(), outputs: z.array(taskResultOutputSchema).max(MAX_TASK_RESULT_FILES)
+ }).strict().refine(m => m.stage !== "execution" || m.verificationRef === null).refine(m => new Set(m.outputs.map(o => o.id)).size === m.outputs.length);
+ export type TaskResultManifestV1 = z.infer<typeof taskResultManifestSchema>;
+ const observationSchema = z.object({
+     revision: positive, ref: artifactRefSchema
+ }).strict();
+ export const taskResultCollectionSchema = z.object({
+     schema: z.literal(TASK_RESULT_COLLECTION_SCHEMA), identity: taskResultIdentitySchema, currentAttempt: safe, revision: safe, manifests: z.array(observationSchema).max(64), nextRevision: safe
+ }).strict().refine(c => c.nextRevision <= c.revision && c.manifests.every((m, i) => m.revision <= c.nextRevision && (i === 0 || c.manifests[i - 1]!.revision < m.revision)));
+ export type TaskResultCollectionV1 = z.infer<typeof taskResultCollectionSchema>;
+-const observationKindSchema = z.enum(["execution", "verification-started", "verification-completed"]);
++const observationKindSchema = z.enum(["execution", "verification-not-run", "verification-started", "verification-completed"]);
+ const indexObservationSchema = observationSchema.extend({
+     kind: observationKindSchema.optional()
+ });
+ const indexSchema = z.object({
+     schema: z.literal("ccloop-task-result-index-v1"), identity: taskResultIdentitySchema, revision: safe, manifests: z.array(indexObservationSchema)
+ }).strict().refine(i => i.revision === i.manifests.length && i.manifests.every((m, n) => m.revision === n + 1));
+ type Index = z.infer<typeof indexSchema>;
+ const indexPath = (source: string) => join(source, "run", "task-result-captures", "index.json");
+ const sameRef = (a: ArtifactRefV1, b: ArtifactRefV1) => a.artifactId === b.artifactId && a.hash === b.hash;
+ function refuse(): never { throw new ControlProtocolError("control-task-result-authority-invalid"); }
+@@ -121,33 +125,36 @@ export async function readTaskResultEvidence(input: StartEnvelopeV3, manifestRef
+ }
+ export interface TaskResultCaptureInput {
+     input: StartEnvelopeV3;
+     runDir: string;
+     worktreePath: string;
+     attempt: number;
+     execution: ExecutionResult;
+     verification?: VerificationResult;
+     /** Actual controller verification entry, never Agent metadata. */
+     verificationStarted?: boolean;
++    /** Actual post-execute/pre-verifier handoff guard, never absence of verifier evidence. */
++    verificationNotRun?: boolean;
+     assertHeld: () => Promise<void>;
+ }
+ const exec = promisify(execFile);
+ async function capture(input: TaskResultCaptureInput): Promise<void> {
+     const envelope = input.input, source = envelope.work.sourceDir;
+     if (input.runDir !== join(source, "run") || !positive.safeParse(input.attempt).success)
+         refuse();
+     await input.assertHeld();
+     const identity = await acceptedIdentity(envelope), old = await readIndex(envelope, identity);
+     const index: Index = old ?? {
+         schema: "ccloop-task-result-index-v1", identity, revision: 0, manifests: []
+     };
+-    const kind = input.verificationStarted === true ? "verification-started"
++    const kind = input.verificationNotRun === true ? "verification-not-run"
++        : input.verificationStarted === true ? "verification-started"
+         : input.verification !== undefined ? "verification-completed" : "execution";
+     let executionStage: TaskResultManifestV1 | undefined;
+     for (const observation of index.manifests) {
+         const manifest = await loadManifest(envelope, index, observation.ref);
+         if (manifest.attempt !== input.attempt)
+             continue;
+         // Original private rows predate actual-start observations; their verification stage was completed capture.
+         const previousKind = observation.kind ?? (manifest.stage === "execution" ? "execution" : "verification-completed");
+         if (previousKind === kind)
+             return;
+@@ -162,21 +169,23 @@ async function capture(input: TaskResultCaptureInput): Promise<void> {
+     }
+     catch (error) {
+         await input.assertHeld();
+         await appendEvent(input.runDir, {
+             type: "task_result_capture_failed", at: new Date().toISOString(), detail: `attempt ${input.attempt}: supplemental evidence unavailable (${error instanceof Error ? error.message : "capture failed"})`
+         }).catch(() => undefined);
+         return null;
+     } };
+     let manifest: TaskResultManifestV1;
+     if (kind !== "execution") {
+-        const evidence = kind === "verification-started"
++        const evidence = kind === "verification-not-run"
++            ? taskResultVerificationNotRunSchema.parse({ schema: TASK_RESULT_VERIFICATION_NOT_RUN_SCHEMA, attempt: input.attempt, status: "not-run" })
++            : kind === "verification-started"
+             ? taskResultVerificationStartedSchema.parse({
+                 schema: TASK_RESULT_VERIFICATION_STARTED_SCHEMA, attempt: input.attempt, status: "in-progress",
+             }) : input.verification;
+         manifest = {
+             ...executionStage!, revision: index.revision + 1, stage: "verification", verificationRef: await optional(evidence),
+         };
+     }
+     else {
+         const normalized = normalizeTaskResult(input.execution.taskResult), raw = boundedTaskResult(input.execution.taskResult);
+         const reportRef = raw === undefined ? null : await optional(raw);
+@@ -255,14 +264,14 @@ async function capture(input: TaskResultCaptureInput): Promise<void> {
+     await publishTaskResultIndex(source, indexPath(source), Buffer.from(JSON.stringify(next)), input.assertHeld);
+ }
+ /** Optional metadata failures are diagnosed, but a lost owner/lease always follows the core controller's handling. */
+ export async function captureTaskResult(input: TaskResultCaptureInput): Promise<void> {
+     try {
+         await capture(input);
+     }
+     catch (error) {
+         await input.assertHeld();
+         await appendEvent(input.runDir, {
+-            type: "task_result_capture_failed", at: new Date().toISOString(), detail: `attempt ${input.attempt} ${input.verificationStarted || input.verification ? "verification" : "execution"}: ${error instanceof Error ? error.message : "capture failed"}`
++            type: "task_result_capture_failed", at: new Date().toISOString(), detail: `attempt ${input.attempt} ${input.verificationNotRun || input.verificationStarted || input.verification ? "verification" : "execution"}: ${error instanceof Error ? error.message : "capture failed"}`
+         }).catch(() => undefined);
+     }
+ }
+diff --git a/src/controller/runLoop.ts b/src/controller/runLoop.ts
+index fcc807f..69a300a 100644
+--- a/src/controller/runLoop.ts
++++ b/src/controller/runLoop.ts
+@@ -1289,26 +1289,27 @@ export async function runLoopFromState(
+     await heartbeat.assertHeld();
+     await write();
+   };
+ 
+   const captureResult = async (
+     attempt: number,
+     worktreePath: string,
+     execution: ExecutionResult | null,
+     verification?: VerificationResult,
+     verificationStarted = false,
++    verificationNotRun = false,
+   ): Promise<void> => {
+     if (options?.taskResultInput === undefined || execution === null) return;
+     await heartbeat.runExclusive(async () => {
+       await captureTaskResult({
+         input: options.taskResultInput!, runDir, worktreePath, attempt, execution,
+-        verification, verificationStarted, assertHeld: () => heartbeat.assertHeld(),
++        verification, verificationStarted, verificationNotRun, assertHeld: () => heartbeat.assertHeld(),
+       });
+     });
+   };
+ 
+   while (true) {
+     await writeOwnedRunState(runDir, state);
+     // §6: the event-driven refresh. It survives environments where the timer is unreliable
+     // and additionally evidences that the loop is making progress rather than merely alive.
+     await heartbeat.affirmNow();
+ 
+@@ -1561,20 +1562,22 @@ export async function runLoopFromState(
+ 
+       const completedExecution = execution;
+       await captureResult(attempt, worktreePath, completedExecution);
+ 
+       if (!executeUsageAlreadyApplied) {
+         await settlePhase("execute", attempt, executeOutcome.elapsedMs, completedExecution);
+       }
+ 
+       if (handoffRequested()) {
+         await guardedWriteArtifacts(() => writeCompletedAttemptArtifacts(runDir, attempt, plan, completedExecution));
++        // Actual bypass after execute settlement; optional metadata cannot fabricate verifier entry or charge its clock.
++        await captureResult(attempt, worktreePath, completedExecution, undefined, false, true);
+         return await persistHandoffBoundary("handoff_boundary", `handoff requested after execute in attempt ${attempt}`);
+       }
+ 
+       if (isPartialExecutionResult(completedExecution)) {
+         await guardedWriteArtifacts(() => writeCompletedAttemptArtifacts(runDir, attempt, plan, completedExecution));
+ 
+         const partialPathPolicy = evaluatePathPolicy({
+           changedFiles: completedExecution.changedFiles,
+           allowlistPaths: contract.safetyPolicy.allowlistPaths,
+           denylistPaths: contract.safetyPolicy.denylistPaths,
+diff --git a/tests/controller/taskResultCapture.test.ts b/tests/controller/taskResultCapture.test.ts
+index e611cd5..0f38b0d 100644
+--- a/tests/controller/taskResultCapture.test.ts
++++ b/tests/controller/taskResultCapture.test.ts
+@@ -50,25 +50,35 @@ describe("immutable live attempt results",()=>{
+   });
+   // A later successful terminal must never upgrade attempt one's rejected verification.
+   it("shows rejected attempt one as history while attempt two executes, then records its separate pass",async()=>{
+     const f=await resultFixture();let entered!:()=>void,release!:()=>void;const ready=new Promise<void>(r=>entered=r),gate=new Promise<void>(r=>release=r);let verifies=0;
+     const adapter:RuntimeAdapter={plan:async()=>({summary:"write",primaryTargetPaths:["answer.txt"]}),execute:async c=>{if(c.attempt===2){entered();await gate}await writeFile(join(c.worktreePath,"answer.txt"),`attempt ${c.attempt}`);return {changedFiles:["answer.txt"],diffPatch:"patch",commandOutputs:[],stdoutStderrLog:"ok",taskResult:report}},verify:async()=>{verifies++;return verifies===1?{...verified,approved:false,rejectCategory:"test-failure",safeToRetry:true}:verified}};
+     const running=runLoop(f.contract,f.runDir,adapter,{taskResultInput:f.input});await ready;
+     try{const r=await f.rpc("task-results",{input:f.input,afterRevision:0});expect(r.code,r.stderr).toBe(0);const page=JSON.parse(r.stdout);expect(page.currentAttempt).toBe(2);expect(page.manifests).toHaveLength(3);expect((await manifestOf(f,page.manifests[2].ref)).attempt).toBe(1)}finally{release()}
+     expect((await running).status).toBe("succeeded");const page=JSON.parse((await f.rpc("task-results",{input:f.input,afterRevision:0})).stdout);expect(page.manifests).toHaveLength(6);const rejected=await manifestOf(f,page.manifests[2].ref);const read=await f.rpc("read-task-result-evidence",{input:f.input,manifestRef:page.manifests[2].ref,ref:rejected.verificationRef});expect(JSON.parse(Buffer.from(JSON.parse(read.stdout).base64,"base64").toString()).approved).toBe(false);
+   });
+ 
+-  // Handoff before verify must retain only execution evidence, never a fabricated approval.
++  // Only the actual post-execute handoff guard may emit an owned verifier bypass fact.
+   it.each(["plan","execute"] as const)("handoff after %s retains only actually executed observations",async phase=>{
+     const f=await resultFixture(),stopRequested=createStopRequestSignal();let verifies=0;
+-    const adapter:RuntimeAdapter={plan:async()=>({summary:"write",primaryTargetPaths:["answer.txt"]}),execute:async c=>{await writeFile(join(c.worktreePath,"answer.txt"),"handoff bytes");return {changedFiles:["answer.txt"],diffPatch:"patch",commandOutputs:[],stdoutStderrLog:"ok",taskResult:report}},verify:async()=>{verifies++;return verified}};
+-    await runLoop(f.contract,f.runDir,adapter,{taskResultInput:f.input,stopRequested,onPhaseSettled:async observation=>{if(observation.phase===phase)stopRequested.requested=true}});expect(verifies).toBe(0);const r=await f.rpc("task-results",{input:f.input,afterRevision:0});expect(r.code,r.stderr).toBe(0);const page=JSON.parse(r.stdout);expect(page.manifests).toHaveLength(phase==="plan"?0:1);if(phase==="execute")expect(await manifestOf(f,page.manifests[0].ref)).toMatchObject({stage:"execution",verificationRef:null});
++    const adapter:RuntimeAdapter={plan:async()=>({summary:"write",primaryTargetPaths:["answer.txt"]}),execute:async c=>{await writeFile(join(c.worktreePath,"answer.txt"),"handoff bytes");return {changedFiles:["answer.txt"],diffPatch:"patch",commandOutputs:[],stdoutStderrLog:"ok",tokenUsage:9,taskResult:report}},verify:async()=>{verifies++;return verified}};
++    const state=await runLoop(f.contract,f.runDir,adapter,{taskResultInput:f.input,stopRequested,onPhaseSettled:async observation=>{if(observation.phase===phase)stopRequested.requested=true}});
++    expect(verifies).toBe(0);const r=await f.rpc("task-results",{input:f.input,afterRevision:0});expect(r.code,r.stderr).toBe(0);const page=JSON.parse(r.stdout);expect(page.manifests).toHaveLength(phase==="plan"?0:2);
++    if(phase==="execute"){
++      expect(state.budgetSnapshot.tokenBudgetRemaining).toBe(991);
++      const execution=await manifestOf(f,page.manifests[0].ref),boundary=await manifestOf(f,page.manifests[1].ref);
++      expect(execution).toMatchObject({stage:"execution",verificationRef:null});expect(boundary).toMatchObject({stage:"verification",attempt:1,outputs:execution.outputs,executionRef:execution.executionRef});
++      const read=await f.rpc("read-task-result-evidence",{input:f.input,manifestRef:page.manifests[1].ref,ref:boundary.verificationRef});expect(read.code,read.stderr).toBe(0);
++      expect(JSON.parse(Buffer.from(JSON.parse(read.stdout).base64,"base64").toString())).toEqual({schema:"ccloop-task-result-verification-not-run-v1",attempt:1,status:"not-run"});
++      const bytes=await f.rpc("read-task-result-evidence",{input:f.input,manifestRef:page.manifests[1].ref,ref:boundary.outputs[0].ref});expect(Buffer.from(JSON.parse(bytes.stdout).base64,"base64").toString()).toBe("handoff bytes");
++      expect(await readFile(join(f.runDir,"events.jsonl"),"utf8")).toContain("handoff requested after execute in attempt 1");
++    }
+   });
+ 
+   // A transient unsafe ancestor must stay unavailable without failing the actual task.
+   it("real capture refuses outside bytes during an ancestor swap and preserves success", async () => {
+     const f = await resultFixture();
+     let race: Awaited<ReturnType<typeof armAncestorSwap>> | undefined;
+     let verifies = 0;
+     const outside = join(f.root, "outside");
+     await mkdir(outside);
+     await writeFile(join(outside, "answer.txt"), "OUTSIDE SENTINEL");
+@@ -412,11 +422,32 @@ describe("immutable live attempt results",()=>{
+       const started = await manifestOf(f, page.manifests[1].ref);
+       const completed = await manifestOf(f, page.manifests[2].ref);
+       expect(started.verificationRef).toBeNull();
+       expect(completed.verificationRef).not.toBeNull();
+       const read = await f.rpc("read-task-result-evidence", { input: f.input, manifestRef: page.manifests[2].ref, ref: completed.verificationRef });
+       expect(JSON.parse(Buffer.from(JSON.parse(read.stdout).base64, "base64").toString()).approved).toBe(true);
+       expect(await readFile(join(f.runDir, "events.jsonl"), "utf8")).toContain("task_result_capture_failed");
+     } finally { open.mockRestore(); }
+   });
+ 
++  it.each(["failure","owner-loss","metadata-clock"] as const)("keeps actual handoff accounting and owner fences for not-run %s capture",async mode=>{
++    const f=await resultFixture(),stopRequested=createStopRequestSignal();const originalOpen=fs.open;let publications=0,injected=false,verifies=0;let clock=Date.now();const phases:Array<{phase:string;elapsedMs:number;tokenUsage:number|null}>=[];
++    const date=vi.spyOn(Date,"now").mockImplementation(()=>clock);
++    const spy=vi.spyOn(fs,"open").mockImplementation(async(...args:Parameters<typeof fs.open>)=>{
++      const handle=await originalOpen(...args);const path=String(args[0]);
++      if(mode==="failure"){
++        const write=handle.writeFile.bind(handle);handle.writeFile=(async(...writeArgs:Parameters<typeof handle.writeFile>)=>{const bytes=writeArgs[0];if(Buffer.isBuffer(bytes)&&bytes.toString().includes('"schema":"ccloop-task-result-verification-not-run-v1"')){injected=true;throw Object.assign(new Error("owned not-run capture failure"),{code:"EIO"});}return write(...writeArgs);}) as typeof handle.writeFile;
++      }
++      if(dirname(path)===join(f.runDir,"task-result-captures")&&basename(path).endsWith(".tmp")){
++        const sync=handle.sync.bind(handle);handle.sync=async()=>{await sync();if(++publications===2){expect(phases.at(-1)).toMatchObject({phase:"execute",tokenUsage:9,elapsedMs:0});injected=true;if(mode==="owner-loss"){const owner=await readOwnerRecord(f.runDir);await writeOwnerRecord(f.runDir,{...owner,currentOwnerEpoch:owner.currentOwnerEpoch+1,currentProcessInstanceId:"foreign-controller"});}if(mode==="metadata-clock")clock+=500;}};
++      }return handle;
++    });
++    const adapter:RuntimeAdapter={plan:async()=>({summary:"write",primaryTargetPaths:["answer.txt"]}),execute:async c=>{await writeFile(join(c.worktreePath,"answer.txt"),"handoff bytes");return {changedFiles:["answer.txt"],diffPatch:"patch",commandOutputs:[],stdoutStderrLog:"ok",tokenUsage:9,taskResult:report};},verify:async()=>{verifies++;return verified;}};
++    try{
++      const state=await runLoop(f.contract,f.runDir,adapter,{taskResultInput:f.input,stopRequested,onPhaseSettled:async observation=>{phases.push(observation);if(observation.phase==="execute")stopRequested.requested=true;}});
++      expect(injected).toBe(true);expect(verifies).toBe(0);expect(phases.map(p=>p.phase)).toEqual(["plan","execute"]);expect(state.budgetSnapshot).toMatchObject({tokenBudgetRemaining:991,timeRemainingMs:30000});
++      const response=await f.rpc("task-results",{input:f.input,afterRevision:0});expect(response.code,response.stderr).toBe(0);const page=JSON.parse(response.stdout);
++      if(mode==="owner-loss"){expect(state).toMatchObject({status:"cancelled",stopReason:"lease_lost"});expect(page.revision).toBe(1);}else{expect(state.status).toBe("executing");expect(page.revision).toBe(2);const boundary=await manifestOf(f,page.manifests[1].ref);if(mode==="failure"){expect(boundary.verificationRef).toBeNull();expect(await readFile(join(f.runDir,"events.jsonl"),"utf8")).toContain("task_result_capture_failed");}else expect(boundary.verificationRef).not.toBeNull();}
++    }finally{date.mockRestore();spy.mockRestore();}
++  });
++
+ });

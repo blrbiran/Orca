@@ -1,0 +1,1 @@
+["./node_modules/.bin/vitest", "run", "--maxWorkers=2", "--no-cache", "--reporter=default", "--reporter=json", "--outputFile=/private/tmp/orca-progress-results-20261010/result4-fix1-full-root.json"]

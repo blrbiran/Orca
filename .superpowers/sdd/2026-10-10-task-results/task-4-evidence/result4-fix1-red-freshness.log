@@ -1,0 +1,68 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.3 [39m[90m/Users/biran/.codex/worktrees/progress-results-20261010/Orca[39m
+
+(node:73379) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ [31m❯[39m tests/panel/taskResults.test.ts [2m([22m[2m23 tests[22m[2m | [22m[31m3 failed[39m[2m | [22m[33m19 skipped[39m[2m)[22m[33m 2843[2mms[22m[39m
+   [31m❯[39m admitted run and group result facts [2m(23)[22m
+     [2m[90m↓[39m[22m isolates rejected attempt from later approval and exposes exact immutable observation history
+     [2m[90m↓[39m[22m uses independently newer source attempt after failed page while core is older, without reusing explanation
+     [2m[90m↓[39m[22m unknown or foreign current facts do not promote saved history to current
+     [2m[90m↓[39m[22m actual started evidence shows in-progress only on current active lifecycle, never core verifying alone
+     [2m[90m↓[39m[22m retained partial core facts prove actual verifier bypass: {"failureType":"timeout"}
+     [2m[90m↓[39m[22m retained partial core facts prove actual verifier bypass: {"failureType":"error","partialOrigin":"runner"}
+     [2m[90m↓[39m[22m retained partial core facts prove actual verifier bypass: {"failureType":"error","changedFiles":[]}
+     [2m[90m↓[39m[22m error partial with changed files may actually verify and must not claim verifier bypass
+     [2m[90m↓[39m[22m damaged completed verifier bytes become unavailable, despite stored passed summary or agent claims
+     [2m[90m↓[39m[22m group follows archived plan order and distinguishes unstarted coverage from missing supported results and independent delivery/review
+     [2m[90m↓[39m[22m optional store damage is unavailable and does not repair original core authority damage
+     [2m[90m↓[39m[22m damaged optional field status remains explicit unavailable
+     [2m[90m↓[39m[22m damaged optional field reason remains explicit unavailable
+     [2m[90m↓[39m[22m damaged optional field observations remains explicit unavailable
+     [2m[90m↓[39m[22m damaged optional field revision remains explicit unavailable
+     [2m[90m↓[39m[22m actual verifier completion overrides authenticated partial-bypass policy and malformed partial cannot claim not-run
+     [2m[90m↓[39m[22m transport failure makes previously current explanation historical while newer real core attempt remains independent
+     [2m[90m↓[39m[22m same-index source attempt2 remains newer than core null without fabricated attempt2 report
+     [2m[90m↓[39m[22m same-index source attempt2 remains newer than core 1 without fabricated attempt2 report
+[31m     [31m×[31m fix1 rejects older same-owner hint {"currentAttempt":1,"revision":4} without rolling back available capture2/revision4[39m[33m 853[2mms[22m[39m
+     [33m[2m✓[22m[39m fix1 rejects older same-owner hint {"currentAttempt":2,"revision":1} without rolling back available capture2/revision4[33m 782[2mms[22m[39m
+[31m     [31m×[31m fix1 rejects older same-owner hint {"currentAttempt":1,"revision":1} without rolling back available capture2/revision4[39m[33m 777[2mms[22m[39m
+[31m     [31m×[31m fix1 malformed capture bounds preserve independent source2 over old core1 with explanation unavailable[39m[33m 428[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 3 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/panel/taskResults.test.ts[2m > [22madmitted run and group result facts[2m > [22mfix1 rejects older same-owner hint {"currentAttempt":1,"revision":4} without rolling back available capture2/revision4
+[41m[1m FAIL [22m[49m tests/panel/taskResults.test.ts[2m > [22madmitted run and group result facts[2m > [22mfix1 rejects older same-owner hint {"currentAttempt":1,"revision":1} without rolling back available capture2/revision4
+[31m[1mAssertionError[22m: expected 1 to be 2 // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 2[39m
+[31m+ 1[39m
+
+[36m [2m❯[22m tests/panel/taskResults.test.ts:[2m285:60[22m[39m
+
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/panel/taskResults.test.ts[2m > [22madmitted run and group result facts[2m > [22mfix1 malformed capture bounds preserve independent source2 over old core1 with explanation unavailable
+[31m[1mAssertionError[22m: expected 1 to be 2 // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 2[39m
+[31m+ 1[39m
+
+[36m [2m❯[22m tests/panel/taskResults.test.ts:[2m290:246[22m[39m
+
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m3 failed[39m[22m[2m | [22m[1m[32m1 passed[39m[22m[2m | [22m[33m19 skipped[39m[90m (23)[39m
+[2m   Start at [22m 22:06:42
+[2m   Duration [22m 4.08s[2m (tests 71%, transform 22%, import 6%)[22m
+

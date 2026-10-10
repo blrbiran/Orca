@@ -1,0 +1,24 @@
+[
+  {
+    "cwd": "/Users/biran/.codex/worktrees/progress-results-20261010/Orca",
+    "sourceCommit": "fef429e76b3eb4b113d4817396de5cc4570fad12",
+    "testedBase": "d4748a7aa24e386a4d336b7664124494203dab23",
+    "typeRecord": "result4-fix1-orca-types-final-candidate",
+    "nativePatchEqualsCommittedDiff": true,
+    "patchBytes": 19709,
+    "patchSha256": "23db3266afea57bb153d4e13426a2eb036b8377b3b24263902c9ca1f1054f13e",
+    "workingSourceDiffBytes": 0,
+    "cachedSourceDiffBytes": 0
+  },
+  {
+    "cwd": "/private/tmp/orca-results-ccloop-20261010",
+    "sourceCommit": "adbc9a9bb8c0587d64c40fb45b7680609a5f0e8f",
+    "testedBase": "c3643a9fb11a6d0a023e88b384356d3f7fedc58f",
+    "typeRecord": "result4-fix1-ccloop-types",
+    "nativePatchEqualsCommittedDiff": true,
+    "patchBytes": 14058,
+    "patchSha256": "31d50ce58bfe6a82b6ec0ad77c5fbb0f288f1c64f6bec399b1af248775dbaf74",
+    "workingSourceDiffBytes": 0,
+    "cachedSourceDiffBytes": 0
+  }
+]

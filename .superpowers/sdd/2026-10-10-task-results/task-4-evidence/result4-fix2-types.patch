@@ -1,0 +1,34 @@
+diff --git a/tests/control/taskResultCollector.test.ts b/tests/control/taskResultCollector.test.ts
+index b14d40e..dbbb5e3 100644
+--- a/tests/control/taskResultCollector.test.ts
++++ b/tests/control/taskResultCollector.test.ts
+@@ -357,22 +357,24 @@ describe('retention queue and source deletion', { timeout: 30000 }, () => {
+         try {
+             const binary = join(f.t.h.root, 'optional-peer.mjs'), calls = join(f.t.h.root, 'optional-calls'), table = join(f.t.h.root, 'optional-table.json');
+             await writeFile(table, '{}', { mode: 0o600 });
+-            const script = (code: string) => '#!/usr/bin/env node\nimport {appendFileSync} from "node:fs";appendFileSync(' + JSON.stringify(calls) + ',"call\\n");' + code;
+-            await writeFile(binary, script('process.stderr.write("control-command-invalid");process.exit(2);'), { mode: 0o700 });
++            // This criterion tests executable identity and refusal caching; Node startup remains covered by the paired CLI tests.
++            const shellQuote = (text: string) => "'" + text.replaceAll("'", "'\\''") + "'";
++            const script = (code: string) => "#!/bin/sh\n/bin/cat >/dev/null\nprintf '%s\\n' 'call' >> " + shellQuote(calls) + '\n' + code + '\n';
++            await writeFile(binary, script("printf '%s' 'control-command-invalid' >&2\nexit 2"), { mode: 0o700 });
+             const port = createCcloopExecutionPort({ binary, agentsTablePath: table, timeoutMs: 5000 });
+             await expect(port.collectTaskResults!(f.input, 0)).rejects.toBeInstanceOf(TaskResultUnsupportedError);
+             await expect(port.collectTaskResults!(f.input, 0)).rejects.toBeInstanceOf(TaskResultUnsupportedError);
+             expect((await readFile(calls, 'utf8')).trim().split('\n')).toHaveLength(1);
+-            await writeFile(binary, script('process.stdout.write(' + JSON.stringify(JSON.stringify(f.page())) + ');'));
++            await writeFile(binary, script("printf '%s' " + shellQuote(JSON.stringify(f.page()))));
+             await chmod(binary, 0o700);
+             expect(await port.collectTaskResults!(f.input, 0)).toMatchObject({ revision: 1 });
+             expect((await readFile(calls, 'utf8')).trim().split('\n')).toHaveLength(2);
+-            await writeFile(binary, script('process.stderr.write("control-envelope-conflict");process.exit(2);'));
++            await writeFile(binary, script("printf '%s' 'control-envelope-conflict' >&2\nexit 2"));
+             await chmod(binary, 0o700);
+             await expect(port.collectTaskResults!(f.input, 0)).rejects.toThrow('control-peer-exit');
+             await expect(port.collectTaskResults!(f.input, 0)).rejects.toThrow('control-peer-exit');
+             expect((await readFile(calls, 'utf8')).trim().split('\n')).toHaveLength(4);
+-            await writeFile(binary, script('setTimeout(()=>{},10000);'));
++            await writeFile(binary, script('exec /bin/sleep 10'));
+             await chmod(binary, 0o700);
+             const before = Date.now();
+             await expect(port.collectTaskResults!(f.input, 0)).rejects.toThrow('control-peer-timeout');

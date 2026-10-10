@@ -1,0 +1,13 @@
+diff --git a/src/controller/runLoop.ts b/src/controller/runLoop.ts
+index 69a300a..cddd530 100644
+--- a/src/controller/runLoop.ts
++++ b/src/controller/runLoop.ts
+@@ -1570,7 +1570,7 @@ export async function runLoopFromState(
+       if (handoffRequested()) {
+         await guardedWriteArtifacts(() => writeCompletedAttemptArtifacts(runDir, attempt, plan, completedExecution));
+         // Actual bypass after execute settlement; optional metadata cannot fabricate verifier entry or charge its clock.
+-        await captureResult(attempt, worktreePath, completedExecution, undefined, false, true);
++        /* fault: suppress actual pre-verifier handoff observation */
+         return await persistHandoffBoundary("handoff_boundary", `handoff requested after execute in attempt ${attempt}`);
+       }
+ 

@@ -1,0 +1,1 @@
+["./node_modules/.bin/vitest", "run", "tests/panel/taskResults.test.ts", "--maxWorkers=2", "--no-cache", "-t", "fix1 actual admitted|fix1 mismatched|fix1 damaged owned"]

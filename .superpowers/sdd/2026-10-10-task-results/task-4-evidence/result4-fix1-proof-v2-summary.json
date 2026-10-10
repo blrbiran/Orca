@@ -1,0 +1,28 @@
+{
+  "sourceCommit": "fef429e76b3eb4b113d4817396de5cc4570fad12",
+  "clone": "/private/tmp/orca-progress-results-20261010/result4-fix1-proof-v2-clone",
+  "mutants": [
+    {
+      "name": "result4-fix1-mutant-v2-cross-owner",
+      "criterion": "cross-owner, hash-only",
+      "sourceCommit": "fef429e76b3eb4b113d4817396de5cc4570fad12",
+      "patchBytes": 799,
+      "rc": 1,
+      "nativeBusinessRed": true,
+      "status": "killed",
+      "restoredWorkingDiffBytes": 0,
+      "restoredCachedDiffBytes": 0
+    },
+    {
+      "name": "result4-fix1-mutant-v2-hash-only-direct",
+      "criterion": "cross-owner, hash-only",
+      "sourceCommit": "fef429e76b3eb4b113d4817396de5cc4570fad12",
+      "patchBytes": 1537,
+      "rc": 1,
+      "nativeBusinessRed": true,
+      "status": "killed",
+      "restoredWorkingDiffBytes": 0,
+      "restoredCachedDiffBytes": 0
+    }
+  ]
+}

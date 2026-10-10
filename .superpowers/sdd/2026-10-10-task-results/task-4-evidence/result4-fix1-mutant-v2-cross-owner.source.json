@@ -1,0 +1,16 @@
+{
+  "cwd": "/private/tmp/orca-progress-results-20261010/result4-fix1-proof-v2-clone",
+  "sourceCommit": "fef429e76b3eb4b113d4817396de5cc4570fad12",
+  "workingSourceDiffBytes": 799,
+  "cachedSourceDiffBytes": 0,
+  "untrackedSource": [],
+  "argv": [
+    "./node_modules/.bin/vitest",
+    "run",
+    "tests/panel/taskResultOutputs.test.ts",
+    "--maxWorkers=2",
+    "--no-cache",
+    "-t",
+    "cross-owner, hash-only"
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "cwd": "/Users/biran/.codex/worktrees/progress-results-20261010/Orca",
+  "sourceCommit": "fef429e76b3eb4b113d4817396de5cc4570fad12",
+  "workingSourceDiffBytes": 0,
+  "cachedSourceDiffBytes": 0,
+  "untrackedSource": [],
+  "argv": [
+    "python3",
+    "/private/tmp/orca-progress-results-20261010/result4-fix1-proof-v2.py",
+    "/Users/biran/.codex/worktrees/progress-results-20261010/Orca",
+    "fef429e76b3eb4b113d4817396de5cc4570fad12"
+  ]
+}

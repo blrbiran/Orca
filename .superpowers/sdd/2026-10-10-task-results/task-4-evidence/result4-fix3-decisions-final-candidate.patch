@@ -1,0 +1,82 @@
+diff --git a/tests/panel/decisionsApi.test.ts b/tests/panel/decisionsApi.test.ts
+index d61bcec..e395a14 100644
+--- a/tests/panel/decisionsApi.test.ts
++++ b/tests/panel/decisionsApi.test.ts
+@@ -11,7 +11,7 @@ import { collect } from "../../src/metrics/collect.js";
+ import { UNRESOLVED_PROJECT_KEYS } from "../../src/metrics/discover.js";
+ import { DECISION_NOT_FOUND, LIST_FIELDS, detailUrl } from "../../src/panel/listProjection.js";
+ import { REVIEWS_LOCK_TIMEOUT_MS, acquireReviewsLock } from "../../src/panel/reviewsLock.js";
+-import { readReviews } from "../../src/panel/reviewsStore.js";
++import { readReviews, ReviewsWriter } from "../../src/panel/reviewsStore.js";
+ import type { ReviewRow } from "../../src/panel/reviewsStore.js";
+ import { createPanelServer, parsePanelArgs } from "../../src/panel/server.js";
+ import type { PanelOptions, StartedPanel } from "../../src/panel/server.js";
+@@ -383,6 +383,27 @@ describe("the decisions endpoints (spec sections 4.2 and 4.3.1)", () => {
+       const repoA = await makeTargetRepo();
+       const repoB = await makeTargetRepo({ remote: "https://github.com/biran/orca-b.git", seedDecision: false });
+       const dist = await makeDistFixture();
++      const writes: Array<Promise<"written" | "duplicate">> = [];
++      const originalAppend = ReviewsWriter.prototype.append;
++      let completedWrites = 0;
++      const appendSpy = vi.spyOn(ReviewsWriter.prototype, "append").mockImplementation(function (this: ReviewsWriter, ...args: Parameters<typeof originalAppend>) {
++        const actual = originalAppend.apply(this, args);
++        writes.push(actual);
++        // Observe completion without replacing the real writer promise or its rejection.
++        void actual.then(() => { completedWrites++; }, () => { completedWrites++; });
++        return actual;
++      });
++      let held: Awaited<ReturnType<typeof acquireReviewsLock>> | undefined;
++      const settleWrites = async (): Promise<void> => {
++        const failures: unknown[] = [];
++        const release = held;
++        held = undefined;
++        try { await release?.release(); } catch (error) { failures.push(error); }
++        // Even a release failure must not skip joining other real writes before fixture removal.
++        const settled = await Promise.allSettled(writes);
++        for (const result of settled) if (result.status === "rejected") failures.push(result.reason);
++        if (failures.length > 0) throw new AggregateError(failures, "real opened writes failed during fixture teardown");
++      };
+       try {
+         const bDecision: DecisionEvent = { ...ORIGINAL, question: "用哪种缓存" };
+         await appendEvent(repoB.decisionsDir, "orca-dev-1", bDecision);
+@@ -402,6 +423,9 @@ describe("the decisions endpoints (spec sections 4.2 and 4.3.1)", () => {
+           ),
+         );
+         try {
++          // Authenticate before holding the I/O lock. Actual opened writes stay pending through HTTP close.
++          await sessionFor(started);
++          held = await acquireReviewsLock(dir);
+           const resA = await get(started, detailUrl("proj-a", "orca-dev-1/1"));
+           expect(resA.status).toBe(200);
+           const bodyA = (await resA.json()) as { decision: { question: string } };
+@@ -411,13 +435,26 @@ describe("the decisions endpoints (spec sections 4.2 and 4.3.1)", () => {
+           expect(resB.status).toBe(200);
+           const bodyB = (await resB.json()) as { decision: { question: string } };
+           expect(bodyB.decision.question).toBe("用哪种缓存");
++          expect(writes).toHaveLength(2);
++          expect(completedWrites).toBe(0);
+         } finally {
+-          await started.close();
++          try { await started.close(); }
++          finally {
++            await settleWrites();
++          }
+         }
++        expect(completedWrites).toBe(2);
++        const opened = (await readReviews(dir)).filter(row => row.action === "opened" && row.decisionId === "orca-dev-1/1");
++        expect(opened.map(row => row.projectKey).sort()).toEqual(["proj-a", "proj-b"]);
+       } finally {
+-        await dist.cleanup();
+-        await repoA.cleanup();
+-        await repoB.cleanup();
++        try {
++          await settleWrites();
++        } finally {
++          appendSpy.mockRestore();
++          await dist.cleanup();
++          await repoA.cleanup();
++          await repoB.cleanup();
++        }
+       }
+     });
+   });

@@ -1,0 +1,16 @@
+{
+  "cwd": "/Users/biran/.codex/worktrees/progress-results-20261010/Orca",
+  "sourceCommit": "1a508ddfaef4fd21b929e838b2ecdc4a6381682e",
+  "workingSourceDiffBytes": 0,
+  "cachedSourceDiffBytes": 0,
+  "untrackedSource": [],
+  "argv": [
+    "./node_modules/.bin/vitest",
+    "run",
+    "--maxWorkers=2",
+    "--no-cache",
+    "--reporter=default",
+    "--reporter=json",
+    "--outputFile=/private/tmp/orca-progress-results-20261010/result4-fix3-full-root.json"
+  ]
+}

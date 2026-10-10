@@ -1,0 +1,13 @@
+diff --git a/src/panel/controlApi.ts b/src/panel/controlApi.ts
+index 02852a7..d316ef2 100644
+--- a/src/panel/controlApi.ts
++++ b/src/panel/controlApi.ts
+@@ -286,7 +286,7 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
+     if(req.query.download==='1'){
+       if(!bytes)throw new ControlError('recovery-blocked','task-result-output-unavailable');
+       res.setHeader('content-type','application/octet-stream');res.setHeader('content-disposition',`attachment; filename="${view.outputId}"`);res.send(bytes);
+-    }else res.json(view);
++    }else res.type('html').send(view.content);
+   }));
+ 
+   app.get("/api/control/runs/:runId/evidence", asyncRoute(async (req, res) => {

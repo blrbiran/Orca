@@ -1,0 +1,19 @@
+{
+  "cwd": "/private/tmp/orca-results-ccloop-20261010",
+  "sourceCommit": "adbc9a9bb8c0587d64c40fb45b7680609a5f0e8f",
+  "workingSourceDiffBytes": 0,
+  "cachedSourceDiffBytes": 0,
+  "untrackedSource": [],
+  "argv": [
+    "env",
+    "ORCA_CCLOOP_BIN=/private/tmp/orca-results-ccloop-20261010/dist/cli.js",
+    "ORCA_AGENTS_TABLE=/private/tmp/orca-feedback-20261010/agents.json",
+    "VITEST_MAX_THREADS=2",
+    "VITEST_MIN_THREADS=1",
+    "VITEST_MAX_FORKS=2",
+    "VITEST_MIN_FORKS=1",
+    "npm",
+    "run",
+    "verify:control"
+  ]
+}

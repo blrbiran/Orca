@@ -1,0 +1,18 @@
+{
+  "cwd": "/Users/biran/.codex/worktrees/progress-results-20261010/Orca",
+  "sourceCommit": "d4748a7aa24e386a4d336b7664124494203dab23",
+  "workingSourceDiffBytes": 15567,
+  "cachedSourceDiffBytes": 0,
+  "untrackedSource": [],
+  "argv": [
+    "env",
+    "ORCA_CCLOOP_BIN=/private/tmp/orca-results-ccloop-20261010/dist/cli.js",
+    "./node_modules/.bin/vitest",
+    "run",
+    "tests/control/taskResultPaired.test.ts",
+    "--maxWorkers=2",
+    "--no-cache",
+    "-t",
+    "actual pre-verifier handoff"
+  ]
+}

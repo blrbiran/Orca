@@ -1,0 +1,4 @@
+result4-fix1-ccloop-clone-command 0
+result4-fix1-mutant-ccloop-not-run-omitted adbc9a9bb8c0587d64c40fb45b7680609a5f0e8f 800 0 0
+result4-fix1-mutant-ccloop-not-run-omitted 1
+{"sourceCommit": "adbc9a9bb8c0587d64c40fb45b7680609a5f0e8f", "cwd": "/private/tmp/orca-progress-results-20261010/result4-fix1-ccloop-proof-clone", "patchBytes": 800, "rc": 1, "nativeBusinessRed": true, "status": "killed", "restoredWorkingDiffBytes": 0, "restoredCachedDiffBytes": 0}

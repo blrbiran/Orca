@@ -1,0 +1,40 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.3 [39m[90m/Users/biran/.codex/worktrees/progress-results-20261010/Orca[39m
+
+(node:84628) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ [32m✓[39m tests/panel/taskResults.test.ts [2m([22m[2m27 tests[22m[2m)[22m[33m 15549[2mms[22m[39m
+   [32m✓[39m admitted run and group result facts [2m(27)[22m
+     [33m[2m✓[22m[39m isolates rejected attempt from later approval and exposes exact immutable observation history[33m 1028[2mms[22m[39m
+     [33m[2m✓[22m[39m uses independently newer source attempt after failed page while core is older, without reusing explanation[33m 461[2mms[22m[39m
+     [33m[2m✓[22m[39m unknown or foreign current facts do not promote saved history to current[33m 438[2mms[22m[39m
+     [33m[2m✓[22m[39m actual started evidence shows in-progress only on current active lifecycle, never core verifying alone[33m 555[2mms[22m[39m
+     [33m[2m✓[22m[39m retained partial core facts prove actual verifier bypass: {"failureType":"timeout"}[33m 443[2mms[22m[39m
+     [33m[2m✓[22m[39m retained partial core facts prove actual verifier bypass: {"failureType":"error","partialOrigin":"runner"}[33m 415[2mms[22m[39m
+     [33m[2m✓[22m[39m retained partial core facts prove actual verifier bypass: {"failureType":"error","changedFiles":[]}[33m 415[2mms[22m[39m
+     [33m[2m✓[22m[39m error partial with changed files may actually verify and must not claim verifier bypass[33m 425[2mms[22m[39m
+     [33m[2m✓[22m[39m damaged completed verifier bytes become unavailable, despite stored passed summary or agent claims[33m 559[2mms[22m[39m
+     [33m[2m✓[22m[39m group follows archived plan order and distinguishes unstarted coverage from missing supported results and independent delivery/review[33m 430[2mms[22m[39m
+     [33m[2m✓[22m[39m optional store damage is unavailable and does not repair original core authority damage[33m 412[2mms[22m[39m
+     [33m[2m✓[22m[39m damaged optional field status remains explicit unavailable[33m 416[2mms[22m[39m
+     [33m[2m✓[22m[39m damaged optional field reason remains explicit unavailable[33m 410[2mms[22m[39m
+     [33m[2m✓[22m[39m damaged optional field observations remains explicit unavailable[33m 426[2mms[22m[39m
+     [33m[2m✓[22m[39m damaged optional field revision remains explicit unavailable[33m 413[2mms[22m[39m
+     [33m[2m✓[22m[39m actual verifier completion overrides authenticated partial-bypass policy and malformed partial cannot claim not-run[33m 542[2mms[22m[39m
+     [33m[2m✓[22m[39m transport failure makes previously current explanation historical while newer real core attempt remains independent[33m 430[2mms[22m[39m
+     [33m[2m✓[22m[39m same-index source attempt2 remains newer than core null without fabricated attempt2 report[33m 501[2mms[22m[39m
+     [33m[2m✓[22m[39m same-index source attempt2 remains newer than core 1 without fabricated attempt2 report[33m 428[2mms[22m[39m
+     [33m[2m✓[22m[39m fix1 rejects older same-owner hint {"currentAttempt":1,"revision":4} without rolling back available capture2/revision4[33m 1244[2mms[22m[39m
+     [33m[2m✓[22m[39m fix1 rejects older same-owner hint {"currentAttempt":2,"revision":1} without rolling back available capture2/revision4[33m 1464[2mms[22m[39m
+     [33m[2m✓[22m[39m fix1 rejects older same-owner hint {"currentAttempt":1,"revision":1} without rolling back available capture2/revision4[33m 800[2mms[22m[39m
+     [33m[2m✓[22m[39m fix1 malformed capture bounds preserve independent source2 over old core1 with explanation unavailable[33m 417[2mms[22m[39m
+     [33m[2m✓[22m[39m fix1 actual admitted handoff not-run evidence reuses snapshot and later started/completed observations supersede it[33m 843[2mms[22m[39m
+     [33m[2m✓[22m[39m fix1 mismatched or malformed not-run evidence is unavailable {"schema":"ccloop-task-result-verification-not-run-v1","attempt":2,"status":"not-run"}[33m 541[2mms[22m[39m
+     [33m[2m✓[22m[39m fix1 mismatched or malformed not-run evidence is unavailable {"schema":"ccloop-task-result-verification-not-run-v1","attempt":1,"status":"not-run","approved":true,"rejectCategory":"none","primaryTargetPaths":[],"failingCommand":null,"safeToRetry":true,"evidence":[],"pauseSignals":[],"stopSignals":[]}[33m 548[2mms[22m[39m
+     [33m[2m✓[22m[39m fix1 damaged owned not-run evidence is unavailable while original execution snapshot remains historical[33m 541[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m27 passed[39m[22m[90m (27)[39m
+[2m   Start at [22m 22:11:11
+[2m   Duration [22m 16.74s[2m (tests 93%, transform 5%, import 1%)[22m
+

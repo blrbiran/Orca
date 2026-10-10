@@ -1,0 +1,69 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.3 [39m[90m/private/tmp/orca-progress-results-20261010/result4-fix1-proof-clone[39m
+
+(node:26462) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ [31m❯[39m tests/panel/taskResultOutputs.test.ts [2m([22m[2m22 tests[22m[2m | [22m[31m1 failed[39m[2m | [22m[33m21 skipped[39m[2m)[22m[33m 1079[2mms[22m[39m
+   [31m❯[39m authorized inert result outputs [2m(22)[22m
+     [2m[90m↓[39m[22m keeps historical output-1 bytes separate from later attempt after source cleanup and target edits
+[31m     [31m×[31m cross-owner, hash-only and unadmitted registered output ids give no authority[39m[33m 1076[2mms[22m[39m
+     [2m[90m↓[39m[22m enforces exact UTF-8 preview cap with saved downloadable bytes 131072
+     [2m[90m↓[39m[22m enforces exact UTF-8 preview cap with saved downloadable bytes 131073
+     [2m[90m↓[39m[22m enforces exact UTF-8 preview cap with saved downloadable bytes 1048576
+     [2m[90m↓[39m[22m binary or invalid UTF-8 is not previewed {"type":"Buffer","data":[255,254]}
+     [2m[90m↓[39m[22m binary or invalid UTF-8 is not previewed {"type":"Buffer","data":[97,0,98]}
+     [2m[90m↓[39m[22m explicit captured missing never opens a live path
+     [2m[90m↓[39m[22m explicit captured deleted never opens a live path
+     [2m[90m↓[39m[22m explicit captured symlink never opens a live path
+     [2m[90m↓[39m[22m explicit captured changed never opens a live path
+     [2m[90m↓[39m[22m explicit captured too-large never opens a live path
+     [2m[90m↓[39m[22m explicit captured unsafe never opens a live path
+     [2m[90m↓[39m[22m explicit captured unavailable never opens a live path
+     [2m[90m↓[39m[22m escaped path ../secret is unsafe even with an admitted saved ref
+     [2m[90m↓[39m[22m escaped path https://evil/x is unsafe even with an admitted saved ref
+     [2m[90m↓[39m[22m escaped path file:///secret is unsafe even with an admitted saved ref
+     [2m[90m↓[39m[22m escaped path a/../../secret is unsafe even with an admitted saved ref
+     [2m[90m↓[39m[22m damaged private saved artifact symlink refuses bytes
+     [2m[90m↓[39m[22m damaged private saved artifact oversized refuses bytes
+     [2m[90m↓[39m[22m damaged private saved artifact hash refuses bytes
+     [2m[90m↓[39m[22m changing saved file is refused even when a bounded read got the old hash
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/panel/taskResultOutputs.test.ts[2m > [22mauthorized inert result outputs[2m > [22mcross-owner, hash-only and unadmitted registered output ids give no authority
+[31m[1mAssertionError[22m: promise resolved "{ …(10) }" instead of rejecting[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- Error {[39m
+[32m-   "message": "rejected promise",[39m
+[31m+ {[39m
+[31m+   "attempt": 1,[39m
+[31m+   "byteLength": 7,[39m
+[31m+   "content": "foreign",[39m
+[31m+   "downloadUrl": null,[39m
+[31m+   "groupId": "g",[39m
+[31m+   "outputId": "unadmitted",[39m
+[31m+   "path": "saved",[39m
+[31m+   "runId": "run-befdcb8e-136e-4f77-834e-c7723f83655b",[39m
+[31m+   "schema": "orca-result-output-v1",[39m
+[31m+   "status": "available",[39m
+[2m  }[22m
+
+[36m [2m❯[22m tests/panel/taskResultOutputs.test.ts:[2m36:83[22m[39m
+    [90m 34|[39m             const foreign = await writeArtifact(f.store, 'unadmitted',…
+    [90m 35|[39m             for (const outputId of [id(other), foreign.artifactId, for…
+    [90m 36|[39m                 await expect(readResultOutput(f.store, f.runId, output…
+    [90m   |[39m                                                                                   [31m^[39m
+    [90m 37|[39m         }
+    [90m 38|[39m         finally {
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[33m21 skipped[39m[90m (22)[39m
+[2m   Start at [22m 22:45:20
+[2m   Duration [22m 2.44s[2m (tests 46%, transform 41%, import 11%)[22m
+

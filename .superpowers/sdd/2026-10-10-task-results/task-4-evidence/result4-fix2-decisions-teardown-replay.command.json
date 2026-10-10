@@ -1,0 +1,1 @@
+["./node_modules/.bin/vitest", "run", "tests/panel/decisionsApi.test.ts", "--maxWorkers=2", "--no-cache", "-t", "returns each repository.*own row"]

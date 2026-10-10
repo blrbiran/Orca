@@ -1,0 +1,1 @@
+["/usr/bin/git", "-c", "core.hooksPath=/private/tmp/opr26/safe-ccloop-hooks", "clone", "--local", "--no-hardlinks", "/private/tmp/orca-results-ccloop-20261010", "/private/tmp/orca-progress-results-20261010/result4-fix1-ccloop-proof-clone"]

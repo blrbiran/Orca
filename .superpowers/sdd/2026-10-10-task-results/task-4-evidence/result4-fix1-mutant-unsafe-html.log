@@ -1,0 +1,35 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.3 [39m[90m/private/tmp/orca-progress-results-20261010/result4-fix1-proof-clone[39m
+
+(node:26789) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ [31m❯[39m tests/panel/taskResultApi.test.ts [2m([22m[2m3 tests[22m[2m | [22m[31m1 failed[39m[2m | [22m[33m2 skipped[39m[2m)[22m[33m 1641[2mms[22m[39m
+   [31m❯[39m saved task result API [2m(3)[22m
+     [2m[90m↓[39m[22m serves actual admitted run and group results under the panel epoch without GET writes
+[31m     [31m×[31m serves inert HTML, attachment downloads and refuses arbitrary output/hash ids and unauthenticated reads[39m[33m 1638[2mms[22m[39m
+     [2m[90m↓[39m[22m missing admitted manifest refuses by name while healthy core evidence remains available
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/panel/taskResultApi.test.ts[2m > [22msaved task result API[2m > [22mserves inert HTML, attachment downloads and refuses arbitrary output/hash ids and unauthenticated reads
+[31m[1mAssertionError[22m: expected 'text/html; charset=utf-8' to contain 'application/json'[39m
+
+Expected: [32m"application/json"[39m
+Received: [31m"text/html; charset=utf-8"[39m
+
+[36m [2m❯[22m tests/panel/taskResultApi.test.ts:[2m45:57[22m[39m
+    [90m 43|[39m             const preview = await http.session.fetch(route);
+    [90m 44|[39m             expect(preview.status).toBe(200);
+    [90m 45|[39m             expect(preview.headers.get('content-type')).toContain('app…
+    [90m   |[39m                                                         [31m^[39m
+    [90m 46|[39m             expect((await preview.json()).content).toBe('<script>alert…
+    [90m 47|[39m             const download = await http.session.fetch(route + '?downlo…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[33m2 skipped[39m[90m (3)[39m
+[2m   Start at [22m 22:45:23
+[2m   Duration [22m 2.85s[2m (tests 60%, transform 32%, import 8%)[22m
+

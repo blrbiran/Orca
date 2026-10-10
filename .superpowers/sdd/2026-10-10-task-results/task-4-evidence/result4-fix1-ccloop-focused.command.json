@@ -1,0 +1,1 @@
+["./node_modules/.bin/vitest", "run", "tests/controller/taskResultCapture.test.ts", "tests/control/taskResults.test.ts", "tests/control/taskResultAuthority.test.ts", "--minWorkers=1", "--maxWorkers=2", "--no-cache"]

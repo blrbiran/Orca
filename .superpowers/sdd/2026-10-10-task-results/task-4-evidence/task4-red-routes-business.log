@@ -1,0 +1,46 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.3 [39m[90m/Users/biran/.codex/worktrees/progress-results-20261010/Orca[39m
+
+(node:70447) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ [31m❯[39m tests/panel/taskResultApi.test.ts [2m([22m[2m2 tests[22m[2m | [22m[31m2 failed[39m[2m)[22m[33m 2685[2mms[22m[39m
+   [31m❯[39m saved task result API [2m(2)[22m
+[31m     [31m×[31m serves actual admitted run and group results under the panel epoch without GET writes[39m[33m 1685[2mms[22m[39m
+[31m     [31m×[31m serves inert HTML, attachment downloads and refuses arbitrary output/hash ids and unauthenticated reads[39m[33m 998[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 2 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/panel/taskResultApi.test.ts[2m > [22msaved task result API[2m > [22mserves actual admitted run and group results under the panel epoch without GET writes
+[31m[1mAssertionError[22m: expected 404 to be 200 // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 200[39m
+[31m+ 404[39m
+
+[36m [2m❯[22m tests/panel/taskResultApi.test.ts:[2m7:98[22m[39m
+
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/panel/taskResultApi.test.ts[2m > [22msaved task result API[2m > [22mserves inert HTML, attachment downloads and refuses arbitrary output/hash ids and unauthenticated reads
+[31m[1mAssertionError[22m: expected 404 to be 200 // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 200[39m
+[31m+ 404[39m
+
+[36m [2m❯[22m tests/panel/taskResultApi.test.ts:[2m14:98[22m[39m
+
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m2 failed[39m[22m[90m (2)[39m
+[2m   Start at [22m 20:46:29
+[2m   Duration [22m 3.88s[2m (tests 71%, transform 23%, import 5%)[22m
+

@@ -1,0 +1,4 @@
+Traceback (most recent call last):
+  File "/private/tmp/orca-progress-results-20261010/result4-fix1-unpack.py", line 7, in <module>
+    tar.extractall(dest,filter='data')
+TypeError: extractall() got an unexpected keyword argument 'filter'

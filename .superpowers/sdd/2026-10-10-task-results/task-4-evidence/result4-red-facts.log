@@ -1,0 +1,121 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.3 [39m[90m/Users/biran/.codex/worktrees/progress-results-20261010/Orca[39m
+
+(node:81707) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:81708) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ [31m❯[39m tests/panel/taskResults.test.ts [2m([22m[2m11 tests[22m[2m | [22m[31m5 failed[39m[2m)[22m[33m 7076[2mms[22m[39m
+   [31m❯[39m admitted run and group result facts [2m(11)[22m
+     [33m[2m✓[22m[39m isolates rejected attempt from later approval and exposes exact immutable observation history[33m 1319[2mms[22m[39m
+     [33m[2m✓[22m[39m uses independently newer source attempt after failed page while core is older, without reusing explanation[33m 505[2mms[22m[39m
+     [33m[2m✓[22m[39m unknown or foreign current facts do not promote saved history to current[33m 661[2mms[22m[39m
+     [33m[2m✓[22m[39m actual started evidence shows in-progress only on current active lifecycle, never core verifying alone[33m 650[2mms[22m[39m
+[31m     [31m×[31m retained partial core facts prove actual verifier bypass: {"failureType":"timeout"}[39m[33m 511[2mms[22m[39m
+[31m     [31m×[31m retained partial core facts prove actual verifier bypass: {"failureType":"error","partialOrigin":"runner"}[39m[33m 535[2mms[22m[39m
+[31m     [31m×[31m retained partial core facts prove actual verifier bypass: {"failureType":"error","changedFiles":[]}[39m[33m 535[2mms[22m[39m
+     [33m[2m✓[22m[39m error partial with changed files may actually verify and must not claim verifier bypass[33m 558[2mms[22m[39m
+     [33m[2m✓[22m[39m damaged completed verifier bytes become unavailable, despite stored passed summary or agent claims[33m 810[2mms[22m[39m
+[31m     [31m×[31m group follows archived plan order and distinguishes unstarted coverage from missing supported results and independent delivery/review[39m[33m 356[2mms[22m[39m
+[31m     [31m×[31m optional store damage is unavailable and does not repair original core authority damage[39m[33m 632[2mms[22m[39m
+ [31m❯[39m tests/panel/taskResultOutputs.test.ts [2m([22m[2m22 tests[22m[2m | [22m[31m5 failed[39m[2m)[22m[33m 11976[2mms[22m[39m
+   [31m❯[39m authorized inert result outputs [2m(22)[22m
+     [33m[2m✓[22m[39m keeps historical output-1 bytes separate from later attempt after source cleanup and target edits[33m 908[2mms[22m[39m
+     [33m[2m✓[22m[39m cross-owner, hash-only and unadmitted registered output ids give no authority[33m 1329[2mms[22m[39m
+     [33m[2m✓[22m[39m enforces exact UTF-8 preview cap with saved downloadable bytes 131072[33m 558[2mms[22m[39m
+     [33m[2m✓[22m[39m enforces exact UTF-8 preview cap with saved downloadable bytes 131073[33m 565[2mms[22m[39m
+     [33m[2m✓[22m[39m enforces exact UTF-8 preview cap with saved downloadable bytes 1048576[33m 542[2mms[22m[39m
+     [33m[2m✓[22m[39m binary or invalid UTF-8 is not previewed {"type":"Buffer","data":[255,254]}[33m 487[2mms[22m[39m
+     [33m[2m✓[22m[39m binary or invalid UTF-8 is not previewed {"type":"Buffer","data":[97,0,98]}[33m 479[2mms[22m[39m
+     [33m[2m✓[22m[39m explicit captured missing never opens a live path[33m 506[2mms[22m[39m
+     [33m[2m✓[22m[39m explicit captured deleted never opens a live path[33m 649[2mms[22m[39m
+     [33m[2m✓[22m[39m explicit captured symlink never opens a live path[33m 488[2mms[22m[39m
+     [33m[2m✓[22m[39m explicit captured changed never opens a live path[33m 581[2mms[22m[39m
+     [33m[2m✓[22m[39m explicit captured too-large never opens a live path[33m 396[2mms[22m[39m
+     [33m[2m✓[22m[39m explicit captured unsafe never opens a live path[33m 401[2mms[22m[39m
+     [33m[2m✓[22m[39m explicit captured unavailable never opens a live path[33m 403[2mms[22m[39m
+[31m     [31m×[31m escaped path ../secret is unsafe even with an admitted saved ref[39m[33m 403[2mms[22m[39m
+[31m     [31m×[31m escaped path https://evil/x is unsafe even with an admitted saved ref[39m[33m 349[2mms[22m[39m
+[31m     [31m×[31m escaped path file:///secret is unsafe even with an admitted saved ref[39m[33m 346[2mms[22m[39m
+[31m     [31m×[31m escaped path a/../../secret is unsafe even with an admitted saved ref[39m[33m 746[2mms[22m[39m
+     [33m[2m✓[22m[39m damaged private saved artifact symlink refuses bytes[33m 470[2mms[22m[39m
+     [33m[2m✓[22m[39m damaged private saved artifact oversized refuses bytes[33m 469[2mms[22m[39m
+     [33m[2m✓[22m[39m damaged private saved artifact hash refuses bytes[33m 456[2mms[22m[39m
+[31m     [31m×[31m changing saved file is refused even when a bounded read got the old hash[39m[33m 440[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 10 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/panel/taskResultOutputs.test.ts[2m > [22mauthorized inert result outputs[2m > [22mescaped path ../secret is unsafe even with an admitted saved ref
+[41m[1m FAIL [22m[49m tests/panel/taskResultOutputs.test.ts[2m > [22mauthorized inert result outputs[2m > [22mescaped path https://evil/x is unsafe even with an admitted saved ref
+[41m[1m FAIL [22m[49m tests/panel/taskResultOutputs.test.ts[2m > [22mauthorized inert result outputs[2m > [22mescaped path file:///secret is unsafe even with an admitted saved ref
+[41m[1m FAIL [22m[49m tests/panel/taskResultOutputs.test.ts[2m > [22mauthorized inert result outputs[2m > [22mescaped path a/../../secret is unsafe even with an admitted saved ref
+[31m[1mControlError[22m: recovery-blocked:task-result-output-unavailable[39m
+[36m [2m❯[22m unavailable src/panel/taskResultOutputs.ts:[2m14:23[22m[39m
+    [90m 12|[39m import { resultOutputSchema, type ResultOutputV1 } from '../control/we…
+    [90m 13|[39m import { resultAuthority, ownedResultManifest, type ResultReadContext …
+    [90m 14|[39m const unavailable=()=>new ControlError('recovery-blocked','task-result…
+    [90m   |[39m                       [31m^[39m
+    [90m 15|[39m const fileIdentity=(s:Stats)=>[s.dev,s.ino,s.size,s.mtimeMs,s.ctimeMs]…
+    [90m 16|[39m /** Private saved bytes only. Callers must establish admitted manifest…
+[90m [2m❯[22m readResultOutputBytes src/panel/taskResultOutputs.ts:[2m32:216[22m[39m
+[90m [2m❯[22m readResultOutput src/panel/taskResultOutputs.ts:[2m43:153[22m[39m
+[90m [2m❯[22m tests/panel/taskResultOutputs.test.ts:[2m24:275[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/10]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/panel/taskResultOutputs.test.ts[2m > [22mauthorized inert result outputs[2m > [22mchanging saved file is refused even when a bounded read got the old hash
+[31m[1mTypeError[22m: Cannot spy on export "open". Module namespace is not configurable in ESM. See: https://vitest.dev/guide/mocking/modules#mocking-a-module[39m
+[36m [2m❯[22m tests/panel/taskResultOutputs.test.ts:[2m26:251[22m[39m
+
+
+[31m[1mCaused by: TypeError[22m: Cannot redefine property: open[39m
+[36m [2m❯[22m tests/panel/taskResultOutputs.test.ts:[2m26:251[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/10]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/panel/taskResults.test.ts[2m > [22madmitted run and group result facts[2m > [22mretained partial core facts prove actual verifier bypass: {"failureType":"timeout"}
+[41m[1m FAIL [22m[49m tests/panel/taskResults.test.ts[2m > [22madmitted run and group result facts[2m > [22mretained partial core facts prove actual verifier bypass: {"failureType":"error","partialOrigin":"runner"}
+[41m[1m FAIL [22m[49m tests/panel/taskResults.test.ts[2m > [22madmitted run and group result facts[2m > [22mretained partial core facts prove actual verifier bypass: {"failureType":"error","changedFiles":[]}
+[31m[1mAssertionError[22m: expected 'unavailable' to be 'not-run' // Object.is equality[39m
+
+Expected: [32m"not-run"[39m
+Received: [31m"unavailable"[39m
+
+[36m [2m❯[22m tests/panel/taskResults.test.ts:[2m31:320[22m[39m
+
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/10]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/panel/taskResults.test.ts[2m > [22madmitted run and group result facts[2m > [22mgroup follows archived plan order and distinguishes unstarted coverage from missing supported results and independent delivery/review
+[31m[1mAssertionError[22m: expected [ 'a', 'z' ] to deeply equal [ 'z', 'a' ][39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[2m  [[22m
+[32m-   "z",[39m
+[2m    "a",[22m
+[31m+   "z",[39m
+[2m  ][22m
+
+[36m [2m❯[22m tests/panel/taskResults.test.ts:[2m40:98[22m[39m
+
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/10]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/panel/taskResults.test.ts[2m > [22madmitted run and group result facts[2m > [22moptional store damage is unavailable and does not repair original core authority damage
+[31m[1mTypeError[22m: state.observations.filter is not a function[39m
+[36m [2m❯[22m resultAuthority src/panel/taskResults.ts:[2m23:56[22m[39m
+
+[90m [2m❯[22m readRunResults src/panel/taskResults.ts:[2m34:10[22m[39m
+[90m [2m❯[22m view tests/panel/taskResults.test.ts:[2m9:59[22m[39m
+[90m [2m❯[22m tests/panel/taskResults.test.ts:[2m44:91[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/10]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m2 failed[39m[22m[90m (2)[39m
+[2m      Tests [22m [1m[31m10 failed[39m[22m[2m | [22m[1m[32m23 passed[39m[22m[90m (33)[39m
+[2m   Start at [22m 20:51:37
+[2m   Duration [22m 13.39s[2m (tests 88%, transform 9%, import 3%)[22m
+

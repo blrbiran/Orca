@@ -1,0 +1,150 @@
+import { describe, it, expect, vi } from 'vitest';
+import { rm, writeFile, symlink } from 'node:fs/promises';
+import * as fs from 'node:fs/promises';
+vi.mock('node:fs/promises', async (original) => { const actual = await original<typeof import('node:fs/promises')>(); return { ...actual, open: vi.fn(actual.open) }; });
+import { join } from 'node:path';
+import { resultFixture, context } from './fixtures/taskResults.js';
+import { readResultOutput, resultOutputId } from '../../src/panel/taskResultOutputs.js';
+import { writeArtifact } from '../../src/control/archive.js';
+import { MAX_TASK_RESULT_PREVIEW_BYTES, MAX_TASK_RESULT_FILE_BYTES } from '../../src/control/taskResultProtocol.js';
+const id = (f: Awaited<ReturnType<typeof resultFixture>>, attempt = 1) => resultOutputId(f.runId, attempt, 'output-1');
+describe('authorized inert result outputs', { timeout: 30000 }, () => {
+    it('keeps historical output-1 bytes separate from later attempt after source cleanup and target edits', async () => {
+        const f = await resultFixture();
+        try {
+            const m2 = f.manifest(2, 2), bytes = Buffer.from('attempt two');
+            m2.outputs = [{
+                    ...m2.outputs[0], ref: f.add(bytes), byteLength: bytes.length
+                }];
+            await f.capture([f.manifest(), m2]);
+            await writeFile(join(f.t.repo, 'a.html'), 'current target changed');
+            await rm(f.t.body(f.runId).drive.sourceDir, { recursive: true, force: true });
+            expect((await readResultOutput(f.store, f.runId, id(f), context)).content).toBe('<script>alert(1)</script>');
+            expect((await readResultOutput(f.store, f.runId, id(f, 2), context)).content).toBe('attempt two');
+        }
+        finally {
+            await f.dispose();
+        }
+    });
+    it('cross-owner, hash-only and unadmitted registered output ids give no authority', async () => {
+        const f = await resultFixture(), other = await resultFixture();
+        try {
+            await f.capture([f.manifest()]);
+            await other.capture([other.manifest()]);
+            const foreign = await writeArtifact(f.store, 'unadmitted', Buffer.from('foreign'));
+            for (const outputId of [id(other), foreign.artifactId, foreign.hash, f.output.hash, 'output-1'])
+                await expect(readResultOutput(f.store, f.runId, outputId, context)).rejects.toThrow('recovery-blocked');
+        }
+        finally {
+            await f.dispose();
+            await other.dispose();
+        }
+    });
+    it.each([131072, 131073, 1048576])('enforces exact UTF-8 preview cap with saved downloadable bytes %i', async (size) => {
+        const f = await resultFixture();
+        try {
+            const m = f.manifest(), bytes = Buffer.alloc(size, 'x');
+            m.outputs = [{
+                    ...m.outputs[0], ref: f.add(bytes), byteLength: size
+                }];
+            await f.capture([m]);
+            const r = await readResultOutput(f.store, f.runId, id(f), context);
+            expect(r.status).toBe(size <= MAX_TASK_RESULT_PREVIEW_BYTES ? 'available' : 'too-large');
+            expect(r.content?.length ?? null).toBe(size <= MAX_TASK_RESULT_PREVIEW_BYTES ? size : null);
+            expect(r.downloadUrl).toContain('?download=1');
+            expect(r.byteLength).toBe(size);
+        }
+        finally {
+            await f.dispose();
+        }
+    });
+    it.each([Buffer.from([0xff, 0xfe]), Buffer.from([97, 0, 98])])('binary or invalid UTF-8 is not previewed %j', async (bytes) => {
+        const f = await resultFixture();
+        try {
+            const m = f.manifest();
+            m.outputs = [{
+                    ...m.outputs[0], ref: f.add(bytes), byteLength: bytes.length
+                }];
+            await f.capture([m]);
+            const r = await readResultOutput(f.store, f.runId, id(f), context);
+            expect(r.status).toBe('binary');
+            expect(r.content).toBeNull();
+            expect(r.downloadUrl).toContain('?download=1');
+        }
+        finally {
+            await f.dispose();
+        }
+    });
+    it.each(['missing', 'deleted', 'symlink', 'changed', 'too-large', 'unsafe', 'unavailable'] as const)('explicit captured %s never opens a live path', async (status) => {
+        const f = await resultFixture();
+        try {
+            const m = f.manifest();
+            m.outputs = [{
+                    ...m.outputs[0], status, ref: null, byteLength: null
+                }];
+            await f.capture([m]);
+            const r = await readResultOutput(f.store, f.runId, id(f), context);
+            expect(r.status).toBe(status);
+            expect(r.content).toBeNull();
+            expect(r.downloadUrl).toBeNull();
+        }
+        finally {
+            await f.dispose();
+        }
+    });
+    it.each(['../secret', 'https://evil/x', 'file:///secret', 'a/../../secret'])('escaped path %s is unsafe even with an admitted saved ref', async (path) => {
+        const f = await resultFixture();
+        try {
+            const m = f.manifest();
+            m.outputs = [{ ...m.outputs[0], path }];
+            await f.capture([m]);
+            await expect(readResultOutput(f.store, f.runId, id(f), context)).rejects.toThrow('task-result-output-unavailable');
+        }
+        finally {
+            await f.dispose();
+        }
+    });
+    it.each(['symlink', 'oversized', 'hash'])('damaged private saved artifact %s refuses bytes', async (mode) => {
+        const f = await resultFixture();
+        try {
+            await f.capture([f.manifest()]);
+            const path = join(f.store.stateDir, 'artifacts', f.output.artifactId, 'data');
+            if (mode === 'symlink') {
+                await rm(path);
+                await symlink('/etc/passwd', path);
+            }
+            else
+                await writeFile(path, mode === 'oversized' ? Buffer.alloc(MAX_TASK_RESULT_FILE_BYTES + 1) : 'corrupted');
+            const r = await readResultOutput(f.store, f.runId, id(f), context);
+            expect(r.status).toBe('unavailable');
+            expect(r.content).toBeNull();
+            expect(r.downloadUrl).toBeNull();
+        }
+        finally {
+            await f.dispose();
+        }
+    });
+    it('changing saved file is refused even when a bounded read got the old hash', async () => {
+        const f = await resultFixture();
+        try {
+            await f.capture([f.manifest()]);
+            const path = join(f.store.stateDir, 'artifacts', f.output.artifactId, 'data');
+            const real = (await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises')).open;
+            vi.mocked(fs.open).mockImplementation(async (...args: Parameters<typeof fs.open>) => {
+                const handle = await real(...args);
+                if (args[0] === path) {
+                    const read = handle.read.bind(handle);
+                    handle.read = (async (...input: any[]) => { const result = await (read as any)(...input); await writeFile(path, 'changed same saved file'); return result; }) as typeof handle.read;
+                }
+                return handle;
+            });
+            const r = await readResultOutput(f.store, f.runId, id(f), context);
+            expect(r.status).toBe('unavailable');
+            expect(r.content).toBeNull();
+        }
+        finally {
+            vi.mocked(fs.open).mockImplementation((await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises')).open);
+            await f.dispose();
+        }
+    });
+});

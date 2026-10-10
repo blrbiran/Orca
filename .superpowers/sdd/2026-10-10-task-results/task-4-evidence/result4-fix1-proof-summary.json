@@ -1,0 +1,114 @@
+{
+  "sourceCommit": "fef429e76b3eb4b113d4817396de5cc4570fad12",
+  "clone": "/private/tmp/orca-progress-results-20261010/result4-fix1-proof-clone",
+  "mutants": [
+    {
+      "name": "result4-fix1-mutant-cross-owner",
+      "criterion": "cross-owner, hash-only",
+      "sourceCommit": "fef429e76b3eb4b113d4817396de5cc4570fad12",
+      "status": "setup-failed",
+      "error": "('src/panel/taskResultOutputs.ts', 'sha256Canonical({ runId, attempt, sourceOutputId })', 0)",
+      "restoredWorkingDiffBytes": 0,
+      "restoredCachedDiffBytes": 0
+    },
+    {
+      "name": "result4-fix1-mutant-hash-only",
+      "criterion": "cross-owner, hash-only",
+      "sourceCommit": "fef429e76b3eb4b113d4817396de5cc4570fad12",
+      "patchBytes": 1554,
+      "rc": 1,
+      "nativeBusinessRed": true,
+      "status": "killed",
+      "restoredWorkingDiffBytes": 0,
+      "restoredCachedDiffBytes": 0
+    },
+    {
+      "name": "result4-fix1-mutant-unsafe-html",
+      "criterion": "serves inert HTML",
+      "sourceCommit": "fef429e76b3eb4b113d4817396de5cc4570fad12",
+      "patchBytes": 709,
+      "rc": 1,
+      "nativeBusinessRed": true,
+      "status": "killed",
+      "restoredWorkingDiffBytes": 0,
+      "restoredCachedDiffBytes": 0
+    },
+    {
+      "name": "result4-fix1-mutant-stale-current",
+      "criterion": "transport failure makes",
+      "sourceCommit": "fef429e76b3eb4b113d4817396de5cc4570fad12",
+      "patchBytes": 1192,
+      "rc": 1,
+      "nativeBusinessRed": true,
+      "status": "killed",
+      "restoredWorkingDiffBytes": 0,
+      "restoredCachedDiffBytes": 0
+    },
+    {
+      "name": "result4-fix1-mutant-stale-bound",
+      "criterion": "fix1 rejects older same-owner hint",
+      "sourceCommit": "fef429e76b3eb4b113d4817396de5cc4570fad12",
+      "patchBytes": 1271,
+      "rc": 1,
+      "nativeBusinessRed": true,
+      "status": "killed",
+      "restoredWorkingDiffBytes": 0,
+      "restoredCachedDiffBytes": 0
+    },
+    {
+      "name": "result4-fix1-mutant-independent-fact-loss",
+      "criterion": "fix1 malformed capture bounds",
+      "sourceCommit": "fef429e76b3eb4b113d4817396de5cc4570fad12",
+      "patchBytes": 1411,
+      "rc": 1,
+      "nativeBusinessRed": true,
+      "status": "killed",
+      "restoredWorkingDiffBytes": 0,
+      "restoredCachedDiffBytes": 0
+    },
+    {
+      "name": "result4-fix1-mutant-prior-upgrade",
+      "criterion": "isolates rejected attempt",
+      "sourceCommit": "fef429e76b3eb4b113d4817396de5cc4570fad12",
+      "patchBytes": 697,
+      "rc": 1,
+      "nativeBusinessRed": true,
+      "status": "killed",
+      "restoredWorkingDiffBytes": 0,
+      "restoredCachedDiffBytes": 0
+    },
+    {
+      "name": "result4-fix1-mutant-partial-guess",
+      "criterion": "error partial with changed",
+      "sourceCommit": "fef429e76b3eb4b113d4817396de5cc4570fad12",
+      "patchBytes": 860,
+      "rc": 1,
+      "nativeBusinessRed": true,
+      "status": "killed",
+      "restoredWorkingDiffBytes": 0,
+      "restoredCachedDiffBytes": 0
+    },
+    {
+      "name": "result4-fix1-mutant-core-verifier-guess",
+      "criterion": "actual started evidence",
+      "sourceCommit": "fef429e76b3eb4b113d4817396de5cc4570fad12",
+      "patchBytes": 726,
+      "rc": 1,
+      "nativeBusinessRed": true,
+      "status": "killed",
+      "restoredWorkingDiffBytes": 0,
+      "restoredCachedDiffBytes": 0
+    },
+    {
+      "name": "result4-fix1-mutant-snapshot-upgrade",
+      "criterion": "isolates rejected attempt",
+      "sourceCommit": "fef429e76b3eb4b113d4817396de5cc4570fad12",
+      "patchBytes": 743,
+      "rc": 1,
+      "nativeBusinessRed": true,
+      "status": "killed",
+      "restoredWorkingDiffBytes": 0,
+      "restoredCachedDiffBytes": 0
+    }
+  ]
+}

@@ -1,0 +1,46 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.3 [39m[90m/Users/biran/.codex/worktrees/progress-results-20261010/Orca[39m
+
+(node:67123) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ [31m❯[39m tests/panel/taskResultApi.test.ts [2m([22m[2m2 tests[22m[2m | [22m[31m2 failed[39m[2m)[22m[33m 2075[2mms[22m[39m
+   [31m❯[39m saved task result API [2m(2)[22m
+[31m     [31m×[31m serves actual admitted run and group results under the panel epoch without GET writes[39m[33m 1362[2mms[22m[39m
+[31m     [31m×[31m serves inert HTML, attachment downloads and refuses arbitrary output/hash ids and unauthenticated reads[39m[33m 695[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 2 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/panel/taskResultApi.test.ts[2m > [22msaved task result API[2m > [22mserves actual admitted run and group results under the panel epoch without GET writes
+[31m[1mError[22m: login as tester answered 400: {"code":"panel-bad-request","message":"this endpoint wants a JSON object sent with content-type: application/json, and got no JSON body"}[39m
+[36m [2m❯[22m login tests/panel/fixtures/auth.ts:[2m33:33[22m[39m
+    [90m 31|[39m export async function login(baseUrl: string, name = "tester", password…
+    [90m 32|[39m   const res = await fetch(`${baseUrl}/api/auth/login`, { method: "POST…
+    [90m 33|[39m   if (res.status !== 200) throw new Error(`login as ${name} answered $…
+    [90m   |[39m                                 [31m^[39m
+    [90m 34|[39m   const set = res.headers.getSetCookie();
+    [90m 35|[39m   const at = cookieValue(set, "orca_at"), csrf = cookieValue(set, "orc…
+[90m [2m❯[22m resultHttp tests/panel/fixtures/taskResults.ts:[2m39:89[22m[39m
+[90m [2m❯[22m tests/panel/taskResultApi.test.ts:[2m5:76[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/panel/taskResultApi.test.ts[2m > [22msaved task result API[2m > [22mserves inert HTML, attachment downloads and refuses arbitrary output/hash ids and unauthenticated reads
+[31m[1mError[22m: login as tester answered 400: {"code":"panel-bad-request","message":"this endpoint wants a JSON object sent with content-type: application/json, and got no JSON body"}[39m
+[36m [2m❯[22m login tests/panel/fixtures/auth.ts:[2m33:33[22m[39m
+    [90m 31|[39m export async function login(baseUrl: string, name = "tester", password…
+    [90m 32|[39m   const res = await fetch(`${baseUrl}/api/auth/login`, { method: "POST…
+    [90m 33|[39m   if (res.status !== 200) throw new Error(`login as ${name} answered $…
+    [90m   |[39m                                 [31m^[39m
+    [90m 34|[39m   const set = res.headers.getSetCookie();
+    [90m 35|[39m   const at = cookieValue(set, "orca_at"), csrf = cookieValue(set, "orc…
+[90m [2m❯[22m resultHttp tests/panel/fixtures/taskResults.ts:[2m39:89[22m[39m
+[90m [2m❯[22m tests/panel/taskResultApi.test.ts:[2m13:76[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m2 failed[39m[22m[90m (2)[39m
+[2m   Start at [22m 20:44:59
+[2m   Duration [22m 3.36s[2m (tests 64%, transform 28%, import 7%)[22m
+

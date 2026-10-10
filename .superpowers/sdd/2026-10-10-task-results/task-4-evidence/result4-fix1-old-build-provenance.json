@@ -1,0 +1,19 @@
+{
+  "featurePath": "/private/tmp/orca-results-ccloop-20261010/dist/cli.js",
+  "acceptedSource": "c3643a9fb11a6d0a023e88b384356d3f7fedc58f",
+  "phase": "old accepted build held unchanged through paired RED, recorded before amended build",
+  "modules": {
+    "dist/cli.js": {
+      "bytes": 166,
+      "sha256": "b85bad30ecfd202e0e726e9926fbbc31fd9230e67048bd3d52061d3b4f5e5aaa"
+    },
+    "dist/src/control/taskResults.js": {
+      "bytes": 14539,
+      "sha256": "958c5d54697c392f43c93756852d84ff621cc32e88f0ff30ed3588adffdede7f"
+    },
+    "dist/src/controller/runLoop.js": {
+      "bytes": 87457,
+      "sha256": "0e55dc7ba113383f06583ddfc7992a6a47f98ca52adb08a0b61aad75d15a3165"
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "cwd": "/Users/biran/.codex/worktrees/progress-results-20261010/Orca",
+  "sourceCommit": "fef429e76b3eb4b113d4817396de5cc4570fad12",
+  "workingSourceDiffBytes": 3106,
+  "cachedSourceDiffBytes": 0,
+  "untrackedSource": [],
+  "argv": [
+    "npm",
+    "run",
+    "typecheck"
+  ]
+}

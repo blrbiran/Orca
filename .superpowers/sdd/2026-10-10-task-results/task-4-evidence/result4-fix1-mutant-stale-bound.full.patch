@@ -1,0 +1,13 @@
+diff --git a/src/panel/taskResults.ts b/src/panel/taskResults.ts
+index b3c799b..d273619 100644
+--- a/src/panel/taskResults.ts
++++ b/src/panel/taskResults.ts
+@@ -92,7 +92,7 @@ export async function readRunResults(store: ControlStore, runId: string, context
+     const a = resultAuthority(store, runId, context, knownGroup), fact = readTaskResultCurrentAttemptFact(store, runId);
+     const core = runProgressSchema.safeParse(a.body.progress);
+     const bounds = a.state?.identity ? { attempt: a.state.currentAttempt, revision: a.state.revision } : null;
+-    const staleHint = fact !== null && bounds !== null && (fact.currentAttempt < bounds.attempt || fact.revision < bounds.revision);
++    const staleHint = fact !== null && bounds !== null && (fact.currentAttempt < bounds.attempt && fact.revision < bounds.revision);
+     const freshEmptyIndex = a.state?.status === 'missing' && a.state.revision === 0 && a.state.observations.length === 0;
+     const sourceFresh = fact !== null && !staleHint && (bounds === null || a.state!.status === 'available' || freshEmptyIndex || fact.currentAttempt > bounds.attempt || fact.revision > bounds.revision);
+     // Only a separately valid same-owner hint rejected for old bounds permits the available capture's ordinal fallback.

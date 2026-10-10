@@ -1,0 +1,12 @@
+diff --git a/src/panel/taskResults.ts b/src/panel/taskResults.ts
+index b3c799b..6dbb971 100644
+--- a/src/panel/taskResults.ts
++++ b/src/panel/taskResults.ts
+@@ -154,6 +154,7 @@ export async function readRunResults(store: ControlStore, runId: string, context
+             if (observation.manifest.stage === 'verification')
+                 verification = actual;
+         }
++        if (a.body.progress?.status==='verifying') verification='in-progress';
+         if (verifierBypassed && !history.some(o => o.manifest.stage === 'verification'))
+             verification = 'not-run';
+         if (verification === 'in-progress' && (attempt !== currentAttempt || a.run.outcome || !['running', 'starting'].includes(a.run.state)))

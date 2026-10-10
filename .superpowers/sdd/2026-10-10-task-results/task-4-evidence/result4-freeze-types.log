@@ -1,0 +1,8 @@
+
+> orca@0.1.0 typecheck
+> tsc --noEmit -p tsconfig.json
+
+src/panel/taskResults.ts(42,9): error TS2322: Type '{ status: "missing" | "unavailable" | "stale" | "available" | "unsupported"; reason: string | null; currentAttempt: number; schema: "orca-task-result-store-v1"; revision: number; observations: { ...; }[]; identity: { ...; } | null; sourceRevision: number; currentAttemptFact?: unknown; } | null' is not assignable to type 'TaskResultState | null'.
+  Type '{ status: "missing" | "unavailable" | "stale" | "available" | "unsupported"; reason: string | null; currentAttempt: number; schema: "orca-task-result-store-v1"; revision: number; observations: { ...; }[]; identity: { ...; } | null; sourceRevision: number; currentAttemptFact?: unknown; }' is not assignable to type 'TaskResultState'.
+    Types of property 'currentAttemptFact' are incompatible.
+      Type 'unknown' is not assignable to type '{ currentAttempt: number; schema: "orca-task-result-current-attempt-v1"; revision: number; identity: { taskId: string | null; runId: string; groupId: string; workItemId: string; generation: number; graphVersion: number; targetVersion: number; executionId: string; envelopeHash: string; }; } | null | undefined'.

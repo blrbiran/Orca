@@ -1,0 +1,22 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.3 [39m[90m/Users/biran/.codex/worktrees/progress-results-20261010/Orca[39m
+
+(node:76207) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ [32m✓[39m tests/panel/taskResults.test.ts [2m([22m[2m23 tests[22m[2m | [22m[33m14 skipped[39m[2m)[22m[33m 5094[2mms[22m[39m
+   [32m✓[39m admitted run and group result facts [2m(23)[22m
+     [33m[2m✓[22m[39m uses independently newer source attempt after failed page while core is older, without reusing explanation[33m 520[2mms[22m[39m
+     [33m[2m✓[22m[39m unknown or foreign current facts do not promote saved history to current[33m 442[2mms[22m[39m
+     [33m[2m✓[22m[39m transport failure makes previously current explanation historical while newer real core attempt remains independent[33m 461[2mms[22m[39m
+     [33m[2m✓[22m[39m same-index source attempt2 remains newer than core null without fabricated attempt2 report[33m 449[2mms[22m[39m
+     [33m[2m✓[22m[39m same-index source attempt2 remains newer than core 1 without fabricated attempt2 report[33m 417[2mms[22m[39m
+     [33m[2m✓[22m[39m fix1 rejects older same-owner hint {"currentAttempt":1,"revision":4} without rolling back available capture2/revision4[33m 753[2mms[22m[39m
+     [33m[2m✓[22m[39m fix1 rejects older same-owner hint {"currentAttempt":2,"revision":1} without rolling back available capture2/revision4[33m 859[2mms[22m[39m
+     [33m[2m✓[22m[39m fix1 rejects older same-owner hint {"currentAttempt":1,"revision":1} without rolling back available capture2/revision4[33m 767[2mms[22m[39m
+     [33m[2m✓[22m[39m fix1 malformed capture bounds preserve independent source2 over old core1 with explanation unavailable[33m 423[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m9 passed[39m[22m[2m | [22m[33m14 skipped[39m[90m (23)[39m
+[2m   Start at [22m 22:07:52
+[2m   Duration [22m 6.37s[2m (tests 81%, transform 15%, import 4%)[22m
+

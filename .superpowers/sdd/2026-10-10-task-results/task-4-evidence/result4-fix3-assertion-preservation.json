@@ -1,0 +1,13 @@
+{
+  "base": "8b94a08dafb0cfdc8be445d226fd4e9aed9df329",
+  "path": "tests/panel/decisionsApi.test.ts",
+  "allFourOriginalStatusQuestionAssertionsRetained": true,
+  "originalAssertions": [
+    "expect(resA.status).toBe(200);",
+    "expect(bodyA.decision.question).toBe(ORIGINAL.question);",
+    "expect(resB.status).toBe(200);",
+    "expect(bodyB.decision.question).toBe(\"\u7528\u54ea\u79cd\u7f13\u5b58\");"
+  ],
+  "outsideTargetOnlyChange": "ReviewsWriter import",
+  "productWorkingDiffBytes": 0
+}

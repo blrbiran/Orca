@@ -1,0 +1,28 @@
+{
+  "cwd": "/Users/biran/.codex/worktrees/progress-results-20261010/Orca",
+  "finalSourceCommit": "1a508ddfaef4fd21b929e838b2ecdc4a6381682e",
+  "productSourceCommit": "fef429e76b3eb4b113d4817396de5cc4570fad12",
+  "productDiffBytes": 0,
+  "workingSourceDiffBytes": 0,
+  "cachedSourceDiffBytes": 0,
+  "ccloopCwd": "/private/tmp/orca-results-ccloop-20261010",
+  "ccloopSourceCommit": "adbc9a9bb8c0587d64c40fb45b7680609a5f0e8f",
+  "ccloopWorkingSourceDiffBytes": 0,
+  "ccloopCachedSourceDiffBytes": 0,
+  "ownedProductTestPaths": [
+    "src/control/taskResultProtocol.ts",
+    "src/control/webProtocol.ts",
+    "src/panel/controlApi.ts",
+    "src/panel/taskResultOutputs.ts",
+    "src/panel/taskResults.ts",
+    "tests/control/taskResultCollector.test.ts",
+    "tests/control/taskResultPaired.test.ts",
+    "tests/panel/decisionsApi.test.ts",
+    "tests/panel/fixtures/taskResults.ts",
+    "tests/panel/taskResultApi.test.ts",
+    "tests/panel/taskResultOutputs.test.ts",
+    "tests/panel/taskResults.test.ts",
+    "tests/panel/webParity.test.ts",
+    "web/src/controlTypes.ts"
+  ]
+}

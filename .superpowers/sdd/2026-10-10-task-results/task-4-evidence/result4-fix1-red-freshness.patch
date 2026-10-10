@@ -1,0 +1,22 @@
+diff --git a/tests/panel/taskResults.test.ts b/tests/panel/taskResults.test.ts
+index 19ff0c0..d143670 100644
+--- a/tests/panel/taskResults.test.ts
++++ b/tests/panel/taskResults.test.ts
+@@ -278,4 +278,17 @@ describe('admitted run and group result facts', { timeout: 30000 }, () => {
+             await f.dispose();
+         }
+     });
++    it.each([{currentAttempt:1,revision:4},{currentAttempt:2,revision:1},{currentAttempt:1,revision:1}])('fix1 rejects older same-owner hint %j without rolling back available capture2/revision4',async(hint)=>{
++        const f=await resultFixture();try{
++            await f.capture([f.manifest(),{...f.manifest(2),stage:'verification',verificationRef:f.add(approved(false))},f.manifest(3,2),{...f.manifest(4,2),stage:'verification',verificationRef:f.add(approved(true))}]);
++            f.core({progress:null});mutateState(f,state=>{state.currentAttemptFact={...state.currentAttemptFact,...hint};});
++            const r=await view(f);expect(r.currentAttempt).toBe(2);expect(r.attempts.map(a=>a.current)).toEqual([false,true]);expect(r.currentExplanation.status).toBe('available');expect(r.attempts.map(a=>a.verification)).toEqual(['failed','passed']);
++        }finally{await f.dispose();}
++    });
++    it('fix1 malformed capture bounds preserve independent source2 over old core1 with explanation unavailable',async()=>{
++        const f=await resultFixture();try{await f.capture([f.manifest()]);f.port.collectTaskResults=async()=>({schema:'ccloop-task-results-v1',identity:f.identity,currentAttempt:2,revision:1,nextRevision:1,manifests:[]});f.collector.schedule(f.runId);await f.collector.flush(f.runId);
++            f.core({progress:{status:'executing',currentAttempt:1,attemptsUsed:1,attemptsRemaining:2,lastTransitionAt:'2026-10-10T00:00:00Z'}});mutateState(f,state=>{state.observations='damaged';});const r=await view(f);expect(r.currentAttempt).toBe(2);expect(r.source.status).toBe('unavailable');expect(r.currentExplanation.status).toBe('unavailable');expect(r.attempts).toEqual([]);
++        }finally{await f.dispose();}
++    });
++
+ });

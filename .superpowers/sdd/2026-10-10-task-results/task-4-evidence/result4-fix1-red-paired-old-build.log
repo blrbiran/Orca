@@ -1,0 +1,34 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.3 [39m[90m/Users/biran/.codex/worktrees/progress-results-20261010/Orca[39m
+
+(node:96738) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ [31m❯[39m tests/control/taskResultPaired.test.ts [2m([22m[2m2 tests[22m[2m | [22m[31m1 failed[39m[2m | [22m[33m1 skipped[39m[2m)[22m[33m 13814[2mms[22m[39m
+   [31m❯[39m result optional transport exact build [2m(2)[22m
+     [2m[90m↓[39m[22m proves fixed-pin refusal or live saved results before a terminal candidate using the exact selected CLI
+[31m     [31m×[31m proves actual pre-verifier handoff not-run on feature and explicit unsupported on fixed pin[39m[33m 13793[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/control/taskResultPaired.test.ts[2m > [22mresult optional transport exact build[2m > [22mproves actual pre-verifier handoff not-run on feature and explicit unsupported on fixed pin
+[31m[1mAssertionError[22m: expected [ 'unavailable' ] to deeply equal [ 'unavailable', 'not-run' ][39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[2m  [[22m
+[2m    "unavailable",[22m
+[32m-   "not-run",[39m
+[2m  ][22m
+
+[36m [2m❯[22m tests/control/taskResultPaired.test.ts:[2m70:75[22m[39m
+
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[33m1 skipped[39m[90m (2)[39m
+[2m   Start at [22m 22:14:26
+[2m   Duration [22m 14.81s[2m (tests 94%, transform 5%, import 1%)[22m
+

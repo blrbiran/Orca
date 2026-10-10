@@ -1,0 +1,56 @@
+diff --git a/src/panel/taskResults.ts b/src/panel/taskResults.ts
+index 1c5eae1..f5eb381 100644
+--- a/src/panel/taskResults.ts
++++ b/src/panel/taskResults.ts
+@@ -90,11 +90,15 @@ const missingExplanation = (status: 'missing' | 'unavailable' = 'missing') => ({
+ });
+ export async function readRunResults(store: ControlStore, runId: string, context: ResultReadContext, knownGroup?: GroupViewV1): Promise<RunResultsV1> {
+     const a = resultAuthority(store, runId, context, knownGroup), fact = readTaskResultCurrentAttemptFact(store, runId);
+-    const core = runProgressSchema.safeParse(a.body.progress), capturedAttempt = a.state?.currentAttempt ?? 0;
+-    const sourceFresh = fact !== null && a.state !== null && (a.state.status === 'available' || fact.currentAttempt > capturedAttempt || fact.revision > a.state.revision);
+-    const coreNewer = core.success && core.data.currentAttempt > capturedAttempt;
+-    // Failed transport preserves history, but an old hint cannot prove it remains the current attempt.
+-    const currentAttempt = sourceFresh || coreNewer ? Math.max(sourceFresh ? fact!.currentAttempt : 0, core.success ? core.data.currentAttempt : 0) : null;
++    const core = runProgressSchema.safeParse(a.body.progress);
++    const bounds = a.state?.identity ? { attempt: a.state.currentAttempt, revision: a.state.revision } : null;
++    const staleHint = fact !== null && bounds !== null && (fact.currentAttempt < bounds.attempt || fact.revision < bounds.revision);
++    const sourceFresh = fact !== null && !staleHint && (bounds === null || a.state!.status === 'available' || fact.currentAttempt > bounds.attempt || fact.revision > bounds.revision);
++    // Only a separately valid same-owner hint rejected for old bounds permits the available capture's ordinal fallback.
++    const sourceAttempt = sourceFresh ? fact!.currentAttempt : staleHint && a.state!.status === 'available' ? bounds!.attempt : null;
++    const coreNewer = core.success && bounds !== null && core.data.currentAttempt > bounds.attempt;
++    // Unknown capture bounds are not zero. Keep independent source authority and never promote damaged saved reports.
++    const currentAttempt = sourceAttempt !== null || coreNewer ? Math.max(sourceAttempt ?? core.data!.currentAttempt, core.success ? core.data.currentAttempt : sourceAttempt!) : null;
+     const attempts: RunResultsV1['attempts'] = [];
+     for (const attempt of [...new Set(a.observations.map(o => o.manifest.attempt))].sort((x, y) => x - y)) {
+         const history = a.observations.filter(o => o.manifest.attempt === attempt).sort((x, y) => x.manifest.revision - y.manifest.revision), latest = history.at(-1)!;
+@@ -160,7 +164,7 @@ export async function readRunResults(store: ControlStore, runId: string, context
+     const current = attempts.find(a => a.current), source = a.state ? { status: a.state.status, reason: a.state.reason } : a.sourceError ? { status: 'unavailable' as const, reason: 'result-store-invalid' } : { status: 'missing' as const, reason: 'result-source-missing' };
+     const availability = !attempts.length ? (source.status === 'missing' || source.status === 'unsupported' ? 'missing' : 'unavailable') : !current || source.status !== 'available' || current.explanation.status !== 'available' || current.outputs.some(o => o.status !== 'available') ? 'partial' : 'available';
+     return runResultsSchema.parse({
+-        schema: 'orca-run-results-v1', epoch: context.epoch, changeSeq: a.group.changeSeq, runId, groupId: a.group.summary.groupId, taskId: a.run.taskId, generation: a.run.generation, executionId: a.body.executionId, run: a.run, currentAttempt, captureRevision: a.state?.revision ?? 0, source, availability, currentExplanation: current?.explanation ?? missingExplanation(currentAttempt === null ? 'unavailable' : 'missing'), attempts
++        schema: 'orca-run-results-v1', epoch: context.epoch, changeSeq: a.group.changeSeq, runId, groupId: a.group.summary.groupId, taskId: a.run.taskId, generation: a.run.generation, executionId: a.body.executionId, run: a.run, currentAttempt, captureRevision: a.state?.revision ?? 0, source, availability, currentExplanation: a.sourceError ? missingExplanation('unavailable') : current?.explanation ?? missingExplanation(currentAttempt === null ? 'unavailable' : 'missing'), attempts
+     });
+ }
+ export async function readGroupResults(store: ControlStore, groupId: string, context: ResultReadContext): Promise<GroupResultsV1> {
+diff --git a/tests/panel/taskResults.test.ts b/tests/panel/taskResults.test.ts
+index 19ff0c0..d143670 100644
+--- a/tests/panel/taskResults.test.ts
++++ b/tests/panel/taskResults.test.ts
+@@ -278,4 +278,17 @@ describe('admitted run and group result facts', { timeout: 30000 }, () => {
+             await f.dispose();
+         }
+     });
++    it.each([{currentAttempt:1,revision:4},{currentAttempt:2,revision:1},{currentAttempt:1,revision:1}])('fix1 rejects older same-owner hint %j without rolling back available capture2/revision4',async(hint)=>{
++        const f=await resultFixture();try{
++            await f.capture([f.manifest(),{...f.manifest(2),stage:'verification',verificationRef:f.add(approved(false))},f.manifest(3,2),{...f.manifest(4,2),stage:'verification',verificationRef:f.add(approved(true))}]);
++            f.core({progress:null});mutateState(f,state=>{state.currentAttemptFact={...state.currentAttemptFact,...hint};});
++            const r=await view(f);expect(r.currentAttempt).toBe(2);expect(r.attempts.map(a=>a.current)).toEqual([false,true]);expect(r.currentExplanation.status).toBe('available');expect(r.attempts.map(a=>a.verification)).toEqual(['failed','passed']);
++        }finally{await f.dispose();}
++    });
++    it('fix1 malformed capture bounds preserve independent source2 over old core1 with explanation unavailable',async()=>{
++        const f=await resultFixture();try{await f.capture([f.manifest()]);f.port.collectTaskResults=async()=>({schema:'ccloop-task-results-v1',identity:f.identity,currentAttempt:2,revision:1,nextRevision:1,manifests:[]});f.collector.schedule(f.runId);await f.collector.flush(f.runId);
++            f.core({progress:{status:'executing',currentAttempt:1,attemptsUsed:1,attemptsRemaining:2,lastTransitionAt:'2026-10-10T00:00:00Z'}});mutateState(f,state=>{state.observations='damaged';});const r=await view(f);expect(r.currentAttempt).toBe(2);expect(r.source.status).toBe('unavailable');expect(r.currentExplanation.status).toBe('unavailable');expect(r.attempts).toEqual([]);
++        }finally{await f.dispose();}
++    });
++
+ });

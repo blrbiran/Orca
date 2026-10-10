@@ -1,0 +1,7 @@
+result4-fix1-proof-v2-clone-command 0
+result4-fix1-mutant-v2-cross-owner fef429e76b3eb4b113d4817396de5cc4570fad12 799 0 0
+result4-fix1-mutant-v2-cross-owner 1
+{"name": "result4-fix1-mutant-v2-cross-owner", "criterion": "cross-owner, hash-only", "sourceCommit": "fef429e76b3eb4b113d4817396de5cc4570fad12", "patchBytes": 799, "rc": 1, "nativeBusinessRed": true, "status": "killed", "restoredWorkingDiffBytes": 0, "restoredCachedDiffBytes": 0}
+result4-fix1-mutant-v2-hash-only-direct fef429e76b3eb4b113d4817396de5cc4570fad12 1537 0 0
+result4-fix1-mutant-v2-hash-only-direct 1
+{"name": "result4-fix1-mutant-v2-hash-only-direct", "criterion": "cross-owner, hash-only", "sourceCommit": "fef429e76b3eb4b113d4817396de5cc4570fad12", "patchBytes": 1537, "rc": 1, "nativeBusinessRed": true, "status": "killed", "restoredWorkingDiffBytes": 0, "restoredCachedDiffBytes": 0}

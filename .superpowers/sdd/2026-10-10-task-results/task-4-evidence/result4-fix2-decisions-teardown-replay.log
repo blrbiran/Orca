@@ -1,0 +1,15 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.3 [39m[90m/Users/biran/.codex/worktrees/progress-results-20261010/Orca[39m
+
+(node:74850) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+orca-panel: initial password for tester written to /private/tmp/opr26/t/orca-tmp-OEgrok/orca-test-control-gpWAom/initial-password
+ [32m✓[39m tests/panel/decisionsApi.test.ts [2m([22m[2m9 tests[22m[2m | [22m[33m8 skipped[39m[2m)[22m[33m 1475[2mms[22m[39m
+   [32m✓[39m the decisions endpoints (spec sections 4.2 and 4.3.1) [2m(9)[22m
+     [33m[2m✓[22m[39m returns each repository's own row when two repositories share a decision id[33m 1472[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m1 passed[39m[22m[2m | [22m[33m8 skipped[39m[90m (9)[39m
+[2m   Start at [22m 23:50:32
+[2m   Duration [22m 2.98s[2m (tests 51%, transform 39%, import 9%)[22m
+

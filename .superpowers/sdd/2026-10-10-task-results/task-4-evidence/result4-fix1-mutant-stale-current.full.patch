@@ -1,0 +1,13 @@
+diff --git a/src/panel/taskResults.ts b/src/panel/taskResults.ts
+index b3c799b..7422f8e 100644
+--- a/src/panel/taskResults.ts
++++ b/src/panel/taskResults.ts
+@@ -96,7 +96,7 @@ export async function readRunResults(store: ControlStore, runId: string, context
+     const freshEmptyIndex = a.state?.status === 'missing' && a.state.revision === 0 && a.state.observations.length === 0;
+     const sourceFresh = fact !== null && !staleHint && (bounds === null || a.state!.status === 'available' || freshEmptyIndex || fact.currentAttempt > bounds.attempt || fact.revision > bounds.revision);
+     // Only a separately valid same-owner hint rejected for old bounds permits the available capture's ordinal fallback.
+-    const sourceAttempt = sourceFresh ? fact!.currentAttempt : staleHint && a.state!.status === 'available' ? bounds!.attempt : null;
++    const sourceAttempt = fact?.currentAttempt ?? null;
+     const coreNewer = core.success && bounds !== null && core.data.currentAttempt > bounds.attempt;
+     // Unknown capture bounds are not zero. Keep independent source authority and never promote damaged saved reports.
+     const knownAttempts = sourceAttempt === null ? [] : [sourceAttempt];

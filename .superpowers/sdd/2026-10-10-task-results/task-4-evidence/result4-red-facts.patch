@@ -1,0 +1,52 @@
+diff --git a/src/control/webProtocol.ts b/src/control/webProtocol.ts
+index 24ef081..c50e1d7 100644
+--- a/src/control/webProtocol.ts
++++ b/src/control/webProtocol.ts
+@@ -1825,3 +1825,18 @@ export const usageViewSchema = z
+   })
+   .strict();
+ export type UsageViewV1 = z.infer<typeof usageViewSchema>;
++
++
++// Optional saved results; execution and delivery retain their existing authoritative views.
++export const resultExplanationContentSchema = z.object({ schema:z.literal('task-result-v1'),goal:z.string().max(4000).refine(s=>s.trim().length>0),completedWork:z.array(z.string().max(4000)).max(32),conclusions:z.array(z.string().max(4000)).max(32),outputs:z.array(z.object({path:z.string().max(1024),label:z.string().max(256)}).strict()).max(32),limitations:z.array(z.string().max(4000)).max(32) }).strict();
++export const resultExplanationSchema = z.object({status:z.enum(['available','missing','invalid','unavailable']),reason:z.string().max(256).nullable(),content:resultExplanationContentSchema.nullable()}).strict();
++export const resultOutputStatusSchema = z.enum(['available','missing','deleted','symlink','binary','too-large','changed','unsafe','unavailable']);
++export const resultOutputMetadataSchema = z.object({outputId:idSchema,path:z.string().max(1024),label:z.string().max(256),origin:z.enum(['reported','changed']),status:resultOutputStatusSchema,byteLength:safeInteger.max(1048576).nullable()}).strict();
++export const resultOutputSchema = z.object({schema:z.literal('orca-result-output-v1'),runId:idSchema,groupId:idSchema,attempt:positiveSafeInteger,outputId:idSchema,path:z.string().max(1024),status:resultOutputStatusSchema,byteLength:safeInteger.max(1048576).nullable(),content:z.string().refine(s=>Buffer.byteLength(s,'utf8')<=131072).nullable(),downloadUrl:z.string().nullable()}).strict();
++export const resultVerificationSchema = z.enum(['not-run','in-progress','passed','failed','unavailable']);
++export const resultAttemptSchema = z.object({attempt:positiveSafeInteger,current:z.boolean(),revision:positiveSafeInteger,execution:z.enum(['complete','partial','unavailable']),verification:resultVerificationSchema,explanation:resultExplanationSchema,outputs:z.array(resultOutputMetadataSchema).max(64),observations:z.array(z.object({revision:positiveSafeInteger,stage:z.enum(['execution','verification']),verification:resultVerificationSchema}).strict())}).strict();
++export const runResultsSchema = z.object({schema:z.literal('orca-run-results-v1'),epoch:nonemptyString,changeSeq:safeInteger,runId:idSchema,groupId:idSchema,taskId:idSchema.nullable(),generation:positiveSafeInteger,executionId:idSchema.nullable(),run:runViewSchema,currentAttempt:safeInteger.nullable(),captureRevision:safeInteger,source:z.object({status:z.enum(['available','missing','unsupported','stale','unavailable']),reason:z.string().max(256).nullable()}).strict(),availability:z.enum(['available','partial','missing','unavailable']),currentExplanation:resultExplanationSchema,attempts:z.array(resultAttemptSchema)}).strict();
++export const groupResultsSchema = z.object({schema:z.literal('orca-group-results-v1'),epoch:nonemptyString,changeSeq:safeInteger,groupId:idSchema,goal:nonemptyString,successConditions:z.array(nonemptyString),status:groupSummarySchema.shape.state,review:z.object({runs:z.array(runViewSchema)}).strict(),delivery:groupIntegrationViewSchema.nullable(),tasks:z.array(z.object({taskId:idSchema,status:workItemViewSchema.shape.status,currentRunId:idSchema.nullable(),pendingRunId:idSchema.nullable(),lineageRunIds:z.array(idSchema),availability:z.enum(['available','partial','missing','unavailable','not-produced']),runs:z.array(runResultsSchema)}).strict()),coverage:z.object({total:safeInteger,available:safeInteger,partial:safeInteger,missing:safeInteger,unavailable:safeInteger,notProduced:safeInteger}).strict()}).strict();
++export type RunResultsV1 = z.infer<typeof runResultsSchema>;
++export type GroupResultsV1 = z.infer<typeof groupResultsSchema>;
++export type ResultOutputV1 = z.infer<typeof resultOutputSchema>;
+diff --git a/src/panel/controlApi.ts b/src/panel/controlApi.ts
+index df70bc8..02852a7 100644
+--- a/src/panel/controlApi.ts
++++ b/src/panel/controlApi.ts
+@@ -1,3 +1,5 @@
++import { readRunResults, readGroupResults } from './taskResults.js';
++import { readResultOutputBytes } from './taskResultOutputs.js';
+ import { readControlOverview } from "./controlOverview.js";
+ import type { Express, NextFunction, Request, Response } from "express";
+ import { randomUUID } from "node:crypto";
+@@ -275,6 +277,18 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
+     }
+   }
+ 
++  app.get('/api/control/groups/:groupId/results', asyncRoute(async(req,res)=>{res.json(await readGroupResults(deps.store,String(req.params.groupId),{epoch:deps.epoch}));}));
++  app.get('/api/control/runs/:runId/results', asyncRoute(async(req,res)=>{res.json(await readRunResults(deps.store,String(req.params.runId),{epoch:deps.epoch}));}));
++  app.get('/api/control/runs/:runId/results/outputs/:outputId', asyncRoute(async(req,res)=>{
++    if(Object.keys(req.query).some(k=>k!=='download')||(req.query.download!==undefined&&req.query.download!=='1'))throw new ControlError('query-invalid');
++    const {view,bytes}=await readResultOutputBytes(deps.store,String(req.params.runId),String(req.params.outputId),{epoch:deps.epoch});
++    res.setHeader('x-content-type-options','nosniff');res.setHeader('content-security-policy',"default-src 'none'");
++    if(req.query.download==='1'){
++      if(!bytes)throw new ControlError('recovery-blocked','task-result-output-unavailable');
++      res.setHeader('content-type','application/octet-stream');res.setHeader('content-disposition',`attachment; filename="${view.outputId}"`);res.send(bytes);
++    }else res.json(view);
++  }));
++
+   app.get("/api/control/runs/:runId/evidence", asyncRoute(async (req, res) => {
+     const runId = String(req.params.runId);
+     try { res.json(await readRunEvidence(deps.store, runId)); }

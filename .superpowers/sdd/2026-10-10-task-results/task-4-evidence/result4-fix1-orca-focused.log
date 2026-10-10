@@ -1,0 +1,140 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.3 [39m[90m/Users/biran/.codex/worktrees/progress-results-20261010/Orca[39m
+
+ [32m✓[39m tests/panel/webParity.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+(node:11347) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:11351) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+/private/tmp/opr26/t/orca-tmp-owwfLB/orca-snapshot-verify-OioC9U/input.bundle is okay
+/private/tmp/opr26/t/orca-tmp-owwfLB/orca-snapshot-verify-2fWB4h/input.bundle is okay
+/private/tmp/opr26/t/orca-tmp-owwfLB/orca-snapshot-verify-k27Okw/input.bundle is okay
+ [32m✓[39m tests/panel/taskResults.test.ts [2m([22m[2m27 tests[22m[2m)[22m[33m 16468[2mms[22m[39m
+   [32m✓[39m admitted run and group result facts [2m(27)[22m
+     [33m[2m✓[22m[39m isolates rejected attempt from later approval and exposes exact immutable observation history[33m 1262[2mms[22m[39m
+     [33m[2m✓[22m[39m uses independently newer source attempt after failed page while core is older, without reusing explanation[33m 621[2mms[22m[39m
+     [33m[2m✓[22m[39m unknown or foreign current facts do not promote saved history to current[33m 608[2mms[22m[39m
+     [33m[2m✓[22m[39m actual started evidence shows in-progress only on current active lifecycle, never core verifying alone[33m 651[2mms[22m[39m
+     [33m[2m✓[22m[39m retained partial core facts prove actual verifier bypass: {"failureType":"timeout"}[33m 449[2mms[22m[39m
+     [33m[2m✓[22m[39m retained partial core facts prove actual verifier bypass: {"failureType":"error","partialOrigin":"runner"}[33m 432[2mms[22m[39m
+     [33m[2m✓[22m[39m retained partial core facts prove actual verifier bypass: {"failureType":"error","changedFiles":[]}[33m 477[2mms[22m[39m
+     [33m[2m✓[22m[39m error partial with changed files may actually verify and must not claim verifier bypass[33m 543[2mms[22m[39m
+     [33m[2m✓[22m[39m damaged completed verifier bytes become unavailable, despite stored passed summary or agent claims[33m 585[2mms[22m[39m
+     [33m[2m✓[22m[39m group follows archived plan order and distinguishes unstarted coverage from missing supported results and independent delivery/review[33m 526[2mms[22m[39m
+     [33m[2m✓[22m[39m optional store damage is unavailable and does not repair original core authority damage[33m 478[2mms[22m[39m
+     [33m[2m✓[22m[39m damaged optional field status remains explicit unavailable[33m 419[2mms[22m[39m
+     [33m[2m✓[22m[39m damaged optional field reason remains explicit unavailable[33m 415[2mms[22m[39m
+     [33m[2m✓[22m[39m damaged optional field observations remains explicit unavailable[33m 423[2mms[22m[39m
+     [33m[2m✓[22m[39m damaged optional field revision remains explicit unavailable[33m 482[2mms[22m[39m
+     [33m[2m✓[22m[39m actual verifier completion overrides authenticated partial-bypass policy and malformed partial cannot claim not-run[33m 799[2mms[22m[39m
+     [33m[2m✓[22m[39m transport failure makes previously current explanation historical while newer real core attempt remains independent[33m 535[2mms[22m[39m
+     [33m[2m✓[22m[39m same-index source attempt2 remains newer than core null without fabricated attempt2 report[33m 509[2mms[22m[39m
+     [33m[2m✓[22m[39m same-index source attempt2 remains newer than core 1 without fabricated attempt2 report[33m 511[2mms[22m[39m
+     [33m[2m✓[22m[39m fix1 rejects older same-owner hint {"currentAttempt":1,"revision":4} without rolling back available capture2/revision4[33m 915[2mms[22m[39m
+     [33m[2m✓[22m[39m fix1 rejects older same-owner hint {"currentAttempt":2,"revision":1} without rolling back available capture2/revision4[33m 896[2mms[22m[39m
+     [33m[2m✓[22m[39m fix1 rejects older same-owner hint {"currentAttempt":1,"revision":1} without rolling back available capture2/revision4[33m 904[2mms[22m[39m
+     [33m[2m✓[22m[39m fix1 malformed capture bounds preserve independent source2 over old core1 with explanation unavailable[33m 445[2mms[22m[39m
+     [33m[2m✓[22m[39m fix1 actual admitted handoff not-run evidence reuses snapshot and later started/completed observations supersede it[33m 817[2mms[22m[39m
+     [33m[2m✓[22m[39m fix1 mismatched or malformed not-run evidence is unavailable {"schema":"ccloop-task-result-verification-not-run-v1","attempt":2,"status":"not-run"}[33m 556[2mms[22m[39m
+     [33m[2m✓[22m[39m fix1 mismatched or malformed not-run evidence is unavailable {"schema":"ccloop-task-result-verification-not-run-v1","attempt":1,"status":"not-run","approved":true,"rejectCategory":"none","primaryTargetPaths":[],"failingCommand":null,"safeToRetry":true,"evidence":[],"pauseSignals":[],"stopSignals":[]}[33m 540[2mms[22m[39m
+     [33m[2m✓[22m[39m fix1 damaged owned not-run evidence is unavailable while original execution snapshot remains historical[33m 665[2mms[22m[39m
+(node:18700) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+/private/tmp/opr26/t/orca-tmp-owwfLB/orca-snapshot-verify-53cDiE/input.bundle is okay
+/private/tmp/opr26/t/orca-tmp-owwfLB/orca-snapshot-verify-Y4aOD1/input.bundle is okay
+/private/tmp/opr26/t/orca-tmp-owwfLB/orca-snapshot-verify-WdolHc/input.bundle is okay
+/private/tmp/opr26/t/orca-tmp-owwfLB/orca-snapshot-verify-EazgOQ/input.bundle is okay
+ [32m✓[39m tests/control/taskResultCollector.test.ts [2m([22m[2m30 tests[22m[2m)[22m[33m 27414[2mms[22m[39m
+   [32m✓[39m independent result retention [2m(11)[22m
+     [33m[2m✓[22m[39m retains manifest-owned hashes with stable run/attempt membership and results-only projection changes[33m 583[2mms[22m[39m
+     [33m[2m✓[22m[39m never admits a partial/corrupt page or rolls history backward and retries transient faults[33m 789[2mms[22m[39m
+     [33m[2m✓[22m[39m requires contiguous complete pages, identity and immutable execution snapshot successors[33m 573[2mms[22m[39m
+     [33m[2m✓[22m[39m separates actual verifier start, completion and unavailable evidence from executor claims[33m 739[2mms[22m[39m
+     [33m[2m✓[22m[39m rejects late writes after owner fence[33m 331[2mms[22m[39m
+     [33m[2m✓[22m[39m rejects late writes after drain fence[33m 381[2mms[22m[39m
+     [33m[2m✓[22m[39m rejects late writes after shutdown fence[33m 361[2mms[22m[39m
+     [33m[2m✓[22m[39m rejects late writes after run-owner fence[33m 313[2mms[22m[39m
+     [33m[2m✓[22m[39m rejects late writes after lease fence[33m 329[2mms[22m[39m
+     [33m[2m✓[22m[39m core usage and terminal settle independently during a blocked optional RPC[33m 2231[2mms[22m[39m
+     [33m[2m✓[22m[39m optional RPC timeout is bounded and a real peer refusal alone means unsupported[33m 1308[2mms[22m[39m
+   [32m✓[39m retention queue and source deletion [2m(6)[22m
+     [33m[2m✓[22m[39m permits at most two process-wide jobs and deduplicates one run across schedule/flush[33m 1190[2mms[22m[39m
+     [33m[2m✓[22m[39m flushes owned queued results before actual source deletion after settled budget, preserving saved bytes[33m 2412[2mms[22m[39m
+     [33m[2m✓[22m[39m includes global queue wait in the 67000-ms flush deadline with available authority and fences late evidence[33m 959[2mms[22m[39m
+     [33m[2m✓[22m[39m includes global queue wait in the 67000-ms flush deadline with unavailable authority and fences late evidence[33m 907[2mms[22m[39m
+     [33m[2m✓[22m[39m does not invent observations on missing/non-task sources and retries transport errors[33m 313[2mms[22m[39m
+     [33m[2m✓[22m[39m caches only old command refusal by executable file identity and re-discovers a changed file[33m 2183[2mms[22m[39m
+   [32m✓[39m optional methods through owned profile routing [2m(2)[22m
+     [33m[2m✓[22m[39m retains evidence through the real frozen router while absent optional methods remain absent[33m 525[2mms[22m[39m
+     [33m[2m✓[22m[39m deduplicates a run across two collector assemblies for the same owned store[33m 407[2mms[22m[39m
+   [32m✓[39m collector assembly owner handover [2m(2)[22m
+     [33m[2m✓[22m[39m observes the old RPC but lets the new assembly retain the same run without an old stop cancelling it[33m 423[2mms[22m[39m
+     [33m[2m✓[22m[39m preserves source when shutdown wins a flush racing actual deletion[33m 2284[2mms[22m[39m
+   [32m✓[39m owner check at artifact registration [2m(1)[22m
+     [33m[2m✓[22m[39m registers no result artifacts when the owner changes after publication admission but before the transaction[33m 344[2mms[22m[39m
+   [32m✓[39m last source deletion fence [2m(1)[22m
+     [33m[2m✓[22m[39m rechecks shutdown after optional flush and immediately before rm starts[33m 2328[2mms[22m[39m
+   [32m✓[39m fix round 1 bounded reference staging and attempt authority [2m(7)[22m
+     [33m[2m✓[22m[39m stages one owned reference before the next read, keeps partial cursor/history and denies both real generic GET and result-reader access[33m 2066[2mms[22m[39m
+     [33m[2m✓[22m[39m checks incremental lease ownership after an asynchronous read before any further reference can be published[33m 555[2mms[22m[39m
+     [33m[2m✓[22m[39m keeps validated source attempt two when evidence fails and core attempt is 1[33m 430[2mms[22m[39m
+     [33m[2m✓[22m[39m keeps validated source attempt two when evidence fails and core attempt is null[33m 424[2mms[22m[39m
+     [33m[2m✓[22m[39m records same-index-revision attempt growth without new reports or cursor advancement, and rejects stale/foreign/malformed facts[33m 427[2mms[22m[39m
+     [33m[2m✓[22m[39m rejects obsolete owner and shutdown writes of source-attempt facts[33m 953[2mms[22m[39m
+     [33m[2m✓[22m[39m retains caller getter and method ownership through the driver overlay[33m 338[2mms[22m[39m
+(node:24065) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ [32m✓[39m tests/panel/taskResultOutputs.test.ts [2m([22m[2m22 tests[22m[2m)[22m[33m 11051[2mms[22m[39m
+   [32m✓[39m authorized inert result outputs [2m(22)[22m
+     [33m[2m✓[22m[39m keeps historical output-1 bytes separate from later attempt after source cleanup and target edits[33m 677[2mms[22m[39m
+     [33m[2m✓[22m[39m cross-owner, hash-only and unadmitted registered output ids give no authority[33m 1032[2mms[22m[39m
+     [33m[2m✓[22m[39m enforces exact UTF-8 preview cap with saved downloadable bytes 131072[33m 558[2mms[22m[39m
+     [33m[2m✓[22m[39m enforces exact UTF-8 preview cap with saved downloadable bytes 131073[33m 479[2mms[22m[39m
+     [33m[2m✓[22m[39m enforces exact UTF-8 preview cap with saved downloadable bytes 1048576[33m 469[2mms[22m[39m
+     [33m[2m✓[22m[39m binary or invalid UTF-8 is not previewed {"type":"Buffer","data":[255,254]}[33m 651[2mms[22m[39m
+     [33m[2m✓[22m[39m binary or invalid UTF-8 is not previewed {"type":"Buffer","data":[97,0,98]}[33m 465[2mms[22m[39m
+     [33m[2m✓[22m[39m explicit captured missing never opens a live path[33m 469[2mms[22m[39m
+     [33m[2m✓[22m[39m explicit captured deleted never opens a live path[33m 447[2mms[22m[39m
+     [33m[2m✓[22m[39m explicit captured symlink never opens a live path[33m 430[2mms[22m[39m
+     [33m[2m✓[22m[39m explicit captured changed never opens a live path[33m 458[2mms[22m[39m
+     [33m[2m✓[22m[39m explicit captured too-large never opens a live path[33m 386[2mms[22m[39m
+     [33m[2m✓[22m[39m explicit captured unsafe never opens a live path[33m 385[2mms[22m[39m
+     [33m[2m✓[22m[39m explicit captured unavailable never opens a live path[33m 531[2mms[22m[39m
+     [33m[2m✓[22m[39m escaped path ../secret is unsafe even with an admitted saved ref[33m 439[2mms[22m[39m
+     [33m[2m✓[22m[39m escaped path https://evil/x is unsafe even with an admitted saved ref[33m 376[2mms[22m[39m
+     [33m[2m✓[22m[39m escaped path file:///secret is unsafe even with an admitted saved ref[33m 412[2mms[22m[39m
+     [33m[2m✓[22m[39m escaped path a/../../secret is unsafe even with an admitted saved ref[33m 408[2mms[22m[39m
+     [33m[2m✓[22m[39m damaged private saved artifact symlink refuses bytes[33m 495[2mms[22m[39m
+     [33m[2m✓[22m[39m damaged private saved artifact oversized refuses bytes[33m 508[2mms[22m[39m
+     [33m[2m✓[22m[39m damaged private saved artifact hash refuses bytes[33m 501[2mms[22m[39m
+     [33m[2m✓[22m[39m changing saved file is refused even when a bounded read got the old hash[33m 467[2mms[22m[39m
+(node:24205) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+/private/tmp/opr26/t/orca-tmp-6t6QVa/orca-snapshot-verify-l9GA9h/input.bundle is okay
+ [32m✓[39m tests/control/taskResultIsolation.test.ts [2m([22m[2m6 tests[22m[2m)[22m[33m 7683[2mms[22m[39m
+   [32m✓[39m task result archive isolation [2m(3)[22m
+     [33m[2m✓[22m[39m ignores missing, special and changing supplemental entries in control/task-result-evidence[33m 1206[2mms[22m[39m
+     [33m[2m✓[22m[39m ignores missing, special and changing supplemental entries in run/task-result-captures[33m 1118[2mms[22m[39m
+     [33m[2m✓[22m[39m normal driver settlement keeps outcome, usage and recoverability with broken optional namespaces[33m 2055[2mms[22m[39m
+   [32m✓[39m isolation in H-settle, failed cleanup and continuation closure [2m(3)[22m
+     [33m[2m✓[22m[39m H-settle retains continuation eligibility and booked usage with unreadable supplemental namespaces[33m 1064[2mms[22m[39m
+     [33m[2m✓[22m[39m settled-failed cleanup ignores supplemental faults and keeps failed outcome and usage[33m 1122[2mms[22m[39m
+     [33m[2m✓[22m[39m genuine core handoff damage still refuses recoverability despite excluded optional faults[33m 1115[2mms[22m[39m
+(node:26571) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+/private/tmp/opr26/t/orca-tmp-CNTEdX/orca-snapshot-verify-N8aDNd/input.bundle is okay
+ [32m✓[39m tests/panel/taskResultApi.test.ts [2m([22m[2m3 tests[22m[2m)[22m[33m 4029[2mms[22m[39m
+   [32m✓[39m saved task result API [2m(3)[22m
+     [33m[2m✓[22m[39m serves actual admitted run and group results under the panel epoch without GET writes[33m 1937[2mms[22m[39m
+     [33m[2m✓[22m[39m serves inert HTML, attachment downloads and refuses arbitrary output/hash ids and unauthenticated reads[33m 1091[2mms[22m[39m
+     [33m[2m✓[22m[39m missing admitted manifest refuses by name while healthy core evidence remains available[33m 999[2mms[22m[39m
+ [32m✓[39m tests/control/taskResultPaired.test.ts [2m([22m[2m2 tests[22m[2m)[22m[33m 23182[2mms[22m[39m
+   [32m✓[39m result optional transport exact build [2m(2)[22m
+     [33m[2m✓[22m[39m proves fixed-pin refusal or live saved results before a terminal candidate using the exact selected CLI[33m 10108[2mms[22m[39m
+     [33m[2m✓[22m[39m proves actual pre-verifier handoff not-run on feature and explicit unsupported on fixed pin[33m 13034[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m7 passed[39m[22m[90m (7)[39m
+[2m      Tests [22m [1m[32m95 passed[39m[22m[90m (95)[39m
+[2m   Start at [22m 22:20:30
+[2m   Duration [22m 52.61s[2m (tests 97%, transform 2%, import 1%)[22m
+

@@ -1,0 +1,13 @@
+diff --git a/src/panel/taskResultOutputs.ts b/src/panel/taskResultOutputs.ts
+index c8ef322..c53be04 100644
+--- a/src/panel/taskResultOutputs.ts
++++ b/src/panel/taskResultOutputs.ts
+@@ -49,7 +49,7 @@ export async function readSavedResultArtifact(store: ControlStore, ref: Artifact
+     }
+ }
+ export const resultOutputId = (runId: string, attempt: number, sourceOutputId: string) => 'output-' + sha256Canonical({
+-    runId, attempt, sourceOutputId
++    attempt, sourceOutputId
+ });
+ export const resultDownloadUrl = (runId: string, outputId: string) => `/api/control/runs/${encodeURIComponent(runId)}/results/outputs/${encodeURIComponent(outputId)}?download=1`;
+ export async function readResultOutputBytes(store: ControlStore, runId: string, outputId: string, context: ResultReadContext): Promise<{

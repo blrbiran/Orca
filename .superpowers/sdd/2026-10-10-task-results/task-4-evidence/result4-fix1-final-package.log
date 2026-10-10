@@ -1,0 +1,734 @@
+
+> ccloop@0.1.0 prepare
+> npm run build
+
+
+> ccloop@0.1.0 build
+> tsc -p tsconfig.json && node -e "const fs=require('fs');fs.writeFileSync('dist/cli.js', '#!/usr/bin/env node\nexport * from \"./src/cli.js\";\nimport { main } from \"./src/cli.js\";\nvoid main(process.argv.slice(2)).then((code) => { process.exitCode = code; });\n');fs.chmodSync('dist/cli.js', 0o755);fs.writeFileSync('dist/cli.d.ts', 'export * from \"./src/cli.js\";\n');"
+
+[
+  {
+    "id": "ccloop@0.1.0",
+    "name": "ccloop",
+    "version": "0.1.0",
+    "size": 216873,
+    "unpackedSize": 782891,
+    "shasum": "c00a0c717af49690f6f03dfce3e2be64d3e2ef55",
+    "integrity": "sha512-vXmi5Cbpfv1PFCcWrflLz6W1Jb/cabOjdS1MN2uG930hvLFcjTOMI0rmqhQSLrt+DJK5ra1fakaJOYL6xe4bPQ==",
+    "filename": "ccloop-0.1.0.tgz",
+    "files": [
+      {
+        "path": "README.md",
+        "size": 25032,
+        "mode": 420
+      },
+      {
+        "path": "dist/cli.d.ts",
+        "size": 30,
+        "mode": 420
+      },
+      {
+        "path": "dist/cli.js",
+        "size": 166,
+        "mode": 493
+      },
+      {
+        "path": "dist/src/agents/claude.d.ts",
+        "size": 437,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/agents/claude.js",
+        "size": 3868,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/agents/codex.d.ts",
+        "size": 441,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/agents/codex.js",
+        "size": 2223,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/agents/command.d.ts",
+        "size": 400,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/agents/command.js",
+        "size": 2301,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/agents/detect.d.ts",
+        "size": 948,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/agents/detect.js",
+        "size": 3655,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/agents/materialize.d.ts",
+        "size": 2488,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/agents/materialize.js",
+        "size": 6385,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/agents/registry.d.ts",
+        "size": 2124,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/agents/registry.js",
+        "size": 544,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/agents/table.d.ts",
+        "size": 1173,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/agents/table.js",
+        "size": 5348,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/agents/types.d.ts",
+        "size": 3374,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/agents/types.js",
+        "size": 3260,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/cli.d.ts",
+        "size": 937,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/cli.js",
+        "size": 21062,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/contract/loadContract.d.ts",
+        "size": 128,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/contract/loadContract.js",
+        "size": 285,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/contract/schema.d.ts",
+        "size": 7222,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/contract/schema.js",
+        "size": 2538,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/control/accept.d.ts",
+        "size": 800,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/control/accept.js",
+        "size": 4969,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/control/collect.d.ts",
+        "size": 1107,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/control/collect.js",
+        "size": 4101,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/control/command.d.ts",
+        "size": 3106,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/control/command.js",
+        "size": 12965,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/control/evidence.d.ts",
+        "size": 376,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/control/evidence.js",
+        "size": 2439,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/control/handoff.d.ts",
+        "size": 2728,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/control/handoff.js",
+        "size": 12564,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/control/materialize.d.ts",
+        "size": 545,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/control/materialize.js",
+        "size": 18702,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/control/paths.d.ts",
+        "size": 417,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/control/paths.js",
+        "size": 5342,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/control/protocol.d.ts",
+        "size": 7548,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/control/protocol.js",
+        "size": 10053,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/control/resultRepository.d.ts",
+        "size": 195,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/control/resultRepository.js",
+        "size": 3732,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/control/singleCall.d.ts",
+        "size": 1716,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/control/singleCall.js",
+        "size": 8525,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/control/stopProof.d.ts",
+        "size": 1118,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/control/stopProof.js",
+        "size": 5425,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/control/store.d.ts",
+        "size": 1113,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/control/store.js",
+        "size": 4922,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/control/taskResultEvidence.d.ts",
+        "size": 1482,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/control/taskResultEvidence.js",
+        "size": 9364,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/control/taskResults.d.ts",
+        "size": 21448,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/control/taskResults.js",
+        "size": 15161,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/control/testCrashPoint.d.ts",
+        "size": 70,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/control/testCrashPoint.js",
+        "size": 996,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/control/usage.d.ts",
+        "size": 2542,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/control/usage.js",
+        "size": 7020,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/control/worker.d.ts",
+        "size": 825,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/control/worker.js",
+        "size": 15439,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/control/workerLauncher.d.ts",
+        "size": 500,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/control/workerLauncher.js",
+        "size": 3265,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/controller/adoptCrashedRun.d.ts",
+        "size": 1762,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/controller/adoptCrashedRun.js",
+        "size": 4039,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/controller/leaseGate.d.ts",
+        "size": 421,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/controller/leaseGate.js",
+        "size": 3269,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/controller/leaseHeartbeat.d.ts",
+        "size": 487,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/controller/leaseHeartbeat.js",
+        "size": 21059,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/controller/ownedRunStateWriter.d.ts",
+        "size": 214,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/controller/ownedRunStateWriter.js",
+        "size": 3700,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/controller/resumeLoop.d.ts",
+        "size": 966,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/controller/resumeLoop.js",
+        "size": 19269,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/controller/runLoop.d.ts",
+        "size": 2688,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/controller/runLoop.js",
+        "size": 87739,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/index.d.ts",
+        "size": 211,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/index.js",
+        "size": 211,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/ownership/lease.d.ts",
+        "size": 1132,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/ownership/lease.js",
+        "size": 4226,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/ownership/ownerController.d.ts",
+        "size": 476,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/ownership/ownerController.js",
+        "size": 4887,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/ownership/ownerLiveness.d.ts",
+        "size": 1187,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/ownership/ownerLiveness.js",
+        "size": 3475,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/ownership/reapRunProcesses.d.ts",
+        "size": 834,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/ownership/reapRunProcesses.js",
+        "size": 5074,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/persistence/fileStore.d.ts",
+        "size": 3902,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/persistence/fileStore.js",
+        "size": 94945,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/policy/pathPolicy.d.ts",
+        "size": 253,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/policy/pathPolicy.js",
+        "size": 1077,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/registry/observeFields.d.ts",
+        "size": 232,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/registry/observeFields.js",
+        "size": 4490,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/registry/observeRun.d.ts",
+        "size": 328,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/registry/observeRun.js",
+        "size": 974,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/registry/readObservedFile.d.ts",
+        "size": 584,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/registry/readObservedFile.js",
+        "size": 4345,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/registry/renderRuns.d.ts",
+        "size": 431,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/registry/renderRuns.js",
+        "size": 5867,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/registry/scanRuns.d.ts",
+        "size": 837,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/registry/scanRuns.js",
+        "size": 4766,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/registry/types.d.ts",
+        "size": 528,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/registry/types.js",
+        "size": 320,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/runtime/claude/claudeAgentAdapter.d.ts",
+        "size": 3026,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/runtime/claude/claudeAgentAdapter.js",
+        "size": 23083,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/runtime/claude/prompts.d.ts",
+        "size": 345,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/runtime/claude/prompts.js",
+        "size": 6095,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/runtime/claude/types.d.ts",
+        "size": 560,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/runtime/claude/types.js",
+        "size": 11,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/runtime/codex/codexAdapter.d.ts",
+        "size": 1281,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/runtime/codex/codexAdapter.js",
+        "size": 5417,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/runtime/codex/codexSkills.d.ts",
+        "size": 282,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/runtime/codex/codexSkills.js",
+        "size": 5337,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/runtime/codex/protocol.d.ts",
+        "size": 5286,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/runtime/codex/protocol.js",
+        "size": 17343,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/runtime/codex/runCodexPhase.d.ts",
+        "size": 723,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/runtime/codex/runCodexPhase.js",
+        "size": 9287,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/runtime/processIdentity.d.ts",
+        "size": 58,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/runtime/processIdentity.js",
+        "size": 565,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/runtime/scriptedAdapter.d.ts",
+        "size": 619,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/runtime/scriptedAdapter.js",
+        "size": 738,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/runtime/taskResult.d.ts",
+        "size": 1859,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/runtime/taskResult.js",
+        "size": 5158,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/runtime/types.d.ts",
+        "size": 8706,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/runtime/types.js",
+        "size": 2836,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/state/stateMachine.d.ts",
+        "size": 233,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/state/stateMachine.js",
+        "size": 1092,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/state/types.d.ts",
+        "size": 2629,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/state/types.js",
+        "size": 11,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/stop/stopController.d.ts",
+        "size": 304,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/stop/stopController.js",
+        "size": 2940,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/sweep/lockPresence.d.ts",
+        "size": 79,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/sweep/lockPresence.js",
+        "size": 3204,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/sweep/sweepRuns.d.ts",
+        "size": 1065,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/sweep/sweepRuns.js",
+        "size": 19001,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/unlock/inspectLock.d.ts",
+        "size": 1183,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/unlock/inspectLock.js",
+        "size": 12256,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/unlock/lockRows.d.ts",
+        "size": 573,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/unlock/lockRows.js",
+        "size": 726,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/unlock/unlockCommand.d.ts",
+        "size": 623,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/unlock/unlockCommand.js",
+        "size": 13215,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/workspace/worktreeManager.d.ts",
+        "size": 1798,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/workspace/worktreeManager.js",
+        "size": 5138,
+        "mode": 420
+      },
+      {
+        "path": "package.json",
+        "size": 1152,
+        "mode": 420
+      },
+      {
+        "path": "scripts/claude-phase-runner.mjs",
+        "size": 27873,
+        "mode": 420
+      },
+      {
+        "path": "scripts/claude-stream.mjs",
+        "size": 8987,
+        "mode": 420
+      }
+    ],
+    "entryCount": 142,
+    "bundled": []
+  }
+]

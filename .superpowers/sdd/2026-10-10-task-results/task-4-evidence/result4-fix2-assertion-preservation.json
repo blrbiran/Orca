@@ -1,0 +1,19 @@
+{
+  "base": "fef429e76b3eb4b113d4817396de5cc4570fad12",
+  "path": "tests/control/taskResultCollector.test.ts",
+  "allOriginalAssertionLinesEqual": true,
+  "assertionLines": [
+    "await expect(port.collectTaskResults!(f.input, 0)).rejects.toBeInstanceOf(TaskResultUnsupportedError);",
+    "await expect(port.collectTaskResults!(f.input, 0)).rejects.toBeInstanceOf(TaskResultUnsupportedError);",
+    "expect((await readFile(calls, 'utf8')).trim().split('\\n')).toHaveLength(1);",
+    "expect(await port.collectTaskResults!(f.input, 0)).toMatchObject({ revision: 1 });",
+    "expect((await readFile(calls, 'utf8')).trim().split('\\n')).toHaveLength(2);",
+    "await expect(port.collectTaskResults!(f.input, 0)).rejects.toThrow('control-peer-exit');",
+    "await expect(port.collectTaskResults!(f.input, 0)).rejects.toThrow('control-peer-exit');",
+    "expect((await readFile(calls, 'utf8')).trim().split('\\n')).toHaveLength(4);",
+    "await expect(port.collectTaskResults!(f.input, 0)).rejects.toThrow('control-peer-timeout');",
+    "expect(Date.now() - before).toBeLessThan(3000);"
+  ],
+  "scope": "single temporary executable implementation; binary filename, options, call counts, rewrites, timeout assertion unchanged",
+  "workingProductDiffBytes": 0
+}

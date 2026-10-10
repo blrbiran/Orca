@@ -1,0 +1,33 @@
+result4-fix1-proof-clone-command 0
+{"name": "result4-fix1-mutant-cross-owner", "criterion": "cross-owner, hash-only", "sourceCommit": "fef429e76b3eb4b113d4817396de5cc4570fad12", "status": "setup-failed", "error": "('src/panel/taskResultOutputs.ts', 'sha256Canonical({ runId, attempt, sourceOutputId })', 0)", "restoredWorkingDiffBytes": 0, "restoredCachedDiffBytes": 0}
+result4-fix1-mutant-hash-only fef429e76b3eb4b113d4817396de5cc4570fad12 1554 0 0
+result4-fix1-mutant-hash-only 1
+{"name": "result4-fix1-mutant-hash-only", "criterion": "cross-owner, hash-only", "sourceCommit": "fef429e76b3eb4b113d4817396de5cc4570fad12", "patchBytes": 1554, "rc": 1, "nativeBusinessRed": true, "status": "killed", "restoredWorkingDiffBytes": 0, "restoredCachedDiffBytes": 0}
+result4-fix1-mutant-unsafe-html fef429e76b3eb4b113d4817396de5cc4570fad12 709 0 0
+result4-fix1-mutant-unsafe-html 1
+{"name": "result4-fix1-mutant-unsafe-html", "criterion": "serves inert HTML", "sourceCommit": "fef429e76b3eb4b113d4817396de5cc4570fad12", "patchBytes": 709, "rc": 1, "nativeBusinessRed": true, "status": "killed", "restoredWorkingDiffBytes": 0, "restoredCachedDiffBytes": 0}
+result4-fix1-mutant-stale-current fef429e76b3eb4b113d4817396de5cc4570fad12 1192 0 0
+result4-fix1-mutant-stale-current 1
+{"name": "result4-fix1-mutant-stale-current", "criterion": "transport failure makes", "sourceCommit": "fef429e76b3eb4b113d4817396de5cc4570fad12", "patchBytes": 1192, "rc": 1, "nativeBusinessRed": true, "status": "killed", "restoredWorkingDiffBytes": 0, "restoredCachedDiffBytes": 0}
+result4-fix1-mutant-stale-bound fef429e76b3eb4b113d4817396de5cc4570fad12 1271 0 0
+result4-fix1-mutant-stale-bound 1
+{"name": "result4-fix1-mutant-stale-bound", "criterion": "fix1 rejects older same-owner hint", "sourceCommit": "fef429e76b3eb4b113d4817396de5cc4570fad12", "patchBytes": 1271, "rc": 1, "nativeBusinessRed": true, "status": "killed", "restoredWorkingDiffBytes": 0, "restoredCachedDiffBytes": 0}
+result4-fix1-mutant-independent-fact-loss fef429e76b3eb4b113d4817396de5cc4570fad12 1411 0 0
+result4-fix1-mutant-independent-fact-loss 1
+{"name": "result4-fix1-mutant-independent-fact-loss", "criterion": "fix1 malformed capture bounds", "sourceCommit": "fef429e76b3eb4b113d4817396de5cc4570fad12", "patchBytes": 1411, "rc": 1, "nativeBusinessRed": true, "status": "killed", "restoredWorkingDiffBytes": 0, "restoredCachedDiffBytes": 0}
+result4-fix1-mutant-prior-upgrade fef429e76b3eb4b113d4817396de5cc4570fad12 697 0 0
+result4-fix1-mutant-prior-upgrade 1
+{"name": "result4-fix1-mutant-prior-upgrade", "criterion": "isolates rejected attempt", "sourceCommit": "fef429e76b3eb4b113d4817396de5cc4570fad12", "patchBytes": 697, "rc": 1, "nativeBusinessRed": true, "status": "killed", "restoredWorkingDiffBytes": 0, "restoredCachedDiffBytes": 0}
+result4-fix1-mutant-partial-guess fef429e76b3eb4b113d4817396de5cc4570fad12 860 0 0
+result4-fix1-mutant-partial-guess 1
+{"name": "result4-fix1-mutant-partial-guess", "criterion": "error partial with changed", "sourceCommit": "fef429e76b3eb4b113d4817396de5cc4570fad12", "patchBytes": 860, "rc": 1, "nativeBusinessRed": true, "status": "killed", "restoredWorkingDiffBytes": 0, "restoredCachedDiffBytes": 0}
+result4-fix1-mutant-core-verifier-guess fef429e76b3eb4b113d4817396de5cc4570fad12 726 0 0
+result4-fix1-mutant-core-verifier-guess 1
+{"name": "result4-fix1-mutant-core-verifier-guess", "criterion": "actual started evidence", "sourceCommit": "fef429e76b3eb4b113d4817396de5cc4570fad12", "patchBytes": 726, "rc": 1, "nativeBusinessRed": true, "status": "killed", "restoredWorkingDiffBytes": 0, "restoredCachedDiffBytes": 0}
+result4-fix1-mutant-snapshot-upgrade fef429e76b3eb4b113d4817396de5cc4570fad12 743 0 0
+result4-fix1-mutant-snapshot-upgrade 1
+{"name": "result4-fix1-mutant-snapshot-upgrade", "criterion": "isolates rejected attempt", "sourceCommit": "fef429e76b3eb4b113d4817396de5cc4570fad12", "patchBytes": 743, "rc": 1, "nativeBusinessRed": true, "status": "killed", "restoredWorkingDiffBytes": 0, "restoredCachedDiffBytes": 0}
+Traceback (most recent call last):
+  File "/private/tmp/orca-progress-results-20261010/result4-fix1-proof.py", line 53, in <module>
+    assert all(x['status']=='killed' for x in results),'survivor/setup failure retained, not counted as kill'
+AssertionError: survivor/setup failure retained, not counted as kill

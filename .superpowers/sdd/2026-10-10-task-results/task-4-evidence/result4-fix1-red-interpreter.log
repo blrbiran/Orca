@@ -1,0 +1,76 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.3 [39m[90m/Users/biran/.codex/worktrees/progress-results-20261010/Orca[39m
+
+(node:80928) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ [31m❯[39m tests/panel/taskResults.test.ts [2m([22m[2m27 tests[22m[2m | [22m[31m3 failed[39m[2m | [22m[33m23 skipped[39m[2m)[22m[33m 2304[2mms[22m[39m
+   [31m❯[39m admitted run and group result facts [2m(27)[22m
+     [2m[90m↓[39m[22m isolates rejected attempt from later approval and exposes exact immutable observation history
+     [2m[90m↓[39m[22m uses independently newer source attempt after failed page while core is older, without reusing explanation
+     [2m[90m↓[39m[22m unknown or foreign current facts do not promote saved history to current
+     [2m[90m↓[39m[22m actual started evidence shows in-progress only on current active lifecycle, never core verifying alone
+     [2m[90m↓[39m[22m retained partial core facts prove actual verifier bypass: {"failureType":"timeout"}
+     [2m[90m↓[39m[22m retained partial core facts prove actual verifier bypass: {"failureType":"error","partialOrigin":"runner"}
+     [2m[90m↓[39m[22m retained partial core facts prove actual verifier bypass: {"failureType":"error","changedFiles":[]}
+     [2m[90m↓[39m[22m error partial with changed files may actually verify and must not claim verifier bypass
+     [2m[90m↓[39m[22m damaged completed verifier bytes become unavailable, despite stored passed summary or agent claims
+     [2m[90m↓[39m[22m group follows archived plan order and distinguishes unstarted coverage from missing supported results and independent delivery/review
+     [2m[90m↓[39m[22m optional store damage is unavailable and does not repair original core authority damage
+     [2m[90m↓[39m[22m damaged optional field status remains explicit unavailable
+     [2m[90m↓[39m[22m damaged optional field reason remains explicit unavailable
+     [2m[90m↓[39m[22m damaged optional field observations remains explicit unavailable
+     [2m[90m↓[39m[22m damaged optional field revision remains explicit unavailable
+     [2m[90m↓[39m[22m actual verifier completion overrides authenticated partial-bypass policy and malformed partial cannot claim not-run
+     [2m[90m↓[39m[22m transport failure makes previously current explanation historical while newer real core attempt remains independent
+     [2m[90m↓[39m[22m same-index source attempt2 remains newer than core null without fabricated attempt2 report
+     [2m[90m↓[39m[22m same-index source attempt2 remains newer than core 1 without fabricated attempt2 report
+     [2m[90m↓[39m[22m fix1 rejects older same-owner hint {"currentAttempt":1,"revision":4} without rolling back available capture2/revision4
+     [2m[90m↓[39m[22m fix1 rejects older same-owner hint {"currentAttempt":2,"revision":1} without rolling back available capture2/revision4
+     [2m[90m↓[39m[22m fix1 rejects older same-owner hint {"currentAttempt":1,"revision":1} without rolling back available capture2/revision4
+     [2m[90m↓[39m[22m fix1 malformed capture bounds preserve independent source2 over old core1 with explanation unavailable
+[31m     [31m×[31m fix1 actual admitted handoff not-run evidence reuses snapshot and later started/completed observations supersede it[39m[33m 628[2mms[22m[39m
+     [33m[2m✓[22m[39m fix1 mismatched or malformed not-run evidence is unavailable {"schema":"ccloop-task-result-verification-not-run-v1","attempt":2,"status":"not-run"}[33m 546[2mms[22m[39m
+[31m     [31m×[31m fix1 mismatched or malformed not-run evidence is unavailable {"schema":"ccloop-task-result-verification-not-run-v1","attempt":1,"status":"not-run","approved":true,"rejectCategory":"none","primaryTargetPaths":[],"failingCommand":null,"safeToRetry":true,"evidence":[],"pauseSignals":[],"stopSignals":[]}[39m[33m 577[2mms[22m[39m
+[31m     [31m×[31m fix1 damaged owned not-run evidence is unavailable while original execution snapshot remains historical[39m[33m 549[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 3 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/panel/taskResults.test.ts[2m > [22madmitted run and group result facts[2m > [22mfix1 actual admitted handoff not-run evidence reuses snapshot and later started/completed observations supersede it
+[31m[1mAssertionError[22m: expected 'unavailable' to be 'not-run' // Object.is equality[39m
+
+Expected: [32m"not-run"[39m
+Received: [31m"unavailable"[39m
+
+[36m [2m❯[22m tests/panel/taskResults.test.ts:[2m295:285[22m[39m
+
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/panel/taskResults.test.ts[2m > [22madmitted run and group result facts[2m > [22mfix1 mismatched or malformed not-run evidence is unavailable {"schema":"ccloop-task-result-verification-not-run-v1","attempt":1,"status":"not-run","approved":true,"rejectCategory":"none","primaryTargetPaths":[],"failingCommand":null,"safeToRetry":true,"evidence":[],"pauseSignals":[],"stopSignals":[]}
+[31m[1mAssertionError[22m: expected 'passed' to be 'unavailable' // Object.is equality[39m
+
+Expected: [32m"unavailable"[39m
+Received: [31m"passed"[39m
+
+[36m [2m❯[22m tests/panel/taskResults.test.ts:[2m299:461[22m[39m
+
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/panel/taskResults.test.ts[2m > [22madmitted run and group result facts[2m > [22mfix1 damaged owned not-run evidence is unavailable while original execution snapshot remains historical
+[31m[1mAssertionError[22m: expected 'unavailable' to be 'not-run' // Object.is equality[39m
+
+Expected: [32m"not-run"[39m
+Received: [31m"unavailable"[39m
+
+[36m [2m❯[22m tests/panel/taskResults.test.ts:[2m300:397[22m[39m
+
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m3 failed[39m[22m[2m | [22m[1m[32m1 passed[39m[22m[2m | [22m[33m23 skipped[39m[90m (27)[39m
+[2m   Start at [22m 22:09:38
+[2m   Duration [22m 3.68s[2m (tests 65%, transform 28%, import 7%)[22m
+

@@ -1,0 +1,22 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.3 [39m[90m/Users/biran/.codex/worktrees/progress-results-20261010/Orca[39m
+
+(node:34206) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ [32m✓[39m tests/panel/taskResults.test.ts [2m([22m[2m28 tests[22m[2m | [22m[33m19 skipped[39m[2m)[22m[33m 4971[2mms[22m[39m
+   [32m✓[39m admitted run and group result facts [2m(28)[22m
+     [33m[2m✓[22m[39m unknown or foreign current facts do not promote saved history to current[33m 512[2mms[22m[39m
+     [33m[2m✓[22m[39m transport failure makes previously current explanation historical while newer real core attempt remains independent[33m 463[2mms[22m[39m
+     [33m[2m✓[22m[39m same-index source attempt2 remains newer than core null without fabricated attempt2 report[33m 447[2mms[22m[39m
+     [33m[2m✓[22m[39m same-index source attempt2 remains newer than core 1 without fabricated attempt2 report[33m 454[2mms[22m[39m
+     [33m[2m✓[22m[39m fix1 rejects older same-owner hint {"currentAttempt":1,"revision":4} without rolling back available capture2/revision4[33m 803[2mms[22m[39m
+     [33m[2m✓[22m[39m fix1 rejects older same-owner hint {"currentAttempt":2,"revision":1} without rolling back available capture2/revision4[33m 770[2mms[22m[39m
+     [33m[2m✓[22m[39m fix1 rejects older same-owner hint {"currentAttempt":1,"revision":1} without rolling back available capture2/revision4[33m 780[2mms[22m[39m
+     [33m[2m✓[22m[39m fix1 malformed capture bounds preserve independent source2 over old core1 with explanation unavailable[33m 424[2mms[22m[39m
+     [33m[2m✓[22m[39m fix1 validated empty successful index retains independent current1 without producing an observation or borrowing explanation[33m 314[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m9 passed[39m[22m[2m | [22m[33m19 skipped[39m[90m (28)[39m
+[2m   Start at [22m 22:24:12
+[2m   Duration [22m 6.38s[2m (tests 79%, transform 16%, import 4%)[22m
+

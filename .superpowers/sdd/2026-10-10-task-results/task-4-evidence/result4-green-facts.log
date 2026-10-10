@@ -1,0 +1,57 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.3 [39m[90m/Users/biran/.codex/worktrees/progress-results-20261010/Orca[39m
+
+ [32m✓[39m tests/panel/webParity.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+(node:89202) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:89203) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ [32m✓[39m tests/panel/taskResults.test.ts [2m([22m[2m11 tests[22m[2m)[22m[33m 6823[2mms[22m[39m
+   [32m✓[39m admitted run and group result facts [2m(11)[22m
+     [33m[2m✓[22m[39m isolates rejected attempt from later approval and exposes exact immutable observation history[33m 1134[2mms[22m[39m
+     [33m[2m✓[22m[39m uses independently newer source attempt after failed page while core is older, without reusing explanation[33m 550[2mms[22m[39m
+     [33m[2m✓[22m[39m unknown or foreign current facts do not promote saved history to current[33m 568[2mms[22m[39m
+     [33m[2m✓[22m[39m actual started evidence shows in-progress only on current active lifecycle, never core verifying alone[33m 686[2mms[22m[39m
+     [33m[2m✓[22m[39m retained partial core facts prove actual verifier bypass: {"failureType":"timeout"}[33m 547[2mms[22m[39m
+     [33m[2m✓[22m[39m retained partial core facts prove actual verifier bypass: {"failureType":"error","partialOrigin":"runner"}[33m 525[2mms[22m[39m
+     [33m[2m✓[22m[39m retained partial core facts prove actual verifier bypass: {"failureType":"error","changedFiles":[]}[33m 557[2mms[22m[39m
+     [33m[2m✓[22m[39m error partial with changed files may actually verify and must not claim verifier bypass[33m 548[2mms[22m[39m
+     [33m[2m✓[22m[39m damaged completed verifier bytes become unavailable, despite stored passed summary or agent claims[33m 693[2mms[22m[39m
+     [33m[2m✓[22m[39m group follows archived plan order and distinguishes unstarted coverage from missing supported results and independent delivery/review[33m 511[2mms[22m[39m
+     [33m[2m✓[22m[39m optional store damage is unavailable and does not repair original core authority damage[33m 500[2mms[22m[39m
+(node:92121) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ [32m✓[39m tests/panel/taskResultApi.test.ts [2m([22m[2m2 tests[22m[2m)[22m[33m 3083[2mms[22m[39m
+   [32m✓[39m saved task result API [2m(2)[22m
+     [33m[2m✓[22m[39m serves actual admitted run and group results under the panel epoch without GET writes[33m 1948[2mms[22m[39m
+     [33m[2m✓[22m[39m serves inert HTML, attachment downloads and refuses arbitrary output/hash ids and unauthenticated reads[33m 1129[2mms[22m[39m
+ [32m✓[39m tests/panel/taskResultOutputs.test.ts [2m([22m[2m22 tests[22m[2m)[22m[33m 11910[2mms[22m[39m
+   [32m✓[39m authorized inert result outputs [2m(22)[22m
+     [33m[2m✓[22m[39m keeps historical output-1 bytes separate from later attempt after source cleanup and target edits[33m 845[2mms[22m[39m
+     [33m[2m✓[22m[39m cross-owner, hash-only and unadmitted registered output ids give no authority[33m 1151[2mms[22m[39m
+     [33m[2m✓[22m[39m enforces exact UTF-8 preview cap with saved downloadable bytes 131072[33m 521[2mms[22m[39m
+     [33m[2m✓[22m[39m enforces exact UTF-8 preview cap with saved downloadable bytes 131073[33m 565[2mms[22m[39m
+     [33m[2m✓[22m[39m enforces exact UTF-8 preview cap with saved downloadable bytes 1048576[33m 547[2mms[22m[39m
+     [33m[2m✓[22m[39m binary or invalid UTF-8 is not previewed {"type":"Buffer","data":[255,254]}[33m 504[2mms[22m[39m
+     [33m[2m✓[22m[39m binary or invalid UTF-8 is not previewed {"type":"Buffer","data":[97,0,98]}[33m 542[2mms[22m[39m
+     [33m[2m✓[22m[39m explicit captured missing never opens a live path[33m 505[2mms[22m[39m
+     [33m[2m✓[22m[39m explicit captured deleted never opens a live path[33m 553[2mms[22m[39m
+     [33m[2m✓[22m[39m explicit captured symlink never opens a live path[33m 441[2mms[22m[39m
+     [33m[2m✓[22m[39m explicit captured changed never opens a live path[33m 500[2mms[22m[39m
+     [33m[2m✓[22m[39m explicit captured too-large never opens a live path[33m 768[2mms[22m[39m
+     [33m[2m✓[22m[39m explicit captured unsafe never opens a live path[33m 482[2mms[22m[39m
+     [33m[2m✓[22m[39m explicit captured unavailable never opens a live path[33m 669[2mms[22m[39m
+     [33m[2m✓[22m[39m escaped path ../secret is unsafe even with an admitted saved ref[33m 413[2mms[22m[39m
+     [33m[2m✓[22m[39m escaped path https://evil/x is unsafe even with an admitted saved ref[33m 328[2mms[22m[39m
+     [33m[2m✓[22m[39m escaped path file:///secret is unsafe even with an admitted saved ref[33m 441[2mms[22m[39m
+     [33m[2m✓[22m[39m escaped path a/../../secret is unsafe even with an admitted saved ref[33m 371[2mms[22m[39m
+     [33m[2m✓[22m[39m damaged private saved artifact symlink refuses bytes[33m 449[2mms[22m[39m
+     [33m[2m✓[22m[39m damaged private saved artifact oversized refuses bytes[33m 446[2mms[22m[39m
+     [33m[2m✓[22m[39m damaged private saved artifact hash refuses bytes[33m 437[2mms[22m[39m
+     [33m[2m✓[22m[39m changing saved file is refused even when a bounded read got the old hash[33m 426[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m4 passed[39m[22m[90m (4)[39m
+[2m      Tests [22m [1m[32m40 passed[39m[22m[90m (40)[39m
+[2m   Start at [22m 20:53:21
+[2m   Duration [22m 13.20s[2m (tests 89%, transform 8%, import 3%)[22m
+

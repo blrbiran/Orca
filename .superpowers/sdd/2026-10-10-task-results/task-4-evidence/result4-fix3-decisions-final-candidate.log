@@ -1,0 +1,23 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.3 [39m[90m/Users/biran/.codex/worktrees/progress-results-20261010/Orca[39m
+
+(node:99790) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+orca-panel: initial password for tester written to /private/tmp/opr26/t/orca-tmp-c9WzcX/orca-test-control-KV3nHs/initial-password
+ [32m✓[39m tests/panel/decisionsApi.test.ts [2m([22m[2m9 tests[22m[2m)[22m[33m 8325[2mms[22m[39m
+   [32m✓[39m the decisions endpoints (spec sections 4.2 and 4.3.1) [2m(9)[22m
+     [33m[2m✓[22m[39m returns list rows DEEP-EQUAL to the frozen projection, not merely lacking a summary[33m 1331[2mms[22m[39m
+     [33m[2m✓[22m[39m marks each row reviewed / highTier by the todo's own key and tier rule, and leaves /api/todo byte-identical[33m 515[2mms[22m[39m
+     [33m[2m✓[22m[39m records NOTHING when the list is served[33m 2486[2mms[22m[39m
+     [33m[2m✓[22m[39m records exactly one `opened` when a detail is served, and no `reviewed`[33m 484[2mms[22m[39m
+     [33m[2m✓[22m[39m serves the detail while the reviews lock is held, and the failed opened write is only a server-side warning[33m 1514[2mms[22m[39m
+     [33m[2m✓[22m[39m serves the detail even when the CORRECTIONS lock is held[33m 474[2mms[22m[39m
+     [33m[2m✓[22m[39m answers 404 for a decision it has never seen, and for a known id under an unconfigured projectKey[33m 455[2mms[22m[39m
+     [33m[2m✓[22m[39m returns each repository's own row when two repositories share a decision id[33m 597[2mms[22m[39m
+     [33m[2m✓[22m[39m answers the detail with the gate's refusal when the gate is broken[33m 465[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m9 passed[39m[22m[90m (9)[39m
+[2m   Start at [22m 00:02:13
+[2m   Duration [22m 9.76s[2m (tests 86%, transform 11%, import 3%)[22m
+

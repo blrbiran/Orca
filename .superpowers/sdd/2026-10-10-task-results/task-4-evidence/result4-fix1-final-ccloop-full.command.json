@@ -1,0 +1,1 @@
+["env", "ORCA_CCLOOP_BIN=/private/tmp/orca-results-ccloop-20261010/dist/cli.js", "npm", "test", "--", "--minWorkers=1", "--maxWorkers=2", "--no-cache", "--reporter=default", "--reporter=json", "--outputFile=/private/tmp/orca-progress-results-20261010/result4-fix1-ccloop-full.json"]

@@ -1,0 +1,1 @@
+["./node_modules/.bin/vitest", "run", "tests/panel/taskResults.test.ts", "--maxWorkers=2", "--no-cache", "-t", "validated empty successful|unknown or foreign|transport failure makes|fix1 rejects|fix1 malformed|same-index source"]

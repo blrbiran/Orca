@@ -1,0 +1,11 @@
+{
+  "name": "result4-fix1-mutant-unsafe-html",
+  "criterion": "serves inert HTML",
+  "sourceCommit": "fef429e76b3eb4b113d4817396de5cc4570fad12",
+  "patchBytes": 709,
+  "rc": 1,
+  "nativeBusinessRed": true,
+  "status": "killed",
+  "restoredWorkingDiffBytes": 0,
+  "restoredCachedDiffBytes": 0
+}

@@ -1,0 +1,1 @@
+["env", "ORCA_CCLOOP_BIN=/private/tmp/orca-results-ccloop-20261010/dist/cli.js", "./node_modules/.bin/vitest", "run", "tests/control/taskResultPaired.test.ts", "--maxWorkers=2", "--no-cache", "-t", "actual pre-verifier handoff"]

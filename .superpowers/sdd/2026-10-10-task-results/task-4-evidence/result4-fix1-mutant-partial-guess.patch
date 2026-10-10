@@ -1,0 +1,13 @@
+diff --git a/src/panel/taskResults.ts b/src/panel/taskResults.ts
+index b3c799b..46df6ff 100644
+--- a/src/panel/taskResults.ts
++++ b/src/panel/taskResults.ts
+@@ -132,7 +132,7 @@ export async function readRunResults(store: ControlStore, runId: string, context
+                 try {
+                     const value = capturedExecutionSchema.parse(JSON.parse((await readSavedResultArtifact(store, manifest.executionRef)).toString('utf8')));
+                     execution = value.completionStatus === 'partial' ? 'partial' : 'complete';
+-                    verifierBypassed = value.completionStatus === 'partial' && (value.failureType === 'timeout' || value.partialOrigin === 'runner' || value.changedFiles.length === 0);
++                    verifierBypassed = value.completionStatus === 'partial';
+                 }
+                 catch { }
+             }

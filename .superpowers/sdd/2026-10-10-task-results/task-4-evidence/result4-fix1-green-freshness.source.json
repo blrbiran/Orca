@@ -1,0 +1,16 @@
+{
+  "cwd": "/Users/biran/.codex/worktrees/progress-results-20261010/Orca",
+  "sourceCommit": "d4748a7aa24e386a4d336b7664124494203dab23",
+  "workingSourceDiffBytes": 6532,
+  "cachedSourceDiffBytes": 0,
+  "untrackedSource": [],
+  "argv": [
+    "./node_modules/.bin/vitest",
+    "run",
+    "tests/panel/taskResults.test.ts",
+    "--maxWorkers=2",
+    "--no-cache",
+    "-t",
+    "fix1 rejects|fix1 malformed|unknown or foreign|transport failure makes|same-index source|uses independently newer"
+  ]
+}

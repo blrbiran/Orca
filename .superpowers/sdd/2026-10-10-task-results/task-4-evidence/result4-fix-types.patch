@@ -1,0 +1,22 @@
+diff --git a/src/panel/taskResults.ts b/src/panel/taskResults.ts
+index fe3a61a..1c5eae1 100644
+--- a/src/panel/taskResults.ts
++++ b/src/panel/taskResults.ts
+@@ -17,7 +17,7 @@ interface ResultAuthority {
+     group: GroupViewV1;
+     run: GroupViewV1['runs'][number];
+     body: Record<string, any>;
+-    state: ReturnType<typeof readTaskResultState>;
++    state: z.infer<typeof savedResultStateSchema> | null;
+     observations: TaskResultObservation[];
+     sourceError: boolean;
+ }
+@@ -36,7 +36,7 @@ export function resultAuthority(store: ControlStore, runId: string, context: Res
+     if (!run || group.summary.groupId !== row.group_id)
+         throw refuse();
+     const body = JSON.parse(String(row.body));
+-    let state: ReturnType<typeof readTaskResultState> = null, sourceError = false;
++    let state: z.infer<typeof savedResultStateSchema> | null = null, sourceError = false;
+     try {
+         const saved = readTaskResultState(store, runId);
+         state = saved === null ? null : savedResultStateSchema.parse(saved);

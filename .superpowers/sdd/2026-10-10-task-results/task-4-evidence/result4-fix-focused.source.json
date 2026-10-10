@@ -1,0 +1,17 @@
+{
+  "cwd": "/Users/biran/.codex/worktrees/progress-results-20261010/Orca",
+  "sourceCommit": "588ed72f434f0ea6cf8142cab8caed0c3005ca8a",
+  "workingSourceDiffBytes": 1035,
+  "cachedSourceDiffBytes": 0,
+  "untrackedSource": [],
+  "argv": [
+    "./node_modules/.bin/vitest",
+    "run",
+    "tests/panel/taskResults.test.ts",
+    "tests/panel/taskResultOutputs.test.ts",
+    "tests/panel/taskResultApi.test.ts",
+    "tests/panel/webParity.test.ts",
+    "--maxWorkers=2",
+    "--no-cache"
+  ]
+}
