@@ -1,0 +1,150 @@
+{
+  "root-interruption.txt": {
+    "bytes": 217,
+    "sha256": "ec0c69003fc688cdeccf27d99730bef9cb70fa5e996a8a5263c4c73ff9f69b0f"
+  },
+  "run.py": {
+    "bytes": 420,
+    "sha256": "825202cfa967b6a44f9ac54760c0e2efa1a743b14c92eebc19c62efe9834971f"
+  },
+  "ccloop-typecheck.rc": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "web-build.rc": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "panel.rc": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "root.rc": {
+    "bytes": 4,
+    "sha256": "f5bde7eb9f6c71611dc5726e8aca3eb4eba3e386da49e0a4ed5c295a90a73a0d"
+  },
+  "whole-buffer-audit.json": {
+    "bytes": 2843,
+    "sha256": "5dc7d5ddcc4d99cd42fa044b42ca357bb403ea3f23fc629c193430b9e767e148"
+  },
+  "ccloop-typecheck.log": {
+    "bytes": 59,
+    "sha256": "443df7778c6055e93ca0f3f4fabce5cbbe7205fa5689a62bd08268806118c185"
+  },
+  "checks.py": {
+    "bytes": 1332,
+    "sha256": "6c453e01425a5a0d04514eb3a79aed3d155ed64c554ee61e80593ed1caff06c7"
+  },
+  "sandbox-diagnosis.rc": {
+    "bytes": 2,
+    "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
+  },
+  "typecheck.log": {
+    "bytes": 57,
+    "sha256": "95e3139b92d7a7c68a78bf799a9e66e72c3ed1f70e2391990dd69e37294e15c9"
+  },
+  "panel.log": {
+    "bytes": 1493,
+    "sha256": "9b3ddb69ac0b1d5fd1e79307bef114dc015d08c515a573e4ff4afc398ddab668"
+  },
+  "root-authorized.log": {
+    "bytes": 335263,
+    "sha256": "f04ed510cac2feda86ecdbd95143a30e54c4a37b38ea60e25e2035278a983561"
+  },
+  "ccloop-build.log": {
+    "bytes": 399,
+    "sha256": "aefbc9b778e411edd79554b58143dc8c252dbc805ec4e91e0c180ac3c2e15cfd"
+  },
+  "web.log": {
+    "bytes": 18727,
+    "sha256": "2167da312b5400a4770ba10e12320c1552d49d6a19ff5f5408da02645508a5c8"
+  },
+  "root.log": {
+    "bytes": 30973,
+    "sha256": "f1a3a6ccc65cb5be96c6df4f95a3ab31acb008d3eaeeed8bb3fd80f509975d10"
+  },
+  "cleanup.py": {
+    "bytes": 2044,
+    "sha256": "764ea11bc90b8338ec5fdb30397b79bf75eae3908fd3e40791780be40916718f"
+  },
+  "checks.json": {
+    "bytes": 1496,
+    "sha256": "22610fd9ed2372bc18cc79ff6bbff2c2a1a0e7f5166ae80ce0dfaebf71864472"
+  },
+  "anchor.txt": {
+    "bytes": 41,
+    "sha256": "05bdbe19e497f279dc7ee05b206492c70306456e83bbb006a261a8cecf600b92"
+  },
+  "root-whole-buffer-audit.json": {
+    "bytes": 288,
+    "sha256": "b06cb140bde82a8f4f1e89487068f74e3b25a1b4e723aed15def16a3b7c65b6b"
+  },
+  "ccmem-config.rc": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "sandbox-diagnosis.log": {
+    "bytes": 22716,
+    "sha256": "253b3e8b043b76053dd86c2afbed9b76991e7c0a7425723e01f39b7adadf423d"
+  },
+  "web-build.log": {
+    "bytes": 658,
+    "sha256": "31121916a5acfcba9edcd013d06a05b8a5804eeac05001dc2e350d7b258bac73"
+  },
+  "ccmem-config.log": {
+    "bytes": 4842,
+    "sha256": "ecdb17cdc839f5907120e17d348bb0aec302f7f7fd137e56caa2eec70c89490f"
+  },
+  "ccloop-build.rc": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "typecheck.rc": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "integration-snapshot.json": {
+    "bytes": 1673,
+    "sha256": "a4c9c740b5e04a32435371bd37a09aa92f92bd0363a69d25bde5e6d32ce825f0"
+  },
+  "web.command.json": {
+    "bytes": 69,
+    "sha256": "ac500be9558c615b0baba91b09f08a0d91d735e4fa802a7fc466997ac04b8b5d"
+  },
+  "root-authorized.command.json": {
+    "bytes": 53,
+    "sha256": "f6e7b581007eecaade1a65e1a1b8a3bb3a5f881c2a7af96e9ae48cc4c43d97c6"
+  },
+  "root-authorized.rc": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "root.command.json": {
+    "bytes": 53,
+    "sha256": "f6e7b581007eecaade1a65e1a1b8a3bb3a5f881c2a7af96e9ae48cc4c43d97c6"
+  },
+  "web.rc": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "pin.log": {
+    "bytes": 1043,
+    "sha256": "3214efe87f7664497d8147d9bd73c10c63ca471b3f90ca7c18b6cd2c6ae6dc51"
+  },
+  "sandbox-diagnosis.command.json": {
+    "bytes": 97,
+    "sha256": "50cb72dfb3a857d328e387da160fe25e842c5bdf3a8677245c1357bcb77a7f57"
+  },
+  "pin.rc": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "build.rc": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "build.log": {
+    "bytes": 50,
+    "sha256": "85a583a8309e758f7d2d85267f693f87462e82c2e62e16213eb3fc5b998b22f0"
+  }
+}

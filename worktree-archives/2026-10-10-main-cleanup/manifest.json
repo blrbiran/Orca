@@ -1,14 +1,38 @@
 {
+  "control-foundation-ignored-manifest.json": {
+    "bytes": 125246,
+    "sha256": "dab376d03ab8b82de3ddd296996a38832d3fdfaac71a8947ba7a52c67ca9a667"
+  },
+  "usage-settlement-ignored-manifest.json": {
+    "bytes": 4774,
+    "sha256": "e40125c1bfe96daa4be85384b4fe369bef6b4fdd8777e3408593f164b932bb1b"
+  },
+  "usage-settlement-ignored-evidence.tar.gz": {
+    "bytes": 1122611,
+    "sha256": "ef4abea32b0c6195116fb3b0e24032d83b966b6efa068b468a052bb2c430ec60"
+  },
   "control-foundation-handoff.patch": {
     "bytes": 5933,
     "sha256": "4dc02f05f4f9e42cb5cc5234fc2b3bc984b029f9a43afc7229a6ce704f01b229"
   },
   "README.md": {
-    "bytes": 462,
-    "sha256": "1adaec7fb955aa62d4928ec6b62fea16cc1b03160e56853b2f8b26feb903466a"
+    "bytes": 818,
+    "sha256": "f98f1040df61ba381c22608d3d7f6d0722110e942543117494ea359425bf236c"
+  },
+  "integration-evidence-manifest.json": {
+    "bytes": 4669,
+    "sha256": "8b6a01c416e1702926afdef38954b32bce3a363b306193796bf76c7c86c69def"
   },
   "control-foundation-handoff.tar.gz": {
     "bytes": 152599,
     "sha256": "29b4690faea4dedf39661a76b904af5d84f51408cdc9bd6d7cd9537ddf2a77f9"
+  },
+  "integration-evidence.tar.gz": {
+    "bytes": 84544,
+    "sha256": "60a874592e33a3a00b5077c8f202d664d90f4895d0acbbc7b80819f043408bad"
+  },
+  "control-foundation-ignored-evidence.tar.gz": {
+    "bytes": 1088147,
+    "sha256": "065676e5f657f408f43c38def454a51a9d38108fd18597e15f3b2a580b70a670"
   }
 }

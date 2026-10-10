@@ -165,9 +165,9 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 
 ### 4.0 现在的接手入口（2026-10-10，Codex controller；本节优先于旧条目）
 
-**本轮 feedback-maintenance 的无需 brainstorm 工作已完成，在主检出 `/Users/biran/code/skills/loop/Orca` 的 `codex/feedback-maintenance-20261010` 分支等人审核；尚未合 Orca main、未 push。** 不要因路径仍叫 Orca 就当作 main。当前分支/HEAD/三仓远端请现查，提交 handoff 会移动 HEAD；本文不固定当前哈希。
+**本轮 feedback-maintenance 已按人 2026-10-10 最新授权 fast-forward 合入 Orca main；三仓当前本地 main 整合及无用 worktree/branch 清理已完成，未 push。** 独有历史文档和忽略证据先归档后清理，详情及本轮整合验收见 `docs/handoff/2026-10-10-main-integration-and-cleanup.md`。当前分支/HEAD/三仓远端请现查，提交 handoff 会移动 HEAD；本文不固定当前哈希。
 
-**旧 issue-fixes、D9/M3、M5/M6 三轮均已结束，不重做。** issue-fixes 人已合并推送；D9/M3、M5/M6 的源码/设计/清理历史已按此前授权本地合 main。本轮保留既有审查 worktree/分支；不重复合并、清理或跑旧性能实验。
+**旧 issue-fixes、D9/M3、M5/M6 三轮均已结束，不重做。** issue-fixes 人已合并推送；D9/M3、M5/M6 的源码/设计/清理历史已按此前授权本地合 main。本轮按人最新授权清理已合入的审查 worktree/分支；历史未提交文档及隐藏证据已保全，不重做已完成轮或跑旧性能实验。
 
 **进度与证据入口**（相对本仓）：
 - 本轮：`.superpowers/sdd/2026-10-10-feedback-maintenance/progress.md` 末尾 Round close；计划 `docs/superpowers/plans/2026-10-10-feedback-maintenance.md`；同目录 `final-review.md` 末尾复审、`verification.md`、`evidence.tar.gz` 与 manifest。详细37条核对：`docs/handoff/2026-10-10-feedback-status.md`。
@@ -192,7 +192,7 @@ M5/M6复用每请求原始批读/懒解码与每同步段组body，归档合法w
 
 **ccmem整合现状**：人已明确允许必要ccmem改动合main；config-value-parity已由既有本地整合完成，只增配置值一致性测试。前后隔离配置25/25，非全仓门；证据 `docs/handoff/2026-10-10-ccmem-local-integration.md`。不再重复合，旧pending/禁令段是历史。姊妹仓本轮产品/协议零改，只滚动同步Orca handoff章节；文档提交以一次性空hooksPath避开Qoder tracker，持久hook配置不改。
 
-**下一轮/归人**：审本轮代码、Ruling与视觉限制，再由人处理Orca main整合和三仓push；不自动删新分支/worktree。需brainstorm的19/30总览、24成果总结/报告、6/27–29设置聚合、18右键、26跨组演进/Chains定位、31更大详情布局、32新通知、34向导、35视觉换肤、自动版本探测与性能余热点均未做。ccloop B4 usageBreakdown点名或放弃、真实GitHub集成、ccmem T13/临时目录/daemon/备份语义等原挂账未关闭。已授权旧五项清理见 `docs/handoff/2026-10-09-post-merge-cleanup.md`，不外延到其他保留工作。
+**下一轮/归人**：本地 main 整合/旧分支与 worktree 清理已按人本轮授权完成；push仍归人，视觉几何仍须人验。接下来用brainstorm定第一批范围。需brainstorm的19/30总览、24成果总结/报告、6/27–29设置聚合、18右键、26跨组演进/Chains定位、31更大详情布局、32新通知、34向导、35视觉换肤、自动版本探测与性能余热点均未做。ccloop B4 usageBreakdown点名或放弃、真实GitHub集成、ccmem T13/临时目录/daemon/备份语义等原挂账未关闭。已授权旧五项清理见 `docs/handoff/2026-10-09-post-merge-cleanup.md`，不外延到其他保留工作。
 
 ### 4.0.w 会话 `e34dc963`（2026-10-08～09）留下的结论（**前半已由人合并推送；过程删了，结论留在这里**）
 
