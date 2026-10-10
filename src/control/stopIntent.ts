@@ -1,5 +1,5 @@
 import { finiteCommitment, type BudgetAmount } from "./tokenPolicy.js";
-import { hasTokenPolicy } from "./fundedAllowance.js";
+import { hasOptionalTaskPolicy, hasTokenPolicy } from "./fundedAllowance.js";
 import { hasValidUsageSettlement, type UsageSettlement } from "./usageSettlement.js";
 import { createHash } from "node:crypto";
 import { z } from "zod";
@@ -778,8 +778,13 @@ function terminaliseRun(store: ControlStore, groupId: string, run: RunBody, outc
     saveWork(store,groupId,work as never);return;
   }
   if (outcome === "settled-restartable") {
+    // Optional claims add tokens at claim time, but retain draft non-token promises.
+    // A proved no-start releases only those funded tokens; the next claim adds them once.
+    if (hasOptionalTaskPolicy(store, groupId, run.workItemId) && !settled.unknown.work && !settled.unknown.handoff) {
+      releaseCommitment(store, groupId, { tokens: released.tokens, activeMs: 0, attempts: 0, sessions: 0 });
+    }
     // Handoff delivery spec §11 I9, §13.2 C-6, Minor a (controller decisions, 2026-09-25): a run proved never to
-    // have started keeps the task's commitment -- nothing is released. A plain run's task is claimable again and
+    // have started keeps its non-token promises (and all fixed legacy commitments). A plain run's task is claimable again and
     // its allocation stays `confirmed`; a continuation gives the task back to the predecessor it continued, so
     // that predecessor's checkpoint can be chosen again (otherwise its half-done work is silently dropped).
     const record = work as unknown as { status: string; currentRunId: string | null; pendingRunId: string | null; continuation?: { continuationIntentId: string; predecessorRunId: string } | null };

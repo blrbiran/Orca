@@ -1,4 +1,4 @@
-import { readFundedAllowance } from "../control/fundedAllowance.js";
+import { hasOptionalTaskPolicy, readFundedAllowance } from "../control/fundedAllowance.js";
 import { tokenPolicySchema, tokenRemainingStatus } from "../control/tokenPolicy.js";
 import { budgetAmountSchema } from "../control/schema.js";
 import { readGroupSnapshot, type GroupReadSnapshot, type StoredJsonResult } from "./groupReadSnapshot.js";
@@ -735,6 +735,7 @@ function workViews(
     const labelState = readTaskLabelState(body);
     const effective = effectiveTaskLabels(labelState, task.labels);
     return {
+      tokenAccountingMode: hasOptionalTaskPolicy(store, groupId, task.taskId) ? "optional-v1" : "finite-legacy",
       taskId: task.taskId, status, dependencyTaskIds: [...task.dependencyTaskIds], targetVersion: task.targetVersion,
       configHash: body.configHash, agent: frozenEntry?.agent ?? null, agentProvenance: frozenEntry?.agentProvenance ?? null,
       originalContractHash: task.originalContractHash,

@@ -693,6 +693,7 @@ export const en = {
     badBudget: "Budgets must be positive integers",
     badFileCap: "Max files changed must be a positive integer",
     unit: { tokens: "tokens", activeMs: "ms active time", attempts: "attempts" },
+    tokenCeiling: "Task token limit: {{tokens}}",
     budgetTaken: "Budget {{delta}} {{unit}}, taken from the group reserve; {{left}} left",
     budgetReturned: "Budget {{delta}} {{unit}}, returned to the group reserve; {{left}} left",
     partSeparator: "; ",

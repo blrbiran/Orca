@@ -182,3 +182,15 @@ describe("changing a loop task's plan on its card (spec §4.2)", () => {
       payload: { baseLoopVersion: 0, plan: "bugfix", inputs: PLAN.inputs, work: { tokens: 1, activeMs: 1, attempts: 1 } } })).toBe("/api/control/groups/g/tasks/a/loop");
   });
 });
+
+
+it.each(["optional-v1", "finite-legacy", undefined] as const)("uses authoritative accounting for a finite task ceiling edit (%s)", mode => {
+ const onCommand=vi.fn(),shown=view([item({tokenAccountingMode:mode})]);
+ shown.ledger.groupLimit.tokens=1_500_000;shown.ledger.committedRemaining.tokens=1_250_000;shown.ledger.explicitUnallocatedReserve.tokens=250_000;shown.allocations[0]!.amount.tokens=99_000;
+ render(<Stateful view={shown} onCommand={onCommand}/>);fireEvent.click(screen.getByRole("button",{name:"Change plan"}));fireEvent.change(screen.getByRole("textbox",{name:"Token budget"}),{target:{value:"1000000"}});
+ const submit=within(screen.getByRole("form",{name:"Change plan a"})).getAllByRole("button").find(b=>(b as HTMLButtonElement).type==="submit") as HTMLButtonElement;
+ expect(submit.disabled).toBe(mode!=="optional-v1");
+ if(mode==="optional-v1") {expect(screen.queryByRole("alert")).toBeNull();fireEvent.click(submit);expect(onCommand).toHaveBeenCalledWith(expect.objectContaining({verb:"set-task-loop",payload:expect.objectContaining({work:{tokens:1_000_000,activeMs:14_400_000,attempts:3}})}));
+  fireEvent.change(screen.getByRole("textbox",{name:"Active time (ms)"}),{target:{value:"28800001"}});expect(submit.disabled).toBe(true);expect(screen.getByRole("alert").textContent).toContain("activeMs short by 1");
+ }else {expect(screen.getByRole("alert").textContent).toBe("Group reserve too small: tokens short by 651000");fireEvent.click(submit);expect(onCommand).not.toHaveBeenCalled();}
+});

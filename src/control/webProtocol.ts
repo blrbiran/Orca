@@ -1178,6 +1178,7 @@ export const loopPlanViewSchema = z
 export const workItemViewSchema = z
   .object({
     taskId: idSchema,
+    tokenAccountingMode: z.enum(["finite-legacy", "optional-v1"]).optional(),
     status: z.enum(["draft", "ready", "starting", "start-unknown", "active", "held", "continuing", "completed", "blocked"]),
     dependencyTaskIds: sortedIdArraySchema,
     targetVersion: positiveSafeInteger,

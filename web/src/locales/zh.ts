@@ -589,6 +589,7 @@ export const zh: Translation<typeof en> = {
     badBudget: "预算要填正整数",
     badFileCap: "最多改几个文件要填正整数",
     unit: { tokens: "token", activeMs: "ms 活跃时间", attempts: "次尝试" },
+    tokenCeiling: "任务令牌上限：{{tokens}}",
     budgetTaken: "预算 {{delta}} {{unit}}，从组余量扣；余量剩 {{left}}",
     budgetReturned: "预算 {{delta}} {{unit}}，退回组余量；余量剩 {{left}}",
     partSeparator: "；",

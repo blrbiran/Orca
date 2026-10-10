@@ -190,6 +190,8 @@ export type AllocationViewV1 = {
   fieldProvenance: AmountProvenanceV1;
 };
 export type WorkItemViewV1 = {
+  /** Absent on older servers: preserve finite draft reservation semantics. */
+  tokenAccountingMode?: "finite-legacy" | "optional-v1";
   taskId: string;
   status: "draft" | "ready" | "starting" | "start-unknown" | "active" | "held" | "continuing" | "completed" | "blocked";
   dependencyTaskIds: string[];

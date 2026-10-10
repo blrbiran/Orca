@@ -134,11 +134,15 @@ function skillSetText(plan: LoopPlanViewV1, t: TFunction): string {
 }
 
 /** Spec §4.2: what the submit does to the group's reserve, and the shortfall that disables it (display only). */
-export function consequenceOf(view: GroupViewV1, current: BudgetAmount, work: { tokens: number|null; activeMs: number; attempts: number }): { text: string; shortfall: string | null } {
+export function consequenceOf(view: GroupViewV1, current: BudgetAmount, work: { tokens: number|null; activeMs: number; attempts: number }, tokenAccountingMode: WorkItemViewV1["tokenAccountingMode"] = "finite-legacy"): { text: string; shortfall: string | null } {
   const reserve = view.ledger.explicitUnallocatedReserve;
   const parts: string[] = [];
   let shortfall: string | null = null;
   for (const dimension of ["tokens", "activeMs", "attempts"] as const) {
+    if (dimension === "tokens" && tokenAccountingMode === "optional-v1") {
+      if (work.tokens !== current.tokens) parts.push(i18n.t("loopPlan.tokenCeiling", { tokens: work.tokens === null ? i18n.t("budget.unlimited") : work.tokens }));
+      continue;
+    }
     if(dimension==="tokens"&&(work.tokens===null||current.tokens===null||reserve.tokens===null)){if(work.tokens!==current.tokens)parts.push(i18n.t("budget.unlimited"));continue;}
     const delta = work[dimension]! - current[dimension]!;
     if (delta === 0) continue;
@@ -182,7 +186,7 @@ function LoopPlanEditor(props: LoopPlanCardProps & { plan: LoopPlanViewV1; curre
   const set = (patch: Partial<LoopDraft>): void => onDraft(key, JSON.stringify({ ...draft, ...patch }));
   const checked = payloadOf(draft, plan.skills);
   const payload = "payload" in checked ? checked.payload : null;
-  const consequence = payload === null ? null : consequenceOf(view, current, payload.work);
+  const consequence = payload === null ? null : consequenceOf(view, current, payload.work, item.tokenAccountingMode);
   const blocked = "invalid" in checked ? checked.invalid : consequence!.shortfall;
   return (
     <form aria-label={t("loopPlan.changePlanFor", { taskId: item.taskId })} onSubmit={(event) => {
