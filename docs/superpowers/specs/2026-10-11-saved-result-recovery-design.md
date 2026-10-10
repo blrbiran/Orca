@@ -55,3 +55,7 @@ For a new explicit command after an interrupted verifier, the latest task run ma
 ### 6.2 Legacy wire protection
 
 Independent plan review found strict old consumers reject new collection keys even on failed runs. Expose capsule/readreachablebytes through separate `saved-result-evidence` and `read-saved-result-evidence` negotiated RPCs; protocol3 collect/terminal/capabilities/list/resolve stays exact even with new internal capsule/mode/entry metadata. Consumer archives new evidence channel separately. Test actual capsule-present v3 failure through unchanged old consumer and reject metadata-leak mutation.
+
+### 6.3 Frozen versus actual runtime contract
+
+Existing withinGrant/repoPath derivation keeps frozen derivedContractHash while runtime JSON narrows budgets/rewrites its private repo path. Bind accepted envelope/frozen hash and exact actual runtime-contract artifact hash separately; semantic task comparison uses frozen hash/version, actual source bytes checked against permitted derivation. New recovery runtime allowance may differ without changing objective/check/safety/write-set. Add capped-source recovery and legacy finite-hash criteria.
