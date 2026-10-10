@@ -61,8 +61,12 @@ describe("the task control and recovery areas in Chinese", () => {
   it("shows the control summary, one group, recovery and the workspace mode in Chinese", async () => {
     await i18n.changeLanguage("zh");
     const { container } = render(
-      <ControlPanel config={config} summary={summary} recovery={recovery} groups={{ g: view }} selected="g" drafts={{}} uncertain={[{ groupId: "g", commandId: "c1" }]}
-        refusal={null} refetchRequired onSelect={vi.fn()} onDraft={vi.fn()} onCommand={vi.fn()} workspace={workspace} onWorkspaceMode={vi.fn()} />,
+      <>
+        <ControlPanel config={config} summary={summary} recovery={recovery} groups={{ g: view }} selected="g" drafts={{}} uncertain={[{ groupId: "g", commandId: "c1" }]}
+          refusal={null} refetchRequired onSelect={vi.fn()} onDraft={vi.fn()} onCommand={vi.fn()} workspace={workspace} />
+        {/* Task 3 moves the default selector to Project settings; retain all original Chinese wording assertions. */}
+        <WorkspaceModeSelector workspace={workspace} onChange={vi.fn()} />
+      </>
     );
     const text = container.textContent ?? "";
     for (const expected of [

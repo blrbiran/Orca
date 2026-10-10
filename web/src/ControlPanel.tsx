@@ -11,20 +11,17 @@
 import { useEffect, useState } from "react";
 import type { JSX } from "react";
 import { useTranslation } from "react-i18next";
-import { AgentSettings } from "./AgentSettings.js";
 import { nextCommandId, type ControlAction } from "./controlApi.js";
 import { ControlGroupView } from "./ControlGroupView.js";
 import { RecoveryView } from "./RecoveryView.js";
 import { RefusalNotice } from "./RefusalNotice.js";
-import { WorkspaceModeSelector } from "./WorkspaceModeSelector.js";
-import { RepositoryIntegration } from "./IntegrationScheme.js";
 import { enumText, refusalText } from "./i18n.js";
 import { GroupList } from "./GroupList.js";
 import { ALL_PROJECTS } from "./projectScope.js";
 import type { GroupScope } from "./projectScope.js";
 import type {
-  AgentPreferencesViewV1, AgentSelectionPreviewV1, AgentsViewV1, ControlConfigV1, ControlSummaryV1, GroupViewV1, OperatorPreferencesV1,
-  IntegrationSchemeV1, RecoveryViewV1, RepositoryIntegrationV1, RepositoryWorkspaceV1,
+  AgentPreferencesViewV1, AgentSelectionPreviewV1, AgentsViewV1, ControlConfigV1, ControlSummaryV1, GroupViewV1,
+  RecoveryViewV1, RepositoryIntegrationV1, RepositoryWorkspaceV1,
 } from "./controlTypes.js";
 import { initialControlState } from "./controlState.js";
 import type { ControlClientState, ControlRefusal, UncertainCommand } from "./controlState.js";
@@ -63,18 +60,15 @@ export interface ControlPanelProps {
   workspace?: RepositoryWorkspaceV1 | null;
   /** Project filtering spec §5: one repository's workspace, so an open group's detail uses its own, not the panel's. */
   workspaceFor?: (repoId: string) => RepositoryWorkspaceV1 | null;
-  onWorkspaceMode?: (mode: "worktree" | "clone", expectedRevision: number) => void;
   /** Integration spec §9.1: the chosen project's repository integration default (project mode only), once read. */
   integration?: RepositoryIntegrationV1 | null;
   /** A repository's integration read, for the target an open group's confirm step suggests. */
   integrationFor?: (repoId: string) => RepositoryIntegrationV1 | null;
-  onIntegrationScheme?: (scheme: IntegrationSchemeV1, expectedRevision: number) => void;
   /** Agent selection spec §6.8: the installation table and this operator's defaults, once read. */
   agents?: AgentsViewV1 | null;
   preferences?: AgentPreferencesViewV1 | null;
   /** The server's agent resolution per group, keyed by groupId. */
   previews?: Record<string, AgentSelectionPreviewV1>;
-  onAgentPreferences?: (preferences: OperatorPreferencesV1, expectedRevision: number) => void;
   /** Drop a group's agent preview and read it again (the operator's Re-read). */
   onRereadPreview?: (groupId: string) => void;
   /** The server's code for why the installation table or the preferences could not be read. */
@@ -257,11 +251,6 @@ export function ControlPanel(props: ControlPanelProps): JSX.Element {
         refusal={props.importRefusal ?? null}
       />
       </div>
-      {props.workspace && props.onWorkspaceMode && <WorkspaceModeSelector workspace={props.workspace} onChange={props.onWorkspaceMode} />}
-      {props.integration && props.onIntegrationScheme && <RepositoryIntegration integration={props.integration} onSave={props.onIntegrationScheme} />}
-      {props.agents && props.preferences && props.onAgentPreferences && (
-        <AgentSettings agents={props.agents} preferences={props.preferences} drafts={drafts} onDraft={props.onDraft} onSave={props.onAgentPreferences} />
-      )}
       <GroupList groups={summary.groups} selected={selected} scope={scope} repoLabel={props.repoLabel} onSelect={props.onSelect} now={props.now} />
       {view !== undefined && (
         <ControlGroupView

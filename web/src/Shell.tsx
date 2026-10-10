@@ -2,18 +2,14 @@
  * Panel UI redesign spec §5.1 (ruling U2). Pure: App hands it everything. Every pane stays
  * mounted -- App-level criteria find Task control's buttons by role from the default
  * section, and `getByRole` skips anything `hidden` -- so only styles.css hides a pane.
- * Panel i18n spec §4: the Language switch sits beside Theme; each option names its language in that language.
+ * Progress spec §4: browser preference controls live in GlobalSettings.
  */
 import type { JSX, ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { LANGUAGE_NAMES, PANEL_LANGUAGES, enumText } from "./i18n.js";
-import type { PanelLanguage } from "./i18n.js";
 import { SECTIONS, hashFor } from "./sections.js";
 import type { Section } from "./sections.js";
-import { THEME_PREFS } from "./theme.js";
-import type { ThemePref } from "./theme.js";
 
-const NAV_KEY = { overview: "nav.overview", decisions: "nav.decisions", chains: "nav.chains", tasks: "nav.tasks", requirements: "nav.requirements", memory: "nav.memory", metrics: "nav.metrics" } as const satisfies Record<Section, string>;
+const NAV_KEY = { overview: "nav.overview", decisions: "nav.decisions", chains: "nav.chains", tasks: "nav.tasks", requirements: "nav.requirements", memory: "nav.memory", metrics: "nav.metrics", "global-settings": "nav.globalSettings", "project-settings": "nav.projectSettings" } as const satisfies Record<Section, string>;
 
 /** The six conditions under which ControlPanel renders a role="alert" line. */
 export interface ControlAlertInput {
@@ -55,11 +51,6 @@ export function Shell(props: {
   active: Section;
   badges: ShellBadges;
   footer: readonly string[];
-  theme: ThemePref;
-  onTheme?: (pref: ThemePref) => void;
-  /** Panel i18n spec §4: the language on screen and the switch; absent in criteria that render the shell alone. */
-  language?: PanelLanguage;
-  onLanguage?: (lang: PanelLanguage) => void;
   /** Project registry spec §7 (§12 C5): the project control, at the top of the sidebar. */
   projectControl?: ReactNode;
   banners?: ReactNode;
@@ -83,18 +74,6 @@ export function Shell(props: {
         </ul>
         <div className="sidebar-foot">
           {props.footer.map((line) => <p key={line}>{line}</p>)}
-          <label className="theme-pick">
-            {t("shell.theme")}
-            <select name="theme" value={props.theme} onChange={(e) => props.onTheme?.(e.currentTarget.value as ThemePref)}>
-              {THEME_PREFS.map((pref) => <option key={pref} value={pref}>{enumText("theme", pref)}</option>)}
-            </select>
-          </label>
-          <label className="theme-pick">
-            {t("shell.language")}
-            <select name="language" value={props.language ?? "en"} onChange={(e) => props.onLanguage?.(e.currentTarget.value as PanelLanguage)}>
-              {PANEL_LANGUAGES.map((lang) => <option key={lang} value={lang}>{LANGUAGE_NAMES[lang]}</option>)}
-            </select>
-          </label>
         </div>
       </nav>
       <main className="content">

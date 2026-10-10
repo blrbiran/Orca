@@ -10,7 +10,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import type { JSX } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getJson, noteAnswer, recordReview } from "../src/api.js";
-import { AuthGate } from "../src/AuthGate.js";
+import { AccountSettings, AuthGate } from "../src/AuthGate.js";
 import { shouldRefresh } from "../src/auth.js";
 import { fetchControlSummary, sendControlCommand } from "../src/controlApi.js";
 import { enErrors } from "../src/locales/en.js";
@@ -278,15 +278,14 @@ describe("AuthGate (spec §7)", () => {
   it("lets an owner add a user, checking the password twice before sending it", async () => {
     meAnswers = [me({ name: "olga", roles: ["owner"] })];
     routes["POST /api/auth/users"] = () => jsonResponse({ user: { id: "u2", name: "bob" } }, 201);
-    render(<AuthGate><p>app body</p></AuthGate>);
+    // Task 3 authorized movement: owner user management is composed in global account settings.
+    render(<AuthGate><p>app body</p><AccountSettings /></AuthGate>);
     await screen.findByText("app body");
-    expect(screen.queryByRole("form", { name: /add user/i })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Menu" }));
     const form = await screen.findByRole("form", { name: /add user/i });
     fireEvent.change(screen.getByLabelText(/user name/i), { target: { value: "bob" } });
     fireEvent.change(screen.getByLabelText(/^role/i), { target: { value: "member" } });
     fireEvent.change(screen.getByLabelText(/^password for the user/i), { target: { value: "bob's long password" } });
-    fireEvent.change(screen.getByLabelText(/password again/i), { target: { value: "bob's long password" } });
+    fireEvent.change(screen.getByLabelText(/^password again$/i), { target: { value: "bob's long password" } });
     fireEvent.submit(form);
     await screen.findByText(/added bob/i);
     const sent = posts("/api/auth/users");

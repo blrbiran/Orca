@@ -13,7 +13,7 @@ describe("sections (ruling U2)", () => {
     expect(sectionFromHash("#")).toBe("overview");
     expect(sectionFromHash("#nope")).toBe("overview");
     // Review Focus 5: a link is a bare hash, so the page URL's path and query survive a click.
-    for (const s of SECTIONS) expect(hashFor(s)).toMatch(/^#[a-z]+$/);
+    for (const s of SECTIONS) expect(hashFor(s)).toMatch(/^#[a-z-]+$/);
   });
 });
 
@@ -40,7 +40,7 @@ describe("controlAlert (spec §5.1, the six alert conditions ControlPanel render
 describe("Shell and SectionPane", () => {
   const render = (badges: { unreviewed: number; chainRunning: boolean; controlAlert: boolean }): string =>
     renderToStaticMarkup(
-      <Shell active="chains" badges={badges} footer={["epoch e-1 · dispatch live"]} theme="system">
+      <Shell active="chains" badges={badges} footer={["epoch e-1 · dispatch live"]}>
         <SectionPane section="decisions" active="chains"><p>pane-d</p></SectionPane>
         <SectionPane section="chains" active="chains"><p>pane-c</p></SectionPane>
       </Shell>,
@@ -73,9 +73,9 @@ describe("Shell and SectionPane", () => {
 describe("the Requirements section in the shell (N1 spec §11.2)", () => {
   it("lists Requirements in the nav after Task control and keeps its pane mounted while another is active", () => {
     // Rewritten again under the human's 2026-10-03 request to reorder the tabs (session 9d95e6c8); earlier under the OK at memory-tab plan review (plan D10).
-    expect(SECTIONS).toEqual(["overview", "requirements", "tasks", "decisions", "memory", "metrics", "chains"]);
+    expect(SECTIONS).toEqual(["overview", "requirements", "tasks", "decisions", "memory", "metrics", "chains", "global-settings", "project-settings"]);
     const html = renderToStaticMarkup(
-      <Shell active="tasks" badges={{ unreviewed: 0, chainRunning: false, controlAlert: false }} footer={[]} theme="system">
+      <Shell active="tasks" badges={{ unreviewed: 0, chainRunning: false, controlAlert: false }} footer={[]}>
         <SectionPane section="requirements" active="tasks"><p>pane-r</p></SectionPane>
       </Shell>,
     );

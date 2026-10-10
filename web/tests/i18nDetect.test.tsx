@@ -41,7 +41,7 @@ async function detect(c: Case): Promise<{ resolved: string | undefined; htmlLang
   initI18n();
   const { Shell } = await import("../src/Shell.js");
   const html = renderToStaticMarkup(
-    <Shell active="decisions" badges={{ unreviewed: 0, chainRunning: false, controlAlert: false }} footer={[]} theme="system"><p>pane</p></Shell>,
+    <Shell active="decisions" badges={{ unreviewed: 0, chainRunning: false, controlAlert: false }} footer={[]}><p>pane</p></Shell>,
   );
   return { resolved: i18n.resolvedLanguage, htmlLang: document.documentElement.lang, writes: setItem.mock.calls.length, html };
 }

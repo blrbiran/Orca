@@ -6,9 +6,9 @@
  *   - the panel under an account bar once logged in.
  * A 401 `login-required` on any later request (web/src/api.ts's `onLoginRequired`) ends the session here too, so the
  * page goes back to the login form instead of showing refusals everywhere. Owners also see the security notices and an
- * "Add user" form; the server answers a member's attempt anyway (owner-required), so hiding them is only courtesy.
+ * "Add user" form in global settings; the server answers a member's attempt anyway (owner-required), so hiding them is only courtesy.
  */
-import { createContext, useCallback, useEffect, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import type { FormEvent, JSX, ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { PanelRefusal } from "./api.js";
@@ -23,6 +23,22 @@ import { Refusal } from "./Refusal.js";
 
 /** The logged-in person, for the parts of the page that differ by role (web/src/UsagePanel.tsx). */
 export const AccountContext = createContext<Me | null>(null);
+
+/** Additive surface: credentials and the session transition still belong to AuthGate. */
+const AccountSettingsContext = createContext<{ me: Me; onPasswordChanged: () => void } | null>(null);
+
+export function AccountSettings(): JSX.Element | null {
+  const account = useContext(AccountSettingsContext);
+  const { t } = useTranslation();
+  if (account === null) return null;
+  return (
+    <section aria-label={t("settings.account")}>
+      <h3>{t("settings.account")}</h3>
+      <ChangePasswordForm me={account.me} onChanged={account.onPasswordChanged} initial={false} />
+      {isOwner(account.me) && <AddUserForm />}
+    </section>
+  );
+}
 
 /**
  * Accounts spec §3.5, §7: whether this page offers human-only actions (group limits, spend caps, the usage calendar).
@@ -100,10 +116,12 @@ export function AuthGate({ children }: { children: ReactNode }): JSX.Element {
   if (state.kind === "change") return <ChangePasswordForm me={state.me} onChanged={() => setState({ kind: "login", ended: false, changed: true })} />;
   return (
     <AccountContext.Provider value={state.me}>
-      <div className="authenticated-shell">
-        <AccountBar me={state.me} onLoggedOut={() => setState({ kind: "login", ended: false })} />
-        {children}
-      </div>
+      <AccountSettingsContext.Provider value={{ me: state.me, onPasswordChanged: () => setState({ kind: "login", ended: false, changed: true }) }}>
+        <div className="authenticated-shell">
+          <AccountBar me={state.me} onLoggedOut={() => setState({ kind: "login", ended: false })} />
+          {children}
+        </div>
+      </AccountSettingsContext.Provider>
     </AccountContext.Provider>
   );
 }
@@ -142,7 +160,7 @@ function passwordProblem(next: string, again: string): PanelRefusal | null {
   return null;
 }
 
-function ChangePasswordForm({ me, onChanged }: { me: Me; onChanged: () => void }): JSX.Element {
+function ChangePasswordForm({ me, onChanged, initial = true }: { me: Me; onChanged: () => void; initial?: boolean }): JSX.Element {
   const { t } = useTranslation();
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
@@ -156,25 +174,25 @@ function ChangePasswordForm({ me, onChanged }: { me: Me; onChanged: () => void }
     if (answer.ok) { onChanged(); return; }
     setRefusal(answer);
   };
+  const Frame = initial ? "main" : "div";
   return (
-    <main className="auth-page">
+    <Frame className={initial ? "auth-page" : "settings-password"}>
       <form className="auth-form" aria-label={t("auth.changeTitle")} onSubmit={(event) => void submit(event)}>
-        <h1>{t("auth.changeTitle")}</h1>
-        <p>{t("auth.changeLede", { name: me.user.name, n: MIN_PASSWORD_LENGTH })}</p>
+        {initial ? <h1>{t("auth.changeTitle")}</h1> : <h4>{t("auth.changeTitle")}</h4>}
+        <p>{t(initial ? "auth.changeLede" : "auth.passwordLede", { name: me.user.name, n: MIN_PASSWORD_LENGTH })}</p>
         <label>{t("auth.currentPassword")}<input type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.currentTarget.value)} /></label>
         <label>{t("auth.newPassword")}<input type="password" autoComplete="new-password" value={next} onChange={(e) => setNext(e.currentTarget.value)} /></label>
         <label>{t("auth.newPasswordAgain")}<input type="password" autoComplete="new-password" value={again} onChange={(e) => setAgain(e.currentTarget.value)} /></label>
         <button type="submit">{t("auth.changePassword")}</button>
         {refusal !== null && <Refusal refusal={refusal} />}
       </form>
-    </main>
+    </Frame>
   );
 }
 
 function AccountBar({ me, onLoggedOut }: { me: Me; onLoggedOut: () => void }): JSX.Element {
   const { t } = useTranslation();
   const owner = isOwner(me);
-  const [menuOpen, setMenuOpen] = useState(false);
   const [refusal, setRefusal] = useState<PanelRefusal | null>(null);
   const doLogout = async (): Promise<void> => {
     const answer = await logout();
@@ -187,13 +205,9 @@ function AccountBar({ me, onLoggedOut }: { me: Me; onLoggedOut: () => void }): J
       <header className="account-bar">
         <span className="account-name">{me.user.name}</span>
         <span className="account-role">{me.user.roles.map((role) => t(`auth.role.${role}` as const)).join(", ")}</span>
-        {owner && (
-          <button type="button" aria-expanded={menuOpen} onClick={() => setMenuOpen(!menuOpen)}>{t("auth.menu")}</button>
-        )}
         <button type="button" onClick={() => void doLogout()}>{t("auth.logOut")}</button>
         {refusal !== null && <Refusal refusal={refusal} />}
       </header>
-      {owner && menuOpen && <AddUserForm />}
       {owner && <Notices />}
     </>
   );

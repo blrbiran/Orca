@@ -15,7 +15,7 @@ import { AccountContext } from "../src/AuthGate.js";
 import type { Me } from "../src/auth.js";
 import { BudgetEditor } from "../src/BudgetEditor.js";
 import { ControlGroupView } from "../src/ControlGroupView.js";
-import { ControlPanel } from "../src/ControlPanel.js";
+import { ProjectSettings } from "../src/ProjectSettings.js";
 import { controlCommandPath, sendIntegrationScheme } from "../src/controlApi.js";
 import type { ControlAction } from "../src/controlApi.js";
 import type {
@@ -121,13 +121,11 @@ describe("the repository's integration section (spec §9.1)", () => {
     expect(within(region).queryAllByRole("combobox")).toEqual([]);
   });
 
-  it("is placed in Task control beside the workspace mode, and its Save reaches the panel's handler", () => {
-    const groupView = confirmedGroup();
-    const summary: ControlSummaryV1 = { schema: "orca-control-summary-v1", epoch: "epoch-a", changeSeq: 4, resetRequired: false, dispatchBlocked: false, groups: [groupView.summary] };
-    const recovery: RecoveryViewV1 = { schema: "orca-control-recovery-v1", epoch: "epoch-a", dispatchBlocked: false, blockers: [] };
+  it("is placed in Project settings beside the workspace mode, and its Save reaches the App's handler", () => {
+    // Task 3 authorized movement only: preserve the actual scheme and revision callback assertion.
     const onIntegrationScheme = vi.fn();
-    render(<ControlPanel config={config} summary={summary} recovery={recovery} groups={{}} selected={null} drafts={{}} uncertain={[]} refusal={null}
-      refetchRequired={false} onSelect={vi.fn()} onDraft={vi.fn()} onCommand={vi.fn()} integration={repository({ delivery: "keep" })} onIntegrationScheme={onIntegrationScheme} />);
+    render(<ProjectSettings repoId="orca" repoLabel="Orca" workspace={null} integration={repository({ delivery: "keep" })}
+      onWorkspaceMode={vi.fn()} onIntegrationScheme={onIntegrationScheme} />);
     const region = screen.getByRole("region", { name: "Integration" });
     fireEvent.click(within(region).getByRole("button", { name: "Save integration" }));
     expect(onIntegrationScheme.mock.calls).toEqual([[{ delivery: "keep" }, 4]]);

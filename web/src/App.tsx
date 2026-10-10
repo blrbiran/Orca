@@ -80,6 +80,7 @@ import type { ControlAction } from "./controlApi.js";
 import { AccountContext } from "./AuthGate.js";
 import { ControlPanel } from "./ControlPanel.js";
 import { initialControlState, reduceControlState, summaryView } from "./controlState.js";
+import type { ControlAnswer } from "./controlApi.js";
 import type { ControlRefusal, UncertainCommand } from "./controlState.js";
 import type {
   AgentPreferencesViewV1, AgentSelectionPreviewV1, AgentsViewV1, CommandSuccessV1, ControlConfigV1, ControlSummaryV1, IntegrationSchemeV1, OperatorPreferencesV1, RepositoryIntegrationV1,
@@ -117,6 +118,8 @@ import { labelsDraftKey } from "./TaskDetail.js";
 import { loopDraftKey } from "./LoopPlanCard.js";
 import { DEFAULT_SECTION, sectionFromHash } from "./sections.js";
 import type { Section } from "./sections.js";
+import { GlobalSettings } from "./GlobalSettings.js";
+import { ProjectSettings } from "./ProjectSettings.js";
 import { SectionPane, Shell, controlAlert } from "./Shell.js";
 import { applyTheme, readTheme, writeTheme } from "./theme.js";
 import type { ThemePref } from "./theme.js";
@@ -556,10 +559,30 @@ export function App(): JSX.Element {
     else setTimeout(() => setPreviewNonce((value) => value + 1), delayMs);
   };
 
+  // Settings feedback is display-only, keyed by the actual owner; unrelated panel refusals never enter it.
+  const [settingsRefusals, setSettingsRefusals] = useState<Record<string, { epoch: string | null; refusal: ControlRefusal | null }>>({});
+  const settingsSeq = useRef<Record<string, number>>({});
+  const beginSettingsSave = (scope: string): { seq: number; epoch: string | null } => {
+    const seq = (settingsSeq.current[scope] ?? 0) + 1;
+    settingsSeq.current[scope] = seq;
+    return { seq, epoch: controlNow.current.epoch };
+  };
+  const showSettingsAnswer = (scope: string, request: { seq: number; epoch: string | null }, answer: ControlAnswer): void => {
+    if (settingsSeq.current[scope] !== request.seq || controlNow.current.epoch !== request.epoch) return;
+    const refusal = answer.kind === "uncertain" ? answer.refusal : answer.status >= 400 ? refusalFromAnswer(answer) : null;
+    setSettingsRefusals((current) => ({ ...current, [scope]: { epoch: controlNow.current.epoch, refusal } }));
+  };
+  const settingsRefusal = (scope: string): ControlRefusal | null => {
+    const feedback = settingsRefusals[scope];
+    return feedback?.epoch === control.epoch ? feedback.refusal : null;
+  };
+
   /** Name the choice under the revision it was read at; whatever the server says is read back, not assumed. */
   const sendWorkspaceMode = async (repoId: string, mode: "worktree" | "clone", expectedRevision: number): Promise<void> => {
     const scope = `@repository:${repoId}`;
+    const request = beginSettingsSave(scope);
     const answer = await sendControlCommand(workspaceModePath(repoId), { commandId: nextCommandId(), expectedRevision, payload: { workspaceMode: mode } });
+    showSettingsAnswer(scope, request, answer);
     if (answer.kind === "uncertain") dispatchControl({ type: "refusal", place: "panel", groupId: scope, value: answer.refusal });
     else if (answer.status >= 400) dispatchControl({ type: "refusal", place: "panel", groupId: scope, value: refusalFromAnswer(answer) });
     await readWorkspace(repoId); // a failed read leaves the refusal above to say why
@@ -568,7 +591,9 @@ export function App(): JSX.Element {
   /** Integration spec §3.1: name the repository's scheme under the revision it was read at; the answer is read back. */
   const sendRepositoryIntegration = async (repoId: string, scheme: IntegrationSchemeV1, expectedRevision: number): Promise<void> => {
     const scope = `@repository:${repoId}`;
+    const request = beginSettingsSave(scope);
     const answer = await sendIntegrationScheme(repoId, scheme, expectedRevision);
+    showSettingsAnswer(scope, request, answer);
     if (answer.kind === "uncertain") dispatchControl({ type: "refusal", place: "panel", groupId: scope, value: answer.refusal });
     else if (answer.status >= 400) dispatchControl({ type: "refusal", place: "panel", groupId: scope, value: refusalFromAnswer(answer) });
     await readIntegration(repoId);
@@ -579,7 +604,9 @@ export function App(): JSX.Element {
     if (agentPreferences === null) return;
     const scope = `@operator:${agentPreferences.operatorId}`;
     // Review P5: the payload is { preferences } only; the revision travels in the envelope.
+    const request = beginSettingsSave(scope);
     const answer = await sendControlCommand(AGENT_PREFERENCES_PATH, { commandId: nextCommandId(), expectedRevision, payload: { preferences } });
+    showSettingsAnswer(scope, request, answer);
     if (answer.kind === "uncertain") dispatchControl({ type: "refusal", place: "panel", groupId: scope, value: answer.refusal });
     else if (answer.status >= 400) dispatchControl({ type: "refusal", place: "panel", groupId: scope, value: refusalFromAnswer(answer) });
     try { setAgentPreferences(await fetchAgentPreferences()); } catch { /* the refusal above already says why */ }
@@ -1094,17 +1121,6 @@ export function App(): JSX.Element {
           }}
         />
       )}
-      theme={theme}
-      language={currentLanguage()}
-      onLanguage={(lang) => {
-        writeLanguage(browserStorage(), lang);
-        void i18n.changeLanguage(lang);
-      }}
-      onTheme={(pref) => {
-        setTheme(pref);
-        writeTheme(browserStorage(), pref);
-        applyTheme(document.documentElement, pref);
-      }}
       banners={
         <>
           {chains !== null && <ChainBanners banners={bannersFor(chains, dismissed)} onDismiss={dismiss} />}
@@ -1117,6 +1133,36 @@ export function App(): JSX.Element {
         </>
       }
     >
+      <SectionPane section="global-settings" active={section}>
+        <GlobalSettings
+          theme={theme}
+          language={currentLanguage()}
+          onLanguage={(lang) => {
+            writeLanguage(browserStorage(), lang);
+            void i18n.changeLanguage(lang);
+          }}
+          onTheme={(pref) => {
+            setTheme(pref);
+            writeTheme(browserStorage(), pref);
+            applyTheme(document.documentElement, pref);
+          }}
+          refusal={agentPreferences === null ? null : settingsRefusal(`@operator:${agentPreferences.operatorId}`)}
+          agents={agents === null || agentPreferences === null ? null : {
+            agents, preferences: agentPreferences, drafts: control.drafts,
+            onDraft: (key, text) => dispatchControl({ type: "draft", key, text }),
+            onSave: (preferences, revision) => { void sendAgentPreferences(preferences, revision); },
+          }}
+        />
+      </SectionPane>
+      <SectionPane section="project-settings" active={section}>
+        <ProjectSettings key={panelRepoId ?? "unresolved"} repoId={panelRepoId} repoLabel={panelRepoId === null ? null : repoLabel(panelRepoId)}
+          refusal={panelRepoId === null ? null : settingsRefusal(`@repository:${panelRepoId}`)}
+          workspace={panelRepoId === null ? null : workspaces[panelRepoId] ?? null}
+          integration={panelRepoId === null ? null : integrations[panelRepoId] ?? null}
+          onWorkspaceMode={(mode, revision) => { if (panelRepoId !== null) void sendWorkspaceMode(panelRepoId, mode, revision); }}
+          onIntegrationScheme={(scheme, revision) => { if (panelRepoId !== null) void sendRepositoryIntegration(panelRepoId, scheme, revision); }}
+        />
+      </SectionPane>
       <SectionPane section="overview" active={section}>
         {overviewNavigationFailure && <p role="alert">{overviewNavigationFailure}</p>}
         <Overview model={overviewModel} onOpen={openOverviewTarget}
@@ -1188,14 +1234,11 @@ export function App(): JSX.Element {
           onRecoveryReread={() => void readControlTick()}
           workspace={panelRepoId === null ? null : workspaces[panelRepoId] ?? null}
           workspaceFor={(repoId) => workspaces[repoId] ?? null}
-          onWorkspaceMode={(mode, revision) => { if (panelRepoId !== null) void sendWorkspaceMode(panelRepoId, mode, revision); }}
           integration={panelRepoId === null ? null : integrations[panelRepoId] ?? null}
           integrationFor={(repoId) => integrations[repoId] ?? null}
-          onIntegrationScheme={(scheme, revision) => { if (panelRepoId !== null) void sendRepositoryIntegration(panelRepoId, scheme, revision); }}
           agents={agents}
           preferences={agentPreferences}
           previews={previews}
-          onAgentPreferences={(preferences, revision) => { void sendAgentPreferences(preferences, revision); }}
           onRereadPreview={manualReread}
             retryNotice={retryNotice(agents === null ? agentsRetry : previewRetry)}
           agentsFailure={agentsFailure}

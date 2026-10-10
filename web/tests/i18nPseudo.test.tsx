@@ -207,7 +207,7 @@ const OVERVIEW = deriveOverview({
 const AREAS: Array<{ name: string; chinese: string; element: () => JSX.Element; settle?: (container: HTMLElement) => Promise<void> }> = [
   { name: "progress overview and source states", chinese: "需要你处理", element: () => <Overview model={OVERVIEW} onOpen={noop} onImport={noop} onRequirement={noop} /> },
   { name: "nav and shell footer", chinese: "决策", element: () => (
-    <Shell active="decisions" badges={{ unreviewed: 1, chainRunning: true, controlAlert: true }} footer={footerLines(summary)} theme="system" language="zh"><p>pane</p></Shell>
+    <Shell active="decisions" badges={{ unreviewed: 1, chainRunning: true, controlAlert: true }} footer={footerLines(summary)}><p>pane</p></Shell>
   ) },
   { name: "decisions", chinese: "未评审的高层级决策", element: () => (
     <DecisionsView rows={[ROW]} filter={NO_FILTER} selected={{ projectKey: "github.com/x/y", id: "run/9" }}
@@ -222,7 +222,7 @@ const AREAS: Array<{ name: string; chinese: string; element: () => JSX.Element; 
   { name: "task control, recovery, budget table", chinese: "工作项", element: () => (
     <ControlPanel config={config} summary={summary} recovery={recovery} groups={{ g: view }} selected="g" drafts={drafts} uncertain={[{ groupId: "g", commandId: "c1" }]}
       refusal={{ status: 409, code: "revision-conflict", message: "m-1", commandRevision: 7 }} refetchRequired onSelect={noop} onDraft={noop} onCommand={noop}
-      workspace={workspace} onWorkspaceMode={noop} />
+      workspace={workspace} />
   ) },
   { name: "task detail and loop card", chinese: "手写契约", element: () => (
     <>

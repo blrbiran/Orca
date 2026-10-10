@@ -7,7 +7,7 @@
 import type { Translation, en } from "./en.js";
 
 export const zh: Translation<typeof en> = {
-  nav: { overview: "概览", sections: "分区", decisions: "决策", chains: "链", tasks: "任务控制", requirements: "需求", memory: "记忆", metrics: "指标" },
+  nav: { overview: "概览", sections: "分区", decisions: "决策", chains: "链", tasks: "任务控制", requirements: "需求", memory: "记忆", metrics: "指标", globalSettings: "全局设置", projectSettings: "项目设置" },
   overview: {
     title: "概览", progress: "进展", queue: "需要你处理", newRequirement: "新建需求", import: "导入计划",
     global: "全局控制", ownerUnknown: "所属项目未登记", ownerRequired: "这一步需要所有者处理。",
@@ -619,6 +619,14 @@ export const zh: Translation<typeof en> = {
       "requirement-not-split": "这个组的需求还没拆分；它在「需求」里处理。",
     },
   },
+  settings: {
+    browserScope: "主题和语言只记在当前浏览器里。",
+    agentScope: "Agent 默认值属于面板共用的 operator。已确认的任务组保留冻结时的选择。",
+    account: "账户", chooseProject: "请在项目选择器中选择一个具体项目，再查看或修改它的设置。",
+    projectScope: "{{project}} 的默认值。已有任务组保留各自的选择。",
+    workspaceUnavailable: "尚未读取工作空间设置。", integrationUnavailable: "尚未读取集成设置。",
+    agentsUnavailable: "尚未读取 Agent 默认值。",
+  },
   auth: {
     loading: "正在确认登录状态…",
     retry: "重试",
@@ -631,6 +639,7 @@ export const zh: Translation<typeof en> = {
     loginHint: "第一个 owner 的初始密码在面板启动时提示的文件里（<control root>/initial-password）；用 orca user add 添加更多人。",
     changeTitle: "修改密码",
     changeLede: "{{name}}，你用初始密码登录了。使用面板前，请设一个自己的密码（至少 {{n}} 个字符）。",
+    passwordLede: "{{name}}，请设置新密码（至少 {{n}} 个字符）。修改后所有登录都会失效，需要重新登录。",
     currentPassword: "当前密码",
     newPassword: "新密码",
     newPasswordAgain: "再输一次新密码",

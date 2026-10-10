@@ -121,7 +121,7 @@ const selectionSource = {
 } as const satisfies Record<ProvenanceSourceV1, string>;
 
 export const en = {
-  nav: { overview: "Overview", sections: "Sections", decisions: "Decisions", chains: "Chains", tasks: "Task control", requirements: "Requirements", memory: "Memory", metrics: "Metrics" },
+  nav: { overview: "Overview", sections: "Sections", decisions: "Decisions", chains: "Chains", tasks: "Task control", requirements: "Requirements", memory: "Memory", metrics: "Metrics", globalSettings: "Global settings", projectSettings: "Project settings" },
   overview: {
     title: "Overview", progress: "Progress", queue: "Needs your attention", newRequirement: "New requirement", import: "Import plan",
     global: "Global control", ownerUnknown: "owner not in registry", ownerRequired: "An owner must take this action.",
@@ -724,6 +724,14 @@ export const en = {
       "requirement-not-split": "This group's requirement has not been split yet; it is handled in Requirements.",
     },
   },
+  settings: {
+    browserScope: "Theme and language are remembered in this browser.",
+    agentScope: "Agent defaults belong to the shared panel operator. Existing confirmed groups keep their frozen choices.",
+    account: "Account", chooseProject: "Choose a concrete project in the project picker to view or change its settings.",
+    projectScope: "Defaults for {{project}}. Existing groups keep their own choices.",
+    workspaceUnavailable: "Workspace settings have not been read.", integrationUnavailable: "Integration settings have not been read.",
+    agentsUnavailable: "Agent defaults have not been read.",
+  },
   auth: {
     loading: "Checking your session…",
     retry: "Try again",
@@ -736,6 +744,7 @@ export const en = {
     loginHint: "The first owner's initial password is in the file the panel named when it started (<control root>/initial-password); add more people with orca user add.",
     changeTitle: "Change your password",
     changeLede: "{{name}}, you logged in with the initial password. Choose your own (at least {{n}} characters) before using the panel.",
+    passwordLede: "{{name}}, choose a new password (at least {{n}} characters). Changing it ends all your sessions and asks you to log in again.",
     currentPassword: "Current password",
     newPassword: "New password",
     newPasswordAgain: "New password again",
