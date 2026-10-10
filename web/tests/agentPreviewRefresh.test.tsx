@@ -6,7 +6,7 @@
  * confirm without a reload. `App` owns the reads, so these criteria drive `App` against a fake panel; the
  * last describe covers the rest of App's agent wiring (the preferences command and what it hands the view).
  */
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/App.js";
 import type {
@@ -135,7 +135,15 @@ afterEach(() => {
 
 const rereadButton = (): HTMLButtonElement => screen.getByRole("button", { name: "Re-read agent selections" }) as HTMLButtonElement;
 /** Fake timers that still follow the wall clock, so testing-library's own waits keep working; `pass` jumps ahead. */
-const pass = async (ms: number): Promise<void> => { await vi.advanceTimersByTimeAsync(ms); };
+const pass = async (ms: number): Promise<void> => {
+  await act(async () => { await vi.advanceTimersByTimeAsync(ms); });
+};
+/** Only after the preview has stopped or resolved: fire every timer, then flush the settled answers together.
+ * Retry boundaries use `pass` so each answer/effect can schedule its next real backoff timeout.
+ */
+const passQuiescent = async (ms: number): Promise<void> => {
+  await act(async () => { vi.advanceTimersByTime(ms); });
+};
 /** Real time for an answer the test just released to reach the page. */
 const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 100));
 const confirmButton = (): HTMLButtonElement => screen.getByRole("button", { name: "Confirm budget" }) as HTMLButtonElement;
@@ -201,11 +209,11 @@ describe("App re-reads a group's agent preview when the one on screen can no lon
       await waitFor(() => expect(previewReads).toBe(index + 2));
     }
     await waitFor(() => expect(screen.getByText(/Stopped after 5 retries/)).toBeTruthy());
-    await pass(600_000);
+    await passQuiescent(600_000);
     expect(previewReads).toBe(6);
     fireEvent.click(rereadButton());
     await waitFor(() => expect(confirmButton().disabled).toBe(false));
-    await pass(600_000);
+    await passQuiescent(600_000);
     expect(previewReads).toBe(7);
   });
 
@@ -224,7 +232,7 @@ describe("App re-reads a group's agent preview when the one on screen can no lon
       await pass(delay / 2 + 1_000);
       await waitFor(() => expect(previewReads).toBe(index + 2));
     }
-    await pass(600_000);
+    await passQuiescent(600_000);
     expect(previewReads).toBe(6);
     expect(confirmButton().disabled).toBe(true);
     // Six failures of one code are one report on the page, not six.
@@ -339,7 +347,7 @@ describe("the proposal view when the installation table cannot be read, and afte
       await pass(delay / 2 + 1_000);
       await waitFor(() => expect(agentsReads).toBe(index + 2));
     }
-    await pass(600_000);
+    await passQuiescent(600_000);
     expect(agentsReads).toBe(6);
     expect(previewReads).toBe(0);
     expect(agentSection().textContent).not.toContain("Resolving");
