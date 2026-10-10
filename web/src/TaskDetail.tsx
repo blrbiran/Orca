@@ -14,6 +14,7 @@ import { useTranslation } from "react-i18next";
 import { controlFailureFrom, downloadEvidenceArtifact, fetchRunActivity, fetchRunEvidence, type ControlAction } from "./controlApi.js";
 import { CUSTOM_LABEL_PREFIX, WEB_SYSTEM_LABELS } from "./controlTypes.js";
 import type { ActivityEntryV1, EvidenceManifestV1, GroupViewV1, WorkItemProgressV1, WorkItemViewV1 } from "./controlTypes.js";
+import { TaskResults } from "./TaskResults.js";
 import { LoopPlanCard } from "./LoopPlanCard.js";
 import { RunReason } from "./RunReason.js";
 import { explainRunReason } from "./refusalExplain.js";
@@ -173,6 +174,8 @@ export function RunActivity(props: { runId: string; changeSeq: number }): JSX.El
 }
 
 export interface TaskDetailProps {
+  resultsActive?: boolean;
+  resultsScope?: string;
   view: GroupViewV1;
   item: WorkItemViewV1;
   drafts: Record<string, string>;
@@ -217,6 +220,7 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
         {t("control.task.labelsFrom", { source: labelSourceText(item.labelsProvenance ?? "plan"), version: item.labelsVersion ?? 0 })}
         {draft !== null ? t("control.task.unsavedDraft") : ""}
       </p>
+      <TaskResults view={view} item={item} active={props.resultsActive === true} scope={props.resultsScope ?? ""} />
       {draft !== null && draft.base !== current && (
         <p role="status">
           {t("control.task.labelsChanged", { base: draft.base, current })}<LabelChips labels={item.labels} />

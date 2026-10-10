@@ -8,6 +8,92 @@ import type {
  Translation, en } from "./en.js";
 
 export const zh: Translation<typeof en> = {
+  results: {
+  "groupRegion": "任务组结果",
+  "taskRegion": "任务结果 · {{taskId}}",
+  "currentRegion": "当前结果 · {{runId}}",
+  "attemptRegion": "已保存尝试 {{attempt}} · {{runId}}",
+  "agentExplanation": "Agent 说明",
+  "explanation": "说明：{{status}}",
+  "goal": "目标",
+  "work": "Agent 报告的已完成工作",
+  "conclusions": "Agent 结论",
+  "reportedOutputs": "Agent 报告的产物",
+  "limitations": "Agent 报告的局限",
+  "outputs": "已保存产物",
+  "unknown": "未知",
+  "unavailable": "不可用",
+  "notProduced": "尚未产出结果。",
+  "identity": "运行 {{runId}} · 代次 {{generation}} · 执行 {{executionId}} · 尝试 {{attempt}} · 快照 {{snapshot}} · 观察 {{revision}} · 捕获 {{capture}}",
+  "execution": "执行：{{status}}",
+  "verification": "验证：{{status}}",
+  "actualRun": "实际运行：{{state}} · 结果 {{outcome}}",
+  "source": "来源：{{status}}",
+  "history": "已保存尝试历史 · {{runId}}",
+  "savedHistory": "已保存观察历史；这不代表当前结果。",
+  "observations": "验证观察历史",
+  "observation": "观察 {{revision}} · {{stage}} · {{verification}}",
+  "taskStatus": "{{taskId}} · 任务验收：{{status}}",
+  "pendingRun": "待启动运行 · {{runId}}",
+  "preview": "预览已保存产物 · {{label}}",
+  "download": "下载已保存产物 · {{path}}",
+  "outputRegion": "已保存产物 · {{path}}",
+  "outputIdentity": "运行 {{runId}} · 尝试 {{attempt}} · 产物 {{outputId}} · {{bytes}} 字节",
+  "refused": "结果读取不可用 · {{code}}",
+  "coverage": "{{total}} 个任务 · 可用 {{available}} · 部分 {{partial}} · 缺失 {{missing}} · 不可用 {{unavailable}} · 尚未产出 {{notProduced}}",
+  "goalReview": "实际任务组目标评审",
+  "reviewNotRun": "尚未运行目标评审。",
+  "delivery": "实际 Git 交付",
+  "deliveryUnavailable": "Git 交付不可用。",
+  "deliveryStatus": "交付：{{state}} · 集成提交 {{commit}}",
+  "explanationStatus": {
+    "available": "可用",
+    "missing": "缺失",
+    "invalid": "无效",
+    "unavailable": "不可用"
+  },
+  "executionStatus": {
+    "complete": "完整",
+    "partial": "部分",
+    "unavailable": "不可用"
+  },
+  "verificationStatus": {
+    "not-run": "未运行",
+    "in-progress": "进行中",
+    "passed": "通过",
+    "failed": "失败",
+    "unavailable": "不可用"
+  },
+  "sourceStatus": {
+    "available": "可用",
+    "missing": "缺失",
+    "unsupported": "不支持",
+    "stale": "过期",
+    "unavailable": "不可用"
+  },
+  "outputStatus": {
+    "available": "可用",
+    "missing": "缺失",
+    "deleted": "已删除",
+    "symlink": "符号链接",
+    "binary": "二进制",
+    "too-large": "过大",
+    "changed": "已变化",
+    "unsafe": "不安全",
+    "unavailable": "不可用"
+  },
+  "stage": {
+    "execution": "执行",
+    "verification": "验证"
+  },
+  "availability": {
+    "available": "可用",
+    "partial": "部分",
+    "missing": "缺失",
+    "unavailable": "不可用",
+    "not-produced": "尚未产出"
+  }
+},
   detail: { regions: "任务组详情", progress: "进度", preparation: "准备", problem: "问题", results: "结果", runs: "运行与证据", technical: "技术详情", resultsMissing: "工作已完成，但缺少结果说明。", resultsNotProduced: "此处尚未产出结果说明。", resultsEvidence: "已有运行证据仍可查看。任务完成、目标评审与 Git 交付是独立的事实。", openRun: "查看运行操作与证据 · {{runId}}", goalReview: "任务组正在评审目标；任务完成不代表目标已被接受。", nextAction: "查看进度、准备或问题；各区域保留当前读取状态允许的操作。" },
   nav: { overview: "概览", sections: "分区", decisions: "决策", chains: "链", tasks: "任务控制", requirements: "需求", memory: "记忆", metrics: "指标", globalSettings: "全局设置", projectSettings: "项目设置" },
   overview: {

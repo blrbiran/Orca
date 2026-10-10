@@ -122,6 +122,92 @@ const selectionSource = {
 } as const satisfies Record<ProvenanceSourceV1, string>;
 
 export const en = {
+  results: {
+  "groupRegion": "Group results",
+  "taskRegion": "Task results · {{taskId}}",
+  "currentRegion": "Current result · {{runId}}",
+  "attemptRegion": "Saved attempt {{attempt}} · {{runId}}",
+  "agentExplanation": "Agent explanation",
+  "explanation": "Explanation: {{status}}",
+  "goal": "Goal",
+  "work": "Completed work reported by Agent",
+  "conclusions": "Agent conclusions",
+  "reportedOutputs": "Outputs reported by Agent",
+  "limitations": "Agent limitations",
+  "outputs": "Saved outputs",
+  "unknown": "unknown",
+  "unavailable": "unavailable",
+  "notProduced": "Result not produced yet.",
+  "identity": "Run {{runId}} · generation {{generation}} · execution {{executionId}} · attempt {{attempt}} · snapshot {{snapshot}} · observation {{revision}} · capture {{capture}}",
+  "execution": "Execution: {{status}}",
+  "verification": "Verification: {{status}}",
+  "actualRun": "Actual run: {{state}} · outcome {{outcome}}",
+  "source": "Source: {{status}}",
+  "history": "Saved attempt history · {{runId}}",
+  "savedHistory": "Saved observation history; this does not establish the current result.",
+  "observations": "Verification observation history",
+  "observation": "Observation {{revision}} · {{stage}} · {{verification}}",
+  "taskStatus": "{{taskId}} · task acceptance: {{status}}",
+  "pendingRun": "Pending run · {{runId}}",
+  "preview": "Preview saved output · {{label}}",
+  "download": "Download saved output · {{path}}",
+  "outputRegion": "Saved output · {{path}}",
+  "outputIdentity": "Run {{runId}} · attempt {{attempt}} · output {{outputId}} · {{bytes}} bytes",
+  "refused": "Result read unavailable · {{code}}",
+  "coverage": "{{total}} tasks · available {{available}} · partial {{partial}} · missing {{missing}} · unavailable {{unavailable}} · not produced {{notProduced}}",
+  "goalReview": "Actual group goal review",
+  "reviewNotRun": "Goal review has not run.",
+  "delivery": "Actual Git delivery",
+  "deliveryUnavailable": "Git delivery is unavailable.",
+  "deliveryStatus": "Delivery: {{state}} · integrated commit {{commit}}",
+  "explanationStatus": {
+    "available": "available",
+    "missing": "missing",
+    "invalid": "invalid",
+    "unavailable": "unavailable"
+  },
+  "executionStatus": {
+    "complete": "complete",
+    "partial": "partial",
+    "unavailable": "unavailable"
+  },
+  "verificationStatus": {
+    "not-run": "not-run",
+    "in-progress": "in-progress",
+    "passed": "passed",
+    "failed": "failed",
+    "unavailable": "unavailable"
+  },
+  "sourceStatus": {
+    "available": "available",
+    "missing": "missing",
+    "unsupported": "unsupported",
+    "stale": "stale",
+    "unavailable": "unavailable"
+  },
+  "outputStatus": {
+    "available": "available",
+    "missing": "missing",
+    "deleted": "deleted",
+    "symlink": "symlink",
+    "binary": "binary",
+    "too-large": "too-large",
+    "changed": "changed",
+    "unsafe": "unsafe",
+    "unavailable": "unavailable"
+  },
+  "stage": {
+    "execution": "execution",
+    "verification": "verification"
+  },
+  "availability": {
+    "available": "available",
+    "partial": "partial",
+    "missing": "missing",
+    "unavailable": "unavailable",
+    "not-produced": "not-produced"
+  }
+},
   detail: { regions: "Group detail", progress: "Progress", preparation: "Preparation", problem: "Problems", results: "Results", runs: "Runs and evidence", technical: "Technical details", resultsMissing: "Work is completed; its explanation is missing.", resultsNotProduced: "A result explanation has not been produced here yet.", resultsEvidence: "Existing run evidence remains available. Task completion, goal review and Git delivery are separate facts.", openRun: "Open run controls and evidence · {{runId}}", goalReview: "The group is in goal review; task completion does not establish goal acceptance.", nextAction: "Review progress, preparation or problems; each region keeps the actions allowed by the current read." },
   nav: { overview: "Overview", sections: "Sections", decisions: "Decisions", chains: "Chains", tasks: "Task control", requirements: "Requirements", memory: "Memory", metrics: "Metrics", globalSettings: "Global settings", projectSettings: "Project settings" },
   overview: {

@@ -335,6 +335,29 @@ Groups come from an accepted requirement or from an imported plan (**Import plan
 - **Recovery:** after a crash the panel reconciles before it accepts connections; anything it cannot settle is shown
   as a blocker, and it will not start new runs until recovery is observed.
 
+Completed groups open **Results** by default, including when no explanation was saved. To open an individual task,
+select it in **Progress**, then choose **Results**; its controls and unfinished inputs stay mounted across region
+changes. **Runs and evidence** retains the original permission-checked evidence downloads.
+
+Results distinguish task acceptance, execution, actual controller verification, the Agent's explanation, goal review
+and Git delivery. Missing or invalid explanation does not change a successful task's outcome. Verification says
+`not-run`, `in-progress`, `passed`, `failed` or `unavailable` only from admitted controller evidence; an Agent's claim
+is labelled as an explanation. A newer current attempt can have no saved report; older attempts and predecessor runs
+remain explicitly saved history and never fill the current explanation. An unknown current attempt stays unknown.
+
+Saved outputs show their run, generation, execution, attempt and immutable snapshot/observation/capture revision.
+They contain the bytes captured during execution, not the current worktree or HEAD. Later verifier observations
+reuse the original snapshot. Preview treats HTML, scripts, links and images as inert text. Binary and too-large text
+may still offer **Download saved output** when authorized; downloads preserve the saved bytes and use the server's
+output ID as the attachment name. Refused or unsafe outputs offer no invented content. Only an active Results pane
+polls the saved read model; hiding it or changing account/project/epoch retires pending reads and downloads. These
+reads do not call an Agent, summarize, backfill or reconstruct missing historical work.
+
+The installed ccloop pin remains `ab824d1`. An old peer reports source `unsupported` with missing explanation while
+ordinary task execution continues. Live saved results require a paired ccloop build with the optional result channel;
+local feature verification does not publish that build, repin the package, or change a running service. Publishing
+the paired producer and deliberately repinning/restarting remain separate release steps.
+
 Each task is one ccloop run, and **runs cost money** (see [Cost](#cost)).
 
 ### Decisions

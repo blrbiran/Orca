@@ -20,6 +20,8 @@
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import type { JSX } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { SavedRunResult } from "../src/TaskResults.js";
+import { savedRun } from "./fixtures/results.js";
 import { AgentSelectionEditor } from "../src/AgentSelectionEditor.js";
 import { AgentSettings } from "../src/AgentSettings.js";
 import { Overview } from "../src/Overview.js";
@@ -204,7 +206,12 @@ const OVERVIEW = deriveOverview({
   todo: { status: "unavailable", data: null, error: null }, recovery: { status: "stale", error: null, data: recovery },
   scope: { kind: "all" }, projectKey: null, projects: null, roles: ["member"], uncertain: [{ groupId: "unknown-g", commandId: "c-1", importPlan: true }],
 });
+const resultFixture = savedRun({executionId:"exec-x"});
+resultFixture.currentExplanation.content = {schema:"task-result-v1",goal:"x1",completedWork:["x2"],conclusions:["x3"],outputs:[],limitations:["x4"]};
+resultFixture.attempts[0]!.explanation = resultFixture.currentExplanation;
+resultFixture.attempts[0]!.outputs = [];
 const AREAS: Array<{ name: string; chinese: string; element: () => JSX.Element; settle?: (container: HTMLElement) => Promise<void> }> = [
+  {name:"saved results and actual verification",chinese:"Agent 说明",element:()=> <SavedRunResult value={resultFixture} active={false} identity="locale-owner"/>},
   { name: "progress overview and source states", chinese: "需要你处理", element: () => <Overview model={OVERVIEW} onOpen={noop} onImport={noop} onRequirement={noop} /> },
   { name: "nav and shell footer", chinese: "决策", element: () => (
     <Shell active="decisions" badges={{ unreviewed: 1, chainRunning: true, controlAlert: true }} footer={footerLines(summary)}><p>pane</p></Shell>

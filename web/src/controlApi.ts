@@ -82,10 +82,10 @@ export function controlFailureFrom(err: unknown): ControlRefusal {
   return { status: refusal.status, code: refusal.code, message: refusal.message, commandRevision: null };
 }
 
-async function controlGet<T>(path: string): Promise<T> {
+export async function controlGet<T>(path: string, signal?: AbortSignal): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(path);
+    res = await fetch(path, signal === undefined ? undefined : { signal });
   } catch (err) {
     throw new ControlRequestError(refusalOf(`GET ${path}`, null, undefined, err instanceof Error ? err.message : i18n.t("panelErrors.noAnswer")));
   }

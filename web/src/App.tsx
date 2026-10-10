@@ -1200,6 +1200,8 @@ export function App(): JSX.Element {
       )}
       {controlConfig !== null && control.recovery !== null && (
         <ControlPanel
+          active={section === "tasks"}
+          resultsScope={JSON.stringify([account?.user.id, scope])}
           roles={account?.user.roles ?? []}
           config={controlConfig}
           summary={summaryView(control)}

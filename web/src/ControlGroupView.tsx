@@ -48,11 +48,14 @@ export function continuableRuns(view: GroupViewV1): Array<{ run: RunViewV1; chec
 }
 
 import { overviewRegionId } from "./overviewNavigation.js";
+import { GroupResults } from "./GroupResults.js";
 import { GroupDetailRegions } from "./GroupDetailRegions.js";
 import { defaultDetailRegion, dispatchDetailRegion, focusedDetailRegion, runRegionId, type DetailRegion } from "./detailRegion.js";
 import type { OverviewTarget } from "./overviewNavigation.js";
 
 export interface ControlGroupViewProps {
+  active?: boolean;
+  resultsScope?: string;
   focusRequest?: number;
   focus?: Extract<OverviewTarget, { kind: "group" }> | null;
   roles?: readonly import("./auth.js").Role[];
@@ -319,7 +322,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       </div>)}
 {dispatchRegion === "problem" && dispatchControls}</>,
         results: <>
-      <p role="status">{t(view.summary.state === "done" ? "detail.resultsMissing" : "detail.resultsNotProduced")}</p>
+      <GroupResults view={view} active={props.active !== false && region === "results"} scope={props.resultsScope ?? ""} />
       <p>{t("detail.resultsEvidence")}</p>
       {view.runs.map(run => <button key={run.runId} type="button" onClick={() => openRun(run.runId)}>{t("detail.openRun", { runId: run.runId })}</button>)}
       <div id={overviewRegionId("group", groupId, "integration")} tabIndex={-1} data-overview-region="integration">
@@ -432,7 +435,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
 
 </>,
       }} />
-      {openItem !== undefined && <TaskDetail key={openItem.taskId} view={view} item={openItem} drafts={drafts} onDraft={onDraft} onCommand={onCommand} workspaceMode={workspaceMode} archived={archived} />}
+      {openItem !== undefined && <TaskDetail key={openItem.taskId} view={view} item={openItem} drafts={drafts} onDraft={onDraft} onCommand={onCommand} workspaceMode={workspaceMode} archived={archived} resultsActive={props.active !== false && region === "results"} resultsScope={props.resultsScope ?? ""} />}
     </section>
   );
 }

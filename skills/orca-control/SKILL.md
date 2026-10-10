@@ -69,7 +69,30 @@ fields; a package version alone does not establish that another running panel su
 - `summary` (or `summary?sinceChangeSeq=<n>`), `groups`, `groups/<id>`, `groups/<id>/requirement`, `groups/<id>/agent-preview`
 - `recovery`, `config`, `agents`, `operator/agent-preferences`, `repositories/<id>/workspace`, `repositories/<id>/integration`, `runs/<id>/evidence` (manifest only; artifact downloads are refused with `control-cli-binary-route`), `runs/<id>/activity` (the run's newest 200 activity rows)
 - `usage?scope=all|repo:<id>[&from=<ms>&to=<ms>][&groupBy=model|repo|day|week|month]`: `get usage?scope=all` reads tokens used per model and the caps (`orca-usage-view-v1`: `.headline` total/week/month, `.range.byModel`, `.caps[]` with `used`, `committed`, `headroom`, and `.spendRevision`)
+- saved results: `groups/<id>/results`, `runs/<id>/results`, and `runs/<id>/results/outputs/<outputId>` (preview JSON). Binary `?download=1` is Web-only and refused by the CLI with `control-cli-binary-route`.
 - a past command's retained result: see section 4
+
+### Saved result interpretation
+
+In the Web panel, completed groups default to Results even when the explanation is missing. Open a task from
+Progress and switch to Results for its run-specific saved read. Runs and evidence keeps the original downloads.
+Task acceptance/outcome, execution, actual controller verification, Agent explanation, group goal review and Git
+delivery are independent facts; do not infer pass from Agent prose or infer task failure from a missing report.
+Verification `not-run` and `in-progress` require actual admitted controller lifecycle evidence. Damaged or unknown
+evidence is `unavailable`.
+
+`currentAttempt` may be null. Only the current attempt's explanation belongs in the current result; older attempts,
+retry runs and continuation predecessors are saved history. A newer source attempt can remain current while its
+capture/report is missing. Report the `source.status` and reason verbatim: `unsupported` means an old peer lacks the
+optional result channel, while `stale`/`unavailable` describe acquisition problems, not a new missing task outcome.
+
+Outputs are immutable execution snapshots, identified by run/generation/execution/attempt and snapshot revision;
+later verifier observations can raise observation/capture revision without recapturing files. Preview is inert text,
+including HTML/links/images. Safe binary or large saved outputs may still have authorized exact-byte Web downloads;
+unsafe/refused outputs do not. Hidden panes make no result reads, and scope/auth/epoch changes retire requests.
+Never request an extra summarizer, backfill historical acceptance, or substitute current-tree files for saved bytes.
+The installed producer remains pinned at `ab824d1`; a local paired feature build is test evidence only. Producer
+publication, package repin and production service changes are separate human release steps.
 
 ## 3. Writing
 
