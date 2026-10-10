@@ -1,3 +1,4 @@
+import { setTimeout as realDelay } from 'node:timers/promises';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { writeFile, readFile, stat } from 'node:fs/promises';
@@ -105,7 +106,7 @@ describe('independent result retention', { timeout: 30000 }, () => {
             expect(readTaskResultState(f.t.h.store, f.runId)?.revision).toBe(0);
             f.setPage({ ...f.page(), identity: f.identity });
             await f.collector.flush(f.runId);
-            const changed = f.add(Buffer.from('changed'));
+            const changed = f.add(Buffer.from('new snapshot'));
             const m2 = f.add({ ...f.manifest(2, 1, 'verification', f.add({ schema: 'ccloop-task-result-verification-started-v1', attempt: 1, status: 'in-progress' })), outputs: [{ ...f.manifest().outputs[0], ref: changed }] });
             f.setPage({ ...f.page(), revision: 2, nextRevision: 2, manifests: [{ revision: 2, ref: m2 }] });
             await f.collector.flush(f.runId);
@@ -167,13 +168,18 @@ describe('independent result retention', { timeout: 30000 }, () => {
         }
     });
     it('core usage and terminal settle independently during a blocked optional RPC', async () => {
-        const f = await fixture(), held = latch(), entered = latch();
+        const f = await fixture(), held = latch(), entered = latch();let driver:ReturnType<typeof createExecutionDriver>|undefined;let collecting:Promise<boolean>|undefined;
         try {
+            vi.useFakeTimers({toFake:['setTimeout','clearTimeout']});
             f.port.collectTaskResults = async () => { entered.release(); await held.promise; return f.page(); };
             f.collector.schedule(f.runId);
             f.collector.schedule(f.runId);
             await entered.promise;
-            const driver = createExecutionDriver({ ...f.t.deps, taskResults: f.collector });
+            driver = createExecutionDriver({ ...f.t.deps, taskResults: f.collector });
+            collecting=driver.round();
+            expect(await Promise.race([collecting.then(()=> 'core-progress'),realDelay(1500).then(()=> 'metadata-gated')])).toBe('core-progress');
+            expect(f.t.body(f.runId)).toMatchObject({state:'collected',highWater:2,cumulative:{work:{tokens:10}}});
+            held.release();await collecting;await f.collector.flush(f.runId);vi.useRealTimers();
             await f.t.until(driver, () => f.t.body(f.runId).state === 'settled');
             expect(f.t.body(f.runId)).toMatchObject({ state: 'settled', highWater: 2, cumulative: { work: { tokens: 10 } } });
             held.release();
@@ -181,7 +187,7 @@ describe('independent result retention', { timeout: 30000 }, () => {
             await driver.stop();
         }
         finally {
-            held.release();
+            held.release();await collecting?.catch(()=>{});vi.useRealTimers();await driver?.stop();
             await f.dispose();
         }
     });
